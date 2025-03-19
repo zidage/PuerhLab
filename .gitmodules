@@ -1,0 +1,4 @@
+[submodule "pu-erh_lab/third_party/opencv"]
+	path = pu-erh_lab/third_party/opencv
+	url = https://github.com/opencv/opencv.git
+	branch = 4.x
