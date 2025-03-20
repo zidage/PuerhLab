@@ -30,22 +30,73 @@
 
 #include <libraw.h>
 
+#include <cstddef>
+#include <memory>
+#include <mutex>
+#include <optional>
+#include <queue>
+#include <type/type.hpp>
 
 #pragma once
 
+#define MAX_REQUEST_SIZE 64
 namespace puerhlab {
 
 struct DecodeRequest {
-  
+  request_id_t _request_id;
+  file_path_t _raw_file_path;
+  std::shared_ptr<LibRaw> _image_processor;
+};
+
+/**
+ * @brief A thread-safe non-blocking task queue used by a RawDecoder.
+ */
+class RequestQueue {
+ private:
+  std::queue<std::shared_ptr<DecodeRequest>> _request_queue;
+  // Mutex used for non-blocking queue
+  std::mutex _front_mtx;
+  std::mutex _rear_mtx;
+  std::condition_variable cv;
+
+ public:
+  explicit RequestQueue() = default;
+
+  /**
+   * @brief A thread-safe wrapper for _request_queue push() method
+   *
+   * @param new_request the request to enqueue
+   */
+  void push(std::shared_ptr<DecodeRequest> new_request) {
+    {
+      std::lock_guard<std::mutex> lock(_rear_mtx);
+      _request_queue.push(std::move(new_request));
+    }
+    cv.notify_one();
+  }
+
+  /**
+   * @brief A thread-safe wrapper for pop() method
+   *
+   * @return std::shared_ptr<DecodeRequest>
+   */
+  std::shared_ptr<DecodeRequest> pop() {
+    std::unique_lock<std::mutex> lock(_front_mtx);
+    // Wait for the queue to be fill with at least one value
+    cv.wait(lock, [this] { return !_request_queue.empty(); });
+
+    auto handled_request = _request_queue.front();
+    _request_queue.pop();
+    return handled_request;
+  }
 };
 
 class RawDecoder {
  public:
+  explicit RawDecoder(unsigned int flags = 0);
   RawDecoder() = default;
 
-  
+ private:
 };
 
-}; // namespace puerhlab
-
-
+};  // namespace puerhlab
