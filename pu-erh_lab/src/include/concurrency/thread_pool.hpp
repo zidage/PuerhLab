@@ -1,6 +1,6 @@
 /*
- * @file        pu-erh_lab/src/include/type/type.hpp
- * @brief       collection of wrapper types
+ * @file        pu-erh_lab/src/include/concurrency/thread_pool.hpp
+ * @brief       header file for raw decoder module
  * @author      Yurun Zi
  * @date        2025-03-19
  * @license     MIT
@@ -28,15 +28,12 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+#include <queue/queue.hpp>
+
 #pragma once
+
 namespace puerhlab {
-
-// Wide character path c string
-#define file_path_t const wchar_t*
-
-
-
-// Used in DecodeRequest type
-#define request_id_t size_t
-
-}
+class ThreadPool {
+  // TODO: Add Implementation
+};
+};

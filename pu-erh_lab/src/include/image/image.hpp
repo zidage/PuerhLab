@@ -1,8 +1,8 @@
 /*
- * @file        pu-erh_lab/src/include/type/type.hpp
- * @brief       collection of wrapper types
+ * @file        pu-erh_lab/src/include/image/image.hpp
+ * @brief       parent class of all image clasess, e.g. tiff, jpeg, raw, etc.
  * @author      Yurun Zi
- * @date        2025-03-19
+ * @date        2025-03-20
  * @license     MIT
  *
  * @copyright   Copyright (c) 2025 Yurun Zi
@@ -29,14 +29,13 @@
 // SOFTWARE.
 
 #pragma once
+
+#include <type/type.hpp>
+
 namespace puerhlab {
-
-// Wide character path c string
-#define file_path_t const wchar_t*
-
-
-
-// Used in DecodeRequest type
-#define request_id_t size_t
-
-}
+class Image {
+ public:
+  file_path_t image_path;
+  // TODO: Add Implementation
+};
+};  // namespace puerhlab

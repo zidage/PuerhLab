@@ -1,8 +1,8 @@
 /*
- * @file        pu-erh_lab/src/include/type/type.hpp
- * @brief       collection of wrapper types
+ * @file        pu-erh_lab/src/include/image/image.hpp
+ * @brief       A wrapper class for metadata portion of libraw_data_t
  * @author      Yurun Zi
- * @date        2025-03-19
+ * @date        2025-03-20
  * @license     MIT
  *
  * @copyright   Copyright (c) 2025 Yurun Zi
@@ -29,14 +29,9 @@
 // SOFTWARE.
 
 #pragma once
+
 namespace puerhlab {
-
-// Wide character path c string
-#define file_path_t const wchar_t*
-
-
-
-// Used in DecodeRequest type
-#define request_id_t size_t
-
-}
+struct metadata {
+  // TODO: Add definition
+};
+};  // namespace puerhlab
