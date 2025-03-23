@@ -28,11 +28,17 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#include <libraw.h>
-#include <image/image.hpp>
-
-
 #pragma once
+
+#include <libraw.h>
+#include "image.hpp"
+
+namespace puerhlab {
+class RawImage : Image {
+  
+};
+};
+
 
 // TODO: Add Implementation
 

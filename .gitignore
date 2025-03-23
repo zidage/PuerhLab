@@ -1045,3 +1045,5 @@ dkms.conf
 *.uf2
 # Raspberry Pi Pico disassembler file
 *.dis
+
+third_party/exiv2-0.28.4-windows/
