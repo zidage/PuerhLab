@@ -29,7 +29,7 @@
 // SOFTWARE.
 
 #include <raw/raw_decoder.hpp>
-
+#include <image/image.hpp>
 namespace puerhlab {
 
 }; // namespace puerhlab

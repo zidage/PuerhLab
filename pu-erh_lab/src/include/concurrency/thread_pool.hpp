@@ -36,4 +36,4 @@ namespace puerhlab {
 class ThreadPool {
   // TODO: Add Implementation
 };
-};
+};  // namespace puerhlab

@@ -30,12 +30,25 @@
 
 #pragma once
 
+#include <exiv2/exif.hpp>
+#include <exiv2/exiv2.hpp>
+#include <memory>
+#include <opencv2/opencv.hpp>
 #include <type/type.hpp>
 
+#include "edit/history/edit_history.hpp"
+#include "edit/history/version.hpp"
+
 namespace puerhlab {
+enum class ImageType { DEFAULT, JPEG, TIFF, ARW, CR2, CR3, NEF, DNG };
+
 class Image {
+ private:
+  EditHistory _edit_history;
+  std::shared_ptr<Version> _curr_version;
  public:
-  file_path_t image_path;
+  image_path_t _image_path;
   // TODO: Add Implementation
+  Exiv2::ExifData _exif_data;
 };
 };  // namespace puerhlab

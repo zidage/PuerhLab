@@ -29,12 +29,17 @@
 // SOFTWARE.
 
 #pragma once
+
+#include<cstdint>
+
 namespace puerhlab {
 
 // Wide character path c string
-#define file_path_t const wchar_t*
+#define image_path_t const wchar_t*
+#define image_id_t uint64_t
 
-
+// Hash type for version control
+#define hash_t uint32_t
 
 // Used in DecodeRequest type
 #define request_id_t size_t

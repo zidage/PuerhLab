@@ -30,15 +30,13 @@
 
 #pragma once
 
-#include <libraw.h>
+#include <libraw/libraw.h>
+
 #include "image.hpp"
 
-namespace puerhlab {
-class RawImage : Image {
-  
-};
-};
 
+namespace puerhlab {
+class RawImage : Image {};
+};  // namespace puerhlab
 
 // TODO: Add Implementation
-

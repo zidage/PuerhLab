@@ -1,8 +1,8 @@
 /*
- * @file        pu-erh_lab/src/include/raw/raw_decoder.hpp
- * @brief       header file for raw decoder module
+ * @file        pu-erh_lab/src/include/edit/history/version.hpp
+ * @brief       A snapshot of a edit version
  * @author      Yurun Zi
- * @date        2025-03-19
+ * @date        2025-03-23
  * @license     MIT
  *
  * @copyright   Copyright (c) 2025 Yurun Zi
@@ -30,37 +30,30 @@
 
 #pragma once
 
-#include <libraw/libraw.h>
-
-#include <atomic>
-#include <cstddef>
-#include <memory>
-#include <queue/queue.hpp>
+#include <ctime>
+#include <list>
 #include <type/type.hpp>
-#include <concurrency/thread_pool.hpp>
+#include <vector>
 
-
-
-#define MAX_REQUEST_SIZE 64
 namespace puerhlab {
-
-struct DecodeRequest {
-  request_id_t _request_id;
-  file_path_t _raw_file_path;
-  std::shared_ptr<LibRaw> _image_processor;
-};
-
-class RawDecoder {
+class Version {
  private:
-  NonBlockingQueue<std::shared_ptr<DecodeRequest>> _process_queue;
-  std::atomic<size_t> _next_request_id;
-
-
- public:
-  RawDecoder() = default;
-
-  int NewRequest();
-
+  /**
+   * @brief MurmurHash3 value for this version
+   */
+  hash_t _hash;
+  /**
+   * @brief Last modified time for this version
+   */
+  std::tm _time_stamp;
+  /**
+   * @brief collection of images related to this version 
+   */
+  std::vector<image_id_t> _related_image;
+  /**
+   * @brief Edit log for this edit version
+   */
+  std::list<int> _edit_log;
+  
 };
-
-};  // namespace puerhlab
+};
