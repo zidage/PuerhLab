@@ -1,8 +1,8 @@
 /*
- * @file        pu-erh_lab/src/include/raw/raw_file.hpp
- * @brief       definition of a raw file object
+ * @file        pu-erh_lab/src/image/image.cpp
+ * @brief       specify the behaviors of a image
  * @author      Yurun Zi
- * @date        2025-03-19
+ * @date        2025-03-20
  * @license     MIT
  *
  * @copyright   Copyright (c) 2025 Yurun Zi
@@ -28,15 +28,10 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#pragma once
-
-#include <libraw/libraw.h>
-
-#include "image.hpp"
-
+#include <image/image.hpp>
 
 namespace puerhlab {
-class RawImage : Image {};
+Image::Image() {
+  
+}
 };  // namespace puerhlab
-
-// TODO: Add Implementation

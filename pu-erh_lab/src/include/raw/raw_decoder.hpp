@@ -30,12 +30,13 @@
 
 #pragma once
 
+#include "utils/queue/queue.hpp"
+
 #include <libraw/libraw.h>
 
 #include <atomic>
 #include <cstddef>
 #include <memory>
-#include <queue/queue.hpp>
 #include <type/type.hpp>
 #include <concurrency/thread_pool.hpp>
 
@@ -46,7 +47,7 @@ namespace puerhlab {
 
 struct DecodeRequest {
   request_id_t _request_id;
-  file_path_t _raw_file_path;
+  image_path_t _raw_file_path;
   std::shared_ptr<LibRaw> _image_processor;
 };
 

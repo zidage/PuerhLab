@@ -44,11 +44,51 @@ enum class ImageType { DEFAULT, JPEG, TIFF, ARW, CR2, CR3, NEF, DNG };
 
 class Image {
  private:
+  /**
+   * @brief related edit history of this image
+   * 
+   */
   EditHistory _edit_history;
+  /**
+   * @brief a pointer to the current edit version
+   * 
+   */
   std::shared_ptr<Version> _curr_version;
+
  public:
+  /**
+   * @brief uid of the image
+   * 
+   */
+  image_id_t _image_id;
+  /**
+   * @brief the path to this image
+   * 
+   */
   image_path_t _image_path;
-  // TODO: Add Implementation
+  /**
+   * @brief the exif metadata of this image
+   * 
+   */
   Exiv2::ExifData _exif_data;
+  /**
+   * @brief image data, represented by a opencv image. It is not empty if and only if has_data is true.
+   *
+   */
+  bool has_data;
+  cv::Mat _image_data;
+  /**
+   * @brief thumbnail of this image
+   *
+   */
+  cv::Mat _thumbnail;
+  /**
+   * @brief image type
+   *
+   */
+  ImageType _image_type = ImageType::DEFAULT;
+
+
+  explicit Image();
 };
 };  // namespace puerhlab
