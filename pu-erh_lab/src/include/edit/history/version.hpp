@@ -30,9 +30,11 @@
 
 #pragma once
 
+#include "type/type.hpp"
+
 #include <ctime>
 #include <list>
-#include <type/type.hpp>
+
 #include <vector>
 
 namespace puerhlab {

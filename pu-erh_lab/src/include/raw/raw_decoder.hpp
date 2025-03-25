@@ -31,14 +31,15 @@
 #pragma once
 
 #include "utils/queue/queue.hpp"
+#include "type/type.hpp"
+#include "concurrency/thread_pool.hpp"
 
 #include <libraw/libraw.h>
 
 #include <atomic>
 #include <cstddef>
 #include <memory>
-#include <type/type.hpp>
-#include <concurrency/thread_pool.hpp>
+
 
 
 
@@ -53,7 +54,7 @@ struct DecodeRequest {
 
 class RawDecoder {
  private:
-  NonBlockingQueue<std::shared_ptr<DecodeRequest>> _process_queue;
+  NonBlockingQueue<DecodeRequest> _process_queue;
   std::atomic<size_t> _next_request_id;
 
 

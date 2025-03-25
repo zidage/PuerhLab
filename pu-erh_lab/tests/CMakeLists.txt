@@ -1,5 +1,12 @@
-# add_executable(SampleTest sample_test.cpp)
-# target_link_libraries(SampleTest PRIVATE GTest::gtest_main)
+add_executable(SampleTest sample_test.cpp)
+target_link_libraries(SampleTest PRIVATE GTest::gtest_main)
 
-# include(GoogleTest)
-# gtest_discover_tests(SampleTest)
+add_executable(SingleRawLoad raw/single_raw_decode_test.cpp)
+target_include_directories(SingleRawLoad PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
+target_link_libraries(SingleRawLoad PRIVATE GTest::gtest_main LibRaw ${OpenCV_LIBS})
+target_compile_definitions(SingleRawLoad PRIVATE LIBRAW_NODLL)
+
+
+include(GoogleTest)
+gtest_discover_tests(SampleTest)
+gtest_discover_tests(SingleRawLoad)

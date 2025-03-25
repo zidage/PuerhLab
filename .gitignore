@@ -1047,3 +1047,8 @@ dkms.conf
 *.dis
 
 third_party/exiv2-0.28.4-windows/
+
+# Temp image files
+*.ARW
+*.NEF
+*.dng

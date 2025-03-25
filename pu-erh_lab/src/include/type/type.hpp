@@ -30,18 +30,21 @@
 
 #pragma once
 
-#include<cstdint>
+#include <cstdint>
 
 namespace puerhlab {
 
 // Wide character path c string
-#define image_path_t const wchar_t*
+#define image_path_t const wchar_t *
 #define image_id_t uint64_t
 
 // Hash type for version control
 #define hash_t uint32_t
 
+// Used in buffer-like structures to represent frame id
+#define frame_id_t uint32_t
+
 // Used in DecodeRequest type
 #define request_id_t size_t
 
-}
+};  // namespace puerhlab
