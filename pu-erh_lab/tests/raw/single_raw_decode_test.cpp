@@ -14,7 +14,7 @@ TEST(SingleRawLoad, BasicAssertions) {
   LibRaw raw_processor;
 
   // Try to open the file
-  ASSERT_EQ(raw_processor.open_file(test_img), LIBRAW_SUCCESS);
+  ASSERT_EQ(raw_processor.open_file(test_img.c_str()), LIBRAW_SUCCESS);
 
   // Try to unpack the image -> to metadata and 
   ASSERT_EQ(raw_processor.unpack(), LIBRAW_SUCCESS);

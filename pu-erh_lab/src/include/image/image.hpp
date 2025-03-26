@@ -89,6 +89,27 @@ class Image {
   ImageType _image_type = ImageType::DEFAULT;
 
 
-  explicit Image();
+  /**
+   * @brief Construct a new Image object
+   * 
+   * @param image_id the interal uid given to the new image
+   * @param image_path the disk location of the image
+   * @param image_type the type of the image
+   */
+  explicit Image(image_id_t image_id, image_path_t image_path, ImageType image_type);
+
+  /**
+   * @brief Load image data into an image object
+   * 
+   * @param image_data 
+   */
+  void LoadData(cv::Mat &&load_image);
+
+  /**
+   * @brief Load image thumbnail into an image object
+   * 
+   * @param image_data 
+   */
+  void LoadThumbnail(cv::Mat &&thumbnail);
 };
 };  // namespace puerhlab

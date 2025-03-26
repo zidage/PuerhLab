@@ -31,11 +31,12 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
 
 namespace puerhlab {
 
 // Wide character path c string
-#define image_path_t const wchar_t *
+#define image_path_t std::wstring
 #define image_id_t uint64_t
 
 // Hash type for version control
