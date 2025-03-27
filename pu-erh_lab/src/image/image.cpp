@@ -30,9 +30,26 @@
 
 #include "image/image.hpp"
 
-namespace puerhlab {
-Image::Image(image_id_t image_id, image_path_t image_path, ImageType image_type)
-    : _image_id(image_id), _image_path(image_path), _image_type(image_type) {}
+#include <exiv2/exif.hpp>
 
+
+namespace puerhlab {
+
+/**
+ * @brief Construct a new Image object
+ *
+ * @param image_id the interal uid given to the new image
+ * @param image_path the disk location of the image
+ * @param image_type the type of the image
+ */
+Image::Image(image_id_t image_id, image_path_t image_path, ImageType image_type, Exiv2::ExifData exif_data)
+    : _image_id(image_id), _image_path(image_path), _exif_data(std::move(exif_data)), _image_type(image_type) {}
+
+/**
+ * @brief Load image data into an image object
+ *
+ * @param image_data
+ */
+void Image::LoadData(cv::Mat &&load_image) { _image_data = std::move(load_image); }
 
 };  // namespace puerhlab

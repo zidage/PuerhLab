@@ -29,3 +29,31 @@
 // SOFTWARE.
 
 #pragma once
+
+
+#include "type/type.hpp"
+#include "image/image.hpp"
+#include "raw/raw_decoder.hpp"
+#include "utils/queue/queue.hpp"
+
+#include <cstdint>
+#include <vector>
+namespace puerhlab {
+
+struct ImageLoadRequest {
+  image_path_t image_path;
+  
+};
+
+class ImageLoader {
+ private:
+  std::vector<image_path_t> _queued_files;
+  NonBlockingQueue<ImageLoadRequest> _load_queue;
+
+  std::atomic<uint32_t> _total_request_size;
+  std::atomic<uint32_t> _completed_request_size;
+
+ public:
+  
+};
+};

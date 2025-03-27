@@ -6,7 +6,12 @@ target_include_directories(SingleRawLoad PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/s
 target_link_libraries(SingleRawLoad PRIVATE GTest::gtest_main LibRaw ${OpenCV_LIBS})
 target_compile_definitions(SingleRawLoad PRIVATE LIBRAW_NODLL)
 
+add_executable(SingleThumbnailLoad raw/single_raw_thumbnail_test.cpp)
+target_include_directories(SingleThumbnailLoad PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
+target_link_libraries(SingleThumbnailLoad PRIVATE GTest::gtest_main LibRaw ${OpenCV_LIBS})
+target_compile_definitions(SingleThumbnailLoad PRIVATE LIBRAW_NODLL)
 
 include(GoogleTest)
 gtest_discover_tests(SampleTest)
 gtest_discover_tests(SingleRawLoad)
+gtest_discover_tests(SingleThumbnailLoad)

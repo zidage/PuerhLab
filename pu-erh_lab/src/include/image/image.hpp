@@ -30,6 +30,7 @@
 
 #pragma once
 
+#include <exiv2/exif.hpp>
 #include <exiv2/exiv2.hpp>
 #include <memory>
 #include <opencv2/opencv.hpp>
@@ -39,8 +40,12 @@
 #include "edit/history/version.hpp"
 
 namespace puerhlab {
-enum class ImageType { DEFAULT, JPEG, TIFF, ARW, CR2, CR3, NEF, DNG };
+enum class ImageType { DEFAULT, JPEG, PNG, TIFF, ARW, CR2, CR3, NEF, DNG };
 
+/**
+ * @brief Represent a tracked image file
+ * 
+ */
 class Image {
  private:
   /**
@@ -55,59 +60,21 @@ class Image {
   std::shared_ptr<Version> _curr_version;
 
  public:
-  /**
-   * @brief uid of the image
-   *
-   */
-  image_id_t _image_id;
-  /**
-   * @brief the path to this image
-   *
-   */
-  image_path_t _image_path;
-  /**
-   * @brief the exif metadata of this image
-   *
-   */
+  image_id_t      _image_id;
+  image_path_t    _image_path;
   Exiv2::ExifData _exif_data;
-  /**
-   * @brief image data, represented by a opencv image. It is not empty if and only if has_data is true.
-   *
-   */
-  bool    has_data;
-  cv::Mat _image_data;
-  /**
-   * @brief thumbnail of this image
-   *
-   */
-  cv::Mat _thumbnail;
-  /**
-   * @brief image type
-   *
-   */
-  ImageType _image_type = ImageType::DEFAULT;
+  bool            has_data;
+  cv::Mat         _image_data;
+  cv::Mat         _thumbnail;
+  ImageType       _image_type = ImageType::DEFAULT;
 
-  /**
-   * @brief Construct a new Image object
-   *
-   * @param image_id the interal uid given to the new image
-   * @param image_path the disk location of the image
-   * @param image_type the type of the image
-   */
-  explicit Image(image_id_t image_id, image_path_t image_path, ImageType image_type);
 
-  /**
-   * @brief Load image data into an image object
-   *
-   * @param image_data
-   */
+  explicit Image(image_id_t image_id, image_path_t image_path, ImageType image_type, Exiv2::ExifData exif_data);
+
   void LoadData(cv::Mat &&load_image);
 
-  /**
-   * @brief Load image thumbnail into an image object
-   *
-   * @param image_data
-   */
   void LoadThumbnail(cv::Mat &&thumbnail);
+
+  cv::Mat &getImageData();
 };
 };  // namespace puerhlab
