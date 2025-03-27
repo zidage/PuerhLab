@@ -1,8 +1,8 @@
 /*
- * @file        pu-erh_lab/src/include/type/type.hpp
- * @brief       collection of wrapper types
+ * @file        pu-erh_lab/src/include/mapper/sleeve/sleeve_mapper.hpp
+ * @brief       Database interacting layer for sleeve base
  * @author      Yurun Zi
- * @date        2025-03-19
+ * @date        2025-03-26
  * @license     MIT
  *
  * @copyright   Copyright (c) 2025 Yurun Zi
@@ -28,26 +28,37 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#pragma once
+#include "type/type.hpp"
+#include "sleeve/sleeve_base.hpp"
+#include "sleeve/sleeve_filter.hpp"
+#include "image/image.hpp"
 
-#include <cstdint>
-#include <string>
+#include <duckdb.h>
+#include <unordered_map>
+
+
+
+
 
 namespace puerhlab {
 
-// Wide character path c string
-#define image_path_t std::wstring
-#define file_path_t std::wstring
+/**
+ * @brief Mapper interface for interacting with the DuckDB
+ * 
+ */
+class SleeveMapper {
+  void CreateDB(file_path_t db_path);
 
-#define image_id_t uint64_t
+  void SetSleeve(SleeveBase sleeve_base);
 
-// Hash type for version control
-#define hash_t uint32_t
+  void AddImage(const Image &image);
 
-// Used in buffer-like structures to represent frame id
-#define frame_id_t uint32_t
+  void UpdateImageById(image_id_t image_id, const Image &image);
 
-// Used in DecodeRequest type
-#define request_id_t size_t
+  void RemoveImage(image_id_t image_id);
 
+  void RemoveImageByFilter(const SleeveFilter &filter);
+
+  std::unordered_map<image_id_t, Image> GetSleeveBaseByFilter(const SleeveFilter &filter);  
+};
 };  // namespace puerhlab

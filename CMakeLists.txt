@@ -36,16 +36,21 @@ set_target_properties(LibRaw PROPERTIES
 )
 
 # DuckDB API
-add_library(DuckDB STATIC IMPORTED)
+add_library(DuckDB SHARED IMPORTED)
 set_target_properties(DuckDB PROPERTIES
-    IMPORTED_LOCATION "${CMAKE_SOURCE_DIR}\\pu-erh_lab\\third_party\\libduckdb-windows"
+    IMPORTED_LOCATION "${CMAKE_SOURCE_DIR}\\pu-erh_lab\\third_party\\libduckdb-windows\\duckdb.dll"
+    IMPORTED_IMPLIB "${CMAKE_SOURCE_DIR}\\pu-erh_lab\\third_party\\libduckdb-windows\\duckdb.lib"
     INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_SOURCE_DIR}\\pu-erh_lab\\third_party\\libduckdb-windows"
 )
 
+# Cereal
+add_library(Cereal INTERFACE "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_party/cereal-1.3.2/include")
+
 # Exiv2
-add_library(Exiv2 STATIC IMPORTED)
+add_library(Exiv2 SHARED IMPORTED)
 set_target_properties(Exiv2 PROPERTIES
-    IMPORTED_LOCATION "${CMAKE_SOURCE_DIR}\\pu-erh_lab\\third_party\\exiv2-0.28.4-windows\\lib"
+    IMPORTED_LOCATION "${CMAKE_SOURCE_DIR}\\pu-erh_lab\\third_party\\exiv2-0.28.4-windows\\bin\\exiv2.dll"
+    IMPORTED_IMPLIB "${CMAKE_SOURCE_DIR}\\pu-erh_lab\\third_party\\exiv2-0.28.4-windows\\lib\\exiv2.lib"
     INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_SOURCE_DIR}\\pu-erh_lab\\third_party\\exiv2-0.28.4-windows\\include"
 )
 

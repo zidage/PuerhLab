@@ -1,8 +1,8 @@
 /*
- * @file        pu-erh_lab/src/include/type/type.hpp
- * @brief       collection of wrapper types
+ * @file        pu-erh_lab/src/include/mapper/sleeve/sleeve_filter.hpp
+ * @brief       A exif-based filter for internal filtering in a sleeve base
  * @author      Yurun Zi
- * @date        2025-03-19
+ * @date        2025-03-26
  * @license     MIT
  *
  * @copyright   Copyright (c) 2025 Yurun Zi
@@ -28,26 +28,9 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#pragma once
-
-#include <cstdint>
-#include <string>
 
 namespace puerhlab {
-
-// Wide character path c string
-#define image_path_t std::wstring
-#define file_path_t std::wstring
-
-#define image_id_t uint64_t
-
-// Hash type for version control
-#define hash_t uint32_t
-
-// Used in buffer-like structures to represent frame id
-#define frame_id_t uint32_t
-
-// Used in DecodeRequest type
-#define request_id_t size_t
-
-};  // namespace puerhlab
+class SleeveFilter {
+  
+};
+};

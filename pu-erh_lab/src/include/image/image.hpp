@@ -30,7 +30,6 @@
 
 #pragma once
 
-#include <exiv2/exif.hpp>
 #include <exiv2/exiv2.hpp>
 #include <memory>
 #include <opencv2/opencv.hpp>
@@ -46,36 +45,36 @@ class Image {
  private:
   /**
    * @brief related edit history of this image
-   * 
+   *
    */
   EditHistory _edit_history;
   /**
    * @brief a pointer to the current edit version
-   * 
+   *
    */
   std::shared_ptr<Version> _curr_version;
 
  public:
   /**
    * @brief uid of the image
-   * 
+   *
    */
   image_id_t _image_id;
   /**
    * @brief the path to this image
-   * 
+   *
    */
   image_path_t _image_path;
   /**
    * @brief the exif metadata of this image
-   * 
+   *
    */
   Exiv2::ExifData _exif_data;
   /**
    * @brief image data, represented by a opencv image. It is not empty if and only if has_data is true.
    *
    */
-  bool has_data;
+  bool    has_data;
   cv::Mat _image_data;
   /**
    * @brief thumbnail of this image
@@ -88,10 +87,9 @@ class Image {
    */
   ImageType _image_type = ImageType::DEFAULT;
 
-
   /**
    * @brief Construct a new Image object
-   * 
+   *
    * @param image_id the interal uid given to the new image
    * @param image_path the disk location of the image
    * @param image_type the type of the image
@@ -100,15 +98,15 @@ class Image {
 
   /**
    * @brief Load image data into an image object
-   * 
-   * @param image_data 
+   *
+   * @param image_data
    */
   void LoadData(cv::Mat &&load_image);
 
   /**
    * @brief Load image thumbnail into an image object
-   * 
-   * @param image_data 
+   *
+   * @param image_data
    */
   void LoadThumbnail(cv::Mat &&thumbnail);
 };

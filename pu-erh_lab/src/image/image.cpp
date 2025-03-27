@@ -28,7 +28,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#include <image/image.hpp>
+#include "image/image.hpp"
 
 namespace puerhlab {
 Image::Image(image_id_t image_id, image_path_t image_path, ImageType image_type)
