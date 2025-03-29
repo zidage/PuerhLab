@@ -70,11 +70,14 @@ class Image {
 
 
   explicit Image(image_id_t image_id, image_path_t image_path, ImageType image_type, Exiv2::ExifData exif_data);
+  explicit Image(image_path_t image_path, ImageType image_type, Exiv2::ExifData exif_data);
 
   void LoadData(cv::Mat &&load_image);
 
   void LoadThumbnail(cv::Mat &&thumbnail);
 
-  cv::Mat &getImageData();
+  auto getImageData() -> cv::Mat &;
+
+  void SetId(image_id_t image_id);
 };
 };  // namespace puerhlab

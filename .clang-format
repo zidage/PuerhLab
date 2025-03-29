@@ -2,4 +2,8 @@ BasedOnStyle: Google
 DerivePointerAlignment: false
 PointerAlignment: Right
 ColumnLimit: 120
-AlignConsecutiveDeclarations: true
+
+
+FileFilter:
+  - '**/*.h':
+      AlignConsecutiveDeclarations: true

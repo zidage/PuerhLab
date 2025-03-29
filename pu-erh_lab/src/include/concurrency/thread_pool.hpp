@@ -1,14 +1,14 @@
 /*
  * @file        pu-erh_lab/src/include/concurrency/thread_pool.hpp
- * @brief       header file for raw decoder module
- * @author      Yurun Zi
+ * @brief       A thread pool for parallel tasks
+ * @author      ChatGPT
  * @date        2025-03-19
  * @license     MIT
  *
- * @copyright   Copyright (c) 2025 Yurun Zi
+ * @copyright   Copyright (c) 2025 ChatGPT
  */
 
-// Copyright (c) 2025 Yurun Zi
+// Copyright (c) 2025 ChatGPT
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -28,12 +28,33 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#include "utils/queue/queue.hpp"
+#include <functional>
+#include <future>
+#include <vector>
+#include <queue>
+
+#include "type/type.hpp"
 
 #pragma once
 
 namespace puerhlab {
 class ThreadPool {
-  // TODO: Add Implementation
+ public:
+  ThreadPool(size_t thread_count);
+  ~ThreadPool();
+
+  template <typename Func, typename T>
+  auto SubmitFile(std::ifstream &&file, file_path_t &&file_path, std::vector<T>& result, uint32_t id, Func func) -> std::future<void>;
+
+ private:
+  std::queue<std::function<void()>> tasks;
+  std::mutex                        _front_mtx;
+  std::mutex                        _rear_mtx;
+  std::condition_variable           condition;
+  std::vector<std::thread>          workers;
+
+  bool stop;
+
+  void WorkerThread();
 };
 };  // namespace puerhlab

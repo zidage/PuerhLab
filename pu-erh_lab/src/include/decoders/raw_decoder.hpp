@@ -1,6 +1,6 @@
 /*
- * @file        pu-erh_lab/src/raw/raw_decoder.cpp
- * @brief       implements raw decode methods
+ * @file        pu-erh_lab/src/include/raw/raw_decoder.hpp
+ * @brief       header file for raw decoder module
  * @author      Yurun Zi
  * @date        2025-03-19
  * @license     MIT
@@ -28,8 +28,25 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#include <raw/raw_decoder.hpp>
-#include <image/image.hpp>
+#pragma once
+
+#include "image_decoder.hpp"
+#include "utils/queue/queue.hpp"
+#include "type/type.hpp"
+#include "concurrency/thread_pool.hpp"
+
+#include <libraw/libraw.h>
+#include <atomic>
+#include <cstddef>
+#include <memory>
+
+
 namespace puerhlab {
 
-}; // namespace puerhlab
+
+class RawDecoder : ImageDecoder {
+ 
+
+};
+
+};  // namespace puerhlab

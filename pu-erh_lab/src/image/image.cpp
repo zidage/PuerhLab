@@ -17,8 +17,8 @@
 // copies of the Software, and to permit persons to whom the Software is
 // furnished to do so, subject to the following conditions:
 //
-// The above copyright notice and this permission notice shall be included in all
-// copies or substantial portions of the Software.
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
 //
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 // IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -32,7 +32,6 @@
 
 #include <exiv2/exif.hpp>
 
-
 namespace puerhlab {
 
 /**
@@ -42,14 +41,22 @@ namespace puerhlab {
  * @param image_path the disk location of the image
  * @param image_type the type of the image
  */
-Image::Image(image_id_t image_id, image_path_t image_path, ImageType image_type, Exiv2::ExifData exif_data)
-    : _image_id(image_id), _image_path(image_path), _exif_data(std::move(exif_data)), _image_type(image_type) {}
+Image::Image(image_id_t image_id, image_path_t image_path, ImageType image_type,
+             Exiv2::ExifData exif_data)
+    : _image_id(image_id), _image_path(image_path),
+      _exif_data(std::move(exif_data)), _image_type(image_type) {}
 
+Image::Image(image_path_t image_path, ImageType image_type,
+             Exiv2::ExifData exif_data)
+    : _image_path(image_path), _exif_data(std::move(exif_data)),
+      _image_type(image_type) {}
 /**
  * @brief Load image data into an image object
  *
  * @param image_data
  */
-void Image::LoadData(cv::Mat &&load_image) { _image_data = std::move(load_image); }
+void Image::LoadData(cv::Mat &&load_image) {
+  _image_data = std::move(load_image);
+}
 
-};  // namespace puerhlab
+}; // namespace puerhlab

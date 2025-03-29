@@ -33,7 +33,7 @@
 
 #include "type/type.hpp"
 #include "image/image.hpp"
-#include "raw/raw_decoder.hpp"
+#include "decoders/raw_decoder.hpp"
 #include "utils/queue/queue.hpp"
 
 #include <cstdint>

@@ -56,6 +56,6 @@ class SleeveMapper {
 
   void RemoveImageByFilter(const SleeveFilter &filter);
 
-  std::unordered_map<image_id_t, Image> GetSleeveBaseByFilter(const SleeveFilter &filter);  
+  auto GetSleeveBaseByFilter(const SleeveFilter &filter) -> std::unordered_map<image_id_t, Image>;  
 };
 };  // namespace puerhlab

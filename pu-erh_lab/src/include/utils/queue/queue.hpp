@@ -40,14 +40,13 @@ namespace puerhlab {
  */
 template <typename T>
 class NonBlockingQueue {
- private:
+ public:
   std::queue<std::shared_ptr<T>> _request_queue;
   // Mutex used for non-blocking queue
   std::mutex _front_mtx;
   std::mutex _rear_mtx;
   std::condition_variable cv;
 
- public:
   explicit NonBlockingQueue() = default;
 
   /**

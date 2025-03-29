@@ -1,8 +1,8 @@
 /*
- * @file        pu-erh_lab/src/include/raw/raw_decoder.hpp
- * @brief       header file for raw decoder module
+ * @file        pu-erh_lab/src/include/decoders/image_decoder.hpp
+ * @brief       A decoder responsible for decoding image files
  * @author      Yurun Zi
- * @date        2025-03-19
+ * @date        2025-03-28
  * @license     MIT
  *
  * @copyright   Copyright (c) 2025 Yurun Zi
@@ -30,39 +30,36 @@
 
 #pragma once
 
-#include "utils/queue/queue.hpp"
-#include "type/type.hpp"
-#include "concurrency/thread_pool.hpp"
-
-#include <libraw/libraw.h>
-
 #include <atomic>
 #include <cstddef>
+#include <cstdint>
+#include <future>
 #include <memory>
+#include <thread>
+#include <vector>
 
+#include "concurrency/thread_pool.hpp"
+#include "image/image.hpp"
+#include "type/type.hpp"
+#include "utils/queue/queue.hpp"
 
-
-
-#define MAX_REQUEST_SIZE 64
+#define MAX_REQUEST_SIZE 64u
 namespace puerhlab {
 
-struct DecodeRequest {
-  request_id_t _request_id;
-  image_path_t _raw_file_path;
-  std::shared_ptr<LibRaw> _image_processor;
-};
-
-class RawDecoder {
+class ImageDecoder {
  private:
-  NonBlockingQueue<DecodeRequest> _process_queue;
-  std::atomic<size_t> _next_request_id;
-
+  ThreadPool            _thread_pool;
+  uint32_t              _total_request;
+  std::atomic<uint32_t> _next_request_id;
+  std::atomic<uint32_t> _completed_request;
+  std::vector<Image>    _decoded;
 
  public:
-  RawDecoder() = default;
+  ImageDecoder(size_t thread_count, uint32_t total_request);
 
-  int NewRequest();
+  void ScheduleDecode(image_path_t image_path);
 
+  static void DecodeImage(std::ifstream &&file, file_path_t&& file_path, std::vector<Image> result, uint32_t id);
 };
 
 };  // namespace puerhlab
