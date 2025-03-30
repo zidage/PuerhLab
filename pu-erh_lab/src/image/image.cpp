@@ -31,6 +31,7 @@
 #include "image/image.hpp"
 
 #include <exiv2/exif.hpp>
+#include <utility>
 
 namespace puerhlab {
 
@@ -57,6 +58,10 @@ Image::Image(image_path_t image_path, ImageType image_type,
  */
 void Image::LoadData(cv::Mat &&load_image) {
   _image_data = std::move(load_image);
+}
+
+void Image::LoadThumbnail(cv::Mat &&thumbnail) {
+  _thumbnail = std::move(thumbnail);
 }
 
 }; // namespace puerhlab

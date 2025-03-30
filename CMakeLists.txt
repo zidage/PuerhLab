@@ -5,7 +5,7 @@ set(CMAKE_CXX_STANDARD 20)
 #set(CMAKE_C_COMPILER "clang")
 #set(CMAKE_CXX_COMPILER "clang++")
 # Compiler flags.
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /W4 /external:anglebrackets /external:W0 /MD")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /W4 /external:anglebrackets /external:W0 /MD /EHsc")
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 
@@ -49,9 +49,9 @@ add_library(Cereal INTERFACE "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_party/cereal-
 # Exiv2
 add_library(Exiv2 SHARED IMPORTED)
 set_target_properties(Exiv2 PROPERTIES
-    IMPORTED_LOCATION "${CMAKE_SOURCE_DIR}\\pu-erh_lab\\third_party\\exiv2-0.28.4-windows\\bin\\exiv2.dll"
-    IMPORTED_IMPLIB "${CMAKE_SOURCE_DIR}\\pu-erh_lab\\third_party\\exiv2-0.28.4-windows\\lib\\exiv2.lib"
-    INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_SOURCE_DIR}\\pu-erh_lab\\third_party\\exiv2-0.28.4-windows\\include"
+    IMPORTED_LOCATION "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_party/exiv2-0.28.4-windows/bin/exiv2.dll"
+    IMPORTED_IMPLIB "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_party/exiv2-0.28.4-windows/lib/exiv2.lib"
+    INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_party/exiv2-0.28.4-windows/include"
 )
 
 # MurmurHash3

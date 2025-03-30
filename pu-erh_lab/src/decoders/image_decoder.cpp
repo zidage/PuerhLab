@@ -29,6 +29,8 @@
 // SOFTWARE.
 
 #include "decoders/image_decoder.hpp"
+#include "concurrency/thread_pool.hpp"
+#include "image/image.hpp"
 
 #include <algorithm>
 #include <cstddef>
@@ -36,13 +38,9 @@
 #include <exiv2/exif.hpp>
 #include <exiv2/image.hpp>
 #include <fstream>
-#include <functional>
-#include <mutex>
 #include <opencv2/imgcodecs.hpp>
 #include <vector>
 
-#include "concurrency/thread_pool.hpp"
-#include "image/image.hpp"
 
 namespace puerhlab {
 /**
@@ -64,7 +62,7 @@ ImageDecoder::ImageDecoder(size_t thread_count, uint32_t total_request)
  */
 void ImageDecoder::ScheduleDecode(image_path_t image_path) {
   std::ifstream file(image_path);
-  _thread_pool.SubmitFile(std::move(file), std::move(image_path), _decoded,
+  _thread_pool.SubmitFile(std::move(file), image_path, _decoded,
                           _next_request_id.fetch_add(1), DecodeImage);
 }
 
@@ -75,7 +73,7 @@ void ImageDecoder::ScheduleDecode(image_path_t image_path) {
  * @param file_path
  * @param id
  */
-void DecodeImage(std::ifstream &&file, file_path_t &&file_path,
+static void DecodeImage(std::ifstream &&file, file_path_t file_path,
                  std::vector<Image> result, uint32_t id) {
   // Load filestream to memory
   std::vector<char> buffer((std::istreambuf_iterator<char>(file)),

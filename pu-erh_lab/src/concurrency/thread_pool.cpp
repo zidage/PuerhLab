@@ -69,18 +69,4 @@ void ThreadPool::WorkerThread() {
   }
 }
 
-template <typename Func, typename T>
-auto ThreadPool::SubmitFile(std::ifstream &&file, file_path_t &&file_path, std::vector<T>& result, uint32_t id, Func func)
-    -> std::future<void> {
-  auto task = std::make_shared<std::packaged_task<void()>>(
-      [&file, file_path, result, id, func] { func(std::move(file), std::move(file_path), result, id); });
-
-  {
-    std::unique_lock<std::mutex> lock(_rear_mtx);
-    tasks.emplace([task]() { (*task)(); });
-  }
-
-  condition.notify_one();
-  return task->get_future();
-}
 };  // namespace puerhlab

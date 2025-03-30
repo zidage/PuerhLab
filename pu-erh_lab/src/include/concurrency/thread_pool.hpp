@@ -17,8 +17,8 @@
 // copies of the Software, and to permit persons to whom the Software is
 // furnished to do so, subject to the following conditions:
 //
-// The above copyright notice and this permission notice shall be included in all
-// copies or substantial portions of the Software.
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
 //
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 // IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -30,8 +30,9 @@
 
 #include <functional>
 #include <future>
-#include <vector>
 #include <queue>
+#include <vector>
+
 
 #include "type/type.hpp"
 
@@ -39,22 +40,37 @@
 
 namespace puerhlab {
 class ThreadPool {
- public:
+public:
   ThreadPool(size_t thread_count);
   ~ThreadPool();
 
   template <typename Func, typename T>
-  auto SubmitFile(std::ifstream &&file, file_path_t &&file_path, std::vector<T>& result, uint32_t id, Func func) -> std::future<void>;
+  auto SubmitFile(std::ifstream &&file, file_path_t file_path,
+                  std::vector<T> &result, uint32_t id, Func func)
+      -> std::future<void> {
+    auto task = std::make_shared<std::packaged_task<void()>>(
+        [&file, file_path, result, id, func] {
+          func(std::move(file), std::move(file_path), result, id);
+        });
 
- private:
+    {
+      std::unique_lock<std::mutex> lock(_rear_mtx);
+      tasks.emplace([task]() { (*task)(); });
+    }
+
+    condition.notify_one();
+    return task->get_future();
+  }
+
+private:
   std::queue<std::function<void()>> tasks;
-  std::mutex                        _front_mtx;
-  std::mutex                        _rear_mtx;
-  std::condition_variable           condition;
-  std::vector<std::thread>          workers;
+  std::mutex _front_mtx;
+  std::mutex _rear_mtx;
+  std::condition_variable condition;
+  std::vector<std::thread> workers;
 
   bool stop;
 
   void WorkerThread();
 };
-};  // namespace puerhlab
+}; // namespace puerhlab

@@ -11,7 +11,14 @@ target_include_directories(SingleThumbnailLoad PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh
 target_link_libraries(SingleThumbnailLoad PRIVATE GTest::gtest_main LibRaw ${OpenCV_LIBS})
 target_compile_definitions(SingleThumbnailLoad PRIVATE LIBRAW_NODLL)
 
+add_executable(ImageDecoderTest decoders/image_decoder_test.cpp)
+target_include_directories(ImageDecoderTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
+target_link_libraries(ImageDecoderTest PRIVATE GTest::gtest_main ImageDecoder Exiv2)
+target_compile_definitions(SingleThumbnailLoad PRIVATE LIBRAW_NODLL)
+
+
 include(GoogleTest)
 gtest_discover_tests(SampleTest)
 gtest_discover_tests(SingleRawLoad)
 gtest_discover_tests(SingleThumbnailLoad)
+gtest_discover_tests(ImageDecoderTest)
