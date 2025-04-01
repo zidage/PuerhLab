@@ -45,16 +45,16 @@ public:
   ~ThreadPool();
 
   template <typename Func, typename T>
-  auto SubmitFile(std::ifstream &&file, file_path_t file_path,
+  auto SubmitFile(std::vector<char> buffer, file_path_t file_path,
                   std::vector<T> &result, uint32_t id, Func func)
       -> std::future<void> {
     auto task = std::make_shared<std::packaged_task<void()>>(
-        [&file, file_path, result, id, func] {
-          func(std::move(file), std::move(file_path), result, id);
+        [buffer, file_path, &result, id, func] {
+          func(buffer, file_path, result, id);
         });
 
     {
-      std::unique_lock<std::mutex> lock(_rear_mtx);
+      std::unique_lock<std::mutex> lock(mtx);
       tasks.emplace([task]() { (*task)(); });
     }
 
@@ -64,8 +64,7 @@ public:
 
 private:
   std::queue<std::function<void()>> tasks;
-  std::mutex _front_mtx;
-  std::mutex _rear_mtx;
+  std::mutex mtx;
   std::condition_variable condition;
   std::vector<std::thread> workers;
 

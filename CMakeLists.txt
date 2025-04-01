@@ -2,12 +2,14 @@ cmake_minimum_required(VERSION 3.10.0)
 
 set(CMAKE_CXX_STANDARD 20)
 
+
 #set(CMAKE_C_COMPILER "clang")
 #set(CMAKE_CXX_COMPILER "clang++")
 # Compiler flags.
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /W4 /external:anglebrackets /external:W0 /MD /EHsc")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /W4 /external:anglebrackets /external:W0 /D_DEBUG /EHsc ")
+set(CMAKE_LINKER_FLAGS_DEBUG "/DEBUG")
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-
+set(BUILD_STATIC_LIB OFF)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
@@ -25,13 +27,15 @@ FetchContent_Declare(
 )
 # For Windows: Prevent overriding the parent project's compiler/linker settings
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+
 FetchContent_MakeAvailable(googletest)
 enable_testing() 
 
 # LibRaw
-add_library(LibRaw STATIC IMPORTED)
+add_library(LibRaw SHARED IMPORTED)
 set_target_properties(LibRaw PROPERTIES
-    IMPORTED_LOCATION "${CMAKE_SOURCE_DIR}\\pu-erh_lab\\third_party\\LibRaw-0.21.3-windows\\lib\\libraw_static.lib"
+    IMPORTED_LOCATION "${CMAKE_SOURCE_DIR}\\pu-erh_lab\\third_party\\LibRaw-0.21.3-windows\\bin\\libraw.dll"
+    IMPORTED_IMPLIB "${CMAKE_SOURCE_DIR}\\pu-erh_lab\\third_party\\LibRaw-0.21.3-windows\\lib\\libraw.lib"
     INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_SOURCE_DIR}\\pu-erh_lab\\third_party\\LibRaw-0.21.3-windows"
 )
 
@@ -49,9 +53,9 @@ add_library(Cereal INTERFACE "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_party/cereal-
 # Exiv2
 add_library(Exiv2 SHARED IMPORTED)
 set_target_properties(Exiv2 PROPERTIES
-    IMPORTED_LOCATION "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_party/exiv2-0.28.4-windows/bin/exiv2.dll"
-    IMPORTED_IMPLIB "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_party/exiv2-0.28.4-windows/lib/exiv2.lib"
-    INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_party/exiv2-0.28.4-windows/include"
+    IMPORTED_LOCATION "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_party/exiv2-0.28.5-2022msvc-AMD64/bin/exiv2.dll"
+    IMPORTED_IMPLIB "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_party/exiv2-0.28.5-2022msvc-AMD64/lib/exiv2.lib"
+    INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_party/exiv2-0.28.5-2022msvc-AMD64/include"
 )
 
 # MurmurHash3

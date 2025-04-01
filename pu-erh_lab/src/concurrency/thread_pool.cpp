@@ -45,8 +45,7 @@ ThreadPool::ThreadPool(size_t thread_count) : stop(false) {
 
 ThreadPool::~ThreadPool() {
   {
-    std::unique_lock<std::mutex> lock_front(_front_mtx);
-    std::unique_lock<std::mutex> lock_rear(_rear_mtx);
+    std::unique_lock<std::mutex> lock(mtx);
     stop = true;
   }
   condition.notify_all();
@@ -59,7 +58,7 @@ void ThreadPool::WorkerThread() {
   while (true) {
     std::function<void()> task;
     {
-      std::unique_lock<std::mutex> lock(_front_mtx);
+      std::unique_lock<std::mutex> lock(mtx);
       condition.wait(lock, [this] { return stop || !tasks.empty(); });
       if (stop && tasks.empty()) return;
       task = std::move(tasks.front());

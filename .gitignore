@@ -1052,3 +1052,4 @@ third_party/exiv2-0.28.4-windows/
 *.ARW
 *.NEF
 *.dng
+**/jpg/*.jpg

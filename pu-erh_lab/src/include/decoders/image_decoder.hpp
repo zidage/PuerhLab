@@ -40,6 +40,7 @@
 #include <exiv2/exif.hpp>
 #include <exiv2/image.hpp>
 #include <fstream>
+#include <future>
 #include <opencv2/imgcodecs.hpp>
 #include <vector>
 
@@ -50,19 +51,19 @@ class ImageDecoder {
 private:
   ThreadPool _thread_pool;
   uint32_t _total_request;
-  std::atomic<uint32_t> _next_request_id;
-  std::atomic<uint32_t> _completed_request;
+  uint32_t _next_request_id;
+  uint32_t _completed_request;
   std::vector<Image> _decoded;
 
 public:
   explicit ImageDecoder(size_t thread_count, uint32_t total_request);
 
-  void ScheduleDecode(image_path_t image_path);
+  auto ScheduleDecode(image_path_t image_path) -> std::future<void>;
 
   
 };
 
-static void DecodeImage(std::ifstream &&file, file_path_t file_path,
-  std::vector<Image> result, uint32_t id);
+static void DecodeImage(std::vector<char> buffer, file_path_t file_path,
+  std::vector<Image>& result, uint32_t id);
 
 }; // namespace puerhlab
