@@ -1,3 +1,6 @@
+add_library(MemLeakDect INTERFACE leak_detector/memory_leak_detector.hpp)
+target_link_libraries(MemLeakDect INTERFACE GTest::gtest_main)
+
 add_executable(SampleTest sample_test.cpp)
 target_link_libraries(SampleTest PRIVATE GTest::gtest_main)
 

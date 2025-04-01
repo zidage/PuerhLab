@@ -34,14 +34,15 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdint>
 #include <exception>
 #include <exiv2/exif.hpp>
 #include <exiv2/image.hpp>
+#include <exiv2/types.hpp>
 #include <fstream>
 #include <future>
 #include <opencv2/imgcodecs.hpp>
 #include <vector>
-
 
 namespace puerhlab {
 /**
@@ -51,9 +52,8 @@ namespace puerhlab {
  * @param total_request
  */
 ImageDecoder::ImageDecoder(size_t thread_count, uint32_t total_request)
-    : _thread_pool(thread_count), _next_request_id(0) {
+    : _thread_pool(thread_count), _next_request_id(0), _decoded(total_request){
   _total_request = std::min(MAX_REQUEST_SIZE, total_request);
-  _decoded.reserve(_total_request);
 }
 
 /**
@@ -61,14 +61,15 @@ ImageDecoder::ImageDecoder(size_t thread_count, uint32_t total_request)
  *
  * @param image_path
  */
-auto ImageDecoder::ScheduleDecode(image_path_t image_path) -> std::future<void> {
+auto ImageDecoder::ScheduleDecode(image_path_t image_path)
+    -> std::future<void> {
   std::ifstream file(image_path, std::ios::binary | std::ios::ate);
   if (_next_request_id >= _total_request || !file.is_open()) {
     return std::future<void>();
   }
 
   std::streamsize fileSize = file.tellg();
-  
+
   file.seekg(0, std::ios::beg);
 
   std::vector<char> buffer(fileSize);
@@ -78,7 +79,7 @@ auto ImageDecoder::ScheduleDecode(image_path_t image_path) -> std::future<void> 
   file.close();
 
   return _thread_pool.SubmitFile(buffer, image_path, _decoded,
-                          _next_request_id++, DecodeImage);
+                                 _next_request_id++, DecodeImage);
 }
 
 /**
@@ -89,18 +90,16 @@ auto ImageDecoder::ScheduleDecode(image_path_t image_path) -> std::future<void> 
  * @param id
  */
 static void DecodeImage(std::vector<char> buffer, file_path_t file_path,
-                 std::vector<Image>& result, uint32_t id) {
+                        std::vector<Image> &result, uint32_t id) {
   // Load filestream to memory
   cv::Mat image_data(buffer.size(), 1, CV_8UC1, buffer.data());
   cv::Mat thumbnail = cv::imdecode(image_data, cv::IMREAD_REDUCED_COLOR_8);
   try {
-    auto exiv2_img = Exiv2::ImageFactory::open(buffer.data());
+    auto exiv2_img = Exiv2::ImageFactory::open((const Exiv2::byte*)buffer.data(), buffer.size());
     Exiv2::ExifData &exifData = exiv2_img->exifData();
-
-    // FIXME: Potential memory management bug
-    result[id] =
+    result.at(id) =
         Image(file_path, ImageType::DEFAULT, Exiv2::ExifData(exifData));
-    result[id].LoadThumbnail(std::move(thumbnail));
+    result.at(id).LoadThumbnail(std::move(thumbnail));
   } catch (std::exception &e) {
     // TODO: Append error message to log
   }
