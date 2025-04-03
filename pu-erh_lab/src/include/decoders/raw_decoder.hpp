@@ -17,8 +17,8 @@
 // copies of the Software, and to permit persons to whom the Software is
 // furnished to do so, subject to the following conditions:
 //
-// The above copyright notice and this permission notice shall be included in all
-// copies or substantial portions of the Software.
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
 //
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 // IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -31,22 +31,21 @@
 #pragma once
 
 #include "image_decoder.hpp"
-#include "utils/queue/queue.hpp"
 #include "type/type.hpp"
-#include "concurrency/thread_pool.hpp"
 
-#include <libraw/libraw.h>
 #include <atomic>
 #include <cstddef>
+#include <libraw/libraw.h>
 #include <memory>
-
 
 namespace puerhlab {
 
-
-class RawDecoder : ImageDecoder {
- 
-
+class RawDecoder : public ImageDecoder {
+public:
+  RawDecoder() = default;
+  void Decode(std::vector<char> buffer, file_path_t file_path,
+              std::vector<std::optional<Image>> &result, uint32_t id,
+              std::promise<uint32_t> promise);
 };
 
-};  // namespace puerhlab
+}; // namespace puerhlab

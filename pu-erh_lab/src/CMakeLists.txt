@@ -10,7 +10,11 @@ target_include_directories(Image PUBLIC include)
 target_link_libraries(Image PUBLIC Exiv2 ${OpenCV_LIBS} LibRaw)
 
 
-add_library(ImageDecoder decoders/image_decoder.cpp)
+add_library(ImageDecoder 
+    decoders/decoder_manager.cpp
+    decoders/raw_decoder.cpp
+    decoders/thumbnail_decoder.cpp    
+)
 target_include_directories(ImageDecoder PUBLIC include)
 target_link_libraries(ImageDecoder PUBLIC Image ThreadPool Exiv2 ${OpenCV_LIBS} LibRaw)
 

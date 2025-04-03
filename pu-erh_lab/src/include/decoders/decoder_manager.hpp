@@ -1,14 +1,14 @@
 /*
- * @file        pu-erh_lab/src/include/concurrency/thread_pool.hpp
- * @brief       A thread pool for parallel tasks
- * @author      ChatGPT
- * @date        2025-03-19
+ * @file        pu-erh_lab/src/include/decoders/image_decoder.hpp
+ * @brief       A decoder responsible for decoding image files
+ * @author      Yurun Zi
+ * @date        2025-03-28
  * @license     MIT
  *
- * @copyright   Copyright (c) 2025 ChatGPT
+ * @copyright   Copyright (c) 2025 Yurun Zi
  */
 
-// Copyright (c) 2025 ChatGPT
+// Copyright (c) 2025 Yurun Zi
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -28,32 +28,39 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#include <functional>
-#include <future>
-#include <queue>
-#include <vector>
-
-
-#include "type/type.hpp"
-
 #pragma once
 
+#include "concurrency/thread_pool.hpp"
+#include "image/image.hpp"
+#include "type/type.hpp"
+
+#include <atomic>
+#include <cstddef>
+#include <cstdint>
+#include <exiv2/exif.hpp>
+#include <exiv2/image.hpp>
+#include <fstream>
+#include <future>
+#include <opencv2/imgcodecs.hpp>
+#include <optional>
+#include <vector>
+
+#define MAX_REQUEST_SIZE 64u
 namespace puerhlab {
-class ThreadPool {
-public:
-  ThreadPool(size_t thread_count);
-  ~ThreadPool();
 
-  void Submit(std::function<void()> task);
-
+class DecoderManager {
 private:
-  std::queue<std::function<void()>> tasks;
-  std::mutex mtx;
-  std::condition_variable condition;
-  std::vector<std::thread> workers;
+  ThreadPool _thread_pool;
+  uint32_t _total_request;
+  uint32_t _next_request_id;
+  uint32_t _completed_request;
+  std::vector<std::optional<Image>> _decoded_buffer;
 
-  bool stop;
+public:
+  explicit DecoderManager(size_t thread_count, uint32_t total_request);
 
-  void WorkerThread();
+  void ScheduleDecode(image_path_t image_path,
+                      std::promise<uint32_t> decode_promise);
 };
+
 }; // namespace puerhlab

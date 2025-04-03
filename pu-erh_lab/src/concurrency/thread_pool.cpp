@@ -54,6 +54,14 @@ ThreadPool::~ThreadPool() {
   }
 }
 
+void ThreadPool::Submit(std::function<void()> task) {
+  {
+    std::lock_guard<std::mutex> lock(mtx);
+    tasks.push(task);
+  }
+  condition.notify_one();
+}
+
 void ThreadPool::WorkerThread() {
   while (true) {
     std::function<void()> task;
