@@ -10,7 +10,7 @@ namespace puerhlab {
  */
 void RawDecoder::Decode(std::vector<char> buffer, file_path_t file_path,
                         std::vector<std::optional<Image>> &result, uint32_t id,
-                        std::promise<uint32_t> promise) {
+                        std::shared_ptr<std::promise<uint32_t>> promise) {
   // TODO: Add Implementation
 }
 }; // namespace puerhlab

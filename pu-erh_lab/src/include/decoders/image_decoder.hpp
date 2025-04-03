@@ -37,6 +37,7 @@
 #include <exiv2/exif.hpp>
 #include <exiv2/image.hpp>
 #include <future>
+#include <memory>
 #include <opencv2/imgcodecs.hpp>
 #include <optional>
 #include <vector>
@@ -47,6 +48,7 @@ namespace puerhlab {
 class ImageDecoder {
 public:
   virtual void Decode(std::vector<char> buffer, file_path_t file_path,
-    std::vector<std::optional<Image>>& result, uint32_t id, std::promise<uint32_t> promise) = 0;
+                      std::vector<std::optional<Image>> &result, uint32_t id,
+                      std::shared_ptr<std::promise<uint32_t>> promise) = 0;
 };
 }; // namespace puerhlab

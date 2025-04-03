@@ -25,13 +25,14 @@ DecoderManager::DecoderManager(size_t thread_count, uint32_t total_request)
  *
  * @param image_path
  */
-void DecoderManager::ScheduleDecode(image_path_t image_path,
-                                    std::promise<uint32_t> decode_promise) {
+void DecoderManager::ScheduleDecode(
+    image_path_t image_path,
+    std::shared_ptr<std::promise<uint32_t>> decode_promise) {
   // Open file as an ifstream
   std::ifstream file(image_path, std::ios::binary | std::ios::ate);
   if (_next_request_id >= _total_request || !file.is_open()) {
     // FIXME: sanity check
-    decode_promise.set_value(0);
+    decode_promise->set_value(_next_request_id);
   }
 
   // Assign a decoder for the task
@@ -53,12 +54,11 @@ void DecoderManager::ScheduleDecode(image_path_t image_path,
 
   auto task = std::make_shared<std::packaged_task<void()>>(
       [decoder, buffer = std::move(buffer), image_path, &decoded, request_id,
-       &decode_promise]() mutable {
+       decode_promise]() mutable {
         decoder->Decode(std::move(buffer), image_path, decoded, request_id,
-                        std::move(decode_promise));
+                        decode_promise);
       });
 
   _thread_pool.Submit([task]() { (*task)(); });
-  _next_request_id++;
 }
 }; // namespace puerhlab

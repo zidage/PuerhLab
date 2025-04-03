@@ -33,8 +33,6 @@
 #include "image_decoder.hpp"
 #include "type/type.hpp"
 
-#include <atomic>
-#include <cstddef>
 #include <libraw/libraw.h>
 #include <memory>
 
@@ -45,7 +43,7 @@ public:
   RawDecoder() = default;
   void Decode(std::vector<char> buffer, file_path_t file_path,
               std::vector<std::optional<Image>> &result, uint32_t id,
-              std::promise<uint32_t> promise);
+              std::shared_ptr<std::promise<uint32_t>> promise);
 };
 
 }; // namespace puerhlab

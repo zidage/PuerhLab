@@ -41,6 +41,7 @@
 #include <exiv2/image.hpp>
 #include <fstream>
 #include <future>
+#include <memory>
 #include <opencv2/imgcodecs.hpp>
 #include <optional>
 #include <vector>
@@ -60,7 +61,7 @@ public:
   explicit DecoderManager(size_t thread_count, uint32_t total_request);
 
   void ScheduleDecode(image_path_t image_path,
-                      std::promise<uint32_t> decode_promise);
+                      std::shared_ptr<std::promise<uint32_t>> decode_promise);
 };
 
 }; // namespace puerhlab
