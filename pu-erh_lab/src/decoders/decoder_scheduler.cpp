@@ -1,9 +1,13 @@
-#include "decoders/decoder_manager.hpp"
+#include "decoders/decoder_scheduler.hpp"
 #include "decoders/image_decoder.hpp"
 #include "decoders/thumbnail_decoder.hpp"
+#include "utils/queue/queue.hpp"
 #include <cstdint>
+#include <exception>
+#include <fstream>
 #include <future>
 #include <memory>
+#include <stdexcept>
 #include <utility>
 #include <vector>
 
@@ -14,25 +18,34 @@ namespace puerhlab {
  * @param thread_count
  * @param total_request
  */
-DecoderManager::DecoderManager(size_t thread_count, uint32_t total_request)
-    : _thread_pool(thread_count), _next_request_id(0),
-      _decoded_buffer(total_request) {
+DecoderScheduler::DecoderScheduler(size_t thread_count, uint32_t total_request)
+    : _thread_pool(thread_count), _next_request_id(0) {
   _total_request = std::min(MAX_REQUEST_SIZE, total_request);
 }
 
 /**
- * @brief
+ * @brief Send a decoding task to the scheduler
  *
- * @param image_path
+ * @param image_path the path of the file to be decoded
+ * @param decode_promise the corresponding promise to be collected
  */
-void DecoderManager::ScheduleDecode(
-    image_path_t image_path,
+void DecoderScheduler::ScheduleDecode(
+    image_path_t image_path, DecodeType decode_type,
     std::shared_ptr<std::promise<uint32_t>> decode_promise) {
+  if (_next_request_id >= _total_request) {
+    // sanity check for buffer size
+    decode_promise->set_exception(std::make_exception_ptr(
+        std::runtime_error("Buffer capacity exceeded.")));
+    return;
+  }
   // Open file as an ifstream
   std::ifstream file(image_path, std::ios::binary | std::ios::ate);
-  if (_next_request_id >= _total_request || !file.is_open()) {
-    // FIXME: sanity check
-    decode_promise->set_value(_next_request_id);
+
+  if (!file.is_open()) {
+    // Check file status
+    decode_promise->set_exception(std::make_exception_ptr(
+        std::runtime_error("File not exists or no read permission.")));
+    return;
   }
 
   // Assign a decoder for the task
@@ -44,7 +57,9 @@ void DecoderManager::ScheduleDecode(
   file.seekg(0, std::ios::beg);
   std::vector<char> buffer(fileSize);
   if (!file.read(buffer.data(), fileSize)) {
-    throw std::runtime_error("Could not read file");
+    decode_promise->set_exception(std::make_exception_ptr(
+        std::runtime_error("File not exists or no read permission.")));
+    return;
   }
   file.close();
 

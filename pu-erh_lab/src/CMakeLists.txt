@@ -11,7 +11,7 @@ target_link_libraries(Image PUBLIC Exiv2 ${OpenCV_LIBS} LibRaw)
 
 
 add_library(ImageDecoder 
-    decoders/decoder_manager.cpp
+    decoders/decoder_scheduler.cpp
     decoders/raw_decoder.cpp
     decoders/thumbnail_decoder.cpp    
 )

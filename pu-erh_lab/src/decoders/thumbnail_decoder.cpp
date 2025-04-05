@@ -3,7 +3,7 @@
 
 namespace puerhlab {
 void ThumbnailDecoder::Decode(std::vector<char> buffer, file_path_t file_path,
-                              std::vector<std::optional<Image>> &result,
+                              NonBlockingQueue<std::optional<Image>> &result,
                               uint32_t id,
                               std::shared_ptr<std::promise<uint32_t>> promise) {
   // Open the datastream as a cv::Mat image
@@ -14,9 +14,9 @@ void ThumbnailDecoder::Decode(std::vector<char> buffer, file_path_t file_path,
     auto exiv2_img = Exiv2::ImageFactory::open(
         (const Exiv2::byte *)buffer.data(), buffer.size());
     Exiv2::ExifData &exifData = exiv2_img->exifData();
-    result.at(id) =
-        Image(file_path, ImageType::DEFAULT, Exiv2::ExifData(exifData));
-    result.at(id)->LoadThumbnail(std::move(thumbnail));
+    Image decoded{file_path, ImageType::DEFAULT, Exiv2::ExifData(exifData)};
+    decoded.LoadThumbnail(std::move(thumbnail));
+    result.push(std::move(decoded));
     promise->set_value(id);
   } catch (std::exception &e) {
     // TODO: Append error message to log

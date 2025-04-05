@@ -41,7 +41,7 @@ namespace puerhlab {
 template <typename T>
 class NonBlockingQueue {
  public:
-  std::queue<std::shared_ptr<T>> _request_queue;
+  std::queue<T> _request_queue;
   // Mutex used for non-blocking queue
   std::mutex _front_mtx;
   std::mutex _rear_mtx;
@@ -54,7 +54,7 @@ class NonBlockingQueue {
    *
    * @param new_request the request to enqueue
    */
-  void push(std::shared_ptr<T> new_request) {
+  void push(T new_request) {
     {
       std::lock_guard<std::mutex> lock(_rear_mtx);
       _request_queue.push(std::move(new_request));
@@ -67,7 +67,7 @@ class NonBlockingQueue {
    *
    * @return std::shared_ptr<DecodeRequest>
    */
-  std::shared_ptr<T> pop() {
+  T pop() {
     std::unique_lock<std::mutex> lock(_front_mtx);
     // Wait for the queue to be fill with at least one value
     cv.wait(lock, [this] { return !_request_queue.empty(); });

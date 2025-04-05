@@ -32,6 +32,7 @@
 
 #include "image/image.hpp"
 #include "type/type.hpp"
+#include "utils/queue/queue.hpp"
 
 #include <cstdint>
 #include <exiv2/exif.hpp>
@@ -48,7 +49,7 @@ namespace puerhlab {
 class ImageDecoder {
 public:
   virtual void Decode(std::vector<char> buffer, file_path_t file_path,
-                      std::vector<std::optional<Image>> &result, uint32_t id,
+                      NonBlockingQueue<std::optional<Image>> &result, uint32_t id,
                       std::shared_ptr<std::promise<uint32_t>> promise) = 0;
 };
 }; // namespace puerhlab
