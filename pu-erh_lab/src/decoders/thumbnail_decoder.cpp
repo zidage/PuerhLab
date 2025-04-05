@@ -14,7 +14,7 @@ void ThumbnailDecoder::Decode(std::vector<char> buffer, file_path_t file_path,
     auto exiv2_img = Exiv2::ImageFactory::open(
         (const Exiv2::byte *)buffer.data(), buffer.size());
     Exiv2::ExifData &exifData = exiv2_img->exifData();
-    Image decoded{file_path, ImageType::DEFAULT, Exiv2::ExifData(exifData)};
+    Image decoded{id, file_path, ImageType::DEFAULT, Exiv2::ExifData(exifData)};
     decoded.LoadThumbnail(std::move(thumbnail));
     result.push(std::move(decoded));
     promise->set_value(id);

@@ -71,6 +71,7 @@ class Image {
   explicit Image() = default;
   explicit Image(image_id_t image_id, image_path_t image_path, ImageType image_type, Exiv2::ExifData exif_data);
   explicit Image(image_path_t image_path, ImageType image_type, Exiv2::ExifData exif_data);
+  explicit Image(Image &&other);
 
   void LoadData(cv::Mat &&load_image);
 

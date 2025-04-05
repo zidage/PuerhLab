@@ -60,7 +60,7 @@ private:
   uint32_t _total_request;
   uint32_t _next_request_id;
   uint32_t _completed_request;
-  NonBlockingQueue<std::optional<Image>> _decoded_buffer;
+  NonBlockingQueue<Image> _decoded_buffer;
 
 public:
   explicit DecoderScheduler(size_t thread_count, uint32_t total_request);
