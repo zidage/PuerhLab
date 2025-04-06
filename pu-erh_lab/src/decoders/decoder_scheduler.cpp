@@ -49,8 +49,11 @@ namespace puerhlab {
  * @param thread_count
  * @param total_request
  */
-DecoderScheduler::DecoderScheduler(size_t thread_count, uint32_t total_request)
-    : _thread_pool(thread_count), _next_request_id(0) {
+DecoderScheduler::DecoderScheduler(
+    size_t thread_count, uint32_t total_request,
+    std::shared_ptr<NonBlockingQueue<std::shared_ptr<Image>>> &decoded_buffer)
+    : _thread_pool(thread_count), _next_request_id(0),
+      _decoded_buffer(decoded_buffer) {
   _total_request = std::min(MAX_REQUEST_SIZE, total_request);
 }
 
@@ -95,14 +98,14 @@ void DecoderScheduler::ScheduleDecode(
   file.close();
 
   // Submit a new decode request
-  auto &decoded = _decoded_buffer;
+  auto &decoded_buffer = _decoded_buffer;
   auto request_id = _next_request_id++;
 
   auto task = std::make_shared<std::packaged_task<void()>>(
-      [decoder, buffer = std::move(buffer), image_path, &decoded, request_id,
-       decode_promise]() mutable {
-        decoder->Decode(std::move(buffer), image_path, decoded, request_id,
-                        decode_promise);
+      [decoder, buffer = std::move(buffer), image_path, &decoded_buffer,
+       request_id, decode_promise]() mutable {
+        decoder->Decode(std::move(buffer), image_path, decoded_buffer,
+                        request_id, decode_promise);
       });
 
   _thread_pool.Submit([task]() { (*task)(); });

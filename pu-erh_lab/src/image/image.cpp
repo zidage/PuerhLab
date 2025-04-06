@@ -54,9 +54,9 @@ Image::Image(image_path_t image_path, ImageType image_type,
 
 Image::Image(Image &&other)
     : _image_id(other._image_id), _image_path(std::move(other._image_path)),
-      _exif_data(std::move(other._exif_data)), _image_type(other._image_type),
-      _image_data(std::move(other._image_data)), _thumbnail(std::move(other._thumbnail)){
-}
+      _exif_data(std::move(other._exif_data)),
+      _image_data(std::move(other._image_data)),
+      _thumbnail(std::move(other._thumbnail)), _image_type(other._image_type) {}
 
 /**
  * @brief Load image data into an image object

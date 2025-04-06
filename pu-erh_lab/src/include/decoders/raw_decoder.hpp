@@ -1,6 +1,6 @@
 /*
- * @file        pu-erh_lab/src/include/raw/raw_decoder.hpp
- * @brief       header file for raw decoder module
+ * @file        pu-erh_lab/src/include/include/raw_decoder.hpp
+ * @brief       A decoder used to decode raw files, e.g. .ARW
  * @author      Yurun Zi
  * @date        2025-03-19
  * @license     MIT
@@ -42,8 +42,8 @@ class RawDecoder : public ImageDecoder {
 public:
   RawDecoder() = default;
   void Decode(std::vector<char> buffer, file_path_t file_path,
-              NonBlockingQueue<Image> &result, uint32_t id,
-              std::shared_ptr<std::promise<uint32_t>> promise);
+              std::shared_ptr<NonBlockingQueue<std::shared_ptr<Image>>> &result,
+              uint32_t id, std::shared_ptr<std::promise<uint32_t>> promise);
 };
 
 }; // namespace puerhlab

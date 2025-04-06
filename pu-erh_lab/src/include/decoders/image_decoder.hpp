@@ -40,7 +40,6 @@
 #include <future>
 #include <memory>
 #include <opencv2/imgcodecs.hpp>
-#include <optional>
 #include <vector>
 
 #define MAX_REQUEST_SIZE 64u
@@ -48,8 +47,9 @@ namespace puerhlab {
 
 class ImageDecoder {
 public:
-  virtual void Decode(std::vector<char> buffer, file_path_t file_path,
-                      NonBlockingQueue<Image> &result, uint32_t id,
-                      std::shared_ptr<std::promise<uint32_t>> promise) = 0;
+  virtual void
+  Decode(std::vector<char> buffer, file_path_t file_path,
+         std::shared_ptr<NonBlockingQueue<std::shared_ptr<Image>>> &result,
+         uint32_t id, std::shared_ptr<std::promise<uint32_t>> promise) = 0;
 };
 }; // namespace puerhlab

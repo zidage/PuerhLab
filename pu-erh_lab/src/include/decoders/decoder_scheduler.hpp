@@ -48,11 +48,7 @@
 #define MAX_REQUEST_SIZE 64u
 namespace puerhlab {
 
-enum class DecodeType {
-  THUMB,
-  RAW,
-  REGULAR
-};
+enum class DecodeType { THUMB, RAW, REGULAR };
 
 class DecoderScheduler {
 private:
@@ -60,10 +56,13 @@ private:
   uint32_t _total_request;
   uint32_t _next_request_id;
   uint32_t _completed_request;
-  NonBlockingQueue<Image> _decoded_buffer;
+  std::shared_ptr<NonBlockingQueue<std::shared_ptr<Image>>> _decoded_buffer;
 
 public:
-  explicit DecoderScheduler(size_t thread_count, uint32_t total_request);
+  explicit DecoderScheduler(
+      size_t thread_count, uint32_t total_request,
+      std::shared_ptr<NonBlockingQueue<std::shared_ptr<Image>>>
+          &decoded_buffer);
 
   void ScheduleDecode(image_path_t image_path, DecodeType decode_type,
                       std::shared_ptr<std::promise<uint32_t>> decode_promise);
