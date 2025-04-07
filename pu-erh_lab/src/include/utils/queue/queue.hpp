@@ -64,7 +64,7 @@ class NonBlockingQueue {
   /**
    * @brief A thread-safe wrapper for pop() method
    *
-   * @return std::shared_ptr<DecodeRequest>
+   * @return the front-most element of the queue
    */
   T pop() {
     std::unique_lock<std::mutex> lock(_front_mtx);
@@ -74,6 +74,20 @@ class NonBlockingQueue {
     auto handled_request = _request_queue.front();
     _request_queue.pop();
     return handled_request;
+  }
+
+  /**
+   * @brief Flush the queue
+   *
+   */void Flush() {
+    std::unique_lock<std::mutex> lock_front(_front_mtx);
+    std::unique_lock<std::mutex> lock_rear(_rear_mtx);
+    // Wait for the queue to be fill with at least one value
+    cv.wait(lock_front, [this] { return !_request_queue.empty(); });
+    cv.wait(lock_rear, [this] { return !_request_queue.empty(); });
+    // Flush all the contents in the queue
+    std::queue<T> empty;
+    _request_queue.swap(empty);
   }
  };
 };
