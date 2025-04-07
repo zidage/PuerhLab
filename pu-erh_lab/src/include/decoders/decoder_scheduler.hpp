@@ -53,18 +53,14 @@ enum class DecodeType { THUMB, RAW, REGULAR };
 class DecoderScheduler {
 private:
   ThreadPool _thread_pool;
-  uint32_t _total_request;
-  uint32_t _next_request_id;
-  uint32_t _completed_request;
   std::shared_ptr<NonBlockingQueue<std::shared_ptr<Image>>> _decoded_buffer;
 
 public:
   explicit DecoderScheduler(
-      size_t thread_count, uint32_t total_request,
-      std::shared_ptr<NonBlockingQueue<std::shared_ptr<Image>>>
-          &decoded_buffer);
+      size_t thread_count,
+      std::shared_ptr<NonBlockingQueue<std::shared_ptr<Image>>> decoded_buffer);
 
-  void ScheduleDecode(image_path_t image_path, DecodeType decode_type,
+  void ScheduleDecode(image_id_t id, image_path_t image_path, DecodeType decode_type,
                       std::shared_ptr<std::promise<uint32_t>> decode_promise);
 };
 

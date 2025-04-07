@@ -39,7 +39,9 @@
 #include "utils/queue/queue.hpp"
 
 
+#include <cstddef>
 #include <cstdint>
+#include <future>
 #include <memory>
 #include <vector>
 namespace puerhlab {
@@ -49,12 +51,22 @@ private:
   // Type alias
   using BufferQueue = NonBlockingQueue<std::shared_ptr<Image>>;
   // Image decoding part
+  std::shared_ptr<BufferQueue> _buffer_decoded;
+  uint32_t _buffer_size;
+  size_t _use_thread;
+  uint32_t _start_id;
+  uint32_t _next_id;
   DecoderScheduler _decoder_scheduler;
-  BufferQueue _buffer_decoded;
+  
+  std::vector<std::shared_ptr<std::promise<uint32_t>>> promises;
+  std::vector<std::future<uint32_t>> futures;
 
+  
 public:
-  void StartLoading(std::vector<image_path_t> images, DecodeType decode_type);
+  explicit ImageLoader(uint32_t buffer_size, size_t _use_thread,
+                       uint32_t start_id);
 
+  void StartLoading(std::vector<image_path_t> images, DecodeType decode_type);
 	auto LoadImage() -> std::shared_ptr<Image>;
   };
 }; // namespace puerhlab

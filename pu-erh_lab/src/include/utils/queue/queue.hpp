@@ -17,8 +17,8 @@
 // copies of the Software, and to permit persons to whom the Software is
 // furnished to do so, subject to the following conditions:
 //
-// The above copyright notice and this permission notice shall be included in all
-// copies or substantial portions of the Software.
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
 //
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 // IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -28,8 +28,9 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#include <queue>
 #include <mutex>
+#include <queue>
+
 
 #pragma once
 
@@ -37,9 +38,8 @@ namespace puerhlab {
 /**
  * @brief A thread-safe non-blocking task queue used by a RawDecoder.
  */
-template <typename T>
-class NonBlockingQueue {
- public:
+template <typename T> class NonBlockingQueue {
+public:
   std::queue<T> _request_queue;
   // Mutex used for non-blocking queue
   std::mutex _front_mtx;
@@ -79,7 +79,8 @@ class NonBlockingQueue {
   /**
    * @brief Flush the queue
    *
-   */void Flush() {
+   */
+  void Flush() {
     std::unique_lock<std::mutex> lock_front(_front_mtx);
     std::unique_lock<std::mutex> lock_rear(_rear_mtx);
     // Wait for the queue to be fill with at least one value
@@ -89,5 +90,5 @@ class NonBlockingQueue {
     std::queue<T> empty;
     _request_queue.swap(empty);
   }
- };
 };
+}; // namespace puerhlab
