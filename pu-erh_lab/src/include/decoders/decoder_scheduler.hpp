@@ -36,19 +36,16 @@
 #include "utils/queue/queue.hpp"
 
 #include <cstddef>
-#include <cstdint>
 #include <exiv2/exif.hpp>
 #include <exiv2/image.hpp>
 #include <future>
 #include <memory>
 #include <opencv2/imgcodecs.hpp>
-#include <optional>
-#include <vector>
 
 #define MAX_REQUEST_SIZE 64u
 namespace puerhlab {
 
-enum class DecodeType { THUMB, RAW, REGULAR };
+enum class DecodeType { SLEEVE_LOADING, THUMB, RAW, REGULAR };
 
 class DecoderScheduler {
 private:
@@ -61,7 +58,7 @@ public:
       std::shared_ptr<NonBlockingQueue<std::shared_ptr<Image>>> decoded_buffer);
 
   void ScheduleDecode(image_id_t id, image_path_t image_path, DecodeType decode_type,
-                      std::shared_ptr<std::promise<uint32_t>> decode_promise);
+                      std::shared_ptr<std::promise<image_id_t>> decode_promise);
 };
 
 }; // namespace puerhlab

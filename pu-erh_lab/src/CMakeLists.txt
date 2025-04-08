@@ -1,5 +1,3 @@
-# include_directories(${OpenCV_INCLUDE_DIRS} ${Exiv2_INCLUDE_DIRS})
-
 add_library(ThreadPool concurrency/thread_pool.cpp)
 target_include_directories(ThreadPool PUBLIC include)
 

@@ -28,6 +28,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+#include <cstdint>
 #include <mutex>
 #include <queue>
 
@@ -40,13 +41,22 @@ namespace puerhlab {
  */
 template <typename T> class NonBlockingQueue {
 public:
-  std::queue<T> _request_queue;
+  std::uint32_t _max_size;
+  std::uint32_t _low_threadshold;
+  std::uint32_t _high_threadshold;
+  std::queue<T> _queue;
   // Mutex used for non-blocking queue
   std::mutex _front_mtx;
   std::mutex _rear_mtx;
-  std::condition_variable cv;
+  std::condition_variable _producer_cv;
+  std::condition_variable _consumer_cv;
 
-  explicit NonBlockingQueue() = default;
+  explicit NonBlockingQueue();
+
+  explicit NonBlockingQueue(uint32_t max_size) : _max_size(max_size) {
+    _low_threadshold = (uint32_t)(max_size * 0.6);
+    _high_threadshold = (uint32_t)(max_size * 0.8);
+  }
 
   /**
    * @brief A thread-safe wrapper for _request_queue push() method
@@ -55,10 +65,13 @@ public:
    */
   void push(T new_request) {
     {
-      std::lock_guard<std::mutex> lock(_rear_mtx);
-      _request_queue.push(std::move(new_request));
+      std::unique_lock<std::mutex> lock(_rear_mtx);
+      _producer_cv.wait(lock, [this]() {
+        return _queue.size() < _high_threadshold;
+      });
+      _queue.push(std::move(new_request));
     }
-    cv.notify_one();
+    _consumer_cv.notify_one();
   }
 
   /**
@@ -69,26 +82,16 @@ public:
   T pop() {
     std::unique_lock<std::mutex> lock(_front_mtx);
     // Wait for the queue to be fill with at least one value
-    cv.wait(lock, [this] { return !_request_queue.empty(); });
+    _consumer_cv.wait(lock, [this] { return !_queue.empty(); });
 
-    auto handled_request = _request_queue.front();
-    _request_queue.pop();
+    auto handled_request = _queue.front();
+    _queue.pop();
+
+    if (_queue.size() <= _low_threadshold) {
+      _producer_cv.notify_all();
+    }
+
     return handled_request;
-  }
-
-  /**
-   * @brief Flush the queue
-   *
-   */
-  void Flush() {
-    std::unique_lock<std::mutex> lock_front(_front_mtx);
-    std::unique_lock<std::mutex> lock_rear(_rear_mtx);
-    // Wait for the queue to be fill with at least one value
-    cv.wait(lock_front, [this] { return !_request_queue.empty(); });
-    cv.wait(lock_rear, [this] { return !_request_queue.empty(); });
-    // Flush all the contents in the queue
-    std::queue<T> empty;
-    _request_queue.swap(empty);
   }
 };
 }; // namespace puerhlab

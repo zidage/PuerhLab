@@ -29,6 +29,9 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+#pragma once
+
+#include "type/type.hpp"
 #include "decoders/image_decoder.hpp"
 
 namespace puerhlab {
@@ -38,6 +41,6 @@ public:
 
   void Decode(std::vector<char> buffer, file_path_t file_path,
               std::shared_ptr<NonBlockingQueue<std::shared_ptr<Image>>> &result,
-              uint32_t id, std::shared_ptr<std::promise<uint32_t>> promise);
+              image_id_t id, std::shared_ptr<std::promise<image_id_t>> promise);
 };
 }; // namespace puerhlab

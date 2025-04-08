@@ -28,6 +28,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+#include "image/image.hpp"
 #include "decoders/decoder_scheduler.hpp"
 #include "decoders/image_decoder.hpp"
 #include "decoders/thumbnail_decoder.hpp"
@@ -63,7 +64,7 @@ DecoderScheduler::DecoderScheduler(
  */
 void DecoderScheduler::ScheduleDecode(
     image_id_t id, image_path_t image_path, DecodeType decode_type,
-    std::shared_ptr<std::promise<uint32_t>> decode_promise) {
+    std::shared_ptr<std::promise<image_id_t>> decode_promise) {
   // Open file as an ifstream
   std::ifstream file(image_path, std::ios::binary | std::ios::ate);
 

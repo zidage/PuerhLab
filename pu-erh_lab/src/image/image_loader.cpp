@@ -34,7 +34,6 @@
 #include <cstdint>
 #include <future>
 #include <memory>
-#include <stdexcept>
 
 namespace puerhlab {
 /**
@@ -44,24 +43,20 @@ namespace puerhlab {
  * @param use_thread number of thread used to decode image
  */
 ImageLoader::ImageLoader(uint32_t buffer_size, size_t use_thread,
-                         uint32_t start_id)
-    : _buffer_decoded(std::make_shared<BufferQueue>()),
+                         image_id_t start_id)
+    : _buffer_decoded(std::make_shared<BufferQueue>(buffer_size)),
       _buffer_size(buffer_size), _use_thread(use_thread), _start_id(start_id),
       _next_id(start_id), _decoder_scheduler(use_thread, _buffer_decoded) {}
 
 /**
- * @brief Loads a batch of 
- * 
- * @param images 
- * @param decode_type 
+ * @brief Loads a batch of images
+ *
+ * @param images
+ * @param decode_type
  */
 void ImageLoader::StartLoading(std::vector<image_path_t> images,
                                DecodeType decode_type) {
   for (const auto &img : images) {
-    if (_next_id > _start_id + _buffer_size) {
-      _start_id = _next_id;
-      throw std::out_of_range("Buffer full! Loading stopped.");
-    }
     promises.emplace_back(std::make_shared<std::promise<uint32_t>>());
     futures.emplace_back(promises[_next_id]->get_future());
     _decoder_scheduler.ScheduleDecode(_next_id, img, decode_type,
@@ -71,7 +66,9 @@ void ImageLoader::StartLoading(std::vector<image_path_t> images,
 }
 
 auto ImageLoader::LoadImage() -> std::shared_ptr<Image> {
-  return _buffer_decoded->pop();
+  std::shared_ptr<Image> img = _buffer_decoded->pop();
+  futures.at(img->_image_id).get();
+  return img;
 }
 
 }; // namespace puerhlab

@@ -34,7 +34,6 @@
 #include "type/type.hpp"
 #include "utils/queue/queue.hpp"
 
-#include <cstdint>
 #include <exiv2/exif.hpp>
 #include <exiv2/image.hpp>
 #include <future>
@@ -50,6 +49,6 @@ public:
   virtual void
   Decode(std::vector<char> buffer, file_path_t file_path,
          std::shared_ptr<NonBlockingQueue<std::shared_ptr<Image>>> &result,
-         uint32_t id, std::shared_ptr<std::promise<uint32_t>> promise) = 0;
+         image_id_t id, std::shared_ptr<std::promise<image_id_t>> promise) = 0;
 };
 }; // namespace puerhlab
