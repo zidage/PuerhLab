@@ -30,6 +30,7 @@
 
 #include "image/image_loader.hpp"
 #include "decoders/decoder_scheduler.hpp"
+#include "type/type.hpp"
 #include <cstddef>
 #include <cstdint>
 #include <future>
@@ -57,7 +58,7 @@ ImageLoader::ImageLoader(uint32_t buffer_size, size_t use_thread,
 void ImageLoader::StartLoading(std::vector<image_path_t> images,
                                DecodeType decode_type) {
   for (const auto &img : images) {
-    promises.emplace_back(std::make_shared<std::promise<uint32_t>>());
+    promises.emplace_back(std::make_shared<std::promise<image_id_t>>());
     futures.emplace_back(promises[_next_id]->get_future());
     _decoder_scheduler.ScheduleDecode(_next_id, img, decode_type,
                                       promises[_next_id]);
@@ -67,7 +68,6 @@ void ImageLoader::StartLoading(std::vector<image_path_t> images,
 
 auto ImageLoader::LoadImage() -> std::shared_ptr<Image> {
   std::shared_ptr<Image> img = _buffer_decoded->pop();
-  futures.at(img->_image_id).get();
   return img;
 }
 
