@@ -38,6 +38,7 @@ namespace puerhlab {
 // Wide character path c string
 #define image_path_t std::wstring
 #define file_path_t std::wstring
+#define file_name_t std::wstring
 
 #define image_id_t uint32_t
 
@@ -50,4 +51,5 @@ namespace puerhlab {
 // Used in DecodeRequest type
 #define request_id_t size_t
 
+#define BufferQueue NonBlockingQueue<std::shared_ptr<Image>>
 };  // namespace puerhlab

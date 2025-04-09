@@ -47,7 +47,6 @@ namespace puerhlab {
 class ImageLoader {
 private:
   // Type alias
-  using BufferQueue = NonBlockingQueue<std::shared_ptr<Image>>;
   // Image decoding part
   std::shared_ptr<BufferQueue> _buffer_decoded;
   uint32_t _buffer_size;

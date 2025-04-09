@@ -50,14 +50,16 @@ enum class DecodeType { SLEEVE_LOADING, THUMB, RAW, REGULAR };
 class DecoderScheduler {
 private:
   ThreadPool _thread_pool;
-  std::shared_ptr<NonBlockingQueue<std::shared_ptr<Image>>> _decoded_buffer;
+  std::shared_ptr<BufferQueue> _decoded_buffer;
 
 public:
-  explicit DecoderScheduler(
-      size_t thread_count,
-      std::shared_ptr<NonBlockingQueue<std::shared_ptr<Image>>> decoded_buffer);
+  explicit DecoderScheduler(size_t thread_count,
+                            std::shared_ptr<BufferQueue> decoded_buffer);
 
-  void ScheduleDecode(image_id_t id, image_path_t image_path, DecodeType decode_type,
+  void ScheduleDecode(image_id_t id, image_path_t image_path,
+                      std::shared_ptr<std::promise<image_id_t>> decode_promise);
+  
+  void ScheduleDecode(std::shared_ptr<Image> source_img, DecodeType decode_type,
                       std::shared_ptr<std::promise<image_id_t>> decode_promise);
 };
 

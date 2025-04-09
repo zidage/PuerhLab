@@ -1,5 +1,5 @@
 /*
- * @file        pu-erh_lab/src/include/include/thumbnail_decoder.hpp
+ * @file        pu-erh_lab/src/include/decoders/thumbnail_decoder.hpp
  * @brief       A decoder used to decode the thumbnails of regular files, e.g.
  * .jpg
  * @author      Yurun Zi
@@ -39,8 +39,8 @@ class ThumbnailDecoder : public ImageDecoder {
 public:
   ThumbnailDecoder() = default;
 
-  void Decode(std::vector<char> buffer, file_path_t file_path,
-              std::shared_ptr<NonBlockingQueue<std::shared_ptr<Image>>> &result,
+  void Decode(std::vector<char> buffer, std::filesystem::path file_path,
+              std::shared_ptr<BufferQueue> result,
               image_id_t id, std::shared_ptr<std::promise<image_id_t>> promise);
 };
 }; // namespace puerhlab

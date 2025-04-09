@@ -1,8 +1,8 @@
 /*
- * @file        pu-erh_lab/src/include/decoders/raw_decoder.hpp
- * @brief       A decoder used to decode raw files, e.g. .ARW
+ * @file        pu-erh_lab/src/include/decoders/metadata_decoder.hpp
+ * @brief       A decoder used to read metadata in a image file, no image data will be loaded.
  * @author      Yurun Zi
- * @date        2025-03-19
+ * @date        2025-04-08
  * @license     MIT
  *
  * @copyright   Copyright (c) 2025 Yurun Zi
@@ -28,22 +28,15 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#include "decoders/raw_decoder.hpp"
+#pragma once
+
+#include "image_decoder.hpp"
 #include "type/type.hpp"
-#include <memory>
 
 namespace puerhlab {
-/**
- * @brief A callback used to decode a raw file
- *
- * @param file
- * @param file_path
- * @param id
- */
-void RawDecoder::Decode(
-    std::vector<char> buffer, std::filesystem::path file_path,
-    std::shared_ptr<BufferQueue> result,
-    image_id_t id, std::shared_ptr<std::promise<image_id_t>> promise) {
-  // TODO: Add Implementation
-}
+class MetadataDecoder : public ImageDecoder {
+  void Decode(std::vector<char> buffer, std::filesystem::path file_path,
+              std::shared_ptr<BufferQueue> result,
+              image_id_t id, std::shared_ptr<std::promise<image_id_t>> promise);
+};
 }; // namespace puerhlab

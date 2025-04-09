@@ -47,6 +47,12 @@ Image::Image(image_id_t image_id, image_path_t image_path, ImageType image_type,
     : _image_id(image_id), _image_path(image_path),
       _exif_data(std::move(exif_data)), _image_type(image_type) {}
 
+Image::Image(image_id_t image_id, image_path_t image_path,
+             file_name_t image_name, ImageType image_type,
+             Exiv2::ExifData exif_data)
+    : _image_id(image_id), _image_path(image_path), _image_name(image_name),
+      _exif_data(std::move(exif_data)), _image_type(image_type) {}
+
 Image::Image(image_path_t image_path, ImageType image_type,
              Exiv2::ExifData exif_data)
     : _image_path(image_path), _exif_data(std::move(exif_data)),
@@ -57,6 +63,12 @@ Image::Image(Image &&other)
       _exif_data(std::move(other._exif_data)),
       _image_data(std::move(other._image_data)),
       _thumbnail(std::move(other._thumbnail)), _image_type(other._image_type) {}
+
+std::wostream &operator<<(std::wostream &os, const Image &img) {
+  os << "img_id: " << img._image_id
+     << "\timage_path: " << img._image_path.c_str() << std::endl;
+  return os;
+}
 
 /**
  * @brief Load image data into an image object

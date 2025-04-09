@@ -23,10 +23,11 @@ TEST(ImageLoaderTest, BatchLoad) {
     imgs.push_back(img.path());
   }
 
-  image_loader.StartLoading(imgs, DecodeType::THUMB);
+  image_loader.StartLoading(imgs, DecodeType::SLEEVE_LOADING);
   size_t total_size = imgs.size();
   while (total_size > 0) {
     std::shared_ptr<Image> img = image_loader.LoadImage();
+    // DEBUG: std::wcout << *img << std::endl;
     total_size--;
   }
 }

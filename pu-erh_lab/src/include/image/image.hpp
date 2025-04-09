@@ -34,6 +34,7 @@
 #include <exiv2/exiv2.hpp>
 #include <memory>
 #include <opencv2/opencv.hpp>
+#include <ostream>
 #include <type/type.hpp>
 
 #include "edit/history/edit_history.hpp"
@@ -62,6 +63,8 @@ class Image {
  public:
   image_id_t      _image_id;
   image_path_t    _image_path;
+  file_name_t     _image_name;
+
   Exiv2::ExifData _exif_data;
   bool            has_data;
   cv::Mat         _image_data;
@@ -70,8 +73,11 @@ class Image {
 
   explicit Image() = default;
   explicit Image(image_id_t image_id, image_path_t image_path, ImageType image_type, Exiv2::ExifData exif_data);
+  explicit Image(image_id_t image_id, image_path_t image_path, file_name_t image_name, ImageType image_type, Exiv2::ExifData exif_data);
   explicit Image(image_path_t image_path, ImageType image_type, Exiv2::ExifData exif_data);
   explicit Image(Image &&other);
+
+  friend std::wostream& operator<<(std::wostream& os, const Image& img);
 
   void LoadData(cv::Mat &&load_image);
 
