@@ -39,7 +39,7 @@ namespace puerhlab {
 /**
  * @brief A thread-safe non-blocking task queue used by a RawDecoder.
  */
-template <typename T> class NonBlockingQueue {
+template <typename T> class ConcurrentBlockingQueue {
 public:
   std::uint32_t _max_size;
   std::uint32_t _low_threadshold;
@@ -50,9 +50,9 @@ public:
   std::condition_variable _producer_cv;
   std::condition_variable _consumer_cv;
 
-  explicit NonBlockingQueue();
+  explicit ConcurrentBlockingQueue();
 
-  explicit NonBlockingQueue(uint32_t max_size) : _max_size(max_size) {
+  explicit ConcurrentBlockingQueue(uint32_t max_size) : _max_size(max_size) {
     _low_threadshold = (uint32_t)(max_size * 0.6);
     _high_threadshold = (uint32_t)(max_size * 0.8);
   }
