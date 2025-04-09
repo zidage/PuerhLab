@@ -125,7 +125,7 @@ void DecoderScheduler::ScheduleDecode(
   }
 
   // Assign a decoder for the task
-  std::shared_ptr<ImageDecoder> decoder = std::make_shared<MetadataDecoder>();
+  std::shared_ptr<ImageDecoder> decoder = std::make_shared<ThumbnailDecoder>();
 
   // Read file into memory
   std::streamsize fileSize = file.tellg();

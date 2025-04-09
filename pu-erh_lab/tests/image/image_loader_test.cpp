@@ -15,7 +15,7 @@
 TEST(ImageLoaderTest, BatchLoad) {
   using namespace puerhlab;
   // MemoryLeakDetector leakDetector;
-  ImageLoader image_loader(256, 23, 0);
+  ImageLoader image_loader(128, 16, 0);
   image_path_t path = L"D:\\Projects\\pu-erh_lab\\pu-erh_"
                       L"lab\\tests\\resources\\sample_images\\jpg";
   std::vector<image_path_t> imgs;
@@ -27,7 +27,7 @@ TEST(ImageLoaderTest, BatchLoad) {
   size_t total_size = imgs.size();
   while (total_size > 0) {
     std::shared_ptr<Image> img = image_loader.LoadImage();
-    // DEBUG: std::wcout << *img << std::endl;
+    // std::wcout << *img << std::endl;
     total_size--;
   }
 }

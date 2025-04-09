@@ -30,9 +30,6 @@
 
 #pragma once
 
-#include <cstdint>
-#include <string>
-
 namespace puerhlab {
 
 // Wide character path c string
@@ -51,5 +48,6 @@ namespace puerhlab {
 // Used in DecodeRequest type
 #define request_id_t size_t
 
-#define BufferQueue NonBlockingQueue<std::shared_ptr<Image>>
+#define BufferQueue ConcurrentBlockingQueue<std::shared_ptr<Image>>
+
 };  // namespace puerhlab

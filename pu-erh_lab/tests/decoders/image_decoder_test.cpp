@@ -12,7 +12,7 @@ TEST(MultipleImageDecoder, FORCE_LEAK) {
   // MemoryLeakDetector leakDetector;
   //  Test decode only one image
 
-  puerhlab::DecoderScheduler scheduler(8, std::make_shared<puerhlab::NonBlockingQueue<std::shared_ptr<puerhlab::Image>>>(64));
+  puerhlab::DecoderScheduler scheduler(8, std::make_shared<puerhlab::ConcurrentBlockingQueue<std::shared_ptr<puerhlab::Image>>>(64));
 
   std::shared_ptr<std::promise<uint32_t>> decode_promise_1 =
       std::make_shared<std::promise<uint32_t>>();
