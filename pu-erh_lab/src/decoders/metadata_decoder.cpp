@@ -46,7 +46,6 @@ namespace puerhlab {
 void MetadataDecoder::Decode(std::vector<char> buffer, std::filesystem::path file_path,
             std::shared_ptr<BufferQueue> result, image_id_t id,
             std::shared_ptr<std::promise<image_id_t>> promise) {
-  
   try {
     auto exiv2_img = Exiv2::ImageFactory::open(
         (const Exiv2::byte *)buffer.data(), buffer.size());
@@ -57,8 +56,14 @@ void MetadataDecoder::Decode(std::vector<char> buffer, std::filesystem::path fil
         id, file_path.wstring(), ImageType::DEFAULT, Exiv2::ExifData(exifData));
     result->push(img);
     promise->set_value(id);
+    return;
 	} catch (std::exception &e) {
     // TODO: Append error message to log
   }
+  // If it fails to read metadata, rewrite the image
+  std::shared_ptr<Image> img = std::make_shared<Image>(
+    id, file_path.wstring(), ImageType::DEFAULT, Exiv2::ExifData());
+  result->push(img);
+  promise->set_value(id);
 }
 };

@@ -46,8 +46,7 @@ public:
   std::uint32_t _high_threadshold;
   std::queue<T> _queue;
   // Mutex used for non-blocking queue
-  std::mutex _front_mtx;
-  std::mutex _rear_mtx;
+  std::mutex mtx;
   std::condition_variable _producer_cv;
   std::condition_variable _consumer_cv;
 
@@ -65,7 +64,7 @@ public:
    */
   void push(T new_request) {
     {
-      std::unique_lock<std::mutex> lock(_rear_mtx);
+      std::unique_lock<std::mutex> lock(mtx);
       _producer_cv.wait(lock, [this]() {
         return _queue.size() < _high_threadshold;
       });
@@ -80,7 +79,7 @@ public:
    * @return the front-most element of the queue
    */
   T pop() {
-    std::unique_lock<std::mutex> lock(_front_mtx);
+    std::unique_lock<std::mutex> lock(mtx);
     // Wait for the queue to be fill with at least one value
     _consumer_cv.wait(lock, [this] { return !_queue.empty(); });
 
