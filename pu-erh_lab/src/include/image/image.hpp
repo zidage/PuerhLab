@@ -30,15 +30,18 @@
 
 #pragma once
 
+#include "edit/history/edit_history.hpp"
+#include "edit/history/version.hpp"
+
 #include <exiv2/exif.hpp>
 #include <exiv2/exiv2.hpp>
 #include <memory>
 #include <opencv2/opencv.hpp>
 #include <ostream>
 #include <type/type.hpp>
+#include <filesystem>
 
-#include "edit/history/edit_history.hpp"
-#include "edit/history/version.hpp"
+
 
 namespace puerhlab {
 enum class ImageType { DEFAULT, JPEG, PNG, TIFF, ARW, CR2, CR3, NEF, DNG };

@@ -1,6 +1,7 @@
 /*
  * @file        pu-erh_lab/src/include/decoders/metadata_decoder.hpp
- * @brief       A decoder used to read metadata in a image file, no image data will be loaded.
+ * @brief       A decoder used to read metadata in a image file, no image data
+ * will be loaded.
  * @author      Yurun Zi
  * @date        2025-04-08
  * @license     MIT
@@ -30,13 +31,20 @@
 
 #pragma once
 
-#include "image_decoder.hpp"
+#include "data_decoder.hpp"
+#include "loading_decoder.hpp"
 #include "type/type.hpp"
 
 namespace puerhlab {
-class MetadataDecoder : public ImageDecoder {
+class MetadataDecoder : public LoadingDecoder {
+public:
+  MetadataDecoder() = default;
   void Decode(std::vector<char> buffer, std::filesystem::path file_path,
+              std::shared_ptr<BufferQueue> result, image_id_t id,
+              std::shared_ptr<std::promise<image_id_t>> promise);
+
+  void Decode(std::vector<char> buffer, std::shared_ptr<Image> source_img,
               std::shared_ptr<BufferQueue> result,
-              image_id_t id, std::shared_ptr<std::promise<image_id_t>> promise);
+              std::shared_ptr<std::promise<image_id_t>> promise);
 };
 }; // namespace puerhlab

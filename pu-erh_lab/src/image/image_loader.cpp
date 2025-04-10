@@ -31,6 +31,8 @@
 #include "image/image_loader.hpp"
 #include "decoders/decoder_scheduler.hpp"
 #include "type/type.hpp"
+#include "type/supported_file_type.hpp"
+
 #include <cstddef>
 #include <cstdint>
 #include <future>
@@ -58,6 +60,11 @@ ImageLoader::ImageLoader(uint32_t buffer_size, size_t use_thread,
 void ImageLoader::StartLoading(std::vector<image_path_t> images,
                                DecodeType decode_type) {
   for (const auto &img : images) {
+    // Skip unsupported file type
+    // if (!is_supported_file(img)) {
+    //   continue;
+    // }
+
     promises.emplace_back(std::make_shared<std::promise<image_id_t>>());
     futures.emplace_back(promises[_next_id]->get_future());
     if (decode_type == DecodeType::SLEEVE_LOADING)
@@ -68,6 +75,7 @@ void ImageLoader::StartLoading(std::vector<image_path_t> images,
 }
 
 auto ImageLoader::LoadImage() -> std::shared_ptr<Image> {
+  // If there's no finished image in the buffer, will block the load routine
   std::shared_ptr<Image> img = _buffer_decoded->pop();
   return img;
 }

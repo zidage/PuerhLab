@@ -30,7 +30,7 @@
 
 #pragma once
 
-#include "image_decoder.hpp"
+#include "data_decoder.hpp"
 #include "type/type.hpp"
 
 #include <libraw/libraw.h>
@@ -38,12 +38,16 @@
 
 namespace puerhlab {
 
-class RawDecoder : public ImageDecoder {
+class RawDecoder : public DataDecoder {
 public:
   RawDecoder() = default;
   void Decode(std::vector<char> buffer, std::filesystem::path file_path,
+              std::shared_ptr<BufferQueue> result, image_id_t id,
+              std::shared_ptr<std::promise<image_id_t>> promise);
+
+  void Decode(std::vector<char> buffer, std::shared_ptr<Image> source_img,
               std::shared_ptr<BufferQueue> result,
-              image_id_t id, std::shared_ptr<std::promise<image_id_t>> promise);
+              std::shared_ptr<std::promise<image_id_t>> promise);
 };
 
 }; // namespace puerhlab

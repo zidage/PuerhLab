@@ -66,7 +66,7 @@ Image::Image(Image &&other)
 
 std::wostream &operator<<(std::wostream &os, const Image &img) {
   os << "img_id: " << img._image_id
-     << "\timage_path: " << img._image_path.c_str() << std::endl;
+     << "\timage_path: " << img._image_path.wstring() << std::endl;
   return os;
 }
 

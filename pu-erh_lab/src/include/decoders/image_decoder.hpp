@@ -46,7 +46,7 @@
 namespace puerhlab {
 
 
-class ImageDecoder {
+class ImageDecoder{
 public:
   virtual void
   Decode(std::vector<char> buffer, std::filesystem::path file_path,

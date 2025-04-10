@@ -39,17 +39,17 @@
 namespace puerhlab {
 /**
  * @brief A callback used to decode the thumbnail of a regular file
- * 
- * @param buffer 
- * @param file_path 
- * @param result 
- * @param id 
- * @param promise 
+ *
+ * @param buffer
+ * @param file_path
+ * @param result
+ * @param id
+ * @param promise
  */
 void ThumbnailDecoder::Decode(
     std::vector<char> buffer, std::filesystem::path file_path,
-    std::shared_ptr<BufferQueue> result,
-    image_id_t id, std::shared_ptr<std::promise<image_id_t>> promise) {
+    std::shared_ptr<BufferQueue> result, image_id_t id,
+    std::shared_ptr<std::promise<image_id_t>> promise) {
   // Open the datastream as a cv::Mat image
   cv::Mat image_data((int)buffer.size(), 1, CV_8UC1, buffer.data());
   // Using IMREAD_REDUCED_COLOR_8 flag to get the low-res thumbnail image
@@ -70,4 +70,9 @@ void ThumbnailDecoder::Decode(
     throw e;
   }
 }
+
+void ThumbnailDecoder::Decode(
+    std::vector<char> buffer, std::shared_ptr<Image> source_img,
+    std::shared_ptr<BufferQueue> result,
+    std::shared_ptr<std::promise<image_id_t>> promise) {}
 }; // namespace puerhlab

@@ -1,15 +1,14 @@
 /*
- * @file        pu-erh_lab/src/include/decoders/thumbnail_decoder.hpp
- * @brief       A decoder used to decode the thumbnails of regular files, e.g.
- * .jpg
- * @author      Yurun Zi
- * @date        2025-03-19
+ * @file        pu-erh_lab/src/include/type/supported_file_type.hpp
+ * @brief       Collection of supported file types.
+ * @author      ChatGPT
+ * @date        2025-04-09
  * @license     MIT
  *
  * @copyright   Copyright (c) 2025 Yurun Zi
  */
 
-// Copyright (c) 2025 Yurun Zi
+// Copyright (c) 2025 ChatGPT
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -31,21 +30,24 @@
 
 #pragma once
 
-#include "data_decoder.hpp"
-#include "type/type.hpp"
+#include <filesystem>
+#include <string>
+#include <unordered_set>
 
+
+namespace fs = std::filesystem;
 
 namespace puerhlab {
-class ThumbnailDecoder : public DataDecoder {
-public:
-  ThumbnailDecoder() = default;
+static const std::unordered_set<std::wstring> supported_extensions = {
+    L".jpg", L".jpeg", L".png", L".raw", L".cr2",  L".nef", L".tiff", L".bmp",
+    L".dng", L".arw",  L".cr3", L".JPG", L".JPEG", L".PNG", L".RAW",  L".CR2",
+    L".NEF", L".TIFF", L".BMP", L".DNG", L".ARW",  L".CR3"};
 
-  void Decode(std::vector<char> buffer, std::filesystem::path file_path,
-              std::shared_ptr<BufferQueue> result, image_id_t id,
-              std::shared_ptr<std::promise<image_id_t>> promise);
+inline bool is_supported_file(const fs::path &path) {
+  if (!fs::is_regular_file(path))
+    return false;
 
-  void Decode(std::vector<char> buffer, std::shared_ptr<Image> source_img,
-              std::shared_ptr<BufferQueue> result,
-              std::shared_ptr<std::promise<image_id_t>> promise);
-};
+  std::wstring ext = path.extension().wstring();
+  return supported_extensions.count(ext) > 0;
+}
 }; // namespace puerhlab

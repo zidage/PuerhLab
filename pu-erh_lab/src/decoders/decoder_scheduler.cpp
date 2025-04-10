@@ -31,12 +31,12 @@
 #include "decoders/decoder_scheduler.hpp"
 #include "decoders/image_decoder.hpp"
 #include "decoders/metadata_decoder.hpp"
+#include "decoders/raw_decoder.hpp"
 #include "decoders/thumbnail_decoder.hpp"
 #include "image/image.hpp"
 #include "type/type.hpp"
 #include "utils/queue/queue.hpp"
 
-#include <cstdint>
 #include <exception>
 #include <filesystem>
 #include <fstream>
@@ -68,17 +68,18 @@ void DecoderScheduler::ScheduleDecode(
     image_id_t id, image_path_t image_path,
     std::shared_ptr<std::promise<image_id_t>> decode_promise) {
   // Open file as an ifstream
+
   std::ifstream file(image_path, std::ios::binary | std::ios::ate);
 
   if (!file.is_open()) {
-    // Check file status
+    // Check whether file openned successfully
     decode_promise->set_exception(std::make_exception_ptr(
         std::runtime_error("File not exists or no read permission.")));
     return;
   }
 
   // Assign a decoder for the task
-  std::shared_ptr<ImageDecoder> decoder = std::make_shared<MetadataDecoder>();
+  std::shared_ptr<LoadingDecoder> decoder = std::make_shared<MetadataDecoder>();
 
   // Read file into memory
   std::streamsize fileSize = file.tellg();
@@ -125,7 +126,23 @@ void DecoderScheduler::ScheduleDecode(
   }
 
   // Assign a decoder for the task
-  std::shared_ptr<ImageDecoder> decoder = std::make_shared<ThumbnailDecoder>();
+  std::shared_ptr<DataDecoder> decoder;
+
+  // Assign a decoder according to the decode type
+  switch (decode_type) {
+  case DecodeType::THUMB:
+    decoder =  std::make_shared<ThumbnailDecoder>();
+    break;
+  case DecodeType::RAW:
+    decoder = std::make_shared<RawDecoder>();
+    break;
+  case DecodeType::REGULAR:
+    // FIXME: Add RegularDecoder
+    decoder = std::make_shared<ThumbnailDecoder>();
+    break;
+  default:
+    throw std::runtime_error("Incompatible decode type.");
+  }
 
   // Read file into memory
   std::streamsize fileSize = file.tellg();
@@ -143,9 +160,9 @@ void DecoderScheduler::ScheduleDecode(
   std::filesystem::path file_path(source_img->_image_path);
 
   auto task = std::make_shared<std::packaged_task<void()>>(
-      [decoder, buffer = std::move(buffer), file_path, decoded_buffer, &source_img,
+      [decoder, buffer = std::move(buffer), decoded_buffer, &source_img,
        decode_promise]() mutable {
-        decoder->Decode(std::move(buffer), file_path, decoded_buffer, source_img->_image_id,
+        decoder->Decode(std::move(buffer), source_img, decoded_buffer,
                         decode_promise);
       });
 
