@@ -29,14 +29,15 @@
 // SOFTWARE.
 
 #include "image/image_loader.hpp"
-#include "decoders/decoder_scheduler.hpp"
-#include "type/type.hpp"
-#include "type/supported_file_type.hpp"
 
 #include <cstddef>
 #include <cstdint>
 #include <future>
 #include <memory>
+
+#include "decoders/decoder_scheduler.hpp"
+#include "type/supported_file_type.hpp"
+#include "type/type.hpp"
 
 namespace puerhlab {
 /**
@@ -45,11 +46,13 @@ namespace puerhlab {
  * @param buffer_size size of loader's buffer
  * @param use_thread number of thread used to decode image
  */
-ImageLoader::ImageLoader(uint32_t buffer_size, size_t use_thread,
-                         image_id_t start_id)
+ImageLoader::ImageLoader(uint32_t buffer_size, size_t use_thread, image_id_t start_id)
     : _buffer_decoded(std::make_shared<BufferQueue>(buffer_size)),
-      _buffer_size(buffer_size), _use_thread(use_thread), _start_id(start_id),
-      _next_id(start_id), _decoder_scheduler(use_thread, _buffer_decoded) {}
+      _buffer_size(buffer_size),
+      _use_thread(use_thread),
+      _start_id(start_id),
+      _next_id(start_id),
+      _decoder_scheduler(use_thread, _buffer_decoded) {}
 
 /**
  * @brief Loads a batch of images
@@ -57,8 +60,7 @@ ImageLoader::ImageLoader(uint32_t buffer_size, size_t use_thread,
  * @param images
  * @param decode_type
  */
-void ImageLoader::StartLoading(std::vector<image_path_t> images,
-                               DecodeType decode_type) {
+void ImageLoader::StartLoading(std::vector<image_path_t> images, DecodeType decode_type) {
   for (const auto &img : images) {
     // Skip unsupported file type
     // if (!is_supported_file(img)) {
@@ -67,9 +69,7 @@ void ImageLoader::StartLoading(std::vector<image_path_t> images,
 
     promises.emplace_back(std::make_shared<std::promise<image_id_t>>());
     futures.emplace_back(promises[_next_id]->get_future());
-    if (decode_type == DecodeType::SLEEVE_LOADING)
-      _decoder_scheduler.ScheduleDecode(_next_id, img,
-                                        promises[_next_id]);
+    if (decode_type == DecodeType::SLEEVE_LOADING) _decoder_scheduler.ScheduleDecode(_next_id, img, promises[_next_id]);
     ++_next_id;
   }
 }
@@ -80,4 +80,4 @@ auto ImageLoader::LoadImage() -> std::shared_ptr<Image> {
   return img;
 }
 
-}; // namespace puerhlab
+};  // namespace puerhlab

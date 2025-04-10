@@ -33,27 +33,26 @@
 #include <queue>
 #include <vector>
 
-
 #include "type/type.hpp"
 
 #pragma once
 
 namespace puerhlab {
 class ThreadPool {
-public:
+ public:
   ThreadPool(size_t thread_count);
   ~ThreadPool();
 
   void Submit(std::function<void()> task);
 
-private:
+ private:
   std::queue<std::function<void()>> tasks;
-  std::mutex mtx;
-  std::condition_variable condition;
-  std::vector<std::thread> workers;
+  std::mutex                        mtx;
+  std::condition_variable           condition;
+  std::vector<std::thread>          workers;
 
   bool stop;
 
   void WorkerThread();
 };
-}; // namespace puerhlab
+};  // namespace puerhlab

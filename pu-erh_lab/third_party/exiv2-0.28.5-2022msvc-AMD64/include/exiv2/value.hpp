@@ -3,6 +3,14 @@
 #ifndef VALUE_HPP_
 #define VALUE_HPP_
 
+#ifdef min()
+  #undef min()
+#endif
+
+#ifdef max()
+  #undef max()
+#endif
+
 // *****************************************************************************
 #include "exiv2lib_export.h"
 

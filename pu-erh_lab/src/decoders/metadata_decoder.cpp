@@ -30,8 +30,10 @@
 // SOFTWARE.
 
 #include "decoders/metadata_decoder.hpp"
-#include "type/type.hpp"
+
 #include <filesystem>
+
+#include "type/type.hpp"
 
 namespace puerhlab {
 /**
@@ -43,18 +45,15 @@ namespace puerhlab {
  * @param id
  * @param promise
  */
-void MetadataDecoder::Decode(
-    std::vector<char> buffer, std::filesystem::path file_path,
-    std::shared_ptr<BufferQueue> result, image_id_t id,
-    std::shared_ptr<std::promise<image_id_t>> promise) {
+void MetadataDecoder::Decode(std::vector<char> buffer, std::filesystem::path file_path,
+                             std::shared_ptr<BufferQueue> result, image_id_t id,
+                             std::shared_ptr<std::promise<image_id_t>> promise) {
   try {
-    auto exiv2_img = Exiv2::ImageFactory::open(
-        (const Exiv2::byte *)buffer.data(), buffer.size());
-    Exiv2::ExifData &exifData = exiv2_img->exifData();
+    auto             exiv2_img = Exiv2::ImageFactory::open((const Exiv2::byte *)buffer.data(), buffer.size());
+    Exiv2::ExifData &exifData  = exiv2_img->exifData();
 
     // Push the decoded image into the buffer queue
-    std::shared_ptr<Image> img = std::make_shared<Image>(
-        id, file_path, ImageType::DEFAULT, Exiv2::ExifData(exifData));
+    std::shared_ptr<Image> img = std::make_shared<Image>(id, file_path, ImageType::DEFAULT, Exiv2::ExifData(exifData));
     result->push(img);
     promise->set_value(id);
     return;
@@ -62,15 +61,12 @@ void MetadataDecoder::Decode(
     // TODO: Append error message to log
   }
   // If it fails to read metadata, produce a plain image with minimum metadata
-  std::shared_ptr<Image> img = std::make_shared<Image>(
-      id, file_path, ImageType::DEFAULT, Exiv2::ExifData());
+  std::shared_ptr<Image> img = std::make_shared<Image>(id, file_path, ImageType::DEFAULT, Exiv2::ExifData());
   result->push(img);
   promise->set_value(id);
 }
 
-void MetadataDecoder::Decode(
-    std::vector<char> buffer, std::shared_ptr<Image> source_img,
-    std::shared_ptr<BufferQueue> result,
-    std::shared_ptr<std::promise<image_id_t>> promise) {}
+void MetadataDecoder::Decode(std::vector<char> buffer, std::shared_ptr<Image> source_img,
+                             std::shared_ptr<BufferQueue> result, std::shared_ptr<std::promise<image_id_t>> promise) {}
 
-}; // namespace puerhlab
+};  // namespace puerhlab

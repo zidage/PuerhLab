@@ -1,7 +1,5 @@
 // TODO: Add Implementation
 
 namespace puerhlab {
-class SleeveBuffer {
-
-};
-};
+class SleeveBuffer {};
+};  // namespace puerhlab

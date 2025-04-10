@@ -33,7 +33,6 @@
 
 #include <string>
 
-
 namespace puerhlab {
 /**
  * @brief A exif-like metadata format used along with a image object. This
@@ -65,7 +64,5 @@ struct ImageMetadata {
   float                   cur_aperture;
   float                   cur_focal;
   bool                    has_attachment;  // for adapter etc.
-  
-  
 };
 };  // namespace puerhlab

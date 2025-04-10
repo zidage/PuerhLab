@@ -30,12 +30,11 @@
 
 #pragma once
 
-#include "type/type.hpp"
-
 #include <ctime>
 #include <list>
-
 #include <vector>
+
+#include "type/type.hpp"
 
 namespace puerhlab {
 class Version {
@@ -49,13 +48,12 @@ class Version {
    */
   std::tm _time_stamp;
   /**
-   * @brief collection of images related to this version 
+   * @brief collection of images related to this version
    */
   std::vector<image_id_t> _related_image;
   /**
    * @brief Edit log for this edit version
    */
   std::list<int> _edit_log;
-  
 };
-};
+};  // namespace puerhlab

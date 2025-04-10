@@ -30,39 +30,38 @@
 
 #pragma once
 
+#include <cstddef>
+#include <cstdint>
+#include <future>
+#include <memory>
+#include <vector>
+
 #include "decoders/decoder_scheduler.hpp"
 #include "image/image.hpp"
 #include "sleeve/sleeve_base.hpp"
 #include "sleeve/sleeve_buffer/sleeve_buffer.hpp"
 #include "type/type.hpp"
 #include "utils/queue/queue.hpp"
-
-#include <cstddef>
-#include <cstdint>
-#include <future>
-#include <memory>
-#include <vector>
 namespace puerhlab {
 
 class ImageLoader {
-private:
+ private:
   // Type alias
   // Image decoding part
   std::shared_ptr<BufferQueue> _buffer_decoded;
-  uint32_t _buffer_size;
-  size_t _use_thread;
-  image_id_t _start_id;
-  image_id_t _next_id;
-  DecoderScheduler _decoder_scheduler;
+  uint32_t                     _buffer_size;
+  size_t                       _use_thread;
+  image_id_t                   _start_id;
+  image_id_t                   _next_id;
+  DecoderScheduler             _decoder_scheduler;
 
   std::vector<std::shared_ptr<std::promise<image_id_t>>> promises;
-  std::vector<std::future<image_id_t>> futures;
+  std::vector<std::future<image_id_t>>                   futures;
 
-public:
-  explicit ImageLoader(uint32_t buffer_size, size_t _use_thread,
-                       image_id_t start_id);
+ public:
+  explicit ImageLoader(uint32_t buffer_size, size_t _use_thread, image_id_t start_id);
 
   void StartLoading(std::vector<image_path_t> images, DecodeType decode_type);
   auto LoadImage() -> std::shared_ptr<Image>;
 };
-}; // namespace puerhlab
+};  // namespace puerhlab

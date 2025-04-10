@@ -74,3 +74,16 @@ find_package(OpenCV REQUIRED)
 # Modules
 add_subdirectory(${CMAKE_SOURCE_DIR}/pu-erh_lab/src)
 add_subdirectory(${CMAKE_SOURCE_DIR}/pu-erh_lab/tests)
+
+file(GLOB_RECURSE ALL_SOURCE_FILES
+    "${CMAKE_SOURCE_DIR}/pu-erh_lab/src/*.c"
+    "${CMAKE_SOURCE_DIR}/pu-erh_lab/src/*.h"
+    "${CMAKE_SOURCE_DIR}/pu-erh_lab/src/*.cpp"
+    "${CMAKE_SOURCE_DIR}/pu-erh_lab/src/*.hpp")
+add_custom_target(format
+    COMMAND clang-format
+    -i
+    -style=file
+    ${ALL_SOURCE_FILES}
+    COMMENT "Running clang-format on source files"
+)

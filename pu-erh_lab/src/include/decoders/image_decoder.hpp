@@ -30,27 +30,24 @@
 
 #pragma once
 
-#include "image/image.hpp"
-#include "type/type.hpp"
-#include "utils/queue/queue.hpp"
-
 #include <exiv2/exif.hpp>
 #include <exiv2/image.hpp>
+#include <filesystem>
 #include <future>
 #include <memory>
 #include <opencv2/imgcodecs.hpp>
 #include <vector>
-#include <filesystem>
+
+#include "image/image.hpp"
+#include "type/type.hpp"
+#include "utils/queue/queue.hpp"
 
 #define MAX_REQUEST_SIZE 64u
 namespace puerhlab {
 
-
-class ImageDecoder{
-public:
-  virtual void
-  Decode(std::vector<char> buffer, std::filesystem::path file_path,
-         std::shared_ptr<BufferQueue> result,
-         image_id_t id, std::shared_ptr<std::promise<image_id_t>> promise) = 0;
+class ImageDecoder {
+ public:
+  virtual void Decode(std::vector<char> buffer, std::filesystem::path file_path, std::shared_ptr<BufferQueue> result,
+                      image_id_t id, std::shared_ptr<std::promise<image_id_t>> promise) = 0;
 };
-}; // namespace puerhlab
+};  // namespace puerhlab

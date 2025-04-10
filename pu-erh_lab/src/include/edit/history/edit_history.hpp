@@ -33,7 +33,5 @@
 #include "version.hpp"
 
 namespace puerhlab {
-class EditHistory {
-  
-};
-};
+class EditHistory {};
+};  // namespace puerhlab

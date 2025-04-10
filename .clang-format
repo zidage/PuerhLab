@@ -4,6 +4,6 @@ PointerAlignment: Right
 ColumnLimit: 120
 AllowAllConstructorInitializersOnNextLine: true
 
-FileFilter:
-  - '**/*.h':
-      AlignConsecutiveDeclarations: true
+AlignConsecutiveDeclarations: true
+AlignConsecutiveAssignments: true
+AlignConsecutiveMacros: true

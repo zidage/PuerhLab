@@ -42,31 +42,30 @@ namespace puerhlab {
  * @param image_path the disk location of the image
  * @param image_type the type of the image
  */
-Image::Image(image_id_t image_id, image_path_t image_path, ImageType image_type,
-             Exiv2::ExifData exif_data)
-    : _image_id(image_id), _image_path(image_path),
-      _exif_data(std::move(exif_data)), _image_type(image_type) {}
+Image::Image(image_id_t image_id, image_path_t image_path, ImageType image_type, Exiv2::ExifData exif_data)
+    : _image_id(image_id), _image_path(image_path), _exif_data(std::move(exif_data)), _image_type(image_type) {}
 
-Image::Image(image_id_t image_id, image_path_t image_path,
-             file_name_t image_name, ImageType image_type,
+Image::Image(image_id_t image_id, image_path_t image_path, file_name_t image_name, ImageType image_type,
              Exiv2::ExifData exif_data)
-    : _image_id(image_id), _image_path(image_path), _image_name(image_name),
-      _exif_data(std::move(exif_data)), _image_type(image_type) {}
-
-Image::Image(image_path_t image_path, ImageType image_type,
-             Exiv2::ExifData exif_data)
-    : _image_path(image_path), _exif_data(std::move(exif_data)),
+    : _image_id(image_id),
+      _image_path(image_path),
+      _image_name(image_name),
+      _exif_data(std::move(exif_data)),
       _image_type(image_type) {}
 
+Image::Image(image_path_t image_path, ImageType image_type, Exiv2::ExifData exif_data)
+    : _image_path(image_path), _exif_data(std::move(exif_data)), _image_type(image_type) {}
+
 Image::Image(Image &&other)
-    : _image_id(other._image_id), _image_path(std::move(other._image_path)),
+    : _image_id(other._image_id),
+      _image_path(std::move(other._image_path)),
       _exif_data(std::move(other._exif_data)),
       _image_data(std::move(other._image_data)),
-      _thumbnail(std::move(other._thumbnail)), _image_type(other._image_type) {}
+      _thumbnail(std::move(other._thumbnail)),
+      _image_type(other._image_type) {}
 
 std::wostream &operator<<(std::wostream &os, const Image &img) {
-  os << "img_id: " << img._image_id
-     << "\timage_path: " << img._image_path.wstring() << std::endl;
+  os << "img_id: " << img._image_id << "\timage_path: " << img._image_path.wstring() << std::endl;
   return os;
 }
 
@@ -75,12 +74,8 @@ std::wostream &operator<<(std::wostream &os, const Image &img) {
  *
  * @param image_data
  */
-void Image::LoadData(cv::Mat &&load_image) {
-  _image_data = std::move(load_image);
-}
+void Image::LoadData(cv::Mat &&load_image) { _image_data = std::move(load_image); }
 
-void Image::LoadThumbnail(cv::Mat &&thumbnail) {
-  _thumbnail = std::move(thumbnail);
-}
+void Image::LoadThumbnail(cv::Mat &&thumbnail) { _thumbnail = std::move(thumbnail); }
 
-}; // namespace puerhlab
+};  // namespace puerhlab

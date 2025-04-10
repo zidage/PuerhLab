@@ -30,11 +30,6 @@
 
 #pragma once
 
-#include "concurrency/thread_pool.hpp"
-#include "image/image.hpp"
-#include "type/type.hpp"
-#include "utils/queue/queue.hpp"
-
 #include <cstddef>
 #include <exiv2/exif.hpp>
 #include <exiv2/image.hpp>
@@ -42,25 +37,28 @@
 #include <memory>
 #include <opencv2/imgcodecs.hpp>
 
+#include "concurrency/thread_pool.hpp"
+#include "image/image.hpp"
+#include "type/type.hpp"
+#include "utils/queue/queue.hpp"
+
 #define MAX_REQUEST_SIZE 64u
 namespace puerhlab {
 
 enum class DecodeType { SLEEVE_LOADING, THUMB, RAW, REGULAR };
 
 class DecoderScheduler {
-private:
-  ThreadPool _thread_pool;
+ private:
+  ThreadPool                   _thread_pool;
   std::shared_ptr<BufferQueue> _decoded_buffer;
 
-public:
-  explicit DecoderScheduler(size_t thread_count,
-                            std::shared_ptr<BufferQueue> decoded_buffer);
+ public:
+  explicit DecoderScheduler(size_t thread_count, std::shared_ptr<BufferQueue> decoded_buffer);
 
-  void ScheduleDecode(image_id_t id, image_path_t image_path,
-                      std::shared_ptr<std::promise<image_id_t>> decode_promise);
-  
+  void ScheduleDecode(image_id_t id, image_path_t image_path, std::shared_ptr<std::promise<image_id_t>> decode_promise);
+
   void ScheduleDecode(std::shared_ptr<Image> source_img, DecodeType decode_type,
                       std::shared_ptr<std::promise<image_id_t>> decode_promise);
 };
 
-}; // namespace puerhlab
+};  // namespace puerhlab

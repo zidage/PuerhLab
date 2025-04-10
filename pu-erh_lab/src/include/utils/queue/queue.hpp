@@ -32,28 +32,28 @@
 #include <mutex>
 #include <queue>
 
-
 #pragma once
 
 namespace puerhlab {
 /**
  * @brief A thread-safe non-blocking task queue used by a RawDecoder.
  */
-template <typename T> class ConcurrentBlockingQueue {
-public:
+template <typename T>
+class ConcurrentBlockingQueue {
+ public:
   std::uint32_t _max_size;
   std::uint32_t _low_threadshold;
   std::uint32_t _high_threadshold;
   std::queue<T> _queue;
   // Mutex used for non-blocking queue
-  std::mutex mtx;
+  std::mutex              mtx;
   std::condition_variable _producer_cv;
   std::condition_variable _consumer_cv;
 
   explicit ConcurrentBlockingQueue();
 
   explicit ConcurrentBlockingQueue(uint32_t max_size) : _max_size(max_size) {
-    _low_threadshold = (uint32_t)(max_size * 0.6);
+    _low_threadshold  = (uint32_t)(max_size * 0.6);
     _high_threadshold = (uint32_t)(max_size * 0.8);
   }
 
@@ -65,9 +65,7 @@ public:
   void push(T new_request) {
     {
       std::unique_lock<std::mutex> lock(mtx);
-      _producer_cv.wait(lock, [this]() {
-        return _queue.size() < _high_threadshold;
-      });
+      _producer_cv.wait(lock, [this]() { return _queue.size() < _high_threadshold; });
       _queue.push(std::move(new_request));
     }
     _consumer_cv.notify_one();
@@ -93,4 +91,4 @@ public:
     return handled_request;
   }
 };
-}; // namespace puerhlab
+};  // namespace puerhlab

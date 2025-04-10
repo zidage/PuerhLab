@@ -34,8 +34,8 @@ namespace puerhlab {
 
 // Wide character path c string
 #define image_path_t std::filesystem::path
-#define file_path_t std::filesystem::path
-#define file_name_t std::wstring
+#define file_path_t  std::filesystem::path
+#define file_name_t  std::wstring
 
 #define image_id_t uint32_t
 

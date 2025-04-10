@@ -28,20 +28,20 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#include "type/type.hpp"
-#include "sleeve/sleeve_base.hpp"
-#include "sleeve/sleeve_filter.hpp"
-#include "image/image.hpp"
-
 #include <duckdb.h>
+
 #include <unordered_map>
 
+#include "image/image.hpp"
+#include "sleeve/sleeve_base.hpp"
+#include "sleeve/sleeve_filter.hpp"
+#include "type/type.hpp"
 
 namespace puerhlab {
 
 /**
  * @brief Mapper interface for interacting with the DuckDB
- * 
+ *
  */
 class SleeveMapper {
   void CreateDB(file_path_t db_path);
@@ -56,6 +56,6 @@ class SleeveMapper {
 
   void RemoveImageByFilter(const SleeveFilter &filter);
 
-  auto GetSleeveBaseByFilter(const SleeveFilter &filter) -> std::unordered_map<image_id_t, Image>;  
+  auto GetSleeveBaseByFilter(const SleeveFilter &filter) -> std::unordered_map<image_id_t, Image>;
 };
 };  // namespace puerhlab

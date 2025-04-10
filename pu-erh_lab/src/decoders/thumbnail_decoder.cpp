@@ -30,11 +30,13 @@
 // SOFTWARE.
 
 #include "decoders/thumbnail_decoder.hpp"
-#include "image/image.hpp"
+
 #include <future>
 #include <memory>
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/opencv.hpp>
+
+#include "image/image.hpp"
 
 namespace puerhlab {
 /**
@@ -46,22 +48,19 @@ namespace puerhlab {
  * @param id
  * @param promise
  */
-void ThumbnailDecoder::Decode(
-    std::vector<char> buffer, std::filesystem::path file_path,
-    std::shared_ptr<BufferQueue> result, image_id_t id,
-    std::shared_ptr<std::promise<image_id_t>> promise) {
+void ThumbnailDecoder::Decode(std::vector<char> buffer, std::filesystem::path file_path,
+                              std::shared_ptr<BufferQueue> result, image_id_t id,
+                              std::shared_ptr<std::promise<image_id_t>> promise) {
   // Open the datastream as a cv::Mat image
   cv::Mat image_data((int)buffer.size(), 1, CV_8UC1, buffer.data());
   // Using IMREAD_REDUCED_COLOR_8 flag to get the low-res thumbnail image
   cv::Mat thumbnail = cv::imdecode(image_data, cv::IMREAD_REDUCED_COLOR_8);
   try {
-    auto exiv2_img = Exiv2::ImageFactory::open(
-        (const Exiv2::byte *)buffer.data(), buffer.size());
-    Exiv2::ExifData &exifData = exiv2_img->exifData();
+    auto             exiv2_img = Exiv2::ImageFactory::open((const Exiv2::byte *)buffer.data(), buffer.size());
+    Exiv2::ExifData &exifData  = exiv2_img->exifData();
 
     // Push the decoded image into the buffer queue
-    std::shared_ptr<Image> img = std::make_shared<Image>(
-        id, file_path, ImageType::DEFAULT, Exiv2::ExifData(exifData));
+    std::shared_ptr<Image> img = std::make_shared<Image>(id, file_path, ImageType::DEFAULT, Exiv2::ExifData(exifData));
     img->LoadThumbnail(std::move(thumbnail));
     result->push(img);
     promise->set_value(id);
@@ -71,8 +70,6 @@ void ThumbnailDecoder::Decode(
   }
 }
 
-void ThumbnailDecoder::Decode(
-    std::vector<char> buffer, std::shared_ptr<Image> source_img,
-    std::shared_ptr<BufferQueue> result,
-    std::shared_ptr<std::promise<image_id_t>> promise) {}
-}; // namespace puerhlab
+void ThumbnailDecoder::Decode(std::vector<char> buffer, std::shared_ptr<Image> source_img,
+                              std::shared_ptr<BufferQueue> result, std::shared_ptr<std::promise<image_id_t>> promise) {}
+};  // namespace puerhlab
