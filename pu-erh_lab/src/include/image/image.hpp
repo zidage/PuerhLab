@@ -66,11 +66,16 @@ class Image {
   image_path_t _image_path;
   file_name_t  _image_name;
 
+  std::time_t _added_time;
+  std::time_t _last_modified_time;
+
   Exiv2::ExifData _exif_data;
   bool            has_data;
   cv::Mat         _image_data;
   cv::Mat         _thumbnail;
   ImageType       _image_type = ImageType::DEFAULT;
+
+  hash_t _checksum;
 
   explicit Image() = default;
   explicit Image(image_id_t image_id, image_path_t image_path, ImageType image_type, Exiv2::ExifData exif_data);
@@ -81,11 +86,15 @@ class Image {
 
   friend std::wostream &operator<<(std::wostream &os, const Image &img);
 
+  void SetAddTime();
+
+  void SetModifiedTime();
+
   void LoadData(cv::Mat &&load_image);
 
   void LoadThumbnail(cv::Mat &&thumbnail);
 
-  auto getImageData() -> cv::Mat &;
+  auto GetImageData() -> cv::Mat &;
 
   void SetId(image_id_t image_id);
 };
