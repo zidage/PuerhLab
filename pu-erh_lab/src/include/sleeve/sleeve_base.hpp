@@ -29,5 +29,7 @@
 // SOFTWARE.
 
 namespace puerhlab {
-class SleeveBase {};
+class SleeveBase {
+ private:
+};
 };  // namespace puerhlab

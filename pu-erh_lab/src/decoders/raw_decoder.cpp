@@ -48,5 +48,7 @@ void RawDecoder::Decode(std::vector<char> buffer, std::filesystem::path file_pat
 }
 
 void RawDecoder::Decode(std::vector<char> buffer, std::shared_ptr<Image> source_img,
-                        std::shared_ptr<BufferQueue> result, std::shared_ptr<std::promise<image_id_t>> promise) {}
+                        std::shared_ptr<BufferQueue> result, std::shared_ptr<std::promise<image_id_t>> promise) {
+  // TODO: Add Implementation
+}
 };  // namespace puerhlab

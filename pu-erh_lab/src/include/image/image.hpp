@@ -49,18 +49,6 @@ enum class ImageType { DEFAULT, JPEG, PNG, TIFF, ARW, CR2, CR3, NEF, DNG };
  *
  */
 class Image {
- private:
-  /**
-   * @brief related edit history of this image
-   *
-   */
-  EditHistory _edit_history;
-  /**
-   * @brief a pointer to the current edit version
-   *
-   */
-  std::shared_ptr<Version> _curr_version;
-
  public:
   image_id_t   _image_id;
   image_path_t _image_path;
