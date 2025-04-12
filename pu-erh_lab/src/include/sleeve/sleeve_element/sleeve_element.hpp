@@ -1,5 +1,5 @@
 /*
- * @file        pu-erh_lab/src/include/mapper/sleeve/sleeve_filter.hpp
+ * @file        pu-erh_lab/src/include/mapper/sleeve/sleeve_element.hpp
  * @brief       A exif-based filter for internal filtering in a sleeve base
  * @author      Yurun Zi
  * @date        2025-03-26
@@ -28,17 +28,31 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#include <unordered_map>
+#pragma once
+
+#include <cstdint>
+#include <ctime>
+
+#include "type/type.hpp"
 
 namespace puerhlab {
-class SleeveFilter {
-  // TODO: Add Implementation
+enum class ElementType { FILE, FOLDER };
 
-  // TODO: Placeholder implementation
-  bool operator==(const SleeveFilter &other) const;
-};
+/**
+ * @brief Abstract objects residing in a sleeve, it can be files or folders
+ *
+ */
+class SleeveElement {
+ protected:
+  sl_element_id_t _element_id;
+  ElementType     _e_type;
 
-struct FilterHasher {
-  std::size_t operator()(const SleeveFilter &f) const;
+  std::time_t _added_time;
+  std::time_t _last_modified_time;
+
+  explicit SleeveElement(sl_element_id_t id);
+
+  void SetAddTime();
+  void SetLastModifiedTime();
 };
 };  // namespace puerhlab
