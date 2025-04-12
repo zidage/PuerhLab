@@ -1053,3 +1053,5 @@ third_party/exiv2-0.28.4-windows/
 *.NEF
 *.dng
 **/jpg/*.jpg
+
+*.pdf

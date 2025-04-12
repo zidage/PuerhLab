@@ -2,8 +2,10 @@
 
 #include <memory>
 
+#include "edit/history/edit_history.hpp"
 #include "image/image.hpp"
 #include "sleeve_element.hpp"
+#include "type/type.hpp"
 
 namespace puerhlab {
 
@@ -15,10 +17,10 @@ class SleeveFile : SleeveElement {
  protected:
   std::shared_ptr<Image> _image;
 
-  std::time_t _added_time;
-  std::time_t _last_modified_time;
+  std::shared_ptr<EditHistory> _edit_history;
+  std::shared_ptr<Version>     _current_version;
 
  public:
-  explicit SleeveFile(std::shared_ptr<Image> image);
+  explicit SleeveFile(sl_element_id_t id, std::shared_ptr<Image> image);
 };
 };  // namespace puerhlab

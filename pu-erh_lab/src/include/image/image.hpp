@@ -74,10 +74,6 @@ class Image {
 
   friend std::wostream &operator<<(std::wostream &os, const Image &img);
 
-  void SetAddTime();
-
-  void SetModifiedTime();
-
   void LoadData(cv::Mat &&load_image);
 
   void LoadThumbnail(cv::Mat &&thumbnail);
