@@ -4,6 +4,12 @@ PointerAlignment: Right
 ColumnLimit: 120
 AllowAllConstructorInitializersOnNextLine: true
 
-AlignConsecutiveDeclarations: true
-AlignConsecutiveAssignments: true
+AlignConsecutiveDeclarations:
+  Enabled: true
+  AcrossEmptyLines: true
+  AcrossComments: true
+AlignConsecutiveAssignments:
+  Enabled: true
+  AcrossEmptyLines: true
+  AcrossComments: true
 AlignConsecutiveMacros: true

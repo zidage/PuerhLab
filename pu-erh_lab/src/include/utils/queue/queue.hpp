@@ -41,10 +41,10 @@ namespace puerhlab {
 template <typename T>
 class ConcurrentBlockingQueue {
  public:
-  std::uint32_t _max_size;
-  std::uint32_t _low_threadshold;
-  std::uint32_t _high_threadshold;
-  std::queue<T> _queue;
+  std::uint32_t           _max_size;
+  std::uint32_t           _low_threadshold;
+  std::uint32_t           _high_threadshold;
+  std::queue<T>           _queue;
   // Mutex used for non-blocking queue
   std::mutex              mtx;
   std::condition_variable _producer_cv;

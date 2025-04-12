@@ -42,11 +42,11 @@ class Version {
   /**
    * @brief MurmurHash3 value for this version
    */
-  hash_t _hash;
+  hash_t                  _hash;
   /**
    * @brief Last modified time for this version
    */
-  std::tm _time_stamp;
+  std::tm                 _time_stamp;
   /**
    * @brief collection of images related to this version
    */
@@ -54,6 +54,6 @@ class Version {
   /**
    * @brief Edit log for this edit version
    */
-  std::list<int> _edit_log;
+  std::list<int>          _edit_log;
 };
 };  // namespace puerhlab

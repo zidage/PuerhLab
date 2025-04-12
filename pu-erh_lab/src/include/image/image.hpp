@@ -50,12 +50,12 @@ enum class ImageType { DEFAULT, JPEG, PNG, TIFF, ARW, CR2, CR3, NEF, DNG };
  */
 class Image {
  public:
-  image_id_t   _image_id;
-  image_path_t _image_path;
-  file_name_t  _image_name;
+  image_id_t      _image_id;
+  image_path_t    _image_path;
+  file_name_t     _image_name;
 
-  std::time_t _added_time;
-  std::time_t _last_modified_time;
+  std::time_t     _added_time;
+  std::time_t     _last_modified_time;
 
   Exiv2::ExifData _exif_data;
   bool            has_data;
@@ -63,7 +63,7 @@ class Image {
   cv::Mat         _thumbnail;
   ImageType       _image_type = ImageType::DEFAULT;
 
-  hash_t _checksum;
+  hash_t          _checksum;
 
   explicit Image() = default;
   explicit Image(image_id_t image_id, image_path_t image_path, ImageType image_type, Exiv2::ExifData exif_data);
@@ -74,12 +74,12 @@ class Image {
 
   friend std::wostream &operator<<(std::wostream &os, const Image &img);
 
-  void LoadData(cv::Mat &&load_image);
+  void                  LoadData(cv::Mat &&load_image);
 
-  void LoadThumbnail(cv::Mat &&thumbnail);
+  void                  LoadThumbnail(cv::Mat &&thumbnail);
 
-  auto GetImageData() -> cv::Mat &;
+  auto                  GetImageData() -> cv::Mat &;
 
-  void SetId(image_id_t image_id);
+  void                  SetId(image_id_t image_id);
 };
 };  // namespace puerhlab

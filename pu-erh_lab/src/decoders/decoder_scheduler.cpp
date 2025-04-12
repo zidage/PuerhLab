@@ -78,10 +78,10 @@ void DecoderScheduler::ScheduleDecode(image_id_t id, image_path_t image_path,
   }
 
   // Assign a decoder for the task
-  std::shared_ptr<LoadingDecoder> decoder = std::make_shared<MetadataDecoder>();
+  std::shared_ptr<LoadingDecoder> decoder  = std::make_shared<MetadataDecoder>();
 
   // Read file into memory
-  std::streamsize fileSize = file.tellg();
+  std::streamsize                 fileSize = file.tellg();
   file.seekg(0, std::ios::beg);
   std::vector<char> buffer(fileSize);
   if (!file.read(buffer.data(), fileSize)) {
@@ -95,7 +95,7 @@ void DecoderScheduler::ScheduleDecode(image_id_t id, image_path_t image_path,
   auto                 &decoded_buffer = _decoded_buffer;
   std::filesystem::path file_path(image_path);
 
-  auto task = std::make_shared<std::packaged_task<void()>>(
+  auto                  task = std::make_shared<std::packaged_task<void()>>(
       [decoder, buffer = std::move(buffer), file_path, decoded_buffer, id, decode_promise]() mutable {
         decoder->Decode(std::move(buffer), file_path, decoded_buffer, id, decode_promise);
       });
@@ -155,7 +155,7 @@ void DecoderScheduler::ScheduleDecode(std::shared_ptr<Image> source_img, DecodeT
   auto                 &decoded_buffer = _decoded_buffer;
   std::filesystem::path file_path(source_img->_image_path);
 
-  auto task = std::make_shared<std::packaged_task<void()>>(
+  auto                  task = std::make_shared<std::packaged_task<void()>>(
       [decoder, buffer = std::move(buffer), decoded_buffer, &source_img, decode_promise]() mutable {
         decoder->Decode(std::move(buffer), source_img, decoded_buffer, decode_promise);
       });

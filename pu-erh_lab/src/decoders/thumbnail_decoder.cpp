@@ -56,8 +56,8 @@ void ThumbnailDecoder::Decode(std::vector<char> buffer, std::filesystem::path fi
   // Using IMREAD_REDUCED_COLOR_8 flag to get the low-res thumbnail image
   cv::Mat thumbnail = cv::imdecode(image_data, cv::IMREAD_REDUCED_COLOR_8);
   try {
-    auto             exiv2_img = Exiv2::ImageFactory::open((const Exiv2::byte *)buffer.data(), buffer.size());
-    Exiv2::ExifData &exifData  = exiv2_img->exifData();
+    auto                   exiv2_img = Exiv2::ImageFactory::open((const Exiv2::byte *)buffer.data(), buffer.size());
+    Exiv2::ExifData       &exifData  = exiv2_img->exifData();
 
     // Push the decoded image into the buffer queue
     std::shared_ptr<Image> img = std::make_shared<Image>(id, file_path, ImageType::DEFAULT, Exiv2::ExifData(exifData));

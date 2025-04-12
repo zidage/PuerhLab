@@ -51,8 +51,8 @@ class ThreadPool {
   std::condition_variable           condition;
   std::vector<std::thread>          workers;
 
-  bool stop;
+  bool                              stop;
 
-  void WorkerThread();
+  void                              WorkerThread();
 };
 };  // namespace puerhlab

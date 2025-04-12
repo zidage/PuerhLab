@@ -39,6 +39,8 @@ namespace puerhlab {
 
 #define image_id_t uint32_t
 
+// Used in sleeve
+#define sleeve_id_t     uint32_t
 #define sl_element_id_t uint32_t
 
 // Hash type for version control

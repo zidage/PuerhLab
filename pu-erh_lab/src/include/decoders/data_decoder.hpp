@@ -11,7 +11,7 @@ class DataDecoder : public ImageDecoder {
                       image_id_t id, std::shared_ptr<std::promise<image_id_t>> promise) = 0;
 
   virtual void Decode(std::vector<char> buffer, std::shared_ptr<Image> source_img, std::shared_ptr<BufferQueue> result,
-                      std::shared_ptr<std::promise<image_id_t>> promise) = 0;
+                      std::shared_ptr<std::promise<image_id_t>> promise)                = 0;
 };
 
 };  // namespace puerhlab
