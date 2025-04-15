@@ -25,6 +25,7 @@ add_library(SleeveFilter
     sleeve/sleeve_filter/filter_combo.cpp
 )
 target_include_directories(SleeveFilter PUBLIC include)
+target_link_libraries(SleeveFilter PRIVATE Image)
 
 add_library(Sleeve 
     sleeve/sleeve_base.cpp    
