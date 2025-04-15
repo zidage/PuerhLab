@@ -28,12 +28,24 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+#pragma once
+
+#include <cstddef>
 #include <memory>
 
 #include "sleeve/sleeve_element/sleeve_folder.hpp"
+#include "type/type.hpp"
+
 namespace puerhlab {
 class SleeveBase {
  private:
-  std::unique_ptr<SleeveFolder> root;
+  sleeve_id_t                   _sleeve_id;
+  std::unique_ptr<SleeveFolder> _root;
+  size_t                        _size;
+
+ public:
+  explicit SleeveBase(sleeve_id_t id);
+
+  void InitializeRoot();
 };
 };  // namespace puerhlab

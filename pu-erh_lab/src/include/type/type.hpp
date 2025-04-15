@@ -33,25 +33,25 @@
 namespace puerhlab {
 
 // Wide character path c string
-#define image_path_t std::filesystem::path
-#define file_path_t  std::filesystem::path
-#define file_name_t  std::wstring
+#define image_path_t    std::filesystem::path
+#define file_path_t     std::filesystem::path
+#define file_name_t     std::wstring
 
-#define image_id_t uint32_t
+#define image_id_t      uint32_t
 
 // Used in sleeve
 #define sleeve_id_t     uint32_t
 #define sl_element_id_t uint32_t
 
 // Hash type for version control
-#define hash_t uint32_t
+#define hash_t          uint32_t
 
 // Used in buffer-like structures to represent frame id
-#define frame_id_t uint32_t
+#define frame_id_t      uint32_t
 
 // Used in DecodeRequest type
-#define request_id_t size_t
+#define request_id_t    size_t
 
-#define BufferQueue ConcurrentBlockingQueue<std::shared_ptr<Image>>
+#define BufferQueue     ConcurrentBlockingQueue<std::shared_ptr<Image>>
 
 };  // namespace puerhlab

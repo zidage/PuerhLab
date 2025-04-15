@@ -21,17 +21,21 @@ add_library(ImageLoader image/image_loader.cpp)
 target_include_directories(ImageLoader PUBLIC include)
 target_link_libraries(ImageLoader PUBLIC ImageDecoder)
 
+add_library(SleeveFilter
+    sleeve/sleeve_filter/filter_combo.cpp
+)
+target_include_directories(SleeveFilter PUBLIC include)
+
 add_library(Sleeve 
     sleeve/sleeve_base.cpp    
     sleeve/sleeve.cpp
     mapper/sleeve/sleeve_mapper.cpp
-    sleeve/sleeve_filter.cpp
     sleeve/sleeve_element/sleeve_element.cpp
     sleeve/sleeve_element/sleeve_file.cpp
     sleeve/sleeve_element/sleeve_folder.cpp
 )
 target_include_directories(Sleeve PUBLIC include)
-target_link_libraries(Sleeve PRIVATE Image ImageLoader DuckDB)
+target_link_libraries(Sleeve PRIVATE Image ImageLoader SleeveFilter DuckDB)
 
 add_library(SleeveManager 
     sleeve/sleeve_manager.cpp)

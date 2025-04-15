@@ -28,17 +28,17 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+#pragma once
+
 #include <unordered_map>
 
 namespace puerhlab {
-class SleeveFilter {
-  // TODO: Add Implementation
-
+class FilterCombo {
   // TODO: Placeholder implementation
-  bool operator==(const SleeveFilter &other) const;
+  bool operator==(const FilterCombo &other) const;
 };
 
-struct FilterHasher {
-  std::size_t operator()(const SleeveFilter &f) const;
+struct FilterComboHasher {
+  std::size_t operator()(const FilterCombo &f) const;
 };
 };  // namespace puerhlab
