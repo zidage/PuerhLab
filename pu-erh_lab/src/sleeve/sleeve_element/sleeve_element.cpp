@@ -4,7 +4,10 @@
 
 namespace puerhlab {
 
-SleeveElement::SleeveElement(sl_element_id_t id) : _element_id(id) { this->SetAddTime(); }
+SleeveElement::SleeveElement(sl_element_id_t id, file_name_t element_name, sl_path_t element_path)
+    : _element_id(id), _element_name(element_name), _element_path(element_path) {
+  this->SetAddTime();
+}
 
 void SleeveElement::SetAddTime() {
   auto now            = std::chrono::system_clock::now();

@@ -2,6 +2,4 @@
 
 #include "type/type.hpp"
 
-namespace puerhlab {
-SleeveFolder::SleeveFolder(sl_element_id_t id) : SleeveElement(id) {}
-};  // namespace puerhlab
+namespace puerhlab {};  // namespace puerhlab
