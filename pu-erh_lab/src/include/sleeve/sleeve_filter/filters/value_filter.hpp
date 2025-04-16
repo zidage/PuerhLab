@@ -5,6 +5,10 @@
 namespace puerhlab {
 template <typename T>
 class ValueFilter {
-  virtual void SetValue(T value) = 0;
+ public:
+  virtual void   SetValue(T value)              = 0;
+  virtual void   ResetFilter()                  = 0;
+  virtual auto   GetPredicate() -> std::wstring = 0;
+  virtual hash_t Hash()                         = 0;
 };
 };  // namespace puerhlab

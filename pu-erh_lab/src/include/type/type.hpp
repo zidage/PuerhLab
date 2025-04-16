@@ -37,6 +37,8 @@ namespace puerhlab {
 #define file_path_t     std::filesystem::path
 #define file_name_t     std::wstring
 
+#define sl_path_t       std::wstring
+
 #define image_id_t      uint32_t
 
 // Used in sleeve

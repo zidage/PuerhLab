@@ -38,16 +38,18 @@ add_library(Sleeve
 target_include_directories(Sleeve PUBLIC include)
 target_link_libraries(Sleeve PRIVATE Image ImageLoader SleeveFilter DuckDB)
 
+add_library(SleeveBuffer
+    buffer/sleeve_buffer/sleeve_buffer_manager.cpp
+    buffer/sleeve_buffer/sleeve_buffer.cpp
+)
+target_include_directories(SleeveBuffer PUBLIC include)
+target_link_libraries(SleeveBuffer PRIVATE Image)
+
 add_library(SleeveManager 
     sleeve/sleeve_manager.cpp)
 target_include_directories(SleeveManager PUBLIC include)
 target_link_libraries(SleeveManager PRIVATE Sleeve ImageLoader)
 
-add_library(SleeveBuffer
-    sleeve/sleeve_buffer/sleeve_buffer_manager.cpp
-    sleeve/sleeve_buffer/sleeve_buffer.cpp
-)
-target_include_directories(SleeveBuffer PUBLIC include)
-target_link_libraries(SleeveBuffer PRIVATE Image)
+
 
 

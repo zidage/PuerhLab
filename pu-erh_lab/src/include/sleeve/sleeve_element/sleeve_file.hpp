@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <memory>
 
 #include "edit/history/edit_history.hpp"
@@ -21,6 +22,7 @@ class SleeveFile : SleeveElement {
   std::shared_ptr<Version>     _current_version;
 
  public:
-  explicit SleeveFile(sl_element_id_t id, std::shared_ptr<Image> image);
+  explicit SleeveFile(sl_element_id_t id, file_name_t element_name, sl_path_t element_path,
+                      std::shared_ptr<Image> image);
 };
 };  // namespace puerhlab

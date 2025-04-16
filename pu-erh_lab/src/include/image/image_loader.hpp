@@ -39,7 +39,6 @@
 #include "decoders/decoder_scheduler.hpp"
 #include "image/image.hpp"
 #include "sleeve/sleeve_base.hpp"
-#include "sleeve/sleeve_buffer/sleeve_buffer.hpp"
 #include "type/type.hpp"
 #include "utils/queue/queue.hpp"
 namespace puerhlab {

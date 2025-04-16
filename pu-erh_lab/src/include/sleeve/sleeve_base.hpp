@@ -31,21 +31,37 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <memory>
+#include <unordered_map>
 
+#include "sleeve/sleeve_element/sleeve_element.hpp"
 #include "sleeve/sleeve_element/sleeve_folder.hpp"
 #include "type/type.hpp"
 
 namespace puerhlab {
 class SleeveBase {
  private:
-  sleeve_id_t                   _sleeve_id;
-  std::unique_ptr<SleeveFolder> _root;
-  size_t                        _size;
+  sleeve_id_t                                                         _sleeve_id;
+  std::unique_ptr<SleeveFolder>                                       _root;
+  size_t                                                              _size;
+  uint32_t                                                            _next_element_id;
+
+  std::unordered_map<sl_element_id_t, std::shared_ptr<SleeveElement>> _storage;
 
  public:
   explicit SleeveBase(sleeve_id_t id);
 
   void InitializeRoot();
+
+  auto AccessElementById(sl_element_id_t id) -> std::shared_ptr<SleeveElement>;
+
+  auto AccessElementByPath(sl_path_t path) -> std::shared_ptr<SleeveFolder>;
+
+  auto CreateFolderToPath(sl_path_t path, file_name_t file_name) -> bool;
+
+  auto CreateFileToPath(sl_path_t path, file_name_t file_name) -> bool;
+
+  auto RemoveElementInPath(sl_path_t full_path);
 };
 };  // namespace puerhlab

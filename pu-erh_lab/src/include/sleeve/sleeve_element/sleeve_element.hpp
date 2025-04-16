@@ -32,6 +32,7 @@
 
 #include <cstdint>
 #include <ctime>
+#include <string>
 
 #include "type/type.hpp"
 
@@ -47,10 +48,13 @@ class SleeveElement {
   sl_element_id_t _element_id;
   ElementType     _e_type;
 
+  file_name_t     _element_name;
+  sl_path_t       _element_path;
+
   std::time_t     _added_time;
   std::time_t     _last_modified_time;
 
-  explicit SleeveElement(sl_element_id_t id);
+  explicit SleeveElement(sl_element_id_t id, file_name_t element_name, sl_path_t element_path);
 
   void SetAddTime();
   void SetLastModifiedTime();
