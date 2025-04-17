@@ -4,8 +4,8 @@
 
 namespace puerhlab {
 
-SleeveElement::SleeveElement(sl_element_id_t id, file_name_t element_name, sl_path_t element_path)
-    : _element_id(id), _element_name(element_name), _element_path(element_path) {
+SleeveElement::SleeveElement(sl_element_id_t id, file_name_t element_name)
+    : _element_id(id), _element_name(element_name) {
   this->SetAddTime();
 }
 

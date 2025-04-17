@@ -32,8 +32,11 @@
 
 #include <cstdint>
 #include <ctime>
+#include <memory>
+#include <optional>
 #include <string>
 
+#include "sleeve/sleeve_filter/filter_combo.hpp"
 #include "type/type.hpp"
 
 namespace puerhlab {
@@ -44,19 +47,32 @@ enum class ElementType { FILE, FOLDER };
  *
  */
 class SleeveElement {
- protected:
+ public:
   sl_element_id_t _element_id;
-  ElementType     _e_type;
+  ElementType     _type;
 
   file_name_t     _element_name;
-  sl_path_t       _element_path;
 
   std::time_t     _added_time;
   std::time_t     _last_modified_time;
 
-  explicit SleeveElement(sl_element_id_t id, file_name_t element_name, sl_path_t element_path);
+  uint32_t        _ref_count;
+
+  explicit SleeveElement(sl_element_id_t id, file_name_t element_name);
+
+  virtual ~SleeveElement();
 
   void SetAddTime();
   void SetLastModifiedTime();
+  auto GetElementId() -> sl_element_id_t;
+  void IncrementRefCount();
+  void DecrementRefCount();
+
+  // virtual void AddElement(std::shared_ptr<SleeveElement>);
+  // virtual void CreateFilter(FilterCombo&& filter);
+  // virtual auto GetElementByName(file_name_t name) -> std::optional<sl_element_id_t>;
+  // virtual auto ListElements() -> std::vector<sl_element_id_t>;
+  // virtual auto RecursiveListElements() -> std::vector<sl_element_id_t>;
+  // virtual auto RemoveElementByName(file_name_t name) -> sl_element_id_t;
 };
 };  // namespace puerhlab

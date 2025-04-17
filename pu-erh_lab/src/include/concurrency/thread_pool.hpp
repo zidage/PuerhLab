@@ -28,6 +28,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+// TODO: Change tasks to MPMS Queue to improve efficiency
+
 #include <functional>
 #include <future>
 #include <queue>
