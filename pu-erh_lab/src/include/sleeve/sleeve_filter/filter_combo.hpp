@@ -30,15 +30,18 @@
 
 #pragma once
 
+#include <cstdint>
+#include <memory>
 #include <unordered_map>
+#include <vector>
+
+#include "type/type.hpp"
 
 namespace puerhlab {
 class FilterCombo {
-  // TODO: Placeholder implementation
-  bool operator==(const FilterCombo &other) const;
-};
-
-struct FilterComboHasher {
-  std::size_t operator()(const FilterCombo &f) const;
+ public:
+  uint32_t filter_id;
+  auto     CreateIndexOn(std::shared_ptr<std::vector<sl_element_id_t>> _lists)
+      -> std::shared_ptr<std::vector<sl_element_id_t>>;
 };
 };  // namespace puerhlab

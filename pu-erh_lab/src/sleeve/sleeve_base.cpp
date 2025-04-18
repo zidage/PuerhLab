@@ -34,13 +34,16 @@
 #include <deque>
 #include <memory>
 #include <optional>
+#include <queue>
 #include <sstream>
 #include <stdexcept>
+#include <vector>
 
 #include "mapper/sleeve/sleeve_mapper.hpp"
 #include "sleeve/sleeve_element/sleeve_element.hpp"
 #include "sleeve/sleeve_element/sleeve_element_factory.hpp"
 #include "sleeve/sleeve_element/sleeve_folder.hpp"
+#include "sleeve/sleeve_filter/filter_combo.hpp"
 #include "type/type.hpp"
 
 namespace puerhlab {
@@ -50,8 +53,10 @@ namespace puerhlab {
  * @param id
  */
 SleeveBase::SleeveBase(sleeve_id_t id) : _sleeve_id(id) {
-  _next_element_id = 0;
-  _size            = 0;
+  _next_element_id   = 0;
+  _size              = 0;
+  _filter_storage[0] = std::make_shared<FilterCombo>();
+  _next_filter_id    = 1;
   InitializeRoot();
 }
 
@@ -108,7 +113,7 @@ auto SleeveBase::AccessElementByPath(const sl_path_t &path) const -> std::option
 
     curr_path = path_elements.front();
     path_elements.pop_front();
-    auto next_element_id = std::dynamic_pointer_cast<SleeveFolder>(curr_element.value())->GetElementByName(curr_path);
+    auto next_element_id = std::dynamic_pointer_cast<SleeveFolder>(curr_element.value())->GetElementIdByName(curr_path);
     if (!next_element_id.has_value()) {
       return std::nullopt;
     }
@@ -146,12 +151,13 @@ auto SleeveBase::CreateElementToPath(const sl_path_t &path, const file_name_t &f
 auto SleeveBase::CreateElementToPath(const std::shared_ptr<SleeveFolder> parent_folder, const file_name_t &file_name,
                                      const ElementType &type) -> std::optional<std::shared_ptr<SleeveElement>> {
   if (parent_folder->Contains(file_name)) {
+    // TODO: Add repetition handling here
     return std::nullopt;
   }
   std::shared_ptr<SleeveElement> newElement = SleeveElementFactory::CreateElement(type, _next_element_id++, file_name);
   // Update the map
   _storage[newElement->_element_id]         = newElement;
-  parent_folder->AddElement(newElement);
+  parent_folder->AddElementToMap(newElement);
   // Increment the reference count of the file
   if (newElement->_type == ElementType::FILE) {
     std::dynamic_pointer_cast<SleeveFile>(newElement)->IncrementRefCount();
@@ -179,18 +185,49 @@ auto SleeveBase::RemoveElementInPath(const sl_path_t &path, const file_name_t &f
   return RemoveElementInPath(parent_folder, file_name);
 }
 
+/**
+ * @brief
+ *
+ * @param parent_folder
+ * @param file_name
+ * @return std::optional<std::shared_ptr<SleeveElement>>
+ */
 auto SleeveBase::RemoveElementInPath(const std::shared_ptr<SleeveFolder> parent_folder, const file_name_t &file_name)
     -> std::optional<std::shared_ptr<SleeveElement>> {
-  auto del_id = parent_folder->GetElementByName(file_name);
+  auto del_id = parent_folder->GetElementIdByName(file_name);
   if (!del_id.has_value()) {
     return std::nullopt;
   }
   auto del_element = AccessElementById(del_id.value()).value();
-  if (del_element->_type == ElementType::FOLDER) {
-    auto del_folder = std::dynamic_pointer_cast<SleeveFolder>(del_element);
-    del_folder->ClearFolder();
+  if (del_element->pinned) {
+    return std::nullopt;
   }
-  parent_folder->RemoveElementByName(del_element->_element_name);
+
+  if (del_element->_type == ElementType::FOLDER) {
+    auto del_folder   = std::dynamic_pointer_cast<SleeveFolder>(del_element);
+    auto del_elements = del_folder->ListElements();
+    auto bfs_queue    = std::deque<sl_element_id_t>(del_elements->begin(), del_elements->end());
+    // Use BFS to decrement all the ref count of the elements under the folder to delete
+    while (!bfs_queue.empty()) {
+      auto next_del_id      = bfs_queue.front();
+      auto next_del_element = _storage[next_del_id];
+      bfs_queue.pop_front();
+      // If the folder at the current level contains a subfolder, expand the bfs fringe
+      if (next_del_element->_type == ElementType::FOLDER) {
+        auto del_folder = std::dynamic_pointer_cast<SleeveFolder>(next_del_element);
+        del_elements    = del_folder->ListElements();
+        bfs_queue.insert(bfs_queue.end(), del_elements->begin(), del_elements->end());
+        del_folder->ClearFolder();
+      }
+      next_del_element->DecrementRefCount();
+    }
+    del_folder->ClearFolder();
+    parent_folder->DecrementFolderCount();
+  } else {
+    // TODO: Add remove code for file elements
+    parent_folder->DecrementFileCount();
+  }
+  parent_folder->RemoveNameMap(del_element->_element_name);
   del_element->DecrementRefCount();
 
   return del_element;

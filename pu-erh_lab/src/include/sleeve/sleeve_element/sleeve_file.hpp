@@ -15,7 +15,7 @@ namespace puerhlab {
  *
  */
 class SleeveFile : public SleeveElement {
- protected:
+ private:
   std::shared_ptr<Image>       _image;
 
   std::shared_ptr<EditHistory> _edit_history;

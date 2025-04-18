@@ -38,7 +38,9 @@
 #include <unordered_map>
 
 #include "sleeve/sleeve_element/sleeve_element.hpp"
+#include "sleeve/sleeve_element/sleeve_file.hpp"
 #include "sleeve/sleeve_element/sleeve_folder.hpp"
+#include "sleeve/sleeve_filter/filter_combo.hpp"
 #include "type/type.hpp"
 
 namespace puerhlab {
@@ -47,9 +49,11 @@ class SleeveBase {
   sleeve_id_t                                                         _sleeve_id;
   std::shared_ptr<SleeveFolder>                                       _root;
   size_t                                                              _size;
-  uint32_t                                                            _next_element_id;
+  sl_element_id_t                                                     _next_element_id;
+  filter_id_t                                                         _next_filter_id;
 
   std::unordered_map<sl_element_id_t, std::shared_ptr<SleeveElement>> _storage;
+  std::unordered_map<uint32_t, std::shared_ptr<FilterCombo>>          _filter_storage;
   std::wstring                                                        delimiter = L"/";
 
  public:
@@ -66,6 +70,6 @@ class SleeveBase {
       -> std::optional<std::shared_ptr<SleeveElement>>;
   auto RemoveElementInPath(const std::shared_ptr<SleeveFolder> parent_folder, const file_name_t &file_name)
       -> std::optional<std::shared_ptr<SleeveElement>>;
-  void GarbageCollection();
+  void GarbageCollect();
 };
 };  // namespace puerhlab

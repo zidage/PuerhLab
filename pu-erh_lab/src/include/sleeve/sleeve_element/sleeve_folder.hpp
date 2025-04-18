@@ -18,27 +18,30 @@ namespace puerhlab {
  *
  */
 class SleeveFolder : public SleeveElement {
- protected:
-  std::unordered_map<file_name_t, sl_element_id_t>                                 _contents;
-  std::unordered_map<FilterCombo, std::vector<sl_element_id_t>, FilterComboHasher> _indicies_cache;
+ private:
+  std::unordered_map<file_name_t, sl_element_id_t>                               _contents;
+  std::unordered_map<filter_id_t, std::shared_ptr<std::vector<sl_element_id_t>>> _indicies_cache;
 
-  uint32_t                                                                         _file_count;
-  uint32_t                                                                         _folder_count;
+  filter_id_t                                                                    _default_filter;
+
+  uint32_t                                                                       _file_count;
+  uint32_t                                                                       _folder_count;
 
  public:
   ElementType _type = ElementType::FOLDER;
   explicit SleeveFolder(sl_element_id_t id, file_name_t element_name);
 
-  void AddElement(std::shared_ptr<SleeveElement>);
-  void CreateFilter(FilterCombo &&filter);
-  auto GetElementByName(file_name_t name) const -> std::optional<sl_element_id_t>;
-  auto Contains(file_name_t name) const -> bool;
-  auto ListElements() const -> std::vector<sl_element_id_t>;
-  auto RecursiveListElements() const -> std::vector<sl_element_id_t>;
-  auto RemoveElementByName(file_name_t name) -> sl_element_id_t;
+  void AddElementToMap(const std::shared_ptr<SleeveElement> element);
+  void CreateIndex(const std::shared_ptr<FilterCombo> filter);
+  auto GetElementIdByName(const file_name_t &name) const -> std::optional<sl_element_id_t>;
+  auto ListElements() const -> std::shared_ptr<std::vector<sl_element_id_t>>;
+  auto Contains(const file_name_t &name) const -> bool;
+  void RemoveNameMap(const file_name_t &name);
 
   void IncrementFolderCount();
   void IncrementFileCount();
+  void DecrementFolderCount();
+  void DecrementFileCount();
   auto ClearFolder() -> bool;
   auto ResetFilters() -> bool;
 };

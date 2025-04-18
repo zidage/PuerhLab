@@ -57,6 +57,7 @@ class SleeveElement {
   std::time_t     _last_modified_time;
 
   uint32_t        _ref_count;
+  bool            pinned;
 
   explicit SleeveElement(sl_element_id_t id, file_name_t element_name);
 
