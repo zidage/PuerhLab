@@ -89,6 +89,9 @@ void SleeveFolder::IncrementFolderCount() { ++_folder_count; }
 
 void SleeveFolder::DecrementFolderCount() { --_folder_count; }
 
-auto SleeveFolder::ClearFolder() -> bool {}
+auto SleeveFolder::ClearFolder() -> bool {
+  // TODO: Add Implementation
+  return false;
+}
 
 };  // namespace puerhlab
