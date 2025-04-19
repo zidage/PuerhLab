@@ -36,7 +36,7 @@ class SleeveFolder : public SleeveElement {
   auto GetElementIdByName(const file_name_t &name) const -> std::optional<sl_element_id_t>;
   auto ListElements() const -> std::shared_ptr<std::vector<sl_element_id_t>>;
   auto Contains(const file_name_t &name) const -> bool;
-  void RemoveNameMap(const file_name_t &name);
+  void RemoveNameFromMap(const file_name_t &name);
 
   void IncrementFolderCount();
   void IncrementFileCount();

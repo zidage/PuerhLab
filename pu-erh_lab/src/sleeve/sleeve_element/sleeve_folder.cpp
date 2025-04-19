@@ -79,7 +79,7 @@ auto SleeveFolder::Contains(const file_name_t &name) const -> bool { return _con
  * @param name
  * @return sl_element_id_t
  */
-void SleeveFolder::RemoveNameMap(const file_name_t &name) { _contents.erase(name); }
+void SleeveFolder::RemoveNameFromMap(const file_name_t &name) { _contents.erase(name); }
 
 void SleeveFolder::IncrementFileCount() { ++_file_count; }
 

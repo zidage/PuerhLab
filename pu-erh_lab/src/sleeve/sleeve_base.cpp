@@ -206,28 +206,18 @@ auto SleeveBase::RemoveElementInPath(const std::shared_ptr<SleeveFolder> parent_
   if (del_element->_type == ElementType::FOLDER) {
     auto del_folder   = std::dynamic_pointer_cast<SleeveFolder>(del_element);
     auto del_elements = del_folder->ListElements();
-    auto bfs_queue    = std::deque<sl_element_id_t>(del_elements->begin(), del_elements->end());
-    // Use BFS to decrement all the ref count of the elements under the folder to delete
-    while (!bfs_queue.empty()) {
-      auto next_del_id      = bfs_queue.front();
-      auto next_del_element = _storage[next_del_id];
-      bfs_queue.pop_front();
-      // If the folder at the current level contains a subfolder, expand the bfs fringe
-      if (next_del_element->_type == ElementType::FOLDER) {
-        auto del_folder = std::dynamic_pointer_cast<SleeveFolder>(next_del_element);
-        del_elements    = del_folder->ListElements();
-        bfs_queue.insert(bfs_queue.end(), del_elements->begin(), del_elements->end());
-        del_folder->ClearFolder();
-      }
-      next_del_element->DecrementRefCount();
+    for (auto &del_element : *del_elements) {
+      auto &e = _storage.at(del_element);
+      e->DecrementRefCount();
     }
+
     del_folder->ClearFolder();
     parent_folder->DecrementFolderCount();
   } else {
     // TODO: Add remove code for file elements
     parent_folder->DecrementFileCount();
   }
-  parent_folder->RemoveNameMap(del_element->_element_name);
+  parent_folder->RemoveNameFromMap(del_element->_element_name);
   del_element->DecrementRefCount();
 
   return del_element;
