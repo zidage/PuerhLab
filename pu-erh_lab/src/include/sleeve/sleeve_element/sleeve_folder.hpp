@@ -30,6 +30,7 @@ class SleeveFolder : public SleeveElement {
  public:
   ElementType _type = ElementType::FOLDER;
   explicit SleeveFolder(sl_element_id_t id, file_name_t element_name);
+  ~SleeveFolder();
 
   void AddElementToMap(const std::shared_ptr<SleeveElement> element);
   void CreateIndex(const std::shared_ptr<FilterCombo> filter);

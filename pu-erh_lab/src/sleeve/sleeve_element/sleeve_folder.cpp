@@ -21,6 +21,8 @@ SleeveFolder::SleeveFolder(sl_element_id_t id, file_name_t element_name)
   _indicies_cache[_default_filter] = std::make_shared<std::vector<sl_element_id_t>>();
 }
 
+SleeveFolder::~SleeveFolder() {}
+
 /**
  * @brief Add an element reference to the folder
  *

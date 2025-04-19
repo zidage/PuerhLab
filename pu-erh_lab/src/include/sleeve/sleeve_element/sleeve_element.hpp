@@ -65,7 +65,6 @@ class SleeveElement {
 
   void SetAddTime();
   void SetLastModifiedTime();
-  auto GetElementId() -> sl_element_id_t;
   void IncrementRefCount();
   void DecrementRefCount();
 

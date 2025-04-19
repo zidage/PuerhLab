@@ -3,4 +3,9 @@
 #include <cstddef>
 #include <unordered_map>
 
-namespace puerhlab {};  // namespace puerhlab
+namespace puerhlab {
+auto FilterCombo::CreateIndexOn(std::shared_ptr<std::vector<sl_element_id_t>> _lists)
+    -> std::shared_ptr<std::vector<sl_element_id_t>> {
+  return nullptr;
+}
+};  // namespace puerhlab

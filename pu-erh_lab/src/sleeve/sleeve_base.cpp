@@ -30,14 +30,9 @@
 
 #include "sleeve/sleeve_base.hpp"
 
-#include <cstddef>
 #include <deque>
 #include <memory>
 #include <optional>
-#include <queue>
-#include <sstream>
-#include <stdexcept>
-#include <vector>
 
 #include "mapper/sleeve/sleeve_mapper.hpp"
 #include "sleeve/sleeve_element/sleeve_element.hpp"
@@ -56,7 +51,7 @@ SleeveBase::SleeveBase(sleeve_id_t id) : _sleeve_id(id) {
   _next_element_id   = 0;
   _size              = 0;
   _filter_storage[0] = std::make_shared<FilterCombo>();
-  _next_filter_id    = 1;
+  _next_filter_id    = 0;
   InitializeRoot();
 }
 
@@ -65,8 +60,10 @@ SleeveBase::SleeveBase(sleeve_id_t id) : _sleeve_id(id) {
  *
  */
 void SleeveBase::InitializeRoot() {
-  if (_root != nullptr) _size += 1;
-  _root                        = std::make_shared<SleeveFolder>(_next_element_id++, L"root");
+  // FIXME: Inconsistent reinitalization logic here
+  if (_root == nullptr) _size += 1;
+  _root = std::make_shared<SleeveFolder>(_next_element_id++, L"root");
+  _root->IncrementRefCount();
   _storage[_root->_element_id] = _root;
 }
 
@@ -165,7 +162,8 @@ auto SleeveBase::CreateElementToPath(const std::shared_ptr<SleeveFolder> parent_
   } else {
     parent_folder->IncrementFolderCount();
   }
-
+  ++_size;
+  newElement->IncrementRefCount();
   return newElement;
 }
 
@@ -206,9 +204,10 @@ auto SleeveBase::RemoveElementInPath(const std::shared_ptr<SleeveFolder> parent_
   if (del_element->_type == ElementType::FOLDER) {
     auto del_folder   = std::dynamic_pointer_cast<SleeveFolder>(del_element);
     auto del_elements = del_folder->ListElements();
-    for (auto &del_element : *del_elements) {
-      auto &e = _storage.at(del_element);
+    for (auto &el_id : *del_elements) {
+      auto &e = _storage.at(el_id);
       e->DecrementRefCount();
+      --_size;
     }
 
     del_folder->ClearFolder();
@@ -219,6 +218,7 @@ auto SleeveBase::RemoveElementInPath(const std::shared_ptr<SleeveFolder> parent_
   }
   parent_folder->RemoveNameFromMap(del_element->_element_name);
   del_element->DecrementRefCount();
+  --_size;
 
   return del_element;
 }

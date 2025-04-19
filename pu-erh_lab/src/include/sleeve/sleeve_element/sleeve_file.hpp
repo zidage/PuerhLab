@@ -27,5 +27,7 @@ class SleeveFile : public SleeveElement {
   ElementType _type = ElementType::FILE;
   explicit SleeveFile(sl_element_id_t id, file_name_t element_name);
   explicit SleeveFile(sl_element_id_t id, file_name_t element_name, std::shared_ptr<Image> image);
+
+  ~SleeveFile();
 };
 };  // namespace puerhlab
