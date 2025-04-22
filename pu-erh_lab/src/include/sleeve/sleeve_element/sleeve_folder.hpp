@@ -32,7 +32,10 @@ class SleeveFolder : public SleeveElement {
   explicit SleeveFolder(sl_element_id_t id, file_name_t element_name);
   ~SleeveFolder();
 
+  auto Copy(sl_element_id_t new_id) -> std::shared_ptr<SleeveElement>;
+
   void AddElementToMap(const std::shared_ptr<SleeveElement> element);
+  void UpdateElementMap(const file_name_t &name, const sl_element_id_t old_id, const sl_element_id_t new_id);
   void CreateIndex(const std::shared_ptr<FilterCombo> filter);
   auto GetElementIdByName(const file_name_t &name) const -> std::optional<sl_element_id_t>;
   auto ListElements() const -> std::shared_ptr<std::vector<sl_element_id_t>>;

@@ -44,6 +44,16 @@
 #include "type/type.hpp"
 
 namespace puerhlab {
+
+// TODO: Implement access guard
+class ElementAccessGuard {
+ public:
+  std::shared_ptr<SleeveElement> _access_element;
+
+  ElementAccessGuard(std::shared_ptr<SleeveElement> element);
+  ~ElementAccessGuard();
+};
+
 class SleeveBase {
  private:
   sleeve_id_t                                                         _sleeve_id;
@@ -60,16 +70,30 @@ class SleeveBase {
   explicit SleeveBase(sleeve_id_t id);
 
   void InitializeRoot();
+
   auto AccessElementById(const sl_element_id_t &id) const -> std::optional<std::shared_ptr<SleeveElement>>;
   auto AccessElementByPath(const sl_path_t &path) const -> std::optional<std::shared_ptr<SleeveElement>>;
+
   auto CreateElementToPath(const sl_path_t &path, const file_name_t &file_name, const ElementType &type)
       -> std::optional<std::shared_ptr<SleeveElement>>;
   auto CreateElementToPath(const std::shared_ptr<SleeveFolder> parent_folder, const file_name_t &file_name,
                            const ElementType &type) -> std::optional<std::shared_ptr<SleeveElement>>;
+
+  auto RemoveElementInPath(const sl_path_t &target) -> std::optional<std::shared_ptr<SleeveElement>>;
   auto RemoveElementInPath(const sl_path_t &path, const file_name_t &file_name)
       -> std::optional<std::shared_ptr<SleeveElement>>;
   auto RemoveElementInPath(const std::shared_ptr<SleeveFolder> parent_folder, const file_name_t &file_name)
       -> std::optional<std::shared_ptr<SleeveElement>>;
+
+  auto CopyElement(const sl_path_t &src, const sl_path_t &dest) -> std::optional<std::shared_ptr<SleeveElement>>;
+
+  auto GetReadGuard(const sl_path_t &target) -> std::optional<ElementAccessGuard>;
+
+  auto GetWriteGuard(const sl_path_t &target) -> std::optional<ElementAccessGuard>;
+  auto GetWriteGuard(const sl_path_t &path, const file_name_t &file_name) -> std::optional<ElementAccessGuard>;
+  auto GetWriteGuard(const std::shared_ptr<SleeveFolder> parent_folder, const file_name_t &file_name)
+      -> std::optional<ElementAccessGuard>;
+
   void GarbageCollect();
 };
 };  // namespace puerhlab

@@ -30,9 +30,9 @@ SleeveFolder::~SleeveFolder() {}
  */
 void SleeveFolder::AddElementToMap(const std::shared_ptr<SleeveElement> element) {
   _contents[element->_element_name] = element->_element_id;
-  _indicies_cache[_default_filter]->push_back(element->_element_id);
+  if (element->_type == ElementType::FILE) _indicies_cache[_default_filter]->push_back(element->_element_id);
   // Once a pinned element is added to the current folder, current folder also becomes pinned
-  pinned |= element->pinned;
+  _pinned |= element->_pinned;
 }
 
 /**

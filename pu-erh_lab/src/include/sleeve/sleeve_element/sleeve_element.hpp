@@ -57,16 +57,18 @@ class SleeveElement {
   std::time_t     _last_modified_time;
 
   uint32_t        _ref_count;
-  bool            pinned;
+  bool            _pinned;
 
   explicit SleeveElement(sl_element_id_t id, file_name_t element_name);
 
   virtual ~SleeveElement();
 
-  void SetAddTime();
-  void SetLastModifiedTime();
-  void IncrementRefCount();
-  void DecrementRefCount();
+  virtual auto Copy(sl_element_id_t new_id) -> std::shared_ptr<SleeveElement>;
+
+  void         SetAddTime();
+  void         SetLastModifiedTime();
+  void         IncrementRefCount();
+  void         DecrementRefCount();
 
   // virtual void AddElement(std::shared_ptr<SleeveElement>);
   // virtual void CreateFilter(FilterCombo&& filter);

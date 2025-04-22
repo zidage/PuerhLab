@@ -5,11 +5,16 @@
 namespace puerhlab {
 
 SleeveElement::SleeveElement(sl_element_id_t id, file_name_t element_name)
-    : _element_id(id), _element_name(element_name), _ref_count(0) {
+    : _element_id(id), _element_name(element_name), _ref_count(0), _pinned(false) {
   this->SetAddTime();
 }
 
 SleeveElement::~SleeveElement() {}
+
+auto SleeveElement::Copy(sl_element_id_t new_id) -> std::shared_ptr<SleeveElement> {
+  // TODO: Remove placeholder
+  return nullptr;
+}
 
 void SleeveElement::SetAddTime() {
   auto now            = std::chrono::system_clock::now();

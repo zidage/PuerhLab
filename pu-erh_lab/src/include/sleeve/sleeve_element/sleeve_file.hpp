@@ -28,6 +28,7 @@ class SleeveFile : public SleeveElement {
   explicit SleeveFile(sl_element_id_t id, file_name_t element_name);
   explicit SleeveFile(sl_element_id_t id, file_name_t element_name, std::shared_ptr<Image> image);
 
+  auto Copy(sl_element_id_t new_id) -> std::shared_ptr<SleeveElement>;
   ~SleeveFile();
 };
 };  // namespace puerhlab

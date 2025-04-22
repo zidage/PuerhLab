@@ -1,6 +1,6 @@
 /*
- * @file        pu-erh_lab/src/include/sleeve/sleeve_base.hpp
- * @brief       A data structure used with DuckDB to store indexed-images
+ * @file        pu-erh_lab/src/sleeve/sleeve_base.hpp
+ * @brief       A file-system-like interface used with DuckDB to store images
  * @author      Yurun Zi
  * @date        2025-03-26
  * @license     MIT
@@ -30,6 +30,7 @@
 
 #include "sleeve/sleeve_base.hpp"
 
+#include <cstddef>
 #include <deque>
 #include <memory>
 #include <optional>
@@ -42,6 +43,17 @@
 #include "type/type.hpp"
 
 namespace puerhlab {
+
+ElementAccessGuard::ElementAccessGuard(std::shared_ptr<SleeveElement> element) {
+  _access_element          = element;
+  _access_element->_pinned = true;
+}
+
+ElementAccessGuard::~ElementAccessGuard() {
+  _access_element->_pinned = false;
+  _access_element.reset();
+}
+
 /**
  * @brief Construct a new Sleeve Base:: Sleeve Base object
  *
@@ -168,7 +180,26 @@ auto SleeveBase::CreateElementToPath(const std::shared_ptr<SleeveFolder> parent_
 }
 
 /**
- * @brief
+ * @brief Remove an element by its full path
+ *
+ * @param target
+ * @return std::optional<std::shared_ptr<SleeveElement>>
+ */
+auto SleeveBase::RemoveElementInPath(const sl_path_t &target) -> std::optional<std::shared_ptr<SleeveElement>> {
+  if (target == L"root") {
+    return std::nullopt;
+  }
+  size_t pos               = target.rfind(delimiter);
+  auto   parent_folder_opt = AccessElementByPath(target.substr(0, pos));
+  if (!parent_folder_opt.has_value() || parent_folder_opt.value()->_type == ElementType::FILE) {
+    return std::nullopt;
+  }
+  auto parent_folder = std::dynamic_pointer_cast<SleeveFolder>(parent_folder_opt.value());
+  return RemoveElementInPath(parent_folder, target.substr(pos + 1));
+}
+
+/**
+ * @brief Remove an element by its parent folder path
  *
  * @param full_path
  * @return std::optional<std::shared_ptr<SleeveElement>>
@@ -197,19 +228,28 @@ auto SleeveBase::RemoveElementInPath(const std::shared_ptr<SleeveFolder> parent_
     return std::nullopt;
   }
   auto del_element = AccessElementById(del_id.value()).value();
-  if (del_element->pinned) {
+  if (del_element->_pinned) {
     return std::nullopt;
   }
 
   if (del_element->_type == ElementType::FOLDER) {
     auto del_folder   = std::dynamic_pointer_cast<SleeveFolder>(del_element);
     auto del_elements = del_folder->ListElements();
-    for (auto &el_id : *del_elements) {
-      auto &e = _storage.at(el_id);
-      e->DecrementRefCount();
-      --_size;
+    auto bfs_queue    = std::deque<sl_element_id_t>(del_elements->begin(), del_elements->end());
+    // Use BFS to find the elements REACHABLE from the to-delete folder, and decrement their reference count
+    while (!bfs_queue.empty()) {
+      auto next_del_id      = bfs_queue.front();
+      auto next_del_element = _storage[next_del_id];
+      bfs_queue.pop_front();
+      // If the folder at the current level contains a subfolder, expand the BFS fringe
+      if (next_del_element->_type == ElementType::FOLDER) {
+        auto sub_folder = std::dynamic_pointer_cast<SleeveFolder>(next_del_element);
+        del_elements    = sub_folder->ListElements();
+        bfs_queue.insert(bfs_queue.end(), del_elements->begin(), del_elements->end());
+        del_folder->ClearFolder();
+      }
+      next_del_element->DecrementRefCount();
     }
-
     del_folder->ClearFolder();
     parent_folder->DecrementFolderCount();
   } else {
@@ -218,9 +258,87 @@ auto SleeveBase::RemoveElementInPath(const std::shared_ptr<SleeveFolder> parent_
   }
   parent_folder->RemoveNameFromMap(del_element->_element_name);
   del_element->DecrementRefCount();
-  --_size;
 
   return del_element;
+}
+
+/**
+ * @brief Acquire the read guard of a element
+ *
+ * @param target
+ * @return std::optional<ElementAccessGuard>
+ */
+auto SleeveBase::GetReadGuard(const sl_path_t &target) -> std::optional<ElementAccessGuard> {
+  auto read_element = AccessElementByPath(target);
+  if (!read_element.has_value()) {
+    return std::nullopt;
+  }
+  return {read_element.value()};
+}
+
+/**
+ * @brief Acquire the write guard of an element by its full path
+ *
+ * @param target
+ * @return std::optional<ElementAccessGuard>
+ */
+auto SleeveBase::GetWriteGuard(const sl_path_t &target) -> std::optional<ElementAccessGuard> {
+  // Copy on write, make a copy to the current folder
+  if (target == L"root") {
+    return std::nullopt;
+  }
+  size_t pos               = target.rfind(delimiter);
+  auto   parent_folder_opt = AccessElementByPath(target.substr(0, pos));
+  if (!parent_folder_opt.has_value() || parent_folder_opt.value()->_type == ElementType::FILE) {
+    return std::nullopt;
+  }
+  auto parent_folder = std::dynamic_pointer_cast<SleeveFolder>(parent_folder_opt.value());
+
+  return GetWriteGuard(parent_folder, target.substr(pos + 1));
+}
+
+/**
+ * @brief Acquire the write guard of an element by its name and parent folder's path
+ *
+ * @param path
+ * @param file_name
+ * @return std::optional<ElementAccessGuard>
+ */
+auto SleeveBase::GetWriteGuard(const sl_path_t &path, const file_name_t &file_name)
+    -> std::optional<ElementAccessGuard> {
+  auto parent_folder_opt = AccessElementByPath(path);
+  if (!parent_folder_opt.has_value() || parent_folder_opt.value()->_type == ElementType::FILE) {
+    return std::nullopt;
+  }
+  auto parent_folder = std::dynamic_pointer_cast<SleeveFolder>(parent_folder_opt.value());
+  return GetWriteGuard(parent_folder, file_name);
+}
+
+/**
+ * @brief Acquire the write guard of an element by its name and parent folder.
+ *
+ * @param parent_folder
+ * @param file_name
+ * @return std::optional<ElementAccessGuard>
+ */
+auto SleeveBase::GetWriteGuard(const std::shared_ptr<SleeveFolder> parent_folder, const file_name_t &file_name)
+    -> std::optional<ElementAccessGuard> {
+  auto write_file_opt = parent_folder->GetElementIdByName(file_name);
+  if (!write_file_opt.has_value()) {
+    return std::nullopt;
+  }
+  auto write_file = _storage.at(write_file_opt.value());
+  if (write_file->_ref_count > 1) {
+    write_file->DecrementRefCount();
+    auto copy = write_file->Copy(_next_element_id++);
+    _storage.erase(write_file->_element_id);
+    _storage[copy->_element_id] = copy;
+    if (copy->_type == ElementType::FILE)
+      parent_folder->UpdateElementMap(file_name, write_file->_element_id, copy->_element_id);
+
+    return copy;
+  }
+  return {write_file};
 }
 
 };  // namespace puerhlab
