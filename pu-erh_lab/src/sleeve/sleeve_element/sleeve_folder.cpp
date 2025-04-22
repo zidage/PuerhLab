@@ -2,10 +2,12 @@
 
 #include <memory>
 #include <optional>
+#include <set>
 #include <type_traits>
 #include <vector>
 
 #include "sleeve/sleeve_element/sleeve_element.hpp"
+#include "sleeve/sleeve_element/sleeve_element_factory.hpp"
 #include "sleeve/sleeve_filter/filter_combo.hpp"
 #include "type/type.hpp"
 
@@ -18,11 +20,20 @@ namespace puerhlab {
  */
 SleeveFolder::SleeveFolder(sl_element_id_t id, file_name_t element_name)
     : SleeveElement(id, element_name), _default_filter(0), _file_count(0), _folder_count(0) {
-  _indicies_cache[_default_filter] = std::make_shared<std::vector<sl_element_id_t>>();
+  _indicies_cache[_default_filter] = std::make_shared<std::set<sl_element_id_t>>();
 }
 
 SleeveFolder::~SleeveFolder() {}
 
+auto SleeveFolder::Copy(sl_element_id_t new_id) const -> std::shared_ptr<SleeveElement> {
+  auto copy       = std::make_shared<SleeveFolder>(new_id, _element_name);
+  // Copy the name-id map and filter map
+  copy->_contents = {_contents};
+  // Only copy indicies cache under default filter
+  copy->_indicies_cache[copy->_default_filter] =
+      std::make_shared<std::set<sl_element_id_t>>(*_indicies_cache.at(_default_filter));
+  return copy;
+}
 /**
  * @brief Add an element reference to the folder
  *
@@ -30,7 +41,7 @@ SleeveFolder::~SleeveFolder() {}
  */
 void SleeveFolder::AddElementToMap(const std::shared_ptr<SleeveElement> element) {
   _contents[element->_element_name] = element->_element_id;
-  if (element->_type == ElementType::FILE) _indicies_cache[_default_filter]->push_back(element->_element_id);
+  if (element->_type == ElementType::FILE) _indicies_cache[_default_filter]->insert(element->_element_id);
   // Once a pinned element is added to the current folder, current folder also becomes pinned
   _pinned |= element->_pinned;
 }
@@ -62,8 +73,9 @@ auto SleeveFolder::GetElementIdByName(const file_name_t &name) const -> std::opt
  *
  * @return std::shared_ptr<std::vector<sl_element_id_t>>
  */
-auto SleeveFolder::ListElements() const -> std::shared_ptr<std::vector<sl_element_id_t>> {
-  return _indicies_cache.at(_default_filter);
+auto SleeveFolder::ListElements() const -> std::shared_ptr<std::set<sl_element_id_t>> {
+  auto default_list = _indicies_cache.at(_default_filter);
+  return default_list;
 }
 
 /**

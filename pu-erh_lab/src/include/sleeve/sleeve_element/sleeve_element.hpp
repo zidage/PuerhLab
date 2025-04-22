@@ -63,7 +63,7 @@ class SleeveElement {
 
   virtual ~SleeveElement();
 
-  virtual auto Copy(sl_element_id_t new_id) -> std::shared_ptr<SleeveElement>;
+  virtual auto Copy(sl_element_id_t new_id) const -> std::shared_ptr<SleeveElement>;
 
   void         SetAddTime();
   void         SetLastModifiedTime();

@@ -11,7 +11,7 @@ SleeveElement::SleeveElement(sl_element_id_t id, file_name_t element_name)
 
 SleeveElement::~SleeveElement() {}
 
-auto SleeveElement::Copy(sl_element_id_t new_id) -> std::shared_ptr<SleeveElement> {
+auto SleeveElement::Copy(sl_element_id_t new_id) const -> std::shared_ptr<SleeveElement> {
   // TODO: Remove placeholder
   return nullptr;
 }

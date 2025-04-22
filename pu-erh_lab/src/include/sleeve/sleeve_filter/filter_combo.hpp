@@ -32,6 +32,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <set>
 #include <unordered_map>
 #include <vector>
 
@@ -41,7 +42,6 @@ namespace puerhlab {
 class FilterCombo {
  public:
   uint32_t filter_id;
-  auto     CreateIndexOn(std::shared_ptr<std::vector<sl_element_id_t>> _lists)
-      -> std::shared_ptr<std::vector<sl_element_id_t>>;
+  auto CreateIndexOn(std::shared_ptr<std::set<sl_element_id_t>> _lists) -> std::shared_ptr<std::set<sl_element_id_t>>;
 };
 };  // namespace puerhlab
