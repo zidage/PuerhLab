@@ -176,7 +176,6 @@ auto SleeveBase::CreateElementToPath(const std::shared_ptr<SleeveFolder> parent_
   parent_folder->AddElementToMap(newElement);
   // Increment the reference count of the file
   if (newElement->_type == ElementType::FILE) {
-    std::dynamic_pointer_cast<SleeveFile>(newElement)->IncrementRefCount();
     parent_folder->IncrementFileCount();
   } else {
     parent_folder->IncrementFolderCount();
