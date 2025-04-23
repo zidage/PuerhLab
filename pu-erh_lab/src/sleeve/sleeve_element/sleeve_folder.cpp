@@ -21,6 +21,7 @@ namespace puerhlab {
 SleeveFolder::SleeveFolder(sl_element_id_t id, file_name_t element_name)
     : SleeveElement(id, element_name), _default_filter(0), _file_count(0), _folder_count(0) {
   _indicies_cache[_default_filter] = std::make_shared<std::set<sl_element_id_t>>();
+  _type                            = ElementType::FOLDER;
 }
 
 SleeveFolder::~SleeveFolder() {}
@@ -41,9 +42,25 @@ auto SleeveFolder::Copy(sl_element_id_t new_id) const -> std::shared_ptr<SleeveE
  */
 void SleeveFolder::AddElementToMap(const std::shared_ptr<SleeveElement> element) {
   _contents[element->_element_name] = element->_element_id;
-  if (element->_type == ElementType::FILE) _indicies_cache[_default_filter]->insert(element->_element_id);
+  _indicies_cache[_default_filter]->insert(element->_element_id);
   // Once a pinned element is added to the current folder, current folder also becomes pinned
   _pinned |= element->_pinned;
+}
+
+/**
+ * @brief Update a name-id mapping
+ *
+ * @param name
+ * @param old_id
+ * @param new_id
+ */
+void SleeveFolder::UpdateElementMap(const file_name_t &name, const sl_element_id_t old_id,
+                                    const sl_element_id_t new_id) {
+  _contents.erase(name);
+  _contents[name]  = new_id;
+  auto default_set = _indicies_cache[_default_filter];
+  default_set->erase(old_id);
+  default_set->insert(new_id);
 }
 
 /**
@@ -73,9 +90,9 @@ auto SleeveFolder::GetElementIdByName(const file_name_t &name) const -> std::opt
  *
  * @return std::shared_ptr<std::vector<sl_element_id_t>>
  */
-auto SleeveFolder::ListElements() const -> std::shared_ptr<std::set<sl_element_id_t>> {
+auto SleeveFolder::ListElements() const -> std::shared_ptr<std::vector<sl_element_id_t>> {
   auto default_list = _indicies_cache.at(_default_filter);
-  return default_list;
+  return std::make_shared<std::vector<sl_element_id_t>>(default_list->begin(), default_list->end());
 }
 
 /**

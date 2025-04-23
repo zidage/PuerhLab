@@ -34,6 +34,8 @@
 #include <deque>
 #include <memory>
 #include <optional>
+#include <stack>
+#include <string>
 
 #include "mapper/sleeve/sleeve_mapper.hpp"
 #include "sleeve/sleeve_element/sleeve_element.hpp"
@@ -278,7 +280,7 @@ auto SleeveBase::RemoveElementInPath(const std::shared_ptr<SleeveFolder> parent_
  * @param target
  * @return std::optional<ElementAccessGuard>
  */
-auto SleeveBase::GetReadGuard(const sl_path_t &target) -> std::optional<ElementAccessGuard> {
+auto SleeveBase::GetReadGuard(const sl_path_t &target) const -> std::optional<ElementAccessGuard> {
   auto read_element = AccessElementByPath(target);
   if (!read_element.has_value()) {
     // TODO: Log
@@ -389,5 +391,57 @@ auto SleeveBase::CopyElement(const sl_path_t &src, const sl_path_t &dest)
   target_folder->AddElementToMap(src_file);
   target_folder->IncrementFileCount();
   return src_file;
+}
+
+/**
+ * @brief Print the whole file structure under a given folder
+ * DEBUG PURPOSE ONLY
+ *
+ */
+auto SleeveBase::Tree(const sl_path_t &path) const -> std::wstring {
+  struct TreeNode {
+    sl_element_id_t id;
+    int             depth;
+    bool            is_last;
+  };
+  std::wstring prefix            = L"";
+
+  auto         target_folder_opt = GetReadGuard(path);
+  if (!target_folder_opt.has_value() || target_folder_opt->_access_element->_type == ElementType::FILE) {
+    std::wcout << L"Cannot call Tree() on an file" << std::endl;
+    return L"";
+  }
+  std::wstring result       = L"";
+  auto         visit_folder = std::dynamic_pointer_cast<SleeveFolder>(target_folder_opt.value()._access_element);
+  auto         contains     = visit_folder->ListElements();
+  auto         dfs_stack    = std::stack<TreeNode>();
+  for (auto e : *contains) {
+    dfs_stack.push({e, 0, _storage.at(e)->_type == ElementType::FILE});
+  }
+  result += visit_folder->_element_name + L"\n";
+
+  while (!dfs_stack.empty()) {
+    auto next_visit = dfs_stack.top();
+    dfs_stack.pop();
+    auto next_visit_element = _storage.at(next_visit.id);
+
+    if (next_visit_element->_type == ElementType::FOLDER) {
+      for (int i = 0; i < next_visit.depth; i++) {
+        result += L"    ";
+      }
+      result += L"├── " + next_visit_element->_element_name + L"\n";
+      auto sub_folder = std::dynamic_pointer_cast<SleeveFolder>(next_visit_element);
+      contains        = sub_folder->ListElements();
+      for (auto e : *contains) {
+        dfs_stack.push({e, next_visit.depth + 1, _storage.at(e)->_type == ElementType::FILE});
+      }
+    } else {
+      for (int i = 0; i < next_visit.depth; i++) {
+        result += L"    ";
+      }
+      result += L"└── " + next_visit_element->_element_name + L"\n";
+    }
+  }
+  return result;
 }
 };  // namespace puerhlab

@@ -1,8 +1,11 @@
+#include "gtest/gtest.h"
 #include "sleeve/sleeve_base.hpp"
 #include "sleeve/sleeve_element/sleeve_element.hpp"
 
 #include <gtest/gtest.h>
+#include <codecvt>
 #include <optional>
+#include <string>
 
 TEST(SleeveOperationTest, NormalTest1) {
   using namespace puerhlab;
@@ -28,6 +31,10 @@ TEST(SleeveOperationTest, NormalTest1) {
   ASSERT_EQ(new_element_2.value()->_element_id, 3);
   ASSERT_EQ(new_element_2.value()->_element_name, L"test_file");
   ASSERT_EQ(new_element_2.value()->_ref_count, 1);
+
+  std::wstring tree = sl.Tree(L"root");
+  std::wstring_convert<std::codecvt_utf8<wchar_t>> conv;
+  std::cout << conv.to_bytes(tree) << std::endl;
 }
 
 TEST(SleeveOperationTest, NormalTest2) {

@@ -7,10 +7,13 @@
 
 namespace puerhlab {
 SleeveFile::~SleeveFile() {}
-SleeveFile::SleeveFile(sl_element_id_t id, file_name_t element_name) : SleeveElement(id, element_name) {}
+SleeveFile::SleeveFile(sl_element_id_t id, file_name_t element_name) : SleeveElement(id, element_name) {
+  _type = ElementType::FILE;
+}
 SleeveFile::SleeveFile(sl_element_id_t id, file_name_t element_name, std::shared_ptr<Image> image)
     : SleeveElement(id, element_name) {
   _image = image;
+  _type  = ElementType::FILE;
 }
 
 auto SleeveFile::Copy(uint32_t new_id) const -> std::shared_ptr<SleeveElement> {
