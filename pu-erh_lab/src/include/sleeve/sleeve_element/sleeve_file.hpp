@@ -21,8 +21,6 @@ class SleeveFile : public SleeveElement {
   std::shared_ptr<EditHistory> _edit_history;
   std::shared_ptr<Version>     _current_version;
 
-  uint32_t                     _ref_count;
-
  public:
   explicit SleeveFile(sl_element_id_t id, file_name_t element_name);
   explicit SleeveFile(sl_element_id_t id, file_name_t element_name, std::shared_ptr<Image> image);

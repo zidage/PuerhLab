@@ -66,6 +66,8 @@ class SleeveBase {
   std::unordered_map<uint32_t, std::shared_ptr<FilterCombo>>          _filter_storage;
   std::wstring                                                        delimiter = L"/";
 
+  auto IsSubFolder(const std::shared_ptr<SleeveFolder> folder_a, const sl_path_t &path_b) const -> bool;
+
  public:
   explicit SleeveBase(sleeve_id_t id);
 
@@ -90,7 +92,8 @@ class SleeveBase {
   auto GetReadGuard(const sl_path_t &target) const -> std::optional<ElementAccessGuard>;
 
   auto GetWriteGuard(const sl_path_t &target) -> std::optional<ElementAccessGuard>;
-  auto GetWriteGuard(const sl_path_t &path, const file_name_t &file_name) -> std::optional<ElementAccessGuard>;
+  auto GetWriteGuard(const sl_path_t &parent_folder_path, const file_name_t &file_name)
+      -> std::optional<ElementAccessGuard>;
   auto GetWriteGuard(const std::shared_ptr<SleeveFolder> parent_folder, const file_name_t &file_name)
       -> std::optional<ElementAccessGuard>;
 

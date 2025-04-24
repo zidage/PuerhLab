@@ -120,7 +120,7 @@ auto SleeveBase::AccessElementByPath(const sl_path_t &path) const -> std::option
   while (curr_element != std::nullopt && !path_elements.empty()) {
     if (curr_element.value()->_type == ElementType::FILE) {
       // TODO: Log
-      // Find a file in path's prefix, which is illegal
+      // the path of a file cannot be a prefix of a full path
       return std::nullopt;
     }
 
@@ -165,6 +165,7 @@ auto SleeveBase::CreateElementToPath(const sl_path_t &path, const file_name_t &f
  */
 auto SleeveBase::CreateElementToPath(const std::shared_ptr<SleeveFolder> parent_folder, const file_name_t &file_name,
                                      const ElementType &type) -> std::optional<std::shared_ptr<SleeveElement>> {
+  // FIXME: Reconstruct using write_guard
   if (parent_folder->Contains(file_name)) {
     // TODO: Log
     // TODO: Add repetition handling here
@@ -214,12 +215,12 @@ auto SleeveBase::RemoveElementInPath(const sl_path_t &target) -> std::optional<s
  */
 auto SleeveBase::RemoveElementInPath(const sl_path_t &path, const file_name_t &file_name)
     -> std::optional<std::shared_ptr<SleeveElement>> {
-  auto parent_folder_opt = AccessElementByPath(path);
-  if (!parent_folder_opt.has_value() || parent_folder_opt.value()->_type == ElementType::FILE) {
+  auto parent_folder_opt = GetWriteGuard(path);
+  if (!parent_folder_opt.has_value() || parent_folder_opt.value()._access_element->_type == ElementType::FILE) {
     // TODO: Log
     return std::nullopt;
   }
-  auto parent_folder = std::dynamic_pointer_cast<SleeveFolder>(parent_folder_opt.value());
+  auto parent_folder = std::dynamic_pointer_cast<SleeveFolder>(parent_folder_opt.value()._access_element);
   return RemoveElementInPath(parent_folder, file_name);
 }
 
@@ -232,45 +233,7 @@ auto SleeveBase::RemoveElementInPath(const sl_path_t &path, const file_name_t &f
  */
 auto SleeveBase::RemoveElementInPath(const std::shared_ptr<SleeveFolder> parent_folder, const file_name_t &file_name)
     -> std::optional<std::shared_ptr<SleeveElement>> {
-  auto del_id = parent_folder->GetElementIdByName(file_name);
-  if (!del_id.has_value()) {
-    // TODO: Log
-    return std::nullopt;
-  }
-  auto del_element = AccessElementById(del_id.value()).value();
-  if (del_element->_pinned) {
-    // TODO: Log
-    return std::nullopt;
-  }
-
-  if (del_element->_type == ElementType::FOLDER) {
-    auto del_folder   = std::dynamic_pointer_cast<SleeveFolder>(del_element);
-    auto del_elements = del_folder->ListElements();
-    auto bfs_queue    = std::deque<sl_element_id_t>(del_elements->begin(), del_elements->end());
-    // Use BFS to find the elements REACHABLE from the to-delete folder, and decrement their reference count
-    while (!bfs_queue.empty()) {
-      auto next_del_id      = bfs_queue.front();
-      auto next_del_element = _storage[next_del_id];
-      bfs_queue.pop_front();
-      // If the folder at the current level contains a subfolder, expand the BFS fringe
-      if (next_del_element->_type == ElementType::FOLDER) {
-        auto sub_folder = std::dynamic_pointer_cast<SleeveFolder>(next_del_element);
-        del_elements    = sub_folder->ListElements();
-        bfs_queue.insert(bfs_queue.end(), del_elements->begin(), del_elements->end());
-        del_folder->ClearFolder();
-      }
-      next_del_element->DecrementRefCount();
-    }
-    del_folder->ClearFolder();
-    parent_folder->DecrementFolderCount();
-  } else {
-    // TODO: Add remove code for file elements
-    parent_folder->DecrementFileCount();
-  }
-  parent_folder->RemoveNameFromMap(del_element->_element_name);
-  del_element->DecrementRefCount();
-
-  return del_element;
+  // FIXME: Reconstruct using write_guard
 }
 
 /**
@@ -298,7 +261,7 @@ auto SleeveBase::GetWriteGuard(const sl_path_t &target) -> std::optional<Element
   // Copy on write, make a copy to the current folder
   if (target == L"root") {
     // TODO: Log
-    return std::nullopt;
+    return std::static_pointer_cast<SleeveElement>(_root);
   }
   size_t pos               = target.rfind(delimiter);
   auto   parent_folder_opt = AccessElementByPath(target.substr(0, pos));
@@ -317,15 +280,67 @@ auto SleeveBase::GetWriteGuard(const sl_path_t &target) -> std::optional<Element
  * @param file_name
  * @return std::optional<ElementAccessGuard>
  */
-auto SleeveBase::GetWriteGuard(const sl_path_t &path, const file_name_t &file_name)
+auto SleeveBase::GetWriteGuard(const sl_path_t &parent_folder_path, const file_name_t &file_name)
     -> std::optional<ElementAccessGuard> {
-  auto parent_folder_opt = AccessElementByPath(path);
-  if (!parent_folder_opt.has_value() || parent_folder_opt.value()->_type == ElementType::FILE) {
-    // TODO: Log
+  std::wregex                 re(delimiter);
+  std::wsregex_token_iterator first{parent_folder_path.begin(), parent_folder_path.end(), re, -1}, last;
+  std::deque<std::wstring>    path_elements{first, last};
+
+  auto                        curr_path = path_elements.front();
+  // For illegal paths, return false
+  if (curr_path != L"root") {
     return std::nullopt;
   }
-  auto parent_folder = std::dynamic_pointer_cast<SleeveFolder>(parent_folder_opt.value());
-  return GetWriteGuard(parent_folder, file_name);
+  path_elements.pop_front();
+  // Assume all the path start with "root"
+  auto                           curr_element_opt   = std::optional<std::shared_ptr<SleeveElement>>(_root);
+  std::shared_ptr<SleeveFolder>  curr_parent_folder = std::dynamic_pointer_cast<SleeveFolder>(curr_element_opt.value());
+  std::optional<sl_element_id_t> next_element_id    = 0;
+
+  while (curr_element_opt != std::nullopt && !path_elements.empty()) {
+    if (curr_element_opt.value()->_type == ElementType::FILE) {
+      // TODO: Log
+      // the path of a file cannot be a prefix of a full path
+      return std::nullopt;
+    }
+    auto curr_element = std::dynamic_pointer_cast<SleeveFolder>(curr_element_opt.value());
+    // Current PARENT folder will only have reference count equal to 1
+    // If current FOLDER has ref count greater than one, then we have to create a new copy
+    // of it, and make the PARENT folder reference to the new copy.
+    if (curr_element->_ref_count > 1) {
+      curr_element->DecrementRefCount();
+      auto copy                   = curr_element->Copy(_next_element_id++);
+      _storage[copy->_element_id] = copy;
+      // Parent folder now contains a "true" copy of the current folder
+      curr_parent_folder->UpdateElementMap(curr_element->_element_name, curr_element->_element_id, copy->_element_id);
+      // Increment the reference count for the contents
+      for (auto &e : *curr_element->ListElements()) {
+        _storage.at(e)->IncrementRefCount();
+      }
+
+      curr_path = path_elements.front();
+      path_elements.pop_front();
+      curr_parent_folder = std::dynamic_pointer_cast<SleeveFolder>(copy);
+      next_element_id    = curr_parent_folder->GetElementIdByName(curr_path);
+      if (!next_element_id.has_value()) {
+        // TODO: Log
+        return std::nullopt;
+      }
+      curr_element_opt = AccessElementById(next_element_id.value());
+      continue;
+    }
+
+    curr_path = path_elements.front();
+    path_elements.pop_front();
+    curr_parent_folder = curr_element;
+    next_element_id    = curr_parent_folder->GetElementIdByName(curr_path);
+    if (!next_element_id.has_value()) {
+      // TODO: Log
+      return std::nullopt;
+    }
+    curr_element_opt = AccessElementById(next_element_id.value());
+  }
+  return GetWriteGuard(std::static_pointer_cast<SleeveFolder>(curr_parent_folder), file_name);
 }
 
 /**
@@ -337,17 +352,16 @@ auto SleeveBase::GetWriteGuard(const sl_path_t &path, const file_name_t &file_na
  */
 auto SleeveBase::GetWriteGuard(const std::shared_ptr<SleeveFolder> parent_folder, const file_name_t &file_name)
     -> std::optional<ElementAccessGuard> {
+  // FIXME: Rewrite this thing
   auto write_file_opt = parent_folder->GetElementIdByName(file_name);
   if (!write_file_opt.has_value()) {
     // TODO: Log
     return std::nullopt;
   }
   auto write_file = _storage.at(write_file_opt.value());
-  // For simplicity, only files will have reference count greater than 1
   if (write_file->_ref_count > 1) {
     write_file->DecrementRefCount();
-    auto copy = write_file->Copy(_next_element_id++);
-    _storage.erase(write_file->_element_id);
+    auto copy                   = write_file->Copy(_next_element_id++);
     _storage[copy->_element_id] = copy;
     parent_folder->UpdateElementMap(file_name, write_file->_element_id, copy->_element_id);
 
@@ -356,39 +370,79 @@ auto SleeveBase::GetWriteGuard(const std::shared_ptr<SleeveFolder> parent_folder
   return write_file;
 }
 
+/**
+ * @brief Check if folder of path_b is a subfolder of folder_a. It is a helper function without any sanity check
+ * for the type of the elements of path_a and path_b
+ *
+ * @param path_a
+ * @param path_b
+ * @return true
+ * @return false
+ */
+auto SleeveBase::IsSubFolder(const std::shared_ptr<SleeveFolder> folder_a, const sl_path_t &path_b) const -> bool {
+  std::wregex                 re(delimiter);
+  std::wsregex_token_iterator first{path_b.begin(), path_b.end(), re, -1}, last;
+  std::deque<std::wstring>    path_elements{first, last};
+
+  auto                        curr_path = path_elements.front();
+  path_elements.pop_front();
+  // Assume all the path start with "root"
+  auto curr_element = std::optional<std::shared_ptr<SleeveElement>>(_root);
+
+  while (curr_element != std::nullopt && !path_elements.empty()) {
+    curr_path = path_elements.front();
+    path_elements.pop_front();
+    auto curr_folder = std::dynamic_pointer_cast<SleeveFolder>(curr_element.value());
+    if (curr_folder == folder_a) {
+      return true;
+    }
+    auto next_element_id = curr_folder->GetElementIdByName(curr_path);
+
+    curr_element         = AccessElementById(next_element_id.value());
+  }
+  return false;
+}
+
 auto SleeveBase::CopyElement(const sl_path_t &src, const sl_path_t &dest)
     -> std::optional<std::shared_ptr<SleeveElement>> {
+  // FIXME: Rewrite this thing
   auto src_read_guard = GetReadGuard(src);
   if (!src_read_guard.has_value()) {
     // TODO: Log
     return std::nullopt;
   }
   auto src_file          = src_read_guard->_access_element;
-  // To avoid unnecssary write from mistakenly passed in file path,
-  // acquire a read guard here.
-  // Multiple references to folder are not allowed, so the read and the write guard have the same behavior here.
+
   auto target_folder_opt = GetReadGuard(dest);
   if (!target_folder_opt.has_value() || target_folder_opt.value()._access_element->_type == ElementType::FILE) {
     // TODO: Log
     return std::nullopt;
   }
+
   auto target_folder = std::dynamic_pointer_cast<SleeveFolder>(target_folder_opt.value()._access_element);
+
   if (target_folder->Contains(src_file->_element_name)) {
     // TODO: Log
     return std::nullopt;
   }
   if (src_file->_type == ElementType::FOLDER) {
-    // Folders will always be wholly copied
-    auto folder_copy                   = src_file->Copy(_next_element_id++);
-    _storage[folder_copy->_element_id] = folder_copy;
-    target_folder->AddElementToMap(folder_copy);
-    target_folder->IncrementFolderCount();
-    return folder_copy;
+    // if source is a folder, target folder should not be a subfolder of the source
+    auto src_folder = std::dynamic_pointer_cast<SleeveFolder>(src_file);
+    if (IsSubFolder(src_folder, dest)) {
+      // TODO: Log
+      return std::nullopt;
+    }
+    // Increment the reference count for all of its contents
+    for (auto &e : *src_folder->ListElements()) {
+      _storage.at(e)->IncrementRefCount();
+    }
   }
 
   // For files, only the reference is copied
   target_folder->AddElementToMap(src_file);
   target_folder->IncrementFileCount();
+
+  src_file->IncrementRefCount();
   return src_file;
 }
 

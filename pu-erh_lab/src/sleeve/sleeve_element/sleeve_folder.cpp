@@ -95,6 +95,14 @@ auto SleeveFolder::ListElements() const -> std::shared_ptr<std::vector<sl_elemen
   return std::make_shared<std::vector<sl_element_id_t>>(default_list->begin(), default_list->end());
 }
 
+auto SleeveFolder::ClearFolder() -> bool {
+  // TODO: Add Implementation
+  _contents.clear();
+  _indicies_cache.clear();
+
+  return true;
+}
+
 /**
  * @brief Check whether the folder contains the element of the given name
  *
@@ -110,7 +118,10 @@ auto SleeveFolder::Contains(const file_name_t &name) const -> bool { return _con
  * @param name
  * @return sl_element_id_t
  */
-void SleeveFolder::RemoveNameFromMap(const file_name_t &name) { _contents.erase(name); }
+void SleeveFolder::RemoveNameFromMap(const file_name_t &name) {
+  _indicies_cache[_default_filter]->erase(_contents.at(name));
+  _contents.erase(name);
+}
 
 void SleeveFolder::IncrementFileCount() { ++_file_count; }
 
@@ -119,10 +130,5 @@ void SleeveFolder::DecrementFileCount() { --_file_count; }
 void SleeveFolder::IncrementFolderCount() { ++_folder_count; }
 
 void SleeveFolder::DecrementFolderCount() { --_folder_count; }
-
-auto SleeveFolder::ClearFolder() -> bool {
-  // TODO: Add Implementation
-  return false;
-}
 
 };  // namespace puerhlab
