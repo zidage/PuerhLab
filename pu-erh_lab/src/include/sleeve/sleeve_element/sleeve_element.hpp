@@ -1,6 +1,6 @@
 /*
- * @file        pu-erh_lab/src/include/mapper/sleeve/sleeve_element.hpp
- * @brief       A exif-based filter for internal filtering in a sleeve base
+ * @file        pu-erh_lab/src/include/sleeve/sleeve_element/sleeve_element.hpp
+ * @brief       The base class for two types of element in the sleeve
  * @author      Yurun Zi
  * @date        2025-03-26
  * @license     MIT
@@ -64,7 +64,7 @@ class SleeveElement {
   virtual ~SleeveElement();
 
   virtual auto Copy(sl_element_id_t new_id) const -> std::shared_ptr<SleeveElement>;
-
+  virtual auto Clear() -> bool;
   void         SetAddTime();
   void         SetLastModifiedTime();
   void         IncrementRefCount();

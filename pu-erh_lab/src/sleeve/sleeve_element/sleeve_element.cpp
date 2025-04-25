@@ -16,6 +16,11 @@ auto SleeveElement::Copy(sl_element_id_t new_id) const -> std::shared_ptr<Sleeve
   return nullptr;
 }
 
+auto SleeveElement::Clear() -> bool {
+  // Placeholder
+  return true;
+}
+
 void SleeveElement::SetAddTime() {
   auto now            = std::chrono::system_clock::now();
   _added_time         = std::chrono::system_clock::to_time_t(now);

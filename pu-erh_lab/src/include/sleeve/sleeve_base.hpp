@@ -67,6 +67,10 @@ class SleeveBase {
   std::wstring                                                        delimiter = L"/";
 
   auto IsSubFolder(const std::shared_ptr<SleeveFolder> folder_a, const sl_path_t &path_b) const -> bool;
+  auto GetWriteGuard(const std::shared_ptr<SleeveFolder> parent_folder, const file_name_t &file_name)
+      -> std::optional<ElementAccessGuard>;
+  auto WriteCopy(std::shared_ptr<SleeveElement> src_element, std::shared_ptr<SleeveFolder> dest_folder)
+      -> std::shared_ptr<SleeveElement>;
 
  public:
   explicit SleeveBase(sleeve_id_t id);
@@ -78,13 +82,9 @@ class SleeveBase {
 
   auto CreateElementToPath(const sl_path_t &path, const file_name_t &file_name, const ElementType &type)
       -> std::optional<std::shared_ptr<SleeveElement>>;
-  auto CreateElementToPath(const std::shared_ptr<SleeveFolder> parent_folder, const file_name_t &file_name,
-                           const ElementType &type) -> std::optional<std::shared_ptr<SleeveElement>>;
 
   auto RemoveElementInPath(const sl_path_t &target) -> std::optional<std::shared_ptr<SleeveElement>>;
   auto RemoveElementInPath(const sl_path_t &path, const file_name_t &file_name)
-      -> std::optional<std::shared_ptr<SleeveElement>>;
-  auto RemoveElementInPath(const std::shared_ptr<SleeveFolder> parent_folder, const file_name_t &file_name)
       -> std::optional<std::shared_ptr<SleeveElement>>;
 
   auto CopyElement(const sl_path_t &src, const sl_path_t &dest) -> std::optional<std::shared_ptr<SleeveElement>>;
@@ -93,8 +93,6 @@ class SleeveBase {
 
   auto GetWriteGuard(const sl_path_t &target) -> std::optional<ElementAccessGuard>;
   auto GetWriteGuard(const sl_path_t &parent_folder_path, const file_name_t &file_name)
-      -> std::optional<ElementAccessGuard>;
-  auto GetWriteGuard(const std::shared_ptr<SleeveFolder> parent_folder, const file_name_t &file_name)
       -> std::optional<ElementAccessGuard>;
 
   void GarbageCollect();

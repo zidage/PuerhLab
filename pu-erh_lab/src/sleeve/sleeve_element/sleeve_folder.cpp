@@ -95,7 +95,7 @@ auto SleeveFolder::ListElements() const -> std::shared_ptr<std::vector<sl_elemen
   return std::make_shared<std::vector<sl_element_id_t>>(default_list->begin(), default_list->end());
 }
 
-auto SleeveFolder::ClearFolder() -> bool {
+auto SleeveFolder::Clear() -> bool {
   // TODO: Add Implementation
   _contents.clear();
   _indicies_cache.clear();

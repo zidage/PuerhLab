@@ -16,6 +16,11 @@ SleeveFile::SleeveFile(sl_element_id_t id, file_name_t element_name, std::shared
   _type  = ElementType::FILE;
 }
 
+auto SleeveFile::Clear() -> bool {
+  // FIXME: Add implementation
+  return true;
+}
+
 auto SleeveFile::Copy(uint32_t new_id) const -> std::shared_ptr<SleeveElement> {
   std::shared_ptr<SleeveFile> new_file = std::make_shared<SleeveFile>(new_id, _element_name);
   new_file->_edit_history              = _edit_history;

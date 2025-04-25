@@ -1,6 +1,6 @@
 /*
- * @file        pu-erh_lab/src/include/mapper/sleeve/sleeve_filter.hpp
- * @brief       A exif-based filter for internal filtering in a sleeve base
+ * @file        pu-erh_lab/src/include/mapper/sleeve/sleeve_filter/filter_combo.hpp
+ * @brief       A combination of a set of filters
  * @author      Yurun Zi
  * @date        2025-03-26
  * @license     MIT
