@@ -89,6 +89,8 @@ class SleeveBase {
 
   auto CopyElement(const sl_path_t &src, const sl_path_t &dest) -> std::optional<std::shared_ptr<SleeveElement>>;
 
+  auto MoveElement(const sl_path_t &src, const sl_path_t &dest) -> std::optional<std::shared_ptr<SleeveElement>>;
+
   auto GetReadGuard(const sl_path_t &target) const -> std::optional<ElementAccessGuard>;
 
   auto GetWriteGuard(const sl_path_t &target) -> std::optional<ElementAccessGuard>;
@@ -98,5 +100,6 @@ class SleeveBase {
   void GarbageCollect();
 
   auto Tree(const sl_path_t &path) const -> std::wstring;
+  auto TreeBFS(const sl_path_t &path) const -> std::wstring;
 };
 };  // namespace puerhlab

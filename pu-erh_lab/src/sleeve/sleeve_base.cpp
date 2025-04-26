@@ -32,6 +32,7 @@
 
 #include <cstddef>
 #include <deque>
+#include <iostream>
 #include <memory>
 #include <optional>
 #include <stack>
@@ -256,13 +257,6 @@ auto inline SleeveBase::WriteCopy(std::shared_ptr<SleeveElement> src_element, st
   _storage[copy->_element_id] = copy;
   // Parent folder now contains a "true" copy of the current folder
   dest_folder->UpdateElementMap(src_element->_element_name, src_element->_element_id, copy->_element_id);
-  // Increment the reference count for the contents
-  if (src_element->_type == ElementType::FOLDER) {
-    auto elements = std::dynamic_pointer_cast<SleeveFolder>(src_element)->ListElements();
-    for (auto &e : *elements) {
-      _storage.at(e)->IncrementRefCount();
-    }
-  }
   copy->IncrementRefCount();
   return copy;
 }
@@ -333,13 +327,11 @@ auto SleeveBase::GetWriteGuard(const sl_path_t &parent_folder_path, const file_n
       continue;
     }
 
+    // Step to the next element along the path
     curr_path = path_elements.front();
     path_elements.pop_front();
-
-    // Reserve the current_parent for the last element along the path
-    if (!path_elements.empty()) curr_parent_folder = curr_element;
-
-    next_element_id = curr_parent_folder->GetElementIdByName(curr_path);
+    curr_parent_folder = curr_element;
+    next_element_id    = curr_parent_folder->GetElementIdByName(curr_path);
     if (!next_element_id.has_value()) {
       // TODO: Log
       return std::nullopt;
@@ -347,21 +339,32 @@ auto SleeveBase::GetWriteGuard(const sl_path_t &parent_folder_path, const file_n
     curr_element_opt = AccessElementById(next_element_id.value());
   }
   // Check the last element along the path
-  if (curr_element_opt.value()->_type == ElementType::FILE) {
+  if (curr_element_opt == std::nullopt || curr_element_opt.value()->_type == ElementType::FILE) {
     // TODO: Log
     // the path of a file cannot be a prefix of a full path
     return std::nullopt;
   }
-  auto curr_element = std::dynamic_pointer_cast<SleeveFolder>(curr_element_opt.value());
-  if (curr_element->_ref_count > 1) {
-    auto copy = WriteCopy(curr_element, curr_parent_folder);
-    return GetWriteGuard(std::static_pointer_cast<SleeveFolder>(copy), file_name);
+  auto parent_folder = std::dynamic_pointer_cast<SleeveFolder>(curr_element_opt.value());
+  if (parent_folder->_ref_count > 1) {
+    auto copy     = WriteCopy(parent_folder, curr_parent_folder);
+    parent_folder = std::dynamic_pointer_cast<SleeveFolder>(copy);
   }
-  return GetWriteGuard(curr_element, file_name);
+
+  auto write_file_opt = parent_folder->GetElementIdByName(file_name);
+  if (!write_file_opt.has_value()) {
+    // TODO: Log
+    return std::nullopt;
+  }
+  auto write_file = _storage.at(write_file_opt.value());
+  if (write_file->_ref_count > 1) {
+    return WriteCopy(write_file, parent_folder);
+  }
+  return write_file;
 }
 
 /**
  * @brief Acquire the write guard of an element by its name and parent folder.
+ * DO NOT USE THIS METHOD'S NAKED FORM UNLESS YOU HAVE ACQUIRED THE WRITE GUARD ON THE PARENT FOLDER
  *
  * @param parent_folder
  * @param file_name
@@ -474,6 +477,16 @@ auto SleeveBase::CopyElement(const sl_path_t &src, const sl_path_t &dest)
   return src_file;
 }
 
+auto SleeveBase::MoveElement(const sl_path_t &src, const sl_path_t &dest)
+    -> std::optional<std::shared_ptr<SleeveElement>> {
+  auto result = CopyElement(src, dest);
+  if (!result.has_value()) {
+    return std::nullopt;
+  }
+  RemoveElementInPath(src);
+  return result;
+}
+
 /**
  * @brief Print the whole file structure under a given folder
  * DEBUG PURPOSE ONLY
@@ -500,6 +513,8 @@ auto SleeveBase::Tree(const sl_path_t &path) const -> std::wstring {
   }
   result += visit_folder->_element_name + L" id:" + std::to_wstring(visit_folder->_element_id) + L"\n";
 
+  std::shared_ptr<SleeveElement> parent_node = nullptr;
+
   while (!dfs_stack.empty()) {
     auto next_visit = dfs_stack.top();
     dfs_stack.pop();
@@ -522,6 +537,57 @@ auto SleeveBase::Tree(const sl_path_t &path) const -> std::wstring {
       }
       result += L"└── " + next_visit_element->_element_name + L" id:" +
                 std::to_wstring(next_visit_element->_element_id) + L"\n";
+    }
+  }
+  return result;
+}
+
+/**
+ * @brief Print the whole file structure under a given folder
+ * DEBUG PURPOSE ONLY
+ *
+ */
+auto SleeveBase::TreeBFS(const sl_path_t &path) const -> std::wstring {
+  struct TreeNode {
+    sl_element_id_t id;
+    int             depth;
+    bool            is_last;
+  };
+  auto target_folder_opt = GetReadGuard(path);
+  if (!target_folder_opt.has_value() || target_folder_opt->_access_element->_type == ElementType::FILE) {
+    std::wcout << L"Cannot call Tree() on an file" << std::endl;
+    return L"";
+  }
+  std::wstring result       = L"";
+  auto         visit_folder = std::dynamic_pointer_cast<SleeveFolder>(target_folder_opt.value()._access_element);
+  auto         contains     = visit_folder->ListElements();
+  auto         bfs_queue    = std::deque<TreeNode>();
+  for (auto e : *contains) {
+    bfs_queue.push_back({e, 1, _storage.at(e)->_type == ElementType::FILE});
+  }
+  result += visit_folder->_element_name + L" id:" + std::to_wstring(visit_folder->_element_id) + L"\n";
+
+  std::shared_ptr<SleeveElement> parent_node = nullptr;
+  int                            last_depth  = 0;
+  while (!bfs_queue.empty()) {
+    auto next_visit = bfs_queue.front();
+    bfs_queue.pop_front();
+    auto next_visit_element = _storage.at(next_visit.id);
+    if (next_visit.depth != last_depth) {
+      result += L"\nLayer: " + std::to_wstring(next_visit.depth) + L" ";
+      last_depth = next_visit.depth;
+    }
+    if (next_visit_element->_type == ElementType::FOLDER) {
+      result += L"FOLDER: " + next_visit_element->_element_name + L" id:" +
+                std::to_wstring(next_visit_element->_element_id) + L" ";
+      auto sub_folder = std::dynamic_pointer_cast<SleeveFolder>(next_visit_element);
+      contains        = sub_folder->ListElements();
+      for (auto e : *contains) {
+        bfs_queue.push_back({e, next_visit.depth + 1, _storage.at(e)->_type == ElementType::FILE});
+      }
+    } else {
+      result += L"FILE: " + next_visit_element->_element_name + L" id:" +
+                std::to_wstring(next_visit_element->_element_id) + L" ";
     }
   }
   return result;
