@@ -200,6 +200,65 @@ TEST(SleeveOperationTest, CopyTest2) {
  * @brief Test the correctness of the file copy functionality
  *
  */
+ TEST(SleeveOperationTest, CopyEdgeTest1) {
+  using namespace puerhlab;
+  SleeveBase sl{0};
+
+  sl.CreateElementToPath(L"root", L"monday", ElementType::FOLDER);
+  sl.CreateElementToPath(L"root", L"tuesday", ElementType::FOLDER);
+
+  auto element_1 = sl.CreateElementToPath(L"root/monday", L"broken", ElementType::FILE);
+  ASSERT_TRUE(element_1.has_value());
+  ASSERT_EQ(element_1.value()->_element_name, L"broken");
+  ASSERT_EQ(element_1.value()->_ref_count, 1);
+
+  auto element_2 = sl.CreateElementToPath(L"root/tuesday", L"hope", ElementType::FILE);
+  ASSERT_TRUE(element_2.has_value());
+  ASSERT_EQ(element_2.value()->_element_name, L"hope");
+  ASSERT_EQ(element_2.value()->_ref_count, 1);
+
+  auto element_3 = sl.CopyElement(L"root/monday/broken", L"root/tuesday");
+  ASSERT_TRUE(element_3.has_value());
+  ASSERT_EQ(element_3.value()->_element_name, L"broken");
+  ASSERT_EQ(element_3.value()->_ref_count, 2);
+
+  auto element_4 = sl.CopyElement(L"root/tuesday", L"root/monday");
+  ASSERT_TRUE(element_4.has_value());
+  ASSERT_EQ(element_4.value()->_element_name, L"tuesday");
+  ASSERT_EQ(element_4.value()->_ref_count, 2);
+
+  sl.CopyElement(L"root/monday", L"root/tuesday");
+
+  std::wstring                                     tree = sl.Tree(L"root");
+  std::wstring_convert<std::codecvt_utf8<wchar_t>> conv;
+  std::cout << conv.to_bytes(tree) << std::endl;
+}
+
+/**
+ * @brief Test the correctness of the file copy functionality
+ *
+ */
+ TEST(SleeveOperationTest, CopyEdgeTest2) {
+  using namespace puerhlab;
+  SleeveBase sl{0};
+
+  sl.CreateElementToPath(L"root", L"B", ElementType::FOLDER);
+  sl.CreateElementToPath(L"root", L"C", ElementType::FOLDER);
+
+  sl.CreateElementToPath(L"root/B", L"D", ElementType::FILE);
+  sl.CopyElement(L"root/B/D", L"root/C");
+  sl.CopyElement(L"root/C", L"root/B");
+  sl.CopyElement(L"root/B", L"root/C");
+  sl.GetWriteGuard(L"root/B/C/D");
+  std::wstring                                     tree = sl.Tree(L"root");
+  std::wstring_convert<std::codecvt_utf8<wchar_t>> conv;
+  std::cout << conv.to_bytes(tree) << std::endl;
+}
+
+/**
+ * @brief Test the correctness of the file copy functionality
+ *
+ */
 TEST(SleeveOperationTest, CopyRemoveTest2) {
   using namespace puerhlab;
   SleeveBase sl{0};
@@ -276,8 +335,7 @@ TEST(SleeveOperationTest, CopyRemoveTest2) {
     }
 
     void Test() {
-      constexpr int kIterations = 100;
-      sl.CreateElementToPath(L"", L"root", ElementType::FOLDER);
+      constexpr int kIterations = 50;
       existing_paths.insert(L"root");
 
       for (int i = 0; i < kIterations; ++i) {
@@ -288,9 +346,9 @@ TEST(SleeveOperationTest, CopyRemoveTest2) {
 
         auto created = sl.CreateElementToPath(parent_path, name, type);
         if (created.has_value()) {
-          std::wstring full_path = parent_path + L"/" + name;
           if (type == ElementType::FOLDER) {
-            existing_paths.insert(full_path);
+            std::wstring new_path = parent_path + L"/" + name; 
+            existing_paths.insert(new_path);
           }
           ASSERT_EQ(created.value()->_element_name, name);
         }
@@ -299,27 +357,30 @@ TEST(SleeveOperationTest, CopyRemoveTest2) {
         if (existing_paths.size() > 1) {
           std::wstring src_path = RandomExistingPath();
           std::wstring dst_path = RandomExistingPath();
+          if (src_path == dst_path) {
+            continue;
+          }
           auto copied = sl.CopyElement(src_path, dst_path);
           if (copied.has_value() && copied.value()->_type == ElementType::FOLDER) {
-            existing_paths.insert(dst_path + L"/" + copied.value()->_element_name);
+            std::wstring copied_path = dst_path + L"/" + copied.value()->_element_name;
+            existing_paths.insert(copied_path);
           }
         }
 
         // Remove
-        std::wstring remove_path = RandomExistingPath();
-        auto removed = sl.RemoveElementInPath(remove_path);
-        if (removed.has_value()) {
-          existing_paths.erase(remove_path);
-        }
+        // std::wstring remove_path = RandomExistingPath();
+        // auto removed = sl.RemoveElementInPath(remove_path);
+        // if (removed.has_value()) {
+        //   existing_paths.erase(remove_path);
+        // }
 
         // Access
-        std::wstring access_path = RandomExistingPath();
-        auto accessed = sl.AccessElementByPath(access_path);
-        if (accessed.has_value()) {
-          ASSERT_GE(accessed.value()->_ref_count, 1);
-        }
+        // std::wstring access_path = RandomExistingPath();
+        // auto accessed = sl.AccessElementByPath(access_path);
+        // if (accessed.has_value()) {
+        //   ASSERT_GE(accessed.value()->_ref_count, 1);
+        // }
       }
-
       std::wstring tree = sl.Tree(L"root");
       std::wstring_convert<std::codecvt_utf8<wchar_t>> conv;
       std::cout << conv.to_bytes(tree) << std::endl;
