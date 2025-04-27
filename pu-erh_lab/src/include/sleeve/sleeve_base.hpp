@@ -30,6 +30,8 @@
 
 #pragma once
 
+#include <opencv2/core/hal/interface.h>
+
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -65,6 +67,11 @@ class SleeveBase {
 
   std::unordered_map<sl_element_id_t, std::shared_ptr<SleeveElement>> _storage;
   std::unordered_map<uint32_t, std::shared_ptr<FilterCombo>>          _filter_storage;
+
+  std::unordered_map<std::wstring, std::shared_ptr<SleeveElement>>    _dentry_cache;
+  uint32_t                                                            _cache_size = 256;
+  uint32_t                                                            _access_counter;
+
   std::wstring                                                        delimiter = L"/";
   std::wregex                                                         re;
 
