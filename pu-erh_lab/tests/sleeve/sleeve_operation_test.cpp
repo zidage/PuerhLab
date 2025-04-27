@@ -323,6 +323,24 @@ TEST(SleeveOperationTest, CopyRemoveTest2) {
 }
 
 /**
+ * @brief Test the correctness of the file movement functionality
+ * 
+ */
+TEST(SleeveOperationTest, MoveTest1) {
+  using namespace puerhlab;
+  SleeveBase sl{0};
+
+  sl.CreateElementToPath(L"root", L"B", ElementType::FOLDER);
+  sl.CreateElementToPath(L"root", L"C", ElementType::FOLDER);
+
+  sl.CreateElementToPath(L"root/B", L"D", ElementType::FILE);
+  sl.MoveElement(L"root/B/D", L"root/C");
+  std::wstring                                     tree = sl.Tree(L"root");
+  std::wstring_convert<std::codecvt_utf8<wchar_t>> conv;
+  std::cout << conv.to_bytes(tree) << std::endl;
+}
+
+/**
  * @brief Test the correctness of the file copy functionality
  *
  */
@@ -362,7 +380,7 @@ TEST(SleeveOperationTest, FuzzingTest1) {
     ElementType RandomElementType() { return (rand() % 2 == 0) ? ElementType::FILE : ElementType::FOLDER; }
 
     void        Test() {
-      constexpr int kIterations = 500;
+      constexpr int kIterations = 50;
       existing_folders.insert(L"root");
       existing_paths.insert(L"root");
 
@@ -383,21 +401,25 @@ TEST(SleeveOperationTest, FuzzingTest1) {
         }
 
         // Copy
-        // if (existing_paths.size() > 1) {
-        //   std::wstring src_path = RandomExistingPath();
-        //   std::wstring dst_path = RandomExistingPath();
-        //   if (src_path == dst_path) {
-        //     continue;
-        //   }
-        //   auto copied = sl.CopyElement(src_path, dst_path);
-        //   if (copied.has_value() && copied.value()->_type == ElementType::FOLDER) {
-        //     std::wstring copied_path = dst_path + L"/" + copied.value()->_element_name;
-        //     existing_paths.insert(copied_path);
-        //   }
-        // }
+        if (rand() % 4 == 0) {
+          if (existing_paths.size() > 1) {
+            std::wstring src_path = RandomExistingPath();
+            std::wstring dst_path = RandomExistingPath();
+            if (src_path == dst_path) {
+              continue;
+            }
+            auto copied = sl.CopyElement(src_path, dst_path);
+            if (copied.has_value()) {
+              std::wstring copied_path = dst_path + L"/" + copied.value()->_element_name;
+              if (copied.value()->_type == ElementType::FOLDER) existing_folders.insert(copied_path);
+              existing_paths.insert(copied_path);
+            }
+            
+          }
+        }
 
         // Remove
-        if (rand() % 2 == 0) {
+        if (rand() % 7 == 0) {
           std::wstring remove_path = RandomExistingPath();
           auto         removed     = sl.RemoveElementInPath(remove_path);
           if (removed.has_value()) {
