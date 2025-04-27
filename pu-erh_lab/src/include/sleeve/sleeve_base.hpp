@@ -34,6 +34,7 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <regex>
 #include <string>
 #include <unordered_map>
 
@@ -65,6 +66,7 @@ class SleeveBase {
   std::unordered_map<sl_element_id_t, std::shared_ptr<SleeveElement>> _storage;
   std::unordered_map<uint32_t, std::shared_ptr<FilterCombo>>          _filter_storage;
   std::wstring                                                        delimiter = L"/";
+  std::wregex                                                         re;
 
   auto IsSubFolder(const std::shared_ptr<SleeveFolder> folder_a, const sl_path_t &path_b) const -> bool;
   auto GetWriteGuard(const std::shared_ptr<SleeveFolder> parent_folder, const file_name_t &file_name)

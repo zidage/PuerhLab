@@ -63,7 +63,7 @@ ElementAccessGuard::~ElementAccessGuard() {
  *
  * @param id
  */
-SleeveBase::SleeveBase(sleeve_id_t id) : _sleeve_id(id) {
+SleeveBase::SleeveBase(sleeve_id_t id) : _sleeve_id(id), re(delimiter) {
   _next_element_id   = 0;
   _size              = 0;
   _filter_storage[0] = std::make_shared<FilterCombo>();
@@ -106,7 +106,6 @@ auto SleeveBase::AccessElementById(const sl_element_id_t &id) const -> std::opti
  * @return std::optional<std::shared_ptr<SleeveElement>>
  */
 auto SleeveBase::AccessElementByPath(const sl_path_t &path) const -> std::optional<std::shared_ptr<SleeveElement>> {
-  std::wregex                 re(delimiter);
   std::wsregex_token_iterator first{path.begin(), path.end(), re, -1}, last;
   std::deque<std::wstring>    path_elements{first, last};
 
@@ -287,7 +286,6 @@ auto SleeveBase::GetWriteGuard(const sl_path_t &target) -> std::optional<Element
  */
 auto SleeveBase::GetWriteGuard(const sl_path_t &parent_folder_path, const file_name_t &file_name)
     -> std::optional<ElementAccessGuard> {
-  std::wregex                 re(delimiter);
   std::wsregex_token_iterator first{parent_folder_path.begin(), parent_folder_path.end(), re, -1}, last;
   std::deque<std::wstring>    path_elements{first, last};
 
@@ -433,17 +431,17 @@ auto SleeveBase::CopyElement(const sl_path_t &src, const sl_path_t &dest)
     // TODO: Log
     return std::nullopt;
   }
-  auto src_file          = src_read_guard->_access_element;
+  auto src_file        = src_read_guard->_access_element;
 
-  auto target_folder_opt = GetReadGuard(dest);
-  if (!target_folder_opt.has_value() || target_folder_opt.value()._access_element->_type == ElementType::FILE) {
+  auto dest_folder_opt = GetReadGuard(dest);
+  if (!dest_folder_opt.has_value() || dest_folder_opt.value()._access_element->_type == ElementType::FILE) {
     // TODO: Log
     return std::nullopt;
   }
 
-  auto target_folder = std::dynamic_pointer_cast<SleeveFolder>(target_folder_opt.value()._access_element);
+  auto dest_folder = std::dynamic_pointer_cast<SleeveFolder>(dest_folder_opt.value()._access_element);
 
-  if (target_folder->Contains(src_file->_element_name)) {
+  if (dest_folder->Contains(src_file->_element_name)) {
     // TODO: Log
     return std::nullopt;
   }
@@ -453,11 +451,11 @@ auto SleeveBase::CopyElement(const sl_path_t &src, const sl_path_t &dest)
     return std::nullopt;
   }
 
-  target_folder_opt = GetWriteGuard(dest);
-  if (target_folder_opt == std::nullopt) {
+  dest_folder_opt = GetWriteGuard(dest);
+  if (dest_folder_opt == std::nullopt) {
     return std::nullopt;
   }
-  target_folder = std::dynamic_pointer_cast<SleeveFolder>(target_folder_opt.value()._access_element);
+  dest_folder = std::dynamic_pointer_cast<SleeveFolder>(dest_folder_opt.value()._access_element);
   if (src_file->_type == ElementType::FOLDER) {
     auto src_folder = std::dynamic_pointer_cast<SleeveFolder>(src_file);
     // Increment the reference count for all of its contents
@@ -465,13 +463,13 @@ auto SleeveBase::CopyElement(const sl_path_t &src, const sl_path_t &dest)
     for (auto &e : *elements) {
       _storage.at(e)->IncrementRefCount();
     }
-    target_folder->IncrementFolderCount();
+    dest_folder->IncrementFolderCount();
   } else {
-    target_folder->IncrementFileCount();
+    dest_folder->IncrementFileCount();
   }
 
   // For files, only the reference is copied
-  target_folder->AddElementToMap(src_file);
+  dest_folder->AddElementToMap(src_file);
 
   src_file->IncrementRefCount();
   return src_file;
@@ -498,14 +496,14 @@ auto SleeveBase::Tree(const sl_path_t &path) const -> std::wstring {
     int             depth;
     bool            is_last;
   };
-  std::wstring prefix            = L"";
-  auto         target_folder_opt = GetReadGuard(path);
-  if (!target_folder_opt.has_value() || target_folder_opt->_access_element->_type == ElementType::FILE) {
+  std::wstring prefix          = L"";
+  auto         dest_folder_opt = GetReadGuard(path);
+  if (!dest_folder_opt.has_value() || dest_folder_opt->_access_element->_type == ElementType::FILE) {
     std::wcout << L"Cannot call Tree() on an file" << std::endl;
     return L"";
   }
   std::wstring result       = L"";
-  auto         visit_folder = std::dynamic_pointer_cast<SleeveFolder>(target_folder_opt.value()._access_element);
+  auto         visit_folder = std::dynamic_pointer_cast<SleeveFolder>(dest_folder_opt.value()._access_element);
   auto         contains     = visit_folder->ListElements();
   auto         dfs_stack    = std::stack<TreeNode>();
   for (auto e : *contains) {
@@ -553,13 +551,13 @@ auto SleeveBase::TreeBFS(const sl_path_t &path) const -> std::wstring {
     int             depth;
     bool            is_last;
   };
-  auto target_folder_opt = GetReadGuard(path);
-  if (!target_folder_opt.has_value() || target_folder_opt->_access_element->_type == ElementType::FILE) {
+  auto dest_folder_opt = GetReadGuard(path);
+  if (!dest_folder_opt.has_value() || dest_folder_opt->_access_element->_type == ElementType::FILE) {
     std::wcout << L"Cannot call Tree() on an file" << std::endl;
     return L"";
   }
   std::wstring result       = L"";
-  auto         visit_folder = std::dynamic_pointer_cast<SleeveFolder>(target_folder_opt.value()._access_element);
+  auto         visit_folder = std::dynamic_pointer_cast<SleeveFolder>(dest_folder_opt.value()._access_element);
   auto         contains     = visit_folder->ListElements();
   auto         bfs_queue    = std::deque<TreeNode>();
   for (auto e : *contains) {
