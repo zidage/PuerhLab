@@ -1,9 +1,11 @@
 #include <cstdint>
 #include <map>
 #include <memory>
+#include <optional>
 #include <queue>
 #include <set>
 #include <unordered_map>
+#include <utility>
 
 #include "sleeve_element/sleeve_element.hpp"
 #include "type/type.hpp"
@@ -12,17 +14,23 @@
 
 namespace puerhlab {
 class DCacheManager {
+  using ListIterator = std::list<std::pair<sl_path_t, sl_element_id_t>>::iterator;
+
  private:
-  std::unordered_map<sl_path_t, std::shared_ptr<SleeveElement>> _cache;
-  std::map<uint32_t, sl_path_t>                                 _access_history;
-  uint32_t                                                      _capacity;
-  uint32_t                                                      _access_counter;
+  std::unordered_map<sl_path_t, ListIterator>      _cache_map;
+  std::list<std::pair<sl_path_t, sl_element_id_t>> _cache_list;
+  uint32_t                                         _capacity;
 
  public:
   explicit DCacheManager();
   explicit DCacheManager(uint32_t capacity);
 
-  void RecordAccess(const sl_path_t &path);
-  auto AccessElement(const sl_path_t &path);
+  auto AccessElement(const sl_path_t &path) -> std::optional<sl_element_id_t>;
+  void RecordAccess(const sl_path_t &path, const sl_element_id_t element_id);
+  auto Evict() -> std::optional<sl_element_id_t>;
+  auto Contains(const sl_path_t &path) -> bool;
+
+  void Flush();
+  void Resize(uint32_t new_capacity);
 };
 };  // namespace puerhlab
