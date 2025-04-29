@@ -22,6 +22,7 @@ class DCacheManager {
   uint32_t                                         _capacity;
 
  public:
+  static const uint32_t _default_capacity = 256;
   explicit DCacheManager();
   explicit DCacheManager(uint32_t capacity);
 

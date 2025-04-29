@@ -68,6 +68,7 @@ SleeveBase::SleeveBase(sleeve_id_t id) : _sleeve_id(id), re(delimiter) {
   _size              = 0;
   _filter_storage[0] = std::make_shared<FilterCombo>();
   _next_filter_id    = 0;
+  _dcache_capacity   = DCacheManager::_default_capacity;
   InitializeRoot();
 }
 
@@ -105,7 +106,12 @@ auto SleeveBase::AccessElementById(const sl_element_id_t &id) const -> std::opti
  * @param path
  * @return std::optional<std::shared_ptr<SleeveElement>>
  */
-auto SleeveBase::AccessElementByPath(const sl_path_t &path) const -> std::optional<std::shared_ptr<SleeveElement>> {
+auto SleeveBase::AccessElementByPath(const sl_path_t &path) -> std::optional<std::shared_ptr<SleeveElement>> {
+  auto result = _dentry_cache.AccessElement(path);
+  if (result.has_value()) {
+    return _storage.at(result.value());
+  }
+
   std::wsregex_token_iterator first{path.begin(), path.end(), re, -1}, last;
   std::deque<std::wstring>    path_elements{first, last};
 
@@ -134,6 +140,8 @@ auto SleeveBase::AccessElementByPath(const sl_path_t &path) const -> std::option
     }
     curr_element = AccessElementById(next_element_id.value());
   }
+
+  if (curr_element.has_value()) _dentry_cache.RecordAccess(path, curr_element.value()->_element_id);
   return curr_element;
 }
 
@@ -240,7 +248,7 @@ auto SleeveBase::RemoveElementInPath(const sl_path_t &path, const file_name_t &f
  * @param target
  * @return std::optional<ElementAccessGuard>
  */
-auto SleeveBase::GetReadGuard(const sl_path_t &target) const -> std::optional<ElementAccessGuard> {
+auto SleeveBase::GetReadGuard(const sl_path_t &target) -> std::optional<ElementAccessGuard> {
   auto read_element = AccessElementByPath(target);
   if (!read_element.has_value()) {
     // TODO: Log
@@ -355,31 +363,9 @@ auto SleeveBase::GetWriteGuard(const sl_path_t &parent_folder_path, const file_n
   }
   auto write_file = _storage.at(write_file_opt.value());
   if (write_file->_ref_count > 1) {
-    return WriteCopy(write_file, parent_folder);
+    write_file = WriteCopy(write_file, parent_folder);
   }
-  return write_file;
-}
-
-/**
- * @brief Acquire the write guard of an element by its name and parent folder.
- * DO NOT USE THIS METHOD'S NAKED FORM UNLESS YOU HAVE ACQUIRED THE WRITE GUARD ON THE PARENT FOLDER
- *
- * @param parent_folder
- * @param file_name
- * @return std::optional<ElementAccessGuard>
- */
-auto SleeveBase::GetWriteGuard(const std::shared_ptr<SleeveFolder> parent_folder, const file_name_t &file_name)
-    -> std::optional<ElementAccessGuard> {
-  // FIXME: Rewrite this thing
-  auto write_file_opt = parent_folder->GetElementIdByName(file_name);
-  if (!write_file_opt.has_value()) {
-    // TODO: Log
-    return std::nullopt;
-  }
-  auto write_file = _storage.at(write_file_opt.value());
-  if (write_file->_ref_count > 1) {
-    return WriteCopy(write_file, parent_folder);
-  }
+  _dentry_cache.RecordAccess(parent_folder_path + delimiter + file_name, write_file->_element_id);
   return write_file;
 }
 
@@ -490,7 +476,7 @@ auto SleeveBase::MoveElement(const sl_path_t &src, const sl_path_t &dest)
  * DEBUG PURPOSE ONLY
  *
  */
-auto SleeveBase::Tree(const sl_path_t &path) const -> std::wstring {
+auto SleeveBase::Tree(const sl_path_t &path) -> std::wstring {
   struct TreeNode {
     sl_element_id_t id;
     int             depth;
@@ -545,7 +531,7 @@ auto SleeveBase::Tree(const sl_path_t &path) const -> std::wstring {
  * DEBUG PURPOSE ONLY
  *
  */
-auto SleeveBase::TreeBFS(const sl_path_t &path) const -> std::wstring {
+auto SleeveBase::TreeBFS(const sl_path_t &path) -> std::wstring {
   struct TreeNode {
     sl_element_id_t id;
     int             depth;

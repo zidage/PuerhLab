@@ -40,6 +40,7 @@
 #include <string>
 #include <unordered_map>
 
+#include "dentry_cache_manager.hpp"
 #include "sleeve/sleeve_element/sleeve_element.hpp"
 #include "sleeve/sleeve_element/sleeve_file.hpp"
 #include "sleeve/sleeve_element/sleeve_folder.hpp"
@@ -68,9 +69,8 @@ class SleeveBase {
   std::unordered_map<sl_element_id_t, std::shared_ptr<SleeveElement>> _storage;
   std::unordered_map<uint32_t, std::shared_ptr<FilterCombo>>          _filter_storage;
 
-  std::unordered_map<std::wstring, std::shared_ptr<SleeveElement>>    _dentry_cache;
-  uint32_t                                                            _cache_size = 256;
-  uint32_t                                                            _access_counter;
+  DCacheManager                                                       _dentry_cache;
+  uint32_t                                                            _dcache_capacity;
 
   std::wstring                                                        delimiter = L"/";
   std::wregex                                                         re;
@@ -87,7 +87,7 @@ class SleeveBase {
   void InitializeRoot();
 
   auto AccessElementById(const sl_element_id_t &id) const -> std::optional<std::shared_ptr<SleeveElement>>;
-  auto AccessElementByPath(const sl_path_t &path) const -> std::optional<std::shared_ptr<SleeveElement>>;
+  auto AccessElementByPath(const sl_path_t &path) -> std::optional<std::shared_ptr<SleeveElement>>;
 
   auto CreateElementToPath(const sl_path_t &path, const file_name_t &file_name, const ElementType &type)
       -> std::optional<std::shared_ptr<SleeveElement>>;
@@ -100,7 +100,7 @@ class SleeveBase {
 
   auto MoveElement(const sl_path_t &src, const sl_path_t &dest) -> std::optional<std::shared_ptr<SleeveElement>>;
 
-  auto GetReadGuard(const sl_path_t &target) const -> std::optional<ElementAccessGuard>;
+  auto GetReadGuard(const sl_path_t &target) -> std::optional<ElementAccessGuard>;
 
   auto GetWriteGuard(const sl_path_t &target) -> std::optional<ElementAccessGuard>;
   auto GetWriteGuard(const sl_path_t &parent_folder_path, const file_name_t &file_name)
@@ -108,7 +108,7 @@ class SleeveBase {
 
   void GarbageCollect();
 
-  auto Tree(const sl_path_t &path) const -> std::wstring;
-  auto TreeBFS(const sl_path_t &path) const -> std::wstring;
+  auto Tree(const sl_path_t &path) -> std::wstring;
+  auto TreeBFS(const sl_path_t &path) -> std::wstring;
 };
 };  // namespace puerhlab

@@ -31,6 +31,7 @@ add_library(Sleeve
     sleeve/sleeve_base.cpp    
     sleeve/sleeve.cpp
     mapper/sleeve/sleeve_mapper.cpp
+    sleeve/dentry_cache_manager.cpp
     sleeve/sleeve_element/sleeve_element_factory.cpp
     sleeve/sleeve_element/sleeve_element.cpp
     sleeve/sleeve_element/sleeve_file.cpp
