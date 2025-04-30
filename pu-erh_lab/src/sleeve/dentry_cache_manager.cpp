@@ -50,6 +50,14 @@ void DCacheManager::RecordAccess(const sl_path_t &path, const sl_element_id_t el
   }
 }
 
+void DCacheManager::RemoveRecord(const sl_path_t &path) {
+  auto it = _cache_map.find(path);
+  if (it != _cache_map.end()) {
+    _cache_list.erase(it->second);
+    _cache_map.erase(it);
+  }
+}
+
 auto DCacheManager::Evict() -> std::optional<sl_element_id_t> {
   if (_cache_list.empty()) {
     return std::nullopt;
@@ -59,6 +67,10 @@ auto DCacheManager::Evict() -> std::optional<sl_element_id_t> {
   _cache_map.erase(last->first);
   auto evicted_id = last->second;
   _cache_list.pop_back();
+  ++_evict_count;
+  if (_access_count != 0 && (double)_evict_count / (double)_access_count > 0.8) {
+    Resize(_capacity * 1.2);
+  }
   return evicted_id;
 }
 

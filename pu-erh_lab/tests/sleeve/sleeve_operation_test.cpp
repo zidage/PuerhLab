@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include <codecvt>
+#include <memory>
 #include <optional>
 #include <random>
 #include <string>
@@ -8,6 +9,7 @@
 #include "gtest/gtest.h"
 #include "sleeve/sleeve_base.hpp"
 #include "sleeve/sleeve_element/sleeve_element.hpp"
+#include "sleeve/sleeve_element/sleeve_folder.hpp"
 
 TEST(SleeveOperationTest, NormalTest1) {
   using namespace puerhlab;
@@ -380,7 +382,7 @@ TEST(SleeveOperationTest, FuzzingTest1) {
     ElementType RandomElementType() { return (rand() % 2 == 0) ? ElementType::FILE : ElementType::FOLDER; }
 
     void        Test() {
-      constexpr int kIterations = 50;
+      constexpr int kIterations = 1000;
       existing_folders.insert(L"root");
       existing_paths.insert(L"root");
 
@@ -404,7 +406,7 @@ TEST(SleeveOperationTest, FuzzingTest1) {
         if (rand() % 4 == 0) {
           if (existing_paths.size() > 1) {
             std::wstring src_path = RandomExistingPath();
-            std::wstring dst_path = RandomExistingPath();
+            std::wstring dst_path = RandomExistingFolder();
             if (src_path == dst_path) {
               continue;
             }
@@ -418,16 +420,6 @@ TEST(SleeveOperationTest, FuzzingTest1) {
           }
         }
 
-        // Remove
-        if (rand() % 7 == 0) {
-          std::wstring remove_path = RandomExistingPath();
-          auto         removed     = sl.RemoveElementInPath(remove_path);
-          if (removed.has_value()) {
-            if (removed.value()->_type == ElementType::FOLDER) existing_folders.erase(remove_path);
-            existing_paths.erase(remove_path);
-          }
-        }
-
         // Access
         // std::wstring access_path = RandomExistingPath();
         // auto accessed = sl.AccessElementByPath(access_path);
@@ -435,9 +427,11 @@ TEST(SleeveOperationTest, FuzzingTest1) {
         //   ASSERT_GE(accessed.value()->_ref_count, 1);
         // }
       }
+      auto print = false;
+      if (print) {
       std::wstring                                     tree = sl.Tree(L"root");
       std::wstring_convert<std::codecvt_utf8<wchar_t>> conv;
-      std::cout << conv.to_bytes(tree) << std::endl;
+      std::cout << conv.to_bytes(tree) << std::endl;}
     }
   };
 

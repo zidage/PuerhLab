@@ -239,6 +239,11 @@ auto SleeveBase::RemoveElementInPath(const sl_path_t &path, const file_name_t &f
     del_element->Clear();
   del_element->DecrementRefCount();
 
+  if (del_element->_type == ElementType::FOLDER)
+    _dentry_cache.Flush();
+  else
+    _dentry_cache.RemoveRecord(path + L"/" + file_name);
+
   return del_element;
 }
 
@@ -308,6 +313,8 @@ auto SleeveBase::GetWriteGuard(const sl_path_t &parent_folder_path, const file_n
   std::shared_ptr<SleeveFolder>  curr_parent_folder = std::dynamic_pointer_cast<SleeveFolder>(curr_element_opt.value());
   std::optional<sl_element_id_t> next_element_id    = 0;
 
+  sl_path_t                      acc_path           = curr_path;
+
   while (curr_element_opt != std::nullopt && !path_elements.empty()) {
     if (curr_element_opt.value()->_type == ElementType::FILE) {
       // TODO: Log
@@ -320,8 +327,9 @@ auto SleeveBase::GetWriteGuard(const sl_path_t &parent_folder_path, const file_n
     // of it, and make the PARENT folder reference to the new copy.
     if (curr_element->_ref_count > 1) {
       auto copy = WriteCopy(curr_element, curr_parent_folder);
-
+      _dentry_cache.RecordAccess(acc_path, copy->_element_id);
       curr_path = path_elements.front();
+      acc_path += L"/" + curr_path;
       path_elements.pop_front();
       curr_parent_folder = std::dynamic_pointer_cast<SleeveFolder>(copy);
       next_element_id    = curr_parent_folder->GetElementIdByName(curr_path);
@@ -335,6 +343,7 @@ auto SleeveBase::GetWriteGuard(const sl_path_t &parent_folder_path, const file_n
 
     // Step to the next element along the path
     curr_path = path_elements.front();
+    acc_path += L"/" + curr_path;
     path_elements.pop_front();
     curr_parent_folder = curr_element;
     next_element_id    = curr_parent_folder->GetElementIdByName(curr_path);
@@ -380,7 +389,6 @@ auto SleeveBase::GetWriteGuard(const sl_path_t &parent_folder_path, const file_n
  */
 auto SleeveBase::IsSubFolder(const std::shared_ptr<SleeveFolder> src_folder, const sl_path_t &dest_folder_path) const
     -> bool {
-  std::wregex                 re(delimiter);
   std::wsregex_token_iterator first{dest_folder_path.begin(), dest_folder_path.end(), re, -1}, last;
   std::deque<std::wstring>    path_elements{first, last};
 
