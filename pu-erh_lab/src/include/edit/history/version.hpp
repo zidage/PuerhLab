@@ -42,11 +42,12 @@ class Version {
   /**
    * @brief MurmurHash3 value for this version
    */
-  hash_t                  _hash;
+  hash_t                  _version_id;
   /**
    * @brief Last modified time for this version
    */
-  std::tm                 _time_stamp;
+  std::time_t             _added_time;
+  std::time_t             _last_modified_time;
   /**
    * @brief collection of images related to this version
    */

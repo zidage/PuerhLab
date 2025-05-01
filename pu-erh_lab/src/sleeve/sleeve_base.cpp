@@ -469,6 +469,13 @@ auto SleeveBase::CopyElement(const sl_path_t &src, const sl_path_t &dest)
   return src_file;
 }
 
+/**
+ * @brief Move element from one path to another
+ *
+ * @param src
+ * @param dest
+ * @return std::optional<std::shared_ptr<SleeveElement>>
+ */
 auto SleeveBase::MoveElement(const sl_path_t &src, const sl_path_t &dest)
     -> std::optional<std::shared_ptr<SleeveElement>> {
   auto result = CopyElement(src, dest);

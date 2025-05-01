@@ -282,6 +282,31 @@ TEST(SleeveOperationTest, CopyEdgeTest3) {
  * @brief Test the correctness of the file copy functionality
  *
  */
+ TEST(SleeveOperationTest, CopyEdgeTest4) {
+  using namespace puerhlab;
+  SleeveBase sl{0};
+
+  sl.CreateElementToPath(L"root", L"B", ElementType::FOLDER);
+  sl.CreateElementToPath(L"root", L"C", ElementType::FOLDER);
+
+  sl.CreateElementToPath(L"root/B", L"D", ElementType::FOLDER);
+  sl.CreateElementToPath(L"root/C", L"E", ElementType::FOLDER);
+  auto result1 = sl.CopyElement(L"root/C", L"root/B/D");
+  EXPECT_TRUE(result1.has_value());
+  EXPECT_EQ(result1.value()->_ref_count, 2);
+  EXPECT_EQ(result1.value()->_element_name, L"C");
+
+  sl.CopyElement(L"root/B/D", L"root/C/E");
+
+  std::wstring                                     tree = sl.Tree(L"root");
+  std::wstring_convert<std::codecvt_utf8<wchar_t>> conv;
+  std::cout << conv.to_bytes(tree) << std::endl;
+}
+
+/**
+ * @brief Test the correctness of the file copy functionality
+ *
+ */
 TEST(SleeveOperationTest, CopyRemoveTest2) {
   using namespace puerhlab;
   SleeveBase sl{0};
@@ -326,7 +351,7 @@ TEST(SleeveOperationTest, CopyRemoveTest2) {
 
 /**
  * @brief Test the correctness of the file movement functionality
- * 
+ *
  */
 TEST(SleeveOperationTest, MoveTest1) {
   using namespace puerhlab;
@@ -340,6 +365,52 @@ TEST(SleeveOperationTest, MoveTest1) {
   std::wstring                                     tree = sl.Tree(L"root");
   std::wstring_convert<std::codecvt_utf8<wchar_t>> conv;
   std::cout << conv.to_bytes(tree) << std::endl;
+}
+
+/**
+ * @brief Test the correctness of the file movement functionality
+ *
+ */
+ TEST(SleeveOperationTest, MoveTest2) {
+  using namespace puerhlab;
+  SleeveBase sl{0};
+
+  sl.CreateElementToPath(L"root", L"B", ElementType::FOLDER);
+  sl.CreateElementToPath(L"root", L"C", ElementType::FOLDER);
+
+  sl.CreateElementToPath(L"root/B", L"D", ElementType::FOLDER);
+  sl.CreateElementToPath(L"root/C", L"E", ElementType::FOLDER);
+  auto result1 = sl.CopyElement(L"root/C", L"root/B/D");
+  EXPECT_TRUE(result1.has_value());
+  EXPECT_EQ(result1.value()->_ref_count, 2);
+  EXPECT_EQ(result1.value()->_element_name, L"C");
+
+  sl.CopyElement(L"root/B/D", L"root/C/E");
+
+  sl.MoveElement(L"root/C/E/D", L"root");
+  sl.RemoveElementInPath(L"root/D");
+  std::wstring                                     tree = sl.Tree(L"root");
+  std::wstring_convert<std::codecvt_utf8<wchar_t>> conv;
+  std::cout << conv.to_bytes(tree) << std::endl;
+}
+
+/**
+ * @brief Test the correctness of the file movement functionality
+ *
+ */
+TEST(SleeveOperationTest, SubFolderTest1) {
+  using namespace puerhlab;
+
+  SleeveBase sl{0};
+
+  sl.CreateElementToPath(L"root", L"B", ElementType::FOLDER);
+  sl.CreateElementToPath(L"root", L"C", ElementType::FOLDER);
+
+  sl.CreateElementToPath(L"root/B", L"D", ElementType::FOLDER);
+  sl.CreateElementToPath(L"root/C", L"E", ElementType::FOLDER);
+
+  EXPECT_TRUE(
+      sl.IsSubFolder(std::dynamic_pointer_cast<SleeveFolder>(sl.AccessElementByPath(L"root/C").value()), L"root/C/E"));
 }
 
 /**
@@ -416,7 +487,6 @@ TEST(SleeveOperationTest, FuzzingTest1) {
               if (copied.value()->_type == ElementType::FOLDER) existing_folders.insert(copied_path);
               existing_paths.insert(copied_path);
             }
-            
           }
         }
 
@@ -429,9 +499,10 @@ TEST(SleeveOperationTest, FuzzingTest1) {
       }
       auto print = false;
       if (print) {
-      std::wstring                                     tree = sl.Tree(L"root");
-      std::wstring_convert<std::codecvt_utf8<wchar_t>> conv;
-      std::cout << conv.to_bytes(tree) << std::endl;}
+        std::wstring                                     tree = sl.Tree(L"root");
+        std::wstring_convert<std::codecvt_utf8<wchar_t>> conv;
+        std::cout << conv.to_bytes(tree) << std::endl;
+      }
     }
   };
 

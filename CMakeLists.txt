@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.10.0)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 
 
 #set(CMAKE_C_COMPILER "clang")
@@ -49,6 +49,10 @@ set_target_properties(DuckDB PROPERTIES
 
 # Cereal
 add_library(Cereal INTERFACE "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_party/cereal-1.3.2/include")
+
+# UUID
+add_library(Stduuid INTERFACE)
+target_include_directories(Stduuid INTERFACE "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_party/stduuid/include")
 
 # Exiv2
 add_library(Exiv2 SHARED IMPORTED)

@@ -21,11 +21,15 @@ add_library(ImageLoader image/image_loader.cpp)
 target_include_directories(ImageLoader PUBLIC include)
 target_link_libraries(ImageLoader PUBLIC ImageDecoder)
 
+add_library(EditHistory edit/history/edit_history.cpp edit/history/version.cpp)
+target_include_directories(EditHistory PUBLIC include)
+target_link_libraries(EditHistory PUBLIC Image Stduuid)
+
 add_library(SleeveFilter
     sleeve/sleeve_filter/filter_combo.cpp
 )
 target_include_directories(SleeveFilter PUBLIC include)
-target_link_libraries(SleeveFilter PRIVATE Image)
+target_link_libraries(SleeveFilter PRIVATE Image Stduuid)
 
 add_library(Sleeve 
     sleeve/sleeve_base.cpp    
@@ -38,19 +42,19 @@ add_library(Sleeve
     sleeve/sleeve_element/sleeve_folder.cpp
 )
 target_include_directories(Sleeve PUBLIC include)
-target_link_libraries(Sleeve PRIVATE Image ImageLoader SleeveFilter DuckDB)
+target_link_libraries(Sleeve PUBLIC Image ImageLoader SleeveFilter DuckDB EditHistory Stduuid)
 
 add_library(SleeveBuffer
     buffer/sleeve_buffer/sleeve_buffer_manager.cpp
     buffer/sleeve_buffer/sleeve_buffer.cpp
 )
 target_include_directories(SleeveBuffer PUBLIC include)
-target_link_libraries(SleeveBuffer PRIVATE Image)
+target_link_libraries(SleeveBuffer PRIVATE Image Sleeve Stduuid)
 
 add_library(SleeveManager 
     sleeve/sleeve_manager.cpp)
 target_include_directories(SleeveManager PUBLIC include)
-target_link_libraries(SleeveManager PRIVATE Sleeve ImageLoader)
+target_link_libraries(SleeveManager PRIVATE Sleeve ImageLoader Stduuid)
 
 
 

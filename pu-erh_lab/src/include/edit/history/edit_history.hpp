@@ -30,8 +30,38 @@
 
 #pragma once
 
+#include <cstdint>
+#include <list>
+#include <unordered_map>
+
+#include "type/type.hpp"
 #include "version.hpp"
 
 namespace puerhlab {
-class EditHistory {};
+class VersionNode {
+ private:
+  Version               &_ver_ref;
+  hash_t                 _commit_id;
+  std::list<VersionNode> _branch;
+
+  uint32_t               _ref_count;
+
+ public:
+  VersionNode(Version &ver_ref);
+};
+
+class EditHistory {
+ private:
+  hash_t                              _history_id;
+  image_id_t                          _bound_image;
+
+  std::time_t                         _added_time;
+  std::time_t                         _last_modified_time;
+
+  std::list<VersionNode>              _commit_tree;
+  std::unordered_map<hash_t, Version> _version_storage;
+
+ public:
+  EditHistory(image_id_t _bound_image);
+};
 };  // namespace puerhlab

@@ -75,7 +75,6 @@ class SleeveBase {
   std::wstring                                                        delimiter = L"/";
   std::wregex                                                         re;
 
-  auto IsSubFolder(const std::shared_ptr<SleeveFolder> folder_a, const sl_path_t &path_b) const -> bool;
   auto GetWriteGuard(const std::shared_ptr<SleeveFolder> parent_folder, const file_name_t &file_name)
       -> std::optional<ElementAccessGuard>;
   auto WriteCopy(std::shared_ptr<SleeveElement> src_element, std::shared_ptr<SleeveFolder> dest_folder)
@@ -110,5 +109,7 @@ class SleeveBase {
 
   auto Tree(const sl_path_t &path) -> std::wstring;
   auto TreeBFS(const sl_path_t &path) -> std::wstring;
+
+  auto IsSubFolder(const std::shared_ptr<SleeveFolder> folder_a, const sl_path_t &path_b) const -> bool;
 };
 };  // namespace puerhlab
