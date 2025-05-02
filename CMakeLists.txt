@@ -54,6 +54,10 @@ add_library(Cereal INTERFACE "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_party/cereal-
 add_library(stduuid INTERFACE)
 target_include_directories(stduuid INTERFACE "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_party/stduuid")
 
+# UUID
+add_library(uuid_v4 INTERFACE)
+target_include_directories(uuid_v4 INTERFACE "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_party/uuid_v4")
+
 # Exiv2
 add_library(Exiv2 SHARED IMPORTED)
 set_target_properties(Exiv2 PROPERTIES

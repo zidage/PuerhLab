@@ -28,7 +28,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#include <uuid.h>
+#include <uuid_v4.h>
 
 #include <cstdint>
 #include <list>
@@ -44,7 +44,7 @@ class VersionNode {
  private:
   Version               &_ver_ref;
   std::list<VersionNode> _branch;
-  uuids::uuid            _commit_id;
+  UUIDv4::UUID           _commit_id;
   uint32_t               _ref_count;
 
  public:
@@ -53,14 +53,14 @@ class VersionNode {
 
 class EditHistory {
  private:
-  uuids::uuid                         _history_id;
-  image_id_t                          _bound_image;
+  UUIDv4::UUID                              _history_id;
+  image_id_t                                _bound_image;
 
-  std::time_t                         _added_time;
-  std::time_t                         _last_modified_time;
+  std::time_t                               _added_time;
+  std::time_t                               _last_modified_time;
 
-  std::list<VersionNode>              _commit_tree;
-  std::unordered_map<hash_t, Version> _version_storage;
+  std::list<VersionNode>                    _commit_tree;
+  std::unordered_map<UUIDv4::UUID, Version> _version_storage;
 
  public:
   EditHistory(image_id_t _bound_image);
