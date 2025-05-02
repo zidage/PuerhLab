@@ -34,6 +34,7 @@
 #include <memory>
 
 #include "edit/history/edit_history.hpp"
+#include "edit/history/version.hpp"
 #include "image/image.hpp"
 #include "sleeve_element.hpp"
 #include "type/type.hpp"

@@ -38,9 +38,6 @@
 #include <ostream>
 #include <type/type.hpp>
 
-#include "edit/history/edit_history.hpp"
-#include "edit/history/version.hpp"
-
 namespace puerhlab {
 enum class ImageType { DEFAULT, JPEG, PNG, TIFF, ARW, CR2, CR3, NEF, DNG };
 

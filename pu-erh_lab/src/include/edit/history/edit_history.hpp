@@ -28,7 +28,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#pragma once
+#include <uuid.h>
 
 #include <cstdint>
 #include <list>
@@ -37,13 +37,14 @@
 #include "type/type.hpp"
 #include "version.hpp"
 
+#pragma once
+
 namespace puerhlab {
 class VersionNode {
  private:
   Version               &_ver_ref;
-  hash_t                 _commit_id;
   std::list<VersionNode> _branch;
-
+  uuids::uuid            _commit_id;
   uint32_t               _ref_count;
 
  public:
@@ -52,7 +53,7 @@ class VersionNode {
 
 class EditHistory {
  private:
-  hash_t                              _history_id;
+  uuids::uuid                         _history_id;
   image_id_t                          _bound_image;
 
   std::time_t                         _added_time;
