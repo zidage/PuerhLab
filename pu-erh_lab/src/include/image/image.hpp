@@ -51,9 +51,6 @@ class Image {
   image_path_t    _image_path;
   file_name_t     _image_name;
 
-  std::time_t     _added_time;
-  std::time_t     _last_modified_time;
-
   Exiv2::ExifData _exif_data;
   bool            has_data;
   cv::Mat         _image_data;
