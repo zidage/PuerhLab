@@ -1,8 +1,8 @@
 /*
- * @file        pu-erh_lab/src/include/edit/history/edit_history.hpp
- * @brief       Data structure used to track all the edit history
+ * @file        pu-erh_lab/src/include/utils/clock/time_provider.hpp
+ * @brief       Implementation of a unified time service to provide time stamp to different modules
  * @author      Yurun Zi
- * @date        2025-03-23
+ * @date        2025-05-02
  * @license     MIT
  *
  * @copyright   Copyright (c) 2025 Yurun Zi
@@ -17,8 +17,8 @@
 // copies of the Software, and to permit persons to whom the Software is
 // furnished to do so, subject to the following conditions:
 //
-// The above copyright notice and this permission notice shall be included in all
-// copies or substantial portions of the Software.
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
 //
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 // IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -28,43 +28,18 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#include <uuid_v4.h>
-
-#include <cstdint>
-#include <list>
-#include <unordered_map>
-
-#include "type/type.hpp"
-#include "version.hpp"
-
 #pragma once
+#include <atomic>
+#include <chrono>
 
 namespace puerhlab {
-class VersionNode {
- private:
-  Version               &_ver_ref;
-  std::list<VersionNode> _branch;
-  UUIDv4::UUID           _commit_id;
-  uint32_t               _ref_count;
-
+class TimeProvider {
  public:
-  VersionNode(Version &ver_ref);
-};
+  static void                                  Refresh();
+  static std::chrono::system_clock::time_point Now();
 
-class EditHistory {
  private:
-  UUIDv4::UUID                              _history_id;
-  sl_element_id_t                           _bound_image;
-
-  std::time_t                               _added_time;
-  std::time_t                               _last_modified_time;
-
-  std::list<VersionNode>                    _commit_tree;
-  std::unordered_map<UUIDv4::UUID, Version> _version_storage;
-
- public:
-  EditHistory(sl_element_id_t bound_image);
-  void SetAddTime();
-  void SetLastModifiedTime();
+  static std::atomic<std::chrono::system_clock::time_point> _cached_sys_time;
+  static std::atomic<std::chrono::steady_clock::time_point> _cached_steady_time;
 };
 };  // namespace puerhlab

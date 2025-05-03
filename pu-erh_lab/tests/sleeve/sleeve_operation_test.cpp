@@ -10,9 +10,13 @@
 #include "sleeve/sleeve_base.hpp"
 #include "sleeve/sleeve_element/sleeve_element.hpp"
 #include "sleeve/sleeve_element/sleeve_folder.hpp"
+#include "utils/clock/time_provider.hpp"
+
+
 
 TEST(SleeveOperationTest, NormalTest1) {
   using namespace puerhlab;
+  TimeProvider::Refresh();
   SleeveBase sl{0};
 
   sl.CreateElementToPath(L"root", L"test", ElementType::FOLDER);

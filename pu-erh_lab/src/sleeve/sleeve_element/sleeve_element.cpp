@@ -2,6 +2,8 @@
 
 #include <chrono>
 
+#include "utils/clock/time_provider.hpp"
+
 namespace puerhlab {
 
 SleeveElement::SleeveElement(sl_element_id_t id, file_name_t element_name)
@@ -22,14 +24,12 @@ auto SleeveElement::Clear() -> bool {
 }
 
 void SleeveElement::SetAddTime() {
-  auto now            = std::chrono::system_clock::now();
-  _added_time         = std::chrono::system_clock::to_time_t(now);
+  _added_time         = std::chrono::system_clock::to_time_t(TimeProvider::Now());
   _last_modified_time = _added_time;
 }
 
 void SleeveElement::SetLastModifiedTime() {
-  auto now            = std::chrono::system_clock::now();
-  _last_modified_time = std::chrono::system_clock::to_time_t(now);
+  _last_modified_time = std::chrono::system_clock::to_time_t(TimeProvider::Now());
 }
 
 void SleeveElement::IncrementRefCount() { ++_ref_count; }

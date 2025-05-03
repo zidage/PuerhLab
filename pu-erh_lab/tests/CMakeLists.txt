@@ -24,7 +24,7 @@ target_link_libraries(ImageLoaderTest PRIVATE GTest::gtest_main ImageDecoder Ima
 
 add_executable(SleeveOperationTest sleeve/sleeve_operation_test.cpp)
 target_include_directories(SleeveOperationTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
-target_link_libraries(SleeveOperationTest PRIVATE GTest::gtest_main ImageDecoder ImageLoader Exiv2 Sleeve)
+target_link_libraries(SleeveOperationTest PRIVATE GTest::gtest_main ImageDecoder ImageLoader Exiv2 Sleeve TimeProvider)
 
 
 include(GoogleTest)
