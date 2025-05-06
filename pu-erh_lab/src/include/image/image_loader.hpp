@@ -60,6 +60,7 @@ class ImageLoader {
   explicit ImageLoader(uint32_t buffer_size, size_t _use_thread, image_id_t start_id);
 
   void StartLoading(std::vector<image_path_t> images, DecodeType decode_type);
+  void StartLoading(std::shared_ptr<Image> source_img, DecodeType decode_type);
   auto LoadImage() -> std::shared_ptr<Image>;
 };
 };  // namespace puerhlab

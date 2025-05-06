@@ -74,6 +74,19 @@ void ImageLoader::StartLoading(std::vector<image_path_t> images, DecodeType deco
   }
 }
 
+/**
+ * @brief Loads a single of images
+ *
+ * @param images
+ * @param decode_type
+ */
+void ImageLoader::StartLoading(std::shared_ptr<Image> image, DecodeType decode_type) {
+  promises.emplace_back(std::make_shared<std::promise<image_id_t>>());
+  futures.emplace_back(promises[_next_id]->get_future());
+  _decoder_scheduler.ScheduleDecode(image, decode_type, promises[_next_id]);
+  ++_next_id;
+}
+
 auto ImageLoader::LoadImage() -> std::shared_ptr<Image> {
   // If there's no finished image in the buffer, will block the load routine
   std::shared_ptr<Image> img = _buffer_decoded->pop();

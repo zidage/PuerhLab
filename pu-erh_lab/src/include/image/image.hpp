@@ -47,17 +47,19 @@ enum class ImageType { DEFAULT, JPEG, PNG, TIFF, ARW, CR2, CR3, NEF, DNG };
  */
 class Image {
  public:
-  image_id_t      _image_id;
-  image_path_t    _image_path;
-  file_name_t     _image_name;
+  image_id_t        _image_id;
+  image_path_t      _image_path;
+  file_name_t       _image_name;
 
-  Exiv2::ExifData _exif_data;
-  bool            has_data;
-  cv::Mat         _image_data;
-  cv::Mat         _thumbnail;
-  ImageType       _image_type = ImageType::DEFAULT;
+  Exiv2::ExifData   _exif_data;
+  bool              has_data;
+  cv::Mat           _image_data;
+  cv::Mat           _thumbnail;
+  ImageType         _image_type = ImageType::DEFAULT;
 
-  hash_t          _checksum;
+  std::atomic<bool> _has_thumbnail;
+
+  hash_t            _checksum;
 
   explicit Image() = default;
   explicit Image(image_id_t image_id, image_path_t image_path, ImageType image_type, Exiv2::ExifData exif_data);
