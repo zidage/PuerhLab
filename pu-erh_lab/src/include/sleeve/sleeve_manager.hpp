@@ -2,19 +2,19 @@
 
 #include <memory>
 
-#include "buffer/sleeve_buffer/sleeve_buffer_manager.hpp"
 #include "image/image_loader.hpp"
 #include "sleeve_base.hpp"
 #include "sleeve_view.hpp"
+#include "storage/image_pool/image_pool_manager.hpp"
 
 namespace puerhlab {
 class SleeveManager {
  private:
-  std::shared_ptr<SleeveBase>          _base;
-  std::shared_ptr<SleeveView>          _view;
-  std::shared_ptr<SleeveBufferManager> _buffer_manager;
+  std::shared_ptr<SleeveBase>       _base;
+  std::shared_ptr<SleeveView>       _view;
+  std::shared_ptr<ImagePoolManager> _buffer_manager;
 
-  std::unique_ptr<ImageLoader>         _image_loader;
+  std::unique_ptr<ImageLoader>      _image_loader;
 
  public:
   explicit SleeveManager();
