@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <memory>
 #include <vector>
 
@@ -28,6 +29,6 @@ class SleeveView {
   SleeveView(std::shared_ptr<SleeveBase> base, std::shared_ptr<SleeveFolder> viewing_node, sl_path_t viewing_path);
 
   void UpdateView();
-  void LoadPreview();
+  void LoadPreview(uint32_t range_low, uint32_t range_high);
 };
 };  // namespace puerhlab
