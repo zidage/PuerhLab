@@ -34,6 +34,12 @@ add_library(SleeveFilter
 target_include_directories(SleeveFilter PUBLIC include)
 target_link_libraries(SleeveFilter PRIVATE Image EditHistory)
 
+add_library(ImagePool
+    storage/image_pool/image_pool_manager.cpp
+)
+target_include_directories(ImagePool PUBLIC include)
+target_link_libraries(ImagePool PRIVATE Image)
+
 add_library(Sleeve 
     sleeve/sleeve_base.cpp    
     mapper/sleeve/sleeve_mapper.cpp
@@ -46,17 +52,14 @@ add_library(Sleeve
 target_include_directories(Sleeve PUBLIC include)
 target_link_libraries(Sleeve PUBLIC Image ImageLoader SleeveFilter DuckDB EditHistory)
 
-# TODO: Placeholder
-add_library(ImagePool
- sleeve/sleeve_manager.cpp
-)
-target_include_directories(ImagePool PUBLIC include)
-target_link_libraries(ImagePool PRIVATE Image Sleeve EditHistory)
+add_library(SleeveView sleeve/sleeve_view.cpp)
+target_include_directories(SleeveView PUBLIC include)
+target_link_libraries(SleeveView PUBLIC Sleeve ImagePool)
 
 add_library(SleeveManager 
     sleeve/sleeve_manager.cpp)
 target_include_directories(SleeveManager PUBLIC include)
-target_link_libraries(SleeveManager PRIVATE Sleeve ImageLoader EditHistory)
+target_link_libraries(SleeveManager PRIVATE Sleeve SleeveView)
 
 
 

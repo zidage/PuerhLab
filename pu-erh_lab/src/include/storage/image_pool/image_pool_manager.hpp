@@ -15,30 +15,39 @@
 #include "type/type.hpp"
 
 namespace puerhlab {
+
+enum class AccessType { THUMB, FULL_IMG, META };
+
 class ImagePoolManager {
-  using ListIterator = std::list<std::pair<image_id_t, std::shared_ptr<Image>>>::iterator;
+  using ListIterator = std::list<image_id_t>::iterator;
 
  private:
-  std::unordered_map<image_id_t, ListIterator>             _cache_map;
-  std::list<std::pair<image_id_t, std::shared_ptr<Image>>> _cache_list;
-  uint32_t                                                 _capacity;
+  std::unordered_map<image_id_t, std::shared_ptr<Image>> _image_pool;
 
-  uint32_t                                                 _evict_count  = 0;
-  uint32_t                                                 _access_count = 0;
+  std::unordered_map<image_id_t, ListIterator>           _cache_map_thumb;
+  std::list<image_id_t>                                  _cache_list_thumb;
 
-  std::unordered_set<image_id_t>                           _with_thumb;
-  std::unordered_set<image_id_t>                           _with_full;
+  std::unordered_map<image_id_t, ListIterator>           _cache_map_full;
+  std::list<image_id_t>                                  _cache_list_full;
+
+  uint32_t                                               _capacity_thumb;
+  uint32_t                                               _capacity_full;
+
+  std::unordered_set<image_id_t>                         _with_thumb;
+  std::unordered_set<image_id_t>                         _with_full;
 
  public:
-  static const uint32_t _default_capacity = 256;
-  explicit ImagePoolManager();
-  explicit ImagePoolManager(uint32_t capacity);
+  static const uint32_t _default_capacity_thumb = 64;
+  static const uint32_t _default_capacity_full  = 3;
 
-  auto AccessElement(const image_id_t &id) -> std::optional<std::shared_ptr<Image>>;
-  void RecordAccess(const image_id_t &id, const std::shared_ptr<Image> image);
-  void RemoveRecord(const image_id_t &id);
-  auto Evict() -> std::optional<std::shared_ptr<Image>>;
-  auto Contains(const image_id_t &id) -> bool;
+  explicit ImagePoolManager();
+  explicit ImagePoolManager(uint32_t capacity_thumb, uint32_t capacity_full);
+
+  auto AccessElement(const image_id_t &id, const AccessType type) -> std::optional<std::shared_ptr<Image>>;
+  void RecordAccess(const image_id_t &id, const AccessType type);
+  void RemoveRecord(const image_id_t &id, const AccessType type);
+  auto Evict(const AccessType type) -> std::optional<std::shared_ptr<Image>>;
+  auto Contains(const image_id_t &id, const AccessType type) -> bool;
 
   void Flush();
   void Resize(uint32_t new_capacity);
