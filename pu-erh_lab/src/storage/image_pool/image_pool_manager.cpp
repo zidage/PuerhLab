@@ -12,8 +12,12 @@ ImagePoolManager::ImagePoolManager()
 ImagePoolManager::ImagePoolManager(uint32_t capacity_thumb, uint32_t capacity_full)
     : _capacity_thumb(capacity_thumb), _capacity_full(capacity_full) {}
 
+void ImagePoolManager::Insert(const std::shared_ptr<Image> img) { _image_pool[img->_image_id] = img; }
+
+auto ImagePoolManager::PoolContains(const image_id_t &id) -> bool { return _image_pool.contains(id); }
+
 auto ImagePoolManager::AccessElement(const image_id_t &id, const AccessType type)
-    -> std::optional<std::shared_ptr<Image>> {
+    -> std::optional<std::weak_ptr<Image>> {
   switch (type) {
     case AccessType::FULL_IMG: {
       auto it = _cache_map_full.find(id);
@@ -106,7 +110,7 @@ void ImagePoolManager::RemoveRecord(const image_id_t &id, const AccessType type)
   }
 }
 
-auto ImagePoolManager::Evict(const AccessType type) -> std::optional<std::shared_ptr<Image>> {
+auto ImagePoolManager::Evict(const AccessType type) -> std::optional<std::weak_ptr<Image>> {
   switch (type) {
     case AccessType::FULL_IMG: {
       if (_cache_list_full.empty()) {
@@ -115,6 +119,7 @@ auto ImagePoolManager::Evict(const AccessType type) -> std::optional<std::shared
       auto last = _cache_list_full.end();
       --last;
       _cache_map_full.erase(*last);
+      _with_full.erase(*last);
       auto evicted_img = _image_pool[*last];
       _cache_list_full.pop_back();
       return evicted_img;
@@ -126,6 +131,7 @@ auto ImagePoolManager::Evict(const AccessType type) -> std::optional<std::shared
       auto last = _cache_list_thumb.end();
       --last;
       _cache_map_thumb.erase(*last);
+      _with_thumb.erase(*last);
       auto evicted_img = _image_pool[*last];
       _cache_list_thumb.pop_back();
       return evicted_img;
@@ -137,16 +143,16 @@ auto ImagePoolManager::Evict(const AccessType type) -> std::optional<std::shared
   return std::nullopt;
 }
 
-auto ImagePoolManager::Contains(const image_id_t &id, const AccessType type) -> bool {
+auto ImagePoolManager::CacheContains(const image_id_t &id, const AccessType type) -> bool {
   switch (type) {
     case AccessType::FULL_IMG: {
-      return _cache_map_full.find(id) != _cache_map_full.end();
+      return _cache_map_full.contains(id);
     }
     case AccessType::THUMB: {
-      return _cache_map_thumb.find(id) != _cache_map_thumb.end();
+      return _cache_map_thumb.contains(id);
     }
     case AccessType::META: {
-      return true;
+      return _image_pool.contains(id);
     }
   }
   return false;

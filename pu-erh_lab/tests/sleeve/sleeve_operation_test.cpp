@@ -6,7 +6,6 @@
 #include <random>
 #include <string>
 
-#include "gtest/gtest.h"
 #include "sleeve/sleeve_base.hpp"
 #include "sleeve/sleeve_element/sleeve_element.hpp"
 #include "sleeve/sleeve_element/sleeve_folder.hpp"
