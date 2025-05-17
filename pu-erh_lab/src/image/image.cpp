@@ -78,4 +78,8 @@ void Image::LoadData(cv::Mat &&load_image) { _image_data = std::move(load_image)
 
 void Image::LoadThumbnail(cv::Mat &&thumbnail) { _thumbnail = std::move(thumbnail); }
 
+void Image::ClearData() { _image_data.release(); }
+
+void Image::ClearThumbnail() { _thumbnail.release(); }
+
 };  // namespace puerhlab

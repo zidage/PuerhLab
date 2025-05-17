@@ -53,6 +53,6 @@ class ImagePoolManager {
   auto CacheContains(const image_id_t &id, const AccessType type) -> bool;
 
   void Flush();
-  void Resize(uint32_t new_capacity);
+  void Clear();
 };
 };  // namespace puerhlab

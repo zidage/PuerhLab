@@ -12,10 +12,29 @@ ImagePoolManager::ImagePoolManager()
 ImagePoolManager::ImagePoolManager(uint32_t capacity_thumb, uint32_t capacity_full)
     : _capacity_thumb(capacity_thumb), _capacity_full(capacity_full) {}
 
+/**
+ * @brief Insert an image into the image pool
+ *
+ * @param img
+ */
 void ImagePoolManager::Insert(const std::shared_ptr<Image> img) { _image_pool[img->_image_id] = img; }
 
+/**
+ * @brief Check whether an image with the given id exists in the image pool
+ *
+ * @param id
+ * @return true image exists
+ * @return false image not exists
+ */
 auto ImagePoolManager::PoolContains(const image_id_t &id) -> bool { return _image_pool.contains(id); }
 
+/**
+ * @brief Access an with-data image from the cache
+ *
+ * @param id
+ * @param type
+ * @return std::optional<std::weak_ptr<Image>>
+ */
 auto ImagePoolManager::AccessElement(const image_id_t &id, const AccessType type)
     -> std::optional<std::weak_ptr<Image>> {
   switch (type) {
@@ -34,15 +53,22 @@ auto ImagePoolManager::AccessElement(const image_id_t &id, const AccessType type
         return std::nullopt;
       }
       // LRU, place the most recent record to the front
-      _cache_list_full.splice(_cache_list_thumb.begin(), _cache_list_thumb, it->second);
+      _cache_list_thumb.splice(_cache_list_thumb.begin(), _cache_list_thumb, it->second);
       return _image_pool[it->first];
     }
     case AccessType::META:
+      // For empty image, return it from the pool directly
       return _image_pool.at(id);
   }
   return std::nullopt;
 }
 
+/**
+ * @brief Add a with-data image into the cache
+ *
+ * @param id
+ * @param type
+ */
 void ImagePoolManager::RecordAccess(const image_id_t &id, const AccessType type) {
   switch (type) {
     case AccessType::FULL_IMG: {
@@ -85,6 +111,12 @@ void ImagePoolManager::RecordAccess(const image_id_t &id, const AccessType type)
   }
 }
 
+/**
+ * @brief Remove a record according to its id
+ *
+ * @param id
+ * @param type
+ */
 void ImagePoolManager::RemoveRecord(const image_id_t &id, const AccessType type) {
   switch (type) {
     case AccessType::FULL_IMG: {
@@ -93,6 +125,8 @@ void ImagePoolManager::RemoveRecord(const image_id_t &id, const AccessType type)
         _cache_list_full.erase(it->second);
         _cache_map_full.erase(it);
         _with_full.erase(it->second);
+        auto img = _image_pool[it->first];
+        img->ClearThumbnail();
       }
       break;
     }
@@ -102,6 +136,8 @@ void ImagePoolManager::RemoveRecord(const image_id_t &id, const AccessType type)
         _cache_list_thumb.erase(it->second);
         _cache_map_thumb.erase(it);
         _with_thumb.erase(it->second);
+        auto img = _image_pool[it->first];
+        img->ClearData();
       }
       break;
     }
@@ -110,6 +146,12 @@ void ImagePoolManager::RemoveRecord(const image_id_t &id, const AccessType type)
   }
 }
 
+/**
+ * @brief Evict an image from the cache
+ *
+ * @param type
+ * @return std::optional<std::weak_ptr<Image>>
+ */
 auto ImagePoolManager::Evict(const AccessType type) -> std::optional<std::weak_ptr<Image>> {
   switch (type) {
     case AccessType::FULL_IMG: {
@@ -122,6 +164,7 @@ auto ImagePoolManager::Evict(const AccessType type) -> std::optional<std::weak_p
       _with_full.erase(*last);
       auto evicted_img = _image_pool[*last];
       _cache_list_full.pop_back();
+      evicted_img->ClearData();
       return evicted_img;
     }
     case AccessType::THUMB: {
@@ -134,6 +177,7 @@ auto ImagePoolManager::Evict(const AccessType type) -> std::optional<std::weak_p
       _with_thumb.erase(*last);
       auto evicted_img = _image_pool[*last];
       _cache_list_thumb.pop_back();
+      evicted_img->ClearThumbnail();
       return evicted_img;
     }
     case AccessType::META: {
@@ -143,6 +187,14 @@ auto ImagePoolManager::Evict(const AccessType type) -> std::optional<std::weak_p
   return std::nullopt;
 }
 
+/**
+ * @brief Check whether an image resides in the cache
+ *
+ * @param id
+ * @param type
+ * @return true
+ * @return false
+ */
 auto ImagePoolManager::CacheContains(const image_id_t &id, const AccessType type) -> bool {
   switch (type) {
     case AccessType::FULL_IMG: {
@@ -156,6 +208,34 @@ auto ImagePoolManager::CacheContains(const image_id_t &id, const AccessType type
     }
   }
   return false;
+}
+
+/**
+ * @brief Flush the cache and clear all the corresponding image data
+ *
+ */
+void ImagePoolManager::Flush() {
+  _cache_list_full.clear();
+  _cache_list_thumb.clear();
+  _cache_map_full.clear();
+  _cache_map_thumb.clear();
+
+  for (auto &id : _with_thumb) {
+    _image_pool.at(id)->ClearThumbnail();
+  }
+
+  for (auto &id : _with_full) {
+    _image_pool.at(id)->ClearData();
+  }
+}
+
+/**
+ * @brief Clear the whole image pool as well as the cache
+ *
+ */
+void ImagePoolManager::Clear() {
+  Flush();
+  _image_pool.clear();
 }
 
 };  // namespace puerhlab

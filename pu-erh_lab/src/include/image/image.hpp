@@ -75,11 +75,10 @@ class Image {
   friend std::wostream &operator<<(std::wostream &os, const Image &img);
 
   void                  LoadData(cv::Mat &&load_image);
-
   void                  LoadThumbnail(cv::Mat &&thumbnail);
-
   auto                  GetImageData() -> cv::Mat &;
-
   void                  SetId(image_id_t image_id);
+  void                  ClearData();
+  void                  ClearThumbnail();
 };
 };  // namespace puerhlab
