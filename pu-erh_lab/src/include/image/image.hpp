@@ -65,7 +65,10 @@ class Image {
   bool              _has_thumb;
   bool              _has_exif;
 
-  explicit Image() = default;
+  bool              _thumb_pinned = false;
+  bool              _full_pinned  = false;
+
+  explicit Image()                = default;
   explicit Image(image_id_t image_id, image_path_t image_path, ImageType image_type, Exiv2::ExifData exif_data);
   explicit Image(image_id_t image_id, image_path_t image_path, file_name_t image_name, ImageType image_type,
                  Exiv2::ExifData exif_data);

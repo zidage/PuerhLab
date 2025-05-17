@@ -159,7 +159,13 @@ auto ImagePoolManager::Evict(const AccessType type) -> std::optional<std::weak_p
         return std::nullopt;
       }
       auto last = _cache_list_full.end();
-      --last;
+      do {
+        --last;
+      } while (_image_pool[*last]->_full_pinned && last != _cache_list_full.begin());
+
+      if (_image_pool[*last]->_full_pinned) {
+        return std::nullopt;
+      }
       _cache_map_full.erase(*last);
       _with_full.erase(*last);
       auto evicted_img = _image_pool[*last];
@@ -172,7 +178,13 @@ auto ImagePoolManager::Evict(const AccessType type) -> std::optional<std::weak_p
         return std::nullopt;
       }
       auto last = _cache_list_thumb.end();
-      --last;
+      do {
+        --last;
+      } while (_image_pool[*last]->_thumb_pinned && last != _cache_list_thumb.begin());
+
+      if (_image_pool[*last]->_thumb_pinned) {
+        return std::nullopt;
+      }
       _cache_map_thumb.erase(*last);
       _with_thumb.erase(*last);
       auto evicted_img = _image_pool[*last];
@@ -208,6 +220,25 @@ auto ImagePoolManager::CacheContains(const image_id_t &id, const AccessType type
     }
   }
   return false;
+}
+
+void ImagePoolManager::ResizeCache(const uint32_t new_capacity, const AccessType type) {
+  switch (type) {
+    case AccessType::FULL_IMG: {
+      while (_cache_list_full.size() > new_capacity) {
+        Evict(type);
+      }
+      _capacity_full = new_capacity;
+    }
+    case AccessType::THUMB: {
+      while (_cache_list_thumb.size() > new_capacity) {
+        Evict(type);
+      }
+      _capacity_thumb = new_capacity;
+    }
+    case AccessType::META: {
+    }
+  }
 }
 
 /**

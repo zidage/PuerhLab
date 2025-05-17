@@ -12,9 +12,9 @@ class SleeveManager {
  private:
   std::shared_ptr<SleeveBase>       _base;
   std::shared_ptr<SleeveView>       _view;
-  std::shared_ptr<ImagePoolManager> _buffer_manager;
+  std::shared_ptr<ImagePoolManager> _image_pool;
 
-  std::unique_ptr<ImageLoader>      _image_loader;
+  std::shared_ptr<ImageLoader>      _image_loader;
 
  public:
   explicit SleeveManager();
