@@ -52,7 +52,6 @@ class Image {
   file_name_t       _image_name;
 
   Exiv2::ExifData   _exif_data;
-  bool              has_data;
   cv::Mat           _image_data;
   cv::Mat           _thumbnail;
   ImageType         _image_type = ImageType::DEFAULT;
@@ -61,12 +60,12 @@ class Image {
 
   hash_t            _checksum;
 
-  bool              _has_full_img;
-  bool              _has_thumb;
-  bool              _has_exif;
+  std::atomic<bool> _has_full_img;
+  std::atomic<bool> _has_thumb;
+  std::atomic<bool> _has_exif;
 
-  bool              _thumb_pinned = false;
-  bool              _full_pinned  = false;
+  std::atomic<bool> _thumb_pinned = false;
+  std::atomic<bool> _full_pinned  = false;
 
   explicit Image()                = default;
   explicit Image(image_id_t image_id, image_path_t image_path, ImageType image_type, Exiv2::ExifData exif_data);

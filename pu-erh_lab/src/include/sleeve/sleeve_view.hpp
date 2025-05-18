@@ -34,10 +34,8 @@ class SleeveView {
   std::weak_ptr<SleeveFolder>               _viewing_node;
   sl_path_t                                 _viewing_path;
   std::vector<std::weak_ptr<SleeveElement>> _children;
-  std::shared_ptr<ImageLoader>              _loader;
 
   std::shared_ptr<ImagePoolManager>         _image_pool;
-  std::vector<DisplayingImage>              _to_display;
 
  public:
   SleeveView(std::shared_ptr<SleeveBase> base, std::shared_ptr<ImagePoolManager> image_pool);

@@ -32,4 +32,6 @@ auto SleeveFile::Copy(uint32_t new_id) const -> std::shared_ptr<SleeveElement> {
 }
 
 auto SleeveFile::GetImage() -> std::shared_ptr<Image> { return _image; }
+
+void SleeveFile::LoadImage(const std::shared_ptr<Image> img) { _image = img; }
 };  // namespace puerhlab

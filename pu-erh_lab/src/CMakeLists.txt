@@ -54,7 +54,7 @@ target_link_libraries(Sleeve PUBLIC Image ImageLoader SleeveFilter DuckDB EditHi
 
 add_library(SleeveView sleeve/sleeve_view.cpp)
 target_include_directories(SleeveView PUBLIC include)
-target_link_libraries(SleeveView PUBLIC Sleeve ImagePool)
+target_link_libraries(SleeveView PUBLIC Image Sleeve ImagePool)
 
 add_library(SleeveManager 
     sleeve/sleeve_manager.cpp)

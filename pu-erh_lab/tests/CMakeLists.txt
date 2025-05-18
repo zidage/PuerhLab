@@ -30,6 +30,11 @@ add_executable(ImagePoolTest storage/image_pool_test.cpp)
 target_include_directories(ImagePoolTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
 target_link_libraries(ImagePoolTest PRIVATE GTest::gtest_main Image ImagePool)
 
+add_executable(SleeveViewTest sleeve/sleeve_view_test.cpp)
+target_include_directories(SleeveViewTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
+target_link_libraries(SleeveViewTest PRIVATE GTest::gtest_main Image ImagePool Sleeve TimeProvider SleeveView)
+
+
 include(GoogleTest)
 gtest_discover_tests(SampleTest)
 gtest_discover_tests(SingleRawLoad)

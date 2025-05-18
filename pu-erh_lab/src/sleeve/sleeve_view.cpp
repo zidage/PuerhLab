@@ -64,24 +64,25 @@ void SleeveView::UpdateView() {
 }
 
 void SleeveView::LoadPreview(uint32_t range_low, uint32_t range_high) {
-  _loader = std::make_shared<ImageLoader>(64, 8, 0);
+  ImageLoader                            _loader{64, 8, 0};
   std::unordered_map<image_id_t, size_t> index_map;
   uint32_t                               empty_img_count = 0;
 
+  // to_display is a array to store images that require thumbnail lock.
+  // once LoadPreview returns, all the images in the to_display will be released from their thumbnail locks
+  std::vector<DisplayingImage>           to_display;
   range_high = range_high > _children.size() - 1 ? _children.size() - 1 : range_high;
-  // TODO: Improve the efficiency of to_display refresh
-  _to_display.clear();
   for (size_t i = range_low; i <= range_high; ++i) {
     auto e_shared = _children[i].lock();
     if (e_shared->_type == ElementType::FILE) {
       auto e_file  = std::dynamic_pointer_cast<SleeveFile>(e_shared);
       auto img_opt = _image_pool->AccessElement(e_file->GetImage()->_image_id, AccessType::THUMB);
       if (!img_opt.has_value()) {
-        _loader->StartLoading(e_file->GetImage(), DecodeType::THUMB);
+        _loader.StartLoading(e_file->GetImage(), DecodeType::THUMB);
         ++empty_img_count;
       } else {
         // TODO: notify the UI framework in advance
-        _to_display.push_back({img_opt.value(), true, false});
+        to_display.push_back({img_opt.value(), true, false});
       }
       index_map[e_file->GetImage()->_image_id] = i;
     } else {
@@ -96,11 +97,11 @@ void SleeveView::LoadPreview(uint32_t range_low, uint32_t range_high) {
     _image_pool->ResizeCache(range_high - range_low + 10, AccessType::THUMB);
   // TODO: Fetch the loaded image, notify UI to update
   for (size_t i = 0; i <= empty_img_count; i++) {
-    auto   loaded     = _loader->LoadImage();
+    auto   loaded     = _loader.LoadImage();
     size_t view_index = index_map.at(loaded->_image_id);
     // Do something with view_index...
     _image_pool->RecordAccess(loaded->_image_id, AccessType::THUMB);
-    _to_display.push_back({loaded, true, false});
+    to_display.push_back({loaded, true, false});
   }
 }
 
