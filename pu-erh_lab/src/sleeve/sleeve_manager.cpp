@@ -2,6 +2,8 @@
 
 #include <cassert>
 #include <codecvt>
+#include <cstddef>
+#include <cstdint>
 #include <exception>
 #include <memory>
 
@@ -41,6 +43,8 @@ auto SleeveManager::GetBase() -> std::shared_ptr<SleeveBase> { return _base; }
  */
 auto SleeveManager::GetView() -> std::shared_ptr<SleeveView> { return _view; }
 
+auto SleeveManager::GetImgCount() -> uint32_t { return _image_pool->Capacity(AccessType::META); }
+
 /**
  * @brief Load a batch of images to the destination path
  *
@@ -60,6 +64,7 @@ auto SleeveManager::LoadToPath(std::vector<image_path_t> img_os_paths, sl_path_t
       throw std::exception("Error creating element in sleeve");
     }
     std::static_pointer_cast<SleeveFile>(element.value())->SetImage(loaded);
+    _image_pool->Insert(loaded);
     total_size++;
     --expected_size;
   }

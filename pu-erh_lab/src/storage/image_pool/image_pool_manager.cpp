@@ -38,8 +38,7 @@ auto ImagePoolManager::Capacity(AccessType type) -> uint32_t {
       return _capacity_thumb;
     }
     case AccessType::META:
-      // For empty image, return it from the pool directly
-      return 0;
+      return _image_pool.size();
   }
   return 0;
 }

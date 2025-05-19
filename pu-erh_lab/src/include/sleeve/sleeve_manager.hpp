@@ -1,5 +1,7 @@
 #pragma once
 
+#include <opencv2/core/hal/interface.h>
+
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -22,6 +24,7 @@ class SleeveManager {
 
   auto GetBase() -> std::shared_ptr<SleeveBase>;
   auto GetView() -> std::shared_ptr<SleeveView>;
+  auto GetImgCount() -> uint32_t;
   auto LoadToPath(std::vector<image_path_t> img_os_path, sl_path_t dest) -> uint32_t;
 };
 };  // namespace puerhlab

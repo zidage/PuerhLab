@@ -74,12 +74,24 @@ std::wostream &operator<<(std::wostream &os, const Image &img) {
  *
  * @param image_data
  */
-void Image::LoadData(cv::Mat &&load_image) { _image_data = std::move(load_image); }
+void Image::LoadData(cv::Mat &&load_image) {
+  _image_data   = std::move(load_image);
+  _has_full_img = true;
+}
 
-void Image::LoadThumbnail(cv::Mat &&thumbnail) { _thumbnail = std::move(thumbnail); }
+void Image::LoadThumbnail(cv::Mat &&thumbnail) {
+  _thumbnail     = std::move(thumbnail);
+  _has_thumbnail = true;
+}
 
-void Image::ClearData() { _image_data.release(); }
+void Image::ClearData() {
+  _image_data.release();
+  _has_full_img = false;
+}
 
-void Image::ClearThumbnail() { _thumbnail.release(); }
+void Image::ClearThumbnail() {
+  _thumbnail.release();
+  _has_thumbnail = false;
+}
 
 };  // namespace puerhlab
