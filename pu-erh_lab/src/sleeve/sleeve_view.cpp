@@ -51,7 +51,7 @@ SleeveView::SleeveView(std::shared_ptr<SleeveBase> base, std::shared_ptr<ImagePo
 }
 
 void SleeveView::UpdateView() {
-  auto target = _base->GetWriteGuard(_viewing_path);
+  auto target = _base->GetReadGuard(_viewing_path);
   if (!target.has_value() || target.value()._access_element->_type != ElementType::FOLDER) {
     return;
   }
@@ -63,7 +63,13 @@ void SleeveView::UpdateView() {
   }
 }
 
-void SleeveView::LoadPreview(uint32_t range_low, uint32_t range_high) {
+void SleeveView::UpdateView(sl_path_t new_viewing_path) {
+  _viewing_path = new_viewing_path;
+  UpdateView();
+}
+
+void SleeveView::LoadPreview(uint32_t range_low, uint32_t range_high,
+                             std::function<void(size_t, std::weak_ptr<Image>)> callback) {
   ImageLoader                            _loader{64, 8, 0};
   std::unordered_map<image_id_t, size_t> index_map;
   uint32_t                               empty_img_count = 0;
@@ -82,6 +88,7 @@ void SleeveView::LoadPreview(uint32_t range_low, uint32_t range_high) {
         ++empty_img_count;
       } else {
         // TODO: notify the UI framework in advance
+        callback(i, img_opt.value());
         to_display.push_back({img_opt.value(), true, false});
       }
       index_map[e_file->GetImage()->_image_id] = i;
@@ -96,10 +103,11 @@ void SleeveView::LoadPreview(uint32_t range_low, uint32_t range_high) {
   if (_image_pool->Capacity(AccessType::THUMB) < range_high - range_low + 10)
     _image_pool->ResizeCache(range_high - range_low + 10, AccessType::THUMB);
   // TODO: Fetch the loaded image, notify UI to update
-  for (size_t i = 0; i <= empty_img_count; i++) {
+  for (size_t i = 0; i < empty_img_count; i++) {
     auto   loaded     = _loader.LoadImage();
     size_t view_index = index_map.at(loaded->_image_id);
     // Do something with view_index...
+    callback(view_index, loaded);
     _image_pool->RecordAccess(loaded->_image_id, AccessType::THUMB);
     to_display.push_back({loaded, true, false});
   }

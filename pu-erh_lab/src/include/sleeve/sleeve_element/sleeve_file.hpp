@@ -61,7 +61,7 @@ class SleeveFile : public SleeveElement {
 
   auto Copy(sl_element_id_t new_id) const -> std::shared_ptr<SleeveElement>;
   auto GetImage() -> std::shared_ptr<Image>;
-  void LoadImage(const std::shared_ptr<Image> img);
+  void SetImage(const std::shared_ptr<Image> img);
   ~SleeveFile();
 };
 };  // namespace puerhlab

@@ -54,6 +54,7 @@ void MetadataDecoder::Decode(std::vector<char> buffer, std::filesystem::path fil
 
     // Push the decoded image into the buffer queue
     std::shared_ptr<Image> img = std::make_shared<Image>(id, file_path, ImageType::DEFAULT, Exiv2::ExifData(exifData));
+    img->_image_name           = file_path.filename();
     result->push(img);
     promise->set_value(id);
     return;

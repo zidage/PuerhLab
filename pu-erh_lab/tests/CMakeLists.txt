@@ -32,7 +32,7 @@ target_link_libraries(ImagePoolTest PRIVATE GTest::gtest_main Image ImagePool)
 
 add_executable(SleeveViewTest sleeve/sleeve_view_test.cpp)
 target_include_directories(SleeveViewTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
-target_link_libraries(SleeveViewTest PRIVATE GTest::gtest_main Image ImagePool Sleeve TimeProvider SleeveView)
+target_link_libraries(SleeveViewTest PRIVATE GTest::gtest_main Image ImagePool Sleeve TimeProvider SleeveView SleeveManager)
 
 
 include(GoogleTest)
@@ -43,3 +43,4 @@ gtest_discover_tests(ImageDecoderTest)
 gtest_discover_tests(ImageLoaderTest)
 gtest_discover_tests(SleeveOperationTest)
 gtest_discover_tests(ImagePoolTest)
+gtest_discover_tests(SleeveViewTest)

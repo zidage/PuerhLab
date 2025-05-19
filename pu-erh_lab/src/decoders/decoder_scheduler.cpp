@@ -156,7 +156,7 @@ void DecoderScheduler::ScheduleDecode(std::shared_ptr<Image> source_img, DecodeT
   std::filesystem::path file_path(source_img->_image_path);
 
   auto                  task = std::make_shared<std::packaged_task<void()>>(
-      [decoder, buffer = std::move(buffer), decoded_buffer, &source_img, decode_promise]() mutable {
+      [decoder, buffer = std::move(buffer), decoded_buffer, source_img, decode_promise]() mutable {
         decoder->Decode(std::move(buffer), source_img, decoded_buffer, decode_promise);
       });
 

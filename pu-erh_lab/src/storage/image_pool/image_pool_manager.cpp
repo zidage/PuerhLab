@@ -1,5 +1,6 @@
 #include "storage/image_pool/image_pool_manager.hpp"
 
+#include <cstdint>
 #include <memory>
 #include <optional>
 
@@ -28,6 +29,20 @@ void ImagePoolManager::Insert(const std::shared_ptr<Image> img) { _image_pool[im
  */
 auto ImagePoolManager::PoolContains(const image_id_t &id) -> bool { return _image_pool.contains(id); }
 
+auto ImagePoolManager::Capacity(AccessType type) -> uint32_t {
+  switch (type) {
+    case AccessType::FULL_IMG: {
+      return _capacity_full;
+    }
+    case AccessType::THUMB: {
+      return _capacity_thumb;
+    }
+    case AccessType::META:
+      // For empty image, return it from the pool directly
+      return 0;
+  }
+  return 0;
+}
 /**
  * @brief Access an with-data image from the cache
  *

@@ -59,7 +59,7 @@ auto SleeveManager::LoadToPath(std::vector<image_path_t> img_os_paths, sl_path_t
     if (!element.has_value()) {
       throw std::exception("Error creating element in sleeve");
     }
-    std::static_pointer_cast<SleeveFile>(element.value())->LoadImage(loaded);
+    std::static_pointer_cast<SleeveFile>(element.value())->SetImage(loaded);
     total_size++;
     --expected_size;
   }

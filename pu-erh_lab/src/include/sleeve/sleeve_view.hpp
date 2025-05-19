@@ -44,6 +44,7 @@ class SleeveView {
              std::shared_ptr<SleeveFolder> viewing_node, sl_path_t viewing_path);
 
   void UpdateView();
-  void LoadPreview(uint32_t range_low, uint32_t range_high);
+  void UpdateView(sl_path_t new_viewing_path);
+  void LoadPreview(uint32_t range_low, uint32_t range_high, std::function<void(size_t, std::weak_ptr<Image>)> callback);
 };
 };  // namespace puerhlab

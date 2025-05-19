@@ -66,10 +66,17 @@ void ThumbnailDecoder::Decode(std::vector<char> buffer, std::filesystem::path fi
     promise->set_value(id);
   } catch (std::exception &e) {
     // TODO: Append error message to log
-    throw e;
   }
 }
 
 void ThumbnailDecoder::Decode(std::vector<char> buffer, std::shared_ptr<Image> source_img,
-                              std::shared_ptr<BufferQueue> result, std::shared_ptr<std::promise<image_id_t>> promise) {}
+                              std::shared_ptr<BufferQueue> result, std::shared_ptr<std::promise<image_id_t>> promise) {
+  // Open the datastream as a cv::Mat image
+  cv::Mat image_data((int)buffer.size(), 1, CV_8UC1, buffer.data());
+  // Using IMREAD_REDUCED_COLOR_8 flag to get the low-res thumbnail image
+  cv::Mat thumbnail = cv::imdecode(image_data, cv::IMREAD_REDUCED_COLOR_8);
+  source_img->LoadThumbnail(std::move(thumbnail));
+  result->push(source_img);
+  promise->set_value(source_img->_image_id);
+}
 };  // namespace puerhlab
