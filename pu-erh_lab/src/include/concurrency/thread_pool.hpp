@@ -30,8 +30,11 @@
 
 // TODO: Change tasks to MPMS Queue to improve efficiency
 
+#include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <future>
+#include <memory>
 #include <queue>
 #include <vector>
 

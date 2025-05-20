@@ -33,17 +33,21 @@ DisplayingImage::~DisplayingImage() {
 }
 
 SleeveView::SleeveView(std::shared_ptr<SleeveBase> base, std::shared_ptr<ImagePoolManager> image_pool)
-    : _base(base), _image_pool(image_pool) {}
+    : _base(base), _image_pool(image_pool), _loader(64, 24, 0) {}
 
 SleeveView::SleeveView(std::shared_ptr<SleeveBase> base, std::shared_ptr<ImagePoolManager> image_pool,
                        sl_path_t viewing_path)
-    : _base(base), _viewing_path(viewing_path), _image_pool(image_pool) {
+    : _base(base), _viewing_path(viewing_path), _image_pool(image_pool), _loader(64, 24, 0) {
   UpdateView();
 }
 
 SleeveView::SleeveView(std::shared_ptr<SleeveBase> base, std::shared_ptr<ImagePoolManager> image_pool,
                        std::shared_ptr<SleeveFolder> viewing_node, sl_path_t viewing_path)
-    : _base(base), _viewing_node(viewing_node), _viewing_path(viewing_path), _image_pool(image_pool) {
+    : _base(base),
+      _viewing_node(viewing_node),
+      _viewing_path(viewing_path),
+      _image_pool(image_pool),
+      _loader(64, 24, 0) {
   auto elements = _viewing_node.lock()->ListElements();
   for (auto &e : *elements) {
     _children.push_back(_base->AccessElementById(e).value());
@@ -70,7 +74,6 @@ void SleeveView::UpdateView(sl_path_t new_viewing_path) {
 
 void SleeveView::LoadPreview(uint32_t range_low, uint32_t range_high,
                              std::function<void(size_t, std::weak_ptr<Image>)> callback) {
-  ImageLoader                            _loader{64, 8, 0};
   std::unordered_map<image_id_t, size_t> index_map;
   uint32_t                               empty_img_count = 0;
 

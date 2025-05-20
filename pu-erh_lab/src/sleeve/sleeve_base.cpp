@@ -39,7 +39,6 @@
 #include <string>
 #include <unordered_set>
 
-#include "mapper/sleeve/sleeve_mapper.hpp"
 #include "sleeve/sleeve_element/sleeve_element.hpp"
 #include "sleeve/sleeve_element/sleeve_element_factory.hpp"
 #include "sleeve/sleeve_element/sleeve_folder.hpp"

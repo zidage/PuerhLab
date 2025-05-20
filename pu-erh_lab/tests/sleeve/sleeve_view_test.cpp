@@ -31,7 +31,6 @@ TEST(SleeveViewTest, DISABLED_SimpleTest1) {
 
 TEST(SleeveViewTest, DISABLED_SimpleTest2) {
   SleeveManager manager{};
-  ImageLoader   image_loader(128, 8, 0);
   image_path_t  path =
       L"D:\\Projects\\pu-erh_lab\\pu-erh_"
       L"lab\\tests\\resources\\sample_images\\jpg";
@@ -72,7 +71,6 @@ TEST(SleeveViewTest, DISABLED_SimpleTest2) {
 
 TEST(SleeveViewTest, FuzzyTest1) {
   SleeveManager manager{};
-  ImageLoader   image_loader(128, 8, 0);
   image_path_t  path =
       L"D:\\Projects\\pu-erh_lab\\pu-erh_"
       L"lab\\tests\\resources\\sample_images\\jpg";
@@ -94,12 +92,12 @@ TEST(SleeveViewTest, FuzzyTest1) {
   for (int i = 0; i < iter_count; i++) {
     try {
     auto start = std::chrono::high_resolution_clock::now();
-    auto low_idx = dist(rng);
+    uint32_t low_idx = dist(rng);
     view->LoadPreview(low_idx, low_idx + view_size, loaded_callback);
     auto end = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double, std::milli> duration = end - start;
     total_duration += duration;
-    if (i % 100 == 0)
+    if (i % 50 == 0)
       std::cout << std::format("Iteration: {}, Avg. View Loading Time: {}ms", i, total_duration.count() / i) << std::endl;
     } catch (std::exception &e) {
       std::cout << std::format("Test aborted, successful iterations: {}. Cause of abortion: {}", i, e.what()) << std::endl;

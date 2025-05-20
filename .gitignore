@@ -1055,3 +1055,5 @@ third_party/exiv2-0.28.4-windows/
 **/jpg/*.jpg
 
 *.pdf
+
+temp_folder/

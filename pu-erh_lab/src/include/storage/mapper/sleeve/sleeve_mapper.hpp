@@ -39,6 +39,7 @@
 #include "sleeve/sleeve_base.hpp"
 #include "sleeve/sleeve_element/sleeve_folder.hpp"
 #include "sleeve/sleeve_filter/filter_combo.hpp"
+#include "storage/image_pool/image_pool_manager.hpp"
 #include "type/type.hpp"
 
 namespace puerhlab {
@@ -48,20 +49,22 @@ namespace puerhlab {
  *
  */
 class SleeveMapper {
+ private:
+  duckdb_database   db;
+  duckdb_connection con;
+  file_path_t       _db_path;
+
+ public:
+  explicit SleeveMapper();
+  explicit SleeveMapper(file_path_t db_path);
+
   void CreateDB(file_path_t db_path);
-
-  void SetSleeve(SleeveBase sleeve_base);
-
-  void AddImage(const Image &image);
-
-  void UpdateImageById(image_id_t image_id, const Image &image);
-
+  void CaptureSleeve(const std::shared_ptr<SleeveBase> sleeve_base);
+  void CaptureImagePool(const std::shared_ptr<ImagePoolManager> image_pool);
+  void AddImage(const std::shared_ptr<Image> image);
+  void EditImage(const std::shared_ptr<Image> image, const image_id_t id);
   void RemoveImage(image_id_t image_id);
-
-  void RemoveImageByFilter(const FilterCombo &filter);
-
-  auto GetSleeveById(sleeve_id_t id) -> std::shared_ptr<SleeveBase>;
-
-  auto GetSleeveFolderByFilter(const FilterCombo &filter) -> std::shared_ptr<SleeveFolder>;
+  void RestoreSleeveFromDB();
+  void RemoveSleeveBase();
 };
 };  // namespace puerhlab

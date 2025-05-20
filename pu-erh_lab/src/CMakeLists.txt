@@ -42,7 +42,6 @@ target_link_libraries(ImagePool PRIVATE Image)
 
 add_library(Sleeve 
     sleeve/sleeve_base.cpp    
-    mapper/sleeve/sleeve_mapper.cpp
     sleeve/dentry_cache_manager.cpp
     sleeve/sleeve_element/sleeve_element_factory.cpp
     sleeve/sleeve_element/sleeve_element.cpp
@@ -56,10 +55,17 @@ add_library(SleeveView sleeve/sleeve_view.cpp)
 target_include_directories(SleeveView PUBLIC include)
 target_link_libraries(SleeveView PUBLIC Image Sleeve ImagePool)
 
+add_library(SleeveMapper     
+    storage/mapper/sleeve/sleeve_mapper.cpp)
+target_include_directories(SleeveMapper PUBLIC include)
+target_link_libraries(SleeveMapper PUBLIC Image Exiv2 Sleeve ImagePool DuckDB)
+
 add_library(SleeveManager 
     sleeve/sleeve_manager.cpp)
 target_include_directories(SleeveManager PUBLIC include)
 target_link_libraries(SleeveManager PRIVATE Sleeve SleeveView)
+
+
 
 
 

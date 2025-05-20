@@ -37,6 +37,8 @@ class SleeveView {
 
   std::shared_ptr<ImagePoolManager>         _image_pool;
 
+  ImageLoader                               _loader;
+
  public:
   SleeveView(std::shared_ptr<SleeveBase> base, std::shared_ptr<ImagePoolManager> image_pool);
   SleeveView(std::shared_ptr<SleeveBase> base, std::shared_ptr<ImagePoolManager> image_pool, sl_path_t viewing_path);
