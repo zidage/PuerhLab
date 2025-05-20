@@ -50,21 +50,26 @@ namespace puerhlab {
  */
 class SleeveMapper {
  private:
-  duckdb_database   db;
-  duckdb_connection con;
+  duckdb_database   _db;
+  duckdb_connection _con;
   file_path_t       _db_path;
+  bool              _db_connected = false;
+  bool              _initialized  = false;
 
  public:
   explicit SleeveMapper();
   explicit SleeveMapper(file_path_t db_path);
+  ~SleeveMapper();
 
-  void CreateDB(file_path_t db_path);
+  void ConnectDB(file_path_t db_path);
+  void InitDB();
   void CaptureSleeve(const std::shared_ptr<SleeveBase> sleeve_base);
   void CaptureImagePool(const std::shared_ptr<ImagePoolManager> image_pool);
+  void AddFilter(const std::shared_ptr<SleeveFolder> sleeve_folder, const std::shared_ptr<FilterCombo> filter);
   void AddImage(const std::shared_ptr<Image> image);
   void EditImage(const std::shared_ptr<Image> image, const image_id_t id);
   void RemoveImage(image_id_t image_id);
-  void RestoreSleeveFromDB();
-  void RemoveSleeveBase();
+  void RestoreSleeveFromDB(sleeve_id_t sleeve_id);
+  void RemoveSleeveBase(sleeve_id_t sleeve_id);
 };
 };  // namespace puerhlab
