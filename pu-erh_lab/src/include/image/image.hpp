@@ -58,7 +58,7 @@ class Image {
 
   std::atomic<bool> _has_thumbnail;
 
-  hash_t            _checksum;
+  p_hash_t          _checksum;
 
   std::atomic<bool> _has_full_img;
   std::atomic<bool> _has_thumb;

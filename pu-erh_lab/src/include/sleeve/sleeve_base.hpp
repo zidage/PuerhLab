@@ -60,8 +60,6 @@ class ElementAccessGuard {
 
 class SleeveBase {
  private:
-  sleeve_id_t                                                         _sleeve_id;
-  std::shared_ptr<SleeveFolder>                                       _root;
   size_t                                                              _size;
   sl_element_id_t                                                     _next_element_id;
   filter_id_t                                                         _next_filter_id;
@@ -81,9 +79,14 @@ class SleeveBase {
       -> std::shared_ptr<SleeveElement>;
 
  public:
+  sleeve_id_t                   _sleeve_id;
+  std::shared_ptr<SleeveFolder> _root;
+
   explicit SleeveBase(sleeve_id_t id);
 
   void InitializeRoot();
+
+  auto GetStorage() -> std::unordered_map<sl_element_id_t, std::shared_ptr<SleeveElement>> &;
 
   auto AccessElementById(const sl_element_id_t &id) const -> std::optional<std::shared_ptr<SleeveElement>>;
   auto AccessElementByPath(const sl_path_t &path) -> std::optional<std::shared_ptr<SleeveElement>>;

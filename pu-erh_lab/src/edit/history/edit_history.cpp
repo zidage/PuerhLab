@@ -1,11 +1,13 @@
 #include "edit/history/edit_history.hpp"
 
+#include <array>
 #include <chrono>
+#include <cstddef>
+#include <cstdint>
+#include <xxhash.hpp>
 
 #include "type/type.hpp"
 #include "utils/clock/time_provider.hpp"
-
-static UUIDv4::UUIDGenerator<std::mt19937_64> uuid_generator;
 
 namespace puerhlab {
 /**
@@ -14,8 +16,9 @@ namespace puerhlab {
  * @param bound_image
  */
 EditHistory::EditHistory(sl_element_id_t bound_image) : _bound_image(bound_image) {
-  _history_id = uuid_generator.getUUID();
   SetAddTime();
+  std::array<uint32_t, 2> input{bound_image, reinterpret_cast<std::uintptr_t>(&bound_image)};
+  _history_id = xxh::xxhash<64>(input);
 }
 
 /**

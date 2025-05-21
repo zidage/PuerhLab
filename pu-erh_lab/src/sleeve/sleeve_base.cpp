@@ -83,6 +83,10 @@ void SleeveBase::InitializeRoot() {
   _storage[_root->_element_id] = _root;
 }
 
+auto SleeveBase::GetStorage() -> std::unordered_map<sl_element_id_t, std::shared_ptr<SleeveElement>> & {
+  return _storage;
+}
+
 /**
  * @brief Access an element by its id from the map
  *

@@ -42,7 +42,7 @@ class Version {
   /**
    * @brief MurmurHash3 value for this version
    */
-  hash_t                  _version_id;
+  p_hash_t                _version_id;
   /**
    * @brief Last modified time for this version
    */

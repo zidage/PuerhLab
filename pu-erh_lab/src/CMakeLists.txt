@@ -26,7 +26,7 @@ target_link_libraries(ImageLoader PUBLIC ImageDecoder)
 
 add_library(EditHistory edit/history/edit_history.cpp edit/history/version.cpp)
 target_include_directories(EditHistory PUBLIC include)
-target_link_libraries(EditHistory PUBLIC uuid_v4 Image TimeProvider)
+target_link_libraries(EditHistory PUBLIC xxHash Image TimeProvider)
 
 add_library(SleeveFilter
     sleeve/sleeve_filter/filter_combo.cpp

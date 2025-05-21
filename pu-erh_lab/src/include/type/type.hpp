@@ -49,7 +49,7 @@ namespace puerhlab {
 #define filter_id_t     uint32_t
 
 // Hash type for version control
-#define hash_t          uint32_t
+#define p_hash_t        uint64_t
 
 // Used in buffer-like structures to represent frame id
 #define frame_id_t      uint32_t

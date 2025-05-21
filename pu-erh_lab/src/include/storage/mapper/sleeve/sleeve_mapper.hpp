@@ -56,6 +56,9 @@ class SleeveMapper {
   bool              _db_connected = false;
   bool              _initialized  = false;
 
+  sleeve_id_t       _captured_sleeve_id;
+  bool              _has_sleeve = false;
+
  public:
   explicit SleeveMapper();
   explicit SleeveMapper(file_path_t db_path);

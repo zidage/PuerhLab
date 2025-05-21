@@ -28,8 +28,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#include <uuid_v4.h>
-
 #include <cstdint>
 #include <list>
 #include <unordered_map>
@@ -44,7 +42,7 @@ class VersionNode {
  private:
   Version               &_ver_ref;
   std::list<VersionNode> _branch;
-  UUIDv4::UUID           _commit_id;
+  p_hash_t               _commit_id;
   uint32_t               _ref_count;
 
  public:
@@ -53,14 +51,14 @@ class VersionNode {
 
 class EditHistory {
  private:
-  UUIDv4::UUID                              _history_id;
-  sl_element_id_t                           _bound_image;
+  p_hash_t                              _history_id;
+  sl_element_id_t                       _bound_image;
 
-  std::time_t                               _added_time;
-  std::time_t                               _last_modified_time;
+  std::time_t                           _added_time;
+  std::time_t                           _last_modified_time;
 
-  std::list<VersionNode>                    _commit_tree;
-  std::unordered_map<UUIDv4::UUID, Version> _version_storage;
+  std::list<VersionNode>                _commit_tree;
+  std::unordered_map<p_hash_t, Version> _version_storage;
 
  public:
   EditHistory(sl_element_id_t bound_image);

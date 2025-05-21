@@ -76,7 +76,9 @@ set_target_properties(MurmurHash3 PROPERTIES
 set(OpenCV_DIR "D:/misc/opencv/build")
 find_package(OpenCV REQUIRED)
 
-
+# xxHash
+add_library(xxHash INTERFACE)
+target_include_directories(xxHash INTERFACE "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_party/xxhash")
 
 
 # Modules
