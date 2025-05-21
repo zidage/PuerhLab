@@ -42,9 +42,9 @@ set_target_properties(LibRaw PROPERTIES
 # DuckDB API
 add_library(DuckDB SHARED IMPORTED)
 set_target_properties(DuckDB PROPERTIES
-    IMPORTED_LOCATION "${CMAKE_SOURCE_DIR}\\pu-erh_lab\\third_party\\libduckdb-windows\\duckdb.dll"
-    IMPORTED_IMPLIB "${CMAKE_SOURCE_DIR}\\pu-erh_lab\\third_party\\libduckdb-windows\\duckdb.lib"
-    INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_SOURCE_DIR}\\pu-erh_lab\\third_party\\libduckdb-windows"
+    IMPORTED_LOCATION "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_party/libduckdb-windows/duckdb.dll"
+    IMPORTED_IMPLIB "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_party/libduckdb-windows/duckdb.lib"
+    INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_party/libduckdb-windows"
 )
 
 # Cereal

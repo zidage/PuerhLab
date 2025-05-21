@@ -34,8 +34,13 @@ add_executable(SleeveViewTest sleeve/sleeve_view_test.cpp)
 target_include_directories(SleeveViewTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
 target_link_libraries(SleeveViewTest PRIVATE GTest::gtest_main Image ImagePool Sleeve TimeProvider SleeveView SleeveManager)
 
+add_executable(SleeveMapperTest storage/sleeve_mapper_test.cpp)
+target_include_directories(SleeveMapperTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
+target_link_libraries(SleeveMapperTest PRIVATE GTest::gtest_main SleeveMapper)
+
 
 include(GoogleTest)
+# set(CMAKE_GTEST_DISCOVER_TESTS_DISCOVERY_MODE PRE_TEST)
 gtest_discover_tests(SampleTest)
 gtest_discover_tests(SingleRawLoad)
 gtest_discover_tests(SingleThumbnailLoad)
@@ -44,3 +49,4 @@ gtest_discover_tests(ImageLoaderTest)
 gtest_discover_tests(SleeveOperationTest)
 gtest_discover_tests(ImagePoolTest)
 gtest_discover_tests(SleeveViewTest)
+gtest_discover_tests(SleeveMapperTest)
