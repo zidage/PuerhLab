@@ -3,6 +3,7 @@
 #include <ctime>
 #include <string>
 
+#include "sleeve_filter.hpp"
 #include "type/type.hpp"
 #include "value_filter.hpp"
 
@@ -32,9 +33,10 @@ class ExifFilter : public ValueFilter<FilterableMetadata> {
   FilterableMetadata _metadata;
 
  public:
-  void SetFilter(FilterableMetadata metadata);
-  void ResetFilter();
-  auto GetPredicate() -> std::wstring;
-  auto Hash() -> hash_t;
+  FilterType   _type = FilterType::EXIF;
+  ElementOrder _order;
+  void         SetFilter(FilterableMetadata metadata, ElementOrder order);
+  void         ResetFilter();
+  auto         GetPredicate() -> std::wstring;
 };
 };  // namespace puerhlab

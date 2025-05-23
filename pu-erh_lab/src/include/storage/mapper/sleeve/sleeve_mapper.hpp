@@ -37,12 +37,32 @@
 
 #include "image/image.hpp"
 #include "sleeve/sleeve_base.hpp"
+#include "sleeve/sleeve_element/sleeve_element.hpp"
 #include "sleeve/sleeve_element/sleeve_folder.hpp"
 #include "sleeve/sleeve_filter/filter_combo.hpp"
 #include "storage/image_pool/image_pool_manager.hpp"
 #include "type/type.hpp"
 
 namespace puerhlab {
+
+class SleeveCaptureResources {
+ private:
+  void RecycleResources();
+
+ public:
+  duckdb_result             result;
+  duckdb_prepared_statement stmt_base;
+  duckdb_prepared_statement stmt_element;
+  duckdb_prepared_statement stmt_root;
+  duckdb_prepared_statement stmt_folder;
+  duckdb_prepared_statement stmt_file;
+  duckdb_prepared_statement stmt_filter;
+  duckdb_prepared_statement stmt_history;
+  duckdb_prepared_statement stmt_version;
+  SleeveCaptureResources(duckdb_connection &con);
+
+  ~SleeveCaptureResources();
+};
 
 /**
  * @brief Mapper interface for interacting with the DuckDB
@@ -58,6 +78,12 @@ class SleeveMapper {
 
   sleeve_id_t       _captured_sleeve_id;
   bool              _has_sleeve = false;
+
+  inline void       CaptureElement(std::shared_ptr<SleeveElement> element, SleeveCaptureResources &res);
+  inline void       CaptureFolder(std::shared_ptr<SleeveFolder> folder, SleeveCaptureResources &res);
+  inline void       CaptureFile(std::shared_ptr<SleeveFile> file, SleeveCaptureResources &res);
+  inline void       CaptureFilters(std::unordered_map<uint32_t, std::shared_ptr<FilterCombo>> &filter_storage,
+                                   SleeveCaptureResources                                     &res);
 
  public:
   explicit SleeveMapper();

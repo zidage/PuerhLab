@@ -87,6 +87,10 @@ auto SleeveBase::GetStorage() -> std::unordered_map<sl_element_id_t, std::shared
   return _storage;
 }
 
+auto SleeveBase::GetFilterStorage() -> std::unordered_map<filter_id_t, std::shared_ptr<FilterCombo>> & {
+  return _filter_storage;
+}
+
 /**
  * @brief Access an element by its id from the map
  *

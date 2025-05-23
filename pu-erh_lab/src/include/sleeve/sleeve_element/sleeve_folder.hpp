@@ -70,6 +70,7 @@ class SleeveFolder : public SleeveElement {
   void CreateIndex(const std::shared_ptr<FilterCombo> filter);
   auto GetElementIdByName(const file_name_t &name) const -> std::optional<sl_element_id_t>;
   auto ListElements() const -> std::shared_ptr<std::vector<sl_element_id_t>>;
+  auto ListFilters() const -> std::vector<filter_id_t>;
   auto Contains(const file_name_t &name) const -> bool;
   void RemoveNameFromMap(const file_name_t &name);
 

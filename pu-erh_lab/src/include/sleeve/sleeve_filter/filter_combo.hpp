@@ -36,12 +36,16 @@
 #include <unordered_map>
 #include <vector>
 
+#include "filters/sleeve_filter.hpp"
 #include "type/type.hpp"
 
 namespace puerhlab {
 class FilterCombo {
+ private:
+  std::vector<SleeveFilter> _filters;
+
  public:
-  uint32_t filter_id;
+  auto GetFilters() -> std::vector<SleeveFilter> &;
   auto CreateIndexOn(std::shared_ptr<std::set<sl_element_id_t>> _lists) -> std::shared_ptr<std::set<sl_element_id_t>>;
 };
 };  // namespace puerhlab

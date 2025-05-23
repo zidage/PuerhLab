@@ -65,7 +65,7 @@ class SleeveBase {
   filter_id_t                                                         _next_filter_id;
 
   std::unordered_map<sl_element_id_t, std::shared_ptr<SleeveElement>> _storage;
-  std::unordered_map<uint32_t, std::shared_ptr<FilterCombo>>          _filter_storage;
+  std::unordered_map<filter_id_t, std::shared_ptr<FilterCombo>>       _filter_storage;
 
   DCacheManager                                                       _dentry_cache;
   uint32_t                                                            _dcache_capacity;
@@ -87,6 +87,7 @@ class SleeveBase {
   void InitializeRoot();
 
   auto GetStorage() -> std::unordered_map<sl_element_id_t, std::shared_ptr<SleeveElement>> &;
+  auto GetFilterStorage() -> std::unordered_map<filter_id_t, std::shared_ptr<FilterCombo>> &;
 
   auto AccessElementById(const sl_element_id_t &id) const -> std::optional<std::shared_ptr<SleeveElement>>;
   auto AccessElementByPath(const sl_path_t &path) -> std::optional<std::shared_ptr<SleeveElement>>;
