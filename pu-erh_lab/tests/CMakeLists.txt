@@ -36,7 +36,7 @@ target_link_libraries(SleeveViewTest PRIVATE GTest::gtest_main Image ImagePool S
 
 add_executable(SleeveMapperTest storage/sleeve_mapper_test.cpp)
 target_include_directories(SleeveMapperTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
-target_link_libraries(SleeveMapperTest PRIVATE GTest::gtest_main SleeveMapper)
+target_link_libraries(SleeveMapperTest PRIVATE GTest::gtest_main SleeveMapper SleeveManager)
 
 
 include(GoogleTest)

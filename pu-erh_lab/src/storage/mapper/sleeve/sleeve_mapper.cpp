@@ -18,64 +18,89 @@
 namespace puerhlab {
 
 static std::string init_table_query =
-    "CREATE TABLE Sleeve (id PRIMARY KEY BIGINT);"
-    "CREATE TABLE Image (id PRIMARY KEY BIGINT, image_path TEXT, file_name TEXT, type INTEGER);"
-    "CREATE TABLE SleeveRoot (id PRIMARY KEY BIGINT);"
-    "CREATE TABLE Element (id BIGINT, type INTEGER, element_name TEXT, added_time TIMESTAMP, modified_time "
+    "CREATE TABLE Sleeve (id BIGINT PRIMARY KEY);"
+    "CREATE TABLE Image (id BIGINT PRIMARY KEY, image_path TEXT, file_name TEXT, type INTEGER);"
+    "CREATE TABLE SleeveRoot (id BIGINT PRIMARY KEY);"
+    "CREATE TABLE Element (id BIGINT PRIMARY KEY, type INTEGER, element_name TEXT, added_time TIMESTAMP, modified_time "
     "TIMESTAMP, "
     "ref_count BIGINT);"
     "CREATE TABLE FolderContent (folder_id BIGINT, element_name TEXT, element_id BIGINT);"
     "CREATE TABLE FileImage (file_id BIGINT, image_id BIGINT);"
-    "CREATE TABLE FilterCombo (combo_id PRIMARY KEY BIGINT, folder_id BIGINT);"
+    "CREATE TABLE FilterCombo (combo_id BIGINT PRIMARY KEY, folder_id BIGINT);"
     "CREATE TABLE Filter (combo_id BIGINT, type INTEGER, data JSON);"
-    "CREATE TABLE EditHistory (history_id PRIMARY KEY BIGINT, file_id BIGINT, added_time TIMESTAMP, modified_time "
+    "CREATE TABLE EditHistory (history_id BIGINT PRIMARY KEY, file_id BIGINT, added_time TIMESTAMP, modified_time "
     "TIMESTAMP);"
-    "CREATE TABLE Version (hash PRIMARY KEY BIGINT, history_id BIGINT, parent_hash BIGINT, content JSON)";
+    "CREATE TABLE Version (hash BIGINT PRIMARY KEY, history_id BIGINT, parent_hash BIGINT, content JSON)";
 
-static std::string base_insert_query = "INSERT OR REPLACE INTO Sleeve (id) VALUES (?)";
+static std::string base_insert_query = "INSERT OR REPLACE INTO Sleeve (id) VALUES (?);";
 
 static std::string element_insert_query =
     "INSERT OR REPLACE INTO Element (id,type,element_name,added_time,modified_time,ref_count) VALUES "
-    "(?,?,?,?,?,?)";
+    "(?,?,?,?,?,?);";
 
 static std::string root_insert_query =
     "INSERT INTO SleeveRoot (id) VALUES "
-    "(?)";
+    "(?);";
 
 static std::string folder_insert_query =
     "INSERT INTO FolderContent (folder_id,element_id) VALUES "
-    "(?,?)";
+    "(?,?);";
 
 static std::string file_insert_query =
     "INSERT INTO FileImage (file_id,image_id) VALUES "
-    "(?,?)";
+    "(?,?);";
 
 static std::string filter_insert_query =
-    "INSERT INTO Filter (combo_id,types,data) VALUES "
-    "(?,?,?,?)";
+    "INSERT INTO Filter (combo_id,type,data) VALUES "
+    "(?,?,?);";
 
 static std::string edit_history_insert_query =
     "INSERT OR REPLACE INTO EditHistory (history_id,file_id,added_time,modified_time) VALUES "
-    "(?,?,?,?)";
+    "(?,?,?,?);";
 
 static std::string version_insert_query =
     "INSERT INTO Version (hash,history_id,parent_hash,content) VALUES "
-    "(?,?,?,?)";
+    "(?,?,?,?);";
 
 void SleeveCaptureResources::RecycleResources() {
-  duckdb_destroy_prepare(&stmt_base);
-  duckdb_destroy_prepare(&stmt_element);
-  duckdb_destroy_prepare(&stmt_root);
-  duckdb_destroy_prepare(&stmt_folder);
-  duckdb_destroy_prepare(&stmt_file);
-  duckdb_destroy_prepare(&stmt_filter);
-  duckdb_destroy_prepare(&stmt_history);
-  duckdb_destroy_prepare(&stmt_version);
+  if (stmt_base) {
+    duckdb_destroy_prepare(&stmt_base);
+  }
+  if (stmt_element) {
+    duckdb_destroy_prepare(&stmt_element);
+  }
+  if (stmt_root) {
+    duckdb_destroy_prepare(&stmt_root);
+  }
+  if (stmt_folder) {
+    duckdb_destroy_prepare(&stmt_folder);
+  }
+  if (stmt_file) {
+    duckdb_destroy_prepare(&stmt_file);
+  }
+  if (stmt_filter) {
+    duckdb_destroy_prepare(&stmt_filter);
+  }
+  if (stmt_history) {
+    duckdb_destroy_prepare(&stmt_history);
+  }
+  if (stmt_version) {
+    duckdb_destroy_prepare(&stmt_version);
+  }
   duckdb_destroy_result(&result);
 }
 
-SleeveCaptureResources::SleeveCaptureResources(duckdb_connection &con) {
-  if (duckdb_prepare(con, element_insert_query.c_str(), &stmt_base) != DuckDBSuccess) {
+SleeveCaptureResources::SleeveCaptureResources(duckdb_connection &con)
+    : stmt_base(),
+      stmt_element(),
+      stmt_root(),
+      stmt_folder(),
+      stmt_file(),
+      stmt_filter(),
+      stmt_history(),
+      stmt_version() {
+  std::memset(&result, 0, sizeof(result));
+  if (duckdb_prepare(con, base_insert_query.c_str(), &stmt_base) != DuckDBSuccess) {
     RecycleResources();
     throw std::exception("Prepare failed when inserting sleeve base");
   }
@@ -87,7 +112,7 @@ SleeveCaptureResources::SleeveCaptureResources(duckdb_connection &con) {
     RecycleResources();
     throw std::exception("Prepare failed when inserting sleeve root");
   }
-  if (duckdb_prepare(con, element_insert_query.c_str(), &stmt_folder) != DuckDBSuccess) {
+  if (duckdb_prepare(con, folder_insert_query.c_str(), &stmt_folder) != DuckDBSuccess) {
     RecycleResources();
     throw std::exception("Prepare failed when inserting folder contents");
   }
@@ -150,6 +175,7 @@ void SleeveMapper::InitDB() {
     duckdb_destroy_result(&result);
     throw std::exception(error_message);
   }
+  _initialized = true;
 }
 
 void SleeveMapper::CaptureElement(std::unordered_map<uint32_t, std::shared_ptr<SleeveElement>> &storage,
@@ -242,7 +268,7 @@ void SleeveMapper::CaptureSleeve(const std::shared_ptr<SleeveBase> sleeve_base) 
   if (!_has_sleeve) {
     // Try to insert the sleeve base if there is no sleeve captured
     duckdb_bind_uint32(res.stmt_base, 1, sleeve_base->_sleeve_id);
-    if (duckdb_execute_prepared(res.stmt_element, &res.result) != DuckDBSuccess) {
+    if (duckdb_execute_prepared(res.stmt_base, &res.result) != DuckDBSuccess) {
       auto error_message = duckdb_result_error(&res.result);
       throw std::exception(error_message);
     }
