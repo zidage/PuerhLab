@@ -79,7 +79,8 @@ class SleeveMapper {
   sleeve_id_t       _captured_sleeve_id;
   bool              _has_sleeve = false;
 
-  inline void       CaptureElement(std::shared_ptr<SleeveElement> element, SleeveCaptureResources &res);
+  inline void       CaptureElement(std::unordered_map<uint32_t, std::shared_ptr<SleeveElement>> &storage,
+                                   SleeveCaptureResources                                       &res);
   inline void       CaptureFolder(std::shared_ptr<SleeveFolder> folder, SleeveCaptureResources &res);
   inline void       CaptureFile(std::shared_ptr<SleeveFile> file, SleeveCaptureResources &res);
   inline void       CaptureFilters(std::unordered_map<uint32_t, std::shared_ptr<FilterCombo>> &filter_storage,

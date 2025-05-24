@@ -12,12 +12,14 @@ class DatetimeFilter : public RangeFilter<std::time_t> {
  public:
   FilterType _type = FilterType::DATETIME;
 
- private:
-  std::time_t start_time;
-  std::time_t end_time;
+  void       SetFilter(std::time_t start_time, std::time_t end_time);
+  void       ResetFilter();
+  auto       GetPredicate() -> std::wstring;
+  auto       ToJSON() -> std::wstring;
+  void       FromJSON(const std::wstring j_str);
 
-  void        SetFilter(std::time_t start_time, std::time_t end_time);
-  void        ResetFilter();
-  auto        GetPredicate() -> std::wstring;
+ private:
+  std::time_t _start_time;
+  std::time_t _end_time;
 };
 };  // namespace puerhlab

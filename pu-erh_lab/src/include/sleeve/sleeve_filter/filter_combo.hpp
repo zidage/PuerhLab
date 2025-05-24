@@ -45,7 +45,8 @@ class FilterCombo {
   std::vector<SleeveFilter> _filters;
 
  public:
-  auto GetFilters() -> std::vector<SleeveFilter> &;
+  filter_id_t filter_id;
+  auto        GetFilters() -> std::vector<SleeveFilter> &;
   auto CreateIndexOn(std::shared_ptr<std::set<sl_element_id_t>> _lists) -> std::shared_ptr<std::set<sl_element_id_t>>;
 };
 };  // namespace puerhlab

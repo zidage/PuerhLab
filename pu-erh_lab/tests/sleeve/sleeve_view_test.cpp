@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <exception>
 #include <memory>
+#include <random>
 
 #include "sleeve/sleeve_manager.hpp"
 

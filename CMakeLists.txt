@@ -80,6 +80,9 @@ find_package(OpenCV REQUIRED)
 add_library(xxHash INTERFACE)
 target_include_directories(xxHash INTERFACE "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_party/xxhash")
 
+# JSON  
+add_library(JSON INTERFACE)
+target_include_directories(JSON INTERFACE "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_party/nlohmann_json")
 
 # Modules
 add_subdirectory(${CMAKE_SOURCE_DIR}/pu-erh_lab/src)

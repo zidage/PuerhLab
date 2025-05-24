@@ -38,5 +38,6 @@ class ExifFilter : public ValueFilter<FilterableMetadata> {
   void         SetFilter(FilterableMetadata metadata, ElementOrder order);
   void         ResetFilter();
   auto         GetPredicate() -> std::wstring;
+  auto         ToJSON() -> std::wstring;
 };
 };  // namespace puerhlab

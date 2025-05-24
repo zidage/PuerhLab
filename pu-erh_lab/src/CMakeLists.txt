@@ -29,10 +29,12 @@ target_include_directories(EditHistory PUBLIC include)
 target_link_libraries(EditHistory PUBLIC xxHash Image TimeProvider)
 
 add_library(SleeveFilter
+    sleeve/sleeve_filter/filters/exif_filter.cpp
+    sleeve/sleeve_filter/filters/datetime_filter.cpp
     sleeve/sleeve_filter/filter_combo.cpp
 )
 target_include_directories(SleeveFilter PUBLIC include)
-target_link_libraries(SleeveFilter PRIVATE Image EditHistory)
+target_link_libraries(SleeveFilter PRIVATE Image EditHistory JSON)
 
 add_library(ImagePool
     storage/image_pool/image_pool_manager.cpp
