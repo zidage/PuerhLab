@@ -64,6 +64,18 @@ class SleeveCaptureResources {
   ~SleeveCaptureResources();
 };
 
+class ImageCaptureResources {
+ private:
+  void RecycleResources();
+
+ public:
+  duckdb_result             result;
+  duckdb_prepared_statement stmt_img;
+  ImageCaptureResources(duckdb_connection &con);
+
+  ~ImageCaptureResources();
+};
+
 /**
  * @brief Mapper interface for interacting with the DuckDB
  *

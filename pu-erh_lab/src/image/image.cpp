@@ -31,10 +31,13 @@
 #include "image/image.hpp"
 
 #include <exiv2/exif.hpp>
+#include <exiv2/tags.hpp>
+#include <json.hpp>
+#include <string>
 #include <utility>
 
 namespace puerhlab {
-
+using json = nlohmann::json;
 /**
  * @brief Construct a new Image object
  *
@@ -43,18 +46,18 @@ namespace puerhlab {
  * @param image_type the type of the image
  */
 Image::Image(image_id_t image_id, image_path_t image_path, ImageType image_type, Exiv2::ExifData exif_data)
-    : _image_id(image_id), _image_path(image_path), _exif_data(std::move(exif_data)), _image_type(image_type) {}
+    : _image_id(image_id), _image_path(image_path), _exif_data(exif_data), _image_type(image_type) {}
 
 Image::Image(image_id_t image_id, image_path_t image_path, file_name_t image_name, ImageType image_type,
              Exiv2::ExifData exif_data)
     : _image_id(image_id),
       _image_path(image_path),
       _image_name(image_name),
-      _exif_data(std::move(exif_data)),
+      _exif_data(exif_data),
       _image_type(image_type) {}
 
 Image::Image(image_path_t image_path, ImageType image_type, Exiv2::ExifData exif_data)
-    : _image_path(image_path), _exif_data(std::move(exif_data)), _image_type(image_type) {}
+    : _image_path(image_path), _exif_data(exif_data), _image_type(image_type) {}
 
 Image::Image(Image &&other)
     : _image_id(other._image_id),
@@ -94,4 +97,16 @@ void Image::ClearThumbnail() {
   _has_thumbnail = false;
 }
 
+auto Image::ExifToJson() -> std::string {
+  json o;
+  if (!_has_exif) {
+    return nlohmann::to_string(o);
+  }
+  for (const auto &exif : _exif_data) {
+    auto type_name  = exif.typeName();
+    auto type_value = exif.value().toString();
+    o[type_name]    = type_value;
+  }
+  return nlohmann::to_string(o);
+}
 };  // namespace puerhlab

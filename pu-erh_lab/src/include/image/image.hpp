@@ -36,6 +36,7 @@
 #include <memory>
 #include <opencv2/opencv.hpp>
 #include <ostream>
+#include <string>
 #include <type/type.hpp>
 
 namespace puerhlab {
@@ -82,5 +83,6 @@ class Image {
   void                  SetId(image_id_t image_id);
   void                  ClearData();
   void                  ClearThumbnail();
+  auto                  ExifToJson() -> std::string;
 };
 };  // namespace puerhlab

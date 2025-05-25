@@ -1054,6 +1054,8 @@ third_party/exiv2-0.28.4-windows/
 *.dng
 **/jpg/*.jpg
 
+sample_images/
+
 *.pdf
 
 temp_folder/

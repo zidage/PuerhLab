@@ -8,7 +8,6 @@
 #include <exception>
 #include <filesystem>
 #include <memory>
-#include <unordered_set>
 
 #include "sleeve/sleeve_element/sleeve_element.hpp"
 #include "sleeve/sleeve_element/sleeve_file.hpp"
@@ -19,7 +18,7 @@ namespace puerhlab {
 
 static std::string init_table_query =
     "CREATE TABLE Sleeve (id BIGINT PRIMARY KEY);"
-    "CREATE TABLE Image (id BIGINT PRIMARY KEY, image_path TEXT, file_name TEXT, type INTEGER);"
+    "CREATE TABLE Image (id BIGINT PRIMARY KEY, image_path TEXT, file_name TEXT, type INTEGER, metadata JSON);"
     "CREATE TABLE SleeveRoot (id BIGINT PRIMARY KEY);"
     "CREATE TABLE Element (id BIGINT PRIMARY KEY, type INTEGER, element_name TEXT, added_time TIMESTAMP, modified_time "
     "TIMESTAMP, "
@@ -61,6 +60,10 @@ static std::string edit_history_insert_query =
 static std::string version_insert_query =
     "INSERT INTO Version (hash,history_id,parent_hash,content) VALUES "
     "(?,?,?,?);";
+
+static std::string image_insert_query =
+    "INSERT INTO Image (id,image_path,file_name,type,metadata) VALUES "
+    "(?,?,?,?,?);";
 
 void SleeveCaptureResources::RecycleResources() {
   if (stmt_base) {
@@ -136,6 +139,22 @@ SleeveCaptureResources::SleeveCaptureResources(duckdb_connection &con)
 
 SleeveCaptureResources::~SleeveCaptureResources() { RecycleResources(); }
 
+void ImageCaptureResources::RecycleResources() {
+  if (stmt_img) {
+    duckdb_destroy_prepare(&stmt_img);
+  }
+}
+
+ImageCaptureResources::ImageCaptureResources(duckdb_connection &con) : stmt_img() {
+  std::memset(&result, 0, sizeof(result));
+  if (duckdb_prepare(con, image_insert_query.c_str(), &stmt_img) != DuckDBSuccess) {
+    RecycleResources();
+    throw std::exception("Prepare failed when inserting images");
+  }
+}
+
+ImageCaptureResources::~ImageCaptureResources() { RecycleResources(); }
+
 SleeveMapper::SleeveMapper() {}
 
 SleeveMapper::SleeveMapper(file_path_t db_path) {
@@ -179,7 +198,7 @@ void SleeveMapper::InitDB() {
 }
 
 void SleeveMapper::CaptureElement(std::unordered_map<uint32_t, std::shared_ptr<SleeveElement>> &storage,
-                                  SleeveCaptureResources                                       &res) {
+                                  SleeveCaptureResources                                       &stmts) {
   std::wstring_convert<std::codecvt_utf8<wchar_t>> conv;
   for (auto &val : storage) {
     auto element = val.second;
@@ -189,58 +208,58 @@ void SleeveMapper::CaptureElement(std::unordered_map<uint32_t, std::shared_ptr<S
     std::strftime(modified_time, sizeof(modified_time), "%Y-%m-%d %H:%M:%S",
                   std::gmtime(&element->_last_modified_time));
 
-    duckdb_bind_uint32(res.stmt_element, 1, element->_element_id);
-    duckdb_bind_uint32(res.stmt_element, 2, static_cast<uint32_t>(element->_type));
-    duckdb_bind_varchar(res.stmt_element, 3, conv.to_bytes(element->_element_name).c_str());
-    duckdb_bind_varchar(res.stmt_element, 4, added_time);
-    duckdb_bind_varchar(res.stmt_element, 5, modified_time);
-    duckdb_bind_uint32(res.stmt_element, 6, element->_ref_count);
+    duckdb_bind_uint32(stmts.stmt_element, 1, element->_element_id);
+    duckdb_bind_uint32(stmts.stmt_element, 2, static_cast<uint32_t>(element->_type));
+    duckdb_bind_varchar(stmts.stmt_element, 3, conv.to_bytes(element->_element_name).c_str());
+    duckdb_bind_varchar(stmts.stmt_element, 4, added_time);
+    duckdb_bind_varchar(stmts.stmt_element, 5, modified_time);
+    duckdb_bind_uint32(stmts.stmt_element, 6, element->_ref_count);
 
     // Execute insertion of an element
-    if (duckdb_execute_prepared(res.stmt_element, &res.result) != DuckDBSuccess) {
-      auto error_message = duckdb_result_error(&res.result);
+    if (duckdb_execute_prepared(stmts.stmt_element, &stmts.result) != DuckDBSuccess) {
+      auto error_message = duckdb_result_error(&stmts.result);
       throw std::exception(error_message);
     }
 
-    duckdb_destroy_result(&res.result);
+    duckdb_destroy_result(&stmts.result);
 
     if (element->_type == ElementType::FOLDER) {
-      CaptureFolder(std::static_pointer_cast<SleeveFolder>(element), res);
+      CaptureFolder(std::static_pointer_cast<SleeveFolder>(element), stmts);
     } else if (element->_type == ElementType::FILE) {
-      CaptureFile(std::static_pointer_cast<SleeveFile>(element), res);
+      CaptureFile(std::static_pointer_cast<SleeveFile>(element), stmts);
     }
   }
 }
 
-void SleeveMapper::CaptureFolder(std::shared_ptr<SleeveFolder> folder, SleeveCaptureResources &res) {
+void SleeveMapper::CaptureFolder(std::shared_ptr<SleeveFolder> folder, SleeveCaptureResources &stmts) {
   auto folder_content = folder->ListElements();
   for (auto &content_id : *folder_content) {
     // FolderContent (folder_id BIGINT, element_id BIGINT);
-    duckdb_bind_uint32(res.stmt_folder, 1, folder->_element_id);
-    duckdb_bind_uint32(res.stmt_folder, 2, content_id);
+    duckdb_bind_uint32(stmts.stmt_folder, 1, folder->_element_id);
+    duckdb_bind_uint32(stmts.stmt_folder, 2, content_id);
     // Execute insertion of an folder content
-    if (duckdb_execute_prepared(res.stmt_folder, &res.result) != DuckDBSuccess) {
-      auto error_message = duckdb_result_error(&res.result);
+    if (duckdb_execute_prepared(stmts.stmt_folder, &stmts.result) != DuckDBSuccess) {
+      auto error_message = duckdb_result_error(&stmts.result);
       throw std::exception(error_message);
     }
   }
-  duckdb_destroy_result(&res.result);
+  duckdb_destroy_result(&stmts.result);
 }
 
-void SleeveMapper::CaptureFile(std::shared_ptr<SleeveFile> file, SleeveCaptureResources &res) {
-  duckdb_bind_uint32(res.stmt_file, 1, file->_element_id);
-  duckdb_bind_uint32(res.stmt_file, 2, file->GetImage()->_image_id);
-  if (duckdb_execute_prepared(res.stmt_file, &res.result) != DuckDBSuccess) {
-    auto error_message = duckdb_result_error(&res.result);
+void SleeveMapper::CaptureFile(std::shared_ptr<SleeveFile> file, SleeveCaptureResources &stmts) {
+  duckdb_bind_uint32(stmts.stmt_file, 1, file->_element_id);
+  duckdb_bind_uint32(stmts.stmt_file, 2, file->GetImage()->_image_id);
+  if (duckdb_execute_prepared(stmts.stmt_file, &stmts.result) != DuckDBSuccess) {
+    auto error_message = duckdb_result_error(&stmts.result);
     throw std::exception(error_message);
   }
   // TODO: handle with edit histories
   // For now edit history will not be stored in DB, since I haven't started working on the editor.
-  duckdb_destroy_result(&res.result);
+  duckdb_destroy_result(&stmts.result);
 }
 
 void SleeveMapper::CaptureFilters(std::unordered_map<uint32_t, std::shared_ptr<FilterCombo>> &filter_storage,
-                                  SleeveCaptureResources                                     &res) {
+                                  SleeveCaptureResources                                     &stmts) {
   std::wstring_convert<std::codecvt_utf8<wchar_t>> conv;
   for (auto &combo_it : filter_storage) {
     auto  combo    = combo_it.second;
@@ -248,9 +267,9 @@ void SleeveMapper::CaptureFilters(std::unordered_map<uint32_t, std::shared_ptr<F
     auto &filters  = combo->GetFilters();
     for (auto &filter : filters) {
       // INSERT INTO Filter (combo_id,types,data)
-      duckdb_bind_uint32(res.stmt_filter, 1, combo_id);
-      duckdb_bind_uint32(res.stmt_filter, 2, static_cast<uint32_t>(filter._type));
-      duckdb_bind_varchar(res.stmt_filter, 3, conv.to_bytes(filter.ToJSON()).c_str());
+      duckdb_bind_uint32(stmts.stmt_filter, 1, combo_id);
+      duckdb_bind_uint32(stmts.stmt_filter, 2, static_cast<uint32_t>(filter._type));
+      duckdb_bind_varchar(stmts.stmt_filter, 3, conv.to_bytes(filter.ToJSON()).c_str());
     }
   }
 }
@@ -264,29 +283,52 @@ void SleeveMapper::CaptureSleeve(const std::shared_ptr<SleeveBase> sleeve_base) 
     throw std::exception("A sleeve has already been captured and cannot be overwritten");
   }
 
-  SleeveCaptureResources res{_con};
+  SleeveCaptureResources stmts{_con};
   if (!_has_sleeve) {
     // Try to insert the sleeve base if there is no sleeve captured
-    duckdb_bind_uint32(res.stmt_base, 1, sleeve_base->_sleeve_id);
-    if (duckdb_execute_prepared(res.stmt_base, &res.result) != DuckDBSuccess) {
-      auto error_message = duckdb_result_error(&res.result);
+    duckdb_bind_uint32(stmts.stmt_base, 1, sleeve_base->_sleeve_id);
+    if (duckdb_execute_prepared(stmts.stmt_base, &stmts.result) != DuckDBSuccess) {
+      auto error_message = duckdb_result_error(&stmts.result);
       throw std::exception(error_message);
     }
   }
-  duckdb_destroy_result(&res.result);
+  duckdb_destroy_result(&stmts.result);
 
   // Insert the root
-  duckdb_bind_uint64(res.stmt_root, 1, static_cast<uint64_t>(sleeve_base->_root->_element_id));
-  if (duckdb_execute_prepared(res.stmt_root, &res.result) != DuckDBSuccess) {
-    auto error_message = duckdb_result_error(&res.result);
+  duckdb_bind_uint64(stmts.stmt_root, 1, static_cast<uint64_t>(sleeve_base->_root->_element_id));
+  if (duckdb_execute_prepared(stmts.stmt_root, &stmts.result) != DuckDBSuccess) {
+    auto error_message = duckdb_result_error(&stmts.result);
     throw std::exception(error_message);
   }
-  duckdb_destroy_result(&res.result);
+  duckdb_destroy_result(&stmts.result);
 
   // Capture elements
-  CaptureElement(storage, res);
+  CaptureElement(storage, stmts);
 
   // Capture filters
-  CaptureFilters(sleeve_base->GetFilterStorage(), res);
+  CaptureFilters(sleeve_base->GetFilterStorage(), stmts);
+}
+
+void SleeveMapper::CaptureImagePool(const std::shared_ptr<ImagePoolManager> image_pool) {
+  if (!_initialized || !_db_connected) {
+    throw std::exception("Cannot connect to a valid sleeve db");
+  }
+  std::wstring_convert<std::codecvt_utf8<wchar_t>> conv;
+  ImageCaptureResources                            stmts{_con};
+  auto                                            &pool = image_pool->GetPool();
+  for (auto &pool_val : pool) {
+    auto img = pool_val.second;
+    // INSERT INTO Image (id,image_path,file_name,type,metadata)
+    duckdb_bind_uint32(stmts.stmt_img, 1, img->_image_id);
+    duckdb_bind_varchar(stmts.stmt_img, 2, img->_image_path.string().c_str());
+    duckdb_bind_varchar(stmts.stmt_img, 3, conv.to_bytes(img->_image_name).c_str());
+    duckdb_bind_uint32(stmts.stmt_img, 4, static_cast<uint32_t>(img->_image_type));
+    duckdb_bind_varchar(stmts.stmt_img, 5, img->ExifToJson().c_str());
+    if (duckdb_execute_prepared(stmts.stmt_img, &stmts.result) != DuckDBSuccess) {
+      auto error_message = duckdb_result_error(&stmts.result);
+      throw std::exception(error_message);
+    }
+    duckdb_destroy_result(&stmts.result);
+  }
 }
 };  // namespace puerhlab

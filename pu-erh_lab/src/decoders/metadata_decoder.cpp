@@ -31,6 +31,7 @@
 
 #include "decoders/metadata_decoder.hpp"
 
+#include <exiv2/exif.hpp>
 #include <filesystem>
 
 #include "type/type.hpp"
@@ -49,14 +50,21 @@ void MetadataDecoder::Decode(std::vector<char> buffer, std::filesystem::path fil
                              std::shared_ptr<BufferQueue> result, image_id_t id,
                              std::shared_ptr<std::promise<image_id_t>> promise) {
   try {
+    std::shared_ptr<Image> img       = std::make_shared<Image>(id, file_path, ImageType::DEFAULT, Exiv2::ExifData());
+    // auto                   exiv2_img = Exiv2::ImageFactory::open((const Exiv2::byte *)buffer.data(), buffer.size());
     auto                   exiv2_img = Exiv2::ImageFactory::open((const Exiv2::byte *)buffer.data(), buffer.size());
-    Exiv2::ExifData       &exifData  = exiv2_img->exifData();
-
     // Push the decoded image into the buffer queue
-    std::shared_ptr<Image> img = std::make_shared<Image>(id, file_path, ImageType::DEFAULT, Exiv2::ExifData(exifData));
-    img->_image_name           = file_path.filename();
+    exiv2_img->readMetadata();
+    Exiv2::ExifData &original_exif = exiv2_img->exifData();
+    img->_has_exif                 = !original_exif.empty();
+    if (!original_exif.empty()) {
+      img->_exif_data = original_exif;
+    }
+    img->_image_name = file_path.filename();
+
     result->push(img);
     promise->set_value(id);
+
     return;
   } catch (std::exception &e) {
     // TODO: Append error message to log

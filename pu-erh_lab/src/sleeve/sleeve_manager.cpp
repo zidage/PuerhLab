@@ -43,6 +43,8 @@ auto SleeveManager::GetBase() -> std::shared_ptr<SleeveBase> { return _base; }
  */
 auto SleeveManager::GetView() -> std::shared_ptr<SleeveView> { return _view; }
 
+auto SleeveManager::GetPool() -> std::shared_ptr<ImagePoolManager> { return _image_pool; }
+
 auto SleeveManager::GetImgCount() -> uint32_t { return _image_pool->Capacity(AccessType::META); }
 
 /**

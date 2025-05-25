@@ -14,6 +14,13 @@ ImagePoolManager::ImagePoolManager(uint32_t capacity_thumb, uint32_t capacity_fu
     : _capacity_thumb(capacity_thumb), _capacity_full(capacity_full) {}
 
 /**
+ * @brief
+ *
+ * @return std::unordered_map<image_id_t, std::shared_ptr<Image>>
+ */
+auto ImagePoolManager::GetPool() -> std::unordered_map<image_id_t, std::shared_ptr<Image>> & { return _image_pool; }
+
+/**
  * @brief Insert an image into the image pool
  *
  * @param img

@@ -8,7 +8,7 @@ add_library(Image
     image/image.cpp
 )
 target_include_directories(Image PUBLIC include)
-target_link_libraries(Image PUBLIC Exiv2 ${OpenCV_LIBS} LibRaw TimeProvider)
+target_link_libraries(Image PUBLIC Exiv2 ${OpenCV_LIBS} LibRaw TimeProvider JSON)
 
 
 add_library(ImageDecoder 

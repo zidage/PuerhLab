@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <unordered_map>
 
 #include "image/image_loader.hpp"
 #include "sleeve_base.hpp"
@@ -24,6 +25,7 @@ class SleeveManager {
 
   auto GetBase() -> std::shared_ptr<SleeveBase>;
   auto GetView() -> std::shared_ptr<SleeveView>;
+  auto GetPool() -> std::shared_ptr<ImagePoolManager>;
   auto GetImgCount() -> uint32_t;
   auto LoadToPath(std::vector<image_path_t> img_os_path, sl_path_t dest) -> uint32_t;
 };
