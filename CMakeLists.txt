@@ -6,13 +6,14 @@ set(CMAKE_CXX_STANDARD 20)
 #set(CMAKE_C_COMPILER "clang")
 #set(CMAKE_CXX_COMPILER "clang++")
 # Compiler flags.
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /W4 /external:anglebrackets /external:W0 /D_DEBUG /EHsc ")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /W4 /external:anglebrackets /external:W0 /D_DEBUG /EHsc")
 set(CMAKE_LINKER_FLAGS_DEBUG "/DEBUG")
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-set(BUILD_STATIC_LIB OFF)
+set(BUILD_STATIC_LIB ON)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-
+set(CMAKE_VS_USE_DEBUG_LIBRARIES "$<CONFIG:Debug,Custom>")
+set(DCMAKE_TOOLCHAIN_FILE "D:\\misc\\vcpkg\\scripts\\buildsystems\\vcpkg.cmake")
 
 
 project(pu-erh_lab VERSION 0.1.0 LANGUAGES C CXX)
@@ -61,9 +62,9 @@ target_include_directories(uuid_v4 INTERFACE "${CMAKE_SOURCE_DIR}/pu-erh_lab/thi
 # Exiv2
 add_library(Exiv2 SHARED IMPORTED)
 set_target_properties(Exiv2 PROPERTIES
-    IMPORTED_LOCATION "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_party/exiv2-0.28.5-2022msvc-AMD64/bin/exiv2.dll"
-    IMPORTED_IMPLIB "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_party/exiv2-0.28.5-2022msvc-AMD64/lib/exiv2.lib"
-    INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_party/exiv2-0.28.5-2022msvc-AMD64/include"
+    IMPORTED_LOCATION "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_party/exiv2_x64-windows/debug/bin/exiv2.dll"
+    IMPORTED_IMPLIB "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_party/exiv2_x64-windows/debug/lib/exiv2.lib"
+    INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_party/exiv2_x64-windows/include"
 )
 
 # MurmurHash3
@@ -84,6 +85,12 @@ target_include_directories(xxHash INTERFACE "${CMAKE_SOURCE_DIR}/pu-erh_lab/thir
 add_library(JSON INTERFACE)
 target_include_directories(JSON INTERFACE "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_party/nlohmann_json")
 
+# Libexif
+add_library(Libexif SHARED IMPORTED)
+set_target_properties(Libexif PROPERTIES
+    IMPORTED_LOCATION "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_party/libexif_x64-windows/debug/bin/exif-12.dll"
+    IMPORTED_IMPLIB "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_party/libexif_x64-windows/debug/lib/exif.lib"
+    INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_party/libexif_x64-windows/include")
 # Modules
 add_subdirectory(${CMAKE_SOURCE_DIR}/pu-erh_lab/src)
 add_subdirectory(${CMAKE_SOURCE_DIR}/pu-erh_lab/tests)

@@ -30,9 +30,13 @@
 
 #pragma once
 
+#include <libexif/exif-data.h>
+#include <libexif/exif-tag.h>
+
 #include <exiv2/exif.hpp>
 #include <exiv2/exiv2.hpp>
 #include <filesystem>
+#include <json.hpp>
 #include <memory>
 #include <opencv2/opencv.hpp>
 #include <ostream>
@@ -48,31 +52,32 @@ enum class ImageType { DEFAULT, JPEG, PNG, TIFF, ARW, CR2, CR3, NEF, DNG };
  */
 class Image {
  public:
-  image_id_t        _image_id;
-  image_path_t      _image_path;
-  file_name_t       _image_name;
+  image_id_t              _image_id;
+  image_path_t            _image_path;
+  file_name_t             _image_name;
 
-  Exiv2::ExifData   _exif_data;
-  cv::Mat           _image_data;
-  cv::Mat           _thumbnail;
-  ImageType         _image_type = ImageType::DEFAULT;
+  Exiv2::Image::UniquePtr _exif_data;
+  nlohmann::json          _exif;
 
-  std::atomic<bool> _has_thumbnail;
+  cv::Mat                 _image_data;
+  cv::Mat                 _thumbnail;
+  ImageType               _image_type = ImageType::DEFAULT;
 
-  p_hash_t          _checksum;
+  std::atomic<bool>       _has_thumbnail;
 
-  std::atomic<bool> _has_full_img;
-  std::atomic<bool> _has_thumb;
-  std::atomic<bool> _has_exif;
+  p_hash_t                _checksum;
 
-  std::atomic<bool> _thumb_pinned = false;
-  std::atomic<bool> _full_pinned  = false;
+  std::atomic<bool>       _has_full_img;
+  std::atomic<bool>       _has_thumb;
+  std::atomic<bool>       _has_exif;
 
-  explicit Image()                = default;
-  explicit Image(image_id_t image_id, image_path_t image_path, ImageType image_type, Exiv2::ExifData exif_data);
-  explicit Image(image_id_t image_id, image_path_t image_path, file_name_t image_name, ImageType image_type,
-                 Exiv2::ExifData exif_data);
-  explicit Image(image_path_t image_path, ImageType image_type, Exiv2::ExifData exif_data);
+  std::atomic<bool>       _thumb_pinned = false;
+  std::atomic<bool>       _full_pinned  = false;
+
+  explicit Image()                      = default;
+  explicit Image(image_id_t image_id, image_path_t image_path, ImageType image_type);
+  explicit Image(image_id_t image_id, image_path_t image_path, file_name_t image_name, ImageType image_type);
+  explicit Image(image_path_t image_path, ImageType image_type);
   explicit Image(Image &&other);
 
   friend std::wostream &operator<<(std::wostream &os, const Image &img);

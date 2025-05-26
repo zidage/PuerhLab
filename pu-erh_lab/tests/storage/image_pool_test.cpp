@@ -19,14 +19,14 @@ TEST(ImagePoolTest, SimpleTest1) {
   std::vector<std::shared_ptr<Image>> images_thumb;
   image_id_t                          start_id = 0;
   for (int i = 0; i < 128; i++) {
-    auto img = std::make_shared<Image>(start_id++, L"PATH", ImageType::DEFAULT, Exiv2::ExifData());
+    auto img = std::make_shared<Image>(start_id++, L"PATH", ImageType::DEFAULT);
     images_thumb.push_back(img);
     img_pool.Insert(img);
   }
 
   std::vector<std::shared_ptr<Image>> images_full;
   for (int i = 0; i < 8; i++) {
-    auto img = std::make_shared<Image>(start_id++, L"PATH_FOR_FULL", ImageType::DEFAULT, Exiv2::ExifData());
+    auto img = std::make_shared<Image>(start_id++, L"PATH_FOR_FULL", ImageType::DEFAULT);
     images_full.push_back(img);
     img_pool.Insert(img);
   }
@@ -54,14 +54,14 @@ TEST(ImagePoolTest, SimpleTest2) {
   std::vector<std::shared_ptr<Image>> images_thumb;
   image_id_t                          start_id = 0;
   for (int i = 0; i < 128; i++) {
-    auto img = std::make_shared<Image>(start_id++, L"PATH", ImageType::DEFAULT, Exiv2::ExifData());
+    auto img = std::make_shared<Image>(start_id++, L"PATH", ImageType::DEFAULT);
     images_thumb.push_back(img);
     img_pool.Insert(img);
   }
 
   std::vector<std::shared_ptr<Image>> images_full;
   for (int i = 0; i < 8; i++) {
-    auto img = std::make_shared<Image>(start_id++, L"PATH_FOR_FULL", ImageType::DEFAULT, Exiv2::ExifData());
+    auto img = std::make_shared<Image>(start_id++, L"PATH_FOR_FULL", ImageType::DEFAULT);
     images_full.push_back(img);
     img_pool.Insert(img);
   }
@@ -91,14 +91,14 @@ TEST(ImagePoolTest, RandomTest1) {
     std::vector<std::shared_ptr<Image>> images_thumb;
     image_id_t                          start_id = 0;
     for (int i = 0; i < 128; i++) {
-      auto img = std::make_shared<Image>(start_id++, L"PATH", ImageType::DEFAULT, Exiv2::ExifData());
+      auto img = std::make_shared<Image>(start_id++, L"PATH", ImageType::DEFAULT);
       images_thumb.push_back(img);
       img_pool.Insert(img);
     }
 
     std::vector<std::shared_ptr<Image>> images_full;
     for (int i = 0; i < 8; i++) {
-      auto img = std::make_shared<Image>(start_id++, L"PATH_FOR_FULL", ImageType::DEFAULT, Exiv2::ExifData());
+      auto img = std::make_shared<Image>(start_id++, L"PATH_FOR_FULL", ImageType::DEFAULT);
       images_full.push_back(img);
       img_pool.Insert(img);
     }

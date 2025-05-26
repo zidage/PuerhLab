@@ -30,6 +30,7 @@
 
 #include "image/image.hpp"
 
+#include <exception>
 #include <exiv2/exif.hpp>
 #include <exiv2/tags.hpp>
 #include <json.hpp>
@@ -45,19 +46,13 @@ using json = nlohmann::json;
  * @param image_path the disk location of the image
  * @param image_type the type of the image
  */
-Image::Image(image_id_t image_id, image_path_t image_path, ImageType image_type, Exiv2::ExifData exif_data)
-    : _image_id(image_id), _image_path(image_path), _exif_data(exif_data), _image_type(image_type) {}
+Image::Image(image_id_t image_id, image_path_t image_path, ImageType image_type)
+    : _image_id(image_id), _image_path(image_path), _image_type(image_type) {}
 
-Image::Image(image_id_t image_id, image_path_t image_path, file_name_t image_name, ImageType image_type,
-             Exiv2::ExifData exif_data)
-    : _image_id(image_id),
-      _image_path(image_path),
-      _image_name(image_name),
-      _exif_data(exif_data),
-      _image_type(image_type) {}
+Image::Image(image_id_t image_id, image_path_t image_path, file_name_t image_name, ImageType image_type)
+    : _image_id(image_id), _image_path(image_path), _image_name(image_name), _image_type(image_type) {}
 
-Image::Image(image_path_t image_path, ImageType image_type, Exiv2::ExifData exif_data)
-    : _image_path(image_path), _exif_data(exif_data), _image_type(image_type) {}
+Image::Image(image_path_t image_path, ImageType image_type) : _image_path(image_path), _image_type(image_type) {}
 
 Image::Image(Image &&other)
     : _image_id(other._image_id),
@@ -99,13 +94,18 @@ void Image::ClearThumbnail() {
 
 auto Image::ExifToJson() -> std::string {
   json o;
+  // Temporary remove the support for reading exif
   if (!_has_exif) {
     return nlohmann::to_string(o);
   }
-  for (const auto &exif : _exif_data) {
-    auto type_name  = exif.typeName();
-    auto type_value = exif.value().toString();
-    o[type_name]    = type_value;
+  try {
+    auto exif_data = _exif_data->exifData();
+    for (auto i = exif_data.begin(); i != exif_data.end(); ++i) {
+      auto type_name  = i->typeName();          // debug
+      auto type_value = i->value().toString();  // debug
+      o[type_name]    = type_value;
+    }
+  } catch (std::exception &e) {
   }
   return nlohmann::to_string(o);
 }

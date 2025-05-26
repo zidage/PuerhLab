@@ -1059,3 +1059,5 @@ sample_images/
 *.pdf
 
 temp_folder/
+
+third_party/

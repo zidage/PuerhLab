@@ -31,8 +31,13 @@
 
 #include "decoders/metadata_decoder.hpp"
 
+#include <exiv2/basicio.hpp>
 #include <exiv2/exif.hpp>
+#include <exiv2/image.hpp>
+#include <exiv2/types.hpp>
 #include <filesystem>
+#include <functional>
+#include <stdexcept>
 
 #include "type/type.hpp"
 
@@ -50,27 +55,20 @@ void MetadataDecoder::Decode(std::vector<char> buffer, std::filesystem::path fil
                              std::shared_ptr<BufferQueue> result, image_id_t id,
                              std::shared_ptr<std::promise<image_id_t>> promise) {
   try {
-    std::shared_ptr<Image> img       = std::make_shared<Image>(id, file_path, ImageType::DEFAULT, Exiv2::ExifData());
-    // auto                   exiv2_img = Exiv2::ImageFactory::open((const Exiv2::byte *)buffer.data(), buffer.size());
-    auto                   exiv2_img = Exiv2::ImageFactory::open((const Exiv2::byte *)buffer.data(), buffer.size());
-    // Push the decoded image into the buffer queue
-    exiv2_img->readMetadata();
-    Exiv2::ExifData &original_exif = exiv2_img->exifData();
-    img->_has_exif                 = !original_exif.empty();
-    if (!original_exif.empty()) {
-      img->_exif_data = original_exif;
-    }
-    img->_image_name = file_path.filename();
-
+    std::shared_ptr<Image> img = std::make_shared<Image>(id, file_path, file_path.filename(), ImageType::DEFAULT);
+    img->_exif_data            = Exiv2::ImageFactory::open((Exiv2::byte *)buffer.data(), buffer.size());
+    img->_exif_data->readMetadata();
+    img->_has_exif = !img->_exif_data->exifData().empty();
     result->push(img);
     promise->set_value(id);
 
     return;
   } catch (std::exception &e) {
     // TODO: Append error message to log
+    std::cout << e.what() << std::endl;
   }
   // If it fails to read metadata, produce a plain image with minimum metadata
-  std::shared_ptr<Image> img = std::make_shared<Image>(id, file_path, ImageType::DEFAULT, Exiv2::ExifData());
+  std::shared_ptr<Image> img = std::make_shared<Image>(id, file_path, file_path.filename(), ImageType::DEFAULT);
   result->push(img);
   promise->set_value(id);
 }

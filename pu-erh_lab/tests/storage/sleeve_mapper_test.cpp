@@ -51,7 +51,7 @@ TEST(SleeveMapperTest, SimpleCaptureTest2) {
     SleeveManager manager{};
     image_path_t  path =
         L"D:\\Projects\\pu-erh_lab\\pu-erh_"
-        L"lab\\tests\\resources\\sample_images\\jpg_1";
+        L"lab\\tests\\resources\\sample_images\\jpg";
     std::vector<image_path_t> imgs;
     for (const auto &img : std::filesystem::directory_iterator(path)) {
       imgs.push_back(img.path());
