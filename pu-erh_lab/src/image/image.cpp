@@ -30,12 +30,14 @@
 
 #include "image/image.hpp"
 
+#include <cstdint>
 #include <exception>
 #include <exiv2/exif.hpp>
 #include <exiv2/tags.hpp>
 #include <json.hpp>
 #include <string>
 #include <utility>
+#include <xxhash.hpp>
 
 namespace puerhlab {
 using json = nlohmann::json;
@@ -101,12 +103,15 @@ auto Image::ExifToJson() -> std::string {
   try {
     auto exif_data = _exif_data->exifData();
     for (auto i = exif_data.begin(); i != exif_data.end(); ++i) {
-      auto type_name  = i->typeName();          // debug
+      auto type_id    = static_cast<uint32_t>(i->typeId());  // debug
+      auto type       = i->ifdName();
       auto type_value = i->value().toString();  // debug
-      o[type_name]    = type_value;
+      o[type]         = std::array<std::string, 2>{std::to_string(type_id), std::move(type_value)};
     }
   } catch (std::exception &e) {
   }
   return nlohmann::to_string(o);
 }
+
+void Image::ComputeCheckSum() { _checksum = xxh::xxhash<64>(this, sizeof(*this)); }
 };  // namespace puerhlab

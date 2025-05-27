@@ -58,6 +58,9 @@ void ThumbnailDecoder::Decode(std::vector<char> buffer, std::filesystem::path fi
   try {
     // Push the decoded image into the buffer queue
     std::shared_ptr<Image> img = std::make_shared<Image>(id, file_path, ImageType::DEFAULT);
+    img->_exif_data            = Exiv2::ImageFactory::open((Exiv2::byte *)buffer.data(), buffer.size());
+    img->_exif_data->readMetadata();
+    img->_has_exif = !img->_exif_data->exifData().empty();
     img->LoadThumbnail(std::move(thumbnail));
     result->push(img);
     promise->set_value(id);

@@ -8,7 +8,7 @@ add_library(Image
     image/image.cpp
 )
 target_include_directories(Image PUBLIC include)
-target_link_libraries(Image PUBLIC Exiv2 ${OpenCV_LIBS} LibRaw TimeProvider JSON Libexif)
+target_link_libraries(Image PUBLIC Exiv2 ${OpenCV_LIBS} LibRaw TimeProvider JSON xxHash)
 
 
 add_library(ImageDecoder 
@@ -58,6 +58,7 @@ target_include_directories(SleeveView PUBLIC include)
 target_link_libraries(SleeveView PUBLIC Image Sleeve ImagePool)
 
 add_library(SleeveMapper     
+    storage/mapper/sleeve/query_prepare.cpp
     storage/mapper/sleeve/sleeve_mapper.cpp)
 target_include_directories(SleeveMapper PUBLIC include)
 target_link_libraries(SleeveMapper PUBLIC DuckDB Image Sleeve ImagePool )

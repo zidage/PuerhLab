@@ -41,41 +41,10 @@
 #include "sleeve/sleeve_element/sleeve_folder.hpp"
 #include "sleeve/sleeve_filter/filter_combo.hpp"
 #include "storage/image_pool/image_pool_manager.hpp"
+#include "storage/mapper/sleeve/statement_prepare.hpp"
 #include "type/type.hpp"
 
 namespace puerhlab {
-
-class SleeveCaptureResources {
- private:
-  void RecycleResources();
-
- public:
-  duckdb_result             result;
-  duckdb_prepared_statement stmt_base;
-  duckdb_prepared_statement stmt_element;
-  duckdb_prepared_statement stmt_root;
-  duckdb_prepared_statement stmt_folder;
-  duckdb_prepared_statement stmt_file;
-  duckdb_prepared_statement stmt_filter;
-  duckdb_prepared_statement stmt_history;
-  duckdb_prepared_statement stmt_version;
-  SleeveCaptureResources(duckdb_connection &con);
-
-  ~SleeveCaptureResources();
-};
-
-class ImageCaptureResources {
- private:
-  void RecycleResources();
-
- public:
-  duckdb_result             result;
-  duckdb_prepared_statement stmt_img;
-  ImageCaptureResources(duckdb_connection &con);
-
-  ~ImageCaptureResources();
-};
-
 /**
  * @brief Mapper interface for interacting with the DuckDB
  *
@@ -91,12 +60,10 @@ class SleeveMapper {
   sleeve_id_t       _captured_sleeve_id;
   bool              _has_sleeve = false;
 
-  inline void       CaptureElement(std::unordered_map<uint32_t, std::shared_ptr<SleeveElement>> &storage,
-                                   SleeveCaptureResources                                       &res);
-  inline void       CaptureFolder(std::shared_ptr<SleeveFolder> folder, SleeveCaptureResources &res);
-  inline void       CaptureFile(std::shared_ptr<SleeveFile> file, SleeveCaptureResources &res);
-  inline void       CaptureFilters(std::unordered_map<uint32_t, std::shared_ptr<FilterCombo>> &filter_storage,
-                                   SleeveCaptureResources                                     &res);
+  inline void       CaptureElement(std::unordered_map<uint32_t, std::shared_ptr<SleeveElement>> &storage, Prepare &pre);
+  inline void       CaptureFolder(std::shared_ptr<SleeveFolder> folder, Prepare &pre);
+  inline void       CaptureFile(std::shared_ptr<SleeveFile> file, Prepare &pre);
+  inline void CaptureFilters(std::unordered_map<uint32_t, std::shared_ptr<FilterCombo>> &filter_storage, Prepare &pre);
 
  public:
   explicit SleeveMapper();
@@ -105,11 +72,12 @@ class SleeveMapper {
 
   void ConnectDB(file_path_t db_path);
   void InitDB();
-  void CaptureSleeve(const std::shared_ptr<SleeveBase> sleeve_base);
-  void CaptureImagePool(const std::shared_ptr<ImagePoolManager> image_pool);
-  void AddFilter(const std::shared_ptr<SleeveFolder> sleeve_folder, const std::shared_ptr<FilterCombo> filter);
-  void AddImage(const std::shared_ptr<Image> image);
-  void EditImage(const std::shared_ptr<Image> image, const image_id_t id);
+  void CaptureSleeve(const std::shared_ptr<SleeveBase> sleeve_base, const std::shared_ptr<ImagePoolManager> image_pool);
+  void CaptureImagePool(const std::shared_ptr<ImagePoolManager> image_pool, Prepare &pre);
+  void AddFilter(const std::shared_ptr<SleeveFolder> sleeve_folder, const std::shared_ptr<FilterCombo> filter,
+                 Prepare &pre);
+  void AddImage(const std::shared_ptr<Image> image, Prepare &pre);
+  void EditImage(const std::shared_ptr<Image> image, const image_id_t id, Prepare &pre);
   void RemoveImage(image_id_t image_id);
   void RestoreSleeveFromDB(sleeve_id_t sleeve_id);
   void RemoveSleeveBase(sleeve_id_t sleeve_id);

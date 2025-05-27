@@ -17,8 +17,7 @@ namespace puerhlab {
  */
 EditHistory::EditHistory(sl_element_id_t bound_image) : _bound_image(bound_image) {
   SetAddTime();
-  std::array<uint32_t, 2> input{bound_image, reinterpret_cast<std::uintptr_t>(&bound_image)};
-  _history_id = xxh::xxhash<64>(input);
+  _history_id = xxh::xxhash<64>(this, sizeof(*this));
 }
 
 /**

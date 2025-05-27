@@ -74,6 +74,22 @@ void MetadataDecoder::Decode(std::vector<char> buffer, std::filesystem::path fil
 }
 
 void MetadataDecoder::Decode(std::vector<char> buffer, std::shared_ptr<Image> source_img,
-                             std::shared_ptr<BufferQueue> result, std::shared_ptr<std::promise<image_id_t>> promise) {}
+                             std::shared_ptr<BufferQueue> result, std::shared_ptr<std::promise<image_id_t>> promise) {
+  try {
+    source_img->_exif_data = Exiv2::ImageFactory::open((Exiv2::byte *)buffer.data(), buffer.size());
+    source_img->_exif_data->readMetadata();
+    source_img->_has_exif = !source_img->_exif_data->exifData().empty();
+    result->push(source_img);
+    promise->set_value(source_img->_image_id);
+
+    return;
+  } catch (std::exception &e) {
+    // TODO: Append error message to log
+    std::cout << e.what() << std::endl;
+  }
+  // If it fails to read metadata, produce a plain image with minimum metadata
+  result->push(source_img);
+  promise->set_value(source_img->_image_id);
+}
 
 };  // namespace puerhlab

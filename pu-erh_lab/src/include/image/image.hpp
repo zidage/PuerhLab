@@ -30,9 +30,6 @@
 
 #pragma once
 
-#include <libexif/exif-data.h>
-#include <libexif/exif-tag.h>
-
 #include <exiv2/exif.hpp>
 #include <exiv2/exiv2.hpp>
 #include <filesystem>
@@ -88,6 +85,7 @@ class Image {
   void                  SetId(image_id_t image_id);
   void                  ClearData();
   void                  ClearThumbnail();
+  void                  ComputeCheckSum();
   auto                  ExifToJson() -> std::string;
 };
 };  // namespace puerhlab
