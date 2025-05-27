@@ -139,11 +139,12 @@ void SleeveMapper::CaptureFilters(std::unordered_map<uint32_t, std::shared_ptr<F
       duckdb_bind_uint32(pre._stmt, 1, combo_id);
       duckdb_bind_uint32(pre._stmt, 2, static_cast<uint32_t>(filter._type));
       duckdb_bind_varchar(pre._stmt, 3, conv.to_bytes(filter.ToJSON()).c_str());
+      if (duckdb_execute_prepared(pre._stmt, &pre._result) != DuckDBSuccess) {
+        auto error_message = duckdb_result_error(&pre._result);
+        throw std::exception(error_message);
+      }
     }
-    if (duckdb_execute_prepared(pre._stmt, &pre._result) != DuckDBSuccess) {
-      auto error_message = duckdb_result_error(&pre._result);
-      throw std::exception(error_message);
-    }
+
     duckdb_destroy_result(&pre._result);
   }
 }
@@ -171,7 +172,7 @@ void SleeveMapper::CaptureSleeve(const std::shared_ptr<SleeveBase>       sleeve_
   duckdb_destroy_result(&base_pre._result);
 
   Prepare root_pre{_con};
-  base_pre.GetStmtGuard(Queries::base_insert_query);
+  root_pre.GetStmtGuard(Queries::root_insert_query);
   // Insert the root
   duckdb_bind_uint64(root_pre._stmt, 1, static_cast<uint64_t>(sleeve_base->_root->_element_id));
   if (duckdb_execute_prepared(root_pre._stmt, &root_pre._result) != DuckDBSuccess) {
@@ -191,7 +192,7 @@ void SleeveMapper::CaptureSleeve(const std::shared_ptr<SleeveBase>       sleeve_
   CaptureFilters(sleeve_base->GetFilterStorage(), filter_pre);
 
   Prepare img_pre{_con};
-  filter_pre.GetStmtGuard(Queries::image_insert_query);
+  img_pre.GetStmtGuard(Queries::image_insert_query);
   CaptureImagePool(image_pool, img_pre);
 }
 
@@ -200,7 +201,6 @@ void SleeveMapper::CaptureImagePool(const std::shared_ptr<ImagePoolManager> imag
     throw std::exception("Cannot connect to a valid sleeve db");
   }
   std::wstring_convert<std::codecvt_utf8<wchar_t>> conv;
-  Prepare                                          stmts{_con};
   auto                                            &pool = image_pool->GetPool();
   for (auto &pool_val : pool) {
     auto img = pool_val.second;

@@ -39,7 +39,7 @@ TEST(SleeveMapperTest, DISABLED_SimpleCaptureTest1) {
     manager.LoadToPath(imgs, L"root");
     try {
       mapper.InitDB();
-      mapper.CaptureSleeve(manager.GetBase());
+      mapper.CaptureSleeve(manager.GetBase(), manager.GetPool());
     } catch (std::exception &e) {
       std::cout << e.what() << std::endl;
     }
@@ -62,7 +62,7 @@ TEST(SleeveMapperTest, SimpleCaptureTest2) {
     manager.LoadToPath(imgs, L"root");
     try {
       mapper.InitDB();
-      mapper.CaptureImagePool(manager.GetPool());
+      mapper.CaptureSleeve(manager.GetBase(), manager.GetPool());
     } catch (std::exception &e) {
       std::cout << e.what() << std::endl;
     }
