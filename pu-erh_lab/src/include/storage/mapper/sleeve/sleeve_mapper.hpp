@@ -56,16 +56,17 @@ namespace puerhlab {
  * Example: To add an image to the image table, the operation
  * ADD_IMAGE is represented by binary number 00000 == Operate | Table.
  * TO edit an filter, the operation EDIT_FILTER is
- * 100101 = EDIT | FILTER
+ * 10101 = EDIT | FILTER
  */
 enum class Table : uint8_t {
-  Image   = 0x0,
-  Element = 0x2,
-  File    = 0x3,
-  Folder  = 0x4,
-  Filter  = 0x5,
-  History = 0x6,
-  Version = 0x7
+  Image       = 0x0,
+  Element     = 0x1,
+  File        = 0x2,
+  Folder      = 0x3,
+  ComboFolder = 0x4,
+  Filter      = 0x5,
+  History     = 0x6,
+  Version     = 0x7
 };
 
 enum class Operate : uint8_t { ADD = 0x0, DELETE = 0x8, EDIT = 0x10, LOOKUP = 0x18 };

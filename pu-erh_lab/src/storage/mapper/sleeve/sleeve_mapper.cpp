@@ -9,13 +9,18 @@
 #include <filesystem>
 #include <memory>
 #include <optional>
+#include <queue>
+#include <unordered_map>
 
+#include "concurrency/thread_local_resource.hpp"
+#include "concurrency/thread_pool.hpp"
 #include "sleeve/sleeve_element/sleeve_element.hpp"
 #include "sleeve/sleeve_element/sleeve_file.hpp"
 #include "sleeve/sleeve_element/sleeve_folder.hpp"
 #include "storage/mapper/sleeve/query_prepare.hpp"
 #include "storage/mapper/sleeve/statement_prepare.hpp"
 #include "type/type.hpp"
+#include "utils/queue/queue.hpp"
 
 namespace puerhlab {
 SleeveMapper::SleeveMapper() {};
@@ -59,7 +64,16 @@ void SleeveMapper::InitDB() {
     duckdb_destroy_result(&result);
     throw std::exception(error_message);
   }
-  _initialized = true;
+  _initialized        = true;
+
+  duckdb_database &db = _db;
+  ThreadLocalResource<duckdb_connection>::SetInitializer([&db] {
+    auto ptr = std::make_unique<duckdb_connection>();
+    if (duckdb_connect(db, ptr.get()) != DuckDBSuccess) {
+      throw std::runtime_error("Failed to connect duckdb in thread");
+    }
+    return ptr;
+  });
 }
 
 auto SleeveMapper::GetPrepare(uint8_t op, const std::string &query) -> Prepare & {
@@ -74,7 +88,7 @@ void SleeveMapper::CaptureElement(std::unordered_map<uint32_t, std::shared_ptr<S
   std::wstring_convert<std::codecvt_utf8<wchar_t>> conv;
 
   Prepare &folder_pre = GetPrepare(GET_OP(Operate::ADD, Table::Folder), Queries::folder_insert_query);
-  Prepare  file_pre   = GetPrepare(GET_OP(Operate::ADD, Table::File), Queries::image_insert_query);
+  Prepare &file_pre   = GetPrepare(GET_OP(Operate::ADD, Table::File), Queries::file_insert_query);
 
   for (auto &val : storage) {
     auto element = val.second;
@@ -118,8 +132,22 @@ void SleeveMapper::CaptureFolder(std::shared_ptr<SleeveFolder> folder, Prepare &
       auto error_message = duckdb_result_error(&pre._result);
       throw std::exception(error_message);
     }
+    duckdb_destroy_result(&pre._result);
   }
-  duckdb_destroy_result(&pre._result);
+  // Insert FilterCombo <-> Folder mapping
+  Prepare &combo_folder_pre = GetPrepare(GET_OP(Operate::ADD, Table::ComboFolder), Queries::combo_insert_query);
+  auto     combos           = folder->ListFilters();
+  auto     folder_id        = folder->_element_id;
+  for (filter_id_t filter_id : combos) {
+    // "INSERT INTO ComboFolder (combo_id, folder_id) VALUES  (?,?);"
+    duckdb_bind_uint32(combo_folder_pre._stmt, 1, filter_id);
+    duckdb_bind_uint32(combo_folder_pre._stmt, 2, folder_id);
+    if (duckdb_execute_prepared(combo_folder_pre._stmt, &combo_folder_pre._result) != DuckDBSuccess) {
+      auto error_message = duckdb_result_error(&combo_folder_pre._result);
+      throw std::exception(error_message);
+    }
+    duckdb_destroy_result(&combo_folder_pre._result);
+  }
 }
 
 void SleeveMapper::CaptureFile(std::shared_ptr<SleeveFile> file, Prepare &pre) {
@@ -191,32 +219,58 @@ void SleeveMapper::CaptureSleeve(const std::shared_ptr<SleeveBase>       sleeve_
     duckdb_destroy_result(&root_pre._result);
   }
 
-  Prepare element_pre = GetPrepare(GET_OP(Operate::ADD, Table::Element), Queries::element_insert_query);
+  Prepare &element_pre = GetPrepare(GET_OP(Operate::ADD, Table::Element), Queries::element_insert_query);
   // Capture elements
   CaptureElement(storage, element_pre);
 
   // Capture filters
-  Prepare filter_pre = GetPrepare(GET_OP(Operate::ADD, Table::Filter), Queries::filter_insert_query);
+  Prepare &filter_pre = GetPrepare(GET_OP(Operate::ADD, Table::Filter), Queries::filter_insert_query);
   CaptureFilters(sleeve_base->GetFilterStorage(), filter_pre);
 
-  Prepare img_pre = GetPrepare(GET_OP(Operate::ADD, Table::Image), Queries::image_insert_query);
+  Prepare &img_pre = GetPrepare(GET_OP(Operate::ADD, Table::Image), Queries::image_insert_query);
   CaptureImagePool(image_pool, img_pre);
 }
 
 void SleeveMapper::CaptureImagePool(const std::shared_ptr<ImagePoolManager> image_pool, Prepare &pre) {
+  ThreadPool thread_pool{4};
   if (!_initialized || !_db_connected) {
     throw std::exception("Cannot connect to a valid sleeve db");
   }
-  std::wstring_convert<std::codecvt_utf8<wchar_t>> conv;
-  auto                                            &pool = image_pool->GetPool();
+
+  auto                                                       &pool = image_pool->GetPool();
+  ConcurrentBlockingQueue<std::pair<image_id_t, std::string>> exif_jsons{256};
   for (auto &pool_val : pool) {
     auto img = pool_val.second;
+    thread_pool.Submit([img, &exif_jsons]() {
+      // auto& con = ThreadLocalResource<duckdb_connection>::Get();
+      // Prepare pre{con};
+      // pre.GetStmtGuard(Queries::image_insert_query);
+      // INSERT INTO Image (id,image_path,file_name,type,metadata)
+      exif_jsons.push({img->_image_id, img->ExifToJson()});
+      // duckdb_bind_uint32(pre._stmt, 1, img->_image_id);
+      // duckdb_bind_varchar(pre._stmt, 2, img->_image_path.string().c_str());
+      // duckdb_bind_varchar(pre._stmt, 3, conv.to_bytes(img->_image_name).c_str());
+      // duckdb_bind_uint32(pre._stmt, 4, static_cast<uint32_t>(img->_image_type));
+      // duckdb_bind_varchar(pre._stmt, 5, img->ExifToJson().c_str());
+      // if (duckdb_execute_prepared(pre._stmt, &pre._result) != DuckDBSuccess) {
+      //   auto error_message = duckdb_result_error(&pre._result);
+      //   throw std::exception(error_message);
+      // }
+      // duckdb_destroy_result(&pre._result);
+    });
+  }
+  std::wstring_convert<std::codecvt_utf8<wchar_t>> conv;
+  for (size_t i = 0; i < pool.size(); ++i) {
+    auto result = exif_jsons.pop();
+    auto json   = result.second;
+    auto id     = result.first;
     // INSERT INTO Image (id,image_path,file_name,type,metadata)
+    auto img    = pool[id];
     duckdb_bind_uint32(pre._stmt, 1, img->_image_id);
     duckdb_bind_varchar(pre._stmt, 2, img->_image_path.string().c_str());
     duckdb_bind_varchar(pre._stmt, 3, conv.to_bytes(img->_image_name).c_str());
     duckdb_bind_uint32(pre._stmt, 4, static_cast<uint32_t>(img->_image_type));
-    duckdb_bind_varchar(pre._stmt, 5, img->ExifToJson().c_str());
+    duckdb_bind_varchar(pre._stmt, 5, json.c_str());
     if (duckdb_execute_prepared(pre._stmt, &pre._result) != DuckDBSuccess) {
       auto error_message = duckdb_result_error(&pre._result);
       throw std::exception(error_message);
@@ -230,5 +284,7 @@ void SleeveMapper::AddFilter(const std::shared_ptr<SleeveFolder> sleeve_folder,
   if (!_initialized || !_db_connected) {
     throw std::exception("Cannot connect to a valid sleeve db");
   }
+
+  Prepare &filter_pre = GetPrepare(GET_OP(Operate::ADD, Table::Filter), Queries::filter_insert_query);
 }
 };  // namespace puerhlab

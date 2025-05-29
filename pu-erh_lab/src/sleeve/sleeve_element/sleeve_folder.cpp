@@ -22,6 +22,7 @@ SleeveFolder::SleeveFolder(sl_element_id_t id, file_name_t element_name)
     : SleeveElement(id, element_name), _default_filter(0), _file_count(0), _folder_count(0) {
   _indicies_cache[_default_filter] = std::make_shared<std::set<sl_element_id_t>>();
   _type                            = ElementType::FOLDER;
+  _filters.push_back(_default_filter);
 }
 
 SleeveFolder::~SleeveFolder() {}
@@ -94,6 +95,8 @@ auto SleeveFolder::ListElements() const -> std::shared_ptr<std::vector<sl_elemen
   auto default_list = _indicies_cache.at(_default_filter);
   return std::make_shared<std::vector<sl_element_id_t>>(default_list->begin(), default_list->end());
 }
+
+auto SleeveFolder::ListFilters() -> std::vector<filter_id_t> & { return _filters; }
 
 auto SleeveFolder::Clear() -> bool {
   // TODO: Add Implementation

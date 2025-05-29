@@ -54,6 +54,7 @@ class SleeveFolder : public SleeveElement {
   std::unordered_map<file_name_t, sl_element_id_t>                            _contents;
   std::unordered_map<filter_id_t, std::shared_ptr<std::set<sl_element_id_t>>> _indicies_cache;
 
+  std::vector<filter_id_t>                                                    _filters;
   filter_id_t                                                                 _default_filter;
 
   uint32_t                                                                    _file_count;
@@ -70,7 +71,7 @@ class SleeveFolder : public SleeveElement {
   void CreateIndex(const std::shared_ptr<FilterCombo> filter);
   auto GetElementIdByName(const file_name_t &name) const -> std::optional<sl_element_id_t>;
   auto ListElements() const -> std::shared_ptr<std::vector<sl_element_id_t>>;
-  auto ListFilters() const -> std::vector<filter_id_t>;
+  auto ListFilters() -> std::vector<filter_id_t> &;
   auto Contains(const file_name_t &name) const -> bool;
   void RemoveNameFromMap(const file_name_t &name);
 
