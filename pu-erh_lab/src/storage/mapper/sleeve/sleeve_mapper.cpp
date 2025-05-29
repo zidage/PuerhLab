@@ -8,17 +8,17 @@
 #include <exception>
 #include <filesystem>
 #include <memory>
+#include <optional>
 
 #include "sleeve/sleeve_element/sleeve_element.hpp"
 #include "sleeve/sleeve_element/sleeve_file.hpp"
 #include "sleeve/sleeve_element/sleeve_folder.hpp"
-#include "sleeve/sleeve_manager.hpp"
 #include "storage/mapper/sleeve/query_prepare.hpp"
 #include "storage/mapper/sleeve/statement_prepare.hpp"
 #include "type/type.hpp"
 
 namespace puerhlab {
-SleeveMapper::SleeveMapper() {}
+SleeveMapper::SleeveMapper() {};
 
 SleeveMapper::SleeveMapper(file_path_t db_path) {
   if (std::filesystem::exists(db_path)) {
@@ -40,7 +40,9 @@ void SleeveMapper::ConnectDB(file_path_t db_path) {
   if (duckdb_connect(_db, &_con) != DuckDBSuccess) {
     throw std::exception("DB cannot be connected");
   }
+
   _db_connected = true;
+  _prepare_storage.resize(32, Prepare(_con));
 }
 
 void SleeveMapper::InitDB() {
@@ -60,13 +62,19 @@ void SleeveMapper::InitDB() {
   _initialized = true;
 }
 
+auto SleeveMapper::GetPrepare(uint8_t op, const std::string &query) -> Prepare & {
+  Prepare &pre = _prepare_storage[op];
+  if (!pre._prepared) {
+    pre.GetStmtGuard(query);
+  }
+  return pre;
+}
+
 void SleeveMapper::CaptureElement(std::unordered_map<uint32_t, std::shared_ptr<SleeveElement>> &storage, Prepare &pre) {
   std::wstring_convert<std::codecvt_utf8<wchar_t>> conv;
 
-  Prepare                                          folder_pre{_con};
-  folder_pre.GetStmtGuard(Queries::folder_insert_query);
-  Prepare file_pre{_con};
-  file_pre.GetStmtGuard(Queries::file_insert_query);
+  Prepare &folder_pre = GetPrepare(GET_OP(Operate::ADD, Table::Folder), Queries::folder_insert_query);
+  Prepare  file_pre   = GetPrepare(GET_OP(Operate::ADD, Table::File), Queries::image_insert_query);
 
   for (auto &val : storage) {
     auto element = val.second;
@@ -159,40 +167,39 @@ void SleeveMapper::CaptureSleeve(const std::shared_ptr<SleeveBase>       sleeve_
     throw std::exception("A sleeve has already been captured and cannot be overwritten");
   }
 
-  Prepare base_pre{_con};
-  base_pre.GetStmtGuard(Queries::base_insert_query);
+  // Since base will not be alternated again, base_pre will not be in the _prepare_storage
   if (!_has_sleeve) {
+    Prepare base_pre{_con};
+    base_pre.GetStmtGuard(Queries::base_insert_query);
+
     // Try to insert the sleeve base if there is no sleeve captured
     duckdb_bind_uint32(base_pre._stmt, 1, sleeve_base->_sleeve_id);
     if (duckdb_execute_prepared(base_pre._stmt, &base_pre._result) != DuckDBSuccess) {
       auto error_message = duckdb_result_error(&base_pre._result);
       throw std::exception(error_message);
     }
+    duckdb_destroy_result(&base_pre._result);
+    // The same goes to root
+    Prepare root_pre{_con};
+    root_pre.GetStmtGuard(Queries::root_insert_query);
+    // Insert the root
+    duckdb_bind_uint64(root_pre._stmt, 1, static_cast<uint64_t>(sleeve_base->_root->_element_id));
+    if (duckdb_execute_prepared(root_pre._stmt, &root_pre._result) != DuckDBSuccess) {
+      auto error_message = duckdb_result_error(&root_pre._result);
+      throw std::exception(error_message);
+    }
+    duckdb_destroy_result(&root_pre._result);
   }
-  duckdb_destroy_result(&base_pre._result);
 
-  Prepare root_pre{_con};
-  root_pre.GetStmtGuard(Queries::root_insert_query);
-  // Insert the root
-  duckdb_bind_uint64(root_pre._stmt, 1, static_cast<uint64_t>(sleeve_base->_root->_element_id));
-  if (duckdb_execute_prepared(root_pre._stmt, &root_pre._result) != DuckDBSuccess) {
-    auto error_message = duckdb_result_error(&root_pre._result);
-    throw std::exception(error_message);
-  }
-  duckdb_destroy_result(&root_pre._result);
-
-  Prepare element_pre{_con};
-  element_pre.GetStmtGuard(Queries::element_insert_query);
+  Prepare element_pre = GetPrepare(GET_OP(Operate::ADD, Table::Element), Queries::element_insert_query);
   // Capture elements
   CaptureElement(storage, element_pre);
 
   // Capture filters
-  Prepare filter_pre{_con};
-  filter_pre.GetStmtGuard(Queries::filter_insert_query);
+  Prepare filter_pre = GetPrepare(GET_OP(Operate::ADD, Table::Filter), Queries::filter_insert_query);
   CaptureFilters(sleeve_base->GetFilterStorage(), filter_pre);
 
-  Prepare img_pre{_con};
-  img_pre.GetStmtGuard(Queries::image_insert_query);
+  Prepare img_pre = GetPrepare(GET_OP(Operate::ADD, Table::Image), Queries::image_insert_query);
   CaptureImagePool(image_pool, img_pre);
 }
 

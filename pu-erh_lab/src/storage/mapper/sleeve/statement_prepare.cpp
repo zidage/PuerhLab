@@ -19,7 +19,10 @@ auto Prepare::GetStmtGuard(const std::string &prepare_query) -> duckdb_prepared_
     RecycleResources();
     throw std::exception("Prepare failed when inserting images");
   }
+  _prepared = true;
   return _stmt;
 }
+
+void Prepare::SetConnection(duckdb_connection &con) { _con = con; }
 
 };  // namespace puerhlab

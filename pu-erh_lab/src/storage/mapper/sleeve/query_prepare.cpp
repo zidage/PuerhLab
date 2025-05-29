@@ -10,7 +10,7 @@ const std::string Queries::init_table_query =
     "ref_count BIGINT);"
     "CREATE TABLE FolderContent (folder_id BIGINT, element_name TEXT, element_id BIGINT);"
     "CREATE TABLE FileImage (file_id BIGINT, image_id BIGINT);"
-    "CREATE TABLE FilterCombo (combo_id BIGINT PRIMARY KEY, folder_id BIGINT);"
+    "CREATE TABLE FilterCombo (combo_id BIGINT, folder_id BIGINT);"
     "CREATE TABLE Filter (combo_id BIGINT, type INTEGER, data JSON);"
     "CREATE TABLE EditHistory (history_id BIGINT PRIMARY KEY, file_id BIGINT, added_time TIMESTAMP, modified_time "
     "TIMESTAMP);"
@@ -32,6 +32,10 @@ const std::string Queries::folder_insert_query =
 
 const std::string Queries::file_insert_query =
     "INSERT INTO FileImage (file_id,image_id) VALUES "
+    "(?,?);";
+
+const std::string Queries::combo_insert_query =
+    "INSERT INTO ComboFilter (combo_id, folder_id) VALUES "
     "(?,?);";
 
 const std::string Queries::filter_insert_query =

@@ -15,6 +15,8 @@ class Queries {
 
   static const std::string file_insert_query;
 
+  static const std::string combo_insert_query;
+
   static const std::string filter_insert_query;
 
   static const std::string edit_history_insert_query;
