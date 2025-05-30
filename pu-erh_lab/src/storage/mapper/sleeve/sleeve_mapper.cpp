@@ -1,6 +1,7 @@
 #include "storage/mapper/sleeve/sleeve_mapper.hpp"
 
 #include <duckdb.h>
+#include <easy/profiler.h>
 
 #include <codecvt>
 #include <cstdint>
@@ -23,6 +24,12 @@
 #include "utils/queue/queue.hpp"
 
 namespace puerhlab {
+struct PreparedImageData {
+  image_id_t             id;
+  std::string            json;
+  std::shared_ptr<Image> img;
+};
+
 SleeveMapper::SleeveMapper() {};
 
 SleeveMapper::SleeveMapper(file_path_t db_path) {
@@ -232,51 +239,46 @@ void SleeveMapper::CaptureSleeve(const std::shared_ptr<SleeveBase>       sleeve_
 }
 
 void SleeveMapper::CaptureImagePool(const std::shared_ptr<ImagePoolManager> image_pool, Prepare &pre) {
-  ThreadPool thread_pool{4};
+  EASY_FUNCTION(profiler::colors::Cyan);
+  ThreadPool thread_pool{16};
   if (!_initialized || !_db_connected) {
     throw std::exception("Cannot connect to a valid sleeve db");
   }
 
-  auto                                                       &pool = image_pool->GetPool();
-  ConcurrentBlockingQueue<std::pair<image_id_t, std::string>> exif_jsons{256};
+  auto                                &pool = image_pool->GetPool();
+  BlockingMPMCQueue<PreparedImageData> exif_jsons{348};
+  EASY_BLOCK("Submitting tasks");
   for (auto &pool_val : pool) {
     auto img = pool_val.second;
     thread_pool.Submit([img, &exif_jsons]() {
-      // auto& con = ThreadLocalResource<duckdb_connection>::Get();
-      // Prepare pre{con};
-      // pre.GetStmtGuard(Queries::image_insert_query);
-      // INSERT INTO Image (id,image_path,file_name,type,metadata)
-      exif_jsons.push({img->_image_id, img->ExifToJson()});
-      // duckdb_bind_uint32(pre._stmt, 1, img->_image_id);
-      // duckdb_bind_varchar(pre._stmt, 2, img->_image_path.string().c_str());
-      // duckdb_bind_varchar(pre._stmt, 3, conv.to_bytes(img->_image_name).c_str());
-      // duckdb_bind_uint32(pre._stmt, 4, static_cast<uint32_t>(img->_image_type));
-      // duckdb_bind_varchar(pre._stmt, 5, img->ExifToJson().c_str());
-      // if (duckdb_execute_prepared(pre._stmt, &pre._result) != DuckDBSuccess) {
-      //   auto error_message = duckdb_result_error(&pre._result);
-      //   throw std::exception(error_message);
-      // }
-      // duckdb_destroy_result(&pre._result);
+      std::string result = img->ExifToJson();
+      EASY_BLOCK("Write finished to Queue");
+      exif_jsons.push({img->_image_id, std::move(result), img});
+      EASY_END_BLOCK;
     });
   }
   std::wstring_convert<std::codecvt_utf8<wchar_t>> conv;
+  duckdb_appender                                  appender;
+  duckdb_appender_create(_con, nullptr, "Image", &appender);
+  EASY_END_BLOCK;
+
+  EASY_BLOCK("Reclaim converted EXIF and write to DB");
   for (size_t i = 0; i < pool.size(); ++i) {
+    EASY_BLOCK("Write data to DB");
     auto result = exif_jsons.pop();
-    auto json   = result.second;
-    auto id     = result.first;
+    auto json   = result.json;
     // INSERT INTO Image (id,image_path,file_name,type,metadata)
-    auto img    = pool[id];
-    duckdb_bind_uint32(pre._stmt, 1, img->_image_id);
-    duckdb_bind_varchar(pre._stmt, 2, img->_image_path.string().c_str());
-    duckdb_bind_varchar(pre._stmt, 3, conv.to_bytes(img->_image_name).c_str());
-    duckdb_bind_uint32(pre._stmt, 4, static_cast<uint32_t>(img->_image_type));
-    duckdb_bind_varchar(pre._stmt, 5, json.c_str());
-    if (duckdb_execute_prepared(pre._stmt, &pre._result) != DuckDBSuccess) {
-      auto error_message = duckdb_result_error(&pre._result);
-      throw std::exception(error_message);
-    }
-    duckdb_destroy_result(&pre._result);
+    auto img    = result.img;
+    duckdb_append_uint32(appender, img->_image_id);
+    duckdb_append_varchar(appender, img->_image_path.string().c_str());
+    duckdb_append_varchar(appender, conv.to_bytes(img->_image_name).c_str());
+    duckdb_append_uint32(appender, static_cast<uint32_t>(img->_image_type));
+    duckdb_append_varchar(appender, json.c_str());
+    duckdb_appender_end_row(appender);
+    EASY_END_BLOCK;
   }
+  duckdb_appender_flush(appender);
+  duckdb_appender_destroy(&appender);
 }
 
 void SleeveMapper::AddFilter(const std::shared_ptr<SleeveFolder> sleeve_folder,

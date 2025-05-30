@@ -8,7 +8,7 @@ add_library(Image
     image/image.cpp
 )
 target_include_directories(Image PUBLIC include)
-target_link_libraries(Image PUBLIC Exiv2 ${OpenCV_LIBS} LibRaw TimeProvider JSON xxHash)
+target_link_libraries(Image PUBLIC Exiv2 ${OpenCV_LIBS} LibRaw TimeProvider JSON xxHash easy_profiler)
 
 
 add_library(ImageDecoder 
@@ -55,14 +55,14 @@ target_link_libraries(Sleeve PUBLIC Image ImageLoader SleeveFilter EditHistory I
 
 add_library(SleeveView sleeve/sleeve_view.cpp)
 target_include_directories(SleeveView PUBLIC include)
-target_link_libraries(SleeveView PUBLIC Image Sleeve ImagePool)
+target_link_libraries(SleeveView PUBLIC Image Sleeve ImagePool easy_profiler)
 
 add_library(SleeveMapper     
     storage/mapper/sleeve/query_prepare.cpp
     storage/mapper/sleeve/statement_prepare.cpp
     storage/mapper/sleeve/sleeve_mapper.cpp)
 target_include_directories(SleeveMapper PUBLIC include)
-target_link_libraries(SleeveMapper PUBLIC DuckDB Image Sleeve ImagePool )
+target_link_libraries(SleeveMapper PUBLIC DuckDB Image Sleeve ImagePool easy_profiler)
 
 add_library(SleeveManager 
     sleeve/sleeve_manager.cpp)

@@ -30,6 +30,8 @@
 
 #include "image/image.hpp"
 
+#include <easy/profiler.h>
+
 #include <cstdint>
 #include <exception>
 #include <exiv2/exif.hpp>
@@ -40,6 +42,12 @@
 #include <xxhash.hpp>
 
 namespace puerhlab {
+struct ExifLite {
+  std::string tag_name;
+  uint32_t    type_id;
+  std::string value_string;
+};
+
 using json = nlohmann::json;
 /**
  * @brief Construct a new Image object
@@ -95,21 +103,32 @@ void Image::ClearThumbnail() {
 }
 
 auto Image::ExifToJson() -> std::string {
+  EASY_FUNCTION(profiler::colors::Magenta);
+  EASY_BLOCK("Converting Sum");
+
   json o;
   // Temporary remove the support for reading exif
   if (!_has_exif) {
     return nlohmann::to_string(o);
   }
   try {
-    auto exif_data = _exif_data->exifData();
-    for (auto i = exif_data.begin(); i != exif_data.end(); ++i) {
-      auto type_id    = static_cast<uint32_t>(i->typeId());  // debug
-      auto type       = i->ifdName();
-      auto type_value = i->value().toString();  // debug
+    auto                          exif_data = _exif_data->exifData();
+    // Suggestion from ChatGPT to improve performance
+    std::vector<Exiv2::Exifdatum> local;
+    for (const auto &entry : exif_data) {
+      local.emplace_back(entry);
+    }
+    for (auto &data : local) {
+      auto type_id    = static_cast<uint32_t>(data.typeId());  // debug
+      auto type       = data.ifdName();
+      auto type_value = data.value().toString();  // debug
       o[type]         = std::array<std::string, 2>{std::to_string(type_id), std::move(type_value)};
     }
+
   } catch (std::exception &e) {
+    std::cerr << e.what() << std::endl;
   }
+  EASY_END_BLOCK;
   return nlohmann::to_string(o);
 }
 

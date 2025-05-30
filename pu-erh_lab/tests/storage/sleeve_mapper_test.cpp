@@ -1,7 +1,7 @@
 #include "storage/mapper/sleeve/sleeve_mapper.hpp"
 
 #include <gtest/gtest.h>
-
+#include <easy/profiler.h>
 #include <exception>
 #include <exiv2/error.hpp>
 #include <filesystem>
@@ -55,6 +55,7 @@ TEST(SleeveMapperTest, DISABLED_SimpleCaptureTest1) {
 }
 
 TEST(SleeveMapperTest, SimpleCaptureTest2) {
+  EASY_PROFILER_ENABLE;
   if (std::filesystem::exists(db_path)) {
     std::filesystem::remove(db_path);
   }
@@ -64,7 +65,7 @@ TEST(SleeveMapperTest, SimpleCaptureTest2) {
     SleeveManager manager{};
     image_path_t  path =
         L"D:\\Projects\\pu-erh_lab\\pu-erh_"
-        L"lab\\tests\\resources\\sample_images\\jpg";
+        L"lab\\tests\\resources\\sample_images\\dng_100";
     std::vector<image_path_t> imgs;
     for (const auto &img : std::filesystem::directory_iterator(path)) {
       imgs.push_back(img.path());
@@ -77,5 +78,6 @@ TEST(SleeveMapperTest, SimpleCaptureTest2) {
       std::cout << e.what() << std::endl;
     }
   }
+  profiler::dumpBlocksToFile("D:\\Projects\\pu-erh_lab\\pu-erh_lab\\tests\\resources\\temp_folder\\test_profile.prof");
   // std::filesystem::remove(db_path.string());
 }

@@ -30,32 +30,29 @@
 
 #include <cstdint>
 #include <mutex>
+#include <optional>
 #include <queue>
 
 #pragma once
 
 namespace puerhlab {
 /**
- * @brief A thread-safe non-blocking task queue used by a RawDecoder.
+ * @brief A thread-safe blocking task queue used by the threadpool.
  */
 template <typename T>
 class ConcurrentBlockingQueue {
  public:
   std::uint32_t           _max_size;
-  std::uint32_t           _low_threadshold;
-  std::uint32_t           _high_threadshold;
+  bool                    _has_capacity_limit = true;
   std::queue<T>           _queue;
   // Mutex used for non-blocking queue
   std::mutex              mtx;
   std::condition_variable _producer_cv;
   std::condition_variable _consumer_cv;
 
-  explicit ConcurrentBlockingQueue();
+  explicit ConcurrentBlockingQueue() { _has_capacity_limit = false; };
 
-  explicit ConcurrentBlockingQueue(uint32_t max_size) : _max_size(max_size) {
-    _low_threadshold  = (uint32_t)(max_size * 0.6);
-    _high_threadshold = (uint32_t)(max_size * 0.8);
-  }
+  explicit ConcurrentBlockingQueue(uint32_t max_size) : _max_size(max_size) {}
 
   /**
    * @brief A thread-safe wrapper for _request_queue push() method
@@ -65,10 +62,9 @@ class ConcurrentBlockingQueue {
   void push(T new_request) {
     {
       std::unique_lock<std::mutex> lock(mtx);
-      _producer_cv.wait(lock, [this]() { return _queue.size() < _high_threadshold; });
       _queue.push(std::move(new_request));
     }
-    _consumer_cv.notify_one();
+    _consumer_cv.notify_all();
   }
 
   /**
@@ -84,11 +80,121 @@ class ConcurrentBlockingQueue {
     auto handled_request = _queue.front();
     _queue.pop();
 
-    if (_queue.size() <= _low_threadshold) {
-      _producer_cv.notify_all();
-    }
-
     return handled_request;
   }
+};
+
+/**
+ * @brief A thread-safe non-blocking ring buffer.
+ */
+template <typename T>
+class LockFreeMPMCQueue {
+ public:
+  explicit LockFreeMPMCQueue(size_t capacity) : _capacity(capacity), _buffer(capacity) {
+    for (size_t i = 0; i < capacity; ++i) {
+      _buffer[i].sequence.store(i, std::memory_order_relaxed);
+    }
+    _head.store(0, std::memory_order_relaxed);
+    _tail.store(0, std::memory_order_relaxed);
+  }
+
+  bool push(const T &item) {
+    size_t pos = _tail.load(std::memory_order_relaxed);
+    while (true) {
+      Slot    &slot = _buffer[pos % _capacity];
+      size_t   seq  = slot.sequence.load(std::memory_order_acquire);
+      intptr_t diff = (intptr_t)seq - (intptr_t)pos;
+      if (diff == 0) {
+        if (_tail.compare_exchange_weak(pos, pos + 1, std::memory_order_relaxed)) {
+          slot.data = item;
+          slot.sequence.store(pos + 1, std::memory_order_release);
+          return true;
+        }
+      } else if (diff < 0) {
+        return false;  // queue is full
+      } else {
+        pos = _tail.load(std::memory_order_relaxed);  // retry
+      }
+    }
+  }
+
+  std::optional<T> pop() {
+    size_t pos = _head.load(std::memory_order_relaxed);
+    while (true) {
+      Slot    &slot = _buffer[pos % _capacity];
+      size_t   seq  = slot.sequence.load(std::memory_order_acquire);
+      intptr_t diff = (intptr_t)seq - (intptr_t)(pos + 1);
+      if (diff == 0) {
+        if (_head.compare_exchange_weak(pos, pos + 1, std::memory_order_relaxed)) {
+          T result = slot.data;
+          slot.sequence.store(pos + _capacity, std::memory_order_release);
+          return result;
+        }
+      } else if (diff < 0) {
+        return std::nullopt;  // queue is empty
+      } else {
+        pos = _head.load(std::memory_order_relaxed);  // retry
+      }
+    }
+  }
+
+  bool empty() const { return _head.load(std::memory_order_acquire) == _tail.load(std::memory_order_acquire); }
+
+ private:
+  struct Slot {
+    std::atomic<size_t> sequence;
+    T                   data;
+  };
+
+  size_t              _capacity;
+  std::vector<Slot>   _buffer;
+  std::atomic<size_t> _head{0};
+  std::atomic<size_t> _tail{0};
+};
+
+template <typename T>
+class BlockingMPMCQueue {
+ public:
+  explicit BlockingMPMCQueue(size_t capacity) : _queue(capacity) {}
+
+  void push(const T &item) {
+    while (true) {
+      if (_queue.push(item)) {
+        {
+          std::lock_guard<std::mutex> lock(_cv_mutex);
+          _not_empty.notify_one();
+        }
+        return;
+      }
+
+      std::unique_lock<std::mutex> lock(_cv_mutex);
+      _not_full.wait(lock);  // wait until space available
+    }
+  }
+
+  T pop() {
+    while (true) {
+      auto item = _queue.pop();
+      if (item.has_value()) {
+        {
+          std::lock_guard<std::mutex> lock(_cv_mutex);
+          _not_full.notify_one();
+        }
+        return item.value();
+      }
+
+      std::unique_lock<std::mutex> lock(_cv_mutex);
+      _not_empty.wait(lock);  // wait until item available
+    }
+  }
+
+  bool empty() const { return _queue.empty(); }
+
+ private:
+  LockFreeMPMCQueue<T>    _queue;
+
+  std::condition_variable _not_empty;
+  std::condition_variable _not_full;
+  std::mutex              _cv_mutex;
 };
 };  // namespace puerhlab

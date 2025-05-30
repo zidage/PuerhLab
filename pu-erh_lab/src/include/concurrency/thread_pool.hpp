@@ -39,6 +39,7 @@
 #include <vector>
 
 #include "type/type.hpp"
+#include "utils/queue/queue.hpp"
 
 #pragma once
 

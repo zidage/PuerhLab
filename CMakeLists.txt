@@ -15,6 +15,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_VS_USE_DEBUG_LIBRARIES "$<CONFIG:Debug,Custom>")
 set(DCMAKE_TOOLCHAIN_FILE "D:\\misc\\vcpkg\\scripts\\buildsystems\\vcpkg.cmake")
 
+set(CMAKE_PREFIX_PATH "D:/Projects/pu-erh_lab/pu-erh_lab/third_party/easy_profiler-v2.1.0-msvc15-win64/lib/cmake/easy_profiler")
 
 project(pu-erh_lab VERSION 0.1.0 LANGUAGES C CXX)
 
@@ -91,9 +92,14 @@ set_target_properties(Libexif PROPERTIES
     IMPORTED_LOCATION "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_party/libexif_x64-windows/debug/bin/exif-12.dll"
     IMPORTED_IMPLIB "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_party/libexif_x64-windows/debug/lib/exif.lib"
     INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_party/libexif_x64-windows/include")
-# Modules
+
+# Profiler
+find_package(easy_profiler REQUIRED)
+
+    # Modules
 add_subdirectory(${CMAKE_SOURCE_DIR}/pu-erh_lab/src)
 add_subdirectory(${CMAKE_SOURCE_DIR}/pu-erh_lab/tests)
+
 
 file(GLOB_RECURSE ALL_SOURCE_FILES
     "${CMAKE_SOURCE_DIR}/pu-erh_lab/src/*.c"

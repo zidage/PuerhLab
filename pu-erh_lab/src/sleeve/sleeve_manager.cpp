@@ -55,7 +55,7 @@ auto SleeveManager::GetImgCount() -> uint32_t { return _image_pool->Capacity(Acc
  * @return uint32_t
  */
 auto SleeveManager::LoadToPath(std::vector<image_path_t> img_os_paths, sl_path_t dest) -> uint32_t {
-  ImageLoader loader{128, 24, 0};
+  ImageLoader loader{128, 16, 0};
   auto        expected_size = img_os_paths.size();
   auto        total_size    = 0;
   loader.StartLoading(std::move(img_os_paths), DecodeType::SLEEVE_LOADING);
