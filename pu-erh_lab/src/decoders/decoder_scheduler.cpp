@@ -30,6 +30,8 @@
 
 #include "decoders/decoder_scheduler.hpp"
 
+#include <easy/profiler.h>
+
 #include <exception>
 #include <filesystem>
 #include <fstream>
@@ -55,7 +57,7 @@ namespace puerhlab {
  * @param total_request
  */
 DecoderScheduler::DecoderScheduler(size_t thread_count, std::shared_ptr<BufferQueue> decoded_buffer)
-    : _thread_pool(thread_count), _decoded_buffer(decoded_buffer) {}
+    : _file_read_thread_pool(thread_count), _thread_pool(thread_count), _decoded_buffer(decoded_buffer) {}
 
 /**
  * @brief Schedule a decode task for initialize image data. The decode type can only be SLEEVE_LOADING, therefore
@@ -66,41 +68,48 @@ DecoderScheduler::DecoderScheduler(size_t thread_count, std::shared_ptr<BufferQu
  */
 void DecoderScheduler::ScheduleDecode(image_id_t id, image_path_t image_path,
                                       std::shared_ptr<std::promise<image_id_t>> decode_promise) {
-  // Open file as an ifstream
+  _file_read_thread_pool.Submit([id, image_path, decode_promise, this] {
+    // Open file as an ifstream
+    EASY_FUNCTION(profiler::colors::Cyan);
+    EASY_BLOCK("Read file from disk");
+    std::ifstream file(image_path, std::ios::binary | std::ios::ate);
 
-  std::ifstream file(image_path, std::ios::binary | std::ios::ate);
+    if (!file.is_open()) {
+      // Check whether file openned successfully
+      decode_promise->set_exception(
+          std::make_exception_ptr(std::runtime_error("File not exists or no read permission.")));
+      return;
+    }
 
-  if (!file.is_open()) {
-    // Check whether file openned successfully
-    decode_promise->set_exception(
-        std::make_exception_ptr(std::runtime_error("File not exists or no read permission.")));
-    return;
-  }
+    // Assign a decoder for the task
+    std::shared_ptr<LoadingDecoder> decoder  = std::make_shared<MetadataDecoder>();
 
-  // Assign a decoder for the task
-  std::shared_ptr<LoadingDecoder> decoder  = std::make_shared<MetadataDecoder>();
+    // Read file into memory
+    std::streamsize                 fileSize = file.tellg();
+    file.seekg(0, std::ios::beg);
+    std::vector<char> buffer(fileSize);
+    if (!file.read(buffer.data(), fileSize)) {
+      decode_promise->set_exception(
+          std::make_exception_ptr(std::runtime_error("File not exists or no read permission.")));
+      return;
+    }
+    file.close();
 
-  // Read file into memory
-  std::streamsize                 fileSize = file.tellg();
-  file.seekg(0, std::ios::beg);
-  std::vector<char> buffer(fileSize);
-  if (!file.read(buffer.data(), fileSize)) {
-    decode_promise->set_exception(
-        std::make_exception_ptr(std::runtime_error("File not exists or no read permission.")));
-    return;
-  }
-  file.close();
+    EASY_END_BLOCK;
+    EASY_BLOCK("Schedule decoding");
+    // Submit a new decode request
+    auto                 &decoded_buffer = _decoded_buffer;
+    std::filesystem::path file_path(image_path);
 
-  // Submit a new decode request
-  auto                 &decoded_buffer = _decoded_buffer;
-  std::filesystem::path file_path(image_path);
+    // auto                  task = std::make_shared<std::packaged_task<void()>>(
+    //     [decoder, buffer = std::move(buffer), file_path, decoded_buffer, id, decode_promise]() mutable {
+    //       decoder->Decode(std::move(buffer), file_path, decoded_buffer, id, decode_promise);
+    //     });
 
-  auto                  task = std::make_shared<std::packaged_task<void()>>(
-      [decoder, buffer = std::move(buffer), file_path, decoded_buffer, id, decode_promise]() mutable {
-        decoder->Decode(std::move(buffer), file_path, decoded_buffer, id, decode_promise);
-      });
-
-  _thread_pool.Submit([task]() { (*task)(); });
+    _thread_pool.Submit([decoder, buffer = std::move(buffer), file_path, decoded_buffer, id, decode_promise]() mutable {
+      decoder->Decode(std::move(buffer), file_path, decoded_buffer, id, decode_promise);
+    });
+  });
 }
 
 /**
@@ -112,6 +121,7 @@ void DecoderScheduler::ScheduleDecode(image_id_t id, image_path_t image_path,
 void DecoderScheduler::ScheduleDecode(std::shared_ptr<Image> source_img, DecodeType decode_type,
                                       std::shared_ptr<std::promise<image_id_t>> decode_promise) {
   // Open file as an ifstream
+
   std::ifstream file(source_img->_image_path, std::ios::binary | std::ios::ate);
 
   if (!file.is_open()) {
@@ -155,11 +165,8 @@ void DecoderScheduler::ScheduleDecode(std::shared_ptr<Image> source_img, DecodeT
   auto                 &decoded_buffer = _decoded_buffer;
   std::filesystem::path file_path(source_img->_image_path);
 
-  auto                  task = std::make_shared<std::packaged_task<void()>>(
-      [decoder, buffer = std::move(buffer), decoded_buffer, source_img, decode_promise]() mutable {
-        decoder->Decode(std::move(buffer), source_img, decoded_buffer, decode_promise);
-      });
-
-  _thread_pool.Submit([task]() { (*task)(); });
+  _thread_pool.Submit([decoder, buffer = std::move(buffer), decoded_buffer, source_img, decode_promise]() mutable {
+    decoder->Decode(std::move(buffer), source_img, decoded_buffer, decode_promise);
+  });
 }
 };  // namespace puerhlab

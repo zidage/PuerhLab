@@ -18,7 +18,7 @@ add_library(ImageDecoder
     decoders/metadata_decoder.cpp
 )
 target_include_directories(ImageDecoder PUBLIC include)
-target_link_libraries(ImageDecoder PUBLIC Image ThreadPool ${OpenCV_LIBS} LibRaw) 
+target_link_libraries(ImageDecoder PUBLIC Image ThreadPool ${OpenCV_LIBS} LibRaw easy_profiler) 
 
 add_library(ImageLoader image/image_loader.cpp)
 target_include_directories(ImageLoader PUBLIC include)

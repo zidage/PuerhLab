@@ -239,32 +239,25 @@ void SleeveMapper::CaptureSleeve(const std::shared_ptr<SleeveBase>       sleeve_
 }
 
 void SleeveMapper::CaptureImagePool(const std::shared_ptr<ImagePoolManager> image_pool, Prepare &pre) {
-  EASY_FUNCTION(profiler::colors::Cyan);
-  ThreadPool thread_pool{16};
+  ThreadPool thread_pool{8};
   if (!_initialized || !_db_connected) {
     throw std::exception("Cannot connect to a valid sleeve db");
   }
 
   auto                                &pool = image_pool->GetPool();
   BlockingMPMCQueue<PreparedImageData> exif_jsons{348};
-  EASY_BLOCK("Submitting tasks");
   for (auto &pool_val : pool) {
     auto img = pool_val.second;
     thread_pool.Submit([img, &exif_jsons]() {
       std::string result = img->ExifToJson();
-      EASY_BLOCK("Write finished to Queue");
       exif_jsons.push({img->_image_id, std::move(result), img});
-      EASY_END_BLOCK;
     });
   }
   std::wstring_convert<std::codecvt_utf8<wchar_t>> conv;
   duckdb_appender                                  appender;
   duckdb_appender_create(_con, nullptr, "Image", &appender);
-  EASY_END_BLOCK;
 
-  EASY_BLOCK("Reclaim converted EXIF and write to DB");
   for (size_t i = 0; i < pool.size(); ++i) {
-    EASY_BLOCK("Write data to DB");
     auto result = exif_jsons.pop();
     auto json   = result.json;
     // INSERT INTO Image (id,image_path,file_name,type,metadata)
@@ -275,7 +268,6 @@ void SleeveMapper::CaptureImagePool(const std::shared_ptr<ImagePoolManager> imag
     duckdb_append_uint32(appender, static_cast<uint32_t>(img->_image_type));
     duckdb_append_varchar(appender, json.c_str());
     duckdb_appender_end_row(appender);
-    EASY_END_BLOCK;
   }
   duckdb_appender_flush(appender);
   duckdb_appender_destroy(&appender);

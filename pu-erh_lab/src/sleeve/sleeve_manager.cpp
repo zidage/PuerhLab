@@ -1,5 +1,7 @@
 #include "sleeve/sleeve_manager.hpp"
 
+#include <easy/profiler.h>
+
 #include <cassert>
 #include <codecvt>
 #include <cstddef>
@@ -55,13 +57,17 @@ auto SleeveManager::GetImgCount() -> uint32_t { return _image_pool->Capacity(Acc
  * @return uint32_t
  */
 auto SleeveManager::LoadToPath(std::vector<image_path_t> img_os_paths, sl_path_t dest) -> uint32_t {
-  ImageLoader loader{128, 16, 0};
+  ImageLoader loader{256, 8, 0};
   auto        expected_size = img_os_paths.size();
   auto        total_size    = 0;
   loader.StartLoading(std::move(img_os_paths), DecodeType::SLEEVE_LOADING);
   while (expected_size > 0) {
-    std::shared_ptr<Image> loaded  = loader.LoadImage();
-    auto                   element = _base->CreateElementToPath(dest, loaded->_image_name, ElementType::FILE);
+    EASY_FUNCTION(profiler::colors::Cyan);
+    EASY_BLOCK("Load Image");
+    std::shared_ptr<Image> loaded = loader.LoadImage();
+    EASY_END_BLOCK;
+    EASY_BLOCK("Create Element");
+    auto element = _base->CreateElementToPath(dest, loaded->_image_name, ElementType::FILE);
     if (!element.has_value()) {
       throw std::exception("Error creating element in sleeve");
     }
@@ -69,6 +75,7 @@ auto SleeveManager::LoadToPath(std::vector<image_path_t> img_os_paths, sl_path_t
     _image_pool->Insert(loaded);
     total_size++;
     --expected_size;
+    EASY_END_BLOCK;
   }
   return total_size;
 }

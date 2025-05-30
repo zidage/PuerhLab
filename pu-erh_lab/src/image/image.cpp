@@ -103,9 +103,6 @@ void Image::ClearThumbnail() {
 }
 
 auto Image::ExifToJson() -> std::string {
-  EASY_FUNCTION(profiler::colors::Magenta);
-  EASY_BLOCK("Converting Sum");
-
   json o;
   // Temporary remove the support for reading exif
   if (!_has_exif) {
@@ -121,14 +118,14 @@ auto Image::ExifToJson() -> std::string {
     for (auto &data : local) {
       auto type_id    = static_cast<uint32_t>(data.typeId());  // debug
       auto type       = data.ifdName();
-      auto type_value = data.value().toString();  // debug
-      o[type]         = std::array<std::string, 2>{std::to_string(type_id), std::move(type_value)};
+      auto type_value = data.value().toUint32();  // debug
+      // o[type]         = std::array<std::string, 2>{std::to_string(type_id), type_value};
+      o[type]         = std::pair<uint32_t, uint32_t>{type_id, type_value};
     }
 
   } catch (std::exception &e) {
     std::cerr << e.what() << std::endl;
   }
-  EASY_END_BLOCK;
   return nlohmann::to_string(o);
 }
 
