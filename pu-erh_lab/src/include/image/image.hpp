@@ -40,6 +40,8 @@
 #include <string>
 #include <type/type.hpp>
 
+#include "image/metadata.hpp"
+
 namespace puerhlab {
 enum class ImageType { DEFAULT, JPEG, PNG, TIFF, ARW, CR2, CR3, NEF, DNG };
 
@@ -54,7 +56,8 @@ class Image {
   file_name_t             _image_name;
 
   Exiv2::Image::UniquePtr _exif_data;
-  nlohmann::json          _exif;
+  nlohmann::json          _exif_json;
+  ExifDisplayMetaData     _exif_display;
 
   cv::Mat                 _image_data;
   cv::Mat                 _thumbnail;
@@ -67,6 +70,8 @@ class Image {
   std::atomic<bool>       _has_full_img;
   std::atomic<bool>       _has_thumb;
   std::atomic<bool>       _has_exif;
+  std::atomic<bool>       _has_exif_json;
+  std::atomic<bool>       _has_exif_display;
 
   std::atomic<bool>       _thumb_pinned = false;
   std::atomic<bool>       _full_pinned  = false;
@@ -85,7 +90,8 @@ class Image {
   void                  SetId(image_id_t image_id);
   void                  ClearData();
   void                  ClearThumbnail();
-  void                  ComputeCheckSum();
-  auto                  ExifToJson() -> std::string;
+  void                  ComputeChecksum();
+  auto                  ExifToJson() const -> std::string;
+  void                  JsonToExif(std::string json_str);
 };
 };  // namespace puerhlab

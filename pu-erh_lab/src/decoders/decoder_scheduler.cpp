@@ -162,7 +162,7 @@ void DecoderScheduler::ScheduleDecode(std::shared_ptr<Image> source_img, DecodeT
   file.close();
 
   // Submit a new decode request
-  auto                 &decoded_buffer = _decoded_buffer;
+  auto                  decoded_buffer = _decoded_buffer;
   std::filesystem::path file_path(source_img->_image_path);
 
   _thread_pool.Submit([decoder, buffer = std::move(buffer), decoded_buffer, source_img, decode_promise]() mutable {

@@ -24,5 +24,7 @@ class Queries {
   static const std::string version_insert_query;
 
   static const std::string image_insert_query;
+
+  static const std::string image_lookup_query;
 };
 };  // namespace puerhlab

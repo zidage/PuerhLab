@@ -53,4 +53,6 @@ const std::string Queries::version_insert_query =
 const std::string Queries::image_insert_query =
     "INSERT INTO Image (id,image_path,file_name,type,metadata) VALUES "
     "(?,?,?,?,?);";
+
+const std::string Queries::image_lookup_query = "SELECT * FROM Image WHERE id = ?;";
 };  // namespace puerhlab

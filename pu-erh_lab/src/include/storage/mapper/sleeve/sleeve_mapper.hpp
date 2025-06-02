@@ -32,6 +32,7 @@
 
 #include <duckdb.h>
 
+#include <codecvt>
 #include <cstdint>
 #include <memory>
 #include <unordered_map>
@@ -76,16 +77,18 @@ enum class Operate : uint8_t { ADD = 0x0, DELETE = 0x8, EDIT = 0x10, LOOKUP = 0x
  */
 class SleeveMapper {
  private:
-  duckdb_database      _db;
-  duckdb_connection    _con;
-  file_path_t          _db_path;
-  bool                 _db_connected = false;
-  bool                 _initialized  = false;
+  duckdb_database                                  _db;
+  duckdb_connection                                _con;
+  file_path_t                                      _db_path;
+  bool                                             _db_connected = false;
+  bool                                             _initialized  = false;
 
-  sleeve_id_t          _captured_sleeve_id;
-  bool                 _has_sleeve = false;
+  sleeve_id_t                                      _captured_sleeve_id;
+  bool                                             _has_sleeve = false;
 
-  std::vector<Prepare> _prepare_storage;
+  std::wstring_convert<std::codecvt_utf8<wchar_t>> conv;
+
+  std::vector<Prepare>                             _prepare_storage;
 
   inline void CaptureElement(std::unordered_map<uint32_t, std::shared_ptr<SleeveElement>> &storage, Prepare &pre);
   inline void CaptureFolder(std::shared_ptr<SleeveFolder> folder, Prepare &pre);
@@ -103,12 +106,27 @@ class SleeveMapper {
   auto GetPrepare(uint8_t op, const std::string &query) -> Prepare &;
 
   void CaptureSleeve(const std::shared_ptr<SleeveBase> sleeve_base, const std::shared_ptr<ImagePoolManager> image_pool);
-  void CaptureImagePool(const std::shared_ptr<ImagePoolManager> image_pool, Prepare &pre);
-  void AddFilter(const std::shared_ptr<SleeveFolder> sleeve_folder, const std::shared_ptr<FilterCombo> filter,
-                 Prepare &pre);
-  void AddImage(const std::shared_ptr<Image> image, Prepare &pre);
-  void EditImage(const std::shared_ptr<Image> image, const image_id_t id, Prepare &pre);
-  void RemoveImage(image_id_t image_id);
+  void CaptureImagePool(const std::shared_ptr<ImagePoolManager> image_pool);
+
+  void AddImage(const Image &image);
+  auto GetImage(const image_id_t id) -> std::shared_ptr<Image>;
+  void EditImage(const Image &image, const image_id_t id);
+  void RemoveImage(const image_id_t image_id);
+
+  void AddElement(const std::shared_ptr<SleeveElement> element);
+  void GetElement(const sl_element_id_t element_id);
+  void RemoveElement(const sl_element_id_t element_id);
+  void EditElement(const sl_element_id_t element_id, const std::shared_ptr<SleeveElement> element);
+
+  void AddFolder(const std::shared_ptr<SleeveFolder> folder);
+  void AddFile(const std::shared_ptr<SleeveFile> file);
+
+  void RemoveFolder(const sl_element_id_t folder_id);
+  void RemoveFile(const sl_element_id_t file_id);
+
+  void AddFilter(const sl_element_id_t folder_id, const std::shared_ptr<FilterCombo> filterd);
+  void RemoveFilterCombo(const sl_element_id_t combo_id);
+
   void RestoreSleeveFromDB(sleeve_id_t sleeve_id);
   void RemoveSleeveBase(sleeve_id_t sleeve_id);
 };

@@ -1,7 +1,9 @@
+#include <json.hpp>
 #include <string>
 
 namespace puerhlab {
-struct ExifMetaData {
+class ExifDisplayMetaData {
+ public:
   std::string    make           = "";
   std::string    model          = "";
 
@@ -16,5 +18,10 @@ struct ExifMetaData {
   float          aperture       = 0.0f;
   float          focal          = 0.0f;
   bool           has_attachment = false;
+
+  ExifDisplayMetaData()         = default;
+  ExifDisplayMetaData(nlohmann::json exif_json);
+
+  void ExtractFromJson(nlohmann::json exif_json);
 };
 };  // namespace puerhlab

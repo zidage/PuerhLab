@@ -11,6 +11,7 @@
 #include <memory>
 #include <optional>
 #include <queue>
+#include <string>
 #include <unordered_map>
 
 #include "concurrency/thread_local_resource.hpp"
@@ -186,9 +187,8 @@ void SleeveMapper::CaptureFilters(std::unordered_map<uint32_t, std::shared_ptr<F
         auto error_message = duckdb_result_error(&pre._result);
         throw std::exception(error_message);
       }
+      duckdb_destroy_result(&pre._result);
     }
-
-    duckdb_destroy_result(&pre._result);
   }
 }
 
@@ -234,11 +234,10 @@ void SleeveMapper::CaptureSleeve(const std::shared_ptr<SleeveBase>       sleeve_
   Prepare &filter_pre = GetPrepare(GET_OP(Operate::ADD, Table::Filter), Queries::filter_insert_query);
   CaptureFilters(sleeve_base->GetFilterStorage(), filter_pre);
 
-  Prepare &img_pre = GetPrepare(GET_OP(Operate::ADD, Table::Image), Queries::image_insert_query);
-  CaptureImagePool(image_pool, img_pre);
+  CaptureImagePool(image_pool);
 }
 
-void SleeveMapper::CaptureImagePool(const std::shared_ptr<ImagePoolManager> image_pool, Prepare &pre) {
+void SleeveMapper::CaptureImagePool(const std::shared_ptr<ImagePoolManager> image_pool) {
   ThreadPool thread_pool{8};
   if (!_initialized || !_db_connected) {
     throw std::exception("Cannot connect to a valid sleeve db");
@@ -253,8 +252,7 @@ void SleeveMapper::CaptureImagePool(const std::shared_ptr<ImagePoolManager> imag
       exif_jsons.push({img->_image_id, std::move(result), img});
     });
   }
-  std::wstring_convert<std::codecvt_utf8<wchar_t>> conv;
-  duckdb_appender                                  appender;
+  duckdb_appender appender;
   duckdb_appender_create(_con, nullptr, "Image", &appender);
 
   for (size_t i = 0; i < pool.size(); ++i) {
@@ -273,12 +271,80 @@ void SleeveMapper::CaptureImagePool(const std::shared_ptr<ImagePoolManager> imag
   duckdb_appender_destroy(&appender);
 }
 
-void SleeveMapper::AddFilter(const std::shared_ptr<SleeveFolder> sleeve_folder,
-                             const std::shared_ptr<FilterCombo> filter, Prepare &pre) {
+void SleeveMapper::AddFilter(const sl_element_id_t folder_id, const std::shared_ptr<FilterCombo> combo) {
   if (!_initialized || !_db_connected) {
     throw std::exception("Cannot connect to a valid sleeve db");
   }
 
-  Prepare &filter_pre = GetPrepare(GET_OP(Operate::ADD, Table::Filter), Queries::filter_insert_query);
+  Prepare &filter_pre       = GetPrepare(GET_OP(Operate::ADD, Table::Filter), Queries::filter_insert_query);
+  Prepare &combo_folder_pre = GetPrepare(GET_OP(Operate::ADD, Table::ComboFolder), Queries::filter_insert_query);
+  auto     combo_id         = combo->filter_id;
+
+  duckdb_bind_uint32(combo_folder_pre._stmt, 1, combo_id);
+  duckdb_bind_uint32(combo_folder_pre._stmt, 2, folder_id);
+  if (duckdb_execute_prepared(combo_folder_pre._stmt, &combo_folder_pre._result) != DuckDBSuccess) {
+    auto error_message = duckdb_result_error(&combo_folder_pre._result);
+    throw std::exception(error_message);
+  }
+  duckdb_destroy_result(&combo_folder_pre._result);
+
+  auto &filters = combo->GetFilters();
+
+  for (auto &filter : filters) {
+    // INSERT INTO Filter (combo_id,types,data)
+    duckdb_bind_uint32(filter_pre._stmt, 1, combo_id);
+    duckdb_bind_uint32(filter_pre._stmt, 2, static_cast<uint32_t>(filter._type));
+    duckdb_bind_varchar(filter_pre._stmt, 3, conv.to_bytes(filter.ToJSON()).c_str());
+    if (duckdb_execute_prepared(filter_pre._stmt, &filter_pre._result) != DuckDBSuccess) {
+      auto error_message = duckdb_result_error(&filter_pre._result);
+      throw std::exception(error_message);
+    }
+    duckdb_destroy_result(&filter_pre._result);
+  }
+}
+
+void SleeveMapper::AddImage(const Image &image) {
+  Prepare &img_pre = GetPrepare(GET_OP(Operate::ADD, Table::Filter), Queries::image_insert_query);
+  // INSERT INTO Image (id,image_path,file_name,type,metadata)
+  duckdb_bind_uint32(img_pre._stmt, 1, image._image_id);
+  duckdb_bind_varchar(img_pre._stmt, 2, conv.to_bytes(image._image_path.wstring()).c_str());
+  duckdb_bind_varchar(img_pre._stmt, 3, conv.to_bytes(image._image_name).c_str());
+  duckdb_bind_uint32(img_pre._stmt, 4, static_cast<uint32_t>(image._image_type));
+  duckdb_bind_varchar(img_pre._stmt, 5, image.ExifToJson().c_str());
+  if (duckdb_execute_prepared(img_pre._stmt, &img_pre._result) != DuckDBSuccess) {
+    auto error_message = duckdb_result_error(&img_pre._result);
+    throw std::exception(error_message);
+  }
+  duckdb_destroy_result(&img_pre._result);
+}
+
+auto SleeveMapper::GetImage(const image_id_t id) -> std::shared_ptr<Image> {
+  Prepare &img_pre = GetPrepare(GET_OP(Operate::LOOKUP, Table::Image), Queries::image_lookup_query);
+  duckdb_bind_uint32(img_pre._stmt, 1, id);
+  if (duckdb_execute_prepared(img_pre._stmt, &img_pre._result) != DuckDBSuccess) {
+    auto error_message = duckdb_result_error(&img_pre._result);
+    throw std::exception(error_message);
+  }
+  idx_t row_count = duckdb_row_count(&img_pre._result);
+  if (row_count != 1) {
+    duckdb_destroy_result(&img_pre._result);
+    throw std::exception("No image found");  // No image found
+  }
+
+  // Image (id,image_path,file_name,type,metadata)
+  auto image_id   = duckdb_value_uint32(&img_pre._result, 0, 0);
+  auto img_path   = std::filesystem::path(duckdb_value_varchar(&img_pre._result, 1, 0));
+  auto file_name  = conv.from_bytes(duckdb_value_varchar(&img_pre._result, 2, 0));
+  auto type       = static_cast<ImageType>(duckdb_value_uint32(&img_pre._result, 3, 0));
+  auto metadata   = duckdb_value_varchar(&img_pre._result, 4, 0);
+
+  auto img        = std::make_shared<Image>(image_id, img_path, file_name, type);
+
+  img->_exif_json = nlohmann::json::parse(metadata);
+  img->_exif_display.ExtractFromJson(img->_exif_json);
+
+  duckdb_destroy_result(&img_pre._result);
+
+  return img;
 }
 };  // namespace puerhlab

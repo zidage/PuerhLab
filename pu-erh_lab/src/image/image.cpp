@@ -102,7 +102,7 @@ void Image::ClearThumbnail() {
   _has_thumbnail = false;
 }
 
-auto Image::ExifToJson() -> std::string {
+auto Image::ExifToJson() const -> std::string {
   json o;
   // Temporary remove the support for reading exif
   if (!_has_exif) {
@@ -129,5 +129,13 @@ auto Image::ExifToJson() -> std::string {
   return nlohmann::to_string(o);
 }
 
-void Image::ComputeCheckSum() { _checksum = xxh::xxhash<64>(this, sizeof(*this)); }
+void Image::JsonToExif(std::string json_str) {
+  try {
+    _exif_json = nlohmann::json::parse(json_str);
+  } catch (nlohmann::json::parse_error &e) {
+    throw std::exception("JSON parse error");
+  }
+}
+
+void Image::ComputeChecksum() { _checksum = xxh::xxhash<64>(this, sizeof(*this)); }
 };  // namespace puerhlab
