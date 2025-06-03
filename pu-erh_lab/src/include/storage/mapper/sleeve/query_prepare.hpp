@@ -25,6 +25,20 @@ class Queries {
 
   static const std::string image_insert_query;
 
+  static const std::string image_update_query;
+
   static const std::string image_lookup_query;
+
+  static const std::string image_delete_query;
+
+  static const std::string element_delete_query;
+
+  static const std::string folder_delete_query;
+  static const std::string file_delete_query;
+  static const std::string combo_delete_query_combo_id;
+  static const std::string combo_delete_query_folder_id;
+
+  static const std::string element_update_query;
+  static const std::string element_lookup_query;
 };
 };  // namespace puerhlab

@@ -103,6 +103,11 @@ void Image::ClearThumbnail() {
 }
 
 auto Image::ExifToJson() const -> std::string {
+  // If the image has exif json, return it directly
+  if (_has_exif_json) {
+    return nlohmann::to_string(_exif_json);
+  }
+
   json o;
   // Temporary remove the support for reading exif
   if (!_has_exif) {
@@ -131,7 +136,8 @@ auto Image::ExifToJson() const -> std::string {
 
 void Image::JsonToExif(std::string json_str) {
   try {
-    _exif_json = nlohmann::json::parse(json_str);
+    _exif_json     = nlohmann::json::parse(json_str);
+    _has_exif_json = true;
   } catch (nlohmann::json::parse_error &e) {
     throw std::exception("JSON parse error");
   }

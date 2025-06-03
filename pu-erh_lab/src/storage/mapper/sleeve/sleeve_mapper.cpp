@@ -130,6 +130,7 @@ void SleeveMapper::CaptureElement(std::unordered_map<uint32_t, std::shared_ptr<S
 }
 
 void SleeveMapper::CaptureFolder(std::shared_ptr<SleeveFolder> folder, Prepare &pre) {
+  // Insert Folder
   auto folder_content = folder->ListElements();
   for (auto &content_id : *folder_content) {
     // FolderContent (folder_id BIGINT, element_id BIGINT);
@@ -159,6 +160,10 @@ void SleeveMapper::CaptureFolder(std::shared_ptr<SleeveFolder> folder, Prepare &
 }
 
 void SleeveMapper::CaptureFile(std::shared_ptr<SleeveFile> file, Prepare &pre) {
+  // Remove existing file image mapping
+  RemoveFile(file->_element_id);
+
+  // Insert File
   duckdb_bind_uint32(pre._stmt, 1, file->_element_id);
   duckdb_bind_uint32(pre._stmt, 2, file->GetImage()->_image_id);
   if (duckdb_execute_prepared(pre._stmt, &pre._result) != DuckDBSuccess) {
@@ -190,6 +195,28 @@ void SleeveMapper::CaptureFilters(std::unordered_map<uint32_t, std::shared_ptr<F
       duckdb_destroy_result(&pre._result);
     }
   }
+}
+
+void SleeveMapper::RecaptureFolder(std::shared_ptr<SleeveFolder> folder) {
+  if (!_initialized || !_db_connected) {
+    throw std::exception("Cannot connect to a valid sleeve db");
+  }
+  // Remove existing folder content mapping
+  RemoveFolder(folder->_element_id);
+
+  Prepare &folder_pre = GetPrepare(GET_OP(Operate::ADD, Table::Folder), Queries::folder_insert_query);
+  CaptureFolder(folder, folder_pre);
+}
+
+void SleeveMapper::RecaptureFile(std::shared_ptr<SleeveFile> file) {
+  if (!_initialized || !_db_connected) {
+    throw std::exception("Cannot connect to a valid sleeve db");
+  }
+  // Remove existing file image mapping
+  RemoveFile(file->_element_id);
+
+  Prepare &file_pre = GetPrepare(GET_OP(Operate::ADD, Table::File), Queries::file_insert_query);
+  CaptureFile(file, file_pre);
 }
 
 void SleeveMapper::CaptureSleeve(const std::shared_ptr<SleeveBase>       sleeve_base,
@@ -271,7 +298,7 @@ void SleeveMapper::CaptureImagePool(const std::shared_ptr<ImagePoolManager> imag
   duckdb_appender_destroy(&appender);
 }
 
-void SleeveMapper::AddFilter(const sl_element_id_t folder_id, const std::shared_ptr<FilterCombo> combo) {
+void SleeveMapper::AddFilterCombo(const sl_element_id_t folder_id, const std::shared_ptr<FilterCombo> combo) {
   if (!_initialized || !_db_connected) {
     throw std::exception("Cannot connect to a valid sleeve db");
   }
@@ -304,6 +331,10 @@ void SleeveMapper::AddFilter(const sl_element_id_t folder_id, const std::shared_
 }
 
 void SleeveMapper::AddImage(const Image &image) {
+  if (!_initialized || !_db_connected) {
+    throw std::exception("Cannot connect to a valid sleeve db");
+  }
+
   Prepare &img_pre = GetPrepare(GET_OP(Operate::ADD, Table::Filter), Queries::image_insert_query);
   // INSERT INTO Image (id,image_path,file_name,type,metadata)
   duckdb_bind_uint32(img_pre._stmt, 1, image._image_id);
@@ -319,6 +350,10 @@ void SleeveMapper::AddImage(const Image &image) {
 }
 
 auto SleeveMapper::GetImage(const image_id_t id) -> std::shared_ptr<Image> {
+  if (!_initialized || !_db_connected) {
+    throw std::exception("Cannot connect to a valid sleeve db");
+  }
+
   Prepare &img_pre = GetPrepare(GET_OP(Operate::LOOKUP, Table::Image), Queries::image_lookup_query);
   duckdb_bind_uint32(img_pre._stmt, 1, id);
   if (duckdb_execute_prepared(img_pre._stmt, &img_pre._result) != DuckDBSuccess) {
@@ -346,5 +381,236 @@ auto SleeveMapper::GetImage(const image_id_t id) -> std::shared_ptr<Image> {
   duckdb_destroy_result(&img_pre._result);
 
   return img;
+}
+
+void SleeveMapper::UpdateImage(const Image &image, const image_id_t id) {
+  if (!_initialized || !_db_connected) {
+    throw std::exception("Cannot connect to a valid sleeve db");
+  }
+
+  Prepare &img_pre = GetPrepare(GET_OP(Operate::EDIT, Table::Image), Queries::image_update_query);
+  // INSERT INTO Image (id,image_path,file_name,type,metadata)
+  duckdb_bind_uint32(img_pre._stmt, 1, id);
+  duckdb_bind_varchar(img_pre._stmt, 2, conv.to_bytes(image._image_path.wstring()).c_str());
+  duckdb_bind_varchar(img_pre._stmt, 3, conv.to_bytes(image._image_name).c_str());
+  duckdb_bind_uint32(img_pre._stmt, 4, static_cast<uint32_t>(image._image_type));
+  duckdb_bind_varchar(img_pre._stmt, 5, image.ExifToJson().c_str());
+  if (duckdb_execute_prepared(img_pre._stmt, &img_pre._result) != DuckDBSuccess) {
+    auto error_message = duckdb_result_error(&img_pre._result);
+    throw std::exception(error_message);
+  }
+  duckdb_destroy_result(&img_pre._result);
+}
+
+void SleeveMapper::RemoveImage(const image_id_t id) {
+  if (!_initialized || !_db_connected) {
+    throw std::exception("Cannot connect to a valid sleeve db");
+  }
+
+  Prepare &img_pre = GetPrepare(GET_OP(Operate::DELETE, Table::Image), Queries::image_delete_query);
+  duckdb_bind_uint32(img_pre._stmt, 1, id);
+  if (duckdb_execute_prepared(img_pre._stmt, &img_pre._result) != DuckDBSuccess) {
+    auto error_message = duckdb_result_error(&img_pre._result);
+    throw std::exception(error_message);
+  }
+}
+
+void SleeveMapper::AddElement(const SleeveElement &element) {
+  if (!_initialized || !_db_connected) {
+    throw std::exception("Cannot connect to a valid sleeve db");
+  }
+
+  Prepare &element_pre = GetPrepare(GET_OP(Operate::ADD, Table::Element), Queries::element_insert_query);
+  char     added_time[32];
+  char     modified_time[32];
+  std::strftime(added_time, sizeof(added_time), "%Y-%m-%d %H:%M:%S", std::gmtime(&element._added_time));
+  std::strftime(modified_time, sizeof(modified_time), "%Y-%m-%d %H:%M:%S", std::gmtime(&element._last_modified_time));
+
+  duckdb_bind_uint32(element_pre._stmt, 1, element._element_id);
+  duckdb_bind_uint32(element_pre._stmt, 2, static_cast<uint32_t>(element._type));
+  duckdb_bind_varchar(element_pre._stmt, 3, conv.to_bytes(element._element_name).c_str());
+  duckdb_bind_varchar(element_pre._stmt, 4, added_time);
+  duckdb_bind_varchar(element_pre._stmt, 5, modified_time);
+  duckdb_bind_uint32(element_pre._stmt, 6, element._ref_count);
+
+  if (duckdb_execute_prepared(element_pre._stmt, &element_pre._result) != DuckDBSuccess) {
+    auto error_message = duckdb_result_error(&element_pre._result);
+    throw std::exception(error_message);
+  }
+
+  if (element._type == ElementType::FOLDER) {
+    Prepare &folder_pre = GetPrepare(GET_OP(Operate::ADD, Table::Folder), Queries::folder_insert_query);
+    CaptureFolder(std::static_pointer_cast<SleeveFolder>(std::make_shared<SleeveElement>(element)), folder_pre);
+  } else if (element._type == ElementType::FILE) {
+    Prepare &file_pre = GetPrepare(GET_OP(Operate::ADD, Table::File), Queries::file_insert_query);
+    CaptureFile(std::static_pointer_cast<SleeveFile>(std::make_shared<SleeveElement>(element)), file_pre);
+  }
+}
+
+void SleeveMapper::RemoveElement(const SleeveElement &element) {
+  if (!_initialized || !_db_connected) {
+    throw std::exception("Cannot connect to a valid sleeve db");
+  }
+
+  Prepare &element_pre = GetPrepare(GET_OP(Operate::DELETE, Table::Element), Queries::element_delete_query);
+  duckdb_bind_uint32(element_pre._stmt, 1, element._element_id);
+  if (duckdb_execute_prepared(element_pre._stmt, &element_pre._result) != DuckDBSuccess) {
+    auto error_message = duckdb_result_error(&element_pre._result);
+    throw std::exception(error_message);
+  }
+
+  if (element._type == ElementType::FOLDER) {
+    RemoveFolder(element._element_id);
+  } else if (element._type == ElementType::FILE) {
+    RemoveFile(element._element_id);
+  }
+}
+
+void SleeveMapper::EditElement(const sl_element_id_t element_id, const std::shared_ptr<SleeveElement> element) {
+  if (!_initialized || !_db_connected) {
+    throw std::exception("Cannot connect to a valid sleeve db");
+  }
+
+  Prepare &element_pre = GetPrepare(GET_OP(Operate::EDIT, Table::Element), Queries::element_update_query);
+  char     added_time[32];
+  char     modified_time[32];
+  std::strftime(added_time, sizeof(added_time), "%Y-%m-%d %H:%M:%S", std::gmtime(&element->_added_time));
+  std::strftime(modified_time, sizeof(modified_time), "%Y-%m-%d %H:%M:%S", std::gmtime(&element->_last_modified_time));
+
+  duckdb_bind_uint32(element_pre._stmt, 1, element_id);
+  duckdb_bind_uint32(element_pre._stmt, 2, static_cast<uint32_t>(element->_type));
+  duckdb_bind_varchar(element_pre._stmt, 3, conv.to_bytes(element->_element_name).c_str());
+  duckdb_bind_varchar(element_pre._stmt, 4, added_time);
+  duckdb_bind_varchar(element_pre._stmt, 5, modified_time);
+  duckdb_bind_uint32(element_pre._stmt, 6, element->_ref_count);
+
+  if (duckdb_execute_prepared(element_pre._stmt, &element_pre._result) != DuckDBSuccess) {
+    auto error_message = duckdb_result_error(&element_pre._result);
+    throw std::exception(error_message);
+  }
+
+  duckdb_destroy_result(&element_pre._result);
+  if (element->_type == ElementType::FOLDER) {
+    Prepare &folder_pre = GetPrepare(GET_OP(Operate::ADD, Table::Folder), Queries::folder_insert_query);
+    CaptureFolder(std::static_pointer_cast<SleeveFolder>(element), folder_pre);
+  } else if (element->_type == ElementType::FILE) {
+    Prepare &file_pre = GetPrepare(GET_OP(Operate::ADD, Table::File), Queries::file_insert_query);
+    CaptureFile(std::static_pointer_cast<SleeveFile>(element), file_pre);
+  }
+}
+
+auto SleeveMapper::GetElement(const sl_element_id_t element_id) -> std::shared_ptr<SleeveElement> {
+  if (!_initialized || !_db_connected) {
+    throw std::exception("Cannot connect to a valid sleeve db");
+  }
+
+  Prepare &element_pre = GetPrepare(GET_OP(Operate::LOOKUP, Table::Element), Queries::element_lookup_query);
+  duckdb_bind_uint32(element_pre._stmt, 1, element_id);
+  if (duckdb_execute_prepared(element_pre._stmt, &element_pre._result) != DuckDBSuccess) {
+    auto error_message = duckdb_result_error(&element_pre._result);
+    throw std::exception(error_message);
+  }
+  idx_t row_count = duckdb_row_count(&element_pre._result);
+  if (row_count != 1) {
+    duckdb_destroy_result(&element_pre._result);
+    return nullptr;  // No element found
+  }
+
+  // Element (id,type,element_name,added_time,modified_time,ref_count)
+  auto               element_id_val = duckdb_value_uint32(&element_pre._result, 0, 0);
+  auto               type           = static_cast<ElementType>(duckdb_value_uint32(&element_pre._result, 1, 0));
+  auto               element_name   = conv.from_bytes(duckdb_value_varchar(&element_pre._result, 2, 0));
+  auto               added_time     = duckdb_value_varchar(&element_pre._result, 3, 0);
+  auto               modified_time  = duckdb_value_varchar(&element_pre._result, 4, 0);
+  auto               ref_count      = duckdb_value_uint32(&element_pre._result, 5, 0);
+
+  std::tm            tm_added{};
+  std::tm            tm_modified{};
+
+  std::istringstream a_ss(added_time);
+  std::istringstream m_ss(modified_time);
+  a_ss >> std::get_time(&tm_added, "%Y-%m-%d %H:%M:%S");
+  m_ss >> std::get_time(&tm_modified, "%Y-%m-%d %H:%M:%S");
+
+  std::shared_ptr<SleeveElement> element;
+  if (type == ElementType::FILE) {
+    element = std::make_shared<SleeveFile>(element_id_val, element_name);
+  } else if (type == ElementType::FOLDER) {
+    element = std::make_shared<SleeveFolder>(element_id_val, element_name);
+  }
+  element->_added_time         = std::mktime(&tm_added);
+  element->_last_modified_time = std::mktime(&tm_modified);
+  element->_ref_count          = ref_count;
+
+  return element;
+}
+
+void SleeveMapper::RemoveFolder(const sl_element_id_t folder_id) {
+  if (!_initialized || !_db_connected) {
+    throw std::exception("Cannot connect to a valid sleeve db");
+  }
+
+  // Remove all folder content
+  Prepare &folder_pre = GetPrepare(GET_OP(Operate::DELETE, Table::Folder), Queries::folder_delete_query);
+  duckdb_bind_uint32(folder_pre._stmt, 1, folder_id);
+  if (duckdb_execute_prepared(folder_pre._stmt, &folder_pre._result) != DuckDBSuccess) {
+    auto error_message = duckdb_result_error(&folder_pre._result);
+    throw std::exception(error_message);
+  }
+  duckdb_destroy_result(&folder_pre._result);
+
+  // Remove all bound filter combos
+  RemoveFilterComboByFolderId(folder_id);
+}
+
+void SleeveMapper::RemoveFile(const sl_element_id_t file_id) {
+  if (!_initialized || !_db_connected) {
+    throw std::exception("Cannot connect to a valid sleeve db");
+  }
+
+  Prepare &file_pre = GetPrepare(GET_OP(Operate::DELETE, Table::File), Queries::file_delete_query);
+  duckdb_bind_uint32(file_pre._stmt, 1, file_id);
+  if (duckdb_execute_prepared(file_pre._stmt, &file_pre._result) != DuckDBSuccess) {
+    auto error_message = duckdb_result_error(&file_pre._result);
+    throw std::exception(error_message);
+  }
+  duckdb_destroy_result(&file_pre._result);
+}
+
+void SleeveMapper::RemoveFilterComboByComboId(const sl_element_id_t combo_id) {
+  if (!_initialized || !_db_connected) {
+    throw std::exception("Cannot connect to a valid sleeve db");
+  }
+
+  Prepare &combo_pre = GetPrepare(GET_OP(Operate::DELETE, Table::Filter), Queries::combo_delete_query_combo_id);
+  duckdb_bind_uint32(combo_pre._stmt, 1, combo_id);
+  if (duckdb_execute_prepared(combo_pre._stmt, &combo_pre._result) != DuckDBSuccess) {
+    auto error_message = duckdb_result_error(&combo_pre._result);
+    throw std::exception(error_message);
+  }
+  duckdb_destroy_result(&combo_pre._result);
+}
+
+void SleeveMapper::RemoveFilterComboByFolderId(const sl_element_id_t folder_id) {
+  if (!_initialized || !_db_connected) {
+    throw std::exception("Cannot connect to a valid sleeve db");
+  }
+
+  Prepare &combo_pre = GetPrepare(GET_OP(Operate::DELETE, Table::ComboFolder), Queries::combo_delete_query_folder_id);
+  duckdb_bind_uint32(combo_pre._stmt, 1, folder_id);
+  if (duckdb_execute_prepared(combo_pre._stmt, &combo_pre._result) != DuckDBSuccess) {
+    auto error_message = duckdb_result_error(&combo_pre._result);
+    throw std::exception(error_message);
+  }
+  duckdb_destroy_result(&combo_pre._result);
+}
+
+void SleeveMapper::EditFilterCombo(const sl_element_id_t folder_id, const std::shared_ptr<FilterCombo> combo) {
+  if (!_initialized || !_db_connected) {
+    throw std::exception("Cannot connect to a valid sleeve db");
+  }
+
+  RemoveFilterComboByFolderId(folder_id);
+  AddFilterCombo(folder_id, combo);
 }
 };  // namespace puerhlab

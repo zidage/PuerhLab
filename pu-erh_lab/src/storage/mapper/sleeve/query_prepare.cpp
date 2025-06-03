@@ -1,5 +1,7 @@
 #include "storage/mapper/sleeve/query_prepare.hpp"
 
+#include <string>
+
 namespace puerhlab {
 const std::string Queries::init_table_query =
     "CREATE TABLE Sleeve (id BIGINT PRIMARY KEY);"
@@ -21,6 +23,17 @@ const std::string Queries::base_insert_query = "INSERT OR REPLACE INTO Sleeve (i
 const std::string Queries::element_insert_query =
     "INSERT OR REPLACE INTO Element (id,type,element_name,added_time,modified_time,ref_count) VALUES "
     "(?,?,?,?,?,?);";
+
+const std::string Queries::element_delete_query         = "DELETE FROM Element WHERE id = ?;";
+const std::string Queries::folder_delete_query          = "DELETE FROM FolderContent WHERE folder_id = ?;";
+const std::string Queries::file_delete_query            = "DELETE FROM FileImage WHERE file_id = ?;";
+const std::string Queries::combo_delete_query_combo_id  = "DELETE FROM Filter WHERE combo_id = ?;";
+const std::string Queries::combo_delete_query_folder_id = "DELETE FROM Filter WHERE folder_id = ?;";
+
+const std::string Queries::element_update_query =
+    "UPDATE Element SET type = ?, element_name = ?, added_time = ?, modified_time = ?, ref_count = ? WHERE id = ?;";
+
+const std::string Queries::element_lookup_query = "SELECT * FROM Element WHERE id = ?;";
 
 const std::string Queries::root_insert_query =
     "INSERT INTO SleeveRoot (id) VALUES "
@@ -54,5 +67,11 @@ const std::string Queries::image_insert_query =
     "INSERT INTO Image (id,image_path,file_name,type,metadata) VALUES "
     "(?,?,?,?,?);";
 
+const std::string Queries::image_update_query =
+    "UPDATE Image SET image_path = ?, file_name = ?, type = ?, metadata = ? WHERE id = ?;";
+
 const std::string Queries::image_lookup_query = "SELECT * FROM Image WHERE id = ?;";
+
+const std::string Queries::image_delete_query = "DELETE FROM Image WHERE id = ?;";
+
 };  // namespace puerhlab

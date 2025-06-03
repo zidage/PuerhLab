@@ -94,6 +94,9 @@ class SleeveMapper {
   inline void CaptureFolder(std::shared_ptr<SleeveFolder> folder, Prepare &pre);
   inline void CaptureFile(std::shared_ptr<SleeveFile> file, Prepare &pre);
   inline void CaptureFilters(std::unordered_map<uint32_t, std::shared_ptr<FilterCombo>> &filter_storage, Prepare &pre);
+  inline void RecaptureFolder(std::shared_ptr<SleeveFolder> folder);
+  inline void RecaptureFile(std::shared_ptr<SleeveFile> file);
+  inline void RecaptureFilter(std::shared_ptr<SleeveFolder> file);
 
  public:
   explicit SleeveMapper();
@@ -110,22 +113,21 @@ class SleeveMapper {
 
   void AddImage(const Image &image);
   auto GetImage(const image_id_t id) -> std::shared_ptr<Image>;
-  void EditImage(const Image &image, const image_id_t id);
+  void UpdateImage(const Image &image, const image_id_t id);
   void RemoveImage(const image_id_t image_id);
 
-  void AddElement(const std::shared_ptr<SleeveElement> element);
-  void GetElement(const sl_element_id_t element_id);
-  void RemoveElement(const sl_element_id_t element_id);
+  void AddElement(const SleeveElement &element);
+  auto GetElement(const sl_element_id_t element_id) -> std::shared_ptr<SleeveElement>;
+  void RemoveElement(const SleeveElement &element);
   void EditElement(const sl_element_id_t element_id, const std::shared_ptr<SleeveElement> element);
-
-  void AddFolder(const std::shared_ptr<SleeveFolder> folder);
-  void AddFile(const std::shared_ptr<SleeveFile> file);
 
   void RemoveFolder(const sl_element_id_t folder_id);
   void RemoveFile(const sl_element_id_t file_id);
 
-  void AddFilter(const sl_element_id_t folder_id, const std::shared_ptr<FilterCombo> filterd);
-  void RemoveFilterCombo(const sl_element_id_t combo_id);
+  void AddFilterCombo(const sl_element_id_t folder_id, const std::shared_ptr<FilterCombo> filterd);
+  void RemoveFilterComboByComboId(const sl_element_id_t combo_id);
+  void RemoveFilterComboByFolderId(const sl_element_id_t combo_id);
+  void EditFilterCombo(const sl_element_id_t combo_id, const std::shared_ptr<FilterCombo> combo);
 
   void RestoreSleeveFromDB(sleeve_id_t sleeve_id);
   void RemoveSleeveBase(sleeve_id_t sleeve_id);
