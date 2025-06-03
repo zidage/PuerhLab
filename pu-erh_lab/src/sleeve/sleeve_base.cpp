@@ -63,6 +63,7 @@ ElementAccessGuard::~ElementAccessGuard() {
  * @param id
  */
 SleeveBase::SleeveBase(sleeve_id_t id) : _sleeve_id(id), re(delimiter) {
+  // TODO: change the id assignment logic
   _next_element_id   = 0;
   _size              = 0;
   _filter_storage[0] = std::make_shared<FilterCombo>();

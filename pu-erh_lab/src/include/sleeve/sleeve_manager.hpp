@@ -28,5 +28,7 @@ class SleeveManager {
   auto GetPool() -> std::shared_ptr<ImagePoolManager>;
   auto GetImgCount() -> uint32_t;
   auto LoadToPath(std::vector<image_path_t> img_os_path, sl_path_t dest) -> uint32_t;
+
+  auto RestoreSleeveFromDB(sleeve_id_t sleeve_id) -> std::shared_ptr<SleeveBase>;
 };
 };  // namespace puerhlab

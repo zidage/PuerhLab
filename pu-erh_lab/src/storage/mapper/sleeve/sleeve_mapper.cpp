@@ -613,4 +613,70 @@ void SleeveMapper::EditFilterCombo(const sl_element_id_t folder_id, const std::s
   RemoveFilterComboByFolderId(folder_id);
   AddFilterCombo(folder_id, combo);
 }
+
+auto SleeveMapper::GetSleeveBase() -> std::shared_ptr<SleeveBase> {
+  if (!_db_connected) {
+    throw std::exception("Cannot connect to a valid sleeve db");
+  }
+
+  if (_has_sleeve) {
+    throw std::exception("Sleeve base has already been restored");
+  }
+
+  // Get sleeve base
+  Prepare base_pre{_con};
+  base_pre.GetStmtGuard(Queries::base_lookup_query);
+  if (duckdb_execute_prepared(base_pre._stmt, &base_pre._result) != DuckDBSuccess) {
+    auto error_message = duckdb_result_error(&base_pre._result);
+    throw std::exception(error_message);
+  }
+  idx_t row_count = duckdb_row_count(&base_pre._result);
+  if (row_count != 1) {
+    duckdb_destroy_result(&base_pre._result);
+    throw std::exception("No sleeve base found");
+  }
+  duckdb_destroy_result(&base_pre._result);
+  sleeve_id_t sleeve_id = duckdb_value_uint32(&base_pre._result, 0, 0);
+  _captured_sleeve_id   = sleeve_id;
+  _has_sleeve           = true;
+  _initialized          = true;
+  auto    sleeve_base   = std::make_shared<SleeveBase>(sleeve_id);
+
+  // Get root element
+  Prepare root_pre{_con};
+  root_pre.GetStmtGuard(Queries::root_lookup_query);
+  duckdb_bind_uint32(root_pre._stmt, 1, sleeve_id);
+  if (duckdb_execute_prepared(root_pre._stmt, &root_pre._result) != DuckDBSuccess) {
+    auto error_message = duckdb_result_error(&root_pre._result);
+    throw std::exception(error_message);
+  }
+  idx_t root_row_count = duckdb_row_count(&root_pre._result);
+  if (root_row_count != 1) {
+    duckdb_destroy_result(&root_pre._result);
+    throw std::exception("Bad database file, no root found");
+  }
+  duckdb_destroy_result(&root_pre._result);
+  sl_element_id_t root_id = duckdb_value_uint32(&root_pre._result, 0, 0);
+
+  auto            root    = GetElement(root_id);
+  sleeve_base->_root      = std::static_pointer_cast<SleeveFolder>(root);
+
+  // Get all elements under the root
+  Prepare &folder_pre     = GetPrepare(GET_OP(Operate::LOOKUP, Table::Folder), Queries::folder_content_lookup_query);
+  duckdb_bind_uint32(folder_pre._stmt, 1, root_id);
+  if (duckdb_execute_prepared(folder_pre._stmt, &folder_pre._result) != DuckDBSuccess) {
+    auto error_message = duckdb_result_error(&folder_pre._result);
+    throw std::exception(error_message);
+  }
+  idx_t content_row_count = duckdb_row_count(&folder_pre._result);
+  for (idx_t i = 0; i < content_row_count; ++i) {
+    sl_element_id_t element_id = duckdb_value_uint32(&folder_pre._result, 2, i);
+    auto            element    = GetElement(element_id);
+    if (element->_type == ElementType::FOLDER) {
+      auto folder = std::static_pointer_cast<SleeveFolder>(element);
+    } else if (element->_type == ElementType::FILE) {
+      auto file = std::static_pointer_cast<SleeveFile>(element);
+    }
+  }
+}
 };  // namespace puerhlab

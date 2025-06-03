@@ -6,12 +6,15 @@ class Queries {
   static const std::string init_table_query;
 
   static const std::string base_insert_query;
+  static const std::string base_lookup_query;
 
   static const std::string element_insert_query;
 
   static const std::string root_insert_query;
+  static const std::string root_lookup_query;
 
   static const std::string folder_insert_query;
+  static const std::string folder_content_lookup_query;
 
   static const std::string file_insert_query;
 

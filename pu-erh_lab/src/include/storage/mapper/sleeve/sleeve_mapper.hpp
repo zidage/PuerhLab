@@ -129,7 +129,6 @@ class SleeveMapper {
   void RemoveFilterComboByFolderId(const sl_element_id_t combo_id);
   void EditFilterCombo(const sl_element_id_t combo_id, const std::shared_ptr<FilterCombo> combo);
 
-  void RestoreSleeveFromDB(sleeve_id_t sleeve_id);
-  void RemoveSleeveBase(sleeve_id_t sleeve_id);
+  auto GetSleeveBase() -> std::shared_ptr<SleeveBase>;
 };
 };  // namespace puerhlab

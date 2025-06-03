@@ -74,4 +74,5 @@ auto SleeveManager::LoadToPath(std::vector<image_path_t> img_os_paths, sl_path_t
   }
   return total_size;
 }
+
 };  // namespace puerhlab

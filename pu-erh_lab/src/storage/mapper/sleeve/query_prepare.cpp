@@ -20,6 +20,8 @@ const std::string Queries::init_table_query =
 
 const std::string Queries::base_insert_query = "INSERT OR REPLACE INTO Sleeve (id) VALUES (?);";
 
+const std::string Queries::base_lookup_query = "SELECT * FROM Sleeve WHERE id = ?;";
+
 const std::string Queries::element_insert_query =
     "INSERT OR REPLACE INTO Element (id,type,element_name,added_time,modified_time,ref_count) VALUES "
     "(?,?,?,?,?,?);";
@@ -39,9 +41,13 @@ const std::string Queries::root_insert_query =
     "INSERT INTO SleeveRoot (id) VALUES "
     "(?);";
 
+const std::string Queries::root_lookup_query = "SELECT * FROM SleeveRoot";
+
 const std::string Queries::folder_insert_query =
     "INSERT INTO FolderContent (folder_id,element_id) VALUES "
     "(?,?);";
+
+const std::string Queries::folder_content_lookup_query = "SELECT * FROM FolderContent WHERE folder_id = ?;";
 
 const std::string Queries::file_insert_query =
     "INSERT INTO FileImage (file_id,image_id) VALUES "
