@@ -57,6 +57,11 @@ add_library(SleeveView sleeve/sleeve_view.cpp)
 target_include_directories(SleeveView PUBLIC include)
 target_link_libraries(SleeveView PUBLIC Image Sleeve ImagePool easy_profiler)
 
+add_library(DuckORM     
+    storage/mapper/duckorm/duckdb_orm.cpp)
+target_include_directories(DuckORM PUBLIC include)
+target_link_libraries(DuckORM PUBLIC DuckDB)
+
 add_library(SleeveMapper     
     storage/mapper/sleeve/query_prepare.cpp
     storage/mapper/sleeve/statement_prepare.cpp
