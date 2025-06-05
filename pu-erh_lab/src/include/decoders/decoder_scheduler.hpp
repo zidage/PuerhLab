@@ -56,7 +56,8 @@ class DecoderScheduler {
  public:
   explicit DecoderScheduler(size_t thread_count, std::shared_ptr<BufferQueue> decoded_buffer);
 
-  void ScheduleDecode(image_id_t id, image_path_t image_path, std::shared_ptr<std::promise<image_id_t>> decode_promise);
+  void ScheduleDecode(image_id_t id, image_path_t image_path,
+                      std::shared_ptr<std::promise<image_id_t>> decode_promise);
 
   void ScheduleDecode(std::shared_ptr<Image> source_img, DecodeType decode_type,
                       std::shared_ptr<std::promise<image_id_t>> decode_promise);

@@ -7,7 +7,8 @@
 #include "sleeve/sleeve_element/sleeve_file.hpp"
 
 namespace puerhlab {
-std::shared_ptr<SleeveElement> SleeveElementFactory::CreateElement(const ElementType &type, uint32_t id,
+std::shared_ptr<SleeveElement> SleeveElementFactory::CreateElement(const ElementType& type,
+                                                                   uint32_t           id,
                                                                    std::wstring element_name) {
   std::shared_ptr<SleeveElement> new_element = nullptr;
   switch (type) {

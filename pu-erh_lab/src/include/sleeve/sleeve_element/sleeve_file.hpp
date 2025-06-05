@@ -42,18 +42,19 @@
 namespace puerhlab {
 
 /**
- * @brief A type of element, it contains an image file, its edit history, and other metadata used in this software
+ * @brief A type of element, it contains an image file, its edit history, and other metadata used in
+ * this software
  *
  */
 class SleeveFile : public SleeveElement {
  private:
   std::shared_ptr<Image>       _image;
-  image_id_t                   _image_id;
 
   std::shared_ptr<EditHistory> _edit_history;
   std::shared_ptr<Version>     _current_version;
 
  public:
+  image_id_t _image_id;
   explicit SleeveFile(sl_element_id_t id, file_name_t element_name);
   explicit SleeveFile(sl_element_id_t id, file_name_t element_name, std::shared_ptr<Image> image);
 

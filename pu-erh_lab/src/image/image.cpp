@@ -59,12 +59,17 @@ using json = nlohmann::json;
 Image::Image(image_id_t image_id, image_path_t image_path, ImageType image_type)
     : _image_id(image_id), _image_path(image_path), _image_type(image_type) {}
 
-Image::Image(image_id_t image_id, image_path_t image_path, file_name_t image_name, ImageType image_type)
-    : _image_id(image_id), _image_path(image_path), _image_name(image_name), _image_type(image_type) {}
+Image::Image(image_id_t image_id, image_path_t image_path, file_name_t image_name,
+             ImageType image_type)
+    : _image_id(image_id),
+      _image_path(image_path),
+      _image_name(image_name),
+      _image_type(image_type) {}
 
-Image::Image(image_path_t image_path, ImageType image_type) : _image_path(image_path), _image_type(image_type) {}
+Image::Image(image_path_t image_path, ImageType image_type)
+    : _image_path(image_path), _image_type(image_type) {}
 
-Image::Image(Image &&other)
+Image::Image(Image&& other)
     : _image_id(other._image_id),
       _image_path(std::move(other._image_path)),
       _exif_data(std::move(other._exif_data)),
@@ -72,8 +77,9 @@ Image::Image(Image &&other)
       _thumbnail(std::move(other._thumbnail)),
       _image_type(other._image_type) {}
 
-std::wostream &operator<<(std::wostream &os, const Image &img) {
-  os << "img_id: " << img._image_id << "\timage_path: " << img._image_path.wstring() << L"\tAdded Time: ";
+std::wostream& operator<<(std::wostream& os, const Image& img) {
+  os << "img_id: " << img._image_id << "\timage_path: " << img._image_path.wstring()
+     << L"\tAdded Time: ";
   return os;
 }
 
@@ -82,12 +88,12 @@ std::wostream &operator<<(std::wostream &os, const Image &img) {
  *
  * @param image_data
  */
-void Image::LoadData(cv::Mat &&load_image) {
+void Image::LoadData(cv::Mat&& load_image) {
   _image_data   = std::move(load_image);
   _has_full_img = true;
 }
 
-void Image::LoadThumbnail(cv::Mat &&thumbnail) {
+void Image::LoadThumbnail(cv::Mat&& thumbnail) {
   _thumbnail     = std::move(thumbnail);
   _has_thumbnail = true;
 }
@@ -117,10 +123,10 @@ auto Image::ExifToJson() const -> std::string {
     auto                          exif_data = _exif_data->exifData();
     // Suggestion from ChatGPT to improve performance
     std::vector<Exiv2::Exifdatum> local;
-    for (const auto &entry : exif_data) {
+    for (const auto& entry : exif_data) {
       local.emplace_back(entry);
     }
-    for (auto &data : local) {
+    for (auto& data : local) {
       auto type_id    = static_cast<uint32_t>(data.typeId());  // debug
       auto type       = data.ifdName();
       auto type_value = data.value().toUint32();  // debug
@@ -128,7 +134,7 @@ auto Image::ExifToJson() const -> std::string {
       o[type]         = std::pair<uint32_t, uint32_t>{type_id, type_value};
     }
 
-  } catch (std::exception &e) {
+  } catch (std::exception& e) {
     std::cerr << e.what() << std::endl;
   }
   return nlohmann::to_string(o);
@@ -138,7 +144,7 @@ void Image::JsonToExif(std::string json_str) {
   try {
     _exif_json     = nlohmann::json::parse(json_str);
     _has_exif_json = true;
-  } catch (nlohmann::json::parse_error &e) {
+  } catch (nlohmann::json::parse_error& e) {
     throw std::exception("JSON parse error");
   }
 }

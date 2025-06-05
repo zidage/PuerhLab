@@ -1,7 +1,7 @@
 BasedOnStyle: Google
 DerivePointerAlignment: false
-PointerAlignment: Right
-ColumnLimit: 120
+PointerAlignment: Left
+ColumnLimit: 100
 AllowAllConstructorInitializersOnNextLine: true
 
 AlignConsecutiveDeclarations:

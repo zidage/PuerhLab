@@ -10,11 +10,13 @@ void Prepare::RecycleResources() {
   duckdb_destroy_result(&_result);
 }
 
-Prepare::Prepare(duckdb_connection &con) : _stmt(), _con(con) { std::memset(&_result, 0, sizeof(_result)); }
+Prepare::Prepare(duckdb_connection& con) : _stmt(), _con(con) {
+  std::memset(&_result, 0, sizeof(_result));
+}
 
 Prepare::~Prepare() { RecycleResources(); }
 
-auto Prepare::GetStmtGuard(const std::string &prepare_query) -> duckdb_prepared_statement & {
+auto Prepare::GetStmtGuard(const std::string& prepare_query) -> duckdb_prepared_statement& {
   if (duckdb_prepare(_con, prepare_query.c_str(), &_stmt) != DuckDBSuccess) {
     RecycleResources();
     throw std::exception("Prepare failed when inserting images");
@@ -23,6 +25,6 @@ auto Prepare::GetStmtGuard(const std::string &prepare_query) -> duckdb_prepared_
   return _stmt;
 }
 
-void Prepare::SetConnection(duckdb_connection &con) { _con = con; }
+void Prepare::SetConnection(duckdb_connection& con) { _con = con; }
 
 };  // namespace puerhlab

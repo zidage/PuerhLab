@@ -90,10 +90,12 @@ class SleeveMapper {
 
   std::vector<Prepare>                             _prepare_storage;
 
-  inline void CaptureElement(std::unordered_map<uint32_t, std::shared_ptr<SleeveElement>> &storage, Prepare &pre);
-  inline void CaptureFolder(std::shared_ptr<SleeveFolder> folder, Prepare &pre);
-  inline void CaptureFile(std::shared_ptr<SleeveFile> file, Prepare &pre);
-  inline void CaptureFilters(std::unordered_map<uint32_t, std::shared_ptr<FilterCombo>> &filter_storage, Prepare &pre);
+  inline void CaptureElement(std::unordered_map<uint32_t, std::shared_ptr<SleeveElement>>& storage,
+                             Prepare&                                                      pre);
+  inline void CaptureFolder(std::shared_ptr<SleeveFolder> folder, Prepare& pre);
+  inline void CaptureFile(std::shared_ptr<SleeveFile> file, Prepare& pre);
+  inline void CaptureFilters(
+      std::unordered_map<uint32_t, std::shared_ptr<FilterCombo>>& filter_storage, Prepare& pre);
   inline void RecaptureFolder(std::shared_ptr<SleeveFolder> folder);
   inline void RecaptureFile(std::shared_ptr<SleeveFile> file);
   inline void RecaptureFilter(std::shared_ptr<SleeveFolder> file);
@@ -106,19 +108,20 @@ class SleeveMapper {
   void ConnectDB(file_path_t db_path);
   void InitDB();
 
-  auto GetPrepare(uint8_t op, const std::string &query) -> Prepare &;
+  auto GetPrepare(uint8_t op, const std::string& query) -> Prepare&;
 
-  void CaptureSleeve(const std::shared_ptr<SleeveBase> sleeve_base, const std::shared_ptr<ImagePoolManager> image_pool);
+  void CaptureSleeve(const std::shared_ptr<SleeveBase>       sleeve_base,
+                     const std::shared_ptr<ImagePoolManager> image_pool);
   void CaptureImagePool(const std::shared_ptr<ImagePoolManager> image_pool);
 
-  void AddImage(const Image &image);
+  void AddImage(const Image& image);
   auto GetImage(const image_id_t id) -> std::shared_ptr<Image>;
-  void UpdateImage(const Image &image, const image_id_t id);
+  void UpdateImage(const Image& image, const image_id_t id);
   void RemoveImage(const image_id_t image_id);
 
-  void AddElement(const SleeveElement &element);
+  void AddElement(const SleeveElement& element);
   auto GetElement(const sl_element_id_t element_id) -> std::shared_ptr<SleeveElement>;
-  void RemoveElement(const SleeveElement &element);
+  void RemoveElement(const SleeveElement& element);
   void EditElement(const sl_element_id_t element_id, const std::shared_ptr<SleeveElement> element);
 
   void RemoveFolder(const sl_element_id_t folder_id);

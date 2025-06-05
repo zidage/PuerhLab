@@ -40,13 +40,13 @@
 namespace puerhlab {
 class VersionNode {
  private:
-  Version               &_ver_ref;
+  Version&               _ver_ref;
   std::list<VersionNode> _branch;
   p_hash_t               _commit_id;
   uint32_t               _ref_count;
 
  public:
-  VersionNode(Version &ver_ref);
+  VersionNode(Version& ver_ref);
 };
 
 class EditHistory {

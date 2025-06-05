@@ -12,13 +12,13 @@ class ThreadLocalResource {
 
   static void SetInitializer(Initializer init) { GetInitFunc() = std::move(init); }
 
-  static T   &Get() {
+  static T&   Get() {
     thread_local std::unique_ptr<T> instance = GetInitFunc()();
     return *instance;
   }
 
  private:
-  static Initializer &GetInitFunc() {
+  static Initializer& GetInitFunc() {
     static Initializer init_func;
     return init_func;
   }

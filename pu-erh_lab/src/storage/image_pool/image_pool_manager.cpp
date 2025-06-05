@@ -18,14 +18,18 @@ ImagePoolManager::ImagePoolManager(uint32_t capacity_thumb, uint32_t capacity_fu
  *
  * @return std::unordered_map<image_id_t, std::shared_ptr<Image>>
  */
-auto ImagePoolManager::GetPool() -> std::unordered_map<image_id_t, std::shared_ptr<Image>> & { return _image_pool; }
+auto ImagePoolManager::GetPool() -> std::unordered_map<image_id_t, std::shared_ptr<Image>>& {
+  return _image_pool;
+}
 
 /**
  * @brief Insert an image into the image pool
  *
  * @param img
  */
-void ImagePoolManager::Insert(const std::shared_ptr<Image> img) { _image_pool[img->_image_id] = img; }
+void ImagePoolManager::Insert(const std::shared_ptr<Image> img) {
+  _image_pool[img->_image_id] = img;
+}
 
 /**
  * @brief Check whether an image with the given id exists in the image pool
@@ -34,7 +38,9 @@ void ImagePoolManager::Insert(const std::shared_ptr<Image> img) { _image_pool[im
  * @return true image exists
  * @return false image not exists
  */
-auto ImagePoolManager::PoolContains(const image_id_t &id) -> bool { return _image_pool.contains(id); }
+auto ImagePoolManager::PoolContains(const image_id_t& id) -> bool {
+  return _image_pool.contains(id);
+}
 
 auto ImagePoolManager::Capacity(AccessType type) -> uint32_t {
   switch (type) {
@@ -56,7 +62,7 @@ auto ImagePoolManager::Capacity(AccessType type) -> uint32_t {
  * @param type
  * @return std::optional<std::weak_ptr<Image>>
  */
-auto ImagePoolManager::AccessElement(const image_id_t &id, const AccessType type)
+auto ImagePoolManager::AccessElement(const image_id_t& id, const AccessType type)
     -> std::optional<std::weak_ptr<Image>> {
   switch (type) {
     case AccessType::FULL_IMG: {
@@ -90,7 +96,7 @@ auto ImagePoolManager::AccessElement(const image_id_t &id, const AccessType type
  * @param id
  * @param type
  */
-void ImagePoolManager::RecordAccess(const image_id_t &id, const AccessType type) {
+void ImagePoolManager::RecordAccess(const image_id_t& id, const AccessType type) {
   switch (type) {
     case AccessType::FULL_IMG: {
       auto it = _cache_map_full.find(id);
@@ -138,7 +144,7 @@ void ImagePoolManager::RecordAccess(const image_id_t &id, const AccessType type)
  * @param id
  * @param type
  */
-void ImagePoolManager::RemoveRecord(const image_id_t &id, const AccessType type) {
+void ImagePoolManager::RemoveRecord(const image_id_t& id, const AccessType type) {
   switch (type) {
     case AccessType::FULL_IMG: {
       auto it = _cache_map_full.find(id);
@@ -228,7 +234,7 @@ auto ImagePoolManager::Evict(const AccessType type) -> std::optional<std::weak_p
  * @return true
  * @return false
  */
-auto ImagePoolManager::CacheContains(const image_id_t &id, const AccessType type) -> bool {
+auto ImagePoolManager::CacheContains(const image_id_t& id, const AccessType type) -> bool {
   switch (type) {
     case AccessType::FULL_IMG: {
       return _cache_map_full.contains(id);
@@ -272,11 +278,11 @@ void ImagePoolManager::Flush() {
   _cache_map_full.clear();
   _cache_map_thumb.clear();
 
-  for (auto &id : _with_thumb) {
+  for (auto& id : _with_thumb) {
     _image_pool.at(id)->ClearThumbnail();
   }
 
-  for (auto &id : _with_full) {
+  for (auto& id : _with_full) {
     _image_pool.at(id)->ClearData();
   }
 }

@@ -57,11 +57,13 @@ namespace puerhlab {
  * @param total_request
  */
 DecoderScheduler::DecoderScheduler(size_t thread_count, std::shared_ptr<BufferQueue> decoded_buffer)
-    : _file_read_thread_pool(thread_count), _thread_pool(thread_count), _decoded_buffer(decoded_buffer) {}
+    : _file_read_thread_pool(thread_count),
+      _thread_pool(thread_count),
+      _decoded_buffer(decoded_buffer) {}
 
 /**
- * @brief Schedule a decode task for initialize image data. The decode type can only be SLEEVE_LOADING, therefore
- *        decode_type field is omitted.
+ * @brief Schedule a decode task for initialize image data. The decode type can only be
+ * SLEEVE_LOADING, therefore decode_type field is omitted.
  *
  * @param image_path the path of the file to be decoded
  * @param decode_promise the corresponding promise to be collected
@@ -98,15 +100,17 @@ void DecoderScheduler::ScheduleDecode(image_id_t id, image_path_t image_path,
     EASY_END_BLOCK;
     EASY_BLOCK("Schedule decoding");
     // Submit a new decode request
-    auto                 &decoded_buffer = _decoded_buffer;
+    auto&                 decoded_buffer = _decoded_buffer;
     std::filesystem::path file_path(image_path);
 
     // auto                  task = std::make_shared<std::packaged_task<void()>>(
-    //     [decoder, buffer = std::move(buffer), file_path, decoded_buffer, id, decode_promise]() mutable {
+    //     [decoder, buffer = std::move(buffer), file_path, decoded_buffer, id, decode_promise]()
+    //     mutable {
     //       decoder->Decode(std::move(buffer), file_path, decoded_buffer, id, decode_promise);
     //     });
 
-    _thread_pool.Submit([decoder, buffer = std::move(buffer), file_path, decoded_buffer, id, decode_promise]() mutable {
+    _thread_pool.Submit([decoder, buffer = std::move(buffer), file_path, decoded_buffer, id,
+                         decode_promise]() mutable {
       decoder->Decode(std::move(buffer), file_path, decoded_buffer, id, decode_promise);
     });
   });
@@ -165,8 +169,9 @@ void DecoderScheduler::ScheduleDecode(std::shared_ptr<Image> source_img, DecodeT
   auto                  decoded_buffer = _decoded_buffer;
   std::filesystem::path file_path(source_img->_image_path);
 
-  _thread_pool.Submit([decoder, buffer = std::move(buffer), decoded_buffer, source_img, decode_promise]() mutable {
-    decoder->Decode(std::move(buffer), source_img, decoded_buffer, decode_promise);
-  });
+  _thread_pool.Submit(
+      [decoder, buffer = std::move(buffer), decoded_buffer, source_img, decode_promise]() mutable {
+        decoder->Decode(std::move(buffer), source_img, decoded_buffer, decode_promise);
+      });
 }
 };  // namespace puerhlab

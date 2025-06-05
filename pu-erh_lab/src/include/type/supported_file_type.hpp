@@ -38,10 +38,11 @@ namespace fs = std::filesystem;
 
 namespace puerhlab {
 static const std::unordered_set<std::wstring> supported_extensions = {
-    L".jpg", L".jpeg", L".png", L".raw", L".cr2", L".nef", L".tiff", L".bmp", L".dng", L".arw", L".cr3",
-    L".JPG", L".JPEG", L".PNG", L".RAW", L".CR2", L".NEF", L".TIFF", L".BMP", L".DNG", L".ARW", L".CR3"};
+    L".jpg", L".jpeg", L".png", L".raw", L".cr2",  L".nef", L".tiff", L".bmp",
+    L".dng", L".arw",  L".cr3", L".JPG", L".JPEG", L".PNG", L".RAW",  L".CR2",
+    L".NEF", L".TIFF", L".BMP", L".DNG", L".ARW",  L".CR3"};
 
-inline bool is_supported_file(const fs::path &path) {
+inline bool is_supported_file(const fs::path& path) {
   if (!fs::is_regular_file(path)) return false;
 
   std::wstring ext = path.extension().wstring();

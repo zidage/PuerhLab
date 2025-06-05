@@ -61,7 +61,7 @@ ImageLoader::ImageLoader(uint32_t buffer_size, size_t use_thread, image_id_t sta
  * @param decode_type
  */
 void ImageLoader::StartLoading(std::vector<image_path_t> images, DecodeType decode_type) {
-  for (const auto &img : images) {
+  for (const auto& img : images) {
     // Skip unsupported file type
     // if (!is_supported_file(img)) {
     //   continue;
@@ -69,7 +69,8 @@ void ImageLoader::StartLoading(std::vector<image_path_t> images, DecodeType deco
 
     promises.emplace_back(std::make_shared<std::promise<image_id_t>>());
     futures.emplace_back(promises[_next_id]->get_future());
-    if (decode_type == DecodeType::SLEEVE_LOADING) _decoder_scheduler.ScheduleDecode(_next_id, img, promises[_next_id]);
+    if (decode_type == DecodeType::SLEEVE_LOADING)
+      _decoder_scheduler.ScheduleDecode(_next_id, img, promises[_next_id]);
     ++_next_id;
   }
 }

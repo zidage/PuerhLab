@@ -67,13 +67,14 @@ class SleeveFolder : public SleeveElement {
   auto Copy(sl_element_id_t new_id) const -> std::shared_ptr<SleeveElement>;
 
   void AddElementToMap(const std::shared_ptr<SleeveElement> element);
-  void UpdateElementMap(const file_name_t &name, const sl_element_id_t old_id, const sl_element_id_t new_id);
+  void UpdateElementMap(const file_name_t& name, const sl_element_id_t old_id,
+                        const sl_element_id_t new_id);
   void CreateIndex(const std::shared_ptr<FilterCombo> filter);
-  auto GetElementIdByName(const file_name_t &name) const -> std::optional<sl_element_id_t>;
+  auto GetElementIdByName(const file_name_t& name) const -> std::optional<sl_element_id_t>;
   auto ListElements() const -> std::shared_ptr<std::vector<sl_element_id_t>>;
-  auto ListFilters() -> std::vector<filter_id_t> &;
-  auto Contains(const file_name_t &name) const -> bool;
-  void RemoveNameFromMap(const file_name_t &name);
+  auto ListFilters() -> std::vector<filter_id_t>&;
+  auto Contains(const file_name_t& name) const -> bool;
+  void RemoveNameFromMap(const file_name_t& name);
 
   void IncrementFolderCount();
   void IncrementFileCount();

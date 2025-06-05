@@ -55,7 +55,7 @@ void SleeveFolder::AddElementToMap(const std::shared_ptr<SleeveElement> element)
  * @param old_id
  * @param new_id
  */
-void SleeveFolder::UpdateElementMap(const file_name_t &name, const sl_element_id_t old_id,
+void SleeveFolder::UpdateElementMap(const file_name_t& name, const sl_element_id_t old_id,
                                     const sl_element_id_t new_id) {
   _contents.erase(name);
   _contents[name]  = new_id;
@@ -79,7 +79,8 @@ void SleeveFolder::CreateIndex(const std::shared_ptr<FilterCombo> filter) {
  * @param name
  * @return std::optional<sl_element_id_t>
  */
-auto SleeveFolder::GetElementIdByName(const file_name_t &name) const -> std::optional<sl_element_id_t> {
+auto SleeveFolder::GetElementIdByName(const file_name_t& name) const
+    -> std::optional<sl_element_id_t> {
   if (!Contains(name)) {
     return std::nullopt;
   }
@@ -96,7 +97,7 @@ auto SleeveFolder::ListElements() const -> std::shared_ptr<std::vector<sl_elemen
   return std::make_shared<std::vector<sl_element_id_t>>(default_list->begin(), default_list->end());
 }
 
-auto SleeveFolder::ListFilters() -> std::vector<filter_id_t> & { return _filters; }
+auto SleeveFolder::ListFilters() -> std::vector<filter_id_t>& { return _filters; }
 
 auto SleeveFolder::Clear() -> bool {
   // TODO: Add Implementation
@@ -113,7 +114,9 @@ auto SleeveFolder::Clear() -> bool {
  * @return true
  * @return false
  */
-auto SleeveFolder::Contains(const file_name_t &name) const -> bool { return _contents.count(name) != 0; }
+auto SleeveFolder::Contains(const file_name_t& name) const -> bool {
+  return _contents.count(name) != 0;
+}
 
 /**
  * @brief Remove a name-id mapping from the _contents table
@@ -121,7 +124,7 @@ auto SleeveFolder::Contains(const file_name_t &name) const -> bool { return _con
  * @param name
  * @return sl_element_id_t
  */
-void SleeveFolder::RemoveNameFromMap(const file_name_t &name) {
+void SleeveFolder::RemoveNameFromMap(const file_name_t& name) {
   _indicies_cache[_default_filter]->erase(_contents.at(name));
   _contents.erase(name);
 }

@@ -43,16 +43,17 @@ class ImagePoolManager {
   explicit ImagePoolManager();
   explicit ImagePoolManager(uint32_t capacity_thumb, uint32_t capacity_full);
 
-  auto GetPool() -> std::unordered_map<image_id_t, std::shared_ptr<Image>> &;
+  auto GetPool() -> std::unordered_map<image_id_t, std::shared_ptr<Image>>&;
   void Insert(const std::shared_ptr<Image> img);
-  auto PoolContains(const image_id_t &id) -> bool;
+  auto PoolContains(const image_id_t& id) -> bool;
 
   auto Capacity(const AccessType type) -> uint32_t;
-  auto AccessElement(const image_id_t &id, const AccessType type) -> std::optional<std::weak_ptr<Image>>;
-  void RecordAccess(const image_id_t &id, const AccessType type);
-  void RemoveRecord(const image_id_t &id, const AccessType type);
+  auto AccessElement(const image_id_t& id, const AccessType type)
+      -> std::optional<std::weak_ptr<Image>>;
+  void RecordAccess(const image_id_t& id, const AccessType type);
+  void RemoveRecord(const image_id_t& id, const AccessType type);
   auto Evict(const AccessType type) -> std::optional<std::weak_ptr<Image>>;
-  auto CacheContains(const image_id_t &id, const AccessType type) -> bool;
+  auto CacheContains(const image_id_t& id, const AccessType type) -> bool;
 
   void ResizeCache(const uint32_t new_capacity, const AccessType type);
 

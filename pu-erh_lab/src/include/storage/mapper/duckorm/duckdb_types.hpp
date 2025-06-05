@@ -20,7 +20,7 @@ enum class DuckDBType : uint8_t {
 };
 
 struct DuckFieldDesc {
-  const char *name;
+  const char* name;
   DuckDBType  type;
   size_t      offset;
 };
@@ -32,4 +32,4 @@ struct DuckFieldDesc {
   }
 };  // namespace duckorm
 
-using VarTypes = std::variant<int32_t, int64_t, uint32_t, uint64_t, double, const char *>;
+using VarTypes = std::variant<int32_t, int64_t, uint32_t, uint64_t, double, const char*>;

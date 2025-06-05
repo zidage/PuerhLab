@@ -98,10 +98,10 @@ class LockFreeMPMCQueue {
     _tail.store(0, std::memory_order_relaxed);
   }
 
-  bool push(const T &item) {
+  bool push(const T& item) {
     size_t pos = _tail.load(std::memory_order_relaxed);
     while (true) {
-      Slot    &slot = _buffer[pos % _capacity];
+      Slot&    slot = _buffer[pos % _capacity];
       size_t   seq  = slot.sequence.load(std::memory_order_acquire);
       intptr_t diff = (intptr_t)seq - (intptr_t)pos;
       if (diff == 0) {
@@ -121,7 +121,7 @@ class LockFreeMPMCQueue {
   std::optional<T> pop() {
     size_t pos = _head.load(std::memory_order_relaxed);
     while (true) {
-      Slot    &slot = _buffer[pos % _capacity];
+      Slot&    slot = _buffer[pos % _capacity];
       size_t   seq  = slot.sequence.load(std::memory_order_acquire);
       intptr_t diff = (intptr_t)seq - (intptr_t)(pos + 1);
       if (diff == 0) {
@@ -138,7 +138,9 @@ class LockFreeMPMCQueue {
     }
   }
 
-  bool empty() const { return _head.load(std::memory_order_acquire) == _tail.load(std::memory_order_acquire); }
+  bool empty() const {
+    return _head.load(std::memory_order_acquire) == _tail.load(std::memory_order_acquire);
+  }
 
  private:
   struct Slot {
@@ -157,7 +159,7 @@ class BlockingMPMCQueue {
  public:
   explicit BlockingMPMCQueue(size_t capacity) : _queue(capacity) {}
 
-  void push(const T &item) {
+  void push(const T& item) {
     while (true) {
       if (_queue.push(item)) {
         {

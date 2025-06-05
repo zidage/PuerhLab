@@ -10,8 +10,8 @@
 #include "storage/mapper/sleeve/statement_prepare.hpp"
 
 namespace duckorm {
-duckdb_state insert(duckdb_connection &conn, const char *table, const void *obj,
-                    const std::vector<DuckFieldDesc> &&fields, size_t field_count) {
+duckdb_state insert(duckdb_connection& conn, const char* table, const void* obj,
+                    const std::vector<DuckFieldDesc>&& fields, size_t field_count) {
   std::ostringstream sql;
   sql << "INSERT INTO " << table << " (";
   for (size_t i = 0; i < field_count; ++i) {
@@ -34,44 +34,49 @@ duckdb_state insert(duckdb_connection &conn, const char *table, const void *obj,
 
   // Bind parameters
   for (size_t i = 0; i < field_count; ++i) {
-    const DuckFieldDesc &field = fields[i];
-    const char          *ptr   = reinterpret_cast<const char *>(obj) + field.offset;
+    const DuckFieldDesc& field = fields[i];
+    const char*          ptr   = reinterpret_cast<const char*>(obj) + field.offset;
     switch (field.type) {
       case DuckDBType::INT32: {
-        int32_t value = *reinterpret_cast<const int32_t *>(ptr);
+        int32_t value = *reinterpret_cast<const int32_t*>(ptr);
         duckdb_bind_int32(insert_pre._stmt, i + 1, value);
         break;
       }
       case DuckDBType::INT64: {
-        int64_t value = *reinterpret_cast<const int64_t *>(ptr);
+        int64_t value = *reinterpret_cast<const int64_t*>(ptr);
         duckdb_bind_int64(insert_pre._stmt, i + 1, value);
         break;
       }
       case DuckDBType::UINT32: {
-        uint32_t value = *reinterpret_cast<const uint32_t *>(reinterpret_cast<const char *>(obj) + field.offset);
+        uint32_t value =
+            *reinterpret_cast<const uint32_t*>(reinterpret_cast<const char*>(obj) + field.offset);
         duckdb_bind_uint32(insert_pre._stmt, i + 1, value);
         break;
       }
       case DuckDBType::UINT64: {
-        uint64_t value = *reinterpret_cast<const uint64_t *>(reinterpret_cast<const char *>(obj) + field.offset);
+        uint64_t value =
+            *reinterpret_cast<const uint64_t*>(reinterpret_cast<const char*>(obj) + field.offset);
         duckdb_bind_uint64(insert_pre._stmt, i + 1, value);
         break;
       }
       case DuckDBType::DOUBLE: {
-        double value = *reinterpret_cast<const double *>(reinterpret_cast<const char *>(obj) + field.offset);
+        double value =
+            *reinterpret_cast<const double*>(reinterpret_cast<const char*>(obj) + field.offset);
         duckdb_bind_double(insert_pre._stmt, i + 1, value);
         break;
       }
       case DuckDBType::TIMESTAMP:
       case DuckDBType::JSON:
       case DuckDBType::VARCHAR: {
-        const char *value = reinterpret_cast<const char *>(reinterpret_cast<const char *>(obj) + field.offset);
+        const char* value =
+            reinterpret_cast<const char*>(reinterpret_cast<const char*>(obj) + field.offset);
         duckdb_bind_varchar(insert_pre._stmt, i + 1, value);
         break;
       }
       case DuckDBType::BOOLEAN:
-        duckdb_bind_boolean(insert_pre._stmt, i + 1,
-                            *reinterpret_cast<const bool *>(reinterpret_cast<const char *>(obj) + field.offset));
+        duckdb_bind_boolean(
+            insert_pre._stmt, i + 1,
+            *reinterpret_cast<const bool*>(reinterpret_cast<const char*>(obj) + field.offset));
         break;
       default:
         throw std::runtime_error("Unsupported DuckFieldType in insert()");  // Unsupported type
@@ -86,8 +91,9 @@ duckdb_state insert(duckdb_connection &conn, const char *table, const void *obj,
   return state;
 }
 
-duckdb_state update(duckdb_connection &conn, const char *table, const void *obj,
-                    const std::vector<DuckFieldDesc> &&fields, size_t field_count, const char *where_clause) {
+duckdb_state update(duckdb_connection& conn, const char* table, const void* obj,
+                    const std::vector<DuckFieldDesc>&& fields, size_t field_count,
+                    const char* where_clause) {
   std::ostringstream sql;
   sql << "UPDATE " << table << " SET ";
   for (size_t i = 0; i < field_count; ++i) {
@@ -105,44 +111,45 @@ duckdb_state update(duckdb_connection &conn, const char *table, const void *obj,
   }
   // Bind parameters
   for (size_t i = 0; i < field_count; ++i) {
-    const DuckFieldDesc &field = fields[i];
-    const char          *ptr   = reinterpret_cast<const char *>(obj) + field.offset;
+    const DuckFieldDesc& field = fields[i];
+    const char*          ptr   = reinterpret_cast<const char*>(obj) + field.offset;
     switch (field.type) {
       case DuckDBType::INT32: {
-        int32_t value = *reinterpret_cast<const int32_t *>(ptr);
+        int32_t value = *reinterpret_cast<const int32_t*>(ptr);
         duckdb_bind_int32(update_pre._stmt, i + 1, value);
         break;
       }
       case DuckDBType::INT64: {
-        int64_t value = *reinterpret_cast<const int64_t *>(ptr);
+        int64_t value = *reinterpret_cast<const int64_t*>(ptr);
         duckdb_bind_int64(update_pre._stmt, i + 1, value);
         break;
       }
       case DuckDBType::UINT32: {
-        uint32_t value = *reinterpret_cast<const uint32_t *>(ptr);
+        uint32_t value = *reinterpret_cast<const uint32_t*>(ptr);
         duckdb_bind_uint32(update_pre._stmt, i + 1, value);
         break;
       }
       case DuckDBType::UINT64: {
-        uint64_t value = *reinterpret_cast<const uint64_t *>(ptr);
+        uint64_t value = *reinterpret_cast<const uint64_t*>(ptr);
         duckdb_bind_uint64(update_pre._stmt, i + 1, value);
         break;
       }
       case DuckDBType::DOUBLE: {
-        double value = *reinterpret_cast<const double *>(ptr);
+        double value = *reinterpret_cast<const double*>(ptr);
         duckdb_bind_double(update_pre._stmt, i + 1, value);
         break;
       }
       case DuckDBType::TIMESTAMP:
       case DuckDBType::JSON:
       case DuckDBType::VARCHAR: {
-        const char *value = reinterpret_cast<const char *>(ptr);
+        const char* value = reinterpret_cast<const char*>(ptr);
         duckdb_bind_varchar(update_pre._stmt, i + 1, value);
         break;
       }
       case DuckDBType::BOOLEAN:
-        duckdb_bind_boolean(update_pre._stmt, i + 1,
-                            *reinterpret_cast<const bool *>(reinterpret_cast<const char *>(obj) + field.offset));
+        duckdb_bind_boolean(
+            update_pre._stmt, i + 1,
+            *reinterpret_cast<const bool*>(reinterpret_cast<const char*>(obj) + field.offset));
         break;
       default:
         duckdb_destroy_prepare(&update_pre._stmt);
@@ -159,7 +166,7 @@ duckdb_state update(duckdb_connection &conn, const char *table, const void *obj,
   return state;
 }
 
-duckdb_state remove(duckdb_connection &conn, const char *table, const char *where_clause) {
+duckdb_state remove(duckdb_connection& conn, const char* table, const char* where_clause) {
   std::ostringstream sql;
   sql << "DELETE FROM " << table << " WHERE " << where_clause << ";";
   std::string       sql_str = sql.str();
@@ -178,8 +185,8 @@ duckdb_state remove(duckdb_connection &conn, const char *table, const char *wher
   return state;
 }
 
-std::vector<std::vector<VarTypes>> select(duckdb_connection &conn, const std::string table,
-                                          const DuckFieldDesc *sample_fields, size_t field_count,
+std::vector<std::vector<VarTypes>> select(duckdb_connection& conn, const std::string table,
+                                          const DuckFieldDesc* sample_fields, size_t field_count,
                                           const std::string where_clause) {
   std::ostringstream sql;
   sql << "SELECT * FROM " << table << " WHERE " << where_clause << ";";
@@ -236,7 +243,7 @@ std::vector<std::vector<VarTypes>> select(duckdb_connection &conn, const std::st
         case DuckDBType::JSON:
         case DuckDBType::BOOLEAN:
         case DuckDBType::TIMESTAMP: {
-          const char *value = duckdb_value_varchar(&select_pre._result, j, i);
+          const char* value = duckdb_value_varchar(&select_pre._result, j, i);
           results[i][j]     = value;
           break;
         }

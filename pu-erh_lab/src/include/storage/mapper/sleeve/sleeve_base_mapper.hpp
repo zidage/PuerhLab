@@ -12,24 +12,27 @@
 #include "type/type.hpp"
 
 namespace puerhlab {
-
-class SleeveBaseMapper : MapperInterface<SleeveBase, sleeve_id_t> {
+struct SleeveBaseMapperParams {
+  sleeve_id_t sleeve_id;
+};
+class SleeveBaseMapper : MapperInterface<SleeveBaseMapperParams, sleeve_id_t> {
  private:
   FileMapper   _file_mapper;
   FolderMapper _folder_mapper;
 
-  auto         FromDesc(std::vector<DuckFieldDesc> &&fields) -> std::shared_ptr<SleeveBase>;
-  auto         ToDesc(const SleeveBase &base) -> std::vector<DuckFieldDesc>;
+  auto         FromDesc(std::vector<DuckFieldDesc>&& fields) -> SleeveBaseMapperParams;
+  auto         ToDesc() -> std::vector<DuckFieldDesc>;
 
  public:
-  SleeveBaseMapper(duckdb_connection &conn) : MapperInterface(conn), _file_mapper(conn), _folder_mapper(conn) {};
+  SleeveBaseMapper(duckdb_connection& conn)
+      : MapperInterface(conn), _file_mapper(conn), _folder_mapper(conn) {};
 
   void CaputureSleeveBase(std::shared_ptr<SleeveBase> base);
 
-  void Insert(const SleeveBase &base);
-  auto Get(const sleeve_id_t id) -> std::vector<std::shared_ptr<SleeveBase>>;
-  auto Get(const char *where_clause) -> std::vector<std::shared_ptr<SleeveBase>>;
+  void Insert(const SleeveBaseMapperParams params);
+  auto Get(const sleeve_id_t id) -> std::vector<SleeveBaseMapperParams>;
+  auto Get(const char* where_clause) -> std::vector<SleeveBaseMapperParams>;
   void Remove(const sleeve_id_t sleeve_id);
-  void Update(const sleeve_id_t sleeve_id, const SleeveBase &updated);
+  void Update(const sleeve_id_t sleeve_id, const SleeveBaseMapperParams updated);
 };
 };  // namespace puerhlab

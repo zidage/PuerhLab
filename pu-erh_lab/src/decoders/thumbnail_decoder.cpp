@@ -58,19 +58,20 @@ void ThumbnailDecoder::Decode(std::vector<char> buffer, std::filesystem::path fi
   try {
     // Push the decoded image into the buffer queue
     std::shared_ptr<Image> img = std::make_shared<Image>(id, file_path, ImageType::DEFAULT);
-    img->_exif_data            = Exiv2::ImageFactory::open((Exiv2::byte *)buffer.data(), buffer.size());
+    img->_exif_data = Exiv2::ImageFactory::open((Exiv2::byte*)buffer.data(), buffer.size());
     img->_exif_data->readMetadata();
     img->_has_exif = !img->_exif_data->exifData().empty();
     img->LoadThumbnail(std::move(thumbnail));
     result->push(img);
     promise->set_value(id);
-  } catch (std::exception &e) {
+  } catch (std::exception& e) {
     // TODO: Append error message to log
   }
 }
 
 void ThumbnailDecoder::Decode(std::vector<char> buffer, std::shared_ptr<Image> source_img,
-                              std::shared_ptr<BufferQueue> result, std::shared_ptr<std::promise<image_id_t>> promise) {
+                              std::shared_ptr<BufferQueue>              result,
+                              std::shared_ptr<std::promise<image_id_t>> promise) {
   // Open the datastream as a cv::Mat image
   cv::Mat image_data((int)buffer.size(), 1, CV_8UC1, buffer.data());
   // Using IMREAD_REDUCED_COLOR_8 flag to get the low-res thumbnail image

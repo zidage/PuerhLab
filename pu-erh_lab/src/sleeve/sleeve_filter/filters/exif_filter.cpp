@@ -20,9 +20,15 @@ auto ExifFilter::ToJSON() -> std::wstring {
   //   float          aperture       = 0.0f;
   //   float          focal          = 0.0f;
   //   bool           has_attachment = false;  // for adapter etc.
-  json o{{"make", _metadata.make},         {"model", _metadata.model}, {"height", _metadata.height},
-         {"width", _metadata.width},       {"lens", _metadata.lens},   {"lens_make", _metadata.lens_make},
-         {"aperture", _metadata.aperture}, {"focal", _metadata.focal}, {"has_attachment", _metadata.has_attachment}};
+  json o{{"make", _metadata.make},
+         {"model", _metadata.model},
+         {"height", _metadata.height},
+         {"width", _metadata.width},
+         {"lens", _metadata.lens},
+         {"lens_make", _metadata.lens_make},
+         {"aperture", _metadata.aperture},
+         {"focal", _metadata.focal},
+         {"has_attachment", _metadata.has_attachment}};
   return o;
 }
 };  // namespace puerhlab

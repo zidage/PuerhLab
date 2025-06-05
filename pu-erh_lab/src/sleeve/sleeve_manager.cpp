@@ -62,8 +62,8 @@ auto SleeveManager::LoadToPath(std::vector<image_path_t> img_os_paths, sl_path_t
   auto        total_size    = 0;
   loader.StartLoading(std::move(img_os_paths), DecodeType::SLEEVE_LOADING);
   while (expected_size > 0) {
-    std::shared_ptr<Image> loaded  = loader.LoadImage();
-    auto                   element = _base->CreateElementToPath(dest, loaded->_image_name, ElementType::FILE);
+    std::shared_ptr<Image> loaded = loader.LoadImage();
+    auto element = _base->CreateElementToPath(dest, loaded->_image_name, ElementType::FILE);
     if (!element.has_value()) {
       throw std::exception("Error creating element in sleeve");
     }

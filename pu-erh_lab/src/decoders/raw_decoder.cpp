@@ -42,13 +42,15 @@ namespace puerhlab {
  * @param file_path
  * @param id
  */
-void RawDecoder::Decode(std::vector<char> buffer, std::filesystem::path file_path, std::shared_ptr<BufferQueue> result,
-                        image_id_t id, std::shared_ptr<std::promise<image_id_t>> promise) {
+void RawDecoder::Decode(std::vector<char> buffer, std::filesystem::path file_path,
+                        std::shared_ptr<BufferQueue> result, image_id_t id,
+                        std::shared_ptr<std::promise<image_id_t>> promise) {
   // TODO: Add Implementation
 }
 
 void RawDecoder::Decode(std::vector<char> buffer, std::shared_ptr<Image> source_img,
-                        std::shared_ptr<BufferQueue> result, std::shared_ptr<std::promise<image_id_t>> promise) {
+                        std::shared_ptr<BufferQueue>              result,
+                        std::shared_ptr<std::promise<image_id_t>> promise) {
   // TODO: Add Implementation
 }
 };  // namespace puerhlab

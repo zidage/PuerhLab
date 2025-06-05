@@ -78,15 +78,16 @@ class Image {
 
   explicit Image()                      = default;
   explicit Image(image_id_t image_id, image_path_t image_path, ImageType image_type);
-  explicit Image(image_id_t image_id, image_path_t image_path, file_name_t image_name, ImageType image_type);
+  explicit Image(image_id_t image_id, image_path_t image_path, file_name_t image_name,
+                 ImageType image_type);
   explicit Image(image_path_t image_path, ImageType image_type);
-  explicit Image(Image &&other);
+  explicit Image(Image&& other);
 
-  friend std::wostream &operator<<(std::wostream &os, const Image &img);
+  friend std::wostream& operator<<(std::wostream& os, const Image& img);
 
-  void                  LoadData(cv::Mat &&load_image);
-  void                  LoadThumbnail(cv::Mat &&thumbnail);
-  auto                  GetImageData() -> cv::Mat &;
+  void                  LoadData(cv::Mat&& load_image);
+  void                  LoadThumbnail(cv::Mat&& thumbnail);
+  auto                  GetImageData() -> cv::Mat&;
   void                  SetId(image_id_t image_id);
   void                  ClearData();
   void                  ClearThumbnail();
