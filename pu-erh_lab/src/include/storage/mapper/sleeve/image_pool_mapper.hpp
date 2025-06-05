@@ -1,24 +1,31 @@
+#pragma once
+
 #include <duckdb.h>
 
 #include <memory>
 
 #include "image/image.hpp"
+#include "mapper_interface.hpp"
 #include "storage/image_pool/image_pool_manager.hpp"
+#include "storage/mapper/duckorm/duckdb_types.hpp"
 #include "type/type.hpp"
 
 namespace puerhlab {
-class ImagePoolMapper {
+using namespace duckorm;
+class ImagePoolMapper : MapperInterface<Image, image_id_t> {
  private:
-  duckdb_connection &_con;
-  bool               _db_connected = false;
+  auto FromDesc(std::vector<DuckFieldDesc> &&fields) -> std::shared_ptr<Image>;
+  auto ToDesc(const Image &image) -> std::vector<DuckFieldDesc>;
 
  public:
-  ImagePoolMapper(duckdb_connection &con);
+  using MapperInterface::MapperInterface;
+
   void CaptureImagePool(const std::shared_ptr<ImagePoolManager> image_pool);
 
-  void AddImage(const Image &image);
-  auto GetImage(const image_id_t id) -> std::shared_ptr<Image>;
-  void UpdateImage(const Image &image, const image_id_t id);
-  void RemoveImage(const image_id_t image_id);
+  void Insert(const Image &image);
+  auto Get(const image_id_t id) -> std::vector<std::shared_ptr<Image>>;
+  auto Get(const char *where_clause) -> std::vector<std::shared_ptr<Image>> = 0;
+  void Remove(const image_id_t image_id);
+  void Update(const image_id_t id, const Image &updated);
 };
 }  // namespace puerhlab

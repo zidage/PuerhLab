@@ -10,8 +10,8 @@
 #include "storage/mapper/sleeve/statement_prepare.hpp"
 
 namespace duckorm {
-duckdb_state insert(duckdb_connection &conn, const char *table, const void *obj, const DuckFieldDesc *fields,
-                    size_t field_count) {
+duckdb_state insert(duckdb_connection &conn, const char *table, const void *obj,
+                    const std::vector<DuckFieldDesc> &&fields, size_t field_count) {
   std::ostringstream sql;
   sql << "INSERT INTO " << table << " (";
   for (size_t i = 0; i < field_count; ++i) {
@@ -86,8 +86,8 @@ duckdb_state insert(duckdb_connection &conn, const char *table, const void *obj,
   return state;
 }
 
-duckdb_state update(duckdb_connection &conn, const char *table, const void *obj, const DuckFieldDesc *fields,
-                    size_t field_count, const char *where_clause) {
+duckdb_state update(duckdb_connection &conn, const char *table, const void *obj,
+                    const std::vector<DuckFieldDesc> &&fields, size_t field_count, const char *where_clause) {
   std::ostringstream sql;
   sql << "UPDATE " << table << " SET ";
   for (size_t i = 0; i < field_count; ++i) {
