@@ -14,7 +14,7 @@ namespace puerhlab {
 using namespace duckorm;
 class ImagePoolMapper : MapperInterface<std::shared_ptr<Image>, image_id_t> {
  private:
-  auto FromDesc(std::vector<DuckFieldDesc>&& fields) -> std::shared_ptr<Image>;
+  auto FromRawData(std::vector<VarTypes>&& data) -> std::shared_ptr<Image>;
   auto ToDesc() -> std::vector<DuckFieldDesc>;
 
  public:

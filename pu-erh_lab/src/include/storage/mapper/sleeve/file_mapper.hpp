@@ -18,7 +18,7 @@ struct FileMapperParams {
 class FileMapper : MapperInterface<FileMapperParams, sl_element_id_t>,
                    FieldReflectable<FileMapper> {
  private:
-  auto FromDesc(std::vector<DuckFieldDesc>&& fields) -> FileMapperParams;
+  auto FromRawData(std::vector<VarTypes>&& data) -> FileMapperParams;
 
   static constexpr std::array<DuckFieldDesc, 2> kFieldDescs = {
       FIELD(FileMapperParams, _file_id, UINT32), FIELD(FileMapperParams, _img_id, UINT32)};

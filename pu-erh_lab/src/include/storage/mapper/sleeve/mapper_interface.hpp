@@ -18,7 +18,7 @@ class MapperInterface {
 
   std::vector<std::string> _query_cache;
 
-  virtual auto             FromDesc(std::vector<DuckFieldDesc>&& fields) -> Mappable = 0;
+  virtual auto             FromRawData(std::vector<VarTypes>&& data) -> Mappable = 0;
 
  public:
   MapperInterface(duckdb_connection& conn) : _conn(conn) {}

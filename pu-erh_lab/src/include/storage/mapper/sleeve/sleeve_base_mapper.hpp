@@ -17,15 +17,11 @@ struct SleeveBaseMapperParams {
 };
 class SleeveBaseMapper : MapperInterface<SleeveBaseMapperParams, sleeve_id_t> {
  private:
-  FileMapper   _file_mapper;
-  FolderMapper _folder_mapper;
-
-  auto         FromDesc(std::vector<DuckFieldDesc>&& fields) -> SleeveBaseMapperParams;
-  auto         ToDesc() -> std::vector<DuckFieldDesc>;
+  auto FromRawData(std::vector<VarTypes>&& data) -> SleeveBaseMapperParams;
+  auto ToDesc() -> std::vector<DuckFieldDesc>;
 
  public:
-  SleeveBaseMapper(duckdb_connection& conn)
-      : MapperInterface(conn), _file_mapper(conn), _folder_mapper(conn) {};
+  SleeveBaseMapper(duckdb_connection& conn) : MapperInterface(conn) {};
 
   void CaputureSleeveBase(std::shared_ptr<SleeveBase> base);
 

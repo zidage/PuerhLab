@@ -14,7 +14,7 @@ struct FolderMapperParams {
 };
 class FolderMapper : MapperInterface<FolderMapperParams, sl_element_id_t> {
  private:
-  auto FromDesc(std::vector<DuckFieldDesc>&& fields) -> FolderMapperParams;
+  auto FromRawData(std::vector<VarTypes>&& data) -> FolderMapperParams;
   auto ToDesc() -> std::vector<DuckFieldDesc>;
 
  public:

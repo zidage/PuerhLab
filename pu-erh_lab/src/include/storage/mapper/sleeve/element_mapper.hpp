@@ -6,6 +6,8 @@
 #include <cstdint>
 #include <memory>
 
+#include "file_mapper.hpp"
+#include "folder_mapper.hpp"
 #include "mapper_interface.hpp"
 #include "sleeve/sleeve_element/sleeve_element.hpp"
 #include "sleeve/sleeve_element/sleeve_file.hpp"
@@ -23,7 +25,10 @@ struct SleeveElementParams {
 class ElementMapper : MapperInterface<SleeveElementParams, sl_element_id_t>,
                       FieldReflectable<ElementMapper> {
  private:
-  auto FromDesc(std::vector<DuckFieldDesc>&& fields) -> SleeveElementParams;
+  auto         FromRawData(std::vector<VarTypes>&& data) -> SleeveElementParams;
+
+  FileMapper   _file_mapper;
+  FolderMapper _folder_mapper;
 
   static constexpr std::array<DuckFieldDesc, 6> kFieldDescs = {
       FIELD(SleeveElementParams, _element_id, UINT32),
@@ -34,8 +39,8 @@ class ElementMapper : MapperInterface<SleeveElementParams, sl_element_id_t>,
       FIELD(SleeveElementParams, _ref_count, UINT32)};
 
  public:
-  using MapperInterface::MapperInterface;
-
+  ElementMapper(duckdb_connection& conn)
+      : MapperInterface(conn), _file_mapper(conn), _folder_mapper(conn) {}
   void Insert(const SleeveElementParams element);
   auto Get(const sl_element_id_t id) -> std::vector<SleeveElementParams>;
   auto Get(const char* where_clause) -> std::vector<SleeveElementParams>;
