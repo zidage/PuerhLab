@@ -9,34 +9,37 @@
 #include "type/type.hpp"
 
 namespace puerhlab {
-struct SleeveElementParams {
-  sl_element_id_t _element_id;
-  uint32_t        _type;
-  const char*     _element_name;
-  const char*     _added_time;
-  const char*     _modified_time;
-  uint32_t        _ref_count;
+// Element (id BIGINT PRIMARY KEY, type INTEGER, element_name TEXT, added_time "
+//     "TIMESTAMP, modified_time "
+//     "TIMESTAMP, "
+//     "ref_count BIGINT);"
+struct ElementMapperParams {
+  sl_element_id_t id;
+  uint32_t        type;
+  const char*     element_name;
+  const char*     added_time;
+  const char*     modified_time;
+  uint32_t        ref_count;
 };
-class ElementMapper : MapperInterface<SleeveElementParams, sl_element_id_t>,
+class ElementMapper : MapperInterface<ElementMapper, ElementMapperParams, sl_element_id_t>,
                       FieldReflectable<ElementMapper> {
  private:
-  auto FromRawData(std::vector<VarTypes>&& data) -> SleeveElementParams;
+  static auto FromRawData(std::vector<duckorm::VarTypes>&& data) -> ElementMapperParams;
 
-  static constexpr std::array<duckorm::DuckFieldDesc, 6> kFieldDescs = {
-      FIELD(SleeveElementParams, _element_id, UINT32),
-      FIELD(SleeveElementParams, _type, UINT32),
-      FIELD(SleeveElementParams, _element_name, VARCHAR),
-      FIELD(SleeveElementParams, _added_time, TIMESTAMP),
-      FIELD(SleeveElementParams, _modified_time, TIMESTAMP),
-      FIELD(SleeveElementParams, _ref_count, UINT32)};
+  static constexpr uint32_t                                         _field_count      = 6;
+  static constexpr const char*                                      _table_name       = "Element";
+  static constexpr const char*                                      _prime_key_clause = "id={}";
+  static constexpr std::array<duckorm::DuckFieldDesc, _field_count> _field_descs      = {
+      FIELD(ElementMapperParams, id, UINT32),
+      FIELD(ElementMapperParams, type, UINT32),
+      FIELD(ElementMapperParams, element_name, VARCHAR),
+      FIELD(ElementMapperParams, added_time, TIMESTAMP),
+      FIELD(ElementMapperParams, modified_time, TIMESTAMP),
+      FIELD(ElementMapperParams, ref_count, UINT32)};
 
  public:
-  using MapperInterface<SleeveElementParams, sl_element_id_t>::MapperInterface;
+  friend struct FieldReflectable<ElementMapper>;
 
-  void Insert(const SleeveElementParams element);
-  auto Get(const sl_element_id_t id) -> std::vector<SleeveElementParams>;
-  auto Get(const char* where_clause) -> std::vector<SleeveElementParams>;
-  void Remove(const sl_element_id_t element_id);
-  void Update(const sl_element_id_t element_id, const SleeveElementParams);
+  using MapperInterface::MapperInterface;
 };
 };  // namespace puerhlab

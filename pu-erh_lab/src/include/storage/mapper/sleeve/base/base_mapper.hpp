@@ -11,44 +11,41 @@ namespace puerhlab {
 struct BaseMapperParams {
   sleeve_id_t id;
 };
-class BaseMapper : MapperInterface<BaseMapperParams, sl_element_id_t>,
+class BaseMapper : MapperInterface<BaseMapper, BaseMapperParams, sleeve_id_t>,
                    FieldReflectable<BaseMapper> {
  private:
-  auto FromRawData(std::vector<VarTypes>&& data) -> BaseMapperParams;
+  static auto               FromRawData(std::vector<duckorm::VarTypes>&& data) -> BaseMapperParams;
 
-  static constexpr std::array<duckorm::DuckFieldDesc, 1> kFieldDescs = {
+  static constexpr uint32_t _field_count                                             = 1;
+  static constexpr const char*                                      table_name       = "Sleeve";
+  static constexpr const char*                                      prime_key_clause = "id={}";
+
+  static constexpr std::array<duckorm::DuckFieldDesc, _field_count> _field_descs     = {
       FIELD(BaseMapperParams, id, UINT32)};
 
- public:
   friend struct FieldReflectable<BaseMapper>;
-  using MapperInterface<BaseMapperParams, sl_element_id_t>::MapperInterface;
-
-  void Insert(const BaseMapperParams&& params);
-  auto Get(const sleeve_id_t id) -> std::vector<BaseMapperParams>;
-  auto Get(const char* where_clause) -> std::vector<BaseMapperParams>;
-  void Remove(const sleeve_id_t id);
-  void Update(const sleeve_id_t id, const BaseMapperParams updated);
+  using MapperInterface::MapperInterface;
 };
 
+// CREATE TABLE SleeveRoot (id BIGINT PRIMARY KEY);"
 struct RootMapperParams {
   sl_element_id_t id;
 };
-class RootMapper : MapperInterface<RootMapperParams, sl_element_id_t>,
+class RootMapper : MapperInterface<RootMapper, RootMapperParams, sl_element_id_t>,
                    FieldReflectable<RootMapper> {
  private:
-  auto FromRawData(std::vector<VarTypes>&& data) -> RootMapperParams;
+  auto                      FromRawData(std::vector<duckorm::VarTypes>&& data) -> RootMapperParams;
 
-  static constexpr std::array<duckorm::DuckFieldDesc, 1> kFieldDescs = {
+  static constexpr uint32_t _field_count                                             = 1;
+  static constexpr const char*                                      table_name       = "SleeveRoot";
+  static constexpr const char*                                      prime_key_clause = "id={}";
+
+  static constexpr std::array<duckorm::DuckFieldDesc, _field_count> _field_descs     = {
       FIELD(RootMapperParams, id, UINT32)};
 
  public:
-  friend struct FieldReflectable<BaseMapper>;
-  using MapperInterface<RootMapperParams, sl_element_id_t>::MapperInterface;
-
-  void Insert(const RootMapperParams&& params);
-  auto Get(const sl_element_id_t id) -> std::vector<RootMapperParams>;
-  auto Get(const char* where_clause) -> std::vector<RootMapperParams>;
-  void Remove(const sl_element_id_t id);
-  void Update(const sl_element_id_t id, const RootMapperParams updated);
+  friend struct FieldReflectable<RootMapper>;
+  friend class MapperInterface<RootMapper, RootMapperParams, sl_element_id_t>;
+  using MapperInterface::MapperInterface;
 };
 };  // namespace puerhlab

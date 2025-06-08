@@ -1,7 +1,5 @@
 #pragma once
 
-#include <duckdb.h>
-
 #include <cstddef>
 #include <cstdint>
 #include <variant>
@@ -25,11 +23,8 @@ struct DuckFieldDesc {
   size_t      offset;
 };
 
-#define FIELD(type, field, field_type)                    \
-  \ 
-  DuckFieldDesc {                                         \
-    #field, DuckDBType::field_type, offsetof(type, field) \
-  }
-};  // namespace duckorm
+#define FIELD(type, field, field_type) \
+  duckorm::DuckFieldDesc { #field, duckorm::DuckDBType::field_type, offsetof(type, field) }
 
 using VarTypes = std::variant<int32_t, int64_t, uint32_t, uint64_t, double, const char*>;
+};  // namespace duckorm

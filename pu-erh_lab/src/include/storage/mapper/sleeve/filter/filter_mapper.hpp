@@ -14,46 +14,39 @@ struct FilterMapperParams {
   uint32_t    type;
   const char* data;
 };
-class FilterMapper : MapperInterface<FilterMapperParams, sl_element_id_t>,
+class FilterMapper : MapperInterface<FilterMapper, FilterMapperParams, sl_element_id_t>,
                      FieldReflectable<FilterMapper> {
  private:
-  auto FromRawData(std::vector<VarTypes>&& data) -> FilterMapperParams;
-
-  static constexpr std::array<DuckFieldDesc, 3> kFieldDescs = {
+  static auto FromRawData(std::vector<duckorm::VarTypes>&& data) -> FilterMapperParams;
+  static constexpr uint32_t    _field_count                                      = 3;
+  static constexpr const char* _table_name                                       = "Filter";
+  static constexpr const char* _prime_key_clause                                 = "combo_id={}";
+  static constexpr std::array<duckorm::DuckFieldDesc, _field_count> _field_descs = {
       FIELD(FilterMapperParams, combo_id, UINT32), FIELD(FilterMapperParams, type, UINT32),
       FIELD(FilterMapperParams, data, VARCHAR)};
 
  public:
+  using MapperInterface::MapperInterface;
   friend struct FieldReflectable<FilterMapper>;
-  using MapperInterface<FilterMapperParams, sl_element_id_t>::MapperInterface;
-
-  void Insert(const FilterMapperParams params);
-  auto Get(const sl_element_id_t id) -> std::vector<FilterMapperParams>;
-  auto Get(const char* where_clause) -> std::vector<FilterMapperParams>;
-  void Remove(const sl_element_id_t element_id);
-  void Update(const sl_element_id_t element_id, const FilterMapperParams updated);
 };
 
+// CREATE TABLE ComboFolder (combo_id BIGINT, folder_id BIGINT);
 struct ComboMapperParams {
   uint32_t combo_id;
   uint32_t folder_id;
 };
-class ComboMapper : MapperInterface<ComboMapperParams, sl_element_id_t>,
+class ComboMapper : MapperInterface<ComboMapper, ComboMapperParams, sl_element_id_t>,
                     FieldReflectable<ComboMapper> {
  private:
-  auto FromRawData(std::vector<VarTypes>&& data) -> ComboMapperParams;
-
-  static constexpr std::array<DuckFieldDesc, 2> kFieldDescs = {
+  auto                      FromRawData(std::vector<duckorm::VarTypes>&& data) -> ComboMapperParams;
+  static constexpr uint32_t _field_count                                         = 2;
+  static constexpr const char* _table_name                                       = "ComboFolder";
+  static constexpr const char* _prime_key_clause                                 = "combo_id={}";
+  static constexpr std::array<duckorm::DuckFieldDesc, _field_count> _field_descs = {
       FIELD(ComboMapperParams, combo_id, UINT32), FIELD(ComboMapperParams, folder_id, UINT32)};
 
  public:
   friend struct FieldReflectable<ComboMapper>;
   using MapperInterface::MapperInterface;
-
-  void Insert(const ComboMapperParams params);
-  auto Get(const sl_element_id_t id) -> std::vector<ComboMapperParams>;
-  auto Get(const char* where_clause) -> std::vector<ComboMapperParams>;
-  void Remove(const sl_element_id_t element_id);
-  void Update(const sl_element_id_t element_id, const ComboMapperParams updated);
 };
 };  // namespace puerhlab

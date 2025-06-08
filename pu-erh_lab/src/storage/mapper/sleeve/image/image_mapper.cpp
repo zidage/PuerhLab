@@ -1,0 +1,1 @@
+#include "storage/mapper/sleeve/image/image_mapper.hpp"

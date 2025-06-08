@@ -16,24 +16,21 @@ struct FolderMapperParams {
   sl_element_id_t element_id;
 };
 
-class FolderMapper : MapperInterface<FolderMapperParams, sl_element_id_t>,
+class FolderMapper : MapperInterface<FolderMapper, FolderMapperParams, sl_element_id_t>,
                      FieldReflectable<FolderMapper> {
  private:
-  auto FromRawData(std::vector<VarTypes>&& data) -> FolderMapperParams;
+  static auto FromRawData(std::vector<duckorm::VarTypes>&& data) -> FolderMapperParams;
 
-  static constexpr std::array<duckorm::DuckFieldDesc, 3> kFieldDescs = {
+  static constexpr uint32_t    _field_count                                      = 3;
+  static constexpr const char* _table_name                                       = "FolderContent";
+  static constexpr const char* _prime_key_clause                                 = "folder_id={}";
+  static constexpr std::array<duckorm::DuckFieldDesc, _field_count> _field_descs = {
       FIELD(FolderMapperParams, folder_id, UINT32),
       FIELD(FolderMapperParams, element_name, VARCHAR),
       FIELD(FolderMapperParams, element_id, UINT32)};
 
  public:
   friend struct FieldReflectable<FolderMapper>;
-  using MapperInterface<FolderMapperParams, sl_element_id_t>::MapperInterface;
-
-  void Insert(const FolderMapperParams params);
-  auto Get(const sl_element_id_t id) -> std::vector<FolderMapperParams>;
-  auto Get(const char* where_clause) -> std::vector<FolderMapperParams>;
-  void Remove(const sl_element_id_t id);
-  void Update(const sl_element_id_t id, const FolderMapperParams updated);
+  using MapperInterface::MapperInterface;
 };
 };  // namespace puerhlab
