@@ -1,16 +1,11 @@
 #pragma once
 
-#include <duckdb.h>
-#include <opencv2/core/hal/interface.h>
-
+#include <array>
 #include <cstdint>
 #include <memory>
 
-#include "file_mapper.hpp"
-#include "folder_mapper.hpp"
-#include "mapper_interface.hpp"
-#include "sleeve/sleeve_element/sleeve_element.hpp"
-#include "sleeve/sleeve_element/sleeve_file.hpp"
+#include "storage/mapper/duckorm/duckdb_types.hpp"
+#include "storage/mapper/mapper_interface.hpp"
 #include "type/type.hpp"
 
 namespace puerhlab {
@@ -25,12 +20,9 @@ struct SleeveElementParams {
 class ElementMapper : MapperInterface<SleeveElementParams, sl_element_id_t>,
                       FieldReflectable<ElementMapper> {
  private:
-  auto         FromRawData(std::vector<VarTypes>&& data) -> SleeveElementParams;
+  auto FromRawData(std::vector<VarTypes>&& data) -> SleeveElementParams;
 
-  FileMapper   _file_mapper;
-  FolderMapper _folder_mapper;
-
-  static constexpr std::array<DuckFieldDesc, 6> kFieldDescs = {
+  static constexpr std::array<duckorm::DuckFieldDesc, 6> kFieldDescs = {
       FIELD(SleeveElementParams, _element_id, UINT32),
       FIELD(SleeveElementParams, _type, UINT32),
       FIELD(SleeveElementParams, _element_name, VARCHAR),
@@ -39,8 +31,8 @@ class ElementMapper : MapperInterface<SleeveElementParams, sl_element_id_t>,
       FIELD(SleeveElementParams, _ref_count, UINT32)};
 
  public:
-  ElementMapper(duckdb_connection& conn)
-      : MapperInterface(conn), _file_mapper(conn), _folder_mapper(conn) {}
+  using MapperInterface<SleeveElementParams, sl_element_id_t>::MapperInterface;
+
   void Insert(const SleeveElementParams element);
   auto Get(const sl_element_id_t id) -> std::vector<SleeveElementParams>;
   auto Get(const char* where_clause) -> std::vector<SleeveElementParams>;

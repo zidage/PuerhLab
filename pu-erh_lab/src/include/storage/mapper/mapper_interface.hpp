@@ -12,7 +12,7 @@ namespace puerhlab {
 using namespace duckorm;
 template <typename Mappable, typename ID>
 class MapperInterface {
- private:
+ public:
   duckdb_connection&       _conn;
   bool                     _is_connected;
 
@@ -20,9 +20,8 @@ class MapperInterface {
 
   virtual auto             FromRawData(std::vector<VarTypes>&& data) -> Mappable = 0;
 
- public:
   MapperInterface(duckdb_connection& conn) : _conn(conn) {}
-  virtual void Insert(const Mappable obj)                             = 0;
+  virtual void Insert(const Mappable&& obj)                           = 0;
   virtual void Remove(const ID remove_id)                             = 0;
   virtual auto Get(const ID target_id) -> std::vector<Mappable>       = 0;
   virtual auto Get(const char* where_clause) -> std::vector<Mappable> = 0;

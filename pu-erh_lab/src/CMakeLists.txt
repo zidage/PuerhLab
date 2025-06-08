@@ -63,11 +63,13 @@ target_include_directories(DuckORM PUBLIC include)
 target_link_libraries(DuckORM PUBLIC DuckDB)
 
 add_library(SleeveMapper     
-    storage/mapper/sleeve/query_prepare.cpp
-    storage/mapper/sleeve/statement_prepare.cpp
-    storage/mapper/sleeve/sleeve_mapper.cpp)
+    storage/mapper/sleeve/element/file_mapper.cpp
+    storage/mapper/sleeve/element/folder_mapper.cpp
+    storage/mapper/sleeve/element/element_mapper.cpp
+    storage/mapper/sleeve/base/base_mapper.cpp
+    )
 target_include_directories(SleeveMapper PUBLIC include)
-target_link_libraries(SleeveMapper PUBLIC DuckDB Image Sleeve ImagePool easy_profiler)
+target_link_libraries(SleeveMapper PUBLIC DuckDB DuckORM Image Sleeve ImagePool easy_profiler)
 
 add_library(SleeveManager 
     sleeve/sleeve_manager.cpp)
