@@ -12,7 +12,7 @@ namespace puerhlab {
 // CREATE TABLE FolderContent (folder_id BIGINT, element_name TEXT, element_id BIGINT);
 struct FolderMapperParams {
   sl_element_id_t folder_id;
-  const char*     element_name;
+  std::string     element_name;
   sl_element_id_t element_id;
 };
 

@@ -14,12 +14,12 @@ namespace puerhlab {
 //     "TIMESTAMP, "
 //     "ref_count BIGINT);"
 struct ElementMapperParams {
-  sl_element_id_t id;
-  uint32_t        type;
-  const char*     element_name;
-  const char*     added_time;
-  const char*     modified_time;
-  uint32_t        ref_count;
+  sl_element_id_t              id;
+  uint32_t                     type;
+  std::unique_ptr<std::string> element_name;
+  std::unique_ptr<std::string> added_time;
+  std::unique_ptr<std::string> modified_time;
+  uint32_t                     ref_count;
 };
 class ElementMapper : MapperInterface<ElementMapper, ElementMapperParams, sl_element_id_t>,
                       FieldReflectable<ElementMapper> {

@@ -67,11 +67,17 @@ add_library(SleeveMapper
     storage/mapper/sleeve/element/folder_mapper.cpp
     storage/mapper/sleeve/element/element_mapper.cpp
     storage/mapper/sleeve/base/base_mapper.cpp
-    storage/mapper/sleeve/image/image_mapper.cpp
+    storage/mapper/image/image_mapper.cpp
     storage/mapper/sleeve/filter/filter_mapper.cpp
     )
 target_include_directories(SleeveMapper PUBLIC include)
 target_link_libraries(SleeveMapper PUBLIC DuckDB DuckORM Image Sleeve ImagePool easy_profiler)
+
+add_library(SleeveService
+    storage/service/image/image_service.cpp
+)
+target_include_directories(SleeveService PUBLIC include)
+target_link_libraries(SleeveService PUBLIC DuckDB DuckORM SleeveMapper)
 
 add_library(SleeveManager 
     sleeve/sleeve_manager.cpp)

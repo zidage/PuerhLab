@@ -36,11 +36,11 @@ class RootMapper : MapperInterface<RootMapper, RootMapperParams, sl_element_id_t
  private:
   auto                      FromRawData(std::vector<duckorm::VarTypes>&& data) -> RootMapperParams;
 
-  static constexpr uint32_t _field_count                                             = 1;
-  static constexpr const char*                                      table_name       = "SleeveRoot";
-  static constexpr const char*                                      prime_key_clause = "id={}";
+  static constexpr uint32_t _field_count                                        = 1;
+  static constexpr const char*                                      _table_name = "SleeveRoot";
+  static constexpr const char*                                      _prime_key_clause = "id={}";
 
-  static constexpr std::array<duckorm::DuckFieldDesc, _field_count> _field_descs     = {
+  static constexpr std::array<duckorm::DuckFieldDesc, _field_count> _field_descs      = {
       FIELD(RootMapperParams, id, UINT32)};
 
  public:

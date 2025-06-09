@@ -2,6 +2,8 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <memory>
+#include <string>
 #include <variant>
 
 namespace duckorm {
@@ -26,5 +28,6 @@ struct DuckFieldDesc {
 #define FIELD(type, field, field_type) \
   duckorm::DuckFieldDesc { #field, duckorm::DuckDBType::field_type, offsetof(type, field) }
 
-using VarTypes = std::variant<int32_t, int64_t, uint32_t, uint64_t, double, const char*>;
+using VarTypes =
+    std::variant<int32_t, int64_t, uint32_t, uint64_t, double, std::unique_ptr<std::string>>;
 };  // namespace duckorm

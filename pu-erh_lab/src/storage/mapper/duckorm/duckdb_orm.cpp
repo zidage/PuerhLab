@@ -142,8 +142,9 @@ duckdb_state update(duckdb_connection& conn, const char* table, const void* obj,
       case DuckDBType::TIMESTAMP:
       case DuckDBType::JSON:
       case DuckDBType::VARCHAR: {
-        const char* value = reinterpret_cast<const char*>(ptr);
-        duckdb_bind_varchar(update_pre._stmt, i + 1, value);
+        auto member_ptr = reinterpret_cast<const std::unique_ptr<std::string>*>(ptr);
+        auto c_str      = member_ptr->get()->c_str();
+        duckdb_bind_varchar(update_pre._stmt, i + 1, c_str);
         break;
       }
       case DuckDBType::BOOLEAN:
@@ -244,7 +245,7 @@ std::vector<std::vector<VarTypes>> select(duckdb_connection& conn, const std::st
         case DuckDBType::BOOLEAN:
         case DuckDBType::TIMESTAMP: {
           const char* value = duckdb_value_varchar(&select_pre._result, j, i);
-          results[i][j]     = value;
+          results[i][j]     = std::make_unique<std::string>(value);
           break;
         }
         default:
