@@ -24,18 +24,18 @@ class ImageService {
   explicit ImageService(duckdb_connection conn) : _conn(conn), _mapper(_conn) {}
 
   auto ToParams(const Image& source) -> ImageMapperParams;
-  auto FromParams(const ImageMapperParams& param) -> std::shared_ptr<Image>;
+  auto FromParams(const ImageMapperParams&& param) -> std::shared_ptr<Image>;
 
   void CaptureImagePool(std::shared_ptr<ImagePoolManager> image_pool);
   void InsertImage(const Image& img);
+  void InsertImageParams(const ImageMapperParams& param);
 
-  auto GetImageByPredicate(std::wstring predicate) -> std::vector<std::shared_ptr<Image>>;
-  auto GetImageById(image_id_t id) -> std::vector<std::shared_ptr<Image>>;
-  auto GetImageByName(std::wstring name) -> std::vector<std::shared_ptr<Image>>;
-  auto GetImageByPath(std::filesystem::path path) -> std::vector<std::shared_ptr<Image>>;
-  auto GetImageByType(ImageType type) -> std::vector<std::shared_ptr<Image>>;
+  auto GetImageByPredicate(const std::wstring predicate) -> std::vector<std::shared_ptr<Image>>;
+  auto GetImageById(const image_id_t id) -> std::vector<std::shared_ptr<Image>>;
+  auto GetImageByName(const std::wstring name) -> std::vector<std::shared_ptr<Image>>;
+  auto GetImageByPath(const std::filesystem::path path) -> std::vector<std::shared_ptr<Image>>;
+  auto GetImageByType(const ImageType type) -> std::vector<std::shared_ptr<Image>>;
 
-  void RemoveImageByPredicate(std::wstring predicate);
   void RemoveImageById(image_id_t id);
   void ClearAllImage();
 

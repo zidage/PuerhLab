@@ -137,6 +137,7 @@ auto Image::ExifToJson() const -> std::string {
   } catch (std::exception& e) {
     std::cerr << e.what() << std::endl;
   }
+
   return nlohmann::to_string(o);
 }
 
@@ -145,7 +146,7 @@ void Image::JsonToExif(std::string json_str) {
     _exif_json     = nlohmann::json::parse(json_str);
     _has_exif_json = true;
   } catch (nlohmann::json::parse_error& e) {
-    throw std::exception("JSON parse error");
+    throw std::exception("Image: JSON parse error");
   }
 }
 

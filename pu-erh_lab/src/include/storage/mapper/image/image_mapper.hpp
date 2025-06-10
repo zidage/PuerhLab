@@ -18,7 +18,7 @@ struct ImageMapperParams {
   uint32_t                     type;
   std::unique_ptr<std::string> metadata;
 };
-class ImageMapper : MapperInterface<ImageMapper, ImageMapperParams, image_id_t>,
+class ImageMapper : public MapperInterface<ImageMapper, ImageMapperParams, image_id_t>,
                     FieldReflectable<ImageMapper> {
  private:
   static auto               FromRawData(std::vector<duckorm::VarTypes>&& data) -> ImageMapperParams;
