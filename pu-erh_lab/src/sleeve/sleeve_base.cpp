@@ -62,7 +62,7 @@ ElementAccessGuard::~ElementAccessGuard() {
  *
  * @param id
  */
-SleeveBase::SleeveBase(sleeve_id_t id) : _sleeve_id(id), re(delimiter) {
+SleeveBase::SleeveBase(sleeve_id_t id) : re(delimiter), _sleeve_id(id) {
   // TODO: change the id assignment logic
   _next_element_id   = 0;
   _size              = 0;

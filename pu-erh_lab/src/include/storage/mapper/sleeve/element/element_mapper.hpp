@@ -21,7 +21,7 @@ struct ElementMapperParams {
   std::unique_ptr<std::string> modified_time;
   uint32_t                     ref_count;
 };
-class ElementMapper : MapperInterface<ElementMapper, ElementMapperParams, sl_element_id_t>,
+class ElementMapper : public MapperInterface<ElementMapper, ElementMapperParams, sl_element_id_t>,
                       FieldReflectable<ElementMapper> {
  private:
   static auto FromRawData(std::vector<duckorm::VarTypes>&& data) -> ElementMapperParams;

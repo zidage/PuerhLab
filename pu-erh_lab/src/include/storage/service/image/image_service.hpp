@@ -19,6 +19,7 @@ class ImageService {
   ImageMapper                                      _mapper;
 
   std::wstring_convert<std::codecvt_utf8<wchar_t>> conv;
+  void InsertImageParams(const ImageMapperParams& param);
 
  public:
   explicit ImageService(duckdb_connection conn) : _conn(conn), _mapper(_conn) {}
@@ -28,7 +29,6 @@ class ImageService {
 
   void CaptureImagePool(std::shared_ptr<ImagePoolManager> image_pool);
   void InsertImage(const Image& img);
-  void InsertImageParams(const ImageMapperParams& param);
 
   auto GetImageByPredicate(const std::wstring predicate) -> std::vector<std::shared_ptr<Image>>;
   auto GetImageById(const image_id_t id) -> std::vector<std::shared_ptr<Image>>;
@@ -37,7 +37,6 @@ class ImageService {
   auto GetImageByType(const ImageType type) -> std::vector<std::shared_ptr<Image>>;
 
   void RemoveImageById(image_id_t id);
-  void ClearAllImage();
 
   void UpdateImage(const Image& updated);
 };
