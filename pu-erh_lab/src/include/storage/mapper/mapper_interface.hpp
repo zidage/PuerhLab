@@ -24,6 +24,9 @@ class MapperInterface {
   void Remove(const ID remove_id) {
     duckorm::remove(_conn, Derived::TableName(), std::format(Derived::PrimeKeyClause(), remove_id));
   }
+  void RemoveByClause(const std::string& predicate) {
+    duckorm::remove(_conn, Derived::TableName(), predicate.c_str());
+  }
   auto Get(const char* where_clause) -> std::vector<Mappable> {
     auto raw = duckorm::select<std::vector<duckorm::VarTypes>>(
         _conn, Derived::TableName(), Derived::FieldDesc(), Derived::FieldCount(), where_clause);

@@ -2,28 +2,23 @@
 
 #include "sleeve/sleeve_element/sleeve_file.hpp"
 #include "storage/mapper/sleeve/element/file_mapper.hpp"
+#include "storage/service/service_interface.hpp"
 #include "type/type.hpp"
 
 namespace puerhlab {
-class FileService {
-  duckdb_connection _conn;
-  FileMapper        _mapper;
-
-  void              InsertFileParams(const FileMapperParams& param);
-
+class FileService : public ServiceInterface<FileService, std::pair<sl_element_id_t, image_id_t>,
+                                            FileMapperParams, FileMapper, sl_element_id_t> {
  public:
-  explicit FileService(duckdb_connection conn) : _conn(conn), _mapper(_conn) {}
+  using ServiceInterface::ServiceInterface;
 
-  auto ToParams(const SleeveFile& source) -> FileMapperParams;
-  auto FromParams(const FileMapperParams&& param) -> std::shared_ptr<SleeveFile>;
+  // File service is used to retrieve a set of mapping, therefore no actual internal type, i.g.
+  // SleeveFile, is returned
+  static auto ToParams(const std::pair<sl_element_id_t, image_id_t>& source) -> FileMapperParams;
+  static auto FromParams(const FileMapperParams&& param) -> std::pair<sl_element_id_t, image_id_t>;
 
-  void InsertFile(const SleeveFile& element);
+  auto        GetFileById(const sl_element_id_t id) -> std::pair<sl_element_id_t, image_id_t>;
+  auto        GetBoundImageById(const sl_element_id_t id) -> image_id_t;
 
-  auto GetFileById(const sl_element_id_t id) -> sl_element_id_t;
-  auto GetBoundImageById(const sl_element_id_t id) -> image_id_t;
-
-  void RemoveFileById(sl_element_id_t id);
-
-  void UpdateFile(const SleeveFile& updated);
+  void        RemoveBindByFileId(const sl_element_id_t id);
 };
 };  // namespace puerhlab

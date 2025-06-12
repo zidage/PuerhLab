@@ -5,6 +5,7 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <utility>
 
 #include "sleeve/sleeve_element/sleeve_element.hpp"
 #include "sleeve/sleeve_element/sleeve_file.hpp"
@@ -59,16 +60,15 @@ auto ElementService::FromParams(const ElementMapperParams&& param)
   return element;
 }
 
-void ElementService::InsertElementParams(const ElementMapperParams& param) {
-  _mapper.Insert(std::move(param));
-}
-
-void ElementService::InsertElement(const SleeveElement& element) {
-  _mapper.Insert(ToParams(element));
-}
-
-auto ElementService::GetElementByPredicate(const std::wstring& predicate)
+auto ElementService::GetElementByName(const std::wstring name)
     -> std::vector<std::shared_ptr<SleeveElement>> {
-  auto param_results = _mapper.Get(conv.to_bytes(predicate).c_str());
+  std::string predicate = conv.to_bytes(std::format(L"element_name={}", name));
+  return GetByPredicate(std::move(predicate));
+}
+
+auto ElementService::GetElementByType(const ElementType type)
+    -> std::vector<std::shared_ptr<SleeveElement>> {
+  std::string predicate = std::format("type={}", static_cast<uint32_t>(type));
+  return GetByPredicate(std::move(predicate));
 }
 };  // namespace puerhlab

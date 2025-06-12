@@ -15,11 +15,10 @@ class ServiceInterface {
   _duckdb_connection                    _conn;
   MapperInterface<Mapper, Mappable, ID> _mapper;
 
-  void InsertParams(const Mappable& param) { _mapper.Insert(std::move(param)); }
-
  public:
+  void InsertParams(const Mappable& param) { _mapper.Insert(std::move(param)); }
   void Insert(const InternalType& obj) { _mapper.Insert(Derived::ToParams(obj)); }
-  auto Get(const std::string& predicate) -> std::vector<std::shared_ptr<InternalType>> {
+  auto GetByPredicate(const std::string&& predicate) -> std::vector<InternalType> {
     std::vector<Mapper>                        param_results = _mapper.Get(predicate);
     std::vector<std::shared_ptr<InternalType>> results;
     results.resize(param_results.size());
@@ -28,6 +27,12 @@ class ServiceInterface {
       results[idx] = Derived::FromParams(std::move(param));
       ++idx;
     }
+    return results;
+  }
+  void RemoveById(const ID remove_id) { _mapper.Remove(remove_id); }
+  void RemoveByClause(const std::string& clause) { _mapper.RemoveByClause(clause); }
+  void Update(const InternalType& obj, const ID update_id) {
+    _mapper.Update(update_id, Derived::ToParams(obj));
   }
 };
 }  // namespace puerhlab

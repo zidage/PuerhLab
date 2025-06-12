@@ -15,12 +15,12 @@
 #include "type/type.hpp"
 
 namespace puerhlab {
-auto ImageService::ToParams(const Image& source) -> ImageMapperParams {
-  return {source._image_id,
-          std::make_unique<std::string>(conv.to_bytes(source._image_path.wstring())),
-          std::make_unique<std::string>(conv.to_bytes(source._image_name)),
-          static_cast<uint32_t>(source._image_type),
-          std::make_unique<std::string>(source.ExifToJson())};
+auto ImageService::ToParams(const std::shared_ptr<Image> source) -> ImageMapperParams {
+  return {source->_image_id,
+          std::make_unique<std::string>(conv.to_bytes(source->_image_path.wstring())),
+          std::make_unique<std::string>(conv.to_bytes(source->_image_name)),
+          static_cast<uint32_t>(source->_image_type),
+          std::make_unique<std::string>(source->ExifToJson())};
 }
 auto ImageService::FromParams(const ImageMapperParams&& param) -> std::shared_ptr<Image> {
   // TODO: Replace it with ImageFactory once the more fine-grained Image loader is implemented
@@ -30,53 +30,25 @@ auto ImageService::FromParams(const ImageMapperParams&& param) -> std::shared_pt
   return recovered;
 }
 
-void ImageService::InsertImage(const Image& img) {
-  auto param = ToParams(img);
-  _mapper.Insert(std::move(param));
-}
-
-void ImageService::InsertImageParams(const ImageMapperParams& param) {
-  _mapper.Insert(std::move(param));
-}
-
-auto ImageService::GetImageByPredicate(const std::wstring predicate)
-    -> std::vector<std::shared_ptr<Image>> {
-  auto                                param_results = _mapper.Get(conv.to_bytes(predicate).c_str());
-  std::vector<std::shared_ptr<Image>> image_results;
-  image_results.resize(param_results.size());
-  size_t idx = 0;
-  for (auto& param : param_results) {
-    image_results[idx] = FromParams(std::move(param));
-    ++idx;
-  }
-  return image_results;
-}
-
 auto ImageService::GetImageById(const image_id_t id) -> std::vector<std::shared_ptr<Image>> {
-  std::wstring predicate = std::format(L"id={}", id);
-  return GetImageByPredicate(predicate);
+  std::string predicate = std::format("id={}", id);
+  return GetByPredicate(std::move(predicate));
 }
 
 auto ImageService::GetImageByName(const std::wstring name) -> std::vector<std::shared_ptr<Image>> {
-  std::wstring predicate = std::format(L"file_name={}", name);
-  return GetImageByPredicate(predicate);
+  std::string predicate = conv.to_bytes(std::format(L"file_name={}", name));
+  return GetByPredicate(std::move(predicate));
 }
 
 auto ImageService::GetImageByPath(const std::filesystem::path path)
     -> std::vector<std::shared_ptr<Image>> {
-  std::wstring predicate = std::format(L"image_path={}", path.wstring());
-  return GetImageByPredicate(predicate);
+  std::string predicate = conv.to_bytes(std::format(L"image_path={}", path.wstring()));
+  return GetByPredicate(std::move(predicate));
 }
 
 auto ImageService::GetImageByType(const ImageType type) -> std::vector<std::shared_ptr<Image>> {
-  std::wstring predicate = std::format(L"type={}", static_cast<uint32_t>(type));
-  return GetImageByPredicate(predicate);
-}
-
-void ImageService::RemoveImageById(const image_id_t id) { _mapper.Remove(id); }
-
-void ImageService::UpdateImage(const Image& updated) {
-  _mapper.Update(updated._image_id, ToParams(updated));
+  std::string predicate = std::format("type={}", static_cast<uint32_t>(type));
+  return GetByPredicate(std::move(predicate));
 }
 
 void ImageService::CaptureImagePool(std::shared_ptr<ImagePoolManager> image_pool) {
@@ -85,12 +57,12 @@ void ImageService::CaptureImagePool(std::shared_ptr<ImagePoolManager> image_pool
   BlockingMPMCQueue<ImageMapperParams> converted_params{348};
   for (auto& pool_val : pool) {
     auto img = pool_val.second;
-    thread_pool.Submit([img, &converted_params, this]() { converted_params.push(ToParams(*img)); });
+    thread_pool.Submit([img, &converted_params, this]() { converted_params.push(ToParams(img)); });
   }
 
   for (size_t i = 0; i < pool.size(); ++i) {
     auto result = converted_params.pop();
-    InsertImageParams(result);
+    InsertParams(result);
   }
 }
 };  // namespace puerhlab

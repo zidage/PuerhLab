@@ -75,9 +75,20 @@ target_link_libraries(SleeveMapper PUBLIC DuckDB DuckORM Image Sleeve ImagePool 
 
 add_library(SleeveService
     storage/service/image/image_service.cpp
+    storage/service/sleeve/base/base_service.cpp
+    storage/service/sleeve/base/root_service.cpp
+    storage/service/sleeve/element/element_service.cpp
+    storage/service/sleeve/element/file_service.cpp
+    storage/service/sleeve/element/folder_service.cpp
 )
 target_include_directories(SleeveService PUBLIC include)
 target_link_libraries(SleeveService PUBLIC DuckDB DuckORM SleeveMapper)
+
+add_library(SleeveController
+    storage/controller/image/image_controller.cpp
+)
+target_include_directories(SleeveController PUBLIC include)
+target_link_libraries(SleeveController PUBLIC SleeveService)
 
 add_library(SleeveManager 
     sleeve/sleeve_manager.cpp)

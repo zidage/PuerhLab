@@ -1,33 +1,34 @@
 #pragma once
 
+#include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "sleeve/sleeve_element/sleeve_folder.hpp"
 #include "storage/mapper/sleeve/element/folder_mapper.hpp"
+#include "storage/service/service_interface.hpp"
 #include "type/type.hpp"
 
 namespace puerhlab {
 
-class FolderService {
-  duckdb_connection _conn;
-  FolderMapper      _mapper;
+class FolderService : ServiceInterface<FolderService, std::pair<sl_element_id_t, sl_element_id_t>,
+                                       FolderMapperParams, FolderMapper, sl_element_id_t> {
+  using ServiceInterface::ServiceInterface;
 
-  void              InsertFileParams(const FolderMapperParams& param);
+  // File service is used to retrieve a set of mapping, therefore no actual internal type, i.g.
+  // SleeveFile, is returned
+  static auto ToParams(const std::pair<sl_element_id_t, sl_element_id_t> source)
+      -> FolderMapperParams;
+  static auto FromParams(const FolderMapperParams&& param)
+      -> std::pair<sl_element_id_t, sl_element_id_t>;
 
- public:
-  explicit FolderService(duckdb_connection conn) : _conn(conn), _mapper(_conn) {}
+  auto GetFolderContent(const sl_element_id_t id) -> std::vector<sl_element_id_t>;
+  auto GetFolderByContentId(const sl_element_id_t id) -> sl_element_id_t;
 
-  auto ToParams(const SleeveFolder& source) -> FolderMapperParams;
-  auto FromParams(const FolderMapperParams&& param) -> std::shared_ptr<SleeveFolder>;
+  void RemoveAllContents(const sl_element_id_t folder_id);
+  void RemoveContentById(const sl_element_id_t content_id);
 
-  void InsertFolder(const SleeveFolder& element);
-
-  auto GetFolderById(const sl_element_id_t id) -> sl_element_id_t;
-  auto GetContentById(const sl_element_id_t id) -> std::vector<sl_element_id_t>;
-
-  void RemoveFolderByParentId(sl_element_id_t id);
-  void RemoveFolderContentById(sl_element_id_t id);
-
-  void UpdateFolder(const SleeveFolder& updated);
+  void UpdateFolderContent(const std::vector<sl_element_id_t>& content,
+                           const sl_element_id_t               folder_id);
 };
 };  // namespace puerhlab
