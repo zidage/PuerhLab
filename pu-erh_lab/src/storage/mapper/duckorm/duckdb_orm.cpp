@@ -68,9 +68,10 @@ duckdb_state insert(duckdb_connection& conn, const char* table, const void* obj,
       case DuckDBType::TIMESTAMP:
       case DuckDBType::JSON:
       case DuckDBType::VARCHAR: {
-        const char* value =
-            reinterpret_cast<const char*>(reinterpret_cast<const char*>(obj) + field.offset);
-        duckdb_bind_varchar(insert_pre._stmt, i + 1, value);
+        const std::unique_ptr<std::string>* ptr_to_unique =
+            reinterpret_cast<const std::unique_ptr<std::string>*>(
+                reinterpret_cast<const char*>(obj) + field.offset);
+        duckdb_bind_varchar(insert_pre._stmt, i + 1, ptr_to_unique->get()->c_str());
         break;
       }
       case DuckDBType::BOOLEAN:

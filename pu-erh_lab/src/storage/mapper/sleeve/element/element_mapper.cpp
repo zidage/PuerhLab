@@ -23,15 +23,17 @@ auto ElementMapper::FromRawData(std::vector<duckorm::VarTypes>&& data) -> Elemen
   }
   auto id            = std::get_if<sl_element_id_t>(&data[0]);
   auto type          = std::get_if<uint32_t>(&data[1]);
-  auto element_name  = std::get_if<const char*>(&data[2]);
-  auto added_time    = std::get_if<const char*>(&data[3]);
-  auto modified_time = std::get_if<const char*>(&data[4]);
+  auto element_name  = std::get_if<std::unique_ptr<std::string>>(&data[2]);
+  auto added_time    = std::get_if<std::unique_ptr<std::string>>(&data[3]);
+  auto modified_time = std::get_if<std::unique_ptr<std::string>>(&data[4]);
   auto ref_count     = std::get_if<uint32_t>(&data[5]);
 
   if (id == nullptr || type == nullptr || element_name == nullptr || added_time == nullptr ||
       modified_time == nullptr || ref_count == nullptr) {
     throw std::runtime_error("Encounting unmatching types when parsing the data from the DB");
   }
-  return {*id, *type, *element_name, *added_time, *modified_time, *ref_count};
+  return {
+      *id,       *type, std::move(*element_name), std::move(*added_time), std::move(*modified_time),
+      *ref_count};
 }
 };  // namespace puerhlab
