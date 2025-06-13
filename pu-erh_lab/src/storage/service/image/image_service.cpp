@@ -51,18 +51,4 @@ auto ImageService::GetImageByType(const ImageType type) -> std::vector<std::shar
   return GetByPredicate(std::move(predicate));
 }
 
-void ImageService::CaptureImagePool(std::shared_ptr<ImagePoolManager> image_pool) {
-  ThreadPool                           thread_pool{8};
-  auto&                                pool = image_pool->GetPool();
-  BlockingMPMCQueue<ImageMapperParams> converted_params{348};
-  for (auto& pool_val : pool) {
-    auto img = pool_val.second;
-    thread_pool.Submit([img, &converted_params, this]() { converted_params.push(ToParams(img)); });
-  }
-
-  for (size_t i = 0; i < pool.size(); ++i) {
-    auto result = converted_params.pop();
-    InsertParams(result);
-  }
-}
 };  // namespace puerhlab

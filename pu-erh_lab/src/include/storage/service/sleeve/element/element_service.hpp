@@ -13,12 +13,14 @@
 #include "type/type.hpp"
 
 namespace puerhlab {
-class ElementService : ServiceInterface<ElementService, std::shared_ptr<SleeveElement>,
-                                        ElementMapperParams, ElementMapper, sl_element_id_t> {
+class ElementService
+    : public ServiceInterface<ElementService, std::shared_ptr<SleeveElement>, ElementMapperParams,
+                              ElementMapper, sl_element_id_t> {
  private:
   std::wstring_convert<std::codecvt_utf8<wchar_t>> conv;
 
  public:
+  using ServiceInterface::ServiceInterface;
   auto ToParams(const SleeveElement& source) -> ElementMapperParams;
   auto FromParams(const ElementMapperParams&& param) -> std::shared_ptr<SleeveElement>;
 

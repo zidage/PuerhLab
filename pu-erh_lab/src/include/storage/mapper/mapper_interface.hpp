@@ -15,9 +15,9 @@ namespace puerhlab {
 template <typename Derived, typename Mappable, typename ID>
 class MapperInterface {
  public:
-  duckdb_connection& _conn;
+  duckdb_connection _conn;
 
-  MapperInterface(duckdb_connection& conn) : _conn(conn) {}
+  MapperInterface(duckdb_connection conn) : _conn(conn) {}
   void Insert(const Mappable&& obj) {
     duckorm::insert(_conn, Derived::TableName(), &obj, Derived::FieldDesc(), Derived::FieldCount());
   }

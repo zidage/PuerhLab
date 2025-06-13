@@ -11,8 +11,9 @@
 
 namespace puerhlab {
 
-class FolderService : ServiceInterface<FolderService, std::pair<sl_element_id_t, sl_element_id_t>,
-                                       FolderMapperParams, FolderMapper, sl_element_id_t> {
+class FolderService
+    : public ServiceInterface<FolderService, std::pair<sl_element_id_t, sl_element_id_t>,
+                              FolderMapperParams, FolderMapper, sl_element_id_t> {
   using ServiceInterface::ServiceInterface;
 
   // File service is used to retrieve a set of mapping, therefore no actual internal type, i.g.

@@ -8,14 +8,13 @@
 #include <vector>
 
 #include "image/image.hpp"
-#include "storage/image_pool/image_pool_manager.hpp"
 #include "storage/mapper/image/image_mapper.hpp"
 #include "storage/service/service_interface.hpp"
 #include "type/type.hpp"
 
 namespace puerhlab {
-class ImageService : ServiceInterface<ImageService, std::shared_ptr<Image>, ImageMapperParams,
-                                      ImageMapper, image_id_t> {
+class ImageService : public ServiceInterface<ImageService, std::shared_ptr<Image>,
+                                             ImageMapperParams, ImageMapper, image_id_t> {
  private:
   static std::wstring_convert<std::codecvt_utf8<wchar_t>> conv;
 
@@ -24,8 +23,6 @@ class ImageService : ServiceInterface<ImageService, std::shared_ptr<Image>, Imag
 
   static auto ToParams(const std::shared_ptr<Image> source) -> ImageMapperParams;
   static auto FromParams(const ImageMapperParams&& param) -> std::shared_ptr<Image>;
-
-  void        CaptureImagePool(std::shared_ptr<ImagePoolManager> image_pool);
 
   auto        GetImageById(const image_id_t id) -> std::vector<std::shared_ptr<Image>>;
   auto        GetImageByName(const std::wstring name) -> std::vector<std::shared_ptr<Image>>;
