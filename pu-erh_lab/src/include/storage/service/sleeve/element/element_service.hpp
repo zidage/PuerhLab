@@ -17,8 +17,6 @@ class ElementService
     : public ServiceInterface<ElementService, std::shared_ptr<SleeveElement>, ElementMapperParams,
                               ElementMapper, sl_element_id_t> {
  private:
-  static std::wstring_convert<std::codecvt_utf8<wchar_t>> conv;
-
  public:
   using ServiceInterface::ServiceInterface;
   static auto ToParams(const std::shared_ptr<SleeveElement>& source) -> ElementMapperParams;

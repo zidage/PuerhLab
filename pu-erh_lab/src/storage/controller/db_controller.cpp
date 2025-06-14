@@ -1,8 +1,12 @@
 #include "storage/controller/db_controller.hpp"
 
 #include <duckdb.h>
+#include <utf8.h>
 
+#include <iterator>
 #include <stdexcept>
+
+#include "utf8/checked.h"
 
 namespace puerhlab {
 DBController::DBController(file_path_t& db_path) : _avail_conns(16), _db_path(db_path) {
@@ -24,7 +28,12 @@ auto DBController::GetConnectionGuard() -> ConnectionGuard {
   }
   ConnectionGuard guard{_avail_conns.pop()};
 
-  if (duckdb_open(conv.to_bytes(_db_path.wstring()).c_str(), &_db) != DuckDBSuccess) {
+  std::string     utf8_str;
+  std::wstring    path_wstr = _db_path.wstring();
+  // TODO: Cross-platform
+  utf8::utf16to8(path_wstr.begin(), path_wstr.end(), std::back_inserter(utf8_str));
+
+  if (duckdb_open(utf8_str.c_str(), &_db) != DuckDBSuccess) {
     throw std::exception("DB cannot be created");
   }
   if (duckdb_connect(_db, &guard._conn) != DuckDBSuccess) {

@@ -4,6 +4,10 @@ target_include_directories(ThreadPool PUBLIC include)
 add_library(TimeProvider utils/clock/time_provider.cpp)
 target_include_directories(TimeProvider PUBLIC include)
 
+add_library(StrConv utils/string/converter.cpp)
+target_include_directories(StrConv PUBLIC include)
+target_link_libraries(StrConv PUBLIC utfcpp)
+
 add_library(Image 
     image/image.cpp
 )
@@ -58,7 +62,8 @@ target_include_directories(SleeveView PUBLIC include)
 target_link_libraries(SleeveView PUBLIC Image Sleeve ImagePool easy_profiler)
 
 add_library(DuckORM     
-    storage/mapper/duckorm/duckdb_orm.cpp)
+    storage/mapper/duckorm/duckdb_orm.cpp
+    storage/mapper/duckorm/duckdb_types.cpp)
 target_include_directories(DuckORM PUBLIC include)
 target_link_libraries(DuckORM PUBLIC DuckDB)
 
@@ -82,7 +87,7 @@ add_library(SleeveService
     storage/service/sleeve/element/folder_service.cpp
 )
 target_include_directories(SleeveService PUBLIC include)
-target_link_libraries(SleeveService PUBLIC DuckDB DuckORM SleeveMapper)
+target_link_libraries(SleeveService PUBLIC DuckDB DuckORM SleeveMapper StrConv)
 
 add_library(SleeveController
     storage/controller/controller_types.cpp
@@ -91,7 +96,7 @@ add_library(SleeveController
     storage/controller/sleeve/element_controller.cpp
 )
 target_include_directories(SleeveController PUBLIC include)
-target_link_libraries(SleeveController PUBLIC SleeveService)
+target_link_libraries(SleeveController PUBLIC SleeveService StrConv)
 
 add_library(SleeveManager 
     sleeve/sleeve_manager.cpp)

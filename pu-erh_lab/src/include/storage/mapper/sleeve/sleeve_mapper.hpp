@@ -77,18 +77,16 @@ enum class Operate : uint8_t { ADD = 0x0, DELETE = 0x8, EDIT = 0x10, LOOKUP = 0x
  */
 class SleeveMapper {
  private:
-  duckdb_database                                  _db;
-  duckdb_connection                                _con;
-  file_path_t                                      _db_path;
-  bool                                             _db_connected = false;
-  bool                                             _initialized  = false;
+  duckdb_database      _db;
+  duckdb_connection    _con;
+  file_path_t          _db_path;
+  bool                 _db_connected = false;
+  bool                 _initialized  = false;
 
-  sleeve_id_t                                      _captured_sleeve_id;
-  bool                                             _has_sleeve = false;
+  sleeve_id_t          _captured_sleeve_id;
+  bool                 _has_sleeve = false;
 
-  std::wstring_convert<std::codecvt_utf8<wchar_t>> conv;
-
-  std::vector<Prepare>                             _prepare_storage;
+  std::vector<Prepare> _prepare_storage;
 
   inline void CaptureElement(std::unordered_map<uint32_t, std::shared_ptr<SleeveElement>>& storage,
                              Prepare&                                                      pre);

@@ -15,9 +15,6 @@
 namespace puerhlab {
 class ImageService : public ServiceInterface<ImageService, std::shared_ptr<Image>,
                                              ImageMapperParams, ImageMapper, image_id_t> {
- private:
-  static std::wstring_convert<std::codecvt_utf8<wchar_t>> conv;
-
  public:
   using ServiceInterface::ServiceInterface;
 

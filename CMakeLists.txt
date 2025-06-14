@@ -74,6 +74,10 @@ set_target_properties(MurmurHash3 PROPERTIES
     INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_party/murmurhash3"
 )
 
+# utfcpp 
+add_library(utfcpp INTERFACE)
+target_include_directories(utfcpp INTERFACE "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_party/utfcpp")
+
 # OpenCV
 set(OpenCV_DIR "D:/misc/opencv/build")
 find_package(OpenCV REQUIRED)

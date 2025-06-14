@@ -1,5 +1,7 @@
 #pragma once
 
+#include <duckdb.h>
+
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -17,6 +19,23 @@ enum class DuckDBType : uint8_t {
   JSON,
   BOOLEAN,
   TIMESTAMP,
+};
+
+class StatementPrepare {
+ private:
+  void RecycleResources();
+
+ public:
+  duckdb_result             _result;
+  duckdb_prepared_statement _stmt;
+  duckdb_connection&        _con;
+
+  bool                      _prepared = false;
+  StatementPrepare(duckdb_connection& con);
+  StatementPrepare();
+  ~StatementPrepare();
+  auto GetStmtGuard(const std::string& prepare_query) -> duckdb_prepared_statement&;
+  void SetConnection(duckdb_connection& con);
 };
 
 struct DuckFieldDesc {

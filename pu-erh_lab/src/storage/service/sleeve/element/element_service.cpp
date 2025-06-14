@@ -11,6 +11,7 @@
 #include "sleeve/sleeve_element/sleeve_element.hpp"
 #include "sleeve/sleeve_element/sleeve_file.hpp"
 #include "sleeve/sleeve_element/sleeve_folder.hpp"
+#include "utils/string/convert.hpp"
 
 namespace puerhlab {
 auto ElementService::ToParams(const std::shared_ptr<SleeveElement>& source) -> ElementMapperParams {
@@ -21,7 +22,7 @@ auto ElementService::ToParams(const std::shared_ptr<SleeveElement>& source) -> E
   std::strftime(modified_time, sizeof(modified_time), "%Y-%m-%d %H:%M:%S",
                 std::gmtime(&source->_last_modified_time));
 
-  std::string utf_8_str = conv.to_bytes(source->_element_name);
+  std::string utf_8_str = conv::ToBytes(source->_element_name);
   return {source->_element_id,
           static_cast<uint32_t>(source->_type),
           std::make_unique<std::string>(utf_8_str),
@@ -34,7 +35,7 @@ auto ElementService::FromParams(const ElementMapperParams&& param)
     -> std::shared_ptr<SleeveElement> {
   auto               id                = param.id;
   auto               type              = static_cast<ElementType>(param.type);
-  auto               element_name      = conv.from_bytes(*param.element_name);
+  auto               element_name      = conv::FromBytes(*param.element_name);
   auto               added_time_str    = *param.added_time;
   auto               modified_time_str = *param.modified_time;
   auto               ref_count         = param.ref_count;
@@ -72,7 +73,7 @@ auto ElementService::GetElementById(const sl_element_id_t id) -> std::shared_ptr
 
 auto ElementService::GetElementByName(const std::wstring name)
     -> std::vector<std::shared_ptr<SleeveElement>> {
-  std::string predicate = conv.to_bytes(std::format(L"element_name={}", name));
+  std::string predicate = conv::ToBytes(std::format(L"element_name={}", name));
   return GetByPredicate(std::move(predicate));
 }
 

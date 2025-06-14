@@ -28,8 +28,8 @@ duckdb_state insert(duckdb_connection& conn, const char* table, const void* obj,
     }
   }
   sql << ");";
-  std::string       sql_str = sql.str();
-  puerhlab::Prepare insert_pre(conn);
+  std::string      sql_str = sql.str();
+  StatementPrepare insert_pre(conn);
   insert_pre.GetStmtGuard(sql_str);
 
   // Bind parameters
@@ -104,9 +104,9 @@ duckdb_state update(duckdb_connection& conn, const char* table, const void* obj,
     }
   }
   sql << " WHERE " << where_clause << ";";
-  std::string       sql_str = sql.str();
+  std::string      sql_str = sql.str();
 
-  puerhlab::Prepare update_pre(conn);
+  StatementPrepare update_pre(conn);
   if (duckdb_prepare(conn, sql_str.c_str(), &update_pre._stmt) != DuckDBSuccess) {
     return DuckDBError;
   }
@@ -171,9 +171,9 @@ duckdb_state update(duckdb_connection& conn, const char* table, const void* obj,
 duckdb_state remove(duckdb_connection& conn, const char* table, const char* where_clause) {
   std::ostringstream sql;
   sql << "DELETE FROM " << table << " WHERE " << where_clause << ";";
-  std::string       sql_str = sql.str();
+  std::string      sql_str = sql.str();
 
-  puerhlab::Prepare delete_pre(conn);
+  StatementPrepare delete_pre(conn);
   if (duckdb_prepare(conn, sql_str.c_str(), &delete_pre._stmt) != DuckDBSuccess) {
     return DuckDBError;
   }
@@ -194,7 +194,7 @@ std::vector<std::vector<VarTypes>> select(duckdb_connection& conn, const std::st
   sql << "SELECT * FROM " << table << " WHERE " << where_clause << ";";
 
   std::vector<std::vector<VarTypes>> results;
-  puerhlab::Prepare                  select_pre(conn);
+  StatementPrepare                   select_pre(conn);
   select_pre.GetStmtGuard(sql.str());
 
   if (duckdb_execute_prepared(select_pre._stmt, &select_pre._result) != DuckDBSuccess) {

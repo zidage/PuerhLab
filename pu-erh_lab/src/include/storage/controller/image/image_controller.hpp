@@ -13,10 +13,8 @@
 namespace puerhlab {
 class ImageController {
  private:
-  ConnectionGuard                                  _guard;
-  ImageService                                     _service;
-
-  std::wstring_convert<std::codecvt_utf8<wchar_t>> conv;
+  ConnectionGuard _guard;
+  ImageService    _service;
 
  public:
   ImageController(ConnectionGuard&& guard);

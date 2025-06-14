@@ -9,6 +9,7 @@
 #include "image/image.hpp"
 #include "storage/service/image/image_service.hpp"
 #include "utils/queue/queue.hpp"
+#include "utils/string/convert.hpp"
 
 namespace puerhlab {
 ImageController::ImageController(ConnectionGuard&& guard) : _guard(guard), _service(_guard._conn) {}
@@ -38,7 +39,7 @@ void ImageController::RemoveImageByType(ImageType type) {
 }
 
 void ImageController::RemoveImageByPath(std::wstring path) {
-  _service.RemoveByClause(std::format("image_path={}", conv.to_bytes(path)));
+  _service.RemoveByClause(std::format("image_path={}", conv::ToBytes(path)));
 }
 
 auto ImageController::GetImageById(image_id_t id) -> std::shared_ptr<Image> {
