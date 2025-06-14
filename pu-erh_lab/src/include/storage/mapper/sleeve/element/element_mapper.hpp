@@ -22,10 +22,8 @@ struct ElementMapperParams {
   uint32_t                     ref_count;
 };
 class ElementMapper : public MapperInterface<ElementMapper, ElementMapperParams, sl_element_id_t>,
-                      FieldReflectable<ElementMapper> {
+                      public FieldReflectable<ElementMapper> {
  private:
-  static auto FromRawData(std::vector<duckorm::VarTypes>&& data) -> ElementMapperParams;
-
   static constexpr uint32_t                                         _field_count      = 6;
   static constexpr const char*                                      _table_name       = "Element";
   static constexpr const char*                                      _prime_key_clause = "id={}";
@@ -38,6 +36,7 @@ class ElementMapper : public MapperInterface<ElementMapper, ElementMapperParams,
       FIELD(ElementMapperParams, ref_count, UINT32)};
 
  public:
+  static auto FromRawData(std::vector<duckorm::VarTypes>&& data) -> ElementMapperParams;
   friend struct FieldReflectable<ElementMapper>;
 
   using MapperInterface::MapperInterface;

@@ -16,6 +16,7 @@ class FolderService
                               FolderMapperParams, FolderMapper, sl_element_id_t> {
   using ServiceInterface::ServiceInterface;
 
+ public:
   // File service is used to retrieve a set of mapping, therefore no actual internal type, i.g.
   // SleeveFile, is returned
   static auto ToParams(const std::pair<sl_element_id_t, sl_element_id_t> source)

@@ -9,12 +9,12 @@
 
 namespace puerhlab {
 auto FolderMapper::FromRawData(std::vector<duckorm::VarTypes>&& data) -> FolderMapperParams {
-  if (data.size() != _field_count) {
+  if (data.size() != FolderMapper::FieldCount()) {
     throw std::runtime_error("Folder Mapper: Invalid DuckFieldDesc for SleeveFolder");
   }
 
   auto folder_id  = std::get_if<sl_element_id_t>(&data[0]);
-  auto element_id = std::get_if<sl_element_id_t>(&data[2]);
+  auto element_id = std::get_if<sl_element_id_t>(&data[1]);
 
   if (folder_id == nullptr || element_id == nullptr) {
     throw std::runtime_error(

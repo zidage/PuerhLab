@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <ctime>
+#include <format>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -12,20 +13,21 @@
 #include "sleeve/sleeve_element/sleeve_folder.hpp"
 
 namespace puerhlab {
-auto ElementService::ToParams(const SleeveElement& source) -> ElementMapperParams {
+auto ElementService::ToParams(const std::shared_ptr<SleeveElement>& source) -> ElementMapperParams {
   char added_time[32];
   char modified_time[32];
   std::strftime(added_time, sizeof(added_time), "%Y-%m-%d %H:%M:%S",
-                std::gmtime(&source._added_time));
+                std::gmtime(&source->_added_time));
   std::strftime(modified_time, sizeof(modified_time), "%Y-%m-%d %H:%M:%S",
-                std::gmtime(&source._last_modified_time));
+                std::gmtime(&source->_last_modified_time));
 
-  return {source._element_id,
-          static_cast<uint32_t>(source._type),
-          std::make_unique<std::string>(conv.to_bytes(source._element_name)),
+  std::string utf_8_str = conv.to_bytes(source->_element_name);
+  return {source->_element_id,
+          static_cast<uint32_t>(source->_type),
+          std::make_unique<std::string>(utf_8_str),
           std::make_unique<std::string>(added_time),
           std::make_unique<std::string>(modified_time),
-          source._ref_count};
+          source->_ref_count};
 }
 
 auto ElementService::FromParams(const ElementMapperParams&& param)
@@ -58,6 +60,14 @@ auto ElementService::FromParams(const ElementMapperParams&& param)
   element->_ref_count          = ref_count;
 
   return element;
+}
+
+auto ElementService::GetElementById(const sl_element_id_t id) -> std::shared_ptr<SleeveElement> {
+  auto result = GetByPredicate(std::format("id={}", id));
+  if (result.size() != 1) {
+    throw std::runtime_error("Element Service: Sleeve element id is not unique. Broken DB file");
+  }
+  return result[0];
 }
 
 auto ElementService::GetElementByName(const std::wstring name)

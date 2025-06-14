@@ -14,18 +14,17 @@ struct FileMapperParams {
   sl_element_id_t file_id;
   image_id_t      image_id;
 };
-class FileMapper : MapperInterface<FileMapper, FileMapperParams, sl_element_id_t>,
-                   FieldReflectable<FileMapper> {
+class FileMapper : public MapperInterface<FileMapper, FileMapperParams, sl_element_id_t>,
+                   public FieldReflectable<FileMapper> {
  private:
-  static auto               FromRawData(std::vector<duckorm::VarTypes>&& data) -> FileMapperParams;
-
-  static constexpr uint32_t _field_count                                         = 2;
+  static constexpr uint32_t    _field_count                                      = 2;
   static constexpr const char* _table_name                                       = "FileImage";
   static constexpr const char* _prime_key_clause                                 = "file_id={}";
   static constexpr std::array<duckorm::DuckFieldDesc, _field_count> _field_descs = {
       FIELD(FileMapperParams, file_id, UINT32), FIELD(FileMapperParams, image_id, UINT32)};
 
  public:
+  static auto FromRawData(std::vector<duckorm::VarTypes>&& data) -> FileMapperParams;
   friend struct FieldReflectable<FileMapper>;
   using MapperInterface::MapperInterface;
 };

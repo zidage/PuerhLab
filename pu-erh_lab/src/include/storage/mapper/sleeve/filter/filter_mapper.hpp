@@ -38,14 +38,14 @@ struct ComboMapperParams {
 class ComboMapper : MapperInterface<ComboMapper, ComboMapperParams, sl_element_id_t>,
                     FieldReflectable<ComboMapper> {
  private:
-  auto                      FromRawData(std::vector<duckorm::VarTypes>&& data) -> ComboMapperParams;
-  static constexpr uint32_t _field_count                                         = 2;
+  static constexpr uint32_t    _field_count                                      = 2;
   static constexpr const char* _table_name                                       = "ComboFolder";
   static constexpr const char* _prime_key_clause                                 = "combo_id={}";
   static constexpr std::array<duckorm::DuckFieldDesc, _field_count> _field_descs = {
       FIELD(ComboMapperParams, combo_id, UINT32), FIELD(ComboMapperParams, folder_id, UINT32)};
 
  public:
+  static auto FromRawData(std::vector<duckorm::VarTypes>&& data) -> ComboMapperParams;
   friend struct FieldReflectable<ComboMapper>;
   using MapperInterface::MapperInterface;
 };

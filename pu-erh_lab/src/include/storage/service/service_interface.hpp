@@ -20,8 +20,8 @@ class ServiceInterface {
   void InsertParams(const Mappable& param) { _mapper.Insert(std::move(param)); }
   void Insert(const InternalType& obj) { _mapper.Insert(Derived::ToParams(obj)); }
   auto GetByPredicate(const std::string&& predicate) -> std::vector<InternalType> {
-    std::vector<Mapper>                        param_results = _mapper.Get(predicate);
-    std::vector<std::shared_ptr<InternalType>> results;
+    std::vector<Mappable>     param_results = _mapper.Get(predicate.c_str());
+    std::vector<InternalType> results;
     results.resize(param_results.size());
     size_t idx = 0;
     for (auto& param : param_results) {

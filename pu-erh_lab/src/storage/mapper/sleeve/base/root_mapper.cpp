@@ -2,7 +2,7 @@
 
 namespace puerhlab {
 auto RootMapper::FromRawData(std::vector<duckorm::VarTypes>&& data) -> RootMapperParams {
-  if (data.size() != _field_count) {
+  if (data.size() != FieldCount()) {
     throw std::runtime_error("Invalid DuckFieldDesc for Base");
   }
   auto id = std::get_if<sl_element_id_t>(&data[0]);

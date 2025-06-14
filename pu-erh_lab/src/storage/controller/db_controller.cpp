@@ -5,7 +5,7 @@
 #include <stdexcept>
 
 namespace puerhlab {
-DBController::DBController(file_path_t&& db_path) : _avail_conns(16), _db_path(db_path) {
+DBController::DBController(file_path_t& db_path) : _avail_conns(16), _db_path(db_path) {
   if (std::filesystem::exists(db_path)) {
     _initialized = true;
   }
@@ -14,6 +14,8 @@ DBController::DBController(file_path_t&& db_path) : _avail_conns(16), _db_path(d
     _avail_conns.push({});
   }
 }
+
+DBController::~DBController() { duckdb_close(&_db); }
 
 auto DBController::GetConnectionGuard() -> ConnectionGuard {
   if (_avail_conns.empty()) {

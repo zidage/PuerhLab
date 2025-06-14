@@ -15,11 +15,9 @@ struct FolderMapperParams {
   sl_element_id_t element_id;
 };
 
-class FolderMapper : MapperInterface<FolderMapper, FolderMapperParams, sl_element_id_t>,
-                     FieldReflectable<FolderMapper> {
+class FolderMapper : public MapperInterface<FolderMapper, FolderMapperParams, sl_element_id_t>,
+                     public FieldReflectable<FolderMapper> {
  private:
-  static auto FromRawData(std::vector<duckorm::VarTypes>&& data) -> FolderMapperParams;
-
   static constexpr uint32_t    _field_count                                      = 2;
   static constexpr const char* _table_name                                       = "FolderContent";
   static constexpr const char* _prime_key_clause                                 = "folder_id={}";
@@ -27,6 +25,7 @@ class FolderMapper : MapperInterface<FolderMapper, FolderMapperParams, sl_elemen
       FIELD(FolderMapperParams, folder_id, UINT32), FIELD(FolderMapperParams, element_id, UINT32)};
 
  public:
+  static auto FromRawData(std::vector<duckorm::VarTypes>&& data) -> FolderMapperParams;
   friend struct FieldReflectable<FolderMapper>;
   using MapperInterface::MapperInterface;
 };

@@ -17,13 +17,14 @@ class ElementService
     : public ServiceInterface<ElementService, std::shared_ptr<SleeveElement>, ElementMapperParams,
                               ElementMapper, sl_element_id_t> {
  private:
-  std::wstring_convert<std::codecvt_utf8<wchar_t>> conv;
+  static std::wstring_convert<std::codecvt_utf8<wchar_t>> conv;
 
  public:
   using ServiceInterface::ServiceInterface;
-  auto ToParams(const SleeveElement& source) -> ElementMapperParams;
-  auto FromParams(const ElementMapperParams&& param) -> std::shared_ptr<SleeveElement>;
+  static auto ToParams(const std::shared_ptr<SleeveElement>& source) -> ElementMapperParams;
+  static auto FromParams(const ElementMapperParams&& param) -> std::shared_ptr<SleeveElement>;
 
+  auto        GetElementById(const sl_element_id_t id) -> std::shared_ptr<SleeveElement>;
   auto GetElementByName(const std::wstring name) -> std::vector<std::shared_ptr<SleeveElement>>;
   auto GetElementByType(const ElementType type) -> std::vector<std::shared_ptr<SleeveElement>>;
 };

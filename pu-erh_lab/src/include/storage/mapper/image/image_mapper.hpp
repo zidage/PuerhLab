@@ -18,11 +18,11 @@ struct ImageMapperParams {
   uint32_t                     type;
   std::unique_ptr<std::string> metadata;
 };
+
 class ImageMapper : public MapperInterface<ImageMapper, ImageMapperParams, image_id_t>,
-                    FieldReflectable<ImageMapper> {
+                    public FieldReflectable<ImageMapper> {
  private:
-  static auto               FromRawData(std::vector<duckorm::VarTypes>&& data) -> ImageMapperParams;
-  static constexpr uint32_t _field_count                                              = 5;
+  static constexpr uint32_t                                         _field_count      = 5;
   static constexpr const char*                                      _table_name       = "Image";
   static constexpr const char*                                      _prime_key_clause = "id={}";
   static constexpr std::array<duckorm::DuckFieldDesc, _field_count> _field_descs      = {
@@ -31,6 +31,7 @@ class ImageMapper : public MapperInterface<ImageMapper, ImageMapperParams, image
       FIELD(ImageMapperParams, metadata, VARCHAR)};
 
  public:
+  static auto FromRawData(std::vector<duckorm::VarTypes>&& data) -> ImageMapperParams;
   friend struct FieldReflectable<ImageMapper>;
   using MapperInterface::MapperInterface;
 };

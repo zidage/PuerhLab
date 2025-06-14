@@ -44,7 +44,7 @@ class DBController {
       "JSON)";
 
  public:
-  explicit DBController(file_path_t&& db_path);
+  explicit DBController(file_path_t& db_path);
   ~DBController();
 
   void InitializeDB();

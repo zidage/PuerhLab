@@ -16,7 +16,7 @@
 
 namespace puerhlab {
 auto FileMapper::FromRawData(std::vector<duckorm::VarTypes>&& data) -> FileMapperParams {
-  if (data.size() != 2) {
+  if (data.size() != FileMapper::FieldCount()) {
     throw std::runtime_error("Invalid DuckFieldDesc for SleeveFile");
   }
 

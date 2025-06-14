@@ -8,22 +8,23 @@
 #include "concurrency/thread_pool.hpp"
 #include "image/image.hpp"
 #include "storage/service/image/image_service.hpp"
+#include "utils/queue/queue.hpp"
 
 namespace puerhlab {
 ImageController::ImageController(ConnectionGuard&& guard) : _guard(guard), _service(_guard._conn) {}
 
 void ImageController::CaptureImagePool(std::shared_ptr<ImagePoolManager> image_pool) {
-  ThreadPool                           thread_pool{8};
-  auto&                                pool = image_pool->GetPool();
-  BlockingMPMCQueue<ImageMapperParams> converted_params{348};
+  ThreadPool                                 thread_pool{8};
+  auto&                                      pool = image_pool->GetPool();
+  ConcurrentBlockingQueue<ImageMapperParams> converted_params{348};
   for (auto& pool_val : pool) {
     auto img = pool_val.second;
     thread_pool.Submit(
-        [img, &converted_params]() { converted_params.push(ImageService::ToParams(img)); });
+        [img, &converted_params]() { converted_params.push_r(ImageService::ToParams(img)); });
   }
 
   for (size_t i = 0; i < pool.size(); ++i) {
-    auto result = converted_params.pop();
+    auto result = converted_params.pop_r();
     _service.InsertParams(result);
   }
 }

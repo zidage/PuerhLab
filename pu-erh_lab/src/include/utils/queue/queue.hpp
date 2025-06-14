@@ -68,6 +68,19 @@ class ConcurrentBlockingQueue {
   }
 
   /**
+   * @brief A thread-safe wrapper for _request_queue push() method
+   *
+   * @param new_request the request to enqueue
+   */
+  void push_r(T&& new_request) {
+    {
+      std::unique_lock<std::mutex> lock(mtx);
+      _queue.push(std::move(new_request));
+    }
+    _consumer_cv.notify_all();
+  }
+
+  /**
    * @brief A thread-safe wrapper for pop() method
    *
    * @return the front-most element of the queue
@@ -78,6 +91,22 @@ class ConcurrentBlockingQueue {
     _consumer_cv.wait(lock, [this] { return !_queue.empty(); });
 
     auto handled_request = _queue.front();
+    _queue.pop();
+
+    return handled_request;
+  }
+
+  /**
+   * @brief A thread-safe wrapper for pop() method
+   *
+   * @return the front-most element of the queue
+   */
+  T pop_r() {
+    std::unique_lock<std::mutex> lock(mtx);
+    // Wait for the queue to be fill with at least one value
+    _consumer_cv.wait(lock, [this] { return !_queue.empty(); });
+
+    auto handled_request = std::move(_queue.front());
     _queue.pop();
 
     return handled_request;

@@ -22,7 +22,8 @@ class MapperInterface {
     duckorm::insert(_conn, Derived::TableName(), &obj, Derived::FieldDesc(), Derived::FieldCount());
   }
   void Remove(const ID remove_id) {
-    duckorm::remove(_conn, Derived::TableName(), std::format(Derived::PrimeKeyClause(), remove_id));
+    std::string remove_clause = std::format(Derived::PrimeKeyClause(), remove_id);
+    duckorm::remove(_conn, Derived::TableName(), remove_clause.c_str());
   }
   void RemoveByClause(const std::string& predicate) {
     duckorm::remove(_conn, Derived::TableName(), predicate.c_str());
@@ -37,14 +38,16 @@ class MapperInterface {
     return result;
   }
   void Update(const ID target_id, const Mappable&& updated) {
+    std::string where_clause = std::format(Derived::PrimeKeyClause(), target_id);
     duckorm::update(_conn, Derived::TableName(), &updated, Derived::FieldDesc(),
-                    Derived::FieldCount(), std::format(Derived::PrimeKeyClause(), target_id));
+                    Derived::FieldCount(), where_clause.c_str());
   }
 };
 
 // Don't understand what heck this is... They call it CRTP (C++ Recurring Tremendous Pain, maybe).
 template <typename Derived>
 struct FieldReflectable {
+ public:
   using FieldArrayType = std::span<const duckorm::DuckFieldDesc>;
   static constexpr FieldArrayType FieldDesc() { return Derived::_field_descs; }
   static constexpr uint32_t       FieldCount() { return Derived::_field_count; }

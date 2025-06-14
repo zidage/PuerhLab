@@ -85,6 +85,8 @@ target_include_directories(SleeveService PUBLIC include)
 target_link_libraries(SleeveService PUBLIC DuckDB DuckORM SleeveMapper)
 
 add_library(SleeveController
+    storage/controller/controller_types.cpp
+    storage/controller/db_controller.cpp
     storage/controller/image/image_controller.cpp
     storage/controller/sleeve/element_controller.cpp
 )

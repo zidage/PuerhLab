@@ -4,7 +4,7 @@
 
 namespace puerhlab {
 auto BaseMapper::FromRawData(std::vector<duckorm::VarTypes>&& data) -> BaseMapperParams {
-  if (data.size() != _field_count) {
+  if (data.size() != FieldCount()) {
     throw std::runtime_error("Invalid DuckFieldDesc for Base");
   }
   auto id = std::get_if<sleeve_id_t>(&data[0]);
