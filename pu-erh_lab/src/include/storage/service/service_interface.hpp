@@ -12,11 +12,11 @@ namespace puerhlab {
 template <typename Derived, typename InternalType, typename Mappable, typename Mapper, typename ID>
 class ServiceInterface {
  private:
-  duckdb_connection                     _conn;
+  duckdb_connection&                    _conn;
   MapperInterface<Mapper, Mappable, ID> _mapper;
 
  public:
-  ServiceInterface(duckdb_connection conn) : _conn(conn), _mapper(conn) {}
+  ServiceInterface(duckdb_connection& conn) : _conn(conn), _mapper(conn) {}
   void InsertParams(const Mappable& param) { _mapper.Insert(std::move(param)); }
   void Insert(const InternalType& obj) { _mapper.Insert(Derived::ToParams(obj)); }
   auto GetByPredicate(const std::string&& predicate) -> std::vector<InternalType> {

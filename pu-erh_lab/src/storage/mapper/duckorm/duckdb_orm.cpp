@@ -17,20 +17,19 @@ duckdb_state insert(duckdb_connection& conn, const char* table, const void* obj,
   for (size_t i = 0; i < field_count; ++i) {
     sql << fields[i].name;
     if (i < field_count - 1) {
-      sql << ", ";
+      sql << ",";
     }
   }
   sql << ") VALUES (";
   for (size_t i = 0; i < field_count; ++i) {
     sql << "?";
     if (i < field_count - 1) {
-      sql << ", ";
+      sql << ",";
     }
   }
   sql << ");";
-  std::string      sql_str = sql.str();
-  StatementPrepare insert_pre(conn);
-  insert_pre.GetStmtGuard(sql_str);
+  std::string       sql_str = sql.str();
+  PreparedStatement insert_pre{conn, sql_str};
 
   // Bind parameters
   for (size_t i = 0; i < field_count; ++i) {
@@ -104,12 +103,10 @@ duckdb_state update(duckdb_connection& conn, const char* table, const void* obj,
     }
   }
   sql << " WHERE " << where_clause << ";";
-  std::string      sql_str = sql.str();
+  std::string       sql_str = sql.str();
 
-  StatementPrepare update_pre(conn);
-  if (duckdb_prepare(conn, sql_str.c_str(), &update_pre._stmt) != DuckDBSuccess) {
-    return DuckDBError;
-  }
+  PreparedStatement update_pre(conn, sql_str);
+
   // Bind parameters
   for (size_t i = 0; i < field_count; ++i) {
     const DuckFieldDesc& field = fields[i];
@@ -171,14 +168,11 @@ duckdb_state update(duckdb_connection& conn, const char* table, const void* obj,
 duckdb_state remove(duckdb_connection& conn, const char* table, const char* where_clause) {
   std::ostringstream sql;
   sql << "DELETE FROM " << table << " WHERE " << where_clause << ";";
-  std::string      sql_str = sql.str();
+  std::string       sql_str = sql.str();
 
-  StatementPrepare delete_pre(conn);
-  if (duckdb_prepare(conn, sql_str.c_str(), &delete_pre._stmt) != DuckDBSuccess) {
-    return DuckDBError;
-  }
+  PreparedStatement delete_pre(conn, sql_str);
 
-  duckdb_state state = duckdb_execute_prepared(delete_pre._stmt, &delete_pre._result);
+  duckdb_state      state = duckdb_execute_prepared(delete_pre._stmt, &delete_pre._result);
   if (state != DuckDBSuccess) {
     auto error_message = duckdb_result_error(&delete_pre._result);
     throw std::runtime_error(error_message);
@@ -194,8 +188,7 @@ std::vector<std::vector<VarTypes>> select(duckdb_connection& conn, const std::st
   sql << "SELECT * FROM " << table << " WHERE " << where_clause << ";";
 
   std::vector<std::vector<VarTypes>> results;
-  StatementPrepare                   select_pre(conn);
-  select_pre.GetStmtGuard(sql.str());
+  PreparedStatement                  select_pre(conn, sql.str());
 
   if (duckdb_execute_prepared(select_pre._stmt, &select_pre._result) != DuckDBSuccess) {
     auto error_message = duckdb_result_error(&select_pre._result);

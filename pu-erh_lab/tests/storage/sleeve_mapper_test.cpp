@@ -11,8 +11,8 @@
 #include "sleeve/sleeve_manager.hpp"
 #include "storage/controller/db_controller.hpp"
 #include "storage/controller/image/image_controller.hpp"
+#include "storage/mapper/duckorm/duckdb_types.hpp"
 #include "type/type.hpp"
-
 
 using namespace puerhlab;
 
@@ -39,7 +39,9 @@ TEST(SleeveMapperTest, SimpleCaptureTest1) {
   }
   {
     try {
-      DBController    db_ctr{db_path};
+      Exiv2::LogMsg::setLevel(Exiv2::LogMsg::Level::mute);
+      DBController db_ctr{db_path};
+      db_ctr.InitializeDB();
       ImageController img_ctr{db_ctr.GetConnectionGuard()};
 
       SleeveManager   manager{};

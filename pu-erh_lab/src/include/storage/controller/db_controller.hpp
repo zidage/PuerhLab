@@ -13,15 +13,13 @@
 namespace puerhlab {
 class DBController {
  private:
-  duckdb_database                      _db;
+  duckdb_database              _db;
 
-  BlockingMPMCQueue<duckdb_connection> _avail_conns;
+  file_path_t                  _db_path;
 
-  file_path_t                          _db_path;
+  bool                         _initialized;
 
-  bool                                 _initialized;
-
-  constexpr static const char*         init_table_query =
+  constexpr static const char* init_table_query =
       "CREATE TABLE Sleeve (id BIGINT PRIMARY KEY);"
       "CREATE TABLE Image (id BIGINT PRIMARY KEY, image_path TEXT, file_name TEXT, type INTEGER, "
       "metadata JSON);"
@@ -48,7 +46,5 @@ class DBController {
   void InitializeDB();
 
   auto GetConnectionGuard() -> ConnectionGuard;
-
-  void ReturnConnectionGuard();
 };
 };  // namespace puerhlab

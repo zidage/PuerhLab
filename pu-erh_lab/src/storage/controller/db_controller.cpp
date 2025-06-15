@@ -9,33 +9,17 @@
 #include "utf8/checked.h"
 
 namespace puerhlab {
-DBController::DBController(file_path_t& db_path) : _avail_conns(16), _db_path(db_path) {
+DBController::DBController(file_path_t& db_path) : _db_path(db_path), _initialized(false) {
   if (std::filesystem::exists(db_path)) {
     _initialized = true;
-  }
-
-  for (int i = 0; i < 8; ++i) {
-    _avail_conns.push({});
   }
 }
 
 DBController::~DBController() { duckdb_close(&_db); }
 
 auto DBController::GetConnectionGuard() -> ConnectionGuard {
-  if (_avail_conns.empty()) {
-    throw std::runtime_error(
-        "DB Controller: Maximum number of connections reached; cannot initialize more connections");
-  }
-  ConnectionGuard guard{_avail_conns.pop()};
+  ConnectionGuard guard{{}};
 
-  std::string     utf8_str;
-  std::wstring    path_wstr = _db_path.wstring();
-  // TODO: Cross-platform
-  utf8::utf16to8(path_wstr.begin(), path_wstr.end(), std::back_inserter(utf8_str));
-
-  if (duckdb_open(utf8_str.c_str(), &_db) != DuckDBSuccess) {
-    throw std::exception("DB cannot be created");
-  }
   if (duckdb_connect(_db, &guard._conn) != DuckDBSuccess) {
     throw std::exception("DB cannot be connected");
   }
@@ -44,10 +28,19 @@ auto DBController::GetConnectionGuard() -> ConnectionGuard {
 }
 
 void DBController::InitializeDB() {
+  std::string  utf8_str;
+  std::wstring path_wstr = _db_path.wstring();
+  // TODO: Cross-platform
+  utf8::utf16to8(path_wstr.begin(), path_wstr.end(), std::back_inserter(utf8_str));
+  if (duckdb_open(utf8_str.c_str(), &_db) != DuckDBSuccess) {
+    throw std::exception("DB cannot be created");
+  }
+
   auto guard = GetConnectionGuard();
   if (_initialized) return;
 
   duckdb_result result;
+
   if (duckdb_query(guard._conn, init_table_query, &result) != DuckDBSuccess) {
     auto error_message = duckdb_result_error(&result);
     duckdb_destroy_result(&result);
@@ -56,5 +49,4 @@ void DBController::InitializeDB() {
   _initialized = true;
 }
 
-void DBController::ReturnConnectionGuard() { _avail_conns.push({}); }
 };  // namespace puerhlab

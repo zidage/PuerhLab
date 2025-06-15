@@ -21,7 +21,7 @@ enum class DuckDBType : uint8_t {
   TIMESTAMP,
 };
 
-class StatementPrepare {
+class PreparedStatement {
  private:
   void RecycleResources();
 
@@ -31,9 +31,10 @@ class StatementPrepare {
   duckdb_connection&        _con;
 
   bool                      _prepared = false;
-  StatementPrepare(duckdb_connection& con);
-  StatementPrepare();
-  ~StatementPrepare();
+  PreparedStatement(duckdb_connection& con);
+  PreparedStatement(duckdb_connection& con, const std::string& prepare_query);
+  PreparedStatement();
+  ~PreparedStatement();
   auto GetStmtGuard(const std::string& prepare_query) -> duckdb_prepared_statement&;
   void SetConnection(duckdb_connection& con);
 };

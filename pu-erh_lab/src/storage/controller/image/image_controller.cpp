@@ -12,7 +12,8 @@
 #include "utils/string/convert.hpp"
 
 namespace puerhlab {
-ImageController::ImageController(ConnectionGuard&& guard) : _guard(guard), _service(_guard._conn) {}
+ImageController::ImageController(ConnectionGuard&& guard)
+    : _guard(std::move(guard)), _service(_guard._conn) {}
 
 void ImageController::CaptureImagePool(std::shared_ptr<ImagePoolManager> image_pool) {
   ThreadPool                                 thread_pool{8};

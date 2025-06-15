@@ -10,7 +10,7 @@
 
 namespace puerhlab {
 ElementController::ElementController(ConnectionGuard&& guard)
-    : _guard(guard),
+    : _guard(std::move(guard)),
       _element_service(_guard._conn),
       _file_service(_guard._conn),
       _folder_service(_guard._conn) {}
