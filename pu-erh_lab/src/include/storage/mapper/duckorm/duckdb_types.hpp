@@ -21,6 +21,10 @@ enum class DuckDBType : uint8_t {
   TIMESTAMP,
 };
 
+/**
+ * @brief A RAII class for managing prepared statements in DuckDB.
+ *
+ */
 class PreparedStatement {
  private:
   void RecycleResources();
@@ -39,15 +43,21 @@ class PreparedStatement {
   void SetConnection(duckdb_connection& con);
 };
 
+/**
+ * @brief Field descriptor for DuckDB ORM.
+ *
+ */
 struct DuckFieldDesc {
   const char* name;
   DuckDBType  type;
   size_t      offset;
 };
 
+// Macro to define a field descriptor for a specific type and field.
 #define FIELD(type, field, field_type) \
   duckorm::DuckFieldDesc { #field, duckorm::DuckDBType::field_type, offsetof(type, field) }
 
+// brief Type alias for a variant that can hold various DuckDB-supported types.
 using VarTypes =
     std::variant<int32_t, int64_t, uint32_t, uint64_t, double, std::unique_ptr<std::string>>;
 };  // namespace duckorm

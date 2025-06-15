@@ -18,6 +18,10 @@ using namespace puerhlab;
 
 std::filesystem::path db_path(
     "D:\\Projects\\pu-erh_lab\\pu-erh_lab\\tests\\resources\\temp_folder\\test.db");
+
+std::filesystem::path raw_path(
+    L"D:\\Projects\\pu-erh_lab\\pu-erh_"
+    L"lab\\tests\\resources\\sample_images\\dng_100");
 TEST(SleeveMapperTest, InitTest1) {
   if (std::filesystem::exists(db_path)) {
     std::filesystem::remove(db_path);
@@ -45,11 +49,8 @@ TEST(SleeveMapperTest, SimpleCaptureTest1) {
       ImageController img_ctr{db_ctr.GetConnectionGuard()};
 
       SleeveManager   manager{};
-      image_path_t    path =
-          L"D:\\Projects\\pu-erh_lab\\pu-erh_"
-          L"lab\\tests\\resources\\sample_images\\jpg";
       std::vector<image_path_t> imgs;
-      for (const auto& img : std::filesystem::directory_iterator(path)) {
+      for (const auto& img : std::filesystem::directory_iterator(raw_path)) {
         imgs.push_back(img.path());
       }
       manager.LoadToPath(imgs, L"root");
@@ -61,4 +62,4 @@ TEST(SleeveMapperTest, SimpleCaptureTest1) {
   }
 }
 
-TEST(SleeveMapperTest, SimpleCaptureTest2) {}
+TEST(SleeveMapperTest, DISABLED_SimpleCaptureTest2) {}

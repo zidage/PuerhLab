@@ -1,6 +1,5 @@
 #include "storage/controller/sleeve/element_controller.hpp"
 
-#include <format>
 #include <memory>
 
 #include "sleeve/sleeve_element/sleeve_element.hpp"
@@ -9,12 +8,22 @@
 #include "type/type.hpp"
 
 namespace puerhlab {
+/**
+ * @brief Construct a new Element Controller:: Element Controller object
+ *
+ * @param guard
+ */
 ElementController::ElementController(ConnectionGuard&& guard)
     : _guard(std::move(guard)),
       _element_service(_guard._conn),
       _file_service(_guard._conn),
       _folder_service(_guard._conn) {}
 
+/**
+ * @brief Add an element to the database.
+ *
+ * @param element
+ */
 void ElementController::AddElement(const std::shared_ptr<SleeveElement> element) {
   _element_service.Insert(element);
   if (element->_type == ElementType::FILE) {
@@ -28,17 +37,39 @@ void ElementController::AddElement(const std::shared_ptr<SleeveElement> element)
   }
 }
 
+/**
+ * @brief Add a content to a folder in the database.
+ *
+ * @param folder_id
+ * @param content_id
+ */
 void ElementController::AddFolderContent(sl_element_id_t folder_id, sl_element_id_t content_id) {
   // TODO: The uniqueness of content_id is not garanteed, SQL statement should be changed
   _folder_service.Insert({folder_id, content_id});
 }
 
+/**
+ * @brief Get an element by its ID from the database.
+ *
+ * @param id
+ * @return std::shared_ptr<SleeveElement>
+ */
 auto ElementController::GetElementById(const sl_element_id_t id) -> std::shared_ptr<SleeveElement> {
   return _element_service.GetElementById(id);
 }
 
+/**
+ * @brief Remove an element by its ID from the database.
+ *
+ * @param id
+ */
 void ElementController::RemoveElement(const sl_element_id_t id) { _element_service.RemoveById(id); }
 
+/**
+ * @brief Update an element in the database.
+ *
+ * @param element
+ */
 void ElementController::UpdateElement(const std::shared_ptr<SleeveElement> element) {
   _element_service.Update(element, element->_element_id);
   if (element->_type == ElementType::FILE) {
