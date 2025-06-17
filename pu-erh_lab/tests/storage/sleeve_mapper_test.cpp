@@ -1,4 +1,3 @@
-#include "storage/mapper/sleeve/sleeve_mapper.hpp"
 
 #include <easy/profiler.h>
 #include <gtest/gtest.h>

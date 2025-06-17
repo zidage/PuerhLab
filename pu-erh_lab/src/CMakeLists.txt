@@ -98,10 +98,22 @@ add_library(SleeveController
 target_include_directories(SleeveController PUBLIC include)
 target_link_libraries(SleeveController PUBLIC SleeveService StrConv)
 
+add_library(SleeveFS
+    sleeve/path_resolver.cpp
+    sleeve/storage_service.cpp
+    sleeve/dentry_cache_manager.cpp
+    sleeve/sleeve_element/sleeve_element_factory.cpp
+    sleeve/sleeve_element/sleeve_element.cpp
+    sleeve/sleeve_element/sleeve_file.cpp
+    sleeve/sleeve_element/sleeve_folder.cpp
+)
+target_include_directories(SleeveFS PUBLIC include)
+target_link_libraries(SleeveFS PUBLIC SleeveController)
+
 add_library(SleeveManager 
     sleeve/sleeve_manager.cpp)
 target_include_directories(SleeveManager PUBLIC include)
-target_link_libraries(SleeveManager PRIVATE Sleeve SleeveView)
+target_link_libraries(SleeveManager PRIVATE Sleeve SleeveView xxHash)
 
 
 

@@ -7,8 +7,6 @@
 #include <stdexcept>
 #include <vector>
 
-#include "storage/mapper/sleeve/statement_prepare.hpp"
-
 namespace duckorm {
 /**
  * @brief Insert an object into a DuckDB table.
@@ -123,7 +121,7 @@ duckdb_state update(duckdb_connection& conn, const char* table, const void* obj,
   for (size_t i = 0; i < field_count; ++i) {
     sql << fields[i].name << " = ?";
     if (i < field_count - 1) {
-      sql << ", ";
+      sql << ",";
     }
   }
   sql << " WHERE " << where_clause << ";";

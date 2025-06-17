@@ -26,5 +26,6 @@ class ElementController {
   void RemoveElement(const sl_element_id_t id);
   void UpdateElement(const std::shared_ptr<SleeveElement> element);
   auto GetElementById(const sl_element_id_t id) -> std::shared_ptr<SleeveElement>;
+  void EnsureChildrenLoaded(sl_element_id_t folder_id);
 };
 };  // namespace puerhlab

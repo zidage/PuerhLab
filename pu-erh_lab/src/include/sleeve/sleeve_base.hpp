@@ -30,8 +30,6 @@
 
 #pragma once
 
-#include <opencv2/core/hal/interface.h>
-
 #include <cstddef>
 #include <cstdint>
 #include <memory>
