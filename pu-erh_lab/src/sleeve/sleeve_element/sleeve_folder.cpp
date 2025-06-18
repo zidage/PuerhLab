@@ -137,4 +137,5 @@ void SleeveFolder::IncrementFolderCount() { ++_folder_count; }
 
 void SleeveFolder::DecrementFolderCount() { --_folder_count; }
 
+auto SleeveFolder::ContentSize() -> size_t { return _contents.size(); }
 };  // namespace puerhlab

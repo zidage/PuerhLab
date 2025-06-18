@@ -10,10 +10,13 @@
 
 namespace puerhlab {
 class LazyNodeHandler {
-  ElementController                                                    _db_ctrl;
+  ElementController&                                                   _db_ctrl;
+
   std::unordered_map<sl_element_id_t, std::shared_ptr<SleeveElement>>& _storage;
 
  public:
+  LazyNodeHandler(ElementController&                                                   db_ctrl,
+                  std::unordered_map<sl_element_id_t, std::shared_ptr<SleeveElement>>& storage);
   void EnsureChildrenLoaded(std::shared_ptr<SleeveFolder> folder);
   auto GetElement(sl_element_id_t id) -> std::shared_ptr<SleeveElement>;
 };

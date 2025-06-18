@@ -1,6 +1,7 @@
 #include "storage/controller/sleeve/element_controller.hpp"
 
 #include <memory>
+#include <vector>
 
 #include "sleeve/sleeve_element/sleeve_element.hpp"
 #include "sleeve/sleeve_element/sleeve_file.hpp"
@@ -56,6 +57,11 @@ void ElementController::AddFolderContent(sl_element_id_t folder_id, sl_element_i
  */
 auto ElementController::GetElementById(const sl_element_id_t id) -> std::shared_ptr<SleeveElement> {
   return _element_service.GetElementById(id);
+}
+
+auto ElementController::GetFolderContent(const sl_element_id_t folder_id)
+    -> std::vector<sl_element_id_t> {
+  return _folder_service.GetFolderContent(folder_id);
 }
 
 /**

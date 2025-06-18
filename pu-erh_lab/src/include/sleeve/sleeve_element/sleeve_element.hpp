@@ -69,6 +69,7 @@ class SleeveElement {
   void         SetLastModifiedTime();
   void         IncrementRefCount();
   void         DecrementRefCount();
+  auto         IsShared() -> bool;
 
   // virtual void AddElement(std::shared_ptr<SleeveElement>);
   // virtual void CreateFilter(FilterCombo&& filter);

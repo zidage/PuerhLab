@@ -27,6 +27,5 @@ class PathResolver {
   auto        Resolve(const std::filesystem::path& path) -> std::shared_ptr<SleeveElement>;
   auto        ResolveForWrite(const std::filesystem::path& path, bool create)
       -> std::shared_ptr<SleeveElement>;
-  auto CoWIfNeeded(std::shared_ptr<SleeveFolder> folder) -> std::shared_ptr<SleeveElement>;
 };
 };  // namespace puerhlab

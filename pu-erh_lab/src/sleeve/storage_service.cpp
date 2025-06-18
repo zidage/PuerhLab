@@ -1,1 +1,32 @@
 #include "sleeve/storage_service.hpp"
+
+#include "storage/service/sleeve/element/element_service.hpp"
+
+namespace puerhlab {
+LazyNodeHandler::LazyNodeHandler(
+    ElementController&                                                   db_ctrl,
+    std::unordered_map<sl_element_id_t, std::shared_ptr<SleeveElement>>& storage)
+    : _db_ctrl(db_ctrl), _storage(storage) {}
+
+auto LazyNodeHandler::GetElement(uint32_t id) -> std::shared_ptr<SleeveElement> {
+  if (_storage.contains(id)) {
+    return _storage.at(id);
+  }
+  // If the element is not presented in the memory, get it from the db.
+  // Then loaded pointer into the storage
+  auto result                   = _db_ctrl.GetElementById(id);
+  _storage[result->_element_id] = result;
+  return result;
+}
+
+void LazyNodeHandler::EnsureChildrenLoaded(std::shared_ptr<SleeveFolder> folder) {
+  // Assume all the lazy-loaded folder are empty for now
+  if (folder->ContentSize() == 0) {
+    auto folder_content = _db_ctrl.GetFolderContent(folder->_element_id);
+    for (auto& content_id : folder_content) {
+      auto content = GetElement(content_id);
+      folder->AddElementToMap(content);
+    }
+  }
+}
+};  // namespace puerhlab

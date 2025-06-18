@@ -67,6 +67,7 @@ class SleeveFolder : public SleeveElement {
   auto Copy(sl_element_id_t new_id) const -> std::shared_ptr<SleeveElement>;
 
   void AddElementToMap(const std::shared_ptr<SleeveElement> element);
+  void ReplaceChild(const sl_element_id_t from, const sl_element_id_t to);
   void UpdateElementMap(const file_name_t& name, const sl_element_id_t old_id,
                         const sl_element_id_t new_id);
   void CreateIndex(const std::shared_ptr<FilterCombo> filter);
@@ -82,5 +83,6 @@ class SleeveFolder : public SleeveElement {
   void DecrementFileCount();
   auto Clear() -> bool;
   auto ResetFilters() -> bool;
+  auto ContentSize() -> size_t;
 };
 };  // namespace puerhlab

@@ -65,8 +65,12 @@ auto ElementService::FromParams(const ElementMapperParams&& param)
 
 auto ElementService::GetElementById(const sl_element_id_t id) -> std::shared_ptr<SleeveElement> {
   auto result = GetByPredicate(std::format("id={}", id));
-  if (result.size() != 1) {
+  if (result.size() > 1) {
     throw std::runtime_error("Element Service: Sleeve element id is not unique. Broken DB file");
+  }
+  if (result.size() == 0) {
+    throw std::runtime_error(
+        std::format("Element Service: No element with id {} is stored in DB", id));
   }
   return result[0];
 }

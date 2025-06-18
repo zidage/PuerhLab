@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <vector>
 
 #include "sleeve/sleeve_element/sleeve_element.hpp"
 #include "storage/controller/controller_types.hpp"
@@ -22,7 +23,10 @@ class ElementController {
   ElementController(ConnectionGuard&& guard);
 
   void AddElement(const std::shared_ptr<SleeveElement> element);
+
   void AddFolderContent(sl_element_id_t folder_id, sl_element_id_t content_id);
+  auto GetFolderContent(const sl_element_id_t folder_id) -> std::vector<sl_element_id_t>;
+
   void RemoveElement(const sl_element_id_t id);
   void UpdateElement(const std::shared_ptr<SleeveElement> element);
   auto GetElementById(const sl_element_id_t id) -> std::shared_ptr<SleeveElement>;
