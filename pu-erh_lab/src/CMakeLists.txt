@@ -46,20 +46,18 @@ add_library(ImagePool
 target_include_directories(ImagePool PUBLIC include)
 target_link_libraries(ImagePool PRIVATE Image)
 
-add_library(Sleeve 
-    sleeve/sleeve_base.cpp    
-    sleeve/dentry_cache_manager.cpp
+add_library(SleeveElement 
     sleeve/sleeve_element/sleeve_element_factory.cpp
     sleeve/sleeve_element/sleeve_element.cpp
     sleeve/sleeve_element/sleeve_file.cpp
     sleeve/sleeve_element/sleeve_folder.cpp
 )
-target_include_directories(Sleeve PUBLIC include)
-target_link_libraries(Sleeve PUBLIC Image ImageLoader SleeveFilter EditHistory ImagePool)
+target_include_directories(SleeveElement PUBLIC include)
+target_link_libraries(SleeveElement PUBLIC Image ImageLoader SleeveFilter EditHistory ImagePool)
 
 add_library(SleeveView sleeve/sleeve_view.cpp)
 target_include_directories(SleeveView PUBLIC include)
-target_link_libraries(SleeveView PUBLIC Image Sleeve ImagePool easy_profiler)
+target_link_libraries(SleeveView PUBLIC Image SleeveElement ImagePool easy_profiler)
 
 add_library(DuckORM     
     storage/mapper/duckorm/duckdb_orm.cpp
@@ -76,7 +74,7 @@ add_library(SleeveMapper
     storage/mapper/sleeve/filter/filter_mapper.cpp
     )
 target_include_directories(SleeveMapper PUBLIC include)
-target_link_libraries(SleeveMapper PUBLIC DuckDB DuckORM Image Sleeve ImagePool easy_profiler)
+target_link_libraries(SleeveMapper PUBLIC DuckDB DuckORM Image SleeveElement ImagePool easy_profiler)
 
 add_library(SleeveService
     storage/service/image/image_service.cpp
@@ -99,21 +97,19 @@ target_include_directories(SleeveController PUBLIC include)
 target_link_libraries(SleeveController PUBLIC SleeveService StrConv)
 
 add_library(SleeveFS
+    sleeve/sleeve_base.cpp
     sleeve/path_resolver.cpp
     sleeve/storage_service.cpp
     sleeve/dentry_cache_manager.cpp
-    sleeve/sleeve_element/sleeve_element_factory.cpp
-    sleeve/sleeve_element/sleeve_element.cpp
-    sleeve/sleeve_element/sleeve_file.cpp
-    sleeve/sleeve_element/sleeve_folder.cpp
+    sleeve/sleeve_filesystem.cpp
 )
 target_include_directories(SleeveFS PUBLIC include)
-target_link_libraries(SleeveFS PUBLIC SleeveController)
+target_link_libraries(SleeveFS PUBLIC SleeveElement SleeveController)
 
 add_library(SleeveManager 
     sleeve/sleeve_manager.cpp)
 target_include_directories(SleeveManager PUBLIC include)
-target_link_libraries(SleeveManager PRIVATE Sleeve SleeveView xxHash)
+target_link_libraries(SleeveManager PRIVATE SleeveElement SleeveFS SleeveView xxHash )
 
 
 

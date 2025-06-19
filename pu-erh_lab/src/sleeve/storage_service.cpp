@@ -29,4 +29,13 @@ void LazyNodeHandler::EnsureChildrenLoaded(std::shared_ptr<SleeveFolder> folder)
     }
   }
 }
+
+StorageService::StorageService(std::filesystem::path db_path)
+    : _db_ctrl(db_path),
+      _el_ctrl(_db_ctrl.GetConnectionGuard()),
+      _img_ctrl(_db_ctrl.GetConnectionGuard()) {}
+
+auto StorageService::GetElementController() -> ElementController& { return _el_ctrl; }
+
+auto StorageService::GetImageController() -> ImageController& { return _img_ctrl; }
 };  // namespace puerhlab

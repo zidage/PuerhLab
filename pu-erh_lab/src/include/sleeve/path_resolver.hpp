@@ -21,11 +21,15 @@ class PathResolver {
   LazyNodeHandler&              _lazy_handler;
 
  public:
-  PathResolver(std::shared_ptr<SleeveFolder> root);
+  PathResolver();
+  PathResolver(LazyNodeHandler& lazy_handler);
+  void        SetRoot(std::shared_ptr<SleeveFolder> root);
   static auto Normalize(const std::filesystem::path raw_path) -> std::wstring;
 
-  auto        Resolve(const std::filesystem::path& path) -> std::shared_ptr<SleeveElement>;
-  auto        ResolveForWrite(const std::filesystem::path& path, bool create)
-      -> std::shared_ptr<SleeveElement>;
+  auto IsSubpath(const std::filesystem::path& base, const std::filesystem::path& target) -> bool;
+  auto Contains(const std::filesystem::path& path, ElementType type) -> bool;
+  auto Contains(const std::filesystem::path& path) -> bool;
+  auto Resolve(const std::filesystem::path& path) -> std::shared_ptr<SleeveElement>;
+  auto ResolveForWrite(const std::filesystem::path& path) -> std::shared_ptr<SleeveElement>;
 };
 };  // namespace puerhlab
