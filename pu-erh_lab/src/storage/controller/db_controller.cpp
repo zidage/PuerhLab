@@ -19,6 +19,7 @@ DBController::DBController(file_path_t& db_path) : _db_path(db_path), _initializ
   if (std::filesystem::exists(db_path)) {
     _initialized = true;
   }
+  InitializeDB();
 }
 
 /**

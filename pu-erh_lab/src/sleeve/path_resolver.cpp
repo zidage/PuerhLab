@@ -51,9 +51,10 @@ auto PathResolver::Contains(const std::filesystem::path& path, ElementType type)
 }
 
 auto PathResolver::Resolve(const std::filesystem::path& path) -> std::shared_ptr<SleeveElement> {
-  std::shared_ptr<SleeveElement> current = _root;
-  for (const auto& part : path) {
-    if (current->_type != ElementType::FILE) {
+  std::shared_ptr<SleeveElement> current    = _root;
+  auto                           visit_path = path.relative_path();
+  for (const auto& part : visit_path) {
+    if (current->_type == ElementType::FILE) {
       throw std::runtime_error("Path Resolver: Illegal path.");
     }
 
@@ -74,10 +75,9 @@ auto PathResolver::ResolveForWrite(const std::filesystem::path& path)
     -> std::shared_ptr<SleeveElement> {
   std::shared_ptr<SleeveElement> current        = _root;
   std::shared_ptr<SleeveElement> current_parent = nullptr;
-  std::vector<std::wstring>      path_stack;
-  for (const auto& part : path) {
-    path_stack.push_back(part.wstring());
-    if (current->_type != ElementType::FILE) {
+  auto                           visit_path     = path.relative_path();
+  for (const auto& part : visit_path) {
+    if (current->_type == ElementType::FILE) {
       throw std::runtime_error("Path Resolver: Illegal path.");
     }
 

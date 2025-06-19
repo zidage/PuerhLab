@@ -30,7 +30,7 @@ auto FileSystem::InitRoot() -> bool {
   try {
     root = _storage_service.GetElementController().GetElementById(0);
   } catch (std::exception& e) {
-    root = SleeveElementFactory::CreateElement(ElementType::FOLDER, 0, L"root");
+    root = SleeveElementFactory::CreateElement(ElementType::FOLDER, 0, L"");
   }
   _storage[0] = root;
   _root       = std::static_pointer_cast<SleeveFolder>(root);
@@ -48,7 +48,7 @@ void FileSystem::Create(std::filesystem::path dest, std::wstring filename, Eleme
     filename = filename + L"@";
   }
   auto new_id      = _id_gen.GenerateID();
-  auto new_element = SleeveElementFactory::CreateElement(type, new_id, dest);
+  auto new_element = SleeveElementFactory::CreateElement(type, new_id, filename);
   _storage[new_id] = new_element;
   dest_folder->AddElementToMap(new_element);
 }

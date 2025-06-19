@@ -1,5 +1,7 @@
 #include "sleeve/storage_service.hpp"
 
+#include <exception>
+
 #include "storage/service/sleeve/element/element_service.hpp"
 
 namespace puerhlab {
@@ -22,10 +24,14 @@ auto LazyNodeHandler::GetElement(uint32_t id) -> std::shared_ptr<SleeveElement> 
 void LazyNodeHandler::EnsureChildrenLoaded(std::shared_ptr<SleeveFolder> folder) {
   // Assume all the lazy-loaded folder are empty for now
   if (folder->ContentSize() == 0) {
-    auto folder_content = _db_ctrl.GetFolderContent(folder->_element_id);
-    for (auto& content_id : folder_content) {
-      auto content = GetElement(content_id);
-      folder->AddElementToMap(content);
+    try {
+      auto folder_content = _db_ctrl.GetFolderContent(folder->_element_id);
+      for (auto& content_id : folder_content) {
+        auto content = GetElement(content_id);
+        folder->AddElementToMap(content);
+      }
+    } catch (std::exception& e) {
+      // TODO: LOG
     }
   }
 }
