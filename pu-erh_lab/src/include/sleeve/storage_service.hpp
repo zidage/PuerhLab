@@ -11,15 +11,16 @@
 #include "type/type.hpp"
 
 namespace puerhlab {
-class LazyNodeHandler {
+class NodeStorageHandler {
  private:
   ElementController&                                                   _db_ctrl;
 
   std::unordered_map<sl_element_id_t, std::shared_ptr<SleeveElement>>& _storage;
 
  public:
-  LazyNodeHandler(ElementController&                                                   db_ctrl,
-                  std::unordered_map<sl_element_id_t, std::shared_ptr<SleeveElement>>& storage);
+  NodeStorageHandler(ElementController&                                                   db_ctrl,
+                     std::unordered_map<sl_element_id_t, std::shared_ptr<SleeveElement>>& storage);
+  void AddToStorage(std::shared_ptr<SleeveElement> new_element);
   void EnsureChildrenLoaded(std::shared_ptr<SleeveFolder> folder);
   auto GetElement(sl_element_id_t id) -> std::shared_ptr<SleeveElement>;
 };

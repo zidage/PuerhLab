@@ -16,8 +16,8 @@ FileSystem::FileSystem(std::filesystem::path db_path, sl_element_id_t start_id)
     : _id_gen(start_id),
       _db_path(db_path),
       _storage_service(db_path),
-      _lazy_handler(_storage_service.GetElementController(), _storage),
-      _resolver(_lazy_handler) {
+      _storage_handler(_storage_service.GetElementController(), _storage),
+      _resolver(_storage_handler, _id_gen) {
   _root = nullptr;
 }
 
@@ -94,5 +94,9 @@ void FileSystem::Copy(std::filesystem::path from, std::filesystem::path dest) {
   dest_node->AddElementToMap(from_node);
 
   from_node->IncrementRefCount();
+}
+
+auto FileSystem::Tree(const std::filesystem::path& path) -> std::wstring {
+  return _resolver.Tree(path);
 }
 };  // namespace puerhlab

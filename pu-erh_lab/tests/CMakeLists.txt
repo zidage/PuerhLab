@@ -40,7 +40,7 @@ target_link_libraries(ImagePoolTest PRIVATE GTest::gtest_main Image ImagePool)
 
 add_executable(SleeveFSTest sleeve/sleeve_fs_test.cpp)
 target_include_directories(SleeveFSTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
-target_link_libraries(SleeveFSTest PRIVATE GTest::gtest_main SleeveFS)
+target_link_libraries(SleeveFSTest PRIVATE GTest::gtest_main SleeveFS StrConv)
 
 
 include(GoogleTest)

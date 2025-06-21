@@ -28,7 +28,7 @@ class FileSystem {
   ///@{
   std::filesystem::path                _db_path;
   StorageService                       _storage_service;
-  LazyNodeHandler                      _lazy_handler;
+  NodeStorageHandler                   _storage_handler;
   PathResolver                         _resolver;
   ///@}
 
@@ -41,5 +41,7 @@ class FileSystem {
   void Delete(std::filesystem::path target);
   auto Get(std::filesystem::path target, bool write) -> std::shared_ptr<SleeveElement>;
   void Copy(std::filesystem::path from, std::filesystem::path dest);
+
+  auto Tree(const std::filesystem::path& path) -> std::wstring;
 };
 };  // namespace puerhlab

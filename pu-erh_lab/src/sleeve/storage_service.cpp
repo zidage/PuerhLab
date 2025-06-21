@@ -5,12 +5,16 @@
 #include "storage/service/sleeve/element/element_service.hpp"
 
 namespace puerhlab {
-LazyNodeHandler::LazyNodeHandler(
+NodeStorageHandler::NodeStorageHandler(
     ElementController&                                                   db_ctrl,
     std::unordered_map<sl_element_id_t, std::shared_ptr<SleeveElement>>& storage)
     : _db_ctrl(db_ctrl), _storage(storage) {}
 
-auto LazyNodeHandler::GetElement(uint32_t id) -> std::shared_ptr<SleeveElement> {
+void NodeStorageHandler::AddToStorage(std::shared_ptr<SleeveElement> new_element) {
+  _storage[new_element->_element_id] = new_element;
+}
+
+auto NodeStorageHandler::GetElement(uint32_t id) -> std::shared_ptr<SleeveElement> {
   if (_storage.contains(id)) {
     return _storage.at(id);
   }
@@ -21,7 +25,7 @@ auto LazyNodeHandler::GetElement(uint32_t id) -> std::shared_ptr<SleeveElement> 
   return result;
 }
 
-void LazyNodeHandler::EnsureChildrenLoaded(std::shared_ptr<SleeveFolder> folder) {
+void NodeStorageHandler::EnsureChildrenLoaded(std::shared_ptr<SleeveFolder> folder) {
   // Assume all the lazy-loaded folder are empty for now
   if (folder->ContentSize() == 0) {
     try {
