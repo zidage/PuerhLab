@@ -4,7 +4,6 @@
 #include <exception>
 #include <filesystem>
 #include <memory>
-#include <ranges>
 #include <sstream>
 #include <stack>
 #include <stdexcept>

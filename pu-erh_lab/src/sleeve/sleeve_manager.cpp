@@ -13,6 +13,7 @@
 #include "sleeve/sleeve_base.hpp"
 #include "sleeve/sleeve_element/sleeve_element.hpp"
 #include "sleeve/sleeve_element/sleeve_file.hpp"
+#include "sleeve/sleeve_filesystem.hpp"
 #include "sleeve/sleeve_view.hpp"
 #include "storage/image_pool/image_pool_manager.hpp"
 #include "type/type.hpp"
@@ -26,17 +27,17 @@ namespace puerhlab {
 SleeveManager::SleeveManager() {
   // Update the application clock
   TimeProvider::Refresh();
-  _base       = std::make_shared<SleeveBase>(0);
-  _image_pool = std::make_shared<ImagePoolManager>(128, 4);
-  _view       = std::make_shared<SleeveView>(_base, _image_pool);
+  // _fs       = std::make_shared<FileSystem>(0);
+  // _image_pool = std::make_shared<ImagePoolManager>(128, 4);
+  // _view       = std::make_shared<SleeveView>(_fs, _image_pool);
 }
 
 /**
  * @brief Return a shared pointer to the sleeve file system interface
  *
- * @return std::shared_ptr<SleeveBase>
+ * @return std::shared_ptr<FileSystem>
  */
-auto SleeveManager::GetBase() -> std::shared_ptr<SleeveBase> { return _base; }
+auto SleeveManager::GetFilesystem() -> std::shared_ptr<FileSystem> { return _fs; }
 
 /**
  * @brief Return a shared pointer to a sleeve view instance
@@ -62,12 +63,9 @@ auto SleeveManager::LoadToPath(std::vector<image_path_t> img_os_paths, sl_path_t
   auto        total_size    = 0;
   loader.StartLoading(std::move(img_os_paths), DecodeType::SLEEVE_LOADING);
   while (expected_size > 0) {
-    std::shared_ptr<Image> loaded = loader.LoadImage();
-    auto element = _base->CreateElementToPath(dest, loaded->_image_name, ElementType::FILE);
-    if (!element.has_value()) {
-      throw std::exception("Error creating element in sleeve");
-    }
-    std::static_pointer_cast<SleeveFile>(element.value())->SetImage(loaded);
+    std::shared_ptr<Image> loaded  = loader.LoadImage();
+    auto                   element = _fs->Create(dest, loaded->_image_name, ElementType::FILE);
+    std::static_pointer_cast<SleeveFile>(element)->SetImage(loaded);
     _image_pool->Insert(loaded);
     total_size++;
     --expected_size;

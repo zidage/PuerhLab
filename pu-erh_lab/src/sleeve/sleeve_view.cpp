@@ -34,40 +34,38 @@ DisplayingImage::~DisplayingImage() {
   _displaying->_thumb_pinned = false;
 }
 
-SleeveView::SleeveView(std::shared_ptr<SleeveBase>       base,
-                       std::shared_ptr<ImagePoolManager> image_pool)
-    : _base(base), _image_pool(image_pool), _loader(64, 24, 0) {}
+SleeveView::SleeveView(std::shared_ptr<FileSystem> fs, std::shared_ptr<ImagePoolManager> image_pool)
+    : _fs(fs), _image_pool(image_pool), _loader(64, 24, 0) {}
 
-SleeveView::SleeveView(std::shared_ptr<SleeveBase>       base,
-                       std::shared_ptr<ImagePoolManager> image_pool, sl_path_t viewing_path)
-    : _base(base), _viewing_path(viewing_path), _image_pool(image_pool), _loader(64, 24, 0) {
+SleeveView::SleeveView(std::shared_ptr<FileSystem> fs, std::shared_ptr<ImagePoolManager> image_pool,
+                       sl_path_t viewing_path)
+    : _fs(fs), _viewing_path(viewing_path), _image_pool(image_pool), _loader(64, 24, 0) {
   UpdateView();
 }
 
-SleeveView::SleeveView(std::shared_ptr<SleeveBase>       base,
-                       std::shared_ptr<ImagePoolManager> image_pool,
+SleeveView::SleeveView(std::shared_ptr<FileSystem> fs, std::shared_ptr<ImagePoolManager> image_pool,
                        std::shared_ptr<SleeveFolder> viewing_node, sl_path_t viewing_path)
-    : _base(base),
+    : _fs(fs),
       _viewing_node(viewing_node),
       _viewing_path(viewing_path),
       _image_pool(image_pool),
       _loader(64, 24, 0) {
   auto elements = _viewing_node.lock()->ListElements();
   for (auto& e : *elements) {
-    _children.push_back(_base->AccessElementById(e).value());
+    _children.push_back(_fs->Get(e));
   }
 }
 
 void SleeveView::UpdateView() {
-  auto target = _base->GetReadGuard(_viewing_path);
-  if (!target.has_value() || target.value()._access_element->_type != ElementType::FOLDER) {
+  auto target = _fs->Get(_viewing_path, false);
+  if (target->_type != ElementType::FOLDER) {
     return;
   }
-  _viewing_node = std::dynamic_pointer_cast<SleeveFolder>(target->_access_element);
+  _viewing_node = std::dynamic_pointer_cast<SleeveFolder>(target);
   _children.clear();
   auto elements = _viewing_node.lock()->ListElements();
   for (auto& e : *elements) {
-    _children.push_back(_base->AccessElementById(e).value());
+    _children.push_back(_fs->Get(e));
   }
 }
 

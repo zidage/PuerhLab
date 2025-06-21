@@ -37,9 +37,11 @@ class FileSystem {
 
   auto InitRoot() -> bool;
 
-  void Create(std::filesystem::path dest, std::wstring filename, ElementType type);
+  auto Create(std::filesystem::path dest, std::wstring filename, ElementType type)
+      -> std::shared_ptr<SleeveElement>;
   void Delete(std::filesystem::path target);
   auto Get(std::filesystem::path target, bool write) -> std::shared_ptr<SleeveElement>;
+  auto Get(sl_element_id_t id) -> std::shared_ptr<SleeveElement>;
   void Copy(std::filesystem::path from, std::filesystem::path dest);
 
   auto Tree(const std::filesystem::path& path) -> std::wstring;

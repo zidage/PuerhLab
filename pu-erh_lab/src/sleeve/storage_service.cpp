@@ -2,8 +2,6 @@
 
 #include <exception>
 
-#include "storage/service/sleeve/element/element_service.hpp"
-
 namespace puerhlab {
 NodeStorageHandler::NodeStorageHandler(
     ElementController&                                                   db_ctrl,

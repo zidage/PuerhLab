@@ -55,9 +55,7 @@ add_library(SleeveElement
 target_include_directories(SleeveElement PUBLIC include)
 target_link_libraries(SleeveElement PUBLIC Image ImageLoader SleeveFilter EditHistory ImagePool)
 
-# add_library(SleeveView sleeve/sleeve_view.cpp)
-# target_include_directories(SleeveView PUBLIC include)
-# target_link_libraries(SleeveView PUBLIC Image SleeveElement ImagePool easy_profiler)
+
 
 add_library(DuckORM     
     storage/mapper/duckorm/duckdb_orm.cpp
@@ -106,10 +104,14 @@ add_library(SleeveFS
 target_include_directories(SleeveFS PUBLIC include)
 target_link_libraries(SleeveFS PUBLIC SleeveElement SleeveController)
 
-# add_library(SleeveManager 
-#     sleeve/sleeve_manager.cpp)
-# target_include_directories(SleeveManager PUBLIC include)
-# target_link_libraries(SleeveManager PRIVATE SleeveElement SleeveFS SleeveView xxHash )
+add_library(SleeveView sleeve/sleeve_view.cpp)
+target_include_directories(SleeveView PUBLIC include)
+target_link_libraries(SleeveView PUBLIC Image SleeveFS ImagePool easy_profiler)
+
+add_library(SleeveManager 
+    sleeve/sleeve_manager.cpp)
+target_include_directories(SleeveManager PUBLIC include)
+target_link_libraries(SleeveManager PUBLIC SleeveFS SleeveView xxHash)
 
 
 

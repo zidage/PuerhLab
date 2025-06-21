@@ -2,14 +2,12 @@
 
 #include <exception>
 #include <filesystem>
-#include <format>
 #include <memory>
 #include <stdexcept>
 
 #include "sleeve/sleeve_element/sleeve_element.hpp"
 #include "sleeve/sleeve_element/sleeve_element_factory.hpp"
 #include "sleeve/sleeve_element/sleeve_folder.hpp"
-#include "sleeve/sleeve_filter/filter_combo.hpp"
 
 namespace puerhlab {
 FileSystem::FileSystem(std::filesystem::path db_path, sl_element_id_t start_id)
@@ -38,7 +36,8 @@ auto FileSystem::InitRoot() -> bool {
   return true;
 }
 
-void FileSystem::Create(std::filesystem::path dest, std::wstring filename, ElementType type) {
+auto FileSystem::Create(std::filesystem::path dest, std::wstring filename, ElementType type)
+    -> std::shared_ptr<SleeveElement> {
   auto dest_element = _resolver.ResolveForWrite(dest);
   if (dest_element->_type != ElementType::FOLDER) {
     throw std::runtime_error("Filesystem: Cannot create element under a file");
@@ -51,6 +50,12 @@ void FileSystem::Create(std::filesystem::path dest, std::wstring filename, Eleme
   auto new_element = SleeveElementFactory::CreateElement(type, new_id, filename);
   _storage[new_id] = new_element;
   dest_folder->AddElementToMap(new_element);
+
+  return new_element;
+}
+
+auto FileSystem::Get(sl_element_id_t id) -> std::shared_ptr<SleeveElement> {
+  return _storage_handler.GetElement(id);
 }
 
 auto FileSystem::Get(std::filesystem::path target, bool write) -> std::shared_ptr<SleeveElement> {
