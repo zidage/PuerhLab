@@ -27,6 +27,7 @@ class FileSystem {
   /** @name Database interaction */
   ///@{
   std::filesystem::path                _db_path;
+  std::filesystem::path                _meta_path;
   StorageService                       _storage_service;
   NodeStorageHandler                   _storage_handler;
   PathResolver                         _resolver;
@@ -45,6 +46,8 @@ class FileSystem {
   void Copy(std::filesystem::path from, std::filesystem::path dest);
 
   void SyncToDB();
+  void WriteSleeveMeta(const std::filesystem::path& meta_path);
+  void ReadSleeveMeta(const std::filesystem::path& meta_path);
 
   auto Tree(const std::filesystem::path& path) -> std::wstring;
 };

@@ -12,6 +12,8 @@
 std::filesystem::path db_path(
     "D:\\Projects\\pu-erh_lab\\pu-erh_lab\\tests\\resources\\temp_folder\\test.db");
 
+std::filesystem::path meta_path("D:\\Projects\\pu-erh_lab\\pu-erh_lab\\tests\\resources\\temp_folder\\meta.json");
+
 namespace puerhlab {
 TEST(SleeveFSTest, InitTest1) {
   TimeProvider::Refresh();
@@ -68,7 +70,7 @@ TEST(SleeveFSTest, AddGetTest2) {
     EXPECT_FALSE(subfolder == nullptr);
     auto file = fs.Get(L"/Folder/File", false);
     EXPECT_FALSE(file == nullptr);
-    
+
     std::cout << conv::ToBytes(fs.Tree(L"/"));
   } catch (std::exception& e) {
     std::cout << e.what() << std::endl;
@@ -98,6 +100,7 @@ TEST(SleeveFSTest, ReInitTest1) {
       EXPECT_FALSE(file == nullptr);
 
       fs.SyncToDB();
+      fs.WriteSleeveMeta(meta_path);
       std::cout << "Before reloading:\n" << conv::ToBytes(fs.Tree(L"")) << std::endl;
     } catch (std::exception& e) {
       std::cout << e.what() << std::endl;
@@ -109,7 +112,8 @@ TEST(SleeveFSTest, ReInitTest1) {
   {
     try {
       // Auto recovered start id has not been implemented
-      FileSystem fs{db_path, 3};
+      FileSystem fs{db_path, 1};
+      fs.ReadSleeveMeta(meta_path);
       fs.InitRoot();
 
       auto folder = fs.Get(L"/Folder", false);
@@ -219,7 +223,90 @@ TEST(SleeveFSTest, CoWTest1) {
 
     std::cout << conv::ToBytes(fs.Tree(L"/"));
   } catch (std::runtime_error& e) {
+    std::cout << "Unexpected exception: " << e.what() << std::endl;
+    FAIL();
+  } catch (std::exception& e) {
+    std::cout << e.what() << std::endl;
+    FAIL();
+  }
+
+  if (std::filesystem::exists(db_path)) {
+    std::filesystem::remove(db_path);
+  }
+}
+
+TEST(SleeveFSTest, CoWTest2) {
+  try {
+    FileSystem fs{db_path, 0};
+    fs.InitRoot();
+
+    fs.Create(L"", L"Folder", ElementType::FOLDER);
+    fs.Create(L"/Folder", L"Subfolder", ElementType::FOLDER);
+    fs.Create(L"/Folder/Subfolder", L"Linux", ElementType::FILE);
+    fs.Create(L"/Folder", L"File", ElementType::FILE);
+    fs.Copy(L"/Folder", L"/Folder/Subfolder");
+  } catch (std::runtime_error& e) {
+    auto exception_msg = std::string(e.what());
     std::cout << "Expected exception: " << e.what() << std::endl;
+    EXPECT_EQ(exception_msg,
+              "Filesystem: Target folder cannot be a subfolder of the original folder");
+  } catch (std::exception& e) {
+    std::cout << e.what() << std::endl;
+    FAIL();
+  }
+
+  if (std::filesystem::exists(db_path)) {
+    std::filesystem::remove(db_path);
+  }
+}
+
+TEST(SleeveFSTest, ReCoWTest1) {
+  std::string first_tree;
+  try {
+    FileSystem fs{db_path, 0};
+    fs.InitRoot();
+
+    fs.Create(L"", L"Folder", ElementType::FOLDER);
+    fs.Create(L"/Folder", L"Subfolder", ElementType::FOLDER);
+    fs.Create(L"/Folder/Subfolder", L"Linux", ElementType::FILE);
+    fs.Create(L"/Folder", L"File", ElementType::FILE);
+    fs.Copy(L"/Folder/Subfolder", L"/");
+
+    fs.Create(L"/Folder/Subfolder", L"Windows", ElementType::FILE);
+
+    first_tree = conv::ToBytes(fs.Tree(L"/"));
+    std::cout << first_tree;
+
+    fs.SyncToDB();
+  } catch (std::runtime_error& e) {
+    std::cout << "Unexpected exception: " << e.what() << std::endl;
+    FAIL();
+  } catch (std::exception& e) {
+    std::cout << e.what() << std::endl;
+    FAIL();
+  }
+
+  std::string second_tree;
+  try {
+    // 8 is just a big enough number...
+    FileSystem fs{db_path, 8};
+    fs.InitRoot();
+
+    // fs.Create(L"", L"Folder", ElementType::FOLDER);
+    // fs.Create(L"/Folder", L"Subfolder", ElementType::FOLDER);
+    // fs.Create(L"/Folder/Subfolder", L"Linux", ElementType::FILE);
+    // fs.Create(L"/Folder", L"File", ElementType::FILE);
+    // fs.Copy(L"/Folder/Subfolder", L"/");
+    // fs.Create(L"/Folder/Subfolder", L"Windows", ElementType::FILE);
+
+    second_tree = conv::ToBytes(fs.Tree(L"/"));
+    std::cout << second_tree;
+
+    EXPECT_EQ(first_tree, second_tree);
+
+  } catch (std::runtime_error& e) {
+    std::cout << "Unexpected exception: " << e.what() << std::endl;
+    FAIL();
   } catch (std::exception& e) {
     std::cout << e.what() << std::endl;
     FAIL();

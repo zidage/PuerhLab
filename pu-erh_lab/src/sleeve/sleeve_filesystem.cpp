@@ -1,13 +1,16 @@
 #include "sleeve/sleeve_filesystem.hpp"
 
+#include <cstdint>
 #include <exception>
 #include <filesystem>
+#include <fstream>
 #include <memory>
 #include <stdexcept>
 
 #include "sleeve/sleeve_element/sleeve_element.hpp"
 #include "sleeve/sleeve_element/sleeve_element_factory.hpp"
 #include "sleeve/sleeve_element/sleeve_folder.hpp"
+#include "utils/string/convert.hpp"
 
 namespace puerhlab {
 FileSystem::FileSystem(std::filesystem::path db_path, sl_element_id_t start_id)
@@ -113,6 +116,29 @@ void FileSystem::SyncToDB() {
   }
 }
 
+void FileSystem::WriteSleeveMeta(const std::filesystem::path& meta_path) {
+  nlohmann::json metadata;
+  metadata["db_path"]   = conv::ToBytes(_db_path.wstring());
+  metadata["meta_path"] = conv::ToBytes(_meta_path.wstring());
+  metadata["start_id"]  = _id_gen.GetCurrentID();
+
+  std::ofstream file(meta_path);
+  if (file.is_open()) {
+    file << metadata.dump(4);
+    file.close();
+  }
+}
+
+void FileSystem::ReadSleeveMeta(const std::filesystem::path& meta_path) {
+  std::ifstream file(meta_path);
+  if (file.is_open()) {
+    nlohmann::json metadata;
+    metadata << file;
+    _db_path   = std::filesystem::path(conv::FromBytes(metadata["db_path"]));
+    _meta_path = std::filesystem::path(conv::FromBytes(metadata["meta_path"]));
+    _id_gen.SetStartID(static_cast<uint32_t>(metadata["start_id"]));
+  }
+}
 auto FileSystem::Tree(const std::filesystem::path& path) -> std::wstring {
   return _resolver.Tree(path);
 }

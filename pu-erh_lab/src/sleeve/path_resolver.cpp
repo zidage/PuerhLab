@@ -162,7 +162,8 @@ auto PathResolver::Tree(const std::filesystem::path& path) -> std::wstring {
       tree_str << L"├── " << next_visit_element->_element_name << L" id:"
                << std::to_wstring(next_visit_element->_element_id) << L"\n";
       auto sub_folder = std::static_pointer_cast<SleeveFolder>(next_visit_element);
-      contains        = sub_folder->ListElements();
+      _storage_handler.EnsureChildrenLoaded(sub_folder);
+      contains = sub_folder->ListElements();
       for (auto& e : *contains) {
         dfs_stack.push(
             {e, next_visit.depth + 1, _storage_handler.GetElement(e)->_type == ElementType::FILE});

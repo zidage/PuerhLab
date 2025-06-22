@@ -16,6 +16,8 @@ class IDGenerator {
  public:
   IDGenerator(T start_id) : _counter(start_id) {}
   auto GenerateID() -> T { return ++_counter; }
+  auto GetCurrentID() -> T { return _counter; }
+  void SetStartID(T start_id) { _counter = start_id; }
 };
 };  // namespace IncrID
 };  // namespace puerhlab
