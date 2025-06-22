@@ -42,6 +42,7 @@
 namespace puerhlab {
 enum class ElementType { FILE, FOLDER };
 
+enum class SyncFlag { UNSYNC, MODIFIED, SYNCED };
 /**
  * @brief Abstract objects residing in a sleeve, it can be files or folders
  *
@@ -59,6 +60,8 @@ class SleeveElement {
   uint32_t        _ref_count;
   bool            _pinned;
 
+  SyncFlag        _sync_flag = SyncFlag::UNSYNC;
+
   explicit SleeveElement(sl_element_id_t id, file_name_t element_name);
 
   virtual ~SleeveElement();
@@ -70,6 +73,7 @@ class SleeveElement {
   void         IncrementRefCount();
   void         DecrementRefCount();
   auto         IsShared() -> bool;
+  void         SetSyncFlag(SyncFlag flag);
 
   // virtual void AddElement(std::shared_ptr<SleeveElement>);
   // virtual void CreateFilter(FilterCombo&& filter);

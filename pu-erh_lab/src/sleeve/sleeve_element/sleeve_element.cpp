@@ -37,4 +37,6 @@ void SleeveElement::IncrementRefCount() { ++_ref_count; }
 void SleeveElement::DecrementRefCount() { --_ref_count; }
 
 auto SleeveElement::IsShared() -> bool { return _ref_count > 1; }
+
+void SleeveElement::SetSyncFlag(SyncFlag flag) { _sync_flag = flag; }
 };  // namespace puerhlab

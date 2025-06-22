@@ -3,6 +3,7 @@
 #include <opencv2/core/hal/interface.h>
 
 #include <cstdint>
+#include <filesystem>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -22,7 +23,7 @@ class SleeveManager {
   std::shared_ptr<ImagePoolManager> _image_pool;
 
  public:
-  explicit SleeveManager();
+  explicit SleeveManager(std::filesystem::path db_path);
 
   auto GetFilesystem() -> std::shared_ptr<FileSystem>;
   auto GetView() -> std::shared_ptr<SleeveView>;

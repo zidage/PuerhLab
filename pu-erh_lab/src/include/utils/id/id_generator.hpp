@@ -4,11 +4,6 @@
 #include <cstdint>
 namespace puerhlab {
 namespace IncrID {
-static uint32_t GenerateID() {
-  static uint32_t counter = 1;
-  return counter++;
-}
-
 template <typename IDType>
 concept Incrementable = requires(IDType t) {
   { ++t } -> std::same_as<IDType&>;

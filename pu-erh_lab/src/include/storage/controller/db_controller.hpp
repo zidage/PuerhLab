@@ -28,7 +28,7 @@ class DBController {
       "TIMESTAMP, modified_time "
       "TIMESTAMP, "
       "ref_count BIGINT);"
-      "CREATE TABLE FolderContent (folder_id BIGINT, element_name TEXT, element_id BIGINT);"
+      "CREATE TABLE FolderContent (folder_id BIGINT, element_id BIGINT);"
       "CREATE TABLE FileImage (file_id BIGINT, image_id BIGINT);"
       "CREATE TABLE ComboFolder (combo_id BIGINT, folder_id BIGINT);"
       "CREATE TABLE Filter (combo_id BIGINT, type INTEGER, data JSON);"

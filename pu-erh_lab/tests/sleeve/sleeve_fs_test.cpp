@@ -24,6 +24,7 @@ TEST(SleeveFSTest, InitTest1) {
       FAIL();
     }
   }
+  // Test whether the connection is released
   if (std::filesystem::exists(db_path)) {
     std::filesystem::remove(db_path);
   }
@@ -46,6 +47,7 @@ TEST(SleeveFSTest, AddGetTest1) {
       FAIL();
     }
   }
+  // Test whether the connection is released
   if (std::filesystem::exists(db_path)) {
     std::filesystem::remove(db_path);
   }
@@ -78,7 +80,7 @@ TEST(SleeveFSTest, AddGetTest2) {
   }
 }
 
-TEST(SleeveFSTest, DISABLED_ReInitTest1) {
+TEST(SleeveFSTest, ReInitTest1) {
   {
     try {
       FileSystem fs{db_path, 0};
@@ -94,6 +96,9 @@ TEST(SleeveFSTest, DISABLED_ReInitTest1) {
       EXPECT_FALSE(subfolder == nullptr);
       auto file = fs.Get(L"/Folder/File", false);
       EXPECT_FALSE(file == nullptr);
+
+      fs.SyncToDB();
+      std::cout << "Before reloading:\n" << conv::ToBytes(fs.Tree(L"")) << std::endl;
     } catch (std::exception& e) {
       std::cout << e.what() << std::endl;
       FAIL();
@@ -113,10 +118,16 @@ TEST(SleeveFSTest, DISABLED_ReInitTest1) {
       EXPECT_FALSE(subfolder == nullptr);
       auto file = fs.Get(L"/Folder/File", false);
       EXPECT_FALSE(file == nullptr);
+
+      std::cout << "After reloading:\n" << conv::ToBytes(fs.Tree(L"")) << std::endl;
     } catch (std::exception& e) {
       std::cout << e.what() << std::endl;
       FAIL();
     }
+  }
+
+  if (std::filesystem::exists(db_path)) {
+    std::filesystem::remove(db_path);
   }
 }
 

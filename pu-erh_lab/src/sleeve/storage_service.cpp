@@ -46,4 +46,6 @@ StorageService::StorageService(std::filesystem::path db_path)
 auto StorageService::GetElementController() -> ElementController& { return _el_ctrl; }
 
 auto StorageService::GetImageController() -> ImageController& { return _img_ctrl; }
+
+auto StorageService::GetDBController() -> DBController& { return _db_ctrl; }
 };  // namespace puerhlab

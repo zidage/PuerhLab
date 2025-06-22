@@ -31,11 +31,13 @@ void ElementController::AddElement(const std::shared_ptr<SleeveElement> element)
     auto file = std::static_pointer_cast<SleeveFile>(element);
     _file_service.Insert({file->_element_id, file->_image_id});
   } else if (element->_type == ElementType::FOLDER) {
-    auto folder = std::static_pointer_cast<SleeveFolder>(element);
-    for (auto& content_id : *folder->ListElements()) {
+    auto folder   = std::static_pointer_cast<SleeveFolder>(element);
+    auto contents = folder->ListElements();
+    for (auto& content_id : *contents) {
       _folder_service.Insert({folder->_element_id, content_id});
     }
   }
+  element->_sync_flag = SyncFlag::SYNCED;
 }
 
 /**
@@ -56,7 +58,9 @@ void ElementController::AddFolderContent(sl_element_id_t folder_id, sl_element_i
  * @return std::shared_ptr<SleeveElement>
  */
 auto ElementController::GetElementById(const sl_element_id_t id) -> std::shared_ptr<SleeveElement> {
-  return _element_service.GetElementById(id);
+  auto result = _element_service.GetElementById(id);
+  result->SetSyncFlag(SyncFlag::SYNCED);
+  return result;
 }
 
 auto ElementController::GetFolderContent(const sl_element_id_t folder_id)
@@ -88,6 +92,7 @@ void ElementController::UpdateElement(const std::shared_ptr<SleeveElement> eleme
       AddFolderContent(folder->_element_id, content_id);
     }
   }
+  element->_sync_flag = SyncFlag::SYNCED;
 }
 
 };  // namespace puerhlab

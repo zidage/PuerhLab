@@ -101,6 +101,18 @@ void FileSystem::Copy(std::filesystem::path from, std::filesystem::path dest) {
   from_node->IncrementRefCount();
 }
 
+void FileSystem::SyncToDB() {
+  auto& element_ctrl = _storage_service.GetElementController();
+  for (auto& pair : _storage) {
+    auto element = pair.second;
+    if (element->_sync_flag == SyncFlag::UNSYNC) {
+      element_ctrl.AddElement(element);
+    } else if (element->_sync_flag == SyncFlag::MODIFIED) {
+      element_ctrl.UpdateElement(element);
+    }
+  }
+}
+
 auto FileSystem::Tree(const std::filesystem::path& path) -> std::wstring {
   return _resolver.Tree(path);
 }

@@ -34,6 +34,7 @@ class StorageService {
  public:
   StorageService(std::filesystem::path db_path);
 
+  auto GetDBController() -> DBController&;
   auto GetElementController() -> ElementController&;
   auto GetImageController() -> ImageController&;
 };

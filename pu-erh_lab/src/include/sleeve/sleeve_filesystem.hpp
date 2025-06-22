@@ -44,6 +44,8 @@ class FileSystem {
   auto Get(sl_element_id_t id) -> std::shared_ptr<SleeveElement>;
   void Copy(std::filesystem::path from, std::filesystem::path dest);
 
+  void SyncToDB();
+
   auto Tree(const std::filesystem::path& path) -> std::wstring;
 };
 };  // namespace puerhlab

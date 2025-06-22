@@ -102,6 +102,9 @@ auto PathResolver::ResolveForWrite(const std::filesystem::path& path)
   if (current->IsShared()) {
     current = CoWHandler(current, std::static_pointer_cast<SleeveFolder>(current_parent));
   }
+  if (current->_sync_flag == SyncFlag::SYNCED) {
+    current->SetSyncFlag(SyncFlag::MODIFIED);
+  }
   return current;
 }
 
@@ -114,6 +117,9 @@ auto PathResolver::CoWHandler(const std::shared_ptr<SleeveElement> to_copy,
   parent_folder->UpdateElementMap(copied->_element_name, old_id, copied->_element_id);
   copied->IncrementRefCount();
   _storage_handler.AddToStorage(copied);
+  if (to_copy->_sync_flag == SyncFlag::SYNCED) {
+    to_copy->SetSyncFlag(SyncFlag::MODIFIED);
+  }
   return copied;
 }
 

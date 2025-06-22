@@ -24,12 +24,13 @@ namespace puerhlab {
  * @brief Ad-hoc constructor for temporary sleeve, e.g. folder preview
  *
  */
-SleeveManager::SleeveManager() {
+SleeveManager::SleeveManager(std::filesystem::path db_path) {
   // Update the application clock
   TimeProvider::Refresh();
-  // _fs       = std::make_shared<FileSystem>(0);
-  // _image_pool = std::make_shared<ImagePoolManager>(128, 4);
-  // _view       = std::make_shared<SleeveView>(_fs, _image_pool);
+  _fs = std::make_shared<FileSystem>(db_path, 0);
+  _fs->InitRoot();
+  _image_pool = std::make_shared<ImagePoolManager>(128, 4);
+  _view       = std::make_shared<SleeveView>(_fs, _image_pool);
 }
 
 /**
