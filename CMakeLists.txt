@@ -29,6 +29,7 @@ FetchContent_Declare(
 )
 # For Windows: Prevent overriding the parent project's compiler/linker settings
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+set(GOOGLETEST_ENABLE_FUZZTEST ON CACHE BOOL "Enable fuzztest support")
 
 FetchContent_MakeAvailable(googletest)
 enable_testing() 

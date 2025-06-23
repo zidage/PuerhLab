@@ -57,10 +57,10 @@ auto PathResolver::Resolve(const std::filesystem::path& path) -> std::shared_ptr
   std::shared_ptr<SleeveElement> current    = _root;
   auto                           visit_path = path.relative_path();
 
-  // auto                           cached_id  = _directory_cache.AccessElement(path.wstring());
-  // if (cached_id.has_value()) {
-  //   return _storage_handler.GetElement(cached_id.value());
-  // }
+  auto                           cached_id  = _directory_cache.AccessElement(path.wstring());
+  if (cached_id.has_value()) {
+    return _storage_handler.GetElement(cached_id.value());
+  }
 
   for (const auto& part : visit_path) {
     if (current->_type == ElementType::FILE) {
@@ -78,7 +78,7 @@ auto PathResolver::Resolve(const std::filesystem::path& path) -> std::shared_ptr
 
     current = _storage_handler.GetElement(next_id.value());
   }
-  //_directory_cache.RecordAccess(path.wstring(), current->_element_id);
+  _directory_cache.RecordAccess(path.wstring(), current->_element_id);
   return current;
 }
 
@@ -113,7 +113,7 @@ auto PathResolver::ResolveForWrite(const std::filesystem::path& path)
   if (current->_sync_flag == SyncFlag::SYNCED) {
     current->SetSyncFlag(SyncFlag::MODIFIED);
   }
-  //_directory_cache.RecordAccess(path.wstring(), current->_element_id);
+  _directory_cache.RecordAccess(path.wstring(), current->_element_id);
   return current;
 }
 
