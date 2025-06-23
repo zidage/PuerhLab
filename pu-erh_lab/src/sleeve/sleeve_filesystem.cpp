@@ -97,11 +97,9 @@ void FileSystem::Copy(std::filesystem::path from, std::filesystem::path dest) {
     throw std::runtime_error("Filesystem: Origin path or destination path does not exist");
   }
 
-  auto from_node = _resolver.ResolveForWrite(from);
+  auto from_node = _resolver.Resolve(from);
   auto dest_node = std::static_pointer_cast<SleeveFolder>(_resolver.ResolveForWrite(dest));
   dest_node->AddElementToMap(from_node);
-
-  from_node->IncrementRefCount();
 }
 
 void FileSystem::SyncToDB() {
@@ -118,6 +116,7 @@ void FileSystem::SyncToDB() {
 
 void FileSystem::WriteSleeveMeta(const std::filesystem::path& meta_path) {
   nlohmann::json metadata;
+  _meta_path            = meta_path;
   metadata["db_path"]   = conv::ToBytes(_db_path.wstring());
   metadata["meta_path"] = conv::ToBytes(_meta_path.wstring());
   metadata["start_id"]  = _id_gen.GetCurrentID();

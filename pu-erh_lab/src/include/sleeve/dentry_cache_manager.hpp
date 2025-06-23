@@ -29,9 +29,9 @@ class DCacheManager {
   explicit DCacheManager();
   explicit DCacheManager(uint32_t capacity);
 
-  auto AccessElement(const sl_path_t& path) -> std::optional<sl_element_id_t>;
-  void RecordAccess(const sl_path_t& path, const sl_element_id_t element_id);
-  void RemoveRecord(const sl_path_t& path);
+  auto AccessElement(const sl_path_t path) -> std::optional<sl_element_id_t>;
+  void RecordAccess(const sl_path_t path, const sl_element_id_t element_id);
+  void RemoveRecord(const sl_path_t path);
   auto Evict() -> std::optional<sl_element_id_t>;
   auto Contains(const sl_path_t& path) -> bool;
 

@@ -27,7 +27,7 @@ auto DCacheManager::Contains(const sl_path_t& path) -> bool {
  * @return std::optional<sl_element_id_t> an element_id to the element or null if path not presents
  * in the cache
  */
-auto DCacheManager::AccessElement(const sl_path_t& path) -> std::optional<sl_element_id_t> {
+auto DCacheManager::AccessElement(const sl_path_t path) -> std::optional<sl_element_id_t> {
   auto it = _cache_map.find(path);
   if (it == _cache_map.end()) {
     return std::nullopt;
@@ -36,7 +36,7 @@ auto DCacheManager::AccessElement(const sl_path_t& path) -> std::optional<sl_ele
   return it->second->second;
 }
 
-void DCacheManager::RecordAccess(const sl_path_t& path, const sl_element_id_t element_id) {
+void DCacheManager::RecordAccess(const sl_path_t path, const sl_element_id_t element_id) {
   auto it = _cache_map.find(path);
   if (it != _cache_map.end()) {
     _cache_list.splice(_cache_list.begin(), _cache_list, it->second);
@@ -53,7 +53,7 @@ void DCacheManager::RecordAccess(const sl_path_t& path, const sl_element_id_t el
   }
 }
 
-void DCacheManager::RemoveRecord(const sl_path_t& path) {
+void DCacheManager::RemoveRecord(const sl_path_t path) {
   auto it = _cache_map.find(path);
   if (it != _cache_map.end()) {
     _cache_list.erase(it->second);

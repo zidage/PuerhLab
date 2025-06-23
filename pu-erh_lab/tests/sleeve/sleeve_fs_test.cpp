@@ -12,7 +12,8 @@
 std::filesystem::path db_path(
     "D:\\Projects\\pu-erh_lab\\pu-erh_lab\\tests\\resources\\temp_folder\\test.db");
 
-std::filesystem::path meta_path("D:\\Projects\\pu-erh_lab\\pu-erh_lab\\tests\\resources\\temp_folder\\meta.json");
+std::filesystem::path meta_path(
+    "D:\\Projects\\pu-erh_lab\\pu-erh_lab\\tests\\resources\\temp_folder\\meta.json");
 
 namespace puerhlab {
 TEST(SleeveFSTest, InitTest1) {
@@ -222,11 +223,8 @@ TEST(SleeveFSTest, CoWTest1) {
     fs.Create(L"/Folder/Subfolder", L"Windows", ElementType::FILE);
 
     std::cout << conv::ToBytes(fs.Tree(L"/"));
-  } catch (std::runtime_error& e) {
-    std::cout << "Unexpected exception: " << e.what() << std::endl;
-    FAIL();
   } catch (std::exception& e) {
-    std::cout << e.what() << std::endl;
+    std::cout << "Unexpected exception: " << e.what() << std::endl;
     FAIL();
   }
 
@@ -252,6 +250,46 @@ TEST(SleeveFSTest, CoWTest2) {
               "Filesystem: Target folder cannot be a subfolder of the original folder");
   } catch (std::exception& e) {
     std::cout << e.what() << std::endl;
+    FAIL();
+  }
+
+  if (std::filesystem::exists(db_path)) {
+    std::filesystem::remove(db_path);
+  }
+}
+
+TEST(SleeveFSTest, CoWTest3) {
+  if (std::filesystem::exists(db_path)) {
+    std::filesystem::remove(db_path);
+  }
+  try {
+    FileSystem fs{db_path, 0};
+    fs.InitRoot();
+
+    fs.Create(L"", L"B", ElementType::FOLDER);
+    fs.Create(L"", L"C", ElementType::FOLDER);
+    fs.Create(L"/B", L"D", ElementType::FOLDER);
+    fs.Create(L"/C", L"E", ElementType::FOLDER);
+    fs.Copy(L"/C", L"/B/D");
+    fs.Copy(L"/B/D", L"/C/E");
+
+    std::cout << "Before reloading:\n" << conv::ToBytes(fs.Tree(L"/"));
+    fs.SyncToDB();
+    fs.WriteSleeveMeta(meta_path);
+
+  } catch (std::exception& e) {
+    std::cout << "Unexpected exception: " << e.what() << std::endl;
+    FAIL();
+  }
+
+  try {
+    FileSystem fs{db_path, 0};
+    fs.ReadSleeveMeta(meta_path);
+    fs.InitRoot();
+    
+    std::cout << "After reloading:\n" << conv::ToBytes(fs.Tree(L"/"));
+  } catch (std::exception& e) {
+    std::cout << "Unexpected exception: " << e.what() << std::endl;
     FAIL();
   }
 
@@ -316,4 +354,5 @@ TEST(SleeveFSTest, ReCoWTest1) {
     std::filesystem::remove(db_path);
   }
 }
+
 };  // namespace puerhlab

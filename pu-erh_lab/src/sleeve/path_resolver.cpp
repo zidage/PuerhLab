@@ -35,7 +35,7 @@ auto PathResolver::IsSubpath(const std::filesystem::path& base, const std::files
 auto PathResolver::Contains(const std::filesystem::path& path) -> bool {
   try {
     Resolve(path);
-  } catch (std::exception& e) {
+  } catch (...) {
     return false;
   }
   return true;
@@ -47,7 +47,7 @@ auto PathResolver::Contains(const std::filesystem::path& path, ElementType type)
     if (target->_type != type) {
       return false;
     }
-  } catch (std::exception& e) {
+  } catch (...) {
     return false;
   }
   return true;
@@ -56,6 +56,12 @@ auto PathResolver::Contains(const std::filesystem::path& path, ElementType type)
 auto PathResolver::Resolve(const std::filesystem::path& path) -> std::shared_ptr<SleeveElement> {
   std::shared_ptr<SleeveElement> current    = _root;
   auto                           visit_path = path.relative_path();
+
+  // auto                           cached_id  = _directory_cache.AccessElement(path.wstring());
+  // if (cached_id.has_value()) {
+  //   return _storage_handler.GetElement(cached_id.value());
+  // }
+
   for (const auto& part : visit_path) {
     if (current->_type == ElementType::FILE) {
       // TODO: add customized exception class
@@ -72,6 +78,7 @@ auto PathResolver::Resolve(const std::filesystem::path& path) -> std::shared_ptr
 
     current = _storage_handler.GetElement(next_id.value());
   }
+  //_directory_cache.RecordAccess(path.wstring(), current->_element_id);
   return current;
 }
 
@@ -80,6 +87,7 @@ auto PathResolver::ResolveForWrite(const std::filesystem::path& path)
   std::shared_ptr<SleeveElement> current        = _root;
   std::shared_ptr<SleeveElement> current_parent = nullptr;
   auto                           visit_path     = path.relative_path();
+
   for (const auto& part : visit_path) {
     if (current->_type == ElementType::FILE) {
       throw std::runtime_error("Path Resolver: Illegal path.");
@@ -96,7 +104,7 @@ auto PathResolver::ResolveForWrite(const std::filesystem::path& path)
     if (!next_id.has_value()) {
       throw std::runtime_error("Path Resolver: Illegal path. Target does not exist");
     }
-    current_parent = current;
+    current_parent = folder;
     current        = _storage_handler.GetElement(next_id.value());
   }
   if (current->IsShared()) {
@@ -105,6 +113,7 @@ auto PathResolver::ResolveForWrite(const std::filesystem::path& path)
   if (current->_sync_flag == SyncFlag::SYNCED) {
     current->SetSyncFlag(SyncFlag::MODIFIED);
   }
+  //_directory_cache.RecordAccess(path.wstring(), current->_element_id);
   return current;
 }
 
@@ -114,6 +123,16 @@ auto PathResolver::CoWHandler(const std::shared_ptr<SleeveElement> to_copy,
   auto old_id = to_copy->_element_id;
   to_copy->DecrementRefCount();
   auto copied = to_copy->Copy(_id_gen.GenerateID());
+  // Increment every child's ref count
+  if (copied->_type == ElementType::FOLDER) {
+    auto copied_folder = std::static_pointer_cast<SleeveFolder>(copied);
+    _storage_handler.EnsureChildrenLoaded(copied_folder);
+    auto contents = copied_folder->ListElements();
+    for (auto& e : *contents) {
+      auto element = _storage_handler.GetElement(e);
+      element->IncrementRefCount();
+    }
+  }
   parent_folder->UpdateElementMap(copied->_element_name, old_id, copied->_element_id);
   copied->IncrementRefCount();
   _storage_handler.AddToStorage(copied);
