@@ -12,18 +12,20 @@
 #include "sleeve/sleeve_element/sleeve_folder.hpp"
 #include "storage/controller/sleeve/element_controller.hpp"
 #include "storage_service.hpp"
+#include "type/type.hpp"
+#include "utils/cache/lru_cache.hpp"
 #include "utils/id/id_generator.hpp"
 
 namespace puerhlab {
 class PathResolver {
  private:
-  std::shared_ptr<SleeveFolder>  _root;
-  DCacheManager                  _directory_cache;
-  NodeStorageHandler&            _storage_handler;
-  IncrID::IDGenerator<uint32_t>& _id_gen;
+  std::shared_ptr<SleeveFolder>        _root;
+  LRUCache<sl_path_t, sl_element_id_t> _directory_cache;
+  NodeStorageHandler&                  _storage_handler;
+  IncrID::IDGenerator<uint32_t>&       _id_gen;
 
-  auto                           CoWHandler(const std::shared_ptr<SleeveElement> to_copy,
-                                            const std::shared_ptr<SleeveFolder>  parent_folder)
+  auto                                 CoWHandler(const std::shared_ptr<SleeveElement> to_copy,
+                                                  const std::shared_ptr<SleeveFolder>  parent_folder)
       -> std::shared_ptr<SleeveElement>;
 
  public:
