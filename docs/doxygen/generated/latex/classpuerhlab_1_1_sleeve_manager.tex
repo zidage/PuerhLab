@@ -1,0 +1,80 @@
+\doxysection{puerhlab\+::Sleeve\+Manager Class Reference}
+\hypertarget{classpuerhlab_1_1_sleeve_manager}{}\label{classpuerhlab_1_1_sleeve_manager}\index{puerhlab::SleeveManager@{puerhlab::SleeveManager}}
+\doxysubsubsection*{Public Member Functions}
+\begin{DoxyCompactItemize}
+\item 
+\Hypertarget{classpuerhlab_1_1_sleeve_manager_a6f3981c47f81a3bbeb95c536e00554e7}\label{classpuerhlab_1_1_sleeve_manager_a6f3981c47f81a3bbeb95c536e00554e7} 
+{\bfseries Sleeve\+Manager} (std\+::filesystem\+::path db\+\_\+path)
+\begin{DoxyCompactList}\small\item\em Ad-\/hoc constructor for temporary sleeve, e.\+g. folder preview. \end{DoxyCompactList}\item 
+auto \mbox{\hyperlink{classpuerhlab_1_1_sleeve_manager_a6758461c29dc2321dce9c78783e471a8}{Get\+Filesystem}} () -\/$>$ std\+::shared\+\_\+ptr$<$ \mbox{\hyperlink{classpuerhlab_1_1_file_system}{File\+System}} $>$
+\begin{DoxyCompactList}\small\item\em Return a shared pointer to the sleeve file system interface. \end{DoxyCompactList}\item 
+auto \mbox{\hyperlink{classpuerhlab_1_1_sleeve_manager_aa0a5100bc85825682acd23b4e79b7019}{Get\+View}} () -\/$>$ std\+::shared\+\_\+ptr$<$ \mbox{\hyperlink{classpuerhlab_1_1_sleeve_view}{Sleeve\+View}} $>$
+\begin{DoxyCompactList}\small\item\em Return a shared pointer to a sleeve view instance. \end{DoxyCompactList}\item 
+\Hypertarget{classpuerhlab_1_1_sleeve_manager_a48901858bdd984c35435174a6d17ddef}\label{classpuerhlab_1_1_sleeve_manager_a48901858bdd984c35435174a6d17ddef} 
+auto {\bfseries Get\+Pool} () -\/$>$ std\+::shared\+\_\+ptr$<$ \mbox{\hyperlink{classpuerhlab_1_1_image_pool_manager}{Image\+Pool\+Manager}} $>$
+\item 
+\Hypertarget{classpuerhlab_1_1_sleeve_manager_a60cc4518082f3f6cebc0eb5ba529a8fd}\label{classpuerhlab_1_1_sleeve_manager_a60cc4518082f3f6cebc0eb5ba529a8fd} 
+auto {\bfseries Get\+Img\+Count} () -\/$>$ uint32\+\_\+t
+\item 
+auto \mbox{\hyperlink{classpuerhlab_1_1_sleeve_manager_a4c908a5d8d6848f2b77f1ebdf862893b}{Load\+To\+Path}} (std\+::vector$<$ image\+\_\+path\+\_\+t $>$ img\+\_\+os\+\_\+path, sl\+\_\+path\+\_\+t dest) -\/$>$ uint32\+\_\+t
+\begin{DoxyCompactList}\small\item\em Load a batch of images to the destination path. \end{DoxyCompactList}\item 
+\Hypertarget{classpuerhlab_1_1_sleeve_manager_ada2891934013542b3ab9e0ae4bb2f9df}\label{classpuerhlab_1_1_sleeve_manager_ada2891934013542b3ab9e0ae4bb2f9df} 
+auto {\bfseries Restore\+Sleeve\+From\+DB} (sleeve\+\_\+id\+\_\+t sleeve\+\_\+id) -\/$>$ std\+::shared\+\_\+ptr$<$ \mbox{\hyperlink{classpuerhlab_1_1_file_system}{File\+System}} $>$
+\end{DoxyCompactItemize}
+
+
+\label{doc-func-members}
+\Hypertarget{classpuerhlab_1_1_sleeve_manager_doc-func-members}
+\doxysubsection{Member Function Documentation}
+\Hypertarget{classpuerhlab_1_1_sleeve_manager_a6758461c29dc2321dce9c78783e471a8}\index{puerhlab::SleeveManager@{puerhlab::SleeveManager}!GetFilesystem@{GetFilesystem}}
+\index{GetFilesystem@{GetFilesystem}!puerhlab::SleeveManager@{puerhlab::SleeveManager}}
+\doxysubsubsection{\texorpdfstring{GetFilesystem()}{GetFilesystem()}}
+{\footnotesize\ttfamily \label{classpuerhlab_1_1_sleeve_manager_a6758461c29dc2321dce9c78783e471a8} 
+auto puerhlab\+::\+Sleeve\+Manager\+::\+Get\+Filesystem (\begin{DoxyParamCaption}{}{}\end{DoxyParamCaption}) -\/$>$ std\+::shared\+\_\+ptr$<$\mbox{\hyperlink{classpuerhlab_1_1_file_system}{File\+System}}$>$}
+
+
+
+Return a shared pointer to the sleeve file system interface. 
+
+\begin{DoxyReturn}{Returns}
+std\+::shared\+\_\+ptr$<$\+File\+System$>$ 
+\end{DoxyReturn}
+\Hypertarget{classpuerhlab_1_1_sleeve_manager_aa0a5100bc85825682acd23b4e79b7019}\index{puerhlab::SleeveManager@{puerhlab::SleeveManager}!GetView@{GetView}}
+\index{GetView@{GetView}!puerhlab::SleeveManager@{puerhlab::SleeveManager}}
+\doxysubsubsection{\texorpdfstring{GetView()}{GetView()}}
+{\footnotesize\ttfamily \label{classpuerhlab_1_1_sleeve_manager_aa0a5100bc85825682acd23b4e79b7019} 
+auto puerhlab\+::\+Sleeve\+Manager\+::\+Get\+View (\begin{DoxyParamCaption}{}{}\end{DoxyParamCaption}) -\/$>$ std\+::shared\+\_\+ptr$<$\mbox{\hyperlink{classpuerhlab_1_1_sleeve_view}{Sleeve\+View}}$>$}
+
+
+
+Return a shared pointer to a sleeve view instance. 
+
+\begin{DoxyReturn}{Returns}
+std\+::shared\+\_\+ptr$<$\+Sleeve\+View$>$ 
+\end{DoxyReturn}
+\Hypertarget{classpuerhlab_1_1_sleeve_manager_a4c908a5d8d6848f2b77f1ebdf862893b}\index{puerhlab::SleeveManager@{puerhlab::SleeveManager}!LoadToPath@{LoadToPath}}
+\index{LoadToPath@{LoadToPath}!puerhlab::SleeveManager@{puerhlab::SleeveManager}}
+\doxysubsubsection{\texorpdfstring{LoadToPath()}{LoadToPath()}}
+{\footnotesize\ttfamily \label{classpuerhlab_1_1_sleeve_manager_a4c908a5d8d6848f2b77f1ebdf862893b} 
+auto puerhlab\+::\+Sleeve\+Manager\+::\+Load\+To\+Path (\begin{DoxyParamCaption}\item[{std\+::vector$<$ image\+\_\+path\+\_\+t $>$}]{img\+\_\+os\+\_\+paths}{, }\item[{sl\+\_\+path\+\_\+t}]{dest}{}\end{DoxyParamCaption}) -\/$>$ uint32\+\_\+t}
+
+
+
+Load a batch of images to the destination path. 
+
+
+\begin{DoxyParams}{Parameters}
+{\em img\+\_\+os\+\_\+paths} & \\
+\hline
+{\em dest} & \\
+\hline
+\end{DoxyParams}
+\begin{DoxyReturn}{Returns}
+uint32\+\_\+t 
+\end{DoxyReturn}
+
+
+The documentation for this class was generated from the following files\+:\begin{DoxyCompactItemize}
+\item 
+D\+:/\+Projects/pu-\/erh\+\_\+lab/pu-\/erh\+\_\+lab/src/include/sleeve/sleeve\+\_\+manager.\+hpp\item 
+D\+:/\+Projects/pu-\/erh\+\_\+lab/pu-\/erh\+\_\+lab/src/sleeve/sleeve\+\_\+manager.\+cpp\end{DoxyCompactItemize}

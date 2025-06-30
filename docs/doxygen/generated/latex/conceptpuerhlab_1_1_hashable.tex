@@ -1,0 +1,11 @@
+\doxysection{puerhlab\+::Hashable Concept Reference}
+\hypertarget{conceptpuerhlab_1_1_hashable}{}\label{conceptpuerhlab_1_1_hashable}\index{puerhlab::Hashable@{puerhlab::Hashable}}
+\doxysubsection{Concept definition}
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{\textcolor{keyword}{template}<\textcolor{keyword}{typename}\ K>}
+\DoxyCodeLine{\textcolor{keyword}{concept\ }\mbox{\hyperlink{conceptpuerhlab_1_1_hashable}{puerhlab::Hashable}}\ =\ \ std::copy\_constructible<K>\ \&\&\ std::equality\_comparable<K>\ \&\&\ \textcolor{keyword}{requires}(K\ key)\ \{}
+\DoxyCodeLine{\ \ \{\ std::hash<K>\{\}(key)\ \}\ -\/>\ std::convertible\_to<std::size\_t>;}
+\DoxyCodeLine{\}}
+
+\end{DoxyCode}

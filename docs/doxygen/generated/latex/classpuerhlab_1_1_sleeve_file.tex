@@ -1,0 +1,112 @@
+\doxysection{puerhlab\+::Sleeve\+File Class Reference}
+\hypertarget{classpuerhlab_1_1_sleeve_file}{}\label{classpuerhlab_1_1_sleeve_file}\index{puerhlab::SleeveFile@{puerhlab::SleeveFile}}
+
+
+A type of element, it contains an image file, its edit history, and other metadata used in this software.  
+
+
+
+
+{\ttfamily \#include $<$sleeve\+\_\+file.\+hpp$>$}
+
+Inheritance diagram for puerhlab\+::Sleeve\+File\+:\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[height=2.000000cm]{classpuerhlab_1_1_sleeve_file}
+\end{center}
+\end{figure}
+\doxysubsubsection*{Public Member Functions}
+\begin{DoxyCompactItemize}
+\item 
+\Hypertarget{classpuerhlab_1_1_sleeve_file_ad0890e1c3f08f1b7c874db63ceba8924}\label{classpuerhlab_1_1_sleeve_file_ad0890e1c3f08f1b7c874db63ceba8924} 
+{\bfseries Sleeve\+File} (sl\+\_\+element\+\_\+id\+\_\+t id, file\+\_\+name\+\_\+t element\+\_\+name)
+\item 
+\Hypertarget{classpuerhlab_1_1_sleeve_file_a14b40a7137c80733a4d77413a1f6724e}\label{classpuerhlab_1_1_sleeve_file_a14b40a7137c80733a4d77413a1f6724e} 
+{\bfseries Sleeve\+File} (sl\+\_\+element\+\_\+id\+\_\+t id, file\+\_\+name\+\_\+t element\+\_\+name, std\+::shared\+\_\+ptr$<$ \mbox{\hyperlink{classpuerhlab_1_1_image}{Image}} $>$ image)
+\item 
+auto \mbox{\hyperlink{classpuerhlab_1_1_sleeve_file_abf4e9137185d467666ceb0133c7cf360}{Clear}} () -\/$>$ bool
+\item 
+auto \mbox{\hyperlink{classpuerhlab_1_1_sleeve_file_a87fae7ff127855849f34a156874181f4}{Copy}} (sl\+\_\+element\+\_\+id\+\_\+t new\+\_\+id) const -\/$>$ std\+::shared\+\_\+ptr$<$ \mbox{\hyperlink{classpuerhlab_1_1_sleeve_element}{Sleeve\+Element}} $>$
+\item 
+\Hypertarget{classpuerhlab_1_1_sleeve_file_a0fa8f1e3af31080dfb1b5a4519a55e11}\label{classpuerhlab_1_1_sleeve_file_a0fa8f1e3af31080dfb1b5a4519a55e11} 
+auto {\bfseries Get\+Image} () -\/$>$ std\+::shared\+\_\+ptr$<$ \mbox{\hyperlink{classpuerhlab_1_1_image}{Image}} $>$
+\item 
+\Hypertarget{classpuerhlab_1_1_sleeve_file_a6fee810d4e96b4dcd51c9cd5323f17ee}\label{classpuerhlab_1_1_sleeve_file_a6fee810d4e96b4dcd51c9cd5323f17ee} 
+void {\bfseries Set\+Image} (const std\+::shared\+\_\+ptr$<$ \mbox{\hyperlink{classpuerhlab_1_1_image}{Image}} $>$ img)
+\end{DoxyCompactItemize}
+\doxysubsection*{Public Member Functions inherited from \mbox{\hyperlink{classpuerhlab_1_1_sleeve_element}{puerhlab\+::\+Sleeve\+Element}}}
+\begin{DoxyCompactItemize}
+\item 
+{\bfseries Sleeve\+Element} (sl\+\_\+element\+\_\+id\+\_\+t id, file\+\_\+name\+\_\+t element\+\_\+name)
+\item 
+void {\bfseries Set\+Add\+Time} ()
+\item 
+void {\bfseries Set\+Last\+Modified\+Time} ()
+\item 
+void {\bfseries Increment\+Ref\+Count} ()
+\item 
+void {\bfseries Decrement\+Ref\+Count} ()
+\item 
+auto {\bfseries Is\+Shared} () -\/$>$ bool
+\item 
+void {\bfseries Set\+Sync\+Flag} (Sync\+Flag flag)
+\end{DoxyCompactItemize}
+\doxysubsubsection*{Public Attributes}
+\begin{DoxyCompactItemize}
+\item 
+\Hypertarget{classpuerhlab_1_1_sleeve_file_ab411af8b007b8bc60d5ba82819851f32}\label{classpuerhlab_1_1_sleeve_file_ab411af8b007b8bc60d5ba82819851f32} 
+image\+\_\+id\+\_\+t {\bfseries \+\_\+image\+\_\+id}
+\end{DoxyCompactItemize}
+\doxysubsection*{Public Attributes inherited from \mbox{\hyperlink{classpuerhlab_1_1_sleeve_element}{puerhlab\+::\+Sleeve\+Element}}}
+\begin{DoxyCompactItemize}
+\item 
+sl\+\_\+element\+\_\+id\+\_\+t {\bfseries \+\_\+element\+\_\+id}
+\item 
+Element\+Type {\bfseries \+\_\+type}
+\item 
+file\+\_\+name\+\_\+t {\bfseries \+\_\+element\+\_\+name}
+\item 
+std\+::time\+\_\+t {\bfseries \+\_\+added\+\_\+time}
+\item 
+std\+::time\+\_\+t {\bfseries \+\_\+last\+\_\+modified\+\_\+time}
+\item 
+uint32\+\_\+t {\bfseries \+\_\+ref\+\_\+count}
+\item 
+bool {\bfseries \+\_\+pinned}
+\item 
+Sync\+Flag {\bfseries \+\_\+sync\+\_\+flag} = Sync\+Flag\+::\+UNSYNC
+\end{DoxyCompactItemize}
+
+
+\doxysubsection{Detailed Description}
+A type of element, it contains an image file, its edit history, and other metadata used in this software. 
+
+\label{doc-func-members}
+\Hypertarget{classpuerhlab_1_1_sleeve_file_doc-func-members}
+\doxysubsection{Member Function Documentation}
+\Hypertarget{classpuerhlab_1_1_sleeve_file_abf4e9137185d467666ceb0133c7cf360}\index{puerhlab::SleeveFile@{puerhlab::SleeveFile}!Clear@{Clear}}
+\index{Clear@{Clear}!puerhlab::SleeveFile@{puerhlab::SleeveFile}}
+\doxysubsubsection{\texorpdfstring{Clear()}{Clear()}}
+{\footnotesize\ttfamily \label{classpuerhlab_1_1_sleeve_file_abf4e9137185d467666ceb0133c7cf360} 
+auto puerhlab\+::\+Sleeve\+File\+::\+Clear (\begin{DoxyParamCaption}{}{}\end{DoxyParamCaption}) -\/$>$ bool\hspace{0.3cm}{\ttfamily [virtual]}}
+
+
+
+Reimplemented from \mbox{\hyperlink{classpuerhlab_1_1_sleeve_element}{puerhlab\+::\+Sleeve\+Element}}.
+
+\Hypertarget{classpuerhlab_1_1_sleeve_file_a87fae7ff127855849f34a156874181f4}\index{puerhlab::SleeveFile@{puerhlab::SleeveFile}!Copy@{Copy}}
+\index{Copy@{Copy}!puerhlab::SleeveFile@{puerhlab::SleeveFile}}
+\doxysubsubsection{\texorpdfstring{Copy()}{Copy()}}
+{\footnotesize\ttfamily \label{classpuerhlab_1_1_sleeve_file_a87fae7ff127855849f34a156874181f4} 
+auto puerhlab\+::\+Sleeve\+File\+::\+Copy (\begin{DoxyParamCaption}\item[{sl\+\_\+element\+\_\+id\+\_\+t}]{new\+\_\+id}{}\end{DoxyParamCaption}) const -\/$>$ std\+::shared\+\_\+ptr$<$\mbox{\hyperlink{classpuerhlab_1_1_sleeve_element}{Sleeve\+Element}}$>$\hspace{0.3cm}{\ttfamily [virtual]}}
+
+
+
+Reimplemented from \mbox{\hyperlink{classpuerhlab_1_1_sleeve_element}{puerhlab\+::\+Sleeve\+Element}}.
+
+
+
+The documentation for this class was generated from the following files\+:\begin{DoxyCompactItemize}
+\item 
+D\+:/\+Projects/pu-\/erh\+\_\+lab/pu-\/erh\+\_\+lab/src/include/sleeve/sleeve\+\_\+element/sleeve\+\_\+file.\+hpp\item 
+D\+:/\+Projects/pu-\/erh\+\_\+lab/pu-\/erh\+\_\+lab/src/sleeve/sleeve\+\_\+element/sleeve\+\_\+file.\+cpp\end{DoxyCompactItemize}

@@ -1,0 +1,56 @@
+\doxysection{base\+\_\+mapper.\+hpp}
+\hypertarget{base__mapper_8hpp_source}{}\label{base__mapper_8hpp_source}\index{D:/Projects/pu-\/erh\_lab/pu-\/erh\_lab/src/include/storage/mapper/sleeve/base/base\_mapper.hpp@{D:/Projects/pu-\/erh\_lab/pu-\/erh\_lab/src/include/storage/mapper/sleeve/base/base\_mapper.hpp}}
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{00001\ \textcolor{preprocessor}{\#pragma\ once}}
+\DoxyCodeLine{00002\ }
+\DoxyCodeLine{00003\ \textcolor{preprocessor}{\#include\ <array>}}
+\DoxyCodeLine{00004\ }
+\DoxyCodeLine{00005\ \textcolor{preprocessor}{\#include\ "{}storage/mapper/duckorm/duckdb\_types.hpp"{}}}
+\DoxyCodeLine{00006\ \textcolor{preprocessor}{\#include\ "{}storage/mapper/mapper\_interface.hpp"{}}}
+\DoxyCodeLine{00007\ \textcolor{preprocessor}{\#include\ "{}type/type.hpp"{}}}
+\DoxyCodeLine{00008\ }
+\DoxyCodeLine{00009\ \textcolor{keyword}{namespace\ }puerhlab\ \{}
+\DoxyCodeLine{00010\ \textcolor{comment}{//\ CREATE\ TABLE\ Sleeve\ (id\ BIGINT\ PRIMARY\ KEY);}}
+\DoxyCodeLine{00011\ \textcolor{keyword}{struct\ }\mbox{\hyperlink{structpuerhlab_1_1_base_mapper_params}{BaseMapperParams}}\ \{}
+\DoxyCodeLine{00012\ \ \ sleeve\_id\_t\ id;}
+\DoxyCodeLine{00013\ \};}
+\DoxyCodeLine{00014\ \textcolor{keyword}{class\ }\mbox{\hyperlink{classpuerhlab_1_1_base_mapper}{BaseMapper}}\ :\ \textcolor{keyword}{public}\ MapperInterface<BaseMapper,\ BaseMapperParams,\ sleeve\_id\_t>,}
+\DoxyCodeLine{00015\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{keyword}{public}\ \mbox{\hyperlink{structpuerhlab_1_1_field_reflectable}{FieldReflectable}}<BaseMapper>\ \{}
+\DoxyCodeLine{00016\ \ \textcolor{keyword}{private}:}
+\DoxyCodeLine{00017\ \ \ \textcolor{keyword}{static}\ \textcolor{keyword}{constexpr}\ uint32\_t\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \_field\_count\ \ \ \ \ =\ 1;}
+\DoxyCodeLine{00018\ \ \ \textcolor{keyword}{static}\ \textcolor{keyword}{constexpr}\ \textcolor{keyword}{const}\ \textcolor{keywordtype}{char}*\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ table\_name\ \ \ \ \ \ \ =\ \textcolor{stringliteral}{"{}Sleeve"{}};}
+\DoxyCodeLine{00019\ \ \ \textcolor{keyword}{static}\ \textcolor{keyword}{constexpr}\ \textcolor{keyword}{const}\ \textcolor{keywordtype}{char}*\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ prime\_key\_clause\ =\ \textcolor{stringliteral}{"{}id=\{\}"{}};}
+\DoxyCodeLine{00020\ }
+\DoxyCodeLine{00021\ \ \ \textcolor{keyword}{static}\ \textcolor{keyword}{constexpr}\ std::array<duckorm::DuckFieldDesc,\ \_field\_count>\ \_field\_descs\ \ \ \ \ =\ \{}
+\DoxyCodeLine{00022\ \ \ \ \ \ \ FIELD(\mbox{\hyperlink{structpuerhlab_1_1_base_mapper_params}{BaseMapperParams}},\ \textcolor{keywordtype}{id},\ UINT32)\};}
+\DoxyCodeLine{00023\ }
+\DoxyCodeLine{00024\ \ \textcolor{keyword}{public}:}
+\DoxyCodeLine{00025\ \ \ \textcolor{keyword}{static}\ \textcolor{keyword}{auto}\ FromRawData(std::vector<duckorm::VarTypes>\&\&\ data)\ -\/>\ \mbox{\hyperlink{structpuerhlab_1_1_base_mapper_params}{BaseMapperParams}};}
+\DoxyCodeLine{00026\ \ \ \textcolor{keyword}{friend}\ \textcolor{keyword}{struct\ }\mbox{\hyperlink{structpuerhlab_1_1_field_reflectable}{FieldReflectable}}<\mbox{\hyperlink{classpuerhlab_1_1_base_mapper}{BaseMapper}}>;}
+\DoxyCodeLine{00027\ \ \ \textcolor{keyword}{using\ }MapperInterface::MapperInterface;}
+\DoxyCodeLine{00028\ \};}
+\DoxyCodeLine{00029\ }
+\DoxyCodeLine{00030\ \textcolor{comment}{//\ CREATE\ TABLE\ SleeveRoot\ (id\ BIGINT\ PRIMARY\ KEY);"{}}}
+\DoxyCodeLine{00031\ \textcolor{keyword}{struct\ }\mbox{\hyperlink{structpuerhlab_1_1_root_mapper_params}{RootMapperParams}}\ \{}
+\DoxyCodeLine{00032\ \ \ sl\_element\_id\_t\ id;}
+\DoxyCodeLine{00033\ \};}
+\DoxyCodeLine{00034\ \textcolor{keyword}{class\ }\mbox{\hyperlink{classpuerhlab_1_1_root_mapper}{RootMapper}}\ :\ MapperInterface<RootMapper,\ RootMapperParams,\ sl\_element\_id\_t>,}
+\DoxyCodeLine{00035\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \mbox{\hyperlink{structpuerhlab_1_1_field_reflectable}{FieldReflectable}}<RootMapper>\ \{}
+\DoxyCodeLine{00036\ \ \textcolor{keyword}{private}:}
+\DoxyCodeLine{00037\ \ \ \textcolor{keyword}{static}\ \textcolor{keyword}{constexpr}\ uint32\_t\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \_field\_count\ =\ 1;}
+\DoxyCodeLine{00038\ \ \ \textcolor{keyword}{static}\ \textcolor{keyword}{constexpr}\ \textcolor{keyword}{const}\ \textcolor{keywordtype}{char}*\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \_table\_name\ \ =\ \textcolor{stringliteral}{"{}SleeveRoot"{}};}
+\DoxyCodeLine{00039\ \ \ \textcolor{keyword}{static}\ \textcolor{keyword}{constexpr}\ \textcolor{keyword}{const}\ \textcolor{keywordtype}{char}*\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \_prime\_key\_clause\ =\ \textcolor{stringliteral}{"{}id=\{\}"{}};}
+\DoxyCodeLine{00040\ }
+\DoxyCodeLine{00041\ \ \ \textcolor{keyword}{static}\ \textcolor{keyword}{constexpr}\ std::array<duckorm::DuckFieldDesc,\ \_field\_count>\ \_field\_descs\ \ \ \ \ \ =\ \{}
+\DoxyCodeLine{00042\ \ \ \ \ \ \ FIELD(\mbox{\hyperlink{structpuerhlab_1_1_root_mapper_params}{RootMapperParams}},\ \textcolor{keywordtype}{id},\ UINT32)\};}
+\DoxyCodeLine{00043\ }
+\DoxyCodeLine{00044\ \ \textcolor{keyword}{public}:}
+\DoxyCodeLine{00045\ \ \ \textcolor{keyword}{static}\ \textcolor{keyword}{auto}\ FromRawData(std::vector<duckorm::VarTypes>\&\&\ data)\ -\/>\ \mbox{\hyperlink{structpuerhlab_1_1_root_mapper_params}{RootMapperParams}};}
+\DoxyCodeLine{00046\ \ \ \textcolor{keyword}{friend}\ \textcolor{keyword}{struct\ }\mbox{\hyperlink{structpuerhlab_1_1_field_reflectable}{FieldReflectable}}<\mbox{\hyperlink{classpuerhlab_1_1_root_mapper}{RootMapper}}>;}
+\DoxyCodeLine{00047\ \ \ \textcolor{keyword}{friend}\ \textcolor{keyword}{class\ }MapperInterface<\mbox{\hyperlink{classpuerhlab_1_1_root_mapper}{RootMapper}},\ \mbox{\hyperlink{structpuerhlab_1_1_root_mapper_params}{RootMapperParams}},\ sl\_element\_id\_t>;}
+\DoxyCodeLine{00048\ \ \ \textcolor{keyword}{using\ }MapperInterface::MapperInterface;}
+\DoxyCodeLine{00049\ \};}
+\DoxyCodeLine{00050\ \};\ \ \textcolor{comment}{//\ namespace\ puerhlab}}
+
+\end{DoxyCode}

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <concepts>
+#include <cstdint>
 #include <list>
 #include <optional>
 #include <unordered_map>
@@ -75,7 +76,7 @@ class LRUCache {
     ++_evict_count;
     // Resize
     if (_access_count != 0 && (double)_evict_count / (double)_access_count > 0.8) {
-      Resize(_capacity * 1.2);
+      Resize(static_cast<uint32_t>(_capacity * 1.2));
     }
     return evicted_id;
   }

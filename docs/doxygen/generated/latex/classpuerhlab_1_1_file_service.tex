@@ -1,0 +1,55 @@
+\doxysection{puerhlab\+::File\+Service Class Reference}
+\hypertarget{classpuerhlab_1_1_file_service}{}\label{classpuerhlab_1_1_file_service}\index{puerhlab::FileService@{puerhlab::FileService}}
+Inheritance diagram for puerhlab\+::File\+Service\+:\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[height=1.443299cm]{classpuerhlab_1_1_file_service}
+\end{center}
+\end{figure}
+\doxysubsubsection*{Public Member Functions}
+\begin{DoxyCompactItemize}
+\item 
+\Hypertarget{classpuerhlab_1_1_file_service_a94726837dbfb7eb1686aca7f81543d7b}\label{classpuerhlab_1_1_file_service_a94726837dbfb7eb1686aca7f81543d7b} 
+auto {\bfseries Get\+File\+By\+Id} (const sl\+\_\+element\+\_\+id\+\_\+t id) -\/$>$ std\+::pair$<$ sl\+\_\+element\+\_\+id\+\_\+t, image\+\_\+id\+\_\+t $>$
+\item 
+\Hypertarget{classpuerhlab_1_1_file_service_a6fa48f1deea8f144fc9755d140a2ccef}\label{classpuerhlab_1_1_file_service_a6fa48f1deea8f144fc9755d140a2ccef} 
+auto {\bfseries Get\+Bound\+Image\+By\+Id} (const sl\+\_\+element\+\_\+id\+\_\+t id) -\/$>$ image\+\_\+id\+\_\+t
+\item 
+\Hypertarget{classpuerhlab_1_1_file_service_ab21d0f505d97647469a0480bbe678e98}\label{classpuerhlab_1_1_file_service_ab21d0f505d97647469a0480bbe678e98} 
+void {\bfseries Remove\+Bind\+By\+File\+Id} (const sl\+\_\+element\+\_\+id\+\_\+t id)
+\item 
+\Hypertarget{classpuerhlab_1_1_file_service_a3f71f2bf169f5aae8c271e384828c32b}\label{classpuerhlab_1_1_file_service_a3f71f2bf169f5aae8c271e384828c32b} 
+{\bfseries Service\+Interface} (duckdb\+\_\+connection \&conn)
+\end{DoxyCompactItemize}
+\doxysubsection*{Public Member Functions inherited from \mbox{\hyperlink{classpuerhlab_1_1_service_interface}{puerhlab\+::\+Service\+Interface$<$ File\+Service, std\+::pair$<$ sl\+\_\+element\+\_\+id\+\_\+t, image\+\_\+id\+\_\+t $>$, File\+Mapper\+Params, File\+Mapper, sl\+\_\+element\+\_\+id\+\_\+t $>$}}}
+\begin{DoxyCompactItemize}
+\item 
+{\bfseries Service\+Interface} (duckdb\+\_\+connection \&conn)
+\item 
+void {\bfseries Insert\+Params} (const \mbox{\hyperlink{structpuerhlab_1_1_file_mapper_params}{File\+Mapper\+Params}} \&param)
+\item 
+void {\bfseries Insert} (const std\+::pair$<$ sl\+\_\+element\+\_\+id\+\_\+t, image\+\_\+id\+\_\+t $>$ \&obj)
+\item 
+auto {\bfseries Get\+By\+Predicate} (const std\+::string \&\&predicate) -\/$>$ std\+::vector$<$ std\+::pair$<$ sl\+\_\+element\+\_\+id\+\_\+t, image\+\_\+id\+\_\+t $>$ $>$
+\item 
+void {\bfseries Remove\+By\+Id} (const sl\+\_\+element\+\_\+id\+\_\+t remove\+\_\+id)
+\item 
+void {\bfseries Remove\+By\+Clause} (const std\+::string \&clause)
+\item 
+void {\bfseries Update} (const std\+::pair$<$ sl\+\_\+element\+\_\+id\+\_\+t, image\+\_\+id\+\_\+t $>$ \&obj, const sl\+\_\+element\+\_\+id\+\_\+t update\+\_\+id)
+\end{DoxyCompactItemize}
+\doxysubsubsection*{Static Public Member Functions}
+\begin{DoxyCompactItemize}
+\item 
+\Hypertarget{classpuerhlab_1_1_file_service_a8511a3225a7fc6c17c723c4c3e68b677}\label{classpuerhlab_1_1_file_service_a8511a3225a7fc6c17c723c4c3e68b677} 
+static auto {\bfseries To\+Params} (const std\+::pair$<$ sl\+\_\+element\+\_\+id\+\_\+t, image\+\_\+id\+\_\+t $>$ \&source) -\/$>$ \mbox{\hyperlink{structpuerhlab_1_1_file_mapper_params}{File\+Mapper\+Params}}
+\item 
+\Hypertarget{classpuerhlab_1_1_file_service_ae18918612e8a6a7d5f9973dae6f9eece}\label{classpuerhlab_1_1_file_service_ae18918612e8a6a7d5f9973dae6f9eece} 
+static auto {\bfseries From\+Params} (const \mbox{\hyperlink{structpuerhlab_1_1_file_mapper_params}{File\+Mapper\+Params}} \&\&param) -\/$>$ std\+::pair$<$ sl\+\_\+element\+\_\+id\+\_\+t, image\+\_\+id\+\_\+t $>$
+\end{DoxyCompactItemize}
+
+
+The documentation for this class was generated from the following files\+:\begin{DoxyCompactItemize}
+\item 
+D\+:/\+Projects/pu-\/erh\+\_\+lab/pu-\/erh\+\_\+lab/src/include/storage/service/sleeve/element/file\+\_\+service.\+hpp\item 
+D\+:/\+Projects/pu-\/erh\+\_\+lab/pu-\/erh\+\_\+lab/src/storage/service/sleeve/element/file\+\_\+service.\+cpp\end{DoxyCompactItemize}

@@ -1,0 +1,41 @@
+\doxysection{puerhlab\+::Path\+Resolver Class Reference}
+\hypertarget{classpuerhlab_1_1_path_resolver}{}\label{classpuerhlab_1_1_path_resolver}\index{puerhlab::PathResolver@{puerhlab::PathResolver}}
+\doxysubsubsection*{Public Member Functions}
+\begin{DoxyCompactItemize}
+\item 
+\Hypertarget{classpuerhlab_1_1_path_resolver_a41669482ecffc2bb13cc48b93c97cde0}\label{classpuerhlab_1_1_path_resolver_a41669482ecffc2bb13cc48b93c97cde0} 
+{\bfseries Path\+Resolver} (\mbox{\hyperlink{classpuerhlab_1_1_node_storage_handler}{Node\+Storage\+Handler}} \&lazy\+\_\+handler, \mbox{\hyperlink{classpuerhlab_1_1_incr_i_d_1_1_i_d_generator}{Incr\+ID\+::\+IDGenerator}}$<$ uint32\+\_\+t $>$ \&id\+\_\+gen)
+\item 
+\Hypertarget{classpuerhlab_1_1_path_resolver_a38edba0bb5712e3bd50b28c1fdfd1598}\label{classpuerhlab_1_1_path_resolver_a38edba0bb5712e3bd50b28c1fdfd1598} 
+void {\bfseries Set\+Root} (std\+::shared\+\_\+ptr$<$ \mbox{\hyperlink{classpuerhlab_1_1_sleeve_folder}{Sleeve\+Folder}} $>$ root)
+\item 
+\Hypertarget{classpuerhlab_1_1_path_resolver_a174740de8aa293a219aa871eacf699d0}\label{classpuerhlab_1_1_path_resolver_a174740de8aa293a219aa871eacf699d0} 
+auto {\bfseries Is\+Subpath} (const std\+::filesystem\+::path \&base, const std\+::filesystem\+::path \&target) -\/$>$ bool
+\item 
+\Hypertarget{classpuerhlab_1_1_path_resolver_a57d7f56788759590788e8bd5a69d1ac5}\label{classpuerhlab_1_1_path_resolver_a57d7f56788759590788e8bd5a69d1ac5} 
+auto {\bfseries Contains} (const std\+::filesystem\+::path \&path, Element\+Type type) -\/$>$ bool
+\item 
+\Hypertarget{classpuerhlab_1_1_path_resolver_ac4c276b74e6afc2436db4f009dad4dc8}\label{classpuerhlab_1_1_path_resolver_ac4c276b74e6afc2436db4f009dad4dc8} 
+auto {\bfseries Contains} (const std\+::filesystem\+::path \&path) -\/$>$ bool
+\item 
+\Hypertarget{classpuerhlab_1_1_path_resolver_a38162f2b7481e23ceae6db6072ca9e4c}\label{classpuerhlab_1_1_path_resolver_a38162f2b7481e23ceae6db6072ca9e4c} 
+auto {\bfseries Resolve} (const std\+::filesystem\+::path \&path) -\/$>$ std\+::shared\+\_\+ptr$<$ \mbox{\hyperlink{classpuerhlab_1_1_sleeve_element}{Sleeve\+Element}} $>$
+\item 
+\Hypertarget{classpuerhlab_1_1_path_resolver_a52b9ccaed33b874f9b07fb7d701c2741}\label{classpuerhlab_1_1_path_resolver_a52b9ccaed33b874f9b07fb7d701c2741} 
+auto {\bfseries Resolve\+For\+Write} (const std\+::filesystem\+::path \&path) -\/$>$ std\+::shared\+\_\+ptr$<$ \mbox{\hyperlink{classpuerhlab_1_1_sleeve_element}{Sleeve\+Element}} $>$
+\item 
+\Hypertarget{classpuerhlab_1_1_path_resolver_aaf16881a3587a136d4c9546fbcc083b3}\label{classpuerhlab_1_1_path_resolver_aaf16881a3587a136d4c9546fbcc083b3} 
+auto {\bfseries Tree} (const std\+::filesystem\+::path \&path) -\/$>$ std\+::wstring
+\end{DoxyCompactItemize}
+\doxysubsubsection*{Static Public Member Functions}
+\begin{DoxyCompactItemize}
+\item 
+\Hypertarget{classpuerhlab_1_1_path_resolver_aa40b05cf4ae464bc6faee5469b715e90}\label{classpuerhlab_1_1_path_resolver_aa40b05cf4ae464bc6faee5469b715e90} 
+static auto {\bfseries Normalize} (const std\+::filesystem\+::path raw\+\_\+path) -\/$>$ std\+::wstring
+\end{DoxyCompactItemize}
+
+
+The documentation for this class was generated from the following files\+:\begin{DoxyCompactItemize}
+\item 
+D\+:/\+Projects/pu-\/erh\+\_\+lab/pu-\/erh\+\_\+lab/src/include/sleeve/path\+\_\+resolver.\+hpp\item 
+D\+:/\+Projects/pu-\/erh\+\_\+lab/pu-\/erh\+\_\+lab/src/sleeve/path\+\_\+resolver.\+cpp\end{DoxyCompactItemize}

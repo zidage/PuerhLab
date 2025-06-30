@@ -1,0 +1,54 @@
+\doxysection{puerhlab\+::Metadata\+Decoder Class Reference}
+\hypertarget{classpuerhlab_1_1_metadata_decoder}{}\label{classpuerhlab_1_1_metadata_decoder}\index{puerhlab::MetadataDecoder@{puerhlab::MetadataDecoder}}
+Inheritance diagram for puerhlab\+::Metadata\+Decoder\+:\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[height=3.000000cm]{classpuerhlab_1_1_metadata_decoder}
+\end{center}
+\end{figure}
+\doxysubsubsection*{Public Member Functions}
+\begin{DoxyCompactItemize}
+\item 
+void \mbox{\hyperlink{classpuerhlab_1_1_metadata_decoder_a7d1dca0bdf7b2e355f355dd5ef15730e}{Decode}} (std\+::vector$<$ char $>$ buffer, std\+::filesystem\+::path file\+\_\+path, std\+::shared\+\_\+ptr$<$ Buffer\+Queue $>$ result, image\+\_\+id\+\_\+t id, std\+::shared\+\_\+ptr$<$ std\+::promise$<$ image\+\_\+id\+\_\+t $>$ $>$ promise)
+\begin{DoxyCompactList}\small\item\em A callback used to parse the basic information of a image file. \end{DoxyCompactList}\item 
+\Hypertarget{classpuerhlab_1_1_metadata_decoder_a2aca6801fa92cd56732711c5d85de8a5}\label{classpuerhlab_1_1_metadata_decoder_a2aca6801fa92cd56732711c5d85de8a5} 
+void {\bfseries Decode} (std\+::vector$<$ char $>$ buffer, std\+::shared\+\_\+ptr$<$ \mbox{\hyperlink{classpuerhlab_1_1_image}{Image}} $>$ source\+\_\+img, std\+::shared\+\_\+ptr$<$ Buffer\+Queue $>$ result, std\+::shared\+\_\+ptr$<$ std\+::promise$<$ image\+\_\+id\+\_\+t $>$ $>$ promise)
+\end{DoxyCompactItemize}
+
+
+\label{doc-func-members}
+\Hypertarget{classpuerhlab_1_1_metadata_decoder_doc-func-members}
+\doxysubsection{Member Function Documentation}
+\Hypertarget{classpuerhlab_1_1_metadata_decoder_a7d1dca0bdf7b2e355f355dd5ef15730e}\index{puerhlab::MetadataDecoder@{puerhlab::MetadataDecoder}!Decode@{Decode}}
+\index{Decode@{Decode}!puerhlab::MetadataDecoder@{puerhlab::MetadataDecoder}}
+\doxysubsubsection{\texorpdfstring{Decode()}{Decode()}}
+{\footnotesize\ttfamily \label{classpuerhlab_1_1_metadata_decoder_a7d1dca0bdf7b2e355f355dd5ef15730e} 
+void puerhlab\+::\+Metadata\+Decoder\+::\+Decode (\begin{DoxyParamCaption}\item[{std\+::vector$<$ char $>$}]{buffer}{, }\item[{std\+::filesystem\+::path}]{file\+\_\+path}{, }\item[{std\+::shared\+\_\+ptr$<$ Buffer\+Queue $>$}]{result}{, }\item[{image\+\_\+id\+\_\+t}]{id}{, }\item[{std\+::shared\+\_\+ptr$<$ std\+::promise$<$ image\+\_\+id\+\_\+t $>$ $>$}]{promise}{}\end{DoxyParamCaption})\hspace{0.3cm}{\ttfamily [virtual]}}
+
+
+
+A callback used to parse the basic information of a image file. 
+
+
+\begin{DoxyParams}{Parameters}
+{\em buffer} & \\
+\hline
+{\em file\+\_\+path} & \\
+\hline
+{\em result} & \\
+\hline
+{\em id} & \\
+\hline
+{\em promise} & \\
+\hline
+\end{DoxyParams}
+
+
+Implements \mbox{\hyperlink{classpuerhlab_1_1_loading_decoder}{puerhlab\+::\+Loading\+Decoder}}.
+
+
+
+The documentation for this class was generated from the following files\+:\begin{DoxyCompactItemize}
+\item 
+D\+:/\+Projects/pu-\/erh\+\_\+lab/pu-\/erh\+\_\+lab/src/include/decoders/metadata\+\_\+decoder.\+hpp\item 
+D\+:/\+Projects/pu-\/erh\+\_\+lab/pu-\/erh\+\_\+lab/src/decoders/metadata\+\_\+decoder.\+cpp\end{DoxyCompactItemize}

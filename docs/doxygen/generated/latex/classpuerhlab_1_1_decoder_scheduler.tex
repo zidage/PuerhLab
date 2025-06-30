@@ -1,0 +1,78 @@
+\doxysection{puerhlab\+::Decoder\+Scheduler Class Reference}
+\hypertarget{classpuerhlab_1_1_decoder_scheduler}{}\label{classpuerhlab_1_1_decoder_scheduler}\index{puerhlab::DecoderScheduler@{puerhlab::DecoderScheduler}}
+\doxysubsubsection*{Public Member Functions}
+\begin{DoxyCompactItemize}
+\item 
+\mbox{\hyperlink{classpuerhlab_1_1_decoder_scheduler_a2dc2eac03afe29bef0e8a85bcd195935}{Decoder\+Scheduler}} (size\+\_\+t thread\+\_\+count, std\+::shared\+\_\+ptr$<$ Buffer\+Queue $>$ decoded\+\_\+buffer)
+\begin{DoxyCompactList}\small\item\em Construct a new \doxylink{classpuerhlab_1_1_image}{Image} Decoder\+::\+Image Decoder object. \end{DoxyCompactList}\item 
+void \mbox{\hyperlink{classpuerhlab_1_1_decoder_scheduler_a6f5cc6dd4d28f6af93858e8217cfa595}{Schedule\+Decode}} (image\+\_\+id\+\_\+t id, image\+\_\+path\+\_\+t image\+\_\+path, std\+::shared\+\_\+ptr$<$ std\+::promise$<$ image\+\_\+id\+\_\+t $>$ $>$ decode\+\_\+promise)
+\begin{DoxyCompactList}\small\item\em Schedule a decode task for initialize image data. The decode type can only be SLEEVE\+\_\+\+LOADING, therefore decode\+\_\+type field is omitted. \end{DoxyCompactList}\item 
+void \mbox{\hyperlink{classpuerhlab_1_1_decoder_scheduler_a23c65cc71de4876c4fc00c14a921b049}{Schedule\+Decode}} (std\+::shared\+\_\+ptr$<$ \mbox{\hyperlink{classpuerhlab_1_1_image}{Image}} $>$ source\+\_\+img, Decode\+Type decode\+\_\+type, std\+::shared\+\_\+ptr$<$ std\+::promise$<$ image\+\_\+id\+\_\+t $>$ $>$ decode\+\_\+promise)
+\begin{DoxyCompactList}\small\item\em Schedule a decode task for loading image data into an \doxylink{classpuerhlab_1_1_image}{Image} object. \end{DoxyCompactList}\end{DoxyCompactItemize}
+
+
+\label{doc-constructors}
+\Hypertarget{classpuerhlab_1_1_decoder_scheduler_doc-constructors}
+\doxysubsection{Constructor \& Destructor Documentation}
+\Hypertarget{classpuerhlab_1_1_decoder_scheduler_a2dc2eac03afe29bef0e8a85bcd195935}\index{puerhlab::DecoderScheduler@{puerhlab::DecoderScheduler}!DecoderScheduler@{DecoderScheduler}}
+\index{DecoderScheduler@{DecoderScheduler}!puerhlab::DecoderScheduler@{puerhlab::DecoderScheduler}}
+\doxysubsubsection{\texorpdfstring{DecoderScheduler()}{DecoderScheduler()}}
+{\footnotesize\ttfamily \label{classpuerhlab_1_1_decoder_scheduler_a2dc2eac03afe29bef0e8a85bcd195935} 
+puerhlab\+::\+Decoder\+Scheduler\+::\+Decoder\+Scheduler (\begin{DoxyParamCaption}\item[{size\+\_\+t}]{thread\+\_\+count}{, }\item[{std\+::shared\+\_\+ptr$<$ Buffer\+Queue $>$}]{decoded\+\_\+buffer}{}\end{DoxyParamCaption})\hspace{0.3cm}{\ttfamily [explicit]}}
+
+
+
+Construct a new \doxylink{classpuerhlab_1_1_image}{Image} Decoder\+::\+Image Decoder object. 
+
+
+\begin{DoxyParams}{Parameters}
+{\em thread\+\_\+count} & \\
+\hline
+{\em total\+\_\+request} & \\
+\hline
+\end{DoxyParams}
+
+
+\label{doc-func-members}
+\Hypertarget{classpuerhlab_1_1_decoder_scheduler_doc-func-members}
+\doxysubsection{Member Function Documentation}
+\Hypertarget{classpuerhlab_1_1_decoder_scheduler_a6f5cc6dd4d28f6af93858e8217cfa595}\index{puerhlab::DecoderScheduler@{puerhlab::DecoderScheduler}!ScheduleDecode@{ScheduleDecode}}
+\index{ScheduleDecode@{ScheduleDecode}!puerhlab::DecoderScheduler@{puerhlab::DecoderScheduler}}
+\doxysubsubsection{\texorpdfstring{ScheduleDecode()}{ScheduleDecode()}\hspace{0.1cm}{\footnotesize\ttfamily [1/2]}}
+{\footnotesize\ttfamily \label{classpuerhlab_1_1_decoder_scheduler_a6f5cc6dd4d28f6af93858e8217cfa595} 
+void puerhlab\+::\+Decoder\+Scheduler\+::\+Schedule\+Decode (\begin{DoxyParamCaption}\item[{image\+\_\+id\+\_\+t}]{id}{, }\item[{image\+\_\+path\+\_\+t}]{image\+\_\+path}{, }\item[{std\+::shared\+\_\+ptr$<$ std\+::promise$<$ image\+\_\+id\+\_\+t $>$ $>$}]{decode\+\_\+promise}{}\end{DoxyParamCaption})}
+
+
+
+Schedule a decode task for initialize image data. The decode type can only be SLEEVE\+\_\+\+LOADING, therefore decode\+\_\+type field is omitted. 
+
+
+\begin{DoxyParams}{Parameters}
+{\em image\+\_\+path} & the path of the file to be decoded \\
+\hline
+{\em decode\+\_\+promise} & the corresponding promise to be collected \\
+\hline
+\end{DoxyParams}
+\Hypertarget{classpuerhlab_1_1_decoder_scheduler_a23c65cc71de4876c4fc00c14a921b049}\index{puerhlab::DecoderScheduler@{puerhlab::DecoderScheduler}!ScheduleDecode@{ScheduleDecode}}
+\index{ScheduleDecode@{ScheduleDecode}!puerhlab::DecoderScheduler@{puerhlab::DecoderScheduler}}
+\doxysubsubsection{\texorpdfstring{ScheduleDecode()}{ScheduleDecode()}\hspace{0.1cm}{\footnotesize\ttfamily [2/2]}}
+{\footnotesize\ttfamily \label{classpuerhlab_1_1_decoder_scheduler_a23c65cc71de4876c4fc00c14a921b049} 
+void puerhlab\+::\+Decoder\+Scheduler\+::\+Schedule\+Decode (\begin{DoxyParamCaption}\item[{std\+::shared\+\_\+ptr$<$ \mbox{\hyperlink{classpuerhlab_1_1_image}{Image}} $>$}]{source\+\_\+img}{, }\item[{Decode\+Type}]{decode\+\_\+type}{, }\item[{std\+::shared\+\_\+ptr$<$ std\+::promise$<$ image\+\_\+id\+\_\+t $>$ $>$}]{decode\+\_\+promise}{}\end{DoxyParamCaption})}
+
+
+
+Schedule a decode task for loading image data into an \doxylink{classpuerhlab_1_1_image}{Image} object. 
+
+
+\begin{DoxyParams}{Parameters}
+{\em source\+\_\+img} & \\
+\hline
+{\em decode\+\_\+promise} & \\
+\hline
+\end{DoxyParams}
+
+
+The documentation for this class was generated from the following files\+:\begin{DoxyCompactItemize}
+\item 
+D\+:/\+Projects/pu-\/erh\+\_\+lab/pu-\/erh\+\_\+lab/src/include/decoders/decoder\+\_\+scheduler.\+hpp\item 
+D\+:/\+Projects/pu-\/erh\+\_\+lab/pu-\/erh\+\_\+lab/src/decoders/decoder\+\_\+scheduler.\+cpp\end{DoxyCompactItemize}

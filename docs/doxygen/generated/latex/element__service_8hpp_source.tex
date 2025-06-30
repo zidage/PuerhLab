@@ -1,0 +1,35 @@
+\doxysection{element\+\_\+service.\+hpp}
+\hypertarget{element__service_8hpp_source}{}\label{element__service_8hpp_source}\index{D:/Projects/pu-\/erh\_lab/pu-\/erh\_lab/src/include/storage/service/sleeve/element/element\_service.hpp@{D:/Projects/pu-\/erh\_lab/pu-\/erh\_lab/src/include/storage/service/sleeve/element/element\_service.hpp}}
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{00001\ \textcolor{preprocessor}{\#pragma\ once}}
+\DoxyCodeLine{00002\ }
+\DoxyCodeLine{00003\ \textcolor{preprocessor}{\#include\ <duckdb.h>}}
+\DoxyCodeLine{00004\ }
+\DoxyCodeLine{00005\ \textcolor{preprocessor}{\#include\ <codecvt>}}
+\DoxyCodeLine{00006\ \textcolor{preprocessor}{\#include\ <filesystem>}}
+\DoxyCodeLine{00007\ \textcolor{preprocessor}{\#include\ <memory>}}
+\DoxyCodeLine{00008\ \textcolor{preprocessor}{\#include\ <vector>}}
+\DoxyCodeLine{00009\ }
+\DoxyCodeLine{00010\ \textcolor{preprocessor}{\#include\ "{}sleeve/sleeve\_element/sleeve\_element.hpp"{}}}
+\DoxyCodeLine{00011\ \textcolor{preprocessor}{\#include\ "{}storage/mapper/sleeve/element/element\_mapper.hpp"{}}}
+\DoxyCodeLine{00012\ \textcolor{preprocessor}{\#include\ "{}storage/service/service\_interface.hpp"{}}}
+\DoxyCodeLine{00013\ \textcolor{preprocessor}{\#include\ "{}type/type.hpp"{}}}
+\DoxyCodeLine{00014\ }
+\DoxyCodeLine{00015\ \textcolor{keyword}{namespace\ }puerhlab\ \{}
+\DoxyCodeLine{00016\ \textcolor{keyword}{class\ }\mbox{\hyperlink{classpuerhlab_1_1_element_service}{ElementService}}}
+\DoxyCodeLine{00017\ \ \ \ \ :\ \textcolor{keyword}{public}\ ServiceInterface<ElementService,\ std::shared\_ptr<SleeveElement>,\ ElementMapperParams,}
+\DoxyCodeLine{00018\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ ElementMapper,\ sl\_element\_id\_t>\ \{}
+\DoxyCodeLine{00019\ \ \textcolor{keyword}{private}:}
+\DoxyCodeLine{00020\ \ \textcolor{keyword}{public}:}
+\DoxyCodeLine{00021\ \ \ \textcolor{keyword}{using\ }ServiceInterface::ServiceInterface;}
+\DoxyCodeLine{00022\ \ \ \textcolor{keyword}{static}\ \textcolor{keyword}{auto}\ ToParams(\textcolor{keyword}{const}\ std::shared\_ptr<SleeveElement>\&\ source)\ -\/>\ \mbox{\hyperlink{structpuerhlab_1_1_element_mapper_params}{ElementMapperParams}};}
+\DoxyCodeLine{00023\ \ \ \textcolor{keyword}{static}\ \textcolor{keyword}{auto}\ FromParams(\textcolor{keyword}{const}\ \mbox{\hyperlink{structpuerhlab_1_1_element_mapper_params}{ElementMapperParams}}\&\&\ param)\ -\/>\ std::shared\_ptr<SleeveElement>;}
+\DoxyCodeLine{00024\ }
+\DoxyCodeLine{00025\ \ \ \textcolor{keyword}{auto}\ \ \ \ \ \ \ \ GetElementById(\textcolor{keyword}{const}\ sl\_element\_id\_t\ \textcolor{keywordtype}{id})\ -\/>\ std::shared\_ptr<SleeveElement>;}
+\DoxyCodeLine{00026\ \ \ \textcolor{keyword}{auto}\ GetElementByName(\textcolor{keyword}{const}\ std::wstring\ name)\ -\/>\ std::vector<std::shared\_ptr<SleeveElement>>;}
+\DoxyCodeLine{00027\ \ \ \textcolor{keyword}{auto}\ GetElementByType(\textcolor{keyword}{const}\ ElementType\ type)\ -\/>\ std::vector<std::shared\_ptr<SleeveElement>>;}
+\DoxyCodeLine{00028\ \};}
+\DoxyCodeLine{00029\ \};\ \ \textcolor{comment}{//\ namespace\ puerhlab}}
+
+\end{DoxyCode}

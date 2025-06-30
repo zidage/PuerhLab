@@ -1,0 +1,276 @@
+\doxysection{puerhlab\+::Sleeve\+Base Class Reference}
+\hypertarget{classpuerhlab_1_1_sleeve_base}{}\label{classpuerhlab_1_1_sleeve_base}\index{puerhlab::SleeveBase@{puerhlab::SleeveBase}}
+\doxysubsubsection*{Public Member Functions}
+\begin{DoxyCompactItemize}
+\item 
+\mbox{\hyperlink{classpuerhlab_1_1_sleeve_base_aab59f8772b4063eaeaf0a2e6d914e23c}{Sleeve\+Base}} (sleeve\+\_\+id\+\_\+t id)
+\begin{DoxyCompactList}\small\item\em Construct a new Sleeve Base\+:\+: Sleeve Base object. \end{DoxyCompactList}\item 
+\Hypertarget{classpuerhlab_1_1_sleeve_base_a8347e12caef7792e8e74844fe7a2207a}\label{classpuerhlab_1_1_sleeve_base_a8347e12caef7792e8e74844fe7a2207a} 
+void {\bfseries Initialize\+Root} ()
+\begin{DoxyCompactList}\small\item\em Initialize the root folder within the base. \end{DoxyCompactList}\item 
+\Hypertarget{classpuerhlab_1_1_sleeve_base_a4b21cf0e5574ae37576a727adf8cb80a}\label{classpuerhlab_1_1_sleeve_base_a4b21cf0e5574ae37576a727adf8cb80a} 
+auto {\bfseries Get\+Storage} () -\/$>$ std\+::unordered\+\_\+map$<$ sl\+\_\+element\+\_\+id\+\_\+t, std\+::shared\+\_\+ptr$<$ \mbox{\hyperlink{classpuerhlab_1_1_sleeve_element}{Sleeve\+Element}} $>$ $>$ \&
+\item 
+\Hypertarget{classpuerhlab_1_1_sleeve_base_a4080204b17ca52e6dcb522cb19921191}\label{classpuerhlab_1_1_sleeve_base_a4080204b17ca52e6dcb522cb19921191} 
+auto {\bfseries Get\+Filter\+Storage} () -\/$>$ std\+::unordered\+\_\+map$<$ filter\+\_\+id\+\_\+t, std\+::shared\+\_\+ptr$<$ \mbox{\hyperlink{classpuerhlab_1_1_filter_combo}{Filter\+Combo}} $>$ $>$ \&
+\item 
+auto \mbox{\hyperlink{classpuerhlab_1_1_sleeve_base_a3948886bb3ada2c4ce47f5981f9ed99b}{Access\+Element\+By\+Id}} (const sl\+\_\+element\+\_\+id\+\_\+t \&id) const -\/$>$ std\+::optional$<$ std\+::shared\+\_\+ptr$<$ \mbox{\hyperlink{classpuerhlab_1_1_sleeve_element}{Sleeve\+Element}} $>$ $>$
+\begin{DoxyCompactList}\small\item\em Access an element by its id from the map. \end{DoxyCompactList}\item 
+auto \mbox{\hyperlink{classpuerhlab_1_1_sleeve_base_ab91bcf2a042610dfa0dc765f1b09fb3f}{Access\+Element\+By\+Path}} (const sl\+\_\+path\+\_\+t \&path) -\/$>$ std\+::optional$<$ std\+::shared\+\_\+ptr$<$ \mbox{\hyperlink{classpuerhlab_1_1_sleeve_element}{Sleeve\+Element}} $>$ $>$
+\begin{DoxyCompactList}\small\item\em Access an element by its path. \end{DoxyCompactList}\item 
+auto \mbox{\hyperlink{classpuerhlab_1_1_sleeve_base_a733b8a0a82cda0dc75cd649a7b83fcf9}{Create\+Element\+To\+Path}} (const sl\+\_\+path\+\_\+t \&path, const file\+\_\+name\+\_\+t \&file\+\_\+name, const Element\+Type \&type) -\/$>$ std\+::optional$<$ std\+::shared\+\_\+ptr$<$ \mbox{\hyperlink{classpuerhlab_1_1_sleeve_element}{Sleeve\+Element}} $>$ $>$
+\item 
+auto \mbox{\hyperlink{classpuerhlab_1_1_sleeve_base_ae1ba4f4297e2d620d84c87d795e58ace}{Remove\+Element\+In\+Path}} (const sl\+\_\+path\+\_\+t \&target) -\/$>$ std\+::optional$<$ std\+::shared\+\_\+ptr$<$ \mbox{\hyperlink{classpuerhlab_1_1_sleeve_element}{Sleeve\+Element}} $>$ $>$
+\begin{DoxyCompactList}\small\item\em Remove an element by its full path. \end{DoxyCompactList}\item 
+auto \mbox{\hyperlink{classpuerhlab_1_1_sleeve_base_ad8fbb184f0a4d7425449871ffd3b37e4}{Remove\+Element\+In\+Path}} (const sl\+\_\+path\+\_\+t \&path, const file\+\_\+name\+\_\+t \&file\+\_\+name) -\/$>$ std\+::optional$<$ std\+::shared\+\_\+ptr$<$ \mbox{\hyperlink{classpuerhlab_1_1_sleeve_element}{Sleeve\+Element}} $>$ $>$
+\begin{DoxyCompactList}\small\item\em Remove an element by its parent folder path. \end{DoxyCompactList}\item 
+\Hypertarget{classpuerhlab_1_1_sleeve_base_a3ff230102b76dea6817dbddb933adb50}\label{classpuerhlab_1_1_sleeve_base_a3ff230102b76dea6817dbddb933adb50} 
+auto {\bfseries Copy\+Element} (const sl\+\_\+path\+\_\+t \&src, const sl\+\_\+path\+\_\+t \&dest) -\/$>$ std\+::optional$<$ std\+::shared\+\_\+ptr$<$ \mbox{\hyperlink{classpuerhlab_1_1_sleeve_element}{Sleeve\+Element}} $>$ $>$
+\item 
+auto \mbox{\hyperlink{classpuerhlab_1_1_sleeve_base_a9c8da6f8ef42921c499d0e2accf45d2b}{Move\+Element}} (const sl\+\_\+path\+\_\+t \&src, const sl\+\_\+path\+\_\+t \&dest) -\/$>$ std\+::optional$<$ std\+::shared\+\_\+ptr$<$ \mbox{\hyperlink{classpuerhlab_1_1_sleeve_element}{Sleeve\+Element}} $>$ $>$
+\begin{DoxyCompactList}\small\item\em Move element from one path to another. \end{DoxyCompactList}\item 
+auto \mbox{\hyperlink{classpuerhlab_1_1_sleeve_base_a5616fec1489096022b0b37d40f40fc03}{Get\+Read\+Guard}} (const sl\+\_\+path\+\_\+t \&target) -\/$>$ std\+::optional$<$ \mbox{\hyperlink{classpuerhlab_1_1_element_access_guard}{Element\+Access\+Guard}} $>$
+\begin{DoxyCompactList}\small\item\em Acquire the read guard of a element. \end{DoxyCompactList}\item 
+auto \mbox{\hyperlink{classpuerhlab_1_1_sleeve_base_ae70d6a052cfb4026dbb350d3da5b3f3b}{Get\+Write\+Guard}} (const sl\+\_\+path\+\_\+t \&target) -\/$>$ std\+::optional$<$ \mbox{\hyperlink{classpuerhlab_1_1_element_access_guard}{Element\+Access\+Guard}} $>$
+\begin{DoxyCompactList}\small\item\em Acquire the write guard of an element by its full path. \end{DoxyCompactList}\item 
+auto \mbox{\hyperlink{classpuerhlab_1_1_sleeve_base_a3166fd5daf2c4f325121bff8200cec65}{Get\+Write\+Guard}} (const sl\+\_\+path\+\_\+t \&parent\+\_\+folder\+\_\+path, const file\+\_\+name\+\_\+t \&file\+\_\+name) -\/$>$ std\+::optional$<$ \mbox{\hyperlink{classpuerhlab_1_1_element_access_guard}{Element\+Access\+Guard}} $>$
+\begin{DoxyCompactList}\small\item\em Acquire the write guard of an element by its name and parent folder\textquotesingle{}s path. \end{DoxyCompactList}\item 
+\Hypertarget{classpuerhlab_1_1_sleeve_base_a1ea46591551b112ff4e37e3d46ee9b85}\label{classpuerhlab_1_1_sleeve_base_a1ea46591551b112ff4e37e3d46ee9b85} 
+void {\bfseries Garbage\+Collect} ()
+\item 
+\Hypertarget{classpuerhlab_1_1_sleeve_base_aa2c3f57270821eaad50822dfede3dfce}\label{classpuerhlab_1_1_sleeve_base_aa2c3f57270821eaad50822dfede3dfce} 
+auto {\bfseries Tree} (const sl\+\_\+path\+\_\+t \&path) -\/$>$ std\+::wstring
+\begin{DoxyCompactList}\small\item\em Print the whole file structure under a given folder DEBUG PURPOSE ONLY. \end{DoxyCompactList}\item 
+\Hypertarget{classpuerhlab_1_1_sleeve_base_aef2b71c8c2f588b1e1311861cb4862e9}\label{classpuerhlab_1_1_sleeve_base_aef2b71c8c2f588b1e1311861cb4862e9} 
+auto {\bfseries Tree\+BFS} (const sl\+\_\+path\+\_\+t \&path) -\/$>$ std\+::wstring
+\begin{DoxyCompactList}\small\item\em Print the whole file structure under a given folder DEBUG PURPOSE ONLY. \end{DoxyCompactList}\item 
+auto \mbox{\hyperlink{classpuerhlab_1_1_sleeve_base_a1c1601898e8a55da5b1723b3869d4655}{Is\+Sub\+Folder}} (const std\+::shared\+\_\+ptr$<$ \mbox{\hyperlink{classpuerhlab_1_1_sleeve_folder}{Sleeve\+Folder}} $>$ folder\+\_\+a, const sl\+\_\+path\+\_\+t \&path\+\_\+b) const -\/$>$ bool
+\begin{DoxyCompactList}\small\item\em Check if folder of dest\+\_\+folder\+\_\+path is a subfolder of src\+\_\+folder. It is a helper function without any sanity check for the type of the elements of path\+\_\+a and dest\+\_\+folder\+\_\+path. \end{DoxyCompactList}\end{DoxyCompactItemize}
+\doxysubsubsection*{Public Attributes}
+\begin{DoxyCompactItemize}
+\item 
+\Hypertarget{classpuerhlab_1_1_sleeve_base_aeb21d84374ec87e9704c9dfb3a49e1a9}\label{classpuerhlab_1_1_sleeve_base_aeb21d84374ec87e9704c9dfb3a49e1a9} 
+sleeve\+\_\+id\+\_\+t {\bfseries \+\_\+sleeve\+\_\+id}
+\item 
+\Hypertarget{classpuerhlab_1_1_sleeve_base_a88eddbb8b07a53c6289f419da6d44d2c}\label{classpuerhlab_1_1_sleeve_base_a88eddbb8b07a53c6289f419da6d44d2c} 
+std\+::shared\+\_\+ptr$<$ \mbox{\hyperlink{classpuerhlab_1_1_sleeve_folder}{Sleeve\+Folder}} $>$ {\bfseries \+\_\+root}
+\end{DoxyCompactItemize}
+
+
+\label{doc-constructors}
+\Hypertarget{classpuerhlab_1_1_sleeve_base_doc-constructors}
+\doxysubsection{Constructor \& Destructor Documentation}
+\Hypertarget{classpuerhlab_1_1_sleeve_base_aab59f8772b4063eaeaf0a2e6d914e23c}\index{puerhlab::SleeveBase@{puerhlab::SleeveBase}!SleeveBase@{SleeveBase}}
+\index{SleeveBase@{SleeveBase}!puerhlab::SleeveBase@{puerhlab::SleeveBase}}
+\doxysubsubsection{\texorpdfstring{SleeveBase()}{SleeveBase()}}
+{\footnotesize\ttfamily \label{classpuerhlab_1_1_sleeve_base_aab59f8772b4063eaeaf0a2e6d914e23c} 
+puerhlab\+::\+Sleeve\+Base\+::\+Sleeve\+Base (\begin{DoxyParamCaption}\item[{sleeve\+\_\+id\+\_\+t}]{id}{}\end{DoxyParamCaption})\hspace{0.3cm}{\ttfamily [explicit]}}
+
+
+
+Construct a new Sleeve Base\+:\+: Sleeve Base object. 
+
+
+\begin{DoxyParams}{Parameters}
+{\em id} & \\
+\hline
+\end{DoxyParams}
+
+
+\label{doc-func-members}
+\Hypertarget{classpuerhlab_1_1_sleeve_base_doc-func-members}
+\doxysubsection{Member Function Documentation}
+\Hypertarget{classpuerhlab_1_1_sleeve_base_a3948886bb3ada2c4ce47f5981f9ed99b}\index{puerhlab::SleeveBase@{puerhlab::SleeveBase}!AccessElementById@{AccessElementById}}
+\index{AccessElementById@{AccessElementById}!puerhlab::SleeveBase@{puerhlab::SleeveBase}}
+\doxysubsubsection{\texorpdfstring{AccessElementById()}{AccessElementById()}}
+{\footnotesize\ttfamily \label{classpuerhlab_1_1_sleeve_base_a3948886bb3ada2c4ce47f5981f9ed99b} 
+auto puerhlab\+::\+Sleeve\+Base\+::\+Access\+Element\+By\+Id (\begin{DoxyParamCaption}\item[{const sl\+\_\+element\+\_\+id\+\_\+t \&}]{id}{}\end{DoxyParamCaption}) const -\/$>$ std\+::optional$<$std\+::shared\+\_\+ptr$<$\mbox{\hyperlink{classpuerhlab_1_1_sleeve_element}{Sleeve\+Element}}$>$$>$}
+
+
+
+Access an element by its id from the map. 
+
+
+\begin{DoxyParams}{Parameters}
+{\em id} & \\
+\hline
+\end{DoxyParams}
+\begin{DoxyReturn}{Returns}
+std\+::optional$<$std\+::shared\+\_\+ptr$<$\+Sleeve\+Element$>$$>$ 
+\end{DoxyReturn}
+\Hypertarget{classpuerhlab_1_1_sleeve_base_ab91bcf2a042610dfa0dc765f1b09fb3f}\index{puerhlab::SleeveBase@{puerhlab::SleeveBase}!AccessElementByPath@{AccessElementByPath}}
+\index{AccessElementByPath@{AccessElementByPath}!puerhlab::SleeveBase@{puerhlab::SleeveBase}}
+\doxysubsubsection{\texorpdfstring{AccessElementByPath()}{AccessElementByPath()}}
+{\footnotesize\ttfamily \label{classpuerhlab_1_1_sleeve_base_ab91bcf2a042610dfa0dc765f1b09fb3f} 
+auto puerhlab\+::\+Sleeve\+Base\+::\+Access\+Element\+By\+Path (\begin{DoxyParamCaption}\item[{const sl\+\_\+path\+\_\+t \&}]{path}{}\end{DoxyParamCaption}) -\/$>$ std\+::optional$<$std\+::shared\+\_\+ptr$<$\mbox{\hyperlink{classpuerhlab_1_1_sleeve_element}{Sleeve\+Element}}$>$$>$}
+
+
+
+Access an element by its path. 
+
+
+\begin{DoxyParams}{Parameters}
+{\em path} & \\
+\hline
+\end{DoxyParams}
+\begin{DoxyReturn}{Returns}
+std\+::optional$<$std\+::shared\+\_\+ptr$<$\+Sleeve\+Element$>$$>$ 
+\end{DoxyReturn}
+\Hypertarget{classpuerhlab_1_1_sleeve_base_a733b8a0a82cda0dc75cd649a7b83fcf9}\index{puerhlab::SleeveBase@{puerhlab::SleeveBase}!CreateElementToPath@{CreateElementToPath}}
+\index{CreateElementToPath@{CreateElementToPath}!puerhlab::SleeveBase@{puerhlab::SleeveBase}}
+\doxysubsubsection{\texorpdfstring{CreateElementToPath()}{CreateElementToPath()}}
+{\footnotesize\ttfamily \label{classpuerhlab_1_1_sleeve_base_a733b8a0a82cda0dc75cd649a7b83fcf9} 
+auto puerhlab\+::\+Sleeve\+Base\+::\+Create\+Element\+To\+Path (\begin{DoxyParamCaption}\item[{const sl\+\_\+path\+\_\+t \&}]{path}{, }\item[{const file\+\_\+name\+\_\+t \&}]{file\+\_\+name}{, }\item[{const Element\+Type \&}]{type}{}\end{DoxyParamCaption}) -\/$>$ std\+::optional$<$std\+::shared\+\_\+ptr$<$\mbox{\hyperlink{classpuerhlab_1_1_sleeve_element}{Sleeve\+Element}}$>$$>$}
+
+
+\begin{DoxyParams}{Parameters}
+{\em path} & \\
+\hline
+{\em file\+\_\+name} & \\
+\hline
+{\em type} & \\
+\hline
+\end{DoxyParams}
+\begin{DoxyReturn}{Returns}
+std\+::optional$<$std\+::shared\+\_\+ptr$<$\+Sleeve\+Element$>$$>$ 
+\end{DoxyReturn}
+\Hypertarget{classpuerhlab_1_1_sleeve_base_a5616fec1489096022b0b37d40f40fc03}\index{puerhlab::SleeveBase@{puerhlab::SleeveBase}!GetReadGuard@{GetReadGuard}}
+\index{GetReadGuard@{GetReadGuard}!puerhlab::SleeveBase@{puerhlab::SleeveBase}}
+\doxysubsubsection{\texorpdfstring{GetReadGuard()}{GetReadGuard()}}
+{\footnotesize\ttfamily \label{classpuerhlab_1_1_sleeve_base_a5616fec1489096022b0b37d40f40fc03} 
+auto puerhlab\+::\+Sleeve\+Base\+::\+Get\+Read\+Guard (\begin{DoxyParamCaption}\item[{const sl\+\_\+path\+\_\+t \&}]{target}{}\end{DoxyParamCaption}) -\/$>$ std\+::optional$<$\mbox{\hyperlink{classpuerhlab_1_1_element_access_guard}{Element\+Access\+Guard}}$>$}
+
+
+
+Acquire the read guard of a element. 
+
+
+\begin{DoxyParams}{Parameters}
+{\em target} & \\
+\hline
+\end{DoxyParams}
+\begin{DoxyReturn}{Returns}
+std\+::optional$<$\+Element\+Access\+Guard$>$ 
+\end{DoxyReturn}
+\Hypertarget{classpuerhlab_1_1_sleeve_base_a3166fd5daf2c4f325121bff8200cec65}\index{puerhlab::SleeveBase@{puerhlab::SleeveBase}!GetWriteGuard@{GetWriteGuard}}
+\index{GetWriteGuard@{GetWriteGuard}!puerhlab::SleeveBase@{puerhlab::SleeveBase}}
+\doxysubsubsection{\texorpdfstring{GetWriteGuard()}{GetWriteGuard()}\hspace{0.1cm}{\footnotesize\ttfamily [1/2]}}
+{\footnotesize\ttfamily \label{classpuerhlab_1_1_sleeve_base_a3166fd5daf2c4f325121bff8200cec65} 
+auto puerhlab\+::\+Sleeve\+Base\+::\+Get\+Write\+Guard (\begin{DoxyParamCaption}\item[{const sl\+\_\+path\+\_\+t \&}]{parent\+\_\+folder\+\_\+path}{, }\item[{const file\+\_\+name\+\_\+t \&}]{file\+\_\+name}{}\end{DoxyParamCaption}) -\/$>$ std\+::optional$<$\mbox{\hyperlink{classpuerhlab_1_1_element_access_guard}{Element\+Access\+Guard}}$>$}
+
+
+
+Acquire the write guard of an element by its name and parent folder\textquotesingle{}s path. 
+
+
+\begin{DoxyParams}{Parameters}
+{\em path} & \\
+\hline
+{\em file\+\_\+name} & \\
+\hline
+\end{DoxyParams}
+\begin{DoxyReturn}{Returns}
+std\+::optional$<$\+Element\+Access\+Guard$>$ 
+\end{DoxyReturn}
+\Hypertarget{classpuerhlab_1_1_sleeve_base_ae70d6a052cfb4026dbb350d3da5b3f3b}\index{puerhlab::SleeveBase@{puerhlab::SleeveBase}!GetWriteGuard@{GetWriteGuard}}
+\index{GetWriteGuard@{GetWriteGuard}!puerhlab::SleeveBase@{puerhlab::SleeveBase}}
+\doxysubsubsection{\texorpdfstring{GetWriteGuard()}{GetWriteGuard()}\hspace{0.1cm}{\footnotesize\ttfamily [2/2]}}
+{\footnotesize\ttfamily \label{classpuerhlab_1_1_sleeve_base_ae70d6a052cfb4026dbb350d3da5b3f3b} 
+auto puerhlab\+::\+Sleeve\+Base\+::\+Get\+Write\+Guard (\begin{DoxyParamCaption}\item[{const sl\+\_\+path\+\_\+t \&}]{target}{}\end{DoxyParamCaption}) -\/$>$ std\+::optional$<$\mbox{\hyperlink{classpuerhlab_1_1_element_access_guard}{Element\+Access\+Guard}}$>$}
+
+
+
+Acquire the write guard of an element by its full path. 
+
+
+\begin{DoxyParams}{Parameters}
+{\em target} & \\
+\hline
+\end{DoxyParams}
+\begin{DoxyReturn}{Returns}
+std\+::optional$<$\+Element\+Access\+Guard$>$ 
+\end{DoxyReturn}
+\Hypertarget{classpuerhlab_1_1_sleeve_base_a1c1601898e8a55da5b1723b3869d4655}\index{puerhlab::SleeveBase@{puerhlab::SleeveBase}!IsSubFolder@{IsSubFolder}}
+\index{IsSubFolder@{IsSubFolder}!puerhlab::SleeveBase@{puerhlab::SleeveBase}}
+\doxysubsubsection{\texorpdfstring{IsSubFolder()}{IsSubFolder()}}
+{\footnotesize\ttfamily \label{classpuerhlab_1_1_sleeve_base_a1c1601898e8a55da5b1723b3869d4655} 
+auto puerhlab\+::\+Sleeve\+Base\+::\+Is\+Sub\+Folder (\begin{DoxyParamCaption}\item[{const std\+::shared\+\_\+ptr$<$ \mbox{\hyperlink{classpuerhlab_1_1_sleeve_folder}{Sleeve\+Folder}} $>$}]{src\+\_\+folder}{, }\item[{const sl\+\_\+path\+\_\+t \&}]{dest\+\_\+folder\+\_\+path}{}\end{DoxyParamCaption}) const -\/$>$ bool}
+
+
+
+Check if folder of dest\+\_\+folder\+\_\+path is a subfolder of src\+\_\+folder. It is a helper function without any sanity check for the type of the elements of path\+\_\+a and dest\+\_\+folder\+\_\+path. 
+
+
+\begin{DoxyParams}{Parameters}
+{\em path\+\_\+a} & \\
+\hline
+{\em dest\+\_\+folder\+\_\+path} & \\
+\hline
+\end{DoxyParams}
+\begin{DoxyReturn}{Returns}
+true 
+
+false 
+\end{DoxyReturn}
+\Hypertarget{classpuerhlab_1_1_sleeve_base_a9c8da6f8ef42921c499d0e2accf45d2b}\index{puerhlab::SleeveBase@{puerhlab::SleeveBase}!MoveElement@{MoveElement}}
+\index{MoveElement@{MoveElement}!puerhlab::SleeveBase@{puerhlab::SleeveBase}}
+\doxysubsubsection{\texorpdfstring{MoveElement()}{MoveElement()}}
+{\footnotesize\ttfamily \label{classpuerhlab_1_1_sleeve_base_a9c8da6f8ef42921c499d0e2accf45d2b} 
+auto puerhlab\+::\+Sleeve\+Base\+::\+Move\+Element (\begin{DoxyParamCaption}\item[{const sl\+\_\+path\+\_\+t \&}]{src}{, }\item[{const sl\+\_\+path\+\_\+t \&}]{dest}{}\end{DoxyParamCaption}) -\/$>$ std\+::optional$<$std\+::shared\+\_\+ptr$<$\mbox{\hyperlink{classpuerhlab_1_1_sleeve_element}{Sleeve\+Element}}$>$$>$}
+
+
+
+Move element from one path to another. 
+
+
+\begin{DoxyParams}{Parameters}
+{\em src} & \\
+\hline
+{\em dest} & \\
+\hline
+\end{DoxyParams}
+\begin{DoxyReturn}{Returns}
+std\+::optional$<$std\+::shared\+\_\+ptr$<$\+Sleeve\+Element$>$$>$ 
+\end{DoxyReturn}
+\Hypertarget{classpuerhlab_1_1_sleeve_base_ad8fbb184f0a4d7425449871ffd3b37e4}\index{puerhlab::SleeveBase@{puerhlab::SleeveBase}!RemoveElementInPath@{RemoveElementInPath}}
+\index{RemoveElementInPath@{RemoveElementInPath}!puerhlab::SleeveBase@{puerhlab::SleeveBase}}
+\doxysubsubsection{\texorpdfstring{RemoveElementInPath()}{RemoveElementInPath()}\hspace{0.1cm}{\footnotesize\ttfamily [1/2]}}
+{\footnotesize\ttfamily \label{classpuerhlab_1_1_sleeve_base_ad8fbb184f0a4d7425449871ffd3b37e4} 
+auto puerhlab\+::\+Sleeve\+Base\+::\+Remove\+Element\+In\+Path (\begin{DoxyParamCaption}\item[{const sl\+\_\+path\+\_\+t \&}]{path}{, }\item[{const file\+\_\+name\+\_\+t \&}]{file\+\_\+name}{}\end{DoxyParamCaption}) -\/$>$ std\+::optional$<$std\+::shared\+\_\+ptr$<$\mbox{\hyperlink{classpuerhlab_1_1_sleeve_element}{Sleeve\+Element}}$>$$>$}
+
+
+
+Remove an element by its parent folder path. 
+
+
+\begin{DoxyParams}{Parameters}
+{\em full\+\_\+path} & \\
+\hline
+\end{DoxyParams}
+\begin{DoxyReturn}{Returns}
+std\+::optional$<$std\+::shared\+\_\+ptr$<$\+Sleeve\+Element$>$$>$ 
+\end{DoxyReturn}
+\Hypertarget{classpuerhlab_1_1_sleeve_base_ae1ba4f4297e2d620d84c87d795e58ace}\index{puerhlab::SleeveBase@{puerhlab::SleeveBase}!RemoveElementInPath@{RemoveElementInPath}}
+\index{RemoveElementInPath@{RemoveElementInPath}!puerhlab::SleeveBase@{puerhlab::SleeveBase}}
+\doxysubsubsection{\texorpdfstring{RemoveElementInPath()}{RemoveElementInPath()}\hspace{0.1cm}{\footnotesize\ttfamily [2/2]}}
+{\footnotesize\ttfamily \label{classpuerhlab_1_1_sleeve_base_ae1ba4f4297e2d620d84c87d795e58ace} 
+auto puerhlab\+::\+Sleeve\+Base\+::\+Remove\+Element\+In\+Path (\begin{DoxyParamCaption}\item[{const sl\+\_\+path\+\_\+t \&}]{target}{}\end{DoxyParamCaption}) -\/$>$ std\+::optional$<$std\+::shared\+\_\+ptr$<$\mbox{\hyperlink{classpuerhlab_1_1_sleeve_element}{Sleeve\+Element}}$>$$>$}
+
+
+
+Remove an element by its full path. 
+
+
+\begin{DoxyParams}{Parameters}
+{\em target} & \\
+\hline
+\end{DoxyParams}
+\begin{DoxyReturn}{Returns}
+std\+::optional$<$std\+::shared\+\_\+ptr$<$\+Sleeve\+Element$>$$>$ 
+\end{DoxyReturn}
+
+
+The documentation for this class was generated from the following files\+:\begin{DoxyCompactItemize}
+\item 
+D\+:/\+Projects/pu-\/erh\+\_\+lab/pu-\/erh\+\_\+lab/src/include/sleeve/sleeve\+\_\+base.\+hpp\item 
+D\+:/\+Projects/pu-\/erh\+\_\+lab/pu-\/erh\+\_\+lab/src/sleeve/sleeve\+\_\+base.\+cpp\end{DoxyCompactItemize}

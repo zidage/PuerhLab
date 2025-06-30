@@ -1,0 +1,44 @@
+\doxysection{image\+\_\+mapper.\+hpp}
+\hypertarget{image__mapper_8hpp_source}{}\label{image__mapper_8hpp_source}\index{D:/Projects/pu-\/erh\_lab/pu-\/erh\_lab/src/include/storage/mapper/image/image\_mapper.hpp@{D:/Projects/pu-\/erh\_lab/pu-\/erh\_lab/src/include/storage/mapper/image/image\_mapper.hpp}}
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{00001\ \textcolor{preprocessor}{\#pragma\ once}}
+\DoxyCodeLine{00002\ }
+\DoxyCodeLine{00003\ \textcolor{preprocessor}{\#include\ <cstdint>}}
+\DoxyCodeLine{00004\ \textcolor{preprocessor}{\#include\ <memory>}}
+\DoxyCodeLine{00005\ }
+\DoxyCodeLine{00006\ \textcolor{preprocessor}{\#include\ "{}storage/image\_pool/image\_pool\_manager.hpp"{}}}
+\DoxyCodeLine{00007\ \textcolor{preprocessor}{\#include\ "{}storage/mapper/duckorm/duckdb\_types.hpp"{}}}
+\DoxyCodeLine{00008\ \textcolor{preprocessor}{\#include\ "{}storage/mapper/mapper\_interface.hpp"{}}}
+\DoxyCodeLine{00009\ \textcolor{preprocessor}{\#include\ "{}type/type.hpp"{}}}
+\DoxyCodeLine{00010\ }
+\DoxyCodeLine{00011\ \textcolor{keyword}{namespace\ }puerhlab\ \{}
+\DoxyCodeLine{00012\ \textcolor{comment}{//\ CREATE\ TABLE\ Image\ (id\ BIGINT\ PRIMARY\ KEY,\ image\_path\ TEXT,\ file\_name\ TEXT,\ type\ INTEGER,}}
+\DoxyCodeLine{00013\ \textcolor{comment}{//\ metadata\ JSON);}}
+\DoxyCodeLine{00014\ \textcolor{keyword}{struct\ }\mbox{\hyperlink{structpuerhlab_1_1_image_mapper_params}{ImageMapperParams}}\ \{}
+\DoxyCodeLine{00015\ \ \ image\_id\_t\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ id;}
+\DoxyCodeLine{00016\ \ \ std::unique\_ptr<std::string>\ image\_path;}
+\DoxyCodeLine{00017\ \ \ std::unique\_ptr<std::string>\ file\_name;}
+\DoxyCodeLine{00018\ \ \ uint32\_t\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ type;}
+\DoxyCodeLine{00019\ \ \ std::unique\_ptr<std::string>\ metadata;}
+\DoxyCodeLine{00020\ \};}
+\DoxyCodeLine{00021\ }
+\DoxyCodeLine{00022\ \textcolor{keyword}{class\ }\mbox{\hyperlink{classpuerhlab_1_1_image_mapper}{ImageMapper}}\ :\ \textcolor{keyword}{public}\ MapperInterface<ImageMapper,\ ImageMapperParams,\ image\_id\_t>,}
+\DoxyCodeLine{00023\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{keyword}{public}\ \mbox{\hyperlink{structpuerhlab_1_1_field_reflectable}{FieldReflectable}}<ImageMapper>\ \{}
+\DoxyCodeLine{00024\ \ \textcolor{keyword}{private}:}
+\DoxyCodeLine{00025\ \ \ \textcolor{keyword}{static}\ \textcolor{keyword}{constexpr}\ uint32\_t\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \_field\_count\ \ \ \ \ \ =\ 5;}
+\DoxyCodeLine{00026\ \ \ \textcolor{keyword}{static}\ \textcolor{keyword}{constexpr}\ \textcolor{keyword}{const}\ \textcolor{keywordtype}{char}*\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \_table\_name\ \ \ \ \ \ \ =\ \textcolor{stringliteral}{"{}Image"{}};}
+\DoxyCodeLine{00027\ \ \ \textcolor{keyword}{static}\ \textcolor{keyword}{constexpr}\ \textcolor{keyword}{const}\ \textcolor{keywordtype}{char}*\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \_prime\_key\_clause\ =\ \textcolor{stringliteral}{"{}id=\{\}"{}};}
+\DoxyCodeLine{00028\ \ \ \textcolor{keyword}{static}\ \textcolor{keyword}{constexpr}\ std::array<duckorm::DuckFieldDesc,\ \_field\_count>\ \_field\_descs\ \ \ \ \ \ =\ \{}
+\DoxyCodeLine{00029\ \ \ \ \ \ \ FIELD(\mbox{\hyperlink{structpuerhlab_1_1_image_mapper_params}{ImageMapperParams}},\ \textcolor{keywordtype}{id},\ UINT32),\ FIELD(\mbox{\hyperlink{structpuerhlab_1_1_image_mapper_params}{ImageMapperParams}},\ image\_path,\ VARCHAR),}
+\DoxyCodeLine{00030\ \ \ \ \ \ \ FIELD(\mbox{\hyperlink{structpuerhlab_1_1_image_mapper_params}{ImageMapperParams}},\ file\_name,\ VARCHAR),\ FIELD(\mbox{\hyperlink{structpuerhlab_1_1_image_mapper_params}{ImageMapperParams}},\ type,\ UINT32),}
+\DoxyCodeLine{00031\ \ \ \ \ \ \ FIELD(\mbox{\hyperlink{structpuerhlab_1_1_image_mapper_params}{ImageMapperParams}},\ metadata,\ VARCHAR)\};}
+\DoxyCodeLine{00032\ }
+\DoxyCodeLine{00033\ \ \textcolor{keyword}{public}:}
+\DoxyCodeLine{00034\ \ \ \textcolor{keyword}{static}\ \textcolor{keyword}{auto}\ FromRawData(std::vector<duckorm::VarTypes>\&\&\ data)\ -\/>\ \mbox{\hyperlink{structpuerhlab_1_1_image_mapper_params}{ImageMapperParams}};}
+\DoxyCodeLine{00035\ \ \ \textcolor{keyword}{friend}\ \textcolor{keyword}{struct\ }\mbox{\hyperlink{structpuerhlab_1_1_field_reflectable}{FieldReflectable}}<\mbox{\hyperlink{classpuerhlab_1_1_image_mapper}{ImageMapper}}>;}
+\DoxyCodeLine{00036\ \ \ \textcolor{keyword}{using\ }MapperInterface::MapperInterface;}
+\DoxyCodeLine{00037\ \};}
+\DoxyCodeLine{00038\ \}\ \ \textcolor{comment}{//\ namespace\ puerhlab}}
+
+\end{DoxyCode}

@@ -1,0 +1,30 @@
+\doxysection{file\+\_\+service.\+hpp}
+\hypertarget{file__service_8hpp_source}{}\label{file__service_8hpp_source}\index{D:/Projects/pu-\/erh\_lab/pu-\/erh\_lab/src/include/storage/service/sleeve/element/file\_service.hpp@{D:/Projects/pu-\/erh\_lab/pu-\/erh\_lab/src/include/storage/service/sleeve/element/file\_service.hpp}}
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{00001\ \textcolor{preprocessor}{\#pragma\ once}}
+\DoxyCodeLine{00002\ }
+\DoxyCodeLine{00003\ \textcolor{preprocessor}{\#include\ "{}sleeve/sleeve\_element/sleeve\_file.hpp"{}}}
+\DoxyCodeLine{00004\ \textcolor{preprocessor}{\#include\ "{}storage/mapper/sleeve/element/file\_mapper.hpp"{}}}
+\DoxyCodeLine{00005\ \textcolor{preprocessor}{\#include\ "{}storage/service/service\_interface.hpp"{}}}
+\DoxyCodeLine{00006\ \textcolor{preprocessor}{\#include\ "{}type/type.hpp"{}}}
+\DoxyCodeLine{00007\ }
+\DoxyCodeLine{00008\ \textcolor{keyword}{namespace\ }puerhlab\ \{}
+\DoxyCodeLine{00009\ \textcolor{keyword}{class\ }\mbox{\hyperlink{classpuerhlab_1_1_file_service}{FileService}}\ :\ \textcolor{keyword}{public}\ ServiceInterface<FileService,\ std::pair<sl\_element\_id\_t,\ image\_id\_t>,}
+\DoxyCodeLine{00010\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ FileMapperParams,\ FileMapper,\ sl\_element\_id\_t>\ \{}
+\DoxyCodeLine{00011\ \ \textcolor{keyword}{public}:}
+\DoxyCodeLine{00012\ \ \ \textcolor{keyword}{using\ }ServiceInterface::ServiceInterface;}
+\DoxyCodeLine{00013\ }
+\DoxyCodeLine{00014\ \ \ \textcolor{comment}{//\ File\ service\ is\ used\ to\ retrieve\ a\ set\ of\ mapping,\ therefore\ no\ actual\ internal\ type,\ i.g.}}
+\DoxyCodeLine{00015\ \ \ \textcolor{comment}{//\ SleeveFile,\ is\ returned}}
+\DoxyCodeLine{00016\ \ \ \textcolor{keyword}{static}\ \textcolor{keyword}{auto}\ ToParams(\textcolor{keyword}{const}\ std::pair<sl\_element\_id\_t,\ image\_id\_t>\&\ source)\ -\/>\ \mbox{\hyperlink{structpuerhlab_1_1_file_mapper_params}{FileMapperParams}};}
+\DoxyCodeLine{00017\ \ \ \textcolor{keyword}{static}\ \textcolor{keyword}{auto}\ FromParams(\textcolor{keyword}{const}\ \mbox{\hyperlink{structpuerhlab_1_1_file_mapper_params}{FileMapperParams}}\&\&\ param)\ -\/>\ std::pair<sl\_element\_id\_t,\ image\_id\_t>;}
+\DoxyCodeLine{00018\ }
+\DoxyCodeLine{00019\ \ \ \textcolor{keyword}{auto}\ \ \ \ \ \ \ \ GetFileById(\textcolor{keyword}{const}\ sl\_element\_id\_t\ \textcolor{keywordtype}{id})\ -\/>\ std::pair<sl\_element\_id\_t,\ image\_id\_t>;}
+\DoxyCodeLine{00020\ \ \ \textcolor{keyword}{auto}\ \ \ \ \ \ \ \ GetBoundImageById(\textcolor{keyword}{const}\ sl\_element\_id\_t\ \textcolor{keywordtype}{id})\ -\/>\ image\_id\_t;}
+\DoxyCodeLine{00021\ }
+\DoxyCodeLine{00022\ \ \ \textcolor{keywordtype}{void}\ \ \ \ \ \ \ \ RemoveBindByFileId(\textcolor{keyword}{const}\ sl\_element\_id\_t\ \textcolor{keywordtype}{id});}
+\DoxyCodeLine{00023\ \};}
+\DoxyCodeLine{00024\ \};\ \ \textcolor{comment}{//\ namespace\ puerhlab}}
+
+\end{DoxyCode}

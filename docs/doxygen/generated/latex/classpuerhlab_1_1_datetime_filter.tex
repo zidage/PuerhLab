@@ -1,0 +1,89 @@
+\doxysection{puerhlab\+::Datetime\+Filter Class Reference}
+\hypertarget{classpuerhlab_1_1_datetime_filter}{}\label{classpuerhlab_1_1_datetime_filter}\index{puerhlab::DatetimeFilter@{puerhlab::DatetimeFilter}}
+Inheritance diagram for puerhlab\+::Datetime\+Filter\+:\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[height=3.000000cm]{classpuerhlab_1_1_datetime_filter}
+\end{center}
+\end{figure}
+\doxysubsubsection*{Public Member Functions}
+\begin{DoxyCompactItemize}
+\item 
+\Hypertarget{classpuerhlab_1_1_datetime_filter_a730c109c74be03e9f895cdf15c306df4}\label{classpuerhlab_1_1_datetime_filter_a730c109c74be03e9f895cdf15c306df4} 
+void {\bfseries Set\+Filter} (std\+::time\+\_\+t start\+\_\+time, std\+::time\+\_\+t end\+\_\+time)
+\item 
+void \mbox{\hyperlink{classpuerhlab_1_1_datetime_filter_aa4c08792b06ac42307667190adb96369}{Reset\+Filter}} ()
+\item 
+auto \mbox{\hyperlink{classpuerhlab_1_1_datetime_filter_a007415a64a842f2e807335ee2b433fa4}{Get\+Predicate}} () -\/$>$ std\+::wstring
+\item 
+auto \mbox{\hyperlink{classpuerhlab_1_1_datetime_filter_a8b41f5fafec9fb9bf989b5668c48a913}{To\+JSON}} () -\/$>$ std\+::wstring
+\item 
+void \mbox{\hyperlink{classpuerhlab_1_1_datetime_filter_af815a99182b004fda5b90c8656d34bd6}{From\+JSON}} (const std\+::wstring j\+\_\+str)
+\end{DoxyCompactItemize}
+\doxysubsection*{Public Member Functions inherited from \mbox{\hyperlink{classpuerhlab_1_1_range_filter}{puerhlab\+::\+Range\+Filter$<$ std\+::time\+\_\+t $>$}}}
+\begin{DoxyCompactItemize}
+\item 
+virtual void {\bfseries Set\+Range} (std\+::time\+\_\+t range\+\_\+low, std\+::time\+\_\+t range\+\_\+high)=0
+\end{DoxyCompactItemize}
+\doxysubsubsection*{Public Attributes}
+\begin{DoxyCompactItemize}
+\item 
+\Hypertarget{classpuerhlab_1_1_datetime_filter_af39aa63e22ac9f55f613121110571124}\label{classpuerhlab_1_1_datetime_filter_af39aa63e22ac9f55f613121110571124} 
+Filter\+Type {\bfseries \+\_\+type} = Filter\+Type\+::\+DATETIME
+\end{DoxyCompactItemize}
+\doxysubsection*{Public Attributes inherited from \mbox{\hyperlink{classpuerhlab_1_1_sleeve_filter}{puerhlab\+::\+Sleeve\+Filter}}}
+\begin{DoxyCompactItemize}
+\item 
+Filter\+Type {\bfseries \+\_\+type}
+\end{DoxyCompactItemize}
+
+
+\label{doc-func-members}
+\Hypertarget{classpuerhlab_1_1_datetime_filter_doc-func-members}
+\doxysubsection{Member Function Documentation}
+\Hypertarget{classpuerhlab_1_1_datetime_filter_af815a99182b004fda5b90c8656d34bd6}\index{puerhlab::DatetimeFilter@{puerhlab::DatetimeFilter}!FromJSON@{FromJSON}}
+\index{FromJSON@{FromJSON}!puerhlab::DatetimeFilter@{puerhlab::DatetimeFilter}}
+\doxysubsubsection{\texorpdfstring{FromJSON()}{FromJSON()}}
+{\footnotesize\ttfamily \label{classpuerhlab_1_1_datetime_filter_af815a99182b004fda5b90c8656d34bd6} 
+void puerhlab\+::\+Datetime\+Filter\+::\+From\+JSON (\begin{DoxyParamCaption}\item[{const std\+::wstring}]{j\+\_\+str}{}\end{DoxyParamCaption})\hspace{0.3cm}{\ttfamily [virtual]}}
+
+
+
+Implements \mbox{\hyperlink{classpuerhlab_1_1_sleeve_filter}{puerhlab\+::\+Sleeve\+Filter}}.
+
+\Hypertarget{classpuerhlab_1_1_datetime_filter_a007415a64a842f2e807335ee2b433fa4}\index{puerhlab::DatetimeFilter@{puerhlab::DatetimeFilter}!GetPredicate@{GetPredicate}}
+\index{GetPredicate@{GetPredicate}!puerhlab::DatetimeFilter@{puerhlab::DatetimeFilter}}
+\doxysubsubsection{\texorpdfstring{GetPredicate()}{GetPredicate()}}
+{\footnotesize\ttfamily \label{classpuerhlab_1_1_datetime_filter_a007415a64a842f2e807335ee2b433fa4} 
+auto puerhlab\+::\+Datetime\+Filter\+::\+Get\+Predicate (\begin{DoxyParamCaption}{}{}\end{DoxyParamCaption}) -\/$>$  std\+::wstring\hspace{0.3cm}{\ttfamily [virtual]}}
+
+
+
+Implements \mbox{\hyperlink{classpuerhlab_1_1_sleeve_filter}{puerhlab\+::\+Sleeve\+Filter}}.
+
+\Hypertarget{classpuerhlab_1_1_datetime_filter_aa4c08792b06ac42307667190adb96369}\index{puerhlab::DatetimeFilter@{puerhlab::DatetimeFilter}!ResetFilter@{ResetFilter}}
+\index{ResetFilter@{ResetFilter}!puerhlab::DatetimeFilter@{puerhlab::DatetimeFilter}}
+\doxysubsubsection{\texorpdfstring{ResetFilter()}{ResetFilter()}}
+{\footnotesize\ttfamily \label{classpuerhlab_1_1_datetime_filter_aa4c08792b06ac42307667190adb96369} 
+void puerhlab\+::\+Datetime\+Filter\+::\+Reset\+Filter (\begin{DoxyParamCaption}{}{}\end{DoxyParamCaption})\hspace{0.3cm}{\ttfamily [virtual]}}
+
+
+
+Implements \mbox{\hyperlink{classpuerhlab_1_1_sleeve_filter}{puerhlab\+::\+Sleeve\+Filter}}.
+
+\Hypertarget{classpuerhlab_1_1_datetime_filter_a8b41f5fafec9fb9bf989b5668c48a913}\index{puerhlab::DatetimeFilter@{puerhlab::DatetimeFilter}!ToJSON@{ToJSON}}
+\index{ToJSON@{ToJSON}!puerhlab::DatetimeFilter@{puerhlab::DatetimeFilter}}
+\doxysubsubsection{\texorpdfstring{ToJSON()}{ToJSON()}}
+{\footnotesize\ttfamily \label{classpuerhlab_1_1_datetime_filter_a8b41f5fafec9fb9bf989b5668c48a913} 
+auto puerhlab\+::\+Datetime\+Filter\+::\+To\+JSON (\begin{DoxyParamCaption}{}{}\end{DoxyParamCaption}) -\/$>$ std\+::wstring\hspace{0.3cm}{\ttfamily [virtual]}}
+
+
+
+Implements \mbox{\hyperlink{classpuerhlab_1_1_sleeve_filter}{puerhlab\+::\+Sleeve\+Filter}}.
+
+
+
+The documentation for this class was generated from the following files\+:\begin{DoxyCompactItemize}
+\item 
+D\+:/\+Projects/pu-\/erh\+\_\+lab/pu-\/erh\+\_\+lab/src/include/sleeve/sleeve\+\_\+filter/filters/datetime\+\_\+filter.\+hpp\item 
+D\+:/\+Projects/pu-\/erh\+\_\+lab/pu-\/erh\+\_\+lab/src/sleeve/sleeve\+\_\+filter/filters/datetime\+\_\+filter.\+cpp\end{DoxyCompactItemize}

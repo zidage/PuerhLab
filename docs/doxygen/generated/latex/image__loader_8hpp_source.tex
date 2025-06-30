@@ -1,0 +1,72 @@
+\doxysection{image\+\_\+loader.\+hpp}
+\hypertarget{image__loader_8hpp_source}{}\label{image__loader_8hpp_source}\index{D:/Projects/pu-\/erh\_lab/pu-\/erh\_lab/src/include/io/image/image\_loader.hpp@{D:/Projects/pu-\/erh\_lab/pu-\/erh\_lab/src/include/io/image/image\_loader.hpp}}
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{00001\ \textcolor{comment}{/*}}
+\DoxyCodeLine{00002\ \textcolor{comment}{\ *\ @file\ \ \ \ \ \ \ \ pu-\/erh\_lab/src/include/image/image\_loader.hpp}}
+\DoxyCodeLine{00003\ \textcolor{comment}{\ *\ @brief\ \ \ \ \ \ \ A\ module\ to\ load\ images\ into\ memory}}
+\DoxyCodeLine{00004\ \textcolor{comment}{\ *\ @author\ \ \ \ \ \ Yurun\ Zi}}
+\DoxyCodeLine{00005\ \textcolor{comment}{\ *\ @date\ \ \ \ \ \ \ \ 2025-\/03-\/25}}
+\DoxyCodeLine{00006\ \textcolor{comment}{\ *\ @license\ \ \ \ \ MIT}}
+\DoxyCodeLine{00007\ \textcolor{comment}{\ *}}
+\DoxyCodeLine{00008\ \textcolor{comment}{\ *\ @copyright\ \ \ Copyright\ (c)\ 2025\ Yurun\ Zi}}
+\DoxyCodeLine{00009\ \textcolor{comment}{\ */}}
+\DoxyCodeLine{00010\ }
+\DoxyCodeLine{00011\ \textcolor{comment}{//\ Copyright\ (c)\ 2025\ Yurun\ Zi}}
+\DoxyCodeLine{00012\ \textcolor{comment}{//}}
+\DoxyCodeLine{00013\ \textcolor{comment}{//\ Permission\ is\ hereby\ granted,\ free\ of\ charge,\ to\ any\ person\ obtaining\ a\ copy}}
+\DoxyCodeLine{00014\ \textcolor{comment}{//\ of\ this\ software\ and\ associated\ documentation\ files\ (the\ "{}Software"{}),\ to\ deal}}
+\DoxyCodeLine{00015\ \textcolor{comment}{//\ in\ the\ Software\ without\ restriction,\ including\ without\ limitation\ the\ rights}}
+\DoxyCodeLine{00016\ \textcolor{comment}{//\ to\ use,\ copy,\ modify,\ merge,\ publish,\ distribute,\ sublicense,\ and/or\ sell}}
+\DoxyCodeLine{00017\ \textcolor{comment}{//\ copies\ of\ the\ Software,\ and\ to\ permit\ persons\ to\ whom\ the\ Software\ is}}
+\DoxyCodeLine{00018\ \textcolor{comment}{//\ furnished\ to\ do\ so,\ subject\ to\ the\ following\ conditions:}}
+\DoxyCodeLine{00019\ \textcolor{comment}{//}}
+\DoxyCodeLine{00020\ \textcolor{comment}{//\ The\ above\ copyright\ notice\ and\ this\ permission\ notice\ shall\ be\ included\ in}}
+\DoxyCodeLine{00021\ \textcolor{comment}{//\ all\ copies\ or\ substantial\ portions\ of\ the\ Software.}}
+\DoxyCodeLine{00022\ \textcolor{comment}{//}}
+\DoxyCodeLine{00023\ \textcolor{comment}{//\ THE\ SOFTWARE\ IS\ PROVIDED\ "{}AS\ IS"{},\ WITHOUT\ WARRANTY\ OF\ ANY\ KIND,\ EXPRESS\ OR}}
+\DoxyCodeLine{00024\ \textcolor{comment}{//\ IMPLIED,\ INCLUDING\ BUT\ NOT\ LIMITED\ TO\ THE\ WARRANTIES\ OF\ MERCHANTABILITY,}}
+\DoxyCodeLine{00025\ \textcolor{comment}{//\ FITNESS\ FOR\ A\ PARTICULAR\ PURPOSE\ AND\ NONINFRINGEMENT.\ IN\ NO\ EVENT\ SHALL\ THE}}
+\DoxyCodeLine{00026\ \textcolor{comment}{//\ AUTHORS\ OR\ COPYRIGHT\ HOLDERS\ BE\ LIABLE\ FOR\ ANY\ CLAIM,\ DAMAGES\ OR\ OTHER}}
+\DoxyCodeLine{00027\ \textcolor{comment}{//\ LIABILITY,\ WHETHER\ IN\ AN\ ACTION\ OF\ CONTRACT,\ TORT\ OR\ OTHERWISE,\ ARISING\ FROM,}}
+\DoxyCodeLine{00028\ \textcolor{comment}{//\ OUT\ OF\ OR\ IN\ CONNECTION\ WITH\ THE\ SOFTWARE\ OR\ THE\ USE\ OR\ OTHER\ DEALINGS\ IN\ THE}}
+\DoxyCodeLine{00029\ \textcolor{comment}{//\ SOFTWARE.}}
+\DoxyCodeLine{00030\ }
+\DoxyCodeLine{00031\ \textcolor{preprocessor}{\#pragma\ once}}
+\DoxyCodeLine{00032\ }
+\DoxyCodeLine{00033\ \textcolor{preprocessor}{\#include\ <cstddef>}}
+\DoxyCodeLine{00034\ \textcolor{preprocessor}{\#include\ <cstdint>}}
+\DoxyCodeLine{00035\ \textcolor{preprocessor}{\#include\ <future>}}
+\DoxyCodeLine{00036\ \textcolor{preprocessor}{\#include\ <memory>}}
+\DoxyCodeLine{00037\ \textcolor{preprocessor}{\#include\ <vector>}}
+\DoxyCodeLine{00038\ }
+\DoxyCodeLine{00039\ \textcolor{preprocessor}{\#include\ "{}decoders/decoder\_scheduler.hpp"{}}}
+\DoxyCodeLine{00040\ \textcolor{preprocessor}{\#include\ "{}image/image.hpp"{}}}
+\DoxyCodeLine{00041\ \textcolor{preprocessor}{\#include\ "{}type/type.hpp"{}}}
+\DoxyCodeLine{00042\ \textcolor{preprocessor}{\#include\ "{}utils/queue/queue.hpp"{}}}
+\DoxyCodeLine{00043\ \textcolor{keyword}{namespace\ }puerhlab\ \{}
+\DoxyCodeLine{00044\ }
+\DoxyCodeLine{00045\ \textcolor{keyword}{class\ }\mbox{\hyperlink{classpuerhlab_1_1_image_loader_ae065f8214f04918548bb7c1e7c2c8dba}{ImageLoader}}\ \{}
+\DoxyCodeLine{00046\ \ \textcolor{keyword}{private}:}
+\DoxyCodeLine{00047\ \ \ \textcolor{comment}{//\ Type\ alias}}
+\DoxyCodeLine{00048\ \ \ \textcolor{comment}{//\ Image\ decoding\ part}}
+\DoxyCodeLine{00049\ \ \ std::shared\_ptr<BufferQueue>\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \_buffer\_decoded;}
+\DoxyCodeLine{00050\ \ \ uint32\_t\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \_buffer\_size;}
+\DoxyCodeLine{00051\ \ \ \textcolor{keywordtype}{size\_t}\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \_use\_thread;}
+\DoxyCodeLine{00052\ \ \ image\_id\_t\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \_start\_id;}
+\DoxyCodeLine{00053\ \ \ image\_id\_t\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \_next\_id;}
+\DoxyCodeLine{00054\ \ \ \mbox{\hyperlink{classpuerhlab_1_1_decoder_scheduler}{DecoderScheduler}}\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \_decoder\_scheduler;}
+\DoxyCodeLine{00055\ }
+\DoxyCodeLine{00056\ \ \ std::vector<std::shared\_ptr<std::promise<image\_id\_t>>>\ promises;}
+\DoxyCodeLine{00057\ \ \ std::vector<std::future<image\_id\_t>>\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ futures;}
+\DoxyCodeLine{00058\ }
+\DoxyCodeLine{00059\ \ \textcolor{keyword}{public}:}
+\DoxyCodeLine{00060\ \ \ \textcolor{keyword}{explicit}\ \mbox{\hyperlink{classpuerhlab_1_1_image_loader_ae065f8214f04918548bb7c1e7c2c8dba}{ImageLoader}}(uint32\_t\ buffer\_size,\ \textcolor{keywordtype}{size\_t}\ \_use\_thread,\ image\_id\_t\ start\_id);}
+\DoxyCodeLine{00061\ }
+\DoxyCodeLine{00062\ \ \ \textcolor{keywordtype}{void}\ \mbox{\hyperlink{classpuerhlab_1_1_image_loader_ad306a2d525cb3baab3739364392a51e0}{StartLoading}}(std::vector<image\_path\_t>\ images,\ DecodeType\ decode\_type);}
+\DoxyCodeLine{00063\ \ \ \textcolor{keywordtype}{void}\ \mbox{\hyperlink{classpuerhlab_1_1_image_loader_ad306a2d525cb3baab3739364392a51e0}{StartLoading}}(std::shared\_ptr<Image>\ source\_img,\ DecodeType\ decode\_type);}
+\DoxyCodeLine{00064\ \ \ \textcolor{keyword}{auto}\ LoadImage()\ -\/>\ std::shared\_ptr<Image>;}
+\DoxyCodeLine{00065\ \};}
+\DoxyCodeLine{00066\ \};\ \ \textcolor{comment}{//\ namespace\ puerhlab}}
+
+\end{DoxyCode}

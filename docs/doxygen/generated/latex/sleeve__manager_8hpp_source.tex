@@ -1,0 +1,42 @@
+\doxysection{sleeve\+\_\+manager.\+hpp}
+\hypertarget{sleeve__manager_8hpp_source}{}\label{sleeve__manager_8hpp_source}\index{D:/Projects/pu-\/erh\_lab/pu-\/erh\_lab/src/include/sleeve/sleeve\_manager.hpp@{D:/Projects/pu-\/erh\_lab/pu-\/erh\_lab/src/include/sleeve/sleeve\_manager.hpp}}
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{00001\ \textcolor{preprocessor}{\#pragma\ once}}
+\DoxyCodeLine{00002\ }
+\DoxyCodeLine{00003\ \textcolor{preprocessor}{\#include\ <opencv2/core/hal/interface.h>}}
+\DoxyCodeLine{00004\ }
+\DoxyCodeLine{00005\ \textcolor{preprocessor}{\#include\ <cstdint>}}
+\DoxyCodeLine{00006\ \textcolor{preprocessor}{\#include\ <filesystem>}}
+\DoxyCodeLine{00007\ \textcolor{preprocessor}{\#include\ <memory>}}
+\DoxyCodeLine{00008\ \textcolor{preprocessor}{\#include\ <string>}}
+\DoxyCodeLine{00009\ \textcolor{preprocessor}{\#include\ <unordered\_map>}}
+\DoxyCodeLine{00010\ }
+\DoxyCodeLine{00011\ \textcolor{preprocessor}{\#include\ "{}io/image/image\_loader.hpp"{}}}
+\DoxyCodeLine{00012\ \textcolor{preprocessor}{\#include\ "{}sleeve/sleeve\_filesystem.hpp"{}}}
+\DoxyCodeLine{00013\ \textcolor{preprocessor}{\#include\ "{}sleeve\_base.hpp"{}}}
+\DoxyCodeLine{00014\ \textcolor{preprocessor}{\#include\ "{}sleeve\_view.hpp"{}}}
+\DoxyCodeLine{00015\ \textcolor{preprocessor}{\#include\ "{}storage/image\_pool/image\_pool\_manager.hpp"{}}}
+\DoxyCodeLine{00016\ \textcolor{preprocessor}{\#include\ "{}type/type.hpp"{}}}
+\DoxyCodeLine{00017\ }
+\DoxyCodeLine{00018\ \textcolor{keyword}{namespace\ }puerhlab\ \{}
+\DoxyCodeLine{00019\ \textcolor{keyword}{class\ }\mbox{\hyperlink{classpuerhlab_1_1_sleeve_manager_a6f3981c47f81a3bbeb95c536e00554e7}{SleeveManager}}\ \{}
+\DoxyCodeLine{00020\ \ \textcolor{keyword}{private}:}
+\DoxyCodeLine{00021\ \ \ std::shared\_ptr<FileSystem>\ \ \ \ \ \ \ \_fs;}
+\DoxyCodeLine{00022\ \ \ std::shared\_ptr<SleeveView>\ \ \ \ \ \ \ \_view;}
+\DoxyCodeLine{00023\ \ \ std::shared\_ptr<ImagePoolManager>\ \_image\_pool;}
+\DoxyCodeLine{00024\ }
+\DoxyCodeLine{00025\ \ \textcolor{keyword}{public}:}
+\DoxyCodeLine{00026\ \ \ \textcolor{keyword}{explicit}\ \mbox{\hyperlink{classpuerhlab_1_1_sleeve_manager_a6f3981c47f81a3bbeb95c536e00554e7}{SleeveManager}}(std::filesystem::path\ db\_path);}
+\DoxyCodeLine{00027\ }
+\DoxyCodeLine{00028\ \ \ \textcolor{keyword}{auto}\ \mbox{\hyperlink{classpuerhlab_1_1_sleeve_manager_a6758461c29dc2321dce9c78783e471a8}{GetFilesystem}}()\ -\/>\ std::shared\_ptr<FileSystem>;}
+\DoxyCodeLine{00029\ \ \ \textcolor{keyword}{auto}\ \mbox{\hyperlink{classpuerhlab_1_1_sleeve_manager_aa0a5100bc85825682acd23b4e79b7019}{GetView}}()\ -\/>\ std::shared\_ptr<SleeveView>;}
+\DoxyCodeLine{00030\ \ \ \textcolor{keyword}{auto}\ GetPool()\ -\/>\ std::shared\_ptr<ImagePoolManager>;}
+\DoxyCodeLine{00031\ \ \ \textcolor{keyword}{auto}\ GetImgCount()\ -\/>\ uint32\_t;}
+\DoxyCodeLine{00032\ \ \ \textcolor{keyword}{auto}\ \mbox{\hyperlink{classpuerhlab_1_1_sleeve_manager_a4c908a5d8d6848f2b77f1ebdf862893b}{LoadToPath}}(std::vector<image\_path\_t>\ img\_os\_path,\ sl\_path\_t\ dest)\ -\/>\ uint32\_t;}
+\DoxyCodeLine{00033\ }
+\DoxyCodeLine{00034\ \ \ \textcolor{keyword}{auto}\ RestoreSleeveFromDB(sleeve\_id\_t\ sleeve\_id)\ -\/>\ std::shared\_ptr<FileSystem>;}
+\DoxyCodeLine{00035\ \};}
+\DoxyCodeLine{00036\ \};\ \ \textcolor{comment}{//\ namespace\ puerhlab}}
+
+\end{DoxyCode}

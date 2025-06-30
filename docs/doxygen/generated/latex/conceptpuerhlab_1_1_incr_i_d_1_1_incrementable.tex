@@ -1,0 +1,11 @@
+\doxysection{puerhlab\+::Incr\+ID\+::Incrementable Concept Reference}
+\hypertarget{conceptpuerhlab_1_1_incr_i_d_1_1_incrementable}{}\label{conceptpuerhlab_1_1_incr_i_d_1_1_incrementable}\index{puerhlab::IncrID::Incrementable@{puerhlab::IncrID::Incrementable}}
+\doxysubsection{Concept definition}
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{\textcolor{keyword}{template}<\textcolor{keyword}{typename}\ IDType>}
+\DoxyCodeLine{\textcolor{keyword}{concept\ }\mbox{\hyperlink{conceptpuerhlab_1_1_incr_i_d_1_1_incrementable}{puerhlab::IncrID::Incrementable}}\ =\ \ \textcolor{keyword}{requires}(IDType\ t)\ \{}
+\DoxyCodeLine{\ \ \{\ ++t\ \}\ -\/>\ std::same\_as<IDType\&>;}
+\DoxyCodeLine{\}}
+
+\end{DoxyCode}

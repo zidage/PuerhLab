@@ -1,0 +1,90 @@
+\doxysection{sleeve\+\_\+folder.\+hpp}
+\hypertarget{sleeve__folder_8hpp_source}{}\label{sleeve__folder_8hpp_source}\index{D:/Projects/pu-\/erh\_lab/pu-\/erh\_lab/src/include/sleeve/sleeve\_element/sleeve\_folder.hpp@{D:/Projects/pu-\/erh\_lab/pu-\/erh\_lab/src/include/sleeve/sleeve\_element/sleeve\_folder.hpp}}
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{00001\ \textcolor{comment}{/*}}
+\DoxyCodeLine{00002\ \textcolor{comment}{\ *\ @file\ \ \ \ \ \ \ \ pu-\/erh\_lab/src/include/sleeve/sleeve\_element/sleeve\_folder.hpp}}
+\DoxyCodeLine{00003\ \textcolor{comment}{\ *\ @brief\ \ \ \ \ \ \ A\ subtype\ of\ sleeve\ element\ representing\ a\ folder\ in\ a\ typical\ file\ system}}
+\DoxyCodeLine{00004\ \textcolor{comment}{\ *\ @author\ \ \ \ \ \ Yurun\ Zi}}
+\DoxyCodeLine{00005\ \textcolor{comment}{\ *\ @date\ \ \ \ \ \ \ \ 2025-\/03-\/26}}
+\DoxyCodeLine{00006\ \textcolor{comment}{\ *\ @license\ \ \ \ \ MIT}}
+\DoxyCodeLine{00007\ \textcolor{comment}{\ *}}
+\DoxyCodeLine{00008\ \textcolor{comment}{\ *\ @copyright\ \ \ Copyright\ (c)\ 2025\ Yurun\ Zi}}
+\DoxyCodeLine{00009\ \textcolor{comment}{\ */}}
+\DoxyCodeLine{00010\ }
+\DoxyCodeLine{00011\ \textcolor{comment}{//\ Copyright\ (c)\ 2025\ Yurun\ Zi}}
+\DoxyCodeLine{00012\ \textcolor{comment}{//}}
+\DoxyCodeLine{00013\ \textcolor{comment}{//\ Permission\ is\ hereby\ granted,\ free\ of\ charge,\ to\ any\ person\ obtaining\ a\ copy}}
+\DoxyCodeLine{00014\ \textcolor{comment}{//\ of\ this\ software\ and\ associated\ documentation\ files\ (the\ "{}Software"{}),\ to\ deal}}
+\DoxyCodeLine{00015\ \textcolor{comment}{//\ in\ the\ Software\ without\ restriction,\ including\ without\ limitation\ the\ rights}}
+\DoxyCodeLine{00016\ \textcolor{comment}{//\ to\ use,\ copy,\ modify,\ merge,\ publish,\ distribute,\ sublicense,\ and/or\ sell}}
+\DoxyCodeLine{00017\ \textcolor{comment}{//\ copies\ of\ the\ Software,\ and\ to\ permit\ persons\ to\ whom\ the\ Software\ is}}
+\DoxyCodeLine{00018\ \textcolor{comment}{//\ furnished\ to\ do\ so,\ subject\ to\ the\ following\ conditions:}}
+\DoxyCodeLine{00019\ \textcolor{comment}{//}}
+\DoxyCodeLine{00020\ \textcolor{comment}{//\ The\ above\ copyright\ notice\ and\ this\ permission\ notice\ shall\ be\ included\ in\ all}}
+\DoxyCodeLine{00021\ \textcolor{comment}{//\ copies\ or\ substantial\ portions\ of\ the\ Software.}}
+\DoxyCodeLine{00022\ \textcolor{comment}{//}}
+\DoxyCodeLine{00023\ \textcolor{comment}{//\ THE\ SOFTWARE\ IS\ PROVIDED\ "{}AS\ IS"{},\ WITHOUT\ WARRANTY\ OF\ ANY\ KIND,\ EXPRESS\ OR}}
+\DoxyCodeLine{00024\ \textcolor{comment}{//\ IMPLIED,\ INCLUDING\ BUT\ NOT\ LIMITED\ TO\ THE\ WARRANTIES\ OF\ MERCHANTABILITY,}}
+\DoxyCodeLine{00025\ \textcolor{comment}{//\ FITNESS\ FOR\ A\ PARTICULAR\ PURPOSE\ AND\ NONINFRINGEMENT.\ IN\ NO\ EVENT\ SHALL\ THE}}
+\DoxyCodeLine{00026\ \textcolor{comment}{//\ AUTHORS\ OR\ COPYRIGHT\ HOLDERS\ BE\ LIABLE\ FOR\ ANY\ CLAIM,\ DAMAGES\ OR\ OTHER}}
+\DoxyCodeLine{00027\ \textcolor{comment}{//\ LIABILITY,\ WHETHER\ IN\ AN\ ACTION\ OF\ CONTRACT,\ TORT\ OR\ OTHERWISE,\ ARISING\ FROM,}}
+\DoxyCodeLine{00028\ \textcolor{comment}{//\ OUT\ OF\ OR\ IN\ CONNECTION\ WITH\ THE\ SOFTWARE\ OR\ THE\ USE\ OR\ OTHER\ DEALINGS\ IN\ THE}}
+\DoxyCodeLine{00029\ \textcolor{comment}{//\ SOFTWARE.}}
+\DoxyCodeLine{00030\ }
+\DoxyCodeLine{00031\ \textcolor{preprocessor}{\#pragma\ once}}
+\DoxyCodeLine{00032\ }
+\DoxyCodeLine{00033\ \textcolor{preprocessor}{\#include\ <cstdint>}}
+\DoxyCodeLine{00034\ \textcolor{preprocessor}{\#include\ <memory>}}
+\DoxyCodeLine{00035\ \textcolor{preprocessor}{\#include\ <optional>}}
+\DoxyCodeLine{00036\ \textcolor{preprocessor}{\#include\ <set>}}
+\DoxyCodeLine{00037\ \textcolor{preprocessor}{\#include\ <string>}}
+\DoxyCodeLine{00038\ \textcolor{preprocessor}{\#include\ <unordered\_map>}}
+\DoxyCodeLine{00039\ \textcolor{preprocessor}{\#include\ <unordered\_set>}}
+\DoxyCodeLine{00040\ \textcolor{preprocessor}{\#include\ <vector>}}
+\DoxyCodeLine{00041\ }
+\DoxyCodeLine{00042\ \textcolor{preprocessor}{\#include\ "{}sleeve/sleeve\_element/sleeve\_element.hpp"{}}}
+\DoxyCodeLine{00043\ \textcolor{preprocessor}{\#include\ "{}sleeve/sleeve\_filter/filter\_combo.hpp"{}}}
+\DoxyCodeLine{00044\ \textcolor{preprocessor}{\#include\ "{}sleeve\_element.hpp"{}}}
+\DoxyCodeLine{00045\ \textcolor{preprocessor}{\#include\ "{}type/type.hpp"{}}}
+\DoxyCodeLine{00046\ }
+\DoxyCodeLine{00047\ \textcolor{keyword}{namespace\ }puerhlab\ \{}
+\DoxyCodeLine{00052\ \textcolor{keyword}{class\ }\mbox{\hyperlink{classpuerhlab_1_1_sleeve_folder_ac13586fc57e97a38962ffdd4a480f990}{SleeveFolder}}\ :\ \textcolor{keyword}{public}\ SleeveElement\ \{}
+\DoxyCodeLine{00053\ \ \textcolor{keyword}{protected}:}
+\DoxyCodeLine{00054\ \ \ std::unordered\_map<file\_name\_t,\ sl\_element\_id\_t>\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \_contents;}
+\DoxyCodeLine{00055\ \ \ std::unordered\_map<filter\_id\_t,\ std::shared\_ptr<std::set<sl\_element\_id\_t>>>\ \_indicies\_cache;}
+\DoxyCodeLine{00056\ }
+\DoxyCodeLine{00057\ \ \ std::vector<filter\_id\_t>\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \_filters;}
+\DoxyCodeLine{00058\ \ \ filter\_id\_t\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \_default\_filter;}
+\DoxyCodeLine{00059\ }
+\DoxyCodeLine{00060\ \ \ uint32\_t\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \_file\_count;}
+\DoxyCodeLine{00061\ \ \ uint32\_t\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \_folder\_count;}
+\DoxyCodeLine{00062\ }
+\DoxyCodeLine{00063\ \ \textcolor{keyword}{public}:}
+\DoxyCodeLine{00064\ \ \ \textcolor{keyword}{explicit}\ \mbox{\hyperlink{classpuerhlab_1_1_sleeve_folder_ac13586fc57e97a38962ffdd4a480f990}{SleeveFolder}}(sl\_element\_id\_t\ \textcolor{keywordtype}{id},\ file\_name\_t\ element\_name);}
+\DoxyCodeLine{00065\ \ \ \mbox{\hyperlink{classpuerhlab_1_1_sleeve_folder_ac13586fc57e97a38962ffdd4a480f990}{\string~SleeveFolder}}();}
+\DoxyCodeLine{00066\ }
+\DoxyCodeLine{00067\ \ \ \textcolor{keyword}{auto}\ Copy(sl\_element\_id\_t\ new\_id)\ \textcolor{keyword}{const}\ -\/>\ std::shared\_ptr<SleeveElement>;}
+\DoxyCodeLine{00068\ }
+\DoxyCodeLine{00069\ \ \ \textcolor{keywordtype}{void}\ \mbox{\hyperlink{classpuerhlab_1_1_sleeve_folder_a2832ec97affceda7fc296ba71b2ecf1f}{AddElementToMap}}(\textcolor{keyword}{const}\ std::shared\_ptr<SleeveElement>\ element);}
+\DoxyCodeLine{00070\ \ \ \textcolor{keywordtype}{void}\ ReplaceChild(\textcolor{keyword}{const}\ sl\_element\_id\_t\ from,\ \textcolor{keyword}{const}\ sl\_element\_id\_t\ to);}
+\DoxyCodeLine{00071\ \ \ \textcolor{keywordtype}{void}\ \mbox{\hyperlink{classpuerhlab_1_1_sleeve_folder_a64bb5a0d9f96ab7a84444364bd8957af}{UpdateElementMap}}(\textcolor{keyword}{const}\ file\_name\_t\&\ name,\ \textcolor{keyword}{const}\ sl\_element\_id\_t\ old\_id,}
+\DoxyCodeLine{00072\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ sl\_element\_id\_t\ new\_id);}
+\DoxyCodeLine{00073\ \ \ \textcolor{keywordtype}{void}\ \mbox{\hyperlink{classpuerhlab_1_1_sleeve_folder_a1bdc8d339d4ab104e1a497b910add1a7}{CreateIndex}}(\textcolor{keyword}{const}\ std::shared\_ptr<FilterCombo>\ filter);}
+\DoxyCodeLine{00074\ \ \ \textcolor{keyword}{auto}\ \mbox{\hyperlink{classpuerhlab_1_1_sleeve_folder_a767685392597c368ccb02c353d4a0e0b}{GetElementIdByName}}(\textcolor{keyword}{const}\ file\_name\_t\&\ name)\ \textcolor{keyword}{const}\ -\/>\ std::optional<sl\_element\_id\_t>;}
+\DoxyCodeLine{00075\ \ \ \textcolor{keyword}{auto}\ \mbox{\hyperlink{classpuerhlab_1_1_sleeve_folder_aaf96f2a815e5cd86b90fe7796fd0c27d}{ListElements}}()\ \textcolor{keyword}{const}\ -\/>\ std::shared\_ptr<std::vector<sl\_element\_id\_t>>;}
+\DoxyCodeLine{00076\ \ \ \textcolor{keyword}{auto}\ ListFilters()\ -\/>\ std::vector<filter\_id\_t>\&;}
+\DoxyCodeLine{00077\ \ \ \textcolor{keyword}{auto}\ \mbox{\hyperlink{classpuerhlab_1_1_sleeve_folder_a346f4109805d4eb69cdb9d75b14f54d6}{Contains}}(\textcolor{keyword}{const}\ file\_name\_t\&\ name)\ \textcolor{keyword}{const}\ -\/>\ bool;}
+\DoxyCodeLine{00078\ \ \ \textcolor{keywordtype}{void}\ \mbox{\hyperlink{classpuerhlab_1_1_sleeve_folder_ab53f56fa6e9fa11e27fc5ed57d2950bc}{RemoveNameFromMap}}(\textcolor{keyword}{const}\ file\_name\_t\&\ name);}
+\DoxyCodeLine{00079\ }
+\DoxyCodeLine{00080\ \ \ \textcolor{keywordtype}{void}\ IncrementFolderCount();}
+\DoxyCodeLine{00081\ \ \ \textcolor{keywordtype}{void}\ IncrementFileCount();}
+\DoxyCodeLine{00082\ \ \ \textcolor{keywordtype}{void}\ DecrementFolderCount();}
+\DoxyCodeLine{00083\ \ \ \textcolor{keywordtype}{void}\ DecrementFileCount();}
+\DoxyCodeLine{00084\ \ \ \textcolor{keyword}{auto}\ Clear()\ -\/>\ bool;}
+\DoxyCodeLine{00085\ \ \ \textcolor{keyword}{auto}\ ResetFilters()\ -\/>\ bool;}
+\DoxyCodeLine{00086\ \ \ \textcolor{keyword}{auto}\ ContentSize()\ -\/>\ size\_t;}
+\DoxyCodeLine{00087\ \};}
+\DoxyCodeLine{00088\ \};\ \ \textcolor{comment}{//\ namespace\ puerhlab}}
+
+\end{DoxyCode}

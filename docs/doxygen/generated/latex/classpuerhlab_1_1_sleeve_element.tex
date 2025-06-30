@@ -1,0 +1,83 @@
+\doxysection{puerhlab\+::Sleeve\+Element Class Reference}
+\hypertarget{classpuerhlab_1_1_sleeve_element}{}\label{classpuerhlab_1_1_sleeve_element}\index{puerhlab::SleeveElement@{puerhlab::SleeveElement}}
+
+
+Abstract objects residing in a sleeve, it can be files or folders.  
+
+
+
+
+{\ttfamily \#include $<$sleeve\+\_\+element.\+hpp$>$}
+
+Inheritance diagram for puerhlab\+::Sleeve\+Element\+:\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[height=2.000000cm]{classpuerhlab_1_1_sleeve_element}
+\end{center}
+\end{figure}
+\doxysubsubsection*{Public Member Functions}
+\begin{DoxyCompactItemize}
+\item 
+\Hypertarget{classpuerhlab_1_1_sleeve_element_a2ba54964cb0d26a1a7841285f6e8355b}\label{classpuerhlab_1_1_sleeve_element_a2ba54964cb0d26a1a7841285f6e8355b} 
+{\bfseries Sleeve\+Element} (sl\+\_\+element\+\_\+id\+\_\+t id, file\+\_\+name\+\_\+t element\+\_\+name)
+\item 
+\Hypertarget{classpuerhlab_1_1_sleeve_element_a186376dd9a4f0170d2403cb88b3b1504}\label{classpuerhlab_1_1_sleeve_element_a186376dd9a4f0170d2403cb88b3b1504} 
+virtual auto {\bfseries Copy} (sl\+\_\+element\+\_\+id\+\_\+t new\+\_\+id) const -\/$>$ std\+::shared\+\_\+ptr$<$ \mbox{\hyperlink{classpuerhlab_1_1_sleeve_element}{Sleeve\+Element}} $>$
+\item 
+\Hypertarget{classpuerhlab_1_1_sleeve_element_aa96e578a414789c9f6f0e9c2aa427e62}\label{classpuerhlab_1_1_sleeve_element_aa96e578a414789c9f6f0e9c2aa427e62} 
+virtual auto {\bfseries Clear} () -\/$>$ bool
+\item 
+\Hypertarget{classpuerhlab_1_1_sleeve_element_a43fa42a2903d8bbbaa4e626c817bb05f}\label{classpuerhlab_1_1_sleeve_element_a43fa42a2903d8bbbaa4e626c817bb05f} 
+void {\bfseries Set\+Add\+Time} ()
+\item 
+\Hypertarget{classpuerhlab_1_1_sleeve_element_a67ad0cebc3381dbb8b5ea28432cf03eb}\label{classpuerhlab_1_1_sleeve_element_a67ad0cebc3381dbb8b5ea28432cf03eb} 
+void {\bfseries Set\+Last\+Modified\+Time} ()
+\item 
+\Hypertarget{classpuerhlab_1_1_sleeve_element_a3b797b6c1b090669a1588eef3320d181}\label{classpuerhlab_1_1_sleeve_element_a3b797b6c1b090669a1588eef3320d181} 
+void {\bfseries Increment\+Ref\+Count} ()
+\item 
+\Hypertarget{classpuerhlab_1_1_sleeve_element_ad3d97abea7f76124b8de6c53b53d77f3}\label{classpuerhlab_1_1_sleeve_element_ad3d97abea7f76124b8de6c53b53d77f3} 
+void {\bfseries Decrement\+Ref\+Count} ()
+\item 
+\Hypertarget{classpuerhlab_1_1_sleeve_element_a786a82ee6481b2c9665dfe119ce79a99}\label{classpuerhlab_1_1_sleeve_element_a786a82ee6481b2c9665dfe119ce79a99} 
+auto {\bfseries Is\+Shared} () -\/$>$ bool
+\item 
+\Hypertarget{classpuerhlab_1_1_sleeve_element_a8cbc256a83b00ff2b41a4bbc22924157}\label{classpuerhlab_1_1_sleeve_element_a8cbc256a83b00ff2b41a4bbc22924157} 
+void {\bfseries Set\+Sync\+Flag} (Sync\+Flag flag)
+\end{DoxyCompactItemize}
+\doxysubsubsection*{Public Attributes}
+\begin{DoxyCompactItemize}
+\item 
+\Hypertarget{classpuerhlab_1_1_sleeve_element_a897a82113704eaa86e07e1d774d2b214}\label{classpuerhlab_1_1_sleeve_element_a897a82113704eaa86e07e1d774d2b214} 
+sl\+\_\+element\+\_\+id\+\_\+t {\bfseries \+\_\+element\+\_\+id}
+\item 
+\Hypertarget{classpuerhlab_1_1_sleeve_element_af5ee1f4713e83887a8c0258de71fe2cf}\label{classpuerhlab_1_1_sleeve_element_af5ee1f4713e83887a8c0258de71fe2cf} 
+Element\+Type {\bfseries \+\_\+type}
+\item 
+\Hypertarget{classpuerhlab_1_1_sleeve_element_a39f3f061eb37eefaa896437706585a5a}\label{classpuerhlab_1_1_sleeve_element_a39f3f061eb37eefaa896437706585a5a} 
+file\+\_\+name\+\_\+t {\bfseries \+\_\+element\+\_\+name}
+\item 
+\Hypertarget{classpuerhlab_1_1_sleeve_element_a6210bd7195192649979caade38f81216}\label{classpuerhlab_1_1_sleeve_element_a6210bd7195192649979caade38f81216} 
+std\+::time\+\_\+t {\bfseries \+\_\+added\+\_\+time}
+\item 
+\Hypertarget{classpuerhlab_1_1_sleeve_element_a88d71a063d65501839b324899fecd1d6}\label{classpuerhlab_1_1_sleeve_element_a88d71a063d65501839b324899fecd1d6} 
+std\+::time\+\_\+t {\bfseries \+\_\+last\+\_\+modified\+\_\+time}
+\item 
+\Hypertarget{classpuerhlab_1_1_sleeve_element_aec41e4d83f70791d2b1b38a7df3a700a}\label{classpuerhlab_1_1_sleeve_element_aec41e4d83f70791d2b1b38a7df3a700a} 
+uint32\+\_\+t {\bfseries \+\_\+ref\+\_\+count}
+\item 
+\Hypertarget{classpuerhlab_1_1_sleeve_element_ac3fccad0d369c576163692d68fd750cf}\label{classpuerhlab_1_1_sleeve_element_ac3fccad0d369c576163692d68fd750cf} 
+bool {\bfseries \+\_\+pinned}
+\item 
+\Hypertarget{classpuerhlab_1_1_sleeve_element_a793b73d8c97dec0c12561f7efe88e4f6}\label{classpuerhlab_1_1_sleeve_element_a793b73d8c97dec0c12561f7efe88e4f6} 
+Sync\+Flag {\bfseries \+\_\+sync\+\_\+flag} = Sync\+Flag\+::\+UNSYNC
+\end{DoxyCompactItemize}
+
+
+\doxysubsection{Detailed Description}
+Abstract objects residing in a sleeve, it can be files or folders. 
+
+The documentation for this class was generated from the following files\+:\begin{DoxyCompactItemize}
+\item 
+D\+:/\+Projects/pu-\/erh\+\_\+lab/pu-\/erh\+\_\+lab/src/include/sleeve/sleeve\+\_\+element/sleeve\+\_\+element.\+hpp\item 
+D\+:/\+Projects/pu-\/erh\+\_\+lab/pu-\/erh\+\_\+lab/src/sleeve/sleeve\+\_\+element/sleeve\+\_\+element.\+cpp\end{DoxyCompactItemize}

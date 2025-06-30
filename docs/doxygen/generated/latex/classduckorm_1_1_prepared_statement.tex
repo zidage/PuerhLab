@@ -1,0 +1,50 @@
+\doxysection{duckorm\+::Prepared\+Statement Class Reference}
+\hypertarget{classduckorm_1_1_prepared_statement}{}\label{classduckorm_1_1_prepared_statement}\index{duckorm::PreparedStatement@{duckorm::PreparedStatement}}
+
+
+A RAII class for managing prepared statements in Duck\+DB.  
+
+
+
+
+{\ttfamily \#include $<$duckdb\+\_\+types.\+hpp$>$}
+
+\doxysubsubsection*{Public Member Functions}
+\begin{DoxyCompactItemize}
+\item 
+\Hypertarget{classduckorm_1_1_prepared_statement_acd2839c505fe225e9f0a10554da356c0}\label{classduckorm_1_1_prepared_statement_acd2839c505fe225e9f0a10554da356c0} 
+{\bfseries Prepared\+Statement} (duckdb\+\_\+connection \&con)
+\item 
+\Hypertarget{classduckorm_1_1_prepared_statement_ae2d34b9f6d4bd9af51b84a02d7442356}\label{classduckorm_1_1_prepared_statement_ae2d34b9f6d4bd9af51b84a02d7442356} 
+{\bfseries Prepared\+Statement} (duckdb\+\_\+connection \&con, const std\+::string \&prepare\+\_\+query)
+\item 
+\Hypertarget{classduckorm_1_1_prepared_statement_a3ed9fed1511731e7edbcbaba6420fe2f}\label{classduckorm_1_1_prepared_statement_a3ed9fed1511731e7edbcbaba6420fe2f} 
+auto {\bfseries Get\+Stmt\+Guard} (const std\+::string \&prepare\+\_\+query) -\/$>$ duckdb\+\_\+prepared\+\_\+statement \&
+\item 
+\Hypertarget{classduckorm_1_1_prepared_statement_a500fde8bf0901b0d3d971b74860d7309}\label{classduckorm_1_1_prepared_statement_a500fde8bf0901b0d3d971b74860d7309} 
+void {\bfseries Set\+Connection} (duckdb\+\_\+connection \&con)
+\end{DoxyCompactItemize}
+\doxysubsubsection*{Public Attributes}
+\begin{DoxyCompactItemize}
+\item 
+\Hypertarget{classduckorm_1_1_prepared_statement_a4c47ac0f4c86ef82eeb9b48227b8d56d}\label{classduckorm_1_1_prepared_statement_a4c47ac0f4c86ef82eeb9b48227b8d56d} 
+duckdb\+\_\+result {\bfseries \+\_\+result}
+\item 
+\Hypertarget{classduckorm_1_1_prepared_statement_abe0f8b80350885f908d8639cc4b5226d}\label{classduckorm_1_1_prepared_statement_abe0f8b80350885f908d8639cc4b5226d} 
+duckdb\+\_\+prepared\+\_\+statement {\bfseries \+\_\+stmt}
+\item 
+\Hypertarget{classduckorm_1_1_prepared_statement_a03e2c751d22912e181302853200532d6}\label{classduckorm_1_1_prepared_statement_a03e2c751d22912e181302853200532d6} 
+duckdb\+\_\+connection \& {\bfseries \+\_\+con}
+\item 
+\Hypertarget{classduckorm_1_1_prepared_statement_ad48cba931a1ed9344ad682d2913798bb}\label{classduckorm_1_1_prepared_statement_ad48cba931a1ed9344ad682d2913798bb} 
+bool {\bfseries \+\_\+prepared} = false
+\end{DoxyCompactItemize}
+
+
+\doxysubsection{Detailed Description}
+A RAII class for managing prepared statements in Duck\+DB. 
+
+The documentation for this class was generated from the following files\+:\begin{DoxyCompactItemize}
+\item 
+D\+:/\+Projects/pu-\/erh\+\_\+lab/pu-\/erh\+\_\+lab/src/include/storage/mapper/duckorm/duckdb\+\_\+types.\+hpp\item 
+D\+:/\+Projects/pu-\/erh\+\_\+lab/pu-\/erh\+\_\+lab/src/storage/mapper/duckorm/duckdb\+\_\+types.\+cpp\end{DoxyCompactItemize}

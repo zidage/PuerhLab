@@ -1,0 +1,44 @@
+\doxysection{puerhlab\+::File\+System Class Reference}
+\hypertarget{classpuerhlab_1_1_file_system}{}\label{classpuerhlab_1_1_file_system}\index{puerhlab::FileSystem@{puerhlab::FileSystem}}
+\doxysubsubsection*{Public Member Functions}
+\begin{DoxyCompactItemize}
+\item 
+\Hypertarget{classpuerhlab_1_1_file_system_ae9b3940efa9f988d44678ceeffe37d01}\label{classpuerhlab_1_1_file_system_ae9b3940efa9f988d44678ceeffe37d01} 
+{\bfseries File\+System} (std\+::filesystem\+::path db\+\_\+path, sl\+\_\+element\+\_\+id\+\_\+t start\+\_\+id)
+\item 
+\Hypertarget{classpuerhlab_1_1_file_system_a75110fbc843ee0bc36bc002faa67263e}\label{classpuerhlab_1_1_file_system_a75110fbc843ee0bc36bc002faa67263e} 
+auto {\bfseries Init\+Root} () -\/$>$ bool
+\item 
+\Hypertarget{classpuerhlab_1_1_file_system_a929708ba4e2d921336ea80a9676aa297}\label{classpuerhlab_1_1_file_system_a929708ba4e2d921336ea80a9676aa297} 
+auto {\bfseries Create} (std\+::filesystem\+::path dest, std\+::wstring filename, Element\+Type type) -\/$>$ std\+::shared\+\_\+ptr$<$ \mbox{\hyperlink{classpuerhlab_1_1_sleeve_element}{Sleeve\+Element}} $>$
+\item 
+\Hypertarget{classpuerhlab_1_1_file_system_a6afa2cc95acf9cce5ab137e50936f3a6}\label{classpuerhlab_1_1_file_system_a6afa2cc95acf9cce5ab137e50936f3a6} 
+void {\bfseries Delete} (std\+::filesystem\+::path target)
+\item 
+\Hypertarget{classpuerhlab_1_1_file_system_aedcf41a3f57bb539abd42c248e345e36}\label{classpuerhlab_1_1_file_system_aedcf41a3f57bb539abd42c248e345e36} 
+auto {\bfseries Get} (std\+::filesystem\+::path target, bool write) -\/$>$ std\+::shared\+\_\+ptr$<$ \mbox{\hyperlink{classpuerhlab_1_1_sleeve_element}{Sleeve\+Element}} $>$
+\item 
+\Hypertarget{classpuerhlab_1_1_file_system_a42d130aaeae131ede5d35eafa081106a}\label{classpuerhlab_1_1_file_system_a42d130aaeae131ede5d35eafa081106a} 
+auto {\bfseries Get} (sl\+\_\+element\+\_\+id\+\_\+t id) -\/$>$ std\+::shared\+\_\+ptr$<$ \mbox{\hyperlink{classpuerhlab_1_1_sleeve_element}{Sleeve\+Element}} $>$
+\item 
+\Hypertarget{classpuerhlab_1_1_file_system_a58977d53665b923757e0a1b36eafcd1c}\label{classpuerhlab_1_1_file_system_a58977d53665b923757e0a1b36eafcd1c} 
+void {\bfseries Copy} (std\+::filesystem\+::path from, std\+::filesystem\+::path dest)
+\item 
+\Hypertarget{classpuerhlab_1_1_file_system_a05c352eab76f669a7c27a87d547e01a9}\label{classpuerhlab_1_1_file_system_a05c352eab76f669a7c27a87d547e01a9} 
+void {\bfseries Sync\+To\+DB} ()
+\item 
+\Hypertarget{classpuerhlab_1_1_file_system_aca1b4fe4fce56ef17a4249a51d271e94}\label{classpuerhlab_1_1_file_system_aca1b4fe4fce56ef17a4249a51d271e94} 
+void {\bfseries Write\+Sleeve\+Meta} (const std\+::filesystem\+::path \&meta\+\_\+path)
+\item 
+\Hypertarget{classpuerhlab_1_1_file_system_ad92a59d23fe5c40571d8d6ba80f4f06f}\label{classpuerhlab_1_1_file_system_ad92a59d23fe5c40571d8d6ba80f4f06f} 
+void {\bfseries Read\+Sleeve\+Meta} (const std\+::filesystem\+::path \&meta\+\_\+path)
+\item 
+\Hypertarget{classpuerhlab_1_1_file_system_a7552a039c9a6ac2b8900d0a7d62ce93c}\label{classpuerhlab_1_1_file_system_a7552a039c9a6ac2b8900d0a7d62ce93c} 
+auto {\bfseries Tree} (const std\+::filesystem\+::path \&path) -\/$>$ std\+::wstring
+\end{DoxyCompactItemize}
+
+
+The documentation for this class was generated from the following files\+:\begin{DoxyCompactItemize}
+\item 
+D\+:/\+Projects/pu-\/erh\+\_\+lab/pu-\/erh\+\_\+lab/src/include/sleeve/sleeve\+\_\+filesystem.\+hpp\item 
+D\+:/\+Projects/pu-\/erh\+\_\+lab/pu-\/erh\+\_\+lab/src/sleeve/sleeve\+\_\+filesystem.\+cpp\end{DoxyCompactItemize}

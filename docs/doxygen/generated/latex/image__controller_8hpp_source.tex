@@ -1,0 +1,38 @@
+\doxysection{image\+\_\+controller.\+hpp}
+\hypertarget{image__controller_8hpp_source}{}\label{image__controller_8hpp_source}\index{D:/Projects/pu-\/erh\_lab/pu-\/erh\_lab/src/include/storage/controller/image/image\_controller.hpp@{D:/Projects/pu-\/erh\_lab/pu-\/erh\_lab/src/include/storage/controller/image/image\_controller.hpp}}
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{00001\ \textcolor{preprocessor}{\#pragma\ once}}
+\DoxyCodeLine{00002\ }
+\DoxyCodeLine{00003\ \textcolor{preprocessor}{\#include\ <memory>}}
+\DoxyCodeLine{00004\ \textcolor{preprocessor}{\#include\ <string>}}
+\DoxyCodeLine{00005\ \textcolor{preprocessor}{\#include\ <vector>}}
+\DoxyCodeLine{00006\ }
+\DoxyCodeLine{00007\ \textcolor{preprocessor}{\#include\ "{}image/image.hpp"{}}}
+\DoxyCodeLine{00008\ \textcolor{preprocessor}{\#include\ "{}storage/controller/controller\_types.hpp"{}}}
+\DoxyCodeLine{00009\ \textcolor{preprocessor}{\#include\ "{}storage/image\_pool/image\_pool\_manager.hpp"{}}}
+\DoxyCodeLine{00010\ \textcolor{preprocessor}{\#include\ "{}storage/service/image/image\_service.hpp"{}}}
+\DoxyCodeLine{00011\ \textcolor{preprocessor}{\#include\ "{}type/type.hpp"{}}}
+\DoxyCodeLine{00012\ }
+\DoxyCodeLine{00013\ \textcolor{keyword}{namespace\ }puerhlab\ \{}
+\DoxyCodeLine{00014\ \textcolor{keyword}{class\ }\mbox{\hyperlink{classpuerhlab_1_1_image_controller_a26c8491a5b0c332abead99a55d693e18}{ImageController}}\ \{}
+\DoxyCodeLine{00015\ \ \textcolor{keyword}{private}:}
+\DoxyCodeLine{00016\ \ \ \mbox{\hyperlink{classpuerhlab_1_1_connection_guard}{ConnectionGuard}}\ \_guard;}
+\DoxyCodeLine{00017\ \ \ \mbox{\hyperlink{classpuerhlab_1_1_image_service}{ImageService}}\ \ \ \ \_service;}
+\DoxyCodeLine{00018\ }
+\DoxyCodeLine{00019\ \ \textcolor{keyword}{public}:}
+\DoxyCodeLine{00020\ \ \ \mbox{\hyperlink{classpuerhlab_1_1_image_controller_a26c8491a5b0c332abead99a55d693e18}{ImageController}}(\mbox{\hyperlink{classpuerhlab_1_1_connection_guard}{ConnectionGuard}}\&\&\ guard);}
+\DoxyCodeLine{00021\ \ \ \textcolor{keywordtype}{void}\ \mbox{\hyperlink{classpuerhlab_1_1_image_controller_a0e98bdd00e4952e6f5db978ddc36327d}{CaptureImagePool}}(\textcolor{keyword}{const}\ std::shared\_ptr<ImagePoolManager>\ image\_pool);}
+\DoxyCodeLine{00022\ \ \ \textcolor{keywordtype}{void}\ \mbox{\hyperlink{classpuerhlab_1_1_image_controller_abe769addcdb023d7d11f98d57a4a8faa}{AddImage}}(\textcolor{keyword}{const}\ std::shared\_ptr<Image>\ image);}
+\DoxyCodeLine{00023\ \ \ \textcolor{keywordtype}{void}\ \mbox{\hyperlink{classpuerhlab_1_1_image_controller_a024a9a0a2e466a9ef28ac4396ce5efd2}{RemoveImageById}}(\textcolor{keyword}{const}\ image\_id\_t\ remove\_id);}
+\DoxyCodeLine{00024\ \ \ \textcolor{keywordtype}{void}\ \mbox{\hyperlink{classpuerhlab_1_1_image_controller_ae8f1f3775152e364708abe6d1490c710}{RemoveImageByType}}(\textcolor{keyword}{const}\ ImageType\ type);}
+\DoxyCodeLine{00025\ \ \ \textcolor{keywordtype}{void}\ \mbox{\hyperlink{classpuerhlab_1_1_image_controller_aad0afa5d65d6bc70b41f8da4c89ceba4}{RemoveImageByPath}}(\textcolor{keyword}{const}\ std::wstring\ path);}
+\DoxyCodeLine{00026\ \ \ \textcolor{keywordtype}{void}\ UpdateImage(\textcolor{keyword}{const}\ image\_id\_t\ remove\_id);}
+\DoxyCodeLine{00027\ \ \ \textcolor{keyword}{auto}\ \mbox{\hyperlink{classpuerhlab_1_1_image_controller_a8c76f595bfe1e3441e26ad8238646eb6}{GetImageById}}(\textcolor{keyword}{const}\ image\_id\_t\ \textcolor{keywordtype}{id})\ -\/>\ std::shared\_ptr<Image>;}
+\DoxyCodeLine{00028\ \ \ \textcolor{keyword}{auto}\ \mbox{\hyperlink{classpuerhlab_1_1_image_controller_abde627367329065455244f166522feab}{GetImageByType}}(\textcolor{keyword}{const}\ ImageType\ type)\ -\/>\ std::vector<std::shared\_ptr<Image>>;}
+\DoxyCodeLine{00029\ \ \ \textcolor{keyword}{auto}\ \mbox{\hyperlink{classpuerhlab_1_1_image_controller_ab97fc444ed852a3a0a076bdc00ec178c}{GetImageByName}}(\textcolor{keyword}{const}\ std::wstring\ name)\ -\/>\ std::vector<std::shared\_ptr<Image>>;}
+\DoxyCodeLine{00030\ \ \ \textcolor{keyword}{auto}\ \mbox{\hyperlink{classpuerhlab_1_1_image_controller_a70053fba0c3a3d9f62ac68d0a89f4f5e}{GetImageByPath}}(\textcolor{keyword}{const}\ std::filesystem::path\ path)\ -\/>\ std::vector<std::shared\_ptr<Image>>;}
+\DoxyCodeLine{00031\ \};}
+\DoxyCodeLine{00032\ \};\ \ \textcolor{comment}{//\ namespace\ puerhlab}}
+
+\end{DoxyCode}

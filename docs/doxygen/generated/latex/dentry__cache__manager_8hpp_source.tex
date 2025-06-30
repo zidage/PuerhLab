@@ -1,0 +1,47 @@
+\doxysection{dentry\+\_\+cache\+\_\+manager.\+hpp}
+\hypertarget{dentry__cache__manager_8hpp_source}{}\label{dentry__cache__manager_8hpp_source}\index{D:/Projects/pu-\/erh\_lab/pu-\/erh\_lab/src/include/sleeve/dentry\_cache\_manager.hpp@{D:/Projects/pu-\/erh\_lab/pu-\/erh\_lab/src/include/sleeve/dentry\_cache\_manager.hpp}}
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{00001\ \textcolor{preprocessor}{\#include\ <cstdint>}}
+\DoxyCodeLine{00002\ \textcolor{preprocessor}{\#include\ <map>}}
+\DoxyCodeLine{00003\ \textcolor{preprocessor}{\#include\ <memory>}}
+\DoxyCodeLine{00004\ \textcolor{preprocessor}{\#include\ <optional>}}
+\DoxyCodeLine{00005\ \textcolor{preprocessor}{\#include\ <queue>}}
+\DoxyCodeLine{00006\ \textcolor{preprocessor}{\#include\ <set>}}
+\DoxyCodeLine{00007\ \textcolor{preprocessor}{\#include\ <unordered\_map>}}
+\DoxyCodeLine{00008\ \textcolor{preprocessor}{\#include\ <utility>}}
+\DoxyCodeLine{00009\ }
+\DoxyCodeLine{00010\ \textcolor{preprocessor}{\#include\ "{}sleeve\_element/sleeve\_element.hpp"{}}}
+\DoxyCodeLine{00011\ \textcolor{preprocessor}{\#include\ "{}type/type.hpp"{}}}
+\DoxyCodeLine{00012\ }
+\DoxyCodeLine{00013\ \textcolor{preprocessor}{\#pragma\ once}}
+\DoxyCodeLine{00014\ }
+\DoxyCodeLine{00015\ \textcolor{keyword}{namespace\ }puerhlab\ \{}
+\DoxyCodeLine{00016\ \textcolor{keyword}{class\ }DCacheManager\ \{}
+\DoxyCodeLine{00017\ \ \ \textcolor{keyword}{using\ }ListIterator\ =\ std::list<std::pair<sl\_path\_t,\ sl\_element\_id\_t>>::iterator;}
+\DoxyCodeLine{00018\ }
+\DoxyCodeLine{00019\ \ \textcolor{keyword}{private}:}
+\DoxyCodeLine{00020\ \ \ std::unordered\_map<sl\_path\_t,\ ListIterator>\ \ \ \ \ \ \_cache\_map;}
+\DoxyCodeLine{00021\ \ \ std::list<std::pair<sl\_path\_t,\ sl\_element\_id\_t>>\ \_cache\_list;}
+\DoxyCodeLine{00022\ \ \ uint32\_t\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \_capacity;}
+\DoxyCodeLine{00023\ }
+\DoxyCodeLine{00024\ \ \ uint32\_t\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \_evict\_count\ \ =\ 0;}
+\DoxyCodeLine{00025\ \ \ uint32\_t\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \_access\_count\ =\ 0;}
+\DoxyCodeLine{00026\ }
+\DoxyCodeLine{00027\ \ \textcolor{keyword}{public}:}
+\DoxyCodeLine{00028\ \ \ \textcolor{keyword}{static}\ \textcolor{keyword}{const}\ uint32\_t\ \_default\_capacity\ =\ 256;}
+\DoxyCodeLine{00029\ \ \ \textcolor{keyword}{explicit}\ DCacheManager();}
+\DoxyCodeLine{00030\ \ \ \textcolor{keyword}{explicit}\ DCacheManager(uint32\_t\ capacity);}
+\DoxyCodeLine{00031\ }
+\DoxyCodeLine{00032\ \ \ \textcolor{keyword}{auto}\ \mbox{\hyperlink{classpuerhlab_1_1_d_cache_manager_aa3689d77b1e807356410d9ec7061ffd9}{AccessElement}}(\textcolor{keyword}{const}\ sl\_path\_t\ path)\ -\/>\ std::optional<sl\_element\_id\_t>;}
+\DoxyCodeLine{00033\ \ \ \textcolor{keywordtype}{void}\ RecordAccess(\textcolor{keyword}{const}\ sl\_path\_t\ path,\ \textcolor{keyword}{const}\ sl\_element\_id\_t\ element\_id);}
+\DoxyCodeLine{00034\ \ \ \textcolor{keywordtype}{void}\ RemoveRecord(\textcolor{keyword}{const}\ sl\_path\_t\ path);}
+\DoxyCodeLine{00035\ \ \ \textcolor{keyword}{auto}\ Evict()\ -\/>\ std::optional<sl\_element\_id\_t>;}
+\DoxyCodeLine{00036\ \ \ \textcolor{keyword}{auto}\ \mbox{\hyperlink{classpuerhlab_1_1_d_cache_manager_aedfd50b385e98c74ffa1aa5dc67a9b37}{Contains}}(\textcolor{keyword}{const}\ sl\_path\_t\&\ path)\ -\/>\ bool;}
+\DoxyCodeLine{00037\ }
+\DoxyCodeLine{00038\ \ \ \textcolor{keywordtype}{void}\ Flush();}
+\DoxyCodeLine{00039\ \ \ \textcolor{keywordtype}{void}\ Resize(uint32\_t\ new\_capacity);}
+\DoxyCodeLine{00040\ \};}
+\DoxyCodeLine{00041\ \};\ \ \textcolor{comment}{//\ namespace\ puerhlab}}
+
+\end{DoxyCode}

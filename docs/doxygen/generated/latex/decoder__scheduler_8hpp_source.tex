@@ -1,0 +1,72 @@
+\doxysection{decoder\+\_\+scheduler.\+hpp}
+\hypertarget{decoder__scheduler_8hpp_source}{}\label{decoder__scheduler_8hpp_source}\index{D:/Projects/pu-\/erh\_lab/pu-\/erh\_lab/src/include/decoders/decoder\_scheduler.hpp@{D:/Projects/pu-\/erh\_lab/pu-\/erh\_lab/src/include/decoders/decoder\_scheduler.hpp}}
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{00001\ \textcolor{comment}{/*}}
+\DoxyCodeLine{00002\ \textcolor{comment}{\ *\ @file\ \ \ \ \ \ \ \ pu-\/erh\_lab/src/include/decoders/image\_decoder.hpp}}
+\DoxyCodeLine{00003\ \textcolor{comment}{\ *\ @brief\ \ \ \ \ \ \ A\ decoder\ responsible\ for\ decoding\ image\ files}}
+\DoxyCodeLine{00004\ \textcolor{comment}{\ *\ @author\ \ \ \ \ \ Yurun\ Zi}}
+\DoxyCodeLine{00005\ \textcolor{comment}{\ *\ @date\ \ \ \ \ \ \ \ 2025-\/03-\/28}}
+\DoxyCodeLine{00006\ \textcolor{comment}{\ *\ @license\ \ \ \ \ MIT}}
+\DoxyCodeLine{00007\ \textcolor{comment}{\ *}}
+\DoxyCodeLine{00008\ \textcolor{comment}{\ *\ @copyright\ \ \ Copyright\ (c)\ 2025\ Yurun\ Zi}}
+\DoxyCodeLine{00009\ \textcolor{comment}{\ */}}
+\DoxyCodeLine{00010\ }
+\DoxyCodeLine{00011\ \textcolor{comment}{//\ Copyright\ (c)\ 2025\ Yurun\ Zi}}
+\DoxyCodeLine{00012\ \textcolor{comment}{//}}
+\DoxyCodeLine{00013\ \textcolor{comment}{//\ Permission\ is\ hereby\ granted,\ free\ of\ charge,\ to\ any\ person\ obtaining\ a\ copy}}
+\DoxyCodeLine{00014\ \textcolor{comment}{//\ of\ this\ software\ and\ associated\ documentation\ files\ (the\ "{}Software"{}),\ to\ deal}}
+\DoxyCodeLine{00015\ \textcolor{comment}{//\ in\ the\ Software\ without\ restriction,\ including\ without\ limitation\ the\ rights}}
+\DoxyCodeLine{00016\ \textcolor{comment}{//\ to\ use,\ copy,\ modify,\ merge,\ publish,\ distribute,\ sublicense,\ and/or\ sell}}
+\DoxyCodeLine{00017\ \textcolor{comment}{//\ copies\ of\ the\ Software,\ and\ to\ permit\ persons\ to\ whom\ the\ Software\ is}}
+\DoxyCodeLine{00018\ \textcolor{comment}{//\ furnished\ to\ do\ so,\ subject\ to\ the\ following\ conditions:}}
+\DoxyCodeLine{00019\ \textcolor{comment}{//}}
+\DoxyCodeLine{00020\ \textcolor{comment}{//\ The\ above\ copyright\ notice\ and\ this\ permission\ notice\ shall\ be\ included\ in}}
+\DoxyCodeLine{00021\ \textcolor{comment}{//\ all\ copies\ or\ substantial\ portions\ of\ the\ Software.}}
+\DoxyCodeLine{00022\ \textcolor{comment}{//}}
+\DoxyCodeLine{00023\ \textcolor{comment}{//\ THE\ SOFTWARE\ IS\ PROVIDED\ "{}AS\ IS"{},\ WITHOUT\ WARRANTY\ OF\ ANY\ KIND,\ EXPRESS\ OR}}
+\DoxyCodeLine{00024\ \textcolor{comment}{//\ IMPLIED,\ INCLUDING\ BUT\ NOT\ LIMITED\ TO\ THE\ WARRANTIES\ OF\ MERCHANTABILITY,}}
+\DoxyCodeLine{00025\ \textcolor{comment}{//\ FITNESS\ FOR\ A\ PARTICULAR\ PURPOSE\ AND\ NONINFRINGEMENT.\ IN\ NO\ EVENT\ SHALL\ THE}}
+\DoxyCodeLine{00026\ \textcolor{comment}{//\ AUTHORS\ OR\ COPYRIGHT\ HOLDERS\ BE\ LIABLE\ FOR\ ANY\ CLAIM,\ DAMAGES\ OR\ OTHER}}
+\DoxyCodeLine{00027\ \textcolor{comment}{//\ LIABILITY,\ WHETHER\ IN\ AN\ ACTION\ OF\ CONTRACT,\ TORT\ OR\ OTHERWISE,\ ARISING\ FROM,}}
+\DoxyCodeLine{00028\ \textcolor{comment}{//\ OUT\ OF\ OR\ IN\ CONNECTION\ WITH\ THE\ SOFTWARE\ OR\ THE\ USE\ OR\ OTHER\ DEALINGS\ IN\ THE}}
+\DoxyCodeLine{00029\ \textcolor{comment}{//\ SOFTWARE.}}
+\DoxyCodeLine{00030\ }
+\DoxyCodeLine{00031\ \textcolor{preprocessor}{\#pragma\ once}}
+\DoxyCodeLine{00032\ }
+\DoxyCodeLine{00033\ \textcolor{preprocessor}{\#include\ <cstddef>}}
+\DoxyCodeLine{00034\ \textcolor{preprocessor}{\#include\ <exiv2/exif.hpp>}}
+\DoxyCodeLine{00035\ \textcolor{preprocessor}{\#include\ <exiv2/image.hpp>}}
+\DoxyCodeLine{00036\ \textcolor{preprocessor}{\#include\ <future>}}
+\DoxyCodeLine{00037\ \textcolor{preprocessor}{\#include\ <memory>}}
+\DoxyCodeLine{00038\ \textcolor{preprocessor}{\#include\ <opencv2/imgcodecs.hpp>}}
+\DoxyCodeLine{00039\ }
+\DoxyCodeLine{00040\ \textcolor{preprocessor}{\#include\ "{}concurrency/thread\_pool.hpp"{}}}
+\DoxyCodeLine{00041\ \textcolor{preprocessor}{\#include\ "{}image/image.hpp"{}}}
+\DoxyCodeLine{00042\ \textcolor{preprocessor}{\#include\ "{}type/type.hpp"{}}}
+\DoxyCodeLine{00043\ \textcolor{preprocessor}{\#include\ "{}utils/queue/queue.hpp"{}}}
+\DoxyCodeLine{00044\ }
+\DoxyCodeLine{00045\ \textcolor{preprocessor}{\#define\ MAX\_REQUEST\_SIZE\ 64u}}
+\DoxyCodeLine{00046\ \textcolor{keyword}{namespace\ }puerhlab\ \{}
+\DoxyCodeLine{00047\ }
+\DoxyCodeLine{00048\ \textcolor{keyword}{enum\ class}\ DecodeType\ \{\ SLEEVE\_LOADING,\ THUMB,\ RAW,\ REGULAR\ \};}
+\DoxyCodeLine{00049\ }
+\DoxyCodeLine{00050\ \textcolor{keyword}{class\ }\mbox{\hyperlink{classpuerhlab_1_1_decoder_scheduler_a2dc2eac03afe29bef0e8a85bcd195935}{DecoderScheduler}}\ \{}
+\DoxyCodeLine{00051\ \ \textcolor{keyword}{private}:}
+\DoxyCodeLine{00052\ \ \ \mbox{\hyperlink{classpuerhlab_1_1_thread_pool}{ThreadPool}}\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \_file\_read\_thread\_pool;}
+\DoxyCodeLine{00053\ \ \ \mbox{\hyperlink{classpuerhlab_1_1_thread_pool}{ThreadPool}}\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \_thread\_pool;}
+\DoxyCodeLine{00054\ \ \ std::shared\_ptr<BufferQueue>\ \_decoded\_buffer;}
+\DoxyCodeLine{00055\ }
+\DoxyCodeLine{00056\ \ \textcolor{keyword}{public}:}
+\DoxyCodeLine{00057\ \ \ \textcolor{keyword}{explicit}\ \mbox{\hyperlink{classpuerhlab_1_1_decoder_scheduler_a2dc2eac03afe29bef0e8a85bcd195935}{DecoderScheduler}}(\textcolor{keywordtype}{size\_t}\ thread\_count,\ std::shared\_ptr<BufferQueue>\ decoded\_buffer);}
+\DoxyCodeLine{00058\ }
+\DoxyCodeLine{00059\ \ \ \textcolor{keywordtype}{void}\ \mbox{\hyperlink{classpuerhlab_1_1_decoder_scheduler_a6f5cc6dd4d28f6af93858e8217cfa595}{ScheduleDecode}}(image\_id\_t\ \textcolor{keywordtype}{id},\ image\_path\_t\ image\_path,}
+\DoxyCodeLine{00060\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ std::shared\_ptr<std::promise<image\_id\_t>>\ decode\_promise);}
+\DoxyCodeLine{00061\ }
+\DoxyCodeLine{00062\ \ \ \textcolor{keywordtype}{void}\ \mbox{\hyperlink{classpuerhlab_1_1_decoder_scheduler_a6f5cc6dd4d28f6af93858e8217cfa595}{ScheduleDecode}}(std::shared\_ptr<Image>\ source\_img,\ DecodeType\ decode\_type,}
+\DoxyCodeLine{00063\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ std::shared\_ptr<std::promise<image\_id\_t>>\ decode\_promise);}
+\DoxyCodeLine{00064\ \};}
+\DoxyCodeLine{00065\ }
+\DoxyCodeLine{00066\ \};\ \ \textcolor{comment}{//\ namespace\ puerhlab}}
+
+\end{DoxyCode}

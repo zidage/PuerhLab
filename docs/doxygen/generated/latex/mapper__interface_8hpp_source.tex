@@ -1,0 +1,63 @@
+\doxysection{mapper\+\_\+interface.\+hpp}
+\hypertarget{mapper__interface_8hpp_source}{}\label{mapper__interface_8hpp_source}\index{D:/Projects/pu-\/erh\_lab/pu-\/erh\_lab/src/include/storage/mapper/mapper\_interface.hpp@{D:/Projects/pu-\/erh\_lab/pu-\/erh\_lab/src/include/storage/mapper/mapper\_interface.hpp}}
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{00001\ \textcolor{preprocessor}{\#pragma\ once}}
+\DoxyCodeLine{00002\ }
+\DoxyCodeLine{00003\ \textcolor{preprocessor}{\#include\ <duckdb.h>}}
+\DoxyCodeLine{00004\ }
+\DoxyCodeLine{00005\ \textcolor{preprocessor}{\#include\ <cstdint>}}
+\DoxyCodeLine{00006\ \textcolor{preprocessor}{\#include\ <format>}}
+\DoxyCodeLine{00007\ \textcolor{preprocessor}{\#include\ <memory>}}
+\DoxyCodeLine{00008\ \textcolor{preprocessor}{\#include\ <span>}}
+\DoxyCodeLine{00009\ \textcolor{preprocessor}{\#include\ <vector>}}
+\DoxyCodeLine{00010\ }
+\DoxyCodeLine{00011\ \textcolor{preprocessor}{\#include\ "{}storage/mapper/duckorm/duckdb\_orm.hpp"{}}}
+\DoxyCodeLine{00012\ \textcolor{preprocessor}{\#include\ "{}storage/mapper/duckorm/duckdb\_types.hpp"{}}}
+\DoxyCodeLine{00013\ }
+\DoxyCodeLine{00014\ \textcolor{keyword}{namespace\ }puerhlab\ \{}
+\DoxyCodeLine{00015\ \textcolor{keyword}{template}\ <\textcolor{keyword}{typename}\ Derived,\ \textcolor{keyword}{typename}\ Mappable,\ \textcolor{keyword}{typename}\ ID>}
+\DoxyCodeLine{00016\ \textcolor{keyword}{class\ }MapperInterface\ \{}
+\DoxyCodeLine{00017\ \ \textcolor{keyword}{public}:}
+\DoxyCodeLine{00018\ \ \ duckdb\_connection\&\ \_conn;}
+\DoxyCodeLine{00019\ }
+\DoxyCodeLine{00020\ \ \ MapperInterface(duckdb\_connection\&\ conn)\ :\ \_conn(conn)\ \{\}}
+\DoxyCodeLine{00021\ \ \ \textcolor{keywordtype}{void}\ Insert(\textcolor{keyword}{const}\ Mappable\&\&\ obj)\ \{}
+\DoxyCodeLine{00022\ \ \ \ \ duckorm::insert(\_conn,\ Derived::TableName(),\ \&obj,\ Derived::FieldDesc(),\ Derived::FieldCount());}
+\DoxyCodeLine{00023\ \ \ \}}
+\DoxyCodeLine{00024\ \ \ \textcolor{keywordtype}{void}\ Remove(\textcolor{keyword}{const}\ ID\ remove\_id)\ \{}
+\DoxyCodeLine{00025\ \ \ \ \ std::string\ remove\_clause\ =\ std::format(Derived::PrimeKeyClause(),\ remove\_id);}
+\DoxyCodeLine{00026\ \ \ \ \ duckorm::remove(\_conn,\ Derived::TableName(),\ remove\_clause.c\_str());}
+\DoxyCodeLine{00027\ \ \ \}}
+\DoxyCodeLine{00028\ \ \ \textcolor{keywordtype}{void}\ RemoveByClause(\textcolor{keyword}{const}\ std::string\&\ predicate)\ \{}
+\DoxyCodeLine{00029\ \ \ \ \ duckorm::remove(\_conn,\ Derived::TableName(),\ predicate.c\_str());}
+\DoxyCodeLine{00030\ \ \ \}}
+\DoxyCodeLine{00031\ \ \ \textcolor{keyword}{auto}\ Get(\textcolor{keyword}{const}\ \textcolor{keywordtype}{char}*\ where\_clause)\ -\/>\ std::vector<Mappable>\ \{}
+\DoxyCodeLine{00032\ \ \ \ \ \textcolor{keyword}{auto}\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ raw\ =\ duckorm::select(\_conn,\ Derived::TableName(),\ Derived::FieldDesc(),}
+\DoxyCodeLine{00033\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ Derived::FieldCount(),\ where\_clause);}
+\DoxyCodeLine{00034\ \ \ \ \ std::vector<Mappable>\ result;}
+\DoxyCodeLine{00035\ \ \ \ \ \textcolor{keywordflow}{for}\ (\textcolor{keyword}{auto}\&\ row\ :\ raw)\ \{}
+\DoxyCodeLine{00036\ \ \ \ \ \ \ result.emplace\_back(Derived::FromRawData(std::move(row)));}
+\DoxyCodeLine{00037\ \ \ \ \ \}}
+\DoxyCodeLine{00038\ \ \ \ \ \textcolor{keywordflow}{return}\ result;}
+\DoxyCodeLine{00039\ \ \ \}}
+\DoxyCodeLine{00040\ \ \ \textcolor{keywordtype}{void}\ Update(\textcolor{keyword}{const}\ ID\ target\_id,\ \textcolor{keyword}{const}\ Mappable\&\&\ updated)\ \{}
+\DoxyCodeLine{00041\ \ \ \ \ std::string\ where\_clause\ =\ std::format(Derived::PrimeKeyClause(),\ target\_id);}
+\DoxyCodeLine{00042\ \ \ \ \ duckorm::update(\_conn,\ Derived::TableName(),\ \&updated,\ Derived::FieldDesc(),}
+\DoxyCodeLine{00043\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ Derived::FieldCount(),\ where\_clause.c\_str());}
+\DoxyCodeLine{00044\ \ \ \}}
+\DoxyCodeLine{00045\ \};}
+\DoxyCodeLine{00046\ }
+\DoxyCodeLine{00047\ \textcolor{comment}{//\ Don't\ understand\ what\ heck\ this\ is...\ They\ call\ it\ CRTP\ (C++\ Recurring\ Tremendous\ Pain,\ maybe).}}
+\DoxyCodeLine{00048\ \textcolor{keyword}{template}\ <\textcolor{keyword}{typename}\ Derived>}
+\DoxyCodeLine{00049\ \textcolor{keyword}{struct\ }\mbox{\hyperlink{structpuerhlab_1_1_field_reflectable}{FieldReflectable}}\ \{}
+\DoxyCodeLine{00050\ \ \textcolor{keyword}{public}:}
+\DoxyCodeLine{00051\ \ \ \textcolor{keyword}{using\ }FieldArrayType\ =\ std::span<const\ duckorm::DuckFieldDesc>;}
+\DoxyCodeLine{00052\ \ \ \textcolor{keyword}{static}\ \textcolor{keyword}{constexpr}\ FieldArrayType\ FieldDesc()\ \{\ \textcolor{keywordflow}{return}\ Derived::\_field\_descs;\ \}}
+\DoxyCodeLine{00053\ \ \ \textcolor{keyword}{static}\ \textcolor{keyword}{constexpr}\ uint32\_t\ \ \ \ \ \ \ FieldCount()\ \{\ \textcolor{keywordflow}{return}\ Derived::\_field\_count;\ \}}
+\DoxyCodeLine{00054\ \ \ \textcolor{keyword}{static}\ \textcolor{keyword}{constexpr}\ \textcolor{keyword}{const}\ \textcolor{keywordtype}{char}*\ \ \ \ TableName()\ \{\ \textcolor{keywordflow}{return}\ Derived::\_table\_name;\ \}}
+\DoxyCodeLine{00055\ \ \ \textcolor{keyword}{static}\ \textcolor{keyword}{constexpr}\ \textcolor{keyword}{const}\ \textcolor{keywordtype}{char}*\ \ \ \ PrimeKeyClause()\ \{\ \textcolor{keywordflow}{return}\ Derived::\_prime\_key\_clause;\ \}}
+\DoxyCodeLine{00056\ \};}
+\DoxyCodeLine{00057\ \};\ \ \textcolor{comment}{//\ namespace\ puerhlab}}
+
+\end{DoxyCode}

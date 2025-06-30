@@ -1,0 +1,211 @@
+\doxysection{queue.\+hpp}
+\hypertarget{queue_8hpp_source}{}\label{queue_8hpp_source}\index{D:/Projects/pu-\/erh\_lab/pu-\/erh\_lab/src/include/utils/queue/queue.hpp@{D:/Projects/pu-\/erh\_lab/pu-\/erh\_lab/src/include/utils/queue/queue.hpp}}
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{00001\ \textcolor{comment}{/*}}
+\DoxyCodeLine{00002\ \textcolor{comment}{\ *\ @file\ \ \ \ \ \ \ \ pu-\/erh\_lab/src/include/queue/queue.hpp}}
+\DoxyCodeLine{00003\ \textcolor{comment}{\ *\ @brief\ \ \ \ \ \ \ Implementation\ of\ a\ non-\/blocking\ queue\ for\ various\ use\ cases}}
+\DoxyCodeLine{00004\ \textcolor{comment}{\ *\ @author\ \ \ \ \ \ Yurun\ Zi}}
+\DoxyCodeLine{00005\ \textcolor{comment}{\ *\ @date\ \ \ \ \ \ \ \ 2025-\/03-\/20}}
+\DoxyCodeLine{00006\ \textcolor{comment}{\ *\ @license\ \ \ \ \ MIT}}
+\DoxyCodeLine{00007\ \textcolor{comment}{\ *}}
+\DoxyCodeLine{00008\ \textcolor{comment}{\ *\ @copyright\ \ \ Copyright\ (c)\ 2025\ Yurun\ Zi}}
+\DoxyCodeLine{00009\ \textcolor{comment}{\ */}}
+\DoxyCodeLine{00010\ }
+\DoxyCodeLine{00011\ \textcolor{comment}{//\ Copyright\ (c)\ 2025\ Yurun\ Zi}}
+\DoxyCodeLine{00012\ \textcolor{comment}{//}}
+\DoxyCodeLine{00013\ \textcolor{comment}{//\ Permission\ is\ hereby\ granted,\ free\ of\ charge,\ to\ any\ person\ obtaining\ a\ copy}}
+\DoxyCodeLine{00014\ \textcolor{comment}{//\ of\ this\ software\ and\ associated\ documentation\ files\ (the\ "{}Software"{}),\ to\ deal}}
+\DoxyCodeLine{00015\ \textcolor{comment}{//\ in\ the\ Software\ without\ restriction,\ including\ without\ limitation\ the\ rights}}
+\DoxyCodeLine{00016\ \textcolor{comment}{//\ to\ use,\ copy,\ modify,\ merge,\ publish,\ distribute,\ sublicense,\ and/or\ sell}}
+\DoxyCodeLine{00017\ \textcolor{comment}{//\ copies\ of\ the\ Software,\ and\ to\ permit\ persons\ to\ whom\ the\ Software\ is}}
+\DoxyCodeLine{00018\ \textcolor{comment}{//\ furnished\ to\ do\ so,\ subject\ to\ the\ following\ conditions:}}
+\DoxyCodeLine{00019\ \textcolor{comment}{//}}
+\DoxyCodeLine{00020\ \textcolor{comment}{//\ The\ above\ copyright\ notice\ and\ this\ permission\ notice\ shall\ be\ included\ in}}
+\DoxyCodeLine{00021\ \textcolor{comment}{//\ all\ copies\ or\ substantial\ portions\ of\ the\ Software.}}
+\DoxyCodeLine{00022\ \textcolor{comment}{//}}
+\DoxyCodeLine{00023\ \textcolor{comment}{//\ THE\ SOFTWARE\ IS\ PROVIDED\ "{}AS\ IS"{},\ WITHOUT\ WARRANTY\ OF\ ANY\ KIND,\ EXPRESS\ OR}}
+\DoxyCodeLine{00024\ \textcolor{comment}{//\ IMPLIED,\ INCLUDING\ BUT\ NOT\ LIMITED\ TO\ THE\ WARRANTIES\ OF\ MERCHANTABILITY,}}
+\DoxyCodeLine{00025\ \textcolor{comment}{//\ FITNESS\ FOR\ A\ PARTICULAR\ PURPOSE\ AND\ NONINFRINGEMENT.\ IN\ NO\ EVENT\ SHALL\ THE}}
+\DoxyCodeLine{00026\ \textcolor{comment}{//\ AUTHORS\ OR\ COPYRIGHT\ HOLDERS\ BE\ LIABLE\ FOR\ ANY\ CLAIM,\ DAMAGES\ OR\ OTHER}}
+\DoxyCodeLine{00027\ \textcolor{comment}{//\ LIABILITY,\ WHETHER\ IN\ AN\ ACTION\ OF\ CONTRACT,\ TORT\ OR\ OTHERWISE,\ ARISING\ FROM,}}
+\DoxyCodeLine{00028\ \textcolor{comment}{//\ OUT\ OF\ OR\ IN\ CONNECTION\ WITH\ THE\ SOFTWARE\ OR\ THE\ USE\ OR\ OTHER\ DEALINGS\ IN\ THE}}
+\DoxyCodeLine{00029\ \textcolor{comment}{//\ SOFTWARE.}}
+\DoxyCodeLine{00030\ }
+\DoxyCodeLine{00031\ \textcolor{preprocessor}{\#include\ <cstdint>}}
+\DoxyCodeLine{00032\ \textcolor{preprocessor}{\#include\ <mutex>}}
+\DoxyCodeLine{00033\ \textcolor{preprocessor}{\#include\ <optional>}}
+\DoxyCodeLine{00034\ \textcolor{preprocessor}{\#include\ <queue>}}
+\DoxyCodeLine{00035\ }
+\DoxyCodeLine{00036\ \textcolor{preprocessor}{\#pragma\ once}}
+\DoxyCodeLine{00037\ }
+\DoxyCodeLine{00038\ \textcolor{keyword}{namespace\ }puerhlab\ \{}
+\DoxyCodeLine{00042\ \textcolor{keyword}{template}\ <\textcolor{keyword}{typename}\ T>}
+\DoxyCodeLine{00043\ \textcolor{keyword}{class\ }ConcurrentBlockingQueue\ \{}
+\DoxyCodeLine{00044\ \ \textcolor{keyword}{public}:}
+\DoxyCodeLine{00045\ \ \ std::uint32\_t\ \ \ \ \ \ \ \ \ \ \ \_max\_size;}
+\DoxyCodeLine{00046\ \ \ \textcolor{keywordtype}{bool}\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \_has\_capacity\_limit\ =\ \textcolor{keyword}{true};}
+\DoxyCodeLine{00047\ \ \ std::queue<T>\ \ \ \ \ \ \ \ \ \ \ \_queue;}
+\DoxyCodeLine{00048\ \ \ \textcolor{comment}{//\ Mutex\ used\ for\ non-\/blocking\ queue}}
+\DoxyCodeLine{00049\ \ \ std::mutex\ \ \ \ \ \ \ \ \ \ \ \ \ \ mtx;}
+\DoxyCodeLine{00050\ \ \ std::condition\_variable\ \_producer\_cv;}
+\DoxyCodeLine{00051\ \ \ std::condition\_variable\ \_consumer\_cv;}
+\DoxyCodeLine{00052\ }
+\DoxyCodeLine{00053\ \ \ \textcolor{keyword}{explicit}\ ConcurrentBlockingQueue()\ \{\ \_has\_capacity\_limit\ =\ \textcolor{keyword}{false};\ \};}
+\DoxyCodeLine{00054\ }
+\DoxyCodeLine{00055\ \ \ \textcolor{keyword}{explicit}\ ConcurrentBlockingQueue(uint32\_t\ max\_size)\ :\ \_max\_size(max\_size)\ \{\}}
+\DoxyCodeLine{00056\ }
+\DoxyCodeLine{00062\ \ \ \textcolor{keywordtype}{void}\ \mbox{\hyperlink{classpuerhlab_1_1_concurrent_blocking_queue_acc4ae3370460a49800ee12105e285f58}{push}}(T\ new\_request)\ \{}
+\DoxyCodeLine{00063\ \ \ \ \ \{}
+\DoxyCodeLine{00064\ \ \ \ \ \ \ std::unique\_lock<std::mutex>\ lock(mtx);}
+\DoxyCodeLine{00065\ \ \ \ \ \ \ \_queue.push(std::move(new\_request));}
+\DoxyCodeLine{00066\ \ \ \ \ \}}
+\DoxyCodeLine{00067\ \ \ \ \ \_consumer\_cv.notify\_all();}
+\DoxyCodeLine{00068\ \ \ \}}
+\DoxyCodeLine{00069\ }
+\DoxyCodeLine{00075\ \ \ \textcolor{keywordtype}{void}\ \mbox{\hyperlink{classpuerhlab_1_1_concurrent_blocking_queue_aea63d4d9a4fdf1e5307d5ee8d2b58f17}{push\_r}}(T\&\&\ new\_request)\ \{}
+\DoxyCodeLine{00076\ \ \ \ \ \{}
+\DoxyCodeLine{00077\ \ \ \ \ \ \ std::unique\_lock<std::mutex>\ lock(mtx);}
+\DoxyCodeLine{00078\ \ \ \ \ \ \ \_queue.push(std::move(new\_request));}
+\DoxyCodeLine{00079\ \ \ \ \ \}}
+\DoxyCodeLine{00080\ \ \ \ \ \_consumer\_cv.notify\_all();}
+\DoxyCodeLine{00081\ \ \ \}}
+\DoxyCodeLine{00082\ }
+\DoxyCodeLine{00088\ \ \ T\ \mbox{\hyperlink{classpuerhlab_1_1_concurrent_blocking_queue_af7c0975fd9247811fde2051fe23f32b3}{pop}}()\ \{}
+\DoxyCodeLine{00089\ \ \ \ \ std::unique\_lock<std::mutex>\ lock(mtx);}
+\DoxyCodeLine{00090\ \ \ \ \ \textcolor{comment}{//\ Wait\ for\ the\ queue\ to\ be\ fill\ with\ at\ least\ one\ value}}
+\DoxyCodeLine{00091\ \ \ \ \ \_consumer\_cv.wait(lock,\ [\textcolor{keyword}{this}]\ \{\ \textcolor{keywordflow}{return}\ !\_queue.empty();\ \});}
+\DoxyCodeLine{00092\ }
+\DoxyCodeLine{00093\ \ \ \ \ \textcolor{keyword}{auto}\ handled\_request\ =\ \_queue.front();}
+\DoxyCodeLine{00094\ \ \ \ \ \_queue.pop();}
+\DoxyCodeLine{00095\ }
+\DoxyCodeLine{00096\ \ \ \ \ \textcolor{keywordflow}{return}\ handled\_request;}
+\DoxyCodeLine{00097\ \ \ \}}
+\DoxyCodeLine{00098\ }
+\DoxyCodeLine{00104\ \ \ T\ \mbox{\hyperlink{classpuerhlab_1_1_concurrent_blocking_queue_a947f5e30ab4c4fe7670f87f573dedf78}{pop\_r}}()\ \{}
+\DoxyCodeLine{00105\ \ \ \ \ std::unique\_lock<std::mutex>\ lock(mtx);}
+\DoxyCodeLine{00106\ \ \ \ \ \textcolor{comment}{//\ Wait\ for\ the\ queue\ to\ be\ fill\ with\ at\ least\ one\ value}}
+\DoxyCodeLine{00107\ \ \ \ \ \_consumer\_cv.wait(lock,\ [\textcolor{keyword}{this}]\ \{\ \textcolor{keywordflow}{return}\ !\_queue.empty();\ \});}
+\DoxyCodeLine{00108\ }
+\DoxyCodeLine{00109\ \ \ \ \ \textcolor{keyword}{auto}\ handled\_request\ =\ std::move(\_queue.front());}
+\DoxyCodeLine{00110\ \ \ \ \ \_queue.pop();}
+\DoxyCodeLine{00111\ }
+\DoxyCodeLine{00112\ \ \ \ \ \textcolor{keywordflow}{return}\ handled\_request;}
+\DoxyCodeLine{00113\ \ \ \}}
+\DoxyCodeLine{00114\ \};}
+\DoxyCodeLine{00115\ }
+\DoxyCodeLine{00119\ \textcolor{keyword}{template}\ <\textcolor{keyword}{typename}\ T>}
+\DoxyCodeLine{00120\ \textcolor{keyword}{class\ }LockFreeMPMCQueue\ \{}
+\DoxyCodeLine{00121\ \ \textcolor{keyword}{public}:}
+\DoxyCodeLine{00122\ \ \ \textcolor{keyword}{explicit}\ LockFreeMPMCQueue(\textcolor{keywordtype}{size\_t}\ capacity)\ :\ \_capacity(capacity),\ \_buffer(capacity)\ \{}
+\DoxyCodeLine{00123\ \ \ \ \ \textcolor{keywordflow}{for}\ (\textcolor{keywordtype}{size\_t}\ i\ =\ 0;\ i\ <\ capacity;\ ++i)\ \{}
+\DoxyCodeLine{00124\ \ \ \ \ \ \ \_buffer[i].sequence.store(i,\ std::memory\_order\_relaxed);}
+\DoxyCodeLine{00125\ \ \ \ \ \}}
+\DoxyCodeLine{00126\ \ \ \ \ \_head.store(0,\ std::memory\_order\_relaxed);}
+\DoxyCodeLine{00127\ \ \ \ \ \_tail.store(0,\ std::memory\_order\_relaxed);}
+\DoxyCodeLine{00128\ \ \ \}}
+\DoxyCodeLine{00129\ }
+\DoxyCodeLine{00130\ \ \ \textcolor{keywordtype}{bool}\ push(\textcolor{keyword}{const}\ T\&\ item)\ \{}
+\DoxyCodeLine{00131\ \ \ \ \ \textcolor{keywordtype}{size\_t}\ pos\ =\ \_tail.load(std::memory\_order\_relaxed);}
+\DoxyCodeLine{00132\ \ \ \ \ \textcolor{keywordflow}{while}\ (\textcolor{keyword}{true})\ \{}
+\DoxyCodeLine{00133\ \ \ \ \ \ \ Slot\&\ \ \ \ slot\ =\ \_buffer[pos\ \%\ \_capacity];}
+\DoxyCodeLine{00134\ \ \ \ \ \ \ \textcolor{keywordtype}{size\_t}\ \ \ seq\ \ =\ slot.sequence.load(std::memory\_order\_acquire);}
+\DoxyCodeLine{00135\ \ \ \ \ \ \ intptr\_t\ diff\ =\ (intptr\_t)seq\ -\/\ (intptr\_t)pos;}
+\DoxyCodeLine{00136\ \ \ \ \ \ \ \textcolor{keywordflow}{if}\ (diff\ ==\ 0)\ \{}
+\DoxyCodeLine{00137\ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{if}\ (\_tail.compare\_exchange\_weak(pos,\ pos\ +\ 1,\ std::memory\_order\_relaxed))\ \{}
+\DoxyCodeLine{00138\ \ \ \ \ \ \ \ \ \ \ slot.data\ =\ item;}
+\DoxyCodeLine{00139\ \ \ \ \ \ \ \ \ \ \ slot.sequence.store(pos\ +\ 1,\ std::memory\_order\_release);}
+\DoxyCodeLine{00140\ \ \ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{return}\ \textcolor{keyword}{true};}
+\DoxyCodeLine{00141\ \ \ \ \ \ \ \ \ \}}
+\DoxyCodeLine{00142\ \ \ \ \ \ \ \}\ \textcolor{keywordflow}{else}\ \textcolor{keywordflow}{if}\ (diff\ <\ 0)\ \{}
+\DoxyCodeLine{00143\ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{return}\ \textcolor{keyword}{false};\ \ \textcolor{comment}{//\ queue\ is\ full}}
+\DoxyCodeLine{00144\ \ \ \ \ \ \ \}\ \textcolor{keywordflow}{else}\ \{}
+\DoxyCodeLine{00145\ \ \ \ \ \ \ \ \ pos\ =\ \_tail.load(std::memory\_order\_relaxed);\ \ \textcolor{comment}{//\ retry}}
+\DoxyCodeLine{00146\ \ \ \ \ \ \ \}}
+\DoxyCodeLine{00147\ \ \ \ \ \}}
+\DoxyCodeLine{00148\ \ \ \}}
+\DoxyCodeLine{00149\ }
+\DoxyCodeLine{00150\ \ \ std::optional<T>\ pop()\ \{}
+\DoxyCodeLine{00151\ \ \ \ \ \textcolor{keywordtype}{size\_t}\ pos\ =\ \_head.load(std::memory\_order\_relaxed);}
+\DoxyCodeLine{00152\ \ \ \ \ \textcolor{keywordflow}{while}\ (\textcolor{keyword}{true})\ \{}
+\DoxyCodeLine{00153\ \ \ \ \ \ \ Slot\&\ \ \ \ slot\ =\ \_buffer[pos\ \%\ \_capacity];}
+\DoxyCodeLine{00154\ \ \ \ \ \ \ \textcolor{keywordtype}{size\_t}\ \ \ seq\ \ =\ slot.sequence.load(std::memory\_order\_acquire);}
+\DoxyCodeLine{00155\ \ \ \ \ \ \ intptr\_t\ diff\ =\ (intptr\_t)seq\ -\/\ (intptr\_t)(pos\ +\ 1);}
+\DoxyCodeLine{00156\ \ \ \ \ \ \ \textcolor{keywordflow}{if}\ (diff\ ==\ 0)\ \{}
+\DoxyCodeLine{00157\ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{if}\ (\_head.compare\_exchange\_weak(pos,\ pos\ +\ 1,\ std::memory\_order\_relaxed))\ \{}
+\DoxyCodeLine{00158\ \ \ \ \ \ \ \ \ \ \ T\ result\ =\ slot.data;}
+\DoxyCodeLine{00159\ \ \ \ \ \ \ \ \ \ \ slot.sequence.store(pos\ +\ \_capacity,\ std::memory\_order\_release);}
+\DoxyCodeLine{00160\ \ \ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{return}\ result;}
+\DoxyCodeLine{00161\ \ \ \ \ \ \ \ \ \}}
+\DoxyCodeLine{00162\ \ \ \ \ \ \ \}\ \textcolor{keywordflow}{else}\ \textcolor{keywordflow}{if}\ (diff\ <\ 0)\ \{}
+\DoxyCodeLine{00163\ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{return}\ std::nullopt;\ \ \textcolor{comment}{//\ queue\ is\ empty}}
+\DoxyCodeLine{00164\ \ \ \ \ \ \ \}\ \textcolor{keywordflow}{else}\ \{}
+\DoxyCodeLine{00165\ \ \ \ \ \ \ \ \ pos\ =\ \_head.load(std::memory\_order\_relaxed);\ \ \textcolor{comment}{//\ retry}}
+\DoxyCodeLine{00166\ \ \ \ \ \ \ \}}
+\DoxyCodeLine{00167\ \ \ \ \ \}}
+\DoxyCodeLine{00168\ \ \ \}}
+\DoxyCodeLine{00169\ }
+\DoxyCodeLine{00170\ \ \ \textcolor{keywordtype}{bool}\ empty()\textcolor{keyword}{\ const\ }\{}
+\DoxyCodeLine{00171\ \ \ \ \ \textcolor{keywordflow}{return}\ \_head.load(std::memory\_order\_acquire)\ ==\ \_tail.load(std::memory\_order\_acquire);}
+\DoxyCodeLine{00172\ \ \ \}}
+\DoxyCodeLine{00173\ }
+\DoxyCodeLine{00174\ \ \textcolor{keyword}{private}:}
+\DoxyCodeLine{00175\ \ \ \textcolor{keyword}{struct\ }Slot\ \{}
+\DoxyCodeLine{00176\ \ \ \ \ std::atomic<size\_t>\ sequence;}
+\DoxyCodeLine{00177\ \ \ \ \ T\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ data;}
+\DoxyCodeLine{00178\ \ \ \};}
+\DoxyCodeLine{00179\ }
+\DoxyCodeLine{00180\ \ \ \textcolor{keywordtype}{size\_t}\ \ \ \ \ \ \ \ \ \ \ \ \ \ \_capacity;}
+\DoxyCodeLine{00181\ \ \ std::vector<Slot>\ \ \ \_buffer;}
+\DoxyCodeLine{00182\ \ \ std::atomic<size\_t>\ \_head\{0\};}
+\DoxyCodeLine{00183\ \ \ std::atomic<size\_t>\ \_tail\{0\};}
+\DoxyCodeLine{00184\ \};}
+\DoxyCodeLine{00185\ }
+\DoxyCodeLine{00186\ \textcolor{keyword}{template}\ <\textcolor{keyword}{typename}\ T>}
+\DoxyCodeLine{00187\ \textcolor{keyword}{class\ }BlockingMPMCQueue\ \{}
+\DoxyCodeLine{00188\ \ \textcolor{keyword}{public}:}
+\DoxyCodeLine{00189\ \ \ \textcolor{keyword}{explicit}\ BlockingMPMCQueue(\textcolor{keywordtype}{size\_t}\ capacity)\ :\ \_queue(capacity)\ \{\}}
+\DoxyCodeLine{00190\ }
+\DoxyCodeLine{00191\ \ \ \textcolor{keywordtype}{void}\ push(\textcolor{keyword}{const}\ T\&\ item)\ \{}
+\DoxyCodeLine{00192\ \ \ \ \ \textcolor{keywordflow}{while}\ (\textcolor{keyword}{true})\ \{}
+\DoxyCodeLine{00193\ \ \ \ \ \ \ \textcolor{keywordflow}{if}\ (\_queue.push(item))\ \{}
+\DoxyCodeLine{00194\ \ \ \ \ \ \ \ \ \{}
+\DoxyCodeLine{00195\ \ \ \ \ \ \ \ \ \ \ std::lock\_guard<std::mutex>\ lock(\_cv\_mutex);}
+\DoxyCodeLine{00196\ \ \ \ \ \ \ \ \ \ \ \_not\_empty.notify\_one();}
+\DoxyCodeLine{00197\ \ \ \ \ \ \ \ \ \}}
+\DoxyCodeLine{00198\ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{return};}
+\DoxyCodeLine{00199\ \ \ \ \ \ \ \}}
+\DoxyCodeLine{00200\ }
+\DoxyCodeLine{00201\ \ \ \ \ \ \ std::unique\_lock<std::mutex>\ lock(\_cv\_mutex);}
+\DoxyCodeLine{00202\ \ \ \ \ \ \ \_not\_full.wait(lock);\ \ \textcolor{comment}{//\ wait\ until\ space\ available}}
+\DoxyCodeLine{00203\ \ \ \ \ \}}
+\DoxyCodeLine{00204\ \ \ \}}
+\DoxyCodeLine{00205\ }
+\DoxyCodeLine{00206\ \ \ T\ pop()\ \{}
+\DoxyCodeLine{00207\ \ \ \ \ \textcolor{keywordflow}{while}\ (\textcolor{keyword}{true})\ \{}
+\DoxyCodeLine{00208\ \ \ \ \ \ \ \textcolor{keyword}{auto}\ item\ =\ \_queue.pop();}
+\DoxyCodeLine{00209\ \ \ \ \ \ \ \textcolor{keywordflow}{if}\ (item.has\_value())\ \{}
+\DoxyCodeLine{00210\ \ \ \ \ \ \ \ \ \{}
+\DoxyCodeLine{00211\ \ \ \ \ \ \ \ \ \ \ std::lock\_guard<std::mutex>\ lock(\_cv\_mutex);}
+\DoxyCodeLine{00212\ \ \ \ \ \ \ \ \ \ \ \_not\_full.notify\_one();}
+\DoxyCodeLine{00213\ \ \ \ \ \ \ \ \ \}}
+\DoxyCodeLine{00214\ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{return}\ item.value();}
+\DoxyCodeLine{00215\ \ \ \ \ \ \ \}}
+\DoxyCodeLine{00216\ }
+\DoxyCodeLine{00217\ \ \ \ \ \ \ std::unique\_lock<std::mutex>\ lock(\_cv\_mutex);}
+\DoxyCodeLine{00218\ \ \ \ \ \ \ \_not\_empty.wait(lock);\ \ \textcolor{comment}{//\ wait\ until\ item\ available}}
+\DoxyCodeLine{00219\ \ \ \ \ \}}
+\DoxyCodeLine{00220\ \ \ \}}
+\DoxyCodeLine{00221\ }
+\DoxyCodeLine{00222\ \ \ \textcolor{keywordtype}{bool}\ empty()\textcolor{keyword}{\ const\ }\{\ \textcolor{keywordflow}{return}\ \_queue.empty();\ \}}
+\DoxyCodeLine{00223\ }
+\DoxyCodeLine{00224\ \ \textcolor{keyword}{private}:}
+\DoxyCodeLine{00225\ \ \ \mbox{\hyperlink{classpuerhlab_1_1_lock_free_m_p_m_c_queue}{LockFreeMPMCQueue<T>}}\ \ \ \ \_queue;}
+\DoxyCodeLine{00226\ }
+\DoxyCodeLine{00227\ \ \ std::condition\_variable\ \_not\_empty;}
+\DoxyCodeLine{00228\ \ \ std::condition\_variable\ \_not\_full;}
+\DoxyCodeLine{00229\ \ \ std::mutex\ \ \ \ \ \ \ \ \ \ \ \ \ \ \_cv\_mutex;}
+\DoxyCodeLine{00230\ \};}
+\DoxyCodeLine{00231\ \};\ \ \textcolor{comment}{//\ namespace\ puerhlab}}
+
+\end{DoxyCode}

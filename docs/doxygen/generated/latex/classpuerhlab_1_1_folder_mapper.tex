@@ -1,0 +1,69 @@
+\doxysection{puerhlab\+::Folder\+Mapper Class Reference}
+\hypertarget{classpuerhlab_1_1_folder_mapper}{}\label{classpuerhlab_1_1_folder_mapper}\index{puerhlab::FolderMapper@{puerhlab::FolderMapper}}
+Inheritance diagram for puerhlab\+::Folder\+Mapper\+:\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[height=1.115538cm]{classpuerhlab_1_1_folder_mapper}
+\end{center}
+\end{figure}
+\doxysubsubsection*{Public Member Functions}
+\begin{DoxyCompactItemize}
+\item 
+\Hypertarget{classpuerhlab_1_1_folder_mapper_a3a2e60ecf51e2886d88907f42ed12e55}\label{classpuerhlab_1_1_folder_mapper_a3a2e60ecf51e2886d88907f42ed12e55} 
+{\bfseries Mapper\+Interface} (duckdb\+\_\+connection \&conn)
+\end{DoxyCompactItemize}
+\doxysubsection*{Public Member Functions inherited from \mbox{\hyperlink{classpuerhlab_1_1_mapper_interface}{puerhlab\+::\+Mapper\+Interface$<$ Folder\+Mapper, Folder\+Mapper\+Params, sl\+\_\+element\+\_\+id\+\_\+t $>$}}}
+\begin{DoxyCompactItemize}
+\item 
+{\bfseries Mapper\+Interface} (duckdb\+\_\+connection \&conn)
+\item 
+void {\bfseries Insert} (const \mbox{\hyperlink{structpuerhlab_1_1_folder_mapper_params}{Folder\+Mapper\+Params}} \&\&obj)
+\item 
+void {\bfseries Remove} (const sl\+\_\+element\+\_\+id\+\_\+t remove\+\_\+id)
+\item 
+void {\bfseries Remove\+By\+Clause} (const std\+::string \&predicate)
+\item 
+auto {\bfseries Get} (const char \texorpdfstring{$\ast$}{*}where\+\_\+clause) -\/$>$ std\+::vector$<$ \mbox{\hyperlink{structpuerhlab_1_1_folder_mapper_params}{Folder\+Mapper\+Params}} $>$
+\item 
+void {\bfseries Update} (const sl\+\_\+element\+\_\+id\+\_\+t target\+\_\+id, const \mbox{\hyperlink{structpuerhlab_1_1_folder_mapper_params}{Folder\+Mapper\+Params}} \&\&updated)
+\end{DoxyCompactItemize}
+\doxysubsubsection*{Static Public Member Functions}
+\begin{DoxyCompactItemize}
+\item 
+\Hypertarget{classpuerhlab_1_1_folder_mapper_ac6e8f6629baea85f928faa3bb85f0d59}\label{classpuerhlab_1_1_folder_mapper_ac6e8f6629baea85f928faa3bb85f0d59} 
+static auto {\bfseries From\+Raw\+Data} (std\+::vector$<$ duckorm\+::\+Var\+Types $>$ \&\&data) -\/$>$ \mbox{\hyperlink{structpuerhlab_1_1_folder_mapper_params}{Folder\+Mapper\+Params}}
+\end{DoxyCompactItemize}
+\doxysubsection*{Static Public Member Functions inherited from \mbox{\hyperlink{structpuerhlab_1_1_field_reflectable}{puerhlab\+::\+Field\+Reflectable$<$ Folder\+Mapper $>$}}}
+\begin{DoxyCompactItemize}
+\item 
+static constexpr Field\+Array\+Type {\bfseries Field\+Desc} ()
+\item 
+static constexpr uint32\+\_\+t {\bfseries Field\+Count} ()
+\item 
+static constexpr const char \texorpdfstring{$\ast$}{*} {\bfseries Table\+Name} ()
+\item 
+static constexpr const char \texorpdfstring{$\ast$}{*} {\bfseries Prime\+Key\+Clause} ()
+\end{DoxyCompactItemize}
+\doxysubsubsection*{Friends}
+\begin{DoxyCompactItemize}
+\item 
+\Hypertarget{classpuerhlab_1_1_folder_mapper_ae1c423b1238a9e2631ee8d888cc7c41f}\label{classpuerhlab_1_1_folder_mapper_ae1c423b1238a9e2631ee8d888cc7c41f} 
+struct {\bfseries Field\+Reflectable$<$ Folder\+Mapper $>$}
+\end{DoxyCompactItemize}
+\doxysubsubsection*{Additional Inherited Members}
+\doxysubsection*{Public Types inherited from \mbox{\hyperlink{structpuerhlab_1_1_field_reflectable}{puerhlab\+::\+Field\+Reflectable$<$ Folder\+Mapper $>$}}}
+\begin{DoxyCompactItemize}
+\item 
+using {\bfseries Field\+Array\+Type}
+\end{DoxyCompactItemize}
+\doxysubsection*{Public Attributes inherited from \mbox{\hyperlink{classpuerhlab_1_1_mapper_interface}{puerhlab\+::\+Mapper\+Interface$<$ Folder\+Mapper, Folder\+Mapper\+Params, sl\+\_\+element\+\_\+id\+\_\+t $>$}}}
+\begin{DoxyCompactItemize}
+\item 
+duckdb\+\_\+connection \& {\bfseries \+\_\+conn}
+\end{DoxyCompactItemize}
+
+
+The documentation for this class was generated from the following files\+:\begin{DoxyCompactItemize}
+\item 
+D\+:/\+Projects/pu-\/erh\+\_\+lab/pu-\/erh\+\_\+lab/src/include/storage/mapper/sleeve/element/folder\+\_\+mapper.\+hpp\item 
+D\+:/\+Projects/pu-\/erh\+\_\+lab/pu-\/erh\+\_\+lab/src/storage/mapper/sleeve/element/folder\+\_\+mapper.\+cpp\end{DoxyCompactItemize}

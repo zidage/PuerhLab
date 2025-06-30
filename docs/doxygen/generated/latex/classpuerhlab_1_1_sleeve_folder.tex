@@ -1,0 +1,296 @@
+\doxysection{puerhlab\+::Sleeve\+Folder Class Reference}
+\hypertarget{classpuerhlab_1_1_sleeve_folder}{}\label{classpuerhlab_1_1_sleeve_folder}\index{puerhlab::SleeveFolder@{puerhlab::SleeveFolder}}
+
+
+A type of element that contains files or folders of its kind.  
+
+
+
+
+{\ttfamily \#include $<$sleeve\+\_\+folder.\+hpp$>$}
+
+Inheritance diagram for puerhlab\+::Sleeve\+Folder\+:\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[height=2.000000cm]{classpuerhlab_1_1_sleeve_folder}
+\end{center}
+\end{figure}
+\doxysubsubsection*{Public Member Functions}
+\begin{DoxyCompactItemize}
+\item 
+\mbox{\hyperlink{classpuerhlab_1_1_sleeve_folder_ac13586fc57e97a38962ffdd4a480f990}{Sleeve\+Folder}} (sl\+\_\+element\+\_\+id\+\_\+t id, file\+\_\+name\+\_\+t element\+\_\+name)
+\begin{DoxyCompactList}\small\item\em Construct a new Sleeve Folder\+:\+: Sleeve Folder object. \end{DoxyCompactList}\item 
+auto \mbox{\hyperlink{classpuerhlab_1_1_sleeve_folder_abdd5cdaf5ec4b9854b26530e47f7233b}{Copy}} (sl\+\_\+element\+\_\+id\+\_\+t new\+\_\+id) const -\/$>$ std\+::shared\+\_\+ptr$<$ \mbox{\hyperlink{classpuerhlab_1_1_sleeve_element}{Sleeve\+Element}} $>$
+\item 
+void \mbox{\hyperlink{classpuerhlab_1_1_sleeve_folder_a2832ec97affceda7fc296ba71b2ecf1f}{Add\+Element\+To\+Map}} (const std\+::shared\+\_\+ptr$<$ \mbox{\hyperlink{classpuerhlab_1_1_sleeve_element}{Sleeve\+Element}} $>$ element)
+\begin{DoxyCompactList}\small\item\em Add an element reference to the folder. \end{DoxyCompactList}\item 
+\Hypertarget{classpuerhlab_1_1_sleeve_folder_a27129849b071001323dbf0cb0f6aea8e}\label{classpuerhlab_1_1_sleeve_folder_a27129849b071001323dbf0cb0f6aea8e} 
+void {\bfseries Replace\+Child} (const sl\+\_\+element\+\_\+id\+\_\+t from, const sl\+\_\+element\+\_\+id\+\_\+t to)
+\item 
+void \mbox{\hyperlink{classpuerhlab_1_1_sleeve_folder_a64bb5a0d9f96ab7a84444364bd8957af}{Update\+Element\+Map}} (const file\+\_\+name\+\_\+t \&name, const sl\+\_\+element\+\_\+id\+\_\+t old\+\_\+id, const sl\+\_\+element\+\_\+id\+\_\+t new\+\_\+id)
+\begin{DoxyCompactList}\small\item\em Update a name-\/id mapping. \end{DoxyCompactList}\item 
+void \mbox{\hyperlink{classpuerhlab_1_1_sleeve_folder_a1bdc8d339d4ab104e1a497b910add1a7}{Create\+Index}} (const std\+::shared\+\_\+ptr$<$ \mbox{\hyperlink{classpuerhlab_1_1_filter_combo}{Filter\+Combo}} $>$ filter)
+\begin{DoxyCompactList}\small\item\em Create an index on the given filter. \end{DoxyCompactList}\item 
+auto \mbox{\hyperlink{classpuerhlab_1_1_sleeve_folder_a767685392597c368ccb02c353d4a0e0b}{Get\+Element\+Id\+By\+Name}} (const file\+\_\+name\+\_\+t \&name) const -\/$>$ std\+::optional$<$ sl\+\_\+element\+\_\+id\+\_\+t $>$
+\begin{DoxyCompactList}\small\item\em Get an element\textquotesingle{}s id from the \+\_\+contents table. \end{DoxyCompactList}\item 
+auto \mbox{\hyperlink{classpuerhlab_1_1_sleeve_folder_aaf96f2a815e5cd86b90fe7796fd0c27d}{List\+Elements}} () const -\/$>$ std\+::shared\+\_\+ptr$<$ std\+::vector$<$ sl\+\_\+element\+\_\+id\+\_\+t $>$ $>$
+\begin{DoxyCompactList}\small\item\em List all the elements within this folder. \end{DoxyCompactList}\item 
+\Hypertarget{classpuerhlab_1_1_sleeve_folder_a6a30824c7fc6829d8cd3f9e8c7d74b62}\label{classpuerhlab_1_1_sleeve_folder_a6a30824c7fc6829d8cd3f9e8c7d74b62} 
+auto {\bfseries List\+Filters} () -\/$>$ std\+::vector$<$ filter\+\_\+id\+\_\+t $>$ \&
+\item 
+auto \mbox{\hyperlink{classpuerhlab_1_1_sleeve_folder_a346f4109805d4eb69cdb9d75b14f54d6}{Contains}} (const file\+\_\+name\+\_\+t \&name) const -\/$>$ bool
+\begin{DoxyCompactList}\small\item\em Check whether the folder contains the element of the given name. \end{DoxyCompactList}\item 
+void \mbox{\hyperlink{classpuerhlab_1_1_sleeve_folder_ab53f56fa6e9fa11e27fc5ed57d2950bc}{Remove\+Name\+From\+Map}} (const file\+\_\+name\+\_\+t \&name)
+\begin{DoxyCompactList}\small\item\em Remove a name-\/id mapping from the \+\_\+contents table. \end{DoxyCompactList}\item 
+\Hypertarget{classpuerhlab_1_1_sleeve_folder_a736a2777872ba22a62d1b753ebb16f82}\label{classpuerhlab_1_1_sleeve_folder_a736a2777872ba22a62d1b753ebb16f82} 
+void {\bfseries Increment\+Folder\+Count} ()
+\item 
+\Hypertarget{classpuerhlab_1_1_sleeve_folder_aef83eabce716e549513c9f6a1285f5e1}\label{classpuerhlab_1_1_sleeve_folder_aef83eabce716e549513c9f6a1285f5e1} 
+void {\bfseries Increment\+File\+Count} ()
+\item 
+\Hypertarget{classpuerhlab_1_1_sleeve_folder_ac06aba5a45f005103a3f644042bec79e}\label{classpuerhlab_1_1_sleeve_folder_ac06aba5a45f005103a3f644042bec79e} 
+void {\bfseries Decrement\+Folder\+Count} ()
+\item 
+\Hypertarget{classpuerhlab_1_1_sleeve_folder_ae7e24ec6eb733cdbfafebfac87cba258}\label{classpuerhlab_1_1_sleeve_folder_ae7e24ec6eb733cdbfafebfac87cba258} 
+void {\bfseries Decrement\+File\+Count} ()
+\item 
+auto \mbox{\hyperlink{classpuerhlab_1_1_sleeve_folder_a29a1ba32a968daf74d84f99621c611d8}{Clear}} () -\/$>$ bool
+\item 
+\Hypertarget{classpuerhlab_1_1_sleeve_folder_af9fe23151d2416709ba41c3420b104c2}\label{classpuerhlab_1_1_sleeve_folder_af9fe23151d2416709ba41c3420b104c2} 
+auto {\bfseries Reset\+Filters} () -\/$>$ bool
+\item 
+\Hypertarget{classpuerhlab_1_1_sleeve_folder_a3e752834202a8e9e0c37f6e4249c3cc7}\label{classpuerhlab_1_1_sleeve_folder_a3e752834202a8e9e0c37f6e4249c3cc7} 
+auto {\bfseries Content\+Size} () -\/$>$ size\+\_\+t
+\end{DoxyCompactItemize}
+\doxysubsection*{Public Member Functions inherited from \mbox{\hyperlink{classpuerhlab_1_1_sleeve_element}{puerhlab\+::\+Sleeve\+Element}}}
+\begin{DoxyCompactItemize}
+\item 
+{\bfseries Sleeve\+Element} (sl\+\_\+element\+\_\+id\+\_\+t id, file\+\_\+name\+\_\+t element\+\_\+name)
+\item 
+void {\bfseries Set\+Add\+Time} ()
+\item 
+void {\bfseries Set\+Last\+Modified\+Time} ()
+\item 
+void {\bfseries Increment\+Ref\+Count} ()
+\item 
+void {\bfseries Decrement\+Ref\+Count} ()
+\item 
+auto {\bfseries Is\+Shared} () -\/$>$ bool
+\item 
+void {\bfseries Set\+Sync\+Flag} (Sync\+Flag flag)
+\end{DoxyCompactItemize}
+\doxysubsubsection*{Protected Attributes}
+\begin{DoxyCompactItemize}
+\item 
+\Hypertarget{classpuerhlab_1_1_sleeve_folder_ab945ac4c10aeacfa9a77a2c197e3f066}\label{classpuerhlab_1_1_sleeve_folder_ab945ac4c10aeacfa9a77a2c197e3f066} 
+std\+::unordered\+\_\+map$<$ file\+\_\+name\+\_\+t, sl\+\_\+element\+\_\+id\+\_\+t $>$ {\bfseries \+\_\+contents}
+\item 
+\Hypertarget{classpuerhlab_1_1_sleeve_folder_a5d11745924b546aba12f9ccda0a4720c}\label{classpuerhlab_1_1_sleeve_folder_a5d11745924b546aba12f9ccda0a4720c} 
+std\+::unordered\+\_\+map$<$ filter\+\_\+id\+\_\+t, std\+::shared\+\_\+ptr$<$ std\+::set$<$ sl\+\_\+element\+\_\+id\+\_\+t $>$ $>$ $>$ {\bfseries \+\_\+indicies\+\_\+cache}
+\item 
+\Hypertarget{classpuerhlab_1_1_sleeve_folder_a79118c48801fd9254167074d4d8f02c6}\label{classpuerhlab_1_1_sleeve_folder_a79118c48801fd9254167074d4d8f02c6} 
+std\+::vector$<$ filter\+\_\+id\+\_\+t $>$ {\bfseries \+\_\+filters}
+\item 
+\Hypertarget{classpuerhlab_1_1_sleeve_folder_aebd1701ba368495d9af016f8563e96ec}\label{classpuerhlab_1_1_sleeve_folder_aebd1701ba368495d9af016f8563e96ec} 
+filter\+\_\+id\+\_\+t {\bfseries \+\_\+default\+\_\+filter}
+\item 
+\Hypertarget{classpuerhlab_1_1_sleeve_folder_aa9755a790b53662c757ba2e19ed1c32f}\label{classpuerhlab_1_1_sleeve_folder_aa9755a790b53662c757ba2e19ed1c32f} 
+uint32\+\_\+t {\bfseries \+\_\+file\+\_\+count}
+\item 
+\Hypertarget{classpuerhlab_1_1_sleeve_folder_a052512d31652f2328808d3fc84f56a02}\label{classpuerhlab_1_1_sleeve_folder_a052512d31652f2328808d3fc84f56a02} 
+uint32\+\_\+t {\bfseries \+\_\+folder\+\_\+count}
+\end{DoxyCompactItemize}
+\doxysubsubsection*{Additional Inherited Members}
+\doxysubsection*{Public Attributes inherited from \mbox{\hyperlink{classpuerhlab_1_1_sleeve_element}{puerhlab\+::\+Sleeve\+Element}}}
+\begin{DoxyCompactItemize}
+\item 
+sl\+\_\+element\+\_\+id\+\_\+t {\bfseries \+\_\+element\+\_\+id}
+\item 
+Element\+Type {\bfseries \+\_\+type}
+\item 
+file\+\_\+name\+\_\+t {\bfseries \+\_\+element\+\_\+name}
+\item 
+std\+::time\+\_\+t {\bfseries \+\_\+added\+\_\+time}
+\item 
+std\+::time\+\_\+t {\bfseries \+\_\+last\+\_\+modified\+\_\+time}
+\item 
+uint32\+\_\+t {\bfseries \+\_\+ref\+\_\+count}
+\item 
+bool {\bfseries \+\_\+pinned}
+\item 
+Sync\+Flag {\bfseries \+\_\+sync\+\_\+flag} = Sync\+Flag\+::\+UNSYNC
+\end{DoxyCompactItemize}
+
+
+\doxysubsection{Detailed Description}
+A type of element that contains files or folders of its kind. 
+
+\label{doc-constructors}
+\Hypertarget{classpuerhlab_1_1_sleeve_folder_doc-constructors}
+\doxysubsection{Constructor \& Destructor Documentation}
+\Hypertarget{classpuerhlab_1_1_sleeve_folder_ac13586fc57e97a38962ffdd4a480f990}\index{puerhlab::SleeveFolder@{puerhlab::SleeveFolder}!SleeveFolder@{SleeveFolder}}
+\index{SleeveFolder@{SleeveFolder}!puerhlab::SleeveFolder@{puerhlab::SleeveFolder}}
+\doxysubsubsection{\texorpdfstring{SleeveFolder()}{SleeveFolder()}}
+{\footnotesize\ttfamily \label{classpuerhlab_1_1_sleeve_folder_ac13586fc57e97a38962ffdd4a480f990} 
+puerhlab\+::\+Sleeve\+Folder\+::\+Sleeve\+Folder (\begin{DoxyParamCaption}\item[{sl\+\_\+element\+\_\+id\+\_\+t}]{id}{, }\item[{file\+\_\+name\+\_\+t}]{element\+\_\+name}{}\end{DoxyParamCaption})\hspace{0.3cm}{\ttfamily [explicit]}}
+
+
+
+Construct a new Sleeve Folder\+:\+: Sleeve Folder object. 
+
+
+\begin{DoxyParams}{Parameters}
+{\em id} & \\
+\hline
+{\em element\+\_\+name} & \\
+\hline
+\end{DoxyParams}
+
+
+\label{doc-func-members}
+\Hypertarget{classpuerhlab_1_1_sleeve_folder_doc-func-members}
+\doxysubsection{Member Function Documentation}
+\Hypertarget{classpuerhlab_1_1_sleeve_folder_a2832ec97affceda7fc296ba71b2ecf1f}\index{puerhlab::SleeveFolder@{puerhlab::SleeveFolder}!AddElementToMap@{AddElementToMap}}
+\index{AddElementToMap@{AddElementToMap}!puerhlab::SleeveFolder@{puerhlab::SleeveFolder}}
+\doxysubsubsection{\texorpdfstring{AddElementToMap()}{AddElementToMap()}}
+{\footnotesize\ttfamily \label{classpuerhlab_1_1_sleeve_folder_a2832ec97affceda7fc296ba71b2ecf1f} 
+void puerhlab\+::\+Sleeve\+Folder\+::\+Add\+Element\+To\+Map (\begin{DoxyParamCaption}\item[{const std\+::shared\+\_\+ptr$<$ \mbox{\hyperlink{classpuerhlab_1_1_sleeve_element}{Sleeve\+Element}} $>$}]{element}{}\end{DoxyParamCaption})}
+
+
+
+Add an element reference to the folder. 
+
+
+\begin{DoxyParams}{Parameters}
+{\em element} & \\
+\hline
+\end{DoxyParams}
+\Hypertarget{classpuerhlab_1_1_sleeve_folder_a29a1ba32a968daf74d84f99621c611d8}\index{puerhlab::SleeveFolder@{puerhlab::SleeveFolder}!Clear@{Clear}}
+\index{Clear@{Clear}!puerhlab::SleeveFolder@{puerhlab::SleeveFolder}}
+\doxysubsubsection{\texorpdfstring{Clear()}{Clear()}}
+{\footnotesize\ttfamily \label{classpuerhlab_1_1_sleeve_folder_a29a1ba32a968daf74d84f99621c611d8} 
+auto puerhlab\+::\+Sleeve\+Folder\+::\+Clear (\begin{DoxyParamCaption}{}{}\end{DoxyParamCaption}) -\/$>$ bool\hspace{0.3cm}{\ttfamily [virtual]}}
+
+
+
+Reimplemented from \mbox{\hyperlink{classpuerhlab_1_1_sleeve_element}{puerhlab\+::\+Sleeve\+Element}}.
+
+\Hypertarget{classpuerhlab_1_1_sleeve_folder_a346f4109805d4eb69cdb9d75b14f54d6}\index{puerhlab::SleeveFolder@{puerhlab::SleeveFolder}!Contains@{Contains}}
+\index{Contains@{Contains}!puerhlab::SleeveFolder@{puerhlab::SleeveFolder}}
+\doxysubsubsection{\texorpdfstring{Contains()}{Contains()}}
+{\footnotesize\ttfamily \label{classpuerhlab_1_1_sleeve_folder_a346f4109805d4eb69cdb9d75b14f54d6} 
+auto puerhlab\+::\+Sleeve\+Folder\+::\+Contains (\begin{DoxyParamCaption}\item[{const file\+\_\+name\+\_\+t \&}]{name}{}\end{DoxyParamCaption}) const -\/$>$ bool}
+
+
+
+Check whether the folder contains the element of the given name. 
+
+
+\begin{DoxyParams}{Parameters}
+{\em name} & \\
+\hline
+\end{DoxyParams}
+\begin{DoxyReturn}{Returns}
+true 
+
+false 
+\end{DoxyReturn}
+\Hypertarget{classpuerhlab_1_1_sleeve_folder_abdd5cdaf5ec4b9854b26530e47f7233b}\index{puerhlab::SleeveFolder@{puerhlab::SleeveFolder}!Copy@{Copy}}
+\index{Copy@{Copy}!puerhlab::SleeveFolder@{puerhlab::SleeveFolder}}
+\doxysubsubsection{\texorpdfstring{Copy()}{Copy()}}
+{\footnotesize\ttfamily \label{classpuerhlab_1_1_sleeve_folder_abdd5cdaf5ec4b9854b26530e47f7233b} 
+auto puerhlab\+::\+Sleeve\+Folder\+::\+Copy (\begin{DoxyParamCaption}\item[{sl\+\_\+element\+\_\+id\+\_\+t}]{new\+\_\+id}{}\end{DoxyParamCaption}) const -\/$>$ std\+::shared\+\_\+ptr$<$\mbox{\hyperlink{classpuerhlab_1_1_sleeve_element}{Sleeve\+Element}}$>$\hspace{0.3cm}{\ttfamily [virtual]}}
+
+
+
+Reimplemented from \mbox{\hyperlink{classpuerhlab_1_1_sleeve_element}{puerhlab\+::\+Sleeve\+Element}}.
+
+\Hypertarget{classpuerhlab_1_1_sleeve_folder_a1bdc8d339d4ab104e1a497b910add1a7}\index{puerhlab::SleeveFolder@{puerhlab::SleeveFolder}!CreateIndex@{CreateIndex}}
+\index{CreateIndex@{CreateIndex}!puerhlab::SleeveFolder@{puerhlab::SleeveFolder}}
+\doxysubsubsection{\texorpdfstring{CreateIndex()}{CreateIndex()}}
+{\footnotesize\ttfamily \label{classpuerhlab_1_1_sleeve_folder_a1bdc8d339d4ab104e1a497b910add1a7} 
+void puerhlab\+::\+Sleeve\+Folder\+::\+Create\+Index (\begin{DoxyParamCaption}\item[{const std\+::shared\+\_\+ptr$<$ \mbox{\hyperlink{classpuerhlab_1_1_filter_combo}{Filter\+Combo}} $>$}]{filter}{}\end{DoxyParamCaption})}
+
+
+
+Create an index on the given filter. 
+
+
+\begin{DoxyParams}{Parameters}
+{\em filter} & \\
+\hline
+\end{DoxyParams}
+\Hypertarget{classpuerhlab_1_1_sleeve_folder_a767685392597c368ccb02c353d4a0e0b}\index{puerhlab::SleeveFolder@{puerhlab::SleeveFolder}!GetElementIdByName@{GetElementIdByName}}
+\index{GetElementIdByName@{GetElementIdByName}!puerhlab::SleeveFolder@{puerhlab::SleeveFolder}}
+\doxysubsubsection{\texorpdfstring{GetElementIdByName()}{GetElementIdByName()}}
+{\footnotesize\ttfamily \label{classpuerhlab_1_1_sleeve_folder_a767685392597c368ccb02c353d4a0e0b} 
+auto puerhlab\+::\+Sleeve\+Folder\+::\+Get\+Element\+Id\+By\+Name (\begin{DoxyParamCaption}\item[{const file\+\_\+name\+\_\+t \&}]{name}{}\end{DoxyParamCaption}) const -\/$>$ std\+::optional$<$sl\+\_\+element\+\_\+id\+\_\+t$>$}
+
+
+
+Get an element\textquotesingle{}s id from the \+\_\+contents table. 
+
+
+\begin{DoxyParams}{Parameters}
+{\em name} & \\
+\hline
+\end{DoxyParams}
+\begin{DoxyReturn}{Returns}
+std\+::optional$<$sl\+\_\+element\+\_\+id\+\_\+t$>$ 
+\end{DoxyReturn}
+\Hypertarget{classpuerhlab_1_1_sleeve_folder_aaf96f2a815e5cd86b90fe7796fd0c27d}\index{puerhlab::SleeveFolder@{puerhlab::SleeveFolder}!ListElements@{ListElements}}
+\index{ListElements@{ListElements}!puerhlab::SleeveFolder@{puerhlab::SleeveFolder}}
+\doxysubsubsection{\texorpdfstring{ListElements()}{ListElements()}}
+{\footnotesize\ttfamily \label{classpuerhlab_1_1_sleeve_folder_aaf96f2a815e5cd86b90fe7796fd0c27d} 
+auto puerhlab\+::\+Sleeve\+Folder\+::\+List\+Elements (\begin{DoxyParamCaption}{}{}\end{DoxyParamCaption}) const -\/$>$ std\+::shared\+\_\+ptr$<$std\+::vector$<$sl\+\_\+element\+\_\+id\+\_\+t$>$$>$}
+
+
+
+List all the elements within this folder. 
+
+\begin{DoxyReturn}{Returns}
+std\+::shared\+\_\+ptr$<$std\+::vector$<$sl\+\_\+element\+\_\+id\+\_\+t$>$$>$ 
+\end{DoxyReturn}
+\Hypertarget{classpuerhlab_1_1_sleeve_folder_ab53f56fa6e9fa11e27fc5ed57d2950bc}\index{puerhlab::SleeveFolder@{puerhlab::SleeveFolder}!RemoveNameFromMap@{RemoveNameFromMap}}
+\index{RemoveNameFromMap@{RemoveNameFromMap}!puerhlab::SleeveFolder@{puerhlab::SleeveFolder}}
+\doxysubsubsection{\texorpdfstring{RemoveNameFromMap()}{RemoveNameFromMap()}}
+{\footnotesize\ttfamily \label{classpuerhlab_1_1_sleeve_folder_ab53f56fa6e9fa11e27fc5ed57d2950bc} 
+void puerhlab\+::\+Sleeve\+Folder\+::\+Remove\+Name\+From\+Map (\begin{DoxyParamCaption}\item[{const file\+\_\+name\+\_\+t \&}]{name}{}\end{DoxyParamCaption})}
+
+
+
+Remove a name-\/id mapping from the \+\_\+contents table. 
+
+
+\begin{DoxyParams}{Parameters}
+{\em name} & \\
+\hline
+\end{DoxyParams}
+\begin{DoxyReturn}{Returns}
+sl\+\_\+element\+\_\+id\+\_\+t 
+\end{DoxyReturn}
+\Hypertarget{classpuerhlab_1_1_sleeve_folder_a64bb5a0d9f96ab7a84444364bd8957af}\index{puerhlab::SleeveFolder@{puerhlab::SleeveFolder}!UpdateElementMap@{UpdateElementMap}}
+\index{UpdateElementMap@{UpdateElementMap}!puerhlab::SleeveFolder@{puerhlab::SleeveFolder}}
+\doxysubsubsection{\texorpdfstring{UpdateElementMap()}{UpdateElementMap()}}
+{\footnotesize\ttfamily \label{classpuerhlab_1_1_sleeve_folder_a64bb5a0d9f96ab7a84444364bd8957af} 
+void puerhlab\+::\+Sleeve\+Folder\+::\+Update\+Element\+Map (\begin{DoxyParamCaption}\item[{const file\+\_\+name\+\_\+t \&}]{name}{, }\item[{const sl\+\_\+element\+\_\+id\+\_\+t}]{old\+\_\+id}{, }\item[{const sl\+\_\+element\+\_\+id\+\_\+t}]{new\+\_\+id}{}\end{DoxyParamCaption})}
+
+
+
+Update a name-\/id mapping. 
+
+
+\begin{DoxyParams}{Parameters}
+{\em name} & \\
+\hline
+{\em old\+\_\+id} & \\
+\hline
+{\em new\+\_\+id} & \\
+\hline
+\end{DoxyParams}
+
+
+The documentation for this class was generated from the following files\+:\begin{DoxyCompactItemize}
+\item 
+D\+:/\+Projects/pu-\/erh\+\_\+lab/pu-\/erh\+\_\+lab/src/include/sleeve/sleeve\+\_\+element/sleeve\+\_\+folder.\+hpp\item 
+D\+:/\+Projects/pu-\/erh\+\_\+lab/pu-\/erh\+\_\+lab/src/sleeve/sleeve\+\_\+element/sleeve\+\_\+folder.\+cpp\end{DoxyCompactItemize}

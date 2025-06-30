@@ -1,0 +1,57 @@
+\doxysection{sleeve\+\_\+filesystem.\+hpp}
+\hypertarget{sleeve__filesystem_8hpp_source}{}\label{sleeve__filesystem_8hpp_source}\index{D:/Projects/pu-\/erh\_lab/pu-\/erh\_lab/src/include/sleeve/sleeve\_filesystem.hpp@{D:/Projects/pu-\/erh\_lab/pu-\/erh\_lab/src/include/sleeve/sleeve\_filesystem.hpp}}
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{00001\ \textcolor{preprocessor}{\#pragma\ once}}
+\DoxyCodeLine{00002\ }
+\DoxyCodeLine{00003\ \textcolor{preprocessor}{\#include\ <filesystem>}}
+\DoxyCodeLine{00004\ \textcolor{preprocessor}{\#include\ <memory>}}
+\DoxyCodeLine{00005\ \textcolor{preprocessor}{\#include\ <string>}}
+\DoxyCodeLine{00006\ \textcolor{preprocessor}{\#include\ <unordered\_map>}}
+\DoxyCodeLine{00007\ }
+\DoxyCodeLine{00008\ \textcolor{preprocessor}{\#include\ "{}path\_resolver.hpp"{}}}
+\DoxyCodeLine{00009\ \textcolor{preprocessor}{\#include\ "{}sleeve/sleeve\_element/sleeve\_element.hpp"{}}}
+\DoxyCodeLine{00010\ \textcolor{preprocessor}{\#include\ "{}sleeve/sleeve\_element/sleeve\_folder.hpp"{}}}
+\DoxyCodeLine{00011\ \textcolor{preprocessor}{\#include\ "{}storage/image\_pool/image\_pool\_manager.hpp"{}}}
+\DoxyCodeLine{00012\ \textcolor{preprocessor}{\#include\ "{}storage\_service.hpp"{}}}
+\DoxyCodeLine{00013\ \textcolor{preprocessor}{\#include\ "{}type/type.hpp"{}}}
+\DoxyCodeLine{00014\ \textcolor{preprocessor}{\#include\ "{}utils/id/id\_generator.hpp"{}}}
+\DoxyCodeLine{00015\ }
+\DoxyCodeLine{00016\ \textcolor{keyword}{namespace\ }puerhlab\ \{}
+\DoxyCodeLine{00017\ \textcolor{keyword}{class\ }FileSystem\ \{}
+\DoxyCodeLine{00018\ \ \ \textcolor{keyword}{using\ }NodeMapping\ =\ std::unordered\_map<sl\_element\_id\_t,\ std::shared\_ptr<SleeveElement>>;}
+\DoxyCodeLine{00019\ }
+\DoxyCodeLine{00020\ \ \textcolor{keyword}{private}:}
+\DoxyCodeLine{00021\ \ \ \textcolor{comment}{//\ A\ mapping\ between\ node\ id\ and\ pointers\ to\ actual\ nodes.}}
+\DoxyCodeLine{00022\ \ \ NodeMapping\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \_storage;}
+\DoxyCodeLine{00023\ \ \ std::shared\_ptr<SleeveFolder>\ \ \ \ \ \ \ \ \_root;}
+\DoxyCodeLine{00024\ }
+\DoxyCodeLine{00025\ \ \ \textcolor{comment}{//\ ID\ Generation}}
+\DoxyCodeLine{00026\ \ \ \mbox{\hyperlink{classpuerhlab_1_1_incr_i_d_1_1_i_d_generator}{IncrID::IDGenerator<sl\_element\_id\_t>}}\ \_id\_gen;}
+\DoxyCodeLine{00029\ \ \ std::filesystem::path\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \_db\_path;}
+\DoxyCodeLine{00030\ \ \ std::filesystem::path\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \_meta\_path;}
+\DoxyCodeLine{00031\ \ \ \mbox{\hyperlink{classpuerhlab_1_1_storage_service}{StorageService}}\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \_storage\_service;}
+\DoxyCodeLine{00032\ \ \ \mbox{\hyperlink{classpuerhlab_1_1_node_storage_handler}{NodeStorageHandler}}\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \_storage\_handler;}
+\DoxyCodeLine{00033\ \ \ \mbox{\hyperlink{classpuerhlab_1_1_path_resolver}{PathResolver}}\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \_resolver;}
+\DoxyCodeLine{00035\ }
+\DoxyCodeLine{00036\ \ \textcolor{keyword}{public}:}
+\DoxyCodeLine{00037\ \ \ FileSystem(std::filesystem::path\ db\_path,\ sl\_element\_id\_t\ start\_id);}
+\DoxyCodeLine{00038\ }
+\DoxyCodeLine{00039\ \ \ \textcolor{keyword}{auto}\ InitRoot()\ -\/>\ bool;}
+\DoxyCodeLine{00040\ }
+\DoxyCodeLine{00041\ \ \ \textcolor{keyword}{auto}\ Create(std::filesystem::path\ dest,\ std::wstring\ filename,\ ElementType\ type)}
+\DoxyCodeLine{00042\ \ \ \ \ \ \ -\/>\ std::shared\_ptr<SleeveElement>;}
+\DoxyCodeLine{00043\ \ \ \textcolor{keywordtype}{void}\ Delete(std::filesystem::path\ target);}
+\DoxyCodeLine{00044\ \ \ \textcolor{keyword}{auto}\ Get(std::filesystem::path\ target,\ \textcolor{keywordtype}{bool}\ write)\ -\/>\ std::shared\_ptr<SleeveElement>;}
+\DoxyCodeLine{00045\ \ \ \textcolor{keyword}{auto}\ Get(sl\_element\_id\_t\ \textcolor{keywordtype}{id})\ -\/>\ std::shared\_ptr<SleeveElement>;}
+\DoxyCodeLine{00046\ \ \ \textcolor{keywordtype}{void}\ Copy(std::filesystem::path\ from,\ std::filesystem::path\ dest);}
+\DoxyCodeLine{00047\ }
+\DoxyCodeLine{00048\ \ \ \textcolor{keywordtype}{void}\ SyncToDB();}
+\DoxyCodeLine{00049\ \ \ \textcolor{keywordtype}{void}\ WriteSleeveMeta(\textcolor{keyword}{const}\ std::filesystem::path\&\ meta\_path);}
+\DoxyCodeLine{00050\ \ \ \textcolor{keywordtype}{void}\ ReadSleeveMeta(\textcolor{keyword}{const}\ std::filesystem::path\&\ meta\_path);}
+\DoxyCodeLine{00051\ }
+\DoxyCodeLine{00052\ \ \ \textcolor{keyword}{auto}\ Tree(\textcolor{keyword}{const}\ std::filesystem::path\&\ path)\ -\/>\ std::wstring;}
+\DoxyCodeLine{00053\ \};}
+\DoxyCodeLine{00054\ \};\ \ \textcolor{comment}{//\ namespace\ puerhlab}}
+
+\end{DoxyCode}

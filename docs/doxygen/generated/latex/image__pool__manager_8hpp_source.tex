@@ -1,0 +1,69 @@
+\doxysection{image\+\_\+pool\+\_\+manager.\+hpp}
+\hypertarget{image__pool__manager_8hpp_source}{}\label{image__pool__manager_8hpp_source}\index{D:/Projects/pu-\/erh\_lab/pu-\/erh\_lab/src/include/storage/image\_pool/image\_pool\_manager.hpp@{D:/Projects/pu-\/erh\_lab/pu-\/erh\_lab/src/include/storage/image\_pool/image\_pool\_manager.hpp}}
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{00001\ \textcolor{preprocessor}{\#pragma\ once}}
+\DoxyCodeLine{00002\ }
+\DoxyCodeLine{00003\ \textcolor{preprocessor}{\#include\ <cstdint>}}
+\DoxyCodeLine{00004\ \textcolor{preprocessor}{\#include\ <map>}}
+\DoxyCodeLine{00005\ \textcolor{preprocessor}{\#include\ <memory>}}
+\DoxyCodeLine{00006\ \textcolor{preprocessor}{\#include\ <optional>}}
+\DoxyCodeLine{00007\ \textcolor{preprocessor}{\#include\ <queue>}}
+\DoxyCodeLine{00008\ \textcolor{preprocessor}{\#include\ <set>}}
+\DoxyCodeLine{00009\ \textcolor{preprocessor}{\#include\ <string>}}
+\DoxyCodeLine{00010\ \textcolor{preprocessor}{\#include\ <unordered\_map>}}
+\DoxyCodeLine{00011\ \textcolor{preprocessor}{\#include\ <unordered\_set>}}
+\DoxyCodeLine{00012\ \textcolor{preprocessor}{\#include\ <utility>}}
+\DoxyCodeLine{00013\ }
+\DoxyCodeLine{00014\ \textcolor{preprocessor}{\#include\ "{}image/image.hpp"{}}}
+\DoxyCodeLine{00015\ \textcolor{preprocessor}{\#include\ "{}type/type.hpp"{}}}
+\DoxyCodeLine{00016\ }
+\DoxyCodeLine{00017\ \textcolor{keyword}{namespace\ }puerhlab\ \{}
+\DoxyCodeLine{00018\ }
+\DoxyCodeLine{00019\ \textcolor{keyword}{enum\ class}\ AccessType\ \{\ THUMB,\ FULL\_IMG,\ META\ \};}
+\DoxyCodeLine{00020\ }
+\DoxyCodeLine{00021\ \textcolor{keyword}{class\ }ImagePoolManager\ \{}
+\DoxyCodeLine{00022\ \ \ \textcolor{keyword}{using\ }ListIterator\ =\ std::list<image\_id\_t>::iterator;}
+\DoxyCodeLine{00023\ }
+\DoxyCodeLine{00024\ \ \textcolor{keyword}{private}:}
+\DoxyCodeLine{00025\ \ \ std::unordered\_map<image\_id\_t,\ std::shared\_ptr<Image>>\ \_image\_pool;}
+\DoxyCodeLine{00026\ }
+\DoxyCodeLine{00027\ \ \ std::unordered\_map<image\_id\_t,\ ListIterator>\ \ \ \ \ \ \ \ \ \ \ \_cache\_map\_thumb;}
+\DoxyCodeLine{00028\ \ \ std::list<image\_id\_t>\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \_cache\_list\_thumb;}
+\DoxyCodeLine{00029\ }
+\DoxyCodeLine{00030\ \ \ std::unordered\_map<image\_id\_t,\ ListIterator>\ \ \ \ \ \ \ \ \ \ \ \_cache\_map\_full;}
+\DoxyCodeLine{00031\ \ \ std::list<image\_id\_t>\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \_cache\_list\_full;}
+\DoxyCodeLine{00032\ }
+\DoxyCodeLine{00033\ \ \ uint32\_t\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \_capacity\_thumb;}
+\DoxyCodeLine{00034\ \ \ uint32\_t\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \_capacity\_full;}
+\DoxyCodeLine{00035\ }
+\DoxyCodeLine{00036\ \ \ std::unordered\_set<image\_id\_t>\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \_with\_thumb;}
+\DoxyCodeLine{00037\ \ \ std::unordered\_set<image\_id\_t>\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \_with\_full;}
+\DoxyCodeLine{00038\ }
+\DoxyCodeLine{00039\ \ \textcolor{keyword}{public}:}
+\DoxyCodeLine{00040\ \ \ \textcolor{keyword}{static}\ \textcolor{keyword}{const}\ uint32\_t\ \_default\_capacity\_thumb\ =\ 64;}
+\DoxyCodeLine{00041\ \ \ \textcolor{keyword}{static}\ \textcolor{keyword}{const}\ uint32\_t\ \_default\_capacity\_full\ \ =\ 3;}
+\DoxyCodeLine{00042\ }
+\DoxyCodeLine{00043\ \ \ \textcolor{keyword}{explicit}\ ImagePoolManager();}
+\DoxyCodeLine{00044\ \ \ \textcolor{keyword}{explicit}\ ImagePoolManager(uint32\_t\ capacity\_thumb,\ uint32\_t\ capacity\_full);}
+\DoxyCodeLine{00045\ }
+\DoxyCodeLine{00046\ \ \ \textcolor{keyword}{auto}\ \mbox{\hyperlink{classpuerhlab_1_1_image_pool_manager_ac77dd04c48700d7557c8d7beeb2b2d1f}{GetPool}}()\ -\/>\ std::unordered\_map<image\_id\_t,\ std::shared\_ptr<Image>>\&;}
+\DoxyCodeLine{00047\ \ \ \textcolor{keywordtype}{void}\ \mbox{\hyperlink{classpuerhlab_1_1_image_pool_manager_a21cc34c921230e7dc01d93375dacfc87}{Insert}}(\textcolor{keyword}{const}\ std::shared\_ptr<Image>\ img);}
+\DoxyCodeLine{00048\ \ \ \textcolor{keyword}{auto}\ \mbox{\hyperlink{classpuerhlab_1_1_image_pool_manager_a17ee9d993ed4028ecaac4e369d66aefb}{PoolContains}}(\textcolor{keyword}{const}\ image\_id\_t\&\ \textcolor{keywordtype}{id})\ -\/>\ bool;}
+\DoxyCodeLine{00049\ }
+\DoxyCodeLine{00050\ \ \ \textcolor{keyword}{auto}\ Capacity(\textcolor{keyword}{const}\ AccessType\ type)\ -\/>\ uint32\_t;}
+\DoxyCodeLine{00051\ \ \ \textcolor{keyword}{auto}\ \mbox{\hyperlink{classpuerhlab_1_1_image_pool_manager_ad41849d18fb5f6dc14f4c591ed29c16f}{AccessElement}}(\textcolor{keyword}{const}\ image\_id\_t\&\ \textcolor{keywordtype}{id},\ \textcolor{keyword}{const}\ AccessType\ type)}
+\DoxyCodeLine{00052\ \ \ \ \ \ \ -\/>\ std::optional<std::weak\_ptr<Image>>;}
+\DoxyCodeLine{00053\ \ \ \textcolor{keywordtype}{void}\ \mbox{\hyperlink{classpuerhlab_1_1_image_pool_manager_afe210f25b0c9238f2c634fde50dafc65}{RecordAccess}}(\textcolor{keyword}{const}\ image\_id\_t\&\ \textcolor{keywordtype}{id},\ \textcolor{keyword}{const}\ AccessType\ type);}
+\DoxyCodeLine{00054\ \ \ \textcolor{keywordtype}{void}\ \mbox{\hyperlink{classpuerhlab_1_1_image_pool_manager_af2e5e85b4e41e766121b2eba288662e3}{RemoveRecord}}(\textcolor{keyword}{const}\ image\_id\_t\&\ \textcolor{keywordtype}{id},\ \textcolor{keyword}{const}\ AccessType\ type);}
+\DoxyCodeLine{00055\ \ \ \textcolor{keyword}{auto}\ \mbox{\hyperlink{classpuerhlab_1_1_image_pool_manager_acefd913cc8e7ae5e75ee7af24ece7ce6}{Evict}}(\textcolor{keyword}{const}\ AccessType\ type)\ -\/>\ std::optional<std::weak\_ptr<Image>>;}
+\DoxyCodeLine{00056\ \ \ \textcolor{keyword}{auto}\ \mbox{\hyperlink{classpuerhlab_1_1_image_pool_manager_a154bbb7a1b1840eb0c2ba19aa1c2ebde}{CacheContains}}(\textcolor{keyword}{const}\ image\_id\_t\&\ \textcolor{keywordtype}{id},\ \textcolor{keyword}{const}\ AccessType\ type)\ -\/>\ bool;}
+\DoxyCodeLine{00057\ }
+\DoxyCodeLine{00058\ \ \ \textcolor{keywordtype}{void}\ ResizeCache(\textcolor{keyword}{const}\ uint32\_t\ new\_capacity,\ \textcolor{keyword}{const}\ AccessType\ type);}
+\DoxyCodeLine{00059\ }
+\DoxyCodeLine{00060\ \ \ \textcolor{keywordtype}{void}\ \mbox{\hyperlink{classpuerhlab_1_1_image_pool_manager_a8afad15ab39471ea2cbef1bc96b450f7}{Flush}}();}
+\DoxyCodeLine{00061\ \ \ \textcolor{keywordtype}{void}\ \mbox{\hyperlink{classpuerhlab_1_1_image_pool_manager_a475396db3de61e0732f6ba4685213ebc}{Clear}}();}
+\DoxyCodeLine{00062\ \};}
+\DoxyCodeLine{00063\ \};\ \ \textcolor{comment}{//\ namespace\ puerhlab}}
+
+\end{DoxyCode}

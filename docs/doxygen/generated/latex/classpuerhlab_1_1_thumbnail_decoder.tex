@@ -1,0 +1,63 @@
+\doxysection{puerhlab\+::Thumbnail\+Decoder Class Reference}
+\hypertarget{classpuerhlab_1_1_thumbnail_decoder}{}\label{classpuerhlab_1_1_thumbnail_decoder}\index{puerhlab::ThumbnailDecoder@{puerhlab::ThumbnailDecoder}}
+Inheritance diagram for puerhlab\+::Thumbnail\+Decoder\+:\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[height=3.000000cm]{classpuerhlab_1_1_thumbnail_decoder}
+\end{center}
+\end{figure}
+\doxysubsubsection*{Public Member Functions}
+\begin{DoxyCompactItemize}
+\item 
+void \mbox{\hyperlink{classpuerhlab_1_1_thumbnail_decoder_ac8e3707a7b2f6150d600556eef9cd126}{Decode}} (std\+::vector$<$ char $>$ buffer, std\+::filesystem\+::path file\+\_\+path, std\+::shared\+\_\+ptr$<$ Buffer\+Queue $>$ result, image\+\_\+id\+\_\+t id, std\+::shared\+\_\+ptr$<$ std\+::promise$<$ image\+\_\+id\+\_\+t $>$ $>$ promise)
+\begin{DoxyCompactList}\small\item\em A callback used to decode the thumbnail of a regular file. \end{DoxyCompactList}\item 
+void \mbox{\hyperlink{classpuerhlab_1_1_thumbnail_decoder_a46a7aa2cd816015d18b7d11f11a95b8c}{Decode}} (std\+::vector$<$ char $>$ buffer, std\+::shared\+\_\+ptr$<$ \mbox{\hyperlink{classpuerhlab_1_1_image}{Image}} $>$ source\+\_\+img, std\+::shared\+\_\+ptr$<$ Buffer\+Queue $>$ result, std\+::shared\+\_\+ptr$<$ std\+::promise$<$ image\+\_\+id\+\_\+t $>$ $>$ promise)
+\end{DoxyCompactItemize}
+
+
+\label{doc-func-members}
+\Hypertarget{classpuerhlab_1_1_thumbnail_decoder_doc-func-members}
+\doxysubsection{Member Function Documentation}
+\Hypertarget{classpuerhlab_1_1_thumbnail_decoder_ac8e3707a7b2f6150d600556eef9cd126}\index{puerhlab::ThumbnailDecoder@{puerhlab::ThumbnailDecoder}!Decode@{Decode}}
+\index{Decode@{Decode}!puerhlab::ThumbnailDecoder@{puerhlab::ThumbnailDecoder}}
+\doxysubsubsection{\texorpdfstring{Decode()}{Decode()}\hspace{0.1cm}{\footnotesize\ttfamily [1/2]}}
+{\footnotesize\ttfamily \label{classpuerhlab_1_1_thumbnail_decoder_ac8e3707a7b2f6150d600556eef9cd126} 
+void puerhlab\+::\+Thumbnail\+Decoder\+::\+Decode (\begin{DoxyParamCaption}\item[{std\+::vector$<$ char $>$}]{buffer}{, }\item[{std\+::filesystem\+::path}]{file\+\_\+path}{, }\item[{std\+::shared\+\_\+ptr$<$ Buffer\+Queue $>$}]{result}{, }\item[{image\+\_\+id\+\_\+t}]{id}{, }\item[{std\+::shared\+\_\+ptr$<$ std\+::promise$<$ image\+\_\+id\+\_\+t $>$ $>$}]{promise}{}\end{DoxyParamCaption})\hspace{0.3cm}{\ttfamily [virtual]}}
+
+
+
+A callback used to decode the thumbnail of a regular file. 
+
+
+\begin{DoxyParams}{Parameters}
+{\em buffer} & \\
+\hline
+{\em file\+\_\+path} & \\
+\hline
+{\em result} & \\
+\hline
+{\em id} & \\
+\hline
+{\em promise} & \\
+\hline
+\end{DoxyParams}
+
+
+Implements \mbox{\hyperlink{classpuerhlab_1_1_data_decoder}{puerhlab\+::\+Data\+Decoder}}.
+
+\Hypertarget{classpuerhlab_1_1_thumbnail_decoder_a46a7aa2cd816015d18b7d11f11a95b8c}\index{puerhlab::ThumbnailDecoder@{puerhlab::ThumbnailDecoder}!Decode@{Decode}}
+\index{Decode@{Decode}!puerhlab::ThumbnailDecoder@{puerhlab::ThumbnailDecoder}}
+\doxysubsubsection{\texorpdfstring{Decode()}{Decode()}\hspace{0.1cm}{\footnotesize\ttfamily [2/2]}}
+{\footnotesize\ttfamily \label{classpuerhlab_1_1_thumbnail_decoder_a46a7aa2cd816015d18b7d11f11a95b8c} 
+void puerhlab\+::\+Thumbnail\+Decoder\+::\+Decode (\begin{DoxyParamCaption}\item[{std\+::vector$<$ char $>$}]{buffer}{, }\item[{std\+::shared\+\_\+ptr$<$ \mbox{\hyperlink{classpuerhlab_1_1_image}{Image}} $>$}]{source\+\_\+img}{, }\item[{std\+::shared\+\_\+ptr$<$ Buffer\+Queue $>$}]{result}{, }\item[{std\+::shared\+\_\+ptr$<$ std\+::promise$<$ image\+\_\+id\+\_\+t $>$ $>$}]{promise}{}\end{DoxyParamCaption})\hspace{0.3cm}{\ttfamily [virtual]}}
+
+
+
+Implements \mbox{\hyperlink{classpuerhlab_1_1_data_decoder}{puerhlab\+::\+Data\+Decoder}}.
+
+
+
+The documentation for this class was generated from the following files\+:\begin{DoxyCompactItemize}
+\item 
+D\+:/\+Projects/pu-\/erh\+\_\+lab/pu-\/erh\+\_\+lab/src/include/decoders/thumbnail\+\_\+decoder.\+hpp\item 
+D\+:/\+Projects/pu-\/erh\+\_\+lab/pu-\/erh\+\_\+lab/src/decoders/thumbnail\+\_\+decoder.\+cpp\end{DoxyCompactItemize}

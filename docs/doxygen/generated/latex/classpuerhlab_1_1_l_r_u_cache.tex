@@ -1,0 +1,40 @@
+\doxysection{puerhlab\+::LRUCache\texorpdfstring{$<$}{<} K, V \texorpdfstring{$>$}{>} Class Template Reference}
+\hypertarget{classpuerhlab_1_1_l_r_u_cache}{}\label{classpuerhlab_1_1_l_r_u_cache}\index{puerhlab::LRUCache$<$ K, V $>$@{puerhlab::LRUCache$<$ K, V $>$}}
+\doxysubsubsection*{Public Member Functions}
+\begin{DoxyCompactItemize}
+\item 
+\Hypertarget{classpuerhlab_1_1_l_r_u_cache_ace6a50a40581833837686b8654584c13}\label{classpuerhlab_1_1_l_r_u_cache_ace6a50a40581833837686b8654584c13} 
+{\bfseries LRUCache} (uint32\+\_\+t capacity)
+\item 
+\Hypertarget{classpuerhlab_1_1_l_r_u_cache_a900e487f1c345ba53e621dd993148a20}\label{classpuerhlab_1_1_l_r_u_cache_a900e487f1c345ba53e621dd993148a20} 
+auto {\bfseries Contains} (const K \&key) -\/$>$ bool
+\item 
+\Hypertarget{classpuerhlab_1_1_l_r_u_cache_a2d1ff3822f70205b68f30e9d79f5376b}\label{classpuerhlab_1_1_l_r_u_cache_a2d1ff3822f70205b68f30e9d79f5376b} 
+auto {\bfseries Access\+Element} (const K \&key) -\/$>$ std\+::optional$<$ V $>$
+\item 
+\Hypertarget{classpuerhlab_1_1_l_r_u_cache_ad1061ff6500e1adf2193ff9f65a2e057}\label{classpuerhlab_1_1_l_r_u_cache_ad1061ff6500e1adf2193ff9f65a2e057} 
+void {\bfseries Record\+Access} (const K \&key, const V \&val)
+\item 
+\Hypertarget{classpuerhlab_1_1_l_r_u_cache_a00c5e75b7da8b14e9092d1bb464f2b16}\label{classpuerhlab_1_1_l_r_u_cache_a00c5e75b7da8b14e9092d1bb464f2b16} 
+void {\bfseries Remove\+Record} (const K \&path)
+\item 
+\Hypertarget{classpuerhlab_1_1_l_r_u_cache_a874aef8147605d40298c5de752c9dbee}\label{classpuerhlab_1_1_l_r_u_cache_a874aef8147605d40298c5de752c9dbee} 
+auto {\bfseries Evict} () -\/$>$ std\+::optional$<$ V $>$
+\item 
+\Hypertarget{classpuerhlab_1_1_l_r_u_cache_a43aa05da15e6fdade5232fe30c1b86e4}\label{classpuerhlab_1_1_l_r_u_cache_a43aa05da15e6fdade5232fe30c1b86e4} 
+void {\bfseries Resize} (uint32\+\_\+t new\+\_\+capacity)
+\item 
+\Hypertarget{classpuerhlab_1_1_l_r_u_cache_a9f44fffabe15aad8e07833f4044b5081}\label{classpuerhlab_1_1_l_r_u_cache_a9f44fffabe15aad8e07833f4044b5081} 
+void {\bfseries Flush} ()
+\end{DoxyCompactItemize}
+\doxysubsubsection*{Static Public Attributes}
+\begin{DoxyCompactItemize}
+\item 
+\Hypertarget{classpuerhlab_1_1_l_r_u_cache_a32ed1742351ee7e1f60a06c1a2f09809}\label{classpuerhlab_1_1_l_r_u_cache_a32ed1742351ee7e1f60a06c1a2f09809} 
+static const uint32\+\_\+t {\bfseries \+\_\+default\+\_\+capacity} = 256
+\end{DoxyCompactItemize}
+
+
+The documentation for this class was generated from the following file\+:\begin{DoxyCompactItemize}
+\item 
+D\+:/\+Projects/pu-\/erh\+\_\+lab/pu-\/erh\+\_\+lab/src/include/utils/cache/lru\+\_\+cache.\+hpp\end{DoxyCompactItemize}

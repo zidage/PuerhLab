@@ -1,0 +1,61 @@
+\doxysection{duckdb\+\_\+types.\+hpp}
+\hypertarget{duckdb__types_8hpp_source}{}\label{duckdb__types_8hpp_source}\index{D:/Projects/pu-\/erh\_lab/pu-\/erh\_lab/src/include/storage/mapper/duckorm/duckdb\_types.hpp@{D:/Projects/pu-\/erh\_lab/pu-\/erh\_lab/src/include/storage/mapper/duckorm/duckdb\_types.hpp}}
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{00001\ \textcolor{preprocessor}{\#pragma\ once}}
+\DoxyCodeLine{00002\ }
+\DoxyCodeLine{00003\ \textcolor{preprocessor}{\#include\ <duckdb.h>}}
+\DoxyCodeLine{00004\ }
+\DoxyCodeLine{00005\ \textcolor{preprocessor}{\#include\ <cstddef>}}
+\DoxyCodeLine{00006\ \textcolor{preprocessor}{\#include\ <cstdint>}}
+\DoxyCodeLine{00007\ \textcolor{preprocessor}{\#include\ <memory>}}
+\DoxyCodeLine{00008\ \textcolor{preprocessor}{\#include\ <string>}}
+\DoxyCodeLine{00009\ \textcolor{preprocessor}{\#include\ <variant>}}
+\DoxyCodeLine{00010\ }
+\DoxyCodeLine{00011\ \textcolor{keyword}{namespace\ }duckorm\ \{}
+\DoxyCodeLine{00012\ \textcolor{keyword}{enum\ class}\ DuckDBType\ :\ uint8\_t\ \{}
+\DoxyCodeLine{00013\ \ \ INT32,}
+\DoxyCodeLine{00014\ \ \ INT64,}
+\DoxyCodeLine{00015\ \ \ UINT32,}
+\DoxyCodeLine{00016\ \ \ UINT64,}
+\DoxyCodeLine{00017\ \ \ DOUBLE,}
+\DoxyCodeLine{00018\ \ \ VARCHAR,}
+\DoxyCodeLine{00019\ \ \ JSON,}
+\DoxyCodeLine{00020\ \ \ BOOLEAN,}
+\DoxyCodeLine{00021\ \ \ TIMESTAMP,}
+\DoxyCodeLine{00022\ \};}
+\DoxyCodeLine{00023\ }
+\DoxyCodeLine{00028\ \textcolor{keyword}{class\ }PreparedStatement\ \{}
+\DoxyCodeLine{00029\ \ \textcolor{keyword}{private}:}
+\DoxyCodeLine{00030\ \ \ \textcolor{keywordtype}{void}\ RecycleResources();}
+\DoxyCodeLine{00031\ }
+\DoxyCodeLine{00032\ \ \textcolor{keyword}{public}:}
+\DoxyCodeLine{00033\ \ \ duckdb\_result\ \ \ \ \ \ \ \ \ \ \ \ \ \_result;}
+\DoxyCodeLine{00034\ \ \ duckdb\_prepared\_statement\ \_stmt;}
+\DoxyCodeLine{00035\ \ \ duckdb\_connection\&\ \ \ \ \ \ \ \ \_con;}
+\DoxyCodeLine{00036\ }
+\DoxyCodeLine{00037\ \ \ \textcolor{keywordtype}{bool}\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \_prepared\ =\ \textcolor{keyword}{false};}
+\DoxyCodeLine{00038\ \ \ PreparedStatement(duckdb\_connection\&\ con);}
+\DoxyCodeLine{00039\ \ \ PreparedStatement(duckdb\_connection\&\ con,\ \textcolor{keyword}{const}\ std::string\&\ prepare\_query);}
+\DoxyCodeLine{00040\ \ \ PreparedStatement();}
+\DoxyCodeLine{00041\ \ \ \string~PreparedStatement();}
+\DoxyCodeLine{00042\ \ \ \textcolor{keyword}{auto}\ GetStmtGuard(\textcolor{keyword}{const}\ std::string\&\ prepare\_query)\ -\/>\ duckdb\_prepared\_statement\&;}
+\DoxyCodeLine{00043\ \ \ \textcolor{keywordtype}{void}\ SetConnection(duckdb\_connection\&\ con);}
+\DoxyCodeLine{00044\ \};}
+\DoxyCodeLine{00045\ }
+\DoxyCodeLine{00050\ \textcolor{keyword}{struct\ }\mbox{\hyperlink{structduckorm_1_1_duck_field_desc}{DuckFieldDesc}}\ \{}
+\DoxyCodeLine{00051\ \ \ \textcolor{keyword}{const}\ \textcolor{keywordtype}{char}*\ name;}
+\DoxyCodeLine{00052\ \ \ DuckDBType\ \ type;}
+\DoxyCodeLine{00053\ \ \ \textcolor{keywordtype}{size\_t}\ \ \ \ \ \ offset;}
+\DoxyCodeLine{00054\ \};}
+\DoxyCodeLine{00055\ }
+\DoxyCodeLine{00056\ \textcolor{comment}{//\ Macro\ to\ define\ a\ field\ descriptor\ for\ a\ specific\ type\ and\ field.}}
+\DoxyCodeLine{00057\ \textcolor{preprocessor}{\#define\ FIELD(type,\ field,\ field\_type)\ \(\backslash\)}}
+\DoxyCodeLine{00058\ \textcolor{preprocessor}{\ \ duckorm::DuckFieldDesc\ \{\ \#field,\ duckorm::DuckDBType::field\_type,\ offsetof(type,\ field)\ \}}}
+\DoxyCodeLine{00059\ }
+\DoxyCodeLine{00060\ \textcolor{comment}{//\ brief\ Type\ alias\ for\ a\ variant\ that\ can\ hold\ various\ DuckDB-\/supported\ types.}}
+\DoxyCodeLine{00061\ \textcolor{keyword}{using\ }VarTypes\ =}
+\DoxyCodeLine{00062\ \ \ \ \ std::variant<int32\_t,\ int64\_t,\ uint32\_t,\ uint64\_t,\ double,\ std::unique\_ptr<std::string>>;}
+\DoxyCodeLine{00063\ \};\ \ \textcolor{comment}{//\ namespace\ duckorm}}
+
+\end{DoxyCode}

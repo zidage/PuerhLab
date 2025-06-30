@@ -1,0 +1,19 @@
+\doxysection{controller\+\_\+types.\+hpp}
+\hypertarget{controller__types_8hpp_source}{}\label{controller__types_8hpp_source}\index{D:/Projects/pu-\/erh\_lab/pu-\/erh\_lab/src/include/storage/controller/controller\_types.hpp@{D:/Projects/pu-\/erh\_lab/pu-\/erh\_lab/src/include/storage/controller/controller\_types.hpp}}
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{00001\ \textcolor{preprocessor}{\#pragma\ once}}
+\DoxyCodeLine{00002\ \textcolor{preprocessor}{\#include\ <duckdb.h>}}
+\DoxyCodeLine{00003\ }
+\DoxyCodeLine{00004\ \textcolor{keyword}{namespace\ }puerhlab\ \{}
+\DoxyCodeLine{00005\ \textcolor{keyword}{class\ }ConnectionGuard\ \{}
+\DoxyCodeLine{00006\ \ \textcolor{keyword}{public}:}
+\DoxyCodeLine{00007\ \ \ duckdb\_connection\ \_conn;}
+\DoxyCodeLine{00008\ }
+\DoxyCodeLine{00009\ \ \ ConnectionGuard(duckdb\_connection\ conn);}
+\DoxyCodeLine{00010\ \ \ ConnectionGuard(ConnectionGuard\&\&\ other)\ \textcolor{keyword}{noexcept};}
+\DoxyCodeLine{00011\ \ \ \string~ConnectionGuard();}
+\DoxyCodeLine{00012\ \};}
+\DoxyCodeLine{00013\ \}\ \ \textcolor{comment}{//\ namespace\ puerhlab}}
+
+\end{DoxyCode}

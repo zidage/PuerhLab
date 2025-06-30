@@ -1,0 +1,121 @@
+\doxysection{puerhlab\+::Concurrent\+Blocking\+Queue\texorpdfstring{$<$}{<} T \texorpdfstring{$>$}{>} Class Template Reference}
+\hypertarget{classpuerhlab_1_1_concurrent_blocking_queue}{}\label{classpuerhlab_1_1_concurrent_blocking_queue}\index{puerhlab::ConcurrentBlockingQueue$<$ T $>$@{puerhlab::ConcurrentBlockingQueue$<$ T $>$}}
+
+
+A thread-\/safe blocking task queue used by the threadpool.  
+
+
+
+
+{\ttfamily \#include $<$queue.\+hpp$>$}
+
+\doxysubsubsection*{Public Member Functions}
+\begin{DoxyCompactItemize}
+\item 
+\Hypertarget{classpuerhlab_1_1_concurrent_blocking_queue_a41b4a8f48a368a5cd196f121ab162573}\label{classpuerhlab_1_1_concurrent_blocking_queue_a41b4a8f48a368a5cd196f121ab162573} 
+{\bfseries Concurrent\+Blocking\+Queue} (uint32\+\_\+t max\+\_\+size)
+\item 
+void \mbox{\hyperlink{classpuerhlab_1_1_concurrent_blocking_queue_acc4ae3370460a49800ee12105e285f58}{push}} (T new\+\_\+request)
+\begin{DoxyCompactList}\small\item\em A thread-\/safe wrapper for \+\_\+request\+\_\+queue \doxylink{classpuerhlab_1_1_concurrent_blocking_queue_acc4ae3370460a49800ee12105e285f58}{push()} method. \end{DoxyCompactList}\item 
+void \mbox{\hyperlink{classpuerhlab_1_1_concurrent_blocking_queue_aea63d4d9a4fdf1e5307d5ee8d2b58f17}{push\+\_\+r}} (T \&\&new\+\_\+request)
+\begin{DoxyCompactList}\small\item\em A thread-\/safe wrapper for \+\_\+request\+\_\+queue \doxylink{classpuerhlab_1_1_concurrent_blocking_queue_acc4ae3370460a49800ee12105e285f58}{push()} method. \end{DoxyCompactList}\item 
+T \mbox{\hyperlink{classpuerhlab_1_1_concurrent_blocking_queue_af7c0975fd9247811fde2051fe23f32b3}{pop}} ()
+\begin{DoxyCompactList}\small\item\em A thread-\/safe wrapper for \doxylink{classpuerhlab_1_1_concurrent_blocking_queue_af7c0975fd9247811fde2051fe23f32b3}{pop()} method. \end{DoxyCompactList}\item 
+T \mbox{\hyperlink{classpuerhlab_1_1_concurrent_blocking_queue_a947f5e30ab4c4fe7670f87f573dedf78}{pop\+\_\+r}} ()
+\begin{DoxyCompactList}\small\item\em A thread-\/safe wrapper for \doxylink{classpuerhlab_1_1_concurrent_blocking_queue_af7c0975fd9247811fde2051fe23f32b3}{pop()} method. \end{DoxyCompactList}\end{DoxyCompactItemize}
+\doxysubsubsection*{Public Attributes}
+\begin{DoxyCompactItemize}
+\item 
+\Hypertarget{classpuerhlab_1_1_concurrent_blocking_queue_a139c42bae065560ee748b7068ee15b10}\label{classpuerhlab_1_1_concurrent_blocking_queue_a139c42bae065560ee748b7068ee15b10} 
+std\+::uint32\+\_\+t {\bfseries \+\_\+max\+\_\+size}
+\item 
+\Hypertarget{classpuerhlab_1_1_concurrent_blocking_queue_aee3fbf00c710d13361e5adbba720f05c}\label{classpuerhlab_1_1_concurrent_blocking_queue_aee3fbf00c710d13361e5adbba720f05c} 
+bool {\bfseries \+\_\+has\+\_\+capacity\+\_\+limit} = true
+\item 
+\Hypertarget{classpuerhlab_1_1_concurrent_blocking_queue_a243d34e51d4a59499323ef600b3f8e20}\label{classpuerhlab_1_1_concurrent_blocking_queue_a243d34e51d4a59499323ef600b3f8e20} 
+std\+::queue$<$ T $>$ {\bfseries \+\_\+queue}
+\item 
+\Hypertarget{classpuerhlab_1_1_concurrent_blocking_queue_a0e6c4a1b14f7b3cc043473ad8452b2f8}\label{classpuerhlab_1_1_concurrent_blocking_queue_a0e6c4a1b14f7b3cc043473ad8452b2f8} 
+std\+::mutex {\bfseries mtx}
+\item 
+\Hypertarget{classpuerhlab_1_1_concurrent_blocking_queue_a7248d718368a5f1537d1004bf53971c3}\label{classpuerhlab_1_1_concurrent_blocking_queue_a7248d718368a5f1537d1004bf53971c3} 
+std\+::condition\+\_\+variable {\bfseries \+\_\+producer\+\_\+cv}
+\item 
+\Hypertarget{classpuerhlab_1_1_concurrent_blocking_queue_ae2db787d2efeac720ede42b979d65596}\label{classpuerhlab_1_1_concurrent_blocking_queue_ae2db787d2efeac720ede42b979d65596} 
+std\+::condition\+\_\+variable {\bfseries \+\_\+consumer\+\_\+cv}
+\end{DoxyCompactItemize}
+
+
+\doxysubsection{Detailed Description}
+\subsubsection*{template$<$typename T$>$\newline
+class puerhlab\+::\+Concurrent\+Blocking\+Queue$<$ T $>$}
+A thread-\/safe blocking task queue used by the threadpool. 
+
+\label{doc-func-members}
+\Hypertarget{classpuerhlab_1_1_concurrent_blocking_queue_doc-func-members}
+\doxysubsection{Member Function Documentation}
+\Hypertarget{classpuerhlab_1_1_concurrent_blocking_queue_af7c0975fd9247811fde2051fe23f32b3}\index{puerhlab::ConcurrentBlockingQueue$<$ T $>$@{puerhlab::ConcurrentBlockingQueue$<$ T $>$}!pop@{pop}}
+\index{pop@{pop}!puerhlab::ConcurrentBlockingQueue$<$ T $>$@{puerhlab::ConcurrentBlockingQueue$<$ T $>$}}
+\doxysubsubsection{\texorpdfstring{pop()}{pop()}}
+{\footnotesize\ttfamily \label{classpuerhlab_1_1_concurrent_blocking_queue_af7c0975fd9247811fde2051fe23f32b3} 
+template$<$typename T$>$ \\
+T \mbox{\hyperlink{classpuerhlab_1_1_concurrent_blocking_queue}{puerhlab\+::\+Concurrent\+Blocking\+Queue}}$<$ T $>$\+::pop (\begin{DoxyParamCaption}{}{}\end{DoxyParamCaption})\hspace{0.3cm}{\ttfamily [inline]}}
+
+
+
+A thread-\/safe wrapper for \doxylink{classpuerhlab_1_1_concurrent_blocking_queue_af7c0975fd9247811fde2051fe23f32b3}{pop()} method. 
+
+\begin{DoxyReturn}{Returns}
+the front-\/most element of the queue 
+\end{DoxyReturn}
+\Hypertarget{classpuerhlab_1_1_concurrent_blocking_queue_a947f5e30ab4c4fe7670f87f573dedf78}\index{puerhlab::ConcurrentBlockingQueue$<$ T $>$@{puerhlab::ConcurrentBlockingQueue$<$ T $>$}!pop\_r@{pop\_r}}
+\index{pop\_r@{pop\_r}!puerhlab::ConcurrentBlockingQueue$<$ T $>$@{puerhlab::ConcurrentBlockingQueue$<$ T $>$}}
+\doxysubsubsection{\texorpdfstring{pop\_r()}{pop\_r()}}
+{\footnotesize\ttfamily \label{classpuerhlab_1_1_concurrent_blocking_queue_a947f5e30ab4c4fe7670f87f573dedf78} 
+template$<$typename T$>$ \\
+T \mbox{\hyperlink{classpuerhlab_1_1_concurrent_blocking_queue}{puerhlab\+::\+Concurrent\+Blocking\+Queue}}$<$ T $>$\+::pop\+\_\+r (\begin{DoxyParamCaption}{}{}\end{DoxyParamCaption})\hspace{0.3cm}{\ttfamily [inline]}}
+
+
+
+A thread-\/safe wrapper for \doxylink{classpuerhlab_1_1_concurrent_blocking_queue_af7c0975fd9247811fde2051fe23f32b3}{pop()} method. 
+
+\begin{DoxyReturn}{Returns}
+the front-\/most element of the queue 
+\end{DoxyReturn}
+\Hypertarget{classpuerhlab_1_1_concurrent_blocking_queue_acc4ae3370460a49800ee12105e285f58}\index{puerhlab::ConcurrentBlockingQueue$<$ T $>$@{puerhlab::ConcurrentBlockingQueue$<$ T $>$}!push@{push}}
+\index{push@{push}!puerhlab::ConcurrentBlockingQueue$<$ T $>$@{puerhlab::ConcurrentBlockingQueue$<$ T $>$}}
+\doxysubsubsection{\texorpdfstring{push()}{push()}}
+{\footnotesize\ttfamily \label{classpuerhlab_1_1_concurrent_blocking_queue_acc4ae3370460a49800ee12105e285f58} 
+template$<$typename T$>$ \\
+void \mbox{\hyperlink{classpuerhlab_1_1_concurrent_blocking_queue}{puerhlab\+::\+Concurrent\+Blocking\+Queue}}$<$ T $>$\+::push (\begin{DoxyParamCaption}\item[{T}]{new\+\_\+request}{}\end{DoxyParamCaption})\hspace{0.3cm}{\ttfamily [inline]}}
+
+
+
+A thread-\/safe wrapper for \+\_\+request\+\_\+queue \doxylink{classpuerhlab_1_1_concurrent_blocking_queue_acc4ae3370460a49800ee12105e285f58}{push()} method. 
+
+
+\begin{DoxyParams}{Parameters}
+{\em new\+\_\+request} & the request to enqueue \\
+\hline
+\end{DoxyParams}
+\Hypertarget{classpuerhlab_1_1_concurrent_blocking_queue_aea63d4d9a4fdf1e5307d5ee8d2b58f17}\index{puerhlab::ConcurrentBlockingQueue$<$ T $>$@{puerhlab::ConcurrentBlockingQueue$<$ T $>$}!push\_r@{push\_r}}
+\index{push\_r@{push\_r}!puerhlab::ConcurrentBlockingQueue$<$ T $>$@{puerhlab::ConcurrentBlockingQueue$<$ T $>$}}
+\doxysubsubsection{\texorpdfstring{push\_r()}{push\_r()}}
+{\footnotesize\ttfamily \label{classpuerhlab_1_1_concurrent_blocking_queue_aea63d4d9a4fdf1e5307d5ee8d2b58f17} 
+template$<$typename T$>$ \\
+void \mbox{\hyperlink{classpuerhlab_1_1_concurrent_blocking_queue}{puerhlab\+::\+Concurrent\+Blocking\+Queue}}$<$ T $>$\+::push\+\_\+r (\begin{DoxyParamCaption}\item[{T \&\&}]{new\+\_\+request}{}\end{DoxyParamCaption})\hspace{0.3cm}{\ttfamily [inline]}}
+
+
+
+A thread-\/safe wrapper for \+\_\+request\+\_\+queue \doxylink{classpuerhlab_1_1_concurrent_blocking_queue_acc4ae3370460a49800ee12105e285f58}{push()} method. 
+
+
+\begin{DoxyParams}{Parameters}
+{\em new\+\_\+request} & the request to enqueue \\
+\hline
+\end{DoxyParams}
+
+
+The documentation for this class was generated from the following file\+:\begin{DoxyCompactItemize}
+\item 
+D\+:/\+Projects/pu-\/erh\+\_\+lab/pu-\/erh\+\_\+lab/src/include/utils/queue/queue.\+hpp\end{DoxyCompactItemize}

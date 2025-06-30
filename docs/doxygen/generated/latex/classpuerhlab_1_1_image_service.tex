@@ -1,0 +1,58 @@
+\doxysection{puerhlab\+::Image\+Service Class Reference}
+\hypertarget{classpuerhlab_1_1_image_service}{}\label{classpuerhlab_1_1_image_service}\index{puerhlab::ImageService@{puerhlab::ImageService}}
+Inheritance diagram for puerhlab\+::Image\+Service\+:\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[height=1.593172cm]{classpuerhlab_1_1_image_service}
+\end{center}
+\end{figure}
+\doxysubsubsection*{Public Member Functions}
+\begin{DoxyCompactItemize}
+\item 
+\Hypertarget{classpuerhlab_1_1_image_service_a68e922613ead7581f01f22d44d00c95e}\label{classpuerhlab_1_1_image_service_a68e922613ead7581f01f22d44d00c95e} 
+auto {\bfseries Get\+Image\+By\+Id} (const image\+\_\+id\+\_\+t id) -\/$>$ std\+::vector$<$ std\+::shared\+\_\+ptr$<$ \mbox{\hyperlink{classpuerhlab_1_1_image}{Image}} $>$ $>$
+\item 
+\Hypertarget{classpuerhlab_1_1_image_service_ae8241f4a4f06951420f9ca7844c0122f}\label{classpuerhlab_1_1_image_service_ae8241f4a4f06951420f9ca7844c0122f} 
+auto {\bfseries Get\+Image\+By\+Name} (const std\+::wstring name) -\/$>$ std\+::vector$<$ std\+::shared\+\_\+ptr$<$ \mbox{\hyperlink{classpuerhlab_1_1_image}{Image}} $>$ $>$
+\item 
+\Hypertarget{classpuerhlab_1_1_image_service_ac2fa5a752df935ac5f483ca032089bad}\label{classpuerhlab_1_1_image_service_ac2fa5a752df935ac5f483ca032089bad} 
+auto {\bfseries Get\+Image\+By\+Path} (const std\+::filesystem\+::path path) -\/$>$ std\+::vector$<$ std\+::shared\+\_\+ptr$<$ \mbox{\hyperlink{classpuerhlab_1_1_image}{Image}} $>$ $>$
+\item 
+\Hypertarget{classpuerhlab_1_1_image_service_a13f998c48cd810871d75a5e7eb58e5bc}\label{classpuerhlab_1_1_image_service_a13f998c48cd810871d75a5e7eb58e5bc} 
+auto {\bfseries Get\+Image\+By\+Type} (const Image\+Type type) -\/$>$ std\+::vector$<$ std\+::shared\+\_\+ptr$<$ \mbox{\hyperlink{classpuerhlab_1_1_image}{Image}} $>$ $>$
+\item 
+\Hypertarget{classpuerhlab_1_1_image_service_a3f71f2bf169f5aae8c271e384828c32b}\label{classpuerhlab_1_1_image_service_a3f71f2bf169f5aae8c271e384828c32b} 
+{\bfseries Service\+Interface} (duckdb\+\_\+connection \&conn)
+\end{DoxyCompactItemize}
+\doxysubsection*{Public Member Functions inherited from \mbox{\hyperlink{classpuerhlab_1_1_service_interface}{puerhlab\+::\+Service\+Interface$<$ Image\+Service, std\+::shared\+\_\+ptr$<$ Image $>$, Image\+Mapper\+Params, Image\+Mapper, image\+\_\+id\+\_\+t $>$}}}
+\begin{DoxyCompactItemize}
+\item 
+{\bfseries Service\+Interface} (duckdb\+\_\+connection \&conn)
+\item 
+void {\bfseries Insert\+Params} (const \mbox{\hyperlink{structpuerhlab_1_1_image_mapper_params}{Image\+Mapper\+Params}} \&param)
+\item 
+void {\bfseries Insert} (const std\+::shared\+\_\+ptr$<$ \mbox{\hyperlink{classpuerhlab_1_1_image}{Image}} $>$ \&obj)
+\item 
+auto {\bfseries Get\+By\+Predicate} (const std\+::string \&\&predicate) -\/$>$ std\+::vector$<$ std\+::shared\+\_\+ptr$<$ \mbox{\hyperlink{classpuerhlab_1_1_image}{Image}} $>$ $>$
+\item 
+void {\bfseries Remove\+By\+Id} (const image\+\_\+id\+\_\+t remove\+\_\+id)
+\item 
+void {\bfseries Remove\+By\+Clause} (const std\+::string \&clause)
+\item 
+void {\bfseries Update} (const std\+::shared\+\_\+ptr$<$ \mbox{\hyperlink{classpuerhlab_1_1_image}{Image}} $>$ \&obj, const image\+\_\+id\+\_\+t update\+\_\+id)
+\end{DoxyCompactItemize}
+\doxysubsubsection*{Static Public Member Functions}
+\begin{DoxyCompactItemize}
+\item 
+\Hypertarget{classpuerhlab_1_1_image_service_a3f7eed8e97a82deabe43eb27441b6919}\label{classpuerhlab_1_1_image_service_a3f7eed8e97a82deabe43eb27441b6919} 
+static auto {\bfseries To\+Params} (const std\+::shared\+\_\+ptr$<$ \mbox{\hyperlink{classpuerhlab_1_1_image}{Image}} $>$ source) -\/$>$ \mbox{\hyperlink{structpuerhlab_1_1_image_mapper_params}{Image\+Mapper\+Params}}
+\item 
+\Hypertarget{classpuerhlab_1_1_image_service_ab65d0d473a2f256e529e7e5a854807b3}\label{classpuerhlab_1_1_image_service_ab65d0d473a2f256e529e7e5a854807b3} 
+static auto {\bfseries From\+Params} (const \mbox{\hyperlink{structpuerhlab_1_1_image_mapper_params}{Image\+Mapper\+Params}} \&\&param) -\/$>$ std\+::shared\+\_\+ptr$<$ \mbox{\hyperlink{classpuerhlab_1_1_image}{Image}} $>$
+\end{DoxyCompactItemize}
+
+
+The documentation for this class was generated from the following files\+:\begin{DoxyCompactItemize}
+\item 
+D\+:/\+Projects/pu-\/erh\+\_\+lab/pu-\/erh\+\_\+lab/src/include/storage/service/image/image\+\_\+service.\+hpp\item 
+D\+:/\+Projects/pu-\/erh\+\_\+lab/pu-\/erh\+\_\+lab/src/storage/service/image/image\+\_\+service.\+cpp\end{DoxyCompactItemize}

@@ -1,0 +1,56 @@
+\doxysection{db\+\_\+controller.\+hpp}
+\hypertarget{db__controller_8hpp_source}{}\label{db__controller_8hpp_source}\index{D:/Projects/pu-\/erh\_lab/pu-\/erh\_lab/src/include/storage/controller/db\_controller.hpp@{D:/Projects/pu-\/erh\_lab/pu-\/erh\_lab/src/include/storage/controller/db\_controller.hpp}}
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{00001\ \textcolor{preprocessor}{\#pragma\ once}}
+\DoxyCodeLine{00002\ }
+\DoxyCodeLine{00003\ \textcolor{preprocessor}{\#include\ <duckdb.h>}}
+\DoxyCodeLine{00004\ }
+\DoxyCodeLine{00005\ \textcolor{preprocessor}{\#include\ <codecvt>}}
+\DoxyCodeLine{00006\ \textcolor{preprocessor}{\#include\ <filesystem>}}
+\DoxyCodeLine{00007\ \textcolor{preprocessor}{\#include\ <string>}}
+\DoxyCodeLine{00008\ }
+\DoxyCodeLine{00009\ \textcolor{preprocessor}{\#include\ "{}controller\_types.hpp"{}}}
+\DoxyCodeLine{00010\ \textcolor{preprocessor}{\#include\ "{}type/type.hpp"{}}}
+\DoxyCodeLine{00011\ \textcolor{preprocessor}{\#include\ "{}utils/queue/queue.hpp"{}}}
+\DoxyCodeLine{00012\ }
+\DoxyCodeLine{00013\ \textcolor{keyword}{namespace\ }puerhlab\ \{}
+\DoxyCodeLine{00014\ \textcolor{keyword}{class\ }\mbox{\hyperlink{classpuerhlab_1_1_d_b_controller_a660db1b50fedda4f1cfb94033ff4f4b1}{DBController}}\ \{}
+\DoxyCodeLine{00015\ \ \textcolor{keyword}{private}:}
+\DoxyCodeLine{00016\ \ \ duckdb\_database\ \ \ \ \ \ \ \ \ \ \ \ \ \ \_db;}
+\DoxyCodeLine{00017\ }
+\DoxyCodeLine{00018\ \ \ file\_path\_t\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \_db\_path;}
+\DoxyCodeLine{00019\ }
+\DoxyCodeLine{00020\ \ \ \textcolor{keywordtype}{bool}\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \_initialized;}
+\DoxyCodeLine{00021\ }
+\DoxyCodeLine{00022\ \ \ \textcolor{keyword}{constexpr}\ \textcolor{keyword}{static}\ \textcolor{keyword}{const}\ \textcolor{keywordtype}{char}*\ init\_table\_query\ =}
+\DoxyCodeLine{00023\ \ \ \ \ \ \ \textcolor{stringliteral}{"{}CREATE\ TABLE\ Sleeve\ (id\ BIGINT\ PRIMARY\ KEY);"{}}}
+\DoxyCodeLine{00024\ \ \ \ \ \ \ \textcolor{stringliteral}{"{}CREATE\ TABLE\ Image\ (id\ BIGINT\ PRIMARY\ KEY,\ image\_path\ TEXT,\ file\_name\ TEXT,\ type\ INTEGER,\ "{}}}
+\DoxyCodeLine{00025\ \ \ \ \ \ \ \textcolor{stringliteral}{"{}metadata\ JSON);"{}}}
+\DoxyCodeLine{00026\ \ \ \ \ \ \ \textcolor{stringliteral}{"{}CREATE\ TABLE\ SleeveRoot\ (id\ BIGINT\ PRIMARY\ KEY);"{}}}
+\DoxyCodeLine{00027\ \ \ \ \ \ \ \textcolor{stringliteral}{"{}CREATE\ TABLE\ Element\ (id\ BIGINT\ PRIMARY\ KEY,\ type\ INTEGER,\ element\_name\ TEXT,\ added\_time\ "{}}}
+\DoxyCodeLine{00028\ \ \ \ \ \ \ \textcolor{stringliteral}{"{}TIMESTAMP,\ modified\_time\ "{}}}
+\DoxyCodeLine{00029\ \ \ \ \ \ \ \textcolor{stringliteral}{"{}TIMESTAMP,\ "{}}}
+\DoxyCodeLine{00030\ \ \ \ \ \ \ \textcolor{stringliteral}{"{}ref\_count\ BIGINT);"{}}}
+\DoxyCodeLine{00031\ \ \ \ \ \ \ \textcolor{stringliteral}{"{}CREATE\ TABLE\ FolderContent\ (folder\_id\ BIGINT,\ element\_id\ BIGINT);"{}}}
+\DoxyCodeLine{00032\ \ \ \ \ \ \ \textcolor{stringliteral}{"{}CREATE\ TABLE\ FileImage\ (file\_id\ BIGINT,\ image\_id\ BIGINT);"{}}}
+\DoxyCodeLine{00033\ \ \ \ \ \ \ \textcolor{stringliteral}{"{}CREATE\ TABLE\ ComboFolder\ (combo\_id\ BIGINT,\ folder\_id\ BIGINT);"{}}}
+\DoxyCodeLine{00034\ \ \ \ \ \ \ \textcolor{stringliteral}{"{}CREATE\ TABLE\ Filter\ (combo\_id\ BIGINT,\ type\ INTEGER,\ data\ JSON);"{}}}
+\DoxyCodeLine{00035\ \ \ \ \ \ \ \textcolor{stringliteral}{"{}CREATE\ TABLE\ EditHistory\ (history\_id\ BIGINT\ PRIMARY\ KEY,\ file\_id\ BIGINT,\ added\_time\ "{}}}
+\DoxyCodeLine{00036\ \ \ \ \ \ \ \textcolor{stringliteral}{"{}TIMESTAMP,\ modified\_time\ "{}}}
+\DoxyCodeLine{00037\ \ \ \ \ \ \ \textcolor{stringliteral}{"{}TIMESTAMP);"{}}}
+\DoxyCodeLine{00038\ \ \ \ \ \ \ \textcolor{stringliteral}{"{}CREATE\ TABLE\ Version\ (hash\ BIGINT\ PRIMARY\ KEY,\ history\_id\ BIGINT,\ parent\_hash\ BIGINT,\ "{}}}
+\DoxyCodeLine{00039\ \ \ \ \ \ \ \textcolor{stringliteral}{"{}content\ "{}}}
+\DoxyCodeLine{00040\ \ \ \ \ \ \ \textcolor{stringliteral}{"{}JSON)"{}};}
+\DoxyCodeLine{00041\ }
+\DoxyCodeLine{00042\ \ \textcolor{keyword}{public}:}
+\DoxyCodeLine{00043\ \ \ \textcolor{keyword}{explicit}\ \mbox{\hyperlink{classpuerhlab_1_1_d_b_controller_a660db1b50fedda4f1cfb94033ff4f4b1}{DBController}}(file\_path\_t\&\ db\_path);}
+\DoxyCodeLine{00044\ \ \ \mbox{\hyperlink{classpuerhlab_1_1_d_b_controller_a1c0f60c784c55d647fe8abfed25c4d06}{\string~DBController}}();}
+\DoxyCodeLine{00045\ }
+\DoxyCodeLine{00046\ \ \ \textcolor{keywordtype}{void}\ \mbox{\hyperlink{classpuerhlab_1_1_d_b_controller_aeb168cb412b8e5c74f4f7b7e8d29702d}{InitializeDB}}();}
+\DoxyCodeLine{00047\ }
+\DoxyCodeLine{00048\ \ \ \textcolor{keyword}{auto}\ \mbox{\hyperlink{classpuerhlab_1_1_d_b_controller_a0d1f8144b5f13cfc40fb582a3fad2dfd}{GetConnectionGuard}}()\ -\/>\ \mbox{\hyperlink{classpuerhlab_1_1_connection_guard}{ConnectionGuard}};}
+\DoxyCodeLine{00049\ \};}
+\DoxyCodeLine{00050\ \};\ \ \textcolor{comment}{//\ namespace\ puerhlab}}
+
+\end{DoxyCode}

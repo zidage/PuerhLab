@@ -1,0 +1,19 @@
+\doxysection{loading\+\_\+decoder.\+hpp}
+\hypertarget{loading__decoder_8hpp_source}{}\label{loading__decoder_8hpp_source}\index{D:/Projects/pu-\/erh\_lab/pu-\/erh\_lab/src/include/decoders/loading\_decoder.hpp@{D:/Projects/pu-\/erh\_lab/pu-\/erh\_lab/src/include/decoders/loading\_decoder.hpp}}
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{00001\ \textcolor{preprocessor}{\#pragma\ once}}
+\DoxyCodeLine{00002\ }
+\DoxyCodeLine{00003\ \textcolor{preprocessor}{\#include\ "{}decoders/image\_decoder.hpp"{}}}
+\DoxyCodeLine{00004\ }
+\DoxyCodeLine{00005\ \textcolor{keyword}{namespace\ }puerhlab\ \{}
+\DoxyCodeLine{00006\ }
+\DoxyCodeLine{00007\ \textcolor{keyword}{class\ }\mbox{\hyperlink{classpuerhlab_1_1_loading_decoder}{LoadingDecoder}}\ :\ \textcolor{keyword}{public}\ \mbox{\hyperlink{classpuerhlab_1_1_image_decoder}{ImageDecoder}}\ \{}
+\DoxyCodeLine{00008\ \ \textcolor{keyword}{public}:}
+\DoxyCodeLine{00009\ \ \ \textcolor{keyword}{virtual}\ \textcolor{keywordtype}{void}\ Decode(std::vector<char>\ buffer,\ std::filesystem::path\ file\_path,}
+\DoxyCodeLine{00010\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ std::shared\_ptr<BufferQueue>\ result,\ image\_id\_t\ \textcolor{keywordtype}{id},}
+\DoxyCodeLine{00011\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ std::shared\_ptr<std::promise<image\_id\_t>>\ promise)\ =\ 0;}
+\DoxyCodeLine{00012\ \};}
+\DoxyCodeLine{00013\ \};\ \ \textcolor{comment}{//\ namespace\ puerhlab}}
+
+\end{DoxyCode}
