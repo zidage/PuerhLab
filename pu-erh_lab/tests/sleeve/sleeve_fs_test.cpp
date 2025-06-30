@@ -472,7 +472,6 @@ TEST_F(RandomizedFileSystemTest, SaveAndLoadConsistencyAfterRandomOps) {
 
     // Once operation is done, display the tree
     first_tree = conv::ToBytes(fs.Tree(L"/"));
-    // std::cout << "First tree:\n" << first_tree << std::endl; // 用于调试
 
     // Store to the database
     fs.SyncToDB();
@@ -487,14 +486,13 @@ TEST_F(RandomizedFileSystemTest, SaveAndLoadConsistencyAfterRandomOps) {
     fs.ReadSleeveMeta(meta_path);
 
     second_tree = conv::ToBytes(fs.Tree(L"/"));
-    // std::cout << "Second tree:\n" << second_tree << std::endl; // 用于调试
 
   } catch (const std::exception& e) {
     FAIL() << "Unexpected exception during reload: " << e.what();
   }
 
-  // 核心断言：验证持久化前后状态是否一致
+  // Core assertion: check if the original tree and the recovered tree are identical
   EXPECT_EQ(first_tree, second_tree);
-  std::cout << second_tree << "\n";
+  // std::cout << second_tree << "\n";
 }
 };  // namespace puerhlab
