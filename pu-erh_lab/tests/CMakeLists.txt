@@ -20,17 +20,11 @@ target_link_libraries(ImageDecoderTest PRIVATE GTest::gtest_main ImageDecoder Ex
 
 add_executable(ImageLoaderTest image/image_loader_test.cpp)
 target_include_directories(ImageLoaderTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
-target_link_libraries(ImageLoaderTest PRIVATE GTest::gtest_main ImageDecoder ImageLoader Exiv2)
-
-# add_executable(SleeveOperationTest sleeve/sleeve_operation_test.cpp)
-# target_include_directories(SleeveOperationTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
-# target_link_libraries(SleeveOperationTest PRIVATE GTest::gtest_main ImageDecoder ImageLoader Exiv2 Sleeve TimeProvider SleeveFS)
+target_link_libraries(ImageLoaderTest PRIVATE GTest::gtest_main ImageDecoder IO Exiv2)
 
 add_executable(ImagePoolTest storage/image_pool_test.cpp)
 target_include_directories(ImagePoolTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
 target_link_libraries(ImagePoolTest PRIVATE GTest::gtest_main Image ImagePool)
-
-
 
 # add_executable(SleeveMapperTest storage/sleeve_mapper_test.cpp)
 # target_include_directories(SleeveMapperTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)

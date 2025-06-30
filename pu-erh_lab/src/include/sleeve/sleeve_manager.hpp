@@ -8,7 +8,7 @@
 #include <string>
 #include <unordered_map>
 
-#include "image/image_loader.hpp"
+#include "io/image/image_loader.hpp"
 #include "sleeve/sleeve_filesystem.hpp"
 #include "sleeve_base.hpp"
 #include "sleeve_view.hpp"

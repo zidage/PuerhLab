@@ -24,9 +24,9 @@ add_library(ImageDecoder
 target_include_directories(ImageDecoder PUBLIC include)
 target_link_libraries(ImageDecoder PUBLIC Image ThreadPool ${OpenCV_LIBS} LibRaw easy_profiler) 
 
-add_library(ImageLoader image/image_loader.cpp)
-target_include_directories(ImageLoader PUBLIC include)
-target_link_libraries(ImageLoader PUBLIC ImageDecoder)
+add_library(IO io/image/image_loader.cpp)
+target_include_directories(IO PUBLIC include)
+target_link_libraries(IO PUBLIC ImageDecoder)
 
 add_library(EditHistory edit/history/edit_history.cpp edit/history/version.cpp)
 target_include_directories(EditHistory PUBLIC include)
@@ -53,7 +53,7 @@ add_library(SleeveElement
     sleeve/sleeve_element/sleeve_folder.cpp
 )
 target_include_directories(SleeveElement PUBLIC include)
-target_link_libraries(SleeveElement PUBLIC Image ImageLoader SleeveFilter EditHistory ImagePool)
+target_link_libraries(SleeveElement PUBLIC Image IO SleeveFilter EditHistory ImagePool)
 
 
 

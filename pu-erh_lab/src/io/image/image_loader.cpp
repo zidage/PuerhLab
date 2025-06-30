@@ -28,7 +28,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#include "image/image_loader.hpp"
+#include "io/image/image_loader.hpp"
 
 #include <cstddef>
 #include <cstdint>

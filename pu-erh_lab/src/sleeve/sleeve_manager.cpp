@@ -9,7 +9,7 @@
 #include <exception>
 #include <memory>
 
-#include "image/image_loader.hpp"
+#include "io/image/image_loader.hpp"
 #include "sleeve/sleeve_base.hpp"
 #include "sleeve/sleeve_element/sleeve_element.hpp"
 #include "sleeve/sleeve_element/sleeve_file.hpp"

@@ -6,7 +6,7 @@
 #include <unordered_map>
 #include <vector>
 
-#include "image/image_loader.hpp"
+#include "io/image/image_loader.hpp"
 #include "sleeve/sleeve_element/sleeve_element.hpp"
 #include "sleeve/sleeve_element/sleeve_file.hpp"
 #include "sleeve/sleeve_element/sleeve_folder.hpp"

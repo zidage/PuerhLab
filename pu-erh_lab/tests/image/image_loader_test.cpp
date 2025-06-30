@@ -1,7 +1,7 @@
 #include "../leak_detector/memory_leak_detector.hpp"
 #include "decoders/decoder_scheduler.hpp"
 #include "image/image.hpp"
-#include "image/image_loader.hpp"
+#include "io/image/image_loader.hpp"
 #include "type/type.hpp"
 
 
