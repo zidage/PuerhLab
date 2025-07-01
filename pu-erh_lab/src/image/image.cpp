@@ -88,23 +88,23 @@ std::wostream& operator<<(std::wostream& os, const Image& img) {
  *
  * @param image_data
  */
-void Image::LoadData(cv::Mat&& load_image) {
+void Image::LoadData(ImageBuffer&& load_image) {
   _image_data   = std::move(load_image);
   _has_full_img = true;
 }
 
-void Image::LoadThumbnail(cv::Mat&& thumbnail) {
+void Image::LoadThumbnail(ImageBuffer&& thumbnail) {
   _thumbnail     = std::move(thumbnail);
   _has_thumbnail = true;
 }
 
 void Image::ClearData() {
-  _image_data.release();
+  _image_data.ReleaseCPUData();
   _has_full_img = false;
 }
 
 void Image::ClearThumbnail() {
-  _thumbnail.release();
+  _thumbnail.ReleaseCPUData();
   _has_thumbnail = false;
 }
 

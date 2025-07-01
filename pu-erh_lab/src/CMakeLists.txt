@@ -9,6 +9,7 @@ target_include_directories(StrConv PUBLIC include)
 target_link_libraries(StrConv PUBLIC utfcpp)
 
 add_library(Image 
+    image/image_buffer.cpp
     image/image.cpp
 )
 target_include_directories(Image PUBLIC include)

@@ -40,6 +40,7 @@
 #include <string>
 #include <type/type.hpp>
 
+#include "image/image_buffer.hpp"
 #include "image/metadata.hpp"
 
 namespace puerhlab {
@@ -59,8 +60,8 @@ class Image {
   nlohmann::json          _exif_json;
   ExifDisplayMetaData     _exif_display;
 
-  cv::Mat                 _image_data;
-  cv::Mat                 _thumbnail;
+  ImageBuffer             _image_data;
+  ImageBuffer             _thumbnail;
   ImageType               _image_type = ImageType::DEFAULT;
 
   std::atomic<bool>       _has_thumbnail;
@@ -85,8 +86,8 @@ class Image {
 
   friend std::wostream& operator<<(std::wostream& os, const Image& img);
 
-  void                  LoadData(cv::Mat&& load_image);
-  void                  LoadThumbnail(cv::Mat&& thumbnail);
+  void                  LoadData(ImageBuffer&& load_image);
+  void                  LoadThumbnail(ImageBuffer&& thumbnail);
   auto                  GetImageData() -> cv::Mat&;
   void                  SetId(image_id_t image_id);
   void                  ClearData();

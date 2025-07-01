@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <opencv2/core/cuda.hpp>
 #include <opencv2/opencv.hpp>
+#include <utility>
 #include <vector>
 
 namespace puerhlab {
@@ -12,7 +13,7 @@ class ImageBuffer {
   // TODO: NOT USED FOR NOW: 2025-6-30
   cv::cuda::GpuMat _gpu_data;
 
-  bool             _data_valid;
+  bool             _data_valid = false;
 
   // TODO: NOT USED FOR NOW: 2025-6-30
   void             SyncToGPU();
@@ -20,11 +21,18 @@ class ImageBuffer {
 
  public:
   ImageBuffer() = default;
-  ImageBuffer(std::vector<uint8_t> buffer);
+  ImageBuffer(cv::Mat&& data);
+  ImageBuffer(std::vector<uint8_t>&& buffer);
+  ImageBuffer(ImageBuffer&& other) noexcept;
 
-  void                    ReadFromVectorBuffer(std::vector<uint8_t> buffer);
+  ImageBuffer& operator=(ImageBuffer&& other) noexcept;
 
-  const cv::Mat&          GetCPUData();
-  const cv::cuda::GpuMat& GetGPUData();
+  void         ReadFromVectorBuffer(std::vector<uint8_t>&& buffer);
+
+  auto         GetCPUData() -> const cv::Mat&;
+  auto         GetGPUData() -> const cv::cuda::GpuMat&;
+
+  void         ReleaseCPUData();
+  void         ReleaseGPUData();
 };
 };  // namespace puerhlab
