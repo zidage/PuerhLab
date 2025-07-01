@@ -151,4 +151,8 @@ void Image::JsonToExif(std::string json_str) {
 }
 
 void Image::ComputeChecksum() { _checksum = xxh::xxhash<64>(this, sizeof(*this)); }
+
+auto Image::GetImageData() -> const cv::Mat& { return _image_data.GetCPUData(); }
+
+auto Image::GetThumbnailData() -> const cv::Mat& { return _thumbnail.GetCPUData(); }
 };  // namespace puerhlab

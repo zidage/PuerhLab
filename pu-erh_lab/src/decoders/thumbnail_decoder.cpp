@@ -35,8 +35,10 @@
 #include <memory>
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/opencv.hpp>
+#include <utility>
 
 #include "image/image.hpp"
+#include "image/image_buffer.hpp"
 
 namespace puerhlab {
 /**
@@ -61,7 +63,8 @@ void ThumbnailDecoder::Decode(std::vector<char> buffer, std::filesystem::path fi
     img->_exif_data = Exiv2::ImageFactory::open((Exiv2::byte*)buffer.data(), buffer.size());
     img->_exif_data->readMetadata();
     img->_has_exif = !img->_exif_data->exifData().empty();
-    img->LoadThumbnail(std::move(thumbnail));
+
+    img->LoadThumbnail({std::move(thumbnail)});
     result->push(img);
     promise->set_value(id);
   } catch (std::exception& e) {
@@ -73,10 +76,11 @@ void ThumbnailDecoder::Decode(std::vector<char> buffer, std::shared_ptr<Image> s
                               std::shared_ptr<BufferQueue>              result,
                               std::shared_ptr<std::promise<image_id_t>> promise) {
   // Open the datastream as a cv::Mat image
-  cv::Mat image_data((int)buffer.size(), 1, CV_8UC1, buffer.data());
+  cv::Mat     image_data((int)buffer.size(), 1, CV_32FC1, buffer.data());
   // Using IMREAD_REDUCED_COLOR_8 flag to get the low-res thumbnail image
-  cv::Mat thumbnail = cv::imdecode(image_data, cv::IMREAD_REDUCED_COLOR_8);
-  source_img->LoadThumbnail(std::move(thumbnail));
+  cv::Mat     thumbnail = cv::imdecode(image_data, cv::IMREAD_REDUCED_COLOR_8);
+  ImageBuffer thumbnail_data{std::move(thumbnail)};
+  source_img->LoadThumbnail(std::move(thumbnail_data));
   result->push(source_img);
   promise->set_value(source_img->_image_id);
 }

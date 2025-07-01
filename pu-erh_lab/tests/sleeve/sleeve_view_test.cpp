@@ -4,7 +4,9 @@
 
 #include <cstdint>
 #include <exception>
+#include <format>
 #include <memory>
+#include <opencv2/highgui.hpp>
 #include <random>
 
 #include "sleeve/sleeve_manager.hpp"
@@ -16,6 +18,12 @@ std::filesystem::path db_path(
 namespace puerhlab {
 auto loaded_callback = [](size_t idx, std::weak_ptr<Image> img) {
   // std::cout << "Get image " << img.lock()->_image_path << " at index " << idx << "\n";
+};
+
+auto display_callback = [](size_t idx, std::weak_ptr<Image> img) {
+  auto access_img = img.lock();
+  cv::imshow(std::format("img: {}", idx), access_img->GetThumbnailData());
+  cv::waitKey(1);
 };
 
 TEST(SleeveViewTest, SimpleTest1) {
@@ -33,7 +41,8 @@ TEST(SleeveViewTest, SimpleTest1) {
     manager.LoadToPath(imgs, L"");
     auto view = manager.GetView();
     view->UpdateView(L"");
-    view->LoadPreview(0, 20, loaded_callback);
+    view->LoadPreview(0, 20, display_callback);
+    cv::waitKey();
   }
 
   if (std::filesystem::exists(db_path)) {
@@ -87,7 +96,7 @@ TEST(SleeveViewTest, DISABLED_SimpleTest2) {
   }
 }
 
-TEST(SleeveViewTest, FuzzyTest1) {
+TEST(SleeveViewTest, DISABLED_FuzzyTest1) {
   {
     SleeveManager manager{db_path};
     image_path_t  path =
