@@ -13,12 +13,11 @@ class ExposureOp : public OperatorBase<ExposureOp> {
    * Positive to increase the brightness, negative to darken.
    *
    */
-  float                             _exposure_offset;
-
-  static constexpr std::string_view _canonical_name = "Exposure";
-  static constexpr std::string_view _script_name    = "exposure";
+  float _exposure_offset;
 
  public:
+  static constexpr std::string_view _canonical_name = "Exposure";
+  static constexpr std::string_view _script_name    = "exposure";
   ExposureOp();
   ExposureOp(float exposure_offset);
 

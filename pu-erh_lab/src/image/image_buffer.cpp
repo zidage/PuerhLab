@@ -30,7 +30,7 @@ void ImageBuffer::ReadFromVectorBuffer(std::vector<uint8_t>&& buffer) {
   _data_valid = true;
 }
 
-auto ImageBuffer::GetCPUData() -> const cv::Mat& {
+auto ImageBuffer::GetCPUData() -> cv::Mat& {
   if (!_data_valid) {
     throw std::runtime_error("Image Buffer: No valid image data to be returned");
   }

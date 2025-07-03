@@ -155,4 +155,6 @@ void Image::ComputeChecksum() { _checksum = xxh::xxhash<64>(this, sizeof(*this))
 auto Image::GetImageData() -> const cv::Mat& { return _image_data.GetCPUData(); }
 
 auto Image::GetThumbnailData() -> const cv::Mat& { return _thumbnail.GetCPUData(); }
+
+auto Image::GetThumbnailBuffer() -> ImageBuffer& { return _thumbnail; }
 };  // namespace puerhlab

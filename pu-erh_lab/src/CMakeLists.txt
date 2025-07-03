@@ -114,7 +114,10 @@ add_library(SleeveManager
 target_include_directories(SleeveManager PUBLIC include)
 target_link_libraries(SleeveManager PUBLIC SleeveFS SleeveView xxHash)
 
-
+add_library(Operators
+    edit/operators/exposure_op.cpp)
+target_include_directories(Operators PUBLIC include)
+target_link_libraries(Operators PUBLIC Image SleeveFS JSON)
 
 
 

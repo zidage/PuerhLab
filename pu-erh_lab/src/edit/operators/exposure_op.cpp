@@ -11,9 +11,9 @@ ExposureOp::ExposureOp() : _exposure_offset(0.0f) {}
 ExposureOp::ExposureOp(float exposure_offset) : _exposure_offset(exposure_offset) {}
 
 auto ExposureOp::Apply(ImageBuffer& input) -> ImageBuffer {
-  float          scale        = std::pow(2.0f, _exposure_offset);
+  float    scale        = std::pow(2.0f, _exposure_offset);
 
-  const cv::Mat& linear_image = input.GetCPUData();
+  cv::Mat& linear_image = input.GetCPUData();
   linear_image *= scale;
 
   return {std::move(linear_image)};

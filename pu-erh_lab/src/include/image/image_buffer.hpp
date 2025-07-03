@@ -29,8 +29,8 @@ class ImageBuffer {
 
   void         ReadFromVectorBuffer(std::vector<uint8_t>&& buffer);
 
-  auto         GetCPUData() -> const cv::Mat&;
-  auto         GetGPUData() -> const cv::cuda::GpuMat&;
+  auto         GetCPUData() -> cv::Mat&;
+  auto         GetGPUData() -> cv::cuda::GpuMat&;
 
   void         ReleaseCPUData();
   void         ReleaseGPUData();
