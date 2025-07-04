@@ -6,6 +6,8 @@
 #include <utility>
 
 namespace puerhlab {
+ImageBuffer::ImageBuffer(cv::Mat& data) : _data_valid(true) { data.copyTo(_cpu_data); }
+
 ImageBuffer::ImageBuffer(cv::Mat&& data) : _cpu_data(data), _data_valid(true) {}
 
 ImageBuffer::ImageBuffer(std::vector<uint8_t>&& buffer)

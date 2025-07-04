@@ -21,6 +21,7 @@ class ImageBuffer {
 
  public:
   ImageBuffer() = default;
+  ImageBuffer(cv::Mat& data);
   ImageBuffer(cv::Mat&& data);
   ImageBuffer(std::vector<uint8_t>&& buffer);
   ImageBuffer(ImageBuffer&& other) noexcept;
