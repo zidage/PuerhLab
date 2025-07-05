@@ -3,7 +3,7 @@
 #include <string>
 #include <string_view>
 
-#include "op_base.hpp"
+#include "edit/operators/op_base.hpp"
 
 namespace puerhlab {
 class ExposureOp : public OperatorBase<ExposureOp> {
@@ -14,6 +14,8 @@ class ExposureOp : public OperatorBase<ExposureOp> {
    *
    */
   float _exposure_offset;
+
+  float _scale;
 
  public:
   static constexpr std::string_view _canonical_name = "Exposure";

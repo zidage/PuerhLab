@@ -1,4 +1,5 @@
-#include "edit/operators/exposure_op.hpp"
+#include "edit/operators/basic/exposure_op.hpp"
+#include "op_test_fixation.hpp"
 
 #include <gtest/gtest.h>
 
@@ -11,31 +12,9 @@
 
 
 namespace puerhlab {
-class ExposureTests : public ::testing::Test {
- protected:
-  std::filesystem::path db_path_;
 
-  // Run before any unit test runs
-  void                  SetUp() override {
-    Exiv2::LogMsg::setLevel(Exiv2::LogMsg::Level::mute);
-    // Create a unique db file location
-    db_path_ = std::filesystem::temp_directory_path() / "test_db.db";
-    // Make sure there is not existing db
-    if (std::filesystem::exists(db_path_)) {
-      std::filesystem::remove(db_path_);
-    }
-  }
 
-  // Run before any unit test runs
-  void TearDown() override {
-    // Clean up the DB file
-    if (std::filesystem::exists(db_path_)) {
-      std::filesystem::remove(db_path_);
-    }
-  }
-};
-
-TEST_F(ExposureTests, DISABLED_AdjustmentTest1) {
+TEST_F(OperationTests, DISABLED_AdjustmentTest1) {
   {
     SleeveManager manager{db_path_};
     ImageLoader   image_loader(128, 8, 0);
@@ -69,7 +48,7 @@ TEST_F(ExposureTests, DISABLED_AdjustmentTest1) {
   }
 }
 
-TEST_F(ExposureTests, AdjustmentTest2) {
+TEST_F(OperationTests, AdjustmentTest2) {
   {
     SleeveManager manager{db_path_};
     ImageLoader   image_loader(128, 8, 0);

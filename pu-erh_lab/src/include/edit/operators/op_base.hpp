@@ -6,6 +6,11 @@
 #include "json.hpp"
 
 namespace puerhlab {
+/**
+ * @brief
+ *
+ * @tparam Derived CRTP derived class
+ */
 template <typename Derived>
 class OperatorBase {
  public:

@@ -26,9 +26,6 @@ add_executable(ImagePoolTest storage/image_pool_test.cpp)
 target_include_directories(ImagePoolTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
 target_link_libraries(ImagePoolTest PRIVATE GTest::gtest_main Image ImagePool)
 
-# add_executable(SleeveMapperTest storage/sleeve_mapper_test.cpp)
-# target_include_directories(SleeveMapperTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
-# target_link_libraries(SleeveMapperTest PRIVATE GTest::gtest_main Image ImagePool DuckORM SleeveManager SleeveMapper SleeveController)
 
 add_executable(SleeveFSTest sleeve/sleeve_fs_test.cpp)
 target_include_directories(SleeveFSTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
@@ -38,9 +35,14 @@ add_executable(SleeveViewTest sleeve/sleeve_view_test.cpp)
 target_include_directories(SleeveViewTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
 target_link_libraries(SleeveViewTest PRIVATE GTest::gtest_main Image ImagePool TimeProvider SleeveView SleeveFS SleeveManager)
 
-add_executable(ExposureOPTest edit/operators/exposure_op_test.cpp)
+# Operation tests
+add_executable(ExposureOPTest edit/operators/basic/exposure_op_test.cpp)
 target_include_directories(ExposureOPTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
 target_link_libraries(ExposureOPTest GTest::gtest_main Operators SleeveManager)
+
+add_executable(ContrastOPTest edit/operators/basic/contrast_op_test.cpp)
+target_include_directories(ContrastOPTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
+target_link_libraries(ContrastOPTest GTest::gtest_main Operators SleeveManager)
 
 include(GoogleTest)
 # set(CMAKE_GTEST_DISCOVER_TESTS_DISCOVERY_MODE PRE_TEST)
@@ -55,3 +57,4 @@ gtest_discover_tests(ImagePoolTest)
 # gtest_discover_tests(SleeveMapperTest)
 gtest_discover_tests(SleeveFSTest)
 gtest_discover_tests(ExposureOPTest)
+gtest_discover_tests(ContrastOPTest)
