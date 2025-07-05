@@ -117,6 +117,7 @@ target_link_libraries(SleeveManager PUBLIC SleeveFS SleeveView xxHash)
 add_library(Operators
     edit/operators/basic/exposure_op.cpp
     edit/operators/basic/contrast_op.cpp
+    edit/operators/basic/tone_region_op.cpp
 )
 target_include_directories(Operators PUBLIC include)
 target_link_libraries(Operators PUBLIC Image SleeveFS JSON)

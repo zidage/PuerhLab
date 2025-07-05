@@ -19,6 +19,7 @@ auto ContrastOp::Apply(ImageBuffer& input) -> ImageBuffer {
   }
 
   linear_image = (linear_image - 0.5f) * _scale + 0.5f;
+  // clamp
   cv::min(linear_image, 1.0f, linear_image);
   cv::max(linear_image, 0.0f, linear_image);
 
