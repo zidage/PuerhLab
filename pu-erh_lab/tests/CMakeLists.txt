@@ -56,6 +56,10 @@ add_executable(SaturationOPTest edit/operators/color/saturation_op_test.cpp)
 target_include_directories(SaturationOPTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
 target_link_libraries(SaturationOPTest GTest::gtest_main Operators SleeveManager)
 
+add_executable(VibranceOPTest edit/operators/color/vibrance_op_test.cpp)
+target_include_directories(VibranceOPTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
+target_link_libraries(VibranceOPTest GTest::gtest_main Operators SleeveManager)
+
 include(GoogleTest)
 # set(CMAKE_GTEST_DISCOVER_TESTS_DISCOVERY_MODE PRE_TEST)
 gtest_discover_tests(SampleTest)

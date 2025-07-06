@@ -3,24 +3,22 @@
 #include "edit/operators/op_base.hpp"
 
 namespace puerhlab {
-class SaturationOp : public OperatorBase<SaturationOp> {
+class VibranceOp : public OperatorBase<VibranceOp> {
  private:
   /**
    * @brief An relative number for adjusting the tint,
    * negative toward green, positive toward
    *
    */
-  float _saturation_offset;
+  float _vibrance_offset;
 
-  float _scale;
-
-  void  ComputeScale();
+  auto  ComputeScale(float chroma) -> float;
 
  public:
-  static constexpr std::string_view _canonical_name = "Saturation";
-  static constexpr std::string_view _script_name    = "saturation";
-  SaturationOp();
-  SaturationOp(float saturation_offset);
+  static constexpr std::string_view _canonical_name = "Vibrance";
+  static constexpr std::string_view _script_name    = "vibrance";
+  VibranceOp();
+  VibranceOp(float vibrance_offset);
 
   auto Apply(ImageBuffer& input) -> ImageBuffer override;
   auto GetParams() const -> nlohmann::json override;
