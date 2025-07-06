@@ -1,7 +1,7 @@
 #include "edit/operators/basic/contrast_op.hpp"
 #include "edit/operators/basic/tone_region_op.hpp"
 
-#include "op_test_fixation.hpp"
+#include "../op_test_fixation.hpp"
 
 #include <gtest/gtest.h>
 
@@ -15,7 +15,7 @@
 
 namespace puerhlab {
 
-TEST_F(OperationTests, DISABLED_BlackAdjustmentTest) {
+TEST_F(OperationTests, BlackAdjustmentTest) {
   {
     SleeveManager manager{db_path_};
     ImageLoader   image_loader(128, 8, 0);
@@ -36,7 +36,7 @@ TEST_F(OperationTests, DISABLED_BlackAdjustmentTest) {
     // Load thumbnail for these images, do nothing with the callback
     view->LoadPreview(0, 20, display_callback);
     // For now, adjust the thumbnail only
-    auto img = manager.GetPool()->AccessElement(0, AccessType::META).value().lock();
+    auto img = manager.GetPool()->AccessElement(2, AccessType::META).value().lock();
 
     cv::namedWindow("Black level Animation", cv::WINDOW_AUTOSIZE);
     ToneRegionOp op{0.0f, ToneRegion::BLACK};
@@ -58,7 +58,7 @@ TEST_F(OperationTests, DISABLED_BlackAdjustmentTest) {
   }
 }
 
-TEST_F(OperationTests, DISABLED_WhiteAdjustmentTest) {
+TEST_F(OperationTests, WhiteAdjustmentTest) {
   {
     SleeveManager manager{db_path_};
     ImageLoader   image_loader(128, 8, 0);
@@ -79,7 +79,7 @@ TEST_F(OperationTests, DISABLED_WhiteAdjustmentTest) {
     // Load thumbnail for these images, do nothing with the callback
     view->LoadPreview(0, 20, display_callback);
     // For now, adjust the thumbnail only
-    auto img = manager.GetPool()->AccessElement(0, AccessType::META).value().lock();
+    auto img = manager.GetPool()->AccessElement(2, AccessType::META).value().lock();
 
     cv::namedWindow("White level Animation", cv::WINDOW_AUTOSIZE);
     ToneRegionOp op{0.0f, ToneRegion::WHITE};
@@ -122,7 +122,7 @@ TEST_F(OperationTests, ShadowsAdjustmentTest) {
     // Load thumbnail for these images, do nothing with the callback
     view->LoadPreview(0, 20, display_callback);
     // For now, adjust the thumbnail only
-    auto img = manager.GetPool()->AccessElement(0, AccessType::META).value().lock();
+    auto img = manager.GetPool()->AccessElement(2, AccessType::META).value().lock();
 
     cv::namedWindow("Shadows Animation", cv::WINDOW_AUTOSIZE);
     ToneRegionOp op{0.0f, ToneRegion::SHADOWS};
@@ -141,11 +141,11 @@ TEST_F(OperationTests, ShadowsAdjustmentTest) {
       if (cv::waitKey(delay) == 27) break; // Press ESC to exit
     }
 
-    cv::waitKey(0);
+    cv::waitKey(1);
   }
 }
 
-TEST_F(OperationTests, DISABLED_HighlightsAdjustmentTest) {
+TEST_F(OperationTests, HighlightsAdjustmentTest) {
   {
     SleeveManager manager{db_path_};
     ImageLoader   image_loader(128, 8, 0);
@@ -166,7 +166,7 @@ TEST_F(OperationTests, DISABLED_HighlightsAdjustmentTest) {
     // Load thumbnail for these images, do nothing with the callback
     view->LoadPreview(0, 20, display_callback);
     // For now, adjust the thumbnail only
-    auto img = manager.GetPool()->AccessElement(0, AccessType::META).value().lock();
+    auto img = manager.GetPool()->AccessElement(2, AccessType::META).value().lock();
 
     cv::namedWindow("Highlights Animation", cv::WINDOW_AUTOSIZE);
     ToneRegionOp op{0.0f, ToneRegion::HIGHLIGHTS};

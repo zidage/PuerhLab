@@ -1,6 +1,6 @@
 #include "edit/operators/basic/contrast_op.hpp"
 
-#include "op_test_fixation.hpp"
+#include "../op_test_fixation.hpp"
 
 #include <gtest/gtest.h>
 

@@ -1,5 +1,5 @@
 #include "edit/operators/basic/exposure_op.hpp"
-#include "op_test_fixation.hpp"
+#include "../op_test_fixation.hpp"
 
 #include <gtest/gtest.h>
 
