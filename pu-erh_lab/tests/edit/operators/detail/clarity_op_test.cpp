@@ -1,10 +1,10 @@
-#include "edit/operators/color/vibrance_op.hpp"
+#include "edit/operators/detail/clarity_op.hpp"
 #include "../op_test_fixation.hpp"
 
 #include "sleeve/sleeve_manager.hpp"
 
 using namespace puerhlab;
-TEST_F(OperationTests, VibranceAdjustmentTest) {
+TEST_F(OperationTests, ClarityAdjustmentTest) {
   {
     SleeveManager manager{db_path_};
     ImageLoader   image_loader(128, 8, 0);
@@ -27,8 +27,8 @@ TEST_F(OperationTests, VibranceAdjustmentTest) {
     // For now, adjust the thumbnail only
     auto img = manager.GetPool()->AccessElement(0, AccessType::THUMB).value().lock();
 
-    cv::namedWindow("Vibrance Animation", cv::WINDOW_AUTOSIZE);
-    VibranceOp op{0.0f};
+    cv::namedWindow("Clarity Animation", cv::WINDOW_AUTOSIZE);
+    ClarityOp op{0.0f};
     auto       param = op.GetParams();
     ImageBuffer to_adjust{img->GetThumbnailData()};
     // Delay between two adjustments
@@ -38,11 +38,11 @@ TEST_F(OperationTests, VibranceAdjustmentTest) {
       op.SetParams(param);
 
       ImageBuffer to_display = op.Apply(to_adjust);
-      std::string info       = "Vibrance: " + std::to_string(value);
+      std::string info       = "Clarity: " + std::to_string(value);
       auto& display = to_display.GetCPUData();
       cv::putText(display, info, cv::Point(20, 40),
                 cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(255,255,255), 2);
-      cv::imshow("Vibrance Animation", display);
+      cv::imshow("Clarity Animation", display);
       to_adjust = {img->GetThumbnailData()};
 
       if (cv::waitKey(delay) == 27) break; // Press ESC to exit
