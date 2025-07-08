@@ -15,6 +15,11 @@ class ExposureOp : public OperatorBase<ExposureOp> {
    */
   float _exposure_offset;
 
+  /**
+   * @brief The actual luminance offset derived from the EV
+   * dL = 2^E
+   *
+   */
   float _scale;
 
  public:

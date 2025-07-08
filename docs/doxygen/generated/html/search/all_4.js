@@ -9,5 +9,6 @@ var searchData=
   ['evict_6',['Evict',['../classpuerhlab_1_1_image_pool_manager.html#acefd913cc8e7ae5e75ee7af24ece7ce6',1,'puerhlab::ImagePoolManager']]],
   ['exifdisplaymetadata_7',['ExifDisplayMetaData',['../classpuerhlab_1_1_exif_display_meta_data.html',1,'puerhlab']]],
   ['exiffilter_8',['ExifFilter',['../classpuerhlab_1_1_exif_filter.html',1,'puerhlab']]],
-  ['exiflite_9',['ExifLite',['../structpuerhlab_1_1_exif_lite.html',1,'puerhlab']]]
+  ['exiflite_9',['ExifLite',['../structpuerhlab_1_1_exif_lite.html',1,'puerhlab']]],
+  ['exposureop_10',['ExposureOp',['../classpuerhlab_1_1_exposure_op.html',1,'puerhlab::ExposureOp'],['../classpuerhlab_1_1_exposure_op.html#ac197c359e3657c7a568fdfc07d271c4d',1,'puerhlab::ExposureOp::ExposureOp()'],['../classpuerhlab_1_1_exposure_op.html#a135d2ee1d7fcec0693da22fbad5cf051',1,'puerhlab::ExposureOp::ExposureOp(float exposure_offset)']]]
 ];

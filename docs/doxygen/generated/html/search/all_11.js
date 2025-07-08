@@ -1,7 +1,5 @@
 var searchData=
 [
-  ['valuefilter_0',['ValueFilter',['../classpuerhlab_1_1_value_filter.html',1,'puerhlab']]],
-  ['valuefilter_3c_20filterablemetadata_20_3e_1',['ValueFilter&lt; FilterableMetadata &gt;',['../classpuerhlab_1_1_value_filter.html',1,'puerhlab']]],
-  ['version_2',['Version',['../classpuerhlab_1_1_version.html',1,'puerhlab']]],
-  ['versionnode_3',['VersionNode',['../classpuerhlab_1_1_version_node.html',1,'puerhlab']]]
+  ['updateelement_0',['UpdateElement',['../classpuerhlab_1_1_element_controller.html#ac5e8cb3c90f7f3da29a165d275ca2f05',1,'puerhlab::ElementController']]],
+  ['updateelementmap_1',['UpdateElementMap',['../classpuerhlab_1_1_sleeve_folder.html#a64bb5a0d9f96ab7a84444364bd8957af',1,'puerhlab::SleeveFolder']]]
 ];

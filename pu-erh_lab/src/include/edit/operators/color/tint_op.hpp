@@ -10,11 +10,16 @@ class TintOp : public OperatorBase<TintOp> {
  private:
   /**
    * @brief An relative number for adjusting the tint,
-   * negative toward green, positive toward
-   *
+   * negative toward green, positive toward magneta
+   * Range from -100 to 100
    */
   float _tint_offset;
 
+  /**
+   * @brief An absolute number for adjusting the tint,
+   * negative toward green, positive toward magneta
+   * Range from -1.0f to 1.0f
+   */
   float _scale;
 
  public:

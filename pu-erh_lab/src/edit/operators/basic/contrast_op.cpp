@@ -5,12 +5,27 @@
 #include <stdexcept>
 
 namespace puerhlab {
+/**
+ * @brief Default construct a new Contrast Op:: Contrast Op object
+ *
+ */
 ContrastOp::ContrastOp() : _contrast_offset(0.0f) { _scale = 1.0f; }
 
+/**
+ * @brief Construct a new Contrast Op:: Contrast Op object
+ *
+ * @param contrast_offset
+ */
 ContrastOp::ContrastOp(float contrast_offset) : _contrast_offset(contrast_offset) {
   _scale = std::exp(contrast_offset / 100.0f);
 }
 
+/**
+ * @brief Apply the contrast adjustment
+ *
+ * @param input
+ * @return ImageBuffer
+ */
 auto ContrastOp::Apply(ImageBuffer& input) -> ImageBuffer {
   cv::Mat& linear_image = input.GetCPUData();
 
@@ -18,6 +33,7 @@ auto ContrastOp::Apply(ImageBuffer& input) -> ImageBuffer {
     throw std::runtime_error("Contrast operator: Unsupported image format");
   }
 
+  // TODO: Change to CLAHE (Contrast Limited Adaptive Histogram Equalization)
   linear_image = (linear_image - 0.5f) * _scale + 0.5f;
   // clamp
   cv::min(linear_image, 1.0f, linear_image);

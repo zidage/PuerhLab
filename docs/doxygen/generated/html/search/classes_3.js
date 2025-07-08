@@ -8,5 +8,6 @@ var searchData=
   ['elementservice_5',['ElementService',['../classpuerhlab_1_1_element_service.html',1,'puerhlab']]],
   ['exifdisplaymetadata_6',['ExifDisplayMetaData',['../classpuerhlab_1_1_exif_display_meta_data.html',1,'puerhlab']]],
   ['exiffilter_7',['ExifFilter',['../classpuerhlab_1_1_exif_filter.html',1,'puerhlab']]],
-  ['exiflite_8',['ExifLite',['../structpuerhlab_1_1_exif_lite.html',1,'puerhlab']]]
+  ['exiflite_8',['ExifLite',['../structpuerhlab_1_1_exif_lite.html',1,'puerhlab']]],
+  ['exposureop_9',['ExposureOp',['../classpuerhlab_1_1_exposure_op.html',1,'puerhlab']]]
 ];

@@ -15,6 +15,7 @@ class ContrastOp : public OperatorBase<ContrastOp> {
   float _contrast_offset;
   /**
    * @brief An absolute number to represent the contrast after adjustment
+   * Usually, it is computed through dividing 100.0f from the offset
    *
    */
   float _scale;

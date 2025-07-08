@@ -6,11 +6,15 @@
 #include "edit/operators/op_base.hpp"
 
 namespace puerhlab {
+/**
+ * @brief Tone regions: black level, white level, shadows and highlights
+ *
+ */
 enum class ToneRegion { BLACK, WHITE, SHADOWS, HIGHLIGHTS };
 class ToneRegionOp : public OperatorBase<ToneRegionOp> {
  private:
   /**
-   * @brief A relative number for adjusting the image
+   * @brief A relative number for enhancing or dehancing a specific tone region
    *
    */
   float       _offset;
@@ -20,9 +24,19 @@ class ToneRegionOp : public OperatorBase<ToneRegionOp> {
    */
   float       _scale;
 
+  /**
+   * @brief The tone region to adjust
+   *
+   */
   ToneRegion  _region;
 
   static auto RegionToString(ToneRegion region) -> std::string;
+  /**
+   * @brief
+   *
+   * @param region_str
+   * @return ToneRegion
+   */
   static auto StringToRegion(std::string& region_str) -> ToneRegion;
   auto        ComputeWeight(float luminance) const -> float;
   void        ComputeScale();

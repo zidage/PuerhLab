@@ -6,8 +6,7 @@ namespace puerhlab {
 class VibranceOp : public OperatorBase<VibranceOp> {
  private:
   /**
-   * @brief An relative number for adjusting the tint,
-   * negative toward green, positive toward
+   * @brief An relative number for adjusting the vibrance (natural saturation)
    *
    */
   float _vibrance_offset;

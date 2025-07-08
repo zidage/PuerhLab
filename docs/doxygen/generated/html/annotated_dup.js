@@ -4,6 +4,9 @@ var annotated_dup =
       [ "DuckFieldDesc", "structduckorm_1_1_duck_field_desc.html", null ],
       [ "PreparedStatement", "classduckorm_1_1_prepared_statement.html", null ]
     ] ],
+    [ "OklabCvt", null, [
+      [ "Oklab", "struct_oklab_cvt_1_1_oklab.html", null ]
+    ] ],
     [ "puerhlab", null, [
       [ "IncrID", null, [
         [ "IDGenerator", "classpuerhlab_1_1_incr_i_d_1_1_i_d_generator.html", null ]
@@ -12,10 +15,12 @@ var annotated_dup =
       [ "BaseMapperParams", "structpuerhlab_1_1_base_mapper_params.html", null ],
       [ "BaseService", "classpuerhlab_1_1_base_service.html", null ],
       [ "BlockingMPMCQueue", "classpuerhlab_1_1_blocking_m_p_m_c_queue.html", null ],
+      [ "ClarityOp", "classpuerhlab_1_1_clarity_op.html", "classpuerhlab_1_1_clarity_op" ],
       [ "ComboMapper", "classpuerhlab_1_1_combo_mapper.html", null ],
       [ "ComboMapperParams", "structpuerhlab_1_1_combo_mapper_params.html", null ],
       [ "ConcurrentBlockingQueue", "classpuerhlab_1_1_concurrent_blocking_queue.html", "classpuerhlab_1_1_concurrent_blocking_queue" ],
       [ "ConnectionGuard", "classpuerhlab_1_1_connection_guard.html", null ],
+      [ "ContrastOp", "classpuerhlab_1_1_contrast_op.html", "classpuerhlab_1_1_contrast_op" ],
       [ "DataDecoder", "classpuerhlab_1_1_data_decoder.html", null ],
       [ "DatetimeFilter", "classpuerhlab_1_1_datetime_filter.html", null ],
       [ "DBController", "classpuerhlab_1_1_d_b_controller.html", "classpuerhlab_1_1_d_b_controller" ],
@@ -31,6 +36,7 @@ var annotated_dup =
       [ "ExifDisplayMetaData", "classpuerhlab_1_1_exif_display_meta_data.html", null ],
       [ "ExifFilter", "classpuerhlab_1_1_exif_filter.html", null ],
       [ "ExifLite", "structpuerhlab_1_1_exif_lite.html", null ],
+      [ "ExposureOp", "classpuerhlab_1_1_exposure_op.html", "classpuerhlab_1_1_exposure_op" ],
       [ "FieldReflectable", "structpuerhlab_1_1_field_reflectable.html", null ],
       [ "FileMapper", "classpuerhlab_1_1_file_mapper.html", null ],
       [ "FileMapperParams", "structpuerhlab_1_1_file_mapper_params.html", null ],
@@ -44,6 +50,7 @@ var annotated_dup =
       [ "FolderMapperParams", "structpuerhlab_1_1_folder_mapper_params.html", null ],
       [ "FolderService", "classpuerhlab_1_1_folder_service.html", null ],
       [ "Image", "classpuerhlab_1_1_image.html", "classpuerhlab_1_1_image" ],
+      [ "ImageBuffer", "classpuerhlab_1_1_image_buffer.html", null ],
       [ "ImageController", "classpuerhlab_1_1_image_controller.html", "classpuerhlab_1_1_image_controller" ],
       [ "ImageDecoder", "classpuerhlab_1_1_image_decoder.html", null ],
       [ "ImageLoader", "classpuerhlab_1_1_image_loader.html", "classpuerhlab_1_1_image_loader" ],
@@ -57,13 +64,16 @@ var annotated_dup =
       [ "MapperInterface", "classpuerhlab_1_1_mapper_interface.html", null ],
       [ "MetadataDecoder", "classpuerhlab_1_1_metadata_decoder.html", "classpuerhlab_1_1_metadata_decoder" ],
       [ "NodeStorageHandler", "classpuerhlab_1_1_node_storage_handler.html", null ],
+      [ "OperatorBase", "classpuerhlab_1_1_operator_base.html", "classpuerhlab_1_1_operator_base" ],
       [ "PathResolver", "classpuerhlab_1_1_path_resolver.html", null ],
       [ "RangeFilter", "classpuerhlab_1_1_range_filter.html", null ],
       [ "RawDecoder", "classpuerhlab_1_1_raw_decoder.html", "classpuerhlab_1_1_raw_decoder" ],
       [ "RootMapper", "classpuerhlab_1_1_root_mapper.html", null ],
       [ "RootMapperParams", "structpuerhlab_1_1_root_mapper_params.html", null ],
       [ "RootService", "classpuerhlab_1_1_root_service.html", null ],
+      [ "SaturationOp", "classpuerhlab_1_1_saturation_op.html", "classpuerhlab_1_1_saturation_op" ],
       [ "ServiceInterface", "classpuerhlab_1_1_service_interface.html", null ],
+      [ "SharpenOp", "classpuerhlab_1_1_sharpen_op.html", "classpuerhlab_1_1_sharpen_op" ],
       [ "SleeveBase", "classpuerhlab_1_1_sleeve_base.html", "classpuerhlab_1_1_sleeve_base" ],
       [ "SleeveElement", "classpuerhlab_1_1_sleeve_element.html", null ],
       [ "SleeveElementFactory", "classpuerhlab_1_1_sleeve_element_factory.html", null ],
@@ -76,9 +86,12 @@ var annotated_dup =
       [ "ThreadPool", "classpuerhlab_1_1_thread_pool.html", null ],
       [ "ThumbnailDecoder", "classpuerhlab_1_1_thumbnail_decoder.html", "classpuerhlab_1_1_thumbnail_decoder" ],
       [ "TimeProvider", "classpuerhlab_1_1_time_provider.html", null ],
+      [ "TintOp", "classpuerhlab_1_1_tint_op.html", "classpuerhlab_1_1_tint_op" ],
+      [ "ToneRegionOp", "classpuerhlab_1_1_tone_region_op.html", "classpuerhlab_1_1_tone_region_op" ],
       [ "ValueFilter", "classpuerhlab_1_1_value_filter.html", null ],
       [ "Version", "classpuerhlab_1_1_version.html", null ],
-      [ "VersionNode", "classpuerhlab_1_1_version_node.html", null ]
+      [ "VersionNode", "classpuerhlab_1_1_version_node.html", null ],
+      [ "VibranceOp", "classpuerhlab_1_1_vibrance_op.html", "classpuerhlab_1_1_vibrance_op" ]
     ] ],
     [ "ThreadLocalResource", "class_thread_local_resource.html", null ]
 ];

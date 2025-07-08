@@ -12,7 +12,7 @@ TEST_F(OperationTests, SharpenAdjustmentTest) {
     ImageLoader   image_loader(128, 8, 0);
     image_path_t  path =
         L"D:\\Projects\\pu-erh_lab\\pu-erh_"
-        L"lab\\tests\\resources\\sample_images\\jpg";
+        L"lab\\tests\\resources\\sample_images\\jpg_1";
     std::vector<image_path_t> imgs;
     for (const auto& img : std::filesystem::directory_iterator(path)) {
       imgs.push_back(img.path());
@@ -24,9 +24,9 @@ TEST_F(OperationTests, SharpenAdjustmentTest) {
     auto view = manager.GetView();
     view->UpdateView(L"");
     // Load thumbnail for these images, do nothing with the callback
-    view->LoadPreview(0, 1000, display_callback);
+    view->LoadPreview(0, 10, display_callback);
     // For now, adjust the thumbnail only
-    auto img = manager.GetPool()->AccessElement(8, AccessType::THUMB).value().lock();
+    auto img = manager.GetPool()->AccessElement(0, AccessType::THUMB).value().lock();
 
     cv::namedWindow("Sharpen Animation", cv::WINDOW_AUTOSIZE);
     SharpenOp   op{0.0f, 2.0f, 5.0f};

@@ -49,6 +49,7 @@ var hierarchy =
     [ "puerhlab::FolderMapperParams", "structpuerhlab_1_1_folder_mapper_params.html", null ],
     [ "puerhlab::IncrID::IDGenerator< T >", "classpuerhlab_1_1_incr_i_d_1_1_i_d_generator.html", null ],
     [ "puerhlab::Image", "classpuerhlab_1_1_image.html", null ],
+    [ "puerhlab::ImageBuffer", "classpuerhlab_1_1_image_buffer.html", null ],
     [ "puerhlab::ImageController", "classpuerhlab_1_1_image_controller.html", null ],
     [ "puerhlab::ImageDecoder", "classpuerhlab_1_1_image_decoder.html", [
       [ "puerhlab::DataDecoder", "classpuerhlab_1_1_data_decoder.html", [
@@ -90,6 +91,32 @@ var hierarchy =
       [ "puerhlab::RootMapper", "classpuerhlab_1_1_root_mapper.html", null ]
     ] ],
     [ "puerhlab::NodeStorageHandler", "classpuerhlab_1_1_node_storage_handler.html", null ],
+    [ "OklabCvt::Oklab", "struct_oklab_cvt_1_1_oklab.html", null ],
+    [ "puerhlab::OperatorBase< Derived >", "classpuerhlab_1_1_operator_base.html", null ],
+    [ "puerhlab::OperatorBase< ClarityOp >", "classpuerhlab_1_1_operator_base.html", [
+      [ "puerhlab::ClarityOp", "classpuerhlab_1_1_clarity_op.html", null ]
+    ] ],
+    [ "puerhlab::OperatorBase< ContrastOp >", "classpuerhlab_1_1_operator_base.html", [
+      [ "puerhlab::ContrastOp", "classpuerhlab_1_1_contrast_op.html", null ]
+    ] ],
+    [ "puerhlab::OperatorBase< ExposureOp >", "classpuerhlab_1_1_operator_base.html", [
+      [ "puerhlab::ExposureOp", "classpuerhlab_1_1_exposure_op.html", null ]
+    ] ],
+    [ "puerhlab::OperatorBase< SaturationOp >", "classpuerhlab_1_1_operator_base.html", [
+      [ "puerhlab::SaturationOp", "classpuerhlab_1_1_saturation_op.html", null ]
+    ] ],
+    [ "puerhlab::OperatorBase< SharpenOp >", "classpuerhlab_1_1_operator_base.html", [
+      [ "puerhlab::SharpenOp", "classpuerhlab_1_1_sharpen_op.html", null ]
+    ] ],
+    [ "puerhlab::OperatorBase< TintOp >", "classpuerhlab_1_1_operator_base.html", [
+      [ "puerhlab::TintOp", "classpuerhlab_1_1_tint_op.html", null ]
+    ] ],
+    [ "puerhlab::OperatorBase< ToneRegionOp >", "classpuerhlab_1_1_operator_base.html", [
+      [ "puerhlab::ToneRegionOp", "classpuerhlab_1_1_tone_region_op.html", null ]
+    ] ],
+    [ "puerhlab::OperatorBase< VibranceOp >", "classpuerhlab_1_1_operator_base.html", [
+      [ "puerhlab::VibranceOp", "classpuerhlab_1_1_vibrance_op.html", null ]
+    ] ],
     [ "puerhlab::PathResolver", "classpuerhlab_1_1_path_resolver.html", null ],
     [ "duckorm::PreparedStatement", "classduckorm_1_1_prepared_statement.html", null ],
     [ "puerhlab::RootMapperParams", "structpuerhlab_1_1_root_mapper_params.html", null ],

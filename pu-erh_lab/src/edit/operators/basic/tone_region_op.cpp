@@ -15,6 +15,12 @@ ToneRegionOp::ToneRegionOp(float offset, ToneRegion region) : _offset(offset), _
   ComputeScale();
 }
 
+/**
+ * @brief Convert a region enum to its literal name
+ *
+ * @param region
+ * @return std::string
+ */
 auto ToneRegionOp::RegionToString(ToneRegion region) -> std::string {
   switch (region) {
     case ToneRegion::BLACK:
@@ -29,6 +35,12 @@ auto ToneRegionOp::RegionToString(ToneRegion region) -> std::string {
   }
 }
 
+/**
+ * @brief Convert a region literal name to its enum class
+ *
+ * @param region
+ * @return std::string
+ */
 auto ToneRegionOp::StringToRegion(std::string& region_str) -> ToneRegion {
   if (region_str == "black") return ToneRegion::BLACK;
   if (region_str == "white") return ToneRegion::WHITE;
@@ -51,6 +63,12 @@ float SmoothStep(float edge0, float edge1, float x) {
   return t * t * (3.0f - 2.0f * t);
 }
 
+/**
+ * @brief Determine whether a luminance value lies within the region of the adjustment
+ *
+ * @param luminance
+ * @return float
+ */
 auto ToneRegionOp::ComputeWeight(float luminance) const -> float {
   switch (_region) {
     case ToneRegion::BLACK:
@@ -66,6 +84,10 @@ auto ToneRegionOp::ComputeWeight(float luminance) const -> float {
   }
 }
 
+/**
+ * @brief Compute the scale from the offset
+ *
+ */
 void ToneRegionOp::ComputeScale() {
   switch (_region) {
     case ToneRegion::BLACK:

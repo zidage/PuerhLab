@@ -6,8 +6,17 @@
 #include "image/image_buffer.hpp"
 
 namespace puerhlab {
+/**
+ * @brief Construct a new Exposure Op:: Exposure Op object
+ *
+ */
 ExposureOp::ExposureOp() : _exposure_offset(0.0f) { _scale = 1.0f; }
 
+/**
+ * @brief Construct a new Exposure Op:: Exposure Op object
+ *
+ * @param exposure_offset
+ */
 ExposureOp::ExposureOp(float exposure_offset) : _exposure_offset(exposure_offset) {
   _scale = std::pow(2.0f, _exposure_offset);
 }

@@ -6,9 +6,21 @@
 namespace puerhlab {
 class ClarityOp : public OperatorBase<ClarityOp> {
  private:
+  /**
+   * @brief Offset to the clarity of the image, ranging from -100 to 100
+   *
+   */
   float        _clarity_offset;
+  /**
+   * @brief Scaled offset to the clarity, ranging from -1.0f to 1.0f
+   *
+   */
   float        _scale;
 
+  /**
+   * @brief An internal-use-only parameter to adjust the radius of the USM sharpening filter
+   *
+   */
   static float _usm_radius;
 
   void         CreateMidtoneMask(cv::Mat& input, cv::Mat& mask);

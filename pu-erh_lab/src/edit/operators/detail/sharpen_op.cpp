@@ -46,6 +46,7 @@ void SharpenOp::SetParams(const nlohmann::json& params) {
 auto SharpenOp::Apply(ImageBuffer& input) -> ImageBuffer {
   cv::Mat& img = input.GetCPUData();
 
+  // Use USM to sharpen the image
   cv::Mat  blurred;
   cv::GaussianBlur(img, blurred, cv::Size(), _radius, _radius, cv::BORDER_REPLICATE);
 

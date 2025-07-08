@@ -13,6 +13,10 @@ SaturationOp::SaturationOp(float saturation_offset) : _saturation_offset(saturat
   ComputeScale();
 }
 
+/**
+ * @brief Compute the scale from the offset
+ *
+ */
 void SaturationOp::ComputeScale() {
   if (_saturation_offset >= 0.0f) {
     _scale = 1.0f + _saturation_offset / 100.0f * 1.5f;
@@ -27,6 +31,7 @@ auto SaturationOp::Apply(ImageBuffer& input) -> ImageBuffer {
   img.forEach<cv::Vec3f>([&](cv::Vec3f& pixel, const int*) {
     OklabCvt::Oklab oklab_vec = OklabCvt::LinearRGB2Oklab(pixel);
 
+    // Chroma = a^2 + b^2
     oklab_vec.a *= _scale;
     oklab_vec.b *= _scale;
 

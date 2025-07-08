@@ -1,6 +1,13 @@
 #include "edit/operators/color/conversion/Oklab_cvt.hpp"
 
 namespace OklabCvt {
+/**
+ * @brief Convert a RGB value to Oklab value.
+ * Adapted from https://bottosson.github.io/posts/oklab/
+ *
+ * @param rgb
+ * @return Oklab
+ */
 Oklab LinearRGB2Oklab(const cv::Vec3f& rgb) {
   // RGB to LMS (via linear transformation)
   float r = rgb[0], g = rgb[1], b = rgb[2];
@@ -22,6 +29,13 @@ Oklab LinearRGB2Oklab(const cv::Vec3f& rgb) {
   return {L, a, l_b};
 }
 
+/**
+ * @brief Convert a Oklab value back to Oklab value.
+ * Adapted from https://bottosson.github.io/posts/oklab/
+ *
+ * @param rgb
+ * @return Oklab
+ */
 cv::Vec3f Oklab2LinearRGB(const Oklab& lab) {
   float L = lab.L, a = lab.a, b = lab.b;
 

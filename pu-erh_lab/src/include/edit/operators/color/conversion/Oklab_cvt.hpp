@@ -3,6 +3,10 @@
 #include <opencv2/core/mat.hpp>
 
 namespace OklabCvt {
+/**
+ * @brief A 3-channel vector to represent an Oklab color
+ *
+ */
 struct Oklab {
   float L, a, b;
 };
