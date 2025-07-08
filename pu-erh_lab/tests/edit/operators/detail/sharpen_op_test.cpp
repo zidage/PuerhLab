@@ -26,10 +26,10 @@ TEST_F(OperationTests, SharpenAdjustmentTest) {
     // Load thumbnail for these images, do nothing with the callback
     view->LoadPreview(0, 1000, display_callback);
     // For now, adjust the thumbnail only
-    auto img = manager.GetPool()->AccessElement(1, AccessType::THUMB).value().lock();
+    auto img = manager.GetPool()->AccessElement(8, AccessType::THUMB).value().lock();
 
     cv::namedWindow("Sharpen Animation", cv::WINDOW_AUTOSIZE);
-    SharpenOp   op{0.0f, 5.0f, 0.0f};
+    SharpenOp   op{0.0f, 2.0f, 5.0f};
     auto        param = op.GetParams();
     ImageBuffer to_adjust{img->GetThumbnailData()};
     // Delay between two adjustments

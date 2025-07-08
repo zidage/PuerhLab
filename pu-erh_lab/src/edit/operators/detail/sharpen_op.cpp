@@ -1,6 +1,7 @@
 #include "edit/operators/detail/sharpen_op.hpp"
 
 #include <opencv2/core.hpp>
+#include <opencv2/core/base.hpp>
 #include <opencv2/opencv.hpp>
 
 #include "image/image_buffer.hpp"
@@ -10,6 +11,7 @@ namespace puerhlab {
 SharpenOp::SharpenOp(float offset, float radius, float threshold)
     : _offset(offset), _radius(radius), _threshold(threshold) {
   ComputeScale();
+  _threshold /= 100.0f;
 }
 
 void SharpenOp::ComputeScale() { _scale = _offset / 100.0f; }
@@ -36,35 +38,36 @@ void SharpenOp::SetParams(const nlohmann::json& params) {
   }
   if (inner.contains("threshold")) {
     _threshold = inner["threshold"].get<float>();
+    _threshold /= 100.0f;
   }
   ComputeScale();
 }
 
 auto SharpenOp::Apply(ImageBuffer& input) -> ImageBuffer {
   cv::Mat& img = input.GetCPUData();
-  cv::Mat  blurred, highpass, scaled, sharpened;
 
-  cv::GaussianBlur(img, blurred, cv::Size(), _radius);
-  cv::subtract(img, blurred, highpass);
+  cv::Mat  blurred;
+  cv::GaussianBlur(img, blurred, cv::Size(), _radius, _radius, cv::BORDER_REPLICATE);
 
-  highpass.convertTo(scaled, highpass.type(), _scale);
-
-  cv::add(img, scaled, sharpened);
-
-  cv::Mat dst;
+  cv::Mat high_pass = img - blurred;
   if (_threshold > 0.0f) {
-    cv::Mat diff, mask;
-    cv::absdiff(img, blurred, diff);
+    cv::Mat high_pass_gray;
+    cv::cvtColor(high_pass, high_pass_gray, cv::COLOR_BGR2GRAY);
 
-    cv::cvtColor(diff, diff, cv::COLOR_BGR2GRAY);
+    cv::Mat abs_high_pass_gray = cv::abs(high_pass_gray);
 
-    cv::threshold(diff, mask, _threshold, 1.0f, cv::THRESH_BINARY);
+    cv::Mat mask;
+    cv::threshold(abs_high_pass_gray, mask, _threshold, 1.0f, cv::THRESH_BINARY);
 
-    sharpened.copyTo(dst, mask);
-    img.copyTo(dst, 1.0f - mask);
-  } else {
-    dst = sharpened;
+    cv::Mat mask_3channel;
+    cv::cvtColor(mask, mask_3channel, cv::COLOR_GRAY2BGR);
+    cv::multiply(high_pass, mask_3channel, high_pass);
   }
-  return {std::move(dst)};
+
+  cv::scaleAdd(high_pass, _scale, img, img);
+  cv::threshold(img, img, 1.0f, 1.0f, cv::THRESH_TRUNC);
+  cv::threshold(img, img, 0.0f, 0.0f, cv::THRESH_TOZERO);
+
+  return {std::move(img)};
 }
 };  // namespace puerhlab
