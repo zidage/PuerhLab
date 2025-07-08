@@ -123,6 +123,7 @@ add_library(Operators
     edit/operators/color/saturation_op.cpp
     edit/operators/color/vibrance_op.cpp
     edit/operators/detail/clarity_op.cpp
+    edit/operators/detail/sharpen_op.cpp
 )
 target_include_directories(Operators PUBLIC include)
 target_link_libraries(Operators PUBLIC Image SleeveFS JSON)

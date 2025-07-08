@@ -10,7 +10,6 @@ class ClarityOp : public OperatorBase<ClarityOp> {
   float        _scale;
 
   static float _usm_radius;
-  static float _blur_sigma;
 
   void         CreateMidtoneMask(cv::Mat& input, cv::Mat& mask);
 

@@ -10,16 +10,10 @@
 
 namespace puerhlab {
 float ClarityOp::_usm_radius = 5.0f;
-float ClarityOp::_blur_sigma = 2.0f;
 
 ClarityOp::ClarityOp() : _clarity_offset(0) { _scale = 1.0f; }
 ClarityOp::ClarityOp(float clarity_offset) : _clarity_offset(clarity_offset) {
-  _scale = clarity_offset / 500.0f;
-}
-
-float MidtoneCurve(float x) {
-  float s = 1.0f / (1.0f + exp(-10.0f * (x - 0.5f)));
-  return s * (1.0f - s) * 4.0f;
+  _scale = clarity_offset / 300.0f;
 }
 
 void ClarityOp::CreateMidtoneMask(cv::Mat& input, cv::Mat& mask) {
@@ -27,14 +21,14 @@ void ClarityOp::CreateMidtoneMask(cv::Mat& input, cv::Mat& mask) {
   cv::cvtColor(input, luminosity_mask, cv::COLOR_BGR2GRAY);
 
   // Apply a "U" shape curve
-  cv::Mat temp = luminosity_mask - 0.5f;
-  temp         = temp * 2.0f;
-  cv::pow(temp, 2.0, temp);
-  mask = 1.0f - temp;
+  luminosity_mask = luminosity_mask - 0.5f;
+  luminosity_mask = luminosity_mask * 2.0f;
+  cv::pow(luminosity_mask, 2.0, luminosity_mask);
+  mask = 1.0f - luminosity_mask;
 
-  if (_blur_sigma > 0) {
-    cv::GaussianBlur(mask, mask, cv::Size(), _blur_sigma, _blur_sigma);
-  }
+  // if (_blur_sigma > 0) {
+  //   cv::GaussianBlur(mask, mask, cv::Size(), _blur_sigma, _blur_sigma);
+  // }
 }
 
 auto ClarityOp::Apply(ImageBuffer& input) -> ImageBuffer {
@@ -55,9 +49,9 @@ auto ClarityOp::Apply(ImageBuffer& input) -> ImageBuffer {
 
   high_pass.forEach<cv::Vec3f>([&](cv::Vec3f& h, const int* pos) {
     const cv::Vec3f& m = mask_3channel.at<cv::Vec3f>(pos[0], pos[1]);
-    h[0] *= m[0] * (_scale / 5.0f);
-    h[1] *= m[1] * (_scale / 5.0f);
-    h[2] *= m[2] * (_scale / 5.0f);
+    h[0] *= m[0] * (_scale);
+    h[1] *= m[1] * (_scale);
+    h[2] *= m[2] * (_scale);
   });
 
   img += high_pass;
@@ -77,6 +71,6 @@ void ClarityOp::SetParams(const nlohmann::json& params) {
   } else {
     _clarity_offset = 0.0f;
   }
-  _scale = _clarity_offset / 500.0f;
+  _scale = _clarity_offset / 300.0f;
 }
 };  // namespace puerhlab
