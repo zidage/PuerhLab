@@ -122,6 +122,7 @@ add_library(Operators
     edit/operators/color/conversion/Oklab_cvt.cpp
     edit/operators/color/saturation_op.cpp
     edit/operators/color/vibrance_op.cpp
+    edit/operators/color/HLS_op.cpp
     edit/operators/detail/clarity_op.cpp
     edit/operators/detail/sharpen_op.cpp
 )

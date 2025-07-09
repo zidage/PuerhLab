@@ -60,6 +60,10 @@ add_executable(VibranceOPTest edit/operators/color/vibrance_op_test.cpp)
 target_include_directories(VibranceOPTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
 target_link_libraries(VibranceOPTest GTest::gtest_main Operators SleeveManager)
 
+add_executable(HLSOPTest edit/operators/color/hls_op_test.cpp)
+target_include_directories(HLSOPTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
+target_link_libraries(HLSOPTest GTest::gtest_main Operators SleeveManager)
+
 add_executable(ClarityOPTest edit/operators/detail/clarity_op_test.cpp)
 target_include_directories(ClarityOPTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
 target_link_libraries(ClarityOPTest GTest::gtest_main Operators SleeveManager)
