@@ -64,6 +64,10 @@ add_executable(HLSOPTest edit/operators/color/hls_op_test.cpp)
 target_include_directories(HLSOPTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
 target_link_libraries(HLSOPTest GTest::gtest_main Operators SleeveManager)
 
+add_executable(CWOPTest edit/operators/wheel/color_wheel_op_test.cpp)
+target_include_directories(CWOPTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
+target_link_libraries(CWOPTest GTest::gtest_main Operators SleeveManager)
+
 add_executable(ClarityOPTest edit/operators/detail/clarity_op_test.cpp)
 target_include_directories(ClarityOPTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
 target_link_libraries(ClarityOPTest GTest::gtest_main Operators SleeveManager)
