@@ -48,9 +48,9 @@ auto ColorWheelOp::Apply(ImageBuffer& input) -> ImageBuffer {
 
   img.forEach<cv::Vec3f>([&](cv::Vec3f& pixel, const int* pos) {
     float     L              = lightness.at<float>(pos[0], pos[1]);
-    float     lift_w         = bell(L, _lift_crossover, 0.35f);
+    float     lift_w         = std::clamp(bell(L, 0.0f, 0.50f), 0.0f, 1.0f);
     float     gamma_w        = 1.0f;
-    float     gain_w         = bell(L, _gain_crossover, 0.35f);
+    float     gain_w         = std::clamp(bell(L, 1.0f, 0.50f), 0.0f, 1.0f);
 
     // float total_w = lift_w + gamma_w + gain_w + 1e-6fff
     // lift_w /= total_w;
