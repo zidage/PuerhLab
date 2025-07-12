@@ -35,21 +35,27 @@ auto ColorWheelOp::Apply(ImageBuffer& input) -> ImageBuffer {
   cv::split(img_Lab, Lab_channels);
   cv::Mat   lightness = Lab_channels[0] / 100.0f;  // L
 
-  cv::Vec3f lift_offset(_lift.color_offset.z, _lift.color_offset.y, _lift.color_offset.x);
-  cv::Vec3f gain_factor(_gain.color_offset.z, _gain.color_offset.y, _gain.color_offset.x);
-  cv::Vec3f gamma_inv(1.0f / _gamma.color_offset.z, 1.0f / _gamma.color_offset.y,
-                      1.0f / _gamma.color_offset.z);
+  // BGR
+  cv::Vec3f lift_offset(_lift.color_offset.z + _lift.luminance_offset,
+                        _lift.color_offset.y + _lift.luminance_offset,
+                        _lift.color_offset.x + _lift.luminance_offset);
+  cv::Vec3f gain_factor(_gain.color_offset.z + _gain.luminance_offset,
+                        _gain.color_offset.y + _gain.luminance_offset,
+                        _gain.color_offset.x + _gain.luminance_offset);
+  cv::Vec3f gamma_inv(1.0f / (_gamma.color_offset.z + _gamma.luminance_offset),
+                      1.0f / (_gamma.color_offset.y + _gamma.luminance_offset),
+                      1.0f / (_gamma.color_offset.x + _gamma.luminance_offset));
 
   img.forEach<cv::Vec3f>([&](cv::Vec3f& pixel, const int* pos) {
-    float L         = lightness.at<float>(pos[0], pos[1]);
-    float lift_w    = bell(L, _lift_crossover, 0.15f);
-    float midtone_w = bell(L, 0.5f, 0.2f);
-    float gain_w    = bell(L, _gain_crossover, 0.15f);
+    float     L              = lightness.at<float>(pos[0], pos[1]);
+    float     lift_w         = bell(L, _lift_crossover, 0.35f);
+    float     gamma_w        = 1.0f;
+    float     gain_w         = bell(L, _gain_crossover, 0.35f);
 
-    float total_w   = lift_w + midtone_w + gain_w + 1e-6f;
-    lift_w /= total_w;
-    midtone_w /= total_w;
-    gain_w /= total_w;
+    // float total_w = lift_w + gamma_w + gain_w + 1e-6fff
+    // lift_w /= total_w;
+    // gamma_w = 1.0f;
+    // gain_w /= total_w;
 
     cv::Vec3f original_pixel = pixel;
     cv::Vec3f lifted_pixel   = original_pixel + lift_offset;
@@ -58,9 +64,9 @@ auto ColorWheelOp::Apply(ImageBuffer& input) -> ImageBuffer {
     gamma_pixel[0] = std::pow(original_pixel[0], gamma_inv[0]);
     gamma_pixel[1] = std::pow(original_pixel[1], gamma_inv[1]);
     gamma_pixel[2] = std::pow(original_pixel[2], gamma_inv[2]);
-
     pixel          = pixel + lift_w * (lifted_pixel - pixel) + gain_w * (gained_pixel - pixel) +
-            midtone_w * (gamma_pixel - pixel);
+            gamma_w * (gamma_pixel - pixel);
+
     cv::saturate_cast<float>(pixel[0]);
     cv::saturate_cast<float>(pixel[1]);
     cv::saturate_cast<float>(pixel[2]);
