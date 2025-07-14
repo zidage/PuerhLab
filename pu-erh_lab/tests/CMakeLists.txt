@@ -68,6 +68,10 @@ add_executable(CWOPTest edit/operators/wheel/color_wheel_op_test.cpp)
 target_include_directories(CWOPTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
 target_link_libraries(CWOPTest GTest::gtest_main Operators SleeveManager)
 
+add_executable(CurveOPTest edit/operators/curve/curve_op_test.cpp)
+target_include_directories(CurveOPTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
+target_link_libraries(CurveOPTest GTest::gtest_main Operators SleeveManager)
+
 add_executable(ClarityOPTest edit/operators/detail/clarity_op_test.cpp)
 target_include_directories(ClarityOPTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
 target_link_libraries(ClarityOPTest GTest::gtest_main Operators SleeveManager)
@@ -75,6 +79,8 @@ target_link_libraries(ClarityOPTest GTest::gtest_main Operators SleeveManager)
 add_executable(SharpenOPTest edit/operators/detail/sharpen_op_test.cpp)
 target_include_directories(SharpenOPTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
 target_link_libraries(SharpenOPTest GTest::gtest_main Operators SleeveManager)
+
+
 
 include(GoogleTest)
 # set(CMAKE_GTEST_DISCOVER_TESTS_DISCOVERY_MODE PRE_TEST)

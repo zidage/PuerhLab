@@ -126,10 +126,7 @@ add_library(Operators
     edit/operators/detail/clarity_op.cpp
     edit/operators/detail/sharpen_op.cpp
     edit/operators/wheel/color_wheel_op.cpp
+    edit/operators/curve/curve_op.cpp
 )
 target_include_directories(Operators PUBLIC include)
 target_link_libraries(Operators PUBLIC Image SleeveFS JSON)
-
-
-
-
