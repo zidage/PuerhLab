@@ -7,19 +7,7 @@
 #include "json.hpp"
 
 namespace puerhlab {
-CurveOp::CurveOp(const std::vector<cv::Point2f>& control_points) {
-  _ctrl_pts = control_points;
-
-  size_t N  = _ctrl_pts.size();
-  _h.resize(N - 1);
-  _m.resize(N);
-
-  for (size_t i = 0; i < N - 1; ++i) {
-    _h[i] = _ctrl_pts[i + 1].x - _ctrl_pts[i].x;
-  }
-
-  ComputeTagents();
-}
+CurveOp::CurveOp(const std::vector<cv::Point2f>& control_points) { SetCtrlPts(control_points); }
 
 void CurveOp::ComputeTagents() {
   size_t             N = _ctrl_pts.size();
@@ -80,6 +68,20 @@ auto CurveOp::Apply(ImageBuffer& input) -> ImageBuffer {
     pixel *= ratio;
   });
   return {std::move(img)};
+}
+
+void CurveOp::SetCtrlPts(const std::vector<cv::Point2f>& control_points) {
+  _ctrl_pts = control_points;
+
+  size_t N  = _ctrl_pts.size();
+  _h.resize(N - 1);
+  _m.resize(N);
+
+  for (size_t i = 0; i < N - 1; ++i) {
+    _h[i] = _ctrl_pts[i + 1].x - _ctrl_pts[i].x;
+  }
+
+  ComputeTagents();
 }
 
 auto CurveOp::GetParams() const -> nlohmann::json {

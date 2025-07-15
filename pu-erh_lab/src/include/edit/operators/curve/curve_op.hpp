@@ -22,6 +22,7 @@ class CurveOp : public OperatorBase<CurveOp> {
   CurveOp(const std::vector<cv::Point2f>& control_points);
 
   auto Apply(ImageBuffer& input) -> ImageBuffer override;
+  void SetCtrlPts(const std::vector<cv::Point2f>& control_points);
   auto GetParams() const -> nlohmann::json override;
   void SetParams(const nlohmann::json& params) override;
 };
