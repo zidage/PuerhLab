@@ -3,6 +3,8 @@
 #include "../op_test_fixation.hpp"
 #include "sleeve/sleeve_manager.hpp"
 
+#include <easy/profiler.h>
+
 using namespace puerhlab;
 static void GetWaveform(cv::Mat& input, cv::Mat& wave) {
   cv::Mat input_resized;
@@ -116,16 +118,21 @@ TEST_F(OperationTests, CurveAnimationAdjustmentTest1) {
     cv::cvtColor(gradient_2d, gradient_2d_3c, cv::COLOR_GRAY2BGR);
 
     for (float i = 0.0f; i <= 1.0f; i += 0.001f) {
-      curve_points[1].y = i;
+      curve_points[3].y = i;
+
       
       curve.SetCtrlPts(curve_points);
+      
       cv::Mat     waveform_input(256, 256, CV_8UC3, cv::Scalar(0.0f));
       cv::Mat     waveform_output(256, 256, CV_8UC3, cv::Scalar(0, 0, 0));
 
       ImageBuffer input{gradient_2d_3c};
+      
       ImageBuffer result = curve.Apply(input);
+      
 
       GetWaveform(result.GetCPUData(), waveform_output);
+      
 
       cv::imshow("After", result.GetCPUData());
       cv::imshow("AfterWave", waveform_output);
@@ -135,7 +142,8 @@ TEST_F(OperationTests, CurveAnimationAdjustmentTest1) {
   }
 }
 
-TEST_F(OperationTests, CurveAnimationAdjustmentTest2) {
+TEST_F(OperationTests, DISABLED_CurveAnimationAdjustmentTest2) {
+  EASY_PROFILER_ENABLE;
   {
     SleeveManager manager{db_path_};
     ImageLoader   image_loader(128, 8, 0);
@@ -156,28 +164,47 @@ TEST_F(OperationTests, CurveAnimationAdjustmentTest2) {
     view->LoadPreview(0, 10, display_callback);
     // For now, adjust the thumbnail only
     auto img = manager.GetPool()->AccessElement(0, AccessType::THUMB).value().lock();
-    std::vector<cv::Point2f> curve_points = {
-        {0.0f, 0.0f}, {0.25f, 0.2f}, {0.75f, 0.8f}, {1.0f, 1.0f}};
-    CurveOp     curve{curve_points};
-    // A teal and orange look
 
     ImageBuffer original{img->GetThumbnailData()};
+    cv::Mat& original_data = original.GetCPUData();
+    // Resize the image
+    int     maxWidth = 2048;
+    cv::Mat resized_img;
+    float scale = static_cast<float>(maxWidth) / original_data.cols;
+    int         newWidth  = maxWidth;
+    int         newHeight = static_cast<int>(original_data.rows * scale);
+    cv::resize(original_data, resized_img, cv::Size(newWidth, newHeight), 0, 0, cv::INTER_AREA);
 
-    for (float i = 0.0f; i <= 1.0f; i += 0.001) {
-      curve_points[1].y = i;
-      
+    std::vector<cv::Point2f> curve_points = {
+        {0.0f, 0.0f}, {0.25f, 0.2f}, {0.75f, 0.8f}, {1.0f, 1.0f}};
+    CurveOp curve{curve_points};
+    // A teal and orange look
+
+    for (float i = 0.0f; i <= 1.0f; i += 0.1) {
+      curve_points[3].y = i;
+      EASY_BLOCK("Calculating curve");
       curve.SetCtrlPts(curve_points);
-      cv::Mat     waveform_output(256, 256, CV_8UC3, cv::Scalar(0, 0, 0));
+      EASY_END_BLOCK;
 
-      ImageBuffer input{original.GetCPUData()};
+      cv::Mat waveform_output(256, 256, CV_8UC3, cv::Scalar(0, 0, 0));
+      EASY_BLOCK("Copy Image Data");
+      ImageBuffer input{resized_img};
+      EASY_END_BLOCK;
+      EASY_BLOCK("Apply curve");
       ImageBuffer result = curve.Apply(input);
+      EASY_END_BLOCK;
 
+      EASY_BLOCK("Calculating waveform");
       GetWaveform(result.GetCPUData(), waveform_output);
+      EASY_END_BLOCK;
 
+      EASY_BLOCK("Window update");
       cv::imshow("After", result.GetCPUData());
       cv::imshow("AfterWave", waveform_output);
-      cv::waitKey(10);
+      EASY_END_BLOCK;
+      cv::waitKey(1);
     }
-    cv::waitKey(0);
+    cv::waitKey(1);
   }
+  profiler::dumpBlocksToFile("D:/Projects/pu-erh_lab/pu-erh_lab/tests/resources/temp_folder/test_profile.prof");
 }

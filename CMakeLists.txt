@@ -101,6 +101,9 @@ set_target_properties(Libexif PROPERTIES
 # Profiler
 find_package(easy_profiler REQUIRED)
 
+# OpenColorIO
+find_package(OpenColorIO CONFIG REQUIRED)
+
     # Modules
 add_subdirectory(${CMAKE_SOURCE_DIR}/pu-erh_lab/src)
 add_subdirectory(${CMAKE_SOURCE_DIR}/pu-erh_lab/tests)

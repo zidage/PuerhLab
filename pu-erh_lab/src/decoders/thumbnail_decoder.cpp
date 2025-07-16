@@ -80,8 +80,8 @@ void ThumbnailDecoder::Decode(std::vector<char> buffer, std::shared_ptr<Image> s
   // Open the datastream as a cv::Mat image
   cv::Mat image_data((int)buffer.size(), 1, CV_32FC1, buffer.data());
   // Using IMREAD_REDUCED_COLOR_8 flag to get the low-res thumbnail image
-  cv::Mat thumbnail = cv::imdecode(image_data, cv::IMREAD_REDUCED_COLOR_8);
-  thumbnail.convertTo(thumbnail, CV_32F, 1.0 / 255.0);
+  cv::Mat thumbnail = cv::imdecode(image_data, cv::IMREAD_COLOR);
+  thumbnail.convertTo(thumbnail, CV_32FC3, 1.0 / 255.0);
   ImageBuffer thumbnail_data{std::move(thumbnail)};
   source_img->LoadThumbnail(std::move(thumbnail_data));
   result->push(source_img);
