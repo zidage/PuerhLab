@@ -4,6 +4,7 @@
 #include <memory>
 #include <optional>
 
+#include "decoders/raw_decoder.hpp"
 #include "type/type.hpp"
 
 namespace puerhlab {

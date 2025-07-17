@@ -88,7 +88,7 @@ class Image {
 
   void                  LoadData(ImageBuffer&& load_image);
   void                  LoadThumbnail(ImageBuffer&& thumbnail);
-  auto                  GetImageData() -> const cv::Mat&;
+  auto                  GetImageData() -> cv::Mat&;
   auto                  GetThumbnailData() -> cv::Mat&;
   auto                  GetThumbnailBuffer() -> ImageBuffer&;
   void                  SetId(image_id_t image_id);

@@ -30,7 +30,14 @@
 
 #include "decoders/raw_decoder.hpp"
 
+#include <libraw/libraw_const.h>
+#include <opencv2/core/hal/interface.h>
+
+#include <cstdint>
 #include <memory>
+#include <opencv2/core/mat.hpp>
+#include <opencv2/core/matx.hpp>
+#include <stdexcept>
 
 #include "type/type.hpp"
 
@@ -48,9 +55,48 @@ void RawDecoder::Decode(std::vector<char> buffer, std::filesystem::path file_pat
   // TODO: Add Implementation
 }
 
+void RawDecoder::Decode(std::vector<char>&& buffer, std::shared_ptr<Image> source_img) {
+  // TODO: Add Implementation
+  LibRaw raw_processor;
+  int    ret = raw_processor.open_buffer((void*)buffer.data(), buffer.size());
+  if (ret != LIBRAW_SUCCESS) {
+    throw std::runtime_error("RawDecoder: Unable to read raw file using LibRAW");
+  }
+  // Default set output color space to ACES2065-1 (AP0)
+  raw_processor.imgdata.params.output_color   = static_cast<int>(OutputColorSpace::ACES);
+  raw_processor.imgdata.params.output_bps     = 16;
+  raw_processor.imgdata.params.gamm[0]        = 1.0;  // Linear gamma
+  raw_processor.imgdata.params.gamm[1]        = 1.0;
+  raw_processor.imgdata.params.no_auto_bright = 1;  // Disable auto brightness
+  raw_processor.imgdata.params.use_camera_wb  = 1;
+
+  raw_processor.unpack();
+  raw_processor.dcraw_process();
+
+  auto img = raw_processor.dcraw_make_mem_image();
+  if (!img || img->type != LIBRAW_IMAGE_BITMAP) {
+    throw std::runtime_error("RawDecoder: Unable to get processed image using LibRAW");
+  }
+
+  int width  = img->width;
+  int height = img->height;
+  if (img->colors != 3) {
+    throw std::runtime_error("RawDecoder: Unsupported image format (cwwloww channel != 3)");
+  }
+  cv::Mat image_16u(height, width, CV_16UC3, img->data);
+  cv::cvtColor(image_16u, image_16u, cv::COLOR_RGB2BGR);
+
+  cv::Mat image_32f;
+  image_16u.convertTo(image_32f, CV_32FC3, 1.0f / 65535.0f);
+
+  LibRaw::dcraw_clear_mem(img);
+  raw_processor.recycle();
+  source_img->LoadData({std::move(image_32f)});
+}
+
 void RawDecoder::Decode(std::vector<char> buffer, std::shared_ptr<Image> source_img,
                         std::shared_ptr<BufferQueue>              result,
                         std::shared_ptr<std::promise<image_id_t>> promise) {
-  // TODO: Add Implementation
+  throw std::runtime_error("RawDecoder: Not implemented");
 }
 };  // namespace puerhlab
