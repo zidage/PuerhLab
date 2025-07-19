@@ -102,12 +102,16 @@ set_target_properties(Libexif PROPERTIES
 find_package(easy_profiler REQUIRED)
 
 # OpenColorIO
-find_package(OpenColorIO CONFIG REQUIRED)
+# find_package(OpenColorIO CONFIG REQUIRED)
+add_library(OpenColorIO SHARED IMPORTED)
+set_target_properties(OpenColorIO PROPERTIES
+    IMPORTED_LOCATION "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_party/ocio/bin/OpenColorIO_2_4.dll"
+    IMPORTED_IMPLIB "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_party/ocio/lib/OpenColorIO.lib"
+    INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_party/ocio/include")
 
     # Modules
 add_subdirectory(${CMAKE_SOURCE_DIR}/pu-erh_lab/src)
 add_subdirectory(${CMAKE_SOURCE_DIR}/pu-erh_lab/tests)
-
 
 file(GLOB_RECURSE ALL_SOURCE_FILES
     "${CMAKE_SOURCE_DIR}/pu-erh_lab/src/*.c"

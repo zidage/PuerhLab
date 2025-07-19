@@ -130,4 +130,4 @@ add_library(Operators
     edit/operators/cst/cst_op.cpp
 )
 target_include_directories(Operators PUBLIC include)
-target_link_libraries(Operators PUBLIC Image SleeveFS JSON OpenColorIO::OpenColorIO)
+target_link_libraries(Operators PUBLIC Image SleeveFS JSON OpenColorIO)
