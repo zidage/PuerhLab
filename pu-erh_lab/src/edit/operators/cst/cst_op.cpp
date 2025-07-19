@@ -25,7 +25,10 @@ OCIO_ACES_Transform_Op::OCIO_ACES_Transform_Op(const std::string& input, const s
 auto OCIO_ACES_Transform_Op::Apply(ImageBuffer& input) -> ImageBuffer {
   auto& img = input.GetCPUData();
   if (!_input_transform.empty()) {
-    auto                  idt = config->getProcessor(_input_transform.c_str(), "ACES - ACES2065-1");
+    auto transform = OCIO::ColorSpaceTransform::Create();
+    transform->setSrc(_input_transform.c_str());
+    transform->setDst("ACES - ACES2065-1");
+    auto                  idt       = config->getProcessor(transform);
     auto                  processor = idt->getDefaultCPUProcessor();
 
     OCIO::PackedImageDesc desc_idt(img.ptr<float>(0), img.cols, img.rows, 3);
@@ -36,7 +39,7 @@ auto OCIO_ACES_Transform_Op::Apply(ImageBuffer& input) -> ImageBuffer {
     auto transform = OCIO::DisplayViewTransform::Create();
     transform->setSrc("ACES - ACES2065-1");
     transform->setDisplay(_output_transform.c_str());
-    transform->setView("ACES 1.0 - SDR Video");
+    transform->setView("Un-tone-mapped");
 
     auto                  odt       = config->getProcessor(transform);
     auto                  processor = odt->getDefaultCPUProcessor();
@@ -46,6 +49,7 @@ auto OCIO_ACES_Transform_Op::Apply(ImageBuffer& input) -> ImageBuffer {
     auto transform = OCIO::ColorSpaceTransform::Create();
     transform->setSrc("ACES - ACES2065-1");
     transform->setDst(_output_transform.c_str());
+    transform->setDirection(OCIO::TransformDirection::TRANSFORM_DIR_FORWARD);
 
     auto                  csc       = config->getProcessor(transform);
     auto                  processor = csc->getDefaultCPUProcessor();

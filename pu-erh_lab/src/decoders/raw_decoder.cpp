@@ -62,8 +62,6 @@ void RawDecoder::Decode(std::vector<char>&& buffer, std::shared_ptr<Image> sourc
   if (ret != LIBRAW_SUCCESS) {
     throw std::runtime_error("RawDecoder: Unable to read raw file using LibRAW");
   }
-
-  raw_processor.unpack();
   // Default set output color space to ACES2065-1 (AP0)
   raw_processor.imgdata.params.output_color   = 6;
   raw_processor.imgdata.params.output_bps     = 16;
@@ -71,6 +69,9 @@ void RawDecoder::Decode(std::vector<char>&& buffer, std::shared_ptr<Image> sourc
   raw_processor.imgdata.params.gamm[1]        = 1.0;
   raw_processor.imgdata.params.no_auto_bright = 1;  // Disable auto brightness
   raw_processor.imgdata.params.use_camera_wb  = 1;
+  raw_processor.imgdata.params.highlight      = 0;
+  raw_processor.unpack();
+
   raw_processor.dcraw_process();
 
   auto img = raw_processor.dcraw_make_mem_image();
@@ -84,7 +85,7 @@ void RawDecoder::Decode(std::vector<char>&& buffer, std::shared_ptr<Image> sourc
     throw std::runtime_error("RawDecoder: Unsupported image format (cwwloww channel != 3)");
   }
   cv::Mat image_16u(height, width, CV_16UC3, img->data);
-  cv::cvtColor(image_16u, image_16u, cv::COLOR_RGB2BGR);
+  // cv::cvtColor(image_16u, image_16u, cv::COLOR_RGB2BGR);
 
   cv::Mat image_32f;
   image_16u.convertTo(image_32f, CV_32FC3, 1.0f / 65535.0f);

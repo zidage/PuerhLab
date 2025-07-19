@@ -7,9 +7,14 @@
 
 #include "../op_test_fixation.hpp"
 #include "decoders/raw_decoder.hpp"
+#include "edit/operators/basic/exposure_op.hpp"
+#include "edit/operators/basic/tone_region_op.hpp"
+#include "edit/operators/color/saturation_op.hpp"
+#include "edit/operators/color/vibrance_op.hpp"
+#include "edit/operators/detail/clarity_op.hpp"
 #include "image/image_buffer.hpp"
 #include "sleeve/sleeve_manager.hpp"
-
+#include "utils/string/convert.hpp"
 
 using namespace puerhlab;
 TEST_F(OperationTests, DISABLED_ColorSpaceTransformTest) {
@@ -78,8 +83,7 @@ TEST_F(OperationTests, DISABLED_ACESWorkflowTest1) {
     decoder.Decode(std::move(buffer), img);
 
     OCIO_ACES_Transform_Op IDT{
-        "", "ACEScct",
-        "D:\\Projects\\pu-erh_lab\\pu-erh_lab\\src\\config\\OCIO\\config.ocio"};
+        "", "ACEScct", "D:\\Projects\\pu-erh_lab\\pu-erh_lab\\src\\config\\OCIO\\config.ocio"};
     ImageBuffer source{img->GetImageData()};
     ImageBuffer to_adjust = IDT.Apply(source);
     // OCIO_ACES_Transform_Op     LMT{"ACEScct", OCIO::ROLE_SCENE_LINEAR};
@@ -93,11 +97,17 @@ TEST_F(OperationTests, DISABLED_ACESWorkflowTest1) {
 
     cv::Mat     to_save_acescct;
     to_adjust.GetCPUData().convertTo(to_save_acescct, CV_16UC3, 65535.0f);
-    cv::imwrite("D:\\Projects\\pu-erh_lab\\pu-erh_lab\\tests\\resources\\sample_images\\my_pipeline\\acescct.tiff", to_save_acescct);
+    cv::imwrite(
+        "D:\\Projects\\pu-erh_lab\\pu-erh_lab\\tests\\resources\\sample_images\\my_"
+        "pipeline\\acescct.tiff",
+        to_save_acescct);
 
     cv::Mat to_save_aces2065;
     img->GetImageData().convertTo(to_save_aces2065, CV_16UC3, 65535.0f);
-    cv::imwrite("D:\\Projects\\pu-erh_lab\\pu-erh_lab\\tests\\resources\\sample_images\\my_pipeline\\aces2065.tiff", to_save_aces2065);
+    cv::imwrite(
+        "D:\\Projects\\pu-erh_lab\\pu-erh_lab\\tests\\resources\\sample_images\\my_"
+        "pipeline\\aces2065.tiff",
+        to_save_aces2065);
     cv::waitKey(0);
   }
 }
@@ -107,7 +117,7 @@ TEST_F(OperationTests, ACESWorkflowTest2) {
     SleeveManager manager{db_path_};
     ImageLoader   image_loader(128, 8, 0);
     image_path_t  path =
-        L"D:\\Projects\\pu-erh_lab\\pu-erh_lab\\tests\\resources\\sample_images\\raw\\building";
+        L"D:\\Projects\\pu-erh_lab\\pu-erh_lab\\tests\\resources\\sample_images\\raw\\lowlight";
     std::vector<image_path_t> imgs;
     for (const auto& img : std::filesystem::directory_iterator(path)) {
       if (!img.is_directory()) imgs.push_back(img.path());
@@ -116,8 +126,8 @@ TEST_F(OperationTests, ACESWorkflowTest2) {
     manager.LoadToPath(imgs, L"");
 
     // Read image data
-    manager.GetPool()->RecordAccess(0, AccessType::FULL_IMG);
-    auto            img = manager.GetPool()->AccessElement(0, AccessType::FULL_IMG).value().lock();
+    manager.GetPool()->RecordAccess(1, AccessType::FULL_IMG);
+    auto            img = manager.GetPool()->AccessElement(1, AccessType::FULL_IMG).value().lock();
     RawDecoder      decoder;
     std::ifstream   file(img->_image_path, std::ios::binary | std::ios::ate);
     std::streamsize fileSize = file.tellg();
@@ -131,17 +141,33 @@ TEST_F(OperationTests, ACESWorkflowTest2) {
     decoder.Decode(std::move(buffer), img);
 
     OCIO_ACES_Transform_Op IDT{
-        "", "ACEScct",
+        "ACES - ACES2065-1", "ACEScct",
         "D:\\Projects\\pu-erh_lab\\pu-erh_lab\\src\\config\\OCIO\\config.ocio"};
-    ImageBuffer source{img->GetImageData()};
-    ImageBuffer to_adjust = IDT.Apply(source);
-    OCIO_ACES_Transform_Op     LMT{"ACEScct", ""};
-    ImageBuffer intermediate = LMT.Apply(to_adjust);
-    OCIO_ACES_Transform_Op ODT("", "sRGB - Display");
-    ImageBuffer to_display = ODT.Apply(intermediate);
+    ImageBuffer            source{img->GetImageData()};
+    ImageBuffer            to_adjust = IDT.Apply(source);
 
-    cv::Mat     to_save_rec709;
+    ExposureOp             EV{0.15f};
+    to_adjust = EV.Apply(to_adjust);
+    ToneRegionOp           HLOP{-40.0f, ToneRegion::HIGHLIGHTS};
+    to_adjust = HLOP.Apply(to_adjust);
+
+    VibranceOp VIB{50.0f};
+    to_adjust = VIB.Apply(to_adjust);
+
+    ClarityOp CLRT{80.0f};
+    to_adjust = CLRT.Apply(to_adjust);
+
+    OCIO_ACES_Transform_Op LMT{"ACEScct", ""};
+    ImageBuffer            intermediate = LMT.Apply(to_adjust);
+    OCIO_ACES_Transform_Op ODT("", "Rec.1886 Rec.709 - Display");
+    ImageBuffer            to_display = ODT.Apply(intermediate);
+
+    cv::Mat                to_save_rec709;
     to_display.GetCPUData().convertTo(to_save_rec709, CV_16UC3, 65535.0f);
-    cv::imwrite("D:\\Projects\\pu-erh_lab\\pu-erh_lab\\tests\\resources\\sample_images\\my_pipeline\\rec709.tiff", to_save_rec709);
+    cv::cvtColor(to_save_rec709, to_save_rec709, cv::COLOR_RGB2BGR);
+    cv::imwrite(std::format("D:\\Projects\\pu-erh_lab\\pu-erh_lab\\tests\\resources\\sample_"
+                            "images\\my_pipeline\\{}.tiff",
+                            conv::ToBytes(img->_image_name)),
+                to_save_rec709);
   }
 }

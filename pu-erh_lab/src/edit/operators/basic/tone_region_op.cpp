@@ -96,7 +96,7 @@ void ToneRegionOp::ComputeScale() {
       break;
     case ToneRegion::SHADOWS:
     case ToneRegion::HIGHLIGHTS:
-      _scale = _offset / 400.0f;
+      _scale = _offset / 300.0f;
       break;
   }
 }
