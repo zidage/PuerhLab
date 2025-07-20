@@ -3,6 +3,9 @@
 #include <OpenColorIO/OpenColorIO.h>
 #include <OpenColorIO/OpenColorTypes.h>
 
+#include <filesystem>
+#include <optional>
+
 #include "edit/operators/op_base.hpp"
 #include "image/image_buffer.hpp"
 
@@ -10,12 +13,12 @@ namespace puerhlab {
 namespace OCIO = OCIO_NAMESPACE;
 class OCIO_ACES_Transform_Op : public OperatorBase<OCIO_ACES_Transform_Op> {
  private:
-  std::string            _input_transform;
-  std::string            _output_transform;
+  std::string                          _input_transform;
+  std::string                          _output_transform;
 
-  const char*            config_path;
+  std::optional<std::filesystem::path> _lmt_path;
 
-  OCIO::ConstConfigRcPtr config;
+  OCIO::ConstConfigRcPtr               config;
 
  public:
   static constexpr std::string_view _canonical_name = "OCIO";
@@ -24,8 +27,10 @@ class OCIO_ACES_Transform_Op : public OperatorBase<OCIO_ACES_Transform_Op> {
   OCIO_ACES_Transform_Op(const std::string& input, const std::string& output);
   OCIO_ACES_Transform_Op(const std::string& input, const std::string& output,
                          const char* config_path);
+  OCIO_ACES_Transform_Op(std::filesystem::path& lmt_path);
 
   auto Apply(ImageBuffer& input) -> ImageBuffer override;
+  auto ApplyLMT(ImageBuffer& input) -> ImageBuffer;
   auto GetParams() const -> nlohmann::json override;
   void SetParams(const nlohmann::json& params) override;
 };

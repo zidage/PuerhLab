@@ -126,8 +126,8 @@ TEST_F(OperationTests, ACESWorkflowTest2) {
     manager.LoadToPath(imgs, L"");
 
     // Read image data
-    manager.GetPool()->RecordAccess(1, AccessType::FULL_IMG);
-    auto            img = manager.GetPool()->AccessElement(1, AccessType::FULL_IMG).value().lock();
+    manager.GetPool()->RecordAccess(0, AccessType::FULL_IMG);
+    auto            img = manager.GetPool()->AccessElement(0, AccessType::FULL_IMG).value().lock();
     RawDecoder      decoder;
     std::ifstream   file(img->_image_path, std::ios::binary | std::ios::ate);
     std::streamsize fileSize = file.tellg();
@@ -148,18 +148,25 @@ TEST_F(OperationTests, ACESWorkflowTest2) {
 
     ExposureOp             EV{0.15f};
     to_adjust = EV.Apply(to_adjust);
-    ToneRegionOp           HLOP{-40.0f, ToneRegion::HIGHLIGHTS};
+    ToneRegionOp           HLOP{-20.0f, ToneRegion::HIGHLIGHTS};
     to_adjust = HLOP.Apply(to_adjust);
 
-    VibranceOp VIB{50.0f};
+    ToneRegionOp           SDOP{20.0f, ToneRegion::SHADOWS};
+    to_adjust = SDOP.Apply(to_adjust);
+
+    SaturationOp VIB{10.0f};
     to_adjust = VIB.Apply(to_adjust);
 
-    ClarityOp CLRT{80.0f};
+    ClarityOp CLRT{30.0f};
     to_adjust = CLRT.Apply(to_adjust);
 
-    OCIO_ACES_Transform_Op LMT{"ACEScct", ""};
-    ImageBuffer            intermediate = LMT.Apply(to_adjust);
-    OCIO_ACES_Transform_Op ODT("", "Rec.1886 Rec.709 - Display");
+    std::filesystem::path look_path{"D:\\Projects\\pu-erh_lab\\pu-erh_lab\\src\\config\\LUTs\\ACES CCT 2383 D65.cube"};
+    OCIO_ACES_Transform_Op LMT{look_path};
+    to_adjust = LMT.ApplyLMT(to_adjust);
+    
+    OCIO_ACES_Transform_Op pre_RRT{"ACEScct", ""};
+    ImageBuffer            intermediate = pre_RRT.Apply(to_adjust);
+    OCIO_ACES_Transform_Op ODT("", "sRGB - Display");
     ImageBuffer            to_display = ODT.Apply(intermediate);
 
     cv::Mat                to_save_rec709;
