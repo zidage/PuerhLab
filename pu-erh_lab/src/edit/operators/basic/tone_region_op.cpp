@@ -72,13 +72,13 @@ float SmoothStep(float edge0, float edge1, float x) {
 auto ToneRegionOp::ComputeWeight(float luminance) const -> float {
   switch (_region) {
     case ToneRegion::BLACK:
-      return std::pow(1.0f - luminance, 1.5f);
+      return std::pow(1.0f - luminance, 5.0f);
     case ToneRegion::WHITE:
-      return std::pow(luminance, 1.5f);
+      return std::pow(luminance, 5.0f);
     case ToneRegion::SHADOWS:
-      return 1.0f - SmoothStep(0.1f, 0.8f, luminance);
+      return 1.0f - SmoothStep(0.1f, 0.5f, luminance);
     case ToneRegion::HIGHLIGHTS:
-      return SmoothStep(0.4f, 0.9f, luminance);
+      return SmoothStep(0.6f, 1.0f, luminance);
     default:
       return 0.0f;
   }

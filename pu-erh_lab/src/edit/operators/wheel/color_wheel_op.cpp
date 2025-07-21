@@ -36,21 +36,21 @@ auto ColorWheelOp::Apply(ImageBuffer& input) -> ImageBuffer {
   cv::Mat   lightness = Lab_channels[0] / 100.0f;  // L
 
   // BGR
-  cv::Vec3f lift_offset(_lift.color_offset.z + _lift.luminance_offset,
+  cv::Vec3f lift_offset(_lift.color_offset.x + _lift.luminance_offset,
                         _lift.color_offset.y + _lift.luminance_offset,
-                        _lift.color_offset.x + _lift.luminance_offset);
-  cv::Vec3f gain_factor(_gain.color_offset.z + _gain.luminance_offset,
+                        _lift.color_offset.z + _lift.luminance_offset);
+  cv::Vec3f gain_factor(_gain.color_offset.x + _gain.luminance_offset,
                         _gain.color_offset.y + _gain.luminance_offset,
-                        _gain.color_offset.x + _gain.luminance_offset);
-  cv::Vec3f gamma_inv(1.0f / (_gamma.color_offset.z + _gamma.luminance_offset),
+                        _gain.color_offset.z + _gain.luminance_offset);
+  cv::Vec3f gamma_inv(1.0f / (_gamma.color_offset.x + _gamma.luminance_offset),
                       1.0f / (_gamma.color_offset.y + _gamma.luminance_offset),
-                      1.0f / (_gamma.color_offset.x + _gamma.luminance_offset));
+                      1.0f / (_gamma.color_offset.z + _gamma.luminance_offset));
 
   img.forEach<cv::Vec3f>([&](cv::Vec3f& pixel, const int* pos) {
     float     L              = lightness.at<float>(pos[0], pos[1]);
-    float     lift_w         = std::clamp(bell(L, 0.0f, 0.50f), 0.0f, 1.0f);
+    float     lift_w         = std::clamp(bell(L, 0.0f, 0.30f), 0.0f, 1.0f);
     float     gamma_w        = 1.0f;
-    float     gain_w         = std::clamp(bell(L, 1.0f, 0.50f), 0.0f, 1.0f);
+    float     gain_w         = std::clamp(bell(L, 1.0f, 0.45f), 0.0f, 1.0f);
 
     // float total_w = lift_w + gamma_w + gain_w + 1e-6fff
     // lift_w /= total_w;

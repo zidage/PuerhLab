@@ -1,17 +1,22 @@
 #include "edit/operators/cst/cst_op.hpp"
 
+#include <easy/profiler.h>
 #include <opencv2/core/hal/interface.h>
 
+#include <opencv2/core/types.hpp>
 #include <opencv2/highgui.hpp>
 #include <opencv2/imgcodecs.hpp>
+#include <opencv2/opencv.hpp>
 
 #include "../op_test_fixation.hpp"
 #include "decoders/raw_decoder.hpp"
 #include "edit/operators/basic/exposure_op.hpp"
 #include "edit/operators/basic/tone_region_op.hpp"
 #include "edit/operators/color/saturation_op.hpp"
+#include "edit/operators/color/tint_op.hpp"
 #include "edit/operators/color/vibrance_op.hpp"
 #include "edit/operators/detail/clarity_op.hpp"
+#include "edit/operators/wheel/color_wheel_op.hpp"
 #include "image/image_buffer.hpp"
 #include "sleeve/sleeve_manager.hpp"
 #include "utils/string/convert.hpp"
@@ -114,10 +119,11 @@ TEST_F(OperationTests, DISABLED_ACESWorkflowTest1) {
 
 TEST_F(OperationTests, ACESWorkflowTest2) {
   {
+    EASY_PROFILER_ENABLE;
     SleeveManager manager{db_path_};
     ImageLoader   image_loader(128, 8, 0);
     image_path_t  path =
-        L"D:\\Projects\\pu-erh_lab\\pu-erh_lab\\tests\\resources\\sample_images\\raw\\lowlight";
+        L"D:\\Projects\\pu-erh_lab\\pu-erh_lab\\tests\\resources\\sample_images\\raw\\camera\\nikon\\z9";
     std::vector<image_path_t> imgs;
     for (const auto& img : std::filesystem::directory_iterator(path)) {
       if (!img.is_directory()) imgs.push_back(img.path());
@@ -138,43 +144,95 @@ TEST_F(OperationTests, ACESWorkflowTest2) {
     }
     file.close();
 
+    EASY_BLOCK("Raw Decoding");
     decoder.Decode(std::move(buffer), img);
+    EASY_END_BLOCK;
 
+    
+    ImageBuffer source{img->GetImageData()};
+
+    EASY_BLOCK("To ACEScct")
     OCIO_ACES_Transform_Op IDT{
         "ACES - ACES2065-1", "ACEScct",
         "D:\\Projects\\pu-erh_lab\\pu-erh_lab\\src\\config\\OCIO\\config.ocio"};
-    ImageBuffer            source{img->GetImageData()};
-    ImageBuffer            to_adjust = IDT.Apply(source);
+    ImageBuffer to_adjust = IDT.Apply(source);
+    EASY_END_BLOCK;
 
-    ExposureOp             EV{0.15f};
-    to_adjust = EV.Apply(to_adjust);
-    ToneRegionOp           HLOP{-20.0f, ToneRegion::HIGHLIGHTS};
-    to_adjust = HLOP.Apply(to_adjust);
+    EASY_BLOCK("Adjustment Stack");
 
-    ToneRegionOp           SDOP{20.0f, ToneRegion::SHADOWS};
-    to_adjust = SDOP.Apply(to_adjust);
+    
+    // ExposureOp EV{0.2f};
+    // to_adjust = EV.Apply(to_adjust);
 
-    SaturationOp VIB{10.0f};
-    to_adjust = VIB.Apply(to_adjust);
+    // TintOp TTOP{+3.0f};
+    //to_adjust = TTOP.Apply(to_adjust);
+    // ToneRegionOp WTOP{10.0f, ToneRegion::WHITE};
+    // to_adjust = WTOP.Apply(to_adjust);
 
-    ClarityOp CLRT{30.0f};
-    to_adjust = CLRT.Apply(to_adjust);
+    // ToneRegionOp HLOP{-50.0f, ToneRegion::HIGHLIGHTS};
+    // to_adjust = HLOP.Apply(to_adjust);
 
-    std::filesystem::path look_path{"D:\\Projects\\pu-erh_lab\\pu-erh_lab\\src\\config\\LUTs\\ACES CCT 2383 D65.cube"};
+    ColorWheelOp   color_wheels;
+    // A teal and orange look
+    nlohmann::json teal_orange_look = {{"lift",
+                                        {{"color_offset.x", 0.0},
+                                         {"color_offset.y", 0.0},
+                                         {"color_offset.z", 0.0},
+                                         {"luminance_offset", 0.0}}},
+                                       {"gamma",
+                                        {{"color_offset.x", 1.0},
+                                         {"color_offset.y", 1.0},
+                                         {"color_offset.z", 1.00},
+                                         {"luminance_offset", 0.2}}},
+                                       {"gain",
+                                        {{"color_offset.x", 1.00},
+                                         {"color_offset.y", 1.0},
+                                         {"color_offset.z", 1.0},
+                                         {"luminance_offset", -0.25}}},
+                                       {"crossovers", {{"lift", 0.3}, {"gain", 0.7}}}};
+    nlohmann::json params;
+    params[color_wheels._script_name] = teal_orange_look;
+    color_wheels.SetParams(params);
+    to_adjust = color_wheels.Apply(to_adjust);
+    // ToneRegionOp SDOP{10.0f, ToneRegion::SHADOWS};
+    // to_adjust = SDOP.Apply(to_adjust);
+
+    // // ToneRegionOp BLOP{5.0f, ToneRegion::BLACK};
+    // // to_adjust = BLOP.Apply(to_adjust);
+
+    // // SaturationOp VIB{30.0f};
+    // // to_adjust = VIB.Apply(to_adjust);
+
+    // // ClarityOp CLRT{20.0f};
+    // // to_adjust = CLRT.Apply(to_adjust);
+    // // EASY_END_BLOCK;
+
+    EASY_BLOCK("LMT");
+    std::filesystem::path look_path{
+        "D:\\Projects\\pu-erh_lab\\pu-erh_lab\\src\\config\\LUTs\\ACES CCT 2383 D65.cube"};
     OCIO_ACES_Transform_Op LMT{look_path};
     to_adjust = LMT.ApplyLMT(to_adjust);
-    
+    EASY_END_BLOCK;
+
+    EASY_BLOCK("To ACES2065");
     OCIO_ACES_Transform_Op pre_RRT{"ACEScct", ""};
     ImageBuffer            intermediate = pre_RRT.Apply(to_adjust);
-    OCIO_ACES_Transform_Op ODT("", "sRGB - Display");
+    EASY_END_BLOCK;
+    EASY_BLOCK("ODT");
+    OCIO_ACES_Transform_Op ODT("", "Camera Rec.709");
     ImageBuffer            to_display = ODT.Apply(intermediate);
+    EASY_END_BLOCK;
 
-    cv::Mat                to_save_rec709;
+    EASY_BLOCK("Saving");
+    cv::Mat to_save_rec709;
     to_display.GetCPUData().convertTo(to_save_rec709, CV_16UC3, 65535.0f);
     cv::cvtColor(to_save_rec709, to_save_rec709, cv::COLOR_RGB2BGR);
     cv::imwrite(std::format("D:\\Projects\\pu-erh_lab\\pu-erh_lab\\tests\\resources\\sample_"
                             "images\\my_pipeline\\{}.tiff",
                             conv::ToBytes(img->_image_name)),
                 to_save_rec709);
+    EASY_END_BLOCK;
   }
+  profiler::dumpBlocksToFile(
+      "D:\\Projects\\pu-erh_lab\\pu-erh_lab\\tests\\resources\\temp_folder\\test_profile.prof");
 }

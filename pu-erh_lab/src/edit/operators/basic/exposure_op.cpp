@@ -25,6 +25,8 @@ auto ExposureOp::Apply(ImageBuffer& input) -> ImageBuffer {
   cv::Mat& linear_image = input.GetCPUData();
   linear_image *= _scale;
 
+  cv::min(linear_image, 1.0f, linear_image);
+  cv::max(linear_image, 0.0f, linear_image);
   return {std::move(linear_image)};
 }
 

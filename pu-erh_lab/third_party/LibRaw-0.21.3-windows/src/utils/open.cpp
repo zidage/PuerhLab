@@ -638,7 +638,7 @@ int LibRaw::open_datastream(LibRaw_abstract_datastream *stream)
 
 	  if (makeIs(LIBRAW_CAMERAMAKER_Canon))
 	  {
-		  if (MN.canon.DefaultCropAbsolute.l != -1)  // tag 0x00e0 SensorInfo was parsed
+		  if (!imgdata.idata.dng_version && (MN.canon.DefaultCropAbsolute.l != -1))  // tag 0x00e0 SensorInfo was parsed
 		  {
 			  if (imgdata.sizes.raw_aspect != LIBRAW_IMAGE_ASPECT_UNKNOWN)
 			  { // tag 0x009a AspectInfo was parsed
@@ -1203,15 +1203,16 @@ int LibRaw::open_datastream(LibRaw_abstract_datastream *stream)
     {
       if (C.profile)
         free(C.profile);
-	  INT64 profile_sz = MIN(INT64(C.profile_length), ID.input->size() - ID.profile_offset);
-	  if (profile_sz > 0LL && profile_sz < LIBRAW_MAX_PROFILE_SIZE_MB * 1024LL * 1024LL)
-	  {
+      INT64 profile_sz = MIN(INT64(C.profile_length), ID.input->size() - ID.profile_offset);
+      if (profile_sz > 0LL && profile_sz < LIBRAW_MAX_PROFILE_SIZE_MB * 1024LL * 1024LL)
+      {
         C.profile = calloc(size_t(profile_sz),1);
+        C.profile_length = unsigned(profile_sz);
         ID.input->seek(ID.profile_offset, SEEK_SET);
         ID.input->read(C.profile, size_t(profile_sz), 1);
-	  }
-	  else
-		  C.profile = NULL;
+      }
+      else
+        C.profile = NULL;
     }
 
     SET_PROC_FLAG(LIBRAW_PROGRESS_IDENTIFY);

@@ -69,7 +69,6 @@ void RawDecoder::Decode(std::vector<char>&& buffer, std::shared_ptr<Image> sourc
   raw_processor.imgdata.params.gamm[1]        = 1.0;
   raw_processor.imgdata.params.no_auto_bright = 1;  // Disable auto brightness
   raw_processor.imgdata.params.use_camera_wb  = 1;
-  raw_processor.imgdata.params.highlight      = 0;
   raw_processor.unpack();
 
   raw_processor.dcraw_process();

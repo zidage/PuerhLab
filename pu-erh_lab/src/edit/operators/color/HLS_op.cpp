@@ -42,7 +42,7 @@ auto HLSOp::Apply(ImageBuffer& input) -> ImageBuffer {
 
   cv::Mat& img = input.GetCPUData();
   cv::Mat  HLS_img;
-  cv::cvtColor(img, HLS_img, cv::COLOR_BGR2HLS);
+  cv::cvtColor(img, HLS_img, cv::COLOR_RGB2HLS);
 
   cv::Mat     mask     = cv::Mat::zeros(img.size(), CV_32F);
   const float target_h = _target_HLS[0];
@@ -85,7 +85,7 @@ auto HLSOp::Apply(ImageBuffer& input) -> ImageBuffer {
   cv::threshold(HLS_channels[2], HLS_channels[2], 0.0f, 0.0f, cv::THRESH_TOZERO);
 
   cv::merge(HLS_channels, img);
-  cv::cvtColor(img, img, cv::COLOR_HLS2BGR);
+  cv::cvtColor(img, img, cv::COLOR_HLS2RGB);
 
   cv::threshold(img, img, 1.0f, 1.0f, cv::THRESH_TRUNC);
   cv::threshold(img, img, 0.0f, 0.0f, cv::THRESH_TOZERO);

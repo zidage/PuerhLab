@@ -82,7 +82,7 @@ target_link_libraries(SharpenOPTest GTest::gtest_main Operators SleeveManager)
 
 add_executable(CSTTest edit/operators/cst/cst_op_test.cpp)
 target_include_directories(CSTTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
-target_link_libraries(CSTTest GTest::gtest_main Operators SleeveManager ImageDecoder)
+target_link_libraries(CSTTest GTest::gtest_main Operators SleeveManager ImageDecoder easy_profiler)
 
 include(GoogleTest)
 # set(CMAKE_GTEST_DISCOVER_TESTS_DISCOVERY_MODE PRE_TEST)

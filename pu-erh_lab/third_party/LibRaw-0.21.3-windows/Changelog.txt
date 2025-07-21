@@ -1,3 +1,18 @@
+2025-04-14  Alex Tutubalin <lexa@lexa.ru>
+
+ LibRaw 0.21.4-Release 
+
+ * It's just time to mark all the changes made with tag
+
+2025-02-07  Alex Tutubalin <lexa@lexa.ru>
+ 
+  * Prevent out-of-buffer access in phase_one_correct()
+
+2025-02-05  Alex Tutubalin <lexa@lexa.ru>
+
+  * Prevent one-off read in Fuji WB table parsing
+  * Prevent one-off read in phase_one_correct()
+
 2024-09-18  Alex Tutubalin <lexa@lexa.ru>
 
  LibRaw 0.21.3-Release
