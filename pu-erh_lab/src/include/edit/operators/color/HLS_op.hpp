@@ -3,8 +3,13 @@
 #include <opencv2/core.hpp>
 
 #include "edit/operators/op_base.hpp"
+#include "type/type.hpp"
 
 namespace puerhlab {
+struct HLSOpRegister {
+  HLSOpRegister();
+};
+
 class HLSOp : public OperatorBase<HLSOp> {
  private:
   cv::Vec3f _target_HLS;
@@ -16,10 +21,12 @@ class HLSOp : public OperatorBase<HLSOp> {
   float     _saturation_range;
 
  public:
+  static constexpr PriorityLevel    _priority_level = 5;
   static constexpr std::string_view _canonical_name = "HLS";
   static constexpr std::string_view _script_name    = "HLS";
 
   HLSOp();
+  HLSOp(const nlohmann::json& params);
 
   void SetTargetColor(const cv::Vec3f& bgr_color_normalized);
   void SetAdjustment(const cv::Vec3f& adjustment);

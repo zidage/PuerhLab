@@ -4,10 +4,21 @@
 #include <opencv2/core.hpp>
 #include <opencv2/core/types.hpp>
 
+#include "edit/operators/operator_factory.hpp"
 #include "json.hpp"
 
 namespace puerhlab {
+CurveOpRegister::CurveOpRegister() {
+  OperatorFactory::Instance().Register(OperatorType::CURVE, [](const nlohmann::json& params) {
+    return std::make_shared<CurveOp>(params);
+  });
+}
+
+static CurveOpRegister _curve_op_reg;
+
 CurveOp::CurveOp(const std::vector<cv::Point2f>& control_points) { SetCtrlPts(control_points); }
+
+CurveOp::CurveOp(const nlohmann::json& params) { SetParams(params); }
 
 void CurveOp::ComputeTagents() {
   size_t             N = _ctrl_pts.size();

@@ -5,12 +5,23 @@
 #include <utility>
 
 #include "edit/operators/color/conversion/Oklab_cvt.hpp"
+#include "edit/operators/operator_factory.hpp"
 #include "json.hpp"
 
 namespace puerhlab {
+VibranceOpRegister::VibranceOpRegister() {
+  OperatorFactory::Instance().Register(OperatorType::VIBRANCE, [](const nlohmann::json& params) {
+    return std::make_shared<VibranceOp>(params);
+  });
+}
+
+static VibranceOpRegister vibrance_op_reg;
+
 VibranceOp::VibranceOp() : _vibrance_offset(0) {}
 
 VibranceOp::VibranceOp(float vibrance_offset) : _vibrance_offset(vibrance_offset) {}
+
+VibranceOp::VibranceOp(const nlohmann::json& params) { SetParams(params); }
 
 auto VibranceOp::ComputeScale(float chroma) -> float {
   // chroma in [0, max], vibrance_offset in [-100, 100]

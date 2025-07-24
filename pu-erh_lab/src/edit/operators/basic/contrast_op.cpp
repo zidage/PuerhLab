@@ -4,7 +4,16 @@
 
 #include <stdexcept>
 
+#include "edit/operators/operator_factory.hpp"
+
 namespace puerhlab {
+ContrastOpRegister::ContrastOpRegister() {
+  OperatorFactory::Instance().Register(OperatorType::CONTRAST, [](const nlohmann::json& params) {
+    return std::make_shared<ContrastOp>(params);
+  });
+}
+
+static ContrastOpRegister _contrast_reg;
 /**
  * @brief Default construct a new Contrast Op:: Contrast Op object
  *
@@ -19,6 +28,8 @@ ContrastOp::ContrastOp() : _contrast_offset(0.0f) { _scale = 1.0f; }
 ContrastOp::ContrastOp(float contrast_offset) : _contrast_offset(contrast_offset) {
   _scale = std::exp(contrast_offset / 100.0f);
 }
+
+ContrastOp::ContrastOp(const nlohmann::json& params) { SetParams(params); }
 
 /**
  * @brief Apply the contrast adjustment

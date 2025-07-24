@@ -1,19 +1,31 @@
 #include "edit/operators/color/tint_op.hpp"
 
+#include <memory>
 #include <opencv2/core.hpp>
 #include <opencv2/core/mat.hpp>
 #include <opencv2/opencv.hpp>
 #include <vector>
 
+#include "edit/operators/operator_factory.hpp"
 #include "json.hpp"
 
 namespace puerhlab {
+TintOpRegister::TintOpRegister() {
+  OperatorFactory::Instance().Register(OperatorType::TINT, [](const nlohmann::json& params) {
+    return std::make_shared<TintOp>(params);
+  });
+}
+
+static TintOpRegister tint_op_reg;
+
 TintOp::TintOp() : _tint_offset(0.0f) { _scale = 0.0f; }
 
 TintOp::TintOp(float tint_offset) : _tint_offset(tint_offset) {
   // In OpenCV, the value of a channel lies between -127 to 127
   _scale = tint_offset / 1000.0f;
 }
+
+TintOp::TintOp(const nlohmann::json& params) { SetParams(params); }
 
 auto TintOp::Apply(ImageBuffer& input) -> ImageBuffer {
   cv::Mat&             img = input.GetCPUData();

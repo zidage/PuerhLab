@@ -6,6 +6,10 @@
 #include "edit/operators/op_base.hpp"
 
 namespace puerhlab {
+struct ContrastOpRegister {
+  ContrastOpRegister();
+};
+
 class ContrastOp : public OperatorBase<ContrastOp> {
  private:
   /**
@@ -21,10 +25,12 @@ class ContrastOp : public OperatorBase<ContrastOp> {
   float _scale;
 
  public:
+  static constexpr PriorityLevel    _priority_level = 3;
   static constexpr std::string_view _canonical_name = "Contrast";
   static constexpr std::string_view _script_name    = "contrast";
   ContrastOp();
   ContrastOp(float contrast_offset);
+  ContrastOp(const nlohmann::json& params);
 
   auto Apply(ImageBuffer& input) -> ImageBuffer override;
   auto GetParams() const -> nlohmann::json override;

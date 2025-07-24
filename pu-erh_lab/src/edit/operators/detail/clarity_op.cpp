@@ -2,19 +2,33 @@
 
 #include <opencv2/core/hal/interface.h>
 
+#include <memory>
 #include <opencv2/core.hpp>
 #include <opencv2/core/mat.hpp>
 #include <opencv2/core/types.hpp>
 #include <opencv2/opencv.hpp>
 #include <vector>
 
+#include "edit/operators/curve/curve_op.hpp"
+#include "edit/operators/operator_factory.hpp"
+
 namespace puerhlab {
-float ClarityOp::_usm_radius = 5.0f;
+ClarityOpRegister::ClarityOpRegister() {
+  OperatorFactory::Instance().Register(OperatorType::CLARITY, [](const nlohmann::json& params) {
+    return std::make_shared<CurveOp>(params);
+  });
+}
+
+static ClarityOpRegister _clarity_reg;
+
+float                    ClarityOp::_usm_radius = 5.0f;
 
 ClarityOp::ClarityOp() : _clarity_offset(0) { _scale = 1.0f; }
 ClarityOp::ClarityOp(float clarity_offset) : _clarity_offset(clarity_offset) {
   _scale = clarity_offset / 300.0f;
 }
+
+ClarityOp::ClarityOp(const nlohmann::json& params) { SetParams(params); }
 
 void ClarityOp::CreateMidtoneMask(cv::Mat& input, cv::Mat& mask) {
   cv::Mat luminosity_mask;

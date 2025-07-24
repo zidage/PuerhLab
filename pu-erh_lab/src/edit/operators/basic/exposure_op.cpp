@@ -3,9 +3,17 @@
 #include <opencv2/core/mat.hpp>
 #include <utility>
 
+#include "edit/operators/operator_factory.hpp"
 #include "image/image_buffer.hpp"
 
 namespace puerhlab {
+ExposureOpRegister::ExposureOpRegister() {
+  OperatorFactory::Instance().Register(OperatorType::EXPOSURE, [](const nlohmann::json& params) {
+    return std::make_shared<ExposureOp>(params);
+  });
+}
+
+static ExposureOpRegister _ev_reg;
 /**
  * @brief Construct a new Exposure Op:: Exposure Op object
  *
@@ -20,6 +28,8 @@ ExposureOp::ExposureOp() : _exposure_offset(0.0f) { _scale = 1.0f; }
 ExposureOp::ExposureOp(float exposure_offset) : _exposure_offset(exposure_offset) {
   _scale = std::pow(2.0f, _exposure_offset);
 }
+
+ExposureOp::ExposureOp(const nlohmann::json& params) { SetParams(params); }
 
 auto ExposureOp::Apply(ImageBuffer& input) -> ImageBuffer {
   cv::Mat& linear_image = input.GetCPUData();

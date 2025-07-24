@@ -4,6 +4,10 @@
 #include "image/image_buffer.hpp"
 
 namespace puerhlab {
+struct ClarityOpRegister {
+  ClarityOpRegister();
+};
+
 class ClarityOp : public OperatorBase<ClarityOp> {
  private:
   /**
@@ -26,10 +30,12 @@ class ClarityOp : public OperatorBase<ClarityOp> {
   void         CreateMidtoneMask(cv::Mat& input, cv::Mat& mask);
 
  public:
+  static constexpr PriorityLevel    _priority_level = 8;
   static constexpr std::string_view _canonical_name = "Clarity";
   static constexpr std::string_view _script_name    = "clarity";
   ClarityOp();
   ClarityOp(float clarity_offset);
+  ClarityOp(const nlohmann::json& params);
 
   auto Apply(ImageBuffer& input) -> ImageBuffer override;
   auto GetParams() const -> nlohmann::json override;

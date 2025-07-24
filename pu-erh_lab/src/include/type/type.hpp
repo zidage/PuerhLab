@@ -59,4 +59,6 @@ namespace puerhlab {
 
 #define BufferQueue     ConcurrentBlockingQueue<std::shared_ptr<Image>>
 
+#define PriorityLevel   int
+
 };  // namespace puerhlab

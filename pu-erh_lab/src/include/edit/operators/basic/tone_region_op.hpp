@@ -6,6 +6,9 @@
 #include "edit/operators/op_base.hpp"
 
 namespace puerhlab {
+struct ToneRegionOpRegister {
+  ToneRegionOpRegister();
+};
 /**
  * @brief Tone regions: black level, white level, shadows and highlights
  *
@@ -42,11 +45,13 @@ class ToneRegionOp : public OperatorBase<ToneRegionOp> {
   void        ComputeScale();
 
  public:
+  static constexpr PriorityLevel    _priority_level = 1;
   static constexpr std::string_view _canonical_name = "ToneRegion";
   static constexpr std::string_view _script_name    = "tone_region";
   ToneRegionOp()                                    = delete;
   ToneRegionOp(ToneRegion region);
   ToneRegionOp(float offset, ToneRegion region);
+  ToneRegionOp(const nlohmann::json& params);
 
   auto Apply(ImageBuffer& input) -> ImageBuffer override;
   auto GetParams() const -> nlohmann::json override;

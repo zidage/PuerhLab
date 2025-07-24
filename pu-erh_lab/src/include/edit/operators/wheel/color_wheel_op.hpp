@@ -6,7 +6,11 @@
 #include "image/image_buffer.hpp"
 
 namespace puerhlab {
-class ColorWheelOp : OperatorBase<ColorWheelOp> {
+struct ColorWheelOpRegister {
+  ColorWheelOpRegister();
+};
+
+class ColorWheelOp : public OperatorBase<ColorWheelOp> {
  public:
   struct WheelControl {
     // x for hue (0->360.0f), y for saturation (0->1)
@@ -25,10 +29,12 @@ class ColorWheelOp : OperatorBase<ColorWheelOp> {
   float        _gain_crossover;
 
  public:
+  static constexpr PriorityLevel    _priority_level = 5;
   static constexpr std::string_view _canonical_name = "Color Wheel";
   static constexpr std::string_view _script_name    = "color_wheel";
 
   ColorWheelOp();
+  ColorWheelOp(const nlohmann::json& params);
 
   auto Apply(ImageBuffer& input) -> ImageBuffer override;
   auto GetParams() const -> nlohmann::json override;

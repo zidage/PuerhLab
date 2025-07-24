@@ -6,14 +6,25 @@
 #include <memory>
 #include <string>
 
+#include "edit/operators/operator_factory.hpp"
 #include "json.hpp"
 
 namespace puerhlab {
+ToneRegionOpRegister::ToneRegionOpRegister() {
+  OperatorFactory::Instance().Register(OperatorType::TONE_REGION, [](const nlohmann::json& params) {
+    return std::make_shared<ToneRegionOp>(params);
+  });
+}
+
+static ToneRegionOpRegister _tone_region_reg;
+
 ToneRegionOp::ToneRegionOp(ToneRegion region) : _offset(0.0f), _region(region) { ComputeScale(); }
 
 ToneRegionOp::ToneRegionOp(float offset, ToneRegion region) : _offset(offset), _region(region) {
   ComputeScale();
 }
+
+ToneRegionOp::ToneRegionOp(const nlohmann::json& params) { SetParams(params); }
 
 /**
  * @brief Convert a region enum to its literal name
@@ -74,11 +85,11 @@ auto ToneRegionOp::ComputeWeight(float luminance) const -> float {
     case ToneRegion::BLACK:
       return std::pow(1.0f - luminance, 5.0f);
     case ToneRegion::WHITE:
-      return std::pow(luminance, 5.0f);
+      return std::pow(luminance, 4.0f);
     case ToneRegion::SHADOWS:
       return 1.0f - SmoothStep(0.1f, 0.5f, luminance);
     case ToneRegion::HIGHLIGHTS:
-      return SmoothStep(0.6f, 1.0f, luminance);
+      return SmoothStep(0.7f, 1.0f, luminance);
     default:
       return 0.0f;
   }
@@ -95,8 +106,10 @@ void ToneRegionOp::ComputeScale() {
       _scale = _offset / 100.0f;
       break;
     case ToneRegion::SHADOWS:
-    case ToneRegion::HIGHLIGHTS:
       _scale = _offset / 300.0f;
+      break;
+    case ToneRegion::HIGHLIGHTS:
+      _scale = _offset / 100.0f;
       break;
   }
 }

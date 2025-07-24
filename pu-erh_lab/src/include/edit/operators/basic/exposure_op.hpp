@@ -4,8 +4,12 @@
 #include <string_view>
 
 #include "edit/operators/op_base.hpp"
+#include "type/type.hpp"
 
 namespace puerhlab {
+struct ExposureOpRegister {
+  ExposureOpRegister();
+};
 class ExposureOp : public OperatorBase<ExposureOp> {
  private:
   /**
@@ -23,10 +27,12 @@ class ExposureOp : public OperatorBase<ExposureOp> {
   float _scale;
 
  public:
+  static constexpr PriorityLevel    _priority_level = 0;
   static constexpr std::string_view _canonical_name = "Exposure";
   static constexpr std::string_view _script_name    = "exposure";
   ExposureOp();
   ExposureOp(float exposure_offset);
+  ExposureOp(const nlohmann::json& params);
 
   auto Apply(ImageBuffer& input) -> ImageBuffer override;
   auto GetParams() const -> nlohmann::json override;

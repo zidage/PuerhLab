@@ -4,6 +4,10 @@
 #include "image/image_buffer.hpp"
 
 namespace puerhlab {
+struct SharpenOpRegister {
+  SharpenOpRegister();
+};
+
 class SharpenOp : public OperatorBase<SharpenOp> {
  private:
   /**
@@ -32,11 +36,13 @@ class SharpenOp : public OperatorBase<SharpenOp> {
   void  ComputeScale();
 
  public:
+  static constexpr PriorityLevel    _priority_level = 8;
   static constexpr std::string_view _canonical_name = "Sharpen";
   static constexpr std::string_view _script_name    = "sharpen";
 
   SharpenOp()                                       = default;
   SharpenOp(float offset, float radius, float threshold);
+  SharpenOp(const nlohmann::json& params);
 
   auto Apply(ImageBuffer& input) -> ImageBuffer override;
   auto GetParams() const -> nlohmann::json override;

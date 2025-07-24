@@ -6,6 +6,10 @@
 #include "edit/operators/op_base.hpp"
 
 namespace puerhlab {
+struct TintOpRegister {
+  TintOpRegister();
+};
+
 class TintOp : public OperatorBase<TintOp> {
  private:
   /**
@@ -23,10 +27,12 @@ class TintOp : public OperatorBase<TintOp> {
   float _scale;
 
  public:
+  static constexpr PriorityLevel    _priority_level = 4;
   static constexpr std::string_view _canonical_name = "Tint";
   static constexpr std::string_view _script_name    = "tint";
   TintOp();
   TintOp(float tint_offset);
+  TintOp(const nlohmann::json& params);
 
   auto Apply(ImageBuffer& input) -> ImageBuffer override;
   auto GetParams() const -> nlohmann::json override;

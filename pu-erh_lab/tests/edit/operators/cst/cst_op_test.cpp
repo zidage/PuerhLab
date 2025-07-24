@@ -9,7 +9,9 @@
 #include <opencv2/opencv.hpp>
 
 #include "../op_test_fixation.hpp"
+#include "concurrency/thread_pool.hpp"
 #include "decoders/raw_decoder.hpp"
+#include "edit/operators/basic/contrast_op.hpp"
 #include "edit/operators/basic/exposure_op.hpp"
 #include "edit/operators/basic/tone_region_op.hpp"
 #include "edit/operators/color/saturation_op.hpp"
@@ -117,13 +119,14 @@ TEST_F(OperationTests, DISABLED_ACESWorkflowTest1) {
   }
 }
 
-TEST_F(OperationTests, ACESWorkflowTest2) {
+TEST_F(OperationTests, DISABLED_ACESWorkflowTest2) {
   {
     EASY_PROFILER_ENABLE;
     SleeveManager manager{db_path_};
     ImageLoader   image_loader(128, 8, 0);
     image_path_t  path =
-        L"D:\\Projects\\pu-erh_lab\\pu-erh_lab\\tests\\resources\\sample_images\\raw\\camera\\nikon\\z9";
+        L"D:\\Projects\\pu-erh_lab\\pu-erh_lab\\tests\\resources\\sample_"
+        L"images\\raw\\camera\\nikon\\z8";
     std::vector<image_path_t> imgs;
     for (const auto& img : std::filesystem::directory_iterator(path)) {
       if (!img.is_directory()) imgs.push_back(img.path());
@@ -148,7 +151,6 @@ TEST_F(OperationTests, ACESWorkflowTest2) {
     decoder.Decode(std::move(buffer), img);
     EASY_END_BLOCK;
 
-    
     ImageBuffer source{img->GetImageData()};
 
     EASY_BLOCK("To ACEScct")
@@ -160,12 +162,11 @@ TEST_F(OperationTests, ACESWorkflowTest2) {
 
     EASY_BLOCK("Adjustment Stack");
 
-    
     // ExposureOp EV{0.2f};
     // to_adjust = EV.Apply(to_adjust);
 
     // TintOp TTOP{+3.0f};
-    //to_adjust = TTOP.Apply(to_adjust);
+    // to_adjust = TTOP.Apply(to_adjust);
     // ToneRegionOp WTOP{10.0f, ToneRegion::WHITE};
     // to_adjust = WTOP.Apply(to_adjust);
 
@@ -206,6 +207,7 @@ TEST_F(OperationTests, ACESWorkflowTest2) {
     // // ClarityOp CLRT{20.0f};
     // // to_adjust = CLRT.Apply(to_adjust);
     // // EASY_END_BLOCK;
+    EASY_END_BLOCK;
 
     EASY_BLOCK("LMT");
     std::filesystem::path look_path{
@@ -224,15 +226,97 @@ TEST_F(OperationTests, ACESWorkflowTest2) {
     EASY_END_BLOCK;
 
     EASY_BLOCK("Saving");
+    EASY_BLOCK("To 709");
     cv::Mat to_save_rec709;
     to_display.GetCPUData().convertTo(to_save_rec709, CV_16UC3, 65535.0f);
+    EASY_END_BLOCK;
+    EASY_BLOCK("Save to Disk");
     cv::cvtColor(to_save_rec709, to_save_rec709, cv::COLOR_RGB2BGR);
     cv::imwrite(std::format("D:\\Projects\\pu-erh_lab\\pu-erh_lab\\tests\\resources\\sample_"
                             "images\\my_pipeline\\{}.tiff",
                             conv::ToBytes(img->_image_name)),
                 to_save_rec709);
     EASY_END_BLOCK;
+    EASY_END_BLOCK;
   }
   profiler::dumpBlocksToFile(
       "D:\\Projects\\pu-erh_lab\\pu-erh_lab\\tests\\resources\\temp_folder\\test_profile.prof");
+}
+
+TEST_F(OperationTests, BatchProcessTest) {
+  {
+    EASY_PROFILER_ENABLE;
+    SleeveManager manager{db_path_};
+    ImageLoader   image_loader(128, 8, 0);
+    image_path_t  path =
+        L"D:\\Projects\\pu-erh_lab\\pu-erh_lab\\tests\\resources\\sample_"
+        L"images\\real_test";
+    std::vector<image_path_t> imgs;
+    for (const auto& img : std::filesystem::directory_iterator(path)) {
+      if (!img.is_directory()) imgs.push_back(img.path());
+    }
+
+    manager.LoadToPath(imgs, L"");
+
+    // Read image data
+    ThreadPool thread_pool{8};
+    auto       img_pool = manager.GetPool()->GetPool();
+    for (auto& pair : img_pool) {
+      auto task = [pair, img_pool]() {
+        auto            img = pair.second;
+        RawDecoder      decoder;
+        std::ifstream   file(img->_image_path, std::ios::binary | std::ios::ate);
+        std::streamsize fileSize = file.tellg();
+        file.seekg(0, std::ios::beg);
+        std::vector<char> buffer(fileSize);
+        if (!file.read(buffer.data(), fileSize)) {
+          FAIL();
+        }
+        file.close();
+
+        decoder.Decode(std::move(buffer), img);
+
+        ImageBuffer            source{img->GetImageData()};
+        OCIO_ACES_Transform_Op IDT{
+            "", "ACEScct"};
+        ImageBuffer    to_adjust = IDT.Apply(source);
+
+        ToneRegionOp   TONE{45.0f, ToneRegion::SHADOWS};
+        to_adjust = TONE.Apply(to_adjust);
+
+        ToneRegionOp HIGH{-70.0f, ToneRegion::WHITE};
+        to_adjust = HIGH.Apply(to_adjust);
+
+        ContrastOp CONT{15.0f};
+        to_adjust = CONT.Apply(to_adjust);
+
+
+        ClarityOp CRT{25.0f};
+        to_adjust = CRT.Apply(to_adjust);
+
+        EASY_BLOCK("LMT");
+        std::filesystem::path look_path{
+            "D:\\Projects\\pu-erh_lab\\pu-erh_lab\\src\\config\\LUTs\\ACES CCT 2383 D65.cube"};
+        OCIO_ACES_Transform_Op LMT{look_path};
+        to_adjust = LMT.ApplyLMT(to_adjust);
+        OCIO_ACES_Transform_Op pre_RRT{"ACEScct", ""};
+        ImageBuffer            intermediate = pre_RRT.Apply(to_adjust);
+        OCIO_ACES_Transform_Op ODT("", "Camera Rec.709");
+        ImageBuffer            to_display = ODT.Apply(intermediate);
+
+        cv::Mat                to_save_rec709;
+        to_display.GetCPUData().convertTo(to_save_rec709, CV_16UC3, 65535.0f);
+        cv::cvtColor(to_save_rec709, to_save_rec709, cv::COLOR_RGB2BGR);
+        cv::imwrite(std::format("D:\\Projects\\pu-erh_lab\\pu-erh_lab\\tests\\resources\\sample_"
+                                "images\\my_pipeline\\batch_results\\{}.tiff",
+                                conv::ToBytes(img->_image_name)),
+                    to_save_rec709);
+
+        img->ClearData();
+        to_save_rec709.release();
+        to_adjust.ReleaseCPUData();
+      };
+      thread_pool.Submit(task);
+    }
+  }
 }

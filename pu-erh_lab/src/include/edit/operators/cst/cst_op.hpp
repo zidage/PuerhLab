@@ -11,6 +11,10 @@
 
 namespace puerhlab {
 namespace OCIO = OCIO_NAMESPACE;
+struct OCIO_ACES_Transform_Op_Register {
+  OCIO_ACES_Transform_Op_Register();
+};
+
 class OCIO_ACES_Transform_Op : public OperatorBase<OCIO_ACES_Transform_Op> {
  private:
   std::string                          _input_transform;
@@ -21,6 +25,7 @@ class OCIO_ACES_Transform_Op : public OperatorBase<OCIO_ACES_Transform_Op> {
   OCIO::ConstConfigRcPtr               config;
 
  public:
+  static constexpr PriorityLevel    _priority_level = 0;
   static constexpr std::string_view _canonical_name = "OCIO";
   static constexpr std::string_view _script_name    = "ocio";
   OCIO_ACES_Transform_Op()                          = delete;
@@ -28,6 +33,7 @@ class OCIO_ACES_Transform_Op : public OperatorBase<OCIO_ACES_Transform_Op> {
   OCIO_ACES_Transform_Op(const std::string& input, const std::string& output,
                          const char* config_path);
   OCIO_ACES_Transform_Op(std::filesystem::path& lmt_path);
+  OCIO_ACES_Transform_Op(const nlohmann::json& params);
 
   auto Apply(ImageBuffer& input) -> ImageBuffer override;
   auto ApplyLMT(ImageBuffer& input) -> ImageBuffer;

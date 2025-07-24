@@ -1,17 +1,29 @@
 #include "edit/operators/color/saturation_op.hpp"
 
+#include <memory>
 #include <opencv2/core/mat.hpp>
 #include <utility>
 
 #include "edit/operators/color/conversion/Oklab_cvt.hpp"
+#include "edit/operators/operator_factory.hpp"
 #include "json.hpp"
 
 namespace puerhlab {
+SaturationOpRegster::SaturationOpRegster() {
+  OperatorFactory::Instance().Register(OperatorType::SATURATION, [](const nlohmann::json& params) {
+    return std::make_shared<SaturationOp>(params);
+  });
+}
+
+static SaturationOpRegster saturation_op_reg;
+
 SaturationOp::SaturationOp() : _saturation_offset(0) { ComputeScale(); }
 
 SaturationOp::SaturationOp(float saturation_offset) : _saturation_offset(saturation_offset) {
   ComputeScale();
 }
+
+SaturationOp::SaturationOp(const nlohmann::json& params) { SetParams(params); }
 
 /**
  * @brief Compute the scale from the offset

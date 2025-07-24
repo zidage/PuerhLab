@@ -6,11 +6,22 @@
 #include <opencv2/opencv.hpp>
 #include <stdexcept>
 
+#include "edit/operators/operator_factory.hpp"
 #include "image/image_buffer.hpp"
 
 namespace puerhlab {
+ColorWheelOpRegister::ColorWheelOpRegister() {
+  OperatorFactory::Instance().Register(OperatorType::COLOR_WHEEL, [](const nlohmann::json& params) {
+    return std::make_shared<ColorWheelOp>(params);
+  });
+}
+
+static ColorWheelOpRegister _color_wheel_op_reg;
+
 ColorWheelOp::ColorWheelOp()
     : _lift(), _gamma(), _gain(), _lift_crossover(0.25f), _gain_crossover(0.75f) {}
+
+ColorWheelOp::ColorWheelOp(const nlohmann::json& params) { SetParams(params); }
 
 void Clamp(cv::Mat& input) {
   cv::threshold(input, input, 1.0f, 1.0f, cv::THRESH_TRUNC);
@@ -48,7 +59,7 @@ auto ColorWheelOp::Apply(ImageBuffer& input) -> ImageBuffer {
 
   img.forEach<cv::Vec3f>([&](cv::Vec3f& pixel, const int* pos) {
     float     L              = lightness.at<float>(pos[0], pos[1]);
-    float     lift_w         = std::clamp(bell(L, 0.0f, 0.30f), 0.0f, 1.0f);
+    float     lift_w         = std::clamp(bell(L, 0.0f, 0.45f), 0.0f, 1.0f);
     float     gamma_w        = 1.0f;
     float     gain_w         = std::clamp(bell(L, 1.0f, 0.45f), 0.0f, 1.0f);
 

@@ -3,6 +3,10 @@
 #include "edit/operators/op_base.hpp"
 
 namespace puerhlab {
+struct SaturationOpRegster {
+  SaturationOpRegster();
+};
+
 class SaturationOp : public OperatorBase<SaturationOp> {
  private:
   /**
@@ -20,10 +24,12 @@ class SaturationOp : public OperatorBase<SaturationOp> {
   void  ComputeScale();
 
  public:
+  static constexpr PriorityLevel    _priority_level = 6;
   static constexpr std::string_view _canonical_name = "Saturation";
   static constexpr std::string_view _script_name    = "saturation";
   SaturationOp();
   SaturationOp(float saturation_offset);
+  SaturationOp(const nlohmann::json& params);
 
   auto Apply(ImageBuffer& input) -> ImageBuffer override;
   auto GetParams() const -> nlohmann::json override;

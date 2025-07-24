@@ -4,15 +4,26 @@
 #include <opencv2/core/base.hpp>
 #include <opencv2/opencv.hpp>
 
+#include "edit/operators/operator_factory.hpp"
 #include "image/image_buffer.hpp"
 #include "json.hpp"
 
 namespace puerhlab {
+SharpenOpRegister::SharpenOpRegister() {
+  OperatorFactory::Instance().Register(OperatorType::SHARPEN, [](const nlohmann::json& params) {
+    return std::make_shared<SharpenOp>(params);
+  });
+}
+
+static SharpenOpRegister _sharpen_op_reg;
+
 SharpenOp::SharpenOp(float offset, float radius, float threshold)
     : _offset(offset), _radius(radius), _threshold(threshold) {
   ComputeScale();
   _threshold /= 100.0f;
 }
+
+SharpenOp::SharpenOp(const nlohmann::json& params) { SetParams(params); }
 
 void SharpenOp::ComputeScale() { _scale = _offset / 100.0f; }
 

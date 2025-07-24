@@ -7,16 +7,27 @@
 #include <opencv2/opencv.hpp>
 #include <vector>
 
+#include "edit/operators/operator_factory.hpp"
 #include "image/image_buffer.hpp"
 #include "json.hpp"
 
 namespace puerhlab {
+HLSOpRegister::HLSOpRegister() {
+  OperatorFactory::Instance().Register(OperatorType::HLS, [](const nlohmann::json& params) {
+    return std::make_shared<HLSOp>(params);
+  });
+}
+
+static HLSOpRegister _hls_op_reg;
+
 HLSOp::HLSOp()
     : _target_HLS(0, 0.5f, 1.0f),
       _HLS_adjustment(0.0f, 0.0f, 0.0f),
       _hue_range(15.0f),
       _lightness_range(0.1f),
       _saturation_range(0.1f) {}
+
+HLSOp::HLSOp(const nlohmann::json& params) { SetParams(params); }
 
 void HLSOp::SetTargetColor(const cv::Vec3f& bgr_color_normalized) {
   cv::Mat bgr_mat(1, 1, CV_32FC3);

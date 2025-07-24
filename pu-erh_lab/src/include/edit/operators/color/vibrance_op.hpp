@@ -3,6 +3,10 @@
 #include "edit/operators/op_base.hpp"
 
 namespace puerhlab {
+struct VibranceOpRegister {
+  VibranceOpRegister();
+};
+
 class VibranceOp : public OperatorBase<VibranceOp> {
  private:
   /**
@@ -14,10 +18,12 @@ class VibranceOp : public OperatorBase<VibranceOp> {
   auto  ComputeScale(float chroma) -> float;
 
  public:
+  static constexpr PriorityLevel    _priority_level = 7;
   static constexpr std::string_view _canonical_name = "Vibrance";
   static constexpr std::string_view _script_name    = "vibrance";
   VibranceOp();
   VibranceOp(float vibrance_offset);
+  VibranceOp(const nlohmann::json& params);
 
   auto Apply(ImageBuffer& input) -> ImageBuffer override;
   auto GetParams() const -> nlohmann::json override;
