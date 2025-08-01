@@ -82,7 +82,7 @@ auto HLSOp::Apply(ImageBuffer& input) -> ImageBuffer {
   cv::split(HLS_img, HLS_channels);
 
   cv::Mat hue_adjusted = HLS_channels[0] + adj_h.mul(mask);
-  hue_adjusted.forEach<float>([](float& p, const int* pos) -> void {
+  hue_adjusted.forEach<float>([](float& p, const int*) -> void {
     p = std::fmod(p, 360.0f);
     if (p < 0) p += 360.0f;
   });

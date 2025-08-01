@@ -27,9 +27,10 @@ class TintOp : public OperatorBase<TintOp> {
   float _scale;
 
  public:
-  static constexpr PriorityLevel    _priority_level = 4;
-  static constexpr std::string_view _canonical_name = "Tint";
-  static constexpr std::string_view _script_name    = "tint";
+  static constexpr PriorityLevel     _priority_level    = 4;
+  static constexpr PipelineStageName _affiliation_stage = PipelineStageName::Color_Adjustment;
+  static constexpr std::string_view  _canonical_name    = "Tint";
+  static constexpr std::string_view  _script_name       = "tint";
   TintOp();
   TintOp(float tint_offset);
   TintOp(const nlohmann::json& params);

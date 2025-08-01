@@ -45,10 +45,11 @@ class ToneRegionOp : public OperatorBase<ToneRegionOp> {
   void        ComputeScale();
 
  public:
-  static constexpr PriorityLevel    _priority_level = 1;
-  static constexpr std::string_view _canonical_name = "ToneRegion";
-  static constexpr std::string_view _script_name    = "tone_region";
-  ToneRegionOp()                                    = delete;
+  static constexpr PriorityLevel     _priority_level    = 1;
+  static constexpr PipelineStageName _affiliation_stage = PipelineStageName::Basic_Adjustment;
+  static constexpr std::string_view  _canonical_name    = "ToneRegion";
+  static constexpr std::string_view  _script_name       = "tone_region";
+  ToneRegionOp()                                        = delete;
   ToneRegionOp(ToneRegion region);
   ToneRegionOp(float offset, ToneRegion region);
   ToneRegionOp(const nlohmann::json& params);

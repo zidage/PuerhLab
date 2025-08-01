@@ -21,9 +21,10 @@ class HLSOp : public OperatorBase<HLSOp> {
   float     _saturation_range;
 
  public:
-  static constexpr PriorityLevel    _priority_level = 5;
-  static constexpr std::string_view _canonical_name = "HLS";
-  static constexpr std::string_view _script_name    = "HLS";
+  static constexpr PriorityLevel     _priority_level    = 5;
+  static constexpr PipelineStageName _affiliation_stage = PipelineStageName::Color_Adjustment;
+  static constexpr std::string_view  _canonical_name    = "HLS";
+  static constexpr std::string_view  _script_name       = "HLS";
 
   HLSOp();
   HLSOp(const nlohmann::json& params);

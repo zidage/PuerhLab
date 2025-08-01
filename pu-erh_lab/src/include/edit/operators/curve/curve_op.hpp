@@ -20,10 +20,11 @@ class CurveOp : public OperatorBase<CurveOp> {
   auto                     EvaluateCurve(float x) const -> float;
 
  public:
-  static constexpr PriorityLevel    _priority_level = 1;
-  static constexpr std::string_view _canonical_name = "Curve";
-  static constexpr std::string_view _script_name    = "curve";
-  CurveOp()                                         = delete;
+  static constexpr PriorityLevel     _priority_level    = 1;
+  static constexpr PipelineStageName _affiliation_stage = PipelineStageName::Basic_Adjustment;
+  static constexpr std::string_view  _canonical_name    = "Curve";
+  static constexpr std::string_view  _script_name       = "curve";
+  CurveOp()                                             = delete;
   CurveOp(const std::vector<cv::Point2f>& control_points);
   CurveOp(const nlohmann::json& params);
 

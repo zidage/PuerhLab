@@ -29,9 +29,10 @@ class ColorWheelOp : public OperatorBase<ColorWheelOp> {
   float        _gain_crossover;
 
  public:
-  static constexpr PriorityLevel    _priority_level = 5;
-  static constexpr std::string_view _canonical_name = "Color Wheel";
-  static constexpr std::string_view _script_name    = "color_wheel";
+  static constexpr PriorityLevel     _priority_level    = 5;
+  static constexpr PipelineStageName _affiliation_stage = PipelineStageName::Color_Adjustment;
+  static constexpr std::string_view  _canonical_name    = "Color Wheel";
+  static constexpr std::string_view  _script_name       = "color_wheel";
 
   ColorWheelOp();
   ColorWheelOp(const nlohmann::json& params);

@@ -7,6 +7,15 @@
 #include "type/type.hpp"
 
 namespace puerhlab {
+enum class PipelineStageName : int {
+  To_WorkingSpace     = 0,
+  Basic_Adjustment    = 1,
+  Color_Adjustment    = 2,
+  Detail_Adjustment   = 3,
+  Output_Transform    = 4,
+  Geometry_Adjustment = 5,
+  Stage_Count         = 6,
+};
 class IOperatorBase {
  public:
   /**
@@ -55,5 +64,7 @@ class OperatorBase : public IOperatorBase {
   virtual auto GetScriptName() const -> std::string { return std::string(Derived::_script_name); }
 
   virtual auto GetPriorityLevel() const -> PriorityLevel { return Derived::_priority_level; }
+
+  virtual auto GetStage() const -> PipelineStageName { return Derived::_affiliation_stage; }
 };
 };  // namespace puerhlab

@@ -72,7 +72,7 @@ auto CurveOp::EvaluateCurve(float x) const -> float {
 auto CurveOp::Apply(ImageBuffer& input) -> ImageBuffer {
   auto& img = input.GetCPUData();
 
-  img.forEach<cv::Vec3f>([&](cv::Vec3f& pixel, const int* pos) {
+  img.forEach<cv::Vec3f>([&](cv::Vec3f& pixel, const int*) {
     float lum     = 0.2126f * pixel[2] + 0.7152f * pixel[1] + 0.0722f * pixel[0];
     float new_lum = EvaluateCurve(lum);
     float ratio   = (lum > 1e-5f) ? new_lum / lum : 0.0f;

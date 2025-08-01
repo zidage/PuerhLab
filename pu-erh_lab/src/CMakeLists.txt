@@ -132,3 +132,9 @@ add_library(Operators
 )
 target_include_directories(Operators PUBLIC include)
 target_link_libraries(Operators PUBLIC Image SleeveFS JSON OpenColorIO)
+
+add_library(EditPipeline
+    edit/pipeline/pipeline_cpu.cpp
+    edit/pipeline/pipeline_utils.cpp)
+target_include_directories(EditPipeline PUBLIC include)
+target_link_libraries(EditPipeline PUBLIC SleeveFS SleeveView xxHash)

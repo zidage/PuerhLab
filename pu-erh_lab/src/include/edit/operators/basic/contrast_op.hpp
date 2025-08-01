@@ -25,9 +25,10 @@ class ContrastOp : public OperatorBase<ContrastOp> {
   float _scale;
 
  public:
-  static constexpr PriorityLevel    _priority_level = 3;
-  static constexpr std::string_view _canonical_name = "Contrast";
-  static constexpr std::string_view _script_name    = "contrast";
+  static constexpr PriorityLevel     _priority_level    = 3;
+  static constexpr PipelineStageName _affiliation_stage = PipelineStageName::Basic_Adjustment;
+  static constexpr std::string_view  _canonical_name    = "Contrast";
+  static constexpr std::string_view  _script_name       = "contrast";
   ContrastOp();
   ContrastOp(float contrast_offset);
   ContrastOp(const nlohmann::json& params);

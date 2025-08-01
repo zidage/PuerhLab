@@ -44,6 +44,7 @@ auto ToneRegionOp::RegionToString(ToneRegion region) -> std::string {
       return "highlights";
       break;
   }
+  return "undefined";
 }
 
 /**

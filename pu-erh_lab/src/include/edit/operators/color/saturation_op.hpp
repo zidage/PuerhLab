@@ -24,9 +24,10 @@ class SaturationOp : public OperatorBase<SaturationOp> {
   void  ComputeScale();
 
  public:
-  static constexpr PriorityLevel    _priority_level = 6;
-  static constexpr std::string_view _canonical_name = "Saturation";
-  static constexpr std::string_view _script_name    = "saturation";
+  static constexpr PriorityLevel     _priority_level    = 6;
+  static constexpr PipelineStageName _affiliation_stage = PipelineStageName::Color_Adjustment;
+  static constexpr std::string_view  _canonical_name    = "Saturation";
+  static constexpr std::string_view  _script_name       = "saturation";
   SaturationOp();
   SaturationOp(float saturation_offset);
   SaturationOp(const nlohmann::json& params);

@@ -284,11 +284,10 @@ TEST_F(OperationTests, BatchProcessTest) {
         ToneRegionOp   TONE{45.0f, ToneRegion::SHADOWS};
         to_adjust = TONE.Apply(to_adjust);
 
-        ToneRegionOp HIGH{-70.0f, ToneRegion::WHITE};
+        ToneRegionOp HIGH{-30.0f, ToneRegion::WHITE};
         to_adjust = HIGH.Apply(to_adjust);
 
-        ContrastOp CONT{15.0f};
-        to_adjust = CONT.Apply(to_adjust);
+        ContrastOp CONT{35.0f};
 
 
         ClarityOp CRT{25.0f};

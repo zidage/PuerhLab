@@ -36,11 +36,12 @@ class SharpenOp : public OperatorBase<SharpenOp> {
   void  ComputeScale();
 
  public:
-  static constexpr PriorityLevel    _priority_level = 8;
-  static constexpr std::string_view _canonical_name = "Sharpen";
-  static constexpr std::string_view _script_name    = "sharpen";
+  static constexpr PriorityLevel     _priority_level    = 8;
+  static constexpr PipelineStageName _affiliation_stage = PipelineStageName::Detail_Adjustment;
+  static constexpr std::string_view  _canonical_name    = "Sharpen";
+  static constexpr std::string_view  _script_name       = "sharpen";
 
-  SharpenOp()                                       = default;
+  SharpenOp()                                           = default;
   SharpenOp(float offset, float radius, float threshold);
   SharpenOp(const nlohmann::json& params);
 

@@ -30,9 +30,10 @@ class ClarityOp : public OperatorBase<ClarityOp> {
   void         CreateMidtoneMask(cv::Mat& input, cv::Mat& mask);
 
  public:
-  static constexpr PriorityLevel    _priority_level = 8;
-  static constexpr std::string_view _canonical_name = "Clarity";
-  static constexpr std::string_view _script_name    = "clarity";
+  static constexpr PriorityLevel     _priority_level    = 8;
+  static constexpr PipelineStageName _affiliation_stage = PipelineStageName::Detail_Adjustment;
+  static constexpr std::string_view  _canonical_name    = "Clarity";
+  static constexpr std::string_view  _script_name       = "clarity";
   ClarityOp();
   ClarityOp(float clarity_offset);
   ClarityOp(const nlohmann::json& params);
