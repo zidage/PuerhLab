@@ -4,10 +4,6 @@
 #include "image/image_buffer.hpp"
 
 namespace puerhlab {
-struct SharpenOpRegister {
-  SharpenOpRegister();
-};
-
 class SharpenOp : public OperatorBase<SharpenOp> {
  private:
   /**

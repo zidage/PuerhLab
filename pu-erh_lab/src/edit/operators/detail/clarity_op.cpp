@@ -13,15 +13,8 @@
 #include "edit/operators/operator_factory.hpp"
 
 namespace puerhlab {
-ClarityOpRegister::ClarityOpRegister() {
-  OperatorFactory::Instance().Register(OperatorType::CLARITY, [](const nlohmann::json& params) {
-    return std::make_shared<CurveOp>(params);
-  });
-}
 
-static ClarityOpRegister _clarity_reg;
-
-float                    ClarityOp::_usm_radius = 5.0f;
+float ClarityOp::_usm_radius = 5.0f;
 
 ClarityOp::ClarityOp() : _clarity_offset(0) { _scale = 1.0f; }
 ClarityOp::ClarityOp(float clarity_offset) : _clarity_offset(clarity_offset) {

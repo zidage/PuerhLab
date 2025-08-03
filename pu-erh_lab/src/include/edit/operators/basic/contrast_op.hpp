@@ -6,9 +6,6 @@
 #include "edit/operators/op_base.hpp"
 
 namespace puerhlab {
-struct ContrastOpRegister {
-  ContrastOpRegister();
-};
 
 class ContrastOp : public OperatorBase<ContrastOp> {
  private:

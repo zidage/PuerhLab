@@ -10,13 +10,6 @@
 #include "json.hpp"
 
 namespace puerhlab {
-TintOpRegister::TintOpRegister() {
-  OperatorFactory::Instance().Register(OperatorType::TINT, [](const nlohmann::json& params) {
-    return std::make_shared<TintOp>(params);
-  });
-}
-
-static TintOpRegister tint_op_reg;
 
 TintOp::TintOp() : _tint_offset(0.0f) { _scale = 0.0f; }
 

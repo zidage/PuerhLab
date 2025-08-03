@@ -10,13 +10,6 @@
 #include "json.hpp"
 
 namespace puerhlab {
-ToneRegionOpRegister::ToneRegionOpRegister() {
-  OperatorFactory::Instance().Register(OperatorType::TONE_REGION, [](const nlohmann::json& params) {
-    return std::make_shared<ToneRegionOp>(params);
-  });
-}
-
-static ToneRegionOpRegister _tone_region_reg;
 
 ToneRegionOp::ToneRegionOp(ToneRegion region) : _offset(0.0f), _region(region) { ComputeScale(); }
 

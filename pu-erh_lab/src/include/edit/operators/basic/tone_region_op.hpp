@@ -6,9 +6,7 @@
 #include "edit/operators/op_base.hpp"
 
 namespace puerhlab {
-struct ToneRegionOpRegister {
-  ToneRegionOpRegister();
-};
+
 /**
  * @brief Tone regions: black level, white level, shadows and highlights
  *

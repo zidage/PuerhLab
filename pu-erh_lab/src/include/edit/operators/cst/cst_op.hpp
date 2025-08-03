@@ -11,10 +11,6 @@
 
 namespace puerhlab {
 namespace OCIO = OCIO_NAMESPACE;
-struct OCIO_ACES_Transform_Op_Register {
-  OCIO_ACES_Transform_Op_Register();
-};
-
 class OCIO_ACES_Transform_Op : public OperatorBase<OCIO_ACES_Transform_Op> {
  private:
   std::string                          _input_transform;

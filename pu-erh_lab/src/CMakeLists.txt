@@ -129,6 +129,7 @@ add_library(Operators
     edit/operators/wheel/color_wheel_op.cpp
     edit/operators/curve/curve_op.cpp
     edit/operators/cst/cst_op.cpp
+    edit/operators/operator_registeration.cpp
 )
 target_include_directories(Operators PUBLIC include)
 target_link_libraries(Operators PUBLIC Image SleeveFS JSON OpenColorIO)
@@ -137,4 +138,4 @@ add_library(EditPipeline
     edit/pipeline/pipeline_cpu.cpp
     edit/pipeline/pipeline_utils.cpp)
 target_include_directories(EditPipeline PUBLIC include)
-target_link_libraries(EditPipeline PUBLIC SleeveFS SleeveView xxHash)
+target_link_libraries(EditPipeline PUBLIC Image Operators)

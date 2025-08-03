@@ -12,13 +12,6 @@
 #include "json.hpp"
 
 namespace puerhlab {
-HLSOpRegister::HLSOpRegister() {
-  OperatorFactory::Instance().Register(OperatorType::HLS, [](const nlohmann::json& params) {
-    return std::make_shared<HLSOp>(params);
-  });
-}
-
-static HLSOpRegister _hls_op_reg;
 
 HLSOp::HLSOp()
     : _target_HLS(0, 0.5f, 1.0f),

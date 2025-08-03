@@ -6,10 +6,6 @@
 #include "edit/operators/op_base.hpp"
 
 namespace puerhlab {
-struct CurveOpRegister {
-  CurveOpRegister();
-};
-
 class CurveOp : public OperatorBase<CurveOp> {
  private:
   std::vector<cv::Point2f> _ctrl_pts;

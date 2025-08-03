@@ -6,9 +6,6 @@
 #include "type/type.hpp"
 
 namespace puerhlab {
-struct HLSOpRegister {
-  HLSOpRegister();
-};
 
 class HLSOp : public OperatorBase<HLSOp> {
  private:

@@ -15,6 +15,7 @@ class CPUPipeline : public Pipeline {
 
  public:
   CPUPipeline();
+  CPUPipeline(const CPUPipeline& other) = default;
   auto GetStage(PipelineStageName stage) -> PipelineStage& override;
   auto Apply(ImageBuffer& input) -> ImageBuffer override;
 };

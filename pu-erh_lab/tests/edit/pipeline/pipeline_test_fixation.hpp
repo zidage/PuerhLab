@@ -4,9 +4,10 @@
 
 #include <exiv2/exiv2.hpp>
 #include <filesystem>
+#include "edit/operators/operator_registeration.hpp"
 
 namespace puerhlab {
-class OperationTests : public ::testing::Test {
+class PipelineTests : public ::testing::Test {
  protected:
   std::filesystem::path db_path_;
 
@@ -19,6 +20,7 @@ class OperationTests : public ::testing::Test {
     if (std::filesystem::exists(db_path_)) {
       std::filesystem::remove(db_path_);
     }
+    RegisterAllOperators();
   }
 
   // Run before any unit test runs

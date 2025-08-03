@@ -3,10 +3,6 @@
 #include "edit/operators/op_base.hpp"
 
 namespace puerhlab {
-struct SaturationOpRegster {
-  SaturationOpRegster();
-};
-
 class SaturationOp : public OperatorBase<SaturationOp> {
  private:
   /**

@@ -7,13 +7,7 @@
 #include "image/image_buffer.hpp"
 
 namespace puerhlab {
-ExposureOpRegister::ExposureOpRegister() {
-  OperatorFactory::Instance().Register(OperatorType::EXPOSURE, [](const nlohmann::json& params) {
-    return std::make_shared<ExposureOp>(params);
-  });
-}
 
-static ExposureOpRegister _ev_reg;
 /**
  * @brief Construct a new Exposure Op:: Exposure Op object
  *

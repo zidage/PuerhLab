@@ -4,10 +4,6 @@
 #include "image/image_buffer.hpp"
 
 namespace puerhlab {
-struct ClarityOpRegister {
-  ClarityOpRegister();
-};
-
 class ClarityOp : public OperatorBase<ClarityOp> {
  private:
   /**

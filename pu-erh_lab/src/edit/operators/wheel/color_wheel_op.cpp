@@ -10,13 +10,6 @@
 #include "image/image_buffer.hpp"
 
 namespace puerhlab {
-ColorWheelOpRegister::ColorWheelOpRegister() {
-  OperatorFactory::Instance().Register(OperatorType::COLOR_WHEEL, [](const nlohmann::json& params) {
-    return std::make_shared<ColorWheelOp>(params);
-  });
-}
-
-static ColorWheelOpRegister _color_wheel_op_reg;
 
 ColorWheelOp::ColorWheelOp()
     : _lift(), _gamma(), _gain(), _lift_crossover(0.25f), _gain_crossover(0.75f) {}

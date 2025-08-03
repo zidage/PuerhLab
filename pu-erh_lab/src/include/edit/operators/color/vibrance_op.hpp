@@ -3,10 +3,6 @@
 #include "edit/operators/op_base.hpp"
 
 namespace puerhlab {
-struct VibranceOpRegister {
-  VibranceOpRegister();
-};
-
 class VibranceOp : public OperatorBase<VibranceOp> {
  private:
   /**

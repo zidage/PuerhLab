@@ -6,7 +6,7 @@
 namespace puerhlab {
 class Pipeline {
  public:
-  virtual auto GetStage(PipelineStageName stage) -> PipelineStage&;
-  virtual auto Apply(ImageBuffer& input) -> ImageBuffer;
+  virtual auto GetStage(PipelineStageName stage) -> PipelineStage& = 0;
+  virtual auto Apply(ImageBuffer& input) -> ImageBuffer            = 0;
 };
 }  // namespace puerhlab

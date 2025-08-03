@@ -8,13 +8,6 @@
 #include "json.hpp"
 
 namespace puerhlab {
-CurveOpRegister::CurveOpRegister() {
-  OperatorFactory::Instance().Register(OperatorType::CURVE, [](const nlohmann::json& params) {
-    return std::make_shared<CurveOp>(params);
-  });
-}
-
-static CurveOpRegister _curve_op_reg;
 
 CurveOp::CurveOp(const std::vector<cv::Point2f>& control_points) { SetCtrlPts(control_points); }
 

@@ -6,9 +6,6 @@
 #include "edit/operators/op_base.hpp"
 
 namespace puerhlab {
-struct TintOpRegister {
-  TintOpRegister();
-};
 
 class TintOp : public OperatorBase<TintOp> {
  private:

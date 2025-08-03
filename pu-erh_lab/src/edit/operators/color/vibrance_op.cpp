@@ -9,13 +9,6 @@
 #include "json.hpp"
 
 namespace puerhlab {
-VibranceOpRegister::VibranceOpRegister() {
-  OperatorFactory::Instance().Register(OperatorType::VIBRANCE, [](const nlohmann::json& params) {
-    return std::make_shared<VibranceOp>(params);
-  });
-}
-
-static VibranceOpRegister vibrance_op_reg;
 
 VibranceOp::VibranceOp() : _vibrance_offset(0) {}
 

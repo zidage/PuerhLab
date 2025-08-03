@@ -7,9 +7,7 @@
 #include "type/type.hpp"
 
 namespace puerhlab {
-struct ExposureOpRegister {
-  ExposureOpRegister();
-};
+
 class ExposureOp : public OperatorBase<ExposureOp> {
  private:
   /**

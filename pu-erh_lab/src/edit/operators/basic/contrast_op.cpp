@@ -7,13 +7,7 @@
 #include "edit/operators/operator_factory.hpp"
 
 namespace puerhlab {
-ContrastOpRegister::ContrastOpRegister() {
-  OperatorFactory::Instance().Register(OperatorType::CONTRAST, [](const nlohmann::json& params) {
-    return std::make_shared<ContrastOp>(params);
-  });
-}
 
-static ContrastOpRegister _contrast_reg;
 /**
  * @brief Default construct a new Contrast Op:: Contrast Op object
  *

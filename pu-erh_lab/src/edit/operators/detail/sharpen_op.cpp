@@ -9,13 +9,6 @@
 #include "json.hpp"
 
 namespace puerhlab {
-SharpenOpRegister::SharpenOpRegister() {
-  OperatorFactory::Instance().Register(OperatorType::SHARPEN, [](const nlohmann::json& params) {
-    return std::make_shared<SharpenOp>(params);
-  });
-}
-
-static SharpenOpRegister _sharpen_op_reg;
 
 SharpenOp::SharpenOp(float offset, float radius, float threshold)
     : _offset(offset), _radius(radius), _threshold(threshold) {

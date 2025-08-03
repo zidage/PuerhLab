@@ -1,5 +1,6 @@
 #include "edit/pipeline/pipeline_cpu.hpp"
 
+#include "edit/pipeline/pipeline_utils.hpp"
 #include "image/image_buffer.hpp"
 
 namespace puerhlab {
@@ -10,6 +11,10 @@ CPUPipeline::CPUPipeline()
                {PipelineStageName::Detail_Adjustment, false},
                {PipelineStageName::Output_Transform, false},
                {PipelineStageName::Geometry_Adjustment, false}}) {}
+
+auto CPUPipeline::GetStage(PipelineStageName stage) -> PipelineStage& {
+  return _stages[static_cast<int>(stage)];
+}
 
 auto CPUPipeline::Apply(ImageBuffer& input) -> ImageBuffer {
   auto output = ImageBuffer{input.GetCPUData().clone()};

@@ -14,13 +14,6 @@
 #include "utils/string/convert.hpp"
 
 namespace puerhlab {
-OCIO_ACES_Transform_Op_Register::OCIO_ACES_Transform_Op_Register() {
-  OperatorFactory::Instance().Register(OperatorType::CST, [](const nlohmann::json& params) {
-    return std::make_shared<OCIO_ACES_Transform_Op>(params);
-  });
-}
-
-static OCIO_ACES_Transform_Op_Register cst_reg;
 
 OCIO_ACES_Transform_Op::OCIO_ACES_Transform_Op(const std::string& input, const std::string& output)
     : _input_transform(input), _output_transform(output) {

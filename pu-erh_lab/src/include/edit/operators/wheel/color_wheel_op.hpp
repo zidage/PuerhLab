@@ -6,10 +6,6 @@
 #include "image/image_buffer.hpp"
 
 namespace puerhlab {
-struct ColorWheelOpRegister {
-  ColorWheelOpRegister();
-};
-
 class ColorWheelOp : public OperatorBase<ColorWheelOp> {
  public:
   struct WheelControl {

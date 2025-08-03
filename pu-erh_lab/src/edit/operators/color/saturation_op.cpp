@@ -9,13 +9,6 @@
 #include "json.hpp"
 
 namespace puerhlab {
-SaturationOpRegster::SaturationOpRegster() {
-  OperatorFactory::Instance().Register(OperatorType::SATURATION, [](const nlohmann::json& params) {
-    return std::make_shared<SaturationOp>(params);
-  });
-}
-
-static SaturationOpRegster saturation_op_reg;
 
 SaturationOp::SaturationOp() : _saturation_offset(0) { ComputeScale(); }
 
