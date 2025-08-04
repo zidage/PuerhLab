@@ -7,53 +7,35 @@
 
 namespace puerhlab {
 
-/**
- * @brief Tone regions: black level, white level, shadows and highlights
- *
- */
-enum class ToneRegion { BLACK, WHITE, SHADOWS, HIGHLIGHTS };
-class ToneRegionOp : public OperatorBase<ToneRegionOp> {
+template <typename Derived>
+class ToneRegionOp {
  private:
-  /**
-   * @brief A relative number for enhancing or dehancing a specific tone region
-   *
-   */
-  float       _offset;
-  /**
-   * @brief An absolute number to represent the contrast after adjustment
-   *
-   */
-  float       _scale;
-
-  /**
-   * @brief The tone region to adjust
-   *
-   */
-  ToneRegion  _region;
-
-  static auto RegionToString(ToneRegion region) -> std::string;
-  /**
-   * @brief
-   *
-   * @param region_str
-   * @return ToneRegion
-   */
-  static auto StringToRegion(std::string& region_str) -> ToneRegion;
-  auto        ComputeWeight(float luminance) const -> float;
-  void        ComputeScale();
+  auto ComputeOutput(float luminance, float adj) const -> float {
+    return Derived::GetOutput(luminance, adj);
+  }
 
  public:
-  static constexpr PriorityLevel     _priority_level    = 1;
-  static constexpr PipelineStageName _affiliation_stage = PipelineStageName::Basic_Adjustment;
-  static constexpr std::string_view  _canonical_name    = "ToneRegion";
-  static constexpr std::string_view  _script_name       = "tone_region";
-  ToneRegionOp()                                        = delete;
-  ToneRegionOp(ToneRegion region);
-  ToneRegionOp(float offset, ToneRegion region);
-  ToneRegionOp(const nlohmann::json& params);
+  auto Apply(ImageBuffer& input) -> ImageBuffer {
+    float    scale = static_cast<Derived*>(this)->GetScale();
 
-  auto Apply(ImageBuffer& input) -> ImageBuffer override;
-  auto GetParams() const -> nlohmann::json override;
-  void SetParams(const nlohmann::json& params) override;
+    cv::Mat& img   = input.GetCPUData();
+    if (img.depth() != CV_32F) {
+      throw std::runtime_error("Tone region operator: Unsupported image format");
+    }
+
+    img.forEach<cv::Vec3f>([&](cv::Vec3f& pixel, const int*) {
+      float Y        = 0.2126f * pixel[0] + 0.7152f * pixel[1] + 0.0722f * pixel[2];
+      float Y_target = ComputeOutput(Y, scale);
+      float delta    = Y_target - Y;
+      for (int c = 0; c < 3; ++c) {
+        float max_push = 1.0f - pixel[c];
+        float min_push = -pixel[c];
+        float push     = std::clamp(delta, min_push, max_push);
+        pixel[c] += push;
+      }
+    });
+
+    return {std::move(img)};
+  }
 };
 }  // namespace puerhlab

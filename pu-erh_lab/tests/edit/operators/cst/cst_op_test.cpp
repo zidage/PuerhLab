@@ -281,12 +281,6 @@ TEST_F(OperationTests, BatchProcessTest) {
             "", "ACEScct"};
         ImageBuffer    to_adjust = IDT.Apply(source);
 
-        ToneRegionOp   TONE{45.0f, ToneRegion::SHADOWS};
-        to_adjust = TONE.Apply(to_adjust);
-
-        ToneRegionOp HIGH{-30.0f, ToneRegion::WHITE};
-        to_adjust = HIGH.Apply(to_adjust);
-
         ContrastOp CONT{35.0f};
 
 

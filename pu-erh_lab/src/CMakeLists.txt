@@ -118,7 +118,10 @@ add_library(Operators
     edit/operators/operator_factory.cpp
     edit/operators/basic/exposure_op.cpp
     edit/operators/basic/contrast_op.cpp
-    edit/operators/basic/tone_region_op.cpp
+    edit/operators/basic/black_op.cpp
+    edit/operators/basic/highlight_op.cpp
+    edit/operators/basic/shadow_op.cpp
+    edit/operators/basic/white_op.cpp
     edit/operators/color/tint_op.cpp
     edit/operators/color/conversion/Oklab_cvt.cpp
     edit/operators/color/saturation_op.cpp
@@ -129,6 +132,7 @@ add_library(Operators
     edit/operators/wheel/color_wheel_op.cpp
     edit/operators/curve/curve_op.cpp
     edit/operators/cst/cst_op.cpp
+    edit/operators/cst/lmt_op.cpp
     edit/operators/operator_registeration.cpp
 )
 target_include_directories(Operators PUBLIC include)

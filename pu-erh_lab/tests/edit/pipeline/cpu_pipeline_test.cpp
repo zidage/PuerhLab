@@ -1,6 +1,9 @@
+#include <string>
+
 #include "decoders/raw_decoder.hpp"
 #include "edit/operators/detail/clarity_op.hpp"
 #include "edit/operators/op_base.hpp"
+#include "edit/operators/operator_factory.hpp"
 #include "edit/pipeline/pipeline_cpu.hpp"
 #include "pipeline_test_fixation.hpp"
 #include "sleeve/sleeve_manager.hpp"
@@ -12,7 +15,7 @@ TEST_F(PipelineTests, SimpleTest1) {
     SleeveManager manager{db_path_};
     ImageLoader   image_loader(128, 8, 0);
     image_path_t  path =
-        L"D:\\Projects\\pu-erh_lab\\pu-erh_lab\\tests\\resources\\sample_images\\real_test\\light";
+        L"D:\\Projects\\pu-erh_lab\\pu-erh_lab\\tests\\resources\\sample_images\\real_test\\mid";
     std::vector<image_path_t> imgs;
     for (const auto& img : std::filesystem::directory_iterator(path)) {
       if (!img.is_directory()) imgs.push_back(img.path());
@@ -28,24 +31,61 @@ TEST_F(PipelineTests, SimpleTest1) {
     to_ws_params["ocio"] = {{"src", ""}, {"dst", "ACEScct"}};
 
     nlohmann::json exposure_params;
-    exposure_params["exposure"] = 0.15;
+    exposure_params["exposure"] = 0.0;
 
-    nlohmann::json white_params;
-    white_params["tone_region"] = {{"region", "white"}, {"offset", -50}};
+    nlohmann::json highlight_params;
+    highlight_params["highlights"] = -100;
+
+    nlohmann::json shadow_params;
+    shadow_params["shadows"] = 50;
+
+    nlohmann::json color_wheel_params;
+    color_wheel_params["color_wheel"] = {{"lift",
+                                          {{"color_offset.x", 0.0},
+                                           {"color_offset.y", 0.0},
+                                           {"color_offset.z", 0.0},
+                                           {"luminance_offset", 0.0}}},
+                                         {"gamma",
+                                          {{"color_offset.x", 1.0},
+                                           {"color_offset.y", 1.0},
+                                           {"color_offset.z", 1.00},
+                                           {"luminance_offset", 0.0}}},
+                                         {"gain",
+                                          {{"color_offset.x", 1.0},
+                                           {"color_offset.y", 1.0},
+                                           {"color_offset.z", 1.0},
+                                           {"luminance_offset", 0.0}}},
+                                         {"crossovers", {{"lift", 0.2}, {"gain", 0.8}}}};
+
+    nlohmann::json contrast_params;
+    contrast_params["contrast"] = 5.0f;
+    nlohmann::json lmt_params;
+    lmt_params["ocio_lmt"] =
+        "D:\\Projects\\pu-erh_lab\\pu-erh_lab\\src\\config\\LUTs\\ACES CCT 2383 D65.cube";
+
+    nlohmann::json pre_output_params;
+    pre_output_params["ocio"] = {{"src", "ACEScct"}, {"dst", ""}};
 
     nlohmann::json output_params;
-    output_params["ocio"] = {{"src", "ACEScct"}, {"dst", "Camera Rec.709"}};
-
+    output_params["ocio"] = {{"src", ""}, {"dst", "Camera Rec.709"}};
+    
     for (auto& pair : img_pool) {
-      auto task = [pair, img_pool, to_ws_params, white_params, exposure_params,
+      auto task = [pair, img_pool, to_ws_params, color_wheel_params, exposure_params,
+                   highlight_params, shadow_params, contrast_params, lmt_params, pre_output_params,
                    output_params]() mutable {
         CPUPipeline pipeline{};
         auto&       to_ws = pipeline.GetStage(PipelineStageName::To_WorkingSpace);
         to_ws.SetOperator(OperatorType::CST, to_ws_params);
 
         auto& adj = pipeline.GetStage(PipelineStageName::Basic_Adjustment);
-        adj.SetOperator(OperatorType::TONE_REGION, white_params);
-        adj.SetOperator(OperatorType::EXPOSURE, exposure_params);
+        adj.SetOperator(OperatorType::HIGHLIGHTS, highlight_params);
+        adj.SetOperator(OperatorType::SHADOWS, shadow_params);
+        //adj.SetOperator(OperatorType::CONTRAST, contrast_params);
+
+        auto& lmt = pipeline.GetStage(PipelineStageName::Color_Adjustment);
+        lmt.SetOperator(OperatorType::CST, pre_output_params);
+        lmt.SetOperator(OperatorType::LMT, lmt_params);
+        
 
         auto& output_stage = pipeline.GetStage(PipelineStageName::Output_Transform);
         output_stage.SetOperator(OperatorType::CST, output_params);
