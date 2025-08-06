@@ -21,13 +21,16 @@ class BlackOp : public ToneRegionOp<BlackOp>, public OperatorBase<BlackOp> {
   static constexpr PipelineStageName _affiliation_stage = PipelineStageName::Basic_Adjustment;
   static constexpr std::string_view  _canonical_name    = "BLACK";
   static constexpr std::string_view  _script_name       = "black";
+  static constexpr ToneRegion        _tone_region       = ToneRegion::BLACK;
 
   BlackOp()                                             = default;
   BlackOp(float offset);
   BlackOp(const nlohmann::json& params);
 
-  auto Apply(ImageBuffer& input) -> ImageBuffer override;
-  auto GetParams() const -> nlohmann::json override;
-  void SetParams(const nlohmann::json& params) override;
+  static void GetMask(cv::Mat& src, cv::Mat& mask);
+
+  auto        Apply(ImageBuffer& input) -> ImageBuffer override;
+  auto        GetParams() const -> nlohmann::json override;
+  void        SetParams(const nlohmann::json& params) override;
 };
 }  // namespace puerhlab

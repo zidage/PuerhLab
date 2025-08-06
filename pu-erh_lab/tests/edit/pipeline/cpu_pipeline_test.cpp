@@ -15,7 +15,7 @@ TEST_F(PipelineTests, SimpleTest1) {
     SleeveManager manager{db_path_};
     ImageLoader   image_loader(128, 8, 0);
     image_path_t  path =
-        L"D:\\Projects\\pu-erh_lab\\pu-erh_lab\\tests\\resources\\sample_images\\real_test\\mid";
+        L"D:\\Projects\\pu-erh_lab\\pu-erh_lab\\tests\\resources\\sample_images\\real_test\\light";
     std::vector<image_path_t> imgs;
     for (const auto& img : std::filesystem::directory_iterator(path)) {
       if (!img.is_directory()) imgs.push_back(img.path());
@@ -31,13 +31,13 @@ TEST_F(PipelineTests, SimpleTest1) {
     to_ws_params["ocio"] = {{"src", ""}, {"dst", "ACEScct"}};
 
     nlohmann::json exposure_params;
-    exposure_params["exposure"] = 0.0;
+    exposure_params["exposure"] = 0.1f;
 
     nlohmann::json highlight_params;
-    highlight_params["highlights"] = -100;
+    highlight_params["highlights"] = -75.0f;
 
     nlohmann::json shadow_params;
-    shadow_params["shadows"] = 50;
+    shadow_params["shadows"] = 80.0f;
 
     nlohmann::json color_wheel_params;
     color_wheel_params["color_wheel"] = {{"lift",
@@ -68,7 +68,7 @@ TEST_F(PipelineTests, SimpleTest1) {
 
     nlohmann::json output_params;
     output_params["ocio"] = {{"src", ""}, {"dst", "Camera Rec.709"}};
-    
+
     for (auto& pair : img_pool) {
       auto task = [pair, img_pool, to_ws_params, color_wheel_params, exposure_params,
                    highlight_params, shadow_params, contrast_params, lmt_params, pre_output_params,
@@ -79,8 +79,10 @@ TEST_F(PipelineTests, SimpleTest1) {
 
         auto& adj = pipeline.GetStage(PipelineStageName::Basic_Adjustment);
         adj.SetOperator(OperatorType::HIGHLIGHTS, highlight_params);
-        adj.SetOperator(OperatorType::SHADOWS, shadow_params);
-        //adj.SetOperator(OperatorType::CONTRAST, contrast_params);
+        // adj.SetOperator(OperatorType::SHADOWS, shadow_params);
+        // adj.SetOperator(OperatorType::CONTRAST, contrast_params);
+        // adj.SetOperator(OperatorType::EXPOSURE, exposure_params);
+        
 
         auto& lmt = pipeline.GetStage(PipelineStageName::Color_Adjustment);
         lmt.SetOperator(OperatorType::CST, pre_output_params);

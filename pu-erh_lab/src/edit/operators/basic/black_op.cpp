@@ -7,6 +7,8 @@ BlackOp::BlackOp(float offset) : _offset(offset) {}
 
 BlackOp::BlackOp(const nlohmann::json& params) { SetParams(params); }
 
+void BlackOp::GetMask(cv::Mat& src, cv::Mat& mask) {}
+
 auto BlackOp::GetOutput(float luminance, float adj) -> float {
   return std::pow(1.0f - luminance, 5.0f);
 }

@@ -69,6 +69,7 @@ void RawDecoder::Decode(std::vector<char>&& buffer, std::shared_ptr<Image> sourc
   raw_processor.imgdata.params.gamm[1]        = 1.0;
   raw_processor.imgdata.params.no_auto_bright = 1;  // Disable auto brightness
   raw_processor.imgdata.params.use_camera_wb  = 1;
+  raw_processor.imgdata.params.highlight      = 9;
   raw_processor.unpack();
 
   raw_processor.dcraw_process();
@@ -87,7 +88,7 @@ void RawDecoder::Decode(std::vector<char>&& buffer, std::shared_ptr<Image> sourc
   // cv::cvtColor(image_16u, image_16u, cv::COLOR_RGB2BGR);
 
   cv::Mat image_32f;
-  image_16u.convertTo(image_32f, CV_32FC3, 1.0f / 65535.0f);
+  image_16u.convertTo(image_32f, CV_32FC3, 1.0f / 65563.0f);
 
   LibRaw::dcraw_clear_mem(img);
   raw_processor.recycle();

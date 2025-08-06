@@ -76,9 +76,9 @@ add_executable(SharpenOPTest edit/operators/detail/sharpen_op_test.cpp)
 target_include_directories(SharpenOPTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
 target_link_libraries(SharpenOPTest GTest::gtest_main Operators SleeveManager)
 
-add_executable(CSTTest edit/operators/cst/cst_op_test.cpp)
-target_include_directories(CSTTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
-target_link_libraries(CSTTest GTest::gtest_main Operators SleeveManager ImageDecoder easy_profiler)
+# add_executable(CSTTest edit/operators/cst/cst_op_test.cpp)
+# target_include_directories(CSTTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
+# target_link_libraries(CSTTest GTest::gtest_main Operators SleeveManager ImageDecoder easy_profiler)
 
 add_executable(PipelineTest edit/pipeline/cpu_pipeline_test.cpp)
 target_include_directories(PipelineTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)

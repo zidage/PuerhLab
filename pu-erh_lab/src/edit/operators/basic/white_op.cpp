@@ -8,6 +8,8 @@ WhiteOp::WhiteOp(float offset) : _offset(offset) {}
 
 WhiteOp::WhiteOp(const nlohmann::json& params) { SetParams(params); }
 
+void WhiteOp::GetMask(cv::Mat& src, cv::Mat& mask) {}
+
 auto WhiteOp::GetOutput(float luminance, float adj) -> float { return std::pow(luminance, 4.0f); }
 
 auto WhiteOp::GetScale() -> float { return _offset / 100.0f; }

@@ -80,7 +80,7 @@ add_library(utfcpp INTERFACE)
 target_include_directories(utfcpp INTERFACE "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_party/utfcpp")
 
 # OpenCV
-set(OpenCV_DIR "D:/misc/opencv/build")
+set(OpenCV_DIR "D:\\Projects\\opencv_selfbuild\\opencv-4.11.0\\build")
 find_package(OpenCV REQUIRED)
 
 # xxHash
