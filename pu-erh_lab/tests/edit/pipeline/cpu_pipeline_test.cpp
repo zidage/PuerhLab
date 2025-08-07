@@ -1,3 +1,4 @@
+#include <easy/profiler.h>
 #include <string>
 
 #include "decoders/raw_decoder.hpp"
@@ -31,13 +32,13 @@ TEST_F(PipelineTests, SimpleTest1) {
     to_ws_params["ocio"] = {{"src", ""}, {"dst", "ACEScct"}};
 
     nlohmann::json exposure_params;
-    exposure_params["exposure"] = 0.1f;
+    exposure_params["exposure"] = 0.4f;
 
     nlohmann::json highlight_params;
     highlight_params["highlights"] = -75.0f;
 
     nlohmann::json shadow_params;
-    shadow_params["shadows"] = 80.0f;
+    shadow_params["shadows"] = 75.0f;
 
     nlohmann::json color_wheel_params;
     color_wheel_params["color_wheel"] = {{"lift",
@@ -67,7 +68,7 @@ TEST_F(PipelineTests, SimpleTest1) {
     pre_output_params["ocio"] = {{"src", "ACEScct"}, {"dst", ""}};
 
     nlohmann::json output_params;
-    output_params["ocio"] = {{"src", ""}, {"dst", "Camera Rec.709"}};
+    output_params["ocio"] = {{"src", ""}, {"dst", "Gamma 2.2 Encoded Rec.709"}};
 
     for (auto& pair : img_pool) {
       auto task = [pair, img_pool, to_ws_params, color_wheel_params, exposure_params,
@@ -81,12 +82,12 @@ TEST_F(PipelineTests, SimpleTest1) {
         adj.SetOperator(OperatorType::HIGHLIGHTS, highlight_params);
         // adj.SetOperator(OperatorType::SHADOWS, shadow_params);
         // adj.SetOperator(OperatorType::CONTRAST, contrast_params);
-        // adj.SetOperator(OperatorType::EXPOSURE, exposure_params);
+        adj.SetOperator(OperatorType::EXPOSURE, exposure_params);
         
 
         auto& lmt = pipeline.GetStage(PipelineStageName::Color_Adjustment);
         lmt.SetOperator(OperatorType::CST, pre_output_params);
-        lmt.SetOperator(OperatorType::LMT, lmt_params);
+        // lmt.SetOperator(OperatorType::LMT, lmt_params);
         
 
         auto& output_stage = pipeline.GetStage(PipelineStageName::Output_Transform);
@@ -101,11 +102,16 @@ TEST_F(PipelineTests, SimpleTest1) {
           FAIL();
         }
         file.close();
-
+        EASY_BLOCK("Raw Decoding");
         decoder.Decode(std::move(buffer), img);
+        EASY_END_BLOCK;
 
         ImageBuffer source{img->GetImageData()};
+        EASY_BLOCK("Pipeline Processing");
         auto        output = pipeline.Apply(source);
+        EASY_END_BLOCK;
+
+        EASY_BLOCK("Image Saving");
         cv::Mat     to_save_rec709;
         output.GetCPUData().convertTo(to_save_rec709, CV_16UC3, 65535.0f);
         cv::cvtColor(to_save_rec709, to_save_rec709, cv::COLOR_RGB2BGR);
@@ -116,6 +122,7 @@ TEST_F(PipelineTests, SimpleTest1) {
         img->ClearData();
         to_save_rec709.release();
         output.ReleaseCPUData();
+        EASY_END_BLOCK;
       };
       thread_pool.Submit(task);
     }

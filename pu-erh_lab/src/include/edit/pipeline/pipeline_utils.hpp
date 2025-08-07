@@ -18,7 +18,6 @@ class PipelineStage {
   using OpPos = std::list<OperatorEntry>::iterator;
 
  private:
-  PipelineStageName                       _stage;
   std::unordered_map<OperatorType, OpPos> _op_map;
   std::list<OperatorEntry>                _operators;
 
@@ -27,6 +26,7 @@ class PipelineStage {
   bool                                    _on_gpu    = false;
 
  public:
+  PipelineStageName _stage;
   PipelineStage() = delete;
   PipelineStage(PipelineStageName stage, bool on_gpu);
   void SetOperator(OperatorType, nlohmann::json& param);

@@ -136,7 +136,7 @@ add_library(Operators
     edit/operators/operator_registeration.cpp
 )
 target_include_directories(Operators PUBLIC include)
-target_link_libraries(Operators PUBLIC Image SleeveFS JSON OpenColorIO)
+target_link_libraries(Operators PUBLIC Image SleeveFS JSON OpenColorIO easy_profiler)
 
 add_library(EditPipeline
     edit/pipeline/pipeline_cpu.cpp

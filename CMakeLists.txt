@@ -37,9 +37,10 @@ enable_testing()
 # LibRaw
 add_library(LibRaw SHARED IMPORTED)
 set_target_properties(LibRaw PROPERTIES
-    IMPORTED_LOCATION "${CMAKE_SOURCE_DIR}\\pu-erh_lab\\third_party\\LibRaw-0.21.3-windows\\bin\\libraw.dll"
-    IMPORTED_IMPLIB "${CMAKE_SOURCE_DIR}\\pu-erh_lab\\third_party\\LibRaw-0.21.3-windows\\lib\\libraw.lib"
-    INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_SOURCE_DIR}\\pu-erh_lab\\third_party\\LibRaw-0.21.3-windows"
+    cpu->apply(desc_idt);// // // // // // // // 
+    IMPORTED_LOCATION "${CMAKE_SOURCE_DIR}\\pu-erh_lab\\third_party\\LibRaw-0.21.4_openmp\\buildfiles\\debug-x86_64\\libraw.dll"
+    IMPORTED_IMPLIB "${CMAKE_SOURCE_DIR}\\pu-erh_lab\\third_party\\LibRaw-0.21.4_openmp\\buildfiles\\debug-x86_64\\libraw.lib"
+    INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_SOURCE_DIR}\\pu-erh_lab\\third_party\\LibRaw-0.21.4_openmp"
 )
 
 # DuckDB API

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <easy/profiler.h>
+
 #include <algorithm>
 #include <opencv2/core.hpp>
 #include <opencv2/core/hal/intrin.hpp>
@@ -31,6 +33,7 @@ class ToneRegionOp {
 
  public:
   auto Apply(ImageBuffer& input) -> ImageBuffer {
+    EASY_BLOCK("Tone Region Pipeline");
     float    scale = static_cast<Derived*>(this)->GetScale();
 
     cv::Mat& img   = input.GetCPUData();
@@ -44,11 +47,10 @@ class ToneRegionOp {
       Derived::GetMask(img, mask);
 
       CV_Assert(img.isContinuous() && mask.isContinuous());
-      float* img_data          = reinterpret_cast<float*>(img.data);
-      float* mask_data         = reinterpret_cast<float*>(mask.data);
+      float* img_data         = reinterpret_cast<float*>(img.data);
+      float* mask_data        = reinterpret_cast<float*>(mask.data);
 
-      size_t total_floats_img  = img.total() * img.channels();
-      size_t total_floats_mask = mask.total() * mask.channels();
+      size_t total_floats_img = img.total() * img.channels();
 
       cv::parallel_for_(
           cv::Range(0, total_floats_img),
@@ -87,7 +89,7 @@ class ToneRegionOp {
         }
       });
     }
-
+    EASY_END_BLOCK;
     return {std::move(img)};
   }
 };
