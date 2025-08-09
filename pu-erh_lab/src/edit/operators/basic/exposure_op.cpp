@@ -26,12 +26,12 @@ ExposureOp::ExposureOp(float exposure_offset) : _exposure_offset(exposure_offset
 ExposureOp::ExposureOp(const nlohmann::json& params) { SetParams(params); }
 
 auto ExposureOp::Apply(ImageBuffer& input) -> ImageBuffer {
-  cv::Mat& linear_image = input.GetCPUData();
-  linear_image *= _scale;
+  cv::Mat& img = input.GetCPUData();
+  img *= _scale;
 
-  cv::min(linear_image, 100.0f, linear_image);
-  cv::max(linear_image, 0.0f, linear_image);
-  return {std::move(linear_image)};
+  cv::min(img, 100.0f, img);
+  cv::max(img, 0.0f, img);
+  return {std::move(img)};
 }
 
 auto ExposureOp::GetParams() const -> nlohmann::json {

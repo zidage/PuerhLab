@@ -39,9 +39,9 @@ auto ContrastOp::Apply(ImageBuffer& input) -> ImageBuffer {
   }
 
   // TODO: Change to CLAHE (Contrast Limited Adaptive Histogram Equalization)
-  linear_image = (linear_image - 0.5f) * _scale + 0.5f;
+  linear_image = (linear_image - 50.0f) * _scale + 50.0f;
   // clamp
-  cv::min(linear_image, 1.0f, linear_image);
+  cv::min(linear_image, 100.0f, linear_image);
   cv::max(linear_image, 0.0f, linear_image);
 
   return {std::move(linear_image)};

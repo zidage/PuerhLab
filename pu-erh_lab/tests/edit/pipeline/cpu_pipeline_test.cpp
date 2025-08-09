@@ -68,7 +68,7 @@ TEST_F(PipelineTests, SimpleTest1) {
     pre_output_params["ocio"] = {{"src", "ACEScct"}, {"dst", ""}};
 
     nlohmann::json output_params;
-    output_params["ocio"] = {{"src", ""}, {"dst", "Gamma 2.2 Encoded Rec.709"}};
+    output_params["ocio"] = {{"src", ""}, {"dst", "Camera Rec.709"}};
 
     for (auto& pair : img_pool) {
       auto task = [pair, img_pool, to_ws_params, color_wheel_params, exposure_params,
@@ -79,19 +79,23 @@ TEST_F(PipelineTests, SimpleTest1) {
         to_ws.SetOperator(OperatorType::CST, to_ws_params);
 
         auto& adj = pipeline.GetStage(PipelineStageName::Basic_Adjustment);
-        adj.SetOperator(OperatorType::HIGHLIGHTS, highlight_params);
-        // adj.SetOperator(OperatorType::SHADOWS, shadow_params);
-        // adj.SetOperator(OperatorType::CONTRAST, contrast_params);
-        adj.SetOperator(OperatorType::EXPOSURE, exposure_params);
-        
+        // adj.SetOperator(OperatorType::HIGHLIGHTS, highlight_params);
+        adj.SetOperator(OperatorType::SHADOWS, shadow_params);
+        //adj.SetOperator(OperatorType::CONTRAST, contrast_params);
+        // adj.SetOperator(OperatorType::EXPOSURE, exposure_params);
+
 
         auto& lmt = pipeline.GetStage(PipelineStageName::Color_Adjustment);
+        // lmt.SetOperator(OperatorType::ACES_TONE_MAPPING, output_params);
         lmt.SetOperator(OperatorType::CST, pre_output_params);
         // lmt.SetOperator(OperatorType::LMT, lmt_params);
         
 
         auto& output_stage = pipeline.GetStage(PipelineStageName::Output_Transform);
         output_stage.SetOperator(OperatorType::CST, output_params);
+        
+
+
         auto            img = pair.second;
         RawDecoder      decoder;
         std::ifstream   file(img->_image_path, std::ios::binary | std::ios::ate);

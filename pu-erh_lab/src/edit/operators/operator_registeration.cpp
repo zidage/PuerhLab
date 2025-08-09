@@ -16,6 +16,7 @@
 #include "edit/operators/detail/clarity_op.hpp"
 #include "edit/operators/detail/sharpen_op.hpp"
 #include "edit/operators/operator_factory.hpp"
+#include "edit/operators/tone_mapping/ACES_tone_mapping_op.hpp"
 #include "edit/operators/wheel/color_wheel_op.hpp"
 
 namespace puerhlab {
@@ -83,5 +84,9 @@ void RegisterAllOperators() {
   OperatorFactory::Instance().Register(OperatorType::COLOR_WHEEL, [](const nlohmann::json& params) {
     return std::make_shared<ColorWheelOp>(params);
   });
+
+  OperatorFactory::Instance().Register(
+      OperatorType::ACES_TONE_MAPPING,
+      [](const nlohmann::json& params) { return std::make_shared<ACESToneMappingOp>(params); });
 }
 };  // namespace puerhlab

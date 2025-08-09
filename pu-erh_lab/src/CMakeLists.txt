@@ -131,6 +131,7 @@ add_library(Operators
     edit/operators/detail/sharpen_op.cpp
     edit/operators/wheel/color_wheel_op.cpp
     edit/operators/curve/curve_op.cpp
+    edit/operators/tone_mapping/ACES_tone_mapping_op.cpp
     edit/operators/cst/cst_op.cpp
     edit/operators/cst/lmt_op.cpp
     edit/operators/operator_registeration.cpp

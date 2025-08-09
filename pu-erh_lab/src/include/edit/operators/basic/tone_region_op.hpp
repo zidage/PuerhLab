@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <opencv2/core.hpp>
+#include <opencv2/core/base.hpp>
 #include <opencv2/core/hal/intrin.hpp>
 #include <opencv2/core/hal/intrin_sse.hpp>
 #include <opencv2/core/matx.hpp>
@@ -46,7 +47,8 @@ class ToneRegionOp {
       cv::Mat mask;
       Derived::GetMask(img, mask);
 
-      CV_Assert(img.isContinuous() && mask.isContinuous());
+      CV_Assert(img.isContinuous());
+      CV_Assert(mask.isContinuous());
       float* img_data         = reinterpret_cast<float*>(img.data);
       float* mask_data        = reinterpret_cast<float*>(mask.data);
 
@@ -73,15 +75,6 @@ class ToneRegionOp {
             }
           },
           cv::getNumThreads() * 4);
-      // img.forEach<cv::Vec3f>([&](cv::Vec3f& pixel, const int* pos) {
-      //   float weight = mask.at<float>(pos[0], pos[1]);
-      //   float delta  = weight * scale;
-      //   cv::add(pixel, delta, pixel);
-      //   cv::threshold(pixel, pixel, 0.0f, 0.0f, cv::THRESH_TOZERO);
-      //   cv::threshold(pixel, pixel, 1.0f, 1.0f, cv::THRESH_TRUNC);
-      // });
-      // cv::threshold(img, img, 0.0f, 0.0f, cv::THRESH_TOZERO);
-      // cv::threshold(img, img, 1.0f, 1.0f, cv::THRESH_TRUNC);
     } else {
       img.forEach<cv::Vec3f>([&](cv::Vec3f& pixel, const int*) {
         for (int c = 0; c < 3; ++c) {

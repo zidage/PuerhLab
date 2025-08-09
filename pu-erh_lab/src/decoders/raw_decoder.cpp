@@ -63,14 +63,18 @@ void RawDecoder::Decode(std::vector<char>&& buffer, std::shared_ptr<Image> sourc
     throw std::runtime_error("RawDecoder: Unable to read raw file using LibRAW");
   }
   // Default set output color space to ACES2065-1 (AP0)
-  raw_processor.imgdata.params.output_color  = 6;
-  raw_processor.imgdata.params.output_bps    = 16;
-  raw_processor.imgdata.params.gamm[0]       = 1.0;  // Linear gamma
-  raw_processor.imgdata.params.gamm[1]       = 1.0;
-  // raw_processor.imgdata.params.no_auto_bright = 0;  // Disable auto brightness
-  raw_processor.imgdata.params.use_camera_wb = 1;
-  raw_processor.imgdata.params.highlight     = 9;
-  raw_processor.imgdata.rawparams.use_dngsdk = 1;
+  raw_processor.imgdata.params.output_color   = 6;
+  raw_processor.imgdata.params.output_bps     = 16;
+  raw_processor.imgdata.params.gamm[0]        = 1.0;  // Linear gamma
+  raw_processor.imgdata.params.gamm[1]        = 1.0;
+  // raw_processor.imgdata.params.user_sat      = 11300;
+  // raw_processor.imgdata.params.adjust_maximum_thr = 0.0f;
+  raw_processor.imgdata.params.no_auto_bright = 0;  // Disable auto brightness
+  raw_processor.imgdata.params.use_camera_wb  = 1;
+  raw_processor.imgdata.params.highlight      = 9;
+
+  // raw_processor.imgdata.rawparams.use_rawspeed    = 1;
+  // raw_processor.imgdata.rawparams.use_dngsdk = 1;
   raw_processor.unpack();
 
   raw_processor.dcraw_process();

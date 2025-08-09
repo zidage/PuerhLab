@@ -22,72 +22,63 @@ void ShadowsOp::GetMask(cv::Mat& src, cv::Mat& mask) {
     return;
   }
 
-  // For shadows, we look at the lower end of the brightness distribution.
-  // e.g., the darkest 23% of pixels. You can adjust this value.
-  float        percentile = 65.0f;
-  float        transition = 0.0f;  // A non-zero transition creates a smoother gradient
+  // Parameters
+  float   percentile = 50.0f;  // shadows percentile
+  float   transition = 20.0f;  // smooth zone width
 
-  // Histogram and CDF calculation (remains the same)
-  int          histSize   = 512;
-  float        range[]    = {0.0f, 100.0f};
-  const float* histRange  = {range};
+  // Step 1: Downsample L channel before processing
+  cv::Mat small_src;
+  int     mask_scale = 32;  // 1/32 resolution
+  cv::resize(src, small_src, cv::Size(src.cols / mask_scale, src.rows / mask_scale), 0, 0,
+             cv::INTER_AREA);
+
+  // Step 2: Histogram in [0, 100]
+  int          histSize  = 128;
+  float        range[]   = {0.0f, 100.0f};
+  const float* histRange = {range};
   cv::Mat      hist;
-  cv::calcHist(&src, 1, 0, cv::Mat(), hist, 1, &histSize, &histRange, true, false);
-  hist /= src.total();
+  cv::calcHist(&small_src, 1, 0, cv::Mat(), hist, 1, &histSize, &histRange, true, false);
+  hist /= small_src.total();
 
-  std::vector<float> cdf(histSize, 0.0f);
+  // Step 3: CDF
+  std::vector<float> cdf(histSize);
   cdf[0] = hist.at<float>(0);
-  for (int i = 1; i < histSize; ++i) {
-    cdf[i] = cdf[i - 1] + hist.at<float>(i);
-  }
+  for (int i = 1; i < histSize; ++i) cdf[i] = cdf[i - 1] + hist.at<float>(i);
 
-  // Find the brightness threshold for the specified percentile
-  float threshold = 0.0f;  // Default to 0
+  // Step 4: Threshold
+  float threshold = 0.0f;
   for (int i = 0; i < histSize; ++i) {
     if (cdf[i] >= percentile / 100.0f) {
-      threshold = range[0] + (range[1] - range[0]) * (i / static_cast<float>(histSize));
+      threshold = range[0] + (range[1] - range[0]) * (i / static_cast<float>(histSize - 1));
       break;
     }
   }
 
-  // --- Mask Generation Logic (Modified for Shadows) ---
-
-  // Define the range for shadows: from 0 up to the threshold + transition.
-  float s_start = 0.0f;
-  float s_end   = std::min(threshold + transition, 100.0f);
-  float range_v = s_end - s_start;
-
-  if (range_v <= 1e-6) {
-    // If the range is negligible, create a binary mask.
-    // For shadows, pixels <= threshold are shadows (value 100).
-    cv::threshold(src, cached_mask, s_end, 100.0f, cv::THRESH_BINARY_INV);
+  // Step 5: Low-res mask generation
+  cv::Mat small_mask;
+  if (transition <= 0.0f) {
+    cv::threshold(small_src, small_mask, threshold, 1.0f, cv::THRESH_BINARY_INV);
   } else {
-    // Create a gradient mask for the shadow range.
-    // The mask value should be 100 at src=0 and 0 at src=s_end.
-    // Formula: mask = (s_end - src) * 100 / range_v
+    cv::Mat temp;
+    cv::subtract(small_src, threshold, temp);  // L - threshold
+    temp /= transition;                        // normalize
+    small_mask = 1.0f - temp;                  // invert
 
-    // 1. Calculate (s_end - src)
-    cv::subtract(cv::Scalar(s_end), src, cached_mask);
+    small_mask *= 100.0f;
 
-    // 2. Scale the result to the [0, 100] range
-    // Note: The original code's division led to a scaling issue.
-    // Multiplying ensures a full [0, 100] gradient.
-    cached_mask = cached_mask * 100.0f;
-    // 3. Clamp values to the [0, 100] range
-    cv::threshold(cached_mask, cached_mask, 100.0f, 100.0f,
-                  cv::THRESH_TRUNC);                                         // values > 100 => 100
-    cv::threshold(cached_mask, cached_mask, 0.0f, 0.0f, cv::THRESH_TOZERO);  // values < 0   => 0
+    cv::threshold(small_mask, small_mask, 100.0f, 100.0f, cv::THRESH_TRUNC);
+    cv::threshold(small_mask, small_mask, 0.0f, 0.0f, cv::THRESH_TOZERO);
   }
+  cv::GaussianBlur(small_mask, small_mask, cv::Size(13, 13), 0);
 
-  // // Apply a small blur for smoothness (optional)
-  cv::GaussianBlur(cached_mask, cached_mask, cv::Size(101, 101), 0);
+  // Step 6: Upsample back to original size
+  cv::resize(small_mask, cached_mask, src.size(), 0, 0, cv::INTER_CUBIC);
 
-  // cv::cvtColor(cached_mask, cached_mask, cv::COLOR_GRAY2RGB);
+  mask = cached_mask;
   // cv::Mat resized;
   // cv::resize(cached_mask, resized, cv::Size(512, 512));
   // cv::imshow("Shadow Mask", resized);
   // cv::waitKey(0);
-  mask = cached_mask;
   EASY_END_BLOCK;
 }
 

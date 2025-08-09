@@ -16,65 +16,68 @@ HighlightsOp::HighlightsOp(float offset) : _offset(offset) {}
 HighlightsOp::HighlightsOp(const nlohmann::json& params) { SetParams(params); }
 
 void HighlightsOp::GetMask(cv::Mat& src, cv::Mat& mask) {
-  EASY_BLOCK("Get Highlight Mask");
+  EASY_BLOCK("Get Shadow Mask");
   static cv::Mat cached_mask;
   if (!cached_mask.empty()) {
     mask = cached_mask;
     return;
   }
 
-  float        percentile = 77.0f;
-  float        transition = 0.0f;
+  // Parameters
+  float   percentile = 88.0f;  // shadows percentile
+  float   transition = 10.0f;  // smooth zone width
 
-  // cv::Mat gray;
-  // cv::cvtColor(src, gray, cv::COLOR_RGB2GRAY);
+  // Step 1: Downsample L channel before processing
+  cv::Mat small_src;
+  int     mask_scale = 16;  // 1/32 resolution
+  cv::resize(src, small_src, cv::Size(src.cols / mask_scale, src.rows / mask_scale), 0, 0,
+             cv::INTER_AREA);
 
-  int          histSize   = 256;
-  float        range[]    = {0.0f, 100.0f};
-  const float* histRange  = {range};
+  // Step 2: Histogram in [0, 100]
+  int          histSize  = 512;
+  float        range[]   = {0.0f, 100.0f};
+  const float* histRange = {range};
   cv::Mat      hist;
-  cv::calcHist(&src, 1, 0, cv::Mat(), hist, 1, &histSize, &histRange, true, false);
-  hist /= src.total();
+  cv::calcHist(&small_src, 1, 0, cv::Mat(), hist, 1, &histSize, &histRange, true, false);
+  hist /= small_src.total();
 
-  std::vector<float> cdf(histSize, 0.0f);
+  // Step 3: CDF
+  std::vector<float> cdf(histSize);
   cdf[0] = hist.at<float>(0);
-  for (int i = 1; i < histSize; ++i) {
-    cdf[i] = cdf[i - 1] + hist.at<float>(i);
-  }
+  for (int i = 1; i < histSize; ++i) cdf[i] = cdf[i - 1] + hist.at<float>(i);
 
-  float threshold = 100.0f;
+  // Step 4: Threshold
+  float threshold = 0.0f;
   for (int i = 0; i < histSize; ++i) {
     if (cdf[i] >= percentile / 100.0f) {
-      threshold = range[0] + (range[1] - range[0]) * (i / static_cast<float>(histSize));
+      threshold = range[0] + (range[1] - range[0]) * (i / static_cast<float>(histSize - 1));
       break;
     }
   }
 
-  float h_start = std::max(threshold - transition, 0.0f);
-  float h_end   = 100.0f;
-  float range_v = h_end - h_start;
-
-  if (range_v <= 1e-6) {
-    cv::threshold(src, cached_mask, h_start, 100.0f, cv::THRESH_BINARY);
+  // Step 5: Low-res mask generation
+  cv::Mat small_mask;
+  if (transition <= 0.0f) {
+    cv::threshold(small_src, small_mask, threshold, 1.0f, cv::THRESH_BINARY_INV);
   } else {
-    cv::subtract(src, h_start, cached_mask);
-    cached_mask = cached_mask / range_v;
+    cv::subtract(small_src, threshold, small_mask);  // L - threshold
+    small_mask /= transition;                        // normalize
 
-    cv::subtract(100.0f, cached_mask, cached_mask);
-    cached_mask *= 100.0f;
-    cv::threshold(cached_mask, cached_mask, 0.0f, 0.0f, cv::THRESH_TOZERO);
-    cv::threshold(cached_mask, cached_mask, 100.0f, 100.0f, cv::THRESH_TRUNC);
+    small_mask *= 100.0f;
+
+    cv::threshold(small_mask, small_mask, 100.0f, 100.0f, cv::THRESH_TRUNC);
+    cv::threshold(small_mask, small_mask, 0.0f, 0.0f, cv::THRESH_TOZERO);
   }
+  cv::GaussianBlur(small_mask, small_mask, cv::Size(15, 15), 0);
 
-  cv::GaussianBlur(cached_mask, cached_mask, cv::Size(1, 1), 0);
-  // cached_mask = 100.0f - cached_mask;
-  // cv::cvtColor(cached_mask, cached_mask, cv::COLOR_GRAY2RGB);
+  // Step 6: Upsample back to original size
+  cv::resize(small_mask, cached_mask, src.size(), 0, 0, cv::INTER_CUBIC);
+
   mask = cached_mask;
   cv::Mat resized;
   cv::resize(cached_mask, resized, cv::Size(512, 512));
-  cv::imshow("Shadow Mask", resized);
+  cv::imshow("Highlight Mask", resized);
   cv::waitKey(0);
-
   EASY_END_BLOCK;
 }
 
@@ -89,7 +92,7 @@ auto HighlightsOp::GetOutput(float luminance, float adj) -> float {
   }
 }
 
-auto HighlightsOp::GetScale() -> float { return _offset / 100.0f; }
+auto HighlightsOp::GetScale() -> float { return _offset / 500.0f; }
 
 auto HighlightsOp::Apply(ImageBuffer& input) -> ImageBuffer {
   return ToneRegionOp<HighlightsOp>::Apply(input);

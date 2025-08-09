@@ -23,7 +23,8 @@ enum class OperatorType : int {
   LMT,
   CLARITY,
   SHARPEN,
-  COLOR_WHEEL
+  COLOR_WHEEL,
+  ACES_TONE_MAPPING
 };
 class OperatorFactory {
  public:

@@ -11,7 +11,7 @@ PipelineStage::PipelineStage(PipelineStageName stage, bool on_gpu)
 void PipelineStage::SetOperator(OperatorType op_type, nlohmann::json& param) {
   auto it = _op_map.find(op_type);
   if (it == _op_map.end()) {
-    _operators.emplace_front(true, OperatorFactory::Instance().Create(op_type, param));
+    _operators.emplace_back(true, OperatorFactory::Instance().Create(op_type, param));
     _op_map[op_type] = _operators.begin();
   } else {
     (it->second)->_op->SetParams(param);
