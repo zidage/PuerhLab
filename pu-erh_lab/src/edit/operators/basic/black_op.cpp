@@ -10,10 +10,17 @@ BlackOp::BlackOp(const nlohmann::json& params) { SetParams(params); }
 void BlackOp::GetMask(cv::Mat& src, cv::Mat& mask) {}
 
 auto BlackOp::GetOutput(float luminance, float adj) -> float {
-  return std::pow(1.0f - luminance, 5.0f);
+  float y_intercept = adj;
+  float white_point = 100.0f;
+
+  float slope       = (white_point - y_intercept) / 100.0f;
+
+  float output      = slope * luminance + y_intercept;
+  output            = std::clamp(output, 0.0f, 100.0f);
+  return output;
 }
 
-auto BlackOp::GetScale() -> float { return _offset / 100.0f; }
+auto BlackOp::GetScale() -> float { return _offset / 3.0f; }
 
 auto BlackOp::Apply(ImageBuffer& input) -> ImageBuffer {
   return ToneRegionOp<BlackOp>::Apply(input);

@@ -3,8 +3,13 @@
 namespace puerhlab {
 
 inline float SmoothStep(float edge0, float edge1, float x) {
-  float t = std::clamp((x - edge0) / (edge1 - edge0), 0.0f, 1.0f);
-  return t * t * (3.0f - 2.0f * t);
+  float t = std::clamp((x - edge0) / (edge1 - edge0), 0.0f, 100.0f);
+  return t * t * (300.0f - 200.0f * t);
+}
+
+inline float SmoothStep(float x) {
+  x = std::clamp(x, 0.0f, 1.0f);
+  return x * x * (300.0f - 200.0f * x);
 }
 
 inline float ACEScct_to_linear(float x) {

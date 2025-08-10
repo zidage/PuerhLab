@@ -10,9 +10,16 @@ WhiteOp::WhiteOp(const nlohmann::json& params) { SetParams(params); }
 
 void WhiteOp::GetMask(cv::Mat& src, cv::Mat& mask) {}
 
-auto WhiteOp::GetOutput(float luminance, float adj) -> float { return std::pow(luminance, 4.0f); }
+auto WhiteOp::GetOutput(float luminance, float adj) -> float {
+  float y_intercept = 100.0f + adj;
+  float black_point = 0.0f;
+  float slope       = (y_intercept - black_point) / 100.0f;
+  float output      = slope * luminance + black_point;
+  output            = std::clamp(output, 0.0f, 100.0f);
+  return output;
+}
 
-auto WhiteOp::GetScale() -> float { return _offset / 100.0f; }
+auto WhiteOp::GetScale() -> float { return _offset / 3.0f; }
 
 auto WhiteOp::Apply(ImageBuffer& input) -> ImageBuffer {
   return ToneRegionOp<WhiteOp>::Apply(input);

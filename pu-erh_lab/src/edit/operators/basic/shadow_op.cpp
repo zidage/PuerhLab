@@ -16,14 +16,10 @@ ShadowsOp::ShadowsOp(const nlohmann::json& params) { SetParams(params); }
 
 void ShadowsOp::GetMask(cv::Mat& src, cv::Mat& mask) {
   EASY_BLOCK("Get Shadow Mask");
-  static cv::Mat cached_mask;
-  if (!cached_mask.empty()) {
-    mask = cached_mask;
-    return;
-  }
+  cv::Mat cached_mask;
 
   // Parameters
-  float   percentile = 50.0f;  // shadows percentile
+  float   percentile = 40.0f;  // shadows percentile
   float   transition = 20.0f;  // smooth zone width
 
   // Step 1: Downsample L channel before processing
@@ -33,7 +29,7 @@ void ShadowsOp::GetMask(cv::Mat& src, cv::Mat& mask) {
              cv::INTER_AREA);
 
   // Step 2: Histogram in [0, 100]
-  int          histSize  = 128;
+  int          histSize  = 8192;  // number of bins
   float        range[]   = {0.0f, 100.0f};
   const float* histRange = {range};
   cv::Mat      hist;
@@ -69,7 +65,7 @@ void ShadowsOp::GetMask(cv::Mat& src, cv::Mat& mask) {
     cv::threshold(small_mask, small_mask, 100.0f, 100.0f, cv::THRESH_TRUNC);
     cv::threshold(small_mask, small_mask, 0.0f, 0.0f, cv::THRESH_TOZERO);
   }
-  cv::GaussianBlur(small_mask, small_mask, cv::Size(13, 13), 0);
+  cv::GaussianBlur(small_mask, small_mask, cv::Size(11, 11), 0);
 
   // Step 6: Upsample back to original size
   cv::resize(small_mask, cached_mask, src.size(), 0, 0, cv::INTER_CUBIC);

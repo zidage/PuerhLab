@@ -1,4 +1,5 @@
 #include <easy/profiler.h>
+
 #include <string>
 
 #include "decoders/raw_decoder.hpp"
@@ -10,13 +11,14 @@
 #include "sleeve/sleeve_manager.hpp"
 #include "utils/string/convert.hpp"
 
+
 using namespace puerhlab;
 TEST_F(PipelineTests, SimpleTest1) {
   {
     SleeveManager manager{db_path_};
     ImageLoader   image_loader(128, 8, 0);
     image_path_t  path =
-        L"D:\\Projects\\pu-erh_lab\\pu-erh_lab\\tests\\resources\\sample_images\\real_test\\light";
+        L"D:\\Projects\\pu-erh_lab\\pu-erh_lab\\tests\\resources\\sample_images\\raw\\street";
     std::vector<image_path_t> imgs;
     for (const auto& img : std::filesystem::directory_iterator(path)) {
       if (!img.is_directory()) imgs.push_back(img.path());
@@ -31,14 +33,12 @@ TEST_F(PipelineTests, SimpleTest1) {
     nlohmann::json to_ws_params;
     to_ws_params["ocio"] = {{"src", ""}, {"dst", "ACEScct"}};
 
-    nlohmann::json exposure_params;
-    exposure_params["exposure"] = 0.4f;
-
-    nlohmann::json highlight_params;
-    highlight_params["highlights"] = -75.0f;
-
-    nlohmann::json shadow_params;
-    shadow_params["shadows"] = 75.0f;
+    nlohmann::json basic_params;
+    basic_params["exposure"]   = 0.2f;
+    basic_params["highlights"] = -85.0f;
+    basic_params["shadows"]    = 55.0f;
+    basic_params["white"]      = -25.0f;
+    basic_params["black"]      = 40.0f;
 
     nlohmann::json color_wheel_params;
     color_wheel_params["color_wheel"] = {{"lift",
@@ -71,30 +71,24 @@ TEST_F(PipelineTests, SimpleTest1) {
     output_params["ocio"] = {{"src", ""}, {"dst", "Camera Rec.709"}};
 
     for (auto& pair : img_pool) {
-      auto task = [pair, img_pool, to_ws_params, color_wheel_params, exposure_params,
-                   highlight_params, shadow_params, contrast_params, lmt_params, pre_output_params,
-                   output_params]() mutable {
+      auto task = [pair, img_pool, to_ws_params, color_wheel_params, basic_params, contrast_params,
+                   lmt_params, pre_output_params, output_params]() mutable {
         CPUPipeline pipeline{};
         auto&       to_ws = pipeline.GetStage(PipelineStageName::To_WorkingSpace);
         to_ws.SetOperator(OperatorType::CST, to_ws_params);
 
         auto& adj = pipeline.GetStage(PipelineStageName::Basic_Adjustment);
-        // adj.SetOperator(OperatorType::HIGHLIGHTS, highlight_params);
-        adj.SetOperator(OperatorType::SHADOWS, shadow_params);
-        //adj.SetOperator(OperatorType::CONTRAST, contrast_params);
-        // adj.SetOperator(OperatorType::EXPOSURE, exposure_params);
-
+        adj.SetOperator(OperatorType::BLACK, basic_params);
+        adj.SetOperator(OperatorType::WHITE, basic_params);
 
         auto& lmt = pipeline.GetStage(PipelineStageName::Color_Adjustment);
         // lmt.SetOperator(OperatorType::ACES_TONE_MAPPING, output_params);
+        lmt.SetOperator(OperatorType::LMT, lmt_params);
         lmt.SetOperator(OperatorType::CST, pre_output_params);
-        // lmt.SetOperator(OperatorType::LMT, lmt_params);
-        
+        //
 
         auto& output_stage = pipeline.GetStage(PipelineStageName::Output_Transform);
         output_stage.SetOperator(OperatorType::CST, output_params);
-        
-
 
         auto            img = pair.second;
         RawDecoder      decoder;
@@ -112,11 +106,11 @@ TEST_F(PipelineTests, SimpleTest1) {
 
         ImageBuffer source{img->GetImageData()};
         EASY_BLOCK("Pipeline Processing");
-        auto        output = pipeline.Apply(source);
+        auto output = pipeline.Apply(source);
         EASY_END_BLOCK;
 
         EASY_BLOCK("Image Saving");
-        cv::Mat     to_save_rec709;
+        cv::Mat to_save_rec709;
         output.GetCPUData().convertTo(to_save_rec709, CV_16UC3, 65535.0f);
         cv::cvtColor(to_save_rec709, to_save_rec709, cv::COLOR_RGB2BGR);
         cv::imwrite(std::format("D:\\Projects\\pu-erh_lab\\pu-erh_lab\\tests\\resources\\sample_"

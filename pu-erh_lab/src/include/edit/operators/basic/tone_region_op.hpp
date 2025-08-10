@@ -42,8 +42,7 @@ class ToneRegionOp {
       throw std::runtime_error("Tone region operator: Unsupported image format");
     }
 
-    if constexpr (Derived::_tone_region == ToneRegion::HIGHLIGHTS ||
-                  Derived::_tone_region == ToneRegion::SHADOWS) {
+    if constexpr (Derived::_tone_region == ToneRegion::SHADOWS) {
       cv::Mat mask;
       Derived::GetMask(img, mask);
 
@@ -61,6 +60,7 @@ class ToneRegionOp {
             int             end         = range.end;
 
             cv::v_float32x4 v_scale     = cv::v_setall_f32(scale);
+
             int             aligned_end = i + ((end - i) / 4) * 4;
             for (; i < aligned_end; i += 4) {
               cv::v_float32x4 v_img  = cv::v_load(img_data + i);
@@ -75,12 +75,14 @@ class ToneRegionOp {
             }
           },
           cv::getNumThreads() * 4);
-    } else {
-      img.forEach<cv::Vec3f>([&](cv::Vec3f& pixel, const int*) {
-        for (int c = 0; c < 3; ++c) {
-          pixel[c] = ComputeOutput(pixel[c], scale);
-        }
+    } else if constexpr (Derived::_tone_region == ToneRegion::HIGHLIGHTS) {
+      img.forEach<float>([&](float& pixel, const int*) {
+        float offset = Derived::GetOutput(pixel, scale);
+        pixel        = pixel + offset;
       });
+    } else {
+      img.forEach<float>(
+          [&](float& pixel, const int*) { pixel = Derived::GetOutput(pixel, scale); });
     }
     EASY_END_BLOCK;
     return {std::move(img)};

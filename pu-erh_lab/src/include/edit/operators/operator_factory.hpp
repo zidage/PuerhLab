@@ -24,7 +24,8 @@ enum class OperatorType : int {
   CLARITY,
   SHARPEN,
   COLOR_WHEEL,
-  ACES_TONE_MAPPING
+  ACES_TONE_MAPPING,
+  AUTO_EXPOSURE
 };
 class OperatorFactory {
  public:
