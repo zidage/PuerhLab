@@ -15,9 +15,10 @@ class WhiteOp : public ToneRegionOp<WhiteOp>, public OperatorBase<WhiteOp> {
   float _offset;
 
  public:
-  static auto                        GetOutput(float luminance, float adj) -> float;
-  auto                               GetScale() -> float;
-  static constexpr PriorityLevel     _priority_level    = 1;
+  static auto                    GetOutput(float luminance, float adj) -> float;
+  static auto                    GetOutput(cv::v_float32x4 luminance, float adj) -> cv::v_float32x4;
+  auto                           GetScale() -> float;
+  static constexpr PriorityLevel _priority_level        = 1;
   static constexpr PipelineStageName _affiliation_stage = PipelineStageName::Basic_Adjustment;
   static constexpr std::string_view  _canonical_name    = "WHITE";
   static constexpr std::string_view  _script_name       = "white";

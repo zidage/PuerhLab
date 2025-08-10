@@ -1,10 +1,13 @@
 #include "edit/pipeline/pipeline_cpu.hpp"
 
+#include <easy/profiler.h>
+
 #include <opencv2/core.hpp>
 #include <opencv2/core/mat.hpp>
 #include <opencv2/opencv.hpp>
 
 #include "edit/operators/op_base.hpp"
+#include "edit/operators/utils/color_conversion.hpp"
 #include "edit/pipeline/pipeline_utils.hpp"
 #include "image/image_buffer.hpp"
 
@@ -25,16 +28,25 @@ auto CPUPipeline::Apply(ImageBuffer& input) -> ImageBuffer {
   auto output = ImageBuffer{input.GetCPUData().clone()};
   for (auto& stage : _stages) {
     if (stage._stage == PipelineStageName::Basic_Adjustment) {
-      cv::cvtColor(output.GetCPUData(), output.GetCPUData(), cv::COLOR_RGB2Lab);
-      std::vector<cv::Mat> channels;
-      cv::split(output.GetCPUData(), channels);
-      cv::Mat L_channel = channels[0];
+      EASY_BLOCK("To Lab Color Space");
+      cv::UMat uSrc, uDst;
+      output.GetCPUData().copyTo(uSrc);
+      GPUCvtColor(uSrc, uDst, cv::COLOR_RGB2Lab);
+
+      std::vector<cv::UMat> channels;
+      cv::split(uDst, channels);
+      cv::Mat L_channel;
+      channels[0].copyTo(L_channel);
+      EASY_END_BLOCK;
       stage.SetInputImage(std::move(L_channel));
       auto modified_L = stage.ApplyStage();
 
-      channels[0]     = modified_L.GetCPUData();
-      cv::merge(channels, output.GetCPUData());
-      cv::cvtColor(output.GetCPUData(), output.GetCPUData(), cv::COLOR_Lab2RGB);
+      EASY_BLOCK("To RGB Color Space");
+      modified_L.GetCPUData().copyTo(channels[0]);
+      cv::merge(channels, uSrc);
+      cv::cvtColor(uSrc, uDst, cv::COLOR_Lab2RGB);
+      uDst.copyTo(output.GetCPUData());
+      EASY_END_BLOCK;
     } else {
       stage.SetInputImage(std::move(output));
       output = stage.ApplyStage();

@@ -1,11 +1,11 @@
 #pragma once
 
+#include <json.hpp>
 #include <string>
 #include <string_view>
 
 #include "edit/operators/op_base.hpp"
 #include "image/image_buffer.hpp"
-#include "json.hpp"
 #include "tone_region_op.hpp"
 
 namespace puerhlab {
@@ -15,9 +15,10 @@ class BlackOp : public ToneRegionOp<BlackOp>, public OperatorBase<BlackOp> {
   float _offset;
 
  public:
-  static auto                        GetOutput(float luminance, float adj) -> float;
-  auto                               GetScale() -> float;
-  static constexpr PriorityLevel     _priority_level    = 1;
+  static auto                    GetOutput(float luminance, float adj) -> float;
+  static auto                    GetOutput(cv::v_float32x4 luminance, float adj) -> cv::v_float32x4;
+  auto                           GetScale() -> float;
+  static constexpr PriorityLevel _priority_level        = 1;
   static constexpr PipelineStageName _affiliation_stage = PipelineStageName::Basic_Adjustment;
   static constexpr std::string_view  _canonical_name    = "BLACK";
   static constexpr std::string_view  _script_name       = "black";

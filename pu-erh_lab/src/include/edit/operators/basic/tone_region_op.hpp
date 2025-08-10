@@ -41,17 +41,17 @@ class ToneRegionOp {
     if (img.depth() != CV_32F) {
       throw std::runtime_error("Tone region operator: Unsupported image format");
     }
+    CV_Assert(img.isContinuous());
+    float* img_data         = reinterpret_cast<float*>(img.data);
+    size_t total_floats_img = img.total() * img.channels();
 
     if constexpr (Derived::_tone_region == ToneRegion::SHADOWS) {
       cv::Mat mask;
       Derived::GetMask(img, mask);
 
-      CV_Assert(img.isContinuous());
       CV_Assert(mask.isContinuous());
-      float* img_data         = reinterpret_cast<float*>(img.data);
-      float* mask_data        = reinterpret_cast<float*>(mask.data);
 
-      size_t total_floats_img = img.total() * img.channels();
+      float* mask_data = reinterpret_cast<float*>(mask.data);
 
       cv::parallel_for_(
           cv::Range(0, total_floats_img),
@@ -81,8 +81,26 @@ class ToneRegionOp {
         pixel        = pixel + offset;
       });
     } else {
-      img.forEach<float>(
-          [&](float& pixel, const int*) { pixel = Derived::GetOutput(pixel, scale); });
+      // img.forEach<float>(
+      //     [&](float& pixel, const int*) { pixel = Derived::GetOutput(pixel, scale); });
+      cv::parallel_for_(
+          cv::Range(0, total_floats_img),
+          [&](const cv::Range& range) {
+            int i           = range.start;
+            int end         = range.end;
+
+            int aligned_end = i + ((end - i) / 4) * 4;
+            for (; i < aligned_end; i += 4) {
+              cv::v_float32x4 v_img = cv::v_load(img_data + i);
+              v_img                 = Derived::GetOutput(v_img, scale);
+              cv::v_store(img_data + i, v_img);
+            }
+
+            for (; i < end; ++i) {
+              img_data[i] = Derived::GetOutput(img_data[i], scale);
+            }
+          },
+          cv::getNumThreads() * 4);
     }
     EASY_END_BLOCK;
     return {std::move(img)};

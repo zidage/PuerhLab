@@ -1,5 +1,7 @@
 #include "edit/operators/basic/black_op.hpp"
 
+#include <opencv2/core/hal/intrin_sse.hpp>
+
 #include "image/image_buffer.hpp"
 
 namespace puerhlab {
@@ -18,6 +20,15 @@ auto BlackOp::GetOutput(float luminance, float adj) -> float {
   float output      = slope * luminance + y_intercept;
   output            = std::clamp(output, 0.0f, 100.0f);
   return output;
+}
+
+auto BlackOp::GetOutput(cv::v_float32x4 luminance, float adj) -> cv::v_float32x4 {
+  cv::v_float32x4 y_intercept = cv::v_setall_f32(adj);
+  cv::v_float32x4 white_point = cv::v_setall_f32(100.0f);
+
+  cv::v_float32x4 slope       = cv::v_div(cv::v_sub(white_point, y_intercept), white_point);
+
+  return cv::v_muladd(slope, luminance, y_intercept);
 }
 
 auto BlackOp::GetScale() -> float { return _offset / 3.0f; }

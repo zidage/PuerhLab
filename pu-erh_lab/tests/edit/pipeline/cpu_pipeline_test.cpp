@@ -18,7 +18,7 @@ TEST_F(PipelineTests, SimpleTest1) {
     SleeveManager manager{db_path_};
     ImageLoader   image_loader(128, 8, 0);
     image_path_t  path =
-        L"D:\\Projects\\pu-erh_lab\\pu-erh_lab\\tests\\resources\\sample_images\\raw\\street";
+        L"D:\\Projects\\pu-erh_lab\\pu-erh_lab\\tests\\resources\\sample_images\\real_test\\mid";
     std::vector<image_path_t> imgs;
     for (const auto& img : std::filesystem::directory_iterator(path)) {
       if (!img.is_directory()) imgs.push_back(img.path());

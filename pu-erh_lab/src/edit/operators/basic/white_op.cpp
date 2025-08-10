@@ -19,6 +19,15 @@ auto WhiteOp::GetOutput(float luminance, float adj) -> float {
   return output;
 }
 
+auto WhiteOp::GetOutput(cv::v_float32x4 luminance, float adj) -> cv::v_float32x4 {
+  cv::v_float32x4 y_intercept = cv::v_add(cv::v_setall_f32(adj), cv::v_setall_f32(100.0f));
+  cv::v_float32x4 black_point = cv::v_setall_f32(0.0f);
+
+  cv::v_float32x4 slope = cv::v_div(cv::v_sub(y_intercept, black_point), cv::v_setall_f32(100.0f));
+
+  return cv::v_muladd(slope, luminance, black_point);
+}
+
 auto WhiteOp::GetScale() -> float { return _offset / 3.0f; }
 
 auto WhiteOp::Apply(ImageBuffer& input) -> ImageBuffer {
