@@ -2,12 +2,22 @@
 
 #include <opencv2/core/hal/intrin_sse.hpp>
 
+#include "edit/operators/basic/tone_region_op.hpp"
 #include "image/image_buffer.hpp"
 
 namespace puerhlab {
-BlackOp::BlackOp(float offset) : _offset(offset) {}
+BlackOp::BlackOp(float offset) : _offset(offset) {
+  _curve.black_point = hw::Set(hw::ScalableTag<float>(), offset / 3.0f);
+  _curve.white_point = hw::Set(hw::ScalableTag<float>(), 100.0f);
+  _curve.slope       = hw::Div(hw::Sub(_curve.white_point, _curve.black_point), _curve.white_point);
+}
 
-BlackOp::BlackOp(const nlohmann::json& params) { SetParams(params); }
+BlackOp::BlackOp(const nlohmann::json& params) {
+  SetParams(params);
+  _curve.black_point = hw::Set(hw::ScalableTag<float>(), _offset / 3.0f);
+  _curve.white_point = hw::Set(hw::ScalableTag<float>(), 100.0f);
+  _curve.slope       = hw::Div(hw::Sub(_curve.white_point, _curve.black_point), _curve.white_point);
+}
 
 void BlackOp::GetMask(cv::Mat& src, cv::Mat& mask) {}
 
@@ -22,13 +32,9 @@ auto BlackOp::GetOutput(float luminance, float adj) -> float {
   return output;
 }
 
-auto BlackOp::GetOutput(cv::v_float32x4 luminance, float adj) -> cv::v_float32x4 {
-  cv::v_float32x4 y_intercept = cv::v_setall_f32(adj);
-  cv::v_float32x4 white_point = cv::v_setall_f32(100.0f);
-
-  cv::v_float32x4 slope       = cv::v_div(cv::v_sub(white_point, y_intercept), white_point);
-
-  return cv::v_muladd(slope, luminance, y_intercept);
+auto BlackOp::GetOutput(hw::Vec<hw::ScalableTag<float>> luminance)
+    -> hw::Vec<hw::ScalableTag<float>> {
+  return hw::MulAdd(_curve.slope, luminance, _curve.black_point);
 }
 
 auto BlackOp::GetScale() -> float { return _offset / 3.0f; }

@@ -9,16 +9,17 @@
 #include "tone_region_op.hpp"
 
 namespace puerhlab {
-
 class WhiteOp : public ToneRegionOp<WhiteOp>, public OperatorBase<WhiteOp> {
  private:
-  float _offset;
+  float           _offset;
+
+  LinearToneCurve _curve;
 
  public:
-  static auto                    GetOutput(float luminance, float adj) -> float;
-  static auto                    GetOutput(cv::v_float32x4 luminance, float adj) -> cv::v_float32x4;
-  auto                           GetScale() -> float;
-  static constexpr PriorityLevel _priority_level        = 1;
+  auto GetOutput(float luminance, float adj) -> float;
+  auto GetOutput(hw::Vec<hw::ScalableTag<float>> luminance) -> hw::Vec<hw::ScalableTag<float>>;
+  auto GetScale() -> float;
+  static constexpr PriorityLevel     _priority_level    = 1;
   static constexpr PipelineStageName _affiliation_stage = PipelineStageName::Basic_Adjustment;
   static constexpr std::string_view  _canonical_name    = "WHITE";
   static constexpr std::string_view  _script_name       = "white";

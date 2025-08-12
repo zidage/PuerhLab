@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD 20)
 #set(CMAKE_C_COMPILER "clang")
 #set(CMAKE_CXX_COMPILER "clang++")
 # Compiler flags.
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /W4 /external:anglebrackets /external:W0 /D_DEBUG /EHsc")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /W4 /external:anglebrackets /external:W0 /D_DEBUG /EHsc /arch:AVX2")
 set(CMAKE_LINKER_FLAGS_DEBUG "/DEBUG")
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(BUILD_STATIC_LIB ON)
@@ -102,13 +102,15 @@ set_target_properties(Libexif PROPERTIES
 # Profiler
 find_package(easy_profiler REQUIRED)
 
+find_package(hwy CONFIG REQUIRED)
+
 # OpenColorIO
 # find_package(OpenColorIO CONFIG REQUIRED)
 add_library(OpenColorIO SHARED IMPORTED)
 set_target_properties(OpenColorIO PROPERTIES
-    IMPORTED_LOCATION "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_party/ocio/bin/OpenColorIO_2_4.dll"
-    IMPORTED_IMPLIB "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_party/ocio/lib/OpenColorIO.lib"
-    INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_party/ocio/include")
+    IMPORTED_LOCATION "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_party/ocio/Release/bin/OpenColorIO_2_4.dll"
+    IMPORTED_IMPLIB "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_party/ocio/Release/lib/OpenColorIO.lib"
+    INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_party/ocio/Release/include")
 
     # Modules
 add_subdirectory(${CMAKE_SOURCE_DIR}/pu-erh_lab/src)

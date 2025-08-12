@@ -6,18 +6,18 @@
 
 namespace puerhlab {
 
-class ACESToneMappingOp : public OperatorBase<ACESToneMappingOp> {
+class CVCvtColorOp : public OperatorBase<CVCvtColorOp> {
  private:
   static void CalculateOutput(cv::Vec3f& color, float adapted_lum = 1.0f);
 
  public:
   static constexpr PriorityLevel     _priority_level    = 1;
-  static constexpr PipelineStageName _affiliation_stage = PipelineStageName::Output_Transform;
-  static constexpr std::string_view  _canonical_name    = "ACES ToneMapping";
-  static constexpr std::string_view  _script_name       = "ACES_tone_mapping";
+  static constexpr PipelineStageName _affiliation_stage = PipelineStageName::Basic_Adjustment;
+  static constexpr std::string_view  _canonical_name    = "CV CvtColor";
+  static constexpr std::string_view  _script_name       = "CV_CvtColor";
 
-  ACESToneMappingOp()                                   = default;
-  ACESToneMappingOp(const nlohmann::json& params);
+  CVCvtColorOp()                                        = default;
+  CVCvtColorOp(const nlohmann::json& params);
 
   auto Apply(ImageBuffer& input) -> ImageBuffer override;
   auto GetParams() const -> nlohmann::json override;

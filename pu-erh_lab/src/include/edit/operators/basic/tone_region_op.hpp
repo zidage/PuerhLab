@@ -1,8 +1,10 @@
 #pragma once
 
 #include <easy/profiler.h>
+#include <hwy/highway.h>
 
 #include <algorithm>
+#include <cstddef>
 #include <opencv2/core.hpp>
 #include <opencv2/core/base.hpp>
 #include <opencv2/core/hal/intrin.hpp>
@@ -14,10 +16,18 @@
 #include <string>
 #include <string_view>
 
+#include "edit/operators/basic/tone_region_op.hpp"
 #include "edit/operators/op_base.hpp"
 #include "edit/operators/utils/functions.hpp"
 
+namespace hw = hwy::HWY_NAMESPACE;
 namespace puerhlab {
+struct LinearToneCurve {
+  hw::Vec<hw::ScalableTag<float>> white_point;
+  hw::Vec<hw::ScalableTag<float>> black_point;
+  hw::Vec<hw::ScalableTag<float>> slope;
+};
+
 enum class ToneRegion {
   HIGHLIGHTS,
   SHADOWS,
@@ -43,12 +53,14 @@ class ToneRegionOp {
     }
     CV_Assert(img.isContinuous());
     float* img_data         = reinterpret_cast<float*>(img.data);
-    size_t total_floats_img = img.total() * img.channels();
+    int    total_floats_img = static_cast<int>(img.total() * img.channels());
 
     if constexpr (Derived::_tone_region == ToneRegion::SHADOWS) {
       cv::Mat mask;
       Derived::GetMask(img, mask);
 
+      const hw::ScalableTag<float> d;
+      int                          lanes = static_cast<int>(hw::Lanes(d));
       CV_Assert(mask.isContinuous());
 
       float* mask_data = reinterpret_cast<float*>(mask.data);
@@ -56,17 +68,17 @@ class ToneRegionOp {
       cv::parallel_for_(
           cv::Range(0, total_floats_img),
           [&](const cv::Range& range) {
-            int             i           = range.start;
-            int             end         = range.end;
+            int    i           = range.start;
+            int    end         = range.end;
 
-            cv::v_float32x4 v_scale     = cv::v_setall_f32(scale);
+            auto   v_scale     = hw::Set(d, scale);
 
-            int             aligned_end = i + ((end - i) / 4) * 4;
-            for (; i < aligned_end; i += 4) {
-              cv::v_float32x4 v_img  = cv::v_load(img_data + i);
-              cv::v_float32x4 v_mask = cv::v_load(mask_data + i);
-              v_img                  = cv::v_muladd(v_mask, v_scale, v_img);
-              cv::v_store(img_data + i, v_img);
+            size_t aligned_end = i + ((end - i) / lanes) * lanes;
+            for (; i < aligned_end; i += lanes) {
+              auto v_img  = hw::Load(d, img_data + i);
+              auto v_mask = hw::Load(d, mask_data + i);
+              v_img       = hw::MulAdd(v_mask, v_scale, v_img);
+              hw::Store(v_img, d, img_data + i);
             }
 
             for (; i < end; ++i) {
@@ -81,23 +93,23 @@ class ToneRegionOp {
         pixel        = pixel + offset;
       });
     } else {
-      // img.forEach<float>(
-      //     [&](float& pixel, const int*) { pixel = Derived::GetOutput(pixel, scale); });
+      const hw::ScalableTag<float> d;
+      int                          lanes = static_cast<int>(hw::Lanes(d));
       cv::parallel_for_(
           cv::Range(0, total_floats_img),
           [&](const cv::Range& range) {
             int i           = range.start;
             int end         = range.end;
 
-            int aligned_end = i + ((end - i) / 4) * 4;
-            for (; i < aligned_end; i += 4) {
-              cv::v_float32x4 v_img = cv::v_load(img_data + i);
-              v_img                 = Derived::GetOutput(v_img, scale);
-              cv::v_store(img_data + i, v_img);
+            int aligned_end = i + ((end - i) / lanes) * lanes;
+            for (; i < aligned_end; i += lanes) {
+              auto v_img = hw::Load(d, img_data + i);
+              v_img      = static_cast<Derived*>(this)->GetOutput(v_img);
+              hw::Store(v_img, d, img_data + i);
             }
 
             for (; i < end; ++i) {
-              img_data[i] = Derived::GetOutput(img_data[i], scale);
+              img_data[i] = static_cast<Derived*>(this)->GetOutput(img_data[i], scale);
             }
           },
           cv::getNumThreads() * 4);

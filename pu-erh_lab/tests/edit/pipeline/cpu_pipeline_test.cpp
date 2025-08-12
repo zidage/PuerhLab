@@ -12,13 +12,14 @@
 #include "utils/string/convert.hpp"
 
 
+
 using namespace puerhlab;
 TEST_F(PipelineTests, SimpleTest1) {
   {
     SleeveManager manager{db_path_};
     ImageLoader   image_loader(128, 8, 0);
     image_path_t  path =
-        L"D:\\Projects\\pu-erh_lab\\pu-erh_lab\\tests\\resources\\sample_images\\real_test\\mid";
+        L"D:\\Projects\\pu-erh_lab\\pu-erh_lab\\tests\\resources\\sample_images\\real_test\\light";
     std::vector<image_path_t> imgs;
     for (const auto& img : std::filesystem::directory_iterator(path)) {
       if (!img.is_directory()) imgs.push_back(img.path());
@@ -37,8 +38,8 @@ TEST_F(PipelineTests, SimpleTest1) {
     basic_params["exposure"]   = 0.2f;
     basic_params["highlights"] = -85.0f;
     basic_params["shadows"]    = 55.0f;
-    basic_params["white"]      = -25.0f;
-    basic_params["black"]      = 40.0f;
+    basic_params["white"]      = -65.0f;
+    basic_params["black"]      = 60.0f;
 
     nlohmann::json color_wheel_params;
     color_wheel_params["color_wheel"] = {{"lift",
@@ -78,6 +79,7 @@ TEST_F(PipelineTests, SimpleTest1) {
         to_ws.SetOperator(OperatorType::CST, to_ws_params);
 
         auto& adj = pipeline.GetStage(PipelineStageName::Basic_Adjustment);
+        //adj.SetOperator(OperatorType::SHADOWS, basic_params);
         adj.SetOperator(OperatorType::BLACK, basic_params);
         adj.SetOperator(OperatorType::WHITE, basic_params);
 

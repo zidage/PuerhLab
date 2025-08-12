@@ -4,21 +4,24 @@
 #include <string>
 #include <string_view>
 
+#include "edit/operators/basic/tone_region_op.hpp"
 #include "edit/operators/op_base.hpp"
 #include "image/image_buffer.hpp"
 #include "tone_region_op.hpp"
 
 namespace puerhlab {
-
+namespace hw = hwy::HWY_NAMESPACE;
 class BlackOp : public ToneRegionOp<BlackOp>, public OperatorBase<BlackOp> {
  private:
-  float _offset;
+  float           _offset;
+
+  LinearToneCurve _curve;
 
  public:
-  static auto                    GetOutput(float luminance, float adj) -> float;
-  static auto                    GetOutput(cv::v_float32x4 luminance, float adj) -> cv::v_float32x4;
-  auto                           GetScale() -> float;
-  static constexpr PriorityLevel _priority_level        = 1;
+  auto GetOutput(float luminance, float adj) -> float;
+  auto GetOutput(hw::Vec<hw::ScalableTag<float>> luminance) -> hw::Vec<hw::ScalableTag<float>>;
+  auto GetScale() -> float;
+  static constexpr PriorityLevel     _priority_level    = 1;
   static constexpr PipelineStageName _affiliation_stage = PipelineStageName::Basic_Adjustment;
   static constexpr std::string_view  _canonical_name    = "BLACK";
   static constexpr std::string_view  _script_name       = "black";
