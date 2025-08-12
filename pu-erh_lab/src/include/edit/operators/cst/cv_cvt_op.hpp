@@ -1,6 +1,7 @@
 #pragma once
 
 #include <opencv2/core.hpp>
+#include <opencv2/core/mat.hpp>
 
 #include "edit/operators/op_base.hpp"
 
@@ -8,7 +9,8 @@ namespace puerhlab {
 
 class CVCvtColorOp : public OperatorBase<CVCvtColorOp> {
  private:
-  static void CalculateOutput(cv::Vec3f& color, float adapted_lum = 1.0f);
+  int                   _code;
+  std::optional<size_t> _channel_index;
 
  public:
   static constexpr PriorityLevel     _priority_level    = 1;
@@ -17,6 +19,7 @@ class CVCvtColorOp : public OperatorBase<CVCvtColorOp> {
   static constexpr std::string_view  _script_name       = "CV_CvtColor";
 
   CVCvtColorOp()                                        = default;
+  CVCvtColorOp(int code, std::optional<size_t> channel_index);
   CVCvtColorOp(const nlohmann::json& params);
 
   auto Apply(ImageBuffer& input) -> ImageBuffer override;

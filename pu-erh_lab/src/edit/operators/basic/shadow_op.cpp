@@ -6,13 +6,19 @@
 #include <opencv2/core/types.hpp>
 #include <opencv2/opencv.hpp>
 
+#include "edit/operators/basic/tone_region_op.hpp"
 #include "edit/operators/utils/functions.hpp"
 #include "image/image_buffer.hpp"
 
 namespace puerhlab {
-ShadowsOp::ShadowsOp(float offset) : _offset(offset) {}
+ShadowsOp::ShadowsOp(float offset) : _offset(offset) {
+  _scale = hw::Set(hw::ScalableTag<float>(), offset / 300.0f);
+}
 
-ShadowsOp::ShadowsOp(const nlohmann::json& params) { SetParams(params); }
+ShadowsOp::ShadowsOp(const nlohmann::json& params) {
+  SetParams(params);
+  _scale = hw::Set(hw::ScalableTag<float>(), _offset / 300.0f);
+}
 
 void ShadowsOp::GetMask(cv::Mat& src, cv::Mat& mask) {
   EASY_BLOCK("Get Shadow Mask");
@@ -65,7 +71,7 @@ void ShadowsOp::GetMask(cv::Mat& src, cv::Mat& mask) {
     cv::threshold(small_mask, small_mask, 100.0f, 100.0f, cv::THRESH_TRUNC);
     cv::threshold(small_mask, small_mask, 0.0f, 0.0f, cv::THRESH_TOZERO);
   }
-  cv::GaussianBlur(small_mask, small_mask, cv::Size(11, 11), 0);
+  cv::GaussianBlur(small_mask, small_mask, cv::Size(7, 7), 0);
 
   // Step 6: Upsample back to original size
   cv::resize(small_mask, cached_mask, src.size(), 0, 0, cv::INTER_CUBIC);
@@ -78,9 +84,31 @@ void ShadowsOp::GetMask(cv::Mat& src, cv::Mat& mask) {
   EASY_END_BLOCK;
 }
 
-auto ShadowsOp::GetOutput(float luminance, float adj) -> float {
-  float x = luminance;
-  return x + adj * x * std::pow(1 - x, 2.0f) * std::exp(-40 * std::pow(x - 0.2f, 2.0f));
+auto ShadowsOp::GetOutput(hw::Vec<hw::ScalableTag<float>> luminance)
+    -> hw::Vec<hw::ScalableTag<float>> {
+  auto scaled_luminance = hw::Div(luminance, _scale_factor);
+  auto dist             = hw::Div(hw::Sub(scaled_luminance, _center), _knee);
+  auto weight           = VExp_F32(hw::Mul(hw::Neg(dist), dist));
+
+  auto delta            = hw::Mul(_scale, hw::Mul(weight, hw::Sub(_white, scaled_luminance)));
+  auto output_luminance = hw::Mul(hw::Add(scaled_luminance, delta), _scale_factor);
+
+  output_luminance      = hw::Clamp(output_luminance, _min, _max);
+
+  return output_luminance;
+}
+
+auto ShadowsOp::GetOutput(float luminance) -> float {
+  float       x      = luminance / 100.0f;
+
+  const float center = 0.2f;
+
+  float       dist   = (x - center) / 0.3f;  // knee = 0.15
+  float       weight = std::exp(-dist * dist);
+  float       delta  = _offset / 100.0f * weight * (1.0f - x);
+  float       output = (x + delta) * 100.0f;
+
+  return output;
 }
 
 auto ShadowsOp::GetScale() -> float { return _offset / 500.0f; }

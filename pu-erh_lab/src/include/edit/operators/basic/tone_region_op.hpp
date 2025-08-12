@@ -52,68 +52,32 @@ class ToneRegionOp {
       throw std::runtime_error("Tone region operator: Unsupported image format");
     }
     CV_Assert(img.isContinuous());
-    float* img_data         = reinterpret_cast<float*>(img.data);
-    int    total_floats_img = static_cast<int>(img.total() * img.channels());
+    float*                       img_data         = reinterpret_cast<float*>(img.data);
+    int                          total_floats_img = static_cast<int>(img.total() * img.channels());
+    const hw::ScalableTag<float> d;
+    int                          lanes = static_cast<int>(hw::Lanes(d));
 
-    if constexpr (Derived::_tone_region == ToneRegion::SHADOWS) {
-      cv::Mat mask;
-      Derived::GetMask(img, mask);
+    // For other tone regions, we can directly apply the adjustment
+    // using a tone curve.
+    cv::parallel_for_(
+        cv::Range(0, total_floats_img),
+        [&](const cv::Range& range) {
+          int i           = range.start;
+          int end         = range.end;
 
-      const hw::ScalableTag<float> d;
-      int                          lanes = static_cast<int>(hw::Lanes(d));
-      CV_Assert(mask.isContinuous());
+          int aligned_end = i + ((end - i) / lanes) * lanes;
+          for (; i < aligned_end; i += lanes) {
+            auto v_img = hw::Load(d, img_data + i);
+            v_img      = static_cast<Derived*>(this)->GetOutput(v_img);
+            hw::Store(v_img, d, img_data + i);
+          }
 
-      float* mask_data = reinterpret_cast<float*>(mask.data);
+          for (; i < end; ++i) {
+            img_data[i] = static_cast<Derived*>(this)->GetOutput(img_data[i]);
+          }
+        },
+        cv::getNumThreads() * 4);
 
-      cv::parallel_for_(
-          cv::Range(0, total_floats_img),
-          [&](const cv::Range& range) {
-            int    i           = range.start;
-            int    end         = range.end;
-
-            auto   v_scale     = hw::Set(d, scale);
-
-            size_t aligned_end = i + ((end - i) / lanes) * lanes;
-            for (; i < aligned_end; i += lanes) {
-              auto v_img  = hw::Load(d, img_data + i);
-              auto v_mask = hw::Load(d, mask_data + i);
-              v_img       = hw::MulAdd(v_mask, v_scale, v_img);
-              hw::Store(v_img, d, img_data + i);
-            }
-
-            for (; i < end; ++i) {
-              float mask_data_remains = mask_data[i];
-              img_data[i]             = mask_data_remains * scale + img_data[i];
-            }
-          },
-          cv::getNumThreads() * 4);
-    } else if constexpr (Derived::_tone_region == ToneRegion::HIGHLIGHTS) {
-      img.forEach<float>([&](float& pixel, const int*) {
-        float offset = Derived::GetOutput(pixel, scale);
-        pixel        = pixel + offset;
-      });
-    } else {
-      const hw::ScalableTag<float> d;
-      int                          lanes = static_cast<int>(hw::Lanes(d));
-      cv::parallel_for_(
-          cv::Range(0, total_floats_img),
-          [&](const cv::Range& range) {
-            int i           = range.start;
-            int end         = range.end;
-
-            int aligned_end = i + ((end - i) / lanes) * lanes;
-            for (; i < aligned_end; i += lanes) {
-              auto v_img = hw::Load(d, img_data + i);
-              v_img      = static_cast<Derived*>(this)->GetOutput(v_img);
-              hw::Store(v_img, d, img_data + i);
-            }
-
-            for (; i < end; ++i) {
-              img_data[i] = static_cast<Derived*>(this)->GetOutput(img_data[i], scale);
-            }
-          },
-          cv::getNumThreads() * 4);
-    }
     EASY_END_BLOCK;
     return {std::move(img)};
   }

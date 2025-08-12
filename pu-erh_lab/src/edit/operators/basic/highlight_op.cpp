@@ -7,13 +7,21 @@
 #include <opencv2/highgui.hpp>
 #include <opencv2/opencv.hpp>
 
+#include "edit/operators/basic/tone_region_op.hpp"
 #include "edit/operators/utils/functions.hpp"
 #include "image/image_buffer.hpp"
 
 namespace puerhlab {
-HighlightsOp::HighlightsOp(float offset) : _offset(offset) {}
+HighlightsOp::HighlightsOp(float offset) : _offset(offset) {
+  _ctrl_param = hw::Mul(hw::Set(hw::ScalableTag<float>(), offset / 100.0f),
+                        hw::Set(hw::ScalableTag<float>(), 30.0f));
+}
 
-HighlightsOp::HighlightsOp(const nlohmann::json& params) { SetParams(params); }
+HighlightsOp::HighlightsOp(const nlohmann::json& params) {
+  SetParams(params);
+  _ctrl_param = hw::Mul(hw::Set(hw::ScalableTag<float>(), _offset / 100.0f),
+                        hw::Set(hw::ScalableTag<float>(), 30.0f));
+}
 
 void HighlightsOp::GetMask(cv::Mat& src, cv::Mat& mask) {
   EASY_BLOCK("Get Shadow Mask");
@@ -25,7 +33,7 @@ void HighlightsOp::GetMask(cv::Mat& src, cv::Mat& mask) {
 
   // Step 1: Downsample L channel before processing
   cv::Mat small_src;
-  int     mask_scale = 8;  // 1/32 resolution
+  int     mask_scale = 8;
   cv::resize(src, small_src, cv::Size(src.cols / mask_scale, src.rows / mask_scale), 0, 0,
              cv::INTER_AREA);
 
@@ -78,14 +86,23 @@ void HighlightsOp::GetMask(cv::Mat& src, cv::Mat& mask) {
   EASY_END_BLOCK;
 }
 
-auto HighlightsOp::GetOutput(float luminance, float adj) -> float {
-  if (luminance < 40.0f) {
-    return 0.0f;  // No highlights below 40
-  }
-  return SmoothStep(40.0f, 100.0f, luminance) * adj;
+auto HighlightsOp::GetOutput(hw::Vec<hw::ScalableTag<float>> luminance)
+    -> hw::Vec<hw::ScalableTag<float>> {
+  auto scaled_luminance = hw::Div(luminance, hw::Set(hw::ScalableTag<float>(), 100.0f));
+  auto t_square         = hw::Mul(scaled_luminance, scaled_luminance);
+
+  auto result           = hw::MulAdd(_ctrl_param, t_square, luminance);
+  return result;
 }
 
-auto HighlightsOp::GetScale() -> float { return _offset / 300.0f; }
+auto HighlightsOp::GetOutput(float luminance) -> float {
+  float scaled_luminance = luminance / 100.0f;
+  float t_square         = scaled_luminance * scaled_luminance;
+
+  return (_offset / 100.0f * 30.0f) * t_square + luminance;
+}
+
+auto HighlightsOp::GetScale() -> float { return _offset / 100.0f; }
 
 auto HighlightsOp::Apply(ImageBuffer& input) -> ImageBuffer {
   return ToneRegionOp<HighlightsOp>::Apply(input);

@@ -37,7 +37,7 @@ TEST_F(PipelineTests, SimpleTest1) {
     nlohmann::json basic_params;
     basic_params["exposure"]   = 0.2f;
     basic_params["highlights"] = -85.0f;
-    basic_params["shadows"]    = 55.0f;
+    basic_params["shadows"]    = 65.0f;
     basic_params["white"]      = -65.0f;
     basic_params["black"]      = 60.0f;
 
@@ -79,13 +79,14 @@ TEST_F(PipelineTests, SimpleTest1) {
         to_ws.SetOperator(OperatorType::CST, to_ws_params);
 
         auto& adj = pipeline.GetStage(PipelineStageName::Basic_Adjustment);
-        //adj.SetOperator(OperatorType::SHADOWS, basic_params);
-        adj.SetOperator(OperatorType::BLACK, basic_params);
-        adj.SetOperator(OperatorType::WHITE, basic_params);
+        adj.SetOperator(OperatorType::EXPOSURE, basic_params);
+        adj.SetOperator(OperatorType::SHADOWS, basic_params);
+        // adj.SetOperator(OperatorType::HIGHLIGHTS, basic_params);
+        // adj.SetOperator(OperatorType::WHITE, basic_params);
 
         auto& lmt = pipeline.GetStage(PipelineStageName::Color_Adjustment);
         // lmt.SetOperator(OperatorType::ACES_TONE_MAPPING, output_params);
-        lmt.SetOperator(OperatorType::LMT, lmt_params);
+        // lmt.SetOperator(OperatorType::LMT, lmt_params);
         lmt.SetOperator(OperatorType::CST, pre_output_params);
         //
 

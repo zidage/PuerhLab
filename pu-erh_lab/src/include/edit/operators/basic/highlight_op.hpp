@@ -1,5 +1,6 @@
 #pragma once
 
+#include <opencv2/core/types.hpp>
 #include <string>
 #include <string_view>
 
@@ -9,14 +10,17 @@
 #include "tone_region_op.hpp"
 
 namespace puerhlab {
-
+namespace hw = hwy::HWY_NAMESPACE;
 class HighlightsOp : public ToneRegionOp<HighlightsOp>, public OperatorBase<HighlightsOp> {
  private:
-  float _offset;
+  float                           _offset;
+
+  hw::Vec<hw::ScalableTag<float>> _ctrl_param;
 
  public:
-  static auto                        GetOutput(float luminance, float adj) -> float;
-  auto                               GetScale() -> float;
+  auto GetOutput(hw::Vec<hw::ScalableTag<float>>) -> hw::Vec<hw::ScalableTag<float>>;
+  auto GetOutput(float luminance) -> float;
+  auto GetScale() -> float;
   static constexpr PriorityLevel     _priority_level    = 1;
   static constexpr PipelineStageName _affiliation_stage = PipelineStageName::Basic_Adjustment;
   static constexpr std::string_view  _canonical_name    = "HIGHLIGHTS";

@@ -12,11 +12,21 @@ namespace puerhlab {
 
 class ShadowsOp : public ToneRegionOp<ShadowsOp>, public OperatorBase<ShadowsOp> {
  private:
-  float _offset;
+  float                           _offset;
+
+  hw::Vec<hw::ScalableTag<float>> _scale;
+  hw::Vec<hw::ScalableTag<float>> _center       = hw::Set(hw::ScalableTag<float>(), 0.2f);
+  hw::Vec<hw::ScalableTag<float>> _knee         = hw::Set(hw::ScalableTag<float>(), 0.3f);
+  hw::Vec<hw::ScalableTag<float>> _scale_factor = hw::Set(hw::ScalableTag<float>(), 100.0f);
+  hw::Vec<hw::ScalableTag<float>> _white        = hw::Set(hw::ScalableTag<float>(), 1.0f);
+
+  hw::Vec<hw::ScalableTag<float>> _min          = hw::Set(hw::ScalableTag<float>(), 0.0f);
+  hw::Vec<hw::ScalableTag<float>> _max          = hw::Set(hw::ScalableTag<float>(), 100.0f);
 
  public:
-  static auto                        GetOutput(float luminance, float adj) -> float;
-  auto                               GetScale() -> float;
+  auto GetOutput(hw::Vec<hw::ScalableTag<float>>) -> hw::Vec<hw::ScalableTag<float>>;
+  auto GetOutput(float luminance) -> float;
+  auto GetScale() -> float;
   static constexpr PriorityLevel     _priority_level    = 1;
   static constexpr PipelineStageName _affiliation_stage = PipelineStageName::Basic_Adjustment;
   static constexpr std::string_view  _canonical_name    = "Shadows";

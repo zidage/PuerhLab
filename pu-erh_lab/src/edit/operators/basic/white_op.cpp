@@ -22,8 +22,8 @@ WhiteOp::WhiteOp(const nlohmann::json& params) {
 
 void WhiteOp::GetMask(cv::Mat& src, cv::Mat& mask) {}
 
-auto WhiteOp::GetOutput(float luminance, float adj) -> float {
-  float y_intercept = 100.0f + adj;
+auto WhiteOp::GetOutput(float luminance) -> float {
+  float y_intercept = 100.0f + _offset / 3.0f;
   float black_point = 0.0f;
   float slope       = (y_intercept - black_point) / 100.0f;
   float output      = slope * luminance + black_point;
