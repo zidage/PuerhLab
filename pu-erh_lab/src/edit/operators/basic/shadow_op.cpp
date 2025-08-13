@@ -8,110 +8,53 @@
 
 #include "edit/operators/basic/tone_region_op.hpp"
 #include "edit/operators/utils/functions.hpp"
+#include "hwy/contrib/math/math-inl.h"
 #include "image/image_buffer.hpp"
 
 namespace puerhlab {
 ShadowsOp::ShadowsOp(float offset) : _offset(offset) {
-  _scale = hw::Set(hw::ScalableTag<float>(), offset / 300.0f);
+  _gamma  = std::pow(2.2f, -_offset / 100.0f);
+  v_gamma = hw::Set(d, _gamma);
 }
 
 ShadowsOp::ShadowsOp(const nlohmann::json& params) {
   SetParams(params);
-  _scale = hw::Set(hw::ScalableTag<float>(), _offset / 300.0f);
-}
-
-void ShadowsOp::GetMask(cv::Mat& src, cv::Mat& mask) {
-  EASY_BLOCK("Get Shadow Mask");
-  cv::Mat cached_mask;
-
-  // Parameters
-  float   percentile = 40.0f;  // shadows percentile
-  float   transition = 20.0f;  // smooth zone width
-
-  // Step 1: Downsample L channel before processing
-  cv::Mat small_src;
-  int     mask_scale = 32;  // 1/32 resolution
-  cv::resize(src, small_src, cv::Size(src.cols / mask_scale, src.rows / mask_scale), 0, 0,
-             cv::INTER_AREA);
-
-  // Step 2: Histogram in [0, 100]
-  int          histSize  = 8192;  // number of bins
-  float        range[]   = {0.0f, 100.0f};
-  const float* histRange = {range};
-  cv::Mat      hist;
-  cv::calcHist(&small_src, 1, 0, cv::Mat(), hist, 1, &histSize, &histRange, true, false);
-  hist /= small_src.total();
-
-  // Step 3: CDF
-  std::vector<float> cdf(histSize);
-  cdf[0] = hist.at<float>(0);
-  for (int i = 1; i < histSize; ++i) cdf[i] = cdf[i - 1] + hist.at<float>(i);
-
-  // Step 4: Threshold
-  float threshold = 0.0f;
-  for (int i = 0; i < histSize; ++i) {
-    if (cdf[i] >= percentile / 100.0f) {
-      threshold = range[0] + (range[1] - range[0]) * (i / static_cast<float>(histSize - 1));
-      break;
-    }
-  }
-
-  // Step 5: Low-res mask generation
-  cv::Mat small_mask;
-  if (transition <= 0.0f) {
-    cv::threshold(small_src, small_mask, threshold, 1.0f, cv::THRESH_BINARY_INV);
-  } else {
-    cv::Mat temp;
-    cv::subtract(small_src, threshold, temp);  // L - threshold
-    temp /= transition;                        // normalize
-    small_mask = 1.0f - temp;                  // invert
-
-    small_mask *= 100.0f;
-
-    cv::threshold(small_mask, small_mask, 100.0f, 100.0f, cv::THRESH_TRUNC);
-    cv::threshold(small_mask, small_mask, 0.0f, 0.0f, cv::THRESH_TOZERO);
-  }
-  cv::GaussianBlur(small_mask, small_mask, cv::Size(7, 7), 0);
-
-  // Step 6: Upsample back to original size
-  cv::resize(small_mask, cached_mask, src.size(), 0, 0, cv::INTER_CUBIC);
-
-  mask = cached_mask;
-  // cv::Mat resized;
-  // cv::resize(cached_mask, resized, cv::Size(512, 512));
-  // cv::imshow("Shadow Mask", resized);
-  // cv::waitKey(0);
-  EASY_END_BLOCK;
+  _gamma  = std::pow(2.2f, -_offset / 100.0f);
+  v_gamma = hw::Set(d, _gamma);
 }
 
 auto ShadowsOp::GetOutput(hw::Vec<hw::ScalableTag<float>> luminance)
     -> hw::Vec<hw::ScalableTag<float>> {
-  auto scaled_luminance = hw::Div(luminance, _scale_factor);
-  auto dist             = hw::Div(hw::Sub(scaled_luminance, _center), _knee);
-  auto weight           = VExp_F32(hw::Mul(hw::Neg(dist), dist));
+  auto v_L_in       = hw::Div(luminance, _max);
+  v_L_in            = hw::Max((v_L_in + _pivot) / (v_one - _pivot), v_zero);
+  auto v_alpha      = hw::Max(v_zero, hw::Sub(v_one, hw::Mul(v_L_in, v_inv_threshold)));
+  auto v_L_in_safe  = hw::Max(v_L_in, v_epsilon);
+  auto v_log_L      = hw::Log(d, v_L_in_safe);
+  auto v_exponent   = hw::Mul(v_gamma, v_log_L);
+  auto v_L_adjusted = hw::Exp(d, v_exponent);
+  auto v_diff       = hw::Sub(v_L_adjusted, v_L_in);
+  auto v_L_out      = hw::MulAdd(v_alpha, v_diff, v_L_in);
 
-  auto delta            = hw::Mul(_scale, hw::Mul(weight, hw::Sub(_white, scaled_luminance)));
-  auto output_luminance = hw::Mul(hw::Add(scaled_luminance, delta), _scale_factor);
-
-  output_luminance      = hw::Clamp(output_luminance, _min, _max);
-
-  return output_luminance;
+  return hw::Mul(v_L_out, _max);
 }
 
 auto ShadowsOp::GetOutput(float luminance) -> float {
-  float       x      = luminance / 100.0f;
+  float L_in       = luminance / 100.0f;
 
-  const float center = 0.2f;
+  L_in             = std::max((L_in + 0.05f) / (1.0f - 0.05f), 0.0f);
 
-  float       dist   = (x - center) / 0.3f;  // knee = 0.15
-  float       weight = std::exp(-dist * dist);
-  float       delta  = _offset / 100.0f * weight * (1.0f - x);
-  float       output = (x + delta) * 100.0f;
+  float alpha      = std::max(0.0f, 1.0f - L_in * _inv_threshold);
 
-  return output;
+  float L_in_safe  = std::max(L_in, 1e-7f);
+  float log_L      = std::log(L_in_safe);
+  float exponent   = _gamma * log_L;
+  float L_adjusted = std::exp(exponent);
+  float diff       = L_adjusted - L_in;
+  float L_out      = alpha * diff + L_in;
+  return L_out * 100.0f;
 }
 
-auto ShadowsOp::GetScale() -> float { return _offset / 500.0f; }
+auto ShadowsOp::GetScale() -> float { return _offset / 100.0f; }
 
 auto ShadowsOp::Apply(ImageBuffer& input) -> ImageBuffer {
   return ToneRegionOp<ShadowsOp>::Apply(input);

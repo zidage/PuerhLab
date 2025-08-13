@@ -12,16 +12,23 @@ namespace puerhlab {
 
 class ShadowsOp : public ToneRegionOp<ShadowsOp>, public OperatorBase<ShadowsOp> {
  private:
-  float                           _offset;
+  float                                 _offset;
 
-  hw::Vec<hw::ScalableTag<float>> _scale;
-  hw::Vec<hw::ScalableTag<float>> _center       = hw::Set(hw::ScalableTag<float>(), 0.2f);
-  hw::Vec<hw::ScalableTag<float>> _knee         = hw::Set(hw::ScalableTag<float>(), 0.3f);
-  hw::Vec<hw::ScalableTag<float>> _scale_factor = hw::Set(hw::ScalableTag<float>(), 100.0f);
-  hw::Vec<hw::ScalableTag<float>> _white        = hw::Set(hw::ScalableTag<float>(), 1.0f);
+  hw::Vec<hw::ScalableTag<float>>       _scale;
+  const hw::ScalableTag<float>          d;
+  const hw::Vec<hw::ScalableTag<float>> v_zero          = hw::Set(d, 0.0f);
+  const hw::Vec<hw::ScalableTag<float>> v_one           = hw::Set(d, 1.0f);
+  const hw::Vec<hw::ScalableTag<float>> v_inv_threshold = hw::Set(d, 1.0f / 0.5f);
+  const hw::Vec<hw::ScalableTag<float>> v_epsilon       = hw::Set(d, 1e-7f);
 
-  hw::Vec<hw::ScalableTag<float>> _min          = hw::Set(hw::ScalableTag<float>(), 0.0f);
-  hw::Vec<hw::ScalableTag<float>> _max          = hw::Set(hw::ScalableTag<float>(), 100.0f);
+  const hw::Vec<hw::ScalableTag<float>> _pivot          = hw::Set(d, 0.05f);
+
+  hw::Vec<hw::ScalableTag<float>>       v_gamma;
+  float                                 _gamma;
+  float                                 _inv_threshold = 1.0f / 0.5f;
+
+  hw::Vec<hw::ScalableTag<float>>       _min           = hw::Set(hw::ScalableTag<float>(), 0.0f);
+  hw::Vec<hw::ScalableTag<float>>       _max           = hw::Set(hw::ScalableTag<float>(), 100.0f);
 
  public:
   auto GetOutput(hw::Vec<hw::ScalableTag<float>>) -> hw::Vec<hw::ScalableTag<float>>;

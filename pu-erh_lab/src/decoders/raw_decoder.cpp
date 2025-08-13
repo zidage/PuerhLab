@@ -94,7 +94,7 @@ void RawDecoder::Decode(std::vector<char>&& buffer, std::shared_ptr<Image> sourc
   // cv::cvtColor(image_16u, image_16u, cv::COLOR_RGB2BGR);
 
   cv::Mat image_32f;
-  image_16u.convertTo(image_32f, CV_32FC3, 1.0f / 65563.0f);
+  image_16u.convertTo(image_32f, CV_32FC3, 1.0f / 65535.0f);
 
   LibRaw::dcraw_clear_mem(img);
   raw_processor.recycle();

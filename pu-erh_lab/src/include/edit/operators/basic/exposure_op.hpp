@@ -1,5 +1,7 @@
 #pragma once
 
+#include <hwy/highway.h>
+
 #include <string>
 #include <string_view>
 
@@ -7,7 +9,7 @@
 #include "type/type.hpp"
 
 namespace puerhlab {
-
+namespace hw = hwy::HWY_NAMESPACE;
 class ExposureOp : public OperatorBase<ExposureOp> {
  private:
   /**
@@ -15,14 +17,18 @@ class ExposureOp : public OperatorBase<ExposureOp> {
    * Positive to increase the brightness, negative to darken.
    *
    */
-  float _exposure_offset;
+  float                           _exposure_offset;
 
   /**
    * @brief The actual luminance offset derived from the EV
    * dL = 2^E
    *
    */
-  float _scale;
+  float                           _scale;
+
+  hw::Vec<hw::ScalableTag<float>> _scale_factor;
+  hw::Vec<hw::ScalableTag<float>> _min = hw::Set(hw::ScalableTag<float>(), 0.0f);
+  hw::Vec<hw::ScalableTag<float>> _max = hw::Set(hw::ScalableTag<float>(), 100.0f);
 
  public:
   static constexpr PriorityLevel     _priority_level    = 0;

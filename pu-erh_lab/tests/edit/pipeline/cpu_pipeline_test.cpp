@@ -19,7 +19,7 @@ TEST_F(PipelineTests, SimpleTest1) {
     SleeveManager manager{db_path_};
     ImageLoader   image_loader(128, 8, 0);
     image_path_t  path =
-        L"D:\\Projects\\pu-erh_lab\\pu-erh_lab\\tests\\resources\\sample_images\\real_test\\light";
+        L"D:\\Projects\\pu-erh_lab\\pu-erh_lab\\tests\\resources\\sample_images\\raw\\camera\\sony\\a7rv";
     std::vector<image_path_t> imgs;
     for (const auto& img : std::filesystem::directory_iterator(path)) {
       if (!img.is_directory()) imgs.push_back(img.path());
@@ -35,10 +35,10 @@ TEST_F(PipelineTests, SimpleTest1) {
     to_ws_params["ocio"] = {{"src", ""}, {"dst", "ACEScct"}};
 
     nlohmann::json basic_params;
-    basic_params["exposure"]   = 0.2f;
-    basic_params["highlights"] = -85.0f;
-    basic_params["shadows"]    = 65.0f;
-    basic_params["white"]      = -65.0f;
+    basic_params["exposure"]   = 0.3f;
+    basic_params["highlights"] = -95.0f;
+    basic_params["shadows"]    = 35.0f;
+    basic_params["white"]      = -15.0f;
     basic_params["black"]      = 60.0f;
 
     nlohmann::json color_wheel_params;
@@ -81,7 +81,7 @@ TEST_F(PipelineTests, SimpleTest1) {
         auto& adj = pipeline.GetStage(PipelineStageName::Basic_Adjustment);
         adj.SetOperator(OperatorType::EXPOSURE, basic_params);
         adj.SetOperator(OperatorType::SHADOWS, basic_params);
-        // adj.SetOperator(OperatorType::HIGHLIGHTS, basic_params);
+        adj.SetOperator(OperatorType::HIGHLIGHTS, basic_params);
         // adj.SetOperator(OperatorType::WHITE, basic_params);
 
         auto& lmt = pipeline.GetStage(PipelineStageName::Color_Adjustment);
@@ -114,6 +114,7 @@ TEST_F(PipelineTests, SimpleTest1) {
 
         EASY_BLOCK("Image Saving");
         cv::Mat to_save_rec709;
+        
         output.GetCPUData().convertTo(to_save_rec709, CV_16UC3, 65535.0f);
         cv::cvtColor(to_save_rec709, to_save_rec709, cv::COLOR_RGB2BGR);
         cv::imwrite(std::format("D:\\Projects\\pu-erh_lab\\pu-erh_lab\\tests\\resources\\sample_"

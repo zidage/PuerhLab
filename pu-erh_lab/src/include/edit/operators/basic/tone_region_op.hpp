@@ -57,7 +57,7 @@ class ToneRegionOp {
     const hw::ScalableTag<float> d;
     int                          lanes = static_cast<int>(hw::Lanes(d));
 
-    // For other tone regions, we can directly apply the adjustment
+    // For all tone regions, we can directly apply the adjustment
     // using a tone curve.
     cv::parallel_for_(
         cv::Range(0, total_floats_img),

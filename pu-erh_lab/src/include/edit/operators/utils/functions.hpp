@@ -1,4 +1,5 @@
 #pragma once
+#include <hwy/base.h>
 #include <hwy/highway.h>
 
 #include <algorithm>
@@ -40,7 +41,7 @@ inline float EvaluateBezier(float t, float p0, float p1, float p2, float p3) {
   return u * u * u * p0 + 3 * u * u * t * p1 + 3 * u * t * t * p2 + t * t * t * p3;
 }
 
-inline hw::Vec<hw::ScalableTag<float>> VExp_F32(hw::Vec<hw::ScalableTag<float>> x) {
+HWY_INLINE hw::Vec<hw::ScalableTag<float>> VExp_F32(hw::Vec<hw::ScalableTag<float>> x) {
   const auto d    = hw::ScalableTag<float>();
   using V         = hw::Vec<hw::ScalableTag<float>>;
 
