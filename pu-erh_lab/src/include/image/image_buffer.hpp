@@ -9,25 +9,17 @@
 namespace puerhlab {
 class ImageBuffer {
  private:
-  cv::Mat                       _cpu_data;
+  cv::Mat          _cpu_data;
   // TODO: NOT USED FOR NOW: 2025-6-30
-  cv::cuda::GpuMat              _gpu_data;
+  cv::cuda::GpuMat _gpu_data;
 
-  bool                          _data_valid = false;
-
-  std::vector<cv::Mat>          _channels;
-  std::vector<cv::cuda::GpuMat> _gpu_channels;
-
-  bool                          _has_channels = false;
-
-  // TODO: NOT USED FOR NOW: 2025-6-30
-  void                          SyncToGPU();
-  void                          SyncToCPU();
+  bool             _data_valid = false;
 
  public:
   ImageBuffer() = default;
   ImageBuffer(cv::Mat& data);
   ImageBuffer(cv::Mat&& data);
+  ImageBuffer(cv::cuda::GpuMat&& data);
   ImageBuffer(std::vector<uint8_t>&& buffer);
   ImageBuffer(ImageBuffer&& other) noexcept;
 
@@ -37,6 +29,9 @@ class ImageBuffer {
 
   auto         GetCPUData() -> cv::Mat&;
   auto         GetGPUData() -> cv::cuda::GpuMat&;
+
+  void         SyncToGPU();
+  void         SyncToCPU();
 
   void         ReleaseCPUData();
   void         ReleaseGPUData();

@@ -16,12 +16,23 @@ class ShadowsOp : public ToneRegionOp<ShadowsOp>, public OperatorBase<ShadowsOp>
 
   hw::Vec<hw::ScalableTag<float>>       _scale;
   const hw::ScalableTag<float>          d;
+  hw::Rebind<int32_t, decltype(d)>      di;
+  const hw::Vec<hw::ScalableTag<float>> v_inv_max = hw::Set(d, 1.0f / 100.0f);
+  ;  // 1.0f / 100.0f
+  const hw::Vec<hw::ScalableTag<float>> v_pivot_scale =
+      hw::Set(d, 1.0f / (1.0f - 0.05f));  // 1.0f / (1.0f - 0.05f)
+  const hw::Vec<hw::ScalableTag<float>> v_pivot_offset =
+      hw::Set(d, 0.05f / (1.0f - 0.05f));  // 0.05f / (1.0f - 0.05f)
   const hw::Vec<hw::ScalableTag<float>> v_zero          = hw::Set(d, 0.0f);
   const hw::Vec<hw::ScalableTag<float>> v_one           = hw::Set(d, 1.0f);
   const hw::Vec<hw::ScalableTag<float>> v_inv_threshold = hw::Set(d, 1.0f / 0.5f);
   const hw::Vec<hw::ScalableTag<float>> v_epsilon       = hw::Set(d, 1e-7f);
 
-  const hw::Vec<hw::ScalableTag<float>> _pivot          = hw::Set(d, 0.05f);
+  static constexpr int                  kLutSize        = 1024;
+  std::vector<float>                    _lut;
+  const hw::Vec<hw::ScalableTag<float>> v_lut_scale = hw::Set(d, static_cast<float>(kLutSize - 1));
+
+  const hw::Vec<hw::ScalableTag<float>> _pivot      = hw::Set(d, 0.05f);
 
   hw::Vec<hw::ScalableTag<float>>       v_gamma;
   float                                 _gamma;
@@ -30,8 +41,10 @@ class ShadowsOp : public ToneRegionOp<ShadowsOp>, public OperatorBase<ShadowsOp>
   hw::Vec<hw::ScalableTag<float>>       _min           = hw::Set(hw::ScalableTag<float>(), 0.0f);
   hw::Vec<hw::ScalableTag<float>>       _max           = hw::Set(hw::ScalableTag<float>(), 100.0f);
 
+  void                                  InitializeLUT();
+
  public:
-  auto GetOutput(hw::Vec<hw::ScalableTag<float>>) -> hw::Vec<hw::ScalableTag<float>>;
+  auto GetOutput(hw::Vec<hw::ScalableTag<float>>&) -> hw::Vec<hw::ScalableTag<float>>;
   auto GetOutput(float luminance) -> float;
   auto GetScale() -> float;
   static constexpr PriorityLevel     _priority_level    = 1;

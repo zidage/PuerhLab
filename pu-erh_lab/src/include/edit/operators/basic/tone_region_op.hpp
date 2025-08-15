@@ -45,9 +45,8 @@ class ToneRegionOp {
  public:
   auto Apply(ImageBuffer& input) -> ImageBuffer {
     EASY_BLOCK("Tone Region Pipeline");
-    float    scale = static_cast<Derived*>(this)->GetScale();
 
-    cv::Mat& img   = input.GetCPUData();
+    cv::Mat& img = input.GetCPUData();
     if (img.depth() != CV_32F) {
       throw std::runtime_error("Tone region operator: Unsupported image format");
     }
@@ -55,10 +54,16 @@ class ToneRegionOp {
     float*                       img_data         = reinterpret_cast<float*>(img.data);
     int                          total_floats_img = static_cast<int>(img.total() * img.channels());
     const hw::ScalableTag<float> d;
-    int                          lanes = static_cast<int>(hw::Lanes(d));
+    int                          lanes   = static_cast<int>(hw::Lanes(d));
 
+    auto*                        derived = static_cast<Derived*>(this);
     // For all tone regions, we can directly apply the adjustment
     // using a tone curve.
+    // if constexpr (Derived::_tone_region == ToneRegion::SHADOWS) {
+    //   img.forEach<float>([this](float& pixel, const int* /* position */) {
+    //     pixel = static_cast<Derived*>(this)->GetOutput(pixel);
+    //   });
+    // } else {
     cv::parallel_for_(
         cv::Range(0, total_floats_img),
         [&](const cv::Range& range) {
@@ -68,15 +73,20 @@ class ToneRegionOp {
           int aligned_end = i + ((end - i) / lanes) * lanes;
           for (; i < aligned_end; i += lanes) {
             auto v_img = hw::Load(d, img_data + i);
-            v_img      = static_cast<Derived*>(this)->GetOutput(v_img);
+            v_img      = derived->GetOutput(v_img);
             hw::Store(v_img, d, img_data + i);
           }
 
           for (; i < end; ++i) {
-            img_data[i] = static_cast<Derived*>(this)->GetOutput(img_data[i]);
+            img_data[i] = derived->GetOutput(img_data[i]);
           }
         },
-        cv::getNumThreads() * 4);
+        1024);
+    // }
+
+    // img.forEach<float>([this](float& pixel, const int* /* position */) {
+    //   pixel = static_cast<Derived*>(this)->GetOutput(pixel);
+    // });
 
     EASY_END_BLOCK;
     return {std::move(img)};

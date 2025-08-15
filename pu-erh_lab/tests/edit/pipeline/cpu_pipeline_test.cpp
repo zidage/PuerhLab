@@ -1,5 +1,6 @@
 #include <easy/profiler.h>
 
+#include <opencv2/cudaimgproc.hpp>
 #include <string>
 
 #include "decoders/raw_decoder.hpp"
@@ -7,6 +8,7 @@
 #include "edit/operators/op_base.hpp"
 #include "edit/operators/operator_factory.hpp"
 #include "edit/pipeline/pipeline_cpu.hpp"
+#include "image/image_buffer.hpp"
 #include "pipeline_test_fixation.hpp"
 #include "sleeve/sleeve_manager.hpp"
 #include "utils/string/convert.hpp"
@@ -19,7 +21,7 @@ TEST_F(PipelineTests, SimpleTest1) {
     SleeveManager manager{db_path_};
     ImageLoader   image_loader(128, 8, 0);
     image_path_t  path =
-        L"D:\\Projects\\pu-erh_lab\\pu-erh_lab\\tests\\resources\\sample_images\\raw\\camera\\sony\\a7rv";
+        L"D:\\Projects\\pu-erh_lab\\pu-erh_lab\\tests\\resources\\sample_images\\raw\\camera\\sony\\a1";
     std::vector<image_path_t> imgs;
     for (const auto& img : std::filesystem::directory_iterator(path)) {
       if (!img.is_directory()) imgs.push_back(img.path());
@@ -35,9 +37,9 @@ TEST_F(PipelineTests, SimpleTest1) {
     to_ws_params["ocio"] = {{"src", ""}, {"dst", "ACEScct"}};
 
     nlohmann::json basic_params;
-    basic_params["exposure"]   = 0.3f;
-    basic_params["highlights"] = -95.0f;
-    basic_params["shadows"]    = 35.0f;
+    basic_params["exposure"]   = 0.4f;
+    basic_params["highlights"] = -45.0f;
+    basic_params["shadows"]    = 55.0f;
     basic_params["white"]      = -15.0f;
     basic_params["black"]      = 60.0f;
 
@@ -69,7 +71,7 @@ TEST_F(PipelineTests, SimpleTest1) {
     pre_output_params["ocio"] = {{"src", "ACEScct"}, {"dst", ""}};
 
     nlohmann::json output_params;
-    output_params["ocio"] = {{"src", ""}, {"dst", "Camera Rec.709"}};
+    output_params["ocio"] = {{"src", "ACEScct"}, {"dst", "Camera Rec.709"}};
 
     for (auto& pair : img_pool) {
       auto task = [pair, img_pool, to_ws_params, color_wheel_params, basic_params, contrast_params,
@@ -79,7 +81,7 @@ TEST_F(PipelineTests, SimpleTest1) {
         to_ws.SetOperator(OperatorType::CST, to_ws_params);
 
         auto& adj = pipeline.GetStage(PipelineStageName::Basic_Adjustment);
-        adj.SetOperator(OperatorType::EXPOSURE, basic_params);
+        // adj.SetOperator(OperatorType::EXPOSURE, basic_params);
         adj.SetOperator(OperatorType::SHADOWS, basic_params);
         adj.SetOperator(OperatorType::HIGHLIGHTS, basic_params);
         // adj.SetOperator(OperatorType::WHITE, basic_params);
@@ -87,7 +89,7 @@ TEST_F(PipelineTests, SimpleTest1) {
         auto& lmt = pipeline.GetStage(PipelineStageName::Color_Adjustment);
         // lmt.SetOperator(OperatorType::ACES_TONE_MAPPING, output_params);
         // lmt.SetOperator(OperatorType::LMT, lmt_params);
-        lmt.SetOperator(OperatorType::CST, pre_output_params);
+        // lmt.SetOperator(OperatorType::CST, pre_output_params);
         //
 
         auto& output_stage = pipeline.GetStage(PipelineStageName::Output_Transform);
@@ -113,17 +115,27 @@ TEST_F(PipelineTests, SimpleTest1) {
         EASY_END_BLOCK;
 
         EASY_BLOCK("Image Saving");
-        cv::Mat to_save_rec709;
-        
-        output.GetCPUData().convertTo(to_save_rec709, CV_16UC3, 65535.0f);
-        cv::cvtColor(to_save_rec709, to_save_rec709, cv::COLOR_RGB2BGR);
+        cv::cuda::GpuMat to_save_rec709;
+        cv::Mat to_save_rec709_cpu;
+
+        output.SyncToGPU();
+        auto& gpu_data = output.GetGPUData();
+        gpu_data.convertTo(to_save_rec709, CV_16UC3, 65535.0f);
+        cv::cuda::cvtColor(to_save_rec709, to_save_rec709, cv::COLOR_RGB2BGR);
+        to_save_rec709.download(to_save_rec709_cpu);
+
+        EASY_BLOCK("Write To Disk");
         cv::imwrite(std::format("D:\\Projects\\pu-erh_lab\\pu-erh_lab\\tests\\resources\\sample_"
-                                "images\\my_pipeline\\batch_results\\{}.tiff",
-                                conv::ToBytes(img->_image_name)),
-                    to_save_rec709);
+                                "images\\my_pipeline\\batch_results\\{}.tif",
+                                conv::ToBytes(img->_image_path.filename().wstring())),
+                    to_save_rec709_cpu);
+        EASY_END_BLOCK;
+
         img->ClearData();
         to_save_rec709.release();
         output.ReleaseCPUData();
+        output.ReleaseGPUData();
+        to_save_rec709_cpu.release();
         EASY_END_BLOCK;
       };
       thread_pool.Submit(task);

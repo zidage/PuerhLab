@@ -4,6 +4,9 @@
 
 #include <opencv2/core.hpp>
 #include <opencv2/core/mat.hpp>
+#include <opencv2/cudaarithm.hpp>
+#include <opencv2/cudaimgproc.hpp>
+#include <opencv2/cudawarping.hpp>
 #include <opencv2/opencv.hpp>
 
 #include "edit/operators/op_base.hpp"
@@ -29,23 +32,24 @@ auto CPUPipeline::Apply(ImageBuffer& input) -> ImageBuffer {
   for (auto& stage : _stages) {
     if (stage._stage == PipelineStageName::Basic_Adjustment) {
       EASY_BLOCK("To Lab Color Space");
-      cv::UMat uSrc, uDst;
-      output.GetCPUData().copyTo(uSrc);
-      GPUCvtColor(uSrc, uDst, cv::COLOR_RGB2Lab);
-
-      std::vector<cv::UMat> channels;
-      cv::split(uDst, channels);
-      cv::Mat L_channel;
-      channels[0].copyTo(L_channel);
+      output.SyncToGPU();
+      auto& gpu_data = output.GetGPUData();
+      cv::cuda::cvtColor(gpu_data, gpu_data, cv::COLOR_RGB2Lab);
+      std::vector<cv::cuda::GpuMat> channels;
+      cv::cuda::split(gpu_data, channels);
+      ImageBuffer L_channel{std::move(channels[0])};
+      L_channel.SyncToCPU();
       EASY_END_BLOCK;
+
       stage.SetInputImage(std::move(L_channel));
       auto modified_L = stage.ApplyStage();
 
       EASY_BLOCK("To RGB Color Space");
-      modified_L.GetCPUData().copyTo(channels[0]);
-      cv::merge(channels, uSrc);
-      cv::cvtColor(uSrc, uDst, cv::COLOR_Lab2RGB);
-      uDst.copyTo(output.GetCPUData());
+      modified_L.SyncToGPU();
+      channels[0] = modified_L.GetGPUData();
+      cv::cuda::merge(channels, gpu_data);
+      cv::cuda::cvtColor(gpu_data, gpu_data, cv::COLOR_Lab2RGB);
+      output.SyncToCPU();
       EASY_END_BLOCK;
     } else {
       stage.SetInputImage(std::move(output));

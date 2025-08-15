@@ -25,9 +25,9 @@ add_library(ImageDecoder
 target_include_directories(ImageDecoder PUBLIC include)
 target_link_libraries(ImageDecoder PUBLIC Image ThreadPool ${OpenCV_LIBS} LibRaw easy_profiler) 
 
-add_library(IO io/image/image_loader.cpp)
-target_include_directories(IO PUBLIC include)
-target_link_libraries(IO PUBLIC ImageDecoder)
+add_library(ImageLoader io/image/image_loader.cpp)
+target_include_directories(ImageLoader PUBLIC include)
+target_link_libraries(ImageLoader PUBLIC ImageDecoder)
 
 add_library(EditHistory edit/history/edit_history.cpp edit/history/version.cpp)
 target_include_directories(EditHistory PUBLIC include)
@@ -47,6 +47,8 @@ add_library(ImagePool
 target_include_directories(ImagePool PUBLIC include)
 target_link_libraries(ImagePool PRIVATE Image)
 
+
+
 add_library(SleeveElement 
     sleeve/sleeve_element/sleeve_element_factory.cpp
     sleeve/sleeve_element/sleeve_element.cpp
@@ -54,7 +56,7 @@ add_library(SleeveElement
     sleeve/sleeve_element/sleeve_folder.cpp
 )
 target_include_directories(SleeveElement PUBLIC include)
-target_link_libraries(SleeveElement PUBLIC Image IO SleeveFilter EditHistory ImagePool)
+target_link_libraries(SleeveElement PUBLIC Image ImageLoader SleeveFilter EditHistory ImagePool)
 
 
 
@@ -113,6 +115,13 @@ add_library(SleeveManager
     sleeve/sleeve_manager.cpp)
 target_include_directories(SleeveManager PUBLIC include)
 target_link_libraries(SleeveManager PUBLIC SleeveFS SleeveView xxHash)
+
+add_library(ImageWriter
+    io/image/image_writer.cpp
+)
+target_include_directories(ImageWriter PUBLIC include)
+target_link_libraries(ImageWriter PUBLIC SleeveManager DuckORM)
+
 
 add_library(Operators
     edit/operators/operator_factory.cpp

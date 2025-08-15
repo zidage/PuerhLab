@@ -15,43 +15,68 @@ namespace puerhlab {
 ShadowsOp::ShadowsOp(float offset) : _offset(offset) {
   _gamma  = std::pow(2.2f, -_offset / 100.0f);
   v_gamma = hw::Set(d, _gamma);
+  InitializeLUT();
 }
 
 ShadowsOp::ShadowsOp(const nlohmann::json& params) {
   SetParams(params);
   _gamma  = std::pow(2.2f, -_offset / 100.0f);
   v_gamma = hw::Set(d, _gamma);
+  InitializeLUT();
 }
 
-auto ShadowsOp::GetOutput(hw::Vec<hw::ScalableTag<float>> luminance)
+void ShadowsOp::InitializeLUT() {
+  _lut.resize(kLutSize);
+  for (int i = 0; i < kLutSize; ++i) {
+    float x = static_cast<float>(i) / (kLutSize - 1);
+    float y = (x == 0.0f && _gamma < 0.0f) ? 0.0f : std::pow(x, _gamma);
+    _lut[i] = y;
+  }
+}
+
+auto ShadowsOp::GetOutput(hw::Vec<hw::ScalableTag<float>>& luminance)
     -> hw::Vec<hw::ScalableTag<float>> {
-  auto v_L_in       = hw::Div(luminance, _max);
-  v_L_in            = hw::Max((v_L_in + _pivot) / (v_one - _pivot), v_zero);
-  auto v_alpha      = hw::Max(v_zero, hw::Sub(v_one, hw::Mul(v_L_in, v_inv_threshold)));
-  auto v_L_in_safe  = hw::Max(v_L_in, v_epsilon);
-  auto v_log_L      = hw::Log(d, v_L_in_safe);
-  auto v_exponent   = hw::Mul(v_gamma, v_log_L);
-  auto v_L_adjusted = hw::Exp(d, v_exponent);
-  auto v_diff       = hw::Sub(v_L_adjusted, v_L_in);
-  auto v_L_out      = hw::MulAdd(v_alpha, v_diff, v_L_in);
+  auto v_L_in         = hw::Mul(luminance, v_inv_max);
+  v_L_in              = hw::MulAdd(v_L_in, v_pivot_scale, v_pivot_offset);
+  v_L_in              = hw::Max(v_L_in, v_zero);
+
+  // alpha = max(1 - L_in / threshold, 0)
+  auto v_alpha        = hw::NegMulAdd(v_L_in, v_inv_threshold, v_one);
+  v_alpha             = hw::Max(v_alpha, v_zero);
+
+  const auto v_f_idx  = hw::Mul(v_L_in, v_lut_scale);
+  const auto v_idx0_f = hw::Floor(v_f_idx);          // float
+  const auto v_weight = hw::Sub(v_f_idx, v_idx0_f);  // in [0,1)
+
+  const auto v_i_idx0 = hw::ConvertTo(di, v_idx0_f);  // int32
+  const auto v_i_idx1 = hw::Min(hw::Add(v_i_idx0, hw::Set(di, 1)), hw::Set(di, kLutSize - 1));
+
+  const float* HWY_RESTRICT lut          = _lut.data();
+  const auto                v_y0         = hw::GatherIndex(d, lut, v_i_idx0);
+  const auto                v_y1         = hw::GatherIndex(d, lut, v_i_idx1);
+
+  const auto                v_L_adjusted = hw::MulAdd(v_weight, hw::Sub(v_y1, v_y0), v_y0);
+  const auto                v_diff       = hw::Sub(v_L_adjusted, v_L_in);
+  const auto                v_L_out      = hw::MulAdd(v_alpha, v_diff, v_L_in);
 
   return hw::Mul(v_L_out, _max);
 }
 
 auto ShadowsOp::GetOutput(float luminance) -> float {
-  float L_in       = luminance / 100.0f;
+  float l_in       = luminance / 100.0f;
+  l_in             = (l_in + 0.05f) / (1.0f - 0.05f);
+  l_in             = std::fmax(l_in, 0.0f);
 
-  L_in             = std::max((L_in + 0.05f) / (1.0f - 0.05f), 0.0f);
+  float alpha      = 1.0f - l_in * _inv_threshold;
+  alpha            = std::fmax(alpha, 0.0f);
 
-  float alpha      = std::max(0.0f, 1.0f - L_in * _inv_threshold);
+  float l_in_safe  = std::fmax(l_in, 1e-7f);  // Avoid division by zero
+  float l_adjusted = std::pow(l_in_safe, _gamma);
 
-  float L_in_safe  = std::max(L_in, 1e-7f);
-  float log_L      = std::log(L_in_safe);
-  float exponent   = _gamma * log_L;
-  float L_adjusted = std::exp(exponent);
-  float diff       = L_adjusted - L_in;
-  float L_out      = alpha * diff + L_in;
-  return L_out * 100.0f;
+  float diff       = l_adjusted - l_in;
+  float l_out      = l_in + alpha * diff;
+
+  return l_out * 100.0f;
 }
 
 auto ShadowsOp::GetScale() -> float { return _offset / 100.0f; }
