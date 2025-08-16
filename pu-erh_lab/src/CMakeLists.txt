@@ -15,6 +15,16 @@ add_library(Image
 target_include_directories(Image PUBLIC include)
 target_link_libraries(Image PUBLIC Exiv2 ${OpenCV_LIBS} LibRaw TimeProvider JSON xxHash easy_profiler)
 
+add_library(RawProcessor
+    decoders/processor/raw_processor.cpp
+    decoders/processor/cuda_operators.cu
+    decoders/processor/highlight_reconstruct.cpp
+)
+target_include_directories(RawProcessor PUBLIC include)
+target_link_libraries(RawProcessor PUBLIC Image LibRaw Exiv2)
+set_target_properties(RawProcessor PROPERTIES
+    CUDA_SEPARABLE_COMPILATION ON
+)
 
 add_library(ImageDecoder 
     decoders/decoder_scheduler.cpp
@@ -23,7 +33,7 @@ add_library(ImageDecoder
     decoders/metadata_decoder.cpp
 )
 target_include_directories(ImageDecoder PUBLIC include)
-target_link_libraries(ImageDecoder PUBLIC Image ThreadPool ${OpenCV_LIBS} LibRaw easy_profiler) 
+target_link_libraries(ImageDecoder PUBLIC Image ThreadPool ${OpenCV_LIBS} LibRaw RawProcessor easy_profiler) 
 
 add_library(ImageLoader io/image/image_loader.cpp)
 target_include_directories(ImageLoader PUBLIC include)

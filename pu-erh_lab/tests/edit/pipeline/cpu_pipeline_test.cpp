@@ -34,12 +34,12 @@ TEST_F(PipelineTests, SimpleTest1) {
     auto           img_pool = manager.GetPool()->GetPool();
 
     nlohmann::json to_ws_params;
-    to_ws_params["ocio"] = {{"src", ""}, {"dst", "ACEScct"}};
+    to_ws_params["ocio"] = {{"src", "Linear Rec.709 (sRGB)"}, {"dst", "ACEScct"}};
 
     nlohmann::json basic_params;
     basic_params["exposure"]   = 0.4f;
     basic_params["highlights"] = -45.0f;
-    basic_params["shadows"]    = 55.0f;
+    basic_params["shadows"]    = 85.0f;
     basic_params["white"]      = -15.0f;
     basic_params["black"]      = 60.0f;
 
@@ -82,8 +82,8 @@ TEST_F(PipelineTests, SimpleTest1) {
 
         auto& adj = pipeline.GetStage(PipelineStageName::Basic_Adjustment);
         // adj.SetOperator(OperatorType::EXPOSURE, basic_params);
-        adj.SetOperator(OperatorType::SHADOWS, basic_params);
-        adj.SetOperator(OperatorType::HIGHLIGHTS, basic_params);
+        // adj.SetOperator(OperatorType::SHADOWS, basic_params);
+        // adj.SetOperator(OperatorType::HIGHLIGHTS, basic_params);
         // adj.SetOperator(OperatorType::WHITE, basic_params);
 
         auto& lmt = pipeline.GetStage(PipelineStageName::Color_Adjustment);

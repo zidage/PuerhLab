@@ -45,7 +45,7 @@ auto ImageBuffer::GetGPUData() -> cv::cuda::GpuMat& {
   if (!_data_valid) {
     throw std::runtime_error("Image Buffer: No valid image data to be returned");
   }
-  SyncToGPU();
+  // SyncToGPU();
   return _gpu_data;
 }
 

@@ -6,6 +6,9 @@ set(CMAKE_CXX_STANDARD 20)
 #set(CMAKE_C_COMPILER "clang")
 #set(CMAKE_CXX_COMPILER "clang++")
 # Compiler flags.
+
+
+
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /W4 /external:anglebrackets /external:W0 /D_DEBUG /EHsc /arch:AVX2")
 set(CMAKE_LINKER_FLAGS_DEBUG "/DEBUG")
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
@@ -16,8 +19,9 @@ set(CMAKE_VS_USE_DEBUG_LIBRARIES "$<CONFIG:Debug,Custom>")
 set(DCMAKE_TOOLCHAIN_FILE "D:\\misc\\vcpkg\\scripts\\buildsystems\\vcpkg.cmake")
 
 set(CMAKE_PREFIX_PATH "D:/Projects/pu-erh_lab/pu-erh_lab/third_party/easy_profiler-v2.1.0-msvc15-win64/lib/cmake/easy_profiler")
+set(CMAKE_CUDA_FLAGS "")
+project(pu-erh_lab VERSION 0.1.0 LANGUAGES C CXX CUDA)
 
-project(pu-erh_lab VERSION 0.1.0 LANGUAGES C CXX)
 
 
 # Dependencies
