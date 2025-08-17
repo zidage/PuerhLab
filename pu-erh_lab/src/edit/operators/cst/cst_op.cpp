@@ -38,59 +38,61 @@ OCIO_ACES_Transform_Op::OCIO_ACES_Transform_Op(const nlohmann::json& params) {
 
 auto OCIO_ACES_Transform_Op::Apply(ImageBuffer& input) -> ImageBuffer {
   auto& img = input.GetCPUData();
-  if (!_input_transform.empty()) {
-    auto transform = OCIO::LookTransform::Create();
-    transform->setLooks("ACES 1.3 Reference Gamut Compression");
+  if (!_input_transform.empty() && !_output_transform.empty()) {
+    auto input_transform = OCIO::ColorSpaceTransform::Create();
+    input_transform->setSrc(_input_transform.c_str());
+    input_transform->setDst("ACES - ACES2065-1");
+    auto                  idt = config->getProcessor(input_transform);
+    auto                  cpu = idt->getDefaultCPUProcessor();
+    OCIO::PackedImageDesc desc_idt(img.ptr<float>(0), img.cols, img.rows, 3);
+    cpu->apply(desc_idt);
+
+    auto output_transform = OCIO::LookTransform::Create();
+    output_transform->setLooks("ACES 1.3 Reference Gamut Compression");
+    output_transform->setSrc("ACES - ACES2065-1");
+    output_transform->setDst(_output_transform.c_str());
+    auto                  odt     = config->getProcessor(output_transform);
+    auto                  odt_cpu = odt->getDefaultCPUProcessor();
+    OCIO::PackedImageDesc desc_odt(img.ptr<float>(0), img.cols, img.rows, 3);
+    odt_cpu->apply(desc_odt);
+
+  } else if (!_input_transform.empty() && _output_transform.empty()) {
+    auto transform = OCIO::ColorSpaceTransform::Create();
+    // transform->setLooks("ACES 1.3 Reference Gamut Compression");
     transform->setSrc(_input_transform.c_str());
     transform->setDst("ACES - ACES2065-1");
     auto                  idt = config->getProcessor(transform);
     auto                  cpu = idt->getDefaultCPUProcessor();
 
-    OCIO::PackedImageDesc desc_idt(img.ptr<float>(0), img.cols, img.rows, 3);
+    OCIO::PackedImageDesc desc(img.ptr<float>(0), img.cols, img.rows, 3);
 
-    cv::parallel_for_(cv::Range(0, img.rows), [&](const cv::Range& range) {
-      for (int y = range.start; y < range.end; ++y) {
-        cv::Vec3f* row = img.ptr<cv::Vec3f>(y);
-        for (int x = 0; x < img.cols; ++x) {
-          cpu->applyRGB(&row[x][0]);
-        }
-      }
-    });
-  }
-  if (!_output_transform.empty() && _output_transform.ends_with("Display")) {
+    cpu->apply(desc);
+
+  } else if (_input_transform.empty() && !_output_transform.empty() &&
+             _output_transform.ends_with("Display")) {
     auto transform = OCIO::DisplayViewTransform::Create();
     transform->setSrc("ACES - ACES2065-1");
     transform->setDisplay(_output_transform.c_str());
     transform->setView("ACES 2.0 - SDR 100 nits (Rec.709)");
 
-    auto odt = config->getProcessor(transform);
-    auto cpu = odt->getDefaultCPUProcessor();
+    auto                  odt = config->getProcessor(transform);
+    auto                  cpu = odt->getDefaultCPUProcessor();
 
-    cv::parallel_for_(cv::Range(0, img.rows), [&](const cv::Range& range) {
-      for (int y = range.start; y < range.end; ++y) {
-        cv::Vec3f* row = img.ptr<cv::Vec3f>(y);
-        for (int x = 0; x < img.cols; ++x) {
-          cpu->applyRGB(&row[x][0]);
-        }
-      }
-    });
-  } else if (!_output_transform.empty()) {
+    OCIO::PackedImageDesc desc(img.ptr<float>(0), img.cols, img.rows, 3);
+
+    cpu->apply(desc);
+  } else if (_input_transform.empty() && !_output_transform.empty()) {
     auto transform = OCIO::LookTransform::Create();
     transform->setLooks("ACES 1.3 Reference Gamut Compression");
     transform->setSrc("ACES - ACES2065-1");
     transform->setDst(_output_transform.c_str());
     transform->setDirection(OCIO::TransformDirection::TRANSFORM_DIR_FORWARD);
 
-    auto csc = config->getProcessor(transform);
-    auto cpu = csc->getDefaultCPUProcessor();
-    cv::parallel_for_(cv::Range(0, img.rows), [&](const cv::Range& range) {
-      for (int y = range.start; y < range.end; ++y) {
-        cv::Vec3f* row = img.ptr<cv::Vec3f>(y);
-        for (int x = 0; x < img.cols; ++x) {
-          cpu->applyRGB(&row[x][0]);
-        }
-      }
-    });
+    auto                  csc = config->getProcessor(transform);
+    auto                  cpu = csc->getDefaultCPUProcessor();
+    OCIO::PackedImageDesc desc(img.ptr<float>(0), img.cols, img.rows, 3);
+
+    cpu->apply(desc);
   }
   return {std::move(img)};
 }

@@ -83,7 +83,7 @@ void RawDecoder::Decode(std::vector<char>&& buffer, std::shared_ptr<Image> sourc
   raw_processor.unpack();
 
   OpenCVRawProcessor processor{
-      {true, false, {}, false, true, 0}, raw_processor.imgdata.rawdata, raw_processor};
+      {false, false, {}, false, true, 0}, raw_processor.imgdata.rawdata, raw_processor};
 
   auto processed = processor.Process();
 

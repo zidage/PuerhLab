@@ -13,15 +13,14 @@
 #include "sleeve/sleeve_manager.hpp"
 #include "utils/string/convert.hpp"
 
-
-
 using namespace puerhlab;
 TEST_F(PipelineTests, SimpleTest1) {
   {
     SleeveManager manager{db_path_};
     ImageLoader   image_loader(128, 8, 0);
     image_path_t  path =
-        L"D:\\Projects\\pu-erh_lab\\pu-erh_lab\\tests\\resources\\sample_images\\raw\\camera\\sony\\a1";
+        L"D:\\Projects\\pu-erh_lab\\pu-erh_lab\\tests\\resources\\sample_"
+        L"images\\raw\\camera\\fuji\\gfx50sii";
     std::vector<image_path_t> imgs;
     for (const auto& img : std::filesystem::directory_iterator(path)) {
       if (!img.is_directory()) imgs.push_back(img.path());
@@ -37,11 +36,15 @@ TEST_F(PipelineTests, SimpleTest1) {
     to_ws_params["ocio"] = {{"src", "Linear Rec.709 (sRGB)"}, {"dst", "ACEScct"}};
 
     nlohmann::json basic_params;
+    // basic_params["ocio"] = {{"src", ""}, {"dst", "ACEScct"}};
     basic_params["exposure"]   = 0.4f;
-    basic_params["highlights"] = -45.0f;
-    basic_params["shadows"]    = 85.0f;
+    basic_params["highlights"] = -35.0f;
+    basic_params["shadows"]    = 55.0f;
     basic_params["white"]      = -15.0f;
-    basic_params["black"]      = 60.0f;
+    basic_params["black"]      = 50.0f;
+
+    nlohmann::json color_params;
+    color_params["vibrance"] = 100.0f;
 
     nlohmann::json color_wheel_params;
     color_wheel_params["color_wheel"] = {{"lift",
@@ -67,24 +70,25 @@ TEST_F(PipelineTests, SimpleTest1) {
     lmt_params["ocio_lmt"] =
         "D:\\Projects\\pu-erh_lab\\pu-erh_lab\\src\\config\\LUTs\\ACES CCT 2383 D65.cube";
 
-    nlohmann::json pre_output_params;
-    pre_output_params["ocio"] = {{"src", "ACEScct"}, {"dst", ""}};
-
     nlohmann::json output_params;
     output_params["ocio"] = {{"src", "ACEScct"}, {"dst", "Camera Rec.709"}};
 
     for (auto& pair : img_pool) {
-      auto task = [pair, img_pool, to_ws_params, color_wheel_params, basic_params, contrast_params,
-                   lmt_params, pre_output_params, output_params]() mutable {
+      auto task = [pair, img_pool, to_ws_params, color_wheel_params, basic_params, color_params,
+                   lmt_params, output_params]() mutable {
         CPUPipeline pipeline{};
         auto&       to_ws = pipeline.GetStage(PipelineStageName::To_WorkingSpace);
         to_ws.SetOperator(OperatorType::CST, to_ws_params);
 
         auto& adj = pipeline.GetStage(PipelineStageName::Basic_Adjustment);
+        // adj.SetOperator(OperatorType::CST, basic_params);
         // adj.SetOperator(OperatorType::EXPOSURE, basic_params);
-        // adj.SetOperator(OperatorType::SHADOWS, basic_params);
-        // adj.SetOperator(OperatorType::HIGHLIGHTS, basic_params);
-        // adj.SetOperator(OperatorType::WHITE, basic_params);
+        adj.SetOperator(OperatorType::SHADOWS, basic_params);
+        adj.SetOperator(OperatorType::HIGHLIGHTS, basic_params);
+        // adj.SetOperator(OperatorType::BLACK, basic_params);
+
+        auto& color_adj = pipeline.GetStage(PipelineStageName::Color_Adjustment);
+        color_adj.SetOperator(OperatorType::VIBRANCE, color_params);
 
         auto& lmt = pipeline.GetStage(PipelineStageName::Color_Adjustment);
         // lmt.SetOperator(OperatorType::ACES_TONE_MAPPING, output_params);
@@ -116,7 +120,7 @@ TEST_F(PipelineTests, SimpleTest1) {
 
         EASY_BLOCK("Image Saving");
         cv::cuda::GpuMat to_save_rec709;
-        cv::Mat to_save_rec709_cpu;
+        cv::Mat          to_save_rec709_cpu;
 
         output.SyncToGPU();
         auto& gpu_data = output.GetGPUData();

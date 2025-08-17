@@ -81,11 +81,12 @@ __global__ void WhiteBalanceCorrectionKernel(cv::cuda::PtrStep<ushort> image, in
     return;
   }
 
-  // Determine the color channel (0, 1, 2, 3) for the current pixel based on its position.
+  // Determine the color channel (0, 1, 3, 2) for the current pixel based on its position.
   // This standard calculation assumes a 2x2 Bayer pattern (like RGGB, GRBG, etc.).
   // The 'bayer_pattern_offset' helps align to the specific pattern from LibRaw's `idata.filters`.
   // The LibRaw COLOR(row, col) macro can often be simplified to this.
   const int color_idx = remap[(((row % 2) * 2) + (col % 2) + bayer_pattern_offset) % 4];
+
 
   // Get a pointer to the current pixel
   ushort*   pixel_ptr = (ushort*)((char*)image.data + row * image.step) + col;
@@ -100,7 +101,8 @@ __global__ void WhiteBalanceCorrectionKernel(cv::cuda::PtrStep<ushort> image, in
 
   // 3. White Balance Multiplication
   // The multipliers are normalized to the green channel (index 1)
-  const float wb_mul = d_wb_multipliers[color_idx] / d_wb_multipliers[1];
+  float mask = (color_idx == 0 || color_idx == 2) ? 1.0f : 0.0f;
+  const float wb_mul = (d_wb_multipliers[color_idx] / d_wb_multipliers[1]) * mask + (1.0f - mask);
   pixel_val *= wb_mul;
 
   // 4. White Level Scaling (Normalization)

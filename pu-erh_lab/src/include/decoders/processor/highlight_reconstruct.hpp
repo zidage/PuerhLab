@@ -13,13 +13,8 @@ class OpenCVHighlightRecovery {
     float clip_threshold;
     int   morphological_radius;
     float candidate_weight;
-    bool  enable_debug_viz;
 
-    RecoveryParams()
-        : clip_threshold(0.98f),
-          morphological_radius(4),
-          candidate_weight(0.5f),
-          enable_debug_viz(false) {}
+    RecoveryParams() : clip_threshold(0.98f), morphological_radius(4), candidate_weight(0.5f) {}
   };
 
   struct SegmentInfo {
@@ -51,5 +46,9 @@ class OpenCVHighlightRecovery {
   void ProcessHighlights(const std::vector<cv::Mat>& bayer_planes,
                          const RecoveryParams&       params = {});
   auto GetProcessedPlanes() -> std::vector<cv::Mat>&;
+  void PerformPseudoChromacityInpainting(cv::Mat& plane, const cv::Mat& inpaint_mask,
+                                         const SegmentInfo& segment, float reference_value);
+  void CalculateNeighborPlaneMeans(const cv::Rect& bbox, std::vector<float>& means);
+  void FinalizeRecovery();
 };
 };  // namespace puerhlab
