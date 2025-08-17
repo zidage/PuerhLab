@@ -33,17 +33,25 @@ auto VibranceOp::Apply(ImageBuffer& input) -> ImageBuffer {
     // Adpated from https://github.com/tannerhelland/PhotoDemon
     float r = pixel[0], g = pixel[1], b = pixel[2];
 
-    float avg      = (r + g + g + b) / 4.0f;
-    float max_val  = std::max({r, g, b});
+    float max_val = std::max({r, g, b});
+    float min_val = std::min({r, g, b});
+    float chroma  = max_val - min_val;
 
-    // vibrance_bias ∈ [-100, 100]
-    float strength = -_vibrance_offset * 0.02f;
+    float scale   = ComputeScale(chroma);
 
-    float amt      = std::abs(max_val - avg) * strength;
+    if (_vibrance_offset >= 0.0f) {
+      float luma = r * 0.299f + g * 0.587f + b * 0.114f;
 
-    if (r != max_val) r += (max_val - r) * amt;
-    if (g != max_val) g += (max_val - g) * amt;
-    if (b != max_val) b += (max_val - b) * amt;
+      r          = luma + (r - luma) * scale;
+      g          = luma + (g - luma) * scale;
+      b          = luma + (b - luma) * scale;
+
+    } else {
+      float avg = (r + g + b) / 3.0f;
+      r += (avg - r) * (1.0f - scale);
+      g += (avg - g) * (1.0f - scale);
+      b += (avg - b) * (1.0f - scale);
+    }
 
     // clamp
     r     = std::clamp(r, 0.0f, 1.0f);

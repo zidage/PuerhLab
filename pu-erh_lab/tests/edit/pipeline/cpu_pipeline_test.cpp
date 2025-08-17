@@ -20,7 +20,7 @@ TEST_F(PipelineTests, SimpleTest1) {
     ImageLoader   image_loader(128, 8, 0);
     image_path_t  path =
         L"D:\\Projects\\pu-erh_lab\\pu-erh_lab\\tests\\resources\\sample_"
-        L"images\\raw\\camera\\fuji\\gfx50sii";
+        L"images\\raw\\camera\\sony\\a7c";
     std::vector<image_path_t> imgs;
     for (const auto& img : std::filesystem::directory_iterator(path)) {
       if (!img.is_directory()) imgs.push_back(img.path());
@@ -44,7 +44,7 @@ TEST_F(PipelineTests, SimpleTest1) {
     basic_params["black"]      = 50.0f;
 
     nlohmann::json color_params;
-    color_params["vibrance"] = 100.0f;
+    color_params["vibrance"] = 15.0f;
 
     nlohmann::json color_wheel_params;
     color_wheel_params["color_wheel"] = {{"lift",
@@ -81,10 +81,9 @@ TEST_F(PipelineTests, SimpleTest1) {
         to_ws.SetOperator(OperatorType::CST, to_ws_params);
 
         auto& adj = pipeline.GetStage(PipelineStageName::Basic_Adjustment);
-        // adj.SetOperator(OperatorType::CST, basic_params);
         // adj.SetOperator(OperatorType::EXPOSURE, basic_params);
-        adj.SetOperator(OperatorType::SHADOWS, basic_params);
-        adj.SetOperator(OperatorType::HIGHLIGHTS, basic_params);
+        // adj.SetOperator(OperatorType::SHADOWS, basic_params);
+        // adj.SetOperator(OperatorType::HIGHLIGHTS, basic_params);
         // adj.SetOperator(OperatorType::BLACK, basic_params);
 
         auto& color_adj = pipeline.GetStage(PipelineStageName::Color_Adjustment);

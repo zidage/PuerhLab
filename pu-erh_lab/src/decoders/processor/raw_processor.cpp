@@ -9,10 +9,12 @@
 #include <cmath>
 #include <cstdint>
 #include <opencv2/core.hpp>
+#include <opencv2/core/base.hpp>
 #include <opencv2/core/mat.hpp>
 #include <opencv2/core/utility.hpp>
 #include <opencv2/cudaarithm.hpp>
 #include <opencv2/cudaimgproc.hpp>
+#include <opencv2/highgui.hpp>
 #include <opencv2/opencv.hpp>
 #include <stdexcept>
 
@@ -149,13 +151,160 @@ void OpenCVRawProcessor::ApplyWhiteBalance() {
         float mask        = (color_idx == 0 || color_idx == 2) ? 1.0f : 0.0f;
         float wb_mul      = (wb[color_idx] / wb[1]) * mask + (1.0f - mask);
         float muled_pixel = pixel * wb_mul;
-        muled_pixel       = fmaxf(0.0f, fminf(65535.0f, muled_pixel));
-        pixel             = static_cast<uint16_t>(muled_pixel);
+        muled_pixel *= (65535.0f / maximum);
+        muled_pixel = fmaxf(0.0f, fminf(65535.0f, muled_pixel));
+        pixel       = static_cast<uint16_t>(muled_pixel);
       });
     }
     // White level
-    cpu_img = cpu_img * (65535.0f / maximum);
+    // cpu_img = cpu_img * (65535.0f / maximum);
   }
+}
+
+void OpenCVRawProcessor::BayerRGGB2RGB_AHD(cv::Mat& bayer) {
+  bayer.convertTo(bayer, CV_32FC1, 1.0f / 65535.0f);
+  const int h = bayer.rows;
+  const int w = bayer.cols;
+
+  cv::Mat1f mask_R(h, w, 0.0f);
+  cv::Mat1f mask_G_r(h, w, 0.0f);
+  cv::Mat1f mask_G_b(h, w, 0.0f);
+  cv::Mat1f mask_B(h, w, 0.0f);
+
+  // build masks using forEach
+  bayer.forEach<float>([&](float&, const int* pos) {
+    int y           = pos[0];
+    int x           = pos[1];
+    int color_index = _raw_processor.COLOR(y, x);  // assume 0:R,1:G_r,2:B,3:G_b
+    switch (color_index) {
+      case 0:
+        mask_R(y, x) = 1.0f;
+        break;
+      case 1:
+        mask_G_r(y, x) = 1.0f;
+        break;
+      case 2:
+        mask_B(y, x) = 1.0f;
+        break;
+      case 3:
+        mask_G_b(y, x) = 1.0f;
+        break;
+      default:
+        break;
+    }
+  });
+
+  // compute directional green estimates at R/B positions using forEach
+  cv::Mat1f G_h(h, w, 0.0f);
+  cv::Mat1f G_v(h, w, 0.0f);
+
+  bayer.forEach<float>([&](float val, const int* pos) {
+    int y = pos[0];
+    int x = pos[1];
+    if (y < 2 || y >= h - 2 || x < 2 || x >= w - 2) return;
+    if (mask_R(y, x) > 0.5f || mask_B(y, x) > 0.5f) {
+      float center = val;
+      float h_avg  = 0.5f * (bayer.at<float>(y, x - 1) + bayer.at<float>(y, x + 1));
+      float h_diff =
+          0.25f * (2.0f * center - bayer.at<float>(y, x - 2) - bayer.at<float>(y, x + 2));
+      G_h(y, x)   = h_avg + h_diff;
+
+      float v_avg = 0.5f * (bayer.at<float>(y - 1, x) + bayer.at<float>(y + 1, x));
+      float v_diff =
+          0.25f * (2.0f * center - bayer.at<float>(y - 2, x) - bayer.at<float>(y + 2, x));
+      G_v(y, x) = v_avg + v_diff;
+    }
+  });
+
+  // choose best directional green (G_final) using forEach
+  cv::Mat1f G_final = bayer.clone();
+  bayer.forEach<float>([&](float, const int* pos) {
+    int y = pos[0];
+    int x = pos[1];
+    if (y < 1 || y >= h - 1 || x < 1 || x >= w - 1) return;
+    if (mask_R(y, x) > 0.5f || mask_B(y, x) > 0.5f) {
+      float Dh      = std::abs(bayer.at<float>(y, x - 1) - bayer.at<float>(y, x + 1));
+      float Dv      = std::abs(bayer.at<float>(y - 1, x) - bayer.at<float>(y + 1, x));
+      G_final(y, x) = (Dh < Dv) ? G_h(y, x) : G_v(y, x);
+    }
+  });
+
+  // initialize R_final and B_final (only at their native positions)
+  cv::Mat1f R_final = bayer.mul(mask_R);
+  cv::Mat1f B_final = bayer.mul(mask_B);
+
+  // Fill missing R and B using pattern-aware interpolation with forEach
+  bayer.forEach<float>([&](float, const int* pos) {
+    int y = pos[0];
+    int x = pos[1];
+    if (y < 1 || y >= h - 1 || x < 1 || x >= w - 1) return;
+
+    // --- fill missing R ---
+    if (mask_R(y, x) < 0.5f) {
+      float estimateR = 0.0f;
+      if (mask_G_r(y, x) > 0.5f) {
+        // G on R row: R neighbors are left/right
+        float left  = R_final(y, x - 1) - G_final(y, x - 1);
+        float right = R_final(y, x + 1) - G_final(y, x + 1);
+        estimateR   = G_final(y, x) + 0.5f * (left + right);
+      } else if (mask_G_b(y, x) > 0.5f) {
+        // G on B row: R neighbors are up/down
+        float up   = R_final(y - 1, x) - G_final(y - 1, x);
+        float down = R_final(y + 1, x) - G_final(y + 1, x);
+        estimateR  = G_final(y, x) + 0.5f * (up + down);
+      } else if (mask_B(y, x) > 0.5f) {
+        // At a B pixel: R is on diagonals
+        float d1  = R_final(y - 1, x - 1) - G_final(y - 1, x - 1);
+        float d2  = R_final(y - 1, x + 1) - G_final(y - 1, x + 1);
+        float d3  = R_final(y + 1, x - 1) - G_final(y + 1, x - 1);
+        float d4  = R_final(y + 1, x + 1) - G_final(y + 1, x + 1);
+        estimateR = G_final(y, x) + 0.25f * (d1 + d2 + d3 + d4);
+      } else {
+        // fallback: simple average of immediate neighbors
+        float left  = R_final(y, x - 1) - G_final(y, x - 1);
+        float right = R_final(y, x + 1) - G_final(y, x + 1);
+        float up    = R_final(y - 1, x) - G_final(y - 1, x);
+        float down  = R_final(y + 1, x) - G_final(y + 1, x);
+        estimateR   = G_final(y, x) + 0.25f * (left + right + up + down);
+      }
+      R_final(y, x) = estimateR;
+    }
+
+    // --- fill missing B ---
+    if (mask_B(y, x) < 0.5f) {
+      float estimateB = 0.0f;
+      if (mask_G_b(y, x) > 0.5f) {
+        // G on B row: B neighbors are left/right
+        float left  = B_final(y, x - 1) - G_final(y, x - 1);
+        float right = B_final(y, x + 1) - G_final(y, x + 1);
+        estimateB   = G_final(y, x) + 0.5f * (left + right);
+      } else if (mask_G_r(y, x) > 0.5f) {
+        // G on R row: B neighbors are up/down
+        float up   = B_final(y - 1, x) - G_final(y - 1, x);
+        float down = B_final(y + 1, x) - G_final(y + 1, x);
+        estimateB  = G_final(y, x) + 0.5f * (up + down);
+      } else if (mask_R(y, x) > 0.5f) {
+        // At an R pixel: B is on diagonals
+        float d1  = B_final(y - 1, x - 1) - G_final(y - 1, x - 1);
+        float d2  = B_final(y - 1, x + 1) - G_final(y - 1, x + 1);
+        float d3  = B_final(y + 1, x - 1) - G_final(y + 1, x - 1);
+        float d4  = B_final(y + 1, x + 1) - G_final(y + 1, x + 1);
+        estimateB = G_final(y, x) + 0.25f * (d1 + d2 + d3 + d4);
+      } else {
+        // fallback
+        float left  = B_final(y, x - 1) - G_final(y, x - 1);
+        float right = B_final(y, x + 1) - G_final(y, x + 1);
+        float up    = B_final(y - 1, x) - G_final(y - 1, x);
+        float down  = B_final(y + 1, x) - G_final(y + 1, x);
+        estimateB   = G_final(y, x) + 0.25f * (left + right + up + down);
+      }
+      B_final(y, x) = estimateB;
+    }
+  });
+
+  // merge channels into a 3-channel RGB image
+  std::vector<cv::Mat> channels = {R_final, G_final, B_final};
+  cv::merge(channels, bayer);  // rgb is CV_32FC3
 }
 
 void OpenCVRawProcessor::ApplyDebayer() {
@@ -165,7 +314,10 @@ void OpenCVRawProcessor::ApplyDebayer() {
     cv::cuda::cvtColor(gpu_img, gpu_img, cv::COLOR_BayerBG2RGB);
   } else {
     auto& img = pre_debayer_buffer.GetCPUData();
-    cv::cvtColor(img, img, cv::COLOR_BayerBG2RGB);
+
+    BayerRGGB2RGB_AHD(img);
+    // cv::cvtColor(img, img, cv::COLOR_BayerBG2RGB);
+    // img.convertTo(img, CV_32FC1, 1.0f / 65535.0f);
   }
 }
 
@@ -186,12 +338,12 @@ void OpenCVRawProcessor::ApplyColorSpaceTransform() {
     stream.waitForCompletion();
   } else {
     auto& img = debayer_buffer.GetCPUData();
-    img.convertTo(img, CV_32FC3, 1.0f / 65535.0f);
+    img.convertTo(img, CV_32FC3);
 
     cv::Matx33f cam_rgb({color_coeffs[0][0], color_coeffs[0][1], color_coeffs[0][2],
                          color_coeffs[1][0], color_coeffs[1][1], color_coeffs[1][2],
                          color_coeffs[2][0], color_coeffs[2][1], color_coeffs[2][2]});
-    cam_rgb = cam_rgb.inv();
+    // cam_rgb = cam_rgb.inv();
 
     cv::transform(img, img, cv::Mat(cam_rgb));
   }
@@ -210,8 +362,10 @@ auto OpenCVRawProcessor::Process() -> ImageBuffer {
   }
   EASY_END_BLOCK;
 
-  std::cout << _raw_processor.COLOR(0, 0) << " " << _raw_processor.COLOR(0, 1) << " "
-            << _raw_processor.COLOR(1, 0) << " " << _raw_processor.COLOR(1, 1) << "\n";
+  // std::cout << _raw_processor.COLOR(0, 0) << " " << _raw_processor.COLOR(0, 1) << " "
+  //           << _raw_processor.COLOR(1, 0) << " " << _raw_processor.COLOR(1, 1) << "\n";
+  CV_Assert(_raw_processor.COLOR(0, 0) == 0 && _raw_processor.COLOR(0, 1) == 1 &&
+            _raw_processor.COLOR(1, 0) == 3 && _raw_processor.COLOR(1, 1) == 2);
   ApplyWhiteBalance();
   ApplyDebayer();
   // ApplyHighlightReconstruction();
