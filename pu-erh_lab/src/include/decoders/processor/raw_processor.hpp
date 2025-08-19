@@ -34,11 +34,6 @@ class OpenCVRawProcessor {
   //                                          -0.4959030231f, 1.3733130458f, 0.0982400361f,
   //                                          0.0000000000f,  0.0000000000f, 0.9912520182f};
 
-  std::vector<cv::Mat>    ExtractBayerPlanes(const cv::Mat& bayer_image);
-  cv::Mat                 ReconstructBayerImage(const std::vector<cv::Mat>& planes);
-
-  void                    BayerRGGB2RGB_AHD(cv::Mat& bayer);
-
   void                    ApplyWhiteBalance();
   void                    ApplyDebayer();
   void                    ApplyColorSpaceTransform();

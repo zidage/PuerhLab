@@ -20,7 +20,7 @@ TEST_F(PipelineTests, SimpleTest1) {
     ImageLoader   image_loader(128, 8, 0);
     image_path_t  path =
         L"D:\\Projects\\pu-erh_lab\\pu-erh_lab\\tests\\resources\\sample_"
-        L"images\\raw\\camera\\sony\\a7c";
+        L"images\\raw\\camera\\nikon\\z6ii";
     std::vector<image_path_t> imgs;
     for (const auto& img : std::filesystem::directory_iterator(path)) {
       if (!img.is_directory()) imgs.push_back(img.path());
@@ -71,14 +71,14 @@ TEST_F(PipelineTests, SimpleTest1) {
         "D:\\Projects\\pu-erh_lab\\pu-erh_lab\\src\\config\\LUTs\\ACES CCT 2383 D65.cube";
 
     nlohmann::json output_params;
-    output_params["ocio"] = {{"src", "ACEScct"}, {"dst", "Camera Rec.709"}};
+    output_params["ocio"] = {{"src", "Linear Rec.709 (sRGB)"}, {"dst", "Camera Rec.709"}};
 
     for (auto& pair : img_pool) {
       auto task = [pair, img_pool, to_ws_params, color_wheel_params, basic_params, color_params,
                    lmt_params, output_params]() mutable {
         CPUPipeline pipeline{};
         auto&       to_ws = pipeline.GetStage(PipelineStageName::To_WorkingSpace);
-        to_ws.SetOperator(OperatorType::CST, to_ws_params);
+        // to_ws.SetOperator(OperatorType::CST, to_ws_params);
 
         auto& adj = pipeline.GetStage(PipelineStageName::Basic_Adjustment);
         // adj.SetOperator(OperatorType::EXPOSURE, basic_params);
@@ -87,7 +87,7 @@ TEST_F(PipelineTests, SimpleTest1) {
         // adj.SetOperator(OperatorType::BLACK, basic_params);
 
         auto& color_adj = pipeline.GetStage(PipelineStageName::Color_Adjustment);
-        color_adj.SetOperator(OperatorType::VIBRANCE, color_params);
+        // color_adj.SetOperator(OperatorType::VIBRANCE, color_params);
 
         auto& lmt = pipeline.GetStage(PipelineStageName::Color_Adjustment);
         // lmt.SetOperator(OperatorType::ACES_TONE_MAPPING, output_params);
@@ -129,7 +129,7 @@ TEST_F(PipelineTests, SimpleTest1) {
 
         EASY_BLOCK("Write To Disk");
         cv::imwrite(std::format("D:\\Projects\\pu-erh_lab\\pu-erh_lab\\tests\\resources\\sample_"
-                                "images\\my_pipeline\\batch_results\\{}.tif",
+                                "images\\my_pipeline\\batch_results\\{}_restored.tif",
                                 conv::ToBytes(img->_image_path.filename().wstring())),
                     to_save_rec709_cpu);
         EASY_END_BLOCK;

@@ -9,7 +9,7 @@ set(CMAKE_CXX_STANDARD 20)
 
 
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /W4 /external:anglebrackets /external:W0 /D_DEBUG /EHsc /arch:AVX2")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /W4 /external:anglebrackets /external:W0 /D_DEBUG /EHsc /arch:AVX2 /openmp")
 set(CMAKE_LINKER_FLAGS_DEBUG "/DEBUG")
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(BUILD_STATIC_LIB ON)
@@ -37,6 +37,8 @@ set(GOOGLETEST_ENABLE_FUZZTEST ON CACHE BOOL "Enable fuzztest support")
 
 FetchContent_MakeAvailable(googletest)
 enable_testing() 
+
+find_package(OpenMP REQUIRED)
 
 # LibRaw
 add_library(LibRaw SHARED IMPORTED)

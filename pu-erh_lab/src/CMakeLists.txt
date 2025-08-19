@@ -13,11 +13,12 @@ add_library(Image
     image/image.cpp
 )
 target_include_directories(Image PUBLIC include)
-target_link_libraries(Image PUBLIC Exiv2 ${OpenCV_LIBS} LibRaw TimeProvider JSON xxHash easy_profiler)
+target_link_libraries(Image PUBLIC Exiv2 ${OpenCV_LIBS} LibRaw TimeProvider JSON xxHash easy_profiler OpenMP::OpenMP_CXX)
 
 add_library(RawProcessor
     decoders/processor/raw_processor.cpp
     decoders/processor/cuda_operators.cu
+    decoders/processor/cpu_operators.cpp
     decoders/processor/highlight_reconstruct.cpp
 )
 target_include_directories(RawProcessor PUBLIC include)

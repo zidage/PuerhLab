@@ -3,6 +3,8 @@
 
 #include "decoders/processor/cuda_operators.hpp"
 
+namespace puerhlab {
+namespace CUDA {
 __constant__ float M_const[9];
 
 __global__ void    ApplyColorMatrixKernel(const uchar* srcptr, uchar* dstptr, int rows, int cols,
@@ -99,6 +101,7 @@ __global__ void WhiteBalanceCorrectionKernel(cv::cuda::PtrStep<ushort> image, in
   // 2. Black Level Subtraction
   pixel_val -= d_black_level[color_idx];
 
+  pixel_val *= white_level_scale;
   // 3. White Balance Multiplication
   // The multipliers are normalized to the green channel (index 1)
   float mask = (color_idx == 0 || color_idx == 2) ? 1.0f : 0.0f;
@@ -106,7 +109,6 @@ __global__ void WhiteBalanceCorrectionKernel(cv::cuda::PtrStep<ushort> image, in
   pixel_val *= wb_mul;
 
   // 4. White Level Scaling (Normalization)
-  pixel_val *= white_level_scale;
 
   // 5. Clamp the result to the valid 16-bit range [0, 65535]
   pixel_val  = fmaxf(0.0f, fminf(65535.0f, pixel_val));
@@ -164,3 +166,5 @@ void WhiteBalanceCorrection(cv::cuda::GpuMat& image, const std::array<float, 4>&
     image.convertTo(image, CV_16U, white_level_scale);
   }
 }
+};
+};

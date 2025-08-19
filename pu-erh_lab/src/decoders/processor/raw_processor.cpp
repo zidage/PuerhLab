@@ -18,6 +18,7 @@
 #include <opencv2/opencv.hpp>
 #include <stdexcept>
 
+#include "decoders/processor/cpu_operators.hpp"
 #include "decoders/processor/cuda_operators.hpp"
 #include "decoders/processor/highlight_reconstruct.hpp"
 #include "image/image_buffer.hpp"
@@ -27,284 +28,29 @@ OpenCVRawProcessor::OpenCVRawProcessor(const RawParams& params, const libraw_raw
                                        LibRaw& raw_processor)
     : _params(params), _raw_data(rawdata), _raw_processor(raw_processor) {}
 
-std::vector<cv::Mat> OpenCVRawProcessor::ExtractBayerPlanes(const cv::Mat& bayer_image) {
-  CV_Assert(bayer_image.type() == CV_16UC1);
-  CV_Assert(bayer_image.rows % 2 == 0 && bayer_image.cols % 2 == 0);
-
-  int                  height       = bayer_image.rows;
-  int                  width        = bayer_image.cols;
-  int                  plane_height = height / 2;
-  int                  plane_width  = width / 2;
-
-  std::vector<cv::Mat> planes(4);
-  for (int i = 0; i < 4; ++i) {
-    planes[i] = cv::Mat::zeros(plane_height, plane_width, CV_32F);
-  }
-
-  // 使用OpenCV的并行循环
-  cv::parallel_for_(
-      cv::Range(0, plane_height),
-      [&](const cv::Range& range) {
-        for (int py = range.start; py < range.end; ++py) {
-          for (int px = 0; px < plane_width; ++px) {
-            int      src_y              = py * 2;
-            int      src_x              = px * 2;
-
-            // 获取2x2 Bayer块的值
-            uint16_t r_val              = bayer_image.at<uint16_t>(src_y, src_x);          // R
-            uint16_t g1_val             = bayer_image.at<uint16_t>(src_y, src_x + 1);      // G1
-            uint16_t g2_val             = bayer_image.at<uint16_t>(src_y + 1, src_x);      // G2
-            uint16_t b_val              = bayer_image.at<uint16_t>(src_y + 1, src_x + 1);  // B
-
-            // 转换并存储
-            planes[0].at<float>(py, px) = r_val / 65535.0f;
-            planes[1].at<float>(py, px) = g1_val / 65535.0f;
-            planes[2].at<float>(py, px) = g2_val / 65535.0f;
-            planes[3].at<float>(py, px) = b_val / 65535.0f;
-          }
-        }
-      },
-      cv::getNumThreads() * 4);
-
-  return planes;
-}
-
-cv::Mat OpenCVRawProcessor::ReconstructBayerImage(const std::vector<cv::Mat>& planes) {
-  CV_Assert(planes.size() == 4);
-
-  int          plane_height = planes[0].rows;
-  int          plane_width  = planes[0].cols;
-  int          height       = plane_height * 2;
-  int          width        = plane_width * 2;
-
-  cv::Mat      result       = cv::Mat::zeros(height, width, CV_16UC1);
-  uint16_t*    dst_ptr      = result.ptr<uint16_t>();
-
-  const float* r_ptr        = planes[0].ptr<float>();
-  const float* g1_ptr       = planes[1].ptr<float>();
-  const float* g2_ptr       = planes[2].ptr<float>();
-  const float* b_ptr        = planes[3].ptr<float>();
-
-  for (int y = 0; y < height; y += 2) {
-    for (int x = 0; x < width; x += 2) {
-      int plane_idx                = (y / 2) * plane_width + (x / 2);
-
-      // 从float转换回uint16，注意防止溢出
-      dst_ptr[y * width + x]       = cv::saturate_cast<uint16_t>(r_ptr[plane_idx] * 65535.0f);
-      dst_ptr[y * width + (x + 1)] = cv::saturate_cast<uint16_t>(g1_ptr[plane_idx] * 65535.0f);
-      dst_ptr[(y + 1) * width + x] = cv::saturate_cast<uint16_t>(g2_ptr[plane_idx] * 65535.0f);
-      dst_ptr[(y + 1) * width + (x + 1)] = cv::saturate_cast<uint16_t>(b_ptr[plane_idx] * 65535.0f);
-    }
-  }
-
-  return result;
-}
-
 void OpenCVRawProcessor::ApplyWhiteBalance() {
-  const float* wb;
-  const int*   user_wb_coeff;
-  if (_params._use_camera_wb) {
-    wb = _raw_data.color.cam_mul;
-  } else {
-    user_wb_coeff = _raw_data.color.WB_Coeffs[21];
-    throw std::runtime_error("Raw Processor: Not Implemented");
-  }
-
-  auto                 maximum            = static_cast<uint16_t>(_raw_data.color.maximum);
-
+  const float*         wb                 = CPU::GetWBCoeff(_raw_data);
   auto&                pre_debayer_buffer = _process_buffer;
 
   // Black level calculation
   // From
   // https://stackoverflow.com/questions/69526257/reading-raw-image-with-libraw-and-converting-to-dng-with-libtiff
-  const auto           base_black_level   = static_cast<float>(_raw_data.color.black);
-  std::array<float, 4> black_level        = {
-      base_black_level + static_cast<float>(_raw_data.color.cblack[0]),
-      base_black_level + static_cast<float>(_raw_data.color.cblack[1]),
-      base_black_level + static_cast<float>(_raw_data.color.cblack[2]),
-      base_black_level + static_cast<float>(_raw_data.color.cblack[3])};
-
-  if (_raw_data.color.cblack[4] == 2 && _raw_data.color.cblack[5] == 2) {
-    for (unsigned int x = 0; x < _raw_data.color.cblack[4]; ++x) {
-      for (unsigned int y = 0; y < _raw_data.color.cblack[5]; ++y) {
-        const auto index   = y * 2 + x;
-        black_level[index] = _raw_data.color.cblack[6 + index];
-      }
-    }
-  }
+  std::array<float, 4> black_level        = CPU::CalculateBlackLevel(_raw_data);
 
   if (_params._cuda) {
     auto& gpu_img = pre_debayer_buffer.GetGPUData();
 
-    WhiteBalanceCorrection(gpu_img, black_level, wb, maximum, true, 0);
+    auto  maximum = static_cast<uint16_t>(_raw_data.color.maximum);
+    CUDA::WhiteBalanceCorrection(gpu_img, black_level, wb, maximum, true, 0);
 
   } else {
     auto& cpu_img = pre_debayer_buffer.GetCPUData();
     // cpu_img -= black;
     //
-    if (_raw_data.color.as_shot_wb_applied != 1) {
-      cpu_img.forEach<uint16_t>([&](uint16_t& pixel, const int* pos) {
-        int color_idx = _raw_processor.COLOR(pos[0], pos[1]);
-
-        pixel         = static_cast<uint16_t>(
-            std::max<int>(0, static_cast<int>(pixel) - black_level[color_idx]));
-        float mask        = (color_idx == 0 || color_idx == 2) ? 1.0f : 0.0f;
-        float wb_mul      = (wb[color_idx] / wb[1]) * mask + (1.0f - mask);
-        float muled_pixel = pixel * wb_mul;
-        muled_pixel *= (65535.0f / maximum);
-        muled_pixel = fmaxf(0.0f, fminf(65535.0f, muled_pixel));
-        pixel       = static_cast<uint16_t>(muled_pixel);
-      });
-    }
+    CPU::WhiteBalanceCorrectionAndHighlightRestore(cpu_img, _raw_processor, black_level, wb);
     // White level
     // cpu_img = cpu_img * (65535.0f / maximum);
   }
-}
-
-void OpenCVRawProcessor::BayerRGGB2RGB_AHD(cv::Mat& bayer) {
-  bayer.convertTo(bayer, CV_32FC1, 1.0f / 65535.0f);
-  const int h = bayer.rows;
-  const int w = bayer.cols;
-
-  cv::Mat1f mask_R(h, w, 0.0f);
-  cv::Mat1f mask_G_r(h, w, 0.0f);
-  cv::Mat1f mask_G_b(h, w, 0.0f);
-  cv::Mat1f mask_B(h, w, 0.0f);
-
-  // build masks using forEach
-  bayer.forEach<float>([&](float&, const int* pos) {
-    int y           = pos[0];
-    int x           = pos[1];
-    int color_index = _raw_processor.COLOR(y, x);  // assume 0:R,1:G_r,2:B,3:G_b
-    switch (color_index) {
-      case 0:
-        mask_R(y, x) = 1.0f;
-        break;
-      case 1:
-        mask_G_r(y, x) = 1.0f;
-        break;
-      case 2:
-        mask_B(y, x) = 1.0f;
-        break;
-      case 3:
-        mask_G_b(y, x) = 1.0f;
-        break;
-      default:
-        break;
-    }
-  });
-
-  // compute directional green estimates at R/B positions using forEach
-  cv::Mat1f G_h(h, w, 0.0f);
-  cv::Mat1f G_v(h, w, 0.0f);
-
-  bayer.forEach<float>([&](float val, const int* pos) {
-    int y = pos[0];
-    int x = pos[1];
-    if (y < 2 || y >= h - 2 || x < 2 || x >= w - 2) return;
-    if (mask_R(y, x) > 0.5f || mask_B(y, x) > 0.5f) {
-      float center = val;
-      float h_avg  = 0.5f * (bayer.at<float>(y, x - 1) + bayer.at<float>(y, x + 1));
-      float h_diff =
-          0.25f * (2.0f * center - bayer.at<float>(y, x - 2) - bayer.at<float>(y, x + 2));
-      G_h(y, x)   = h_avg + h_diff;
-
-      float v_avg = 0.5f * (bayer.at<float>(y - 1, x) + bayer.at<float>(y + 1, x));
-      float v_diff =
-          0.25f * (2.0f * center - bayer.at<float>(y - 2, x) - bayer.at<float>(y + 2, x));
-      G_v(y, x) = v_avg + v_diff;
-    }
-  });
-
-  // choose best directional green (G_final) using forEach
-  cv::Mat1f G_final = bayer.clone();
-  bayer.forEach<float>([&](float, const int* pos) {
-    int y = pos[0];
-    int x = pos[1];
-    if (y < 1 || y >= h - 1 || x < 1 || x >= w - 1) return;
-    if (mask_R(y, x) > 0.5f || mask_B(y, x) > 0.5f) {
-      float Dh      = std::abs(bayer.at<float>(y, x - 1) - bayer.at<float>(y, x + 1));
-      float Dv      = std::abs(bayer.at<float>(y - 1, x) - bayer.at<float>(y + 1, x));
-      G_final(y, x) = (Dh < Dv) ? G_h(y, x) : G_v(y, x);
-    }
-  });
-
-  // initialize R_final and B_final (only at their native positions)
-  cv::Mat1f R_final = bayer.mul(mask_R);
-  cv::Mat1f B_final = bayer.mul(mask_B);
-
-  // Fill missing R and B using pattern-aware interpolation with forEach
-  bayer.forEach<float>([&](float, const int* pos) {
-    int y = pos[0];
-    int x = pos[1];
-    if (y < 1 || y >= h - 1 || x < 1 || x >= w - 1) return;
-
-    // --- fill missing R ---
-    if (mask_R(y, x) < 0.5f) {
-      float estimateR = 0.0f;
-      if (mask_G_r(y, x) > 0.5f) {
-        // G on R row: R neighbors are left/right
-        float left  = R_final(y, x - 1) - G_final(y, x - 1);
-        float right = R_final(y, x + 1) - G_final(y, x + 1);
-        estimateR   = G_final(y, x) + 0.5f * (left + right);
-      } else if (mask_G_b(y, x) > 0.5f) {
-        // G on B row: R neighbors are up/down
-        float up   = R_final(y - 1, x) - G_final(y - 1, x);
-        float down = R_final(y + 1, x) - G_final(y + 1, x);
-        estimateR  = G_final(y, x) + 0.5f * (up + down);
-      } else if (mask_B(y, x) > 0.5f) {
-        // At a B pixel: R is on diagonals
-        float d1  = R_final(y - 1, x - 1) - G_final(y - 1, x - 1);
-        float d2  = R_final(y - 1, x + 1) - G_final(y - 1, x + 1);
-        float d3  = R_final(y + 1, x - 1) - G_final(y + 1, x - 1);
-        float d4  = R_final(y + 1, x + 1) - G_final(y + 1, x + 1);
-        estimateR = G_final(y, x) + 0.25f * (d1 + d2 + d3 + d4);
-      } else {
-        // fallback: simple average of immediate neighbors
-        float left  = R_final(y, x - 1) - G_final(y, x - 1);
-        float right = R_final(y, x + 1) - G_final(y, x + 1);
-        float up    = R_final(y - 1, x) - G_final(y - 1, x);
-        float down  = R_final(y + 1, x) - G_final(y + 1, x);
-        estimateR   = G_final(y, x) + 0.25f * (left + right + up + down);
-      }
-      R_final(y, x) = estimateR;
-    }
-
-    // --- fill missing B ---
-    if (mask_B(y, x) < 0.5f) {
-      float estimateB = 0.0f;
-      if (mask_G_b(y, x) > 0.5f) {
-        // G on B row: B neighbors are left/right
-        float left  = B_final(y, x - 1) - G_final(y, x - 1);
-        float right = B_final(y, x + 1) - G_final(y, x + 1);
-        estimateB   = G_final(y, x) + 0.5f * (left + right);
-      } else if (mask_G_r(y, x) > 0.5f) {
-        // G on R row: B neighbors are up/down
-        float up   = B_final(y - 1, x) - G_final(y - 1, x);
-        float down = B_final(y + 1, x) - G_final(y + 1, x);
-        estimateB  = G_final(y, x) + 0.5f * (up + down);
-      } else if (mask_R(y, x) > 0.5f) {
-        // At an R pixel: B is on diagonals
-        float d1  = B_final(y - 1, x - 1) - G_final(y - 1, x - 1);
-        float d2  = B_final(y - 1, x + 1) - G_final(y - 1, x + 1);
-        float d3  = B_final(y + 1, x - 1) - G_final(y + 1, x - 1);
-        float d4  = B_final(y + 1, x + 1) - G_final(y + 1, x + 1);
-        estimateB = G_final(y, x) + 0.25f * (d1 + d2 + d3 + d4);
-      } else {
-        // fallback
-        float left  = B_final(y, x - 1) - G_final(y, x - 1);
-        float right = B_final(y, x + 1) - G_final(y, x + 1);
-        float up    = B_final(y - 1, x) - G_final(y - 1, x);
-        float down  = B_final(y + 1, x) - G_final(y + 1, x);
-        estimateB   = G_final(y, x) + 0.25f * (left + right + up + down);
-      }
-      B_final(y, x) = estimateB;
-    }
-  });
-
-  // merge channels into a 3-channel RGB image
-  std::vector<cv::Mat> channels = {R_final, G_final, B_final};
-  cv::merge(channels, bayer);  // rgb is CV_32FC3
 }
 
 void OpenCVRawProcessor::ApplyDebayer() {
@@ -315,7 +61,7 @@ void OpenCVRawProcessor::ApplyDebayer() {
   } else {
     auto& img = pre_debayer_buffer.GetCPUData();
 
-    BayerRGGB2RGB_AHD(img);
+    CPU::BayerRGGB2RGB_AHD(img, true, (_raw_data.color.maximum - _raw_data.color.black) / 65535.0f);
     // cv::cvtColor(img, img, cv::COLOR_BayerBG2RGB);
     // img.convertTo(img, CV_32FC1, 1.0f / 65535.0f);
   }
@@ -334,18 +80,13 @@ void OpenCVRawProcessor::ApplyColorSpaceTransform() {
     gpu_img.convertTo(gpu_img, CV_32FC3, 1.0f / 65535.0f);
 
     cv::cuda::Stream stream;
-    ApplyColorMatrix(gpu_img, gpu_img, cv::Mat(cam_rgb), stream);
+    CUDA::ApplyColorMatrix(gpu_img, gpu_img, cv::Mat(cam_rgb), stream);
     stream.waitForCompletion();
   } else {
     auto& img = debayer_buffer.GetCPUData();
     img.convertTo(img, CV_32FC3);
 
-    cv::Matx33f cam_rgb({color_coeffs[0][0], color_coeffs[0][1], color_coeffs[0][2],
-                         color_coeffs[1][0], color_coeffs[1][1], color_coeffs[1][2],
-                         color_coeffs[2][0], color_coeffs[2][1], color_coeffs[2][2]});
-    // cam_rgb = cam_rgb.inv();
-
-    cv::transform(img, img, cv::Mat(cam_rgb));
+    CPU::ApplyColorMatrix(img, color_coeffs);
   }
 }
 
