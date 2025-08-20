@@ -19,6 +19,8 @@ class ExifDisplayMetaData {
   float          focal          = 0.0f;
   bool           has_attachment = false;
 
+  float          maximum        = 0;
+
   ExifDisplayMetaData()         = default;
   ExifDisplayMetaData(nlohmann::json exif_json);
 

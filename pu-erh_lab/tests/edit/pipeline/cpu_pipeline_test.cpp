@@ -33,21 +33,21 @@ TEST_F(PipelineTests, SimpleTest1) {
     auto           img_pool = manager.GetPool()->GetPool();
 
     nlohmann::json to_ws_params;
-    to_ws_params["ocio"] = {{"src", "Linear Rec.709 (sRGB)"}, {"dst", "ACEScct"}};
+    to_ws_params["ocio"] = {
+        {"src", "Linear Rec.709 (sRGB)"}, {"dst", "ACEScc"}, {"normalize", true}};
 
     nlohmann::json basic_params;
     // basic_params["ocio"] = {{"src", ""}, {"dst", "ACEScct"}};
-    basic_params["exposure"]   = 0.4f;
-    basic_params["highlights"] = -35.0f;
-    basic_params["shadows"]    = 55.0f;
-    basic_params["white"]      = -15.0f;
-    basic_params["black"]      = 50.0f;
+    basic_params["exposure"]   = -0.4f;
+    basic_params["highlights"] = -15.0f;
+    basic_params["shadows"]    = 75.0f;
+    basic_params["white"]      = -75.0f;
+    basic_params["black"]      = 20.0f;
 
     nlohmann::json color_params;
     color_params["vibrance"] = 15.0f;
 
-    nlohmann::json color_wheel_params;
-    color_wheel_params["color_wheel"] = {{"lift",
+    color_params["color_wheel"] = {{"lift",
                                           {{"color_offset.x", 0.0},
                                            {"color_offset.y", 0.0},
                                            {"color_offset.z", 0.0},
@@ -56,12 +56,12 @@ TEST_F(PipelineTests, SimpleTest1) {
                                           {{"color_offset.x", 1.0},
                                            {"color_offset.y", 1.0},
                                            {"color_offset.z", 1.00},
-                                           {"luminance_offset", 0.0}}},
+                                           {"luminance_offset", 0.2}}},
                                          {"gain",
                                           {{"color_offset.x", 1.0},
                                            {"color_offset.y", 1.0},
                                            {"color_offset.z", 1.0},
-                                           {"luminance_offset", 0.0}}},
+                                           {"luminance_offset", -0.4}}},
                                          {"crossovers", {{"lift", 0.2}, {"gain", 0.8}}}};
 
     nlohmann::json contrast_params;
@@ -71,32 +71,31 @@ TEST_F(PipelineTests, SimpleTest1) {
         "D:\\Projects\\pu-erh_lab\\pu-erh_lab\\src\\config\\LUTs\\ACES CCT 2383 D65.cube";
 
     nlohmann::json output_params;
-    output_params["ocio"] = {{"src", "Linear Rec.709 (sRGB)"}, {"dst", "Camera Rec.709"}};
+    output_params["ocio"] = {{"src", "ACEScc"}, {"dst", "Camera Rec.709"}, {"limit", true}};
 
     for (auto& pair : img_pool) {
-      auto task = [pair, img_pool, to_ws_params, color_wheel_params, basic_params, color_params,
+      auto task = [pair, img_pool, to_ws_params, basic_params, color_params,
                    lmt_params, output_params]() mutable {
         CPUPipeline pipeline{};
         auto&       to_ws = pipeline.GetStage(PipelineStageName::To_WorkingSpace);
-        // to_ws.SetOperator(OperatorType::CST, to_ws_params);
+        to_ws.SetOperator(OperatorType::CST, to_ws_params);
 
         auto& adj = pipeline.GetStage(PipelineStageName::Basic_Adjustment);
         // adj.SetOperator(OperatorType::EXPOSURE, basic_params);
         // adj.SetOperator(OperatorType::SHADOWS, basic_params);
-        // adj.SetOperator(OperatorType::HIGHLIGHTS, basic_params);
-        // adj.SetOperator(OperatorType::BLACK, basic_params);
+        adj.SetOperator(OperatorType::HIGHLIGHTS, basic_params);
+        // adj.SetOperator(OperatorType::WHITE, basic_params);
 
-        auto& color_adj = pipeline.GetStage(PipelineStageName::Color_Adjustment);
-        // color_adj.SetOperator(OperatorType::VIBRANCE, color_params);
+        auto& color_adj    = pipeline.GetStage(PipelineStageName::Color_Adjustment);
+        // color_adj.SetOperator(OperatorType::COLOR_WHEEL, color_params);
 
-        auto& lmt = pipeline.GetStage(PipelineStageName::Color_Adjustment);
-        // lmt.SetOperator(OperatorType::ACES_TONE_MAPPING, output_params);
+        auto& lmt          = pipeline.GetStage(PipelineStageName::Color_Adjustment);
         // lmt.SetOperator(OperatorType::LMT, lmt_params);
-        // lmt.SetOperator(OperatorType::CST, pre_output_params);
         //
 
         auto& output_stage = pipeline.GetStage(PipelineStageName::Output_Transform);
         output_stage.SetOperator(OperatorType::CST, output_params);
+        // output_stage.SetOperator(OperatorType::ACES_TONE_MAPPING, output_params);
 
         auto            img = pair.second;
         RawDecoder      decoder;
@@ -122,6 +121,7 @@ TEST_F(PipelineTests, SimpleTest1) {
         cv::Mat          to_save_rec709_cpu;
 
         output.SyncToGPU();
+
         auto& gpu_data = output.GetGPUData();
         gpu_data.convertTo(to_save_rec709, CV_16UC3, 65535.0f);
         cv::cuda::cvtColor(to_save_rec709, to_save_rec709, cv::COLOR_RGB2BGR);
@@ -129,7 +129,7 @@ TEST_F(PipelineTests, SimpleTest1) {
 
         EASY_BLOCK("Write To Disk");
         cv::imwrite(std::format("D:\\Projects\\pu-erh_lab\\pu-erh_lab\\tests\\resources\\sample_"
-                                "images\\my_pipeline\\batch_results\\{}_restored.tif",
+                                "images\\my_pipeline\\batch_results\\{}_restored_1.tif",
                                 conv::ToBytes(img->_image_path.filename().wstring())),
                     to_save_rec709_cpu);
         EASY_END_BLOCK;

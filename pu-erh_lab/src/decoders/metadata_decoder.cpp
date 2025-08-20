@@ -32,6 +32,7 @@
 #include "decoders/metadata_decoder.hpp"
 
 #include <easy/profiler.h>
+#include <libraw/libraw.h>
 
 #include <exiv2/basicio.hpp>
 #include <exiv2/exif.hpp>
@@ -59,6 +60,7 @@ void MetadataDecoder::Decode(std::vector<char> buffer, std::filesystem::path fil
   try {
     std::shared_ptr<Image> img =
         std::make_shared<Image>(id, file_path, file_path.filename(), ImageType::DEFAULT);
+
     img->_exif_data = Exiv2::ImageFactory::open((Exiv2::byte*)buffer.data(), buffer.size());
     img->_exif_data->readMetadata();
     img->_has_exif = !img->_exif_data->exifData().empty();

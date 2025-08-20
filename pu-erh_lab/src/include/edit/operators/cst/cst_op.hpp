@@ -15,6 +15,8 @@ class OCIO_ACES_Transform_Op : public OperatorBase<OCIO_ACES_Transform_Op> {
  private:
   std::string                          _input_transform;
   std::string                          _output_transform;
+  bool                                 _limit     = false;
+  bool                                 _normalize = false;
 
   std::optional<std::filesystem::path> _lmt_path;
 
