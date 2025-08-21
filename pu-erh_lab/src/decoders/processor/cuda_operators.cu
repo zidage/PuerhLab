@@ -1,5 +1,11 @@
+#include <opencv2/core.hpp>
 #include <opencv2/core/cuda.hpp>
 #include <opencv2/core/cuda_stream_accessor.hpp>
+#include <opencv2/core/mat.hpp>
+#include <opencv2/cudaarithm.hpp>
+#include <opencv2/cudaimgproc.hpp>
+#include <opencv2/cudawarping.hpp>
+#include <opencv2/opencv.hpp>
 
 #include "decoders/processor/cuda_operators.hpp"
 
@@ -60,7 +66,7 @@ void ApplyColorMatrix(const cv::cuda::GpuMat& src, cv::cuda::GpuMat& dst, const 
 // This is faster than global memory.
 __constant__ float d_black_level[4];
 __constant__ float d_wb_multipliers[4];
-__constant__ int remap[4] = {0, 1, 3, 2}; 
+__constant__ int   remap[4] = {0, 1, 3, 2};
 
 /**
  * @brief CUDA kernel to perform black level subtraction, white balancing, and white level scaling.
@@ -89,7 +95,6 @@ __global__ void WhiteBalanceCorrectionKernel(cv::cuda::PtrStep<ushort> image, in
   // The LibRaw COLOR(row, col) macro can often be simplified to this.
   const int color_idx = remap[(((row % 2) * 2) + (col % 2) + bayer_pattern_offset) % 4];
 
-
   // Get a pointer to the current pixel
   ushort*   pixel_ptr = (ushort*)((char*)image.data + row * image.step) + col;
 
@@ -104,7 +109,7 @@ __global__ void WhiteBalanceCorrectionKernel(cv::cuda::PtrStep<ushort> image, in
   pixel_val *= white_level_scale;
   // 3. White Balance Multiplication
   // The multipliers are normalized to the green channel (index 1)
-  float mask = (color_idx == 0 || color_idx == 2) ? 1.0f : 0.0f;
+  float       mask   = (color_idx == 0 || color_idx == 2) ? 1.0f : 0.0f;
   const float wb_mul = (d_wb_multipliers[color_idx] / d_wb_multipliers[1]) * mask + (1.0f - mask);
   pixel_val *= wb_mul;
 
@@ -166,5 +171,131 @@ void WhiteBalanceCorrection(cv::cuda::GpuMat& image, const std::array<float, 4>&
     image.convertTo(image, CV_16U, white_level_scale);
   }
 }
-};
-};
+
+__global__ void G_FinalGeneration(cv::cuda::PtrStep<float> raw, cv::cuda::PtrStep<float> G_final,
+                                  cv::cuda::PtrStep<float> R_final,
+                                  cv::cuda::PtrStep<float> B_final, int width, int height) {
+  // Kernel implementation goes here
+  const int x = blockIdx.x * blockDim.x + threadIdx.x; // col
+  const int y = blockIdx.y * blockDim.y + threadIdx.y; // row
+
+  // Boundary check to avoid processing out-of-bounds pixels
+  if (y >= height - 2 || x >= width - 2 || y < 2 || x < 2) {
+    return;
+  }
+
+  const int color_idx = remap[(((y % 2) * 2) + (x % 2)) % 4];
+  if (color_idx == 0 || color_idx == 2) {
+    float center  = raw(y, x);
+    float h_avg   = 0.5f * (raw(y, x - 1) + raw(y, x + 1));
+    float h_diff  = 0.25f * (2.0f * center - raw(y, x - 2) - raw(y, x + 2));
+
+    float v_avg   = 0.5f * (raw(y - 1, x) + raw(y + 1, x));
+    float v_diff  = 0.25f * (2.0f * center - raw(y - 2, x) - raw(y + 2, x));
+
+    float Dh      = std::abs(raw(y, x - 1) - raw(y, x + 1));
+    float Dv      = std::abs(raw(y - 1, x) - raw(y + 1, x));
+
+    G_final(y, x) = (Dh < Dv) ? (h_avg + h_diff) : (v_avg + v_diff);
+
+    R_final(y, x) = color_idx == 0 ? center : 0.0f;
+    B_final(y, x) = color_idx == 2 ? center : 0.0f;
+  }
+}
+
+__global__ void R_B_FinalGeneration(cv::cuda::PtrStep<float> raw, cv::cuda::PtrStep<float> G_final,
+                                    cv::cuda::PtrStep<float> R_final,
+                                    cv::cuda::PtrStep<float> B_final, int width, int height) {
+  const int x = blockIdx.x * blockDim.x + threadIdx.x; // col
+  const int y = blockIdx.y * blockDim.y + threadIdx.y; // row
+
+  // Boundary check to avoid processing out-of-bounds pixels
+  if (y >= height - 1 || x >= width - 1 || y < 1 || x < 1) {
+    return;
+  }
+
+  const int color_idx = remap[(((y % 2) * 2) + (x % 2)) % 4];
+  if (color_idx != 0) {
+    float estimate_R = 0.0f;
+
+    if (color_idx == 1) {
+      float left  = R_final(y, x - 1) - G_final(y, x - 1);
+      float right = R_final(y, x + 1) - G_final(y, x - 1);
+      estimate_R  = G_final(y, x) + 0.5f * (left + right);
+    } else if (color_idx == 3) {
+      float up   = R_final(y - 1, x) - G_final(y - 1, x);
+      float down = R_final(y + 1, x) - G_final(y + 1, x);
+      estimate_R = G_final(y, x) + 0.5f * (up + down);
+    } else if (color_idx == 2) {
+      // At a B pixel: R is on diagonals
+      float d1   = R_final(y - 1, x - 1) - G_final(y - 1, x - 1);
+      float d2   = R_final(y - 1, x + 1) - G_final(y - 1, x + 1);
+      float d3   = R_final(y + 1, x - 1) - G_final(y + 1, x - 1);
+      float d4   = R_final(y + 1, x + 1) - G_final(y + 1, x + 1);
+      estimate_R = G_final(y, x) + 0.25f * (d1 + d2 + d3 + d4);
+    } else {
+      float left  = R_final(y, x - 1) - G_final(y, x - 1);
+      float right = R_final(y, x + 1) - G_final(y, x + 1);
+      float up    = R_final(y - 1, x) - G_final(y - 1, x);
+      float down  = R_final(y + 1, x) - G_final(y + 1, x);
+      estimate_R  = G_final(y, x) + 0.25f * (left + right + up + down);
+    }
+    R_final(y, x) = estimate_R;
+  }
+
+  if (color_idx != 2) {
+    float estimate_B = 0.0f;
+    if (color_idx == 3) {
+      float left  = B_final(y, x - 1) - G_final(y, x - 1);
+      float right = B_final(y, x + 1) - G_final(y, x + 1);
+      estimate_B  = G_final(y, x) + 0.5f * (left + right);
+    } else if (color_idx == 1) {
+      float up   = B_final(y - 1, x) - G_final(y - 1, x);
+      float down = B_final(y + 1, x) - G_final(y + 1, x);
+      estimate_B = G_final(y, x) + 0.5f * (up + down);
+    } else if (color_idx == 0) {
+      // At an R pixel: B is on diagonals
+      float d1   = B_final(y - 1, x - 1) - G_final(y - 1, x - 1);
+      float d2   = B_final(y - 1, x + 1) - G_final(y - 1, x + 1);
+      float d3   = B_final(y + 1, x - 1) - G_final(y + 1, x - 1);
+      float d4   = B_final(y + 1, x + 1) - G_final(y + 1, x + 1);
+      estimate_B = G_final(y, x) + 0.25f * (d1 + d2 + d3 + d4);
+    } else {
+      float left  = B_final(y, x - 1) - G_final(y, x - 1);
+      float right = B_final(y, x + 1) - G_final(y, x + 1);
+      float up    = B_final(y - 1, x) - G_final(y - 1, x);
+      float down  = B_final(y + 1, x) - G_final(y + 1, x);
+      estimate_B  = G_final(y, x) + 0.25f * (left + right + up + down);
+    }
+    B_final(y, x) = estimate_B;
+  }
+}
+
+void BayerRGGB2RGB_AHD(cv::cuda::GpuMat& image) {
+  const dim3 threads_per_block(16, 16);
+  const dim3 num_blocks((image.cols + threads_per_block.x - 1) / threads_per_block.x,
+                        (image.rows + threads_per_block.y - 1) / threads_per_block.y);
+
+  image.convertTo(image, CV_32FC1, 1.0f / 65535.0f);
+
+  cv::cuda::GpuMat G_final = image.clone();
+  cv::cuda::GpuMat R_final;
+  R_final.create(image.size(), CV_32FC1);
+  cv::cuda::GpuMat B_final;
+  B_final.create(image.size(), CV_32FC1);
+
+  G_FinalGeneration<<<num_blocks, threads_per_block>>>(image, G_final, R_final, B_final, image.cols,
+                                                       image.rows);
+  CUDA_CHECK(cudaGetLastError());
+  CUDA_CHECK(cudaDeviceSynchronize());
+
+  R_B_FinalGeneration<<<num_blocks, threads_per_block>>>(image, G_final, R_final, B_final,
+                                                         image.cols, image.rows);
+  CUDA_CHECK(cudaGetLastError());
+  CUDA_CHECK(cudaDeviceSynchronize());
+
+  std::vector<cv::cuda::GpuMat> channels = {R_final, G_final, B_final};
+  cv::cuda::merge(channels, image);
+}
+};  // namespace CUDA
+};  // namespace puerhlab

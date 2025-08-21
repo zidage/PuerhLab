@@ -9,5 +9,7 @@ void ApplyColorMatrix(const cv::cuda::GpuMat& src, cv::cuda::GpuMat& dst, const 
 void WhiteBalanceCorrection(cv::cuda::GpuMat& image, const std::array<float, 4>& black_level,
                             const float* wb_coeffs, float maximum, bool apply_wb_and_black_level,
                             int bayer_offset = 0);
+
+void BayerRGGB2RGB_AHD(cv::cuda::GpuMat& image);
 };  // namespace CUDA
 };  // namespace puerhlab

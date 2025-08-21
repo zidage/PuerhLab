@@ -4,6 +4,7 @@
 
 #include <cmath>
 #include <cstdint>
+#include <opencv2/calib3d.hpp>
 #include <opencv2/core.hpp>
 #include <opencv2/core/mat.hpp>
 #include <opencv2/core/types.hpp>
@@ -31,9 +32,9 @@ namespace CPU {
 void recoverHighlights_RatioGuided(const cv::Mat& raw_clipped, const cv::Mat& guide,
                                    const cv::Mat& mask_clipped, cv::Mat& out, int channel_y,
                                    int channel_x, int step_y, int step_x, int window_size = 25,
-                                   float sigma_spatial = 25.0f, float sigma_guide = 2.f,
-                                   int min_valid_neighbors = 0, float feather_radius = 10000.0f,
-                                   float edge_sigma = 0.0f, float residual_beta = 0.5f) {
+                                   float sigma_spatial = 4.0f, float sigma_guide = 0.1f,
+                                   int min_valid_neighbors = 0, float feather_radius = 10.0f,
+                                   float edge_sigma = 0.0f, float residual_beta = 0.2f) {
   CV_Assert(raw_clipped.type() == CV_32FC1 && guide.type() == CV_32FC1 &&
             mask_clipped.type() == CV_8UC1);
   CV_Assert(raw_clipped.size() == guide.size() && raw_clipped.size() == mask_clipped.size());
@@ -196,60 +197,104 @@ void recoverHighlights_RatioGuided(const cv::Mat& raw_clipped, const cv::Mat& gu
 void WhiteBalanceCorrectionAndHighlightRestore(cv::Mat& img, LibRaw& raw_processor,
                                                std::array<float, 4>& black_level, const float* wb) {
   img.convertTo(img, CV_32FC1, 1.0f / 65535.0f);
-  int       w = img.cols;
-  int       h = img.rows;
+  int w = img.cols;
+  int h = img.rows;
 
-  cv::Mat1f G_guide(h, w, 0.0f);
+  // cv::Mat1f G_guide(h, w, 0.0f);
 
-  cv::Mat1b R_clipped(h, w, (uchar)0.0);
-  cv::Mat1b B_clipped(h, w, (uchar)0.0);
-  cv::Mat1b G1_clipped(h, w, (uchar)0.0);
-  cv::Mat1b G2_clipped(h, w, (uchar)0.0);
+  // cv::Mat1b R_clipped(h, w, (uchar)0.0);
+  // cv::Mat1b B_clipped(h, w, (uchar)0.0);
+  // cv::Mat1b G1_clipped(h, w, (uchar)0.0);
+  // cv::Mat1b G2_clipped(h, w, (uchar)0.0);
 
   // cv::Mat1b  G2_clipped(h, w, (uchar)0.0);
 
   if (raw_processor.imgdata.color.as_shot_wb_applied != 1) {
-    float min       = black_level[0];
-    float maximum   = static_cast<float>(raw_processor.imgdata.color.maximum) / 65535.0f - min;
+    float min            = black_level[0];
+    auto  linear_maximum = raw_processor.imgdata.rawdata.color.linear_max;
+    float maximum[4];
+    for (int i = 0; i < 4; ++i) {
+      if (linear_maximum[i] == 0) {
+        maximum[i] = raw_processor.imgdata.rawdata.color.maximum / 65535.0f - min;
+      } else {
+        maximum[i] = linear_maximum[i] / 65535.0f - min;
+      }
+    }
+#pragma omp parallel for schedule(dynamic)
+    for (int y = 0; y < h; ++y) {
+      for (int x = 0; x < w; ++x) {
+        int   color_idx   = raw_processor.COLOR(y, x);
 
-    float threshold = maximum * 0.7f;
-    img.forEach<float>([&](float& pixel, const int* pos) {
-      int y             = pos[0];
-      int x             = pos[1];
-      int color_idx     = raw_processor.COLOR(pos[0], pos[1]);
+        float pixel       = img.at<float>(y, x);
 
-      pixel             = std::max(0.0f, pixel - black_level[color_idx]);
-      float muled_pixel = pixel;
-      float mask        = (color_idx == 0 || color_idx == 2) ? 1.0f : 0.0f;
-      //
-      float wb_mul      = (wb[color_idx] / wb[1]) * mask + (1.0f - mask);
+        pixel             = std::max(0.0f, pixel - black_level[color_idx]);
 
-      muled_pixel       = muled_pixel * wb_mul;
+        float muled_pixel = pixel;
+        float mask        = (color_idx == 0 || color_idx == 2) ? 1.0f : 0.0f;
+        //
+        float wb_mul      = (wb[color_idx] / wb[1]) * mask + (1.0f - mask);
 
-      pixel             = muled_pixel;
-      // switch (color_idx) {
-      //   case 0:
-      //     if (pixel >= threshold) R_clipped(y, x) = 255;
-      //     break;
-      //   case 2:
-      //     if (pixel >= threshold) B_clipped(y, x) = 255;
-      //     break;
-      //   case 1:
-      //     if (pixel < threshold)
-      //       G_guide(y, x) = pixel;
-      //     else
-      //       G1_clipped(y, x) = 255;
-      //     break;
-      //   case 3:
-      //     if (pixel < threshold)
-      //       G_guide(y, x) = pixel;
-      //     else
-      //       G2_clipped(y, x) = 255;
-      //     break;
-      //   default:
-      //     return;
-      // }
-    });
+        muled_pixel       = muled_pixel * wb_mul;
+
+        pixel             = muled_pixel;
+
+        if (pixel > maximum[color_idx]) {
+          pixel = maximum[color_idx];
+        }
+
+        pixel /= maximum[color_idx];
+
+        img.at<float>(y, x) = pixel;
+      }
+    }
+
+    // float threshold = raw_processor.imgdata.rawdata.color.maximum / 65535.0f;
+
+    // img.forEach<float>([&](float& pixel, const int* pos) {
+    //   int y             = pos[0];
+    //   int x             = pos[1];
+    //   int color_idx     = raw_processor.COLOR(pos[0], pos[1]);
+
+    //   pixel             = std::max(0.0f, pixel - black_level[color_idx]);
+
+    //   float muled_pixel = pixel;
+    //   float mask        = (color_idx == 0 || color_idx == 2) ? 1.0f : 0.0f;
+    //   //
+    //   float wb_mul      = (wb[color_idx] / wb[1]) * mask + (1.0f - mask);
+
+    //   muled_pixel       = muled_pixel * wb_mul;
+
+    //   pixel             = muled_pixel;
+
+    //   if (pixel > maximum[color_idx]) {
+    //     pixel = maximum[color_idx];
+    //   }
+
+    //   pixel /= maximum[color_idx];
+
+    //   // switch (color_idx) {
+    //   //   case 0:
+    //   //     if (pixel >= threshold) R_clipped(y, x) = 255;
+    //   //     break;
+    //   //   case 2:
+    //   //     if (pixel >= threshold) B_clipped(y, x) = 255;
+    //   //     break;
+    //   //   case 1:
+    //   //     if (pixel < threshold)
+    //   //       G_guide(y, x) = pixel;
+    //   //     else
+    //   //       G1_clipped(y, x) = 255;
+    //   //     break;
+    //   //   case 3:
+    //   //     if (pixel < threshold)
+    //   //       G_guide(y, x) = pixel;
+    //   //     else
+    //   //       G2_clipped(y, x) = 255;
+    //   //     break;
+    //   //   default:
+    //   //     return;
+    //   // }
+    // });
 
     // cv::Mat resized;
     // cv::resize(G_guide, resized, cv::Size(512, 512));
@@ -257,12 +302,12 @@ void WhiteBalanceCorrectionAndHighlightRestore(cv::Mat& img, LibRaw& raw_process
     // cv::imshow("G_guide", resized);
     // cv::waitKey(0);
 
-    // bool recover = false;
+    // bool recover = true;
     // if (recover) {
     //   recoverHighlights_RatioGuided(img, G_guide, B_clipped, img, 1, 1, 2, 2);
     //   recoverHighlights_RatioGuided(img, G_guide, R_clipped, img, 0, 0, 2, 2);
-    //   // recoverHighlights_RatioGuided(img, G_guide, G1_clipped, img, 0, 1, 2, 2);
-    //   // recoverHighlights_RatioGuided(img, G_guide, G2_clipped, img, 1, 0, 2, 2);
+    //   recoverHighlights_RatioGuided(img, G_guide, G1_clipped, img, 0, 1, 2, 2);
+    //   recoverHighlights_RatioGuided(img, G_guide, G2_clipped, img, 1, 0, 2, 2);
     // }
 
     // img.forEach<float>([&](float& pixel, const int* pos) {
@@ -418,6 +463,82 @@ void BayerRGGB2RGB_AHD(cv::Mat& bayer, bool use_AHD, float maximum) {
   std::vector<cv::Mat> channels = {R_final, G_final, B_final};
   cv::merge(channels, bayer);
 
+  // cv::Mat resized;
+  // cv::resize(bayer, resized, cv::Size(1024, 1024));
+
+  // cv::Mat hls, hls_small, brightness, saturation;
+  // cv::cvtColor(bayer, hls, cv::COLOR_RGB2HLS);
+  // cv::cvtColor(resized, hls_small, cv::COLOR_RGB2HLS);
+  // cv::extractChannel(hls_small, brightness, 1);
+  // cv::extractChannel(hls_small, saturation, 2);
+
+  // std::vector<float> brightness_values;
+  // std::vector<float> saturation_values;
+  // brightness_values.reserve(1024 * 1024);
+  // saturation_values.reserve(1024 * 1024);
+  // for (int y = 0; y < brightness.rows; ++y) {
+  //   for (int x = 0; x < brightness.cols; ++x) {
+  //     brightness_values.emplace_back(brightness.at<float>(y, x));
+  //     saturation_values.emplace_back(saturation.at<float>(y, x));
+  //   }
+  // }
+
+  // std::sort(brightness_values.begin(), brightness_values.end());
+  // std::sort(saturation_values.begin(), saturation_values.end());
+
+  // float L_soft  = brightness_values[static_cast<int>(brightness_values.size() * 0.7f)];
+  // float L_hard  = brightness_values[static_cast<int>(brightness_values.size() * 0.8f)];
+  // float S_soft  = saturation_values[static_cast<int>(saturation_values.size() * 0.7f)];
+  // float S_hard  = saturation_values[static_cast<int>(saturation_values.size() * 0.8f)];
+
+  // auto  sigmoid = [](float x, float steepness = 1.0f) {
+  //   return 1.0f / (1.0f + std::exp(-steepness * x));
+  // };
+
+  // float target_hue =
+  //     280.0f;  // Adjust this: e.g., 330.0f for warmer pink, 350.0f for cooler/magenta
+  // float hue_width     = 20.0f;  // Adjust this: Smaller (e.g., 20.0f) for very precise targeting;
+  //                               // larger (50.0f) if pink varies
+  // float hue_steepness = 0.01f;  // Adjust: Smaller for broader influence (gentle falloff);
+  //                               // larger (0.2f) for sharper drop
+
+  // hls.forEach<cv::Vec3f>([&](cv::Vec3f& pixel, const int*) {
+  //   float L = pixel[1];
+  //   float S = pixel[2];
+  //   float H = pixel[0];
+  //   float l_normalized =
+  //       (L - L_soft) / (L_hard - L_soft + 1e-6f) * 2.0f - 1.0f;  // Center around 0 for sigmoid
+  //   float l_factor =
+  //       sigmoid(l_normalized * 5.0f);  // Steepness=5 for moderate curve; adjust higher for
+  //       sharper
+
+  //   float s_normalized      = (S - S_soft) / (S_hard - S_soft + 1e-6f) * 2.0f - 1.0f;
+  //   float s_factor          = sigmoid(s_normalized * 5.0f);
+
+  //   float d                 = std::min(std::abs(H - target_hue), 360.0f - std::abs(H -
+  //   target_hue)); float h_normalized      = (hue_width - d) / hue_width;  // Apply sigmoid here
+  //   too float h_weight          = sigmoid(h_normalized *
+  //                                     (1.0f / hue_steepness));  // Lower steepness for broader
+  //                                     hue influence
+
+  //   float exposure_strength = l_factor * h_weight * S;
+  //   if (exposure_strength > 0.0f) {
+  //     float blend_factor = 1.0f - std::exp(-exposure_strength * 2.0f);
+  //     S                  = S * (1.0f - blend_factor);
+  //     // L                  = L + (1.0f - L) * blend_factor * 0.5f;
+  //     // pixel[1]           = L;
+  //     pixel[2]           = S;
+  //   }
+  // });
+  // cv::cvtColor(hls, bayer, cv::COLOR_HLS2RGB);
+
+  // maximum *= 0.4;
+
+  // bayer.forEach<cv::Vec3f>([&](cv::Vec3f& pixel, const int*) {
+  //   pixel[0] = pixel[0] / (float)maximum;
+  //   pixel[1] = pixel[1] / (float)maximum;
+  //   pixel[2] = pixel[2] / (float)maximum;
+  // });
   // maximum *= 1.5f;
   // bayer.forEach<cv::Vec3f>([&](cv::Vec3f& pixel, const int*) {
   //   pixel[0] = fminf(1.0f, fmaxf(0.0f, pixel[0] / maximum));

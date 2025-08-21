@@ -20,7 +20,7 @@ TEST_F(PipelineTests, SimpleTest1) {
     ImageLoader   image_loader(128, 8, 0);
     image_path_t  path =
         L"D:\\Projects\\pu-erh_lab\\pu-erh_lab\\tests\\resources\\sample_"
-        L"images\\raw\\camera\\nikon\\z6ii";
+        L"images\\raw\\camera\\fuji\\gfx100s";
     std::vector<image_path_t> imgs;
     for (const auto& img : std::filesystem::directory_iterator(path)) {
       if (!img.is_directory()) imgs.push_back(img.path());
@@ -83,7 +83,7 @@ TEST_F(PipelineTests, SimpleTest1) {
         auto& adj = pipeline.GetStage(PipelineStageName::Basic_Adjustment);
         // adj.SetOperator(OperatorType::EXPOSURE, basic_params);
         // adj.SetOperator(OperatorType::SHADOWS, basic_params);
-        adj.SetOperator(OperatorType::HIGHLIGHTS, basic_params);
+        // adj.SetOperator(OperatorType::HIGHLIGHTS, basic_params);
         // adj.SetOperator(OperatorType::WHITE, basic_params);
 
         auto& color_adj    = pipeline.GetStage(PipelineStageName::Color_Adjustment);
@@ -129,7 +129,7 @@ TEST_F(PipelineTests, SimpleTest1) {
 
         EASY_BLOCK("Write To Disk");
         cv::imwrite(std::format("D:\\Projects\\pu-erh_lab\\pu-erh_lab\\tests\\resources\\sample_"
-                                "images\\my_pipeline\\batch_results\\{}_restored_1.tif",
+                                "images\\my_pipeline\\batch_results\\{}_restored.tif",
                                 conv::ToBytes(img->_image_path.filename().wstring())),
                     to_save_rec709_cpu);
         EASY_END_BLOCK;

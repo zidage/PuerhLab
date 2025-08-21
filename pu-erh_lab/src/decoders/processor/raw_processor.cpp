@@ -57,10 +57,13 @@ void OpenCVRawProcessor::ApplyDebayer() {
   auto& pre_debayer_buffer = _process_buffer;
   if (_params._cuda) {
     auto& gpu_img = pre_debayer_buffer.GetGPUData();
-    cv::cuda::cvtColor(gpu_img, gpu_img, cv::COLOR_BayerBG2RGB);
+    CUDA::BayerRGGB2RGB_AHD(gpu_img);
+    // Now gpu_img is CV_32FC3
+    // cv::cuda::cvtColor(gpu_img, gpu_img, cv::COLOR_BayerBG2RGB);
   } else {
     auto& img = pre_debayer_buffer.GetCPUData();
 
+    // auto maximum = _raw_data.color.linear_max;
     CPU::BayerRGGB2RGB_AHD(img, true, (_raw_data.color.maximum - _raw_data.color.black) / 65535.0f);
     // cv::cvtColor(img, img, cv::COLOR_BayerBG2RGB);
     // img.convertTo(img, CV_32FC1, 1.0f / 65535.0f);
@@ -71,13 +74,13 @@ void OpenCVRawProcessor::ApplyColorSpaceTransform() {
   auto& debayer_buffer = _process_buffer;
   auto  color_coeffs   = _raw_data.color.rgb_cam;
   if (_params._cuda) {
-    cv::Matx33f cam_rgb({color_coeffs[0][0], color_coeffs[0][1], color_coeffs[0][2],
-                         color_coeffs[1][0], color_coeffs[1][1], color_coeffs[1][2],
-                         color_coeffs[2][0], color_coeffs[2][1], color_coeffs[2][2]});
+    cv::Matx33f      cam_rgb({color_coeffs[0][0], color_coeffs[0][1], color_coeffs[0][2],
+                              color_coeffs[1][0], color_coeffs[1][1], color_coeffs[1][2],
+                              color_coeffs[2][0], color_coeffs[2][1], color_coeffs[2][2]});
     // cam_rgb = cam_rgb.inv();
     // debayer_buffer.SyncToCPU();
-    auto&       gpu_img = debayer_buffer.GetGPUData();
-    gpu_img.convertTo(gpu_img, CV_32FC3, 1.0f / 65535.0f);
+    auto&            gpu_img = debayer_buffer.GetGPUData();
+    // gpu_img.convertTo(gpu_img, CV_32FC3);
 
     cv::cuda::Stream stream;
     CUDA::ApplyColorMatrix(gpu_img, gpu_img, cv::Mat(cam_rgb), stream);
@@ -91,11 +94,13 @@ void OpenCVRawProcessor::ApplyColorSpaceTransform() {
 }
 
 auto OpenCVRawProcessor::Process() -> ImageBuffer {
-  auto    img_unpacked = _raw_data.raw_image;
-  auto&   img_sizes    = _raw_data.sizes;
+  auto  img_unpacked = _raw_data.raw_image;
+  auto& img_sizes    = _raw_data.sizes;
 
+  EASY_BLOCK("Unpacked Mat");
   cv::Mat unpacked_mat{img_sizes.raw_height, img_sizes.raw_width, CV_16UC1, img_unpacked};
   _process_buffer = {std::move(unpacked_mat)};
+  EASY_END_BLOCK;
 
   EASY_BLOCK("Sync to GPU")
   if (_params._cuda) {
@@ -107,10 +112,16 @@ auto OpenCVRawProcessor::Process() -> ImageBuffer {
   //           << _raw_processor.COLOR(1, 0) << " " << _raw_processor.COLOR(1, 1) << "\n";
   CV_Assert(_raw_processor.COLOR(0, 0) == 0 && _raw_processor.COLOR(0, 1) == 1 &&
             _raw_processor.COLOR(1, 0) == 3 && _raw_processor.COLOR(1, 1) == 2);
+  EASY_BLOCK("White Balance Correction");
   ApplyWhiteBalance();
+  EASY_END_BLOCK;
+  EASY_BLOCK("AHD Debayer");
   ApplyDebayer();
+  EASY_END_BLOCK;
   // ApplyHighlightReconstruction();
+  EASY_BLOCK("CST");
   ApplyColorSpaceTransform();
+  EASY_END_BLOCK;
 
   EASY_BLOCK("Sync to CPU")
   if (_params._cuda) {

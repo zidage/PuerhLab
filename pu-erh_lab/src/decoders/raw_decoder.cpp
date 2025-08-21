@@ -30,6 +30,7 @@
 
 #include "decoders/raw_decoder.hpp"
 
+#include <easy/profiler.h>
 #include <libraw/libraw_const.h>
 #include <opencv2/core/hal/interface.h>
 
@@ -65,6 +66,7 @@ void RawDecoder::Decode(std::vector<char> buffer, std::filesystem::path file_pat
 
 void RawDecoder::Decode(std::vector<char>&& buffer, std::shared_ptr<Image> source_img) {
   // TODO: Add Implementation
+  EASY_BLOCK("LibRaw Unpacking");
   LibRaw raw_processor;
   int    ret = raw_processor.open_buffer((void*)buffer.data(), buffer.size());
   if (ret != LIBRAW_SUCCESS) {
@@ -81,9 +83,10 @@ void RawDecoder::Decode(std::vector<char>&& buffer, std::shared_ptr<Image> sourc
 
   raw_processor.imgdata.rawparams.use_dngsdk  = 1;
   raw_processor.unpack();
+  EASY_END_BLOCK;
 
   OpenCVRawProcessor processor{
-      {false, false, {}, true, true, 0}, raw_processor.imgdata.rawdata, raw_processor};
+      {true, false, {}, true, true, 0}, raw_processor.imgdata.rawdata, raw_processor};
 
   auto processed = processor.Process();
 
