@@ -18,9 +18,12 @@
 #include <opencv2/opencv.hpp>
 #include <stdexcept>
 
-#include "decoders/processor/cpu_operators.hpp"
-#include "decoders/processor/cuda_operators.hpp"
-#include "decoders/processor/highlight_reconstruct.hpp"
+#include "decoders/processor/operators/cpu/color_space_conv.hpp"
+#include "decoders/processor/operators/cpu/debayer_ahd.hpp"
+#include "decoders/processor/operators/cpu/white_balance.hpp"
+#include "decoders/processor/operators/gpu/cuda_color_space_conv.hpp"
+#include "decoders/processor/operators/gpu/cuda_debayer_ahd.hpp"
+#include "decoders/processor/operators/gpu/cuda_white_balance.hpp"
 #include "image/image_buffer.hpp"
 
 namespace puerhlab {
@@ -29,25 +32,17 @@ OpenCVRawProcessor::OpenCVRawProcessor(const RawParams& params, const libraw_raw
     : _params(params), _raw_data(rawdata), _raw_processor(raw_processor) {}
 
 void OpenCVRawProcessor::ApplyWhiteBalance() {
-  const float*         wb                 = CPU::GetWBCoeff(_raw_data);
-  auto&                pre_debayer_buffer = _process_buffer;
-
-  // Black level calculation
-  // From
-  // https://stackoverflow.com/questions/69526257/reading-raw-image-with-libraw-and-converting-to-dng-with-libtiff
-  std::array<float, 4> black_level        = CPU::CalculateBlackLevel(_raw_data);
-
+  auto& pre_debayer_buffer = _process_buffer;
   if (_params._cuda) {
     auto& gpu_img = pre_debayer_buffer.GetGPUData();
 
-    auto  maximum = static_cast<uint16_t>(_raw_data.color.maximum);
-    CUDA::WhiteBalanceCorrection(gpu_img, black_level, wb, maximum, true, 0);
+    CUDA::WhiteBalanceCorrection(gpu_img, _raw_processor);
 
   } else {
     auto& cpu_img = pre_debayer_buffer.GetCPUData();
     // cpu_img -= black;
     //
-    CPU::WhiteBalanceCorrectionAndHighlightRestore(cpu_img, _raw_processor, black_level, wb);
+    CPU::WhiteBalanceCorrection(cpu_img, _raw_processor);
     // White level
     // cpu_img = cpu_img * (65535.0f / maximum);
   }
@@ -64,7 +59,7 @@ void OpenCVRawProcessor::ApplyDebayer() {
     auto& img = pre_debayer_buffer.GetCPUData();
 
     // auto maximum = _raw_data.color.linear_max;
-    CPU::BayerRGGB2RGB_AHD(img, true, (_raw_data.color.maximum - _raw_data.color.black) / 65535.0f);
+    CPU::BayerRGGB2RGB_AHD(img, true);
     // cv::cvtColor(img, img, cv::COLOR_BayerBG2RGB);
     // img.convertTo(img, CV_32FC1, 1.0f / 65535.0f);
   }
@@ -74,17 +69,9 @@ void OpenCVRawProcessor::ApplyColorSpaceTransform() {
   auto& debayer_buffer = _process_buffer;
   auto  color_coeffs   = _raw_data.color.rgb_cam;
   if (_params._cuda) {
-    cv::Matx33f      cam_rgb({color_coeffs[0][0], color_coeffs[0][1], color_coeffs[0][2],
-                              color_coeffs[1][0], color_coeffs[1][1], color_coeffs[1][2],
-                              color_coeffs[2][0], color_coeffs[2][1], color_coeffs[2][2]});
-    // cam_rgb = cam_rgb.inv();
-    // debayer_buffer.SyncToCPU();
-    auto&            gpu_img = debayer_buffer.GetGPUData();
-    // gpu_img.convertTo(gpu_img, CV_32FC3);
+    auto& gpu_img = debayer_buffer.GetGPUData();
 
-    cv::cuda::Stream stream;
-    CUDA::ApplyColorMatrix(gpu_img, gpu_img, cv::Mat(cam_rgb), stream);
-    stream.waitForCompletion();
+    CUDA::ApplyColorMatrix(gpu_img, color_coeffs);
   } else {
     auto& img = debayer_buffer.GetCPUData();
     img.convertTo(img, CV_32FC3);

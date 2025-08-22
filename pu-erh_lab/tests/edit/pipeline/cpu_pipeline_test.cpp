@@ -20,7 +20,7 @@ TEST_F(PipelineTests, SimpleTest1) {
     ImageLoader   image_loader(128, 8, 0);
     image_path_t  path =
         L"D:\\Projects\\pu-erh_lab\\pu-erh_lab\\tests\\resources\\sample_"
-        L"images\\raw\\camera\\fuji\\gfx100s";
+        L"images\\raw\\camera\\hasselblad\\h5d";
     std::vector<image_path_t> imgs;
     for (const auto& img : std::filesystem::directory_iterator(path)) {
       if (!img.is_directory()) imgs.push_back(img.path());
@@ -34,13 +34,13 @@ TEST_F(PipelineTests, SimpleTest1) {
 
     nlohmann::json to_ws_params;
     to_ws_params["ocio"] = {
-        {"src", "Linear Rec.709 (sRGB)"}, {"dst", "ACEScc"}, {"normalize", true}};
+        {"src", "Linear Rec.709 (sRGB)"}, {"dst", "ACEScct"}, {"normalize", true}};
 
     nlohmann::json basic_params;
     // basic_params["ocio"] = {{"src", ""}, {"dst", "ACEScct"}};
     basic_params["exposure"]   = -0.4f;
-    basic_params["highlights"] = -15.0f;
-    basic_params["shadows"]    = 75.0f;
+    basic_params["highlights"] = -100.0f;
+    basic_params["shadows"]    = 25.0f;
     basic_params["white"]      = -75.0f;
     basic_params["black"]      = 20.0f;
 
@@ -71,7 +71,7 @@ TEST_F(PipelineTests, SimpleTest1) {
         "D:\\Projects\\pu-erh_lab\\pu-erh_lab\\src\\config\\LUTs\\ACES CCT 2383 D65.cube";
 
     nlohmann::json output_params;
-    output_params["ocio"] = {{"src", "ACEScc"}, {"dst", "Camera Rec.709"}, {"limit", true}};
+    output_params["ocio"] = {{"src", "ACEScct"}, {"dst", "Camera Rec.709"}, {"limit", true}};
 
     for (auto& pair : img_pool) {
       auto task = [pair, img_pool, to_ws_params, basic_params, color_params,
@@ -83,7 +83,7 @@ TEST_F(PipelineTests, SimpleTest1) {
         auto& adj = pipeline.GetStage(PipelineStageName::Basic_Adjustment);
         // adj.SetOperator(OperatorType::EXPOSURE, basic_params);
         // adj.SetOperator(OperatorType::SHADOWS, basic_params);
-        // adj.SetOperator(OperatorType::HIGHLIGHTS, basic_params);
+        adj.SetOperator(OperatorType::HIGHLIGHTS, basic_params);
         // adj.SetOperator(OperatorType::WHITE, basic_params);
 
         auto& color_adj    = pipeline.GetStage(PipelineStageName::Color_Adjustment);

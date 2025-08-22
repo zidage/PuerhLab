@@ -15,17 +15,27 @@ add_library(Image
 target_include_directories(Image PUBLIC include)
 target_link_libraries(Image PUBLIC Exiv2 ${OpenCV_LIBS} LibRaw TimeProvider JSON xxHash easy_profiler OpenMP::OpenMP_CXX)
 
-add_library(RawProcessor
-    decoders/processor/raw_processor.cpp
-    decoders/processor/cuda_operators.cu
-    decoders/processor/cpu_operators.cpp
-    decoders/processor/highlight_reconstruct.cpp
+add_library(RawProcessorOp
+    decoders/processor/operators/cpu/color_space_conv.cpp
+    decoders/processor/operators/cpu/debayer_ahd.cpp
+    decoders/processor/operators/cpu/highlight_reconstruct.cpp
+    decoders/processor/operators/cpu/white_balance.cpp
+    decoders/processor/operators/gpu/cuda_color_space_conv.cu
+    decoders/processor/operators/gpu/cuda_debayer_ahd.cu
+    decoders/processor/operators/gpu/cuda_highlight_reconstruct.cu
+    decoders/processor/operators/gpu/cuda_white_balance.cu
 )
-target_include_directories(RawProcessor PUBLIC include)
-target_link_libraries(RawProcessor PUBLIC Image LibRaw Exiv2)
-set_target_properties(RawProcessor PROPERTIES
+target_include_directories(RawProcessorOp PUBLIC include)
+target_link_libraries(RawProcessorOp PUBLIC Image LibRaw Exiv2)
+set_target_properties(RawProcessorOp PROPERTIES
     CUDA_SEPARABLE_COMPILATION ON
 )
+
+add_library(RawProcessor
+    decoders/processor/raw_processor.cpp
+)
+target_include_directories(RawProcessor PUBLIC include)
+target_link_libraries(RawProcessor PUBLIC Image LibRaw Exiv2 RawProcessorOp)
 
 add_library(ImageDecoder 
     decoders/decoder_scheduler.cpp

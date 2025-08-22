@@ -114,35 +114,8 @@ auto OCIO_ACES_Transform_Op::Apply(ImageBuffer& input) -> ImageBuffer {
     //   float hue_steepness = 0.01f;  // Adjust: Smaller for broader influence (gentle falloff);
     //                                 // larger (0.2f) for sharper drop
 
-    //   hls.forEach<cv::Vec3f>([&](cv::Vec3f& pixel, const int*) {
-    //     float L = pixel[1];
-    //     float S = pixel[2];
-    //     float H = pixel[0];
-    //     float l_normalized =
-    //         (L - L_soft) / (L_hard - L_soft + 1e-6f) * 2.0f - 1.0f;  // Center around 0 for
-    //         sigmoid
-    //     float l_factor = sigmoid(
-    //         l_normalized * 5.0f);  // Steepness=5 for moderate curve; adjust higher for sharper
-
-    //     float s_normalized = (S - S_soft) / (S_hard - S_soft + 1e-6f) * 2.0f - 1.0f;
-    //     float s_factor     = sigmoid(s_normalized * 5.0f);
-
-    //     float d            = std::min(std::abs(H - target_hue), 360.0f - std::abs(H -
-    //     target_hue)); float h_normalized = (hue_width - d) / hue_width;  // Apply sigmoid here
-    //     too float h_weight     = sigmoid(
-    //         h_normalized * (1.0f / hue_steepness));  // Lower steepness for broader hue influence
-
-    //     float exposure_strength = l_factor * h_weight;
-    //     if (exposure_strength > 0.0f) {
-    //       float blend_factor = 1.0f - std::exp(-exposure_strength * 2.0f);
-    //       S                  = S * (1.0f - blend_factor);
-    //       // L                  = L + (1.0f - L) * blend_factor * 0.5f;
-    //       // pixel[1]           = L;
-    //       pixel[2]           = S;
-    //     }
-    //   });
-    //   cv::cvtColor(hls, img, cv::COLOR_HLS2RGB);
-    // }
+    img                   = cv::max(0.0f, img);
+    img                   = cv::min(1.0f, img);
 
     auto output_transform = OCIO::LookTransform::Create();
     output_transform->setLooks("ACES 1.3 Reference Gamut Compression");
