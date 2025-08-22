@@ -20,13 +20,14 @@ add_library(RawProcessorOp
     decoders/processor/operators/cpu/debayer_ahd.cpp
     decoders/processor/operators/cpu/highlight_reconstruct.cpp
     decoders/processor/operators/cpu/white_balance.cpp
+    decoders/processor/operators/cpu/raw_proc_utils.cpp
     decoders/processor/operators/gpu/cuda_color_space_conv.cu
     decoders/processor/operators/gpu/cuda_debayer_ahd.cu
     decoders/processor/operators/gpu/cuda_highlight_reconstruct.cu
     decoders/processor/operators/gpu/cuda_white_balance.cu
 )
 target_include_directories(RawProcessorOp PUBLIC include)
-target_link_libraries(RawProcessorOp PUBLIC Image LibRaw Exiv2)
+target_link_libraries(RawProcessorOp PUBLIC Image LibRaw Exiv2 hwy::hwy)
 set_target_properties(RawProcessorOp PROPERTIES
     CUDA_SEPARABLE_COMPILATION ON
 )
