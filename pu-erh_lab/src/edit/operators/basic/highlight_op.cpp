@@ -32,11 +32,15 @@ auto HighlightsOp::GetOutput(hw::Vec<hw::ScalableTag<float>> luminance)
   return result;
 }
 
-auto HighlightsOp::GetOutput(float luminance) -> float {
-  float scaled_luminance = luminance / 100.0f;
-  float t_square         = scaled_luminance * scaled_luminance;
+auto HighlightsOp::GetOutput(cv::Vec3f& input) -> cv::Vec3f {
+  // float scaled_luminance = luminance / 100.0f;
+  float t_square[3];
+  t_square[0] = input[0] * input[0];
+  t_square[1] = input[1] * input[1];
+  t_square[2] = input[2] * input[2];
 
-  return (_offset / 100.0f * 40.0f) * t_square + luminance;
+  float a     = (_offset / 100.0f * 40.0f);
+  return {a * t_square[0] + input[0], a * t_square[1] + input[1], a * t_square[2] + input[2]};
 }
 
 auto HighlightsOp::GetScale() -> float { return _offset / 300.0f; }

@@ -8,13 +8,17 @@
 #include <cmath>
 #include <opencv2/core.hpp>
 #include <opencv2/core/mat.hpp>
+#include <opencv2/core/types.hpp>
+#include <opencv2/highgui.hpp>
 #include <opencv2/imgproc.hpp>
 
 #include "decoders/processor/operators/cpu/raw_proc_utils.hpp"
 
 namespace puerhlab {
 namespace CPU {
-inline static auto GetBlackSom(const libraw_rawdata_t& raw_data) -> std::array<float, 3> {
+inline static float sqr(float x) { return x * x; }
+
+inline static auto  GetBlackSom(const libraw_rawdata_t& raw_data) -> std::array<float, 3> {
   const auto           base_black_level = static_cast<float>(raw_data.color.black);
   std::array<float, 3> black_level      = {
       (base_black_level + static_cast<float>(raw_data.color.cblack[0])) / 65535.0f,
@@ -25,15 +29,17 @@ inline static auto GetBlackSom(const libraw_rawdata_t& raw_data) -> std::array<f
 }
 
 inline static auto GetScaleMul(const libraw_rawdata_t& raw_data) -> std::array<float, 3> {
-  auto                 pre_mul     = raw_data.color.pre_mul;
-  float                max_pre_mul = std::max({pre_mul[0], pre_mul[1], pre_mul[2]});
+  // auto                 pre_mul     = raw_data.color.pre_mul;
+  auto                 cam_mul = raw_data.color.cam_mul;
 
-  auto                 c_white     = (int)raw_data.color.maximum;
-  auto                 c_black     = (int)raw_data.color.black;
+  // float                max_pre_mul = std::max({pre_mul[0], pre_mul[1], pre_mul[2]});
+
+  auto                 c_white = raw_data.color.maximum;
+  auto                 c_black = raw_data.color.black;
 
   std::array<float, 3> scale_mul;
   for (int c = 0; c < 3; ++c) {
-    scale_mul[c] = (pre_mul[c] / max_pre_mul) / ((c_white - c_black) / 65535.0f);
+    scale_mul[c] = (cam_mul[c] / cam_mul[1]) / (((int)c_white - (int)c_black) / 65535.0f);
   }
 
   return scale_mul;
@@ -42,25 +48,25 @@ inline static auto GetScaleMul(const libraw_rawdata_t& raw_data) -> std::array<f
 inline static auto GetClMax(const libraw_rawdata_t& raw_data) -> std::array<float, 3> {
   std::array<float, 3> cl_max;
 
-  int                  c_white    = (int)raw_data.color.maximum;
+  int                  c_white    = (int)(raw_data.color.maximum);
 
   std::array<float, 3> cblack_som = GetBlackSom(raw_data);
   std::array<float, 3> scale_mul  = GetScaleMul(raw_data);
 
   for (int c = 0; c < 3; ++c) {
-    cl_max[c] = (c_white = cblack_som[c]) * scale_mul[c];
+    cl_max[c] = ((c_white - cblack_som[c]) * scale_mul[c]) / 65535.0f;
   }
 
   return cl_max;
 }
 
 inline static auto GetChMax(cv::Mat& img) -> std::array<float, 3> {
-  cv::Mat resized;
-  cv::resize(img, resized, cv::Size(img.cols / 16, img.rows / 16));
+  // cv::Mat resized;
+  // cv::resize(img, resized, cv::Size(img.cols / 16, img.rows / 16));
 
   std::array<float, 3> ch_max = {0, 0, 0};
 
-  resized.forEach<cv::Vec3f>([&](cv::Vec3f& pixel, const int*) {
+  img.forEach<cv::Vec3f>([&](cv::Vec3f& pixel, const int*) {
     if (pixel[0] > ch_max[0]) {
       ch_max[0] = pixel[0];
     }
@@ -91,7 +97,7 @@ void HighlightReconstruct(cv::Mat& img, LibRaw& raw_processor) {
   constexpr float maxpct      = 0.95f;
   constexpr float epsilon     = 1e-5f;
 
-  constexpr float blendthresh = 1.0;
+  constexpr float blendthresh = 0.00f;
   constexpr int   ColorCount  = 3;
 
   cv::Mat1f       red;
@@ -99,10 +105,8 @@ void HighlightReconstruct(cv::Mat& img, LibRaw& raw_processor) {
   cv::Mat1f       blue;
 
   cv::extractChannel(img, red, 0);
-  cv::extractChannel(img, red, 1);
-  cv::extractChannel(img, red, 2);
-  auto            black_lev                     = raw_processor.imgdata.color.black;
-  auto            c_black                       = GetBlackSom(raw_processor.imgdata.rawdata);
+  cv::extractChannel(img, green, 1);
+  cv::extractChannel(img, blue, 2);
 
   constexpr float trans[ColorCount][ColorCount] = {
       {1.f, 1.f, 1.f}, {1.7320508f, -1.7320508f, 0.f}, {-1.f, -1.f, 2.f}};
@@ -162,8 +166,8 @@ void HighlightReconstruct(cv::Mat& img, LibRaw& raw_processor) {
   float blend_pt = blendthresh + clip_pt;
   float med_factor[3];
 
-  for (int c; c < ColorCount; ++c) {
-    med_factor[c] = std::max(1.0f, (max_f[c] / med_pt) / (-blend_pt));
+  for (int c = 0; c < ColorCount; ++c) {
+    med_factor[c] = std::max(1.0f, (max_f[c] / med_pt)) / (-blend_pt);
   }
 
   int min_x = width - 1;
@@ -171,7 +175,7 @@ void HighlightReconstruct(cv::Mat& img, LibRaw& raw_processor) {
   int min_y = height - 1;
   int max_y = 0;
 
-#pragma omp parallel for schedule(dynamic, 16)
+  // #pragma omp parallel for schedule(dynamic, 16)
   for (int y = 0; y < height; ++y) {
     for (int x = 0; x < width; ++x) {
       if (red(y, x) >= max_f[0] || green(y, x) >= max_f[1] || blue(y, x) >= max_f[2]) {
@@ -206,9 +210,9 @@ void HighlightReconstruct(cv::Mat& img, LibRaw& raw_processor) {
 #pragma omp parallel for
   for (int y = 0; y < blur_height; ++y) {
     for (int x = 0; x < blur_width; ++x) {
-      channel_blur[0](y, x) = fabsf(channel_blur[0](y, x) - red(y, x)) +
-                              fabsf(channel_blur[1](y, x) - green(y, x)) +
-                              fabsf(channel_blur[2](y, x) - blue(y, x));
+      channel_blur[0](y, x) = fabsf(channel_blur[0](y, x) - red(y + min_y, x + min_x)) +
+                              fabsf(channel_blur[1](y, x) - green(y + min_y, x + min_x)) +
+                              fabsf(channel_blur[2](y, x) - blue(y + min_y, x + min_x));
     }
   }
 
@@ -231,8 +235,8 @@ void HighlightReconstruct(cv::Mat& img, LibRaw& raw_processor) {
     for (int x = 0; x < blur_width; ++x) {
       if ((red(y + min_y, x + min_x) > thresh[0] || green(y + min_y, x + min_x) > thresh[1] ||
            blue(y + min_y, x + min_x) > thresh[2]) &&
-          (red(y + min_y, x + min_x) > max_f[0] || green(y + min_y, x + min_x) > max_f[1] ||
-           blue(y + min_y, x + min_x) > max_f[2])) {
+          (red(y + min_y, x + min_x) < max_f[0] || green(y + min_y, x + min_x) < max_f[1] ||
+           blue(y + min_y, x + min_x) < max_f[2])) {
         highpass_sum += static_cast<double>(channel_blur[0](y, x));
         ++highpass_norm;
 
@@ -249,8 +253,6 @@ void HighlightReconstruct(cv::Mat& img, LibRaw& raw_processor) {
   cv::Mat1f hilite_full4(blur_height, blur_width);
   // Blue highlight data
   boxblur2(hilite_full[3], hilite_full4, temp, 0, 0, blur_height, blur_width, 1);
-
-  temp.release();
 
 #pragma omp parallel for schedule(dynamic, 16)
   for (int y = 0; y < blur_height; ++y) {
@@ -287,7 +289,9 @@ void HighlightReconstruct(cv::Mat& img, LibRaw& raw_processor) {
     boxblur_resamp(hilite_full[m], hilite[m], temp2, blur_height, blur_width, range, pitch);
   }
 
-  temp2.release();
+  temp.deallocate();
+
+  temp2.deallocate();
 
   std::array<cv::Mat1f, 8> hilite_dir;
   for (cv::Mat1f& channel : hilite_dir) {
@@ -295,12 +299,14 @@ void HighlightReconstruct(cv::Mat& img, LibRaw& raw_processor) {
     channel.setTo(0.0f);
   }
 
+  // Cache friendly for vertical scan
   std::array<cv::Mat1f, 4> hilite_dir0;
-  for (cv::Mat1f& channel : hilite_dir) {
+  for (cv::Mat1f& channel : hilite_dir0) {
     channel.create(hfw, hfh);
     channel.setTo(0.0f);
   }
 
+  // Cache friendly for vertical scan
   std::array<cv::Mat1f, 4> hilite_dir4;
   for (cv::Mat1f& channel : hilite_dir4) {
     channel.create(hfw, hfh);
@@ -308,7 +314,545 @@ void HighlightReconstruct(cv::Mat& img, LibRaw& raw_processor) {
   }
 
   // Fill gaps in highlight map by directional extension
-  // Raster scan from four corners
+  // Raster scan from four corner
+
+  // From left
+  for (int x = 1; x < hfw - 1; ++x) {
+    for (int y = 2; y < hfh - 2; ++y) {
+      // From left
+      if (hilite[3](y, x) > epsilon) {
+        hilite_dir0[3](x, y) = 1.f;
+      } else {
+        hilite_dir0[3](x, y) = (hilite_dir0[3](x - 1, y - 2) + hilite_dir0[3](x - 1, y - 1) +
+                                hilite_dir0[3](x - 1, y - 1) + hilite_dir0[3](x - 1, y) +
+                                hilite_dir0[3](x - 1, y + 1)) == 0.f
+                                   ? 0.f
+                                   : 0.1f;
+      }
+    }
+
+    if (hilite[3](2, x) <= epsilon) {
+      hilite_dir[3](0, x) = hilite_dir0[3](x, 2);
+    }
+
+    if (hilite[3](3, x) <= epsilon) {
+      hilite_dir[3](1, x) = hilite_dir0[3](x, 3);
+    }
+
+    if (hilite[3](hfh - 3, x) <= epsilon) {
+      hilite_dir[4 + 3](hfh - 1, x) = hilite_dir0[3](x, hfh - 3);
+    }
+
+    if (hilite[3](hfh - 4, x) <= epsilon) {
+      hilite_dir[4 + 3](hfh - 2, x) = hilite_dir0[3](x, hfh - 4);
+    }
+  }
+
+  for (int y = 2; y < hfh - 2; ++y) {
+    if (hilite[3](y, hfw - 2) <= epsilon) {
+      hilite_dir4[3](hfw - 1, y) = hilite_dir0[3](hfw - 2, y);
+    }
+  }
+
+  // From left
+#pragma omp parallel for
+  for (int c = 0; c < 3; ++c) {
+    for (int x = 1; x < hfw - 1; ++x) {
+      for (int y = 2; y < hfh - 2; ++y) {
+        if (hilite[3](y, x) > epsilon) {
+          hilite_dir[0](y, x) = hilite[c](y, x) / hilite[3](y, x);
+        } else {
+          hilite_dir0[c](x, y) =
+              0.1f * ((hilite_dir0[c](x - 1, y - 2) + hilite_dir0[c](x - 1, y - 1) +
+                       hilite_dir0[c](x - 1, y) + hilite_dir0[c](x - 1, y + 1) +
+                       hilite_dir0[c](x - 1, y + 2)) /
+                      (hilite_dir0[3](x - 1, y - 2) + hilite_dir0[3](x - 1, y - 1) +
+                       hilite_dir0[3](x - 1, y) + hilite_dir0[3](x - 1, y + 1) +
+                       hilite_dir0[3](x - 1, y + 2) + epsilon));
+        }
+      }
+      if (hilite[3](2, x) <= epsilon) {
+        hilite_dir[0 + c](0, x) = hilite_dir0[c](x, 2);
+      }
+      if (hilite[3](3, x) <= epsilon) {
+        hilite_dir[0 + c](1, x) = hilite_dir0[c](x, 3);
+      }
+      if (hilite[3](hfh - 3, x) <= epsilon) {
+        hilite_dir[4 + c](hfh - 1, x) = hilite_dir0[c](x, hfh - 3);
+      }
+      if (hilite[3](hfh - 4, x) <= epsilon) {
+        hilite_dir[4 + c](hfh - 2, x) = hilite_dir0[c](x, hfh - 4);
+      }
+    }
+
+    for (int y = 2; y < hfh - 1; ++y) {
+      if (hilite[3](y, hfw - 2) <= epsilon) {
+        hilite_dir4[c](hfw - 1, y) = hilite_dir0[c](hfw - 2, y);
+      }
+    }
+  }
+
+  // From right
+  for (int x = hfw - 2; x > 0; --x) {
+    for (int y = 2; y < hfh - 2; ++y) {
+      if (hilite[3](y, x) > epsilon) {
+        hilite_dir4[3](x, y) = 1.f;
+      } else {
+        hilite_dir4[3](x, y) = (hilite_dir4[3](x + 1, y - 2) + hilite_dir4[3](x + 1, y - 1) +
+                                hilite_dir4[3](x + 1, y) + hilite_dir4[3](x + 1, y + 1) +
+                                hilite_dir4[3](x + 1, y + 2)) == 0.f
+                                   ? 0.f
+                                   : 0.1f;
+      }
+    }
+
+    if (hilite[3](2, x) <= epsilon) {
+      hilite_dir[3](0, x) += hilite_dir4[3](x, 2);
+    }
+
+    if (hilite[3](hfh - 3, x) <= epsilon) {
+      hilite_dir[4 + 3](hfh - 1, x) += hilite_dir4[3](x, hfh - 3);
+    }
+  }
+
+  for (int y = 2; y < hfh - 2; ++y) {
+    if (hilite[3](y, 0) <= epsilon) {
+      hilite_dir[3](y - 2, 0) += hilite_dir4[3](0, y);
+      hilite_dir[4 + 3](y + 2, 0) += hilite_dir4[3](0, y);
+    }
+
+    if (hilite[3](y, 1) <= epsilon) {
+      hilite_dir[3](y - 2, 1) += hilite_dir4[3](1, y);
+      hilite_dir[4 + 3](y + 2, 1) += hilite_dir4[3](1, y);
+    }
+
+    if (hilite[3](y, hfw - 2) <= epsilon) {
+      hilite_dir[3](y - 2, hfw - 2) += hilite_dir4[3](hfw - 2, y);
+      hilite_dir[4 + 3](y + 2, hfw - 2) += hilite_dir4[3](hfw - 2, y);
+    }
+  }
+
+// Color dilate
+#pragma omp parallel for
+  for (int c = 0; c < 3; ++c) {
+    for (int x = hfw - 2; x > 0; --x) {
+      for (int y = 2; y < hfh - 2; ++y) {
+        // From right
+        if (hilite[3](y, x) > epsilon) {
+          hilite_dir4[c](x, y) = hilite[c](y, x) / hilite[3](y, x);
+        } else {
+          hilite_dir4[c](x, y) =
+              0.1f * ((hilite_dir4[c](x + 1, y - 2) + hilite_dir4[c](x + 1, y - 1) +
+                       hilite_dir4[c](x + 1, y) + hilite_dir4[c](x + 1, y + 1) +
+                       hilite_dir4[c](x + 1, y + 2)) /
+                      (hilite_dir4[3](x + 1, y - 2) + hilite_dir4[3](x + 1, y - 1) +
+                       hilite_dir4[3](x + 1, y) + hilite_dir4[3](x + 1, y + 1) +
+                       hilite_dir4[3](x + 1, y + 2) + epsilon));
+        }
+      }
+
+      if (hilite[3](2, x) <= epsilon) {
+        hilite_dir[0 + c](0, x) += hilite_dir4[c](x, 2);
+      }
+
+      if (hilite[3](hfh - 3, x) <= epsilon) {
+        hilite_dir[4 + c](hfh - 1, x) += hilite_dir4[c](x, hfh - 3);
+      }
+    }
+
+    for (int y = 2; y < hfh - 2; ++y) {
+      if (hilite[3](y, 0) <= epsilon) {
+        hilite_dir[0 + c](y - 2, 0) = hilite_dir4[c](0, y);
+        hilite_dir[4 + c](y + 2, 0) = hilite_dir4[c](0, y);
+      }
+
+      if (hilite[3](y, 1) <= epsilon) {
+        hilite_dir[0 + c](y - 2, 1) += hilite_dir4[c](1, y);
+        hilite_dir[4 + c](y + 2, 1) += hilite_dir4[c](1, y);
+      }
+
+      if (hilite[3](y, hfw - 2) <= epsilon) {
+        hilite_dir[0 + c](y - 2, hfw - 2) += hilite_dir4[c](hfw - 2, y);
+        hilite_dir[4 + c](y + 2, hfw - 2) += hilite_dir4[c](hfw - 2, y);
+      }
+    }
+  }
+
+  // From top
+  for (int y = 1; y < hfh - 1; ++y) {
+    for (int x = 2; x < hfw - 2; ++x) {
+      // from top
+      if (hilite[3](y, x) > epsilon) {
+        hilite_dir[3](y, x) = 1.f;
+      } else {
+        hilite_dir[3](y, x) =
+            (hilite_dir[3](y - 1, x - 2) + hilite_dir[3](y - 1, x - 1) + hilite_dir[3](y - 1, x) +
+             hilite_dir[3](y - 1, x + 1) + hilite_dir[3](y - 1, x + 2)) == 0.f
+                ? 0.f
+                : 0.1f;
+      }
+    }
+  }
+
+  for (int x = 2; x < hfw - 2; ++x) {
+    if (hilite[3](hfh - 2, x) <= epsilon) {
+      hilite_dir[4 + 3](hfh - 1, x) += hilite_dir[0 + 3](hfh - 2, x);
+    }
+  }
+
+#pragma omp parallel for
+  for (int c = 0; c < 3; ++c) {
+    for (int y = 1; y < hfh - 1; ++y) {
+      for (int x = 2; x < hfw - 2; ++x) {
+        // From top
+        if (hilite[3](y, x) > epsilon) {
+          hilite_dir[0 + c](y, x) = hilite[c](y, x) / hilite[3](y, x);
+        } else {
+          hilite_dir[0 + c](y, x) =
+              0.1f * ((hilite_dir[c](y - 1, x - 2) + hilite_dir[c](y - 1, x - 1) +
+                       hilite_dir[c](y - 1, x) + hilite_dir[c](y - 1, x + 1) +
+                       hilite_dir[c](y - 1, x + 2)) /
+                      (hilite_dir[3](y - 1, x - 2) + hilite_dir[3](y - 1, x - 1) +
+                       hilite_dir[3](y - 1, x) + hilite_dir[3](y - 1, x + 1) +
+                       hilite_dir[3](y - 1, x + 2) + epsilon));
+        }
+      }
+    }
+
+    for (int x = 2; x < hfw - 2; ++x) {
+      if (hilite[3](hfh - 2, x) <= epsilon) {
+        hilite_dir[4 + c](hfh - 1, x) += hilite_dir[0 + c](hfh - 2, x);
+      }
+    }
+  }
+
+  // From bottom
+  for (int y = hfh - 2; y > 0; --y) {
+    for (int x = 2; x < hfw - 2; ++x) {
+      // from bottom
+      if (hilite[3](y, x) > epsilon) {
+        hilite_dir[4 + 3](y, x) = 1.f;
+      } else {
+        hilite_dir[4 + 3](y, x) =
+            (hilite_dir[4 + 3](y + 1, x - 2) + hilite_dir[4 + 3](y + 1, x - 1) +
+             hilite_dir[4 + 3](y + 1, x) + hilite_dir[4 + 3](y + 1, x + 1) +
+             hilite_dir[4 + 3](y + 1, x + 2)) == 0.f
+                ? 0.f
+                : 0.1f;
+      }
+    }
+  }
+
+#pragma omp parallel for
+  for (int c = 0; c < 4; ++c) {
+    for (int y = hfh - 2; y > 0; --y) {
+      for (int x = 2; x < hfw - 2; ++x) {
+        // From bottom
+        if (hilite[3](y, x) > epsilon) {
+          hilite_dir[4 + c](y, x) = hilite[c](y, x) / hilite[3](y, x);
+        } else {
+          hilite_dir[4 + c](y, x) =
+              0.1f * ((hilite_dir[4 + c](y + 1, x - 2) + hilite_dir[4 + c](y + 1, x - 1) +
+                       hilite_dir[4 + c](y + 1, x) + hilite_dir[4 + c](y + 1, x + 1) +
+                       hilite_dir[4 + c](y + 1, x + 2)) /
+                      (hilite_dir[4 + 3](y + 1, x - 2) + hilite_dir[3](y + 1, x - 1) +
+                       hilite_dir[4 + 3](y + 1, x) + hilite_dir[4 + 3](y + 1, x + 1) +
+                       hilite_dir[4 + 3](y + 1, x + 2) + epsilon));
+        }
+      }
+    }
+  }
+  // fill in edges
+  for (int dir = 0; dir < 2; ++dir) {
+    for (int y = 1; y < hfh - 1; ++y) {
+      for (int c = 0; c < 4; ++c) {
+        hilite_dir[dir * 4 + c](y, 0)       = hilite_dir[dir * 4 + c](y, 1);
+        hilite_dir[dir * 4 + c](y, hfw - 1) = hilite_dir[dir * 4 + c](y, hfw - 2);
+      }
+    }
+
+    for (int x = 1; x < hfw - 1; ++x) {
+      for (int c = 0; c < 4; ++c) {
+        hilite_dir[dir * 4 + c](0, x)       = hilite_dir[dir * 4 + c](1, x);
+        hilite_dir[dir * 4 + c](hfh - 1, x) = hilite_dir[dir * 4 + c](hfh - 2, x);
+      }
+    }
+
+    for (int c = 0; c < 4; ++c) {
+      hilite_dir[dir * 4 + c](0, 0) = hilite_dir[dir * 4 + c](1, 0) = hilite_dir[dir * 4 + c](
+          0, 1) = hilite_dir[dir * 4 + c](1, 1) = hilite_dir[dir * 4 + c](2, 2);
+      hilite_dir[dir * 4 + c](0, hfw - 1)       = hilite_dir[dir * 4 + c](1, hfw - 1) =
+          hilite_dir[dir * 4 + c](0, hfw - 2)   = hilite_dir[dir * 4 + c](1, hfw - 2) =
+              hilite_dir[dir * 4 + c](2, hfw - 3);
+      hilite_dir[dir * 4 + c](hfh - 1, 0)     = hilite_dir[dir * 4 + c](hfh - 2, 0) =
+          hilite_dir[dir * 4 + c](hfh - 1, 1) = hilite_dir[dir * 4 + c](hfh - 2, 1) =
+              hilite_dir[dir * 4 + c](hfh - 3, 2);
+      hilite_dir[dir * 4 + c](hfh - 1, hfw - 1)     = hilite_dir[dir * 4 + c](hfh - 2, hfw - 1) =
+          hilite_dir[dir * 4 + c](hfh - 1, hfw - 2) = hilite_dir[dir * 4 + c](hfh - 2, hfw - 2) =
+              hilite_dir[dir * 4 + c](hfh - 3, hfw - 3);
+    }
+  }
+
+  for (int y = 1; y < hfh - 1; ++y) {
+    for (int c = 0; c < 4; ++c) {
+      hilite_dir0[c](0, y)       = hilite_dir0[c](1, y);
+      hilite_dir0[c](hfw - 1, y) = hilite_dir0[c](hfw - 2, y);
+    }
+  }
+
+  for (int x = 1; x < hfw - 1; ++x) {
+    for (int c = 0; c < 4; ++c) {
+      hilite_dir0[c](x, 0)       = hilite_dir0[c](x, 1);
+      hilite_dir0[c](x, hfh - 1) = hilite_dir0[c](x, hfh - 2);
+    }
+  }
+
+  for (int c = 0; c < 4; ++c) {
+    hilite_dir0[c](0, 0) = hilite_dir0[c](0, 1) = hilite_dir0[c](1, 0) = hilite_dir0[c](1, 1) =
+        hilite_dir0[c](2, 2);
+    hilite_dir0[c](hfw - 1, 0) = hilite_dir0[c](hfw - 1, 1) = hilite_dir0[c](hfw - 2, 0) =
+        hilite_dir0[c](hfw - 2, 1)                          = hilite_dir0[c](hfw - 3, 2);
+    hilite_dir0[c](0, hfh - 1) = hilite_dir0[c](0, hfh - 2) = hilite_dir0[c](1, hfh - 1) =
+        hilite_dir0[c](1, hfh - 2)                          = hilite_dir0[c](2, hfh - 3);
+    hilite_dir0[c](hfw - 1, hfh - 1) = hilite_dir0[c](hfw - 1, hfh - 2) = hilite_dir0[c](
+        hfw - 2, hfh - 1) = hilite_dir0[c](hfw - 2, hfh - 2) = hilite_dir0[c](hfw - 3, hfh - 3);
+  }
+
+  for (int y = 1; y < hfh - 1; ++y) {
+    for (int c = 0; c < 4; ++c) {
+      hilite_dir4[c](0, y)       = hilite_dir4[c](1, y);
+      hilite_dir4[c](hfw - 1, y) = hilite_dir4[c](hfw - 2, y);
+    }
+  }
+
+  for (int x = 1; x < hfw - 1; ++x) {
+    for (int c = 0; c < 4; ++c) {
+      hilite_dir4[c](x, 0)       = hilite_dir4[c](x, 1);
+      hilite_dir4[c](x, hfh - 1) = hilite_dir4[c](x, hfh - 2);
+    }
+  }
+
+  for (int c = 0; c < 4; ++c) {
+    hilite_dir4[c](0, 0) = hilite_dir4[c](0, 1) = hilite_dir4[c](1, 0) = hilite_dir4[c](1, 1) =
+        hilite_dir4[c](2, 2);
+    hilite_dir4[c](hfw - 1, 0) = hilite_dir4[c](hfw - 1, 1) = hilite_dir4[c](hfw - 2, 0) =
+        hilite_dir4[c](hfw - 2, 1)                          = hilite_dir0[c](hfw - 3, 2);
+    hilite_dir4[c](0, hfh - 1) = hilite_dir4[c](0, hfh - 2) = hilite_dir4[c](1, hfh - 1) =
+        hilite_dir4[c](1, hfh - 2)                          = hilite_dir4[c](2, hfh - 3);
+    hilite_dir4[c](hfw - 1, hfh - 1) = hilite_dir4[c](hfw - 1, hfh - 2) = hilite_dir4[c](
+        hfw - 2, hfh - 1) = hilite_dir4[c](hfw - 2, hfh - 2) = hilite_dir4[c](hfw - 3, hfh - 3);
+  }
+
+  // Free up some memory
+  for (int c = 0; c < 4; ++c) {
+    hilite[c].release();
+  }
+
+  // Highlight reconstruction
+#pragma omp parallel for schedule(dynamic, 32)
+  for (int y = 0; y < blur_height; ++y) {
+    int y1 = std::min(y - (y % pitch) / pitch, hfh - 1);
+    for (int x = 0; x < blur_width; ++x) {
+      float pixel[3] = {red(y + min_y, x + min_x), green(y + min_y, x + min_x),
+                        blue(y + min_y, x + min_x)};
+
+      if (pixel[0] < max_f[0] && pixel[1] < max_f[1] && pixel[2] < max_f[2]) {
+        continue;
+      }
+
+      int   x1 = std::min((x - (x % pitch)) / pitch, hfw - 1);
+
+      // Estimate recovered values using modified HLRecovery_blend algorithm
+      float rgb[ColorCount], rgb_blend[ColorCount] = {}, cam[2][ColorCount], lab[2][ColorCount],
+                             sum[2], ch_ratio;
+
+      rgb[0] = pixel[0];
+      rgb[1] = pixel[1];
+      rgb[2] = pixel[2];
+
+      // Initialize cam with raw input [0] and potentially clipped input [1]
+      for (int c = 0; c < ColorCount; ++c) {
+        cam[0][c] = rgb[c];
+        cam[1][c] = std::min(cam[0][c], clip_pt);
+      }
+
+      // Calculate the lightness correction ratio (chratio)
+      for (int y2 = 0; y2 < 2; y2++) {
+        for (int c = 0; c < ColorCount; ++c) {
+          lab[y2][c] = 0;
+
+          for (int c1 = 0; c1 < ColorCount; ++c1) {
+            lab[y2][c] += trans[c][c1] * cam[y2][c1];
+          }
+        }
+
+        sum[y2] = 0.f;
+
+        for (int c = 1; c < ColorCount; ++c) {
+          sum[y2] += sqr(lab[y2][c]);
+        }
+      }
+
+      if (sum[0] == 0.f) {
+        sum[0] = epsilon;
+      }
+
+      ch_ratio = sqrtf(sum[1] / sum[0]);
+
+      // Apply ratio to lightness in lab space
+      for (int c = 1; c < ColorCount; ++c) {
+        lab[0][c] *= ch_ratio;
+      }
+
+      // Transform back from lab to RGB
+      for (int c = 0; c < ColorCount; ++c) {
+        cam[0][c] = 0;
+
+        for (int c1 = 0; c1 < ColorCount; ++c1) {
+          cam[0][c] += itrans[c][c1] * lab[0][c1];
+        }
+      }
+
+      for (int c = 0; c < ColorCount; ++c) {
+        rgb[c] = cam[0][c] / ColorCount;
+      }
+
+      float r_frac = std::max(0.f, std::min(1.f, med_factor[0] * (pixel[0] - blend_pt)));
+      float g_frac = std::max(0.f, std::min(1.f, med_factor[1] * (pixel[1] - blend_pt)));
+      float b_frac = std::max(0.f, std::min(1.f, med_factor[2] * (pixel[2] - blend_pt)));
+
+      if (pixel[0] > blend_pt) {
+        rgb_blend[0] = r_frac * rgb[0] + (1.f - r_frac) * pixel[0];
+      }
+
+      if (pixel[1] > blend_pt) {
+        rgb_blend[1] = g_frac * rgb[1] + (1.f - g_frac) * pixel[1];
+      }
+
+      if (pixel[2] > blend_pt) {
+        rgb_blend[2] = b_frac * rgb[2] + (1.f - b_frac) * pixel[2];
+      }
+
+      // end of HLRecovery_blend estimation
+      //%%%%%%%%%%%%%%%%%%%%%%%
+
+      // there are clipped highlights
+      // first, determine weighted average of unclipped extensions (weighting is by 'hue' proximity)
+      float total_weight = 0.f;
+      float clip_fix[3]  = {0.f, 0.f, 0.f};
+
+      float Y            = epsilon + rgb_blend[0] + rgb_blend[1] + rgb_blend[2];
+
+      for (int c = 0; c < ColorCount; ++c) {
+        rgb_blend[c] /= Y;
+      }
+
+      float Yhi = 1.f / (hilite_dir0[0](x1, y1) + hilite_dir0[1](x1, y1) + hilite_dir0[2](x1, y1));
+
+      if (Yhi < 2.f) {
+        float dir_wt = 1.f / (1.f + (sqr(rgb_blend[0] - hilite_dir0[0](x1, y1) * Yhi) +
+                                     sqr(rgb_blend[1] - hilite_dir0[1](x1, y1) * Yhi) +
+                                     sqr(rgb_blend[2] - hilite_dir0[2](x1, y1) * Yhi)));
+
+        total_weight = dir_wt;
+        dir_wt /= (hilite_dir0[3](x1, y1) + epsilon);
+        clip_fix[0] = dir_wt * hilite_dir0[0](x1, y1);
+        clip_fix[1] = dir_wt * hilite_dir0[1](x1, y1);
+        clip_fix[2] = dir_wt * hilite_dir0[2](x1, y1);
+      }
+
+      for (int dir = 0; dir < 2; ++dir) {
+        float Yhil = 1.f / (hilite_dir[dir * 4 + 0](y1, x1) + hilite_dir[dir * 4 + 1](y1, x1) +
+                            hilite_dir[dir * 4 + 2](y1, x1));
+
+        if (Yhil < 2.f) {
+          float dir_wt = 1.f / (1.f + (sqr(rgb_blend[0] - hilite_dir[dir * 4 + 0](y1, x1) * Yhil) +
+                                       sqr(rgb_blend[1] - hilite_dir[dir * 4 + 1](y1, x1) * Yhil) +
+                                       sqr(rgb_blend[2] - hilite_dir[dir * 4 + 2](y1, x1) * Yhil)));
+
+          total_weight += dir_wt;
+          dir_wt /= (hilite_dir[dir * 4 + 3](y1, x1) + epsilon);
+          clip_fix[0] += dir_wt * hilite_dir[dir * 4 + 0](y1, x1);
+          clip_fix[1] += dir_wt * hilite_dir[dir * 4 + 1](y1, x1);
+          clip_fix[2] += dir_wt * hilite_dir[dir * 4 + 2](y1, x1);
+        }
+      }
+
+      Yhi = 1.f / (hilite_dir4[0](x1, y1) + hilite_dir4[1](x1, y1) + hilite_dir4[2](x1, y1));
+
+      if (Yhi < 2.f) {
+        float dir_wt = 1.f / (1.f + (sqr(rgb_blend[0] - hilite_dir4[0](x1, y1) * Yhi) +
+                                     sqr(rgb_blend[1] - hilite_dir4[1](x1, y1) * Yhi) +
+                                     sqr(rgb_blend[2] - hilite_dir4[2](x1, y1) * Yhi)));
+        total_weight += dir_wt;
+        dir_wt /= (hilite_dir4[3](x1, y1) + epsilon);
+        clip_fix[0] += dir_wt * hilite_dir4[0](x1, y1);
+        clip_fix[1] += dir_wt * hilite_dir4[1](x1, y1);
+        clip_fix[2] += dir_wt * hilite_dir4[2](x1, y1);
+      }
+
+      if (total_weight == .0f) {
+        continue;
+      }
+
+      clip_fix[0] /= total_weight;
+      clip_fix[1] /= total_weight;
+      clip_fix[2] /= total_weight;
+
+      // Now correct clipped channels
+      if (pixel[0] > max_f[0] && pixel[1] > max_f[1] && pixel[2] > max_f[2]) {
+        // all channels clipped
+        float Yl   = (0.299f * clip_fix[0] + 0.587f * clip_fix[1] + 0.114f * clip_fix[2]);
+
+        float mult = white_pt / Yl;
+        red(y + min_y, x + min_x)   = clip_fix[0] * mult;
+        green(y + min_y, x + min_x) = clip_fix[1] * mult;
+        blue(y + min_y, x + min_x)  = clip_fix[2] * mult;
+      } else {
+        // some channels are clipped
+        float not_clipped[3] = {pixel[0] <= max_f[0] ? 1.f : 0.f, pixel[1] <= max_f[1] ? 1.f : 0.f,
+                                pixel[2] <= max_f[2] ? 1.f : 0.f};
+
+        if (not_clipped[0] == 0.f) {
+          red(y + min_y, x + min_x) =
+              std::max(red(y + min_y, x + min_x),
+                       (clip_fix[0] *
+                        ((not_clipped[1] * pixel[1] + not_clipped[2] * pixel[2]) /
+                         (not_clipped[1] * clip_fix[1] + not_clipped[2] * clip_fix[2] + epsilon))));
+        }
+        if (not_clipped[1] == 0.f) {
+          green(y + min_y, x + min_x) =
+              std::max(green(y + min_y, x + min_x),
+                       (clip_fix[1] *
+                        ((not_clipped[2] * pixel[2] + not_clipped[0] * pixel[0]) /
+                         (not_clipped[2] * clip_fix[2] + not_clipped[0] * clip_fix[0] + epsilon))));
+        }
+        if (not_clipped[2] == 0.f) {
+          blue(y + min_y, x + min_x) =
+              std::max(blue(y + min_y, x + min_x),
+                       (clip_fix[2] *
+                        ((not_clipped[0] * pixel[0] + not_clipped[1] * pixel[1]) /
+                         (not_clipped[0] * clip_fix[0] + not_clipped[1] * clip_fix[1] + epsilon))));
+        }
+      }
+      Y = (0.299f * red(y + min_y, x + min_x) + 0.587f * green(y + min_y, x + min_x) +
+           0.114f * blue(y + min_y, x + min_x));
+
+      if (Y > white_pt) {
+        float mult = white_pt / Y;
+
+        red(y + min_y, x + min_x) *= mult;
+        green(y + min_y, x + min_x) *= mult;
+        blue(y + min_y, x + min_x) *= mult;
+      }
+    }
+  }
+
+  cv::insertChannel(red, img, 0);
+  cv::insertChannel(green, img, 1);
+  cv::insertChannel(blue, img, 2);
+
+  img.convertTo(img, CV_32FC1);
 }
 
 };  // namespace CPU

@@ -1,5 +1,6 @@
 #include "edit/operators/basic/exposure_op.hpp"
 
+#include <opencv2/core.hpp>
 #include <opencv2/core/mat.hpp>
 #include <utility>
 
@@ -33,34 +34,35 @@ ExposureOp::ExposureOp(const nlohmann::json& params) {
 }
 
 auto ExposureOp::Apply(ImageBuffer& input) -> ImageBuffer {
-  cv::Mat&                     img              = input.GetCPUData();
+  cv::Mat& img = input.GetCPUData();
 
-  float*                       img_data         = reinterpret_cast<float*>(img.data);
-  int                          total_floats_img = static_cast<int>(img.total() * img.channels());
-  const hw::ScalableTag<float> d;
-  int                          lanes = static_cast<int>(hw::Lanes(d));
+  img.forEach<cv::Vec3f>([&](cv::Vec3f& pixel, const int*) { pixel *= _scale; });
+  // float*                       img_data         = reinterpret_cast<float*>(img.data);
+  // int                          total_floats_img = static_cast<int>(img.total() * img.channels());
+  // const hw::ScalableTag<float> d;
+  // int                          lanes = static_cast<int>(hw::Lanes(d));
 
-  // For all tone regions, we can directly apply the adjustment
-  // using a tone curve.
-  cv::parallel_for_(
-      cv::Range(0, total_floats_img),
-      [&](const cv::Range& range) {
-        int i           = range.start;
-        int end         = range.end;
+  // // For all tone regions, we can directly apply the adjustment
+  // // using a tone curve.
+  // cv::parallel_for_(
+  //     cv::Range(0, total_floats_img),
+  //     [&](const cv::Range& range) {
+  //       int i           = range.start;
+  //       int end         = range.end;
 
-        int aligned_end = i + ((end - i) / lanes) * lanes;
-        for (; i < aligned_end; i += lanes) {
-          auto v_img = hw::Load(d, img_data + i);
-          v_img      = hw::Mul(v_img, _scale_factor);
-          v_img      = hw::Clamp(v_img, _min, _max);
-          hw::Store(v_img, d, img_data + i);
-        }
+  //       int aligned_end = i + ((end - i) / lanes) * lanes;
+  //       for (; i < aligned_end; i += lanes) {
+  //         auto v_img = hw::Load(d, img_data + i);
+  //         v_img      = hw::Mul(v_img, _scale_factor);
+  //         v_img      = hw::Clamp(v_img, _min, _max);
+  //         hw::Store(v_img, d, img_data + i);
+  //       }
 
-        for (; i < end; ++i) {
-          img_data[i] = img_data[i] * _scale;
-        }
-      },
-      cv::getNumThreads() * 4);
+  //       for (; i < end; ++i) {
+  //         img_data[i] = img_data[i] * _scale;
+  //       }
+  //     },
+  //     cv::getNumThreads() * 4);
   return {std::move(img)};
 }
 

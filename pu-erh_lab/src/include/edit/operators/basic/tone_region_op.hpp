@@ -60,28 +60,28 @@ class ToneRegionOp {
     // For all tone regions, we can directly apply the adjustment
     // using a tone curve.
     // if constexpr (Derived::_tone_region == ToneRegion::SHADOWS) {
-    //   img.forEach<float>([this](float& pixel, const int* /* position */) {
-    //     pixel = static_cast<Derived*>(this)->GetOutput(pixel);
-    //   });
+    img.forEach<cv::Vec3f>([this](cv::Vec3f& pixel, const int* /* position */) {
+      pixel = static_cast<Derived*>(this)->GetOutput(pixel);
+    });
     // } else {
-    cv::parallel_for_(
-        cv::Range(0, total_floats_img),
-        [&](const cv::Range& range) {
-          int i           = range.start;
-          int end         = range.end;
+    // cv::parallel_for_(
+    //     cv::Range(0, total_floats_img),
+    //     [&](const cv::Range& range) {
+    //       int i           = range.start;
+    //       int end         = range.end;
 
-          int aligned_end = i + ((end - i) / lanes) * lanes;
-          for (; i < aligned_end; i += lanes) {
-            auto v_img = hw::Load(d, img_data + i);
-            v_img      = derived->GetOutput(v_img);
-            hw::Store(v_img, d, img_data + i);
-          }
+    //       int aligned_end = i + ((end - i) / lanes) * lanes;
+    //       for (; i < aligned_end; i += lanes) {
+    //         auto v_img = hw::Load(d, img_data + i);
+    //         v_img      = derived->GetOutput(v_img);
+    //         hw::Store(v_img, d, img_data + i);
+    //       }
 
-          for (; i < end; ++i) {
-            img_data[i] = derived->GetOutput(img_data[i]);
-          }
-        },
-        1024);
+    //       for (; i < end; ++i) {
+    //         img_data[i] = derived->GetOutput(img_data[i]);
+    //       }
+    //     },
+    //     1024);
     // }
 
     // img.forEach<float>([this](float& pixel, const int* /* position */) {

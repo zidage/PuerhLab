@@ -7,6 +7,7 @@
 #include <filesystem>
 
 #include "edit/operators/operator_registeration.hpp"
+#include "utils/clock/time_provider.hpp"
 
 
 namespace puerhlab {
@@ -17,6 +18,7 @@ class PipelineTests : public ::testing::Test {
   // Run before any unit test runs
   void                  SetUp() override {
     EASY_PROFILER_ENABLE;
+    TimeProvider::Refresh();
     Exiv2::LogMsg::setLevel(Exiv2::LogMsg::Level::mute);
     // Create a unique db file location
     db_path_ = std::filesystem::temp_directory_path() / "test_db.db";

@@ -16,7 +16,7 @@ class WhiteOp : public ToneRegionOp<WhiteOp>, public OperatorBase<WhiteOp> {
   LinearToneCurve _curve;
 
  public:
-  auto GetOutput(float luminance) -> float;
+  auto GetOutput(cv::Vec3f&) -> cv::Vec3f;
   auto GetOutput(hw::Vec<hw::ScalableTag<float>> luminance) -> hw::Vec<hw::ScalableTag<float>>;
   auto GetScale() -> float;
   static constexpr PriorityLevel     _priority_level    = 1;

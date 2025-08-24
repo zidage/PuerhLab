@@ -26,6 +26,8 @@ class ExposureOp : public OperatorBase<ExposureOp> {
    */
   float                           _scale;
 
+  float                           _gamma;
+
   hw::Vec<hw::ScalableTag<float>> _scale_factor;
   hw::Vec<hw::ScalableTag<float>> _min = hw::Set(hw::ScalableTag<float>(), 0.0f);
   hw::Vec<hw::ScalableTag<float>> _max = hw::Set(hw::ScalableTag<float>(), 100.0f);

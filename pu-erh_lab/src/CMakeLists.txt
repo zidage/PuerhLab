@@ -175,4 +175,4 @@ add_library(EditPipeline
     edit/pipeline/pipeline_cpu.cpp
     edit/pipeline/pipeline_utils.cpp)
 target_include_directories(EditPipeline PUBLIC include)
-target_link_libraries(EditPipeline PUBLIC Image Operators)
+target_link_libraries(EditPipeline PUBLIC Image OpenColorIO Operators)

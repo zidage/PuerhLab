@@ -36,6 +36,7 @@ class OpenCVRawProcessor {
 
   void                    ApplyWhiteBalance();
   void                    ApplyDebayer();
+  void                    ApplyHighlightReconstruct();
   void                    ApplyColorSpaceTransform();
 
  public:

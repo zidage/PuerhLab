@@ -114,8 +114,8 @@ auto OCIO_ACES_Transform_Op::Apply(ImageBuffer& input) -> ImageBuffer {
     //   float hue_steepness = 0.01f;  // Adjust: Smaller for broader influence (gentle falloff);
     //                                 // larger (0.2f) for sharper drop
 
-    img                   = cv::max(0.0f, img);
-    img                   = cv::min(1.0f, img);
+    // img                   = cv::max(0.0f, img);
+    // img                   = cv::min(1.0f, img);
 
     auto output_transform = OCIO::LookTransform::Create();
     output_transform->setLooks("ACES 1.3 Reference Gamut Compression");

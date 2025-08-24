@@ -1,5 +1,6 @@
 #include "edit/operators/basic/black_op.hpp"
 
+#include <opencv2/core.hpp>
 #include <opencv2/core/hal/intrin_sse.hpp>
 
 #include "edit/operators/basic/tone_region_op.hpp"
@@ -21,14 +22,18 @@ BlackOp::BlackOp(const nlohmann::json& params) {
 
 void BlackOp::GetMask(cv::Mat& src, cv::Mat& mask) {}
 
-auto BlackOp::GetOutput(float luminance) -> float {
-  float y_intercept = _offset / 3.0f;
-  float white_point = 100.0f;
+auto BlackOp::GetOutput(cv::Vec3f& input) -> cv::Vec3f {
+  float     y_intercept = _offset / 3.0f;
+  float     white_point = 100.0f;
 
-  float slope       = (white_point - y_intercept) / 100.0f;
+  float     slope       = (white_point - y_intercept) / 100.0f;
 
-  float output      = slope * luminance + y_intercept;
-  output            = std::clamp(output, 0.0f, 100.0f);
+  cv::Vec3f output      = {
+      slope * input[0] + y_intercept,
+      slope * input[1] + y_intercept,
+      slope * input[2] + y_intercept,
+  };
+  // output            = std::clamp(output, 0.0f, 100.0f);
   return output;
 }
 

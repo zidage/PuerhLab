@@ -37,6 +37,7 @@ class TimeProvider {
  public:
   static void                                  Refresh();
   static std::chrono::system_clock::time_point Now();
+  static std::string TimePointToString(const std::chrono::system_clock::time_point& tp);
 
  private:
   static std::atomic<std::chrono::system_clock::time_point> _cached_sys_time;

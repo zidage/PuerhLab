@@ -45,7 +45,7 @@ class ShadowsOp : public ToneRegionOp<ShadowsOp>, public OperatorBase<ShadowsOp>
 
  public:
   auto GetOutput(hw::Vec<hw::ScalableTag<float>>&) -> hw::Vec<hw::ScalableTag<float>>;
-  auto GetOutput(float luminance) -> float;
+  auto GetOutput(cv::Vec3f&) -> cv::Vec3f;
   auto GetScale() -> float;
   static constexpr PriorityLevel     _priority_level    = 1;
   static constexpr PipelineStageName _affiliation_stage = PipelineStageName::Basic_Adjustment;

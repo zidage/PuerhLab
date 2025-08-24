@@ -1,5 +1,7 @@
 #include "decoders/processor/operators/cpu/white_balance.hpp"
 
+#include <cfloat>
+
 namespace puerhlab {
 namespace CPU {
 static auto CalculateBlackLevel(const libraw_rawdata_t& raw_data) -> std::array<float, 4> {
@@ -26,6 +28,28 @@ static auto GetWBCoeff(const libraw_rawdata_t& raw_data) -> const float* {
   return raw_data.color.cam_mul;
 }
 
+inline static auto GetScaleMul(const libraw_rawdata_t& raw_data) -> std::array<float, 4> {
+  auto                 cam_mul = raw_data.color.cam_mul;
+  // float                max_pre_mul = std::max({pre_mul[0], pre_mul[1], pre_mul[2], pre_mul[3]});
+
+  auto                 c_white = (int)raw_data.color.maximum;
+  auto                 c_black = (int)raw_data.color.black;
+
+  // From dcraw.c
+
+  std::array<float, 4> scale_mul;
+  for (int c = 0; c < 4; ++c) {
+    float cam_mul_c = cam_mul[c];
+    if (cam_mul_c == 0.f) {
+      cam_mul_c = cam_mul[1];
+    }
+
+    scale_mul[c] = (cam_mul_c / cam_mul[1]) / ((c_white - c_black) / 65535.0f);
+  }
+
+  return scale_mul;
+}
+
 void WhiteBalanceCorrection(cv::Mat& img, LibRaw& raw_processor) {
   auto black_level = CalculateBlackLevel(raw_processor.imgdata.rawdata);
   auto wb          = GetWBCoeff(raw_processor.imgdata.rawdata);
@@ -47,29 +71,35 @@ void WhiteBalanceCorrection(cv::Mat& img, LibRaw& raw_processor) {
         maximum[i] = linear_maximum[i] / 65535.0f - min;
       }
     }
+
+    auto scale_mul = GetScaleMul(raw_processor.imgdata.rawdata);
 #pragma omp parallel for schedule(dynamic)
     for (int y = 0; y < h; ++y) {
       for (int x = 0; x < w; ++x) {
-        int   color_idx   = raw_processor.COLOR(y, x);
+        int   color_idx     = raw_processor.COLOR(y, x);
 
-        float pixel       = img.at<float>(y, x);
+        float pixel         = img.at<float>(y, x);
 
-        pixel             = std::max(0.0f, pixel - black_level[color_idx]);
+        pixel               = std::max(0.0f, pixel - black_level[color_idx]);
+        pixel               = pixel * scale_mul[color_idx];
 
-        float muled_pixel = pixel;
-        float mask        = (color_idx == 0 || color_idx == 2) ? 1.0f : 0.0f;
         //
-        float wb_mul      = (wb[color_idx] / wb[1]) * mask + (1.0f - mask);
+        pixel               = std::min(1.0f, pixel);
+        pixel               = std::max(0.0f, pixel);
+        // float muled_pixel = pixel;
+        // float mask        = (color_idx == 0 || color_idx == 2) ? 1.0f : 0.0f;
+        // //
+        // float wb_mul      = (wb[color_idx] / wb[1]) * mask + (1.0f - mask);
 
-        muled_pixel       = muled_pixel * wb_mul;
+        // muled_pixel       = muled_pixel * wb_mul;
 
-        pixel             = muled_pixel;
+        // pixel             = muled_pixel;
 
-        if (pixel > maximum[color_idx]) {
-          pixel = maximum[color_idx];
-        }
+        // // if (pixel > maximum[color_idx]) {
+        // //   pixel = maximum[color_idx];
+        // // }
 
-        pixel /= maximum[color_idx];
+        // pixel /= maximum[color_idx];
 
         img.at<float>(y, x) = pixel;
       }

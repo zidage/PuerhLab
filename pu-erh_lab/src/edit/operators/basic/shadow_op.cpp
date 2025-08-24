@@ -62,21 +62,24 @@ auto ShadowsOp::GetOutput(hw::Vec<hw::ScalableTag<float>>& luminance)
   return hw::Mul(v_L_out, _max);
 }
 
-auto ShadowsOp::GetOutput(float luminance) -> float {
-  float l_in       = luminance / 100.0f;
-  l_in             = (l_in + 0.05f) / (1.0f - 0.05f);
-  l_in             = std::fmax(l_in, 0.0f);
+auto ShadowsOp::GetOutput(cv::Vec3f& input) -> cv::Vec3f {
+  // float l_in       = luminance / 100.0f;
+  cv::Vec3f output = {};
+  for (int c = 0; c < 3; ++c) {
+    float l_in       = (input[c] + 0.05f) / (1.0f - 0.05f);
+    l_in             = std::fmax(l_in, 0.0f);
 
-  float alpha      = 1.0f - l_in * _inv_threshold;
-  alpha            = std::fmax(alpha, 0.0f);
+    float alpha      = 1.0f - l_in * _inv_threshold;
+    alpha            = std::fmax(alpha, 0.0f);
 
-  float l_in_safe  = std::fmax(l_in, 1e-7f);  // Avoid division by zero
-  float l_adjusted = std::pow(l_in_safe, _gamma);
+    float l_in_safe  = std::fmax(l_in, 1e-7f);  // Avoid division by zero
+    float l_adjusted = std::pow(l_in_safe, _gamma);
 
-  float diff       = l_adjusted - l_in;
-  float l_out      = l_in + alpha * diff;
+    float diff       = l_adjusted - l_in;
+    output[c]        = l_in + alpha * diff;
+  }
 
-  return l_out * 100.0f;
+  return output;
 }
 
 auto ShadowsOp::GetScale() -> float { return _offset / 100.0f; }

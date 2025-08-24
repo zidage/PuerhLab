@@ -20,6 +20,7 @@
 
 #include "decoders/processor/operators/cpu/color_space_conv.hpp"
 #include "decoders/processor/operators/cpu/debayer_ahd.hpp"
+#include "decoders/processor/operators/cpu/highlight_reconstruct.hpp"
 #include "decoders/processor/operators/cpu/white_balance.hpp"
 #include "decoders/processor/operators/gpu/cuda_color_space_conv.hpp"
 #include "decoders/processor/operators/gpu/cuda_debayer_ahd.hpp"
@@ -65,6 +66,17 @@ void OpenCVRawProcessor::ApplyDebayer() {
   }
 }
 
+void OpenCVRawProcessor::ApplyHighlightReconstruct() {
+  if (_params._cuda) {
+    throw std::runtime_error("OpenCVRawProcessor: Not implemented");
+  } else {
+    auto& img = _process_buffer.GetCPUData();
+    img.convertTo(img, CV_32FC3);
+    CPU::HighlightReconstruct(img, _raw_processor);
+    // img.convertTo(img, CV_32FC1);
+  }
+}
+
 void OpenCVRawProcessor::ApplyColorSpaceTransform() {
   auto& debayer_buffer = _process_buffer;
   auto  color_coeffs   = _raw_data.color.rgb_cam;
@@ -105,7 +117,7 @@ auto OpenCVRawProcessor::Process() -> ImageBuffer {
   EASY_BLOCK("AHD Debayer");
   ApplyDebayer();
   EASY_END_BLOCK;
-  // ApplyHighlightReconstruction();
+  if (_params._highlights_reconstruct) ApplyHighlightReconstruct();
   EASY_BLOCK("CST");
   ApplyColorSpaceTransform();
   EASY_END_BLOCK;

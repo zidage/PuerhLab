@@ -46,4 +46,13 @@ std::chrono::system_clock::time_point TimeProvider::Now() {
   return _cached_sys_time.load() +
          std::chrono::duration_cast<std::chrono::system_clock::duration>(elapsed);
 }
+
+std::string TimeProvider::TimePointToString(const std::chrono::system_clock::time_point& tp) {
+  std::time_t        t  = std::chrono::system_clock::to_time_t(tp);
+  std::tm            tm = *std::localtime(&t);
+
+  std::ostringstream oss;
+  oss << std::put_time(&tm, "%Y-%m-%d_%H-%M-%S");
+  return oss.str();
+}
 }  // namespace puerhlab
