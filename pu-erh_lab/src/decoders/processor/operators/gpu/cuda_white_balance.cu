@@ -38,7 +38,6 @@ __global__ void WhiteBalanceCorrectionKernel(cv::cuda::PtrStep<float> image, int
   // 2. Black Level Subtraction
   pixel_val -= d_black_level[color_idx];
 
-  pixel_val *= white_level_scale;
   // The multipliers are normalized to the green channel (index 1)
   float       mask   = (color_idx == 0 || color_idx == 2) ? 1.0f : 0.0f;
   const float wb_mul = (d_wb_multipliers[color_idx] / d_wb_multipliers[1]) * mask + (1.0f - mask);
@@ -46,8 +45,9 @@ __global__ void WhiteBalanceCorrectionKernel(cv::cuda::PtrStep<float> image, int
 
   // 4. White Level Scaling (Normalization)
 
-  // 5. Clamp the result to the valid 16-bit range [0, 65535]
-  // pixel_val  = fmaxf(0.0f, fminf(1.0f, pixel_val));
+  pixel_val /= white_level_scale;
+  // 5. Clamp the result to the valid 16-bit range [0, 1.0f]
+  pixel_val  = fmaxf(0.0f, fminf(1.0f, pixel_val));
 
   // 6. Store the final result back to the GpuMat, rounding correctly
   image(row, col) = pixel_val;

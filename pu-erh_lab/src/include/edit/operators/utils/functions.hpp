@@ -10,8 +10,10 @@ namespace hw = hwy::HWY_NAMESPACE;
 namespace puerhlab {
 
 inline float SmoothStep(float edge0, float edge1, float x) {
-  float t = std::clamp((x - edge0) / (edge1 - edge0), 0.0f, 100.0f);
-  return t * t * (300.0f - 200.0f * t);
+  if (x <= edge0) return 0.0f;
+  // if (x >= edge1) return 1.0f;
+  float t = (x - edge0) / (edge1 - edge0);
+  return t * t * (3.0f - 2.0f * t);  // Hermite smoothstep
 }
 
 inline float SmoothStep(float x) {

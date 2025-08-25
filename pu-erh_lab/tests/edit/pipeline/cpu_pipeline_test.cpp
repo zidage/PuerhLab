@@ -11,6 +11,7 @@
 #include "image/image_buffer.hpp"
 #include "pipeline_test_fixation.hpp"
 #include "sleeve/sleeve_manager.hpp"
+#include "type/supported_file_type.hpp"
 #include "utils/clock/time_provider.hpp"
 #include "utils/string/convert.hpp"
 
@@ -21,10 +22,10 @@ TEST_F(PipelineTests, SimpleTest1) {
     ImageLoader   image_loader(128, 8, 0);
     image_path_t  path =
         L"D:\\Projects\\pu-erh_lab\\pu-erh_lab\\tests\\resources\\sample_"
-        L"images\\raw\\camera\\sony\\a1";
+        L"images\\raw\\camera\\nikon\\d780";
     std::vector<image_path_t> imgs;
     for (const auto& img : std::filesystem::directory_iterator(path)) {
-      if (!img.is_directory()) imgs.push_back(img.path());
+      if (!img.is_directory() && is_supported_file(img.path())) imgs.push_back(img.path());
     }
 
     manager.LoadToPath(imgs, L"");
@@ -35,18 +36,20 @@ TEST_F(PipelineTests, SimpleTest1) {
 
     nlohmann::json to_ws_params;
     to_ws_params["ocio"] = {
-        {"src", "Linear Rec.709 (sRGB)"}, {"dst", ""}, {"normalize", true}};
+        {"src", "Linear Rec.709 (sRGB)"}, {"dst", "ACEScct"}, {"normalize", true}};
 
     nlohmann::json basic_params;
     // basic_params["ocio"] = {{"src", ""}, {"dst", "ACEScct"}};
-    basic_params["exposure"]   = 2.0f;
-    basic_params["highlights"] = -35.0f;
+    basic_params["exposure"]   = 0.5f;
+    basic_params["highlights"] = -15.0f;
     basic_params["shadows"]    = 25.0f;
-    basic_params["white"]      = -75.0f;
+    basic_params["white"]      = -55.0f;
     basic_params["black"]      = 20.0f;
 
     nlohmann::json color_params;
-    color_params["vibrance"]    = 15.0f;
+    color_params["vibrance"]    = 50.0f;
+    color_params["tint"]    = -5.0f;
+    color_params["clarity"]    = 95.0f;
 
     color_params["color_wheel"] = {{"lift",
                                     {{"color_offset.x", 0.0},
@@ -72,27 +75,29 @@ TEST_F(PipelineTests, SimpleTest1) {
         "D:\\Projects\\pu-erh_lab\\pu-erh_lab\\src\\config\\LUTs\\ACES CCT 2383 D65.cube";
 
     nlohmann::json output_params;
-    output_params["ocio"] = {{"src", ""}, {"dst", "Camera Rec.709"}, {"limit", true}};
+    output_params["ocio"] = {{"src", "ACEScct"}, {"dst", "Camera Rec.709"}, {"limit", true}};
 
     for (auto& pair : img_pool) {
       auto task = [pair, img_pool, to_ws_params, basic_params, color_params, lmt_params,
                    output_params]() mutable {
         CPUPipeline pipeline{};
         auto&       to_ws = pipeline.GetStage(PipelineStageName::To_WorkingSpace);
+        // to_ws.SetOperator(OperatorType::EXPOSURE, basic_params);
         to_ws.SetOperator(OperatorType::CST, to_ws_params);
 
         auto&       adj   = pipeline.GetStage(PipelineStageName::Basic_Adjustment);
         adj.SetOperator(OperatorType::EXPOSURE, basic_params);
         // adj.SetOperator(OperatorType::SHADOWS, basic_params);
         adj.SetOperator(OperatorType::HIGHLIGHTS, basic_params);
-        // adj.SetOperator(OperatorType::WHITE, basic_params);
+        // adj.SetOperator(OperatorType::BLACK, basic_params);
 
         auto& color_adj = pipeline.GetStage(PipelineStageName::Color_Adjustment);
         // color_adj.SetOperator(OperatorType::CST, to_ws_params);
-        // color_adj.SetOperator(OperatorType::COLOR_WHEEL, color_params);
+        // color_adj.SetOperator(OperatorType::TINT, color_params);
+        // color_adj.SetOperator(OperatorType::CLARITY, color_params);
 
         auto& lmt          = pipeline.GetStage(PipelineStageName::Color_Adjustment);
-        // lmt.SetOperator(OperatorType::LMT, lmt_params);
+        lmt.SetOperator(OperatorType::LMT, lmt_params);
         //
 
         auto& output_stage = pipeline.GetStage(PipelineStageName::Output_Transform);

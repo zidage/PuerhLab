@@ -32,15 +32,85 @@ auto HighlightsOp::GetOutput(hw::Vec<hw::ScalableTag<float>> luminance)
   return result;
 }
 
+static inline float h00(float t) { return 2 * t * t * t - 3 * t * t + 1; }
+static inline float h10(float t) { return t * t * t - 2 * t * t + t; }
+static inline float h01(float t) { return -2 * t * t * t + 3 * t * t; }
+static inline float h11(float t) { return t * t * t - t * t; }
+
+static inline float clampf(float v, float a, float b) { return std::max(a, std::min(b, v)); }
+
+// Luminance (linear, BGR)
+static inline float Luma(const cv::Vec3f& bgr) {
+  return 0.0722f * bgr[2] + 0.7152f * bgr[1] + 0.2126f * bgr[0];
+}
+
 auto HighlightsOp::GetOutput(cv::Vec3f& input) -> cv::Vec3f {
   // float scaled_luminance = luminance / 100.0f;
-  float t_square[3];
-  t_square[0] = input[0] * input[0];
-  t_square[1] = input[1] * input[1];
-  t_square[2] = input[2] * input[2];
+  // clamp parameters reasonably
+  float       control     = clampf(_offset / 10.0f, -1.0f, 1.0f);
+  float       knee_start  = clampf(0.2f, 0.0f, 1.0f);  // ensure <= whitepoint
+  // map control -> slope at whitepoint (m1)
+  // design: control = +1 => strong compression (m1 -> small, e.g. 0.2)
+  //         control =  0 => identity slope (1.0)
+  //         control = -1 => boost highlights (m1 -> >1, e.g. 1.8)
+  const float slope_range = 0.8f;  // how far slope can move from 1.0 (tuneable)
+  float       m1          = 1.0f - control * slope_range;  // in [1-slope_range, 1+slope_range]
 
-  float a     = (_offset / 100.0f * 40.0f);
-  return {a * t_square[0] + input[0], a * t_square[1] + input[1], a * t_square[2] + input[2]};
+  // endpoints for Hermite between x0 = knee_start, x1 = whitepoint
+  float       x0          = knee_start;
+  float       x1          = 1.0f;
+  float       y0          = x0;  // keep continuity (identity at x0)
+  float       y1          = x1;  // identity at x1 (we'll control slope to shape shoulder)
+
+  // slope at x0: preserve continuity with identity -> m0 = 1
+  float       m0          = 1.0f;
+
+  // For Hermite formula we need derivatives dy/dx at endpoints.
+  // m0 and m1 are dy/dx at x0 and x1 respectively.
+  // But Hermite cubic uses tangents scaled by (x1-x0) in the basis:
+  float       dx          = (x1 - x0);
+  // handle degenerate case: if dx==0, do nothing
+  if (dx <= 1e-6f) {
+    // fallback: no curve region; just apply linear scaling beyond whitepoint
+    float L = Luma(input);
+    float outL;
+    if (L <= x0)
+      outL = L;
+    else
+      outL = y1 + (L - x1) * m1;  // linear extrapolate
+    float scale = (L > 1e-8f) ? outL / L : 1.0f;
+    return input * scale;
+  }
+
+  // compute input luminance
+  float L    = Luma(input);
+  float outL = L;
+
+  if (L <= x0) {
+    // below knee_start: identity
+    outL = L;
+  } else if (L < x1) {
+    // inside the Hermite segment: parameterize t in [0,1]
+    float t   = (L - x0) / dx;
+    // Hermite interpolation:
+    float H00 = h00(t);
+    float H10 = h10(t);
+    float H01 = h01(t);
+    float H11 = h11(t);
+    // note: tangents in Hermite are (dx * m0) and (dx * m1)
+    outL      = H00 * y0 + H10 * (dx * m0) + H01 * y1 + H11 * (dx * m1);
+  } else {
+    // L >= whitepoint: linear extrapolate using slope m1
+    outL = y1 + (L - x1) * m1;
+  }
+
+  // avoid negative or NaN
+  if (!std::isfinite(outL)) outL = L;
+  // Preserve hue/chroma by scaling RGB by ratio outL/L (guard L==0)
+  float     scale = (L > 1e-8f) ? (outL / L) : 1.0f;
+  cv::Vec3f out   = input * scale;
+  // Do not clamp here — keep HDR for downstream processing. (Optionally clamp if you want)
+  return out;
 }
 
 auto HighlightsOp::GetScale() -> float { return _offset / 300.0f; }

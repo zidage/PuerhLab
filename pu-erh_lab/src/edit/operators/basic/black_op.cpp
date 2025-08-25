@@ -24,9 +24,9 @@ void BlackOp::GetMask(cv::Mat& src, cv::Mat& mask) {}
 
 auto BlackOp::GetOutput(cv::Vec3f& input) -> cv::Vec3f {
   float     y_intercept = _offset / 3.0f;
-  float     white_point = 100.0f;
+  float     white_point = 1.0f;
 
-  float     slope       = (white_point - y_intercept) / 100.0f;
+  float     slope       = (white_point - y_intercept) / 1.0f;
 
   cv::Vec3f output      = {
       slope * input[0] + y_intercept,
@@ -54,7 +54,7 @@ void BlackOp::SetParams(const nlohmann::json& params) {
   if (!params.contains(_script_name)) {
     _offset = 0.0f;
   } else {
-    _offset = params[_script_name].get<float>();
+    _offset = params[_script_name].get<float>() / 100.0f;
   }
 }
 }  // namespace puerhlab

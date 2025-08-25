@@ -32,7 +32,7 @@ inline static auto GetScaleMul(const libraw_rawdata_t& raw_data) -> std::array<f
   // auto                 pre_mul     = raw_data.color.pre_mul;
   auto                 cam_mul = raw_data.color.cam_mul;
 
-  // float                max_pre_mul = std::max({pre_mul[0], pre_mul[1], pre_mul[2]});
+  // float                max_cam_mul = std::max({cam_mul[0], cam_mul[1], cam_mul[2]});
 
   auto                 c_white = raw_data.color.maximum;
   auto                 c_black = raw_data.color.black;
@@ -61,12 +61,12 @@ inline static auto GetClMax(const libraw_rawdata_t& raw_data) -> std::array<floa
 }
 
 inline static auto GetChMax(cv::Mat& img) -> std::array<float, 3> {
-  // cv::Mat resized;
-  // cv::resize(img, resized, cv::Size(img.cols / 16, img.rows / 16));
+  cv::Mat resized;
+  cv::resize(img, resized, cv::Size(img.cols / 8, img.rows / 8));
 
-  std::array<float, 3> ch_max = {0, 0, 0};
+  std::array<float, 3> ch_max = {0.f, 0.f, 0.f};
 
-  img.forEach<cv::Vec3f>([&](cv::Vec3f& pixel, const int*) {
+  resized.forEach<cv::Vec3f>([&](cv::Vec3f& pixel, const int*) {
     if (pixel[0] > ch_max[0]) {
       ch_max[0] = pixel[0];
     }
@@ -97,7 +97,7 @@ void HighlightReconstruct(cv::Mat& img, LibRaw& raw_processor) {
   constexpr float maxpct      = 0.95f;
   constexpr float epsilon     = 1e-5f;
 
-  constexpr float blendthresh = 0.00f;
+  constexpr float blendthresh = 0.0f;
   constexpr int   ColorCount  = 3;
 
   cv::Mat1f       red;
@@ -682,7 +682,7 @@ void HighlightReconstruct(cv::Mat& img, LibRaw& raw_processor) {
           lab[y2][c] = 0;
 
           for (int c1 = 0; c1 < ColorCount; ++c1) {
-            lab[y2][c] += trans[c][c1] * cam[y2][c1];
+            lab[y2][c] += (trans[c][c1] * cam[y2][c1]);
           }
         }
 
@@ -709,7 +709,7 @@ void HighlightReconstruct(cv::Mat& img, LibRaw& raw_processor) {
         cam[0][c] = 0;
 
         for (int c1 = 0; c1 < ColorCount; ++c1) {
-          cam[0][c] += itrans[c][c1] * lab[0][c1];
+          cam[0][c] += (itrans[c][c1] * lab[0][c1]);
         }
       }
 
@@ -853,6 +853,8 @@ void HighlightReconstruct(cv::Mat& img, LibRaw& raw_processor) {
   cv::insertChannel(blue, img, 2);
 
   img.convertTo(img, CV_32FC1);
+  // Expose down by 1 stop
+  // img /= 2;
 }
 
 };  // namespace CPU

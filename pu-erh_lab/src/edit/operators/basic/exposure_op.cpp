@@ -2,6 +2,7 @@
 
 #include <opencv2/core.hpp>
 #include <opencv2/core/mat.hpp>
+#include <opencv2/core/types.hpp>
 #include <utility>
 
 #include "edit/operators/operator_factory.hpp"
@@ -13,10 +14,7 @@ namespace puerhlab {
  * @brief Construct a new Exposure Op:: Exposure Op object
  *
  */
-ExposureOp::ExposureOp() : _exposure_offset(0.0f) {
-  _scale        = 1.0f;
-  _scale_factor = hw::Set(hw::ScalableTag<float>(), 1.0f);
-}
+ExposureOp::ExposureOp() : _exposure_offset(0.0f) { _scale = 0.0f; }
 
 /**
  * @brief Construct a new Exposure Op:: Exposure Op object
@@ -24,7 +22,7 @@ ExposureOp::ExposureOp() : _exposure_offset(0.0f) {
  * @param exposure_offset
  */
 ExposureOp::ExposureOp(float exposure_offset) : _exposure_offset(exposure_offset) {
-  _scale        = std::pow(2.0f, _exposure_offset);
+  // _scale        = std::pow(2.0f, _exposure_offset);
   _scale_factor = hw::Set(hw::ScalableTag<float>(), _scale);
 }
 
@@ -36,7 +34,11 @@ ExposureOp::ExposureOp(const nlohmann::json& params) {
 auto ExposureOp::Apply(ImageBuffer& input) -> ImageBuffer {
   cv::Mat& img = input.GetCPUData();
 
-  img.forEach<cv::Vec3f>([&](cv::Vec3f& pixel, const int*) { pixel *= _scale; });
+  img.forEach<cv::Vec3f>([&](cv::Vec3f& pixel, const int*) {
+    pixel[0] += _scale;
+    pixel[1] += _scale;
+    pixel[2] += _scale;
+  });
   // float*                       img_data         = reinterpret_cast<float*>(img.data);
   // int                          total_floats_img = static_cast<int>(img.total() * img.channels());
   // const hw::ScalableTag<float> d;
@@ -75,7 +77,7 @@ auto ExposureOp::GetParams() const -> nlohmann::json {
 
 void ExposureOp::SetParams(const nlohmann::json& params) {
   _exposure_offset = params[GetScriptName()];
-  _scale           = std::pow(2.0f, _exposure_offset);
+  _scale           = _exposure_offset / 17.52f;
 }
 
 };  // namespace puerhlab
