@@ -18,6 +18,7 @@ target_link_libraries(Image PUBLIC Exiv2 ${OpenCV_LIBS} LibRaw TimeProvider JSON
 add_library(RawProcessorOp
     decoders/processor/operators/cpu/color_space_conv.cpp
     decoders/processor/operators/cpu/debayer_ahd.cpp
+    decoders/processor/operators/cpu/debayer_amaze.cpp
     decoders/processor/operators/cpu/highlight_reconstruct.cpp
     decoders/processor/operators/cpu/white_balance.cpp
     decoders/processor/operators/cpu/raw_proc_utils.cpp

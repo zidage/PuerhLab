@@ -10,14 +10,7 @@
 
 namespace puerhlab {
 namespace CPU {
-void BayerRGGB2RGB_AHD(cv::Mat& bayer, bool use_AHD) {
-  if (!use_AHD) {
-    bayer.convertTo(bayer, CV_16UC1, 65535.0f);
-    cv::cvtColor(bayer, bayer, cv::COLOR_BayerBG2RGB);
-    bayer.convertTo(bayer, CV_32FC1, 1.0f / 65535.0f);
-    return;
-  }
-
+void BayerRGGB2RGB_AHD(cv::Mat& bayer) {
   static int remap[4] = {0, 1, 3, 2};
   const int  h        = bayer.rows;
   const int  w        = bayer.cols;

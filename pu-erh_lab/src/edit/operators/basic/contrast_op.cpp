@@ -34,12 +34,7 @@ ContrastOp::ContrastOp(const nlohmann::json& params) { SetParams(params); }
 auto ContrastOp::Apply(ImageBuffer& input) -> ImageBuffer {
   cv::Mat& linear_image = input.GetCPUData();
 
-  if (linear_image.depth() != CV_32F) {
-    throw std::runtime_error("Contrast operator: Unsupported image format");
-  }
-
-  // TODO: Change to CLAHE (Contrast Limited Adaptive Histogram Equalization)
-  linear_image = (linear_image - 50.0f) * _scale + 50.0f;
+  linear_image          = (linear_image - 50.0f) * _scale + 50.0f;
   // clamp
   cv::min(linear_image, 100.0f, linear_image);
   cv::max(linear_image, 0.0f, linear_image);

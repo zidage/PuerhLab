@@ -118,6 +118,8 @@ set_target_properties(OpenColorIO PROPERTIES
     IMPORTED_IMPLIB "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_party/ocio/Release/lib/OpenColorIO.lib"
     INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_party/ocio/Release/include")
 
+# LittleCMS 2
+find_package(lcms2 CONFIG REQUIRED)
     # Modules
 add_subdirectory(${CMAKE_SOURCE_DIR}/pu-erh_lab/src)
 add_subdirectory(${CMAKE_SOURCE_DIR}/pu-erh_lab/tests)

@@ -47,7 +47,7 @@ static inline float Luma(const cv::Vec3f& bgr) {
 auto HighlightsOp::GetOutput(cv::Vec3f& input) -> cv::Vec3f {
   // float scaled_luminance = luminance / 100.0f;
   // clamp parameters reasonably
-  float       control     = clampf(_offset / 10.0f, -1.0f, 1.0f);
+  float       control     = clampf(_offset / 100.0f, -1.0f, 1.0f);
   float       knee_start  = clampf(0.2f, 0.0f, 1.0f);  // ensure <= whitepoint
   // map control -> slope at whitepoint (m1)
   // design: control = +1 => strong compression (m1 -> small, e.g. 0.2)

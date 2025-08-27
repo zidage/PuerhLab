@@ -20,6 +20,7 @@
 
 #include "decoders/processor/operators/cpu/color_space_conv.hpp"
 #include "decoders/processor/operators/cpu/debayer_ahd.hpp"
+#include "decoders/processor/operators/cpu/debayer_amaze.hpp"
 #include "decoders/processor/operators/cpu/highlight_reconstruct.hpp"
 #include "decoders/processor/operators/cpu/white_balance.hpp"
 #include "decoders/processor/operators/gpu/cuda_color_space_conv.hpp"
@@ -60,7 +61,7 @@ void OpenCVRawProcessor::ApplyDebayer() {
     auto& img = pre_debayer_buffer.GetCPUData();
 
     // auto maximum = _raw_data.color.linear_max;
-    CPU::BayerRGGB2RGB_AHD(img, true);
+    CPU::BayerRGGB2RGB_AHD(img);
     // cv::cvtColor(img, img, cv::COLOR_BayerBG2RGB);
     // img.convertTo(img, CV_32FC1, 1.0f / 65535.0f);
   }

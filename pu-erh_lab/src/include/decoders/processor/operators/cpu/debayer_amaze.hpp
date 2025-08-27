@@ -4,6 +4,6 @@
 
 namespace puerhlab {
 namespace CPU {
-void BayerRGGB2RGB_AHD(cv::Mat& bayer);
+void BayerRGGB2RGB_AMaZe(cv::Mat& bayer);
 };
 };  // namespace puerhlab
