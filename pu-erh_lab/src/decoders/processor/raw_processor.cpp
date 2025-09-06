@@ -61,7 +61,7 @@ void OpenCVRawProcessor::ApplyDebayer() {
     auto& img = pre_debayer_buffer.GetCPUData();
 
     // auto maximum = _raw_data.color.linear_max;
-    CPU::BayerRGGB2RGB_AHD(img);
+    CPU::BayerRGGB2RGB_AMaZe(img);
     // cv::cvtColor(img, img, cv::COLOR_BayerBG2RGB);
     // img.convertTo(img, CV_32FC1, 1.0f / 65535.0f);
   }

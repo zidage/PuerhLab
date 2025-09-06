@@ -86,7 +86,7 @@ void RawDecoder::Decode(std::vector<char>&& buffer, std::shared_ptr<Image> sourc
   EASY_END_BLOCK;
 
   OpenCVRawProcessor processor{
-      {false, false, {}, false, true, 0}, raw_processor.imgdata.rawdata, raw_processor};
+      {true, false, {}, false, true, 0}, raw_processor.imgdata.rawdata, raw_processor};
 
   auto processed = processor.Process();
 

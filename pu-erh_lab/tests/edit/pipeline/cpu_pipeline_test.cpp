@@ -66,7 +66,7 @@ TEST_F(PipelineTests, SimpleTest1) {
     ImageLoader   image_loader(128, 8, 0);
     image_path_t  path =
         L"D:\\Projects\\pu-erh_lab\\pu-erh_lab\\tests\\resources\\sample_"
-        L"images\\raw\\camera\\sony\\a7c";
+        L"images\\raw\\camera\\nikon\\z7ii";
     std::vector<image_path_t> imgs;
     for (const auto& img : std::filesystem::directory_iterator(path)) {
       if (!img.is_directory() && is_supported_file(img.path())) imgs.push_back(img.path());

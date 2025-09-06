@@ -8,13 +8,14 @@
 
 namespace puerhlab {
 enum class PipelineStageName : int {
-  To_WorkingSpace     = 0,
-  Basic_Adjustment    = 1,
-  Color_Adjustment    = 2,
-  Detail_Adjustment   = 3,
-  Output_Transform    = 4,
-  Geometry_Adjustment = 5,
-  Stage_Count         = 6,
+  Raw_Decoding        = 0,
+  To_WorkingSpace     = 1,
+  Basic_Adjustment    = 2,
+  Color_Adjustment    = 3,
+  Detail_Adjustment   = 4,
+  Output_Transform    = 5,
+  Geometry_Adjustment = 6,
+  Stage_Count         = 7,
 };
 class IOperatorBase {
  public:
