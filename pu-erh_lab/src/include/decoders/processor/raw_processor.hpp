@@ -11,8 +11,6 @@
 namespace puerhlab {
 struct RawParams {
   bool     _cuda = false;
-  bool     _shrunk;
-  cv::Size _size;
   bool     _highlights_reconstruct;
   bool     _use_camera_wb;
   uint32_t _user_wb;

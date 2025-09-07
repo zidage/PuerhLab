@@ -1,9 +1,13 @@
 #pragma once
 
+#include <memory>
+
 #include "decoders/processor/raw_processor.hpp"
 #include "edit/operators/op_base.hpp"
 
 namespace puerhlab {
+
+enum class RawProcessBackend { PUERH, LIBRAW };
 
 class RawDecodeOp : public OperatorBase<RawDecodeOp> {
  public:
@@ -13,7 +17,7 @@ class RawDecodeOp : public OperatorBase<RawDecodeOp> {
   static constexpr PipelineStageName _affiliation_stage = PipelineStageName::Raw_Decoding;
 
   RawParams                          _params;
-  OpenCVRawProcessor                 _processor;
+  RawProcessBackend                  _backend;
 
   RawDecodeOp() = delete;
 

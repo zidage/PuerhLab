@@ -6,47 +6,60 @@
 #include <utility>
 
 namespace puerhlab {
-ImageBuffer::ImageBuffer(cv::Mat& data) : _data_valid(true) { data.copyTo(_cpu_data); }
+ImageBuffer::ImageBuffer(cv::Mat& data) : _cpu_data_valid(true) { data.copyTo(_cpu_data); }
 
-ImageBuffer::ImageBuffer(cv::Mat&& data) : _cpu_data(data), _data_valid(true) {}
+ImageBuffer::ImageBuffer(cv::Mat&& data) : _cpu_data(data), _cpu_data_valid(true) {}
 
 ImageBuffer::ImageBuffer(std::vector<uint8_t>&& buffer)
-    : _cpu_data(static_cast<int>(buffer.size()), 1, CV_32FC3, buffer.data()), _data_valid(true) {}
+    : _buffer(std::move(buffer)), _cpu_data_valid(true) {}
 
 ImageBuffer::ImageBuffer(ImageBuffer&& other) noexcept
     : _cpu_data(std::move(other._cpu_data)),
       _gpu_data(std::move(other._gpu_data)),
-      _data_valid(other._data_valid) {}
+      _buffer(std::move(other._buffer)),
+      _cpu_data_valid(other._cpu_data_valid),
+      _gpu_data_valid(other._gpu_data_valid),
+      _buffer_valid(other._buffer_valid) {}
 
-ImageBuffer::ImageBuffer(cv::cuda::GpuMat&& data) : _gpu_data(std::move(data)), _data_valid(true) {}
+ImageBuffer::ImageBuffer(cv::cuda::GpuMat&& data)
+    : _gpu_data(std::move(data)), _gpu_data_valid(true) {}
 
 ImageBuffer& ImageBuffer::operator=(ImageBuffer&& other) noexcept {
   if (this != &other) {
-    _cpu_data   = std::move(other._cpu_data);
-    _gpu_data   = std::move(other._gpu_data);
-    _data_valid = other._data_valid;
+    _cpu_data       = std::move(other._cpu_data);
+    _gpu_data       = std::move(other._gpu_data);
+    _cpu_data_valid = other._cpu_data_valid;
+    _gpu_data_valid = other._gpu_data_valid;
+    _buffer_valid   = other._buffer_valid;
   }
   return *this;
 }
 
 void ImageBuffer::ReadFromVectorBuffer(std::vector<uint8_t>&& buffer) {
-  cv::Mat loaded_data{(int)buffer.size(), 1, CV_32FC3, buffer.data()};
-  _data_valid = true;
+  _buffer       = std::move(buffer);
+  _buffer_valid = true;
 }
 
 auto ImageBuffer::GetCPUData() -> cv::Mat& {
-  if (!_data_valid) {
+  if (!_cpu_data_valid) {
     throw std::runtime_error("Image Buffer: No valid image data to be returned");
   }
   return _cpu_data;
 }
 
 auto ImageBuffer::GetGPUData() -> cv::cuda::GpuMat& {
-  if (!_data_valid) {
+  if (!_gpu_data_valid) {
     throw std::runtime_error("Image Buffer: No valid image data to be returned");
   }
   // SyncToGPU();
   return _gpu_data;
+}
+
+auto ImageBuffer::GetBuffer() -> std::vector<uint8_t>& {
+  if (!_buffer_valid) {
+    throw std::runtime_error("Image Buffer: No valid buffer data to be returned");
+  }
+  return _buffer;
 }
 
 auto ImageBuffer::SyncToGPU() -> void {
@@ -66,4 +79,6 @@ auto ImageBuffer::SyncToCPU() -> void {
 void ImageBuffer::ReleaseCPUData() { _cpu_data.release(); }
 
 void ImageBuffer::ReleaseGPUData() { _gpu_data.release(); }
+
+void ImageBuffer::ReleaseBuffer() { _buffer.clear(); }
 };  // namespace puerhlab

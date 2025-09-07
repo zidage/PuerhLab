@@ -14,7 +14,9 @@ class ImageBuffer {
 
   std::vector<uint8_t> _buffer;
 
-  bool                 _data_valid = false;
+  bool                 _cpu_data_valid = false;
+  bool                 _gpu_data_valid = false;
+  bool                 _buffer_valid   = false;
 
  public:
   ImageBuffer() = default;
@@ -30,11 +32,13 @@ class ImageBuffer {
 
   auto         GetCPUData() -> cv::Mat&;
   auto         GetGPUData() -> cv::cuda::GpuMat&;
+  auto         GetBuffer() -> std::vector<uint8_t>&;
 
   void         SyncToGPU();
   void         SyncToCPU();
 
   void         ReleaseCPUData();
   void         ReleaseGPUData();
+  void         ReleaseBuffer();
 };
 };  // namespace puerhlab
