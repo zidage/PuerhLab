@@ -94,7 +94,7 @@ TEST_F(OperationTests, CurveAnimationAdjustmentTest1) {
       imgs.push_back(img.path());
     }
 
-    auto display_callback = [](size_t idx, std::weak_ptr<Image> img) {};
+    auto display_callback = [](size_t, std::weak_ptr<Image>) {};
 
     manager.LoadToPath(imgs, L"");
     auto view = manager.GetView();
@@ -155,7 +155,7 @@ TEST_F(OperationTests, DISABLED_CurveAnimationAdjustmentTest2) {
       imgs.push_back(img.path());
     }
 
-    auto display_callback = [](size_t idx, std::weak_ptr<Image> img) {};
+    auto display_callback = [](size_t, std::weak_ptr<Image>) {};
 
     manager.LoadToPath(imgs, L"");
     auto view = manager.GetView();

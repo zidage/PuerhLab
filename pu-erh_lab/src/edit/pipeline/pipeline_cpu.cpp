@@ -15,19 +15,20 @@
 #include "image/image_buffer.hpp"
 
 namespace puerhlab {
-CPUPipeline::CPUPipeline()
-    : _stages({{PipelineStageName::To_WorkingSpace, false},
+CPUPipelineExecutor::CPUPipelineExecutor()
+    : _stages({{PipelineStageName::Raw_Decoding, false},
+               {PipelineStageName::To_WorkingSpace, false},
                {PipelineStageName::Basic_Adjustment, false},
                {PipelineStageName::Color_Adjustment, false},
                {PipelineStageName::Detail_Adjustment, false},
                {PipelineStageName::Output_Transform, false},
                {PipelineStageName::Geometry_Adjustment, false}}) {}
 
-auto CPUPipeline::GetStage(PipelineStageName stage) -> PipelineStage& {
+auto CPUPipelineExecutor::GetStage(PipelineStageName stage) -> PipelineStage& {
   return _stages[static_cast<int>(stage)];
 }
 
-auto CPUPipeline::Apply(ImageBuffer& input) -> ImageBuffer {
+auto CPUPipelineExecutor::Apply(ImageBuffer& input) -> ImageBuffer {
   auto output = ImageBuffer{input.GetCPUData().clone()};
   for (auto& stage : _stages) {
     if (stage._stage == PipelineStageName::Basic_Adjustment) {

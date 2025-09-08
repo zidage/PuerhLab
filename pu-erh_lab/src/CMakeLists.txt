@@ -174,6 +174,7 @@ target_link_libraries(Operators PUBLIC Image SleeveFS JSON OpenColorIO easy_prof
 
 add_library(EditPipeline
     edit/pipeline/pipeline_cpu.cpp
-    edit/pipeline/pipeline_utils.cpp)
+    edit/pipeline/pipeline_utils.cpp
+    edit/scheduler/pipeline_scheduler.cpp)
 target_include_directories(EditPipeline PUBLIC include)
 target_link_libraries(EditPipeline PUBLIC Image OpenColorIO Operators)

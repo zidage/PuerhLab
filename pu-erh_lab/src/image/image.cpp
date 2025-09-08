@@ -42,12 +42,6 @@
 #include <xxhash.hpp>
 
 namespace puerhlab {
-struct ExifLite {
-  std::string tag_name;
-  uint32_t    type_id;
-  std::string value_string;
-};
-
 using json = nlohmann::json;
 /**
  * @brief Construct a new Image object

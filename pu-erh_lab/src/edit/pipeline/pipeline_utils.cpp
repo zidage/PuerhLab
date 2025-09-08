@@ -32,10 +32,10 @@ void PipelineStage::SetInputImage(ImageBuffer&& input) {
 
 auto PipelineStage::ApplyStage() -> ImageBuffer {
   if (!_input_set) {
-    throw std::runtime_error("Pipeline PipelineStageName: No valid input image set");
+    throw std::runtime_error("PipelineExecutor PipelineStageName: No valid input image set");
   }
   if (_on_gpu) {
-    throw std::runtime_error("Pipeline PipelineStageName: GPU processing not implemented");
+    throw std::runtime_error("PipelineExecutor PipelineStageName: GPU processing not implemented");
   }
 
   auto& output = _input_img;

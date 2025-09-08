@@ -44,7 +44,7 @@ class ToneRegionOp {
 
  public:
   auto Apply(ImageBuffer& input) -> ImageBuffer {
-    EASY_BLOCK("Tone Region Pipeline");
+    EASY_BLOCK("Tone Region PipelineExecutor");
 
     cv::Mat& img = input.GetCPUData();
     if (img.depth() != CV_32F) {

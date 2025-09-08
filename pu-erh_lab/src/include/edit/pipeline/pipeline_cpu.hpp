@@ -6,7 +6,7 @@
 #include "utils/cache/lru_cache.hpp"
 
 namespace puerhlab {
-class CPUPipeline : public Pipeline {
+class CPUPipelineExecutor : public PipelineExecutor {
  private:
   std::array<PipelineStage, static_cast<int>(PipelineStageName::Stage_Count)> _stages;
 
@@ -14,8 +14,7 @@ class CPUPipeline : public Pipeline {
   LRUCache<PipelineStageName, ImageBuffer>                                    _image_buffer;
 
  public:
-  CPUPipeline();
-  CPUPipeline(const CPUPipeline& other) = default;
+  CPUPipelineExecutor();
   auto GetStage(PipelineStageName stage) -> PipelineStage& override;
   auto Apply(ImageBuffer& input) -> ImageBuffer override;
 };

@@ -125,7 +125,7 @@ TEST_F(PipelineTests, SimpleTest1) {
     for (auto& pair : img_pool) {
       auto task = [pair, img_pool, to_ws_params, basic_params, color_params, lmt_params,
                    output_params]() mutable {
-        CPUPipeline pipeline{};
+        CPUPipelineExecutor pipeline{};
         auto&       to_ws = pipeline.GetStage(PipelineStageName::To_WorkingSpace);
         // to_ws.SetOperator(OperatorType::EXPOSURE, basic_params);
         to_ws.SetOperator(OperatorType::CST, to_ws_params);

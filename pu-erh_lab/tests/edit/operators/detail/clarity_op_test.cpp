@@ -18,7 +18,7 @@ TEST_F(OperationTests, ClarityAdjustmentTest) {
       imgs.push_back(img.path());
     }
 
-    auto display_callback = [](size_t idx, std::weak_ptr<Image> img) {};
+    auto display_callback = [](size_t, std::weak_ptr<Image>) {};
 
     manager.LoadToPath(imgs, L"");
     auto view = manager.GetView();
