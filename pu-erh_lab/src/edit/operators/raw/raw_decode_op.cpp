@@ -30,7 +30,7 @@ auto RawDecodeOp::Apply(ImageBuffer& input) -> ImageBuffer {
       break;
     }
     case RawProcessBackend::LIBRAW: {
-      raw_processor.imgdata.params.output_color   = 6;
+      raw_processor.imgdata.params.output_color   = 1;
       raw_processor.imgdata.params.gamm[0]        = 1.0;  // Linear gamma
       raw_processor.imgdata.params.gamm[1]        = 1.0;
       raw_processor.imgdata.params.no_auto_bright = 0;  // Disable auto brightness
@@ -63,23 +63,36 @@ auto RawDecodeOp::Apply(ImageBuffer& input) -> ImageBuffer {
 
 auto RawDecodeOp::GetParams() const -> nlohmann::json {
   nlohmann::json params;
-  params["cuda"]                   = _params._cuda;
-  params["highlights_reconstruct"] = _params._highlights_reconstruct;
-  params["use_camera_wb"]          = _params._use_camera_wb;
-  params["user_wb"]                = _params._user_wb;
-  params["backend"]                = (_backend == RawProcessBackend::PUERH) ? "puerh" : "libraw";
+  nlohmann::json inner;
+
+  inner["cuda"]                   = _params._cuda;
+  inner["highlights_reconstruct"] = _params._highlights_reconstruct;
+  inner["use_camera_wb"]          = _params._use_camera_wb;
+  inner["user_wb"]                = _params._user_wb;
+  inner["backend"]                = (_backend == RawProcessBackend::PUERH) ? "puerh" : "libraw";
+
+  params["raw"]                   = inner;
   return params;
 }
 
 void RawDecodeOp::SetParams(const nlohmann::json& params) {
-  if (params.contains("cuda")) _params._cuda = params["cuda"].get<bool>();
-  if (params.contains("highlights_reconstruct"))
-    _params._highlights_reconstruct = params["highlights_reconstruct"].get<bool>();
-  if (params.contains("use_camera_wb"))
-    _params._use_camera_wb = params["use_camera_wb"].get<bool>();
-  if (params.contains("user_wb")) _params._user_wb = params["user_wb"].get<uint32_t>();
-  if (params.contains("backend")) {
-    std::string backend = params["backend"].get<std::string>();
+  if (!params.is_object()) {
+    throw std::runtime_error("RawDecodeOp: Params should be a json object");
+  }
+
+  nlohmann::json inner;
+  if (params.contains("raw")) {
+    inner = params["raw"];
+  } else {
+    return;
+  }
+  if (inner.contains("cuda")) _params._cuda = inner["cuda"].get<bool>();
+  if (inner.contains("highlights_reconstruct"))
+    _params._highlights_reconstruct = inner["highlights_reconstruct"].get<bool>();
+  if (inner.contains("use_camera_wb")) _params._use_camera_wb = inner["use_camera_wb"].get<bool>();
+  if (inner.contains("user_wb")) _params._user_wb = inner["user_wb"].get<uint32_t>();
+  if (inner.contains("backend")) {
+    std::string backend = inner["backend"].get<std::string>();
     if (backend == "puerh")
       _backend = RawProcessBackend::PUERH;
     else if (backend == "libraw")

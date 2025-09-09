@@ -11,7 +11,7 @@ ImageBuffer::ImageBuffer(cv::Mat& data) : _cpu_data_valid(true) { data.copyTo(_c
 ImageBuffer::ImageBuffer(cv::Mat&& data) : _cpu_data(data), _cpu_data_valid(true) {}
 
 ImageBuffer::ImageBuffer(std::vector<uint8_t>&& buffer)
-    : _buffer(std::move(buffer)), _cpu_data_valid(true) {}
+    : _buffer(std::move(buffer)), _buffer_valid(true) {}
 
 ImageBuffer::ImageBuffer(ImageBuffer&& other) noexcept
     : _cpu_data(std::move(other._cpu_data)),
@@ -28,6 +28,7 @@ ImageBuffer& ImageBuffer::operator=(ImageBuffer&& other) noexcept {
   if (this != &other) {
     _cpu_data       = std::move(other._cpu_data);
     _gpu_data       = std::move(other._gpu_data);
+    _buffer         = std::move(other._buffer);
     _cpu_data_valid = other._cpu_data_valid;
     _gpu_data_valid = other._gpu_data_valid;
     _buffer_valid   = other._buffer_valid;
@@ -67,6 +68,8 @@ auto ImageBuffer::SyncToGPU() -> void {
     throw std::runtime_error("Image Buffer: No valid CPU data to sync to GPU");
   }
   _gpu_data.upload(_cpu_data);
+  _gpu_data_valid = true;
+  _cpu_data_valid = false;
 }
 
 auto ImageBuffer::SyncToCPU() -> void {
@@ -74,6 +77,23 @@ auto ImageBuffer::SyncToCPU() -> void {
     throw std::runtime_error("Image Buffer: No valid GPU data to sync to CPU");
   }
   _gpu_data.download(_cpu_data);
+  _cpu_data_valid = true;
+  _gpu_data_valid = false;
+}
+
+ImageBuffer ImageBuffer::Clone() const {
+  if (_cpu_data_valid) {
+    return ImageBuffer{_cpu_data.clone()};
+  } else if (_gpu_data_valid) {
+    cv::Mat cpu_copy;
+    _gpu_data.download(cpu_copy);
+    return ImageBuffer{cpu_copy};
+  } else if (_buffer_valid) {
+    auto buffer = _buffer;  // copy the buffer
+    return ImageBuffer{std::move(buffer)};
+  } else {
+    throw std::runtime_error("Image Buffer: No valid data to clone");
+  }
 }
 
 void ImageBuffer::ReleaseCPUData() { _cpu_data.release(); }

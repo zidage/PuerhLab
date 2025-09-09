@@ -167,6 +167,7 @@ add_library(Operators
     edit/operators/basic/auto_exposure_op.cpp
     edit/operators/cst/cst_op.cpp
     edit/operators/cst/lmt_op.cpp
+    edit/operators/raw/raw_decode_op.cpp
     edit/operators/operator_registeration.cpp
 )
 target_include_directories(Operators PUBLIC include)

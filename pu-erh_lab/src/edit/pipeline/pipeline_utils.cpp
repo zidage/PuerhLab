@@ -3,10 +3,11 @@
 #include <stdexcept>
 
 #include "edit/operators/operator_factory.hpp"
+#include "image/image_buffer.hpp"
 
 namespace puerhlab {
 PipelineStage::PipelineStage(PipelineStageName stage, bool on_gpu)
-    : _stage(stage), _on_gpu(on_gpu) {}
+    : _on_gpu(on_gpu), _stage(stage) {}
 
 void PipelineStage::SetOperator(OperatorType op_type, nlohmann::json& param) {
   auto it = _op_map.find(op_type);

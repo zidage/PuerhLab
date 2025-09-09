@@ -14,12 +14,11 @@ class ImageBuffer {
 
   std::vector<uint8_t> _buffer;
 
-  bool                 _cpu_data_valid = false;
-  bool                 _gpu_data_valid = false;
-  bool                 _buffer_valid   = false;
-
  public:
-  ImageBuffer() = default;
+  bool _cpu_data_valid = false;
+  bool _gpu_data_valid = false;
+  bool _buffer_valid   = false;
+  ImageBuffer()        = default;
   ImageBuffer(cv::Mat& data);
   ImageBuffer(cv::Mat&& data);
   ImageBuffer(cv::cuda::GpuMat&& data);
@@ -36,6 +35,8 @@ class ImageBuffer {
 
   void         SyncToGPU();
   void         SyncToCPU();
+
+  ImageBuffer  Clone() const;
 
   void         ReleaseCPUData();
   void         ReleaseGPUData();

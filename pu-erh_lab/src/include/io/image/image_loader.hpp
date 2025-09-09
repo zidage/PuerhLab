@@ -62,4 +62,15 @@ class ImageLoader {
   void StartLoading(std::shared_ptr<Image> source_img, DecodeType decode_type);
   auto LoadImage() -> std::shared_ptr<Image>;
 };
+
+class ByteBufferLoader {
+ public:
+  /**
+   * @brief Load image data from disk into a byte buffer, used only from ImagePool
+   *
+   * @param img
+   * @return std::vector<uint8_t>
+   */
+  static auto LoadFromImage(std::shared_ptr<Image> img) -> std::vector<uint8_t>;
+};
 };  // namespace puerhlab

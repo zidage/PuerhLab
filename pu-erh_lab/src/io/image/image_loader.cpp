@@ -32,8 +32,10 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <fstream>
 #include <future>
 #include <memory>
+#include <vector>
 
 #include "decoders/decoder_scheduler.hpp"
 #include "type/supported_file_type.hpp"
@@ -92,6 +94,18 @@ auto ImageLoader::LoadImage() -> std::shared_ptr<Image> {
   // If there's no finished image in the buffer, will block the load routine
   std::shared_ptr<Image> img = _buffer_decoded->pop();
   return img;
+}
+
+auto ByteBufferLoader::LoadFromImage(std::shared_ptr<Image> img) -> std::vector<uint8_t> {
+  std::ifstream   file(img->_image_path, std::ios::binary | std::ios::ate);
+  std::streamsize fileSize = file.tellg();
+  file.seekg(0, std::ios::beg);
+  std::vector<char> buffer(fileSize);
+  if (!file.read(buffer.data(), fileSize)) {
+    return {};
+  }
+  file.close();
+  return std::vector<uint8_t>(buffer.begin(), buffer.end());
 }
 
 };  // namespace puerhlab
