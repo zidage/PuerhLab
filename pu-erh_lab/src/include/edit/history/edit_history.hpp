@@ -30,8 +30,10 @@
 
 #include <cstdint>
 #include <list>
+#include <memory>
 #include <unordered_map>
 
+#include "edit/pipeline/pipeline.hpp"
 #include "type/type.hpp"
 #include "version.hpp"
 
@@ -39,11 +41,10 @@
 
 namespace puerhlab {
 class VersionNode {
- private:
-  Version&               _ver_ref;
-  std::list<VersionNode> _branch;
-  p_hash_t               _commit_id;
-  uint32_t               _ref_count;
+ public:
+  Version& _ver_ref;
+  // std::list<VersionNode> _branch; // TODO: Not support branching for now
+  p_hash_t _commit_id;
 
  public:
   VersionNode(Version& ver_ref);
@@ -58,11 +59,24 @@ class EditHistory {
   std::time_t                           _last_modified_time;
 
   std::list<VersionNode>                _commit_tree;
+
+  // Version storages, not support persistence for now
   std::unordered_map<p_hash_t, Version> _version_storage;
 
  public:
   EditHistory(sl_element_id_t bound_image);
   void SetAddTime();
   void SetLastModifiedTime();
+  auto GetAddTime() const -> std::time_t;
+  auto GetLastModifiedTime() const -> std::time_t;
+
+  auto GetHistoryId() const -> p_hash_t;
+  auto GetBoundImage() const -> sl_element_id_t;
+
+  auto GetVersion(p_hash_t ver_id) -> Version&;
+  auto CommitVersion(Version&& ver) -> p_hash_t;
+
+  auto GetLatestVersion() -> VersionNode&;
+  auto RemoveVersion(p_hash_t ver_id) -> bool;
 };
 };  // namespace puerhlab

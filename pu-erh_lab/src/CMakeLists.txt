@@ -90,7 +90,7 @@ add_library(ImageLoader io/image/image_loader.cpp)
 target_include_directories(ImageLoader PUBLIC include)
 target_link_libraries(ImageLoader PUBLIC ImageDecoder)
 
-add_library(EditHistory edit/history/edit_history.cpp edit/history/version.cpp)
+add_library(EditHistory edit/history/edit_history.cpp edit/history/version.cpp edit/history/edit_transaction.cpp)
 target_include_directories(EditHistory PUBLIC include)
 target_link_libraries(EditHistory PUBLIC xxHash Image TimeProvider)
 

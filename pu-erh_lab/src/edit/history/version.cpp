@@ -29,3 +29,57 @@
 // SOFTWARE.
 
 #include "edit/history/version.hpp"
+
+#include <xxhash.hpp>
+
+#include "utils/clock/time_provider.hpp"
+
+namespace puerhlab {
+Version::Version(sl_element_id_t bound_image) : _bound_image(bound_image) {
+  _added_time         = std::chrono::system_clock::to_time_t(TimeProvider::Now());
+  _last_modified_time = _added_time;
+  _version_id         = 0;  // TODO: Generate hash value
+}
+
+void Version::CalculateVersionID() {
+  SetLastModifiedTime();
+  _version_id = xxh::xxhash<64>(this, sizeof(*this));
+}
+
+auto Version::GetVersionID() const -> p_hash_t { return _version_id; }
+
+auto Version::GetAddTime() const -> std::time_t { return _added_time; }
+
+auto Version::GetLastModifiedTime() const -> std::time_t { return _last_modified_time; }
+
+void Version::SetLastModifiedTime() {
+  _last_modified_time = std::chrono::system_clock::to_time_t(TimeProvider::Now());
+}
+
+void Version::SetBoundImage(sl_element_id_t image_id) { _bound_image = image_id; }
+
+auto Version::GetBoundImage() const -> sl_element_id_t { return _bound_image; }
+
+void Version::AppendEditTransaction(EditTransaction&& edit_transaction) {
+  _edit_transactions.push_back(std::move(edit_transaction));
+  SetLastModifiedTime();
+}
+
+auto Version::RemoveLastEditTransaction() -> EditTransaction {
+  if (_edit_transactions.empty()) {
+    throw std::runtime_error("Version: No edit transaction to remove");
+  }
+  EditTransaction last_transaction = std::move(_edit_transactions.back());
+  _edit_transactions.pop_back();
+  SetLastModifiedTime();
+  return last_transaction;
+}
+
+auto Version::GetLastEditTransaction() -> EditTransaction& {
+  if (_edit_transactions.empty()) {
+    throw std::runtime_error("Version: No edit transaction to get");
+  }
+  return _edit_transactions.back();
+}
+
+}  // namespace puerhlab

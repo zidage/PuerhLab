@@ -34,6 +34,8 @@
 #include <list>
 #include <vector>
 
+#include "edit/history/edit_transaction.hpp"
+#include "edit_transaction.hpp"
 #include "type/type.hpp"
 
 namespace puerhlab {
@@ -42,19 +44,38 @@ class Version {
   /**
    * @brief MurmurHash3 value for this version
    */
-  p_hash_t                _version_id;
+  p_hash_t                   _version_id;
   /**
    * @brief Last modified time for this version
    */
-  std::time_t             _added_time;
-  std::time_t             _last_modified_time;
+  std::time_t                _added_time;
+  std::time_t                _last_modified_time;
   /**
    * @brief collection of images related to this version
    */
-  std::vector<image_id_t> _related_image;
+  sl_element_id_t            _bound_image;
   /**
-   * @brief Edit log for this edit version
+   * @brief Edit transactions for this edit version
    */
-  std::list<int>          _edit_log;
+  std::list<EditTransaction> _edit_transactions;
+
+ public:
+  Version(sl_element_id_t bound_image);
+
+  void CalculateVersionID();
+  auto GetVersionID() const -> p_hash_t;
+
+  void SetAddTime();
+  auto GetAddTime() const -> std::time_t;
+  void SetLastModifiedTime();
+  auto GetLastModifiedTime() const -> std::time_t;
+
+  void SetBoundImage(sl_element_id_t bound_image);
+  auto GetBoundImage() const -> sl_element_id_t;
+
+  void AppendEditTransaction(EditTransaction&& edit_transaction);
+  auto RemoveLastEditTransaction() -> EditTransaction;
+  auto GetLastEditTransaction() -> EditTransaction&;
+  auto GetAllEditTransactions() const -> const std::list<EditTransaction>&;
 };
 };  // namespace puerhlab
