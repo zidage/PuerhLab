@@ -8,12 +8,50 @@ add_library(StrConv utils/string/converter.cpp)
 target_include_directories(StrConv PUBLIC include)
 target_link_libraries(StrConv PUBLIC utfcpp)
 
+add_library(ImageBuffer image/image_buffer.cpp)
+target_include_directories(ImageBuffer PUBLIC include)
+target_link_libraries(ImageBuffer PUBLIC Exiv2 ${OpenCV_LIBS} LibRaw TimeProvider JSON xxHash easy_profiler OpenMP::OpenMP_CXX StrConv)
+
+add_library(Operators
+    edit/operators/operator_factory.cpp
+    edit/operators/basic/exposure_op.cpp
+    edit/operators/basic/contrast_op.cpp
+    edit/operators/basic/black_op.cpp
+    edit/operators/basic/highlight_op.cpp
+    edit/operators/basic/shadow_op.cpp
+    edit/operators/basic/white_op.cpp
+    edit/operators/color/tint_op.cpp
+    edit/operators/color/conversion/Oklab_cvt.cpp
+    edit/operators/color/saturation_op.cpp
+    edit/operators/color/vibrance_op.cpp
+    edit/operators/color/HLS_op.cpp
+    edit/operators/detail/clarity_op.cpp
+    edit/operators/detail/sharpen_op.cpp
+    edit/operators/wheel/color_wheel_op.cpp
+    edit/operators/curve/curve_op.cpp
+    edit/operators/tone_mapping/ACES_tone_mapping_op.cpp
+    edit/operators/basic/auto_exposure_op.cpp
+    edit/operators/cst/cst_op.cpp
+    edit/operators/cst/lmt_op.cpp
+    edit/operators/raw/raw_decode_op.cpp
+    edit/operators/geometry/resize_op.cpp
+    edit/operators/operator_registeration.cpp
+)
+target_include_directories(Operators PUBLIC include)
+target_link_libraries(Operators PUBLIC ImageBuffer JSON OpenColorIO easy_profiler hwy::hwy)
+
+add_library(EditPipeline
+    edit/pipeline/pipeline_cpu.cpp
+    edit/pipeline/pipeline_utils.cpp
+    edit/scheduler/pipeline_scheduler.cpp)
+target_include_directories(EditPipeline PUBLIC include)
+target_link_libraries(EditPipeline PUBLIC Operators)
+
 add_library(Image 
-    image/image_buffer.cpp
     image/image.cpp
 )
 target_include_directories(Image PUBLIC include)
-target_link_libraries(Image PUBLIC Exiv2 ${OpenCV_LIBS} LibRaw TimeProvider JSON xxHash easy_profiler OpenMP::OpenMP_CXX)
+target_link_libraries(Image PUBLIC ImageBuffer)
 
 add_library(RawProcessorOp
     decoders/processor/operators/cpu/color_space_conv.cpp
@@ -145,37 +183,3 @@ add_library(ImageWriter
 target_include_directories(ImageWriter PUBLIC include)
 target_link_libraries(ImageWriter PUBLIC SleeveManager DuckORM)
 
-
-add_library(Operators
-    edit/operators/operator_factory.cpp
-    edit/operators/basic/exposure_op.cpp
-    edit/operators/basic/contrast_op.cpp
-    edit/operators/basic/black_op.cpp
-    edit/operators/basic/highlight_op.cpp
-    edit/operators/basic/shadow_op.cpp
-    edit/operators/basic/white_op.cpp
-    edit/operators/color/tint_op.cpp
-    edit/operators/color/conversion/Oklab_cvt.cpp
-    edit/operators/color/saturation_op.cpp
-    edit/operators/color/vibrance_op.cpp
-    edit/operators/color/HLS_op.cpp
-    edit/operators/detail/clarity_op.cpp
-    edit/operators/detail/sharpen_op.cpp
-    edit/operators/wheel/color_wheel_op.cpp
-    edit/operators/curve/curve_op.cpp
-    edit/operators/tone_mapping/ACES_tone_mapping_op.cpp
-    edit/operators/basic/auto_exposure_op.cpp
-    edit/operators/cst/cst_op.cpp
-    edit/operators/cst/lmt_op.cpp
-    edit/operators/raw/raw_decode_op.cpp
-    edit/operators/operator_registeration.cpp
-)
-target_include_directories(Operators PUBLIC include)
-target_link_libraries(Operators PUBLIC Image SleeveFS JSON OpenColorIO easy_profiler hwy::hwy)
-
-add_library(EditPipeline
-    edit/pipeline/pipeline_cpu.cpp
-    edit/pipeline/pipeline_utils.cpp
-    edit/scheduler/pipeline_scheduler.cpp)
-target_include_directories(EditPipeline PUBLIC include)
-target_link_libraries(EditPipeline PUBLIC Image OpenColorIO Operators)

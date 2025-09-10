@@ -8,7 +8,7 @@
 
 namespace puerhlab {
 enum class PipelineStageName : int {
-  Raw_Decoding        = 0,
+  Image_Loading       = 0,
   To_WorkingSpace     = 1,
   Basic_Adjustment    = 2,
   Color_Adjustment    = 3,

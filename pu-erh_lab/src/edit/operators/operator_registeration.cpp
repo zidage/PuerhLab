@@ -16,6 +16,7 @@
 #include "edit/operators/curve/curve_op.hpp"
 #include "edit/operators/detail/clarity_op.hpp"
 #include "edit/operators/detail/sharpen_op.hpp"
+#include "edit/operators/geometry/resize_op.hpp"
 #include "edit/operators/operator_factory.hpp"
 #include "edit/operators/raw/raw_decode_op.hpp"
 #include "edit/operators/tone_mapping/ACES_tone_mapping_op.hpp"
@@ -25,6 +26,10 @@ namespace puerhlab {
 void RegisterAllOperators() {
   OperatorFactory::Instance().Register(OperatorType::RAW_DECODE, [](const nlohmann::json& params) {
     return std::make_shared<RawDecodeOp>(params);
+  });
+
+  OperatorFactory::Instance().Register(OperatorType::RESIZE, [](const nlohmann::json& params) {
+    return std::make_shared<ResizeOp>(params);
   });
 
   OperatorFactory::Instance().Register(OperatorType::CONTRAST, [](const nlohmann::json& params) {

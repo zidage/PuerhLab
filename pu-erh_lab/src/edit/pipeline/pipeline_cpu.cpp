@@ -16,7 +16,7 @@
 
 namespace puerhlab {
 CPUPipelineExecutor::CPUPipelineExecutor()
-    : _stages({{PipelineStageName::Raw_Decoding, false},
+    : _stages({{PipelineStageName::Image_Loading, false},
                {PipelineStageName::To_WorkingSpace, false},
                {PipelineStageName::Basic_Adjustment, false},
                {PipelineStageName::Color_Adjustment, false},

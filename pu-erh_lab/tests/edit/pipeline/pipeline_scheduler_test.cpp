@@ -27,7 +27,7 @@ using namespace puerhlab;
 
 using namespace puerhlab;
 void SetPipelineStages(std::shared_ptr<PipelineExecutor> executor) {
-  auto&          raw_stage = executor->GetStage(PipelineStageName::Raw_Decoding);
+  auto&          raw_stage = executor->GetStage(PipelineStageName::Image_Loading);
   nlohmann::json decode_params;
   decode_params["raw"]["cuda"]                   = false;
   decode_params["raw"]["highlights_reconstruct"] = false;
@@ -47,6 +47,7 @@ void SetPipelineStages(std::shared_ptr<PipelineExecutor> executor) {
   output_params["ocio"]       = {{"src", "ACEScct"}, {"dst", "Camera Rec.709"}, {"limit", true}};
   output_stage.SetOperator(OperatorType::CST, output_params);
 }
+
 TEST_F(PipelineTests, SchedulerBasic) {
   {
     SleeveManager manager{db_path_};

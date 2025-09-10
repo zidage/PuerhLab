@@ -9,6 +9,7 @@
 namespace puerhlab {
 enum class OperatorType : int {
   RAW_DECODE,
+  RESIZE,
   EXPOSURE,
   CONTRAST,
   WHITE,

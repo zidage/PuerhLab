@@ -14,7 +14,7 @@ class RawDecodeOp : public OperatorBase<RawDecodeOp> {
   static constexpr PriorityLevel     _priority_level    = 0;
   static constexpr std::string_view  _canonical_name    = "RawDecode";
   static constexpr std::string_view  _script_name       = "raw_decode";
-  static constexpr PipelineStageName _affiliation_stage = PipelineStageName::Raw_Decoding;
+  static constexpr PipelineStageName _affiliation_stage = PipelineStageName::Image_Loading;
 
   RawParams                          _params;
   RawProcessBackend                  _backend;
