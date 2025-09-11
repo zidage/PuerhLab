@@ -88,6 +88,15 @@ add_executable(PipelineSchedulerTest edit/pipeline/pipeline_scheduler_test.cpp)
 target_include_directories(PipelineSchedulerTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
 target_link_libraries(PipelineSchedulerTest GTest::gtest_main Operators SleeveManager ImageDecoder easy_profiler EditPipeline OpenColorIO lcms2::lcms2)
 
+add_executable(EditTransactionTest edit/history/transaction_test.cpp)
+target_include_directories(EditTransactionTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
+target_link_libraries(EditTransactionTest GTest::gtest_main Operators SleeveManager ImageDecoder easy_profiler EditPipeline OpenColorIO lcms2::lcms2)
+
+add_executable(EditHistoryTest edit/history/history_test.cpp)
+target_include_directories(EditHistoryTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
+target_link_libraries(EditHistoryTest GTest::gtest_main Operators SleeveManager ImageDecoder easy_profiler EditPipeline OpenColorIO lcms2::lcms2)
+
+
 include(GoogleTest)
 # set(CMAKE_GTEST_DISCOVER_TESTS_DISCOVERY_MODE PRE_TEST)
 # gtest_discover_tests(SampleTest)

@@ -5,7 +5,7 @@
 #include "edit/pipeline/pipeline.hpp"
 
 namespace puerhlab {
-enum class EditTransactionType { ADD, DELETE, EDIT };
+enum class TransactionType : int { _ADD, _DELETE, _EDIT };
 /**
  * @brief Represents a single edit transaction in the pipeline. Each transaction can be an addition,
  * deletion, or modification of an operator. Once created, transactions are immutable.
@@ -13,20 +13,20 @@ enum class EditTransactionType { ADD, DELETE, EDIT };
  */
 class EditTransaction {
  private:
-  int                 transaction_id;
-  EditTransactionType type;
+  int               transaction_id;
+  TransactionType   type;
 
-  OperatorType        operator_type;
-  PipelineStageName   stage_name;
-  nlohmann::json      operator_params;
+  OperatorType      operator_type;
+  PipelineStageName stage_name;
+  nlohmann::json    operator_params;
 
   // Pointer to the previous transaction in the undo/redo chain.
   // This does not imply ownership; the lifetime of parent_transaction must be managed externally.
   // Used to traverse the history of edit transactions for undo/redo operations.
-  EditTransaction*    parent_transaction;
+  EditTransaction*  parent_transaction;
 
  public:
-  EditTransaction(int transaction_id, EditTransactionType type, OperatorType operator_type,
+  EditTransaction(int transaction_id, TransactionType type, OperatorType operator_type,
                   PipelineStageName stage_name, nlohmann::json operator_params,
                   EditTransaction* parent_transaction = nullptr)
       : transaction_id(transaction_id),

@@ -92,7 +92,7 @@ target_link_libraries(ImageLoader PUBLIC ImageDecoder)
 
 add_library(EditHistory edit/history/edit_history.cpp edit/history/version.cpp edit/history/edit_transaction.cpp)
 target_include_directories(EditHistory PUBLIC include)
-target_link_libraries(EditHistory PUBLIC xxHash Image TimeProvider)
+target_link_libraries(EditHistory PUBLIC xxHash Image TimeProvider JSON EditPipeline)
 
 add_library(SleeveFilter
     sleeve/sleeve_filter/filters/exif_filter.cpp

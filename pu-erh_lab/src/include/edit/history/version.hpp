@@ -60,6 +60,7 @@ class Version {
   std::list<EditTransaction> _edit_transactions;
 
  public:
+  Version() = default;
   Version(sl_element_id_t bound_image);
 
   void CalculateVersionID();

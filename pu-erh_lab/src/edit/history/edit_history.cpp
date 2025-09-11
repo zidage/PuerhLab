@@ -10,6 +10,8 @@
 #include "utils/clock/time_provider.hpp"
 
 namespace puerhlab {
+VersionNode::VersionNode(Version& ver) : _ver_ref(ver) {}
+
 /**
  * @brief Construct a new Edit History:: Edit History object
  *
