@@ -164,9 +164,11 @@ TEST_F(EditHistoryTests, TestWithImage) {
 
       auto future_task1           = task1._result->get_future();
 
-      auto task2                  = task1;    // Make a copy of task1 for task2
-      task2._result               = nullptr;  // Clear the promise for task2 to avoid issues
-      task2._options._is_blocking = false;    // Make task2 non-blocking
+      auto task2                  = task1;  // Make a copy of task1 for task2
+      task2._result               = std::make_shared<std::promise<ImageBuffer>>();
+      ;  // Clear the promise for task2 to avoid issues
+      auto future_task2           = task2._result->get_future();
+      task2._options._is_blocking = true;  // Make task2 non-blocking
 
       scheduler.ScheduleTask(std::move(task1));
 
@@ -176,7 +178,20 @@ TEST_F(EditHistoryTests, TestWithImage) {
       EditTransaction tx1(1, TransactionType::_ADD, OperatorType::EXPOSURE,
                           PipelineStageName::Basic_Adjustment, {{"exposure", 0.5}});
       tx1.ApplyTransaction(*pipeline_executor);
+
+      auto task3                  = task2;
+      task3._result               = std::make_shared<std::promise<ImageBuffer>>();
+      auto future_task3           = task3._result->get_future();
+      task3._options._is_blocking = true;  // Make task3 non-blocking
       scheduler.ScheduleTask(std::move(task2));
+      future_task2.get();  // Wait for task2 to complete
+
+      // Create and apply another edit transaction
+      EditTransaction tx2(2, TransactionType::_ADD, OperatorType::CONTRAST,
+                          PipelineStageName::Basic_Adjustment, {{"contrast", 50}}, &tx1);
+      tx2.ApplyTransaction(*pipeline_executor);
+      scheduler.ScheduleTask(std::move(task3));
+      future_task3.get();  // Wait for task3 to complete
     }
   }
 }

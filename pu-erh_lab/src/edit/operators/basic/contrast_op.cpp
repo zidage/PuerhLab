@@ -2,8 +2,10 @@
 
 #include <opencv2/core/hal/interface.h>
 
+#include <opencv2/core.hpp>
 #include <stdexcept>
 
+#include "edit/operators/color/conversion/Oklab_cvt.hpp"
 #include "edit/operators/operator_factory.hpp"
 
 namespace puerhlab {
@@ -34,10 +36,16 @@ ContrastOp::ContrastOp(const nlohmann::json& params) { SetParams(params); }
 auto ContrastOp::Apply(ImageBuffer& input) -> ImageBuffer {
   cv::Mat& linear_image = input.GetCPUData();
 
-  linear_image          = (linear_image - 50.0f) * _scale + 50.0f;
+  linear_image.forEach<cv::Vec3f>([&](cv::Vec3f& pixel, const int*) -> void {
+    auto lab = OklabCvt::ACESRGB2Oklab(pixel);
+    lab.L    = (lab.L - 0.5f) * _scale + 0.5f;
+    pixel    = OklabCvt::Oklab2ACESRGB(lab);
+  });
+
+  // linear_image          = (linear_image - 0.5f) * _scale + 0.5f;
   // clamp
-  cv::min(linear_image, 100.0f, linear_image);
-  cv::max(linear_image, 0.0f, linear_image);
+  // cv::min(linear_image, 100.0f, linear_image);
+  // cv::max(linear_image, 0.0f, linear_image);
 
   return {std::move(linear_image)};
 }

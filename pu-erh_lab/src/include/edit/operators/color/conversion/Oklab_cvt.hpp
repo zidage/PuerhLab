@@ -14,4 +14,7 @@ struct Oklab {
 Oklab     LinearRGB2Oklab(const cv::Vec3f& rgb);
 
 cv::Vec3f Oklab2LinearRGB(const Oklab& lab);
+
+Oklab     ACESRGB2Oklab(const cv::Vec3f& rgb);
+cv::Vec3f Oklab2ACESRGB(const Oklab& lab);
 };  // namespace OklabCvt
