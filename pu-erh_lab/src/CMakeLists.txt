@@ -12,6 +12,45 @@ add_library(ImageBuffer image/image_buffer.cpp)
 target_include_directories(ImageBuffer PUBLIC include)
 target_link_libraries(ImageBuffer PUBLIC Exiv2 ${OpenCV_LIBS} LibRaw TimeProvider JSON xxHash easy_profiler OpenMP::OpenMP_CXX StrConv)
 
+# CPU sources (always compiled)
+set(RAWPROCESSOR_CPU_SOURCES
+    decoders/processor/operators/cpu/color_space_conv.cpp
+    decoders/processor/operators/cpu/debayer_ahd.cpp
+    decoders/processor/operators/cpu/debayer_amaze.cpp
+    decoders/processor/operators/cpu/highlight_reconstruct.cpp
+    decoders/processor/operators/cpu/white_balance.cpp
+    decoders/processor/operators/cpu/raw_proc_utils.cpp
+)
+
+# GPU sources (only if CUDA is found)
+if(CUDAToolkit_FOUND)
+    enable_language(CUDA)
+
+    set(RAWPROCESSOR_GPU_SOURCES
+        decoders/processor/operators/gpu/cuda_color_space_conv.cu
+        decoders/processor/operators/gpu/cuda_debayer_ahd.cu
+        decoders/processor/operators/gpu/cuda_highlight_reconstruct.cu
+        decoders/processor/operators/gpu/cuda_white_balance.cu
+    )
+endif()
+
+# Define library with conditional sources
+add_library(RawProcessorOp
+    ${RAWPROCESSOR_CPU_SOURCES}
+    ${RAWPROCESSOR_GPU_SOURCES}
+)
+
+target_include_directories(RawProcessorOp PUBLIC include)
+target_link_libraries(RawProcessorOp PUBLIC ImageBuffer LibRaw Exiv2 hwy::hwy)
+
+# Only apply CUDA properties if CUDA is enabled
+if(CUDAToolkit_FOUND)
+    set_target_properties(RawProcessorOp PROPERTIES
+        CUDA_SEPARABLE_COMPILATION ON
+    )
+    target_compile_definitions(RawProcessorOp PUBLIC HAVE_CUDA)
+endif()
+
 add_library(Operators
     edit/operators/operator_factory.cpp
     edit/operators/basic/exposure_op.cpp
@@ -53,23 +92,7 @@ add_library(Image
 target_include_directories(Image PUBLIC include)
 target_link_libraries(Image PUBLIC ImageBuffer)
 
-add_library(RawProcessorOp
-    decoders/processor/operators/cpu/color_space_conv.cpp
-    decoders/processor/operators/cpu/debayer_ahd.cpp
-    decoders/processor/operators/cpu/debayer_amaze.cpp
-    decoders/processor/operators/cpu/highlight_reconstruct.cpp
-    decoders/processor/operators/cpu/white_balance.cpp
-    decoders/processor/operators/cpu/raw_proc_utils.cpp
-    decoders/processor/operators/gpu/cuda_color_space_conv.cu
-    decoders/processor/operators/gpu/cuda_debayer_ahd.cu
-    decoders/processor/operators/gpu/cuda_highlight_reconstruct.cu
-    decoders/processor/operators/gpu/cuda_white_balance.cu
-)
-target_include_directories(RawProcessorOp PUBLIC include)
-target_link_libraries(RawProcessorOp PUBLIC Image LibRaw Exiv2 hwy::hwy)
-set_target_properties(RawProcessorOp PROPERTIES
-    CUDA_SEPARABLE_COMPILATION ON
-)
+
 
 add_library(RawProcessor
     decoders/processor/raw_processor.cpp

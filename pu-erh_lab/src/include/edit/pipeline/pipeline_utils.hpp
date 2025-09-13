@@ -12,18 +12,19 @@ namespace puerhlab {
 struct OperatorEntry {
   bool                           _enable = true;
   std::shared_ptr<IOperatorBase> _op;
+
+  bool                           operator<(const OperatorEntry& other) const {
+    return _op->GetPriorityLevel() < other._op->GetPriorityLevel();
+  }
 };
 
 class PipelineStage {
-  using OpPos = std::list<OperatorEntry>::iterator;
-
  private:
-  std::unordered_map<OperatorType, OpPos> _op_map;
-  std::list<OperatorEntry>                _operators;
+  std::map<OperatorType, OperatorEntry> _operators;
 
-  ImageBuffer                             _input_img;
-  bool                                    _input_set = false;
-  bool                                    _on_gpu    = false;
+  ImageBuffer                           _input_img;
+  bool                                  _input_set = false;
+  bool                                  _on_gpu    = false;
 
  public:
   PipelineStageName _stage;
@@ -32,6 +33,8 @@ class PipelineStage {
   void SetOperator(OperatorType, nlohmann::json& param);
   void EnableOperator(OperatorType, bool enable);
   void SetInputImage(ImageBuffer&& input);
+
+  auto GetStageNameString() const -> std::string;
 
   auto HasInput() -> bool;
 

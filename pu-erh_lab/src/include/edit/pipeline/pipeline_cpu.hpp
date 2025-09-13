@@ -22,18 +22,6 @@ class CPUPipelineExecutor : public PipelineExecutor {
   auto GetStage(PipelineStageName stage) -> PipelineStage& override;
   auto Apply(ImageBuffer& input) -> ImageBuffer override;
 
-  void SetThumbnailMode(bool is_thumbnail) {
-    _is_thumbnail     = is_thumbnail;
-    _thumbnail_params = {};  // TODO: Use default params for now
-    if (!_is_thumbnail) {
-      // Disable resizing in image loading stage
-      _stages[static_cast<int>(PipelineStageName::Image_Loading)].EnableOperator(
-          OperatorType::RESIZE,
-          false);  // If RESIZE operator not exist, this function will do nothing
-      return;
-    }
-    _stages[static_cast<int>(PipelineStageName::Image_Loading)].SetOperator(OperatorType::RESIZE,
-                                                                            _thumbnail_params);
-  }
+  void SetThumbnailMode(bool is_thumbnail);
 };
 };  // namespace puerhlab

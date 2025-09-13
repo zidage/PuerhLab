@@ -88,7 +88,7 @@ TEST_F(EditHistoryTests, RedoWithoutParentTransaction) {
 void SetPipelineTemplate(std::shared_ptr<PipelineExecutor> executor) {
   auto&          raw_stage = executor->GetStage(PipelineStageName::Image_Loading);
   nlohmann::json decode_params;
-  decode_params["raw"]["cuda"]                   = false;
+  decode_params["raw"]["cuda"]                   = true;
   decode_params["raw"]["highlights_reconstruct"] = false;
   decode_params["raw"]["use_camera_wb"]          = true;
   decode_params["raw"]["backend"]                = "puerh";
@@ -134,6 +134,7 @@ TEST_F(EditHistoryTests, TestWithImage) {
       task1._input             = std::make_shared<ImageBuffer>(std::move(buffer));
 
       auto pipeline_executor   = std::make_shared<CPUPipelineExecutor>();
+      pipeline_executor->SetThumbnailMode(true);
 
       task1._pipeline_executor = pipeline_executor;
       SetPipelineTemplate(task1._pipeline_executor);
@@ -158,7 +159,11 @@ TEST_F(EditHistoryTests, TestWithImage) {
                                          save_name),
                              output.GetCPUData());
       };
-      task1._callback             = save_callback;
+
+      auto empty_callback = [](ImageBuffer&) {};
+
+      
+      task1._callback             = empty_callback;
       task1._options._is_blocking = true;
       task1._result               = std::make_shared<std::promise<ImageBuffer>>();
 
@@ -170,9 +175,11 @@ TEST_F(EditHistoryTests, TestWithImage) {
       auto future_task2           = task2._result->get_future();
       task2._options._is_blocking = true;  // Make task2 non-blocking
 
+      EASY_BLOCK("Schedule and process task1");
       scheduler.ScheduleTask(std::move(task1));
 
       future_task1.get();  // Wait for task1 to complete
+      EASY_END_BLOCK;   
 
       // Create and apply an edit transaction
       EditTransaction tx1(1, TransactionType::_ADD, OperatorType::EXPOSURE,
@@ -183,15 +190,20 @@ TEST_F(EditHistoryTests, TestWithImage) {
       task3._result               = std::make_shared<std::promise<ImageBuffer>>();
       auto future_task3           = task3._result->get_future();
       task3._options._is_blocking = true;  // Make task3 non-blocking
+
+      EASY_BLOCK("Schedule and process task2");
       scheduler.ScheduleTask(std::move(task2));
       future_task2.get();  // Wait for task2 to complete
+      EASY_END_BLOCK;
 
       // Create and apply another edit transaction
       EditTransaction tx2(2, TransactionType::_ADD, OperatorType::CONTRAST,
                           PipelineStageName::Basic_Adjustment, {{"contrast", 50}}, &tx1);
       tx2.ApplyTransaction(*pipeline_executor);
+      EASY_BLOCK("Schedule and process task3");
       scheduler.ScheduleTask(std::move(task3));
       future_task3.get();  // Wait for task3 to complete
+      EASY_END_BLOCK;
     }
   }
 }

@@ -19,11 +19,16 @@ set(CMAKE_VS_USE_DEBUG_LIBRARIES "$<CONFIG:Debug,Custom>")
 set(DCMAKE_TOOLCHAIN_FILE "D:\\misc\\vcpkg\\scripts\\buildsystems\\vcpkg.cmake")
 
 set(CMAKE_PREFIX_PATH "D:/Projects/pu-erh_lab/pu-erh_lab/third_party/easy_profiler-v2.1.0-msvc15-win64/lib/cmake/easy_profiler")
+
 set(CMAKE_CUDA_FLAGS "")
-project(pu-erh_lab VERSION 0.1.0 LANGUAGES C CXX CUDA)
+project(pu-erh_lab VERSION 0.1.0 LANGUAGES C CXX)
 
 
-
+find_package(CUDAToolkit)
+if (CUDAToolkit_FOUND)
+    enable_language(CUDA)
+    add_definitions(-DHAVE_CUDA)
+endif()
 # Dependencies
 # CTest
 include(FetchContent)
@@ -33,7 +38,6 @@ FetchContent_Declare(
 )
 # For Windows: Prevent overriding the parent project's compiler/linker settings
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
-set(GOOGLETEST_ENABLE_FUZZTEST ON CACHE BOOL "Enable fuzztest support")
 
 FetchContent_MakeAvailable(googletest)
 enable_testing() 
@@ -43,7 +47,6 @@ find_package(OpenMP REQUIRED)
 # LibRaw
 add_library(LibRaw SHARED IMPORTED)
 set_target_properties(LibRaw PROPERTIES
-    cpu->apply(desc_idt);// // // // // // // // 
     IMPORTED_LOCATION "${CMAKE_SOURCE_DIR}\\pu-erh_lab\\third_party\\LibRaw-0.21.4_openmp\\buildfiles\\release-x86_64\\libraw.dll"
     IMPORTED_IMPLIB "${CMAKE_SOURCE_DIR}\\pu-erh_lab\\third_party\\LibRaw-0.21.4_openmp\\buildfiles\\release-x86_64\\libraw.lib"
     INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_SOURCE_DIR}\\pu-erh_lab\\third_party\\LibRaw-0.21.4_openmp"

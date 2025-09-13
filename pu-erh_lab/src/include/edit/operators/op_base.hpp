@@ -25,21 +25,27 @@ class IOperatorBase {
    * @param input
    * @return ImageBuffer
    */
-  virtual auto Apply(ImageBuffer& input) -> ImageBuffer = 0;
+  virtual auto Apply(ImageBuffer& input) -> ImageBuffer  = 0;
   /**
    * @brief Set the parameters of this operator from JSON
    *
    * @param params
    */
-  virtual auto GetParams() const -> nlohmann::json      = 0;
+  virtual auto GetParams() const -> nlohmann::json       = 0;
   /**
    * @brief Get JSON parameter for this operator
    *
    * @return nlohmann::json
    */
-  virtual void SetParams(const nlohmann::json&)         = 0;
+  virtual void SetParams(const nlohmann::json&)          = 0;
 
-  virtual ~IOperatorBase()                              = default;
+  virtual auto GetScriptName() const -> std::string      = 0;
+
+  virtual auto GetPriorityLevel() const -> PriorityLevel = 0;
+
+  virtual auto GetStage() const -> PipelineStageName     = 0;
+
+  virtual ~IOperatorBase()                               = default;
 };
 /**
  * @brief A base class for all operators
@@ -62,10 +68,10 @@ class OperatorBase : public IOperatorBase {
    *
    * @return std::string
    */
-  virtual auto GetScriptName() const -> std::string { return std::string(Derived::_script_name); }
+  auto GetScriptName() const -> std::string override { return std::string(Derived::_script_name); }
 
-  virtual auto GetPriorityLevel() const -> PriorityLevel { return Derived::_priority_level; }
+  auto GetPriorityLevel() const -> PriorityLevel override { return Derived::_priority_level; }
 
-  virtual auto GetStage() const -> PipelineStageName { return Derived::_affiliation_stage; }
+  auto GetStage() const -> PipelineStageName override { return Derived::_affiliation_stage; }
 };
 };  // namespace puerhlab

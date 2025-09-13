@@ -29,6 +29,7 @@ enum class OperatorType : int {
   ACES_TONE_MAPPING,
   AUTO_EXPOSURE
 };
+
 class OperatorFactory {
  public:
   using Creator = std::function<std::shared_ptr<IOperatorBase>(const nlohmann::json&)>;
@@ -44,7 +45,7 @@ class OperatorFactory {
   static Creator MakeCreator() {
     return [](const nlohmann::json& params) -> std::shared_ptr<IOperatorBase> {
       auto op = std::make_shared<T>(params);
-      return std::static_pointer_cast<IOperatorBase>(op);  // 关键点
+      return std::static_pointer_cast<IOperatorBase>(op);
     };
   }
 

@@ -1,5 +1,7 @@
 #include "edit/pipeline/pipeline_utils.hpp"
 
+#include <easy/profiler.h>
+
 #include <stdexcept>
 
 #include "edit/operators/operator_factory.hpp"
@@ -10,19 +12,19 @@ PipelineStage::PipelineStage(PipelineStageName stage, bool on_gpu)
     : _on_gpu(on_gpu), _stage(stage) {}
 
 void PipelineStage::SetOperator(OperatorType op_type, nlohmann::json& param) {
-  auto it = _op_map.find(op_type);
-  if (it == _op_map.end()) {
-    _operators.emplace_back(true, OperatorFactory::Instance().Create(op_type, param));
-    _op_map[op_type] = _operators.begin();
+  auto it = _operators.find(op_type);
+  if (it == _operators.end()) {
+    _operators.emplace(op_type,
+                       OperatorEntry{true, OperatorFactory::Instance().Create(op_type, param)});
   } else {
-    (it->second)->_op->SetParams(param);
+    (it->second)._op->SetParams(param);
   }
 }
 
 void PipelineStage::EnableOperator(OperatorType op_type, bool enable) {
-  auto it = _op_map.find(op_type);
-  if (it != _op_map.end()) {
-    it->second->_enable = enable;
+  auto it = _operators.find(op_type);
+  if (it != _operators.end()) {
+    it->second._enable = enable;
   }
 }
 
@@ -41,8 +43,12 @@ auto PipelineStage::ApplyStage() -> ImageBuffer {
 
   auto& output = _input_img;
   for (auto& op : _operators) {
-    if (op._enable) {
-      output = op._op->Apply(output);
+    if (op.second._enable) {
+      EASY_NONSCOPED_BLOCK(
+          std::format("Apply Operator: {}", op.second._op->GetScriptName()).c_str(),
+          profiler::colors::Cyan);
+      output = op.second._op->Apply(output);
+      EASY_END_BLOCK;
     }
   }
 
@@ -51,4 +57,25 @@ auto PipelineStage::ApplyStage() -> ImageBuffer {
 }
 
 auto PipelineStage::HasInput() -> bool { return _input_set; }
+
+auto PipelineStage::GetStageNameString() const -> std::string {
+  switch (_stage) {
+    case PipelineStageName::Image_Loading:
+      return "Image Loading";
+    case PipelineStageName::To_WorkingSpace:
+      return "To Working Space";
+    case PipelineStageName::Basic_Adjustment:
+      return "Basic Adjustment";
+    case PipelineStageName::Color_Adjustment:
+      return "Color Adjustment";
+    case PipelineStageName::Detail_Adjustment:
+      return "Detail Adjustment";
+    case PipelineStageName::Output_Transform:
+      return "Output Transform";
+    case PipelineStageName::Geometry_Adjustment:
+      return "Geometry Adjustment";
+    default:
+      return "Unknown Stage";
+  }
+}
 };  // namespace puerhlab

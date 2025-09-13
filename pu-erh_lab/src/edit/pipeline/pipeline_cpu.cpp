@@ -32,9 +32,26 @@ auto CPUPipelineExecutor::Apply(ImageBuffer& input) -> ImageBuffer {
   ImageBuffer output = input.Clone();
 
   for (auto& stage : _stages) {
+    EASY_NONSCOPED_BLOCK(std::format("Apply stage: {}", stage.GetStageNameString()).c_str(),
+                         profiler::colors::Red);
     stage.SetInputImage(std::move(output));
     output = stage.ApplyStage();
+    EASY_END_BLOCK
   }
   return output;
+}
+
+void CPUPipelineExecutor::SetThumbnailMode(bool is_thumbnail) {
+  _is_thumbnail     = is_thumbnail;
+  _thumbnail_params = {};  // TODO: Use default params for now
+  if (!_is_thumbnail) {
+    // Disable resizing in image loading stage
+    _stages[static_cast<int>(PipelineStageName::Image_Loading)].EnableOperator(
+        OperatorType::RESIZE,
+        false);  // If RESIZE operator not exist, this function will do nothing
+    return;
+  }
+  _stages[static_cast<int>(PipelineStageName::Image_Loading)].SetOperator(OperatorType::RESIZE,
+                                                                          _thumbnail_params);
 }
 };  // namespace puerhlab
