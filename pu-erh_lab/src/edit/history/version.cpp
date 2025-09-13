@@ -82,4 +82,8 @@ auto Version::GetLastEditTransaction() -> EditTransaction& {
   return _edit_transactions.back();
 }
 
+auto Version::GetAllEditTransactions() const -> const std::list<EditTransaction>& {
+  return _edit_transactions;
+}
+
 }  // namespace puerhlab

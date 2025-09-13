@@ -1,6 +1,7 @@
 #pragma once
 
 #include <concepts>
+#include <cstddef>
 #include <cstdint>
 #include <list>
 #include <optional>
@@ -17,7 +18,7 @@ class LRUCache {
  private:
   std::unordered_map<K, ListIterator> _cache_map;
   std::list<std::pair<K, V>>          _cache_list;
-  uint32_t                            _capacity;
+  size_t                              _capacity;
 
   uint32_t                            _evict_count  = 0;
   uint32_t                            _access_count = 0;
@@ -26,7 +27,7 @@ class LRUCache {
   static const uint32_t _default_capacity = 256;
 
   explicit LRUCache() : _capacity(_default_capacity) {}
-  explicit LRUCache(uint32_t capacity) : _capacity(capacity) {}
+  explicit LRUCache(size_t capacity) : _capacity(capacity) {}
 
   auto Contains(const K& key) -> bool { return _cache_map.contains(key); }
 

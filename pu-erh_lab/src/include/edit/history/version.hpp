@@ -32,9 +32,11 @@
 
 #include <ctime>
 #include <list>
+#include <memory>
 #include <vector>
 
 #include "edit/history/edit_transaction.hpp"
+#include "edit/pipeline/pipeline.hpp"
 #include "edit_transaction.hpp"
 #include "type/type.hpp"
 
@@ -44,20 +46,22 @@ class Version {
   /**
    * @brief MurmurHash3 value for this version
    */
-  p_hash_t                   _version_id;
+  p_hash_t                          _version_id;
   /**
    * @brief Last modified time for this version
    */
-  std::time_t                _added_time;
-  std::time_t                _last_modified_time;
+  std::time_t                       _added_time;
+  std::time_t                       _last_modified_time;
   /**
    * @brief collection of images related to this version
    */
-  sl_element_id_t            _bound_image;
+  sl_element_id_t                   _bound_image;
   /**
    * @brief Edit transactions for this edit version
    */
-  std::list<EditTransaction> _edit_transactions;
+  std::list<EditTransaction>        _edit_transactions;
+
+  std::shared_ptr<PipelineExecutor> _base_pipeline_executor;
 
  public:
   Version() = default;
@@ -73,6 +77,10 @@ class Version {
 
   void SetBoundImage(sl_element_id_t bound_image);
   auto GetBoundImage() const -> sl_element_id_t;
+
+  void SetBasePipelineExecutor(std::shared_ptr<PipelineExecutor> pipeline_executor) {
+    _base_pipeline_executor = pipeline_executor;
+  }
 
   void AppendEditTransaction(EditTransaction&& edit_transaction);
   auto RemoveLastEditTransaction() -> EditTransaction;

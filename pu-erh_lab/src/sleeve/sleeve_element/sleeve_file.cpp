@@ -34,5 +34,9 @@ auto SleeveFile::Copy(uint32_t new_id) const -> std::shared_ptr<SleeveElement> {
 
 auto SleeveFile::GetImage() -> std::shared_ptr<Image> { return _image; }
 
-void SleeveFile::SetImage(const std::shared_ptr<Image> img) { _image = img; }
+void SleeveFile::SetImage(const std::shared_ptr<Image> img) {
+  _image        = img;
+  // Once a new image is set, the edit history will be replaced with a new one
+  _edit_history = std::make_shared<EditHistory>(this->_element_id);
+}
 };  // namespace puerhlab

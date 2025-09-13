@@ -24,6 +24,8 @@ CPUPipelineExecutor::CPUPipelineExecutor()
                {PipelineStageName::Output_Transform, false},
                {PipelineStageName::Geometry_Adjustment, false}}) {}
 
+auto CPUPipelineExecutor::GetBackend() -> PipelineBackend { return _backend; }
+
 auto CPUPipelineExecutor::GetStage(PipelineStageName stage) -> PipelineStage& {
   return _stages[static_cast<int>(stage)];
 }
