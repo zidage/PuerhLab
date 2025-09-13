@@ -14,10 +14,10 @@ class CPUPipelineExecutor : public PipelineExecutor {
   bool                                                                        _is_thumbnail = false;
   nlohmann::json                                                              _thumbnail_params;
 
-  static constexpr PipelineBackend         _backend = PipelineBackend::CPU;
+  static constexpr PipelineBackend _backend = PipelineBackend::CPU;
 
   // TODO: Caching (NOT IMPLEMENTED)
-  LRUCache<PipelineStageName, ImageBuffer> _image_buffer;
+  ImageBuffer                      _cached_image;
 
  public:
   CPUPipelineExecutor();

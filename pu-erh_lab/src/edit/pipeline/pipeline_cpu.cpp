@@ -2,6 +2,7 @@
 
 #include <easy/profiler.h>
 
+#include <memory>
 #include <opencv2/core.hpp>
 #include <opencv2/core/mat.hpp>
 #include <opencv2/cudaarithm.hpp>
@@ -22,7 +23,14 @@ CPUPipelineExecutor::CPUPipelineExecutor()
                {PipelineStageName::Color_Adjustment, false},
                {PipelineStageName::Detail_Adjustment, false},
                {PipelineStageName::Output_Transform, false},
-               {PipelineStageName::Geometry_Adjustment, false}}) {}
+               {PipelineStageName::Geometry_Adjustment, false}}) {
+  // Link stages
+  for (size_t i = 0; i < _stages.size(); i++) {
+    PipelineStage* prev = (i == 0) ? nullptr : &_stages[i - 1];
+    PipelineStage* next = (i == _stages.size() - 1) ? nullptr : &_stages[i + 1];
+    _stages[i].SetNeighbors(prev, next);
+  }
+}
 
 auto CPUPipelineExecutor::GetBackend() -> PipelineBackend { return _backend; }
 
@@ -31,16 +39,16 @@ auto CPUPipelineExecutor::GetStage(PipelineStageName stage) -> PipelineStage& {
 }
 
 auto CPUPipelineExecutor::Apply(ImageBuffer& input) -> ImageBuffer {
-  ImageBuffer output = input.Clone();
+  auto output = std::make_shared<ImageBuffer>(input.Clone());
 
   for (auto& stage : _stages) {
     EASY_NONSCOPED_BLOCK(std::format("Apply stage: {}", stage.GetStageNameString()).c_str(),
                          profiler::colors::Red);
-    stage.SetInputImage(std::move(output));
+    stage.SetInputImage(output);
     output = stage.ApplyStage();
     EASY_END_BLOCK
   }
-  return output;
+  return output->Clone();
 }
 
 void CPUPipelineExecutor::SetThumbnailMode(bool is_thumbnail) {

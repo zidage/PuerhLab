@@ -31,10 +31,10 @@ auto ResizeOp::SetParams(const nlohmann::json& params) -> void {
     if (inner.contains("maximum_edge")) {
       _maximum_edge = inner.at("maximum_edge").get<int>();
     } else {
-      _maximum_edge = 4000;
+      _maximum_edge = 3000;
     }
   } else {
-    _maximum_edge = 4000;
+    _maximum_edge = 3000;
   }
 }
 };  // namespace puerhlab

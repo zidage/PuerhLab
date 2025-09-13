@@ -22,9 +22,16 @@ class PipelineStage {
  private:
   std::map<OperatorType, OperatorEntry> _operators;
 
-  ImageBuffer                           _input_img;
-  bool                                  _input_set = false;
-  bool                                  _on_gpu    = false;
+  PipelineStage*                        prev_stage = nullptr;
+  PipelineStage*                        next_stage = nullptr;
+
+  std::shared_ptr<ImageBuffer>          _input_img;
+  std::shared_ptr<ImageBuffer>          _output_cache;
+
+  bool                                  _input_cache_valid  = false;
+  bool                                  _output_cache_valid = false;
+  bool                                  _input_set          = false;
+  bool                                  _on_gpu             = false;
 
  public:
   PipelineStageName _stage;
@@ -32,12 +39,19 @@ class PipelineStage {
   PipelineStage(PipelineStageName stage, bool on_gpu);
   void SetOperator(OperatorType, nlohmann::json& param);
   void EnableOperator(OperatorType, bool enable);
-  void SetInputImage(ImageBuffer&& input);
+  void SetInputImage(std::shared_ptr<ImageBuffer>);
+
+  void SetNeighbors(PipelineStage* prev, PipelineStage* next);
+
+  void SetInputCacheValid(bool valid);
+  void SetOutputCacheValid(bool valid);
+
+  auto CacheValid() const -> bool { return _input_cache_valid && _output_cache_valid; }
 
   auto GetStageNameString() const -> std::string;
 
   auto HasInput() -> bool;
 
-  auto ApplyStage() -> ImageBuffer;
+  auto ApplyStage() -> std::shared_ptr<ImageBuffer>;
 };
 };  // namespace puerhlab
