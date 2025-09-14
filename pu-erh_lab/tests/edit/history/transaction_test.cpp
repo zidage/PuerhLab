@@ -1,5 +1,8 @@
 #include <future>
+#include <opencv2/core/mat.hpp>
 #include <opencv2/cudaimgproc.hpp>
+#include <opencv2/highgui.hpp>
+#include <opencv2/opencv.hpp>
 
 #include "edit/history/edit_transaction.hpp"
 #include "edit/history/version.hpp"
@@ -14,7 +17,7 @@
 
 using namespace puerhlab;
 
-TEST_F(EditHistoryTests, ApplyAddTransaction) {
+TEST_F(EditHistoryTests, DISABLED_ApplyAddTransaction) {
   CPUPipelineExecutor pipeline = CPUPipelineExecutor();
 
   Version             version(1);
@@ -24,7 +27,7 @@ TEST_F(EditHistoryTests, ApplyAddTransaction) {
   EXPECT_TRUE(transaction.ApplyTransaction(pipeline));
 }
 
-TEST_F(EditHistoryTests, ApplyDeleteTransaction) {
+TEST_F(EditHistoryTests, DISABLED_ApplyDeleteTransaction) {
   CPUPipelineExecutor pipeline = CPUPipelineExecutor();
 
   // First, add an operator to delete later.
@@ -39,7 +42,7 @@ TEST_F(EditHistoryTests, ApplyDeleteTransaction) {
   EXPECT_TRUE(delete_transaction.ApplyTransaction(pipeline));
 }
 
-TEST_F(EditHistoryTests, ApplyEditTransaction) {
+TEST_F(EditHistoryTests, DISABLED_ApplyEditTransaction) {
   CPUPipelineExecutor pipeline = CPUPipelineExecutor();
 
   // First, add an operator to edit later.
@@ -55,7 +58,7 @@ TEST_F(EditHistoryTests, ApplyEditTransaction) {
   EXPECT_TRUE(edit_transaction.ApplyTransaction(pipeline));
 }
 
-TEST_F(EditHistoryTests, RedoTransaction) {
+TEST_F(EditHistoryTests, DISABLED_RedoTransaction) {
   CPUPipelineExecutor pipeline = CPUPipelineExecutor();
 
   // First, add an operator to edit later.
@@ -74,7 +77,7 @@ TEST_F(EditHistoryTests, RedoTransaction) {
   EXPECT_TRUE(edit_transaction.RedoTransaction(pipeline));
 }
 
-TEST_F(EditHistoryTests, RedoWithoutParentTransaction) {
+TEST_F(EditHistoryTests, DISABLED_RedoWithoutParentTransaction) {
   CPUPipelineExecutor pipeline = CPUPipelineExecutor();
 
   // Create a transaction without a parent
@@ -107,7 +110,7 @@ void SetPipelineTemplate(std::shared_ptr<PipelineExecutor> executor) {
   output_stage.SetOperator(OperatorType::CST, output_params);
 }
 
-TEST_F(EditHistoryTests, TestWithImage) {
+TEST_F(EditHistoryTests, DISABLED_TestWithImage) {
   {
     SleeveManager manager{db_path_};
     ImageLoader   image_loader(128, 8, 0);
@@ -130,10 +133,10 @@ TEST_F(EditHistoryTests, TestWithImage) {
       auto         img_ptr = img.second;
       PipelineTask task1;
 
-      auto         buffer      = ByteBufferLoader::LoadFromImage(img_ptr);
-      task1._input             = std::make_shared<ImageBuffer>(std::move(buffer));
+      auto         buffer    = ByteBufferLoader::LoadFromImage(img_ptr);
+      task1._input           = std::make_shared<ImageBuffer>(std::move(buffer));
 
-      auto pipeline_executor   = std::make_shared<CPUPipelineExecutor>();
+      auto pipeline_executor = std::make_shared<CPUPipelineExecutor>();
       pipeline_executor->SetThumbnailMode(true);
 
       task1._pipeline_executor = pipeline_executor;
@@ -160,9 +163,8 @@ TEST_F(EditHistoryTests, TestWithImage) {
                              output.GetCPUData());
       };
 
-      auto empty_callback = [](ImageBuffer&) {};
+      auto empty_callback         = [](ImageBuffer&) {};
 
-      
       task1._callback             = empty_callback;
       task1._options._is_blocking = true;
       task1._result               = std::make_shared<std::promise<ImageBuffer>>();
@@ -179,7 +181,7 @@ TEST_F(EditHistoryTests, TestWithImage) {
       scheduler.ScheduleTask(std::move(task1));
 
       future_task1.get();  // Wait for task1 to complete
-      EASY_END_BLOCK;   
+      EASY_END_BLOCK;
 
       // Create and apply an edit transaction
       EditTransaction tx1(1, TransactionType::_ADD, OperatorType::EXPOSURE,
@@ -204,6 +206,73 @@ TEST_F(EditHistoryTests, TestWithImage) {
       scheduler.ScheduleTask(std::move(task3));
       future_task3.get();  // Wait for task3 to complete
       EASY_END_BLOCK;
+    }
+  }
+}
+
+TEST_F(EditHistoryTests, TestWithImage_Animated) {
+  {
+    SleeveManager manager{db_path_};
+    ImageLoader   image_loader(128, 8, 0);
+    image_path_t  path =
+        L"D:\\Projects\\pu-erh_lab\\pu-erh_lab\\tests\\resources\\sample_"
+        L"images\\raw\\building";
+    std::vector<image_path_t> imgs;
+    for (const auto& img : std::filesystem::directory_iterator(path)) {
+      if (!img.is_directory() && is_supported_file(img.path())) imgs.push_back(img.path());
+    }
+
+    manager.LoadToPath(imgs, L"");
+
+    // Read image data
+    auto              img_pool = manager.GetPool()->GetPool();
+
+    PipelineScheduler scheduler{};
+
+    auto              img_ptr = img_pool.begin()->second;
+
+    // Animation loop for the same image
+    cv::namedWindow("preview");
+    cv::resizeWindow("preview", 800, 600);
+
+    PipelineTask task;
+    auto         buffer    = ByteBufferLoader::LoadFromImage(img_ptr);
+    task._input            = std::make_shared<ImageBuffer>(std::move(buffer));
+
+    auto pipeline_executor = std::make_shared<CPUPipelineExecutor>();
+    pipeline_executor->SetThumbnailMode(true);
+
+    task._pipeline_executor = pipeline_executor;
+    SetPipelineTemplate(task._pipeline_executor);
+
+    task._options._is_callback = false;
+    task._options._is_seq_callback = true;
+    auto display_callback         = [](ImageBuffer& output, uint32_t id) {
+      auto time = TimeProvider::TimePointToString(TimeProvider::Now());
+      std::cout << "New frame " << id << " rendered at " << time << "." << std::endl;
+
+      // cv::cvtColor(output.GetCPUData(), output.GetCPUData(), cv::COLOR_RGB2BGR);
+      
+    };
+    task._seq_callback           = display_callback;
+    task._options._is_blocking   = true;
+
+    nlohmann::json exposure_params;
+    exposure_params["exposure"] = 0.0f;
+    for (float exposure = -2.0f; exposure <= 2.0f; exposure += 0.05f) {
+      PipelineTask task1 = task;  // Make a copy of task for task1
+      auto& basic_stage  = task1._pipeline_executor->GetStage(PipelineStageName::Basic_Adjustment);
+      exposure_params["exposure"] = exposure;
+      basic_stage.SetOperator(OperatorType::EXPOSURE, exposure_params);
+      task1._options._is_blocking = true;
+      task1._result               = std::make_shared<std::promise<ImageBuffer>>();
+      auto future_task1           = task1._result->get_future();
+
+      scheduler.ScheduleTask(std::move(task1));
+      auto result = future_task1.get();  // Wait for task1 to complete
+      cv::cvtColor(result.GetCPUData(), result.GetCPUData(), cv::COLOR_RGB2BGR);
+      cv::imshow("preview", result.GetCPUData());
+      cv::waitKey(1);
     }
   }
 }

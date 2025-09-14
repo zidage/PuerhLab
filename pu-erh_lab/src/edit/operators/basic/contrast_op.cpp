@@ -36,7 +36,7 @@ ContrastOp::ContrastOp(const nlohmann::json& params) { SetParams(params); }
 auto ContrastOp::Apply(ImageBuffer& input) -> ImageBuffer {
   cv::Mat& linear_image = input.GetCPUData();
 
-  linear_image.forEach<cv::Vec3f>([&](cv::Vec3f& pixel, const int*) -> void {
+  linear_image.forEach<cv::Vec3f>([this](cv::Vec3f& pixel, const int*) -> void {
     auto lab = OklabCvt::ACESRGB2Oklab(pixel);
     lab.L    = (lab.L - 0.5f) * _scale + 0.5f;
     pixel    = OklabCvt::Oklab2ACESRGB(lab);
