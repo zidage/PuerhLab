@@ -16,9 +16,6 @@ class CPUPipelineExecutor : public PipelineExecutor {
 
   static constexpr PipelineBackend _backend = PipelineBackend::CPU;
 
-  // TODO: Caching (NOT IMPLEMENTED)
-  ImageBuffer                      _cached_image;
-
  public:
   CPUPipelineExecutor();
 

@@ -11,6 +11,8 @@
 
 namespace puerhlab {
 struct TaskOptions {
+  bool          _is_preview;  // if true, use preview pipeline
+
   bool          _is_blocking;      // if true, wait for the task to finish
   bool          _is_callback;      // if true, use callback to return result
   bool          _is_seq_callback;  // if true, use sequential callback to return result

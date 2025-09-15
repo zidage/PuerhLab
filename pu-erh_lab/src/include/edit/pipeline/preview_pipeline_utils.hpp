@@ -7,9 +7,11 @@
 #include <mutex>
 #include <unordered_map>
 
+#include "concurrency/thread_pool.hpp"
 #include "edit/operators/operator_factory.hpp"
 #include "image/image_buffer.hpp"
 #include "pipeline_utils.hpp"
+#include "type/type.hpp"
 #include "utils/cache/lru_cache.hpp"
 
 namespace puerhlab {
@@ -25,7 +27,7 @@ struct CacheEntry {
   std::shared_ptr<std::promise<std::shared_ptr<ImageBuffer>>> _promise;
   std::shared_future<std::shared_ptr<ImageBuffer>>            _shared_future;
 
-  size_t                                                      params_hash = 0;
+  p_hash_t                                                    params_hash = 0;
   std::chrono::steady_clock::time_point                       last_access;
 
   CacheEntry() {
@@ -46,17 +48,31 @@ class PreviewPipelineStage {
 
   PreviewPipelineStage*                          next_stage = nullptr;
 
+  auto                                           CurrentParamsHash() -> p_hash_t;
+
+  ThreadPool*                                    _attached_pool = nullptr;
+
  public:
   PipelineStageName _stage;
   PreviewPipelineStage() = delete;
   PreviewPipelineStage(PipelineStageName stage);
   void SetOperator(OperatorType, nlohmann::json& param);
   void EnableOperator(OperatorType, bool enable);
+  void SetInputImage(FrameId fid, std::shared_ptr<ImageBuffer> input);
 
   void SetNextStage(PreviewPipelineStage* next);
 
+  void AttachThreadPool(ThreadPool* pool) { _attached_pool = pool; }
+
+  auto Process(FrameId fid, const ImageBuffer& input) -> std::shared_future<ImageBuffer>;
+
+  /**
+   * @brief Get the Stage Name String object, for logging and debugging
+   *
+   * @return std::string
+   */
   auto GetStageNameString() const -> std::string;
 
-  auto ApplyStage(FrameId id, std::shared_ptr<ImageBuffer> input) -> std::shared_ptr<CacheEntry>;
+  auto ApplyStage(FrameId fid) -> std::shared_ptr<ImageBuffer>;
 };
 };  // namespace puerhlab

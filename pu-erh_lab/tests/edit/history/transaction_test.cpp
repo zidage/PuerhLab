@@ -210,7 +210,74 @@ TEST_F(EditHistoryTests, DISABLED_TestWithImage) {
   }
 }
 
-TEST_F(EditHistoryTests, TestWithImage_Animated) {
+TEST_F(EditHistoryTests, DISABLED_TestWithImage_Animated) {
+  {
+    SleeveManager manager{db_path_};
+    ImageLoader   image_loader(128, 8, 0);
+    image_path_t  path =
+        L"D:\\Projects\\pu-erh_lab\\pu-erh_lab\\tests\\resources\\sample_"
+        L"images\\raw\\building";
+    std::vector<image_path_t> imgs;
+    for (const auto& img : std::filesystem::directory_iterator(path)) {
+      if (!img.is_directory() && is_supported_file(img.path())) imgs.push_back(img.path());
+    }
+
+    manager.LoadToPath(imgs, L"");
+
+    // Read image data
+    auto              img_pool = manager.GetPool()->GetPool();
+
+    PipelineScheduler scheduler{};
+
+    auto              img_ptr = img_pool.begin()->second;
+
+    // Animation loop for the same image
+    cv::namedWindow("preview");
+    cv::resizeWindow("preview", 800, 600);
+
+    PipelineTask task;
+    auto         buffer    = ByteBufferLoader::LoadFromImage(img_ptr);
+    task._input            = std::make_shared<ImageBuffer>(std::move(buffer));
+
+    auto pipeline_executor = std::make_shared<CPUPipelineExecutor>();
+    pipeline_executor->SetThumbnailMode(true);
+
+    task._pipeline_executor = pipeline_executor;
+    SetPipelineTemplate(task._pipeline_executor);
+
+    task._options._is_callback = false;
+    task._options._is_seq_callback = true;
+    auto display_callback         = [](ImageBuffer&, uint32_t id) {
+      auto time = TimeProvider::TimePointToString(TimeProvider::Now());
+      std::cout << "New frame " << id << " rendered at " << time << "." << std::endl;
+
+      // cv::cvtColor(output.GetCPUData(), output.GetCPUData(), cv::COLOR_RGB2BGR);
+      
+    };
+    task._seq_callback           = display_callback;
+    task._options._is_blocking   = true;
+
+    nlohmann::json exposure_params;
+    exposure_params["exposure"] = 0.0f;
+    for (float exposure = -2.0f; exposure <= 2.0f; exposure += 0.05f) {
+      PipelineTask task1 = task;  // Make a copy of task for task1
+      auto& basic_stage  = task1._pipeline_executor->GetStage(PipelineStageName::Basic_Adjustment);
+      exposure_params["exposure"] = exposure;
+      basic_stage.SetOperator(OperatorType::EXPOSURE, exposure_params);
+      task1._options._is_blocking = true;
+      task1._result               = std::make_shared<std::promise<ImageBuffer>>();
+      auto future_task1           = task1._result->get_future();
+
+      scheduler.ScheduleTask(std::move(task1));
+      auto result = future_task1.get();  // Wait for task1 to complete
+      cv::cvtColor(result.GetCPUData(), result.GetCPUData(), cv::COLOR_RGB2BGR);
+      cv::imshow("preview", result.GetCPUData());
+      cv::waitKey(1);
+    }
+  }
+}
+
+TEST_F(EditHistoryTests, TestWithPreviewPipeline) {
   {
     SleeveManager manager{db_path_};
     ImageLoader   image_loader(128, 8, 0);
