@@ -24,8 +24,7 @@ set(RAWPROCESSOR_CPU_SOURCES
 
 # GPU sources (only if CUDA is found)
 if(CUDAToolkit_FOUND)
-    enable_language(CUDA)
-
+    # enable_language(CUDA)
     set(RAWPROCESSOR_GPU_SOURCES
         decoders/processor/operators/gpu/cuda_color_space_conv.cu
         decoders/processor/operators/gpu/cuda_debayer_ahd.cu
@@ -39,11 +38,10 @@ add_library(RawProcessorOp
     ${RAWPROCESSOR_CPU_SOURCES}
     ${RAWPROCESSOR_GPU_SOURCES}
 )
-
 target_include_directories(RawProcessorOp PUBLIC include)
 target_link_libraries(RawProcessorOp PUBLIC ImageBuffer LibRaw Exiv2 hwy::hwy)
 
-# Only apply CUDA properties if CUDA is enabled
+# # Only apply CUDA properties if CUDA is enabled
 if(CUDAToolkit_FOUND)
     set_target_properties(RawProcessorOp PROPERTIES
         CUDA_SEPARABLE_COMPILATION ON
@@ -82,7 +80,6 @@ target_link_libraries(Operators PUBLIC ImageBuffer JSON OpenColorIO easy_profile
 add_library(EditPipeline
     edit/pipeline/pipeline_cpu.cpp
     edit/pipeline/pipeline_utils.cpp
-    edit/pipeline/preview_pipeline_utils.cpp
     edit/scheduler/pipeline_scheduler.cpp)
 target_include_directories(EditPipeline PUBLIC include)
 target_link_libraries(EditPipeline PUBLIC Operators)

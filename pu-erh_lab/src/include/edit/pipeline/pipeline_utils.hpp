@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <mutex>
 #include <unordered_map>
 
 #include "edit/operators/op_base.hpp"
@@ -33,10 +34,12 @@ class PipelineStage {
   bool                                  _input_set          = false;
   bool                                  _on_gpu             = false;
 
+  bool                                  _enable_cache       = true;
+
  public:
   PipelineStageName _stage;
   PipelineStage() = delete;
-  PipelineStage(PipelineStageName stage, bool on_gpu);
+  PipelineStage(PipelineStageName stage, bool enable_cache);
   void SetOperator(OperatorType, nlohmann::json& param);
   void EnableOperator(OperatorType, bool enable);
   void SetInputImage(std::shared_ptr<ImageBuffer>);
@@ -46,7 +49,7 @@ class PipelineStage {
   void SetInputCacheValid(bool valid);
   void SetOutputCacheValid(bool valid);
 
-  auto CacheValid() const -> bool { return _input_cache_valid && _output_cache_valid; }
+  auto CacheValid() -> bool { return _input_cache_valid && _output_cache_valid; };
 
   auto GetStageNameString() const -> std::string;
 

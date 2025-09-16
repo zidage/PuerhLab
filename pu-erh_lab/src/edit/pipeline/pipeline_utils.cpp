@@ -9,8 +9,8 @@
 #include "image/image_buffer.hpp"
 
 namespace puerhlab {
-PipelineStage::PipelineStage(PipelineStageName stage, bool on_gpu)
-    : _on_gpu(on_gpu), _stage(stage) {
+PipelineStage::PipelineStage(PipelineStageName stage, bool enable_cache)
+    : _enable_cache(enable_cache), _stage(stage) {
   if (_stage == PipelineStageName::Image_Loading) {
     _input_cache_valid = true;  // No input for image loading stage, so input cache is always valid
   }
@@ -74,39 +74,65 @@ auto PipelineStage::ApplyStage() -> std::shared_ptr<ImageBuffer> {
     throw std::runtime_error("PipelineExecutor: GPU processing not implemented");
   }
 
-  if (CacheValid()) {
-    if (next_stage && next_stage->CacheValid()) {
-      // Both input and output cache are valid, skip processing and copying
-      return nullptr;
+  if (_enable_cache) {
+    if (CacheValid()) {
+      if (next_stage && next_stage->CacheValid()) {
+        // Both input and output cache are valid, skip processing and copying
+        return nullptr;
+      }
+      // Output cache is valid, but next stage's input cache is not valid, copy output cache to next
+      return _output_cache;
     }
-    // Output cache is valid, but next stage's input cache is not valid, copy output cache to next
+
+    bool has_enabled_op = _operators.size() > 0;
+    if (has_enabled_op) {
+      ImageBuffer current_img = _input_img->Clone();
+      for (const auto& op_entry : _operators) {
+        if (op_entry.second._enable) {
+          EASY_NONSCOPED_BLOCK(
+              std::format("Apply Operator: {}", op_entry.second._op->GetScriptName()).c_str(),
+              profiler::colors::Cyan);
+          current_img = op_entry.second._op->Apply(current_img);
+          EASY_END_BLOCK;
+        }
+      }
+      _output_cache = std::make_shared<ImageBuffer>(std::move(current_img));
+    } else {
+      _output_cache = _input_img;
+    }
+
+    // _input_set = false;
+    // _input_img.reset();
+    SetOutputCacheValid(true);
+    if (next_stage) {
+      next_stage->SetInputCacheValid(true);
+    }
+    return _output_cache;
+  } else {
+    bool has_enabled_op = _operators.size() > 0;
+    if (has_enabled_op) {
+      std::shared_ptr<ImageBuffer> current_img = _input_img;
+      for (const auto& op_entry : _operators) {
+        if (op_entry.second._enable) {
+          EASY_NONSCOPED_BLOCK(
+              std::format("Apply Operator: {}", op_entry.second._op->GetScriptName()).c_str(),
+              profiler::colors::Cyan);
+          current_img = std::make_shared<ImageBuffer>(op_entry.second._op->Apply(*current_img));
+          EASY_END_BLOCK;
+        }
+      }
+      _output_cache = current_img;
+    } else {
+      _output_cache = _input_img;
+    }
+
+    // Set to false to avoid using cache
+    SetOutputCacheValid(false);
+    if (next_stage) {
+      next_stage->SetInputCacheValid(false);
+    }
     return _output_cache;
   }
-
-  bool has_enabled_op = _operators.size() > 0;
-  if (has_enabled_op) {
-    ImageBuffer current_img = _input_img->Clone();
-    for (const auto& op_entry : _operators) {
-      if (op_entry.second._enable) {
-        EASY_NONSCOPED_BLOCK(
-            std::format("Apply Operator: {}", op_entry.second._op->GetScriptName()).c_str(),
-            profiler::colors::Cyan);
-        current_img = op_entry.second._op->Apply(current_img);
-        EASY_END_BLOCK;
-      }
-    }
-    _output_cache = std::make_shared<ImageBuffer>(std::move(current_img));
-  } else {
-    _output_cache = _input_img;
-  }
-
-  // _input_set = false;
-  // _input_img.reset();
-  SetOutputCacheValid(true);
-  if (next_stage) {
-    next_stage->SetInputCacheValid(true);
-  }
-  return _output_cache;
 }
 
 auto PipelineStage::HasInput() -> bool { return _input_set; }

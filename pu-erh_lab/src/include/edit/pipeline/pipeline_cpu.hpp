@@ -12,13 +12,18 @@ class CPUPipelineExecutor : public PipelineExecutor {
   std::array<PipelineStage, static_cast<int>(PipelineStageName::Stage_Count)> _stages;
 
   bool                                                                        _is_thumbnail = false;
+  bool                                                                        _enable_cache = true;
   nlohmann::json                                                              _thumbnail_params;
 
   static constexpr PipelineBackend _backend = PipelineBackend::CPU;
 
+  void                             ResetStages();
+
  public:
   CPUPipelineExecutor();
+  CPUPipelineExecutor(bool enable_cache);
 
+  void SetEnableCache(bool enable_cache);
   auto GetBackend() -> PipelineBackend override;
 
   auto GetStage(PipelineStageName stage) -> PipelineStage& override;

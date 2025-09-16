@@ -32,6 +32,38 @@ CPUPipelineExecutor::CPUPipelineExecutor()
   }
 }
 
+void CPUPipelineExecutor::ResetStages() {
+  for (size_t i = 0; i < _stages.size(); i++) {
+    _stages[i]          = PipelineStage(_stages[i]._stage, _enable_cache);
+    PipelineStage* prev = (i == 0) ? nullptr : &_stages[i - 1];
+    PipelineStage* next = (i == _stages.size() - 1) ? nullptr : &_stages[i + 1];
+    _stages[i].SetNeighbors(prev, next);
+  }
+}
+
+void CPUPipelineExecutor::SetEnableCache(bool enable_cache) {
+  if (_enable_cache == enable_cache) return;
+  _enable_cache = enable_cache;
+  // Reinitialize stages with the new cache setting
+  ResetStages();
+}
+
+CPUPipelineExecutor::CPUPipelineExecutor(bool enable_cache)
+    : _stages({{PipelineStageName::Image_Loading, enable_cache},
+               {PipelineStageName::To_WorkingSpace, enable_cache},
+               {PipelineStageName::Basic_Adjustment, enable_cache},
+               {PipelineStageName::Color_Adjustment, enable_cache},
+               {PipelineStageName::Detail_Adjustment, enable_cache},
+               {PipelineStageName::Output_Transform, enable_cache},
+               {PipelineStageName::Geometry_Adjustment, enable_cache}}) {
+  // Link stages
+  for (size_t i = 0; i < _stages.size(); i++) {
+    PipelineStage* prev = (i == 0) ? nullptr : &_stages[i - 1];
+    PipelineStage* next = (i == _stages.size() - 1) ? nullptr : &_stages[i + 1];
+    _stages[i].SetNeighbors(prev, next);
+  }
+}
+
 auto CPUPipelineExecutor::GetBackend() -> PipelineBackend { return _backend; }
 
 auto CPUPipelineExecutor::GetStage(PipelineStageName stage) -> PipelineStage& {

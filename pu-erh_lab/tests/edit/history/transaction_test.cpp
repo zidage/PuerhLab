@@ -306,7 +306,7 @@ TEST_F(EditHistoryTests, TestWithPreviewPipeline) {
     auto         buffer    = ByteBufferLoader::LoadFromImage(img_ptr);
     task._input            = std::make_shared<ImageBuffer>(std::move(buffer));
 
-    auto pipeline_executor = std::make_shared<CPUPipelineExecutor>();
+    auto pipeline_executor = std::make_shared<CPUPipelineExecutor>(true);
     pipeline_executor->SetThumbnailMode(true);
 
     task._pipeline_executor = pipeline_executor;
@@ -315,8 +315,8 @@ TEST_F(EditHistoryTests, TestWithPreviewPipeline) {
     task._options._is_callback = false;
     task._options._is_seq_callback = true;
     auto display_callback         = [](ImageBuffer& output, uint32_t id) {
-      auto time = TimeProvider::TimePointToString(TimeProvider::Now());
-      std::cout << "New frame " << id << " rendered at " << time << "." << std::endl;
+      // auto time = TimeProvider::TimePointToString(TimeProvider::Now());
+      std::cout << "New frame " << id << std::endl;
 
       // cv::cvtColor(output.GetCPUData(), output.GetCPUData(), cv::COLOR_RGB2BGR);
       
