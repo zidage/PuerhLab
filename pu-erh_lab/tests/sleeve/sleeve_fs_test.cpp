@@ -10,11 +10,9 @@
 #include "utils/clock/time_provider.hpp"
 #include "utils/string/convert.hpp"
 
-std::filesystem::path db_path(
-    "D:\\Projects\\pu-erh_lab\\pu-erh_lab\\tests\\resources\\temp_folder\\test.db");
+std::filesystem::path db_path(TEST_DB_PATH);
 
-std::filesystem::path meta_path(
-    "D:\\Projects\\pu-erh_lab\\pu-erh_lab\\tests\\resources\\temp_folder\\meta.json");
+std::filesystem::path meta_path(TEST_META_PATH);
 
 namespace puerhlab {
 TEST(SleeveFSTest, InitTest1) {

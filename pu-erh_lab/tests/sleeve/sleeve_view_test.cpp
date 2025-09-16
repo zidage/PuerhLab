@@ -11,10 +11,9 @@
 
 #include "sleeve/sleeve_manager.hpp"
 
+std::filesystem::path db_path(TEST_DB_PATH);
 
-std::filesystem::path db_path(
-    "D:\\Projects\\pu-erh_lab\\pu-erh_lab\\tests\\resources\\temp_folder\\test.db");
-
+image_path_t          path = conv::FromBytes(TEST_IMG_PATH + std::string("/jpg"));
 namespace puerhlab {
 auto loaded_callback = [](size_t idx, std::weak_ptr<Image> img) {
   // std::cout << "Get image " << img.lock()->_image_path << " at index " << idx << "\n";
@@ -29,11 +28,9 @@ auto display_callback = [](size_t idx, std::weak_ptr<Image> img) {
 TEST(SleeveViewTest, SimpleTest1) {
   Exiv2::LogMsg::setLevel(Exiv2::LogMsg::Level::mute);
   {
-    SleeveManager manager{db_path};
-    ImageLoader   image_loader(128, 8, 0);
-    image_path_t  path =
-        L"D:\\Projects\\pu-erh_lab\\pu-erh_"
-        L"lab\\tests\\resources\\sample_images\\jpg";
+    SleeveManager             manager{db_path};
+    ImageLoader               image_loader(128, 8, 0);
+
     std::vector<image_path_t> imgs;
     for (const auto& img : std::filesystem::directory_iterator(path)) {
       imgs.push_back(img.path());
@@ -52,10 +49,8 @@ TEST(SleeveViewTest, SimpleTest1) {
 
 TEST(SleeveViewTest, DISABLED_SimpleTest2) {
   {
-    SleeveManager manager{db_path};
-    image_path_t  path =
-        L"D:\\Projects\\pu-erh_lab\\pu-erh_"
-        L"lab\\tests\\resources\\sample_images\\jpg";
+    SleeveManager             manager{db_path};
+    image_path_t              path = conv::FromBytes(TEST_IMG_PATH + std::string("/jpg"));
     std::vector<image_path_t> imgs;
     for (const auto& img : std::filesystem::directory_iterator(path)) {
       imgs.push_back(img.path());
@@ -99,9 +94,6 @@ TEST(SleeveViewTest, DISABLED_SimpleTest2) {
 TEST(SleeveViewTest, DISABLED_FuzzyTest1) {
   {
     SleeveManager manager{db_path};
-    image_path_t  path =
-        L"D:\\Projects\\pu-erh_lab\\pu-erh_"
-        L"lab\\tests\\resources\\sample_images\\jpg";
     std::vector<image_path_t> imgs;
     for (const auto& img : std::filesystem::directory_iterator(path)) {
       imgs.push_back(img.path());
@@ -119,7 +111,7 @@ TEST(SleeveViewTest, DISABLED_FuzzyTest1) {
     constexpr int                             iter_count = 1000;
     for (int i = 0; i < iter_count; i++) {
       try {
-        auto     start   = std::chrono::high_resolution_clock::now();
+        auto   start   = std::chrono::high_resolution_clock::now();
         size_t low_idx = dist(rng);
         view->LoadPreview(low_idx, low_idx + view_size, loaded_callback);
         auto                                      end = std::chrono::high_resolution_clock::now();

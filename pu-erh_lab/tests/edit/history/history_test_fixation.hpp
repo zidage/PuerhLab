@@ -9,7 +9,6 @@
 #include "edit/operators/operator_registeration.hpp"
 #include "utils/clock/time_provider.hpp"
 
-
 namespace puerhlab {
 class EditHistoryTests : public ::testing::Test {
  protected:
@@ -35,8 +34,7 @@ class EditHistoryTests : public ::testing::Test {
     if (std::filesystem::exists(db_path_)) {
       std::filesystem::remove(db_path_);
     }
-    profiler::dumpBlocksToFile(
-      "D:\\Projects\\pu-erh_lab\\pu-erh_lab\\tests\\resources\\temp_folder\\test_profile.prof");
+    profiler::dumpBlocksToFile(TEST_PROFILER_OUTPUT_PATH);
   }
 };
 }  // namespace puerhlab

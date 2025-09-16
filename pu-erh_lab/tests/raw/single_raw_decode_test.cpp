@@ -10,7 +10,7 @@
 TEST(SingleRawLoad, BasicAssertions) {
   // std::cout << std::filesystem::current_path() << std::endl;
   // Set the path of the test image, which has to be an absolute path, didn't know why...
-  image_path_t test_img = L"D:\\Projects\\pu-erh_lab\\pu-erh_lab\\tests\\resources\\sample_images\\raw\\_DSC2667.NEF";
+  image_path_t test_img = conv::FromBytes(TEST_IMG_PATH + std::string("/raw/dng_100.dng"));
   LibRaw raw_processor;
 
   // Try to open the file

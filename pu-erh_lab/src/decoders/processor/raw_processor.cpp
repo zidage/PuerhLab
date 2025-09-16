@@ -23,9 +23,11 @@
 #include "decoders/processor/operators/cpu/debayer_amaze.hpp"
 #include "decoders/processor/operators/cpu/highlight_reconstruct.hpp"
 #include "decoders/processor/operators/cpu/white_balance.hpp"
+#ifdef HAVE_CUDA
 #include "decoders/processor/operators/gpu/cuda_color_space_conv.hpp"
 #include "decoders/processor/operators/gpu/cuda_debayer_ahd.hpp"
 #include "decoders/processor/operators/gpu/cuda_white_balance.hpp"
+#endif
 #include "image/image_buffer.hpp"
 
 namespace puerhlab {
@@ -35,6 +37,7 @@ OpenCVRawProcessor::OpenCVRawProcessor(const RawParams& params, const libraw_raw
 
 void OpenCVRawProcessor::ApplyWhiteBalance() {
   auto& pre_debayer_buffer = _process_buffer;
+#ifdef HAVE_CUDA
   if (_params._cuda) {
     auto& gpu_img = pre_debayer_buffer.GetGPUData();
 
@@ -42,29 +45,28 @@ void OpenCVRawProcessor::ApplyWhiteBalance() {
 
   } else {
     auto& cpu_img = pre_debayer_buffer.GetCPUData();
-    // cpu_img -= black;
-    //
     CPU::WhiteBalanceCorrection(cpu_img, _raw_processor);
-    // White level
-    // cpu_img = cpu_img * (65535.0f / maximum);
   }
+#else
+  auto& cpu_img = pre_debayer_buffer.GetCPUData();
+  CPU::WhiteBalanceCorrection(cpu_img, _raw_processor);
+#endif
 }
 
 void OpenCVRawProcessor::ApplyDebayer() {
   auto& pre_debayer_buffer = _process_buffer;
+#ifdef HAVE_CUDA
   if (_params._cuda) {
     auto& gpu_img = pre_debayer_buffer.GetGPUData();
     CUDA::BayerRGGB2RGB_AHD(gpu_img);
-    // Now gpu_img is CV_32FC3
-    // cv::cuda::cvtColor(gpu_img, gpu_img, cv::COLOR_BayerBG2RGB);
   } else {
     auto& img = pre_debayer_buffer.GetCPUData();
-
-    // auto maximum = _raw_data.color.linear_max;
     CPU::BayerRGGB2RGB_AHD(img);
-    // cv::cvtColor(img, img, cv::COLOR_BayerBG2RGB);
-    // img.convertTo(img, CV_32FC1, 1.0f / 65535.0f);
   }
+#else
+  auto& img = pre_debayer_buffer.GetCPUData();
+  CPU::BayerRGGB2RGB_AHD(img);
+#endif
 }
 
 void OpenCVRawProcessor::ApplyHighlightReconstruct() {
@@ -74,13 +76,13 @@ void OpenCVRawProcessor::ApplyHighlightReconstruct() {
     auto& img = _process_buffer.GetCPUData();
     img.convertTo(img, CV_32FC3);
     CPU::HighlightReconstruct(img, _raw_processor);
-    // img.convertTo(img, CV_32FC1);
   }
 }
 
 void OpenCVRawProcessor::ApplyColorSpaceTransform() {
   auto& debayer_buffer = _process_buffer;
   auto  color_coeffs   = _raw_data.color.rgb_cam;
+#ifdef HAVE_CUDA
   if (_params._cuda) {
     auto& gpu_img = debayer_buffer.GetGPUData();
 
@@ -91,6 +93,11 @@ void OpenCVRawProcessor::ApplyColorSpaceTransform() {
 
     CPU::ApplyColorMatrix(img, color_coeffs);
   }
+#else
+  auto& img = debayer_buffer.GetCPUData();
+  img.convertTo(img, CV_32FC3);
+  CPU::ApplyColorMatrix(img, color_coeffs);
+#endif
 }
 
 auto OpenCVRawProcessor::Process() -> ImageBuffer {
@@ -102,11 +109,13 @@ auto OpenCVRawProcessor::Process() -> ImageBuffer {
   _process_buffer = {std::move(unpacked_mat)};
   EASY_END_BLOCK;
 
+#ifdef HAVE_CUDA
   EASY_BLOCK("Sync to GPU")
   if (_params._cuda) {
     _process_buffer.SyncToGPU();
   }
   EASY_END_BLOCK;
+#endif
 
   // std::cout << _raw_processor.COLOR(0, 0) << " " << _raw_processor.COLOR(0, 1) << " "
   //           << _raw_processor.COLOR(1, 0) << " " << _raw_processor.COLOR(1, 1) << "\n";
@@ -123,12 +132,14 @@ auto OpenCVRawProcessor::Process() -> ImageBuffer {
   ApplyColorSpaceTransform();
   EASY_END_BLOCK;
 
+#ifdef HAVE_CUDA
   EASY_BLOCK("Sync to CPU")
   if (_params._cuda) {
     _process_buffer.SyncToCPU();
     _process_buffer.ReleaseGPUData();
   }
   EASY_END_BLOCK;
+#endif
   return {std::move(_process_buffer)};
 }
 }  // namespace puerhlab

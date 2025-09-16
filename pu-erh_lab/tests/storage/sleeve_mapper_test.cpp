@@ -16,11 +16,10 @@
 using namespace puerhlab;
 
 std::filesystem::path db_path(
-    "D:\\Projects\\pu-erh_lab\\pu-erh_lab\\tests\\resources\\temp_folder\\test.db");
+TEST_DB_PATH);
 
 std::filesystem::path raw_path(
-    L"D:\\Projects\\pu-erh_lab\\pu-erh_"
-    L"lab\\tests\\resources\\sample_images\\dng_100");
+    TEST_IMG_PATH + std::string("/dng_100"));
 TEST(SleeveMapperTest, InitTest1) {
   if (std::filesystem::exists(db_path)) {
     std::filesystem::remove(db_path);

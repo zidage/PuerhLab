@@ -170,6 +170,14 @@ endif()
 
 # Modules
 add_subdirectory(${CMAKE_SOURCE_DIR}/pu-erh_lab/src)
+set(TEST_RES_DIR "${CMAKE_SOURCE_DIR}/pu-erh_lab/tests/resources" CACHE PATH "Path to test resources")
+file(TO_CMAKE_PATH "${TEST_RES_DIR}" TEST_RES_DIR)
+add_compile_definitions(
+    TEST_DB_PATH=\"${TEST_RES_DIR}/temp_folder/test.db\"
+    TEST_META_PATH=\"${TEST_RES_DIR}/temp_folder/meta.json\"
+    TEST_IMG_PATH=\"${TEST_RES_DIR}/sample_images\"
+    TEST_PROFILER_OUTPUT_PATH=\"${TEST_RES_DIR}/temp_folder/test_profile.prof\"
+)
 add_subdirectory(${CMAKE_SOURCE_DIR}/pu-erh_lab/tests)
 
 file(GLOB_RECURSE ALL_SOURCE_FILES
