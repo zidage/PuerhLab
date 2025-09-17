@@ -13,7 +13,7 @@
 
 std::filesystem::path db_path(TEST_DB_PATH);
 
-image_path_t          path = conv::FromBytes(TEST_IMG_PATH + std::string("/jpg"));
+image_path_t          path = std::string(TEST_IMG_PATH) + std::string("/jpg");
 namespace puerhlab {
 auto loaded_callback = [](size_t idx, std::weak_ptr<Image> img) {
   // std::cout << "Get image " << img.lock()->_image_path << " at index " << idx << "\n";
@@ -50,7 +50,7 @@ TEST(SleeveViewTest, SimpleTest1) {
 TEST(SleeveViewTest, DISABLED_SimpleTest2) {
   {
     SleeveManager             manager{db_path};
-    image_path_t              path = conv::FromBytes(TEST_IMG_PATH + std::string("/jpg"));
+    image_path_t              path = std::string(TEST_IMG_PATH) + std::string("/jpg");
     std::vector<image_path_t> imgs;
     for (const auto& img : std::filesystem::directory_iterator(path)) {
       imgs.push_back(img.path());

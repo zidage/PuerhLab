@@ -177,6 +177,7 @@ add_compile_definitions(
     TEST_META_PATH=\"${TEST_RES_DIR}/temp_folder/meta.json\"
     TEST_IMG_PATH=\"${TEST_RES_DIR}/sample_images\"
     TEST_PROFILER_OUTPUT_PATH=\"${TEST_RES_DIR}/temp_folder/test_profile.prof\"
+    CONFIG_PATH=\"${CMAKE_SOURCE_DIR}/pu-erh_lab/src/config/\"
 )
 add_subdirectory(${CMAKE_SOURCE_DIR}/pu-erh_lab/tests)
 

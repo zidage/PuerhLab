@@ -16,8 +16,7 @@ TEST_F(OperationTests, GrayGradientAdjustmentTest) {
     SleeveManager manager{db_path_};
     ImageLoader   image_loader(128, 8, 0);
     image_path_t  path =
-        L"D:\\Projects\\pu-erh_lab\\pu-erh_"
-        L"lab\\tests\\resources\\sample_images\\original_jpg";
+        TEST_IMG_PATH "/sample_images/original_jpg";
     std::vector<image_path_t> imgs;
     for (const auto& img : std::filesystem::directory_iterator(path)) {
       imgs.push_back(img.path());
@@ -133,8 +132,7 @@ TEST_F(OperationTests, DISABLED_ColorWheelAdjustmentTest) {
     SleeveManager manager{db_path_};
     ImageLoader   image_loader(128, 8, 0);
     image_path_t  path =
-        L"D:\\Projects\\pu-erh_lab\\pu-erh_"
-        L"lab\\tests\\resources\\sample_images\\original_jpg";
+        TEST_IMG_PATH "/sample_images/original_jpg";
     std::vector<image_path_t> imgs;
     for (const auto& img : std::filesystem::directory_iterator(path)) {
       imgs.push_back(img.path());
@@ -196,8 +194,7 @@ TEST_F(OperationTests, ColorWheelAnimationTest) {
     SleeveManager manager{db_path_};
     ImageLoader   image_loader(128, 8, 0);
     image_path_t  path =
-        L"D:\\Projects\\pu-erh_lab\\pu-erh_"
-        L"lab\\tests\\resources\\sample_images\\original_jpg";
+        TEST_IMG_PATH "/sample_images/original_jpg";
     std::vector<image_path_t> imgs;
     for (const auto& img : std::filesystem::directory_iterator(path)) {
       imgs.push_back(img.path());

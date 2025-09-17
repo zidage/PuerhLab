@@ -52,9 +52,7 @@ TEST_F(PipelineTests, SchedulerBasic) {
   {
     SleeveManager manager{db_path_};
     ImageLoader   image_loader(128, 8, 0);
-    image_path_t  path =
-        L"D:\\Projects\\pu-erh_lab\\pu-erh_lab\\tests\\resources\\sample_"
-        L"images\\raw\\building";
+    image_path_t  path = std::string(TEST_IMG_PATH) + std::string("raw/building");
     std::vector<image_path_t> imgs;
     for (const auto& img : std::filesystem::directory_iterator(path)) {
       if (!img.is_directory() && is_supported_file(img.path())) imgs.push_back(img.path());
@@ -91,10 +89,8 @@ TEST_F(PipelineTests, SchedulerBasic) {
         std::string time      = TimeProvider::TimePointToString(TimeProvider::Now());
 
         std::string save_name = file_name + "_" + time;
-        cv::imwrite(std::format("D:\\Projects\\pu-erh_lab\\pu-erh_lab\\tests\\resources\\sample_"
-                                                        "images\\my_pipeline\\batch_results\\{}.tif",
-                                            save_name),
-                                output.GetCPUData());
+        static constexpr auto save_path = TEST_IMG_PATH "/my_pipeline/batch_results/{}.tif";
+        cv::imwrite(std::format(save_path, save_name), output.GetCPUData());
       };
 
       scheduler.ScheduleTask(std::move(task));

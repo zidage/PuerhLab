@@ -19,8 +19,8 @@ std::filesystem::path db_path(
 TEST_DB_PATH);
 
 std::filesystem::path raw_path(
-    TEST_IMG_PATH + std::string("/dng_100"));
-TEST(SleeveMapperTest, InitTest1) {
+    std::string(TEST_IMG_PATH) + std::string("/dng_100"));
+(SleeveMapperTest, InitTest1) {
   if (std::filesystem::exists(db_path)) {
     std::filesystem::remove(db_path);
   }

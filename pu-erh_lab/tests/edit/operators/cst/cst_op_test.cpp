@@ -29,7 +29,7 @@ TEST_F(OperationTests, DISABLED_ColorSpaceTransformTest) {
     SleeveManager manager{db_path_};
     ImageLoader   image_loader(128, 8, 0);
     image_path_t  path =
-        L"D:\\Projects\\pu-erh_lab\\pu-erh_lab\\tests\\resources\\sample_images\\cst\\adobe_rgb";
+        TEST_IMG_PATH "/sample_images/cst/adobe_rgb";
     std::vector<image_path_t> imgs;
     for (const auto& img : std::filesystem::directory_iterator(path)) {
       imgs.push_back(img.path());
@@ -47,7 +47,7 @@ TEST_F(OperationTests, DISABLED_ColorSpaceTransformTest) {
 
     OCIO_ACES_Transform_Op op{
         "Gamma 2.4 Encoded Rec.709", "sRGB Encoded Rec.709 (sRGB)",
-        "D:\\Projects\\pu-erh_lab\\pu-erh_lab\\src\\config\\OCIO\\config.ocio"};
+        CONFIG_PATH "OCIO/config.ocio"};
     ImageBuffer to_adjust{img->GetThumbnailData()};
     ImageBuffer to_display = op.Apply(to_adjust);
     cv::namedWindow("Adobe RGB", cv::WINDOW_KEEPRATIO);
@@ -66,7 +66,7 @@ TEST_F(OperationTests, DISABLED_ACESWorkflowTest1) {
     SleeveManager manager{db_path_};
     ImageLoader   image_loader(128, 8, 0);
     image_path_t  path =
-        L"D:\\Projects\\pu-erh_lab\\pu-erh_lab\\tests\\resources\\sample_images\\raw\\building";
+        TEST_IMG_PATH "/sample_images/raw/building";
     std::vector<image_path_t> imgs;
     for (const auto& img : std::filesystem::directory_iterator(path)) {
       if (!img.is_directory()) imgs.push_back(img.path());
@@ -90,7 +90,7 @@ TEST_F(OperationTests, DISABLED_ACESWorkflowTest1) {
     decoder.Decode(std::move(buffer), img);
 
     OCIO_ACES_Transform_Op IDT{
-        "", "ACEScct", "D:\\Projects\\pu-erh_lab\\pu-erh_lab\\src\\config\\OCIO\\config.ocio"};
+        "", "ACEScct", CONFIG_PATH "OCIO/config.ocio"};
     ImageBuffer source{img->GetImageData()};
     ImageBuffer to_adjust = IDT.Apply(source);
     // OCIO_ACES_Transform_Op     LMT{"ACEScct", OCIO::ROLE_SCENE_LINEAR};
@@ -104,16 +104,13 @@ TEST_F(OperationTests, DISABLED_ACESWorkflowTest1) {
 
     cv::Mat     to_save_acescct;
     to_adjust.GetCPUData().convertTo(to_save_acescct, CV_16UC3, 65535.0f);
-    cv::imwrite(
-        "D:\\Projects\\pu-erh_lab\\pu-erh_lab\\tests\\resources\\sample_images\\my_"
-        "pipeline\\acescct.tiff",
-        to_save_acescct);
+    static constexpr auto save_path = TEST_IMG_PATH "/my_pipeline/batch_results/{}.tif";
+    cv::imwrite(std::format(save_path, "acescct"), to_save_acescct);
 
     cv::Mat to_save_aces2065;
     img->GetImageData().convertTo(to_save_aces2065, CV_16UC3, 65535.0f);
     cv::imwrite(
-        "D:\\Projects\\pu-erh_lab\\pu-erh_lab\\tests\\resources\\sample_images\\my_"
-        "pipeline\\aces2065.tiff",
+        std::format(save_path, "aces2065"),
         to_save_aces2065);
     cv::waitKey(0);
   }
@@ -125,8 +122,7 @@ TEST_F(OperationTests, DISABLED_ACESWorkflowTest2) {
     SleeveManager manager{db_path_};
     ImageLoader   image_loader(128, 8, 0);
     image_path_t  path =
-        L"D:\\Projects\\pu-erh_lab\\pu-erh_lab\\tests\\resources\\sample_"
-        L"images\\raw\\camera\\nikon\\z8";
+        TEST_IMG_PATH "/sample_images/raw/camera/nikon/z8";
     std::vector<image_path_t> imgs;
     for (const auto& img : std::filesystem::directory_iterator(path)) {
       if (!img.is_directory()) imgs.push_back(img.path());
@@ -156,7 +152,7 @@ TEST_F(OperationTests, DISABLED_ACESWorkflowTest2) {
     EASY_BLOCK("To ACEScct")
     OCIO_ACES_Transform_Op IDT{
         "ACES - ACES2065-1", "ACEScct",
-        "D:\\Projects\\pu-erh_lab\\pu-erh_lab\\src\\config\\OCIO\\config.ocio"};
+        CONFIG_PATH "OCIO/config.ocio"};
     ImageBuffer to_adjust = IDT.Apply(source);
     EASY_END_BLOCK;
 
@@ -211,7 +207,7 @@ TEST_F(OperationTests, DISABLED_ACESWorkflowTest2) {
 
     EASY_BLOCK("LMT");
     std::filesystem::path look_path{
-        "D:\\Projects\\pu-erh_lab\\pu-erh_lab\\src\\config\\LUTs\\ACES CCT 2383 D65.cube"};
+        CONFIG_PATH "LUTs/ACES CCT 2383 D65.cube"};
     OCIO_ACES_Transform_Op LMT{look_path};
     to_adjust = LMT.ApplyLMT(to_adjust);
     EASY_END_BLOCK;
@@ -232,15 +228,13 @@ TEST_F(OperationTests, DISABLED_ACESWorkflowTest2) {
     EASY_END_BLOCK;
     EASY_BLOCK("Save to Disk");
     cv::cvtColor(to_save_rec709, to_save_rec709, cv::COLOR_RGB2BGR);
-    cv::imwrite(std::format("D:\\Projects\\pu-erh_lab\\pu-erh_lab\\tests\\resources\\sample_"
-                            "images\\my_pipeline\\{}.tiff",
-                            conv::ToBytes(img->_image_name)),
-                to_save_rec709);
+    static constexpr auto save_path = TEST_IMG_PATH "/my_pipeline/batch_results/{}.tif";
+    cv::imwrite(std::format(save_path, conv::ToBytes(img->_image_name)), to_save_rec709);
     EASY_END_BLOCK;
     EASY_END_BLOCK;
   }
   profiler::dumpBlocksToFile(
-      "D:\\Projects\\pu-erh_lab\\pu-erh_lab\\tests\\resources\\temp_folder\\test_profile.prof");
+TEST_PROFILER_OUTPUT_PATH);
 }
 
 TEST_F(OperationTests, BatchProcessTest) {
@@ -249,8 +243,7 @@ TEST_F(OperationTests, BatchProcessTest) {
     SleeveManager manager{db_path_};
     ImageLoader   image_loader(128, 8, 0);
     image_path_t  path =
-        L"D:\\Projects\\pu-erh_lab\\pu-erh_lab\\tests\\resources\\sample_"
-        L"images\\real_test";
+       std::string(TEST_IMG_PATH) + std::string("/real_tests");
     std::vector<image_path_t> imgs;
     for (const auto& img : std::filesystem::directory_iterator(path)) {
       if (!img.is_directory()) imgs.push_back(img.path());
@@ -289,7 +282,7 @@ TEST_F(OperationTests, BatchProcessTest) {
 
         EASY_BLOCK("LMT");
         std::filesystem::path look_path{
-            "D:\\Projects\\pu-erh_lab\\pu-erh_lab\\src\\config\\LUTs\\ACES CCT 2383 D65.cube"};
+            CONFIG_PATH "LUTs/ACES CCT 2383 D65.cube"};
         OCIO_ACES_Transform_Op LMT{look_path};
         to_adjust = LMT.ApplyLMT(to_adjust);
         OCIO_ACES_Transform_Op pre_RRT{"ACEScct", ""};
@@ -300,10 +293,8 @@ TEST_F(OperationTests, BatchProcessTest) {
         cv::Mat                to_save_rec709;
         to_display.GetCPUData().convertTo(to_save_rec709, CV_16UC3, 65535.0f);
         cv::cvtColor(to_save_rec709, to_save_rec709, cv::COLOR_RGB2BGR);
-        cv::imwrite(std::format("D:\\Projects\\pu-erh_lab\\pu-erh_lab\\tests\\resources\\sample_"
-                                "images\\my_pipeline\\batch_results\\{}.tiff",
-                                conv::ToBytes(img->_image_name)),
-                    to_save_rec709);
+        static constexpr auto save_path = TEST_IMG_PATH "/my_pipeline/batch_results/{}.tif";
+        cv::imwrite(std::format(save_path, conv::ToBytes(img->_image_name)), to_save_rec709);
 
         img->ClearData();
         to_save_rec709.release();

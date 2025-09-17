@@ -19,8 +19,7 @@ TEST_F(OperationTests, DISABLED_AdjustmentTest1) {
     SleeveManager manager{db_path_};
     ImageLoader   image_loader(128, 8, 0);
     image_path_t  path =
-        L"D:\\Projects\\pu-erh_lab\\pu-erh_"
-        L"lab\\tests\\resources\\sample_images\\jpg";
+        TEST_IMG_PATH "/sample_images/jpg";
     std::vector<image_path_t> imgs;
     for (const auto& img : std::filesystem::directory_iterator(path)) {
       imgs.push_back(img.path());
@@ -53,8 +52,7 @@ TEST_F(OperationTests, AdjustmentTest2) {
     SleeveManager manager{db_path_};
     ImageLoader   image_loader(128, 8, 0);
     image_path_t  path =
-        L"D:\\Projects\\pu-erh_lab\\pu-erh_"
-        L"lab\\tests\\resources\\sample_images\\jpg";
+        TEST_IMG_PATH "/sample_images/jpg";
     std::vector<image_path_t> imgs;
     for (const auto& img : std::filesystem::directory_iterator(path)) {
       imgs.push_back(img.path());

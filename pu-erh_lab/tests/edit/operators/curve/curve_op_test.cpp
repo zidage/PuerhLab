@@ -35,8 +35,7 @@ TEST_F(OperationTests, DISABLED_CurveGrayGradientAdjustmentTest) {
     SleeveManager manager{db_path_};
     ImageLoader   image_loader(128, 8, 0);
     image_path_t  path =
-        L"D:\\Projects\\pu-erh_lab\\pu-erh_"
-        L"lab\\tests\\resources\\sample_images\\original_jpg";
+        TEST_IMG_PATH "/sample_images/jpg";
     std::vector<image_path_t> imgs;
     for (const auto& img : std::filesystem::directory_iterator(path)) {
       imgs.push_back(img.path());
@@ -87,7 +86,7 @@ TEST_F(OperationTests, CurveAnimationAdjustmentTest1) {
     SleeveManager manager{db_path_};
     ImageLoader   image_loader(128, 8, 0);
     image_path_t  path =
-        L"D:\\Projects\\pu-erh_lab\\pu-erh_"
+        TEST_IMG_PATH "/sample_images/original_jpg";
         L"lab\\tests\\resources\\sample_images\\original_jpg";
     std::vector<image_path_t> imgs;
     for (const auto& img : std::filesystem::directory_iterator(path)) {
@@ -148,8 +147,7 @@ TEST_F(OperationTests, DISABLED_CurveAnimationAdjustmentTest2) {
     SleeveManager manager{db_path_};
     ImageLoader   image_loader(128, 8, 0);
     image_path_t  path =
-        L"D:\\Projects\\pu-erh_lab\\pu-erh_"
-        L"lab\\tests\\resources\\sample_images\\original_jpg";
+        TEST_IMG_PATH "/sample_images/jpg";
     std::vector<image_path_t> imgs;
     for (const auto& img : std::filesystem::directory_iterator(path)) {
       imgs.push_back(img.path());

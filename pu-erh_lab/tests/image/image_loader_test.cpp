@@ -16,7 +16,7 @@ TEST(ImageLoaderTest, BatchLoad) {
   using namespace puerhlab;
   // MemoryLeakDetector leakDetector;
   ImageLoader image_loader(128, 8, 0);
-  image_path_t test_img = conv::FromBytes(TEST_IMG_PATH + std::string("/raw/dng_100.dng"));
+  image_path_t path = std::string(TEST_IMG_PATH) + std::string("/raw/dng_100.dng");
   std::vector<image_path_t> imgs;
   for (const auto &img : std::filesystem::directory_iterator(path)) {
     imgs.push_back(img.path());
