@@ -1,5 +1,4 @@
 
-#include <easy/profiler.h>
 #include <gtest/gtest.h>
 
 #include <exception>
@@ -20,7 +19,7 @@ TEST_DB_PATH);
 
 std::filesystem::path raw_path(
     std::string(TEST_IMG_PATH) + std::string("/dng_100"));
-(SleeveMapperTest, InitTest1) {
+TEST(SleeveMapperTest, InitTest1) {
   if (std::filesystem::exists(db_path)) {
     std::filesystem::remove(db_path);
   }
@@ -46,7 +45,7 @@ TEST(SleeveMapperTest, SimpleCaptureTest1) {
       db_ctr.InitializeDB();
       ImageController img_ctr{db_ctr.GetConnectionGuard()};
 
-      SleeveManager   manager{};
+      SleeveManager   manager{db_path};
       std::vector<image_path_t> imgs;
       for (const auto& img : std::filesystem::directory_iterator(raw_path)) {
         imgs.push_back(img.path());

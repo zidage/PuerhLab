@@ -1,7 +1,5 @@
 #include "sleeve/sleeve_manager.hpp"
 
-#include <easy/profiler.h>
-
 #include <cassert>
 #include <codecvt>
 #include <cstddef>

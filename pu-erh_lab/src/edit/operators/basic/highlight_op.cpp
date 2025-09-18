@@ -1,7 +1,5 @@
 #include "edit/operators/basic/highlight_op.hpp"
 
-#include <easy/profiler.h>
-
 #include <cmath>
 #include <opencv2/core/types.hpp>
 #include <opencv2/highgui.hpp>

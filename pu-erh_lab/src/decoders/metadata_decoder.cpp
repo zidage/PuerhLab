@@ -31,7 +31,6 @@
 
 #include "decoders/metadata_decoder.hpp"
 
-#include <easy/profiler.h>
 #include <libraw/libraw.h>
 
 #include <exiv2/basicio.hpp>

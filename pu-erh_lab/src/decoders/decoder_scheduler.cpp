@@ -30,8 +30,6 @@
 
 #include "decoders/decoder_scheduler.hpp"
 
-#include <easy/profiler.h>
-
 #include <exception>
 #include <filesystem>
 #include <fstream>
@@ -72,8 +70,7 @@ void DecoderScheduler::ScheduleDecode(image_id_t id, image_path_t image_path,
                                       std::shared_ptr<std::promise<image_id_t>> decode_promise) {
   _file_read_thread_pool.Submit([id, image_path, decode_promise, this] {
     // Open file as an ifstream
-    EASY_FUNCTION(profiler::colors::Cyan);
-    EASY_BLOCK("Read file from disk");
+
     std::ifstream file(image_path, std::ios::binary | std::ios::ate);
 
     if (!file.is_open()) {
@@ -97,8 +94,6 @@ void DecoderScheduler::ScheduleDecode(image_id_t id, image_path_t image_path,
     }
     file.close();
 
-    EASY_END_BLOCK;
-    EASY_BLOCK("Schedule decoding");
     // Submit a new decode request
     auto&                 decoded_buffer = _decoded_buffer;
     std::filesystem::path file_path(image_path);

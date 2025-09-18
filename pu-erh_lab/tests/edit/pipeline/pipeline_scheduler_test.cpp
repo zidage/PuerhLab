@@ -1,7 +1,5 @@
 #include "edit/scheduler/pipeline_scheduler.hpp"
 
-#include <easy/profiler.h>
-
 #include <memory>
 #include <opencv2/cudaimgproc.hpp>
 #include <string>

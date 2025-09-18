@@ -10,7 +10,10 @@ target_link_libraries(StrConv PUBLIC utfcpp)
 
 add_library(ImageBuffer image/image_buffer.cpp)
 target_include_directories(ImageBuffer PUBLIC include)
-target_link_libraries(ImageBuffer PUBLIC Exiv2 ${OpenCV_LIBS} LibRaw TimeProvider JSON xxHash easy_profiler OpenMP::OpenMP_CXX StrConv)
+target_link_libraries(ImageBuffer PUBLIC Exiv2 ${OpenCV_LIBS} LibRaw TimeProvider JSON xxHash OpenMP::OpenMP_CXX StrConv)
+if (HAVE_EASY_PROFILER)
+    target_link_libraries(ImageBuffer PUBLIC easy_profiler)
+endif()
 
 # CPU sources (always compiled)
 set(RAWPROCESSOR_CPU_SOURCES
@@ -75,7 +78,8 @@ add_library(Operators
     edit/operators/operator_registeration.cpp
 )
 target_include_directories(Operators PUBLIC include)
-target_link_libraries(Operators PUBLIC ImageBuffer JSON OpenColorIO easy_profiler hwy::hwy)
+target_link_libraries(Operators PUBLIC ImageBuffer JSON OpenColorIO hwy::hwy)
+
 
 add_library(EditPipeline
     edit/pipeline/pipeline_cpu.cpp
@@ -105,7 +109,7 @@ add_library(ImageDecoder
     decoders/metadata_decoder.cpp
 )
 target_include_directories(ImageDecoder PUBLIC include)
-target_link_libraries(ImageDecoder PUBLIC Image ThreadPool ${OpenCV_LIBS} LibRaw RawProcessor easy_profiler) 
+target_link_libraries(ImageDecoder PUBLIC Image ThreadPool ${OpenCV_LIBS} LibRaw RawProcessor) 
 
 add_library(ImageLoader io/image/image_loader.cpp)
 target_include_directories(ImageLoader PUBLIC include)
@@ -157,7 +161,7 @@ add_library(SleeveMapper
     storage/mapper/sleeve/filter/filter_mapper.cpp
     )
 target_include_directories(SleeveMapper PUBLIC include)
-target_link_libraries(SleeveMapper PUBLIC DuckDB DuckORM Image SleeveElement ImagePool easy_profiler)
+target_link_libraries(SleeveMapper PUBLIC DuckDB DuckORM Image SleeveElement ImagePool)
 
 add_library(SleeveService
     storage/service/image/image_service.cpp
@@ -191,7 +195,7 @@ target_link_libraries(SleeveFS PUBLIC SleeveElement SleeveController)
 
 add_library(SleeveView sleeve/sleeve_view.cpp)
 target_include_directories(SleeveView PUBLIC include)
-target_link_libraries(SleeveView PUBLIC Image SleeveFS ImagePool easy_profiler)
+target_link_libraries(SleeveView PUBLIC Image SleeveFS ImagePool)
 
 add_library(SleeveManager 
     sleeve/sleeve_manager.cpp)

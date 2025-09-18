@@ -17,7 +17,7 @@ set(BUILD_STATIC_LIBS ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 if (MSVC)
-    set(CMAKE_CXX_FLAGS_INIT "/W4 /external:anglebrackets /external:W0 /D_DEBUG /EHsc /arch:AVX2 /openmp")
+    set(CMAKE_CXX_FLAGS_INIT "/W4 /external:anglebrackets /external:W0 /D_DEBUG /EHsc /arch:AVX2 /openmp /fsanitize=address")
     add_link_options(/DEBUG)
     set(CMAKE_VS_USE_DEBUG_LIBRARIES "$<CONFIG:Debug,Custom>")
 else()
@@ -85,7 +85,10 @@ target_include_directories(JSON INTERFACE "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_
 find_package(OpenCV REQUIRED)
 
 # Profiler/hwy/lcms2
+if (WIN32)
 find_package(easy_profiler REQUIRED)
+add_compile_definitions(HAS_EASY_PROFILER)
+endif()
 find_package(hwy CONFIG REQUIRED)
 find_package(lcms2 CONFIG REQUIRED)
 

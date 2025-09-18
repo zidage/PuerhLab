@@ -1,6 +1,5 @@
 #include "edit/operators/cst/cst_op.hpp"
 
-#include <easy/profiler.h>
 #include <opencv2/core/hal/interface.h>
 
 #include <opencv2/core/types.hpp>
@@ -26,10 +25,9 @@
 using namespace puerhlab;
 TEST_F(OperationTests, DISABLED_ColorSpaceTransformTest) {
   {
-    SleeveManager manager{db_path_};
-    ImageLoader   image_loader(128, 8, 0);
-    image_path_t  path =
-        TEST_IMG_PATH "/sample_images/cst/adobe_rgb";
+    SleeveManager             manager{db_path_};
+    ImageLoader               image_loader(128, 8, 0);
+    image_path_t              path = TEST_IMG_PATH "/sample_images/cst/adobe_rgb";
     std::vector<image_path_t> imgs;
     for (const auto& img : std::filesystem::directory_iterator(path)) {
       imgs.push_back(img.path());
@@ -45,11 +43,10 @@ TEST_F(OperationTests, DISABLED_ColorSpaceTransformTest) {
     // For now, adjust the thumbnails'RGBsRGB
     auto img = manager.GetPool()->AccessElement(0, AccessType::THUMB).value().lock();
 
-    OCIO_ACES_Transform_Op op{
-        "Gamma 2.4 Encoded Rec.709", "sRGB Encoded Rec.709 (sRGB)",
-        CONFIG_PATH "OCIO/config.ocio"};
-    ImageBuffer to_adjust{img->GetThumbnailData()};
-    ImageBuffer to_display = op.Apply(to_adjust);
+    OCIO_ACES_Transform_Op op{"Gamma 2.4 Encoded Rec.709", "sRGB Encoded Rec.709 (sRGB)",
+                              CONFIG_PATH "OCIO/config.ocio"};
+    ImageBuffer            to_adjust{img->GetThumbnailData()};
+    ImageBuffer            to_display = op.Apply(to_adjust);
     cv::namedWindow("Adobe RGB", cv::WINDOW_KEEPRATIO);
     cv::imshow("Adobe RGB", img->GetThumbnailData());
     cv::Mat display_8u;
@@ -63,10 +60,9 @@ TEST_F(OperationTests, DISABLED_ColorSpaceTransformTest) {
 
 TEST_F(OperationTests, DISABLED_ACESWorkflowTest1) {
   {
-    SleeveManager manager{db_path_};
-    ImageLoader   image_loader(128, 8, 0);
-    image_path_t  path =
-        TEST_IMG_PATH "/sample_images/raw/building";
+    SleeveManager             manager{db_path_};
+    ImageLoader               image_loader(128, 8, 0);
+    image_path_t              path = TEST_IMG_PATH "/sample_images/raw/building";
     std::vector<image_path_t> imgs;
     for (const auto& img : std::filesystem::directory_iterator(path)) {
       if (!img.is_directory()) imgs.push_back(img.path());
@@ -89,10 +85,9 @@ TEST_F(OperationTests, DISABLED_ACESWorkflowTest1) {
 
     decoder.Decode(std::move(buffer), img);
 
-    OCIO_ACES_Transform_Op IDT{
-        "", "ACEScct", CONFIG_PATH "OCIO/config.ocio"};
-    ImageBuffer source{img->GetImageData()};
-    ImageBuffer to_adjust = IDT.Apply(source);
+    OCIO_ACES_Transform_Op IDT{"", "ACEScct", CONFIG_PATH "OCIO/config.ocio"};
+    ImageBuffer            source{img->GetImageData()};
+    ImageBuffer            to_adjust = IDT.Apply(source);
     // OCIO_ACES_Transform_Op     LMT{"ACEScct", OCIO::ROLE_SCENE_LINEAR};
     // ImageBuffer intermediate = LMT.Apply(to_adjust);
     // OCIO_ACES_Transform_Op ODT(OCIO::ROLE_SCENE_LINEAR, "Rec.1886 Rec.709 - Display");
@@ -102,27 +97,23 @@ TEST_F(OperationTests, DISABLED_ACESWorkflowTest1) {
     // cv::namedWindow("sRGB", cv::WINDOW_KEEPRATIO);
     // cv::imshow("sRGB", to_display.GetCPUData());
 
-    cv::Mat     to_save_acescct;
+    cv::Mat                to_save_acescct;
     to_adjust.GetCPUData().convertTo(to_save_acescct, CV_16UC3, 65535.0f);
     static constexpr auto save_path = TEST_IMG_PATH "/my_pipeline/batch_results/{}.tif";
     cv::imwrite(std::format(save_path, "acescct"), to_save_acescct);
 
     cv::Mat to_save_aces2065;
     img->GetImageData().convertTo(to_save_aces2065, CV_16UC3, 65535.0f);
-    cv::imwrite(
-        std::format(save_path, "aces2065"),
-        to_save_aces2065);
+    cv::imwrite(std::format(save_path, "aces2065"), to_save_aces2065);
     cv::waitKey(0);
   }
 }
 
 TEST_F(OperationTests, DISABLED_ACESWorkflowTest2) {
   {
-    EASY_PROFILER_ENABLE;
-    SleeveManager manager{db_path_};
-    ImageLoader   image_loader(128, 8, 0);
-    image_path_t  path =
-        TEST_IMG_PATH "/sample_images/raw/camera/nikon/z8";
+    SleeveManager             manager{db_path_};
+    ImageLoader               image_loader(128, 8, 0);
+    image_path_t              path = TEST_IMG_PATH "/sample_images/raw/camera/nikon/z8";
     std::vector<image_path_t> imgs;
     for (const auto& img : std::filesystem::directory_iterator(path)) {
       if (!img.is_directory()) imgs.push_back(img.path());
@@ -143,20 +134,15 @@ TEST_F(OperationTests, DISABLED_ACESWorkflowTest2) {
     }
     file.close();
 
-    EASY_BLOCK("Raw Decoding");
     decoder.Decode(std::move(buffer), img);
-    EASY_END_BLOCK;
+
 
     ImageBuffer source{img->GetImageData()};
 
-    EASY_BLOCK("To ACEScct")
-    OCIO_ACES_Transform_Op IDT{
-        "ACES - ACES2065-1", "ACEScct",
-        CONFIG_PATH "OCIO/config.ocio"};
-    ImageBuffer to_adjust = IDT.Apply(source);
-    EASY_END_BLOCK;
+    OCIO_ACES_Transform_Op IDT{"ACES - ACES2065-1", "ACEScct", CONFIG_PATH "OCIO/config.ocio"};
+    ImageBuffer            to_adjust = IDT.Apply(source);
 
-    EASY_BLOCK("Adjustment Stack");
+
 
     // ExposureOp EV{0.2f};
     // to_adjust = EV.Apply(to_adjust);
@@ -202,48 +188,35 @@ TEST_F(OperationTests, DISABLED_ACESWorkflowTest2) {
 
     // // ClarityOp CLRT{20.0f};
     // // to_adjust = CLRT.Apply(to_adjust);
-    // // EASY_END_BLOCK;
-    EASY_END_BLOCK;
 
-    EASY_BLOCK("LMT");
-    std::filesystem::path look_path{
-        CONFIG_PATH "LUTs/ACES CCT 2383 D65.cube"};
+    std::filesystem::path  look_path{CONFIG_PATH "LUTs/ACES CCT 2383 D65.cube"};
     OCIO_ACES_Transform_Op LMT{look_path};
     to_adjust = LMT.ApplyLMT(to_adjust);
-    EASY_END_BLOCK;
 
-    EASY_BLOCK("To ACES2065");
+
     OCIO_ACES_Transform_Op pre_RRT{"ACEScct", ""};
     ImageBuffer            intermediate = pre_RRT.Apply(to_adjust);
-    EASY_END_BLOCK;
-    EASY_BLOCK("ODT");
+
     OCIO_ACES_Transform_Op ODT("", "Camera Rec.709");
     ImageBuffer            to_display = ODT.Apply(intermediate);
-    EASY_END_BLOCK;
 
-    EASY_BLOCK("Saving");
-    EASY_BLOCK("To 709");
     cv::Mat to_save_rec709;
     to_display.GetCPUData().convertTo(to_save_rec709, CV_16UC3, 65535.0f);
-    EASY_END_BLOCK;
-    EASY_BLOCK("Save to Disk");
+
     cv::cvtColor(to_save_rec709, to_save_rec709, cv::COLOR_RGB2BGR);
     static constexpr auto save_path = TEST_IMG_PATH "/my_pipeline/batch_results/{}.tif";
     cv::imwrite(std::format(save_path, conv::ToBytes(img->_image_name)), to_save_rec709);
-    EASY_END_BLOCK;
-    EASY_END_BLOCK;
+
   }
-  profiler::dumpBlocksToFile(
-TEST_PROFILER_OUTPUT_PATH);
+
 }
 
 TEST_F(OperationTests, BatchProcessTest) {
   {
-    EASY_PROFILER_ENABLE;
-    SleeveManager manager{db_path_};
-    ImageLoader   image_loader(128, 8, 0);
-    image_path_t  path =
-       std::string(TEST_IMG_PATH) + std::string("/real_tests");
+
+    SleeveManager             manager{db_path_};
+    ImageLoader               image_loader(128, 8, 0);
+    image_path_t              path = std::string(TEST_IMG_PATH) + std::string("/real_tests");
     std::vector<image_path_t> imgs;
     for (const auto& img : std::filesystem::directory_iterator(path)) {
       if (!img.is_directory()) imgs.push_back(img.path());
@@ -270,19 +243,16 @@ TEST_F(OperationTests, BatchProcessTest) {
         decoder.Decode(std::move(buffer), img);
 
         ImageBuffer            source{img->GetImageData()};
-        OCIO_ACES_Transform_Op IDT{
-            "", "ACEScct"};
-        ImageBuffer    to_adjust = IDT.Apply(source);
+        OCIO_ACES_Transform_Op IDT{"", "ACEScct"};
+        ImageBuffer            to_adjust = IDT.Apply(source);
 
-        ContrastOp CONT{35.0f};
+        ContrastOp             CONT{35.0f};
 
-
-        ClarityOp CRT{25.0f};
+        ClarityOp              CRT{25.0f};
         to_adjust = CRT.Apply(to_adjust);
 
-        EASY_BLOCK("LMT");
-        std::filesystem::path look_path{
-            CONFIG_PATH "LUTs/ACES CCT 2383 D65.cube"};
+
+        std::filesystem::path  look_path{CONFIG_PATH "LUTs/ACES CCT 2383 D65.cube"};
         OCIO_ACES_Transform_Op LMT{look_path};
         to_adjust = LMT.ApplyLMT(to_adjust);
         OCIO_ACES_Transform_Op pre_RRT{"ACEScct", ""};

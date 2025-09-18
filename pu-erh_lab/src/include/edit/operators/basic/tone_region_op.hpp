@@ -1,6 +1,5 @@
 #pragma once
 
-#include <easy/profiler.h>
 #include <hwy/highway.h>
 
 #include <algorithm>
@@ -44,8 +43,6 @@ class ToneRegionOp {
 
  public:
   auto Apply(ImageBuffer& input) -> ImageBuffer {
-    EASY_BLOCK("Tone Region PipelineExecutor");
-
     cv::Mat& img = input.GetCPUData();
     if (img.depth() != CV_32F) {
       throw std::runtime_error("Tone region operator: Unsupported image format");
@@ -88,7 +85,6 @@ class ToneRegionOp {
     //   pixel = static_cast<Derived*>(this)->GetOutput(pixel);
     // });
 
-    EASY_END_BLOCK;
     return {std::move(img)};
   }
 };

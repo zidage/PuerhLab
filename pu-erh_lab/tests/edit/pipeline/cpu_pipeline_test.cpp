@@ -1,5 +1,3 @@
-#include <easy/profiler.h>
-
 #include <opencv2/cudaimgproc.hpp>
 #include <string>
 
@@ -21,7 +19,6 @@ using namespace puerhlab;
 
 #include <algorithm>
 #include <fstream>
-
 
 // clamp helper
 static inline double sat(double v) { return std::min(1.0, std::max(0.0, v)); }
@@ -66,8 +63,8 @@ TEST_F(PipelineTests, SimpleTest1) {
 
     SleeveManager manager{db_path_};
     ImageLoader   image_loader(128, 8, 0);
-    image_path_t  path =
-        std::string(TEST_IMG_PATH) + "raw/building";;
+    image_path_t  path = std::string(TEST_IMG_PATH) + "raw/building";
+    ;
     std::vector<image_path_t> imgs;
     for (const auto& img : std::filesystem::directory_iterator(path)) {
       if (!img.is_directory() && is_supported_file(img.path())) imgs.push_back(img.path());
@@ -116,8 +113,7 @@ TEST_F(PipelineTests, SimpleTest1) {
     nlohmann::json contrast_params;
     contrast_params["contrast"] = 5.0f;
     nlohmann::json lmt_params;
-    lmt_params["ocio_lmt"] =
-        CONFIG_PATH "LUTs/ACES CCT 2383 D65.cube";
+    lmt_params["ocio_lmt"] = CONFIG_PATH "LUTs/ACES CCT 2383 D65.cube";
     // lmt_params["ocio"] = {{"src", "ACEScct"}, {"dst", "Camera Rec.709"}, {"limit", true}};
 
     nlohmann::json output_params;
@@ -161,16 +157,11 @@ TEST_F(PipelineTests, SimpleTest1) {
           FAIL();
         }
         file.close();
-        EASY_BLOCK("Raw Decoding");
         decoder.Decode(std::move(buffer), img);
-        EASY_END_BLOCK;
 
         ImageBuffer source{img->GetImageData()};
-        EASY_BLOCK("Pipeline Processing");
         auto output = pipeline.Apply(source);
-        EASY_END_BLOCK;
 
-        EASY_BLOCK("Image Saving");
         cv::cuda::GpuMat to_save_rec709;
         cv::Mat          to_save_rec709_cpu;
 
@@ -181,23 +172,18 @@ TEST_F(PipelineTests, SimpleTest1) {
         cv::cuda::cvtColor(to_save_rec709, to_save_rec709, cv::COLOR_RGB2BGR);
         to_save_rec709.download(to_save_rec709_cpu);
 
-        EASY_BLOCK("Write To Disk");
-        std::string file_name = conv::ToBytes(img->_image_path.filename().wstring());
-        std::string time      = TimeProvider::TimePointToString(TimeProvider::Now());
+        std::string           file_name = conv::ToBytes(img->_image_path.filename().wstring());
+        std::string           time      = TimeProvider::TimePointToString(TimeProvider::Now());
 
-        std::string save_name = file_name + "_" + time;
+        std::string           save_name = file_name + "_" + time;
         static constexpr auto save_path = TEST_IMG_PATH "/my_pipeline/batch_results/{}.tif";
-        cv::imwrite(
-            std::format(save_path, save_name),
-            to_save_rec709_cpu);
-        EASY_END_BLOCK;
+        cv::imwrite(std::format(save_path, save_name), to_save_rec709_cpu);
 
         img->ClearData();
         to_save_rec709.release();
         output.ReleaseCPUData();
         output.ReleaseGPUData();
         to_save_rec709_cpu.release();
-        EASY_END_BLOCK;
       };
       thread_pool.Submit(task);
     }

@@ -30,8 +30,6 @@
 
 #include "image/image.hpp"
 
-#include <easy/profiler.h>
-
 #include <cstdint>
 #include <exception>
 #include <exiv2/exif.hpp>

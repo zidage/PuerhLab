@@ -1,6 +1,5 @@
 #pragma once
 
-#include <easy/profiler.h>
 #include <gtest/gtest.h>
 
 #include <exiv2/exiv2.hpp>
@@ -17,7 +16,6 @@ class PipelineTests : public ::testing::Test {
 
   // Run before any unit test runs
   void                  SetUp() override {
-    EASY_PROFILER_ENABLE;
     TimeProvider::Refresh();
     Exiv2::LogMsg::setLevel(Exiv2::LogMsg::Level::mute);
     // Create a unique db file location
@@ -35,7 +33,6 @@ class PipelineTests : public ::testing::Test {
     if (std::filesystem::exists(db_path_)) {
       std::filesystem::remove(db_path_);
     }
-    profiler::dumpBlocksToFile(TEST_PROFILER_OUTPUT_PATH);
   }
 };
 }  // namespace puerhlab

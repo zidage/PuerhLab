@@ -1,7 +1,5 @@
 #include "edit/pipeline/pipeline_utils.hpp"
 
-#include <easy/profiler.h>
-
 #include <memory>
 #include <stdexcept>
 
@@ -89,11 +87,7 @@ auto PipelineStage::ApplyStage() -> std::shared_ptr<ImageBuffer> {
       ImageBuffer current_img = _input_img->Clone();
       for (const auto& op_entry : _operators) {
         if (op_entry.second._enable) {
-          EASY_NONSCOPED_BLOCK(
-              std::format("Apply Operator: {}", op_entry.second._op->GetScriptName()).c_str(),
-              profiler::colors::Cyan);
           current_img = op_entry.second._op->Apply(current_img);
-          EASY_END_BLOCK;
         }
       }
       _output_cache = std::make_shared<ImageBuffer>(std::move(current_img));
@@ -114,11 +108,7 @@ auto PipelineStage::ApplyStage() -> std::shared_ptr<ImageBuffer> {
       std::shared_ptr<ImageBuffer> current_img = _input_img;
       for (const auto& op_entry : _operators) {
         if (op_entry.second._enable) {
-          EASY_NONSCOPED_BLOCK(
-              std::format("Apply Operator: {}", op_entry.second._op->GetScriptName()).c_str(),
-              profiler::colors::Cyan);
           current_img = std::make_shared<ImageBuffer>(op_entry.second._op->Apply(*current_img));
-          EASY_END_BLOCK;
         }
       }
       _output_cache = current_img;

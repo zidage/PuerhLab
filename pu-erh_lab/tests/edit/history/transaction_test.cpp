@@ -112,10 +112,9 @@ void SetPipelineTemplate(std::shared_ptr<PipelineExecutor> executor) {
 
 TEST_F(EditHistoryTests, DISABLED_TestWithImage) {
   {
-    SleeveManager manager{db_path_};
-    ImageLoader   image_loader(128, 8, 0);
-    image_path_t  path =
-        std::string(TEST_IMG_PATH) + "raw/building";
+    SleeveManager             manager{db_path_};
+    ImageLoader               image_loader(128, 8, 0);
+    image_path_t              path = std::string(TEST_IMG_PATH) + "/raw/building";
     std::vector<image_path_t> imgs;
     for (const auto& img : std::filesystem::directory_iterator(path)) {
       if (!img.is_directory() && is_supported_file(img.path())) imgs.push_back(img.path());
@@ -152,11 +151,11 @@ TEST_F(EditHistoryTests, DISABLED_TestWithImage) {
 
         output.SyncToCPU();
 
-        std::string file_name = conv::ToBytes(img_ptr->_image_path.filename().wstring());
-        std::string time      = TimeProvider::TimePointToString(TimeProvider::Now());
+        std::string           file_name = conv::ToBytes(img_ptr->_image_path.filename().wstring());
+        std::string           time      = TimeProvider::TimePointToString(TimeProvider::Now());
 
         static constexpr auto save_path = TEST_IMG_PATH "/my_pipeline/batch_results/{}.tif";
-        std::string save_name = file_name + "_" + time;
+        std::string           save_name = file_name + "_" + time;
         cv::imwrite(std::format(save_path, save_name), output.GetCPUData());
       };
 
@@ -174,11 +173,11 @@ TEST_F(EditHistoryTests, DISABLED_TestWithImage) {
       auto future_task2           = task2._result->get_future();
       task2._options._is_blocking = true;  // Make task2 non-blocking
 
-      EASY_BLOCK("Schedule and process task1");
+
       scheduler.ScheduleTask(std::move(task1));
 
       future_task1.get();  // Wait for task1 to complete
-      EASY_END_BLOCK;
+
 
       // Create and apply an edit transaction
       EditTransaction tx1(1, TransactionType::_ADD, OperatorType::EXPOSURE,
@@ -190,29 +189,27 @@ TEST_F(EditHistoryTests, DISABLED_TestWithImage) {
       auto future_task3           = task3._result->get_future();
       task3._options._is_blocking = true;  // Make task3 non-blocking
 
-      EASY_BLOCK("Schedule and process task2");
       scheduler.ScheduleTask(std::move(task2));
       future_task2.get();  // Wait for task2 to complete
-      EASY_END_BLOCK;
+
 
       // Create and apply another edit transaction
       EditTransaction tx2(2, TransactionType::_ADD, OperatorType::CONTRAST,
                           PipelineStageName::Basic_Adjustment, {{"contrast", 50}}, &tx1);
       tx2.ApplyTransaction(*pipeline_executor);
-      EASY_BLOCK("Schedule and process task3");
+
       scheduler.ScheduleTask(std::move(task3));
       future_task3.get();  // Wait for task3 to complete
-      EASY_END_BLOCK;
+
     }
   }
 }
 
 TEST_F(EditHistoryTests, DISABLED_TestWithImage_Animated) {
   {
-    SleeveManager manager{db_path_};
-    ImageLoader   image_loader(128, 8, 0);
-    image_path_t  path =
-        std::string(TEST_IMG_PATH) + "raw/building";
+    SleeveManager             manager{db_path_};
+    ImageLoader               image_loader(128, 8, 0);
+    image_path_t              path = std::string(TEST_IMG_PATH) + "/raw/building";
     std::vector<image_path_t> imgs;
     for (const auto& img : std::filesystem::directory_iterator(path)) {
       if (!img.is_directory() && is_supported_file(img.path())) imgs.push_back(img.path());
@@ -241,17 +238,16 @@ TEST_F(EditHistoryTests, DISABLED_TestWithImage_Animated) {
     task._pipeline_executor = pipeline_executor;
     SetPipelineTemplate(task._pipeline_executor);
 
-    task._options._is_callback = false;
+    task._options._is_callback     = false;
     task._options._is_seq_callback = true;
-    auto display_callback         = [](ImageBuffer&, uint32_t id) {
+    auto display_callback          = [](ImageBuffer&, uint32_t id) {
       auto time = TimeProvider::TimePointToString(TimeProvider::Now());
       std::cout << "New frame " << id << " rendered at " << time << "." << std::endl;
 
       // cv::cvtColor(output.GetCPUData(), output.GetCPUData(), cv::COLOR_RGB2BGR);
-      
     };
-    task._seq_callback           = display_callback;
-    task._options._is_blocking   = true;
+    task._seq_callback         = display_callback;
+    task._options._is_blocking = true;
 
     nlohmann::json exposure_params;
     exposure_params["exposure"] = 0.0f;
@@ -275,10 +271,9 @@ TEST_F(EditHistoryTests, DISABLED_TestWithImage_Animated) {
 
 TEST_F(EditHistoryTests, TestWithPreviewPipeline) {
   {
-    SleeveManager manager{db_path_};
-    ImageLoader   image_loader(128, 8, 0);
-    image_path_t  path =
-        std::string(TEST_IMG_PATH) + "raw/building";
+    SleeveManager             manager{db_path_};
+    ImageLoader               image_loader(128, 8, 0);
+    image_path_t              path = std::string(TEST_IMG_PATH) + "/raw/building";
     std::vector<image_path_t> imgs;
     for (const auto& img : std::filesystem::directory_iterator(path)) {
       if (!img.is_directory() && is_supported_file(img.path())) imgs.push_back(img.path());
@@ -307,17 +302,16 @@ TEST_F(EditHistoryTests, TestWithPreviewPipeline) {
     task._pipeline_executor = pipeline_executor;
     SetPipelineTemplate(task._pipeline_executor);
 
-    task._options._is_callback = false;
+    task._options._is_callback     = false;
     task._options._is_seq_callback = true;
-    auto display_callback         = [](ImageBuffer& output, uint32_t id) {
+    auto display_callback          = [](ImageBuffer& output, uint32_t id) {
       // auto time = TimeProvider::TimePointToString(TimeProvider::Now());
       std::cout << "New frame " << id << std::endl;
 
       // cv::cvtColor(output.GetCPUData(), output.GetCPUData(), cv::COLOR_RGB2BGR);
-      
     };
-    task._seq_callback           = display_callback;
-    task._options._is_blocking   = true;
+    task._seq_callback         = display_callback;
+    task._options._is_blocking = true;
 
     nlohmann::json exposure_params;
     exposure_params["exposure"] = 0.0f;

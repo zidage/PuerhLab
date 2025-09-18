@@ -1,7 +1,5 @@
 #include "edit/pipeline/pipeline_cpu.hpp"
 
-#include <easy/profiler.h>
-
 #include <memory>
 #include <opencv2/core.hpp>
 #include <opencv2/core/mat.hpp>
@@ -74,11 +72,8 @@ auto CPUPipelineExecutor::Apply(ImageBuffer& input) -> ImageBuffer {
   auto output = std::make_shared<ImageBuffer>(input.Clone());
 
   for (auto& stage : _stages) {
-    EASY_NONSCOPED_BLOCK(std::format("Apply stage: {}", stage.GetStageNameString()).c_str(),
-                         profiler::colors::Red);
     stage.SetInputImage(output);
     output = stage.ApplyStage();
-    EASY_END_BLOCK
   }
   return output->Clone();
 }
