@@ -1,3 +1,4 @@
+// Test for pipeline scheduler, only on Windows for now
 #ifdef _WIN32
 #include "edit/scheduler/pipeline_scheduler.hpp"
 

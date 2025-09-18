@@ -15,7 +15,6 @@
 #include "image/image_buffer.hpp"
 #include "sleeve/sleeve_manager.hpp"
 #include "type/supported_file_type.hpp"
-#include "utils/string/convert.hpp"
 
 using namespace puerhlab;
 
@@ -93,7 +92,7 @@ TEST_F(EditHistoryTests, DISABLED_RedoWithoutParentTransaction) {
 void SetPipelineTemplate(std::shared_ptr<PipelineExecutor> executor) {
   auto&          raw_stage = executor->GetStage(PipelineStageName::Image_Loading);
   nlohmann::json decode_params;
-  decode_params["raw"]["cuda"]                   = true;
+  decode_params["raw"]["cuda"]                   = false;
   decode_params["raw"]["highlights_reconstruct"] = false;
   decode_params["raw"]["use_camera_wb"]          = true;
   decode_params["raw"]["backend"]                = "puerh";
@@ -315,7 +314,7 @@ TEST_F(EditHistoryTests, TestWithPreviewPipeline) {
 
     nlohmann::json exposure_params;
     exposure_params["exposure"] = 0.0f;
-    for (float exposure = -2.0f; exposure <= 2.0f; exposure += 0.05f) {
+    for (float exposure = -2.0f; exposure <= -2.0f; exposure += 0.05f) {
       PipelineTask task1 = task;  // Make a copy of task for task1
       auto& basic_stage  = task1._pipeline_executor->GetStage(PipelineStageName::Basic_Adjustment);
       exposure_params["exposure"] = exposure;

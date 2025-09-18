@@ -1061,3 +1061,5 @@ sample_images/
 temp_folder/
 
 third_party/
+
+/.vscode/
