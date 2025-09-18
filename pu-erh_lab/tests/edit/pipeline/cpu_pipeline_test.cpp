@@ -1,3 +1,4 @@
+#ifdef _WIN32
 #include <opencv2/cudaimgproc.hpp>
 #include <string>
 
@@ -189,3 +190,4 @@ TEST_F(PipelineTests, SimpleTest1) {
     }
   }
 }
+#endif

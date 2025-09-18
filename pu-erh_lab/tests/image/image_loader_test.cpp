@@ -1,4 +1,6 @@
+#ifdef _WIN32
 #include "../leak_detector/memory_leak_detector.hpp"
+#endif
 #include "decoders/decoder_scheduler.hpp"
 #include "image/image.hpp"
 #include "io/image/image_loader.hpp"

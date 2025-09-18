@@ -37,7 +37,7 @@ auto DBController::GetConnectionGuard() -> ConnectionGuard {
   ConnectionGuard guard{{}};
 
   if (duckdb_connect(_db, &guard._conn) != DuckDBSuccess) {
-    throw std::exception("DB cannot be connected");
+    throw std::runtime_error("DB cannot be connected");
   }
 
   return guard;
@@ -51,7 +51,7 @@ void DBController::InitializeDB() {
   // SQL query to create the necessary tables
   std::string utf8_str = conv::ToBytes(_db_path.wstring());
   if (duckdb_open(utf8_str.c_str(), &_db) != DuckDBSuccess) {
-    throw std::exception("DB cannot be created");
+    throw std::runtime_error("DB cannot be created");
   }
 
   // SQL query to create the tables
@@ -64,7 +64,7 @@ void DBController::InitializeDB() {
   if (duckdb_query(guard._conn, init_table_query, &result) != DuckDBSuccess) {
     auto error_message = duckdb_result_error(&result);
     duckdb_destroy_result(&result);
-    throw std::exception(error_message);
+    throw std::runtime_error(error_message);
   }
   _initialized = true;
 }

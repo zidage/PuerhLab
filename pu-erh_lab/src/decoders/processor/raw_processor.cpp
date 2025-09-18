@@ -11,8 +11,12 @@
 #include <opencv2/core/base.hpp>
 #include <opencv2/core/mat.hpp>
 #include <opencv2/core/utility.hpp>
+
+#ifdef HAVE_CUDA
 #include <opencv2/cudaarithm.hpp>
 #include <opencv2/cudaimgproc.hpp>
+#endif
+
 #include <opencv2/highgui.hpp>
 #include <opencv2/opencv.hpp>
 #include <stdexcept>

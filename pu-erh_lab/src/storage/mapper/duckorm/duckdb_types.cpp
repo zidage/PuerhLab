@@ -3,6 +3,7 @@
 #include <duckdb.h>
 
 #include <exception>
+#include <stdexcept>
 
 namespace duckorm {
 void PreparedStatement::RecycleResources() {
@@ -24,7 +25,7 @@ PreparedStatement::PreparedStatement(duckdb_connection& con, const std::string& 
 
   if (duckdb_prepare(_con, prepare_query.c_str(), &_stmt) != DuckDBSuccess) {
     RecycleResources();
-    throw std::exception("PreparedStatement failed when inserting images");
+    throw std::runtime_error("PreparedStatement failed when inserting images");
   }
   _prepared = true;
 }
@@ -35,7 +36,7 @@ auto PreparedStatement::GetStmtGuard(const std::string& prepare_query)
     -> duckdb_prepared_statement& {
   if (duckdb_prepare(_con, prepare_query.c_str(), &_stmt) != DuckDBSuccess) {
     RecycleResources();
-    throw std::exception("PreparedStatement failed when inserting images");
+    throw std::runtime_error("PreparedStatement failed when inserting images");
   }
   _prepared = true;
   return _stmt;

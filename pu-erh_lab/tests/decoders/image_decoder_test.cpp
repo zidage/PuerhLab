@@ -1,5 +1,7 @@
 #include "decoders/decoder_scheduler.hpp"
+#ifdef _WIN32
 #include "../leak_detector/memory_leak_detector.hpp"
+#endif
 #include "image/image.hpp"
 #include "utils/queue/queue.hpp"
 

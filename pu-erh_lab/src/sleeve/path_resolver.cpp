@@ -9,7 +9,12 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+
+#ifdef _WIN32
 #include <xxhash.hpp>
+#else
+#include <xxhash.h> 
+#endif
 
 #include "sleeve/sleeve_element/sleeve_element.hpp"
 #include "sleeve/sleeve_element/sleeve_folder.hpp"
@@ -23,7 +28,7 @@ PathResolver::PathResolver(NodeStorageHandler& lazy_handler, IncrID::IDGenerator
 void PathResolver::SetRoot(std::shared_ptr<SleeveFolder> root) { _root = root; }
 
 auto PathResolver::Normalize(const std::filesystem::path raw_path) -> std::wstring {
-  return raw_path.lexically_normal();
+  return raw_path.lexically_normal().wstring();
 }
 
 auto PathResolver::IsSubpath(const std::filesystem::path& base, const std::filesystem::path& target)

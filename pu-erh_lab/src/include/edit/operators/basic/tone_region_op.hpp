@@ -6,8 +6,6 @@
 #include <cstddef>
 #include <opencv2/core.hpp>
 #include <opencv2/core/base.hpp>
-#include <opencv2/core/hal/intrin.hpp>
-#include <opencv2/core/hal/intrin_sse.hpp>
 #include <opencv2/core/matx.hpp>
 #include <opencv2/core/types.hpp>
 #include <opencv2/core/utility.hpp>

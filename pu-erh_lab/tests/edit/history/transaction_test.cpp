@@ -1,6 +1,8 @@
 #include <future>
 #include <opencv2/core/mat.hpp>
+#ifdef HAVE_CUDA
 #include <opencv2/cudaimgproc.hpp>
+#endif
 #include <opencv2/highgui.hpp>
 #include <opencv2/opencv.hpp>
 
@@ -142,21 +144,19 @@ TEST_F(EditHistoryTests, DISABLED_TestWithImage) {
 
       task1._options._is_blocking = false;
       task1._options._is_callback = true;
-      auto save_callback          = [img_ptr](ImageBuffer& output) {
-        output.SyncToGPU();
+      auto save_callback          = [img_ptr](ImageBuffer& ) {
 
-        auto& gpu_data = output.GetGPUData();
-        gpu_data.convertTo(gpu_data, CV_16UC3, 65535.0f);
-        cv::cuda::cvtColor(gpu_data, gpu_data, cv::COLOR_RGB2BGR);
+        // gpu_data.convertTo(gpu_data, CV_16UC3, 65535.0f);
+        // cv::cuda::cvtColor(gpu_data, gpu_data, cv::COLOR_RGB2BGR);
 
-        output.SyncToCPU();
+        // output.SyncToCPU();
 
-        std::string           file_name = conv::ToBytes(img_ptr->_image_path.filename().wstring());
-        std::string           time      = TimeProvider::TimePointToString(TimeProvider::Now());
+        // std::string           file_name = conv::ToBytes(img_ptr->_image_path.filename().wstring());
+        // std::string           time      = TimeProvider::TimePointToString(TimeProvider::Now());
 
-        static constexpr auto save_path = TEST_IMG_PATH "/my_pipeline/batch_results/{}.tif";
-        std::string           save_name = file_name + "_" + time;
-        cv::imwrite(std::format(save_path, save_name), output.GetCPUData());
+        // static constexpr auto save_path = TEST_IMG_PATH "/my_pipeline/batch_results/{}.tif";
+        // std::string           save_name = file_name + "_" + time;
+        // cv::imwrite(std::format(save_path, save_name), output.GetCPUData());
       };
 
       auto empty_callback         = [](ImageBuffer&) {};

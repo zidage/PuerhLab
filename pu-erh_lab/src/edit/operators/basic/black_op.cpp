@@ -1,7 +1,6 @@
 #include "edit/operators/basic/black_op.hpp"
 
 #include <opencv2/core.hpp>
-#include <opencv2/core/hal/intrin_sse.hpp>
 
 #include "edit/operators/basic/tone_region_op.hpp"
 #include "image/image_buffer.hpp"

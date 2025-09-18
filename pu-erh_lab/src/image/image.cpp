@@ -35,9 +35,15 @@
 #include <exiv2/exif.hpp>
 #include <exiv2/tags.hpp>
 #include <json.hpp>
+#include <stdexcept>
 #include <string>
 #include <utility>
+
+#ifdef _WIN32
 #include <xxhash.hpp>
+#else
+#include <xxhash.h>
+#endif
 
 namespace puerhlab {
 using json = nlohmann::json;
@@ -138,11 +144,17 @@ void Image::JsonToExif(std::string json_str) {
     _exif_json     = nlohmann::json::parse(json_str);
     _has_exif_json = true;
   } catch (nlohmann::json::parse_error& e) {
-    throw std::exception("Image: JSON parse error");
+    throw std::runtime_error("Image: JSON parse error");
   }
 }
 
-void Image::ComputeChecksum() { _checksum = xxh::xxhash<64>(this, sizeof(*this)); }
+void Image::ComputeChecksum() {
+#ifdef _WIN32
+  _checksum = xxh::xxhash<64>(this, sizeof(*this));
+#else
+  _checksum = XXH64(this, sizeof(*this), 0);
+#endif
+}
 
 auto Image::GetImageData() -> cv::Mat& { return _image_data.GetCPUData(); }
 

@@ -31,6 +31,8 @@
 #include "utils/clock/time_provider.hpp"
 
 #include <chrono>
+#include <ctime>
+#include <iomanip>
 
 namespace puerhlab {
 std::atomic<std::chrono::system_clock::time_point> TimeProvider::_cached_sys_time;

@@ -80,11 +80,11 @@ void FileSystem::Delete(std::filesystem::path target) {
   // Now re-acquire parent_node using write method
   auto parent_write_node =
       std::static_pointer_cast<SleeveFolder>(_resolver.ResolveForWrite(parent));
-  auto delete_node_id = parent_write_node->GetElementIdByName(delete_node_name);
+  auto delete_node_id = parent_write_node->GetElementIdByName(delete_node_name.wstring());
   auto delete_node    = _storage.at(delete_node_id.value());
   delete_node->DecrementRefCount();
 
-  parent_write_node->RemoveNameFromMap(delete_node_name);
+  parent_write_node->RemoveNameFromMap(delete_node_name.wstring());
 }
 
 void FileSystem::Copy(std::filesystem::path from, std::filesystem::path dest) {

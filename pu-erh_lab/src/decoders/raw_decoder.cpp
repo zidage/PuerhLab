@@ -38,9 +38,11 @@
 #include <memory>
 #include <opencv2/core/mat.hpp>
 #include <opencv2/core/matx.hpp>
+#ifdef HAVE_CUDA
 #include <opencv2/cudaarithm.hpp>
 #include <opencv2/cudaimgproc.hpp>
 #include <opencv2/cudawarping.hpp>
+#endif
 #include <opencv2/opencv.hpp>
 #include <stdexcept>
 

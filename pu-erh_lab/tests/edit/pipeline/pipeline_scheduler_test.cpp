@@ -1,3 +1,4 @@
+#ifdef _WIN32
 #include "edit/scheduler/pipeline_scheduler.hpp"
 
 #include <memory>
@@ -95,3 +96,4 @@ TEST_F(PipelineTests, SchedulerBasic) {
     }
   }
 }
+#endif

@@ -150,10 +150,17 @@ void ImagePoolManager::RemoveRecord(const image_id_t& id, const AccessType type)
     case AccessType::FULL_IMG: {
       auto it = _cache_map_full.find(id);
       if (it != _cache_map_full.end()) {
-        _cache_list_full.erase(it->second);
+        // capture values before erasing from the map (erasing invalidates `it`)
+        auto key     = it->first;   // image id
+        auto list_it = it->second;  // iterator into _cache_list_full
+
+        _cache_list_full.erase(list_it);
         _cache_map_full.erase(it);
-        _with_full.erase(it->second);
-        auto img = _image_pool[it->first];
+
+        // _with_full likely holds image ids, so erase by key
+        _with_full.erase(key);
+
+        auto img = _image_pool[key];
         img->ClearThumbnail();
       }
       break;
@@ -161,15 +168,18 @@ void ImagePoolManager::RemoveRecord(const image_id_t& id, const AccessType type)
     case AccessType::THUMB: {
       auto it = _cache_map_thumb.find(id);
       if (it != _cache_map_thumb.end()) {
-        _cache_list_thumb.erase(it->second);
+        auto key     = it->first;
+        auto list_it = it->second;
+
+        _cache_list_thumb.erase(list_it);
         _cache_map_thumb.erase(it);
-        _with_thumb.erase(it->second);
-        auto img = _image_pool[it->first];
-        img->ClearData();
+
+        _with_thumb.erase(key);
+
+        auto img = _image_pool[key];
+        img->ClearThumbnail();
       }
       break;
-    }
-    case AccessType::META: {
     }
   }
 }

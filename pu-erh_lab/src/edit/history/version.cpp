@@ -30,7 +30,11 @@
 
 #include "edit/history/version.hpp"
 
+#ifdef _WIN32
 #include <xxhash.hpp>
+#else
+#include <xxhash.h>
+#endif
 
 #include "utils/clock/time_provider.hpp"
 
@@ -43,7 +47,11 @@ Version::Version(sl_element_id_t bound_image) : _bound_image(bound_image) {
 
 void Version::CalculateVersionID() {
   SetLastModifiedTime();
+#ifdef _WIN32
   _version_id = xxh::xxhash<64>(this, sizeof(*this));
+#else
+  _version_id = XXH64(this, sizeof(*this), 0);
+#endif
 }
 
 auto Version::GetVersionID() const -> p_hash_t { return _version_id; }
