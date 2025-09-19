@@ -36,6 +36,8 @@ class EditTransaction {
         operator_params(operator_params),
         parent_transaction(parent_transaction == this ? nullptr : parent_transaction) {}
 
+  auto GetTransactionID() const -> int { return transaction_id; }
+
   auto ApplyTransaction(PipelineExecutor& pipeline) -> bool;
   auto RedoTransaction(PipelineExecutor& pipeline) -> bool;
 };

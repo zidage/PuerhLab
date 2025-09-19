@@ -69,7 +69,13 @@ void Version::SetBoundImage(sl_element_id_t image_id) { _bound_image = image_id;
 auto Version::GetBoundImage() const -> sl_element_id_t { return _bound_image; }
 
 void Version::AppendEditTransaction(EditTransaction&& edit_transaction) {
+  if (_edit_transactions.size() >= MAX_EDIT_TRANSACTIONS) {
+    auto removed_tx = std::move(_edit_transactions.front());
+    _tx_id_map.erase(removed_tx.GetTransactionID());
+    _edit_transactions.pop_front();
+  }
   _edit_transactions.push_back(std::move(edit_transaction));
+  _tx_id_map[_edit_transactions.back().GetTransactionID()] = std::prev(_edit_transactions.end());
   SetLastModifiedTime();
 }
 
@@ -78,9 +84,18 @@ auto Version::RemoveLastEditTransaction() -> EditTransaction {
     throw std::runtime_error("Version: No edit transaction to remove");
   }
   EditTransaction last_transaction = std::move(_edit_transactions.back());
+  _tx_id_map.erase(last_transaction.GetTransactionID());
   _edit_transactions.pop_back();
   SetLastModifiedTime();
   return last_transaction;
+}
+
+auto Version::GetTransactionByID(int transaction_id) -> EditTransaction& {
+  auto it = _tx_id_map.find(transaction_id);
+  if (it == _tx_id_map.end()) {
+    throw std::runtime_error("Version: No edit transaction with the given ID");
+  }
+  return *(it->second);
 }
 
 auto Version::GetLastEditTransaction() -> EditTransaction& {

@@ -33,6 +33,7 @@
 #include <ctime>
 #include <list>
 #include <memory>
+#include <unordered_map>
 #include <vector>
 
 #include "edit/history/edit_transaction.hpp"
@@ -41,8 +42,10 @@
 #include "type/type.hpp"
 
 namespace puerhlab {
+using TxPos = std::list<EditTransaction>::iterator;
 class Version {
  private:
+  static constexpr size_t           MAX_EDIT_TRANSACTIONS = 2048;
   /**
    * @brief MurmurHash3 value for this version
    */
@@ -61,12 +64,18 @@ class Version {
    */
   std::list<EditTransaction>        _edit_transactions;
 
+  std::unordered_map<int, TxPos>    _tx_id_map;
+
   std::shared_ptr<PipelineExecutor> _base_pipeline_executor;
 
  public:
   Version() = default;
   Version(sl_element_id_t bound_image);
 
+  /**
+   * @brief Calulate the version ID (hash) for this version, only when the version is committed
+   *
+   */
   void CalculateVersionID();
   auto GetVersionID() const -> p_hash_t;
 
@@ -84,6 +93,7 @@ class Version {
 
   void AppendEditTransaction(EditTransaction&& edit_transaction);
   auto RemoveLastEditTransaction() -> EditTransaction;
+  auto GetTransactionByID(int transaction_id) -> EditTransaction&;
   auto GetLastEditTransaction() -> EditTransaction&;
   auto GetAllEditTransactions() const -> const std::list<EditTransaction>&;
 };
