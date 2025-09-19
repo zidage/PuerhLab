@@ -24,11 +24,11 @@ VersionNode::VersionNode(Version& ver) : _ver_ref(ver) {}
  */
 EditHistory::EditHistory(sl_element_id_t bound_image) : _bound_image(bound_image) {
   SetAddTime();
-  #ifdef _WIN32
+#ifdef _WIN32
   _history_id = xxh::xxhash<64>(this, sizeof(*this));
-  #else
-  _history_id = XXH64(this, sizeof(*this), 0);  
-  #endif
+#else
+  _history_id = XXH64(this, sizeof(*this), 0);
+#endif
 }
 
 /**

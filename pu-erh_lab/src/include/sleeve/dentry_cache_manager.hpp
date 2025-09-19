@@ -1,4 +1,5 @@
 #include <cstdint>
+#include <list>
 #include <map>
 #include <memory>
 #include <optional>
@@ -6,7 +7,6 @@
 #include <set>
 #include <unordered_map>
 #include <utility>
-#include <list>
 
 #include "sleeve_element/sleeve_element.hpp"
 #include "type/type.hpp"
