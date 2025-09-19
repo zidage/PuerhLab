@@ -6,6 +6,28 @@
   },
   "configurePresets": [
     {
+      "name": "win_debug",
+      "displayName": "Debug Build",
+      "description": "Windows: Build with debug info",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/vcpkg/scripts/buildsystems/vcpkg.cmake"
+      }
+    },
+    {
+      "name": "win_release",
+      "displayName": "Release Build",
+      "description": "Windows: Build release",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/vcpkg/scripts/buildsystems/vcpkg.cmake"
+      }
+    },
+    {
       "name": "debug",
       "displayName": "Debug Build",
       "description": "Build with debug info",
@@ -18,7 +40,7 @@
     {
       "name": "release",
       "displayName": "Release Build",
-      "description": "Optimized build",
+      "description": "Build release",
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/release",
       "cacheVariables": {

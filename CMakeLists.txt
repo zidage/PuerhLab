@@ -1,13 +1,9 @@
 cmake_minimum_required(VERSION 3.19)
 
 
-
 #set(CMAKE_C_COMPILER "clang")
 #set(CMAKE_CXX_COMPILER "clang++")
 # Compiler flags.
-if (NOT CMAKE_TOOLCHAIN_FILE AND DEFINED ENV{VCPKG_ROOT} AND NOT DEFINED CMAKE_VCPKG_ROOT)
-    set(CMAKE_VCPKG_ROOT $ENV{VCPKG_ROOT})     
-endif()
 
 project(pu-erh_lab VERSION 0.1.0 LANGUAGES C CXX)
 
