@@ -271,7 +271,7 @@ TEST_F(EditHistoryTests, DISABLED_TestWithImage_Animated) {
 TEST_F(EditHistoryTests, TestWithPreviewPipeline) {
   {
     SleeveManager             manager{db_path_};
-    ImageLoader               image_loader(128, 8, 0);
+    ImageLoader               image_loader(128, 1, 0);
     image_path_t              path = std::string(TEST_IMG_PATH) + "/raw/building";
     std::vector<image_path_t> imgs;
     for (const auto& img : std::filesystem::directory_iterator(path)) {
