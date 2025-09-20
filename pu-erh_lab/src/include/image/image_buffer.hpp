@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <memory>
 #include <opencv2/core/cuda.hpp>
 #include <opencv2/opencv.hpp>
 #include <utility>
@@ -9,10 +10,10 @@
 namespace puerhlab {
 class ImageBuffer {
  private:
-  cv::Mat              _cpu_data;
-  cv::cuda::GpuMat     _gpu_data;
+  cv::Mat                               _cpu_data;
+  cv::cuda::GpuMat                      _gpu_data;
 
-  std::vector<uint8_t> _buffer;
+  std::unique_ptr<std::vector<uint8_t>> _buffer;
 
  public:
   bool _cpu_data_valid = false;

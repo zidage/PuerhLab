@@ -10,8 +10,9 @@ ImageBuffer::ImageBuffer(cv::Mat& data) : _cpu_data_valid(true) { data.copyTo(_c
 
 ImageBuffer::ImageBuffer(cv::Mat&& data) : _cpu_data(data), _cpu_data_valid(true) {}
 
-ImageBuffer::ImageBuffer(std::vector<uint8_t>&& buffer)
-    : _buffer(std::move(buffer)), _buffer_valid(true) {}
+ImageBuffer::ImageBuffer(std::vector<uint8_t>&& buffer) : _buffer_valid(true) {
+  _buffer = std::make_unique<std::vector<uint8_t>>(std::move(buffer));
+}
 
 ImageBuffer::ImageBuffer(ImageBuffer&& other) noexcept
     : _cpu_data(std::move(other._cpu_data)),
@@ -37,7 +38,7 @@ ImageBuffer& ImageBuffer::operator=(ImageBuffer&& other) noexcept {
 }
 
 void ImageBuffer::ReadFromVectorBuffer(std::vector<uint8_t>&& buffer) {
-  _buffer       = std::move(buffer);
+  _buffer       = std::make_unique<std::vector<uint8_t>>(std::move(buffer));
   _buffer_valid = true;
 }
 
@@ -60,7 +61,7 @@ auto ImageBuffer::GetBuffer() -> std::vector<uint8_t>& {
   if (!_buffer_valid) {
     throw std::runtime_error("Image Buffer: No valid buffer data to be returned");
   }
-  return _buffer;
+  return *_buffer;
 }
 
 auto ImageBuffer::SyncToGPU() -> void {
@@ -89,7 +90,7 @@ ImageBuffer ImageBuffer::Clone() const {
     _gpu_data.download(cpu_copy);
     return ImageBuffer{cpu_copy};
   } else if (_buffer_valid) {
-    auto buffer = _buffer;  // copy the buffer
+    auto buffer = *_buffer;  // copy the buffer
     return ImageBuffer{std::move(buffer)};
   } else {
     throw std::runtime_error("Image Buffer: No valid data to clone");
@@ -100,5 +101,5 @@ void ImageBuffer::ReleaseCPUData() { _cpu_data.release(); }
 
 void ImageBuffer::ReleaseGPUData() { _gpu_data.release(); }
 
-void ImageBuffer::ReleaseBuffer() { _buffer.clear(); }
+void ImageBuffer::ReleaseBuffer() { _buffer.reset(); }
 };  // namespace puerhlab

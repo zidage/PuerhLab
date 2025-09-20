@@ -1063,3 +1063,5 @@ temp_folder/
 third_party/
 
 /.vscode/
+
+vcpkg
