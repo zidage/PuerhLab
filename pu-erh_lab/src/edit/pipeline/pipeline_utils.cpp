@@ -84,13 +84,13 @@ auto PipelineStage::ApplyStage() -> std::shared_ptr<ImageBuffer> {
 
     bool has_enabled_op = _operators.size() > 0;
     if (has_enabled_op) {
-      std::shared_ptr<ImageBuffer> current_img = std::make_shared<ImageBuffer>(_input_img->Clone());
+      ImageBuffer current_img = _input_img->Clone();
       for (const auto& op_entry : _operators) {
         if (op_entry.second._enable) {
-          current_img = std::make_shared<ImageBuffer>(op_entry.second._op->Apply(*current_img));
+          current_img = op_entry.second._op->Apply(current_img);
         }
       }
-      _output_cache = current_img;
+      _output_cache = std::make_shared<ImageBuffer>(std::move(current_img));
     } else {
       _output_cache = _input_img;
     }

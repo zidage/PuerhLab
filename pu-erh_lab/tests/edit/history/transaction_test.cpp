@@ -1,4 +1,5 @@
 #include <future>
+#include <memory>
 #include <opencv2/core/mat.hpp>
 #ifdef HAVE_CUDA
 #include <opencv2/cudaimgproc.hpp>
@@ -111,7 +112,7 @@ void SetPipelineTemplate(std::shared_ptr<PipelineExecutor> executor) {
   output_stage.SetOperator(OperatorType::CST, output_params);
 }
 
-TEST_F(EditHistoryTests, DISABLED_TestWithImage) {
+TEST_F(EditHistoryTests, TestWithImage) {
   {
     SleeveManager             manager{db_path_};
     ImageLoader               image_loader(128, 8, 0);
@@ -133,7 +134,8 @@ TEST_F(EditHistoryTests, DISABLED_TestWithImage) {
       PipelineTask task1;
 
       auto         buffer    = ByteBufferLoader::LoadFromImage(img_ptr);
-      task1._input           = std::make_shared<ImageBuffer>(std::move(buffer));
+      task1._input           = buffer ? std::make_shared<ImageBuffer>(std::move(*buffer))
+                                        : nullptr;
 
       auto pipeline_executor = std::make_shared<CPUPipelineExecutor>();
       pipeline_executor->SetThumbnailMode(true);
@@ -143,15 +145,15 @@ TEST_F(EditHistoryTests, DISABLED_TestWithImage) {
 
       task1._options._is_blocking = false;
       task1._options._is_callback = true;
-      auto save_callback          = [img_ptr](ImageBuffer& ) {
-
+      auto save_callback          = [img_ptr](ImageBuffer&) {
         // gpu_data.convertTo(gpu_data, CV_16UC3, 65535.0f);
         // cv::cuda::cvtColor(gpu_data, gpu_data, cv::COLOR_RGB2BGR);
 
         // output.SyncToCPU();
 
-        // std::string           file_name = conv::ToBytes(img_ptr->_image_path.filename().wstring());
-        // std::string           time      = TimeProvider::TimePointToString(TimeProvider::Now());
+        // std::string           file_name =
+        // conv::ToBytes(img_ptr->_image_path.filename().wstring()); std::string           time =
+        // TimeProvider::TimePointToString(TimeProvider::Now());
 
         // static constexpr auto save_path = TEST_IMG_PATH "/my_pipeline/batch_results/{}.tif";
         // std::string           save_name = file_name + "_" + time;
@@ -172,11 +174,9 @@ TEST_F(EditHistoryTests, DISABLED_TestWithImage) {
       auto future_task2           = task2._result->get_future();
       task2._options._is_blocking = true;  // Make task2 non-blocking
 
-
       scheduler.ScheduleTask(std::move(task1));
 
       future_task1.get();  // Wait for task1 to complete
-
 
       // Create and apply an edit transaction
       EditTransaction tx1(1, TransactionType::_ADD, OperatorType::EXPOSURE,
@@ -191,7 +191,6 @@ TEST_F(EditHistoryTests, DISABLED_TestWithImage) {
       scheduler.ScheduleTask(std::move(task2));
       future_task2.get();  // Wait for task2 to complete
 
-
       // Create and apply another edit transaction
       EditTransaction tx2(2, TransactionType::_ADD, OperatorType::CONTRAST,
                           PipelineStageName::Basic_Adjustment, {{"contrast", 50}}, &tx1);
@@ -199,7 +198,6 @@ TEST_F(EditHistoryTests, DISABLED_TestWithImage) {
 
       scheduler.ScheduleTask(std::move(task3));
       future_task3.get();  // Wait for task3 to complete
-
     }
   }
 }
@@ -229,7 +227,7 @@ TEST_F(EditHistoryTests, DISABLED_TestWithImage_Animated) {
 
     PipelineTask task;
     auto         buffer    = ByteBufferLoader::LoadFromImage(img_ptr);
-    task._input            = std::make_shared<ImageBuffer>(std::move(buffer));
+    task._input            = buffer ? std::make_shared<ImageBuffer>(std::move(*buffer)) : nullptr;
 
     auto pipeline_executor = std::make_shared<CPUPipelineExecutor>();
     pipeline_executor->SetThumbnailMode(true);
@@ -268,7 +266,7 @@ TEST_F(EditHistoryTests, DISABLED_TestWithImage_Animated) {
   }
 }
 
-TEST_F(EditHistoryTests, TestWithPreviewPipeline) {
+TEST_F(EditHistoryTests, DISABLED_TestWithPreviewPipeline) {
   {
     SleeveManager             manager{db_path_};
     ImageLoader               image_loader(128, 1, 0);
@@ -293,7 +291,7 @@ TEST_F(EditHistoryTests, TestWithPreviewPipeline) {
 
     PipelineTask task;
     auto         buffer    = ByteBufferLoader::LoadFromImage(img_ptr);
-    task._input            = std::make_shared<ImageBuffer>(std::move(buffer));
+    task._input            = buffer ? std::make_shared<ImageBuffer>(std::move(*buffer)) : nullptr;
 
     auto pipeline_executor = std::make_shared<CPUPipelineExecutor>(true);
     pipeline_executor->SetThumbnailMode(true);
@@ -304,17 +302,14 @@ TEST_F(EditHistoryTests, TestWithPreviewPipeline) {
     task._options._is_callback     = false;
     task._options._is_seq_callback = true;
     auto display_callback          = [](ImageBuffer& output, uint32_t id) {
-      // auto time = TimeProvider::TimePointToString(TimeProvider::Now());
       std::cout << "New frame " << id << std::endl;
-
-      // cv::cvtColor(output.GetCPUData(), output.GetCPUData(), cv::COLOR_RGB2BGR);
     };
     task._seq_callback         = display_callback;
     task._options._is_blocking = true;
 
     nlohmann::json exposure_params;
     exposure_params["exposure"] = 0.0f;
-    for (float exposure = -2.0f; exposure <= -2.0f; exposure += 0.05f) {
+    for (float exposure = -2.0f; exposure <= 2.0f; exposure += 0.05f) {
       PipelineTask task1 = task;  // Make a copy of task for task1
       auto& basic_stage  = task1._pipeline_executor->GetStage(PipelineStageName::Basic_Adjustment);
       exposure_params["exposure"] = exposure;

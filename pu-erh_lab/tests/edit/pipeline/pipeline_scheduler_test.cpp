@@ -69,7 +69,7 @@ TEST_F(PipelineTests, SchedulerBasic) {
       PipelineTask task;
 
       auto         buffer        = ByteBufferLoader::LoadFromImage(img_ptr);
-      task._input                = std::make_shared<ImageBuffer>(std::move(buffer));
+      task._input                = buffer ? std::make_shared<ImageBuffer>(std::move(*buffer)) : nullptr;
       task._pipeline_executor    = std::make_shared<CPUPipelineExecutor>();
       SetPipelineStages(task._pipeline_executor);
 
