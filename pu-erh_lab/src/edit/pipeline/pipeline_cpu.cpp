@@ -16,28 +16,31 @@
 #include "image/image_buffer.hpp"
 
 namespace puerhlab {
-CPUPipelineExecutor::CPUPipelineExecutor()
-    : _stages({{PipelineStageName::Image_Loading, false},
-               {PipelineStageName::To_WorkingSpace, false},
-               {PipelineStageName::Basic_Adjustment, false},
-               {PipelineStageName::Color_Adjustment, false},
-               {PipelineStageName::Detail_Adjustment, false},
-               {PipelineStageName::Output_Transform, false},
-               {PipelineStageName::Geometry_Adjustment, false}}) {
+CPUPipelineExecutor::CPUPipelineExecutor() {
+  _stages =
+      std::make_unique<std::array<PipelineStage, static_cast<int>(PipelineStageName::Stage_Count)>>(
+          std::array<PipelineStage, static_cast<int>(PipelineStageName::Stage_Count)>{
+              PipelineStage{PipelineStageName::Image_Loading, _enable_cache},
+              PipelineStage{PipelineStageName::To_WorkingSpace, _enable_cache},
+              PipelineStage{PipelineStageName::Basic_Adjustment, _enable_cache},
+              PipelineStage{PipelineStageName::Color_Adjustment, _enable_cache},
+              PipelineStage{PipelineStageName::Detail_Adjustment, _enable_cache},
+              PipelineStage{PipelineStageName::Output_Transform, _enable_cache},
+              PipelineStage{PipelineStageName::Geometry_Adjustment, _enable_cache}});
   // Link stages
-  for (size_t i = 0; i < _stages.size(); i++) {
-    PipelineStage* prev = (i == 0) ? nullptr : &_stages[i - 1];
-    PipelineStage* next = (i == _stages.size() - 1) ? nullptr : &_stages[i + 1];
-    _stages[i].SetNeighbors(prev, next);
+  for (size_t i = 0; i < _stages->size(); i++) {
+    PipelineStage* prev = (i == 0) ? nullptr : &(*_stages)[i - 1];
+    PipelineStage* next = (i == _stages->size() - 1) ? nullptr : &(*_stages)[i + 1];
+    (*_stages)[i].SetNeighbors(prev, next);
   }
 }
 
 void CPUPipelineExecutor::ResetStages() {
-  for (size_t i = 0; i < _stages.size(); i++) {
-    _stages[i]          = PipelineStage(_stages[i]._stage, _enable_cache);
-    PipelineStage* prev = (i == 0) ? nullptr : &_stages[i - 1];
-    PipelineStage* next = (i == _stages.size() - 1) ? nullptr : &_stages[i + 1];
-    _stages[i].SetNeighbors(prev, next);
+  for (size_t i = 0; i < _stages->size(); i++) {
+    (*_stages)[i]       = PipelineStage((*_stages)[i]._stage, _enable_cache);
+    PipelineStage* prev = (i == 0) ? nullptr : &(*_stages)[i - 1];
+    PipelineStage* next = (i == _stages->size() - 1) ? nullptr : &(*_stages)[i + 1];
+    (*_stages)[i].SetNeighbors(prev, next);
   }
 }
 
@@ -49,31 +52,35 @@ void CPUPipelineExecutor::SetEnableCache(bool enable_cache) {
 }
 
 CPUPipelineExecutor::CPUPipelineExecutor(bool enable_cache)
-    : _stages({{PipelineStageName::Image_Loading, enable_cache},
-               {PipelineStageName::To_WorkingSpace, enable_cache},
-               {PipelineStageName::Basic_Adjustment, enable_cache},
-               {PipelineStageName::Color_Adjustment, enable_cache},
-               {PipelineStageName::Detail_Adjustment, enable_cache},
-               {PipelineStageName::Output_Transform, enable_cache},
-               {PipelineStageName::Geometry_Adjustment, enable_cache}}) {
+    : _enable_cache(enable_cache) {
+  _stages =
+      std::make_unique<std::array<PipelineStage, static_cast<int>(PipelineStageName::Stage_Count)>>(
+          std::array<PipelineStage, static_cast<int>(PipelineStageName::Stage_Count)>{
+              PipelineStage{PipelineStageName::Image_Loading, _enable_cache},
+              PipelineStage{PipelineStageName::To_WorkingSpace, _enable_cache},
+              PipelineStage{PipelineStageName::Basic_Adjustment, _enable_cache},
+              PipelineStage{PipelineStageName::Color_Adjustment, _enable_cache},
+              PipelineStage{PipelineStageName::Detail_Adjustment, _enable_cache},
+              PipelineStage{PipelineStageName::Output_Transform, _enable_cache},
+              PipelineStage{PipelineStageName::Geometry_Adjustment, _enable_cache}});
   // Link stages
-  for (size_t i = 0; i < _stages.size(); i++) {
-    PipelineStage* prev = (i == 0) ? nullptr : &_stages[i - 1];
-    PipelineStage* next = (i == _stages.size() - 1) ? nullptr : &_stages[i + 1];
-    _stages[i].SetNeighbors(prev, next);
+  for (size_t i = 0; i < _stages->size(); i++) {
+    PipelineStage* prev = (i == 0) ? nullptr : &(*_stages)[i - 1];
+    PipelineStage* next = (i == _stages->size() - 1) ? nullptr : &(*_stages)[i + 1];
+    (*_stages)[i].SetNeighbors(prev, next);
   }
 }
 
 auto CPUPipelineExecutor::GetBackend() -> PipelineBackend { return _backend; }
 
 auto CPUPipelineExecutor::GetStage(PipelineStageName stage) -> PipelineStage& {
-  return _stages[static_cast<int>(stage)];
+  return (*_stages)[static_cast<int>(stage)];
 }
 
 auto CPUPipelineExecutor::Apply(ImageBuffer& input) -> ImageBuffer {
   auto output = std::make_shared<ImageBuffer>(input.Clone());
 
-  for (auto& stage : _stages) {
+  for (auto& stage : *_stages) {
     stage.SetInputImage(output);
     output = stage.ApplyStage();
   }
@@ -85,12 +92,12 @@ void CPUPipelineExecutor::SetThumbnailMode(bool is_thumbnail) {
   _thumbnail_params = {};  // TODO: Use default params for now
   if (!_is_thumbnail) {
     // Disable resizing in image loading stage
-    _stages[static_cast<int>(PipelineStageName::Image_Loading)].EnableOperator(
+    (*_stages)[static_cast<int>(PipelineStageName::Image_Loading)].EnableOperator(
         OperatorType::RESIZE,
         false);  // If RESIZE operator not exist, this function will do nothing
     return;
   }
-  _stages[static_cast<int>(PipelineStageName::Image_Loading)].SetOperator(OperatorType::RESIZE,
+  (*_stages)[static_cast<int>(PipelineStageName::Image_Loading)].SetOperator(OperatorType::RESIZE,
                                                                           _thumbnail_params);
 }
 };  // namespace puerhlab

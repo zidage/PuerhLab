@@ -51,10 +51,9 @@ void OpenCVRawProcessor::ApplyWhiteBalance() {
     auto& cpu_img = pre_debayer_buffer.GetCPUData();
     CPU::WhiteBalanceCorrection(cpu_img, _raw_processor);
   }
-#else
+#endif
   auto& cpu_img = pre_debayer_buffer.GetCPUData();
   CPU::WhiteBalanceCorrection(cpu_img, _raw_processor);
-#endif
 }
 
 void OpenCVRawProcessor::ApplyDebayer() {
@@ -67,10 +66,9 @@ void OpenCVRawProcessor::ApplyDebayer() {
     auto& img = pre_debayer_buffer.GetCPUData();
     CPU::BayerRGGB2RGB_AHD(img);
   }
-#else
+#endif
   auto& img = pre_debayer_buffer.GetCPUData();
   CPU::BayerRGGB2RGB_AHD(img);
-#endif
 }
 
 void OpenCVRawProcessor::ApplyHighlightReconstruct() {
@@ -97,11 +95,10 @@ void OpenCVRawProcessor::ApplyColorSpaceTransform() {
 
     CPU::ApplyColorMatrix(img, color_coeffs);
   }
-#else
+#endif
   auto& img = debayer_buffer.GetCPUData();
   img.convertTo(img, CV_32FC3);
   CPU::ApplyColorMatrix(img, color_coeffs);
-#endif
 }
 
 auto OpenCVRawProcessor::Process() -> ImageBuffer {

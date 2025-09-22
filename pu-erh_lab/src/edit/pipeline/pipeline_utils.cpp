@@ -9,6 +9,7 @@
 namespace puerhlab {
 PipelineStage::PipelineStage(PipelineStageName stage, bool enable_cache)
     : _enable_cache(enable_cache), _stage(stage) {
+  _operators = std::make_unique<std::map<OperatorType, OperatorEntry>>();
   if (_stage == PipelineStageName::Image_Loading) {
     _input_cache_valid = true;  // No input for image loading stage, so input cache is always valid
   }
@@ -20,9 +21,9 @@ void PipelineStage::SetNeighbors(PipelineStage* prev, PipelineStage* next) {
 }
 
 void PipelineStage::SetOperator(OperatorType op_type, nlohmann::json& param) {
-  auto it = _operators.find(op_type);
-  if (it == _operators.end()) {
-    _operators.emplace(op_type,
+  auto it = _operators->find(op_type);
+  if (it == _operators->end()) {
+    _operators->emplace(op_type,
                        OperatorEntry{true, OperatorFactory::Instance().Create(op_type, param)});
     SetOutputCacheValid(false);
   } else {
@@ -32,8 +33,8 @@ void PipelineStage::SetOperator(OperatorType op_type, nlohmann::json& param) {
 }
 
 void PipelineStage::EnableOperator(OperatorType op_type, bool enable) {
-  auto it = _operators.find(op_type);
-  if (it != _operators.end()) {
+  auto it = _operators->find(op_type);
+  if (it != _operators->end()) {
     if (it->second._enable != enable) {
       SetOutputCacheValid(false);
     }
@@ -82,10 +83,10 @@ auto PipelineStage::ApplyStage() -> std::shared_ptr<ImageBuffer> {
       return _output_cache;
     }
 
-    bool has_enabled_op = _operators.size() > 0;
+    bool has_enabled_op = _operators->size() > 0;
     if (has_enabled_op) {
       ImageBuffer current_img = _input_img->Clone();
-      for (const auto& op_entry : _operators) {
+      for (const auto& op_entry : *_operators) {
         if (op_entry.second._enable) {
           current_img = op_entry.second._op->Apply(current_img);
         }
@@ -103,10 +104,10 @@ auto PipelineStage::ApplyStage() -> std::shared_ptr<ImageBuffer> {
     }
     return _output_cache;
   } else {
-    bool has_enabled_op = _operators.size() > 0;
+    bool has_enabled_op = _operators->size() > 0;
     if (has_enabled_op) {
       std::shared_ptr<ImageBuffer> current_img = _input_img;
-      for (const auto& op_entry : _operators) {
+      for (const auto& op_entry : *_operators) {
         if (op_entry.second._enable) {
           current_img = std::make_shared<ImageBuffer>(op_entry.second._op->Apply(*current_img));
         }

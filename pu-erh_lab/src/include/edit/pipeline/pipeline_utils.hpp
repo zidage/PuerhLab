@@ -21,7 +21,7 @@ struct OperatorEntry {
 
 class PipelineStage {
  private:
-  std::map<OperatorType, OperatorEntry> _operators;
+  std::unique_ptr<std::map<OperatorType, OperatorEntry>> _operators;
 
   PipelineStage*                        prev_stage = nullptr;
   PipelineStage*                        next_stage = nullptr;

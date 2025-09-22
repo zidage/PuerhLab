@@ -112,7 +112,7 @@ void SetPipelineTemplate(std::shared_ptr<PipelineExecutor> executor) {
   output_stage.SetOperator(OperatorType::CST, output_params);
 }
 
-TEST_F(EditHistoryTests, TestWithImage) {
+TEST_F(EditHistoryTests, DISABLED_TestWithImage) {
   {
     SleeveManager             manager{db_path_};
     ImageLoader               image_loader(128, 8, 0);
@@ -266,7 +266,7 @@ TEST_F(EditHistoryTests, DISABLED_TestWithImage_Animated) {
   }
 }
 
-TEST_F(EditHistoryTests, DISABLED_TestWithPreviewPipeline) {
+TEST_F(EditHistoryTests, TestWithPreviewPipeline) {
   {
     SleeveManager             manager{db_path_};
     ImageLoader               image_loader(128, 1, 0);
