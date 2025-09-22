@@ -44,12 +44,8 @@ void OpenCVRawProcessor::ApplyWhiteBalance() {
 #ifdef HAVE_CUDA
   if (_params._cuda) {
     auto& gpu_img = pre_debayer_buffer.GetGPUData();
-
     CUDA::WhiteBalanceCorrection(gpu_img, _raw_processor);
-
-  } else {
-    auto& cpu_img = pre_debayer_buffer.GetCPUData();
-    CPU::WhiteBalanceCorrection(cpu_img, _raw_processor);
+    return;
   }
 #endif
   auto& cpu_img = pre_debayer_buffer.GetCPUData();
@@ -62,9 +58,7 @@ void OpenCVRawProcessor::ApplyDebayer() {
   if (_params._cuda) {
     auto& gpu_img = pre_debayer_buffer.GetGPUData();
     CUDA::BayerRGGB2RGB_AHD(gpu_img);
-  } else {
-    auto& img = pre_debayer_buffer.GetCPUData();
-    CPU::BayerRGGB2RGB_AHD(img);
+    return;
   }
 #endif
   auto& img = pre_debayer_buffer.GetCPUData();
@@ -87,13 +81,8 @@ void OpenCVRawProcessor::ApplyColorSpaceTransform() {
 #ifdef HAVE_CUDA
   if (_params._cuda) {
     auto& gpu_img = debayer_buffer.GetGPUData();
-
     CUDA::ApplyColorMatrix(gpu_img, color_coeffs);
-  } else {
-    auto& img = debayer_buffer.GetCPUData();
-    img.convertTo(img, CV_32FC3);
-
-    CPU::ApplyColorMatrix(img, color_coeffs);
+    return;
   }
 #endif
   auto& img = debayer_buffer.GetCPUData();
