@@ -33,8 +33,8 @@ ContrastOp::ContrastOp(const nlohmann::json& params) { SetParams(params); }
  * @param input
  * @return ImageBuffer
  */
-auto ContrastOp::Apply(ImageBuffer& input) -> ImageBuffer {
-  cv::Mat& linear_image = input.GetCPUData();
+void ContrastOp::Apply(std::shared_ptr<ImageBuffer> input) {
+  cv::Mat& linear_image = input->GetCPUData();
 
   linear_image.forEach<cv::Vec3f>([this](cv::Vec3f& pixel, const int*) -> void {
     auto lab = OklabCvt::ACESRGB2Oklab(pixel);
@@ -46,8 +46,6 @@ auto ContrastOp::Apply(ImageBuffer& input) -> ImageBuffer {
   // clamp
   // cv::min(linear_image, 100.0f, linear_image);
   // cv::max(linear_image, 0.0f, linear_image);
-
-  return {std::move(linear_image)};
 }
 
 auto ContrastOp::GetParams() const -> nlohmann::json {

@@ -24,7 +24,7 @@ void PipelineStage::SetOperator(OperatorType op_type, nlohmann::json& param) {
   auto it = _operators->find(op_type);
   if (it == _operators->end()) {
     _operators->emplace(op_type,
-                       OperatorEntry{true, OperatorFactory::Instance().Create(op_type, param)});
+                        OperatorEntry{true, OperatorFactory::Instance().Create(op_type, param)});
     SetOutputCacheValid(false);
   } else {
     (it->second)._op->SetParams(param);
@@ -85,13 +85,13 @@ auto PipelineStage::ApplyStage() -> std::shared_ptr<ImageBuffer> {
 
     bool has_enabled_op = _operators->size() > 0;
     if (has_enabled_op) {
-      ImageBuffer current_img = _input_img->Clone();
+      auto current_img = std::make_shared<ImageBuffer>(_input_img->Clone());
       for (const auto& op_entry : *_operators) {
         if (op_entry.second._enable) {
-          current_img = op_entry.second._op->Apply(current_img);
+          op_entry.second._op->Apply(current_img);
         }
       }
-      _output_cache = std::make_shared<ImageBuffer>(std::move(current_img));
+      _output_cache = current_img;
     } else {
       _output_cache = _input_img;
     }
@@ -109,7 +109,7 @@ auto PipelineStage::ApplyStage() -> std::shared_ptr<ImageBuffer> {
       std::shared_ptr<ImageBuffer> current_img = _input_img;
       for (const auto& op_entry : *_operators) {
         if (op_entry.second._enable) {
-          current_img = std::make_shared<ImageBuffer>(op_entry.second._op->Apply(*current_img));
+          op_entry.second._op->Apply(current_img);
         }
       }
       _output_cache = current_img;

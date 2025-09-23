@@ -84,8 +84,8 @@ auto ShadowsOp::GetOutput(cv::Vec3f& input) -> cv::Vec3f {
 
 auto ShadowsOp::GetScale() -> float { return _offset / 100.0f; }
 
-auto ShadowsOp::Apply(ImageBuffer& input) -> ImageBuffer {
-  return ToneRegionOp<ShadowsOp>::Apply(input);
+void ShadowsOp::Apply(std::shared_ptr<ImageBuffer> input) {
+  ToneRegionOp<ShadowsOp>::Apply(input);
 }
 
 auto ShadowsOp::GetParams() const -> nlohmann::json { return {_script_name, _offset}; }

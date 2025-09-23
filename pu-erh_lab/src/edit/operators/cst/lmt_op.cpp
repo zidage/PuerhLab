@@ -13,11 +13,11 @@ OCIO_LMT_Transform_Op::OCIO_LMT_Transform_Op(const nlohmann::json& params) {
   SetParams(params);
 }
 
-auto OCIO_LMT_Transform_Op::Apply(ImageBuffer& input) -> ImageBuffer {
+void OCIO_LMT_Transform_Op::Apply(std::shared_ptr<ImageBuffer> input) {
   if (_lmt_path.empty()) {
-    return {std::move(input)};
+    return;
   }
-  auto& img           = input.GetCPUData();
+  auto& img           = input->GetCPUData();
 
   auto  lmt_transform = OCIO::FileTransform::Create();
   auto  path_str      = _lmt_path.wstring();
@@ -36,8 +36,6 @@ auto OCIO_LMT_Transform_Op::Apply(ImageBuffer& input) -> ImageBuffer {
       }
     }
   });
-
-  return {std::move(img)};
 }
 
 auto OCIO_LMT_Transform_Op::GetParams() const -> nlohmann::json {

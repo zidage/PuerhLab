@@ -30,7 +30,7 @@ class HLSOp : public OperatorBase<HLSOp> {
   void SetAdjustment(const cv::Vec3f& adjustment);
   void SetRanges(float h_range, float l_range, float s_range);
 
-  auto Apply(ImageBuffer& input) -> ImageBuffer override;
+  void Apply(std::shared_ptr<ImageBuffer> input) override;
   auto GetParams() const -> nlohmann::json override;
   void SetParams(const nlohmann::json& params) override;
 };

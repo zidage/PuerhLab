@@ -160,15 +160,15 @@ TEST_F(PipelineTests, SimpleTest1) {
         file.close();
         decoder.Decode(std::move(buffer), img);
 
-        ImageBuffer source{img->GetImageData()};
+        auto source = std::make_shared<ImageBuffer>(img->GetImageData());
         auto output = pipeline.Apply(source);
 
         cv::cuda::GpuMat to_save_rec709;
         cv::Mat          to_save_rec709_cpu;
 
-        output.SyncToGPU();
+        output->SyncToGPU();
 
-        auto& gpu_data = output.GetGPUData();
+        auto& gpu_data = output->GetGPUData();
         gpu_data.convertTo(to_save_rec709, CV_16UC3, 65535.0f);
         cv::cuda::cvtColor(to_save_rec709, to_save_rec709, cv::COLOR_RGB2BGR);
         to_save_rec709.download(to_save_rec709_cpu);
@@ -182,8 +182,8 @@ TEST_F(PipelineTests, SimpleTest1) {
 
         img->ClearData();
         to_save_rec709.release();
-        output.ReleaseCPUData();
-        output.ReleaseGPUData();
+        output->ReleaseCPUData();
+        output->ReleaseGPUData();
         to_save_rec709_cpu.release();
       };
       thread_pool.Submit(task);

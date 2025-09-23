@@ -5,8 +5,8 @@
 namespace puerhlab {
 AutoExposureOp::AutoExposureOp(const nlohmann::json& params) {}
 
-auto AutoExposureOp::Apply(ImageBuffer& input) -> ImageBuffer {
-  cv::Mat& L      = input.GetCPUData();
+void AutoExposureOp::Apply(std::shared_ptr<ImageBuffer> input) {
+  cv::Mat& L      = input->GetCPUData();
 
   // float    v_low  = ComputePercentile(L, p_clip_low);
   float    v_ref  = ComputePercentile(L, p_ref);
@@ -43,8 +43,6 @@ auto AutoExposureOp::Apply(ImageBuffer& input) -> ImageBuffer {
       pixel = SoftClip(pixel, soft_clip_start, soft_clip_strength);
     }
   });
-
-  return {std::move(L)};
 }
 
 auto AutoExposureOp::GetParams() const -> nlohmann::json { return {}; }

@@ -39,12 +39,12 @@ void HLSOp::SetRanges(float h_range, float l_range, float s_range) {
   _saturation_range = s_range;
 }
 
-auto HLSOp::Apply(ImageBuffer& input) -> ImageBuffer {
+void HLSOp::Apply(std::shared_ptr<ImageBuffer> input) {
   if (cv::norm(_HLS_adjustment, cv::NORM_L2SQR) < 1e-10) {
-    return {std::move(input)};
+    return;
   }
 
-  cv::Mat& img = input.GetCPUData();
+  cv::Mat& img = input->GetCPUData();
   cv::Mat  HLS_img;
   cv::cvtColor(img, HLS_img, cv::COLOR_RGB2HLS);
 
@@ -93,8 +93,6 @@ auto HLSOp::Apply(ImageBuffer& input) -> ImageBuffer {
 
   cv::threshold(img, img, 1.0f, 1.0f, cv::THRESH_TRUNC);
   cv::threshold(img, img, 0.0f, 0.0f, cv::THRESH_TOZERO);
-
-  return {std::move(img)};
 }
 
 auto HLSOp::GetParams() const -> nlohmann::json {

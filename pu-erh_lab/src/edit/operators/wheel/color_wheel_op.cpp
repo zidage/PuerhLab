@@ -26,8 +26,8 @@ float bell(float L, float center, float width) {
   return exp(-x * x);  // Gaussian
 }
 
-auto ColorWheelOp::Apply(ImageBuffer& input) -> ImageBuffer {
-  cv::Mat& img = input.GetCPUData();
+void ColorWheelOp::Apply(std::shared_ptr<ImageBuffer> input) {
+  cv::Mat& img = input->GetCPUData();
   if (img.empty()) {
     throw std::invalid_argument("Color Wheel: Invalid input image");
   }
@@ -75,8 +75,6 @@ auto ColorWheelOp::Apply(ImageBuffer& input) -> ImageBuffer {
     cv::saturate_cast<float>(pixel[1]);
     cv::saturate_cast<float>(pixel[2]);
   });
-
-  return {std::move(img)};
 }
 
 auto ColorWheelOp::GetParams() const -> nlohmann::json {

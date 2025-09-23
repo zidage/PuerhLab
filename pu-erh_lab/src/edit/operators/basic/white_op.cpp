@@ -42,8 +42,8 @@ auto WhiteOp::GetOutput(hw::Vec<hw::ScalableTag<float>> luminance)
 
 auto WhiteOp::GetScale() -> float { return _offset / 3.0f; }
 
-auto WhiteOp::Apply(ImageBuffer& input) -> ImageBuffer {
-  return ToneRegionOp<WhiteOp>::Apply(input);
+void WhiteOp::Apply(std::shared_ptr<ImageBuffer> input) {
+  ToneRegionOp<WhiteOp>::Apply(input);
 }
 
 auto WhiteOp::GetParams() const -> nlohmann::json { return {_script_name, _offset}; }

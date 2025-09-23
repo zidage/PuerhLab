@@ -8,8 +8,8 @@
 namespace puerhlab {
 RawDecodeOp::RawDecodeOp(const nlohmann::json& params) { SetParams(params); }
 
-auto RawDecodeOp::Apply(ImageBuffer& input) -> ImageBuffer {
-  auto&  buffer = input.GetBuffer();
+void RawDecodeOp::Apply(std::shared_ptr<ImageBuffer> input) {
+  auto&  buffer = input->GetBuffer();
 
   LibRaw raw_processor;
   int    ret = raw_processor.open_buffer((void*)buffer.data(), buffer.size());
@@ -18,8 +18,8 @@ auto RawDecodeOp::Apply(ImageBuffer& input) -> ImageBuffer {
   }
 
   raw_processor.imgdata.params.output_bps = 16;
-
   ImageBuffer output;
+
   switch (_backend) {
     case RawProcessBackend::PUERH: {
       raw_processor.unpack();
@@ -58,7 +58,7 @@ auto RawDecodeOp::Apply(ImageBuffer& input) -> ImageBuffer {
       break;
     }
   }
-  return output;
+  *input = std::move(output);
 }
 
 auto RawDecodeOp::GetParams() const -> nlohmann::json {

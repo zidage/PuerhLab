@@ -77,14 +77,14 @@ auto CPUPipelineExecutor::GetStage(PipelineStageName stage) -> PipelineStage& {
   return (*_stages)[static_cast<int>(stage)];
 }
 
-auto CPUPipelineExecutor::Apply(ImageBuffer& input) -> ImageBuffer {
-  auto output = std::make_shared<ImageBuffer>(input.Clone());
+auto CPUPipelineExecutor::Apply(std::shared_ptr<ImageBuffer> input) -> std::shared_ptr<ImageBuffer> {
+  auto output = std::make_shared<ImageBuffer>(input->Clone());
 
   for (auto& stage : *_stages) {
     stage.SetInputImage(output);
     output = stage.ApplyStage();
   }
-  return output->Clone();
+  return output;
 }
 
 void CPUPipelineExecutor::SetThumbnailMode(bool is_thumbnail) {

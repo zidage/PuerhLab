@@ -26,8 +26,8 @@ auto VibranceOp::ComputeScale(float chroma) -> float {
   return 1.0f + strength * falloff;
 }
 
-auto VibranceOp::Apply(ImageBuffer& input) -> ImageBuffer {
-  cv::Mat& img = input.GetCPUData();
+void VibranceOp::Apply(std::shared_ptr<ImageBuffer> input) {
+  cv::Mat& img = input->GetCPUData();
 
   img.forEach<cv::Vec3f>([&](cv::Vec3f& pixel, const int*) {
     // Adpated from https://github.com/tannerhelland/PhotoDemon
@@ -61,7 +61,6 @@ auto VibranceOp::Apply(ImageBuffer& input) -> ImageBuffer {
     pixel = {r, g, b};
   });
 
-  return {std::move(input)};
 }
 
 auto VibranceOp::GetParams() const -> nlohmann::json {

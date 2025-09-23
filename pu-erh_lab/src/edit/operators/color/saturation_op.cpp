@@ -30,8 +30,8 @@ void SaturationOp::ComputeScale() {
   }
 }
 
-auto SaturationOp::Apply(ImageBuffer& input) -> ImageBuffer {
-  cv::Mat& img = input.GetCPUData();
+void SaturationOp::Apply(std::shared_ptr<ImageBuffer> input) {
+  cv::Mat& img = input->GetCPUData();
 
   img.forEach<cv::Vec3f>([&](cv::Vec3f& pixel, const int*) {
     OklabCvt::Oklab oklab_vec = OklabCvt::LinearRGB2Oklab(pixel);
@@ -42,8 +42,6 @@ auto SaturationOp::Apply(ImageBuffer& input) -> ImageBuffer {
 
     pixel = OklabCvt::Oklab2LinearRGB(oklab_vec);
   });
-
-  return {std::move(input)};
 }
 
 auto SaturationOp::GetParams() const -> nlohmann::json {

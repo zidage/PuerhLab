@@ -28,7 +28,7 @@ class SaturationOp : public OperatorBase<SaturationOp> {
   SaturationOp(float saturation_offset);
   SaturationOp(const nlohmann::json& params);
 
-  auto Apply(ImageBuffer& input) -> ImageBuffer override;
+  void Apply(std::shared_ptr<ImageBuffer> input) override;
   auto GetParams() const -> nlohmann::json override;
   void SetParams(const nlohmann::json& params) override;
 };

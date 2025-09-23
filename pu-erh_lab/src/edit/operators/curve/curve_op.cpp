@@ -62,8 +62,8 @@ auto CurveOp::EvaluateCurve(float x) const -> float {
   return std::clamp(y, 0.0f, 1.0f);
 }
 
-auto CurveOp::Apply(ImageBuffer& input) -> ImageBuffer {
-  auto& img = input.GetCPUData();
+void CurveOp::Apply(std::shared_ptr<ImageBuffer> input) {
+  auto& img = input->GetCPUData();
 
   img.forEach<cv::Vec3f>([&](cv::Vec3f& pixel, const int*) {
     float lum     = 0.2126f * pixel[2] + 0.7152f * pixel[1] + 0.0722f * pixel[0];
@@ -71,7 +71,6 @@ auto CurveOp::Apply(ImageBuffer& input) -> ImageBuffer {
     float ratio   = (lum > 1e-5f) ? new_lum / lum : 0.0f;
     pixel *= ratio;
   });
-  return {std::move(img)};
 }
 
 void CurveOp::SetCtrlPts(const std::vector<cv::Point2f>& control_points) {

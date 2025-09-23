@@ -22,7 +22,7 @@ class CVCvtColorOp : public OperatorBase<CVCvtColorOp> {
   CVCvtColorOp(int code, std::optional<size_t> channel_index);
   CVCvtColorOp(const nlohmann::json& params);
 
-  auto Apply(ImageBuffer& input) -> ImageBuffer override;
+  void Apply(std::shared_ptr<ImageBuffer> input) override;
   auto GetParams() const -> nlohmann::json override;
   void SetParams(const nlohmann::json& params) override;
 };

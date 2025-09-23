@@ -38,10 +38,10 @@ void ClarityOp::CreateMidtoneMask(cv::Mat& input, cv::Mat& mask) {
   // }
 }
 
-auto ClarityOp::Apply(ImageBuffer& input) -> ImageBuffer {
+void ClarityOp::Apply(std::shared_ptr<ImageBuffer> input) {
   // Adpated from
   // https://community.adobe.com/t5/photoshop-ecosystem-discussions/what-exactly-is-clarity/td-p/8957968
-  cv::Mat& img = input.GetCPUData();
+  cv::Mat& img = input->GetCPUData();
 
   cv::Mat  midtone_mask;
   CreateMidtoneMask(img, midtone_mask);
@@ -62,7 +62,6 @@ auto ClarityOp::Apply(ImageBuffer& input) -> ImageBuffer {
   });
 
   img += high_pass;
-  return {std::move(img)};
 }
 
 auto ClarityOp::GetParams() const -> nlohmann::json {

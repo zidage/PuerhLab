@@ -6,8 +6,8 @@ CVCvtColorOp::CVCvtColorOp(int code, std::optional<size_t> channel_index)
 
 CVCvtColorOp::CVCvtColorOp(const nlohmann::json& params) { SetParams(params); }
 
-auto CVCvtColorOp::Apply(ImageBuffer& input) -> ImageBuffer {
-  cv::Mat& img = input.GetCPUData();
+void CVCvtColorOp::Apply(std::shared_ptr<ImageBuffer> input) {
+  cv::Mat& img = input->GetCPUData();
   cv::UMat src;
   img.copyTo(src);
 
@@ -22,8 +22,7 @@ auto CVCvtColorOp::Apply(ImageBuffer& input) -> ImageBuffer {
   if (_channel_index.has_value()) {
     std::vector<cv::Mat> channels;
     cv::split(dst, channels);
-    return {std::move(channels.at(_channel_index.value()))};
+    img = channels.at(_channel_index.value());
   }
-  return {std::move(dst)};
 }
 };  // namespace puerhlab

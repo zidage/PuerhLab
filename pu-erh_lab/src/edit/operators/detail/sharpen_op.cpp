@@ -47,8 +47,8 @@ void SharpenOp::SetParams(const nlohmann::json& params) {
   ComputeScale();
 }
 
-auto SharpenOp::Apply(ImageBuffer& input) -> ImageBuffer {
-  cv::Mat& img = input.GetCPUData();
+void SharpenOp::Apply(std::shared_ptr<ImageBuffer> input) {
+  cv::Mat& img = input->GetCPUData();
 
   // Use USM to sharpen the image
   cv::Mat  blurred;
@@ -73,6 +73,5 @@ auto SharpenOp::Apply(ImageBuffer& input) -> ImageBuffer {
   cv::threshold(img, img, 1.0f, 1.0f, cv::THRESH_TRUNC);
   cv::threshold(img, img, 0.0f, 0.0f, cv::THRESH_TOZERO);
 
-  return {std::move(img)};
 }
 };  // namespace puerhlab

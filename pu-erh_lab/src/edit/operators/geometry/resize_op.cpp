@@ -5,16 +5,17 @@
 namespace puerhlab {
 ResizeOp::ResizeOp(const nlohmann::json& params) { SetParams(params); }
 
-auto ResizeOp::Apply(ImageBuffer& input) -> ImageBuffer {
-  auto& img = input.GetCPUData();
+void ResizeOp::Apply(std::shared_ptr<ImageBuffer> input) {
+  auto& img = input->GetCPUData();
   int   w   = img.cols;
   int   h   = img.rows;
-  if (std::max(w, h) <= _maximum_edge) return {std::move(input)};
+  if (std::max(w, h) <= _maximum_edge) {
+    return;
+  }
 
   float scale = static_cast<float>(_maximum_edge) / static_cast<float>(std::max(w, h));
   cv::resize(img, img, cv::Size(static_cast<int>(w * scale), static_cast<int>(h * scale)), 0, 0,
              cv::INTER_LANCZOS4);
-  return {std::move(img)};
 }
 
 auto ResizeOp::GetParams() const -> nlohmann::json {

@@ -20,8 +20,8 @@ void ACESToneMappingOp::CalculateOutput(cv::Vec3f& color, float adapted_lum) {
   cv::divide(num, denom, color);
 };
 
-auto ACESToneMappingOp::Apply(ImageBuffer& input) -> ImageBuffer {
-  cv::Mat& img = input.GetCPUData();
+void ACESToneMappingOp::Apply(std::shared_ptr<ImageBuffer> input) {
+  cv::Mat& img = input->GetCPUData();
 
   img.forEach<cv::Vec3f>([this](cv::Vec3f& pixel, const int*) {
     // Calculate luminance
@@ -31,8 +31,6 @@ auto ACESToneMappingOp::Apply(ImageBuffer& input) -> ImageBuffer {
     // Apply the ACES tone mapping curve
     CalculateOutput(pixel, adapted_lum);
   });
-
-  return {std::move(img)};
 }
 
 void ACESToneMappingOp::SetParams(const nlohmann::json& params) {

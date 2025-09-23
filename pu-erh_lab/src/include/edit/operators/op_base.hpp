@@ -25,7 +25,7 @@ class IOperatorBase {
    * @param input
    * @return ImageBuffer
    */
-  virtual auto Apply(ImageBuffer& input) -> ImageBuffer  = 0;
+  virtual void Apply(std::shared_ptr<ImageBuffer> input)  = 0;
   /**
    * @brief Set the parameters of this operator from JSON
    *

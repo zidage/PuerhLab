@@ -113,8 +113,8 @@ auto HighlightsOp::GetOutput(cv::Vec3f& input) -> cv::Vec3f {
 
 auto HighlightsOp::GetScale() -> float { return _offset / 300.0f; }
 
-auto HighlightsOp::Apply(ImageBuffer& input) -> ImageBuffer {
-  return ToneRegionOp<HighlightsOp>::Apply(input);
+void HighlightsOp::Apply(std::shared_ptr<ImageBuffer> input) {
+  ToneRegionOp<HighlightsOp>::Apply(input);
 }
 
 auto HighlightsOp::GetParams() const -> nlohmann::json { return {_script_name, _offset}; }

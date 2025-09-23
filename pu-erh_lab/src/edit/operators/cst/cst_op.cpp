@@ -42,8 +42,8 @@ OCIO_ACES_Transform_Op::OCIO_ACES_Transform_Op(const nlohmann::json& params) {
   SetParams(params);
 }
 
-auto OCIO_ACES_Transform_Op::Apply(ImageBuffer& input) -> ImageBuffer {
-  auto& img = input.GetCPUData();
+void OCIO_ACES_Transform_Op::Apply(std::shared_ptr<ImageBuffer> input) {
+  auto& img = input->GetCPUData();
 
   if (!_input_transform.empty() && !_output_transform.empty()) {
     auto input_transform = OCIO::ColorSpaceTransform::Create();
@@ -53,69 +53,6 @@ auto OCIO_ACES_Transform_Op::Apply(ImageBuffer& input) -> ImageBuffer {
     auto                  cpu = idt->getDefaultCPUProcessor();
     OCIO::PackedImageDesc desc_idt(img.ptr<float>(0), img.cols, img.rows, 3);
     cpu->apply(desc_idt);
-
-    // if (_normalize) {
-    //   cv::Mat resized;
-    //   cv::resize(img, resized, cv::Size(512, 512));
-
-    //   double maximum;
-    //   cv::minMaxLoc(resized, nullptr, &maximum, nullptr, nullptr);
-
-    //   // maximum *= 0.4;
-
-    //   img.forEach<cv::Vec3f>([&](cv::Vec3f& pixel, const int*) {
-    //     pixel[0] = pixel[0] / (float)maximum;
-    //     pixel[1] = pixel[1] / (float)maximum;
-    //     pixel[2] = pixel[2] / (float)maximum;
-    //   });
-    //   // cv::resize(img, resized, cv::Size(512, 512));
-    //   // cv::cvtColor(resized, resized, cv::COLOR_RGB2BGR);
-    //   // cv::imshow("Scaled", resized);
-    //   // cv::waitKey(0);
-    // }
-
-    // if (_limit) {
-    //   cv::Mat resized;
-    //   cv::resize(img, resized, cv::Size(1024, 1024));
-
-    //   cv::Mat hls, hls_small, brightness, saturation;
-    //   cv::cvtColor(img, hls, cv::COLOR_RGB2HLS);
-    //   cv::cvtColor(resized, hls_small, cv::COLOR_RGB2HLS);
-    //   cv::extractChannel(hls_small, brightness, 1);
-    //   cv::extractChannel(hls_small, saturation, 2);
-
-    //   std::vector<float> brightness_values;
-    //   std::vector<float> saturation_values;
-    //   brightness_values.reserve(1024 * 1024);
-    //   saturation_values.reserve(1024 * 1024);
-    //   for (int y = 0; y < brightness.rows; ++y) {
-    //     for (int x = 0; x < brightness.cols; ++x) {
-    //       brightness_values.emplace_back(brightness.at<float>(y, x));
-    //       saturation_values.emplace_back(saturation.at<float>(y, x));
-    //     }
-    //   }
-
-    //   std::sort(brightness_values.begin(), brightness_values.end());
-    //   std::sort(saturation_values.begin(), saturation_values.end());
-
-    //   float L_soft  = brightness_values[static_cast<int>(brightness_values.size() * 0.7f)];
-    //   float L_hard  = brightness_values[static_cast<int>(brightness_values.size() * 0.8f)];
-    //   float S_soft  = saturation_values[static_cast<int>(saturation_values.size() * 0.7f)];
-    //   float S_hard  = saturation_values[static_cast<int>(saturation_values.size() * 0.8f)];
-
-    //   auto  sigmoid = [](float x, float steepness = 1.0f) {
-    //     return 1.0f / (1.0f + std::exp(-steepness * x));
-    //   };
-
-    //   float target_hue =
-    //       280.0f;  // Adjust this: e.g., 330.0f for warmer pink, 350.0f for cooler/magenta
-    //   float hue_width = 80.0f;  // Adjust this: Smaller (e.g., 20.0f) for very precise targeting;
-    //                             // larger (50.0f) if pink varies
-    //   float hue_steepness = 0.01f;  // Adjust: Smaller for broader influence (gentle falloff);
-    //                                 // larger (0.2f) for sharper drop
-
-    // img                   = cv::max(0.0f, img);
-    // img                   = cv::min(1.0f, img);
 
     auto output_transform = OCIO::LookTransform::Create();
     output_transform->setLooks("ACES 1.3 Reference Gamut Compression");
@@ -163,7 +100,6 @@ auto OCIO_ACES_Transform_Op::Apply(ImageBuffer& input) -> ImageBuffer {
 
     cpu->apply(desc);
   }
-  return {std::move(img)};
 }
 
 auto OCIO_ACES_Transform_Op::ApplyLMT(ImageBuffer& input) -> ImageBuffer {

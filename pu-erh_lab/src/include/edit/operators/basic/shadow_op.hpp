@@ -59,7 +59,7 @@ class ShadowsOp : public ToneRegionOp<ShadowsOp>, public OperatorBase<ShadowsOp>
 
   static void GetMask(cv::Mat& src, cv::Mat& mask);
 
-  auto        Apply(ImageBuffer& input) -> ImageBuffer override;
+  void        Apply(std::shared_ptr<ImageBuffer> input) override;
   auto        GetParams() const -> nlohmann::json override;
   void        SetParams(const nlohmann::json& params) override;
 };

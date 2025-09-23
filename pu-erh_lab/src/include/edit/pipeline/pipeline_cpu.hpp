@@ -31,7 +31,7 @@ class CPUPipelineExecutor : public PipelineExecutor {
   auto GetBackend() -> PipelineBackend override;
 
   auto GetStage(PipelineStageName stage) -> PipelineStage& override;
-  auto Apply(ImageBuffer& input) -> ImageBuffer override;
+  auto Apply(std::shared_ptr<ImageBuffer> input) -> std::shared_ptr<ImageBuffer> override;
 
   void SetThumbnailMode(bool is_thumbnail);
 };

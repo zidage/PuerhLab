@@ -43,8 +43,8 @@ auto BlackOp::GetOutput(hw::Vec<hw::ScalableTag<float>> luminance)
 
 auto BlackOp::GetScale() -> float { return _offset / 3.0f; }
 
-auto BlackOp::Apply(ImageBuffer& input) -> ImageBuffer {
-  return ToneRegionOp<BlackOp>::Apply(input);
+void BlackOp::Apply(std::shared_ptr<ImageBuffer> input) {
+  ToneRegionOp<BlackOp>::Apply(input);
 }
 
 auto BlackOp::GetParams() const -> nlohmann::json { return {_script_name, _offset}; }

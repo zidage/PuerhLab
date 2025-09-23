@@ -40,8 +40,8 @@ class ToneRegionOp {
   }
 
  public:
-  auto Apply(ImageBuffer& input) -> ImageBuffer {
-    cv::Mat& img = input.GetCPUData();
+  void Apply(std::shared_ptr<ImageBuffer> input) {
+    cv::Mat& img = input->GetCPUData();
     if (img.depth() != CV_32F) {
       throw std::runtime_error("Tone region operator: Unsupported image format");
     }
@@ -58,32 +58,6 @@ class ToneRegionOp {
     img.forEach<cv::Vec3f>([this](cv::Vec3f& pixel, const int* /* position */) {
       pixel = static_cast<Derived*>(this)->GetOutput(pixel);
     });
-    // } else {
-    // cv::parallel_for_(
-    //     cv::Range(0, total_floats_img),
-    //     [&](const cv::Range& range) {
-    //       int i           = range.start;
-    //       int end         = range.end;
-
-    //       int aligned_end = i + ((end - i) / lanes) * lanes;
-    //       for (; i < aligned_end; i += lanes) {
-    //         auto v_img = hw::Load(d, img_data + i);
-    //         v_img      = derived->GetOutput(v_img);
-    //         hw::Store(v_img, d, img_data + i);
-    //       }
-
-    //       for (; i < end; ++i) {
-    //         img_data[i] = derived->GetOutput(img_data[i]);
-    //       }
-    //     },
-    //     1024);
-    // }
-
-    // img.forEach<float>([this](float& pixel, const int* /* position */) {
-    //   pixel = static_cast<Derived*>(this)->GetOutput(pixel);
-    // });
-
-    return {std::move(img)};
   }
 };
 }  // namespace puerhlab

@@ -35,7 +35,7 @@ class OCIO_ACES_Transform_Op : public OperatorBase<OCIO_ACES_Transform_Op> {
   OCIO_ACES_Transform_Op(std::filesystem::path& lmt_path);
   OCIO_ACES_Transform_Op(const nlohmann::json& params);
 
-  auto Apply(ImageBuffer& input) -> ImageBuffer override;
+  void Apply(std::shared_ptr<ImageBuffer> input) override;
   auto ApplyLMT(ImageBuffer& input) -> ImageBuffer;
   auto GetParams() const -> nlohmann::json override;
   void SetParams(const nlohmann::json& params) override;
