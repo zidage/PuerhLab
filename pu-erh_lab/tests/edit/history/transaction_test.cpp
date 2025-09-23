@@ -164,12 +164,12 @@ TEST_F(EditHistoryTests, DISABLED_TestWithImage) {
 
       task1._callback             = empty_callback;
       task1._options._is_blocking = true;
-      task1._result               = std::make_shared<std::promise<ImageBuffer>>();
+      task1._result               = std::make_shared<std::promise<std::shared_ptr<ImageBuffer>>>();
 
       auto future_task1           = task1._result->get_future();
 
       auto task2                  = task1;  // Make a copy of task1 for task2
-      task2._result               = std::make_shared<std::promise<ImageBuffer>>();
+      task2._result               = std::make_shared<std::promise<std::shared_ptr<ImageBuffer>>>();
       ;  // Clear the promise for task2 to avoid issues
       auto future_task2           = task2._result->get_future();
       task2._options._is_blocking = true;  // Make task2 non-blocking
@@ -184,7 +184,7 @@ TEST_F(EditHistoryTests, DISABLED_TestWithImage) {
       tx1.ApplyTransaction(*pipeline_executor);
 
       auto task3                  = task2;
-      task3._result               = std::make_shared<std::promise<ImageBuffer>>();
+      task3._result               = std::make_shared<std::promise<std::shared_ptr<ImageBuffer>>>();
       auto future_task3           = task3._result->get_future();
       task3._options._is_blocking = true;  // Make task3 non-blocking
 
@@ -254,13 +254,13 @@ TEST_F(EditHistoryTests, DISABLED_TestWithImage_Animated) {
       exposure_params["exposure"] = exposure;
       basic_stage.SetOperator(OperatorType::EXPOSURE, exposure_params);
       task1._options._is_blocking = true;
-      task1._result               = std::make_shared<std::promise<ImageBuffer>>();
+      task1._result               = std::make_shared<std::promise<std::shared_ptr<ImageBuffer>>>();
       auto future_task1           = task1._result->get_future();
 
       scheduler.ScheduleTask(std::move(task1));
       auto result = future_task1.get();  // Wait for task1 to complete
-      cv::cvtColor(result.GetCPUData(), result.GetCPUData(), cv::COLOR_RGB2BGR);
-      cv::imshow("preview", result.GetCPUData());
+      cv::cvtColor(result->GetCPUData(), result->GetCPUData(), cv::COLOR_RGB2BGR);
+      cv::imshow("preview", result->GetCPUData());
       cv::waitKey(1);
     }
   }
@@ -315,13 +315,15 @@ TEST_F(EditHistoryTests, TestWithPreviewPipeline) {
       exposure_params["exposure"] = exposure;
       basic_stage.SetOperator(OperatorType::EXPOSURE, exposure_params);
       task1._options._is_blocking = true;
-      task1._result               = std::make_shared<std::promise<ImageBuffer>>();
+      task1._result               = std::make_shared<std::promise<std::shared_ptr<ImageBuffer>>>();
       auto future_task1           = task1._result->get_future();
 
       scheduler.ScheduleTask(std::move(task1));
       auto result = future_task1.get();  // Wait for task1 to complete
-      cv::cvtColor(result.GetCPUData(), result.GetCPUData(), cv::COLOR_RGB2BGR);
-      cv::imshow("preview", result.GetCPUData());
+      // auto result = task1._pipeline_executor->Apply(task1._input);
+      std::cout << "Frame " << exposure << " done.\n";
+      cv::cvtColor(result->GetCPUData(), result->GetCPUData(), cv::COLOR_RGB2BGR);
+      cv::imshow("preview", result->GetCPUData());
       cv::waitKey(1);
     }
   }

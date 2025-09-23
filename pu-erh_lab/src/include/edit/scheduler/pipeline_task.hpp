@@ -19,12 +19,12 @@ struct TaskOptions {
   PriorityLevel _task_priority;    // task priority level, not used yet
 };
 struct PipelineTask {
-  uint32_t                                         _task_id;
-  std::shared_ptr<PipelineExecutor>                _pipeline_executor;
-  std::shared_ptr<ImageBuffer>                     _input;
+  uint32_t                                                    _task_id;
+  std::shared_ptr<PipelineExecutor>                           _pipeline_executor;
+  std::shared_ptr<ImageBuffer>                                _input;
 
-  std::shared_ptr<std::promise<ImageBuffer>>       _result;    // used for blocking tasks
-  std::optional<std::function<void(ImageBuffer&)>> _callback;  // used for callback tasks
+  std::shared_ptr<std::promise<std::shared_ptr<ImageBuffer>>> _result;    // used for blocking tasks
+  std::optional<std::function<void(ImageBuffer&)>>            _callback;  // used for callback tasks
   std::optional<std::function<void(ImageBuffer&, uint32_t)>>
               _seq_callback;  // used for callback tasks
 

@@ -4,7 +4,6 @@
 #include <opencv2/core.hpp>
 #include <opencv2/core/types.hpp>
 
-#include "edit/operators/operator_factory.hpp"
 #include "json.hpp"
 
 namespace puerhlab {

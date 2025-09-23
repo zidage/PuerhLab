@@ -5,6 +5,7 @@ PipelineScheduler::PipelineScheduler() : _thread_pool(8) {}
 
 void PipelineScheduler::ScheduleTask(PipelineTask&& task) {
   task._task_id = _id_generator.GenerateID();
+  std::cout << "Task size: " << sizeof(task) << " bytes." << std::endl;
   _thread_pool.Submit([task = std::move(task)]() mutable {
     auto result = task._pipeline_executor->Apply(task._input);
 
@@ -15,7 +16,7 @@ void PipelineScheduler::ScheduleTask(PipelineTask&& task) {
       (*task._seq_callback)(*result, task._task_id);
     }
     if (task._options._is_blocking) {
-      task._result->set_value({std::move(*result)});  // Notify the waiting thread
+      task._result->set_value(result);  // Notify the waiting thread
     }
   });
 }

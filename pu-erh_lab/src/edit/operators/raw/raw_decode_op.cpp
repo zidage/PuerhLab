@@ -1,6 +1,7 @@
 #include "edit/operators/raw/raw_decode_op.hpp"
 
 #include <opencv2/core/hal/interface.h>
+#include <memory>
 
 #include "decoders/processor/raw_processor.hpp"
 #include "image/image_buffer.hpp"
@@ -11,35 +12,35 @@ RawDecodeOp::RawDecodeOp(const nlohmann::json& params) { SetParams(params); }
 void RawDecodeOp::Apply(std::shared_ptr<ImageBuffer> input) {
   auto&  buffer = input->GetBuffer();
 
-  LibRaw raw_processor;
-  int    ret = raw_processor.open_buffer((void*)buffer.data(), buffer.size());
+  std::unique_ptr<LibRaw> raw_processor = std::make_unique<LibRaw>();
+  int    ret = raw_processor->open_buffer((void*)buffer.data(), buffer.size());
   if (ret != LIBRAW_SUCCESS) {
     throw std::runtime_error("RawDecodeOp: Unable to read raw file using LibRAW");
   }
 
-  raw_processor.imgdata.params.output_bps = 16;
+  raw_processor->imgdata.params.output_bps = 16;
   ImageBuffer output;
 
   switch (_backend) {
     case RawProcessBackend::PUERH: {
-      raw_processor.unpack();
-      OpenCVRawProcessor processor{_params, raw_processor.imgdata.rawdata, raw_processor};
+      raw_processor->unpack();
+      OpenCVRawProcessor processor{_params, raw_processor->imgdata.rawdata, *raw_processor};
 
       output = processor.Process();
-      raw_processor.recycle();
+      raw_processor->recycle();
       break;
     }
     case RawProcessBackend::LIBRAW: {
-      raw_processor.imgdata.params.output_color   = 1;
-      raw_processor.imgdata.params.gamm[0]        = 1.0;  // Linear gamma
-      raw_processor.imgdata.params.gamm[1]        = 1.0;
-      raw_processor.imgdata.params.no_auto_bright = 0;  // Disable auto brightness
-      raw_processor.imgdata.params.use_camera_wb  = 1;  // Discarded if user_wb is set for now
-      raw_processor.imgdata.rawparams.use_dngsdk  = 1;
+      raw_processor->imgdata.params.output_color   = 1;
+      raw_processor->imgdata.params.gamm[0]        = 1.0;  // Linear gamma
+      raw_processor->imgdata.params.gamm[1]        = 1.0;
+      raw_processor->imgdata.params.no_auto_bright = 0;  // Disable auto brightness
+      raw_processor->imgdata.params.use_camera_wb  = 1;  // Discarded if user_wb is set for now
+      raw_processor->imgdata.rawparams.use_dngsdk  = 1;
 
-      raw_processor.unpack();
-      raw_processor.dcraw_process();
-      libraw_processed_image_t* img = raw_processor.dcraw_make_mem_image(&ret);
+      raw_processor->unpack();
+      raw_processor->dcraw_process();
+      libraw_processed_image_t* img = raw_processor->dcraw_make_mem_image(&ret);
       if (ret != LIBRAW_SUCCESS) {
         throw std::runtime_error("RawDecodeOp: Unable to process raw file using LibRAW");
       }
@@ -53,8 +54,8 @@ void RawDecodeOp::Apply(std::shared_ptr<ImageBuffer> input) {
       result.convertTo(result, CV_32FC3, 1.0 / 65535.0);
 
       output = ImageBuffer(std::move(result));
-      raw_processor.dcraw_clear_mem(img);
-      raw_processor.recycle();
+      raw_processor->dcraw_clear_mem(img);
+      raw_processor->recycle();
       break;
     }
   }
