@@ -109,4 +109,46 @@ auto Version::GetAllEditTransactions() const -> const std::list<EditTransaction>
   return _edit_transactions;
 }
 
+auto Version::ToJSON() const -> nlohmann::json {
+  nlohmann::json j;
+  j["version_id"]         = _version_id;
+  j["added_time"]         = _added_time;
+  j["last_modified_time"] = _last_modified_time;
+  j["bound_image"]        = _bound_image;
+
+  j["edit_transactions"]  = nlohmann::json::array();
+  for (const auto& tx : _edit_transactions) {
+    j["edit_transactions"].push_back(tx.ToJSON());
+  }
+
+  return j;
+}
+
+void Version::FromJSON(const nlohmann::json& j) {
+  if (!j.is_object() || !j.contains("version_id") || !j.contains("added_time") ||
+      !j.contains("last_modified_time") || !j.contains("bound_image") ||
+      !j.contains("edit_transactions")) {
+    throw std::runtime_error("Version: Invalid JSON format");
+  }
+  _version_id         = j.at("version_id").get<p_hash_t>();
+  _added_time         = j.at("added_time").get<std::time_t>();
+  _last_modified_time = j.at("last_modified_time").get<std::time_t>();
+  _bound_image        = j.at("bound_image").get<sl_element_id_t>();
+  _edit_transactions.clear();
+  _tx_id_map.clear();
+  for (const auto& tx_j : j.at("edit_transactions").get<nlohmann::json::array_t>()) {
+    EditTransaction tx(tx_j);
+    _edit_transactions.push_back(std::move(tx));
+    _tx_id_map[_edit_transactions.back().GetTransactionID()] = std::prev(_edit_transactions.end());
+  }
+
+  // Chain together parent transactions
+  for (auto it = _edit_transactions.begin(); it != _edit_transactions.end(); ++it) {
+    if (it != std::prev(_edit_transactions.end())) {
+      it->SetParentTransaction(&(*std::next(it)));
+    } else {
+      it->SetParentTransaction(nullptr);
+    }
+  }
+}
 }  // namespace puerhlab

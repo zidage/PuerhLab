@@ -96,5 +96,8 @@ class Version {
   auto GetTransactionByID(int transaction_id) -> EditTransaction&;
   auto GetLastEditTransaction() -> EditTransaction&;
   auto GetAllEditTransactions() const -> const std::list<EditTransaction>&;
+
+  auto ToJSON() const -> nlohmann::json;
+  void FromJSON(const nlohmann::json& j);
 };
 };  // namespace puerhlab

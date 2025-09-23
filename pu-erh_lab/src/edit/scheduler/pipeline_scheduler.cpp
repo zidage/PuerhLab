@@ -5,7 +5,6 @@ PipelineScheduler::PipelineScheduler() : _thread_pool(8) {}
 
 void PipelineScheduler::ScheduleTask(PipelineTask&& task) {
   task._task_id = _id_generator.GenerateID();
-  std::cout << "Task size: " << sizeof(task) << " bytes." << std::endl;
   _thread_pool.Submit([task = std::move(task)]() mutable {
     auto result = task._pipeline_executor->Apply(task._input);
 

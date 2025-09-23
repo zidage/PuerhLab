@@ -50,6 +50,12 @@ class VersionNode {
   VersionNode(Version& ver_ref);
 };
 
+/**
+ * @brief A history of edits applied to a specific image. Each EditHistory instance is
+ *        associated with a single image and tracks all changes made to it over time.
+ *        It maintains a collection of Version instances, each representing a snapshot of the
+ *        image at a specific point in time. This class is serializable to JSON.
+ */
 class EditHistory {
  private:
   p_hash_t                              _history_id;
@@ -59,8 +65,7 @@ class EditHistory {
   std::time_t                           _last_modified_time;
 
   std::list<VersionNode>                _commit_tree;
-
-  // Version storages, not support persistence for now
+  
   std::unordered_map<p_hash_t, Version> _version_storage;
 
  public:
@@ -78,5 +83,9 @@ class EditHistory {
 
   auto GetLatestVersion() -> VersionNode&;
   auto RemoveVersion(p_hash_t ver_id) -> bool;
+
+  auto ToJSON() const -> nlohmann::json;
+  void FromJSON(const nlohmann::json& j);
+
 };
 };  // namespace puerhlab

@@ -97,4 +97,62 @@ auto EditHistory::RemoveVersion(p_hash_t ver_id) -> bool {
   SetLastModifiedTime();
   return true;
 }
+
+auto EditHistory::ToJSON() const -> nlohmann::json {
+  nlohmann::json j;
+  j["history_id"]         = _history_id;
+  j["bound_image"]        = _bound_image;
+  j["added_time"]         = _added_time;
+  j["last_modified_time"] = _last_modified_time;
+
+  j["commit_tree"]        = nlohmann::json::array();
+  for (const auto& node : _commit_tree) {
+    nlohmann::json node_json;
+    node_json["commit_id"] = node._commit_id;
+    node_json["version"]   = node._ver_ref.ToJSON();
+    j["commit_tree"].push_back(node_json);
+  }
+
+  j["version_storage"] = nlohmann::json::array();
+  for (const auto& [ver_id, ver] : _version_storage) {
+    nlohmann::json ver_json;
+    ver_json["version_id"] = ver_id;
+    ver_json["version"]    = ver.ToJSON();
+    j["version_storage"].push_back(ver_json);
+  }
+
+  return j;
+}
+
+void EditHistory::FromJSON(const nlohmann::json& j) {
+  if (!j.is_object() || !j.contains("history_id") || !j.contains("bound_image") ||
+      !j.contains("added_time") || !j.contains("last_modified_time") ||
+      !j.contains("commit_tree") || !j.contains("version_storage")) {
+    throw std::runtime_error("EditHistory: Invalid JSON format for EditHistory");
+  }
+
+  _history_id         = j.at("history_id").get<p_hash_t>();
+  _bound_image        = j.at("bound_image").get<sl_element_id_t>();
+  _added_time         = j.at("added_time").get<std::time_t>();
+  _last_modified_time = j.at("last_modified_time").get<std::time_t>();
+  _commit_tree.clear();
+  _version_storage.clear();
+  for (const auto& node_json : j.at("commit_tree")) {
+    if (!node_json.is_object() || !node_json.contains("commit_id") ||
+        !node_json.contains("version")) {
+      _commit_tree.clear();
+      _version_storage.clear();
+      throw std::runtime_error(
+          "EditHistory: Invalid JSON format for commit_tree node, clear all commit tree and "
+          "version storage");
+    }
+    Version ver;
+    ver.FromJSON(node_json.at("version"));
+    p_hash_t ver_id          = ver.GetVersionID();
+    _version_storage[ver_id] = std::move(ver);
+    VersionNode node(_version_storage[ver_id]);
+    node._commit_id = node_json.at("commit_id").get<p_hash_t>();
+    _commit_tree.push_back(std::move(node));
+  }
+}
 };  // namespace puerhlab

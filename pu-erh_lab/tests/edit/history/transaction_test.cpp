@@ -93,7 +93,11 @@ TEST_F(EditHistoryTests, DISABLED_RedoWithoutParentTransaction) {
 void SetPipelineTemplate(std::shared_ptr<PipelineExecutor> executor) {
   auto&          raw_stage = executor->GetStage(PipelineStageName::Image_Loading);
   nlohmann::json decode_params;
+#ifdef HAVE_CUDA
+  decode_params["raw"]["cuda"]                   = true;
+#else
   decode_params["raw"]["cuda"]                   = false;
+#endif
   decode_params["raw"]["highlights_reconstruct"] = false;
   decode_params["raw"]["use_camera_wb"]          = true;
   decode_params["raw"]["backend"]                = "puerh";
