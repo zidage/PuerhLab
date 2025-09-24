@@ -61,4 +61,6 @@ namespace puerhlab {
 
 #define PriorityLevel   int
 
+// #define version_id_t   XXH128_hash_t
+
 };  // namespace puerhlab

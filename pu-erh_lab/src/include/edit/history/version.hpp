@@ -39,34 +39,40 @@
 #include "edit/history/edit_transaction.hpp"
 #include "edit/pipeline/pipeline.hpp"
 #include "edit_transaction.hpp"
+#include "type/hash_type.hpp"
 #include "type/type.hpp"
+#include "xxhash.h"
+
 
 namespace puerhlab {
 using TxPos = std::list<EditTransaction>::iterator;
+using version_id_t = Hash128;
+
 class Version {
  private:
-  static constexpr size_t           MAX_EDIT_TRANSACTIONS = 2048;
+  static constexpr size_t                 MAX_EDIT_TRANSACTIONS = 2048;
   /**
-   * @brief MurmurHash3 value for this version
+   * @brief Version ID (hash) for this version, calculated from building a merkle tree of all edit
+   * transactions
    */
-  p_hash_t                          _version_id;
+  version_id_t                            _version_id           = version_id_t{};
   /**
    * @brief Last modified time for this version
    */
-  std::time_t                       _added_time;
-  std::time_t                       _last_modified_time;
+  std::time_t                             _added_time;
+  std::time_t                             _last_modified_time;
   /**
    * @brief collection of images related to this version
    */
-  sl_element_id_t                   _bound_image;
+  sl_element_id_t                         _bound_image;
   /**
    * @brief Edit transactions for this edit version
    */
-  std::list<EditTransaction>        _edit_transactions;
+  std::list<EditTransaction>              _edit_transactions;
 
-  std::unordered_map<int, TxPos>    _tx_id_map;
+  std::unordered_map<int, TxPos> _tx_id_map;
 
-  std::shared_ptr<PipelineExecutor> _base_pipeline_executor;
+  std::shared_ptr<PipelineExecutor>       _base_pipeline_executor;
 
  public:
   Version() = default;
@@ -77,7 +83,7 @@ class Version {
    *
    */
   void CalculateVersionID();
-  auto GetVersionID() const -> p_hash_t;
+  auto GetVersionID() const -> version_id_t;
 
   void SetAddTime();
   auto GetAddTime() const -> std::time_t;

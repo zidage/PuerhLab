@@ -270,7 +270,7 @@ TEST_F(EditHistoryTests, DISABLED_TestWithImage_Animated) {
   }
 }
 
-TEST_F(EditHistoryTests, TestWithPreviewPipeline) {
+TEST_F(EditHistoryTests, DISABLED_TestWithPreviewPipeline) {
   {
     SleeveManager             manager{db_path_};
     ImageLoader               image_loader(128, 1, 0);

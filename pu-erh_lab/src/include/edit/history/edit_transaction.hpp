@@ -53,5 +53,12 @@ class EditTransaction {
       _parent_transaction = parent;
     }
   }
+
+  auto GetParentTransactionID() const -> int { 
+    if (_parent_transaction) {
+      return _parent_transaction->_transaction_id;
+    }
+    return -1;  // Meaningful value indicating no parent
+  }
 };
 };  // namespace puerhlab

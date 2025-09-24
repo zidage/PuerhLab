@@ -4,6 +4,7 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include "type/hash_type.hpp"
 
 #ifdef _WIN32
 #include <xxhash.hpp>
@@ -27,7 +28,7 @@ EditHistory::EditHistory(sl_element_id_t bound_image) : _bound_image(bound_image
 #ifdef _WIN32
   _history_id = xxh::xxhash<64>(this, sizeof(*this));
 #else
-  _history_id = XXH64(this, sizeof(*this), 0);
+  _history_id = Hash128(XXH3_128bits(this, sizeof(*this)));
 #endif
 }
 
@@ -52,18 +53,18 @@ auto EditHistory::GetAddTime() const -> std::time_t { return _added_time; }
 
 auto EditHistory::GetLastModifiedTime() const -> std::time_t { return _last_modified_time; }
 
-auto EditHistory::GetHistoryId() const -> p_hash_t { return _history_id; }
+auto EditHistory::GetHistoryId() const -> history_id_t { return _history_id; }
 
 auto EditHistory::GetBoundImage() const -> sl_element_id_t { return _bound_image; }
 
-auto EditHistory::GetVersion(p_hash_t ver_id) -> Version& {
+auto EditHistory::GetVersion(history_id_t ver_id) -> Version& {
   if (_version_storage.find(ver_id) == _version_storage.end()) {
     throw std::runtime_error("Version not found");
   }
   return _version_storage[ver_id];
 }
 
-auto EditHistory::CommitVersion(Version&& ver) -> p_hash_t {
+auto EditHistory::CommitVersion(Version&& ver) -> history_id_t {
   ver.CalculateVersionID();
   auto ver_id = ver.GetVersionID();
   if (_version_storage.find(ver_id) != _version_storage.end()) {
@@ -82,7 +83,7 @@ auto EditHistory::GetLatestVersion() -> VersionNode& {
   return _commit_tree.back();
 }
 
-auto EditHistory::RemoveVersion(p_hash_t ver_id) -> bool {
+auto EditHistory::RemoveVersion(history_id_t ver_id) -> bool {
   if (_version_storage.find(ver_id) == _version_storage.end()) {
     return false;
   }
@@ -100,7 +101,7 @@ auto EditHistory::RemoveVersion(p_hash_t ver_id) -> bool {
 
 auto EditHistory::ToJSON() const -> nlohmann::json {
   nlohmann::json j;
-  j["history_id"]         = _history_id;
+  j["history_id"]         = _history_id.ToString();
   j["bound_image"]        = _bound_image;
   j["added_time"]         = _added_time;
   j["last_modified_time"] = _last_modified_time;
@@ -116,7 +117,7 @@ auto EditHistory::ToJSON() const -> nlohmann::json {
   j["version_storage"] = nlohmann::json::array();
   for (const auto& [ver_id, ver] : _version_storage) {
     nlohmann::json ver_json;
-    ver_json["version_id"] = ver_id;
+    ver_json["version_id"] = ver_id.ToString();
     ver_json["version"]    = ver.ToJSON();
     j["version_storage"].push_back(ver_json);
   }
@@ -131,7 +132,7 @@ void EditHistory::FromJSON(const nlohmann::json& j) {
     throw std::runtime_error("EditHistory: Invalid JSON format for EditHistory");
   }
 
-  _history_id         = j.at("history_id").get<p_hash_t>();
+  _history_id         = Hash128::FromString(j.at("history_id").get<std::string>());
   _bound_image        = j.at("bound_image").get<sl_element_id_t>();
   _added_time         = j.at("added_time").get<std::time_t>();
   _last_modified_time = j.at("last_modified_time").get<std::time_t>();
@@ -148,7 +149,7 @@ void EditHistory::FromJSON(const nlohmann::json& j) {
     }
     Version ver;
     ver.FromJSON(node_json.at("version"));
-    p_hash_t ver_id          = ver.GetVersionID();
+    history_id_t ver_id          = ver.GetVersionID();
     _version_storage[ver_id] = std::move(ver);
     VersionNode node(_version_storage[ver_id]);
     node._commit_id = node_json.at("commit_id").get<p_hash_t>();

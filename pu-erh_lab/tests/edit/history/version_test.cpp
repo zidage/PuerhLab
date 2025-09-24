@@ -23,7 +23,7 @@ TEST_F(EditHistoryTests, VersionIDGenerationTest) {
     v.AppendEditTransaction(std::move(tx1));
 
     v.CalculateVersionID();
-    p_hash_t        id1 = v.GetVersionID();
+    auto id1 = v.GetVersionID();
 
     EditTransaction tx2{1,
                         TransactionType::_ADD,
@@ -32,10 +32,10 @@ TEST_F(EditHistoryTests, VersionIDGenerationTest) {
                         {{"contrast", 2.2f}}};
     v.AppendEditTransaction(std::move(tx2));
     v.CalculateVersionID();
-    p_hash_t id2 = v.GetVersionID();
+    auto id2 = v.GetVersionID();
 
-    std::cout << "Version ID after first transaction: 0x" << std::hex << id1 << std::endl;
-    std::cout << "Version ID after second transaction: 0x" << std::hex << id2 << std::endl;
+    std::cout << "Version ID after first transaction: 0x" << id1.ToString() << std::endl;
+    std::cout << "Version ID after second transaction: 0x" << id2.ToString() << std::endl;
     EXPECT_NE(id1, id2) << "Version IDs (hashes) should differ after adding a new transaction.";
   }
 }
@@ -63,15 +63,15 @@ TEST_F(EditHistoryTests, RemoveTransactionTest) {
     EXPECT_EQ(all_txs.size(), 2) << "There should be 2 transactions before removal.";
 
     v.CalculateVersionID();
-    p_hash_t        id_before_removal = v.GetVersionID();
-    std::cout << "Version ID before removing transaction: 0x" << std::hex << id_before_removal
+    auto        id_before_removal = v.GetVersionID();
+    std::cout << "Version ID before removing transaction: 0x" << id_before_removal.ToString()
               << std::endl;
 
     EditTransaction removed_tx = v.RemoveLastEditTransaction();
 
     v.CalculateVersionID();
-    p_hash_t id_after_removal = v.GetVersionID();
-    std::cout << "Version ID after removing transaction: 0x" << std::hex << id_after_removal
+    auto id_after_removal = v.GetVersionID();
+    std::cout << "Version ID after removing transaction: 0x" << id_after_removal.ToString()
               << std::endl;
 
     EXPECT_NE(id_before_removal, id_after_removal)
@@ -88,7 +88,7 @@ TEST_F(EditHistoryTests, FuzzTest) {
     v.SetBasePipelineExecutor(std::make_shared<CPUPipelineExecutor>());
 
     const int num_transactions = 10000;
-    p_hash_t id = v.GetVersionID();
+    auto id = v.GetVersionID();
     for (int i = 0; i < num_transactions; ++i) {
       EditTransaction tx{i,
                           TransactionType::_ADD,
@@ -106,5 +106,45 @@ TEST_F(EditHistoryTests, FuzzTest) {
         << "Version should only keep the last 2048 transactions.";
 
   }
+}
+
+TEST_F(EditHistoryTests, JSONSerializationTest) {
+  Version version(1);
+  version.SetBoundImage(1001);
+
+  EditTransaction tx1(1, TransactionType::_ADD, OperatorType::EXPOSURE,
+                      PipelineStageName::Basic_Adjustment, {{"exposure", 0.5}});
+  version.AppendEditTransaction(std::move(tx1));
+
+  EditTransaction tx2(2, TransactionType::_ADD, OperatorType::CONTRAST,
+                      PipelineStageName::Basic_Adjustment, {{"contrast", 50}}, &tx1);
+  version.AppendEditTransaction(std::move(tx2));
+
+  version.CalculateVersionID();
+
+  nlohmann::json j = version.ToJSON();
+  
+  // std::cout << j.dump(2) << std::endl;
+
+  Version version2;
+  version2.FromJSON(j);
+  version2.CalculateVersionID();
+
+  nlohmann::json j2 = version2.ToJSON();
+  // std::cout << j2.dump(2) << std::endl;
+
+  EXPECT_EQ(j.dump(), j2.dump());
+
+  // Check parent-child relationships
+  auto txs = version2.GetAllEditTransactions();
+  EXPECT_EQ(txs.size(), 2);
+
+  auto& tx1_reloaded = version2.GetTransactionByID(1);
+  auto& tx2_reloaded = version2.GetTransactionByID(2);
+
+  EXPECT_NE(tx2_reloaded.GetParentTransactionID(), -1);
+  EXPECT_EQ(tx2_reloaded.GetParentTransactionID(), tx1_reloaded.GetTransactionID());
+  EXPECT_EQ(tx1_reloaded.GetParentTransactionID(), -1);
+  
 }
 }  // namespace puerhlab

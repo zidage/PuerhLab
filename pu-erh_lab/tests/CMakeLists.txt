@@ -105,9 +105,9 @@ target_link_libraries(EditTransactionTest easy_profiler)
 endif()
 
 
-add_executable(VersionTest edit/history/version_test.cpp)
-target_include_directories(VersionTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
-target_link_libraries(VersionTest GTest::gtest_main Operators SleeveManager ImageDecoder EditPipeline OpenColorIO lcms2::lcms2)
+add_executable(EditVersionTest edit/history/version_test.cpp)
+target_include_directories(EditVersionTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
+target_link_libraries(EditVersionTest GTest::gtest_main Operators SleeveManager ImageDecoder EditPipeline OpenColorIO lcms2::lcms2)
 if (WIN32)
 target_link_libraries(VersionTest easy_profiler)
 endif()

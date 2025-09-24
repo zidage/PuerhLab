@@ -34,6 +34,7 @@
 #include <unordered_map>
 
 #include "edit/pipeline/pipeline.hpp"
+#include "type/hash_type.hpp"
 #include "type/type.hpp"
 #include "version.hpp"
 
@@ -50,6 +51,7 @@ class VersionNode {
   VersionNode(Version& ver_ref);
 };
 
+using history_id_t = Hash128;
 /**
  * @brief A history of edits applied to a specific image. Each EditHistory instance is
  *        associated with a single image and tracks all changes made to it over time.
@@ -58,15 +60,15 @@ class VersionNode {
  */
 class EditHistory {
  private:
-  p_hash_t                              _history_id;
-  sl_element_id_t                       _bound_image;
+  history_id_t                              _history_id;
+  sl_element_id_t                           _bound_image;
 
-  std::time_t                           _added_time;
-  std::time_t                           _last_modified_time;
+  std::time_t                               _added_time;
+  std::time_t                               _last_modified_time;
 
-  std::list<VersionNode>                _commit_tree;
-  
-  std::unordered_map<p_hash_t, Version> _version_storage;
+  std::list<VersionNode>                    _commit_tree;
+
+  std::unordered_map<history_id_t, Version> _version_storage;
 
  public:
   EditHistory(sl_element_id_t bound_image);
@@ -75,17 +77,16 @@ class EditHistory {
   auto GetAddTime() const -> std::time_t;
   auto GetLastModifiedTime() const -> std::time_t;
 
-  auto GetHistoryId() const -> p_hash_t;
+  auto GetHistoryId() const -> history_id_t;
   auto GetBoundImage() const -> sl_element_id_t;
 
-  auto GetVersion(p_hash_t ver_id) -> Version&;
-  auto CommitVersion(Version&& ver) -> p_hash_t;
+  auto GetVersion(history_id_t ver_id) -> Version&;
+  auto CommitVersion(Version&& ver) -> history_id_t;
 
   auto GetLatestVersion() -> VersionNode&;
-  auto RemoveVersion(p_hash_t ver_id) -> bool;
+  auto RemoveVersion(history_id_t ver_id) -> bool;
 
   auto ToJSON() const -> nlohmann::json;
   void FromJSON(const nlohmann::json& j);
-
 };
 };  // namespace puerhlab

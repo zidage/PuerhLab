@@ -29,6 +29,7 @@
 // SOFTWARE.
 
 #include "edit/history/version.hpp"
+#include "type/hash_type.hpp"
 
 #ifdef _WIN32
 #include <xxhash.hpp>
@@ -42,7 +43,6 @@ namespace puerhlab {
 Version::Version(sl_element_id_t bound_image) : _bound_image(bound_image) {
   _added_time         = std::chrono::system_clock::to_time_t(TimeProvider::Now());
   _last_modified_time = _added_time;
-  _version_id         = 0;  // TODO: Generate hash value
 }
 
 void Version::CalculateVersionID() {
@@ -50,11 +50,11 @@ void Version::CalculateVersionID() {
 #ifdef _WIN32
   _version_id = xxh::xxhash<64>(this, sizeof(*this));
 #else
-  _version_id = XXH64(this, sizeof(*this), 0);
+  _version_id = Hash128(XXH3_128bits(this, sizeof(*this)));
 #endif
 }
 
-auto Version::GetVersionID() const -> p_hash_t { return _version_id; }
+auto Version::GetVersionID() const -> version_id_t { return _version_id; }
 
 auto Version::GetAddTime() const -> std::time_t { return _added_time; }
 
@@ -74,8 +74,8 @@ void Version::AppendEditTransaction(EditTransaction&& edit_transaction) {
     _tx_id_map.erase(removed_tx.GetTransactionID());
     _edit_transactions.pop_front();
   }
-  _edit_transactions.push_back(std::move(edit_transaction));
-  _tx_id_map[_edit_transactions.back().GetTransactionID()] = std::prev(_edit_transactions.end());
+  _edit_transactions.push_front(std::move(edit_transaction));
+  _tx_id_map[_edit_transactions.front().GetTransactionID()] = _edit_transactions.begin();
   SetLastModifiedTime();
 }
 
@@ -83,9 +83,9 @@ auto Version::RemoveLastEditTransaction() -> EditTransaction {
   if (_edit_transactions.empty()) {
     throw std::runtime_error("Version: No edit transaction to remove");
   }
-  EditTransaction last_transaction = std::move(_edit_transactions.back());
+  EditTransaction last_transaction = std::move(_edit_transactions.front());
   _tx_id_map.erase(last_transaction.GetTransactionID());
-  _edit_transactions.pop_back();
+  _edit_transactions.pop_front();
   SetLastModifiedTime();
   return last_transaction;
 }
@@ -111,7 +111,7 @@ auto Version::GetAllEditTransactions() const -> const std::list<EditTransaction>
 
 auto Version::ToJSON() const -> nlohmann::json {
   nlohmann::json j;
-  j["version_id"]         = _version_id;
+  j["version_id"]         = _version_id.ToString();
   j["added_time"]         = _added_time;
   j["last_modified_time"] = _last_modified_time;
   j["bound_image"]        = _bound_image;
@@ -130,7 +130,7 @@ void Version::FromJSON(const nlohmann::json& j) {
       !j.contains("edit_transactions")) {
     throw std::runtime_error("Version: Invalid JSON format");
   }
-  _version_id         = j.at("version_id").get<p_hash_t>();
+  _version_id         = Hash128::FromString(j.at("version_id").get<std::string>());
   _added_time         = j.at("added_time").get<std::time_t>();
   _last_modified_time = j.at("last_modified_time").get<std::time_t>();
   _bound_image        = j.at("bound_image").get<sl_element_id_t>();
