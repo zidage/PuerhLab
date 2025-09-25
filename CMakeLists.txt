@@ -69,10 +69,9 @@ set_target_properties(MurmurHash3 PROPERTIES
 
 # xxHash
 if (WIN32)
-    add_library(xxHash INTERFACE)
-    target_include_directories(xxHash INTERFACE "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_party/xxhash")
+    find_package(xxHash CONFIG REQUIRED)
 else()
-        find_package(xxHash CONFIG REQUIRED)
+    find_package(xxHash CONFIG REQUIRED)
     # Create a unified alias target 'xxHash' so the rest of the project can link to it.
     add_library(xxHash INTERFACE)
     if (TARGET xxHash::xxhash)

@@ -73,7 +73,7 @@ namespace std {
     template<>
     struct hash<puerhlab::Hash128> {
         std::size_t operator()(const puerhlab::Hash128& h) const noexcept {
-            // 更好的 hash_combine
+            // Better hash combining, from Boost
             auto h1 = std::hash<uint64_t>{}(h.low64());
             auto h2 = std::hash<uint64_t>{}(h.high64());
             return h1 ^ (h2 + 0x9e3779b97f4a7c15ULL + (h1 << 6) + (h1 >> 2));

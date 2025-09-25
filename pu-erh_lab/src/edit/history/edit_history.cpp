@@ -6,11 +6,8 @@
 #include <cstdint>
 #include "type/hash_type.hpp"
 
-#ifdef _WIN32
-#include <xxhash.hpp>
-#else
+
 #include <xxhash.h>
-#endif
 
 #include "type/type.hpp"
 #include "utils/clock/time_provider.hpp"
@@ -25,11 +22,7 @@ VersionNode::VersionNode(Version& ver) : _ver_ref(ver) {}
  */
 EditHistory::EditHistory(sl_element_id_t bound_image) : _bound_image(bound_image) {
   SetAddTime();
-#ifdef _WIN32
-  _history_id = xxh::xxhash<64>(this, sizeof(*this));
-#else
   _history_id = Hash128(XXH3_128bits(this, sizeof(*this)));
-#endif
 }
 
 /**

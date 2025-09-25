@@ -10,9 +10,11 @@ target_link_libraries(StrConv PUBLIC utfcpp)
 
 add_library(ImageBuffer image/image_buffer.cpp)
 target_include_directories(ImageBuffer PUBLIC include)
-target_link_libraries(ImageBuffer PUBLIC Exiv2 ${OpenCV_LIBS} LibRaw TimeProvider JSON xxHash OpenMP::OpenMP_CXX StrConv)
-if (HAVE_EASY_PROFILER)
-    target_link_libraries(ImageBuffer PUBLIC easy_profiler)
+target_link_libraries(ImageBuffer PUBLIC Exiv2 ${OpenCV_LIBS} LibRaw TimeProvider JSON OpenMP::OpenMP_CXX StrConv)
+if (WIN32)
+    target_link_libraries(ImageBuffer PUBLIC easy_profiler xxHash::xxhash)
+else()
+    target_link_libraries(ImageBuffer PUBLIC xxHash)
 endif()
 
 # CPU sources (always compiled)
@@ -117,7 +119,7 @@ target_link_libraries(ImageLoader PUBLIC ImageDecoder)
 
 add_library(EditHistory edit/history/edit_history.cpp edit/history/version.cpp edit/history/edit_transaction.cpp)
 target_include_directories(EditHistory PUBLIC include)
-target_link_libraries(EditHistory PUBLIC xxHash Image TimeProvider JSON EditPipeline)
+target_link_libraries(EditHistory PUBLIC Image TimeProvider JSON EditPipeline)
 
 add_library(SleeveFilter
     sleeve/sleeve_filter/filters/exif_filter.cpp
@@ -200,7 +202,7 @@ target_link_libraries(SleeveView PUBLIC Image SleeveFS ImagePool)
 add_library(SleeveManager 
     sleeve/sleeve_manager.cpp)
 target_include_directories(SleeveManager PUBLIC include)
-target_link_libraries(SleeveManager PUBLIC SleeveFS SleeveView xxHash)
+target_link_libraries(SleeveManager PUBLIC SleeveFS SleeveView)
 
 add_library(ImageWriter
     io/image/image_writer.cpp

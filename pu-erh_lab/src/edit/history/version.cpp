@@ -29,15 +29,12 @@
 // SOFTWARE.
 
 #include "edit/history/version.hpp"
-#include "type/hash_type.hpp"
 
-#ifdef _WIN32
-#include <xxhash.hpp>
-#else
 #include <xxhash.h>
-#endif
 
+#include "type/hash_type.hpp"
 #include "utils/clock/time_provider.hpp"
+
 
 namespace puerhlab {
 Version::Version(sl_element_id_t bound_image) : _bound_image(bound_image) {
@@ -47,11 +44,8 @@ Version::Version(sl_element_id_t bound_image) : _bound_image(bound_image) {
 
 void Version::CalculateVersionID() {
   SetLastModifiedTime();
-#ifdef _WIN32
-  _version_id = xxh::xxhash<64>(this, sizeof(*this));
-#else
+
   _version_id = Hash128(XXH3_128bits(this, sizeof(*this)));
-#endif
 }
 
 auto Version::GetVersionID() const -> version_id_t { return _version_id; }

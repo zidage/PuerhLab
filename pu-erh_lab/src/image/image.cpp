@@ -39,11 +39,8 @@
 #include <string>
 #include <utility>
 
-#ifdef _WIN32
-#include <xxhash.hpp>
-#else
+
 #include <xxhash.h>
-#endif
 
 namespace puerhlab {
 using json = nlohmann::json;
@@ -149,11 +146,7 @@ void Image::JsonToExif(std::string json_str) {
 }
 
 void Image::ComputeChecksum() {
-#ifdef _WIN32
-  _checksum = xxh::xxhash<64>(this, sizeof(*this));
-#else
-  _checksum = XXH64(this, sizeof(*this), 0);
-#endif
+  _checksum = XXH3_64bits(this, sizeof(*this));
 }
 
 auto Image::GetImageData() -> cv::Mat& { return _image_data.GetCPUData(); }

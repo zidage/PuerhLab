@@ -41,7 +41,7 @@
 #include "edit_transaction.hpp"
 #include "type/hash_type.hpp"
 #include "type/type.hpp"
-#include "xxhash.h"
+#include <xxhash.h>
 
 
 namespace puerhlab {

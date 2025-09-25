@@ -10,11 +10,8 @@
 #include <string>
 #include <vector>
 
-#ifdef _WIN32
-#include <xxhash.hpp>
-#else
+
 #include <xxhash.h>
-#endif
 
 #include "sleeve/sleeve_element/sleeve_element.hpp"
 #include "sleeve/sleeve_element/sleeve_folder.hpp"
