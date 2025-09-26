@@ -58,7 +58,6 @@ auto EditHistory::GetVersion(history_id_t ver_id) -> Version& {
 }
 
 auto EditHistory::CommitVersion(Version&& ver) -> history_id_t {
-  ver.CalculateVersionID();
   auto ver_id = ver.GetVersionID();
   if (_version_storage.find(ver_id) != _version_storage.end()) {
     throw std::runtime_error("Version already exists");

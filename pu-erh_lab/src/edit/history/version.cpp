@@ -43,7 +43,6 @@ Version::Version(sl_element_id_t bound_image) : _bound_image(bound_image) {
 }
 
 void Version::CalculateVersionID() {
-  SetLastModifiedTime();
   _version_id = Hash128::Blend(_version_id,
                                Hash128::Compute(&_last_modified_time, sizeof(_last_modified_time)));
   if (!_edit_transactions.empty()) {
@@ -57,7 +56,7 @@ void Version::CalculateVersionID() {
   }
 }
 
-auto Version::GetVersionID() const -> version_id_t { return _version_id; }
+auto Version::GetVersionID() const -> version_id_t { return Hash128(_version_id); }
 
 auto Version::GetAddTime() const -> std::time_t { return _added_time; }
 
@@ -80,6 +79,7 @@ void Version::AppendEditTransaction(EditTransaction&& edit_transaction) {
   _edit_transactions.push_front(std::move(edit_transaction));
   _tx_id_map[_edit_transactions.front().GetTransactionID()] = _edit_transactions.begin();
   SetLastModifiedTime();
+  CalculateVersionID();
 }
 
 auto Version::RemoveLastEditTransaction() -> EditTransaction {
@@ -88,7 +88,9 @@ auto Version::RemoveLastEditTransaction() -> EditTransaction {
   }
   EditTransaction last_transaction = std::move(_edit_transactions.front());
   _tx_id_map.erase(last_transaction.GetTransactionID());
+  _edit_transactions.pop_front();
   SetLastModifiedTime();
+  CalculateVersionID();
   return last_transaction;
 }
 

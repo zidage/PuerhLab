@@ -30,6 +30,8 @@
 
 #pragma once
 
+#include <xxhash.h>
+
 #include <ctime>
 #include <list>
 #include <memory>
@@ -41,51 +43,45 @@
 #include "edit_transaction.hpp"
 #include "type/hash_type.hpp"
 #include "type/type.hpp"
-#include <xxhash.h>
-
 
 namespace puerhlab {
-using TxPos = std::list<EditTransaction>::iterator;
+using TxPos        = std::list<EditTransaction>::iterator;
 using version_id_t = Hash128;
 
 class Version {
  private:
-  static constexpr size_t                 MAX_EDIT_TRANSACTIONS = 2048;
+  static constexpr size_t            MAX_EDIT_TRANSACTIONS = 2048;
   /**
    * @brief Version ID (hash) for this version, calculated from building a merkle tree of all edit
    * transactions
    */
-  version_id_t                            _version_id           = version_id_t{};
+  version_id_t                       _version_id           = version_id_t{};
 
-  version_id_t                            _parent_version_id    = version_id_t{};
+  version_id_t                       _parent_version_id    = version_id_t{};
   /**
    * @brief Last modified time for this version
    */
-  std::time_t                             _added_time;
-  std::time_t                             _last_modified_time;
+  std::time_t                        _added_time;
+  std::time_t                        _last_modified_time;
   /**
    * @brief collection of images related to this version
    */
-  sl_element_id_t                         _bound_image;
+  sl_element_id_t                    _bound_image;
   /**
    * @brief Edit transactions for this edit version
    */
-  std::list<EditTransaction>              _edit_transactions;
+  std::list<EditTransaction>         _edit_transactions;
 
   std::unordered_map<Hash128, TxPos> _tx_id_map;
 
-  std::shared_ptr<PipelineExecutor>       _base_pipeline_executor;
+  std::shared_ptr<PipelineExecutor>  _base_pipeline_executor;
 
+  void CalculateVersionID();
  public:
   Version() = default;
   Version(sl_element_id_t bound_image);
   Version(sl_element_id_t bound_image, version_id_t parent_version_id);
 
-  /**
-   * @brief Calulate the version ID (hash) for this version, only when the version is committed
-   *
-   */
-  void CalculateVersionID();
   auto GetVersionID() const -> version_id_t;
 
   void SetAddTime();

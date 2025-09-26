@@ -72,7 +72,8 @@ class EditTransaction {
   }
 
   auto UndoTransaction() -> EditTransaction {
-    
+    return EditTransaction(TransactionType::_DELETE, _operator_type, _stage_name, {},
+                           _parent_tx_id);
   }
 };
 };  // namespace puerhlab

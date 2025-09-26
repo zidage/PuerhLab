@@ -1,3 +1,4 @@
+#include <gtest/gtest.h>
 #include <future>
 #include <memory>
 #include <opencv2/core/mat.hpp>
@@ -23,7 +24,7 @@ TEST_F(EditHistoryTests, DISABLED_ApplyAddTransaction) {
   CPUPipelineExecutor pipeline = CPUPipelineExecutor();
 
   Version             version(1);
-  EditTransaction     transaction(1, TransactionType::_ADD, OperatorType::EXPOSURE,
+  EditTransaction     transaction(TransactionType::_ADD, OperatorType::EXPOSURE,
                                   PipelineStageName::Basic_Adjustment, {{"exposure", 0.5}});
 
   EXPECT_TRUE(transaction.ApplyTransaction(pipeline));
@@ -33,13 +34,13 @@ TEST_F(EditHistoryTests, DISABLED_ApplyDeleteTransaction) {
   CPUPipelineExecutor pipeline = CPUPipelineExecutor();
 
   // First, add an operator to delete later.
-  EditTransaction     add_transaction(1, TransactionType::_ADD, OperatorType::EXPOSURE,
+  EditTransaction     add_transaction(TransactionType::_ADD, OperatorType::EXPOSURE,
                                       PipelineStageName::Basic_Adjustment, {{"exposure", 0.5}});
   EXPECT_TRUE(add_transaction.ApplyTransaction(pipeline));
 
   // Now, create a delete transaction for the same operator.
-  EditTransaction delete_transaction(2, TransactionType::_DELETE, OperatorType::EXPOSURE,
-                                     PipelineStageName::Basic_Adjustment, {}, &add_transaction);
+  EditTransaction delete_transaction(TransactionType::_DELETE, OperatorType::EXPOSURE,
+                                     PipelineStageName::Basic_Adjustment, {}, add_transaction.GetTransactionID());
 
   EXPECT_TRUE(delete_transaction.ApplyTransaction(pipeline));
 }
@@ -48,47 +49,18 @@ TEST_F(EditHistoryTests, DISABLED_ApplyEditTransaction) {
   CPUPipelineExecutor pipeline = CPUPipelineExecutor();
 
   // First, add an operator to edit later.
-  EditTransaction     add_transaction(1, TransactionType::_ADD, OperatorType::EXPOSURE,
+  EditTransaction     add_transaction(TransactionType::_ADD, OperatorType::EXPOSURE,
                                       PipelineStageName::Basic_Adjustment, {{"exposure", 0.5}});
   EXPECT_TRUE(add_transaction.ApplyTransaction(pipeline));
 
   // Now, create an edit transaction for the same operator.
-  EditTransaction edit_transaction(2, TransactionType::_EDIT, OperatorType::EXPOSURE,
+  EditTransaction edit_transaction(TransactionType::_EDIT, OperatorType::EXPOSURE,
                                    PipelineStageName::Basic_Adjustment, {{"exposure", 1.0}},
-                                   &add_transaction);
+                                   add_transaction.GetTransactionID());
 
   EXPECT_TRUE(edit_transaction.ApplyTransaction(pipeline));
 }
 
-TEST_F(EditHistoryTests, DISABLED_RedoTransaction) {
-  CPUPipelineExecutor pipeline = CPUPipelineExecutor();
-
-  // First, add an operator to edit later.
-  EditTransaction     add_transaction(1, TransactionType::_ADD, OperatorType::EXPOSURE,
-                                      PipelineStageName::Basic_Adjustment, {{"exposure", 0.5}});
-  EXPECT_TRUE(add_transaction.ApplyTransaction(pipeline));
-
-  // Now, create an edit transaction for the same operator.
-  EditTransaction edit_transaction(2, TransactionType::_EDIT, OperatorType::EXPOSURE,
-                                   PipelineStageName::Basic_Adjustment, {{"exposure", 1.0}},
-                                   &add_transaction);
-
-  EXPECT_TRUE(edit_transaction.ApplyTransaction(pipeline));
-
-  // Redo the edit transaction
-  EXPECT_TRUE(edit_transaction.RedoTransaction(pipeline));
-}
-
-TEST_F(EditHistoryTests, DISABLED_RedoWithoutParentTransaction) {
-  CPUPipelineExecutor pipeline = CPUPipelineExecutor();
-
-  // Create a transaction without a parent
-  EditTransaction     transaction(1, TransactionType::_ADD, OperatorType::EXPOSURE,
-                                  PipelineStageName::Basic_Adjustment, {{"exposure", 0.5}});
-
-  // Attempt to redo the transaction, which should fail since there's no parent
-  EXPECT_FALSE(transaction.RedoTransaction(pipeline));
-}
 
 void SetPipelineTemplate(std::shared_ptr<PipelineExecutor> executor) {
   auto&          raw_stage = executor->GetStage(PipelineStageName::Image_Loading);
@@ -183,7 +155,7 @@ TEST_F(EditHistoryTests, DISABLED_TestWithImage) {
       future_task1.get();  // Wait for task1 to complete
 
       // Create and apply an edit transaction
-      EditTransaction tx1(1, TransactionType::_ADD, OperatorType::EXPOSURE,
+      EditTransaction tx1(TransactionType::_ADD, OperatorType::EXPOSURE,
                           PipelineStageName::Basic_Adjustment, {{"exposure", 0.5}});
       tx1.ApplyTransaction(*pipeline_executor);
 
@@ -196,8 +168,8 @@ TEST_F(EditHistoryTests, DISABLED_TestWithImage) {
       future_task2.get();  // Wait for task2 to complete
 
       // Create and apply another edit transaction
-      EditTransaction tx2(2, TransactionType::_ADD, OperatorType::CONTRAST,
-                          PipelineStageName::Basic_Adjustment, {{"contrast", 50}}, &tx1);
+      EditTransaction tx2(TransactionType::_ADD, OperatorType::CONTRAST,
+                          PipelineStageName::Basic_Adjustment, {{"contrast", 50}}, tx1.GetTransactionID());
       tx2.ApplyTransaction(*pipeline_executor);
 
       scheduler.ScheduleTask(std::move(task3));
