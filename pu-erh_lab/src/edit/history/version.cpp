@@ -32,9 +32,9 @@
 
 #include <xxhash.h>
 
+#include "edit/history/edit_transaction.hpp"
 #include "type/hash_type.hpp"
 #include "utils/clock/time_provider.hpp"
-
 
 namespace puerhlab {
 Version::Version(sl_element_id_t bound_image) : _bound_image(bound_image) {
@@ -44,8 +44,17 @@ Version::Version(sl_element_id_t bound_image) : _bound_image(bound_image) {
 
 void Version::CalculateVersionID() {
   SetLastModifiedTime();
-
-  _version_id = Hash128(XXH3_128bits(this, sizeof(*this)));
+  _version_id = Hash128::Blend(_version_id,
+                               Hash128::Compute(&_last_modified_time, sizeof(_last_modified_time)));
+  if (!_edit_transactions.empty()) {
+    const auto& tx = _edit_transactions.back();
+    _version_id = Hash128::Blend(_version_id,
+                                 Hash128::Compute(&tx, sizeof(EditTransaction)));
+  } else {
+    // If there are no edit transactions, use the bound image ID to ensure uniqueness
+    _version_id = Hash128::Blend(_version_id,
+                                 Hash128::Compute(&_bound_image, sizeof(_bound_image)));
+  }
 }
 
 auto Version::GetVersionID() const -> version_id_t { return _version_id; }
@@ -79,12 +88,11 @@ auto Version::RemoveLastEditTransaction() -> EditTransaction {
   }
   EditTransaction last_transaction = std::move(_edit_transactions.front());
   _tx_id_map.erase(last_transaction.GetTransactionID());
-  _edit_transactions.pop_front();
   SetLastModifiedTime();
   return last_transaction;
 }
 
-auto Version::GetTransactionByID(int transaction_id) -> EditTransaction& {
+auto Version::GetTransactionByID(tx_id_t transaction_id) -> EditTransaction& {
   auto it = _tx_id_map.find(transaction_id);
   if (it == _tx_id_map.end()) {
     throw std::runtime_error("Version: No edit transaction with the given ID");
@@ -139,9 +147,9 @@ void Version::FromJSON(const nlohmann::json& j) {
   // Chain together parent transactions
   for (auto it = _edit_transactions.begin(); it != _edit_transactions.end(); ++it) {
     if (it != std::prev(_edit_transactions.end())) {
-      it->SetParentTransaction(&(*std::next(it)));
+      it->SetParentTransaction(std::next(it)->GetTransactionID());
     } else {
-      it->SetParentTransaction(nullptr);
+      it->SetParentTransaction(Hash128());
     }
   }
 }

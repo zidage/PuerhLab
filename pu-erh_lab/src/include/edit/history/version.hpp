@@ -56,6 +56,8 @@ class Version {
    * transactions
    */
   version_id_t                            _version_id           = version_id_t{};
+
+  version_id_t                            _parent_version_id    = version_id_t{};
   /**
    * @brief Last modified time for this version
    */
@@ -70,13 +72,14 @@ class Version {
    */
   std::list<EditTransaction>              _edit_transactions;
 
-  std::unordered_map<int, TxPos> _tx_id_map;
+  std::unordered_map<Hash128, TxPos> _tx_id_map;
 
   std::shared_ptr<PipelineExecutor>       _base_pipeline_executor;
 
  public:
   Version() = default;
   Version(sl_element_id_t bound_image);
+  Version(sl_element_id_t bound_image, version_id_t parent_version_id);
 
   /**
    * @brief Calulate the version ID (hash) for this version, only when the version is committed
@@ -99,7 +102,7 @@ class Version {
 
   void AppendEditTransaction(EditTransaction&& edit_transaction);
   auto RemoveLastEditTransaction() -> EditTransaction;
-  auto GetTransactionByID(int transaction_id) -> EditTransaction&;
+  auto GetTransactionByID(tx_id_t transaction_id) -> EditTransaction&;
   auto GetLastEditTransaction() -> EditTransaction&;
   auto GetAllEditTransactions() const -> const std::list<EditTransaction>&;
 
