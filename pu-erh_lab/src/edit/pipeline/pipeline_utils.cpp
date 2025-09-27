@@ -32,6 +32,14 @@ void PipelineStage::SetOperator(OperatorType op_type, nlohmann::json& param) {
   }
 }
 
+auto PipelineStage::GetOperator(OperatorType op_type) const -> std::optional<OperatorEntry*> {
+  auto it = _operators->find(op_type);
+  if (it == _operators->end()) {
+    return std::nullopt;
+  }
+  return &(it->second);
+}
+
 void PipelineStage::EnableOperator(OperatorType op_type, bool enable) {
   auto it = _operators->find(op_type);
   if (it != _operators->end()) {

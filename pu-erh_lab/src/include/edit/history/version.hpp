@@ -43,6 +43,7 @@
 #include "edit_transaction.hpp"
 #include "type/hash_type.hpp"
 #include "type/type.hpp"
+#include "utils/id/id_generator.hpp"
 
 namespace puerhlab {
 using TxPos        = std::list<EditTransaction>::iterator;
@@ -50,6 +51,7 @@ using version_id_t = Hash128;
 
 class Version {
  private:
+  IncrID::IDGenerator<tx_id_t>       _tx_id_generator;
   static constexpr size_t            MAX_EDIT_TRANSACTIONS = 2048;
   /**
    * @brief Version ID (hash) for this version, calculated from building a merkle tree of all edit
@@ -72,15 +74,17 @@ class Version {
    */
   std::list<EditTransaction>         _edit_transactions;
 
-  std::unordered_map<Hash128, TxPos> _tx_id_map;
+  std::unordered_map<tx_id_t, TxPos> _tx_id_map;
 
   std::shared_ptr<PipelineExecutor>  _base_pipeline_executor;
 
-  void CalculateVersionID();
+  void                               CalculateVersionID();
+
  public:
-  Version() = default;
+  Version();
   Version(sl_element_id_t bound_image);
   Version(sl_element_id_t bound_image, version_id_t parent_version_id);
+  Version(nlohmann::json& j);
 
   auto GetVersionID() const -> version_id_t;
 

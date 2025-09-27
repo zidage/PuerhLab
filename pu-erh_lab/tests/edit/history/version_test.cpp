@@ -21,7 +21,7 @@ TEST_F(EditHistoryTests, VersionIDGenerationTest) {
                         {{"exposure", 1.0f}}};
     v.AppendEditTransaction(std::move(tx1));
 
-    auto            id1 = v.GetVersionID();
+    auto            id1 = v.GetVersionID().ToString();
 
     EditTransaction tx2{TransactionType::_ADD,
                         OperatorType::CONTRAST,
@@ -29,10 +29,10 @@ TEST_F(EditHistoryTests, VersionIDGenerationTest) {
                         {{"contrast", 2.2f}},
                         tx1.GetTransactionID()};
     v.AppendEditTransaction(std::move(tx2));
-    auto id2 = v.GetVersionID();
+    auto id2 = v.GetVersionID().ToString();
 
-    std::cout << "Version ID after first transaction: 0x" << id1.ToString() << std::endl;
-    std::cout << "Version ID after second transaction: 0x" << id2.ToString() << std::endl;
+    std::cout << "Version ID after first transaction: 0x" << id1 << std::endl;
+    std::cout << "Version ID after second transaction: 0x" << id2 << std::endl;
     EXPECT_NE(id1, id2) << "Version IDs (hashes) should differ after adding a new transaction.";
   }
 }
@@ -58,14 +58,14 @@ TEST_F(EditHistoryTests, RemoveTransactionTest) {
     auto all_txs = v.GetAllEditTransactions();
     EXPECT_EQ(all_txs.size(), 2) << "There should be 2 transactions before removal.";
 
-    auto id_before_removal = v.GetVersionID();
-    std::cout << "Version ID before removing transaction: 0x" << id_before_removal.ToString()
+    auto id_before_removal = v.GetVersionID().ToString();
+    std::cout << "Version ID before removing transaction: 0x" << id_before_removal
               << std::endl;
 
     EditTransaction removed_tx       = v.RemoveLastEditTransaction();
 
-    auto            id_after_removal = v.GetVersionID();
-    std::cout << "Version ID after removing transaction: 0x" << id_after_removal.ToString()
+    auto            id_after_removal = v.GetVersionID().ToString();
+    std::cout << "Version ID after removing transaction: 0x" << id_after_removal
               << std::endl;
 
     EXPECT_NE(id_before_removal, id_after_removal)
@@ -101,22 +101,26 @@ TEST_F(EditHistoryTests, FuzzTest) {
 TEST_F(EditHistoryTests, JSONSerializationTest) {
   Version version(1);
   version.SetBoundImage(1001);
+  auto pipeline_executor = std::make_shared<CPUPipelineExecutor>();
+  version.SetBasePipelineExecutor(pipeline_executor);
 
   EditTransaction tx1(TransactionType::_ADD, OperatorType::EXPOSURE,
                       PipelineStageName::Basic_Adjustment, {{"exposure", 0.5}});
   version.AppendEditTransaction(std::move(tx1));
+  // The id for tx1 will be assigned when appended to version
+  nlohmann::json j_tx1 = version.GetTransactionByID(1).ToJSON();
 
   EditTransaction tx2(TransactionType::_ADD, OperatorType::CONTRAST,
                       PipelineStageName::Basic_Adjustment, {{"contrast", 50}}, tx1.GetTransactionID());
   version.AppendEditTransaction(std::move(tx2));
-
+  // The id for tx2 will be assigned when appended to version
+  nlohmann::json j_tx2 = version.GetTransactionByID(2).ToJSON();
 
   nlohmann::json j = version.ToJSON();
 
   // std::cout << j.dump(2) << std::endl;
 
-  Version        version2;
-  version2.FromJSON(j);
+  Version        version2{j};
 
   nlohmann::json j2 = version2.ToJSON();
   // std::cout << j2.dump(2) << std::endl;
@@ -127,11 +131,11 @@ TEST_F(EditHistoryTests, JSONSerializationTest) {
   auto txs = version2.GetAllEditTransactions();
   EXPECT_EQ(txs.size(), 2);
 
-  auto& tx1_reloaded = version2.GetTransactionByID(tx1.GetTransactionID());
-  auto& tx2_reloaded = version2.GetTransactionByID(tx2.GetTransactionID());
+  auto& tx1_reloaded = version2.GetTransactionByID(1);
+  auto& tx2_reloaded = version2.GetTransactionByID(2);
 
-  // EXPECT_NE(tx2_reloaded.GetParentTransactionID(), -1);
-  EXPECT_EQ(tx2_reloaded.GetParentTransactionID(), tx1_reloaded.GetTransactionID());
-  // EXPECT_EQ(tx1_reloaded.GetParentTransactionID(), -1);
+  EXPECT_EQ(tx1_reloaded.ToJSON().dump(), j_tx1.dump());
+  EXPECT_EQ(tx2_reloaded.ToJSON().dump(), j_tx2.dump());
+  
 }
 }  // namespace puerhlab

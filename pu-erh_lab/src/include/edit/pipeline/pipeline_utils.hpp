@@ -41,6 +41,7 @@ class PipelineStage {
   PipelineStage() = delete;
   PipelineStage(PipelineStageName stage, bool enable_cache);
   void SetOperator(OperatorType, nlohmann::json& param);
+  auto GetOperator(OperatorType) const -> std::optional<OperatorEntry*>;
   void EnableOperator(OperatorType, bool enable);
   void SetInputImage(std::shared_ptr<ImageBuffer>);
 
