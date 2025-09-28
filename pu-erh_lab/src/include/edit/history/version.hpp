@@ -78,14 +78,13 @@ class Version {
 
   std::shared_ptr<PipelineExecutor>  _base_pipeline_executor;
 
-  void                               CalculateVersionID();
-
  public:
   Version();
   Version(sl_element_id_t bound_image);
   Version(sl_element_id_t bound_image, version_id_t parent_version_id);
   Version(nlohmann::json& j);
 
+  void CalculateVersionID();
   auto GetVersionID() const -> version_id_t;
 
   void SetAddTime();

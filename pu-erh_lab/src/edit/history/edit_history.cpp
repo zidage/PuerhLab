@@ -1,14 +1,13 @@
 #include "edit/history/edit_history.hpp"
 
+#include <xxhash.h>
+
 #include <array>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+
 #include "type/hash_type.hpp"
-
-
-#include <xxhash.h>
-
 #include "type/type.hpp"
 #include "utils/clock/time_provider.hpp"
 
@@ -22,9 +21,18 @@ VersionNode::VersionNode(Version& ver) : _ver_ref(ver) {}
  */
 EditHistory::EditHistory(sl_element_id_t bound_image) : _bound_image(bound_image) {
   SetAddTime();
-  _history_id = Hash128(XXH3_128bits(this, sizeof(*this)));
+  _history_id = Hash128::Blend(Hash128::Compute(&_added_time, sizeof(_added_time)),
+                               Hash128::Compute(&bound_image, sizeof(bound_image)));
 }
 
+void EditHistory::CalculateHistoryID() {
+  auto& last_node = GetLatestVersion();
+  // Merkle-like hash computation
+  _history_id     = Hash128::Blend(
+      _history_id,
+      Hash128::Blend(last_node._ver_ref.GetVersionID(),
+                         Hash128::Compute(&_last_modified_time, sizeof(_last_modified_time))));
+}
 /**
  * @brief Set the created time for a EditHistory
  *
@@ -65,6 +73,7 @@ auto EditHistory::CommitVersion(Version&& ver) -> history_id_t {
   _version_storage[ver_id] = std::move(ver);
   _commit_tree.emplace_back(_version_storage[ver_id]);
   SetLastModifiedTime();
+  CalculateHistoryID();
   return ver_id;
 }
 
@@ -141,7 +150,7 @@ void EditHistory::FromJSON(const nlohmann::json& j) {
     }
     Version ver;
     ver.FromJSON(node_json.at("version"));
-    history_id_t ver_id          = ver.GetVersionID();
+    history_id_t ver_id      = ver.GetVersionID();
     _version_storage[ver_id] = std::move(ver);
     VersionNode node(_version_storage[ver_id]);
     node._commit_id = node_json.at("commit_id").get<p_hash_t>();

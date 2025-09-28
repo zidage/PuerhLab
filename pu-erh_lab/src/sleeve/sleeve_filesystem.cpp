@@ -132,7 +132,7 @@ void FileSystem::ReadSleeveMeta(const std::filesystem::path& meta_path) {
   std::ifstream file(meta_path);
   if (file.is_open()) {
     nlohmann::json metadata;
-    metadata << file;
+    file >> metadata;
     _db_path   = std::filesystem::path(conv::FromBytes(metadata["db_path"]));
     _meta_path = std::filesystem::path(conv::FromBytes(metadata["meta_path"]));
     _id_gen.SetStartID(static_cast<uint32_t>(metadata["start_id"]));

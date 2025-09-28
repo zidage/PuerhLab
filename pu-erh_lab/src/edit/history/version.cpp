@@ -37,17 +37,23 @@
 #include "utils/clock/time_provider.hpp"
 
 namespace puerhlab {
-Version::Version() : _tx_id_generator(0) {}
+Version::Version() : _tx_id_generator(0) {
+  _added_time         = std::chrono::system_clock::to_time_t(TimeProvider::Now());
+  _last_modified_time = _added_time;
+  CalculateVersionID();
+}
 
 Version::Version(sl_element_id_t bound_image) : _tx_id_generator(0), _bound_image(bound_image) {
   _added_time         = std::chrono::system_clock::to_time_t(TimeProvider::Now());
   _last_modified_time = _added_time;
+  CalculateVersionID();
 }
 
 Version::Version(sl_element_id_t bound_image, version_id_t parent_version_id)
     : _tx_id_generator(0), _bound_image(bound_image), _version_id(parent_version_id) {
   _added_time         = std::chrono::system_clock::to_time_t(TimeProvider::Now());
   _last_modified_time = _added_time;
+  CalculateVersionID();
 }
 
 Version::Version(nlohmann::json& j) : _tx_id_generator(0) { FromJSON(j); }
@@ -88,7 +94,7 @@ void Version::AppendEditTransaction(EditTransaction&& edit_transaction) {
   _edit_transactions.push_front(std::move(edit_transaction));
 
   // Assign a new transaction ID, update the ID map
-  auto& last_tx                                             = _edit_transactions.front();
+  auto& last_tx = _edit_transactions.front();
   last_tx.SetTransactionID(_tx_id_generator.GenerateID());
   _tx_id_map[_edit_transactions.front().GetTransactionID()] = _edit_transactions.begin();
 
