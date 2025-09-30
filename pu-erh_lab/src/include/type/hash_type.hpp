@@ -15,6 +15,7 @@ class Hash128 {
   Hash128() : _h{0, 0} {}
   explicit Hash128(const XXH128_hash_t& h) : _h(h) {}
   
+  Hash128(uint64_t low, uint64_t high) : _h{low, high} {}
   
 
   uint64_t                low64() const { return _h.low64; }

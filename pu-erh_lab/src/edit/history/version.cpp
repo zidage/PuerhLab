@@ -144,7 +144,8 @@ auto Version::GetAllEditTransactions() const -> const std::list<EditTransaction>
 
 auto Version::ToJSON() const -> nlohmann::json {
   nlohmann::json j;
-  j["version_id"]         = _version_id.ToString();
+  j["version_id_low"]         = _version_id.low64();
+  j["version_id_high"]        = _version_id.high64();
   j["added_time"]         = _added_time;
   j["last_modified_time"] = _last_modified_time;
   j["bound_image"]        = _bound_image;
@@ -159,12 +160,12 @@ auto Version::ToJSON() const -> nlohmann::json {
 }
 
 void Version::FromJSON(const nlohmann::json& j) {
-  if (!j.is_object() || !j.contains("version_id") || !j.contains("added_time") ||
+  if (!j.is_object() || !j.contains("version_id_low") || !j.contains("version_id_high") || !j.contains("added_time") ||
       !j.contains("last_modified_time") || !j.contains("bound_image") ||
       !j.contains("edit_transactions") || !j.contains("tx_id_start")) {
     throw std::runtime_error("Version: Invalid JSON format");
   }
-  _version_id         = Hash128::FromString(j.at("version_id").get<std::string>());
+  _version_id         = Hash128(j.at("version_id_low").get<uint64_t>(), j.at("version_id_high").get<uint64_t>());
   _added_time         = j.at("added_time").get<std::time_t>();
   _last_modified_time = j.at("last_modified_time").get<std::time_t>();
   _bound_image        = j.at("bound_image").get<sl_element_id_t>();
