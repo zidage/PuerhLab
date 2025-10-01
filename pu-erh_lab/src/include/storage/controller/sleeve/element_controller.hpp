@@ -30,6 +30,7 @@ class ElementController {
   auto GetFolderContent(const sl_element_id_t folder_id) -> std::vector<sl_element_id_t>;
 
   void RemoveElement(const sl_element_id_t id);
+  void RemoveElement(const std::shared_ptr<SleeveElement> element);
   void UpdateElement(const std::shared_ptr<SleeveElement> element);
   auto GetElementById(const sl_element_id_t id) -> std::shared_ptr<SleeveElement>;
   void EnsureChildrenLoaded(sl_element_id_t folder_id);

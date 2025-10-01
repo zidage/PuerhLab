@@ -65,19 +65,19 @@ void ElementController::AddFolderContent(sl_element_id_t folder_id, sl_element_i
 auto ElementController::GetElementById(const sl_element_id_t id) -> std::shared_ptr<SleeveElement> {
   auto result = _element_service.GetElementById(id);
   if (result->_type == ElementType::FILE) {
-    auto file = std::static_pointer_cast<SleeveFile>(result);
+    auto file    = std::static_pointer_cast<SleeveFile>(result);
     auto history = _history_service.GetEditHistoryByFileId(file->_element_id);
     file->SetEditHistory(history);
-  } 
+  }
   result->SetSyncFlag(SyncFlag::SYNCED);
   return result;
 }
 
 /**
  * @brief Get the content of a folder by its ID from the database.
- * 
- * @param folder_id 
- * @return std::vector<sl_element_id_t> 
+ *
+ * @param folder_id
+ * @return std::vector<sl_element_id_t>
  */
 auto ElementController::GetFolderContent(const sl_element_id_t folder_id)
     -> std::vector<sl_element_id_t> {
@@ -85,11 +85,24 @@ auto ElementController::GetFolderContent(const sl_element_id_t folder_id)
 }
 
 /**
- * @brief Remove an element by its ID from the database.
+ * @brief Remove an element by its ID from the database, only be called when the ref count to the
+ * element is 0.
  *
  * @param id
  */
 void ElementController::RemoveElement(const sl_element_id_t id) { _element_service.RemoveById(id); }
+
+void ElementController::RemoveElement(const std::shared_ptr<SleeveElement> element) {
+  if (element->_type == ElementType::FILE) {
+    auto file = std::static_pointer_cast<SleeveFile>(element);
+    _history_service.RemoveById(file->_element_id);
+    _file_service.RemoveById(file->_element_id);
+  } else if (element->_type == ElementType::FOLDER) {
+    auto folder = std::static_pointer_cast<SleeveFolder>(element);
+    _folder_service.RemoveById(folder->_element_id);
+  }
+  _element_service.RemoveById(element->_element_id);
+}
 
 /**
  * @brief Update an element in the database.
