@@ -18,7 +18,8 @@ ElementController::ElementController(ConnectionGuard&& guard)
     : _guard(std::move(guard)),
       _element_service(_guard._conn),
       _file_service(_guard._conn),
-      _folder_service(_guard._conn) {}
+      _folder_service(_guard._conn),
+      _history_service(_guard._conn) {}
 
 /**
  * @brief Add an element to the database.
@@ -30,6 +31,10 @@ void ElementController::AddElement(const std::shared_ptr<SleeveElement> element)
   if (element->_type == ElementType::FILE) {
     auto file = std::static_pointer_cast<SleeveFile>(element);
     _file_service.Insert({file->_element_id, file->_image_id});
+    if (file->GetEditHistory() != nullptr) {
+      auto history = file->GetEditHistory();
+      _history_service.Insert(history);
+    }
   } else if (element->_type == ElementType::FOLDER) {
     auto folder   = std::static_pointer_cast<SleeveFolder>(element);
     auto contents = folder->ListElements();
@@ -59,10 +64,21 @@ void ElementController::AddFolderContent(sl_element_id_t folder_id, sl_element_i
  */
 auto ElementController::GetElementById(const sl_element_id_t id) -> std::shared_ptr<SleeveElement> {
   auto result = _element_service.GetElementById(id);
+  if (result->_type == ElementType::FILE) {
+    auto file = std::static_pointer_cast<SleeveFile>(result);
+    auto history = _history_service.GetEditHistoryByFileId(file->_element_id);
+    file->SetEditHistory(history);
+  } 
   result->SetSyncFlag(SyncFlag::SYNCED);
   return result;
 }
 
+/**
+ * @brief Get the content of a folder by its ID from the database.
+ * 
+ * @param folder_id 
+ * @return std::vector<sl_element_id_t> 
+ */
 auto ElementController::GetFolderContent(const sl_element_id_t folder_id)
     -> std::vector<sl_element_id_t> {
   return _folder_service.GetFolderContent(folder_id);
@@ -85,6 +101,7 @@ void ElementController::UpdateElement(const std::shared_ptr<SleeveElement> eleme
   if (element->_type == ElementType::FILE) {
     auto file = std::static_pointer_cast<SleeveFile>(element);
     _file_service.Update({file->_element_id, file->_image_id}, file->_image_id);
+    _history_service.Update(file->GetEditHistory(), file->_element_id);
   } else if (element->_type == ElementType::FOLDER) {
     auto folder = std::static_pointer_cast<SleeveFolder>(element);
     _folder_service.RemoveById(folder->_element_id);

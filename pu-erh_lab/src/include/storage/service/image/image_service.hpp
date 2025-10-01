@@ -2,7 +2,6 @@
 
 #include <duckdb.h>
 
-#include <codecvt>
 #include <filesystem>
 #include <memory>
 #include <vector>

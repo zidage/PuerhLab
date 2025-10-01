@@ -5,6 +5,7 @@
 
 #include "sleeve/sleeve_element/sleeve_element.hpp"
 #include "storage/controller/controller_types.hpp"
+#include "storage/service/sleeve/edit_history/history_service.hpp"
 #include "storage/service/sleeve/element/element_service.hpp"
 #include "storage/service/sleeve/element/file_service.hpp"
 #include "storage/service/sleeve/element/folder_service.hpp"
@@ -13,11 +14,12 @@
 namespace puerhlab {
 class ElementController {
  private:
-  ConnectionGuard _guard;
+  ConnectionGuard    _guard;
 
-  ElementService  _element_service;
-  FileService     _file_service;
-  FolderService   _folder_service;
+  ElementService     _element_service;
+  FileService        _file_service;
+  FolderService      _folder_service;
+  EditHistoryService _history_service;
 
  public:
   ElementController(ConnectionGuard&& guard);

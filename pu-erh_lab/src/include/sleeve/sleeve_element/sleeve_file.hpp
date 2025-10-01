@@ -65,6 +65,7 @@ class SleeveFile : public SleeveElement {
   void SetImage(const std::shared_ptr<Image> img);
 
   auto GetEditHistory() -> std::shared_ptr<EditHistory>;
+  auto SetEditHistory(const std::shared_ptr<EditHistory> history) -> void;
   ~SleeveFile();
 };
 };  // namespace puerhlab

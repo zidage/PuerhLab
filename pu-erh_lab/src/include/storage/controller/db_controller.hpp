@@ -32,9 +32,7 @@ class DBController {
       "CREATE TABLE FileImage (file_id BIGINT, image_id BIGINT);"
       "CREATE TABLE ComboFolder (combo_id BIGINT, folder_id BIGINT);"
       "CREATE TABLE Filter (combo_id BIGINT, type INTEGER, data JSON);"
-      "CREATE TABLE EditHistory (history_id BIGINT PRIMARY KEY, file_id BIGINT, added_time "
-      "TIMESTAMP, modified_time "
-      "TIMESTAMP);"
+      "CREATE TABLE EditHistory (file_id BIGINT, history JSON);"
       "CREATE TABLE Version (hash BIGINT PRIMARY KEY, history_id BIGINT, parent_hash BIGINT, "
       "content "
       "JSON)";

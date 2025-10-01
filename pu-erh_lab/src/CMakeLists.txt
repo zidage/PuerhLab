@@ -161,6 +161,7 @@ add_library(SleeveMapper
     storage/mapper/sleeve/base/base_mapper.cpp
     storage/mapper/image/image_mapper.cpp
     storage/mapper/sleeve/filter/filter_mapper.cpp
+    storage/mapper/sleeve/edit_history/history_mapper.cpp
     )
 target_include_directories(SleeveMapper PUBLIC include)
 target_link_libraries(SleeveMapper PUBLIC DuckDB DuckORM Image SleeveElement ImagePool)
@@ -172,6 +173,7 @@ add_library(SleeveService
     storage/service/sleeve/element/element_service.cpp
     storage/service/sleeve/element/file_service.cpp
     storage/service/sleeve/element/folder_service.cpp
+    storage/service/sleeve/edit_history/history_service.cpp
 )
 target_include_directories(SleeveService PUBLIC include)
 target_link_libraries(SleeveService PUBLIC DuckDB DuckORM SleeveMapper StrConv)

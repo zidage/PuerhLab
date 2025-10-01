@@ -18,16 +18,41 @@ class MapperInterface {
   duckdb_connection& _conn;
 
   MapperInterface(duckdb_connection& conn) : _conn(conn) {}
+
+  /**
+   * @brief Insert a new record into the table
+   * 
+   * @param obj 
+   */
   void Insert(const Mappable&& obj) {
     duckorm::insert(_conn, Derived::TableName(), &obj, Derived::FieldDesc(), Derived::FieldCount());
   }
+
+  /**
+   * @brief Remove a record from the table by its primary key
+   * 
+   * @param remove_id 
+   */
   void Remove(const ID remove_id) {
     std::string remove_clause = std::format(Derived::PrimeKeyClause(), remove_id);
     duckorm::remove(_conn, Derived::TableName(), remove_clause.c_str());
   }
+
+  /**
+   * @brief Remove records from the table by a custom SQL predicate
+   * 
+   * @param predicate 
+   */
   void RemoveByClause(const std::string& predicate) {
     duckorm::remove(_conn, Derived::TableName(), predicate.c_str());
   }
+
+  /**
+   * @brief Get records from the table by a custom SQL predicate
+   * 
+   * @param where_clause 
+   * @return std::vector<Mappable> 
+   */
   auto Get(const char* where_clause) -> std::vector<Mappable> {
     auto                  raw = duckorm::select(_conn, Derived::TableName(), Derived::FieldDesc(),
                                                 Derived::FieldCount(), where_clause);
@@ -37,6 +62,13 @@ class MapperInterface {
     }
     return result;
   }
+
+  /**
+   * @brief Update a record in the table by its primary key
+   * 
+   * @param target_id 
+   * @param updated 
+   */
   void Update(const ID target_id, const Mappable&& updated) {
     std::string where_clause = std::format(Derived::PrimeKeyClause(), target_id);
     duckorm::update(_conn, Derived::TableName(), &updated, Derived::FieldDesc(),
