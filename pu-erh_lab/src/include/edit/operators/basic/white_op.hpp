@@ -13,6 +13,10 @@ class WhiteOp : public ToneRegionOp<WhiteOp>, public OperatorBase<WhiteOp> {
  private:
   float           _offset;
 
+  float           _y_intercept;
+  float           _black_point;
+  float           _slope;
+
   LinearToneCurve _curve;
 
  public:
@@ -32,6 +36,7 @@ class WhiteOp : public ToneRegionOp<WhiteOp>, public OperatorBase<WhiteOp> {
   static void GetMask(cv::Mat& src, cv::Mat& mask);
 
   void        Apply(std::shared_ptr<ImageBuffer> input) override;
+  auto        ToKernel() const -> Kernel override;
   auto        GetParams() const -> nlohmann::json override;
   void        SetParams(const nlohmann::json& params) override;
 };

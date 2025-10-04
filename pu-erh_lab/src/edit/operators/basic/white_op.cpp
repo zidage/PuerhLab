@@ -23,13 +23,10 @@ WhiteOp::WhiteOp(const nlohmann::json& params) {
 void WhiteOp::GetMask(cv::Mat& src, cv::Mat& mask) {}
 
 auto WhiteOp::GetOutput(cv::Vec3f& input) -> cv::Vec3f {
-  float     y_intercept = 100.0f + _offset / 3.0f;
-  float     black_point = 0.0f;
-  float     slope       = (y_intercept - black_point) / 100.0f;
   cv::Vec3f output      = {
-      slope * input[0],
-      slope * input[1],
-      slope * input[2],
+      _slope * input[0],
+      _slope * input[1],
+      _slope * input[2],
   };
   // output            = std::clamp(output, 0.0f, 100.0f);
   return output;
@@ -46,13 +43,32 @@ void WhiteOp::Apply(std::shared_ptr<ImageBuffer> input) {
   ToneRegionOp<WhiteOp>::Apply(input);
 }
 
+auto WhiteOp::ToKernel() const -> Kernel {
+  return Kernel {
+    ._type = Kernel::Type::Point,
+    ._func = PointKernelFunc([s=_slope](const Pixel& in) -> Pixel {
+      return Pixel{
+        s * in.r,
+        s * in.g,
+        s * in.b
+      };
+    })
+  };
+}
+
 auto WhiteOp::GetParams() const -> nlohmann::json { return {_script_name, _offset}; }
 
 void WhiteOp::SetParams(const nlohmann::json& params) {
   if (!params.contains(_script_name)) {
     _offset = 0.0f;
+    _y_intercept = 1.0f;
+    _black_point = 0.0f;
+    _slope = 1.0f;
   } else {
     _offset = params[_script_name].get<float>();
+    _y_intercept = 1.0f + _offset / 3.0f;
+    _black_point = 0.0f;  
+    _slope = (_y_intercept - _black_point) / 1.0f;
   }
 }
 }  // namespace puerhlab
