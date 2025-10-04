@@ -4,6 +4,7 @@
 
 #include "image/image_buffer.hpp"
 #include "json.hpp"
+#include "op_kernel.hpp"
 #include "type/type.hpp"
 
 namespace puerhlab {
@@ -25,7 +26,7 @@ class IOperatorBase {
    * @param input
    * @return ImageBuffer
    */
-  virtual void Apply(std::shared_ptr<ImageBuffer> input)  = 0;
+  virtual void Apply(std::shared_ptr<ImageBuffer> input) = 0;
   /**
    * @brief Set the parameters of this operator from JSON
    *
@@ -44,6 +45,8 @@ class IOperatorBase {
   virtual auto GetPriorityLevel() const -> PriorityLevel = 0;
 
   virtual auto GetStage() const -> PipelineStageName     = 0;
+
+  virtual auto ToKernel() const -> Kernel                = 0;
 
   virtual ~IOperatorBase()                               = default;
 };
