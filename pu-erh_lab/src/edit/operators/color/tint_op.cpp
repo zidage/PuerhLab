@@ -34,6 +34,18 @@ void TintOp::Apply(std::shared_ptr<ImageBuffer> input) {
   cv::merge(bgr_channels, img);
 }
 
+auto TintOp::ToKernel() const -> Kernel {
+  return Kernel {
+    ._type = Kernel::Type::Point,
+    ._func = PointKernelFunc([s=_scale](const Pixel& in) -> Pixel {
+      Pixel out = in;
+      out.g += s;
+      out.g = std::clamp(out.g, 0.0f, 1.0f);
+      return out;
+    })
+  };
+}
+
 auto TintOp::GetParams() const -> nlohmann::json {
   nlohmann::json o;
   o[_script_name] = _tint_offset;

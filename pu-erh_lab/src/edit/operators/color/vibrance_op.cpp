@@ -63,6 +63,48 @@ void VibranceOp::Apply(std::shared_ptr<ImageBuffer> input) {
 
 }
 
+auto VibranceOp::ToKernel() const -> Kernel {
+  return Kernel {
+    ._type = Kernel::Type::Point,
+    ._func = PointKernelFunc([o=_vibrance_offset](const Pixel& in) -> Pixel {
+      float r = in.r, g = in.g, b = in.b;
+
+      float max_val = std::max({r, g, b});
+      float min_val = std::min({r, g, b});
+      float chroma  = max_val - min_val;
+
+       // chroma in [0, max], vibrance_offset in [-100, 100]
+      float strength = o / 100.0f;
+
+      // Protect already highly saturated color
+      float falloff  = std::exp(-3.0f * chroma);
+
+      float scale = 1.0f + strength * falloff;
+
+      if (o >= 0.0f) {
+        float luma = r * 0.299f + g * 0.587f + b * 0.114f;
+
+        r          = luma + (r - luma) * scale;
+        g          = luma + (g - luma) * scale;
+        b          = luma + (b - luma) * scale;
+
+      } else {
+        float avg = (r + g + b) / 3.0f;
+        r += (avg - r) * (1.0f - scale);
+        g += (avg - g) * (1.0f - scale);
+        b += (avg - b) * (1.0f - scale);
+      }
+
+      // clamp
+      r     = std::clamp(r, 0.0f, 1.0f);
+      g     = std::clamp(g, 0.0f, 1.0f);
+      b     = std::clamp(b, 0.0f, 1.0f);
+
+      return Pixel{r, g, b};
+    })
+  };
+}
+
 auto VibranceOp::GetParams() const -> nlohmann::json {
   nlohmann::json o;
   o[_script_name] = _vibrance_offset;

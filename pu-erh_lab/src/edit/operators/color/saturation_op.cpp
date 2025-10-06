@@ -5,6 +5,7 @@
 #include <utility>
 
 #include "edit/operators/color/conversion/Oklab_cvt.hpp"
+#include "edit/operators/op_kernel.hpp"
 #include "edit/operators/operator_factory.hpp"
 #include "json.hpp"
 
@@ -42,6 +43,23 @@ void SaturationOp::Apply(std::shared_ptr<ImageBuffer> input) {
 
     pixel = OklabCvt::Oklab2LinearRGB(oklab_vec);
   });
+}
+
+auto SaturationOp::ToKernel() const -> Kernel {
+  return Kernel {
+    ._type = Kernel::Type::Point,
+    ._func = PointKernelFunc([s=_scale](const Pixel& in) -> Pixel {
+      OklabCvt::Oklab oklab_vec = OklabCvt::ACESRGB2Oklab(in);
+
+      // Chroma = a^2 + b^2
+      oklab_vec.a *= s;
+      oklab_vec.b *= s;
+
+      Pixel out;
+      OklabCvt::Oklab2ACESRGB(oklab_vec, out);
+      return out;
+    })
+  };
 }
 
 auto SaturationOp::GetParams() const -> nlohmann::json {

@@ -160,4 +160,16 @@ cv::Vec3f Oklab2ACESRGB(const Oklab& lab) {
 
   return LinearAP1_to_ACEScc_vec(result_linear);
 }
+
+Oklab ACESRGB2Oklab(const puerhlab::Pixel& pixel) {
+  cv::Vec3f acescc_rgb{pixel.r, pixel.g, pixel.b};
+  return ACESRGB2Oklab(acescc_rgb);
+}
+
+void Oklab2ACESRGB(const Oklab& lab, puerhlab::Pixel& pixel) {
+  cv::Vec3f acescc_rgb = Oklab2ACESRGB(lab);
+  pixel.r              = acescc_rgb[0];
+  pixel.g              = acescc_rgb[1];
+  pixel.b              = acescc_rgb[2];
+}
 };  // namespace OklabCvt
