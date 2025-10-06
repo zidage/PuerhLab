@@ -11,10 +11,26 @@
 
 namespace puerhlab {
 namespace hw = hwy::HWY_NAMESPACE;
+struct HighlightCurveParams {
+  float       control;
+  float       knee_start;
+  const float slope_range = 0.8f;
+  float       m1;
+
+  float       x0;
+  float       x1 = 1.0f;
+  float       y0;
+  float       y1;
+
+  float       m0 = 1.0f;
+
+  float       dx;
+};
 class HighlightsOp : public ToneRegionOp<HighlightsOp>, public OperatorBase<HighlightsOp> {
  private:
   float                           _offset;
 
+  HighlightCurveParams            _curve;
   hw::Vec<hw::ScalableTag<float>> _ctrl_param;
 
  public:
@@ -32,6 +48,7 @@ class HighlightsOp : public ToneRegionOp<HighlightsOp>, public OperatorBase<High
   HighlightsOp(const nlohmann::json& params);
   static void GetMask(cv::Mat& src, cv::Mat& mask);
   void        Apply(std::shared_ptr<ImageBuffer> input) override;
+  auto       ToKernel() const -> Kernel override;
   auto        GetParams() const -> nlohmann::json override;
   void        SetParams(const nlohmann::json& params) override;
 };

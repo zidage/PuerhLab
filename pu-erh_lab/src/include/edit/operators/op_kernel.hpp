@@ -1,5 +1,6 @@
 #pragma once
 
+#include <variant>
 #include "image/image_buffer.hpp"
 
 namespace puerhlab {

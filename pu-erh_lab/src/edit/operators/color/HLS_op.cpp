@@ -2,6 +2,7 @@
 
 #include <opencv2/core/hal/interface.h>
 
+#include <algorithm>
 #include <array>
 #include <opencv2/core.hpp>
 #include <opencv2/opencv.hpp>
@@ -93,6 +94,84 @@ void HLSOp::Apply(std::shared_ptr<ImageBuffer> input) {
 
   cv::threshold(img, img, 1.0f, 1.0f, cv::THRESH_TRUNC);
   cv::threshold(img, img, 0.0f, 0.0f, cv::THRESH_TOZERO);
+}
+
+auto HLSOp::ToKernel() const -> Kernel {
+  return Kernel{
+      ._type = Kernel::Type::Point,
+      ._func = [target_hls = _target_HLS, hls_adj = _HLS_adjustment, h_range = _hue_range,
+                l_range = _lightness_range, s_range = _saturation_range](const Pixel& in) -> Pixel {
+        // Convert RGB to HLS
+        // cv::Vec3f rgb(in.r, in.g, in.b);
+        // cv::Mat   bgr_mat(1, 1, CV_32FC3);
+        // cv::cvtColor(bgr_mat, bgr_mat, cv::COLOR_RGB2HLS);
+        // cv::Vec3f hls      = bgr_mat.at<cv::Vec3f>(0, 0);
+
+        float r = in.r, g = in.g, b = in.b;
+        float max_c = std::max({r, g, b});
+        float min_c = std::min({r, g, b});
+        float L     = (max_c + min_c) * 0.5f;
+        float H = 0.0f, S = 0.0f;
+        float d = max_c - min_c == 0.0f ? 1e-10f : max_c - min_c;
+
+        S       = (L < 0.5f) ? (d / (max_c + min_c)) : (d / (2.0f - max_c - min_c));
+        if (max_c == r) {
+          H = (g - b) / d + (g < b ? 6.0f : 0.0f);
+        } else if (max_c == g) {
+          H = (b - r) / d + 2.0f;
+        } else if (max_c == b) {
+          H = (r - g) / d + 4.0f;
+        }
+        H *= 60.0f;
+
+        float target_h = target_hls[0];
+        float target_l = target_hls[1];
+        float target_s = target_hls[2];
+
+        // Compute mask
+        float h        = H;
+        float l        = L;
+        float s        = S;
+        float hue_diff = std::abs(h - target_h);
+        float hue_dist = std::min(hue_diff, 360.0f - hue_diff);
+
+        float weight   = std::max(0.0f, 1.0f - hue_dist / h_range) *              // hue_w
+                       std::max(0.0f, 1.0f - std::abs(l - target_l) / l_range) *  // lightness_w
+                       std::max(0.0f, 1.0f - std::abs(s - target_s) / s_range);   // saturation_w
+
+        float adj_h      = hls_adj[0];
+        float adj_l      = hls_adj[1];
+        float adj_s      = hls_adj[2];
+
+        float h_adjusted = std::fmod(h + adj_h * weight, 360.0f);
+        if (h_adjusted < 0) h_adjusted += 360.0f;
+
+        float l_adjusted = std::clamp(l + adj_l * weight, 0.0f, 1.0f);
+        float s_adjusted = std::clamp(s + adj_s * weight, 0.0f, 1.0f);
+
+        // Convert HLS back to RGB
+        if (s_adjusted == 0.0f) {
+          return Pixel{l_adjusted, l_adjusted, l_adjusted};
+        } else {
+          float q       = (l_adjusted < 0.5f) ? (l_adjusted * (1.0f + s_adjusted))
+                                              : (l_adjusted + s_adjusted - l_adjusted * s_adjusted);
+          float p       = 2.0f * l_adjusted - q;
+
+          auto  hue2rgb = [](float p, float q, float t) -> float {
+            if (t < 0.0f) t += 1.0f;
+            if (t > 1.0f) t -= 1.0f;
+            if (t < 1.0f / 6.0f) return p + (q - p) * 6.0f * t;
+            if (t < 1.0f / 2.0f) return q;
+            if (t < 2.0f / 3.0f) return p + (q - p) * (2.0f / 3.0f - t) * 6.0f;
+            return p;
+          };
+
+          float r = hue2rgb(p, q, h_adjusted / 360.0f + 1.0f / 3.0f);
+          float g = hue2rgb(p, q, h_adjusted / 360.0f);
+          float b = hue2rgb(p, q, h_adjusted / 360.0f - 1.0f / 3.0f);
+          return Pixel{r, g, b};
+        }
+      }};
 }
 
 auto HLSOp::GetParams() const -> nlohmann::json {

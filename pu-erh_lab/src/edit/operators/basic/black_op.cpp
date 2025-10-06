@@ -22,15 +22,10 @@ BlackOp::BlackOp(const nlohmann::json& params) {
 void BlackOp::GetMask(cv::Mat& src, cv::Mat& mask) {}
 
 auto BlackOp::GetOutput(cv::Vec3f& input) -> cv::Vec3f {
-  float     y_intercept = _offset / 3.0f;
-  float     white_point = 1.0f;
-
-  float     slope       = (white_point - y_intercept) / 1.0f;
-
-  cv::Vec3f output      = {
-      slope * input[0] + y_intercept,
-      slope * input[1] + y_intercept,
-      slope * input[2] + y_intercept,
+  cv::Vec3f output = {
+      _slope * input[0] + _y_intercept,
+      _slope * input[1] + _y_intercept,
+      _slope * input[2] + _y_intercept,
   };
   // output            = std::clamp(output, 0.0f, 100.0f);
   return output;
@@ -43,17 +38,26 @@ auto BlackOp::GetOutput(hw::Vec<hw::ScalableTag<float>> luminance)
 
 auto BlackOp::GetScale() -> float { return _offset / 3.0f; }
 
-void BlackOp::Apply(std::shared_ptr<ImageBuffer> input) {
-  ToneRegionOp<BlackOp>::Apply(input);
+void BlackOp::Apply(std::shared_ptr<ImageBuffer> input) { ToneRegionOp<BlackOp>::Apply(input); }
+
+auto BlackOp::ToKernel() const -> Kernel {
+  return Kernel{._type = Kernel::Type::Point,
+                ._func = PointKernelFunc([s = _slope, b = _y_intercept](const Pixel& in) -> Pixel {
+                  return Pixel{in.r * s + b, in.g * s + b, in.b * s + b};
+                })};
 }
 
 auto BlackOp::GetParams() const -> nlohmann::json { return {_script_name, _offset}; }
 
 void BlackOp::SetParams(const nlohmann::json& params) {
   if (!params.contains(_script_name)) {
-    _offset = 0.0f;
+    _offset      = 0.0f;
+    _y_intercept = 0.0f;
+    _slope       = 1.0f;
   } else {
-    _offset = params[_script_name].get<float>() / 100.0f;
+    _offset      = params[_script_name].get<float>() / 100.0f;
+    _y_intercept = _offset / 3.0f;
+    _slope       = (1.0f - _y_intercept) / 1.0f;
   }
 }
 }  // namespace puerhlab
