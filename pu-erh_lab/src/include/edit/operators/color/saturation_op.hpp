@@ -1,6 +1,7 @@
 #pragma once
 
 #include "edit/operators/op_base.hpp"
+#include "edit/operators/op_kernel.hpp"
 
 namespace puerhlab {
 class SaturationOp : public OperatorBase<SaturationOp> {
@@ -29,6 +30,7 @@ class SaturationOp : public OperatorBase<SaturationOp> {
   SaturationOp(const nlohmann::json& params);
 
   void Apply(std::shared_ptr<ImageBuffer> input) override;
+  auto ToKernel() const -> Kernel override;
   auto GetParams() const -> nlohmann::json override;
   void SetParams(const nlohmann::json& params) override;
 };
