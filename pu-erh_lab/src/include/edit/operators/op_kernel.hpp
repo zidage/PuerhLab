@@ -4,7 +4,6 @@
 
 #include "image/image_buffer.hpp"
 
-
 namespace puerhlab {
 struct Pixel {
   float r, g, b;
@@ -20,13 +19,70 @@ struct Pixel {
   }
 };
 
+struct Rect {
+  int  x, y, width, height;  // (x, y) is the top-left corner
+
+  Rect expand(int margin) const {
+    Rect new_rect   = *this;
+    new_rect.x      = std::max(0, x - margin);
+    new_rect.y      = std::max(0, y - margin);
+    new_rect.width  = width + 2 * margin;
+    new_rect.height = height + 2 * margin;
+    return new_rect;
+  }
+};
+
 struct Tile {
-  uint8_t* ptr;  // pointer to the top-left pixel of the tile
-  int      _width, _height;
-  int      _stride;    // byte per row
-  int      _channels;  // number of channels
-  int      _x0, _y0;   // position in the original image, (x0, y0) is the top-left corner
-  int      original_width, original_height;  // original image size
+  uint8_t*    _ptr;  // pointer to the top-left pixel of the tile
+  cv::Mat     tile_mat; // Keep a reference to the tile data to manage its lifetime
+  int         _width, _height;
+  int         _stride;    // byte per row
+  int         _channels;  // number of channels
+  int         _x0, _y0;   // position in the original image, (x0, y0) is the top-left corner
+  int         _halo;      // number of pixels of halo (margin) around the tile
+  int         original_width, original_height;  // original image size
+
+  static auto CopyFrom(ImageBuffer& img, const Rect& region, int halo) -> Tile {
+    Tile tile;
+    auto&    img_data        = img.GetCPUData();
+    auto     expanded_region = region.expand(halo);
+    cv::Rect roi(expanded_region.x, expanded_region.y,
+                 std::min(expanded_region.width, img_data.cols - expanded_region.x),
+              std::min(expanded_region.height, img_data.rows - expanded_region.y));
+    tile.tile_mat = img_data(roi).clone();  // Clone to ensure data continuity
+    tile._ptr     = tile.tile_mat.data;
+    tile._width   = tile.tile_mat.cols;
+    tile._height  = tile.tile_mat.rows;
+    tile._stride  = static_cast<int>(tile.tile_mat.step);
+    tile._channels = tile.tile_mat.channels();
+    tile._x0      = expanded_region.x;
+    tile._y0       = expanded_region.y;
+    tile._halo     = halo;
+    tile.original_width  = img_data.cols;
+    tile.original_height = img_data.rows;
+    return tile;
+  }
+
+  static auto ViewFrom(ImageBuffer& img, Rect& region, int halo) -> Tile {
+    Tile tile;
+    auto&    img_data        = img.GetCPUData();
+    auto     expanded_region = region.expand(halo);
+    cv::Rect roi(expanded_region.x, expanded_region.y,
+                 std::min(expanded_region.width, img_data.cols - expanded_region.x),
+              std::min(expanded_region.height, img_data.rows - expanded_region.y));
+    tile.tile_mat = img_data(roi);  // View, no clone
+    tile._ptr     = tile.tile_mat.data;
+    tile._width   = tile.tile_mat.cols;
+    tile._height  = tile.tile_mat.rows;
+    tile._stride  = static_cast<int>(tile.tile_mat.step);
+    tile._channels = tile.tile_mat.channels();
+    tile._x0      = expanded_region.x;
+    tile._y0       = expanded_region.y;
+    tile._halo     = halo;
+    tile.original_width  = img_data.cols;
+    tile.original_height = img_data.rows;
+    return tile;
+  }
 };
 
 struct ImageAccessor {
@@ -34,16 +90,16 @@ struct ImageAccessor {
 
   /**
    * @brief Access pixel at (x, y) with border replication
-   * 
-   * @param x 
-   * @param y 
-   * @return Pixel 
+   *
+   * @param x
+   * @param y
+   * @return Pixel
    */
   Pixel at(int x, int y) const {
     // Use border replication for out-of-bounds access
-    x = std::clamp(x, 0, _tile->original_width - 1);
-    y = std::clamp(y, 0, _tile->original_height - 1);
-    float* row = reinterpret_cast<float*>(_tile->ptr + (y - _tile->_y0) * _tile->_stride);
+    x          = std::clamp(x, 0, _tile->original_width - 1);
+    y          = std::clamp(y, 0, _tile->original_height - 1);
+    float* row = reinterpret_cast<float*>(_tile->_ptr + (y - _tile->_y0) * _tile->_stride);
     float* p   = row + (x - _tile->_x0) * _tile->_channels;
     return Pixel{p[0], p[1], p[2]};
   }
