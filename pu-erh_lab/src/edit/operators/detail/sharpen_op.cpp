@@ -4,16 +4,35 @@
 #include <opencv2/core/base.hpp>
 #include <opencv2/opencv.hpp>
 
+#include "edit/operators/op_kernel.hpp"
 #include "edit/operators/operator_factory.hpp"
 #include "image/image_buffer.hpp"
 #include "json.hpp"
 
 namespace puerhlab {
+static auto GetGaussianKernel1D(float sigma) -> std::vector<float> {
+  int                radius = int(std::ceil(3 * sigma));
+  int                size   = 2 * radius + 1;
+  std::vector<float> kernel(size);
+
+  float              sum = 0.0f;
+  for (int i = -radius; i <= radius; ++i) {
+    float val          = std::exp(-(i * i) / (2 * sigma * sigma));
+    kernel[i + radius] = val;
+    sum += val;
+  }
+
+  // normalize
+  for (float& v : kernel) v /= sum;
+
+  return kernel;
+}
 
 SharpenOp::SharpenOp(float offset, float radius, float threshold)
     : _offset(offset), _radius(radius), _threshold(threshold) {
   ComputeScale();
   _threshold /= 100.0f;
+  _kernel = GetGaussianKernel1D(_radius);
 }
 
 SharpenOp::SharpenOp(const nlohmann::json& params) { SetParams(params); }
@@ -39,12 +58,15 @@ void SharpenOp::SetParams(const nlohmann::json& params) {
   }
   if (inner.contains("radius")) {
     _radius = inner["radius"].get<float>();
+  } else {
+    _radius = 3.0f;
   }
   if (inner.contains("threshold")) {
     _threshold = inner["threshold"].get<float>();
     _threshold /= 100.0f;
   }
   ComputeScale();
+  _kernel = GetGaussianKernel1D(_radius);
 }
 
 void SharpenOp::Apply(std::shared_ptr<ImageBuffer> input) {
@@ -72,6 +94,10 @@ void SharpenOp::Apply(std::shared_ptr<ImageBuffer> input) {
   cv::scaleAdd(high_pass, _scale, img, img);
   cv::threshold(img, img, 1.0f, 1.0f, cv::THRESH_TRUNC);
   cv::threshold(img, img, 0.0f, 0.0f, cv::THRESH_TOZERO);
-
 }
+
+auto SharpenOp::ToKernel() const -> Kernel {
+  throw std::runtime_error("SharpenOp::ToKernel() is not implemented yet.");
+}
+
 };  // namespace puerhlab

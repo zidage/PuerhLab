@@ -1,5 +1,6 @@
 #include "edit/operators/cst/lmt_op.hpp"
 
+#include "edit/operators/op_kernel.hpp"
 #include "utils/string/convert.hpp"
 
 namespace puerhlab {
@@ -36,6 +37,25 @@ void OCIO_LMT_Transform_Op::Apply(std::shared_ptr<ImageBuffer> input) {
       }
     }
   });
+}
+
+auto OCIO_LMT_Transform_Op::ToKernel() const -> Kernel {
+  auto  lmt_transform = OCIO::FileTransform::Create();
+  auto  path_str      = _lmt_path.wstring();
+  lmt_transform->setSrc(conv::ToBytes(path_str).c_str());
+  lmt_transform->setInterpolation(OCIO::INTERP_BEST);
+  lmt_transform->setDirection(OCIO::TRANSFORM_DIR_FORWARD);
+
+  auto lmt_processor = config->getProcessor(lmt_transform);
+  auto cpu           = lmt_processor->getDefaultCPUProcessor();
+  return Kernel {
+    ._type = Kernel::Type::Point,
+    ._func = PointKernelFunc([cpu](const Pixel& in) -> Pixel {
+      Pixel rgb = in;
+      cpu->applyRGB(&rgb.r);
+      return rgb;
+    })
+  };
 }
 
 auto OCIO_LMT_Transform_Op::GetParams() const -> nlohmann::json {

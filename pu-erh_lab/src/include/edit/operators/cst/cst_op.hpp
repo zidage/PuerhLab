@@ -7,6 +7,7 @@
 #include <optional>
 
 #include "edit/operators/op_base.hpp"
+#include "edit/operators/op_kernel.hpp"
 #include "image/image_buffer.hpp"
 
 namespace puerhlab {
@@ -36,6 +37,7 @@ class OCIO_ACES_Transform_Op : public OperatorBase<OCIO_ACES_Transform_Op> {
   OCIO_ACES_Transform_Op(const nlohmann::json& params);
 
   void Apply(std::shared_ptr<ImageBuffer> input) override;
+  auto ToKernel() const -> Kernel override;
   auto ApplyLMT(ImageBuffer& input) -> ImageBuffer;
   auto GetParams() const -> nlohmann::json override;
   void SetParams(const nlohmann::json& params) override;
