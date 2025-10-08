@@ -8,7 +8,7 @@
 
 namespace puerhlab {
 PipelineStage::PipelineStage(PipelineStageName stage, bool enable_cache)
-    : _enable_cache(enable_cache), _stage(stage) {
+    : IPipelineStage(stage, enable_cache) {
   _operators = std::make_unique<std::map<OperatorType, OperatorEntry>>();
   if (_stage == PipelineStageName::Image_Loading) {
     _input_cache_valid = true;  // No input for image loading stage, so input cache is always valid

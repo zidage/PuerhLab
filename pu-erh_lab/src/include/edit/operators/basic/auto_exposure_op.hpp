@@ -123,6 +123,9 @@ class AutoExposureOp : public OperatorBase<AutoExposureOp> {
   AutoExposureOp(const nlohmann::json& params);
 
   void Apply(std::shared_ptr<ImageBuffer> input) override;
+  auto ToKernel() const -> Kernel override {
+    throw std::runtime_error("AutoExposureOp does not support kernel processing.");
+  }
   auto GetParams() const -> nlohmann::json override;
   void SetParams(const nlohmann::json& params) override;
 };

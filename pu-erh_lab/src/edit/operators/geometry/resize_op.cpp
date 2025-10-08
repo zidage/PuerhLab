@@ -18,6 +18,10 @@ void ResizeOp::Apply(std::shared_ptr<ImageBuffer> input) {
              cv::INTER_LANCZOS4);
 }
 
+auto ResizeOp::ToKernel() const -> Kernel {
+  throw std::runtime_error("ResizeOp does not support kernel processing.");
+}
+
 auto ResizeOp::GetParams() const -> nlohmann::json {
   nlohmann::json params;
   nlohmann::json inner;

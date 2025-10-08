@@ -20,6 +20,9 @@ class ACESToneMappingOp : public OperatorBase<ACESToneMappingOp> {
   ACESToneMappingOp(const nlohmann::json& params);
 
   void Apply(std::shared_ptr<ImageBuffer> input) override;
+  auto ToKernel() const -> Kernel override {
+    throw std::runtime_error("ACES ToneMapping does not support kernel processing.");
+  }
   auto GetParams() const -> nlohmann::json override;
   void SetParams(const nlohmann::json& params) override;
 };

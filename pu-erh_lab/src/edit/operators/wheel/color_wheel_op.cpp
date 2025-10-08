@@ -77,6 +77,39 @@ void ColorWheelOp::Apply(std::shared_ptr<ImageBuffer> input) {
   });
 }
 
+auto ColorWheelOp::ToKernel() const -> Kernel {
+  return Kernel{._type = Kernel::Type::Point,
+                ._func = PointKernelFunc([this](const Pixel& in) -> Pixel {
+                  float     lum     = 0.2126f * in.r + 0.7152f * in.g + 0.0722f * in.b;
+                  float     lift_w  = std::clamp(bell(lum, 0.0f, 0.45f), 0.0f, 1.0f);
+                  float     gamma_w = 1.0f;
+                  float     gain_w  = std::clamp(bell(lum, 1.0f, 0.45f), 0.0f, 1.0f);
+
+                  cv::Vec3f lift_offset(_lift.color_offset.x + _lift.luminance_offset,
+                                        _lift.color_offset.y + _lift.luminance_offset,
+                                        _lift.color_offset.z + _lift.luminance_offset);
+                  cv::Vec3f gain_factor(_gain.color_offset.x + _gain.luminance_offset,
+                                        _gain.color_offset.y + _gain.luminance_offset,
+                                        _gain.color_offset.z + _gain.luminance_offset);
+                  cv::Vec3f gamma_inv(1.0f / (_gamma.color_offset.x + _gamma.luminance_offset),
+                                      1.0f / (_gamma.color_offset.y + _gamma.luminance_offset),
+                                      1.0f / (_gamma.color_offset.z + _gamma.luminance_offset));
+
+                  cv::Vec3f original_pixel(in.b, in.g, in.r);
+                  cv::Vec3f lifted_pixel = original_pixel + lift_offset;
+                  cv::Vec3f gained_pixel = original_pixel.mul(gain_factor);
+                  cv::Vec3f gamma_pixel;
+                  gamma_pixel[0]  = std::pow(original_pixel[0], gamma_inv[0]);
+                  gamma_pixel[1]  = std::pow(original_pixel[1], gamma_inv[1]);
+                  gamma_pixel[2]  = std::pow(original_pixel[2], gamma_inv[2]);
+                  cv::Vec3f pixel = original_pixel + lift_w * (lifted_pixel - original_pixel) +
+                                    gain_w * (gained_pixel - original_pixel) +
+                                    gamma_w * (gamma_pixel - original_pixel);
+
+                  return Pixel(pixel[2], pixel[1], pixel[0]);
+                })};
+}
+
 auto ColorWheelOp::GetParams() const -> nlohmann::json {
   nlohmann::json o;
   nlohmann::json inner;
