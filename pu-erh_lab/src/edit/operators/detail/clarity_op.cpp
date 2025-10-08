@@ -24,7 +24,7 @@ ClarityOp::ClarityOp(float clarity_offset) : _clarity_offset(clarity_offset) {
 
 ClarityOp::ClarityOp(const nlohmann::json& params) { SetParams(params); }
 
-void ClarityOp::CreateMidtoneMask(cv::Mat& input, cv::Mat& mask) {
+void ClarityOp::CreateMidtoneMask(cv::Mat& input, cv::Mat& mask) const {
   cv::Mat luminosity_mask;
   cv::cvtColor(input, luminosity_mask, cv::COLOR_BGR2GRAY);
 
@@ -66,49 +66,32 @@ void ClarityOp::Apply(std::shared_ptr<ImageBuffer> input) {
 }
 
 auto ClarityOp::ToKernel() const -> Kernel {
-  return Kernel {
-    ._type = Kernel::Type::Neighbor,
-    ._func = NeighborKernelFunc([this](const ImageAccessor& in, int x, int y) -> Pixel {
-      // Create midtone mask
-      float lum = 0.2126f * in.at(x, y).r + 0.7152f * in.at(x, y).g + 0.0722f * in.at(x, y).b;
-      float m   = 1.0f - std::pow(std::clamp((lum - 0.5f) * 2.0f, -1.0f, 1.0f), 2.0f);
+  return Kernel{._type = Kernel::Type::Neighbor,
+                ._func = NeighborKernelFunc([this](ImageAccessor& in) -> ImageAccessor {
+                  cv::Mat& img = in._tile->tile_mat; 
 
-      // Approximate Gaussian blur with box blur
-      int   ksize = static_cast<int>(std::ceil(_usm_radius)) * 2 + 1;
-      int   half   = ksize / 2;
-      Pixel sum    = {0.0f, 0.0f, 0.0f};
-      int   count  = 0;
-      for (int dy = -half; dy <= half; ++dy) {
-        for (int dx = -half; dx <= half; ++dx) {
-          // Pixel.at() will handle border replication
-          sum.r += in.at(x + dx, y + dy).r;
-          sum.g += in.at(x + dx, y + dy).g;
-          sum.b += in.at(x + dx, y + dy).b;
-          count++;
-        }
-      }
-      sum.r /= count;
-      sum.g /= count;
-      sum.b /= count;
+                  cv::Mat  midtone_mask;
+                  CreateMidtoneMask(img, midtone_mask);
 
-      // High-pass pixel
-      Pixel hp = {
-        .r = in.at(x, y).r - sum.r,
-        .g = in.at(x, y).g - sum.g,
-        .b = in.at(x, y).b - sum.b,
-      };
+                  cv::Mat blurred;
+                  cv::GaussianBlur(img, blurred, cv::Size(), _usm_radius, _usm_radius,
+                                   cv::BORDER_REPLICATE);
 
-      hp.r *= m * (_scale);
-      hp.g *= m * (_scale);
-      hp.b *= m * (_scale);
+                  cv::Mat high_pass = img - blurred;
 
-      return Pixel {
-        .r = in.at(x, y).r + hp.r,
-        .g = in.at(x, y).g + hp.g,
-        .b = in.at(x, y).b + hp.b,
-      };
-    })
-  };
+                  cv::Mat mask_3channel;
+                  cv::cvtColor(midtone_mask, mask_3channel, cv::COLOR_GRAY2BGR);
+
+                  high_pass.forEach<cv::Vec3f>([&](cv::Vec3f& h, const int* pos) {
+                    const cv::Vec3f& m = mask_3channel.at<cv::Vec3f>(pos[0], pos[1]);
+                    h[0] *= m[0] * (_scale);
+                    h[1] *= m[1] * (_scale);
+                    h[2] *= m[2] * (_scale);
+                  });
+
+                  img += high_pass;
+                  return in;
+                })};
 }
 
 auto ClarityOp::GetParams() const -> nlohmann::json {

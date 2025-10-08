@@ -106,7 +106,7 @@ struct ImageAccessor {
 };
 
 using PointKernelFunc    = std::function<Pixel(const Pixel&)>;
-using NeighborKernelFunc = std::function<Pixel(const ImageAccessor&, int, int)>;
+using NeighborKernelFunc = std::function<ImageAccessor(ImageAccessor&)>;
 using KernelFunc         = std::variant<PointKernelFunc, NeighborKernelFunc>;
 
 struct Kernel {

@@ -23,7 +23,7 @@ class ClarityOp : public OperatorBase<ClarityOp> {
    */
   static float _usm_radius;
 
-  void         CreateMidtoneMask(cv::Mat& input, cv::Mat& mask);
+  void         CreateMidtoneMask(cv::Mat& input, cv::Mat& mask) const;
 
  public:
   static constexpr PriorityLevel     _priority_level    = 8;
