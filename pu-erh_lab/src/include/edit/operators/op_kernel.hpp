@@ -64,8 +64,11 @@ struct Tile {
   }
 
   static auto ViewFrom(ImageBuffer& img, Rect& region, int halo) -> Tile {
+    return ViewFrom(img.GetCPUData(), region, halo);
+  }
+
+  static auto ViewFrom(const cv::Mat& img_data, Rect& region, int halo) -> Tile {
     Tile tile;
-    auto&    img_data        = img.GetCPUData();
     auto     expanded_region = region.expand(halo);
     cv::Rect roi(expanded_region.x, expanded_region.y,
                  std::min(expanded_region.width, img_data.cols - expanded_region.x),
@@ -88,6 +91,7 @@ struct Tile {
 struct ImageAccessor {
   Tile* _tile;
 
+  ImageAccessor(Tile* tile) : _tile(tile) {}
   /**
    * @brief Access pixel at (x, y) with border replication
    *
@@ -113,5 +117,18 @@ struct Kernel {
   enum class Type { Point, Neighbor } _type;
 
   KernelFunc _func;
+};
+
+struct KernelStream {
+  std::list<Kernel> _kernels;
+
+  bool AddToStream(const Kernel& kernel) {
+    // Ensure all kernels in the stream are of the same type
+    if (kernel._type == Kernel::Type::Point) {
+      _kernels.push_back(kernel);
+      return true;
+    }
+    return false;  // Type mismatch
+  }
 };
 };  // namespace puerhlab
