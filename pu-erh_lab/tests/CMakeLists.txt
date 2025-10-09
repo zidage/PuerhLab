@@ -83,6 +83,10 @@ target_link_libraries(SleeveViewTest PRIVATE GTest::gtest_main Image ImagePool T
 # target_include_directories(CSTTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
 # target_link_libraries(CSTTest GTest::gtest_main Operators SleeveManager ImageDecoder easy_profiler)
 
+add_executable(TileTest edit/pipeline/tile_test.cpp)
+target_include_directories(TileTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
+target_link_libraries(TileTest GTest::gtest_main Operators SleeveManager ImageDecoder EditPipeline OpenColorIO lcms2::lcms2)
+
 add_executable(PipelineTest edit/pipeline/cpu_pipeline_test.cpp)
 target_include_directories(PipelineTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
 target_link_libraries(PipelineTest GTest::gtest_main Operators SleeveManager ImageDecoder EditPipeline OpenColorIO lcms2::lcms2)
@@ -118,7 +122,6 @@ target_link_libraries(EditHistoryTest GTest::gtest_main Operators SleeveManager 
 if (WIN32)
 target_link_libraries(EditHistoryTest easy_profiler)
 endif()
-
 
 include(GoogleTest)
 # set(CMAKE_GTEST_DISCOVER_TESTS_DISCOVERY_MODE PRE_TEST)

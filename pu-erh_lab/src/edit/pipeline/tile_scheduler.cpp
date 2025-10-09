@@ -38,10 +38,13 @@ auto TileScheduler::ApplyOps() -> std::shared_ptr<ImageBuffer> {
   BlockingMPMCQueue<size_t> tile_queue{_total_tiles};
 
   for (size_t tile_idx = 0; tile_idx < _total_tiles; ++tile_idx) {
-    _thread_pool.Submit([this, i = tile_idx, input_buffer, output_buffer, &tile_queue]() {
+    _thread_pool.Submit([this, tile_idx = tile_idx, input_buffer, output_buffer, &tile_queue]() {
       // Get each tile's x0 and y0
-      size_t        tile_x = i * _tile_size;
-      size_t        tile_y = i * _tile_size;
+      size_t        tile_x = (tile_idx % _tile_per_col) * _tile_size;
+      size_t        tile_y = (tile_idx / _tile_per_col) * _tile_size;
+      if (tile_x >= input_buffer.cols || tile_y >= input_buffer.rows) {
+        return;  // Out of bounds
+      }
 
       Rect          tile_rect(tile_x, tile_y, std::min(_tile_size, input_buffer.cols - tile_x),
                               std::min(_tile_size, input_buffer.rows - tile_y));
@@ -49,22 +52,22 @@ auto TileScheduler::ApplyOps() -> std::shared_ptr<ImageBuffer> {
       ImageAccessor accessor(&tile);
       // Apply kernel stream to the tile
       for (int i = 0; i < tile._height; ++i) {
+          float* row =
+              reinterpret_cast<float*>(output_buffer.data + (tile._y0 + i) * output_buffer.step);
         for (int j = 0; j < tile._width; ++j) {
-          Pixel out = accessor.at(j, i);
+          Pixel out = accessor.at(tile._x0 +j, tile._y0 + i);
           for (Kernel& kernel : _stream._kernels) {
             auto func = std::get<PointKernelFunc>(kernel._func);
             out       = func(out);
           }
           // Write back to output buffer
-          float* row =
-              reinterpret_cast<float*>(output_buffer.data + (tile._y0 + i) * output_buffer.step);
           float* p = row + (tile._x0 + j) * tile._channels;
           p[0]     = out.r;
           p[1]     = out.g;
           p[2]     = out.b;
         }
       }
-      tile_queue.push(i);
+      tile_queue.push(tile_idx);
     });
   }
 
