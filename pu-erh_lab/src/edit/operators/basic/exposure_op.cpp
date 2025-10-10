@@ -5,11 +5,9 @@
 #include <opencv2/core/types.hpp>
 #include <utility>
 
-#include "edit/operators/operator_factory.hpp"
 #include "image/image_buffer.hpp"
 
 namespace puerhlab {
-
 /**
  * @brief Construct a new Exposure Op:: Exposure Op object
  *
@@ -61,5 +59,6 @@ void ExposureOp::SetParams(const nlohmann::json& params) {
   _exposure_offset = params[GetScriptName()];
   _scale           = _exposure_offset / 17.52f;
 }
+
 
 };  // namespace puerhlab

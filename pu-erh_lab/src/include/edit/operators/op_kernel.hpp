@@ -33,8 +33,8 @@ struct Rect {
 };
 
 struct Tile {
-  uint8_t*    _ptr;  // pointer to the top-left pixel of the tile
-  cv::Mat     tile_mat; // Keep a reference to the tile data to manage its lifetime
+  uint8_t*    _ptr;      // pointer to the top-left pixel of the tile
+  cv::Mat     tile_mat;  // Keep a reference to the tile data to manage its lifetime
   int         _width, _height;
   int         _stride;    // byte per row
   int         _channels;  // number of channels
@@ -43,21 +43,21 @@ struct Tile {
   int         original_width, original_height;  // original image size
 
   static auto CopyFrom(ImageBuffer& img, const Rect& region, int halo) -> Tile {
-    Tile tile;
+    Tile     tile;
     auto&    img_data        = img.GetCPUData();
     auto     expanded_region = region.expand(halo);
     cv::Rect roi(expanded_region.x, expanded_region.y,
                  std::min(expanded_region.width, img_data.cols - expanded_region.x),
-              std::min(expanded_region.height, img_data.rows - expanded_region.y));
-    tile.tile_mat = img_data(roi).clone();  // Clone to ensure data continuity
-    tile._ptr     = tile.tile_mat.data;
-    tile._width   = tile.tile_mat.cols;
-    tile._height  = tile.tile_mat.rows;
-    tile._stride  = static_cast<int>(tile.tile_mat.step);
-    tile._channels = tile.tile_mat.channels();
-    tile._x0      = expanded_region.x;
-    tile._y0       = expanded_region.y;
-    tile._halo     = halo;
+                 std::min(expanded_region.height, img_data.rows - expanded_region.y));
+    tile.tile_mat        = img_data(roi).clone();  // Clone to ensure data continuity
+    tile._ptr            = tile.tile_mat.data;
+    tile._width          = tile.tile_mat.cols;
+    tile._height         = tile.tile_mat.rows;
+    tile._stride         = static_cast<int>(tile.tile_mat.step);
+    tile._channels       = tile.tile_mat.channels();
+    tile._x0             = expanded_region.x;
+    tile._y0             = expanded_region.y;
+    tile._halo           = halo;
     tile.original_width  = img_data.cols;
     tile.original_height = img_data.rows;
     return tile;
@@ -68,20 +68,20 @@ struct Tile {
   }
 
   static auto ViewFrom(const cv::Mat& img_data, Rect& region, int halo) -> Tile {
-    Tile tile;
+    Tile     tile;
     auto     expanded_region = region.expand(halo);
     cv::Rect roi(expanded_region.x, expanded_region.y,
                  std::min(expanded_region.width, img_data.cols - expanded_region.x),
-              std::min(expanded_region.height, img_data.rows - expanded_region.y));
-    tile.tile_mat = img_data(roi);  // View, no clone
-    tile._ptr     = tile.tile_mat.data;
-    tile._width   = tile.tile_mat.cols;
-    tile._height  = tile.tile_mat.rows;
-    tile._stride  = static_cast<int>(tile.tile_mat.step);
-    tile._channels = tile.tile_mat.channels();
-    tile._x0      = expanded_region.x;
-    tile._y0       = expanded_region.y;
-    tile._halo     = halo;
+                 std::min(expanded_region.height, img_data.rows - expanded_region.y));
+    tile.tile_mat        = img_data(roi);  // View, no clone
+    tile._ptr            = tile.tile_mat.data;
+    tile._width          = tile.tile_mat.cols;
+    tile._height         = tile.tile_mat.rows;
+    tile._stride         = static_cast<int>(tile.tile_mat.step);
+    tile._channels       = tile.tile_mat.channels();
+    tile._x0             = expanded_region.x;
+    tile._y0             = expanded_region.y;
+    tile._halo           = halo;
     tile.original_width  = img_data.cols;
     tile.original_height = img_data.rows;
     return tile;
@@ -110,19 +110,20 @@ struct ImageAccessor {
 };
 
 using PointKernelFunc    = std::function<Pixel(const Pixel&)>;
+using VectorKernelFunc   = std::function<void(const float* src, float* dst, int length)>;
 using NeighborKernelFunc = std::function<ImageAccessor(ImageAccessor&)>;
-using KernelFunc         = std::variant<PointKernelFunc, NeighborKernelFunc>;
+using KernelFunc         = std::variant<PointKernelFunc, VectorKernelFunc, NeighborKernelFunc>;
 
 struct Kernel {
-  enum class Type { Point, Neighbor } _type;
+  enum class Type { Point, Vector, Neighbor } _type;
 
   KernelFunc _func;
 };
 
 struct KernelStream {
-  std::list<Kernel> _kernels;
+  std::vector<Kernel> _kernels;
 
-  bool AddToStream(const Kernel& kernel) {
+  bool                AddToStream(const Kernel& kernel) {
     // Ensure all kernels in the stream are of the same type
     if (kernel._type == Kernel::Type::Point) {
       _kernels.push_back(kernel);
@@ -130,5 +131,7 @@ struct KernelStream {
     }
     return false;  // Type mismatch
   }
+
+  void Clear() { _kernels.clear(); }
 };
 };  // namespace puerhlab

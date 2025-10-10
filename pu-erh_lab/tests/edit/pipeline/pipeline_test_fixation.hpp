@@ -7,6 +7,7 @@
 
 #include "edit/operators/operator_registeration.hpp"
 #include "utils/clock/time_provider.hpp"
+#include <opencv2/core/utils/logger.hpp>
 
 
 namespace puerhlab {
@@ -18,6 +19,7 @@ class PipelineTests : public ::testing::Test {
   void                  SetUp() override {
     TimeProvider::Refresh();
     Exiv2::LogMsg::setLevel(Exiv2::LogMsg::Level::mute);
+    cv::utils::logging::setLogLevel(cv::utils::logging::LOG_LEVEL_SILENT);
     // Create a unique db file location
     db_path_ = std::filesystem::temp_directory_path() / "test_db.db";
     // Make sure there is not existing db

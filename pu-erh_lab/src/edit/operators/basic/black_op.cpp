@@ -56,7 +56,7 @@ void BlackOp::SetParams(const nlohmann::json& params) {
     _slope       = 1.0f;
   } else {
     _offset      = params[_script_name].get<float>() / 100.0f;
-    _y_intercept = _offset / 3.0f;
+    _y_intercept = _offset / 300.0f;
     _slope       = (1.0f - _y_intercept) / 1.0f;
   }
 }
