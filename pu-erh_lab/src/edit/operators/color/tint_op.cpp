@@ -37,11 +37,9 @@ void TintOp::Apply(std::shared_ptr<ImageBuffer> input) {
 auto TintOp::ToKernel() const -> Kernel {
   return Kernel {
     ._type = Kernel::Type::Point,
-    ._func = PointKernelFunc([s=_scale](const Pixel& in) -> Pixel {
-      Pixel out = in;
-      out.g += s;
-      out.g = std::clamp(out.g, 0.0f, 1.0f);
-      return out;
+    ._func = PointKernelFunc([s=_scale](Pixel& in) {
+      in.g += s;
+      in.g = std::clamp(in.g, 0.0f, 1.0f);
     })
   };
 }

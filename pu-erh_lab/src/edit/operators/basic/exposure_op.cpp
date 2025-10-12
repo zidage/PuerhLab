@@ -42,19 +42,22 @@ void ExposureOp::Apply(std::shared_ptr<ImageBuffer> input) {
 auto ExposureOp::ToKernel() const -> Kernel {
   return Kernel {
     ._type = Kernel::Type::Point,
-    ._func = PointKernelFunc([d=_scale](const Pixel& in) -> Pixel {
-      return Pixel{in.r + d, in.g + d, in.b + d};
+    ._func = PointKernelFunc([d=_scale](Pixel& in) {
+      in.r += d;
+      in.g += d;
+      in.b += d;
     })
   };
 }
 
 auto ExposureOp::ToKernel_Vec() const -> Kernel {
-  return Kernel {
-    ._type = Kernel::Type::Vector,
-    ._func = VectorKernelFunc([d=_scale](const float* in, float* out, size_t length) {
-      // ApplyExposureVec(in, out, length, d);
-    })
-  };
+  // return Kernel {
+  //   ._type = Kernel::Type::Vector,
+  //   ._func = VectorKernelFunc([d=_scale](const float* in, float* out, size_t length) {
+  //     // ApplyExposureVec(in, out, length, d);
+  //   })
+  // };
+  throw std::runtime_error("ExposureOp::ToKernel_Vec not implemented yet.");
 }
 
 auto ExposureOp::GetParams() const -> nlohmann::json {

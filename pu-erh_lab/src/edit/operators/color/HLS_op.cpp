@@ -100,7 +100,7 @@ auto HLSOp::ToKernel() const -> Kernel {
   return Kernel{
       ._type = Kernel::Type::Point,
       ._func = [target_hls = _target_HLS, hls_adj = _HLS_adjustment, h_range = _hue_range,
-                l_range = _lightness_range, s_range = _saturation_range](const Pixel& in) -> Pixel {
+                l_range = _lightness_range, s_range = _saturation_range](Pixel& in) {
         // Convert RGB to HLS
         // cv::Vec3f rgb(in.r, in.g, in.b);
         // cv::Mat   bgr_mat(1, 1, CV_32FC3);
@@ -169,7 +169,9 @@ auto HLSOp::ToKernel() const -> Kernel {
           float r = hue2rgb(p, q, h_adjusted / 360.0f + 1.0f / 3.0f);
           float g = hue2rgb(p, q, h_adjusted / 360.0f);
           float b = hue2rgb(p, q, h_adjusted / 360.0f - 1.0f / 3.0f);
-          return Pixel{r, g, b};
+          in.r    = r;
+          in.g    = g;
+          in.b    = b;
         }
       }};
 }

@@ -5,6 +5,8 @@
 #include "edit/operators/basic/exposure_op.hpp"
 #include "edit/operators/basic/white_op.hpp"
 #include "edit/operators/color/tint_op.hpp"
+#include "edit/operators/cst/cst_op.hpp"
+#include "edit/operators/cst/lmt_op.hpp"
 #include "edit/operators/op_kernel.hpp"
 #include "edit/pipeline/tile_scheduler.hpp"
 #include "io/image/image_loader.hpp"
@@ -51,21 +53,38 @@ TEST_F(PipelineTests, TileSchedulerBasic2) {
   params["black"]    = 10.0f;
   params["white"]    = -15.0f;
   params["tint"]     = -15.0f;
+  nlohmann::json lmt_params;
+    lmt_params["ocio_lmt"] = CONFIG_PATH "LUTs/ACES CCT 2383 D65.cube";
+  
   ExposureOp   exp_op{params};
   BlackOp      black_op{params};
   WhiteOp      white_op{params};
   TintOp       tint_op{params};
 
+  OCIO_LMT_Transform_Op lmt_op{lmt_params};
+
+  nlohmann::json        input_cst_params;
+  input_cst_params["ocio"] = {{"src", "sRGB Encoded Rec.709 (sRGB)"}, {"dst", "ACEScct"}};
+  OCIO_ACES_Transform_Op input_cst_op{input_cst_params};
+  
+
+  nlohmann::json output_cst_params;
+  output_cst_params["ocio"] = {{"src", "ACEScct"}, {"dst", "Camera Rec.709"}, {"limit", true}};
+  OCIO_ACES_Transform_Op output_cst_op{output_cst_params};
+
   KernelStream stream;
+  stream.AddToStream(input_cst_op.ToKernel());
   stream.AddToStream(exp_op.ToKernel());
   stream.AddToStream(black_op.ToKernel());
   stream.AddToStream(white_op.ToKernel());
   stream.AddToStream(tint_op.ToKernel());
+  stream.AddToStream(lmt_op.ToKernel());
+  stream.AddToStream(output_cst_op.ToKernel());
 
   cv::Mat bgr8 =
       cv::imread(std::string(TEST_IMG_PATH) + "/jpeg/tile_tests/test_img.jpg", cv::IMREAD_COLOR);
   ASSERT_FALSE(bgr8.empty()) << "Failed to read image";
-  cv::resize(bgr8, bgr8, cv::Size(1500, 2000));
+  cv::resize(bgr8, bgr8, cv::Size(768, 1024));
 
   cv::Mat img;
   bgr8.convertTo(img, CV_32FC3, 1.0 / 255.0);

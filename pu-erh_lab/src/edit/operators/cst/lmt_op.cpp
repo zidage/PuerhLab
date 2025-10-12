@@ -50,10 +50,8 @@ auto OCIO_LMT_Transform_Op::ToKernel() const -> Kernel {
   auto cpu           = lmt_processor->getDefaultCPUProcessor();
   return Kernel {
     ._type = Kernel::Type::Point,
-    ._func = PointKernelFunc([cpu](const Pixel& in) -> Pixel {
-      Pixel rgb = in;
-      cpu->applyRGB(&rgb.r);
-      return rgb;
+    ._func = PointKernelFunc([cpu](Pixel& in) {
+      cpu->applyRGB(&in.r);
     })
   };
 }

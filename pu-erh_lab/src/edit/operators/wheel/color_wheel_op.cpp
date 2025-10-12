@@ -79,7 +79,7 @@ void ColorWheelOp::Apply(std::shared_ptr<ImageBuffer> input) {
 
 auto ColorWheelOp::ToKernel() const -> Kernel {
   return Kernel{._type = Kernel::Type::Point,
-                ._func = PointKernelFunc([this](const Pixel& in) -> Pixel {
+                ._func = PointKernelFunc([this](Pixel& in) {
                   float     lum     = 0.2126f * in.r + 0.7152f * in.g + 0.0722f * in.b;
                   float     lift_w  = std::clamp(bell(lum, 0.0f, 0.45f), 0.0f, 1.0f);
                   float     gamma_w = 1.0f;
@@ -106,7 +106,9 @@ auto ColorWheelOp::ToKernel() const -> Kernel {
                                     gain_w * (gained_pixel - original_pixel) +
                                     gamma_w * (gamma_pixel - original_pixel);
 
-                  return Pixel(pixel[2], pixel[1], pixel[0]);
+                  in.r = cv::saturate_cast<float>(pixel[0]);
+                  in.g = cv::saturate_cast<float>(pixel[1]);
+                  in.b = cv::saturate_cast<float>(pixel[2]);
                 })};
 }
 

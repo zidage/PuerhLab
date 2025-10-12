@@ -39,7 +39,7 @@ class ExposureOp : public OperatorBase<ExposureOp> {
 
   void Apply(std::shared_ptr<ImageBuffer> input) override;
   auto ToKernel() const -> Kernel override;
-  auto ToKernel_Vec() const -> Kernel;
+  auto ToKernel_Vec() const -> Kernel; // not implemented yet
   auto GetParams() const -> nlohmann::json override;
   void SetParams(const nlohmann::json& params) override;
 };

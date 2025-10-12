@@ -46,12 +46,10 @@ void WhiteOp::Apply(std::shared_ptr<ImageBuffer> input) {
 auto WhiteOp::ToKernel() const -> Kernel {
   return Kernel {
     ._type = Kernel::Type::Point,
-    ._func = PointKernelFunc([s=_slope](const Pixel& in) -> Pixel {
-      return Pixel{
-        s * in.r,
-        s * in.g,
-        s * in.b
-      };
+    ._func = PointKernelFunc([s=_slope](Pixel& in) {
+      in.r = in.r * s;
+      in.g = in.g * s;
+      in.b = in.b * s;
     })
   };
 }

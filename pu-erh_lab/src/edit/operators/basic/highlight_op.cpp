@@ -125,7 +125,7 @@ auto HighlightsOp::ToKernel() const -> Kernel {
   return Kernel{
       ._type = Kernel::Type::Point,
       ._func = PointKernelFunc([c = _curve.control, k = _curve.knee_start, m0 = _curve.m0,
-                                m1 = _curve.m1, dx = _curve.dx](const Pixel& in) -> Pixel {
+                                m1 = _curve.m1, dx = _curve.dx](Pixel& in) {
         float L    = 0.2126f * in.r + 0.7152f * in.g + 0.0722f * in.b;
         float outL = L;
 
@@ -151,7 +151,9 @@ auto HighlightsOp::ToKernel() const -> Kernel {
         if (!std::isfinite(outL)) outL = L;
         // Preserve hue/chroma by scaling RGB by ratio outL/L (guard L==0)
         float scale = (L > 1e-8f) ? (outL / L) : 1.0f;
-        return Pixel{in.r * scale, in.g * scale, in.b * scale};
+        in.r *= scale;
+        in.g *= scale;
+        in.b *= scale;
       })};
 }
 

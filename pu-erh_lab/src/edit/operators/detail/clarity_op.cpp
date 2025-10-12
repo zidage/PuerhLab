@@ -66,32 +66,33 @@ void ClarityOp::Apply(std::shared_ptr<ImageBuffer> input) {
 }
 
 auto ClarityOp::ToKernel() const -> Kernel {
-  return Kernel{._type = Kernel::Type::Neighbor,
-                ._func = NeighborKernelFunc([this](ImageAccessor& in) -> ImageAccessor {
-                  cv::Mat& img = in._tile->tile_mat; 
+  // return Kernel{._type = Kernel::Type::Neighbor,
+  //               ._func = NeighborKernelFunc([this](ImageAccessor& in) -> ImageAccessor {
+  //                 cv::Mat& img = in._tile->tile_mat; 
 
-                  cv::Mat  midtone_mask;
-                  CreateMidtoneMask(img, midtone_mask);
+  //                 cv::Mat  midtone_mask;
+  //                 CreateMidtoneMask(img, midtone_mask);
 
-                  cv::Mat blurred;
-                  cv::GaussianBlur(img, blurred, cv::Size(), _usm_radius, _usm_radius,
-                                   cv::BORDER_REPLICATE);
+  //                 cv::Mat blurred;
+  //                 cv::GaussianBlur(img, blurred, cv::Size(), _usm_radius, _usm_radius,
+  //                                  cv::BORDER_REPLICATE);
 
-                  cv::Mat high_pass = img - blurred;
+  //                 cv::Mat high_pass = img - blurred;
 
-                  cv::Mat mask_3channel;
-                  cv::cvtColor(midtone_mask, mask_3channel, cv::COLOR_GRAY2BGR);
+  //                 cv::Mat mask_3channel;
+  //                 cv::cvtColor(midtone_mask, mask_3channel, cv::COLOR_GRAY2BGR);
 
-                  high_pass.forEach<cv::Vec3f>([&](cv::Vec3f& h, const int* pos) {
-                    const cv::Vec3f& m = mask_3channel.at<cv::Vec3f>(pos[0], pos[1]);
-                    h[0] *= m[0] * (_scale);
-                    h[1] *= m[1] * (_scale);
-                    h[2] *= m[2] * (_scale);
-                  });
+  //                 high_pass.forEach<cv::Vec3f>([&](cv::Vec3f& h, const int* pos) {
+  //                   const cv::Vec3f& m = mask_3channel.at<cv::Vec3f>(pos[0], pos[1]);
+  //                   h[0] *= m[0] * (_scale);
+  //                   h[1] *= m[1] * (_scale);
+  //                   h[2] *= m[2] * (_scale);
+  //                 });
 
-                  img += high_pass;
-                  return in;
-                })};
+  //                 img += high_pass;
+  //                 return in;
+  //               })};
+  throw std::runtime_error("ClarityOp::ToKernel not implemented yet.");
 }
 
 auto ClarityOp::GetParams() const -> nlohmann::json {

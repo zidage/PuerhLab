@@ -109,15 +109,15 @@ struct ImageAccessor {
   }
 };
 
-using PointKernelFunc    = std::function<Pixel(const Pixel&)>;
+using PointKernelFunc    = std::function<void(Pixel&)>;
 using VectorKernelFunc   = std::function<void(const float* src, float* dst, int length)>;
 using NeighborKernelFunc = std::function<ImageAccessor(ImageAccessor&)>;
-using KernelFunc         = std::variant<PointKernelFunc, VectorKernelFunc, NeighborKernelFunc>;
+using KernelFunc         = std::variant<PointKernelFunc>;
 
 struct Kernel {
   enum class Type { Point, Vector, Neighbor } _type;
 
-  KernelFunc _func;
+  PointKernelFunc _func;
 };
 
 struct KernelStream {

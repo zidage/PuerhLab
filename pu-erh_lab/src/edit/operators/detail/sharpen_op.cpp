@@ -98,37 +98,38 @@ void SharpenOp::Apply(std::shared_ptr<ImageBuffer> input) {
 
 auto SharpenOp::ToKernel() const -> Kernel {
   // The "size" of the kernel is essentially the size of the whole tile being processed.
-  Kernel USM_kernel {
-    ._type = Kernel::Type::Neighbor,
-    ._func = NeighborKernelFunc([this](const ImageAccessor& in) -> ImageAccessor {
-      cv::Mat original = in._tile->tile_mat;
-      cv::Mat blurred;
-      // The "original" here contains the halo regions, so we can directly apply GaussianBlur on it.
-      // Halo region will be trimmed when the tile is merged back to the full image.
-      cv::GaussianBlur(original, blurred, cv::Size(5,5), _radius, _radius, cv::BORDER_REPLICATE);
+  // Kernel USM_kernel {
+  //   ._type = Kernel::Type::Neighbor,
+  //   ._func = NeighborKernelFunc([this](const ImageAccessor& in) -> ImageAccessor {
+  //     cv::Mat original = in._tile->tile_mat;
+  //     cv::Mat blurred;
+  //     // The "original" here contains the halo regions, so we can directly apply GaussianBlur on it.
+  //     // Halo region will be trimmed when the tile is merged back to the full image.
+  //     cv::GaussianBlur(original, blurred, cv::Size(5,5), _radius, _radius, cv::BORDER_REPLICATE);
 
-      cv::Mat high_pass = original - blurred;
+  //     cv::Mat high_pass = original - blurred;
 
-      if (_threshold > 0.0f) {
-        cv::Mat high_pass_gray;
-        cv::cvtColor(high_pass, high_pass_gray, cv::COLOR_BGR2GRAY);
+  //     if (_threshold > 0.0f) {
+  //       cv::Mat high_pass_gray;
+  //       cv::cvtColor(high_pass, high_pass_gray, cv::COLOR_BGR2GRAY);
 
-        cv::Mat abs_high_pass_gray = cv::abs(high_pass_gray);
+  //       cv::Mat abs_high_pass_gray = cv::abs(high_pass_gray);
 
-        cv::Mat mask;
-        cv::threshold(abs_high_pass_gray, mask, _threshold, 1.0f, cv::THRESH_BINARY);
+  //       cv::Mat mask;
+  //       cv::threshold(abs_high_pass_gray, mask, _threshold, 1.0f, cv::THRESH_BINARY);
 
-        cv::Mat mask_3channel;
-        cv::cvtColor(mask, mask_3channel, cv::COLOR_GRAY2BGR);
-        cv::multiply(high_pass, mask_3channel, high_pass);
-      }
+  //       cv::Mat mask_3channel;
+  //       cv::cvtColor(mask, mask_3channel, cv::COLOR_GRAY2BGR);
+  //       cv::multiply(high_pass, mask_3channel, high_pass);
+  //     }
 
-      cv::scaleAdd(high_pass, _scale, original, original);
-      cv::threshold(original, original, 1.0f, 1.0f, cv::THRESH_TRUNC);
-      cv::threshold(original, original, 0.0f, 0.0f, cv::THRESH_TOZERO);
+  //     cv::scaleAdd(high_pass, _scale, original, original);
+  //     cv::threshold(original, original, 1.0f, 1.0f, cv::THRESH_TRUNC);
+  //     cv::threshold(original, original, 0.0f, 0.0f, cv::THRESH_TOZERO);
       
-      return in;
-    })};
-  return USM_kernel;
+  //     return in;
+  //   })};
+  // return USM_kernel;
+  throw std::runtime_error("SharpenOp::ToKernel not implemented yet.");
   }
 };  // namespace puerhlab
