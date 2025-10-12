@@ -1,4 +1,4 @@
-#include "edit/pipeline/pipeline_utils.hpp"
+#include "edit/pipeline/pipeline_stage.hpp"
 
 #include <memory>
 #include <stdexcept>
@@ -7,17 +7,12 @@
 #include "image/image_buffer.hpp"
 
 namespace puerhlab {
-PipelineStage::PipelineStage(PipelineStageName stage, bool enable_cache)
-    : IPipelineStage(stage, enable_cache) {
+PipelineStage::PipelineStage(PipelineStageName stage, bool enable_cache, bool is_streamable)
+    : _is_streamable(is_streamable) {
   _operators = std::make_unique<std::map<OperatorType, OperatorEntry>>();
   if (_stage == PipelineStageName::Image_Loading) {
     _input_cache_valid = true;  // No input for image loading stage, so input cache is always valid
   }
-}
-
-void PipelineStage::SetNeighbors(PipelineStage* prev, PipelineStage* next) {
-  prev_stage = prev;
-  next_stage = next;
 }
 
 void PipelineStage::SetOperator(OperatorType op_type, nlohmann::json& param) {
@@ -26,9 +21,13 @@ void PipelineStage::SetOperator(OperatorType op_type, nlohmann::json& param) {
     _operators->emplace(op_type,
                         OperatorEntry{true, OperatorFactory::Instance().Create(op_type, param)});
     SetOutputCacheValid(false);
+    // TODO: Update the dependents' stream
   } else {
     (it->second)._op->SetParams(param);
     SetOutputCacheValid(false);
+  }
+  for (auto* dependent : _dependents) {
+    dependent->SetInputCacheValid(false);
   }
 }
 
@@ -45,6 +44,9 @@ void PipelineStage::EnableOperator(OperatorType op_type, bool enable) {
   if (it != _operators->end()) {
     if (it->second._enable != enable) {
       SetOutputCacheValid(false);
+      for (auto* dependent : _dependents) {
+        dependent->SetInputCacheValid(false);
+      }
     }
     it->second._enable = enable;
   }
@@ -66,8 +68,8 @@ void PipelineStage::SetInputCacheValid(bool valid) {
 void PipelineStage::SetOutputCacheValid(bool valid) {
   if (_output_cache_valid != valid && !valid) {
     _output_cache.reset();
-    if (next_stage) {
-      next_stage->SetInputCacheValid(false);
+    if (_next_stage) {
+      _next_stage->SetInputCacheValid(false);
     }
   }
   _output_cache_valid = valid;
@@ -77,13 +79,10 @@ auto PipelineStage::ApplyStage() -> std::shared_ptr<ImageBuffer> {
   if (!_input_set) {
     throw std::runtime_error("PipelineExecutor: No valid input image set");
   }
-  if (_on_gpu) {
-    throw std::runtime_error("PipelineExecutor: GPU processing not implemented");
-  }
 
   if (_enable_cache) {
     if (CacheValid()) {
-      if (next_stage && next_stage->CacheValid()) {
+      if (_next_stage && _next_stage->CacheValid()) {
         // Both input and output cache are valid, skip processing and copying
         return nullptr;
       }
@@ -92,7 +91,8 @@ auto PipelineStage::ApplyStage() -> std::shared_ptr<ImageBuffer> {
     }
 
     bool has_enabled_op = _operators->size() > 0;
-    if (has_enabled_op) {
+    if (has_enabled_op && !_is_streamable) {
+      // Non-streamable stage with enabled operators, process the entire image at once
       auto current_img = std::make_shared<ImageBuffer>(_input_img->Clone());
       for (const auto& op_entry : *_operators) {
         if (op_entry.second._enable) {
@@ -100,6 +100,19 @@ auto PipelineStage::ApplyStage() -> std::shared_ptr<ImageBuffer> {
         }
       }
       _output_cache = current_img;
+    } else if (_is_streamable) {
+      if (!HasStreamableOps()) {
+        _output_cache = _input_img;
+      } else {
+        // Streamable stage with enabled operators, use tile scheduler
+        if (!_tile_scheduler) {
+          // If tile scheduler is not set, create one
+          SetTileScheduler();
+        }
+        _tile_scheduler->SetInputImage(_input_img);
+        auto current_img = _tile_scheduler->ApplyOps();
+        _output_cache    = current_img;
+      }
     } else {
       _output_cache = _input_img;
     }
@@ -107,11 +120,12 @@ auto PipelineStage::ApplyStage() -> std::shared_ptr<ImageBuffer> {
     // _input_set = false;
     // _input_img.reset();
     SetOutputCacheValid(true);
-    if (next_stage) {
-      next_stage->SetInputCacheValid(true);
+    if (_next_stage) {
+      _next_stage->SetInputCacheValid(true);
     }
     return _output_cache;
   } else {
+    // No caching, always process the image without using streaming
     bool has_enabled_op = _operators->size() > 0;
     if (has_enabled_op) {
       std::shared_ptr<ImageBuffer> current_img = _input_img;
@@ -127,8 +141,8 @@ auto PipelineStage::ApplyStage() -> std::shared_ptr<ImageBuffer> {
 
     // Set to false to avoid using cache
     SetOutputCacheValid(false);
-    if (next_stage) {
-      next_stage->SetInputCacheValid(false);
+    if (_next_stage) {
+      _next_stage->SetInputCacheValid(false);
     }
     return _output_cache;
   }
@@ -152,8 +166,12 @@ auto PipelineStage::GetStageNameString() const -> std::string {
       return "Output Transform";
     case PipelineStageName::Geometry_Adjustment:
       return "Geometry Adjustment";
+    case PipelineStageName::Merged_Stage:
+      return "Merged Stage";
     default:
       return "Unknown Stage";
   }
+
+  return "Unknown Stage";
 }
 };  // namespace puerhlab

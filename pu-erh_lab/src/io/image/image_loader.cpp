@@ -96,7 +96,8 @@ auto ImageLoader::LoadImage() -> std::shared_ptr<Image> {
   return img;
 }
 
-auto ByteBufferLoader::LoadFromImage(std::shared_ptr<Image> img) -> std::shared_ptr<std::vector<uint8_t>> {
+auto ByteBufferLoader::LoadFromImage(std::shared_ptr<Image> img)
+    -> std::shared_ptr<std::vector<uint8_t>> {
   std::ifstream   file(img->_image_path, std::ios::binary | std::ios::ate);
   std::streamsize fileSize = file.tellg();
   file.seekg(0, std::ios::beg);

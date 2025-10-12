@@ -2,26 +2,32 @@
 
 #include <memory>
 
+#include "edit/operators/op_kernel.hpp"
 #include "edit/operators/operator_factory.hpp"
-#include "edit/pipeline/pipeline_utils.hpp"
+#include "edit/pipeline/pipeline_stage.hpp"
 #include "image/image_buffer.hpp"
 #include "pipeline.hpp"
+#include "pipeline_stage.hpp"
 #include "utils/cache/lru_cache.hpp"
-
 
 namespace puerhlab {
 class CPUPipelineExecutor : public PipelineExecutor {
  private:
-  std::unique_ptr<std::array<PipelineStage, static_cast<int>(PipelineStageName::Stage_Count)>>
-                                   _stages;
+  bool                                                                        _enable_cache = true;
+  std::array<PipelineStage, static_cast<int>(PipelineStageName::Stage_Count)> _stages;
 
-  bool                             _is_thumbnail = false;
-  bool                             _enable_cache = true;
-  nlohmann::json                   _thumbnail_params;
+  KernelStream                                                                _kernel_stream;
 
-  static constexpr PipelineBackend _backend = PipelineBackend::CPU;
+  bool                                                                        _is_thumbnail = false;
 
-  void                             ResetStages();
+  nlohmann::json                                                              _thumbnail_params;
+
+  static constexpr PipelineBackend            _backend = PipelineBackend::CPU;
+
+  std::vector<PipelineStage*>                 _exec_stages;
+  std::vector<std::unique_ptr<PipelineStage>> _merged_stages;
+
+  void                                        ResetStages();
 
  public:
   CPUPipelineExecutor();
@@ -33,6 +39,8 @@ class CPUPipelineExecutor : public PipelineExecutor {
   auto GetStage(PipelineStageName stage) -> PipelineStage& override;
   auto Apply(std::shared_ptr<ImageBuffer> input) -> std::shared_ptr<ImageBuffer> override;
 
-  void SetThumbnailMode(bool is_thumbnail);
+  void SetPreviewMode(bool is_thumbnail);
+  void SetExecutionStages();
+  void ResetExecutionStages();
 };
 };  // namespace puerhlab

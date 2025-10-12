@@ -1,7 +1,7 @@
 #pragma once
 
 #include "image/image_buffer.hpp"
-#include "pipeline_utils.hpp"
+#include "pipeline_stage.hpp"
 
 namespace puerhlab {
 enum class PipelineBackend { CPU, CUDA, OpenCL };

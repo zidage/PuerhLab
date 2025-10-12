@@ -1,6 +1,7 @@
 #include "edit/operators/raw/raw_decode_op.hpp"
 
 #include <opencv2/core/hal/interface.h>
+
 #include <memory>
 
 #include "decoders/processor/raw_processor.hpp"
@@ -10,10 +11,10 @@ namespace puerhlab {
 RawDecodeOp::RawDecodeOp(const nlohmann::json& params) { SetParams(params); }
 
 void RawDecodeOp::Apply(std::shared_ptr<ImageBuffer> input) {
-  auto&  buffer = input->GetBuffer();
+  auto&                   buffer        = input->GetBuffer();
 
   std::unique_ptr<LibRaw> raw_processor = std::make_unique<LibRaw>();
-  int    ret = raw_processor->open_buffer((void*)buffer.data(), buffer.size());
+  int                     ret = raw_processor->open_buffer((void*)buffer.data(), buffer.size());
   if (ret != LIBRAW_SUCCESS) {
     throw std::runtime_error("RawDecodeOp: Unable to read raw file using LibRAW");
   }

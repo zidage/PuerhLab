@@ -14,4 +14,4 @@ auto EditHistoryMapper::FromRawData(std::vector<duckorm::VarTypes>&& data)
   }
   return {*file_id, std::move(*history)};
 }
-};
+};  // namespace puerhlab

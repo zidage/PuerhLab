@@ -122,39 +122,38 @@ void HighlightsOp::Apply(std::shared_ptr<ImageBuffer> input) {
 }
 
 auto HighlightsOp::ToKernel() const -> Kernel {
-  return Kernel{
-      ._type = Kernel::Type::Point,
-      ._func = PointKernelFunc([c = _curve.control, k = _curve.knee_start, m0 = _curve.m0,
-                                m1 = _curve.m1, dx = _curve.dx](Pixel& in) {
-        float L    = 0.2126f * in.r + 0.7152f * in.g + 0.0722f * in.b;
-        float outL = L;
+  return Kernel{._type = Kernel::Type::Point,
+                ._func = PointKernelFunc([c = _curve.control, k = _curve.knee_start, m0 = _curve.m0,
+                                          m1 = _curve.m1, dx = _curve.dx](Pixel& in) {
+                  float L    = 0.2126f * in.r + 0.7152f * in.g + 0.0722f * in.b;
+                  float outL = L;
 
-        if (L <= k) {
-          // below knee_start: identity
-          outL = L;
-        } else if (L < 1.0f) {
-          // inside the Hermite segment: parameterize t in [0,1]
-          float t   = (L - k) / dx;
-          // Hermite interpolation:
-          float H00 = 2 * t * t * t - 3 * t * t + 1;
-          float H10 = t * t * t - 2 * t * t + t;
-          float H01 = -2 * t * t * t + 3 * t * t;
-          float H11 = t * t * t - t * t;
-          // note: tangents in Hermite are (dx * m0) and (dx * m1)
-          outL      = H00 * k + H10 * (dx * m0) + H01 * 1.0f + H11 * (dx * m1);
-        } else {
-          // L >= whitepoint: linear extrapolate using slope m1
-          outL = 1.0f + (L - 1.0f) * m1;
-        }
+                  if (L <= k) {
+                    // below knee_start: identity
+                    outL = L;
+                  } else if (L < 1.0f) {
+                    // inside the Hermite segment: parameterize t in [0,1]
+                    float t   = (L - k) / dx;
+                    // Hermite interpolation:
+                    float H00 = 2 * t * t * t - 3 * t * t + 1;
+                    float H10 = t * t * t - 2 * t * t + t;
+                    float H01 = -2 * t * t * t + 3 * t * t;
+                    float H11 = t * t * t - t * t;
+                    // note: tangents in Hermite are (dx * m0) and (dx * m1)
+                    outL      = H00 * k + H10 * (dx * m0) + H01 * 1.0f + H11 * (dx * m1);
+                  } else {
+                    // L >= whitepoint: linear extrapolate using slope m1
+                    outL = 1.0f + (L - 1.0f) * m1;
+                  }
 
-        // avoid negative or NaN
-        if (!std::isfinite(outL)) outL = L;
-        // Preserve hue/chroma by scaling RGB by ratio outL/L (guard L==0)
-        float scale = (L > 1e-8f) ? (outL / L) : 1.0f;
-        in.r *= scale;
-        in.g *= scale;
-        in.b *= scale;
-      })};
+                  // avoid negative or NaN
+                  if (!std::isfinite(outL)) outL = L;
+                  // Preserve hue/chroma by scaling RGB by ratio outL/L (guard L==0)
+                  float scale = (L > 1e-8f) ? (outL / L) : 1.0f;
+                  in.r *= scale;
+                  in.g *= scale;
+                  in.b *= scale;
+                })};
 }
 
 auto HighlightsOp::GetParams() const -> nlohmann::json { return {_script_name, _offset}; }

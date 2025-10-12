@@ -86,7 +86,7 @@ target_link_libraries(Operators PUBLIC ImageBuffer JSON OpenColorIO hwy::hwy)
 
 add_library(EditPipeline
     edit/pipeline/pipeline_cpu.cpp
-    edit/pipeline/pipeline_utils.cpp
+    edit/pipeline/pipeline_stage.cpp
     edit/scheduler/pipeline_scheduler.cpp
     edit/pipeline/tile_scheduler.cpp
     )

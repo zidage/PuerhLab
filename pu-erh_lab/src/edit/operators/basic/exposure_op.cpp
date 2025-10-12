@@ -5,7 +5,6 @@
 #include <opencv2/core/types.hpp>
 #include <utility>
 
-
 #include "edit/operators/op_kernel.hpp"
 #include "image/image_buffer.hpp"
 
@@ -22,12 +21,10 @@ ExposureOp::ExposureOp() : _exposure_offset(0.0f) { _scale = 0.0f; }
  * @param exposure_offset
  */
 ExposureOp::ExposureOp(float exposure_offset) : _exposure_offset(exposure_offset) {
-  _scale           = _exposure_offset / 17.52f;
+  _scale = _exposure_offset / 17.52f;
 }
 
-ExposureOp::ExposureOp(const nlohmann::json& params) {
-  SetParams(params);
-}
+ExposureOp::ExposureOp(const nlohmann::json& params) { SetParams(params); }
 
 void ExposureOp::Apply(std::shared_ptr<ImageBuffer> input) {
   cv::Mat& img = input->GetCPUData();
@@ -40,14 +37,11 @@ void ExposureOp::Apply(std::shared_ptr<ImageBuffer> input) {
 }
 
 auto ExposureOp::ToKernel() const -> Kernel {
-  return Kernel {
-    ._type = Kernel::Type::Point,
-    ._func = PointKernelFunc([d=_scale](Pixel& in) {
-      in.r += d;
-      in.g += d;
-      in.b += d;
-    })
-  };
+  return Kernel{._type = Kernel::Type::Point, ._func = PointKernelFunc([d = _scale](Pixel& in) {
+                                                in.r += d;
+                                                in.g += d;
+                                                in.b += d;
+                                              })};
 }
 
 auto ExposureOp::ToKernel_Vec() const -> Kernel {
@@ -71,6 +65,5 @@ void ExposureOp::SetParams(const nlohmann::json& params) {
   _exposure_offset = params[GetScriptName()];
   _scale           = _exposure_offset / 17.52f;
 }
-
 
 };  // namespace puerhlab

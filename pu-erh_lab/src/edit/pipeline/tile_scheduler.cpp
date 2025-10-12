@@ -38,53 +38,52 @@ auto TileScheduler::ApplyOps() -> std::shared_ptr<ImageBuffer> {
   std::mutex              mtx;
   std::condition_variable cv;
   const int               channels = input_buffer.channels();
-  
+
   for (size_t tile_idx = 0; tile_idx < _total_tiles; ++tile_idx) {
-    _thread_pool.Submit([this, tile_idx, &input_buffer, &output_buffer, &tiles_completed, &mtx, &cv,
-                         channels]() {
-      // Get tile's starting coordinates
-      size_t tile_x = (tile_idx % _tile_per_col) * _tile_size;
-      size_t tile_y = (tile_idx / _tile_per_col) * _tile_size;
-      if (tile_x >= input_buffer.cols || tile_y >= input_buffer.rows) {
-        return;  // Skip out-of-bounds tiles
-      }
-
-      // Define the tile's region of interest (ROI), clamping to image boundaries
-      int height = std::min((int)_tile_size, input_buffer.rows - (int)tile_y);
-      int width  = std::min((int)_tile_size, input_buffer.cols - (int)tile_x);
-      
-      for (int i = 0; i < height; ++i) {
-        // Get raw pointers to the start of the current row
-        const float* src_row =
-            input_buffer.ptr<const float>(tile_y + i) + tile_x * channels;
-        float* dst_row = output_buffer.ptr<float>(tile_y + i) + tile_x * channels;
-
-        for (int j = 0; j < width; ++j) {
-          // Read input pixel directly
-          Pixel out{src_row[j * channels + 0], src_row[j * channels + 1], src_row[j * channels + 2]};
-          // Add alpha channel if necessary: out.a = src_row[j * channels + 3];
-
-          // Apply kernel stream to the tile (this logic is unchanged)
-          for (Kernel& kernel : _stream._kernels) {
-            // auto func = std::get<PointKernelFunc>(kernel._func);
-            // TODO handle other kernel types
-            kernel._func(out);
-            
+    _thread_pool.Submit(
+        [this, tile_idx, &input_buffer, &output_buffer, &tiles_completed, &mtx, &cv, channels]() {
+          // Get tile's starting coordinates
+          size_t tile_x = (tile_idx % _tile_per_col) * _tile_size;
+          size_t tile_y = (tile_idx / _tile_per_col) * _tile_size;
+          if (tile_x >= input_buffer.cols || tile_y >= input_buffer.rows) {
+            return;  // Skip out-of-bounds tiles
           }
 
-          // Write output pixel directly
-          dst_row[j * channels + 0] = out.r;
-          dst_row[j * channels + 1] = out.g;
-          dst_row[j * channels + 2] = out.b;
-        }
-      }
+          // Define the tile's region of interest (ROI), clamping to image boundaries
+          int height = std::min((int)_tile_size, input_buffer.rows - (int)tile_y);
+          int width  = std::min((int)_tile_size, input_buffer.cols - (int)tile_x);
 
-      // Atomically signal completion and notify the main thread if all tasks are done
-      if (tiles_completed.fetch_add(1, std::memory_order_release) + 1 == _total_tiles) {
-        std::lock_guard<std::mutex> lock(mtx);
-        cv.notify_one();
-      }
-    });
+          for (int i = 0; i < height; ++i) {
+            // Get raw pointers to the start of the current row
+            const float* src_row = input_buffer.ptr<const float>(tile_y + i) + tile_x * channels;
+            float*       dst_row = output_buffer.ptr<float>(tile_y + i) + tile_x * channels;
+
+            for (int j = 0; j < width; ++j) {
+              // Read input pixel directly
+              Pixel out{src_row[j * channels + 0], src_row[j * channels + 1],
+                        src_row[j * channels + 2]};
+              // Add alpha channel if necessary: out.a = src_row[j * channels + 3];
+
+              // Apply kernel stream to the tile (this logic is unchanged)
+              for (Kernel& kernel : _stream._kernels) {
+                // auto func = std::get<PointKernelFunc>(kernel._func);
+                // TODO handle other kernel types
+                kernel._func(out);
+              }
+
+              // Write output pixel directly
+              dst_row[j * channels + 0] = out.r;
+              dst_row[j * channels + 1] = out.g;
+              dst_row[j * channels + 2] = out.b;
+            }
+          }
+
+          // Atomically signal completion and notify the main thread if all tasks are done
+          if (tiles_completed.fetch_add(1, std::memory_order_release) + 1 == _total_tiles) {
+            std::lock_guard<std::mutex> lock(mtx);
+            cv.notify_one();
+          }
+        });
   }
 
   // Wait efficiently for all tiles to be processed

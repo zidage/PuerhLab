@@ -30,6 +30,8 @@
 
 #include "image/image.hpp"
 
+#include <xxhash.h>
+
 #include <cstdint>
 #include <exception>
 #include <exiv2/exif.hpp>
@@ -38,9 +40,6 @@
 #include <stdexcept>
 #include <string>
 #include <utility>
-
-
-#include <xxhash.h>
 
 namespace puerhlab {
 using json = nlohmann::json;
@@ -145,9 +144,7 @@ void Image::JsonToExif(std::string json_str) {
   }
 }
 
-void Image::ComputeChecksum() {
-  _checksum = XXH3_64bits(this, sizeof(*this));
-}
+void Image::ComputeChecksum() { _checksum = XXH3_64bits(this, sizeof(*this)); }
 
 auto Image::GetImageData() -> cv::Mat& { return _image_data.GetCPUData(); }
 

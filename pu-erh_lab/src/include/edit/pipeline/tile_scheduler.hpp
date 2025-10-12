@@ -26,5 +26,6 @@ class TileScheduler {
                 size_t num_threads = 8);
   void SetInputImage(std::shared_ptr<ImageBuffer> img);
   auto ApplyOps() -> std::shared_ptr<ImageBuffer>;
+  auto HasOps() const -> bool { return _stream._kernels.size() > 0; }
 };
 }  // namespace puerhlab

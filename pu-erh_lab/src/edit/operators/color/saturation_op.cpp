@@ -46,18 +46,16 @@ void SaturationOp::Apply(std::shared_ptr<ImageBuffer> input) {
 }
 
 auto SaturationOp::ToKernel() const -> Kernel {
-  return Kernel {
-    ._type = Kernel::Type::Point,
-    ._func = PointKernelFunc([s=_scale](Pixel& in) {
-      OklabCvt::Oklab oklab_vec = OklabCvt::ACESRGB2Oklab(in);
+  return Kernel{._type = Kernel::Type::Point, ._func = PointKernelFunc([s = _scale](Pixel& in) {
+                                                OklabCvt::Oklab oklab_vec =
+                                                    OklabCvt::ACESRGB2Oklab(in);
 
-      // Chroma = a^2 + b^2
-      oklab_vec.a *= s;
-      oklab_vec.b *= s;
+                                                // Chroma = a^2 + b^2
+                                                oklab_vec.a *= s;
+                                                oklab_vec.b *= s;
 
-      OklabCvt::Oklab2ACESRGB(oklab_vec, in);
-    })
-  };
+                                                OklabCvt::Oklab2ACESRGB(oklab_vec, in);
+                                              })};
 }
 
 auto SaturationOp::GetParams() const -> nlohmann::json {

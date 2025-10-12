@@ -117,11 +117,10 @@ auto OCIO_ACES_Transform_Op::ToKernel() const -> Kernel {
     auto odt     = config->getProcessor(output_transform);
     auto odt_cpu = odt->getDefaultCPUProcessor();
 
-    return Kernel{._type = Kernel::Type::Point,
-                  ._func = PointKernelFunc([cpu, odt_cpu](Pixel& in) {
-                    cpu->applyRGB(&in.r);
-                    odt_cpu->applyRGB(&in.r);
-                  })};
+    return Kernel{._type = Kernel::Type::Point, ._func = PointKernelFunc([cpu, odt_cpu](Pixel& in) {
+                                                  cpu->applyRGB(&in.r);
+                                                  odt_cpu->applyRGB(&in.r);
+                                                })};
 
   } else if (!_input_transform.empty() && _output_transform.empty()) {
     auto transform = OCIO::ColorSpaceTransform::Create();
@@ -131,11 +130,10 @@ auto OCIO_ACES_Transform_Op::ToKernel() const -> Kernel {
     auto idt = config->getProcessor(transform);
     auto cpu = idt->getDefaultCPUProcessor();
 
-    return Kernel{._type = Kernel::Type::Point,
-                  ._func = PointKernelFunc([cpu](Pixel& in) {
-                    cpu->applyRGB(&in.r);
-                    return in;
-                  })};
+    return Kernel{._type = Kernel::Type::Point, ._func = PointKernelFunc([cpu](Pixel& in) {
+                                                  cpu->applyRGB(&in.r);
+                                                  return in;
+                                                })};
   } else if (_input_transform.empty() && !_output_transform.empty() &&
              _output_transform.ends_with("Display")) {
     auto transform = OCIO::DisplayViewTransform::Create();
@@ -146,11 +144,10 @@ auto OCIO_ACES_Transform_Op::ToKernel() const -> Kernel {
     auto odt = config->getProcessor(transform);
     auto cpu = odt->getDefaultCPUProcessor();
 
-    return Kernel{._type = Kernel::Type::Point,
-                  ._func = PointKernelFunc([cpu](Pixel& in) {
-                    cpu->applyRGB(&in.r);
-                    return in;
-                  })};
+    return Kernel{._type = Kernel::Type::Point, ._func = PointKernelFunc([cpu](Pixel& in) {
+                                                  cpu->applyRGB(&in.r);
+                                                  return in;
+                                                })};
   } else if (_input_transform.empty() && !_output_transform.empty()) {
     auto transform = OCIO::LookTransform::Create();
     transform->setLooks("ACES 1.3 Reference Gamut Compression");
@@ -161,9 +158,7 @@ auto OCIO_ACES_Transform_Op::ToKernel() const -> Kernel {
     auto csc = config->getProcessor(transform);
     auto cpu = csc->getDefaultCPUProcessor();
     return Kernel{._type = Kernel::Type::Point,
-                  ._func = PointKernelFunc([cpu](Pixel& in) {
-                    cpu->applyRGB(&in.r);
-                  })};
+                  ._func = PointKernelFunc([cpu](Pixel& in) { cpu->applyRGB(&in.r); })};
   }
   throw std::runtime_error("OCIO_ACES_Transform_Op: No valid transform assigned to the operator");
 }

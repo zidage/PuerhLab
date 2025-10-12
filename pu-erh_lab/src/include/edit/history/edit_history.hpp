@@ -70,7 +70,7 @@ class EditHistory {
 
   std::unordered_map<history_id_t, Version> _version_storage;
 
-  void CalculateHistoryID();
+  void                                      CalculateHistoryID();
 
  public:
   EditHistory(sl_element_id_t bound_image);

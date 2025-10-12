@@ -183,7 +183,7 @@ void ImagePoolManager::RemoveRecord(const image_id_t& id, const AccessType type)
     }
     default:
       break;
-    }
+  }
 }
 
 /**

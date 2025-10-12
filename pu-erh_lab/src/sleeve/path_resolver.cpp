@@ -1,5 +1,7 @@
 #include "sleeve/path_resolver.hpp"
 
+#include <xxhash.h>
+
 #include <algorithm>
 #include <exception>
 #include <filesystem>
@@ -9,9 +11,6 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
-
-
-#include <xxhash.h>
 
 #include "sleeve/sleeve_element/sleeve_element.hpp"
 #include "sleeve/sleeve_element/sleeve_folder.hpp"

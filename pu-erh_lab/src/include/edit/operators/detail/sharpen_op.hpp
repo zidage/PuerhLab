@@ -5,7 +5,6 @@
 #include "edit/operators/op_base.hpp"
 #include "image/image_buffer.hpp"
 
-
 namespace puerhlab {
 class SharpenOp : public OperatorBase<SharpenOp> {
  private:

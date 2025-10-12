@@ -88,33 +88,32 @@ auto ShadowsOp::GetScale() -> float { return _offset / 100.0f; }
 void ShadowsOp::Apply(std::shared_ptr<ImageBuffer> input) { ToneRegionOp<ShadowsOp>::Apply(input); }
 
 auto ShadowsOp::ToKernel() const -> Kernel {
-  return Kernel{
-      ._type = Kernel::Type::Point,
-      ._func = PointKernelFunc([inv = _inv_threshold, g = _gamma](Pixel& in) {
-        float l_in_r       = std::fmax((in.r + 0.05f) / (1.0f - 0.05f), 0.0f);
-        float l_in_g       = std::fmax((in.g + 0.05f) / (1.0f - 0.05f), 0.0f);
-        float l_in_b       = std::fmax((in.b + 0.05f) / (1.0f - 0.05f), 0.0f);
+  return Kernel{._type = Kernel::Type::Point,
+                ._func = PointKernelFunc([inv = _inv_threshold, g = _gamma](Pixel& in) {
+                  float l_in_r       = std::fmax((in.r + 0.05f) / (1.0f - 0.05f), 0.0f);
+                  float l_in_g       = std::fmax((in.g + 0.05f) / (1.0f - 0.05f), 0.0f);
+                  float l_in_b       = std::fmax((in.b + 0.05f) / (1.0f - 0.05f), 0.0f);
 
-        float alpha_r      = std::fmax(1.0f - l_in_r * inv, 0.0f);
-        float alpha_g      = std::fmax(1.0f - l_in_g * inv, 0.0f);
-        float alpha_b      = std::fmax(1.0f - l_in_b * inv, 0.0f);
+                  float alpha_r      = std::fmax(1.0f - l_in_r * inv, 0.0f);
+                  float alpha_g      = std::fmax(1.0f - l_in_g * inv, 0.0f);
+                  float alpha_b      = std::fmax(1.0f - l_in_b * inv, 0.0f);
 
-        float l_in_r_safe  = std::fmax(l_in_r, 1e-7f);
-        float l_in_g_safe  = std::fmax(l_in_g, 1e-7f);
-        float l_in_b_safe  = std::fmax(l_in_b, 1e-7f);
+                  float l_in_r_safe  = std::fmax(l_in_r, 1e-7f);
+                  float l_in_g_safe  = std::fmax(l_in_g, 1e-7f);
+                  float l_in_b_safe  = std::fmax(l_in_b, 1e-7f);
 
-        float l_adjusted_r = std::pow(l_in_r_safe, g);
-        float l_adjusted_g = std::pow(l_in_g_safe, g);
-        float l_adjusted_b = std::pow(l_in_b_safe, g);
+                  float l_adjusted_r = std::pow(l_in_r_safe, g);
+                  float l_adjusted_g = std::pow(l_in_g_safe, g);
+                  float l_adjusted_b = std::pow(l_in_b_safe, g);
 
-        float diff_r       = l_adjusted_r - l_in_r;
-        float diff_g       = l_adjusted_g - l_in_g;
-        float diff_b       = l_adjusted_b - l_in_b;
+                  float diff_r       = l_adjusted_r - l_in_r;
+                  float diff_g       = l_adjusted_g - l_in_g;
+                  float diff_b       = l_adjusted_b - l_in_b;
 
-        in.r = l_in_r + alpha_r * diff_r;
-        in.g = l_in_g + alpha_g * diff_g;
-        in.b = l_in_b + alpha_b * diff_b;
-      })};
+                  in.r               = l_in_r + alpha_r * diff_r;
+                  in.g               = l_in_g + alpha_g * diff_g;
+                  in.b               = l_in_b + alpha_b * diff_b;
+                })};
 }
 
 auto ShadowsOp::GetParams() const -> nlohmann::json { return {_script_name, _offset}; }

@@ -16,17 +16,16 @@ class ExposureOp : public OperatorBase<ExposureOp> {
    * Positive to increase the brightness, negative to darken.
    *
    */
-  float                           _exposure_offset;
+  float _exposure_offset;
 
   /**
    * @brief The actual luminance offset derived from the EV
    * dL = 2^E
    *
    */
-  float                           _scale;
+  float _scale;
 
-  float                           _gamma;
-
+  float _gamma;
 
  public:
   static constexpr PriorityLevel     _priority_level    = 0;
@@ -39,7 +38,7 @@ class ExposureOp : public OperatorBase<ExposureOp> {
 
   void Apply(std::shared_ptr<ImageBuffer> input) override;
   auto ToKernel() const -> Kernel override;
-  auto ToKernel_Vec() const -> Kernel; // not implemented yet
+  auto ToKernel_Vec() const -> Kernel;  // not implemented yet
   auto GetParams() const -> nlohmann::json override;
   void SetParams(const nlohmann::json& params) override;
 };

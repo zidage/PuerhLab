@@ -16,7 +16,7 @@ class BlackOp : public ToneRegionOp<BlackOp>, public OperatorBase<BlackOp> {
   float           _offset;
 
   float           _y_intercept;
-  float           _slope;               // slope of the tone curve
+  float           _slope;  // slope of the tone curve
   LinearToneCurve _curve;
 
  public:

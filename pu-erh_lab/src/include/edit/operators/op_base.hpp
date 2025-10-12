@@ -17,6 +17,7 @@ enum class PipelineStageName : int {
   Output_Transform    = 5,
   Geometry_Adjustment = 6,
   Stage_Count         = 7,
+  Merged_Stage        = 8  // Special stage for merged streamable stages
 };
 class IOperatorBase {
  public:

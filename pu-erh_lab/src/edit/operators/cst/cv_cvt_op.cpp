@@ -7,7 +7,6 @@ CVCvtColorOp::CVCvtColorOp(int code, std::optional<size_t> channel_index)
 CVCvtColorOp::CVCvtColorOp(const nlohmann::json& params) { SetParams(params); }
 
 void CVCvtColorOp::Apply(std::shared_ptr<ImageBuffer> input) {
-
   cv::Mat& img = input->GetCPUData();
   cv::UMat src;
   img.copyTo(src);

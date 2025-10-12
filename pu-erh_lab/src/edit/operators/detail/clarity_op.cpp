@@ -68,7 +68,7 @@ void ClarityOp::Apply(std::shared_ptr<ImageBuffer> input) {
 auto ClarityOp::ToKernel() const -> Kernel {
   // return Kernel{._type = Kernel::Type::Neighbor,
   //               ._func = NeighborKernelFunc([this](ImageAccessor& in) -> ImageAccessor {
-  //                 cv::Mat& img = in._tile->tile_mat; 
+  //                 cv::Mat& img = in._tile->tile_mat;
 
   //                 cv::Mat  midtone_mask;
   //                 CreateMidtoneMask(img, midtone_mask);

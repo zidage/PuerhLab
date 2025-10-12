@@ -103,7 +103,8 @@ auto SharpenOp::ToKernel() const -> Kernel {
   //   ._func = NeighborKernelFunc([this](const ImageAccessor& in) -> ImageAccessor {
   //     cv::Mat original = in._tile->tile_mat;
   //     cv::Mat blurred;
-  //     // The "original" here contains the halo regions, so we can directly apply GaussianBlur on it.
+  //     // The "original" here contains the halo regions, so we can directly apply GaussianBlur on
+  //     it.
   //     // Halo region will be trimmed when the tile is merged back to the full image.
   //     cv::GaussianBlur(original, blurred, cv::Size(5,5), _radius, _radius, cv::BORDER_REPLICATE);
 
@@ -126,10 +127,10 @@ auto SharpenOp::ToKernel() const -> Kernel {
   //     cv::scaleAdd(high_pass, _scale, original, original);
   //     cv::threshold(original, original, 1.0f, 1.0f, cv::THRESH_TRUNC);
   //     cv::threshold(original, original, 0.0f, 0.0f, cv::THRESH_TOZERO);
-      
+
   //     return in;
   //   })};
   // return USM_kernel;
   throw std::runtime_error("SharpenOp::ToKernel not implemented yet.");
-  }
+}
 };  // namespace puerhlab
