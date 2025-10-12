@@ -57,6 +57,7 @@ endif()
 add_library(Operators
     edit/operators/operator_factory.cpp
     edit/operators/basic/exposure_op.cpp
+    edit/operators/basic/exposure_op_vec.cpp
     edit/operators/basic/contrast_op.cpp
     edit/operators/basic/black_op.cpp
     edit/operators/basic/highlight_op.cpp

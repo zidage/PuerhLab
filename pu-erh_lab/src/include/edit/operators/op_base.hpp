@@ -48,6 +48,8 @@ class IOperatorBase {
 
   virtual auto ToKernel() const -> Kernel                = 0;
 
+  // virtual auto ToKernel_Vec() const -> Kernel            = 0;
+
   virtual ~IOperatorBase()                               = default;
 };
 /**

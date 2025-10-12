@@ -9,7 +9,6 @@
 #include "type/type.hpp"
 
 namespace puerhlab {
-namespace hw = hwy::HWY_NAMESPACE;
 class ExposureOp : public OperatorBase<ExposureOp> {
  private:
   /**
@@ -28,9 +27,6 @@ class ExposureOp : public OperatorBase<ExposureOp> {
 
   float                           _gamma;
 
-  hw::Vec<hw::ScalableTag<float>> _scale_factor;
-  hw::Vec<hw::ScalableTag<float>> _min = hw::Set(hw::ScalableTag<float>(), 0.0f);
-  hw::Vec<hw::ScalableTag<float>> _max = hw::Set(hw::ScalableTag<float>(), 100.0f);
 
  public:
   static constexpr PriorityLevel     _priority_level    = 0;
@@ -43,6 +39,7 @@ class ExposureOp : public OperatorBase<ExposureOp> {
 
   void Apply(std::shared_ptr<ImageBuffer> input) override;
   auto ToKernel() const -> Kernel override;
+  auto ToKernel_Vec() const -> Kernel;
   auto GetParams() const -> nlohmann::json override;
   void SetParams(const nlohmann::json& params) override;
 };

@@ -5,6 +5,8 @@
 #include <opencv2/core/types.hpp>
 #include <utility>
 
+
+#include "edit/operators/op_kernel.hpp"
 #include "image/image_buffer.hpp"
 
 namespace puerhlab {
@@ -20,13 +22,11 @@ ExposureOp::ExposureOp() : _exposure_offset(0.0f) { _scale = 0.0f; }
  * @param exposure_offset
  */
 ExposureOp::ExposureOp(float exposure_offset) : _exposure_offset(exposure_offset) {
-  // _scale        = std::pow(2.0f, _exposure_offset);
-  _scale_factor = hw::Set(hw::ScalableTag<float>(), _scale);
+  _scale           = _exposure_offset / 17.52f;
 }
 
 ExposureOp::ExposureOp(const nlohmann::json& params) {
   SetParams(params);
-  _scale_factor = hw::Set(hw::ScalableTag<float>(), _scale);
 }
 
 void ExposureOp::Apply(std::shared_ptr<ImageBuffer> input) {
@@ -44,6 +44,15 @@ auto ExposureOp::ToKernel() const -> Kernel {
     ._type = Kernel::Type::Point,
     ._func = PointKernelFunc([d=_scale](const Pixel& in) -> Pixel {
       return Pixel{in.r + d, in.g + d, in.b + d};
+    })
+  };
+}
+
+auto ExposureOp::ToKernel_Vec() const -> Kernel {
+  return Kernel {
+    ._type = Kernel::Type::Vector,
+    ._func = VectorKernelFunc([d=_scale](const float* in, float* out, size_t length) {
+      // ApplyExposureVec(in, out, length, d);
     })
   };
 }
