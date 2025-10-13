@@ -114,7 +114,7 @@ TEST_F(EditHistoryTests, DISABLED_TestWithImage) {
                                         : nullptr;
 
       auto pipeline_executor = std::make_shared<CPUPipelineExecutor>();
-      pipeline_executor->SetThumbnailMode(true);
+      pipeline_executor->SetPreviewMode(true);
 
       task1._pipeline_executor = pipeline_executor;
       SetPipelineTemplate(task1._pipeline_executor);
@@ -206,7 +206,7 @@ TEST_F(EditHistoryTests, DISABLED_TestWithImage_Animated) {
     task._input            = buffer ? std::make_shared<ImageBuffer>(std::move(*buffer)) : nullptr;
 
     auto pipeline_executor = std::make_shared<CPUPipelineExecutor>();
-    pipeline_executor->SetThumbnailMode(true);
+    pipeline_executor->SetPreviewMode(true);
 
     task._pipeline_executor = pipeline_executor;
     SetPipelineTemplate(task._pipeline_executor);
@@ -222,8 +222,15 @@ TEST_F(EditHistoryTests, DISABLED_TestWithImage_Animated) {
     task._seq_callback         = display_callback;
     task._options._is_blocking = true;
 
+    
     nlohmann::json exposure_params;
     exposure_params["exposure"] = 0.0f;
+
+    auto& basic_stage = task._pipeline_executor->GetStage(PipelineStageName::Basic_Adjustment);
+    basic_stage.SetOperator(OperatorType::EXPOSURE, exposure_params);
+
+    pipeline_executor->SetExecutionStages();
+    
     for (float exposure = -2.0f; exposure <= 2.0f; exposure += 0.05f) {
       PipelineTask task1 = task;  // Make a copy of task for task1
       auto& basic_stage  = task1._pipeline_executor->GetStage(PipelineStageName::Basic_Adjustment);
@@ -242,7 +249,7 @@ TEST_F(EditHistoryTests, DISABLED_TestWithImage_Animated) {
   }
 }
 
-TEST_F(EditHistoryTests, DISABLED_TestWithPreviewPipeline) {
+TEST_F(EditHistoryTests, TestWithPreviewPipeline) {
   {
     SleeveManager             manager{db_path_};
     ImageLoader               image_loader(128, 1, 0);
@@ -270,7 +277,7 @@ TEST_F(EditHistoryTests, DISABLED_TestWithPreviewPipeline) {
     task._input            = buffer ? std::make_shared<ImageBuffer>(std::move(*buffer)) : nullptr;
 
     auto pipeline_executor = std::make_shared<CPUPipelineExecutor>(true);
-    pipeline_executor->SetThumbnailMode(true);
+    pipeline_executor->SetPreviewMode(true);
 
     task._pipeline_executor = pipeline_executor;
     SetPipelineTemplate(task._pipeline_executor);
@@ -285,6 +292,12 @@ TEST_F(EditHistoryTests, DISABLED_TestWithPreviewPipeline) {
 
     nlohmann::json exposure_params;
     exposure_params["exposure"] = 0.0f;
+
+    auto& basic_stage = task._pipeline_executor->GetStage(PipelineStageName::Basic_Adjustment);
+    basic_stage.SetOperator(OperatorType::EXPOSURE, exposure_params);
+
+    pipeline_executor->SetExecutionStages();
+
     for (float exposure = -2.0f; exposure <= 2.0f; exposure += 0.05f) {
       PipelineTask task1 = task;  // Make a copy of task for task1
       auto& basic_stage  = task1._pipeline_executor->GetStage(PipelineStageName::Basic_Adjustment);
@@ -297,7 +310,7 @@ TEST_F(EditHistoryTests, DISABLED_TestWithPreviewPipeline) {
       scheduler.ScheduleTask(std::move(task1));
       auto result = future_task1.get();  // Wait for task1 to complete
       // auto result = task1._pipeline_executor->Apply(task1._input);
-      std::cout << "Frame " << exposure << " done.\n";
+      std::cout << "Exposure " << exposure << " done.\n";
       cv::cvtColor(result->GetCPUData(), result->GetCPUData(), cv::COLOR_RGB2BGR);
       cv::imshow("preview", result->GetCPUData());
       cv::waitKey(1);

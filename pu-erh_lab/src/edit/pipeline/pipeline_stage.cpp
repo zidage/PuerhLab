@@ -8,7 +8,7 @@
 
 namespace puerhlab {
 PipelineStage::PipelineStage(PipelineStageName stage, bool enable_cache, bool is_streamable)
-    : _is_streamable(is_streamable) {
+    : _enable_cache(enable_cache), _is_streamable(is_streamable) {
   _operators = std::make_unique<std::map<OperatorType, OperatorEntry>>();
   if (_stage == PipelineStageName::Image_Loading) {
     _input_cache_valid = true;  // No input for image loading stage, so input cache is always valid
@@ -27,7 +27,7 @@ void PipelineStage::SetOperator(OperatorType op_type, nlohmann::json& param) {
     SetOutputCacheValid(false);
   }
   for (auto* dependent : _dependents) {
-    dependent->SetInputCacheValid(false);
+    dependent->SetOutputCacheValid(false);
   }
 }
 
@@ -149,6 +149,25 @@ auto PipelineStage::ApplyStage() -> std::shared_ptr<ImageBuffer> {
 }
 
 auto PipelineStage::HasInput() -> bool { return _input_set; }
+
+void PipelineStage::ResetAll() {
+  _operators->clear();
+  _input_img.reset();
+  _output_cache.reset();
+  _input_set          = false;
+  _input_cache_valid  = false;
+  _output_cache_valid = false;
+  _tile_scheduler.reset();
+  _dependents.clear();
+}
+
+void PipelineStage::ResetCache() {
+  _output_cache.reset();
+  _output_cache_valid = false;
+  if (_next_stage) {
+    _next_stage->SetInputCacheValid(false);
+  }
+}
 
 auto PipelineStage::GetStageNameString() const -> std::string {
   switch (_stage) {

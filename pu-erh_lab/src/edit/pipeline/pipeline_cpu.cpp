@@ -59,9 +59,9 @@ auto CPUPipelineExecutor::Apply(std::shared_ptr<ImageBuffer> input)
     -> std::shared_ptr<ImageBuffer> {
   auto output = std::make_shared<ImageBuffer>(input->Clone());
 
-  for (auto& stage : _stages) {
-    stage.SetInputImage(output);
-    output = stage.ApplyStage();
+  for (auto& stage : _exec_stages) {
+    stage->SetInputImage(output);
+    output = stage->ApplyStage();
   }
   return output;
 }
@@ -119,6 +119,12 @@ void CPUPipelineExecutor::SetExecutionStages() {
   // Dealing with remaining streamable stages
   if (!streamable_stages.empty()) {
     flush_streamable();
+  }
+  // Chain the execution stages
+  for (size_t i = 0; i < _exec_stages.size(); i++) {
+    PipelineStage* prev_stage = (i > 0) ? _exec_stages[i - 1] : nullptr;
+    PipelineStage* next_stage = (i < _exec_stages.size() - 1) ? _exec_stages[i + 1] : nullptr;
+    _exec_stages[i]->SetNeighbors(prev_stage, next_stage);
   }
 }
 

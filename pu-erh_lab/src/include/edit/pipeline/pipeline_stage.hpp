@@ -62,7 +62,11 @@ class PipelineStage {
     return _is_streamable && _kernel_stream._kernels.size() > 0;
   }
 
-  void SetNeighbors(PipelineStage* prev, PipelineStage* next);
+  void SetNeighbors(PipelineStage* prev, PipelineStage* next) {
+    _prev_stage = prev;
+    _next_stage = next;
+  }
+
   void SetInputCacheValid(bool valid);
   void SetOutputCacheValid(bool valid);
   auto CacheValid() const -> bool { return _input_cache_valid && _output_cache_valid; }
