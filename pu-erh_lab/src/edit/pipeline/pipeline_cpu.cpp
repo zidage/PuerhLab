@@ -92,7 +92,7 @@ void CPUPipelineExecutor::SetExecutionStages() {
       auto& stream = merged->GetKernelStream();
       for (auto* s : streamable_stages) {
         s->AddDependent(merged.get());
-        auto ops = s->GetAllOperators();
+        auto& ops = s->GetAllOperators();
         for (const auto& [type, op_entry] : ops) {
           if (op_entry._enable) {
             stream.AddToStream(op_entry._op->ToKernel());

@@ -308,9 +308,14 @@ TEST_F(EditHistoryTests, TestWithPreviewPipeline) {
       auto future_task1           = task1._result->get_future();
 
       scheduler.ScheduleTask(std::move(task1));
+
+      using clock = std::chrono::high_resolution_clock;
+      auto start = clock::now();
       auto result = future_task1.get();  // Wait for task1 to complete
       // auto result = task1._pipeline_executor->Apply(task1._input);
-      std::cout << "Exposure " << exposure << " done.\n";
+      auto end    = clock::now();
+      std::chrono::duration<double, std::milli> diff = end - start;
+      std::cout << "Render time: " << diff.count() << " ms." << std::endl;
       cv::cvtColor(result->GetCPUData(), result->GetCPUData(), cv::COLOR_RGB2BGR);
       cv::imshow("preview", result->GetCPUData());
       cv::waitKey(1);

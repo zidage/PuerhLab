@@ -1,7 +1,7 @@
 #include "edit/scheduler/pipeline_scheduler.hpp"
 
 namespace puerhlab {
-PipelineScheduler::PipelineScheduler() : _thread_pool(8) {}
+PipelineScheduler::PipelineScheduler() : _thread_pool(1) {}
 
 void PipelineScheduler::ScheduleTask(PipelineTask&& task) {
   task._task_id = _id_generator.GenerateID();

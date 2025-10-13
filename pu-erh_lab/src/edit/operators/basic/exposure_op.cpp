@@ -37,10 +37,10 @@ void ExposureOp::Apply(std::shared_ptr<ImageBuffer> input) {
 }
 
 auto ExposureOp::ToKernel() const -> Kernel {
-  return Kernel{._type = Kernel::Type::Point, ._func = PointKernelFunc([d = _scale](Pixel& in) {
-                                                in.r += d;
-                                                in.g += d;
-                                                in.b += d;
+  return Kernel{._type = Kernel::Type::Point, ._func = PointKernelFunc([d = &_scale](Pixel& in) {
+                                                in.r += *d;
+                                                in.g += *d;
+                                                in.b += *d;
                                               })};
 }
 
