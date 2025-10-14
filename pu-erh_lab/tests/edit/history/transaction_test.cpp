@@ -77,14 +77,14 @@ void SetPipelineTemplate(std::shared_ptr<PipelineExecutor> executor) {
 
   nlohmann::json to_ws_params;
   to_ws_params["ocio"] = {
-      {"src", "Linear Rec.709 (sRGB)"}, {"dst", "ACEScct"}, {"normalize", true}};
+      {"src", "Linear Rec.709 (sRGB)"}, {"dst", "ACEScc"}, {"normalize", true}};
 
   auto& to_ws = executor->GetStage(PipelineStageName::To_WorkingSpace);
   to_ws.SetOperator(OperatorType::CST, to_ws_params);
 
   nlohmann::json output_params;
   auto&          output_stage = executor->GetStage(PipelineStageName::Output_Transform);
-  output_params["ocio"]       = {{"src", "ACEScct"}, {"dst", "Camera Rec.709"}, {"limit", true}};
+  output_params["ocio"]       = {{"src", "ACEScc"}, {"dst", "Camera Rec.709"}, {"limit", true}};
   output_stage.SetOperator(OperatorType::CST, output_params);
 }
 
@@ -298,7 +298,10 @@ TEST_F(EditHistoryTests, TestWithPreviewPipeline) {
 
     pipeline_executor->SetExecutionStages();
 
-    for (float exposure = -2.0f; exposure <= 2.0f; exposure += 0.05f) {
+    for (float exposure = -5.0f; exposure <= 5.0f; exposure += 0.5f) {
+      using clock = std::chrono::high_resolution_clock;
+
+      auto start = clock::now();
       PipelineTask task1 = task;  // Make a copy of task for task1
       auto& basic_stage  = task1._pipeline_executor->GetStage(PipelineStageName::Basic_Adjustment);
       exposure_params["exposure"] = exposure;
@@ -309,16 +312,18 @@ TEST_F(EditHistoryTests, TestWithPreviewPipeline) {
 
       scheduler.ScheduleTask(std::move(task1));
 
-      using clock = std::chrono::high_resolution_clock;
-      auto start = clock::now();
+      auto submit_time = clock::now();
       auto result = future_task1.get();  // Wait for task1 to complete
-      // auto result = task1._pipeline_executor->Apply(task1._input);
-      auto end    = clock::now();
-      std::chrono::duration<double, std::milli> diff = end - start;
-      std::cout << "Render time: " << diff.count() << " ms." << std::endl;
 
       cv::cvtColor(result->GetCPUData(), result->GetCPUData(), cv::COLOR_RGB2BGR);
       cv::imshow("preview", result->GetCPUData());
+
+      auto end    = clock::now();
+      std::chrono::duration<double, std::milli> diff = end - start;
+      std::cout << "Loop time: " << diff.count() << " ms." << std::endl;
+      std::chrono::duration<double, std::milli> submit_diff = end - submit_time;
+      std::cout << "Render time: " << submit_diff.count() << " ms." << std::endl;
+
       cv::waitKey(1);
     }
   }

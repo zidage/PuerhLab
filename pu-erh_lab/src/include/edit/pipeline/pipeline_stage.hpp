@@ -54,7 +54,17 @@ class PipelineStage {
 
   void SetInputImage(std::shared_ptr<ImageBuffer>);
 
-  void SetOperator(OperatorType, nlohmann::json& param);
+  /**
+   * @brief Set the parameters for an operator with the given type in this stage.
+   *
+   * @param op_type
+   * @param param
+   * @return int 1 if a new operator is created and added (if this stage was merged into the
+   * execution stage, should call SetExecutionStages() to rebuild the kernel stream), 0 if an
+   * existing operator is updated.
+   */
+  auto SetOperator(OperatorType, nlohmann::json& param) -> int;
+
   auto GetOperator(OperatorType) const -> std::optional<OperatorEntry*>;
   auto GetAllOperators() const -> std::map<OperatorType, OperatorEntry>& { return *_operators; }
   void EnableOperator(OperatorType, bool enable);
@@ -65,6 +75,11 @@ class PipelineStage {
   void SetNeighbors(PipelineStage* prev, PipelineStage* next) {
     _prev_stage = prev;
     _next_stage = next;
+  }
+
+  void ResetNeighbors() {
+    _prev_stage = nullptr;
+    _next_stage = nullptr;
   }
 
   void SetInputCacheValid(bool valid);

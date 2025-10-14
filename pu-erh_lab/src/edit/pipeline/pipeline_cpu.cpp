@@ -131,8 +131,11 @@ void CPUPipelineExecutor::SetExecutionStages() {
 void CPUPipelineExecutor::ResetExecutionStages() {
   for (auto& stage : _stages) {
     stage.ResetDependents();
+    stage.ResetNeighbors();
+    stage.ResetCache();
   }
   _exec_stages.clear();
+  _merged_stages.clear();
 }
 
 };  // namespace puerhlab

@@ -15,19 +15,28 @@ PipelineStage::PipelineStage(PipelineStageName stage, bool enable_cache, bool is
   }
 }
 
-void PipelineStage::SetOperator(OperatorType op_type, nlohmann::json& param) {
+auto PipelineStage::SetOperator(OperatorType op_type, nlohmann::json& param) -> int {
   auto it = _operators->find(op_type);
   if (it == _operators->end()) {
-    _operators->emplace(op_type,
-                        OperatorEntry{true, OperatorFactory::Instance().Create(op_type, param)});
+    auto op = OperatorFactory::Instance().Create(op_type, param);
+    _operators->emplace(op_type, OperatorEntry{true, op});
     SetOutputCacheValid(false);
-    // TODO: Update the dependents' stream
+    for (auto* dependent : _dependents) {
+      dependent->SetOutputCacheValid(false);
+    }
+    return 1;
   } else {
     (it->second)._op->SetParams(param);
     SetOutputCacheValid(false);
-  }
-  for (auto* dependent : _dependents) {
-    dependent->SetOutputCacheValid(false);
+    for (auto* dependent : _dependents) {
+      dependent->SetOutputCacheValid(false);
+    }
+    if (op_type == OperatorType::CST || op_type == OperatorType::LMT) {
+      // CST and LMT need to regenerate their CPU processors, so we need to call
+      // SetExecutionStages()
+      return 1;
+    }
+    return 0;
   }
 }
 
