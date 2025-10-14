@@ -42,11 +42,11 @@ void BlackOp::Apply(std::shared_ptr<ImageBuffer> input) { ToneRegionOp<BlackOp>:
 
 auto BlackOp::ToKernel() const -> Kernel {
   return Kernel{._type = Kernel::Type::Point,
-                ._func = PointKernelFunc([s = _slope, b = _y_intercept](Pixel& in) {
+                ._func = PointKernelFunc([&a = _slope, &b = _y_intercept](Pixel& in) {
                   // return Pixel{in.r * s + b, in.g * s + b, in.b * s + b};
-                  in.r = in.r * s + b;
-                  in.g = in.g * s + b;
-                  in.b = in.b * s + b;
+                  in.r = in.r * a + b;
+                  in.g = in.g * a + b;
+                  in.b = in.b * a + b;
                 })};
 }
 

@@ -64,7 +64,7 @@ void VibranceOp::Apply(std::shared_ptr<ImageBuffer> input) {
 
 auto VibranceOp::ToKernel() const -> Kernel {
   return Kernel{._type = Kernel::Type::Point,
-                ._func = PointKernelFunc([o = _vibrance_offset](Pixel& in) {
+                ._func = PointKernelFunc([&o = _vibrance_offset](Pixel& in) {
                   float r = in.r, g = in.g, b = in.b;
 
                   float max_val  = std::max({r, g, b});

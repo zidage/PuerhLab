@@ -89,7 +89,7 @@ void ShadowsOp::Apply(std::shared_ptr<ImageBuffer> input) { ToneRegionOp<Shadows
 
 auto ShadowsOp::ToKernel() const -> Kernel {
   return Kernel{._type = Kernel::Type::Point,
-                ._func = PointKernelFunc([inv = _inv_threshold, g = _gamma](Pixel& in) {
+                ._func = PointKernelFunc([&inv = _inv_threshold, &g = _gamma](Pixel& in) {
                   float l_in_r       = std::fmax((in.r + 0.05f) / (1.0f - 0.05f), 0.0f);
                   float l_in_g       = std::fmax((in.g + 0.05f) / (1.0f - 0.05f), 0.0f);
                   float l_in_b       = std::fmax((in.b + 0.05f) / (1.0f - 0.05f), 0.0f);

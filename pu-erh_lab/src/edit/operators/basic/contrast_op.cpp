@@ -49,7 +49,7 @@ void ContrastOp::Apply(std::shared_ptr<ImageBuffer> input) {
 }
 
 auto ContrastOp::ToKernel() const -> Kernel {
-  return Kernel{._type = Kernel::Type::Point, ._func = PointKernelFunc([s = _scale](Pixel& in) {
+  return Kernel{._type = Kernel::Type::Point, ._func = PointKernelFunc([&s = _scale](Pixel& in) {
                                                 in.r = (in.r - 0.05707762557f) * s +
                                                        0.05707762557f;  // 1 stop = 1/17.52
                                                 in.g = (in.g - 0.05707762557f) * s + 0.05707762557f;

@@ -42,7 +42,7 @@ auto WhiteOp::GetScale() -> float { return _offset / 3.0f; }
 void WhiteOp::Apply(std::shared_ptr<ImageBuffer> input) { ToneRegionOp<WhiteOp>::Apply(input); }
 
 auto WhiteOp::ToKernel() const -> Kernel {
-  return Kernel{._type = Kernel::Type::Point, ._func = PointKernelFunc([s = _slope](Pixel& in) {
+  return Kernel{._type = Kernel::Type::Point, ._func = PointKernelFunc([&s = _slope](Pixel& in) {
                                                 in.r = in.r * s;
                                                 in.g = in.g * s;
                                                 in.b = in.b * s;
