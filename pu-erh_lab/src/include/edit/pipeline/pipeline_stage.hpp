@@ -69,7 +69,11 @@ class PipelineStage {
 
   void SetInputCacheValid(bool valid);
   void SetOutputCacheValid(bool valid);
-  auto CacheValid() const -> bool { return _input_cache_valid && _output_cache_valid; }
+  auto CacheValid() const -> bool {
+    if (!_enable_cache) return false;
+    if (!_prev_stage) return _output_cache_valid;
+    return _input_cache_valid && _output_cache_valid;
+  }
 
   /**
    * @brief Used to track merged stages dependent on this stage

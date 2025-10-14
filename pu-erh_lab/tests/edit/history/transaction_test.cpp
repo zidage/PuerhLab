@@ -316,6 +316,7 @@ TEST_F(EditHistoryTests, TestWithPreviewPipeline) {
       auto end    = clock::now();
       std::chrono::duration<double, std::milli> diff = end - start;
       std::cout << "Render time: " << diff.count() << " ms." << std::endl;
+
       cv::cvtColor(result->GetCPUData(), result->GetCPUData(), cv::COLOR_RGB2BGR);
       cv::imshow("preview", result->GetCPUData());
       cv::waitKey(1);
