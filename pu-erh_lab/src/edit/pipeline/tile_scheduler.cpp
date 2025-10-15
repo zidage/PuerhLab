@@ -1,6 +1,7 @@
 #include "edit/pipeline/tile_scheduler.hpp"
 
 #include <cstddef>
+#include <ctime>
 #include <memory>
 
 #include "edit/operators/op_kernel.hpp"
@@ -14,7 +15,8 @@ TileScheduler::TileScheduler(std::shared_ptr<ImageBuffer> input_img, KernelStrea
     : _input_img(input_img), _stream(stream), _thread_pool(num_threads) {
   auto& input_buffer = _input_img->GetCPUData();
   // Determine tile size based on image dimensions
-  _tile_size         = std::max(input_buffer.cols, input_buffer.rows) / num_threads;
+  // _tile_size         = std::max(input_buffer.cols, input_buffer.rows) / num_threads;
+  _tile_size = 32;  // Fixed tile size for better cache locality
   _tile_per_col      = std::ceil(static_cast<float>(input_buffer.cols) / _tile_size);
   _tile_per_row      = std::ceil(static_cast<float>(input_buffer.rows) / _tile_size);
   _total_tiles       = _tile_per_col * _tile_per_row;
@@ -23,6 +25,9 @@ TileScheduler::TileScheduler(std::shared_ptr<ImageBuffer> input_img, KernelStrea
 void TileScheduler::SetInputImage(std::shared_ptr<ImageBuffer> img) { _input_img = img; }
 
 auto TileScheduler::ApplyOps() -> std::shared_ptr<ImageBuffer> {
+  using clock = std::chrono::high_resolution_clock;
+  auto start  = clock::now();
+  
   if (!_input_img) {
     throw std::runtime_error("TileScheduler: Input image not set.");
   }
@@ -45,9 +50,9 @@ auto TileScheduler::ApplyOps() -> std::shared_ptr<ImageBuffer> {
           // Get tile's starting coordinates
           size_t tile_x = (tile_idx % _tile_per_col) * _tile_size;
           size_t tile_y = (tile_idx / _tile_per_col) * _tile_size;
-          if (tile_x >= input_buffer.cols || tile_y >= input_buffer.rows) {
-            return;  // Skip out-of-bounds tiles
-          }
+          // if (tile_x >= input_buffer.cols || tile_y >= input_buffer.rows) {
+          //   return;  // Skip out-of-bounds tiles
+          // }
 
           // Define the tile's region of interest (ROI), clamping to image boundaries
           int height = std::min((int)_tile_size, input_buffer.rows - (int)tile_y);
@@ -90,6 +95,9 @@ auto TileScheduler::ApplyOps() -> std::shared_ptr<ImageBuffer> {
   std::unique_lock<std::mutex> lock(mtx);
   cv.wait(lock, [&]() { return tiles_completed.load(std::memory_order_acquire) == _total_tiles; });
 
+  auto end = clock::now();
+  std::chrono::duration<double, std::milli> duration = end - start;
+  printf("TileScheduler: Processed %zu tiles in %.2f ms\n", _total_tiles, duration.count());
   return std::make_shared<ImageBuffer>(std::move(output_buffer));
 }
 
