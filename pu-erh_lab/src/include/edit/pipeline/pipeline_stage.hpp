@@ -24,6 +24,7 @@ class PipelineStage {
  private:
   std::unique_ptr<std::map<OperatorType, OperatorEntry>> _operators;
   bool                                                   _is_streamable = true;
+  bool                                                   _vec_enabled   = false;
   KernelStream                                           _kernel_stream;
   std::unique_ptr<TileScheduler>                         _tile_scheduler;
 

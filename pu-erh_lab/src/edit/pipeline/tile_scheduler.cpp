@@ -16,7 +16,7 @@ TileScheduler::TileScheduler(std::shared_ptr<ImageBuffer> input_img, KernelStrea
   auto& input_buffer = _input_img->GetCPUData();
   // Determine tile size based on image dimensions
   // _tile_size         = std::max(input_buffer.cols, input_buffer.rows) / num_threads;
-  _tile_size = 32;  // Fixed tile size for better cache locality
+  _tile_size = 64;  // Fixed tile size for better cache locality
   _tile_per_col      = std::ceil(static_cast<float>(input_buffer.cols) / _tile_size);
   _tile_per_row      = std::ceil(static_cast<float>(input_buffer.rows) / _tile_size);
   _total_tiles       = _tile_per_col * _tile_per_row;
@@ -50,9 +50,6 @@ auto TileScheduler::ApplyOps() -> std::shared_ptr<ImageBuffer> {
           // Get tile's starting coordinates
           size_t tile_x = (tile_idx % _tile_per_col) * _tile_size;
           size_t tile_y = (tile_idx / _tile_per_col) * _tile_size;
-          // if (tile_x >= input_buffer.cols || tile_y >= input_buffer.rows) {
-          //   return;  // Skip out-of-bounds tiles
-          // }
 
           // Define the tile's region of interest (ROI), clamping to image boundaries
           int height = std::min((int)_tile_size, input_buffer.rows - (int)tile_y);
@@ -65,21 +62,23 @@ auto TileScheduler::ApplyOps() -> std::shared_ptr<ImageBuffer> {
 
             for (int j = 0; j < width; ++j) {
               // Read input pixel directly
-              Pixel out{src_row[j * channels + 0], src_row[j * channels + 1],
-                        src_row[j * channels + 2]};
+              // Pixel out{src_row[j * channels + 0], src_row[j * channels + 1],
+                        // src_row[j * channels + 2]};
               // Add alpha channel if necessary: out.a = src_row[j * channels + 3];
 
+              PixelVec in = PixelVec::Load(&src_row[j * channels + 0]);
               // Apply kernel stream to the tile (this logic is unchanged)
               for (Kernel& kernel : _stream._kernels) {
                 // auto func = std::get<PointKernelFunc>(kernel._func);
                 // TODO handle other kernel types
-                kernel._func(out);
+                kernel._vec_func(in);
               }
 
               // Write output pixel directly
-              dst_row[j * channels + 0] = out.r;
-              dst_row[j * channels + 1] = out.g;
-              dst_row[j * channels + 2] = out.b;
+              in.Store(&dst_row[j * channels + 0]);
+              // dst_row[j * channels + 0] = out.r;
+              // dst_row[j * channels + 1] = out.g;
+              // dst_row[j * channels + 2] = out.b;
             }
           }
 

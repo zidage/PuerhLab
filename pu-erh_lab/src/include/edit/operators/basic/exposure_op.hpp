@@ -27,6 +27,8 @@ class ExposureOp : public OperatorBase<ExposureOp> {
 
   float _gamma;
 
+  PixelVec _vec_offset;
+
  public:
   static constexpr PriorityLevel     _priority_level    = 0;
   static constexpr PipelineStageName _affiliation_stage = PipelineStageName::Basic_Adjustment;

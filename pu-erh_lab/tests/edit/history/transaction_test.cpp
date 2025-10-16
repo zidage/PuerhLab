@@ -80,12 +80,12 @@ void SetPipelineTemplate(std::shared_ptr<PipelineExecutor> executor) {
       {"src", "Linear Rec.709 (sRGB)"}, {"dst", "ACEScc"}, {"normalize", true}};
 
   auto& to_ws = executor->GetStage(PipelineStageName::To_WorkingSpace);
-  to_ws.SetOperator(OperatorType::CST, to_ws_params);
+  // to_ws.SetOperator(OperatorType::CST, to_ws_params);
 
   nlohmann::json output_params;
   auto&          output_stage = executor->GetStage(PipelineStageName::Output_Transform);
   output_params["ocio"]       = {{"src", "ACEScc"}, {"dst", "Camera Rec.709"}, {"limit", true}};
-  output_stage.SetOperator(OperatorType::CST, output_params);
+  // output_stage.SetOperator(OperatorType::CST, output_params);
 }
 
 TEST_F(EditHistoryTests, DISABLED_TestWithImage) {

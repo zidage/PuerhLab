@@ -9,6 +9,7 @@
 #include "image/image_buffer.hpp"
 
 namespace puerhlab {
+// using hn = hwy::HWY_NAMESPACE;
 /**
  * @brief Construct a new Exposure Op:: Exposure Op object
  *
@@ -37,11 +38,17 @@ void ExposureOp::Apply(std::shared_ptr<ImageBuffer> input) {
 }
 
 auto ExposureOp::ToKernel() const -> Kernel {
-  return Kernel{._type = Kernel::Type::Point, ._func = PointKernelFunc([&s = _scale](Pixel& in) {
-                                                in.r += s;
-                                                in.g += s;
-                                                in.b += s;
-                                              })};
+  Kernel vec_kernel = {
+      ._type     = Kernel::Type::Point,
+      ._func     = PointKernelFunc([&s = _scale](Pixel& in) {
+        in.r += s;
+        in.g += s;
+        in.b += s;
+      }),
+      ._vec_func = VectorKernelFunc([&offset = _vec_offset](PixelVec& in) { in = in + offset; }),
+  };
+
+  return vec_kernel;
 }
 
 auto ExposureOp::ToKernel_Vec() const -> Kernel {
@@ -64,6 +71,7 @@ auto ExposureOp::GetParams() const -> nlohmann::json {
 void ExposureOp::SetParams(const nlohmann::json& params) {
   _exposure_offset = params[GetScriptName()];
   _scale           = _exposure_offset / 17.52f;
+  _vec_offset      = PixelVec(_scale);
 }
 
 };  // namespace puerhlab
