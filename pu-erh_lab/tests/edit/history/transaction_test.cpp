@@ -1,7 +1,9 @@
 #include <gtest/gtest.h>
+
 #include <future>
 #include <memory>
 #include <opencv2/core/mat.hpp>
+
 #ifdef HAVE_CUDA
 #include <opencv2/cudaimgproc.hpp>
 #endif
@@ -40,7 +42,8 @@ TEST_F(EditHistoryTests, DISABLED_ApplyDeleteTransaction) {
 
   // Now, create a delete transaction for the same operator.
   EditTransaction delete_transaction(TransactionType::_DELETE, OperatorType::EXPOSURE,
-                                     PipelineStageName::Basic_Adjustment, {}, add_transaction.GetTransactionID());
+                                     PipelineStageName::Basic_Adjustment, {},
+                                     add_transaction.GetTransactionID());
 
   EXPECT_TRUE(delete_transaction.ApplyTransaction(pipeline));
 }
@@ -61,14 +64,13 @@ TEST_F(EditHistoryTests, DISABLED_ApplyEditTransaction) {
   EXPECT_TRUE(edit_transaction.ApplyTransaction(pipeline));
 }
 
-
 void SetPipelineTemplate(std::shared_ptr<PipelineExecutor> executor) {
   auto&          raw_stage = executor->GetStage(PipelineStageName::Image_Loading);
   nlohmann::json decode_params;
 #ifdef HAVE_CUDA
-  decode_params["raw"]["cuda"]                   = true;
+  decode_params["raw"]["cuda"] = true;
 #else
-  decode_params["raw"]["cuda"]                   = false;
+  decode_params["raw"]["cuda"] = false;
 #endif
   decode_params["raw"]["highlights_reconstruct"] = false;
   decode_params["raw"]["use_camera_wb"]          = true;
@@ -76,16 +78,15 @@ void SetPipelineTemplate(std::shared_ptr<PipelineExecutor> executor) {
   raw_stage.SetOperator(OperatorType::RAW_DECODE, decode_params);
 
   nlohmann::json to_ws_params;
-  to_ws_params["ocio"] = {
-      {"src", "Linear Rec.709 (sRGB)"}, {"dst", "ACEScc"}, {"normalize", true}};
+  to_ws_params["ocio"] = {{"src", "Linear Rec.709 (sRGB)"}, {"dst", "ACEScc"}, {"normalize", true}};
 
-  auto& to_ws = executor->GetStage(PipelineStageName::To_WorkingSpace);
-  // to_ws.SetOperator(OperatorType::CST, to_ws_params);
+  auto& to_ws          = executor->GetStage(PipelineStageName::To_WorkingSpace);
+  to_ws.SetOperator(OperatorType::CST, to_ws_params);
 
   nlohmann::json output_params;
   auto&          output_stage = executor->GetStage(PipelineStageName::Output_Transform);
   output_params["ocio"]       = {{"src", "ACEScc"}, {"dst", "Camera Rec.709"}, {"limit", true}};
-  // output_stage.SetOperator(OperatorType::CST, output_params);
+  output_stage.SetOperator(OperatorType::CST, output_params);
 }
 
 TEST_F(EditHistoryTests, DISABLED_TestWithImage) {
@@ -110,8 +111,7 @@ TEST_F(EditHistoryTests, DISABLED_TestWithImage) {
       PipelineTask task1;
 
       auto         buffer    = ByteBufferLoader::LoadFromImage(img_ptr);
-      task1._input           = buffer ? std::make_shared<ImageBuffer>(std::move(*buffer))
-                                        : nullptr;
+      task1._input           = buffer ? std::make_shared<ImageBuffer>(std::move(*buffer)) : nullptr;
 
       auto pipeline_executor = std::make_shared<CPUPipelineExecutor>();
       pipeline_executor->SetPreviewMode(true);
@@ -169,7 +169,8 @@ TEST_F(EditHistoryTests, DISABLED_TestWithImage) {
 
       // Create and apply another edit transaction
       EditTransaction tx2(TransactionType::_ADD, OperatorType::CONTRAST,
-                          PipelineStageName::Basic_Adjustment, {{"contrast", 50}}, tx1.GetTransactionID());
+                          PipelineStageName::Basic_Adjustment, {{"contrast", 50}},
+                          tx1.GetTransactionID());
       tx2.ApplyTransaction(*pipeline_executor);
 
       scheduler.ScheduleTask(std::move(task3));
@@ -222,7 +223,6 @@ TEST_F(EditHistoryTests, DISABLED_TestWithImage_Animated) {
     task._seq_callback         = display_callback;
     task._options._is_blocking = true;
 
-    
     nlohmann::json exposure_params;
     exposure_params["exposure"] = 0.0f;
 
@@ -230,7 +230,7 @@ TEST_F(EditHistoryTests, DISABLED_TestWithImage_Animated) {
     basic_stage.SetOperator(OperatorType::EXPOSURE, exposure_params);
 
     pipeline_executor->SetExecutionStages();
-    
+
     for (float exposure = -2.0f; exposure <= 2.0f; exposure += 0.05f) {
       PipelineTask task1 = task;  // Make a copy of task for task1
       auto& basic_stage  = task1._pipeline_executor->GetStage(PipelineStageName::Basic_Adjustment);
@@ -299,11 +299,8 @@ TEST_F(EditHistoryTests, TestWithPreviewPipeline) {
     pipeline_executor->SetExecutionStages();
 
     for (float exposure = -5.0f; exposure <= 5.0f; exposure += 0.5f) {
-      using clock = std::chrono::high_resolution_clock;
-
-      auto start = clock::now();
-      PipelineTask task1 = task;  // Make a copy of task for task1
-      auto& basic_stage  = task1._pipeline_executor->GetStage(PipelineStageName::Basic_Adjustment);
+      PipelineTask task1      = task;  // Make a copy of task for task1
+      auto& basic_stage = task1._pipeline_executor->GetStage(PipelineStageName::Basic_Adjustment);
       exposure_params["exposure"] = exposure;
       basic_stage.SetOperator(OperatorType::EXPOSURE, exposure_params);
       task1._options._is_blocking = true;
@@ -312,17 +309,11 @@ TEST_F(EditHistoryTests, TestWithPreviewPipeline) {
 
       scheduler.ScheduleTask(std::move(task1));
 
-      auto submit_time = clock::now();
-      auto result = future_task1.get();  // Wait for task1 to complete
+      auto result       = future_task1.get();  // Wait for task1 to complete
 
       cv::cvtColor(result->GetCPUData(), result->GetCPUData(), cv::COLOR_RGB2BGR);
       cv::imshow("preview", result->GetCPUData());
 
-      auto end    = clock::now();
-      std::chrono::duration<double, std::milli> diff = end - start;
-      std::cout << "Loop time: " << diff.count() << " ms." << std::endl;
-      std::chrono::duration<double, std::milli> submit_diff = end - submit_time;
-      std::cout << "Render time: " << submit_diff.count() << " ms." << std::endl;
 
       cv::waitKey(1);
     }

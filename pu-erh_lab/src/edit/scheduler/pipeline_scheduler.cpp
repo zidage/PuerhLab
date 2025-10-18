@@ -6,6 +6,7 @@ PipelineScheduler::PipelineScheduler() : _thread_pool(1) {}
 void PipelineScheduler::ScheduleTask(PipelineTask&& task) {
   task._task_id = _id_generator.GenerateID();
   _thread_pool.Submit([task = std::move(task)]() mutable {
+    using clock = std::chrono::high_resolution_clock;
     auto result = task._pipeline_executor->Apply(task._input);
 
     if (task._options._is_callback && task._callback) {

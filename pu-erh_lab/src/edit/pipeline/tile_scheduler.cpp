@@ -62,23 +62,23 @@ auto TileScheduler::ApplyOps() -> std::shared_ptr<ImageBuffer> {
 
             for (int j = 0; j < width; ++j) {
               // Read input pixel directly
-              // Pixel out{src_row[j * channels + 0], src_row[j * channels + 1],
-                        // src_row[j * channels + 2]};
+              Pixel out{src_row[j * channels + 0], src_row[j * channels + 1],
+                        src_row[j * channels + 2]};
               // Add alpha channel if necessary: out.a = src_row[j * channels + 3];
 
-              PixelVec in = PixelVec::Load(&src_row[j * channels + 0]);
+              // PixelVec in = PixelVec::Load(&src_row[j * channels + 0]);
               // Apply kernel stream to the tile (this logic is unchanged)
               for (Kernel& kernel : _stream._kernels) {
                 // auto func = std::get<PointKernelFunc>(kernel._func);
                 // TODO handle other kernel types
-                kernel._vec_func(in);
+                kernel._func(out);
               }
 
               // Write output pixel directly
-              in.Store(&dst_row[j * channels + 0]);
-              // dst_row[j * channels + 0] = out.r;
-              // dst_row[j * channels + 1] = out.g;
-              // dst_row[j * channels + 2] = out.b;
+              // in.Store(&dst_row[j * channels + 0]);
+              dst_row[j * channels + 0] = out.r;
+              dst_row[j * channels + 1] = out.g;
+              dst_row[j * channels + 2] = out.b;
             }
           }
 

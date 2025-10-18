@@ -57,12 +57,28 @@ auto CPUPipelineExecutor::GetStage(PipelineStageName stage) -> PipelineStage& {
 
 auto CPUPipelineExecutor::Apply(std::shared_ptr<ImageBuffer> input)
     -> std::shared_ptr<ImageBuffer> {
-  auto output = std::make_shared<ImageBuffer>(input->Clone());
-
-  for (auto& stage : _exec_stages) {
-    stage->SetInputImage(output);
-    output = stage->ApplyStage();
+  auto* first_stage = _exec_stages.front();
+  if (!first_stage) {
+    return input;
   }
+  std::shared_ptr<ImageBuffer> output;
+  if (!first_stage->CacheValid()) {
+    output = std::make_shared<ImageBuffer>(input->Clone());
+    for (auto* stage : _exec_stages) {
+      stage->SetInputImage(output);
+      output = stage->ApplyStage();
+    }
+  } else {
+    // If cache is valid, use cached output
+    output = first_stage->GetOutputCache();
+    for (auto* stage : _exec_stages) {
+      if (stage != first_stage) {
+        stage->SetInputImage(output);
+        output = stage->ApplyStage();
+      }
+    }
+  }
+
   return output;
 }
 

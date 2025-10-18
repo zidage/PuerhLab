@@ -91,6 +91,8 @@ class PipelineStage {
     return _input_cache_valid && _output_cache_valid;
   }
 
+  auto GetOutputCache() const -> std::shared_ptr<ImageBuffer> { return _output_cache; }
+
   /**
    * @brief Used to track merged stages dependent on this stage
    *
