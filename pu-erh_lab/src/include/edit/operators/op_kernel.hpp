@@ -2,21 +2,23 @@
 
 #include <variant>
 
+#include "edit/operators/op_kernel.hpp"
 #include "image/image_buffer.hpp"
 #include <hwy/highway.h>
 
 namespace puerhlab {
 
 struct Pixel {
-  float r, g, b;
+  float r, g, b, a;
 
-  Pixel operator*(float scalar) const { return Pixel{r * scalar, g * scalar, b * scalar}; }
-  Pixel operator+(const Pixel& other) const { return Pixel{r + other.r, g + other.g, b + other.b}; }
-  Pixel operator-(const Pixel& other) const { return Pixel{r - other.r, g - other.g, b - other.b}; }
+  Pixel operator*(float scalar) const { return Pixel{r * scalar, g * scalar, b * scalar, a * scalar}; }
+  Pixel operator+(const Pixel& other) const { return Pixel{r + other.r, g + other.g, b + other.b, a + other.a}; }
+  Pixel operator-(const Pixel& other) const { return Pixel{r - other.r, g - other.g, b - other.b, a - other.a}; }
   Pixel& operator+=(const Pixel& other) {
     r += other.r;
     g += other.g;
     b += other.b;
+    a += other.a;
     return *this;
   }
 };
@@ -128,16 +130,17 @@ class PixelVec {
   HWY_INLINE explicit PixelVec(V v) : _v(v) {}
 
   static HWY_INLINE PixelVec Load(const float* src) {
-    float tmp[4] = {src[0], src[1], src[2], 0.0f};
-    return PixelVec(hn::Load(D(), tmp));
+    // float tmp[4] = {src[0], src[1], src[2], 0.0f};
+    return PixelVec(hn::Load(D(), src));
   }
 
   HWY_INLINE void Store(float* dst) const {
-    float tmp[4];
-    hn::Store(_v, D(), tmp);
-    dst[0] = tmp[0];
-    dst[1] = tmp[1];
-    dst[2] = tmp[2];
+    // float tmp[4];
+    // hn::Store(_v, D(), tmp);
+    // dst[0] = tmp[0];
+    // dst[1] = tmp[1];
+    // dst[2] = tmp[2];
+    hn::Store(_v, D(), dst);
   }
 
   HWY_INLINE PixelVec operator+(const PixelVec& other) const { return PixelVec(Add(_v, other._v)); }

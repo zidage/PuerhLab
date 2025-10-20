@@ -63,7 +63,7 @@ auto TileScheduler::ApplyOps() -> std::shared_ptr<ImageBuffer> {
             for (int j = 0; j < width; ++j) {
               // Read input pixel directly
               Pixel out{src_row[j * channels + 0], src_row[j * channels + 1],
-                        src_row[j * channels + 2]};
+                        src_row[j * channels + 2], 0.0f};
               // Add alpha channel if necessary: out.a = src_row[j * channels + 3];
 
               // PixelVec in = PixelVec::Load(&src_row[j * channels + 0]);

@@ -8,6 +8,11 @@
 #include "edit/operators/op_kernel.hpp"
 #include "image/image_buffer.hpp"
 
+#include <immintrin.h>
+#include <xmmintrin.h>
+
+#include "utils/simd/simple_simd.hpp"
+
 namespace puerhlab {
 // using hn = hwy::HWY_NAMESPACE;
 /**
@@ -39,12 +44,23 @@ void ExposureOp::Apply(std::shared_ptr<ImageBuffer> input) {
 
 auto ExposureOp::ToKernel() const -> Kernel {
   Kernel vec_kernel = {
-      ._type     = Kernel::Type::Point,
-      ._func     = PointKernelFunc([&s = _scale](Pixel& in) {
-        in.r += s;
-        in.g += s;
-        in.b += s;
-      }),
+    ._type = Kernel::Type::Point,
+    ._func = PointKernelFunc([&s = _scale, &offset = _voffset](Pixel& in){
+      using namespace simple_simd;
+      // PixelVec in_vec = PixelVec::Load(&in.r);
+      // in_vec          = in_vec + offset;
+      // in_vec.Store(&in.r);
+      // __m128 voffset = _mm_set1_ps(s);
+      // __m128 pin    = _mm_loadu_ps(&in.r);
+      // pin           = _mm_add_ps(pin, offset);
+      // _mm_storeu_ps(&in.r, pin);
+      f32x4 v = load_f32x4(&in.r);
+      v = add_f32x4(v, offset);
+      store_f32x4(&in.r, v);
+      // in.r += s;
+      // in.g += s;
+      // in.b += s;
+    }),
       ._vec_func = VectorKernelFunc([&offset = _vec_offset](PixelVec& in) { in = in + offset; }),
   };
 
@@ -72,6 +88,7 @@ void ExposureOp::SetParams(const nlohmann::json& params) {
   _exposure_offset = params[GetScriptName()];
   _scale           = _exposure_offset / 17.52f;
   _vec_offset      = PixelVec(_scale);
+  _voffset         = simple_simd::set1_f32(_scale);
 }
 
 };  // namespace puerhlab

@@ -8,6 +8,8 @@
 #include "edit/operators/op_base.hpp"
 #include "type/type.hpp"
 
+#include "utils/simd/simple_simd.hpp"
+
 namespace puerhlab {
 class ExposureOp : public OperatorBase<ExposureOp> {
  private:
@@ -28,6 +30,8 @@ class ExposureOp : public OperatorBase<ExposureOp> {
   float _gamma;
 
   PixelVec _vec_offset;
+
+  simple_simd::f32x4 _voffset;
 
  public:
   static constexpr PriorityLevel     _priority_level    = 0;
