@@ -17,7 +17,7 @@ class OCIO_LMT_Transform_Op : public OperatorBase<OCIO_LMT_Transform_Op> {
   OCIO::ConstConfigRcPtr config;
 
  public:
-  static constexpr PriorityLevel     _priority_level    = 0;
+  static constexpr PriorityLevel     _priority_level    = 3;
   // DO NOT USE THIS
   static constexpr PipelineStageName _affiliation_stage = PipelineStageName::Output_Transform;
   static constexpr std::string_view  _canonical_name    = "OCIO LMT";

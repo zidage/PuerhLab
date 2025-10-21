@@ -56,27 +56,17 @@ auto ExposureOp::ToKernel() const -> Kernel {
       // __m128 pin    = _mm_loadu_ps(&in.r);
       // pin           = _mm_add_ps(pin, offset);
       // _mm_storeu_ps(&in.r, pin);
-      f32x4 v = load_f32x4(&in.r);
-      v = add_f32x4(v, offset);
-      store_f32x4(&in.r, v);
-      // in.r += s;
-      // in.g += s;
-      // in.b += s;
+      // f32x4 v = load_f32x4(&in.r);
+      // v = add_f32x4(v, offset);
+      // store_f32x4(&in.r, v);
+      in.r += s;
+      in.g += s;
+      in.b += s;
     }),
       ._vec_func = VectorKernelFunc([&offset = _vec_offset](PixelVec& in) { in = in + offset; }),
   };
 
   return vec_kernel;
-}
-
-auto ExposureOp::ToKernel_Vec() const -> Kernel {
-  // return Kernel {
-  //   ._type = Kernel::Type::Vector,
-  //   ._func = VectorKernelFunc([d=_scale](const float* in, float* out, size_t length) {
-  //     // ApplyExposureVec(in, out, length, d);
-  //   })
-  // };
-  throw std::runtime_error("ExposureOp::ToKernel_Vec not implemented yet.");
 }
 
 auto ExposureOp::GetParams() const -> nlohmann::json {

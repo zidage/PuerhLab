@@ -1,12 +1,14 @@
 #include "edit/pipeline/tile_scheduler.hpp"
 
+#include <easy/profiler.h>
+
 #include <cstddef>
 #include <ctime>
 #include <memory>
 
 #include "edit/operators/op_kernel.hpp"
 #include "image/image_buffer.hpp"
-#include "utils/queue/queue.hpp"
+#include "utils/profiler/profiler.hpp"
 
 namespace puerhlab {
 
@@ -16,7 +18,7 @@ TileScheduler::TileScheduler(std::shared_ptr<ImageBuffer> input_img, KernelStrea
   auto& input_buffer = _input_img->GetCPUData();
   // Determine tile size based on image dimensions
   // _tile_size         = std::max(input_buffer.cols, input_buffer.rows) / num_threads;
-  _tile_size = 64;  // Fixed tile size for better cache locality
+  _tile_size         = 64;  // Fixed tile size for better cache locality
   _tile_per_col      = std::ceil(static_cast<float>(input_buffer.cols) / _tile_size);
   _tile_per_row      = std::ceil(static_cast<float>(input_buffer.rows) / _tile_size);
   _total_tiles       = _tile_per_col * _tile_per_row;
@@ -27,7 +29,7 @@ void TileScheduler::SetInputImage(std::shared_ptr<ImageBuffer> img) { _input_img
 auto TileScheduler::ApplyOps() -> std::shared_ptr<ImageBuffer> {
   using clock = std::chrono::high_resolution_clock;
   auto start  = clock::now();
-  
+
   if (!_input_img) {
     throw std::runtime_error("TileScheduler: Input image not set.");
   }
@@ -44,16 +46,17 @@ auto TileScheduler::ApplyOps() -> std::shared_ptr<ImageBuffer> {
   std::condition_variable cv;
   const int               channels = input_buffer.channels();
 
-  for (size_t tile_idx = 0; tile_idx < _total_tiles; ++tile_idx) {
+  for (int tile_idx = 0; tile_idx < _total_tiles; ++tile_idx) {
     _thread_pool.Submit(
         [this, tile_idx, &input_buffer, &output_buffer, &tiles_completed, &mtx, &cv, channels]() {
           // Get tile's starting coordinates
+          // EASY_BLOCK("Tile Processing");
           size_t tile_x = (tile_idx % _tile_per_col) * _tile_size;
           size_t tile_y = (tile_idx / _tile_per_col) * _tile_size;
 
           // Define the tile's region of interest (ROI), clamping to image boundaries
-          int height = std::min((int)_tile_size, input_buffer.rows - (int)tile_y);
-          int width  = std::min((int)_tile_size, input_buffer.cols - (int)tile_x);
+          int    height = std::min((int)_tile_size, input_buffer.rows - (int)tile_y);
+          int    width  = std::min((int)_tile_size, input_buffer.cols - (int)tile_x);
 
           for (int i = 0; i < height; ++i) {
             // Get raw pointers to the start of the current row
@@ -87,6 +90,7 @@ auto TileScheduler::ApplyOps() -> std::shared_ptr<ImageBuffer> {
             std::lock_guard<std::mutex> lock(mtx);
             cv.notify_one();
           }
+          // EASY_END_BLOCK;
         });
   }
 
@@ -94,7 +98,7 @@ auto TileScheduler::ApplyOps() -> std::shared_ptr<ImageBuffer> {
   std::unique_lock<std::mutex> lock(mtx);
   cv.wait(lock, [&]() { return tiles_completed.load(std::memory_order_acquire) == _total_tiles; });
 
-  auto end = clock::now();
+  auto                                      end      = clock::now();
   std::chrono::duration<double, std::milli> duration = end - start;
   printf("TileScheduler: Processed %zu tiles in %.2f ms\n", _total_tiles, duration.count());
   return std::make_shared<ImageBuffer>(std::move(output_buffer));

@@ -1,3 +1,4 @@
+#include <easy/profiler.h>
 #include <gtest/gtest.h>
 
 #include <future>
@@ -75,13 +76,14 @@ void SetPipelineTemplate(std::shared_ptr<PipelineExecutor> executor) {
   decode_params["raw"]["highlights_reconstruct"] = false;
   decode_params["raw"]["use_camera_wb"]          = true;
   decode_params["raw"]["backend"]                = "puerh";
-  raw_stage.SetOperator(OperatorType::RAW_DECODE, decode_params);
-
   nlohmann::json to_ws_params;
   to_ws_params["ocio"] = {{"src", "Linear Rec.709 (sRGB)"}, {"dst", "ACEScc"}, {"normalize", true}};
+  raw_stage.SetOperator(OperatorType::RAW_DECODE, decode_params);
+  raw_stage.SetOperator(OperatorType::CST, to_ws_params);
 
-  auto& to_ws          = executor->GetStage(PipelineStageName::To_WorkingSpace);
-  to_ws.SetOperator(OperatorType::CST, to_ws_params);
+
+  // auto& to_ws          = executor->GetStage(PipelineStageName::To_WorkingSpace);
+  // to_ws.SetOperator(OperatorType::CST, to_ws_params);
 
   nlohmann::json output_params;
   auto&          output_stage = executor->GetStage(PipelineStageName::Output_Transform);
@@ -292,17 +294,29 @@ TEST_F(EditHistoryTests, TestWithPreviewPipeline) {
 
     nlohmann::json exposure_params;
     exposure_params["exposure"] = 0.0f;
+    exposure_params["white"]    = 0.0f;
+    exposure_params["black"]    = 0.0f;
 
     auto& basic_stage = task._pipeline_executor->GetStage(PipelineStageName::Basic_Adjustment);
     basic_stage.SetOperator(OperatorType::EXPOSURE, exposure_params);
+    basic_stage.SetOperator(OperatorType::WHITE, exposure_params);
+    basic_stage.SetOperator(OperatorType::BLACK, exposure_params);
 
     pipeline_executor->SetExecutionStages();
 
     for (float exposure = -5.0f; exposure <= 5.0f; exposure += 0.5f) {
       PipelineTask task1      = task;  // Make a copy of task for task1
       auto& basic_stage = task1._pipeline_executor->GetStage(PipelineStageName::Basic_Adjustment);
+
+      // Update multiple parameters
       exposure_params["exposure"] = exposure;
+      exposure_params["white"]    = exposure;
+      exposure_params["black"]    = exposure;
       basic_stage.SetOperator(OperatorType::EXPOSURE, exposure_params);
+      basic_stage.SetOperator(OperatorType::WHITE, exposure_params);
+      basic_stage.SetOperator(OperatorType::BLACK, exposure_params);
+
+      // Set up blocking and result promise
       task1._options._is_blocking = true;
       task1._result               = std::make_shared<std::promise<std::shared_ptr<ImageBuffer>>>();
       auto future_task1           = task1._result->get_future();
@@ -313,7 +327,6 @@ TEST_F(EditHistoryTests, TestWithPreviewPipeline) {
 
       cv::cvtColor(result->GetCPUData(), result->GetCPUData(), cv::COLOR_RGB2BGR);
       cv::imshow("preview", result->GetCPUData());
-
 
       cv::waitKey(1);
     }

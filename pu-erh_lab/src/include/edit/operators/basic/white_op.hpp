@@ -7,6 +7,7 @@
 #include "image/image_buffer.hpp"
 #include "json.hpp"
 #include "tone_region_op.hpp"
+#include "utils/simd/simple_simd.hpp"
 
 namespace puerhlab {
 class WhiteOp : public ToneRegionOp<WhiteOp>, public OperatorBase<WhiteOp> {
@@ -18,6 +19,10 @@ class WhiteOp : public ToneRegionOp<WhiteOp>, public OperatorBase<WhiteOp> {
   float           _slope;
 
   LinearToneCurve _curve;
+
+  simple_simd::f32x4 _y_intercept_vec;
+  simple_simd::f32x4 _black_point_vec;
+  simple_simd::f32x4 _slope_vec;
 
  public:
   auto GetOutput(cv::Vec3f&) -> cv::Vec3f;

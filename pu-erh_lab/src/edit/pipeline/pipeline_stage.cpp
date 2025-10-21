@@ -1,4 +1,5 @@
 #include "edit/pipeline/pipeline_stage.hpp"
+#include <easy/profiler.h>
 
 #include <memory>
 #include <stdexcept>
@@ -85,6 +86,7 @@ void PipelineStage::SetOutputCacheValid(bool valid) {
 }
 
 auto PipelineStage::ApplyStage() -> std::shared_ptr<ImageBuffer> {
+  EASY_BLOCK("Apply Stage");
   if (!_input_set) {
     throw std::runtime_error("PipelineExecutor: No valid input image set");
   }
@@ -155,6 +157,7 @@ auto PipelineStage::ApplyStage() -> std::shared_ptr<ImageBuffer> {
     }
     return _output_cache;
   }
+  EASY_END_BLOCK;
 }
 
 auto PipelineStage::HasInput() -> bool { return _input_set; }

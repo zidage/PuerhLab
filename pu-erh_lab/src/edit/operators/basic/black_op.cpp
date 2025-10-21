@@ -4,6 +4,8 @@
 
 #include "edit/operators/basic/tone_region_op.hpp"
 #include "image/image_buffer.hpp"
+#include "utils/simd/simple_simd.hpp"
+
 
 namespace puerhlab {
 BlackOp::BlackOp(float offset) : _offset(offset) {
@@ -57,10 +59,13 @@ void BlackOp::SetParams(const nlohmann::json& params) {
     _offset      = 0.0f;
     _y_intercept = 0.0f;
     _slope       = 1.0f;
+
   } else {
     _offset      = params[_script_name].get<float>() / 100.0f;
     _y_intercept = _offset / 300.0f;
     _slope       = (1.0f - _y_intercept) / 1.0f;
   }
+  _y_intercept_vec = simple_simd::set1_f32(_y_intercept);
+  _slope_vec       = simple_simd::set1_f32(_slope);
 }
 }  // namespace puerhlab

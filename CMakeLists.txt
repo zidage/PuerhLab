@@ -13,7 +13,7 @@ set(BUILD_STATIC_LIBS ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 if (MSVC)
-    set(CMAKE_CXX_FLAGS_INIT "/arch:SSE4.2 /bigobj /W4 /external:anglebrackets /external:W0 /D_DEBUG /EHsc /openmp /fsanitize=address")
+    set(CMAKE_CXX_FLAGS_INIT "/O2 /arch:SSE4.2 /bigobj /W4 /external:anglebrackets /external:W0 /D_DEBUG /EHsc /openmp /fsanitize=address")
     add_link_options(/DEBUG)
     set(CMAKE_VS_USE_DEBUG_LIBRARIES "$<CONFIG:Debug,Custom>")
 else()

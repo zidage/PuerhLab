@@ -9,6 +9,8 @@
 #include "image/image_buffer.hpp"
 #include "tone_region_op.hpp"
 
+#include "utils/simd/simple_simd.hpp"
+
 namespace puerhlab {
 namespace hw = hwy::HWY_NAMESPACE;
 class BlackOp : public ToneRegionOp<BlackOp>, public OperatorBase<BlackOp> {
@@ -17,6 +19,9 @@ class BlackOp : public ToneRegionOp<BlackOp>, public OperatorBase<BlackOp> {
 
   float           _y_intercept;
   float           _slope;  // slope of the tone curve
+
+  simple_simd::f32x4 _y_intercept_vec;
+  simple_simd::f32x4 _slope_vec;
   LinearToneCurve _curve;
 
  public:

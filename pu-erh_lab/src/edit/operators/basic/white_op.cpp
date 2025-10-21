@@ -63,5 +63,8 @@ void WhiteOp::SetParams(const nlohmann::json& params) {
     _black_point = 0.0f;
     _slope       = (_y_intercept - _black_point) / 1.0f;
   }
+  _y_intercept_vec = simple_simd::set1_f32(_y_intercept);
+  _black_point_vec = simple_simd::set1_f32(_black_point);
+  _slope_vec       = simple_simd::set1_f32(_slope);
 }
 }  // namespace puerhlab
