@@ -3,15 +3,17 @@
 #include <opencv2/core.hpp>
 #include <opencv2/core/mat.hpp>
 #include <opencv2/core/types.hpp>
-#include <utility>
 
 #include "edit/operators/op_kernel.hpp"
 #include "image/image_buffer.hpp"
 
+#include "utils/simd/simple_simd.hpp"
+
+#if SIMPLE_SIMD_X86
 #include <immintrin.h>
 #include <xmmintrin.h>
+#endif
 
-#include "utils/simd/simple_simd.hpp"
 
 namespace puerhlab {
 // using hn = hwy::HWY_NAMESPACE;

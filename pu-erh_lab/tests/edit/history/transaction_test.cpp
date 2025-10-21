@@ -311,7 +311,7 @@ TEST_F(EditHistoryTests, TestWithPreviewPipeline) {
 
       auto result       = future_task1.get();  // Wait for task1 to complete
 
-      // cv::cvtColor(result->GetCPUData(), result->GetCPUData(), cv::COLOR_RGB2BGR);
+      cv::cvtColor(result->GetCPUData(), result->GetCPUData(), cv::COLOR_RGB2BGR);
       cv::imshow("preview", result->GetCPUData());
 
 
