@@ -9,13 +9,14 @@ project(pu-erh_lab VERSION 0.1.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-set(BUILD_STATIC_LIBS ON)
+# set(BUILD_STATIC_LIBS ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 if (MSVC)
-    set(CMAKE_CXX_FLAGS_INIT "/O2 /arch:SSE4.2 /bigobj /W4 /external:anglebrackets /external:W0 /D_DEBUG /EHsc /openmp /fsanitize=address")
+    set(CMAKE_CXX_FLAGS_INIT "/O2 /arch:AVX /bigobj /W4 /external:anglebrackets /external:W0 /D_DEBUG /EHsc /openmp /fsanitize=address")
     add_link_options(/DEBUG)
     set(CMAKE_VS_USE_DEBUG_LIBRARIES "$<CONFIG:Debug,Custom>")
+    set(CMAKE_PREFIX_PATH "D:/misc/Qt/6.9.3/msvc2022_64/lib/cmake;${CMAKE_PREFIX_PATH}")
 else()
     set(CMAKE_CXX_FLAGS_INIT "-Wall -Wextra -Wpedantic -D_DEBUG -fopenmp -fsanitize=address -g")
     if(APPLE)
@@ -91,6 +92,9 @@ target_include_directories(JSON INTERFACE "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_
 # Other libraries
 # OpenCV
 find_package(OpenCV REQUIRED)
+
+find_package(Qt6 REQUIRED COMPONENTS Widgets Quick)
+
 
 # Profiler/hwy/lcms2
 if (WIN32)
@@ -195,9 +199,6 @@ else()
 endif()
 
 # Modules
-add_subdirectory(${CMAKE_SOURCE_DIR}/pu-erh_lab/src)
-set(TEST_RES_DIR "${CMAKE_SOURCE_DIR}/pu-erh_lab/tests/resources" CACHE PATH "Path to test resources")
-file(TO_CMAKE_PATH "${TEST_RES_DIR}" TEST_RES_DIR)
 add_compile_definitions(
     TEST_DB_PATH=\"${TEST_RES_DIR}/temp_folder/test.db\"
     TEST_META_PATH=\"${TEST_RES_DIR}/temp_folder/meta.json\"
@@ -205,6 +206,10 @@ add_compile_definitions(
     TEST_PROFILER_OUTPUT_PATH=\"${TEST_RES_DIR}/temp_folder/test_profile.prof\"
     CONFIG_PATH=\"${CMAKE_SOURCE_DIR}/pu-erh_lab/src/config/\"
 )
+set(TEST_RES_DIR "${CMAKE_SOURCE_DIR}/pu-erh_lab/tests/resources" CACHE PATH "Path to test resources")
+file(TO_CMAKE_PATH "${TEST_RES_DIR}" TEST_RES_DIR)
+
+add_subdirectory(${CMAKE_SOURCE_DIR}/pu-erh_lab/src)
 add_subdirectory(${CMAKE_SOURCE_DIR}/pu-erh_lab/tests)
 
 file(GLOB_RECURSE ALL_SOURCE_FILES

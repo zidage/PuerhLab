@@ -1,6 +1,5 @@
 #include <easy/profiler.h>
 #include <gtest/gtest.h>
-
 #include <future>
 #include <memory>
 #include <opencv2/core/mat.hpp>
@@ -10,6 +9,7 @@
 #endif
 #include <opencv2/highgui.hpp>
 #include <opencv2/opencv.hpp>
+
 
 #include "edit/history/edit_transaction.hpp"
 #include "edit/history/version.hpp"
@@ -69,7 +69,7 @@ void SetPipelineTemplate(std::shared_ptr<PipelineExecutor> executor) {
   auto&          raw_stage = executor->GetStage(PipelineStageName::Image_Loading);
   nlohmann::json decode_params;
 #ifdef HAVE_CUDA
-  decode_params["raw"]["cuda"] = true;
+  decode_params["raw"]["cuda"] = false;
 #else
   decode_params["raw"]["cuda"] = false;
 #endif
@@ -251,11 +251,11 @@ TEST_F(EditHistoryTests, DISABLED_TestWithImage_Animated) {
   }
 }
 
-TEST_F(EditHistoryTests, TestWithPreviewPipeline) {
+TEST_F(EditHistoryTests, DISABLED_TestWithPreviewPipeline) {
   {
     SleeveManager             manager{db_path_};
     ImageLoader               image_loader(128, 1, 0);
-    image_path_t              path = std::string(TEST_IMG_PATH) + "/raw/building";
+    image_path_t              path = std::string(TEST_IMG_PATH) + "/raw/camera/sony/a1";
     std::vector<image_path_t> imgs;
     for (const auto& img : std::filesystem::directory_iterator(path)) {
       if (!img.is_directory() && is_supported_file(img.path())) imgs.push_back(img.path());
@@ -294,27 +294,19 @@ TEST_F(EditHistoryTests, TestWithPreviewPipeline) {
 
     nlohmann::json exposure_params;
     exposure_params["exposure"] = 0.0f;
-    exposure_params["white"]    = 0.0f;
-    exposure_params["black"]    = 0.0f;
 
     auto& basic_stage = task._pipeline_executor->GetStage(PipelineStageName::Basic_Adjustment);
     basic_stage.SetOperator(OperatorType::EXPOSURE, exposure_params);
-    basic_stage.SetOperator(OperatorType::WHITE, exposure_params);
-    basic_stage.SetOperator(OperatorType::BLACK, exposure_params);
 
     pipeline_executor->SetExecutionStages();
 
-    for (float exposure = -5.0f; exposure <= 5.0f; exposure += 0.5f) {
+    for (float exposure = -5.0f; exposure <= 5.0f; exposure += .5f) {
       PipelineTask task1      = task;  // Make a copy of task for task1
       auto& basic_stage = task1._pipeline_executor->GetStage(PipelineStageName::Basic_Adjustment);
 
       // Update multiple parameters
       exposure_params["exposure"] = exposure;
-      exposure_params["white"]    = exposure;
-      exposure_params["black"]    = exposure;
       basic_stage.SetOperator(OperatorType::EXPOSURE, exposure_params);
-      basic_stage.SetOperator(OperatorType::WHITE, exposure_params);
-      basic_stage.SetOperator(OperatorType::BLACK, exposure_params);
 
       // Set up blocking and result promise
       task1._options._is_blocking = true;

@@ -123,6 +123,14 @@ if (WIN32)
 target_link_libraries(EditHistoryTest easy_profiler)
 endif()
 
+add_executable(ImagePreview gui_pocs/image_preview_cpu.cpp)
+target_include_directories(ImagePreview PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
+target_link_libraries(ImagePreview Image ImageLoader ImageDecoder EditPipeline Operators SleeveManager OpenColorIO lcms2::lcms2)
+if (WIN32)
+target_link_libraries(ImagePreview easy_profiler Qt6::Widgets)
+endif()
+
+
 include(GoogleTest)
 # set(CMAKE_GTEST_DISCOVER_TESTS_DISCOVERY_MODE PRE_TEST)
 # gtest_discover_tests(SampleTest)

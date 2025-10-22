@@ -72,12 +72,12 @@ auto VibranceOp::ToKernel() const -> Kernel {
                   float chroma   = max_val - min_val;
 
                   // chroma in [0, max], vibrance_offset in [-100, 100]
-                  float strength = o / 100.0f;
+                  // float strength = o / 100.0f;
 
                   // Protect already highly saturated color
                   float falloff  = std::exp(-3.0f * chroma);
 
-                  float scale    = 1.0f + strength * falloff;
+                  float scale    = 1.0f + o * falloff;
 
                   if (o >= 0.0f) {
                     float luma = r * 0.299f + g * 0.587f + b * 0.114f;
@@ -113,7 +113,7 @@ auto VibranceOp::GetParams() const -> nlohmann::json {
 
 void VibranceOp::SetParams(const nlohmann::json& params) {
   if (params.contains(_script_name)) {
-    _vibrance_offset = params[_script_name];
+    _vibrance_offset = params[_script_name].get<float>() / 100.0f;
   } else {
     _vibrance_offset = 0.0f;
   }
