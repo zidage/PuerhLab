@@ -58,8 +58,8 @@ void WhiteOp::SetParams(const nlohmann::json& params) {
     _black_point = 0.0f;
     _slope       = 1.0f;
   } else {
-    _offset      = params[_script_name].get<float>();
-    _y_intercept = 1.0f + _offset / 300.0f;
+    _offset      = params[_script_name].get<float>() / 100.0f;
+    _y_intercept = 1.0f + _offset / 3.0f;
     _black_point = 0.0f;
     _slope       = (_y_intercept - _black_point) / 1.0f;
   }

@@ -62,7 +62,7 @@ void BlackOp::SetParams(const nlohmann::json& params) {
 
   } else {
     _offset      = params[_script_name].get<float>() / 100.0f;
-    _y_intercept = _offset / 300.0f;
+    _y_intercept = _offset / 3.f;
     _slope       = (1.0f - _y_intercept) / 1.0f;
   }
   _y_intercept_vec = simple_simd::set1_f32(_y_intercept);
