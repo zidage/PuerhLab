@@ -39,7 +39,7 @@ class CPUPipelineExecutor : public PipelineExecutor {
   auto GetStage(PipelineStageName stage) -> PipelineStage& override;
   auto Apply(std::shared_ptr<ImageBuffer> input) -> std::shared_ptr<ImageBuffer> override;
 
-  void SetPreviewMode(bool is_thumbnail);
+  void SetPreviewMode(bool is_preview);
   void SetExecutionStages();
   void ResetExecutionStages();
 };

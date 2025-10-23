@@ -1,6 +1,9 @@
 #include <qapplication.h>
 #include <qimage.h>
 #include <qlabel.h>
+
+#include <QBoxLayout>
+#include <QSlider>
 #include <QTimer>
 
 #include "edit/pipeline/pipeline_cpu.hpp"
@@ -50,76 +53,103 @@ static QImage cvMatToQImage(const cv::Mat& mat) {
 }
 
 int main(int argc, char* argv[]) {
-    QApplication app(argc, argv);
-    QLabel label;
-    label.setWindowTitle("Qt Image Preview");
-    label.resize(2000, 1500);
-    label.show();
+  QApplication app(argc, argv);
 
-    UIHistoryTests tests;
-    tests.SetUp();
-    auto db_path = tests.GetDBPath();
-    SleeveManager manager{db_path};
-    ImageLoader image_loader(128, 1, 0);
+  QWidget      window;
+  auto*        root   = new QHBoxLayout(&window);
 
-    image_path_t path = std::string(TEST_IMG_PATH) + "/raw/camera/sony/a1";
-    std::vector<image_path_t> imgs;
-    for (const auto& img : std::filesystem::directory_iterator(path)) {
-        if (!img.is_directory() && is_supported_file(img.path()))
-            imgs.push_back(img.path());
-    }
-    manager.LoadToPath(imgs, L"");
-    auto img_pool = manager.GetPool()->GetPool();
-    auto img_ptr = img_pool.begin()->second;
+  QLabel*      label  = new QLabel(&window);
+  label->setMinimumSize(800, 600);
+  label->setAlignment(Qt::AlignCenter);
 
-    PipelineScheduler scheduler{};
-    PipelineTask base_task;
-    auto buffer = ByteBufferLoader::LoadFromImage(img_ptr);
-    base_task._input = buffer ? std::make_shared<ImageBuffer>(std::move(*buffer)) : nullptr;
+  QWidget*     controls = new QWidget(&window);
+  auto*        controlsLayout = new QVBoxLayout(controls);
+  QLabel*      sliderInfo = new QLabel("White: 0", controls);
+  auto*        slider = new QSlider(Qt::Horizontal, controls); 
+  slider->setRange(-100, 100);
+  slider->setValue(0);
+  slider->setMinimumWidth(200);
 
-    auto pipeline_executor = std::make_shared<CPUPipelineExecutor>(true);
-    pipeline_executor->SetPreviewMode(true);
-    base_task._pipeline_executor = pipeline_executor;
-    SetPipelineTemplate(base_task._pipeline_executor);
+  controlsLayout->addWidget(sliderInfo);
+  controlsLayout->addWidget(slider);
+  controlsLayout->addStretch();
 
-    nlohmann::json exposure_params;
-    exposure_params["exposure"] = 0.0f;
-    auto& basic_stage = base_task._pipeline_executor->GetStage(PipelineStageName::Basic_Adjustment);
-    basic_stage.SetOperator(OperatorType::EXPOSURE, exposure_params);
-    pipeline_executor->SetExecutionStages();
+  root->addWidget(label, /*stretch*/1);
+  root->addWidget(controls);
 
-    // Animation state
-    float exposure = -5.0f;
+  window.setWindowTitle("Qt Image Preview");
+  window.resize(1500, 1000);
+  window.show();
 
-    QTimer* timer = new QTimer();
-    QObject::connect(timer, &QTimer::timeout, [&]() {
-        if (exposure > 5.0f) {
-            timer->stop();
-            tests.TearDown();
-            return;
-        }
+  UIHistoryTests tests;
+  tests.SetUp();
+  auto                      db_path = tests.GetDBPath();
+  SleeveManager             manager{db_path};
+  ImageLoader               image_loader(128, 1, 0);
 
-        PipelineTask task = base_task;
-        auto& basic_stage = task._pipeline_executor->GetStage(PipelineStageName::Basic_Adjustment);
-        exposure_params["exposure"] = exposure;
-        basic_stage.SetOperator(OperatorType::EXPOSURE, exposure_params);
+  image_path_t              path = std::string(TEST_IMG_PATH) + "/raw/camera/sony/a1";
+  std::vector<image_path_t> imgs;
+  for (const auto& img : std::filesystem::directory_iterator(path)) {
+    if (!img.is_directory() && is_supported_file(img.path())) imgs.push_back(img.path());
+  }
+  manager.LoadToPath(imgs, L"");
+  auto              img_pool = manager.GetPool()->GetPool();
+  auto              img_ptr  = img_pool.begin()->second;
 
-        task._options._is_blocking = true;
-        task._result = std::make_shared<std::promise<std::shared_ptr<ImageBuffer>>>();
-        auto future = task._result->get_future();
+  PipelineScheduler scheduler{};
+  PipelineTask      base_task;
+  auto              buffer = ByteBufferLoader::LoadFromImage(img_ptr);
+  base_task._input         = buffer ? std::make_shared<ImageBuffer>(std::move(*buffer)) : nullptr;
 
-        scheduler.ScheduleTask(std::move(task));
-        auto result = future.get();
+  auto base_executor       = std::make_shared<CPUPipelineExecutor>(true);
+  base_executor->SetPreviewMode(true);
+  base_task._pipeline_executor = base_executor;
 
-        cv::Mat img = result->GetCPUData();
-        img.convertTo(img, CV_8U, 255.0);
-        // cv::cvtColor(img, img, cv::COLOR_RGB2BGR);
-        QImage qimage(img.data, img.cols, img.rows, img.step, QImage::Format_RGB888);
-        label.setPixmap(QPixmap::fromImage(qimage).scaled(label.size(), Qt::KeepAspectRatio));
+  SetPipelineTemplate(base_task._pipeline_executor);
+  // Register a default exposure
+  auto& basic_stage = base_task._pipeline_executor->GetStage(PipelineStageName::Basic_Adjustment);
+  nlohmann::json params;
+  params["white"] = 0.0f;
+  basic_stage.SetOperator(OperatorType::WHITE, params);
 
-        exposure += 0.05f;
-    });
+  // Set execution stages
+  base_executor->SetExecutionStages();
 
-    timer->start(10); // 1 ms interval for smooth animation
-    return app.exec();
+  const qreal dpr                  = app.devicePixelRatio();
+
+  auto        scheduleWithExposure = [&](float offset) {
+    PipelineTask task = base_task;
+
+    auto& basic_stage = task._pipeline_executor->GetStage(PipelineStageName::Basic_Adjustment);
+    params["white"] = offset;
+
+    basic_stage.SetOperator(OperatorType::WHITE, params);
+
+    task._options._is_blocking = false;
+    task._options._is_callback = true;
+
+    task._callback             = [label, dpr](ImageBuffer& output) {
+      cv::Mat img = output.GetCPUData();
+      img.convertTo(img, CV_8U, 255.0);
+
+      QImage qimg = cvMatToQImage(img);
+
+      qimg.setDevicePixelRatio(dpr);
+      label->setPixmap(QPixmap::fromImage(qimg));
+    };
+
+    scheduler.ScheduleTask(std::move(task));
+  };
+
+  scheduleWithExposure(0.0f);
+
+  QObject::connect(slider, &QSlider::valueChanged, [&](int v) {
+    sliderInfo->setText(QString("White: %1").arg(v));
+    float val = static_cast<float>(v); 
+    scheduleWithExposure(val);
+  });
+
+  int ret = app.exec();
+  tests.TearDown();
+  return ret;
 }
