@@ -22,7 +22,7 @@ void SetPipelineTemplate(std::shared_ptr<PipelineExecutor> executor) {
 #else
   decode_params["raw"]["cuda"] = false;
 #endif
-  decode_params["raw"]["highlights_reconstruct"] = false;
+  decode_params["raw"]["highlights_reconstruct"] = true;
   decode_params["raw"]["use_camera_wb"]          = true;
   decode_params["raw"]["backend"]                = "puerh";
   nlohmann::json to_ws_params;
@@ -64,7 +64,7 @@ int main(int argc, char* argv[]) {
 
   QWidget*     controls = new QWidget(&window);
   auto*        controlsLayout = new QVBoxLayout(controls);
-  QLabel*      sliderInfo = new QLabel("White: 0", controls);
+  QLabel*      sliderInfo = new QLabel("Highlights: 0", controls);
   auto*        slider = new QSlider(Qt::Horizontal, controls); 
   slider->setRange(-100, 100);
   slider->setValue(0);
@@ -109,8 +109,8 @@ int main(int argc, char* argv[]) {
   // Register a default exposure
   auto& basic_stage = base_task._pipeline_executor->GetStage(PipelineStageName::Basic_Adjustment);
   nlohmann::json params;
-  params["white"] = 0.0f;
-  basic_stage.SetOperator(OperatorType::WHITE, params);
+  params["highlights"] = 0.0f;
+  basic_stage.SetOperator(OperatorType::HIGHLIGHTS, params);
 
   // Set execution stages
   base_executor->SetExecutionStages();
@@ -121,9 +121,9 @@ int main(int argc, char* argv[]) {
     PipelineTask task = base_task;
 
     auto& basic_stage = task._pipeline_executor->GetStage(PipelineStageName::Basic_Adjustment);
-    params["white"] = offset;
+    params["highlights"] = offset;
 
-    basic_stage.SetOperator(OperatorType::WHITE, params);
+    basic_stage.SetOperator(OperatorType::HIGHLIGHTS, params);
 
     task._options._is_blocking = false;
     task._options._is_callback = true;
@@ -144,8 +144,8 @@ int main(int argc, char* argv[]) {
   scheduleWithExposure(0.0f);
 
   QObject::connect(slider, &QSlider::valueChanged, [&](int v) {
-    sliderInfo->setText(QString("White: %1").arg(v));
-    float val = static_cast<float>(v); 
+    sliderInfo->setText(QString("Highlights: %1").arg(v));
+    float val = static_cast<float>(v);
     scheduleWithExposure(val);
   });
 

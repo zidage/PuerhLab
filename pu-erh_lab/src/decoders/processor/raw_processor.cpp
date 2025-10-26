@@ -70,7 +70,6 @@ void OpenCVRawProcessor::ApplyHighlightReconstruct() {
     throw std::runtime_error("OpenCVRawProcessor: Not implemented");
   } else {
     auto& img = _process_buffer.GetCPUData();
-    img.convertTo(img, CV_32FC3);
     CPU::HighlightReconstruct(img, _raw_processor);
   }
 }
@@ -111,9 +110,9 @@ auto OpenCVRawProcessor::Process() -> ImageBuffer {
 
   ApplyWhiteBalance();
 
-  ApplyDebayer();
-
   if (_params._highlights_reconstruct) ApplyHighlightReconstruct();
+
+  ApplyDebayer();
 
   ApplyColorSpaceTransform();
 #ifdef HAVE_CUDA

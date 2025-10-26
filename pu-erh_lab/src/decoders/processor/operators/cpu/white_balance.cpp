@@ -83,9 +83,9 @@ void WhiteBalanceCorrection(cv::Mat& img, LibRaw& raw_processor) {
         pixel               = std::max(0.0f, pixel - black_level[color_idx]);
         pixel               = pixel * scale_mul[color_idx];
 
-        //
-        pixel               = std::min(1.0f, pixel);
-        pixel               = std::max(0.0f, pixel);
+        // //
+        // pixel               = std::min(1.0f, pixel);
+        // pixel               = std::max(0.0f, pixel);
         // float muled_pixel = pixel;
         // float mask        = (color_idx == 0 || color_idx == 2) ? 1.0f : 0.0f;
         // //
@@ -95,11 +95,11 @@ void WhiteBalanceCorrection(cv::Mat& img, LibRaw& raw_processor) {
 
         // pixel             = muled_pixel;
 
-        // // if (pixel > maximum[color_idx]) {
-        // //   pixel = maximum[color_idx];
-        // // }
+        // if (pixel > maximum[color_idx]) {
+        //   pixel = maximum[color_idx];
+        // }
 
-        // pixel /= maximum[color_idx];
+        // // pixel /= maximum[color_idx];
 
         img.at<float>(y, x) = pixel;
       }
