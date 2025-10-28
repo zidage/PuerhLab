@@ -1,10 +1,11 @@
-#include <qapplication.h>
-#include <qimage.h>
-#include <qlabel.h>
+#include <QApplication>
+#include <QImage>
+#include <QLabel>
 
 #include <QBoxLayout>
 #include <QSlider>
 #include <QTimer>
+
 
 #include "edit/pipeline/pipeline_cpu.hpp"
 #include "edit/scheduler/pipeline_scheduler.hpp"
@@ -64,7 +65,7 @@ int main(int argc, char* argv[]) {
 
   QWidget*     controls = new QWidget(&window);
   auto*        controlsLayout = new QVBoxLayout(controls);
-  QLabel*      sliderInfo = new QLabel("Highlights: 0", controls);
+  QLabel*      sliderInfo = new QLabel("Shadows: 0", controls);
   auto*        slider = new QSlider(Qt::Horizontal, controls); 
   slider->setRange(-100, 100);
   slider->setValue(0);
@@ -87,7 +88,7 @@ int main(int argc, char* argv[]) {
   SleeveManager             manager{db_path};
   ImageLoader               image_loader(128, 1, 0);
 
-  image_path_t              path = std::string(TEST_IMG_PATH) + "/raw/camera/sony/a1";
+  image_path_t              path = std::string(TEST_IMG_PATH) + "/raw/building";
   std::vector<image_path_t> imgs;
   for (const auto& img : std::filesystem::directory_iterator(path)) {
     if (!img.is_directory() && is_supported_file(img.path())) imgs.push_back(img.path());
@@ -109,8 +110,8 @@ int main(int argc, char* argv[]) {
   // Register a default exposure
   auto& basic_stage = base_task._pipeline_executor->GetStage(PipelineStageName::Basic_Adjustment);
   nlohmann::json params;
-  params["highlights"] = 0.0f;
-  basic_stage.SetOperator(OperatorType::HIGHLIGHTS, params);
+  params["shadows"] = 0.0f;
+  basic_stage.SetOperator(OperatorType::SHADOWS, params);
 
   // Set execution stages
   base_executor->SetExecutionStages();
@@ -121,15 +122,15 @@ int main(int argc, char* argv[]) {
     PipelineTask task = base_task;
 
     auto& basic_stage = task._pipeline_executor->GetStage(PipelineStageName::Basic_Adjustment);
-    params["highlights"] = offset;
+    params["shadows"] = offset;
 
-    basic_stage.SetOperator(OperatorType::HIGHLIGHTS, params);
+    basic_stage.SetOperator(OperatorType::SHADOWS, params);
 
     task._options._is_blocking = false;
     task._options._is_callback = true;
 
     task._callback             = [label, dpr](ImageBuffer& output) {
-      cv::Mat img = output.GetCPUData();
+      cv::Mat img = output.GetCPUData().clone();
       img.convertTo(img, CV_8U, 255.0);
 
       QImage qimg = cvMatToQImage(img);
@@ -144,7 +145,7 @@ int main(int argc, char* argv[]) {
   scheduleWithExposure(0.0f);
 
   QObject::connect(slider, &QSlider::valueChanged, [&](int v) {
-    sliderInfo->setText(QString("Highlights: %1").arg(v));
+    sliderInfo->setText(QString("Shadows: %1").arg(v));
     float val = static_cast<float>(v);
     scheduleWithExposure(val);
   });

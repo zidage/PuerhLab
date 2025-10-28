@@ -1,6 +1,5 @@
 #include "edit/pipeline/tile_scheduler.hpp"
 
-#include <easy/profiler.h>
 
 #include <cstddef>
 #include <ctime>

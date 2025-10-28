@@ -1,6 +1,5 @@
 #pragma once
 
-#include <easy/profiler.h>
 #include <gtest/gtest.h>
 
 #include <exiv2/exiv2.hpp>

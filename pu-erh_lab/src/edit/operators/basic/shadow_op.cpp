@@ -14,16 +14,18 @@
 
 namespace puerhlab {
 ShadowsOp::ShadowsOp(float offset) : _offset(offset) {
-  _gamma  = std::pow(2.2f, -_offset / 100.0f);
+  float normalized_offset = _offset / 100.0f;
+  _gamma = std::pow(2.0f, -normalized_offset * 1.3f);
   v_gamma = hw::Set(d, _gamma);
-  InitializeLUT();
+  // InitializeLUT();
 }
 
 ShadowsOp::ShadowsOp(const nlohmann::json& params) {
   SetParams(params);
-  _gamma  = std::pow(2.2f, -_offset / 100.0f);
+  float normalized_offset = _offset / 100.0f;
+  _gamma = std::pow(2.0f, -normalized_offset * 1.3f);
   v_gamma = hw::Set(d, _gamma);
-  InitializeLUT();
+  // InitializeLUT();
 }
 
 void ShadowsOp::InitializeLUT() {
@@ -90,29 +92,31 @@ void ShadowsOp::Apply(std::shared_ptr<ImageBuffer> input) { ToneRegionOp<Shadows
 auto ShadowsOp::ToKernel() const -> Kernel {
   return Kernel{._type = Kernel::Type::Point,
                 ._func = PointKernelFunc([&inv = _inv_threshold, &g = _gamma](Pixel& in) {
-                  float l_in_r       = std::fmax((in.r + 0.05f) / (1.0f - 0.05f), 0.0f);
-                  float l_in_g       = std::fmax((in.g + 0.05f) / (1.0f - 0.05f), 0.0f);
-                  float l_in_b       = std::fmax((in.b + 0.05f) / (1.0f - 0.05f), 0.0f);
+                  constexpr float kPivot = 0.05f;
+                  constexpr float eps = 1e-7f;
+                  constexpr float threshold = 0.2f;
 
-                  float alpha_r      = std::fmax(1.0f - l_in_r * inv, 0.0f);
-                  float alpha_g      = std::fmax(1.0f - l_in_g * inv, 0.0f);
-                  float alpha_b      = std::fmax(1.0f - l_in_b * inv, 0.0f);
+                  const float L = 0.2126f * in.r + 0.7152f * in.g + 0.0722f * in.b;
+                  
+                  if (L < eps) {
+                    return;
+                  }
 
-                  float l_in_r_safe  = std::fmax(l_in_r, 1e-7f);
-                  float l_in_g_safe  = std::fmax(l_in_g, 1e-7f);
-                  float l_in_b_safe  = std::fmax(l_in_b, 1e-7f);
+                  float Lp = (L + 0.05f) / (1.0f - kPivot);
+                  Lp = std::fmax(Lp, 0.0f);
 
-                  float l_adjusted_r = std::pow(l_in_r_safe, g);
-                  float l_adjusted_g = std::pow(l_in_g_safe, g);
-                  float l_adjusted_b = std::pow(l_in_b_safe, g);
+                  float alpha = 1.0f - Lp / threshold;
+                  alpha = std::fmax(alpha, 0.0f);
 
-                  float diff_r       = l_adjusted_r - l_in_r;
-                  float diff_g       = l_adjusted_g - l_in_g;
-                  float diff_b       = l_adjusted_b - l_in_b;
+                  const float Lp_adjust = std::pow(Lp, g);
+                  const float Lp_out = Lp + alpha * (Lp_adjust - Lp);
+                  const float L_out = (Lp_out * (1.0f - kPivot) - kPivot);
 
-                  in.r               = l_in_r + alpha_r * diff_r;
-                  in.g               = l_in_g + alpha_g * diff_g;
-                  in.b               = l_in_b + alpha_b * diff_b;
+                  const float scale = L_out / L;
+
+                  in.r *= scale;
+                  in.g *= scale;
+                  in.b *= scale;
                 })};
 }
 

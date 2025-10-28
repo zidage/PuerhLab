@@ -21,6 +21,7 @@ else()
     set(CMAKE_CXX_FLAGS_INIT "-Wall -Wextra -Wpedantic -D_DEBUG -fopenmp -fsanitize=address -g")
     if(APPLE)
         add_compile_definitions(__MACOSX_CORE__)
+    set(CMAKE_PREFIX_PATH "/Users/zidage/Qt/6.9.3/macos/lib/cmake;${CMAKE_PREFIX_PATH}")
     endif()
 endif()
 

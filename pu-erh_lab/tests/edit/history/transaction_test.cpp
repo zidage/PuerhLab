@@ -1,4 +1,3 @@
-#include <easy/profiler.h>
 #include <gtest/gtest.h>
 #include <future>
 #include <memory>
