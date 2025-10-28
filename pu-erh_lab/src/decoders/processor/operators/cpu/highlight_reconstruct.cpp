@@ -1,19 +1,14 @@
-#pragma once
-
 #include "decoders/processor/operators/cpu/highlight_reconstruct.hpp"
 
 #include <libraw/libraw_types.h>
 #include <opencv2/core/hal/interface.h>
 
 #include <cmath>
-#include <iostream>
 #include <opencv2/core.hpp>
 #include <opencv2/core/mat.hpp>
 #include <opencv2/core/types.hpp>
 #include <opencv2/highgui.hpp>
 #include <opencv2/imgproc.hpp>
-
-#include "decoders/processor/operators/cpu/raw_proc_utils.hpp"
 
 #define HL_POWERF 3.0f
 
@@ -173,37 +168,29 @@ void HighlightReconstruct(cv::Mat& img, LibRaw& raw_processor) {
   auto               cam_mul       = raw_processor.imgdata.color.cam_mul;
   auto               pre_mul       = raw_processor.imgdata.color.pre_mul;
 
-  float              correction[4] = {
-      cam_mul[0] / std::max(1e-8f, cam_mul[1]),
-      1.0f,
-      cam_mul[2] / std::max(1e-8f, cam_mul[1]),
-      0.f};
-  // float correction[4] = {1.0f, 1.0f, 1.0f, 0.f};
+  float              correction[4] = {(cam_mul[1] > 0.f) ? (cam_mul[0] / cam_mul[1]) : 1.f, 1.f,
+                         (cam_mul[1] > 0.f) ? (cam_mul[2] / cam_mul[1]) : 1.f, 0.f};
 
-  // auto        mul    = raw_processor.imgdata.color.cam_mul;
-  // const float        icoeffs[3]    = {scale_mul[0], scale_mul[1], scale_mul[2]};
-  // double             max_val;
-  // cv::Point max_loc;
-  // cv::minMaxLoc(img, nullptr, &max_val, nullptr, &max_loc);
-
-  const float        clip_val      = hilight_magic * 1.0f;
-  // const float        max_coeff     = std::max({icoeffs[0], icoeffs[1], icoeffs[2]});
-
-  const float        clips[3]      = {
-      clip_val * 1.f,
-      clip_val * 1.f,
-      clip_val * 1.f,
+  float              chr_correction[4] = {
+    (pre_mul[1] / pre_mul[0]) / ((cam_mul[1] > 0.f) ? (cam_mul[0] / cam_mul[1]) : 1.f),
+    1.f,
+    (pre_mul[1] / pre_mul[2]) / ((cam_mul[1] > 0.f) ? (cam_mul[2] / cam_mul[1]) : 1.f),
+    0.f
   };
 
+  const float        clip_val      = hilight_magic;
+
+  const float        clips[3]      = {clip_val, clip_val, clip_val};
+
   // Didn't know why darktable use m_width and m_height
-  const size_t               m_width    = width / 3;
-  const size_t               m_height   = height / 3;
-  const size_t               m_size     = round_size((size_t)(m_width + 1) * (m_height + 1), 16);
+  const size_t       m_width       = width / 3;
+  const size_t       m_height      = height / 3;
+  const size_t       m_size        = round_size((size_t)(m_width + 1) * (m_height + 1), 16);
 
-  bool                       anyclipped = false;
-  cv::Mat1f                  input(img);
+  bool               anyclipped    = false;
+  cv::Mat1f          input(img);
 
-  auto                       input_data = input.ptr<float>(0);
+  auto               input_data = input.ptr<float>(0);
 
   std::vector<unsigned char> mask_buf(6 * m_size, 0);
 
@@ -252,7 +239,7 @@ void HighlightReconstruct(cv::Mat& img, LibRaw& raw_processor) {
       }
     }
 
-    const float lo_clips[4] = {0.6f * clips[0], 0.6f * clips[1], 0.6f * clips[2], 1.0f};
+    const float lo_clips[4] = {0.95f * clips[0], 0.95f * clips[1], 0.95f * clips[2], 1.0f};
     /* After having the surrounding mask for each color channel we can calculate the chrominance
      * corrections. */
 
@@ -275,9 +262,9 @@ void HighlightReconstruct(cv::Mat& img, LibRaw& raw_processor) {
 
     float chrominance[4] = {0.f, 0.f, 0.f, 0.f};
     for (int c = 0; c < 3; ++c) {
-      chrominance[c] = (cnts[c] > 100.f) ? (sums[c] / cnts[c]) : 0.f;
+      // TODO: why 1.1f?
+      chrominance[c] = (cnts[c] > 40.f) ? (sums[c] / cnts[c]) * 1.1f : 0.f;
     }
- 
 
     // std::cout << "Correction: R=" << correction[0] << " G=" << correction[1]
     //           << " B=" << correction[2] << std::endl;
