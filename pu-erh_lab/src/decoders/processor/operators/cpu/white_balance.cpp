@@ -53,7 +53,6 @@ inline static auto GetScaleMul(const libraw_rawdata_t& raw_data) -> std::array<f
 void WhiteBalanceCorrection(cv::Mat& img, LibRaw& raw_processor) {
   auto black_level = CalculateBlackLevel(raw_processor.imgdata.rawdata);
   auto wb          = GetWBCoeff(raw_processor.imgdata.rawdata);
-  img.convertTo(img, CV_32FC1, 1.0f / 65535.0f);
   int w = img.cols;
   int h = img.rows;
 
@@ -84,8 +83,8 @@ void WhiteBalanceCorrection(cv::Mat& img, LibRaw& raw_processor) {
         pixel               = pixel * scale_mul[color_idx];
 
         // //
-        // pixel               = std::min(1.0f, pixel);
-        // pixel               = std::max(0.0f, pixel);
+        // pixel               = std::min(1.2f, pixel);
+        pixel               = std::max(0.0f, pixel);
         // float muled_pixel = pixel;
         // float mask        = (color_idx == 0 || color_idx == 2) ? 1.0f : 0.0f;
         // //

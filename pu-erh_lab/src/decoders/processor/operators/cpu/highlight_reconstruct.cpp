@@ -6,6 +6,7 @@
 #include <opencv2/core/hal/interface.h>
 
 #include <cmath>
+#include <iostream>
 #include <opencv2/core.hpp>
 #include <opencv2/core/mat.hpp>
 #include <opencv2/core/types.hpp>
@@ -127,7 +128,7 @@ static inline float _calc_linear_refavg(const float* in, const int color) {
 }
 
 static inline float _calc_refavg(const float* in, const int row, const int col, const int height,
-                                 const int width) {
+                                 const int width, float* correction) {
   const int color   = FC(row, col);
   float     mean[4] = {0.0f, 0.0f, 0.0f, 0.0f};
   float     cnt[4]  = {0.0f, 0.0f, 0.0f, 0.0f};
@@ -146,12 +147,13 @@ static inline float _calc_refavg(const float* in, const int row, const int col, 
     }
   }
   for (int c = 0; c < 3; ++c) {
-    mean[c] = (cnt[c] > 0.f) ? powf(mean[c] / cnt[c], 1.0f / HL_POWERF) : 0.f;
+    mean[c] = (cnt[c] > 0.f) ? powf(correction[c] * mean[c] / cnt[c], 1.0f / HL_POWERF) : 0.f;
   }
 
   const float croot_refavg[4] = {0.5f * (mean[1] + mean[2]), 0.5f * (mean[0] + mean[2]),
                                  0.5f * (mean[0] + mean[1]), 0.0f};
   return powf(croot_refavg[color], HL_POWERF);
+  // return croot_refavg[color];
 }
 
 /**
@@ -168,16 +170,29 @@ void HighlightReconstruct(cv::Mat& img, LibRaw& raw_processor) {
   static const float hilight_magic = 0.987f;  // default value from darktable
   // float max_val = static_cast<float>(raw_processor.imgdata.rawdata.color.maximum) / 65535.0f;
 
-  auto               scale_mul     = raw_processor.imgdata.rawdata.color.cam_mul;
+  auto               cam_mul       = raw_processor.imgdata.color.cam_mul;
+  auto               pre_mul       = raw_processor.imgdata.color.pre_mul;
+
+  float              correction[4] = {
+      cam_mul[0] / std::max(1e-8f, cam_mul[1]),
+      1.0f,
+      cam_mul[2] / std::max(1e-8f, cam_mul[1]),
+      0.f};
+  // float correction[4] = {1.0f, 1.0f, 1.0f, 0.f};
+
   // auto        mul    = raw_processor.imgdata.color.cam_mul;
-  const float        icoeffs[3]    = {scale_mul[0], scale_mul[1], scale_mul[2]};
-  const float        clip_val      = hilight_magic * 1.1f;
-  const float        max_coeff     = std::max({icoeffs[0], icoeffs[1], icoeffs[2]});
+  // const float        icoeffs[3]    = {scale_mul[0], scale_mul[1], scale_mul[2]};
+  // double             max_val;
+  // cv::Point max_loc;
+  // cv::minMaxLoc(img, nullptr, &max_val, nullptr, &max_loc);
+
+  const float        clip_val      = hilight_magic * 1.0f;
+  // const float        max_coeff     = std::max({icoeffs[0], icoeffs[1], icoeffs[2]});
 
   const float        clips[3]      = {
-      clip_val * icoeffs[0] / max_coeff,
-      clip_val * icoeffs[1] / max_coeff,
-      clip_val * icoeffs[2] / max_coeff,
+      clip_val * 1.f,
+      clip_val * 1.f,
+      clip_val * 1.f,
   };
 
   // Didn't know why darktable use m_width and m_height
@@ -192,7 +207,7 @@ void HighlightReconstruct(cv::Mat& img, LibRaw& raw_processor) {
 
   std::vector<unsigned char> mask_buf(6 * m_size, 0);
 
-  #pragma omp parallel for
+#pragma omp parallel for
   for (int row = 1; row < m_height - 1; ++row) {
     for (int col = 1; col < m_width - 1; ++col) {
       char         mbuff[3] = {0, 0, 0};
@@ -202,14 +217,14 @@ void HighlightReconstruct(cv::Mat& img, LibRaw& raw_processor) {
           const size_t idx     = grp + y * width + x;
           const int    color   = FC(row + y, col + x);
           const char   clipped = input_data[idx] >= clips[color] ? 1 : 0;
-          mbuff[color] += clipped ? 1 : 0;
+          mbuff[color] += (clipped) ? 1 : 0;
         }
       }
-      const size_t cmx = _raw_to_cmap(m_width, row, col);
+      // const size_t cmx = _raw_to_cmap(m_width, row, col);
       for (int c = 0; c < 3; ++c) {
         if (mbuff[c]) {
-          mask_buf[c * m_size + cmx] = 1;
-          anyclipped                 = true;
+          mask_buf[c * m_size + row * m_width + col] = 1;
+          anyclipped                                 = true;
         }
       }
     }
@@ -237,7 +252,7 @@ void HighlightReconstruct(cv::Mat& img, LibRaw& raw_processor) {
       }
     }
 
-    const float lo_clips[4] = {0.2f * clips[0], 0.2f * clips[1], 0.2f * clips[2], 1.0f};
+    const float lo_clips[4] = {0.6f * clips[0], 0.6f * clips[1], 0.6f * clips[2], 1.0f};
     /* After having the surrounding mask for each color channel we can calculate the chrominance
      * corrections. */
 
@@ -251,7 +266,8 @@ void HighlightReconstruct(cv::Mat& img, LibRaw& raw_processor) {
          * chrominance offset */
         if ((inval < clips[color]) && (inval > lo_clips[color]) &&
             (mask_buf[(color + 3) * m_size + _raw_to_cmap(m_width, row, col)])) {
-          sums[color] += inval - _calc_refavg(input.ptr<float>(0), row, col, height, width);
+          sums[color] +=
+              inval - _calc_refavg(input.ptr<float>(0), row, col, height, width, correction);
           cnts[color] += 1.0f;
         }
       }
@@ -259,9 +275,14 @@ void HighlightReconstruct(cv::Mat& img, LibRaw& raw_processor) {
 
     float chrominance[4] = {0.f, 0.f, 0.f, 0.f};
     for (int c = 0; c < 3; ++c) {
-      chrominance[c] = (cnts[c] > 30.f) ? (sums[c] / cnts[c]) : 0.f;
+      chrominance[c] = (cnts[c] > 100.f) ? (sums[c] / cnts[c]) : 0.f;
     }
+ 
 
+    // std::cout << "Correction: R=" << correction[0] << " G=" << correction[1]
+    //           << " B=" << correction[2] << std::endl;
+    // std::cout << "Chrominance: R=" << chrominance[0] << " G=" << chrominance[1]
+    //           << " B=" << chrominance[2] << std::endl;
     cv::Mat1f result = input.clone();
 #pragma omp parallel for
     for (int row = 0; row < height; ++row) {
@@ -269,7 +290,7 @@ void HighlightReconstruct(cv::Mat& img, LibRaw& raw_processor) {
         const int   color = FC(row, col);
         const float inval = MAX(0.0f, input(row, col));
         if (inval >= clips[color]) {
-          const float ref  = _calc_refavg(input.ptr<float>(0), row, col, height, width);
+          const float ref  = _calc_refavg(input.ptr<float>(0), row, col, height, width, correction);
           result(row, col) = std::max(inval, ref + chrominance[color]);
         } else {
           result(row, col) = inval;

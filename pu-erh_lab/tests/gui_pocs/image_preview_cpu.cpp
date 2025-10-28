@@ -65,7 +65,7 @@ int main(int argc, char* argv[]) {
 
   QWidget*     controls = new QWidget(&window);
   auto*        controlsLayout = new QVBoxLayout(controls);
-  QLabel*      sliderInfo = new QLabel("Shadows: 0", controls);
+  QLabel*      sliderInfo = new QLabel("Highlights: 0", controls);
   auto*        slider = new QSlider(Qt::Horizontal, controls); 
   slider->setRange(-100, 100);
   slider->setValue(0);
@@ -88,7 +88,7 @@ int main(int argc, char* argv[]) {
   SleeveManager             manager{db_path};
   ImageLoader               image_loader(128, 1, 0);
 
-  image_path_t              path = std::string(TEST_IMG_PATH) + "/raw/building";
+  image_path_t              path = std::string(TEST_IMG_PATH) + "/raw/camera/sony/a1";
   std::vector<image_path_t> imgs;
   for (const auto& img : std::filesystem::directory_iterator(path)) {
     if (!img.is_directory() && is_supported_file(img.path())) imgs.push_back(img.path());
@@ -110,8 +110,8 @@ int main(int argc, char* argv[]) {
   // Register a default exposure
   auto& basic_stage = base_task._pipeline_executor->GetStage(PipelineStageName::Basic_Adjustment);
   nlohmann::json params;
-  params["shadows"] = 0.0f;
-  basic_stage.SetOperator(OperatorType::SHADOWS, params);
+  params["highlights"] = 0.0f;
+  basic_stage.SetOperator(OperatorType::HIGHLIGHTS, params);
 
   // Set execution stages
   base_executor->SetExecutionStages();
@@ -122,9 +122,9 @@ int main(int argc, char* argv[]) {
     PipelineTask task = base_task;
 
     auto& basic_stage = task._pipeline_executor->GetStage(PipelineStageName::Basic_Adjustment);
-    params["shadows"] = offset;
+    params["highlights"] = offset;
 
-    basic_stage.SetOperator(OperatorType::SHADOWS, params);
+    basic_stage.SetOperator(OperatorType::HIGHLIGHTS, params);
 
     task._options._is_blocking = false;
     task._options._is_callback = true;
@@ -145,7 +145,7 @@ int main(int argc, char* argv[]) {
   scheduleWithExposure(0.0f);
 
   QObject::connect(slider, &QSlider::valueChanged, [&](int v) {
-    sliderInfo->setText(QString("Shadows: %1").arg(v));
+    sliderInfo->setText(QString("Highlights: %1").arg(v));
     float val = static_cast<float>(v);
     scheduleWithExposure(val);
   });

@@ -70,6 +70,12 @@ void OpenCVRawProcessor::ApplyHighlightReconstruct() {
     throw std::runtime_error("OpenCVRawProcessor: Not implemented");
   } else {
     auto& img = _process_buffer.GetCPUData();
+    if (!_params._highlights_reconstruct) {
+      // clamp to [0, 1]
+      cv::threshold(img, img, 1.0f, 1.0f, cv::THRESH_TRUNC);
+      cv::threshold(img, img, 0.0f, 0.0f, cv::THRESH_TOZERO);
+      return;
+    }
     CPU::HighlightReconstruct(img, _raw_processor);
   }
 }
@@ -107,10 +113,11 @@ auto OpenCVRawProcessor::Process() -> ImageBuffer {
   //           << _raw_processor.COLOR(1, 0) << " " << _raw_processor.COLOR(1, 1) << "\n";
   CV_Assert(_raw_processor.COLOR(0, 0) == 0 && _raw_processor.COLOR(0, 1) == 1 &&
             _raw_processor.COLOR(1, 0) == 3 && _raw_processor.COLOR(1, 1) == 2);
+  _process_buffer.GetCPUData().convertTo(_process_buffer.GetCPUData(), CV_32FC1, 1.0f / 65535.0f);
 
   ApplyWhiteBalance();
 
-  if (_params._highlights_reconstruct) ApplyHighlightReconstruct();
+  ApplyHighlightReconstruct();
 
   ApplyDebayer();
 
