@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <mutex>
 
 #include "edit/operators/op_kernel.hpp"
 #include "edit/operators/operator_factory.hpp"
@@ -21,6 +22,8 @@ class CPUPipelineExecutor : public PipelineExecutor {
   bool                                                                        _is_thumbnail = false;
 
   nlohmann::json                                                              _thumbnail_params;
+
+  std::mutex                                                                  _exec_mutex;
 
   static constexpr PipelineBackend            _backend = PipelineBackend::CPU;
 

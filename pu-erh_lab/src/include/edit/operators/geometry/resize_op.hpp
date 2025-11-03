@@ -1,9 +1,18 @@
 #include "edit/operators/op_base.hpp"
 
 namespace puerhlab {
+struct ROI {
+  int   x;
+  int   y;
+  float resize_factor;
+};
+
 class ResizeOp : public OperatorBase<ResizeOp> {
  private:
-  int _maximum_edge;
+  int  _maximum_edge;
+
+  bool enable_roi = false;
+  ROI  roi;
 
  public:
   static constexpr PriorityLevel     _priority_level    = 1;

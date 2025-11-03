@@ -10,12 +10,12 @@
 namespace puerhlab {
 enum class PipelineStageName : int {
   Image_Loading       = 0,
-  To_WorkingSpace     = 1,
-  Basic_Adjustment    = 2,
-  Color_Adjustment    = 3,
-  Detail_Adjustment   = 4,
-  Output_Transform    = 5,
-  Geometry_Adjustment = 6,
+  Geometry_Adjustment = 1,
+  To_WorkingSpace     = 2,
+  Basic_Adjustment    = 3,
+  Color_Adjustment    = 4,
+  Detail_Adjustment   = 5,
+  Output_Transform    = 6,
   Stage_Count         = 7,
   Merged_Stage        = 8  // Special stage for merged streamable stages
 };

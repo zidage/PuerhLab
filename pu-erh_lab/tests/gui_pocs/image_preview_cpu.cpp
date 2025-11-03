@@ -88,7 +88,7 @@ int main(int argc, char* argv[]) {
   SleeveManager             manager{db_path};
   ImageLoader               image_loader(128, 1, 0);
 
-  image_path_t              path = std::string(TEST_IMG_PATH) + "/raw/still_life";
+  image_path_t              path = std::string(TEST_IMG_PATH) + "/raw/camera/leica/m11";
   std::vector<image_path_t> imgs;
   for (const auto& img : std::filesystem::directory_iterator(path)) {
     if (!img.is_directory() && is_supported_file(img.path())) imgs.push_back(img.path());
@@ -112,6 +112,12 @@ int main(int argc, char* argv[]) {
   nlohmann::json params;
   params["highlights"] = 0.0f;
   basic_stage.SetOperator(OperatorType::HIGHLIGHTS, params);
+
+  auto& geom_stage = base_task._pipeline_executor->GetStage(PipelineStageName::Geometry_Adjustment);
+  nlohmann::json roi_resize_params;
+  roi_resize_params["resize"] = {{"enable_roi", true},
+                                 {"roi", {{"x", 100}, {"y", 100}, {"resize_factor", 0.5f}}}};
+  geom_stage.SetOperator(OperatorType::RESIZE, roi_resize_params);
 
   // Set execution stages
   base_executor->SetExecutionStages();

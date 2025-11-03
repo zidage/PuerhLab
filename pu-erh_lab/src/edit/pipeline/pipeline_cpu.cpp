@@ -19,12 +19,12 @@ namespace puerhlab {
 CPUPipelineExecutor::CPUPipelineExecutor()
     : _enable_cache(false),
       _stages({{PipelineStageName::Image_Loading, _enable_cache, false},
+               {PipelineStageName::Geometry_Adjustment, _enable_cache, false},
                {PipelineStageName::To_WorkingSpace, _enable_cache, true},
                {PipelineStageName::Basic_Adjustment, _enable_cache, true},
                {PipelineStageName::Color_Adjustment, _enable_cache, true},
                {PipelineStageName::Detail_Adjustment, _enable_cache, true},
-               {PipelineStageName::Output_Transform, _enable_cache, true},
-               {PipelineStageName::Geometry_Adjustment, _enable_cache, false}}) {}
+               {PipelineStageName::Output_Transform, _enable_cache, true}}) {}
 
 void CPUPipelineExecutor::ResetStages() {
   for (size_t i = 0; i < _stages.size(); i++) {
@@ -42,12 +42,12 @@ void CPUPipelineExecutor::SetEnableCache(bool enable_cache) {
 CPUPipelineExecutor::CPUPipelineExecutor(bool enable_cache)
     : _enable_cache(enable_cache),
       _stages({{PipelineStageName::Image_Loading, _enable_cache, false},
+               {PipelineStageName::Geometry_Adjustment, _enable_cache, false},
                {PipelineStageName::To_WorkingSpace, _enable_cache, true},
                {PipelineStageName::Basic_Adjustment, _enable_cache, true},
                {PipelineStageName::Color_Adjustment, _enable_cache, true},
                {PipelineStageName::Detail_Adjustment, _enable_cache, true},
-               {PipelineStageName::Output_Transform, _enable_cache, true},
-               {PipelineStageName::Geometry_Adjustment, _enable_cache, false}}) {}
+               {PipelineStageName::Output_Transform, _enable_cache, true}}) {}
 
 auto CPUPipelineExecutor::GetBackend() -> PipelineBackend { return _backend; }
 
@@ -57,7 +57,8 @@ auto CPUPipelineExecutor::GetStage(PipelineStageName stage) -> PipelineStage& {
 
 auto CPUPipelineExecutor::Apply(std::shared_ptr<ImageBuffer> input)
     -> std::shared_ptr<ImageBuffer> {
-  auto* first_stage = _exec_stages.front();
+  std::lock_guard<std::mutex> lock(_exec_mutex);
+  auto*                       first_stage = _exec_stages.front();
   if (!first_stage) {
     return input;
   }
@@ -84,6 +85,7 @@ auto CPUPipelineExecutor::Apply(std::shared_ptr<ImageBuffer> input)
 
 void CPUPipelineExecutor::SetPreviewMode(bool is_thumbnail) {
   _is_thumbnail     = is_thumbnail;
+
   _thumbnail_params = {};  // TODO: Use default params for now
   if (!_is_thumbnail) {
     // Disable resizing in image loading stage
@@ -92,8 +94,8 @@ void CPUPipelineExecutor::SetPreviewMode(bool is_thumbnail) {
         false);  // If RESIZE operator not exist, this function will do nothing
     return;
   }
-  _stages[static_cast<int>(PipelineStageName::Image_Loading)].SetOperator(OperatorType::RESIZE,
-                                                                          _thumbnail_params);
+  // _stages[static_cast<int>(PipelineStageName::Geometry_Adjustment)].SetOperator(
+  //     OperatorType::RESIZE, _thumbnail_params);
 }
 
 void CPUPipelineExecutor::SetExecutionStages() {
