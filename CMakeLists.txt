@@ -16,11 +16,13 @@ if (MSVC)
     set(CMAKE_CXX_FLAGS_INIT "/O2 /arch:AVX /bigobj /W4 /external:anglebrackets /external:W0 /D_DEBUG /EHsc /openmp /fsanitize=address")
     add_link_options(/DEBUG)
     set(CMAKE_VS_USE_DEBUG_LIBRARIES "$<CONFIG:Debug,Custom>")
+    # FIXME: Hardcoded Qt path for Windows, consider making it configurable
     set(CMAKE_PREFIX_PATH "D:/misc/Qt/6.9.3/msvc2022_64/lib/cmake;${CMAKE_PREFIX_PATH}")
 else()
     set(CMAKE_CXX_FLAGS_INIT "-Wall -Wextra -Wpedantic -D_DEBUG -fopenmp -O2 -fsanitize=address -g")
     if(APPLE)
         add_compile_definitions(__MACOSX_CORE__)
+    # FIXME: Hardcoded Qt path for macOS, consider making it configurable
     set(CMAKE_PREFIX_PATH "/Users/zidage/Qt/6.9.3/macos/lib/cmake;${CMAKE_PREFIX_PATH}")
     endif()
 endif()
