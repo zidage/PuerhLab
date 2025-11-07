@@ -58,11 +58,20 @@ void OpenCVRawProcessor::ApplyDebayer() {
   if (_params._cuda) {
     auto& gpu_img = pre_debayer_buffer.GetGPUData();
     CUDA::BayerRGGB2RGB_AHD(gpu_img);
+    
     return;
   }
 #endif
   auto& img = pre_debayer_buffer.GetCPUData();
   CPU::BayerRGGB2RGB_AHD(img);
+  // Crop to valid area
+  // cv::Rect crop_rect(_raw_data.sizes.raw_inset_crops[0].cleft,
+  // _raw_data.sizes.raw_inset_crops[0].ctop,
+  //                    _raw_data.sizes.raw_inset_crops[0].cwidth,
+  //                    _raw_data.sizes.raw_inset_crops[0].cheight);
+  cv::Rect crop_rect(_raw_data.sizes.left_margin, _raw_data.sizes.top_margin,
+                     _raw_data.sizes.width, _raw_data.sizes.height);
+  img = img(crop_rect);
 }
 
 void OpenCVRawProcessor::ApplyHighlightReconstruct() {

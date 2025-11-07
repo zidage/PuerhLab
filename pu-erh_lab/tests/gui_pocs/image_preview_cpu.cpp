@@ -88,7 +88,7 @@ int main(int argc, char* argv[]) {
   SleeveManager             manager{db_path};
   ImageLoader               image_loader(128, 1, 0);
 
-  image_path_t              path = std::string(TEST_IMG_PATH) + "/raw/camera/sony/a7rv";
+  image_path_t              path = std::string(TEST_IMG_PATH) + "/raw/camera/sony/a7iv";
   std::vector<image_path_t> imgs;
   for (const auto& img : std::filesystem::directory_iterator(path)) {
     if (!img.is_directory() && is_supported_file(img.path())) imgs.push_back(img.path());
@@ -145,10 +145,10 @@ int main(int argc, char* argv[]) {
     PipelineTask task = base_task;
 
     auto& basic_stage = task._pipeline_executor->GetStage(PipelineStageName::Basic_Adjustment);
-    color_wheel["gamma"] = {{"color_offset.x", 1.0f + offset / 500.0f},
+    color_wheel["gamma"] = {{"color_offset.x", 1.0f},
                                         {"color_offset.y", 1.0f},
                                         {"color_offset.z", 1.0f},
-                                        {"luminance_offset", 0.f}};
+                                        {"luminance_offset", offset / 500.0f}};
     params["color_wheel"] = color_wheel;
 
     basic_stage.SetOperator(OperatorType::COLOR_WHEEL, params);

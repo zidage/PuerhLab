@@ -36,6 +36,7 @@
 #include <exiv2/basicio.hpp>
 #include <exiv2/exif.hpp>
 #include <exiv2/image.hpp>
+#include <exiv2/tags.hpp>
 #include <exiv2/types.hpp>
 #include <filesystem>
 #include <functional>
@@ -43,7 +44,44 @@
 
 #include "type/type.hpp"
 
+
+
 namespace puerhlab {
+void GetDisplayMetadataFromExif(Exiv2::ExifData&        exif_data,
+                                ExifDisplayMetaData&   display_metadata) {
+  if (exif_data.empty()) {
+    return;
+  }
+  if (exif_data.findKey(Exiv2::ExifKey("Exif.Image.Make")) != exif_data.end()) {
+    display_metadata.make = exif_data["Exif.Image.Make"].toString();
+  }
+  if (exif_data.findKey(Exiv2::ExifKey("Exif.Image.Model")) != exif_data.end()) {
+    display_metadata.model = exif_data["Exif.Image.Model"].toString();
+  }
+  if (exif_data.findKey(Exiv2::ExifKey("Exif.Photo.LensModel")) != exif_data.end()) {
+    display_metadata.lens = exif_data["Exif.Photo.LensModel"].toString();
+  }
+  if (exif_data.findKey(Exiv2::ExifKey("Exif.Photo.LensMake")) != exif_data.end()) {
+    display_metadata.lens_make = exif_data["Exif.Photo.LensMake"].toString();
+  }
+  if (exif_data.findKey(Exiv2::ExifKey("Exif.Photo.FNumber")) != exif_data.end()) {
+    display_metadata.aperture = exif_data["Exif.Photo.FNumber"].toRational();
+  }
+  if (exif_data.findKey(Exiv2::ExifKey("Exif.Image.FocalLength")) != exif_data.end()) {
+    display_metadata.focal = exif_data["	Exif.Image.FocalLength"].toFloat();
+  }
+  if (exif_data.findKey(Exiv2::ExifKey("Exif.Image.ImageLength")) != exif_data.end()) {
+    display_metadata.height = exif_data["Exif.Image.ImageLength"].toUint32();
+  }
+  if (exif_data.findKey(Exiv2::ExifKey("Exif.Image.ImageWidth")) != exif_data.end()) {
+    display_metadata.width = exif_data["Exif.Image.ImageWidth"].toUint32();
+  }
+  if (exif_data.findKey(Exiv2::ExifKey("Exif.Image.DateTime")) != exif_data.end()) {
+    display_metadata.date_time_str = exif_data["Exif.Image.DateTime"].toString();
+  }
+
+
+}
 /**
  * @brief A callback used to parse the basic information of a image file
  *
@@ -63,6 +101,7 @@ void MetadataDecoder::Decode(std::vector<char> buffer, std::filesystem::path fil
     img->_exif_data = Exiv2::ImageFactory::open((Exiv2::byte*)buffer.data(), buffer.size());
     img->_exif_data->readMetadata();
     img->_has_exif = !img->_exif_data->exifData().empty();
+    GetDisplayMetadataFromExif(img->_exif_data->exifData(), img->_exif_display);
     result->push(img);
     promise->set_value(id);
     return;
@@ -84,6 +123,7 @@ void MetadataDecoder::Decode(std::vector<char> buffer, std::shared_ptr<Image> so
     source_img->_exif_data = Exiv2::ImageFactory::open((Exiv2::byte*)buffer.data(), buffer.size());
     source_img->_exif_data->readMetadata();
     source_img->_has_exif = !source_img->_exif_data->exifData().empty();
+    GetDisplayMetadataFromExif(source_img->_exif_data->exifData(), source_img->_exif_display);
     result->push(source_img);
     promise->set_value(source_img->_image_id);
 
