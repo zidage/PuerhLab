@@ -109,9 +109,26 @@ int main(int argc, char* argv[]) {
   SetPipelineTemplate(base_task._pipeline_executor);
   // Register a default exposure
   auto& basic_stage = base_task._pipeline_executor->GetStage(PipelineStageName::Basic_Adjustment);
+  nlohmann::json color_wheel = {{"lift",
+                                        {{"color_offset.x", 0.0},
+                                         {"color_offset.y", 0.0},
+                                         {"color_offset.z", 0.0},
+                                         {"luminance_offset", 0.0}}},
+                                       {"gamma",
+                                        {{"color_offset.x", 1.0},
+                                         {"color_offset.y", 1.0},
+                                         {"color_offset.z", 1.00},
+                                         {"luminance_offset", -0.0}}},
+                                       {"gain",
+                                        {{"color_offset.x", 1.0},
+                                         {"color_offset.y", 1.0},
+                                         {"color_offset.z", 1.0},
+                                         {"luminance_offset", 0.0}}},
+                                       {"crossovers", {{"lift", 0.2}, {"gain", 0.8}}}};
   nlohmann::json params;
   params["saturation"] = 0.0f;
-  basic_stage.SetOperator(OperatorType::SATURATION, params);
+  params["color_wheel"] = color_wheel;
+  basic_stage.SetOperator(OperatorType::COLOR_WHEEL, params);
 
   auto& geom_stage = base_task._pipeline_executor->GetStage(PipelineStageName::Geometry_Adjustment);
   nlohmann::json roi_resize_params;
@@ -128,9 +145,13 @@ int main(int argc, char* argv[]) {
     PipelineTask task = base_task;
 
     auto& basic_stage = task._pipeline_executor->GetStage(PipelineStageName::Basic_Adjustment);
-    params["saturation"] = offset;
+    color_wheel["gamma"] = {{"color_offset.x", 1.0f + offset / 500.0f},
+                                        {"color_offset.y", 1.0f},
+                                        {"color_offset.z", 1.0f},
+                                        {"luminance_offset", 0.f}};
+    params["color_wheel"] = color_wheel;
 
-    basic_stage.SetOperator(OperatorType::SATURATION, params);
+    basic_stage.SetOperator(OperatorType::COLOR_WHEEL, params);
 
     task._options._is_blocking = false;
     task._options._is_callback = true;
