@@ -23,8 +23,6 @@ class CPUPipelineExecutor : public PipelineExecutor {
 
   nlohmann::json                                                              _thumbnail_params;
 
-  std::mutex                                                                  _exec_mutex;
-
   static constexpr PipelineBackend            _backend = PipelineBackend::CPU;
 
   std::vector<PipelineStage*>                 _exec_stages;

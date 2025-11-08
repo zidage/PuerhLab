@@ -64,7 +64,7 @@ class PipelineStage {
    * execution stage, should call SetExecutionStages() to rebuild the kernel stream), 0 if an
    * existing operator is updated.
    */
-  auto SetOperator(OperatorType, nlohmann::json& param) -> int;
+  auto SetOperator(OperatorType, nlohmann::json param) -> int;
 
   auto GetOperator(OperatorType) const -> std::optional<OperatorEntry*>;
   auto GetAllOperators() const -> std::map<OperatorType, OperatorEntry>& { return *_operators; }

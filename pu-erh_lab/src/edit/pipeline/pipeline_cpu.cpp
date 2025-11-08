@@ -57,7 +57,6 @@ auto CPUPipelineExecutor::GetStage(PipelineStageName stage) -> PipelineStage& {
 
 auto CPUPipelineExecutor::Apply(std::shared_ptr<ImageBuffer> input)
     -> std::shared_ptr<ImageBuffer> {
-  std::lock_guard<std::mutex> lock(_exec_mutex);
   auto*                       first_stage = _exec_stages.front();
   if (!first_stage) {
     return input;
@@ -94,8 +93,8 @@ void CPUPipelineExecutor::SetPreviewMode(bool is_thumbnail) {
         false);  // If RESIZE operator not exist, this function will do nothing
     return;
   }
-  // _stages[static_cast<int>(PipelineStageName::Geometry_Adjustment)].SetOperator(
-  //     OperatorType::RESIZE, _thumbnail_params);
+  _stages[static_cast<int>(PipelineStageName::Geometry_Adjustment)].SetOperator(
+      OperatorType::RESIZE, _thumbnail_params);
 }
 
 void CPUPipelineExecutor::SetExecutionStages() {

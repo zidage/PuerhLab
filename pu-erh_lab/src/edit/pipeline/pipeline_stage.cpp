@@ -15,7 +15,7 @@ PipelineStage::PipelineStage(PipelineStageName stage, bool enable_cache, bool is
   }
 }
 
-auto PipelineStage::SetOperator(OperatorType op_type, nlohmann::json& param) -> int {
+auto PipelineStage::SetOperator(OperatorType op_type, nlohmann::json param) -> int {
   auto it = _operators->find(op_type);
   if (it == _operators->end()) {
     auto op = OperatorFactory::Instance().Create(op_type, param);

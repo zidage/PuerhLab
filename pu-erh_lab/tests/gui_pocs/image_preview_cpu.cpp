@@ -1,11 +1,10 @@
 #include <QApplication>
+#include <QBoxLayout>
 #include <QImage>
 #include <QLabel>
-
-#include <QBoxLayout>
 #include <QSlider>
 #include <QTimer>
-
+#include <future>
 
 #include "edit/pipeline/pipeline_cpu.hpp"
 #include "edit/scheduler/pipeline_scheduler.hpp"
@@ -54,28 +53,31 @@ static QImage cvMatToQImage(const cv::Mat& mat) {
 }
 
 int main(int argc, char* argv[]) {
+  struct AdjustmentState {
+    float exposure   = 0.0f;
+    float contrast   = 1.0f;
+    float saturation = 0.0f;
+    float blacks     = 0.0f;
+    float whites     = 0.0f;
+    float shadows    = 0.0f;
+    float highlights = 0.0f;
+  };
+
   QApplication app(argc, argv);
 
   QWidget      window;
-  auto*        root   = new QHBoxLayout(&window);
+  auto*        root  = new QHBoxLayout(&window);
 
-  QLabel*      label  = new QLabel(&window);
+  QLabel*      label = new QLabel(&window);
   label->setMinimumSize(800, 600);
   label->setAlignment(Qt::AlignCenter);
 
-  QWidget*     controls = new QWidget(&window);
-  auto*        controlsLayout = new QVBoxLayout(controls);
-  QLabel*      sliderInfo = new QLabel("Highlights: 0", controls);
-  auto*        slider = new QSlider(Qt::Horizontal, controls); 
-  slider->setRange(-100, 100);
-  slider->setValue(0);
-  slider->setMinimumWidth(200);
+  QWidget* controls       = new QWidget(&window);
+  auto*    controlsLayout = new QVBoxLayout(controls);
 
-  controlsLayout->addWidget(sliderInfo);
-  controlsLayout->addWidget(slider);
   controlsLayout->addStretch();
 
-  root->addWidget(label, /*stretch*/1);
+  root->addWidget(label, /*stretch*/ 1);
   root->addWidget(controls);
 
   window.setWindowTitle("Qt Image Preview");
@@ -109,55 +111,43 @@ int main(int argc, char* argv[]) {
   SetPipelineTemplate(base_task._pipeline_executor);
   // Register a default exposure
   auto& basic_stage = base_task._pipeline_executor->GetStage(PipelineStageName::Basic_Adjustment);
-  nlohmann::json color_wheel = {{"lift",
-                                        {{"color_offset.x", 0.0},
-                                         {"color_offset.y", 0.0},
-                                         {"color_offset.z", 0.0},
-                                         {"luminance_offset", 0.0}}},
-                                       {"gamma",
-                                        {{"color_offset.x", 1.0},
-                                         {"color_offset.y", 1.0},
-                                         {"color_offset.z", 1.00},
-                                         {"luminance_offset", -0.0}}},
-                                       {"gain",
-                                        {{"color_offset.x", 1.0},
-                                         {"color_offset.y", 1.0},
-                                         {"color_offset.z", 1.0},
-                                         {"luminance_offset", 0.0}}},
-                                       {"crossovers", {{"lift", 0.2}, {"gain", 0.8}}}};
-  nlohmann::json params;
-  params["saturation"] = 0.0f;
-  params["color_wheel"] = color_wheel;
-  basic_stage.SetOperator(OperatorType::COLOR_WHEEL, params);
+  basic_stage.SetOperator(OperatorType::EXPOSURE, {{"exposure", 0.0f}});
+  basic_stage.SetOperator(OperatorType::CONTRAST, {{"contrast", 1.0f}});
+  basic_stage.SetOperator(OperatorType::BLACK, {{"black", 0.0f}});
+  basic_stage.SetOperator(OperatorType::WHITE, {{"white", 0.0f}});
+  basic_stage.SetOperator(OperatorType::SHADOWS, {{"shadows", 0.0f}});
+  basic_stage.SetOperator(OperatorType::HIGHLIGHTS, {{"highlights", 0.0f}});
 
-  auto& geom_stage = base_task._pipeline_executor->GetStage(PipelineStageName::Geometry_Adjustment);
-  nlohmann::json roi_resize_params;
-  roi_resize_params["resize"] = {{"enable_roi", false},
-                                 {"roi", {{"x", 100}, {"y", 100}, {"resize_factor", 0.5f}}}};
-  geom_stage.SetOperator(OperatorType::RESIZE, roi_resize_params);
+  auto& color_stage = base_task._pipeline_executor->GetStage(PipelineStageName::Color_Adjustment);
+  color_stage.SetOperator(OperatorType::SATURATION, {{"saturation", 0.0f}});
 
   // Set execution stages
   base_executor->SetExecutionStages();
 
-  const qreal dpr                  = app.devicePixelRatio();
+  const qreal     dpr = app.devicePixelRatio();
 
-  auto        scheduleWithExposure = [&](float offset) {
+  AdjustmentState adjustments{};
+  auto            scheduleAdjustments = [&](const AdjustmentState& state) {
     PipelineTask task = base_task;
 
-    auto& basic_stage = task._pipeline_executor->GetStage(PipelineStageName::Basic_Adjustment);
-    color_wheel["gamma"] = {{"color_offset.x", 1.0f},
-                                        {"color_offset.y", 1.0f},
-                                        {"color_offset.z", 1.0f},
-                                        {"luminance_offset", offset / 500.0f}};
-    params["color_wheel"] = color_wheel;
+    auto&        basic = task._pipeline_executor->GetStage(PipelineStageName::Basic_Adjustment);
+    basic.SetOperator(OperatorType::EXPOSURE, {{"exposure", state.exposure}});
+    basic.SetOperator(OperatorType::CONTRAST, {{"contrast", state.contrast}});
+    basic.SetOperator(OperatorType::BLACK, {{"black", state.blacks}});
+    basic.SetOperator(OperatorType::WHITE, {{"white", state.whites}});
+    basic.SetOperator(OperatorType::SHADOWS, {{"shadows", state.shadows}});
+    basic.SetOperator(OperatorType::HIGHLIGHTS, {{"highlights", state.highlights}});
 
-    basic_stage.SetOperator(OperatorType::COLOR_WHEEL, params);
+    auto& color = task._pipeline_executor->GetStage(PipelineStageName::Color_Adjustment);
+    color.SetOperator(OperatorType::SATURATION, {{"saturation", state.saturation}});
+
+    
 
     task._options._is_blocking = false;
     task._options._is_callback = true;
 
     task._callback             = [label, dpr](ImageBuffer& output) {
-      cv::Mat img = output.GetCPUData().clone();
+      cv::Mat img = output.GetCPUData();
       img.convertTo(img, CV_8U, 255.0);
 
       QImage qimg = cvMatToQImage(img);
@@ -169,13 +159,83 @@ int main(int argc, char* argv[]) {
     scheduler.ScheduleTask(std::move(task));
   };
 
-  scheduleWithExposure(0.0f);
+  auto defaultFormatter = [](int v) { return QString::number(v); };
+  auto addSlider        = [&](const QString& name, int min, int max, int value, auto&& onChange,
+                       auto&& formatter) {
+    auto* info   = new QLabel(QString("%1: %2").arg(name).arg(formatter(value)), controls);
+    auto* slider = new QSlider(Qt::Horizontal, controls);
+    slider->setRange(min, max);
+    slider->setValue(value);
+    slider->setMinimumWidth(200);
 
-  QObject::connect(slider, &QSlider::valueChanged, [&](int v) {
-    sliderInfo->setText(QString("Saturation: %1").arg(v));
-    float val = static_cast<float>(v);
-    scheduleWithExposure(val);
-  });
+    QObject::connect(
+        slider, &QSlider::valueChanged, controls,
+        [info, name, formatter, onChange = std::forward<decltype(onChange)>(onChange)](int v) {
+          info->setText(QString("%1: %2").arg(name).arg(formatter(v)));
+          onChange(v);
+        });
+
+    controlsLayout->insertWidget(controlsLayout->count() - 1, info);
+    controlsLayout->insertWidget(controlsLayout->count() - 1, slider);
+  };
+
+  addSlider(
+      "Exposure", -500, 500, 0,
+      [&](int v) {
+        adjustments.exposure = static_cast<float>(v) / 100.0f;
+        scheduleAdjustments(adjustments);
+      },
+      [](int v) { return QString::number(v / 100.0, 'f', 2); });
+
+  addSlider(
+      "Contrast", -100, 100, 0,
+      [&](int v) {
+        adjustments.contrast = static_cast<float>(v);
+        scheduleAdjustments(adjustments);
+      },
+      [](int v) { return QString::number(v, 'f', 2); });
+
+  addSlider(
+      "Saturation", -100, 100, 0,
+      [&](int v) {
+        adjustments.saturation = static_cast<float>(v);
+        scheduleAdjustments(adjustments);
+      },
+      [](int v) { return QString::number(v, 'f', 2); });
+
+  addSlider(
+      "Blacks", -100, 100, 0,
+      [&](int v) {
+        adjustments.blacks = static_cast<float>(v);
+        scheduleAdjustments(adjustments);
+      },
+      [](int v) { return QString::number(v, 'f', 2); });
+
+  addSlider(
+      "Whites", -100, 100, 0,
+      [&](int v) {
+        adjustments.whites = static_cast<float>(v);
+        scheduleAdjustments(adjustments);
+      },
+      [](int v) { return QString::number(v, 'f', 2); });
+
+  addSlider(
+      "Shadows", -100, 100, 0,
+      [&](int v) {
+        adjustments.shadows = static_cast<float>(v);
+        scheduleAdjustments(adjustments);
+      },
+      [](int v) { return QString::number(v, 'f', 2); });
+
+  addSlider(
+      "Highlights", -100, 100, 0,
+      [&](int v) {
+        adjustments.highlights = static_cast<float>(v);
+        scheduleAdjustments(adjustments);
+      },
+      [](int v) { return QString::number(v, 'f', 2); });
+
+  scheduleAdjustments(adjustments);
 
   int ret = app.exec();
   tests.TearDown();
