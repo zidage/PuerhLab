@@ -24,12 +24,12 @@ void ResizeOp::Apply(std::shared_ptr<ImageBuffer> input) {
     roi_img = img(roi_rect);
     float scale = static_cast<float>(_maximum_edge) / static_cast<float>(std::max(roi_w, roi_h));
     cv::resize(roi_img, roi_img, cv::Size(static_cast<int>(roi_w * scale), static_cast<int>(roi_h * scale)), 0, 0,
-             cv::INTER_LANCZOS4);
+             cv::INTER_AREA);
     img = roi_img;
     return;
   }
   cv::resize(img, img, cv::Size(static_cast<int>(w * scale), static_cast<int>(h * scale)), 0, 0,
-             cv::INTER_LANCZOS4);
+             cv::INTER_AREA);
 }
 
 auto ResizeOp::ToKernel() const -> Kernel {
