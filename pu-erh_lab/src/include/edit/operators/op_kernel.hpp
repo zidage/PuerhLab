@@ -122,8 +122,8 @@ namespace hn = hwy::HWY_NAMESPACE;
 class PixelVec {
  public:
   static constexpr size_t kLanes = 4;
-  using D = HWY_CAPPED(float, kLanes);
-  using V = hn::Vec<D>;
+  using D                        = HWY_CAPPED(float, kLanes);
+  using V                        = hn::Vec<D>;
 
   HWY_INLINE PixelVec() : _v(Zero(D())) {}
   HWY_INLINE PixelVec(float scalar) : _v(Set(D(), scalar)) {}
@@ -148,25 +148,21 @@ class PixelVec {
   HWY_INLINE PixelVec operator*(const PixelVec& other) const { return PixelVec(Mul(_v, other._v)); }
   HWY_INLINE PixelVec operator/(const PixelVec& other) const { return PixelVec(Div(_v, other._v)); }
 
-  HWY_INLINE PixelVec operator*(float scalar) const {
-    return PixelVec(Mul(_v, Set(D(), scalar)));
-  }
+  HWY_INLINE PixelVec operator*(float scalar) const { return PixelVec(Mul(_v, Set(D(), scalar))); }
 
-  HWY_INLINE PixelVec Clamp01() const {
-    return PixelVec(Min(Max(_v, Zero(D())), Set(D(), 1.0f)));
-  }
+  HWY_INLINE PixelVec Clamp01() const { return PixelVec(Min(Max(_v, Zero(D())), Set(D(), 1.0f))); }
 
-  HWY_INLINE V raw() const { return _v; }
+  HWY_INLINE V        raw() const { return _v; }
 
  private:
   V _v;
 };
-}; // namespace HWY_NAMESPACE
-}; // namespace puerhlab
+};  // namespace HWY_NAMESPACE
+};  // namespace puerhlab
 HWY_AFTER_NAMESPACE();
 
 namespace puerhlab {
-using PixelVec = HWY_NAMESPACE::PixelVec;
+using PixelVec           = HWY_NAMESPACE::PixelVec;
 using PointKernelFunc    = std::function<void(Pixel&)>;
 using VectorKernelFunc   = std::function<void(PixelVec&)>;
 using NeighborKernelFunc = std::function<ImageAccessor(ImageAccessor&)>;
@@ -175,18 +171,17 @@ using KernelFunc         = std::variant<PointKernelFunc>;
 struct Kernel {
   enum class Type { Point, Neighbor } _type;
 
-  PointKernelFunc _func;
+  PointKernelFunc  _func;
   VectorKernelFunc _vec_func;
 
   bool             has_vector_func;
   int              vector_length;  // length of the vector for vectorized operations
-  
 };
 
 struct KernelStream {
-  std::vector<Kernel> _kernels;
+  std::vector<Kernel>                         _kernels;
 
-  bool                AddToStream(const Kernel& kernel) {
+  bool                                        AddToStream(const Kernel& kernel) {
     // Ensure all kernels in the stream are of the same type
     if (kernel._type == Kernel::Type::Point) {
       _kernels.push_back(kernel);

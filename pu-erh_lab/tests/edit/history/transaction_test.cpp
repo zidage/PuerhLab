@@ -250,7 +250,7 @@ TEST_F(EditHistoryTests, DISABLED_TestWithImage_Animated) {
   }
 }
 
-TEST_F(EditHistoryTests, DISABLED_TestWithPreviewPipeline) {
+TEST_F(EditHistoryTests, TestWithPreviewPipeline) {
   {
     SleeveManager             manager{db_path_};
     ImageLoader               image_loader(128, 1, 0);
@@ -270,8 +270,6 @@ TEST_F(EditHistoryTests, DISABLED_TestWithPreviewPipeline) {
     auto              img_ptr = img_pool.begin()->second;
 
     // Animation loop for the same image
-    cv::namedWindow("preview");
-    cv::resizeWindow("preview", 800, 600);
 
     PipelineTask task;
     auto         buffer    = ByteBufferLoader::LoadFromImage(img_ptr);
@@ -296,6 +294,11 @@ TEST_F(EditHistoryTests, DISABLED_TestWithPreviewPipeline) {
 
     auto& basic_stage = task._pipeline_executor->GetStage(PipelineStageName::Basic_Adjustment);
     basic_stage.SetOperator(OperatorType::EXPOSURE, exposure_params);
+    basic_stage.SetOperator(OperatorType::BLACK, exposure_params);
+    basic_stage.SetOperator(OperatorType::WHITE, exposure_params);
+    basic_stage.SetOperator(OperatorType::SHADOWS, exposure_params);
+    basic_stage.SetOperator(OperatorType::HIGHLIGHTS, exposure_params);
+    basic_stage.SetOperator(OperatorType::SATURATION, exposure_params);
 
     pipeline_executor->SetExecutionStages();
 
@@ -317,9 +320,9 @@ TEST_F(EditHistoryTests, DISABLED_TestWithPreviewPipeline) {
       auto result       = future_task1.get();  // Wait for task1 to complete
 
       cv::cvtColor(result->GetCPUData(), result->GetCPUData(), cv::COLOR_RGB2BGR);
-      cv::imshow("preview", result->GetCPUData());
+      // cv::imshow("preview", result->GetCPUData());
 
-      cv::waitKey(1);
+      // cv::waitKey(1);
     }
   }
 }

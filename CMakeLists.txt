@@ -13,8 +13,9 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 if (MSVC)
-    set(CMAKE_CXX_FLAGS_INIT "/O2 /arch:AVX /bigobj /W4 /external:anglebrackets /external:W0 /D_DEBUG /EHsc /openmp /fsanitize=address")
-    add_link_options(/DEBUG)
+    set(CMAKE_CXX_FLAGS_DEBUG "/O2 /arch:AVX /bigobj /W4 /external:anglebrackets /external:W0 /D_DEBUG /EHsc /openmp /fsanitize=address")
+    set(CMAKE_CXX_FLAGS_RELEASE "/O2 /arch:AVX /bigobj /W4 /external:anglebrackets /external:W0 /EHsc /openmp")
+    # add_link_options(/DEBUG)
     set(CMAKE_VS_USE_DEBUG_LIBRARIES "$<CONFIG:Debug,Custom>")
     # FIXME: Hardcoded Qt path for Windows, consider making it configurable
     set(CMAKE_PREFIX_PATH "D:/misc/Qt/6.9.3/msvc2022_64/lib/cmake;${CMAKE_PREFIX_PATH}")

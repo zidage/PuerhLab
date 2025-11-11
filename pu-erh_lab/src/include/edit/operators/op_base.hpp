@@ -80,4 +80,16 @@ class OperatorBase : public IOperatorBase {
 
   auto GetStage() const -> PipelineStageName override { return Derived::_affiliation_stage; }
 };
+
+struct OpStream {
+  std::vector<std::shared_ptr<IOperatorBase>> _ops;
+
+  bool                                        AddToStream(const std::shared_ptr<IOperatorBase>& op) {
+    // Ensure all kernels in the stream are of the same type
+    _ops.push_back(op);
+    return true;
+  }
+
+  void Clear() { _ops.clear(); }
+};
 };  // namespace puerhlab
