@@ -2,31 +2,26 @@
  * @file        pu-erh_lab/src/include/mapper/sleeve/sleeve_filter/filter_combo.hpp
  * @brief       A combination of a set of filters
  * @author      Yurun Zi
- * @date        2025-03-26
- * @license     MIT
+ * @date        2025-11-14
+ * @license     GPL-3.0-or-later
  *
  * @copyright   Copyright (c) 2025 Yurun Zi
  */
 
-// Copyright (c) 2025 Yurun Zi
+// Copyright (C) 2025  Yurun Zi
 //
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-// The above copyright notice and this permission notice shall be included in all
-// copies or substantial portions of the Software.
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
 //
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #pragma once
 
@@ -36,6 +31,7 @@
 #include <vector>
 
 #include "filters/sleeve_filter.hpp"
+#include "image/image.hpp"
 #include "type/type.hpp"
 
 namespace puerhlab {
@@ -46,13 +42,13 @@ enum class FilterField {
   ExifFocalLength,
   ExifAperture,
   ExifISO,
-  CaptureDate,      
-  ImportDate,       
+  CaptureDate,
+  ImportDate,
   FileName,
   FileExtension,
-  FileSize,
-  Rating,          
-  FolderPath,
+  ImageSize,
+  Rating,
+  ImagePath,
   SemanticTags
 };
 
@@ -71,52 +67,50 @@ enum class CompareOp {
   REGEX
 };
 
-using FilterValue =
-    std::variant<std::monostate, int64_t, double, bool, std::wstring, std::tm>;
+using FilterValue = std::variant<std::monostate, int64_t, double, bool, std::wstring, std::tm>;
 
 struct FieldCondition {
-  FilterField field;
-  CompareOp  op;
-  FilterValue value;
-  FilterValue second_value;  // Used for BETWEEN condition
+  FilterField                field;
+  CompareOp                  op;
+  FilterValue                value;
+  std::optional<FilterValue> second_value = std::nullopt;  // Used for BETWEEN condition
 };
 
 struct FilterNode {
   enum class Type { Logical, Condition, RawSQL } type;
 
   // For Logical nodes
-  FilterOp op;
-  std::vector<FilterNode> children;
+  FilterOp                      op;
+  std::vector<FilterNode>       children;
 
   // For Condition nodes
   std::optional<FieldCondition> condition;
 
   // For RawSQL nodes
-  std::optional<std::wstring> raw_sql;
+  std::optional<std::wstring>   raw_sql;
 };
 
 class FilterSQLCompiler {
  public:
   struct Result {
-    std::wstring where_clause;
+    std::wstring             where_clause;
     std::vector<FilterValue> params;
   };
 
-  Result Compile(const FilterNode& node);
+  static Result Compile(const FilterNode& node);
 
  private:
-  Result CompileNode(const FilterNode& node);
-  std::wstring FieldToColumn(FilterField field);
-  std::wstring CompareToSQL(CompareOp op);
+  static std::wstring CompileNode(const FilterNode& node);
+  static std::wstring FieldToColumn(FilterField field);
+  static std::wstring CompareToSQL(CompareOp op);
 };
 
 class FilterCombo {
  private:
-  FilterNode _root;
+  FilterNode                _root;
   std::vector<SleeveFilter> _filters;
 
  public:
   filter_id_t filter_id;
-
 };
 };  // namespace puerhlab

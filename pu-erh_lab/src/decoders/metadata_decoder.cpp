@@ -66,10 +66,17 @@ void GetDisplayMetadataFromExif(Exiv2::ExifData&        exif_data,
     display_metadata.lens_make = exif_data["Exif.Photo.LensMake"].toString();
   }
   if (exif_data.findKey(Exiv2::ExifKey("Exif.Photo.FNumber")) != exif_data.end()) {
-    display_metadata.aperture = exif_data["Exif.Photo.FNumber"].toRational();
+    auto aperture_rational = exif_data["Exif.Photo.FNumber"].toRational();
+    display_metadata.aperture = static_cast<float>(aperture_rational.first) / aperture_rational.second;
   }
   if (exif_data.findKey(Exiv2::ExifKey("Exif.Image.FocalLength")) != exif_data.end()) {
     display_metadata.focal = exif_data["	Exif.Image.FocalLength"].toFloat();
+  }
+  if (exif_data.findKey(Exiv2::ExifKey("Exif.Photo.ISOSpeedRatings")) != exif_data.end()) {
+    display_metadata.iso = exif_data["Exif.Photo.ISOSpeedRatings"].toInt64();
+  }
+  if (exif_data.findKey(Exiv2::ExifKey("Exif.Image.ShutterSpeedValue")) != exif_data.end()) {
+    display_metadata.shutter_speed = exif_data["Exif.Image.ShutterSpeedValue"].toRational();
   }
   if (exif_data.findKey(Exiv2::ExifKey("Exif.Image.ImageLength")) != exif_data.end()) {
     display_metadata.height = exif_data["Exif.Image.ImageLength"].toUint32();
