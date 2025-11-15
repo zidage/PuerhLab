@@ -37,8 +37,8 @@ void ElementController::AddElement(const std::shared_ptr<SleeveElement> element)
     }
   } else if (element->_type == ElementType::FOLDER) {
     auto folder   = std::static_pointer_cast<SleeveFolder>(element);
-    auto contents = folder->ListElements();
-    for (auto& content_id : *contents) {
+    auto& contents = folder->ListElements();
+    for (auto& content_id : contents) {
       _folder_service.Insert({folder->_element_id, content_id});
     }
   }
@@ -118,7 +118,7 @@ void ElementController::UpdateElement(const std::shared_ptr<SleeveElement> eleme
   } else if (element->_type == ElementType::FOLDER) {
     auto folder = std::static_pointer_cast<SleeveFolder>(element);
     _folder_service.RemoveById(folder->_element_id);
-    for (auto& content_id : *folder->ListElements()) {
+    for (auto& content_id : folder->ListElements()) {
       AddFolderContent(folder->_element_id, content_id);
     }
   }

@@ -128,8 +128,8 @@ auto PathResolver::CoWHandler(const std::shared_ptr<SleeveElement> to_copy,
   if (copied->_type == ElementType::FOLDER) {
     auto copied_folder = std::static_pointer_cast<SleeveFolder>(copied);
     _storage_handler.EnsureChildrenLoaded(copied_folder);
-    auto contents = copied_folder->ListElements();
-    for (auto& e : *contents) {
+    auto& contents = copied_folder->ListElements();
+    for (auto& e : contents) {
       auto element = _storage_handler.GetElement(e);
       element->IncrementRefCount();
     }
@@ -162,7 +162,7 @@ auto PathResolver::Tree(const std::filesystem::path& path) -> std::wstring {
   _storage_handler.EnsureChildrenLoaded(visit_folder);
 
   auto contains = visit_folder->ListElements();
-  for (auto& e : *contains) {
+  for (auto& e : contains) {
     dfs_stack.push({e, 0, _storage_handler.GetElement(e)->_type == ElementType::FILE});
   }
 
@@ -184,7 +184,7 @@ auto PathResolver::Tree(const std::filesystem::path& path) -> std::wstring {
       auto sub_folder = std::static_pointer_cast<SleeveFolder>(next_visit_element);
       _storage_handler.EnsureChildrenLoaded(sub_folder);
       contains = sub_folder->ListElements();
-      for (auto& e : *contains) {
+      for (auto& e : contains) {
         dfs_stack.push(
             {e, next_visit.depth + 1, _storage_handler.GetElement(e)->_type == ElementType::FILE});
       }

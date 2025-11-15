@@ -50,8 +50,8 @@ SleeveView::SleeveView(std::shared_ptr<FileSystem> fs, std::shared_ptr<ImagePool
       _viewing_path(viewing_path),
       _image_pool(image_pool),
       _loader(64, 24, 0) {
-  auto elements = _viewing_node.lock()->ListElements();
-  for (auto& e : *elements) {
+  auto& elements = _viewing_node.lock()->ListElements();
+  for (auto& e : elements) {
     _children.push_back(_fs->Get(e));
   }
 }
@@ -63,8 +63,8 @@ void SleeveView::UpdateView() {
   }
   _viewing_node = std::dynamic_pointer_cast<SleeveFolder>(target);
   _children.clear();
-  auto elements = _viewing_node.lock()->ListElements();
-  for (auto& e : *elements) {
+  auto& elements = _viewing_node.lock()->ListElements();
+  for (auto& e : elements) {
     _children.push_back(_fs->Get(e));
   }
 }

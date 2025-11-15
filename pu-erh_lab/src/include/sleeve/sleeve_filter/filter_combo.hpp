@@ -31,23 +31,93 @@
 #pragma once
 
 #include <cstdint>
-#include <memory>
-#include <set>
-#include <unordered_map>
+#include <optional>
+#include <variant>
 #include <vector>
 
 #include "filters/sleeve_filter.hpp"
 #include "type/type.hpp"
 
 namespace puerhlab {
+enum class FilterOp { AND, OR, NOT };
+
+enum class FilterField {
+  ExifCameraModel,
+  ExifFocalLength,
+  ExifAperture,
+  ExifISO,
+  CaptureDate,      
+  ImportDate,       
+  FileName,
+  FileExtension,
+  FileSize,
+  Rating,          
+  FolderPath,
+  SemanticTags
+};
+
+enum class CompareOp {
+  EQUALS,
+  NOT_EQUALS,
+  CONTAINS,
+  NOT_CONTAINS,
+  GREATER_THAN,
+  LESS_THAN,
+  GREATER_EQUAL,
+  LESS_EQUAL,
+  STARTS_WITH,
+  ENDS_WITH,
+  BETWEEN,
+  REGEX
+};
+
+using FilterValue =
+    std::variant<std::monostate, int64_t, double, bool, std::wstring, std::tm>;
+
+struct FieldCondition {
+  FilterField field;
+  CompareOp  op;
+  FilterValue value;
+  FilterValue second_value;  // Used for BETWEEN condition
+};
+
+struct FilterNode {
+  enum class Type { Logical, Condition, RawSQL } type;
+
+  // For Logical nodes
+  FilterOp op;
+  std::vector<FilterNode> children;
+
+  // For Condition nodes
+  std::optional<FieldCondition> condition;
+
+  // For RawSQL nodes
+  std::optional<std::wstring> raw_sql;
+};
+
+class FilterSQLCompiler {
+ public:
+  struct Result {
+    std::wstring where_clause;
+    std::vector<FilterValue> params;
+  };
+
+  Result Compile(const FilterNode& node);
+
+ private:
+  Result CompileNode(const FilterNode& node);
+  std::wstring FieldToColumn(FilterField field);
+  std::wstring CompareToSQL(CompareOp op);
+};
+
 class FilterCombo {
  private:
+  FilterNode _root;
   std::vector<SleeveFilter> _filters;
 
  public:
   filter_id_t filter_id;
-  auto        GetFilters() -> std::vector<SleeveFilter>&;
-  auto        CreateIndexOn(std::shared_ptr<std::set<sl_element_id_t>> _lists)
-      -> std::shared_ptr<std::set<sl_element_id_t>>;
+
+
 };
 };  // namespace puerhlab

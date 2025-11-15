@@ -241,8 +241,8 @@ auto SleeveBase::RemoveElementInPath(const sl_path_t& path, const file_name_t& f
 
   if (del_element->_type == ElementType::FOLDER) {
     auto del_folder = std::dynamic_pointer_cast<SleeveFolder>(del_element);
-    auto elements   = del_folder->ListElements();
-    for (auto& element_id : *elements) {
+    auto& elements   = del_folder->ListElements();
+    for (auto& element_id : elements) {
       auto& e = _storage.at(element_id);
       e->DecrementRefCount();
     }
@@ -481,8 +481,8 @@ auto SleeveBase::CopyElement(const sl_path_t& src, const sl_path_t& dest)
   if (src_file->_type == ElementType::FOLDER) {
     auto src_folder = std::dynamic_pointer_cast<SleeveFolder>(src_file);
     // Increment the reference count for all of its contents
-    auto elements   = src_folder->ListElements();
-    for (auto& e : *elements) {
+    auto& elements   = src_folder->ListElements();
+    for (auto& e : elements) {
       _storage.at(e)->IncrementRefCount();
     }
     dest_folder->IncrementFolderCount();
@@ -537,7 +537,7 @@ auto SleeveBase::Tree(const sl_path_t& path) -> std::wstring {
       std::dynamic_pointer_cast<SleeveFolder>(dest_folder_opt.value()._access_element);
   auto contains  = visit_folder->ListElements();
   auto dfs_stack = std::stack<TreeNode>();
-  for (auto e : *contains) {
+  for (auto e : contains) {
     dfs_stack.push({e, 0, _storage.at(e)->_type == ElementType::FILE});
   }
   result +=
@@ -558,7 +558,7 @@ auto SleeveBase::Tree(const sl_path_t& path) -> std::wstring {
                 std::to_wstring(next_visit_element->_element_id) + L"\n";
       auto sub_folder = std::dynamic_pointer_cast<SleeveFolder>(next_visit_element);
       contains        = sub_folder->ListElements();
-      for (auto e : *contains) {
+      for (auto e : contains) {
         dfs_stack.push({e, next_visit.depth + 1, _storage.at(e)->_type == ElementType::FILE});
       }
     } else {
@@ -594,7 +594,7 @@ auto SleeveBase::TreeBFS(const sl_path_t& path) -> std::wstring {
       std::dynamic_pointer_cast<SleeveFolder>(dest_folder_opt.value()._access_element);
   auto contains  = visit_folder->ListElements();
   auto bfs_queue = std::deque<TreeNode>();
-  for (auto e : *contains) {
+  for (auto e : contains) {
     bfs_queue.push_back({e, 1, _storage.at(e)->_type == ElementType::FILE});
   }
   result +=
@@ -615,7 +615,7 @@ auto SleeveBase::TreeBFS(const sl_path_t& path) -> std::wstring {
                 std::to_wstring(next_visit_element->_element_id) + L" ";
       auto sub_folder = std::dynamic_pointer_cast<SleeveFolder>(next_visit_element);
       contains        = sub_folder->ListElements();
-      for (auto e : *contains) {
+      for (auto e : contains) {
         bfs_queue.push_back({e, next_visit.depth + 1, _storage.at(e)->_type == ElementType::FILE});
       }
     } else {

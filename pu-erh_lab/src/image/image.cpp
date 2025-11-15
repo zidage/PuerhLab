@@ -102,43 +102,22 @@ void Image::ClearThumbnail() {
   _has_thumbnail = false;
 }
 
-auto Image::ExifToJson() const -> std::string {
+auto Image::ExifToJson() -> std::string {
   // If the image has exif json, return it directly
   if (_has_exif_json) {
     return nlohmann::to_string(_exif_json);
   }
 
-  json o;
-  // Temporary remove the support for reading exif
-  if (!_has_exif) {
-    return nlohmann::to_string(o);
-  }
-  try {
-    auto                          exif_data = _exif_data->exifData();
-    // Suggestion from ChatGPT to improve performance
-    std::vector<Exiv2::Exifdatum> local;
-    for (const auto& entry : exif_data) {
-      local.emplace_back(entry);
-    }
-    for (auto& data : local) {
-      auto type_id    = static_cast<uint32_t>(data.typeId());  // debug
-      auto type       = data.ifdName();
-      auto type_value = data.value().toUint32();  // debug
-      // o[type]         = std::array<std::string, 2>{std::to_string(type_id), type_value};
-      o[type]         = std::pair<uint32_t, uint32_t>{type_id, type_value};
-    }
-
-  } catch (std::exception& e) {
-    std::cerr << e.what() << std::endl;
-  }
-
-  return nlohmann::to_string(o);
+  _exif_json = _exif_display.ToJson();
+  _has_exif_json = true;
+  return nlohmann::to_string(_exif_json);
 }
 
 void Image::JsonToExif(std::string json_str) {
   try {
     _exif_json     = nlohmann::json::parse(json_str);
     _has_exif_json = true;
+    _exif_display.FromJson(_exif_json);
   } catch (nlohmann::json::parse_error& e) {
     throw std::runtime_error("Image: JSON parse error");
   }

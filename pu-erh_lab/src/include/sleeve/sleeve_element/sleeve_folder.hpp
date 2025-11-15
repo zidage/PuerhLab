@@ -52,10 +52,8 @@ namespace puerhlab {
 class SleeveFolder : public SleeveElement {
  protected:
   std::unordered_map<file_name_t, sl_element_id_t>                            _contents;
-  std::unordered_map<filter_id_t, std::shared_ptr<std::set<sl_element_id_t>>> _indicies_cache;
-
-  std::vector<filter_id_t>                                                    _filters;
-  filter_id_t                                                                 _default_filter;
+  std::unordered_map<filter_id_t, std::vector<sl_element_id_t>> _indicies_cache;
+  filter_id_t                                                               _default_filter = 0;
 
   uint32_t                                                                    _file_count;
   uint32_t                                                                    _folder_count;
@@ -72,8 +70,7 @@ class SleeveFolder : public SleeveElement {
                         const sl_element_id_t new_id);
   void CreateIndex(const std::shared_ptr<FilterCombo> filter);
   auto GetElementIdByName(const file_name_t& name) const -> std::optional<sl_element_id_t>;
-  auto ListElements() const -> std::shared_ptr<std::vector<sl_element_id_t>>;
-  auto ListFilters() -> std::vector<filter_id_t>&;
+  auto ListElements() const -> const std::vector<sl_element_id_t>&;
   auto Contains(const file_name_t& name) const -> bool;
   void RemoveNameFromMap(const file_name_t& name);
 

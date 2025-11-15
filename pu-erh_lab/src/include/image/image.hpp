@@ -95,7 +95,7 @@ class Image {
   void                  ClearData();
   void                  ClearThumbnail();
   void                  ComputeChecksum();
-  auto                  ExifToJson() const -> std::string;
+  auto                  ExifToJson() -> std::string;
   void                  JsonToExif(std::string json_str);
 };
 };  // namespace puerhlab

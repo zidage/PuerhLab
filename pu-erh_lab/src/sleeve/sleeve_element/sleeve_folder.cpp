@@ -19,10 +19,9 @@ namespace puerhlab {
  * @param element_name
  */
 SleeveFolder::SleeveFolder(sl_element_id_t id, file_name_t element_name)
-    : SleeveElement(id, element_name), _default_filter(0), _file_count(0), _folder_count(0) {
-  _indicies_cache[_default_filter] = std::make_shared<std::set<sl_element_id_t>>();
+    : SleeveElement(id, element_name), _file_count(0), _folder_count(0) {
+  _indicies_cache[_default_filter] = {};
   _type                            = ElementType::FOLDER;
-  _filters.push_back(_default_filter);
 }
 
 SleeveFolder::~SleeveFolder() {}
@@ -33,7 +32,7 @@ auto SleeveFolder::Copy(sl_element_id_t new_id) const -> std::shared_ptr<SleeveE
   copy->_contents = {_contents};
   // Only copy indicies cache under default filter
   copy->_indicies_cache[copy->_default_filter] =
-      std::make_shared<std::set<sl_element_id_t>>(*_indicies_cache.at(_default_filter));
+      std::vector<sl_element_id_t>(_indicies_cache.at(_default_filter));
   return copy;
 }
 /**
@@ -43,7 +42,7 @@ auto SleeveFolder::Copy(sl_element_id_t new_id) const -> std::shared_ptr<SleeveE
  */
 void SleeveFolder::AddElementToMap(const std::shared_ptr<SleeveElement> element) {
   _contents[element->_element_name] = element->_element_id;
-  _indicies_cache[_default_filter]->insert(element->_element_id);
+  _indicies_cache[_default_filter].push_back(element->_element_id);
   // Once a pinned element is added to the current folder, current folder also becomes pinned
   _pinned |= element->_pinned;
   element->IncrementRefCount();
@@ -60,9 +59,14 @@ void SleeveFolder::UpdateElementMap(const file_name_t& name, const sl_element_id
                                     const sl_element_id_t new_id) {
   _contents.erase(name);
   _contents[name]  = new_id;
-  auto default_set = _indicies_cache[_default_filter];
-  default_set->erase(old_id);
-  default_set->insert(new_id);
+  auto default_filter = _indicies_cache[_default_filter];
+
+  for (auto& id : default_filter) {
+    if (id == old_id) {
+      id = new_id;
+      break;
+    }
+  }
 }
 
 /**
@@ -71,7 +75,7 @@ void SleeveFolder::UpdateElementMap(const file_name_t& name, const sl_element_id
  * @param filter
  */
 void SleeveFolder::CreateIndex(const std::shared_ptr<FilterCombo> filter) {
-  _indicies_cache[filter->filter_id] = filter->CreateIndexOn(_indicies_cache[_default_filter]);
+  _indicies_cache[filter->filter_id] = filter->CreateIndexOn(_contents);
 }
 
 /**
@@ -93,12 +97,11 @@ auto SleeveFolder::GetElementIdByName(const file_name_t& name) const
  *
  * @return std::shared_ptr<std::vector<sl_element_id_t>>
  */
-auto SleeveFolder::ListElements() const -> std::shared_ptr<std::vector<sl_element_id_t>> {
-  auto default_list = _indicies_cache.at(_default_filter);
-  return std::make_shared<std::vector<sl_element_id_t>>(default_list->begin(), default_list->end());
+auto SleeveFolder::ListElements() const -> const std::vector<sl_element_id_t>& {
+  const auto& default_list = _indicies_cache.at(_default_filter);
+  return default_list;
 }
 
-auto SleeveFolder::ListFilters() -> std::vector<filter_id_t>& { return _filters; }
 
 auto SleeveFolder::Clear() -> bool {
   // TODO: Add Implementation
@@ -126,7 +129,11 @@ auto SleeveFolder::Contains(const file_name_t& name) const -> bool {
  * @return sl_element_id_t
  */
 void SleeveFolder::RemoveNameFromMap(const file_name_t& name) {
-  _indicies_cache[_default_filter]->erase(_contents.at(name));
+  auto removed_id = _contents.at(name);
+  // Also remove from default filter index
+  auto& default_index = _indicies_cache[_default_filter];
+  default_index.erase(std::remove(default_index.begin(), default_index.end(), removed_id),
+                      default_index.end());
   _contents.erase(name);
 }
 
