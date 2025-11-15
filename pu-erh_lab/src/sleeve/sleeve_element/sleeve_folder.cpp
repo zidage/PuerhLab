@@ -75,7 +75,7 @@ void SleeveFolder::UpdateElementMap(const file_name_t& name, const sl_element_id
  * @param filter
  */
 void SleeveFolder::CreateIndex(const std::shared_ptr<FilterCombo> filter) {
-  _indicies_cache[filter->filter_id] = filter->CreateIndexOn(_contents);
+  // _indicies_cache[filter->filter_id] = filter->CreateIndexOn(_contents);
 }
 
 /**

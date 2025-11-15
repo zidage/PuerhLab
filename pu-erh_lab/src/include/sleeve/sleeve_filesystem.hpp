@@ -28,13 +28,14 @@ class FileSystem {
   ///@{
   std::filesystem::path                _db_path;
   std::filesystem::path                _meta_path;
-  StorageService                       _storage_service;
+  StorageService&                       _storage_service;
   NodeStorageHandler                   _storage_handler;
   PathResolver                         _resolver;
   ///@}
 
  public:
-  FileSystem(std::filesystem::path db_path, sl_element_id_t start_id);
+  // FileSystem(std::filesystem::path db_path, sl_element_id_t start_id);
+  FileSystem(std::filesystem::path db_path, StorageService& storage_service, sl_element_id_t start_id);
 
   auto InitRoot() -> bool;
 

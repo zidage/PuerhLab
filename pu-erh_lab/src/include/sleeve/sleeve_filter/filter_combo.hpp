@@ -118,6 +118,5 @@ class FilterCombo {
  public:
   filter_id_t filter_id;
 
-
 };
 };  // namespace puerhlab

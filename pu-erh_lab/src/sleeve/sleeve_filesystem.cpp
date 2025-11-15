@@ -13,10 +13,11 @@
 #include "utils/string/convert.hpp"
 
 namespace puerhlab {
-FileSystem::FileSystem(std::filesystem::path db_path, sl_element_id_t start_id)
+FileSystem::FileSystem(std::filesystem::path db_path, StorageService& storage_service,
+                       sl_element_id_t start_id)
     : _id_gen(start_id),
       _db_path(db_path),
-      _storage_service(db_path),
+      _storage_service(storage_service),
       _storage_handler(_storage_service.GetElementController(), _storage),
       _resolver(_storage_handler, _id_gen) {
   _root = nullptr;

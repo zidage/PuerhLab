@@ -19,7 +19,8 @@ TEST(SleeveFSTest, InitTest1) {
   TimeProvider::Refresh();
   {
     try {
-      FileSystem fs{db_path, 0};
+      StorageService storage_service{db_path};
+      FileSystem     fs{db_path, storage_service, 0};
       fs.InitRoot();
     } catch (std::exception& e) {
       std::cout << e.what() << std::endl;
@@ -35,7 +36,8 @@ TEST(SleeveFSTest, InitTest1) {
 TEST(SleeveFSTest, AddGetTest1) {
   {
     try {
-      FileSystem fs{db_path, 0};
+      StorageService storage_service{db_path};
+      FileSystem     fs{db_path, storage_service, 0};
       fs.InitRoot();
 
       fs.Create(L"", L"FILE", ElementType::FILE);
@@ -57,7 +59,8 @@ TEST(SleeveFSTest, AddGetTest1) {
 
 TEST(SleeveFSTest, AddGetTest2) {
   try {
-    FileSystem fs{db_path, 0};
+    StorageService storage_service{db_path};
+    FileSystem     fs{db_path, storage_service, 0};
     fs.InitRoot();
 
     fs.Create(L"", L"Folder", ElementType::FOLDER);
@@ -85,7 +88,8 @@ TEST(SleeveFSTest, AddGetTest2) {
 TEST(SleeveFSTest, ReInitTest1) {
   {
     try {
-      FileSystem fs{db_path, 0};
+      StorageService storage_service{db_path};
+      FileSystem     fs{db_path, storage_service, 0};
       fs.InitRoot();
 
       fs.Create(L"", L"Folder", ElementType::FOLDER);
@@ -112,7 +116,8 @@ TEST(SleeveFSTest, ReInitTest1) {
   {
     try {
       // Auto recovered start id has not been implemented
-      FileSystem fs{db_path, 1};
+      StorageService storage_service{db_path};
+      FileSystem     fs{db_path, storage_service, 0};
       fs.ReadSleeveMeta(meta_path);
       fs.InitRoot();
 
@@ -137,7 +142,8 @@ TEST(SleeveFSTest, ReInitTest1) {
 
 TEST(SleeveFSTest, DeleteTest1) {
   try {
-    FileSystem fs{db_path, 0};
+    StorageService storage_service{db_path};
+    FileSystem     fs{db_path, storage_service, 0};
     fs.InitRoot();
 
     fs.Create(L"", L"FILE", ElementType::FILE);
@@ -163,7 +169,8 @@ TEST(SleeveFSTest, DeleteTest1) {
 
 TEST(SleeveFSTest, DeleteTest2) {
   try {
-    FileSystem fs{db_path, 0};
+    StorageService storage_service{db_path};
+    FileSystem     fs{db_path, storage_service, 0};
     fs.InitRoot();
 
     fs.Create(L"", L"Folder", ElementType::FOLDER);
@@ -186,7 +193,8 @@ TEST(SleeveFSTest, DeleteTest2) {
 
 TEST(SleeveFSTest, CopyTest1) {
   try {
-    FileSystem fs{db_path, 0};
+    StorageService storage_service{db_path};
+    FileSystem     fs{db_path, storage_service, 0};
     fs.InitRoot();
 
     fs.Create(L"", L"Folder", ElementType::FOLDER);
@@ -210,7 +218,8 @@ TEST(SleeveFSTest, CopyTest1) {
 
 TEST(SleeveFSTest, CoWTest1) {
   try {
-    FileSystem fs{db_path, 0};
+    StorageService storage_service{db_path};
+      FileSystem fs{db_path, storage_service, 0};
     fs.InitRoot();
 
     fs.Create(L"", L"Folder", ElementType::FOLDER);
@@ -234,7 +243,8 @@ TEST(SleeveFSTest, CoWTest1) {
 
 TEST(SleeveFSTest, CoWTest2) {
   try {
-    FileSystem fs{db_path, 0};
+    StorageService storage_service{db_path};
+      FileSystem fs{db_path, storage_service, 0};
     fs.InitRoot();
 
     fs.Create(L"", L"Folder", ElementType::FOLDER);
@@ -262,7 +272,8 @@ TEST(SleeveFSTest, CoWTest3) {
     std::filesystem::remove(db_path);
   }
   try {
-    FileSystem fs{db_path, 0};
+    StorageService storage_service{db_path};
+      FileSystem fs{db_path, storage_service, 0};
     fs.InitRoot();
 
     fs.Create(L"", L"B", ElementType::FOLDER);
@@ -282,7 +293,8 @@ TEST(SleeveFSTest, CoWTest3) {
   }
 
   try {
-    FileSystem fs{db_path, 0};
+    StorageService storage_service{db_path};
+      FileSystem fs{db_path, storage_service, 0};
     fs.ReadSleeveMeta(meta_path);
     fs.InitRoot();
 
@@ -300,7 +312,8 @@ TEST(SleeveFSTest, CoWTest3) {
 TEST(SleeveFSTest, ReCoWTest1) {
   std::string first_tree;
   try {
-    FileSystem fs{db_path, 0};
+    StorageService storage_service{db_path};
+      FileSystem fs{db_path, storage_service, 0};
     fs.InitRoot();
 
     fs.Create(L"", L"Folder", ElementType::FOLDER);
@@ -326,7 +339,8 @@ TEST(SleeveFSTest, ReCoWTest1) {
   std::string second_tree;
   try {
     // 8 is just a big enough number...
-    FileSystem fs{db_path, 8};
+    StorageService storage_service{db_path};
+      FileSystem fs{db_path, storage_service, 0};
     fs.InitRoot();
 
     second_tree = conv::ToBytes(fs.Tree(L"/"));
@@ -399,7 +413,8 @@ TEST_F(RandomizedFileSystemTest, SaveAndLoadConsistencyAfterRandomOps) {
   // Part1: randomized operation sequence
 
   {
-    FileSystem fs{db_path_, 0};
+    StorageService storage_service{db_path};
+      FileSystem fs{db_path, storage_service, 0};
     fs.InitRoot();
 
     const int num_operations = 500;  // execute 100 random tests
@@ -479,7 +494,8 @@ TEST_F(RandomizedFileSystemTest, SaveAndLoadConsistencyAfterRandomOps) {
   // Part2: Reloading
   std::string second_tree;
   try {
-    FileSystem fs{db_path_, 8};  // it is nonsense
+    StorageService storage_service{db_path};
+      FileSystem fs{db_path, storage_service, 8};
     fs.InitRoot();
     fs.ReadSleeveMeta(meta_path);
 

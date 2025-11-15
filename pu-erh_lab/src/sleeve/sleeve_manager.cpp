@@ -22,10 +22,10 @@ namespace puerhlab {
  * @brief Ad-hoc constructor for temporary sleeve, e.g. folder preview
  *
  */
-SleeveManager::SleeveManager(std::filesystem::path db_path) {
+SleeveManager::SleeveManager(std::filesystem::path db_path) : _storage_service(db_path) {
   // Update the application clock
   TimeProvider::Refresh();
-  _fs = std::make_shared<FileSystem>(db_path, 0);
+  _fs = std::make_shared<FileSystem>(db_path, _storage_service, 0);
   _fs->InitRoot();
   _image_pool = std::make_shared<ImagePoolManager>(128, 4);
   _view       = std::make_shared<SleeveView>(_fs, _image_pool);
@@ -57,7 +57,7 @@ auto SleeveManager::GetImgCount() -> uint32_t { return _image_pool->Capacity(Acc
  * @return uint32_t
  */
 auto SleeveManager::LoadToPath(std::vector<image_path_t> img_os_paths, sl_path_t dest) -> uint32_t {
-  ImageLoader loader{256, 8, 0};
+  ImageLoader loader{16, 20, 0};
   auto        expected_size = img_os_paths.size();
   auto        total_size    = 0;
   loader.StartLoading(std::move(img_os_paths), DecodeType::SLEEVE_LOADING);
@@ -69,6 +69,8 @@ auto SleeveManager::LoadToPath(std::vector<image_path_t> img_os_paths, sl_path_t
     total_size++;
     --expected_size;
   }
+  _fs->SyncToDB();
+  _storage_service.GetImageController().CaptureImagePool(_image_pool);
   return total_size;
 }
 

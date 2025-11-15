@@ -33,6 +33,7 @@
 
 #include <libraw/libraw.h>
 
+#include <chrono>
 #include <exiv2/basicio.hpp>
 #include <exiv2/exif.hpp>
 #include <exiv2/image.hpp>
@@ -95,15 +96,19 @@ void MetadataDecoder::Decode(std::vector<char> buffer, std::filesystem::path fil
                              std::shared_ptr<BufferQueue> result, image_id_t id,
                              std::shared_ptr<std::promise<image_id_t>> promise) {
   try {
+
     std::shared_ptr<Image> img =
         std::make_shared<Image>(id, file_path, file_path.filename().wstring(), ImageType::DEFAULT);
 
     img->_exif_data = Exiv2::ImageFactory::open((Exiv2::byte*)buffer.data(), buffer.size());
     img->_exif_data->readMetadata();
     img->_has_exif = !img->_exif_data->exifData().empty();
+
     GetDisplayMetadataFromExif(img->_exif_data->exifData(), img->_exif_display);
+
     result->push(img);
     promise->set_value(id);
+
     return;
   } catch (std::exception& e) {
     // TODO: Append error message to log

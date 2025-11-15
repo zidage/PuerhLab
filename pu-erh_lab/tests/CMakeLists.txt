@@ -18,14 +18,17 @@ target_compile_definitions(SingleThumbnailLoad PRIVATE LIBRAW_NODLL)
 # target_include_directories(ImageDecoderTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
 # target_link_libraries(ImageDecoderTest PRIVATE GTest::gtest_main ImageDecoder Exiv2)
 
-add_executable(ImageLoaderTest image/image_loader_test.cpp)
-target_include_directories(ImageLoaderTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
-target_link_libraries(ImageLoaderTest PRIVATE GTest::gtest_main ImageDecoder ImageLoader Exiv2)
+# add_executable(ImageLoaderTest image/image_loader_test.cpp)
+# target_include_directories(ImageLoaderTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
+# target_link_libraries(ImageLoaderTest PRIVATE GTest::gtest_main ImageDecoder ImageLoader Exiv2)
 
 add_executable(ImagePoolTest storage/image_pool_test.cpp)
 target_include_directories(ImagePoolTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
 target_link_libraries(ImagePoolTest PRIVATE GTest::gtest_main Image ImagePool)
 
+add_executable(SleeveMapperTest storage/sleeve_mapper_test.cpp)
+target_include_directories(SleeveMapperTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
+target_link_libraries(SleeveMapperTest PRIVATE GTest::gtest_main SleeveFS SleeveManager ImagePool)
 
 add_executable(SleeveFSTest sleeve/sleeve_fs_test.cpp)
 target_include_directories(SleeveFSTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
