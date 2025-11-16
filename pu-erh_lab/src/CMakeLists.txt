@@ -196,6 +196,7 @@ add_library(SleeveFS
     sleeve/storage_service.cpp
     sleeve/dentry_cache_manager.cpp
     sleeve/sleeve_filesystem.cpp
+    sleeve/sleeve_filter/filter_sql.cpp
 )
 target_include_directories(SleeveFS PUBLIC include)
 target_link_libraries(SleeveFS PUBLIC SleeveElement SleeveController)

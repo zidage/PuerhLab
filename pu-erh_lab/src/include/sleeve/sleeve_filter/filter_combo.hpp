@@ -37,6 +37,10 @@
 namespace puerhlab {
 enum class FilterOp { AND, OR, NOT };
 
+/**
+ * @brief Filterable fields in Image metadata
+ *
+ */
 enum class FilterField {
   ExifCameraModel,
   ExifFocalLength,
@@ -90,6 +94,10 @@ struct FilterNode {
   std::optional<std::wstring>   raw_sql;
 };
 
+/**
+ * @brief A minimal SQL compiler for FilterNode, used to generate WHERE clauses ONLY on Image table
+ *
+ */
 class FilterSQLCompiler {
  public:
   struct Result {
@@ -97,20 +105,30 @@ class FilterSQLCompiler {
     std::vector<FilterValue> params;
   };
 
-  static Result Compile(const FilterNode& node);
+  static std::wstring Compile(const FilterNode& node);
 
  private:
-  static std::wstring CompileNode(const FilterNode& node);
-  static std::wstring FieldToColumn(FilterField field);
-  static std::wstring CompareToSQL(CompareOp op);
+  static inline std::wstring GenerateConditionString(const FieldCondition& cond);
+  static std::wstring        CompileNode(const FilterNode& node);
+  static std::wstring        FieldToColumn(FilterField field);
+  static std::wstring        CompareToSQL(CompareOp op);
 };
 
 class FilterCombo {
- private:
-  FilterNode                _root;
-  std::vector<SleeveFilter> _filters;
-
  public:
   filter_id_t filter_id;
+
+ private:
+  FilterNode _root;
+
+ public:
+  FilterCombo() = default;
+  FilterCombo(const filter_id_t id, const FilterNode& root) : filter_id(id), _root(root) {}
+
+  const FilterNode& GetRoot() const { return _root; }
+
+  void              SetRoot(const FilterNode& root) { _root = root; }
+
+  auto              GenerateSQLOn(sl_element_id_t parent_id) const -> std::wstring;
 };
 };  // namespace puerhlab

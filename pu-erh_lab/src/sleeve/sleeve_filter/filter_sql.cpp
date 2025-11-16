@@ -23,6 +23,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+#include <sstream>
 #include <string>
 
 #include "sleeve/sleeve_filter/filter_combo.hpp"
@@ -91,40 +92,71 @@ std::wstring FilterSQLCompiler::CompareToSQL(CompareOp op) {
   return L"";
 }
 
-FilterSQLCompiler::Result FilterSQLCompiler::Compile(const FilterNode& node) {
-  Result result;
+static inline std::wstring FilterValueToString(const FilterValue& value) {
+  if (std::holds_alternative<std::monostate>(value)) {
+    return L"NULL";
+  } else if (std::holds_alternative<int64_t>(value)) {
+    return std::to_wstring(std::get<int64_t>(value));
+  } else if (std::holds_alternative<double>(value)) {
+    return std::to_wstring(std::get<double>(value));
+  } else if (std::holds_alternative<bool>(value)) {
+    return std::get<bool>(value) ? L"1" : L"0";
+  } else if (std::holds_alternative<std::wstring>(value)) {
+    return L"'" + std::get<std::wstring>(value) + L"'";
+  } else if (std::holds_alternative<std::tm>(value)) {
+    const std::tm& tm_value = std::get<std::tm>(value);
+    wchar_t buffer[20];
+    wcsftime(buffer, sizeof(buffer), L"'%Y-%m-%d %H:%M:%S'", &tm_value);
+    return std::wstring(buffer);
+  }
+  return L"";
+}
 
-  // Implementation of the SQL compilation logic goes here.
-  // This is a placeholder implementation.
+std::wstring FilterSQLCompiler::GenerateConditionString(const FieldCondition& cond) {
+  std::wstring column = FilterSQLCompiler::FieldToColumn(cond.field);
+  std::wstring op = FilterSQLCompiler::CompareToSQL(cond.op);
+  auto& value = cond.value;
 
-  // Traverse the AST and build the SQL query
-  result.where_clause = CompileNode(node);
-
-  return result;
+  // First four cases does not use op string directly
+  if (cond.op == CompareOp::BETWEEN && cond.second_value.has_value()) {
+    return std::format(L"({} BETWEEN {} AND {})", column, FilterValueToString(value), FilterValueToString(cond.second_value.value()));
+  } else if (cond.op == CompareOp::CONTAINS) {
+    return std::format(L"({} LIKE '%{}%')", column, std::get<std::wstring>(value));
+  } else if (cond.op == CompareOp::STARTS_WITH) {
+    return std::format(L"({} LIKE '{}%')", column, std::get<std::wstring>(value));
+  } else if (cond.op == CompareOp::ENDS_WITH) {
+    return std::format(L"({} LIKE '%{}')", column, std::get<std::wstring>(value));
+  } else {
+    return std::format(L"({} {} {})", column, op, FilterValueToString(value));
+  }
 }
 
 std::wstring FilterSQLCompiler::CompileNode(const FilterNode& node) {
   if (node.type == FilterNode::Type::Condition && node.condition.has_value()) {
     const FieldCondition& cond = node.condition.value();
-    std::wstring column = FieldToColumn(cond.field);
-    std::wstring op = CompareToSQL(cond.op);
-    // Here we would also need to handle the value and second_value properly
-    // TODO: Add special handling for different data types and operators
-    return L"(" + column + L" " + op + L" ?)";
+    return GenerateConditionString(cond);
   } else if (node.type == FilterNode::Type::Logical) {
     std::wstring combined;
+    // Reserve some space to avoid multiple allocations
+    combined.reserve(256);
+    combined.append(L"(");
     for (size_t i = 0; i < node.children.size(); ++i) {
       if (i > 0) {
         // TODO: Add handling for NOT
-        combined += (node.op == FilterOp::AND) ? L" AND " : L" OR ";
+        combined.append((node.op == FilterOp::AND) ? L" AND " : L" OR ");
       }
-      combined += CompileNode(node.children[i]);
+      combined.append(CompileNode(node.children[i]));
     }
-    return L"(" + combined + L")";
+    combined.append(L")");
+    return combined;
   } else if (node.type == FilterNode::Type::RawSQL && node.raw_sql.has_value()) {
     return node.raw_sql.value();
   }
   return L"";
+}
+
+std::wstring FilterSQLCompiler::Compile(const FilterNode& node) {
+  return CompileNode(node);
 }
 
 

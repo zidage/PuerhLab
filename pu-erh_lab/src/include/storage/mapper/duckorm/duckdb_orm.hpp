@@ -20,4 +20,8 @@ duckdb_state remove(duckdb_connection& conn, const char* table, const char* wher
 std::vector<std::vector<VarTypes>> select(duckdb_connection& conn, const std::string table,
                                           std::span<const DuckFieldDesc> sample_fields,
                                           size_t field_count, const char* where_clause);
+
+std::vector<std::vector<VarTypes>> select_by_query(duckdb_connection&             conn,
+                                                   std::span<const DuckFieldDesc> sample_fields,
+                                                   size_t field_count, const std::string& sql);
 }  // namespace duckorm
