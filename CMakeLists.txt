@@ -25,7 +25,21 @@ if (MSVC)
     # FIXME: Hardcoded Qt path for Windows, consider making it configurable
     set(CMAKE_PREFIX_PATH "D:/misc/Qt/6.9.3/msvc2022_64/lib/cmake;${CMAKE_PREFIX_PATH}")
 else()
-    set(CMAKE_CXX_FLAGS_INIT "-Wall -Wextra -Wpedantic -D_DEBUG -fopenmp -O2 -fsanitize=address -g")
+    #set(CMAKE_CXX_FLAGS_INIT "-Wall -Wextra -Wpedantic -D_DEBUG -fopenmp -O2 -fsanitize=address -g")
+
+    add_compile_options(-Wall -Wextra -Wpedantic)
+
+    add_compile_options(
+        $<$<CONFIG:Debug>:-g>
+        $<$<CONFIG:Debug>:-fsanitize=address>
+        $<$<CONFIG:Debug>:-fno-omit-frame-pointer>
+        $<$<CONFIG:Release>:-O3>
+        $<$<CONFIG:Release>:-DNDEBUG>
+    )
+
+    add_link_options(
+        $<$<CONFIG:Debug>:-fsanitize=address>
+    )
     if(APPLE)
         add_compile_definitions(__MACOSX_CORE__)
     # FIXME: Hardcoded Qt path for macOS, consider making it configurable
@@ -208,6 +222,8 @@ else()
 endif()
 
 # Modules
+set(TEST_RES_DIR "${CMAKE_SOURCE_DIR}/pu-erh_lab/tests/resources" CACHE PATH "Path to test resources")
+file(TO_CMAKE_PATH "${TEST_RES_DIR}" TEST_RES_DIR)
 add_compile_definitions(
     TEST_DB_PATH=\"${TEST_RES_DIR}/temp_folder/test.db\"
     TEST_META_PATH=\"${TEST_RES_DIR}/temp_folder/meta.json\"
@@ -215,8 +231,7 @@ add_compile_definitions(
     TEST_PROFILER_OUTPUT_PATH=\"${TEST_RES_DIR}/temp_folder/test_profile.prof\"
     CONFIG_PATH=\"${CMAKE_SOURCE_DIR}/pu-erh_lab/src/config/\"
 )
-set(TEST_RES_DIR "${CMAKE_SOURCE_DIR}/pu-erh_lab/tests/resources" CACHE PATH "Path to test resources")
-file(TO_CMAKE_PATH "${TEST_RES_DIR}" TEST_RES_DIR)
+
 
 add_subdirectory(${CMAKE_SOURCE_DIR}/pu-erh_lab/src)
 add_subdirectory(${CMAKE_SOURCE_DIR}/pu-erh_lab/tests)
