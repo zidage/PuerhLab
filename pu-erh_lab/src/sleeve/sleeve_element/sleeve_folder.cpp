@@ -69,14 +69,6 @@ void SleeveFolder::UpdateElementMap(const file_name_t& name, const sl_element_id
   }
 }
 
-/**
- * @brief Create an index on the given filter
- *
- * @param filter
- */
-void SleeveFolder::CreateIndex(const std::shared_ptr<FilterCombo> filter) {
-  // _indicies_cache[filter->filter_id] = filter->CreateIndexOn(_contents);
-}
 
 /**
  * @brief Get an element's id from the _contents table
@@ -136,6 +128,23 @@ void SleeveFolder::RemoveNameFromMap(const file_name_t& name) {
                       default_index.end());
   _contents.erase(name);
 }
+
+void SleeveFolder::CreateIndex(const std::vector<std::shared_ptr<SleeveElement>>& filtered_elements,
+                               const filter_id_t filter_id) {
+  std::vector<sl_element_id_t> new_index;
+  for (const auto& element : filtered_elements) {
+    new_index.push_back(element->_element_id);
+  }
+  _indicies_cache[filter_id] = new_index;
+}
+
+auto SleeveFolder::ListElementsByFilter(const filter_id_t filter_id) const -> const std::vector<sl_element_id_t>& {
+  if (!HasFilterIndex(filter_id)) {
+    throw std::runtime_error("Filter index not found in folder.");
+  }
+  return _indicies_cache.at(filter_id);
+}
+
 
 void SleeveFolder::IncrementFileCount() { ++_file_count; }
 

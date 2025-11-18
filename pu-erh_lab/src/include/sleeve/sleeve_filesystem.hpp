@@ -44,6 +44,11 @@ class FileSystem {
   void Delete(std::filesystem::path target);
   auto Get(std::filesystem::path target, bool write) -> std::shared_ptr<SleeveElement>;
   auto Get(sl_element_id_t id) -> std::shared_ptr<SleeveElement>;
+
+  auto ApplyFilterToFolder(const std::filesystem::path&       folder_path,
+                             const std::shared_ptr<FilterCombo> filter)
+      -> std::vector<std::shared_ptr<SleeveElement>>;
+      
   void Copy(std::filesystem::path from, std::filesystem::path dest);
 
   void SyncToDB();

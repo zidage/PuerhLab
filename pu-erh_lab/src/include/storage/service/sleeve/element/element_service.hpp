@@ -25,5 +25,7 @@ class ElementService
   auto        GetElementById(const sl_element_id_t id) -> std::shared_ptr<SleeveElement>;
   auto GetElementByName(const std::wstring name) -> std::vector<std::shared_ptr<SleeveElement>>;
   auto GetElementByType(const ElementType type) -> std::vector<std::shared_ptr<SleeveElement>>;
+  auto GetElementsInFolderByFilter(const std::wstring filter_sql)
+      -> std::vector<std::shared_ptr<SleeveElement>>;
 };
 };  // namespace puerhlab

@@ -125,4 +125,12 @@ void ElementController::UpdateElement(const std::shared_ptr<SleeveElement> eleme
   element->_sync_flag = SyncFlag::SYNCED;
 }
 
+auto ElementController::GetElementsInFolderByFilter(const std::shared_ptr<FilterCombo> filter,
+                                                    const sl_element_id_t              folder_id)
+    -> std::vector<std::shared_ptr<SleeveElement>> {
+  // Build SQL query from the filter
+  std::wstring filter_sql = filter->GenerateSQLOn(folder_id);
+  return _element_service.GetElementsInFolderByFilter(filter_sql); // for specialized queries only
+}
+
 };  // namespace puerhlab

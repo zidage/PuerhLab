@@ -103,6 +103,44 @@ void FileSystem::Copy(std::filesystem::path from, std::filesystem::path dest) {
   dest_node->AddElementToMap(from_node);
 }
 
+auto FileSystem::ApplyFilterToFolder(const std::filesystem::path&       folder_path,
+                                     const std::shared_ptr<FilterCombo> filter)
+    -> std::vector<std::shared_ptr<SleeveElement>> {
+  if (!_resolver.Contains(folder_path, ElementType::FOLDER)) {
+    throw std::runtime_error("Filesystem: Specified folder does not exist");
+  }
+  // Here we only need to "read" the folder, so no need to use ResolveForWrite
+  std::shared_ptr<SleeveElement> folder_element;
+  try {
+    folder_element = Get(folder_path, false);
+  } catch (std::exception& e) {
+    throw std::runtime_error("Filesystem: Specified folder does not exist");
+  }
+
+  if (folder_element->_type != ElementType::FOLDER) {
+    throw std::runtime_error("Filesystem: Specified path is not a folder");
+  }
+  
+  auto folder = std::static_pointer_cast<SleeveFolder>(folder_element);
+
+  if (folder->HasFilterIndex(filter->filter_id)) {
+    auto& cached_ids = folder->ListElementsByFilter(filter->filter_id);
+    std::vector<std::shared_ptr<SleeveElement>> result_elements;
+    result_elements.reserve(cached_ids.size());
+    for (const auto& id : cached_ids) {
+      result_elements.push_back(Get(id));
+    }
+    return result_elements;
+  }
+
+  auto result_elements = _storage_service.GetElementController().GetElementsInFolderByFilter(filter, folder->_element_id);
+  // Just for cache purpose, which will not affect sync status nor anything else
+  folder->CreateIndex(result_elements, filter->filter_id);
+
+  
+  
+}
+
 void FileSystem::SyncToDB() {
   auto& element_ctrl = _storage_service.GetElementController();
   for (auto& pair : _storage) {

@@ -68,11 +68,18 @@ class SleeveFolder : public SleeveElement {
   void ReplaceChild(const sl_element_id_t from, const sl_element_id_t to);
   void UpdateElementMap(const file_name_t& name, const sl_element_id_t old_id,
                         const sl_element_id_t new_id);
-  void CreateIndex(const std::shared_ptr<FilterCombo> filter);
   auto GetElementIdByName(const file_name_t& name) const -> std::optional<sl_element_id_t>;
   auto ListElements() const -> const std::vector<sl_element_id_t>&;
+
+  auto HasFilterIndex(const filter_id_t filter_id) const -> bool {
+    return _indicies_cache.contains(filter_id);
+  }
+
+  auto ListElementsByFilter(const filter_id_t filter_id) const -> const std::vector<sl_element_id_t>&;
   auto Contains(const file_name_t& name) const -> bool;
   void RemoveNameFromMap(const file_name_t& name);
+
+  void CreateIndex(const std::vector<std::shared_ptr<SleeveElement>>& filtered_elements, const filter_id_t filter_id);
 
   void IncrementFolderCount();
   void IncrementFileCount();

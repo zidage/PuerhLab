@@ -8,13 +8,12 @@
 #include "sleeve/sleeve_element/sleeve_element.hpp"
 #include "type/type.hpp"
 
-
 namespace puerhlab {
 auto FilterCombo::GenerateSQLOn(sl_element_id_t parent_id) const -> std::wstring {
   // For now, we just compile the filter node to SQL
   std::wstring sql = std::format(
       L"SELECT\n"
-      L"  e.id AS file_id\n"
+      L"  e\n"
       L"FROM\n"
       L"  FolderContent fc\n"
       L"JOIN Element e ON e.id = fc.element_id\n"

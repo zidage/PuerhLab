@@ -86,4 +86,10 @@ auto ElementService::GetElementByType(const ElementType type)
   std::string predicate = std::format("type={}", static_cast<uint32_t>(type));
   return GetByPredicate(std::move(predicate));
 }
+
+auto ElementService::GetElementsInFolderByFilter(const std::wstring filter_sql)
+    -> std::vector<std::shared_ptr<SleeveElement>> {
+  std::string filter_sql_u8 = conv::ToBytes(filter_sql);
+  return GetByQuery(std::move(filter_sql_u8));
+}
 };  // namespace puerhlab

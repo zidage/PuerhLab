@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "sleeve/sleeve_element/sleeve_element.hpp"
+#include "sleeve/sleeve_filter/filter_combo.hpp"
 #include "storage/controller/controller_types.hpp"
 #include "storage/service/sleeve/edit_history/history_service.hpp"
 #include "storage/service/sleeve/element/element_service.hpp"
@@ -33,6 +34,10 @@ class ElementController {
   void RemoveElement(const std::shared_ptr<SleeveElement> element);
   void UpdateElement(const std::shared_ptr<SleeveElement> element);
   auto GetElementById(const sl_element_id_t id) -> std::shared_ptr<SleeveElement>;
+
+  auto GetElementsInFolderByFilter(const std::shared_ptr<FilterCombo> filter, const sl_element_id_t folder_id)
+      -> std::vector<std::shared_ptr<SleeveElement>>;
+
   void EnsureChildrenLoaded(sl_element_id_t folder_id);
 };
 };  // namespace puerhlab
