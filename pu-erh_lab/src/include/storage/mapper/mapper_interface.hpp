@@ -64,7 +64,7 @@ class MapperInterface {
   }
 
   auto GetByQuery(const char* query) -> std::vector<Mappable> {
-    auto raw = duckorm::select_by_query(_conn, Derived::TableName(), Derived::FieldDesc(), query);
+    auto raw = duckorm::select_by_query(_conn, Derived::FieldDesc(), Derived::FieldCount(), query);
     std::vector<Mappable> result;
     for (auto& row : raw) {
       result.emplace_back(Derived::FromRawData(std::move(row)));
