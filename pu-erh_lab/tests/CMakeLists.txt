@@ -34,6 +34,11 @@ add_executable(SleeveFSTest sleeve/sleeve_fs_test.cpp)
 target_include_directories(SleeveFSTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
 target_link_libraries(SleeveFSTest PRIVATE GTest::gtest_main SleeveFS StrConv)
 
+add_executable(SleeveFilterTest sleeve/sleeve_filter_test.cpp)
+target_include_directories(SleeveFilterTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
+target_link_libraries(SleeveFilterTest PRIVATE GTest::gtest_main SleeveFS StrConv)
+
+
 add_executable(SleeveViewTest sleeve/sleeve_view_test.cpp)
 target_include_directories(SleeveViewTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
 target_link_libraries(SleeveViewTest PRIVATE GTest::gtest_main Image ImagePool TimeProvider SleeveView SleeveFS SleeveManager)

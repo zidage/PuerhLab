@@ -125,8 +125,7 @@ target_include_directories(EditHistory PUBLIC include)
 target_link_libraries(EditHistory PUBLIC Image TimeProvider JSON EditPipeline)
 
 add_library(SleeveFilter
-    sleeve/sleeve_filter/filters/exif_filter.cpp
-    sleeve/sleeve_filter/filters/datetime_filter.cpp
+    sleeve/sleeve_filter/filter_sql.cpp
     sleeve/sleeve_filter/filter_combo.cpp
 )
 target_include_directories(SleeveFilter PUBLIC include)
@@ -196,7 +195,6 @@ add_library(SleeveFS
     sleeve/storage_service.cpp
     sleeve/dentry_cache_manager.cpp
     sleeve/sleeve_filesystem.cpp
-    sleeve/sleeve_filter/filter_sql.cpp
 )
 target_include_directories(SleeveFS PUBLIC include)
 target_link_libraries(SleeveFS PUBLIC SleeveElement SleeveController)
