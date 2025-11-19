@@ -32,25 +32,25 @@ namespace puerhlab {
 std::wstring FilterSQLCompiler::FieldToColumn(FilterField field) {
   switch (field) {
     case FilterField::ExifCameraModel:
-      return L"json_extract_scalar(metadata, '$.Model')";
+      return L"json_extract(metadata, '$.Model')";
     case FilterField::ExifFocalLength:
-      return L"json_extract_scalar(metadata, '$.FocalLength')";
+      return L"json_extract(metadata, '$.FocalLength')";
     case FilterField::ExifAperture:
-      return L"json_extract_scalar(metadata, '$.Aperture')";
+      return L"json_extract(metadata, '$.Aperture')";
     case FilterField::ExifISO:
-      return L"json_extract_scalar(metadata, '$.ISO')";
+      return L"json_extract(metadata, '$.ISO')";
     case FilterField::CaptureDate:
-      return L"json_extract_scalar(metadata, '$.DateTimeString')";
+      return L"json_extract(metadata, '$.DateTimeString')";
     case FilterField::ImportDate:
       return L"added_time";
     case FilterField::FileName:
       return L"element_name";
     case FilterField::FileExtension:
-      return L"file_name";  // Needs further processing
+      return L"LOWER(file_name)";  // Avoid case sensitivity issues
     case FilterField::ImageSize:
-      return L"json_extract_scalar(metadata, '$.ImageSize')";
+      return L"json_extract(metadata, '$.ImageSize')";
     case FilterField::Rating:
-      return L"json_extract_scalar(metadata, '$.Rating')";
+      return L"json_extract(metadata, '$.Rating')";
     case FilterField::ImagePath:
       return L"image_path";
     case FilterField::SemanticTags:

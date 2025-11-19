@@ -34,9 +34,9 @@ class SleeveFilterTests : public ::testing::Test {
   // Run before any unit test runs
   void TearDown() override {
     // Clean up the DB file
-    if (std::filesystem::exists(db_path_)) {
-      std::filesystem::remove(db_path_);
-    }
+    // if (std::filesystem::exists(db_path_)) {
+    //   std::filesystem::remove(db_path_);
+    // }
 #ifdef EASY_PROFILER_ENABLE
     profiler::dumpBlocksToFile(TEST_PROFILER_OUTPUT_PATH);
     EASY_PROFILER_DISABLE;

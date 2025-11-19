@@ -36,6 +36,7 @@ auto SleeveFile::GetImage() -> std::shared_ptr<Image> { return _image; }
 
 void SleeveFile::SetImage(const std::shared_ptr<Image> img) {
   _image        = img;
+  _image_id     = img->_image_id;
   // Once a new image is set, the edit history will be replaced with a new one
   _edit_history = std::make_shared<EditHistory>(this->_element_id);
 }

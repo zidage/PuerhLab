@@ -13,14 +13,14 @@ auto FilterCombo::GenerateSQLOn(sl_element_id_t parent_id) const -> std::wstring
   // For now, we just compile the filter node to SQL
   std::wstring sql = std::format(
       L"SELECT\n"
-      L"  e\n"
+      L"  e.*\n"
       L"FROM\n"
       L"  FolderContent fc\n"
       L"JOIN Element e ON e.id = fc.element_id\n"
       L"JOIN FileImage fi ON fi.file_id = e.id\n"
       L"JOIN Image img ON img.id = fi.image_id\n"
       L"WHERE\n"
-      L"  fc.folder_id = :{}\n"
+      L"  fc.folder_id = {}\n"
       L"  AND e.type = {}\n"
       L"  AND ({});",
       parent_id, static_cast<uint32_t>(ElementType::FILE), FilterSQLCompiler::Compile(_root));

@@ -23,9 +23,16 @@ PreparedStatement::PreparedStatement(duckdb_connection& con, const std::string& 
   std::memset(&_result, 0, sizeof(_result));
   // std::memset(&_stmt, 0, sizeof(_stmt));
 
+  // FIXME: Unified error handling
   if (duckdb_prepare(_con, prepare_query.c_str(), &_stmt) != DuckDBSuccess) {
+    const char* err = duckdb_prepare_error(_stmt);
+    std::string msg = "PreparedStatement failed in GetStmtGuard";
+    if (err && std::strlen(err) > 0) {
+      msg += ": ";
+      msg += err;
+    }
     RecycleResources();
-    throw std::runtime_error("PreparedStatement failed when inserting images");
+    throw std::runtime_error(msg);
   }
   _prepared = true;
 }
