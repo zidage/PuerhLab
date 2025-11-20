@@ -1,2 +1,71 @@
-# Pu-erh Lab
-Pu-erh Lab is a free and open-source photo editing and managing software project. It is still at the very early stage of development, and more specifications are coming soon.
+# Pu-erh Lab 🍵
+
+![Build Status](https://img.shields.io/badge/build-passing-brightgreen) ![License](https://img.shields.io/badge/license-GPLv3-blue) ![Stage](https://img.shields.io/badge/stage-pre--alpha-orange) ![C++](https://img.shields.io/badge/C%2B%2B-20-blue)
+
+**Pu-erh Lab** is a free, open-source, high-performance photo editing and management software built with modern C++.
+
+> ⚠️ **Note:** This project is currently in the **very early stages of development (Pre-Alpha)**. Features are subject to change, and the codebase is under active construction.
+
+## 🎯 Vision
+
+Pu-erh Lab aims to provide a professional-grade workflow for photographers, combining robust asset management with a non-destructive, node-based editing pipeline. We focus on performance, usability, and extensibility.
+
+## ✨ Key Technical Features 
+
+### 🚀 High-Performance Core
+- **Concurrency First:** Built on a custom thread pool and lock-free queues to maximize multi-core CPU utilization during image decoding and processing.
+- **Modern C++:** Written in C++20, leveraging the latest language features for safety and speed.
+- **GPU Acceleration (Planned):** Future support for GPU-accelerated processing using CUDA for real-time editing performance.
+
+### 🎨 Professional Imaging Pipeline
+- **RAW Support:** GPU accelerated decoding module with an integration with **LibRaw** for RAW file unpacking.
+- **Color Management:** Support for **ACES** workflows (not really, there are only few ODTs available for digital cameras) with LUT-based stylization.
+- **Non-Destructive Editing:** A flexible `Pipeline` and `Operator` architecture allows for infinite undo/redo and adjustment layering without altering original files.
+
+### 🗃️ Asset Management ("Sleeve" System)
+- **Sleeve Virtual FS:** A custom abstraction layer (`Sleeve`) designed specifically for handling massive photo libraries, providing efficient caching and path resolution.
+- **DuckDB Integration:** Utilizes **DuckDB** as an embedded analytical database engine for lightning-fast metadata querying and filtering across thousands of images.
+
+## 🛠️ Tech Stack
+
+*   **Language:** C++20
+*   **Build System:** CMake
+*   **Package Manager:** vcpkg
+*   **Core Libraries:**
+    *   **Image Processing:** OpenCV, LibRaw, OpenColorIO
+    *   **Data & Storage:** DuckDB
+    *   **Concurrency:** moodycamel::ConcurrentQueue
+    *   **Metadata:** Exiv2
+    *   ***Working in progress...***
+
+## 🚧 Development Status
+
+We are currently working on the foundational architecture:
+
+- [x] CMake & vcpkg build infrastructure setup
+- [x] Basic RAW image decoding (LibRaw integration)
+- [x] "Sleeve" filesystem abstraction layer
+- [x] Basic pipeline model
+- [ ] User Interface (UI) implementation
+- [ ] Non-destructive edit history serialization
+- [ ] GPU acceleration support
+
+## 🔨 Building from Source
+
+**Prerequisites:**
+*   C++ Compiler supporting C++20 (MSVC, Clang, has not been tested with GCC yet)
+*   CMake 3.20+
+*   Git
+
+**Build Steps:**
+It is possible to build Pu-erh Lab right from the repository using CMake and vcpkg on Windows. But the dependencies list is still evolving, so please be patient.
+```bash
+# Clone the repository
+git clone --recursive https://github.com/your-username/pu-erh_lab.git
+cd pu-erh_lab
+
+# Configure with CMake (vcpkg will bootstrap automatically)
+cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE=vcpkg/scripts/buildsystems/vcpkg.cmake
+
+# Build
+cmake --build build --config Release
