@@ -34,19 +34,19 @@ std::wstring FilterSQLCompiler::FieldToColumn(FilterField field) {
     case FilterField::ExifCameraModel:
       return L"json_extract(metadata, '$.Model')";
     case FilterField::ExifFocalLength:
-      return L"json_extract(metadata, '$.FocalLength')";
+      return L"json_extract(metadata, '$.FocalLength')::DOUBLE";
     case FilterField::ExifAperture:
-      return L"json_extract(metadata, '$.Aperture')";
+      return L"json_extract(metadata, '$.Aperture')::DOUBLE";
     case FilterField::ExifISO:
-      return L"json_extract(metadata, '$.ISO')";
+      return L"json_extract(metadata, '$.ISO')::INT";
     case FilterField::CaptureDate:
-      return L"json_extract(metadata, '$.DateTimeString')";
+      return L"json_extract(metadata, '$.DateTimeString')::TIMESTAMP";
     case FilterField::ImportDate:
       return L"added_time";
     case FilterField::FileName:
       return L"element_name";
     case FilterField::FileExtension:
-      return L"LOWER(file_name)";  // Avoid case sensitivity issues
+      return L"UPPER(file_name)";  // Avoid case sensitivity issues
     case FilterField::ImageSize:
       return L"json_extract(metadata, '$.ImageSize')";
     case FilterField::Rating:
@@ -107,7 +107,7 @@ static inline std::wstring FilterValueToString(const FilterValue& value) {
     const std::tm& tm_value = std::get<std::tm>(value);
     wchar_t buffer[20];
     wcsftime(buffer, sizeof(buffer), L"'%Y-%m-%d %H:%M:%S'", &tm_value);
-    return std::wstring(buffer);
+    return L"TIMESTAMP " + std::wstring(buffer);
   }
   return L"";
 }

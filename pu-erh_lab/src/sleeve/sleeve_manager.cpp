@@ -51,6 +51,7 @@ auto SleeveManager::GetImgCount() -> uint32_t { return _image_pool->Capacity(Acc
 
 /**
  * @brief Load a batch of images to the destination path
+ * FIXME: This function should be moved to another module
  *
  * @param img_os_paths
  * @param dest

@@ -45,11 +45,8 @@
 
 #include "type/type.hpp"
 
-
-
 namespace puerhlab {
-void GetDisplayMetadataFromExif(Exiv2::ExifData&        exif_data,
-                                ExifDisplayMetaData&   display_metadata) {
+void GetDisplayMetadataFromExif(Exiv2::ExifData& exif_data, ExifDisplayMetaData& display_metadata) {
   if (exif_data.empty()) {
     return;
   }
@@ -67,10 +64,12 @@ void GetDisplayMetadataFromExif(Exiv2::ExifData&        exif_data,
   }
   if (exif_data.findKey(Exiv2::ExifKey("Exif.Photo.FNumber")) != exif_data.end()) {
     auto aperture_rational = exif_data["Exif.Photo.FNumber"].toRational();
-    display_metadata.aperture = static_cast<float>(aperture_rational.first) / aperture_rational.second;
+    display_metadata.aperture =
+        static_cast<float>(aperture_rational.first) / aperture_rational.second;
   }
-  if (exif_data.findKey(Exiv2::ExifKey("Exif.Image.FocalLength")) != exif_data.end()) {
-    display_metadata.focal = exif_data["	Exif.Image.FocalLength"].toFloat();
+  if (exif_data.findKey(Exiv2::ExifKey("Exif.Photo.FocalLength")) != exif_data.end()) {
+    auto exposure_rational = exif_data["Exif.Photo.FocalLength"].toRational();
+    display_metadata.focal = static_cast<float>(exposure_rational.first) / exposure_rational.second;
   }
   if (exif_data.findKey(Exiv2::ExifKey("Exif.Photo.ISOSpeedRatings")) != exif_data.end()) {
     display_metadata.iso = exif_data["Exif.Photo.ISOSpeedRatings"].toInt64();
@@ -86,9 +85,11 @@ void GetDisplayMetadataFromExif(Exiv2::ExifData&        exif_data,
   }
   if (exif_data.findKey(Exiv2::ExifKey("Exif.Image.DateTime")) != exif_data.end()) {
     display_metadata.date_time_str = exif_data["Exif.Image.DateTime"].toString();
+    if (display_metadata.date_time_str.size() >= 10) {
+      display_metadata.date_time_str[4] = '-'; // Change from "YYYY:MM:DD HH:MM:SS" to "YYYY-MM-DD HH:MM:SS"
+      display_metadata.date_time_str[7] = '-';
+    }
   }
-
-
 }
 /**
  * @brief A callback used to parse the basic information of a image file
@@ -103,7 +104,6 @@ void MetadataDecoder::Decode(std::vector<char> buffer, std::filesystem::path fil
                              std::shared_ptr<BufferQueue> result, image_id_t id,
                              std::shared_ptr<std::promise<image_id_t>> promise) {
   try {
-
     std::shared_ptr<Image> img =
         std::make_shared<Image>(id, file_path, file_path.filename().wstring(), ImageType::DEFAULT);
 
