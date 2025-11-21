@@ -50,6 +50,8 @@ We are currently working on the foundational architecture:
 - [ ] Non-destructive edit history serialization
 - [ ] GPU acceleration support
 
+The detailed development roadmap can be found [here](https://github.com/zidage/PuerhLab/blob/main/docs/roadmap/roadmap.md).
+
 ## 🔨 Building from Source
 
 **Prerequisites:**
@@ -69,3 +71,4 @@ cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE=vcpkg/scripts/buildsystems/vcpkg.cmak
 
 # Build
 cmake --build build --config Release
+
