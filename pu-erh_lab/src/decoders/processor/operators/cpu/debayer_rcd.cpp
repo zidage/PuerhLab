@@ -6,7 +6,6 @@
 #include <opencv2/core.hpp>
 #include <opencv2/core/mat.hpp>
 
-
 namespace puerhlab {
 namespace CPU {
 
@@ -16,12 +15,22 @@ static int fc[2][2] = {{0, 1}, {1, 2}};  // R=0, G1=1, B=2, G2=1
 #endif
 #define FC(y, x) fc[(y) & 1][(x) & 1]
 
+/**
+ * @brief Adapted from https://github.com/LuisSR/RCD-Demosaicing/blob/master/rcd_demosaicing.c
+ *
+ * RATIO CORRECTED DEMOSAICING
+ * Luis Sanz Rodríguez (luis.sanz.rodriguez(at)gmail(dot)com)
+ *
+ * Release 2.3 @ 171125
+ *
+ * @param bayer Input Bayer pattern image (CV_32F)
+ */
 void BayerRGGB2RGB_RCD(cv::Mat& bayer) {
   cv::Mat1f bayer_float;
   if (bayer.type() != CV_32F) {
     bayer.convertTo(bayer_float, CV_32F);
   } else {
-    bayer_float = bayer.clone();  // Clone 确保内存连续
+    bayer_float = bayer.clone();
   }
 
   int                    width  = bayer_float.cols;
@@ -50,7 +59,7 @@ void BayerRGGB2RGB_RCD(cv::Mat& bayer) {
   for (int row = 0; row < height; row++) {
     for (int col = 0; col < width; col++) {
       int indx                = row * width + col;
-      rgb[indx][FC(row, col)] = cfa[indx];  
+      rgb[indx][FC(row, col)] = cfa[indx];
     }
   }
 
@@ -343,7 +352,7 @@ void BayerRGGB2RGB_RCD(cv::Mat& bayer) {
     }
   }
   VH_dir.release();
-  // delete[] rgb; 
+  // delete[] rgb;
 
   output.copyTo(bayer);
   bayer.convertTo(bayer, CV_32FC3);
