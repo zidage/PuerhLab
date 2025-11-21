@@ -11,6 +11,7 @@
 #include <opencv2/core/base.hpp>
 #include <opencv2/core/mat.hpp>
 #include <opencv2/core/utility.hpp>
+#include "decoders/processor/operators/cpu/debayer_rcd.hpp"
 
 #ifdef HAVE_CUDA
 #include <opencv2/cudaarithm.hpp>
@@ -63,7 +64,7 @@ void OpenCVRawProcessor::ApplyDebayer() {
   }
 #endif
   auto& img = pre_debayer_buffer.GetCPUData();
-  CPU::BayerRGGB2RGB_AHD(img);
+  CPU::BayerRGGB2RGB_RCD(img);
   // Crop to valid area
   // cv::Rect crop_rect(_raw_data.sizes.raw_inset_crops[0].cleft,
   // _raw_data.sizes.raw_inset_crops[0].ctop,

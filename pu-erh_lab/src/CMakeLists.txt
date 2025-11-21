@@ -22,6 +22,7 @@ set(RAWPROCESSOR_CPU_SOURCES
     decoders/processor/operators/cpu/color_space_conv.cpp
     decoders/processor/operators/cpu/debayer_ahd.cpp
     decoders/processor/operators/cpu/debayer_amaze.cpp
+    decoders/processor/operators/cpu/debayer_rcd.cpp
     decoders/processor/operators/cpu/highlight_reconstruct.cpp
     decoders/processor/operators/cpu/white_balance.cpp
     decoders/processor/operators/cpu/raw_proc_utils.cpp
