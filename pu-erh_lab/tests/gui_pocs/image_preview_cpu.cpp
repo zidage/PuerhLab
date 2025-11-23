@@ -27,7 +27,7 @@ void SetPipelineTemplate(std::shared_ptr<PipelineExecutor> executor) {
   decode_params["raw"]["user_wb"]                = 5500;
   decode_params["raw"]["backend"]                = "puerh";
   nlohmann::json to_ws_params;
-  to_ws_params["ocio"] = {{"src", "Linear Rec.709 (sRGB)"}, {"dst", "ACEScc"}, {"normalize", true}};
+  to_ws_params["ocio"] = {{"src", ""}, {"dst", "ACEScc"}, {"normalize", true}};
   raw_stage.SetOperator(OperatorType::RAW_DECODE, decode_params);
   raw_stage.SetOperator(OperatorType::CST, to_ws_params);
 
@@ -91,7 +91,7 @@ int main(int argc, char* argv[]) {
   SleeveManager             manager{db_path};
   ImageLoader               image_loader(128, 1, 0);
 
-  image_path_t              path = std::string(TEST_IMG_PATH) + "/raw/camera/nikon/z7ii";
+  image_path_t              path = std::string(TEST_IMG_PATH) + "/raw/camera/nikon/z9";
   std::vector<image_path_t> imgs;
   for (const auto& img : std::filesystem::directory_iterator(path)) {
     if (!img.is_directory() && is_supported_file(img.path())) imgs.push_back(img.path());

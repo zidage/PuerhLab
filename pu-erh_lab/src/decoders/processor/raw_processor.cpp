@@ -112,7 +112,7 @@ void RawProcessor::ApplyColorSpaceTransform() {
     CPU::ApplyColorMatrix(img, color_coeffs, pre_mul, cam_mul, wb_coeffs, user_temp_indices, _params._user_wb, cam_xyz);
     return;
   }
-  CPU::ApplyColorMatrix(img, color_coeffs, pre_mul, cam_mul);
+  CPU::ApplyColorMatrix(img, color_coeffs, pre_mul, cam_mul, cam_xyz);
 }
 
 auto RawProcessor::Process() -> ImageBuffer {
