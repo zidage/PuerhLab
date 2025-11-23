@@ -19,7 +19,7 @@ Pu-erh Lab aims to provide a professional-grade workflow for photographers, comb
 
 ### 🎨 Professional Imaging Pipeline
 - **RAW Support:** GPU accelerated decoding module with an integration with **LibRaw** for RAW file unpacking.
-- **Color Management:** Support for **ACES** workflows (not really, there are only few ODTs available for digital cameras) with LUT-based stylization.
+- **Color Management:** Support for **ACES** workflows (not really, there are only few IDTs available for digital cameras) with LUT-based stylization.
 - **Non-Destructive Editing:** A flexible `Pipeline` and `Operator` architecture allows for infinite undo/redo and adjustment layering without altering original files.
 
 ### 🗃️ Asset Management ("Sleeve" System)
@@ -71,4 +71,5 @@ cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE=vcpkg/scripts/buildsystems/vcpkg.cmak
 
 # Build
 cmake --build build --config Release
+
 
