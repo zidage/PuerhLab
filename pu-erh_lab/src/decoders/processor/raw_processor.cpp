@@ -36,11 +36,11 @@
 #include "image/image_buffer.hpp"
 
 namespace puerhlab {
-OpenCVRawProcessor::OpenCVRawProcessor(const RawParams& params, const libraw_rawdata_t& rawdata,
+RawProcessor::RawProcessor(const RawParams& params, const libraw_rawdata_t& rawdata,
                                        LibRaw& raw_processor)
     : _params(params), _raw_data(rawdata), _raw_processor(raw_processor) {}
 
-void OpenCVRawProcessor::ApplyWhiteBalance() {
+void RawProcessor::ApplyWhiteBalance() {
   auto& pre_debayer_buffer = _process_buffer;
 #ifdef HAVE_CUDA
   if (_params._cuda) {
@@ -53,7 +53,7 @@ void OpenCVRawProcessor::ApplyWhiteBalance() {
   CPU::WhiteBalanceCorrection(cpu_img, _raw_processor);
 }
 
-void OpenCVRawProcessor::ApplyDebayer() {
+void RawProcessor::ApplyDebayer() {
   auto& pre_debayer_buffer = _process_buffer;
 #ifdef HAVE_CUDA
   if (_params._cuda) {
@@ -75,9 +75,9 @@ void OpenCVRawProcessor::ApplyDebayer() {
   img = img(crop_rect);
 }
 
-void OpenCVRawProcessor::ApplyHighlightReconstruct() {
+void RawProcessor::ApplyHighlightReconstruct() {
   if (_params._cuda) {
-    throw std::runtime_error("OpenCVRawProcessor: Not implemented");
+    throw std::runtime_error("RawProcessor: Not implemented");
   } else {
     auto& img = _process_buffer.GetCPUData();
     if (!_params._highlights_reconstruct) {
@@ -90,7 +90,7 @@ void OpenCVRawProcessor::ApplyHighlightReconstruct() {
   }
 }
 
-void OpenCVRawProcessor::ApplyColorSpaceTransform() {
+void RawProcessor::ApplyColorSpaceTransform() {
   auto& debayer_buffer = _process_buffer;
   auto  color_coeffs   = _raw_data.color.rgb_cam;
 #ifdef HAVE_CUDA
@@ -102,10 +102,20 @@ void OpenCVRawProcessor::ApplyColorSpaceTransform() {
 #endif
   auto& img = debayer_buffer.GetCPUData();
   img.convertTo(img, CV_32FC3);
-  CPU::ApplyColorMatrix(img, color_coeffs);
+  auto pre_mul = _raw_data.color.pre_mul;
+  auto cam_mul = _raw_data.color.cam_mul;
+  auto wb_coeffs = _raw_data.color.WB_Coeffs; // EXIF Lightsource Values
+  auto cam_xyz = _raw_data.color.cam_xyz;
+  if (!_params._use_camera_wb) {
+    // User specified white balance temperature
+    auto user_temp_indices = CPU::GetWBIndicesForTemp(static_cast<float>(_params._user_wb));
+    CPU::ApplyColorMatrix(img, color_coeffs, pre_mul, cam_mul, wb_coeffs, user_temp_indices, _params._user_wb, cam_xyz);
+    return;
+  }
+  CPU::ApplyColorMatrix(img, color_coeffs, pre_mul, cam_mul);
 }
 
-auto OpenCVRawProcessor::Process() -> ImageBuffer {
+auto RawProcessor::Process() -> ImageBuffer {
   auto    img_unpacked = _raw_data.raw_image;
   auto&   img_sizes    = _raw_data.sizes;
 

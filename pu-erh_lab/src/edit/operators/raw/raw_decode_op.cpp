@@ -25,7 +25,7 @@ void RawDecodeOp::Apply(std::shared_ptr<ImageBuffer> input) {
   switch (_backend) {
     case RawProcessBackend::PUERH: {
       raw_processor->unpack();
-      OpenCVRawProcessor processor{_params, raw_processor->imgdata.rawdata, *raw_processor};
+      RawProcessor processor{_params, raw_processor->imgdata.rawdata, *raw_processor};
 
       output = processor.Process();
       raw_processor->recycle();

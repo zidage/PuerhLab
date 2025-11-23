@@ -1,3 +1,6 @@
+// FIXME: What this file does is not just white balance, but also black level correction and scaling.
+// Should rename it to something more appropriate.
+
 #include "decoders/processor/operators/cpu/white_balance.hpp"
 
 #include <cfloat>
@@ -29,8 +32,9 @@ static auto GetWBCoeff(const libraw_rawdata_t& raw_data) -> const float* {
 }
 
 inline static auto GetScaleMul(const libraw_rawdata_t& raw_data) -> std::array<float, 4> {
-  auto                 cam_mul = raw_data.color.cam_mul;
-  // float                max_pre_mul = std::max({pre_mul[0], pre_mul[1], pre_mul[2], pre_mul[3]});
+  // cam_mul for as-shot white balance, pre_mul for D65
+  // auto                 cam_mul = raw_data.color.cam_mul;
+  auto                 pre_mul = raw_data.color.pre_mul;
 
   auto                 c_white = (int)raw_data.color.maximum;
   auto                 c_black = (int)raw_data.color.black;
@@ -39,12 +43,12 @@ inline static auto GetScaleMul(const libraw_rawdata_t& raw_data) -> std::array<f
 
   std::array<float, 4> scale_mul;
   for (int c = 0; c < 4; ++c) {
-    float cam_mul_c = cam_mul[c];
-    if (cam_mul_c == 0.f) {
-      cam_mul_c = cam_mul[1];
+    float mul_c = pre_mul[c];  
+    if (mul_c == 0.f) {
+      mul_c = pre_mul[1];
     }
 
-    scale_mul[c] = (cam_mul_c / cam_mul[1]) / ((c_white - c_black) / 65535.0f);
+    scale_mul[c] = (mul_c / pre_mul[1]) / ((c_white - c_black) / 65535.0f);
   }
 
   return scale_mul;
@@ -53,8 +57,8 @@ inline static auto GetScaleMul(const libraw_rawdata_t& raw_data) -> std::array<f
 void WhiteBalanceCorrection(cv::Mat& img, LibRaw& raw_processor) {
   auto black_level = CalculateBlackLevel(raw_processor.imgdata.rawdata);
   auto wb          = GetWBCoeff(raw_processor.imgdata.rawdata);
-  int w = img.cols;
-  int h = img.rows;
+  int  w           = img.cols;
+  int  h           = img.rows;
 
   if (raw_processor.imgdata.color.as_shot_wb_applied != 1) {
     for (float& level : black_level) {

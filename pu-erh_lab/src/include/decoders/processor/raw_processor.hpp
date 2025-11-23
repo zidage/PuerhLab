@@ -6,17 +6,20 @@
 #include <opencv2/core/types.hpp>
 
 #include "image/image_buffer.hpp"
+#include "operators/cpu/raw_proc_utils.hpp"
 #include "type/type.hpp"
 
 namespace puerhlab {
 struct RawParams {
-  bool     _cuda = false;
-  bool     _highlights_reconstruct;
-  bool     _use_camera_wb;
-  uint32_t _user_wb;
+  bool     _cuda                   = false;
+  bool     _highlights_reconstruct = false;
+  bool     _use_camera_wb          = true;
+  uint32_t _user_wb = 6500;  // If user wants to set a specific white balance temperature
+  CPU::LightSourceType _user_light_source =
+      CPU::LightSourceType::UNKNOWN;  // If user wants to use a preset light source as the wb
 };
 
-class OpenCVRawProcessor {
+class RawProcessor {
  private:
   ImageBuffer             _process_buffer;
   RawParams               _params;
@@ -38,9 +41,8 @@ class OpenCVRawProcessor {
   void                    ApplyColorSpaceTransform();
 
  public:
-  OpenCVRawProcessor() = delete;
-  OpenCVRawProcessor(const RawParams& params, const libraw_rawdata_t& rawdata,
-                     LibRaw& raw_processor);
+  RawProcessor() = delete;
+  RawProcessor(const RawParams& params, const libraw_rawdata_t& rawdata, LibRaw& raw_processor);
   auto Process() -> ImageBuffer;
 };
 };  // namespace puerhlab

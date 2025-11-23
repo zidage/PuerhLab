@@ -1065,3 +1065,9 @@ third_party/
 /.vscode/
 
 vcpkg
+
+# Ignore clangd
+.clangd
+
+# Temporarily ignore technical documentation
+/docs/technical

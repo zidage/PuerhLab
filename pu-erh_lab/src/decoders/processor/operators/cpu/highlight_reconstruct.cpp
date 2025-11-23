@@ -168,15 +168,15 @@ void HighlightReconstruct(cv::Mat& img, LibRaw& raw_processor) {
   auto               cam_mul       = raw_processor.imgdata.color.cam_mul;
   auto               pre_mul       = raw_processor.imgdata.color.pre_mul;
 
-  float              correction[4] = {(cam_mul[1] > 0.f) ? (cam_mul[0] / cam_mul[1]) : 1.f, 1.f,
-                         (cam_mul[1] > 0.f) ? (cam_mul[2] / cam_mul[1]) : 1.f, 0.f};
+  float              correction[4] = {(pre_mul[1] > 0.f) ? (pre_mul[0] / pre_mul[1]) : 1.f, 1.f,
+                         (pre_mul[1] > 0.f) ? (pre_mul[2] / pre_mul[1]) : 1.f, 0.f};
 
-  float              chr_correction[4] = {
-    (pre_mul[1] / pre_mul[0]) / ((cam_mul[1] > 0.f) ? (cam_mul[0] / cam_mul[1]) : 1.f),
-    1.f,
-    (pre_mul[1] / pre_mul[2]) / ((cam_mul[1] > 0.f) ? (cam_mul[2] / cam_mul[1]) : 1.f),
-    0.f
-  };
+  // float              chr_correction[4] = {
+  //   (pre_mul[1] / pre_mul[0]) / ((cam_mul[1] > 0.f) ? (cam_mul[0] / cam_mul[1]) : 1.f),
+  //   1.f,
+  //   (pre_mul[1] / pre_mul[2]) / ((cam_mul[1] > 0.f) ? (cam_mul[2] / cam_mul[1]) : 1.f),
+  //   0.f
+  // };
 
   const float        clip_val      = hilight_magic;
 
