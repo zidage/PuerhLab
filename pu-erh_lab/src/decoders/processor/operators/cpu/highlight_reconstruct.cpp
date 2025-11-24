@@ -19,6 +19,9 @@ static int fc[2][2] = {{0, 1}, {2, 1}};  // R=0, G1=1, B=2, G2=1
 
 namespace puerhlab {
 namespace CPU {
+// Helper: Fast cubic root and power to avoid expensive powf
+static inline float fast_pow_inv_3(float x) { return cbrtf(x); }
+static inline float fast_pow_3(float x) { return x * x * x; }
 
 inline static float sqr(float x) { return x * x; }
 
@@ -90,14 +93,14 @@ size_t round_size(const size_t size, const size_t alignment) {
   return ((size % alignment) == 0) ? size : ((size - 1) / alignment + 1) * alignment;
 }
 
-static inline char mask_dilate(const unsigned char* in, const size_t w1) {
+static inline char mask_dilate(const unsigned char* in, const int w1) {
   if (in[0]) return 1;
 
   if (in[-w1 - 1] | in[-w1] | in[-w1 + 1] | in[-1] | in[1] | in[w1 - 1] | in[w1] | in[w1 + 1])
     return 1;
 
-  const size_t w2 = 2 * w1;
-  const size_t w3 = 3 * w1;
+  const int w2 = 2 * w1;
+  const int w3 = 3 * w1;
   return (in[-w3 - 2] | in[-w3 - 1] | in[-w3] | in[-w3 + 1] | in[-w3 + 2] | in[-w2 - 3] |
           in[-w2 - 2] | in[-w2 - 1] | in[-w2] | in[-w2 + 1] | in[-w2 + 2] | in[-w2 + 3] |
           in[-w1 - 3] | in[-w1 - 2] | in[-w1 + 2] | in[-w1 + 3] | in[-3] | in[-2] | in[2] | in[3] |
@@ -123,11 +126,12 @@ static inline float _calc_linear_refavg(const float* in, const int color) {
 }
 
 static inline float _calc_refavg(const float* in, const int row, const int col, const int height,
-                                 const int width, float* correction) {
+                                 const int width, const float* correction) {
   const int color   = FC(row, col);
   float     mean[4] = {0.0f, 0.0f, 0.0f, 0.0f};
   float     cnt[4]  = {0.0f, 0.0f, 0.0f, 0.0f};
 
+  // Loop limits logic remains the same
   const int dymin   = std::max(0, row - 1);
   const int dxmin   = std::max(0, col - 1);
   const int dymax   = std::min(height - 1, row + 2);
@@ -141,14 +145,20 @@ static inline float _calc_refavg(const float* in, const int row, const int col, 
       cnt[c] += 1.0f;
     }
   }
+
+  // Optimization: correction is now based on D65 (pre_mul)
   for (int c = 0; c < 3; ++c) {
-    mean[c] = (cnt[c] > 0.f) ? powf(correction[c] * mean[c] / cnt[c], 1.0f / HL_POWERF) : 0.f;
+    // Use cbrtf for speed optimization over powf(x, 1.0/3.0)
+    mean[c] = (cnt[c] > 0.f) ? fast_pow_inv_3(correction[c] * mean[c] / cnt[c]) : 0.f;
   }
 
-  const float croot_refavg[4] = {0.5f * (mean[1] + mean[2]), 0.5f * (mean[0] + mean[2]),
-                                 0.5f * (mean[0] + mean[1]), 0.0f};
-  return powf(croot_refavg[color], HL_POWERF);
-  // return croot_refavg[color];
+  const float croot_refavg[4] = {0.5f * (mean[1] + mean[2]),  // Reconstruct Red from G/B
+                                 0.5f * (mean[0] + mean[2]),  // Reconstruct Green from R/B
+                                 0.5f * (mean[0] + mean[1]),  // Reconstruct Blue from R/G
+                                 0.0f};
+
+  // Use simple multiplication for power of 3
+  return fast_pow_3(croot_refavg[color]);
 }
 
 /**
@@ -162,130 +172,127 @@ void HighlightReconstruct(cv::Mat& img, LibRaw& raw_processor) {
   const int          width         = img.cols;
   const int          height        = img.rows;
 
-  static const float hilight_magic = 0.987f;  // default value from darktable
-  // float max_val = static_cast<float>(raw_processor.imgdata.rawdata.color.maximum) / 65535.0f;
+  static const float hilight_magic = 0.987f;
+  const float        clip_val      = hilight_magic;
+  const float        clips[3]      = {clip_val, clip_val, clip_val};
 
   auto               cam_mul       = raw_processor.imgdata.color.cam_mul;
   auto               pre_mul       = raw_processor.imgdata.color.pre_mul;
 
-  float              correction[4] = {(pre_mul[1] > 0.f) ? (pre_mul[0] / pre_mul[1]) : 1.f, 1.f,
-                         (pre_mul[1] > 0.f) ? (pre_mul[2] / pre_mul[1]) : 1.f, 0.f};
+  // --- FIX START: Use D65 (pre_mul) for reconstruction correlation ---
+  // If we use cam_mul (Scene WB) on a Sun highlight (D65), we skew the ratios.
+  // We fallback to cam_mul only if pre_mul looks invalid (all zeros).
+  const float*       wb_basis      = (pre_mul[0] > 0.1f && pre_mul[1] > 0.1f) ? pre_mul : cam_mul;
 
-  // float              chr_correction[4] = {
-  //   (pre_mul[1] / pre_mul[0]) / ((cam_mul[1] > 0.f) ? (cam_mul[0] / cam_mul[1]) : 1.f),
-  //   1.f,
-  //   (pre_mul[1] / pre_mul[2]) / ((cam_mul[1] > 0.f) ? (cam_mul[2] / cam_mul[1]) : 1.f),
-  //   0.f
-  // };
+  float              correction[4] = {
+      (wb_basis[1] > 0.f) ? (wb_basis[0] / wb_basis[1]) : 1.f,  // R normalized to G
+      1.f,                                                                   // G is anchor
+      (wb_basis[1] > 0.f) ? (wb_basis[2] / wb_basis[1]) : 1.f,               // B normalized to G
+      0.f};
+  // --- FIX END ---
 
-  const float        clip_val      = hilight_magic;
+  const size_t               m_width    = width / 3;
+  const size_t               m_height   = height / 3;
+  const size_t               m_size     = round_size((size_t)(m_width + 1) * (m_height + 1), 16);
 
-  const float        clips[3]      = {clip_val, clip_val, clip_val};
+  bool                       anyclipped = false;
+  cv::Mat1f                  input(img);
+  auto                       input_data = input.ptr<float>(0);
 
-  // Didn't know why darktable use m_width and m_height
-  const size_t       m_width       = width / 3;
-  const size_t       m_height      = height / 3;
-  const size_t       m_size        = round_size((size_t)(m_width + 1) * (m_height + 1), 16);
-
-  bool               anyclipped    = false;
-  cv::Mat1f          input(img);
-
-  auto               input_data = input.ptr<float>(0);
-
+  // Using vector is fine, but ensure zero initialization
   std::vector<unsigned char> mask_buf(6 * m_size, 0);
 
+// 1. Build Clipping Mask
 #pragma omp parallel for
   for (int row = 1; row < m_height - 1; ++row) {
     for (int col = 1; col < m_width - 1; ++col) {
+      // ... [Keep existing mask generation logic] ...
       char         mbuff[3] = {0, 0, 0};
       const size_t grp      = 3 * (row * width + col);
       for (int y = -1; y <= 1; ++y) {
         for (int x = -1; x <= 1; ++x) {
-          const size_t idx     = grp + y * width + x;
-          const int    color   = FC(row + y, col + x);
-          const char   clipped = input_data[idx] >= clips[color] ? 1 : 0;
-          mbuff[color] += (clipped) ? 1 : 0;
+          const size_t idx   = grp + y * width + x;
+          const int    color = FC(row + y, col + x);
+          if (input_data[idx] >= clips[color]) mbuff[color]++;
         }
       }
-      // const size_t cmx = _raw_to_cmap(m_width, row, col);
       for (int c = 0; c < 3; ++c) {
         if (mbuff[c]) {
           mask_buf[c * m_size + row * m_width + col] = 1;
-          anyclipped                                 = true;
+          anyclipped = true;  // This race condition is benign (bool becomes true repeatedly)
         }
       }
     }
   }
 
-  // DebuggingPreview(mask);
-
-  /* We want to use the photosites closely around clipped data to be taken into account.
-     The mask buffers holds data for each color channel, we dilate the mask buffer slightly
-     to get those locations.
-     If there are no clipped locations we keep the chrominance correction at 0 but make it valid
-  */
+  if (!anyclipped) return;
 
   float sums[4] = {0.f, 0.f, 0.f, 0.f};
   float cnts[4] = {0.f, 0.f, 0.f, 0.f};
 
-  if (anyclipped) {
+// 2. Dilate Mask (Expand area of interest)
 #pragma omp parallel for
-    for (int row = 3; row < static_cast<int>(m_height) - 3; ++row) {
-      for (int col = 3; col < static_cast<int>(m_width) - 3; ++col) {
-        const size_t mx           = static_cast<size_t>(row) * m_width + static_cast<size_t>(col);
-        mask_buf[3 * m_size + mx] = mask_dilate(mask_buf.data() + 0 * m_size + mx, m_width);
-        mask_buf[4 * m_size + mx] = mask_dilate(mask_buf.data() + 1 * m_size + mx, m_width);
-        mask_buf[5 * m_size + mx] = mask_dilate(mask_buf.data() + 2 * m_size + mx, m_width);
-      }
+  for (int row = 3; row < static_cast<int>(m_height) - 3; ++row) {
+    for (int col = 3; col < static_cast<int>(m_width) - 3; ++col) {
+      const int mx              = row * m_width + col;
+      // Calculate dilated masks for the "Expanded" buffer area (indices 3, 4, 5)
+      mask_buf[3 * m_size + mx] = mask_dilate(mask_buf.data() + 0 * m_size + mx, m_width);
+      mask_buf[4 * m_size + mx] = mask_dilate(mask_buf.data() + 1 * m_size + mx, m_width);
+      mask_buf[5 * m_size + mx] = mask_dilate(mask_buf.data() + 2 * m_size + mx, m_width);
     }
-
-    const float lo_clips[4] = {0.95f * clips[0], 0.95f * clips[1], 0.95f * clips[2], 1.0f};
-    /* After having the surrounding mask for each color channel we can calculate the chrominance
-     * corrections. */
-
-#pragma omp parallel for
-    for (int row = 3; row < height - 3; ++row) {
-      for (int col = 3; col < width - 3; ++col) {
-        const int   color = FC(row, col);
-        const float inval = input(row, col);
-
-        /* we only use the unclipped photosites very close the true clipped data to calculate the
-         * chrominance offset */
-        if ((inval < clips[color]) && (inval > lo_clips[color]) &&
-            (mask_buf[(color + 3) * m_size + _raw_to_cmap(m_width, row, col)])) {
-          sums[color] +=
-              inval - _calc_refavg(input.ptr<float>(0), row, col, height, width, correction);
-          cnts[color] += 1.0f;
-        }
-      }
-    }
-
-    float chrominance[4] = {0.f, 0.f, 0.f, 0.f};
-    for (int c = 0; c < 3; ++c) {
-      // TODO: why 1.1f?
-      chrominance[c] = (cnts[c] > 40.f) ? (sums[c] / cnts[c]) * 1.1f : 0.f;
-    }
-
-    // std::cout << "Correction: R=" << correction[0] << " G=" << correction[1]
-    //           << " B=" << correction[2] << std::endl;
-    // std::cout << "Chrominance: R=" << chrominance[0] << " G=" << chrominance[1]
-    //           << " B=" << chrominance[2] << std::endl;
-    cv::Mat1f result = input.clone();
-#pragma omp parallel for
-    for (int row = 0; row < height; ++row) {
-      for (int col = 0; col < width; ++col) {
-        const int   color = FC(row, col);
-        const float inval = MAX(0.0f, input(row, col));
-        if (inval >= clips[color]) {
-          const float ref  = _calc_refavg(input.ptr<float>(0), row, col, height, width, correction);
-          result(row, col) = std::max(inval, ref + chrominance[color]);
-        } else {
-          result(row, col) = inval;
-        }
-      }
-    }
-    img = result;
   }
+
+  const float lo_clips[4] = {0.95f * clips[0], 0.95f * clips[1], 0.95f * clips[2], 1.0f};
+
+// 3. Calculate Chromaticity Offset (Global Reference)
+// Note: Global offset can be dangerous if image has mixed highlight colors (e.g. Sun vs Blue Sky).
+// Ideally, this should be local, but optimizing the existing global logic first:
+#pragma omp parallel for
+  for (int row = 3; row < height - 3; ++row) {
+    for (int col = 3; col < width - 3; ++col) {
+      const int   color = FC(row, col);
+      const float inval = input(row, col);
+
+      // Check if pixel is Valid (unclipped) but High (near clip) AND inside the dilated mask area
+      if ((inval < clips[color]) && (inval > lo_clips[color]) &&
+          (mask_buf[(color + 3) * m_size + _raw_to_cmap(m_width, row, col)])) {
+        // Calculate what the value "should" be based on neighbors + D65 correction
+        float ref = _calc_refavg(input_data, row, col, height, width, correction);
+
+#pragma omp atomic
+        sums[color] += (inval - ref);
+#pragma omp atomic
+        cnts[color] += 1.0f;
+      }
+    }
+  }
+
+  float chrominance[4] = {0.f, 0.f, 0.f, 0.f};
+  for (int c = 0; c < 3; ++c) {
+    chrominance[c] = (cnts[c] > 100.f) ? (sums[c] / cnts[c]) * (cam_mul[c] / cam_mul[1]) : 0.f;
+  }
+
+  // 4. Apply Reconstruction
+  cv::Mat1f result = input.clone();
+#pragma omp parallel for
+  for (int row = 0; row < height; ++row) {
+    for (int col = 0; col < width; ++col) {
+      const int   color = FC(row, col);
+      const float inval = std::max(0.0f, input(row, col));  // Safe access
+
+      if (inval >= clips[color]) {
+        const float ref           = _calc_refavg(input_data, row, col, height, width, correction);
+
+        // Apply global offset
+        float       reconstructed = ref + chrominance[color];
+
+        // Safety: Ensure we don't reconstruct LOWER than the clipped value
+        result(row, col)          = std::max(inval, reconstructed);
+      }
+    }
+  }
+  img = result;
 }
+
 };  // namespace CPU
 };  // namespace puerhlab

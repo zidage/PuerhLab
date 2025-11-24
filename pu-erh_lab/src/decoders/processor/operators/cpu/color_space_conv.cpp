@@ -98,10 +98,6 @@ static inline cv::Matx33f ElementWiseDivide(const cv::Matx33f& a, const cv::Matx
 }
 }  // namespace
 
-static const cv::Matx33f aces2065_to_xyz = {0.9525523959f, 0.000000f,     0.0000936786f,
-                                            0.3439664498f, 0.7281660966f, -0.0721325464f,
-                                            0.000000f,     0.000000f,     1.0088251844f};
-
 void ApplyColorMatrix(cv::Mat& img, const float rgb_cam[][4], const float* pre_mul,
                       const float* cam_mul, const float cam_xyz[][3]) {
   (void)rgb_cam;  // Current pipeline does not reuse rgb_cam directly.
