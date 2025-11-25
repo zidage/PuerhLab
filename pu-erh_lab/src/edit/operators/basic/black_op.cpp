@@ -16,7 +16,7 @@ BlackOp::BlackOp(float offset) : _offset(offset) {
 
 BlackOp::BlackOp(const nlohmann::json& params) {
   SetParams(params);
-  _curve.black_point = hw::Set(hw::ScalableTag<float>(), _offset / 3.0f);
+  _curve.black_point = hw::Set(hw::ScalableTag<float>(), _offset / 10.0f);
   _curve.white_point = hw::Set(hw::ScalableTag<float>(), 100.0f);
   _curve.slope       = hw::Div(hw::Sub(_curve.white_point, _curve.black_point), _curve.white_point);
 }
@@ -62,7 +62,7 @@ void BlackOp::SetParams(const nlohmann::json& params) {
 
   } else {
     _offset      = params[_script_name].get<float>() / 100.0f;
-    _y_intercept = _offset / 3.f;
+    _y_intercept = _offset / 10.f;
     _slope       = (1.0f - _y_intercept) / 1.0f;
   }
   _y_intercept_vec = simple_simd::set1_f32(_y_intercept);

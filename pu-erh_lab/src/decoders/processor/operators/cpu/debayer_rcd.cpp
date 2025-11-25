@@ -172,7 +172,7 @@ void BayerRGGB2RGB_RCD(cv::Mat& bayer) {
       float H_est  = (W_grad * E_est + E_grad * W_est) / (E_grad + W_grad);
 
       // G@B and G@R interpolation
-      rgb[indx][1] = std::clamp(VH_disc * H_est + (1.f - VH_disc) * V_est, 0.f, 1.f);
+      rgb[indx][1] = std::max(VH_disc * H_est + (1.f - VH_disc) * V_est, 0.f);
     }
   }
   low_pass.release();
@@ -302,7 +302,7 @@ void BayerRGGB2RGB_RCD(cv::Mat& bayer) {
       float Q_est  = (NE_grad * SW_est + SW_grad * NE_est) / (NE_grad + SW_grad);
 
       // R@B and B@R interpolation
-      rgb[indx][c] = std::clamp(rgb[indx][1] + (1.f - PQ_disc) * P_est + PQ_disc * Q_est, 0.f, 1.f);
+      rgb[indx][c] = std::max(0.f, rgb[indx][1] + (1.f - PQ_disc) * P_est + PQ_disc * Q_est);
     }
   }
 
@@ -347,7 +347,7 @@ void BayerRGGB2RGB_RCD(cv::Mat& bayer) {
 
         // R@G and B@G interpolation
         rgb[indx][c] =
-            std::clamp(rgb[indx][1] + (1.f - VH_disc) * V_est + VH_disc * H_est, 0.f, 1.f);
+            std::max(0.f, rgb[indx][1] + (1.f - VH_disc) * V_est + VH_disc * H_est);
       }
     }
   }

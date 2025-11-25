@@ -33,7 +33,7 @@ static auto GetWBCoeff(const libraw_rawdata_t& raw_data) -> const float* {
 
 inline static auto GetScaleMul(const libraw_rawdata_t& raw_data) -> std::array<float, 4> {
   // cam_mul for as-shot white balance, pre_mul for D65
-  // auto                 cam_mul = raw_data.color.cam_mul;
+  auto                 cam_mul = raw_data.color.cam_mul;
   auto                 pre_mul = raw_data.color.pre_mul;
 
   auto                 c_white = (int)raw_data.color.maximum;
@@ -43,12 +43,12 @@ inline static auto GetScaleMul(const libraw_rawdata_t& raw_data) -> std::array<f
 
   std::array<float, 4> scale_mul;
   for (int c = 0; c < 4; ++c) {
-    float mul_c = pre_mul[c];  
+    float mul_c = cam_mul[c];  
     if (mul_c == 0.f) {
-      mul_c = pre_mul[1];
+      mul_c = cam_mul[1];
     }
 
-    scale_mul[c] = (mul_c / pre_mul[1]) / ((c_white - c_black) / 65535.0f);
+    scale_mul[c] = (mul_c / cam_mul[1]) / ((c_white - c_black) / 65535.0f);
   }
 
   return scale_mul;
