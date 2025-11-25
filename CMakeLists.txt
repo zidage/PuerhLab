@@ -31,6 +31,7 @@ else()
 
     add_compile_options(
         $<$<CONFIG:Debug>:-g>
+        $<$<CONFIG:Debug>:-O2>
         $<$<CONFIG:Debug>:-fsanitize=address>
         $<$<CONFIG:Debug>:-fno-omit-frame-pointer>
         $<$<CONFIG:Release>:-O3>
