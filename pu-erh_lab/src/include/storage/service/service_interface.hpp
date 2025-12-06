@@ -22,9 +22,9 @@ class ServiceInterface {
 
   /**
    * @brief Get the objects by a SQL predicate (WHERE clause)
-   * 
-   * @param predicate 
-   * @return std::vector<InternalType> 
+   *
+   * @param predicate
+   * @return std::vector<InternalType>
    */
   auto GetByPredicate(const std::string&& predicate) -> std::vector<InternalType> {
     std::vector<Mappable>     param_results = _mapper.Get(predicate.c_str());
@@ -41,9 +41,9 @@ class ServiceInterface {
   /**
    * @brief Get the objects by a full SQL query, results may not compatible with Mappable.
    *        Should only be used internally (e.g., filter).
-   * 
-   * @param query 
-   * @return std::vector<InternalType> 
+   *
+   * @param query
+   * @return std::vector<InternalType>
    */
   auto GetByQuery(const std::string&& query) -> std::vector<InternalType> {
     std::vector<Mappable>     param_results = _mapper.GetByQuery(query.c_str());

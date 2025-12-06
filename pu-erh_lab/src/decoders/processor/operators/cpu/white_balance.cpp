@@ -1,5 +1,5 @@
-// FIXME: What this file does is not just white balance, but also black level correction and scaling.
-// Should rename it to something more appropriate.
+// FIXME: What this file does is not just white balance, but also black level correction and
+// scaling. Should rename it to something more appropriate.
 
 #include "decoders/processor/operators/cpu/white_balance.hpp"
 
@@ -43,7 +43,7 @@ inline static auto GetScaleMul(const libraw_rawdata_t& raw_data) -> std::array<f
 
   std::array<float, 4> scale_mul;
   for (int c = 0; c < 4; ++c) {
-    float mul_c = cam_mul[c];  
+    float mul_c = cam_mul[c];
     if (mul_c == 0.f) {
       mul_c = cam_mul[1];
     }

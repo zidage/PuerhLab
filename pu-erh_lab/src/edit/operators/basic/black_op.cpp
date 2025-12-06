@@ -6,7 +6,6 @@
 #include "image/image_buffer.hpp"
 #include "utils/simd/simple_simd.hpp"
 
-
 namespace puerhlab {
 BlackOp::BlackOp(float offset) : _offset(offset) {
   _curve.black_point = hw::Set(hw::ScalableTag<float>(), offset / 3.0f);

@@ -240,7 +240,7 @@ auto SleeveBase::RemoveElementInPath(const sl_path_t& path, const file_name_t& f
   }
 
   if (del_element->_type == ElementType::FOLDER) {
-    auto del_folder = std::dynamic_pointer_cast<SleeveFolder>(del_element);
+    auto  del_folder = std::dynamic_pointer_cast<SleeveFolder>(del_element);
     auto& elements   = del_folder->ListElements();
     for (auto& element_id : elements) {
       auto& e = _storage.at(element_id);
@@ -479,7 +479,7 @@ auto SleeveBase::CopyElement(const sl_path_t& src, const sl_path_t& dest)
   }
   dest_folder = std::dynamic_pointer_cast<SleeveFolder>(dest_folder_opt.value()._access_element);
   if (src_file->_type == ElementType::FOLDER) {
-    auto src_folder = std::dynamic_pointer_cast<SleeveFolder>(src_file);
+    auto  src_folder = std::dynamic_pointer_cast<SleeveFolder>(src_file);
     // Increment the reference count for all of its contents
     auto& elements   = src_folder->ListElements();
     for (auto& e : elements) {

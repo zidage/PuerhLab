@@ -81,43 +81,44 @@ void ColorWheelOp::Apply(std::shared_ptr<ImageBuffer> input) {
 }
 
 auto ColorWheelOp::ToKernel() const -> Kernel {
-  return Kernel{._type = Kernel::Type::Point,
-                ._func = PointKernelFunc([this](Pixel& in) {
-                                    const float lum     = 0.2126f * in.r + 0.7152f * in.g + 0.0722f * in.b;
-                  const float lift_w  = std::clamp(bell(lum, 0.0f, 0.45f), 0.0f, 1.0f);
-                  const float gamma_w = 1.0f;
-                  const float gain_w  = std::clamp(bell(lum, 1.0f, 0.45f), 0.0f, 1.0f);
+  return Kernel{
+      ._type = Kernel::Type::Point,
+      ._func = PointKernelFunc([this](Pixel& in) {
+        const float lum         = 0.2126f * in.r + 0.7152f * in.g + 0.0722f * in.b;
+        const float lift_w      = std::clamp(bell(lum, 0.0f, 0.45f), 0.0f, 1.0f);
+        const float gamma_w     = 1.0f;
+        const float gain_w      = std::clamp(bell(lum, 1.0f, 0.45f), 0.0f, 1.0f);
 
-                  const float lift_x  = _lift.color_offset.x + _lift.luminance_offset;
-                  const float lift_y  = _lift.color_offset.y + _lift.luminance_offset;
-                  const float lift_z  = _lift.color_offset.z + _lift.luminance_offset;
+        const float lift_x      = _lift.color_offset.x + _lift.luminance_offset;
+        const float lift_y      = _lift.color_offset.y + _lift.luminance_offset;
+        const float lift_z      = _lift.color_offset.z + _lift.luminance_offset;
 
-                  const float gain_x  = _gain.color_offset.x + _gain.luminance_offset;
-                  const float gain_y  = _gain.color_offset.y + _gain.luminance_offset;
-                  const float gain_z  = _gain.color_offset.z + _gain.luminance_offset;
+        const float gain_x      = _gain.color_offset.x + _gain.luminance_offset;
+        const float gain_y      = _gain.color_offset.y + _gain.luminance_offset;
+        const float gain_z      = _gain.color_offset.z + _gain.luminance_offset;
 
-                  const float gamma_inv_x = 1.0f / (_gamma.color_offset.x + _gamma.luminance_offset);
-                  const float gamma_inv_y = 1.0f / (_gamma.color_offset.y + _gamma.luminance_offset);
-                  const float gamma_inv_z = 1.0f / (_gamma.color_offset.z + _gamma.luminance_offset);
+        const float gamma_inv_x = 1.0f / (_gamma.color_offset.x + _gamma.luminance_offset);
+        const float gamma_inv_y = 1.0f / (_gamma.color_offset.y + _gamma.luminance_offset);
+        const float gamma_inv_z = 1.0f / (_gamma.color_offset.z + _gamma.luminance_offset);
 
-                  const float gain_dx = gain_x - 1.0f;
-                  const float gain_dy = gain_y - 1.0f;
-                  const float gain_dz = gain_z - 1.0f;
+        const float gain_dx     = gain_x - 1.0f;
+        const float gain_dy     = gain_y - 1.0f;
+        const float gain_dz     = gain_z - 1.0f;
 
-                  const float r0 = in.r, g0 = in.g, b0 = in.b;
+        const float r0 = in.r, g0 = in.g, b0 = in.b;
 
-                  const float pr = std::pow(r0, gamma_inv_x);
-                  const float pg = std::pow(g0, gamma_inv_y);
-                  const float pb = std::pow(b0, gamma_inv_z);
+        const float pr = std::pow(r0, gamma_inv_x);
+        const float pg = std::pow(g0, gamma_inv_y);
+        const float pb = std::pow(b0, gamma_inv_z);
 
-                  float r = r0 + lift_w * lift_x + gain_w * (r0 * gain_dx) + gamma_w * (pr - r0);
-                  float g = g0 + lift_w * lift_y + gain_w * (g0 * gain_dy) + gamma_w * (pg - g0);
-                  float b = b0 + lift_w * lift_z + gain_w * (b0 * gain_dz) + gamma_w * (pb - b0);
+        float       r  = r0 + lift_w * lift_x + gain_w * (r0 * gain_dx) + gamma_w * (pr - r0);
+        float       g  = g0 + lift_w * lift_y + gain_w * (g0 * gain_dy) + gamma_w * (pg - g0);
+        float       b  = b0 + lift_w * lift_z + gain_w * (b0 * gain_dz) + gamma_w * (pb - b0);
 
-                  in.r = cv::saturate_cast<float>(r);
-                  in.g = cv::saturate_cast<float>(g);
-                  in.b = cv::saturate_cast<float>(b);
-                })};
+        in.r           = cv::saturate_cast<float>(r);
+        in.g           = cv::saturate_cast<float>(g);
+        in.b           = cv::saturate_cast<float>(b);
+      })};
 }
 
 auto ColorWheelOp::GetParams() const -> nlohmann::json {

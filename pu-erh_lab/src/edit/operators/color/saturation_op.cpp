@@ -48,7 +48,7 @@ void SaturationOp::Apply(std::shared_ptr<ImageBuffer> input) {
 auto SaturationOp::ToKernel() const -> Kernel {
   return Kernel{._type = Kernel::Type::Point, ._func = PointKernelFunc([&s = _scale](Pixel& in) {
                                                 // OklabCvt::Oklab oklab_vec =
-                                                    // OklabCvt::ACESRGB2Oklab(in);
+                                                // OklabCvt::ACESRGB2Oklab(in);
 
                                                 float luma = 0.2126f * in.r + 0.7152f * in.g +
                                                              0.0722f * in.b;

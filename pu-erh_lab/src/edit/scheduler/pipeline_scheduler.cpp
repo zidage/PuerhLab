@@ -1,4 +1,5 @@
 #include "edit/scheduler/pipeline_scheduler.hpp"
+
 #include <mutex>
 
 namespace puerhlab {
@@ -12,7 +13,6 @@ void PipelineScheduler::ScheduleTask(PipelineTask&& task) {
     auto result = task._pipeline_executor->Apply(task._input);
     auto output = result->GetCPUData().clone();
     guard.unlock();
-    
 
     if (task._options._is_callback && task._callback) {
       (*task._callback)(*result);

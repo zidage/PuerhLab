@@ -58,7 +58,7 @@ void SleeveFolder::AddElementToMap(const std::shared_ptr<SleeveElement> element)
 void SleeveFolder::UpdateElementMap(const file_name_t& name, const sl_element_id_t old_id,
                                     const sl_element_id_t new_id) {
   _contents.erase(name);
-  _contents[name]  = new_id;
+  _contents[name]     = new_id;
   auto default_filter = _indicies_cache[_default_filter];
 
   for (auto& id : default_filter) {
@@ -68,7 +68,6 @@ void SleeveFolder::UpdateElementMap(const file_name_t& name, const sl_element_id
     }
   }
 }
-
 
 /**
  * @brief Get an element's id from the _contents table
@@ -93,7 +92,6 @@ auto SleeveFolder::ListElements() const -> const std::vector<sl_element_id_t>& {
   const auto& default_list = _indicies_cache.at(_default_filter);
   return default_list;
 }
-
 
 auto SleeveFolder::Clear() -> bool {
   // TODO: Add Implementation
@@ -121,7 +119,7 @@ auto SleeveFolder::Contains(const file_name_t& name) const -> bool {
  * @return sl_element_id_t
  */
 void SleeveFolder::RemoveNameFromMap(const file_name_t& name) {
-  auto removed_id = _contents.at(name);
+  auto  removed_id    = _contents.at(name);
   // Also remove from default filter index
   auto& default_index = _indicies_cache[_default_filter];
   default_index.erase(std::remove(default_index.begin(), default_index.end(), removed_id),
@@ -130,7 +128,7 @@ void SleeveFolder::RemoveNameFromMap(const file_name_t& name) {
 }
 
 void SleeveFolder::CreateIndex(const std::vector<std::shared_ptr<SleeveElement>>& filtered_elements,
-                               const filter_id_t filter_id) {
+                               const filter_id_t                                  filter_id) {
   std::vector<sl_element_id_t> new_index;
   for (const auto& element : filtered_elements) {
     new_index.push_back(element->_element_id);
@@ -138,13 +136,13 @@ void SleeveFolder::CreateIndex(const std::vector<std::shared_ptr<SleeveElement>>
   _indicies_cache[filter_id] = new_index;
 }
 
-auto SleeveFolder::ListElementsByFilter(const filter_id_t filter_id) const -> const std::vector<sl_element_id_t>& {
+auto SleeveFolder::ListElementsByFilter(const filter_id_t filter_id) const
+    -> const std::vector<sl_element_id_t>& {
   if (!HasFilterIndex(filter_id)) {
     throw std::runtime_error("Filter index not found in folder.");
   }
   return _indicies_cache.at(filter_id);
 }
-
 
 void SleeveFolder::IncrementFileCount() { ++_file_count; }
 

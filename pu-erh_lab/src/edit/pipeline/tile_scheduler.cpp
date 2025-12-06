@@ -1,6 +1,5 @@
 #include "edit/pipeline/tile_scheduler.hpp"
 
-
 #include <cstddef>
 #include <ctime>
 #include <memory>

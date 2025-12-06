@@ -86,7 +86,8 @@ void GetDisplayMetadataFromExif(Exiv2::ExifData& exif_data, ExifDisplayMetaData&
   if (exif_data.findKey(Exiv2::ExifKey("Exif.Image.DateTime")) != exif_data.end()) {
     display_metadata.date_time_str = exif_data["Exif.Image.DateTime"].toString();
     if (display_metadata.date_time_str.size() >= 10) {
-      display_metadata.date_time_str[4] = '-'; // Change from "YYYY:MM:DD HH:MM:SS" to "YYYY-MM-DD HH:MM:SS"
+      display_metadata.date_time_str[4] =
+          '-';  // Change from "YYYY:MM:DD HH:MM:SS" to "YYYY-MM-DD HH:MM:SS"
       display_metadata.date_time_str[7] = '-';
     }
   }

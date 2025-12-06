@@ -84,7 +84,7 @@ class OperatorBase : public IOperatorBase {
 struct OpStream {
   std::vector<std::shared_ptr<IOperatorBase>> _ops;
 
-  bool                                        AddToStream(const std::shared_ptr<IOperatorBase>& op) {
+  bool AddToStream(const std::shared_ptr<IOperatorBase>& op) {
     // Ensure all kernels in the stream are of the same type
     _ops.push_back(op);
     return true;

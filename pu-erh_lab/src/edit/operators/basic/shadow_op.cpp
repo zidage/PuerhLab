@@ -124,7 +124,7 @@ auto                ShadowsOp::ToKernel() const -> Kernel {
                     float H11 = t * t * t - t * t;
                     outL = H00 * y0 + H10 * (dx * m0) + H01 * y1 + H11 * (dx * m1);
                   } else {
-                    outL = L; 
+                    outL = L;
                   }
 
                   if (!std::isfinite(outL)) outL = L;

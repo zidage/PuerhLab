@@ -108,7 +108,7 @@ auto Image::ExifToJson() -> std::string {
     return nlohmann::to_string(_exif_json);
   }
 
-  _exif_json = _exif_display.ToJson();
+  _exif_json     = _exif_display.ToJson();
   _has_exif_json = true;
   return nlohmann::to_string(_exif_json);
 }

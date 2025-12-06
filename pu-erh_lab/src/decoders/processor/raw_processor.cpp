@@ -11,6 +11,7 @@
 #include <opencv2/core/base.hpp>
 #include <opencv2/core/mat.hpp>
 #include <opencv2/core/utility.hpp>
+
 #include "decoders/processor/operators/cpu/debayer_rcd.hpp"
 
 #ifdef HAVE_CUDA
@@ -37,7 +38,7 @@
 
 namespace puerhlab {
 RawProcessor::RawProcessor(const RawParams& params, const libraw_rawdata_t& rawdata,
-                                       LibRaw& raw_processor)
+                           LibRaw& raw_processor)
     : _params(params), _raw_data(rawdata), _raw_processor(raw_processor) {}
 
 void RawProcessor::ApplyLinearization() {
@@ -59,7 +60,7 @@ void RawProcessor::ApplyDebayer() {
   if (_params._cuda) {
     auto& gpu_img = pre_debayer_buffer.GetGPUData();
     CUDA::BayerRGGB2RGB_AHD(gpu_img);
-    
+
     return;
   }
 #endif
@@ -70,8 +71,8 @@ void RawProcessor::ApplyDebayer() {
   // _raw_data.sizes.raw_inset_crops[0].ctop,
   //                    _raw_data.sizes.raw_inset_crops[0].cwidth,
   //                    _raw_data.sizes.raw_inset_crops[0].cheight);
-  cv::Rect crop_rect(_raw_data.sizes.left_margin, _raw_data.sizes.top_margin,
-                     _raw_data.sizes.width, _raw_data.sizes.height);
+  cv::Rect crop_rect(_raw_data.sizes.left_margin, _raw_data.sizes.top_margin, _raw_data.sizes.width,
+                     _raw_data.sizes.height);
   img = img(crop_rect);
 }
 
@@ -102,14 +103,15 @@ void RawProcessor::ConvertToWorkingSpace() {
 #endif
   auto& img = debayer_buffer.GetCPUData();
   img.convertTo(img, CV_32FC3);
-  auto pre_mul = _raw_data.color.pre_mul;
-  auto cam_mul = _raw_data.color.cam_mul;
-  auto wb_coeffs = _raw_data.color.WB_Coeffs; // EXIF Lightsource Values
-  auto cam_xyz = _raw_data.color.cam_xyz;
+  auto pre_mul   = _raw_data.color.pre_mul;
+  auto cam_mul   = _raw_data.color.cam_mul;
+  auto wb_coeffs = _raw_data.color.WB_Coeffs;  // EXIF Lightsource Values
+  auto cam_xyz   = _raw_data.color.cam_xyz;
   if (!_params._use_camera_wb) {
     // User specified white balance temperature
     auto user_temp_indices = CPU::GetWBIndicesForTemp(static_cast<float>(_params._user_wb));
-    CPU::ApplyColorMatrix(img, color_coeffs, pre_mul, cam_mul, wb_coeffs, user_temp_indices, _params._user_wb, cam_xyz);
+    CPU::ApplyColorMatrix(img, color_coeffs, pre_mul, cam_mul, wb_coeffs, user_temp_indices,
+                          _params._user_wb, cam_xyz);
     return;
   }
   CPU::ApplyColorMatrix(img, color_coeffs, pre_mul, cam_mul, cam_xyz);
@@ -135,13 +137,29 @@ auto RawProcessor::Process() -> ImageBuffer {
             _raw_processor.COLOR(1, 0) == 3 && _raw_processor.COLOR(1, 1) == 2);
   _process_buffer.GetCPUData().convertTo(_process_buffer.GetCPUData(), CV_32FC1, 1.0f / 65535.0f);
 
+  using clock = std::chrono::high_resolution_clock;
+  auto start  = clock::now();
   ApplyLinearization();
+  auto                                      linear_end      = clock::now();
+  std::chrono::duration<double, std::milli> linear_duration = linear_end - start;
+  std::cout << "Linearization took " << linear_duration.count() << " ms\n";
 
   ApplyHighlightReconstruct();
+  auto                                      hl_end      = clock::now();
+  std::chrono::duration<double, std::milli> hl_duration = hl_end - linear_end;
+  std::cout << "Highlight Reconstruction took " << hl_duration.count() << " ms\n";
 
   ApplyDebayer();
+  auto                                      debayer_end      = clock::now();
+  std::chrono::duration<double, std::milli> debayer_duration = debayer_end - hl_end;
+  std::cout << "Debayering took " << debayer_duration.count() << " ms\n";
 
   ConvertToWorkingSpace();
+  auto                                      cst_end      = clock::now();
+  std::chrono::duration<double, std::milli> cst_duration = cst_end - debayer_end;
+  std::cout << "Color Space Transformation took " << cst_duration.count() << " ms\n";
+  std::cout << "Total processing took "
+            << (linear_duration + hl_duration + debayer_duration + cst_duration).count() << " ms\n";
 #ifdef HAVE_CUDA
   if (_params._cuda) {
     _process_buffer.SyncToCPU();

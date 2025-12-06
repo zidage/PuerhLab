@@ -51,12 +51,12 @@ namespace puerhlab {
  */
 class SleeveFolder : public SleeveElement {
  protected:
-  std::unordered_map<file_name_t, sl_element_id_t>                            _contents;
+  std::unordered_map<file_name_t, sl_element_id_t>              _contents;
   std::unordered_map<filter_id_t, std::vector<sl_element_id_t>> _indicies_cache;
-  filter_id_t                                                               _default_filter = 0;
+  filter_id_t                                                   _default_filter = 0;
 
-  uint32_t                                                                    _file_count;
-  uint32_t                                                                    _folder_count;
+  uint32_t                                                      _file_count;
+  uint32_t                                                      _folder_count;
 
  public:
   explicit SleeveFolder(sl_element_id_t id, file_name_t element_name);
@@ -75,11 +75,13 @@ class SleeveFolder : public SleeveElement {
     return _indicies_cache.contains(filter_id);
   }
 
-  auto ListElementsByFilter(const filter_id_t filter_id) const -> const std::vector<sl_element_id_t>&;
+  auto ListElementsByFilter(const filter_id_t filter_id) const
+      -> const std::vector<sl_element_id_t>&;
   auto Contains(const file_name_t& name) const -> bool;
   void RemoveNameFromMap(const file_name_t& name);
 
-  void CreateIndex(const std::vector<std::shared_ptr<SleeveElement>>& filtered_elements, const filter_id_t filter_id);
+  void CreateIndex(const std::vector<std::shared_ptr<SleeveElement>>& filtered_elements,
+                   const filter_id_t                                  filter_id);
 
   void IncrementFolderCount();
   void IncrementFileCount();

@@ -35,7 +35,8 @@ class ElementController {
   void UpdateElement(const std::shared_ptr<SleeveElement> element);
   auto GetElementById(const sl_element_id_t id) -> std::shared_ptr<SleeveElement>;
 
-  auto GetElementsInFolderByFilter(const std::shared_ptr<FilterCombo> filter, const sl_element_id_t folder_id)
+  auto GetElementsInFolderByFilter(const std::shared_ptr<FilterCombo> filter,
+                                   const sl_element_id_t              folder_id)
       -> std::vector<std::shared_ptr<SleeveElement>>;
 
   void EnsureChildrenLoaded(sl_element_id_t folder_id);

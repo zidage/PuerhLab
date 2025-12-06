@@ -120,14 +120,14 @@ auto FileSystem::ApplyFilterToFolder(const std::filesystem::path&       folder_p
   if (folder_element->_type != ElementType::FOLDER) {
     throw std::runtime_error("Filesystem: Specified path is not a folder");
   }
-  
+
   auto folder = std::static_pointer_cast<SleeveFolder>(folder_element);
 
   std::vector<std::shared_ptr<SleeveElement>> result_elements;
   // First check if the folder has cached index for this filter
   if (folder->HasFilterIndex(filter->filter_id)) {
     auto& cached_ids = folder->ListElementsByFilter(filter->filter_id);
-    
+
     result_elements.reserve(cached_ids.size());
     for (const auto& id : cached_ids) {
       result_elements.push_back(Get(id));
@@ -135,7 +135,8 @@ auto FileSystem::ApplyFilterToFolder(const std::filesystem::path&       folder_p
     return result_elements;
   }
 
-  auto result_elements_db = _storage_service.GetElementController().GetElementsInFolderByFilter(filter, folder->_element_id);
+  auto result_elements_db = _storage_service.GetElementController().GetElementsInFolderByFilter(
+      filter, folder->_element_id);
   // Just for cache purpose, which will not affect sync status nor anything else
   folder->CreateIndex(result_elements_db, filter->filter_id);
 

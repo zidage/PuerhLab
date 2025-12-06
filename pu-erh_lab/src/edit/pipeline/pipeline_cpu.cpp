@@ -57,7 +57,7 @@ auto CPUPipelineExecutor::GetStage(PipelineStageName stage) -> PipelineStage& {
 
 auto CPUPipelineExecutor::Apply(std::shared_ptr<ImageBuffer> input)
     -> std::shared_ptr<ImageBuffer> {
-  auto*                       first_stage = _exec_stages.front();
+  auto* first_stage = _exec_stages.front();
   if (!first_stage) {
     return input;
   }

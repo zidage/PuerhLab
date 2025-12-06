@@ -6,45 +6,44 @@ namespace OklabCvt {
 
 // --- fast LUT for ACEScc -> LinearAP1 ---
 namespace {
-  constexpr int ACESCC_LUT_N = 4096;
-  std::array<float, ACESCC_LUT_N + 1> g_acescc2lin{};
-  std::once_flag g_acescc2lin_once;
+constexpr int                       ACESCC_LUT_N = 4096;
+std::array<float, ACESCC_LUT_N + 1> g_acescc2lin{};
+std::once_flag                      g_acescc2lin_once;
 
-  static inline float ACEScc_to_linear_AP1_exact(float acescc) {
-    const float a      = 17.52f;
-    const float b      = 9.72f;
-    const float thresh = (b - 15.0f) / a;  // (9.72 - 15) / 17.52
-    float lin;
-    if (acescc < thresh) {
-      lin = (std::pow(2.0f, acescc * a - b) - std::pow(2.0f, -16.0f)) * 2.0f;
-    } else {
-      lin = std::pow(2.0f, acescc * a - b);
-    }
-    if (lin > 65504.0f) lin = 65504.0f;
-    return lin;
+static inline float                 ACEScc_to_linear_AP1_exact(float acescc) {
+  const float a      = 17.52f;
+  const float b      = 9.72f;
+  const float thresh = (b - 15.0f) / a;  // (9.72 - 15) / 17.52
+  float       lin;
+  if (acescc < thresh) {
+    lin = (std::pow(2.0f, acescc * a - b) - std::pow(2.0f, -16.0f)) * 2.0f;
+  } else {
+    lin = std::pow(2.0f, acescc * a - b);
   }
+  if (lin > 65504.0f) lin = 65504.0f;
+  return lin;
+}
 
-  static inline void build_acescc2lin_lut() {
-    for (int i = 0; i <= ACESCC_LUT_N; ++i) {
-      float x = static_cast<float>(i) / ACESCC_LUT_N;
-      g_acescc2lin[i] = ACEScc_to_linear_AP1_exact(x);
-    }
+static inline void build_acescc2lin_lut() {
+  for (int i = 0; i <= ACESCC_LUT_N; ++i) {
+    float x         = static_cast<float>(i) / ACESCC_LUT_N;
+    g_acescc2lin[i] = ACEScc_to_linear_AP1_exact(x);
   }
+}
 
-  static inline float ACEScc_to_linear_AP1_fast(float acescc) {
-    std::call_once(g_acescc2lin_once, build_acescc2lin_lut);
-    if (acescc <= 0.0f) return 0.0f;
-    if (acescc >= 1.0f) return g_acescc2lin[ACESCC_LUT_N];
-    float f = acescc * ACESCC_LUT_N;
-    int   i = static_cast<int>(f);
-    float t = f - i;
-    return g_acescc2lin[i] * (1.0f - t) + g_acescc2lin[i + 1] * t;
-  }
-} // namespace
+static inline float ACEScc_to_linear_AP1_fast(float acescc) {
+  std::call_once(g_acescc2lin_once, build_acescc2lin_lut);
+  if (acescc <= 0.0f) return 0.0f;
+  if (acescc >= 1.0f) return g_acescc2lin[ACESCC_LUT_N];
+  float f = acescc * ACESCC_LUT_N;
+  int   i = static_cast<int>(f);
+  float t = f - i;
+  return g_acescc2lin[i] * (1.0f - t) + g_acescc2lin[i + 1] * t;
+}
+}  // namespace
 
 static inline cv::Vec3f ACEScc_to_linearAP1_vec(const cv::Vec3f& acescc_rgb) {
-  return {ACEScc_to_linear_AP1_fast(acescc_rgb[0]),
-          ACEScc_to_linear_AP1_fast(acescc_rgb[1]),
+  return {ACEScc_to_linear_AP1_fast(acescc_rgb[0]), ACEScc_to_linear_AP1_fast(acescc_rgb[1]),
           ACEScc_to_linear_AP1_fast(acescc_rgb[2])};
 }
 
@@ -52,7 +51,7 @@ static inline float LinearAP1_to_ACEScc(float lin) {
   const float a = 17.52f;
   const float b = 9.72f;
 
-  float acescc;
+  float       acescc;
   if (lin <= 0.0f) {
     acescc = 0.0f;
   } else if (lin < powf(2.0f, -15.0f)) {

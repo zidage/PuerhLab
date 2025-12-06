@@ -28,14 +28,15 @@ class FileSystem {
   ///@{
   std::filesystem::path                _db_path;
   std::filesystem::path                _meta_path;
-  StorageService&                       _storage_service;
+  StorageService&                      _storage_service;
   NodeStorageHandler                   _storage_handler;
   PathResolver                         _resolver;
   ///@}
 
  public:
   // FileSystem(std::filesystem::path db_path, sl_element_id_t start_id);
-  FileSystem(std::filesystem::path db_path, StorageService& storage_service, sl_element_id_t start_id);
+  FileSystem(std::filesystem::path db_path, StorageService& storage_service,
+             sl_element_id_t start_id);
 
   auto InitRoot() -> bool;
 
@@ -46,9 +47,9 @@ class FileSystem {
   auto Get(sl_element_id_t id) -> std::shared_ptr<SleeveElement>;
 
   auto ApplyFilterToFolder(const std::filesystem::path&       folder_path,
-                             const std::shared_ptr<FilterCombo> filter)
+                           const std::shared_ptr<FilterCombo> filter)
       -> std::vector<std::shared_ptr<SleeveElement>>;
-      
+
   void Copy(std::filesystem::path from, std::filesystem::path dest);
 
   void SyncToDB();

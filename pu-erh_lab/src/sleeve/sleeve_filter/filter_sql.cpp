@@ -105,7 +105,7 @@ static inline std::wstring FilterValueToString(const FilterValue& value) {
     return L"'" + std::get<std::wstring>(value) + L"'";
   } else if (std::holds_alternative<std::tm>(value)) {
     const std::tm& tm_value = std::get<std::tm>(value);
-    wchar_t buffer[20];
+    wchar_t        buffer[20];
     wcsftime(buffer, sizeof(buffer), L"'%Y-%m-%d %H:%M:%S'", &tm_value);
     return L"TIMESTAMP " + std::wstring(buffer);
   }
@@ -114,12 +114,13 @@ static inline std::wstring FilterValueToString(const FilterValue& value) {
 
 std::wstring FilterSQLCompiler::GenerateConditionString(const FieldCondition& cond) {
   std::wstring column = FilterSQLCompiler::FieldToColumn(cond.field);
-  std::wstring op = FilterSQLCompiler::CompareToSQL(cond.op);
-  auto& value = cond.value;
+  std::wstring op     = FilterSQLCompiler::CompareToSQL(cond.op);
+  auto&        value  = cond.value;
 
   // First four cases does not use op string directly
   if (cond.op == CompareOp::BETWEEN && cond.second_value.has_value()) {
-    return std::format(L"({} BETWEEN {} AND {})", column, FilterValueToString(value), FilterValueToString(cond.second_value.value()));
+    return std::format(L"({} BETWEEN {} AND {})", column, FilterValueToString(value),
+                       FilterValueToString(cond.second_value.value()));
   } else if (cond.op == CompareOp::CONTAINS) {
     return std::format(L"({} LIKE '%{}%')", column, std::get<std::wstring>(value));
   } else if (cond.op == CompareOp::STARTS_WITH) {
@@ -155,9 +156,6 @@ std::wstring FilterSQLCompiler::CompileNode(const FilterNode& node) {
   return L"";
 }
 
-std::wstring FilterSQLCompiler::Compile(const FilterNode& node) {
-  return CompileNode(node);
-}
-
+std::wstring FilterSQLCompiler::Compile(const FilterNode& node) { return CompileNode(node); }
 
 };  // namespace puerhlab

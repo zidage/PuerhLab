@@ -27,7 +27,6 @@ class RawProcessor {
   const libraw_rawdata_t& _raw_data;
   LibRaw&                 _raw_processor;
 
-
   /**
    * @brief A procedure similar to DNG "Mapping Raw Values to Linear Reference Values" procedure.
    *
@@ -46,7 +45,7 @@ class RawProcessor {
 
   /**
    * @brief Debayer the raw image according to the selected algorithm.
-   * 
+   *
    */
   void                    ApplyDebayer();
 
@@ -59,7 +58,8 @@ class RawProcessor {
    * to obtain the necessary data (ForwardMatrix, ColorMatrix1, ColorMatrix2, etc.).
    *
    * Due to the lack of lab measurement data, the current "color science" is solely based on the
-   * color matrices provided by LibRaw, which are extracted from the camera profiles or the corresponding DNG files. 
+   * color matrices provided by LibRaw, which are extracted from the camera profiles or the
+   * corresponding DNG files.
    */
   void                    ConvertToWorkingSpace();
 

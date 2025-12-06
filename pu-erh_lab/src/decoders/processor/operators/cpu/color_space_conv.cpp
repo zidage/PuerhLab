@@ -108,10 +108,10 @@ void ApplyColorMatrix(cv::Mat& img, const float rgb_cam[][4], const float* pre_m
   //     BuildDiagonal(SafeDivide(normalized_cam_mul(0, 0), normalized_pre_mul(0, 0)),
   //                   SafeDivide(normalized_cam_mul(1, 1), normalized_pre_mul(1, 1)),
   //                   SafeDivide(normalized_cam_mul(2, 2), normalized_pre_mul(2, 2)));
-  cv::Matx33f pre_to_cam_matrix = BuildDiagonal(1.f, 1.f, 1.f);
+  cv::Matx33f pre_to_cam_matrix  = BuildDiagonal(1.f, 1.f, 1.f);
 
-  cv::Matx33f cam_xyz_matrix = BuildCamMatrix(cam_xyz);
-  cv::Matx33f cam2xyz_matrix = ComputeCam2Xyz(normalized_pre_mul, cam_xyz_matrix);
+  cv::Matx33f cam_xyz_matrix     = BuildCamMatrix(cam_xyz);
+  cv::Matx33f cam2xyz_matrix     = ComputeCam2Xyz(normalized_pre_mul, cam_xyz_matrix);
 
   ApplyWithPreToTarget(img, cam2xyz_matrix, pre_to_cam_matrix);
 }

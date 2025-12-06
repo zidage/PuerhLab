@@ -336,18 +336,17 @@ void BayerRGGB2RGB_RCD(cv::Mat& bayer) {
                        std::abs(rgb[indx + 1][c] - rgb[indx + 3][c]);
 
         // Cardinal colour differences
-        float N_est = rgb[indx - w1][c] - rgb[indx - w1][1];
-        float S_est = rgb[indx + w1][c] - rgb[indx + w1][1];
-        float W_est = rgb[indx - 1][c] - rgb[indx - 1][1];
-        float E_est = rgb[indx + 1][c] - rgb[indx + 1][1];
+        float N_est  = rgb[indx - w1][c] - rgb[indx - w1][1];
+        float S_est  = rgb[indx + w1][c] - rgb[indx + w1][1];
+        float W_est  = rgb[indx - 1][c] - rgb[indx - 1][1];
+        float E_est  = rgb[indx + 1][c] - rgb[indx + 1][1];
 
         // Vertical and horizontal estimations
-        float V_est = (N_grad * S_est + S_grad * N_est) / (N_grad + S_grad);
-        float H_est = (E_grad * W_est + W_grad * E_est) / (E_grad + W_grad);
+        float V_est  = (N_grad * S_est + S_grad * N_est) / (N_grad + S_grad);
+        float H_est  = (E_grad * W_est + W_grad * E_est) / (E_grad + W_grad);
 
         // R@G and B@G interpolation
-        rgb[indx][c] =
-            std::max(0.f, rgb[indx][1] + (1.f - VH_disc) * V_est + VH_disc * H_est);
+        rgb[indx][c] = std::max(0.f, rgb[indx][1] + (1.f - VH_disc) * V_est + VH_disc * H_est);
       }
     }
   }

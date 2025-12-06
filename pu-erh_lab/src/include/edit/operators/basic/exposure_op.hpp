@@ -7,7 +7,6 @@
 
 #include "edit/operators/op_base.hpp"
 #include "type/type.hpp"
-
 #include "utils/simd/simple_simd.hpp"
 
 namespace puerhlab {
@@ -18,18 +17,18 @@ class ExposureOp : public OperatorBase<ExposureOp> {
    * Positive to increase the brightness, negative to darken.
    *
    */
-  float _exposure_offset;
+  float              _exposure_offset;
 
   /**
    * @brief The actual luminance offset derived from the EV
    * dL = 2^E
    *
    */
-  float _scale;
+  float              _scale;
 
-  float _gamma;
+  float              _gamma;
 
-  PixelVec _vec_offset;
+  PixelVec           _vec_offset;
 
   simple_simd::f32x4 _voffset;
 

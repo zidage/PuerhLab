@@ -1,19 +1,26 @@
 #pragma once
 
+#include <hwy/highway.h>
+
 #include <variant>
 
 #include "edit/operators/op_kernel.hpp"
 #include "image/image_buffer.hpp"
-#include <hwy/highway.h>
 
 namespace puerhlab {
 
 struct Pixel {
   float r, g, b, a;
 
-  Pixel operator*(float scalar) const { return Pixel{r * scalar, g * scalar, b * scalar, a * scalar}; }
-  Pixel operator+(const Pixel& other) const { return Pixel{r + other.r, g + other.g, b + other.b, a + other.a}; }
-  Pixel operator-(const Pixel& other) const { return Pixel{r - other.r, g - other.g, b - other.b, a - other.a}; }
+  Pixel operator*(float scalar) const {
+    return Pixel{r * scalar, g * scalar, b * scalar, a * scalar};
+  }
+  Pixel operator+(const Pixel& other) const {
+    return Pixel{r + other.r, g + other.g, b + other.b, a + other.a};
+  }
+  Pixel operator-(const Pixel& other) const {
+    return Pixel{r - other.r, g - other.g, b - other.b, a - other.a};
+  }
   Pixel& operator+=(const Pixel& other) {
     r += other.r;
     g += other.g;
@@ -179,9 +186,9 @@ struct Kernel {
 };
 
 struct KernelStream {
-  std::vector<Kernel>                         _kernels;
+  std::vector<Kernel> _kernels;
 
-  bool                                        AddToStream(const Kernel& kernel) {
+  bool                AddToStream(const Kernel& kernel) {
     // Ensure all kernels in the stream are of the same type
     if (kernel._type == Kernel::Type::Point) {
       _kernels.push_back(kernel);

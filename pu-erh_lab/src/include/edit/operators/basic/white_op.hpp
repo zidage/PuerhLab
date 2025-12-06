@@ -12,13 +12,13 @@
 namespace puerhlab {
 class WhiteOp : public ToneRegionOp<WhiteOp>, public OperatorBase<WhiteOp> {
  private:
-  float           _offset;
+  float              _offset;
 
-  float           _y_intercept;
-  float           _black_point;
-  float           _slope;
+  float              _y_intercept;
+  float              _black_point;
+  float              _slope;
 
-  LinearToneCurve _curve;
+  LinearToneCurve    _curve;
 
   simple_simd::f32x4 _y_intercept_vec;
   simple_simd::f32x4 _black_point_vec;

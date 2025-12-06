@@ -60,71 +60,6 @@ static int fc[2][2] = {{0, 1}, {2, 1}};  // R=0, G1=1, B=2, G2=1
 namespace puerhlab {
 namespace CPU {
 
-inline static float sqr(float x) { return x * x; }
-
-inline static auto  GetBlackSom(const libraw_rawdata_t& raw_data) -> std::array<float, 3> {
-  const auto           base_black_level = static_cast<float>(raw_data.color.black);
-  std::array<float, 3> black_level      = {
-      (base_black_level + static_cast<float>(raw_data.color.cblack[0])) / 65535.0f,
-      (base_black_level + static_cast<float>(raw_data.color.cblack[1])) / 65535.0f,
-      (base_black_level + static_cast<float>(raw_data.color.cblack[2])) / 65535.0f};
-
-  return black_level;
-}
-
-inline static auto GetScaleMul(const libraw_rawdata_t& raw_data) -> std::array<float, 3> {
-  // auto                 pre_mul     = raw_data.color.pre_mul;
-  auto                 cam_mul = raw_data.color.cam_mul;
-
-  // float                max_cam_mul = std::max({cam_mul[0], cam_mul[1], cam_mul[2]});
-
-  auto                 c_white = raw_data.color.maximum;
-  auto                 c_black = raw_data.color.black;
-
-  std::array<float, 3> scale_mul;
-  for (int c = 0; c < 3; ++c) {
-    scale_mul[c] = (cam_mul[c] / cam_mul[1]) / (((int)c_white - (int)c_black) / 65535.0f);
-  }
-
-  return scale_mul;
-}
-
-inline static auto GetClMax(const libraw_rawdata_t& raw_data) -> std::array<float, 3> {
-  std::array<float, 3> cl_max;
-
-  int                  c_white    = (int)(raw_data.color.maximum);
-
-  std::array<float, 3> cblack_som = GetBlackSom(raw_data);
-  std::array<float, 3> scale_mul  = GetScaleMul(raw_data);
-
-  for (int c = 0; c < 3; ++c) {
-    cl_max[c] = ((c_white - cblack_som[c]) * scale_mul[c]) / 65535.0f;
-  }
-
-  return cl_max;
-}
-
-inline static auto GetChMax(cv::Mat& img) -> std::array<float, 3> {
-  cv::Mat resized;
-  cv::resize(img, resized, cv::Size(img.cols / 8, img.rows / 8));
-
-  std::array<float, 3> ch_max = {0.f, 0.f, 0.f};
-
-  resized.forEach<cv::Vec3f>([&](cv::Vec3f& pixel, const int*) {
-    if (pixel[0] > ch_max[0]) {
-      ch_max[0] = pixel[0];
-    }
-    if (pixel[1] > ch_max[1]) {
-      ch_max[1] = pixel[1];
-    }
-    if (pixel[2] > ch_max[2]) {
-      ch_max[2] = pixel[2];
-    }
-  });
-
-  return ch_max;
-}
-
 int round_size(const int size, const int alignment) {
   // Round the size of a buffer to the closest higher multiple
   return ((size % alignment) == 0) ? size : ((size - 1) / alignment + 1) * alignment;
@@ -150,16 +85,6 @@ static inline char mask_dilate(const unsigned char* in, const int w1) {
 
 static inline int _raw_to_cmap(const int width, const int row, const int col) {
   return (row / 3) * width + (col / 3);
-}
-
-static inline float _calc_linear_refavg(const float* in, const int color) {
-  const float ins[4] = {powf(fmaxf(0.0f, in[0]), 1.0f / HL_POWERF),
-                        powf(fmaxf(0.0f, in[1]), 1.0f / HL_POWERF),
-                        powf(fmaxf(0.0f, in[2]), 1.0f / HL_POWERF), 0.0f};
-  const float opp[4] = {0.5f * (ins[1] + ins[2]), 0.5f * (ins[0] + ins[2]),
-                        0.5f * (ins[0] + ins[1]), 0.0f};
-
-  return powf(opp[color], HL_POWERF);
 }
 
 static inline float _calc_refavg(const float* in, const int row, const int col, const int height,
@@ -195,15 +120,13 @@ static inline float _calc_refavg(const float* in, const int row, const int col, 
 static inline float _calc_desaturation_factor(const float* in, const int row, const int col,
                                               const int height, const int width, const float* clips,
                                               const int search_radius = 5) {
-
-
-  const int dymin                 = std::max(0, row - search_radius);
-  const int dxmin                 = std::max(0, col - search_radius);
-  const int dymax                 = std::min(height - 1, row + search_radius + 1);
-  const int dxmax                 = std::min(width - 1, col + search_radius + 1);
+  const int dymin              = std::max(0, row - search_radius);
+  const int dxmin              = std::max(0, col - search_radius);
+  const int dymax              = std::min(height - 1, row + search_radius + 1);
+  const int dxmax              = std::min(width - 1, col + search_radius + 1);
 
   // Check how many channels are clipped in the local area
-  bool      channel_clipped[3]    = {false, false, false};
+  bool      channel_clipped[3] = {false, false, false};
 
   for (int dy = dymin; dy < dymax; ++dy) {
     for (int dx = dxmin; dx < dxmax; ++dx) {
@@ -245,30 +168,25 @@ void HighlightReconstruct(cv::Mat& img, LibRaw& raw_processor) {
   // float max_val = static_cast<float>(raw_processor.imgdata.rawdata.color.maximum) / 65535.0f;
 
   auto               cam_mul       = raw_processor.imgdata.color.cam_mul;
-  auto               pre_mul       = raw_processor.imgdata.color.pre_mul;
-  auto               scale_mul     = GetScaleMul(raw_processor.imgdata.rawdata);
 
   float              correction[4] = {cam_mul[0] / cam_mul[1], 1.f, cam_mul[2] / cam_mul[1], 0.f};
 
-  float              chr_correction[4] = {scale_mul[0], 1.f, scale_mul[2], 0.f};
+  const float        clip_val      = hilight_magic;
 
-  const float        clip_val          = hilight_magic;
-
-  const float        clips[3]          = {clip_val, clip_val, clip_val};
+  const float        clips[3]      = {clip_val, clip_val, clip_val};
 
   // Didn't know why darktable use m_width and m_height
-  const int          m_width           = width / 3;
-  const int          m_height          = height / 3;
-  const int          m_size            = round_size((int)(m_width + 1) * (m_height + 1), 16);
+  const int          m_width       = width / 3;
+  const int          m_height      = height / 3;
+  const int          m_size        = round_size((int)(m_width + 1) * (m_height + 1), 16);
 
-  bool               anyclipped        = false;
+  bool               anyclipped    = false;
   cv::Mat1f          input(img);
 
   auto               input_data = input.ptr<float>(0);
 
   std::vector<unsigned char> mask_buf(6 * m_size, 0);
 
-#pragma omp parallel for
   for (int row = 1; row < m_height - 1; ++row) {
     for (int col = 1; col < m_width - 1; ++col) {
       char      mbuff[3] = {0, 0, 0};
@@ -303,7 +221,6 @@ void HighlightReconstruct(cv::Mat& img, LibRaw& raw_processor) {
   float cnts[4] = {0.f, 0.f, 0.f, 0.f};
 
   if (anyclipped) {
-#pragma omp parallel for
     for (int row = 3; row < static_cast<int>(m_height) - 3; ++row) {
       for (int col = 3; col < static_cast<int>(m_width) - 3; ++col) {
         const int mx              = static_cast<int>(row) * m_width + static_cast<int>(col);
@@ -313,11 +230,10 @@ void HighlightReconstruct(cv::Mat& img, LibRaw& raw_processor) {
       }
     }
 
-    const float lo_clips[4] = {0.95f * clips[0], 0.95f * clips[1], 0.95f * clips[2], 1.0f};
+    const float lo_clips[4] = {0.98f * clips[0], 0.98f * clips[1], 0.98f * clips[2], 1.0f};
     /* After having the surrounding mask for each color channel we can calculate the chrominance
      * corrections. */
 
-#pragma omp parallel for
     for (int row = 3; row < height - 3; ++row) {
       for (int col = 3; col < width - 3; ++col) {
         const int   color = FC(row, col);
@@ -336,8 +252,7 @@ void HighlightReconstruct(cv::Mat& img, LibRaw& raw_processor) {
 
     float chrominance[4] = {0.f, 0.f, 0.f, 0.f};
     for (int c = 0; c < 3; ++c) {
-      // TODO: why 1.1f?
-      chrominance[c] = (cnts[c] > 1.f) ? (sums[c] / cnts[c]) * 1.1f : 0.f;
+      chrominance[c] = (cnts[c] > 1.f) ? (sums[c] / cnts[c]) : 0.f;
     }
 
     // std::cout << "Correction: R=" << correction[0] << " G=" << correction[1]
@@ -345,7 +260,7 @@ void HighlightReconstruct(cv::Mat& img, LibRaw& raw_processor) {
     // std::cout << "Chrominance: R=" << chrominance[0] << " G=" << chrominance[1]
     //           << " B=" << chrominance[2] << std::endl;
     cv::Mat1f result = input.clone();
-#pragma omp parallel for
+
     for (int row = 0; row < height; ++row) {
       for (int col = 0; col < width; ++col) {
         const int   color = FC(row, col);
@@ -360,7 +275,7 @@ void HighlightReconstruct(cv::Mat& img, LibRaw& raw_processor) {
     }
 
     cv::Mat1f final_result = result.clone();
-#pragma omp parallel for
+
     for (int row = 2; row < height - 2; ++row) {
       for (int col = 2; col < width - 2; ++col) {
         const int   color = FC(row, col);

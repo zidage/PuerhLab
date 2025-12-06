@@ -293,12 +293,12 @@ std::vector<std::vector<VarTypes>> select(duckdb_connection& conn, const std::st
 
 /**
  * @brief Generic select by SQL query
- * 
- * @param conn 
- * @param sample_fields 
- * @param field_count 
- * @param sql 
- * @return std::vector<std::vector<VarTypes>> 
+ *
+ * @param conn
+ * @param sample_fields
+ * @param field_count
+ * @param sql
+ * @return std::vector<std::vector<VarTypes>>
  */
 std::vector<std::vector<VarTypes>> select_by_query(duckdb_connection&             conn,
                                                    std::span<const DuckFieldDesc> sample_fields,

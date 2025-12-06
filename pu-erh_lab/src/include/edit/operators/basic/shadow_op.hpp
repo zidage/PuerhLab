@@ -11,8 +11,8 @@
 namespace puerhlab {
 
 struct ShadowCurveParams {
-  float       control;  // [-1, 1]
-  float       toe_end = 0.25;  // end of toe region in [0,1], e.g. 0.25
+  float       control;             // [-1, 1]
+  float       toe_end     = 0.25;  // end of toe region in [0,1], e.g. 0.25
   const float slope_range = 0.8f;
 
   // Hermite between x0=0 and x1=toe_end

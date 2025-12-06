@@ -135,7 +135,9 @@ inline f32x4 mul(const f32x4& a, const f32x4& b) { return _mm_mul_ps(a, b); }
 inline f32x4 add(const f32x4& a, const f32x4& b) { return _mm_add_ps(a, b); }
 inline f32x4 sub(const f32x4& a, const f32x4& b) { return _mm_sub_ps(a, b); }
 inline f32x4 div(const f32x4& a, const f32x4& b) { return _mm_div_ps(a, b); }
-inline f32x4 mul_add(const f32x4& a, const f32x4& b, const f32x4& c) { return _mm_fmadd_ps(a, b, c); }
+inline f32x4 mul_add(const f32x4& a, const f32x4& b, const f32x4& c) {
+  return _mm_fmadd_ps(a, b, c);
+}
 }  // namespace impl_sse
 #endif
 
@@ -149,7 +151,9 @@ inline f32x4 mul(const f32x4& a, const f32x4& b) { return _mm_mul_ps(a, b); }
 inline f32x4 add(const f32x4& a, const f32x4& b) { return _mm_add_ps(a, b); }
 inline f32x4 sub(const f32x4& a, const f32x4& b) { return _mm_sub_ps(a, b); }
 inline f32x4 div(const f32x4& a, const f32x4& b) { return _mm_div_ps(a, b); }
-inline f32x4 mul_add(const f32x4& a, const f32x4& b, const f32x4& c) { return _mm_fmadd_ps(a, b, c); }
+inline f32x4 mul_add(const f32x4& a, const f32x4& b, const f32x4& c) {
+  return _mm_fmadd_ps(a, b, c);
+}
 }  // namespace impl_avx2
 #endif
 
@@ -175,71 +179,71 @@ inline f32x4 mul_add(const f32x4& a, const f32x4& b, const f32x4& c) {
 #endif
 
 // -------- dispatcher ----------
-using load_fn_t  = f32x4 (*)(const float*);
-using store_fn_t = void (*)(float*, const f32x4&);
-using set1_fn_t  = f32x4 (*)(float);
-using mul_fn_t   = f32x4 (*)(const f32x4&, const f32x4&);
-using add_fn_t   = f32x4 (*)(const f32x4&, const f32x4&);
-using sub_fn_t   = f32x4 (*)(const f32x4&, const f32x4&);
-using div_fn_t   = f32x4 (*)(const f32x4&, const f32x4&);
+using load_fn_t    = f32x4 (*)(const float*);
+using store_fn_t   = void (*)(float*, const f32x4&);
+using set1_fn_t    = f32x4 (*)(float);
+using mul_fn_t     = f32x4 (*)(const f32x4&, const f32x4&);
+using add_fn_t     = f32x4 (*)(const f32x4&, const f32x4&);
+using sub_fn_t     = f32x4 (*)(const f32x4&, const f32x4&);
+using div_fn_t     = f32x4 (*)(const f32x4&, const f32x4&);
 using mul_add_fn_t = f32x4 (*)(const f32x4&, const f32x4&, const f32x4&);
 
 struct Dispatch {
 #if SIMPLE_SIMD_ARM
-  load_fn_t  load  = impl_neon::load;
-  store_fn_t store = impl_neon::store;
-  set1_fn_t  set1  = impl_neon::set1;
-  mul_fn_t   mul   = impl_neon::mul;
-  add_fn_t   add   = impl_neon::add;
-  sub_fn_t   sub   = impl_neon::sub;
-  div_fn_t   div   = impl_neon::div;
+  load_fn_t    load    = impl_neon::load;
+  store_fn_t   store   = impl_neon::store;
+  set1_fn_t    set1    = impl_neon::set1;
+  mul_fn_t     mul     = impl_neon::mul;
+  add_fn_t     add     = impl_neon::add;
+  sub_fn_t     sub     = impl_neon::sub;
+  div_fn_t     div     = impl_neon::div;
   mul_add_fn_t mul_add = impl_neon::mul_add;
 #else
-  load_fn_t  load  = impl_scalar::load;
-  store_fn_t store = impl_scalar::store;
-  set1_fn_t  set1  = impl_scalar::set1;
-  mul_fn_t   mul   = impl_scalar::mul;
-  add_fn_t   add   = impl_scalar::add;
-  sub_fn_t   sub   = impl_scalar::sub;
-  div_fn_t   div   = impl_scalar::div;
+  load_fn_t    load    = impl_scalar::load;
+  store_fn_t   store   = impl_scalar::store;
+  set1_fn_t    set1    = impl_scalar::set1;
+  mul_fn_t     mul     = impl_scalar::mul;
+  add_fn_t     add     = impl_scalar::add;
+  sub_fn_t     sub     = impl_scalar::sub;
+  div_fn_t     div     = impl_scalar::div;
   mul_add_fn_t mul_add = impl_scalar::mul_add;
 #endif
 
-    void init() {
+  void init() {
 #if SIMPLE_SIMD_X86
-        CPUFeatures f = detect_cpu();
-        #if defined(__AVX2__)
-        if (f.avx2) {
-            load = impl_avx2::load;
-            store = impl_avx2::store;
-            set1 = impl_avx2::set1;
-            mul = impl_avx2::mul;
-            add = impl_avx2::add;
-            sub = impl_avx2::sub;
-            div = impl_avx2::div;
-            mul_add = impl_avx2::mul_add;
-            return;
-        }
-        #endif
-        #if defined(__SSE4_1__)
-        if (f.sse41) {
-            load = impl_sse::load;
-            store = impl_sse::store;
-            set1 = impl_sse::set1;
-            mul = impl_sse::mul;
-            add = impl_sse::add;
-            sub = impl_sse::sub;
-            div = impl_sse::div;
-            mul_add = impl_sse::mul_add;
-            return;
-        }
-        #endif
-        // fallback scalar already set on x86
-#elif SIMPLE_SIMD_ARM
-        // NEON is baseline on AArch64; defaults already set.
-        return;
-#endif
+    CPUFeatures f = detect_cpu();
+#if defined(__AVX2__)
+    if (f.avx2) {
+      load    = impl_avx2::load;
+      store   = impl_avx2::store;
+      set1    = impl_avx2::set1;
+      mul     = impl_avx2::mul;
+      add     = impl_avx2::add;
+      sub     = impl_avx2::sub;
+      div     = impl_avx2::div;
+      mul_add = impl_avx2::mul_add;
+      return;
     }
+#endif
+#if defined(__SSE4_1__)
+    if (f.sse41) {
+      load    = impl_sse::load;
+      store   = impl_sse::store;
+      set1    = impl_sse::set1;
+      mul     = impl_sse::mul;
+      add     = impl_sse::add;
+      sub     = impl_sse::sub;
+      div     = impl_sse::div;
+      mul_add = impl_sse::mul_add;
+      return;
+    }
+#endif
+    // fallback scalar already set on x86
+#elif SIMPLE_SIMD_ARM
+    // NEON is baseline on AArch64; defaults already set.
+    return;
+#endif
+  }
 };
 
 inline Dispatch& global_dispatch() {
@@ -260,6 +264,8 @@ inline f32x4 mul_f32x4(const f32x4& a, const f32x4& b) { return global_dispatch(
 inline f32x4 add_f32x4(const f32x4& a, const f32x4& b) { return global_dispatch().add(a, b); }
 inline f32x4 sub_f32x4(const f32x4& a, const f32x4& b) { return global_dispatch().sub(a, b); }
 inline f32x4 div_f32x4(const f32x4& a, const f32x4& b) { return global_dispatch().div(a, b); }
-inline f32x4 mul_add_f32x4(const f32x4& a, const f32x4& b, const f32x4& c) { return global_dispatch().mul_add(a, b, c); }
+inline f32x4 mul_add_f32x4(const f32x4& a, const f32x4& b, const f32x4& c) {
+  return global_dispatch().mul_add(a, b, c);
+}
 
 }  // namespace simple_simd

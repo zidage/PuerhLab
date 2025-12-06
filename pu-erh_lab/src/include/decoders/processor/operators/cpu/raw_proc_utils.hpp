@@ -25,11 +25,11 @@ enum class LightSourceType : uint8_t {
   D50          = 23
 };
 
-const int COLOR_TEMP_TABLE_SIZE = 24;
+const int   COLOR_TEMP_TABLE_SIZE              = 24;
 const float EXIF_WB_MAP[COLOR_TEMP_TABLE_SIZE] = {
-    0.0f,   5500.0f,  4200.0f,  2850.0f,  5500.0f,  5200.0f,  0.0f,  0.0f,
-    0.0f, 5200.0f,  6500.0f,  7500.0f,  0.0f,  0.0f,  0.0f,  0.0f,
-    0.0f,2850.0f,0.0f,0.0f,5500.0f,6500.0f,7500.0f,5000.0f};
+    0.0f, 5500.0f, 4200.0f, 2850.0f, 5500.0f, 5200.0f, 0.0f,    0.0f,
+    0.0f, 5200.0f, 6500.0f, 7500.0f, 0.0f,    0.0f,    0.0f,    0.0f,
+    0.0f, 2850.0f, 0.0f,    0.0f,    5500.0f, 6500.0f, 7500.0f, 5000.0f};
 
 inline static float GetTempForWBIndices(int idx) {
   if (idx < 0 || idx >= COLOR_TEMP_TABLE_SIZE) {
@@ -41,30 +41,30 @@ inline static float GetTempForWBIndices(int idx) {
 /**
  * @brief Get the WB Indices For Temp object. If exact match is found, both indices will be the
  * same. Otherwise, the lower and upper indices surrounding the temperature are returned.
- * 
- * @param temp 
- * @return std::pair<int, int> 
+ *
+ * @param temp
+ * @return std::pair<int, int>
  */
 inline static std::pair<int, int> GetWBIndicesForTemp(float temp) {
-  std::pair<int, int> result{-1, -1}; // lower index, upper index
-  float lower_tmp = -1.0f;
-  float upper_tmp = -1.0f;
+  std::pair<int, int> result{-1, -1};  // lower index, upper index
+  float               lower_tmp = -1.0f;
+  float               upper_tmp = -1.0f;
   for (int i = 1; i < COLOR_TEMP_TABLE_SIZE; ++i) {
     if (EXIF_WB_MAP[i] == 0.0f) continue;
     if (EXIF_WB_MAP[i] <= temp) {
       if (EXIF_WB_MAP[i] == temp) {
-        result.first = i;
+        result.first  = i;
         result.second = i;
         // Exact match
         return result;
       }
       if (EXIF_WB_MAP[i] > lower_tmp) {
-        lower_tmp = EXIF_WB_MAP[i];
+        lower_tmp    = EXIF_WB_MAP[i];
         result.first = i;
       }
     } else {
       if (upper_tmp < 0.0f || EXIF_WB_MAP[i] < upper_tmp) {
-        upper_tmp = EXIF_WB_MAP[i];
+        upper_tmp     = EXIF_WB_MAP[i];
         result.second = i;
       }
     }

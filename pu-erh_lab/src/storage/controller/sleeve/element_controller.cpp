@@ -36,7 +36,7 @@ void ElementController::AddElement(const std::shared_ptr<SleeveElement> element)
       _history_service.Insert(history);
     }
   } else if (element->_type == ElementType::FOLDER) {
-    auto folder   = std::static_pointer_cast<SleeveFolder>(element);
+    auto  folder   = std::static_pointer_cast<SleeveFolder>(element);
     auto& contents = folder->ListElements();
     for (auto& content_id : contents) {
       _folder_service.Insert({folder->_element_id, content_id});
@@ -130,7 +130,7 @@ auto ElementController::GetElementsInFolderByFilter(const std::shared_ptr<Filter
     -> std::vector<std::shared_ptr<SleeveElement>> {
   // Build SQL query from the filter
   std::wstring filter_sql = filter->GenerateSQLOn(folder_id);
-  return _element_service.GetElementsInFolderByFilter(filter_sql); // for specialized queries only
+  return _element_service.GetElementsInFolderByFilter(filter_sql);  // for specialized queries only
 }
 
 };  // namespace puerhlab
