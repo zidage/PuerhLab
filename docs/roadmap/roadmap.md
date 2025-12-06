@@ -11,10 +11,10 @@
 
 #### Pipeline and Image Processing
 
-- Add preliminary implementation for CUDA pipelines.
-- Modify preview mode in `PipelineScheduler` to support full-resolution image silent processing.
-- Implement RCD algorithm as the default method for raw demosaicing.
-- Add experimental panorama stitching module.
-- Fix magic numbers in highlight reconstruction algorithm.
-- Explore multi-threading / SIMD optimizations for image processing tasks.
-- Add support for JSON serialization of pipeline configurations.
+- [ ] Add preliminary implementation for CUDA pipelines.
+- [ ] Modify preview mode in `PipelineScheduler` to support full-resolution image silent processing.
+- [x] Implement RCD algorithm as the default method for raw demosaicing.
+- [x] Add experimental panorama stitching module (complete algorithm, needs integration).
+- [x] Fix magic numbers in highlight reconstruction algorithm (sort of, thanks to Claude Opus 4.5).
+- [ ] Explore multi-threading / SIMD optimizations for image processing tasks (on-going).
+- [ ] Add support for JSON serialization of pipeline configurations.
