@@ -30,8 +30,7 @@ auto EditHistoryService::GetEditHistoryByFileId(const sl_element_id_t file_id)
                              std::to_string(file_id));
   }
   if (result.empty()) {
-    throw std::runtime_error(std::format(
-        "EditHistoryService: No history bound with sleeve file id {} is stored in DB", file_id));
+    return std::make_shared<EditHistory>(file_id);
   }
   return result.front();
 }
