@@ -12,7 +12,7 @@ auto FolderService::ToParams(const std::pair<sl_element_id_t, sl_element_id_t> s
   return {source.first, source.second};
 }
 
-auto FolderService::FromParams(const FolderMapperParams&& param)
+auto FolderService::FromParams(FolderMapperParams&& param)
     -> std::pair<sl_element_id_t, sl_element_id_t> {
   return {param.folder_id, param.element_id};
 }

@@ -105,7 +105,8 @@ TEST(SleeveFSTest, ReInitTest1) {
 
       fs.SyncToDB();
       fs.WriteSleeveMeta(meta_path);
-      std::cout << "Before reloading:\n" << conv::ToBytes(fs.Tree(L"")) << std::endl;
+      auto tree_str = conv::ToBytes(fs.Tree(L""));
+      std::cout << "Before reloading:\n" << tree_str << std::endl;
     } catch (std::exception& e) {
       std::cout << e.what() << std::endl;
       FAIL();

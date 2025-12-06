@@ -28,12 +28,12 @@ auto ImageService::ToParams(const std::shared_ptr<Image> source) -> ImageMapperP
           std::make_unique<std::string>(utf8_img_name), static_cast<uint32_t>(source->_image_type),
           std::make_unique<std::string>(source->ExifToJson())};
 }
-auto ImageService::FromParams(const ImageMapperParams&& param) -> std::shared_ptr<Image> {
+auto ImageService::FromParams(ImageMapperParams&& param) -> std::shared_ptr<Image> {
   // TODO: Replace it with ImageFactory once the more fine-grained Image loader is implemented
-  auto recovered = std::make_shared<Image>(param.id, std::filesystem::path(*param.image_path),
-                                           conv::FromBytes(*param.file_name),
+  auto recovered = std::make_shared<Image>(param.id, std::filesystem::path(std::move(*param.image_path)),
+                                           conv::FromBytes(std::move(*param.file_name)),
                                            static_cast<ImageType>(param.type));
-  recovered->JsonToExif(*param.metadata);
+  recovered->JsonToExif(std::move(*param.metadata));
   return recovered;
 }
 
@@ -42,7 +42,7 @@ auto ImageService::GetImageById(const image_id_t id) -> std::vector<std::shared_
   return GetByPredicate(std::move(predicate));
 }
 
-auto ImageService::GetImageByName(const std::wstring name) -> std::vector<std::shared_ptr<Image>> {
+auto ImageService::GetImageByName(const std::wstring& name) -> std::vector<std::shared_ptr<Image>> {
   std::wstring predicate_w = std::format(L"file_name={}", name);
   return GetByPredicate(conv::ToBytes(predicate_w));
 }

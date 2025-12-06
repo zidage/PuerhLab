@@ -14,7 +14,7 @@ class FileService : public ServiceInterface<FileService, std::pair<sl_element_id
   // File service is used to retrieve a set of mapping, therefore no actual internal type, i.g.
   // SleeveFile, is returned
   static auto ToParams(const std::pair<sl_element_id_t, image_id_t>& source) -> FileMapperParams;
-  static auto FromParams(const FileMapperParams&& param) -> std::pair<sl_element_id_t, image_id_t>;
+  static auto FromParams(FileMapperParams&& param) -> std::pair<sl_element_id_t, image_id_t>;
 
   auto        GetFileById(const sl_element_id_t id) -> std::pair<sl_element_id_t, image_id_t>;
   auto        GetBoundImageById(const sl_element_id_t id) -> image_id_t;

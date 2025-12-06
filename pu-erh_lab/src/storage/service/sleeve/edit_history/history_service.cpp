@@ -13,11 +13,11 @@ auto EditHistoryService::ToParams(const std::shared_ptr<EditHistory> source)
   return param;
 }
 
-auto EditHistoryService::FromParams(const EditHistoryMapperParams&& param)
+auto EditHistoryService::FromParams(EditHistoryMapperParams&& param)
     -> std::shared_ptr<EditHistory> {
   auto history = std::make_shared<EditHistory>(param.file_id);
   if (param.history) {
-    history->FromJSON(nlohmann::json::parse(*param.history));
+    history->FromJSON(nlohmann::json::parse(std::move(*param.history)));
   }
   return history;
 }

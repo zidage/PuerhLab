@@ -16,7 +16,7 @@ class EditHistoryService
   using ServiceInterface::ServiceInterface;
 
   static auto ToParams(const std::shared_ptr<EditHistory> source) -> EditHistoryMapperParams;
-  static auto FromParams(const EditHistoryMapperParams&& param) -> std::shared_ptr<EditHistory>;
+  static auto FromParams(EditHistoryMapperParams&& param) -> std::shared_ptr<EditHistory>;
 
   auto        GetEditHistoryByFileId(const sl_element_id_t file_id) -> std::shared_ptr<EditHistory>;
 };

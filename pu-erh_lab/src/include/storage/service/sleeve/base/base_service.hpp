@@ -9,6 +9,6 @@ class BaseService
  public:
   using ServiceInterface::ServiceInterface;
   static auto ToParams(const sleeve_id_t source) -> BaseMapperParams;
-  static auto FromParams(const BaseMapperParams&& param) -> sleeve_id_t;
+  static auto FromParams(BaseMapperParams&& param) -> sleeve_id_t;
 };
 };  // namespace puerhlab

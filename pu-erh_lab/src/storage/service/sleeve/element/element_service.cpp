@@ -31,13 +31,13 @@ auto ElementService::ToParams(const std::shared_ptr<SleeveElement>& source) -> E
           source->_ref_count};
 }
 
-auto ElementService::FromParams(const ElementMapperParams&& param)
+auto ElementService::FromParams(ElementMapperParams&& param)
     -> std::shared_ptr<SleeveElement> {
   auto               id                = param.id;
   auto               type              = static_cast<ElementType>(param.type);
-  auto               element_name      = conv::FromBytes(*param.element_name);
-  auto               added_time_str    = *param.added_time;
-  auto               modified_time_str = *param.modified_time;
+  auto               element_name      = conv::FromBytes(std::move(*param.element_name));
+  auto               added_time_str    = std::move(*param.added_time);
+  auto               modified_time_str = std::move(*param.modified_time);
   auto               ref_count         = param.ref_count;
 
   std::tm            tm_added{};
@@ -75,7 +75,7 @@ auto ElementService::GetElementById(const sl_element_id_t id) -> std::shared_ptr
   return result[0];
 }
 
-auto ElementService::GetElementByName(const std::wstring name)
+auto ElementService::GetElementByName(const std::wstring& name)
     -> std::vector<std::shared_ptr<SleeveElement>> {
   std::string predicate = conv::ToBytes(std::format(L"element_name={}", name));
   return GetByPredicate(std::move(predicate));
@@ -87,7 +87,7 @@ auto ElementService::GetElementByType(const ElementType type)
   return GetByPredicate(std::move(predicate));
 }
 
-auto ElementService::GetElementsInFolderByFilter(const std::wstring filter_sql)
+auto ElementService::GetElementsInFolderByFilter(const std::wstring& filter_sql)
     -> std::vector<std::shared_ptr<SleeveElement>> {
   std::string filter_sql_u8 = conv::ToBytes(filter_sql);
   return GetByQuery(std::move(filter_sql_u8));

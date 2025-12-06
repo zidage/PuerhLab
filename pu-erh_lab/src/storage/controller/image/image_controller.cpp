@@ -69,7 +69,7 @@ void ImageController::RemoveImageByType(ImageType type) {
  *
  * @param path
  */
-void ImageController::RemoveImageByPath(std::wstring path) {
+void ImageController::RemoveImageByPath(const std::wstring& path) {
   _service.RemoveByClause(std::format("image_path={}", conv::ToBytes(path)));
 }
 
@@ -101,7 +101,7 @@ auto ImageController::GetImageByType(ImageType type) -> std::vector<std::shared_
  * @param name
  * @return std::vector<std::shared_ptr<Image>>
  */
-auto ImageController::GetImageByName(std::wstring name) -> std::vector<std::shared_ptr<Image>> {
+auto ImageController::GetImageByName(const std::wstring& name) -> std::vector<std::shared_ptr<Image>> {
   return _service.GetImageByName(name);
 }
 

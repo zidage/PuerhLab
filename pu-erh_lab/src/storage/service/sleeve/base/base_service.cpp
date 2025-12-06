@@ -6,5 +6,5 @@
 namespace puerhlab {
 auto BaseService::ToParams(const sleeve_id_t source) -> BaseMapperParams { return {source}; }
 
-auto BaseService::FromParams(const BaseMapperParams&& param) -> sleeve_id_t { return param.id; }
+auto BaseService::FromParams(BaseMapperParams&& param) -> sleeve_id_t { return param.id; }
 };  // namespace puerhlab

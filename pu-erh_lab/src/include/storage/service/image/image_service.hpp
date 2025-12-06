@@ -18,10 +18,10 @@ class ImageService : public ServiceInterface<ImageService, std::shared_ptr<Image
   using ServiceInterface::ServiceInterface;
 
   static auto ToParams(const std::shared_ptr<Image> source) -> ImageMapperParams;
-  static auto FromParams(const ImageMapperParams&& param) -> std::shared_ptr<Image>;
+  static auto FromParams(ImageMapperParams&& param) -> std::shared_ptr<Image>;
 
   auto        GetImageById(const image_id_t id) -> std::vector<std::shared_ptr<Image>>;
-  auto        GetImageByName(const std::wstring name) -> std::vector<std::shared_ptr<Image>>;
+  auto        GetImageByName(const std::wstring& name) -> std::vector<std::shared_ptr<Image>>;
   auto GetImageByPath(const std::filesystem::path path) -> std::vector<std::shared_ptr<Image>>;
   auto GetImageByType(const ImageType type) -> std::vector<std::shared_ptr<Image>>;
 };

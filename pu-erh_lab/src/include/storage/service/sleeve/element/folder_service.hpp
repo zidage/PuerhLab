@@ -21,7 +21,7 @@ class FolderService
   // SleeveFile, is returned
   static auto ToParams(const std::pair<sl_element_id_t, sl_element_id_t> source)
       -> FolderMapperParams;
-  static auto FromParams(const FolderMapperParams&& param)
+  static auto FromParams(FolderMapperParams&& param)
       -> std::pair<sl_element_id_t, sl_element_id_t>;
 
   auto GetFolderContent(const sl_element_id_t id) -> std::vector<sl_element_id_t>;

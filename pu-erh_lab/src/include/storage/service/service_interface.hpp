@@ -26,7 +26,7 @@ class ServiceInterface {
    * @param predicate
    * @return std::vector<InternalType>
    */
-  auto GetByPredicate(const std::string&& predicate) -> std::vector<InternalType> {
+  auto GetByPredicate(std::string&& predicate) -> std::vector<InternalType> {
     std::vector<Mappable>     param_results = _mapper.Get(predicate.c_str());
     std::vector<InternalType> results;
     results.resize(param_results.size());
@@ -45,7 +45,7 @@ class ServiceInterface {
    * @param query
    * @return std::vector<InternalType>
    */
-  auto GetByQuery(const std::string&& query) -> std::vector<InternalType> {
+  auto GetByQuery(std::string&& query) -> std::vector<InternalType> {
     std::vector<Mappable>     param_results = _mapper.GetByQuery(query.c_str());
     std::vector<InternalType> results;
     results.resize(param_results.size());
