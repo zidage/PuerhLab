@@ -1,3 +1,4 @@
+# Not used by now, but kept for future test cases
 add_library(MemLeakDect INTERFACE leak_detector/memory_leak_detector.hpp)
 target_link_libraries(MemLeakDect INTERFACE GTest::gtest_main)
 
@@ -129,6 +130,13 @@ target_include_directories(EditHistoryTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab
 target_link_libraries(EditHistoryTest GTest::gtest_main Operators SleeveManager ImageDecoder EditPipeline OpenColorIO lcms2::lcms2)
 if (WIN32)
 target_link_libraries(EditHistoryTest easy_profiler)
+endif()
+
+add_executable(PipelineSerialTest edit/pipeline/pipeline_serial_test.cpp)
+target_include_directories(PipelineSerialTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
+target_link_libraries(PipelineSerialTest GTest::gtest_main Operators SleeveManager ImageDecoder EditPipeline OpenColorIO lcms2::lcms2)
+if (WIN32)
+target_link_libraries(PipelineSerialTest easy_profiler)
 endif()
 
 add_executable(ImagePreview gui_pocs/image_preview_cpu.cpp)
