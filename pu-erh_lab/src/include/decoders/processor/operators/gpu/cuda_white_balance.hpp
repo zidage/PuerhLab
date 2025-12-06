@@ -8,6 +8,6 @@
 
 namespace puerhlab {
 namespace CUDA {
-void WhiteBalanceCorrection(cv::cuda::GpuMat& img, LibRaw& raw_processor);
+void ToLinearRef(cv::cuda::GpuMat& img, LibRaw& raw_processor);
 };
 };  // namespace puerhlab

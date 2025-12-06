@@ -40,17 +40,17 @@ RawProcessor::RawProcessor(const RawParams& params, const libraw_rawdata_t& rawd
                                        LibRaw& raw_processor)
     : _params(params), _raw_data(rawdata), _raw_processor(raw_processor) {}
 
-void RawProcessor::ApplyWhiteBalance() {
+void RawProcessor::ApplyLinearization() {
   auto& pre_debayer_buffer = _process_buffer;
 #ifdef HAVE_CUDA
   if (_params._cuda) {
     auto& gpu_img = pre_debayer_buffer.GetGPUData();
-    CUDA::WhiteBalanceCorrection(gpu_img, _raw_processor);
+    CUDA::ToLinearRef(gpu_img, _raw_processor);
     return;
   }
 #endif
   auto& cpu_img = pre_debayer_buffer.GetCPUData();
-  CPU::WhiteBalanceCorrection(cpu_img, _raw_processor);
+  CPU::ToLinearRef(cpu_img, _raw_processor);
 }
 
 void RawProcessor::ApplyDebayer() {
@@ -90,7 +90,7 @@ void RawProcessor::ApplyHighlightReconstruct() {
   }
 }
 
-void RawProcessor::ApplyColorSpaceTransform() {
+void RawProcessor::ConvertToWorkingSpace() {
   auto& debayer_buffer = _process_buffer;
   auto  color_coeffs   = _raw_data.color.rgb_cam;
 #ifdef HAVE_CUDA
@@ -135,13 +135,13 @@ auto RawProcessor::Process() -> ImageBuffer {
             _raw_processor.COLOR(1, 0) == 3 && _raw_processor.COLOR(1, 1) == 2);
   _process_buffer.GetCPUData().convertTo(_process_buffer.GetCPUData(), CV_32FC1, 1.0f / 65535.0f);
 
-  ApplyWhiteBalance();
+  ApplyLinearization();
 
   ApplyHighlightReconstruct();
 
   ApplyDebayer();
 
-  ApplyColorSpaceTransform();
+  ConvertToWorkingSpace();
 #ifdef HAVE_CUDA
   if (_params._cuda) {
     _process_buffer.SyncToCPU();

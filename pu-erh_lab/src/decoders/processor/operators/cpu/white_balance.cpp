@@ -54,7 +54,7 @@ inline static auto GetScaleMul(const libraw_rawdata_t& raw_data) -> std::array<f
   return scale_mul;
 }
 
-void WhiteBalanceCorrection(cv::Mat& img, LibRaw& raw_processor) {
+void ToLinearRef(cv::Mat& img, LibRaw& raw_processor) {
   auto black_level = CalculateBlackLevel(raw_processor.imgdata.rawdata);
   auto wb          = GetWBCoeff(raw_processor.imgdata.rawdata);
   int  w           = img.cols;

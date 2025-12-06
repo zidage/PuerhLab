@@ -6,6 +6,6 @@
 
 namespace puerhlab {
 namespace CPU {
-void WhiteBalanceCorrection(cv::Mat& img, LibRaw& raw_processor);
+void ToLinearRef(cv::Mat& img, LibRaw& raw_processor);
 };
 };  // namespace puerhlab

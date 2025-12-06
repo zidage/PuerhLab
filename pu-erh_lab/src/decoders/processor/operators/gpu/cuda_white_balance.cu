@@ -11,7 +11,7 @@ __constant__ float d_black_level[4];
 __constant__ float d_wb_multipliers[4];
 
 __constant__ int   remap[4] = {0, 1, 3, 2};
-__global__ void WhiteBalanceCorrectionKernel(cv::cuda::PtrStep<float> image, int width, int height,
+__global__ void ToLinearRefKernel(cv::cuda::PtrStep<float> image, int width, int height,
                                              float white_level_scale) {
   // Calculate the global x and y coordinates of the pixel for this thread
   const int col = blockIdx.x * blockDim.x + threadIdx.x;
@@ -77,7 +77,7 @@ static auto GetWBCoeff(const libraw_rawdata_t& raw_data) -> const float* {
   return raw_data.color.cam_mul;
 }
 
-void WhiteBalanceCorrection(cv::cuda::GpuMat& image, LibRaw& raw_processor) {
+void ToLinearRef(cv::cuda::GpuMat& image, LibRaw& raw_processor) {
   auto black_level = CalculateBlackLevel(raw_processor.imgdata.rawdata);
   auto wb          = GetWBCoeff(raw_processor.imgdata.rawdata);
   int w = image.cols;
@@ -110,7 +110,7 @@ void WhiteBalanceCorrection(cv::cuda::GpuMat& image, LibRaw& raw_processor) {
                           (image.rows + threads_per_block.y - 1) / threads_per_block.y);
 
     // 3. Launch the kernel
-    WhiteBalanceCorrectionKernel<<<num_blocks, threads_per_block>>>(image, image.cols, image.rows,
+    ToLinearRefKernel<<<num_blocks, threads_per_block>>>(image, image.cols, image.rows,
                                                                     maximum);
 
     // Check for any kernel launch errors (important for debugging)

@@ -27,18 +27,41 @@ class RawProcessor {
   const libraw_rawdata_t& _raw_data;
   LibRaw&                 _raw_processor;
 
-  static constexpr float  _xyz_ap0[9] = {1.06349349f,     0.00641074032f, -0.0157827139f,
-                                         -0.492064744f,   1.36820328f,    0.0913489163f,
-                                         -0.00281119067f, 0.00463410327f, 0.916555226f};
 
-  //   static constexpr float  _xyz_ap0[9] = {1.0498110175f,  0.0000000000f, -0.0000974845f,
-  //                                          -0.4959030231f, 1.3733130458f, 0.0982400361f,
-  //                                          0.0000000000f,  0.0000000000f, 0.9912520182f};
+  /**
+   * @brief A procedure similar to DNG "Mapping Raw Values to Linear Reference Values" procedure.
+   *
+   * This method converts the raw sensor values to linear reference values. To support highlight
+   * reconstruction, "as shot" white balance multipliers are applied here beforehand.
+   */
+  void                    ApplyLinearization();
 
-  void                    ApplyWhiteBalance();
-  void                    ApplyDebayer();
+  /**
+   * @brief Apply highlight reconstruction if enabled.
+   *
+   * To make highlight reconstruction work properly, "as shot" white balance multipliers should be
+   * applied before this step.
+   */
   void                    ApplyHighlightReconstruct();
-  void                    ApplyColorSpaceTransform();
+
+  /**
+   * @brief Debayer the raw image according to the selected algorithm.
+   * 
+   */
+  void                    ApplyDebayer();
+
+  /**
+   * @brief Apply color space transformation from camera RGB to ACES2065-1.
+   *
+   * Currently, this procedure is not complete. LibRaw does not provide all the necesssary data to
+   * perform a "more" accurate color space transformation according to the DNG specification.
+   * In the future, we may consider converting all RAW files to DNG first using Adobe DNG Converter
+   * to obtain the necessary data (ForwardMatrix, ColorMatrix1, ColorMatrix2, etc.).
+   *
+   * Due to the lack of lab measurement data, the current "color science" is solely based on the
+   * color matrices provided by LibRaw, which are extracted from the camera profiles or the corresponding DNG files. 
+   */
+  void                    ConvertToWorkingSpace();
 
  public:
   RawProcessor() = delete;
