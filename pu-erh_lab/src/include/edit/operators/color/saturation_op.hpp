@@ -25,6 +25,8 @@ class SaturationOp : public OperatorBase<SaturationOp> {
   static constexpr PipelineStageName _affiliation_stage = PipelineStageName::Color_Adjustment;
   static constexpr std::string_view  _canonical_name    = "Saturation";
   static constexpr std::string_view  _script_name       = "saturation";
+  static constexpr OperatorType      _operator_type     = OperatorType::SATURATION;
+
   SaturationOp();
   SaturationOp(float saturation_offset);
   SaturationOp(const nlohmann::json& params);

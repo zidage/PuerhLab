@@ -37,6 +37,7 @@ class ExposureOp : public OperatorBase<ExposureOp> {
   static constexpr PipelineStageName _affiliation_stage = PipelineStageName::Basic_Adjustment;
   static constexpr std::string_view  _canonical_name    = "Exposure";
   static constexpr std::string_view  _script_name       = "exposure";
+  static constexpr OperatorType      _operator_type     = OperatorType::EXPOSURE;
   ExposureOp();
   ExposureOp(float exposure_offset);
   ExposureOp(const nlohmann::json& params);

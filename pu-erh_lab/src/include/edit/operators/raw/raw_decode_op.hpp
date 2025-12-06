@@ -15,6 +15,7 @@ class RawDecodeOp : public OperatorBase<RawDecodeOp> {
   static constexpr std::string_view  _canonical_name    = "RawDecode";
   static constexpr std::string_view  _script_name       = "raw_decode";
   static constexpr PipelineStageName _affiliation_stage = PipelineStageName::Image_Loading;
+  static constexpr OperatorType      _operator_type     = OperatorType::RAW_DECODE;
 
   RawParams                          _params;
   RawProcessBackend                  _backend;

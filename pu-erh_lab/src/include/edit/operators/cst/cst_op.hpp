@@ -29,6 +29,7 @@ class OCIO_ACES_Transform_Op : public OperatorBase<OCIO_ACES_Transform_Op> {
   static constexpr PipelineStageName _affiliation_stage = PipelineStageName::Output_Transform;
   static constexpr std::string_view  _canonical_name    = "OCIO";
   static constexpr std::string_view  _script_name       = "ocio";
+  static constexpr OperatorType      _operator_type     = OperatorType::CST;
   OCIO_ACES_Transform_Op()                              = delete;
   OCIO_ACES_Transform_Op(const std::string& input, const std::string& output);
   OCIO_ACES_Transform_Op(const std::string& input, const std::string& output,

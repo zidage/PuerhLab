@@ -6,6 +6,10 @@
 
 namespace puerhlab {
 
+/**
+ * @brief Deprecated. Use DNG SDK tone curve in the future (not implemented yet).
+ *
+ */
 class ACESToneMappingOp : public OperatorBase<ACESToneMappingOp> {
  private:
   static void CalculateOutput(cv::Vec3f& color, float adapted_lum = 1.0f);
@@ -15,6 +19,7 @@ class ACESToneMappingOp : public OperatorBase<ACESToneMappingOp> {
   static constexpr PipelineStageName _affiliation_stage = PipelineStageName::Output_Transform;
   static constexpr std::string_view  _canonical_name    = "ACES ToneMapping";
   static constexpr std::string_view  _script_name       = "ACES_tone_mapping";
+  static constexpr OperatorType      _operator_type     = OperatorType::ACES_TONE_MAPPING;
 
   ACESToneMappingOp()                                   = default;
   ACESToneMappingOp(const nlohmann::json& params);

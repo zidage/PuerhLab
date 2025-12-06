@@ -42,6 +42,7 @@ class HighlightsOp : public ToneRegionOp<HighlightsOp>, public OperatorBase<High
   static constexpr std::string_view  _canonical_name    = "HIGHLIGHTS";
   static constexpr std::string_view  _script_name       = "highlights";
   static constexpr ToneRegion        _tone_region       = ToneRegion::HIGHLIGHTS;
+  static constexpr OperatorType      _operator_type     = OperatorType::HIGHLIGHTS;
 
   HighlightsOp()                                        = default;
   HighlightsOp(float offset);

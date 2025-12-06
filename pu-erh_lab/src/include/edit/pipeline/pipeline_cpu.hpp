@@ -43,5 +43,20 @@ class CPUPipelineExecutor : public PipelineExecutor {
   void SetPreviewMode(bool is_preview);
   void SetExecutionStages();
   void ResetExecutionStages();
+
+  /**
+   * @brief Serialize the pipeline parameters to JSON
+   *
+   * @return nlohmann::json
+   */
+  auto ExportPipelineParams() const -> nlohmann::json override;
+  /**
+   * @brief Set the pipeline parameters from JSON. It will reset all stages and operators, as well
+   * as cache. After importing, you need to call SetExecutionStages() to rebuild the execution
+   * stages.
+   *
+   * @param j
+   */
+  void ImportPipelineParams(const nlohmann::json& j) override;
 };
 };  // namespace puerhlab

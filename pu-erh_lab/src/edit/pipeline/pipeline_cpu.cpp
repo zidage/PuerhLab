@@ -155,4 +155,25 @@ void CPUPipelineExecutor::ResetExecutionStages() {
   _merged_stages.clear();
 }
 
+auto CPUPipelineExecutor::ExportPipelineParams() const -> nlohmann::json {
+  nlohmann::json j;
+  for (const auto& stage : _stages) {
+    nlohmann::json stage_json     = stage.ExportStageParams();
+    j[stage.GetStageNameString()] = std::move(stage_json);
+  }
+  return j;
+}
+
+void CPUPipelineExecutor::ImportPipelineParams(const nlohmann::json& j) {
+  ResetExecutionStages();
+  for (auto& stage : _stages) {
+    std::string stage_name = stage.GetStageNameString();
+    if (j.contains(stage_name)) {
+      nlohmann::json stage_json = j[stage_name];
+      // When importing, stage's import function will do reset internally
+      stage.ImportStageParams(stage_json);
+    }
+  }
+}
+
 };  // namespace puerhlab

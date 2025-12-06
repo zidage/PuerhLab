@@ -33,6 +33,7 @@ class WhiteOp : public ToneRegionOp<WhiteOp>, public OperatorBase<WhiteOp> {
   static constexpr std::string_view  _canonical_name    = "WHITE";
   static constexpr std::string_view  _script_name       = "white";
   static constexpr ToneRegion        _tone_region       = ToneRegion::WHITE;
+  static constexpr OperatorType      _operator_type     = OperatorType::WHITE;
 
   WhiteOp()                                             = default;
   WhiteOp(float offset);

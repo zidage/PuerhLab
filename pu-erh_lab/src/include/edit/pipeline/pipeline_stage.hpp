@@ -18,6 +18,20 @@ struct OperatorEntry {
   bool                           operator<(const OperatorEntry& other) const {
     return _op->GetPriorityLevel() < other._op->GetPriorityLevel();
   }
+
+ public:
+  auto ExportOperatorParams() const -> nlohmann::json {
+    nlohmann::json j;
+    j["type"]   = _op->GetOperatorType();
+    j["enable"] = _enable;
+    j["params"] = _op->GetParams();
+    return j;
+  }
+
+  auto ImportOperatorParams(const nlohmann::json& j) -> void {
+    if (j.contains("enable")) _enable = j["enable"].get<bool>();
+    if (j.contains("params")) _op->SetParams(j["params"]);
+  }
 };
 
 class PipelineStage {
@@ -109,8 +123,31 @@ class PipelineStage {
 
   auto GetKernelStream() -> KernelStream& { return _kernel_stream; }
 
+  /**
+   * @brief Reset this stage to initial state
+   *
+   */
   void ResetAll();
+
+  /**
+   * @brief Reset the cache of this stage
+   *
+   */
   void ResetCache();
+
+  /**
+   * @brief Export the parameters of this stage and its operators to JSON (serialize)
+   *
+   * @return nlohmann::json
+   */
+  auto ExportStageParams() const -> nlohmann::json;
+
+  /**
+   * @brief Import the parameters of this stage and its operators from JSON (deserialize)
+   *
+   * @param j
+   */
+  void ImportStageParams(const nlohmann::json& j);
 };
 
 }  // namespace puerhlab

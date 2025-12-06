@@ -11,6 +11,11 @@
 
 namespace puerhlab {
 namespace OCIO = OCIO_NAMESPACE;
+
+/**
+ * @brief An operator to apply ACES Look Modification Transform (LMT) using OpenColorIO
+ *
+ */
 class OCIO_LMT_Transform_Op : public OperatorBase<OCIO_LMT_Transform_Op> {
  private:
   std::filesystem::path  _lmt_path;
@@ -22,6 +27,8 @@ class OCIO_LMT_Transform_Op : public OperatorBase<OCIO_LMT_Transform_Op> {
   static constexpr PipelineStageName _affiliation_stage = PipelineStageName::Output_Transform;
   static constexpr std::string_view  _canonical_name    = "OCIO LMT";
   static constexpr std::string_view  _script_name       = "ocio_lmt";
+  static constexpr OperatorType      _operator_type     = OperatorType::LMT;
+
   OCIO_LMT_Transform_Op()                               = delete;
   OCIO_LMT_Transform_Op(std::filesystem::path& lmt_path);
   OCIO_LMT_Transform_Op(const nlohmann::json& params);

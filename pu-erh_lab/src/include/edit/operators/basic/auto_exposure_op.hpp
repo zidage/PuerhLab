@@ -118,6 +118,7 @@ class AutoExposureOp : public OperatorBase<AutoExposureOp> {
   static constexpr PipelineStageName _affiliation_stage = PipelineStageName::Basic_Adjustment;
   static constexpr std::string_view  _canonical_name    = "Auto Exposure";
   static constexpr std::string_view  _script_name       = "auto_exposure";
+  static constexpr OperatorType      _operator_type     = OperatorType::AUTO_EXPOSURE;
 
   AutoExposureOp()                                      = default;
   AutoExposureOp(const nlohmann::json& params);

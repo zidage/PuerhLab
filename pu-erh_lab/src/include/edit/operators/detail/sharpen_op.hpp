@@ -40,6 +40,7 @@ class SharpenOp : public OperatorBase<SharpenOp> {
   static constexpr PipelineStageName _affiliation_stage = PipelineStageName::Detail_Adjustment;
   static constexpr std::string_view  _canonical_name    = "Sharpen";
   static constexpr std::string_view  _script_name       = "sharpen";
+  static constexpr OperatorType      _operator_type     = OperatorType::SHARPEN;
 
   SharpenOp()                                           = default;
   SharpenOp(float offset, float radius, float threshold);

@@ -26,6 +26,7 @@ class ContrastOp : public OperatorBase<ContrastOp> {
   static constexpr PipelineStageName _affiliation_stage = PipelineStageName::Basic_Adjustment;
   static constexpr std::string_view  _canonical_name    = "Contrast";
   static constexpr std::string_view  _script_name       = "contrast";
+  static constexpr OperatorType      _operator_type     = OperatorType::CONTRAST;
   ContrastOp();
   ContrastOp(float contrast_offset);
   ContrastOp(const nlohmann::json& params);

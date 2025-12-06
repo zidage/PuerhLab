@@ -19,6 +19,31 @@ enum class PipelineStageName : int {
   Stage_Count         = 7,
   Merged_Stage        = 8  // Special stage for merged streamable stages
 };
+
+enum class OperatorType : int {
+  RAW_DECODE,
+  RESIZE,
+  EXPOSURE,
+  CONTRAST,
+  WHITE,
+  BLACK,
+  SHADOWS,
+  HIGHLIGHTS,
+  CURVE,
+  HLS,
+  SATURATION,
+  TINT,
+  VIBRANCE,
+  CST,
+  LMT,
+  CLARITY,
+  SHARPEN,
+  COLOR_WHEEL,
+  ACES_TONE_MAPPING,
+  AUTO_EXPOSURE,
+  UNKNOWN  // For unrecognized operator types or placeholders
+};
+
 class IOperatorBase {
  public:
   /**
@@ -46,6 +71,8 @@ class IOperatorBase {
   virtual auto GetPriorityLevel() const -> PriorityLevel = 0;
 
   virtual auto GetStage() const -> PipelineStageName     = 0;
+
+  virtual auto GetOperatorType() const -> OperatorType   = 0;
 
   virtual auto ToKernel() const -> Kernel                = 0;
 
@@ -79,6 +106,8 @@ class OperatorBase : public IOperatorBase {
   auto GetPriorityLevel() const -> PriorityLevel override { return Derived::_priority_level; }
 
   auto GetStage() const -> PipelineStageName override { return Derived::_affiliation_stage; }
+
+  auto GetOperatorType() const -> OperatorType override { return Derived::_operator_type; }
 };
 
 struct OpStream {

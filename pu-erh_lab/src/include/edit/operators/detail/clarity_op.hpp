@@ -30,6 +30,8 @@ class ClarityOp : public OperatorBase<ClarityOp> {
   static constexpr PipelineStageName _affiliation_stage = PipelineStageName::Detail_Adjustment;
   static constexpr std::string_view  _canonical_name    = "Clarity";
   static constexpr std::string_view  _script_name       = "clarity";
+  static constexpr OperatorType      _operator_type     = OperatorType::CLARITY;
+
   ClarityOp();
   ClarityOp(float clarity_offset);
   ClarityOp(const nlohmann::json& params);

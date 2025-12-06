@@ -29,6 +29,7 @@ class ColorWheelOp : public OperatorBase<ColorWheelOp> {
   static constexpr PipelineStageName _affiliation_stage = PipelineStageName::Color_Adjustment;
   static constexpr std::string_view  _canonical_name    = "Color Wheel";
   static constexpr std::string_view  _script_name       = "color_wheel";
+  static constexpr OperatorType      _operator_type     = OperatorType::COLOR_WHEEL;
 
   ColorWheelOp();
   ColorWheelOp(const nlohmann::json& params);

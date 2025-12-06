@@ -32,6 +32,7 @@ class BlackOp : public ToneRegionOp<BlackOp>, public OperatorBase<BlackOp> {
   static constexpr std::string_view  _canonical_name    = "BLACK";
   static constexpr std::string_view  _script_name       = "black";
   static constexpr ToneRegion        _tone_region       = ToneRegion::BLACK;
+  static constexpr OperatorType      _operator_type     = OperatorType::BLACK;
 
   BlackOp()                                             = default;
   BlackOp(float offset);

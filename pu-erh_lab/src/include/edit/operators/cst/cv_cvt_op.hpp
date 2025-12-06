@@ -7,6 +7,10 @@
 
 namespace puerhlab {
 
+/**
+ * @brief Already deprecated. Use CSTOp instead.
+ *
+ */
 class CVCvtColorOp : public OperatorBase<CVCvtColorOp> {
  private:
   int                   _code;

@@ -10,5 +10,7 @@ class PipelineExecutor {
   virtual auto GetStage(PipelineStageName stage) -> PipelineStage&                       = 0;
   virtual auto Apply(std::shared_ptr<ImageBuffer> input) -> std::shared_ptr<ImageBuffer> = 0;
   virtual auto GetBackend() -> PipelineBackend                                           = 0;
+  virtual auto ExportPipelineParams() const -> nlohmann::json                            = 0;
+  virtual void ImportPipelineParams(const nlohmann::json& j)                             = 0;
 };
 }  // namespace puerhlab

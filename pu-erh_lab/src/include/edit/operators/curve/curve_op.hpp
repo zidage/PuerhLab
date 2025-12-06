@@ -20,6 +20,8 @@ class CurveOp : public OperatorBase<CurveOp> {
   static constexpr PipelineStageName _affiliation_stage = PipelineStageName::Basic_Adjustment;
   static constexpr std::string_view  _canonical_name    = "Curve";
   static constexpr std::string_view  _script_name       = "curve";
+  static constexpr OperatorType      _operator_type     = OperatorType::CURVE;
+
   CurveOp()                                             = delete;
   CurveOp(const std::vector<cv::Point2f>& control_points);
   CurveOp(const nlohmann::json& params);

@@ -19,6 +19,7 @@ class ResizeOp : public OperatorBase<ResizeOp> {
   static constexpr PipelineStageName _affiliation_stage = PipelineStageName::Image_Loading;
   static constexpr std::string_view  _canonical_name    = "Resize";
   static constexpr std::string_view  _script_name       = "resize";
+  static constexpr OperatorType      _operator_type     = OperatorType::RESIZE;
 
   ResizeOp()                                            = default;
   ResizeOp(const nlohmann::json& params);

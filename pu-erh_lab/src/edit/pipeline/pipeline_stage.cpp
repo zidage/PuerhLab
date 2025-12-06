@@ -3,12 +3,13 @@
 #include <memory>
 #include <stdexcept>
 
+#include "edit/operators/op_base.hpp"
 #include "edit/operators/operator_factory.hpp"
 #include "image/image_buffer.hpp"
 
 namespace puerhlab {
 PipelineStage::PipelineStage(PipelineStageName stage, bool enable_cache, bool is_streamable)
-    : _enable_cache(enable_cache), _is_streamable(is_streamable), _stage(stage) {
+    : _is_streamable(is_streamable), _enable_cache(enable_cache), _stage(stage) {
   _operators = std::make_unique<std::map<OperatorType, OperatorEntry>>();
   if (_stage == PipelineStageName::Image_Loading) {
     _input_cache_valid = true;  // No input for image loading stage, so input cache is always valid
@@ -168,6 +169,12 @@ void PipelineStage::ResetAll() {
   _output_cache_valid = false;
   _tile_scheduler.reset();
   _dependents.clear();
+  _kernel_stream._kernels.clear();
+  _prev_stage   = nullptr;
+  _next_stage   = nullptr;
+  _input_img    = nullptr;
+  _output_cache = nullptr;
+  _input_set    = false;
 }
 
 void PipelineStage::ResetCache() {
@@ -201,5 +208,33 @@ auto PipelineStage::GetStageNameString() const -> std::string {
   }
 
   return "Unknown Stage";
+}
+
+auto PipelineStage::ExportStageParams() const -> nlohmann::json {
+  nlohmann::json inner;
+  for (const auto& [op_type, op_entry] : *_operators) {
+    inner[op_entry._op->GetScriptName()] = op_entry.ExportOperatorParams();
+  }
+  nlohmann::json j;
+  j.emplace(GetStageNameString(), std::move(inner));
+  return j;
+}
+
+void PipelineStage::ImportStageParams(const nlohmann::json& j) {
+  ResetAll();
+
+  std::string stage_name = GetStageNameString();
+  if (!j.contains(stage_name)) {
+    return;
+  }
+  nlohmann::json stage_json = j[stage_name];
+  for (auto& [op_name, op_json] : stage_json.items()) {
+    if (!op_json.contains("params")) {
+      continue;
+    }
+    nlohmann::json params  = op_json.value("params", nlohmann::json::object());
+    OperatorType   op_type = op_json.value("type", OperatorType::UNKNOWN);
+    SetOperator(op_type, params);
+  }
 }
 };  // namespace puerhlab

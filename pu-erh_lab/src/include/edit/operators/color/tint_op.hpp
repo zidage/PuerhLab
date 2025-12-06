@@ -28,6 +28,8 @@ class TintOp : public OperatorBase<TintOp> {
   static constexpr PipelineStageName _affiliation_stage = PipelineStageName::Color_Adjustment;
   static constexpr std::string_view  _canonical_name    = "Tint";
   static constexpr std::string_view  _script_name       = "tint";
+  static constexpr OperatorType      _operator_type     = OperatorType::TINT;
+
   TintOp();
   TintOp(float tint_offset);
   TintOp(const nlohmann::json& params);

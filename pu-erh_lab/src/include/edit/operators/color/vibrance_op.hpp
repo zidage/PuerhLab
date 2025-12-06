@@ -18,6 +18,8 @@ class VibranceOp : public OperatorBase<VibranceOp> {
   static constexpr PipelineStageName _affiliation_stage = PipelineStageName::Color_Adjustment;
   static constexpr std::string_view  _canonical_name    = "Vibrance";
   static constexpr std::string_view  _script_name       = "vibrance";
+  static constexpr OperatorType      _operator_type     = OperatorType::VIBRANCE;
+
   VibranceOp();
   VibranceOp(float vibrance_offset);
   VibranceOp(const nlohmann::json& params);

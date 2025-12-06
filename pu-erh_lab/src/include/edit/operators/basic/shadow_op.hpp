@@ -69,6 +69,7 @@ class ShadowsOp : public ToneRegionOp<ShadowsOp>, public OperatorBase<ShadowsOp>
   static constexpr std::string_view  _canonical_name    = "Shadows";
   static constexpr std::string_view  _script_name       = "shadows";
   static constexpr ToneRegion        _tone_region       = ToneRegion::SHADOWS;
+  static constexpr OperatorType      _operator_type     = OperatorType::SHADOWS;
 
   ShadowsOp()                                           = default;
   ShadowsOp(float offset);

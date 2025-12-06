@@ -22,6 +22,7 @@ class HLSOp : public OperatorBase<HLSOp> {
   static constexpr PipelineStageName _affiliation_stage = PipelineStageName::Color_Adjustment;
   static constexpr std::string_view  _canonical_name    = "HLS";
   static constexpr std::string_view  _script_name       = "HLS";
+  static constexpr OperatorType      _operator_type     = OperatorType::HLS;
 
   HLSOp();
   HLSOp(const nlohmann::json& params);
