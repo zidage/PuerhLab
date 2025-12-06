@@ -2,7 +2,7 @@
 
 ![Build Status](https://img.shields.io/badge/build-passing-brightgreen) ![License](https://img.shields.io/badge/license-GPLv3-blue) ![Stage](https://img.shields.io/badge/stage-pre--alpha-orange) ![C++](https://img.shields.io/badge/C%2B%2B-20-blue)
 
-**Pu-erh Lab** is a free, open-source, high-performance photo editing and management software built with modern C++.
+**Pu-erh Lab** is an open-source RAW photo processor and digital asset management (DAM) system, similar in vision to darktable and RawTherapee. It provides non-destructive RAW development, high-performance image processing, and a professional workflow engine built in modern C++.
 
 > ⚠️ **Note:** This project is currently in the **very early stages of development (Pre-Alpha)**. Features are subject to change, and the codebase is under active construction.
 
@@ -71,5 +71,6 @@ cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE=vcpkg/scripts/buildsystems/vcpkg.cmak
 
 # Build
 cmake --build build --config Release
+
 
 
