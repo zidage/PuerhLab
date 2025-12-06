@@ -1,24 +1,72 @@
-add_library(ThreadPool concurrency/thread_pool.cpp)
-target_include_directories(ThreadPool PUBLIC include)
+# ==============================================================================
+# Helper Macro to reduce boilerplate
+# ==============================================================================
+# 用法: def_library(Name SOURCES src1 src2 PUBLIC_DEPS lib1 PRIVATE_DEPS lib2)
+macro(def_library target_name)
+    cmake_parse_arguments(ARG "" "" "SOURCES;PUBLIC_DEPS;PRIVATE_DEPS" ${ARGN})
+    
+    add_library(${target_name} ${ARG_SOURCES})
+    target_include_directories(${target_name} PUBLIC include)
+    
+    if(ARG_PUBLIC_DEPS)
+        target_link_libraries(${target_name} PUBLIC ${ARG_PUBLIC_DEPS})
+    endif()
+    
+    if(ARG_PRIVATE_DEPS)
+        target_link_libraries(${target_name} PRIVATE ${ARG_PRIVATE_DEPS})
+    endif()
+endmacro()
 
-add_library(TimeProvider utils/clock/time_provider.cpp)
-target_include_directories(TimeProvider PUBLIC include)
+# ==============================================================================
+# 1. Utilities
+# ==============================================================================
 
-add_library(StrConv utils/string/converter.cpp)
-target_include_directories(StrConv PUBLIC include)
-target_link_libraries(StrConv PUBLIC utfcpp)
+def_library(ThreadPool SOURCES concurrency/thread_pool.cpp)
 
-add_library(ImageBuffer image/image_buffer.cpp)
+def_library(TimeProvider SOURCES utils/clock/time_provider.cpp)
+
+def_library(StrConv 
+    SOURCES utils/string/converter.cpp 
+    PUBLIC_DEPS utfcpp
+)
+
+# ==============================================================================
+# 2. Core Image Handling 
+# ==============================================================================
+
+# ImageBuffer (Platform specific deps handling)
+set(IMAGE_BUFFER_SRCS image/image_buffer.cpp)
+add_library(ImageBuffer ${IMAGE_BUFFER_SRCS})
 target_include_directories(ImageBuffer PUBLIC include)
-target_link_libraries(ImageBuffer PUBLIC Exiv2 ${OpenCV_LIBS} LibRaw TimeProvider JSON OpenMP::OpenMP_CXX StrConv)
+
+# Common dependencies
+set(IMAGE_BUFFER_DEPS Exiv2 ${OpenCV_LIBS} LibRaw TimeProvider JSON OpenMP::OpenMP_CXX StrConv)
+
+# Platform specific dependencies
 if (WIN32)
-    target_link_libraries(ImageBuffer PUBLIC easy_profiler xxHash::xxhash)
+    target_link_libraries(ImageBuffer PUBLIC ${IMAGE_BUFFER_DEPS} easy_profiler xxHash::xxhash)
 else()
-    target_link_libraries(ImageBuffer PUBLIC xxHash)
+    target_link_libraries(ImageBuffer PUBLIC ${IMAGE_BUFFER_DEPS} xxHash)
 endif()
 
-# CPU sources (always compiled)
-set(RAWPROCESSOR_CPU_SOURCES
+# Image Base
+def_library(Image 
+    SOURCES image/image.cpp 
+    PUBLIC_DEPS ImageBuffer
+)
+
+# Image Pool
+def_library(ImagePool 
+    SOURCES storage/image_pool/image_pool_manager.cpp
+    PRIVATE_DEPS Image
+)
+
+# ==============================================================================
+# 3. Processors & Operators
+# ==============================================================================
+
+# --- RawProcessorOp Configuration (CPU/GPU Split) ---
+set(RAW_OP_CPU_SRCS
     decoders/processor/operators/cpu/color_space_conv.cpp
     decoders/processor/operators/cpu/debayer_ahd.cpp
     decoders/processor/operators/cpu/debayer_amaze.cpp
@@ -28,10 +76,8 @@ set(RAWPROCESSOR_CPU_SOURCES
     decoders/processor/operators/cpu/raw_proc_utils.cpp
 )
 
-# GPU sources (only if CUDA is found)
 if(CUDAToolkit_FOUND)
-    # enable_language(CUDA)
-    set(RAWPROCESSOR_GPU_SOURCES
+    set(RAW_OP_GPU_SRCS
         decoders/processor/operators/gpu/cuda_color_space_conv.cu
         decoders/processor/operators/gpu/cuda_debayer_ahd.cu
         decoders/processor/operators/gpu/cuda_highlight_reconstruct.cu
@@ -39,23 +85,19 @@ if(CUDAToolkit_FOUND)
     )
 endif()
 
-# Define library with conditional sources
-add_library(RawProcessorOp
-    ${RAWPROCESSOR_CPU_SOURCES}
-    ${RAWPROCESSOR_GPU_SOURCES}
+# RawProcessorOp Target
+def_library(RawProcessorOp
+    SOURCES ${RAW_OP_CPU_SRCS} ${RAW_OP_GPU_SRCS}
+    PUBLIC_DEPS ImageBuffer LibRaw Exiv2 hwy::hwy
 )
-target_include_directories(RawProcessorOp PUBLIC include)
-target_link_libraries(RawProcessorOp PUBLIC ImageBuffer LibRaw Exiv2 hwy::hwy)
 
-# # Only apply CUDA properties if CUDA is enabled
 if(CUDAToolkit_FOUND)
-    set_target_properties(RawProcessorOp PROPERTIES
-        CUDA_SEPARABLE_COMPILATION ON
-    )
+    set_target_properties(RawProcessorOp PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
     target_compile_definitions(RawProcessorOp PUBLIC HAVE_CUDA)
 endif()
 
-add_library(Operators
+# --- Edit Operators ---
+set(OPERATORS_SRCS
     edit/operators/operator_factory.cpp
     edit/operators/basic/exposure_op.cpp
     edit/operators/basic/exposure_op_vec.cpp
@@ -81,83 +123,101 @@ add_library(Operators
     edit/operators/geometry/resize_op.cpp
     edit/operators/operator_registeration.cpp
 )
-target_include_directories(Operators PUBLIC include)
-target_link_libraries(Operators PUBLIC ImageBuffer JSON OpenColorIO hwy::hwy)
 
+def_library(Operators
+    SOURCES ${OPERATORS_SRCS}
+    PUBLIC_DEPS ImageBuffer JSON OpenColorIO hwy::hwy
+)
 
-add_library(EditPipeline
+# --- Edit Pipeline ---
+set(PIPELINE_SRCS
     edit/pipeline/pipeline_cpu.cpp
     edit/pipeline/pipeline_stage.cpp
     edit/scheduler/pipeline_scheduler.cpp
     edit/pipeline/tile_scheduler.cpp
-    )
-target_include_directories(EditPipeline PUBLIC include)
-target_link_libraries(EditPipeline PUBLIC Operators)
-
-add_library(Image 
-    image/image.cpp
 )
-target_include_directories(Image PUBLIC include)
-target_link_libraries(Image PUBLIC ImageBuffer)
 
-
-
-add_library(RawProcessor
-    decoders/processor/raw_processor.cpp
+def_library(EditPipeline
+    SOURCES ${PIPELINE_SRCS}
+    PUBLIC_DEPS Operators
 )
-target_include_directories(RawProcessor PUBLIC include)
-target_link_libraries(RawProcessor PUBLIC Image LibRaw Exiv2 RawProcessorOp)
 
-add_library(ImageDecoder 
+# --- Raw Processor Wrapper ---
+def_library(RawProcessor
+    SOURCES decoders/processor/raw_processor.cpp
+    PUBLIC_DEPS Image LibRaw Exiv2 RawProcessorOp
+)
+
+# ==============================================================================
+# 4. Decoding & IO
+# ==============================================================================
+
+set(DECODER_SRCS
     decoders/decoder_scheduler.cpp
     decoders/raw_decoder.cpp
-    decoders/thumbnail_decoder.cpp    
+    decoders/thumbnail_decoder.cpp
     decoders/metadata_decoder.cpp
 )
-target_include_directories(ImageDecoder PUBLIC include)
-target_link_libraries(ImageDecoder PUBLIC Image ThreadPool ${OpenCV_LIBS} LibRaw RawProcessor) 
 
-add_library(ImageLoader io/image/image_loader.cpp)
-target_include_directories(ImageLoader PUBLIC include)
-target_link_libraries(ImageLoader PUBLIC ImageDecoder)
+def_library(ImageDecoder
+    SOURCES ${DECODER_SRCS}
+    PUBLIC_DEPS Image ThreadPool ${OpenCV_LIBS} LibRaw RawProcessor
+)
 
-add_library(EditHistory edit/history/edit_history.cpp edit/history/version.cpp edit/history/edit_transaction.cpp)
-target_include_directories(EditHistory PUBLIC include)
-target_link_libraries(EditHistory PUBLIC Image TimeProvider JSON EditPipeline)
+def_library(ImageLoader 
+    SOURCES io/image/image_loader.cpp
+    PUBLIC_DEPS ImageDecoder
+)
 
-add_library(SleeveFilter
+# ==============================================================================
+# 5. Business Logic & State
+# ==============================================================================
+
+set(HISTORY_SRCS 
+    edit/history/edit_history.cpp 
+    edit/history/version.cpp 
+    edit/history/edit_transaction.cpp
+)
+
+def_library(EditHistory
+    SOURCES ${HISTORY_SRCS}
+    PUBLIC_DEPS Image TimeProvider JSON EditPipeline
+)
+
+set(FILTER_SRCS
     sleeve/sleeve_filter/filter_sql.cpp
     sleeve/sleeve_filter/filter_combo.cpp
 )
-target_include_directories(SleeveFilter PUBLIC include)
-target_link_libraries(SleeveFilter PRIVATE Image EditHistory JSON)
 
-add_library(ImagePool
-    storage/image_pool/image_pool_manager.cpp
+def_library(SleeveFilter
+    SOURCES ${FILTER_SRCS}
+    PRIVATE_DEPS Image EditHistory JSON
 )
-target_include_directories(ImagePool PUBLIC include)
-target_link_libraries(ImagePool PRIVATE Image)
 
-
-
-add_library(SleeveElement 
+set(ELEMENT_SRCS
     sleeve/sleeve_element/sleeve_element_factory.cpp
     sleeve/sleeve_element/sleeve_element.cpp
     sleeve/sleeve_element/sleeve_file.cpp
     sleeve/sleeve_element/sleeve_folder.cpp
 )
-target_include_directories(SleeveElement PUBLIC include)
-target_link_libraries(SleeveElement PUBLIC Image ImageLoader SleeveFilter EditHistory ImagePool)
 
+def_library(SleeveElement
+    SOURCES ${ELEMENT_SRCS}
+    PUBLIC_DEPS Image ImageLoader SleeveFilter EditHistory ImagePool
+)
 
+# ==============================================================================
+# 6. Storage & Database
+# ==============================================================================
 
-add_library(DuckORM     
-    storage/mapper/duckorm/duckdb_orm.cpp
-    storage/mapper/duckorm/duckdb_types.cpp)
-target_include_directories(DuckORM PUBLIC include)
-target_link_libraries(DuckORM PUBLIC DuckDB)
+# ORM Layer
+def_library(DuckORM
+    SOURCES storage/mapper/duckorm/duckdb_orm.cpp storage/mapper/duckorm/duckdb_types.cpp
+    PUBLIC_DEPS DuckDB
+)
 
-add_library(SleeveMapper     
+# Mappers
+set(MAPPER_SRCS
     storage/mapper/sleeve/element/file_mapper.cpp
     storage/mapper/sleeve/element/folder_mapper.cpp
     storage/mapper/sleeve/element/element_mapper.cpp
@@ -165,11 +225,15 @@ add_library(SleeveMapper
     storage/mapper/image/image_mapper.cpp
     storage/mapper/sleeve/filter/filter_mapper.cpp
     storage/mapper/sleeve/edit_history/history_mapper.cpp
-    )
-target_include_directories(SleeveMapper PUBLIC include)
-target_link_libraries(SleeveMapper PUBLIC DuckDB DuckORM Image SleeveElement ImagePool)
+)
 
-add_library(SleeveService
+def_library(SleeveMapper
+    SOURCES ${MAPPER_SRCS}
+    PUBLIC_DEPS DuckDB DuckORM Image SleeveElement ImagePool
+)
+
+# Services
+set(SERVICE_SRCS
     storage/service/image/image_service.cpp
     storage/service/sleeve/base/base_service.cpp
     storage/service/sleeve/base/root_service.cpp
@@ -178,40 +242,58 @@ add_library(SleeveService
     storage/service/sleeve/element/folder_service.cpp
     storage/service/sleeve/edit_history/history_service.cpp
 )
-target_include_directories(SleeveService PUBLIC include)
-target_link_libraries(SleeveService PUBLIC DuckDB DuckORM SleeveMapper StrConv)
 
-add_library(SleeveController
+def_library(SleeveService
+    SOURCES ${SERVICE_SRCS}
+    PUBLIC_DEPS DuckDB DuckORM SleeveMapper StrConv
+)
+
+# Controllers
+set(CONTROLLER_SRCS
     storage/controller/controller_types.cpp
     storage/controller/db_controller.cpp
     storage/controller/image/image_controller.cpp
     storage/controller/sleeve/element_controller.cpp
 )
-target_include_directories(SleeveController PUBLIC include)
-target_link_libraries(SleeveController PUBLIC DuckDB SleeveService StrConv)
 
-add_library(SleeveFS
+def_library(SleeveController
+    SOURCES ${CONTROLLER_SRCS}
+    PUBLIC_DEPS DuckDB SleeveService StrConv
+)
+
+# ==============================================================================
+# 7. Filesystem & View Manager
+# ==============================================================================
+
+set(FS_SRCS
     sleeve/sleeve_base.cpp
     sleeve/path_resolver.cpp
     sleeve/storage_service.cpp
     sleeve/dentry_cache_manager.cpp
     sleeve/sleeve_filesystem.cpp
 )
-target_include_directories(SleeveFS PUBLIC include)
-target_link_libraries(SleeveFS PUBLIC SleeveElement SleeveController)
 
-add_library(SleeveView sleeve/sleeve_view.cpp)
-target_include_directories(SleeveView PUBLIC include)
-target_link_libraries(SleeveView PUBLIC Image SleeveFS ImagePool)
-
-add_library(SleeveManager 
-    sleeve/sleeve_manager.cpp)
-target_include_directories(SleeveManager PUBLIC include)
-target_link_libraries(SleeveManager PUBLIC SleeveFS SleeveView)
-
-add_library(ImageWriter
-    io/image/image_writer.cpp
+def_library(SleeveFS
+    SOURCES ${FS_SRCS}
+    PUBLIC_DEPS SleeveElement SleeveController
 )
-target_include_directories(ImageWriter PUBLIC include)
-target_link_libraries(ImageWriter PUBLIC SleeveManager DuckORM)
+
+def_library(SleeveView
+    SOURCES sleeve/sleeve_view.cpp
+    PUBLIC_DEPS Image SleeveFS ImagePool
+)
+
+def_library(SleeveManager
+    SOURCES sleeve/sleeve_manager.cpp
+    PUBLIC_DEPS SleeveFS SleeveView
+)
+
+# ==============================================================================
+# 8. Writers (Last step dependencies)
+# ==============================================================================
+
+def_library(ImageWriter
+    SOURCES io/image/image_writer.cpp
+    PUBLIC_DEPS SleeveManager DuckORM
+)
 
