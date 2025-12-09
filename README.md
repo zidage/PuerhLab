@@ -6,6 +6,10 @@
 
 > ⚠️ **Note:** This project is currently in the **very early stages of development (Pre-Alpha)**. Features are subject to change, and the codebase is under active construction.
 
+## 📷 Early Demo Screenshot
+
+![Early Demo Screenshot](docs/demo/editor.png)
+
 ## 🎯 Vision
 
 Pu-erh Lab aims to provide a professional-grade workflow for photographers, combining robust asset management with a non-destructive, node-based editing pipeline. We focus on performance, usability, and extensibility.
