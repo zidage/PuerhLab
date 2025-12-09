@@ -121,6 +121,8 @@ int main(int argc, char* argv[]) {
 
   auto& color_stage = base_task._pipeline_executor->GetStage(PipelineStageName::Color_Adjustment);
   color_stage.SetOperator(OperatorType::SATURATION, {{"saturation", 0.0f}});
+  std::string LUT_PATH = std::string(CONFIG_PATH) + "LUTs/ACES CCT 2383 D65.cube";
+  color_stage.SetOperator(OperatorType::LMT, {{"ocio_lmt", LUT_PATH}});
 
   // Set execution stages
   base_executor->SetExecutionStages();
