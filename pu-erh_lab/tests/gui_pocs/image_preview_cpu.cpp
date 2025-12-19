@@ -27,7 +27,7 @@ void SetPipelineTemplate(std::shared_ptr<PipelineExecutor> executor) {
   decode_params["raw"]["user_wb"]                = 5500;
   decode_params["raw"]["backend"]                = "puerh";
   nlohmann::json to_ws_params;
-  to_ws_params["ocio"] = {{"src", ""}, {"dst", "ACEScc"}, {"normalize", true}};
+  to_ws_params["ocio"] = {{"src", ""}, {"dst", "ACEScct"}, {"normalize", true}};
   raw_stage.SetOperator(OperatorType::RAW_DECODE, decode_params);
   raw_stage.SetOperator(OperatorType::CST, to_ws_params);
 
@@ -36,7 +36,7 @@ void SetPipelineTemplate(std::shared_ptr<PipelineExecutor> executor) {
 
   nlohmann::json output_params;
   auto&          output_stage = executor->GetStage(PipelineStageName::Output_Transform);
-  output_params["ocio"]       = {{"src", "ACEScc"}, {"dst", "Camera Rec.709"}, {"limit", true}};
+  output_params["ocio"]       = {{"src", "ACEScct"}, {"dst", "Camera Rec.709"}, {"limit", true}};
   output_stage.SetOperator(OperatorType::CST, output_params);
 }
 

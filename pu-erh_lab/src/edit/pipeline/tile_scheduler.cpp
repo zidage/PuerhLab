@@ -11,7 +11,7 @@
 namespace puerhlab {
 
 TileScheduler::TileScheduler(std::shared_ptr<ImageBuffer> input_img, KernelStream& stream,
-                             size_t num_threads)
+                             int num_threads)
     : _input_img(input_img), _stream(stream), _thread_pool(num_threads) {
   auto& input_buffer = _input_img->GetCPUData();
   // Determine tile size based on image dimensions
@@ -39,7 +39,7 @@ auto TileScheduler::ApplyOps() -> std::shared_ptr<ImageBuffer> {
   const cv::Mat&          input_buffer = _input_img->GetCPUData();
   cv::Mat                 output_buffer{input_buffer.size(), input_buffer.type()};
 
-  std::atomic<size_t>     tiles_completed = 0;
+  std::atomic<int>        tiles_completed = 0;
   std::mutex              mtx;
   std::condition_variable cv;
   const int               channels = input_buffer.channels();
@@ -49,39 +49,29 @@ auto TileScheduler::ApplyOps() -> std::shared_ptr<ImageBuffer> {
         [this, tile_idx, &input_buffer, &output_buffer, &tiles_completed, &mtx, &cv, channels]() {
           // Get tile's starting coordinates
           // EASY_BLOCK("Tile Processing");
-          size_t tile_x = (tile_idx % _tile_per_col) * _tile_size;
-          size_t tile_y = (tile_idx / _tile_per_col) * _tile_size;
+          int  tile_x = (tile_idx % _tile_per_col) * _tile_size;
+          int  tile_y = (tile_idx / _tile_per_col) * _tile_size;
 
           // Define the tile's region of interest (ROI), clamping to image boundaries
-          int    height = std::min((int)_tile_size, input_buffer.rows - (int)tile_y);
-          int    width  = std::min((int)_tile_size, input_buffer.cols - (int)tile_x);
+          int  height = std::min(_tile_size, input_buffer.rows - tile_y);
+          int  width  = std::min(_tile_size, input_buffer.cols - tile_x);
+
+          Tile tile   = Tile::CopyFrom(input_buffer, {tile_x, tile_y, width, height}, 0);
 
           for (int i = 0; i < height; ++i) {
-            // Get raw pointers to the start of the current row
-            const float* src_row = input_buffer.ptr<const float>(tile_y + i) + tile_x * channels;
-            float*       dst_row = output_buffer.ptr<float>(tile_y + i) + tile_x * channels;
-
             for (int j = 0; j < width; ++j) {
               // Read input pixel directly
-              Pixel out{src_row[j * channels + 0], src_row[j * channels + 1],
-                        src_row[j * channels + 2], 0.0f};
-              // Add alpha channel if necessary: out.a = src_row[j * channels + 3];
-
-              // PixelVec in = PixelVec::Load(&src_row[j * channels + 0]);
+              Pixel& out = tile.at(i, j);
               // Apply kernel stream to the tile (this logic is unchanged)
               for (Kernel& kernel : _stream._kernels) {
                 // auto func = std::get<PointKernelFunc>(kernel._func);
                 // TODO handle other kernel types
                 kernel._func(out);
               }
-
-              // Write output pixel directly
-              // in.Store(&dst_row[j * channels + 0]);
-              dst_row[j * channels + 0] = out.r;
-              dst_row[j * channels + 1] = out.g;
-              dst_row[j * channels + 2] = out.b;
             }
           }
+
+          Tile::CopyInto(output_buffer, tile);
 
           // Atomically signal completion and notify the main thread if all tasks are done
           if (tiles_completed.fetch_add(1, std::memory_order_release) + 1 == _total_tiles) {

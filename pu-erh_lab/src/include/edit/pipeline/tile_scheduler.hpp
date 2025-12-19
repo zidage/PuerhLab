@@ -8,6 +8,7 @@
 #include "image/image_buffer.hpp"
 
 namespace puerhlab {
+
 class TileScheduler {
  private:
   KernelStream&                _stream;
@@ -15,15 +16,15 @@ class TileScheduler {
   std::shared_ptr<ImageBuffer> _input_img;
 
   ThreadPool                   _thread_pool;
-  size_t                       _total_tiles;   // total number of tiles
-  size_t                       _tile_per_row;  // number of tiles per row
-  size_t                       _tile_per_col;  // number of tiles per column
-  size_t                       _tile_size;     // dynamic tile size based on image size
+  int                       _total_tiles;   // total number of tiles
+  int                       _tile_per_row;  // number of tiles per row
+  int                       _tile_per_col;  // number of tiles per column
+  int                       _tile_size;     // dynamic tile size based on image size
 
  public:
   TileScheduler() = delete;
   TileScheduler(std::shared_ptr<ImageBuffer> input_img, KernelStream& stream,
-                size_t num_threads = 20);
+                int num_threads = 20);
   void SetInputImage(std::shared_ptr<ImageBuffer> img);
   auto ApplyOps() -> std::shared_ptr<ImageBuffer>;
   auto HasOps() const -> bool { return _stream._kernels.size() > 0; }

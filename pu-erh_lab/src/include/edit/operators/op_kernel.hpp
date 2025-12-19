@@ -44,59 +44,81 @@ struct Rect {
 };
 
 struct Tile {
-  uint8_t*    _ptr;      // pointer to the top-left pixel of the tile
-  cv::Mat     tile_mat;  // Keep a reference to the tile data to manage its lifetime
-  int         _width, _height;
-  int         _stride;    // byte per row
-  int         _channels;  // number of channels
-  int         _x0, _y0;   // position in the original image, (x0, y0) is the top-left corner
-  int         _halo;      // number of pixels of halo (margin) around the tile
-  int         original_width, original_height;  // original image size
+  // uint8_t*    _ptr;      // pointer to the top-left pixel of the tile
+  // cv::Mat     tile_mat;  // Keep a reference to the tile data to manage its lifetime
+  Pixel* _ptr;  // pointer to the top-left pixel of the Pixel tile
+  int    _width, _height;
+  int    _channels;  // number of channels
+  int    _x0, _y0;   // position in the original image, (x0, y0) is the top-left corner
+  int    _halo;      // number of pixels of halo (margin) around the tile
+  int    original_width, original_height;  // original image size
+
+  explicit Tile(int x0, int y0, int width, int height)
+      : _width(width),
+        _height(height),
+        _channels(4),
+        _x0(x0),
+        _y0(y0),
+        _halo(0),
+        original_width(0),
+        original_height(0) {
+    _ptr = new Pixel[width * height];
+  }
+
+  ~Tile() { delete[] _ptr; }
+
+  inline static auto CopyFrom(const cv::Mat& img_data, const Rect& region, int halo) -> Tile {
+    auto     expanded_region = region.expand(halo);
+    cv::Rect roi(expanded_region.x, expanded_region.y,
+                 std::min(expanded_region.width, img_data.cols - expanded_region.x),
+                 std::min(expanded_region.height, img_data.rows - expanded_region.y));
+    cv::Mat  tile_mat = img_data(roi);
+    Tile     tile(expanded_region.x, expanded_region.y, tile_mat.cols, tile_mat.rows);
+
+    for (int i = 0; i < tile_mat.rows; ++i) {
+      const float* src_row = tile_mat.ptr<const float>(i);
+      for (int j = 0; j < tile_mat.cols; ++j) {
+        Pixel& p = tile._ptr[i * tile_mat.cols + j];
+        p.r      = src_row[j * tile_mat.channels() + 0];
+        p.g      = src_row[j * tile_mat.channels() + 1];
+        p.b      = src_row[j * tile_mat.channels() + 2];
+        p.a      = 0.0f;
+      }
+    }
+
+    return tile;
+  }
+
+  inline static auto CopyInto(cv::Mat& img_data, const Tile& tile) -> void {
+    cv::Rect roi(tile._x0, tile._y0,
+                 std::min(tile._width, img_data.cols - tile._x0),
+                 std::min(tile._height, img_data.rows - tile._y0));
+    cv::Mat  tile_mat = img_data(roi);
+
+    for (int i = 0; i < tile_mat.rows; ++i) {
+      float* dst_row = tile_mat.ptr<float>(i);
+      for (int j = 0; j < tile_mat.cols; ++j) {
+        const Pixel& p = tile.at(i, j);
+        dst_row[j * tile_mat.channels() + 0] = p.r;
+        dst_row[j * tile_mat.channels() + 1] = p.g;
+        dst_row[j * tile_mat.channels() + 2] = p.b;
+      }
+    }
+  }
+
+  static auto CopyInto(ImageBuffer& img, const Tile& tile) -> void {
+    auto& img_data = img.GetCPUData();
+    CopyInto(img_data, tile);
+  }
 
   static auto CopyFrom(ImageBuffer& img, const Rect& region, int halo) -> Tile {
-    Tile     tile;
-    auto&    img_data        = img.GetCPUData();
-    auto     expanded_region = region.expand(halo);
-    cv::Rect roi(expanded_region.x, expanded_region.y,
-                 std::min(expanded_region.width, img_data.cols - expanded_region.x),
-                 std::min(expanded_region.height, img_data.rows - expanded_region.y));
-    tile.tile_mat        = img_data(roi).clone();  // Clone to ensure data continuity
-    tile._ptr            = tile.tile_mat.data;
-    tile._width          = tile.tile_mat.cols;
-    tile._height         = tile.tile_mat.rows;
-    tile._stride         = static_cast<int>(tile.tile_mat.step);
-    tile._channels       = tile.tile_mat.channels();
-    tile._x0             = expanded_region.x;
-    tile._y0             = expanded_region.y;
-    tile._halo           = halo;
-    tile.original_width  = img_data.cols;
-    tile.original_height = img_data.rows;
-    return tile;
+    auto& img_data = img.GetCPUData();
+    return CopyFrom(img_data, region, halo);
   }
 
-  static auto ViewFrom(ImageBuffer& img, Rect& region, int halo) -> Tile {
-    return ViewFrom(img.GetCPUData(), region, halo);
-  }
-
-  static auto ViewFrom(const cv::Mat& img_data, Rect& region, int halo) -> Tile {
-    Tile     tile;
-    auto     expanded_region = region.expand(halo);
-    cv::Rect roi(expanded_region.x, expanded_region.y,
-                 std::min(expanded_region.width, img_data.cols - expanded_region.x),
-                 std::min(expanded_region.height, img_data.rows - expanded_region.y));
-    tile.tile_mat        = img_data(roi);  // View, no clone
-    tile._ptr            = tile.tile_mat.data;
-    tile._width          = tile.tile_mat.cols;
-    tile._height         = tile.tile_mat.rows;
-    tile._stride         = static_cast<int>(tile.tile_mat.step);
-    tile._channels       = tile.tile_mat.channels();
-    tile._x0             = expanded_region.x;
-    tile._y0             = expanded_region.y;
-    tile._halo           = halo;
-    tile.original_width  = img_data.cols;
-    tile.original_height = img_data.rows;
-    return tile;
-  }
+  // Fast access without bounds checks; y-first to match row-major storage
+  inline Pixel& at(int y, int x) { return _ptr[y * _width + x]; }
+  inline const Pixel& at(int y, int x) const { return _ptr[y * _width + x]; }
 };
 
 struct ImageAccessor {
@@ -112,11 +134,8 @@ struct ImageAccessor {
    */
   Pixel at(int x, int y) const {
     // Use border replication for out-of-bounds access
-    x          = std::clamp(x, 0, _tile->original_width - 1);
-    y          = std::clamp(y, 0, _tile->original_height - 1);
-    float* row = reinterpret_cast<float*>(_tile->_ptr + (y - _tile->_y0) * _tile->_stride);
-    float* p   = row + (x - _tile->_x0) * _tile->_channels;
-    return Pixel{p[0], p[1], p[2]};
+    return _tile->_ptr[std::clamp(y, 0, _tile->_height - 1) * _tile->_width +
+                       std::clamp(x, 0, _tile->_width - 1)];
   }
 };
 };  // namespace puerhlab
