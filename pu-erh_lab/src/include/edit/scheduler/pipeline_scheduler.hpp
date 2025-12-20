@@ -11,9 +11,9 @@ namespace puerhlab {
 class PipelineScheduler {
  private:
   IncrID::IDGenerator<uint32_t> _id_generator{0};
-  ThreadPool _thread_pool;  // use thred pool for now, can be changed to task scheduler later
 
-  std::mutex _scheduler_lock;
+  std::mutex                    _scheduler_lock;
+  ThreadPool _thread_pool;  // use thred pool for now, can be changed to task scheduler later
 
  public:
   explicit PipelineScheduler();

@@ -1,7 +1,7 @@
 # ==============================================================================
 # Helper Macro to reduce boilerplate
 # ==============================================================================
-# 用法: def_library(Name SOURCES src1 src2 PUBLIC_DEPS lib1 PRIVATE_DEPS lib2)
+# Usage: def_library(Name SOURCES src1 src2 PUBLIC_DEPS lib1 PRIVATE_DEPS lib2)
 macro(def_library target_name)
     cmake_parse_arguments(ARG "" "" "SOURCES;PUBLIC_DEPS;PRIVATE_DEPS" ${ARGN})
     

@@ -30,9 +30,9 @@ auto ImageService::ToParams(const std::shared_ptr<Image> source) -> ImageMapperP
 }
 auto ImageService::FromParams(ImageMapperParams&& param) -> std::shared_ptr<Image> {
   // TODO: Replace it with ImageFactory once the more fine-grained Image loader is implemented
-  auto recovered = std::make_shared<Image>(param.id, std::filesystem::path(std::move(*param.image_path)),
-                                           conv::FromBytes(std::move(*param.file_name)),
-                                           static_cast<ImageType>(param.type));
+  auto recovered = std::make_shared<Image>(
+      param.id, std::filesystem::path(std::move(*param.image_path)),
+      conv::FromBytes(std::move(*param.file_name)), static_cast<ImageType>(param.type));
   recovered->JsonToExif(std::move(*param.metadata));
   return recovered;
 }

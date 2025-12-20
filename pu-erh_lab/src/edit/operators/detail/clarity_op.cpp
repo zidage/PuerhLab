@@ -51,17 +51,34 @@ void ClarityOp::Apply(std::shared_ptr<ImageBuffer> input) {
   // Use reflect padding to avoid brightness seams at tile boundaries
   cv::GaussianBlur(img, blurred, cv::Size(), _usm_radius, _usm_radius, cv::BORDER_REFLECT101);
 
-  cv::Mat high_pass = img - blurred;
+  cv::Mat    high_pass  = img - blurred;
 
-  cv::Mat mask_3channel;
-  cv::cvtColor(midtone_mask, mask_3channel, cv::COLOR_GRAY2BGR);
+  const bool continuous = high_pass.isContinuous() && midtone_mask.isContinuous();
+  const int  rows       = high_pass.rows;
+  const int  cols       = high_pass.cols;
 
-  high_pass.forEach<cv::Vec3f>([&](cv::Vec3f& h, const int* pos) {
-    const cv::Vec3f& m = mask_3channel.at<cv::Vec3f>(pos[0], pos[1]);
-    h[0] *= m[0] * (_scale);
-    h[1] *= m[1] * (_scale);
-    h[2] *= m[2] * (_scale);
-  });
+  if (continuous) {
+    const int total    = rows * cols;
+    auto*     hp_ptr   = high_pass.ptr<cv::Vec3f>();
+    auto*     mask_ptr = midtone_mask.ptr<float>();
+    for (int i = 0; i < total; ++i) {
+      const float w = mask_ptr[i] * _scale;
+      hp_ptr[i][0] *= w;
+      hp_ptr[i][1] *= w;
+      hp_ptr[i][2] *= w;
+    }
+  } else {
+    for (int r = 0; r < rows; ++r) {
+      auto*        hp_ptr = high_pass.ptr<cv::Vec3f>(r);
+      const float* m      = midtone_mask.ptr<float>(r);
+      for (int c = 0; c < cols; ++c) {
+        const float w = m[c] * _scale;
+        hp_ptr[c][0] *= w;
+        hp_ptr[c][1] *= w;
+        hp_ptr[c][2] *= w;
+      }
+    }
+  }
 
   img += high_pass;
 }
@@ -78,16 +95,34 @@ auto ClarityOp::ToKernel() const -> Kernel {
         cv::Mat blurred;
         // Reflect padding keeps gradients continuous across tile borders when halos are stitched
         cv::GaussianBlur(tile_mat, blurred, cv::Size(), _usm_radius, _usm_radius,
-             cv::BORDER_REFLECT101);
-        cv::Mat high_pass = tile_mat - blurred;
-        cv::Mat mask_3channel;
-        cv::cvtColor(midtone_mask, mask_3channel, cv::COLOR_GRAY2RGBA);
-        high_pass.forEach<cv::Vec4f>([&](cv::Vec4f& h, const int* pos) {
-          const cv::Vec4f& m = mask_3channel.at<cv::Vec4f>(pos[0], pos[1]);
-          h[0] *= m[0] * (_scale);
-          h[1] *= m[1] * (_scale);
-          h[2] *= m[2] * (_scale);
-        });
+                         cv::BORDER_REFLECT101);
+        cv::Mat    high_pass  = tile_mat - blurred;
+        const bool continuous = high_pass.isContinuous() && midtone_mask.isContinuous();
+        const int  rows       = high_pass.rows;
+        const int  cols       = high_pass.cols;
+
+        if (continuous) {
+          const int total    = rows * cols;
+          auto*     hp_ptr   = high_pass.ptr<cv::Vec4f>();
+          auto*     mask_ptr = midtone_mask.ptr<float>();
+          for (int i = 0; i < total; ++i) {
+            const float w = mask_ptr[i] * _scale;
+            hp_ptr[i][0] *= w;
+            hp_ptr[i][1] *= w;
+            hp_ptr[i][2] *= w;  // leave alpha untouched
+          }
+        } else {
+          for (int r = 0; r < rows; ++r) {
+            auto*        hp_ptr = high_pass.ptr<cv::Vec4f>(r);
+            const float* m      = midtone_mask.ptr<float>(r);
+            for (int c = 0; c < cols; ++c) {
+              const float w = m[c] * _scale;
+              hp_ptr[c][0] *= w;
+              hp_ptr[c][1] *= w;
+              hp_ptr[c][2] *= w;  // leave alpha untouched
+            }
+          }
+        }
         tile_mat += high_pass;
       }),
   };

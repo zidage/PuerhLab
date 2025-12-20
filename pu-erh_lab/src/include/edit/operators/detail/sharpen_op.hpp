@@ -12,27 +12,26 @@ class SharpenOp : public OperatorBase<SharpenOp> {
    * @brief Offset to the sharpness of the image, ranging from 0 to 100
    *
    */
-  float              _offset    = 0.0f;
+  float _offset    = 0.0f;
   /**
    * @brief Scaled offset to the sharpness of the image, ranging from 0 to 1.0f
    *
    */
-  float              _scale     = 0.0f;
+  float _scale     = 0.0f;
 
   /**
    * @brief The USM radius
    *
    */
-  float              _radius    = 1.0f;
+  float _radius    = 1.0f;
   /**
    * @brief A threshold limiting the sharpening effect, like the "Mask" option in ACR's sharpening
    * module
    *
    */
-  float              _threshold = 0.0f;
+  float _threshold = 0.0f;
 
-
-  void               ComputeScale();
+  void  ComputeScale();
 
  public:
   static constexpr PriorityLevel     _priority_level    = 8;

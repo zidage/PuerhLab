@@ -78,7 +78,7 @@ void SharpenOp::Apply(std::shared_ptr<ImageBuffer> input) {
 
 auto SharpenOp::ToKernel() const -> Kernel {
   return Kernel{
-      ._type = Kernel::Type::Neighbor,
+      ._type          = Kernel::Type::Neighbor,
       ._neighbor_func = NeighborKernelFunc([this](Tile& in) {
         // Apply sharpen operation on pixel p
         // This is a placeholder; actual implementation would go here

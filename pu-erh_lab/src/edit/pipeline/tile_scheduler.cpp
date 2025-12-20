@@ -56,7 +56,7 @@ auto TileScheduler::ApplyOps() -> std::shared_ptr<ImageBuffer> {
           int          height = std::min(_tile_size, input_buffer.rows - tile_y);
           int          width  = std::min(_tile_size, input_buffer.cols - tile_x);
 
-          Tile         tile   = Tile::CopyFrom(input_buffer, {tile_x, tile_y, width , height}, 0);
+          Tile         tile   = Tile::CopyFrom(input_buffer, {tile_x, tile_y, width, height}, 0);
 
           Kernel::Type last_kernel_type = Kernel::Type::Init;
           for (int it_idx = 0; it_idx < (int)_stream._kernels.size(); ++it_idx) {
@@ -83,7 +83,13 @@ auto TileScheduler::ApplyOps() -> std::shared_ptr<ImageBuffer> {
               }
             } else if (kernel._type == Kernel::Type::Neighbor) {
               // Apply neighbor kernel function to the entire tile
-              kernel._neighbor_func(tile);
+              for (int kt_idx = it_idx; kt_idx < (int)_stream._kernels.size(); ++kt_idx) {
+                Kernel& k = _stream._kernels[kt_idx];
+                if (k._type != kernel._type) {
+                  break;
+                }
+                k._neighbor_func(tile);
+              }
             }
             last_kernel_type = kernel._type;
           }

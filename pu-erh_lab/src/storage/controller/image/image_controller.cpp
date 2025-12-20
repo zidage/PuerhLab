@@ -101,7 +101,8 @@ auto ImageController::GetImageByType(ImageType type) -> std::vector<std::shared_
  * @param name
  * @return std::vector<std::shared_ptr<Image>>
  */
-auto ImageController::GetImageByName(const std::wstring& name) -> std::vector<std::shared_ptr<Image>> {
+auto ImageController::GetImageByName(const std::wstring& name)
+    -> std::vector<std::shared_ptr<Image>> {
   return _service.GetImageByName(name);
 }
 

@@ -31,8 +31,7 @@ auto ElementService::ToParams(const std::shared_ptr<SleeveElement>& source) -> E
           source->_ref_count};
 }
 
-auto ElementService::FromParams(ElementMapperParams&& param)
-    -> std::shared_ptr<SleeveElement> {
+auto ElementService::FromParams(ElementMapperParams&& param) -> std::shared_ptr<SleeveElement> {
   auto               id                = param.id;
   auto               type              = static_cast<ElementType>(param.type);
   auto               element_name      = conv::FromBytes(std::move(*param.element_name));

@@ -17,7 +17,6 @@
 #include "type/supported_file_type.hpp"
 #include "ui_test_fixation.hpp"
 
-
 using namespace puerhlab;
 
 void SetPipelineTemplate(std::shared_ptr<PipelineExecutor> executor) {
@@ -69,6 +68,7 @@ int main(int argc, char* argv[]) {
     float shadows    = 0.0f;
     float highlights = 0.0f;
     float sharpen    = 0.0f;
+    float clarity    = 0.0f;
   };
 
   QApplication app(argc, argv);
@@ -133,7 +133,8 @@ int main(int argc, char* argv[]) {
   color_stage.SetOperator(OperatorType::LMT, {{"ocio_lmt", LUT_PATH}});
 
   auto& detail_stage = base_task._pipeline_executor->GetStage(PipelineStageName::Detail_Adjustment);
-  detail_stage.SetOperator(OperatorType::SHARPEN, {{"sharpen", {"offset", 0.0f}}});
+  detail_stage.SetOperator(OperatorType::SHARPEN, {{"sharpen", {{"offset", 0.0f}}}});
+  detail_stage.SetOperator(OperatorType::CLARITY, {{"clarity", 0.0f}});
 
   // Set execution stages
   base_executor->SetExecutionStages();
@@ -158,6 +159,7 @@ int main(int argc, char* argv[]) {
     auto& detail = task._pipeline_executor->GetStage(PipelineStageName::Detail_Adjustment);
 
     detail.SetOperator(OperatorType::SHARPEN, {{"sharpen", {{"offset", state.sharpen}}}});
+    detail.SetOperator(OperatorType::CLARITY, {{"clarity", state.clarity}});
 
     task._options._is_blocking = false;
     task._options._is_callback = true;
@@ -259,6 +261,13 @@ int main(int argc, char* argv[]) {
       },
       [](int v) { return QString::number(v, 'f', 2); });
 
+  addSlider(
+      "Clarity", -100, 100, 0,
+      [&](int v) {
+        adjustments.clarity = static_cast<float>(v);
+        scheduleAdjustments(adjustments);
+      },
+      [](int v) { return QString::number(v, 'f', 2); });
   scheduleAdjustments(adjustments);
 
   int ret = app.exec();
