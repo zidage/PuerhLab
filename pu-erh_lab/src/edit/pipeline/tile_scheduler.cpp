@@ -16,7 +16,7 @@ TileScheduler::TileScheduler(std::shared_ptr<ImageBuffer> input_img, KernelStrea
   auto& input_buffer = _input_img->GetCPUData();
   // Determine tile size based on image dimensions
   // _tile_size         = std::max(input_buffer.cols, input_buffer.rows) / num_threads;
-  _tile_size         = 64;  // Fixed tile size for better cache locality
+  _tile_size         = 49;  // Fixed tile size for better cache locality
   _tile_per_col      = std::ceil(static_cast<float>(input_buffer.cols) / _tile_size);
   _tile_per_row      = std::ceil(static_cast<float>(input_buffer.rows) / _tile_size);
   _total_tiles       = _tile_per_col * _tile_per_row;
@@ -49,26 +49,43 @@ auto TileScheduler::ApplyOps() -> std::shared_ptr<ImageBuffer> {
         [this, tile_idx, &input_buffer, &output_buffer, &tiles_completed, &mtx, &cv, channels]() {
           // Get tile's starting coordinates
           // EASY_BLOCK("Tile Processing");
-          int  tile_x = (tile_idx % _tile_per_col) * _tile_size;
-          int  tile_y = (tile_idx / _tile_per_col) * _tile_size;
+          int          tile_x = (tile_idx % _tile_per_col) * _tile_size;
+          int          tile_y = (tile_idx / _tile_per_col) * _tile_size;
 
           // Define the tile's region of interest (ROI), clamping to image boundaries
-          int  height = std::min(_tile_size, input_buffer.rows - tile_y);
-          int  width  = std::min(_tile_size, input_buffer.cols - tile_x);
+          int          height = std::min(_tile_size, input_buffer.rows - tile_y);
+          int          width  = std::min(_tile_size, input_buffer.cols - tile_x);
 
-          Tile tile   = Tile::CopyFrom(input_buffer, {tile_x, tile_y, width, height}, 0);
+          Tile         tile   = Tile::CopyFrom(input_buffer, {tile_x, tile_y, width , height}, 0);
 
-          for (int i = 0; i < height; ++i) {
-            for (int j = 0; j < width; ++j) {
-              // Read input pixel directly
-              Pixel& out = tile.at(i, j);
-              // Apply kernel stream to the tile (this logic is unchanged)
-              for (Kernel& kernel : _stream._kernels) {
-                // auto func = std::get<PointKernelFunc>(kernel._func);
-                // TODO handle other kernel types
-                kernel._func(out);
+          Kernel::Type last_kernel_type = Kernel::Type::Init;
+          for (int it_idx = 0; it_idx < (int)_stream._kernels.size(); ++it_idx) {
+            Kernel& kernel = _stream._kernels[it_idx];
+            // Check for kernel type consistency
+            // Basic logic: Point kernels can be grouped together, neighbor kernels are applied
+            // separately
+            if (last_kernel_type == kernel._type) {
+              continue;
+            } else if (kernel._type == Kernel::Type::Point) {
+              for (int i = 0; i < height; ++i) {
+                for (int j = 0; j < width; ++j) {
+                  // Work on the inner (non-halo) region
+                  Pixel& out = tile.at_inner(i, j);
+                  // Apply kernel stream to the tile (this logic is unchanged)
+                  for (int kt_idx = it_idx; kt_idx < (int)_stream._kernels.size(); ++kt_idx) {
+                    Kernel& k = _stream._kernels[kt_idx];
+                    if (k._type != kernel._type) {
+                      break;
+                    }
+                    k._func(out);
+                  }
+                }
               }
+            } else if (kernel._type == Kernel::Type::Neighbor) {
+              // Apply neighbor kernel function to the entire tile
+              kernel._neighbor_func(tile);
             }
+            last_kernel_type = kernel._type;
           }
 
           Tile::CopyInto(output_buffer, tile);

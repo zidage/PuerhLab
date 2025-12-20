@@ -31,7 +31,6 @@ class SharpenOp : public OperatorBase<SharpenOp> {
    */
   float              _threshold = 0.0f;
 
-  std::vector<float> _kernel;
 
   void               ComputeScale();
 

@@ -10,29 +10,10 @@
 #include "json.hpp"
 
 namespace puerhlab {
-static auto GetGaussianKernel1D(float sigma) -> std::vector<float> {
-  int                radius = int(std::ceil(3 * sigma));
-  int                size   = 2 * radius + 1;
-  std::vector<float> kernel(size);
-
-  float              sum = 0.0f;
-  for (int i = -radius; i <= radius; ++i) {
-    float val          = std::exp(-(i * i) / (2 * sigma * sigma));
-    kernel[i + radius] = val;
-    sum += val;
-  }
-
-  // normalize
-  for (float& v : kernel) v /= sum;
-
-  return kernel;
-}
-
 SharpenOp::SharpenOp(float offset, float radius, float threshold)
     : _offset(offset), _radius(radius), _threshold(threshold) {
   ComputeScale();
   _threshold /= 100.0f;
-  _kernel = GetGaussianKernel1D(_radius);
 }
 
 SharpenOp::SharpenOp(const nlohmann::json& params) { SetParams(params); }
@@ -66,7 +47,6 @@ void SharpenOp::SetParams(const nlohmann::json& params) {
     _threshold /= 100.0f;
   }
   ComputeScale();
-  _kernel = GetGaussianKernel1D(_radius);
 }
 
 void SharpenOp::Apply(std::shared_ptr<ImageBuffer> input) {
@@ -97,40 +77,27 @@ void SharpenOp::Apply(std::shared_ptr<ImageBuffer> input) {
 }
 
 auto SharpenOp::ToKernel() const -> Kernel {
-  // The "size" of the kernel is essentially the size of the whole tile being processed.
-  // Kernel USM_kernel {
-  //   ._type = Kernel::Type::Neighbor,
-  //   ._func = NeighborKernelFunc([this](const ImageAccessor& in) -> ImageAccessor {
-  //     cv::Mat original = in._tile->tile_mat;
-  //     cv::Mat blurred;
-  //     // The "original" here contains the halo regions, so we can directly apply GaussianBlur on
-  //     it.
-  //     // Halo region will be trimmed when the tile is merged back to the full image.
-  //     cv::GaussianBlur(original, blurred, cv::Size(5,5), _radius, _radius, cv::BORDER_REPLICATE);
-
-  //     cv::Mat high_pass = original - blurred;
-
-  //     if (_threshold > 0.0f) {
-  //       cv::Mat high_pass_gray;
-  //       cv::cvtColor(high_pass, high_pass_gray, cv::COLOR_BGR2GRAY);
-
-  //       cv::Mat abs_high_pass_gray = cv::abs(high_pass_gray);
-
-  //       cv::Mat mask;
-  //       cv::threshold(abs_high_pass_gray, mask, _threshold, 1.0f, cv::THRESH_BINARY);
-
-  //       cv::Mat mask_3channel;
-  //       cv::cvtColor(mask, mask_3channel, cv::COLOR_GRAY2BGR);
-  //       cv::multiply(high_pass, mask_3channel, high_pass);
-  //     }
-
-  //     cv::scaleAdd(high_pass, _scale, original, original);
-  //     cv::threshold(original, original, 1.0f, 1.0f, cv::THRESH_TRUNC);
-  //     cv::threshold(original, original, 0.0f, 0.0f, cv::THRESH_TOZERO);
-
-  //     return in;
-  //   })};
-  // return USM_kernel;
-  throw std::runtime_error("SharpenOp::ToKernel not implemented yet.");
+  return Kernel{
+      ._type = Kernel::Type::Neighbor,
+      ._neighbor_func = NeighborKernelFunc([this](Tile& in) {
+        // Apply sharpen operation on pixel p
+        // This is a placeholder; actual implementation would go here
+        cv::Mat tile_mat(in._height, in._width, CV_32FC4, in._ptr);
+        cv::Mat blurred;
+        cv::GaussianBlur(tile_mat, blurred, cv::Size(), _radius, _radius, cv::BORDER_REPLICATE);
+        cv::Mat high_pass = tile_mat - blurred;
+        if (_threshold > 0.0f) {
+          cv::Mat high_pass_gray;
+          cv::cvtColor(high_pass, high_pass_gray, cv::COLOR_BGR2GRAY);
+          cv::Mat abs_high_pass_gray = cv::abs(high_pass_gray);
+          cv::Mat mask;
+          cv::threshold(abs_high_pass_gray, mask, _threshold, 1.0f, cv::THRESH_BINARY);
+          cv::Mat mask_3channel;
+          cv::cvtColor(mask, mask_3channel, cv::COLOR_GRAY2BGR);
+          cv::multiply(high_pass, mask_3channel, high_pass);
+        }
+        cv::scaleAdd(high_pass, _scale, tile_mat, tile_mat);
+      }),
+  };
 }
 };  // namespace puerhlab

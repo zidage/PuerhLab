@@ -1,3 +1,5 @@
+#include <opencv2/core/hal/interface.h>
+
 #include <QApplication>
 #include <QBoxLayout>
 #include <QImage>
@@ -5,12 +7,16 @@
 #include <QSlider>
 #include <QTimer>
 #include <future>
+#include <opencv2/imgcodecs.hpp>
+#include <opencv2/opencv.hpp>
 
+#include "edit/operators/op_base.hpp"
 #include "edit/pipeline/pipeline_cpu.hpp"
 #include "edit/scheduler/pipeline_scheduler.hpp"
 #include "sleeve/sleeve_manager.hpp"
 #include "type/supported_file_type.hpp"
 #include "ui_test_fixation.hpp"
+
 
 using namespace puerhlab;
 
@@ -62,6 +68,7 @@ int main(int argc, char* argv[]) {
     float whites     = 0.0f;
     float shadows    = 0.0f;
     float highlights = 0.0f;
+    float sharpen    = 0.0f;
   };
 
   QApplication app(argc, argv);
@@ -121,8 +128,12 @@ int main(int argc, char* argv[]) {
 
   auto& color_stage = base_task._pipeline_executor->GetStage(PipelineStageName::Color_Adjustment);
   color_stage.SetOperator(OperatorType::SATURATION, {{"saturation", 0.0f}});
+
   std::string LUT_PATH = std::string(CONFIG_PATH) + "LUTs/ACES CCT 2383 D65.cube";
   color_stage.SetOperator(OperatorType::LMT, {{"ocio_lmt", LUT_PATH}});
+
+  auto& detail_stage = base_task._pipeline_executor->GetStage(PipelineStageName::Detail_Adjustment);
+  detail_stage.SetOperator(OperatorType::SHARPEN, {{"sharpen", {"offset", 0.0f}}});
 
   // Set execution stages
   base_executor->SetExecutionStages();
@@ -144,7 +155,9 @@ int main(int argc, char* argv[]) {
     auto& color = task._pipeline_executor->GetStage(PipelineStageName::Color_Adjustment);
     color.SetOperator(OperatorType::SATURATION, {{"saturation", state.saturation}});
 
-    
+    auto& detail = task._pipeline_executor->GetStage(PipelineStageName::Detail_Adjustment);
+
+    detail.SetOperator(OperatorType::SHARPEN, {{"sharpen", {{"offset", state.sharpen}}}});
 
     task._options._is_blocking = false;
     task._options._is_callback = true;
@@ -238,10 +251,17 @@ int main(int argc, char* argv[]) {
       },
       [](int v) { return QString::number(v, 'f', 2); });
 
+  addSlider(
+      "Sharpen", -100, 100, 0,
+      [&](int v) {
+        adjustments.sharpen = static_cast<float>(v);
+        scheduleAdjustments(adjustments);
+      },
+      [](int v) { return QString::number(v, 'f', 2); });
+
   scheduleAdjustments(adjustments);
 
   int ret = app.exec();
   tests.TearDown();
   return ret;
-
 }
