@@ -46,10 +46,7 @@ class WhiteOp : public ToneRegionOp<WhiteOp>, public OperatorBase<WhiteOp> {
   auto        GetParams() const -> nlohmann::json override;
   void        SetParams(const nlohmann::json& params) override;
 
-  inline void operator()(Pixel& p, OperatorParams& params) const {
-    p.r = (p.r - params.black_point) * params.white_slope + params.white_point;
-    p.g = (p.g - params.black_point) * params.white_slope + params.white_point;
-    p.b = (p.b - params.black_point) * params.white_slope + params.white_point;
-  }
+  void SetGlobalParams(OperatorParams& params) const override;
+
 };
 }  // namespace puerhlab

@@ -35,12 +35,11 @@ struct PointChain {
 };
 
 template <typename... Stages>
-class StaticPipeline {
+class StaticKernelStream {
   std::tuple<Stages...> _stages;
 
  public:
-  StaticPipeline(Stages... stages) : _stages(std::move(stages)...) {}
-
+  StaticKernelStream(Stages... stages) : _stages(std::move(stages)...) {}
   void ProcessTile(Tile& tile, OperatorParams& params) {
     std::apply([&](auto&... stage) {
       auto dispatch = [&](auto& s) {

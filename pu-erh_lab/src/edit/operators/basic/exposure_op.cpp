@@ -81,4 +81,9 @@ void ExposureOp::SetParams(const nlohmann::json& params) {
   _voffset         = simple_simd::set1_f32(_scale);
 }
 
+void ExposureOp::SetGlobalParams(OperatorParams& params) const {
+  // Should only be called once SetParams has been called
+  params.exposure_offset = _scale;
+}
+
 };  // namespace puerhlab

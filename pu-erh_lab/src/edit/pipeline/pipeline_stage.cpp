@@ -41,6 +41,17 @@ auto PipelineStage::SetOperator(OperatorType op_type, nlohmann::json param) -> i
   }
 }
 
+auto PipelineStage::SetOperator(OperatorType op_type, nlohmann::json param, OperatorParams& global_params)
+    -> int {
+  SetOperator(op_type, param);
+  auto it = _operators->find(op_type);
+  if (it != _operators->end()) {
+    it->second._op->SetGlobalParams(global_params);
+    return 0;
+  }
+  return 1;
+}
+
 auto PipelineStage::GetOperator(OperatorType op_type) const -> std::optional<OperatorEntry*> {
   auto it = _operators->find(op_type);
   if (it == _operators->end()) {

@@ -80,6 +80,8 @@ class PipelineStage {
    */
   auto SetOperator(OperatorType, nlohmann::json param) -> int;
 
+  auto SetOperator(OperatorType, nlohmann::json param, OperatorParams& global_params) -> int;
+
   auto GetOperator(OperatorType) const -> std::optional<OperatorEntry*>;
   auto GetAllOperators() const -> std::map<OperatorType, OperatorEntry>& { return *_operators; }
   void EnableOperator(OperatorType, bool enable);

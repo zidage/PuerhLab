@@ -35,11 +35,6 @@ class ContrastOp : public OperatorBase<ContrastOp> {
   auto ToKernel() const -> Kernel override;
   auto GetParams() const -> nlohmann::json override;
   void SetParams(const nlohmann::json& params) override;
-
-  inline void operator()(Pixel& p, OperatorParams& params) const {
-    p.r = (p.r - 0.05707762557f) * params.contrast_scale + 0.05707762557f;  // 1 stop = 1/17.52
-    p.g = (p.g - 0.05707762557f) * params.contrast_scale + 0.05707762557f;
-    p.b = (p.b - 0.05707762557f) * params.contrast_scale + 0.05707762557f;
-  }
+  void SetGlobalParams(OperatorParams& params) const override;
 };
 }  // namespace puerhlab

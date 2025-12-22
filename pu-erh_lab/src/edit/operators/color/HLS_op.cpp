@@ -213,4 +213,19 @@ void HLSOp::SetParams(const nlohmann::json& params) {
     }
   }
 }
+
+void HLSOp::SetGlobalParams(OperatorParams& params) const {
+  // No global params to set for HLSOp
+  params.target_hls[0] = _target_HLS[0];
+  params.target_hls[1] = _target_HLS[1];
+  params.target_hls[2] = _target_HLS[2];
+
+  params.hls_adjustment[0] = _HLS_adjustment[0];;
+  params.hls_adjustment[1] = _HLS_adjustment[1];
+  params.hls_adjustment[2] = _HLS_adjustment[2];
+
+  params.hue_range        = _hue_range;
+  params.lightness_range   = _lightness_range;
+  params.saturation_range = _saturation_range;
+}
 };  // namespace puerhlab

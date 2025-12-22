@@ -13,7 +13,11 @@
 namespace puerhlab {
 namespace OCIO = OCIO_NAMESPACE;
 class OCIO_ACES_Transform_Op : public OperatorBase<OCIO_ACES_Transform_Op> {
+ public:
+  enum class TransformType : uint32_t { To_WorkingSpace, To_OutputSpace };
+
  private:
+  TransformType                        _transform_type = TransformType::To_WorkingSpace;
   std::string                          _input_transform;
   std::string                          _output_transform;
   bool                                 _limit     = false;
@@ -22,6 +26,9 @@ class OCIO_ACES_Transform_Op : public OperatorBase<OCIO_ACES_Transform_Op> {
   std::optional<std::filesystem::path> _lmt_path;
 
   OCIO::ConstConfigRcPtr               config;
+
+  OCIO::ConstCPUProcessorRcPtr              cpu_processor;
+
 
  public:
   static constexpr PriorityLevel     _priority_level    = 2;
@@ -42,6 +49,8 @@ class OCIO_ACES_Transform_Op : public OperatorBase<OCIO_ACES_Transform_Op> {
   auto ApplyLMT(ImageBuffer& input) -> ImageBuffer;
   auto GetParams() const -> nlohmann::json override;
   void SetParams(const nlohmann::json& params) override;
+
+  void SetGlobalParams(OperatorParams& params) const override;
 };
 
 }  // namespace puerhlab

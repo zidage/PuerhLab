@@ -65,5 +65,19 @@ void OCIO_LMT_Transform_Op::SetParams(const nlohmann::json& params) {
     _lmt_path = std::filesystem::path();
   }
   _lmt_path = std::filesystem::path(conv::FromBytes(params[_script_name].get<std::string>()));
+
+  auto lmt_transform = OCIO::FileTransform::Create();
+  auto path_str      = _lmt_path.wstring();
+  lmt_transform->setSrc(conv::ToBytes(path_str).c_str());
+  lmt_transform->setInterpolation(OCIO::INTERP_BEST);
+  lmt_transform->setDirection(OCIO::TRANSFORM_DIR_FORWARD);
+
+  auto lmt_processor = config->getProcessor(lmt_transform);
+  auto cpu           = lmt_processor->getDefaultCPUProcessor();
+  cpu_processor = cpu;
+}
+
+void OCIO_LMT_Transform_Op::SetGlobalParams(OperatorParams& params) const {
+  params.lmt_processor = cpu_processor;
 }
 };  // namespace puerhlab

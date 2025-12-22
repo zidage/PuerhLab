@@ -67,4 +67,10 @@ void BlackOp::SetParams(const nlohmann::json& params) {
   _y_intercept_vec = simple_simd::set1_f32(_y_intercept);
   _slope_vec       = simple_simd::set1_f32(_slope);
 }
+
+void BlackOp::SetGlobalParams(OperatorParams& params) const {
+  // Should only be called once SetParams has been called
+  params.black_point = _y_intercept;
+  params.black_slope = _slope;
+}
 }  // namespace puerhlab

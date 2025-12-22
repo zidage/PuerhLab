@@ -6,6 +6,7 @@
 #include <opencv2/opencv.hpp>
 
 #include "edit/operators/basic/tone_region_op.hpp"
+#include "edit/operators/op_base.hpp"
 #include "edit/operators/utils/functions.hpp"
 #include "image/image_buffer.hpp"
 
@@ -182,5 +183,10 @@ void HighlightsOp::SetParams(const nlohmann::json& params) {
   // m0 and m1 are dy/dx at x0 and x1 respectively.
   // But Hermite cubic uses tangents scaled by (x1-x0) in the basis:
   _curve.dx = (_curve.x1 - _curve.x0);
+}
+
+void HighlightsOp::SetGlobalParams(OperatorParams& params) const {
+  params.highlights_offset = _offset / 100.0f;
+  params.highlights_m1     = _curve.m1;
 }
 }  // namespace puerhlab

@@ -1,5 +1,6 @@
 #include "edit/operators/geometry/resize_op.hpp"
 
+#include "edit/operators/op_base.hpp"
 #include "image/image_buffer.hpp"
 
 namespace puerhlab {
@@ -71,4 +72,8 @@ auto ResizeOp::SetParams(const nlohmann::json& params) -> void {
     _maximum_edge = 2048;
   }
 }
+
+void ResizeOp::SetGlobalParams(OperatorParams&) const {
+  throw std::runtime_error("ResizeOp does not support global parameters.");
+}  
 };  // namespace puerhlab

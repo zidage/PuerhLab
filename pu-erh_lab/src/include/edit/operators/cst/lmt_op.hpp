@@ -18,8 +18,10 @@ namespace OCIO = OCIO_NAMESPACE;
  */
 class OCIO_LMT_Transform_Op : public OperatorBase<OCIO_LMT_Transform_Op> {
  private:
-  std::filesystem::path  _lmt_path;
-  OCIO::ConstConfigRcPtr config;
+  std::filesystem::path        _lmt_path;
+  OCIO::ConstConfigRcPtr       config;
+
+  OCIO::ConstCPUProcessorRcPtr cpu_processor;
 
  public:
   static constexpr PriorityLevel     _priority_level    = 3;
@@ -37,6 +39,8 @@ class OCIO_LMT_Transform_Op : public OperatorBase<OCIO_LMT_Transform_Op> {
   auto ToKernel() const -> Kernel override;
   auto GetParams() const -> nlohmann::json override;
   void SetParams(const nlohmann::json& params) override;
+
+  void SetGlobalParams(OperatorParams& params) const override;
 };
 
 }  // namespace puerhlab

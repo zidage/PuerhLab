@@ -45,10 +45,6 @@ class BlackOp : public ToneRegionOp<BlackOp>, public OperatorBase<BlackOp> {
   auto        GetParams() const -> nlohmann::json override;
   void        SetParams(const nlohmann::json& params) override;
 
-  inline void operator()(Pixel& p, OperatorParams& params) const {
-    p.r = p.r + params.black_point;
-    p.g = p.g + params.black_point;
-    p.b = p.b + params.black_point;
-  }
+  void SetGlobalParams(OperatorParams& params) const override;
 };
 }  // namespace puerhlab

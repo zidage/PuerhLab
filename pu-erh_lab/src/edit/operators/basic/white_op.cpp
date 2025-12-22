@@ -1,6 +1,7 @@
 #include "edit/operators/basic/white_op.hpp"
 
 #include "edit/operators/basic/tone_region_op.hpp"
+#include "edit/operators/op_base.hpp"
 #include "edit/operators/utils/functions.hpp"
 #include "image/image_buffer.hpp"
 
@@ -66,5 +67,10 @@ void WhiteOp::SetParams(const nlohmann::json& params) {
   _y_intercept_vec = simple_simd::set1_f32(_y_intercept);
   _black_point_vec = simple_simd::set1_f32(_black_point);
   _slope_vec       = simple_simd::set1_f32(_slope);
+}
+
+void WhiteOp::SetGlobalParams(OperatorParams& params) const {
+  params.white_point = _y_intercept;
+  params.white_slope = _slope;
 }
 }  // namespace puerhlab

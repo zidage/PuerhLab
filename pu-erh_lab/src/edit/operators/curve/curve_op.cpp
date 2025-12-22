@@ -151,4 +151,10 @@ void CurveOp::SetParams(const nlohmann::json& params) {
 
   ComputeTagents();
 }
+
+void CurveOp::SetGlobalParams(OperatorParams& params) const {
+  params.curve_ctrl_pts = _ctrl_pts;
+  params.curve_m        = _m;
+  params.curve_h        = _h;
+}
 };  // namespace puerhlab

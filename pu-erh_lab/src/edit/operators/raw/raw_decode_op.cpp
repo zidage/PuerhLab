@@ -103,4 +103,8 @@ void RawDecodeOp::SetParams(const nlohmann::json& params) {
       throw std::runtime_error("RawDecodeOp: Unknown backend " + backend);
   }
 }
+
+void RawDecodeOp::SetGlobalParams(OperatorParams&) const {
+  throw std::runtime_error("RawDecodeOp does not support global parameters.");
+}
 };  // namespace puerhlab

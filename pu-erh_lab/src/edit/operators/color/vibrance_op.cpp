@@ -118,4 +118,8 @@ void VibranceOp::SetParams(const nlohmann::json& params) {
     _vibrance_offset = 0.0f;
   }
 }
+
+void VibranceOp::SetGlobalParams(OperatorParams& params) const {
+  params.vibrance_offset = _vibrance_offset;
+}
 };  // namespace puerhlab

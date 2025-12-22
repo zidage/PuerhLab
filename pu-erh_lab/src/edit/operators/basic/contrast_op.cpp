@@ -67,4 +67,9 @@ void ContrastOp::SetParams(const nlohmann::json& params) {
   _contrast_offset = params[GetScriptName()];
   _scale           = std::exp(_contrast_offset / 100.0f);
 }
+
+void ContrastOp::SetGlobalParams(OperatorParams& params) const {
+  // Should only be called once SetParams has been called
+  params.contrast_scale = _scale;
+}
 };  // namespace puerhlab

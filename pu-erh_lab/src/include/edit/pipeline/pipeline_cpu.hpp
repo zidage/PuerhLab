@@ -3,6 +3,7 @@
 #include <memory>
 #include <mutex>
 
+#include "edit/operators/op_base.hpp"
 #include "edit/operators/op_kernel.hpp"
 #include "edit/operators/operator_factory.hpp"
 #include "edit/pipeline/pipeline_stage.hpp"
@@ -18,6 +19,8 @@ class CPUPipelineExecutor : public PipelineExecutor {
   std::array<PipelineStage, static_cast<int>(PipelineStageName::Stage_Count)> _stages;
 
   KernelStream                                                                _kernel_stream;
+
+  OperatorParams                                                              _operator_params;
 
   bool                                                                        _is_thumbnail = false;
 
@@ -43,6 +46,8 @@ class CPUPipelineExecutor : public PipelineExecutor {
   void SetPreviewMode(bool is_preview);
   void SetExecutionStages();
   void ResetExecutionStages();
+
+  auto GetOperatorParams() -> OperatorParams& { return _operator_params; }
 
   /**
    * @brief Serialize the pipeline parameters to JSON

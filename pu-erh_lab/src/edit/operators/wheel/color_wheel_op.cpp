@@ -145,4 +145,21 @@ void ColorWheelOp::SetParams(const nlohmann::json& params) {
     if (crossovers.contains("gain")) crossovers.at("gain").get_to(_gain_crossover);
   }
 }
+
+void ColorWheelOp::SetGlobalParams(OperatorParams& params) const {
+  params.lift_color_offset[0] = _lift.color_offset.x;
+  params.lift_color_offset[1] = _lift.color_offset.y;
+  params.lift_color_offset[2] = _lift.color_offset.z;
+  params.lift_luminance_offset = _lift.luminance_offset;
+
+  params.gain_color_offset[0] = _gain.color_offset.x;;
+  params.gain_color_offset[1]  = _gain.color_offset.y;
+  params.gain_color_offset[2]  = _gain.color_offset.z;
+  params.gain_luminance_offset = _gain.luminance_offset;
+
+  params.gamma_color_offset[0] = _gamma.color_offset.x;
+  params.gamma_color_offset[1] = _gamma.color_offset.y;
+  params.gamma_color_offset[2] = _gamma.color_offset.z;
+  params.gamma_luminance_offset = _gamma.luminance_offset;
+}
 };  // namespace puerhlab

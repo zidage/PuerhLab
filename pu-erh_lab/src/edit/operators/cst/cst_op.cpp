@@ -198,6 +198,7 @@ auto OCIO_ACES_Transform_Op::GetParams() const -> nlohmann::json {
   inner["dest"]      = _output_transform;
   inner["limit"]     = _limit;
   inner["normalize"] = _normalize;
+  inner["transform_type"] = static_cast<uint32_t>(_transform_type);
 
   if (_lmt_path.has_value()) {
     inner["lmt"] = _lmt_path->u8string();
@@ -223,6 +224,65 @@ void OCIO_ACES_Transform_Op::SetParams(const nlohmann::json& params) {
 
   if (inner.contains("normalize")) {
     _normalize = inner["normalize"].get<bool>();
+  }
+
+  if (!_input_transform.empty() && !_output_transform.empty()) {
+    auto input_transform = OCIO::ColorSpaceTransform::Create();
+    input_transform->setSrc(_input_transform.c_str());
+    input_transform->setDst("ACES - ACES2065-1");
+    auto idt              = config->getProcessor(input_transform);
+    auto cpu              = idt->getDefaultCPUProcessor();
+
+    auto output_transform = OCIO::LookTransform::Create();
+    output_transform->setLooks("ACES 1.3 Reference Gamut Compression");
+    output_transform->setSrc("ACES - ACES2065-1");
+    output_transform->setDst(_output_transform.c_str());
+    auto odt     = config->getProcessor(output_transform);
+    auto odt_cpu = odt->getDefaultCPUProcessor();
+
+    cpu_processor = odt_cpu;
+  } else if (!_input_transform.empty() && _output_transform.empty()) {
+    auto transform = OCIO::ColorSpaceTransform::Create();
+    // transform->setLooks("ACES 1.3 Reference Gamut Compression");
+    transform->setSrc(_input_transform.c_str());
+    transform->setDst("ACES - ACES2065-1");
+    auto idt = config->getProcessor(transform);
+    auto cpu = idt->getDefaultCPUProcessor();
+
+    cpu_processor = cpu;
+  } else if (_input_transform.empty() && !_output_transform.empty() &&
+             _output_transform.ends_with("Display")) {
+    auto transform = OCIO::DisplayViewTransform::Create();
+    transform->setSrc("ACES - ACES2065-1");
+    transform->setDisplay(_output_transform.c_str());
+    transform->setView("ACES 2.0 - SDR 100 nits (Rec.709)");
+
+    auto odt = config->getProcessor(transform);
+    auto cpu = odt->getDefaultCPUProcessor();
+
+    cpu_processor = cpu;
+  } else if (_input_transform.empty() && !_output_transform.empty()) {
+    auto transform = OCIO::LookTransform::Create();
+    transform->setLooks("ACES 1.3 Reference Gamut Compression");
+    transform->setSrc("ACES - ACES2065-1");
+    transform->setDst(_output_transform.c_str());
+    transform->setDirection(OCIO::TransformDirection::TRANSFORM_DIR_FORWARD);
+
+    auto csc = config->getProcessor(transform);
+    auto cpu = csc->getDefaultCPUProcessor();
+    cpu_processor = cpu;
+  }
+  throw std::runtime_error("OCIO_ACES_Transform_Op: No valid transform assigned to the operator");
+}
+
+void OCIO_ACES_Transform_Op::SetGlobalParams(OperatorParams& params) const {
+  switch (_transform_type) {
+    case TransformType::To_WorkingSpace:
+      params.to_working_processor = cpu_processor;
+      break;
+    case TransformType::To_OutputSpace:
+      params.to_output_processor = cpu_processor;
+      break;
   }
 }
 };  // namespace puerhlab

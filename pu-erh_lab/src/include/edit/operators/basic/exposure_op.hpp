@@ -48,10 +48,7 @@ class ExposureOp : public OperatorBase<ExposureOp>, PointOpTag {
   auto GetParams() const -> nlohmann::json override;
   void SetParams(const nlohmann::json& params) override;
 
-  inline void operator()(Pixel& p, OperatorParams& params) const {
-    p.r += params.exposure_offset;
-    p.g += params.exposure_offset;
-    p.b += params.exposure_offset;
-  }
+  void SetGlobalParams(OperatorParams& params) const override;
+
 };
 }  // namespace puerhlab

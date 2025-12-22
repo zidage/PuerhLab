@@ -100,4 +100,10 @@ auto SharpenOp::ToKernel() const -> Kernel {
       }),
   };
 }
+
+void SharpenOp::SetGlobalParams(OperatorParams& params) const {
+  params.sharpen_offset = _scale;
+  params.sharpen_radius = _radius;
+  params.sharpen_threshold = _threshold;
+}
 };  // namespace puerhlab

@@ -80,4 +80,9 @@ void ShadowsOp::SetParams(const nlohmann::json& params) {
     _curve.dx      = _curve.x1 - _curve.x0;
   }
 }
+
+void ShadowsOp::SetGlobalParams(OperatorParams& params) const {
+  params.shadows_offset = _offset / 100.0f;
+  params.shadows_m0     = _curve.m0;
+}
 }  // namespace puerhlab
