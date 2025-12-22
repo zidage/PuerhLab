@@ -20,29 +20,34 @@
 using namespace puerhlab;
 
 void SetPipelineTemplate(std::shared_ptr<PipelineExecutor> executor) {
-  auto&          raw_stage = executor->GetStage(PipelineStageName::Image_Loading);
+  auto&          raw_stage     = executor->GetStage(PipelineStageName::Image_Loading);
+  auto&          global_params = executor->GetGlobalParams();
   nlohmann::json decode_params;
 #ifdef HAVE_CUDA
   decode_params["raw"]["cuda"] = false;
 #else
   decode_params["raw"]["cuda"] = false;
 #endif
-  decode_params["raw"]["highlights_reconstruct"] = false;
+  decode_params["raw"]["highlights_reconstruct"] = true;
   decode_params["raw"]["use_camera_wb"]          = true;
   decode_params["raw"]["user_wb"]                = 5500;
   decode_params["raw"]["backend"]                = "puerh";
-  nlohmann::json to_ws_params;
-  to_ws_params["ocio"] = {{"src", ""}, {"dst", "ACEScct"}, {"normalize", true}};
   raw_stage.SetOperator(OperatorType::RAW_DECODE, decode_params);
-  raw_stage.SetOperator(OperatorType::CST, to_ws_params);
+  // raw_stage.SetOperator(OperatorType::CST, to_ws_params);
 
   // auto& to_ws          = executor->GetStage(PipelineStageName::To_WorkingSpace);
   // to_ws.SetOperator(OperatorType::CST, to_ws_params);
+  nlohmann::json to_ws_params;
+  to_ws_params["ocio"] = {
+      {"src", ""}, {"dst", "ACEScct"}, {"normalize", true}, {"transform_type", 0}};
+  auto& input_stage = executor->GetStage(PipelineStageName::Basic_Adjustment);
+  input_stage.SetOperator(OperatorType::TO_WS, to_ws_params, global_params);
 
   nlohmann::json output_params;
   auto&          output_stage = executor->GetStage(PipelineStageName::Output_Transform);
-  output_params["ocio"]       = {{"src", "ACEScct"}, {"dst", "Camera Rec.709"}, {"limit", true}};
-  output_stage.SetOperator(OperatorType::CST, output_params);
+  output_params["ocio"]       = {
+      {"src", "ACEScct"}, {"dst", "Camera Rec.709"}, {"limit", true}, {"transform_type", 1}};
+  output_stage.SetOperator(OperatorType::TO_OUTPUT, output_params, global_params);
 }
 
 static QImage cvMatToQImage(const cv::Mat& mat) {
@@ -117,25 +122,25 @@ int main(int argc, char* argv[]) {
   base_task._pipeline_executor = base_executor;
 
   SetPipelineTemplate(base_task._pipeline_executor);
+  auto& global_params = base_task._pipeline_executor->GetGlobalParams();
   // Register a default exposure
   auto& basic_stage = base_task._pipeline_executor->GetStage(PipelineStageName::Basic_Adjustment);
-  basic_stage.SetOperator(OperatorType::EXPOSURE, {{"exposure", 0.0f}});
-  basic_stage.SetOperator(OperatorType::CONTRAST, {{"contrast", 1.0f}});
-  basic_stage.SetOperator(OperatorType::BLACK, {{"black", 0.0f}});
-  basic_stage.SetOperator(OperatorType::WHITE, {{"white", 0.0f}});
-  basic_stage.SetOperator(OperatorType::SHADOWS, {{"shadows", 0.0f}});
-  basic_stage.SetOperator(OperatorType::HIGHLIGHTS, {{"highlights", 0.0f}});
+  basic_stage.SetOperator(OperatorType::EXPOSURE, {{"exposure", 0.0f}}, global_params);
+  basic_stage.SetOperator(OperatorType::CONTRAST, {{"contrast", 1.0f}}, global_params);
+  basic_stage.SetOperator(OperatorType::BLACK, {{"black", 0.0f}}, global_params);
+  basic_stage.SetOperator(OperatorType::WHITE, {{"white", 0.0f}}, global_params);
+  basic_stage.SetOperator(OperatorType::SHADOWS, {{"shadows", 0.0f}}, global_params);
+  basic_stage.SetOperator(OperatorType::HIGHLIGHTS, {{"highlights", 0.0f}}, global_params);
 
   auto& color_stage = base_task._pipeline_executor->GetStage(PipelineStageName::Color_Adjustment);
-  color_stage.SetOperator(OperatorType::SATURATION, {{"saturation", 0.0f}});
+  color_stage.SetOperator(OperatorType::SATURATION, {{"saturation", 0.0f}}, global_params);
 
   std::string LUT_PATH = std::string(CONFIG_PATH) + "LUTs/ACES CCT 2383 D65.cube";
-  color_stage.SetOperator(OperatorType::LMT, {{"ocio_lmt", LUT_PATH}});
+  color_stage.SetOperator(OperatorType::LMT, {{"ocio_lmt", LUT_PATH}}, global_params);
 
   auto& detail_stage = base_task._pipeline_executor->GetStage(PipelineStageName::Detail_Adjustment);
-  detail_stage.SetOperator(OperatorType::SHARPEN, {{"sharpen", {{"offset", 0.0f}}}});
-  detail_stage.SetOperator(OperatorType::CLARITY, {{"clarity", 0.0f}});
-
+  detail_stage.SetOperator(OperatorType::SHARPEN, {{"sharpen", {{"offset", 0.0f}}}}, global_params);
+  detail_stage.SetOperator(OperatorType::CLARITY, {{"clarity", 0.0f}}, global_params);
   // Set execution stages
   base_executor->SetExecutionStages();
 
@@ -146,20 +151,20 @@ int main(int argc, char* argv[]) {
     PipelineTask task = base_task;
 
     auto&        basic = task._pipeline_executor->GetStage(PipelineStageName::Basic_Adjustment);
-    basic.SetOperator(OperatorType::EXPOSURE, {{"exposure", state.exposure}});
-    basic.SetOperator(OperatorType::CONTRAST, {{"contrast", state.contrast}});
-    basic.SetOperator(OperatorType::BLACK, {{"black", state.blacks}});
-    basic.SetOperator(OperatorType::WHITE, {{"white", state.whites}});
-    basic.SetOperator(OperatorType::SHADOWS, {{"shadows", state.shadows}});
-    basic.SetOperator(OperatorType::HIGHLIGHTS, {{"highlights", state.highlights}});
+    basic.SetOperator(OperatorType::EXPOSURE, {{"exposure", state.exposure}}, global_params);
+    basic.SetOperator(OperatorType::CONTRAST, {{"contrast", state.contrast}}, global_params);
+    basic.SetOperator(OperatorType::BLACK, {{"black", state.blacks}}, global_params);
+    basic.SetOperator(OperatorType::WHITE, {{"white", state.whites}}, global_params);
+    basic.SetOperator(OperatorType::SHADOWS, {{"shadows", state.shadows}}, global_params);
+    basic.SetOperator(OperatorType::HIGHLIGHTS, {{"highlights", state.highlights}}, global_params);
 
     auto& color = task._pipeline_executor->GetStage(PipelineStageName::Color_Adjustment);
-    color.SetOperator(OperatorType::SATURATION, {{"saturation", state.saturation}});
+    color.SetOperator(OperatorType::SATURATION, {{"saturation", state.saturation}}, global_params);
 
     auto& detail = task._pipeline_executor->GetStage(PipelineStageName::Detail_Adjustment);
 
-    detail.SetOperator(OperatorType::SHARPEN, {{"sharpen", {{"offset", state.sharpen}}}});
-    detail.SetOperator(OperatorType::CLARITY, {{"clarity", state.clarity}});
+    detail.SetOperator(OperatorType::SHARPEN, {{"sharpen", {{"offset", state.sharpen}}}}, global_params);
+    detail.SetOperator(OperatorType::CLARITY, {{"clarity", state.clarity}}, global_params);
 
     task._options._is_blocking = false;
     task._options._is_callback = true;
@@ -177,7 +182,7 @@ int main(int argc, char* argv[]) {
     scheduler.ScheduleTask(std::move(task));
   };
 
-  auto addSlider        = [&](const QString& name, int min, int max, int value, auto&& onChange,
+  auto addSlider = [&](const QString& name, int min, int max, int value, auto&& onChange,
                        auto&& formatter) {
     auto* info   = new QLabel(QString("%1: %2").arg(name).arg(formatter(value)), controls);
     auto* slider = new QSlider(Qt::Horizontal, controls);

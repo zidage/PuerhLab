@@ -37,6 +37,7 @@ class EditTransaction {
         _stage_name(stage_name),
         _operator_params(operator_params) {
     // Compute a unique transaction ID based on the transaction details
+    (void)parent_tx_id;
     auto params_str = _operator_params.dump();
   }
 

@@ -7,9 +7,9 @@
 
 namespace puerhlab {
 
-struct OCIO_LMT_Transform_Op : PointKernelFunc {
+struct OCIO_LMT_Transform_Op_Kernel : PointOpTag {
   inline void operator()(Pixel& p, OperatorParams& params) const {
-    // This kernel is a placeholder. The actual OCIO transform is applied in the Apply function.
+    if (!params.lmt_enabled) return;
     params.lmt_processor->applyRGBA(&p.r);
   }
 };

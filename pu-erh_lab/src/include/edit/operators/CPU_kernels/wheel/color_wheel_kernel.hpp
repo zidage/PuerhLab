@@ -5,6 +5,7 @@
 namespace puerhlab {
 struct ColorWheelOpKernel : PointOpTag {
   inline void operator()(Pixel& p, OperatorParams& params) const {
+    if (!params.color_wheel_enabled) return;
     const float lum     = 0.2126f * p.r + 0.7152f * p.g + 0.0722f * p.b;
     const float lift_w  = std::clamp(std::exp(-(lum * lum) / (0.45f * 0.45f)), 0.0f, 1.0f);
     const float gamma_w = 1.0f;
@@ -37,9 +38,9 @@ struct ColorWheelOpKernel : PointOpTag {
     float       g  = g0 + lift_w * lift_y + gain_w * (g0 * gain_dy) + gamma_w * (pg - g0);
     float       b  = b0 + lift_w * lift_z + gain_w * (b0 * gain_dz) + gamma_w * (pb - b0);
 
-    p.r           = cv::saturate_cast<float>(r);
-    p.g           = cv::saturate_cast<float>(g);
-    p.b           = cv::saturate_cast<float>(b);
+    p.r            = cv::saturate_cast<float>(r);
+    p.g            = cv::saturate_cast<float>(g);
+    p.b            = cv::saturate_cast<float>(b);
   }
 };
 };  // namespace puerhlab

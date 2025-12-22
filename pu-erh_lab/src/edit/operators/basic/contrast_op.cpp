@@ -48,14 +48,6 @@ void ContrastOp::Apply(std::shared_ptr<ImageBuffer> input) {
   // cv::max(linear_image, 0.0f, linear_image);
 }
 
-auto ContrastOp::ToKernel() const -> Kernel {
-  return Kernel{._type = Kernel::Type::Point, ._func = PointKernelFunc([&s = _scale](Pixel& in) {
-                                                in.r = (in.r - 0.05707762557f) * s +
-                                                       0.05707762557f;  // 1 stop = 1/17.52
-                                                in.g = (in.g - 0.05707762557f) * s + 0.05707762557f;
-                                                in.b = (in.b - 0.05707762557f) * s + 0.05707762557f;
-                                              })};
-}
 
 auto ContrastOp::GetParams() const -> nlohmann::json {
   nlohmann::json o;

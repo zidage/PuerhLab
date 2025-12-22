@@ -5,11 +5,13 @@
 namespace puerhlab {
 struct VibranceOpKernel : PointOpTag {
   inline void operator()(Pixel& in, OperatorParams& params) const {
+    if (!params.vibrance_enabled) return;
+
     float r = in.r, g = in.g, b = in.b;
 
-    float max_val = std::max({r, g, b});
-    float min_val = std::min({r, g, b});
-    float chroma  = max_val - min_val;
+    float max_val  = std::max({r, g, b});
+    float min_val  = std::min({r, g, b});
+    float chroma   = max_val - min_val;
 
     // chroma in [0, max], vibrance_offset in [-100, 100]
     float strength = params.vibrance_offset / 100.0f;
@@ -17,7 +19,7 @@ struct VibranceOpKernel : PointOpTag {
     // Protect already highly saturated color
     float falloff  = std::exp(-3.0f * chroma);
 
-    float scale   = 1.0f + strength * falloff;
+    float scale    = 1.0f + strength * falloff;
 
     if (params.vibrance_offset >= 0.0f) {
       float luma = r * 0.299f + g * 0.587f + b * 0.114f;

@@ -27,9 +27,6 @@ class CVCvtColorOp : public OperatorBase<CVCvtColorOp> {
   CVCvtColorOp(const nlohmann::json& params);
 
   void Apply(std::shared_ptr<ImageBuffer> input) override;
-  auto ToKernel() const -> Kernel override {
-    throw std::runtime_error("CVCvtColorOp: ToKernel not implemented");
-  }
   auto GetParams() const -> nlohmann::json override;
   void SetParams(const nlohmann::json& params) override;
 

@@ -4,6 +4,7 @@
 #include <mutex>
 #include <unordered_map>
 
+#include "edit/operators/CPU_kernels/cpu_kernels.hpp"
 #include "edit/operators/op_base.hpp"
 #include "edit/operators/op_kernel.hpp"
 #include "edit/operators/operator_factory.hpp"
@@ -11,6 +12,51 @@
 #include "image/image_buffer.hpp"
 
 namespace puerhlab {
+// Iteration 3: Static Pipeline with compile-time operator chaining
+template <typename... Ops>
+struct PointChain {
+  std::tuple<Ops...> _ops;
+
+  PointChain(Ops... ops) : _ops(std::move(ops)...) {}
+
+  void Execute(Tile& tile, OperatorParams& params) {
+    int height = tile._height;
+    int width  = tile._width;
+
+    for (int y = 0; y < height; ++y) {
+      for (int x = 0; x < width; ++x) {
+        Pixel& p = tile.at(y, x);
+        std::apply([&p, &params](auto&... op) { (op(p, params), ...); }, _ops);
+      }
+    }
+  }
+};
+
+template <typename... Stages>
+class StaticKernelStream {
+  std::tuple<Stages...> _stages;
+
+ public:
+  StaticKernelStream(Stages... stages) : _stages(std::move(stages)...) {}
+  void ProcessTile(Tile& tile, OperatorParams& params) {
+    std::apply(
+        [&](auto&... stage) {
+          auto dispatch = [&](auto& s) {
+            if constexpr (std::is_base_of_v<PointOpTag, std::decay_t<decltype(s)>>) {
+              s(tile, params);
+            } else if constexpr (std::is_base_of_v<NeighborOpTag, std::decay_t<decltype(s)>>) {
+              s(tile, params);
+            } else {
+              s.Execute(tile, params);
+            }
+          };
+
+          (dispatch(stage), ...);
+        },
+        _stages);
+  }
+};
+
 struct OperatorEntry {
   bool                           _enable = true;
   std::shared_ptr<IOperatorBase> _op;
@@ -39,8 +85,6 @@ class PipelineStage {
   std::unique_ptr<std::map<OperatorType, OperatorEntry>> _operators;
   bool                                                   _is_streamable = true;
   bool                                                   _vec_enabled   = false;
-  KernelStream                                           _kernel_stream;
-  std::unique_ptr<TileScheduler>                         _tile_scheduler;
 
   PipelineStage*                                         _prev_stage         = nullptr;
   PipelineStage*                                         _next_stage         = nullptr;
@@ -53,7 +97,43 @@ class PipelineStage {
   bool                                                   _output_cache_valid = false;
   bool                                                   _input_set          = false;
 
-  std::vector<PipelineStage*>                            _dependents;
+  PipelineStage*                                         _dependents         = nullptr;
+
+  static constexpr auto                                  BuildKernelStream   = []() {
+    auto op_to_working = OCIO_ACES_Transform_Op_Kernel();
+    auto op_exp        = ExposureOpKernel();
+    auto op_contrast   = ContrastOpKernel();
+    auto op_black      = BlackOpKernel();
+    auto op_white      = WhiteOpKernel();
+    auto op_shadow     = ShadowsOpKernel();
+    auto op_highlight  = HighlightsOpKernel();
+
+    auto op_curve      = CurveOpKernel();
+
+    auto op_tint       = TintOpKernel();
+    auto op_saturation = SaturationOpKernel();
+    auto op_vibrance   = VibranceOpKernel();
+
+    auto color_wheel   = ColorWheelOpKernel();
+
+    auto op_lmt        = OCIO_LMT_Transform_Op_Kernel();
+
+    auto op_clarity    = ClarityOpKernel();
+    auto op_sharpen    = SharpenOpKernel();
+
+    auto to_output     = OCIO_ACES_Transform_Op_Kernel();
+
+    return StaticKernelStream(
+        PointChain(op_to_working, op_exp, op_contrast, op_black, op_white, op_shadow, op_highlight,
+                                                      op_curve, op_tint, op_saturation, op_vibrance, color_wheel, op_lmt, to_output),
+        op_clarity, op_sharpen);
+  };
+
+  using StaticKernelStreamType                 = decltype(BuildKernelStream());
+
+  StaticKernelStreamType _static_kernel_stream = BuildKernelStream();
+
+  std::unique_ptr<StaticTileScheduler<StaticKernelStreamType>> _static_tile_scheduler;
 
  public:
   PipelineStageName _stage;
@@ -63,8 +143,11 @@ class PipelineStage {
   PipelineStage(PipelineStageName stage, bool enable_cache, bool is_streamable);
 
   auto IsStreamable() const -> bool { return _is_streamable; }
-  void SetTileScheduler() {
-    _tile_scheduler = std::make_unique<TileScheduler>(_input_img, _kernel_stream);
+  
+
+  void SetStaticTileScheduler() {
+    _static_tile_scheduler = std::make_unique<StaticTileScheduler<StaticKernelStreamType>>(
+        _input_img, _static_kernel_stream);
   }
 
   void SetInputImage(std::shared_ptr<ImageBuffer>);
@@ -78,16 +161,13 @@ class PipelineStage {
    * execution stage, should call SetExecutionStages() to rebuild the kernel stream), 0 if an
    * existing operator is updated.
    */
-  auto SetOperator(OperatorType, nlohmann::json param) -> int;
+  void SetOperator(OperatorType, nlohmann::json param);
 
-  auto SetOperator(OperatorType, nlohmann::json param, OperatorParams& global_params) -> int;
+  void SetOperator(OperatorType, nlohmann::json param, OperatorParams& global_params);
 
   auto GetOperator(OperatorType) const -> std::optional<OperatorEntry*>;
   auto GetAllOperators() const -> std::map<OperatorType, OperatorEntry>& { return *_operators; }
   void EnableOperator(OperatorType, bool enable);
-  auto HasStreamableOps() const -> bool {
-    return _is_streamable && _kernel_stream._kernels.size() > 0;
-  }
 
   void SetNeighbors(PipelineStage* prev, PipelineStage* next) {
     _prev_stage = prev;
@@ -114,16 +194,16 @@ class PipelineStage {
    *
    * @param dependent
    */
-  void AddDependent(PipelineStage* dependent) { _dependents.push_back(dependent); }
-  void ResetDependents() { _dependents.clear(); }
+  void AddDependent(PipelineStage* dependent) { _dependents = dependent; }
+  void ResetDependents() { _dependents = nullptr; }
 
   auto GetStageNameString() const -> std::string;
 
   auto HasInput() -> bool;
 
-  auto ApplyStage() -> std::shared_ptr<ImageBuffer>;
+  auto ApplyStage(OperatorParams& global_params) -> std::shared_ptr<ImageBuffer>;
 
-  auto GetKernelStream() -> KernelStream& { return _kernel_stream; }
+  auto GetStaticKernelStream() -> StaticKernelStreamType& { return _static_kernel_stream; }
 
   /**
    * @brief Reset this stage to initial state

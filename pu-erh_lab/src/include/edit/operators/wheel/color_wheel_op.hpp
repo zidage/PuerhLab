@@ -35,7 +35,6 @@ class ColorWheelOp : public OperatorBase<ColorWheelOp> {
   ColorWheelOp(const nlohmann::json& params);
 
   void Apply(std::shared_ptr<ImageBuffer> input) override;
-  auto ToKernel() const -> Kernel override;
   auto GetParams() const -> nlohmann::json override;
   void SetParams(const nlohmann::json& params) override;
 

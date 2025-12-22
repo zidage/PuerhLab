@@ -6,7 +6,6 @@
 #include "edit/operators/op_base.hpp"
 #include "image/image_buffer.hpp"
 #include "json.hpp"
-#include "tone_region_op.hpp"
 
 namespace puerhlab {
 
@@ -26,39 +25,18 @@ struct ShadowCurveParams {
 
   float       dx;  // x1 - x0
 };
-class ShadowsOp : public ToneRegionOp<ShadowsOp>, public OperatorBase<ShadowsOp> {
+class ShadowsOp : public OperatorBase<ShadowsOp> {
  private:
-  float                                 _offset;
-  ShadowCurveParams                     _curve{};
+  float                _offset;
+  ShadowCurveParams    _curve{};
 
-  hw::Vec<hw::ScalableTag<float>>       _scale;
-  const hw::ScalableTag<float>          d;
-  hw::Rebind<int32_t, decltype(d)>      di;
-  const hw::Vec<hw::ScalableTag<float>> v_inv_max = hw::Set(d, 1.0f / 100.0f);
-  ;  // 1.0f / 100.0f
-  const hw::Vec<hw::ScalableTag<float>> v_pivot_scale =
-      hw::Set(d, 1.0f / (1.0f - 0.05f));  // 1.0f / (1.0f - 0.05f)
-  const hw::Vec<hw::ScalableTag<float>> v_pivot_offset =
-      hw::Set(d, 0.05f / (1.0f - 0.05f));  // 0.05f / (1.0f - 0.05f)
-  const hw::Vec<hw::ScalableTag<float>> v_zero          = hw::Set(d, 0.0f);
-  const hw::Vec<hw::ScalableTag<float>> v_one           = hw::Set(d, 1.0f);
-  const hw::Vec<hw::ScalableTag<float>> v_inv_threshold = hw::Set(d, 1.0f / 0.5f);
-  const hw::Vec<hw::ScalableTag<float>> v_epsilon       = hw::Set(d, 1e-7f);
+  static constexpr int kLutSize = 1024;
+  std::vector<float>   _lut;
 
-  static constexpr int                  kLutSize        = 1024;
-  std::vector<float>                    _lut;
-  const hw::Vec<hw::ScalableTag<float>> v_lut_scale = hw::Set(d, static_cast<float>(kLutSize - 1));
+  float                _gamma;
+  float                _inv_threshold = 1.0f / 0.5f;
 
-  const hw::Vec<hw::ScalableTag<float>> _pivot      = hw::Set(d, 0.05f);
-
-  hw::Vec<hw::ScalableTag<float>>       v_gamma;
-  float                                 _gamma;
-  float                                 _inv_threshold = 1.0f / 0.5f;
-
-  hw::Vec<hw::ScalableTag<float>>       _min           = hw::Set(hw::ScalableTag<float>(), 0.0f);
-  hw::Vec<hw::ScalableTag<float>>       _max           = hw::Set(hw::ScalableTag<float>(), 100.0f);
-
-  void                                  InitializeLUT();
+  void                 InitializeLUT();
 
  public:
   auto                               GetScale() -> float;
@@ -66,7 +44,6 @@ class ShadowsOp : public ToneRegionOp<ShadowsOp>, public OperatorBase<ShadowsOp>
   static constexpr PipelineStageName _affiliation_stage = PipelineStageName::Basic_Adjustment;
   static constexpr std::string_view  _canonical_name    = "Shadows";
   static constexpr std::string_view  _script_name       = "shadows";
-  static constexpr ToneRegion        _tone_region       = ToneRegion::SHADOWS;
   static constexpr OperatorType      _operator_type     = OperatorType::SHADOWS;
 
   ShadowsOp()                                           = default;
@@ -76,7 +53,6 @@ class ShadowsOp : public ToneRegionOp<ShadowsOp>, public OperatorBase<ShadowsOp>
   static void GetMask(cv::Mat& src, cv::Mat& mask);
 
   void        Apply(std::shared_ptr<ImageBuffer> input) override;
-  auto        ToKernel() const -> Kernel override;
   auto        GetParams() const -> nlohmann::json override;
   void        SetParams(const nlohmann::json& params) override;
 

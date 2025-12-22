@@ -1,6 +1,5 @@
 #include "edit/operators/operator_registeration.hpp"
 
-#include "edit/operators/basic/auto_exposure_op.hpp"
 #include "edit/operators/basic/black_op.hpp"
 #include "edit/operators/basic/contrast_op.hpp"
 #include "edit/operators/basic/exposure_op.hpp"
@@ -19,7 +18,6 @@
 #include "edit/operators/geometry/resize_op.hpp"
 #include "edit/operators/operator_factory.hpp"
 #include "edit/operators/raw/raw_decode_op.hpp"
-#include "edit/operators/tone_mapping/ACES_tone_mapping_op.hpp"
 #include "edit/operators/wheel/color_wheel_op.hpp"
 
 namespace puerhlab {
@@ -76,6 +74,14 @@ void RegisterAllOperators() {
     return std::make_shared<OCIO_ACES_Transform_Op>(params);
   });
 
+  OperatorFactory::Instance().Register(OperatorType::TO_WS, [](const nlohmann::json& params) {
+    return std::make_shared<OCIO_ACES_Transform_Op>(params);
+  });
+
+  OperatorFactory::Instance().Register(OperatorType::TO_OUTPUT, [](const nlohmann::json& params) {
+    return std::make_shared<OCIO_ACES_Transform_Op>(params);
+  });
+
   OperatorFactory::Instance().Register(OperatorType::LMT, [](const nlohmann::json& params) {
     return std::make_shared<OCIO_LMT_Transform_Op>(params);
   });
@@ -95,13 +101,5 @@ void RegisterAllOperators() {
   OperatorFactory::Instance().Register(OperatorType::COLOR_WHEEL, [](const nlohmann::json& params) {
     return std::make_shared<ColorWheelOp>(params);
   });
-
-  OperatorFactory::Instance().Register(
-      OperatorType::ACES_TONE_MAPPING,
-      [](const nlohmann::json& params) { return std::make_shared<ACESToneMappingOp>(params); });
-
-  OperatorFactory::Instance().Register(
-      OperatorType::AUTO_EXPOSURE,
-      [](const nlohmann::json& params) { return std::make_shared<AutoExposureOp>(params); });
 }
 };  // namespace puerhlab

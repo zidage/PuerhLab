@@ -37,6 +37,8 @@ enum class OperatorType : int {
   TINT,
   VIBRANCE,
   CST,
+  TO_WS,
+  TO_OUTPUT,
   LMT,
   CLARITY,
   SHARPEN,
@@ -50,6 +52,8 @@ struct OperatorParams {
   // Basic adjustment parameters
   bool                                     exposure_enabled       = true;
   float                                    exposure_offset        = 0.0f;
+
+  bool                                     contrast_enabled       = true;
   float                                    contrast_scale         = 0.0f;
 
   // Shadows adjustment parameter
@@ -76,16 +80,15 @@ struct OperatorParams {
   float                                    highlights_dx          = 0.8f;
 
   // White and Black point adjustment parameters
-  bool                                     white_black_enabled    = true;
+  bool                                     white_enabled          = true;
   float                                    white_point            = 1.0f;
-  float                                    white_slope            = 1.0f;
 
   bool                                     black_enabled          = true;
-  float                                    black_slope            = 1.0f;
   float                                    black_point            = 0.0f;
 
+  float                                    slope                  = 1.0f;
   // HLS adjustment parameters
-  bool                                     hls_enabled            = false;
+  bool                                     hls_enabled            = true;
   float                                    target_hls[3]          = {0.0f, 0.0f, 0.0f};
   float                                    hls_adjustment[3]      = {0.0f, 0.0f, 0.0f};
   float                                    hue_range              = 0.0f;
@@ -105,15 +108,14 @@ struct OperatorParams {
   float                                    vibrance_offset        = 0.0f;
 
   // Working space
-  bool                                     to_working_enabled     = true;
+  bool                                     is_working_space       = true;
   OpenColorIO_v2_4::ConstCPUProcessorRcPtr to_working_processor   = nullptr;
 
   // Look modification transform
-  bool                                     lmt_enabled            = false;
+  bool                                     lmt_enabled            = true;
   OpenColorIO_v2_4::ConstCPUProcessorRcPtr lmt_processor          = nullptr;
 
   // To output space
-  bool                                     to_output_enabled      = true;
   OpenColorIO_v2_4::ConstCPUProcessorRcPtr to_output_processor    = nullptr;
 
   // Curve adjustment parameters
@@ -174,7 +176,6 @@ class IOperatorBase {
 
   virtual auto GetOperatorType() const -> OperatorType       = 0;
 
-  virtual auto ToKernel() const -> Kernel                    = 0;
 
   // virtual auto ToKernel_Vec() const -> Kernel            = 0;
 

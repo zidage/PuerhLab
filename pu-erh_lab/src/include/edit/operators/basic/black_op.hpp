@@ -4,15 +4,12 @@
 #include <string>
 #include <string_view>
 
-#include "edit/operators/basic/tone_region_op.hpp"
 #include "edit/operators/op_base.hpp"
 #include "image/image_buffer.hpp"
-#include "tone_region_op.hpp"
 #include "utils/simd/simple_simd.hpp"
 
 namespace puerhlab {
-namespace hw = hwy::HWY_NAMESPACE;
-class BlackOp : public ToneRegionOp<BlackOp>, public OperatorBase<BlackOp> {
+class BlackOp : public OperatorBase<BlackOp> {
  private:
   float              _offset;
 
@@ -21,17 +18,13 @@ class BlackOp : public ToneRegionOp<BlackOp>, public OperatorBase<BlackOp> {
 
   simple_simd::f32x4 _y_intercept_vec;
   simple_simd::f32x4 _slope_vec;
-  LinearToneCurve    _curve;
 
  public:
-  auto GetOutput(cv::Vec3f&) -> cv::Vec3f;
-  auto GetOutput(hw::Vec<hw::ScalableTag<float>> luminance) -> hw::Vec<hw::ScalableTag<float>>;
-  auto GetScale() -> float;
+  auto                               GetScale() -> float;
   static constexpr PriorityLevel     _priority_level    = 1;
   static constexpr PipelineStageName _affiliation_stage = PipelineStageName::Basic_Adjustment;
   static constexpr std::string_view  _canonical_name    = "BLACK";
   static constexpr std::string_view  _script_name       = "black";
-  static constexpr ToneRegion        _tone_region       = ToneRegion::BLACK;
   static constexpr OperatorType      _operator_type     = OperatorType::BLACK;
 
   BlackOp()                                             = default;
@@ -41,10 +34,9 @@ class BlackOp : public ToneRegionOp<BlackOp>, public OperatorBase<BlackOp> {
   static void GetMask(cv::Mat& src, cv::Mat& mask);
 
   void        Apply(std::shared_ptr<ImageBuffer> input) override;
-  auto        ToKernel() const -> Kernel override;
   auto        GetParams() const -> nlohmann::json override;
   void        SetParams(const nlohmann::json& params) override;
 
-  void SetGlobalParams(OperatorParams& params) const override;
+  void        SetGlobalParams(OperatorParams& params) const override;
 };
 }  // namespace puerhlab

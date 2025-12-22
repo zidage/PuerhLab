@@ -5,6 +5,7 @@
 namespace puerhlab {
 struct HighlightsOpKernel : PointOpTag {
   inline void operator()(Pixel& p, OperatorParams& params) const {
+    if (!params.highlights_enabled) return;
     float L    = 0.2126f * p.r + 0.7152f * p.g + 0.0722f * p.b;
     float outL = L;
     if (L <= params.highlights_k) {
@@ -19,7 +20,8 @@ struct HighlightsOpKernel : PointOpTag {
       float H01 = -2 * t * t * t + 3 * t * t;
       float H11 = t * t * t - t * t;
       // note: tangents in Hermite are (dx * m0) and (dx * m1)
-      outL      = H00 * params.highlights_k + H10 * (params.highlights_dx * params.highlights_m0) + H01 * 1.0f + H11 * (params.highlights_dx * params.highlights_m1);
+      outL      = H00 * params.highlights_k + H10 * (params.highlights_dx * params.highlights_m0) +
+             H01 * 1.0f + H11 * (params.highlights_dx * params.highlights_m1);
     } else {
       // L >= whitepoint: linear extrapolate using slope m1
       outL = 1.0f + (L - 1.0f) * params.highlights_m1;

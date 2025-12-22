@@ -29,9 +29,6 @@ class ExposureOp : public OperatorBase<ExposureOp>, PointOpTag {
 
   float              _gamma;
 
-  PixelVec           _vec_offset;
-
-  simple_simd::f32x4 _voffset;
 
  public:
   static constexpr PriorityLevel     _priority_level    = 0;
@@ -44,11 +41,9 @@ class ExposureOp : public OperatorBase<ExposureOp>, PointOpTag {
   ExposureOp(const nlohmann::json& params);
 
   void Apply(std::shared_ptr<ImageBuffer> input) override;
-  auto ToKernel() const -> Kernel override;
   auto GetParams() const -> nlohmann::json override;
   void SetParams(const nlohmann::json& params) override;
 
   void SetGlobalParams(OperatorParams& params) const override;
-
 };
 }  // namespace puerhlab

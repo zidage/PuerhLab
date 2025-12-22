@@ -16,40 +16,27 @@ PipelineStage::PipelineStage(PipelineStageName stage, bool enable_cache, bool is
   }
 }
 
-auto PipelineStage::SetOperator(OperatorType op_type, nlohmann::json param) -> int {
+void PipelineStage::SetOperator(OperatorType op_type, nlohmann::json param) {
   auto it = _operators->find(op_type);
   if (it == _operators->end()) {
     auto op = OperatorFactory::Instance().Create(op_type, param);
     _operators->emplace(op_type, OperatorEntry{true, op});
     SetOutputCacheValid(false);
-    for (auto* dependent : _dependents) {
-      dependent->SetOutputCacheValid(false);
-    }
-    return 1;
+    if (_dependents) _dependents->SetOutputCacheValid(false);
   } else {
     (it->second)._op->SetParams(param);
     SetOutputCacheValid(false);
-    for (auto* dependent : _dependents) {
-      dependent->SetOutputCacheValid(false);
-    }
-    if (op_type == OperatorType::CST || op_type == OperatorType::LMT) {
-      // CST and LMT need to regenerate their CPU processors, so we need to call
-      // SetExecutionStages()
-      return 1;
-    }
-    return 0;
+    if (_dependents) _dependents->SetOutputCacheValid(false);
   }
 }
 
-auto PipelineStage::SetOperator(OperatorType op_type, nlohmann::json param, OperatorParams& global_params)
-    -> int {
+void PipelineStage::SetOperator(OperatorType op_type, nlohmann::json param,
+                                OperatorParams& global_params) {
   SetOperator(op_type, param);
   auto it = _operators->find(op_type);
   if (it != _operators->end()) {
     it->second._op->SetGlobalParams(global_params);
-    return 0;
   }
-  return 1;
 }
 
 auto PipelineStage::GetOperator(OperatorType op_type) const -> std::optional<OperatorEntry*> {
@@ -65,9 +52,7 @@ void PipelineStage::EnableOperator(OperatorType op_type, bool enable) {
   if (it != _operators->end()) {
     if (it->second._enable != enable) {
       SetOutputCacheValid(false);
-      for (auto* dependent : _dependents) {
-        dependent->SetInputCacheValid(false);
-      }
+      if (_dependents) _dependents->SetInputCacheValid(false);
     }
     it->second._enable = enable;
   }
@@ -96,7 +81,7 @@ void PipelineStage::SetOutputCacheValid(bool valid) {
   _output_cache_valid = valid;
 }
 
-auto PipelineStage::ApplyStage() -> std::shared_ptr<ImageBuffer> {
+auto PipelineStage::ApplyStage(OperatorParams& global_params) -> std::shared_ptr<ImageBuffer> {
   if (!_input_set) {
     throw std::runtime_error("PipelineExecutor: No valid input image set");
   }
@@ -122,18 +107,15 @@ auto PipelineStage::ApplyStage() -> std::shared_ptr<ImageBuffer> {
       }
       _output_cache = current_img;
     } else if (_is_streamable) {
-      if (!HasStreamableOps()) {
-        _output_cache = _input_img;
-      } else {
-        // Streamable stage with enabled operators, use tile scheduler
-        if (!_tile_scheduler) {
-          // If tile scheduler is not set, create one
-          SetTileScheduler();
-        }
-        _tile_scheduler->SetInputImage(_input_img);
-        auto current_img = _tile_scheduler->ApplyOps();
-        _output_cache    = current_img;
+      // Streamable stage with enabled operators, use tile scheduler
+      if (!_static_tile_scheduler) {
+        // If tile scheduler is not set, create one
+        SetStaticTileScheduler();
       }
+      _static_tile_scheduler->SetInputImage(_input_img);
+      auto current_img = _static_tile_scheduler->ApplyOps(global_params);
+      _output_cache    = current_img;
+
     } else {
       _output_cache = _input_img;
     }
@@ -145,6 +127,7 @@ auto PipelineStage::ApplyStage() -> std::shared_ptr<ImageBuffer> {
       _next_stage->SetInputCacheValid(true);
     }
     return _output_cache;
+
   } else {
     // No caching, always process the image without using streaming
     bool has_enabled_op = _operators->size() > 0;
@@ -178,9 +161,7 @@ void PipelineStage::ResetAll() {
   _input_set          = false;
   _input_cache_valid  = false;
   _output_cache_valid = false;
-  _tile_scheduler.reset();
-  _dependents.clear();
-  _kernel_stream._kernels.clear();
+  _dependents = nullptr;
   _prev_stage   = nullptr;
   _next_stage   = nullptr;
   _input_img    = nullptr;

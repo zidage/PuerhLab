@@ -102,66 +102,6 @@ void OCIO_ACES_Transform_Op::Apply(std::shared_ptr<ImageBuffer> input) {
   }
 }
 
-auto OCIO_ACES_Transform_Op::ToKernel() const -> Kernel {
-  if (!_input_transform.empty() && !_output_transform.empty()) {
-    auto input_transform = OCIO::ColorSpaceTransform::Create();
-    input_transform->setSrc(_input_transform.c_str());
-    input_transform->setDst("ACES - ACES2065-1");
-    auto idt              = config->getProcessor(input_transform);
-    auto cpu              = idt->getDefaultCPUProcessor();
-
-    auto output_transform = OCIO::LookTransform::Create();
-    output_transform->setLooks("ACES 1.3 Reference Gamut Compression");
-    output_transform->setSrc("ACES - ACES2065-1");
-    output_transform->setDst(_output_transform.c_str());
-    auto odt     = config->getProcessor(output_transform);
-    auto odt_cpu = odt->getDefaultCPUProcessor();
-
-    return Kernel{._type = Kernel::Type::Point, ._func = PointKernelFunc([cpu, odt_cpu](Pixel& in) {
-                                                  cpu->applyRGB(&in.r);
-                                                  odt_cpu->applyRGBA(&in.r);
-                                                })};
-
-  } else if (!_input_transform.empty() && _output_transform.empty()) {
-    auto transform = OCIO::ColorSpaceTransform::Create();
-    // transform->setLooks("ACES 1.3 Reference Gamut Compression");
-    transform->setSrc(_input_transform.c_str());
-    transform->setDst("ACES - ACES2065-1");
-    auto idt = config->getProcessor(transform);
-    auto cpu = idt->getDefaultCPUProcessor();
-
-    return Kernel{._type = Kernel::Type::Point, ._func = PointKernelFunc([cpu](Pixel& in) {
-                                                  cpu->applyRGBA(&in.r);
-                                                  return in;
-                                                })};
-  } else if (_input_transform.empty() && !_output_transform.empty() &&
-             _output_transform.ends_with("Display")) {
-    auto transform = OCIO::DisplayViewTransform::Create();
-    transform->setSrc("ACES - ACES2065-1");
-    transform->setDisplay(_output_transform.c_str());
-    transform->setView("ACES 2.0 - SDR 100 nits (Rec.709)");
-
-    auto odt = config->getProcessor(transform);
-    auto cpu = odt->getDefaultCPUProcessor();
-
-    return Kernel{._type = Kernel::Type::Point, ._func = PointKernelFunc([cpu](Pixel& in) {
-                                                  cpu->applyRGBA(&in.r);
-                                                  return in;
-                                                })};
-  } else if (_input_transform.empty() && !_output_transform.empty()) {
-    auto transform = OCIO::LookTransform::Create();
-    transform->setLooks("ACES 1.3 Reference Gamut Compression");
-    transform->setSrc("ACES - ACES2065-1");
-    transform->setDst(_output_transform.c_str());
-    transform->setDirection(OCIO::TransformDirection::TRANSFORM_DIR_FORWARD);
-
-    auto csc = config->getProcessor(transform);
-    auto cpu = csc->getDefaultCPUProcessor();
-    return Kernel{._type = Kernel::Type::Point,
-                  ._func = PointKernelFunc([cpu](Pixel& in) { cpu->applyRGBA(&in.r); })};
-  }
-  throw std::runtime_error("OCIO_ACES_Transform_Op: No valid transform assigned to the operator");
-}
 
 auto OCIO_ACES_Transform_Op::ApplyLMT(ImageBuffer& input) -> ImageBuffer {
   if (!_lmt_path.has_value()) {
@@ -194,10 +134,10 @@ auto OCIO_ACES_Transform_Op::GetParams() const -> nlohmann::json {
   nlohmann::json o;
   nlohmann::json inner;
 
-  inner["src"]       = _input_transform;
-  inner["dest"]      = _output_transform;
-  inner["limit"]     = _limit;
-  inner["normalize"] = _normalize;
+  inner["src"]            = _input_transform;
+  inner["dest"]           = _output_transform;
+  inner["limit"]          = _limit;
+  inner["normalize"]      = _normalize;
   inner["transform_type"] = static_cast<uint32_t>(_transform_type);
 
   if (_lmt_path.has_value()) {
@@ -226,30 +166,29 @@ void OCIO_ACES_Transform_Op::SetParams(const nlohmann::json& params) {
     _normalize = inner["normalize"].get<bool>();
   }
 
-  if (!_input_transform.empty() && !_output_transform.empty()) {
-    auto input_transform = OCIO::ColorSpaceTransform::Create();
-    input_transform->setSrc(_input_transform.c_str());
-    input_transform->setDst("ACES - ACES2065-1");
-    auto idt              = config->getProcessor(input_transform);
-    auto cpu              = idt->getDefaultCPUProcessor();
+  if (inner.contains("transform_type")) {
+    _transform_type = static_cast<TransformType>(inner["transform_type"].get<uint32_t>());
+  }
 
-    auto output_transform = OCIO::LookTransform::Create();
-    output_transform->setLooks("ACES 1.3 Reference Gamut Compression");
-    output_transform->setSrc("ACES - ACES2065-1");
+  if (!_input_transform.empty() && !_output_transform.empty()) {
+    auto output_transform = OCIO::ColorSpaceTransform::Create();
+    output_transform->setSrc(_input_transform.c_str());
     output_transform->setDst(_output_transform.c_str());
-    auto odt     = config->getProcessor(output_transform);
-    auto odt_cpu = odt->getDefaultCPUProcessor();
+    auto odt      = config->getProcessor(output_transform);
+    auto odt_cpu  = odt->getDefaultCPUProcessor();
 
     cpu_processor = odt_cpu;
+    return;
   } else if (!_input_transform.empty() && _output_transform.empty()) {
     auto transform = OCIO::ColorSpaceTransform::Create();
     // transform->setLooks("ACES 1.3 Reference Gamut Compression");
     transform->setSrc(_input_transform.c_str());
     transform->setDst("ACES - ACES2065-1");
-    auto idt = config->getProcessor(transform);
-    auto cpu = idt->getDefaultCPUProcessor();
+    auto idt      = config->getProcessor(transform);
+    auto cpu      = idt->getDefaultCPUProcessor();
 
     cpu_processor = cpu;
+    return;
   } else if (_input_transform.empty() && !_output_transform.empty() &&
              _output_transform.ends_with("Display")) {
     auto transform = OCIO::DisplayViewTransform::Create();
@@ -257,10 +196,11 @@ void OCIO_ACES_Transform_Op::SetParams(const nlohmann::json& params) {
     transform->setDisplay(_output_transform.c_str());
     transform->setView("ACES 2.0 - SDR 100 nits (Rec.709)");
 
-    auto odt = config->getProcessor(transform);
-    auto cpu = odt->getDefaultCPUProcessor();
+    auto odt      = config->getProcessor(transform);
+    auto cpu      = odt->getDefaultCPUProcessor();
 
     cpu_processor = cpu;
+    return;
   } else if (_input_transform.empty() && !_output_transform.empty()) {
     auto transform = OCIO::LookTransform::Create();
     transform->setLooks("ACES 1.3 Reference Gamut Compression");
@@ -268,9 +208,10 @@ void OCIO_ACES_Transform_Op::SetParams(const nlohmann::json& params) {
     transform->setDst(_output_transform.c_str());
     transform->setDirection(OCIO::TransformDirection::TRANSFORM_DIR_FORWARD);
 
-    auto csc = config->getProcessor(transform);
-    auto cpu = csc->getDefaultCPUProcessor();
+    auto csc      = config->getProcessor(transform);
+    auto cpu      = csc->getDefaultCPUProcessor();
     cpu_processor = cpu;
+    return;
   }
   throw std::runtime_error("OCIO_ACES_Transform_Op: No valid transform assigned to the operator");
 }

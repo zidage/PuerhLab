@@ -4,8 +4,9 @@
 #include "edit/operators/op_kernel.hpp"
 
 namespace puerhlab {
-struct CurveOpKernel : PointKernelFunc {
+struct CurveOpKernel : PointOpTag {
   inline void operator()(Pixel& p, OperatorParams& params) const {
+    if (!params.curve_enabled) return;
     float lum = 0.2126f * p.r + 0.7152f * p.g + 0.0722f * p.b;
     float x   = lum;
 

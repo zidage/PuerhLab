@@ -3,6 +3,10 @@
 #include <memory>
 #include <opencv2/core.hpp>
 #include <opencv2/core/mat.hpp>
+
+#include "edit/operators/cst/lmt_op.hpp"
+#include "edit/pipeline/pipeline.hpp"
+
 #ifdef HAVE_CUDA
 #include <opencv2/cudaarithm.hpp>
 #include <opencv2/cudaimgproc.hpp>
@@ -10,6 +14,7 @@
 #endif
 #include <opencv2/opencv.hpp>
 
+#include "edit/operators/CPU_kernels/cpu_kernels.hpp"
 #include "edit/operators/op_base.hpp"
 #include "edit/operators/utils/color_conversion.hpp"
 #include "edit/pipeline/pipeline_stage.hpp"
@@ -66,7 +71,7 @@ auto CPUPipelineExecutor::Apply(std::shared_ptr<ImageBuffer> input)
     output = std::make_shared<ImageBuffer>(input->Clone());
     for (auto* stage : _exec_stages) {
       stage->SetInputImage(output);
-      output = stage->ApplyStage();
+      output = stage->ApplyStage(_global_params);
     }
   } else {
     // If cache is valid, use cached output
@@ -74,7 +79,7 @@ auto CPUPipelineExecutor::Apply(std::shared_ptr<ImageBuffer> input)
     for (auto* stage : _exec_stages) {
       if (stage != first_stage) {
         stage->SetInputImage(output);
-        output = stage->ApplyStage();
+        output = stage->ApplyStage(_global_params);
       }
     }
   }
@@ -99,44 +104,21 @@ void CPUPipelineExecutor::SetPreviewMode(bool is_thumbnail) {
 
 void CPUPipelineExecutor::SetExecutionStages() {
   _exec_stages.clear();
-  _merged_stages.clear();
   std::vector<PipelineStage*> streamable_stages;
 
-  auto                        flush_streamable = [&]() {
-    if (!streamable_stages.empty()) {
-      // Merge all streamable stages into one
-      auto  merged = std::make_unique<PipelineStage>(PipelineStageName::Merged_Stage, true, true);
-      auto& stream = merged->GetKernelStream();
-      for (auto* s : streamable_stages) {
-        s->AddDependent(merged.get());
-        auto& ops = s->GetAllOperators();
-        for (const auto& [type, op_entry] : ops) {
-          if (op_entry._enable) {
-            stream.AddToStream(op_entry._op->ToKernel());
-          }
-        }
-      }
-      _exec_stages.push_back(merged.get());
-      _merged_stages.push_back(std::move(merged));
-      streamable_stages.clear();
-    }
-  };
+  auto merged = std::make_unique<PipelineStage>(PipelineStageName::Merged_Stage, true, true);
 
-  for (auto& stage : _stages) {
-    if (!stage.IsStreamable()) {
-      if (!streamable_stages.empty()) {
-        // Merge all streamable stages into one
-        flush_streamable();
-      }
-      _exec_stages.push_back(&stage);
-    } else {
-      streamable_stages.push_back(&stage);
-    }
+  _exec_stages.push_back(&_stages[static_cast<int>(PipelineStageName::Image_Loading)]);
+  _exec_stages.push_back(&_stages[static_cast<int>(PipelineStageName::Geometry_Adjustment)]);
+  _exec_stages.push_back(merged.get());
+
+  _merged_stages = std::move(merged);
+
+  for (size_t i = 2; i < _stages.size(); i++) {
+    PipelineStage& stage = _stages[i];
+    stage.AddDependent(_merged_stages.get());
   }
-  // Dealing with remaining streamable stages
-  if (!streamable_stages.empty()) {
-    flush_streamable();
-  }
+
   // Chain the execution stages
   for (size_t i = 0; i < _exec_stages.size(); i++) {
     PipelineStage* prev_stage = (i > 0) ? _exec_stages[i - 1] : nullptr;
@@ -152,7 +134,7 @@ void CPUPipelineExecutor::ResetExecutionStages() {
     stage.ResetCache();
   }
   _exec_stages.clear();
-  _merged_stages.clear();
+  _merged_stages.reset();
 }
 
 auto CPUPipelineExecutor::ExportPipelineParams() const -> nlohmann::json {

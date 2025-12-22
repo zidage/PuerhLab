@@ -83,50 +83,6 @@ void ClarityOp::Apply(std::shared_ptr<ImageBuffer> input) {
   img += high_pass;
 }
 
-auto ClarityOp::ToKernel() const -> Kernel {
-  return Kernel{
-      ._type          = Kernel::Type::Neighbor,
-      ._neighbor_func = NeighborKernelFunc([this](Tile& in) {
-        // Apply clarity operation on pixel p
-        // This is a placeholder; actual implementation would go here
-        cv::Mat tile_mat(in._height, in._width, CV_32FC4, in._ptr);
-        cv::Mat midtone_mask;
-        CreateMidtoneMask(tile_mat, midtone_mask);
-        cv::Mat blurred;
-        // Reflect padding keeps gradients continuous across tile borders when halos are stitched
-        cv::GaussianBlur(tile_mat, blurred, cv::Size(), _usm_radius, _usm_radius,
-                         cv::BORDER_REFLECT101);
-        cv::Mat    high_pass  = tile_mat - blurred;
-        const bool continuous = high_pass.isContinuous() && midtone_mask.isContinuous();
-        const int  rows       = high_pass.rows;
-        const int  cols       = high_pass.cols;
-
-        if (continuous) {
-          const int total    = rows * cols;
-          auto*     hp_ptr   = high_pass.ptr<cv::Vec4f>();
-          auto*     mask_ptr = midtone_mask.ptr<float>();
-          for (int i = 0; i < total; ++i) {
-            const float w = mask_ptr[i] * _scale;
-            hp_ptr[i][0] *= w;
-            hp_ptr[i][1] *= w;
-            hp_ptr[i][2] *= w;  // leave alpha untouched
-          }
-        } else {
-          for (int r = 0; r < rows; ++r) {
-            auto*        hp_ptr = high_pass.ptr<cv::Vec4f>(r);
-            const float* m      = midtone_mask.ptr<float>(r);
-            for (int c = 0; c < cols; ++c) {
-              const float w = m[c] * _scale;
-              hp_ptr[c][0] *= w;
-              hp_ptr[c][1] *= w;
-              hp_ptr[c][2] *= w;  // leave alpha untouched
-            }
-          }
-        }
-        tile_mat += high_pass;
-      }),
-  };
-}
 
 auto ClarityOp::GetParams() const -> nlohmann::json {
   nlohmann::json o;
@@ -144,7 +100,5 @@ void ClarityOp::SetParams(const nlohmann::json& params) {
   _scale = _clarity_offset / 300.0f;
 }
 
-void ClarityOp::SetGlobalParams(OperatorParams& params) const {
-  params.clarity_offset = _scale;
-}
+void ClarityOp::SetGlobalParams(OperatorParams& params) const { params.clarity_offset = _scale; }
 };  // namespace puerhlab

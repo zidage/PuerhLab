@@ -3,6 +3,7 @@
 #include <memory>
 #include <mutex>
 
+#include "edit/operators/CPU_kernels/cpu_kernels.hpp"
 #include "edit/operators/op_base.hpp"
 #include "edit/operators/op_kernel.hpp"
 #include "edit/operators/operator_factory.hpp"
@@ -18,20 +19,18 @@ class CPUPipelineExecutor : public PipelineExecutor {
   bool                                                                        _enable_cache = true;
   std::array<PipelineStage, static_cast<int>(PipelineStageName::Stage_Count)> _stages;
 
-  KernelStream                                                                _kernel_stream;
-
-  OperatorParams                                                              _operator_params;
+  OperatorParams                                                              _global_params;
 
   bool                                                                        _is_thumbnail = false;
 
   nlohmann::json                                                              _thumbnail_params;
 
-  static constexpr PipelineBackend            _backend = PipelineBackend::CPU;
+  static constexpr PipelineBackend _backend = PipelineBackend::CPU;
 
-  std::vector<PipelineStage*>                 _exec_stages;
-  std::vector<std::unique_ptr<PipelineStage>> _merged_stages;
+  std::vector<PipelineStage*>      _exec_stages;
+  std::unique_ptr<PipelineStage>   _merged_stages;
 
-  void                                        ResetStages();
+  void                             ResetStages();
 
  public:
   CPUPipelineExecutor();
@@ -47,7 +46,7 @@ class CPUPipelineExecutor : public PipelineExecutor {
   void SetExecutionStages();
   void ResetExecutionStages();
 
-  auto GetOperatorParams() -> OperatorParams& { return _operator_params; }
+  auto GetGlobalParams() -> OperatorParams& override { return _global_params; }
 
   /**
    * @brief Serialize the pipeline parameters to JSON

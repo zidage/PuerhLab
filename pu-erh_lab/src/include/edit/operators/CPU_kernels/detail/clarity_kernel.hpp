@@ -6,6 +6,7 @@
 namespace puerhlab {
 struct ClarityOpKernel : NeighborOpTag {
   inline void operator()(Tile& in, OperatorParams& params) const {
+    if (!params.clarity_enabled) return;
     cv::Mat tile_mat(in._height, in._width, CV_32FC4, in._ptr);
     cv::Mat midtone_mask;
 
@@ -19,8 +20,7 @@ struct ClarityOpKernel : NeighborOpTag {
     midtone_mask = 1.0f - luminosity_mask;
     cv::Mat blurred;
     // Reflect padding keeps gradients continuous across tile borders when halos are stitched
-    cv::GaussianBlur(tile_mat, blurred, cv::Size(), 5.0f, 5.0f,
-                     cv::BORDER_REFLECT101);
+    cv::GaussianBlur(tile_mat, blurred, cv::Size(), 5.0f, 5.0f, cv::BORDER_REFLECT101);
     cv::Mat    high_pass  = tile_mat - blurred;
     const bool continuous = high_pass.isContinuous() && midtone_mask.isContinuous();
     const int  rows       = high_pass.rows;

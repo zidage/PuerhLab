@@ -32,7 +32,6 @@ class HLSOp : public OperatorBase<HLSOp> {
   void SetRanges(float h_range, float l_range, float s_range);
 
   void Apply(std::shared_ptr<ImageBuffer> input) override;
-  auto ToKernel() const -> Kernel override;
   auto GetParams() const -> nlohmann::json override;
   void SetParams(const nlohmann::json& params) override;
 

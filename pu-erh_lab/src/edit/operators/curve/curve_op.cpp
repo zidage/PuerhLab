@@ -72,17 +72,6 @@ void CurveOp::Apply(std::shared_ptr<ImageBuffer> input) {
   });
 }
 
-auto CurveOp::ToKernel() const -> Kernel {
-  return Kernel{._type = Kernel::Type::Point, ._func = PointKernelFunc([this](Pixel& in) {
-                                                float lum = 0.2126f * in.r + 0.7152f * in.g +
-                                                            0.0722f * in.b;
-                                                float new_lum = EvaluateCurve(lum);
-                                                float ratio = (lum > 1e-5f) ? new_lum / lum : 0.0f;
-                                                in.r *= ratio;
-                                                in.g *= ratio;
-                                                in.b *= ratio;
-                                              })};
-}
 
 void CurveOp::SetCtrlPts(const std::vector<cv::Point2f>& control_points) {
   _ctrl_pts = control_points;

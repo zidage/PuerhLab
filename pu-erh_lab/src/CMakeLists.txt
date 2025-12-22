@@ -115,8 +115,6 @@ set(OPERATORS_SRCS
     edit/operators/detail/sharpen_op.cpp
     edit/operators/wheel/color_wheel_op.cpp
     edit/operators/curve/curve_op.cpp
-    edit/operators/tone_mapping/ACES_tone_mapping_op.cpp
-    edit/operators/basic/auto_exposure_op.cpp
     edit/operators/cst/cst_op.cpp
     edit/operators/cst/lmt_op.cpp
     edit/operators/raw/raw_decode_op.cpp
@@ -134,7 +132,6 @@ set(PIPELINE_SRCS
     edit/pipeline/pipeline_cpu.cpp
     edit/pipeline/pipeline_stage.cpp
     edit/scheduler/pipeline_scheduler.cpp
-    edit/pipeline/tile_scheduler.cpp
 )
 
 def_library(EditPipeline

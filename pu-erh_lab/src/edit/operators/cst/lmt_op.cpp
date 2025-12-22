@@ -39,18 +39,6 @@ void OCIO_LMT_Transform_Op::Apply(std::shared_ptr<ImageBuffer> input) {
   });
 }
 
-auto OCIO_LMT_Transform_Op::ToKernel() const -> Kernel {
-  auto lmt_transform = OCIO::FileTransform::Create();
-  auto path_str      = _lmt_path.wstring();
-  lmt_transform->setSrc(conv::ToBytes(path_str).c_str());
-  lmt_transform->setInterpolation(OCIO::INTERP_BEST);
-  lmt_transform->setDirection(OCIO::TRANSFORM_DIR_FORWARD);
-
-  auto lmt_processor = config->getProcessor(lmt_transform);
-  auto cpu           = lmt_processor->getDefaultCPUProcessor();
-  return Kernel{._type = Kernel::Type::Point,
-                ._func = PointKernelFunc([cpu](Pixel& in) { cpu->applyRGB(&in.r); })};
-}
 
 auto OCIO_LMT_Transform_Op::GetParams() const -> nlohmann::json {
   nlohmann::json o;
@@ -74,7 +62,7 @@ void OCIO_LMT_Transform_Op::SetParams(const nlohmann::json& params) {
 
   auto lmt_processor = config->getProcessor(lmt_transform);
   auto cpu           = lmt_processor->getDefaultCPUProcessor();
-  cpu_processor = cpu;
+  cpu_processor      = cpu;
 }
 
 void OCIO_LMT_Transform_Op::SetGlobalParams(OperatorParams& params) const {

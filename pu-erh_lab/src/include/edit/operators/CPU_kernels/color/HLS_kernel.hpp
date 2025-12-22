@@ -6,6 +6,8 @@ namespace puerhlab {
 
 struct HLSOpKernel : PointOpTag {
   inline void operator()(Pixel& p, OperatorParams& params) const {
+    if (!params.hls_enabled) return;
+
     // Convert RGB to HLS
     float r = p.r, g = p.g, b = p.b;
     float max_c = std::max({r, g, b});
@@ -69,12 +71,10 @@ struct HLSOpKernel : PointOpTag {
         return p;
       };
 
-      float r = hue2rgb(_p, q, h_adjusted / 360.0f + 1.0f / 3.0f);
-      float g = hue2rgb(_p, q, h_adjusted / 360.0f);
-      float b = hue2rgb(_p, q, h_adjusted / 360.0f - 1.0f / 3.0f);
-      p.r     = r;
-      p.g     = g;
-      p.b     = b;
+      p.r = hue2rgb(_p, q, h_adjusted / 360.0f + 1.0f / 3.0f);
+      ;
+      p.g = hue2rgb(_p, q, h_adjusted / 360.0f);
+      p.b = hue2rgb(_p, q, h_adjusted / 360.0f - 1.0f / 3.0f);
     }
   }
 };

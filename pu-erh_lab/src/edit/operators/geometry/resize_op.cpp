@@ -34,10 +34,6 @@ void ResizeOp::Apply(std::shared_ptr<ImageBuffer> input) {
              cv::INTER_AREA);
 }
 
-auto ResizeOp::ToKernel() const -> Kernel {
-  throw std::runtime_error("ResizeOp does not support kernel processing.");
-}
-
 auto ResizeOp::GetParams() const -> nlohmann::json {
   nlohmann::json params;
   nlohmann::json inner;
@@ -75,5 +71,5 @@ auto ResizeOp::SetParams(const nlohmann::json& params) -> void {
 
 void ResizeOp::SetGlobalParams(OperatorParams&) const {
   throw std::runtime_error("ResizeOp does not support global parameters.");
-}  
+}
 };  // namespace puerhlab

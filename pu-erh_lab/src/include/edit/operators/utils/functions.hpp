@@ -4,8 +4,6 @@
 
 #include <algorithm>
 
-#include "edit/operators/basic/tone_region_op.hpp"
-
 namespace hw = hwy::HWY_NAMESPACE;
 namespace puerhlab {
 

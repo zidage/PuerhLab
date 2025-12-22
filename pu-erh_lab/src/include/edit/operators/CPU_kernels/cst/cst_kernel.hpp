@@ -13,9 +13,15 @@
 namespace puerhlab {
 struct OCIO_ACES_Transform_Op_Kernel : PointOpTag {
   inline void operator()(Pixel& p, OperatorParams& params) const {
-    // This kernel is a placeholder. The actual OCIO transform is applied in the Apply function.
-    params.lmt_processor->applyRGBA(&p.r);
+    // The pair of transform ops should always be enabled.
+    if (params.is_working_space) {
+      params.to_working_processor->applyRGBA(&p.r);
+      params.is_working_space = false;
+    } else {
+      params.to_output_processor->applyRGBA(&p.r);
+      params.is_working_space = true;
+    }
   }
- };
+};
 
 }  // namespace puerhlab

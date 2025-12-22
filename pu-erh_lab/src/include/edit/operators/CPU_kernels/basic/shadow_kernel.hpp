@@ -6,6 +6,7 @@ namespace puerhlab {
 
 struct ShadowsOpKernel : PointOpTag {
   inline void operator()(Pixel& p, OperatorParams& params) const {
+    if (!params.shadows_enabled) return;
     float L = 0.2126f * p.r + 0.7152f * p.g + 0.0722f * p.b;
     if (L <= params.shadows_x0) {
       p.r = 0.0f;

@@ -76,34 +76,10 @@ void SharpenOp::Apply(std::shared_ptr<ImageBuffer> input) {
   cv::threshold(img, img, 0.0f, 0.0f, cv::THRESH_TOZERO);
 }
 
-auto SharpenOp::ToKernel() const -> Kernel {
-  return Kernel{
-      ._type          = Kernel::Type::Neighbor,
-      ._neighbor_func = NeighborKernelFunc([this](Tile& in) {
-        // Apply sharpen operation on pixel p
-        // This is a placeholder; actual implementation would go here
-        cv::Mat tile_mat(in._height, in._width, CV_32FC4, in._ptr);
-        cv::Mat blurred;
-        cv::GaussianBlur(tile_mat, blurred, cv::Size(), _radius, _radius, cv::BORDER_REPLICATE);
-        cv::Mat high_pass = tile_mat - blurred;
-        if (_threshold > 0.0f) {
-          cv::Mat high_pass_gray;
-          cv::cvtColor(high_pass, high_pass_gray, cv::COLOR_BGR2GRAY);
-          cv::Mat abs_high_pass_gray = cv::abs(high_pass_gray);
-          cv::Mat mask;
-          cv::threshold(abs_high_pass_gray, mask, _threshold, 1.0f, cv::THRESH_BINARY);
-          cv::Mat mask_3channel;
-          cv::cvtColor(mask, mask_3channel, cv::COLOR_GRAY2BGR);
-          cv::multiply(high_pass, mask_3channel, high_pass);
-        }
-        cv::scaleAdd(high_pass, _scale, tile_mat, tile_mat);
-      }),
-  };
-}
 
 void SharpenOp::SetGlobalParams(OperatorParams& params) const {
-  params.sharpen_offset = _scale;
-  params.sharpen_radius = _radius;
+  params.sharpen_offset    = _scale;
+  params.sharpen_radius    = _radius;
   params.sharpen_threshold = _threshold;
 }
 };  // namespace puerhlab
