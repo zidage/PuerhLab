@@ -262,6 +262,7 @@ using VectorKernelFunc   = std::function<void(PixelVec&)>;
 using NeighborKernelFunc = std::function<void(Tile&)>;
 using KernelFunc         = std::variant<PointKernelFunc>;
 
+// Iteration 2: Dynamic Kernel with runtime polymorphism
 struct Kernel {
   enum class Type { Point, Neighbor, Init } _type;
 

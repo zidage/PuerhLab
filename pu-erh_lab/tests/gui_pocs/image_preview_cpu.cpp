@@ -177,7 +177,6 @@ int main(int argc, char* argv[]) {
     scheduler.ScheduleTask(std::move(task));
   };
 
-  auto defaultFormatter = [](int v) { return QString::number(v); };
   auto addSlider        = [&](const QString& name, int min, int max, int value, auto&& onChange,
                        auto&& formatter) {
     auto* info   = new QLabel(QString("%1: %2").arg(name).arg(formatter(value)), controls);

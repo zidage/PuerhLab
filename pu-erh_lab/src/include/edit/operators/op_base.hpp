@@ -1,5 +1,7 @@
 #pragma once
 
+#include <OpenColorIO/OpenColorTypes.h>
+
 #include <memory>
 
 #include "image/image_buffer.hpp"
@@ -42,6 +44,88 @@ enum class OperatorType : int {
   ACES_TONE_MAPPING,
   AUTO_EXPOSURE,
   UNKNOWN  // For unrecognized operator types or placeholders
+};
+
+struct OperatorParams {
+  // Basic adjustment parameters
+  float                                    exposure_offset        = 0.0f;
+  float                                    contrast_scale         = 0.0f;
+
+  // Shadows adjustment parameter
+  float                                    shadows_offset         = 0.0f;
+  float                                    shadows_x0             = 0.0f;
+  float                                    shadows_x1             = 0.25f;
+  float                                    shadows_y0             = 0.0f;
+  float                                    shadows_y1             = 0.25f;
+  float                                    shadows_m0             = 0.0f;
+  float                                    shadows_m1             = 1.0f;
+  float                                    shadows_dx             = 0.25f;
+
+  // Highlights adjustment parameter
+  const float                              highlights_k           = 0.2f;
+  float                                    highlights_offset      = 0.0f;
+  const float                              highlights_slope_range = 0.8f;
+  float                                    highlights_m0          = 1.0f;
+  float                                    highlights_m1          = 1.0f;
+  float                                    highlights_x0          = 0.2f;
+  float                                    highlights_y0          = 0.2f;
+  float                                    highlights_y1          = 1.0f;
+  float                                    highlights_dx          = 0.8f;
+
+  float                                    white_point            = 1.0f;
+  float                                    white_slope            = 1.0f;
+
+  float                                    black_slope            = 1.0f;
+  float                                    black_point            = 0.0f;
+
+  // HLS adjustment parameters
+  float                                    target_hls[3]          = {0.0f, 0.0f, 0.0f};
+  float                                    hls_adjustment[3]      = {0.0f, 0.0f, 0.0f};
+  float                                    hue_range              = 0.0f;
+  float                                    lightness_range        = 0.0f;
+  float                                    saturation_range       = 0.0f;
+
+  // Saturation adjustment parameter
+  float                                    saturation_offset      = 0.0f;
+
+  // Tint adjustment parameter
+  float                                    tint_offset            = 0.0f;
+
+  // Vibrance adjustment parameter
+  float                                    vibrance_offset        = 0.0f;
+
+  // Working space
+  std::string                              working_space          = "ACEScct";
+  OpenColorIO_v2_4::ConstCPUProcessorRcPtr to_working_processor   = nullptr;
+
+  // Look modification transform
+  std::string                              lmt_profile            = "";
+  OpenColorIO_v2_4::ConstCPUProcessorRcPtr lmt_processor          = nullptr;
+
+  // To output space
+  std::string                              output_space           = "Camera sRGB";
+  OpenColorIO_v2_4::ConstCPUProcessorRcPtr to_output_processor    = nullptr;
+
+  // Curve adjustment parameters
+  std::vector<cv::Point2f>                 curve_ctrl_pts         = {};
+  std::vector<float>                       curve_h                = {};
+  std::vector<float>                       curve_m                = {};
+
+  // Clarity adjustment parameter
+  float                                    clarity_offset         = 0.0f;
+
+  // Sharpen adjustment parameter
+  float                                    sharpen_offset         = 0.0f;
+  float                                    sharpen_radius         = 3.0f;
+  float                                    sharpen_threshold      = 0.0f;
+
+  // Color wheel adjustment parameters
+  float                                    lift_color_offset[3]   = {0.0f, 0.0f, 0.0f};
+  float                                    lift_luminance_offset  = 0.0f;
+  float                                    gamma_color_offset[3]  = {0.0f, 0.0f, 0.0f};
+  float                                    gamma_luminance_offset = 0.0f;
+  float                                    gain_color_offset[3]   = {0.0f, 0.0f, 0.0f};
+  float                                    gain_luminance_offset  = 0.0f;
 };
 
 class IOperatorBase {
@@ -121,4 +205,7 @@ struct OpStream {
 
   void Clear() { _ops.clear(); }
 };
+
+struct PointOpTag {};
+struct NeighborOpTag {};
 };  // namespace puerhlab

@@ -6,11 +6,12 @@
 #include <string_view>
 
 #include "edit/operators/op_base.hpp"
+#include "edit/operators/op_kernel.hpp"
 #include "type/type.hpp"
 #include "utils/simd/simple_simd.hpp"
 
 namespace puerhlab {
-class ExposureOp : public OperatorBase<ExposureOp> {
+class ExposureOp : public OperatorBase<ExposureOp>, PointOpTag {
  private:
   /**
    * @brief An EV offset applied to the target image.
@@ -46,5 +47,11 @@ class ExposureOp : public OperatorBase<ExposureOp> {
   auto ToKernel() const -> Kernel override;
   auto GetParams() const -> nlohmann::json override;
   void SetParams(const nlohmann::json& params) override;
+
+  inline void operator()(Pixel& p, OperatorParams& params) const {
+    p.r += params.exposure_offset;
+    p.g += params.exposure_offset;
+    p.b += params.exposure_offset;
+  }
 };
 }  // namespace puerhlab
