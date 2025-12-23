@@ -11,7 +11,7 @@
 <figure>
   <img src="docs/demo/editor.png" width="600">
   <figcaption style="text-align:center; font-size:14px; color:gray;">
-    Shot with Sony A7RIII · Applied <strong>2383 LUT from Cullen Kelly</strong> · Demo Screenshot
+    Shot with Sony A7RIII · Applied <strong>2383 LUT</strong> · Demo Screenshot
   </figcaption>
 </figure>
 
@@ -80,6 +80,7 @@ cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE=vcpkg/scripts/buildsystems/vcpkg.cmak
 
 # Build
 cmake --build build --config Release
+
 
 
 
