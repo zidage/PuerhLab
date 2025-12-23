@@ -19,14 +19,23 @@ struct PointChain {
 
   PointChain(Ops... ops) : _ops(std::move(ops)...) {}
 
+  template <size_t I = 0>
+  inline void ApplyOps(Pixel& p, OperatorParams& params) {
+    if constexpr (I < sizeof...(Ops)) {
+      auto& op = std::get<I>(_ops);
+      op(p, params);
+      ApplyOps<I + 1>(p, params);
+    }
+  }
+
   void Execute(Tile& tile, OperatorParams& params) {
     int height = tile._height;
     int width  = tile._width;
-
+    
     for (int y = 0; y < height; ++y) {
       for (int x = 0; x < width; ++x) {
         Pixel& p = tile.at(y, x);
-        std::apply([&p, &params](auto&... op) { (op(p, params), ...); }, _ops);
+        ApplyOps(p, params);
       }
     }
   }
@@ -38,22 +47,24 @@ class StaticKernelStream {
 
  public:
   StaticKernelStream(Stages... stages) : _stages(std::move(stages)...) {}
-  void ProcessTile(Tile& tile, OperatorParams& params) {
-    std::apply(
-        [&](auto&... stage) {
-          auto dispatch = [&](auto& s) {
-            if constexpr (std::is_base_of_v<PointOpTag, std::decay_t<decltype(s)>>) {
-              s(tile, params);
-            } else if constexpr (std::is_base_of_v<NeighborOpTag, std::decay_t<decltype(s)>>) {
-              s(tile, params);
-            } else {
-              s.Execute(tile, params);
-            }
-          };
+  template <size_t I = 0>
+  inline void Dispatch(Tile& tile, OperatorParams& params) {
+    if constexpr (I < sizeof...(Stages)) {
+      auto& s = std::get<I>(_stages);
 
-          (dispatch(stage), ...);
-        },
-        _stages);
+      if constexpr (std::is_base_of_v<PointOpTag, std::decay_t<decltype(s)>>) {
+        s(tile, params);
+      } else if constexpr (std::is_base_of_v<NeighborOpTag, std::decay_t<decltype(s)>>) {
+        s(tile, params);
+      } else {
+        s.Execute(tile, params);
+      }
+
+      Dispatch<I + 1>(tile, params);
+    }
+  }
+  void ProcessTile(Tile& tile, OperatorParams& params) {
+    Dispatch(tile, params);
   }
 };
 

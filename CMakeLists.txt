@@ -19,7 +19,7 @@ if (MSVC)
         message(STATUS "CMAKE_CXX_FLAGS: ${CMAKE_CXX_FLAGS}\n")
         add_compile_options(/fsanitize=address)
     endif()
-    set(CMAKE_CXX_FLAGS_RELEASE "/O2 /arch:AVX /bigobj /W4 /external:anglebrackets /external:W0 /EHsc /openmp")
+    set(CMAKE_CXX_FLAGS_RELEASE "/O2 /arch:AVX /bigobj /W4 /external:anglebrackets /external:W0 /EHsc /openmp /GL")
     # add_link_options(/DEBUG)
     set(CMAKE_VS_USE_DEBUG_LIBRARIES "$<CONFIG:Debug,Custom>")
     # FIXME: Hardcoded Qt path for Windows, consider making it configurable

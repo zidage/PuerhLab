@@ -135,12 +135,12 @@ struct OperatorParams {
   float                                    sharpen_threshold      = 0.0f;
 
   // Color wheel adjustment parameters
-  bool                                     color_wheel_enabled    = false;
+  bool                                     color_wheel_enabled    = true;
   float                                    lift_color_offset[3]   = {0.0f, 0.0f, 0.0f};
   float                                    lift_luminance_offset  = 0.0f;
-  float                                    gamma_color_offset[3]  = {0.0f, 0.0f, 0.0f};
+  float                                    gamma_color_offset[3]  = {1.0f, 1.0f, 1.0f};
   float                                    gamma_luminance_offset = 0.0f;
-  float                                    gain_color_offset[3]   = {0.0f, 0.0f, 0.0f};
+  float                                    gain_color_offset[3]   = {1.0f, 1.0f, 1.0f};
   float                                    gain_luminance_offset  = 0.0f;
 };
 
