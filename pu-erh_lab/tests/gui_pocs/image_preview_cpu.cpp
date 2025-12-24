@@ -4,7 +4,7 @@
 #include <QBoxLayout>
 #include <QImage>
 #include <QLabel>
-#include <QSlider>
+#include <QScrollBar>
 #include <QTimer>
 #include <future>
 #include <opencv2/imgcodecs.hpp>
@@ -39,14 +39,14 @@ void SetPipelineTemplate(std::shared_ptr<PipelineExecutor> executor) {
   // to_ws.SetOperator(OperatorType::CST, to_ws_params);
   nlohmann::json to_ws_params;
   to_ws_params["ocio"] = {
-      {"src", ""}, {"dst", "ACEScct"}, {"normalize", true}, {"transform_type", 0}};
+      {"src", ""}, {"dst", "ACEScc"}, {"normalize", true}, {"transform_type", 0}};
   auto& input_stage = executor->GetStage(PipelineStageName::Basic_Adjustment);
   input_stage.SetOperator(OperatorType::TO_WS, to_ws_params, global_params);
 
   nlohmann::json output_params;
   auto&          output_stage = executor->GetStage(PipelineStageName::Output_Transform);
   output_params["ocio"]       = {
-      {"src", "ACEScct"}, {"dst", "Camera Rec.709"}, {"limit", true}, {"transform_type", 1}};
+      {"src", "ACEScc"}, {"dst", "Camera Rec.709"}, {"limit", true}, {"transform_type", 1}};
   output_stage.SetOperator(OperatorType::TO_OUTPUT, output_params, global_params);
 }
 
@@ -68,6 +68,7 @@ int main(int argc, char* argv[]) {
     float exposure   = 0.0f;
     float contrast   = 1.0f;
     float saturation = 0.0f;
+    float tint       = 0.0f;
     float blacks     = 0.0f;
     float whites     = 0.0f;
     float shadows    = 0.0f;
@@ -124,7 +125,7 @@ int main(int argc, char* argv[]) {
   SetPipelineTemplate(base_task._pipeline_executor);
   auto& global_params = base_task._pipeline_executor->GetGlobalParams();
   // Register a default exposure
-  auto& basic_stage = base_task._pipeline_executor->GetStage(PipelineStageName::Basic_Adjustment);
+  auto& basic_stage   = base_task._pipeline_executor->GetStage(PipelineStageName::Basic_Adjustment);
   basic_stage.SetOperator(OperatorType::EXPOSURE, {{"exposure", 0.0f}}, global_params);
   basic_stage.SetOperator(OperatorType::CONTRAST, {{"contrast", 1.0f}}, global_params);
   basic_stage.SetOperator(OperatorType::BLACK, {{"black", 0.0f}}, global_params);
@@ -134,6 +135,7 @@ int main(int argc, char* argv[]) {
 
   auto& color_stage = base_task._pipeline_executor->GetStage(PipelineStageName::Color_Adjustment);
   color_stage.SetOperator(OperatorType::SATURATION, {{"saturation", 0.0f}}, global_params);
+  color_stage.SetOperator(OperatorType::TINT, {{"tint", 0.0f}}, global_params);
 
   std::string LUT_PATH = std::string(CONFIG_PATH) + "LUTs/ACES CCT 2383 D65.cube";
   color_stage.SetOperator(OperatorType::LMT, {{"ocio_lmt", LUT_PATH}}, global_params);
@@ -160,10 +162,11 @@ int main(int argc, char* argv[]) {
 
     auto& color = task._pipeline_executor->GetStage(PipelineStageName::Color_Adjustment);
     color.SetOperator(OperatorType::SATURATION, {{"saturation", state.saturation}}, global_params);
-
+    color.SetOperator(OperatorType::TINT, {{"tint", state.tint}}, global_params);
     auto& detail = task._pipeline_executor->GetStage(PipelineStageName::Detail_Adjustment);
 
-    detail.SetOperator(OperatorType::SHARPEN, {{"sharpen", {{"offset", state.sharpen}}}}, global_params);
+    detail.SetOperator(OperatorType::SHARPEN, {{"sharpen", {{"offset", state.sharpen}}}},
+                                  global_params);
     detail.SetOperator(OperatorType::CLARITY, {{"clarity", state.clarity}}, global_params);
 
     task._options._is_blocking = false;
@@ -185,20 +188,54 @@ int main(int argc, char* argv[]) {
   auto addSlider = [&](const QString& name, int min, int max, int value, auto&& onChange,
                        auto&& formatter) {
     auto* info   = new QLabel(QString("%1: %2").arg(name).arg(formatter(value)), controls);
-    auto* slider = new QSlider(Qt::Horizontal, controls);
-    slider->setRange(min, max);
-    slider->setValue(value);
-    slider->setMinimumWidth(200);
+    auto* bar    = new QScrollBar(Qt::Horizontal, controls);
+    bar->setRange(min, max);
+    bar->setValue(value);
+    bar->setSingleStep(1);
+    bar->setPageStep(std::max(1, (max - min) / 20));
+    bar->setMinimumWidth(220);
+    bar->setStyleSheet(
+      "QScrollBar:horizontal {"
+      "  background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #1f1f1f, stop:1 #262626);"
+      "  border: 1px solid #3a3a3a;"
+      "  height: 18px;"
+      "  margin: 6px 14px 6px 14px;"
+      "  border-radius: 9px;"
+      "}"
+      "QScrollBar::handle:horizontal {"
+      "  background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #5fa2ff, stop:1 #3f7de0);"
+      "  border: 1px solid #2f63b8;"
+      "  border-radius: 8px;"
+      "  min-width: 32px;"
+      "  margin: 1px;"
+      "}"
+      "QScrollBar::handle:horizontal:hover {"
+      "  background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #76b4ff, stop:1 #4f8cf0);"
+      "  border-color: #3874cc;"
+      "}"
+      "QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {"
+      "  border: none;"
+      "  background: transparent;"
+      "  width: 0px;"
+      "}"
+      "QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {"
+      "  background: transparent;"
+      "}");
 
     QObject::connect(
-        slider, &QSlider::valueChanged, controls,
+        bar, &QScrollBar::valueChanged, controls,
         [info, name, formatter, onChange = std::forward<decltype(onChange)>(onChange)](int v) {
           info->setText(QString("%1: %2").arg(name).arg(formatter(v)));
           onChange(v);
         });
 
-    controlsLayout->insertWidget(controlsLayout->count() - 1, info);
-    controlsLayout->insertWidget(controlsLayout->count() - 1, slider);
+    auto* row       = new QWidget(controls);
+    auto* rowLayout = new QHBoxLayout(row);
+    rowLayout->setContentsMargins(0, 0, 0, 0);
+    rowLayout->addWidget(info, /*stretch*/ 1);
+    rowLayout->addWidget(bar);
+
+    controlsLayout->insertWidget(controlsLayout->count() - 1, row);
   };
 
   addSlider(
@@ -221,6 +258,14 @@ int main(int argc, char* argv[]) {
       "Saturation", -100, 100, 0,
       [&](int v) {
         adjustments.saturation = static_cast<float>(v);
+        scheduleAdjustments(adjustments);
+      },
+      [](int v) { return QString::number(v, 'f', 2); });
+
+  addSlider(
+      "Tint", -100, 100, 0,
+      [&](int v) {
+        adjustments.tint = static_cast<float>(v);
         scheduleAdjustments(adjustments);
       },
       [](int v) { return QString::number(v, 'f', 2); });

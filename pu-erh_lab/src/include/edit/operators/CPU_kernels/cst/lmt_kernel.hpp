@@ -9,7 +9,7 @@ namespace puerhlab {
 
 struct OCIO_LMT_Transform_Op_Kernel : PointOpTag {
   inline void operator()(Pixel& p, OperatorParams& params) const {
-    if (!params.lmt_enabled) return;
+    if (!params.lmt_enabled || !params.lmt_processor) return;
     params.lmt_processor->applyRGBA(&p.r);
   }
 };

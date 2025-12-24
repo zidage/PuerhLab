@@ -1,3 +1,6 @@
+// TODO: License
+// TODO: Migrate to static pipeline architecture
+
 #include "decoders/processor/raw_processor.hpp"
 
 #include <libraw/libraw.h>  // Add this header for libraw_rawdata_t
@@ -153,6 +156,25 @@ auto RawProcessor::Process() -> ImageBuffer {
   auto                                      debayer_end      = clock::now();
   std::chrono::duration<double, std::milli> debayer_duration = debayer_end - hl_end;
   std::cout << "Debayering took " << debayer_duration.count() << " ms\n";
+
+  // Temporary fix for orientation
+  switch (_raw_data.sizes.flip) {
+    case 3:
+      // 180 degree
+      cv::rotate(_process_buffer.GetCPUData(), _process_buffer.GetCPUData(), cv::ROTATE_180);
+      break;
+    case 5:
+      // Rotate 90 CCW
+      cv::rotate(_process_buffer.GetCPUData(), _process_buffer.GetCPUData(), cv::ROTATE_90_COUNTERCLOCKWISE);
+      break;
+    case 6:
+      // Rotate 90 CW
+      cv::rotate(_process_buffer.GetCPUData(), _process_buffer.GetCPUData(), cv::ROTATE_90_CLOCKWISE);
+      break;
+    default:
+      // Do nothing
+      break;
+  }
 
   ConvertToWorkingSpace();
   auto                                      cst_end      = clock::now();

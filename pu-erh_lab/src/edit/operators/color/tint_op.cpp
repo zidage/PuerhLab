@@ -45,7 +45,7 @@ auto TintOp::GetParams() const -> nlohmann::json {
 void TintOp::SetParams(const nlohmann::json& params) {
   if (params.contains(_script_name)) {
     _tint_offset = params.at(_script_name).get<float>();
-    _scale       = _tint_offset / 1000.0f;
+    _scale       = _tint_offset / 5000.0f;
   } else {
     _tint_offset = 0.0f;
     _scale       = 0.0f;

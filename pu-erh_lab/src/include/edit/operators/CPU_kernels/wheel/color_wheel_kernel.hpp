@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include "edit/operators/op_base.hpp"
 
 namespace puerhlab {
@@ -38,9 +39,9 @@ struct ColorWheelOpKernel : PointOpTag {
     float       g  = g0 + lift_w * lift_y + gain_w * (g0 * gain_dy) + gamma_w * (pg - g0);
     float       b  = b0 + lift_w * lift_z + gain_w * (b0 * gain_dz) + gamma_w * (pb - b0);
 
-    p.r            = cv::saturate_cast<float>(r);
-    p.g            = cv::saturate_cast<float>(g);
-    p.b            = cv::saturate_cast<float>(b);
+    p.r            = std::clamp(r, 0.0f, 1.0f);
+    p.g            = std::clamp(g, 0.0f, 1.0f);
+    p.b            = std::clamp(b, 0.0f, 1.0f);
   }
 };
 };  // namespace puerhlab

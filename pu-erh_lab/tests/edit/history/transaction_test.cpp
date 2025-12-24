@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+
 #include <future>
 #include <memory>
 #include <opencv2/core/mat.hpp>
@@ -8,7 +9,6 @@
 #endif
 #include <opencv2/highgui.hpp>
 #include <opencv2/opencv.hpp>
-
 
 #include "edit/history/edit_transaction.hpp"
 #include "edit/history/version.hpp"
@@ -65,7 +65,8 @@ TEST_F(EditHistoryTests, DISABLED_ApplyEditTransaction) {
 }
 
 void SetPipelineTemplate(std::shared_ptr<PipelineExecutor> executor) {
-  auto&          raw_stage = executor->GetStage(PipelineStageName::Image_Loading);
+  auto&          raw_stage     = executor->GetStage(PipelineStageName::Image_Loading);
+  auto&          global_params = executor->GetGlobalParams();
   nlohmann::json decode_params;
 #ifdef HAVE_CUDA
   decode_params["raw"]["cuda"] = false;
@@ -76,18 +77,21 @@ void SetPipelineTemplate(std::shared_ptr<PipelineExecutor> executor) {
   decode_params["raw"]["use_camera_wb"]          = true;
   decode_params["raw"]["backend"]                = "puerh";
   nlohmann::json to_ws_params;
-  to_ws_params["ocio"] = {{"src", "Linear Rec.709 (sRGB)"}, {"dst", "ACEScc"}, {"normalize", true}};
+  to_ws_params["ocio"] = {{"src", "Linear Rec.709 (sRGB)"},
+                          {"dst", "ACEScc"},
+                          {"normalize", true},
+                          {"transform_type", 0}};
   raw_stage.SetOperator(OperatorType::RAW_DECODE, decode_params);
-  raw_stage.SetOperator(OperatorType::CST, to_ws_params);
+  // raw_stage.SetOperator(OperatorType::CST, to_ws_params);
 
-
-  // auto& to_ws          = executor->GetStage(PipelineStageName::To_WorkingSpace);
-  // to_ws.SetOperator(OperatorType::CST, to_ws_params);
+  auto& to_ws = executor->GetStage(PipelineStageName::Basic_Adjustment);
+  to_ws.SetOperator(OperatorType::TO_WS, to_ws_params, global_params);
 
   nlohmann::json output_params;
   auto&          output_stage = executor->GetStage(PipelineStageName::Output_Transform);
-  output_params["ocio"]       = {{"src", "ACEScc"}, {"dst", "Camera Rec.709"}, {"limit", true}};
-  output_stage.SetOperator(OperatorType::CST, output_params);
+  output_params["ocio"]       = {
+      {"src", "ACEScc"}, {"dst", "Camera Rec.709"}, {"limit", true}, {"transform_type", 1}};
+  output_stage.SetOperator(OperatorType::TO_OUTPUT, output_params, global_params);
 }
 
 TEST_F(EditHistoryTests, DISABLED_TestWithImage) {
@@ -271,15 +275,17 @@ TEST_F(EditHistoryTests, TestWithPreviewPipeline) {
 
     // Animation loop for the same image
 
-    PipelineTask task;
-    auto         buffer    = ByteBufferLoader::LoadFromImage(img_ptr);
-    task._input            = buffer ? std::make_shared<ImageBuffer>(std::move(*buffer)) : nullptr;
+    PipelineTask      task;
+    auto              buffer = ByteBufferLoader::LoadFromImage(img_ptr);
+    task._input              = buffer ? std::make_shared<ImageBuffer>(std::move(*buffer)) : nullptr;
 
-    auto pipeline_executor = std::make_shared<CPUPipelineExecutor>(true);
+    auto pipeline_executor   = std::make_shared<CPUPipelineExecutor>(true);
     pipeline_executor->SetPreviewMode(true);
 
     task._pipeline_executor = pipeline_executor;
     SetPipelineTemplate(task._pipeline_executor);
+
+    auto& global_params            = task._pipeline_executor->GetGlobalParams();
 
     task._options._is_callback     = false;
     task._options._is_seq_callback = true;
@@ -293,22 +299,17 @@ TEST_F(EditHistoryTests, TestWithPreviewPipeline) {
     exposure_params["exposure"] = 0.0f;
 
     auto& basic_stage = task._pipeline_executor->GetStage(PipelineStageName::Basic_Adjustment);
-    basic_stage.SetOperator(OperatorType::EXPOSURE, exposure_params);
-    basic_stage.SetOperator(OperatorType::BLACK, exposure_params);
-    basic_stage.SetOperator(OperatorType::WHITE, exposure_params);
-    basic_stage.SetOperator(OperatorType::SHADOWS, exposure_params);
-    basic_stage.SetOperator(OperatorType::HIGHLIGHTS, exposure_params);
-    basic_stage.SetOperator(OperatorType::SATURATION, exposure_params);
+    basic_stage.SetOperator(OperatorType::EXPOSURE, exposure_params, global_params);
 
     pipeline_executor->SetExecutionStages();
 
     for (float exposure = -5.0f; exposure <= 5.0f; exposure += .5f) {
-      PipelineTask task1      = task;  // Make a copy of task for task1
-      auto& basic_stage = task1._pipeline_executor->GetStage(PipelineStageName::Basic_Adjustment);
+      PipelineTask task1 = task;  // Make a copy of task for task1
+      auto& basic_stage  = task1._pipeline_executor->GetStage(PipelineStageName::Basic_Adjustment);
 
       // Update multiple parameters
       exposure_params["exposure"] = exposure;
-      basic_stage.SetOperator(OperatorType::EXPOSURE, exposure_params);
+      basic_stage.SetOperator(OperatorType::EXPOSURE, exposure_params, global_params);
 
       // Set up blocking and result promise
       task1._options._is_blocking = true;
@@ -317,7 +318,7 @@ TEST_F(EditHistoryTests, TestWithPreviewPipeline) {
 
       scheduler.ScheduleTask(std::move(task1));
 
-      auto result       = future_task1.get();  // Wait for task1 to complete
+      auto result = future_task1.get();  // Wait for task1 to complete
 
       cv::cvtColor(result->GetCPUData(), result->GetCPUData(), cv::COLOR_RGB2BGR);
       // cv::imshow("preview", result->GetCPUData());
