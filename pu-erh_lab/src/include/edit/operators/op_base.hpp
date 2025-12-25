@@ -176,7 +176,6 @@ class IOperatorBase {
 
   virtual auto GetOperatorType() const -> OperatorType       = 0;
 
-
   // virtual auto ToKernel_Vec() const -> Kernel            = 0;
 
   virtual ~IOperatorBase()                                   = default;
@@ -223,6 +222,4 @@ struct OpStream {
   void Clear() { _ops.clear(); }
 };
 
-struct PointOpTag {};
-struct NeighborOpTag {};
 };  // namespace puerhlab

@@ -205,4 +205,12 @@ struct ImageAccessor {
                        std::clamp(x, 0, _tile->_width - 1)];
   }
 };
+
+struct PointOpTag {};
+struct NeighborOpTag {};
+
+struct GPUPointOpTag {};
+struct GPUNeighborOpTag {};
+
+
 };  // namespace puerhlab
