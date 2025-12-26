@@ -134,10 +134,21 @@ set(PIPELINE_SRCS
     edit/scheduler/pipeline_scheduler.cpp
 )
 
+if(CUDAToolkit_FOUND)
+    set(GPU_PIPELINE_SRCS
+        edit/pipeline/pipeline_gpu_impl.cu
+    )
+endif()
+
 def_library(EditPipeline
-    SOURCES ${PIPELINE_SRCS}
+    SOURCES ${PIPELINE_SRCS} ${GPU_PIPELINE_SRCS}
     PUBLIC_DEPS Operators
 )
+
+if(CUDAToolkit_FOUND)
+    set_target_properties(EditPipeline PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
+    target_compile_definitions(EditPipeline PUBLIC HAVE_CUDA)
+endif()
 
 # --- Raw Processor Wrapper ---
 def_library(RawProcessor

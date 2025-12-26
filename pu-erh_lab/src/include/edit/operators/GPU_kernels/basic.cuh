@@ -6,6 +6,7 @@
 #include <cuda_runtime.h>
 
 #include "edit/operators/op_kernel.hpp"
+#include "param.cuh"
 
 namespace puerhlab {
 namespace CUDA {
@@ -71,7 +72,7 @@ struct GPU_HighlightOpKernel : GPUPointOpTag {
     }
 
     // avoid negative or NaN
-    if (!std::isfinite(outL)) outL = L;
+    if (!isfinite(outL)) outL = L;
     // Preserve hue/chroma by scaling RGB by ratio outL/L (guard L==0)
     float scale = (L > 1e-8f) ? (outL / L) : 1.0f;
     p->x *= (scale);

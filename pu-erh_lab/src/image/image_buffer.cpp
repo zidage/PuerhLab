@@ -82,6 +82,17 @@ auto ImageBuffer::SyncToCPU() -> void {
   _gpu_data_valid = false;
 }
 
+void ImageBuffer::InitGPUData(int width, int height, int type) {
+  if (_gpu_data_valid || !_gpu_data.empty()) {
+    return;
+  }
+  _gpu_data.create(height, width, type);
+}
+
+void ImageBuffer::SetGPUDataValid(bool valid) {
+  _gpu_data_valid = valid;
+}
+
 ImageBuffer ImageBuffer::Clone() const {
   if (_cpu_data_valid) {
     return ImageBuffer{_cpu_data.clone()};

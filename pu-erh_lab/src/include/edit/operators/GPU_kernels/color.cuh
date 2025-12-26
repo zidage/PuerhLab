@@ -17,8 +17,8 @@ struct GPU_HLSOpKernel : GPUPointOpTag {
 
     // Convert RGB to HLS
     float r = p->x, g = p->y, b = p->z;
-    float max_c = std::max({r, g, b});
-    float min_c = std::min({r, g, b});
+    float max_c = fmaxf(fmaxf(r, g), b);
+    float min_c = fminf(fminf(r, g), b);
     float L     = (max_c + min_c) * 0.5f;
     float H = 0.0f, S = 0.0f;
     float d = max_c - min_c == 0.0f ? 1e-10f : max_c - min_c;
@@ -41,24 +41,23 @@ struct GPU_HLSOpKernel : GPUPointOpTag {
     float h        = H;
     float l        = L;
     float s        = S;
-    float hue_diff = std::abs(h - target_h);
-    float hue_dist = std::min(hue_diff, 360.0f - hue_diff);
+    float hue_diff = fabsf(h - target_h);
+    float hue_dist = fminf(hue_diff, 360.0f - hue_diff);
 
     float weight =
-        std::max(0.0f, 1.0f - hue_dist / params.hue_range) *                      // hue_w
-        std::max(0.0f, 1.0f - std::abs(l - target_l) / params.lightness_range) *  // lightness_w
-        std::max(0.0f, 1.0f - std::abs(s - target_s) / params.saturation_range);  // saturation_w
+        fmaxf(0.0f, 1.0f - hue_dist / params.hue_range) *                      // hue_w
+        fmaxf(0.0f, 1.0f - fabsf(l - target_l) / params.lightness_range) *  // lightness_w
+        fmaxf(0.0f, 1.0f - fabsf(s - target_s) / params.saturation_range);  // saturation_w
 
     float adj_h      = params.hls_adjustment[0];
     float adj_l      = params.hls_adjustment[1];
     float adj_s      = params.hls_adjustment[2];
 
-    float h_adjusted = std::fmod(h + adj_h * weight, 360.0f);
+    float h_adjusted = fmodf(h + adj_h * weight, 360.0f);
     if (h_adjusted < 0) h_adjusted += 360.0f;
 
-    float l_adjusted = std::clamp(l + adj_l * weight, 0.0f, 1.0f);
-    float s_adjusted = std::clamp(s + adj_s * weight, 0.0f, 1.0f);
-
+    float l_adjusted = fminf(fmaxf(l + adj_l * weight, 0.0f), 1.0f);
+    float s_adjusted = fminf(fmaxf(s + adj_s * weight, 0.0f), 1.0f);
     // Convert HLS back to RGB
     if (s_adjusted == 0.0f) {
       p->x = l_adjusted;
@@ -108,15 +107,15 @@ struct GPU_VibranceOpKernel : GPUPointOpTag {
   __device__ __forceinline__ inline void operator()(float4* p, GPUOperatorParams& params) const {
     if (!params.vibrance_enabled) return;
 
-    float max_val  = std::max({p->x, p->y, p->z});
-    float min_val  = std::min({p->x, p->y, p->z});
+    float max_val  = fmaxf(fmaxf(p->x, p->y), p->z);
+    float min_val  = fminf(fminf(p->x, p->y), p->z);
     float chroma   = max_val - min_val;
 
     // chroma in [0, max], vibrance_offset in [-100, 100]
     float strength = params.vibrance_offset / 100.0f;
 
     // Protect already highly saturated color
-    float falloff  = std::exp(-3.0f * chroma);
+    float falloff  = expf(-3.0f * chroma);
 
     float scale    = 1.0f + strength * falloff;
 

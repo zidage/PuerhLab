@@ -24,9 +24,9 @@ struct GPUOperatorParams {
 
   // Highlights adjustment parameter
   bool                highlights_enabled     = true;
-  const float         highlights_k           = 0.2f;
+  float         highlights_k           = 0.2f;
   float               highlights_offset      = 0.0f;
-  const float         highlights_slope_range = 0.8f;
+  float         highlights_slope_range = 0.8f;
   float               highlights_m0          = 1.0f;
   float               highlights_m1          = 1.0f;
   float               highlights_x0          = 0.2f;

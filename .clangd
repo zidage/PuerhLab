@@ -1,2 +1,20 @@
+If:
+    PathMatch: .*\.(cu|cuh)
+CompileFlags:
+    Compiler: clang++
+    Remove: [ "-forward-unknown-to-host-compiler", "-Xcompiler= /GR /EHsc", "-Xcompiler= -Zi -Ob0 -Od /RTC1", "/nologo", "/TP", "/EHsc", "/Zi", "/O2", "/arch:AVX", "/bigobj", "/W4", "/external:*", "/openmp", "-MDd", "/Fo*", "/Fd*", "/FS", "-c", "-GS", "-WX", "-wd*", "-J", "-utf-8", "/GR", "-std:*" ]
+    Add:
+        [ -xcuda,
+            "--cuda-path=C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.8",
+            -fms-compatibility,
+            -fms-extensions,
+            -fdelayed-template-parsing,
+            -std=c++20 ]
+    CompilationDatabase: build/debug
+
+---
+
+If:
+    PathMatch: .*\.(c|h)pp
 CompileFlags:
     CompilationDatabase: build/debug

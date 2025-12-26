@@ -1,10 +1,12 @@
 #pragma once
 
 #include <cuda_runtime.h>
+#include <cuda_runtime_api.h>
 #include <device_types.h>
 
 #include <cstddef>
 #include <tuple>
+#include <utility>
 
 #include "edit/operators/GPU_kernels/param.cuh"
 
@@ -57,19 +59,41 @@ __global__ void GenericNeighborKernel(Op  op, const float4* __restrict src, floa
   }
 }
 
+// Minimal tuple-like chain that is trivially device-callable; avoids std::get, which can be
+// host-only in some libstdc++ builds used by nvcc.
+template <typename... Ts>
+struct OpList;
+
+template <>
+struct OpList<> {
+  __host__ __device__             OpList() = default;
+  __device__ __forceinline__ void Apply(float4*, GPUOperatorParams&) {}
+};
+
+template <typename Head, typename... Tail>
+struct OpList<Head, Tail...> {
+  Head                head;
+  OpList<Tail...>     tail;
+
+  __host__ __device__ OpList() = default;
+  __host__            __device__ explicit OpList(Head h, Tail... t)
+      : head(std::move(h)), tail(std::move(t)...) {}
+
+  __device__ __forceinline__ void Apply(float4* p, GPUOperatorParams& params) {
+    head(p, params);
+    tail.Apply(p, params);
+  }
+};
+
 template <typename... Ops>
 struct GPU_PointChain {
-  std::tuple<Ops...> _ops;
+  OpList<Ops...> _ops;
 
   GPU_PointChain(Ops... ops) : _ops(std::move(ops)...) {}
 
   template <size_t I = 0>
   __device__ __forceinline__ void ApplyOps(float4* p, GPUOperatorParams& params) {
-    if constexpr (I < sizeof...(Ops)) {
-      auto& op = std::get<I>(_ops);
-      op(p, params);
-      ApplyOps<I + 1>(p, params);
-    }
+    _ops.Apply(p, params);
   }
 };
 
@@ -81,40 +105,36 @@ class GPU_StaticKernelStream {
   GPU_StaticKernelStream(Stages... stages) : _stages(std::move(stages)...) {}
 
   template <size_t I = 0>
-  inline float4* Dispatch(float4* current_src, float4* current_dst, int width, int height,
-                          size_t pitch_elems, GPUOperatorParams& params, dim3 grid, dim3 block) {
+  inline void Dispatch(float4* src, float4* dst, int width, int height, size_t pitch_elems,
+                       GPUOperatorParams& params, dim3 grid, dim3 block, cudaStream_t stream) {
     if constexpr (I < sizeof...(Stages)) {
-      auto& stage      = std::get<I>(_stages);
-      using StageType  = std::decay_t<decltype(stage)>;
-
-      float4* next_src = nullptr;
-      float4* next_dst = nullptr;
+      auto& stage     = std::get<I>(_stages);
+      using StageType = std::decay_t<decltype(stage)>;
 
       if constexpr (HasApplyOps<StageType>::value) {
         // PointOp
-        GenericPointKernel<<<grid, block>>>(stage, current_src, current_dst, width, height,
-                                            pitch_elems, params);
-        return Dispatch<I + 1>(current_src, current_dst, width, height, pitch_elems, params, grid,
-                               block);
+        GenericPointKernel<<<grid, block, 0, stream>>>(stage, src, dst, width, height, pitch_elems,
+                                                       params);
       } else {
         // NeighborOp
-        GenericNeighborKernel<<<grid, block>>>(stage, current_src, current_dst, width, height,
-                                               pitch_elems, params);
-        next_src = current_dst;
-        next_dst = current_src;
-        return Dispatch<I + 1>(next_src, next_dst, width, height, pitch_elems, params, grid, block);
+        GenericNeighborKernel<<<grid, block, 0, stream>>>(stage, src, dst, width, height,
+                                                          pitch_elems, params);
       }
-    }
 
-    return current_src;
+      std::swap(src, dst);  // Ping-pong buffers
+      Dispatch<I + 1>(src, dst, width, height, pitch_elems, params, grid, block, stream);
+    }
   }
 
-  void Process(float4* d_in, float4* d_temp, int width, int height, size_t pitch_elems,
-               GPUOperatorParams& params) {
+  float4* Process(float4* d_in, float4* d_temp, int width, int height, size_t pitch_elems,
+                  GPUOperatorParams& params, cudaStream_t stream = 0) {
     dim3 block(16, 16);
     dim3 grid((width + block.x - 1) / block.x, (height + block.y - 1) / block.y);
 
-    Dispatch<0>(d_in, d_temp, width, height, pitch_elems, params, grid, block);
+    Dispatch<0>(d_in, d_temp, width, height, pitch_elems, params, grid, block, stream);
+    cudaStreamSynchronize(stream);
+
+    return (sizeof...(Stages) % 2 == 0) ? d_temp : d_in;
   }
 };
 };  // namespace CUDA
