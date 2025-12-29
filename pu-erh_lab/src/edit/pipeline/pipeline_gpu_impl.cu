@@ -46,8 +46,12 @@ class GPUPipelineImpl {
 
   void SetInput(std::shared_ptr<ImageBuffer> input_img) { _launcher.SetInputImage(input_img); }
 
-  void SetParams(const GPUOperatorParams& global_params) {
+  void SetParams(GPUOperatorParams& global_params) {
     _launcher.SetParams(global_params);
+  }
+
+  void SetParams(OperatorParams& cpu_params) {
+    _launcher.SetParams(cpu_params);
   }
 
   void Execute(std::shared_ptr<ImageBuffer> output_img) {
@@ -65,7 +69,11 @@ void GPUPipelineWrapper::SetInputImage(std::shared_ptr<ImageBuffer> input_image)
   _impl->SetInput(input_image);
 }
 
-void GPUPipelineWrapper::SetParams(const GPUOperatorParams& params) { _impl->SetParams(params); }
+void GPUPipelineWrapper::SetParams(GPUOperatorParams& params) { _impl->SetParams(params); }
+
+void GPUPipelineWrapper::SetParams(OperatorParams& cpu_params) {
+  _impl->SetParams(cpu_params);
+}
 
 void GPUPipelineWrapper::Execute(std::shared_ptr<ImageBuffer> output) { _impl->Execute(output); }
 };  // namespace puerhlab

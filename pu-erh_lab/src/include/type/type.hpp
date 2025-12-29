@@ -63,4 +63,6 @@ namespace puerhlab {
 
 // #define version_id_t   XXH128_hash_t
 enum class ColorSpace { SRGB, ADOBE_RGB, ACEScc, Camera };
+
+#define LUT3D_EDGE_SIZE    33
 };  // namespace puerhlab

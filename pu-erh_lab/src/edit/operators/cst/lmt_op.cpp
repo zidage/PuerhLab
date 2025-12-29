@@ -69,5 +69,8 @@ void OCIO_LMT_Transform_Op::SetParams(const nlohmann::json& params) {
 void OCIO_LMT_Transform_Op::SetGlobalParams(OperatorParams& params) const {
   params.cpu_lmt_processor = cpu_processor;
   params.gpu_lmt_processor = gpu_processor;
+
+  params.lmt_lut_path      = _lmt_path;
+  params.to_lmt_dirty      = true;
 }
 };  // namespace puerhlab

@@ -9,6 +9,7 @@
 #include <opencv2/core/cuda.hpp>
 
 #include "edit/operators/GPU_kernels/param.cuh"
+#include "edit/operators/op_base.hpp"
 #include "image/image_buffer.hpp"
 #include "kernel_stream_gpu.cuh"
 
@@ -42,6 +43,10 @@ class GPU_KernelLauncher {
       cudaFree(_temp_buffer);
       _temp_buffer = nullptr;
     }
+
+    _params.to_ws_lut.Reset();
+    _params.lmt_lut.Reset();
+    _params.to_output_lut.Reset();
   }
 
   void SetInputImage(std::shared_ptr<ImageBuffer> input_img) {
@@ -72,8 +77,12 @@ class GPU_KernelLauncher {
 
   void SetOutputImage(std::shared_ptr<ImageBuffer> output_img) { _output_img = output_img; }
 
-  void SetParams(const GPUOperatorParams& params) {
+  void SetParams(GPUOperatorParams& params) {
     _params = params;  // copy the params into the scheduler
+  }
+
+  void SetParams(OperatorParams& cpu_params) {
+    _params = GPUParamsConverter::ConvertFromCPU(cpu_params);
   }
 
   void Execute() {

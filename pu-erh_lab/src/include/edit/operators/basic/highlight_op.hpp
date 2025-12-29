@@ -9,7 +9,6 @@
 #include "json.hpp"
 
 namespace puerhlab {
-namespace hw = hwy::HWY_NAMESPACE;
 struct HighlightCurveParams {
   float       control;
   float       knee_start;

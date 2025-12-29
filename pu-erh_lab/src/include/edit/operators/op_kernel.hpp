@@ -1,7 +1,5 @@
 #pragma once
 
-#include <hwy/highway.h>
-
 #include <variant>
 
 #include "image/image_buffer.hpp"

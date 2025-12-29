@@ -66,7 +66,7 @@ struct OpList;
 
 template <>
 struct OpList<> {
-  __host__ __device__             OpList() = default;
+  OpList() = default;
   __device__ __forceinline__ void Apply(float4*, GPUOperatorParams&) {}
 };
 
@@ -75,7 +75,7 @@ struct OpList<Head, Tail...> {
   Head                head;
   OpList<Tail...>     tail;
 
-  __host__ __device__ OpList() = default;
+  OpList() = default;
   __host__            __device__ explicit OpList(Head h, Tail... t)
       : head(std::move(h)), tail(std::move(t)...) {}
 

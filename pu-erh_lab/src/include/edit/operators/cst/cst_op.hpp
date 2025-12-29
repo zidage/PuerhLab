@@ -29,6 +29,10 @@ class OCIO_ACES_Transform_Op : public OperatorBase<OCIO_ACES_Transform_Op> {
 
   OCIO::ConstCPUProcessorRcPtr         cpu_processor;
   OCIO::ConstGPUProcessorRcPtr         gpu_processor;
+  OCIO::BakerRcPtr                     baker;
+
+  void SetCSTProcessors(const char* input, const char* output);
+  void SetDisplayProcessors(const char* output);
 
  public:
   static constexpr PriorityLevel     _priority_level    = 2;

@@ -17,6 +17,7 @@
 #include "edit/operators/utils/functions.hpp"
 #include "image/image_buffer.hpp"
 #include "json.hpp"
+#include "type/type.hpp"
 #include "utils/string/convert.hpp"
 
 namespace puerhlab {
@@ -147,6 +148,30 @@ auto OCIO_ACES_Transform_Op::GetParams() const -> nlohmann::json {
   return o;
 }
 
+void OCIO_ACES_Transform_Op::SetCSTProcessors(const char* input, const char* output) {
+  auto transform = OCIO::ColorSpaceTransform::Create();
+  transform->setSrc(input);
+  transform->setDst(output);
+  auto proc     = config->getProcessor(transform);
+  auto cpu_proc = proc->getDefaultCPUProcessor();
+  auto gpu_proc = proc->getDefaultGPUProcessor();
+
+  cpu_processor = cpu_proc;
+  gpu_processor = gpu_proc;
+
+  baker         = OCIO::Baker::Create();
+  baker->setConfig(config);
+  baker->setFormat("cube");
+  baker->setCubeSize(LUT3D_EDGE_SIZE);
+  baker->setInputSpace(input);
+  baker->setTargetSpace(output);
+}
+
+void OCIO_ACES_Transform_Op::SetDisplayProcessors(const char* output) {
+  (void)output;
+  throw std::runtime_error("OCIO_ACES_Transform_Op: Display processor not implemented yet");
+}
+
 void OCIO_ACES_Transform_Op::SetParams(const nlohmann::json& params) {
   if (!params.contains(_script_name)) {
     throw std::invalid_argument("CST Operator: Not a valid adjustments JSON");
@@ -170,56 +195,19 @@ void OCIO_ACES_Transform_Op::SetParams(const nlohmann::json& params) {
   }
 
   if (!_input_transform.empty() && !_output_transform.empty()) {
-    auto output_transform = OCIO::ColorSpaceTransform::Create();
-    output_transform->setSrc(_input_transform.c_str());
-    output_transform->setDst(_output_transform.c_str());
-    auto odt           = config->getProcessor(output_transform);
-    auto odt_cpu       = odt->getDefaultCPUProcessor();
-
-    auto odt_gpu = odt->getDefaultGPUProcessor();
-
-    cpu_processor      = odt_cpu;
-    gpu_processor      = odt_gpu;
+    SetCSTProcessors(_input_transform.c_str(), _output_transform.c_str());
     return;
   } else if (!_input_transform.empty() && _output_transform.empty()) {
-    auto transform = OCIO::ColorSpaceTransform::Create();
-    // transform->setLooks("ACES 1.3 Reference Gamut Compression");
-    transform->setSrc(_input_transform.c_str());
-    transform->setDst("ACES - ACES2065-1");
-    auto idt      = config->getProcessor(transform);
-    auto idt_cpu      = idt->getDefaultCPUProcessor();
-    auto idt_gpu      = idt->getDefaultGPUProcessor();
-
-    cpu_processor = idt_cpu;
-    gpu_processor = idt_gpu;
+    SetCSTProcessors(_input_transform.c_str(), "ACES - ACES2065-1");
     return;
   } else if (_input_transform.empty() && !_output_transform.empty() &&
              _output_transform.ends_with("Display")) {
-    auto transform = OCIO::DisplayViewTransform::Create();
-    transform->setSrc("ACES - ACES2065-1");
-    transform->setDisplay(_output_transform.c_str());
-    transform->setView("ACES 2.0 - SDR 100 nits (Rec.709)");
-
-    auto odt      = config->getProcessor(transform);
-    auto odt_cpu      = odt->getDefaultCPUProcessor();
-    auto odt_gpu      = odt->getDefaultGPUProcessor();
-
-    cpu_processor = odt_cpu;
-    gpu_processor = odt_gpu;
+    // TODO: Gamut compression + ODT
+    SetDisplayProcessors(_output_transform.c_str());
     return;
   } else if (_input_transform.empty() && !_output_transform.empty()) {
-    auto transform = OCIO::LookTransform::Create();
-    transform->setLooks("ACES 1.3 Reference Gamut Compression");
-    transform->setSrc("ACES - ACES2065-1");
-    transform->setDst(_output_transform.c_str());
-    transform->setDirection(OCIO::TransformDirection::TRANSFORM_DIR_FORWARD);
-
-    auto csc      = config->getProcessor(transform);
-    auto csc_cpu      = csc->getDefaultCPUProcessor();
-    auto csc_gpu      = csc->getDefaultGPUProcessor();
-    cpu_processor = csc_cpu;
-    gpu_processor = csc_gpu;
-
+    // TODO: Gamut compression + ODT
+    SetCSTProcessors("ACES - ACES2065-1", _output_transform.c_str());
     return;
   }
   throw std::runtime_error("OCIO_ACES_Transform_Op: No valid transform assigned to the operator");
@@ -230,10 +218,14 @@ void OCIO_ACES_Transform_Op::SetGlobalParams(OperatorParams& params) const {
     case TransformType::To_WorkingSpace:
       params.cpu_to_working_processor = cpu_processor;
       params.gpu_to_working_processor = gpu_processor;
+      params.to_ws_lut_baker          = baker;
+      params.to_ws_dirty              = true;
       break;
     case TransformType::To_OutputSpace:
       params.cpu_to_output_processor = cpu_processor;
       params.gpu_to_output_processor = gpu_processor;
+      params.to_output_lut_baker     = baker;
+      params.to_output_dirty         = true;
       break;
   }
 }
