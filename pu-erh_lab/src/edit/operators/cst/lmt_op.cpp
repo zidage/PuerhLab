@@ -39,7 +39,6 @@ void OCIO_LMT_Transform_Op::Apply(std::shared_ptr<ImageBuffer> input) {
   });
 }
 
-
 auto OCIO_LMT_Transform_Op::GetParams() const -> nlohmann::json {
   nlohmann::json o;
   o[_script_name] = conv::ToBytes(_lmt_path.wstring());
@@ -62,10 +61,13 @@ void OCIO_LMT_Transform_Op::SetParams(const nlohmann::json& params) {
 
   auto lmt_processor = config->getProcessor(lmt_transform);
   auto cpu           = lmt_processor->getDefaultCPUProcessor();
+  auto gpu           = lmt_processor->getDefaultGPUProcessor();
   cpu_processor      = cpu;
+  gpu_processor      = gpu;
 }
 
 void OCIO_LMT_Transform_Op::SetGlobalParams(OperatorParams& params) const {
-  params.lmt_processor = cpu_processor;
+  params.cpu_lmt_processor = cpu_processor;
+  params.gpu_lmt_processor = gpu_processor;
 }
 };  // namespace puerhlab

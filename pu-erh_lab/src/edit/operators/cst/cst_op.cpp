@@ -102,7 +102,6 @@ void OCIO_ACES_Transform_Op::Apply(std::shared_ptr<ImageBuffer> input) {
   }
 }
 
-
 auto OCIO_ACES_Transform_Op::ApplyLMT(ImageBuffer& input) -> ImageBuffer {
   if (!_lmt_path.has_value()) {
     throw std::runtime_error("OCIO_ACES_Transform_Op: No valid LMT look assigned to the operator");
@@ -174,10 +173,13 @@ void OCIO_ACES_Transform_Op::SetParams(const nlohmann::json& params) {
     auto output_transform = OCIO::ColorSpaceTransform::Create();
     output_transform->setSrc(_input_transform.c_str());
     output_transform->setDst(_output_transform.c_str());
-    auto odt      = config->getProcessor(output_transform);
-    auto odt_cpu  = odt->getDefaultCPUProcessor();
+    auto odt           = config->getProcessor(output_transform);
+    auto odt_cpu       = odt->getDefaultCPUProcessor();
 
-    cpu_processor = odt_cpu;
+    auto odt_gpu = odt->getDefaultGPUProcessor();
+
+    cpu_processor      = odt_cpu;
+    gpu_processor      = odt_gpu;
     return;
   } else if (!_input_transform.empty() && _output_transform.empty()) {
     auto transform = OCIO::ColorSpaceTransform::Create();
@@ -185,9 +187,11 @@ void OCIO_ACES_Transform_Op::SetParams(const nlohmann::json& params) {
     transform->setSrc(_input_transform.c_str());
     transform->setDst("ACES - ACES2065-1");
     auto idt      = config->getProcessor(transform);
-    auto cpu      = idt->getDefaultCPUProcessor();
+    auto idt_cpu      = idt->getDefaultCPUProcessor();
+    auto idt_gpu      = idt->getDefaultGPUProcessor();
 
-    cpu_processor = cpu;
+    cpu_processor = idt_cpu;
+    gpu_processor = idt_gpu;
     return;
   } else if (_input_transform.empty() && !_output_transform.empty() &&
              _output_transform.ends_with("Display")) {
@@ -197,9 +201,11 @@ void OCIO_ACES_Transform_Op::SetParams(const nlohmann::json& params) {
     transform->setView("ACES 2.0 - SDR 100 nits (Rec.709)");
 
     auto odt      = config->getProcessor(transform);
-    auto cpu      = odt->getDefaultCPUProcessor();
+    auto odt_cpu      = odt->getDefaultCPUProcessor();
+    auto odt_gpu      = odt->getDefaultGPUProcessor();
 
-    cpu_processor = cpu;
+    cpu_processor = odt_cpu;
+    gpu_processor = odt_gpu;
     return;
   } else if (_input_transform.empty() && !_output_transform.empty()) {
     auto transform = OCIO::LookTransform::Create();
@@ -209,8 +215,11 @@ void OCIO_ACES_Transform_Op::SetParams(const nlohmann::json& params) {
     transform->setDirection(OCIO::TransformDirection::TRANSFORM_DIR_FORWARD);
 
     auto csc      = config->getProcessor(transform);
-    auto cpu      = csc->getDefaultCPUProcessor();
-    cpu_processor = cpu;
+    auto csc_cpu      = csc->getDefaultCPUProcessor();
+    auto csc_gpu      = csc->getDefaultGPUProcessor();
+    cpu_processor = csc_cpu;
+    gpu_processor = csc_gpu;
+
     return;
   }
   throw std::runtime_error("OCIO_ACES_Transform_Op: No valid transform assigned to the operator");
@@ -219,10 +228,12 @@ void OCIO_ACES_Transform_Op::SetParams(const nlohmann::json& params) {
 void OCIO_ACES_Transform_Op::SetGlobalParams(OperatorParams& params) const {
   switch (_transform_type) {
     case TransformType::To_WorkingSpace:
-      params.to_working_processor = cpu_processor;
+      params.cpu_to_working_processor = cpu_processor;
+      params.gpu_to_working_processor = gpu_processor;
       break;
     case TransformType::To_OutputSpace:
-      params.to_output_processor = cpu_processor;
+      params.cpu_to_output_processor = cpu_processor;
+      params.gpu_to_output_processor = gpu_processor;
       break;
   }
 }

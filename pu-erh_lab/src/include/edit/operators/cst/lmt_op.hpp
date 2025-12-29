@@ -22,6 +22,7 @@ class OCIO_LMT_Transform_Op : public OperatorBase<OCIO_LMT_Transform_Op> {
   OCIO::ConstConfigRcPtr       config;
 
   OCIO::ConstCPUProcessorRcPtr cpu_processor;
+  OCIO::ConstGPUProcessorRcPtr gpu_processor;
 
  public:
   static constexpr PriorityLevel     _priority_level    = 3;

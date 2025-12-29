@@ -10,6 +10,8 @@
 #include "type/type.hpp"
 
 namespace puerhlab {
+namespace OCIO = OCIO_NAMESPACE;
+
 enum class PipelineStageName : int {
   Image_Loading       = 0,
   Geometry_Adjustment = 1,
@@ -109,14 +111,17 @@ struct OperatorParams {
 
   // Working space
   bool                                     is_working_space       = true;
-  OpenColorIO_v2_4::ConstCPUProcessorRcPtr to_working_processor   = nullptr;
+  OCIO::ConstCPUProcessorRcPtr             cpu_to_working_processor   = nullptr;
+  OCIO::ConstGPUProcessorRcPtr             gpu_to_working_processor   = nullptr;
 
   // Look modification transform
   bool                                     lmt_enabled            = true;
-  OpenColorIO_v2_4::ConstCPUProcessorRcPtr lmt_processor          = nullptr;
-
+  OCIO::ConstCPUProcessorRcPtr             cpu_lmt_processor          = nullptr;
+  OCIO::ConstGPUProcessorRcPtr             gpu_lmt_processor          = nullptr;
   // To output space
-  OpenColorIO_v2_4::ConstCPUProcessorRcPtr to_output_processor    = nullptr;
+  OCIO::ConstCPUProcessorRcPtr             cpu_to_output_processor    = nullptr;
+  OCIO::ConstGPUProcessorRcPtr             gpu_to_output_processor    = nullptr;
+
 
   // Curve adjustment parameters
   bool                                     curve_enabled          = false;
