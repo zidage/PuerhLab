@@ -12,18 +12,14 @@
 namespace puerhlab {
 namespace CUDA {
 struct GPU_ClarityKernel : GPUNeighborOpTag {
-  static __device__ __forceinline__ float gauss5(int dx, int dy) {
-    constexpr float k[5][5] = {{1, 4, 7, 4, 1},
-                               {4, 16, 26, 16, 4},
-                               {7, 26, 41, 26, 7},
-                               {4, 16, 26, 16, 4},
-                               {1, 4, 7, 4, 1}};
-    return k[dy + 2][dx + 2] * (1.0f / 273.0f);
+  __device__ __forceinline__ float luminance(const float4& c) const {
+    // COLOR_BGR2GRAY (matching OpenCV convention)
+    return c.x * 0.114f + c.y * 0.587f + c.z * 0.299f;
   }
 
-  __device__ __forceinline__ float luminance(const float4& c) const {
-    // COLOR_RGB2GRAY
-    return c.x * 0.114f + c.y * 0.587f + c.z * 0.299f;
+  __device__ __forceinline__ float gaussian(float dx, float dy, float sigma) const {
+    const float inv2sigma2 = 0.5f / (sigma * sigma);
+    return expf(-(dx * dx + dy * dy) * inv2sigma2);
   }
 
   __device__ __forceinline__ void operator()(int x, int y, const float4* __restrict src,
@@ -35,36 +31,57 @@ struct GPU_ClarityKernel : GPUNeighborOpTag {
       return;
     }
 
+    // Use sigma = 5.0 to match CPU implementation (cv::GaussianBlur with sigma 5.0)
+    const float sigma  = params.clarity_radius;
+    int         radius = (int)ceilf(3.0f * sigma);
+    radius             = max(1, min(radius, 20));  // Clamp radius to reasonable range
+
+    // Compute Gaussian blur with dynamic kernel size
     float4 blur = make_float4(0, 0, 0, 0);
-    for (int dy = -2; dy <= 2; ++dy) {
-      int           yy  = max(max(y + dy, 0), height - 1);
+    float  sumW = 0.0f;
+
+    for (int dy = -radius; dy <= radius; ++dy) {
+      int           yy  = min(max(y + dy, 0), height - 1);
       const float4* row = src + yy * pitch_elems;
-      for (int dx = -2; dx <= 2; ++dx) {
+      for (int dx = -radius; dx <= radius; ++dx) {
         int    xx = min(max(x + dx, 0), width - 1);
-        float  w  = gauss5(dx, dy);
+        float  w  = gaussian((float)dx, (float)dy, sigma);
         float4 v  = row[xx];
         blur.x += v.x * w;
         blur.y += v.y * w;
         blur.z += v.z * w;
         blur.w += v.w * w;
+        sumW += w;
       }
     }
 
+    // Normalize blur result
+    const float invSum = 1.0f / sumW;
+    blur.x *= invSum;
+    blur.y *= invSum;
+    blur.z *= invSum;
+    blur.w *= invSum;
+
+    // High-pass = original - blur
     const float4 orig = src[y * pitch_elems + x];
     float4       high = make_float4(orig.x - blur.x, orig.y - blur.y, orig.z - blur.z,
                                     orig.w);  // alpha unchanged
-    // midtone mask: 1 - ((L-0.5)*2)^2
-    float        lum  = luminance(orig);
-    float        t    = (lum - 0.5f) * 2.0f;
-    float        mask = 1.0f - t * t;
 
-    float        w    = mask * params.clarity_offset;
+    // Midtone mask: "U" shape curve -> 1 - ((L - 0.5) * 2)^2
+    // This emphasizes midtones and reduces effect on shadows/highlights
+    float lum  = luminance(orig);
+    float t    = (lum - 0.5f) * 2.0f;
+    float mask = 1.0f - t * t;
+
+    // Apply clarity with midtone weighting
+    float w = mask * params.clarity_offset;
     high.x *= w;
     high.y *= w;
     high.z *= w;
 
+    // Output = original + weighted high-pass (alpha unchanged)
     float4 out               = make_float4(orig.x + high.x, orig.y + high.y, orig.z + high.z,
-                                           orig.w);  // alpha unchanged
+                                           orig.w);
     dst[y * pitch_elems + x] = out;
   }
 };

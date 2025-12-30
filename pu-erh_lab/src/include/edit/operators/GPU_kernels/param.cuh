@@ -117,6 +117,7 @@ struct GPUOperatorParams {
   // Clarity adjustment parameter
   bool      clarity_enabled        = true;
   float     clarity_offset         = 0.0f;
+  float     clarity_radius         = 5.0f;
 
   // Sharpen adjustment parameter
   bool      sharpen_enabled        = true;
@@ -225,6 +226,7 @@ class GPUParamsConverter {
 
     gpu_params.clarity_enabled     = cpu_params.clarity_enabled;
     gpu_params.clarity_offset      = cpu_params.clarity_offset;
+    gpu_params.clarity_radius      = cpu_params.clarity_radius;
 
     gpu_params.sharpen_enabled     = cpu_params.sharpen_enabled;
     gpu_params.sharpen_offset      = cpu_params.sharpen_offset;

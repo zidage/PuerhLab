@@ -141,6 +141,7 @@ struct OperatorParams {
   // Clarity adjustment parameter
   bool                         clarity_enabled         = true;
   float                        clarity_offset          = 0.0f;
+  float                        clarity_radius          = 5.0f;
 
   // Sharpen adjustment parameter
   bool                         sharpen_enabled         = true;

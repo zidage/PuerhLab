@@ -134,7 +134,7 @@ class GPU_StaticKernelStream {
     Dispatch<0>(d_in, d_temp, width, height, pitch_elems, params, grid, block, stream);
     cudaStreamSynchronize(stream);
 
-    return (sizeof...(Stages) % 2 == 0) ? d_temp : d_in;
+    return (sizeof...(Stages) % 2 == 0) ? d_in : d_temp;
   }
 };
 };  // namespace CUDA
