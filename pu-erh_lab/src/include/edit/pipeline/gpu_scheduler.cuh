@@ -52,8 +52,7 @@ class GPU_KernelLauncher {
   void SetInputImage(std::shared_ptr<ImageBuffer> input_img) {
     _input_img = input_img;
     _input_img->SyncToGPU();
-
-    cv::cuda::GpuMat gpu_mat     = _input_img->GetGPUData();
+    cv::cuda::GpuMat gpu_mat = _input_img->GetGPUData();
 
     size_t           width       = gpu_mat.cols;
     size_t           height      = gpu_mat.rows;
@@ -64,10 +63,7 @@ class GPU_KernelLauncher {
         cudaFree(_work_buffer);
         _work_buffer = nullptr;
       }
-      if (_temp_buffer) {
-        cudaFree(_temp_buffer);
-        _temp_buffer = nullptr;
-      }
+      
 
       cudaMalloc((void**)&_work_buffer, needed_size);
       cudaMalloc((void**)&_temp_buffer, needed_size);
@@ -77,12 +73,8 @@ class GPU_KernelLauncher {
 
   void SetOutputImage(std::shared_ptr<ImageBuffer> output_img) { _output_img = output_img; }
 
-  void SetParams(GPUOperatorParams& params) {
-    _params = params;  // copy the params into the scheduler
-  }
-
   void SetParams(OperatorParams& cpu_params) {
-    _params = GPUParamsConverter::ConvertFromCPU(cpu_params);
+    _params = GPUParamsConverter::ConvertFromCPU(cpu_params, _params);
   }
 
   void Execute() {

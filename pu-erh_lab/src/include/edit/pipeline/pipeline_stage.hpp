@@ -10,6 +10,7 @@
 #include "edit/operators/operator_factory.hpp"
 #include "edit/pipeline/tile_scheduler.hpp"
 #include "image/image_buffer.hpp"
+#include "pipeline_gpu_wrapper.hpp"
 
 namespace puerhlab {
 // Iteration 3: Static Pipeline with compile-time operator chaining
@@ -31,7 +32,7 @@ struct PointChain {
   void Execute(Tile& tile, OperatorParams& params) {
     int height = tile._height;
     int width  = tile._width;
-    
+
     for (int y = 0; y < height; ++y) {
       for (int x = 0; x < width; ++x) {
         Pixel& p = tile.at(y, x);
@@ -63,9 +64,7 @@ class StaticKernelStream {
       Dispatch<I + 1>(tile, params);
     }
   }
-  void ProcessTile(Tile& tile, OperatorParams& params) {
-    Dispatch(tile, params);
-  }
+  void ProcessTile(Tile& tile, OperatorParams& params) { Dispatch(tile, params); }
 };
 
 struct OperatorEntry {
@@ -94,8 +93,8 @@ struct OperatorEntry {
 class PipelineStage {
  private:
   std::unique_ptr<std::map<OperatorType, OperatorEntry>> _operators;
-  bool                                                   _is_streamable = true;
-  bool                                                   _vec_enabled   = false;
+  bool                                                   _is_streamable      = true;
+  bool                                                   _vec_enabled        = false;
 
   PipelineStage*                                         _prev_stage         = nullptr;
   PipelineStage*                                         _next_stage         = nullptr;
@@ -146,6 +145,9 @@ class PipelineStage {
 
   std::unique_ptr<StaticTileScheduler<StaticKernelStreamType>> _static_tile_scheduler;
 
+  GPUPipelineWrapper                                           _gpu_executor;
+  bool                                                         _gpu_setup_done = false;
+
  public:
   PipelineStageName _stage;
   PipelineStage()                           = delete;
@@ -154,11 +156,15 @@ class PipelineStage {
   PipelineStage(PipelineStageName stage, bool enable_cache, bool is_streamable);
 
   auto IsStreamable() const -> bool { return _is_streamable; }
-  
 
   void SetStaticTileScheduler() {
     _static_tile_scheduler = std::make_unique<StaticTileScheduler<StaticKernelStreamType>>(
         _input_img, _static_kernel_stream);
+  }
+
+  void SetGPUExecutor() {
+    _gpu_executor.SetInputImage(_input_img);
+    _gpu_setup_done = true;
   }
 
   void SetInputImage(std::shared_ptr<ImageBuffer>);

@@ -70,7 +70,7 @@ auto ImageBuffer::SyncToGPU() -> void {
   }
   _gpu_data.upload(_cpu_data);
   _gpu_data_valid = true;
-  _cpu_data_valid = false;
+  // _cpu_data_valid = false;
 }
 
 auto ImageBuffer::SyncToCPU() -> void {
@@ -79,7 +79,7 @@ auto ImageBuffer::SyncToCPU() -> void {
   }
   _gpu_data.download(_cpu_data);
   _cpu_data_valid = true;
-  _gpu_data_valid = false;
+  // _gpu_data_valid = false;
 }
 
 void ImageBuffer::InitGPUData(int width, int height, int type) {
@@ -87,6 +87,7 @@ void ImageBuffer::InitGPUData(int width, int height, int type) {
     return;
   }
   _gpu_data.create(height, width, type);
+  _gpu_data_valid = true;
 }
 
 void ImageBuffer::SetGPUDataValid(bool valid) {

@@ -17,7 +17,7 @@
 #include "edit/operators/utils/functions.hpp"
 #include "image/image_buffer.hpp"
 #include "json.hpp"
-#include "type/type.hpp"
+#include "type/size.hpp"
 #include "utils/string/convert.hpp"
 
 namespace puerhlab {
@@ -159,10 +159,17 @@ void OCIO_ACES_Transform_Op::SetCSTProcessors(const char* input, const char* out
   cpu_processor = cpu_proc;
   gpu_processor = gpu_proc;
 
-  baker         = OCIO::Baker::Create();
-  baker->setConfig(config);
-  baker->setFormat("cube");
-  baker->setCubeSize(LUT3D_EDGE_SIZE);
+  try {
+    baker = OCIO::Baker::Create();
+    baker->setConfig(config);
+    baker->setFormat("iridas_cube");
+
+    baker->setCubeSize(LUT3D_EDGE_SIZE);
+  } catch (OCIO::Exception& e) {
+    std::cout << "OCIO Exception: " << e.what() << std::endl;
+    throw std::runtime_error(
+        std::string("OCIO_ACES_Transform_Op: Failed to set LUT size in baker: ") + e.what());
+  }
   baker->setInputSpace(input);
   baker->setTargetSpace(output);
 }

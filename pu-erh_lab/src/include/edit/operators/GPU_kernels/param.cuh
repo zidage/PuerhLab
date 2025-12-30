@@ -11,21 +11,21 @@
 
 namespace puerhlab {
 struct GPU_LUT3D {
-  cudaArray_t         array          = nullptr;
-  cudaTextureObject_t texture_object = 0;
-  int                 edge_size      = 0;
+  cudaArray_t         array               = nullptr;
+  cudaTextureObject_t texture_object      = 0;
+  int                 edge_size           = 0;
 
-  GPU_LUT3D()                            = default;
+  GPU_LUT3D()                             = default;
 
-  GPU_LUT3D(const GPU_LUT3D&) = default; 
+  GPU_LUT3D(const GPU_LUT3D&)             = default;
 
-  GPU_LUT3D& operator=(const GPU_LUT3D&) = default;  
+  GPU_LUT3D& operator=(const GPU_LUT3D&)  = default;
 
-  GPU_LUT3D(GPU_LUT3D&& other) = default; 
+  GPU_LUT3D(GPU_LUT3D&& other)            = default;
 
-  GPU_LUT3D& operator=(GPU_LUT3D&& other) = default; 
+  GPU_LUT3D& operator=(GPU_LUT3D&& other) = default;
 
-  void Reset() {
+  void       Reset() {
     if (texture_object) {
       cudaDestroyTextureObject(texture_object);
       texture_object = 0;
@@ -100,19 +100,16 @@ struct GPUOperatorParams {
   // Working space
   bool      to_ws_enabled          = true;
   GPU_LUT3D to_ws_lut              = {};
-  float     lut_max_coord_ws       = 1.0f;
   // TODO: NOT IMPLEMENTED
 
   // Look modification transform
-  bool      lmt_enabled            = true;
+  bool      lmt_enabled            = false;
   GPU_LUT3D lmt_lut                = {};
-  float     lut_max_coord_lmt      = 1.0f;
   // TODO: NOT IMPLEMENTED
 
   // Output transform
   bool      to_output_enabled      = true;
   GPU_LUT3D to_output_lut          = {};
-  float     lut_max_coord_output   = 1.0f;
 
   // Curve adjustment parameters
   bool      curve_enabled          = false;
@@ -139,7 +136,9 @@ struct GPUOperatorParams {
 
 class GPUParamsConverter {
  public:
-  static GPUOperatorParams ConvertFromCPU(OperatorParams& cpu_params) {
+  static GPUOperatorParams ConvertFromCPU(OperatorParams&    cpu_params,
+                                          GPUOperatorParams& orig_params) {
+    // TODO: Improve param synchronization to avoid unnecessary data transfers
     GPUOperatorParams gpu_params;
 
     gpu_params.exposure_enabled       = cpu_params.exposure_enabled;
@@ -196,25 +195,31 @@ class GPUParamsConverter {
     gpu_params.vibrance_offset    = cpu_params.vibrance_offset;
 
     gpu_params.to_ws_enabled      = cpu_params.to_ws_enabled;
-    if (cpu_params.to_ws_dirty) {
-      gpu_params.to_ws_lut.Reset(); // Explicitly reset existing LUT
-      gpu_params.to_ws_lut   = CreateLUTTextureObject(cpu_params.to_ws_lut_baker);
-      cpu_params.to_ws_dirty = false;
-    }
+    // if (cpu_params.to_ws_dirty) {
+    //   gpu_params.to_ws_lut.Reset();  // Explicitly reset existing LUT
+    //   gpu_params.to_ws_lut        = CreateLUTTextureObject(cpu_params.to_ws_lut_baker);
+    //   cpu_params.to_ws_dirty      = false;
+    // } else {
+    //   gpu_params.to_ws_lut = orig_params.to_ws_lut;
+    // }
 
     gpu_params.lmt_enabled = cpu_params.lmt_enabled;
     if (cpu_params.to_lmt_dirty) {
-      gpu_params.lmt_lut.Reset(); // Explicitly reset existing LUT
-      gpu_params.lmt_lut      = CreateLUTTextureObject(cpu_params.lmt_lut_path);
-      cpu_params.to_lmt_dirty = false;
+      gpu_params.lmt_lut.Reset();  // Explicitly reset existing LUT
+      gpu_params.lmt_lut           = CreateLUTTextureObject(cpu_params.lmt_lut_path);
+      cpu_params.to_lmt_dirty      = false;
+    } else {
+      gpu_params.lmt_lut = orig_params.lmt_lut;
     }
 
     gpu_params.to_output_enabled = cpu_params.to_output_enabled;
-    if (cpu_params.to_output_dirty) {
-      gpu_params.to_output_lut.Reset(); // Explicitly reset existing LUT
-      gpu_params.to_output_lut   = CreateLUTTextureObject(cpu_params.to_output_lut_baker);
-      cpu_params.to_output_dirty = false;
-    }
+    // if (cpu_params.to_output_dirty) {
+    //   gpu_params.to_output_lut.Reset();  // Explicitly reset existing LUT
+    //   gpu_params.to_output_lut        = CreateLUTTextureObject(cpu_params.to_output_lut_baker);
+    //   cpu_params.to_output_dirty      = false;
+    // } else {
+    //   gpu_params.to_output_lut = orig_params.to_output_lut;
+    // }
 
     gpu_params.curve_enabled       = cpu_params.curve_enabled;
 
@@ -242,15 +247,12 @@ class GPUParamsConverter {
  private:
   static GPU_LUT3D CreateLUTTextureObject(const std::vector<float>& lut_data, int edge_size) {
     GPU_LUT3D gpu_lut;
-    gpu_lut.edge_size = edge_size;
+    gpu_lut.edge_size          = edge_size;
 
-    const size_t voxels = static_cast<size_t>(edge_size) * edge_size * edge_size;
+    const size_t        voxels = static_cast<size_t>(edge_size) * edge_size * edge_size;
     std::vector<float4> packed(voxels);
     for (size_t i = 0; i < voxels; ++i) {
-      packed[i] = make_float4(lut_data[i * 3 + 0],
-                              lut_data[i * 3 + 1],
-                              lut_data[i * 3 + 2],
-                              1.0f);
+      packed[i] = make_float4(lut_data[i * 3 + 0], lut_data[i * 3 + 1], lut_data[i * 3 + 2], 1.0f);
     }
 
     cudaChannelFormatDesc channel_desc = cudaCreateChannelDesc<float4>();
@@ -285,7 +287,7 @@ class GPUParamsConverter {
     std::ostringstream oss;
     baker->bake(oss);
     // Parse LUT data from lut_str and create a 3D texture object
-    CubeLut     lut;
+    CubeLut lut;
     ParseCubeString(oss.str(), lut);
 
     // Create CUDA 3D texture object from LUT data

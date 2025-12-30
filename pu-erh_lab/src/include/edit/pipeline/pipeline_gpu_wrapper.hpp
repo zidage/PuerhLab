@@ -16,8 +16,6 @@ class GPUPipelineWrapper {
 
   void SetInputImage(std::shared_ptr<ImageBuffer> input_image);
 
-  void SetParams(GPUOperatorParams& params);
-
   void SetParams(OperatorParams& params);
 
   void Execute(std::shared_ptr<ImageBuffer> output);

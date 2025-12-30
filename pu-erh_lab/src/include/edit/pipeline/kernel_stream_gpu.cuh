@@ -128,7 +128,7 @@ class GPU_StaticKernelStream {
 
   float4* Process(float4* d_in, float4* d_temp, int width, int height, size_t pitch_elems,
                   GPUOperatorParams& params, cudaStream_t stream = 0) {
-    dim3 block(16, 16);
+    dim3 block(32, 32);
     dim3 grid((width + block.x - 1) / block.x, (height + block.y - 1) / block.y);
 
     Dispatch<0>(d_in, d_temp, width, height, pitch_elems, params, grid, block, stream);

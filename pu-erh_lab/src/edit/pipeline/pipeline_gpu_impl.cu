@@ -46,10 +46,6 @@ class GPUPipelineImpl {
 
   void SetInput(std::shared_ptr<ImageBuffer> input_img) { _launcher.SetInputImage(input_img); }
 
-  void SetParams(GPUOperatorParams& global_params) {
-    _launcher.SetParams(global_params);
-  }
-
   void SetParams(OperatorParams& cpu_params) {
     _launcher.SetParams(cpu_params);
   }
@@ -68,8 +64,6 @@ GPUPipelineWrapper::~GPUPipelineWrapper() = default;
 void GPUPipelineWrapper::SetInputImage(std::shared_ptr<ImageBuffer> input_image) {
   _impl->SetInput(input_image);
 }
-
-void GPUPipelineWrapper::SetParams(GPUOperatorParams& params) { _impl->SetParams(params); }
 
 void GPUPipelineWrapper::SetParams(OperatorParams& cpu_params) {
   _impl->SetParams(cpu_params);

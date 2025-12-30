@@ -1,6 +1,7 @@
 #include "edit/pipeline/pipeline_stage.hpp"
 
 #include <memory>
+#include <opencv2/highgui.hpp>
 #include <stdexcept>
 
 #include "edit/operators/op_base.hpp"
@@ -108,13 +109,25 @@ auto PipelineStage::ApplyStage(OperatorParams& global_params) -> std::shared_ptr
       _output_cache = current_img;
     } else if (_is_streamable) {
       // Streamable stage with enabled operators, use tile scheduler
-      if (!_static_tile_scheduler) {
+      if (!_gpu_setup_done) {
         // If tile scheduler is not set, create one
-        SetStaticTileScheduler();
+        // SetStaticTileScheduler();
+        SetGPUExecutor();
       }
-      _static_tile_scheduler->SetInputImage(_input_img);
-      auto current_img = _static_tile_scheduler->ApplyOps(global_params);
-      _output_cache    = current_img;
+      _output_cache = std::make_shared<ImageBuffer>();
+      // _static_tile_scheduler->SetInputImage(_input_img);
+      using clock = std::chrono::high_resolution_clock;
+      auto start = clock::now();
+      _gpu_executor.SetParams(global_params);
+      _gpu_executor.Execute(_output_cache);
+      _output_cache->SyncToCPU(); // TODO: remove this for future optimization
+      auto end = clock::now();
+      auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+      std::cout << "Pipeline Stage: " << GetStageNameString()
+                << " GPU execution time: " << duration << " ms" << std::endl;
+      // auto current_img = _static_tile_scheduler->ApplyOps(global_params);
+      // auto 
+      // _output_cache    = current_img;
 
     } else {
       _output_cache = _input_img;

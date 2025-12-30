@@ -56,7 +56,7 @@ struct OperatorParams {
   bool                         exposure_enabled         = true;
   float                        exposure_offset          = 0.0f;
 
-  bool                         contrast_enabled         = true;
+  bool                         contrast_enabled         = false;
   float                        contrast_scale           = 0.0f;
 
   // Shadows adjustment parameter
@@ -99,7 +99,7 @@ struct OperatorParams {
   float                        saturation_range         = 0.0f;
 
   // Saturation adjustment parameter
-  bool                         saturation_enabled       = true;
+  bool                         saturation_enabled       = false;
   float                        saturation_offset        = 0.0f;
 
   // Tint adjustment parameter
@@ -119,7 +119,7 @@ struct OperatorParams {
   OCIO::BakerRcPtr             to_ws_lut_baker          = nullptr;
 
   // Look modification transform
-  bool                         lmt_enabled              = true;
+  bool                         lmt_enabled              = false;
   bool                         to_lmt_dirty             = false;
   OCIO::ConstCPUProcessorRcPtr cpu_lmt_processor        = nullptr;
   OCIO::ConstGPUProcessorRcPtr gpu_lmt_processor        = nullptr;

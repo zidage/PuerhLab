@@ -177,6 +177,10 @@ auto RawProcessor::Process() -> ImageBuffer {
   }
 
   ConvertToWorkingSpace();
+  cv::Mat final_img = cv::Mat();
+  final_img.create(_process_buffer.GetCPUData().rows, _process_buffer.GetCPUData().cols, CV_32FC4);
+  cv::cvtColor(_process_buffer.GetCPUData(), final_img, cv::COLOR_RGB2RGBA);
+  _process_buffer = {std::move(final_img)};
   auto                                      cst_end      = clock::now();
   std::chrono::duration<double, std::milli> cst_duration = cst_end - debayer_end;
   std::cout << "Color Space Transformation took " << cst_duration.count() << " ms\n";

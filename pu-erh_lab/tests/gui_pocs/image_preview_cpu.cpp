@@ -39,7 +39,7 @@ void SetPipelineTemplate(std::shared_ptr<PipelineExecutor> executor) {
   // to_ws.SetOperator(OperatorType::CST, to_ws_params);
   nlohmann::json to_ws_params;
   to_ws_params["ocio"] = {
-      {"src", ""}, {"dst", "ACEScc"}, {"normalize", true}, {"transform_type", 0}};
+      {"src", "ACES2065-1"}, {"dst", "ACEScc"}, {"normalize", true}, {"transform_type", 0}};
   auto& input_stage = executor->GetStage(PipelineStageName::Basic_Adjustment);
   input_stage.SetOperator(OperatorType::TO_WS, to_ws_params, global_params);
 
@@ -51,16 +51,17 @@ void SetPipelineTemplate(std::shared_ptr<PipelineExecutor> executor) {
 }
 
 static QImage cvMatToQImage(const cv::Mat& mat) {
-  if (mat.type() == CV_8UC3) {
-    QImage image(mat.data, mat.cols, mat.rows, static_cast<int>(mat.step), QImage::Format_RGB888);
-    return image;
-  } else if (mat.type() == CV_8UC1) {
-    QImage image(mat.data, mat.cols, mat.rows, static_cast<int>(mat.step),
-                 QImage::Format_Grayscale8);
-    return image;
-  } else {
-    throw std::runtime_error("Unsupported image format for display");
-  }
+  // if (mat.type() == CV_8UC3) {
+  //   QImage image(mat.data, mat.cols, mat.rows, static_cast<int>(mat.step), QImage::Format_RGB888);
+  //   return image;
+  // } else if (mat.type() == CV_8UC1) {
+  //   QImage image(mat.data, mat.cols, mat.rows, static_cast<int>(mat.step),
+  //                QImage::Format_Grayscale8);
+  //   return image;
+  // } else {
+  //   throw std::runtime_error("Unsupported image format for display");
+  // }
+  return QImage{mat.data, mat.cols, mat.rows, static_cast<int>(mat.step), QImage::Format_RGBA32FPx4};
 }
 
 int main(int argc, char* argv[]) {
@@ -173,13 +174,17 @@ int main(int argc, char* argv[]) {
     task._options._is_callback = true;
 
     task._callback             = [label, dpr](ImageBuffer& output) {
+      try {
       cv::Mat img = output.GetCPUData();
-      img.convertTo(img, CV_8U, 255.0);
+      // img.convertTo(img, CV_8UC3, 255.0);
 
       QImage qimg = cvMatToQImage(img);
 
       qimg.setDevicePixelRatio(dpr);
       label->setPixmap(QPixmap::fromImage(qimg));
+      } catch (const std::exception& e) {
+        qDebug("Failed to get image from pipeline: %s", e.what());
+      }
     };
 
     scheduler.ScheduleTask(std::move(task));

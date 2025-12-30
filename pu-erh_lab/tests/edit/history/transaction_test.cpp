@@ -77,7 +77,7 @@ void SetPipelineTemplate(std::shared_ptr<PipelineExecutor> executor) {
   decode_params["raw"]["use_camera_wb"]          = true;
   decode_params["raw"]["backend"]                = "puerh";
   nlohmann::json to_ws_params;
-  to_ws_params["ocio"] = {{"src", "Linear Rec.709 (sRGB)"},
+  to_ws_params["ocio"] = {{"src", "ACES2065-1"},
                           {"dst", "ACEScc"},
                           {"normalize", true},
                           {"transform_type", 0}};
@@ -321,9 +321,9 @@ TEST_F(EditHistoryTests, TestWithPreviewPipeline) {
       auto result = future_task1.get();  // Wait for task1 to complete
 
       cv::cvtColor(result->GetCPUData(), result->GetCPUData(), cv::COLOR_RGB2BGR);
-      // cv::imshow("preview", result->GetCPUData());
+      cv::imshow("preview", result->GetCPUData());
 
-      // cv::waitKey(1);
+      cv::waitKey(0);
     }
   }
 }

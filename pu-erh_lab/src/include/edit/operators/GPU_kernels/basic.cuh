@@ -32,9 +32,9 @@ struct GPU_BlackOpKernel : GPUPointOpTag {
 struct GPU_WhiteOpKernel : GPUPointOpTag {
   __device__ __forceinline__ void operator()(float4* p, GPUOperatorParams& params) const {
       if (!params.white_enabled) return;
-      p->x = p->x * params.slope + params.white_point;
-      p->y = p->y * params.slope + params.white_point;
-      p->z = p->z * params.slope + params.white_point;
+      p->x = p->x * params.slope + params.black_point;
+      p->y = p->y * params.slope + params.black_point;
+      p->z = p->z * params.slope + params.black_point;
   }
 };
 
