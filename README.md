@@ -23,8 +23,8 @@ Pu-erh Lab aims to provide a professional-grade workflow for photographers, comb
 
 ### 🚀 High-Performance Core
 - **Concurrency First:** Built on a tile-based rendering mechanism to maximize multi-core CPU utilization during image processing.
-- **Modern C++:** Written in C++20, trying to achieve **_blazingly fast_**!
-- **GPU Acceleration (Planned):** Future support for GPU-accelerated processing using CUDA for real-time editing performance.
+- **Modern C++:** Written in C++20, trying to be **_blazingly fast_**!
+- **GPU Acceleration:** Support GPU-accelerated processing using CUDA for real-time editing performance.
 
 ### 🎨 Professional Imaging Pipeline
 - **RAW Support:** GPU accelerated decoding module with an integration with **LibRaw** for RAW file unpacking.
@@ -80,6 +80,7 @@ cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE=vcpkg/scripts/buildsystems/vcpkg.cmak
 
 # Build
 cmake --build build --config Release
+
 
 
 
