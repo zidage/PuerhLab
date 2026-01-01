@@ -124,7 +124,7 @@ set(OPERATORS_SRCS
 
 def_library(Operators
     SOURCES ${OPERATORS_SRCS}
-    PUBLIC_DEPS ImageBuffer JSON OpenColorIO hwy::hwy
+    PUBLIC_DEPS ImageBuffer JSON OpenColorIO hwy::hwy glad::glad
 )
 
 # --- Edit Pipeline ---
@@ -142,7 +142,7 @@ endif()
 
 def_library(EditPipeline
     SOURCES ${PIPELINE_SRCS} ${GPU_PIPELINE_SRCS}
-    PUBLIC_DEPS Operators
+    PUBLIC_DEPS Operators glad::glad OpenGL::GL
 )
 
 if(CUDAToolkit_FOUND)
@@ -304,4 +304,17 @@ def_library(ImageWriter
     SOURCES io/image/image_writer.cpp
     PUBLIC_DEPS SleeveManager DuckORM
 )
+
+# ==============================================================================
+# 9. UI Components
+# ==============================================================================
+def_library(EditViewer
+    SOURCES ui/edit_viewer/edit_viewer.cpp
+    PUBLIC_DEPS SleeveView EditPipeline glad::glad OpenGL::GL Qt6::OpenGLWidgets
+)
+
+if(CUDAToolkit_FOUND)
+    set_target_properties(EditViewer PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
+    target_compile_definitions(EditViewer PUBLIC HAVE_CUDA)
+endif()
 

@@ -12,6 +12,8 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 # set(BUILD_STATIC_LIBS ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+
+
 if (MSVC)
     set(CMAKE_CXX_FLAGS_DEBUG "/Zi /O2 /arch:AVX /bigobj /W4 /external:anglebrackets /external:W0 /D_DEBUG /EHsc /openmp")
     if(ASAN_ENABLED)
@@ -47,6 +49,13 @@ else()
     set(CMAKE_PREFIX_PATH "/Users/zidage/Qt/6.9.3/macos/lib/cmake;${CMAKE_PREFIX_PATH}")
     endif()
 endif()
+
+# Qt6
+find_package(Qt6 REQUIRED COMPONENTS Widgets Quick OpenGL OpenGLWidgets)
+
+set(CMAKE_AUTOMOC ON)
+set(CMAKE_AUTOUIC ON)
+set(CMAKE_AUTORCC ON)
 
 find_package(CUDAToolkit)
 if (CUDAToolkit_FOUND)
@@ -117,8 +126,11 @@ target_include_directories(JSON INTERFACE "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_
 # OpenCV
 find_package(OpenCV REQUIRED)
 
-find_package(Qt6 REQUIRED COMPONENTS Widgets Quick)
 
+
+# OpenGL
+find_package(OpenGL REQUIRED)
+find_package(glad CONFIG REQUIRED)
 
 # Profiler/hwy/lcms2
 if (WIN32)
@@ -239,13 +251,31 @@ add_subdirectory(${CMAKE_SOURCE_DIR}/pu-erh_lab/tests)
 
 file(GLOB_RECURSE ALL_SOURCE_FILES
     "${CMAKE_SOURCE_DIR}/pu-erh_lab/src/*.c"
-    "${CMAKE_SOURCE_DIR}/pu-erh_lab/src/*.h"
     "${CMAKE_SOURCE_DIR}/pu-erh_lab/src/*.cpp"
-    "${CMAKE_SOURCE_DIR}/pu-erh_lab/src/*.hpp")
+    "${CMAKE_SOURCE_DIR}/pu-erh_lab/src/*.cu"
+    "${CMAKE_SOURCE_DIR}/pu-erh_lab/src/*.h"
+    "${CMAKE_SOURCE_DIR}/pu-erh_lab/src/*.hpp"
+    "${CMAKE_SOURCE_DIR}/pu-erh_lab/src/*.cuh")
+
+set(MY_HEADER_FILES "${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include/.*")
+
 add_custom_target(format
     COMMAND clang-format
     -i
     -style=file
     ${ALL_SOURCE_FILES}
     COMMENT "Running clang-format on source files"
+)
+
+add_custom_target(tidy
+    COMMAND clang-tidy
+    "-p=${CMAKE_BINARY_DIR}"
+    "-fix"
+    "-fix-errors"
+    "--header-filter=${MY_HEADER_FILTER}"
+    "--extra-arg=--driver-mode=cl"
+    "--extra-arg=-fms-compatibility"
+    "--extra-arg=-fms-extensions"
+    ${ALL_SOURCE_FILES}
+    COMMENT "Running clang-tidy on source files"
 )

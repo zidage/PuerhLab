@@ -18,3 +18,5 @@ If:
     PathMatch: .*\.(c|h)pp
 CompileFlags:
     CompilationDatabase: build/debug
+Diagnostics:
+  Suppress: redefinition_different_typedef
