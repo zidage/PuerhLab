@@ -25,40 +25,40 @@ namespace puerhlab {
 template <typename KernelStreamT>
 class StaticTileScheduler {
  private:
-  std::shared_ptr<ImageBuffer> _input_img;
-  KernelStreamT                _stream;
+  std::shared_ptr<ImageBuffer> input_img_;
+  KernelStreamT                stream_;
 
-  ThreadPool                   _thread_pool;
-  int                          _total_tiles;   // total number of tiles
-  int                          _tile_per_row;  // number of tiles per row
-  int                          _tile_per_col;  // number of tiles per column
-  int                          _tile_size;     // dynamic tile size based on image size
+  ThreadPool                   thread_pool_;
+  int                          total_tiles_;   // total number of tiles
+  int                          tile_per_row_;  // number of tiles per row
+  int                          tile_per_col_;  // number of tiles per column
+  int                          tile_size_;     // dynamic tile size based on image size
 
  public:
   StaticTileScheduler() = delete;
   StaticTileScheduler(std::shared_ptr<ImageBuffer> input_img, KernelStreamT stream,
                       int num_threads = 20)
-      : _input_img(input_img), _stream(std::move(stream)), _thread_pool(num_threads) {
-    auto& input_buffer = _input_img->GetCPUData();
+      : input_img_(input_img), stream_(std::move(stream)), thread_pool_(num_threads) {
+    auto& input_buffer = input_img_->GetCPUData();
     // Determine tile size based on image dimensions
     // _tile_size         = std::max(input_buffer.cols, input_buffer.rows) / num_threads;
-    _tile_size         = 64;  // Fixed tile size for better cache locality
-    _tile_per_col      = static_cast<int>(std::ceil(static_cast<float>(input_buffer.cols) / _tile_size));
-    _tile_per_row      = static_cast<int>(std::ceil(static_cast<float>(input_buffer.rows) / _tile_size));
-    _total_tiles       = _tile_per_col * _tile_per_row;
+    tile_size_         = 64;  // Fixed tile size for better cache locality
+    tile_per_col_      = static_cast<int>(std::ceil(static_cast<float>(input_buffer.cols) / tile_size_));
+    tile_per_row_      = static_cast<int>(std::ceil(static_cast<float>(input_buffer.rows) / tile_size_));
+    total_tiles_       = tile_per_col_ * tile_per_row_;
   }
-  void SetInputImage(std::shared_ptr<ImageBuffer> img) { _input_img = img; }
+  void SetInputImage(std::shared_ptr<ImageBuffer> img) { input_img_ = img; }
   auto ApplyOps(OperatorParams& params) -> std::shared_ptr<ImageBuffer> {
     // Similar implementation as TileScheduler but using static stream
     using clock = std::chrono::high_resolution_clock;
     auto start  = clock::now();
 
-    if (!_input_img) {
+    if (!input_img_) {
       throw std::runtime_error("TileScheduler: Input image not set.");
     }
 
     // Use const& for the input buffer.
-    const cv::Mat&          input_buffer = _input_img->GetCPUData();
+    const cv::Mat&          input_buffer = input_img_->GetCPUData();
     cv::Mat                 output_buffer{input_buffer.size(), input_buffer.type()};
 
     std::atomic<int>        tiles_completed = 0;
@@ -66,27 +66,27 @@ class StaticTileScheduler {
     std::condition_variable cv;
     const int               channels = input_buffer.channels();
 
-    for (int tile_idx = 0; tile_idx < _total_tiles; ++tile_idx) {
-      _thread_pool.Submit([this, &params = params, tile_idx, &input_buffer, &output_buffer,
+    for (int tile_idx = 0; tile_idx < total_tiles_; ++tile_idx) {
+      thread_pool_.Submit([this, &params = params, tile_idx, &input_buffer, &output_buffer,
                            &tiles_completed, &mtx, &cv, channels]() {
         // Get tile's starting coordinates
         // EASY_BLOCK("Tile Processing");
-        int            tile_x = (tile_idx % _tile_per_col) * _tile_size;
-        int            tile_y = (tile_idx / _tile_per_col) * _tile_size;
+        int            tile_x = (tile_idx % tile_per_col_) * tile_size_;
+        int            tile_y = (tile_idx / tile_per_col_) * tile_size_;
 
         // Define the tile's region of interest (ROI), clamping to image boundaries
-        int            height = std::min(_tile_size, input_buffer.rows - tile_y);
-        int            width  = std::min(_tile_size, input_buffer.cols - tile_x);
+        int            height = std::min(tile_size_, input_buffer.rows - tile_y);
+        int            width  = std::min(tile_size_, input_buffer.cols - tile_x);
 
         Tile           tile   = Tile::CopyFrom(input_buffer, {tile_x, tile_y, width, height}, 0);
 
         OperatorParams params_copy = params;  // Copy params for thread safety
-        _stream.ProcessTile(tile, params_copy);
+        stream_.ProcessTile(tile, params_copy);
 
         Tile::CopyInto(output_buffer, tile);
 
         // Atomically signal completion and notify the main thread if all tasks are done
-        if (tiles_completed.fetch_add(1, std::memory_order_release) + 1 == _total_tiles) {
+        if (tiles_completed.fetch_add(1, std::memory_order_release) + 1 == total_tiles_) {
           std::lock_guard<std::mutex> lock(mtx);
           cv.notify_one();
         }
@@ -95,11 +95,11 @@ class StaticTileScheduler {
     }
     std::unique_lock<std::mutex> lock(mtx);
     cv.wait(lock,
-            [&]() { return tiles_completed.load(std::memory_order_acquire) == _total_tiles; });
+            [&]() { return tiles_completed.load(std::memory_order_acquire) == total_tiles_; });
 
     auto                                      end      = clock::now();
     std::chrono::duration<double, std::milli> duration = end - start;
-    printf("TileScheduler: Processed %d tiles in %.2f ms\n", _total_tiles, duration.count());
+    printf("TileScheduler: Processed %d tiles in %.2f ms\n", total_tiles_, duration.count());
     return std::make_shared<ImageBuffer>(std::move(output_buffer));
   }
   auto HasOps() const -> bool { return true; }

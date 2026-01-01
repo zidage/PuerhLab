@@ -26,34 +26,34 @@
 #include "utils/clock/time_provider.hpp"
 
 namespace puerhlab {
-VersionNode::VersionNode(Version& ver) : _ver_ref(ver) {}
+VersionNode::VersionNode(Version& ver) : ver_ref_(ver) {}
 
 /**
  * @brief Construct a new Edit History:: Edit History object
  *
  * @param bound_image
  */
-EditHistory::EditHistory(sl_element_id_t bound_image) : _bound_image(bound_image) {
+EditHistory::EditHistory(sl_element_id_t bound_image) : bound_image_(bound_image) {
   SetAddTime();
-  _history_id = Hash128::Blend(Hash128::Compute(&_added_time, sizeof(_added_time)),
+  history_id_ = Hash128::Blend(Hash128::Compute(&added_time_, sizeof(added_time_)),
                                Hash128::Compute(&bound_image, sizeof(bound_image)));
 }
 
 void EditHistory::CalculateHistoryID() {
   auto& last_node = GetLatestVersion();
   // Merkle-like hash computation
-  _history_id     = Hash128::Blend(
-      _history_id,
-      Hash128::Blend(last_node._ver_ref.GetVersionID(),
-                         Hash128::Compute(&_last_modified_time, sizeof(_last_modified_time))));
+  history_id_     = Hash128::Blend(
+      history_id_,
+      Hash128::Blend(last_node.ver_ref_.GetVersionID(),
+                         Hash128::Compute(&last_modified_time_, sizeof(last_modified_time_))));
 }
 /**
  * @brief Set the created time for a EditHistory
  *
  */
 void EditHistory::SetAddTime() {
-  _added_time         = std::chrono::system_clock::to_time_t(TimeProvider::Now());
-  _last_modified_time = _added_time;
+  added_time_         = std::chrono::system_clock::to_time_t(TimeProvider::Now());
+  last_modified_time_ = added_time_;
 }
 
 /**
@@ -61,76 +61,76 @@ void EditHistory::SetAddTime() {
  *
  */
 void EditHistory::SetLastModifiedTime() {
-  _last_modified_time = std::chrono::system_clock::to_time_t(TimeProvider::Now());
+  last_modified_time_ = std::chrono::system_clock::to_time_t(TimeProvider::Now());
 }
 
-auto EditHistory::GetAddTime() const -> std::time_t { return _added_time; }
+auto EditHistory::GetAddTime() const -> std::time_t { return added_time_; }
 
-auto EditHistory::GetLastModifiedTime() const -> std::time_t { return _last_modified_time; }
+auto EditHistory::GetLastModifiedTime() const -> std::time_t { return last_modified_time_; }
 
-auto EditHistory::GetHistoryId() const -> history_id_t { return _history_id; }
+auto EditHistory::GetHistoryId() const -> history_id_t { return history_id_; }
 
-auto EditHistory::GetBoundImage() const -> sl_element_id_t { return _bound_image; }
+auto EditHistory::GetBoundImage() const -> sl_element_id_t { return bound_image_; }
 
 auto EditHistory::GetVersion(history_id_t ver_id) -> Version& {
-  if (_version_storage.find(ver_id) == _version_storage.end()) {
+  if (version_storage_.find(ver_id) == version_storage_.end()) {
     throw std::runtime_error("Version not found");
   }
-  return _version_storage[ver_id];
+  return version_storage_[ver_id];
 }
 
 auto EditHistory::CommitVersion(Version&& ver) -> history_id_t {
   auto ver_id = ver.GetVersionID();
-  if (_version_storage.find(ver_id) != _version_storage.end()) {
+  if (version_storage_.find(ver_id) != version_storage_.end()) {
     throw std::runtime_error("Version already exists");
   }
-  _version_storage[ver_id] = std::move(ver);
-  _commit_tree.emplace_back(_version_storage[ver_id]);
+  version_storage_[ver_id] = std::move(ver);
+  commit_tree_.emplace_back(version_storage_[ver_id]);
   SetLastModifiedTime();
   CalculateHistoryID();
   return ver_id;
 }
 
 auto EditHistory::GetLatestVersion() -> VersionNode& {
-  if (_commit_tree.empty()) {
+  if (commit_tree_.empty()) {
     throw std::runtime_error("No version in history");
   }
-  return _commit_tree.back();
+  return commit_tree_.back();
 }
 
 auto EditHistory::RemoveVersion(history_id_t ver_id) -> bool {
-  if (_version_storage.find(ver_id) == _version_storage.end()) {
+  if (version_storage_.find(ver_id) == version_storage_.end()) {
     return false;
   }
   // Remove from commit tree
-  for (auto it = _commit_tree.begin(); it != _commit_tree.end(); ++it) {
-    if (it->_ver_ref.GetVersionID() == ver_id) {  // TODO: Not support branching for now
-      _commit_tree.erase(it);
+  for (auto it = commit_tree_.begin(); it != commit_tree_.end(); ++it) {
+    if (it->ver_ref_.GetVersionID() == ver_id) {  // TODO: Not support branching for now
+      commit_tree_.erase(it);
       break;
     }
   }
-  _version_storage.erase(ver_id);
+  version_storage_.erase(ver_id);
   SetLastModifiedTime();
   return true;
 }
 
 auto EditHistory::ToJSON() const -> nlohmann::json {
   nlohmann::json j;
-  j["history_id"]         = _history_id.ToString();
-  j["bound_image"]        = _bound_image;
-  j["added_time"]         = _added_time;
-  j["last_modified_time"] = _last_modified_time;
+  j["history_id"]         = history_id_.ToString();
+  j["bound_image"]        = bound_image_;
+  j["added_time"]         = added_time_;
+  j["last_modified_time"] = last_modified_time_;
 
   j["commit_tree"]        = nlohmann::json::array();
-  for (const auto& node : _commit_tree) {
+  for (const auto& node : commit_tree_) {
     nlohmann::json node_json;
-    node_json["commit_id"] = node._commit_id;
-    node_json["version"]   = node._ver_ref.ToJSON();
+    node_json["commit_id"] = node.commit_id_;
+    node_json["version"]   = node.ver_ref_.ToJSON();
     j["commit_tree"].push_back(node_json);
   }
 
   j["version_storage"] = nlohmann::json::array();
-  for (const auto& [ver_id, ver] : _version_storage) {
+  for (const auto& [ver_id, ver] : version_storage_) {
     nlohmann::json ver_json;
     ver_json["version_id"] = ver_id.ToString();
     ver_json["version"]    = ver.ToJSON();
@@ -147,17 +147,17 @@ void EditHistory::FromJSON(const nlohmann::json& j) {
     throw std::runtime_error("EditHistory: Invalid JSON format for EditHistory");
   }
 
-  _history_id         = Hash128::FromString(j.at("history_id").get<std::string>());
-  _bound_image        = j.at("bound_image").get<sl_element_id_t>();
-  _added_time         = j.at("added_time").get<std::time_t>();
-  _last_modified_time = j.at("last_modified_time").get<std::time_t>();
-  _commit_tree.clear();
-  _version_storage.clear();
+  history_id_         = Hash128::FromString(j.at("history_id").get<std::string>());
+  bound_image_        = j.at("bound_image").get<sl_element_id_t>();
+  added_time_         = j.at("added_time").get<std::time_t>();
+  last_modified_time_ = j.at("last_modified_time").get<std::time_t>();
+  commit_tree_.clear();
+  version_storage_.clear();
   for (const auto& node_json : j.at("commit_tree")) {
     if (!node_json.is_object() || !node_json.contains("commit_id") ||
         !node_json.contains("version")) {
-      _commit_tree.clear();
-      _version_storage.clear();
+      commit_tree_.clear();
+      version_storage_.clear();
       throw std::runtime_error(
           "EditHistory: Invalid JSON format for commit_tree node, clear all commit tree and "
           "version storage");
@@ -165,10 +165,10 @@ void EditHistory::FromJSON(const nlohmann::json& j) {
     Version ver;
     ver.FromJSON(node_json.at("version"));
     history_id_t ver_id      = ver.GetVersionID();
-    _version_storage[ver_id] = std::move(ver);
-    VersionNode node(_version_storage[ver_id]);
-    node._commit_id = node_json.at("commit_id").get<p_hash_t>();
-    _commit_tree.push_back(std::move(node));
+    version_storage_[ver_id] = std::move(ver);
+    VersionNode node(version_storage_[ver_id]);
+    node.commit_id_ = node_json.at("commit_id").get<p_hash_t>();
+    commit_tree_.push_back(std::move(node));
   }
 }
 };  // namespace puerhlab

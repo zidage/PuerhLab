@@ -18,44 +18,44 @@
 
 namespace puerhlab {
 auto EditTransaction::ApplyTransaction(PipelineExecutor& pipeline) -> bool {
-  auto& stage = pipeline.GetStage(_stage_name);
-  switch (_type) {
+  auto& stage = pipeline.GetStage(stage_name_);
+  switch (type_) {
     case TransactionType::_ADD:
-      stage.SetOperator(_operator_type, _operator_params);
+      stage.SetOperator(operator_type_, operator_params_);
       return true;
     case TransactionType::_DELETE:
-      stage.EnableOperator(_operator_type, false);
+      stage.EnableOperator(operator_type_, false);
       return true;
     case TransactionType::_EDIT:
-      stage.SetOperator(_operator_type, _operator_params);
+      stage.SetOperator(operator_type_, operator_params_);
       return true;
   }
 }
 
 auto EditTransaction::ToJSON() const -> nlohmann::json {
   nlohmann::json j;
-  j["id"]              = _tx_id;
-  j["type"]            = static_cast<int>(_type);
-  j["operator_type"]   = static_cast<int>(_operator_type);
-  j["stage_name"]      = static_cast<int>(_stage_name);
-  j["operator_params"] = _operator_params;
-  if (_last_operator_params) {
-    j["last_operator_params"] = *_last_operator_params;
+  j["id"]              = tx_id_;
+  j["type"]            = static_cast<int>(type_);
+  j["operator_type"]   = static_cast<int>(operator_type_);
+  j["stage_name"]      = static_cast<int>(stage_name_);
+  j["operator_params"] = operator_params_;
+  if (last_operator_params_) {
+    j["last_operator_params"] = *last_operator_params_;
   }
 
   return j;
 }
 
 void EditTransaction::FromJSON(const nlohmann::json& j) {
-  _tx_id           = j["id"].get<tx_id_t>();
-  _type            = static_cast<TransactionType>(j["type"].get<int>());
-  _operator_type   = static_cast<OperatorType>(j["operator_type"].get<int>());
-  _stage_name      = static_cast<PipelineStageName>(j["stage_name"].get<int>());
-  _operator_params = j["operator_params"];
+  tx_id_           = j["id"].get<tx_id_t>();
+  type_            = static_cast<TransactionType>(j["type"].get<int>());
+  operator_type_   = static_cast<OperatorType>(j["operator_type"].get<int>());
+  stage_name_      = static_cast<PipelineStageName>(j["stage_name"].get<int>());
+  operator_params_ = j["operator_params"];
   if (j.contains("last_operator_params")) {
-    _last_operator_params = j["last_operator_params"];
+    last_operator_params_ = j["last_operator_params"];
   } else {
-    _last_operator_params = std::nullopt;
+    last_operator_params_ = std::nullopt;
   }
 }
 

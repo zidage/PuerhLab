@@ -30,22 +30,22 @@ namespace puerhlab {
 // Iteration 3: Static Pipeline with compile-time operator chaining
 template <typename... Ops>
 struct PointChain {
-  std::tuple<Ops...> _ops;
+  std::tuple<Ops...> ops_;
 
-  PointChain(Ops... ops) : _ops(std::move(ops)...) {}
+  PointChain(Ops... ops) : ops_(std::move(ops)...) {}
 
   template <size_t I = 0>
   inline void ApplyOps(Pixel& p, OperatorParams& params) {
     if constexpr (I < sizeof...(Ops)) {
-      auto& op = std::get<I>(_ops);
+      auto& op = std::get<I>(ops_);
       op(p, params);
       ApplyOps<I + 1>(p, params);
     }
   }
 
   void Execute(Tile& tile, OperatorParams& params) {
-    int height = tile._height;
-    int width  = tile._width;
+    int height = tile.height_;
+    int width  = tile.width_;
 
     for (int y = 0; y < height; ++y) {
       for (int x = 0; x < width; ++x) {
@@ -58,14 +58,14 @@ struct PointChain {
 
 template <typename... Stages>
 class StaticKernelStream {
-  std::tuple<Stages...> _stages;
+  std::tuple<Stages...> stages_;
 
  public:
-  StaticKernelStream(Stages... stages) : _stages(std::move(stages)...) {}
+  StaticKernelStream(Stages... stages) : stages_(std::move(stages)...) {}
   template <size_t I = 0>
   inline void Dispatch(Tile& tile, OperatorParams& params) {
     if constexpr (I < sizeof...(Stages)) {
-      auto& s = std::get<I>(_stages);
+      auto& s = std::get<I>(stages_);
 
       if constexpr (std::is_base_of_v<PointOpTag, std::decay_t<decltype(s)>>) {
         s(tile, params);
@@ -82,46 +82,46 @@ class StaticKernelStream {
 };
 
 struct OperatorEntry {
-  bool                           _enable = true;
-  std::shared_ptr<IOperatorBase> _op;
+  bool                           enable_ = true;
+  std::shared_ptr<IOperatorBase> op_;
 
   bool                           operator<(const OperatorEntry& other) const {
-    return _op->GetPriorityLevel() < other._op->GetPriorityLevel();
+    return op_->GetPriorityLevel() < other.op_->GetPriorityLevel();
   }
 
  public:
   auto ExportOperatorParams() const -> nlohmann::json {
     nlohmann::json j;
-    j["type"]   = _op->GetOperatorType();
-    j["enable"] = _enable;
-    j["params"] = _op->GetParams();
+    j["type"]   = op_->GetOperatorType();
+    j["enable"] = enable_;
+    j["params"] = op_->GetParams();
     return j;
   }
 
   auto ImportOperatorParams(const nlohmann::json& j) -> void {
-    if (j.contains("enable")) _enable = j["enable"].get<bool>();
-    if (j.contains("params")) _op->SetParams(j["params"]);
+    if (j.contains("enable")) enable_ = j["enable"].get<bool>();
+    if (j.contains("params")) op_->SetParams(j["params"]);
   }
 };
 
 class PipelineStage {
  private:
-  std::unique_ptr<std::map<OperatorType, OperatorEntry>> _operators;
-  bool                                                   _is_streamable      = true;
-  bool                                                   _vec_enabled        = false;
+  std::unique_ptr<std::map<OperatorType, OperatorEntry>> operators_;
+  bool                                                   is_streamable_      = true;
+  bool                                                   vec_enabled_        = false;
 
-  PipelineStage*                                         _prev_stage         = nullptr;
-  PipelineStage*                                         _next_stage         = nullptr;
+  PipelineStage*                                         prev_stage_         = nullptr;
+  PipelineStage*                                         next_stage_         = nullptr;
 
-  std::shared_ptr<ImageBuffer>                           _input_img          = nullptr;
-  std::shared_ptr<ImageBuffer>                           _output_cache       = nullptr;
+  std::shared_ptr<ImageBuffer>                           input_img_          = nullptr;
+  std::shared_ptr<ImageBuffer>                           output_cache_       = nullptr;
 
-  bool                                                   _enable_cache       = false;
-  bool                                                   _input_cache_valid  = false;
-  bool                                                   _output_cache_valid = false;
-  bool                                                   _input_set          = false;
+  bool                                                   enable_cache_       = false;
+  bool                                                   input_cache_valid_  = false;
+  bool                                                   output_cache_valid_ = false;
+  bool                                                   input_set_          = false;
 
-  PipelineStage*                                         _dependents         = nullptr;
+  PipelineStage*                                         dependents_         = nullptr;
 
   static constexpr auto                                  BuildKernelStream   = []() {
     auto op_to_working = OCIO_ACES_Transform_Op_Kernel();
@@ -155,30 +155,30 @@ class PipelineStage {
 
   using StaticKernelStreamType                 = decltype(BuildKernelStream());
 
-  StaticKernelStreamType _static_kernel_stream = BuildKernelStream();
+  StaticKernelStreamType static_kernel_stream_ = BuildKernelStream();
 
-  std::unique_ptr<StaticTileScheduler<StaticKernelStreamType>> _static_tile_scheduler;
+  std::unique_ptr<StaticTileScheduler<StaticKernelStreamType>> static_tile_scheduler_;
 
-  GPUPipelineWrapper                                           _gpu_executor;
-  bool                                                         _gpu_setup_done = false;
+  GPUPipelineWrapper                                           gpu_executor_;
+  bool                                                         gpu_setup_done_ = false;
 
  public:
-  PipelineStageName _stage;
+  PipelineStageName stage_;
   PipelineStage()                           = delete;
   PipelineStage(const PipelineStage& other) = delete;
 
   PipelineStage(PipelineStageName stage, bool enable_cache, bool is_streamable);
 
-  auto IsStreamable() const -> bool { return _is_streamable; }
+  auto IsStreamable() const -> bool { return is_streamable_; }
 
   void SetStaticTileScheduler() {
-    _static_tile_scheduler = std::make_unique<StaticTileScheduler<StaticKernelStreamType>>(
-        _input_img, _static_kernel_stream);
+    static_tile_scheduler_ = std::make_unique<StaticTileScheduler<StaticKernelStreamType>>(
+        input_img_, static_kernel_stream_);
   }
 
   void SetGPUExecutor() {
-    _gpu_executor.SetInputImage(_input_img);
-    _gpu_setup_done = true;
+    gpu_executor_.SetInputImage(input_img_);
+    gpu_setup_done_ = true;
   }
 
   void SetInputImage(std::shared_ptr<ImageBuffer>);
@@ -197,36 +197,36 @@ class PipelineStage {
   void SetOperator(OperatorType, nlohmann::json param, OperatorParams& global_params);
 
   auto GetOperator(OperatorType) const -> std::optional<OperatorEntry*>;
-  auto GetAllOperators() const -> std::map<OperatorType, OperatorEntry>& { return *_operators; }
+  auto GetAllOperators() const -> std::map<OperatorType, OperatorEntry>& { return *operators_; }
   void EnableOperator(OperatorType, bool enable);
 
   void SetNeighbors(PipelineStage* prev, PipelineStage* next) {
-    _prev_stage = prev;
-    _next_stage = next;
+    prev_stage_ = prev;
+    next_stage_ = next;
   }
 
   void ResetNeighbors() {
-    _prev_stage = nullptr;
-    _next_stage = nullptr;
+    prev_stage_ = nullptr;
+    next_stage_ = nullptr;
   }
 
   void SetInputCacheValid(bool valid);
   void SetOutputCacheValid(bool valid);
   auto CacheValid() const -> bool {
-    if (!_enable_cache) return false;
-    if (!_prev_stage) return _output_cache_valid;
-    return _input_cache_valid && _output_cache_valid;
+    if (!enable_cache_) return false;
+    if (!prev_stage_) return output_cache_valid_;
+    return input_cache_valid_ && output_cache_valid_;
   }
 
-  auto GetOutputCache() const -> std::shared_ptr<ImageBuffer> { return _output_cache; }
+  auto GetOutputCache() const -> std::shared_ptr<ImageBuffer> { return output_cache_; }
 
   /**
    * @brief Used to track merged stages dependent on this stage
    *
    * @param dependent
    */
-  void AddDependent(PipelineStage* dependent) { _dependents = dependent; }
-  void ResetDependents() { _dependents = nullptr; }
+  void AddDependent(PipelineStage* dependent) { dependents_ = dependent; }
+  void ResetDependents() { dependents_ = nullptr; }
 
   auto GetStageNameString() const -> std::string;
 
@@ -234,7 +234,7 @@ class PipelineStage {
 
   auto ApplyStage(OperatorParams& global_params) -> std::shared_ptr<ImageBuffer>;
 
-  auto GetStaticKernelStream() -> StaticKernelStreamType& { return _static_kernel_stream; }
+  auto GetStaticKernelStream() -> StaticKernelStreamType& { return static_kernel_stream_; }
 
   /**
    * @brief Reset this stage to initial state

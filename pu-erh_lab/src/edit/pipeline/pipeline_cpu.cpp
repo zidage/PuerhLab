@@ -36,64 +36,64 @@
 
 namespace puerhlab {
 CPUPipelineExecutor::CPUPipelineExecutor()
-    : _enable_cache(false),
-      _stages({{PipelineStageName::Image_Loading, _enable_cache, false},
-               {PipelineStageName::Geometry_Adjustment, _enable_cache, false},
-               {PipelineStageName::To_WorkingSpace, _enable_cache, true},
-               {PipelineStageName::Basic_Adjustment, _enable_cache, true},
-               {PipelineStageName::Color_Adjustment, _enable_cache, true},
-               {PipelineStageName::Detail_Adjustment, _enable_cache, true},
-               {PipelineStageName::Output_Transform, _enable_cache, true}}) {}
+    : enable_cache_(false),
+      stages_({{PipelineStageName::Image_Loading, enable_cache_, false},
+               {PipelineStageName::Geometry_Adjustment, enable_cache_, false},
+               {PipelineStageName::To_WorkingSpace, enable_cache_, true},
+               {PipelineStageName::Basic_Adjustment, enable_cache_, true},
+               {PipelineStageName::Color_Adjustment, enable_cache_, true},
+               {PipelineStageName::Detail_Adjustment, enable_cache_, true},
+               {PipelineStageName::Output_Transform, enable_cache_, true}}) {}
 
 void CPUPipelineExecutor::ResetStages() {
-  for (size_t i = 0; i < _stages.size(); i++) {
-    _stages[i].ResetAll();
+  for (size_t i = 0; i < stages_.size(); i++) {
+    stages_[i].ResetAll();
   }
 }
 
 void CPUPipelineExecutor::SetEnableCache(bool enable_cache) {
-  if (_enable_cache == enable_cache) return;
-  _enable_cache = enable_cache;
+  if (enable_cache_ == enable_cache) return;
+  enable_cache_ = enable_cache;
   // Reinitialize stages with the new cache setting
   ResetStages();
 }
 
 CPUPipelineExecutor::CPUPipelineExecutor(bool enable_cache)
-    : _enable_cache(enable_cache),
-      _stages({{PipelineStageName::Image_Loading, _enable_cache, false},
-               {PipelineStageName::Geometry_Adjustment, _enable_cache, false},
-               {PipelineStageName::To_WorkingSpace, _enable_cache, true},
-               {PipelineStageName::Basic_Adjustment, _enable_cache, true},
-               {PipelineStageName::Color_Adjustment, _enable_cache, true},
-               {PipelineStageName::Detail_Adjustment, _enable_cache, true},
-               {PipelineStageName::Output_Transform, _enable_cache, true}}) {}
+    : enable_cache_(enable_cache),
+      stages_({{PipelineStageName::Image_Loading, enable_cache_, false},
+               {PipelineStageName::Geometry_Adjustment, enable_cache_, false},
+               {PipelineStageName::To_WorkingSpace, enable_cache_, true},
+               {PipelineStageName::Basic_Adjustment, enable_cache_, true},
+               {PipelineStageName::Color_Adjustment, enable_cache_, true},
+               {PipelineStageName::Detail_Adjustment, enable_cache_, true},
+               {PipelineStageName::Output_Transform, enable_cache_, true}}) {}
 
-auto CPUPipelineExecutor::GetBackend() -> PipelineBackend { return _backend; }
+auto CPUPipelineExecutor::GetBackend() -> PipelineBackend { return backend_; }
 
 auto CPUPipelineExecutor::GetStage(PipelineStageName stage) -> PipelineStage& {
-  return _stages[static_cast<int>(stage)];
+  return stages_[static_cast<int>(stage)];
 }
 
 auto CPUPipelineExecutor::Apply(std::shared_ptr<ImageBuffer> input)
     -> std::shared_ptr<ImageBuffer> {
-  auto* first_stage = _exec_stages.front();
+  auto* first_stage = exec_stages_.front();
   if (!first_stage) {
     return input;
   }
   std::shared_ptr<ImageBuffer> output;
   if (!first_stage->CacheValid()) {
     output = std::make_shared<ImageBuffer>(input->Clone());
-    for (auto* stage : _exec_stages) {
+    for (auto* stage : exec_stages_) {
       stage->SetInputImage(output);
-      output = stage->ApplyStage(_global_params);
+      output = stage->ApplyStage(global_params_);
     }
   } else {
     // If cache is valid, use cached output
     output = first_stage->GetOutputCache();
-    for (auto* stage : _exec_stages) {
+    for (auto* stage : exec_stages_) {
       if (stage != first_stage) {
         stage->SetInputImage(output);
-        output = stage->ApplyStage(_global_params);
+        output = stage->ApplyStage(global_params_);
       }
     }
   }
@@ -102,58 +102,58 @@ auto CPUPipelineExecutor::Apply(std::shared_ptr<ImageBuffer> input)
 }
 
 void CPUPipelineExecutor::SetPreviewMode(bool is_thumbnail) {
-  _is_thumbnail     = is_thumbnail;
+  is_thumbnail_     = is_thumbnail;
 
-  _thumbnail_params = {};  // TODO: Use default params for now
-  if (!_is_thumbnail) {
+  thumbnail_params_ = {};  // TODO: Use default params for now
+  if (!is_thumbnail_) {
     // Disable resizing in image loading stage
-    _stages[static_cast<int>(PipelineStageName::Image_Loading)].EnableOperator(
+    stages_[static_cast<int>(PipelineStageName::Image_Loading)].EnableOperator(
         OperatorType::RESIZE,
         false);  // If RESIZE operator not exist, this function will do nothing
     return;
   }
-  _stages[static_cast<int>(PipelineStageName::Geometry_Adjustment)].SetOperator(
-      OperatorType::RESIZE, _thumbnail_params);
+  stages_[static_cast<int>(PipelineStageName::Geometry_Adjustment)].SetOperator(
+      OperatorType::RESIZE, thumbnail_params_);
 }
 
 void CPUPipelineExecutor::SetExecutionStages() {
-  _exec_stages.clear();
+  exec_stages_.clear();
   std::vector<PipelineStage*> streamable_stages;
 
   auto merged = std::make_unique<PipelineStage>(PipelineStageName::Merged_Stage, true, true);
 
-  _exec_stages.push_back(&_stages[static_cast<int>(PipelineStageName::Image_Loading)]);
-  _exec_stages.push_back(&_stages[static_cast<int>(PipelineStageName::Geometry_Adjustment)]);
-  _exec_stages.push_back(merged.get());
+  exec_stages_.push_back(&stages_[static_cast<int>(PipelineStageName::Image_Loading)]);
+  exec_stages_.push_back(&stages_[static_cast<int>(PipelineStageName::Geometry_Adjustment)]);
+  exec_stages_.push_back(merged.get());
 
-  _merged_stages = std::move(merged);
+  merged_stages_ = std::move(merged);
 
-  for (size_t i = 2; i < _stages.size(); i++) {
-    PipelineStage& stage = _stages[i];
-    stage.AddDependent(_merged_stages.get());
+  for (size_t i = 2; i < stages_.size(); i++) {
+    PipelineStage& stage = stages_[i];
+    stage.AddDependent(merged_stages_.get());
   }
 
   // Chain the execution stages
-  for (size_t i = 0; i < _exec_stages.size(); i++) {
-    PipelineStage* prev_stage = (i > 0) ? _exec_stages[i - 1] : nullptr;
-    PipelineStage* next_stage = (i < _exec_stages.size() - 1) ? _exec_stages[i + 1] : nullptr;
-    _exec_stages[i]->SetNeighbors(prev_stage, next_stage);
+  for (size_t i = 0; i < exec_stages_.size(); i++) {
+    PipelineStage* prev_stage = (i > 0) ? exec_stages_[i - 1] : nullptr;
+    PipelineStage* next_stage = (i < exec_stages_.size() - 1) ? exec_stages_[i + 1] : nullptr;
+    exec_stages_[i]->SetNeighbors(prev_stage, next_stage);
   }
 }
 
 void CPUPipelineExecutor::ResetExecutionStages() {
-  for (auto& stage : _stages) {
+  for (auto& stage : stages_) {
     stage.ResetDependents();
     stage.ResetNeighbors();
     stage.ResetCache();
   }
-  _exec_stages.clear();
-  _merged_stages.reset();
+  exec_stages_.clear();
+  merged_stages_.reset();
 }
 
 auto CPUPipelineExecutor::ExportPipelineParams() const -> nlohmann::json {
   nlohmann::json j;
-  for (const auto& stage : _stages) {
+  for (const auto& stage : stages_) {
     nlohmann::json stage_json     = stage.ExportStageParams();
     j[stage.GetStageNameString()] = std::move(stage_json);
   }
@@ -162,7 +162,7 @@ auto CPUPipelineExecutor::ExportPipelineParams() const -> nlohmann::json {
 
 void CPUPipelineExecutor::ImportPipelineParams(const nlohmann::json& j) {
   ResetExecutionStages();
-  for (auto& stage : _stages) {
+  for (auto& stage : stages_) {
     std::string stage_name = stage.GetStageNameString();
     if (j.contains(stage_name)) {
       nlohmann::json stage_json = j[stage_name];

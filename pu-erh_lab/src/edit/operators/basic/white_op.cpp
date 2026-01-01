@@ -19,35 +19,35 @@
 #include "image/image_buffer.hpp"
 
 namespace puerhlab {
-WhiteOp::WhiteOp(float offset) : _offset(offset) {}
+WhiteOp::WhiteOp(float offset) : offset_(offset) {}
 
 WhiteOp::WhiteOp(const nlohmann::json& params) { SetParams(params); }
-auto WhiteOp::GetScale() -> float { return _offset / 3.0f; }
+auto WhiteOp::GetScale() -> float { return offset_ / 3.0f; }
 
 void WhiteOp::Apply(std::shared_ptr<ImageBuffer> input) { (void)input; }
 
 
-auto WhiteOp::GetParams() const -> nlohmann::json { return {_script_name, _offset}; }
+auto WhiteOp::GetParams() const -> nlohmann::json { return {script_name_, offset_}; }
 
 void WhiteOp::SetParams(const nlohmann::json& params) {
-  if (!params.contains(_script_name)) {
-    _offset      = 0.0f;
-    _y_intercept = 1.0f;
-    _black_point = 0.0f;
-    _slope       = 1.0f;
+  if (!params.contains(script_name_)) {
+    offset_      = 0.0f;
+    y_intercept_ = 1.0f;
+    black_point_ = 0.0f;
+    slope_       = 1.0f;
   } else {
-    _offset      = params[_script_name].get<float>() / 100.0f;
-    _y_intercept = 1.0f + _offset / 3.0f;
-    _black_point = 0.0f;
-    _slope       = (_y_intercept - _black_point) / 1.0f;
+    offset_      = params[script_name_].get<float>() / 100.0f;
+    y_intercept_ = 1.0f + offset_ / 3.0f;
+    black_point_ = 0.0f;
+    slope_       = (y_intercept_ - black_point_) / 1.0f;
   }
-  _y_intercept_vec = simple_simd::set1_f32(_y_intercept);
-  _black_point_vec = simple_simd::set1_f32(_black_point);
-  _slope_vec       = simple_simd::set1_f32(_slope);
+  y_intercept_vec_ = simple_simd::set1_f32(y_intercept_);
+  black_point_vec_ = simple_simd::set1_f32(black_point_);
+  slope_vec_       = simple_simd::set1_f32(slope_);
 }
 
 void WhiteOp::SetGlobalParams(OperatorParams& params) const {
-  params.white_point = _y_intercept;
-  params.slope       = (params.white_point - params.black_point);
+  params.white_point_ = y_intercept_;
+  params.slope_       = (params.white_point_ - params.black_point_);
 }
 }  // namespace puerhlab

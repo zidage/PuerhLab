@@ -36,12 +36,12 @@ class ThreadPool {
   void Submit(std::function<void()> task);
 
  private:
-  std::queue<std::function<void()>> tasks;
-  std::mutex                        mtx;
-  std::condition_variable           condition;
-  std::vector<std::thread>          workers;
+  std::queue<std::function<void()>> tasks_;
+  std::mutex                        mtx_;
+  std::condition_variable           condition_;
+  std::vector<std::thread>          workers_;
 
-  bool                              stop;
+  bool                              stop_;
 
   void                              WorkerThread();
 };

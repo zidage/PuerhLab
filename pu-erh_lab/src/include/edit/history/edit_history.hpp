@@ -27,9 +27,9 @@
 namespace puerhlab {
 class VersionNode {
  public:
-  Version& _ver_ref;
+  Version& ver_ref_;
   // std::list<VersionNode> _branch; // TODO: Not support branching for now
-  p_hash_t _commit_id;
+  p_hash_t commit_id_;
 
  public:
   VersionNode(Version& ver_ref);
@@ -44,15 +44,15 @@ using history_id_t = Hash128;
  */
 class EditHistory {
  private:
-  history_id_t                              _history_id;
-  sl_element_id_t                           _bound_image;
+  history_id_t                              history_id_;
+  sl_element_id_t                           bound_image_;
 
-  std::time_t                               _added_time;
-  std::time_t                               _last_modified_time;
+  std::time_t                               added_time_;
+  std::time_t                               last_modified_time_;
 
-  std::list<VersionNode>                    _commit_tree;
+  std::list<VersionNode>                    commit_tree_;
 
-  std::unordered_map<history_id_t, Version> _version_storage;
+  std::unordered_map<history_id_t, Version> version_storage_;
 
   void                                      CalculateHistoryID();
 

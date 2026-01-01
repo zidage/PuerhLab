@@ -39,9 +39,9 @@ namespace puerhlab {
  * @param total_request
  */
 DecoderScheduler::DecoderScheduler(size_t thread_count, std::shared_ptr<BufferQueue> decoded_buffer)
-    : _file_read_thread_pool(thread_count),
-      _thread_pool(thread_count),
-      _decoded_buffer(decoded_buffer) {}
+    : file_read_thread_pool_(thread_count),
+      thread_pool_(thread_count),
+      decoded_buffer_(decoded_buffer) {}
 
 /**
  * @brief Schedule a decode task for initialize image data. The decode type can only be
@@ -52,7 +52,7 @@ DecoderScheduler::DecoderScheduler(size_t thread_count, std::shared_ptr<BufferQu
  */
 void DecoderScheduler::ScheduleDecode(image_id_t id, image_path_t image_path,
                                       std::shared_ptr<std::promise<image_id_t>> decode_promise) {
-  _file_read_thread_pool.Submit([id, image_path, decode_promise, this] {
+  file_read_thread_pool_.Submit([id, image_path, decode_promise, this] {
     // Open file as an ifstream
 
     std::ifstream file(image_path, std::ios::binary | std::ios::ate);
@@ -79,7 +79,7 @@ void DecoderScheduler::ScheduleDecode(image_id_t id, image_path_t image_path,
     file.close();
 
     // Submit a new decode request
-    auto&                 decoded_buffer = _decoded_buffer;
+    auto&                 decoded_buffer = decoded_buffer_;
     std::filesystem::path file_path(image_path);
 
     // auto                  task = std::make_shared<std::packaged_task<void()>>(
@@ -88,7 +88,7 @@ void DecoderScheduler::ScheduleDecode(image_id_t id, image_path_t image_path,
     //       decoder->Decode(std::move(buffer), file_path, decoded_buffer, id, decode_promise);
     //     });
 
-    _thread_pool.Submit([decoder, buffer = std::move(buffer), file_path, decoded_buffer, id,
+    thread_pool_.Submit([decoder, buffer = std::move(buffer), file_path, decoded_buffer, id,
                          decode_promise]() mutable {
       decoder->Decode(std::move(buffer), file_path, decoded_buffer, id, decode_promise);
     });
@@ -105,7 +105,7 @@ void DecoderScheduler::ScheduleDecode(std::shared_ptr<Image> source_img, DecodeT
                                       std::shared_ptr<std::promise<image_id_t>> decode_promise) {
   // Open file as an ifstream
 
-  std::ifstream file(source_img->_image_path, std::ios::binary | std::ios::ate);
+  std::ifstream file(source_img->image_path_, std::ios::binary | std::ios::ate);
 
   if (!file.is_open()) {
     // Check file status
@@ -145,10 +145,10 @@ void DecoderScheduler::ScheduleDecode(std::shared_ptr<Image> source_img, DecodeT
   file.close();
 
   // Submit a new decode request
-  auto                  decoded_buffer = _decoded_buffer;
-  std::filesystem::path file_path(source_img->_image_path);
+  auto                  decoded_buffer = decoded_buffer_;
+  std::filesystem::path file_path(source_img->image_path_);
 
-  _thread_pool.Submit(
+  thread_pool_.Submit(
       [decoder, buffer = std::move(buffer), decoded_buffer, source_img, decode_promise]() mutable {
         decoder->Decode(std::move(buffer), source_img, decoded_buffer, decode_promise);
       });

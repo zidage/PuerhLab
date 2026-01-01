@@ -26,34 +26,33 @@ class SharpenOp : public OperatorBase<SharpenOp> {
    * @brief Offset to the sharpness of the image, ranging from 0 to 100
    *
    */
-  float _offset    = 0.0f;
+  float offset_    = 0.0f;
   /**
    * @brief Scaled offset to the sharpness of the image, ranging from 0 to 1.0f
    *
    */
-  float _scale     = 0.0f;
+  float scale_     = 0.0f;
 
   /**
    * @brief The USM radius
    *
    */
-  float _radius    = 1.0f;
+  float radius_    = 1.0f;
   /**
    * @brief A threshold limiting the sharpening effect, like the "Mask" option in ACR's sharpening
    * module
    *
    */
-  float _threshold = 0.0f;
+  float threshold_ = 0.0f;
 
   void  ComputeScale();
 
  public:
-  static constexpr PriorityLevel     _priority_level    = 8;
-  static constexpr PipelineStageName _affiliation_stage = PipelineStageName::Detail_Adjustment;
-  static constexpr std::string_view  _canonical_name    = "Sharpen";
-  static constexpr std::string_view  _script_name       = "sharpen";
-  static constexpr OperatorType      _operator_type     = OperatorType::SHARPEN;
-
+  static constexpr PriorityLevel     priority_level_    = 8;
+  static constexpr PipelineStageName affiliation_stage_ = PipelineStageName::Detail_Adjustment;
+  static constexpr std::string_view  canonical_name_    = "Sharpen";
+  static constexpr std::string_view  script_name_       = "sharpen";
+  static constexpr OperatorType      operator_type_     = OperatorType::SHARPEN;
   SharpenOp()                                           = default;
   SharpenOp(float offset, float radius, float threshold);
   SharpenOp(const nlohmann::json& params);

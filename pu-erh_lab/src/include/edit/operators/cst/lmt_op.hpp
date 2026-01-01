@@ -32,19 +32,19 @@ namespace OCIO = OCIO_NAMESPACE;
  */
 class OCIO_LMT_Transform_Op : public OperatorBase<OCIO_LMT_Transform_Op> {
  private:
-  std::filesystem::path        _lmt_path;
-  OCIO::ConstConfigRcPtr       config;
+  std::filesystem::path        lmt_path_;
+  OCIO::ConstConfigRcPtr       config_;
 
-  OCIO::ConstCPUProcessorRcPtr cpu_processor;
-  OCIO::ConstGPUProcessorRcPtr gpu_processor;
+  OCIO::ConstCPUProcessorRcPtr cpu_processor_;
+  OCIO::ConstGPUProcessorRcPtr gpu_processor_;
 
  public:
-  static constexpr PriorityLevel     _priority_level    = 3;
+  static constexpr PriorityLevel     priority_level_    = 3;
   // DO NOT USE THIS
-  static constexpr PipelineStageName _affiliation_stage = PipelineStageName::Output_Transform;
-  static constexpr std::string_view  _canonical_name    = "OCIO LMT";
-  static constexpr std::string_view  _script_name       = "ocio_lmt";
-  static constexpr OperatorType      _operator_type     = OperatorType::LMT;
+  static constexpr PipelineStageName affiliation_stage_ = PipelineStageName::Output_Transform;
+  static constexpr std::string_view  canonical_name_    = "OCIO LMT";
+  static constexpr std::string_view  script_name_       = "ocio_lmt";
+  static constexpr OperatorType      operator_type_     = OperatorType::LMT;
 
   OCIO_LMT_Transform_Op()                               = delete;
   OCIO_LMT_Transform_Op(std::filesystem::path& lmt_path);

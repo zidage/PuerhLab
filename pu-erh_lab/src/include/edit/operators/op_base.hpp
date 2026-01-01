@@ -67,110 +67,110 @@ enum class OperatorType : int {
 
 struct OperatorParams {
   // Basic adjustment parameters
-  bool                         exposure_enabled         = true;
-  float                        exposure_offset          = 0.0f;
+  bool                         exposure_enabled_         = true;
+  float                        exposure_offset_          = 0.0f;
 
-  bool                         contrast_enabled         = false;
-  float                        contrast_scale           = 0.0f;
+  bool                         contrast_enabled_         = false;
+  float                        contrast_scale_           = 0.0f;
 
   // Shadows adjustment parameter
-  bool                         shadows_enabled          = true;
-  float                        shadows_offset           = 0.0f;
-  float                        shadows_x0               = 0.0f;
-  float                        shadows_x1               = 0.25f;
-  float                        shadows_y0               = 0.0f;
-  float                        shadows_y1               = 0.25f;
-  float                        shadows_m0               = 0.0f;
-  float                        shadows_m1               = 1.0f;
-  float                        shadows_dx               = 0.25f;
+  bool                         shadows_enabled_          = true;
+  float                        shadows_offset_           = 0.0f;
+  float                        shadows_x0_               = 0.0f;
+  float                        shadows_x1_               = 0.25f;
+  float                        shadows_y0_               = 0.0f;
+  float                        shadows_y1_               = 0.25f;
+  float                        shadows_m0_               = 0.0f;
+  float                        shadows_m1_               = 1.0f;
+  float                        shadows_dx_               = 0.25f;
 
   // Highlights adjustment parameter
-  bool                         highlights_enabled       = true;
-  const float                  highlights_k             = 0.2f;
-  float                        highlights_offset        = 0.0f;
-  const float                  highlights_slope_range   = 0.8f;
-  float                        highlights_m0            = 1.0f;
-  float                        highlights_m1            = 1.0f;
-  float                        highlights_x0            = 0.2f;
-  float                        highlights_y0            = 0.2f;
-  float                        highlights_y1            = 1.0f;
-  float                        highlights_dx            = 0.8f;
+  bool                         highlights_enabled_       = true;
+  const float                  highlights_k_             = 0.2f;
+  float                        highlights_offset_        = 0.0f;
+  const float                  highlights_slope_range_   = 0.8f;
+  float                        highlights_m0_            = 1.0f;
+  float                        highlights_m1_            = 1.0f;
+  float                        highlights_x0_            = 0.2f;
+  float                        highlights_y0_            = 0.2f;
+  float                        highlights_y1_            = 1.0f;
+  float                        highlights_dx_            = 0.8f;
 
   // White and Black point adjustment parameters
-  bool                         white_enabled            = true;
-  float                        white_point              = 1.0f;
+  bool                         white_enabled_            = true;
+  float                        white_point_              = 1.0f;
 
-  bool                         black_enabled            = true;
-  float                        black_point              = 0.0f;
+  bool                         black_enabled_            = true;
+  float                        black_point_              = 0.0f;
 
-  float                        slope                    = 1.0f;
+  float                        slope_                    = 1.0f;
   // HLS adjustment parameters
-  bool                         hls_enabled              = true;
-  float                        target_hls[3]            = {0.0f, 0.0f, 0.0f};
-  float                        hls_adjustment[3]        = {0.0f, 0.0f, 0.0f};
-  float                        hue_range                = 0.0f;
-  float                        lightness_range          = 0.0f;
-  float                        saturation_range         = 0.0f;
+  bool                         hls_enabled_              = true;
+  float                        target_hls_[3]            = {0.0f, 0.0f, 0.0f};
+  float                        hls_adjustment_[3]        = {0.0f, 0.0f, 0.0f};
+  float                        hue_range_                = 0.0f;
+  float                        lightness_range_          = 0.0f;
+  float                        saturation_range_         = 0.0f;
 
   // Saturation adjustment parameter
-  bool                         saturation_enabled       = false;
-  float                        saturation_offset        = 0.0f;
+  bool                         saturation_enabled_       = false;
+  float                        saturation_offset_        = 0.0f;
 
   // Tint adjustment parameter
-  bool                         tint_enabled             = true;
-  float                        tint_offset              = 0.0f;
+  bool                         tint_enabled_             = true;
+  float                        tint_offset_              = 0.0f;
 
   // Vibrance adjustment parameter
-  bool                         vibrance_enabled         = true;
-  float                        vibrance_offset          = 0.0f;
+  bool                         vibrance_enabled_         = true;
+  float                        vibrance_offset_          = 0.0f;
 
   // Working space
-  bool                         to_ws_enabled            = true;
-  bool                         is_working_space         = true;
-  bool                         to_ws_dirty              = false;
-  OCIO::ConstCPUProcessorRcPtr cpu_to_working_processor = nullptr;
-  OCIO::ConstGPUProcessorRcPtr gpu_to_working_processor = nullptr;
-  OCIO::BakerRcPtr             to_ws_lut_baker          = nullptr;
+  bool                         to_ws_enabled_            = true;
+  bool                         is_working_space_         = true;
+  bool                         to_ws_dirty_              = false;
+  OCIO::ConstCPUProcessorRcPtr cpu_to_working_processor_ = nullptr;
+  OCIO::ConstGPUProcessorRcPtr gpu_to_working_processor_ = nullptr;
+  OCIO::BakerRcPtr             to_ws_lut_baker_          = nullptr;
 
   // Look modification transform
-  bool                         lmt_enabled              = false;
-  bool                         to_lmt_dirty             = false;
-  OCIO::ConstCPUProcessorRcPtr cpu_lmt_processor        = nullptr;
-  OCIO::ConstGPUProcessorRcPtr gpu_lmt_processor        = nullptr;
-  std::filesystem::path        lmt_lut_path                 = {};
+  bool                         lmt_enabled_              = false;
+  bool                         to_lmt_dirty_             = false;
+  OCIO::ConstCPUProcessorRcPtr cpu_lmt_processor_        = nullptr;
+  OCIO::ConstGPUProcessorRcPtr gpu_lmt_processor_        = nullptr;
+  std::filesystem::path        lmt_lut_path_                 = {};
 
   // To output space
-  bool                         to_output_enabled       = true;
-  bool                         to_output_dirty         = false;
-  OCIO::ConstCPUProcessorRcPtr cpu_to_output_processor = nullptr;
-  OCIO::ConstGPUProcessorRcPtr gpu_to_output_processor = nullptr;
-  OCIO::BakerRcPtr             to_output_lut_baker     = nullptr;
+  bool                         to_output_enabled_       = true;
+  bool                         to_output_dirty_         = false;
+  OCIO::ConstCPUProcessorRcPtr cpu_to_output_processor_ = nullptr;
+  OCIO::ConstGPUProcessorRcPtr gpu_to_output_processor_ = nullptr;
+  OCIO::BakerRcPtr             to_output_lut_baker_     = nullptr;
 
   // Curve adjustment parameters
-  bool                         curve_enabled           = false;
-  std::vector<cv::Point2f>     curve_ctrl_pts          = {};
-  std::vector<float>           curve_h                 = {};
-  std::vector<float>           curve_m                 = {};
+  bool                         curve_enabled_           = false;
+  std::vector<cv::Point2f>     curve_ctrl_pts_          = {};
+  std::vector<float>           curve_h_                 = {};
+  std::vector<float>           curve_m_                 = {};
 
   // Clarity adjustment parameter
-  bool                         clarity_enabled         = true;
-  float                        clarity_offset          = 0.0f;
-  float                        clarity_radius          = 5.0f;
+  bool                         clarity_enabled_         = true;
+  float                        clarity_offset_          = 0.0f;
+  float                        clarity_radius_          = 5.0f;
 
   // Sharpen adjustment parameter
-  bool                         sharpen_enabled         = true;
-  float                        sharpen_offset          = 0.0f;
-  float                        sharpen_radius          = 3.0f;
-  float                        sharpen_threshold       = 0.0f;
+  bool                         sharpen_enabled_         = true;
+  float                        sharpen_offset_          = 0.0f;
+  float                        sharpen_radius_          = 3.0f;
+  float                        sharpen_threshold_       = 0.0f;
 
   // Color wheel adjustment parameters
-  bool                         color_wheel_enabled     = true;
-  float                        lift_color_offset[3]    = {0.0f, 0.0f, 0.0f};
-  float                        lift_luminance_offset   = 0.0f;
-  float                        gamma_color_offset[3]   = {1.0f, 1.0f, 1.0f};
-  float                        gamma_luminance_offset  = 0.0f;
-  float                        gain_color_offset[3]    = {1.0f, 1.0f, 1.0f};
-  float                        gain_luminance_offset   = 0.0f;
+  bool                         color_wheel_enabled_     = true;
+  float                        lift_color_offset_[3]    = {0.0f, 0.0f, 0.0f};
+  float                        lift_luminance_offset_   = 0.0f;
+  float                        gamma_color_offset_[3]   = {1.0f, 1.0f, 1.0f};
+  float                        gamma_luminance_offset_  = 0.0f;
+  float                        gain_color_offset_[3]    = {1.0f, 1.0f, 1.0f};
+  float                        gain_luminance_offset_   = 0.0f;
 };
 
 class IOperatorBase {
@@ -223,32 +223,32 @@ class OperatorBase : public IOperatorBase {
    * @return std::string
    */
   virtual auto GetCanonicalName() const -> std::string {
-    return std::string(Derived::_canonical_name);
+    return std::string(Derived::canonical_name_);
   }
   /**
    * @brief Get the script name of the operator (for JSON serialization)
    *
    * @return std::string
    */
-  auto GetScriptName() const -> std::string override { return std::string(Derived::_script_name); }
+  auto GetScriptName() const -> std::string override { return std::string(Derived::script_name_); }
 
-  auto GetPriorityLevel() const -> PriorityLevel override { return Derived::_priority_level; }
+  auto GetPriorityLevel() const -> PriorityLevel override { return Derived::priority_level_; }
 
-  auto GetStage() const -> PipelineStageName override { return Derived::_affiliation_stage; }
+  auto GetStage() const -> PipelineStageName override { return Derived::affiliation_stage_; }
 
-  auto GetOperatorType() const -> OperatorType override { return Derived::_operator_type; }
+  auto GetOperatorType() const -> OperatorType override { return Derived::operator_type_; }
 };
 
 struct OpStream {
-  std::vector<std::shared_ptr<IOperatorBase>> _ops;
+  std::vector<std::shared_ptr<IOperatorBase>> ops_;
 
   bool AddToStream(const std::shared_ptr<IOperatorBase>& op) {
     // Ensure all kernels in the stream are of the same type
-    _ops.push_back(op);
+    ops_.push_back(op);
     return true;
   }
 
-  void Clear() { _ops.clear(); }
+  void Clear() { ops_.clear(); }
 };
 
 };  // namespace puerhlab

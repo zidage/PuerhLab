@@ -23,17 +23,16 @@ class VibranceOp : public OperatorBase<VibranceOp> {
    * @brief An relative number for adjusting the vibrance (natural saturation)
    *
    */
-  float _vibrance_offset;
+  float vibrance_offset_;
 
   auto  ComputeScale(float chroma) -> float;
 
  public:
-  static constexpr PriorityLevel     _priority_level    = 7;
-  static constexpr PipelineStageName _affiliation_stage = PipelineStageName::Color_Adjustment;
-  static constexpr std::string_view  _canonical_name    = "Vibrance";
-  static constexpr std::string_view  _script_name       = "vibrance";
-  static constexpr OperatorType      _operator_type     = OperatorType::VIBRANCE;
-
+  static constexpr PriorityLevel     priority_level_    = 7;
+  static constexpr PipelineStageName affiliation_stage_ = PipelineStageName::Color_Adjustment;
+  static constexpr std::string_view  canonical_name_    = "Vibrance";
+  static constexpr std::string_view  script_name_       = "vibrance";
+  static constexpr OperatorType      operator_type_     = OperatorType::VIBRANCE;
   VibranceOp();
   VibranceOp(float vibrance_offset);
   VibranceOp(const nlohmann::json& params);

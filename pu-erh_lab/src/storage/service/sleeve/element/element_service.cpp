@@ -32,26 +32,26 @@ auto ElementService::ToParams(const std::shared_ptr<SleeveElement>& source) -> E
   char added_time[32];
   char modified_time[32];
   std::strftime(added_time, sizeof(added_time), "%Y-%m-%d %H:%M:%S",
-                std::gmtime(&source->_added_time));
+                std::gmtime(&source->added_time_));
   std::strftime(modified_time, sizeof(modified_time), "%Y-%m-%d %H:%M:%S",
-                std::gmtime(&source->_last_modified_time));
+                std::gmtime(&source->last_modified_time_));
 
-  std::string utf_8_str = conv::ToBytes(source->_element_name);
-  return {source->_element_id,
-          static_cast<uint32_t>(source->_type),
+  std::string utf_8_str = conv::ToBytes(source->element_name_);
+  return {source->element_id_,
+          static_cast<uint32_t>(source->type_),
           std::make_unique<std::string>(utf_8_str),
           std::make_unique<std::string>(added_time),
           std::make_unique<std::string>(modified_time),
-          source->_ref_count};
+          source->ref_count_};
 }
 
 auto ElementService::FromParams(ElementMapperParams&& param) -> std::shared_ptr<SleeveElement> {
-  auto               id                = param.id;
-  auto               type              = static_cast<ElementType>(param.type);
-  auto               element_name      = conv::FromBytes(std::move(*param.element_name));
-  auto               added_time_str    = std::move(*param.added_time);
-  auto               modified_time_str = std::move(*param.modified_time);
-  auto               ref_count         = param.ref_count;
+  auto               id                = param.id_;
+  auto               type              = static_cast<ElementType>(param.type_);
+  auto               element_name      = conv::FromBytes(std::move(*param.element_name_));
+  auto               added_time_str    = std::move(*param.added_time_);
+  auto               modified_time_str = std::move(*param.modified_time_);
+  auto               ref_count         = param.ref_count_;
 
   std::tm            tm_added{};
   std::tm            tm_modified{};
@@ -69,9 +69,9 @@ auto ElementService::FromParams(ElementMapperParams&& param) -> std::shared_ptr<
     throw std::runtime_error("ElementService: Invalid ElementMapperParams");
   }
 
-  element->_added_time         = std::mktime(&tm_added);
-  element->_last_modified_time = std::mktime(&tm_modified);
-  element->_ref_count          = ref_count;
+  element->added_time_         = std::mktime(&tm_added);
+  element->last_modified_time_ = std::mktime(&tm_modified);
+  element->ref_count_          = ref_count;
 
   return element;
 }

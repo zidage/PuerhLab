@@ -63,24 +63,24 @@ enum class CompareOp {
 using FilterValue = std::variant<std::monostate, int64_t, double, bool, std::wstring, std::tm>;
 
 struct FieldCondition {
-  FilterField                field;
-  CompareOp                  op;
-  FilterValue                value;
-  std::optional<FilterValue> second_value = std::nullopt;  // Used for BETWEEN condition
+  FilterField                field_;
+  CompareOp                  op_;
+  FilterValue                value_;
+  std::optional<FilterValue> second_value_ = std::nullopt;  // Used for BETWEEN condition
 };
 
 struct FilterNode {
-  enum class Type { Logical, Condition, RawSQL } type;
+  enum class Type { Logical, Condition, RawSQL } type_;
 
   // For Logical nodes
-  FilterOp                      op;
-  std::vector<FilterNode>       children;
+  FilterOp                      op_;
+  std::vector<FilterNode>       children_;
 
   // For Condition nodes
-  std::optional<FieldCondition> condition;
+  std::optional<FieldCondition> condition_;
 
   // For RawSQL nodes
-  std::optional<std::wstring>   raw_sql;
+  std::optional<std::wstring>   raw_sql_;
 };
 
 /**
@@ -90,8 +90,8 @@ struct FilterNode {
 class FilterSQLCompiler {
  public:
   struct Result {
-    std::wstring             where_clause;
-    std::vector<FilterValue> params;
+    std::wstring             where_clause_;
+    std::vector<FilterValue> params_;
   };
 
   static std::wstring Compile(const FilterNode& node);
@@ -105,18 +105,18 @@ class FilterSQLCompiler {
 
 class FilterCombo {
  public:
-  filter_id_t filter_id;
+  filter_id_t filter_id_;
 
  private:
-  FilterNode _root;
+  FilterNode root_;
 
  public:
   FilterCombo() = default;
-  FilterCombo(const filter_id_t id, const FilterNode& root) : filter_id(id), _root(root) {}
+  FilterCombo(const filter_id_t id, const FilterNode& root) : filter_id_(id), root_(root) {}
 
-  const FilterNode& GetRoot() const { return _root; }
+  const FilterNode& GetRoot() const { return root_; }
 
-  void              SetRoot(const FilterNode& root) { _root = root; }
+  void              SetRoot(const FilterNode& root) { root_ = root; }
 
   auto              GenerateSQLOn(sl_element_id_t parent_id) const -> std::wstring;
 };

@@ -19,13 +19,13 @@
 class MemoryLeakDetector {
 public:
     MemoryLeakDetector() {
-        _CrtMemCheckpoint(&memState_);
+        _CrtMemCheckpoint(&mem_state_);
     }
 
     ~MemoryLeakDetector() {
         _CrtMemState stateNow, stateDiff;
         _CrtMemCheckpoint(&stateNow);
-        int diffResult = _CrtMemDifference(&stateDiff, &memState_, &stateNow);
+        int diffResult = _CrtMemDifference(&stateDiff, &mem_state_, &stateNow);
         if (diffResult)
             reportFailure(stateDiff.lSizes[1]);
     }
@@ -33,5 +33,5 @@ private:
     void reportFailure(unsigned int unfreedBytes) {
         FAIL() << "Memory leak of " << unfreedBytes << " byte(s) detected.";
     }
-    _CrtMemState memState_;
+    _CrtMemState mem_state_;
 };

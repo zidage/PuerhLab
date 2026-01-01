@@ -23,10 +23,10 @@
 
 namespace puerhlab {
 ImagePoolManager::ImagePoolManager()
-    : _capacity_thumb(_default_capacity_thumb), _capacity_full(_default_capacity_full) {}
+    : capacity_thumb_(default_capacity_thumb_), capacity_full_(default_capacity_full_) {}
 
 ImagePoolManager::ImagePoolManager(uint32_t capacity_thumb, uint32_t capacity_full)
-    : _capacity_thumb(capacity_thumb), _capacity_full(capacity_full) {}
+    : capacity_thumb_(capacity_thumb), capacity_full_(capacity_full) {}
 
 /**
  * @brief
@@ -34,7 +34,7 @@ ImagePoolManager::ImagePoolManager(uint32_t capacity_thumb, uint32_t capacity_fu
  * @return std::unordered_map<image_id_t, std::shared_ptr<Image>>
  */
 auto ImagePoolManager::GetPool() -> std::unordered_map<image_id_t, std::shared_ptr<Image>>& {
-  return _image_pool;
+  return image_pool_;
 }
 
 /**
@@ -43,7 +43,7 @@ auto ImagePoolManager::GetPool() -> std::unordered_map<image_id_t, std::shared_p
  * @param img
  */
 void ImagePoolManager::Insert(const std::shared_ptr<Image> img) {
-  _image_pool[img->_image_id] = img;
+  image_pool_[img->image_id_] = img;
 }
 
 /**
@@ -54,19 +54,19 @@ void ImagePoolManager::Insert(const std::shared_ptr<Image> img) {
  * @return false image not exists
  */
 auto ImagePoolManager::PoolContains(const image_id_t& id) -> bool {
-  return _image_pool.contains(id);
+  return image_pool_.contains(id);
 }
 
 auto ImagePoolManager::Capacity(AccessType type) -> uint32_t {
   switch (type) {
     case AccessType::FULL_IMG: {
-      return _capacity_full;
+      return capacity_full_;
     }
     case AccessType::THUMB: {
-      return _capacity_thumb;
+      return capacity_thumb_;
     }
     case AccessType::META:
-      return _image_pool.size();
+      return image_pool_.size();
   }
   return 0;
 }
@@ -81,26 +81,26 @@ auto ImagePoolManager::AccessElement(const image_id_t& id, const AccessType type
     -> std::optional<std::weak_ptr<Image>> {
   switch (type) {
     case AccessType::FULL_IMG: {
-      auto it = _cache_map_full.find(id);
-      if (it == _cache_map_full.end()) {
+      auto it = cache_map_full_.find(id);
+      if (it == cache_map_full_.end()) {
         return std::nullopt;
       }
       // LRU, place the most recent record to the front
-      _cache_list_full.splice(_cache_list_full.begin(), _cache_list_full, it->second);
-      return _image_pool[it->first];
+      cache_list_full_.splice(cache_list_full_.begin(), cache_list_full_, it->second);
+      return image_pool_[it->first];
     }
     case AccessType::THUMB: {
-      auto it = _cache_map_thumb.find(id);
-      if (it == _cache_map_thumb.end()) {
+      auto it = cache_map_thumb_.find(id);
+      if (it == cache_map_thumb_.end()) {
         return std::nullopt;
       }
       // LRU, place the most recent record to the front
-      _cache_list_thumb.splice(_cache_list_thumb.begin(), _cache_list_thumb, it->second);
-      return _image_pool[it->first];
+      cache_list_thumb_.splice(cache_list_thumb_.begin(), cache_list_thumb_, it->second);
+      return image_pool_[it->first];
     }
     case AccessType::META:
       // For empty image, return it from the pool directly
-      return _image_pool.at(id);
+      return image_pool_.at(id);
   }
   return std::nullopt;
 }
@@ -114,37 +114,37 @@ auto ImagePoolManager::AccessElement(const image_id_t& id, const AccessType type
 void ImagePoolManager::RecordAccess(const image_id_t& id, const AccessType type) {
   switch (type) {
     case AccessType::FULL_IMG: {
-      auto it = _cache_map_full.find(id);
-      if (it == _cache_map_full.end()) {
-        if (_cache_list_full.size() >= _capacity_full) {
+      auto it = cache_map_full_.find(id);
+      if (it == cache_map_full_.end()) {
+        if (cache_list_full_.size() >= capacity_full_) {
           Evict(type);
         }
         // Place the new-added record to the front
-        _cache_list_full.push_front(id);
-        _cache_map_full[id] = _cache_list_full.begin();
+        cache_list_full_.push_front(id);
+        cache_map_full_[id] = cache_list_full_.begin();
       } else {
-        _cache_list_full.splice(_cache_list_full.begin(), _cache_list_full, it->second);
-        if (_cache_list_full.front() != id) {
-          _cache_list_full.front() = id;
+        cache_list_full_.splice(cache_list_full_.begin(), cache_list_full_, it->second);
+        if (cache_list_full_.front() != id) {
+          cache_list_full_.front() = id;
         }
-        _with_full.insert(id);
+        with_full_.insert(id);
       }
       break;
     }
     case AccessType::THUMB: {
-      auto it = _cache_map_thumb.find(id);
-      if (it == _cache_map_thumb.end()) {
-        if (_cache_list_thumb.size() >= _capacity_thumb) {
+      auto it = cache_map_thumb_.find(id);
+      if (it == cache_map_thumb_.end()) {
+        if (cache_list_thumb_.size() >= capacity_thumb_) {
           Evict(type);
         }
-        _cache_list_thumb.push_front(id);
-        _cache_map_thumb[id] = _cache_list_thumb.begin();
+        cache_list_thumb_.push_front(id);
+        cache_map_thumb_[id] = cache_list_thumb_.begin();
       } else {
-        _cache_list_thumb.splice(_cache_list_thumb.begin(), _cache_list_thumb, it->second);
-        if (_cache_list_thumb.front() != id) {
-          _cache_list_thumb.front() = id;
+        cache_list_thumb_.splice(cache_list_thumb_.begin(), cache_list_thumb_, it->second);
+        if (cache_list_thumb_.front() != id) {
+          cache_list_thumb_.front() = id;
         }
-        _with_thumb.insert(id);
+        with_thumb_.insert(id);
       }
       break;
     }
@@ -162,35 +162,34 @@ void ImagePoolManager::RecordAccess(const image_id_t& id, const AccessType type)
 void ImagePoolManager::RemoveRecord(const image_id_t& id, const AccessType type) {
   switch (type) {
     case AccessType::FULL_IMG: {
-      auto it = _cache_map_full.find(id);
-      if (it != _cache_map_full.end()) {
+      auto it = cache_map_full_.find(id);
+      if (it != cache_map_full_.end()) {
         // capture values before erasing from the map (erasing invalidates `it`)
         auto key     = it->first;   // image id
-        auto list_it = it->second;  // iterator into _cache_list_full
+        auto list_it = it->second;  // iterator into cache_list_full_
 
-        _cache_list_full.erase(list_it);
-        _cache_map_full.erase(it);
+        cache_list_full_.erase(list_it);
+        cache_map_full_.erase(it);
 
-        // _with_full likely holds image ids, so erase by key
-        _with_full.erase(key);
-
-        auto img = _image_pool[key];
+        // with_full_ likely holds image ids, so erase by key
+        with_full_.erase(key);
+        auto img = image_pool_[key];
         img->ClearThumbnail();
       }
       break;
     }
     case AccessType::THUMB: {
-      auto it = _cache_map_thumb.find(id);
-      if (it != _cache_map_thumb.end()) {
+      auto it = cache_map_thumb_.find(id);
+      if (it != cache_map_thumb_.end()) {
         auto key     = it->first;
         auto list_it = it->second;
 
-        _cache_list_thumb.erase(list_it);
-        _cache_map_thumb.erase(it);
+        cache_list_thumb_.erase(list_it);
+        cache_map_thumb_.erase(it);
 
-        _with_thumb.erase(key);
+        with_thumb_.erase(key);
 
-        auto img = _image_pool[key];
+        auto img = image_pool_[key];
         img->ClearThumbnail();
       }
       break;
@@ -209,40 +208,40 @@ void ImagePoolManager::RemoveRecord(const image_id_t& id, const AccessType type)
 auto ImagePoolManager::Evict(const AccessType type) -> std::optional<std::weak_ptr<Image>> {
   switch (type) {
     case AccessType::FULL_IMG: {
-      if (_cache_list_full.empty()) {
+      if (cache_list_full_.empty()) {
         return std::nullopt;
       }
-      auto last = _cache_list_full.end();
+      auto last = cache_list_full_.end();
       do {
         --last;
-      } while (_image_pool[*last]->_full_pinned && last != _cache_list_full.begin());
+      } while (image_pool_[*last]->full_pinned_ && last != cache_list_full_.begin());
 
-      if (_image_pool[*last]->_full_pinned) {
+      if (image_pool_[*last]->full_pinned_) {
         return std::nullopt;
       }
-      _cache_map_full.erase(*last);
-      _with_full.erase(*last);
-      auto evicted_img = _image_pool[*last];
-      _cache_list_full.pop_back();
+      cache_map_full_.erase(*last);
+      with_full_.erase(*last);
+      auto evicted_img = image_pool_[*last];
+      cache_list_full_.pop_back();
       evicted_img->ClearData();
       return evicted_img;
     }
     case AccessType::THUMB: {
-      if (_cache_list_thumb.empty()) {
+      if (cache_list_thumb_.empty()) {
         return std::nullopt;
       }
-      auto last = _cache_list_thumb.end();
+      auto last = cache_list_thumb_.end();
       do {
         --last;
-      } while (_image_pool[*last]->_thumb_pinned && last != _cache_list_thumb.begin());
+      } while (image_pool_[*last]->thumb_pinned_ && last != cache_list_thumb_.begin());
 
-      if (_image_pool[*last]->_thumb_pinned) {
+      if (image_pool_[*last]->thumb_pinned_) {
         return std::nullopt;
       }
-      _cache_map_thumb.erase(*last);
-      _with_thumb.erase(*last);
-      auto evicted_img = _image_pool[*last];
-      _cache_list_thumb.pop_back();
+      cache_map_thumb_.erase(*last);
+      with_thumb_.erase(*last);
+      auto evicted_img = image_pool_[*last];
+      cache_list_thumb_.pop_back();
       evicted_img->ClearThumbnail();
       return evicted_img;
     }
@@ -264,13 +263,13 @@ auto ImagePoolManager::Evict(const AccessType type) -> std::optional<std::weak_p
 auto ImagePoolManager::CacheContains(const image_id_t& id, const AccessType type) -> bool {
   switch (type) {
     case AccessType::FULL_IMG: {
-      return _cache_map_full.contains(id);
+      return cache_map_full_.contains(id);
     }
     case AccessType::THUMB: {
-      return _cache_map_thumb.contains(id);
+      return cache_map_thumb_.contains(id);
     }
     case AccessType::META: {
-      return _image_pool.contains(id);
+      return image_pool_.contains(id);
     }
   }
   return false;
@@ -279,16 +278,16 @@ auto ImagePoolManager::CacheContains(const image_id_t& id, const AccessType type
 void ImagePoolManager::ResizeCache(const uint32_t new_capacity, const AccessType type) {
   switch (type) {
     case AccessType::FULL_IMG: {
-      while (_cache_list_full.size() > new_capacity) {
+      while (cache_list_full_.size() > new_capacity) {
         Evict(type);
       }
-      _capacity_full = new_capacity;
+      capacity_full_ = new_capacity;
     }
     case AccessType::THUMB: {
-      while (_cache_list_thumb.size() > new_capacity) {
+      while (cache_list_thumb_.size() > new_capacity) {
         Evict(type);
       }
-      _capacity_thumb = new_capacity;
+      capacity_thumb_ = new_capacity;
     }
     case AccessType::META: {
     }
@@ -300,17 +299,17 @@ void ImagePoolManager::ResizeCache(const uint32_t new_capacity, const AccessType
  *
  */
 void ImagePoolManager::Flush() {
-  _cache_list_full.clear();
-  _cache_list_thumb.clear();
-  _cache_map_full.clear();
-  _cache_map_thumb.clear();
+  cache_list_full_.clear();
+  cache_list_thumb_.clear();
+  cache_map_full_.clear();
+  cache_map_thumb_.clear();
 
-  for (auto& id : _with_thumb) {
-    _image_pool.at(id)->ClearThumbnail();
+  for (auto& id : with_thumb_) {
+    image_pool_.at(id)->ClearThumbnail();
   }
 
-  for (auto& id : _with_full) {
-    _image_pool.at(id)->ClearData();
+  for (auto& id : with_full_) {
+    image_pool_.at(id)->ClearData();
   }
 }
 
@@ -320,7 +319,7 @@ void ImagePoolManager::Flush() {
  */
 void ImagePoolManager::Clear() {
   Flush();
-  _image_pool.clear();
+  image_pool_.clear();
 }
 
 };  // namespace puerhlab

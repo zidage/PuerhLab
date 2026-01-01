@@ -36,13 +36,13 @@ namespace puerhlab {
  * @brief Ad-hoc constructor for temporary sleeve, e.g. folder preview
  *
  */
-SleeveManager::SleeveManager(std::filesystem::path db_path) : _storage_service(db_path) {
+SleeveManager::SleeveManager(std::filesystem::path db_path) : storage_service_(db_path) {
   // Update the application clock
   TimeProvider::Refresh();
-  _fs = std::make_shared<FileSystem>(db_path, _storage_service, 0);
-  _fs->InitRoot();
-  _image_pool = std::make_shared<ImagePoolManager>(128, 4);
-  _view       = std::make_shared<SleeveView>(_fs, _image_pool);
+  fs_ = std::make_shared<FileSystem>(db_path, storage_service_, 0);
+  fs_->InitRoot();
+  image_pool_ = std::make_shared<ImagePoolManager>(128, 4);
+  view_       = std::make_shared<SleeveView>(fs_, image_pool_);
 }
 
 /**
@@ -50,18 +50,18 @@ SleeveManager::SleeveManager(std::filesystem::path db_path) : _storage_service(d
  *
  * @return std::shared_ptr<FileSystem>
  */
-auto SleeveManager::GetFilesystem() -> std::shared_ptr<FileSystem> { return _fs; }
+auto SleeveManager::GetFilesystem() -> std::shared_ptr<FileSystem> { return fs_; }
 
 /**
  * @brief Return a shared pointer to a sleeve view instance
  *
  * @return std::shared_ptr<SleeveView>
  */
-auto SleeveManager::GetView() -> std::shared_ptr<SleeveView> { return _view; }
+auto SleeveManager::GetView() -> std::shared_ptr<SleeveView> { return view_; }
 
-auto SleeveManager::GetPool() -> std::shared_ptr<ImagePoolManager> { return _image_pool; }
+auto SleeveManager::GetPool() -> std::shared_ptr<ImagePoolManager> { return image_pool_; }
 
-auto SleeveManager::GetImgCount() -> uint32_t { return _image_pool->Capacity(AccessType::META); }
+auto SleeveManager::GetImgCount() -> uint32_t { return image_pool_->Capacity(AccessType::META); }
 
 /**
  * @brief Load a batch of images to the destination path
@@ -78,14 +78,14 @@ auto SleeveManager::LoadToPath(std::vector<image_path_t> img_os_paths, sl_path_t
   loader.StartLoading(std::move(img_os_paths), DecodeType::SLEEVE_LOADING);
   while (expected_size > 0) {
     std::shared_ptr<Image> loaded  = loader.LoadImage();
-    auto                   element = _fs->Create(dest, loaded->_image_name, ElementType::FILE);
+    auto                   element = fs_->Create(dest, loaded->image_name_, ElementType::FILE);
     std::static_pointer_cast<SleeveFile>(element)->SetImage(loaded);
-    _image_pool->Insert(loaded);
+    image_pool_->Insert(loaded);
     total_size++;
     --expected_size;
   }
-  _fs->SyncToDB();
-  _storage_service.GetImageController().CaptureImagePool(_image_pool);
+  fs_->SyncToDB();
+  storage_service_.GetImageController().CaptureImagePool(image_pool_);
   return total_size;
 }
 

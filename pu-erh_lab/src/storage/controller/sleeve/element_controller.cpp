@@ -29,34 +29,33 @@ namespace puerhlab {
  * @param guard
  */
 ElementController::ElementController(ConnectionGuard&& guard)
-    : _guard(std::move(guard)),
-      _element_service(_guard._conn),
-      _file_service(_guard._conn),
-      _folder_service(_guard._conn),
-      _history_service(_guard._conn) {}
-
+    : guard_(std::move(guard)),
+      element_service_(guard_.conn_),
+      file_service_(guard_.conn_),
+      folder_service_(guard_.conn_),
+      history_service_(guard_.conn_) {}
 /**
  * @brief Add an element to the database.
  *
  * @param element
  */
 void ElementController::AddElement(const std::shared_ptr<SleeveElement> element) {
-  _element_service.Insert(element);
-  if (element->_type == ElementType::FILE) {
+  element_service_.Insert(element);
+  if (element->type_ == ElementType::FILE) {
     auto file = std::static_pointer_cast<SleeveFile>(element);
-    _file_service.Insert({file->_element_id, file->_image_id});
+    file_service_.Insert({file->element_id_, file->image_id_});
     if (file->GetEditHistory() != nullptr) {
       auto history = file->GetEditHistory();
-      _history_service.Insert(history);
+      history_service_.Insert(history);
     }
-  } else if (element->_type == ElementType::FOLDER) {
+  } else if (element->type_ == ElementType::FOLDER) {
     auto  folder   = std::static_pointer_cast<SleeveFolder>(element);
     auto& contents = folder->ListElements();
     for (auto& content_id : contents) {
-      _folder_service.Insert({folder->_element_id, content_id});
+      folder_service_.Insert({folder->element_id_, content_id});
     }
   }
-  element->_sync_flag = SyncFlag::SYNCED;
+  element->sync_flag_ = SyncFlag::SYNCED;
 }
 
 /**
@@ -67,7 +66,7 @@ void ElementController::AddElement(const std::shared_ptr<SleeveElement> element)
  */
 void ElementController::AddFolderContent(sl_element_id_t folder_id, sl_element_id_t content_id) {
   // TODO: The uniqueness of content_id is not garanteed, SQL statement should be changed
-  _folder_service.Insert({folder_id, content_id});
+  folder_service_.Insert({folder_id, content_id});
 }
 
 /**
@@ -77,10 +76,10 @@ void ElementController::AddFolderContent(sl_element_id_t folder_id, sl_element_i
  * @return std::shared_ptr<SleeveElement>
  */
 auto ElementController::GetElementById(const sl_element_id_t id) -> std::shared_ptr<SleeveElement> {
-  auto result = _element_service.GetElementById(id);
-  if (result->_type == ElementType::FILE) {
+  auto result = element_service_.GetElementById(id);
+  if (result->type_ == ElementType::FILE) {
     auto file    = std::static_pointer_cast<SleeveFile>(result);
-    auto history = _history_service.GetEditHistoryByFileId(file->_element_id);
+    auto history = history_service_.GetEditHistoryByFileId(file->element_id_);
     file->SetEditHistory(history);
   }
   result->SetSyncFlag(SyncFlag::SYNCED);
@@ -95,7 +94,7 @@ auto ElementController::GetElementById(const sl_element_id_t id) -> std::shared_
  */
 auto ElementController::GetFolderContent(const sl_element_id_t folder_id)
     -> std::vector<sl_element_id_t> {
-  return _folder_service.GetFolderContent(folder_id);
+  return folder_service_.GetFolderContent(folder_id);
 }
 
 /**
@@ -104,18 +103,18 @@ auto ElementController::GetFolderContent(const sl_element_id_t folder_id)
  *
  * @param id
  */
-void ElementController::RemoveElement(const sl_element_id_t id) { _element_service.RemoveById(id); }
+void ElementController::RemoveElement(const sl_element_id_t id) { element_service_.RemoveById(id); }
 
 void ElementController::RemoveElement(const std::shared_ptr<SleeveElement> element) {
-  if (element->_type == ElementType::FILE) {
+  if (element->type_ == ElementType::FILE) {
     auto file = std::static_pointer_cast<SleeveFile>(element);
-    _history_service.RemoveById(file->_element_id);
-    _file_service.RemoveById(file->_element_id);
-  } else if (element->_type == ElementType::FOLDER) {
+    history_service_.RemoveById(file->element_id_);
+    file_service_.RemoveById(file->element_id_);
+  } else if (element->type_ == ElementType::FOLDER) {
     auto folder = std::static_pointer_cast<SleeveFolder>(element);
-    _folder_service.RemoveById(folder->_element_id);
+    folder_service_.RemoveById(folder->element_id_);
   }
-  _element_service.RemoveById(element->_element_id);
+  element_service_.RemoveById(element->element_id_);
 }
 
 /**
@@ -124,19 +123,19 @@ void ElementController::RemoveElement(const std::shared_ptr<SleeveElement> eleme
  * @param element
  */
 void ElementController::UpdateElement(const std::shared_ptr<SleeveElement> element) {
-  _element_service.Update(element, element->_element_id);
-  if (element->_type == ElementType::FILE) {
+  element_service_.Update(element, element->element_id_);
+  if (element->type_ == ElementType::FILE) {
     auto file = std::static_pointer_cast<SleeveFile>(element);
-    _file_service.Update({file->_element_id, file->_image_id}, file->_image_id);
-    _history_service.Update(file->GetEditHistory(), file->_element_id);
-  } else if (element->_type == ElementType::FOLDER) {
+    file_service_.Update({file->element_id_, file->image_id_}, file->image_id_);
+    history_service_.Update(file->GetEditHistory(), file->element_id_);
+  } else if (element->type_ == ElementType::FOLDER) {
     auto folder = std::static_pointer_cast<SleeveFolder>(element);
-    _folder_service.RemoveById(folder->_element_id);
+    folder_service_.RemoveById(folder->element_id_);
     for (auto& content_id : folder->ListElements()) {
-      AddFolderContent(folder->_element_id, content_id);
+      AddFolderContent(folder->element_id_, content_id);
     }
   }
-  element->_sync_flag = SyncFlag::SYNCED;
+  element->sync_flag_ = SyncFlag::SYNCED;
 }
 
 auto ElementController::GetElementsInFolderByFilter(const std::shared_ptr<FilterCombo> filter,
@@ -144,7 +143,7 @@ auto ElementController::GetElementsInFolderByFilter(const std::shared_ptr<Filter
     -> std::vector<std::shared_ptr<SleeveElement>> {
   // Build SQL query from the filter
   std::wstring filter_sql = filter->GenerateSQLOn(folder_id);
-  return _element_service.GetElementsInFolderByFilter(filter_sql);  // for specialized queries only
+  return element_service_.GetElementsInFolderByFilter(filter_sql);  // for specialized queries only
 }
 
 };  // namespace puerhlab

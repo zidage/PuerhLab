@@ -44,11 +44,11 @@ class PreparedStatement {
   void RecycleResources();
 
  public:
-  duckdb_result             _result;
-  duckdb_prepared_statement _stmt;
-  duckdb_connection&        _con;
+  duckdb_result             result_;
+  duckdb_prepared_statement stmt_;
+  duckdb_connection&        con_;
 
-  bool                      _prepared = false;
+  bool                      prepared_ = false;
   PreparedStatement(duckdb_connection& con);
   PreparedStatement(duckdb_connection& con, const std::string& prepare_query);
   PreparedStatement();
@@ -62,9 +62,9 @@ class PreparedStatement {
  *
  */
 struct DuckFieldDesc {
-  const char* name;
-  DuckDBType  type;
-  size_t      offset;
+  const char* name_;
+  DuckDBType  type_;
+  size_t      offset_;
 };
 
 // Macro to define a field descriptor for a specific type and field.

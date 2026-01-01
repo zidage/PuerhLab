@@ -27,8 +27,8 @@
 namespace puerhlab {
 class ImageController {
  private:
-  ConnectionGuard _guard;
-  ImageService    _service;
+  ConnectionGuard guard_;
+  ImageService    service_;
 
  public:
   ImageController(ConnectionGuard&& guard);

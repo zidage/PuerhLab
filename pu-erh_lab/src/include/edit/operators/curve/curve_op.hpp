@@ -22,20 +22,19 @@
 namespace puerhlab {
 class CurveOp : public OperatorBase<CurveOp> {
  private:
-  std::vector<cv::Point2f> _ctrl_pts;
-  std::vector<float>       _h;
-  std::vector<float>       _m;
+  std::vector<cv::Point2f> ctrl_pts_;
+  std::vector<float>       h_;
+  std::vector<float>       m_;
 
   void                     ComputeTagents();
   auto                     EvaluateCurve(float x) const -> float;
 
  public:
-  static constexpr PriorityLevel     _priority_level    = 1;
-  static constexpr PipelineStageName _affiliation_stage = PipelineStageName::Basic_Adjustment;
-  static constexpr std::string_view  _canonical_name    = "Curve";
-  static constexpr std::string_view  _script_name       = "curve";
-  static constexpr OperatorType      _operator_type     = OperatorType::CURVE;
-
+  static constexpr PriorityLevel     priority_level_    = 1;
+  static constexpr PipelineStageName affiliation_stage_ = PipelineStageName::Basic_Adjustment;
+  static constexpr std::string_view  canonical_name_    = "Curve";
+  static constexpr std::string_view  script_name_       = "curve";
+  static constexpr OperatorType      operator_type_     = OperatorType::CURVE;
   CurveOp()                                             = delete;
   CurveOp(const std::vector<cv::Point2f>& control_points);
   CurveOp(const nlohmann::json& params);

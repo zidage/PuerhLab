@@ -21,7 +21,7 @@
 namespace puerhlab {
 
 SleeveElement::SleeveElement(sl_element_id_t id, file_name_t element_name)
-    : _element_id(id), _element_name(element_name), _ref_count(0), _pinned(false) {
+    : element_id_(id), element_name_(element_name), ref_count_(0), pinned_(false) {
   this->SetAddTime();
 }
 
@@ -38,19 +38,19 @@ auto SleeveElement::Clear() -> bool {
 }
 
 void SleeveElement::SetAddTime() {
-  _added_time         = std::chrono::system_clock::to_time_t(TimeProvider::Now());
-  _last_modified_time = _added_time;
+  added_time_         = std::chrono::system_clock::to_time_t(TimeProvider::Now());
+  last_modified_time_ = added_time_;
 }
 
 void SleeveElement::SetLastModifiedTime() {
-  _last_modified_time = std::chrono::system_clock::to_time_t(TimeProvider::Now());
+  last_modified_time_ = std::chrono::system_clock::to_time_t(TimeProvider::Now());
 }
 
-void SleeveElement::IncrementRefCount() { ++_ref_count; }
+void SleeveElement::IncrementRefCount() { ++ref_count_; }
 
-void SleeveElement::DecrementRefCount() { --_ref_count; }
+void SleeveElement::DecrementRefCount() { --ref_count_; }
 
-auto SleeveElement::IsShared() -> bool { return _ref_count > 1; }
+auto SleeveElement::IsShared() -> bool { return ref_count_ > 1; }
 
-void SleeveElement::SetSyncFlag(SyncFlag flag) { _sync_flag = flag; }
+void SleeveElement::SetSyncFlag(SyncFlag flag) { sync_flag_ = flag; }
 };  // namespace puerhlab

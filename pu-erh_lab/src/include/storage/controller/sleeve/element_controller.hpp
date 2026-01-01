@@ -29,12 +29,12 @@
 namespace puerhlab {
 class ElementController {
  private:
-  ConnectionGuard    _guard;
+  ConnectionGuard    guard_;
 
-  ElementService     _element_service;
-  FileService        _file_service;
-  FolderService      _folder_service;
-  EditHistoryService _history_service;
+  ElementService     element_service_;
+  FileService        file_service_;
+  FolderService      folder_service_;
+  EditHistoryService history_service_;
 
  public:
   ElementController(ConnectionGuard&& guard);

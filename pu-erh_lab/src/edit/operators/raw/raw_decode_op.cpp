@@ -36,10 +36,10 @@ void RawDecodeOp::Apply(std::shared_ptr<ImageBuffer> input) {
   raw_processor->imgdata.params.output_bps = 16;
   ImageBuffer output;
 
-  switch (_backend) {
+  switch (backend_) {
     case RawProcessBackend::PUERH: {
       raw_processor->unpack();
-      RawProcessor processor{_params, raw_processor->imgdata.rawdata, *raw_processor};
+      RawProcessor processor{params_, raw_processor->imgdata.rawdata, *raw_processor};
 
       output = processor.Process();
       raw_processor->recycle();
@@ -81,11 +81,11 @@ auto RawDecodeOp::GetParams() const -> nlohmann::json {
   nlohmann::json params;
   nlohmann::json inner;
 
-  inner["cuda"]                   = _params._cuda;
-  inner["highlights_reconstruct"] = _params._highlights_reconstruct;
-  inner["use_camera_wb"]          = _params._use_camera_wb;
-  inner["user_wb"]                = _params._user_wb;
-  inner["backend"]                = (_backend == RawProcessBackend::PUERH) ? "puerh" : "libraw";
+  inner["cuda"]                   = params_.cuda_;
+  inner["highlights_reconstruct"] = params_.highlights_reconstruct_;
+  inner["use_camera_wb"]          = params_.use_camera_wb_;
+  inner["user_wb"]                = params_.user_wb_;
+  inner["backend"]                = (backend_ == RawProcessBackend::PUERH) ? "puerh" : "libraw";
 
   params["raw"]                   = inner;
   return params;
@@ -102,17 +102,17 @@ void RawDecodeOp::SetParams(const nlohmann::json& params) {
   } else {
     return;
   }
-  if (inner.contains("cuda")) _params._cuda = inner["cuda"].get<bool>();
+  if (inner.contains("cuda")) params_.cuda_ = inner["cuda"].get<bool>();
   if (inner.contains("highlights_reconstruct"))
-    _params._highlights_reconstruct = inner["highlights_reconstruct"].get<bool>();
-  if (inner.contains("use_camera_wb")) _params._use_camera_wb = inner["use_camera_wb"].get<bool>();
-  if (inner.contains("user_wb")) _params._user_wb = inner["user_wb"].get<uint32_t>();
+    params_.highlights_reconstruct_ = inner["highlights_reconstruct"].get<bool>();
+  if (inner.contains("use_camera_wb")) params_.use_camera_wb_ = inner["use_camera_wb"].get<bool>();
+  if (inner.contains("user_wb")) params_.user_wb_ = inner["user_wb"].get<uint32_t>();
   if (inner.contains("backend")) {
     std::string backend = inner["backend"].get<std::string>();
     if (backend == "puerh")
-      _backend = RawProcessBackend::PUERH;
+      backend_ = RawProcessBackend::PUERH;
     else if (backend == "libraw")
-      _backend = RawProcessBackend::LIBRAW;
+      backend_ = RawProcessBackend::LIBRAW;
     else
       throw std::runtime_error("RawDecodeOp: Unknown backend " + backend);
   }

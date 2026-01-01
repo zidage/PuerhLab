@@ -21,73 +21,72 @@
 #include "utils/clock/time_provider.hpp"
 
 namespace puerhlab {
-Version::Version() : _tx_id_generator(0) {
-  _added_time         = std::chrono::system_clock::to_time_t(TimeProvider::Now());
-  _last_modified_time = _added_time;
+Version::Version() : tx_id_generator_(0) {
+  added_time_         = std::chrono::system_clock::to_time_t(TimeProvider::Now());
+  last_modified_time_ = added_time_;
   CalculateVersionID();
 }
 
-Version::Version(sl_element_id_t bound_image) : _tx_id_generator(0), _bound_image(bound_image) {
-  _added_time         = std::chrono::system_clock::to_time_t(TimeProvider::Now());
-  _last_modified_time = _added_time;
+Version::Version(sl_element_id_t bound_image) : tx_id_generator_(0), bound_image_(bound_image) {
+  added_time_         = std::chrono::system_clock::to_time_t(TimeProvider::Now());
+  last_modified_time_ = added_time_;
   CalculateVersionID();
 }
 
 Version::Version(sl_element_id_t bound_image, version_id_t parent_version_id)
-    : _tx_id_generator(0), _bound_image(bound_image), _version_id(parent_version_id) {
-  _added_time         = std::chrono::system_clock::to_time_t(TimeProvider::Now());
-  _last_modified_time = _added_time;
+    : tx_id_generator_(0), version_id_(parent_version_id), bound_image_(bound_image) {
+  added_time_         = std::chrono::system_clock::to_time_t(TimeProvider::Now());
+  last_modified_time_ = added_time_;
   CalculateVersionID();
 }
 
-Version::Version(nlohmann::json& j) : _tx_id_generator(0) { FromJSON(j); }
+Version::Version(nlohmann::json& j) : tx_id_generator_(0) { FromJSON(j); }
 
 void Version::CalculateVersionID() {
-  _version_id = Hash128::Blend(_version_id,
-                               Hash128::Compute(&_last_modified_time, sizeof(_last_modified_time)));
-  if (!_edit_transactions.empty()) {
-    const auto& tx = _edit_transactions.back();
-    _version_id    = Hash128::Blend(_version_id, Hash128::Compute(&tx, sizeof(EditTransaction)));
+  version_id_ = Hash128::Blend(version_id_,
+                               Hash128::Compute(&last_modified_time_, sizeof(last_modified_time_)));
+  if (!edit_transactions_.empty()) {
+    const auto& tx = edit_transactions_.back();
+    version_id_    = Hash128::Blend(version_id_, Hash128::Compute(&tx, sizeof(EditTransaction)));
   } else {
     // If there are no edit transactions, use the bound image ID to ensure uniqueness
-    _version_id =
-        Hash128::Blend(_version_id, Hash128::Compute(&_bound_image, sizeof(_bound_image)));
+    version_id_ =
+        Hash128::Blend(version_id_, Hash128::Compute(&bound_image_, sizeof(bound_image_)));
   }
 }
 
-auto Version::GetVersionID() const -> version_id_t { return Hash128(_version_id); }
+auto Version::GetVersionID() const -> version_id_t { return Hash128(version_id_); }
+auto Version::GetAddTime() const -> std::time_t { return added_time_; }
 
-auto Version::GetAddTime() const -> std::time_t { return _added_time; }
-
-auto Version::GetLastModifiedTime() const -> std::time_t { return _last_modified_time; }
+auto Version::GetLastModifiedTime() const -> std::time_t { return last_modified_time_; }
 
 void Version::SetLastModifiedTime() {
-  _last_modified_time = std::chrono::system_clock::to_time_t(TimeProvider::Now());
+  last_modified_time_ = std::chrono::system_clock::to_time_t(TimeProvider::Now());
 }
 
-void Version::SetBoundImage(sl_element_id_t image_id) { _bound_image = image_id; }
+void Version::SetBoundImage(sl_element_id_t image_id) { bound_image_ = image_id; }
 
-auto Version::GetBoundImage() const -> sl_element_id_t { return _bound_image; }
+auto Version::GetBoundImage() const -> sl_element_id_t { return bound_image_; }
 
 void Version::AppendEditTransaction(EditTransaction&& edit_transaction) {
-  if (_edit_transactions.size() >= MAX_EDIT_TRANSACTIONS) {
-    auto removed_tx = std::move(_edit_transactions.front());
-    _tx_id_map.erase(removed_tx.GetTransactionID());
-    _edit_transactions.pop_front();
+  if (edit_transactions_.size() >= MAX_EDIT_TRANSACTIONS) {
+    auto removed_tx = std::move(edit_transactions_.front());
+    tx_id_map_.erase(removed_tx.GetTransactionID());
+    edit_transactions_.pop_front();
   }
-  _edit_transactions.push_front(std::move(edit_transaction));
+  edit_transactions_.push_front(std::move(edit_transaction));
 
   // Assign a new transaction ID, update the ID map
-  auto& last_tx = _edit_transactions.front();
-  last_tx.SetTransactionID(_tx_id_generator.GenerateID());
-  _tx_id_map[_edit_transactions.front().GetTransactionID()] = _edit_transactions.begin();
+  auto& last_tx = edit_transactions_.front();
+  last_tx.SetTransactionID(tx_id_generator_.GenerateID());
+  tx_id_map_[edit_transactions_.front().GetTransactionID()] = edit_transactions_.begin();
 
   // Check the same operator in the same stage, chain the parent transaction
-  auto& stage = _base_pipeline_executor->GetStage(last_tx.GetTxOpStageName());
+  auto& stage = base_pipeline_executor_->GetStage(last_tx.GetTxOpStageName());
   auto  op    = stage.GetOperator(last_tx.GetTxOperatorType());
   // If this operator has been registered in this stage, chain the parent transaction
   if (op) {
-    auto parent_params = (*op)->_op->GetParams();
+    auto parent_params = (*op)->op_->GetParams();
     last_tx.SetLastOperatorParams(parent_params);
   }
 
@@ -96,47 +95,47 @@ void Version::AppendEditTransaction(EditTransaction&& edit_transaction) {
 }
 
 auto Version::RemoveLastEditTransaction() -> EditTransaction {
-  if (_edit_transactions.empty()) {
+  if (edit_transactions_.empty()) {
     throw std::runtime_error("Version: No edit transaction to remove");
   }
-  EditTransaction last_transaction = std::move(_edit_transactions.front());
-  _tx_id_map.erase(last_transaction.GetTransactionID());
-  _edit_transactions.pop_front();
+  EditTransaction last_transaction = std::move(edit_transactions_.front());
+  tx_id_map_.erase(last_transaction.GetTransactionID());
+  edit_transactions_.pop_front();
   SetLastModifiedTime();
   CalculateVersionID();
   return last_transaction;
 }
 
 auto Version::GetTransactionByID(tx_id_t transaction_id) -> EditTransaction& {
-  auto it = _tx_id_map.find(transaction_id);
-  if (it == _tx_id_map.end()) {
+  auto it = tx_id_map_.find(transaction_id);
+  if (it == tx_id_map_.end()) {
     throw std::runtime_error("Version: No edit transaction with the given ID");
   }
   return *(it->second);
 }
 
 auto Version::GetLastEditTransaction() -> EditTransaction& {
-  if (_edit_transactions.empty()) {
+  if (edit_transactions_.empty()) {
     throw std::runtime_error("Version: No edit transaction to get");
   }
-  return _edit_transactions.back();
+  return edit_transactions_.back();
 }
 
 auto Version::GetAllEditTransactions() const -> const std::list<EditTransaction>& {
-  return _edit_transactions;
+  return edit_transactions_;
 }
 
 auto Version::ToJSON() const -> nlohmann::json {
   nlohmann::json j;
-  j["version_id_low"]     = _version_id.low64();
-  j["version_id_high"]    = _version_id.high64();
-  j["added_time"]         = _added_time;
-  j["last_modified_time"] = _last_modified_time;
-  j["bound_image"]        = _bound_image;
+  j["version_id_low"]     = version_id_.low64();
+  j["version_id_high"]    = version_id_.high64();
+  j["added_time"]         = added_time_;
+  j["last_modified_time"] = last_modified_time_;
+  j["bound_image"]        = bound_image_;
   j["edit_transactions"]  = nlohmann::json::array();
 
-  j["tx_id_start"]        = _tx_id_generator.GetCurrentID();
-  for (const auto& tx : _edit_transactions) {
+  j["tx_id_start"]        = tx_id_generator_.GetCurrentID();
+  for (const auto& tx : edit_transactions_) {
     j["edit_transactions"].push_back(tx.ToJSON());
   }
 
@@ -150,18 +149,18 @@ void Version::FromJSON(const nlohmann::json& j) {
       !j.contains("tx_id_start")) {
     throw std::runtime_error("Version: Invalid JSON format");
   }
-  _version_id =
+  version_id_ =
       Hash128(j.at("version_id_low").get<uint64_t>(), j.at("version_id_high").get<uint64_t>());
-  _added_time         = j.at("added_time").get<std::time_t>();
-  _last_modified_time = j.at("last_modified_time").get<std::time_t>();
-  _bound_image        = j.at("bound_image").get<sl_element_id_t>();
-  _tx_id_generator.SetStartID(j.at("tx_id_start").get<tx_id_t>());
-  _edit_transactions.clear();
-  _tx_id_map.clear();
+  added_time_         = j.at("added_time").get<std::time_t>();
+  last_modified_time_ = j.at("last_modified_time").get<std::time_t>();
+  bound_image_        = j.at("bound_image").get<sl_element_id_t>();
+  tx_id_generator_.SetStartID(j.at("tx_id_start").get<tx_id_t>());
+  edit_transactions_.clear();
+  tx_id_map_.clear();
   for (const auto& tx_j : j.at("edit_transactions").get<nlohmann::json::array_t>()) {
     EditTransaction tx(tx_j);
-    _edit_transactions.push_back(std::move(tx));
-    _tx_id_map[_edit_transactions.back().GetTransactionID()] = std::prev(_edit_transactions.end());
+    edit_transactions_.push_back(std::move(tx));
+    tx_id_map_[edit_transactions_.back().GetTransactionID()] = std::prev(edit_transactions_.end());
   }
 }
 }  // namespace puerhlab

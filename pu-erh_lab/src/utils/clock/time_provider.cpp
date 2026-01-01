@@ -19,17 +19,17 @@
 #include <iomanip>
 
 namespace puerhlab {
-std::atomic<std::chrono::system_clock::time_point> TimeProvider::_cached_sys_time;
-std::atomic<std::chrono::steady_clock::time_point> TimeProvider::_cached_steady_time;
+std::atomic<std::chrono::system_clock::time_point> TimeProvider::cached_sys_time_;
+std::atomic<std::chrono::steady_clock::time_point> TimeProvider::cached_steady_time_;
 
 void                                               TimeProvider::Refresh() {
-  _cached_sys_time = std::chrono::system_clock::now();
-  _cached_steady_time = std::chrono::steady_clock::now();
+  cached_sys_time_ = std::chrono::system_clock::now();
+  cached_steady_time_ = std::chrono::steady_clock::now();
 }
 
 std::chrono::system_clock::time_point TimeProvider::Now() {
-  auto elapsed = std::chrono::steady_clock::now() - _cached_steady_time.load();
-  return _cached_sys_time.load() +
+  auto elapsed = std::chrono::steady_clock::now() - cached_steady_time_.load();
+  return cached_sys_time_.load() +
          std::chrono::duration_cast<std::chrono::system_clock::duration>(elapsed);
 }
 

@@ -32,13 +32,13 @@
 namespace puerhlab {
 
 ElementAccessGuard::ElementAccessGuard(std::shared_ptr<SleeveElement> element) {
-  _access_element          = element;
-  _access_element->_pinned = true;
+  access_element_          = element;
+  access_element_->pinned_ = true;
 }
 
 ElementAccessGuard::~ElementAccessGuard() {
-  _access_element->_pinned = false;
-  _access_element.reset();
+  access_element_->pinned_ = false;
+  access_element_.reset();
 }
 
 /**
@@ -46,13 +46,13 @@ ElementAccessGuard::~ElementAccessGuard() {
  *
  * @param id
  */
-SleeveBase::SleeveBase(sleeve_id_t id) : re(delimiter), _sleeve_id(id) {
+SleeveBase::SleeveBase(sleeve_id_t id) : re_(delimiter_), sleeve_id_(id) {
   // TODO: change the id assignment logic
-  _next_element_id   = 0;
-  _size              = 0;
-  _filter_storage[0] = std::make_shared<FilterCombo>();
-  _next_filter_id    = 0;
-  _dcache_capacity   = DCacheManager::_default_capacity;
+  next_element_id_   = 0;
+  size_              = 0;
+  filter_storage_[0] = std::make_shared<FilterCombo>();
+  next_filter_id_    = 0;
+  dcache_capacity_   = DCacheManager::default_capacity_;
   InitializeRoot();
 }
 
@@ -62,20 +62,20 @@ SleeveBase::SleeveBase(sleeve_id_t id) : re(delimiter), _sleeve_id(id) {
  */
 void SleeveBase::InitializeRoot() {
   // FIXME: Inconsistent reinitalization logic here
-  if (_root == nullptr) _size += 1;
-  _root = std::make_shared<SleeveFolder>(_next_element_id++, L"root");
-  _root->IncrementRefCount();
-  _storage[_root->_element_id] = _root;
+  if (root_ == nullptr) size_ += 1;
+  root_ = std::make_shared<SleeveFolder>(next_element_id_++, L"root");
+  root_->IncrementRefCount();
+  storage_[root_->element_id_] = root_;
 }
 
 auto SleeveBase::GetStorage()
     -> std::unordered_map<sl_element_id_t, std::shared_ptr<SleeveElement>>& {
-  return _storage;
+  return storage_;
 }
 
 auto SleeveBase::GetFilterStorage()
     -> std::unordered_map<filter_id_t, std::shared_ptr<FilterCombo>>& {
-  return _filter_storage;
+  return filter_storage_;
 }
 
 /**
@@ -86,8 +86,8 @@ auto SleeveBase::GetFilterStorage()
  */
 auto SleeveBase::AccessElementById(const sl_element_id_t& id) const
     -> std::optional<std::shared_ptr<SleeveElement>> {
-  auto target = _storage.find(id);
-  if (target == _storage.end()) {
+  auto target = storage_.find(id);
+  if (target == storage_.end()) {
     // TODO: Log
     return std::nullopt;
   }
@@ -103,12 +103,12 @@ auto SleeveBase::AccessElementById(const sl_element_id_t& id) const
  */
 auto SleeveBase::AccessElementByPath(const sl_path_t& path)
     -> std::optional<std::shared_ptr<SleeveElement>> {
-  auto result = _dentry_cache.AccessElement(path);
+  auto result = dentry_cache_.AccessElement(path);
   if (result.has_value()) {
-    return _storage.at(result.value());
+    return storage_.at(result.value());
   }
 
-  std::wsregex_token_iterator first{path.begin(), path.end(), re, -1}, last;
+  std::wsregex_token_iterator first{path.begin(), path.end(), re_, -1}, last;
   std::deque<std::wstring>    path_elements{first, last};
 
   auto                        curr_path = path_elements.front();
@@ -118,10 +118,10 @@ auto SleeveBase::AccessElementByPath(const sl_path_t& path)
   }
   path_elements.pop_front();
   // Assume all the path start with "root"
-  auto curr_element = std::optional<std::shared_ptr<SleeveElement>>(_root);
+  auto curr_element = std::optional<std::shared_ptr<SleeveElement>>(root_);
 
   while (curr_element != std::nullopt && !path_elements.empty()) {
-    if (curr_element.value()->_type == ElementType::FILE) {
+    if (curr_element.value()->type_ == ElementType::FILE) {
       // TODO: Log
       // the path of a file cannot be a prefix of a full path
       return std::nullopt;
@@ -138,7 +138,7 @@ auto SleeveBase::AccessElementByPath(const sl_path_t& path)
     curr_element = AccessElementById(next_element_id.value());
   }
 
-  if (curr_element.has_value()) _dentry_cache.RecordAccess(path, curr_element.value()->_element_id);
+  if (curr_element.has_value()) dentry_cache_.RecordAccess(path, curr_element.value()->element_id_);
   return curr_element;
 }
 
@@ -155,24 +155,24 @@ auto SleeveBase::CreateElementToPath(const sl_path_t& path, const file_name_t& f
     -> std::optional<std::shared_ptr<SleeveElement>> {
   auto parent_folder_opt = GetWriteGuard(path);
   if (!parent_folder_opt.has_value() ||
-      parent_folder_opt.value()._access_element->_type == ElementType::FILE) {
+      parent_folder_opt.value().access_element_->type_ == ElementType::FILE) {
     // TODO: Log
     return std::nullopt;
   }
   auto parent_folder =
-      std::dynamic_pointer_cast<SleeveFolder>(parent_folder_opt.value()._access_element);
+      std::dynamic_pointer_cast<SleeveFolder>(parent_folder_opt.value().access_element_);
   if (parent_folder->Contains(file_name)) {
     // TODO: Log
     // TODO: Add duplication handling here
     return std::nullopt;
   }
   std::shared_ptr<SleeveElement> newElement =
-      SleeveElementFactory::CreateElement(type, _next_element_id++, file_name);
+      SleeveElementFactory::CreateElement(type, next_element_id_++, file_name);
   // Update the map
-  _storage[newElement->_element_id] = newElement;
+  storage_[newElement->element_id_] = newElement;
   parent_folder->AddElementToMap(newElement);
   // Increment the reference count of the file
-  if (newElement->_type == ElementType::FILE) {
+  if (newElement->type_ == ElementType::FILE) {
     parent_folder->IncrementFileCount();
   } else {
     parent_folder->IncrementFolderCount();
@@ -194,7 +194,7 @@ auto SleeveBase::RemoveElementInPath(const sl_path_t& target)
     // TODO: Log
     return std::nullopt;
   }
-  size_t pos = target.rfind(delimiter);
+  size_t pos = target.rfind(delimiter_);
   return RemoveElementInPath(target.substr(0, pos), target.substr(pos + 1));
 }
 
@@ -208,26 +208,26 @@ auto SleeveBase::RemoveElementInPath(const sl_path_t& path, const file_name_t& f
     -> std::optional<std::shared_ptr<SleeveElement>> {
   auto parent_folder_opt = GetWriteGuard(path);
   if (!parent_folder_opt.has_value() ||
-      parent_folder_opt.value()._access_element->_type == ElementType::FILE) {
+      parent_folder_opt.value().access_element_->type_ == ElementType::FILE) {
     // TODO: Log
     return std::nullopt;
   }
   auto parent_folder =
-      std::dynamic_pointer_cast<SleeveFolder>(parent_folder_opt.value()._access_element);
+      std::dynamic_pointer_cast<SleeveFolder>(parent_folder_opt.value().access_element_);
   auto del_id = parent_folder->GetElementIdByName(file_name);
   if (!del_id.has_value()) {
     return std::nullopt;
   }
   auto del_element = AccessElementById(del_id.value()).value();
-  if (del_element->_pinned) {
+  if (del_element->pinned_) {
     return std::nullopt;
   }
 
-  if (del_element->_type == ElementType::FOLDER) {
+  if (del_element->type_ == ElementType::FOLDER) {
     auto  del_folder = std::dynamic_pointer_cast<SleeveFolder>(del_element);
     auto& elements   = del_folder->ListElements();
     for (auto& element_id : elements) {
-      auto& e = _storage.at(element_id);
+      auto& e = storage_.at(element_id);
       e->DecrementRefCount();
     }
 
@@ -236,17 +236,17 @@ auto SleeveBase::RemoveElementInPath(const sl_path_t& path, const file_name_t& f
     // TODO: Add remove code for file elements
     parent_folder->DecrementFileCount();
   }
-  parent_folder->RemoveNameFromMap(del_element->_element_name);
+  parent_folder->RemoveNameFromMap(del_element->element_name_);
   parent_folder->SetLastModifiedTime();
-  if (del_element->_ref_count == 1)
+  if (del_element->ref_count_ == 1)
     // clear all the metadata and actual data in the target element
     del_element->Clear();
   del_element->DecrementRefCount();
 
-  if (del_element->_type == ElementType::FOLDER)
-    _dentry_cache.Flush();
+  if (del_element->type_ == ElementType::FOLDER)
+    dentry_cache_.Flush();
   else
-    _dentry_cache.RemoveRecord(path + L"/" + file_name);
+    dentry_cache_.RemoveRecord(path + L"/" + file_name);
 
   return del_element;
 }
@@ -270,11 +270,11 @@ auto inline SleeveBase::WriteCopy(std::shared_ptr<SleeveElement> src_element,
                                   std::shared_ptr<SleeveFolder>  dest_folder)
     -> std::shared_ptr<SleeveElement> {
   src_element->DecrementRefCount();
-  auto copy                   = src_element->Copy(_next_element_id++);
-  _storage[copy->_element_id] = copy;
+  auto copy                   = src_element->Copy(next_element_id_++);
+  storage_[copy->element_id_] = copy;
   // Parent folder now contains a "true" copy of the current folder
-  dest_folder->UpdateElementMap(src_element->_element_name, src_element->_element_id,
-                                copy->_element_id);
+  dest_folder->UpdateElementMap(src_element->element_name_, src_element->element_id_,
+                                copy->element_id_);
   copy->IncrementRefCount();
   return copy;
 }
@@ -289,9 +289,9 @@ auto SleeveBase::GetWriteGuard(const sl_path_t& target) -> std::optional<Element
   // Copy on write, make a copy to the current folder
   if (target == L"root") {
     // TODO: Log
-    return std::static_pointer_cast<SleeveElement>(_root);
+    return std::static_pointer_cast<SleeveElement>(root_);
   }
-  size_t pos = target.rfind(delimiter);
+  size_t pos = target.rfind(delimiter_);
 
   return GetWriteGuard(target.substr(0, pos), target.substr(pos + 1));
 }
@@ -305,7 +305,7 @@ auto SleeveBase::GetWriteGuard(const sl_path_t& target) -> std::optional<Element
  */
 auto SleeveBase::GetWriteGuard(const sl_path_t& parent_folder_path, const file_name_t& file_name)
     -> std::optional<ElementAccessGuard> {
-  std::wsregex_token_iterator first{parent_folder_path.begin(), parent_folder_path.end(), re, -1},
+  std::wsregex_token_iterator first{parent_folder_path.begin(), parent_folder_path.end(), re_, -1},
       last;
   std::deque<std::wstring> path_elements{first, last};
 
@@ -316,7 +316,7 @@ auto SleeveBase::GetWriteGuard(const sl_path_t& parent_folder_path, const file_n
   }
   path_elements.pop_front();
   // Assume all the path start with "root"
-  auto curr_element_opt = std::optional<std::shared_ptr<SleeveElement>>(_root);
+  auto curr_element_opt = std::optional<std::shared_ptr<SleeveElement>>(root_);
   std::shared_ptr<SleeveFolder> curr_parent_folder =
       std::dynamic_pointer_cast<SleeveFolder>(curr_element_opt.value());
   std::optional<sl_element_id_t> next_element_id = 0;
@@ -324,7 +324,7 @@ auto SleeveBase::GetWriteGuard(const sl_path_t& parent_folder_path, const file_n
   sl_path_t                      acc_path        = curr_path;
 
   while (curr_element_opt != std::nullopt && !path_elements.empty()) {
-    if (curr_element_opt.value()->_type == ElementType::FILE) {
+    if (curr_element_opt.value()->type_ == ElementType::FILE) {
       // TODO: Log
       // the path of a file cannot be a prefix of a full path
       return std::nullopt;
@@ -333,9 +333,9 @@ auto SleeveBase::GetWriteGuard(const sl_path_t& parent_folder_path, const file_n
     // Current PARENT folder will only have reference count equal to 1
     // If current FOLDER has ref count greater than one, then we have to create a new copy
     // of it, and make the PARENT folder reference to the new copy.
-    if (curr_element->_ref_count > 1) {
+    if (curr_element->ref_count_ > 1) {
       auto copy = WriteCopy(curr_element, curr_parent_folder);
-      _dentry_cache.RecordAccess(acc_path, copy->_element_id);
+      dentry_cache_.RecordAccess(acc_path, copy->element_id_);
       curr_path = path_elements.front();
       acc_path += L"/" + curr_path;
       path_elements.pop_front();
@@ -362,13 +362,13 @@ auto SleeveBase::GetWriteGuard(const sl_path_t& parent_folder_path, const file_n
     curr_element_opt = AccessElementById(next_element_id.value());
   }
   // Check the last element along the path
-  if (curr_element_opt == std::nullopt || curr_element_opt.value()->_type == ElementType::FILE) {
+  if (curr_element_opt == std::nullopt || curr_element_opt.value()->type_ == ElementType::FILE) {
     // TODO: Log
     // the path of a file cannot be a prefix of a full path
     return std::nullopt;
   }
   auto parent_folder = std::dynamic_pointer_cast<SleeveFolder>(curr_element_opt.value());
-  if (parent_folder->_ref_count > 1) {
+  if (parent_folder->ref_count_ > 1) {
     auto copy     = WriteCopy(parent_folder, curr_parent_folder);
     parent_folder = std::dynamic_pointer_cast<SleeveFolder>(copy);
   }
@@ -378,11 +378,11 @@ auto SleeveBase::GetWriteGuard(const sl_path_t& parent_folder_path, const file_n
     // TODO: Log
     return std::nullopt;
   }
-  auto write_file = _storage.at(write_file_opt.value());
-  if (write_file->_ref_count > 1) {
+  auto write_file = storage_.at(write_file_opt.value());
+  if (write_file->ref_count_ > 1) {
     write_file = WriteCopy(write_file, parent_folder);
   }
-  _dentry_cache.RecordAccess(parent_folder_path + delimiter + file_name, write_file->_element_id);
+  dentry_cache_.RecordAccess(parent_folder_path + delimiter_ + file_name, write_file->element_id_);
   return write_file;
 }
 
@@ -397,13 +397,13 @@ auto SleeveBase::GetWriteGuard(const sl_path_t& parent_folder_path, const file_n
  */
 auto SleeveBase::IsSubFolder(const std::shared_ptr<SleeveFolder> src_folder,
                              const sl_path_t&                    dest_folder_path) const -> bool {
-  std::wsregex_token_iterator first{dest_folder_path.begin(), dest_folder_path.end(), re, -1}, last;
+  std::wsregex_token_iterator first{dest_folder_path.begin(), dest_folder_path.end(), re_, -1}, last;
   std::deque<std::wstring>    path_elements{first, last};
 
   auto                        curr_path = path_elements.front();
   path_elements.pop_front();
   // Assume all the path start with "root"
-  auto curr_element = std::optional<std::shared_ptr<SleeveElement>>(_root);
+  auto curr_element = std::optional<std::shared_ptr<SleeveElement>>(root_);
 
   while (curr_element != std::nullopt && !path_elements.empty()) {
     curr_path = path_elements.front();
@@ -434,24 +434,24 @@ auto SleeveBase::CopyElement(const sl_path_t& src, const sl_path_t& dest)
     // TODO: Log
     return std::nullopt;
   }
-  auto src_file        = src_read_guard->_access_element;
+  auto src_file        = src_read_guard->access_element_;
 
   auto dest_folder_opt = GetReadGuard(dest);
   if (!dest_folder_opt.has_value() ||
-      dest_folder_opt.value()._access_element->_type == ElementType::FILE) {
+      dest_folder_opt.value().access_element_->type_ == ElementType::FILE) {
     // TODO: Log
     return std::nullopt;
   }
 
   auto dest_folder =
-      std::dynamic_pointer_cast<SleeveFolder>(dest_folder_opt.value()._access_element);
+      std::dynamic_pointer_cast<SleeveFolder>(dest_folder_opt.value().access_element_);
 
-  if (dest_folder->Contains(src_file->_element_name)) {
+  if (dest_folder->Contains(src_file->element_name_)) {
     // TODO: Log
     return std::nullopt;
   }
   // if source is a folder, target folder should not be a subfolder of the source
-  if (src_file->_type == ElementType::FOLDER &&
+  if (src_file->type_ == ElementType::FOLDER &&
       IsSubFolder(std::dynamic_pointer_cast<SleeveFolder>(src_file), dest)) {
     // TODO: Log
     return std::nullopt;
@@ -461,13 +461,13 @@ auto SleeveBase::CopyElement(const sl_path_t& src, const sl_path_t& dest)
   if (dest_folder_opt == std::nullopt) {
     return std::nullopt;
   }
-  dest_folder = std::dynamic_pointer_cast<SleeveFolder>(dest_folder_opt.value()._access_element);
-  if (src_file->_type == ElementType::FOLDER) {
+  dest_folder = std::dynamic_pointer_cast<SleeveFolder>(dest_folder_opt.value().access_element_);
+  if (src_file->type_ == ElementType::FOLDER) {
     auto  src_folder = std::dynamic_pointer_cast<SleeveFolder>(src_file);
     // Increment the reference count for all of its contents
     auto& elements   = src_folder->ListElements();
     for (auto& e : elements) {
-      _storage.at(e)->IncrementRefCount();
+      storage_.at(e)->IncrementRefCount();
     }
     dest_folder->IncrementFolderCount();
   } else {
@@ -505,52 +505,52 @@ auto SleeveBase::MoveElement(const sl_path_t& src, const sl_path_t& dest)
  */
 auto SleeveBase::Tree(const sl_path_t& path) -> std::wstring {
   struct TreeNode {
-    sl_element_id_t id;
-    int             depth;
-    bool            is_last;
+    sl_element_id_t id_;
+    int             depth_;
+    bool            is_last_;
   };
   std::wstring prefix          = L"";
   auto         dest_folder_opt = GetReadGuard(path);
   if (!dest_folder_opt.has_value() ||
-      dest_folder_opt->_access_element->_type == ElementType::FILE) {
+      dest_folder_opt->access_element_->type_ == ElementType::FILE) {
     std::wcout << L"Cannot call Tree() on an file" << std::endl;
     return L"";
   }
   std::wstring result = L"";
   auto         visit_folder =
-      std::dynamic_pointer_cast<SleeveFolder>(dest_folder_opt.value()._access_element);
+      std::dynamic_pointer_cast<SleeveFolder>(dest_folder_opt.value().access_element_);
   auto contains  = visit_folder->ListElements();
   auto dfs_stack = std::stack<TreeNode>();
   for (auto e : contains) {
-    dfs_stack.push({e, 0, _storage.at(e)->_type == ElementType::FILE});
+    dfs_stack.push({e, 0, storage_.at(e)->type_ == ElementType::FILE});
   }
   result +=
-      visit_folder->_element_name + L" id:" + std::to_wstring(visit_folder->_element_id) + L"\n";
+      visit_folder->element_name_ + L" id:" + std::to_wstring(visit_folder->element_id_) + L"\n";
 
   std::shared_ptr<SleeveElement> parent_node = nullptr;
 
   while (!dfs_stack.empty()) {
     auto next_visit = dfs_stack.top();
     dfs_stack.pop();
-    auto next_visit_element = _storage.at(next_visit.id);
+    auto next_visit_element = storage_.at(next_visit.id_);
 
-    if (next_visit_element->_type == ElementType::FOLDER) {
-      for (int i = 0; i < next_visit.depth; i++) {
+    if (next_visit_element->type_ == ElementType::FOLDER) {
+      for (int i = 0; i < next_visit.depth_; i++) {
         result += L"    ";
       }
-      result += L"├── " + next_visit_element->_element_name + L" id:" +
-                std::to_wstring(next_visit_element->_element_id) + L"\n";
+      result += L"├── " + next_visit_element->element_name_ + L" id:" +
+                std::to_wstring(next_visit_element->element_id_) + L"\n";
       auto sub_folder = std::dynamic_pointer_cast<SleeveFolder>(next_visit_element);
       contains        = sub_folder->ListElements();
       for (auto e : contains) {
-        dfs_stack.push({e, next_visit.depth + 1, _storage.at(e)->_type == ElementType::FILE});
+        dfs_stack.push({e, next_visit.depth_ + 1, storage_.at(e)->type_ == ElementType::FILE});
       }
     } else {
-      for (int i = 0; i < next_visit.depth; i++) {
+      for (int i = 0; i < next_visit.depth_; i++) {
         result += L"    ";
       }
-      result += L"└── " + next_visit_element->_element_name + L" id:" +
-                std::to_wstring(next_visit_element->_element_id) + L"\n";
+      result += L"└── " + next_visit_element->element_name_ + L" id:" +
+                std::to_wstring(next_visit_element->element_id_) + L"\n";
     }
   }
   return result;
@@ -563,48 +563,48 @@ auto SleeveBase::Tree(const sl_path_t& path) -> std::wstring {
  */
 auto SleeveBase::TreeBFS(const sl_path_t& path) -> std::wstring {
   struct TreeNode {
-    sl_element_id_t id;
-    int             depth;
-    bool            is_last;
+    sl_element_id_t id_;
+    int             depth_;
+    bool            is_last_;
   };
   auto dest_folder_opt = GetReadGuard(path);
   if (!dest_folder_opt.has_value() ||
-      dest_folder_opt->_access_element->_type == ElementType::FILE) {
+      dest_folder_opt->access_element_->type_ == ElementType::FILE) {
     std::wcout << L"Cannot call Tree() on an file" << std::endl;
     return L"";
   }
   std::wstring result = L"";
   auto         visit_folder =
-      std::dynamic_pointer_cast<SleeveFolder>(dest_folder_opt.value()._access_element);
+      std::dynamic_pointer_cast<SleeveFolder>(dest_folder_opt.value().access_element_);
   auto contains  = visit_folder->ListElements();
   auto bfs_queue = std::deque<TreeNode>();
   for (auto e : contains) {
-    bfs_queue.push_back({e, 1, _storage.at(e)->_type == ElementType::FILE});
+    bfs_queue.push_back({e, 1, storage_.at(e)->type_ == ElementType::FILE});
   }
   result +=
-      visit_folder->_element_name + L" id:" + std::to_wstring(visit_folder->_element_id) + L"\n";
+      visit_folder->element_name_ + L" id:" + std::to_wstring(visit_folder->element_id_) + L"\n";
 
   std::shared_ptr<SleeveElement> parent_node = nullptr;
   int                            last_depth  = 0;
   while (!bfs_queue.empty()) {
     auto next_visit = bfs_queue.front();
     bfs_queue.pop_front();
-    auto next_visit_element = _storage.at(next_visit.id);
-    if (next_visit.depth != last_depth) {
-      result += L"\nLayer: " + std::to_wstring(next_visit.depth) + L" ";
-      last_depth = next_visit.depth;
+    auto next_visit_element = storage_.at(next_visit.id_);
+    if (next_visit.depth_ != last_depth) {
+      result += L"\nLayer: " + std::to_wstring(next_visit.depth_) + L" ";
+      last_depth = next_visit.depth_;
     }
-    if (next_visit_element->_type == ElementType::FOLDER) {
-      result += L"FOLDER: " + next_visit_element->_element_name + L" id:" +
-                std::to_wstring(next_visit_element->_element_id) + L" ";
+    if (next_visit_element->type_ == ElementType::FOLDER) {
+      result += L"FOLDER: " + next_visit_element->element_name_ + L" id:" +
+                std::to_wstring(next_visit_element->element_id_) + L" ";
       auto sub_folder = std::dynamic_pointer_cast<SleeveFolder>(next_visit_element);
       contains        = sub_folder->ListElements();
       for (auto e : contains) {
-        bfs_queue.push_back({e, next_visit.depth + 1, _storage.at(e)->_type == ElementType::FILE});
+        bfs_queue.push_back({e, next_visit.depth_ + 1, storage_.at(e)->type_ == ElementType::FILE});
       }
     } else {
-      result += L"FILE: " + next_visit_element->_element_name + L" id:" +
-                std::to_wstring(next_visit_element->_element_id) + L" ";
+      result += L"FILE: " + next_visit_element->element_name_ + L" id:" +
+                std::to_wstring(next_visit_element->element_id_) + L" ";
     }
   }
   return result;

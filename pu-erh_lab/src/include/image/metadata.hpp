@@ -22,26 +22,26 @@ namespace puerhlab {
 class ExifDisplayMetaData {
  public:
   // Model
-  std::string         make          = "";
-  std::string         model         = "";
-  std::string         lens          = "";
-  std::string         lens_make     = "";
+  std::string         make_          = "";
+  std::string         model_         = "";
+  std::string         lens_          = "";
+  std::string         lens_make_     = "";
 
-  std::string         date_time_str = "";
+  std::string         date_time_str_ = "";
 
   // Size
-  uint32_t            height        = 0;
-  uint32_t            width         = 0;
-  uint32_t            image_size    = 0;
+  uint32_t            height_        = 0;
+  uint32_t            width_         = 0;
+  uint32_t            image_size_    = 0;
 
   // Technical
-  float               aperture      = 0.0f;
-  std::pair<int, int> shutter_speed = {0, 0};
-  uint64_t            iso           = 0;
-  float               focal         = 0.0f;
+  float               aperture_      = 0.0f;
+  std::pair<int, int> shutter_speed_ = {0, 0};
+  uint64_t            iso_           = 0;
+  float               focal_         = 0.0f;
 
   // Other
-  int                 rating        = 0;
+  int                 rating_        = 0;
 
   ExifDisplayMetaData()             = default;
   ExifDisplayMetaData(nlohmann::json exif_json);
@@ -52,64 +52,64 @@ class ExifDisplayMetaData {
     // DEBUG ONLY
     std::stringstream ss;
     // Model
-    ss << "Make: " << make << "\n";
-    ss << "Model: " << model << "\n";
-    ss << "Lens: " << lens << "\n";
-    ss << "Lens Make: " << lens_make << "\n";
+    ss << "Make: " << make_ << "\n";
+    ss << "Model: " << model_ << "\n";
+    ss << "Lens: " << lens_ << "\n";
+    ss << "Lens Make: " << lens_make_ << "\n";
 
     // Technical
-    ss << "Aperture: " << aperture << "\n";
-    ss << "Focal Length: " << focal << " mm\n";
-    ss << "Shutter Speed: " << shutter_speed.first << "/" << shutter_speed.second << " s\n";
-    ss << "Image Size: " << width << " x " << height << "\n";
-    ss << "Date Time: " << date_time_str << "\n";
-    ss << "Rating: " << rating << "\n";
+    ss << "Aperture: " << aperture_ << "\n";
+    ss << "Focal Length: " << focal_ << " mm\n";
+    ss << "Shutter Speed: " << shutter_speed_.first << "/" << shutter_speed_.second << " s\n";
+    ss << "Image Size: " << width_ << " x " << height_ << "\n";
+    ss << "Date Time: " << date_time_str_ << "\n";
+    ss << "Rating: " << rating_ << "\n";
     return ss.str();
   }
 
   auto ToJson() const -> nlohmann::json {
     nlohmann::json exif_json;
     // Model
-    exif_json["Make"]           = make;
-    exif_json["Model"]          = model;
-    exif_json["Lens"]           = lens;
-    exif_json["LensMake"]       = lens_make;
+    exif_json["Make"]           = make_;
+    exif_json["Model"]          = model_;
+    exif_json["Lens"]           = lens_;
+    exif_json["LensMake"]       = lens_make_;
 
     // Technical
-    exif_json["Aperture"]       = aperture;
-    exif_json["FocalLength"]    = focal;
-    exif_json["ISO"]            = iso;
-    exif_json["ShutterSpeed"]   = {shutter_speed.first, shutter_speed.second};
-    exif_json["ImageHeight"]    = height;
-    exif_json["ImageWidth"]     = width;
-    exif_json["ImageSize"]      = width * height;
-    exif_json["DateTimeString"] = date_time_str;
+    exif_json["Aperture"]       = aperture_;
+    exif_json["FocalLength"]    = focal_;
+    exif_json["ISO"]            = iso_;
+    exif_json["ShutterSpeed"]   = {shutter_speed_.first, shutter_speed_.second};
+    exif_json["ImageHeight"]    = height_;
+    exif_json["ImageWidth"]     = width_;
+    exif_json["ImageSize"]      = width_ * height_;
+    exif_json["DateTimeString"] = date_time_str_;
 
     // Other
-    exif_json["Rating"]         = rating;
+    exif_json["Rating"]         = rating_;
     return exif_json;
   }
 
   void FromJson(const nlohmann::json& exif_json) {
     // Model
-    make          = exif_json.value("Make", "");
-    model         = exif_json.value("Model", "");
-    lens          = exif_json.value("Lens", "");
-    lens_make     = exif_json.value("LensMake", "");
+    make_          = exif_json.value("Make", "");
+    model_         = exif_json.value("Model", "");
+    lens_          = exif_json.value("Lens", "");
+    lens_make_     = exif_json.value("LensMake", "");
 
     // Technical
-    aperture      = exif_json.value("Aperture", 0.0f);
-    focal         = exif_json.value("FocalLength", 0.0f);
-    iso           = exif_json.value("ISO", 0);
+    aperture_      = exif_json.value("Aperture", 0.0f);
+    focal_         = exif_json.value("FocalLength", 0.0f);
+    iso_           = exif_json.value("ISO", 0);
     auto shutter  = exif_json.value("ShutterSpeed", std::vector<int>{0, 0});
-    height        = exif_json.value("ImageHeight", 0);
-    width         = exif_json.value("ImageWidth", 0);
-    image_size    = exif_json.value("ImageSize", 0);
+    height_        = exif_json.value("ImageHeight", 0);
+    width_         = exif_json.value("ImageWidth", 0);
+    image_size_    = exif_json.value("ImageSize", 0);
 
     // Time
-    date_time_str = exif_json.value("DateTimeString", "");
+    date_time_str_ = exif_json.value("DateTimeString", "");
     // Other
-    rating        = exif_json.value("Rating", 0);
+    rating_        = exif_json.value("Rating", 0);
   }
 };
 };  // namespace puerhlab

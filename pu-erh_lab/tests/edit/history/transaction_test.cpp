@@ -116,16 +116,16 @@ TEST_F(EditHistoryTests, DISABLED_TestWithImage) {
       PipelineTask task1;
 
       auto         buffer    = ByteBufferLoader::LoadFromImage(img_ptr);
-      task1._input           = buffer ? std::make_shared<ImageBuffer>(std::move(*buffer)) : nullptr;
+      task1.input_           = buffer ? std::make_shared<ImageBuffer>(std::move(*buffer)) : nullptr;
 
       auto pipeline_executor = std::make_shared<CPUPipelineExecutor>();
       pipeline_executor->SetPreviewMode(true);
 
-      task1._pipeline_executor = pipeline_executor;
-      SetPipelineTemplate(task1._pipeline_executor);
+      task1.pipeline_executor_ = pipeline_executor;
+      SetPipelineTemplate(task1.pipeline_executor_);
 
-      task1._options._is_blocking = false;
-      task1._options._is_callback = true;
+      task1.options_.is_blocking_ = false;
+      task1.options_.is_callback_ = true;
       auto save_callback          = [img_ptr](ImageBuffer&) {
         // gpu_data.convertTo(gpu_data, CV_16UC3, 65535.0f);
         // cv::cuda::cvtColor(gpu_data, gpu_data, cv::COLOR_RGB2BGR);
@@ -143,17 +143,16 @@ TEST_F(EditHistoryTests, DISABLED_TestWithImage) {
 
       auto empty_callback         = [](ImageBuffer&) {};
 
-      task1._callback             = empty_callback;
-      task1._options._is_blocking = true;
-      task1._result               = std::make_shared<std::promise<std::shared_ptr<ImageBuffer>>>();
-
-      auto future_task1           = task1._result->get_future();
+      task1.callback_             = empty_callback;
+      task1.options_.is_blocking_ = true;
+      task1.result_               = std::make_shared<std::promise<std::shared_ptr<ImageBuffer>>>();
+      auto future_task1           = task1.result_->get_future();
 
       auto task2                  = task1;  // Make a copy of task1 for task2
-      task2._result               = std::make_shared<std::promise<std::shared_ptr<ImageBuffer>>>();
+      task2.result_               = std::make_shared<std::promise<std::shared_ptr<ImageBuffer>>>();
       ;  // Clear the promise for task2 to avoid issues
-      auto future_task2           = task2._result->get_future();
-      task2._options._is_blocking = true;  // Make task2 non-blocking
+      auto future_task2           = task2.result_->get_future();
+      task2.options_.is_blocking_ = true;  // Make task2 non-blocking
 
       scheduler.ScheduleTask(std::move(task1));
 
@@ -165,9 +164,9 @@ TEST_F(EditHistoryTests, DISABLED_TestWithImage) {
       tx1.ApplyTransaction(*pipeline_executor);
 
       auto task3                  = task2;
-      task3._result               = std::make_shared<std::promise<std::shared_ptr<ImageBuffer>>>();
-      auto future_task3           = task3._result->get_future();
-      task3._options._is_blocking = true;  // Make task3 non-blocking
+      task3.result_               = std::make_shared<std::promise<std::shared_ptr<ImageBuffer>>>();
+      auto future_task3           = task3.result_->get_future();
+      task3.options_.is_blocking_ = true;  // Make task3 non-blocking
 
       scheduler.ScheduleTask(std::move(task2));
       future_task2.get();  // Wait for task2 to complete
@@ -209,41 +208,41 @@ TEST_F(EditHistoryTests, DISABLED_TestWithImage_Animated) {
 
     PipelineTask task;
     auto         buffer    = ByteBufferLoader::LoadFromImage(img_ptr);
-    task._input            = buffer ? std::make_shared<ImageBuffer>(std::move(*buffer)) : nullptr;
+    task.input_            = buffer ? std::make_shared<ImageBuffer>(std::move(*buffer)) : nullptr;
 
     auto pipeline_executor = std::make_shared<CPUPipelineExecutor>();
     pipeline_executor->SetPreviewMode(true);
 
-    task._pipeline_executor = pipeline_executor;
-    SetPipelineTemplate(task._pipeline_executor);
+    task.pipeline_executor_ = pipeline_executor;
+    SetPipelineTemplate(task.pipeline_executor_);
 
-    task._options._is_callback     = false;
-    task._options._is_seq_callback = true;
+    task.options_.is_callback_     = false;
+    task.options_.is_seq_callback_ = true;
     auto display_callback          = [](ImageBuffer&, uint32_t id) {
       auto time = TimeProvider::TimePointToString(TimeProvider::Now());
       std::cout << "New frame " << id << " rendered at " << time << "." << std::endl;
 
       // cv::cvtColor(output.GetCPUData(), output.GetCPUData(), cv::COLOR_RGB2BGR);
     };
-    task._seq_callback         = display_callback;
-    task._options._is_blocking = true;
+    task.seq_callback_         = display_callback;
+    task.options_.is_blocking_ = true;
 
     nlohmann::json exposure_params;
     exposure_params["exposure"] = 0.0f;
 
-    auto& basic_stage = task._pipeline_executor->GetStage(PipelineStageName::Basic_Adjustment);
+    auto& basic_stage = task.pipeline_executor_->GetStage(PipelineStageName::Basic_Adjustment);
     basic_stage.SetOperator(OperatorType::EXPOSURE, exposure_params);
 
     pipeline_executor->SetExecutionStages();
 
     for (float exposure = -2.0f; exposure <= 2.0f; exposure += 0.05f) {
       PipelineTask task1 = task;  // Make a copy of task for task1
-      auto& basic_stage  = task1._pipeline_executor->GetStage(PipelineStageName::Basic_Adjustment);
+      auto& basic_stage  = task1.pipeline_executor_->GetStage(PipelineStageName::Basic_Adjustment);
       exposure_params["exposure"] = exposure;
       basic_stage.SetOperator(OperatorType::EXPOSURE, exposure_params);
-      task1._options._is_blocking = true;
-      task1._result               = std::make_shared<std::promise<std::shared_ptr<ImageBuffer>>>();
-      auto future_task1           = task1._result->get_future();
+      task1.options_.is_blocking_ = true;
+      task1.result_               = std::make_shared<std::promise<std::shared_ptr<ImageBuffer>>>();
+      auto future_task1           = task1.result_->get_future();
 
       scheduler.ScheduleTask(std::move(task1));
       auto result = future_task1.get();  // Wait for task1 to complete
@@ -277,44 +276,44 @@ TEST_F(EditHistoryTests, TestWithPreviewPipeline) {
 
     PipelineTask      task;
     auto              buffer = ByteBufferLoader::LoadFromImage(img_ptr);
-    task._input              = buffer ? std::make_shared<ImageBuffer>(std::move(*buffer)) : nullptr;
+    task.input_              = buffer ? std::make_shared<ImageBuffer>(std::move(*buffer)) : nullptr;
 
     auto pipeline_executor   = std::make_shared<CPUPipelineExecutor>(true);
     pipeline_executor->SetPreviewMode(true);
 
-    task._pipeline_executor = pipeline_executor;
-    SetPipelineTemplate(task._pipeline_executor);
+    task.pipeline_executor_ = pipeline_executor;
+    SetPipelineTemplate(task.pipeline_executor_);
 
-    auto& global_params            = task._pipeline_executor->GetGlobalParams();
+    auto& global_params            = task.pipeline_executor_->GetGlobalParams();
 
-    task._options._is_callback     = false;
-    task._options._is_seq_callback = true;
+    task.options_.is_callback_     = false;
+    task.options_.is_seq_callback_ = true;
     auto display_callback          = [](ImageBuffer& output, uint32_t id) {
       std::cout << "New frame " << id << std::endl;
     };
-    task._seq_callback         = display_callback;
-    task._options._is_blocking = true;
+    task.seq_callback_         = display_callback;
+    task.options_.is_blocking_ = true;
 
     nlohmann::json exposure_params;
     exposure_params["exposure"] = 0.0f;
 
-    auto& basic_stage = task._pipeline_executor->GetStage(PipelineStageName::Basic_Adjustment);
+    auto& basic_stage = task.pipeline_executor_->GetStage(PipelineStageName::Basic_Adjustment);
     basic_stage.SetOperator(OperatorType::EXPOSURE, exposure_params, global_params);
 
     pipeline_executor->SetExecutionStages();
 
     for (float exposure = -5.0f; exposure <= 5.0f; exposure += .5f) {
       PipelineTask task1 = task;  // Make a copy of task for task1
-      auto& basic_stage  = task1._pipeline_executor->GetStage(PipelineStageName::Basic_Adjustment);
+      auto& basic_stage  = task1.pipeline_executor_->GetStage(PipelineStageName::Basic_Adjustment);
 
       // Update multiple parameters
       exposure_params["exposure"] = exposure;
       basic_stage.SetOperator(OperatorType::EXPOSURE, exposure_params, global_params);
 
       // Set up blocking and result promise
-      task1._options._is_blocking = true;
-      task1._result               = std::make_shared<std::promise<std::shared_ptr<ImageBuffer>>>();
-      auto future_task1           = task1._result->get_future();
+      task1.options_.is_blocking_ = true;
+      task1.result_               = std::make_shared<std::promise<std::shared_ptr<ImageBuffer>>>();
+      auto future_task1           = task1.result_->get_future();
 
       scheduler.ScheduleTask(std::move(task1));
 

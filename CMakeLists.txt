@@ -257,7 +257,15 @@ file(GLOB_RECURSE ALL_SOURCE_FILES
     "${CMAKE_SOURCE_DIR}/pu-erh_lab/src/*.hpp"
     "${CMAKE_SOURCE_DIR}/pu-erh_lab/src/*.cuh")
 
-set(MY_HEADER_FILES "${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include/.*")
+# Files compiled by clang-tidy; keep to TUs so compile_commands entries are used.
+file(GLOB_RECURSE TIDY_SOURCE_FILES
+    "${CMAKE_SOURCE_DIR}/pu-erh_lab/src/*.c"
+    "${CMAKE_SOURCE_DIR}/pu-erh_lab/src/*.cpp"
+    "${CMAKE_SOURCE_DIR}/pu-erh_lab/src/*.cu"
+    "${CMAKE_SOURCE_DIR}/pu-erh_lab/tests/*.cpp")
+
+# Header filter: allow both '/' and '\\' so Windows paths match.
+set(MY_HEADER_FILTER ".*pu-erh_lab[\\\\/](src|tests)[\\\\/].*")
 
 add_custom_target(format
     COMMAND clang-format
@@ -269,13 +277,14 @@ add_custom_target(format
 
 add_custom_target(tidy
     COMMAND clang-tidy
-    "-p=${CMAKE_BINARY_DIR}"
+    "\"-p=${CMAKE_BINARY_DIR}\""
+    "\"--config-file=${CMAKE_SOURCE_DIR}/.clang-tidy\""
+    "\"--header-filter=${MY_HEADER_FILTER}\""
+    "\"--extra-arg=--driver-mode=cl\""
+    "\"--extra-arg=-fms-compatibility\""
+    "\"--extra-arg=-fms-extensions\""
     "-fix"
     "-fix-errors"
-    "--header-filter=${MY_HEADER_FILTER}"
-    "--extra-arg=--driver-mode=cl"
-    "--extra-arg=-fms-compatibility"
-    "--extra-arg=-fms-extensions"
-    ${ALL_SOURCE_FILES}
+    ${TIDY_SOURCE_FILES}
     COMMENT "Running clang-tidy on source files"
 )

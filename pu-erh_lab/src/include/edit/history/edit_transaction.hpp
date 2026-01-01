@@ -32,62 +32,62 @@ enum class TransactionType : int { _ADD, _DELETE, _EDIT };
  */
 class EditTransaction {
  private:
-  tx_id_t                       _tx_id;
-  TransactionType               _type;
+  tx_id_t                       tx_id_;
+  TransactionType               type_;
 
-  OperatorType                  _operator_type;
-  PipelineStageName             _stage_name;
-  nlohmann::json                _operator_params;
+  OperatorType                  operator_type_;
+  PipelineStageName             stage_name_;
+  nlohmann::json                operator_params_;
 
   // Optional parent parameter to the last transaction that modified the same operator
-  std::optional<nlohmann::json> _last_operator_params = std::nullopt;
+  std::optional<nlohmann::json> last_operator_params_ = std::nullopt;
 
  public:
   EditTransaction(TransactionType type, OperatorType operator_type, PipelineStageName stage_name,
                   nlohmann::json         operator_params,
                   std::optional<tx_id_t> parent_tx_id = std::nullopt)
-      : _type(type),
-        _operator_type(operator_type),
-        _stage_name(stage_name),
-        _operator_params(operator_params) {
+      : type_(type),
+        operator_type_(operator_type),
+        stage_name_(stage_name),
+        operator_params_(operator_params) {
     // Compute a unique transaction ID based on the transaction details
     (void)parent_tx_id;
-    auto params_str = _operator_params.dump();
+    auto params_str = operator_params_.dump();
   }
 
   EditTransaction(const nlohmann::json& j) { FromJSON(j); }
 
-  auto SetTransactionID(tx_id_t id) { _tx_id = id; }
+  auto SetTransactionID(tx_id_t id) { tx_id_ = id; }
 
-  auto GetTransactionID() const -> tx_id_t { return _tx_id; }
+  auto GetTransactionID() const -> tx_id_t { return tx_id_; }
 
   auto ApplyTransaction(PipelineExecutor& pipeline) -> bool;
 
   auto ToJSON() const -> nlohmann::json;
   void FromJSON(const nlohmann::json& j);
 
-  auto GetTxOpStageName() const -> PipelineStageName { return _stage_name; }
-  auto GetTxOperatorType() const -> OperatorType { return _operator_type; }
+  auto GetTxOpStageName() const -> PipelineStageName { return stage_name_; }
+  auto GetTxOperatorType() const -> OperatorType { return operator_type_; }
 
-  void SetLastOperatorParams(const nlohmann::json& params) { _last_operator_params = params; }
+  void SetLastOperatorParams(const nlohmann::json& params) { last_operator_params_ = params; }
   auto GetLastOperatorParams() const -> std::optional<nlohmann::json> {
-    return _last_operator_params;
+    return last_operator_params_;
   }
 
   auto UndoTransaction() -> EditTransaction {
-    return EditTransaction(TransactionType::_EDIT, _operator_type, _stage_name,
-                           _last_operator_params);
+    return EditTransaction(TransactionType::_EDIT, operator_type_, stage_name_,
+                           last_operator_params_);
   }
 
   auto Hash() const -> Hash128 {
-    std::string params_str = _operator_params.dump();
+    std::string params_str = operator_params_.dump();
     Hash128     result =
-        Hash128::Blend(Hash128::Blend(Hash128::Compute(&_type, sizeof(_type)),
-                                      Hash128::Compute(&_operator_type, sizeof(_operator_type))),
-                       Hash128::Blend(Hash128::Compute(&_stage_name, sizeof(_stage_name)),
+        Hash128::Blend(Hash128::Blend(Hash128::Compute(&type_, sizeof(type_)),
+                                      Hash128::Compute(&operator_type_, sizeof(operator_type_))),
+                       Hash128::Blend(Hash128::Compute(&stage_name_, sizeof(stage_name_)),
                                       Hash128::Compute(&params_str, params_str.size())));
-    if (_last_operator_params) {
-      std::string last_params_str = _last_operator_params->dump();
+    if (last_operator_params_) {
+      std::string last_params_str = last_operator_params_->dump();
       result = Hash128::Blend(result, Hash128::Compute(&last_params_str, last_params_str.size()));
     }
     return result;

@@ -33,10 +33,10 @@
 namespace puerhlab {
 class PathResolver {
  private:
-  std::shared_ptr<SleeveFolder>        _root;
-  LRUCache<sl_path_t, sl_element_id_t> _directory_cache;
-  NodeStorageHandler&                  _storage_handler;
-  IncrID::IDGenerator<uint32_t>&       _id_gen;
+  std::shared_ptr<SleeveFolder>        root_;
+  LRUCache<sl_path_t, sl_element_id_t> directory_cache_;
+  NodeStorageHandler&                  storage_handler_;
+  IncrID::IDGenerator<uint32_t>&       id_gen_;
 
   auto                                 CoWHandler(const std::shared_ptr<SleeveElement> to_copy,
                                                   const std::shared_ptr<SleeveFolder>  parent_folder)

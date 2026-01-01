@@ -32,13 +32,13 @@ namespace puerhlab {
  */
 class SleeveFile : public SleeveElement {
  private:
-  std::shared_ptr<Image>       _image;
+  std::shared_ptr<Image>       image_;
 
-  std::shared_ptr<EditHistory> _edit_history;
-  std::shared_ptr<Version>     _current_version;
+  std::shared_ptr<EditHistory> edit_history_;
+  std::shared_ptr<Version>     current_version_;
 
  public:
-  image_id_t _image_id;
+  image_id_t image_id_;
   explicit SleeveFile(sl_element_id_t id, file_name_t element_name);
   explicit SleeveFile(sl_element_id_t id, file_name_t element_name, std::shared_ptr<Image> image);
 

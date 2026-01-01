@@ -102,19 +102,19 @@ static inline std::wstring FilterValueToString(const FilterValue& value) {
 }
 
 std::wstring FilterSQLCompiler::GenerateConditionString(const FieldCondition& cond) {
-  std::wstring column = FilterSQLCompiler::FieldToColumn(cond.field);
-  std::wstring op     = FilterSQLCompiler::CompareToSQL(cond.op);
-  auto&        value  = cond.value;
+  std::wstring column = FilterSQLCompiler::FieldToColumn(cond.field_);
+  std::wstring op     = FilterSQLCompiler::CompareToSQL(cond.op_);
+  auto&        value  = cond.value_;
 
   // First four cases does not use op string directly
-  if (cond.op == CompareOp::BETWEEN && cond.second_value.has_value()) {
+  if (cond.op_ == CompareOp::BETWEEN && cond.second_value_.has_value()) {
     return std::format(L"({} BETWEEN {} AND {})", column, FilterValueToString(value),
-                       FilterValueToString(cond.second_value.value()));
-  } else if (cond.op == CompareOp::CONTAINS) {
+                       FilterValueToString(cond.second_value_.value()));
+  } else if (cond.op_ == CompareOp::CONTAINS) {
     return std::format(L"({} LIKE '%{}%')", column, std::get<std::wstring>(value));
-  } else if (cond.op == CompareOp::STARTS_WITH) {
+  } else if (cond.op_ == CompareOp::STARTS_WITH) {
     return std::format(L"({} LIKE '{}%')", column, std::get<std::wstring>(value));
-  } else if (cond.op == CompareOp::ENDS_WITH) {
+  } else if (cond.op_ == CompareOp::ENDS_WITH) {
     return std::format(L"({} LIKE '%{}')", column, std::get<std::wstring>(value));
   } else {
     return std::format(L"({} {} {})", column, op, FilterValueToString(value));
@@ -122,25 +122,25 @@ std::wstring FilterSQLCompiler::GenerateConditionString(const FieldCondition& co
 }
 
 std::wstring FilterSQLCompiler::CompileNode(const FilterNode& node) {
-  if (node.type == FilterNode::Type::Condition && node.condition.has_value()) {
-    const FieldCondition& cond = node.condition.value();
+  if (node.type_ == FilterNode::Type::Condition && node.condition_.has_value()) {
+    const FieldCondition& cond = node.condition_.value();
     return GenerateConditionString(cond);
-  } else if (node.type == FilterNode::Type::Logical) {
+  } else if (node.type_ == FilterNode::Type::Logical) {
     std::wstring combined;
     // Reserve some space to avoid multiple allocations
     combined.reserve(256);
     combined.append(L"(");
-    for (size_t i = 0; i < node.children.size(); ++i) {
+    for (size_t i = 0; i < node.children_.size(); ++i) {
       if (i > 0) {
         // TODO: Add handling for NOT
-        combined.append((node.op == FilterOp::AND) ? L" AND " : L" OR ");
+        combined.append((node.op_ == FilterOp::AND) ? L" AND " : L" OR ");
       }
-      combined.append(CompileNode(node.children[i]));
+      combined.append(CompileNode(node.children_[i]));
     }
     combined.append(L")");
     return combined;
-  } else if (node.type == FilterNode::Type::RawSQL && node.raw_sql.has_value()) {
-    return node.raw_sql.value();
+  } else if (node.type_ == FilterNode::Type::RawSQL && node.raw_sql_.has_value()) {
+    return node.raw_sql_.value();
   }
   return L"";
 }

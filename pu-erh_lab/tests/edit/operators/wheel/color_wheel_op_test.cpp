@@ -51,7 +51,7 @@ TEST_F(OperationTests, GrayGradientAdjustmentTest) {
                                          {"luminance_offset", -1.0}}},
                                        {"crossovers", {{"lift", 0.2}, {"gain", 0.8}}}};
     nlohmann::json params;
-    params[color_wheels._script_name] = teal_orange_look;
+    params[color_wheels.script_name_] = teal_orange_look;
     color_wheels.SetParams(params);
 
     ImageBuffer orignal{img->GetThumbnailData().clone()};
@@ -167,7 +167,7 @@ TEST_F(OperationTests, DISABLED_ColorWheelAdjustmentTest) {
                                          {"luminance_offset", 0.0}}},
                                        {"crossovers", {{"lift", 0.2}, {"gain", 0.8}}}};
     nlohmann::json params;
-    params[color_wheels._script_name] = teal_orange_look;
+    params[color_wheels.script_name_] = teal_orange_look;
     color_wheels.SetParams(params);
 
     ImageBuffer original{img->GetThumbnailData().clone()};
@@ -229,11 +229,11 @@ TEST_F(OperationTests, ColorWheelAnimationTest) {
                              {"luminance_offset", 0.0}}},
                            {"crossovers", {{"lift", 0.2}, {"gain", 0.8}}}};
     nlohmann::json params;
-    params[color_wheels._script_name] = look;
+    params[color_wheels.script_name_] = look;
     color_wheels.SetParams(params);
 
     for (float i = -1.0f; i <= 1.0f; i += 0.01f) {
-      params[color_wheels._script_name]["gain"]["luminance_offset"] = i;
+      params[color_wheels.script_name_]["gain"]["luminance_offset"] = i;
       color_wheels.SetParams(params);
       ImageBuffer original{img->GetThumbnailData().clone()};
 

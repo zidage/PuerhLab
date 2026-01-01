@@ -55,25 +55,25 @@
 namespace puerhlab {
 RawProcessor::RawProcessor(const RawParams& params, const libraw_rawdata_t& rawdata,
                            LibRaw& raw_processor)
-    : _params(params), _raw_data(rawdata), _raw_processor(raw_processor) {}
+    : params_(params), raw_data_(rawdata), raw_processor_(raw_processor) {}
 
 void RawProcessor::ApplyLinearization() {
-  auto& pre_debayer_buffer = _process_buffer;
+  auto& pre_debayer_buffer = process_buffer_;
 #ifdef HAVE_CUDA
-  if (_params._cuda) {
+  if (params_.cuda_) {
     auto& gpu_img = pre_debayer_buffer.GetGPUData();
-    CUDA::ToLinearRef(gpu_img, _raw_processor);
+    CUDA::ToLinearRef(gpu_img, raw_processor_);
     return;
   }
 #endif
   auto& cpu_img = pre_debayer_buffer.GetCPUData();
-  CPU::ToLinearRef(cpu_img, _raw_processor);
+  CPU::ToLinearRef(cpu_img, raw_processor_);
 }
 
 void RawProcessor::ApplyDebayer() {
-  auto& pre_debayer_buffer = _process_buffer;
+  auto& pre_debayer_buffer = process_buffer_;
 #ifdef HAVE_CUDA
-  if (_params._cuda) {
+  if (params_.cuda_) {
     auto& gpu_img = pre_debayer_buffer.GetGPUData();
     CUDA::BayerRGGB2RGB_AHD(gpu_img);
 
@@ -87,31 +87,31 @@ void RawProcessor::ApplyDebayer() {
   // _raw_data.sizes.raw_inset_crops[0].ctop,
   //                    _raw_data.sizes.raw_inset_crops[0].cwidth,
   //                    _raw_data.sizes.raw_inset_crops[0].cheight);
-  cv::Rect crop_rect(_raw_data.sizes.left_margin, _raw_data.sizes.top_margin, _raw_data.sizes.width,
-                     _raw_data.sizes.height);
+  cv::Rect crop_rect(raw_data_.sizes.left_margin, raw_data_.sizes.top_margin, raw_data_.sizes.width,
+                     raw_data_.sizes.height);
   img = img(crop_rect);
 }
 
 void RawProcessor::ApplyHighlightReconstruct() {
-  if (_params._cuda) {
+  if (params_.cuda_) {
     throw std::runtime_error("RawProcessor: Not implemented");
   } else {
-    auto& img = _process_buffer.GetCPUData();
-    if (!_params._highlights_reconstruct) {
+    auto& img = process_buffer_.GetCPUData();
+    if (!params_.highlights_reconstruct_) {
       // clamp to [0, 1]
       cv::threshold(img, img, 1.0f, 1.0f, cv::THRESH_TRUNC);
       cv::threshold(img, img, 0.0f, 0.0f, cv::THRESH_TOZERO);
       return;
     }
-    CPU::HighlightReconstruct(img, _raw_processor);
+    CPU::HighlightReconstruct(img, raw_processor_);
   }
 }
 
 void RawProcessor::ConvertToWorkingSpace() {
-  auto& debayer_buffer = _process_buffer;
-  auto  color_coeffs   = _raw_data.color.rgb_cam;
+  auto& debayer_buffer = process_buffer_;
+  auto  color_coeffs   = raw_data_.color.rgb_cam;
 #ifdef HAVE_CUDA
-  if (_params._cuda) {
+  if (params_.cuda_) {
     auto& gpu_img = debayer_buffer.GetGPUData();
     CUDA::ApplyColorMatrix(gpu_img, color_coeffs);
     return;
@@ -119,39 +119,39 @@ void RawProcessor::ConvertToWorkingSpace() {
 #endif
   auto& img = debayer_buffer.GetCPUData();
   img.convertTo(img, CV_32FC3);
-  auto pre_mul   = _raw_data.color.pre_mul;
-  auto cam_mul   = _raw_data.color.cam_mul;
-  auto wb_coeffs = _raw_data.color.WB_Coeffs;  // EXIF Lightsource Values
-  auto cam_xyz   = _raw_data.color.cam_xyz;
-  if (!_params._use_camera_wb) {
+  auto pre_mul   = raw_data_.color.pre_mul;
+  auto cam_mul   = raw_data_.color.cam_mul;
+  auto wb_coeffs = raw_data_.color.WB_Coeffs;  // EXIF Lightsource Values
+  auto cam_xyz   = raw_data_.color.cam_xyz;
+  if (!params_.use_camera_wb_) {
     // User specified white balance temperature
-    auto user_temp_indices = CPU::GetWBIndicesForTemp(static_cast<float>(_params._user_wb));
+    auto user_temp_indices = CPU::GetWBIndicesForTemp(static_cast<float>(params_.user_wb_));
     CPU::ApplyColorMatrix(img, color_coeffs, pre_mul, cam_mul, wb_coeffs, user_temp_indices,
-                          _params._user_wb, cam_xyz);
+                          params_.user_wb_, cam_xyz);
     return;
   }
   CPU::ApplyColorMatrix(img, color_coeffs, pre_mul, cam_mul, cam_xyz);
 }
 
 auto RawProcessor::Process() -> ImageBuffer {
-  auto    img_unpacked = _raw_data.raw_image;
-  auto&   img_sizes    = _raw_data.sizes;
+  auto    img_unpacked = raw_data_.raw_image;
+  auto&   img_sizes    = raw_data_.sizes;
 
   cv::Mat unpacked_mat{img_sizes.raw_height, img_sizes.raw_width, CV_16UC1, img_unpacked};
-  _process_buffer = {std::move(unpacked_mat)};
+  process_buffer_ = {std::move(unpacked_mat)};
 
 #ifdef HAVE_CUDA
 
-  if (_params._cuda) {
-    _process_buffer.SyncToGPU();
+  if (params_.cuda_) {
+    process_buffer_.SyncToGPU();
   }
 #endif
 
   // std::cout << _raw_processor.COLOR(0, 0) << " " << _raw_processor.COLOR(0, 1) << " "
   //           << _raw_processor.COLOR(1, 0) << " " << _raw_processor.COLOR(1, 1) << "\n";
-  CV_Assert(_raw_processor.COLOR(0, 0) == 0 && _raw_processor.COLOR(0, 1) == 1 &&
-            _raw_processor.COLOR(1, 0) == 3 && _raw_processor.COLOR(1, 1) == 2);
-  _process_buffer.GetCPUData().convertTo(_process_buffer.GetCPUData(), CV_32FC1, 1.0f / 65535.0f);
+  CV_Assert(raw_processor_.COLOR(0, 0) == 0 && raw_processor_.COLOR(0, 1) == 1 &&
+            raw_processor_.COLOR(1, 0) == 3 && raw_processor_.COLOR(1, 1) == 2);
+  process_buffer_.GetCPUData().convertTo(process_buffer_.GetCPUData(), CV_32FC1, 1.0f / 65535.0f);
 
   using clock = std::chrono::high_resolution_clock;
   auto start  = clock::now();
@@ -171,18 +171,18 @@ auto RawProcessor::Process() -> ImageBuffer {
   std::cout << "Debayering took " << debayer_duration.count() << " ms\n";
 
   // Temporary fix for orientation
-  switch (_raw_data.sizes.flip) {
+  switch (raw_data_.sizes.flip) {
     case 3:
       // 180 degree
-      cv::rotate(_process_buffer.GetCPUData(), _process_buffer.GetCPUData(), cv::ROTATE_180);
+      cv::rotate(process_buffer_.GetCPUData(), process_buffer_.GetCPUData(), cv::ROTATE_180);
       break;
     case 5:
       // Rotate 90 CCW
-      cv::rotate(_process_buffer.GetCPUData(), _process_buffer.GetCPUData(), cv::ROTATE_90_COUNTERCLOCKWISE);
+      cv::rotate(process_buffer_.GetCPUData(), process_buffer_.GetCPUData(), cv::ROTATE_90_COUNTERCLOCKWISE);
       break;
     case 6:
       // Rotate 90 CW
-      cv::rotate(_process_buffer.GetCPUData(), _process_buffer.GetCPUData(), cv::ROTATE_90_CLOCKWISE);
+      cv::rotate(process_buffer_.GetCPUData(), process_buffer_.GetCPUData(), cv::ROTATE_90_CLOCKWISE);
       break;
     default:
       // Do nothing
@@ -191,20 +191,20 @@ auto RawProcessor::Process() -> ImageBuffer {
 
   ConvertToWorkingSpace();
   cv::Mat final_img = cv::Mat();
-  final_img.create(_process_buffer.GetCPUData().rows, _process_buffer.GetCPUData().cols, CV_32FC4);
-  cv::cvtColor(_process_buffer.GetCPUData(), final_img, cv::COLOR_RGB2RGBA);
-  _process_buffer = {std::move(final_img)};
+  final_img.create(process_buffer_.GetCPUData().rows, process_buffer_.GetCPUData().cols, CV_32FC4);
+  cv::cvtColor(process_buffer_.GetCPUData(), final_img, cv::COLOR_RGB2RGBA);
+  process_buffer_ = {std::move(final_img)};
   auto                                      cst_end      = clock::now();
   std::chrono::duration<double, std::milli> cst_duration = cst_end - debayer_end;
   std::cout << "Color Space Transformation took " << cst_duration.count() << " ms\n";
   std::cout << "Total processing took "
             << (linear_duration + hl_duration + debayer_duration + cst_duration).count() << " ms\n";
 #ifdef HAVE_CUDA
-  if (_params._cuda) {
-    _process_buffer.SyncToCPU();
-    _process_buffer.ReleaseGPUData();
+  if (params_.cuda_) {
+    process_buffer_.SyncToCPU();
+    process_buffer_.ReleaseGPUData();
   }
 #endif
-  return {std::move(_process_buffer)};
+  return {std::move(process_buffer_)};
 }
 }  // namespace puerhlab

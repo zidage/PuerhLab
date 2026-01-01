@@ -33,18 +33,18 @@ class FileSystem {
 
  private:
   // A mapping between node id and pointers to actual nodes.
-  NodeMapping                          _storage;
-  std::shared_ptr<SleeveFolder>        _root;
+  NodeMapping                          storage_;
+  std::shared_ptr<SleeveFolder>        root_;
 
   // ID Generation
-  IncrID::IDGenerator<sl_element_id_t> _id_gen;
+  IncrID::IDGenerator<sl_element_id_t> id_gen_;
   /** @name Database interaction */
   ///@{
-  std::filesystem::path                _db_path;
-  std::filesystem::path                _meta_path;
-  StorageService&                      _storage_service;
-  NodeStorageHandler                   _storage_handler;
-  PathResolver                         _resolver;
+  std::filesystem::path                db_path_;
+  std::filesystem::path                meta_path_;
+  StorageService&                      storage_service_;
+  NodeStorageHandler                   storage_handler_;
+  PathResolver                         resolver_;
   ///@}
 
  public:

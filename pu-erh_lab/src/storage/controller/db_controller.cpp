@@ -29,9 +29,9 @@ namespace puerhlab {
  *
  * @param db_path
  */
-DBController::DBController(file_path_t& db_path) : _db_path(db_path), _initialized(false) {
+DBController::DBController(file_path_t& db_path) : db_path_(db_path), initialized_(false) {
   if (std::filesystem::exists(db_path)) {
-    _initialized = true;
+    initialized_ = true;
   }
   InitializeDB();
 }
@@ -40,7 +40,7 @@ DBController::DBController(file_path_t& db_path) : _db_path(db_path), _initializ
  * @brief Destroy the DBController::DBController object
  *
  */
-DBController::~DBController() { duckdb_close(&_db); }
+DBController::~DBController() { duckdb_close(&db_); }
 
 /**
  * @brief Get a connection guard for the database.
@@ -50,7 +50,7 @@ DBController::~DBController() { duckdb_close(&_db); }
 auto DBController::GetConnectionGuard() -> ConnectionGuard {
   ConnectionGuard guard{{}};
 
-  if (duckdb_connect(_db, &guard._conn) != DuckDBSuccess) {
+  if (duckdb_connect(db_, &guard.conn_) != DuckDBSuccess) {
     throw std::runtime_error("DB cannot be connected");
   }
 
@@ -63,24 +63,24 @@ auto DBController::GetConnectionGuard() -> ConnectionGuard {
  */
 void DBController::InitializeDB() {
   // SQL query to create the necessary tables
-  std::string utf8_str = conv::ToBytes(_db_path.wstring());
-  if (duckdb_open(utf8_str.c_str(), &_db) != DuckDBSuccess) {
+  std::string utf8_str = conv::ToBytes(db_path_.wstring());
+  if (duckdb_open(utf8_str.c_str(), &db_) != DuckDBSuccess) {
     throw std::runtime_error("DB cannot be created");
   }
 
   // SQL query to create the tables
   auto guard = GetConnectionGuard();
-  if (_initialized) return;
+  if (initialized_) return;
 
   duckdb_result result;
 
   // Run the SQL query to create the tables
-  if (duckdb_query(guard._conn, init_table_query, &result) != DuckDBSuccess) {
+  if (duckdb_query(guard.conn_, init_table_query, &result) != DuckDBSuccess) {
     auto error_message = duckdb_result_error(&result);
     duckdb_destroy_result(&result);
     throw std::runtime_error(error_message);
   }
-  _initialized = true;
+  initialized_ = true;
 }
 
 };  // namespace puerhlab

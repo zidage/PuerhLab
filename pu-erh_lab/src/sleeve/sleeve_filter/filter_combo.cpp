@@ -37,7 +37,7 @@ auto FilterCombo::GenerateSQLOn(sl_element_id_t parent_id) const -> std::wstring
       L"  fc.folder_id = {}\n"
       L"  AND e.type = {}\n"
       L"  AND ({});",
-      parent_id, static_cast<uint32_t>(ElementType::FILE), FilterSQLCompiler::Compile(_root));
+      parent_id, static_cast<uint32_t>(ElementType::FILE), FilterSQLCompiler::Compile(root_));
   return sql;
 }
 };  // namespace puerhlab

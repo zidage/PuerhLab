@@ -52,36 +52,36 @@ class GPUPipelineImpl {
   };
 
   using StaticKernelStreamType = decltype(BuildKernelStream());
-  StaticKernelStreamType _static_kernel_stream = BuildKernelStream();
-  GPU_KernelLauncher<StaticKernelStreamType> _launcher;
+  StaticKernelStreamType static_kernel_stream_ = BuildKernelStream();
+  GPU_KernelLauncher<StaticKernelStreamType> launcher_;
 
  public:
-  GPUPipelineImpl() : _launcher(nullptr, _static_kernel_stream) {}
+  GPUPipelineImpl() : launcher_(nullptr, static_kernel_stream_) {}
 
-  void SetInput(std::shared_ptr<ImageBuffer> input_img) { _launcher.SetInputImage(input_img); }
+  void SetInput(std::shared_ptr<ImageBuffer> input_img) { launcher_.SetInputImage(input_img); }
 
   void SetParams(OperatorParams& cpu_params) {
-    _launcher.SetParams(cpu_params);
+    launcher_.SetParams(cpu_params);
   }
 
   void Execute(std::shared_ptr<ImageBuffer> output_img) {
-    _launcher.SetOutputImage(output_img);
-    _launcher.Execute();
+    launcher_.SetOutputImage(output_img);
+    launcher_.Execute();
   }
   
 };
 
-GPUPipelineWrapper::GPUPipelineWrapper() : _impl(std::make_unique<GPUPipelineImpl>()) {}
+GPUPipelineWrapper::GPUPipelineWrapper() : impl_(std::make_unique<GPUPipelineImpl>()) {}
 
 GPUPipelineWrapper::~GPUPipelineWrapper() = default;
 
 void GPUPipelineWrapper::SetInputImage(std::shared_ptr<ImageBuffer> input_image) {
-  _impl->SetInput(input_image);
+  impl_->SetInput(input_image);
 }
 
 void GPUPipelineWrapper::SetParams(OperatorParams& cpu_params) {
-  _impl->SetParams(cpu_params);
+  impl_->SetParams(cpu_params);
 }
 
-void GPUPipelineWrapper::Execute(std::shared_ptr<ImageBuffer> output) { _impl->Execute(output); }
+void GPUPipelineWrapper::Execute(std::shared_ptr<ImageBuffer> output) { impl_->Execute(output); }
 };  // namespace puerhlab

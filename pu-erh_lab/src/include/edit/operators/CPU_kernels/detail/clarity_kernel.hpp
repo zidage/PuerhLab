@@ -20,8 +20,8 @@
 namespace puerhlab {
 struct ClarityOpKernel : NeighborOpTag {
   inline void operator()(Tile& in, OperatorParams& params) const {
-    if (!params.clarity_enabled) return;
-    cv::Mat tile_mat(in._height, in._width, CV_32FC4, in._ptr);
+    if (!params.clarity_enabled_) return;
+    cv::Mat tile_mat(in.height_, in.width_, CV_32FC4, in.ptr_);
     cv::Mat midtone_mask;
 
     cv::Mat luminosity_mask;
@@ -45,7 +45,7 @@ struct ClarityOpKernel : NeighborOpTag {
       auto*     hp_ptr   = high_pass.ptr<cv::Vec4f>();
       auto*     mask_ptr = midtone_mask.ptr<float>();
       for (int i = 0; i < total; ++i) {
-        const float w = mask_ptr[i] * params.clarity_offset;
+        const float w = mask_ptr[i] * params.clarity_offset_;
         hp_ptr[i][0] *= w;
         hp_ptr[i][1] *= w;
         hp_ptr[i][2] *= w;  // leave alpha untouched
@@ -55,7 +55,7 @@ struct ClarityOpKernel : NeighborOpTag {
         auto*        hp_ptr = high_pass.ptr<cv::Vec4f>(r);
         const float* m      = midtone_mask.ptr<float>(r);
         for (int c = 0; c < cols; ++c) {
-          const float w = m[c] * params.clarity_offset;
+          const float w = m[c] * params.clarity_offset_;
           hp_ptr[c][0] *= w;
           hp_ptr[c][1] *= w;
           hp_ptr[c][2] *= w;  // leave alpha untouched

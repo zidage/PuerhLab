@@ -20,20 +20,20 @@ namespace puerhlab {
 NodeStorageHandler::NodeStorageHandler(
     ElementController&                                                   db_ctrl,
     std::unordered_map<sl_element_id_t, std::shared_ptr<SleeveElement>>& storage)
-    : _db_ctrl(db_ctrl), _storage(storage) {}
+    : db_ctrl_(db_ctrl), storage_(storage) {}
 
 void NodeStorageHandler::AddToStorage(std::shared_ptr<SleeveElement> new_element) {
-  _storage[new_element->_element_id] = new_element;
+  storage_[new_element->element_id_] = new_element;
 }
 
 auto NodeStorageHandler::GetElement(uint32_t id) -> std::shared_ptr<SleeveElement> {
-  if (_storage.contains(id)) {
-    return _storage.at(id);
+  if (storage_.contains(id)) {
+    return storage_.at(id);
   }
   // If the element is not presented in the memory, get it from the db.
   // Then loaded pointer into the storage
-  auto result                   = _db_ctrl.GetElementById(id);
-  _storage[result->_element_id] = result;
+  auto result                   = db_ctrl_.GetElementById(id);
+  storage_[result->element_id_] = result;
   return result;
 }
 
@@ -41,7 +41,7 @@ void NodeStorageHandler::EnsureChildrenLoaded(std::shared_ptr<SleeveFolder> fold
   // Assume all the lazy-loaded folder are empty for now
   if (folder->ContentSize() == 0) {
     try {
-      auto folder_content = _db_ctrl.GetFolderContent(folder->_element_id);
+      auto folder_content = db_ctrl_.GetFolderContent(folder->element_id_);
       for (auto& content_id : folder_content) {
         auto content = GetElement(content_id);
         folder->AddElementToMap(content);
@@ -53,13 +53,13 @@ void NodeStorageHandler::EnsureChildrenLoaded(std::shared_ptr<SleeveFolder> fold
 }
 
 StorageService::StorageService(std::filesystem::path db_path)
-    : _db_ctrl(db_path),
-      _el_ctrl(_db_ctrl.GetConnectionGuard()),
-      _img_ctrl(_db_ctrl.GetConnectionGuard()) {}
+    : db_ctrl_(db_path),
+      el_ctrl_(db_ctrl_.GetConnectionGuard()),
+      img_ctrl_(db_ctrl_.GetConnectionGuard()) {}
 
-auto StorageService::GetElementController() -> ElementController& { return _el_ctrl; }
+auto StorageService::GetElementController() -> ElementController& { return el_ctrl_; }
 
-auto StorageService::GetImageController() -> ImageController& { return _img_ctrl; }
+auto StorageService::GetImageController() -> ImageController& { return img_ctrl_; }
 
-auto StorageService::GetDBController() -> DBController& { return _db_ctrl; }
+auto StorageService::GetDBController() -> DBController& { return db_ctrl_; }
 };  // namespace puerhlab

@@ -120,7 +120,7 @@ Oklab LinearRGB2Oklab(const cv::Vec3f& rgb) {
  * @return Oklab
  */
 cv::Vec3f Oklab2LinearRGB(const Oklab& lab) {
-  float     L = lab.L, a = lab.a, b = lab.b;
+  float     L = lab.l_, a = lab.a_, b = lab.b_;
 
   // Oklab to LMS (non-linear)
   float     l_    = L + 0.3963377774f * a + 0.2158037573f * b;
@@ -172,7 +172,7 @@ Oklab ACESRGB2Oklab(const cv::Vec3f& rgb) {
  * @return Oklab
  */
 cv::Vec3f Oklab2ACESRGB(const Oklab& lab) {
-  float     L = lab.L, a = lab.a, b = lab.b;
+  float     L = lab.l_, a = lab.a_, b = lab.b_;
 
   // Oklab to LMS (non-linear)
   float     l_    = L + 0.3963377774f * a + 0.2158037573f * b;
@@ -195,14 +195,14 @@ cv::Vec3f Oklab2ACESRGB(const Oklab& lab) {
 }
 
 Oklab ACESRGB2Oklab(const puerhlab::Pixel& pixel) {
-  cv::Vec3f acescc_rgb{pixel.r, pixel.g, pixel.b};
+  cv::Vec3f acescc_rgb{pixel.r_, pixel.g_, pixel.b_};
   return ACESRGB2Oklab(acescc_rgb);
 }
 
 void Oklab2ACESRGB(const Oklab& lab, puerhlab::Pixel& pixel) {
   cv::Vec3f acescc_rgb = Oklab2ACESRGB(lab);
-  pixel.r              = acescc_rgb[0];
-  pixel.g              = acescc_rgb[1];
-  pixel.b              = acescc_rgb[2];
+  pixel.r_              = acescc_rgb[0];
+  pixel.g_              = acescc_rgb[1];
+  pixel.b_              = acescc_rgb[2];
 }
 };  // namespace OklabCvt

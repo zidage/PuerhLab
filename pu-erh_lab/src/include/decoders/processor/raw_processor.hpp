@@ -25,21 +25,21 @@
 
 namespace puerhlab {
 struct RawParams {
-  bool     _cuda                   = false;
-  bool     _highlights_reconstruct = false;
-  bool     _use_camera_wb          = true;
-  uint32_t _user_wb = 6500;  // If user wants to set a specific white balance temperature
-  CPU::LightSourceType _user_light_source =
+  bool     cuda_                   = false;
+  bool     highlights_reconstruct_ = false;
+  bool     use_camera_wb_          = true;
+  uint32_t user_wb_ = 6500;  // If user wants to set a specific white balance temperature
+  CPU::LightSourceType user_light_source_ =
       CPU::LightSourceType::UNKNOWN;  // If user wants to use a preset light source as the wb
 };
 
 class RawProcessor {
  private:
-  ImageBuffer             _process_buffer;
-  RawParams               _params;
+  ImageBuffer             process_buffer_;
+  RawParams               params_;
 
-  const libraw_rawdata_t& _raw_data;
-  LibRaw&                 _raw_processor;
+  const libraw_rawdata_t& raw_data_;
+  LibRaw&                 raw_processor_;
 
   /**
    * @brief A procedure similar to DNG "Mapping Raw Values to Linear Reference Values" procedure.

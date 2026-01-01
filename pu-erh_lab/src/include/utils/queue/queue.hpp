@@ -26,17 +26,17 @@ namespace puerhlab {
 template <typename T>
 class ConcurrentBlockingQueue {
  public:
-  std::uint32_t           _max_size;
-  bool                    _has_capacity_limit = true;
-  std::queue<T>           _queue;
+  std::uint32_t           max_size_;
+  bool                    has_capacity_limit_ = true;
+  std::queue<T>           queue_;
   // Mutex used for non-blocking queue
-  std::mutex              mtx;
-  std::condition_variable _producer_cv;
-  std::condition_variable _consumer_cv;
+  std::mutex              mtx_;
+  std::condition_variable producer_cv_;
+  std::condition_variable consumer_cv_;
 
-  explicit ConcurrentBlockingQueue() { _has_capacity_limit = false; };
+  explicit ConcurrentBlockingQueue() { has_capacity_limit_ = false; };
 
-  explicit ConcurrentBlockingQueue(uint32_t max_size) : _max_size(max_size) {}
+  explicit ConcurrentBlockingQueue(uint32_t max_size) : max_size_(max_size) {}
 
   /**
    * @brief A thread-safe wrapper for _request_queue push() method
@@ -45,10 +45,10 @@ class ConcurrentBlockingQueue {
    */
   void push(T new_request) {
     {
-      std::unique_lock<std::mutex> lock(mtx);
-      _queue.push(std::move(new_request));
+      std::unique_lock<std::mutex> lock(mtx_);
+      queue_.push(std::move(new_request));
     }
-    _consumer_cv.notify_all();
+    consumer_cv_.notify_all();
   }
 
   /**
@@ -58,10 +58,10 @@ class ConcurrentBlockingQueue {
    */
   void push_r(T&& new_request) {
     {
-      std::unique_lock<std::mutex> lock(mtx);
-      _queue.push(std::move(new_request));
+      std::unique_lock<std::mutex> lock(mtx_);
+      queue_.push(std::move(new_request));
     }
-    _consumer_cv.notify_all();
+    consumer_cv_.notify_all();
   }
 
   /**
@@ -70,12 +70,12 @@ class ConcurrentBlockingQueue {
    * @return the front-most element of the queue
    */
   T pop() {
-    std::unique_lock<std::mutex> lock(mtx);
+    std::unique_lock<std::mutex> lock(mtx_);
     // Wait for the queue to be fill with at least one value
-    _consumer_cv.wait(lock, [this] { return !_queue.empty(); });
+    consumer_cv_.wait(lock, [this] { return !queue_.empty(); });
 
-    auto handled_request = _queue.front();
-    _queue.pop();
+    auto handled_request = queue_.front();
+    queue_.pop();
 
     return handled_request;
   }
@@ -86,12 +86,12 @@ class ConcurrentBlockingQueue {
    * @return the front-most element of the queue
    */
   T pop_r() {
-    std::unique_lock<std::mutex> lock(mtx);
+    std::unique_lock<std::mutex> lock(mtx_);
     // Wait for the queue to be fill with at least one value
-    _consumer_cv.wait(lock, [this] { return !_queue.empty(); });
+    consumer_cv_.wait(lock, [this] { return !queue_.empty(); });
 
-    auto handled_request = std::move(_queue.front());
-    _queue.pop();
+    auto handled_request = std::move(queue_.front());
+    queue_.pop();
 
     return handled_request;
   }
@@ -103,113 +103,113 @@ class ConcurrentBlockingQueue {
 template <typename T>
 class LockFreeMPMCQueue {
  public:
-  explicit LockFreeMPMCQueue(size_t capacity) : _capacity(capacity), _buffer(capacity) {
+  explicit LockFreeMPMCQueue(size_t capacity) : capacity_(capacity), buffer_(capacity) {
     for (size_t i = 0; i < capacity; ++i) {
-      _buffer[i].sequence.store(i, std::memory_order_relaxed);
+      buffer_[i].sequence.store(i, std::memory_order_relaxed);
     }
-    _head.store(0, std::memory_order_relaxed);
-    _tail.store(0, std::memory_order_relaxed);
+    head_.store(0, std::memory_order_relaxed);
+    tail_.store(0, std::memory_order_relaxed);
   }
 
   bool push(const T& item) {
-    size_t pos = _tail.load(std::memory_order_relaxed);
+    size_t pos = tail_.load(std::memory_order_relaxed);
     while (true) {
-      Slot&    slot = _buffer[pos % _capacity];
-      size_t   seq  = slot.sequence.load(std::memory_order_acquire);
+      Slot&    slot = buffer_[pos % capacity_];
+      size_t   seq  = slot.sequence_.load(std::memory_order_acquire);
       intptr_t diff = (intptr_t)seq - (intptr_t)pos;
       if (diff == 0) {
-        if (_tail.compare_exchange_weak(pos, pos + 1, std::memory_order_relaxed)) {
-          slot.data = item;
-          slot.sequence.store(pos + 1, std::memory_order_release);
+        if (tail_.compare_exchange_weak(pos, pos + 1, std::memory_order_relaxed)) {
+          slot.data_ = item;
+          slot.sequence_.store(pos + 1, std::memory_order_release);
           return true;
         }
       } else if (diff < 0) {
         return false;  // queue is full
       } else {
-        pos = _tail.load(std::memory_order_relaxed);  // retry
+        pos = tail_.load(std::memory_order_relaxed);  // retry
       }
     }
   }
 
   std::optional<T> pop() {
-    size_t pos = _head.load(std::memory_order_relaxed);
+    size_t pos = head_.load(std::memory_order_relaxed);
     while (true) {
-      Slot&    slot = _buffer[pos % _capacity];
-      size_t   seq  = slot.sequence.load(std::memory_order_acquire);
+      Slot&    slot = buffer_[pos % capacity_];
+      size_t   seq  = slot.sequence_.load(std::memory_order_acquire);
       intptr_t diff = (intptr_t)seq - (intptr_t)(pos + 1);
       if (diff == 0) {
-        if (_head.compare_exchange_weak(pos, pos + 1, std::memory_order_relaxed)) {
-          T result = slot.data;
-          slot.sequence.store(pos + _capacity, std::memory_order_release);
+        if (head_.compare_exchange_weak(pos, pos + 1, std::memory_order_relaxed)) {
+          T result = slot.data_;
+          slot.sequence_.store(pos + capacity_, std::memory_order_release);
           return result;
         }
       } else if (diff < 0) {
         return std::nullopt;  // queue is empty
       } else {
-        pos = _head.load(std::memory_order_relaxed);  // retry
+        pos = head_.load(std::memory_order_relaxed);  // retry
       }
     }
   }
 
   bool empty() const {
-    return _head.load(std::memory_order_acquire) == _tail.load(std::memory_order_acquire);
+    return head_.load(std::memory_order_acquire) == tail_.load(std::memory_order_acquire);
   }
 
  private:
   struct Slot {
-    std::atomic<size_t> sequence;
-    T                   data;
+    std::atomic<size_t> sequence_;
+    T                   data_;
   };
 
-  size_t              _capacity;
-  std::vector<Slot>   _buffer;
-  std::atomic<size_t> _head{0};
-  std::atomic<size_t> _tail{0};
+  size_t              capacity_;
+  std::vector<Slot>   buffer_;
+  std::atomic<size_t> head_{0};
+  std::atomic<size_t> tail_{0};
 };
 
 template <typename T>
 class BlockingMPMCQueue {
  public:
-  explicit BlockingMPMCQueue(size_t capacity) : _queue(capacity) {}
+  explicit BlockingMPMCQueue(size_t capacity) : queue_(capacity) {}
 
   void push(const T& item) {
     while (true) {
-      if (_queue.push(item)) {
+      if (queue_.push(item)) {
         {
-          std::lock_guard<std::mutex> lock(_cv_mutex);
-          _not_empty.notify_one();
+          std::lock_guard<std::mutex> lock(cv_mutex_);
+          not_empty_.notify_one();
         }
         return;
       }
 
-      std::unique_lock<std::mutex> lock(_cv_mutex);
-      _not_full.wait(lock);  // wait until space available
+      std::unique_lock<std::mutex> lock(cv_mutex_);
+      not_full_.wait(lock);  // wait until space available
     }
   }
 
   T pop() {
     while (true) {
-      auto item = _queue.pop();
+      auto item = queue_.pop();
       if (item.has_value()) {
         {
-          std::lock_guard<std::mutex> lock(_cv_mutex);
-          _not_full.notify_one();
+          std::lock_guard<std::mutex> lock(cv_mutex_);
+          not_full_.notify_one();
         }
         return item.value();
       }
 
-      std::unique_lock<std::mutex> lock(_cv_mutex);
-      _not_empty.wait(lock);  // wait until item available
+      std::unique_lock<std::mutex> lock(cv_mutex_);
+      not_empty_.wait(lock);  // wait until item available
     }
   }
 
-  bool empty() const { return _queue.empty(); }
+  bool empty() const { return queue_.empty(); }
 
  private:
-  LockFreeMPMCQueue<T>    _queue;
+  LockFreeMPMCQueue<T>    queue_;
 
-  std::condition_variable _not_empty;
-  std::condition_variable _not_full;
-  std::mutex              _cv_mutex;
+  std::condition_variable not_empty_;
+  std::condition_variable not_full_;
+  std::mutex              cv_mutex_;
 };
 };  // namespace puerhlab

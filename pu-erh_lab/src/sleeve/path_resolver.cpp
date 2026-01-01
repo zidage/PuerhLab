@@ -33,9 +33,9 @@
 
 namespace puerhlab {
 PathResolver::PathResolver(NodeStorageHandler& lazy_handler, IncrID::IDGenerator<uint32_t>& id_gen)
-    : _storage_handler(lazy_handler), _id_gen(id_gen) {}
+    : storage_handler_(lazy_handler), id_gen_(id_gen) {}
 
-void PathResolver::SetRoot(std::shared_ptr<SleeveFolder> root) { _root = root; }
+void PathResolver::SetRoot(std::shared_ptr<SleeveFolder> root) { root_ = root; }
 
 auto PathResolver::Normalize(const std::filesystem::path raw_path) -> std::wstring {
   return raw_path.lexically_normal().wstring();
@@ -59,7 +59,7 @@ auto PathResolver::Contains(const std::filesystem::path& path) -> bool {
 auto PathResolver::Contains(const std::filesystem::path& path, ElementType type) -> bool {
   try {
     auto target = Resolve(path);
-    if (target->_type != type) {
+    if (target->type_ != type) {
       return false;
     }
   } catch (...) {
@@ -69,47 +69,47 @@ auto PathResolver::Contains(const std::filesystem::path& path, ElementType type)
 }
 
 auto PathResolver::Resolve(const std::filesystem::path& path) -> std::shared_ptr<SleeveElement> {
-  std::shared_ptr<SleeveElement> current    = _root;
+  std::shared_ptr<SleeveElement> current    = root_;
   auto                           visit_path = path.relative_path();
 
-  auto                           cached_id  = _directory_cache.AccessElement(path.wstring());
+  auto                           cached_id  = directory_cache_.AccessElement(path.wstring());
   if (cached_id.has_value()) {
-    return _storage_handler.GetElement(cached_id.value());
+    return storage_handler_.GetElement(cached_id.value());
   }
 
   for (const auto& part : visit_path) {
-    if (current->_type == ElementType::FILE) {
+    if (current->type_ == ElementType::FILE) {
       // TODO: add customized exception class
       throw std::runtime_error("Path Resolver: Illegal path.");
     }
 
     std::shared_ptr<SleeveFolder> folder = std::static_pointer_cast<SleeveFolder>(current);
-    _storage_handler.EnsureChildrenLoaded(folder);
+    storage_handler_.EnsureChildrenLoaded(folder);
 
     auto next_id = folder->GetElementIdByName(part.wstring());
     if (!next_id.has_value()) {
       throw std::runtime_error("Path Resolver: Illegal path. Target does not exist");
     }
 
-    current = _storage_handler.GetElement(next_id.value());
+    current = storage_handler_.GetElement(next_id.value());
   }
-  _directory_cache.RecordAccess(path.wstring(), current->_element_id);
+  directory_cache_.RecordAccess(path.wstring(), current->element_id_);
   return current;
 }
 
 auto PathResolver::ResolveForWrite(const std::filesystem::path& path)
     -> std::shared_ptr<SleeveElement> {
-  std::shared_ptr<SleeveElement> current        = _root;
+  std::shared_ptr<SleeveElement> current        = root_;
   std::shared_ptr<SleeveElement> current_parent = nullptr;
   auto                           visit_path     = path.relative_path();
 
   for (const auto& part : visit_path) {
-    if (current->_type == ElementType::FILE) {
+    if (current->type_ == ElementType::FILE) {
       throw std::runtime_error("Path Resolver: Illegal path.");
     }
 
     std::shared_ptr<SleeveFolder> folder = std::static_pointer_cast<SleeveFolder>(current);
-    _storage_handler.EnsureChildrenLoaded(folder);
+    storage_handler_.EnsureChildrenLoaded(folder);
 
     if (folder->IsShared()) {
       folder = std::static_pointer_cast<SleeveFolder>(
@@ -120,38 +120,38 @@ auto PathResolver::ResolveForWrite(const std::filesystem::path& path)
       throw std::runtime_error("Path Resolver: Illegal path. Target does not exist");
     }
     current_parent = folder;
-    current        = _storage_handler.GetElement(next_id.value());
+    current        = storage_handler_.GetElement(next_id.value());
   }
   if (current->IsShared()) {
     current = CoWHandler(current, std::static_pointer_cast<SleeveFolder>(current_parent));
   }
-  if (current->_sync_flag == SyncFlag::SYNCED) {
+  if (current->sync_flag_ == SyncFlag::SYNCED) {
     current->SetSyncFlag(SyncFlag::MODIFIED);
   }
-  _directory_cache.RecordAccess(path.wstring(), current->_element_id);
+  directory_cache_.RecordAccess(path.wstring(), current->element_id_);
   return current;
 }
 
 auto PathResolver::CoWHandler(const std::shared_ptr<SleeveElement> to_copy,
                               const std::shared_ptr<SleeveFolder>  parent_folder)
     -> std::shared_ptr<SleeveElement> {
-  auto old_id = to_copy->_element_id;
+  auto old_id = to_copy->element_id_;
   to_copy->DecrementRefCount();
-  auto copied = to_copy->Copy(_id_gen.GenerateID());
+  auto copied = to_copy->Copy(id_gen_.GenerateID());
   // Increment every child's ref count
-  if (copied->_type == ElementType::FOLDER) {
+  if (copied->type_ == ElementType::FOLDER) {
     auto copied_folder = std::static_pointer_cast<SleeveFolder>(copied);
-    _storage_handler.EnsureChildrenLoaded(copied_folder);
+    storage_handler_.EnsureChildrenLoaded(copied_folder);
     auto& contents = copied_folder->ListElements();
     for (auto& e : contents) {
-      auto element = _storage_handler.GetElement(e);
+      auto element = storage_handler_.GetElement(e);
       element->IncrementRefCount();
     }
   }
-  parent_folder->UpdateElementMap(copied->_element_name, old_id, copied->_element_id);
+  parent_folder->UpdateElementMap(copied->element_name_, old_id, copied->element_id_);
   copied->IncrementRefCount();
-  _storage_handler.AddToStorage(copied);
-  if (to_copy->_sync_flag == SyncFlag::SYNCED) {
+  storage_handler_.AddToStorage(copied);
+  if (to_copy->sync_flag_ == SyncFlag::SYNCED) {
     to_copy->SetSyncFlag(SyncFlag::MODIFIED);
   }
   return copied;
@@ -159,55 +159,55 @@ auto PathResolver::CoWHandler(const std::shared_ptr<SleeveElement> to_copy,
 
 auto PathResolver::Tree(const std::filesystem::path& path) -> std::wstring {
   struct TreeNode {
-    sl_element_id_t id;
-    int             depth;
-    bool            is_last;
+    sl_element_id_t id_;
+    int             depth_;
+    bool            is_last_;
   };
 
   std::wostringstream tree_str;
   auto                start_node = Resolve(path);
-  if (start_node->_type != ElementType::FOLDER) {
+  if (start_node->type_ != ElementType::FOLDER) {
     throw std::runtime_error("Filesystem: Cannot call Tree() on a file node");
   }
 
   auto dfs_stack    = std::stack<TreeNode>();
 
   auto visit_folder = std::static_pointer_cast<SleeveFolder>(start_node);
-  _storage_handler.EnsureChildrenLoaded(visit_folder);
+  storage_handler_.EnsureChildrenLoaded(visit_folder);
 
   auto contains = visit_folder->ListElements();
   for (auto& e : contains) {
-    dfs_stack.push({e, 0, _storage_handler.GetElement(e)->_type == ElementType::FILE});
+    dfs_stack.push({e, 0, storage_handler_.GetElement(e)->type_ == ElementType::FILE});
   }
 
-  tree_str << visit_folder->_element_name << L"id:" << std::to_wstring(visit_folder->_element_id)
+  tree_str << visit_folder->element_name_ << L"id:" << std::to_wstring(visit_folder->element_id_)
            << L"\n";
   std::shared_ptr<SleeveElement> parent = nullptr;
 
   while (!dfs_stack.empty()) {
     auto next_visit = dfs_stack.top();
     dfs_stack.pop();
-    auto next_visit_element = _storage_handler.GetElement(next_visit.id);
+    auto next_visit_element = storage_handler_.GetElement(next_visit.id_);
 
-    if (next_visit_element->_type == ElementType::FOLDER) {
-      for (int i = 0; i < next_visit.depth; ++i) {
+    if (next_visit_element->type_ == ElementType::FOLDER) {
+      for (int i = 0; i < next_visit.depth_; ++i) {
         tree_str << L"    ";
       }
-      tree_str << L"├── " << next_visit_element->_element_name << L" id:"
-               << std::to_wstring(next_visit_element->_element_id) << L"\n";
+      tree_str << L"├── " << next_visit_element->element_name_ << L" id:"
+               << std::to_wstring(next_visit_element->element_id_) << L"\n";
       auto sub_folder = std::static_pointer_cast<SleeveFolder>(next_visit_element);
-      _storage_handler.EnsureChildrenLoaded(sub_folder);
+      storage_handler_.EnsureChildrenLoaded(sub_folder);
       contains = sub_folder->ListElements();
       for (auto& e : contains) {
         dfs_stack.push(
-            {e, next_visit.depth + 1, _storage_handler.GetElement(e)->_type == ElementType::FILE});
+            {e, next_visit.depth_ + 1, storage_handler_.GetElement(e)->type_ == ElementType::FILE});
       }
     } else {
-      for (int i = 0; i < next_visit.depth; ++i) {
+      for (int i = 0; i < next_visit.depth_; ++i) {
         tree_str << L"    ";
       }
-      tree_str << L"└── " + next_visit_element->_element_name << L" id:"
-               << std::to_wstring(next_visit_element->_element_id) << L"\n";
+      tree_str << L"└── " + next_visit_element->element_name_ << L" id:"
+               << std::to_wstring(next_visit_element->element_id_) << L"\n";
     }
   }
   return tree_str.str();

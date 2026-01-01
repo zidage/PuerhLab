@@ -24,15 +24,15 @@
 
 namespace puerhlab {
 
-VibranceOp::VibranceOp() : _vibrance_offset(0) {}
+VibranceOp::VibranceOp() : vibrance_offset_(0) {}
 
-VibranceOp::VibranceOp(float vibrance_offset) : _vibrance_offset(vibrance_offset) {}
+VibranceOp::VibranceOp(float vibrance_offset) : vibrance_offset_(vibrance_offset) {}
 
 VibranceOp::VibranceOp(const nlohmann::json& params) { SetParams(params); }
 
 auto VibranceOp::ComputeScale(float chroma) -> float {
   // chroma in [0, max], vibrance_offset in [-100, 100]
-  float strength = _vibrance_offset / 100.0f;
+  float strength = vibrance_offset_ / 100.0f;
 
   // Protect already highly saturated color
   float falloff  = std::exp(-3.0f * chroma);
@@ -53,7 +53,7 @@ void VibranceOp::Apply(std::shared_ptr<ImageBuffer> input) {
 
     float scale   = ComputeScale(chroma);
 
-    if (_vibrance_offset >= 0.0f) {
+    if (vibrance_offset_ >= 0.0f) {
       float luma = r * 0.299f + g * 0.587f + b * 0.114f;
 
       r          = luma + (r - luma) * scale;
@@ -79,20 +79,20 @@ void VibranceOp::Apply(std::shared_ptr<ImageBuffer> input) {
 
 auto VibranceOp::GetParams() const -> nlohmann::json {
   nlohmann::json o;
-  o[_script_name] = _vibrance_offset;
+  o[script_name_] = vibrance_offset_;
 
   return o;
 }
 
 void VibranceOp::SetParams(const nlohmann::json& params) {
-  if (params.contains(_script_name)) {
-    _vibrance_offset = params[_script_name].get<float>() / 100.0f;
+  if (params.contains(script_name_)) {
+    vibrance_offset_ = params[script_name_].get<float>() / 100.0f;
   } else {
-    _vibrance_offset = 0.0f;
+    vibrance_offset_ = 0.0f;
   }
 }
 
 void VibranceOp::SetGlobalParams(OperatorParams& params) const {
-  params.vibrance_offset = _vibrance_offset;
+  params.vibrance_offset_ = vibrance_offset_;
 }
 };  // namespace puerhlab

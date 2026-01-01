@@ -21,25 +21,24 @@
 
 namespace duckorm {
 void PreparedStatement::RecycleResources() {
-  if (_stmt) {
-    duckdb_destroy_prepare(&_stmt);
-    _stmt = nullptr;
+  if (stmt_) {
+    duckdb_destroy_prepare(&stmt_);
+    stmt_ = nullptr;
   }
-  if (_result.deprecated_columns) duckdb_destroy_result(&_result);
+  if (result_.deprecated_columns) duckdb_destroy_result(&result_);
 }
 
-PreparedStatement::PreparedStatement(duckdb_connection& con) : _stmt(), _con(con) {
-  std::memset(&_result, 0, sizeof(_result));
+PreparedStatement::PreparedStatement(duckdb_connection& con) : stmt_(), con_(con) {
+  std::memset(&result_, 0, sizeof(result_));
 }
 
 PreparedStatement::PreparedStatement(duckdb_connection& con, const std::string& prepare_query)
-    : _stmt(), _con(con) {
-  std::memset(&_result, 0, sizeof(_result));
-  // std::memset(&_stmt, 0, sizeof(_stmt));
+    : stmt_(), con_(con) {
+  std::memset(&result_, 0, sizeof(result_));
 
   // FIXME: Unified error handling
-  if (duckdb_prepare(_con, prepare_query.c_str(), &_stmt) != DuckDBSuccess) {
-    const char* err = duckdb_prepare_error(_stmt);
+  if (duckdb_prepare(con_, prepare_query.c_str(), &stmt_) != DuckDBSuccess) {
+    const char* err = duckdb_prepare_error(stmt_);
     std::string msg = "PreparedStatement failed in GetStmtGuard";
     if (err && std::strlen(err) > 0) {
       msg += ": ";
@@ -48,20 +47,20 @@ PreparedStatement::PreparedStatement(duckdb_connection& con, const std::string& 
     RecycleResources();
     throw std::runtime_error(msg);
   }
-  _prepared = true;
+  prepared_ = true;
 }
 
 PreparedStatement::~PreparedStatement() { RecycleResources(); }
 
 auto PreparedStatement::GetStmtGuard(const std::string& prepare_query)
     -> duckdb_prepared_statement& {
-  if (duckdb_prepare(_con, prepare_query.c_str(), &_stmt) != DuckDBSuccess) {
+  if (duckdb_prepare(con_, prepare_query.c_str(), &stmt_) != DuckDBSuccess) {
     RecycleResources();
     throw std::runtime_error("PreparedStatement failed when inserting images");
   }
-  _prepared = true;
-  return _stmt;
+  prepared_ = true;
+  return stmt_;
 }
 
-void PreparedStatement::SetConnection(duckdb_connection& con) { _con = con; }
+void PreparedStatement::SetConnection(duckdb_connection& con) { con_ = con; }
 }  // namespace duckorm

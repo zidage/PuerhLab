@@ -24,20 +24,20 @@
 namespace puerhlab {
 // CREATE TABLE Filter (combo_id BIGINT, type INTEGER, data JSON);
 struct FilterMapperParams {
-  uint32_t    combo_id;
-  uint32_t    type;
-  const char* data;
+  uint32_t    combo_id_;
+  uint32_t    type_;
+  const char* data_;
 };
 class FilterMapper : MapperInterface<FilterMapper, FilterMapperParams, sl_element_id_t>,
                      FieldReflectable<FilterMapper> {
  private:
   static auto FromRawData(std::vector<duckorm::VarTypes>&& data) -> FilterMapperParams;
-  static constexpr uint32_t    _field_count                                      = 3;
-  static constexpr const char* _table_name                                       = "Filter";
-  static constexpr const char* _prime_key_clause                                 = "combo_id={}";
-  static constexpr std::array<duckorm::DuckFieldDesc, _field_count> _field_descs = {
-      FIELD(FilterMapperParams, combo_id, UINT32), FIELD(FilterMapperParams, type, UINT32),
-      FIELD(FilterMapperParams, data, VARCHAR)};
+  static constexpr uint32_t    field_count_                                      = 3;
+  static constexpr const char* table_name_                                       = "Filter";
+  static constexpr const char* prime_key_clause_                                 = "combo_id={}";
+  static constexpr std::array<duckorm::DuckFieldDesc, field_count_> field_descs_ = {
+      FIELD(FilterMapperParams, combo_id_, UINT32), FIELD(FilterMapperParams, type_, UINT32),
+      FIELD(FilterMapperParams, data_, VARCHAR)};
 
  public:
   using MapperInterface::MapperInterface;
@@ -46,17 +46,17 @@ class FilterMapper : MapperInterface<FilterMapper, FilterMapperParams, sl_elemen
 
 // CREATE TABLE ComboFolder (combo_id BIGINT, folder_id BIGINT);
 struct ComboMapperParams {
-  uint32_t combo_id;
-  uint32_t folder_id;
+  uint32_t combo_id_;
+  uint32_t folder_id_;
 };
 class ComboMapper : MapperInterface<ComboMapper, ComboMapperParams, sl_element_id_t>,
                     FieldReflectable<ComboMapper> {
  private:
-  static constexpr uint32_t    _field_count                                      = 2;
-  static constexpr const char* _table_name                                       = "ComboFolder";
-  static constexpr const char* _prime_key_clause                                 = "combo_id={}";
-  static constexpr std::array<duckorm::DuckFieldDesc, _field_count> _field_descs = {
-      FIELD(ComboMapperParams, combo_id, UINT32), FIELD(ComboMapperParams, folder_id, UINT32)};
+  static constexpr uint32_t    field_count_                                      = 2;
+  static constexpr const char* table_name_                                       = "ComboFolder";
+  static constexpr const char* prime_key_clause_                                 = "combo_id={}";
+  static constexpr std::array<duckorm::DuckFieldDesc, field_count_> field_descs_ = {
+      FIELD(ComboMapperParams, combo_id_, UINT32), FIELD(ComboMapperParams, folder_id_, UINT32)};
 
  public:
   static auto FromRawData(std::vector<duckorm::VarTypes>&& data) -> ComboMapperParams;

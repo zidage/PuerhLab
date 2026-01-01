@@ -20,112 +20,111 @@
 #include <utility>
 
 namespace puerhlab {
-ImageBuffer::ImageBuffer(cv::Mat& data) : _cpu_data_valid(true) { data.copyTo(_cpu_data); }
+ImageBuffer::ImageBuffer(cv::Mat& data) : cpu_data_valid_(true) { data.copyTo(cpu_data_); }
 
-ImageBuffer::ImageBuffer(cv::Mat&& data) : _cpu_data(data), _cpu_data_valid(true) {}
+ImageBuffer::ImageBuffer(cv::Mat&& data) : cpu_data_(data), cpu_data_valid_(true) {}
 
-ImageBuffer::ImageBuffer(std::vector<uint8_t>&& buffer) : _buffer_valid(true) {
-  _buffer = std::make_unique<std::vector<uint8_t>>(std::move(buffer));
+ImageBuffer::ImageBuffer(std::vector<uint8_t>&& buffer) : buffer_valid_(true) {
+  buffer_ = std::make_unique<std::vector<uint8_t>>(std::move(buffer));
 }
 
 ImageBuffer::ImageBuffer(ImageBuffer&& other) noexcept
-    : _cpu_data(std::move(other._cpu_data)),
-      _gpu_data(std::move(other._gpu_data)),
-      _buffer(std::move(other._buffer)),
-      _cpu_data_valid(other._cpu_data_valid),
-      _gpu_data_valid(other._gpu_data_valid),
-      _buffer_valid(other._buffer_valid) {}
-
+    : cpu_data_(std::move(other.cpu_data_)),
+      gpu_data_(std::move(other.gpu_data_)),
+      buffer_(std::move(other.buffer_)),
+      cpu_data_valid_(other.cpu_data_valid_),
+      gpu_data_valid_(other.gpu_data_valid_),
+      buffer_valid_(other.buffer_valid_) {}
 ImageBuffer::ImageBuffer(cv::cuda::GpuMat&& data)
-    : _gpu_data(std::move(data)), _gpu_data_valid(true) {}
+    : gpu_data_(std::move(data)), gpu_data_valid_(true) {}
 
 ImageBuffer& ImageBuffer::operator=(ImageBuffer&& other) noexcept {
   if (this != &other) {
-    _cpu_data       = std::move(other._cpu_data);
-    _gpu_data       = std::move(other._gpu_data);
-    _buffer         = std::move(other._buffer);
-    _cpu_data_valid = other._cpu_data_valid;
-    _gpu_data_valid = other._gpu_data_valid;
-    _buffer_valid   = other._buffer_valid;
+    cpu_data_       = std::move(other.cpu_data_);
+    gpu_data_       = std::move(other.gpu_data_);
+    buffer_         = std::move(other.buffer_);
+    cpu_data_valid_ = other.cpu_data_valid_;
+    gpu_data_valid_ = other.gpu_data_valid_;
+    buffer_valid_   = other.buffer_valid_;
   }
   return *this;
 }
 
 void ImageBuffer::ReadFromVectorBuffer(std::vector<uint8_t>&& buffer) {
-  _buffer       = std::make_unique<std::vector<uint8_t>>(std::move(buffer));
-  _buffer_valid = true;
+  buffer_       = std::make_unique<std::vector<uint8_t>>(std::move(buffer));
+  buffer_valid_ = true;
 }
 
 auto ImageBuffer::GetCPUData() -> cv::Mat& {
-  if (!_cpu_data_valid) {
+  if (!cpu_data_valid_) {
     throw std::runtime_error("Image Buffer: No valid image data to be returned");
   }
-  return _cpu_data;
+  return cpu_data_;
 }
 
 auto ImageBuffer::GetGPUData() -> cv::cuda::GpuMat& {
-  if (!_gpu_data_valid) {
+  if (!gpu_data_valid_) {
     throw std::runtime_error("Image Buffer: No valid image data to be returned");
   }
   // SyncToGPU();
-  return _gpu_data;
+  return gpu_data_;
 }
 
 auto ImageBuffer::GetBuffer() -> std::vector<uint8_t>& {
-  if (!_buffer_valid) {
+  if (!buffer_valid_) {
     throw std::runtime_error("Image Buffer: No valid buffer data to be returned");
   }
-  return *_buffer;
+  return *buffer_;
 }
 
 auto ImageBuffer::SyncToGPU() -> void {
-  if (_cpu_data.empty()) {
+  if (cpu_data_.empty()) {
     throw std::runtime_error("Image Buffer: No valid CPU data to sync to GPU");
   }
-  _gpu_data.upload(_cpu_data);
-  _gpu_data_valid = true;
-  // _cpu_data_valid = false;
+  gpu_data_.upload(cpu_data_);
+  gpu_data_valid_ = true;
+  // cpu_data_valid_ = false;
 }
 
 auto ImageBuffer::SyncToCPU() -> void {
-  if (_gpu_data.empty()) {
+  if (gpu_data_.empty()) {
     throw std::runtime_error("Image Buffer: No valid GPU data to sync to CPU");
   }
-  _gpu_data.download(_cpu_data);
-  _cpu_data_valid = true;
-  // _gpu_data_valid = false;
+  gpu_data_.download(cpu_data_);
+  cpu_data_valid_ = true;
+  // gpu_data_valid_ = false;
 }
 
 void ImageBuffer::InitGPUData(int width, int height, int type) {
-  if (_gpu_data_valid || !_gpu_data.empty()) {
+  if (gpu_data_valid_ || !gpu_data_.empty()) {
     return;
   }
-  _gpu_data.create(height, width, type);
-  _gpu_data_valid = true;
+  gpu_data_.create(height, width, type);
+  gpu_data_valid_ = true;
 }
 
 void ImageBuffer::SetGPUDataValid(bool valid) {
-  _gpu_data_valid = valid;
+  gpu_data_valid_ = valid;
 }
 
 ImageBuffer ImageBuffer::Clone() const {
-  if (_cpu_data_valid) {
-    return ImageBuffer{_cpu_data.clone()};
-  } else if (_gpu_data_valid) {
+  if (cpu_data_valid_) {
+    return ImageBuffer{cpu_data_.clone()};
+  } else if (gpu_data_valid_) {
     cv::Mat cpu_copy;
-    _gpu_data.download(cpu_copy);
+    gpu_data_.download(cpu_copy);
     return ImageBuffer{cpu_copy};
-  } else if (_buffer_valid) {
-    auto buffer = *_buffer;  // copy the buffer
+  } else if (buffer_valid_) {
+    auto buffer = *buffer_;  // copy the buffer
     return ImageBuffer{std::move(buffer)};
   } else {
     throw std::runtime_error("Image Buffer: No valid data to clone");
   }
 }
 
-void ImageBuffer::ReleaseCPUData() { _cpu_data.release(); }
+void ImageBuffer::ReleaseCPUData() { cpu_data_.release(); }
 
-void ImageBuffer::ReleaseGPUData() { _gpu_data.release(); }
+void ImageBuffer::ReleaseGPUData() { gpu_data_.release(); }
 
-void ImageBuffer::ReleaseBuffer() { _buffer.reset(); }
+void ImageBuffer::ReleaseBuffer() { buffer_.reset(); }
 };  // namespace puerhlab

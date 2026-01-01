@@ -26,18 +26,18 @@
 #include "image/image_buffer.hpp"
 
 namespace puerhlab {
-ShadowsOp::ShadowsOp(float offset) : _offset(offset) {
-  float normalized_offset = _offset / 100.0f;
-  _gamma                  = std::pow(2.0f, -normalized_offset * 1.3f);
+ShadowsOp::ShadowsOp(float offset) : offset_(offset) {
+  float normalized_offset = offset_ / 100.0f;
+  gamma_                  = std::pow(2.0f, -normalized_offset * 1.3f);
 }
 
 ShadowsOp::ShadowsOp(const nlohmann::json& params) {
   SetParams(params);
-  float normalized_offset = _offset / 100.0f;
-  _gamma                  = std::pow(2.0f, -normalized_offset * 1.3f);
+  float normalized_offset = offset_ / 100.0f;
+  gamma_                  = std::pow(2.0f, -normalized_offset * 1.3f);
 }
 
-auto ShadowsOp::GetScale() -> float { return _offset / 100.0f; }
+auto ShadowsOp::GetScale() -> float { return offset_ / 100.0f; }
 
 void ShadowsOp::Apply(std::shared_ptr<ImageBuffer> input) {
   {
@@ -45,34 +45,34 @@ void ShadowsOp::Apply(std::shared_ptr<ImageBuffer> input) {
 }
 
 static inline float Luma(const Pixel& rgb) {
-  return 0.2126f * rgb.r + 0.7152f * rgb.g + 0.0722f * rgb.b;
+  return 0.2126f * rgb.r_ + 0.7152f * rgb.g_ + 0.0722f * rgb.b_;
 }
 
 
-auto ShadowsOp::GetParams() const -> nlohmann::json { return {_script_name, _offset}; }
+auto ShadowsOp::GetParams() const -> nlohmann::json { return {script_name_, offset_}; }
 
 void ShadowsOp::SetParams(const nlohmann::json& params) {
-  if (!params.contains(_script_name)) {
-    _offset = 0.0f;
+  if (!params.contains(script_name_)) {
+    offset_ = 0.0f;
   } else {
-    _offset        = params[_script_name].get<float>();
-    _curve.control = std::clamp(_offset / 100.0f, -1.0f, 1.0f);
-    _curve.toe_end = std::clamp(0.55f, 0.0f, 1.0f);
-    _curve.m0      = 1.0f + _curve.control * _curve.slope_range;
-    _curve.x1      = _curve.toe_end;
-    _curve.y1      = _curve.x1;
-    _curve.dx      = _curve.x1 - _curve.x0;
+    offset_        = params[script_name_].get<float>();
+    curve_.control_ = std::clamp(offset_ / 100.0f, -1.0f, 1.0f);
+    curve_.toe_end_ = std::clamp(0.55f, 0.0f, 1.0f);
+    curve_.m0_      = 1.0f + curve_.control_ * curve_.slope_range_;
+    curve_.x1_      = curve_.toe_end_;
+    curve_.y1_      = curve_.x1_;
+    curve_.dx_      = curve_.x1_ - curve_.x0_;
   }
 }
 
 void ShadowsOp::SetGlobalParams(OperatorParams& params) const {
-  params.shadows_offset = _offset / 100.0f;
-  params.shadows_m0     = 1.0f + params.shadows_offset * _curve.slope_range;
-  params.shadows_x0     = _curve.x0;
-  params.shadows_x1     = _curve.x1;
-  params.shadows_y0     = _curve.y0;
-  params.shadows_y1     = _curve.y1;
-  params.shadows_m1     = _curve.m1;
-  params.shadows_dx     = _curve.dx;
+  params.shadows_offset_ = offset_ / 100.0f;
+  params.shadows_m0_     = 1.0f + params.shadows_offset_ * curve_.slope_range_;
+  params.shadows_x0_     = curve_.x0_;
+  params.shadows_x1_     = curve_.x1_;
+  params.shadows_y0_     = curve_.y0_;
+  params.shadows_y1_     = curve_.y1_;
+  params.shadows_m1_     = curve_.m1_;
+  params.shadows_dx_     = curve_.dx_;
 }
 }  // namespace puerhlab

@@ -27,11 +27,11 @@
 namespace puerhlab {
 class DBController {
  private:
-  duckdb_database              _db;
+  duckdb_database              db_;
 
-  file_path_t                  _db_path;
+  file_path_t                  db_path_;
 
-  bool                         _initialized;
+  bool                         initialized_;
 
   constexpr static const char* init_table_query =
       "CREATE TABLE Sleeve (id BIGINT PRIMARY KEY);"

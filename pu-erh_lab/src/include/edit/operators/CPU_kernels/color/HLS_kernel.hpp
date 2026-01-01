@@ -20,10 +20,10 @@ namespace puerhlab {
 
 struct HLSOpKernel : PointOpTag {
   inline void operator()(Pixel& p, OperatorParams& params) const {
-    if (!params.hls_enabled) return;
+    if (!params.hls_enabled_) return;
 
     // Convert RGB to HLS
-    float r = p.r, g = p.g, b = p.b;
+    float r = p.r_, g = p.g_, b = p.b_;
     float max_c = std::max({r, g, b});
     float min_c = std::min({r, g, b});
     float L     = (max_c + min_c) * 0.5f;
@@ -40,9 +40,9 @@ struct HLSOpKernel : PointOpTag {
     }
     H *= 60.0f;
 
-    float target_h = params.target_hls[0];
-    float target_l = params.target_hls[1];
-    float target_s = params.target_hls[2];
+    float target_h = params.target_hls_[0];
+    float target_l = params.target_hls_[1];
+    float target_s = params.target_hls_[2];
 
     // Compute mask
     float h        = H;
@@ -52,13 +52,13 @@ struct HLSOpKernel : PointOpTag {
     float hue_dist = std::min(hue_diff, 360.0f - hue_diff);
 
     float weight =
-        std::max(0.0f, 1.0f - hue_dist / params.hue_range) *                      // hue_w
-        std::max(0.0f, 1.0f - std::abs(l - target_l) / params.lightness_range) *  // lightness_w
-        std::max(0.0f, 1.0f - std::abs(s - target_s) / params.saturation_range);  // saturation_w
+        std::max(0.0f, 1.0f - hue_dist / params.hue_range_) *                      // hue_w
+        std::max(0.0f, 1.0f - std::abs(l - target_l) / params.lightness_range_) *  // lightness_w
+        std::max(0.0f, 1.0f - std::abs(s - target_s) / params.saturation_range_);  // saturation_w
 
-    float adj_h      = params.hls_adjustment[0];
-    float adj_l      = params.hls_adjustment[1];
-    float adj_s      = params.hls_adjustment[2];
+    float adj_h      = params.hls_adjustment_[0];
+    float adj_l      = params.hls_adjustment_[1];
+    float adj_s      = params.hls_adjustment_[2];
 
     float h_adjusted = std::fmod(h + adj_h * weight, 360.0f);
     if (h_adjusted < 0) h_adjusted += 360.0f;
@@ -68,9 +68,9 @@ struct HLSOpKernel : PointOpTag {
 
     // Convert HLS back to RGB
     if (s_adjusted == 0.0f) {
-      p.r = l_adjusted;
-      p.g = l_adjusted;
-      p.b = l_adjusted;
+      p.r_ = l_adjusted;
+      p.g_ = l_adjusted;
+      p.b_ = l_adjusted;
     } else {
       float q       = (l_adjusted < 0.5f) ? (l_adjusted * (1.0f + s_adjusted))
                                           : (l_adjusted + s_adjusted - l_adjusted * s_adjusted);
@@ -85,10 +85,10 @@ struct HLSOpKernel : PointOpTag {
         return p;
       };
 
-      p.r = hue2rgb(_p, q, h_adjusted / 360.0f + 1.0f / 3.0f);
+      p.r_ = hue2rgb(_p, q, h_adjusted / 360.0f + 1.0f / 3.0f);
       ;
-      p.g = hue2rgb(_p, q, h_adjusted / 360.0f);
-      p.b = hue2rgb(_p, q, h_adjusted / 360.0f - 1.0f / 3.0f);
+      p.g_ = hue2rgb(_p, q, h_adjusted / 360.0f);
+      p.b_ = hue2rgb(_p, q, h_adjusted / 360.0f - 1.0f / 3.0f);
     }
   }
 };

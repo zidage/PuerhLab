@@ -36,23 +36,23 @@ class ImagePoolManager {
   using ListIterator = std::list<image_id_t>::iterator;
 
  private:
-  std::unordered_map<image_id_t, std::shared_ptr<Image>> _image_pool;
+  std::unordered_map<image_id_t, std::shared_ptr<Image>> image_pool_;
 
-  std::unordered_map<image_id_t, ListIterator>           _cache_map_thumb;
-  std::list<image_id_t>                                  _cache_list_thumb;
+  std::unordered_map<image_id_t, ListIterator>           cache_map_thumb_;
+  std::list<image_id_t>                                  cache_list_thumb_;
 
-  std::unordered_map<image_id_t, ListIterator>           _cache_map_full;
-  std::list<image_id_t>                                  _cache_list_full;
+  std::unordered_map<image_id_t, ListIterator>           cache_map_full_;
+  std::list<image_id_t>                                  cache_list_full_;
 
-  uint32_t                                               _capacity_thumb;
-  uint32_t                                               _capacity_full;
+  uint32_t                                               capacity_thumb_;
+  uint32_t                                               capacity_full_;
 
-  std::unordered_set<image_id_t>                         _with_thumb;
-  std::unordered_set<image_id_t>                         _with_full;
+  std::unordered_set<image_id_t>                         with_thumb_;
+  std::unordered_set<image_id_t>                         with_full_;
 
  public:
-  static const uint32_t _default_capacity_thumb = 64;
-  static const uint32_t _default_capacity_full  = 3;
+  static const uint32_t default_capacity_thumb_ = 64;
+  static const uint32_t default_capacity_full_  = 3;
 
   explicit ImagePoolManager();
   explicit ImagePoolManager(uint32_t capacity_thumb, uint32_t capacity_full);

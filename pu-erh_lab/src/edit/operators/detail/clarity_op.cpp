@@ -29,11 +29,11 @@
 
 namespace puerhlab {
 
-float ClarityOp::_usm_radius = 5.0f;
+float ClarityOp::usm_radius_ = 5.0f;
 
-ClarityOp::ClarityOp() : _clarity_offset(0) { _scale = 1.0f; }
-ClarityOp::ClarityOp(float clarity_offset) : _clarity_offset(clarity_offset) {
-  _scale = clarity_offset / 300.0f;
+ClarityOp::ClarityOp() : clarity_offset_(0) { scale_ = 1.0f; }
+ClarityOp::ClarityOp(float clarity_offset) : clarity_offset_(clarity_offset) {
+  scale_ = clarity_offset / 300.0f;
 }
 
 ClarityOp::ClarityOp(const nlohmann::json& params) { SetParams(params); }
@@ -63,7 +63,7 @@ void ClarityOp::Apply(std::shared_ptr<ImageBuffer> input) {
 
   cv::Mat blurred;
   // Use reflect padding to avoid brightness seams at tile boundaries
-  cv::GaussianBlur(img, blurred, cv::Size(), _usm_radius, _usm_radius, cv::BORDER_REFLECT101);
+  cv::GaussianBlur(img, blurred, cv::Size(), usm_radius_, usm_radius_, cv::BORDER_REFLECT101);
 
   cv::Mat    high_pass  = img - blurred;
 
@@ -76,7 +76,7 @@ void ClarityOp::Apply(std::shared_ptr<ImageBuffer> input) {
     auto*     hp_ptr   = high_pass.ptr<cv::Vec3f>();
     auto*     mask_ptr = midtone_mask.ptr<float>();
     for (int i = 0; i < total; ++i) {
-      const float w = mask_ptr[i] * _scale;
+      const float w = mask_ptr[i] * scale_;
       hp_ptr[i][0] *= w;
       hp_ptr[i][1] *= w;
       hp_ptr[i][2] *= w;
@@ -86,7 +86,7 @@ void ClarityOp::Apply(std::shared_ptr<ImageBuffer> input) {
       auto*        hp_ptr = high_pass.ptr<cv::Vec3f>(r);
       const float* m      = midtone_mask.ptr<float>(r);
       for (int c = 0; c < cols; ++c) {
-        const float w = m[c] * _scale;
+        const float w = m[c] * scale_;
         hp_ptr[c][0] *= w;
         hp_ptr[c][1] *= w;
         hp_ptr[c][2] *= w;
@@ -100,19 +100,19 @@ void ClarityOp::Apply(std::shared_ptr<ImageBuffer> input) {
 
 auto ClarityOp::GetParams() const -> nlohmann::json {
   nlohmann::json o;
-  o[_script_name] = _clarity_offset;
+  o[script_name_] = clarity_offset_;
 
   return o;
 }
 
 void ClarityOp::SetParams(const nlohmann::json& params) {
-  if (params.contains(_script_name)) {
-    _clarity_offset = params[_script_name];
+  if (params.contains(script_name_)) {
+    clarity_offset_ = params[script_name_];
   } else {
-    _clarity_offset = 0.0f;
+    clarity_offset_ = 0.0f;
   }
-  _scale = _clarity_offset / 300.0f;
+  scale_ = clarity_offset_ / 300.0f;
 }
 
-void ClarityOp::SetGlobalParams(OperatorParams& params) const { params.clarity_offset = _scale; }
+void ClarityOp::SetGlobalParams(OperatorParams& params) const { params.clarity_offset_ = scale_; }
 };  // namespace puerhlab

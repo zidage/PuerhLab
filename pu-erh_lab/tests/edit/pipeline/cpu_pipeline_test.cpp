@@ -150,7 +150,7 @@ TEST_F(PipelineTests, SimpleTest1) {
 
         auto            img = pair.second;
         RawDecoder      decoder;
-        std::ifstream   file(img->_image_path, std::ios::binary | std::ios::ate);
+        std::ifstream   file(img->image_path_, std::ios::binary | std::ios::ate);
         std::streamsize fileSize = file.tellg();
         file.seekg(0, std::ios::beg);
         std::vector<char> buffer(fileSize);
@@ -173,7 +173,7 @@ TEST_F(PipelineTests, SimpleTest1) {
         cv::cuda::cvtColor(to_save_rec709, to_save_rec709, cv::COLOR_RGB2BGR);
         to_save_rec709.download(to_save_rec709_cpu);
 
-        std::string           file_name = conv::ToBytes(img->_image_path.filename().wstring());
+        std::string           file_name = conv::ToBytes(img->image_path_.filename().wstring());
         std::string           time      = TimeProvider::TimePointToString(TimeProvider::Now());
 
         std::string           save_name = file_name + "_" + time;

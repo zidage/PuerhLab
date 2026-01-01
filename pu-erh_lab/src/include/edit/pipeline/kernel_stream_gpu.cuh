@@ -86,43 +86,43 @@ struct OpList<> {
 
 template <typename Head, typename... Tail>
 struct OpList<Head, Tail...> {
-  Head                head;
-  OpList<Tail...>     tail;
+  Head                head_;
+  OpList<Tail...>     tail_;
 
   OpList() = default;
   __host__            __device__ explicit OpList(Head h, Tail... t)
-      : head(std::move(h)), tail(std::move(t)...) {}
+      : head_(std::move(h)), tail_(std::move(t)...) {}
 
   __device__ __forceinline__ void Apply(float4* p, GPUOperatorParams& params) {
-    head(p, params);
-    tail.Apply(p, params);
+    head_(p, params);
+    tail_.Apply(p, params);
   }
 };
 
 template <typename... Ops>
 struct GPU_PointChain {
-  OpList<Ops...> _ops;
+  OpList<Ops...> ops_;
 
-  GPU_PointChain(Ops... ops) : _ops(std::move(ops)...) {}
+  GPU_PointChain(Ops... ops) : ops_(std::move(ops)...) {}
 
   template <size_t I = 0>
   __device__ __forceinline__ void ApplyOps(float4* p, GPUOperatorParams& params) {
-    _ops.Apply(p, params);
+    ops_.Apply(p, params);
   }
 };
 
 template <typename... Stages>
 class GPU_StaticKernelStream {
-  std::tuple<Stages...> _stages;
+  std::tuple<Stages...> stages_;
 
  public:
-  GPU_StaticKernelStream(Stages... stages) : _stages(std::move(stages)...) {}
+  GPU_StaticKernelStream(Stages... stages) : stages_(std::move(stages)...) {}
 
   template <size_t I = 0>
   inline void Dispatch(float4* src, float4* dst, int width, int height, size_t pitch_elems,
                        GPUOperatorParams& params, dim3 grid, dim3 block, cudaStream_t stream) {
     if constexpr (I < sizeof...(Stages)) {
-      auto& stage     = std::get<I>(_stages);
+      auto& stage     = std::get<I>(stages_);
       using StageType = std::decay_t<decltype(stage)>;
 
       if constexpr (HasApplyOps<StageType>::value) {

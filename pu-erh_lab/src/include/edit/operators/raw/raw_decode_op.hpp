@@ -25,14 +25,14 @@ enum class RawProcessBackend { PUERH, LIBRAW };
 
 class RawDecodeOp : public OperatorBase<RawDecodeOp> {
  public:
-  static constexpr PriorityLevel     _priority_level    = 0;
-  static constexpr std::string_view  _canonical_name    = "RawDecode";
-  static constexpr std::string_view  _script_name       = "raw_decode";
-  static constexpr PipelineStageName _affiliation_stage = PipelineStageName::Image_Loading;
-  static constexpr OperatorType      _operator_type     = OperatorType::RAW_DECODE;
+  static constexpr PriorityLevel     priority_level_    = 0;
+  static constexpr std::string_view  canonical_name_    = "RawDecode";
+  static constexpr std::string_view  script_name_       = "raw_decode";
+  static constexpr PipelineStageName affiliation_stage_ = PipelineStageName::Image_Loading;
+  static constexpr OperatorType      operator_type_     = OperatorType::RAW_DECODE;
 
-  RawParams                          _params;
-  RawProcessBackend                  _backend;
+  RawParams                          params_;
+  RawProcessBackend                  backend_;
 
   RawDecodeOp() = delete;
 

@@ -28,15 +28,15 @@ namespace puerhlab {
  * @brief Default construct a new Contrast Op:: Contrast Op object
  *
  */
-ContrastOp::ContrastOp() : _contrast_offset(0.0f) { _scale = 1.0f; }
+ContrastOp::ContrastOp() : contrast_offset_(0.0f) { scale_ = 1.0f; }
 
 /**
  * @brief Construct a new Contrast Op:: Contrast Op object
  *
  * @param contrast_offset
  */
-ContrastOp::ContrastOp(float contrast_offset) : _contrast_offset(contrast_offset) {
-  _scale = std::exp(contrast_offset / 100.0f);
+ContrastOp::ContrastOp(float contrast_offset) : contrast_offset_(contrast_offset) {
+  scale_ = std::exp(contrast_offset / 100.0f);
 }
 
 ContrastOp::ContrastOp(const nlohmann::json& params) { SetParams(params); }
@@ -52,7 +52,7 @@ void ContrastOp::Apply(std::shared_ptr<ImageBuffer> input) {
 
   linear_image.forEach<cv::Vec3f>([this](cv::Vec3f& pixel, const int*) -> void {
     auto lab = OklabCvt::ACESRGB2Oklab(pixel);
-    lab.L    = (lab.L - 0.5f) * _scale + 0.5f;
+    lab.l_    = (lab.l_ - 0.5f) * scale_ + 0.5f;
     pixel    = OklabCvt::Oklab2ACESRGB(lab);
   });
 
@@ -65,17 +65,17 @@ void ContrastOp::Apply(std::shared_ptr<ImageBuffer> input) {
 
 auto ContrastOp::GetParams() const -> nlohmann::json {
   nlohmann::json o;
-  o[GetScriptName()] = _contrast_offset;
+  o[GetScriptName()] = contrast_offset_;
   return o;
 }
 
 void ContrastOp::SetParams(const nlohmann::json& params) {
-  _contrast_offset = params[GetScriptName()];
-  _scale           = std::exp(_contrast_offset / 100.0f);
+  contrast_offset_ = params[GetScriptName()];
+  scale_           = std::exp(contrast_offset_ / 100.0f);
 }
 
 void ContrastOp::SetGlobalParams(OperatorParams& params) const {
   // Should only be called once SetParams has been called
-  params.contrast_scale = _scale;
+  params.contrast_scale_ = scale_;
 }
 };  // namespace puerhlab

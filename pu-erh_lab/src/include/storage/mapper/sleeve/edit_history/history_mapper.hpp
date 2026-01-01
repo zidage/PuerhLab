@@ -24,20 +24,20 @@
 namespace puerhlab {
 // CREATE TABLE EditHistory (file_id PRIMARY KEY BIGINT, history JSON);
 struct EditHistoryMapperParams {
-  sl_element_id_t              file_id;
-  std::unique_ptr<std::string> history;
+  sl_element_id_t              file_id_;
+  std::unique_ptr<std::string> history_;
 };
 
 class EditHistoryMapper
     : public MapperInterface<EditHistoryMapper, EditHistoryMapperParams, sl_element_id_t>,
       public FieldReflectable<EditHistoryMapper> {
  private:
-  static constexpr uint32_t    _field_count                                      = 2;
-  static constexpr const char* _table_name                                       = "EditHistory";
-  static constexpr const char* _prime_key_clause                                 = "file_id={}";
-  static constexpr std::array<duckorm::DuckFieldDesc, _field_count> _field_descs = {
-      FIELD(EditHistoryMapperParams, file_id, UINT32),
-      FIELD(EditHistoryMapperParams, history, VARCHAR)};
+  static constexpr uint32_t    field_count_                                     = 2;
+  static constexpr const char* table_name_                                      = "EditHistory";
+  static constexpr const char* prime_key_clause_                                = "file_id={}";
+  static constexpr std::array<duckorm::DuckFieldDesc, field_count_> field_descs_ = {
+      FIELD(EditHistoryMapperParams, file_id_, UINT32),
+      FIELD(EditHistoryMapperParams, history_, VARCHAR)};
 
  public:
   static auto FromRawData(std::vector<duckorm::VarTypes>&& data) -> EditHistoryMapperParams;

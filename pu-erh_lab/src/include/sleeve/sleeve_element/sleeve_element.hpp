@@ -33,18 +33,18 @@ enum class SyncFlag { UNSYNC, MODIFIED, SYNCED };
  */
 class SleeveElement {
  public:
-  sl_element_id_t _element_id;
-  ElementType     _type;
+  sl_element_id_t element_id_;
+  ElementType     type_;
 
-  file_name_t     _element_name;
+  file_name_t     element_name_;
 
-  std::time_t     _added_time;
-  std::time_t     _last_modified_time;
+  std::time_t     added_time_;
+  std::time_t     last_modified_time_;
 
-  uint32_t        _ref_count;
-  bool            _pinned;
+  uint32_t        ref_count_;
+  bool            pinned_;
 
-  SyncFlag        _sync_flag = SyncFlag::UNSYNC;
+  SyncFlag        sync_flag_ = SyncFlag::UNSYNC;
 
   explicit SleeveElement(sl_element_id_t id, file_name_t element_name);
 

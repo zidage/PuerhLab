@@ -19,7 +19,7 @@
 namespace puerhlab {
 using json = nlohmann::json;
 auto DatetimeFilter::ToJSON() -> std::wstring {
-  json o{{"start_time", _start_time}, {"end_time", _end_time}};
+  json o{{"start_time", start_time_}, {"end_time", end_time_}};
   return o;
 }
 };  // namespace puerhlab

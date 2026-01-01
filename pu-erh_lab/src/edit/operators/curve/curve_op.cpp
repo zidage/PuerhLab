@@ -27,41 +27,41 @@ CurveOp::CurveOp(const std::vector<cv::Point2f>& control_points) { SetCtrlPts(co
 CurveOp::CurveOp(const nlohmann::json& params) { SetParams(params); }
 
 void CurveOp::ComputeTagents() {
-  size_t             N = _ctrl_pts.size();
+  size_t             N = ctrl_pts_.size();
   std::vector<float> delta(N - 1);
 
   for (int i = 0; i < N - 1; ++i) {
-    delta[i] = (_ctrl_pts[i + 1].y - _ctrl_pts[i].y) / _h[i];
+    delta[i] = (ctrl_pts_[i + 1].y - ctrl_pts_[i].y) / h_[i];
   }
 
-  _m[0]     = delta[0];
-  _m[N - 1] = delta[N - 2];
+  m_[0]     = delta[0];
+  m_[N - 1] = delta[N - 2];
 
   for (int i = 1; i < N - 1; ++i) {
     if (delta[i - 1] * delta[i] <= 0) {
-      _m[i] = 0;
+      m_[i] = 0;
     } else {
-      float w1 = 2 * _h[i] + _h[i - 1];
-      float w2 = _h[i] + 2 * _h[i - 1];
-      _m[i]    = (w1 + w2) > 0 ? (w1 + w2) / ((w1 / delta[i - 1]) + (w2 / delta[i])) : 0.0f;
+      float w1 = 2 * h_[i] + h_[i - 1];
+      float w2 = h_[i] + 2 * h_[i - 1];
+      m_[i]    = (w1 + w2) > 0 ? (w1 + w2) / ((w1 / delta[i - 1]) + (w2 / delta[i])) : 0.0f;
     }
   }
 }
 
 auto CurveOp::EvaluateCurve(float x) const -> float {
-  if (x <= _ctrl_pts.front().x) return _ctrl_pts.front().y;
-  if (x >= _ctrl_pts.back().x) return _ctrl_pts.back().y;
+  if (x <= ctrl_pts_.front().x) return ctrl_pts_.front().y;
+  if (x >= ctrl_pts_.back().x) return ctrl_pts_.back().y;
 
   // Find segment
   int idx = 0;
-  for (int i = 0; i < static_cast<int>(_ctrl_pts.size()) - 1; ++i) {
-    if (x < _ctrl_pts[i + 1].x) {
+  for (int i = 0; i < static_cast<int>(ctrl_pts_.size()) - 1; ++i) {
+    if (x < ctrl_pts_[i + 1].x) {
       idx = i;
       break;
     }
   }
 
-  float t   = (x - _ctrl_pts[idx].x) / _h[idx];
+  float t   = (x - ctrl_pts_[idx].x) / h_[idx];
 
   // Hermite interpolation
   float h00 = (2 * t * t * t - 3 * t * t + 1);
@@ -69,8 +69,8 @@ auto CurveOp::EvaluateCurve(float x) const -> float {
   float h01 = (-2 * t * t * t + 3 * t * t);
   float h11 = (t * t * t - t * t);
 
-  float y   = h00 * _ctrl_pts[idx].y + h10 * _h[idx] * _m[idx] + h01 * _ctrl_pts[idx + 1].y +
-            h11 * _h[idx] * _m[idx + 1];
+  float y   = h00 * ctrl_pts_[idx].y + h10 * h_[idx] * m_[idx] + h01 * ctrl_pts_[idx + 1].y +
+            h11 * h_[idx] * m_[idx + 1];
 
   return std::clamp(y, 0.0f, 1.0f);
 }
@@ -88,14 +88,14 @@ void CurveOp::Apply(std::shared_ptr<ImageBuffer> input) {
 
 
 void CurveOp::SetCtrlPts(const std::vector<cv::Point2f>& control_points) {
-  _ctrl_pts = control_points;
+  ctrl_pts_ = control_points;
 
-  size_t N  = _ctrl_pts.size();
-  _h.resize(N - 1);
-  _m.resize(N);
+  size_t N  = ctrl_pts_.size();
+  h_.resize(N - 1);
+  m_.resize(N);
 
   for (size_t i = 0; i < N - 1; ++i) {
-    _h[i] = _ctrl_pts[i + 1].x - _ctrl_pts[i].x;
+    h_[i] = ctrl_pts_[i + 1].x - ctrl_pts_[i].x;
   }
 
   ComputeTagents();
@@ -105,59 +105,59 @@ auto CurveOp::GetParams() const -> nlohmann::json {
   nlohmann::json o;
 
   nlohmann::json inner;
-  for (size_t i = 0; i < _ctrl_pts.size(); ++i) {
+  for (size_t i = 0; i < ctrl_pts_.size(); ++i) {
     nlohmann::json pt;
-    pt["x"]                        = _ctrl_pts[i].x;
-    pt["y"]                        = _ctrl_pts[i].y;
+    pt["x"]                        = ctrl_pts_[i].x;
+    pt["y"]                        = ctrl_pts_[i].y;
     inner[std::format("pts{}", i)] = pt;
   }
 
-  inner["size"]   = _ctrl_pts.size();
+  inner["size"]   = ctrl_pts_.size();
 
-  o[_script_name] = inner;
+  o[script_name_] = inner;
 
   return o;
 }
 
 void CurveOp::SetParams(const nlohmann::json& params) {
-  if (!params.contains(_script_name)) {
+  if (!params.contains(script_name_)) {
     return;
   }
 
-  nlohmann::json pts_json = params[_script_name].get<nlohmann::json>();
+  nlohmann::json pts_json = params[script_name_].get<nlohmann::json>();
   if (!pts_json.contains("size")) {
     return;
   }
 
   size_t size = pts_json["size"].get<size_t>();
-  _ctrl_pts.clear();
-  _h.clear();
-  _m.clear();
+  ctrl_pts_.clear();
+  h_.clear();
+  m_.clear();
   for (size_t i = 0; i < size; ++i) {
     auto pt_name = std::format("pts{}", i);
     if (pts_json.contains(pt_name)) {
       nlohmann::json pt_json = pts_json[pt_name].get<nlohmann::json>();
       if (pt_json.contains("x") && pt_json.contains("y")) {
         cv::Point2f pt = {pt_json["x"], pt_json["y"]};
-        _ctrl_pts.emplace_back(std::move(pt));
+        ctrl_pts_.emplace_back(std::move(pt));
       }
     }
   }
 
-  size_t N = _ctrl_pts.size();
-  _h.resize(N - 1);
-  _m.resize(N);
+  size_t N = ctrl_pts_.size();
+  h_.resize(N - 1);
+  m_.resize(N);
 
   for (size_t i = 0; i < N - 1; ++i) {
-    _h[i] = _ctrl_pts[i + 1].x - _ctrl_pts[i].x;
+    h_[i] = ctrl_pts_[i + 1].x - ctrl_pts_[i].x;
   }
 
   ComputeTagents();
 }
 
 void CurveOp::SetGlobalParams(OperatorParams& params) const {
-  params.curve_ctrl_pts = _ctrl_pts;
-  params.curve_m        = _m;
-  params.curve_h        = _h;
+  params.curve_ctrl_pts_ = ctrl_pts_;
+  params.curve_m_        = m_;
+  params.curve_h_        = h_;
 }
 };  // namespace puerhlab

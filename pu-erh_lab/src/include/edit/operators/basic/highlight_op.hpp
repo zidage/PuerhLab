@@ -24,34 +24,33 @@
 
 namespace puerhlab {
 struct HighlightCurveParams {
-  float       control;
-  float       knee_start;
-  const float slope_range = 0.8f;
-  float       m1;
+  float       control_;
+  float       knee_start_;
+  const float slope_range_ = 0.8f;
+  float       m1_;
 
-  float       x0;
-  float       x1 = 1.0f;
-  float       y0;
-  float       y1;
+  float       x0_;
+  float       x1_ = 1.0f;
+  float       y0_;
+  float       y1_;
 
-  float       m0 = 1.0f;
+  float       m0_ = 1.0f;
 
-  float       dx;
+  float       dx_;
 };
 class HighlightsOp : public OperatorBase<HighlightsOp> {
  private:
-  float                _offset;
+  float                offset_;
 
-  HighlightCurveParams _curve;
+  HighlightCurveParams curve_;
 
  public:
   auto                               GetScale() -> float;
-  static constexpr PriorityLevel     _priority_level    = 1;
-  static constexpr PipelineStageName _affiliation_stage = PipelineStageName::Basic_Adjustment;
-  static constexpr std::string_view  _canonical_name    = "HIGHLIGHTS";
-  static constexpr std::string_view  _script_name       = "highlights";
-  static constexpr OperatorType      _operator_type     = OperatorType::HIGHLIGHTS;
-
+  static constexpr PriorityLevel     priority_level_    = 1;
+  static constexpr PipelineStageName affiliation_stage_ = PipelineStageName::Basic_Adjustment;
+  static constexpr std::string_view  canonical_name_    = "HIGHLIGHTS";
+  static constexpr std::string_view  script_name_       = "highlights";
+  static constexpr OperatorType      operator_type_     = OperatorType::HIGHLIGHTS;
   HighlightsOp()                                        = default;
   HighlightsOp(float offset);
   HighlightsOp(const nlohmann::json& params);

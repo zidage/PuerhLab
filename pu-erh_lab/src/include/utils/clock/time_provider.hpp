@@ -24,7 +24,7 @@ class TimeProvider {
   static std::string TimePointToString(const std::chrono::system_clock::time_point& tp);
 
  private:
-  static std::atomic<std::chrono::system_clock::time_point> _cached_sys_time;
-  static std::atomic<std::chrono::steady_clock::time_point> _cached_steady_time;
+  static std::atomic<std::chrono::system_clock::time_point> cached_sys_time_;
+  static std::atomic<std::chrono::steady_clock::time_point> cached_steady_time_;
 };
 };  // namespace puerhlab

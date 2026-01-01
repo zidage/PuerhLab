@@ -12,7 +12,7 @@ enum class ElementOrder { ASC, DESC };
 enum class FilterType { DATETIME, EXIF, DEFAULT };
 class SleeveFilter {
  public:
-  FilterType   _type;
+  FilterType   type_;
   virtual void ResetFilter()                      = 0;
   virtual auto GetPredicate() -> std::wstring     = 0;
   virtual auto ToJSON() -> std::wstring           = 0;

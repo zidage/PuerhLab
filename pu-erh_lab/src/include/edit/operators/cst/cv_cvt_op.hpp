@@ -27,14 +27,14 @@ namespace puerhlab {
  */
 class CVCvtColorOp : public OperatorBase<CVCvtColorOp> {
  private:
-  int                   _code;
-  std::optional<size_t> _channel_index;
+  int                   code_;
+  std::optional<size_t> channel_index_;
 
  public:
-  static constexpr PriorityLevel     _priority_level    = 1;
-  static constexpr PipelineStageName _affiliation_stage = PipelineStageName::Basic_Adjustment;
-  static constexpr std::string_view  _canonical_name    = "CV CvtColor";
-  static constexpr std::string_view  _script_name       = "CV_CvtColor";
+  static constexpr PriorityLevel     priority_level_    = 1;
+  static constexpr PipelineStageName affiliation_stage_ = PipelineStageName::Basic_Adjustment;
+  static constexpr std::string_view  canonical_name_    = "CV CvtColor";
+  static constexpr std::string_view  script_name_       = "CV_CvtColor";
 
   CVCvtColorOp()                                        = default;
   CVCvtColorOp(int code, std::optional<size_t> channel_index);

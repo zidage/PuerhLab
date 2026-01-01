@@ -134,6 +134,6 @@ class OperatorFactory {
   }
 
  private:
-  std::unordered_map<OperatorType, Creator> _creators;
+  std::unordered_map<OperatorType, Creator> creators_;
 };
 }  // namespace puerhlab

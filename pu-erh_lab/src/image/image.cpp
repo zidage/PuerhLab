@@ -35,28 +35,28 @@ using json = nlohmann::json;
  * @param image_type the type of the image
  */
 Image::Image(image_id_t image_id, image_path_t image_path, ImageType image_type)
-    : _image_id(image_id), _image_path(image_path), _image_type(image_type) {}
+    : image_id_(image_id), image_path_(image_path), image_type_(image_type) {}
 
 Image::Image(image_id_t image_id, image_path_t image_path, file_name_t image_name,
              ImageType image_type)
-    : _image_id(image_id),
-      _image_path(image_path),
-      _image_name(image_name),
-      _image_type(image_type) {}
+    : image_id_(image_id),
+      image_path_(image_path),
+      image_name_(image_name),
+      image_type_(image_type) {}
 
 Image::Image(image_path_t image_path, ImageType image_type)
-    : _image_path(image_path), _image_type(image_type) {}
+    : image_path_(image_path), image_type_(image_type) {}
 
 Image::Image(Image&& other)
-    : _image_id(other._image_id),
-      _image_path(std::move(other._image_path)),
-      _exif_data(std::move(other._exif_data)),
-      _image_data(std::move(other._image_data)),
-      _thumbnail(std::move(other._thumbnail)),
-      _image_type(other._image_type) {}
+    : image_id_(other.image_id_),
+      image_path_(std::move(other.image_path_)),
+      exif_data_(std::move(other.exif_data_)),
+      image_data_(std::move(other.image_data_)),
+      thumbnail_(std::move(other.thumbnail_)),
+      image_type_(other.image_type_) {}
 
 std::wostream& operator<<(std::wostream& os, const Image& img) {
-  os << "img_id: " << img._image_id << "\timage_path: " << img._image_path.wstring()
+  os << "img_id: " << img.image_id_ << "\timage_path: " << img.image_path_.wstring()
      << L"\tAdded Time: ";
   return os;
 }
@@ -67,51 +67,51 @@ std::wostream& operator<<(std::wostream& os, const Image& img) {
  * @param image_data
  */
 void Image::LoadData(ImageBuffer&& load_image) {
-  _image_data   = std::move(load_image);
-  _has_full_img = true;
+  image_data_   = std::move(load_image);
+  has_full_img_ = true;
 }
 
 void Image::LoadThumbnail(ImageBuffer&& thumbnail) {
-  _thumbnail     = std::move(thumbnail);
-  _has_thumbnail = true;
+  thumbnail_     = std::move(thumbnail);
+  has_thumbnail_ = true;
 }
 
 void Image::ClearData() {
-  _image_data.ReleaseCPUData();
-  _has_full_img = false;
+  image_data_.ReleaseCPUData();
+  has_full_img_ = false;
 }
 
 void Image::ClearThumbnail() {
-  _thumbnail.ReleaseCPUData();
-  _has_thumbnail = false;
+  thumbnail_.ReleaseCPUData();
+  has_thumbnail_ = false;
 }
 
 auto Image::ExifToJson() -> std::string {
   // If the image has exif json, return it directly
-  if (_has_exif_json) {
-    return nlohmann::to_string(_exif_json);
+  if (has_exif_json_) {
+    return nlohmann::to_string(exif_json_);
   }
 
-  _exif_json     = _exif_display.ToJson();
-  _has_exif_json = true;
-  return nlohmann::to_string(_exif_json);
+  exif_json_     = exif_display_.ToJson();
+  has_exif_json_ = true;
+  return nlohmann::to_string(exif_json_);
 }
 
 void Image::JsonToExif(std::string json_str) {
   try {
-    _exif_json     = nlohmann::json::parse(json_str);
-    _has_exif_json = true;
-    _exif_display.FromJson(_exif_json);
+    exif_json_     = nlohmann::json::parse(json_str);
+    has_exif_json_ = true;
+    exif_display_.FromJson(exif_json_);
   } catch (nlohmann::json::parse_error& e) {
     throw std::runtime_error("Image: JSON parse error");
   }
 }
 
-void Image::ComputeChecksum() { _checksum = XXH3_64bits(this, sizeof(*this)); }
+void Image::ComputeChecksum() { checksum_ = XXH3_64bits(this, sizeof(*this)); }
 
-auto Image::GetImageData() -> cv::Mat& { return _image_data.GetCPUData(); }
+auto Image::GetImageData() -> cv::Mat& { return image_data_.GetCPUData(); }
 
-auto Image::GetThumbnailData() -> cv::Mat& { return _thumbnail.GetCPUData(); }
+auto Image::GetThumbnailData() -> cv::Mat& { return thumbnail_.GetCPUData(); }
 
-auto Image::GetThumbnailBuffer() -> ImageBuffer& { return _thumbnail; }
+auto Image::GetThumbnailBuffer() -> ImageBuffer& { return thumbnail_; }
 };  // namespace puerhlab

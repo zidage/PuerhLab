@@ -12,29 +12,29 @@ namespace puerhlab {
 class FilterableMetadata {
  public:
   // libraw_iparams_t
-  std::string    make           = "";
-  std::string    model          = "";
+  std::string    make_           = "";
+  std::string    model_          = "";
 
   // libraw_image_size_t
-  unsigned short height         = 0;
-  unsigned short width          = 0;
+  unsigned short height_         = 0;
+  unsigned short width_          = 0;
 
   // libraw_lensinfo_t
   // libraw_makernotes_lens_t
-  std::string    lens           = "";
-  std::string    lens_make      = "";
-  float          aperture       = 0.0f;
-  float          focal          = 0.0f;
-  bool           has_attachment = false;  // for adapter etc.
+  std::string    lens_           = "";
+  std::string    lens_make_      = "";
+  float          aperture_       = 0.0f;
+  float          focal_          = 0.0f;
+  bool           has_attachment_ = false;  // for adapter etc.
 };
 
 class ExifFilter : public ValueFilter<FilterableMetadata> {
  private:
-  FilterableMetadata _metadata;
+  FilterableMetadata metadata_;
 
  public:
-  FilterType   _type = FilterType::EXIF;
-  ElementOrder _order;
+  FilterType   type_ = FilterType::EXIF;
+  ElementOrder order_;
   void         SetFilter(FilterableMetadata metadata, ElementOrder order);
   void         ResetFilter();
   auto         GetPredicate() -> std::wstring;

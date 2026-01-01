@@ -33,9 +33,9 @@ enum class DecodeType { SLEEVE_LOADING, THUMB, RAW, REGULAR };
 
 class DecoderScheduler {
  private:
-  ThreadPool                   _file_read_thread_pool;
-  ThreadPool                   _thread_pool;
-  std::shared_ptr<BufferQueue> _decoded_buffer;
+  ThreadPool                   file_read_thread_pool_;
+  ThreadPool                   thread_pool_;
+  std::shared_ptr<BufferQueue> decoded_buffer_;
 
  public:
   explicit DecoderScheduler(size_t thread_count, std::shared_ptr<BufferQueue> decoded_buffer);

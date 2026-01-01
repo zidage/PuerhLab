@@ -25,40 +25,40 @@
 
 namespace puerhlab {
 SharpenOp::SharpenOp(float offset, float radius, float threshold)
-    : _offset(offset), _radius(radius), _threshold(threshold) {
+    : offset_(offset), radius_(radius), threshold_(threshold) {
   ComputeScale();
-  _threshold /= 100.0f;
+  threshold_ /= 100.0f;
 }
 
 SharpenOp::SharpenOp(const nlohmann::json& params) { SetParams(params); }
 
-void SharpenOp::ComputeScale() { _scale = _offset / 100.0f; }
+void SharpenOp::ComputeScale() { scale_ = offset_ / 100.0f; }
 
 auto SharpenOp::GetParams() const -> nlohmann::json {
   nlohmann::json o;
   nlohmann::json inner;
 
-  inner["offset"]    = _offset;
-  inner["radius"]    = _radius;
-  inner["threshold"] = _threshold;
+  inner["offset"]    = offset_;
+  inner["radius"]    = radius_;
+  inner["threshold"] = threshold_;
 
-  o[_script_name]    = inner;
+  o[script_name_]    = inner;
   return o;
 }
 
 void SharpenOp::SetParams(const nlohmann::json& params) {
-  nlohmann::json inner = params[_script_name].get<nlohmann::json>();
+  nlohmann::json inner = params[script_name_].get<nlohmann::json>();
   if (inner.contains("offset")) {
-    _offset = inner["offset"].get<float>();
+    offset_ = inner["offset"].get<float>();
   }
   if (inner.contains("radius")) {
-    _radius = inner["radius"].get<float>();
+    radius_ = inner["radius"].get<float>();
   } else {
-    _radius = 3.0f;
+    radius_ = 3.0f;
   }
   if (inner.contains("threshold")) {
-    _threshold = inner["threshold"].get<float>();
-    _threshold /= 100.0f;
+    threshold_ = inner["threshold"].get<float>();
+    threshold_ /= 100.0f;
   }
   ComputeScale();
 }
@@ -68,32 +68,32 @@ void SharpenOp::Apply(std::shared_ptr<ImageBuffer> input) {
 
   // Use USM to sharpen the image
   cv::Mat  blurred;
-  cv::GaussianBlur(img, blurred, cv::Size(), _radius, _radius, cv::BORDER_REPLICATE);
+  cv::GaussianBlur(img, blurred, cv::Size(), radius_, radius_, cv::BORDER_REPLICATE);
 
   cv::Mat high_pass = img - blurred;
-  if (_threshold > 0.0f) {
+  if (threshold_ > 0.0f) {
     cv::Mat high_pass_gray;
     cv::cvtColor(high_pass, high_pass_gray, cv::COLOR_BGR2GRAY);
 
     cv::Mat abs_high_pass_gray = cv::abs(high_pass_gray);
 
     cv::Mat mask;
-    cv::threshold(abs_high_pass_gray, mask, _threshold, 1.0f, cv::THRESH_BINARY);
+    cv::threshold(abs_high_pass_gray, mask, threshold_, 1.0f, cv::THRESH_BINARY);
 
     cv::Mat mask_3channel;
     cv::cvtColor(mask, mask_3channel, cv::COLOR_GRAY2BGR);
     cv::multiply(high_pass, mask_3channel, high_pass);
   }
 
-  cv::scaleAdd(high_pass, _scale, img, img);
+  cv::scaleAdd(high_pass, scale_, img, img);
   cv::threshold(img, img, 1.0f, 1.0f, cv::THRESH_TRUNC);
   cv::threshold(img, img, 0.0f, 0.0f, cv::THRESH_TOZERO);
 }
 
 
 void SharpenOp::SetGlobalParams(OperatorParams& params) const {
-  params.sharpen_offset    = _scale;
-  params.sharpen_radius    = _radius;
-  params.sharpen_threshold = _threshold;
+  params.sharpen_offset_    = scale_;
+  params.sharpen_radius_    = radius_;
+  params.sharpen_threshold_ = threshold_;
 }
 };  // namespace puerhlab

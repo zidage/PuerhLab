@@ -25,13 +25,13 @@ concept Incrementable = requires(IDType t) {
 template <Incrementable T>
 class IDGenerator {
  private:
-  T _counter;
+  T counter_;
 
  public:
-  IDGenerator(T start_id) : _counter(start_id) {}
-  auto GenerateID() -> T { return ++_counter; }
-  auto GetCurrentID() const -> T { return _counter; }
-  void SetStartID(T start_id) { _counter = start_id; }
+  IDGenerator(T start_id) : counter_(start_id) {}
+  auto GenerateID() -> T { return ++counter_; }
+  auto GetCurrentID() const -> T { return counter_; }
+  void SetStartID(T start_id) { counter_ = start_id; }
 };
 };  // namespace IncrID
 };  // namespace puerhlab

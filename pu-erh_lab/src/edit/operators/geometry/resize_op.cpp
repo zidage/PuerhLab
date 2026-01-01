@@ -24,20 +24,20 @@ void ResizeOp::Apply(std::shared_ptr<ImageBuffer> input) {
   auto& img = input->GetCPUData();
   int   w   = img.cols;
   int   h   = img.rows;
-  if (std::max(w, h) <= _maximum_edge) {
+  if (std::max(w, h) <= maximum_edge_) {
     return;
   }
 
-  float   scale = static_cast<float>(_maximum_edge) / static_cast<float>(std::max(w, h));
+  float   scale = static_cast<float>(maximum_edge_) / static_cast<float>(std::max(w, h));
   cv::Mat roi_img;
-  if (enable_roi) {
-    int roi_w = static_cast<int>(w * roi.resize_factor);
-    int roi_h = static_cast<int>(h * roi.resize_factor);
-    roi_w     = std::min(roi_w, w - roi.x);
-    roi_h     = std::min(roi_h, h - roi.y);
-    cv::Rect roi_rect(roi.x, roi.y, roi_w, roi_h);
+  if (enable_roi_) {
+    int roi_w = static_cast<int>(w * roi_.resize_factor_);
+    int roi_h = static_cast<int>(h * roi_.resize_factor_);
+    roi_w     = std::min(roi_w, w - roi_.x_);
+    roi_h     = std::min(roi_h, h - roi_.y_);
+    cv::Rect roi_rect(roi_.x_, roi_.y_, roi_w, roi_h);
     roi_img     = img(roi_rect);
-    float scale = static_cast<float>(_maximum_edge) / static_cast<float>(std::max(roi_w, roi_h));
+    float scale = static_cast<float>(maximum_edge_) / static_cast<float>(std::max(roi_w, roi_h));
     cv::resize(roi_img, roi_img,
                cv::Size(static_cast<int>(roi_w * scale), static_cast<int>(roi_h * scale)), 0, 0,
                cv::INTER_AREA);
@@ -51,35 +51,35 @@ void ResizeOp::Apply(std::shared_ptr<ImageBuffer> input) {
 auto ResizeOp::GetParams() const -> nlohmann::json {
   nlohmann::json params;
   nlohmann::json inner;
-  inner["maximum_edge"] = _maximum_edge;
-  inner["enable_roi"]   = enable_roi;
-  inner["roi"]          = {{"x", roi.x}, {"y", roi.y}, {"resize_factor", roi.resize_factor}};
+  inner["maximum_edge"] = maximum_edge_;
+  inner["enable_roi"]   = enable_roi_;
+  inner["roi"]          = {{"x", roi_.x_}, {"y", roi_.y_}, {"resize_factor", roi_.resize_factor_}};
 
-  params[_script_name]  = inner;
+  params[script_name_]  = inner;
   return params;
 }
 
 auto ResizeOp::SetParams(const nlohmann::json& params) -> void {
-  if (params.contains(_script_name)) {
-    auto inner = params.at(_script_name);
+  if (params.contains(script_name_)) {
+    auto inner = params.at(script_name_);
     if (inner.contains("maximum_edge")) {
-      _maximum_edge = inner.at("maximum_edge").get<int>();
+      maximum_edge_ = inner.at("maximum_edge").get<int>();
     } else {
-      _maximum_edge = 2048;
+      maximum_edge_ = 2048;
     }
     if (inner.contains("enable_roi")) {
-      enable_roi = inner.at("enable_roi").get<bool>();
+      enable_roi_ = inner.at("enable_roi").get<bool>();
     } else {
-      enable_roi = false;
+      enable_roi_ = false;
     }
-    if (enable_roi && inner.contains("roi")) {
+    if (enable_roi_ && inner.contains("roi")) {
       auto roi_json     = inner.at("roi");
-      roi.x             = roi_json.value("x", 0);
-      roi.y             = roi_json.value("y", 0);
-      roi.resize_factor = roi_json.value("resize_factor", 1.0f);
+      roi_.x_             = roi_json.value("x", 0);
+      roi_.y_             = roi_json.value("y", 0);
+      roi_.resize_factor_ = roi_json.value("resize_factor", 1.0f);
     }
   } else {
-    _maximum_edge = 2048;
+    maximum_edge_ = 2048;
   }
 }
 

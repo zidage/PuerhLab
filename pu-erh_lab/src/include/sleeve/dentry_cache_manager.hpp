@@ -33,15 +33,15 @@ class DCacheManager {
   using ListIterator = std::list<std::pair<sl_path_t, sl_element_id_t>>::iterator;
 
  private:
-  std::unordered_map<sl_path_t, ListIterator>      _cache_map;
-  std::list<std::pair<sl_path_t, sl_element_id_t>> _cache_list;
-  uint32_t                                         _capacity;
+  std::unordered_map<sl_path_t, ListIterator>      cache_map_;
+  std::list<std::pair<sl_path_t, sl_element_id_t>> cache_list_;
+  uint32_t                                         capacity_;
 
-  uint32_t                                         _evict_count  = 0;
-  uint32_t                                         _access_count = 0;
+  uint32_t                                         evict_count_  = 0;
+  uint32_t                                         access_count_ = 0;
 
  public:
-  static const uint32_t _default_capacity = 256;
+  static const uint32_t default_capacity_ = 256;
   explicit DCacheManager();
   explicit DCacheManager(uint32_t capacity);
 

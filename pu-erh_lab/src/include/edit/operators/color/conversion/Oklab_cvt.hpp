@@ -24,7 +24,7 @@ namespace OklabCvt {
  *
  */
 struct Oklab {
-  float L, a, b;
+  float l_, a_, b_;
 };
 
 Oklab     LinearRGB2Oklab(const cv::Vec3f& rgb);

@@ -28,7 +28,7 @@
 namespace puerhlab {
 
 ColorWheelOp::ColorWheelOp()
-    : _lift(), _gamma(), _gain(), _lift_crossover(0.25f), _gain_crossover(0.75f) {}
+    : lift_(), gamma_(), gain_(), lift_crossover_(0.25f), gain_crossover_(0.75f) {}
 
 ColorWheelOp::ColorWheelOp(const nlohmann::json& params) { SetParams(params); }
 
@@ -57,15 +57,15 @@ void ColorWheelOp::Apply(std::shared_ptr<ImageBuffer> input) {
   cv::Mat   lightness = Lab_channels[0] / 100.0f;  // L
 
   // BGR
-  cv::Vec3f lift_offset(_lift.color_offset.x + _lift.luminance_offset,
-                        _lift.color_offset.y + _lift.luminance_offset,
-                        _lift.color_offset.z + _lift.luminance_offset);
-  cv::Vec3f gain_factor(_gain.color_offset.x + _gain.luminance_offset,
-                        _gain.color_offset.y + _gain.luminance_offset,
-                        _gain.color_offset.z + _gain.luminance_offset);
-  cv::Vec3f gamma_inv(1.0f / (_gamma.color_offset.x + _gamma.luminance_offset),
-                      1.0f / (_gamma.color_offset.y + _gamma.luminance_offset),
-                      1.0f / (_gamma.color_offset.z + _gamma.luminance_offset));
+  cv::Vec3f lift_offset(lift_.color_offset_.x + lift_.luminance_offset_,
+                        lift_.color_offset_.y + lift_.luminance_offset_,
+                        lift_.color_offset_.z + lift_.luminance_offset_);
+  cv::Vec3f gain_factor(gain_.color_offset_.x + gain_.luminance_offset_,
+                        gain_.color_offset_.y + gain_.luminance_offset_,
+                        gain_.color_offset_.z + gain_.luminance_offset_);
+  cv::Vec3f gamma_inv(1.0f / (gamma_.color_offset_.x + gamma_.luminance_offset_),
+                      1.0f / (gamma_.color_offset_.y + gamma_.luminance_offset_),
+                      1.0f / (gamma_.color_offset_.z + gamma_.luminance_offset_));
 
   img.forEach<cv::Vec3f>([&](cv::Vec3f& pixel, const int* pos) {
     float     L              = lightness.at<float>(pos[0], pos[1]);
@@ -98,42 +98,42 @@ auto ColorWheelOp::GetParams() const -> nlohmann::json {
   nlohmann::json o;
   nlohmann::json inner;
 
-  inner["lift"]       = _lift;
-  inner["gamma"]      = _gamma;
-  inner["gain"]       = _gain;
-  inner["crossovers"] = {{"lift", _lift_crossover}, {"gain", _gain_crossover}};
+  inner["lift"]       = lift_;
+  inner["gamma"]      = gamma_;
+  inner["gain"]       = gain_;
+  inner["crossovers"] = {{"lift", lift_crossover_}, {"gain", gain_crossover_}};
 
-  o[_script_name]     = inner;
+  o[script_name_]     = inner;
   return o;
 }
 
 void ColorWheelOp::SetParams(const nlohmann::json& params) {
-  nlohmann::json inner = params.at(_script_name);
-  if (inner.contains("lift")) inner.at("lift").get_to(_lift);
-  if (inner.contains("gamma")) inner.at("gamma").get_to(_gamma);
-  if (inner.contains("gain")) inner.at("gain").get_to(_gain);
+  nlohmann::json inner = params.at(script_name_);
+  if (inner.contains("lift")) inner.at("lift").get_to(lift_);
+  if (inner.contains("gamma")) inner.at("gamma").get_to(gamma_);
+  if (inner.contains("gain")) inner.at("gain").get_to(gain_);
   if (inner.contains("crossovers")) {
     const auto& crossovers = inner.at("crossovers");
-    if (crossovers.contains("lift")) crossovers.at("lift").get_to(_lift_crossover);
-    if (crossovers.contains("gain")) crossovers.at("gain").get_to(_gain_crossover);
+    if (crossovers.contains("lift")) crossovers.at("lift").get_to(lift_crossover_);
+    if (crossovers.contains("gain")) crossovers.at("gain").get_to(gain_crossover_);
   }
 }
 
 void ColorWheelOp::SetGlobalParams(OperatorParams& params) const {
-  params.lift_color_offset[0]  = _lift.color_offset.x;
-  params.lift_color_offset[1]  = _lift.color_offset.y;
-  params.lift_color_offset[2]  = _lift.color_offset.z;
-  params.lift_luminance_offset = _lift.luminance_offset;
+  params.lift_color_offset_[0]  = lift_.color_offset_.x;
+  params.lift_color_offset_[1]  = lift_.color_offset_.y;
+  params.lift_color_offset_[2]  = lift_.color_offset_.z;
+  params.lift_luminance_offset_ = lift_.luminance_offset_;
 
-  params.gain_color_offset[0]  = _gain.color_offset.x;
+  params.gain_color_offset_[0]  = gain_.color_offset_.x;
   ;
-  params.gain_color_offset[1]   = _gain.color_offset.y;
-  params.gain_color_offset[2]   = _gain.color_offset.z;
-  params.gain_luminance_offset  = _gain.luminance_offset;
+  params.gain_color_offset_[1]   = gain_.color_offset_.y;
+  params.gain_color_offset_[2]   = gain_.color_offset_.z;
+  params.gain_luminance_offset_  = gain_.luminance_offset_;
 
-  params.gamma_color_offset[0]  = _gamma.color_offset.x;
-  params.gamma_color_offset[1]  = _gamma.color_offset.y;
-  params.gamma_color_offset[2]  = _gamma.color_offset.z;
-  params.gamma_luminance_offset = _gamma.luminance_offset;
+  params.gamma_color_offset_[0]  = gamma_.color_offset_.x;
+  params.gamma_color_offset_[1]  = gamma_.color_offset_.y;
+  params.gamma_color_offset_[2]  = gamma_.color_offset_.z;
+  params.gamma_luminance_offset_ = gamma_.luminance_offset_;
 }
 };  // namespace puerhlab

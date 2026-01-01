@@ -43,9 +43,9 @@ TEST(SleeveFSTest, AddGetTest1) {
       fs.Create(L"", L"FILE", ElementType::FILE);
       auto new_file = fs.Get("/FILE", false);
       EXPECT_FALSE(new_file == nullptr);
-      EXPECT_EQ(new_file->_element_name, L"FILE");
-      EXPECT_EQ(new_file->_element_id, 1);
-      EXPECT_EQ(new_file->_ref_count, 1);
+      EXPECT_EQ(new_file->element_name_, L"FILE");
+      EXPECT_EQ(new_file->element_id_, 1);
+      EXPECT_EQ(new_file->ref_count_, 1);
     } catch (std::exception& e) {
       std::cout << e.what() << std::endl;
       FAIL();
@@ -150,9 +150,9 @@ TEST(SleeveFSTest, DeleteTest1) {
     fs.Create(L"", L"FILE", ElementType::FILE);
     auto new_file = fs.Get("/FILE", false);
     EXPECT_FALSE(new_file == nullptr);
-    EXPECT_EQ(new_file->_element_name, L"FILE");
-    EXPECT_EQ(new_file->_element_id, 1);
-    EXPECT_EQ(new_file->_ref_count, 1);
+    EXPECT_EQ(new_file->element_name_, L"FILE");
+    EXPECT_EQ(new_file->element_id_, 1);
+    EXPECT_EQ(new_file->ref_count_, 1);
 
     fs.Delete(L"/FILE");
     fs.Get("/FILE", false);

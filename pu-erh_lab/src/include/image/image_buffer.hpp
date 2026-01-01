@@ -24,16 +24,16 @@
 namespace puerhlab {
 class ImageBuffer {
  private:
-  cv::Mat                               _cpu_data;
-  cv::cuda::GpuMat                      _gpu_data;
+  cv::Mat                               cpu_data_;
+  cv::cuda::GpuMat                      gpu_data_;
 
-  std::unique_ptr<std::vector<uint8_t>> _buffer;
+  std::unique_ptr<std::vector<uint8_t>> buffer_;
 
  public:
-  bool _cpu_data_valid       = false;
-  bool _gpu_data_valid       = false;
+  bool cpu_data_valid_       = false;
+  bool gpu_data_valid_       = false;
 
-  bool _buffer_valid         = false;
+  bool buffer_valid_         = false;
   ImageBuffer()              = default;
   ImageBuffer(cv::Mat& data);
   ImageBuffer(cv::Mat&& data);

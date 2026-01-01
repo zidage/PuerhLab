@@ -25,23 +25,23 @@
 
 namespace puerhlab {
 struct TaskOptions {
-  bool          _is_preview;  // if true, use preview pipeline
+  bool          is_preview_;  // if true, use preview pipeline
 
-  bool          _is_blocking;      // if true, wait for the task to finish
-  bool          _is_callback;      // if true, use callback to return result
-  bool          _is_seq_callback;  // if true, use sequential callback to return result
-  PriorityLevel _task_priority;    // task priority level, not used yet
+  bool          is_blocking_;      // if true, wait for the task to finish
+  bool          is_callback_;      // if true, use callback to return result
+  bool          is_seq_callback_;  // if true, use sequential callback to return result
+  PriorityLevel task_priority_;    // task priority level, not used yet
 };
 struct PipelineTask {
-  uint32_t                                                    _task_id;
-  std::shared_ptr<PipelineExecutor>                           _pipeline_executor;
-  std::shared_ptr<ImageBuffer>                                _input;
+  uint32_t                                                    task_id_;
+  std::shared_ptr<PipelineExecutor>                           pipeline_executor_;
+  std::shared_ptr<ImageBuffer>                                input_;
 
-  std::shared_ptr<std::promise<std::shared_ptr<ImageBuffer>>> _result;    // used for blocking tasks
-  std::optional<std::function<void(ImageBuffer&)>>            _callback;  // used for callback tasks
+  std::shared_ptr<std::promise<std::shared_ptr<ImageBuffer>>> result_;    // used for blocking tasks
+  std::optional<std::function<void(ImageBuffer&)>>            callback_;  // used for callback tasks
   std::optional<std::function<void(ImageBuffer&, uint32_t)>>
-              _seq_callback;  // used for callback tasks
+              seq_callback_;  // used for callback tasks
 
-  TaskOptions _options;
+  TaskOptions options_;
 };
 };  // namespace puerhlab

@@ -20,8 +20,8 @@ namespace puerhlab {
 
 struct TintOpKernel : PointOpTag {
   inline void operator()(Pixel& p, OperatorParams& params) const {
-    if (!params.tint_enabled) return;
-    p.g += params.tint_offset;
+    if (!params.tint_enabled_) return;
+    p.g_ += params.tint_offset_;
   }
 };
 }  // namespace puerhlab

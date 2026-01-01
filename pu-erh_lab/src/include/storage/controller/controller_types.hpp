@@ -18,7 +18,7 @@
 namespace puerhlab {
 class ConnectionGuard {
  public:
-  duckdb_connection _conn;
+  duckdb_connection conn_;
 
   ConnectionGuard(duckdb_connection conn);
   ConnectionGuard(ConnectionGuard&& other) noexcept;

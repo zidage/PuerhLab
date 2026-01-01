@@ -10,7 +10,7 @@
 namespace puerhlab {
 class DatetimeFilter : public RangeFilter<std::time_t> {
  public:
-  FilterType _type = FilterType::DATETIME;
+  FilterType type_ = FilterType::DATETIME;
 
   void       SetFilter(std::time_t start_time, std::time_t end_time);
   void       ResetFilter();
@@ -19,7 +19,7 @@ class DatetimeFilter : public RangeFilter<std::time_t> {
   void       FromJSON(const std::wstring j_str);
 
  private:
-  std::time_t _start_time;
-  std::time_t _end_time;
+  std::time_t start_time_;
+  std::time_t end_time_;
 };
 };  // namespace puerhlab

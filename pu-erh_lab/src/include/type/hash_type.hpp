@@ -26,18 +26,18 @@
 namespace puerhlab {
 class Hash128 {
  public:
-  Hash128() : _h{0, 0} {}
-  explicit Hash128(const XXH128_hash_t& h) : _h(h) {}
+  Hash128() : h_{0, 0} {}
+  explicit Hash128(const XXH128_hash_t& h) : h_(h) {}
 
-  Hash128(uint64_t low, uint64_t high) : _h{low, high} {}
+  Hash128(uint64_t low, uint64_t high) : h_{low, high} {}
 
-  uint64_t                low64() const { return _h.low64; }
-  uint64_t                high64() const { return _h.high64; }
+  uint64_t                low64() const { return h_.low64; }
+  uint64_t                high64() const { return h_.high64; }
 
   std::array<uint8_t, 16> ToBytes() const {
     std::array<uint8_t, 16> arr{};
-    uint64_t                lo = _h.low64;
-    uint64_t                hi = _h.high64;
+    uint64_t                lo = h_.low64;
+    uint64_t                hi = h_.high64;
     for (int i = 0; i < 8; i++) {
       arr[i]     = static_cast<uint8_t>(lo & 0xFF);
       arr[i + 8] = static_cast<uint8_t>(hi & 0xFF);
@@ -50,8 +50,8 @@ class Hash128 {
   std::string ToString() const {
     std::ostringstream oss;
     oss << std::hex << std::setfill('0');
-    oss << std::setw(16) << _h.high64;
-    oss << std::setw(16) << _h.low64;
+    oss << std::setw(16) << h_.high64;
+    oss << std::setw(16) << h_.low64;
     return oss.str();
   }
 
@@ -64,18 +64,18 @@ class Hash128 {
     return Hash128(XXH128_hash_t{low, high});
   }
 
-  std::size_t ToSizeT() const noexcept { return static_cast<std::size_t>(_h.low64 ^ _h.high64); }
+  std::size_t ToSizeT() const noexcept { return static_cast<std::size_t>(h_.low64 ^ h_.high64); }
 
   bool        operator==(const Hash128& other) const noexcept {
-    return _h.low64 == other._h.low64 && _h.high64 == other._h.high64;
+    return h_.low64 == other.h_.low64 && h_.high64 == other.h_.high64;
   }
   bool operator!=(const Hash128& other) const noexcept { return !(*this == other); }
   bool operator<(const Hash128& other) const noexcept {
-    return (_h.high64 < other._h.high64) ||
-           (_h.high64 == other._h.high64 && _h.low64 < other._h.low64);
+    return (h_.high64 < other.h_.high64) ||
+           (h_.high64 == other.h_.high64 && h_.low64 < other.h_.low64);
   }
 
-  const XXH128_hash_t& Raw() const { return _h; }
+  const XXH128_hash_t& Raw() const { return h_; }
 
   static Hash128       Compute(const void* data, size_t length, uint64_t seed = 0) {
     XXH128_hash_t h = XXH3_128bits_withSeed(data, length, seed);
@@ -90,7 +90,7 @@ class Hash128 {
   }
 
  private:
-  XXH128_hash_t _h;
+  XXH128_hash_t h_;
 };
 };  // namespace puerhlab
 

@@ -66,16 +66,16 @@ static QImage cvMatToQImage(const cv::Mat& mat) {
 
 int main(int argc, char* argv[]) {
   struct AdjustmentState {
-    float exposure   = 0.0f;
-    float contrast   = 1.0f;
-    float saturation = 0.0f;
-    float tint       = 0.0f;
-    float blacks     = 0.0f;
-    float whites     = 0.0f;
-    float shadows    = 0.0f;
-    float highlights = 0.0f;
-    float sharpen    = 0.0f;
-    float clarity    = 0.0f;
+    float exposure_   = 0.0f;
+    float contrast_   = 1.0f;
+    float saturation_ = 0.0f;
+    float tint_       = 0.0f;
+    float blacks_     = 0.0f;
+    float whites_     = 0.0f;
+    float shadows_    = 0.0f;
+    float highlights_ = 0.0f;
+    float sharpen_    = 0.0f;
+    float clarity_    = 0.0f;
   };
 
   QApplication app(argc, argv);
@@ -117,16 +117,15 @@ int main(int argc, char* argv[]) {
   PipelineScheduler scheduler{};
   PipelineTask      base_task;
   auto              buffer = ByteBufferLoader::LoadFromImage(img_ptr);
-  base_task._input         = buffer ? std::make_shared<ImageBuffer>(std::move(*buffer)) : nullptr;
+  base_task.input_         = buffer ? std::make_shared<ImageBuffer>(std::move(*buffer)) : nullptr;
 
   auto base_executor       = std::make_shared<CPUPipelineExecutor>(true);
   base_executor->SetPreviewMode(true);
-  base_task._pipeline_executor = base_executor;
-
-  SetPipelineTemplate(base_task._pipeline_executor);
-  auto& global_params = base_task._pipeline_executor->GetGlobalParams();
+  base_task.pipeline_executor_ = base_executor;
+  SetPipelineTemplate(base_task.pipeline_executor_);
+  auto& global_params = base_task.pipeline_executor_->GetGlobalParams();
   // Register a default exposure
-  auto& basic_stage   = base_task._pipeline_executor->GetStage(PipelineStageName::Basic_Adjustment);
+  auto& basic_stage   = base_task.pipeline_executor_->GetStage(PipelineStageName::Basic_Adjustment);
   basic_stage.SetOperator(OperatorType::EXPOSURE, {{"exposure", 0.0f}}, global_params);
   basic_stage.SetOperator(OperatorType::CONTRAST, {{"contrast", 1.0f}}, global_params);
   basic_stage.SetOperator(OperatorType::BLACK, {{"black", 0.0f}}, global_params);
@@ -134,14 +133,14 @@ int main(int argc, char* argv[]) {
   basic_stage.SetOperator(OperatorType::SHADOWS, {{"shadows", 0.0f}}, global_params);
   basic_stage.SetOperator(OperatorType::HIGHLIGHTS, {{"highlights", 0.0f}}, global_params);
 
-  auto& color_stage = base_task._pipeline_executor->GetStage(PipelineStageName::Color_Adjustment);
+  auto& color_stage = base_task.pipeline_executor_->GetStage(PipelineStageName::Color_Adjustment);
   color_stage.SetOperator(OperatorType::SATURATION, {{"saturation", 0.0f}}, global_params);
   color_stage.SetOperator(OperatorType::TINT, {{"tint", 0.0f}}, global_params);
 
   std::string LUT_PATH = std::string(CONFIG_PATH) + "LUTs/ACES CCT 2383 D65.cube";
   color_stage.SetOperator(OperatorType::LMT, {{"ocio_lmt", LUT_PATH}}, global_params);
 
-  auto& detail_stage = base_task._pipeline_executor->GetStage(PipelineStageName::Detail_Adjustment);
+  auto& detail_stage = base_task.pipeline_executor_->GetStage(PipelineStageName::Detail_Adjustment);
   detail_stage.SetOperator(OperatorType::SHARPEN, {{"sharpen", {{"offset", 0.0f}}}}, global_params);
   detail_stage.SetOperator(OperatorType::CLARITY, {{"clarity", 0.0f}}, global_params);
   // Set execution stages
@@ -153,27 +152,27 @@ int main(int argc, char* argv[]) {
   auto            scheduleAdjustments = [&](const AdjustmentState& state) {
     PipelineTask task = base_task;
 
-    auto&        basic = task._pipeline_executor->GetStage(PipelineStageName::Basic_Adjustment);
-    basic.SetOperator(OperatorType::EXPOSURE, {{"exposure", state.exposure}}, global_params);
-    basic.SetOperator(OperatorType::CONTRAST, {{"contrast", state.contrast}}, global_params);
-    basic.SetOperator(OperatorType::BLACK, {{"black", state.blacks}}, global_params);
-    basic.SetOperator(OperatorType::WHITE, {{"white", state.whites}}, global_params);
-    basic.SetOperator(OperatorType::SHADOWS, {{"shadows", state.shadows}}, global_params);
-    basic.SetOperator(OperatorType::HIGHLIGHTS, {{"highlights", state.highlights}}, global_params);
+    auto&        basic = task.pipeline_executor_->GetStage(PipelineStageName::Basic_Adjustment);
+    basic.SetOperator(OperatorType::EXPOSURE, {{"exposure", state.exposure_}}, global_params);
+    basic.SetOperator(OperatorType::CONTRAST, {{"contrast", state.contrast_}}, global_params);
+    basic.SetOperator(OperatorType::BLACK, {{"black", state.blacks_}}, global_params);
+    basic.SetOperator(OperatorType::WHITE, {{"white", state.whites_}}, global_params);
+    basic.SetOperator(OperatorType::SHADOWS, {{"shadows", state.shadows_}}, global_params);
+    basic.SetOperator(OperatorType::HIGHLIGHTS, {{"highlights", state.highlights_}}, global_params);
 
-    auto& color = task._pipeline_executor->GetStage(PipelineStageName::Color_Adjustment);
-    color.SetOperator(OperatorType::SATURATION, {{"saturation", state.saturation}}, global_params);
-    color.SetOperator(OperatorType::TINT, {{"tint", state.tint}}, global_params);
-    auto& detail = task._pipeline_executor->GetStage(PipelineStageName::Detail_Adjustment);
+    auto& color = task.pipeline_executor_->GetStage(PipelineStageName::Color_Adjustment);
+    color.SetOperator(OperatorType::SATURATION, {{"saturation", state.saturation_}}, global_params);
+    color.SetOperator(OperatorType::TINT, {{"tint", state.tint_}}, global_params);
+    auto& detail = task.pipeline_executor_->GetStage(PipelineStageName::Detail_Adjustment);
 
-    detail.SetOperator(OperatorType::SHARPEN, {{"sharpen", {{"offset", state.sharpen}}}},
+    detail.SetOperator(OperatorType::SHARPEN, {{"sharpen", {{"offset", state.sharpen_}}}},
                                   global_params);
-    detail.SetOperator(OperatorType::CLARITY, {{"clarity", state.clarity}}, global_params);
+    detail.SetOperator(OperatorType::CLARITY, {{"clarity", state.clarity_}}, global_params);
 
-    task._options._is_blocking = false;
-    task._options._is_callback = true;
+    task.options_.is_blocking_ = false;
+    task.options_.is_callback_ = true;
 
-    task._callback             = [label, dpr](ImageBuffer& output) {
+    task.callback_             = [label, dpr](ImageBuffer& output) {
       try {
       cv::Mat img = output.GetCPUData();
       // img.convertTo(img, CV_8UC3, 255.0);
@@ -246,7 +245,7 @@ int main(int argc, char* argv[]) {
   addSlider(
       "Exposure", -500, 500, 0,
       [&](int v) {
-        adjustments.exposure = static_cast<float>(v) / 100.0f;
+        adjustments.exposure_ = static_cast<float>(v) / 100.0f;
         scheduleAdjustments(adjustments);
       },
       [](int v) { return QString::number(v / 100.0, 'f', 2); });
@@ -254,7 +253,7 @@ int main(int argc, char* argv[]) {
   addSlider(
       "Contrast", -100, 100, 0,
       [&](int v) {
-        adjustments.contrast = static_cast<float>(v);
+        adjustments.contrast_ = static_cast<float>(v);
         scheduleAdjustments(adjustments);
       },
       [](int v) { return QString::number(v, 'f', 2); });
@@ -262,7 +261,7 @@ int main(int argc, char* argv[]) {
   addSlider(
       "Saturation", -100, 100, 0,
       [&](int v) {
-        adjustments.saturation = static_cast<float>(v);
+        adjustments.saturation_ = static_cast<float>(v);
         scheduleAdjustments(adjustments);
       },
       [](int v) { return QString::number(v, 'f', 2); });
@@ -270,7 +269,7 @@ int main(int argc, char* argv[]) {
   addSlider(
       "Tint", -100, 100, 0,
       [&](int v) {
-        adjustments.tint = static_cast<float>(v);
+        adjustments.tint_ = static_cast<float>(v);
         scheduleAdjustments(adjustments);
       },
       [](int v) { return QString::number(v, 'f', 2); });
@@ -278,7 +277,7 @@ int main(int argc, char* argv[]) {
   addSlider(
       "Blacks", -100, 100, 0,
       [&](int v) {
-        adjustments.blacks = static_cast<float>(v);
+        adjustments.blacks_ = static_cast<float>(v);
         scheduleAdjustments(adjustments);
       },
       [](int v) { return QString::number(v, 'f', 2); });
@@ -286,7 +285,7 @@ int main(int argc, char* argv[]) {
   addSlider(
       "Whites", -100, 100, 0,
       [&](int v) {
-        adjustments.whites = static_cast<float>(v);
+        adjustments.whites_ = static_cast<float>(v);
         scheduleAdjustments(adjustments);
       },
       [](int v) { return QString::number(v, 'f', 2); });
@@ -294,7 +293,7 @@ int main(int argc, char* argv[]) {
   addSlider(
       "Shadows", -100, 100, 0,
       [&](int v) {
-        adjustments.shadows = static_cast<float>(v);
+        adjustments.shadows_ = static_cast<float>(v);
         scheduleAdjustments(adjustments);
       },
       [](int v) { return QString::number(v, 'f', 2); });
@@ -302,7 +301,7 @@ int main(int argc, char* argv[]) {
   addSlider(
       "Highlights", -100, 100, 0,
       [&](int v) {
-        adjustments.highlights = static_cast<float>(v);
+        adjustments.highlights_ = static_cast<float>(v);
         scheduleAdjustments(adjustments);
       },
       [](int v) { return QString::number(v, 'f', 2); });
@@ -310,7 +309,7 @@ int main(int argc, char* argv[]) {
   addSlider(
       "Sharpen", -100, 100, 0,
       [&](int v) {
-        adjustments.sharpen = static_cast<float>(v);
+        adjustments.sharpen_ = static_cast<float>(v);
         scheduleAdjustments(adjustments);
       },
       [](int v) { return QString::number(v, 'f', 2); });
@@ -318,7 +317,7 @@ int main(int argc, char* argv[]) {
   addSlider(
       "Clarity", -100, 100, 0,
       [&](int v) {
-        adjustments.clarity = static_cast<float>(v);
+        adjustments.clarity_ = static_cast<float>(v);
         scheduleAdjustments(adjustments);
       },
       [](int v) { return QString::number(v, 'f', 2); });

@@ -31,26 +31,26 @@ namespace puerhlab {
 
 struct DisplayingImage {
  private:
-  std::shared_ptr<Image> _displaying;
-  bool                   _require_thumb;
-  bool                   _require_full;
+  std::shared_ptr<Image> displaying_;
+  bool                   require_thumb_;
+  bool                   require_full_;
 
  public:
-  DisplayingImage(std::weak_ptr<Image> _displaying, bool _require_thumb, bool _require_full);
-  DisplayingImage(std::shared_ptr<Image> _displaying, bool _require_thumb, bool _require_full);
+  DisplayingImage(std::weak_ptr<Image> displaying, bool require_thumb, bool require_full);
+  DisplayingImage(std::shared_ptr<Image> displaying, bool require_thumb, bool require_full);
   ~DisplayingImage();
 };
 
 class SleeveView {
  private:
-  std::shared_ptr<FileSystem>               _fs;
-  std::weak_ptr<SleeveFolder>               _viewing_node;
-  sl_path_t                                 _viewing_path;
-  std::vector<std::weak_ptr<SleeveElement>> _children;
+  std::shared_ptr<FileSystem>               fs_;
+  std::weak_ptr<SleeveFolder>               viewing_node_;
+  sl_path_t                                 viewing_path_;
+  std::vector<std::weak_ptr<SleeveElement>> children_;
 
-  std::shared_ptr<ImagePoolManager>         _image_pool;
+  std::shared_ptr<ImagePoolManager>         image_pool_;
 
-  ImageLoader                               _loader;
+  ImageLoader                               loader_;
 
  public:
   SleeveView(std::shared_ptr<FileSystem> base, std::shared_ptr<ImagePoolManager> image_pool);

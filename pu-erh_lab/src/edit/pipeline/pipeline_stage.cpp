@@ -24,62 +24,62 @@
 
 namespace puerhlab {
 PipelineStage::PipelineStage(PipelineStageName stage, bool enable_cache, bool is_streamable)
-    : _is_streamable(is_streamable), _enable_cache(enable_cache), _stage(stage) {
-  _operators = std::make_unique<std::map<OperatorType, OperatorEntry>>();
-  if (_stage == PipelineStageName::Image_Loading) {
-    _input_cache_valid = true;  // No input for image loading stage, so input cache is always valid
+    : is_streamable_(is_streamable), enable_cache_(enable_cache), stage_(stage) {
+  operators_ = std::make_unique<std::map<OperatorType, OperatorEntry>>();
+  if (stage_ == PipelineStageName::Image_Loading) {
+    input_cache_valid_ = true;  // No input for image loading stage, so input cache is always valid
   }
 }
 
 void PipelineStage::SetOperator(OperatorType op_type, nlohmann::json param) {
-  auto it = _operators->find(op_type);
-  if (it == _operators->end()) {
+  auto it = operators_->find(op_type);
+  if (it == operators_->end()) {
     auto op = OperatorFactory::Instance().Create(op_type, param);
-    _operators->emplace(op_type, OperatorEntry{true, op});
+    operators_->emplace(op_type, OperatorEntry{true, op});
     SetOutputCacheValid(false);
-    if (_dependents) _dependents->SetOutputCacheValid(false);
+    if (dependents_) dependents_->SetOutputCacheValid(false);
   } else {
-    (it->second)._op->SetParams(param);
+    (it->second).op_->SetParams(param);
     SetOutputCacheValid(false);
-    if (_dependents) _dependents->SetOutputCacheValid(false);
+    if (dependents_) dependents_->SetOutputCacheValid(false);
   }
 }
 
 void PipelineStage::SetOperator(OperatorType op_type, nlohmann::json param,
                                 OperatorParams& global_params) {
   SetOperator(op_type, param);
-  auto it = _operators->find(op_type);
-  if (it != _operators->end()) {
-    it->second._op->SetGlobalParams(global_params);
+  auto it = operators_->find(op_type);
+  if (it != operators_->end()) {
+    it->second.op_->SetGlobalParams(global_params);
   }
 }
 
 auto PipelineStage::GetOperator(OperatorType op_type) const -> std::optional<OperatorEntry*> {
-  auto it = _operators->find(op_type);
-  if (it == _operators->end()) {
+  auto it = operators_->find(op_type);
+  if (it == operators_->end()) {
     return std::nullopt;
   }
   return &(it->second);
 }
 
 void PipelineStage::EnableOperator(OperatorType op_type, bool enable) {
-  auto it = _operators->find(op_type);
-  if (it != _operators->end()) {
-    if (it->second._enable != enable) {
+  auto it = operators_->find(op_type);
+  if (it != operators_->end()) {
+    if (it->second.enable_ != enable) {
       SetOutputCacheValid(false);
-      if (_dependents) _dependents->SetInputCacheValid(false);
+      if (dependents_) dependents_->SetInputCacheValid(false);
     }
-    it->second._enable = enable;
+    it->second.enable_ = enable;
   }
 }
 
 void PipelineStage::SetInputImage(std::shared_ptr<ImageBuffer> input) {
-  _input_img = input;
-  _input_set = true;
+  input_img_ = input;
+  input_set_ = true;
 }
 
 void PipelineStage::SetInputCacheValid(bool valid) {
-  _input_cache_valid = valid;
+  input_cache_valid_ = valid;
   if (!valid) {
     // Invalidate output cache if input cache is invalidated
     SetOutputCacheValid(false);
@@ -87,125 +87,124 @@ void PipelineStage::SetInputCacheValid(bool valid) {
 }
 
 void PipelineStage::SetOutputCacheValid(bool valid) {
-  if (_output_cache_valid != valid && !valid) {
-    _output_cache.reset();
-    if (_next_stage) {
-      _next_stage->SetInputCacheValid(false);
+  if (output_cache_valid_ != valid && !valid) {
+    output_cache_.reset();
+    if (next_stage_) {
+      next_stage_->SetInputCacheValid(false);
     }
   }
-  _output_cache_valid = valid;
+  output_cache_valid_ = valid;
 }
 
 auto PipelineStage::ApplyStage(OperatorParams& global_params) -> std::shared_ptr<ImageBuffer> {
-  if (!_input_set) {
+  if (!input_set_) {
     throw std::runtime_error("PipelineExecutor: No valid input image set");
   }
 
-  if (_enable_cache) {
+  if (enable_cache_) {
     if (CacheValid()) {
-      if (_next_stage && _next_stage->CacheValid()) {
+      if (next_stage_ && next_stage_->CacheValid()) {
         // Both input and output cache are valid, skip processing and copying
         return nullptr;
       }
       // Output cache is valid, but next stage's input cache is not valid, copy output cache to next
-      return _output_cache;
+      return output_cache_;
     }
 
-    bool has_enabled_op = _operators->size() > 0;
-    if (has_enabled_op && !_is_streamable) {
+    bool has_enabled_op = operators_->size() > 0;
+    if (has_enabled_op && !is_streamable_) {
       // Non-streamable stage with enabled operators, process the entire image at once
-      auto current_img = std::make_shared<ImageBuffer>(_input_img->Clone());
-      for (const auto& op_entry : *_operators) {
-        if (op_entry.second._enable) {
-          op_entry.second._op->Apply(current_img);
+      auto current_img = std::make_shared<ImageBuffer>(input_img_->Clone());
+      for (const auto& op_entry : *operators_) {
+        if (op_entry.second.enable_) {
+          op_entry.second.op_->Apply(current_img);
         }
       }
-      _output_cache = current_img;
-    } else if (_is_streamable) {
+      output_cache_ = current_img;
+    } else if (is_streamable_) {
       // Streamable stage with enabled operators, use tile scheduler
-      if (!_gpu_setup_done) {
+      if (!gpu_setup_done_) {
         // If tile scheduler is not set, create one
         // SetStaticTileScheduler();
         SetGPUExecutor();
       }
-      _output_cache = std::make_shared<ImageBuffer>();
+      output_cache_ = std::make_shared<ImageBuffer>();
       // _static_tile_scheduler->SetInputImage(_input_img);
       using clock = std::chrono::high_resolution_clock;
       auto start = clock::now();
-      _gpu_executor.SetParams(global_params);
-      _gpu_executor.Execute(_output_cache);
-      _output_cache->SyncToCPU(); // TODO: remove this for future optimization
+      gpu_executor_.SetParams(global_params);
+      gpu_executor_.Execute(output_cache_);
+      output_cache_->SyncToCPU(); // TODO: remove this for future optimization
       auto end = clock::now();
       auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
       std::cout << "Pipeline Stage: " << GetStageNameString()
                 << " GPU execution time: " << duration << " ms" << std::endl;
       // auto current_img = _static_tile_scheduler->ApplyOps(global_params);
       // auto 
-      // _output_cache    = current_img;
+      // output_cache_    = current_img;
 
     } else {
-      _output_cache = _input_img;
+      output_cache_ = input_img_;
     }
 
-    // _input_set = false;
-    // _input_img.reset();
+    // input_set_ = false;
+    // input_img_.reset();
     SetOutputCacheValid(true);
-    if (_next_stage) {
-      _next_stage->SetInputCacheValid(true);
+    if (next_stage_) {
+      next_stage_->SetInputCacheValid(true);
     }
-    return _output_cache;
+    return output_cache_;
 
   } else {
     // No caching, always process the image without using streaming
-    bool has_enabled_op = _operators->size() > 0;
+    bool has_enabled_op = operators_->size() > 0;
     if (has_enabled_op) {
-      std::shared_ptr<ImageBuffer> current_img = _input_img;
-      for (const auto& op_entry : *_operators) {
-        if (op_entry.second._enable) {
-          op_entry.second._op->Apply(current_img);
+      std::shared_ptr<ImageBuffer> current_img = input_img_;
+      for (const auto& op_entry : *operators_) {
+        if (op_entry.second.enable_) {
+          op_entry.second.op_->Apply(current_img);
         }
       }
-      _output_cache = current_img;
+      output_cache_ = current_img;
     } else {
-      _output_cache = _input_img;
+      output_cache_ = input_img_;
     }
 
     // Set to false to avoid using cache
     SetOutputCacheValid(false);
-    if (_next_stage) {
-      _next_stage->SetInputCacheValid(false);
+    if (next_stage_) {
+      next_stage_->SetInputCacheValid(false);
     }
-    return _output_cache;
+    return output_cache_;
   }
 }
 
-auto PipelineStage::HasInput() -> bool { return _input_set; }
-
+auto PipelineStage::HasInput() -> bool { return input_set_; }
 void PipelineStage::ResetAll() {
-  _operators->clear();
-  _input_img.reset();
-  _output_cache.reset();
-  _input_set          = false;
-  _input_cache_valid  = false;
-  _output_cache_valid = false;
-  _dependents = nullptr;
-  _prev_stage   = nullptr;
-  _next_stage   = nullptr;
-  _input_img    = nullptr;
-  _output_cache = nullptr;
-  _input_set    = false;
+  operators_->clear();
+  input_img_.reset();
+  output_cache_.reset();
+  input_set_          = false;
+  input_cache_valid_  = false;
+  output_cache_valid_ = false;
+  dependents_ = nullptr;
+  prev_stage_   = nullptr;
+  next_stage_   = nullptr;
+  input_img_    = nullptr;
+  output_cache_ = nullptr;
+  input_set_    = false;
 }
 
 void PipelineStage::ResetCache() {
-  _output_cache.reset();
-  _output_cache_valid = false;
-  if (_next_stage) {
-    _next_stage->SetInputCacheValid(false);
+  output_cache_.reset();
+  output_cache_valid_ = false;
+  if (next_stage_) {
+    next_stage_->SetInputCacheValid(false);
   }
 }
 
 auto PipelineStage::GetStageNameString() const -> std::string {
-  switch (_stage) {
+  switch (stage_) {
     case PipelineStageName::Image_Loading:
       return "Image Loading";
     case PipelineStageName::To_WorkingSpace:
@@ -231,8 +230,8 @@ auto PipelineStage::GetStageNameString() const -> std::string {
 
 auto PipelineStage::ExportStageParams() const -> nlohmann::json {
   nlohmann::json inner;
-  for (const auto& [op_type, op_entry] : *_operators) {
-    inner[op_entry._op->GetScriptName()] = op_entry.ExportOperatorParams();
+  for (const auto& [op_type, op_entry] : *operators_) {
+    inner[op_entry.op_->GetScriptName()] = op_entry.ExportOperatorParams();
   }
   nlohmann::json j;
   j.emplace(GetStageNameString(), std::move(inner));

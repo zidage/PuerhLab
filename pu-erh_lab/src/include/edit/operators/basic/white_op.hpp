@@ -25,24 +25,23 @@
 namespace puerhlab {
 class WhiteOp : public OperatorBase<WhiteOp> {
  private:
-  float              _offset;
+  float              offset_;
 
-  float              _y_intercept;
-  float              _black_point;
-  float              _slope;
+  float              y_intercept_;
+  float              black_point_;
+  float              slope_;
 
-  simple_simd::f32x4 _y_intercept_vec;
-  simple_simd::f32x4 _black_point_vec;
-  simple_simd::f32x4 _slope_vec;
+  simple_simd::f32x4 y_intercept_vec_;
+  simple_simd::f32x4 black_point_vec_;
+  simple_simd::f32x4 slope_vec_;
 
  public:
   auto                               GetScale() -> float;
-  static constexpr PriorityLevel     _priority_level    = 1;
-  static constexpr PipelineStageName _affiliation_stage = PipelineStageName::Basic_Adjustment;
-  static constexpr std::string_view  _canonical_name    = "WHITE";
-  static constexpr std::string_view  _script_name       = "white";
-  static constexpr OperatorType      _operator_type     = OperatorType::WHITE;
-
+  static constexpr PriorityLevel     priority_level_    = 1;
+  static constexpr PipelineStageName affiliation_stage_ = PipelineStageName::Basic_Adjustment;
+  static constexpr std::string_view  canonical_name_    = "WHITE";
+  static constexpr std::string_view  script_name_       = "white";
+  static constexpr OperatorType      operator_type_     = OperatorType::WHITE;
   WhiteOp()                                             = default;
   WhiteOp(float offset);
   WhiteOp(const nlohmann::json& params);

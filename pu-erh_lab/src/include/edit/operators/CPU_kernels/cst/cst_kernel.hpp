@@ -28,12 +28,12 @@ namespace puerhlab {
 struct OCIO_ACES_Transform_Op_Kernel : PointOpTag {
   inline void operator()(Pixel& p, OperatorParams& params) const {
     // The pair of transform ops should always be enabled.
-    if (params.is_working_space) {
-      params.cpu_to_working_processor->applyRGBA(&p.r);
-      params.is_working_space = false;
+    if (params.is_working_space_) {
+      params.cpu_to_working_processor_->applyRGBA(&p.r_);
+      params.is_working_space_ = false;
     } else {
-      params.cpu_to_output_processor->applyRGBA(&p.r);
-      params.is_working_space = true;
+      params.cpu_to_output_processor_->applyRGBA(&p.r_);
+      params.is_working_space_ = true;
     }
   }
 };

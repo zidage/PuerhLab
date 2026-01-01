@@ -19,10 +19,10 @@
 namespace puerhlab {
 struct ExposureOpKernel : PointOpTag {
   inline void operator()(Pixel& p, OperatorParams& params) const {
-    if (!params.exposure_enabled) return;
-    p.r += params.exposure_offset;
-    p.g += params.exposure_offset;
-    p.b += params.exposure_offset;
+    if (!params.exposure_enabled_) return;
+    p.r_ += params.exposure_offset_;
+    p.g_ += params.exposure_offset_;
+    p.b_ += params.exposure_offset_;
   }
 };
 }  // namespace puerhlab

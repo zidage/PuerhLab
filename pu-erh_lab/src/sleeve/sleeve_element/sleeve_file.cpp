@@ -23,12 +23,12 @@ namespace puerhlab {
 SleeveFile::~SleeveFile() {}
 SleeveFile::SleeveFile(sl_element_id_t id, file_name_t element_name)
     : SleeveElement(id, element_name) {
-  _type = ElementType::FILE;
+  type_ = ElementType::FILE;
 }
 SleeveFile::SleeveFile(sl_element_id_t id, file_name_t element_name, std::shared_ptr<Image> image)
     : SleeveElement(id, element_name) {
-  _image = image;
-  _type  = ElementType::FILE;
+  image_ = image;
+  type_  = ElementType::FILE;
 }
 
 auto SleeveFile::Clear() -> bool {
@@ -37,27 +37,26 @@ auto SleeveFile::Clear() -> bool {
 }
 
 auto SleeveFile::Copy(uint32_t new_id) const -> std::shared_ptr<SleeveElement> {
-  std::shared_ptr<SleeveFile> new_file = std::make_shared<SleeveFile>(new_id, _element_name);
-  new_file->_edit_history              = _edit_history;
+  std::shared_ptr<SleeveFile> new_file = std::make_shared<SleeveFile>(new_id, element_name_);
+  new_file->edit_history_              = edit_history_;
   // TODO: Update the current_version pointer once finish implementing edit history module
-  new_file->_current_version           = nullptr;
+  new_file->current_version_           = nullptr;
   // The image object is still reused
-  new_file->_image                     = _image;
+  new_file->image_                     = image_;
   return new_file;
 }
 
-auto SleeveFile::GetImage() -> std::shared_ptr<Image> { return _image; }
-
+auto SleeveFile::GetImage() -> std::shared_ptr<Image> { return image_; }
 void SleeveFile::SetImage(const std::shared_ptr<Image> img) {
-  _image        = img;
-  _image_id     = img->_image_id;
+  image_        = img;
+  image_id_     = img->image_id_;
   // Once a new image is set, the edit history will be replaced with a new one
-  _edit_history = std::make_shared<EditHistory>(this->_element_id);
+  edit_history_ = std::make_shared<EditHistory>(this->element_id_);
 }
 
-auto SleeveFile::GetEditHistory() -> std::shared_ptr<EditHistory> { return _edit_history; }
+auto SleeveFile::GetEditHistory() -> std::shared_ptr<EditHistory> { return edit_history_; }
 
 auto SleeveFile::SetEditHistory(const std::shared_ptr<EditHistory> history) -> void {
-  _edit_history = history;
+  edit_history_ = history;
 }
 };  // namespace puerhlab

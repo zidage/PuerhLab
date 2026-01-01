@@ -29,11 +29,11 @@
 namespace puerhlab {
 
 HLSOp::HLSOp()
-    : _target_HLS(0, 0.5f, 1.0f),
-      _HLS_adjustment(0.0f, 0.0f, 0.0f),
-      _hue_range(15.0f),
-      _lightness_range(0.1f),
-      _saturation_range(0.1f) {}
+    : target_hls_(0, 0.5f, 1.0f),
+      hls_adjustment_(0.0f, 0.0f, 0.0f),
+      hue_range_(15.0f),
+      lightness_range_(0.1f),
+      saturation_range_(0.1f) {}
 
 HLSOp::HLSOp(const nlohmann::json& params) { SetParams(params); }
 
@@ -43,19 +43,19 @@ void HLSOp::SetTargetColor(const cv::Vec3f& bgr_color_normalized) {
 
   cv::Mat HLS_mat;
   cv::cvtColor(bgr_mat, HLS_mat, cv::COLOR_BGR2HLS);
-  _target_HLS = HLS_mat.at<cv::Vec3f>(0, 0);
+  target_hls_ = HLS_mat.at<cv::Vec3f>(0, 0);
 }
 
-void HLSOp::SetAdjustment(const cv::Vec3f& adjustment) { _HLS_adjustment = adjustment; }
+void HLSOp::SetAdjustment(const cv::Vec3f& adjustment) { hls_adjustment_ = adjustment; }
 
 void HLSOp::SetRanges(float h_range, float l_range, float s_range) {
-  _hue_range        = h_range;
-  _lightness_range  = l_range;
-  _saturation_range = s_range;
+  hue_range_        = h_range;
+  lightness_range_  = l_range;
+  saturation_range_ = s_range;
 }
 
 void HLSOp::Apply(std::shared_ptr<ImageBuffer> input) {
-  if (cv::norm(_HLS_adjustment, cv::NORM_L2SQR) < 1e-10) {
+  if (cv::norm(hls_adjustment_, cv::NORM_L2SQR) < 1e-10) {
     return;
   }
 
@@ -64,9 +64,9 @@ void HLSOp::Apply(std::shared_ptr<ImageBuffer> input) {
   cv::cvtColor(img, HLS_img, cv::COLOR_RGB2HLS);
 
   cv::Mat     mask     = cv::Mat::zeros(img.size(), CV_32F);
-  const float target_h = _target_HLS[0];
-  const float target_l = _target_HLS[1];
-  const float target_s = _target_HLS[2];
+  const float target_h = target_hls_[0];
+  const float target_l = target_hls_[1];
+  const float target_s = target_hls_[2];
 
   HLS_img.forEach<cv::Vec3f>([&](cv::Vec3f& pixel, const int* position) -> void {
     const float h                = pixel[0];
@@ -76,15 +76,15 @@ void HLSOp::Apply(std::shared_ptr<ImageBuffer> input) {
     float       hue_diff         = std::abs(h - target_h);
     float       hue_dist         = std::min(hue_diff, 360.0f - hue_diff);
 
-    float       hue_weight       = std::max(0.0f, 1.0f - hue_dist / _hue_range);
-    float       lightness_weight = std::max(0.0f, 1.0f - std::abs(l - target_l) / _lightness_range);
-    float saturation_weight = std::max(0.0f, 1.0f - std::abs(s - target_s) / _saturation_range);
+    float       hue_weight       = std::max(0.0f, 1.0f - hue_dist / hue_range_);
+    float       lightness_weight = std::max(0.0f, 1.0f - std::abs(l - target_l) / lightness_range_);
+    float saturation_weight = std::max(0.0f, 1.0f - std::abs(s - target_s) / saturation_range_);
     mask.at<float>(position[0], position[1]) = hue_weight * lightness_weight * saturation_weight;
   });
 
-  cv::Mat              adj_h = cv::Mat(img.size(), CV_32F, _HLS_adjustment[0]);
-  cv::Mat              adj_l = cv::Mat(img.size(), CV_32F, _HLS_adjustment[1]);
-  cv::Mat              adj_s = cv::Mat(img.size(), CV_32F, _HLS_adjustment[2]);
+  cv::Mat              adj_h = cv::Mat(img.size(), CV_32F, hls_adjustment_[0]);
+  cv::Mat              adj_l = cv::Mat(img.size(), CV_32F, hls_adjustment_[1]);
+  cv::Mat              adj_s = cv::Mat(img.size(), CV_32F, hls_adjustment_[2]);
 
   std::vector<cv::Mat> HLS_channels(3);
   cv::split(HLS_img, HLS_channels);
@@ -115,53 +115,53 @@ auto HLSOp::GetParams() const -> nlohmann::json {
   nlohmann::json o;
   nlohmann::json inner;
 
-  inner["target_hls"] = std::array<float, 3>{_target_HLS[0], _target_HLS[1], _target_HLS[2]};
+  inner["target_hls"] = std::array<float, 3>{target_hls_[0], target_hls_[1], target_hls_[2]};
   inner["hls_adj"] =
-      std::array<float, 3>{_HLS_adjustment[0], _HLS_adjustment[1], _HLS_adjustment[2]};
-  inner["h_range"] = _hue_range;
-  inner["l_range"] = _lightness_range;
-  inner["s_range"] = _saturation_range;
+      std::array<float, 3>{hls_adjustment_[0], hls_adjustment_[1], hls_adjustment_[2]};
+  inner["h_range"] = hue_range_;
+  inner["l_range"] = lightness_range_;
+  inner["s_range"] = saturation_range_;
 
-  o[_script_name]  = inner;
+  o[script_name_]  = inner;
   return o;
 }
 
 void HLSOp::SetParams(const nlohmann::json& params) {
-  if (params.contains(_script_name)) {
-    nlohmann::json inner = params[_script_name];
+  if (params.contains(script_name_)) {
+    nlohmann::json inner = params[script_name_];
     if (inner.contains("target_hls")) {
       auto tgt_hls = inner["target_hls"].get<std::array<float, 3>>();
-      _target_HLS  = {tgt_hls[0], tgt_hls[1], tgt_hls[2]};
+      target_hls_  = {tgt_hls[0], tgt_hls[1], tgt_hls[2]};
     }
     if (inner.contains("hls_adj")) {
       auto hls_adj    = inner["hls_adj"].get<std::array<float, 3>>();
-      _HLS_adjustment = {hls_adj[0], hls_adj[1], hls_adj[2]};
+      hls_adjustment_ = {hls_adj[0], hls_adj[1], hls_adj[2]};
     }
     if (inner.contains("h_range")) {
-      _hue_range = inner["h_range"].get<float>();
+      hue_range_ = inner["h_range"].get<float>();
     }
     if (inner.contains("l_range")) {
-      _lightness_range = inner["l_range"].get<float>();
+      lightness_range_ = inner["l_range"].get<float>();
     }
     if (inner.contains("s_range")) {
-      _saturation_range = inner["s_range"].get<float>();
+      saturation_range_ = inner["s_range"].get<float>();
     }
   }
 }
 
 void HLSOp::SetGlobalParams(OperatorParams& params) const {
   // No global params to set for HLSOp
-  params.target_hls[0]     = _target_HLS[0];
-  params.target_hls[1]     = _target_HLS[1];
-  params.target_hls[2]     = _target_HLS[2];
+  params.target_hls_[0]     = target_hls_[0];
+  params.target_hls_[1]     = target_hls_[1];
+  params.target_hls_[2]     = target_hls_[2];
 
-  params.hls_adjustment[0] = _HLS_adjustment[0];
+  params.hls_adjustment_[0] = hls_adjustment_[0];
   ;
-  params.hls_adjustment[1] = _HLS_adjustment[1];
-  params.hls_adjustment[2] = _HLS_adjustment[2];
+  params.hls_adjustment_[1] = hls_adjustment_[1];
+  params.hls_adjustment_[2] = hls_adjustment_[2];
 
-  params.hue_range         = _hue_range;
-  params.lightness_range   = _lightness_range;
-  params.saturation_range  = _saturation_range;
+  params.hue_range_         = hue_range_;
+  params.lightness_range_   = lightness_range_;
+  params.saturation_range_  = saturation_range_;
 }
 };  // namespace puerhlab

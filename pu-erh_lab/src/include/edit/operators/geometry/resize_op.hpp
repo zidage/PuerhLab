@@ -17,25 +17,24 @@
 
 namespace puerhlab {
 struct ROI {
-  int   x;
-  int   y;
-  float resize_factor;
+  int   x_;
+  int   y_;
+  float resize_factor_;
 };
 
 class ResizeOp : public OperatorBase<ResizeOp> {
  private:
-  int  _maximum_edge;
+  int  maximum_edge_;
 
-  bool enable_roi = false;
-  ROI  roi;
+  bool enable_roi_ = false;
+  ROI  roi_;
 
  public:
-  static constexpr PriorityLevel     _priority_level    = 1;
-  static constexpr PipelineStageName _affiliation_stage = PipelineStageName::Image_Loading;
-  static constexpr std::string_view  _canonical_name    = "Resize";
-  static constexpr std::string_view  _script_name       = "resize";
-  static constexpr OperatorType      _operator_type     = OperatorType::RESIZE;
-
+  static constexpr PriorityLevel     priority_level_    = 1;
+  static constexpr PipelineStageName affiliation_stage_ = PipelineStageName::Image_Loading;
+  static constexpr std::string_view  canonical_name_    = "Resize";
+  static constexpr std::string_view  script_name_       = "resize";
+  static constexpr OperatorType      operator_type_     = OperatorType::RESIZE;
   ResizeOp()                                            = default;
   ResizeOp(const nlohmann::json& params);
 

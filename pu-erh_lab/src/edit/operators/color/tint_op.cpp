@@ -25,11 +25,11 @@
 
 namespace puerhlab {
 
-TintOp::TintOp() : _tint_offset(0.0f) { _scale = 0.0f; }
+TintOp::TintOp() : tint_offset_(0.0f) { scale_ = 0.0f; }
 
-TintOp::TintOp(float tint_offset) : _tint_offset(tint_offset) {
+TintOp::TintOp(float tint_offset) : tint_offset_(tint_offset) {
   // In OpenCV, the value of a channel lies between -127 to 127
-  _scale = tint_offset / 1000.0f;
+  scale_ = tint_offset / 1000.0f;
 }
 
 TintOp::TintOp(const nlohmann::json& params) { SetParams(params); }
@@ -40,7 +40,7 @@ void TintOp::Apply(std::shared_ptr<ImageBuffer> input) {
 
   cv::split(img, bgr_channels);
 
-  bgr_channels[1] += _scale;
+  bgr_channels[1] += scale_;
   // Thresholding
   cv::threshold(bgr_channels[1], bgr_channels[1], 1.0f, 1.0f, cv::THRESH_TRUNC);
   cv::threshold(bgr_channels[1], bgr_channels[1], 0.0f, 0.0f, cv::THRESH_TOZERO);
@@ -52,20 +52,20 @@ void TintOp::Apply(std::shared_ptr<ImageBuffer> input) {
 
 auto TintOp::GetParams() const -> nlohmann::json {
   nlohmann::json o;
-  o[_script_name] = _tint_offset;
+  o[script_name_] = tint_offset_;
   return o;
 }
 
 void TintOp::SetParams(const nlohmann::json& params) {
-  if (params.contains(_script_name)) {
-    _tint_offset = params.at(_script_name).get<float>();
-    _scale       = _tint_offset / 5000.0f;
+  if (params.contains(script_name_)) {
+    tint_offset_ = params.at(script_name_).get<float>();
+    scale_       = tint_offset_ / 5000.0f;
   } else {
-    _tint_offset = 0.0f;
-    _scale       = 0.0f;
+    tint_offset_ = 0.0f;
+    scale_       = 0.0f;
   }
 }
 
-void TintOp::SetGlobalParams(OperatorParams& params) const { params.tint_offset = _scale; }
+void TintOp::SetGlobalParams(OperatorParams& params) const { params.tint_offset_ = scale_; }
 
 };  // namespace puerhlab

@@ -24,8 +24,8 @@
 namespace puerhlab {
 namespace CUDA {
 struct GPU_HLSOpKernel : GPUPointOpTag {
-  __device__ __forceinline__ inline void operator()(float4* p, GPUOperatorParams& params) const {
-    if (!params.hls_enabled) return;
+  __device__ __forceinline__ void operator()(float4* p, GPUOperatorParams& params) const {
+    if (!params.hls_enabled_) return;
 
     // Convert RGB to HLS
     float r = p->x, g = p->y, b = p->z;
@@ -45,9 +45,9 @@ struct GPU_HLSOpKernel : GPUPointOpTag {
     }
     H *= 60.0f;
 
-    float target_h = params.target_hls[0];
-    float target_l = params.target_hls[1];
-    float target_s = params.target_hls[2];
+    float target_h = params.target_hls_[0];
+    float target_l = params.target_hls_[1];
+    float target_s = params.target_hls_[2];
 
     // Compute mask
     float h        = H;
@@ -57,14 +57,13 @@ struct GPU_HLSOpKernel : GPUPointOpTag {
     float hue_dist = fminf(hue_diff, 360.0f - hue_diff);
 
     float weight =
-        fmaxf(0.0f, 1.0f - hue_dist / params.hue_range) *                      // hue_w
-        fmaxf(0.0f, 1.0f - fabsf(l - target_l) / params.lightness_range) *  // lightness_w
-        fmaxf(0.0f, 1.0f - fabsf(s - target_s) / params.saturation_range);  // saturation_w
+        fmaxf(0.0f, 1.0f - hue_dist / params.hue_range_) *                      // hue_w
+        fmaxf(0.0f, 1.0f - fabsf(l - target_l) / params.lightness_range_) *  // lightness_w
+        fmaxf(0.0f, 1.0f - fabsf(s - target_s) / params.saturation_range_);  // saturation_w
 
-    float adj_h      = params.hls_adjustment[0];
-    float adj_l      = params.hls_adjustment[1];
-    float adj_s      = params.hls_adjustment[2];
-
+    float adj_h      = params.hls_adjustment_[0];
+    float adj_l      = params.hls_adjustment_[1];
+    float adj_s      = params.hls_adjustment_[2];
     float h_adjusted = fmodf(h + adj_h * weight, 360.0f);
     if (h_adjusted < 0) h_adjusted += 360.0f;
 
@@ -97,41 +96,41 @@ struct GPU_HLSOpKernel : GPUPointOpTag {
 };
 
 struct GPU_SaturationOpKernel : GPUPointOpTag {
-  __device__ __forceinline__ inline void operator()(float4* p, GPUOperatorParams& params) const {
-    if (!params.saturation_enabled) return;
+  __device__ __forceinline__ void operator()(float4* p, GPUOperatorParams& params) const {
+    if (!params.saturation_enabled_) return;
 
     float luma = 0.2126f * p->x + 0.7152f * p->y + 0.0722f * p->z;
-    p->x       = luma + (p->x - luma) * params.saturation_offset;
-    p->y       = luma + (p->y - luma) * params.saturation_offset;
-    p->z       = luma + (p->z - luma) * params.saturation_offset;
+    p->x       = luma + (p->x - luma) * params.saturation_offset_;
+    p->y       = luma + (p->y - luma) * params.saturation_offset_;
+    p->z       = luma + (p->z - luma) * params.saturation_offset_;
   }
 };
 
 struct GPU_TintOpKernel : GPUPointOpTag {
-  __device__ __forceinline__ inline void operator()(float4* p, GPUOperatorParams& params) const {
-    if (!params.tint_enabled) return;
+  __device__ __forceinline__ void operator()(float4* p, GPUOperatorParams& params) const {
+    if (!params.tint_enabled_) return;
 
-    p->y += params.tint_offset;
+    p->y += params.tint_offset_;
   }
 };
 
 struct GPU_VibranceOpKernel : GPUPointOpTag {
-  __device__ __forceinline__ inline void operator()(float4* p, GPUOperatorParams& params) const {
-    if (!params.vibrance_enabled) return;
+  __device__ __forceinline__ void operator()(float4* p, GPUOperatorParams& params) const {
+    if (!params.vibrance_enabled_) return;
 
     float max_val  = fmaxf(fmaxf(p->x, p->y), p->z);
     float min_val  = fminf(fminf(p->x, p->y), p->z);
     float chroma   = max_val - min_val;
 
     // chroma in [0, max], vibrance_offset in [-100, 100]
-    float strength = params.vibrance_offset / 100.0f;
+    float strength = params.vibrance_offset_ / 100.0f;
 
     // Protect already highly saturated color
     float falloff  = expf(-3.0f * chroma);
 
     float scale    = 1.0f + strength * falloff;
 
-    if (params.vibrance_offset >= 0.0f) {
+    if (params.vibrance_offset_ >= 0.0f) {
       float luma = p->x * 0.299f + p->y * 0.587f + p->z * 0.114f;
 
       p->x          = luma + (p->x - luma) * scale;

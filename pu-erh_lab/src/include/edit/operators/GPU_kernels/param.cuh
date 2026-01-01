@@ -25,9 +25,9 @@
 
 namespace puerhlab {
 struct GPU_LUT3D {
-  cudaArray_t         array               = nullptr;
-  cudaTextureObject_t texture_object      = 0;
-  int                 edge_size           = 0;
+  cudaArray_t         array_               = nullptr;
+  cudaTextureObject_t texture_object_      = 0;
+  int                 edge_size_           = 0;
 
   GPU_LUT3D()                             = default;
 
@@ -40,113 +40,113 @@ struct GPU_LUT3D {
   GPU_LUT3D& operator=(GPU_LUT3D&& other) = default;
 
   void       Reset() {
-    if (texture_object) {
-      cudaDestroyTextureObject(texture_object);
-      texture_object = 0;
+    if (texture_object_) {
+      cudaDestroyTextureObject(texture_object_);
+      texture_object_ = 0;
     }
-    if (array) {
-      cudaFreeArray(array);
-      array = nullptr;
+    if (array_) {
+      cudaFreeArray(array_);
+      array_ = nullptr;
     }
-    edge_size = 0;
+    edge_size_ = 0;
   }
 };
 
 struct GPUOperatorParams {
   // Basic adjustment parameters
-  bool      exposure_enabled       = true;
-  float     exposure_offset        = 0.0f;
+  bool      exposure_enabled_       = true;
+  float     exposure_offset_        = 0.0f;
 
-  bool      contrast_enabled       = true;
-  float     contrast_scale         = 0.0f;
+  bool      contrast_enabled_       = true;
+  float     contrast_scale_         = 0.0f;
 
   // Shadows adjustment parameter
-  bool      shadows_enabled        = true;
-  float     shadows_offset         = 0.0f;
-  float     shadows_x0             = 0.0f;
-  float     shadows_x1             = 0.25f;
-  float     shadows_y0             = 0.0f;
-  float     shadows_y1             = 0.25f;
-  float     shadows_m0             = 0.0f;
-  float     shadows_m1             = 1.0f;
-  float     shadows_dx             = 0.25f;
+  bool      shadows_enabled_        = true;
+  float     shadows_offset_         = 0.0f;
+  float     shadows_x0_             = 0.0f;
+  float     shadows_x1_             = 0.25f;
+  float     shadows_y0_             = 0.0f;
+  float     shadows_y1_             = 0.25f;
+  float     shadows_m0_             = 0.0f;
+  float     shadows_m1_             = 1.0f;
+  float     shadows_dx_             = 0.25f;
 
   // Highlights adjustment parameter
-  bool      highlights_enabled     = true;
-  float     highlights_k           = 0.2f;
-  float     highlights_offset      = 0.0f;
-  float     highlights_slope_range = 0.8f;
-  float     highlights_m0          = 1.0f;
-  float     highlights_m1          = 1.0f;
-  float     highlights_x0          = 0.2f;
-  float     highlights_y0          = 0.2f;
-  float     highlights_y1          = 1.0f;
-  float     highlights_dx          = 0.8f;
+  bool      highlights_enabled_     = true;
+  float     highlights_k_           = 0.2f;
+  float     highlights_offset_      = 0.0f;
+  float     highlights_slope_range_ = 0.8f;
+  float     highlights_m0_          = 1.0f;
+  float     highlights_m1_          = 1.0f;
+  float     highlights_x0_          = 0.2f;
+  float     highlights_y0_          = 0.2f;
+  float     highlights_y1_          = 1.0f;
+  float     highlights_dx_          = 0.8f;
 
   // White and Black point adjustment parameters
-  bool      white_enabled          = true;
-  float     white_point            = 1.0f;
+  bool      white_enabled_          = true;
+  float     white_point_            = 1.0f;
 
-  bool      black_enabled          = true;
-  float     black_point            = 0.0f;
+  bool      black_enabled_          = true;
+  float     black_point_            = 0.0f;
 
-  float     slope                  = 1.0f;
+  float     slope_                  = 1.0f;
   // HLS adjustment parameters
-  bool      hls_enabled            = true;
-  float     target_hls[3]          = {0.0f, 0.0f, 0.0f};
-  float     hls_adjustment[3]      = {0.0f, 0.0f, 0.0f};
-  float     hue_range              = 0.0f;
-  float     lightness_range        = 0.0f;
-  float     saturation_range       = 0.0f;
+  bool      hls_enabled_            = true;
+  float     target_hls_[3]          = {0.0f, 0.0f, 0.0f};
+  float     hls_adjustment_[3]      = {0.0f, 0.0f, 0.0f};
+  float     hue_range_              = 0.0f;
+  float     lightness_range_        = 0.0f;
+  float     saturation_range_       = 0.0f;
 
   // Saturation adjustment parameter
-  bool      saturation_enabled     = true;
-  float     saturation_offset      = 0.0f;
+  bool      saturation_enabled_     = true;
+  float     saturation_offset_      = 0.0f;
 
   // Tint adjustment parameter
-  bool      tint_enabled           = true;
-  float     tint_offset            = 0.0f;
+  bool      tint_enabled_           = true;
+  float     tint_offset_            = 0.0f;
 
   // Vibrance adjustment parameter
-  bool      vibrance_enabled       = true;
-  float     vibrance_offset        = 0.0f;
+  bool      vibrance_enabled_       = true;
+  float     vibrance_offset_        = 0.0f;
 
   // Working space
-  bool      to_ws_enabled          = true;
-  GPU_LUT3D to_ws_lut              = {};
+  bool      to_ws_enabled_          = true;
+  GPU_LUT3D to_ws_lut_              = {};
   // TODO: NOT IMPLEMENTED
 
   // Look modification transform
-  bool      lmt_enabled            = false;
-  GPU_LUT3D lmt_lut                = {};
+  bool      lmt_enabled_            = false;
+  GPU_LUT3D lmt_lut_                = {};
   // TODO: NOT IMPLEMENTED
 
   // Output transform
-  bool      to_output_enabled      = true;
-  GPU_LUT3D to_output_lut          = {};
+  bool      to_output_enabled_      = true;
+  GPU_LUT3D to_output_lut_          = {};
 
   // Curve adjustment parameters
-  bool      curve_enabled          = false;
+  bool      curve_enabled_          = false;
 
   // Clarity adjustment parameter
-  bool      clarity_enabled        = true;
-  float     clarity_offset         = 0.0f;
-  float     clarity_radius         = 5.0f;
+  bool      clarity_enabled_        = true;
+  float     clarity_offset_         = 0.0f;
+  float     clarity_radius_         = 5.0f;
 
   // Sharpen adjustment parameter
-  bool      sharpen_enabled        = true;
-  float     sharpen_offset         = 0.0f;
-  float     sharpen_radius         = 3.0f;
-  float     sharpen_threshold      = 0.0f;
+  bool      sharpen_enabled_        = true;
+  float     sharpen_offset_         = 0.0f;
+  float     sharpen_radius_         = 3.0f;
+  float     sharpen_threshold_      = 0.0f;
 
   // Color wheel adjustment parameters
-  bool      color_wheel_enabled    = true;
-  float     lift_color_offset[3]   = {0.0f, 0.0f, 0.0f};
-  float     lift_luminance_offset  = 0.0f;
-  float     gamma_color_offset[3]  = {1.0f, 1.0f, 1.0f};
-  float     gamma_luminance_offset = 0.0f;
-  float     gain_color_offset[3]   = {1.0f, 1.0f, 1.0f};
-  float     gain_luminance_offset  = 0.0f;
+  bool      color_wheel_enabled_    = true;
+  float     lift_color_offset_[3]   = {0.0f, 0.0f, 0.0f};
+  float     lift_luminance_offset_  = 0.0f;
+  float     gamma_color_offset_[3]  = {1.0f, 1.0f, 1.0f};
+  float     gamma_luminance_offset_ = 0.0f;
+  float     gain_color_offset_[3]   = {1.0f, 1.0f, 1.0f};
+  float     gain_luminance_offset_  = 0.0f;
 };
 
 class GPUParamsConverter {
@@ -156,60 +156,60 @@ class GPUParamsConverter {
     // TODO: Improve param synchronization to avoid unnecessary data transfers
     GPUOperatorParams gpu_params;
 
-    gpu_params.exposure_enabled       = cpu_params.exposure_enabled;
-    gpu_params.exposure_offset        = cpu_params.exposure_offset;
+    gpu_params.exposure_enabled_       = cpu_params.exposure_enabled_;
+    gpu_params.exposure_offset_        = cpu_params.exposure_offset_;
 
-    gpu_params.contrast_enabled       = cpu_params.contrast_enabled;
-    gpu_params.contrast_scale         = cpu_params.contrast_scale;
+    gpu_params.contrast_enabled_       = cpu_params.contrast_enabled_;
+    gpu_params.contrast_scale_         = cpu_params.contrast_scale_;
 
-    gpu_params.shadows_enabled        = cpu_params.shadows_enabled;
-    gpu_params.shadows_offset         = cpu_params.shadows_offset;
-    gpu_params.shadows_x0             = cpu_params.shadows_x0;
-    gpu_params.shadows_x1             = cpu_params.shadows_x1;
-    gpu_params.shadows_y0             = cpu_params.shadows_y0;
-    gpu_params.shadows_y1             = cpu_params.shadows_y1;
-    gpu_params.shadows_m0             = cpu_params.shadows_m0;
-    gpu_params.shadows_m1             = cpu_params.shadows_m1;
-    gpu_params.shadows_dx             = cpu_params.shadows_dx;
+    gpu_params.shadows_enabled_        = cpu_params.shadows_enabled_;
+    gpu_params.shadows_offset_         = cpu_params.shadows_offset_;
+    gpu_params.shadows_x0_             = cpu_params.shadows_x0_;
+    gpu_params.shadows_x1_             = cpu_params.shadows_x1_;
+    gpu_params.shadows_y0_             = cpu_params.shadows_y0_;
+    gpu_params.shadows_y1_             = cpu_params.shadows_y1_;
+    gpu_params.shadows_m0_             = cpu_params.shadows_m0_;
+    gpu_params.shadows_m1_             = cpu_params.shadows_m1_;
+    gpu_params.shadows_dx_             = cpu_params.shadows_dx_;
 
-    gpu_params.highlights_enabled     = cpu_params.highlights_enabled;
-    gpu_params.highlights_k           = cpu_params.highlights_k;
-    gpu_params.highlights_offset      = cpu_params.highlights_offset;
-    gpu_params.highlights_slope_range = cpu_params.highlights_slope_range;
-    gpu_params.highlights_m0          = cpu_params.highlights_m0;
-    gpu_params.highlights_m1          = cpu_params.highlights_m1;
-    gpu_params.highlights_x0          = cpu_params.highlights_x0;
-    gpu_params.highlights_y0          = cpu_params.highlights_y0;
-    gpu_params.highlights_y1          = cpu_params.highlights_y1;
-    gpu_params.highlights_dx          = cpu_params.highlights_dx;
+    gpu_params.highlights_enabled_     = cpu_params.highlights_enabled_;
+    gpu_params.highlights_k_           = cpu_params.highlights_k_;
+    gpu_params.highlights_offset_      = cpu_params.highlights_offset_;
+    gpu_params.highlights_slope_range_ = cpu_params.highlights_slope_range_;
+    gpu_params.highlights_m0_          = cpu_params.highlights_m0_;
+    gpu_params.highlights_m1_          = cpu_params.highlights_m1_;
+    gpu_params.highlights_x0_          = cpu_params.highlights_x0_;
+    gpu_params.highlights_y0_          = cpu_params.highlights_y0_;
+    gpu_params.highlights_y1_          = cpu_params.highlights_y1_;
+    gpu_params.highlights_dx_          = cpu_params.highlights_dx_;
 
-    gpu_params.white_enabled          = cpu_params.white_enabled;
-    gpu_params.white_point            = cpu_params.white_point;
+    gpu_params.white_enabled_          = cpu_params.white_enabled_;
+    gpu_params.white_point_            = cpu_params.white_point_;
 
-    gpu_params.black_enabled          = cpu_params.black_enabled;
-    gpu_params.black_point            = cpu_params.black_point;
+    gpu_params.black_enabled_          = cpu_params.black_enabled_;
+    gpu_params.black_point_            = cpu_params.black_point_;
 
-    gpu_params.slope                  = cpu_params.slope;
+    gpu_params.slope_                  = cpu_params.slope_;
 
-    gpu_params.hls_enabled            = cpu_params.hls_enabled;
+    gpu_params.hls_enabled_            = cpu_params.hls_enabled_;
     for (int i = 0; i < 3; ++i) {
-      gpu_params.target_hls[i]     = cpu_params.target_hls[i];
-      gpu_params.hls_adjustment[i] = cpu_params.hls_adjustment[i];
+      gpu_params.target_hls_[i]     = cpu_params.target_hls_[i];
+      gpu_params.hls_adjustment_[i] = cpu_params.hls_adjustment_[i];
     }
-    gpu_params.hue_range          = cpu_params.hue_range;
-    gpu_params.lightness_range    = cpu_params.lightness_range;
+    gpu_params.hue_range_          = cpu_params.hue_range_;
+    gpu_params.lightness_range_    = cpu_params.lightness_range_;
 
-    gpu_params.saturation_range   = cpu_params.saturation_range;
-    gpu_params.saturation_enabled = cpu_params.saturation_enabled;
-    gpu_params.saturation_offset  = cpu_params.saturation_offset;
+    gpu_params.saturation_range_   = cpu_params.saturation_range_;
+    gpu_params.saturation_enabled_ = cpu_params.saturation_enabled_;
+    gpu_params.saturation_offset_  = cpu_params.saturation_offset_;
 
-    gpu_params.tint_enabled       = cpu_params.tint_enabled;
-    gpu_params.tint_offset        = cpu_params.tint_offset;
+    gpu_params.tint_enabled_       = cpu_params.tint_enabled_;
+    gpu_params.tint_offset_        = cpu_params.tint_offset_;
 
-    gpu_params.vibrance_enabled   = cpu_params.vibrance_enabled;
-    gpu_params.vibrance_offset    = cpu_params.vibrance_offset;
+    gpu_params.vibrance_enabled_   = cpu_params.vibrance_enabled_;
+    gpu_params.vibrance_offset_    = cpu_params.vibrance_offset_;
 
-    gpu_params.to_ws_enabled      = cpu_params.to_ws_enabled;
+    gpu_params.to_ws_enabled_      = cpu_params.to_ws_enabled_;
     // if (cpu_params.to_ws_dirty) {
     //   gpu_params.to_ws_lut.Reset();  // Explicitly reset existing LUT
     //   gpu_params.to_ws_lut        = CreateLUTTextureObject(cpu_params.to_ws_lut_baker);
@@ -218,16 +218,16 @@ class GPUParamsConverter {
     //   gpu_params.to_ws_lut = orig_params.to_ws_lut;
     // }
 
-    gpu_params.lmt_enabled = cpu_params.lmt_enabled;
-    if (cpu_params.to_lmt_dirty) {
-      gpu_params.lmt_lut.Reset();  // Explicitly reset existing LUT
-      gpu_params.lmt_lut           = CreateLUTTextureObject(cpu_params.lmt_lut_path);
-      cpu_params.to_lmt_dirty      = false;
+    gpu_params.lmt_enabled_ = cpu_params.lmt_enabled_;
+    if (cpu_params.to_lmt_dirty_) {
+      gpu_params.lmt_lut_.Reset();  // Explicitly reset existing LUT
+      gpu_params.lmt_lut_           = CreateLUTTextureObject(cpu_params.lmt_lut_path_);
+      cpu_params.to_lmt_dirty_      = false;
     } else {
-      gpu_params.lmt_lut = orig_params.lmt_lut;
+      gpu_params.lmt_lut_ = orig_params.lmt_lut_;
     }
 
-    gpu_params.to_output_enabled = cpu_params.to_output_enabled;
+    gpu_params.to_output_enabled_ = cpu_params.to_output_enabled_;
     // if (cpu_params.to_output_dirty) {
     //   gpu_params.to_output_lut.Reset();  // Explicitly reset existing LUT
     //   gpu_params.to_output_lut        = CreateLUTTextureObject(cpu_params.to_output_lut_baker);
@@ -236,26 +236,26 @@ class GPUParamsConverter {
     //   gpu_params.to_output_lut = orig_params.to_output_lut;
     // }
 
-    gpu_params.curve_enabled       = cpu_params.curve_enabled;
+    gpu_params.curve_enabled_       = cpu_params.curve_enabled_;
 
-    gpu_params.clarity_enabled     = cpu_params.clarity_enabled;
-    gpu_params.clarity_offset      = cpu_params.clarity_offset;
-    gpu_params.clarity_radius      = cpu_params.clarity_radius;
+    gpu_params.clarity_enabled_     = cpu_params.clarity_enabled_;
+    gpu_params.clarity_offset_      = cpu_params.clarity_offset_;
+    gpu_params.clarity_radius_      = cpu_params.clarity_radius_;
 
-    gpu_params.sharpen_enabled     = cpu_params.sharpen_enabled;
-    gpu_params.sharpen_offset      = cpu_params.sharpen_offset;
-    gpu_params.sharpen_radius      = cpu_params.sharpen_radius;
-    gpu_params.sharpen_threshold   = cpu_params.sharpen_threshold;
+    gpu_params.sharpen_enabled_     = cpu_params.sharpen_enabled_;
+    gpu_params.sharpen_offset_      = cpu_params.sharpen_offset_;
+    gpu_params.sharpen_radius_      = cpu_params.sharpen_radius_;
+    gpu_params.sharpen_threshold_   = cpu_params.sharpen_threshold_;
 
-    gpu_params.color_wheel_enabled = cpu_params.color_wheel_enabled;
+    gpu_params.color_wheel_enabled_ = cpu_params.color_wheel_enabled_;
     for (int i = 0; i < 3; ++i) {
-      gpu_params.lift_color_offset[i]  = cpu_params.lift_color_offset[i];
-      gpu_params.gamma_color_offset[i] = cpu_params.gamma_color_offset[i];
-      gpu_params.gain_color_offset[i]  = cpu_params.gain_color_offset[i];
+      gpu_params.lift_color_offset_[i]  = cpu_params.lift_color_offset_[i];
+      gpu_params.gamma_color_offset_[i] = cpu_params.gamma_color_offset_[i];
+      gpu_params.gain_color_offset_[i]  = cpu_params.gain_color_offset_[i];
     }
-    gpu_params.lift_luminance_offset  = cpu_params.lift_luminance_offset;
-    gpu_params.gamma_luminance_offset = cpu_params.gamma_luminance_offset;
-    gpu_params.gain_luminance_offset  = cpu_params.gain_luminance_offset;
+    gpu_params.lift_luminance_offset_  = cpu_params.lift_luminance_offset_;
+    gpu_params.gamma_luminance_offset_ = cpu_params.gamma_luminance_offset_;
+    gpu_params.gain_luminance_offset_  = cpu_params.gain_luminance_offset_;
 
     return gpu_params;
   }
@@ -263,7 +263,7 @@ class GPUParamsConverter {
  private:
   static GPU_LUT3D CreateLUTTextureObject(const std::vector<float>& lut_data, int edge_size) {
     GPU_LUT3D gpu_lut;
-    gpu_lut.edge_size          = edge_size;
+    gpu_lut.edge_size_          = edge_size;
 
     const size_t        voxels = static_cast<size_t>(edge_size) * edge_size * edge_size;
     std::vector<float4> packed(voxels);
@@ -273,19 +273,19 @@ class GPUParamsConverter {
 
     cudaChannelFormatDesc channel_desc = cudaCreateChannelDesc<float4>();
     cudaExtent            extent       = make_cudaExtent(edge_size, edge_size, edge_size);
-    cudaMalloc3DArray(&gpu_lut.array, &channel_desc, extent);
+    cudaMalloc3DArray(&gpu_lut.array_, &channel_desc, extent);
 
     cudaMemcpy3DParms copy_params = {0};
     copy_params.srcPtr =
         make_cudaPitchedPtr((void*)packed.data(), edge_size * sizeof(float4), edge_size, edge_size);
-    copy_params.dstArray = gpu_lut.array;
+    copy_params.dstArray = gpu_lut.array_;
     copy_params.extent   = extent;
     copy_params.kind     = cudaMemcpyHostToDevice;
     cudaMemcpy3D(&copy_params);
 
     cudaResourceDesc res_desc = {};
     res_desc.resType          = cudaResourceTypeArray;
-    res_desc.res.array.array  = gpu_lut.array;
+    res_desc.res.array.array  = gpu_lut.array_;
 
     cudaTextureDesc tex_desc  = {};
     tex_desc.normalizedCoords = 1;
@@ -295,7 +295,7 @@ class GPUParamsConverter {
     tex_desc.addressMode[1]   = cudaAddressModeClamp;
     tex_desc.addressMode[2]   = cudaAddressModeClamp;
 
-    cudaCreateTextureObject(&gpu_lut.texture_object, &res_desc, &tex_desc, nullptr);
+    cudaCreateTextureObject(&gpu_lut.texture_object_, &res_desc, &tex_desc, nullptr);
     return gpu_lut;
   };
 
@@ -308,7 +308,7 @@ class GPUParamsConverter {
 
     // Create CUDA 3D texture object from LUT data
     if (lut.Has3D()) {
-      return CreateLUTTextureObject(lut.lut3d, lut.edge3d);
+      return CreateLUTTextureObject(lut.lut3d_, lut.edge3d_);
     }
 
     // TODO: Add support for 1D LUTs if needed
@@ -319,7 +319,7 @@ class GPUParamsConverter {
     CubeLut lut;
     ParseCubeFile(path, lut);
     if (lut.Has3D()) {
-      return CreateLUTTextureObject(lut.lut3d, lut.edge3d);
+      return CreateLUTTextureObject(lut.lut3d_, lut.edge3d_);
     }
     // TODO: Add support for 1D LUTs if needed
     throw std::runtime_error("GPUParamsConverter: Only 3D LUTs are supported for GPU processing.");

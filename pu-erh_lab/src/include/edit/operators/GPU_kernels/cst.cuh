@@ -130,15 +130,15 @@ struct GPU_TOWS_Kernel : GPUPointOpTag {
 
 struct GPU_LMT_Kernel : GPUPointOpTag {
   __device__ __forceinline__ void operator()(float4* p, GPUOperatorParams& params) const {
-    if (!params.lmt_enabled) return;
+    if (!params.lmt_enabled_) return;
 
-    float scale = (params.lmt_lut.edge_size - 1.0f) / static_cast<float>(params.lmt_lut.edge_size);
-    float offset = 1.0f / (2.0f * params.lmt_lut.edge_size);
+    float scale = (params.lmt_lut_.edge_size_ - 1.0f) / static_cast<float>(params.lmt_lut_.edge_size_);
+    float offset = 1.0f / (2.0f * params.lmt_lut_.edge_size_);
     float  u      = (p->x * scale + offset);
     float  v      = (p->y * scale + offset);
     float  w      = (p->z * scale + offset);
 
-    float4 result = tex3D<float4>(params.lmt_lut.texture_object, u, v, w);
+    float4 result = tex3D<float4>(params.lmt_lut_.texture_object_, u, v, w);
     *p            = make_float4(result.x, result.y, result.z, p->w);
   }
 };

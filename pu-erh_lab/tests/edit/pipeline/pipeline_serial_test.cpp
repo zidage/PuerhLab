@@ -59,7 +59,7 @@ TEST_F(PipelineTests, PipelineStageImportTest) {
   // After import, verify the operator is set correctly
   nlohmann::json exported_after_import = stage.ExportStageParams();
   auto           expected_op           = stage.GetOperator(OperatorType::EXPOSURE);
-  nlohmann::json op_param_json         = expected_op.value()->_op->GetParams();
+  nlohmann::json op_param_json         = expected_op.value()->op_->GetParams();
   EXPECT_EQ(op_param_json["exposure"], 2.0f);
   ASSERT_TRUE(expected_op.has_value());
   std::cout << exported_after_import.dump(2) << std::endl;

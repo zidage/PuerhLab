@@ -24,27 +24,26 @@ class ColorWheelOp : public OperatorBase<ColorWheelOp> {
  public:
   struct WheelControl {
     // x for hue (0->360.0f), y for saturation (0->1)
-    cv::Point3f color_offset{0.0f, 0.0f, 0.0f};
-    float       luminance_offset{0.0f};
-    NLOHMANN_DEFINE_TYPE_INTRUSIVE(WheelControl, color_offset.x, color_offset.y, color_offset.z,
-                                   luminance_offset)
+    cv::Point3f color_offset_{0.0f, 0.0f, 0.0f};
+    float       luminance_offset_{0.0f};
+    NLOHMANN_DEFINE_TYPE_INTRUSIVE(WheelControl, color_offset_.x, color_offset_.y, color_offset_.z,
+                                   luminance_offset_)
   };
 
  private:
-  WheelControl _lift;
-  WheelControl _gamma;
-  WheelControl _gain;
+  WheelControl lift_;
+  WheelControl gamma_;
+  WheelControl gain_;
 
-  float        _lift_crossover;
-  float        _gain_crossover;
+  float        lift_crossover_;
+  float        gain_crossover_;
 
  public:
-  static constexpr PriorityLevel     _priority_level    = 5;
-  static constexpr PipelineStageName _affiliation_stage = PipelineStageName::Color_Adjustment;
-  static constexpr std::string_view  _canonical_name    = "Color Wheel";
-  static constexpr std::string_view  _script_name       = "color_wheel";
-  static constexpr OperatorType      _operator_type     = OperatorType::COLOR_WHEEL;
-
+  static constexpr PriorityLevel     priority_level_    = 5;
+  static constexpr PipelineStageName affiliation_stage_ = PipelineStageName::Color_Adjustment;
+  static constexpr std::string_view  canonical_name_    = "Color Wheel";
+  static constexpr std::string_view  script_name_       = "color_wheel";
+  static constexpr OperatorType      operator_type_     = OperatorType::COLOR_WHEEL;
   ColorWheelOp();
   ColorWheelOp(const nlohmann::json& params);
 

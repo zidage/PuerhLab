@@ -174,7 +174,7 @@ TEST_F(OperationTests, DISABLED_ACESWorkflowTest2) {
                                          {"luminance_offset", -0.25}}},
                                        {"crossovers", {{"lift", 0.3}, {"gain", 0.7}}}};
     nlohmann::json params;
-    params[color_wheels._script_name] = teal_orange_look;
+    params[color_wheels.script_name_] = teal_orange_look;
     color_wheels.SetParams(params);
     to_adjust = color_wheels.Apply(to_adjust);
     // ToneRegionOp SDOP{10.0f, ToneRegion::SHADOWS};

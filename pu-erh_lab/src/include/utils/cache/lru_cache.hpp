@@ -30,82 +30,82 @@ class LRUCache {
   using ListIterator = std::list<std::pair<K, V>>::iterator;
 
  private:
-  std::unordered_map<K, ListIterator> _cache_map;
-  std::list<std::pair<K, V>>          _cache_list;
-  size_t                              _capacity;
+  std::unordered_map<K, ListIterator> cache_map_;
+  std::list<std::pair<K, V>>          cache_list_;
+  size_t                              capacity_;
 
-  uint32_t                            _evict_count  = 0;
-  uint32_t                            _access_count = 0;
+  uint32_t                            evict_count_  = 0;
+  uint32_t                            access_count_ = 0;
 
  public:
-  static const uint32_t _default_capacity = 256;
+  static const uint32_t default_capacity_ = 256;
 
-  explicit LRUCache() : _capacity(_default_capacity) {}
-  explicit LRUCache(size_t capacity) : _capacity(capacity) {}
+  explicit LRUCache() : capacity_(default_capacity_) {}
+  explicit LRUCache(size_t capacity) : capacity_(capacity) {}
 
-  auto Contains(const K& key) -> bool { return _cache_map.contains(key); }
+  auto Contains(const K& key) -> bool { return cache_map_.contains(key); }
 
   auto AccessElement(const K& key) -> std::optional<V> {
-    auto it = _cache_map.find(key);
-    if (it == _cache_map.end()) {
+    auto it = cache_map_.find(key);
+    if (it == cache_map_.end()) {
       return std::nullopt;
     }
-    _cache_list.splice(_cache_list.begin(), _cache_list, it->second);
+    cache_list_.splice(cache_list_.begin(), cache_list_, it->second);
     return it->second->second;
   }
 
   void RecordAccess(const K& key, const V& val) {
-    auto it = _cache_map.find(key);
-    if (it != _cache_map.end()) {
-      _cache_list.splice(_cache_list.begin(), _cache_list, it->second);
-      if (_cache_list.front().second != val) {
-        _cache_list.front() = {key, val};
+    auto it = cache_map_.find(key);
+    if (it != cache_map_.end()) {
+      cache_list_.splice(cache_list_.begin(), cache_list_, it->second);
+      if (cache_list_.front().second != val) {
+        cache_list_.front() = {key, val};
       }
     } else {
-      if (_cache_list.size() >= _capacity) {
+      if (cache_list_.size() >= capacity_) {
         Evict();
       }
 
-      _cache_list.push_front({key, val});
-      _cache_map[key] = _cache_list.begin();
+      cache_list_.push_front({key, val});
+      cache_map_[key] = cache_list_.begin();
     }
   }
 
   void RemoveRecord(const K& path) {
-    auto it = _cache_map.find(path);
-    if (it != _cache_map.end()) {
-      _cache_list.erase(it->second);
-      _cache_map.erase(it);
+    auto it = cache_map_.find(path);
+    if (it != cache_map_.end()) {
+      cache_list_.erase(it->second);
+      cache_map_.erase(it);
     }
   }
 
   auto Evict() -> std::optional<V> {
-    if (_cache_list.empty()) {
+    if (cache_list_.empty()) {
       return std::nullopt;
     }
-    auto last = _cache_list.end();
+    auto last = cache_list_.end();
     --last;
-    _cache_map.erase(last->first);
+    cache_map_.erase(last->first);
     auto evicted_id = last->second;
-    _cache_list.pop_back();
-    ++_evict_count;
+    cache_list_.pop_back();
+    ++evict_count_;
     // Resize
-    if (_access_count != 0 && (double)_evict_count / (double)_access_count > 0.8) {
-      Resize(static_cast<uint32_t>(_capacity * 1.2));
+    if (access_count_ != 0 && (double)evict_count_ / (double)access_count_ > 0.8) {
+      Resize(static_cast<uint32_t>(capacity_ * 1.2));
     }
     return evicted_id;
   }
 
   void Resize(uint32_t new_capacity) {
-    if (new_capacity > _capacity) {
+    if (new_capacity > capacity_) {
       Flush();
     }
-    _capacity = new_capacity;
+    capacity_ = new_capacity;
   }
 
   void Flush() {
-    _cache_map.clear();
-    _cache_list.clear();
+    cache_map_.clear();
+    cache_list_.clear();
   }
 };
 };  // namespace puerhlab

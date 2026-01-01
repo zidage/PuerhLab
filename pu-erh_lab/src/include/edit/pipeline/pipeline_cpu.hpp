@@ -30,19 +30,19 @@
 namespace puerhlab {
 class CPUPipelineExecutor : public PipelineExecutor {
  private:
-  bool                                                                        _enable_cache = true;
-  std::array<PipelineStage, static_cast<int>(PipelineStageName::Stage_Count)> _stages;
+  bool                                                                        enable_cache_ = true;
+  std::array<PipelineStage, static_cast<int>(PipelineStageName::Stage_Count)> stages_;
 
-  OperatorParams                                                              _global_params;
+  OperatorParams                                                              global_params_;
 
-  bool                                                                        _is_thumbnail = false;
+  bool                                                                        is_thumbnail_ = false;
 
-  nlohmann::json                                                              _thumbnail_params;
+  nlohmann::json                                                              thumbnail_params_;
 
-  static constexpr PipelineBackend _backend = PipelineBackend::CPU;
+  static constexpr PipelineBackend backend_ = PipelineBackend::CPU;
 
-  std::vector<PipelineStage*>      _exec_stages;
-  std::unique_ptr<PipelineStage>   _merged_stages;
+  std::vector<PipelineStage*>      exec_stages_;
+  std::unique_ptr<PipelineStage>   merged_stages_;
 
   void                             ResetStages();
 
@@ -60,7 +60,7 @@ class CPUPipelineExecutor : public PipelineExecutor {
   void SetExecutionStages();
   void ResetExecutionStages();
 
-  auto GetGlobalParams() -> OperatorParams& override { return _global_params; }
+  auto GetGlobalParams() -> OperatorParams& override { return global_params_; }
 
   /**
    * @brief Serialize the pipeline parameters to JSON

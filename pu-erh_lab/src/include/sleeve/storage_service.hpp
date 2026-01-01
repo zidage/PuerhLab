@@ -27,9 +27,9 @@
 namespace puerhlab {
 class NodeStorageHandler {
  private:
-  ElementController&                                                   _db_ctrl;
+  ElementController&                                                   db_ctrl_;
 
-  std::unordered_map<sl_element_id_t, std::shared_ptr<SleeveElement>>& _storage;
+  std::unordered_map<sl_element_id_t, std::shared_ptr<SleeveElement>>& storage_;
 
  public:
   NodeStorageHandler(ElementController&                                                   db_ctrl,
@@ -41,9 +41,9 @@ class NodeStorageHandler {
 
 class StorageService {
  private:
-  DBController      _db_ctrl;
-  ElementController _el_ctrl;
-  ImageController   _img_ctrl;
+  DBController      db_ctrl_;
+  ElementController el_ctrl_;
+  ImageController   img_ctrl_;
 
  public:
   StorageService(std::filesystem::path db_path);

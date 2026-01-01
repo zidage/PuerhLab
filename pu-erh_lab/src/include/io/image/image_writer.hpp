@@ -23,11 +23,11 @@
 namespace puerhlab {
 class ImageWriter {
  private:
-  image_path_t                 _output_path;
+  image_path_t                 output_path_;
 
-  std::vector<sl_element_id_t> _output_file_ids;
+  std::vector<sl_element_id_t> output_file_ids_;
 
-  FileSystem&                  _file_system;
+  FileSystem&                  file_system_;
 
  public:
   ImageWriter() = delete;

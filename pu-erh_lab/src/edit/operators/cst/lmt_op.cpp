@@ -19,28 +19,28 @@
 
 namespace puerhlab {
 OCIO_LMT_Transform_Op::OCIO_LMT_Transform_Op(std::filesystem::path& lmt_path)
-    : _lmt_path(lmt_path) {
-  config = OCIO::GetCurrentConfig();
+    : lmt_path_(lmt_path) {
+  config_ = OCIO::GetCurrentConfig();
 }
 
 OCIO_LMT_Transform_Op::OCIO_LMT_Transform_Op(const nlohmann::json& params) {
-  config = OCIO::GetCurrentConfig();
+  config_ = OCIO::GetCurrentConfig();
   SetParams(params);
 }
 
 void OCIO_LMT_Transform_Op::Apply(std::shared_ptr<ImageBuffer> input) {
-  if (_lmt_path.empty()) {
+  if (lmt_path_.empty()) {
     return;
   }
   auto& img           = input->GetCPUData();
 
   auto  lmt_transform = OCIO::FileTransform::Create();
-  auto  path_str      = _lmt_path.wstring();
+  auto  path_str      = lmt_path_.wstring();
   lmt_transform->setSrc(conv::ToBytes(path_str).c_str());
   lmt_transform->setInterpolation(OCIO::INTERP_BEST);
   lmt_transform->setDirection(OCIO::TRANSFORM_DIR_FORWARD);
 
-  auto lmt_processor = config->getProcessor(lmt_transform);
+  auto lmt_processor = config_->getProcessor(lmt_transform);
   auto cpu           = lmt_processor->getDefaultCPUProcessor();
 
   cv::parallel_for_(cv::Range(0, img.rows), [&](const cv::Range& range) {
@@ -55,36 +55,36 @@ void OCIO_LMT_Transform_Op::Apply(std::shared_ptr<ImageBuffer> input) {
 
 auto OCIO_LMT_Transform_Op::GetParams() const -> nlohmann::json {
   nlohmann::json o;
-  o[_script_name] = conv::ToBytes(_lmt_path.wstring());
+  o[script_name_] = conv::ToBytes(lmt_path_.wstring());
 
   return o;
 }
 
 void OCIO_LMT_Transform_Op::SetParams(const nlohmann::json& params) {
-  if (!params.contains(_script_name)) {
+  if (!params.contains(script_name_)) {
     // Empty path
-    _lmt_path = std::filesystem::path();
+    lmt_path_ = std::filesystem::path();
   }
-  _lmt_path = std::filesystem::path(conv::FromBytes(params[_script_name].get<std::string>()));
+  lmt_path_ = std::filesystem::path(conv::FromBytes(params[script_name_].get<std::string>()));
 
   auto lmt_transform = OCIO::FileTransform::Create();
-  auto path_str      = _lmt_path.wstring();
+  auto path_str      = lmt_path_.wstring();
   lmt_transform->setSrc(conv::ToBytes(path_str).c_str());
   lmt_transform->setInterpolation(OCIO::INTERP_BEST);
   lmt_transform->setDirection(OCIO::TRANSFORM_DIR_FORWARD);
 
-  auto lmt_processor = config->getProcessor(lmt_transform);
+  auto lmt_processor = config_->getProcessor(lmt_transform);
   auto cpu           = lmt_processor->getDefaultCPUProcessor();
   auto gpu           = lmt_processor->getDefaultGPUProcessor();
-  cpu_processor      = cpu;
-  gpu_processor      = gpu;
+  cpu_processor_      = cpu;
+  gpu_processor_      = gpu;
 }
 
 void OCIO_LMT_Transform_Op::SetGlobalParams(OperatorParams& params) const {
-  params.cpu_lmt_processor = cpu_processor;
-  params.gpu_lmt_processor = gpu_processor;
+  params.cpu_lmt_processor_ = cpu_processor_;
+  params.gpu_lmt_processor_ = gpu_processor_;
 
-  params.lmt_lut_path      = _lmt_path;
-  params.to_lmt_dirty      = true;
+  params.lmt_lut_path_      = lmt_path_;
+  params.to_lmt_dirty_      = true;
 }
 };  // namespace puerhlab

@@ -45,9 +45,9 @@ void ThumbnailDecoder::Decode(std::vector<char> buffer, std::filesystem::path fi
   try {
     // Push the decoded image into the buffer queue
     std::shared_ptr<Image> img = std::make_shared<Image>(id, file_path, ImageType::DEFAULT);
-    img->_exif_data = Exiv2::ImageFactory::open((Exiv2::byte*)buffer.data(), buffer.size());
-    img->_exif_data->readMetadata();
-    img->_has_exif = !img->_exif_data->exifData().empty();
+    img->exif_data_ = Exiv2::ImageFactory::open((Exiv2::byte*)buffer.data(), buffer.size());
+    img->exif_data_->readMetadata();
+    img->has_exif_ = !img->exif_data_->exifData().empty();
 
     img->LoadThumbnail({std::move(thumbnail)});
     result->push(img);
@@ -68,6 +68,6 @@ void ThumbnailDecoder::Decode(std::vector<char> buffer, std::shared_ptr<Image> s
   ImageBuffer thumbnail_data{std::move(thumbnail)};
   source_img->LoadThumbnail(std::move(thumbnail_data));
   result->push(source_img);
-  promise->set_value(source_img->_image_id);
+  promise->set_value(source_img->image_id_);
 }
 };  // namespace puerhlab

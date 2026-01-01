@@ -23,21 +23,20 @@ namespace puerhlab {
 
 class HLSOp : public OperatorBase<HLSOp> {
  private:
-  cv::Vec3f _target_HLS;
+  cv::Vec3f target_hls_;
 
-  cv::Vec3f _HLS_adjustment;
+  cv::Vec3f hls_adjustment_;
 
-  float     _hue_range;
-  float     _lightness_range;
-  float     _saturation_range;
+  float     hue_range_;
+  float     lightness_range_;
+  float     saturation_range_;
 
  public:
-  static constexpr PriorityLevel     _priority_level    = 5;
-  static constexpr PipelineStageName _affiliation_stage = PipelineStageName::Color_Adjustment;
-  static constexpr std::string_view  _canonical_name    = "HLS";
-  static constexpr std::string_view  _script_name       = "HLS";
-  static constexpr OperatorType      _operator_type     = OperatorType::HLS;
-
+  static constexpr PriorityLevel     priority_level_    = 5;
+  static constexpr PipelineStageName affiliation_stage_ = PipelineStageName::Color_Adjustment;
+  static constexpr std::string_view  canonical_name_    = "HLS";
+  static constexpr std::string_view  script_name_       = "HLS";
+  static constexpr OperatorType      operator_type_     = OperatorType::HLS;
   HLSOp();
   HLSOp(const nlohmann::json& params);
 

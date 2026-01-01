@@ -50,10 +50,10 @@ namespace simple_simd {
 
 // -------- feature detection (x86) ----------
 struct CPUFeatures {
-  bool sse41 = false;
-  bool sse42 = false;
-  bool avx2  = false;
-  bool avx   = false;
+  bool sse41_ = false;
+  bool sse42_ = false;
+  bool avx2_  = false;
+  bool avx_   = false;
 };
 
 inline CPUFeatures detect_cpu() {
@@ -65,14 +65,14 @@ inline CPUFeatures detect_cpu() {
   if (nIds >= 1) {
     __cpuid(info, 1);
     int ecx = info[2];
-    f.sse42 = (ecx & (1 << 20)) != 0;
-    f.sse41 = (ecx & (1 << 19)) != 0;
-    f.avx   = (ecx & (1 << 28)) != 0;
+    f.sse42_ = (ecx & (1 << 20)) != 0;
+    f.sse41_ = (ecx & (1 << 19)) != 0;
+    f.avx_   = (ecx & (1 << 28)) != 0;
   }
   if (nIds >= 7) {
     __cpuidex(info, 7, 0);
     int ebx = info[1];
-    f.avx2  = (ebx & (1 << 5)) != 0;
+    f.avx2_  = (ebx & (1 << 5)) != 0;
   }
 #elif SIMPLE_SIMD_X86 && (defined(__GNUC__) || defined(__clang__))
   unsigned int eax, ebx, ecx, edx;
@@ -213,14 +213,14 @@ struct Dispatch {
   div_fn_t     div     = impl_neon::div;
   mul_add_fn_t mul_add = impl_neon::mul_add;
 #else
-  load_fn_t    load    = impl_scalar::load;
-  store_fn_t   store   = impl_scalar::store;
-  set1_fn_t    set1    = impl_scalar::set1;
-  mul_fn_t     mul     = impl_scalar::mul;
-  add_fn_t     add     = impl_scalar::add;
-  sub_fn_t     sub     = impl_scalar::sub;
-  div_fn_t     div     = impl_scalar::div;
-  mul_add_fn_t mul_add = impl_scalar::mul_add;
+  load_fn_t    load_    = impl_scalar::load;
+  store_fn_t   store_   = impl_scalar::store;
+  set1_fn_t    set1_    = impl_scalar::set1;
+  mul_fn_t     mul_     = impl_scalar::mul;
+  add_fn_t     add_     = impl_scalar::add;
+  sub_fn_t     sub_     = impl_scalar::sub;
+  div_fn_t     div_     = impl_scalar::div;
+  mul_add_fn_t mul_add_ = impl_scalar::mul_add;
 #endif
 
   void init() {
@@ -240,15 +240,15 @@ struct Dispatch {
     }
 #endif
 #if defined(__SSE4_1__)
-    if (f.sse41) {
-      load    = impl_sse::load;
-      store   = impl_sse::store;
-      set1    = impl_sse::set1;
-      mul     = impl_sse::mul;
-      add     = impl_sse::add;
-      sub     = impl_sse::sub;
-      div     = impl_sse::div;
-      mul_add = impl_sse::mul_add;
+    if (f.sse41_) {
+      load_    = impl_sse::load;
+      store_   = impl_sse::store;
+      set1_    = impl_sse::set1;
+      mul_     = impl_sse::mul;
+      add_     = impl_sse::add;
+      sub_     = impl_sse::sub;
+      div_     = impl_sse::div;
+      mul_add_ = impl_sse::mul_add;
       return;
     }
 #endif
@@ -271,15 +271,15 @@ inline Dispatch& global_dispatch() {
 }
 
 // -------- public API ----------
-inline f32x4 load_f32x4(const float* p) { return global_dispatch().load(p); }
-inline void  store_f32x4(float* dst, const f32x4& v) { return global_dispatch().store(dst, v); }
-inline f32x4 set1_f32(float x) { return global_dispatch().set1(x); }
-inline f32x4 mul_f32x4(const f32x4& a, const f32x4& b) { return global_dispatch().mul(a, b); }
-inline f32x4 add_f32x4(const f32x4& a, const f32x4& b) { return global_dispatch().add(a, b); }
-inline f32x4 sub_f32x4(const f32x4& a, const f32x4& b) { return global_dispatch().sub(a, b); }
-inline f32x4 div_f32x4(const f32x4& a, const f32x4& b) { return global_dispatch().div(a, b); }
+inline f32x4 load_f32x4(const float* p) { return global_dispatch().load_(p); }
+inline void  store_f32x4(float* dst, const f32x4& v) { return global_dispatch().store_(dst, v); }
+inline f32x4 set1_f32(float x) { return global_dispatch().set1_(x); }
+inline f32x4 mul_f32x4(const f32x4& a, const f32x4& b) { return global_dispatch().mul_(a, b); }
+inline f32x4 add_f32x4(const f32x4& a, const f32x4& b) { return global_dispatch().add_(a, b); }
+inline f32x4 sub_f32x4(const f32x4& a, const f32x4& b) { return global_dispatch().sub_(a, b); }
+inline f32x4 div_f32x4(const f32x4& a, const f32x4& b) { return global_dispatch().div_(a, b); }
 inline f32x4 mul_add_f32x4(const f32x4& a, const f32x4& b, const f32x4& c) {
-  return global_dispatch().mul_add(a, b, c);
+  return global_dispatch().mul_add_(a, b, c);
 }
 
 }  // namespace simple_simd

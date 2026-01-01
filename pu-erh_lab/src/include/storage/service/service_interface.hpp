@@ -26,13 +26,13 @@ namespace puerhlab {
 template <typename Derived, typename InternalType, typename Mappable, typename Mapper, typename ID>
 class ServiceInterface {
  private:
-  duckdb_connection&                    _conn;
-  MapperInterface<Mapper, Mappable, ID> _mapper;
+  duckdb_connection&                    conn_;
+  MapperInterface<Mapper, Mappable, ID> mapper_;
 
  public:
-  ServiceInterface(duckdb_connection& conn) : _conn(conn), _mapper(conn) {}
-  void InsertParams(const Mappable& param) { _mapper.Insert(std::move(param)); }
-  void Insert(const InternalType& obj) { _mapper.Insert(Derived::ToParams(obj)); }
+  ServiceInterface(duckdb_connection& conn) : conn_(conn), mapper_(conn) {}
+  void InsertParams(const Mappable& param) { mapper_.Insert(std::move(param)); }
+  void Insert(const InternalType& obj) { mapper_.Insert(Derived::ToParams(obj)); }
 
   /**
    * @brief Get the objects by a SQL predicate (WHERE clause)
@@ -41,7 +41,7 @@ class ServiceInterface {
    * @return std::vector<InternalType>
    */
   auto GetByPredicate(std::string&& predicate) -> std::vector<InternalType> {
-    std::vector<Mappable>     param_results = _mapper.Get(predicate.c_str());
+    std::vector<Mappable>     param_results = mapper_.Get(predicate.c_str());
     std::vector<InternalType> results;
     results.resize(param_results.size());
     size_t idx = 0;
@@ -60,7 +60,7 @@ class ServiceInterface {
    * @return std::vector<InternalType>
    */
   auto GetByQuery(std::string&& query) -> std::vector<InternalType> {
-    std::vector<Mappable>     param_results = _mapper.GetByQuery(query.c_str());
+    std::vector<Mappable>     param_results = mapper_.GetByQuery(query.c_str());
     std::vector<InternalType> results;
     results.resize(param_results.size());
     size_t idx = 0;
@@ -71,10 +71,10 @@ class ServiceInterface {
     return results;
   }
 
-  void RemoveById(const ID remove_id) { _mapper.Remove(remove_id); }
-  void RemoveByClause(const std::string& clause) { _mapper.RemoveByClause(clause); }
+  void RemoveById(const ID remove_id) { mapper_.Remove(remove_id); }
+  void RemoveByClause(const std::string& clause) { mapper_.RemoveByClause(clause); }
   void Update(const InternalType& obj, const ID update_id) {
-    _mapper.Update(update_id, Derived::ToParams(obj));
+    mapper_.Update(update_id, Derived::ToParams(obj));
   }
 };
 }  // namespace puerhlab

@@ -28,7 +28,7 @@ auto FolderService::ToParams(const std::pair<sl_element_id_t, sl_element_id_t> s
 
 auto FolderService::FromParams(FolderMapperParams&& param)
     -> std::pair<sl_element_id_t, sl_element_id_t> {
-  return {param.folder_id, param.element_id};
+  return {param.folder_id_, param.element_id_};
 }
 
 auto FolderService::GetFolderContent(const sl_element_id_t id) -> std::vector<sl_element_id_t> {

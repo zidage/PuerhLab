@@ -43,39 +43,39 @@ inline float LIM(float x, float min, float max) { return std::max(min, std::min(
 
 class AMaZeDemosaic {
  private:
-  int       height, width;
-  cv::Mat1f raw;
-  cv::Mat1f red, green, blue;
+  int       height_, width_;
+  cv::Mat1f raw_;
+  cv::Mat1f red_, green_, blue_;
 
   // Working buffers
-  cv::Mat1f hvgrad;    // Horizontal/Vertical gradients
-  cv::Mat1f dggrad;    // Diagonal gradients
-  cv::Mat1f nyquist;   // Nyquist frequency map
-  cv::Mat1f artifact;  // Artifact map
+  cv::Mat1f hvgrad_;    // Horizontal/Vertical gradients
+  cv::Mat1f dggrad_;    // Diagonal gradients
+  cv::Mat1f nyquist_;   // Nyquist frequency map
+  cv::Mat1f artifact_;  // Artifact map
 
   // Temporary interpolation buffers
-  cv::Mat1f green_h, green_v;  // Horizontal and vertical green estimates
-  cv::Mat1f diff_h, diff_v;    // Color difference maps
+  cv::Mat1f green_h_, green_v_;  // Horizontal and vertical green estimates
+  cv::Mat1f diff_h_, diff_v_;    // Color difference maps
 
  public:
-  AMaZeDemosaic(const cv::Mat1f& bayer) : raw(bayer) {
-    height   = raw.rows;
-    width    = raw.cols;
+  AMaZeDemosaic(const cv::Mat1f& bayer) : raw_(bayer) {
+    height_   = raw_.rows;
+    width_    = raw_.cols;
 
     // Initialize output channels
-    red      = cv::Mat1f(height, width, 0.0f);
-    green    = cv::Mat1f(height, width, 0.0f);
-    blue     = cv::Mat1f(height, width, 0.0f);
+    red_      = cv::Mat1f(height_, width_, 0.0f);
+    green_    = cv::Mat1f(height_, width_, 0.0f);
+    blue_     = cv::Mat1f(height_, width_, 0.0f);
 
     // Initialize working buffers
-    hvgrad   = cv::Mat1f(height, width, 0.0f);
-    dggrad   = cv::Mat1f(height, width, 0.0f);
-    nyquist  = cv::Mat1f(height, width, 0.0f);
-    artifact = cv::Mat1f(height, width, 0.0f);
+    hvgrad_   = cv::Mat1f(height_, width_, 0.0f);
+    dggrad_   = cv::Mat1f(height_, width_, 0.0f);
+    nyquist_  = cv::Mat1f(height_, width_, 0.0f);
+    artifact_ = cv::Mat1f(height_, width_, 0.0f);
     // green_h  = cv::Mat1f(height, width, 0.0f);
     // green_v  = cv::Mat1f(height, width, 0.0f);
-    diff_h   = cv::Mat1f(height, width, 0.0f);
-    diff_v   = cv::Mat1f(height, width, 0.0f);
+    diff_h_   = cv::Mat1f(height_, width_, 0.0f);
+    diff_v_   = cv::Mat1f(height_, width_, 0.0f);
 
     // Copy raw values to appropriate channels
     initializeChannels();
@@ -83,21 +83,21 @@ class AMaZeDemosaic {
 
   void initializeChannels() {
 #pragma omp parallel for
-    for (int y = 0; y < height; ++y) {
-      for (int x = 0; x < width; ++x) {
-        float val = raw(y, x);
+    for (int y = 0; y < height_; ++y) {
+      for (int x = 0; x < width_; ++x) {
+        float val = raw_(y, x);
         switch (FC(y, x)) {
           case 0:
-            red(y, x) = val;
+            red_(y, x) = val;
             break;  // R
           case 1:
-            green(y, x) = val;
+            green_(y, x) = val;
             break;  // G1
           case 2:
-            blue(y, x) = val;
+            blue_(y, x) = val;
             break;  // B
           case 3:
-            green(y, x) = val;
+            green_(y, x) = val;
             break;  // G2
         }
       }
@@ -106,33 +106,33 @@ class AMaZeDemosaic {
 
   void computeGradients() {
 #pragma omp parallel for
-    for (int y = 2; y < height - 2; ++y) {
-      for (int x = 2; x < width - 2; ++x) {
+    for (int y = 2; y < height_ - 2; ++y) {
+      for (int x = 2; x < width_ - 2; ++x) {
         if (!IS_GREEN(y, x)) {
           // Horizontal gradient
-          float grad_h = std::abs(raw(y, x - 1) - raw(y, x + 1));
-          if (x >= 3 && x < width - 3) {
-            grad_h += std::abs(raw(y, x - 2) - raw(y, x)) * 0.5f;
-            grad_h += std::abs(raw(y, x + 2) - raw(y, x)) * 0.5f;
+          float grad_h = std::abs(raw_(y, x - 1) - raw_(y, x + 1));
+          if (x >= 3 && x < width_ - 3) {
+            grad_h += std::abs(raw_(y, x - 2) - raw_(y, x)) * 0.5f;
+            grad_h += std::abs(raw_(y, x + 2) - raw_(y, x)) * 0.5f;
             // Add second derivative
-            grad_h += std::abs(2 * raw(y, x) - raw(y, x - 2) - raw(y, x + 2)) * 0.25f;
+            grad_h += std::abs(2 * raw_(y, x) - raw_(y, x - 2) - raw_(y, x + 2)) * 0.25f;
           }
 
           // Vertical gradient
-          float grad_v = std::abs(raw(y - 1, x) - raw(y + 1, x));
-          if (y >= 3 && y < height - 3) {
-            grad_v += std::abs(raw(y - 2, x) - raw(y, x)) * 0.5f;
-            grad_v += std::abs(raw(y + 2, x) - raw(y, x)) * 0.5f;
+          float grad_v = std::abs(raw_(y - 1, x) - raw_(y + 1, x));
+          if (y >= 3 && y < height_ - 3) {
+            grad_v += std::abs(raw_(y - 2, x) - raw_(y, x)) * 0.5f;
+            grad_v += std::abs(raw_(y + 2, x) - raw_(y, x)) * 0.5f;
             // Add second derivative
-            grad_v += std::abs(2 * raw(y, x) - raw(y - 2, x) - raw(y + 2, x)) * 0.25f;
+            grad_v += std::abs(2 * raw_(y, x) - raw_(y - 2, x) - raw_(y + 2, x)) * 0.25f;
           }
 
-          hvgrad(y, x)  = grad_h - grad_v;
+          hvgrad_(y, x)  = grad_h - grad_v;
 
           // Diagonal gradients
-          float grad_ne = std::abs(raw(y - 1, x + 1) - raw(y + 1, x - 1));
-          float grad_nw = std::abs(raw(y - 1, x - 1) - raw(y + 1, x + 1));
-          dggrad(y, x)  = grad_ne - grad_nw;
+          float grad_ne = std::abs(raw_(y - 1, x + 1) - raw_(y + 1, x - 1));
+          float grad_nw = std::abs(raw_(y - 1, x - 1) - raw_(y + 1, x + 1));
+          dggrad_(y, x)  = grad_ne - grad_nw;
         }
       }
     }
@@ -140,36 +140,36 @@ class AMaZeDemosaic {
 
   void interpolateGreenInitial() {
 #pragma omp parallel for
-    for (int y = 2; y < height - 2; ++y) {
-      for (int x = 2; x < width - 2; ++x) {
+    for (int y = 2; y < height_ - 2; ++y) {
+      for (int x = 2; x < width_ - 2; ++x) {
         if (!IS_GREEN(y, x)) {
-          float grad = hvgrad(y, x);
+          float grad = hvgrad_(y, x);
 
           // Horizontal interpolation
-          float g_h  = (raw(y, x - 1) + raw(y, x + 1)) * 0.5f;
-          if (x >= 2 && x < width - 2) {
+          float g_h  = (raw_(y, x - 1) + raw_(y, x + 1)) * 0.5f;
+          if (x >= 2 && x < width_ - 2) {
             // Add Laplacian correction
-            g_h += (2 * raw(y, x) - raw(y, x - 2) - raw(y, x + 2)) * 0.25f;
+            g_h += (2 * raw_(y, x) - raw_(y, x - 2) - raw_(y, x + 2)) * 0.25f;
           }
           // green_h(y, x) = g_h;
 
           // Vertical interpolation
-          float g_v = (raw(y - 1, x) + raw(y + 1, x)) * 0.5f;
-          if (y >= 2 && y < height - 2) {
+          float g_v = (raw_(y - 1, x) + raw_(y + 1, x)) * 0.5f;
+          if (y >= 2 && y < height_ - 2) {
             // Add Laplacian correction
-            g_v += (2 * raw(y, x) - raw(y - 2, x) - raw(y + 2, x)) * 0.25f;
+            g_v += (2 * raw_(y, x) - raw_(y - 2, x) - raw_(y + 2, x)) * 0.25f;
           }
           // green_v(y, x) = g_v;
           // Adaptive combination based on gradients
           if (std::abs(grad) < GRAD_THRESH) {
             // Similar gradients - use weighted average
-            green(y, x) = (g_h + g_v) * 0.5f;
+            green_(y, x) = (g_h + g_v) * 0.5f;
           } else if (grad > 0) {
             // Vertical edge - use horizontal interpolation
-            green(y, x) = g_h;
+            green_(y, x) = g_h;
           } else {
             // Horizontal edge - use vertical interpolation
-            green(y, x) = g_v;
+            green_(y, x) = g_v;
           }
         }
       }
@@ -178,8 +178,8 @@ class AMaZeDemosaic {
 
   void computeNyquistMap() {
 #pragma omp parallel for
-    for (int y = 4; y < height - 4; ++y) {
-      for (int x = 4; x < width - 4; ++x) {
+    for (int y = 4; y < height_ - 4; ++y) {
+      for (int x = 4; x < width_ - 4; ++x) {
         if (!IS_GREEN(y, x)) {
           // Compute local Nyquist frequency content
           float nyq = 0;
@@ -189,15 +189,15 @@ class AMaZeDemosaic {
             for (int dx = -2; dx <= 2; dx += 2) {
               if (dy == 0 && dx == 0) continue;
 
-              float diff      = std::abs(green(y + dy, x + dx) - green(y, x));
-              float local_avg = (green(y + dy, x + dx) + green(y, x)) * 0.5f;
+              float diff      = std::abs(green_(y + dy, x + dx) - green_(y, x));
+              float local_avg = (green_(y + dy, x + dx) + green_(y, x)) * 0.5f;
               if (local_avg > 0) {
                 nyq += diff / (local_avg + 1e-6f);
               }
             }
           }
 
-          nyquist(y, x) = nyq / 8.0f;  // Normalize
+          nyquist_(y, x) = nyq / 8.0f;  // Normalize
         }
       }
     }
@@ -206,57 +206,57 @@ class AMaZeDemosaic {
   void detectAndReduceArtifacts() {
 // Detect artifacts (zipper, maze patterns)
 #pragma omp parallel for
-    for (int y = 3; y < height - 3; ++y) {
-      for (int x = 3; x < width - 3; ++x) {
+    for (int y = 3; y < height_ - 3; ++y) {
+      for (int x = 3; x < width_ - 3; ++x) {
         if (!IS_GREEN(y, x)) {
           float art = 0;
 
           // Check for alternating patterns (zipper artifacts)
-          if (x >= 4 && x < width - 4) {
-            float alt_h = std::abs(green(y, x - 2) - 2 * green(y, x) + green(y, x + 2));
+          if (x >= 4 && x < width_ - 4) {
+            float alt_h = std::abs(green_(y, x - 2) - 2 * green_(y, x) + green_(y, x + 2));
             art += alt_h;
           }
-          if (y >= 4 && y < height - 4) {
-            float alt_v = std::abs(green(y - 2, x) - 2 * green(y, x) + green(y + 2, x));
+          if (y >= 4 && y < height_ - 4) {
+            float alt_v = std::abs(green_(y - 2, x) - 2 * green_(y, x) + green_(y + 2, x));
             art += alt_v;
           }
 
           // Combine with Nyquist map
-          artifact(y, x) = art * nyquist(y, x);
+          artifact_(y, x) = art * nyquist_(y, x);
         }
       }
     }
 
 // Reduce artifacts where detected
 #pragma omp parallel for
-    for (int y = 3; y < height - 3; ++y) {
-      for (int x = 3; x < width - 3; ++x) {
-        if (!IS_GREEN(y, x) && artifact(y, x) > ARTIFACT_THRESH) {
+    for (int y = 3; y < height_ - 3; ++y) {
+      for (int x = 3; x < width_ - 3; ++x) {
+        if (!IS_GREEN(y, x) && artifact_(y, x) > ARTIFACT_THRESH) {
           // Use median of surrounding green values
           std::array<float, 8> neighbors;
           int                  idx = 0;
           for (int dy = -1; dy <= 1; ++dy) {
             for (int dx = -1; dx <= 1; ++dx) {
               if (dy == 0 && dx == 0) continue;
-              neighbors[idx++] = green(y + dy, x + dx);
+              neighbors[idx++] = green_(y + dy, x + dx);
             }
           }
           std::nth_element(neighbors.begin(), neighbors.begin() + 4, neighbors.begin() + 8);
 
           // Blend with median based on artifact strength
-          float blend = std::min(1.0f, artifact(y, x) / 0.5f);
-          green(y, x) = green(y, x) * (1 - blend) + neighbors[4] * blend;
+          float blend = std::min(1.0f, artifact_(y, x) / 0.5f);
+          green_(y, x) = green_(y, x) * (1 - blend) + neighbors[4] * blend;
         }
       }
     }
   }
 
   void refineGreenChannel() {
-    cv::Mat1f green_new = green.clone();
+    cv::Mat1f green_new = green_.clone();
 
 #pragma omp parallel for
-    for (int y = 3; y < height - 3; ++y) {
-      for (int x = 3; x < width - 3; ++x) {
+    for (int y = 3; y < height_ - 3; ++y) {
+      for (int x = 3; x < width_ - 3; ++x) {
         if (!IS_GREEN(y, x)) {
           // Compute color differences in neighborhood
           float sum_weight = 0;
@@ -269,13 +269,13 @@ class AMaZeDemosaic {
               int ny = y + dy;
               int nx = x + dx;
 
-              if (ny >= 0 && ny < height && nx >= 0 && nx < width) {
+              if (ny >= 0 && ny < height_ && nx >= 0 && nx < width_) {
                 // Weight based on color similarity and distance
-                float color_diff   = std::abs(raw(ny, nx) - raw(y, x));
+                float color_diff   = std::abs(raw_(ny, nx) - raw_(y, x));
                 float spatial_dist = std::sqrt(float(dy * dy + dx * dx));
                 float weight       = std::exp(-color_diff * 0.1f - spatial_dist * 0.5f);
 
-                sum_green += green(ny, nx) * weight;
+                sum_green += green_(ny, nx) * weight;
                 sum_weight += weight;
               }
             }
@@ -288,13 +288,13 @@ class AMaZeDemosaic {
       }
     }
 
-    green = green_new;
+    green_ = green_new;
   }
 
   void interpolateRedBlue() {
 #pragma omp parallel for
-    for (int y = 2; y < height - 2; ++y) {
-      for (int x = 2; x < width - 2; ++x) {
+    for (int y = 2; y < height_ - 2; ++y) {
+      for (int x = 2; x < width_ - 2; ++x) {
         int color = FC(y, x);
 
         if (IS_GREEN(y, x)) {
@@ -311,21 +311,21 @@ class AMaZeDemosaic {
               int   nx     = x + dx;
               int   nc     = FC(ny, nx);
 
-              float g_diff = std::abs(green(ny, nx) - green(y, x));
+              float g_diff = std::abs(green_(ny, nx) - green_(y, x));
               float weight = 1.0f / (1.0f + g_diff);
 
               if (nc == 0) {  // Red pixel
-                sum_r += (red(ny, nx) - green(ny, nx)) * weight;
+                sum_r += (red_(ny, nx) - green_(ny, nx)) * weight;
                 weight_r += weight;
               } else if (nc == 2) {  // Blue pixel
-                sum_b += (blue(ny, nx) - green(ny, nx)) * weight;
+                sum_b += (blue_(ny, nx) - green_(ny, nx)) * weight;
                 weight_b += weight;
               }
             }
           }
 
-          if (weight_r > 0.f) red(y, x) = green(y, x) + sum_r / weight_r;
-          if (weight_b > 0.f) blue(y, x) = green(y, x) + sum_b / weight_b;
+          if (weight_r > 0.f) red_(y, x) = green_(y, x) + sum_r / weight_r;
+          if (weight_b > 0.f) blue_(y, x) = green_(y, x) + sum_b / weight_b;
 
         } else if (color == 0) {
           // At red pixels, interpolate blue
@@ -339,15 +339,15 @@ class AMaZeDemosaic {
               int   ny     = y + dy;
               int   nx     = x + dx;
 
-              float g_diff = std::abs(green(ny, nx) - green(y, x));
+              float g_diff = std::abs(green_(ny, nx) - green_(y, x));
               float weight = 1.0f / (1.0f + g_diff);
 
-              sum_b += (blue(ny, nx) - green(ny, nx)) * weight;
+              sum_b += (blue_(ny, nx) - green_(ny, nx)) * weight;
               weight_b += weight;
             }
           }
 
-          if (weight_b > 0) blue(y, x) = green(y, x) + sum_b / weight_b;
+          if (weight_b > 0) blue_(y, x) = green_(y, x) + sum_b / weight_b;
 
         } else if (color == 2) {
           // At blue pixels, interpolate red
@@ -361,35 +361,35 @@ class AMaZeDemosaic {
               int   ny     = y + dy;
               int   nx     = x + dx;
 
-              float g_diff = std::abs(green(ny, nx) - green(y, x));
+              float g_diff = std::abs(green_(ny, nx) - green_(y, x));
               float weight = 1.0f / (1.0f + g_diff);
 
-              sum_r += (red(ny, nx) - green(ny, nx)) * weight;
+              sum_r += (red_(ny, nx) - green_(ny, nx)) * weight;
               weight_r += weight;
             }
           }
 
-          if (weight_r > 0) red(y, x) = green(y, x) + sum_r / weight_r;
+          if (weight_r > 0) red_(y, x) = green_(y, x) + sum_r / weight_r;
         }
       }
     }
   }
 
   void suppressFalseColors() {
-    cv::Mat1f red_new  = red.clone();
-    cv::Mat1f blue_new = blue.clone();
+    cv::Mat1f red_new  = red_.clone();
+    cv::Mat1f blue_new = blue_.clone();
 
 #pragma omp parallel for
-    for (int y = 2; y < height - 2; ++y) {
-      for (int x = 2; x < width - 2; ++x) {
+    for (int y = 2; y < height_ - 2; ++y) {
+      for (int x = 2; x < width_ - 2; ++x) {
         // Compute median of color differences in 3x3 neighborhood
         std::array<float, 9> cd_r, cd_b;
         int                  idx = 0;
 
         for (int dy = -1; dy <= 1; ++dy) {
           for (int dx = -1; dx <= 1; ++dx) {
-            cd_r[idx] = red(y + dy, x + dx) - green(y + dy, x + dx);
-            cd_b[idx] = blue(y + dy, x + dx) - green(y + dy, x + dx);
+            cd_r[idx] = red_(y + dy, x + dx) - green_(y + dy, x + dx);
+            cd_b[idx] = blue_(y + dy, x + dx) - green_(y + dy, x + dx);
             idx++;
           }
         }
@@ -400,24 +400,24 @@ class AMaZeDemosaic {
         float median_cd_r  = cd_r[4];
         float median_cd_b  = cd_b[4];
 
-        float current_cd_r = red(y, x) - green(y, x);
-        float current_cd_b = blue(y, x) - green(y, x);
+        float current_cd_r = red_(y, x) - green_(y, x);
+        float current_cd_b = blue_(y, x) - green_(y, x);
 
         // Suppress if too different from median
         float thresh_r     = std::max(0.1f, std::abs(median_cd_r) * 2.0f);
         float thresh_b     = std::max(0.1f, std::abs(median_cd_b) * 2.0f);
 
         if (std::abs(current_cd_r - median_cd_r) > thresh_r) {
-          red_new(y, x) = green(y, x) + median_cd_r;
+          red_new(y, x) = green_(y, x) + median_cd_r;
         }
         if (std::abs(current_cd_b - median_cd_b) > thresh_b) {
-          blue_new(y, x) = green(y, x) + median_cd_b;
+          blue_new(y, x) = green_(y, x) + median_cd_b;
         }
       }
     }
 
-    red  = red_new;
-    blue = blue_new;
+    red_  = red_new;
+    blue_ = blue_new;
   }
 
   void process() {
@@ -451,23 +451,23 @@ class AMaZeDemosaic {
 
   void handleBoundaries() {
     // Simple boundary handling - can be improved
-    for (int y = 0; y < height; ++y) {
-      for (int x = 0; x < width; ++x) {
-        if (y < 2 || y >= height - 2 || x < 2 || x >= width - 2) {
+    for (int y = 0; y < height_; ++y) {
+      for (int x = 0; x < width_; ++x) {
+        if (y < 2 || y >= height_ - 2 || x < 2 || x >= width_ - 2) {
           // Use nearest valid pixel
-          int sy      = LIM(y, 2, height - 3);
-          int sx      = LIM(x, 2, width - 3);
+          int sy      = LIM(y, 2, height_ - 3);
+          int sx      = LIM(x, 2, width_ - 3);
 
-          red(y, x)   = red(sy, sx);
-          green(y, x) = green(sy, sx);
-          blue(y, x)  = blue(sy, sx);
+          red_(y, x)   = red_(sy, sx);
+          green_(y, x) = green_(sy, sx);
+          blue_(y, x)  = blue_(sy, sx);
         }
       }
     }
   }
 
   void getResult(cv::Mat& output) {
-    std::vector<cv::Mat> channels = {red, green, blue};
+    std::vector<cv::Mat> channels = {red_, green_, blue_};
     cv::merge(channels, output);
   }
 };

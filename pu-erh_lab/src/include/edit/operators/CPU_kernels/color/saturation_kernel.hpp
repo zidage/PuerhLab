@@ -19,12 +19,12 @@
 namespace puerhlab {
 struct SaturationOpKernel : PointOpTag {
   inline void operator()(Pixel& p, OperatorParams& params) const {
-    if (!params.saturation_enabled) return;
+    if (!params.saturation_enabled_) return;
 
-    float luma = 0.2126f * p.r + 0.7152f * p.g + 0.0722f * p.b;
-    p.r        = luma + (p.r - luma) * params.saturation_offset;
-    p.g        = luma + (p.g - luma) * params.saturation_offset;
-    p.b        = luma + (p.b - luma) * params.saturation_offset;
+    float luma = 0.2126f * p.r_ + 0.7152f * p.g_ + 0.0722f * p.b_;
+    p.r_        = luma + (p.r_ - luma) * params.saturation_offset_;
+    p.g_        = luma + (p.g_ - luma) * params.saturation_offset_;
+    p.b_        = luma + (p.b_ - luma) * params.saturation_offset_;
   }
 };
 }  // namespace puerhlab

@@ -39,7 +39,7 @@ duckdb_state insert(duckdb_connection& conn, const char* table, const void* obj,
   std::ostringstream sql;
   sql << "INSERT INTO " << table << " (";
   for (size_t i = 0; i < field_count; ++i) {
-    sql << fields[i].name;
+    sql << fields[i].name_;
     if (i < field_count - 1) {
       sql << ",";
     }
@@ -58,34 +58,34 @@ duckdb_state insert(duckdb_connection& conn, const char* table, const void* obj,
   // Bind parameters
   for (size_t i = 0; i < field_count; ++i) {
     const DuckFieldDesc& field = fields[i];
-    const char*          ptr   = reinterpret_cast<const char*>(obj) + field.offset;
-    switch (field.type) {
+    const char*          ptr   = reinterpret_cast<const char*>(obj) + field.offset_;
+    switch (field.type_) {
       case DuckDBType::INT32: {
         int32_t value = *reinterpret_cast<const int32_t*>(ptr);
-        duckdb_bind_int32(insert_pre._stmt, i + 1, value);
+        duckdb_bind_int32(insert_pre.stmt_, i + 1, value);
         break;
       }
       case DuckDBType::INT64: {
         int64_t value = *reinterpret_cast<const int64_t*>(ptr);
-        duckdb_bind_int64(insert_pre._stmt, i + 1, value);
+        duckdb_bind_int64(insert_pre.stmt_, i + 1, value);
         break;
       }
       case DuckDBType::UINT32: {
         uint32_t value =
-            *reinterpret_cast<const uint32_t*>(reinterpret_cast<const char*>(obj) + field.offset);
-        duckdb_bind_uint32(insert_pre._stmt, i + 1, value);
+            *reinterpret_cast<const uint32_t*>(reinterpret_cast<const char*>(obj) + field.offset_);
+        duckdb_bind_uint32(insert_pre.stmt_, i + 1, value);
         break;
       }
       case DuckDBType::UINT64: {
         uint64_t value =
-            *reinterpret_cast<const uint64_t*>(reinterpret_cast<const char*>(obj) + field.offset);
-        duckdb_bind_uint64(insert_pre._stmt, i + 1, value);
+            *reinterpret_cast<const uint64_t*>(reinterpret_cast<const char*>(obj) + field.offset_);
+        duckdb_bind_uint64(insert_pre.stmt_, i + 1, value);
         break;
       }
       case DuckDBType::DOUBLE: {
         double value =
-            *reinterpret_cast<const double*>(reinterpret_cast<const char*>(obj) + field.offset);
-        duckdb_bind_double(insert_pre._stmt, i + 1, value);
+            *reinterpret_cast<const double*>(reinterpret_cast<const char*>(obj) + field.offset_);
+        duckdb_bind_double(insert_pre.stmt_, i + 1, value);
         break;
       }
       case DuckDBType::TIMESTAMP:
@@ -94,23 +94,23 @@ duckdb_state insert(duckdb_connection& conn, const char* table, const void* obj,
         // For TIMESTAMP, VARCHAR and JSON, we assume the field is a std::unique_ptr<std::string>
         const std::unique_ptr<std::string>* ptr_to_unique =
             reinterpret_cast<const std::unique_ptr<std::string>*>(
-                reinterpret_cast<const char*>(obj) + field.offset);
-        duckdb_bind_varchar(insert_pre._stmt, i + 1, ptr_to_unique->get()->c_str());
+                reinterpret_cast<const char*>(obj) + field.offset_);
+        duckdb_bind_varchar(insert_pre.stmt_, i + 1, ptr_to_unique->get()->c_str());
         break;
       }
       case DuckDBType::BOOLEAN:
         duckdb_bind_boolean(
-            insert_pre._stmt, i + 1,
-            *reinterpret_cast<const bool*>(reinterpret_cast<const char*>(obj) + field.offset));
+            insert_pre.stmt_, i + 1,
+            *reinterpret_cast<const bool*>(reinterpret_cast<const char*>(obj) + field.offset_));
         break;
       default:
         throw std::runtime_error("Unsupported DuckFieldType in insert()");  // Unsupported type
     }
   }
 
-  duckdb_state state = duckdb_execute_prepared(insert_pre._stmt, &insert_pre._result);
+  duckdb_state state = duckdb_execute_prepared(insert_pre.stmt_, &insert_pre.result_);
   if (state != DuckDBSuccess) {
-    auto error_message = duckdb_result_error(&insert_pre._result);
+    auto error_message = duckdb_result_error(&insert_pre.result_);
     throw std::runtime_error(error_message);
   }
   return state;
@@ -133,7 +133,7 @@ duckdb_state update(duckdb_connection& conn, const char* table, const void* obj,
   std::ostringstream sql;
   sql << "UPDATE " << table << " SET ";
   for (size_t i = 0; i < field_count; ++i) {
-    sql << fields[i].name << " = ?";
+    sql << fields[i].name_ << " = ?";
     if (i < field_count - 1) {
       sql << ",";
     }
@@ -146,31 +146,31 @@ duckdb_state update(duckdb_connection& conn, const char* table, const void* obj,
   // Bind parameters
   for (size_t i = 0; i < field_count; ++i) {
     const DuckFieldDesc& field = fields[i];
-    const char*          ptr   = reinterpret_cast<const char*>(obj) + field.offset;
-    switch (field.type) {
+    const char*          ptr   = reinterpret_cast<const char*>(obj) + field.offset_;
+    switch (field.type_) {
       case DuckDBType::INT32: {
         int32_t value = *reinterpret_cast<const int32_t*>(ptr);
-        duckdb_bind_int32(update_pre._stmt, i + 1, value);
+        duckdb_bind_int32(update_pre.stmt_, i + 1, value);
         break;
       }
       case DuckDBType::INT64: {
         int64_t value = *reinterpret_cast<const int64_t*>(ptr);
-        duckdb_bind_int64(update_pre._stmt, i + 1, value);
+        duckdb_bind_int64(update_pre.stmt_, i + 1, value);
         break;
       }
       case DuckDBType::UINT32: {
         uint32_t value = *reinterpret_cast<const uint32_t*>(ptr);
-        duckdb_bind_uint32(update_pre._stmt, i + 1, value);
+        duckdb_bind_uint32(update_pre.stmt_, i + 1, value);
         break;
       }
       case DuckDBType::UINT64: {
         uint64_t value = *reinterpret_cast<const uint64_t*>(ptr);
-        duckdb_bind_uint64(update_pre._stmt, i + 1, value);
+        duckdb_bind_uint64(update_pre.stmt_, i + 1, value);
         break;
       }
       case DuckDBType::DOUBLE: {
         double value = *reinterpret_cast<const double*>(ptr);
-        duckdb_bind_double(update_pre._stmt, i + 1, value);
+        duckdb_bind_double(update_pre.stmt_, i + 1, value);
         break;
       }
       case DuckDBType::TIMESTAMP:
@@ -178,23 +178,23 @@ duckdb_state update(duckdb_connection& conn, const char* table, const void* obj,
       case DuckDBType::VARCHAR: {
         auto member_ptr = reinterpret_cast<const std::unique_ptr<std::string>*>(ptr);
         auto c_str      = member_ptr->get()->c_str();
-        duckdb_bind_varchar(update_pre._stmt, i + 1, c_str);
+        duckdb_bind_varchar(update_pre.stmt_, i + 1, c_str);
         break;
       }
       case DuckDBType::BOOLEAN:
         duckdb_bind_boolean(
-            update_pre._stmt, i + 1,
-            *reinterpret_cast<const bool*>(reinterpret_cast<const char*>(obj) + field.offset));
+            update_pre.stmt_, i + 1,
+            *reinterpret_cast<const bool*>(reinterpret_cast<const char*>(obj) + field.offset_));
         break;
       default:
-        duckdb_destroy_prepare(&update_pre._stmt);
+        duckdb_destroy_prepare(&update_pre.stmt_);
         throw std::runtime_error("Unsupported DuckFieldType in update()");  // Unsupported type
     }
   }
 
-  duckdb_state state = duckdb_execute_prepared(update_pre._stmt, &update_pre._result);
+  duckdb_state state = duckdb_execute_prepared(update_pre.stmt_, &update_pre.result_);
   if (state != DuckDBSuccess) {
-    auto error_message = duckdb_result_error(&update_pre._result);
+    auto error_message = duckdb_result_error(&update_pre.result_);
     throw std::runtime_error(error_message);
   }
 
@@ -216,9 +216,9 @@ duckdb_state remove(duckdb_connection& conn, const char* table, const char* wher
 
   PreparedStatement delete_pre(conn, sql_str);
 
-  duckdb_state      state = duckdb_execute_prepared(delete_pre._stmt, &delete_pre._result);
+  duckdb_state      state = duckdb_execute_prepared(delete_pre.stmt_, &delete_pre.result_);
   if (state != DuckDBSuccess) {
-    auto error_message = duckdb_result_error(&delete_pre._result);
+    auto error_message = duckdb_result_error(&delete_pre.result_);
     throw std::runtime_error(error_message);
   }
 
@@ -244,16 +244,16 @@ std::vector<std::vector<VarTypes>> select(duckdb_connection& conn, const std::st
   std::vector<std::vector<VarTypes>> results;
   PreparedStatement                  select_pre(conn, sql.str());
 
-  if (duckdb_execute_prepared(select_pre._stmt, &select_pre._result) != DuckDBSuccess) {
-    auto error_message = duckdb_result_error(&select_pre._result);
+  if (duckdb_execute_prepared(select_pre.stmt_, &select_pre.result_) != DuckDBSuccess) {
+    auto error_message = duckdb_result_error(&select_pre.result_);
     throw std::runtime_error(error_message);
   }
 
-  if (duckdb_column_count(&select_pre._result) != field_count) {
+  if (duckdb_column_count(&select_pre.result_) != field_count) {
     throw std::runtime_error("Column count mismatch in select query");
   }
 
-  idx_t row_count = duckdb_row_count(&select_pre._result);
+  idx_t row_count = duckdb_row_count(&select_pre.result_);
   if (row_count == 0) {
     return results;  // No rows found
   }
@@ -262,29 +262,29 @@ std::vector<std::vector<VarTypes>> select(duckdb_connection& conn, const std::st
     // Construct a field describe
     results[i].resize(field_count);
     for (size_t j = 0; j < field_count; ++j) {
-      switch (sample_fields[j].type) {
+      switch (sample_fields[j].type_) {
         case DuckDBType::INT32: {
-          int32_t value = duckdb_value_int32(&select_pre._result, j, i);
+          int32_t value = duckdb_value_int32(&select_pre.result_, j, i);
           results[i][j] = value;
           break;
         };
         case DuckDBType::INT64: {
-          int64_t value = duckdb_value_int64(&select_pre._result, j, i);
+          int64_t value = duckdb_value_int64(&select_pre.result_, j, i);
           results[i][j] = value;
           break;
         }
         case DuckDBType::UINT32: {
-          uint32_t value = duckdb_value_uint32(&select_pre._result, j, i);
+          uint32_t value = duckdb_value_uint32(&select_pre.result_, j, i);
           results[i][j]  = value;
           break;
         }
         case DuckDBType::UINT64: {
-          uint64_t value = duckdb_value_uint64(&select_pre._result, j, i);
+          uint64_t value = duckdb_value_uint64(&select_pre.result_, j, i);
           results[i][j]  = value;
           break;
         }
         case DuckDBType::DOUBLE: {
-          double value  = duckdb_value_double(&select_pre._result, j, i);
+          double value  = duckdb_value_double(&select_pre.result_, j, i);
           results[i][j] = value;
           break;
         }
@@ -292,7 +292,7 @@ std::vector<std::vector<VarTypes>> select(duckdb_connection& conn, const std::st
         case DuckDBType::JSON:
         case DuckDBType::BOOLEAN:
         case DuckDBType::TIMESTAMP: {
-          const char* value = duckdb_value_varchar(&select_pre._result, j, i);
+          const char* value = duckdb_value_varchar(&select_pre.result_, j, i);
           results[i][j]     = std::make_unique<std::string>(value);
           break;
         }
@@ -320,16 +320,16 @@ std::vector<std::vector<VarTypes>> select_by_query(duckdb_connection&           
   std::vector<std::vector<VarTypes>> results;
   PreparedStatement                  select_pre(conn, sql);
 
-  if (duckdb_execute_prepared(select_pre._stmt, &select_pre._result) != DuckDBSuccess) {
-    auto error_message = duckdb_result_error(&select_pre._result);
+  if (duckdb_execute_prepared(select_pre.stmt_, &select_pre.result_) != DuckDBSuccess) {
+    auto error_message = duckdb_result_error(&select_pre.result_);
     throw std::runtime_error(error_message);
   }
 
-  if (duckdb_column_count(&select_pre._result) != field_count) {
+  if (duckdb_column_count(&select_pre.result_) != field_count) {
     throw std::runtime_error("Column count mismatch in select query");
   }
 
-  idx_t row_count = duckdb_row_count(&select_pre._result);
+  idx_t row_count = duckdb_row_count(&select_pre.result_);
   if (row_count == 0) {
     return results;  // No rows found
   }
@@ -338,29 +338,29 @@ std::vector<std::vector<VarTypes>> select_by_query(duckdb_connection&           
     // Construct a field describe
     results[i].resize(field_count);
     for (size_t j = 0; j < field_count; ++j) {
-      switch (sample_fields[j].type) {
+      switch (sample_fields[j].type_) {
         case DuckDBType::INT32: {
-          int32_t value = duckdb_value_int32(&select_pre._result, j, i);
+          int32_t value = duckdb_value_int32(&select_pre.result_, j, i);
           results[i][j] = value;
           break;
         };
         case DuckDBType::INT64: {
-          int64_t value = duckdb_value_int64(&select_pre._result, j, i);
+          int64_t value = duckdb_value_int64(&select_pre.result_, j, i);
           results[i][j] = value;
           break;
         }
         case DuckDBType::UINT32: {
-          uint32_t value = duckdb_value_uint32(&select_pre._result, j, i);
+          uint32_t value = duckdb_value_uint32(&select_pre.result_, j, i);
           results[i][j]  = value;
           break;
         }
         case DuckDBType::UINT64: {
-          uint64_t value = duckdb_value_uint64(&select_pre._result, j, i);
+          uint64_t value = duckdb_value_uint64(&select_pre.result_, j, i);
           results[i][j]  = value;
           break;
         }
         case DuckDBType::DOUBLE: {
-          double value  = duckdb_value_double(&select_pre._result, j, i);
+          double value  = duckdb_value_double(&select_pre.result_, j, i);
           results[i][j] = value;
           break;
         }
@@ -368,7 +368,7 @@ std::vector<std::vector<VarTypes>> select_by_query(duckdb_connection&           
         case DuckDBType::JSON:
         case DuckDBType::BOOLEAN:
         case DuckDBType::TIMESTAMP: {
-          const char* value = duckdb_value_varchar(&select_pre._result, j, i);
+          const char* value = duckdb_value_varchar(&select_pre.result_, j, i);
           results[i][j]     = std::make_unique<std::string>(value);
           break;
         }

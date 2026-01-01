@@ -38,13 +38,13 @@ struct GPU_ClarityKernel : GPUNeighborOpTag {
                                              float4* __restrict dst, int width, int height,
                                              size_t pitch_elems,  // pitch in float4 units
                                              GPUOperatorParams& params) const {
-    if (!params.clarity_enabled) {
+    if (!params.clarity_enabled_) {
       dst[y * pitch_elems + x] = src[y * pitch_elems + x];
       return;
     }
 
     // Use sigma = 5.0 to match CPU implementation (cv::GaussianBlur with sigma 5.0)
-    const float sigma  = params.clarity_radius;
+    const float sigma  = params.clarity_radius_;
     int         radius = (int)ceilf(3.0f * sigma);
     radius             = max(1, min(radius, 20));  // Clamp radius to reasonable range
 
@@ -86,7 +86,7 @@ struct GPU_ClarityKernel : GPUNeighborOpTag {
     float mask = 1.0f - t * t;
 
     // Apply clarity with midtone weighting
-    float w = mask * params.clarity_offset;
+    float w = mask * params.clarity_offset_;
     high.x *= w;
     high.y *= w;
     high.z *= w;
@@ -112,12 +112,12 @@ struct GPU_SharpenKernel : GPUNeighborOpTag {
                                              float4* __restrict dst, int width, int height,
                                              size_t pitch_elems,  // pitch in float4 units
                                              GPUOperatorParams& params) const {
-    if (!params.sharpen_enabled || params.sharpen_offset == 0.0f || params.sharpen_radius <= 0.0f) {
+    if (!params.sharpen_enabled_ || params.sharpen_offset_ == 0.0f || params.sharpen_radius_ <= 0.0f) {
       dst[y * pitch_elems + x] = src[y * pitch_elems + x];
       return;
     }
 
-    const float sigma  = params.sharpen_radius;
+    const float sigma  = params.sharpen_radius_;
     int         radius = (int)ceilf(3.0f * sigma);
     radius             = max(1, min(radius, 15));
 
@@ -147,9 +147,9 @@ struct GPU_SharpenKernel : GPUNeighborOpTag {
     const float4 orig = src[y * pitch_elems + x];
     float4 high = make_float4(orig.x - blur.x, orig.y - blur.y, orig.z - blur.z, orig.w - blur.w);
 
-    if (params.sharpen_threshold > 0.0f) {
+    if (params.sharpen_threshold_ > 0.0f) {
       float hp_gray = luminance(high);
-      float mask    = (fabsf(hp_gray) > params.sharpen_threshold) ? 1.0f : 0.0f;
+      float mask    = (fabsf(hp_gray) > params.sharpen_threshold_) ? 1.0f : 0.0f;
       high.x *= mask;
       high.y *= mask;
       high.z *= mask;
@@ -158,8 +158,8 @@ struct GPU_SharpenKernel : GPUNeighborOpTag {
 
     // USM: out = orig + high * offset
     float4 out = make_float4(
-        orig.x + high.x * params.sharpen_offset, orig.y + high.y * params.sharpen_offset,
-        orig.z + high.z * params.sharpen_offset, orig.w + high.w * params.sharpen_offset);
+        orig.x + high.x * params.sharpen_offset_, orig.y + high.y * params.sharpen_offset_,
+        orig.z + high.z * params.sharpen_offset_, orig.w + high.w * params.sharpen_offset_);
     dst[y * pitch_elems + x] = out;
   }
 };

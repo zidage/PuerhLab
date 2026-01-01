@@ -26,23 +26,23 @@ namespace puerhlab {
 // CREATE TABLE Image (id BIGINT PRIMARY KEY, image_path TEXT, file_name TEXT, type INTEGER,
 // metadata JSON);
 struct ImageMapperParams {
-  image_id_t                   id;
-  std::unique_ptr<std::string> image_path;
-  std::unique_ptr<std::string> file_name;
-  uint32_t                     type;
-  std::unique_ptr<std::string> metadata;
+  image_id_t                   id_;
+  std::unique_ptr<std::string> image_path_;
+  std::unique_ptr<std::string> file_name_;
+  uint32_t                     type_;
+  std::unique_ptr<std::string> metadata_;
 };
 
 class ImageMapper : public MapperInterface<ImageMapper, ImageMapperParams, image_id_t>,
                     public FieldReflectable<ImageMapper> {
  private:
-  static constexpr uint32_t                                         _field_count      = 5;
-  static constexpr const char*                                      _table_name       = "Image";
-  static constexpr const char*                                      _prime_key_clause = "id={}";
-  static constexpr std::array<duckorm::DuckFieldDesc, _field_count> _field_descs      = {
-      FIELD(ImageMapperParams, id, UINT32), FIELD(ImageMapperParams, image_path, VARCHAR),
-      FIELD(ImageMapperParams, file_name, VARCHAR), FIELD(ImageMapperParams, type, UINT32),
-      FIELD(ImageMapperParams, metadata, VARCHAR)};
+  static constexpr uint32_t                                         field_count_      = 5;
+  static constexpr const char*                                      table_name_       = "Image";
+  static constexpr const char*                                      prime_key_clause_ = "id={}";
+  static constexpr std::array<duckorm::DuckFieldDesc, field_count_> field_descs_      = {
+      FIELD(ImageMapperParams, id_, UINT32), FIELD(ImageMapperParams, image_path_, VARCHAR),
+      FIELD(ImageMapperParams, file_name_, VARCHAR), FIELD(ImageMapperParams, type_, UINT32),
+      FIELD(ImageMapperParams, metadata_, VARCHAR)};
 
  public:
   static auto FromRawData(std::vector<duckorm::VarTypes>&& data) -> ImageMapperParams;

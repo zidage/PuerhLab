@@ -23,12 +23,12 @@ auto OperatorFactory::Instance() -> OperatorFactory& {
 }
 
 void OperatorFactory::Register(const OperatorType& type, Creator creator) {
-  _creators[type] = creator;
+  creators_[type] = creator;
 }
 
 auto OperatorFactory::Create(const OperatorType& type, const nlohmann::json& params) const
     -> std::shared_ptr<IOperatorBase> {
-  auto it = _creators.find(type);
-  return (it != _creators.end()) ? (it->second)(params) : nullptr;
+  auto it = creators_.find(type);
+  return (it != creators_.end()) ? (it->second)(params) : nullptr;
 }
 };  // namespace puerhlab

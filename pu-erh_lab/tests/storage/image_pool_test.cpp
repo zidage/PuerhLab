@@ -32,19 +32,19 @@ TEST(ImagePoolTest, SimpleTest1) {
   }
 
   // Cache init test, first cache miss
-  img_pool.RecordAccess(images_thumb[0]->_image_id, AccessType::THUMB);
-  EXPECT_TRUE(img_pool.PoolContains(images_thumb[0]->_image_id));
-  EXPECT_TRUE(img_pool.CacheContains(images_thumb[0]->_image_id, AccessType::THUMB));
+  img_pool.RecordAccess(images_thumb[0]->image_id_, AccessType::THUMB);
+  EXPECT_TRUE(img_pool.PoolContains(images_thumb[0]->image_id_));
+  EXPECT_TRUE(img_pool.CacheContains(images_thumb[0]->image_id_, AccessType::THUMB));
 
-  img_pool.RecordAccess(images_full[0]->_image_id, AccessType::FULL_IMG);
-  img_pool.RecordAccess(images_full[1]->_image_id, AccessType::FULL_IMG);
-  img_pool.RecordAccess(images_full[2]->_image_id, AccessType::FULL_IMG);
-  EXPECT_TRUE(img_pool.AccessElement(images_full[0]->_image_id, AccessType::FULL_IMG).has_value());
-  img_pool.RecordAccess(images_full[3]->_image_id, AccessType::FULL_IMG);
-  EXPECT_FALSE(img_pool.CacheContains(images_full[1]->_image_id, AccessType::FULL_IMG));
-  EXPECT_TRUE(img_pool.CacheContains(images_full[0]->_image_id, AccessType::FULL_IMG));
-  EXPECT_TRUE(img_pool.CacheContains(images_full[2]->_image_id, AccessType::FULL_IMG));
-  EXPECT_TRUE(img_pool.CacheContains(images_full[3]->_image_id, AccessType::FULL_IMG));
+  img_pool.RecordAccess(images_full[0]->image_id_, AccessType::FULL_IMG);
+  img_pool.RecordAccess(images_full[1]->image_id_, AccessType::FULL_IMG);
+  img_pool.RecordAccess(images_full[2]->image_id_, AccessType::FULL_IMG);
+  EXPECT_TRUE(img_pool.AccessElement(images_full[0]->image_id_, AccessType::FULL_IMG).has_value());
+  img_pool.RecordAccess(images_full[3]->image_id_, AccessType::FULL_IMG);
+  EXPECT_FALSE(img_pool.CacheContains(images_full[1]->image_id_, AccessType::FULL_IMG));
+  EXPECT_TRUE(img_pool.CacheContains(images_full[0]->image_id_, AccessType::FULL_IMG));
+  EXPECT_TRUE(img_pool.CacheContains(images_full[2]->image_id_, AccessType::FULL_IMG));
+  EXPECT_TRUE(img_pool.CacheContains(images_full[3]->image_id_, AccessType::FULL_IMG));
 }
 
 TEST(ImagePoolTest, SimpleTest2) {
@@ -68,13 +68,13 @@ TEST(ImagePoolTest, SimpleTest2) {
 
   // Cache flood test
   for (int i = 0; i < 128; i++) {
-    img_pool.RecordAccess(images_thumb[i]->_image_id, AccessType::THUMB);
+    img_pool.RecordAccess(images_thumb[i]->image_id_, AccessType::THUMB);
   }
 
   int cache_hit    = 0;
   int total_access = 0;
   for (int i = 0; i < 128; i++) {
-    if (img_pool.AccessElement(images_thumb[i]->_image_id, AccessType::THUMB).has_value()) {
+    if (img_pool.AccessElement(images_thumb[i]->image_id_, AccessType::THUMB).has_value()) {
       cache_hit++;
     }
     total_access++;
@@ -105,7 +105,7 @@ TEST(ImagePoolTest, RandomTest1) {
 
     // Cache flood test
     for (int i = 0; i < 128; i++) {
-      img_pool.RecordAccess(images_thumb[i]->_image_id, AccessType::THUMB);
+      img_pool.RecordAccess(images_thumb[i]->image_id_, AccessType::THUMB);
     }
 
     // Random number generator
@@ -116,7 +116,7 @@ TEST(ImagePoolTest, RandomTest1) {
     int                                   cache_hit    = 0;
     int                                   total_access = 0;
     for (int i = 0; i < total_iter; i++) {
-      if (img_pool.AccessElement(images_thumb[dist(rng)]->_image_id, AccessType::THUMB).has_value()) {
+      if (img_pool.AccessElement(images_thumb[dist(rng)]->image_id_, AccessType::THUMB).has_value()) {
         cache_hit++;
       }
       total_access++;

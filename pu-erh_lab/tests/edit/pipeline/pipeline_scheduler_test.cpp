@@ -69,14 +69,13 @@ TEST_F(PipelineTests, SchedulerBasic) {
       PipelineTask task;
 
       auto         buffer        = ByteBufferLoader::LoadFromImage(img_ptr);
-      task._input                = buffer ? std::make_shared<ImageBuffer>(std::move(*buffer)) : nullptr;
-      task._pipeline_executor    = std::make_shared<CPUPipelineExecutor>();
-      SetPipelineStages(task._pipeline_executor);
+      task.input_                = buffer ? std::make_shared<ImageBuffer>(std::move(*buffer)) : nullptr;
+      task.pipeline_executor_    = std::make_shared<CPUPipelineExecutor>();
+      SetPipelineStages(task.pipeline_executor_);
 
-      task._options._is_blocking = false;
-      task._options._is_callback = true;
-
-      task._callback             = [img_ptr](ImageBuffer& output) {
+      task.options_.is_blocking_ = false;
+      task.options_.is_callback_ = true;
+      task.callback_             = [img_ptr](ImageBuffer& output) {
         output.SyncToGPU();
 
         auto&            gpu_data = output.GetGPUData();
@@ -85,7 +84,7 @@ TEST_F(PipelineTests, SchedulerBasic) {
 
         output.SyncToCPU();
 
-        std::string file_name = conv::ToBytes(img_ptr->_image_path.filename().wstring());
+        std::string file_name = conv::ToBytes(img_ptr->image_path_.filename().wstring());
         std::string time      = TimeProvider::TimePointToString(TimeProvider::Now());
 
         std::string save_name = file_name + "_" + time;

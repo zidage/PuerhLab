@@ -35,19 +35,19 @@
 namespace puerhlab {
 
 auto ImageService::ToParams(const std::shared_ptr<Image> source) -> ImageMapperParams {
-  std::string utf8_path     = conv::ToBytes(source->_image_path.wstring());
+  std::string utf8_path     = conv::ToBytes(source->image_path_.wstring());
 
-  std::string utf8_img_name = conv::ToBytes(source->_image_name);
-  return {source->_image_id, std::make_unique<std::string>(utf8_path),
-          std::make_unique<std::string>(utf8_img_name), static_cast<uint32_t>(source->_image_type),
+  std::string utf8_img_name = conv::ToBytes(source->image_name_);
+  return {source->image_id_, std::make_unique<std::string>(utf8_path),
+          std::make_unique<std::string>(utf8_img_name), static_cast<uint32_t>(source->image_type_),
           std::make_unique<std::string>(source->ExifToJson())};
 }
 auto ImageService::FromParams(ImageMapperParams&& param) -> std::shared_ptr<Image> {
   // TODO: Replace it with ImageFactory once the more fine-grained Image loader is implemented
   auto recovered = std::make_shared<Image>(
-      param.id, std::filesystem::path(std::move(*param.image_path)),
-      conv::FromBytes(std::move(*param.file_name)), static_cast<ImageType>(param.type));
-  recovered->JsonToExif(std::move(*param.metadata));
+      param.id_, std::filesystem::path(std::move(*param.image_path_)),
+      conv::FromBytes(std::move(*param.file_name_)), static_cast<ImageType>(param.type_));
+  recovered->JsonToExif(std::move(*param.metadata_));
   return recovered;
 }
 

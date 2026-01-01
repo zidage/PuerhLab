@@ -25,9 +25,9 @@
 
 namespace puerhlab {
 
-SaturationOp::SaturationOp() : _saturation_offset(0) { ComputeScale(); }
+SaturationOp::SaturationOp() : saturation_offset_(0) { ComputeScale(); }
 
-SaturationOp::SaturationOp(float saturation_offset) : _saturation_offset(saturation_offset) {
+SaturationOp::SaturationOp(float saturation_offset) : saturation_offset_(saturation_offset) {
   ComputeScale();
 }
 
@@ -38,10 +38,10 @@ SaturationOp::SaturationOp(const nlohmann::json& params) { SetParams(params); }
  *
  */
 void SaturationOp::ComputeScale() {
-  if (_saturation_offset >= 0.0f) {
-    _scale = 1.0f + _saturation_offset / 100.0f;
+  if (saturation_offset_ >= 0.0f) {
+    scale_ = 1.0f + saturation_offset_ / 100.0f;
   } else {
-    _scale = 1.0f + _saturation_offset / 100.0f;
+    scale_ = 1.0f + saturation_offset_ / 100.0f;
   }
 }
 
@@ -52,8 +52,8 @@ void SaturationOp::Apply(std::shared_ptr<ImageBuffer> input) {
     OklabCvt::Oklab oklab_vec = OklabCvt::LinearRGB2Oklab(pixel);
 
     // Chroma = a^2 + b^2
-    oklab_vec.a *= _scale;
-    oklab_vec.b *= _scale;
+    oklab_vec.a_ *= scale_;
+    oklab_vec.b_ *= scale_;
 
     pixel = OklabCvt::Oklab2LinearRGB(oklab_vec);
   });
@@ -63,21 +63,21 @@ void SaturationOp::Apply(std::shared_ptr<ImageBuffer> input) {
 
 auto SaturationOp::GetParams() const -> nlohmann::json {
   nlohmann::json o;
-  o[_script_name] = _saturation_offset;
+  o[script_name_] = saturation_offset_;
 
   return o;
 }
 
 void SaturationOp::SetParams(const nlohmann::json& params) {
-  if (params.contains(_script_name)) {
-    _saturation_offset = params[_script_name];
+  if (params.contains(script_name_)) {
+    saturation_offset_ = params[script_name_];
   } else {
-    _saturation_offset = 0.0f;
+    saturation_offset_ = 0.0f;
   }
   ComputeScale();
 }
 
 void SaturationOp::SetGlobalParams(OperatorParams& params) const {
-  params.saturation_offset = _scale;
+  params.saturation_offset_ = scale_;
 }
 };  // namespace puerhlab

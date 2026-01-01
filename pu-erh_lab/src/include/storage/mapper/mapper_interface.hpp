@@ -29,9 +29,9 @@ namespace puerhlab {
 template <typename Derived, typename Mappable, typename ID>
 class MapperInterface {
  public:
-  duckdb_connection& _conn;
+  duckdb_connection& conn_;
 
-  MapperInterface(duckdb_connection& conn) : _conn(conn) {}
+  MapperInterface(duckdb_connection& conn) : conn_(conn) {}
 
   /**
    * @brief Insert a new record into the table
@@ -39,7 +39,7 @@ class MapperInterface {
    * @param obj
    */
   void Insert(const Mappable&& obj) {
-    duckorm::insert(_conn, Derived::TableName(), &obj, Derived::FieldDesc(), Derived::FieldCount());
+    duckorm::insert(conn_, Derived::TableName(), &obj, Derived::FieldDesc(), Derived::FieldCount());
   }
 
   /**
@@ -49,7 +49,7 @@ class MapperInterface {
    */
   void Remove(const ID remove_id) {
     std::string remove_clause = std::format(Derived::PrimeKeyClause(), remove_id);
-    duckorm::remove(_conn, Derived::TableName(), remove_clause.c_str());
+    duckorm::remove(conn_, Derived::TableName(), remove_clause.c_str());
   }
 
   /**
@@ -58,7 +58,7 @@ class MapperInterface {
    * @param predicate
    */
   void RemoveByClause(const std::string& predicate) {
-    duckorm::remove(_conn, Derived::TableName(), predicate.c_str());
+    duckorm::remove(conn_, Derived::TableName(), predicate.c_str());
   }
 
   /**
@@ -68,7 +68,7 @@ class MapperInterface {
    * @return std::vector<Mappable>
    */
   auto Get(const char* where_clause) -> std::vector<Mappable> {
-    auto                  raw = duckorm::select(_conn, Derived::TableName(), Derived::FieldDesc(),
+    auto                  raw = duckorm::select(conn_, Derived::TableName(), Derived::FieldDesc(),
                                                 Derived::FieldCount(), where_clause);
     std::vector<Mappable> result;
     for (auto& row : raw) {
@@ -78,7 +78,7 @@ class MapperInterface {
   }
 
   auto GetByQuery(const char* query) -> std::vector<Mappable> {
-    auto raw = duckorm::select_by_query(_conn, Derived::FieldDesc(), Derived::FieldCount(), query);
+    auto raw = duckorm::select_by_query(conn_, Derived::FieldDesc(), Derived::FieldCount(), query);
     std::vector<Mappable> result;
     for (auto& row : raw) {
       result.emplace_back(Derived::FromRawData(std::move(row)));
@@ -94,7 +94,7 @@ class MapperInterface {
    */
   void Update(const ID target_id, const Mappable&& updated) {
     std::string where_clause = std::format(Derived::PrimeKeyClause(), target_id);
-    duckorm::update(_conn, Derived::TableName(), &updated, Derived::FieldDesc(),
+    duckorm::update(conn_, Derived::TableName(), &updated, Derived::FieldDesc(),
                     Derived::FieldCount(), where_clause.c_str());
   }
 };
@@ -104,9 +104,9 @@ template <typename Derived>
 struct FieldReflectable {
  public:
   using FieldArrayType = std::span<const duckorm::DuckFieldDesc>;
-  static constexpr FieldArrayType FieldDesc() { return Derived::_field_descs; }
-  static constexpr uint32_t       FieldCount() { return Derived::_field_count; }
-  static constexpr const char*    TableName() { return Derived::_table_name; }
-  static constexpr const char*    PrimeKeyClause() { return Derived::_prime_key_clause; }
+  static constexpr FieldArrayType FieldDesc() { return Derived::field_descs_; }
+  static constexpr uint32_t       FieldCount() { return Derived::field_count_; }
+  static constexpr const char*    TableName() { return Derived::table_name_; }
+  static constexpr const char*    PrimeKeyClause() { return Derived::prime_key_clause_; }
 };
 };  // namespace puerhlab

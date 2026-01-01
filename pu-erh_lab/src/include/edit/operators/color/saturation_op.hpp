@@ -24,23 +24,22 @@ class SaturationOp : public OperatorBase<SaturationOp> {
    * @brief An relative number for adjusting the saturation from -100 to 100
    *
    */
-  float _saturation_offset;
+  float saturation_offset_;
 
   /**
    * @brief The absolute value for the saturation adjustment from -1.0f to 1.0f
    *
    */
-  float _scale;
+  float scale_;
 
   void  ComputeScale();
 
  public:
-  static constexpr PriorityLevel     _priority_level    = 6;
-  static constexpr PipelineStageName _affiliation_stage = PipelineStageName::Color_Adjustment;
-  static constexpr std::string_view  _canonical_name    = "Saturation";
-  static constexpr std::string_view  _script_name       = "saturation";
-  static constexpr OperatorType      _operator_type     = OperatorType::SATURATION;
-
+  static constexpr PriorityLevel     priority_level_    = 6;
+  static constexpr PipelineStageName affiliation_stage_ = PipelineStageName::Color_Adjustment;
+  static constexpr std::string_view  canonical_name_    = "Saturation";
+  static constexpr std::string_view  script_name_       = "saturation";
+  static constexpr OperatorType      operator_type_     = OperatorType::SATURATION;
   SaturationOp();
   SaturationOp(float saturation_offset);
   SaturationOp(const nlohmann::json& params);

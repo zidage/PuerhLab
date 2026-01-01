@@ -27,20 +27,20 @@ class ContrastOp : public OperatorBase<ContrastOp> {
    * @brief A relative number for adjusting the image
    *
    */
-  float _contrast_offset;
+  float contrast_offset_;
   /**
    * @brief An absolute number to represent the contrast after adjustment
    * Usually, it is computed through dividing 100.0f from the offset
    *
    */
-  float _scale;
+  float scale_;
 
  public:
-  static constexpr PriorityLevel     _priority_level    = 3;
-  static constexpr PipelineStageName _affiliation_stage = PipelineStageName::Basic_Adjustment;
-  static constexpr std::string_view  _canonical_name    = "Contrast";
-  static constexpr std::string_view  _script_name       = "contrast";
-  static constexpr OperatorType      _operator_type     = OperatorType::CONTRAST;
+  static constexpr PriorityLevel     priority_level_    = 3;
+  static constexpr PipelineStageName affiliation_stage_ = PipelineStageName::Basic_Adjustment;
+  static constexpr std::string_view  canonical_name_    = "Contrast";
+  static constexpr std::string_view  script_name_       = "contrast";
+  static constexpr OperatorType      operator_type_     = OperatorType::CONTRAST;
   ContrastOp();
   ContrastOp(float contrast_offset);
   ContrastOp(const nlohmann::json& params);

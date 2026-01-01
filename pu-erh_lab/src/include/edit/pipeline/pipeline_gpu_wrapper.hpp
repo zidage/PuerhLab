@@ -35,7 +35,7 @@ class GPUPipelineWrapper {
   void Execute(std::shared_ptr<ImageBuffer> output);
 
  private:
-  std::unique_ptr<GPUPipelineImpl> _impl;
+  std::unique_ptr<GPUPipelineImpl> impl_;
 
 
 };

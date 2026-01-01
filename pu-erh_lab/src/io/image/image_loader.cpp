@@ -33,12 +33,12 @@ namespace puerhlab {
  * @param use_thread number of thread used to decode image
  */
 ImageLoader::ImageLoader(uint32_t buffer_size, size_t use_thread, image_id_t start_id)
-    : _buffer_decoded(std::make_shared<BufferQueue>(buffer_size)),
-      _buffer_size(buffer_size),
-      _use_thread(use_thread),
-      _start_id(start_id),
-      _next_id(start_id),
-      _decoder_scheduler(use_thread, _buffer_decoded) {}
+    : buffer_decoded_(std::make_shared<BufferQueue>(buffer_size)),
+      buffer_size_(buffer_size),
+      use_thread_(use_thread),
+      start_id_(start_id),
+      next_id_(start_id),
+      decoder_scheduler_(use_thread, buffer_decoded_) {}
 
 /**
  * @brief Loads a batch of images
@@ -53,11 +53,11 @@ void ImageLoader::StartLoading(std::vector<image_path_t> images, DecodeType deco
     //   continue;
     // }
 
-    promises.emplace_back(std::make_shared<std::promise<image_id_t>>());
-    futures.emplace_back(promises[_next_id]->get_future());
+    promises_.emplace_back(std::make_shared<std::promise<image_id_t>>());
+    futures_.emplace_back(promises_[next_id_]->get_future());
     if (decode_type == DecodeType::SLEEVE_LOADING)
-      _decoder_scheduler.ScheduleDecode(_next_id, img, promises[_next_id]);
-    ++_next_id;
+      decoder_scheduler_.ScheduleDecode(next_id_, img, promises_[next_id_]);
+    ++next_id_;
   }
 }
 
@@ -68,21 +68,21 @@ void ImageLoader::StartLoading(std::vector<image_path_t> images, DecodeType deco
  * @param decode_type
  */
 void ImageLoader::StartLoading(std::shared_ptr<Image> image, DecodeType decode_type) {
-  promises.emplace_back(std::make_shared<std::promise<image_id_t>>());
-  futures.emplace_back(promises[_next_id]->get_future());
-  _decoder_scheduler.ScheduleDecode(image, decode_type, promises[_next_id]);
-  ++_next_id;
+  promises_.emplace_back(std::make_shared<std::promise<image_id_t>>());
+  futures_.emplace_back(promises_[next_id_]->get_future());
+  decoder_scheduler_.ScheduleDecode(image, decode_type, promises_[next_id_]);
+  ++next_id_;
 }
 
 auto ImageLoader::LoadImage() -> std::shared_ptr<Image> {
   // If there's no finished image in the buffer, will block the load routine
-  std::shared_ptr<Image> img = _buffer_decoded->pop();
+  std::shared_ptr<Image> img = buffer_decoded_->pop();
   return img;
 }
 
 auto ByteBufferLoader::LoadFromImage(std::shared_ptr<Image> img)
     -> std::shared_ptr<std::vector<uint8_t>> {
-  std::ifstream   file(img->_image_path, std::ios::binary | std::ios::ate);
+  std::ifstream   file(img->image_path_, std::ios::binary | std::ios::ate);
   std::streamsize fileSize = file.tellg();
   file.seekg(0, std::ios::beg);
   auto buffer = std::make_shared<std::vector<uint8_t>>(fileSize);

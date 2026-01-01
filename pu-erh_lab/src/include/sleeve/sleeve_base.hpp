@@ -35,7 +35,7 @@ namespace puerhlab {
 // TODO: Implement access guard
 class ElementAccessGuard {
  public:
-  std::shared_ptr<SleeveElement> _access_element;
+  std::shared_ptr<SleeveElement> access_element_;
 
   ElementAccessGuard(std::shared_ptr<SleeveElement> element);
   ~ElementAccessGuard();
@@ -43,18 +43,18 @@ class ElementAccessGuard {
 
 class SleeveBase {
  private:
-  size_t                                                              _size;
-  sl_element_id_t                                                     _next_element_id;
-  filter_id_t                                                         _next_filter_id;
+  size_t                                                              size_;
+  sl_element_id_t                                                     next_element_id_;
+  filter_id_t                                                         next_filter_id_;
 
-  std::unordered_map<sl_element_id_t, std::shared_ptr<SleeveElement>> _storage;
-  std::unordered_map<filter_id_t, std::shared_ptr<FilterCombo>>       _filter_storage;
+  std::unordered_map<sl_element_id_t, std::shared_ptr<SleeveElement>> storage_;
+  std::unordered_map<filter_id_t, std::shared_ptr<FilterCombo>>       filter_storage_;
 
-  DCacheManager                                                       _dentry_cache;
-  uint32_t                                                            _dcache_capacity;
+  DCacheManager                                                       dentry_cache_;
+  uint32_t                                                            dcache_capacity_;
 
-  std::wstring                                                        delimiter = L"/";
-  std::wregex                                                         re;
+  std::wstring                                                        delimiter_ = L"/";
+  std::wregex                                                         re_;
 
   auto GetWriteGuard(const std::shared_ptr<SleeveFolder> parent_folder,
                      const file_name_t& file_name) -> std::optional<ElementAccessGuard>;
@@ -62,8 +62,8 @@ class SleeveBase {
                  std::shared_ptr<SleeveFolder>  dest_folder) -> std::shared_ptr<SleeveElement>;
 
  public:
-  sleeve_id_t                   _sleeve_id;
-  std::shared_ptr<SleeveFolder> _root;
+  sleeve_id_t                   sleeve_id_;
+  std::shared_ptr<SleeveFolder> root_;
 
   explicit SleeveBase(sleeve_id_t id);
 

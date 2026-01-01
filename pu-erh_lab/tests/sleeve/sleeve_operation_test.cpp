@@ -21,23 +21,23 @@ TEST(SleeveOperationTest, NormalTest1) {
   sl.CreateElementToPath(L"root", L"test", ElementType::FOLDER);
   auto element = sl.AccessElementByPath(L"root/test");
   ASSERT_TRUE(element.has_value());
-  ASSERT_EQ(element.value()->_element_id, 1);
-  ASSERT_EQ(element.value()->_element_name, L"test");
-  ASSERT_EQ(element.value()->_ref_count, 1);
+  ASSERT_EQ(element.value()->element_id_, 1);
+  ASSERT_EQ(element.value()->element_name_, L"test");
+  ASSERT_EQ(element.value()->ref_count_, 1);
 
   auto element_1 = sl.CreateElementToPath(L"root/test", L"test_file", ElementType::FILE);
   element_1      = sl.AccessElementByPath(L"root/test/test_file");
   ASSERT_TRUE(element_1.has_value());
-  ASSERT_EQ(element_1.value()->_element_id, 2);
-  ASSERT_EQ(element_1.value()->_element_name, L"test_file");
-  ASSERT_EQ(element_1.value()->_ref_count, 1);
+  ASSERT_EQ(element_1.value()->element_id_, 2);
+  ASSERT_EQ(element_1.value()->element_name_, L"test_file");
+  ASSERT_EQ(element_1.value()->ref_count_, 1);
 
   auto element_2 = sl.CreateElementToPath(L"root", L"test_file", ElementType::FILE);
   element_2      = sl.AccessElementByPath(L"root/test_file");
   ASSERT_TRUE(element_2.has_value());
-  ASSERT_EQ(element_2.value()->_element_id, 3);
-  ASSERT_EQ(element_2.value()->_element_name, L"test_file");
-  ASSERT_EQ(element_2.value()->_ref_count, 1);
+  ASSERT_EQ(element_2.value()->element_id_, 3);
+  ASSERT_EQ(element_2.value()->element_name_, L"test_file");
+  ASSERT_EQ(element_2.value()->ref_count_, 1);
 
   std::wstring                                     tree = sl.Tree(L"root");
   std::wstring_convert<std::codecvt_utf8<wchar_t>> conv;
@@ -54,17 +54,17 @@ TEST(SleeveOperationTest, NormalTest2) {
 
   auto element_1 = sl.RemoveElementInPath(L"root/test", L"test_file");
   ASSERT_TRUE(element_1.has_value());
-  ASSERT_EQ(element_1.value()->_element_id, 2);
-  ASSERT_EQ(element_1.value()->_element_name, L"test_file");
-  ASSERT_EQ(element_1.value()->_ref_count, 0);
+  ASSERT_EQ(element_1.value()->element_id_, 2);
+  ASSERT_EQ(element_1.value()->element_name_, L"test_file");
+  ASSERT_EQ(element_1.value()->ref_count_, 0);
 
   ASSERT_EQ(sl.AccessElementByPath(L"root/test/test_file"), std::nullopt);
 
   auto element_2 = sl.RemoveElementInPath(L"root", L"test");
   ASSERT_TRUE(element_2.has_value());
-  ASSERT_EQ(element_2.value()->_element_id, 1);
-  ASSERT_EQ(element_2.value()->_element_name, L"test");
-  ASSERT_EQ(element_2.value()->_ref_count, 0);
+  ASSERT_EQ(element_2.value()->element_id_, 1);
+  ASSERT_EQ(element_2.value()->element_name_, L"test");
+  ASSERT_EQ(element_2.value()->ref_count_, 0);
   ASSERT_EQ(sl.AccessElementByPath(L"root/test"), std::nullopt);
 
   std::wstring                                     tree = sl.Tree(L"root");
@@ -116,13 +116,13 @@ TEST(SleeveOperationTest, EdgeTest3) {
 
   auto element_1 = sl.CreateElementToPath(L"root/test", L"test", ElementType::FOLDER);
   ASSERT_TRUE(element_1.has_value());
-  ASSERT_EQ(element_1.value()->_element_name, L"test");
-  ASSERT_EQ(element_1.value()->_ref_count, 1);
+  ASSERT_EQ(element_1.value()->element_name_, L"test");
+  ASSERT_EQ(element_1.value()->ref_count_, 1);
 
   auto element_2 = sl.CreateElementToPath(L"root/test/test", L"test", ElementType::FILE);
   ASSERT_TRUE(element_2.has_value());
-  ASSERT_EQ(element_2.value()->_element_name, L"test");
-  ASSERT_EQ(element_2.value()->_ref_count, 1);
+  ASSERT_EQ(element_2.value()->element_name_, L"test");
+  ASSERT_EQ(element_2.value()->ref_count_, 1);
 
   std::wstring                                     tree = sl.Tree(L"root");
   std::wstring_convert<std::codecvt_utf8<wchar_t>> conv;
@@ -142,18 +142,18 @@ TEST(SleeveOperationTest, CopyTest1) {
 
   auto element_1 = sl.CreateElementToPath(L"root/monday", L"broken", ElementType::FILE);
   ASSERT_TRUE(element_1.has_value());
-  ASSERT_EQ(element_1.value()->_element_name, L"broken");
-  ASSERT_EQ(element_1.value()->_ref_count, 1);
+  ASSERT_EQ(element_1.value()->element_name_, L"broken");
+  ASSERT_EQ(element_1.value()->ref_count_, 1);
 
   auto element_2 = sl.CreateElementToPath(L"root/tuesday", L"hope", ElementType::FILE);
   ASSERT_TRUE(element_2.has_value());
-  ASSERT_EQ(element_2.value()->_element_name, L"hope");
-  ASSERT_EQ(element_2.value()->_ref_count, 1);
+  ASSERT_EQ(element_2.value()->element_name_, L"hope");
+  ASSERT_EQ(element_2.value()->ref_count_, 1);
 
   auto element_3 = sl.CopyElement(L"root/monday/broken", L"root/tuesday");
   ASSERT_TRUE(element_3.has_value());
-  ASSERT_EQ(element_3.value()->_element_name, L"broken");
-  ASSERT_EQ(element_3.value()->_ref_count, 2);
+  ASSERT_EQ(element_3.value()->element_name_, L"broken");
+  ASSERT_EQ(element_3.value()->ref_count_, 2);
 
   std::wstring                                     tree = sl.Tree(L"root");
   std::wstring_convert<std::codecvt_utf8<wchar_t>> conv;
@@ -173,28 +173,28 @@ TEST(SleeveOperationTest, CopyTest2) {
 
   auto element_1 = sl.CreateElementToPath(L"root/monday", L"broken", ElementType::FILE);
   ASSERT_TRUE(element_1.has_value());
-  ASSERT_EQ(element_1.value()->_element_name, L"broken");
-  ASSERT_EQ(element_1.value()->_ref_count, 1);
+  ASSERT_EQ(element_1.value()->element_name_, L"broken");
+  ASSERT_EQ(element_1.value()->ref_count_, 1);
 
   auto element_2 = sl.CreateElementToPath(L"root/tuesday", L"hope", ElementType::FILE);
   ASSERT_TRUE(element_2.has_value());
-  ASSERT_EQ(element_2.value()->_element_name, L"hope");
-  ASSERT_EQ(element_2.value()->_ref_count, 1);
+  ASSERT_EQ(element_2.value()->element_name_, L"hope");
+  ASSERT_EQ(element_2.value()->ref_count_, 1);
 
   auto element_3 = sl.CopyElement(L"root/monday/broken", L"root/tuesday");
   ASSERT_TRUE(element_3.has_value());
-  ASSERT_EQ(element_3.value()->_element_name, L"broken");
-  ASSERT_EQ(element_3.value()->_ref_count, 2);
+  ASSERT_EQ(element_3.value()->element_name_, L"broken");
+  ASSERT_EQ(element_3.value()->ref_count_, 2);
 
   auto element_4 = sl.CopyElement(L"root/tuesday", L"root/monday");
   ASSERT_TRUE(element_4.has_value());
-  ASSERT_EQ(element_4.value()->_element_name, L"tuesday");
-  ASSERT_EQ(element_4.value()->_ref_count, 2);
+  ASSERT_EQ(element_4.value()->element_name_, L"tuesday");
+  ASSERT_EQ(element_4.value()->ref_count_, 2);
 
   auto element_5 = sl.AccessElementByPath(L"root/monday/tuesday/broken");
   ASSERT_TRUE(element_5.has_value());
-  ASSERT_EQ(element_5.value()->_element_name, L"broken");
-  ASSERT_EQ(element_5.value()->_ref_count, 3);
+  ASSERT_EQ(element_5.value()->element_name_, L"broken");
+  ASSERT_EQ(element_5.value()->ref_count_, 3);
 
   std::wstring                                     tree = sl.Tree(L"root");
   std::wstring_convert<std::codecvt_utf8<wchar_t>> conv;
@@ -214,23 +214,23 @@ TEST(SleeveOperationTest, CopyEdgeTest1) {
 
   auto element_1 = sl.CreateElementToPath(L"root/monday", L"broken", ElementType::FILE);
   ASSERT_TRUE(element_1.has_value());
-  ASSERT_EQ(element_1.value()->_element_name, L"broken");
-  ASSERT_EQ(element_1.value()->_ref_count, 1);
+  ASSERT_EQ(element_1.value()->element_name_, L"broken");
+  ASSERT_EQ(element_1.value()->ref_count_, 1);
 
   auto element_2 = sl.CreateElementToPath(L"root/tuesday", L"hope", ElementType::FILE);
   ASSERT_TRUE(element_2.has_value());
-  ASSERT_EQ(element_2.value()->_element_name, L"hope");
-  ASSERT_EQ(element_2.value()->_ref_count, 1);
+  ASSERT_EQ(element_2.value()->element_name_, L"hope");
+  ASSERT_EQ(element_2.value()->ref_count_, 1);
 
   auto element_3 = sl.CopyElement(L"root/monday/broken", L"root/tuesday");
   ASSERT_TRUE(element_3.has_value());
-  ASSERT_EQ(element_3.value()->_element_name, L"broken");
-  ASSERT_EQ(element_3.value()->_ref_count, 2);
+  ASSERT_EQ(element_3.value()->element_name_, L"broken");
+  ASSERT_EQ(element_3.value()->ref_count_, 2);
 
   auto element_4 = sl.CopyElement(L"root/tuesday", L"root/monday");
   ASSERT_TRUE(element_4.has_value());
-  ASSERT_EQ(element_4.value()->_element_name, L"tuesday");
-  ASSERT_EQ(element_4.value()->_ref_count, 2);
+  ASSERT_EQ(element_4.value()->element_name_, L"tuesday");
+  ASSERT_EQ(element_4.value()->ref_count_, 2);
 
   sl.CopyElement(L"root/monday", L"root/tuesday");
 
@@ -296,8 +296,8 @@ TEST(SleeveOperationTest, CopyEdgeTest3) {
   sl.CreateElementToPath(L"root/C", L"E", ElementType::FOLDER);
   auto result1 = sl.CopyElement(L"root/C", L"root/B/D");
   EXPECT_TRUE(result1.has_value());
-  EXPECT_EQ(result1.value()->_ref_count, 2);
-  EXPECT_EQ(result1.value()->_element_name, L"C");
+  EXPECT_EQ(result1.value()->ref_count_, 2);
+  EXPECT_EQ(result1.value()->element_name_, L"C");
 
   sl.CopyElement(L"root/B/D", L"root/C/E");
 
@@ -319,33 +319,33 @@ TEST(SleeveOperationTest, CopyRemoveTest2) {
 
   auto element_1 = sl.CreateElementToPath(L"root/monday", L"broken", ElementType::FILE);
   ASSERT_TRUE(element_1.has_value());
-  ASSERT_EQ(element_1.value()->_element_name, L"broken");
-  ASSERT_EQ(element_1.value()->_ref_count, 1);
+  ASSERT_EQ(element_1.value()->element_name_, L"broken");
+  ASSERT_EQ(element_1.value()->ref_count_, 1);
 
   auto element_2 = sl.CreateElementToPath(L"root/tuesday", L"hope", ElementType::FILE);
   ASSERT_TRUE(element_2.has_value());
-  ASSERT_EQ(element_2.value()->_element_name, L"hope");
-  ASSERT_EQ(element_2.value()->_ref_count, 1);
+  ASSERT_EQ(element_2.value()->element_name_, L"hope");
+  ASSERT_EQ(element_2.value()->ref_count_, 1);
 
   auto element_3 = sl.CopyElement(L"root/monday/broken", L"root/tuesday");
   ASSERT_TRUE(element_3.has_value());
-  ASSERT_EQ(element_3.value()->_element_name, L"broken");
-  ASSERT_EQ(element_3.value()->_ref_count, 2);
+  ASSERT_EQ(element_3.value()->element_name_, L"broken");
+  ASSERT_EQ(element_3.value()->ref_count_, 2);
 
   auto element_4 = sl.CopyElement(L"root/tuesday", L"root/monday");
   ASSERT_TRUE(element_4.has_value());
-  ASSERT_EQ(element_4.value()->_element_name, L"tuesday");
-  ASSERT_EQ(element_4.value()->_ref_count, 2);
+  ASSERT_EQ(element_4.value()->element_name_, L"tuesday");
+  ASSERT_EQ(element_4.value()->ref_count_, 2);
 
   auto element_5 = sl.RemoveElementInPath(L"root/monday/tuesday/broken");
   ASSERT_TRUE(element_5.has_value());
-  ASSERT_EQ(element_5.value()->_element_name, L"broken");
-  ASSERT_EQ(element_5.value()->_ref_count, 2);
+  ASSERT_EQ(element_5.value()->element_name_, L"broken");
+  ASSERT_EQ(element_5.value()->ref_count_, 2);
 
   auto element_6 = sl.AccessElementByPath(L"root/monday/tuesday");
   ASSERT_TRUE(element_6.has_value());
-  ASSERT_EQ(element_6.value()->_element_name, L"tuesday");
-  ASSERT_EQ(element_6.value()->_ref_count, 1);
+  ASSERT_EQ(element_6.value()->element_name_, L"tuesday");
+  ASSERT_EQ(element_6.value()->ref_count_, 1);
 
   std::wstring                                     tree = sl.Tree(L"root");
   std::wstring_convert<std::codecvt_utf8<wchar_t>> conv;
@@ -385,8 +385,8 @@ TEST(SleeveOperationTest, MoveTest1) {
   sl.CreateElementToPath(L"root/C", L"E", ElementType::FOLDER);
   auto result1 = sl.CopyElement(L"root/C", L"root/B/D");
   EXPECT_TRUE(result1.has_value());
-  EXPECT_EQ(result1.value()->_ref_count, 2);
-  EXPECT_EQ(result1.value()->_element_name, L"C");
+  EXPECT_EQ(result1.value()->ref_count_, 2);
+  EXPECT_EQ(result1.value()->element_name_, L"C");
 
   sl.CopyElement(L"root/B/D", L"root/C/E");
 
@@ -425,9 +425,9 @@ TEST(SleeveOperationTest, FuzzingTest1) {
 
   class SleeveBaseFuzzTest {
    public:
-    SleeveBase                       sl{0};
-    std::unordered_set<std::wstring> existing_paths;
-    std::unordered_set<std::wstring> existing_folders;
+    SleeveBase                       sl_{0};
+    std::unordered_set<std::wstring> existing_paths_;
+    std::unordered_set<std::wstring> existing_folders_;
 
     static std::wstring              RandomWString(size_t length) {
       static std::mt19937                       rng{std::random_device{}()};
@@ -441,14 +441,14 @@ TEST(SleeveOperationTest, FuzzingTest1) {
 
     std::wstring RandomExistingPath() {
       static std::mt19937                   rng{std::random_device{}()};
-      std::vector<std::wstring>             path_pool(existing_paths.begin(), existing_paths.end());
+      std::vector<std::wstring>             path_pool(existing_paths_.begin(), existing_paths_.end());
       std::uniform_int_distribution<size_t> dist(0, path_pool.size() - 1);
       return path_pool[dist(rng)];
     }
 
     std::wstring RandomExistingFolder() {
       static std::mt19937                   rng{std::random_device{}()};
-      std::vector<std::wstring>             path_pool(existing_folders.begin(), existing_folders.end());
+      std::vector<std::wstring>             path_pool(existing_folders_.begin(), existing_folders_.end());
       std::uniform_int_distribution<size_t> dist(0, path_pool.size() - 1);
       return path_pool[dist(rng)];
     }
@@ -457,8 +457,8 @@ TEST(SleeveOperationTest, FuzzingTest1) {
 
     void        Test() {
       constexpr int kIterations = 1000;
-      existing_folders.insert(L"root");
-      existing_paths.insert(L"root");
+      existing_folders_.insert(L"root");
+      existing_paths_.insert(L"root");
 
       for (int i = 0; i < kIterations; ++i) {
         // Create
@@ -466,29 +466,29 @@ TEST(SleeveOperationTest, FuzzingTest1) {
         std::wstring name        = RandomWString(5);
         ElementType  type        = RandomElementType();
 
-        auto         created     = sl.CreateElementToPath(parent_path, name, type);
+        auto         created     = sl_.CreateElementToPath(parent_path, name, type);
         if (created.has_value()) {
           std::wstring new_path = parent_path + L"/" + name;
           if (type == ElementType::FOLDER) {
-            existing_folders.insert(new_path);
+            existing_folders_.insert(new_path);
           }
-          existing_paths.insert(new_path);
-          ASSERT_EQ(created.value()->_element_name, name);
+          existing_paths_.insert(new_path);
+          ASSERT_EQ(created.value()->element_name_, name);
         }
 
         // Copy
         if (rand() % 4 == 0) {
-          if (existing_paths.size() > 1) {
+          if (existing_paths_.size() > 1) {
             std::wstring src_path = RandomExistingPath();
             std::wstring dst_path = RandomExistingFolder();
             if (src_path == dst_path) {
               continue;
             }
-            auto copied = sl.CopyElement(src_path, dst_path);
+            auto copied = sl_.CopyElement(src_path, dst_path);
             if (copied.has_value()) {
-              std::wstring copied_path = dst_path + L"/" + copied.value()->_element_name;
-              if (copied.value()->_type == ElementType::FOLDER) existing_folders.insert(copied_path);
-              existing_paths.insert(copied_path);
+              std::wstring copied_path = dst_path + L"/" + copied.value()->element_name_;
+              if (copied.value()->type_ == ElementType::FOLDER) existing_folders_.insert(copied_path);
+              existing_paths_.insert(copied_path);
             }
           }
         }
@@ -502,7 +502,7 @@ TEST(SleeveOperationTest, FuzzingTest1) {
       }
       auto print = false;
       if (print) {
-        std::wstring                                     tree = sl.Tree(L"root");
+        std::wstring                                     tree = sl_.Tree(L"root");
         std::wstring_convert<std::codecvt_utf8<wchar_t>> conv;
         std::cout << conv.to_bytes(tree) << std::endl;
       }

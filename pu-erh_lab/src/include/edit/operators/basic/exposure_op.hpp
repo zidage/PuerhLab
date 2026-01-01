@@ -32,24 +32,24 @@ class ExposureOp : public OperatorBase<ExposureOp>, PointOpTag {
    * Positive to increase the brightness, negative to darken.
    *
    */
-  float              _exposure_offset;
+  float              exposure_offset_;
 
   /**
    * @brief The actual luminance offset derived from the EV
    * dL = 2^E
    *
    */
-  float              _scale;
+  float              scale_;
 
-  float              _gamma;
+  float              gamma_;
 
 
  public:
-  static constexpr PriorityLevel     _priority_level    = 0;
-  static constexpr PipelineStageName _affiliation_stage = PipelineStageName::Basic_Adjustment;
-  static constexpr std::string_view  _canonical_name    = "Exposure";
-  static constexpr std::string_view  _script_name       = "exposure";
-  static constexpr OperatorType      _operator_type     = OperatorType::EXPOSURE;
+  static constexpr PriorityLevel     priority_level_    = 0;
+  static constexpr PipelineStageName affiliation_stage_ = PipelineStageName::Basic_Adjustment;
+  static constexpr std::string_view  canonical_name_    = "Exposure";
+  static constexpr std::string_view  script_name_       = "exposure";
+  static constexpr OperatorType      operator_type_     = OperatorType::EXPOSURE;
   ExposureOp();
   ExposureOp(float exposure_offset);
   ExposureOp(const nlohmann::json& params);

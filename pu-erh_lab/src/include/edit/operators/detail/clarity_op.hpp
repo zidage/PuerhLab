@@ -24,28 +24,27 @@ class ClarityOp : public OperatorBase<ClarityOp> {
    * @brief Offset to the clarity of the image, ranging from -100 to 100
    *
    */
-  float        _clarity_offset;
+  float        clarity_offset_;
   /**
    * @brief Scaled offset to the clarity, ranging from -1.0f to 1.0f
    *
    */
-  float        _scale;
+  float        scale_;
 
   /**
    * @brief An internal-use-only parameter to adjust the radius of the USM sharpening filter
    *
    */
-  static float _usm_radius;
+  static float usm_radius_;
 
   void         CreateMidtoneMask(cv::Mat& input, cv::Mat& mask) const;
 
  public:
-  static constexpr PriorityLevel     _priority_level    = 8;
-  static constexpr PipelineStageName _affiliation_stage = PipelineStageName::Detail_Adjustment;
-  static constexpr std::string_view  _canonical_name    = "Clarity";
-  static constexpr std::string_view  _script_name       = "clarity";
-  static constexpr OperatorType      _operator_type     = OperatorType::CLARITY;
-
+  static constexpr PriorityLevel     priority_level_    = 8;
+  static constexpr PipelineStageName affiliation_stage_ = PipelineStageName::Detail_Adjustment;
+  static constexpr std::string_view  canonical_name_    = "Clarity";
+  static constexpr std::string_view  script_name_       = "clarity";
+  static constexpr OperatorType      operator_type_     = OperatorType::CLARITY;
   ClarityOp();
   ClarityOp(float clarity_offset);
   ClarityOp(const nlohmann::json& params);

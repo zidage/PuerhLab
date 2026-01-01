@@ -29,18 +29,18 @@ namespace puerhlab {
 class ImageLoader {
  private:
   // Image decoding part
-  std::shared_ptr<BufferQueue>                           _buffer_decoded;
-  uint32_t                                               _buffer_size;
-  size_t                                                 _use_thread;
-  image_id_t                                             _start_id;
-  image_id_t                                             _next_id;
-  DecoderScheduler                                       _decoder_scheduler;
+  std::shared_ptr<BufferQueue>                           buffer_decoded_;
+  uint32_t                                               buffer_size_;
+  size_t                                                 use_thread_;
+  image_id_t                                             start_id_;
+  image_id_t                                             next_id_;
+  DecoderScheduler                                       decoder_scheduler_;
 
-  std::vector<std::shared_ptr<std::promise<image_id_t>>> promises;
-  std::vector<std::future<image_id_t>>                   futures;
+  std::vector<std::shared_ptr<std::promise<image_id_t>>> promises_;
+  std::vector<std::future<image_id_t>>                   futures_;
 
  public:
-  explicit ImageLoader(uint32_t buffer_size, size_t _use_thread, image_id_t start_id);
+  explicit ImageLoader(uint32_t buffer_size, size_t use_thread, image_id_t start_id);
 
   void StartLoading(std::vector<image_path_t> images, DecodeType decode_type);
   void StartLoading(std::shared_ptr<Image> source_img, DecodeType decode_type);
