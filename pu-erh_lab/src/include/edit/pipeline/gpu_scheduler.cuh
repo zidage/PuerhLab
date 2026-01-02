@@ -116,13 +116,13 @@ class GPU_KernelLauncher {
     // Process() will synchronize the stream internally
     cudaStreamDestroy(stream);
           
-    float4* mapped_ptr = frame_sink_->MapResourceForWrite();
-    if (mapped_ptr) {
-      size_t size_bytes = width * height * sizeof(float4);
-      cudaMemcpy(mapped_ptr, result_ptr, size_bytes, cudaMemcpyDeviceToDevice);
-      frame_sink_->UnmapResource();
-      frame_sink_->NotifyFrameReady();
-    }
+    // float4* mapped_ptr = frame_sink_->MapResourceForWrite();
+    // if (mapped_ptr) {
+    //   size_t size_bytes = width * height * sizeof(float4);
+    //   cudaMemcpy(mapped_ptr, result_ptr, size_bytes, cudaMemcpyDeviceToDevice);
+    //   frame_sink_->UnmapResource();
+    //   frame_sink_->NotifyFrameReady();
+    // }
 
     if (output_img_) {
       output_img_->InitGPUData(width, height, CV_32FC4);
