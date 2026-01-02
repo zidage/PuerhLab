@@ -20,14 +20,14 @@
 #include "edit/pipeline/gpu_scheduler.cuh"
 #include "edit/pipeline/kernel_stream_gpu.cuh"
 #include "edit/pipeline/pipeline_gpu_wrapper.hpp"
+#include "ui/edit_viewer/frame_sink.hpp"
 
 namespace puerhlab {
 using namespace CUDA;
 
 class GPUPipelineImpl {
  private:
-
-  static constexpr auto                     BuildKernelStream = []() {
+  static constexpr auto BuildKernelStream = []() {
     auto to_ws  = GPU_TOWS_Kernel();
     auto exp    = GPU_ExposureOpKernel();
     auto cont   = GPU_ContrastOpKernel();
@@ -47,12 +47,12 @@ class GPUPipelineImpl {
     auto clar   = GPU_ClarityKernel();
 
     return GPU_StaticKernelStream(GPU_PointChain(to_ws, exp, cont, white, black, high, shad, tint,
-                                                                     sat, vib, hls, lmt, to_out),
-                                                    sharp, clar);
+                                                 sat, vib, hls, lmt, to_out),
+                                  sharp, clar);
   };
 
-  using StaticKernelStreamType = decltype(BuildKernelStream());
-  StaticKernelStreamType static_kernel_stream_ = BuildKernelStream();
+  using StaticKernelStreamType                                     = decltype(BuildKernelStream());
+  StaticKernelStreamType                     static_kernel_stream_ = BuildKernelStream();
   GPU_KernelLauncher<StaticKernelStreamType> launcher_;
 
  public:
@@ -60,15 +60,14 @@ class GPUPipelineImpl {
 
   void SetInput(std::shared_ptr<ImageBuffer> input_img) { launcher_.SetInputImage(input_img); }
 
-  void SetParams(OperatorParams& cpu_params) {
-    launcher_.SetParams(cpu_params);
-  }
+  void SetParams(OperatorParams& cpu_params) { launcher_.SetParams(cpu_params); }
+
+  void SetFrameSink(IFrameSink* frame_sink) { launcher_.SetFrameSink(frame_sink); }
 
   void Execute(std::shared_ptr<ImageBuffer> output_img) {
     launcher_.SetOutputImage(output_img);
     launcher_.Execute();
   }
-  
 };
 
 GPUPipelineWrapper::GPUPipelineWrapper() : impl_(std::make_unique<GPUPipelineImpl>()) {}
@@ -79,9 +78,9 @@ void GPUPipelineWrapper::SetInputImage(std::shared_ptr<ImageBuffer> input_image)
   impl_->SetInput(input_image);
 }
 
-void GPUPipelineWrapper::SetParams(OperatorParams& cpu_params) {
-  impl_->SetParams(cpu_params);
-}
+void GPUPipelineWrapper::SetParams(OperatorParams& cpu_params) { impl_->SetParams(cpu_params); }
+
+void GPUPipelineWrapper::SetFrameSink(IFrameSink* frame_sink) { impl_->SetFrameSink(frame_sink); }
 
 void GPUPipelineWrapper::Execute(std::shared_ptr<ImageBuffer> output) { impl_->Execute(output); }
 };  // namespace puerhlab

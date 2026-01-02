@@ -21,14 +21,16 @@ class IFrameSink {
  public:
   virtual ~IFrameSink() {}
 
-  virtual float4* MapResourceForWrite() = 0;
+  virtual void    EnsureSize(int width, int height) = 0;
 
-  virtual void    UnmapResource()       = 0;
+  virtual float4* MapResourceForWrite()             = 0;
 
-  virtual void    NotifyFrameReady()    = 0;
+  virtual void    UnmapResource()                   = 0;
+
+  virtual void    NotifyFrameReady()                = 0;
 
   // Get the size of the frame
-  virtual int     GetWidth() const      = 0;
-  virtual int     GetHeight() const     = 0;
+  virtual int     GetWidth() const                  = 0;
+  virtual int     GetHeight() const                 = 0;
 };
 }  // namespace puerhlab

@@ -26,6 +26,7 @@
 #include "edit/operators/op_base.hpp"
 #include "image/image_buffer.hpp"
 #include "kernel_stream_gpu.cuh"
+#include "ui/edit_viewer/frame_sink.hpp"
 
 namespace puerhlab {
 namespace CUDA {
@@ -43,6 +44,8 @@ class GPU_KernelLauncher {
   KernelStreamT                kernel_stream_;
 
   GPUOperatorParams            params_;
+
+  IFrameSink*                  frame_sink_ = nullptr;
 
  public:
   GPU_KernelLauncher(std::shared_ptr<ImageBuffer> input_img, KernelStreamT kernel_stream)
@@ -66,7 +69,7 @@ class GPU_KernelLauncher {
   void SetInputImage(std::shared_ptr<ImageBuffer> input_img) {
     input_img_ = input_img;
     input_img_->SyncToGPU();
-    cv::cuda::GpuMat gpu_mat = input_img_->GetGPUData();
+    cv::cuda::GpuMat gpu_mat     = input_img_->GetGPUData();
 
     size_t           width       = gpu_mat.cols;
     size_t           height      = gpu_mat.rows;
@@ -77,7 +80,6 @@ class GPU_KernelLauncher {
         cudaFree(work_buffer_);
         work_buffer_ = nullptr;
       }
-      
 
       cudaMalloc((void**)&work_buffer_, needed_size);
       cudaMalloc((void**)&temp_buffer_, needed_size);
@@ -90,6 +92,8 @@ class GPU_KernelLauncher {
   void SetParams(OperatorParams& cpu_params) {
     params_ = GPUParamsConverter::ConvertFromCPU(cpu_params, params_);
   }
+
+  void SetFrameSink(IFrameSink* frame_sink) { frame_sink_ = frame_sink; }
 
   void Execute() {
     if (!input_img_ || !work_buffer_) {
@@ -105,11 +109,20 @@ class GPU_KernelLauncher {
     cudaStream_t stream;
     cudaStreamCreate(&stream);
 
+
     float4* result_ptr = kernel_stream_.Process(work_buffer_, temp_buffer_, static_cast<int>(width),
                                                 static_cast<int>(height),
                                                 static_cast<size_t>(width), params_, stream);
     // Process() will synchronize the stream internally
     cudaStreamDestroy(stream);
+          
+    float4* mapped_ptr = frame_sink_->MapResourceForWrite();
+    if (mapped_ptr) {
+      size_t size_bytes = width * height * sizeof(float4);
+      cudaMemcpy(mapped_ptr, result_ptr, size_bytes, cudaMemcpyDeviceToDevice);
+      frame_sink_->UnmapResource();
+      frame_sink_->NotifyFrameReady();
+    }
 
     if (output_img_) {
       output_img_->InitGPUData(width, height, CV_32FC4);
