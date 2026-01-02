@@ -23,7 +23,7 @@ auto FileService::ToParams(const std::pair<sl_element_id_t, image_id_t>& source)
 }
 
 auto FileService::FromParams(FileMapperParams&& param) -> std::pair<sl_element_id_t, image_id_t> {
-  return {param.file_id_, param.image_id_};
+  return {param.file_id, param.image_id};
 }
 
 auto FileService::GetFileById(const sl_element_id_t id) -> std::pair<sl_element_id_t, image_id_t> {

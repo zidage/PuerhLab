@@ -23,7 +23,7 @@
 namespace puerhlab {
 // CREATE TABLE Sleeve (id BIGINT PRIMARY KEY);
 struct BaseMapperParams {
-  sleeve_id_t id_;
+  sleeve_id_t id;
 };
 class BaseMapper : public MapperInterface<BaseMapper, BaseMapperParams, sleeve_id_t>,
                    public FieldReflectable<BaseMapper> {
@@ -33,7 +33,7 @@ class BaseMapper : public MapperInterface<BaseMapper, BaseMapperParams, sleeve_i
   static constexpr const char*                                      prime_key_clause_ = "id={}";
 
   static constexpr std::array<duckorm::DuckFieldDesc, field_count_> field_descs_     = {
-      FIELD(BaseMapperParams, id_, UINT32)};
+      FIELD(BaseMapperParams, id, UINT32)};
 
  public:
   static auto FromRawData(std::vector<duckorm::VarTypes>&& data) -> BaseMapperParams;

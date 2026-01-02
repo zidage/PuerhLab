@@ -17,6 +17,7 @@
 #include <duckdb.h>
 
 #include <exception>
+#include <iostream>
 #include <stdexcept>
 
 namespace duckorm {
@@ -37,15 +38,21 @@ PreparedStatement::PreparedStatement(duckdb_connection& con, const std::string& 
   std::memset(&result_, 0, sizeof(result_));
 
   // FIXME: Unified error handling
-  if (duckdb_prepare(con_, prepare_query.c_str(), &stmt_) != DuckDBSuccess) {
-    const char* err = duckdb_prepare_error(stmt_);
-    std::string msg = "PreparedStatement failed in GetStmtGuard";
-    if (err && std::strlen(err) > 0) {
-      msg += ": ";
-      msg += err;
+  try {
+    if (duckdb_prepare(con_, prepare_query.c_str(), &stmt_) != DuckDBSuccess) {
+      const char* err = duckdb_prepare_error(stmt_);
+      std::string msg = "PreparedStatement failed in GetStmtGuard";
+      if (err && std::strlen(err) > 0) {
+        msg += ": ";
+        msg += err;
+      }
+      RecycleResources();
+      throw std::runtime_error(msg);
     }
+  } catch (const std::exception& e) {
+    std::cerr << "Exception in PreparedStatement constructor: " << e.what() << std::endl;
     RecycleResources();
-    throw std::runtime_error(msg);
+    throw;
   }
   prepared_ = true;
 }

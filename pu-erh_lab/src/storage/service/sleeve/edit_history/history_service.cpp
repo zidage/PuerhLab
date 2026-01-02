@@ -22,16 +22,16 @@ namespace puerhlab {
 auto EditHistoryService::ToParams(const std::shared_ptr<EditHistory> source)
     -> EditHistoryMapperParams {
   EditHistoryMapperParams param;
-  param.file_id_ = source->GetBoundImage();
-  param.history_ = std::make_unique<std::string>(source->ToJSON().dump());
+  param.file_id = source->GetBoundImage();
+  param.history = std::make_unique<std::string>(source->ToJSON().dump());
   return param;
 }
 
 auto EditHistoryService::FromParams(EditHistoryMapperParams&& param)
     -> std::shared_ptr<EditHistory> {
-  auto history = std::make_shared<EditHistory>(param.file_id_);
-  if (param.history_) {
-    history->FromJSON(nlohmann::json::parse(std::move(*param.history_)));
+  auto history = std::make_shared<EditHistory>(param.file_id);
+  if (param.history) {
+    history->FromJSON(nlohmann::json::parse(std::move(*param.history)));
   }
   return history;
 }

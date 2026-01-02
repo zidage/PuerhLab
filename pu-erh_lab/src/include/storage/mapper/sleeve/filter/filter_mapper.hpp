@@ -24,9 +24,9 @@
 namespace puerhlab {
 // CREATE TABLE Filter (combo_id BIGINT, type INTEGER, data JSON);
 struct FilterMapperParams {
-  uint32_t    combo_id_;
-  uint32_t    type_;
-  const char* data_;
+  uint32_t    combo_id;
+  uint32_t    type;
+  const char* data;
 };
 class FilterMapper : MapperInterface<FilterMapper, FilterMapperParams, sl_element_id_t>,
                      FieldReflectable<FilterMapper> {
@@ -36,8 +36,8 @@ class FilterMapper : MapperInterface<FilterMapper, FilterMapperParams, sl_elemen
   static constexpr const char* table_name_                                       = "Filter";
   static constexpr const char* prime_key_clause_                                 = "combo_id={}";
   static constexpr std::array<duckorm::DuckFieldDesc, field_count_> field_descs_ = {
-      FIELD(FilterMapperParams, combo_id_, UINT32), FIELD(FilterMapperParams, type_, UINT32),
-      FIELD(FilterMapperParams, data_, VARCHAR)};
+      FIELD(FilterMapperParams, combo_id, UINT32), FIELD(FilterMapperParams, type, UINT32),
+      FIELD(FilterMapperParams, data, VARCHAR)};
 
  public:
   using MapperInterface::MapperInterface;

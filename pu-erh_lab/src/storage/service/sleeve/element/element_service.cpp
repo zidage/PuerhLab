@@ -46,12 +46,12 @@ auto ElementService::ToParams(const std::shared_ptr<SleeveElement>& source) -> E
 }
 
 auto ElementService::FromParams(ElementMapperParams&& param) -> std::shared_ptr<SleeveElement> {
-  auto               id                = param.id_;
-  auto               type              = static_cast<ElementType>(param.type_);
-  auto               element_name      = conv::FromBytes(std::move(*param.element_name_));
-  auto               added_time_str    = std::move(*param.added_time_);
-  auto               modified_time_str = std::move(*param.modified_time_);
-  auto               ref_count         = param.ref_count_;
+  auto               id                = param.id;
+  auto               type              = static_cast<ElementType>(param.type);
+  auto               element_name      = conv::FromBytes(std::move(*param.element_name));
+  auto               added_time_str    = std::move(*param.added_time);
+  auto               modified_time_str = std::move(*param.modified_time);
+  auto               ref_count         = param.ref_count;
 
   std::tm            tm_added{};
   std::tm            tm_modified{};

@@ -25,8 +25,8 @@
 namespace puerhlab {
 // CREATE TABLE FileImage (file_id BIGINT, image_id BIGINT);
 struct FileMapperParams {
-  sl_element_id_t file_id_;
-  image_id_t      image_id_;
+  sl_element_id_t file_id;
+  image_id_t      image_id;
 };
 class FileMapper : public MapperInterface<FileMapper, FileMapperParams, sl_element_id_t>,
                    public FieldReflectable<FileMapper> {
@@ -35,7 +35,7 @@ class FileMapper : public MapperInterface<FileMapper, FileMapperParams, sl_eleme
   static constexpr const char* table_name_                                       = "FileImage";
   static constexpr const char* prime_key_clause_                                 = "file_id={}";
   static constexpr std::array<duckorm::DuckFieldDesc, field_count_> field_descs_ = {
-      FIELD(FileMapperParams, file_id_, UINT32), FIELD(FileMapperParams, image_id_, UINT32)};
+      FIELD(FileMapperParams, file_id, UINT32), FIELD(FileMapperParams, image_id, UINT32)};
  public:
   static auto FromRawData(std::vector<duckorm::VarTypes>&& data) -> FileMapperParams;
   friend struct FieldReflectable<FileMapper>;

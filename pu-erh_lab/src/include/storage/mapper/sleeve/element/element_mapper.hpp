@@ -28,12 +28,12 @@ namespace puerhlab {
 //     "TIMESTAMP, "
 //     "ref_count BIGINT);"
 struct ElementMapperParams {
-  sl_element_id_t              id_;
-  uint32_t                     type_;
-  std::unique_ptr<std::string> element_name_;
-  std::unique_ptr<std::string> added_time_;
-  std::unique_ptr<std::string> modified_time_;
-  uint32_t                     ref_count_;
+  sl_element_id_t              id;
+  uint32_t                     type;
+  std::unique_ptr<std::string> element_name;
+  std::unique_ptr<std::string> added_time;
+  std::unique_ptr<std::string> modified_time;
+  uint32_t                     ref_count;
 };
 class ElementMapper : public MapperInterface<ElementMapper, ElementMapperParams, sl_element_id_t>,
                       public FieldReflectable<ElementMapper> {
@@ -42,12 +42,12 @@ class ElementMapper : public MapperInterface<ElementMapper, ElementMapperParams,
   static constexpr const char*                                      table_name_       = "Element";
   static constexpr const char*                                      prime_key_clause_ = "id={}";
   static constexpr std::array<duckorm::DuckFieldDesc, field_count_> field_descs_      = {
-      FIELD(ElementMapperParams, id_, UINT32),
-      FIELD(ElementMapperParams, type_, UINT32),
-      FIELD(ElementMapperParams, element_name_, VARCHAR),
-      FIELD(ElementMapperParams, added_time_, TIMESTAMP),
-      FIELD(ElementMapperParams, modified_time_, TIMESTAMP),
-      FIELD(ElementMapperParams, ref_count_, UINT32)};
+      FIELD(ElementMapperParams, id, UINT32),
+      FIELD(ElementMapperParams, type, UINT32),
+      FIELD(ElementMapperParams, element_name, VARCHAR),
+      FIELD(ElementMapperParams, added_time, TIMESTAMP),
+      FIELD(ElementMapperParams, modified_time, TIMESTAMP),
+      FIELD(ElementMapperParams, ref_count, UINT32)};
 
  public:
   static auto FromRawData(std::vector<duckorm::VarTypes>&& data) -> ElementMapperParams;

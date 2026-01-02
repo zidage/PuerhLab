@@ -20,5 +20,5 @@
 namespace puerhlab {
 auto BaseService::ToParams(const sleeve_id_t source) -> BaseMapperParams { return {source}; }
 
-auto BaseService::FromParams(BaseMapperParams&& param) -> sleeve_id_t { return param.id_; }
+auto BaseService::FromParams(BaseMapperParams&& param) -> sleeve_id_t { return param.id; }
 };  // namespace puerhlab
