@@ -23,6 +23,7 @@
 #include "json.hpp"
 #include "op_kernel.hpp"
 #include "type/type.hpp"
+#include "utils/color_utils.hpp"
 
 namespace puerhlab {
 namespace OCIO = OCIO_NAMESPACE;
@@ -57,6 +58,7 @@ enum class OperatorType : int {
   TO_WS,
   TO_OUTPUT,
   LMT,
+  ODT,
   CLARITY,
   SHARPEN,
   COLOR_WHEEL,
@@ -142,9 +144,14 @@ struct OperatorParams {
   // To output space
   bool                         to_output_enabled_       = true;
   bool                         to_output_dirty_         = false;
-  OCIO::ConstCPUProcessorRcPtr cpu_to_output_processor_ = nullptr;
+  OCIO::ConstCPUProcessorRcPtr cpu_to_output_processor_      = nullptr;
+  // [UNUSED] Current approach does not use OCIO or LUT in GPU path 
   OCIO::ConstGPUProcessorRcPtr gpu_to_output_processor_ = nullptr;
   OCIO::BakerRcPtr             to_output_lut_baker_     = nullptr;
+  // [WIP] Ported from Academy Color Encoding System Core Transforms
+  // A CUDA implementation of the CTL operators
+  // https://github.com/aces-aswf/aces-core
+  ColorUtils::ODTParams                    odt_params_              = {};
 
   // Curve adjustment parameters
   bool                         curve_enabled_           = false;

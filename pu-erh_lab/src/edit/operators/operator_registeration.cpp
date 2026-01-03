@@ -26,6 +26,7 @@
 #include "edit/operators/color/vibrance_op.hpp"
 #include "edit/operators/cst/cst_op.hpp"
 #include "edit/operators/cst/lmt_op.hpp"
+#include "edit/operators/cst/odt_op.hpp"
 #include "edit/operators/curve/curve_op.hpp"
 #include "edit/operators/detail/clarity_op.hpp"
 #include "edit/operators/detail/sharpen_op.hpp"
@@ -94,6 +95,10 @@ void RegisterAllOperators() {
 
   OperatorFactory::Instance().Register(OperatorType::TO_OUTPUT, [](const nlohmann::json& params) {
     return std::make_shared<OCIO_ACES_Transform_Op>(params);
+  });
+
+  OperatorFactory::Instance().Register(OperatorType::ODT, [](const nlohmann::json& params) {
+    return std::make_shared<ACES_ODT_Op>(params);
   });
 
   OperatorFactory::Instance().Register(OperatorType::LMT, [](const nlohmann::json& params) {

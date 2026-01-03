@@ -54,6 +54,8 @@ inline std::string OperatorTypeToString(OperatorType type) {
       return "CST";
     case OperatorType::LMT:
       return "LMT";
+    case OperatorType::ODT:
+      return "ODT";
     case OperatorType::CLARITY:
       return "CLARITY";
     case OperatorType::SHARPEN:
@@ -100,6 +102,8 @@ inline OperatorType OperatorTypeFromString(const std::string& type_str) {
     return OperatorType::CST;
   else if (type_str == "LMT")
     return OperatorType::LMT;
+  else if (type_str == "ODT")
+    return OperatorType::ODT;
   else if (type_str == "CLARITY")
     return OperatorType::CLARITY;
   else if (type_str == "SHARPEN")
