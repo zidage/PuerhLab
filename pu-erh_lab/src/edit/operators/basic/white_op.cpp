@@ -41,9 +41,6 @@ void WhiteOp::SetParams(const nlohmann::json& params) {
     black_point_ = 0.0f;
     slope_       = (y_intercept_ - black_point_) / 1.0f;
   }
-  y_intercept_vec_ = simple_simd::set1_f32(y_intercept_);
-  black_point_vec_ = simple_simd::set1_f32(black_point_);
-  slope_vec_       = simple_simd::set1_f32(slope_);
 }
 
 void WhiteOp::SetGlobalParams(OperatorParams& params) const {

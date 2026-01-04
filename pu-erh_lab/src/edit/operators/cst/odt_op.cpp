@@ -95,8 +95,9 @@ std::string ACES_ODT_Op::ETOFToString(ColorUtils::ETOF etof) {
 
 ACES_ODT_Op::ACES_ODT_Op(const nlohmann::json& params) { SetParams(params); }
 
-void ACES_ODT_Op::Apply(std::shared_ptr<ImageBuffer> input) {
+void ACES_ODT_Op::Apply(std::shared_ptr<ImageBuffer>) {
   // [WIP] Implement ODT application using odt_params_
+  
   throw std::runtime_error(
       "ACES_ODT_Op: Use CST_Op with OCIO instead. This operator is used only as a descriptor for "
       "the ODT stage.");
@@ -126,6 +127,11 @@ void ACES_ODT_Op::SetParams(const nlohmann::json& j) {
     peak_luminance_ = j["peak_luminance"].get<float>();
   }
   init_ODTParams();
+}
+
+void ACES_ODT_Op::SetGlobalParams(OperatorParams& global_params) const {
+  // ODT operator does not modify global params
+  global_params.odt_params_ = odt_params_;
 }
 
 void ACES_ODT_Op::init_TSParams() {

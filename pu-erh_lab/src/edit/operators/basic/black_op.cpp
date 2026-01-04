@@ -17,7 +17,6 @@
 #include <opencv2/core.hpp>
 
 #include "image/image_buffer.hpp"
-#include "utils/simd/simple_simd.hpp"
 
 namespace puerhlab {
 BlackOp::BlackOp(float offset) : offset_(offset) {}
@@ -42,8 +41,6 @@ void BlackOp::SetParams(const nlohmann::json& params) {
     y_intercept_ = offset_ / 10.f;
     slope_       = (1.0f - y_intercept_) / 1.0f;
   }
-  y_intercept_vec_ = simple_simd::set1_f32(y_intercept_);
-  slope_vec_       = simple_simd::set1_f32(slope_);
 }
 
 void BlackOp::SetGlobalParams(OperatorParams& params) const {

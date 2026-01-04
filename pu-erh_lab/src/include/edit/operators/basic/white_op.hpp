@@ -20,7 +20,6 @@
 #include "edit/operators/op_base.hpp"
 #include "image/image_buffer.hpp"
 #include "json.hpp"
-#include "utils/simd/simple_simd.hpp"
 
 namespace puerhlab {
 class WhiteOp : public OperatorBase<WhiteOp> {
@@ -31,9 +30,6 @@ class WhiteOp : public OperatorBase<WhiteOp> {
   float              black_point_;
   float              slope_;
 
-  simple_simd::f32x4 y_intercept_vec_;
-  simple_simd::f32x4 black_point_vec_;
-  simple_simd::f32x4 slope_vec_;
 
  public:
   auto                               GetScale() -> float;

@@ -49,28 +49,28 @@ struct ColorSpacePrimaries {
 };
 
 const ColorSpacePrimaries AP0_PRIMARY = {
-    {0.73470, 0.26530}, {0.00000, 1.00000}, {0.00010, -0.07700}, {0.32168, 0.33767}};
+    {0.73470f, 0.26530f}, {0.00000f, 1.00000f}, {0.00010f, -0.07700f}, {0.32168f, 0.33767f}};
 
 const ColorSpacePrimaries AP1_PRIMARY = {
-    {0.713, 0.293}, {0.165, 0.830}, {0.128, 0.044}, {0.32168, 0.33767}};
+    {0.713f, 0.293f}, {0.165f, 0.830f}, {0.128f, 0.044f}, {0.32168f, 0.33767f}};
 
 const ColorSpacePrimaries REACH_PRIMARY = {
-    {0.713, 0.293}, {0.165, 0.830}, {0.128, 0.044}, {0.32168, 0.33767}};
+    {0.713f, 0.293f}, {0.165f, 0.830f}, {0.128f, 0.044f}, {0.32168f, 0.33767f}};
 
 const ColorSpacePrimaries REC709_PRIMARY = {
-    {0.640, 0.330}, {0.300, 0.600}, {0.150, 0.060}, {0.3127, 0.3290}};
+    {0.640f, 0.330f}, {0.300f, 0.600f}, {0.150f, 0.060f}, {0.3127f, 0.3290f}};
 
 const ColorSpacePrimaries REC2020_PRIMARY = {
-    {0.708, 0.292}, {0.170, 0.797}, {0.131, 0.046}, {0.3127, 0.3290}};
+    {0.708f, 0.292f}, {0.170f, 0.797f}, {0.131f, 0.046f}, {0.3127f, 0.3290f}};
 
 const ColorSpacePrimaries P3_D65_PRIMARY = {
-    {0.680, 0.320}, {0.265, 0.690}, {0.150, 0.060}, {0.3127, 0.3290}};
+    {0.680f, 0.320f}, {0.265f, 0.690f}, {0.150f, 0.060f}, {0.3127f, 0.3290f}};
 
 const ColorSpacePrimaries PROPHOTO_PRIMARY = {
-    {0.734699, 0.265301}, {0.159597, 0.840403}, {0.036598, 0.000105}, {0.345704, 0.358540}};
+    {0.734699f, 0.265301f}, {0.159597f, 0.840403f}, {0.036598f, 0.000105f}, {0.345704f, 0.358540f}};
 
 const ColorSpacePrimaries ADOBE_RGB_PRIMARY = {
-    {0.6400, 0.3300}, {0.2100, 0.7100}, {0.1500, 0.0600}, {0.3127, 0.3290}};
+    {0.6400f, 0.3300f}, {0.2100f, 0.7100f}, {0.1500f, 0.0600f}, {0.3127f, 0.3290f}};
 
 inline ColorSpacePrimaries SpaceEnumToPrimary(ColorSpace cs) {
   switch (cs) {
@@ -93,10 +93,10 @@ inline ColorSpacePrimaries SpaceEnumToPrimary(ColorSpace cs) {
   }
 }
 
-cv::Matx33f RGB_TO_XYZ_f33(const ColorSpacePrimaries& C, float Y = 1.0f) {
+inline cv::Matx33f RGB_TO_XYZ_f33(const ColorSpacePrimaries& C, float Y = 1.0f) {
   // X and Z values of RGB value (1, 1, 1), or "white"
   float X = C.white_[0] * Y / C.white_[1];
-  float Z = (1. - C.white_[0] - C.white_[1]) * Y / C.white_[1];
+  float Z = (1.f - C.white_[0] - C.white_[1]) * Y / C.white_[1];
 
   // Scale factors for matrix rows
   float d = C.red_[0] * (C.blue_[1] - C.green_[1]) + C.blue_[0] * (C.green_[1] - C.red_[1]) +
@@ -116,27 +116,27 @@ cv::Matx33f RGB_TO_XYZ_f33(const ColorSpacePrimaries& C, float Y = 1.0f) {
       (X * (C.green_[1] - C.red_[1]) - C.red_[0] * (Y * (C.green_[1] - 1) + C.green_[1] * (X + Z)) +
        C.green_[0] * (Y * (C.red_[1] - 1) + C.red_[1] * (X + Z))) /
       d;
-  cv::Matx33f M(Sr * C.red_[0], Sr * C.red_[1], Sr * (1. - C.red_[0] - C.red_[1]), Sg * C.green_[0],
-                Sg * C.green_[1], Sg * (1. - C.green_[0] - C.green_[1]), Sb * C.blue_[0],
-                Sb * C.blue_[1], Sb * (1. - C.blue_[0] - C.blue_[1]));
+  cv::Matx33f M(Sr * C.red_[0], Sr * C.red_[1], Sr * (1.f - C.red_[0] - C.red_[1]), Sg * C.green_[0],
+                Sg * C.green_[1], Sg * (1.f - C.green_[0] - C.green_[1]), Sb * C.blue_[0],
+                Sb * C.blue_[1], Sb * (1.f - C.blue_[0] - C.blue_[1]));
   return M;
 }
 
-cv::Matx33f XYZ_TO_RGB_f33(const ColorSpacePrimaries& C, float Y = 1.0f) {
+inline cv::Matx33f XYZ_TO_RGB_f33(const ColorSpacePrimaries& C, float Y = 1.0f) {
   cv::Matx33f M = RGB_TO_XYZ_f33(C, Y);
   return M.inv();
 }
 
 // Gamut compression constants
-const float               smooth_cusps           = 0.12;
-const float               smooth_J               = 0.0;  // could be eliminated
-const float               smooth_M               = 0.27;
-const float               cusp_mid_blend         = 1.3;
+const float               smooth_cusps           = 0.12f;
+const float               smooth_J               = 0.0f;  // could be eliminated
+const float               smooth_M               = 0.27f;
+const float               cusp_mid_blend         = 1.3f;
 
-const float               focus_gain_blend       = 0.3;
-const float               focus_adjust_gain      = 0.55;
-const float               focus_distance         = 1.35;
-const float               focus_distance_scaling = 1.75;
+const float               focus_gain_blend       = 0.3f;
+const float               focus_adjust_gain      = 0.55f;
+const float               focus_distance         = 1.35f;
+const float               focus_distance_scaling = 1.75f;
 
 // CAM Parameters
 const float               L_A                    = 100.f;
@@ -149,13 +149,13 @@ const float               ba                     = 0.05f + (2.f - ra);
 const float               surround[3] = {0.9f, 0.59f, 0.9f};  // Average viewing condition
 
 const ColorSpacePrimaries CAM16_PRI   = {
-    {0.8336, 0.1735}, {2.3854, -1.4659}, {0.087, -0.125}, {0.333, 0.333}};
+    {0.8336f, 0.1735f}, {2.3854f, -1.4659f}, {0.087f, -0.125f}, {0.333f, 0.333f}};
 
 const cv::Matx33f CAM16_RGB_TO_XYZ = RGB_TO_XYZ_f33(CAM16_PRI, 1.f);
 
-cv::Matx33f       GeneratePanlrcm(float ra = 2.f, float ba = 0.05f) {
-  cv::Matx33f panlrcm_data = {ra,        1.f, 1.f / 9.f,  1.f,       -12.f / 11.f,
-                                    1.f / 9.f, ba,  1.f / 11.f, -2.f / 9.f};
+inline cv::Matx33f       GeneratePanlrcm(float _ra = 2.f, float _ba = 0.05f) {
+  cv::Matx33f panlrcm_data = {_ra,        1.f, 1.f / 9.f,  1.f,       -12.f / 11.f,
+                                    1.f / 9.f, _ba,  1.f / 11.f, -2.f / 9.f};
   cv::Matx33f panlrcm      = panlrcm_data.inv();
 
   for (int i = 0; i < 3; ++i) {
@@ -226,18 +226,18 @@ inline cv::Matx13f mult_f3_f33(const cv::Matx13f& v, const cv::Matx33f& m) {
                      v(0) * m(0, 2) + v(1) * m(1, 2) + v(2) * m(2, 2));
 }
 
-inline float Y_to_Hellwig_J(float Y, float surround = 0.59f, float L_A = 100.f, float Y_b = 20.f) {
-  float k   = 1.f / (5.f * L_A + 1.f);
+inline float Y_to_Hellwig_J(float Y, float _surround = 0.59f, float _L_A = 100.f, float _Y_b = 20.f) {
+  float k   = 1.f / (5.f * _L_A + 1.f);
   float k4  = k * k * k * k;
-  float F_L = 0.2f * k4 * (5.f * L_A) + 0.1f * powf((1.f - k4), 2.f) * powf((5.f * L_A), 1.f / 3.f);
-  float n   = Y_b / 100.f;
+  float F_L = 0.2f * k4 * (5.f * _L_A) + 0.1f * powf((1.f - k4), 2.f) * powf((5.f * _L_A), 1.f / 3.f);
+  float n   = _Y_b / 100.f;
   float z   = 1.48f + sqrtf(n);
   float F_L_W = powf(F_L, 0.42f);
   float A_w   = (400.f * F_L_W) / (F_L_W + 27.13f);
 
   float F_L_Y = powf(F_L * fabsf(Y) / 100.f, 0.42f);
 
-  return signum(Y) * 100.f * powf(((400. * F_L_Y) / (27.13 + F_L_Y)) / A_w, surround * z);
+  return signum(Y) * 100.f * powf(((400.f * F_L_Y) / (27.13f + F_L_Y)) / A_w, _surround * z);
 }
 }  // namespace ColorUtils
 };  // namespace puerhlab

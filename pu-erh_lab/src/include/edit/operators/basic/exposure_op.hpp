@@ -22,7 +22,6 @@
 #include "edit/operators/op_base.hpp"
 #include "edit/operators/op_kernel.hpp"
 #include "type/type.hpp"
-#include "utils/simd/simple_simd.hpp"
 
 namespace puerhlab {
 class ExposureOp : public OperatorBase<ExposureOp>, PointOpTag {

@@ -21,9 +21,7 @@
 #include <opencv2/opencv.hpp>
 #include <stdexcept>
 
-#include "edit/operators/operator_factory.hpp"
 #include "image/image_buffer.hpp"
-#include "utils/simd/simple_simd.hpp"
 
 namespace puerhlab {
 

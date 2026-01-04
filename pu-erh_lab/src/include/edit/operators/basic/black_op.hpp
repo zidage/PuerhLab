@@ -20,7 +20,6 @@
 
 #include "edit/operators/op_base.hpp"
 #include "image/image_buffer.hpp"
-#include "utils/simd/simple_simd.hpp"
 
 namespace puerhlab {
 class BlackOp : public OperatorBase<BlackOp> {
@@ -30,8 +29,7 @@ class BlackOp : public OperatorBase<BlackOp> {
   float              y_intercept_;
   float              slope_;  // slope of the tone curve
 
-  simple_simd::f32x4 y_intercept_vec_;
-  simple_simd::f32x4 slope_vec_;
+  
 
  public:
   auto                               GetScale() -> float;

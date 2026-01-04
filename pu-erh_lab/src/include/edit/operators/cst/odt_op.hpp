@@ -24,26 +24,27 @@
 namespace puerhlab {
 class ACES_ODT_Op : public OperatorBase<ACES_ODT_Op> {
  private:
-  ColorUtils::ColorSpace         encoding_space_ = ColorUtils::ColorSpace::REC709;  // Default to Rec.709
-  ColorUtils::ETOF               encoding_etof_  = ColorUtils::ETOF::GAMMA_2_2;     // Default to Gamma 2.2
+  ColorUtils::ColorSpace encoding_space_ = ColorUtils::ColorSpace::REC709;  // Default to Rec.709
+  ColorUtils::ETOF       encoding_etof_  = ColorUtils::ETOF::GAMMA_2_2;     // Default to Gamma 2.2
 
-  ColorUtils::ColorSpace         limiting_space_  = ColorUtils::ColorSpace::REC709;  // Default to Rec.709
-  
-  float              peak_luminance_ = 100.0f;              // Default to 100 nits
+  ColorUtils::ColorSpace limiting_space_ = ColorUtils::ColorSpace::REC709;  // Default to Rec.709
 
-  ColorUtils::ODTParams          odt_params_;
+  float                  peak_luminance_ = 100.0f;  // Default to 100 nits
 
-  static ColorUtils::ColorSpace  ParseColorSpace(const std::string& cs_str);
-  static ColorUtils::ETOF        ParseETOF(const std::string& etof_str);
-  static std::string ColorSpaceToString(ColorUtils::ColorSpace cs);
-  static std::string ETOFToString(ColorUtils::ETOF etof);
+  ColorUtils::ODTParams  odt_params_;
 
-  void               init_TSParams();
-  void               init_ODTParams();
+  static ColorUtils::ColorSpace ParseColorSpace(const std::string& cs_str);
+  static ColorUtils::ETOF       ParseETOF(const std::string& etof_str);
+  static std::string            ColorSpaceToString(ColorUtils::ColorSpace cs);
+  static std::string            ETOFToString(ColorUtils::ETOF etof);
+
+  void                          init_TSParams();
+  void                          init_ODTParams();
 
  public:
   static constexpr PriorityLevel     priority_level_    = 1;
   static constexpr PipelineStageName affiliation_stage_ = PipelineStageName::Output_Transform;
+  static constexpr OperatorType      operator_type_     = OperatorType::ODT;
   static constexpr std::string_view  canonical_name_    = "Output Device Transform (ACES)";
   static constexpr std::string_view  script_name_       = "aces_odt";
 

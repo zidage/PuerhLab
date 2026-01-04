@@ -117,6 +117,7 @@ set(OPERATORS_SRCS
     edit/operators/curve/curve_op.cpp
     edit/operators/cst/cst_op.cpp
     edit/operators/cst/lmt_op.cpp
+    edit/operators/cst/odt_op.cpp
     edit/operators/raw/raw_decode_op.cpp
     edit/operators/geometry/resize_op.cpp
     edit/operators/operator_registeration.cpp
