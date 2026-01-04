@@ -9,10 +9,7 @@
 ## 📷 Early Demo Screenshot
 
 <figure>
-  <img src="docs/demo/editor.png" width="600">
-  <figcaption style="text-align:center; font-size:14px; color:gray;">
-    Shot with Sony A7RIII · Applied <strong>2383 LUT</strong> · Demo Screenshot
-  </figcaption>
+  <img src="docs/demo/editor.gif" width="1000">
 </figure>
 
 ## 🎯 Vision
