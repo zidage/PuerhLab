@@ -52,6 +52,51 @@ struct GPU_LUT3D {
   }
 };
 
+struct GPU_TSParams {
+  float n_;
+  float n_r_;
+  float g_;
+  float t_1_;
+  float c_t_;
+  float s_2_;
+  float u_2_;
+  float m_2_;
+  float forward_limit_;
+  float inverse_limit_;
+  float log_peak_;
+};
+
+struct GPU_ODTParams {
+float       peak_luminance_;
+
+  // Tone scale, set via TSParams structure
+  GPU_TSParams    ts_params_;
+
+  float       focus_dist_;
+
+  // Chroma Compression
+  float       limit_J_max_;
+  float       mid_J_;
+  float       model_gamma_;
+  float       sat_;
+  float       sat_thr_;
+  float       compr_;
+
+  float upper_clamp_;
+
+  // Limit
+  float LIMIT_RGB_TO_XYZ_[9];
+  float LIMIT_XYZ_TO_RGB_[9];
+  float XYZ_w_limit_[3];
+
+  // Output
+  float OUTPUT_RGB_TO_XYZ_[9];
+  float OUTPUT_XYZ_TO_RGB_[9];
+  float XYZ_w_output_[3];
+
+  float       lower_hull_gamma_;
+};
+
 struct GPUOperatorParams {
   // Basic adjustment parameters
   bool      exposure_enabled_       = true;
@@ -124,6 +169,7 @@ struct GPUOperatorParams {
   // Output transform
   bool      to_output_enabled_      = true;
   GPU_LUT3D to_output_lut_          = {};
+  GPU_ODTParams odt_params_            = {};
 
   // Curve adjustment parameters
   bool      curve_enabled_          = false;

@@ -38,6 +38,7 @@ class ACES_ODT_Op : public OperatorBase<ACES_ODT_Op> {
   static std::string            ColorSpaceToString(ColorUtils::ColorSpace cs);
   static std::string            ETOFToString(ColorUtils::ETOF etof);
 
+  void                          init_JMhParams();
   void                          init_TSParams();
   void                          init_ODTParams();
 

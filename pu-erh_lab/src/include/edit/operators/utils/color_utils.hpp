@@ -16,7 +16,10 @@
 
 #include <array>
 #include <cmath>
+#include <memory>
+#include <numeric>
 #include <opencv2/core/matx.hpp>
+#include <vector>
 
 namespace puerhlab {
 namespace ColorUtils {
@@ -116,9 +119,9 @@ inline cv::Matx33f RGB_TO_XYZ_f33(const ColorSpacePrimaries& C, float Y = 1.0f) 
       (X * (C.green_[1] - C.red_[1]) - C.red_[0] * (Y * (C.green_[1] - 1) + C.green_[1] * (X + Z)) +
        C.green_[0] * (Y * (C.red_[1] - 1) + C.red_[1] * (X + Z))) /
       d;
-  cv::Matx33f M(Sr * C.red_[0], Sr * C.red_[1], Sr * (1.f - C.red_[0] - C.red_[1]), Sg * C.green_[0],
-                Sg * C.green_[1], Sg * (1.f - C.green_[0] - C.green_[1]), Sb * C.blue_[0],
-                Sb * C.blue_[1], Sb * (1.f - C.blue_[0] - C.blue_[1]));
+  cv::Matx33f M(Sr * C.red_[0], Sr * C.red_[1], Sr * (1.f - C.red_[0] - C.red_[1]),
+                Sg * C.green_[0], Sg * C.green_[1], Sg * (1.f - C.green_[0] - C.green_[1]),
+                Sb * C.blue_[0], Sb * C.blue_[1], Sb * (1.f - C.blue_[0] - C.blue_[1]));
   return M;
 }
 
@@ -127,35 +130,71 @@ inline cv::Matx33f XYZ_TO_RGB_f33(const ColorSpacePrimaries& C, float Y = 1.0f) 
   return M.inv();
 }
 
-// Gamut compression constants
-const float               smooth_cusps           = 0.12f;
-const float               smooth_J               = 0.0f;  // could be eliminated
-const float               smooth_M               = 0.27f;
-const float               cusp_mid_blend         = 1.3f;
+// Chroma compression
+const float chroma_compress        = 2.4;
+const float chroma_compress_fact   = 3.3;
+const float chroma_expand          = 1.3;
+const float chroma_expand_fact     = 0.69;
+const float chroma_expand_thr      = 0.5;
 
-const float               focus_gain_blend       = 0.3f;
-const float               focus_adjust_gain      = 0.55f;
-const float               focus_distance         = 1.35f;
-const float               focus_distance_scaling = 1.75f;
+// Gamut compression constants
+const float smooth_cusps           = 0.12f;
+const float smooth_J               = 0.0f;  // could be eliminated
+const float smooth_M               = 0.27f;
+const float cusp_mid_blend         = 1.3f;
+
+const float focus_gain_blend       = 0.3f;
+const float focus_adjust_gain      = 0.55f;
+const float focus_distance         = 1.35f;
+const float focus_distance_scaling = 1.75f;
 
 // CAM Parameters
-const float               L_A                    = 100.f;
-const float               Y_b                    = 20.f;
+const float ref_lum                = 100.f;
+const float L_A                    = 100.f;
+const float Y_b                    = 20.f;
 
-const float               ac_resp                = 1.f;
-const float               ra                     = 2.f;
-const float               ba                     = 0.05f + (2.f - ra);
+const float ac_resp                = 1.f;
+const float ra                     = 2.f;
+const float ba                     = 0.05f + (2.f - ra);
 
-const float               surround[3] = {0.9f, 0.59f, 0.9f};  // Average viewing condition
+const float surround[3]            = {0.9f, 0.59f, 0.9f};  // Average viewing condition
 
-const ColorSpacePrimaries CAM16_PRI   = {
+const float J_scale                = 100.0;
+const float cam_nl_Y_reference     = 100.0;
+const float cam_nl_offset          = 0.2713 * cam_nl_Y_reference;
+const float cam_nl_scale           = 4.0 * cam_nl_Y_reference;
+
+const float model_gamma            = surround[1] * (1.48f + sqrtf(Y_b / ref_lum));
+
+// Table generation
+#define TOTAL_TABLE_SIZE 362
+#define TABLE_SIZE       360
+
+const int                 cusp_corner_count      = 6;
+const int                 total_corner_count     = cusp_corner_count + 2;
+const int                 max_sorted_corners     = 2 * cusp_corner_count;
+const float               reach_cusp_tolerance   = 1e-3f;
+const float               display_cusp_tolerance = 1e-7f;
+
+const float               hue_limit              = 360.f;
+
+const float               gamma_minimum          = 0.0;
+const float               gamma_maximum          = 5.0;
+const float               gamma_search_step      = 0.4;
+const float               gamma_accuracy         = 1e-5;
+
+const ColorSpacePrimaries CAM16_PRI              = {
     {0.8336f, 0.1735f}, {2.3854f, -1.4659f}, {0.087f, -0.125f}, {0.333f, 0.333f}};
 
-const cv::Matx33f CAM16_RGB_TO_XYZ = RGB_TO_XYZ_f33(CAM16_PRI, 1.f);
+const cv::Matx33f CAM16_RGB_TO_XYZ          = RGB_TO_XYZ_f33(CAM16_PRI, 1.f);
+const cv::Matx33f MATRIX_16                 = XYZ_TO_RGB_f33(CAM16_PRI, 1.f);
 
-inline cv::Matx33f       GeneratePanlrcm(float _ra = 2.f, float _ba = 0.05f) {
-  cv::Matx33f panlrcm_data = {_ra,        1.f, 1.f / 9.f,  1.f,       -12.f / 11.f,
-                                    1.f / 9.f, _ba,  1.f / 11.f, -2.f / 9.f};
+const cv::Matx33f base_cone_repponse_to_Aab = {
+    2.f, 1.f, 1.f / 9.f, 1.f, -12.f / 11.f, 1.f / 9.f, 1.f / 20.f, 1.f / 11.f, -2.f / 9.f};
+
+inline cv::Matx33f GeneratePanlrcm(float _ra = 2.f, float _ba = 0.05f) {
+  cv::Matx33f panlrcm_data = {_ra,       1.f, 1.f / 9.f,  1.f,       -12.f / 11.f,
+                              1.f / 9.f, _ba, 1.f / 11.f, -2.f / 9.f};
   cv::Matx33f panlrcm      = panlrcm_data.inv();
 
   for (int i = 0; i < 3; ++i) {
@@ -168,6 +207,42 @@ inline cv::Matx33f       GeneratePanlrcm(float _ra = 2.f, float _ba = 0.05f) {
   return panlrcm;
 }
 
+// CAM Functions
+inline float _pacrc_fwd_(float Rc) {
+  const float F_L_Y = powf(Rc, 0.42f);
+  return (F_L_Y) / (cam_nl_offset + F_L_Y);
+}
+
+inline float pacrc_fwd(float v) {
+  const float abs_v = fabsf(v);
+  return copysignf(_pacrc_fwd_(abs_v), v);
+}
+
+inline float _pacrc_inv(float Ra) {
+  const float Ra_lim = fminf(Ra, 0.99f);
+  const float F_L_Y  = (cam_nl_offset * Ra_lim) / (1.f - Ra_lim);
+  return powf(F_L_Y, 1.f / 0.42f);
+}
+
+inline float pacrc_inv(float v) {
+  const float abs_v = fabsf(v);
+  return copysignf(_pacrc_inv(abs_v), v);
+}
+
+const cv::Matx33f PANLRCM = GeneratePanlrcm(ra, ba);
+
+struct JMhParams {
+  cv::Matx33f MATRIX_RGB_to_CAM16_c_;
+  cv::Matx33f MATRIX_CAM16_c_to_RGB_;
+  cv::Matx33f MATRIX_cone_response_to_Aab_;
+  cv::Matx33f MATRIX_Aab_to_cone_response_;
+  float       F_L_n_;
+  float       cz_;
+  float       inv_cz_;
+  float       A_w_z_;
+  float       inv_A_w_J_;
+};
+
 struct TSParams {
   float n_;
   float n_r_;
@@ -177,37 +252,53 @@ struct TSParams {
   float s_2_;
   float u_2_;
   float m_2_;
+  float forward_limit_;
+  float inverse_limit_;
+  float log_peak_;
 };
 
-const cv::Matx33f PANLRCM = GeneratePanlrcm(ra, ba);
-
 struct ODTParams {
-  float       peak_luminance_;
+  float                                                      peak_luminance_;
+
+  // JMh parameters
+  JMhParams                                                  input_params_;
+  JMhParams                                                  reach_params_;
+  JMhParams                                                  limit_params_;
 
   // Tone scale, set via TSParams structure
-  TSParams    ts_params_;
+  TSParams                                                   ts_params_;
 
-  float       focus_dist_;
+  // Shared compression parameters
+  float                                                      limit_J_max_;
+  float                                                      model_gamma_inv_;
+  std::shared_ptr<std::array<float, TOTAL_TABLE_SIZE>>       table_reach_M_;
 
-  // Chroma Compression
-  float       limit_J_max_;
-  float       mid_J_;
-  float       model_gamma_;
-  float       sat_;
-  float       sat_thr_;
-  float       compr_;
+  // Gamut compression parameters
+  float                                                      mid_J_;
+  float                                                      model_gamma_;
+  float                                                      lower_hull_gamma_;
+  float                                                      focus_dist_;
+  float                                                      lower_hull_gamma_inv_;
+  std::shared_ptr<std::array<float, TOTAL_TABLE_SIZE>>       table_hues_;
+  std::shared_ptr<std::array<cv::Matx13f, TOTAL_TABLE_SIZE>> table_gamut_cusps_;
+  std::shared_ptr<std::array<float, TOTAL_TABLE_SIZE>>       table_upper_hull_gammas_;
+  int                                                        hue_linearity_search_range_[2];
+
+  // Chroma compression parameters
+  float                                                      sat_;
+  float                                                      sat_thr_;
+  float                                                      compr_;
+  float                                                      chroma_compress_scale_;
 
   // Limit
-  cv::Matx33f LIMIT_RGB_TO_XYZ_;
-  cv::Matx33f LIMIT_XYZ_TO_RGB_;
-  cv::Matx13f XYZ_w_limit_;
+  cv::Matx33f                                                LIMIT_RGB_TO_XYZ_;
+  cv::Matx33f                                                LIMIT_XYZ_TO_RGB_;
+  cv::Matx13f                                                XYZ_w_limit_;
 
   // Output
-  cv::Matx33f OUTPUT_RGB_TO_XYZ_;
-  cv::Matx33f OUTPUT_XYZ_TO_RGB_;
-  cv::Matx13f XYZ_w_output_;
-
-  float       lower_hull_gamma_;
+  cv::Matx33f                                                OUTPUT_RGB_TO_XYZ_;
+  cv::Matx33f                                                OUTPUT_XYZ_TO_RGB_;
+  cv::Matx13f                                                XYZ_w_output_;
 };
 
 inline float signum(float x) {
@@ -226,18 +317,565 @@ inline cv::Matx13f mult_f3_f33(const cv::Matx13f& v, const cv::Matx33f& m) {
                      v(0) * m(0, 2) + v(1) * m(1, 2) + v(2) * m(2, 2));
 }
 
-inline float Y_to_Hellwig_J(float Y, float _surround = 0.59f, float _L_A = 100.f, float _Y_b = 20.f) {
-  float k   = 1.f / (5.f * _L_A + 1.f);
-  float k4  = k * k * k * k;
-  float F_L = 0.2f * k4 * (5.f * _L_A) + 0.1f * powf((1.f - k4), 2.f) * powf((5.f * _L_A), 1.f / 3.f);
-  float n   = _Y_b / 100.f;
-  float z   = 1.48f + sqrtf(n);
+inline float Y_to_Hellwig_J(float Y, float _surround = 0.59f, float _L_A = 100.f,
+                            float _Y_b = 20.f) {
+  float k  = 1.f / (5.f * _L_A + 1.f);
+  float k4 = k * k * k * k;
+  float F_L =
+      0.2f * k4 * (5.f * _L_A) + 0.1f * powf((1.f - k4), 2.f) * powf((5.f * _L_A), 1.f / 3.f);
+  float n     = _Y_b / 100.f;
+  float z     = 1.48f + sqrtf(n);
   float F_L_W = powf(F_L, 0.42f);
   float A_w   = (400.f * F_L_W) / (F_L_W + 27.13f);
 
   float F_L_Y = powf(F_L * fabsf(Y) / 100.f, 0.42f);
 
   return signum(Y) * 100.f * powf(((400.f * F_L_Y) / (27.13f + F_L_Y)) / A_w, _surround * z);
+}
+
+inline float Achromatic_n_to_J(float A, float cz) { return J_scale * powf(A, cz); }
+
+inline float Y_to_J(float Y, JMhParams& p) {
+  float abs_Y = fabsf(Y);
+  float Ra    = _pacrc_fwd_(abs_Y * p.F_L_n_);
+  float J     = Achromatic_n_to_J(Ra * p.inv_A_w_J_, p.cz_);
+
+  return copysignf(J, Y);
+}
+
+inline float wrap_to_360(float hue) {
+  float y = fmodf(hue, 360.f);
+  if (y < 0.f) {
+    y += 360.f;
+  }
+  return y;
+}
+
+inline float J_to_Achromatic_n(float J, float inv_cz) { return powf(J * (1.f / J_scale), inv_cz); }
+
+inline cv::Matx13f JMh_to_Aab(cv::Matx13f& JMh, JMhParams& params) {
+  float       J      = JMh(0);
+  float       M      = JMh(1);
+  float       h      = JMh(2);
+  float       h_rad  = h * static_cast<float>(CV_PI) / 180.f;
+  float       cos_hr = cosf(h_rad);
+  float       sin_hr = sinf(h_rad);
+
+  float       A      = J_to_Achromatic_n(J, params.inv_cz_);
+  float       a      = M * cos_hr;
+  float       b      = M * sin_hr;
+
+  cv::Matx13f Aab    = cv::Matx13f(A, a, b);
+  return Aab;
+}
+
+inline cv::Matx13f Aab_to_JMh(cv::Matx13f& Aab, JMhParams& params) {
+  cv::Matx13f JMh = {0.f, 0.f, 0.f};
+  if (Aab(0) <= 0.f) {
+    return JMh;
+  }
+
+  float J     = Achromatic_n_to_J(Aab(0), params.cz_);
+  float M     = sqrtf(Aab(1) * Aab(1) + Aab(2) * Aab(2));
+  float h_rad = atan2f(Aab(2), Aab(1));
+  float h     = wrap_to_360(h_rad * 180.f / static_cast<float>(CV_PI));
+
+  JMh(0)      = J;
+  JMh(1)      = M;
+  JMh(2)      = h;
+
+  return JMh;
+}
+
+inline cv::Matx13f Aab_to_RGB(cv::Matx13f& Aab, JMhParams& params) {
+  cv::Matx13f rgb_a = Aab * params.MATRIX_Aab_to_cone_response_;
+  cv::Matx13f rgb_m(pacrc_inv(rgb_a(0)), pacrc_inv(rgb_a(1)), pacrc_inv(rgb_a(2)));
+  cv::Matx13f rgb = rgb_m * params.MATRIX_CAM16_c_to_RGB_;
+  return rgb;
+}
+
+inline cv::Matx13f RGB_to_Aab(cv::Matx13f& RGB, JMhParams& params) {
+  cv::Matx13f rgb_m = RGB * params.MATRIX_RGB_to_CAM16_c_;
+  cv::Matx13f rgb_a(pacrc_fwd(rgb_m(0)), pacrc_fwd(rgb_m(1)), pacrc_fwd(rgb_m(2)));
+
+  return rgb_a * params.MATRIX_cone_response_to_Aab_;
+}
+
+inline cv::Matx13f JMh_to_RGB(cv::Matx13f& JMh, JMhParams& params) {
+  cv::Matx13f Aab = JMh_to_Aab(JMh, params);
+  cv::Matx13f RGB = Aab_to_RGB(Aab, params);
+  return RGB;
+}
+
+inline cv::Matx13f RGB_to_JMh(cv::Matx13f& RGB, JMhParams& params) {
+  cv::Matx13f Aab = RGB_to_Aab(RGB, params);
+}
+
+inline std::shared_ptr<std::array<float, TOTAL_TABLE_SIZE>> MakeReachMTable(JMhParams& params,
+                                                                            float limit_J_max) {
+  auto table_reach_M = std::make_shared<std::array<float, TOTAL_TABLE_SIZE>>();
+  for (int i = 0; i < TABLE_SIZE; ++i) {
+    float       i_float        = i;
+    float       hue            = i * 360.f / TABLE_SIZE;
+
+    const float search_range   = 50.f;
+    const float search_maximum = 1300.f;
+    float       low            = 0.f;
+    float       high           = low + search_range;
+    bool        outside        = false;
+
+    while ((!outside) && (high < search_maximum)) {
+      cv::Matx13f search_JMh = {limit_J_max, high, hue};
+      cv::Matx13f search_RGB = JMh_to_RGB(search_JMh, params);
+      outside = (search_RGB(0) < 0.f) || (search_RGB(1) < 0.f) || (search_RGB(2) < 0.f) ||
+                (search_RGB(0) > 1.f) || (search_RGB(1) > 1.f) || (search_RGB(2) > 1.f);
+      if (!outside) {
+        low = high;
+        high += search_range;
+      }
+    }
+
+    while (high - low > 1e-2f) {
+      float       sample_M      = (high + low) * 0.5f;
+      cv::Matx13f search_JMh    = {limit_J_max, sample_M, hue};
+      cv::Matx13f new_limit_RGB = JMh_to_RGB(search_JMh, params);
+      outside = (new_limit_RGB(0) < 0.f) || (new_limit_RGB(1) < 0.f) || (new_limit_RGB(2) < 0.f) ||
+                (new_limit_RGB(0) > 1.f) || (new_limit_RGB(1) > 1.f) || (new_limit_RGB(2) > 1.f);
+      if (outside) {
+        high = sample_M;
+      } else {
+        low = sample_M;
+      }
+    }
+
+    (*table_reach_M)[i + 1] = low;
+  }
+
+  (*table_reach_M)[0]              = (*table_reach_M)[TABLE_SIZE];
+
+  (*table_reach_M)[1 + TABLE_SIZE] = (*table_reach_M)[1];
+
+  return table_reach_M;
+}
+
+inline cv::Matx13f generate_unit_cube_cusp_corners(int corner) {
+  cv::Matx13f result;
+  // Generation order R, Y, G, C, B, M to ensure hues rotate in correct order
+  if (((corner + 1) % cusp_corner_count) < 3)
+    result(0) = 1;
+  else
+    result(0) = 0;
+  if (((corner + 5) % cusp_corner_count) < 3)
+    result(1) = 1;
+  else
+    result(1) = 0;
+  if (((corner + 3) % cusp_corner_count) < 3)
+    result(2) = 1;
+  else
+    result(2) = 0;
+  return result;
+}
+
+inline void find_reach_corners_table(std::array<cv::Matx13f, total_corner_count>& jmh_corners,
+                                     JMhParams& params_reach, ODTParams& p) {
+  std::array<cv::Matx13f, total_corner_count> temp_JMh_corners;
+
+  float limit_A   = J_to_Achromatic_n(p.limit_J_max_, params_reach.inv_cz_);
+
+  int   min_index = 0;
+  for (int i = 0; i < cusp_corner_count; ++i) {
+    const cv::Matx13f rgb_vector = generate_unit_cube_cusp_corners(i);
+
+    float             lower      = 0.f;
+    float             upper      = p.ts_params_.forward_limit_;
+
+    while ((upper - lower) > reach_cusp_tolerance) {
+      float       test = (lower + upper) * 0.5f;
+      cv::Matx13f test_corner =
+          cv::Matx13f(rgb_vector(0) * test, rgb_vector(1) * test, rgb_vector(2) * test);
+      float A = RGB_to_Aab(test_corner, params_reach)(0);
+      if (A < limit_A) {
+        lower = test;
+      } else {
+        upper = test;
+      }
+    }
+
+    cv::Matx13f scale_rgb_vec =
+        cv::Matx13f(rgb_vector(0) * upper, rgb_vector(1) * upper, rgb_vector(2) * upper);
+    temp_JMh_corners[i] = RGB_to_JMh(scale_rgb_vec, params_reach);
+
+    if (temp_JMh_corners[i](2) < temp_JMh_corners[min_index](2)) {
+      min_index = i;
+    }
+  }
+
+  // Rotate entries placing lowest at [1]
+  for (int i = 0; i < cusp_corner_count; ++i) {
+    jmh_corners[i + 1] = temp_JMh_corners[(i + min_index) % cusp_corner_count];
+  }
+
+  // Copy and elments to create a cycle
+  jmh_corners[0]                     = jmh_corners[cusp_corner_count];
+  jmh_corners[cusp_corner_count + 1] = jmh_corners[1];
+
+  // Wrap the hues, to maintain monotonicity these entries will fall outside [0.0, hue_limit)
+  jmh_corners[0](2) -= hue_limit;
+  jmh_corners[cusp_corner_count + 1](2) += hue_limit;
+}
+
+std::array<float, max_sorted_corners> extract_sorted_cube_hues(
+    std::array<cv::Matx13f, total_corner_count>& reach_JMh,
+    std::array<cv::Matx13f, total_corner_count>& limit_JMh) {
+  std::array<float, max_sorted_corners> sorted_hues{};
+
+  // Basic merge of 2 sorted arrays, extracting the unique hues.
+  // Return the count of the unique hues
+  int                                   idx       = 0;
+  int                                   reach_idx = 1;
+  int                                   limit_idx = 1;
+
+  while ((reach_idx <= cusp_corner_count) || (limit_idx <= cusp_corner_count)) {
+    float reach_hue = reach_JMh[reach_idx](2);
+    float limit_hue = limit_JMh[limit_idx](2);
+    if (reach_hue == limit_hue) {
+      sorted_hues[idx] = reach_hue;
+      ++reach_idx;
+      ++limit_idx;
+    } else {
+      if (reach_hue < limit_hue) {
+        sorted_hues[idx] = reach_hue;
+        ++reach_idx;
+      } else {
+        sorted_hues[idx] = limit_hue;
+        ++limit_idx;
+      }
+    }
+    ++idx;
+  }
+  return sorted_hues;
+}
+
+inline void build_limiting_cusp_tables(std::array<cv::Matx13f, total_corner_count>& RGB_corners,
+                                       std::array<cv::Matx13f, total_corner_count>& JMh_corners,
+                                       JMhParams& limit_params, ODTParams& p) {
+  // We calculate the RGB and JMh values for the limiting gamut cusp corners
+  // They are then arranged into a cycle with the lowest JMh value at [1] to
+  // allow for hue wrapping
+  std::array<cv::Matx13f, total_corner_count> temp_RGB_corners{};
+  std::array<cv::Matx13f, total_corner_count> temp_JMh_corners{};
+
+  int                                         min_index = 0;
+  for (int i = 0; i < cusp_corner_count; ++i) {
+    temp_RGB_corners[i] = {p.peak_luminance_ / ref_lum * generate_unit_cube_cusp_corners(i)(0),
+                           p.peak_luminance_ / ref_lum * generate_unit_cube_cusp_corners(i)(1),
+                           p.peak_luminance_ / ref_lum * generate_unit_cube_cusp_corners(i)(2)};
+    temp_JMh_corners[i] = RGB_to_JMh(temp_RGB_corners[i], limit_params);
+    if (temp_JMh_corners[i](2) < temp_JMh_corners[min_index](2)) {
+      min_index = i;
+    }
+  }
+
+  // Rotate entries placing lowest at [1]
+  for (int i = 0; i < cusp_corner_count; ++i) {
+    RGB_corners[i + 1] = temp_RGB_corners[(i + min_index) % cusp_corner_count];
+    JMh_corners[i + 1] = temp_JMh_corners[(i + min_index) % cusp_corner_count];
+  }
+
+  // Copy and elements to create a cycle
+  RGB_corners[0]                     = RGB_corners[cusp_corner_count];
+  RGB_corners[cusp_corner_count + 1] = RGB_corners[1];
+  JMh_corners[0]                     = JMh_corners[cusp_corner_count];
+  JMh_corners[cusp_corner_count + 1] = JMh_corners[1];
+
+  // Wrap the hues, to maintain monotonicity these entries will fall outside [0.0, hue_limit)
+  JMh_corners[0](2) -= hue_limit;
+  JMh_corners[cusp_corner_count + 1](2) += hue_limit;
+}
+
+inline void build_hue_sample_interval(int samples, float lower, float upper,
+                                      std::array<float, TOTAL_TABLE_SIZE>& hue_table, int base) {
+  float delta = (upper - lower) / static_cast<float>(samples);
+  int   i;
+  for (i = 0; i < samples; ++i) {
+    hue_table[base + i] = lower + delta * static_cast<float>(i);
+  }
+}
+
+inline std::array<float, TOTAL_TABLE_SIZE> build_hue_table(
+    std::array<float, max_sorted_corners>& sorted_hues) {
+  std::array<float, TOTAL_TABLE_SIZE> hue_table{};
+
+  float                               ideal_spacing                    = TABLE_SIZE / hue_limit;
+  int                                 samples_count[cusp_corner_count] = {0};
+  int                                 last_idx                         = 0;
+  int                                 min_index                        = 0;
+  if (sorted_hues[0] == 0.f) {
+    min_index = 0;
+  } else {
+    min_index = 1;
+  }
+  int hue_idx;
+
+  for (hue_idx = 0; hue_idx != max_sorted_corners; ++hue_idx) {
+    float raw_idx     = roundf(sorted_hues[hue_idx] * ideal_spacing);
+    int   nominal_idx = fminf(fmaxf(roundf((sorted_hues[hue_idx] * ideal_spacing)), min_index),
+                              static_cast<float>(TABLE_SIZE - 1));
+
+    if (last_idx == nominal_idx) {
+      // Last two hues should sample at same index, need to adjust them
+      // Adjust previou sample down if we can
+      if (hue_idx > 1 && samples_count[hue_idx - 2] != (samples_count[hue_idx - 1] - 1)) {
+        samples_count[hue_idx - 1] -= 1;
+      } else {
+        nominal_idx += 1;
+      }
+    }
+    samples_count[hue_idx] = fminf(nominal_idx, static_cast<float>(TABLE_SIZE - 1));
+    min_index              = nominal_idx;
+    last_idx               = min_index;
+  }
+
+  int total_samples = 0;
+  // Special cases for ends
+  int i             = 0;
+  build_hue_sample_interval(samples_count[i], 0.0f, sorted_hues[i], hue_table, total_samples + 1);
+  total_samples += samples_count[i];
+
+  for (i = i + 1; i < max_sorted_corners; ++i) {
+    int samples = samples_count[i] - samples_count[i - 1];
+    build_hue_sample_interval(samples, sorted_hues[i - 1], sorted_hues[i], hue_table,
+                              total_samples + 1);
+    total_samples += samples;
+  }
+
+  build_hue_sample_interval(TABLE_SIZE - total_samples, sorted_hues[i - 1], hue_limit, hue_table,
+                            total_samples + 1);
+
+  hue_table[0]              = hue_table[TABLE_SIZE] - hue_limit;
+  hue_table[TABLE_SIZE + 1] = hue_table[1] + hue_limit;
+  return hue_table;
+}
+
+inline cv::Matx13f lerp_f3(const cv::Matx13f& a, const cv::Matx13f& b, float t) {
+  return cv::Matx13f(std::lerp(a(0), b(0), t), std::lerp(a(1), b(1), t), std::lerp(a(2), b(2), t));
+}
+
+inline cv::Matx12f find_display_cusp_for_hue(
+    float hue, std::array<cv::Matx13f, total_corner_count>& RGB_corners,
+    std::array<cv::Matx13f, total_corner_count>& JMh_corners, JMhParams& params,
+    cv::Matx12f& previous) {
+  // This works by finding the required line segment between two of the XYZ
+  // cusp corners, then binary searching along the line calculating the JMh of
+  // points along the line till we find the required value. All values on the
+  // line segments are valid cusp locations.
+  cv::Matx12f return_JM;
+
+  int         upper_corner = 1;
+  int         found        = 0;
+  for (int i = upper_corner; i != total_corner_count && !found; ++i) {
+    if (hue < JMh_corners[i](2)) {
+      upper_corner = i;
+      found        = 1;
+    }
+  }
+  int lower_corner = upper_corner - 1;
+
+  // hue should now be within [lower_corner, upper_corner), handle exact match
+  if (JMh_corners[lower_corner](2) == hue) {
+    return_JM(0) = JMh_corners[lower_corner](0);
+    return_JM(1) = JMh_corners[lower_corner](1);
+    return return_JM;
+  }
+
+  // Search by lerping between RGB corners for the hue
+  cv::Matx13f cusp_lower = RGB_corners[lower_corner];
+  cv::Matx13f cusp_upper = RGB_corners[upper_corner];
+  cv::Matx13f sample;
+
+  float       sample_t;
+  float       lower_t = 0.f;
+  if (upper_corner == previous(0)) lower_t = previous(1);
+  float       upper_t = 1.f;
+
+  cv::Matx13f JMh;
+
+  // There is an edge case where we need to search towards the range when
+  // across the [0.0, hue_limit] boundary each edge needs the directions
+  // swapped. This is handled by comparing against the appropriate corner to
+  // make sure we are still in the expected range between the lower and upper
+  // corner hue limits
+  while ((upper_t - lower_t) > display_cusp_tolerance) {
+    sample_t = std::midpoint(lower_t, upper_t);
+    sample   = lerp_f3(cusp_lower, cusp_upper, sample_t);
+    JMh      = RGB_to_JMh(sample, params);
+    if (JMh(2) < JMh_corners[lower_corner](2)) {
+      upper_t = sample_t;
+    } else if (JMh(2) >= JMh_corners[upper_corner](2)) {
+      lower_t = sample_t;
+    } else if (JMh(2) > hue) {
+      upper_t = sample_t;
+    } else {
+      lower_t = sample_t;
+    }
+  }
+
+  sample_t     = std::midpoint(lower_t, upper_t);
+  sample       = lerp_f3(cusp_lower, cusp_upper, sample_t);
+  JMh          = RGB_to_JMh(sample, params);
+  return_JM(0) = JMh(0);
+  return_JM(1) = JMh(1);
+  return return_JM;
+}
+
+inline std::array<cv::Matx13f, TOTAL_TABLE_SIZE> build_cusp_table(
+    std::array<float, TOTAL_TABLE_SIZE>&         hue_table,
+    std::array<cv::Matx13f, total_corner_count>& RGB_corners,
+    std::array<cv::Matx13f, total_corner_count>& JMh_corners, JMhParams& params) {
+  cv::Matx12f                               previous = {0.f, 0.f};
+  std::array<cv::Matx13f, TOTAL_TABLE_SIZE> output_table{};
+
+  for (int i = 1; i < TOTAL_TABLE_SIZE; ++i) {
+    float hue          = hue_table[i];
+    auto  JM           = find_display_cusp_for_hue(hue, RGB_corners, JMh_corners, params, previous);
+    output_table[i](0) = JM(0);
+    output_table[i](1) = JM(1) * (1.f + smooth_M * smooth_cusps);
+    output_table[i](2) = hue;
+  }
+
+  // Copy last nominal entry to start
+  output_table[0](0)              = output_table[TABLE_SIZE](0);
+  output_table[0](1)              = output_table[TABLE_SIZE](1);
+  output_table[0](2)              = hue_table[0];
+
+  // Copy first nominal entry to end
+  output_table[TABLE_SIZE + 1](0) = output_table[1](0);
+  output_table[TABLE_SIZE + 1](1) = output_table[1](1);
+  output_table[TABLE_SIZE + 1](2) = hue_table[TABLE_SIZE + 1];
+  return output_table;
+}
+
+const int   test_count                = 5;
+const float testPositions[test_count] = {0.01, 0.1, 0.5, 0.8, 0.99};
+
+struct TestData {
+  std::array<float, 3> test_JMh_;
+  float                J_intersect_source_;
+  float                slope_;
+  float                J_intersect_cusp_;
+};
+
+inline float compute_focus_J(float cusp_J, float mid_J, float limit_J_max) {
+  return std::lerp(cusp_J, mid_J, fminf(1.f, cusp_mid_blend - (cusp_J / limit_J_max)));
+}
+
+inline float get_focus_gain(float J, float analytical_threshold, float limit_J_Max,
+                            float focus_dist) {
+  float gain = limit_J_Max * focus_dist;
+
+  if (J > analytical_threshold) {
+    float gain_adjustment =
+        log10f((limit_J_Max - analytical_threshold) / fmaxf(0.0001f, limit_J_Max - J));
+    gain_adjustment = gain_adjustment * gain_adjustment + 1.f;
+    gain            = gain * gain_adjustment;
+  }
+  return gain;
+}
+
+inline float solve_J_intersect(float J, float M, float focus_J, float max_J, float slope_gain) {
+  const float M_scaled = M / slope_gain;
+  const float a        = M_scaled / focus_J;
+
+  if (J < focus_J) {
+    const float b    = 1.f - M_scaled;
+    const float c    = -J;
+    const float det  = b * b - 4.f * a * c;
+    const float root = sqrtf(det);
+    return -2.f * c / (b + root);
+  } else {
+    const float b    = -(1. + M_scaled + max_J * a);
+    const float c    = max_J * M_scaled - J;
+    const float det  = b * b - 4.f * a * c;
+    const float root = sqrtf(det);
+    return -2.f * c / (b - root);
+  }
+}
+
+inline float compute_compression_vector_slope(float intersect_J, float focus_J, float limit_J_max,
+                                              float slope_gain) {
+  float direction_scalar;
+  if (intersect_J < focus_J) {
+    direction_scalar = intersect_J;
+  } else {
+    direction_scalar = limit_J_max - intersect_J;
+  }
+  return direction_scalar * (intersect_J - focus_J) / (focus_J * slope_gain);
+}
+
+inline void generate_gamma_test_data(cv::Matx12f& JM_cusp, float hue, float limit_J_max,
+                                     float mid_J, float focus_dist,
+                                     std::array<cv::Matx13f, test_count>& test_JMh,
+                                     std::array<float, test_count>&       J_intersect_source,
+                                     std::array<float, test_count>&       slopes,
+                                     std::array<float, test_count>&       J_intersect_cusp) {
+  float analytical_threshold = std::lerp(JM_cusp(0), limit_J_max, focus_gain_blend);
+  float focus_J              = compute_focus_J(JM_cusp(0), mid_J, limit_J_max);
+
+  for (int test_idx = 0; test_idx != test_count; ++test_idx) {
+    float test_J     = std::lerp(JM_cusp(0), limit_J_max, testPositions[test_idx]);
+    float slope_gain = get_focus_gain(test_J, analytical_threshold, limit_J_max, focus_dist);
+    // float J_intersect =
+    float J_intersect = solve_J_intersect(test_J, JM_cusp(1), focus_J, limit_J_max, slope_gain);
+    float slope = compute_compression_vector_slope(J_intersect, focus_J, limit_J_max, slope_gain);
+    float J_cusp      = solve_J_intersect(JM_cusp(0), JM_cusp(1), focus_J, limit_J_max, slope_gain);
+
+    test_JMh[test_idx] = cv::Matx13f(test_J, JM_cusp(1), hue);
+    J_intersect_source[test_idx] = J_intersect;
+    slopes[test_idx] = slope;
+    J_intersect_cusp[test_idx] = J_cusp;
+  }
+}
+
+inline std::array<float, TOTAL_TABLE_SIZE> build_upper_hull_gamma_table(
+    std::array<cv::Matx13f, TOTAL_TABLE_SIZE>& gamut_cusp_table, ODTParams& p) {
+  // Find upper hull gamma values for the gamut mapper.
+  // Start by taking a h angle
+  // Get the cusp J value for that angle
+  // Find a J value halfway to the Jmax
+  // Iterate through gamma values until the approximate max M is
+  // negative through the actual boundary
+
+  // positions between the cusp and Jmax we will check variables that get
+  // set as we iterate through, once all are set to true we break the loop
+
+  std::array<float, TOTAL_TABLE_SIZE> upper_hull_gammas{};
+
+  for (int i = 1; i != 1 + TABLE_SIZE; ++i) {
+    // Get cusp from cusp table at hue position
+    float                               hue     = gamut_cusp_table[i](2);
+    cv::Matx12f                         JM_cusp = {gamut_cusp_table[i](0), gamut_cusp_table[i](1)};
+
+    std::array<cv::Matx13f, test_count> test_JMh{};
+    std::array<float, test_count>       J_intersect_source{};
+    std::array<float, test_count>       slops{};
+    std::array<float, test_count>       J_intersect_cusp{};
+  }
+}
+
+inline std::shared_ptr<std::array<cv::Matx13f, TOTAL_TABLE_SIZE>> MakeUniformHueGamutTable(
+    JMhParams& reach_params, JMhParams& limit_params, ODTParams& p) {
+  std::array<cv::Matx13f, total_corner_count> reach_JMh_corners{};
+  std::array<cv::Matx13f, total_corner_count> limiting_RGB_corners{};
+  std::array<cv::Matx13f, total_corner_count> limiting_JMh_corners{};
+
+  find_reach_corners_table(reach_JMh_corners, reach_params, p);
+  build_limiting_cusp_tables(limiting_RGB_corners, limiting_JMh_corners, limit_params, p);
+  auto sorted_hues = extract_sorted_cube_hues(reach_JMh_corners, limiting_JMh_corners);
+  auto hue_table   = build_hue_table(sorted_hues);
+
+  auto cusp_table  = std::make_shared<std::array<cv::Matx13f, TOTAL_TABLE_SIZE>>(
+      build_cusp_table(hue_table, limiting_RGB_corners, limiting_JMh_corners, limit_params));
+  return cusp_table;
 }
 }  // namespace ColorUtils
 };  // namespace puerhlab
