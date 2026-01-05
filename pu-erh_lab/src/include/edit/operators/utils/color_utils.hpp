@@ -282,7 +282,7 @@ struct ODTParams {
   std::shared_ptr<std::array<float, TOTAL_TABLE_SIZE>>       table_hues_;
   std::shared_ptr<std::array<cv::Matx13f, TOTAL_TABLE_SIZE>> table_gamut_cusps_;
   std::shared_ptr<std::array<float, TOTAL_TABLE_SIZE>>       table_upper_hull_gammas_;
-  int                                                        hue_linearity_search_range_[2];
+  cv::Matx12f                                                hue_linearity_search_range_;
 
   // Chroma compression parameters
   float                                                      sat_;
@@ -822,21 +822,98 @@ inline void generate_gamma_test_data(cv::Matx12f& JM_cusp, float hue, float limi
   float focus_J              = compute_focus_J(JM_cusp(0), mid_J, limit_J_max);
 
   for (int test_idx = 0; test_idx != test_count; ++test_idx) {
-    float test_J     = std::lerp(JM_cusp(0), limit_J_max, testPositions[test_idx]);
-    float slope_gain = get_focus_gain(test_J, analytical_threshold, limit_J_max, focus_dist);
+    float test_J      = std::lerp(JM_cusp(0), limit_J_max, testPositions[test_idx]);
+    float slope_gain  = get_focus_gain(test_J, analytical_threshold, limit_J_max, focus_dist);
     // float J_intersect =
     float J_intersect = solve_J_intersect(test_J, JM_cusp(1), focus_J, limit_J_max, slope_gain);
-    float slope = compute_compression_vector_slope(J_intersect, focus_J, limit_J_max, slope_gain);
-    float J_cusp      = solve_J_intersect(JM_cusp(0), JM_cusp(1), focus_J, limit_J_max, slope_gain);
+    float slope  = compute_compression_vector_slope(J_intersect, focus_J, limit_J_max, slope_gain);
+    float J_cusp = solve_J_intersect(JM_cusp(0), JM_cusp(1), focus_J, limit_J_max, slope_gain);
 
-    test_JMh[test_idx] = cv::Matx13f(test_J, JM_cusp(1), hue);
+    test_JMh[test_idx]           = cv::Matx13f(test_J, JM_cusp(1), hue);
     J_intersect_source[test_idx] = J_intersect;
-    slopes[test_idx] = slope;
-    J_intersect_cusp[test_idx] = J_cusp;
+    slopes[test_idx]             = slope;
+    J_intersect_cusp[test_idx]   = J_cusp;
   }
 }
 
-inline std::array<float, TOTAL_TABLE_SIZE> build_upper_hull_gamma_table(
+inline float estimate_line_and_boundary_intersection_M(float J_axis_intersect, float slope,
+                                                       float inv_gamma, float J_max, float M_max,
+                                                       float J_intersection_reference) {
+  // Line defined by     J = slope * x + J_axis_intersect
+  // Boundary defined by J = J_max * (x / M_max) ^ (1/inv_gamma)
+  // Approximate as we do not want to iteratively solve intersection of a
+  // straight line and an exponential
+
+  // We calculate a shifted intersection from the original intersection using
+  // the inverse of the exponential and the provided reference
+  const float normalized_J         = J_axis_intersect / J_intersection_reference;
+  const float shifted_intersection = J_intersection_reference * powf(normalized_J, inv_gamma);
+
+  // Now we find the M intersection of two lines
+  // line from origin to J,M Max       l1(x) = J/M * x
+  // line from J Intersect' with slope l2(x) = slope * x + Intersect'
+
+  // return shifted_intersection / ((J_max / M_max) - slope);
+  return shifted_intersection * M_max / (J_max - slope * M_max);
+}
+
+inline float smin_scaled(float a, float b, float scale_ref) {
+  const float s_scaled = smooth_cusps * scale_ref;
+  const float h        = fmaxf(s_scaled - fabsf(a - b), 0.f) / s_scaled;
+  return fminf(a, b) - h * h * h * s_scaled * (1.f / 6.f);
+}
+
+inline float find_gamut_boundary_intersection(cv::Matx12f& JM_cusp, float J_max,
+                                              float gamma_top_inv, float gamma_bottom_inv,
+                                              float J_intersect_source, float slope,
+                                              float J_intersect_cusp) {
+  const float M_boundary_lower = estimate_line_and_boundary_intersection_M(
+      J_intersect_source, slope, gamma_bottom_inv, JM_cusp(0), JM_cusp(1), J_intersect_cusp);
+  // The upper hull is flipped and thus 'zeroed' at J_max
+  // Also note we negate the slope
+  const float f_J_intersect_cusp   = J_max - J_intersect_cusp;
+  const float f_J_intersect_source = J_max - J_intersect_source;
+  const float f_JM_cusp_J          = J_max - JM_cusp(0);
+  const float M_boundary_upper     = estimate_line_and_boundary_intersection_M(
+      f_J_intersect_source, -slope, gamma_top_inv, f_JM_cusp_J, JM_cusp(1), f_J_intersect_cusp);
+
+  float M_boundary = smin_scaled(M_boundary_lower, M_boundary_upper, JM_cusp(1));
+  return M_boundary;
+}
+
+inline bool outside_hull(cv::Matx13f& rgb, float max_rgb_test_val) {
+  return rgb(0) > max_rgb_test_val || rgb(1) > max_rgb_test_val || rgb(2) > max_rgb_test_val;
+}
+
+inline bool evaluate_gamma_fit(cv::Matx12f& JM_cusp, std::array<cv::Matx13f, test_count>& test_JMh,
+                               std::array<float, test_count>& J_intersect_source,
+                               std::array<float, test_count>& slopes,
+                               std::array<float, test_count>& J_intersect_cusp, float top_gamma_inv,
+                               float peak_luminance, float limit_J_max, float lower_hull_gamma_inv,
+                               JMhParams& limit_params) {
+  float luminance_limit = peak_luminance / ref_lum;
+
+  for (int test_idx = 0; test_idx < test_count; ++test_idx) {
+    // Compute gamut boundary intersection
+    float approxLimit_M = find_gamut_boundary_intersection(
+        JM_cusp, limit_J_max, top_gamma_inv, lower_hull_gamma_inv, J_intersect_source[test_idx],
+        slopes[test_idx], J_intersect_source[test_idx]);
+    float       approxLimit_J   = J_intersect_source[test_idx] + slopes[test_idx] * approxLimit_M;
+
+    // Store JMh values
+    cv::Matx13f approximate_JMh = {approxLimit_J, approxLimit_M, test_JMh[test_idx](2)};
+
+    // Convert to RGB
+    cv::Matx13f new_limit_RGB   = JMh_to_RGB(approximate_JMh, limit_params);
+
+    // Check if any values exceed the luminance limit. If so, we are outside of the top gamut shell
+    if (!outside_hull(new_limit_RGB, luminance_limit)) return false;
+  }
+
+  return true;
+}
+
+inline std::array<float, TOTAL_TABLE_SIZE> MakeUpperHullGammaTable(
     std::array<cv::Matx13f, TOTAL_TABLE_SIZE>& gamut_cusp_table, ODTParams& p) {
   // Find upper hull gamma values for the gamut mapper.
   // Start by taking a h angle
@@ -857,9 +934,47 @@ inline std::array<float, TOTAL_TABLE_SIZE> build_upper_hull_gamma_table(
 
     std::array<cv::Matx13f, test_count> test_JMh{};
     std::array<float, test_count>       J_intersect_source{};
-    std::array<float, test_count>       slops{};
+    std::array<float, test_count>       slopes{};
     std::array<float, test_count>       J_intersect_cusp{};
+
+    generate_gamma_test_data(JM_cusp, hue, p.limit_J_max_, p.mid_J_, p.focus_dist_, test_JMh,
+                             J_intersect_source, slopes, J_intersect_cusp);
+    float search_range = gamma_search_step;
+    float low          = gamma_minimum;
+    float high         = low + search_range;
+    bool  outside      = false;
+    while (!(outside) && (high < gamma_maximum)) {
+      bool gamma_found = evaluate_gamma_fit(
+          JM_cusp, test_JMh, J_intersect_source, slopes, J_intersect_cusp, 1.f / high,
+          p.peak_luminance_, p.limit_J_max_, p.lower_hull_gamma_inv_, p.limit_params_);
+      if (!gamma_found) {
+        low = high;
+        high += search_range;
+      } else {
+        outside = true;
+      }
+    }
+
+    float test_gamma = -1.f;
+    while ((high - low) > gamma_accuracy) {
+      test_gamma       = std::midpoint(high, low);
+      bool gamma_found = evaluate_gamma_fit(
+          JM_cusp, test_JMh, J_intersect_source, slopes, J_intersect_cusp, 1.f / test_gamma,
+          p.peak_luminance_, p.limit_J_max_, p.lower_hull_gamma_inv_, p.limit_params_);
+      if (gamma_found) {
+        high = test_gamma;
+      } else {
+        low = test_gamma;
+      }
+    }
+    upper_hull_gammas[i] = 1.f / high;
   }
+
+  // Copy last populated entry to first empty spot
+  upper_hull_gammas[0]              = upper_hull_gammas[TABLE_SIZE];
+  upper_hull_gammas[TABLE_SIZE + 1] = upper_hull_gammas[1];
+
+  return upper_hull_gammas;
 }
 
 inline std::shared_ptr<std::array<cv::Matx13f, TOTAL_TABLE_SIZE>> MakeUniformHueGamutTable(
@@ -876,6 +991,35 @@ inline std::shared_ptr<std::array<cv::Matx13f, TOTAL_TABLE_SIZE>> MakeUniformHue
   auto cusp_table  = std::make_shared<std::array<cv::Matx13f, TOTAL_TABLE_SIZE>>(
       build_cusp_table(hue_table, limiting_RGB_corners, limiting_JMh_corners, limit_params));
   return cusp_table;
+}
+
+int hue_position_in_uniform_table(float hue, int table_size) {
+  const float wrapped_hue = wrap_to_360(hue);
+  int         result      = (wrapped_hue / hue_limit * table_size);
+  return result;
+}
+
+inline cv::Matx12f DetermineHueLinearitySearchRange(
+    std::array<float, TOTAL_TABLE_SIZE>& hue_table) {
+  // This function searches through the hues looking for the largest
+  // deviations from a linear distribution. We can then use this to initialise
+  // the binary search range to something smaller than the full one to reduce
+  // the number of lookups per hue lookup from ~ceil(log2(table size)) to
+  // ~ceil(log2(range)) during image rendering.
+
+  const int lower_padding = 0;
+  const int upper_padding = 1;
+
+  cv::Matx12f hue_linearity_search_range = {lower_padding, upper_padding};
+
+  for (int i = 1; i != 1 + TABLE_SIZE; ++i) {
+    const int pos = hue_position_in_uniform_table(hue_table[i], TOTAL_TABLE_SIZE);
+    const int delta = i - pos;
+    hue_linearity_search_range(0) = fminf(hue_linearity_search_range(0), delta + lower_padding);
+    hue_linearity_search_range(1) = fmaxf(hue_linearity_search_range(1), delta + upper_padding);
+  }
+
+  return hue_linearity_search_range;
 }
 }  // namespace ColorUtils
 };  // namespace puerhlab

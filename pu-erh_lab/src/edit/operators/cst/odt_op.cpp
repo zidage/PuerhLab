@@ -16,6 +16,7 @@
 
 #include "edit/operators/cst/odt_op.hpp"
 
+#include <memory>
 #include <opencv2/core.hpp>
 
 #include "edit/operators/utils/color_utils.hpp"
@@ -263,15 +264,16 @@ void ACES_ODT_Op::init_ODTParams() {
   odt.mid_J_                 = Y_to_J(ts.c_t_ * ref_lum, odt.input_params_);
   odt.focus_dist_ = focus_distance + focus_distance * focus_distance_scaling * ts.log_peak_;
   const float lower_hull_gama = 1.14f + 0.07f * ts.log_peak_;
-  odt.lower_hull_gamma_      = lower_hull_gama;
-  odt.lower_hull_gamma_inv_  = 1.f / lower_hull_gama;
+  odt.lower_hull_gamma_       = lower_hull_gama;
+  odt.lower_hull_gamma_inv_   = 1.f / lower_hull_gama;
   odt.table_gamut_cusps_      = MakeUniformHueGamutTable(odt.reach_params_, odt.limit_params_, odt);
 
   odt.table_hues_             = std::make_shared<std::array<float, TOTAL_TABLE_SIZE>>();
   for (int i = 0; i < TOTAL_TABLE_SIZE; ++i) {
     (*odt.table_hues_)[i] = (*odt.table_gamut_cusps_)[i](2);
   }
-
-  
+  odt.table_upper_hull_gammas_ = std::make_shared<std::array<float, TOTAL_TABLE_SIZE>>(
+      MakeUpperHullGammaTable(*odt.table_gamut_cusps_, odt));
+  odt.hue_linearity_search_range_ = DetermineHueLinearitySearchRange(*odt.table_hues_);
 }
 };  // namespace puerhlab
