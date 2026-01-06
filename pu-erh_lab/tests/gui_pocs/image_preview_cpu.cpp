@@ -10,7 +10,6 @@
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/opencv.hpp>
 
-#include "edit/operators/op_base.hpp"
 #include "edit/pipeline/pipeline_cpu.hpp"
 #include "edit/scheduler/pipeline_scheduler.hpp"
 #include "sleeve/sleeve_manager.hpp"
@@ -47,7 +46,12 @@ void SetPipelineTemplate(std::shared_ptr<PipelineExecutor> executor) {
   auto&          output_stage = executor->GetStage(PipelineStageName::Output_Transform);
   output_params["ocio"]       = {
       {"src", "ACEScc"}, {"dst", "Camera Rec.709"}, {"limit", true}, {"transform_type", 1}};
-  output_stage.SetOperator(OperatorType::TO_OUTPUT, output_params, global_params);
+  output_params["aces_odt"] = {
+      {"encoding_space", "rec709"},
+      {"encoding_etof", "gamma_1_8"},
+      {"limiting_space", "rec709"},
+      {"peak_luminance", 100.0f}};
+  output_stage.SetOperator(OperatorType::ODT, output_params, global_params);
 }
 
 static QImage cvMatToQImage(const cv::Mat& mat) {
@@ -105,7 +109,7 @@ int main(int argc, char* argv[]) {
   SleeveManager             manager{db_path};
   ImageLoader               image_loader(128, 1, 0);
 
-  image_path_t              path = std::string(TEST_IMG_PATH) + "/raw/showcase";
+  image_path_t              path = std::string(TEST_IMG_PATH) + "/raw/camera/sony/a7iv";
   std::vector<image_path_t> imgs;
   for (const auto& img : std::filesystem::directory_iterator(path)) {
     if (!img.is_directory() && is_supported_file(img.path())) imgs.push_back(img.path());

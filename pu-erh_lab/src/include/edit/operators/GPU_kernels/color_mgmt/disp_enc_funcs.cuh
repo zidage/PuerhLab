@@ -262,6 +262,13 @@ GPU_FUNC float3 eotf(const float3& rgb_cv, GPU_ETOF etof_enum) {
   }
 }
 
+GPU_FUNC float3 ApplyWhiteScale(float3& rgb, float* MAT_limit_to_display) {
+  float3 RGB_w_f = mult_f3_f33(make_float3(1.f, 1.f, 1.f), MAT_limit_to_display);
+  float  scale   = 1.f / fmaxf(fmaxf(RGB_w_f.x, RGB_w_f.y), RGB_w_f.z);
+
+  return mult_f_f3(rgb, scale);
+}
+
 GPU_FUNC float3 DisplayEncoding(float3& rgb, float* MAT_limit_to_display, GPU_ETOF etof_num,
                                  float linear_scale = 1.f) {
   float3 rgb_disp_linear = mult_f3_f33(rgb, MAT_limit_to_display);

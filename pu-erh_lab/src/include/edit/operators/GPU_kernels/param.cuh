@@ -487,8 +487,9 @@ class GPUParamsConverter {
         dst.F_L_n_     = src.F_L_n_;
         dst.cz_        = src.cz_;
         dst.inv_cz_    = src.inv_cz_;
-        // CPU naming is A_w_z_ but semantically this is the same precomputed achromatic scaling.
-        dst.A_w_J_     = src.A_w_z_;
+        // CTL semantics: A_w_J = _pacrc_fwd(F_L). Use inv_A_w_J_ as the
+        // authoritative value to avoid any CPU-side naming/meaning mismatches.
+        dst.A_w_J_     = (src.inv_A_w_J_ != 0.f) ? (1.f / src.inv_A_w_J_) : 0.f;
         dst.inv_A_w_J_ = src.inv_A_w_J_;
       };
 

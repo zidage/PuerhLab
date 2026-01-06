@@ -113,10 +113,16 @@ auto ACES_ODT_Op::GetParams() const -> nlohmann::json {
   j["encoding_etof"]  = ETOFToString(encoding_etof_);
   j["limiting_space"] = ColorSpaceToString(limiting_space_);
   j["peak_luminance"] = peak_luminance_;
-  return j;
+  o["aces_odt"]       = j;
+  return o;
 }
 
-void ACES_ODT_Op::SetParams(const nlohmann::json& j) {
+void ACES_ODT_Op::SetParams(const nlohmann::json& in_j) {
+  if (!in_j.contains("aces_odt")) {
+    return;
+  }
+  const nlohmann::json& j = in_j["aces_odt"];
+
   if (j.contains("encoding_space")) {
     encoding_space_ = ParseColorSpace(j["encoding_space"].get<std::string>());
   }
@@ -201,7 +207,11 @@ ColorUtils::JMhParams init_JMhParams(const ColorUtils::ColorSpacePrimaries& prim
   p.F_L_n_                       = F_L_n;
   p.cz_                          = cz;
   p.inv_cz_                      = 1.f / cz;
-  p.A_w_z_                       = A_w / A_w_J;
+  // NOTE: CTL uses JMhParams.A_w_J = _pacrc_fwd(F_L). This value is required
+  // by the achromatic optimization path (J_to_Y / Y_to_J).
+  // Historically this field was named A_w_z_ in our CPU struct, but for the
+  // CTL port (and GPU path) it must store A_w_J.
+  p.A_w_z_                       = A_w_J;
   p.inv_A_w_J_                   = 1.f / A_w_J;
 
   return p;
@@ -216,35 +226,35 @@ void ACES_ODT_Op::init_JMhParams() {
 }
 
 void ACES_ODT_Op::init_TSParams() {
-  const float          n         = peak_luminance_;
+  const float n         = peak_luminance_;
 
-  const float          n_r       = 100.0f;   // normalized white in nits (what 1.0 should be)
-  const float          g         = 1.15f;    // surround / contrast
-  const float          c         = 0.18f;    // anchor for 18% grey
-  const float          c_d       = 10.013f;  // output luminance of 18% grey (in nits)
-  const float          w_g       = 0.14f;    // change in grey between different peak luminance
-  const float          t_1       = 0.04f;    // shadow toe or flare/glare compensation
-  const float          r_hit_min = 128.f;    // scene-referred value "hitting the roof"
-  const float          r_hit_max = 896.f;    // scene-referred value "hitting the roof"
+  const float n_r       = 100.0f;   // normalized white in nits (what 1.0 should be)
+  const float g         = 1.15f;    // surround / contrast
+  const float c         = 0.18f;    // anchor for 18% grey
+  const float c_d       = 10.013f;  // output luminance of 18% grey (in nits)
+  const float w_g       = 0.14f;    // change in grey between different peak luminance
+  const float t_1       = 0.04f;    // shadow toe or flare/glare compensation
+  const float r_hit_min = 128.f;    // scene-referred value "hitting the roof"
+  const float r_hit_max = 896.f;    // scene-referred value "hitting the roof"
 
   // Calculate output constants
-  const float          r_hit     = r_hit_min + r_hit_max * (logf(n / n_r) / logf(10000.f / 100.f));
-  const float          m_0       = (n / n_r);
-  const float          m_1       = 0.5f * (m_0 + sqrtf(m_0 * (m_0 + 4.f * t_1)));
-  const float          u         = powf((r_hit / m_1) / ((r_hit / m_1) + 1), g);
-  const float          m         = m_1 / u;
-  const float          w_i       = logf(n / 100.f) / logf(2.f);
-  const float          c_t       = c_d / n_r * (1.f + w_i * w_g);
-  const float          g_ip      = 0.5f * (c_t + sqrtf(c_t * (c_t + 4.f * t_1)));
-  const float          g_ipp2 = -(m_1 * powf((g_ip / m), (1.f / g))) / (powf(g_ip / m, 1.f / g) - 1.f);
-  const float          w_2    = c / g_ipp2;
-  const float          s_2    = w_2 * m_1;
-  const float          u_2    = powf((r_hit / m_1) / ((r_hit / m_1) + w_2), g);
-  const float          m_2    = m_1 / u_2;
+  const float r_hit     = r_hit_min + (r_hit_max - r_hit_min) * (log(n / n_r) / log(10000.f / 100.f));
+  const float m_0       = (n / n_r);
+  const float m_1       = 0.5f * (m_0 + sqrt(m_0 * (m_0 + 4.f * t_1)));
+  const float u         = pow((r_hit / m_1) / ((r_hit / m_1) + 1), g);
+  const float m         = m_1 / u;
+  const float w_i       = log(n / 100.f) / log(2.f);
+  const float c_t       = c_d / n_r * (1.f + w_i * w_g);
+  const float g_ip      = 0.5f * (c_t + sqrt(c_t * (c_t + 4.f * t_1)));
+  const float g_ipp2    = -(m_1 * pow((g_ip / m), (1.f / g))) / (pow(g_ip / m, 1.f / g) - 1.f);
+  const float w_2       = c / g_ipp2;
+  const float s_2       = w_2 * m_1;
+  const float u_2       = pow((r_hit / m_1) / ((r_hit / m_1) + w_2), g);
+  const float m_2       = m_1 / u_2;
 
   ColorUtils::TSParams TonescaleParams = {
       n, n_r, g, t_1, c_t, s_2, u_2, m_2, 8.f * r_hit, n / (u_2 * n_r), log10(n / n_r)};
-  to_output_params_.odt_params_.ts_params_ = std::move(TonescaleParams);
+  to_output_params_.odt_params_.ts_params_ = TonescaleParams;
 }
 
 void ACES_ODT_Op::init_ODTParams() {
@@ -255,7 +265,7 @@ void ACES_ODT_Op::init_ODTParams() {
   TSParams&  ts        = to_output_params_.odt_params_.ts_params_;
   ODTParams& odt       = to_output_params_.odt_params_;
   // Shared compression parameters
-  odt.limit_J_max_     = Y_to_Hellwig_J(to_output_params_.odt_params_.peak_luminance_);
+  odt.limit_J_max_     = Y_to_J(peak_luminance_, odt.input_params_);
   odt.model_gamma_inv_ = 1.f / model_gamma;
   odt.table_reach_M_ =
       MakeReachMTable(to_output_params_.odt_params_.reach_params_, odt.limit_J_max_);

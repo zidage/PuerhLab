@@ -221,10 +221,12 @@ struct GPU_OUTPUT_Kernel : GPUPointOpTag {
     // RRT step)
     float3 otd_color = OutputTransform_fwd(aces_3, params.to_output_params_.odt_params_);
 
+    // float3 otd_color_ws =
+    //     ApplyWhiteScale(otd_color, params.to_output_params_.limit_to_display_matx);
     // Step 3: Display encoding
-    float3 cv_3      = DisplayEncoding(otd_color, params.to_output_params_.limit_to_display_matx,
-                                       params.to_output_params_.etof, 1.0f);
-    *p               = make_float4(cv_3.x, cv_3.y, cv_3.z, p->w);
+    float3 cv_3 = DisplayEncoding(otd_color, params.to_output_params_.limit_to_display_matx,
+                                  params.to_output_params_.etof, 1.0f);
+    *p          = make_float4(cv_3.x, cv_3.y, cv_3.z, p->w);
   }
 };
 };  // namespace CUDA

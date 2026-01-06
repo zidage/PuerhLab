@@ -25,6 +25,7 @@
 
 #include <cmath>
 
+#include "edit/operators/GPU_kernels/color_mgmt/odt_const.cuh"
 #include "edit/operators/GPU_kernels/param.cuh"
 #include "odt_const.cuh"
 #include "tonescale_funcs.cuh"
@@ -42,8 +43,10 @@ struct HueDependentGamutParams {
 };
 GPU_FUNC float3 clamp_AP1(const float3& AP1_color, float clamp_lower_limit,
                           float clamp_upper_limit) {
+  // float3 AP1_color = mult_f3_f33(AP0_color, AP0_TO_AP1);
   float3 AP1_clamped = clamp_f3(AP1_color, clamp_lower_limit, clamp_upper_limit);
-  return mult_f3_f33(AP1_clamped, AP1_TO_AP0);
+  float3 AP0_clamped = mult_f3_f33(AP1_clamped, AP1_TO_AP0);
+  return AP0_clamped;
 }
 
 GPU_FUNC float table_get(const GPU_Table1D<float>& table, int index) {
@@ -114,9 +117,9 @@ GPU_FUNC float pacrc_inv(float v) {
   return copysignf(Rc, v);
 }
 
-GPU_FUNC float  Achromatic_n_to_J(float A, float cz) { return J_scale * powf(A, cz); }
+GPU_FUNC float Achromatic_n_to_J(float A, float cz) { return J_scale * powf(A, cz); }
 
-GPU_FUNC float  J_to_Achromatic_n(float J, float inv_cz) { return pow(J * (1. / J_scale), inv_cz); }
+GPU_FUNC float J_to_Achromatic_n(float J, float inv_cz) { return powf(J * (1. / J_scale), inv_cz); }
 
 GPU_FUNC float3 RGB_to_Aab(const float3& RGB, GPU_JMhParams& p) {
   float3 RGB_m = mult_f3_f33(RGB, p.MATRIX_RGB_to_CAM16_c_);
@@ -209,43 +212,38 @@ GPU_FUNC float chroma_compress_norm(float h, float chroma_compress_scale) {
 }
 
 GPU_FUNC float reinhard_remap(float scale, float nd, bool invert = false) {
-  const float fwd     = scale * nd / (1.0f + nd);
+  const float fwd = scale * nd / (1.0f + nd);
 
-  // invert 分支，两种子分支：nd>=1 与 nd<1
-  const int   nd_ge_1 = nd >= 1.0f;
-  const float denom   = fmaxf(nd - 1.0f, 1e-7f);  // 避免除 0
-  const float inv_hi  = scale;                    // nd>=1
-  const float inv_lo  = scale * (-nd / denom);    // nd<1
-  const float inv     = nd_ge_1 ? inv_hi : inv_lo;
+  if (invert) {
+    if (nd >= 1.0f) {
+      return scale;
+    } else {
+      return scale * -(nd / (nd - 1.0f));
+    }
+  }
 
-  return invert ? inv : fwd;
+  return fwd;
 }
 
 // A "toe" function that remaps the given value x between 0 and limit.
 // The k1 and k2 parameters change the size and shape of the toe.
 // https://www.desmos.com/calculator/6vplvw14ti
-GPU_FUNC float toe(float x, float limit, float k1_in, float k2_in, int invert /* 0 or 1 */
+GPU_FUNC float toe(float x, float limit, float k1_in, float k2_in, int invert = 0 /* 0 or 1 */
 ) {
   // Clamp k2 to avoid division by 0 / extreme slope
-  float k2      = fmaxf(k2_in, 1e-3f);
-  float k1      = sqrtf(k1_in * k1_in + k2 * k2);
-  float k3      = (limit + k1) / (limit + k2);
+  if (x > limit) return x;
 
-  // forward branch
-  float t       = k3 * x - k1;
-  float fwd     = 0.5f * (t + sqrtf(t * t + 4.0f * k2 * k3 * x));
+  float k2 = fmaxf(k2_in, 0.001f);
+  float k1 = sqrtf(k1_in * k1_in + k2 * k2);
+  float k3 = (limit + k1) / (limit + k2);
 
-  // inverse branch
-  float inv     = (x * x + k1 * x) / (k3 * (x + k2));
-
-  // select invert (invert must be 0/1)
-  float invMask = (float)invert;                    // 0.0 or 1.0
-  float toeVal  = fmaf(invMask, (inv - fwd), fwd);  // toeVal = invert ? inv : fwd
-
-  // select x>limit
-  // (x>limit) is still a compare, but no control-flow branch is required.
-  float gtMask  = (x > limit) ? 1.0f : 0.0f;  // may compile to predicate
-  return fmaf(gtMask, (x - toeVal), toeVal);  // gt? x : toeVal
+  if (invert) {
+    return (x * x + k1 * x) / (k3 * (x + k2));
+  } else {
+    const float minus_b = k3 * x - k1;
+    const float minus_c = k2 * k3 * x;
+    return 0.5f * (minus_b + sqrtf(minus_b * minus_b + 4.f * minus_c));
+  }
 }
 
 GPU_FUNC float3 chroma_compress_fwd(const float3& JMh, float tonemapped_J, GPU_ODTParams& p,
@@ -257,23 +255,23 @@ GPU_FUNC float3 chroma_compress_fwd(const float3& JMh, float tonemapped_J, GPU_O
   float M_compr = M;
 
   if (M != 0.f) {
-    const float nJ          = tonemapped_J / p.limit_J_max;
-    const float snJ         = fmaxf(0.f, 1.f - nJ);
-    float       Mnorm       = chroma_compress_norm(h, p.chroma_compress_scale);
-    float       limit       = powf(nJ, p.model_gamma_inv) * reach_M_from_table(h, p.table_reach_M_);
+    const float nJ    = tonemapped_J / p.limit_J_max;
+    const float snJ   = fmaxf(0.f, 1.f - nJ);
+    float       Mnorm = chroma_compress_norm(h, p.chroma_compress_scale);
+    float limit     = powf(nJ, p.model_gamma_inv) * reach_M_from_table(h, p.table_reach_M_) / Mnorm;
 
-    float       toe_limit   = limit - 0.001f;
-    float       toe_snJ_sat = snJ * p.sat;
-    float       toe_sqrt_nJ_sat_thr = sqrtf(nJ * nJ + p.sat_thr);
-    float       toe_nJ_compr        = nJ * p.compr;
+    float toe_limit = limit - 0.001f;
+    float toe_snJ_sat         = snJ * p.sat;
+    float toe_sqrt_nJ_sat_thr = sqrtf(nJ * nJ + p.sat_thr);
+    float toe_nJ_compr        = nJ * p.compr;
 
     // Rescaling of M with the tonescaled J to get the M to the same range as
     // J after the tonescale.  The rescaling uses the Hellwig2022 model gamma to
     // keep the M/J ratio correct (keeping the chromaticities constant).
-    M_compr                         = M * powf(tonemapped_J / J, p.model_gamma_inv);
+    M_compr                   = M * powf(tonemapped_J / J, p.model_gamma_inv);
 
     // Normalize M with the rendering space cusp M
-    M_compr                         = M_compr / Mnorm;
+    M_compr                   = M_compr / Mnorm;
 
     // Expand the colorfulness by running the toe function in reverse.  The goal is to
     // expand less saturated colors less and more saturated colors more.  The expansion
@@ -307,12 +305,13 @@ GPU_FUNC float3 tonemap_and_compress_fwd(const float3& JMh, GPU_ODTParams& p) {
 
   // Compress M; functio returns { tonemapped J, compressed M, h }
   return chroma_compress_fwd(JMh, J_ts, p);
+  // return make_float3(J_ts, JMh.y, JMh.z);
 }
 
 GPU_FUNC int look_hue_interval(float h, const GPU_Table1D<float>& hue_table,
                                int* hue_linearity_search_range) {
-  const float hw   = wrap_to_360(h);
-  int         i    = baseIndex + hue_position_in_uniform_table(hw, totalTableSize);
+  const float hw = wrap_to_360(h);
+  int         i  = baseIndex + hue_position_in_uniform_table(hw, tableSize);  // 使用 tableSize=360
   int         i_lo = i + hue_linearity_search_range[0];
   int         i_hi = i + hue_linearity_search_range[1];
 
@@ -547,6 +546,7 @@ GPU_FUNC float3 gamut_compress_fwd(const float3& JMh, GPU_ODTParams& p) {
 
 GPU_FUNC float3 OutputTransform_fwd(const float3& in_color, GPU_ODTParams& p) {
   // float3 color          = make_float3(in_color.x, in_color.y, in_color.z);
+  // float3 color          = mult_f3_f33(in_color, AP1_TO_AP0);
   float3 AP1_clamped    = clamp_AP1(in_color, 0.0f, p.ts_.forward_limit_);
 
   float3 JMh            = RGB_to_JMh(AP1_clamped, p.input_params_);
