@@ -262,6 +262,7 @@ struct GPUOperatorParams {
   bool          to_output_enabled_      = true;
   GPU_LUT3D     to_output_lut_          = {};
   GPU_ODTParams odt_params_             = {};
+  
 
   // Curve adjustment parameters
   bool          curve_enabled_          = false;

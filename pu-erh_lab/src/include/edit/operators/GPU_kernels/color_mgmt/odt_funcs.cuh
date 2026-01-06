@@ -28,6 +28,7 @@
 #include "edit/operators/GPU_kernels/param.cuh"
 #include "odt_const.cuh"
 #include "tonescale_funcs.cuh"
+#include "util_funcs.cuh"
 
 namespace puerhlab {
 namespace CUDA {
@@ -39,17 +40,6 @@ struct HueDependentGamutParams {
   float  focus_J;
   float  analytical_threshold;
 };
-
-GPU_FUNC float3 mult_f3_f33(const float3& v, const float* m) {
-  return make_float3(v.x * m[0] + v.y * m[3] + v.z * m[6], v.x * m[1] + v.y * m[4] + v.z * m[7],
-                     v.x * m[2] + v.y * m[5] + v.z * m[8]);
-}
-
-GPU_FUNC float3 clamp_f3(const float3& v, float min_val, float max_val) {
-  return make_float3(fminf(fmaxf(v.x, min_val), max_val), fminf(fmaxf(v.y, min_val), max_val),
-                     fminf(fmaxf(v.z, min_val), max_val));
-}
-
 GPU_FUNC float3 clamp_AP0_to_AP1(const float3& AP0_color, float clamp_lower_limit,
                                  float clamp_upper_limit) {
   float3 AP1         = mult_f3_f33(AP0_color, AP0_TO_AP1);
