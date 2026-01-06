@@ -14,7 +14,6 @@
 
 #pragma once
 
-#include <__clang_cuda_runtime_wrapper.h>
 #include <cuda_runtime.h>
 
 // JMh Constants

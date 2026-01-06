@@ -31,7 +31,7 @@ class ACES_ODT_Op : public OperatorBase<ACES_ODT_Op> {
 
   float                  peak_luminance_ = 100.0f;  // Default to 100 nits
 
-  ColorUtils::ODTParams  odt_params_;
+  ColorUtils::TO_OUTPUT_Params  to_output_params_;
 
   static ColorUtils::ColorSpace ParseColorSpace(const std::string& cs_str);
   static ColorUtils::ETOF       ParseETOF(const std::string& etof_str);

@@ -139,45 +139,45 @@ struct OperatorParams {
   bool                         to_lmt_dirty_             = false;
   OCIO::ConstCPUProcessorRcPtr cpu_lmt_processor_        = nullptr;
   OCIO::ConstGPUProcessorRcPtr gpu_lmt_processor_        = nullptr;
-  std::filesystem::path        lmt_lut_path_                 = {};
+  std::filesystem::path        lmt_lut_path_             = {};
 
   // To output space
-  bool                         to_output_enabled_       = true;
-  bool                         to_output_dirty_         = false;
-  OCIO::ConstCPUProcessorRcPtr cpu_to_output_processor_      = nullptr;
-  // [UNUSED] Current approach does not use OCIO or LUT in GPU path 
-  OCIO::ConstGPUProcessorRcPtr gpu_to_output_processor_ = nullptr;
-  OCIO::BakerRcPtr             to_output_lut_baker_     = nullptr;
+  bool                         to_output_enabled_        = true;
+  bool                         to_output_dirty_          = false;
+  OCIO::ConstCPUProcessorRcPtr cpu_to_output_processor_  = nullptr;
+  // [UNUSED] Current approach does not use OCIO or LUT in GPU path
+  OCIO::ConstGPUProcessorRcPtr gpu_to_output_processor_  = nullptr;
+  OCIO::BakerRcPtr             to_output_lut_baker_      = nullptr;
   // [WIP] Ported from Academy Color Encoding System Core Transforms
   // A CUDA implementation of the CTL operators
   // https://github.com/aces-aswf/aces-core
-  ColorUtils::ODTParams                    odt_params_              = {};
+  ColorUtils::TO_OUTPUT_Params to_output_params_         = {};
 
   // Curve adjustment parameters
-  bool                         curve_enabled_           = false;
-  std::vector<cv::Point2f>     curve_ctrl_pts_          = {};
-  std::vector<float>           curve_h_                 = {};
-  std::vector<float>           curve_m_                 = {};
+  bool                         curve_enabled_            = false;
+  std::vector<cv::Point2f>     curve_ctrl_pts_           = {};
+  std::vector<float>           curve_h_                  = {};
+  std::vector<float>           curve_m_                  = {};
 
   // Clarity adjustment parameter
-  bool                         clarity_enabled_         = true;
-  float                        clarity_offset_          = 0.0f;
-  float                        clarity_radius_          = 5.0f;
+  bool                         clarity_enabled_          = true;
+  float                        clarity_offset_           = 0.0f;
+  float                        clarity_radius_           = 5.0f;
 
   // Sharpen adjustment parameter
-  bool                         sharpen_enabled_         = true;
-  float                        sharpen_offset_          = 0.0f;
-  float                        sharpen_radius_          = 3.0f;
-  float                        sharpen_threshold_       = 0.0f;
+  bool                         sharpen_enabled_          = true;
+  float                        sharpen_offset_           = 0.0f;
+  float                        sharpen_radius_           = 3.0f;
+  float                        sharpen_threshold_        = 0.0f;
 
   // Color wheel adjustment parameters
-  bool                         color_wheel_enabled_     = true;
-  float                        lift_color_offset_[3]    = {0.0f, 0.0f, 0.0f};
-  float                        lift_luminance_offset_   = 0.0f;
-  float                        gamma_color_offset_[3]   = {1.0f, 1.0f, 1.0f};
-  float                        gamma_luminance_offset_  = 0.0f;
-  float                        gain_color_offset_[3]    = {1.0f, 1.0f, 1.0f};
-  float                        gain_luminance_offset_   = 0.0f;
+  bool                         color_wheel_enabled_      = true;
+  float                        lift_color_offset_[3]     = {0.0f, 0.0f, 0.0f};
+  float                        lift_luminance_offset_    = 0.0f;
+  float                        gamma_color_offset_[3]    = {1.0f, 1.0f, 1.0f};
+  float                        gamma_luminance_offset_   = 0.0f;
+  float                        gain_color_offset_[3]     = {1.0f, 1.0f, 1.0f};
+  float                        gain_luminance_offset_    = 0.0f;
 };
 
 class IOperatorBase {

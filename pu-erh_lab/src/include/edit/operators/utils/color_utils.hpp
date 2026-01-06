@@ -131,11 +131,11 @@ inline cv::Matx33f XYZ_TO_RGB_f33(const ColorSpacePrimaries& C, float Y = 1.0f) 
 }
 
 // Chroma compression
-const float chroma_compress        = 2.4;
-const float chroma_compress_fact   = 3.3;
-const float chroma_expand          = 1.3;
-const float chroma_expand_fact     = 0.69;
-const float chroma_expand_thr      = 0.5;
+const float chroma_compress        = 2.4f;
+const float chroma_compress_fact   = 3.3f;
+const float chroma_expand          = 1.3f;
+const float chroma_expand_fact     = 0.69f;
+const float chroma_expand_thr      = 0.5f;
 
 // Gamut compression constants
 const float smooth_cusps           = 0.12f;
@@ -159,10 +159,10 @@ const float ba                     = 0.05f + (2.f - ra);
 
 const float surround[3]            = {0.9f, 0.59f, 0.9f};  // Average viewing condition
 
-const float J_scale                = 100.0;
-const float cam_nl_Y_reference     = 100.0;
-const float cam_nl_offset          = 0.2713 * cam_nl_Y_reference;
-const float cam_nl_scale           = 4.0 * cam_nl_Y_reference;
+const float J_scale                = 100.0f;
+const float cam_nl_Y_reference     = 100.0f;
+const float cam_nl_offset          = 0.2713f * cam_nl_Y_reference;
+const float cam_nl_scale           = 4.0f * cam_nl_Y_reference;
 
 const float model_gamma            = surround[1] * (1.48f + sqrtf(Y_b / ref_lum));
 
@@ -178,10 +178,10 @@ const float               display_cusp_tolerance = 1e-7f;
 
 const float               hue_limit              = 360.f;
 
-const float               gamma_minimum          = 0.0;
-const float               gamma_maximum          = 5.0;
-const float               gamma_search_step      = 0.4;
-const float               gamma_accuracy         = 1e-5;
+const float               gamma_minimum          = 0.0f;
+const float               gamma_maximum          = 5.0f;
+const float               gamma_search_step      = 0.4f;
+const float               gamma_accuracy         = 1e-5f;
 
 const ColorSpacePrimaries CAM16_PRI              = {
     {0.8336f, 0.1735f}, {2.3854f, -1.4659f}, {0.087f, -0.125f}, {0.333f, 0.333f}};
@@ -289,16 +289,13 @@ struct ODTParams {
   float                                                      sat_thr_;
   float                                                      compr_;
   float                                                      chroma_compress_scale_;
+};
 
-  // Limit
-  cv::Matx33f                                                LIMIT_RGB_TO_XYZ_;
-  cv::Matx33f                                                LIMIT_XYZ_TO_RGB_;
-  cv::Matx13f                                                XYZ_w_limit_;
+struct TO_OUTPUT_Params {
+  struct ODTParams odt_params_;
 
-  // Output
-  cv::Matx33f                                                OUTPUT_RGB_TO_XYZ_;
-  cv::Matx33f                                                OUTPUT_XYZ_TO_RGB_;
-  cv::Matx13f                                                XYZ_w_output_;
+  cv::Matx33f      limit_to_display_matx_;
+  ETOF             etof_;
 };
 
 inline float signum(float x) {
@@ -409,14 +406,16 @@ inline cv::Matx13f JMh_to_RGB(cv::Matx13f& JMh, JMhParams& params) {
 
 inline cv::Matx13f RGB_to_JMh(cv::Matx13f& RGB, JMhParams& params) {
   cv::Matx13f Aab = RGB_to_Aab(RGB, params);
+  cv::Matx13f JMh = Aab_to_JMh(Aab, params);
+
+  return JMh;
 }
 
 inline std::shared_ptr<std::array<float, TOTAL_TABLE_SIZE>> MakeReachMTable(JMhParams& params,
                                                                             float limit_J_max) {
   auto table_reach_M = std::make_shared<std::array<float, TOTAL_TABLE_SIZE>>();
   for (int i = 0; i < TABLE_SIZE; ++i) {
-    float       i_float        = i;
-    float       hue            = i * 360.f / TABLE_SIZE;
+    float       hue            = (float)i * 360.f / TABLE_SIZE;
 
     const float search_range   = 50.f;
     const float search_maximum = 1300.f;
@@ -524,7 +523,7 @@ inline void find_reach_corners_table(std::array<cv::Matx13f, total_corner_count>
   jmh_corners[cusp_corner_count + 1](2) += hue_limit;
 }
 
-std::array<float, max_sorted_corners> extract_sorted_cube_hues(
+inline std::array<float, max_sorted_corners> extract_sorted_cube_hues(
     std::array<cv::Matx13f, total_corner_count>& reach_JMh,
     std::array<cv::Matx13f, total_corner_count>& limit_JMh) {
   std::array<float, max_sorted_corners> sorted_hues{};
@@ -607,7 +606,7 @@ inline std::array<float, TOTAL_TABLE_SIZE> build_hue_table(
   std::array<float, TOTAL_TABLE_SIZE> hue_table{};
 
   float                               ideal_spacing                    = TABLE_SIZE / hue_limit;
-  int                                 samples_count[cusp_corner_count] = {0};
+  int                                 samples_count[2 * cusp_corner_count + 2] = {0};
   int                                 last_idx                         = 0;
   int                                 min_index                        = 0;
   if (sorted_hues[0] == 0.f) {
@@ -618,9 +617,9 @@ inline std::array<float, TOTAL_TABLE_SIZE> build_hue_table(
   int hue_idx;
 
   for (hue_idx = 0; hue_idx != max_sorted_corners; ++hue_idx) {
-    float raw_idx     = roundf(sorted_hues[hue_idx] * ideal_spacing);
-    int   nominal_idx = fminf(fmaxf(roundf((sorted_hues[hue_idx] * ideal_spacing)), min_index),
-                              static_cast<float>(TABLE_SIZE - 1));
+    int nominal_idx = static_cast<int>(
+        fminf(fmaxf(roundf((sorted_hues[hue_idx] * ideal_spacing)), static_cast<float>(min_index)),
+              static_cast<float>(TABLE_SIZE - 1)));
 
     if (last_idx == nominal_idx) {
       // Last two hues should sample at same index, need to adjust them
@@ -631,7 +630,7 @@ inline std::array<float, TOTAL_TABLE_SIZE> build_hue_table(
         nominal_idx += 1;
       }
     }
-    samples_count[hue_idx] = fminf(nominal_idx, static_cast<float>(TABLE_SIZE - 1));
+    samples_count[hue_idx] = static_cast<int>(fminf(static_cast<float>(nominal_idx), static_cast<float>(TABLE_SIZE - 1)));
     min_index              = nominal_idx;
     last_idx               = min_index;
   }
@@ -652,7 +651,7 @@ inline std::array<float, TOTAL_TABLE_SIZE> build_hue_table(
   build_hue_sample_interval(TABLE_SIZE - total_samples, sorted_hues[i - 1], hue_limit, hue_table,
                             total_samples + 1);
 
-  hue_table[0]              = hue_table[TABLE_SIZE] - hue_limit;
+  hue_table[0]              = hue_table[1 + TABLE_SIZE - 1] - hue_limit;
   hue_table[TABLE_SIZE + 1] = hue_table[1] + hue_limit;
   return hue_table;
 }
@@ -756,7 +755,7 @@ inline std::array<cv::Matx13f, TOTAL_TABLE_SIZE> build_cusp_table(
 }
 
 const int   test_count                = 5;
-const float testPositions[test_count] = {0.01, 0.1, 0.5, 0.8, 0.99};
+const float testPositions[test_count] = {0.01f, 0.1f, 0.5f, 0.8f, 0.99f};
 
 struct TestData {
   std::array<float, 3> test_JMh_;
@@ -793,7 +792,7 @@ inline float solve_J_intersect(float J, float M, float focus_J, float max_J, flo
     const float root = sqrtf(det);
     return -2.f * c / (b + root);
   } else {
-    const float b    = -(1. + M_scaled + max_J * a);
+    const float b    = -(1.f + M_scaled + max_J * a);
     const float c    = max_J * M_scaled - J;
     const float det  = b * b - 4.f * a * c;
     const float root = sqrtf(det);
@@ -897,7 +896,7 @@ inline bool evaluate_gamma_fit(cv::Matx12f& JM_cusp, std::array<cv::Matx13f, tes
     // Compute gamut boundary intersection
     float approxLimit_M = find_gamut_boundary_intersection(
         JM_cusp, limit_J_max, top_gamma_inv, lower_hull_gamma_inv, J_intersect_source[test_idx],
-        slopes[test_idx], J_intersect_source[test_idx]);
+        slopes[test_idx], J_intersect_cusp[test_idx]);
     float       approxLimit_J   = J_intersect_source[test_idx] + slopes[test_idx] * approxLimit_M;
 
     // Store JMh values
@@ -972,6 +971,8 @@ inline std::array<float, TOTAL_TABLE_SIZE> MakeUpperHullGammaTable(
 
   // Copy last populated entry to first empty spot
   upper_hull_gammas[0]              = upper_hull_gammas[TABLE_SIZE];
+
+  // Copy first populated entry to last empty spot
   upper_hull_gammas[TABLE_SIZE + 1] = upper_hull_gammas[1];
 
   return upper_hull_gammas;
@@ -993,9 +994,9 @@ inline std::shared_ptr<std::array<cv::Matx13f, TOTAL_TABLE_SIZE>> MakeUniformHue
   return cusp_table;
 }
 
-int hue_position_in_uniform_table(float hue, int table_size) {
+inline int hue_position_in_uniform_table(float hue, int table_size) {
   const float wrapped_hue = wrap_to_360(hue);
-  int         result      = (wrapped_hue / hue_limit * table_size);
+  int         result      = static_cast<int>(wrapped_hue / hue_limit * table_size);
   return result;
 }
 
@@ -1007,16 +1008,18 @@ inline cv::Matx12f DetermineHueLinearitySearchRange(
   // the number of lookups per hue lookup from ~ceil(log2(table size)) to
   // ~ceil(log2(range)) during image rendering.
 
-  const int lower_padding = 0;
-  const int upper_padding = 1;
+  const int   lower_padding              = 0;
+  const int   upper_padding              = 1;
 
   cv::Matx12f hue_linearity_search_range = {lower_padding, upper_padding};
 
   for (int i = 1; i != 1 + TABLE_SIZE; ++i) {
-    const int pos = hue_position_in_uniform_table(hue_table[i], TOTAL_TABLE_SIZE);
+    const int pos   = hue_position_in_uniform_table(hue_table[i], TOTAL_TABLE_SIZE);
     const int delta = i - pos;
-    hue_linearity_search_range(0) = fminf(hue_linearity_search_range(0), delta + lower_padding);
-    hue_linearity_search_range(1) = fmaxf(hue_linearity_search_range(1), delta + upper_padding);
+    hue_linearity_search_range(0) =
+        fminf(hue_linearity_search_range(0), static_cast<float>(delta + lower_padding));
+    hue_linearity_search_range(1) =
+        fmaxf(hue_linearity_search_range(1), static_cast<float>(delta + upper_padding));
   }
 
   return hue_linearity_search_range;

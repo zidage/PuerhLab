@@ -40,10 +40,9 @@ struct HueDependentGamutParams {
   float  focus_J;
   float  analytical_threshold;
 };
-GPU_FUNC float3 clamp_AP0_to_AP1(const float3& AP0_color, float clamp_lower_limit,
-                                 float clamp_upper_limit) {
-  float3 AP1         = mult_f3_f33(AP0_color, AP0_TO_AP1);
-  float3 AP1_clamped = clamp_f3(AP1, clamp_lower_limit, clamp_upper_limit);
+GPU_FUNC float3 clamp_AP1(const float3& AP1_color, float clamp_lower_limit,
+                          float clamp_upper_limit) {
+  float3 AP1_clamped = clamp_f3(AP1_color, clamp_lower_limit, clamp_upper_limit);
   return mult_f3_f33(AP1_clamped, AP1_TO_AP0);
 }
 
@@ -52,9 +51,9 @@ GPU_FUNC float table_get(const GPU_Table1D<float>& table, int index) {
 }
 
 GPU_FUNC float wrap_to_360(float hue) {
-  float y   = fmod(hue, 360.);
+  float y   = fmod(hue, 360.f);
   // branchless: add 360 when y<0, else add 0
-  float add = ((float)(y < 0.)) * 360.;  // step(x,y)= y<=x?1:0 in CTL; adjust if different
+  float add = ((float)(y < 0.f)) * 360.f;  // step(x,y)= y<=x?1:0 in CTL; adjust if different
   return y + add;
 }
 
@@ -180,7 +179,10 @@ GPU_FUNC float _A_to_Y(float A, GPU_JMhParams& p) {
   return Y;
 }
 
-GPU_FUNC float J_to_Y(float J, GPU_JMhParams& p) { float abs_J = fabsf(J); }
+GPU_FUNC float J_to_Y(float J, GPU_JMhParams& p) {
+  float abs_J = fabsf(J);
+  return _A_to_Y(J_to_Achromatic_n(abs_J, p.inv_cz_), p);
+}
 
 GPU_FUNC float Y_to_J(float Y, GPU_JMhParams& p) {
   float abs_Y = fabsf(Y);
@@ -332,7 +334,7 @@ GPU_FUNC int look_hue_interval(float h, const GPU_Table1D<float>& hue_table,
 
 GPU_FUNC float  interpolation_weight(float h, float h_lo, float h_hi) { return h - h_lo; }
 
-GPU_FUNC float2 cusp_from_table(float h, const GPU_Table1D<float3>& table) {
+GPU_FUNC float2 cusp_from_table(float h, const GPU_Table1D<float4>& table) {
   const float hw     = wrap_to_360(h);
 
   int         low_i  = 0;
@@ -341,15 +343,15 @@ GPU_FUNC float2 cusp_from_table(float h, const GPU_Table1D<float3>& table) {
 
 #pragma unroll
   for (int k = 0; k < 10 && (low_i + 1 < high_i); ++k) {  // log2(362) < 10
-    const float h_i = tex1Dfetch<float3>(table.texture_object_, i).z;
+    const float h_i = tex1Dfetch<float4>(table.texture_object_, i).z;
     const int   gt  = hw > h_i;  // 0/1 mask to reduce divergence
     low_i           = gt ? i : low_i;
     high_i          = gt ? high_i : i;
     i               = (low_i + high_i) >> 1;  // midpoint
   }
 
-  const float3 lo    = tex1Dfetch<float3>(table.texture_object_, high_i - 1);
-  const float3 hi    = tex1Dfetch<float3>(table.texture_object_, high_i);
+  const float4 lo    = tex1Dfetch<float4>(table.texture_object_, high_i - 1);
+  const float4 hi    = tex1Dfetch<float4>(table.texture_object_, high_i);
   const float  denom = hi.z - lo.z;
   const float  t     = (denom != 0.0f) ? (hw - lo.z) / denom : 0.0f;
 
@@ -543,11 +545,11 @@ GPU_FUNC float3 gamut_compress_fwd(const float3& JMh, GPU_ODTParams& p) {
   return compress_gamut(JMh, J, p, hdp, false);
 }
 
-GPU_FUNC float3 OutputTransform_fwd(const float4& in_color, GPU_ODTParams& p) {
-  float3 color          = make_float3(in_color.x, in_color.y, in_color.z);
-  float3 AP0_clamped    = clamp_AP0_to_AP1(color, 0.0f, p.ts_.forward_limit_);
+GPU_FUNC float3 OutputTransform_fwd(const float3& in_color, GPU_ODTParams& p) {
+  // float3 color          = make_float3(in_color.x, in_color.y, in_color.z);
+  float3 AP1_clamped    = clamp_AP1(in_color, 0.0f, p.ts_.forward_limit_);
 
-  float3 JMh            = RGB_to_JMh(AP0_clamped, p.input_params_);
+  float3 JMh            = RGB_to_JMh(AP1_clamped, p.input_params_);
   float3 tonemapped_JMh = tonemap_and_compress_fwd(JMh, p);
   float3 compressed_JMh = gamut_compress_fwd(tonemapped_JMh, p);
   return JMh_to_RGB(compressed_JMh, p.limit_params_);

@@ -19,6 +19,8 @@
 #include <texture_fetch_functions.h>
 #include <vector_functions.h>
 
+#include "color_mgmt/disp_enc_funcs.cuh"
+#include "color_mgmt/odt_funcs.cuh"
 #include "edit/operators/op_kernel.hpp"
 #include "param.cuh"
 
@@ -202,35 +204,27 @@ struct GPU_LMT_Kernel : GPUPointOpTag {
 };
 
 /**
- * GPU_OUTPUT_Kernel: ACEScc (AP1, log encoded) -> sRGB (Gamma 2.2)
+ * GPU_OUTPUT_Kernel: RRT + ODT
  *
- * Pipeline:
- *   1. Decode ACEScc logarithmic encoding to linear AP1
- *   2. Transform from ACEScg (AP1) primaries to sRGB/Rec.709 primaries
- *   3. Apply Gamma 2.2 encoding curve
+ * Pipeline: Refer to ACES Output Transform documentation
+ *
  */
 struct GPU_OUTPUT_Kernel : GPUPointOpTag {
   __device__ __forceinline__ void operator()(float4* p, GPUOperatorParams& params) const {
     // Step 1: Decode ACEScc log to linear AP1
-    float lin_r = acescc_decode(p->x);
-    float lin_g = acescc_decode(p->y);
-    float lin_b = acescc_decode(p->z);
+    float  lin_r     = acescc_decode(p->x);
+    float  lin_g     = acescc_decode(p->y);
+    float  lin_b     = acescc_decode(p->z);
 
-    // Step 2: AP1 to sRGB matrix transformation
-    float srgb_lin_r, srgb_lin_g, srgb_lin_b;
-    apply_matrix3x3(AP1_TO_SRGB_MAT, lin_r, lin_g, lin_b, &srgb_lin_r, &srgb_lin_g, &srgb_lin_b);
+    float3 aces_3    = make_float3(lin_r, lin_g, lin_b);
+    // Step 2: AP1 ODT (the orginal input is in linear AP0, but it will be converted to AP1 in the
+    // RRT step)
+    float3 otd_color = OutputTransform_fwd(aces_3, params.to_output_params_.odt_params_);
 
-    // Step 3: Apply Gamma 2.2 encoding
-    float srgb_r = gamma22_encode(srgb_lin_r);
-    float srgb_g = gamma22_encode(srgb_lin_g);
-    float srgb_b = gamma22_encode(srgb_lin_b);
-
-    // Clamp output to [0, 1] for display
-    srgb_r       = fminf(fmaxf(srgb_r, 0.0f), 1.0f);
-    srgb_g       = fminf(fmaxf(srgb_g, 0.0f), 1.0f);
-    srgb_b       = fminf(fmaxf(srgb_b, 0.0f), 1.0f);
-
-    *p           = make_float4(srgb_r, srgb_g, srgb_b, p->w);
+    // Step 3: Display encoding
+    float3 cv_3      = DisplayEncoding(otd_color, params.to_output_params_.limit_to_display_matx,
+                                       params.to_output_params_.etof, 1.0f);
+    *p               = make_float4(cv_3.x, cv_3.y, cv_3.z, p->w);
   }
 };
 };  // namespace CUDA

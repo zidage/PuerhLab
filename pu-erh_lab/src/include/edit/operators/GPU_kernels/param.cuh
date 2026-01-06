@@ -19,8 +19,8 @@
 #include <driver_types.h>
 
 #include <cstdint>
-#include <vector>
 #include <sstream>
+#include <vector>
 
 #include "edit/operators/op_base.hpp"
 #include "utils/lut/cube_lut.hpp"
@@ -28,6 +28,16 @@
 #define GPU_FUNC __device__ __forceinline__
 
 namespace puerhlab {
+enum class GPU_ETOF : int {
+  LINEAR    = 0,
+  ST2084    = 1,
+  HLG       = 2,
+  GAMMA_2_6 = 3,
+  BT1886    = 4,
+  GAMMA_2_2 = 5,
+  GAMMA_1_8 = 6,
+};
+
 struct GPU_LUT3D {
   cudaArray_t         array_              = nullptr;
   cudaTextureObject_t texture_object_     = 0;
@@ -88,7 +98,7 @@ struct GPU_Table1D {
   void*               dev_ptr_        = nullptr;
   size_t              count_          = 0;
 
-  GPU_Table1D() = default;
+  GPU_Table1D()                       = default;
 
   void Reset() {
     if (texture_object_) {
@@ -114,178 +124,184 @@ static GPU_Table1D<T> Create1DLinearTableTextureObject(const T* host_data, size_
     return table;
   }
 
-  table.count_ = count;
+  table.count_       = count;
 
   const size_t bytes = sizeof(T) * count;
   cudaMalloc(&table.dev_ptr_, bytes);
   cudaMemcpy(table.dev_ptr_, host_data, bytes, cudaMemcpyHostToDevice);
 
-  cudaResourceDesc res_desc = {};
-  res_desc.resType          = cudaResourceTypeLinear;
-  res_desc.res.linear.devPtr = table.dev_ptr_;
-  res_desc.res.linear.desc   = cudaCreateChannelDesc<T>();
+  cudaResourceDesc res_desc       = {};
+  res_desc.resType                = cudaResourceTypeLinear;
+  res_desc.res.linear.devPtr      = table.dev_ptr_;
+  res_desc.res.linear.desc        = cudaCreateChannelDesc<T>();
   res_desc.res.linear.sizeInBytes = bytes;
 
-  cudaTextureDesc tex_desc = {};
-  tex_desc.normalizedCoords = 0;
-  tex_desc.filterMode       = cudaFilterModePoint;
-  tex_desc.readMode         = cudaReadModeElementType;
-  tex_desc.addressMode[0]   = cudaAddressModeClamp;
+  cudaTextureDesc tex_desc        = {};
+  tex_desc.normalizedCoords       = 0;
+  tex_desc.filterMode             = cudaFilterModePoint;
+  tex_desc.readMode               = cudaReadModeElementType;
+  tex_desc.addressMode[0]         = cudaAddressModeClamp;
 
   cudaCreateTextureObject(&table.texture_object_, &res_desc, &tex_desc, nullptr);
   return table;
 }
 
 struct GPU_ODTParams {
-  float         peak_luminance_ = 100.0f;
+  float               peak_luminance_ = 100.0f;
 
   // JMh parameters
-  GPU_JMhParams input_params_;
-  GPU_JMhParams reach_params_;
-  GPU_JMhParams limit_params_;
+  GPU_JMhParams       input_params_;
+  GPU_JMhParams       reach_params_;
+  GPU_JMhParams       limit_params_;
 
   // Tonescale parameters
-  GPU_TSParams  ts_;
+  GPU_TSParams        ts_;
 
   // Shared compression parameters
-  float         limit_J_max;
-  float         model_gamma_inv;
-  GPU_Table1D<float> table_reach_M_;
-  std::uintptr_t     host_table_reach_M_id_ = 0;
+  float               limit_J_max;
+  float               model_gamma_inv;
+  GPU_Table1D<float>  table_reach_M_;
+  std::uintptr_t      host_table_reach_M_id_ = 0;
 
   // Chroma compression parameters
-  float         sat;
-  float         sat_thr;
-  float         compr;
-  float         chroma_compress_scale;
+  float               sat;
+  float               sat_thr;
+  float               compr;
+  float               chroma_compress_scale;
 
   // Gamut compression parameters
-  float         mid_J;
-  float         focus_dist;
-  float         lower_hull_gamma_inv;
+  float               mid_J;
+  float               focus_dist;
+  float               lower_hull_gamma_inv;
   GPU_Table1D<float>  table_hues_;
   std::uintptr_t      host_table_hues_id_ = 0;
 
-  // Packed as float3{J, M, h}
-  GPU_Table1D<float3> table_gamut_cusps_;
+  // Packed as float4{J, M, h}
+  GPU_Table1D<float4> table_gamut_cusps_;
   std::uintptr_t      host_table_gamut_cusps_id_ = 0;
 
   GPU_Table1D<float>  table_upper_hull_gamma_;
   std::uintptr_t      host_table_upper_hull_gamma_id_ = 0;
 
-  int                 hue_linearity_search_range[2] = {0, 1};
+  int                 hue_linearity_search_range[2]   = {0, 1};
 
-  void Reset() {
+  void                Reset() {
     table_reach_M_.Reset();
     table_hues_.Reset();
     table_gamut_cusps_.Reset();
     table_upper_hull_gamma_.Reset();
-    host_table_reach_M_id_ = 0;
-    host_table_hues_id_ = 0;
-    host_table_gamut_cusps_id_ = 0;
+    host_table_reach_M_id_          = 0;
+    host_table_hues_id_             = 0;
+    host_table_gamut_cusps_id_      = 0;
     host_table_upper_hull_gamma_id_ = 0;
-    hue_linearity_search_range[0] = 0;
-    hue_linearity_search_range[1] = 1;
+    hue_linearity_search_range[0]   = 0;
+    hue_linearity_search_range[1]   = 1;
   }
+};
+
+struct GPU_TO_OUTPUT_Params {
+  GPU_ODTParams odt_params_ = {};
+
+  float         limit_to_display_matx[9];
+  GPU_ETOF      etof = GPU_ETOF::LINEAR;
 };
 
 struct GPUOperatorParams {
   // Basic adjustment parameters
-  bool          exposure_enabled_       = true;
-  float         exposure_offset_        = 0.0f;
+  bool                 exposure_enabled_       = true;
+  float                exposure_offset_        = 0.0f;
 
-  bool          contrast_enabled_       = true;
-  float         contrast_scale_         = 0.0f;
+  bool                 contrast_enabled_       = true;
+  float                contrast_scale_         = 0.0f;
 
   // Shadows adjustment parameter
-  bool          shadows_enabled_        = true;
-  float         shadows_offset_         = 0.0f;
-  float         shadows_x0_             = 0.0f;
-  float         shadows_x1_             = 0.25f;
-  float         shadows_y0_             = 0.0f;
-  float         shadows_y1_             = 0.25f;
-  float         shadows_m0_             = 0.0f;
-  float         shadows_m1_             = 1.0f;
-  float         shadows_dx_             = 0.25f;
+  bool                 shadows_enabled_        = true;
+  float                shadows_offset_         = 0.0f;
+  float                shadows_x0_             = 0.0f;
+  float                shadows_x1_             = 0.25f;
+  float                shadows_y0_             = 0.0f;
+  float                shadows_y1_             = 0.25f;
+  float                shadows_m0_             = 0.0f;
+  float                shadows_m1_             = 1.0f;
+  float                shadows_dx_             = 0.25f;
 
   // Highlights adjustment parameter
-  bool          highlights_enabled_     = true;
-  float         highlights_k_           = 0.2f;
-  float         highlights_offset_      = 0.0f;
-  float         highlights_slope_range_ = 0.8f;
-  float         highlights_m0_          = 1.0f;
-  float         highlights_m1_          = 1.0f;
-  float         highlights_x0_          = 0.2f;
-  float         highlights_y0_          = 0.2f;
-  float         highlights_y1_          = 1.0f;
-  float         highlights_dx_          = 0.8f;
+  bool                 highlights_enabled_     = true;
+  float                highlights_k_           = 0.2f;
+  float                highlights_offset_      = 0.0f;
+  float                highlights_slope_range_ = 0.8f;
+  float                highlights_m0_          = 1.0f;
+  float                highlights_m1_          = 1.0f;
+  float                highlights_x0_          = 0.2f;
+  float                highlights_y0_          = 0.2f;
+  float                highlights_y1_          = 1.0f;
+  float                highlights_dx_          = 0.8f;
 
   // White and Black point adjustment parameters
-  bool          white_enabled_          = true;
-  float         white_point_            = 1.0f;
+  bool                 white_enabled_          = true;
+  float                white_point_            = 1.0f;
 
-  bool          black_enabled_          = true;
-  float         black_point_            = 0.0f;
+  bool                 black_enabled_          = true;
+  float                black_point_            = 0.0f;
 
-  float         slope_                  = 1.0f;
+  float                slope_                  = 1.0f;
   // HLS adjustment parameters
-  bool          hls_enabled_            = true;
-  float         target_hls_[3]          = {0.0f, 0.0f, 0.0f};
-  float         hls_adjustment_[3]      = {0.0f, 0.0f, 0.0f};
-  float         hue_range_              = 0.0f;
-  float         lightness_range_        = 0.0f;
-  float         saturation_range_       = 0.0f;
+  bool                 hls_enabled_            = true;
+  float                target_hls_[3]          = {0.0f, 0.0f, 0.0f};
+  float                hls_adjustment_[3]      = {0.0f, 0.0f, 0.0f};
+  float                hue_range_              = 0.0f;
+  float                lightness_range_        = 0.0f;
+  float                saturation_range_       = 0.0f;
 
   // Saturation adjustment parameter
-  bool          saturation_enabled_     = true;
-  float         saturation_offset_      = 0.0f;
+  bool                 saturation_enabled_     = true;
+  float                saturation_offset_      = 0.0f;
 
   // Tint adjustment parameter
-  bool          tint_enabled_           = true;
-  float         tint_offset_            = 0.0f;
+  bool                 tint_enabled_           = true;
+  float                tint_offset_            = 0.0f;
 
   // Vibrance adjustment parameter
-  bool          vibrance_enabled_       = true;
-  float         vibrance_offset_        = 0.0f;
+  bool                 vibrance_enabled_       = true;
+  float                vibrance_offset_        = 0.0f;
 
   // Working space
-  bool          to_ws_enabled_          = true;
-  GPU_LUT3D     to_ws_lut_              = {};
+  bool                 to_ws_enabled_          = true;
+  GPU_LUT3D            to_ws_lut_              = {};
   // TODO: NOT IMPLEMENTED
 
   // Look modification transform
-  bool          lmt_enabled_            = false;
-  GPU_LUT3D     lmt_lut_                = {};
+  bool                 lmt_enabled_            = false;
+  GPU_LUT3D            lmt_lut_                = {};
   // TODO: NOT IMPLEMENTED
 
   // Output transform
-  bool          to_output_enabled_      = true;
-  GPU_LUT3D     to_output_lut_          = {};
-  GPU_ODTParams odt_params_             = {};
-  
+  bool                 to_output_enabled_      = true;
+  GPU_LUT3D            to_output_lut_          = {};
+  GPU_TO_OUTPUT_Params to_output_params_       = {};
 
   // Curve adjustment parameters
-  bool          curve_enabled_          = false;
+  bool                 curve_enabled_          = false;
 
   // Clarity adjustment parameter
-  bool          clarity_enabled_        = true;
-  float         clarity_offset_         = 0.0f;
-  float         clarity_radius_         = 5.0f;
+  bool                 clarity_enabled_        = true;
+  float                clarity_offset_         = 0.0f;
+  float                clarity_radius_         = 5.0f;
 
   // Sharpen adjustment parameter
-  bool          sharpen_enabled_        = true;
-  float         sharpen_offset_         = 0.0f;
-  float         sharpen_radius_         = 3.0f;
-  float         sharpen_threshold_      = 0.0f;
+  bool                 sharpen_enabled_        = true;
+  float                sharpen_offset_         = 0.0f;
+  float                sharpen_radius_         = 3.0f;
+  float                sharpen_threshold_      = 0.0f;
 
   // Color wheel adjustment parameters
-  bool          color_wheel_enabled_    = true;
-  float         lift_color_offset_[3]   = {0.0f, 0.0f, 0.0f};
-  float         lift_luminance_offset_  = 0.0f;
-  float         gamma_color_offset_[3]  = {1.0f, 1.0f, 1.0f};
-  float         gamma_luminance_offset_ = 0.0f;
-  float         gain_color_offset_[3]   = {1.0f, 1.0f, 1.0f};
-  float         gain_luminance_offset_  = 0.0f;
+  bool                 color_wheel_enabled_    = true;
+  float                lift_color_offset_[3]   = {0.0f, 0.0f, 0.0f};
+  float                lift_luminance_offset_  = 0.0f;
+  float                gamma_color_offset_[3]  = {1.0f, 1.0f, 1.0f};
+  float                gamma_luminance_offset_ = 0.0f;
+  float                gain_color_offset_[3]   = {1.0f, 1.0f, 1.0f};
+  float                gain_luminance_offset_  = 0.0f;
 };
 
 class GPUParamsConverter {
@@ -293,7 +309,7 @@ class GPUParamsConverter {
   static GPUOperatorParams ConvertFromCPU(OperatorParams&    cpu_params,
                                           GPUOperatorParams& orig_params) {
     // TODO: Improve param synchronization to avoid unnecessary data transfers
-  GPUOperatorParams gpu_params = orig_params;
+    GPUOperatorParams gpu_params       = orig_params;
 
     gpu_params.exposure_enabled_       = cpu_params.exposure_enabled_;
     gpu_params.exposure_offset_        = cpu_params.exposure_offset_;
@@ -406,41 +422,10 @@ class GPUParamsConverter {
     // shared_ptrs, so pointer changes imply new contents.
     // ----------------------------------------------------------------------
     {
-      const auto& odt_cpu = cpu_params.odt_params_;
-      auto&       odt_gpu = gpu_params.odt_params_;
-
-      odt_gpu.peak_luminance_  = odt_cpu.peak_luminance_;
-      odt_gpu.limit_J_max      = odt_cpu.limit_J_max_;
-      odt_gpu.model_gamma_inv  = odt_cpu.model_gamma_inv_;
-
-      // Tone scale
-      odt_gpu.ts_.n_            = odt_cpu.ts_params_.n_;
-      odt_gpu.ts_.n_r_          = odt_cpu.ts_params_.n_r_;
-      odt_gpu.ts_.g_            = odt_cpu.ts_params_.g_;
-      odt_gpu.ts_.t_1_          = odt_cpu.ts_params_.t_1_;
-      odt_gpu.ts_.c_t_          = odt_cpu.ts_params_.c_t_;
-      odt_gpu.ts_.s_2_          = odt_cpu.ts_params_.s_2_;
-      odt_gpu.ts_.u_2_          = odt_cpu.ts_params_.u_2_;
-      odt_gpu.ts_.m_2_          = odt_cpu.ts_params_.m_2_;
-      odt_gpu.ts_.forward_limit_ = odt_cpu.ts_params_.forward_limit_;
-      odt_gpu.ts_.inverse_limit_ = odt_cpu.ts_params_.inverse_limit_;
-      odt_gpu.ts_.log_peak_      = odt_cpu.ts_params_.log_peak_;
-
-      // Chroma compression
-      odt_gpu.sat                 = odt_cpu.sat_;
-      odt_gpu.sat_thr             = odt_cpu.sat_thr_;
-      odt_gpu.compr               = odt_cpu.compr_;
-      odt_gpu.chroma_compress_scale = odt_cpu.chroma_compress_scale_;
-
-      // Gamut compression
-      odt_gpu.mid_J               = odt_cpu.mid_J_;
-      odt_gpu.focus_dist          = odt_cpu.focus_dist_;
-      odt_gpu.lower_hull_gamma_inv = odt_cpu.lower_hull_gamma_inv_;
-      odt_gpu.hue_linearity_search_range[0] = static_cast<int>(odt_cpu.hue_linearity_search_range_(0));
-      odt_gpu.hue_linearity_search_range[1] = static_cast<int>(odt_cpu.hue_linearity_search_range_(1));
-
+      auto&       to_output_gpu = gpu_params.to_output_params_;
+      const auto& to_output_cpu = cpu_params.to_output_params_;
       // Matrices: flatten cv::Matx33f into row-major float[9]
-      auto copy33 = [](const cv::Matx33f& m, float out[9]) {
+      auto        copy33        = [](const cv::Matx33f& m, float out[9]) {
         out[0] = m(0, 0);
         out[1] = m(0, 1);
         out[2] = m(0, 2);
@@ -452,17 +437,59 @@ class GPUParamsConverter {
         out[8] = m(2, 2);
       };
 
+      // Copy TO_OUTPUT params
+      // Limit to display matrix
+      copy33(to_output_cpu.limit_to_display_matx_, to_output_gpu.limit_to_display_matx);
+      // ETOF
+      // These two enums have identical values; static_cast through int to be safe
+      to_output_gpu.etof = static_cast<GPU_ETOF>(static_cast<int>(to_output_cpu.etof_));
+
+      const auto& odt_cpu           = cpu_params.to_output_params_.odt_params_;
+      auto&       odt_gpu           = gpu_params.to_output_params_.odt_params_;
+
+      odt_gpu.peak_luminance_       = odt_cpu.peak_luminance_;
+      odt_gpu.limit_J_max           = odt_cpu.limit_J_max_;
+      odt_gpu.model_gamma_inv       = odt_cpu.model_gamma_inv_;
+
+      // Tone scale
+      odt_gpu.ts_.n_                = odt_cpu.ts_params_.n_;
+      odt_gpu.ts_.n_r_              = odt_cpu.ts_params_.n_r_;
+      odt_gpu.ts_.g_                = odt_cpu.ts_params_.g_;
+      odt_gpu.ts_.t_1_              = odt_cpu.ts_params_.t_1_;
+      odt_gpu.ts_.c_t_              = odt_cpu.ts_params_.c_t_;
+      odt_gpu.ts_.s_2_              = odt_cpu.ts_params_.s_2_;
+      odt_gpu.ts_.u_2_              = odt_cpu.ts_params_.u_2_;
+      odt_gpu.ts_.m_2_              = odt_cpu.ts_params_.m_2_;
+      odt_gpu.ts_.forward_limit_    = odt_cpu.ts_params_.forward_limit_;
+      odt_gpu.ts_.inverse_limit_    = odt_cpu.ts_params_.inverse_limit_;
+      odt_gpu.ts_.log_peak_         = odt_cpu.ts_params_.log_peak_;
+
+      // Chroma compression
+      odt_gpu.sat                   = odt_cpu.sat_;
+      odt_gpu.sat_thr               = odt_cpu.sat_thr_;
+      odt_gpu.compr                 = odt_cpu.compr_;
+      odt_gpu.chroma_compress_scale = odt_cpu.chroma_compress_scale_;
+
+      // Gamut compression
+      odt_gpu.mid_J                 = odt_cpu.mid_J_;
+      odt_gpu.focus_dist            = odt_cpu.focus_dist_;
+      odt_gpu.lower_hull_gamma_inv  = odt_cpu.lower_hull_gamma_inv_;
+      odt_gpu.hue_linearity_search_range[0] =
+          static_cast<int>(odt_cpu.hue_linearity_search_range_(0));
+      odt_gpu.hue_linearity_search_range[1] =
+          static_cast<int>(odt_cpu.hue_linearity_search_range_(1));
+
       auto copy_jmh = [&](const ColorUtils::JMhParams& src, GPU_JMhParams& dst) {
         copy33(src.MATRIX_RGB_to_CAM16_c_, dst.MATRIX_RGB_to_CAM16_c_);
         copy33(src.MATRIX_CAM16_c_to_RGB_, dst.MATRIX_CAM16_c_to_RGB_);
         copy33(src.MATRIX_cone_response_to_Aab_, dst.MATRIX_cone_response_to_Aab_);
         copy33(src.MATRIX_Aab_to_cone_response_, dst.MATRIX_Aab_to_cone_response_);
-        dst.F_L_n_      = src.F_L_n_;
-        dst.cz_         = src.cz_;
-        dst.inv_cz_     = src.inv_cz_;
+        dst.F_L_n_     = src.F_L_n_;
+        dst.cz_        = src.cz_;
+        dst.inv_cz_    = src.inv_cz_;
         // CPU naming is A_w_z_ but semantically this is the same precomputed achromatic scaling.
-        dst.A_w_J_      = src.A_w_z_;
-        dst.inv_A_w_J_  = src.inv_A_w_J_;
+        dst.A_w_J_     = src.A_w_z_;
+        dst.inv_A_w_J_ = src.inv_A_w_J_;
       };
 
       copy_jmh(odt_cpu.input_params_, odt_gpu.input_params_);
@@ -484,8 +511,8 @@ class GPUParamsConverter {
         const std::uintptr_t id = reinterpret_cast<std::uintptr_t>(odt_cpu.table_hues_.get());
         if (id != odt_gpu.host_table_hues_id_) {
           odt_gpu.table_hues_.Reset();
-          odt_gpu.table_hues_ = Create1DLinearTableTextureObject<float>(
-              odt_cpu.table_hues_->data(), TOTAL_TABLE_SIZE);
+          odt_gpu.table_hues_ = Create1DLinearTableTextureObject<float>(odt_cpu.table_hues_->data(),
+                                                                        TOTAL_TABLE_SIZE);
           odt_gpu.host_table_hues_id_ = id;
         }
       }
@@ -506,13 +533,13 @@ class GPUParamsConverter {
             reinterpret_cast<std::uintptr_t>(odt_cpu.table_gamut_cusps_.get());
         if (id != odt_gpu.host_table_gamut_cusps_id_) {
           odt_gpu.table_gamut_cusps_.Reset();
-          std::vector<float3> packed(TOTAL_TABLE_SIZE);
+          std::vector<float4> packed(TOTAL_TABLE_SIZE);
           for (size_t i = 0; i < TOTAL_TABLE_SIZE; ++i) {
             const auto& v = (*odt_cpu.table_gamut_cusps_)[i];
-            packed[i] = make_float3(v(0), v(1), v(2));
+            packed[i]     = make_float4(v(0), v(1), v(2), 0.f);
           }
-          odt_gpu.table_gamut_cusps_ = Create1DLinearTableTextureObject<float3>(
-              packed.data(), packed.size());
+          odt_gpu.table_gamut_cusps_ =
+              Create1DLinearTableTextureObject<float4>(packed.data(), packed.size());
           odt_gpu.host_table_gamut_cusps_id_ = id;
         }
       }
