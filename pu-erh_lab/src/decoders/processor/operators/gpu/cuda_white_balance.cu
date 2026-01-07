@@ -60,6 +60,7 @@ __global__ void ToLinearRefKernel(cv::cuda::PtrStep<float> image, int width, int
   // 4. White Level Scaling (Normalization)
 
   pixel_val /= white_level_scale;
+
   // 5. Clamp the result to the valid 16-bit range [0, 1.0f]
   pixel_val  = fmaxf(0.0f, fminf(1.0f, pixel_val));
 

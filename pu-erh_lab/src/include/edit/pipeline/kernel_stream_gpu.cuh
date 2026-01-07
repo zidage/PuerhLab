@@ -19,6 +19,9 @@
 #include <device_types.h>
 
 #include <cstddef>
+#include <iostream>
+#include <stdexcept>
+#include <string>
 #include <tuple>
 #include <utility>
 
@@ -86,11 +89,11 @@ struct OpList<> {
 
 template <typename Head, typename... Tail>
 struct OpList<Head, Tail...> {
-  Head                head_;
-  OpList<Tail...>     tail_;
+  Head            head_;
+  OpList<Tail...> tail_;
 
   OpList() = default;
-  __host__            __device__ explicit OpList(Head h, Tail... t)
+  __host__ __device__ explicit OpList(Head h, Tail... t)
       : head_(std::move(h)), tail_(std::move(t)...) {}
 
   __device__ __forceinline__ void Apply(float4* p, GPUOperatorParams& params) {
@@ -135,6 +138,26 @@ class GPU_StaticKernelStream {
                                                           pitch_elems, params);
       }
 
+      {
+        const auto launch_err = cudaGetLastError();
+        if (launch_err != cudaSuccess) {
+          std::cout << "CUDA kernel launch failed at stage " << I << ": "
+                    << cudaGetErrorString(launch_err) << std::endl;
+          throw std::runtime_error(std::string("CUDA kernel launch failed at stage ") +
+                                   std::to_string(I) + ": " + cudaGetErrorString(launch_err));
+        }
+      }
+
+      {
+        const auto exec_err = cudaStreamSynchronize(stream);
+        if (exec_err != cudaSuccess) {
+          std::cout << "CUDA kernel execution failed at stage " << I << ": "
+                    << cudaGetErrorString(exec_err) << std::endl;
+          throw std::runtime_error(std::string("CUDA kernel execution failed at stage ") +
+                                   std::to_string(I) + ": " + cudaGetErrorString(exec_err));
+        }
+      }
+
       std::swap(src, dst);  // Ping-pong buffers
       Dispatch<I + 1>(src, dst, width, height, pitch_elems, params, grid, block, stream);
     }
@@ -142,11 +165,18 @@ class GPU_StaticKernelStream {
 
   float4* Process(float4* d_in, float4* d_temp, int width, int height, size_t pitch_elems,
                   GPUOperatorParams& params, cudaStream_t stream = 0) {
-    dim3 block(32, 32);
+    dim3 block(16, 16);
     dim3 grid((width + block.x - 1) / block.x, (height + block.y - 1) / block.y);
 
     Dispatch<0>(d_in, d_temp, width, height, pitch_elems, params, grid, block, stream);
-    cudaStreamSynchronize(stream);
+
+    {
+      const auto sync_err = cudaStreamSynchronize(stream);
+      if (sync_err != cudaSuccess) {
+        throw std::runtime_error(std::string("CUDA stream sync failed: ") +
+                                 cudaGetErrorString(sync_err));
+      }
+    }
 
     return (sizeof...(Stages) % 2 == 0) ? d_in : d_temp;
   }

@@ -20,6 +20,8 @@
 
 #include <cstddef>
 #include <memory>
+#include <stdexcept>
+#include <string>
 #include <opencv2/core/cuda.hpp>
 
 #include "edit/operators/GPU_kernels/param.cuh"
@@ -104,18 +106,37 @@ class GPU_KernelLauncher {
     cv::cuda::GpuMat gpu_mat = input_img_->GetGPUData();
     size_t           width   = gpu_mat.cols;
     size_t           height  = gpu_mat.rows;
-    cudaMemcpy2D(work_buffer_, width * sizeof(float4), gpu_mat.ptr<float4>(), gpu_mat.step,
-                 width * sizeof(float4), height, cudaMemcpyDeviceToDevice);
+    {
+      const auto copy_err = cudaMemcpy2D(work_buffer_, width * sizeof(float4), gpu_mat.ptr<float4>(),
+                                         gpu_mat.step, width * sizeof(float4), height,
+                                         cudaMemcpyDeviceToDevice);
+      if (copy_err != cudaSuccess) {
+        throw std::runtime_error(std::string("cudaMemcpy2D (input->work) failed: ") +
+                                 cudaGetErrorString(copy_err));
+      }
+    }
 
     cudaStream_t stream;
-    cudaStreamCreate(&stream);
+    {
+      const auto stream_err = cudaStreamCreate(&stream);
+      if (stream_err != cudaSuccess) {
+        throw std::runtime_error(std::string("cudaStreamCreate failed: ") +
+                                 cudaGetErrorString(stream_err));
+      }
+    }
 
 
     float4* result_ptr = kernel_stream_.Process(work_buffer_, temp_buffer_, static_cast<int>(width),
                                                 static_cast<int>(height),
                                                 static_cast<size_t>(width), params_, stream);
     // Process() will synchronize the stream internally
-    cudaStreamDestroy(stream);
+    {
+      const auto destroy_err = cudaStreamDestroy(stream);
+      if (destroy_err != cudaSuccess) {
+        throw std::runtime_error(std::string("cudaStreamDestroy failed: ") +
+                                 cudaGetErrorString(destroy_err));
+      }
+    }
           
     // float4* mapped_ptr = frame_sink_->MapResourceForWrite();
     // if (mapped_ptr) {
@@ -128,9 +149,16 @@ class GPU_KernelLauncher {
     if (output_img_) {
       output_img_->InitGPUData(width, height, CV_32FC4);
       cv::cuda::GpuMat output_gpu_mat = output_img_->GetGPUData();
-      cudaMemcpy2D(output_gpu_mat.ptr<float4>(), output_gpu_mat.step, result_ptr,
-                   width * sizeof(float4), width * sizeof(float4), height,
-                   cudaMemcpyDeviceToDevice);
+      {
+        const auto out_copy_err =
+            cudaMemcpy2D(output_gpu_mat.ptr<float4>(), output_gpu_mat.step, result_ptr,
+                         width * sizeof(float4), width * sizeof(float4), height,
+                         cudaMemcpyDeviceToDevice);
+        if (out_copy_err != cudaSuccess) {
+          throw std::runtime_error(std::string("cudaMemcpy2D (work->output) failed: ") +
+                                   cudaGetErrorString(out_copy_err));
+        }
+      }
       output_img_->SetGPUDataValid(true);
     }
   }

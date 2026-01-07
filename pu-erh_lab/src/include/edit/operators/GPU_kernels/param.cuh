@@ -20,6 +20,7 @@
 
 #include <cstdint>
 #include <sstream>
+#include <stdexcept>
 #include <vector>
 
 #include "edit/operators/op_base.hpp"
@@ -421,9 +422,30 @@ class GPUParamsConverter {
     // Current CPU implementation regenerates these tables by allocating new
     // shared_ptrs, so pointer changes imply new contents.
     // ----------------------------------------------------------------------
-    {
+    if (cpu_params.to_output_dirty_) {
       auto&       to_output_gpu = gpu_params.to_output_params_;
       const auto& to_output_cpu = cpu_params.to_output_params_;
+
+      // Fail fast if ODT precompute is missing.
+      // Without these tables, the GPU ODT path will end up calling tex1Dfetch
+      // with texture_object_=0, which is undefined and can manifest as
+      // run-to-run nondeterminism.
+      if (cpu_params.to_output_enabled_) {
+        const auto& odt_check = cpu_params.to_output_params_.odt_params_;
+        const bool  missing_tables = (!odt_check.table_reach_M_) || (!odt_check.table_hues_) ||
+                                    (!odt_check.table_upper_hull_gammas_) ||
+                                    (!odt_check.table_gamut_cusps_);
+        if (missing_tables) {
+          std::ostringstream oss;
+          oss << "GPUParamsConverter: ODT tables are not initialized:";
+          if (!odt_check.table_reach_M_) oss << " table_reach_M_";
+          if (!odt_check.table_hues_) oss << " table_hues_";
+          if (!odt_check.table_upper_hull_gammas_) oss << " table_upper_hull_gammas_";
+          if (!odt_check.table_gamut_cusps_) oss << " table_gamut_cusps_";
+          oss << ". Ensure CPU ODT precompute runs before executing the GPU pipeline.";
+          throw std::runtime_error(oss.str());
+        }
+      }
       // Matrices: flatten cv::Matx33f into row-major float[9]
       auto        copy33        = [](const cv::Matx33f& m, float out[9]) {
         out[0] = m(0, 0);
@@ -544,6 +566,10 @@ class GPUParamsConverter {
           odt_gpu.host_table_gamut_cusps_id_ = id;
         }
       }
+
+      cpu_params.to_output_dirty_ = false;
+    } else {
+      gpu_params.to_output_params_ = orig_params.to_output_params_;
     }
 
     return gpu_params;

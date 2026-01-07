@@ -311,7 +311,7 @@ GPU_FUNC float3 tonemap_and_compress_fwd(const float3& JMh, GPU_ODTParams& p) {
 GPU_FUNC int look_hue_interval(float h, const GPU_Table1D<float>& hue_table,
                                int* hue_linearity_search_range) {
   const float hw = wrap_to_360(h);
-  int         i  = baseIndex + hue_position_in_uniform_table(hw, tableSize);  // 使用 tableSize=360
+  int         i  = baseIndex + hue_position_in_uniform_table(hw, tableSize);  //  tableSize=360
   int         i_lo = i + hue_linearity_search_range[0];
   int         i_hi = i + hue_linearity_search_range[1];
 
@@ -544,12 +544,36 @@ GPU_FUNC float3 gamut_compress_fwd(const float3& JMh, GPU_ODTParams& p) {
   return compress_gamut(JMh, J, p, hdp, false);
 }
 
+// --- add: chroma-preserving limiter (scale RGB uniformly when exceeding upper) ---
+GPU_FUNC float3 limit_rgb_preserve_chroma(float3 rgb, float lower, float upper) {
+  // Guard NaN/Inf: keep behavior predictable in later pow/log.
+  if (!isfinite(rgb.x) || !isfinite(rgb.y) || !isfinite(rgb.z)) {
+    return make_float3(0.f, 0.f, 0.f);
+  }
+
+  // Lower clamp (negatives usually break perceptual ops; keep per-channel for safety)
+  rgb.x = fmaxf(rgb.x, lower);
+  rgb.y = fmaxf(rgb.y, lower);
+  rgb.z = fmaxf(rgb.z, lower);
+
+  // Upper limit: preserve ratios by scaling uniformly
+  const float m = fmaxf(rgb.x, fmaxf(rgb.y, rgb.z));
+  if (m > upper && m > 0.f) {
+    const float s = upper / m;
+    rgb.x *= s;
+    rgb.y *= s;
+    rgb.z *= s;
+  }
+  return rgb;
+}
+
 GPU_FUNC float3 OutputTransform_fwd(const float3& in_color, GPU_ODTParams& p) {
   // float3 color          = make_float3(in_color.x, in_color.y, in_color.z);
   // float3 color          = mult_f3_f33(in_color, AP1_TO_AP0);
-  float3 AP1_clamped    = clamp_AP1(in_color, 0.0f, p.ts_.forward_limit_);
+  // float3 in_AP1 = clamp_f3(in_color, 0.f, 1.f);
+  float3 AP0_clamped    = clamp_AP1(in_color, 0.0f, p.ts_.forward_limit_);
 
-  float3 JMh            = RGB_to_JMh(AP1_clamped, p.input_params_);
+  float3 JMh            = RGB_to_JMh(AP0_clamped, p.input_params_);
   float3 tonemapped_JMh = tonemap_and_compress_fwd(JMh, p);
   float3 compressed_JMh = gamut_compress_fwd(tonemapped_JMh, p);
   return JMh_to_RGB(compressed_JMh, p.limit_params_);

@@ -21,6 +21,7 @@
 
 #include "color_mgmt/disp_enc_funcs.cuh"
 #include "color_mgmt/odt_funcs.cuh"
+#include "color_mgmt/util_funcs.cuh"
 #include "edit/operators/op_kernel.hpp"
 #include "param.cuh"
 
@@ -122,12 +123,16 @@ __device__ __forceinline__ float acescc_decode(float acescc) {
   // Threshold for denormalized region: (log2(2^-15) + 9.72) / 17.52
   const float denorm_threshold = (ACESCC_LOG2_MIN + ACESCC_A) / ACESCC_B;  // ≈ -0.3013698630
 
+  // acescc = fminf(acescc, 1.0f);  // Clamp to max value 
+
   if (acescc < denorm_threshold) {
     // Denormalized region
-    return (exp2f(acescc * ACESCC_B - ACESCC_A) - ACESCC_DENORM_OFFSET) * 2.0f;
+    float linear = (exp2f(acescc * ACESCC_B - ACESCC_A) - ACESCC_DENORM_OFFSET) * 2.0f;
+    return linear;
   } else {
     // Normal region
-    return exp2f(acescc * ACESCC_B - ACESCC_A);
+    float linear = exp2f(acescc * ACESCC_B - ACESCC_A);
+    return linear;
   }
 }
 
@@ -135,7 +140,7 @@ __device__ __forceinline__ float acescc_decode(float acescc) {
 __device__ __forceinline__ float gamma22_encode(float linear) {
   // Clamp to avoid NaN from negative values
   linear = fmaxf(linear, 0.0f);
-  return powf(linear, 1.0f / 1.8f);
+  return powf(linear, 1.0f / 2.2f);
 }
 
 // ============================================================================
@@ -156,27 +161,27 @@ struct GPU_TOWS_Kernel : GPUPointOpTag {
     float ap1_r, ap1_g, ap1_b;
     apply_matrix3x3(AP0_TO_AP1_MAT, p->x, p->y, p->z, &ap1_r, &ap1_g, &ap1_b);
 
-    // Step 2: Apply RGC
-    float ach     = fmaxf(ap1_r, fmaxf(ap1_g, ap1_b));
+    // // Step 2: Apply RGC
+    // float ach     = fmaxf(ap1_r, fmaxf(ap1_g, ap1_b));
 
-    float abs_ach = fabsf(ach);
-    if (abs_ach > 1e-6f) {
-      float dist_cyan    = (ach - ap1_r) / abs_ach;
-      float dist_magenta = (ach - ap1_g) / abs_ach;
-      float dist_yellow  = (ach - ap1_b) / abs_ach;
+    // float abs_ach = fabsf(ach);
+    // if (abs_ach > 1e-6f) {
+    //   float dist_cyan    = (ach - ap1_r) / abs_ach;
+    //   float dist_magenta = (ach - ap1_g) / abs_ach;
+    //   float dist_yellow  = (ach - ap1_b) / abs_ach;
 
-      // Apply RGC compression curve
-      float c_dist_cyan  = rgc_compress_curve(dist_cyan, RGC_LIM_CYAN, RGC_THR_CYAN, RGC_PWR);
-      float c_dist_magenta =
-          rgc_compress_curve(dist_magenta, RGC_LIM_MAGENTA, RGC_THR_MAGENTA, RGC_PWR);
-      float c_dist_yellow =
-          rgc_compress_curve(dist_yellow, RGC_LIM_YELLOW, RGC_THR_YELLOW, RGC_PWR);
+    //   // Apply RGC compression curve
+    //   float c_dist_cyan  = rgc_compress_curve(dist_cyan, RGC_LIM_CYAN, RGC_THR_CYAN, RGC_PWR);
+    //   float c_dist_magenta =
+    //       rgc_compress_curve(dist_magenta, RGC_LIM_MAGENTA, RGC_THR_MAGENTA, RGC_PWR);
+    //   float c_dist_yellow =
+    //       rgc_compress_curve(dist_yellow, RGC_LIM_YELLOW, RGC_THR_YELLOW, RGC_PWR);
 
-      // Reconstruct compressed AP1 values
-      ap1_r = ach - c_dist_cyan * abs_ach;
-      ap1_g = ach - c_dist_magenta * abs_ach;
-      ap1_b = ach - c_dist_yellow * abs_ach;
-    }
+    //   // Reconstruct compressed AP1 values
+    //   ap1_r = ach - c_dist_cyan * abs_ach;
+    //   ap1_g = ach - c_dist_magenta * abs_ach;
+    //   ap1_b = ach - c_dist_yellow * abs_ach;
+    // }
 
     // Step 3: Apply ACEScc log encoding
     float acescc_r = acescc_encode(ap1_r);
@@ -219,14 +224,41 @@ struct GPU_OUTPUT_Kernel : GPUPointOpTag {
     float3 aces_3    = make_float3(lin_r, lin_g, lin_b);
     // Step 2: AP1 ODT (the orginal input is in linear AP0, but it will be converted to AP1 in the
     // RRT step)
-    float3 otd_color = OutputTransform_fwd(aces_3, params.to_output_params_.odt_params_);
+    float3 odt_color = OutputTransform_fwd(aces_3, params.to_output_params_.odt_params_);
 
+    // float3 odt_color_clamped = clamp_f3(odt_color, 0.f, 1.f);
     // float3 otd_color_ws =
     //     ApplyWhiteScale(otd_color, params.to_output_params_.limit_to_display_matx);
     // Step 3: Display encoding
-    float3 cv_3 = DisplayEncoding(otd_color, params.to_output_params_.limit_to_display_matx,
+    float3 cv_3 = DisplayEncoding(odt_color, params.to_output_params_.limit_to_display_matx,
                                   params.to_output_params_.etof, 1.0f);
+
+    // cv_3.x = fminf(1.0f, fmaxf(0.0f, cv_3.x));
+    // cv_3.y = fminf(1.0f, fmaxf(0.0f, cv_3.y));
+    // cv_3.z = fminf(1.0f, fmaxf(0.0f, cv_3.z));
     *p          = make_float4(cv_3.x, cv_3.y, cv_3.z, p->w);
+    // *p = make_float4(otd_color.x, otd_color.y, otd_color.z, p->w);
+
+    // // Step 1: Decode ACEScc log to linear AP1
+    // float lin_r = acescc_decode(p->x);
+    // float lin_g = acescc_decode(p->y);
+    // float lin_b = acescc_decode(p->z);
+
+    // // Step 2: AP1 to sRGB matrix transformation
+    // float srgb_lin_r, srgb_lin_g, srgb_lin_b;
+    // apply_matrix3x3(AP1_TO_SRGB_MAT, lin_r, lin_g, lin_b, &srgb_lin_r, &srgb_lin_g, &srgb_lin_b);
+
+    // // Step 3: Apply Gamma 2.2 encoding
+    // float srgb_r = gamma22_encode(srgb_lin_r);
+    // float srgb_g = gamma22_encode(srgb_lin_g);
+    // float srgb_b = gamma22_encode(srgb_lin_b);
+
+    // // Clamp output to [0, 1] for display
+    // srgb_r       = fminf(fmaxf(srgb_r, 0.0f), 1.0f);
+    // srgb_g       = fminf(fmaxf(srgb_g, 0.0f), 1.0f);
+    // srgb_b       = fminf(fmaxf(srgb_b, 0.0f), 1.0f);
+
+    // *p           = make_float4(srgb_r, srgb_g, srgb_b, p->w);
   }
 };
 };  // namespace CUDA

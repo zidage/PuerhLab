@@ -49,7 +49,7 @@
 
    Pu-erh Lab changes:
    - Adapted to work with libraw and modified desaturation strategy.
-   - Add a new strategy to desaturate restored highlights based on the number of clipped channels.
+   - Add a new strategy to desaturate restored highlights based on the number of clipped channels [DEPRECATED].
 */
 
 #include "decoders/processor/operators/cpu/highlight_reconstruct.hpp"
@@ -161,9 +161,9 @@ static inline float _calc_desaturation_factor(const float* in, const int row, co
   if (num_channels_clipped >= 3) {
     return 1.0f;  // Full desaturation to white/gray
   } else if (num_channels_clipped == 2) {
-    return 0.8f;  // Significant desaturation
+    return 1.f;  // Significant desaturation
   } else {
-    return 0.5f;  // Slight desaturation needed
+    return 0.8f;  // Slight desaturation needed
   }
 }
 
@@ -244,7 +244,7 @@ void HighlightReconstruct(cv::Mat& img, LibRaw& raw_processor) {
       }
     }
 
-    const float lo_clips[4] = {0.98f * clips[0], 0.98f * clips[1], 0.98f * clips[2], 1.0f};
+    const float lo_clips[4] = {0.99f * clips[0], 0.99f * clips[1], 0.99f * clips[2], 1.0f};
     /* After having the surrounding mask for each color channel we can calculate the chrominance
      * corrections. */
 

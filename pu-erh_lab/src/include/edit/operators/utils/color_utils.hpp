@@ -35,13 +35,13 @@ enum class ColorSpace : int {
 };
 
 enum class ETOF : int {
-  LINEAR,
-  ST2084,
-  HLG,
-  GAMMA_2_6,
-  BT1886,
-  GAMMA_2_2,
-  GAMMA_1_8,
+  LINEAR = 0,
+  ST2084 = 1,
+  HLG = 2,
+  GAMMA_2_6 = 3,
+  BT1886 = 4,
+  GAMMA_2_2 = 5,
+  GAMMA_1_8 = 6,
 };
 
 struct ColorSpacePrimaries {

@@ -219,24 +219,23 @@ GPU_FUNC float3 HLG_1000nits_to_ST2084_f3(const float3& HLG) {
 GPU_FUNC float3 eotf_inv(const float3& rgb_linear_in, GPU_ETOF otf_type) {
   float3 rgb_linear = make_float3(fmaxf(0.f, rgb_linear_in.x), fmaxf(0.f, rgb_linear_in.y),
                                   fmaxf(0.f, rgb_linear_in.z));
-  switch (otf_type) {
-    case GPU_ETOF::LINEAR:
-      return rgb_linear;
-    case GPU_ETOF::ST2084:
-      return Y_to_ST2084_f3(rgb_linear);
-    case GPU_ETOF::HLG:
-      // Assume 1000 nits display for HLG conversion
-      return HLG_1000nits_to_ST2084_f3(rgb_linear);
-    case GPU_ETOF::BT1886:
-      return bt1886_inv_f3(rgb_linear, 2.4f, 1.0f, 0.0f);
-    case GPU_ETOF::GAMMA_2_6:
-      return pow_f3(rgb_linear, 1.0f / 2.6f);
-    case GPU_ETOF::GAMMA_2_2:
-      return pow_f3(rgb_linear, 1.0f / 2.2f);
-    case GPU_ETOF::GAMMA_1_8:
-      return pow_f3(rgb_linear, 1.0f / 1.8f);
-    default:
-      return moncurve_inv_f3(rgb_linear, 2.4f, 0.055f);
+  if (otf_type == GPU_ETOF::LINEAR) {
+    return rgb_linear;
+  } else if (otf_type == GPU_ETOF::ST2084) {
+    return Y_to_ST2084_f3(rgb_linear);
+  } else if (otf_type == GPU_ETOF::HLG) {
+    // Assume 1000 nits display for HLG conversion
+    return HLG_1000nits_to_ST2084_f3(rgb_linear);
+  } else if (otf_type == GPU_ETOF::BT1886) {
+    return bt1886_inv_f3(rgb_linear, 2.4f, 1.0f, 0.0f);
+  } else if (otf_type == GPU_ETOF::GAMMA_2_6) {
+    return pow_f3(rgb_linear, 1.0f / 2.6f);
+  } else if (otf_type == GPU_ETOF::GAMMA_2_2) {
+    return pow_f3(rgb_linear, 1.0f / 2.2f);
+  } else if (otf_type == GPU_ETOF::GAMMA_1_8) {
+    return pow_f3(rgb_linear, 1.0f / 1.8f);
+  } else {
+    return moncurve_inv_f3(rgb_linear, 2.4f, 0.055f);
   }
 }
 

@@ -128,6 +128,7 @@ void ACES_ODT_Op::SetParams(const nlohmann::json& in_j) {
   }
   if (j.contains("encoding_etof")) {
     encoding_etof_ = ParseETOF(j["encoding_etof"].get<std::string>());
+    // std::cout << static_cast<int>(encoding_etof_) << std::endl;
   }
   if (j.contains("limiting_space")) {
     limiting_space_ = ParseColorSpace(j["limiting_space"].get<std::string>());
@@ -141,11 +142,14 @@ void ACES_ODT_Op::SetParams(const nlohmann::json& in_j) {
   to_output_params_.limit_to_display_matx_ =
       ColorUtils::RGB_TO_XYZ_f33(ColorUtils::SpaceEnumToPrimary(limiting_space_)) *
       ColorUtils::XYZ_TO_RGB_f33(ColorUtils::SpaceEnumToPrimary(encoding_space_));
+
+  to_output_params_.etof_ = encoding_etof_;
 }
 
 void ACES_ODT_Op::SetGlobalParams(OperatorParams& global_params) const {
   // ODT operator does not modify global params
   global_params.to_output_params_ = to_output_params_;
+  global_params.to_output_dirty_  = true;
 }
 
 ColorUtils::JMhParams init_JMhParams(const ColorUtils::ColorSpacePrimaries& prims) {
@@ -223,6 +227,13 @@ void ACES_ODT_Op::init_JMhParams() {
       ::puerhlab::init_JMhParams(ColorUtils::REACH_PRIMARY);
   to_output_params_.odt_params_.limit_params_ =
       ::puerhlab::init_JMhParams(ColorUtils::SpaceEnumToPrimary(limiting_space_));
+  auto prims = ColorUtils::SpaceEnumToPrimary(limiting_space_);
+  std::cout << "Limiting space primaries:\n"
+            << "[" << prims.red_[0] << ", " << prims.red_[1] << "]\n"
+            << "[" << prims.green_[0] << ", " << prims.green_[1] << "]\n"
+            << "[" << prims.blue_[0] << ", " << prims.blue_[1] << "]\n"
+            << "[" << prims.white_[0] << ", " << prims.white_[1] << "]"
+            << std::endl;
 }
 
 void ACES_ODT_Op::init_TSParams() {
@@ -238,22 +249,23 @@ void ACES_ODT_Op::init_TSParams() {
   const float r_hit_max = 896.f;    // scene-referred value "hitting the roof"
 
   // Calculate output constants
-  const float r_hit     = r_hit_min + (r_hit_max - r_hit_min) * (log(n / n_r) / log(10000.f / 100.f));
-  const float m_0       = (n / n_r);
-  const float m_1       = 0.5f * (m_0 + sqrt(m_0 * (m_0 + 4.f * t_1)));
-  const float u         = pow((r_hit / m_1) / ((r_hit / m_1) + 1), g);
-  const float m         = m_1 / u;
-  const float w_i       = log(n / 100.f) / log(2.f);
-  const float c_t       = c_d / n_r * (1.f + w_i * w_g);
-  const float g_ip      = 0.5f * (c_t + sqrt(c_t * (c_t + 4.f * t_1)));
-  const float g_ipp2    = -(m_1 * pow((g_ip / m), (1.f / g))) / (pow(g_ip / m, 1.f / g) - 1.f);
-  const float w_2       = c / g_ipp2;
-  const float s_2       = w_2 * m_1;
-  const float u_2       = pow((r_hit / m_1) / ((r_hit / m_1) + w_2), g);
-  const float m_2       = m_1 / u_2;
+  const float r_hit  = r_hit_min + (r_hit_max - r_hit_min) * (log(n / n_r) / log(10000.f / 100.f));
+  const float m_0    = (n / n_r);
+  const float m_1    = 0.5f * (m_0 + sqrt(m_0 * (m_0 + 4.f * t_1)));
+  const float u      = pow((r_hit / m_1) / ((r_hit / m_1) + 1), g);
+  const float m      = m_1 / u;
+  const float w_i    = log(n / 100.f) / log(2.f);
+  const float c_t    = c_d / n_r * (1.f + w_i * w_g);
+  const float g_ip   = 0.5f * (c_t + sqrt(c_t * (c_t + 4.f * t_1)));
+  const float g_ipp2 = -(m_1 * pow((g_ip / m), (1.f / g))) / (pow(g_ip / m, 1.f / g) - 1.f);
+  const float w_2    = c / g_ipp2;
+  const float s_2    = w_2 * m_1;
+  const float u_2    = pow((r_hit / m_1) / ((r_hit / m_1) + w_2), g);
+  const float m_2    = m_1 / u_2;
 
   ColorUtils::TSParams TonescaleParams = {
       n, n_r, g, t_1, c_t, s_2, u_2, m_2, 8.f * r_hit, n / (u_2 * n_r), log10(n / n_r)};
+  // std::cout << "r_hit: " << TonescaleParams.forward_limit_ << std::endl;
   to_output_params_.odt_params_.ts_params_ = TonescaleParams;
 }
 
