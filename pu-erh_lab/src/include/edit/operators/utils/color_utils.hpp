@@ -35,11 +35,11 @@ enum class ColorSpace : int {
 };
 
 enum class ETOF : int {
-  LINEAR = 0,
-  ST2084 = 1,
-  HLG = 2,
+  LINEAR    = 0,
+  ST2084    = 1,
+  HLG       = 2,
   GAMMA_2_6 = 3,
-  BT1886 = 4,
+  BT1886    = 4,
   GAMMA_2_2 = 5,
   GAMMA_1_8 = 6,
 };
@@ -426,8 +426,7 @@ inline std::shared_ptr<std::array<float, TOTAL_TABLE_SIZE>> MakeReachMTable(JMhP
     while ((!outside) && (high < search_maximum)) {
       cv::Matx13f search_JMh = {limit_J_max, high, hue};
       cv::Matx13f search_RGB = JMh_to_RGB(search_JMh, params);
-      outside = (search_RGB(0) < 0.f) || (search_RGB(1) < 0.f) || (search_RGB(2) < 0.f) ||
-                (search_RGB(0) > 1.f) || (search_RGB(1) > 1.f) || (search_RGB(2) > 1.f);
+      outside = (search_RGB(0) < 0.f) || (search_RGB(1) < 0.f) || (search_RGB(2) < 0.f);
       if (!outside) {
         low = high;
         high += search_range;
@@ -438,8 +437,7 @@ inline std::shared_ptr<std::array<float, TOTAL_TABLE_SIZE>> MakeReachMTable(JMhP
       float       sample_M      = (high + low) * 0.5f;
       cv::Matx13f search_JMh    = {limit_J_max, sample_M, hue};
       cv::Matx13f new_limit_RGB = JMh_to_RGB(search_JMh, params);
-      outside = (new_limit_RGB(0) < 0.f) || (new_limit_RGB(1) < 0.f) || (new_limit_RGB(2) < 0.f) ||
-                (new_limit_RGB(0) > 1.f) || (new_limit_RGB(1) > 1.f) || (new_limit_RGB(2) > 1.f);
+      outside = (new_limit_RGB(0) < 0.f) || (new_limit_RGB(1) < 0.f) || (new_limit_RGB(2) < 0.f);
       if (outside) {
         high = sample_M;
       } else {
@@ -447,7 +445,7 @@ inline std::shared_ptr<std::array<float, TOTAL_TABLE_SIZE>> MakeReachMTable(JMhP
       }
     }
 
-    (*table_reach_M)[i + 1] = low;
+    (*table_reach_M)[i + 1] = high;
   }
 
   (*table_reach_M)[0]              = (*table_reach_M)[TABLE_SIZE];
@@ -605,10 +603,10 @@ inline std::array<float, TOTAL_TABLE_SIZE> build_hue_table(
     std::array<float, max_sorted_corners>& sorted_hues) {
   std::array<float, TOTAL_TABLE_SIZE> hue_table{};
 
-  float                               ideal_spacing                    = TABLE_SIZE / hue_limit;
+  float                               ideal_spacing = TABLE_SIZE / hue_limit;
   int                                 samples_count[2 * cusp_corner_count + 2] = {0};
-  int                                 last_idx                         = 0;
-  int                                 min_index                        = 0;
+  int                                 last_idx                                 = 0;
+  int                                 min_index                                = 0;
   if (sorted_hues[0] == 0.f) {
     min_index = 0;
   } else {
@@ -630,9 +628,10 @@ inline std::array<float, TOTAL_TABLE_SIZE> build_hue_table(
         nominal_idx += 1;
       }
     }
-    samples_count[hue_idx] = static_cast<int>(fminf(static_cast<float>(nominal_idx), static_cast<float>(TABLE_SIZE - 1)));
-    min_index              = nominal_idx;
-    last_idx               = min_index;
+    samples_count[hue_idx] = static_cast<int>(
+        fminf(static_cast<float>(nominal_idx), static_cast<float>(TABLE_SIZE - 1)));
+    min_index = nominal_idx;
+    last_idx  = min_index;
   }
 
   int total_samples = 0;
@@ -793,7 +792,7 @@ inline float solve_J_intersect(float J, float M, float focus_J, float max_J, flo
     return -2.f * c / (b + root);
   } else {
     const float b    = -(1.f + M_scaled + max_J * a);
-    const float c    = max_J * M_scaled - J;
+    const float c    = max_J * M_scaled + J;
     const float det  = b * b - 4.f * a * c;
     const float root = sqrtf(det);
     return -2.f * c / (b - root);

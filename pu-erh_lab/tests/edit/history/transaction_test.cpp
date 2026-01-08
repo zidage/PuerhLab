@@ -257,7 +257,7 @@ TEST_F(EditHistoryTests, TestWithPreviewPipeline) {
   {
     SleeveManager             manager{db_path_};
     ImageLoader               image_loader(128, 1, 0);
-    image_path_t              path = std::string(TEST_IMG_PATH) + "/raw/camera/sony/a1";
+    image_path_t              path = std::string(TEST_IMG_PATH) + "/raw/building";
     std::vector<image_path_t> imgs;
     for (const auto& img : std::filesystem::directory_iterator(path)) {
       if (!img.is_directory() && is_supported_file(img.path())) imgs.push_back(img.path());

@@ -66,19 +66,19 @@ GPU_FUNC float degrees_to_radians(float deg) { return deg * (CUDART_PI_F / 180.f
 
 GPU_FUNC int   hue_position_in_uniform_table(float hue, int table_size) {
   const float wrapped = wrap_to_360(hue);                        // [0, 360)
-  int         idx = (int)(wrapped * (float)table_size / 360.f);  // trunc == floor for positive
-  idx             = idx < 0 ? 0 : idx;
-  idx             = idx >= table_size ? (table_size - 1) : idx;
-  return idx;
+  // int         idx = (int)(wrapped * (float)table_size / 360.f);  // trunc == floor for positive
+  // idx             = idx < 0 ? 0 : idx;
+  // idx             = idx >= table_size ? (table_size - 1) : idx;
+  return (int)(wrapped / hue_limit * (float)table_size);  // hue_limit=1.0f
 }
 
 GPU_FUNC float lerp_f(float a, float b, float t) { return a + (b - a) * t; }
 
 // reach_M_from_table(h, p.TABLE_reach_M)
 GPU_FUNC float reach_M_from_table(float h, const GPU_Table1D<float>& table) {
-  const float hw   = wrap_to_360(h);
-  const int   base = hue_position_in_uniform_table(hw, tableSize);  // tableSize=360
-  const float t    = hw - (float)base;
+  // const float hw   = wrap_to_360(h);
+  const int   base = hue_position_in_uniform_table(h, tableSize);  // tableSize=360
+  const float t    = h - (float)base;
 
   const int   i_lo = base + baseIndex;  // baseIndex=1 (padding)
   const int   i_hi = i_lo + 1;
@@ -482,8 +482,7 @@ GPU_FUNC float remap_M(float M, float gamut_boundary_M, float reach_boundary_M,
   const float proportion     = fmaxf(boundary_ratio, compression_threshold);
   const float threshold      = proportion * gamut_boundary_M;
 
-  const int   pass           = (M > threshold) && (proportion < 1.f);
-  if (!pass) return M;
+  if (M <= threshold || proportion >= 1.f) return M;
 
   const float m_offset  = M - threshold;
   const float gamut_off = gamut_boundary_M - threshold;

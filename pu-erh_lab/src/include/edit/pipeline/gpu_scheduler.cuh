@@ -125,7 +125,6 @@ class GPU_KernelLauncher {
       }
     }
 
-
     float4* result_ptr = kernel_stream_.Process(work_buffer_, temp_buffer_, static_cast<int>(width),
                                                 static_cast<int>(height),
                                                 static_cast<size_t>(width), params_, stream);

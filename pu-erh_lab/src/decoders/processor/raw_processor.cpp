@@ -29,6 +29,7 @@
 #include <opencv2/core/utility.hpp>
 
 #include "decoders/processor/operators/cpu/debayer_rcd.hpp"
+#include "decoders/processor/operators/cpu/raw_proc_utils.hpp"
 
 #ifdef HAVE_CUDA
 #include <opencv2/cudaarithm.hpp>
@@ -123,6 +124,7 @@ void RawProcessor::ConvertToWorkingSpace() {
   auto cam_mul   = raw_data_.color.cam_mul;
   auto wb_coeffs = raw_data_.color.WB_Coeffs;  // EXIF Lightsource Values
   auto cam_xyz   = raw_data_.color.cam_xyz;
+  auto rgb_cam  = raw_data_.color.rgb_cam;
   if (!params_.use_camera_wb_) {
     // User specified white balance temperature
     auto user_temp_indices = CPU::GetWBIndicesForTemp(static_cast<float>(params_.user_wb_));
@@ -189,7 +191,9 @@ auto RawProcessor::Process() -> ImageBuffer {
       break;
   }
 
+
   ConvertToWorkingSpace();
+
   cv::Mat final_img = cv::Mat();
   final_img.create(process_buffer_.GetCPUData().rows, process_buffer_.GetCPUData().cols, CV_32FC4);
   cv::cvtColor(process_buffer_.GetCPUData(), final_img, cv::COLOR_RGB2RGBA);

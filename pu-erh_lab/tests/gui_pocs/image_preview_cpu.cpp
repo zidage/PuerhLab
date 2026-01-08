@@ -4,9 +4,9 @@
 #include <QBoxLayout>
 #include <QImage>
 #include <QLabel>
-#include <QScrollBar>
+#include <QSlider>
 #include <QTimer>
-#include <future>
+#include <QStyleFactory>
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/opencv.hpp>
 
@@ -48,7 +48,7 @@ void SetPipelineTemplate(std::shared_ptr<PipelineExecutor> executor) {
       {"src", "ACEScc"}, {"dst", "Camera Rec.709"}, {"limit", true}, {"transform_type", 1}};
   output_params["aces_odt"] = {
       {"encoding_space", "rec709"},
-      {"encoding_etof", "gamma_1_8"},
+      {"encoding_etof", "gamma_2_2"},
       {"limiting_space", "rec709"},
       {"peak_luminance", 100.0f}};
   output_stage.SetOperator(OperatorType::ODT, output_params, global_params);
@@ -68,6 +68,76 @@ static QImage cvMatToQImage(const cv::Mat& mat) {
   return QImage{mat.data, mat.cols, mat.rows, static_cast<int>(mat.step), QImage::Format_RGBA32FPx4};
 }
 
+static void ApplyMaterialLikeTheme(QApplication& app) {
+  // Use a consistent cross-platform base style.
+  app.setStyle(QStyleFactory::create("Fusion"));
+
+  // Material-like dark palette.
+  QPalette p;
+  p.setColor(QPalette::Window, QColor(0x12, 0x12, 0x12));
+  p.setColor(QPalette::WindowText, QColor(0xE8, 0xEA, 0xED));
+  p.setColor(QPalette::Base, QColor(0x1E, 0x1E, 0x1E));
+  p.setColor(QPalette::AlternateBase, QColor(0x20, 0x20, 0x20));
+  p.setColor(QPalette::ToolTipBase, QColor(0x20, 0x20, 0x20));
+  p.setColor(QPalette::ToolTipText, QColor(0xE8, 0xEA, 0xED));
+  p.setColor(QPalette::Text, QColor(0xE8, 0xEA, 0xED));
+  p.setColor(QPalette::Button, QColor(0x1E, 0x1E, 0x1E));
+  p.setColor(QPalette::ButtonText, QColor(0xE8, 0xEA, 0xED));
+  p.setColor(QPalette::BrightText, Qt::white);
+  p.setColor(QPalette::Link, QColor(0x5F, 0xA2, 0xFF));
+  p.setColor(QPalette::Highlight, QColor(0x5F, 0xA2, 0xFF));
+  p.setColor(QPalette::HighlightedText, QColor(0x08, 0x0A, 0x0C));
+  app.setPalette(p);
+
+  // Global QSS: keep it simple, flat, and with comfortable spacing.
+  app.setStyleSheet(
+      "QWidget {"
+      "  color: #E8EAED;"
+      "  font-size: 12px;"
+      "}"
+      "QLabel {"
+      "  color: #E8EAED;"
+      "}"
+      "QToolTip {"
+      "  background-color: #202124;"
+      "  color: #E8EAED;"
+      "  border: 1px solid #303134;"
+      "  padding: 6px 8px;"
+      "  border-radius: 8px;"
+      "}"
+      // Material-like slider (horizontal)
+      "QSlider::groove:horizontal {"
+      "  height: 4px;"
+      "  background: #3C4043;"
+      "  border-radius: 2px;"
+      "}"
+      "QSlider::sub-page:horizontal {"
+      "  background: #5FA2FF;"
+      "  border-radius: 2px;"
+      "}"
+      "QSlider::add-page:horizontal {"
+      "  background: #3C4043;"
+      "  border-radius: 2px;"
+      "}"
+      "QSlider::handle:horizontal {"
+      "  background: #5FA2FF;"
+      "  width: 18px;"
+      "  height: 18px;"
+      "  margin: -7px 0;" // centers handle on 4px groove
+      "  border-radius: 9px;"
+      "}"
+      "QSlider::handle:horizontal:hover {"
+      "  background: #76B4FF;"
+      "}"
+      "QSlider::handle:horizontal:pressed {"
+      "  background: #4F8CF0;"
+      "}"
+      "QSlider::tick-mark {"
+      "  background: transparent;"
+      "}"
+      );
+}
+
 int main(int argc, char* argv[]) {
   struct AdjustmentState {
     float exposure_   = 0.0f;
@@ -83,6 +153,7 @@ int main(int argc, char* argv[]) {
   };
 
   QApplication app(argc, argv);
+  ApplyMaterialLikeTheme(app);
 
   QWidget      window;
   auto*        root  = new QHBoxLayout(&window);
@@ -90,9 +161,25 @@ int main(int argc, char* argv[]) {
   QLabel*      label = new QLabel(&window);
   label->setMinimumSize(800, 600);
   label->setAlignment(Qt::AlignCenter);
+  label->setStyleSheet(
+      "QLabel {"
+      "  background: #121212;"
+      "  border: 1px solid #303134;"
+      "  border-radius: 12px;"
+      "}");
 
   QWidget* controls       = new QWidget(&window);
   auto*    controlsLayout = new QVBoxLayout(controls);
+
+  controls->setStyleSheet(
+      "QWidget {"
+      "  background: #1E1E1E;"
+      "  border: 1px solid #303134;"
+      "  border-radius: 12px;"
+      "}");
+
+  controlsLayout->setContentsMargins(16, 16, 16, 16);
+  controlsLayout->setSpacing(12);
 
   controlsLayout->addStretch();
 
@@ -109,7 +196,7 @@ int main(int argc, char* argv[]) {
   SleeveManager             manager{db_path};
   ImageLoader               image_loader(128, 1, 0);
 
-  image_path_t              path = std::string(TEST_IMG_PATH) + "/raw/camera/sony/a1";
+  image_path_t              path = std::string(TEST_IMG_PATH) + "/raw/camera/sony/a7c";
   std::vector<image_path_t> imgs;
   for (const auto& img : std::filesystem::directory_iterator(path)) {
     if (!img.is_directory() && is_supported_file(img.path())) imgs.push_back(img.path());
@@ -195,43 +282,24 @@ int main(int argc, char* argv[]) {
 
   auto addSlider = [&](const QString& name, int min, int max, int value, auto&& onChange,
                        auto&& formatter) {
-    auto* info   = new QLabel(QString("%1: %2").arg(name).arg(formatter(value)), controls);
-    auto* bar    = new QScrollBar(Qt::Horizontal, controls);
-    bar->setRange(min, max);
-    bar->setValue(value);
-    bar->setSingleStep(1);
-    bar->setPageStep(std::max(1, (max - min) / 20));
-    bar->setMinimumWidth(220);
-    bar->setStyleSheet(
-      "QScrollBar:horizontal {"
-      "  background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #1f1f1f, stop:1 #262626);"
-      "  border: 1px solid #3a3a3a;"
-      "  height: 18px;"
-      "  margin: 6px 14px 6px 14px;"
-      "  border-radius: 9px;"
-      "}"
-      "QScrollBar::handle:horizontal {"
-      "  background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #5fa2ff, stop:1 #3f7de0);"
-      "  border: 1px solid #2f63b8;"
-      "  border-radius: 8px;"
-      "  min-width: 32px;"
-      "  margin: 1px;"
-      "}"
-      "QScrollBar::handle:horizontal:hover {"
-      "  background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #76b4ff, stop:1 #4f8cf0);"
-      "  border-color: #3874cc;"
-      "}"
-      "QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {"
-      "  border: none;"
-      "  background: transparent;"
-      "  width: 0px;"
-      "}"
-      "QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {"
-      "  background: transparent;"
-      "}");
+    auto* info = new QLabel(QString("%1: %2").arg(name).arg(formatter(value)), controls);
+    info->setStyleSheet(
+        "QLabel {"
+        "  color: #E8EAED;"
+        "  font-weight: 500;"
+        "}");
+
+    auto* slider = new QSlider(Qt::Horizontal, controls);
+    slider->setRange(min, max);
+    slider->setValue(value);
+    slider->setSingleStep(1);
+    slider->setPageStep(std::max(1, (max - min) / 20));
+    slider->setMinimumWidth(240);
+    // Larger hit area without changing the Material-like track thickness.
+    slider->setFixedHeight(32);
 
     QObject::connect(
-        bar, &QScrollBar::valueChanged, controls,
+        slider, &QSlider::valueChanged, controls,
         [info, name, formatter, onChange = std::forward<decltype(onChange)>(onChange)](int v) {
           info->setText(QString("%1: %2").arg(name).arg(formatter(v)));
           onChange(v);
@@ -241,7 +309,7 @@ int main(int argc, char* argv[]) {
     auto* rowLayout = new QHBoxLayout(row);
     rowLayout->setContentsMargins(0, 0, 0, 0);
     rowLayout->addWidget(info, /*stretch*/ 1);
-    rowLayout->addWidget(bar);
+    rowLayout->addWidget(slider);
 
     controlsLayout->insertWidget(controlsLayout->count() - 1, row);
   };
