@@ -33,6 +33,43 @@
 
 namespace puerhlab {
 namespace CUDA {
+
+// ---- small CUDA-friendly "safe math" helpers (avoid NaN/Inf; keep fast paths) ----
+GPU_FUNC bool isfinite_f(float x) {
+#if defined(__CUDA_ARCH__)
+  return isfinite(x);
+#else
+  return std::isfinite(x);
+#endif
+}
+
+GPU_FUNC float clamp_f(float x, float lo, float hi) { return fminf(fmaxf(x, lo), hi); }
+
+GPU_FUNC int clamp_i(int x, int lo, int hi) { return x < lo ? lo : (x > hi ? hi : x); }
+
+GPU_FUNC float safe_pos(float x) { return fmaxf(x, 0.0f); }
+
+GPU_FUNC float safe_sqrt(float x) { return sqrtf(fmaxf(x, 0.0f)); }
+
+GPU_FUNC float safe_div(float a, float b, float eps = 1e-7f) {
+  // Avoid 0/0 and huge blow-ups; keeps sign of b for continuity.
+  const float ab = fabsf(b);
+  const float bb = (ab < eps) ? copysignf(eps, b) : b;
+  return a / bb;
+}
+
+GPU_FUNC float safe_log10_ratio(float num, float den, float eps = 1e-7f) {
+  // log10(num/den) with both sides clamped away from 0.
+  const float n = fmaxf(num, eps);
+  const float d = fmaxf(den, eps);
+  return log10f(n / d);
+}
+
+GPU_FUNC float safe_pow_pos(float base, float exp) {
+  // pow for non-negative base; clamps base to >=0 to avoid NaNs for fractional exp.
+  return powf(fmaxf(base, 0.0f), exp);
+}
+
 struct HueDependentGamutParams {
   // Hue-dependent gamut parameters
   float2 JMcusp;
@@ -54,7 +91,8 @@ GPU_FUNC float table_get(const GPU_Table1D<float>& table, int index) {
 }
 
 GPU_FUNC float wrap_to_360(float hue) {
-  float y   = fmod(hue, 360.f);
+  if (!isfinite_f(hue)) return 0.0f;
+  float y   = fmodf(hue, 360.f);
   // branchless: add 360 when y<0, else add 0
   float add = ((float)(y < 0.f)) * 360.f;  // step(x,y)= y<=x?1:0 in CTL; adjust if different
   return y + add;
@@ -64,21 +102,22 @@ GPU_FUNC float radians_to_degrees(float rad) { return rad * (180.f / CUDART_PI_F
 
 GPU_FUNC float degrees_to_radians(float deg) { return deg * (CUDART_PI_F / 180.f); }
 
-GPU_FUNC int   hue_position_in_uniform_table(float hue, int table_size) {
-  const float wrapped = wrap_to_360(hue);                        // [0, 360)
-  // int         idx = (int)(wrapped * (float)table_size / 360.f);  // trunc == floor for positive
-  // idx             = idx < 0 ? 0 : idx;
-  // idx             = idx >= table_size ? (table_size - 1) : idx;
-  return (int)(wrapped / hue_limit * (float)table_size);  // hue_limit=1.0f
+GPU_FUNC int hue_position_in_uniform_table(float hue, int table_size) {
+  const float wrapped = wrap_to_360(hue);  // [0, 360)
+  const float pos     = wrapped * ((float)table_size / hue_limit);
+  // trunc == floor for positive; clamp to valid range.
+  const int   idx     = (int)pos;
+  return clamp_i(idx, 0, table_size - 1);
 }
 
 GPU_FUNC float lerp_f(float a, float b, float t) { return a + (b - a) * t; }
 
 // reach_M_from_table(h, p.TABLE_reach_M)
 GPU_FUNC float reach_M_from_table(float h, const GPU_Table1D<float>& table) {
-  // const float hw   = wrap_to_360(h);
-  const int   base = hue_position_in_uniform_table(h, tableSize);  // tableSize=360
-  const float t    = h - (float)base;
+  const float hw   = wrap_to_360(h);
+  const float pos  = hw * ((float)tableSize / hue_limit);
+  const int   base = clamp_i((int)pos, 0, tableSize - 1);
+  const float t    = clamp_f(pos - (float)base, 0.0f, 1.0f);
 
   const int   i_lo = base + baseIndex;  // baseIndex=1 (padding)
   const int   i_hi = i_lo + 1;
@@ -134,7 +173,7 @@ GPU_FUNC float3 Aab_to_JMh(const float3& Aab, GPU_JMhParams& p) {
   const float mask  = Aab.x > 0.f ? 1.f : 0.f;
   const float J     = Achromatic_n_to_J(Aab.x, p.cz_) * mask;
   const float M2    = Aab.y * Aab.y + Aab.z * Aab.z;
-  const float M     = sqrtf(M2) * mask;
+  const float M     = safe_sqrt(M2) * mask;
 
   const float h_rad = atan2f(Aab.z, Aab.y);
   const float h     = wrap_to_360(radians_to_degrees(h_rad)) * mask;
@@ -242,7 +281,7 @@ GPU_FUNC float toe(float x, float limit, float k1_in, float k2_in, int invert = 
   } else {
     const float minus_b = k3 * x - k1;
     const float minus_c = k2 * k3 * x;
-    return 0.5f * (minus_b + sqrtf(minus_b * minus_b + 4.f * minus_c));
+    return 0.5f * (minus_b + safe_sqrt(minus_b * minus_b + 4.f * minus_c));
   }
 }
 
@@ -255,10 +294,17 @@ GPU_FUNC float3 chroma_compress_fwd(const float3& JMh, float tonemapped_J, GPU_O
   float M_compr = M;
 
   if (M != 0.f) {
-    const float nJ    = tonemapped_J / p.limit_J_max;
+    const float limitJ = fmaxf(p.limit_J_max, 1e-6f);
+    const float Jts    = fmaxf(tonemapped_J, 0.0f);
+    const float nJ     = clamp_f(Jts / limitJ, 0.0f, 1.0f);
     const float snJ   = fmaxf(0.f, 1.f - nJ);
     float       Mnorm = chroma_compress_norm(h, p.chroma_compress_scale);
-    float limit     = powf(nJ, p.model_gamma_inv) * reach_M_from_table(h, p.table_reach_M_) / Mnorm;
+    if (!isfinite_f(Mnorm) || fabsf(Mnorm) < 1e-6f) {
+      // Degenerate normalization: avoid division by ~0.
+      return make_float3(Jts, 0.0f, h);
+    }
+    float limit     = safe_pow_pos(nJ, p.model_gamma_inv) * reach_M_from_table(h, p.table_reach_M_) / Mnorm;
+    limit           = fmaxf(limit, 0.0f);
 
     float toe_limit = limit - 0.001f;
     float toe_snJ_sat         = snJ * p.sat;
@@ -268,7 +314,10 @@ GPU_FUNC float3 chroma_compress_fwd(const float3& JMh, float tonemapped_J, GPU_O
     // Rescaling of M with the tonescaled J to get the M to the same range as
     // J after the tonescale.  The rescaling uses the Hellwig2022 model gamma to
     // keep the M/J ratio correct (keeping the chromaticities constant).
-    M_compr                   = M * powf(tonemapped_J / J, p.model_gamma_inv);
+    // Avoid division by ~0 in near-black. If J is tiny, keep ratio ~1 to prevent blow-ups.
+    const float absJ          = fabsf(J);
+    const float ratio         = (absJ < 1e-6f) ? 1.0f : (Jts / absJ);
+    M_compr                   = M * safe_pow_pos(ratio, p.model_gamma_inv);
 
     // Normalize M with the rendering space cusp M
     M_compr                   = M_compr / Mnorm;
@@ -370,8 +419,8 @@ GPU_FUNC HueDependentGamutParams init_HueDependentGamutParams(float h, GPU_ODTPa
   hdp.gamma_bottom_inv = p.lower_hull_gamma_inv;
 
   const int   i_hi     = look_hue_interval(h, p.table_hues_, p.hue_linearity_search_range);
-  const float t =
-      interpolation_weight(h, table_get(p.table_hues_, i_hi - 1), table_get(p.table_hues_, i_hi));
+  const float hw = wrap_to_360(h);
+  const float t  = interpolation_weight(hw, table_get(p.table_hues_, i_hi - 1), table_get(p.table_hues_, i_hi));
 
   hdp.JMcusp               = cusp_from_table(h, p.table_gamut_cusps_);
   hdp.gamma_top_inv        = lerp_f(table_get(p.table_upper_hull_gamma_, i_hi - 1),
@@ -388,8 +437,9 @@ GPU_FUNC float get_focus_gain(float J, float analytical_threshold, float limit_J
 
   if (J > analytical_threshold) {
     // Approximate inverse required above threshold due to the introduction of J in the calculation
-    float gain_adjustment =
-        log10f((limit_J_max - analytical_threshold) / fmaxf(1e-4f, limit_J_max - J));
+    const float num = limit_J_max - analytical_threshold;
+    const float den = limit_J_max - J;
+    float gain_adjustment = safe_log10_ratio(num, den, 1e-4f);
     gain_adjustment = gain_adjustment * gain_adjustment + 1.f;
     gain            = gain * gain_adjustment;
   }
@@ -398,22 +448,26 @@ GPU_FUNC float get_focus_gain(float J, float analytical_threshold, float limit_J
 }
 
 GPU_FUNC float solve_J_intersect(float J, float M, float focusJ, float maxJ, float slope_gain) {
-  const float M_scaled = M / slope_gain;
-  const float a        = M_scaled / focusJ;
+  const float sg       = fmaxf(fabsf(slope_gain), 1e-6f);
+  const float fj       = fmaxf(fabsf(focusJ), 1e-6f);
+  const float M_scaled = M / sg;
+  const float a        = M_scaled / fj;
 
   // branch 1: J < focusJ
   const float b1       = 1.f - M_scaled;
   const float c1       = -J;
   const float det1     = b1 * b1 - 4.f * a * c1;
-  const float r1       = (det1 > 0.f) ? sqrtf(det1) : 0.f;
-  const float res1     = (-2.f * c1) / (b1 + r1);
+  const float r1       = (det1 > 0.f) ? safe_sqrt(det1) : 0.f;
+  const float den1     = copysignf(fmaxf(fabsf(b1 + r1), 1e-6f), (b1 + r1));
+  const float res1     = (-2.f * c1) / den1;
 
   // branch 2: J >= focusJ
   const float b2       = -(1.f + M_scaled + maxJ * a);
   const float c2       = maxJ * M_scaled + J;
   const float det2     = b2 * b2 - 4.f * a * c2;
-  const float r2       = (det2 > 0.f) ? sqrtf(det2) : 0.f;
-  const float res2     = (-2.f * c2) / (b2 - r2);
+  const float r2       = (det2 > 0.f) ? safe_sqrt(det2) : 0.f;
+  const float den2     = copysignf(fmaxf(fabsf(b2 - r2), 1e-6f), (b2 - r2));
+  const float res2     = (-2.f * c2) / den2;
 
   const int   choose1  = J < focusJ;  // 0/1 mask
   return choose1 ? res1 : res2;
@@ -427,7 +481,8 @@ GPU_FUNC float compute_compression_vector_slope(float intersect_J, float focus_J
   const float dir_hi           = limit_J_max - intersect_J;
   const float direction_scalar = m ? dir_lo : dir_hi;
 
-  return direction_scalar * (intersect_J - focus_J) / (focus_J * slope_gain);
+  const float denom = fmaxf(fabsf(focus_J * slope_gain), 1e-6f);
+  return direction_scalar * (intersect_J - focus_J) / denom;
 }
 
 GPU_FUNC float estimate_line_and_boundary_intersection_M(float J_axis_intersect, float slope,
@@ -440,21 +495,24 @@ GPU_FUNC float estimate_line_and_boundary_intersection_M(float J_axis_intersect,
 
   // We calculate a shifted intersection from the original intersection using
   // the inverse of the exponential and the provided reference
-  const float normalised_J         = J_axis_intersect / J_intersection_reference;
-  const float shifted_intersection = J_intersection_reference * powf(normalised_J, inv_gamma);
+  const float refJ                 = fmaxf(J_intersection_reference, 1e-6f);
+  const float normalised_J         = fmaxf(J_axis_intersect / refJ, 0.0f);
+  const float shifted_intersection = refJ * safe_pow_pos(normalised_J, inv_gamma);
 
   // Now we find the M intersection of two lines
   // line from origin to J,M Max       l1(x) = J/M * x
   // line from J Intersect' with slope l2(x) = slope * x + Intersect'
 
   // return shifted_intersection / ((J_max / M_max) - slope);
-  return shifted_intersection * M_max / (J_max - slope * M_max);
+  const float denom = copysignf(fmaxf(fabsf(J_max - slope * M_max), 1e-6f), (J_max - slope * M_max));
+  return shifted_intersection * M_max / denom;
 }
 
 // Smooth minimum about the scaled reference, based upon a cubic polynomial
 GPU_FUNC float smin_scaled(float a, float b, float scale_reference) {
   const float s_scaled = smooth_cusps * scale_reference;
-  const float h        = fmaxf(s_scaled - fabsf(a - b), 0.0) / s_scaled;
+  if (s_scaled <= 1e-6f) return fminf(a, b);
+  const float h        = fmaxf(s_scaled - fabsf(a - b), 0.0f) / s_scaled;
   return fminf(a, b) - h * h * h * s_scaled * (1. / 6.);
 }
 
@@ -478,7 +536,7 @@ GPU_FUNC float find_gamut_boundary_intersection(float2 JM_cusp, float J_max, flo
 
 GPU_FUNC float remap_M(float M, float gamut_boundary_M, float reach_boundary_M,
                        bool invert = false) {
-  const float boundary_ratio = gamut_boundary_M / reach_boundary_M;
+  const float boundary_ratio = safe_div(gamut_boundary_M, reach_boundary_M, 1e-6f);
   const float proportion     = fmaxf(boundary_ratio, compression_threshold);
   const float threshold      = proportion * gamut_boundary_M;
 
@@ -487,7 +545,8 @@ GPU_FUNC float remap_M(float M, float gamut_boundary_M, float reach_boundary_M,
   const float m_offset  = M - threshold;
   const float gamut_off = gamut_boundary_M - threshold;
   const float reach_off = reach_boundary_M - threshold;
-  const float denom     = fmaxf((reach_off / gamut_off) - 1.f, 1e-7f);
+  const float ratio_rg  = safe_div(reach_off, gamut_off, 1e-6f);
+  const float denom     = fmaxf(ratio_rg - 1.f, 1e-7f);
   const float scale     = reach_off / denom;
   const float nd        = m_offset / scale;
 
@@ -500,8 +559,7 @@ GPU_FUNC float3 compress_gamut(const float3& JMh, float Jx, GPU_ODTParams& p,
   const float M = JMh.y;
   const float h = JMh.z;
 
-  const float slope_gain =
-      get_focus_gain(Jx, hdp.analytical_threshold, p.limit_J_max, p.focus_dist);
+  const float slope_gain = fmaxf(get_focus_gain(Jx, hdp.analytical_threshold, p.limit_J_max, p.focus_dist), 1e-6f);
   const float J_intersect_source = solve_J_intersect(J, M, hdp.focus_J, p.limit_J_max, slope_gain);
   const float gamut_slope =
       compute_compression_vector_slope(J_intersect_source, hdp.focus_J, p.limit_J_max, slope_gain);
@@ -517,7 +575,7 @@ GPU_FUNC float3 compress_gamut(const float3& JMh, float Jx, GPU_ODTParams& p,
     return make_float3(Jx, 0.f, h);
   }
 
-  float       reach_max_M = reach_M_from_table(h, p);
+  float       reach_max_M = fmaxf(reach_M_from_table(h, p), 0.0f);
 
   const float reach_boundary_M =
       estimate_line_and_boundary_intersection_M(J_intersect_source, gamut_slope, p.model_gamma_inv,
@@ -567,6 +625,9 @@ GPU_FUNC float3 limit_rgb_preserve_chroma(float3 rgb, float lower, float upper) 
 }
 
 GPU_FUNC float3 OutputTransform_fwd(const float3& in_color, GPU_ODTParams& p) {
+  if (!isfinite_f(in_color.x) || !isfinite_f(in_color.y) || !isfinite_f(in_color.z)) {
+    return make_float3(0.f, 0.f, 0.f);
+  }
   // float3 color          = make_float3(in_color.x, in_color.y, in_color.z);
   // float3 color          = mult_f3_f33(in_color, AP1_TO_AP0);
   // float3 in_AP1 = clamp_f3(in_color, 0.f, 1.f);
@@ -575,7 +636,9 @@ GPU_FUNC float3 OutputTransform_fwd(const float3& in_color, GPU_ODTParams& p) {
   float3 JMh            = RGB_to_JMh(AP0_clamped, p.input_params_);
   float3 tonemapped_JMh = tonemap_and_compress_fwd(JMh, p);
   float3 compressed_JMh = gamut_compress_fwd(tonemapped_JMh, p);
-  return JMh_to_RGB(compressed_JMh, p.limit_params_);
+  float3 out_rgb = JMh_to_RGB(compressed_JMh, p.limit_params_);
+  // Keep output finite and within forward range, preserving chroma when exceeding upper.
+  return limit_rgb_preserve_chroma(out_rgb, 0.0f, p.ts_.forward_limit_);
 }
 };  // namespace CUDA
 };  // namespace puerhlab

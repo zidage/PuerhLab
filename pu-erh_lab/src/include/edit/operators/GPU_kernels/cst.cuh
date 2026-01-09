@@ -162,26 +162,26 @@ struct GPU_TOWS_Kernel : GPUPointOpTag {
     apply_matrix3x3(AP0_TO_AP1_MAT, p->x, p->y, p->z, &ap1_r, &ap1_g, &ap1_b);
 
     // // Step 2: Apply RGC
-    // float ach     = fmaxf(ap1_r, fmaxf(ap1_g, ap1_b));
+    float ach     = fmaxf(ap1_r, fmaxf(ap1_g, ap1_b));
 
-    // float abs_ach = fabsf(ach);
-    // if (abs_ach > 1e-6f) {
-    //   float dist_cyan    = (ach - ap1_r) / abs_ach;
-    //   float dist_magenta = (ach - ap1_g) / abs_ach;
-    //   float dist_yellow  = (ach - ap1_b) / abs_ach;
+    float abs_ach = fabsf(ach);
+    if (abs_ach > 1e-6f) {
+      float dist_cyan    = (ach - ap1_r) / abs_ach;
+      float dist_magenta = (ach - ap1_g) / abs_ach;
+      float dist_yellow  = (ach - ap1_b) / abs_ach;
 
-    //   // Apply RGC compression curve
-    //   float c_dist_cyan  = rgc_compress_curve(dist_cyan, RGC_LIM_CYAN, RGC_THR_CYAN, RGC_PWR);
-    //   float c_dist_magenta =
-    //       rgc_compress_curve(dist_magenta, RGC_LIM_MAGENTA, RGC_THR_MAGENTA, RGC_PWR);
-    //   float c_dist_yellow =
-    //       rgc_compress_curve(dist_yellow, RGC_LIM_YELLOW, RGC_THR_YELLOW, RGC_PWR);
+      // Apply RGC compression curve
+      float c_dist_cyan  = rgc_compress_curve(dist_cyan, RGC_LIM_CYAN, RGC_THR_CYAN, RGC_PWR);
+      float c_dist_magenta =
+          rgc_compress_curve(dist_magenta, RGC_LIM_MAGENTA, RGC_THR_MAGENTA, RGC_PWR);
+      float c_dist_yellow =
+          rgc_compress_curve(dist_yellow, RGC_LIM_YELLOW, RGC_THR_YELLOW, RGC_PWR);
 
-    //   // Reconstruct compressed AP1 values
-    //   ap1_r = ach - c_dist_cyan * abs_ach;
-    //   ap1_g = ach - c_dist_magenta * abs_ach;
-    //   ap1_b = ach - c_dist_yellow * abs_ach;
-    // }
+      // Reconstruct compressed AP1 values
+      ap1_r = ach - c_dist_cyan * abs_ach;
+      ap1_g = ach - c_dist_magenta * abs_ach;
+      ap1_b = ach - c_dist_yellow * abs_ach;
+    }
 
     // Step 3: Apply ACEScc log encoding
     float acescc_r = acescc_encode(ap1_r);
@@ -233,9 +233,7 @@ struct GPU_OUTPUT_Kernel : GPUPointOpTag {
     float3 cv_3 = DisplayEncoding(odt_color, params.to_output_params_.limit_to_display_matx,
                                   params.to_output_params_.etof, 1.0f);
 
-    // cv_3.x = fminf(1.0f, fmaxf(0.0f, cv_3.x));
-    // cv_3.y = fminf(1.0f, fmaxf(0.0f, cv_3.y));
-    // cv_3.z = fminf(1.0f, fmaxf(0.0f, cv_3.z));
+    
     *p          = make_float4(cv_3.x, cv_3.y, cv_3.z, p->w);
     // *p = make_float4(otd_color.x, otd_color.y, otd_color.z, p->w);
 

@@ -25,6 +25,7 @@
 #include "image/image_buffer.hpp"
 #include "pipeline.hpp"
 #include "pipeline_stage.hpp"
+#include "ui/edit_viewer/frame_sink.hpp"
 #include "utils/cache/lru_cache.hpp"
 
 namespace puerhlab {
@@ -58,6 +59,7 @@ class CPUPipelineExecutor : public PipelineExecutor {
 
   void SetPreviewMode(bool is_preview);
   void SetExecutionStages();
+  void SetExecutionStages(IFrameSink* frame_sink);
   void ResetExecutionStages();
 
   auto GetGlobalParams() -> OperatorParams& override { return global_params_; }

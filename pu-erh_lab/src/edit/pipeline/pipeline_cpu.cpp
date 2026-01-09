@@ -141,6 +141,15 @@ void CPUPipelineExecutor::SetExecutionStages() {
   }
 }
 
+void CPUPipelineExecutor::SetExecutionStages(IFrameSink* frame_sink) {
+  SetExecutionStages();
+
+  // Set frame sink for the last stage
+  if (!exec_stages_.empty()) {
+    exec_stages_.back()->SetFrameSink(frame_sink);
+  }
+}
+
 void CPUPipelineExecutor::ResetExecutionStages() {
   for (auto& stage : stages_) {
     stage.ResetDependents();

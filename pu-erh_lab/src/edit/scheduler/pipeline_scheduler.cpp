@@ -30,9 +30,10 @@ void PipelineScheduler::ScheduleTask(PipelineTask&& task) {
       std::unique_lock<std::mutex> guard(lock);
       if (task.input_) {
         auto result = task.pipeline_executor_->Apply(task.input_);
-        if (result) {
-          result_copy = std::make_shared<ImageBuffer>(result->GetCPUData());
+        if (!result || !result->gpu_data_valid_ || result->GetCPUData().empty()) {
+          return;
         }
+        result_copy = std::make_shared<ImageBuffer>(result->GetCPUData());
       }
     }
 

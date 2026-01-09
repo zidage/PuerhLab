@@ -134,7 +134,7 @@ auto PipelineStage::ApplyStage(OperatorParams& global_params) -> std::shared_ptr
       auto start = clock::now();
       gpu_executor_.SetParams(global_params);
       gpu_executor_.Execute(output_cache_);
-      output_cache_->SyncToCPU(); // TODO: remove this for future optimization
+      // output_cache_->SyncToCPU(); // TODO: remove this for future optimization
       auto end = clock::now();
       auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
       std::cout << "Pipeline Stage: " << GetStageNameString()

@@ -14,6 +14,7 @@
 #include "edit/scheduler/pipeline_scheduler.hpp"
 #include "sleeve/sleeve_manager.hpp"
 #include "type/supported_file_type.hpp"
+#include "ui/edit_viewer/edit_viewer.hpp"
 #include "ui_test_fixation.hpp"
 
 using namespace puerhlab;
@@ -29,7 +30,7 @@ void SetPipelineTemplate(std::shared_ptr<PipelineExecutor> executor) {
 #endif
   decode_params["raw"]["highlights_reconstruct"] = true;
   decode_params["raw"]["use_camera_wb"]          = true;
-  decode_params["raw"]["user_wb"]                = 5500;
+  decode_params["raw"]["user_wb"]                = 7600.f;
   decode_params["raw"]["backend"]                = "puerh";
   raw_stage.SetOperator(OperatorType::RAW_DECODE, decode_params);
   // raw_stage.SetOperator(OperatorType::CST, to_ws_params);
@@ -152,17 +153,20 @@ int main(int argc, char* argv[]) {
     float clarity_    = 0.0f;
   };
 
+
+  QCoreApplication::setAttribute(Qt::AA_UseDesktopOpenGL);
+
   QApplication app(argc, argv);
   ApplyMaterialLikeTheme(app);
 
   QWidget      window;
   auto*        root  = new QHBoxLayout(&window);
 
-  QLabel*      label = new QLabel(&window);
-  label->setMinimumSize(800, 600);
-  label->setAlignment(Qt::AlignCenter);
-  label->setStyleSheet(
-      "QLabel {"
+    auto* viewer = new QtEditViewer(&window);
+    viewer->setMinimumSize(800, 600);
+    viewer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    viewer->setStyleSheet(
+      "QOpenGLWidget {"
       "  background: #121212;"
       "  border: 1px solid #303134;"
       "  border-radius: 12px;"
@@ -183,7 +187,7 @@ int main(int argc, char* argv[]) {
 
   controlsLayout->addStretch();
 
-  root->addWidget(label, /*stretch*/ 1);
+  root->addWidget(viewer, /*stretch*/ 1);
   root->addWidget(controls);
 
   window.setWindowTitle("Qt Image Preview");
@@ -196,7 +200,7 @@ int main(int argc, char* argv[]) {
   SleeveManager             manager{db_path};
   ImageLoader               image_loader(128, 1, 0);
 
-  image_path_t              path = std::string(TEST_IMG_PATH) + "/raw/camera/sony/a7c";
+  image_path_t              path = std::string(TEST_IMG_PATH) + "/raw/camera/lumix/s5ii";
   std::vector<image_path_t> imgs;
   for (const auto& img : std::filesystem::directory_iterator(path)) {
     if (!img.is_directory() && is_supported_file(img.path())) imgs.push_back(img.path());
@@ -235,9 +239,7 @@ int main(int argc, char* argv[]) {
   detail_stage.SetOperator(OperatorType::SHARPEN, {{"sharpen", {{"offset", 0.0f}}}}, global_params);
   detail_stage.SetOperator(OperatorType::CLARITY, {{"clarity", 0.0f}}, global_params);
   // Set execution stages
-  base_executor->SetExecutionStages();
-
-  const qreal     dpr = app.devicePixelRatio();
+  base_executor->SetExecutionStages(viewer);
 
   AdjustmentState adjustments{};
   auto            scheduleAdjustments = [&](const AdjustmentState& state) {
@@ -263,18 +265,9 @@ int main(int argc, char* argv[]) {
     task.options_.is_blocking_ = false;
     task.options_.is_callback_ = true;
 
-    task.callback_             = [label, dpr](ImageBuffer& output) {
-      try {
-      cv::Mat img = output.GetCPUData();
-      // img.convertTo(img, CV_8UC3, 255.0);
+    task.callback_             = [viewer](ImageBuffer&) {
+      // viewer->NotifyFrameReady();
 
-      QImage qimg = cvMatToQImage(img);
-
-      qimg.setDevicePixelRatio(dpr);
-      label->setPixmap(QPixmap::fromImage(qimg));
-      } catch (const std::exception& e) {
-        qDebug("Failed to get image from pipeline: %s", e.what());
-      }
     };
 
     scheduler.ScheduleTask(std::move(task));
@@ -393,7 +386,11 @@ int main(int argc, char* argv[]) {
         scheduleAdjustments(adjustments);
       },
       [](int v) { return QString::number(v, 'f', 2); });
-  scheduleAdjustments(adjustments);
+
+  // Defer initial scheduling until the event loop starts so the QOpenGLWidget
+  // has a valid OpenGL context before any frame sink resize/map.
+  const AdjustmentState init_state = adjustments;
+  QTimer::singleShot(0, &window, [&, init_state]() { scheduleAdjustments(init_state); });
 
   int ret = app.exec();
   tests.TearDown();

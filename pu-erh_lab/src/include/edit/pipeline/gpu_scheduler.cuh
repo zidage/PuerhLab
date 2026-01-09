@@ -106,6 +106,9 @@ class GPU_KernelLauncher {
     cv::cuda::GpuMat gpu_mat = input_img_->GetGPUData();
     size_t           width   = gpu_mat.cols;
     size_t           height  = gpu_mat.rows;
+
+    frame_sink_->EnsureSize(width, height);
+
     {
       const auto copy_err = cudaMemcpy2D(work_buffer_, width * sizeof(float4), gpu_mat.ptr<float4>(),
                                          gpu_mat.step, width * sizeof(float4), height,
@@ -137,29 +140,29 @@ class GPU_KernelLauncher {
       }
     }
           
-    // float4* mapped_ptr = frame_sink_->MapResourceForWrite();
-    // if (mapped_ptr) {
-    //   size_t size_bytes = width * height * sizeof(float4);
-    //   cudaMemcpy(mapped_ptr, result_ptr, size_bytes, cudaMemcpyDeviceToDevice);
-    //   frame_sink_->UnmapResource();
-    //   frame_sink_->NotifyFrameReady();
-    // }
-
-    if (output_img_) {
-      output_img_->InitGPUData(width, height, CV_32FC4);
-      cv::cuda::GpuMat output_gpu_mat = output_img_->GetGPUData();
-      {
-        const auto out_copy_err =
-            cudaMemcpy2D(output_gpu_mat.ptr<float4>(), output_gpu_mat.step, result_ptr,
-                         width * sizeof(float4), width * sizeof(float4), height,
-                         cudaMemcpyDeviceToDevice);
-        if (out_copy_err != cudaSuccess) {
-          throw std::runtime_error(std::string("cudaMemcpy2D (work->output) failed: ") +
-                                   cudaGetErrorString(out_copy_err));
-        }
-      }
-      output_img_->SetGPUDataValid(true);
+    float4* mapped_ptr = frame_sink_->MapResourceForWrite();
+    if (mapped_ptr) {
+      size_t size_bytes = width * height * sizeof(float4);
+      cudaMemcpy(mapped_ptr, result_ptr, size_bytes, cudaMemcpyDeviceToDevice);
+      frame_sink_->UnmapResource();
+      frame_sink_->NotifyFrameReady();
     }
+
+    // if (output_img_) {
+    //   output_img_->InitGPUData(width, height, CV_32FC4);
+    //   cv::cuda::GpuMat output_gpu_mat = output_img_->GetGPUData();
+    //   {
+    //     const auto out_copy_err =
+    //         cudaMemcpy2D(output_gpu_mat.ptr<float4>(), output_gpu_mat.step, result_ptr,
+    //                      width * sizeof(float4), width * sizeof(float4), height,
+    //                      cudaMemcpyDeviceToDevice);
+    //     if (out_copy_err != cudaSuccess) {
+    //       throw std::runtime_error(std::string("cudaMemcpy2D (work->output) failed: ") +
+    //                                cudaGetErrorString(out_copy_err));
+    //     }
+    //   }
+    //   output_img_->SetGPUDataValid(true);
+    // }
   }
 };
 }  // namespace CUDA

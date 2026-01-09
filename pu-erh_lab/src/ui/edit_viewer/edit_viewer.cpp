@@ -15,6 +15,7 @@
 #include "ui/edit_viewer/edit_viewer.hpp"
 
 #include <GL/gl.h>
+#include <cuda_runtime_api.h>
 #include <driver_types.h>
 #include <qopenglext.h>
 #include <qoverload.h>
@@ -23,13 +24,15 @@
 
 namespace puerhlab {
 
-static const char* vertexShaderSource   = R"(
-    attribute vec2 position;
-    varying vec2 vTexCoord;
-    void main() {
-        gl_Position = vec4(position, 0.0, 1.0);
-        vTexCoord = (position + 1.0) * 0.5;
-    }
+static const char* vertexShaderSource = R"(
+#version 330 core
+layout(location = 0) in vec2 position;
+out vec2 vTexCoord;
+void main() {
+    gl_Position = vec4(position, 0.0, 1.0);
+    vec2 uv = (position + 1.0) * 0.5;
+    vTexCoord = vec2(uv.x, 1.0 - uv.y); // flip Y
+}
 )";
 
 static const char* fragmentShaderSource = R"(
@@ -55,6 +58,12 @@ QtEditViewer::~QtEditViewer() {
   FreeResources();
   delete program_;
   doneCurrent();
+
+  if (staging_ptr_) {
+    cudaFree(staging_ptr_);
+    staging_ptr_   = nullptr;
+    staging_bytes_ = 0;
+  }
 }
 
 void QtEditViewer::EnsureSize(int width, int height) {
@@ -65,31 +74,46 @@ void QtEditViewer::EnsureSize(int width, int height) {
     }
   }
 
+  // Ensure staging buffer is available for worker thread writes.
+  const size_t needed_bytes = static_cast<size_t>(width) * static_cast<size_t>(height) * sizeof(float4);
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (needed_bytes > 0 && needed_bytes != staging_bytes_) {
+      if (staging_ptr_) {
+        cudaFree(staging_ptr_);
+        staging_ptr_ = nullptr;
+      }
+      const cudaError_t alloc_err = cudaMalloc(reinterpret_cast<void**>(&staging_ptr_), needed_bytes);
+      if (alloc_err != cudaSuccess) {
+        qWarning("Failed to allocate CUDA staging buffer (%zu bytes): %s", needed_bytes,
+                 cudaGetErrorString(alloc_err));
+        staging_ptr_   = nullptr;
+        staging_bytes_ = 0;
+      } else {
+        staging_bytes_ = needed_bytes;
+      }
+    }
+  }
+
   emit RequestResize(width, height);
 }
 
 float4* QtEditViewer::MapResourceForWrite() {
   mutex_.lock();
 
-  if (!cuda_resource_) {
-    // No resource to map
+  // IMPORTANT: Do NOT map the OpenGL PBO from this thread. On Windows this often
+  // fails with "invalid OpenGL or DirectX context" because the GL context is
+  // owned by the GUI thread.
+  if (!staging_ptr_ || staging_bytes_ == 0) {
     mutex_.unlock();
     return nullptr;
   }
 
-  cudaGraphicsMapResources(1, &cuda_resource_, 0);
-
-  float4* d_ptr = nullptr;
-  size_t  num_bytes;
-  cudaGraphicsResourceGetMappedPointer((void**)&d_ptr, &num_bytes, cuda_resource_);
-
-  return d_ptr;
+  return staging_ptr_;
 }
 
 void QtEditViewer::UnmapResource() {
-  if (cuda_resource_) {
-    cudaGraphicsUnmapResources(1, &cuda_resource_, 0);
-  }
+  frame_pending_.store(true, std::memory_order_release);
   mutex_.unlock();
 }
 
@@ -115,10 +139,22 @@ void QtEditViewer::initializeGL() {
   glBindBuffer(GL_ARRAY_BUFFER, vbo_);
   glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
 
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (alloc_width_ <= 0 || alloc_height_ <= 0) {
+      alloc_width_  = std::max(1, this->width());
+      alloc_height_ = std::max(1, this->height());
+    }
+  }
+
   InitPBO();
 }
 
 void QtEditViewer::InitPBO() {
+  if (GetWidth() <= 0 || GetHeight() <= 0) {
+    qWarning("InitPBO skipped: invalid size %dx%d", GetWidth(), GetHeight());
+    return;
+  }
   // Create PBO
   glGenBuffers(1, &pbo_);
   glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pbo_);
@@ -150,10 +186,62 @@ void QtEditViewer::InitPBO() {
 
 void QtEditViewer::paintGL() {
   std::lock_guard<std::mutex> lock(mutex_);
+  if (!pbo_ || !texture_ || !program_) return;
 
-  if (!pbo_ || !texture_) {
-    // Resources not initialized
-    return;
+  const float dpr = devicePixelRatioF();
+  const float vw  = std::max(1.0f, float(width()) * dpr);
+  const float vh  = std::max(1.0f, float(height()) * dpr);
+  glViewport(0, 0, int(vw), int(vh));
+
+  // Keep aspect ratio (letterbox)
+  const float imgW = std::max(1, GetWidth());
+  const float imgH = std::max(1, GetHeight());
+  const float winAspect = vw / vh;
+  const float imgAspect = imgW / imgH;
+
+  float sx = 1.0f, sy = 1.0f;
+  if (imgAspect > winAspect) {
+    sy = winAspect / imgAspect; // image wider -> reduce Y
+  } else {
+    sx = imgAspect / winAspect; // image taller -> reduce X
+  }
+
+  float vertices[] = {
+      -sx, -sy,
+       sx, -sy,
+      -sx,  sy,
+       sx,  sy,
+  };
+  glBindBuffer(GL_ARRAY_BUFFER, vbo_);
+  glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(vertices), vertices);
+
+  // If a new frame is pending, copy staging buffer into the mapped PBO.
+  if (frame_pending_.load(std::memory_order_acquire) && cuda_resource_ && staging_ptr_ && staging_bytes_ > 0) {
+    cudaError_t map_err = cudaGraphicsMapResources(1, &cuda_resource_, 0);
+    if (map_err != cudaSuccess) {
+      qWarning("Failed to map CUDA resource (paintGL): %s", cudaGetErrorString(map_err));
+    } else {
+      float4* mapped_ptr = nullptr;
+      size_t  mapped_bytes = 0;
+      cudaError_t ptr_err = cudaGraphicsResourceGetMappedPointer(
+          reinterpret_cast<void**>(&mapped_ptr), &mapped_bytes, cuda_resource_);
+      if (ptr_err != cudaSuccess || !mapped_ptr || mapped_bytes == 0) {
+        qWarning("Failed to get mapped pointer (paintGL): %s", cudaGetErrorString(ptr_err));
+      } else {
+        const size_t copy_bytes = std::min(staging_bytes_, mapped_bytes);
+        cudaError_t copy_err = cudaMemcpy(mapped_ptr, staging_ptr_, copy_bytes, cudaMemcpyDeviceToDevice);
+        if (copy_err != cudaSuccess) {
+          qWarning("Failed to copy staging->PBO: %s", cudaGetErrorString(copy_err));
+        } else {
+          frame_pending_.store(false, std::memory_order_release);
+        }
+      }
+
+      cudaError_t unmap_err = cudaGraphicsUnmapResources(1, &cuda_resource_, 0);
+      if (unmap_err != cudaSuccess) {
+        qWarning("Failed to unmap CUDA resource (paintGL): %s", cudaGetErrorString(unmap_err));
+      }
+    }
   }
 
   glClear(GL_COLOR_BUFFER_BIT);

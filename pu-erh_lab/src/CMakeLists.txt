@@ -310,7 +310,7 @@ def_library(ImageWriter
 # 9. UI Components
 # ==============================================================================
 def_library(EditViewer
-    SOURCES ui/edit_viewer/edit_viewer.cpp
+    SOURCES ui/edit_viewer/edit_viewer.cpp include/ui/edit_viewer/edit_viewer.hpp
     PUBLIC_DEPS SleeveView EditPipeline glad::glad OpenGL::GL Qt6::OpenGLWidgets
 )
 

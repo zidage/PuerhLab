@@ -25,6 +25,7 @@
 #include "edit/pipeline/tile_scheduler.hpp"
 #include "image/image_buffer.hpp"
 #include "pipeline_gpu_wrapper.hpp"
+#include "ui/edit_viewer/frame_sink.hpp"
 
 namespace puerhlab {
 // Iteration 3: Static Pipeline with compile-time operator chaining
@@ -123,6 +124,7 @@ class PipelineStage {
 
   PipelineStage*                                         dependents_         = nullptr;
 
+
   static constexpr auto                                  BuildKernelStream   = []() {
     auto op_to_working = OCIO_ACES_Transform_Op_Kernel();
     auto op_exp        = ExposureOpKernel();
@@ -179,6 +181,10 @@ class PipelineStage {
   void SetGPUExecutor() {
     gpu_executor_.SetInputImage(input_img_);
     gpu_setup_done_ = true;
+  }
+
+  void SetFrameSink(IFrameSink* frame_sink) {
+    gpu_executor_.SetFrameSink(frame_sink);
   }
 
   void SetInputImage(std::shared_ptr<ImageBuffer>);

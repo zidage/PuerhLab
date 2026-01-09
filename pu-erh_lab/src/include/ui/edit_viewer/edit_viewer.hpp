@@ -20,6 +20,7 @@
 #include <QOpenGLFunctions>
 #include <QOpenGLShaderProgram>
 #include <QOpenGLWidget>
+#include <atomic>
 #include <mutex>
 #include <cuda_gl_interop.h>
 
@@ -64,6 +65,12 @@ class QtEditViewer : public QOpenGLWidget, protected QOpenGLFunctions, public pu
 
   // CUDA resources
   cudaGraphicsResource* cuda_resource_ = nullptr;
+
+  // CUDA staging buffer (written by worker thread). We only map the PBO in paintGL
+  // on the GUI thread to avoid "invalid OpenGL or DirectX context".
+  float4*               staging_ptr_   = nullptr;
+  size_t                staging_bytes_ = 0;
+  std::atomic<bool>     frame_pending_{false};
 
   // Thread synchronization
   std::mutex            mutex_;

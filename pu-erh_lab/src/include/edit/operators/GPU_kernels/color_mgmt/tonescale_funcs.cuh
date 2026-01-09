@@ -26,7 +26,10 @@ namespace CUDA {
 
 GPU_FUNC float Tonescale_fwd(float x, GPU_TSParams& params) {
   // Forward MM tone scale
-  float f = params.m_2_ * powf(fmaxf(0.f, x) / (x + params.s_2_), params.g_);
+  // Guard against 0/0 when x == -s_2_ and against negative denominators.
+  const float denom = x + params.s_2_;
+  const float ratio = (denom > 1e-7f) ? (fmaxf(0.f, x) / denom) : 0.0f;
+  float f = params.m_2_ * powf(ratio, params.g_);
 
   float h = fmaxf(0.f, f * f / (f + params.t_1_));
   return h * params.n_r_;
