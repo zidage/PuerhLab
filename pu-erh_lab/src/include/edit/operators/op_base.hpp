@@ -135,7 +135,7 @@ struct OperatorParams {
   OCIO::BakerRcPtr             to_ws_lut_baker_          = nullptr;
 
   // Look modification transform
-  bool                         lmt_enabled_              = true;
+  bool                         lmt_enabled_              = false;
   bool                         to_lmt_dirty_             = false;
   OCIO::ConstCPUProcessorRcPtr cpu_lmt_processor_        = nullptr;
   OCIO::ConstGPUProcessorRcPtr gpu_lmt_processor_        = nullptr;

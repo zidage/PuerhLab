@@ -32,18 +32,10 @@ struct GPU_ExposureOpKernel : GPUPointOpTag {
   }
 };
 
-struct GPU_BlackOpKernel : GPUPointOpTag {
-  __device__ __forceinline__ void operator()(float4* p, GPUOperatorParams& params) const {
-      if (!params.black_enabled_) return;
-      p->x = p->x * params.slope_ + params.black_point_;
-      p->y = p->y * params.slope_ + params.black_point_;
-      p->z = p->z * params.slope_ + params.black_point_;
-  }
-};
 
-struct GPU_WhiteOpKernel : GPUPointOpTag {
+struct GPU_ToneOpKernel : GPUPointOpTag {
   __device__ __forceinline__ void operator()(float4* p, GPUOperatorParams& params) const {
-      if (!params.white_enabled_) return;
+      if (!params.white_enabled_ && !params.black_enabled_) return;
       p->x = p->x * params.slope_ + params.black_point_;
       p->y = p->y * params.slope_ + params.black_point_;
       p->z = p->z * params.slope_ + params.black_point_;

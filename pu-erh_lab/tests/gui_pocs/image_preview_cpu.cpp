@@ -1,12 +1,13 @@
 #include <opencv2/core/hal/interface.h>
+#include <qlogging.h>
 
 #include <QApplication>
 #include <QBoxLayout>
 #include <QImage>
 #include <QLabel>
 #include <QSlider>
-#include <QTimer>
 #include <QStyleFactory>
+#include <QTimer>
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/opencv.hpp>
 
@@ -16,6 +17,7 @@
 #include "type/supported_file_type.hpp"
 #include "ui/edit_viewer/edit_viewer.hpp"
 #include "ui_test_fixation.hpp"
+
 
 using namespace puerhlab;
 
@@ -47,18 +49,17 @@ void SetPipelineTemplate(std::shared_ptr<PipelineExecutor> executor) {
   auto&          output_stage = executor->GetStage(PipelineStageName::Output_Transform);
   output_params["ocio"]       = {
       {"src", "ACEScc"}, {"dst", "Camera Rec.709"}, {"limit", true}, {"transform_type", 1}};
-  output_params["aces_odt"] = {
-      {"encoding_space", "rec709"},
-      {"encoding_etof", "gamma_2_2"},
-      {"limiting_space", "rec709"},
-      {"peak_luminance", 100.0f}};
+  output_params["aces_odt"] = {{"encoding_space", "rec709"},
+                               {"encoding_etof", "gamma_2_2"},
+                               {"limiting_space", "rec709"},
+                               {"peak_luminance", 100.0f}};
   output_stage.SetOperator(OperatorType::ODT, output_params, global_params);
 }
 
 static QImage cvMatToQImage(const cv::Mat& mat) {
   // if (mat.type() == CV_8UC3) {
-  //   QImage image(mat.data, mat.cols, mat.rows, static_cast<int>(mat.step), QImage::Format_RGB888);
-  //   return image;
+  //   QImage image(mat.data, mat.cols, mat.rows, static_cast<int>(mat.step),
+  //   QImage::Format_RGB888); return image;
   // } else if (mat.type() == CV_8UC1) {
   //   QImage image(mat.data, mat.cols, mat.rows, static_cast<int>(mat.step),
   //                QImage::Format_Grayscale8);
@@ -66,7 +67,8 @@ static QImage cvMatToQImage(const cv::Mat& mat) {
   // } else {
   //   throw std::runtime_error("Unsupported image format for display");
   // }
-  return QImage{mat.data, mat.cols, mat.rows, static_cast<int>(mat.step), QImage::Format_RGBA32FPx4};
+  return QImage{mat.data, mat.cols, mat.rows, static_cast<int>(mat.step),
+                QImage::Format_RGBA32FPx4};
 }
 
 static void ApplyMaterialLikeTheme(QApplication& app) {
@@ -124,7 +126,7 @@ static void ApplyMaterialLikeTheme(QApplication& app) {
       "  background: #5FA2FF;"
       "  width: 18px;"
       "  height: 18px;"
-      "  margin: -7px 0;" // centers handle on 4px groove
+      "  margin: -7px 0;"  // centers handle on 4px groove
       "  border-radius: 9px;"
       "}"
       "QSlider::handle:horizontal:hover {"
@@ -135,8 +137,7 @@ static void ApplyMaterialLikeTheme(QApplication& app) {
       "}"
       "QSlider::tick-mark {"
       "  background: transparent;"
-      "}"
-      );
+      "}");
 }
 
 int main(int argc, char* argv[]) {
@@ -153,19 +154,18 @@ int main(int argc, char* argv[]) {
     float clarity_    = 0.0f;
   };
 
-
   QCoreApplication::setAttribute(Qt::AA_UseDesktopOpenGL);
 
   QApplication app(argc, argv);
   ApplyMaterialLikeTheme(app);
 
-  QWidget      window;
-  auto*        root  = new QHBoxLayout(&window);
+  QWidget window;
+  auto*   root   = new QHBoxLayout(&window);
 
-    auto* viewer = new QtEditViewer(&window);
-    viewer->setMinimumSize(800, 600);
-    viewer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
-    viewer->setStyleSheet(
+  auto*   viewer = new QtEditViewer(&window);
+  viewer->setMinimumSize(800, 600);
+  viewer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+  viewer->setStyleSheet(
       "QOpenGLWidget {"
       "  background: #121212;"
       "  border: 1px solid #303134;"
@@ -200,10 +200,15 @@ int main(int argc, char* argv[]) {
   SleeveManager             manager{db_path};
   ImageLoader               image_loader(128, 1, 0);
 
-  image_path_t              path = std::string(TEST_IMG_PATH) + "/raw/camera/lumix/s5ii";
+  image_path_t              path = std::string(TEST_IMG_PATH) + "/raw/street";
   std::vector<image_path_t> imgs;
-  for (const auto& img : std::filesystem::directory_iterator(path)) {
-    if (!img.is_directory() && is_supported_file(img.path())) imgs.push_back(img.path());
+  try {
+    for (const auto& img : std::filesystem::directory_iterator(path)) {
+      if (!img.is_directory() && is_supported_file(img.path())) imgs.push_back(img.path());
+    }
+  } catch (...) {
+    qWarning() << "Failed to read test images from" << QString::fromStdString(path.string());
+    return -1;
   }
   manager.LoadToPath(imgs, L"");
   auto              img_pool = manager.GetPool()->GetPool();
@@ -219,6 +224,7 @@ int main(int argc, char* argv[]) {
   base_task.pipeline_executor_ = base_executor;
   SetPipelineTemplate(base_task.pipeline_executor_);
   auto& global_params = base_task.pipeline_executor_->GetGlobalParams();
+  global_params.lmt_enabled_ = true;
   // Register a default exposure
   auto& basic_stage   = base_task.pipeline_executor_->GetStage(PipelineStageName::Basic_Adjustment);
   basic_stage.SetOperator(OperatorType::EXPOSURE, {{"exposure", 0.0f}}, global_params);
@@ -267,7 +273,6 @@ int main(int argc, char* argv[]) {
 
     task.callback_             = [viewer](ImageBuffer&) {
       // viewer->NotifyFrameReady();
-
     };
 
     scheduler.ScheduleTask(std::move(task));

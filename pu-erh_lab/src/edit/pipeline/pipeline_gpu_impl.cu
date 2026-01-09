@@ -31,8 +31,7 @@ class GPUPipelineImpl {
     auto to_ws  = GPU_TOWS_Kernel();
     auto exp    = GPU_ExposureOpKernel();
     auto cont   = GPU_ContrastOpKernel();
-    auto white  = GPU_WhiteOpKernel();
-    auto black  = GPU_BlackOpKernel();
+    auto tone  = GPU_ToneOpKernel();
     auto high   = GPU_HighlightOpKernel();
     auto shad   = GPU_ShadowOpKernel();
 
@@ -46,7 +45,7 @@ class GPUPipelineImpl {
     auto sharp  = GPU_SharpenKernel();
     auto clar   = GPU_ClarityKernel();
 
-    return GPU_StaticKernelStream(GPU_PointChain(to_ws, exp, cont, white, black, high, shad, tint,
+    return GPU_StaticKernelStream(GPU_PointChain(to_ws, exp, cont, tone, high, shad, tint,
                                                  sat, vib, hls, lmt, to_out),
                                   sharp, clar);
   };

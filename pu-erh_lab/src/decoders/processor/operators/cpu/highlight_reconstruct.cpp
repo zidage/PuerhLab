@@ -266,7 +266,7 @@ void HighlightReconstruct(cv::Mat& img, LibRaw& raw_processor) {
 
     float chrominance[4] = {0.f, 0.f, 0.f, 0.f};
     for (int c = 0; c < 3; ++c) {
-      chrominance[c] = (cnts[c] > 1.f) ? (sums[c] / cnts[c]) : 0.f;
+      chrominance[c] = (cnts[c] > 80.f) ? (sums[c] / cnts[c]) : 0.f;
     }
 
     // std::cout << "Correction: R=" << correction[0] << " G=" << correction[1]
@@ -288,53 +288,53 @@ void HighlightReconstruct(cv::Mat& img, LibRaw& raw_processor) {
       }
     }
 
-    cv::Mat1f final_result = result.clone();
+    // cv::Mat1f final_result = result.clone();
 
-    for (int row = 2; row < height - 2; ++row) {
-      for (int col = 2; col < width - 2; ++col) {
-        const int   color = FC(row, col);
-        const float inval = input(row, col);
+    // for (int row = 2; row < height - 2; ++row) {
+    //   for (int col = 2; col < width - 2; ++col) {
+    //     const int   color = FC(row, col);
+    //     const float inval = input(row, col);
 
-        // Only process clipped pixels
-        if (inval >= clips[color]) {
-          const float reconstructed = result(row, col);
+    //     // Only process clipped pixels
+    //     if (inval >= clips[color]) {
+    //       const float reconstructed = result(row, col);
 
-          // Calculate how many channels are clipped in neighborhood
-          float       desat_factor =
-              _calc_desaturation_factor(input.ptr<float>(0), row, col, height, width, clips);
+    //       // Calculate how many channels are clipped in neighborhood
+    //       float       desat_factor =
+    //           _calc_desaturation_factor(input.ptr<float>(0), row, col, height, width, clips);
 
-          if (desat_factor > 0.0f) {
-            // Calculate local luminance estimate from surrounding pixels
-            float lum_sum = 0.0f;
-            float lum_cnt = 0.0f;
+    //       if (desat_factor > 0.0f) {
+    //         // Calculate local luminance estimate from surrounding pixels
+    //         float lum_sum = 0.0f;
+    //         float lum_cnt = 0.0f;
 
-            for (int dy = -2; dy <= 2; ++dy) {
-              for (int dx = -2; dx <= 2; ++dx) {
-                const int ny = row + dy;
-                const int nx = col + dx;
-                if (ny >= 0 && ny < height && nx >= 0 && nx < width) {
-                  lum_sum += result(ny, nx);
-                  lum_cnt += 1.0f;
-                }
-              }
-            }
+    //         for (int dy = -2; dy <= 2; ++dy) {
+    //           for (int dx = -2; dx <= 2; ++dx) {
+    //             const int ny = row + dy;
+    //             const int nx = col + dx;
+    //             if (ny >= 0 && ny < height && nx >= 0 && nx < width) {
+    //               lum_sum += result(ny, nx);
+    //               lum_cnt += 1.0f;
+    //             }
+    //           }
+    //         }
 
-            const float local_lum = (lum_cnt > 0.0f) ? (lum_sum / lum_cnt) : reconstructed;
+    //         const float local_lum = (lum_cnt > 0.0f) ? (lum_sum / lum_cnt) : reconstructed;
 
-            // Blend towards neutral (luminance) based on desaturation factor
-            // This effectively reduces saturation while preserving brightness
-            final_result(row, col) =
-                reconstructed * (1.0f - desat_factor) + local_lum * desat_factor;
-          } else {
-            final_result(row, col) = reconstructed;
-          }
-        } else {
-          final_result(row, col) = result(row, col);
-        }
-      }
-    }
+    //         // Blend towards neutral (luminance) based on desaturation factor
+    //         // This effectively reduces saturation while preserving brightness
+    //         final_result(row, col) =
+    //             reconstructed * (1.0f - desat_factor) + local_lum * desat_factor;
+    //       } else {
+    //         final_result(row, col) = reconstructed;
+    //       }
+    //     } else {
+    //       final_result(row, col) = result(row, col);
+    //     }
+    //   }
+    // }
 
-    img = final_result;
+    img = result;
   }
 }
 };  // namespace CPU
