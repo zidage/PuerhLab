@@ -130,15 +130,9 @@ auto PipelineStage::ApplyStage(OperatorParams& global_params) -> std::shared_ptr
       }
       output_cache_ = std::make_shared<ImageBuffer>();
       // _static_tile_scheduler->SetInputImage(_input_img);
-      using clock = std::chrono::high_resolution_clock;
-      auto start = clock::now();
       gpu_executor_.SetParams(global_params);
       gpu_executor_.Execute(output_cache_);
       // output_cache_->SyncToCPU(); // TODO: remove this for future optimization
-      auto end = clock::now();
-      auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
-      std::cout << "Pipeline Stage: " << GetStageNameString()
-                << " GPU execution time: " << duration << " ms" << std::endl;
       // auto current_img = _static_tile_scheduler->ApplyOps(global_params);
       // auto 
       // output_cache_    = current_img;

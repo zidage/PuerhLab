@@ -27,20 +27,29 @@ namespace puerhlab {
 static const char* vertexShaderSource = R"(
 #version 330 core
 layout(location = 0) in vec2 position;
+
+uniform vec2 uScale;
+
 out vec2 vTexCoord;
+
 void main() {
-    gl_Position = vec4(position, 0.0, 1.0);
+    // Letterbox: scale geometry, keep UV from original quad
+    vec2 pos = position * uScale;
+    gl_Position = vec4(pos, 0.0, 1.0);
+
     vec2 uv = (position + 1.0) * 0.5;
     vTexCoord = vec2(uv.x, 1.0 - uv.y); // flip Y
 }
 )";
 
 static const char* fragmentShaderSource = R"(
-    uniform sampler2D textureSampler;
-    varying vec2 vTexCoord;
-    void main() {
-        gl_FragColor = texture2D(textureSampler, vTexCoord);
-    }
+#version 330 core
+uniform sampler2D textureSampler;
+in vec2 vTexCoord;
+out vec4 FragColor;
+void main() {
+    FragColor = texture(textureSampler, vTexCoord);
+}
 )";
 
 QtEditViewer::QtEditViewer(QWidget* parent) : QOpenGLWidget(parent) {
@@ -125,15 +134,23 @@ void QtEditViewer::NotifyFrameReady() {
 void QtEditViewer::initializeGL() {
   initializeOpenGLFunctions();
 
-  // Initialize shaders
   program_ = new QOpenGLShaderProgram();
-  program_->addShaderFromSourceCode(QOpenGLShader::Vertex, vertexShaderSource);
-  program_->addShaderFromSourceCode(QOpenGLShader::Fragment, fragmentShaderSource);
-  program_->link();
+  if (!program_->addShaderFromSourceCode(QOpenGLShader::Vertex, vertexShaderSource)) {
+    qWarning("Vertex shader compile failed: %s", program_->log().toUtf8().constData());
+  }
+  if (!program_->addShaderFromSourceCode(QOpenGLShader::Fragment, fragmentShaderSource)) {
+    qWarning("Fragment shader compile failed: %s", program_->log().toUtf8().constData());
+  }
+  if (!program_->link()) {
+    qWarning("Shader program link failed: %s", program_->log().toUtf8().constData());
+  }
 
-  // Initialize PBO
+  // Static full-screen quad (never modified)
   float vertices[] = {
-      -1.0f, -1.0f, 1.0f, -1.0f, -1.0f, 1.0f, 1.0f, 1.0f,
+      -1.0f, -1.0f,
+       1.0f, -1.0f,
+      -1.0f,  1.0f,
+       1.0f,  1.0f,
   };
   glGenBuffers(1, &vbo_);
   glBindBuffer(GL_ARRAY_BUFFER, vbo_);
@@ -186,16 +203,16 @@ void QtEditViewer::InitPBO() {
 
 void QtEditViewer::paintGL() {
   std::lock_guard<std::mutex> lock(mutex_);
-  if (!pbo_ || !texture_ || !program_) return;
+  if (!pbo_ || !texture_ || !program_ || !program_->isLinked()) return;
 
   const float dpr = devicePixelRatioF();
   const float vw  = std::max(1.0f, float(width()) * dpr);
   const float vh  = std::max(1.0f, float(height()) * dpr);
   glViewport(0, 0, int(vw), int(vh));
 
-  // Keep aspect ratio (letterbox)
-  const float imgW = std::max(1, GetWidth());
-  const float imgH = std::max(1, GetHeight());
+  // Compute letterbox scale from IMAGE aspect vs WINDOW aspect
+  const float imgW = float(std::max(1, GetWidth()));
+  const float imgH = float(std::max(1, GetHeight()));
   const float winAspect = vw / vh;
   const float imgAspect = imgW / imgH;
 
@@ -205,15 +222,6 @@ void QtEditViewer::paintGL() {
   } else {
     sx = imgAspect / winAspect; // image taller -> reduce X
   }
-
-  float vertices[] = {
-      -sx, -sy,
-       sx, -sy,
-      -sx,  sy,
-       sx,  sy,
-  };
-  glBindBuffer(GL_ARRAY_BUFFER, vbo_);
-  glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(vertices), vertices);
 
   // If a new frame is pending, copy staging buffer into the mapped PBO.
   if (frame_pending_.load(std::memory_order_acquire) && cuda_resource_ && staging_ptr_ && staging_bytes_ > 0) {
@@ -244,22 +252,24 @@ void QtEditViewer::paintGL() {
     }
   }
 
+  glClearColor(0.f, 0.f, 0.f, 1.f);
   glClear(GL_COLOR_BUFFER_BIT);
+
   program_->bind();
+  program_->setUniformValue("uScale", QVector2D(sx, sy));
+
+  glActiveTexture(GL_TEXTURE0);
+  program_->setUniformValue("textureSampler", 0);
 
   glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pbo_);
   glBindTexture(GL_TEXTURE_2D, texture_);
-
-  // Update texture from PBO
   glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, GetWidth(), GetHeight(), GL_RGBA, GL_FLOAT, nullptr);
-
   glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
 
-  // Draw call
   glBindBuffer(GL_ARRAY_BUFFER, vbo_);
   int pos_loc = program_->attributeLocation("position");
   program_->enableAttributeArray(pos_loc);
-  program_->setAttributeBuffer(pos_loc, GL_FLOAT, 0, 2, 0);
+  program_->setAttributeBuffer(pos_loc, GL_FLOAT, 0, 2, 2 * sizeof(float));
 
   glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
   program_->release();
@@ -268,15 +278,15 @@ void QtEditViewer::paintGL() {
 void QtEditViewer::resizeGL(int w, int h) {
   if (w <= 0 || h <= 0) return;
 
-  makeCurrent();
+  // makeCurrent();
 
-  std::lock_guard<std::mutex> lock(mutex_);
-  FreeResources();
+  // std::lock_guard<std::mutex> lock(mutex_);
+  // FreeResources();
 
-  alloc_width_  = w;
-  alloc_height_ = h;
+  // alloc_width_  = w;
+  // alloc_height_ = h;
 
-  InitPBO();
+  // InitPBO();
 }
 
 void QtEditViewer::FreeResources() {
@@ -298,10 +308,16 @@ void QtEditViewer::OnResizeGL(int w, int h) {
   makeCurrent();
   {
     std::lock_guard<std::mutex> lock(mutex_);
+
+    FreeResources();
     alloc_width_  = w;
     alloc_height_ = h;
+    InitPBO();
   }
-  resizeGL(w, h);
+  // resizeGL(w, h);
   doneCurrent();
+
+  // Ensure a repaint after resize
+  update();
 }
 };  // namespace puerhlab

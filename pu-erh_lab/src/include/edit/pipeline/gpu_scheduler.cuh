@@ -18,8 +18,12 @@
 #include <cuda_runtime_api.h>
 #include <opencv2/core/hal/interface.h>
 
+#include <chrono>
 #include <cstddef>
+#include <iomanip>
+#include <iostream>
 #include <memory>
+#include <mutex>
 #include <stdexcept>
 #include <string>
 #include <opencv2/core/cuda.hpp>
@@ -48,6 +52,17 @@ class GPU_KernelLauncher {
   GPUOperatorParams            params_;
 
   IFrameSink*                  frame_sink_ = nullptr;
+
+  // Lightweight FPS reporter (per launcher instance). Prints a single updating
+  // line in the CLI, throttled to avoid spamming.
+  std::chrono::steady_clock::time_point last_report_time_{};
+  double                               ema_fps_                 = 0.0;
+  double                               last_frame_ms_           = 0.0;
+  size_t                               frames_since_report_     = 0;
+  size_t                               total_frames_rendered_   = 0;
+
+  static constexpr std::chrono::milliseconds kReportInterval{500};
+  static constexpr double                   kEmaAlpha = 0.15;  // smoothing factor
 
  public:
   GPU_KernelLauncher(std::shared_ptr<ImageBuffer> input_img, KernelStreamT kernel_stream)
@@ -99,6 +114,7 @@ class GPU_KernelLauncher {
   void SetFrameSink(IFrameSink* frame_sink) { frame_sink_ = frame_sink; }
 
   void Execute() {
+    const auto exec_start = std::chrono::steady_clock::now();
     if (!input_img_ || !work_buffer_) {
       throw std::runtime_error("Input image not set or work buffer not allocated.");
     }
@@ -146,6 +162,33 @@ class GPU_KernelLauncher {
       cudaMemcpy(mapped_ptr, result_ptr, size_bytes, cudaMemcpyDeviceToDevice);
       frame_sink_->UnmapResource();
       frame_sink_->NotifyFrameReady();
+
+      // FPS/frametime reporting
+      const auto exec_end = std::chrono::steady_clock::now();
+      const double frame_ms = std::chrono::duration<double, std::milli>(exec_end - exec_start).count();
+      last_frame_ms_ = frame_ms;
+      const double inst_fps = (frame_ms > 0.0) ? (1000.0 / frame_ms) : 0.0;
+      ema_fps_ = (ema_fps_ <= 0.0) ? inst_fps : (ema_fps_ * (1.0 - kEmaAlpha) + inst_fps * kEmaAlpha);
+      ++frames_since_report_;
+      ++total_frames_rendered_;
+
+      if (last_report_time_.time_since_epoch().count() == 0) {
+        last_report_time_ = exec_end;
+      }
+
+      if ((exec_end - last_report_time_) >= kReportInterval) {
+        static std::mutex print_mutex;
+        std::lock_guard<std::mutex> guard(print_mutex);
+
+        std::cout << "\r\033[2KGPU preview: "
+                  << std::fixed << std::setprecision(1) << ema_fps_ << " fps"
+                  << " | last " << std::setprecision(2) << last_frame_ms_ << " ms"
+                  << " | frames " << total_frames_rendered_
+                  << std::flush;
+
+        frames_since_report_ = 0;
+        last_report_time_    = exec_end;
+      }
     }
 
     // if (output_img_) {
