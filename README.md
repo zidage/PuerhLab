@@ -24,25 +24,12 @@ Pu-erh Lab aims to provide a professional-grade workflow for photographers, comb
 - **GPU Acceleration:** Support GPU-accelerated processing using CUDA for real-time editing performance.
 
 ### 🎨 Professional Imaging Pipeline
-- **RAW Support:** GPU accelerated decoding module with an integration with **LibRaw** for RAW file unpacking.
-- **Color Management:** Support for **ACES** workflows (not really, there are only few IDTs available for digital cameras) with LUT-based stylization.
+- **RAW Support:** GPU-accelerated **LibRaw** based decoding module.
+- **Color Management:** Support ACES 2.0 Output Transform and LUT-based stylization.
 - **Non-Destructive Editing:** A flexible serializable architecture allows for infinite undo/redo and adjustment layering without altering original files.
 
 ### 🗃️ Asset Management ("Sleeve" System)
-- **Sleeve Virtual FS:** A custom abstraction layer designed specifically for handling massive photo libraries, providing efficient caching and path resolution.
-- **DuckDB Integration:** Utilizes **DuckDB** as an embedded analytical database engine for lightning-fast metadata querying and filtering across thousands of images.
-
-## 🛠️ Tech Stack
-
-*   **Language:** C++20
-*   **Build System:** CMake
-*   **Package Manager:** vcpkg, TBD
-*   **Core Libraries:**
-    *   **Image Processing:** OpenCV, LibRaw, OpenColorIO
-    *   **Data & Storage:** DuckDB, nlohmann::json, xxHash
-    *   **Concurrency:** moodycamel::ConcurrentQueue
-    *   **Metadata:** Exiv2
-    *   ***Working in progress...***
+- A custom abstraction layer designed specifically for handling massive photo libraries, providing efficient caching and path resolution.
 
 ## 🚧 Development Status
 
@@ -77,10 +64,6 @@ cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE=vcpkg/scripts/buildsystems/vcpkg.cmak
 
 # Build
 cmake --build build --config Release
-
-
-
-
-
+```
 
 
