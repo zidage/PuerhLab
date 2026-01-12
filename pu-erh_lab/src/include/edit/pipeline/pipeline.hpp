@@ -14,12 +14,16 @@
 
 #pragma once
 
+#include <memory>
+
 #include "edit/operators/op_base.hpp"
 #include "image/image_buffer.hpp"
 #include "pipeline_stage.hpp"
 
+
 namespace puerhlab {
 enum class PipelineBackend { CPU, CUDA, OpenCL };
+
 class PipelineExecutor {
  public:
   virtual void SetBoundFile(sl_element_id_t file_id)                                     = 0;
@@ -31,6 +35,9 @@ class PipelineExecutor {
   virtual void ImportPipelineParams(const nlohmann::json& j)                             = 0;
 
   virtual auto GetGlobalParams() -> OperatorParams&                                      = 0;
+
+  virtual void SetRenderRegion(int x, int y, float scale_factor)                                       = 0;
+  virtual void SetRenderRes(bool full_res, int max_side_length = 2048)                                         = 0;
 };
 
 }  // namespace puerhlab

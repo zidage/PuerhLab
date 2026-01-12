@@ -19,13 +19,24 @@
 #include <future>
 #include <memory>
 
+#include "edit/operators/op_kernel.hpp"
 #include "edit/pipeline/pipeline.hpp"
 #include "image/image_buffer.hpp"
 #include "type/type.hpp"
 
 namespace puerhlab {
+enum class RenderType { FAST_PREVIEW, FULL_RES_PREVIEW, FULL_RES_EXPORT, THUMBNAIL };
+
+struct RenderDesc {
+  RenderType render_type_  = RenderType::FAST_PREVIEW;
+
+  int        x_            = 0;
+  int        y_            = 0;
+  float      scale_factor_ = 1.0f;
+};
+
 struct TaskOptions {
-  bool          is_preview_;  // if true, use preview pipeline
+  RenderDesc    render_desc_;
 
   bool          is_blocking_;      // if true, wait for the task to finish
   bool          is_callback_;      // if true, use callback to return result
@@ -43,5 +54,7 @@ struct PipelineTask {
               seq_callback_;  // used for callback tasks
 
   TaskOptions options_;
+
+  void        SetExecutorRenderParams();
 };
 };  // namespace puerhlab

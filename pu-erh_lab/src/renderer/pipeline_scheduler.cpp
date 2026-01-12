@@ -12,14 +12,32 @@
 //  See the License for the specific language governing permissions and
 //  limitations under the License.
 
-#include "edit/scheduler/pipeline_scheduler.hpp"
+#include "renderer/pipeline_scheduler.hpp"
 
 #include <memory>
 #include <mutex>
 
 #include "image/image_buffer.hpp"
+#include "renderer/pipeline_task.hpp"
 
 namespace puerhlab {
+void PipelineTask::SetExecutorRenderParams() {
+  if (!pipeline_executor_) {
+    return;
+  }
+  auto& desc = options_.render_desc_;
+  pipeline_executor_->SetRenderRegion(desc.x_, desc.y_, desc.scale_factor_);
+  if (desc.render_type_ == RenderType::FAST_PREVIEW) {
+    pipeline_executor_->SetRenderRes(false, 2048);
+    return;
+  }
+  if (desc.render_type_ == RenderType::THUMBNAIL) {
+    pipeline_executor_->SetRenderRes(false, 1024);
+    return;
+  }
+  pipeline_executor_->SetRenderRes(true);
+}
+
 PipelineScheduler::PipelineScheduler() : thread_pool_(1) {}
 
 void PipelineScheduler::ScheduleTask(PipelineTask&& task) {
@@ -29,8 +47,15 @@ void PipelineScheduler::ScheduleTask(PipelineTask&& task) {
     {
       std::unique_lock<std::mutex> guard(lock);
       if (task.input_) {
+        auto& render_desc = task.options_.render_desc_;
+        if (!(render_desc.render_type_ == RenderType::FAST_PREVIEW)) {
+          task.SetExecutorRenderParams();
+        }
+
         auto result = task.pipeline_executor_->Apply(task.input_);
-        if (!result || !result->gpu_data_valid_ || result->GetCPUData().empty()) {
+        if (render_desc.render_type_ == RenderType::FAST_PREVIEW ||
+            render_desc.render_type_ == RenderType::FULL_RES_PREVIEW || !result ||
+            !result->gpu_data_valid_ || result->GetCPUData().empty()) {
           return;
         }
         result_copy = std::make_shared<ImageBuffer>(result->GetCPUData());

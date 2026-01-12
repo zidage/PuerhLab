@@ -12,7 +12,7 @@
 #include <opencv2/opencv.hpp>
 
 #include "edit/pipeline/pipeline_cpu.hpp"
-#include "edit/scheduler/pipeline_scheduler.hpp"
+#include "renderer/pipeline_scheduler.hpp"
 #include "sleeve/sleeve_manager.hpp"
 #include "type/supported_file_type.hpp"
 #include "ui/edit_viewer/edit_viewer.hpp"

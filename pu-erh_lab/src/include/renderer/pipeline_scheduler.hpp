@@ -29,6 +29,7 @@ class PipelineScheduler {
   std::mutex                    scheduler_lock_;
   ThreadPool thread_pool_;  // use thred pool for now, can be changed to task scheduler later
 
+  
  public:
   explicit PipelineScheduler();
 

@@ -101,10 +101,11 @@ auto CPUPipelineExecutor::Apply(std::shared_ptr<ImageBuffer> input)
   return output;
 }
 
-void CPUPipelineExecutor::SetPreviewMode(bool is_thumbnail) {
+[[deprecated("SetPreviewMode is deprecated, set from pipeline scheduler instead")]] void
+CPUPipelineExecutor::SetPreviewMode(bool is_thumbnail) {
   is_thumbnail_     = is_thumbnail;
 
-  thumbnail_params_ = {};  // TODO: Use default params for now
+  render_params_ = {};  // TODO: Use default params for now
   if (!is_thumbnail_) {
     // Disable resizing in image loading stage
     stages_[static_cast<int>(PipelineStageName::Image_Loading)].EnableOperator(
@@ -113,7 +114,7 @@ void CPUPipelineExecutor::SetPreviewMode(bool is_thumbnail) {
     return;
   }
   stages_[static_cast<int>(PipelineStageName::Geometry_Adjustment)].SetOperator(
-      OperatorType::RESIZE, thumbnail_params_);
+      OperatorType::RESIZE, render_params_);
 }
 
 void CPUPipelineExecutor::SetExecutionStages() {
@@ -180,5 +181,32 @@ void CPUPipelineExecutor::ImportPipelineParams(const nlohmann::json& j) {
     }
   }
 }
+
+void CPUPipelineExecutor::SetRenderRegion(int x, int y, float scale_factor) {
+  auto& resize_params = render_params_["resize"];
+  // render_params_["resize"] = {
+  //   {"enable_roi", true},
+  //   {"roi", {{"x", x}, {"y", y}, {"resize_factor", scale_factor}}},
+  // };
+  resize_params["enable_roi"] = true;
+  resize_params["roi"]        = {{"x", x}, {"y", y}, {"resize_factor", scale_factor}};
+
+  stages_[static_cast<int>(PipelineStageName::Geometry_Adjustment)].SetOperator(
+      OperatorType::RESIZE, render_params_);
+}
+
+void CPUPipelineExecutor::SetRenderRes(bool full_res, int max_side_length) {
+  auto& resize_params = render_params_["resize"];
+  // render_params_["resize"] = {
+  //   {"enable_scale", true},
+  //   {"maximum_edge", max_side_length},
+  // };
+  resize_params["enable_scale"] = !full_res;
+  resize_params["maximum_edge"] = max_side_length;
+
+  stages_[static_cast<int>(PipelineStageName::Geometry_Adjustment)].SetOperator(
+      OperatorType::RESIZE, render_params_);
+}
+
 
 };  // namespace puerhlab

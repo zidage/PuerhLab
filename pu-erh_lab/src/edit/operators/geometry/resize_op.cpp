@@ -28,7 +28,8 @@ void ResizeOp::Apply(std::shared_ptr<ImageBuffer> input) {
     return;
   }
 
-  float   scale = static_cast<float>(maximum_edge_) / static_cast<float>(std::max(w, h));
+  float scale =
+      enable_scale_ ? static_cast<float>(maximum_edge_) / static_cast<float>(std::max(w, h)) : 1.0f;
   cv::Mat roi_img;
   if (enable_roi_) {
     int roi_w = static_cast<int>(w * roi_.resize_factor_);
@@ -36,7 +37,7 @@ void ResizeOp::Apply(std::shared_ptr<ImageBuffer> input) {
     roi_w     = std::min(roi_w, w - roi_.x_);
     roi_h     = std::min(roi_h, h - roi_.y_);
     cv::Rect roi_rect(roi_.x_, roi_.y_, roi_w, roi_h);
-    roi_img     = img(roi_rect);
+    roi_img     = img(roi_rect).clone();  // Clone to create contiguous memory
     float scale = static_cast<float>(maximum_edge_) / static_cast<float>(std::max(roi_w, roi_h));
     cv::resize(roi_img, roi_img,
                cv::Size(static_cast<int>(roi_w * scale), static_cast<int>(roi_h * scale)), 0, 0,
@@ -51,6 +52,7 @@ void ResizeOp::Apply(std::shared_ptr<ImageBuffer> input) {
 auto ResizeOp::GetParams() const -> nlohmann::json {
   nlohmann::json params;
   nlohmann::json inner;
+  inner["enable_scale"] = enable_scale_;
   inner["maximum_edge"] = maximum_edge_;
   inner["enable_roi"]   = enable_roi_;
   inner["roi"]          = {{"x", roi_.x_}, {"y", roi_.y_}, {"resize_factor", roi_.resize_factor_}};
@@ -62,6 +64,11 @@ auto ResizeOp::GetParams() const -> nlohmann::json {
 auto ResizeOp::SetParams(const nlohmann::json& params) -> void {
   if (params.contains(script_name_)) {
     auto inner = params.at(script_name_);
+    if (inner.contains("enable_scale")) {
+      enable_scale_ = inner.at("enable_scale").get<bool>();
+    } else {
+      enable_scale_ = false;
+    }
     if (inner.contains("maximum_edge")) {
       maximum_edge_ = inner.at("maximum_edge").get<int>();
     } else {
@@ -73,13 +80,16 @@ auto ResizeOp::SetParams(const nlohmann::json& params) -> void {
       enable_roi_ = false;
     }
     if (enable_roi_ && inner.contains("roi")) {
-      auto roi_json     = inner.at("roi");
+      auto roi_json       = inner.at("roi");
       roi_.x_             = roi_json.value("x", 0);
       roi_.y_             = roi_json.value("y", 0);
       roi_.resize_factor_ = roi_json.value("resize_factor", 1.0f);
     }
   } else {
+    enable_scale_ = false;
     maximum_edge_ = 2048;
+    enable_roi_   = false;
+    roi_          = {0, 0, 1.0f};
   }
 }
 

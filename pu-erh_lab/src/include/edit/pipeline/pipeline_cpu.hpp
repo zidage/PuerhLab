@@ -40,7 +40,7 @@ class CPUPipelineExecutor : public PipelineExecutor {
 
   bool                                                                        is_thumbnail_ = false;
 
-  nlohmann::json                                                              thumbnail_params_;
+  nlohmann::json                                                              render_params_;
 
   static constexpr PipelineBackend backend_ = PipelineBackend::CPU;
 
@@ -63,6 +63,7 @@ class CPUPipelineExecutor : public PipelineExecutor {
   auto Apply(std::shared_ptr<ImageBuffer> input) -> std::shared_ptr<ImageBuffer> override;
 
   void SetPreviewMode(bool is_preview);
+
   void SetExecutionStages();
   void SetExecutionStages(IFrameSink* frame_sink);
   void ResetExecutionStages();
@@ -83,5 +84,8 @@ class CPUPipelineExecutor : public PipelineExecutor {
    * @param j
    */
   void ImportPipelineParams(const nlohmann::json& j) override;
+
+  void SetRenderRegion(int x, int y, float scale_factor) override;
+  void SetRenderRes(bool full_res, int max_side_length = 2048) override;
 };
 };  // namespace puerhlab

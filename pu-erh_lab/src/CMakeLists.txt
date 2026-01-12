@@ -132,7 +132,7 @@ def_library(Operators
 set(PIPELINE_SRCS
     edit/pipeline/pipeline_cpu.cpp
     edit/pipeline/pipeline_stage.cpp
-    edit/scheduler/pipeline_scheduler.cpp
+    
 )
 
 if(CUDAToolkit_FOUND)
@@ -150,6 +150,11 @@ if(CUDAToolkit_FOUND)
     set_target_properties(EditPipeline PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
     target_compile_definitions(EditPipeline PUBLIC HAVE_CUDA)
 endif()
+
+set(RENDERER_SRCS renderer/pipeline_scheduler.cpp)
+def_library(PipelineScheduler
+    SOURCES ${RENDERER_SRCS}
+    PUBLIC_DEPS EditPipeline ThreadPool)
 
 # --- Raw Processor Wrapper ---
 def_library(RawProcessor
@@ -239,7 +244,7 @@ set(MAPPER_SRCS
 
 def_library(SleeveMapper
     SOURCES ${MAPPER_SRCS}
-    PUBLIC_DEPS DuckDB DuckORM Image SleeveElement ImagePool EditPipeline
+    PUBLIC_DEPS DuckDB DuckORM Image SleeveElement ImagePool EditPipeline PipelineScheduler
 )
 
 # Services
@@ -256,7 +261,7 @@ set(SERVICE_SRCS
 
 def_library(SleeveService
     SOURCES ${SERVICE_SRCS}
-    PUBLIC_DEPS DuckDB DuckORM SleeveMapper StrConv
+    PUBLIC_DEPS DuckDB DuckORM SleeveMapper StrConv PipelineScheduler
 )
 
 # Controllers
@@ -291,12 +296,12 @@ def_library(SleeveFS
 
 def_library(SleeveView
     SOURCES sleeve/sleeve_view.cpp
-    PUBLIC_DEPS Image SleeveFS ImagePool
+    PUBLIC_DEPS Image SleeveFS ImagePool PipelineScheduler
 )
 
 def_library(SleeveManager
     SOURCES sleeve/sleeve_manager.cpp
-    PUBLIC_DEPS SleeveFS SleeveView
+    PUBLIC_DEPS SleeveFS SleeveView PipelineScheduler
 )
 
 # ==============================================================================
@@ -305,7 +310,7 @@ def_library(SleeveManager
 
 def_library(ImageWriter
     SOURCES io/image/image_writer.cpp
-    PUBLIC_DEPS SleeveManager DuckORM
+    PUBLIC_DEPS SleeveManager DuckORM PipelineScheduler
 )
 
 # ==============================================================================

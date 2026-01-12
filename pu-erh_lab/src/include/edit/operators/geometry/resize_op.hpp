@@ -26,6 +26,8 @@ class ResizeOp : public OperatorBase<ResizeOp> {
  private:
   int  maximum_edge_;
 
+  bool enable_scale_ = false;
+
   bool enable_roi_ = false;
   ROI  roi_;
 
