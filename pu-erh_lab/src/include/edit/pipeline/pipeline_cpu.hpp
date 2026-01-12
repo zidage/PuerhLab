@@ -17,17 +17,13 @@
 #include <memory>
 #include <mutex>
 
-#include "edit/operators/CPU_kernels/cpu_kernels.hpp"
 #include "edit/operators/op_base.hpp"
-#include "edit/operators/op_kernel.hpp"
-#include "edit/operators/operator_factory.hpp"
 #include "edit/pipeline/pipeline_stage.hpp"
 #include "image/image_buffer.hpp"
 #include "pipeline.hpp"
 #include "pipeline_stage.hpp"
 #include "type/type.hpp"
 #include "ui/edit_viewer/frame_sink.hpp"
-#include "utils/cache/lru_cache.hpp"
 
 namespace puerhlab {
 class CPUPipelineExecutor : public PipelineExecutor {
@@ -40,7 +36,9 @@ class CPUPipelineExecutor : public PipelineExecutor {
 
   bool                                                                        is_thumbnail_ = false;
 
-  nlohmann::json                                                              render_params_;
+  bool                                                                        force_cpu_output_ = false;
+
+  nlohmann::json                                                              render_params_ = {};
 
   static constexpr PipelineBackend backend_ = PipelineBackend::CPU;
 
@@ -58,6 +56,8 @@ class CPUPipelineExecutor : public PipelineExecutor {
 
   void SetEnableCache(bool enable_cache);
   auto GetBackend() -> PipelineBackend override;
+
+  void SetForceCPUOutput(bool force) override { force_cpu_output_ = force; }
 
   auto GetStage(PipelineStageName stage) -> PipelineStage& override;
   auto Apply(std::shared_ptr<ImageBuffer> input) -> std::shared_ptr<ImageBuffer> override;
@@ -87,5 +87,7 @@ class CPUPipelineExecutor : public PipelineExecutor {
 
   void SetRenderRegion(int x, int y, float scale_factor) override;
   void SetRenderRes(bool full_res, int max_side_length = 2048) override;
+
+  void RegisterAllOperators();
 };
 };  // namespace puerhlab

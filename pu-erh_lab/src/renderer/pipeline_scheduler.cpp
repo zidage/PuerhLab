@@ -28,14 +28,26 @@ void PipelineTask::SetExecutorRenderParams() {
   auto& desc = options_.render_desc_;
   pipeline_executor_->SetRenderRegion(desc.x_, desc.y_, desc.scale_factor_);
   if (desc.render_type_ == RenderType::FAST_PREVIEW) {
+    pipeline_executor_->SetForceCPUOutput(false);
     pipeline_executor_->SetRenderRes(false, 2048);
     return;
   }
   if (desc.render_type_ == RenderType::THUMBNAIL) {
+    pipeline_executor_->SetForceCPUOutput(true);
     pipeline_executor_->SetRenderRes(false, 1024);
     return;
   }
   pipeline_executor_->SetRenderRes(true);
+  pipeline_executor_->SetForceCPUOutput(desc.render_type_ == RenderType::FULL_RES_EXPORT);
+}
+
+void PipelineTask::ResetPreviewRenderParams() {
+  if (!pipeline_executor_) {
+    return;
+  }
+  // A simple status machine to automatically set back to fast preview mode
+  pipeline_executor_->SetRenderRes(false);
+  pipeline_executor_->SetForceCPUOutput(false);
 }
 
 PipelineScheduler::PipelineScheduler() : thread_pool_(1) {}
@@ -53,11 +65,21 @@ void PipelineScheduler::ScheduleTask(PipelineTask&& task) {
         }
 
         auto result = task.pipeline_executor_->Apply(task.input_);
+
         if (render_desc.render_type_ == RenderType::FAST_PREVIEW ||
             render_desc.render_type_ == RenderType::FULL_RES_PREVIEW || !result ||
             !result->gpu_data_valid_ || result->GetCPUData().empty()) {
+          if (task.options_.is_blocking_ && task.result_) {
+            task.result_->set_value(result);  // Notify the waiting thread
+          }
+
+          if (render_desc.render_type_ == RenderType::FULL_RES_PREVIEW) {
+            // Reset to fast preview mode after full res preview
+            task.ResetPreviewRenderParams();
+          }
           return;
         }
+
         result_copy = std::make_shared<ImageBuffer>(result->GetCPUData());
       }
     }

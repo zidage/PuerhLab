@@ -18,7 +18,6 @@
 #include <opencv2/core.hpp>
 #include <opencv2/core/mat.hpp>
 
-#include "edit/operators/cst/lmt_op.hpp"
 #include "edit/pipeline/pipeline.hpp"
 
 #ifdef HAVE_CUDA
@@ -28,9 +27,7 @@
 #endif
 #include <opencv2/opencv.hpp>
 
-#include "edit/operators/CPU_kernels/cpu_kernels.hpp"
 #include "edit/operators/op_base.hpp"
-#include "edit/operators/utils/color_conversion.hpp"
 #include "edit/pipeline/pipeline_stage.hpp"
 #include "image/image_buffer.hpp"
 
@@ -43,7 +40,9 @@ CPUPipelineExecutor::CPUPipelineExecutor()
                {PipelineStageName::Basic_Adjustment, enable_cache_, true},
                {PipelineStageName::Color_Adjustment, enable_cache_, true},
                {PipelineStageName::Detail_Adjustment, enable_cache_, true},
-               {PipelineStageName::Output_Transform, enable_cache_, true}}) {}
+               {PipelineStageName::Output_Transform, enable_cache_, true}}) {
+  render_params_["resize"] = {};
+}
 
 void CPUPipelineExecutor::ResetStages() {
   for (size_t i = 0; i < stages_.size(); i++) {
@@ -66,7 +65,9 @@ CPUPipelineExecutor::CPUPipelineExecutor(bool enable_cache)
                {PipelineStageName::Basic_Adjustment, enable_cache_, true},
                {PipelineStageName::Color_Adjustment, enable_cache_, true},
                {PipelineStageName::Detail_Adjustment, enable_cache_, true},
-               {PipelineStageName::Output_Transform, enable_cache_, true}}) {}
+               {PipelineStageName::Output_Transform, enable_cache_, true}}) {
+  render_params_["resize"] = {};
+}
 
 auto CPUPipelineExecutor::GetBackend() -> PipelineBackend { return backend_; }
 
@@ -85,6 +86,7 @@ auto CPUPipelineExecutor::Apply(std::shared_ptr<ImageBuffer> input)
     output = std::make_shared<ImageBuffer>(input->Clone());
     for (auto* stage : exec_stages_) {
       stage->SetInputImage(output);
+      stage->SetForceCPUOutput(force_cpu_output_);
       output = stage->ApplyStage(global_params_);
     }
   } else {
@@ -93,6 +95,7 @@ auto CPUPipelineExecutor::Apply(std::shared_ptr<ImageBuffer> input)
     for (auto* stage : exec_stages_) {
       if (stage != first_stage) {
         stage->SetInputImage(output);
+        stage->SetForceCPUOutput(force_cpu_output_);
         output = stage->ApplyStage(global_params_);
       }
     }
@@ -103,18 +106,18 @@ auto CPUPipelineExecutor::Apply(std::shared_ptr<ImageBuffer> input)
 
 [[deprecated("SetPreviewMode is deprecated, set from pipeline scheduler instead")]] void
 CPUPipelineExecutor::SetPreviewMode(bool is_thumbnail) {
-  is_thumbnail_     = is_thumbnail;
+  // is_thumbnail_  = is_thumbnail;
 
-  render_params_ = {};  // TODO: Use default params for now
-  if (!is_thumbnail_) {
-    // Disable resizing in image loading stage
-    stages_[static_cast<int>(PipelineStageName::Image_Loading)].EnableOperator(
-        OperatorType::RESIZE,
-        false);  // If RESIZE operator not exist, this function will do nothing
-    return;
-  }
-  stages_[static_cast<int>(PipelineStageName::Geometry_Adjustment)].SetOperator(
-      OperatorType::RESIZE, render_params_);
+  // render_params_ = {};  // TODO: Use default params for now
+  // if (!is_thumbnail_) {
+  //   // Disable resizing in image loading stage
+  //   stages_[static_cast<int>(PipelineStageName::Image_Loading)].EnableOperator(
+  //       OperatorType::RESIZE,
+  //       false);  // If RESIZE operator not exist, this function will do nothing
+  //   return;
+  // }
+  // stages_[static_cast<int>(PipelineStageName::Geometry_Adjustment)].SetOperator(
+  //     OperatorType::RESIZE, render_params_);
 }
 
 void CPUPipelineExecutor::SetExecutionStages() {
@@ -134,7 +137,7 @@ void CPUPipelineExecutor::SetExecutionStages() {
     stage.AddDependent(merged_stages_.get());
   }
 
-  // Chain the execution stages
+  // Chain the execution stages for caching
   for (size_t i = 0; i < exec_stages_.size(); i++) {
     PipelineStage* prev_stage = (i > 0) ? exec_stages_[i - 1] : nullptr;
     PipelineStage* next_stage = (i < exec_stages_.size() - 1) ? exec_stages_[i + 1] : nullptr;
@@ -183,12 +186,12 @@ void CPUPipelineExecutor::ImportPipelineParams(const nlohmann::json& j) {
 }
 
 void CPUPipelineExecutor::SetRenderRegion(int x, int y, float scale_factor) {
-  auto& resize_params = render_params_["resize"];
+  auto& resize_params         = render_params_["resize"];
   // render_params_["resize"] = {
   //   {"enable_roi", true},
   //   {"roi", {{"x", x}, {"y", y}, {"resize_factor", scale_factor}}},
   // };
-  resize_params["enable_roi"] = true;
+  resize_params["enable_roi"] = false;
   resize_params["roi"]        = {{"x", x}, {"y", y}, {"resize_factor", scale_factor}};
 
   stages_[static_cast<int>(PipelineStageName::Geometry_Adjustment)].SetOperator(
@@ -196,7 +199,7 @@ void CPUPipelineExecutor::SetRenderRegion(int x, int y, float scale_factor) {
 }
 
 void CPUPipelineExecutor::SetRenderRes(bool full_res, int max_side_length) {
-  auto& resize_params = render_params_["resize"];
+  auto& resize_params           = render_params_["resize"];
   // render_params_["resize"] = {
   //   {"enable_scale", true},
   //   {"maximum_edge", max_side_length},
@@ -208,5 +211,40 @@ void CPUPipelineExecutor::SetRenderRes(bool full_res, int max_side_length) {
       OperatorType::RESIZE, render_params_);
 }
 
+void CPUPipelineExecutor::RegisterAllOperators() {
+  // It is really silly to hardcode the operators here.
+  // I should keep things more flexible in the future.
+  auto& image_loading_stage = stages_[static_cast<int>(PipelineStageName::Image_Loading)];
+  image_loading_stage.SetOperator(OperatorType::RAW_DECODE, {});
+
+  auto& geometry_adjustment_stage =
+      stages_[static_cast<int>(PipelineStageName::Geometry_Adjustment)];
+  geometry_adjustment_stage.SetOperator(OperatorType::RESIZE, render_params_);
+
+  auto& to_working_space_stage = stages_[static_cast<int>(PipelineStageName::To_WorkingSpace)];
+  to_working_space_stage.SetOperator(OperatorType::TO_WS, {});
+
+  auto& basic_adjustment_stage = stages_[static_cast<int>(PipelineStageName::Basic_Adjustment)];
+  basic_adjustment_stage.SetOperator(OperatorType::EXPOSURE, {});
+  basic_adjustment_stage.SetOperator(OperatorType::CONTRAST, {});
+  basic_adjustment_stage.SetOperator(OperatorType::WHITE, {});
+  basic_adjustment_stage.SetOperator(OperatorType::BLACK, {});
+  basic_adjustment_stage.SetOperator(OperatorType::HIGHLIGHTS, {});
+  basic_adjustment_stage.SetOperator(OperatorType::SHADOWS, {});
+  basic_adjustment_stage.SetOperator(OperatorType::CURVE, {});
+
+  auto& color_adjustment_stage = stages_[static_cast<int>(PipelineStageName::Color_Adjustment)];
+  color_adjustment_stage.SetOperator(
+      OperatorType::TINT,
+      {});  // TODO: This thing should be in the raw decoding part. Future fix needed.
+  color_adjustment_stage.SetOperator(OperatorType::SATURATION, {});
+  color_adjustment_stage.SetOperator(OperatorType::VIBRANCE, {});
+  color_adjustment_stage.SetOperator(OperatorType::HLS, {});
+  color_adjustment_stage.SetOperator(OperatorType::COLOR_WHEEL, {});
+
+  auto& detail_adjustment_stage = stages_[static_cast<int>(PipelineStageName::Detail_Adjustment)];
+  detail_adjustment_stage.SetOperator(OperatorType::SHARPEN, {});
+  detail_adjustment_stage.SetOperator(OperatorType::CLARITY, {});
+}
 
 };  // namespace puerhlab

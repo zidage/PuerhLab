@@ -28,6 +28,9 @@ void ResizeOp::Apply(std::shared_ptr<ImageBuffer> input) {
     return;
   }
 
+  if (!enable_scale_ && !enable_roi_) {
+    return;
+  }
   float scale =
       enable_scale_ ? static_cast<float>(maximum_edge_) / static_cast<float>(std::max(w, h)) : 1.0f;
   cv::Mat roi_img;

@@ -107,9 +107,13 @@ struct OperatorEntry {
 
 class PipelineStage {
  private:
+  enum class StageRole { DescriptorOnly, CpuOperators, GpuStreamable };
+
   std::unique_ptr<std::map<OperatorType, OperatorEntry>> operators_;
   bool                                                   is_streamable_      = true;
   bool                                                   vec_enabled_        = false;
+
+  StageRole                                              stage_role_         = StageRole::DescriptorOnly;
 
   PipelineStage*                                         prev_stage_         = nullptr;
   PipelineStage*                                         next_stage_         = nullptr;
@@ -189,6 +193,8 @@ class PipelineStage {
 
   void SetInputImage(std::shared_ptr<ImageBuffer>);
 
+  void SetForceCPUOutput(bool force) { force_cpu_output_ = force; }
+
   /**
    * @brief Set the parameters for an operator with the given type in this stage.
    *
@@ -267,6 +273,17 @@ class PipelineStage {
    * @param j
    */
   void ImportStageParams(const nlohmann::json& j);
+
+ private:
+  static StageRole DetermineStageRole(PipelineStageName stage, bool is_streamable);
+
+  bool HasEnabledOperator() const;
+
+  std::shared_ptr<ImageBuffer> ApplyDescriptorOnly();
+  std::shared_ptr<ImageBuffer> ApplyCpuOperators();
+  std::shared_ptr<ImageBuffer> ApplyGpuStream(OperatorParams& global_params);
+
+  bool force_cpu_output_ = false;
 };
 
 }  // namespace puerhlab

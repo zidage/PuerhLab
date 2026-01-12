@@ -8,16 +8,19 @@
 #include <QSlider>
 #include <QStyleFactory>
 #include <QTimer>
+#include <future>
+#include <memory>
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/opencv.hpp>
 
 #include "edit/pipeline/pipeline_cpu.hpp"
+#include "image/image_buffer.hpp"
 #include "renderer/pipeline_scheduler.hpp"
+#include "renderer/pipeline_task.hpp"
 #include "sleeve/sleeve_manager.hpp"
 #include "type/supported_file_type.hpp"
 #include "ui/edit_viewer/edit_viewer.hpp"
 #include "ui_test_fixation.hpp"
-
 
 using namespace puerhlab;
 
@@ -142,16 +145,18 @@ static void ApplyMaterialLikeTheme(QApplication& app) {
 
 int main(int argc, char* argv[]) {
   struct AdjustmentState {
-    float exposure_   = 0.0f;
-    float contrast_   = 1.0f;
-    float saturation_ = 0.0f;
-    float tint_       = 0.0f;
-    float blacks_     = 0.0f;
-    float whites_     = 0.0f;
-    float shadows_    = 0.0f;
-    float highlights_ = 0.0f;
-    float sharpen_    = 0.0f;
-    float clarity_    = 0.0f;
+    float      exposure_   = 0.0f;
+    float      contrast_   = 1.0f;
+    float      saturation_ = 0.0f;
+    float      tint_       = 0.0f;
+    float      blacks_     = 0.0f;
+    float      whites_     = 0.0f;
+    float      shadows_    = 0.0f;
+    float      highlights_ = 0.0f;
+    float      sharpen_    = 0.0f;
+    float      clarity_    = 0.0f;
+
+    RenderType type_       = RenderType::FAST_PREVIEW;
   };
 
   QCoreApplication::setAttribute(Qt::AA_UseDesktopOpenGL);
@@ -223,10 +228,11 @@ int main(int argc, char* argv[]) {
   base_executor->SetPreviewMode(true);
   base_task.pipeline_executor_ = base_executor;
   SetPipelineTemplate(base_task.pipeline_executor_);
-  auto& global_params = base_task.pipeline_executor_->GetGlobalParams();
-  global_params.lmt_enabled_ = true;
+  base_task.options_.render_desc_.render_type_ = RenderType::FULL_RES_PREVIEW;
+  auto& global_params                          = base_task.pipeline_executor_->GetGlobalParams();
+  global_params.lmt_enabled_                   = true;
   // Register a default exposure
-  auto& basic_stage   = base_task.pipeline_executor_->GetStage(PipelineStageName::Basic_Adjustment);
+  auto& basic_stage = base_task.pipeline_executor_->GetStage(PipelineStageName::Basic_Adjustment);
   basic_stage.SetOperator(OperatorType::EXPOSURE, {{"exposure", 0.0f}}, global_params);
   basic_stage.SetOperator(OperatorType::CONTRAST, {{"contrast", 1.0f}}, global_params);
   basic_stage.SetOperator(OperatorType::BLACK, {{"black", 0.0f}}, global_params);
@@ -249,9 +255,10 @@ int main(int argc, char* argv[]) {
 
   AdjustmentState adjustments{};
   auto            scheduleAdjustments = [&](const AdjustmentState& state) {
-    PipelineTask task = base_task;
+    PipelineTask task                       = base_task;
 
-    auto&        basic = task.pipeline_executor_->GetStage(PipelineStageName::Basic_Adjustment);
+    task.options_.render_desc_.render_type_ = state.type_;
+    auto& basic = task.pipeline_executor_->GetStage(PipelineStageName::Basic_Adjustment);
     basic.SetOperator(OperatorType::EXPOSURE, {{"exposure", state.exposure_}}, global_params);
     basic.SetOperator(OperatorType::CONTRAST, {{"contrast", state.contrast_}}, global_params);
     basic.SetOperator(OperatorType::BLACK, {{"black", state.blacks_}}, global_params);
@@ -394,7 +401,8 @@ int main(int argc, char* argv[]) {
 
   // Defer initial scheduling until the event loop starts so the QOpenGLWidget
   // has a valid OpenGL context before any frame sink resize/map.
-  const AdjustmentState init_state = adjustments;
+  AdjustmentState init_state = adjustments;
+  init_state.type_      = RenderType::FULL_RES_PREVIEW;
   QTimer::singleShot(0, &window, [&, init_state]() { scheduleAdjustments(init_state); });
 
   int ret = app.exec();
