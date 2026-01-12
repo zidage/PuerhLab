@@ -8,6 +8,33 @@
 
 ## 📷 Early Demo Screenshot
 
+
+
+### Image Rendering Previews 
+Applied with 2383 LUT and highlight recovery.
+<table>
+  <tr>
+    <td width="50%" align="center">
+      <img src="docs/demo/preview_01.png" alt="Preview 01 (placeholder)" width="480" />
+      <br />
+    </td>
+    <td width="50%" align="center">
+      <img src="docs/demo/preview_02.png" alt="Preview 02 (placeholder)" width="480" />
+      <br />
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" align="center">
+      <img src="docs/demo/preview_03.png" alt="Preview 03 (placeholder)" width="480" />
+      <br />
+    </td>
+    <td width="50%" align="center">
+      <img src="docs/demo/preview_04.png" alt="Preview 04 (placeholder)" width="480" />
+      <br />
+    </td>
+  </tr>
+</table>
+
 <figure>
   <img src="docs/demo/editor.gif" width="1000">
 </figure>
