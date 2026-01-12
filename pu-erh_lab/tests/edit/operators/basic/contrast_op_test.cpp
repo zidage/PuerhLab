@@ -33,7 +33,7 @@ TEST_F(OperationTests, DISABLED_AdjustmentTest1) {
       ContrastOp op{15.0f};
       auto       adjusted = op.Apply(thumbnail);
 
-      access_img->LoadThumbnail(std::move(adjusted));
+      access_img->LoadThumbnailData(std::move(adjusted));
 
       cv::imshow(std::format("img_after: {}", idx), access_img->GetThumbnailData());
       cv::waitKey(1);

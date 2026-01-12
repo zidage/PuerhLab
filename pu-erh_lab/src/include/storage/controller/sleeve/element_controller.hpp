@@ -17,9 +17,11 @@
 #include <memory>
 #include <vector>
 
+#include "edit/pipeline/pipeline_cpu.hpp"
 #include "sleeve/sleeve_element/sleeve_element.hpp"
 #include "sleeve/sleeve_filter/filter_combo.hpp"
 #include "storage/controller/controller_types.hpp"
+#include "storage/service/pipeline/pipeline_service.hpp"
 #include "storage/service/sleeve/edit_history/history_service.hpp"
 #include "storage/service/sleeve/element/element_service.hpp"
 #include "storage/service/sleeve/element/file_service.hpp"
@@ -35,6 +37,7 @@ class ElementController {
   FileService        file_service_;
   FolderService      folder_service_;
   EditHistoryService history_service_;
+  PipelineService    pipeline_service_;
 
  public:
   ElementController(ConnectionGuard&& guard);
@@ -54,5 +57,7 @@ class ElementController {
       -> std::vector<std::shared_ptr<SleeveElement>>;
 
   void EnsureChildrenLoaded(sl_element_id_t folder_id);
+
+  auto GetPipelineByElementId(const sl_element_id_t element_id) -> std::shared_ptr<CPUPipelineExecutor>;
 };
 };  // namespace puerhlab

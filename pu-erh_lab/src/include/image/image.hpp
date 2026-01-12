@@ -70,8 +70,8 @@ class Image {
 
   friend std::wostream& operator<<(std::wostream& os, const Image& img);
 
-  void                  LoadData(ImageBuffer&& load_image);
-  void                  LoadThumbnail(ImageBuffer&& thumbnail);
+  void                  LoadOriginalData(ImageBuffer&& load_image);
+  void                  LoadThumbnailData(ImageBuffer&& thumbnail);
   auto                  GetImageData() -> cv::Mat&;
   auto                  GetThumbnailData() -> cv::Mat&;
   auto                  GetThumbnailBuffer() -> ImageBuffer&;

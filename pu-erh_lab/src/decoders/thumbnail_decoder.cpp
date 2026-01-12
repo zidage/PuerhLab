@@ -49,7 +49,7 @@ void ThumbnailDecoder::Decode(std::vector<char> buffer, std::filesystem::path fi
     img->exif_data_->readMetadata();
     img->has_exif_ = !img->exif_data_->exifData().empty();
 
-    img->LoadThumbnail({std::move(thumbnail)});
+    img->LoadThumbnailData({std::move(thumbnail)});
     result->push(img);
     promise->set_value(id);
   } catch (std::exception& e) {
@@ -66,7 +66,7 @@ void ThumbnailDecoder::Decode(std::vector<char> buffer, std::shared_ptr<Image> s
   cv::Mat thumbnail = cv::imdecode(image_data, cv::IMREAD_COLOR);
   thumbnail.convertTo(thumbnail, CV_32FC3, 1.0 / 255.0);
   ImageBuffer thumbnail_data{std::move(thumbnail)};
-  source_img->LoadThumbnail(std::move(thumbnail_data));
+  source_img->LoadThumbnailData(std::move(thumbnail_data));
   result->push(source_img);
   promise->set_value(source_img->image_id_);
 }

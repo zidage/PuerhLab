@@ -234,11 +234,12 @@ set(MAPPER_SRCS
     storage/mapper/image/image_mapper.cpp
     storage/mapper/sleeve/filter/filter_mapper.cpp
     storage/mapper/sleeve/edit_history/history_mapper.cpp
+    storage/mapper/pipeline/pipeline_mapper.cpp
 )
 
 def_library(SleeveMapper
     SOURCES ${MAPPER_SRCS}
-    PUBLIC_DEPS DuckDB DuckORM Image SleeveElement ImagePool
+    PUBLIC_DEPS DuckDB DuckORM Image SleeveElement ImagePool EditPipeline
 )
 
 # Services
@@ -250,6 +251,7 @@ set(SERVICE_SRCS
     storage/service/sleeve/element/file_service.cpp
     storage/service/sleeve/element/folder_service.cpp
     storage/service/sleeve/edit_history/history_service.cpp
+    storage/service/pipeline/pipeline_service.cpp
 )
 
 def_library(SleeveService

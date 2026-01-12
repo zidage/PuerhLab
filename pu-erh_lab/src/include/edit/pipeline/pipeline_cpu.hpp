@@ -25,13 +25,15 @@
 #include "image/image_buffer.hpp"
 #include "pipeline.hpp"
 #include "pipeline_stage.hpp"
+#include "type/type.hpp"
 #include "ui/edit_viewer/frame_sink.hpp"
 #include "utils/cache/lru_cache.hpp"
 
 namespace puerhlab {
 class CPUPipelineExecutor : public PipelineExecutor {
  private:
-  bool                                                                        enable_cache_ = true;
+  sl_element_id_t                                                             bound_file_id_ = 0;
+  bool                                                                        enable_cache_  = true;
   std::array<PipelineStage, static_cast<int>(PipelineStageName::Stage_Count)> stages_;
 
   OperatorParams                                                              global_params_;
@@ -50,6 +52,9 @@ class CPUPipelineExecutor : public PipelineExecutor {
  public:
   CPUPipelineExecutor();
   CPUPipelineExecutor(bool enable_cache);
+
+  void SetBoundFile(sl_element_id_t file_id) override { bound_file_id_ = file_id; }
+  auto GetBoundFile() const -> sl_element_id_t override { return bound_file_id_; }
 
   void SetEnableCache(bool enable_cache);
   auto GetBackend() -> PipelineBackend override;

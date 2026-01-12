@@ -49,7 +49,8 @@ class DBController {
       "CREATE TABLE EditHistory (file_id BIGINT, history JSON);"
       "CREATE TABLE Version (hash BIGINT PRIMARY KEY, history_id BIGINT, parent_hash BIGINT, "
       "content "
-      "JSON)";
+      "JSON);"
+      "CREATE TABLE PipelineParam(file_id BIGINT PRIMARY KEY, param_json JSON);";
 
  public:
   explicit DBController(file_path_t& db_path);

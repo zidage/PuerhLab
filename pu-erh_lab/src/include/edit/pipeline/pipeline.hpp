@@ -22,6 +22,8 @@ namespace puerhlab {
 enum class PipelineBackend { CPU, CUDA, OpenCL };
 class PipelineExecutor {
  public:
+  virtual void SetBoundFile(sl_element_id_t file_id)                                     = 0;
+  virtual auto GetBoundFile() const -> sl_element_id_t                                   = 0;
   virtual auto GetStage(PipelineStageName stage) -> PipelineStage&                       = 0;
   virtual auto Apply(std::shared_ptr<ImageBuffer> input) -> std::shared_ptr<ImageBuffer> = 0;
   virtual auto GetBackend() -> PipelineBackend                                           = 0;

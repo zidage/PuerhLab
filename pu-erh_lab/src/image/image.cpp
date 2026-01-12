@@ -66,12 +66,12 @@ std::wostream& operator<<(std::wostream& os, const Image& img) {
  *
  * @param image_data
  */
-void Image::LoadData(ImageBuffer&& load_image) {
+void Image::LoadOriginalData(ImageBuffer&& load_image) {
   image_data_   = std::move(load_image);
   has_full_img_ = true;
 }
 
-void Image::LoadThumbnail(ImageBuffer&& thumbnail) {
+void Image::LoadThumbnailData(ImageBuffer&& thumbnail) {
   thumbnail_     = std::move(thumbnail);
   has_thumbnail_ = true;
 }
@@ -103,7 +103,9 @@ void Image::JsonToExif(std::string json_str) {
     has_exif_json_ = true;
     exif_display_.FromJson(exif_json_);
   } catch (nlohmann::json::parse_error& e) {
-    throw std::runtime_error("Image: JSON parse error");
+    throw std::runtime_error("[ERROR] Image: JSON parse error, " + std::string(e.what()));
+  } catch (std::exception& e) {
+    throw std::runtime_error("[ERROR] Image: JSON to Exif conversion error, " + std::string(e.what()));
   }
 }
 

@@ -74,7 +74,7 @@ void RawDecoder::Decode(std::vector<char>&& buffer, std::shared_ptr<Image> sourc
   auto         processed = processor.Process();
 
   raw_processor.recycle();
-  source_img->LoadData(std::move(processed));
+  source_img->LoadOriginalData(std::move(processed));
 }
 
 void RawDecoder::Decode(std::vector<char> buffer, std::shared_ptr<Image> source_img,

@@ -33,7 +33,8 @@ ElementController::ElementController(ConnectionGuard&& guard)
       element_service_(guard_.conn_),
       file_service_(guard_.conn_),
       folder_service_(guard_.conn_),
-      history_service_(guard_.conn_) {}
+      history_service_(guard_.conn_),
+      pipeline_service_(guard_.conn_) {}
 /**
  * @brief Add an element to the database.
  *
@@ -144,6 +145,11 @@ auto ElementController::GetElementsInFolderByFilter(const std::shared_ptr<Filter
   // Build SQL query from the filter
   std::wstring filter_sql = filter->GenerateSQLOn(folder_id);
   return element_service_.GetElementsInFolderByFilter(filter_sql);  // for specialized queries only
+}
+
+auto ElementController::GetPipelineByElementId(const sl_element_id_t element_id)
+    -> std::shared_ptr<CPUPipelineExecutor> {
+  return pipeline_service_.GetPipelineParamByFileId(element_id);
 }
 
 };  // namespace puerhlab
