@@ -20,6 +20,9 @@
 #include <QOpenGLFunctions>
 #include <QOpenGLShaderProgram>
 #include <QOpenGLWidget>
+#include <QMouseEvent>
+#include <QWheelEvent>
+#include <array>
 #include <atomic>
 #include <mutex>
 #include <cuda_gl_interop.h>
@@ -34,13 +37,16 @@ class QtEditViewer : public QOpenGLWidget, protected QOpenGLFunctions, public pu
   explicit QtEditViewer(QWidget* parent = nullptr);
   ~QtEditViewer();
 
+  // Reset zoom/pan to default view
+  void ResetView();
+
   // Overrides from IFrameSink
   void    EnsureSize(int width, int height) override;
   float4* MapResourceForWrite() override;
   void    UnmapResource() override;
   void    NotifyFrameReady() override;
-  int     GetWidth() const override { return alloc_width_; };
-  int     GetHeight() const override { return alloc_height_; };
+    int     GetWidth() const override { return buffers_[active_idx_].width; };
+    int     GetHeight() const override { return buffers_[active_idx_].height; };
 
  signals:
   void RequestUpdate();
@@ -55,32 +61,47 @@ class QtEditViewer : public QOpenGLWidget, protected QOpenGLFunctions, public pu
   void initializeGL() override;
   void resizeGL(int w, int h) override;
   void paintGL() override;
+  void wheelEvent(QWheelEvent* event) override;
+  void mousePressEvent(QMouseEvent* event) override;
+  void mouseMoveEvent(QMouseEvent* event) override;
+  void mouseReleaseEvent(QMouseEvent* event) override;
+  void mouseDoubleClickEvent(QMouseEvent* event) override;
 
  private:
-  // OpenGL resources
-  GLuint                pbo_           = 0;
-  GLuint                texture_       = 0;
-  GLuint                vbo_           = 0;
-  QOpenGLShaderProgram* program_       = nullptr;
+  struct GLBuffer {
+    GLuint                pbo           = 0;
+    GLuint                texture       = 0;
+    cudaGraphicsResource* cuda_resource = nullptr;
+    int                   width         = 0;
+    int                   height        = 0;
+  };
 
-  // CUDA resources
-  cudaGraphicsResource* cuda_resource_ = nullptr;
+  std::array<GLBuffer, 2> buffers_{};
+
+  GLuint                  vbo_               = 0;
+  QOpenGLShaderProgram*   program_           = nullptr;
+
+  int                     active_idx_        = 0;  // Currently displayed buffer
+  int                     write_idx_         = 1;  // Buffer to render next frame into
+  int                     render_target_idx_ = 0;  // Which buffer next GPU frame should use
 
   // CUDA staging buffer (written by worker thread). We only map the PBO in paintGL
   // on the GUI thread to avoid "invalid OpenGL or DirectX context".
-  float4*               staging_ptr_   = nullptr;
-  size_t                staging_bytes_ = 0;
-  std::atomic<bool>     frame_pending_{false};
+  float4*                 staging_ptr_     = nullptr;
+  size_t                  staging_bytes_   = 0;
+  std::atomic<int>        pending_frame_idx_{-1};
 
   // Thread synchronization
-  std::mutex            mutex_;
+  std::mutex              mutex_;
 
-  // Current size
-  int                   alloc_width_  = 0;
-  int                   alloc_height_ = 0;
+  // Interaction state (UI thread only)
+  float                   view_zoom_    = 1.0f;
+  QVector2D               view_pan_     = {0.0f, 0.0f};
+  QPoint                  last_mouse_pos_{};
+  bool                    dragging_     = false;
 
-  void                  InitPBO();
-
-  void                  FreeResources();
+  bool                    InitBuffer(GLBuffer& buffer, int width, int height);
+  void                    FreeBuffer(GLBuffer& buffer);
+  void                    FreeAllBuffers();
 };
 };  // namespace puerhlab

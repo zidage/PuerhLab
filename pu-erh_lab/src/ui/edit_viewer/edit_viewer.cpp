@@ -20,6 +20,8 @@
 #include <qopenglext.h>
 #include <qoverload.h>
 
+#include <algorithm>
+#include <cmath>
 #include <mutex>
 
 namespace puerhlab {
@@ -29,16 +31,18 @@ static const char* vertexShaderSource = R"(
 layout(location = 0) in vec2 position;
 
 uniform vec2 uScale;
+uniform vec2 uPan;
+uniform float uZoom;
 
 out vec2 vTexCoord;
 
 void main() {
-    // Letterbox: scale geometry, keep UV from original quad
-    vec2 pos = position * uScale;
-    gl_Position = vec4(pos, 0.0, 1.0);
+  // Letterbox scale, then user zoom/pan for interactive view controls
+  vec2 pos = position * uScale * uZoom + uPan;
+  gl_Position = vec4(pos, 0.0, 1.0);
 
-    vec2 uv = (position + 1.0) * 0.5;
-    vTexCoord = vec2(uv.x, 1.0 - uv.y); // flip Y
+  vec2 uv = (position + 1.0) * 0.5;
+  vTexCoord = vec2(uv.x, 1.0 - uv.y); // flip Y
 }
 )";
 
@@ -64,7 +68,7 @@ QtEditViewer::QtEditViewer(QWidget* parent) : QOpenGLWidget(parent) {
 QtEditViewer::~QtEditViewer() {
   makeCurrent();
   // Clean up OpenGL resources
-  FreeResources();
+  FreeAllBuffers();
   delete program_;
   doneCurrent();
 
@@ -76,11 +80,20 @@ QtEditViewer::~QtEditViewer() {
 }
 
 void QtEditViewer::EnsureSize(int width, int height) {
+  bool need_resize = false;
   {
     std::lock_guard<std::mutex> lock(mutex_);
-    if (alloc_width_ == width && alloc_height_ == height) {
-      return;
+    const auto& target_buf = buffers_[render_target_idx_];
+    if (target_buf.width != width || target_buf.height != height) {
+      // Prepare the alternate buffer for the new size without dropping the currently shown one.
+      render_target_idx_ = write_idx_;
+      need_resize        = true;
     }
+  }
+
+  // Emit outside the mutex to avoid deadlock with the UI thread (slot locks the same mutex).
+  if (need_resize) {
+    emit RequestResize(width, height);
   }
 
   // Ensure staging buffer is available for worker thread writes.
@@ -104,7 +117,13 @@ void QtEditViewer::EnsureSize(int width, int height) {
     }
   }
 
-  emit RequestResize(width, height);
+  // Resize request is emitted in the size-change branch above.
+}
+
+void QtEditViewer::ResetView() {
+  view_zoom_ = 1.0f;
+  view_pan_  = QVector2D(0.0f, 0.0f);
+  update();
 }
 
 float4* QtEditViewer::MapResourceForWrite() {
@@ -122,7 +141,8 @@ float4* QtEditViewer::MapResourceForWrite() {
 }
 
 void QtEditViewer::UnmapResource() {
-  frame_pending_.store(true, std::memory_order_release);
+  // Mark which buffer should receive the pending frame.
+  pending_frame_idx_.store(render_target_idx_, std::memory_order_release);
   mutex_.unlock();
 }
 
@@ -158,52 +178,55 @@ void QtEditViewer::initializeGL() {
 
   {
     std::lock_guard<std::mutex> lock(mutex_);
-    if (alloc_width_ <= 0 || alloc_height_ <= 0) {
-      alloc_width_  = std::max(1, this->width());
-      alloc_height_ = std::max(1, this->height());
+    if (buffers_[active_idx_].width <= 0 || buffers_[active_idx_].height <= 0) {
+      buffers_[active_idx_].width  = std::max(1, this->width());
+      buffers_[active_idx_].height = std::max(1, this->height());
     }
   }
 
-  InitPBO();
+  InitBuffer(buffers_[active_idx_], buffers_[active_idx_].width, buffers_[active_idx_].height);
 }
 
-void QtEditViewer::InitPBO() {
-  if (GetWidth() <= 0 || GetHeight() <= 0) {
-    qWarning("InitPBO skipped: invalid size %dx%d", GetWidth(), GetHeight());
-    return;
+bool QtEditViewer::InitBuffer(GLBuffer& buffer, int width, int height) {
+  if (width <= 0 || height <= 0) {
+    qWarning("InitBuffer skipped: invalid size %dx%d", width, height);
+    return false;
   }
-  // Create PBO
-  glGenBuffers(1, &pbo_);
-  glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pbo_);
 
-  size_t size = GetWidth() * GetHeight() * sizeof(float4);
-  // Allocate data for PBO
+  FreeBuffer(buffer);
+
+  glGenBuffers(1, &buffer.pbo);
+  glBindBuffer(GL_PIXEL_UNPACK_BUFFER, buffer.pbo);
+
+  size_t size = static_cast<size_t>(width) * static_cast<size_t>(height) * sizeof(float4);
   glBufferData(GL_PIXEL_UNPACK_BUFFER, size, nullptr, GL_DYNAMIC_COPY);
 
-  // Create OpenGL texture
-  glGenTextures(1, &texture_);
-  glBindTexture(GL_TEXTURE_2D, texture_);
-  // Set texture parameters
+  glGenTextures(1, &buffer.texture);
+  glBindTexture(GL_TEXTURE_2D, buffer.texture);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-  // Allocate texture storage
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, GetWidth(), GetHeight(), 0, GL_RGBA, GL_FLOAT,
-               nullptr);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, width, height, 0, GL_RGBA, GL_FLOAT, nullptr);
 
-  // Register PBO with CUDA
-  cudaError_t err =
-      cudaGraphicsGLRegisterBuffer(&cuda_resource_, pbo_, cudaGraphicsMapFlagsWriteDiscard);
-
+  cudaError_t err = cudaGraphicsGLRegisterBuffer(&buffer.cuda_resource, buffer.pbo,
+                                                 cudaGraphicsMapFlagsWriteDiscard);
   if (err != cudaSuccess) {
     qWarning("Failed to register PBO with CUDA: %s", cudaGetErrorString(err));
+    glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+    FreeBuffer(buffer);
+    return false;
   }
 
   glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+
+  buffer.width  = width;
+  buffer.height = height;
+  return true;
 }
 
 void QtEditViewer::paintGL() {
   std::lock_guard<std::mutex> lock(mutex_);
-  if (!pbo_ || !texture_ || !program_ || !program_->isLinked()) return;
+  GLBuffer& active_buffer = buffers_[active_idx_];
+  if (!active_buffer.pbo || !active_buffer.texture || !program_ || !program_->isLinked()) return;
 
   const float dpr = devicePixelRatioF();
   const float vw  = std::max(1.0f, float(width()) * dpr);
@@ -211,8 +234,8 @@ void QtEditViewer::paintGL() {
   glViewport(0, 0, int(vw), int(vh));
 
   // Compute letterbox scale from IMAGE aspect vs WINDOW aspect
-  const float imgW = float(std::max(1, GetWidth()));
-  const float imgH = float(std::max(1, GetHeight()));
+  const float imgW = float(std::max(1, active_buffer.width));
+  const float imgH = float(std::max(1, active_buffer.height));
   const float winAspect = vw / vh;
   const float imgAspect = imgW / imgH;
 
@@ -223,16 +246,25 @@ void QtEditViewer::paintGL() {
     sx = imgAspect / winAspect; // image taller -> reduce X
   }
 
-  // If a new frame is pending, copy staging buffer into the mapped PBO.
-  if (frame_pending_.load(std::memory_order_acquire) && cuda_resource_ && staging_ptr_ && staging_bytes_ > 0) {
-    cudaError_t map_err = cudaGraphicsMapResources(1, &cuda_resource_, 0);
+  const float zoom = view_zoom_;
+  const QVector2D pan = view_pan_;
+
+  // If a new frame is pending, copy staging buffer into the mapped PBO of the target buffer.
+  const int pending_idx = pending_frame_idx_.exchange(-1, std::memory_order_acq_rel);
+  GLBuffer* target_buffer = nullptr;
+  if (pending_idx >= 0 && pending_idx < static_cast<int>(buffers_.size())) {
+    target_buffer = &buffers_[pending_idx];
+  }
+
+  if (target_buffer && target_buffer->cuda_resource && staging_ptr_ && staging_bytes_ > 0) {
+    cudaError_t map_err = cudaGraphicsMapResources(1, &target_buffer->cuda_resource, 0);
     if (map_err != cudaSuccess) {
       qWarning("Failed to map CUDA resource (paintGL): %s", cudaGetErrorString(map_err));
     } else {
       float4* mapped_ptr = nullptr;
       size_t  mapped_bytes = 0;
       cudaError_t ptr_err = cudaGraphicsResourceGetMappedPointer(
-          reinterpret_cast<void**>(&mapped_ptr), &mapped_bytes, cuda_resource_);
+          reinterpret_cast<void**>(&mapped_ptr), &mapped_bytes, target_buffer->cuda_resource);
       if (ptr_err != cudaSuccess || !mapped_ptr || mapped_bytes == 0) {
         qWarning("Failed to get mapped pointer (paintGL): %s", cudaGetErrorString(ptr_err));
       } else {
@@ -241,11 +273,12 @@ void QtEditViewer::paintGL() {
         if (copy_err != cudaSuccess) {
           qWarning("Failed to copy staging->PBO: %s", cudaGetErrorString(copy_err));
         } else {
-          frame_pending_.store(false, std::memory_order_release);
+          active_idx_ = pending_idx;
+          write_idx_  = 1 - active_idx_;
         }
       }
 
-      cudaError_t unmap_err = cudaGraphicsUnmapResources(1, &cuda_resource_, 0);
+      cudaError_t unmap_err = cudaGraphicsUnmapResources(1, &target_buffer->cuda_resource, 0);
       if (unmap_err != cudaSuccess) {
         qWarning("Failed to unmap CUDA resource (paintGL): %s", cudaGetErrorString(unmap_err));
       }
@@ -257,13 +290,15 @@ void QtEditViewer::paintGL() {
 
   program_->bind();
   program_->setUniformValue("uScale", QVector2D(sx, sy));
+  program_->setUniformValue("uPan", pan);
+  program_->setUniformValue("uZoom", zoom);
 
   glActiveTexture(GL_TEXTURE0);
   program_->setUniformValue("textureSampler", 0);
 
-  glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pbo_);
-  glBindTexture(GL_TEXTURE_2D, texture_);
-  glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, GetWidth(), GetHeight(), GL_RGBA, GL_FLOAT, nullptr);
+  glBindBuffer(GL_PIXEL_UNPACK_BUFFER, active_buffer.pbo);
+  glBindTexture(GL_TEXTURE_2D, active_buffer.texture);
+  glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, active_buffer.width, active_buffer.height, GL_RGBA, GL_FLOAT, nullptr);
   glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
 
   glBindBuffer(GL_ARRAY_BUFFER, vbo_);
@@ -278,29 +313,28 @@ void QtEditViewer::paintGL() {
 void QtEditViewer::resizeGL(int w, int h) {
   if (w <= 0 || h <= 0) return;
 
-  // makeCurrent();
-
-  // std::lock_guard<std::mutex> lock(mutex_);
-  // FreeResources();
-
-  // alloc_width_  = w;
-  // alloc_height_ = h;
-
-  // InitPBO();
 }
 
-void QtEditViewer::FreeResources() {
-  if (cuda_resource_) {
-    cudaGraphicsUnregisterResource(cuda_resource_);
-    cuda_resource_ = nullptr;
+void QtEditViewer::FreeBuffer(GLBuffer& buffer) {
+  if (buffer.cuda_resource) {
+    cudaGraphicsUnregisterResource(buffer.cuda_resource);
+    buffer.cuda_resource = nullptr;
   }
-  if (pbo_) {
-    glDeleteBuffers(1, &pbo_);
-    pbo_ = 0;
+  if (buffer.pbo) {
+    glDeleteBuffers(1, &buffer.pbo);
+    buffer.pbo = 0;
   }
-  if (texture_) {
-    glDeleteTextures(1, &texture_);
-    texture_ = 0;
+  if (buffer.texture) {
+    glDeleteTextures(1, &buffer.texture);
+    buffer.texture = 0;
+  }
+  buffer.width  = 0;
+  buffer.height = 0;
+}
+
+void QtEditViewer::FreeAllBuffers() {
+  for (auto& buffer : buffers_) {
+    FreeBuffer(buffer);
   }
 }
 
@@ -308,16 +342,94 @@ void QtEditViewer::OnResizeGL(int w, int h) {
   makeCurrent();
   {
     std::lock_guard<std::mutex> lock(mutex_);
-
-    FreeResources();
-    alloc_width_  = w;
-    alloc_height_ = h;
-    InitPBO();
+    GLBuffer& target = buffers_[write_idx_];
+    FreeBuffer(target);
+    if (InitBuffer(target, w, h)) {
+      render_target_idx_ = write_idx_;
+    }
   }
   // resizeGL(w, h);
   doneCurrent();
 
   // Ensure a repaint after resize
   update();
+}
+
+void QtEditViewer::wheelEvent(QWheelEvent* event) {
+  const QPoint num_degrees = event->angleDelta();
+  if (!num_degrees.isNull()) {
+    const float steps   = static_cast<float>(num_degrees.y()) / 120.0f;  // 120 units per notch
+    const float factor  = std::pow(1.1f, steps);
+    const float oldZoom = view_zoom_;
+    view_zoom_          = std::clamp(view_zoom_ * factor, 0.1f, 20.0f);
+
+    // Optional: adjust pan so zoom stays centered on view
+    if (std::abs(view_zoom_ - oldZoom) > 1e-4f) {
+      // Zoom towards cursor by nudging pan in normalized device space
+      const float dpr = devicePixelRatioF();
+      const float vw  = std::max(1.0f, float(width()) * dpr);
+      const float vh  = std::max(1.0f, float(height()) * dpr);
+      const QPointF p = event->position();
+      const float ndcX = (2.0f * float(p.x()) / vw) - 1.0f;
+      const float ndcY = 1.0f - (2.0f * float(p.y()) / vh);
+      const float zoomDelta = view_zoom_ - oldZoom;
+      const float adjust    = (zoomDelta / std::max(view_zoom_, 1e-4f));
+      view_pan_ -= QVector2D(ndcX, ndcY) * adjust * 0.5f;
+    }
+
+    update();
+    event->accept();
+    return;
+  }
+  QOpenGLWidget::wheelEvent(event);
+}
+
+void QtEditViewer::mousePressEvent(QMouseEvent* event) {
+  if (event->button() == Qt::LeftButton || event->button() == Qt::MiddleButton) {
+    dragging_      = true;
+    last_mouse_pos_ = event->pos();
+    setCursor(Qt::ClosedHandCursor);
+    event->accept();
+    return;
+  }
+  QOpenGLWidget::mousePressEvent(event);
+}
+
+void QtEditViewer::mouseMoveEvent(QMouseEvent* event) {
+  if (dragging_) {
+    const QPoint delta = event->pos() - last_mouse_pos_;
+    last_mouse_pos_    = event->pos();
+
+    const float dpr = devicePixelRatioF();
+    const float vw  = std::max(1.0f, float(width()) * dpr);
+    const float vh  = std::max(1.0f, float(height()) * dpr);
+
+    // Convert pixel delta to normalized device coordinates
+    QVector2D ndc_delta(2.0f * float(delta.x()) / vw, -2.0f * float(delta.y()) / vh);
+    view_pan_ += ndc_delta;
+    update();
+    event->accept();
+    return;
+  }
+  QOpenGLWidget::mouseMoveEvent(event);
+}
+
+void QtEditViewer::mouseReleaseEvent(QMouseEvent* event) {
+  if (dragging_ && (event->button() == Qt::LeftButton || event->button() == Qt::MiddleButton)) {
+    dragging_ = false;
+    unsetCursor();
+    event->accept();
+    return;
+  }
+  QOpenGLWidget::mouseReleaseEvent(event);
+}
+
+void QtEditViewer::mouseDoubleClickEvent(QMouseEvent* event) {
+  if (event->button() == Qt::LeftButton) {
+    ResetView();
+    event->accept();
+    return;
+  }
+  QOpenGLWidget::mouseDoubleClickEvent(event);
 }
 };  // namespace puerhlab
