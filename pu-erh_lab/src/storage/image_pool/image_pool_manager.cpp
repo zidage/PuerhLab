@@ -46,6 +46,13 @@ void ImagePoolManager::Insert(const std::shared_ptr<Image> img) {
   image_pool_[img->image_id_] = img;
 }
 
+auto ImagePoolManager::InsertEmpty() -> std::shared_ptr<Image> {
+  auto new_id = id_generator_.GenerateID();
+  auto img    = std::make_shared<Image>(new_id);
+  image_pool_[new_id] = img;
+  return img;
+}
+
 /**
  * @brief Check whether an image with the given id exists in the image pool
  *

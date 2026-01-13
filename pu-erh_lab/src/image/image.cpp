@@ -27,6 +27,9 @@
 
 namespace puerhlab {
 using json = nlohmann::json;
+
+Image::Image(image_id_t image_id) : image_id_(image_id) {}
+
 /**
  * @brief Construct a new Image object
  *
@@ -109,6 +112,13 @@ void Image::JsonToExif(std::string json_str) {
   }
 }
 
+void Image::SetId(image_id_t image_id) { image_id_ = image_id; }
+
+void Image::SetExifDisplayMetaData(ExifDisplayMetaData&& exif_display) {
+  exif_display_     = std::move(exif_display);
+  has_exif_display_ = true;
+}
+
 void Image::ComputeChecksum() { checksum_ = XXH3_64bits(this, sizeof(*this)); }
 
 auto Image::GetImageData() -> cv::Mat& { return image_data_.GetCPUData(); }
@@ -116,4 +126,5 @@ auto Image::GetImageData() -> cv::Mat& { return image_data_.GetCPUData(); }
 auto Image::GetThumbnailData() -> cv::Mat& { return thumbnail_.GetCPUData(); }
 
 auto Image::GetThumbnailBuffer() -> ImageBuffer& { return thumbnail_; }
+
 };  // namespace puerhlab

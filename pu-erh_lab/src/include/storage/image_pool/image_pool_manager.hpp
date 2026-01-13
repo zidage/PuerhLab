@@ -27,6 +27,7 @@
 
 #include "image/image.hpp"
 #include "type/type.hpp"
+#include "utils/id/id_generator.hpp"
 
 namespace puerhlab {
 
@@ -36,6 +37,7 @@ class ImagePoolManager {
   using ListIterator = std::list<image_id_t>::iterator;
 
  private:
+  IncrID::IDGenerator<image_id_t>                        id_generator_{0};
   std::unordered_map<image_id_t, std::shared_ptr<Image>> image_pool_;
 
   std::unordered_map<image_id_t, ListIterator>           cache_map_thumb_;
@@ -55,10 +57,13 @@ class ImagePoolManager {
   static const uint32_t default_capacity_full_  = 3;
 
   explicit ImagePoolManager();
+  explicit ImagePoolManager(uint32_t start_id);
   explicit ImagePoolManager(uint32_t capacity_thumb, uint32_t capacity_full);
+  explicit ImagePoolManager(uint32_t capacity_thumb, uint32_t capacity_full, uint32_t start_id);
 
   auto GetPool() -> std::unordered_map<image_id_t, std::shared_ptr<Image>>&;
   void Insert(const std::shared_ptr<Image> img);
+  auto InsertEmpty() -> std::shared_ptr<Image>;
   auto PoolContains(const image_id_t& id) -> bool;
 
   auto Capacity(const AccessType type) -> uint32_t;

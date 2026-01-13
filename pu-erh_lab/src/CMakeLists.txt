@@ -52,6 +52,7 @@ endif()
 # Image Base
 def_library(Image 
     SOURCES image/image.cpp 
+    image/metadata_extractor.cpp
     PUBLIC_DEPS ImageBuffer
 )
 
@@ -305,12 +306,21 @@ def_library(SleeveManager
 )
 
 # ==============================================================================
-# 8. Writers (Last step dependencies)
+# 8. I/O  
 # ==============================================================================
 
 def_library(ImageWriter
     SOURCES io/image/image_writer.cpp
     PUBLIC_DEPS SleeveManager DuckORM PipelineScheduler
+)
+
+# ==============================================================================
+# 9. Services
+# ==============================================================================
+
+def_library(ImportService
+    SOURCES app/import_service.cpp
+    PUBLIC_DEPS SleeveManager ImageWriter ImagePool
 )
 
 # ==============================================================================

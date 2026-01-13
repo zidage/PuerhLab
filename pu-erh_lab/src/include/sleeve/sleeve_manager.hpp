@@ -12,6 +12,8 @@
 //  See the License for the specific language governing permissions and
 //  limitations under the License.
 
+// TODO: Refactor to UI layer as "LibrarySession"
+
 #pragma once
 
 #include <opencv2/core/hal/interface.h>
@@ -47,6 +49,7 @@ class SleeveManager {
   auto GetPool() -> std::shared_ptr<ImagePoolManager>;
   auto GetImgCount() -> uint32_t;
   auto GetStorageService() -> StorageService& { return storage_service_; }
+
   auto LoadToPath(std::vector<image_path_t> img_os_path, sl_path_t dest) -> uint32_t;
 
   auto RestoreSleeveFromDB(sleeve_id_t sleeve_id) -> std::shared_ptr<FileSystem>;

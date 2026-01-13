@@ -62,6 +62,7 @@ class Image {
   std::atomic<bool>       full_pinned_  = false;
 
   explicit Image()                      = default;
+  explicit Image(image_id_t image_id);
   explicit Image(image_id_t image_id, image_path_t image_path, ImageType image_type);
   explicit Image(image_id_t image_id, image_path_t image_path, file_name_t image_name,
                  ImageType image_type);
@@ -72,10 +73,14 @@ class Image {
 
   void                  LoadOriginalData(ImageBuffer&& load_image);
   void                  LoadThumbnailData(ImageBuffer&& thumbnail);
+
   auto                  GetImageData() -> cv::Mat&;
   auto                  GetThumbnailData() -> cv::Mat&;
   auto                  GetThumbnailBuffer() -> ImageBuffer&;
+  
   void                  SetId(image_id_t image_id);
+  void                  SetExifDisplayMetaData(ExifDisplayMetaData&& exif_display);
+
   void                  ClearData();
   void                  ClearThumbnail();
   void                  ComputeChecksum();
