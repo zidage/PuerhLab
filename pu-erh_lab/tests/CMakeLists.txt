@@ -146,6 +146,12 @@ if (WIN32)
 target_link_libraries(ImagePreview easy_profiler )
 endif()
 
+add_executable(ImportServiceTest app/import_service_test.cpp)
+target_include_directories(ImportServiceTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
+target_link_libraries(ImportServiceTest ImportService GTest::gtest_main)
+if (WIN32)
+target_link_libraries(ImportServiceTest easy_profiler)
+endif()
 
 include(GoogleTest)
 # set(CMAKE_GTEST_DISCOVER_TESTS_DISCOVERY_MODE PRE_TEST)

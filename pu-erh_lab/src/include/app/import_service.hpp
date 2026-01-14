@@ -76,12 +76,6 @@ struct ImportResult {
   uint32_t                     requested_ = 0;
   uint32_t                     imported_  = 0;
   uint32_t                     failed_    = 0;
-
-  std::vector<ImportError>     errors_{};
-
-  std::vector<sl_element_id_t> created_file_ids_{};
-
-  std::vector<image_id_t>      assigned_image_ids_{};
 };
 
 class ImportJob {
@@ -91,6 +85,7 @@ class ImportJob {
 
   // Cancellation toke observed by implementation
   std::atomic<bool> canceled_{false};
+  std::atomic<bool> cancelation_acked_{false};
 
   ProgressCallback  on_progress_{};
   FinishedCallback  on_finished_{};
@@ -98,6 +93,7 @@ class ImportJob {
   ~ImportJob() = default;
 
   auto IsCancelled() const -> bool { return canceled_.load(); }
+  auto IsCancelationAcked() const -> bool { return cancelation_acked_.load(); }
 };
 
 class ImportService {
@@ -113,7 +109,9 @@ class ImportService {
 class ImportServiceImpl final : public ImportService {
  public:
   ImportServiceImpl() = default;
-  ImportServiceImpl(std::shared_ptr<FileSystem> fs) : fs_(fs) {}
+  ImportServiceImpl(std::shared_ptr<FileSystem>       fs,
+                    std::shared_ptr<ImagePoolManager> image_pool_manager)
+      : fs_(fs), image_pool_manager_(image_pool_manager) {}
 
   ~ImportServiceImpl()                                  = default;
 

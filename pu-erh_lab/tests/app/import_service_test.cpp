@@ -1,0 +1,237 @@
+#include "app/import_service.hpp"
+
+#include <gtest/gtest.h>
+
+#include <memory>
+
+#include "import_test_fixation.hpp"
+#include "sleeve/sleeve_manager.hpp"
+#include "type/type.hpp"
+
+namespace puerhlab {
+TEST_F(ImportServiceTests, DISABLED_InitTest) {
+  {
+    SleeveManager sleeve_manager{db_path_};
+
+    auto          fs       = sleeve_manager.GetFilesystem();
+    auto          img_pool = sleeve_manager.GetPool();
+
+    EXPECT_NO_THROW(std::unique_ptr<ImportService> import_service =
+                        std::make_unique<ImportServiceImpl>(fs, img_pool));
+  }
+}
+
+TEST_F(ImportServiceTests, DISABLED_ImportEmptyTest) {
+  SleeveManager                  sleeve_manager{db_path_};
+
+  auto                           fs             = sleeve_manager.GetFilesystem();
+  auto                           img_pool       = sleeve_manager.GetPool();
+
+  std::unique_ptr<ImportService> import_service = std::make_unique<ImportServiceImpl>(fs, img_pool);
+
+  std::vector<image_path_t>      empty_paths;
+
+  std::shared_ptr<ImportJob>     import_job = std::make_shared<ImportJob>();
+
+  ImportResult                   final_result;
+  bool                           job_finished = false;
+
+  import_job->on_finished_ = [&final_result, &job_finished](const ImportResult& result) {
+    final_result = result;
+    job_finished = true;
+  };
+
+  import_job = import_service->ImportToFolder(empty_paths, L"", {}, import_job);
+
+  ASSERT_NE(import_job, nullptr);
+
+  // Wait for the job to finish
+  while (!job_finished) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  }
+
+  EXPECT_EQ(final_result.requested_, 0);
+  EXPECT_EQ(final_result.imported_, 0);
+  EXPECT_EQ(final_result.failed_, 0);
+}
+
+TEST_F(ImportServiceTests, DISABLED_ImportSingleFileTest) {
+  SleeveManager                  sleeve_manager{db_path_};
+
+  auto                           fs             = sleeve_manager.GetFilesystem();
+  auto                           img_pool       = sleeve_manager.GetPool();
+
+  std::unique_ptr<ImportService> import_service = std::make_unique<ImportServiceImpl>(fs, img_pool);
+
+  std::vector<image_path_t>      paths;
+  paths.push_back(TEST_IMG_PATH "/raw/airplane/_DSC1704.NEF");
+
+  std::shared_ptr<ImportJob> import_job = std::make_shared<ImportJob>();
+
+  std::promise<ImportResult> final_result;
+  auto                       final_result_future = final_result.get_future();
+
+  import_job->on_progress_                       = [](const ImportProgress& progress) {
+    // Can log progress here if needed
+    std::cout << "Progress: " << progress.metadata_done_ << "/" << progress.total_ << "\n";
+  };
+
+  import_job->on_finished_ = [&final_result](const ImportResult& result) {
+    final_result.set_value(result);
+  };
+
+  import_job = import_service->ImportToFolder(paths, L"", {}, import_job);
+
+  ASSERT_NE(import_job, nullptr);
+
+  // Wait for the job to finish
+  final_result_future.wait();
+
+  ImportResult final_result_value = final_result_future.get();
+
+  EXPECT_EQ(final_result_value.requested_, 1);
+  EXPECT_EQ(final_result_value.imported_, 1);
+  EXPECT_EQ(final_result_value.failed_, 0);
+}
+
+TEST_F(ImportServiceTests, DISABLED_ImportInvalidFileTest) {
+  SleeveManager                  sleeve_manager{db_path_};
+
+  auto                           fs             = sleeve_manager.GetFilesystem();
+  auto                           img_pool       = sleeve_manager.GetPool();
+
+  std::unique_ptr<ImportService> import_service = std::make_unique<ImportServiceImpl>(fs, img_pool);
+
+  std::vector<image_path_t>      paths;
+  paths.push_back(TEST_IMG_PATH "/raw/airplane/invalid_file.txt");
+
+  std::shared_ptr<ImportJob> import_job = std::make_shared<ImportJob>();
+
+  std::promise<ImportResult> final_result;
+  auto                       final_result_future = final_result.get_future();
+
+  import_job->on_progress_                       = [](const ImportProgress& progress) {
+    // Can log progress here if needed
+    std::cout << "Progress: " << progress.metadata_done_ << "/" << progress.total_ << "\n";
+  };
+
+  import_job->on_finished_ = [&final_result](const ImportResult& result) {
+    final_result.set_value(result);
+  };
+
+  import_job = import_service->ImportToFolder(paths, L"", {}, import_job);
+
+  ASSERT_NE(import_job, nullptr);
+
+  // Wait for the job to finish
+  final_result_future.wait();
+
+  ImportResult final_result_value = final_result_future.get();
+
+  EXPECT_EQ(final_result_value.requested_, 1);
+  EXPECT_EQ(final_result_value.imported_, 0);
+  EXPECT_EQ(final_result_value.failed_, 1);
+}
+
+TEST_F(ImportServiceTests, BatchReadTest) {
+  SleeveManager                  sleeve_manager{db_path_};
+
+  auto                           fs             = sleeve_manager.GetFilesystem();
+  auto                           img_pool       = sleeve_manager.GetPool();
+
+  std::unique_ptr<ImportService> import_service = std::make_unique<ImportServiceImpl>(fs, img_pool);
+
+  std::vector<image_path_t>      paths;
+
+  image_path_t                   img_dir = TEST_IMG_PATH "/raw/batch_import";
+  for (const auto& entry : std::filesystem::directory_iterator(img_dir)) {
+    paths.push_back(entry.path());
+  }
+
+  std::shared_ptr<ImportJob> import_job = std::make_shared<ImportJob>();
+  std::promise<ImportResult> final_result;
+  auto                       final_result_future = final_result.get_future();
+  import_job->on_progress_ = [](const ImportProgress& progress) {
+    const uint32_t total = progress.total_ ? progress.total_ : 1;  // avoid div by zero
+    const uint32_t done  = progress.metadata_done_;
+    const uint32_t pct   = static_cast<uint32_t>((done * 100) / total);
+    constexpr uint32_t bar_width = 24;
+    const uint32_t filled       = (pct * bar_width) / 100;
+
+    std::string bar(bar_width, ' ');
+    for (uint32_t i = 0; i < filled; ++i) {
+      bar[i] = '#';
+    }
+
+    // Clear line, show green progress bar with percentage
+    std::cout << "\r\033[2K\033[32m[" << bar << "] " << pct << "%"
+              << " | " << done << "/" << total << "\033[0m" << std::flush;
+  };
+  import_job->on_finished_ = [&final_result](const ImportResult& result) {
+    std::cout << std::endl;
+    final_result.set_value(result);
+  };
+  import_job = import_service->ImportToFolder(paths, L"", {}, import_job);
+  ASSERT_NE(import_job, nullptr);
+  // Wait for the job to finish
+  final_result_future.wait();
+  ImportResult final_result_value = final_result_future.get();
+  EXPECT_EQ(final_result_value.requested_, static_cast<uint32_t>(paths.size()));
+  EXPECT_EQ(final_result_value.imported_, static_cast<uint32_t>(paths.size()));
+  EXPECT_EQ(final_result_value.failed_, 0);
+}
+
+TEST_F(ImportServiceTests, BatchCancelTest) {
+  SleeveManager                  sleeve_manager{db_path_};
+
+  auto                           fs             = sleeve_manager.GetFilesystem();
+  auto                           img_pool       = sleeve_manager.GetPool();
+
+  std::unique_ptr<ImportService> import_service = std::make_unique<ImportServiceImpl>(fs, img_pool);
+
+  std::vector<image_path_t>      paths;
+
+  image_path_t                   img_dir = TEST_IMG_PATH "/raw/batch_import";
+  for (const auto& entry : std::filesystem::directory_iterator(img_dir)) {
+    paths.push_back(entry.path());
+  }
+
+  std::shared_ptr<ImportJob> import_job = std::make_shared<ImportJob>();
+  std::promise<ImportResult> final_result;
+  auto                       final_result_future = final_result.get_future();
+  import_job->on_progress_ = [](const ImportProgress& progress) {
+    const uint32_t total = progress.total_ ? progress.total_ : 1;  // avoid div by zero
+    const uint32_t done  = progress.metadata_done_;
+    const uint32_t pct   = static_cast<uint32_t>((done * 100) / total);
+    constexpr uint32_t bar_width = 24;
+    const uint32_t filled       = (pct * bar_width) / 100;
+
+    std::string bar(bar_width, ' ');
+    for (uint32_t i = 0; i < filled; ++i) {
+      bar[i] = '#';
+    }
+
+    // Clear line, show green progress bar with percentage
+    std::cout << "\r\033[2K\033[32m[" << bar << "] " << pct << "%"
+              << " | " << done << "/" << total << "\033[0m" << std::flush;
+  };
+  import_job->on_finished_ = [&final_result](const ImportResult& result) {
+    std::cout << std::endl;
+    final_result.set_value(result);
+  };
+  import_job = import_service->ImportToFolder(paths, L"", {}, import_job);
+
+  // Sleep for a short while and then cancel
+  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  import_job->canceled_.store(true);
+
+  ASSERT_NE(import_job, nullptr);
+  // Wait for the job to finish
+  final_result_future.wait();
+  ImportResult final_result_value = final_result_future.get();
+  EXPECT_EQ(final_result_value.requested_, static_cast<uint32_t>(paths.size()));
+  EXPECT_LT(final_result_value.imported_, static_cast<uint32_t>(paths.size()));
+  EXPECT_EQ(final_result_value.failed_, 0);
+}
+
+};  // namespace puerhlab
