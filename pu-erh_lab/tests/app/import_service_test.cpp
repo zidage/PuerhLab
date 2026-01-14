@@ -92,6 +92,12 @@ TEST_F(ImportServiceTests, ImportSingleFileTest) {
   EXPECT_EQ(final_result_value.requested_, 1);
   EXPECT_EQ(final_result_value.imported_, 1);
   EXPECT_EQ(final_result_value.failed_, 0);
+
+  ASSERT_NE(import_job->import_log_, nullptr);
+  auto snapshot = import_job->import_log_->Snapshot();
+  EXPECT_EQ(snapshot.created_.size(), 1u);
+  EXPECT_EQ(snapshot.metadata_ok_.size(), 1u);
+  EXPECT_EQ(snapshot.metadata_failed_.size(), 0u);
 }
 
 TEST_F(ImportServiceTests, ImportInvalidFileTest) {
@@ -131,6 +137,12 @@ TEST_F(ImportServiceTests, ImportInvalidFileTest) {
   EXPECT_EQ(final_result_value.requested_, 1);
   EXPECT_EQ(final_result_value.imported_, 0);
   EXPECT_EQ(final_result_value.failed_, 1);
+
+  ASSERT_NE(import_job->import_log_, nullptr);
+  auto snapshot = import_job->import_log_->Snapshot();
+  EXPECT_EQ(snapshot.created_.size(), 0u);
+  EXPECT_EQ(snapshot.metadata_ok_.size(), 0u);
+  EXPECT_EQ(snapshot.metadata_failed_.size(), 0u);
 }
 
 static auto on_progress_logger = [](const ImportProgress& progress) {
@@ -139,7 +151,6 @@ static auto on_progress_logger = [](const ImportProgress& progress) {
   const uint32_t     pct       = static_cast<uint32_t>((done * 100) / total);
   constexpr uint32_t bar_width = 24;
   const uint32_t     filled    = (pct * bar_width) / 100;
-
   std::string        bar(bar_width, ' ');
   for (uint32_t i = 0; i < filled; ++i) {
     bar[i] = '#';
@@ -312,6 +323,63 @@ TEST_F(ImportServiceTests, ImportWithInvalidFilesTest) {
   // Clean up the created text files
   for (int i = 0; i < num_invalid_files; ++i) {
     std::filesystem::remove(img_dir.string() + "/invalid_file_" + std::to_string(i) + ".txt");
+  }
+}
+
+TEST_F(ImportServiceTests, ImportPartialSuccessWithMockRawFiles) {
+  image_path_t  img_dir                = TEST_IMG_PATH "/raw/batch_import";
+  constexpr int num_mock_invalid_files = 3;
+
+  for (int i = 0; i < num_mock_invalid_files; ++i) {
+    std::ofstream ofs(img_dir.string() + "/mock_invalid_" + std::to_string(i) + ".NEF");
+    ofs << "Mock RAW file with invalid content." << std::endl;
+    ofs.close();
+  }
+
+  try {
+    SleeveManager                  sleeve_manager{db_path_};
+    auto                           fs       = sleeve_manager.GetFilesystem();
+    auto                           img_pool = sleeve_manager.GetPool();
+
+    std::vector<image_path_t>      paths;
+    std::unique_ptr<ImportService> import_service =
+        std::make_unique<ImportServiceImpl>(fs, img_pool);
+    for (const auto& entry : std::filesystem::directory_iterator(img_dir)) {
+      paths.push_back(entry.path());
+    }
+
+    std::shared_ptr<ImportJob> import_job = std::make_shared<ImportJob>();
+    std::promise<ImportResult> final_result;
+    auto                       final_result_future = final_result.get_future();
+    import_job->on_progress_                       = on_progress_logger;
+
+    import_job->on_finished_                       = [&final_result](const ImportResult& result) {
+      std::cout << std::endl;
+      final_result.set_value(result);
+    };
+    import_job = import_service->ImportToFolder(paths, L"", {}, import_job);
+
+    ASSERT_NE(import_job, nullptr);
+    final_result_future.wait();
+    ImportResult final_result_value = final_result_future.get();
+
+    EXPECT_EQ(final_result_value.requested_, static_cast<uint32_t>(paths.size()));
+    EXPECT_EQ(final_result_value.imported_,
+              static_cast<uint32_t>(paths.size()) - num_mock_invalid_files);
+    EXPECT_EQ(final_result_value.failed_, num_mock_invalid_files);
+
+    ASSERT_NE(import_job->import_log_, nullptr);
+    auto snapshot = import_job->import_log_->Snapshot();
+    EXPECT_EQ(snapshot.created_.size(), static_cast<uint32_t>(paths.size()));
+    EXPECT_EQ(snapshot.metadata_ok_.size(),
+              static_cast<uint32_t>(paths.size()) - num_mock_invalid_files);
+    EXPECT_EQ(snapshot.metadata_failed_.size(), num_mock_invalid_files);
+  } catch (const std::exception& e) {
+    FAIL() << "Failed to create SleeveManager: " << e.what();
+  }
+
+  for (int i = 0; i < num_mock_invalid_files; ++i) {
+    std::filesystem::remove(img_dir.string() + "/mock_invalid_" + std::to_string(i) + ".NEF");
   }
 }
 

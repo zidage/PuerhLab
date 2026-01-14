@@ -26,6 +26,7 @@
 #include "storage/image_pool/image_pool_manager.hpp"
 #include "type/type.hpp"
 #include "utils/id/id_generator.hpp"
+#include "utils/import/import_log.hpp"
 
 namespace puerhlab {
 enum class ImportSortMode : uint8_t {
@@ -73,9 +74,9 @@ struct ImportError {
 };
 
 struct ImportResult {
-  uint32_t                     requested_ = 0;
-  uint32_t                     imported_  = 0;
-  uint32_t                     failed_    = 0;
+  uint32_t requested_ = 0;
+  uint32_t imported_  = 0;
+  uint32_t failed_    = 0;
 };
 
 class ImportJob {
@@ -84,13 +85,15 @@ class ImportJob {
   using FinishedCallback = std::function<void(const ImportResult&)>;
 
   // Cancellation toke observed by implementation
-  std::atomic<bool> canceled_{false};
-  std::atomic<bool> cancelation_acked_{false};
+  std::atomic<bool>          canceled_{false};
+  std::atomic<bool>          cancelation_acked_{false};
 
-  ProgressCallback  on_progress_{};
-  FinishedCallback  on_finished_{};
+  ProgressCallback           on_progress_{};
+  FinishedCallback           on_finished_{};
 
-  ~ImportJob() = default;
+  std::shared_ptr<ImportLog> import_log_ = nullptr;
+
+  ~ImportJob()                           = default;
 
   auto IsCancelled() const -> bool { return canceled_.load(); }
   auto IsCancelationAcked() const -> bool { return cancelation_acked_.load(); }
@@ -103,7 +106,10 @@ class ImportService {
   virtual auto ImportToFolder(const std::vector<image_path_t>& paths, const image_path_t& dest,
                               const ImportOptions&       options = {},
                               std::shared_ptr<ImportJob> job     = nullptr)
-      -> std::shared_ptr<ImportJob> = 0;
+      -> std::shared_ptr<ImportJob>                           = 0;
+
+  virtual void CleanupFailedImports(const ImportLogSnapshot& log_snapshot,
+                                    const image_path_t&      dest) = 0;
 };
 
 class ImportServiceImpl final : public ImportService {
@@ -123,5 +129,8 @@ class ImportServiceImpl final : public ImportService {
   auto ImportToFolder(const std::vector<image_path_t>& paths, const image_path_t& dest,
                       const ImportOptions& options = {}, std::shared_ptr<ImportJob> job = nullptr)
       -> std::shared_ptr<ImportJob> override;
+
+  void CleanupFailedImports(const ImportLogSnapshot& log_snapshot,
+                            const image_path_t&      dest) override;
 };
 };  // namespace puerhlab

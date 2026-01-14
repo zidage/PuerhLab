@@ -39,6 +39,10 @@ auto ImportServiceImpl::ImportToFolder(const std::vector<image_path_t>& paths,
                                        const image_path_t& dest, const ImportOptions& options,
                                        std::shared_ptr<ImportJob> job)
     -> std::shared_ptr<ImportJob> {
+  auto import_log = std::make_shared<ImportLog>();
+  if (job) {
+    job->import_log_ = import_log;
+  }
   std::shared_ptr<ImportProgress> progress_ptr = std::make_shared<ImportProgress>();
   progress_ptr->total_                         = static_cast<uint32_t>(paths.size());
 
@@ -98,17 +102,25 @@ auto ImportServiceImpl::ImportToFolder(const std::vector<image_path_t>& paths,
 
     // Link the image to the SleeveFile
     sleeve_file->SetImage(image_ptr);
+    progress_ptr->placeholders_created_.fetch_add(1);
+    if (import_log) {
+      import_log->AddPlaceholder(image_ptr->image_id_, sleeve_file->element_id_,
+                                 image_path.filename().wstring());
+    }
 
     any_threadpool_submission = true;
 
     // Submit the metadata extraction task to thread pool
-    thread_pool_.Submit([image_ptr, image_path, progress_ptr, job]() {
+    thread_pool_.Submit([image_ptr, image_path, progress_ptr, job, import_log]() {
       if (job && job->IsCancelationAcked()) {
         return;
       }
       // Extract metadata
       try {
         MetadataExtractor::ExtractEXIF_ToImage(image_ptr->image_path_, *image_ptr);
+        if (import_log) {
+          import_log->MarkMetadataSuccess(image_ptr->image_id_);
+        }
         // Update progress
         progress_ptr->metadata_done_.fetch_add(1);
       } catch (...) {
@@ -135,5 +147,24 @@ auto ImportServiceImpl::ImportToFolder(const std::vector<image_path_t>& paths,
                     progress_ptr->failed_.load());
   }
   return job;
+}
+
+void ImportServiceImpl::CleanupFailedImports(const ImportLogSnapshot& log_snapshot,
+                                             const image_path_t& dest) {
+  if (!fs_ || !image_pool_manager_) {
+    return;
+  }
+
+  for (const auto& entry : log_snapshot.metadata_failed_) {
+    if (!entry.file_name_.empty()) {
+      try {
+        fs_->Delete(dest / entry.file_name_);
+      } catch (...) {
+      }
+    }
+
+    auto& pool = image_pool_manager_->GetPool();
+    pool.erase(entry.image_id_);
+  }
 }
 };  // namespace puerhlab
