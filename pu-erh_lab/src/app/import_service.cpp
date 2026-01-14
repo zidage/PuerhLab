@@ -62,7 +62,17 @@ auto ImportServiceImpl::ImportToFolder(const std::vector<image_path_t>& paths,
       }
       continue;
     }
-    auto element = fs_->Create(dest, image_path.filename(), ElementType::FILE);
+    std::shared_ptr<SleeveElement> element = nullptr;
+    try {
+      element = fs_->Create(dest, image_path.filename(), ElementType::FILE);
+
+    } catch (...) {
+      progress_ptr->failed_.fetch_add(1);
+      if (job && job->on_progress_) {
+        job->on_progress_(*progress_ptr);
+      }
+      continue;
+    }
     if (!element) {
       progress_ptr->failed_.fetch_add(1);
       if (job && job->on_progress_) {
