@@ -37,6 +37,7 @@ class NodeStorageHandler {
   void AddToStorage(std::shared_ptr<SleeveElement> new_element);
   void EnsureChildrenLoaded(std::shared_ptr<SleeveFolder> folder);
   auto GetElement(sl_element_id_t id) -> std::shared_ptr<SleeveElement>;
+  void GarbageCollect();
 };
 
 class StorageService {

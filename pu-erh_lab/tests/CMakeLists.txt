@@ -157,6 +157,13 @@ if (WIN32)
 target_link_libraries(ImportServiceTest easy_profiler)
 endif()
 
+add_executable(SleeveServiceTest app/sleeve_service_test.cpp)
+target_include_directories(SleeveServiceTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
+target_link_libraries(SleeveServiceTest FSService GTest::gtest_main)
+if (WIN32)
+target_link_libraries(SleeveServiceTest easy_profiler)
+endif()
+
 include(GoogleTest)
 # set(CMAKE_GTEST_DISCOVER_TESTS_DISCOVERY_MODE PRE_TEST)
 # gtest_discover_tests(SampleTest)

@@ -41,7 +41,7 @@ class SleeveService {
   virtual ~SleeveService() = default;
 
   template <typename TResult>
-  auto Read(std::function<TResult(const FileSystem&)> operation) -> TResult;
+  auto Read(std::function<TResult(FileSystem&)> operation) -> TResult;
 
   template <typename TResult>
   auto Write(std::function<TResult(FileSystem&)> operation) -> std::pair<TResult, SyncResult>;
@@ -69,10 +69,22 @@ class SleeveServiceImpl final : public SleeveService {
                     sl_element_id_t start_id = 0);
 
   template <typename TResult>
-  auto Read(std::function<TResult(const FileSystem&)> operation) -> TResult;
+  auto Read(std::function<TResult(FileSystem&)> operation) -> TResult {
+    std::lock_guard<std::mutex> lock(fs_lock_);
+    return operation(*fs_);
+  }
 
   template <typename TResult>
-  auto Write(std::function<TResult(FileSystem&)> operation) -> std::pair<TResult, SyncResult>;
+  auto Write(std::function<TResult(FileSystem&)> operation) -> std::pair<TResult, SyncResult> {
+    std::lock_guard<std::mutex> lock(fs_lock_);
+
+    // Perform the write operation
+    TResult                     result      = operation(*fs_);
+
+    // Automatic sync after write operation
+    SyncResult                  sync_result = Sync();
+    return {result, sync_result};
+  }
 
   auto Sync() -> SyncResult override;
 

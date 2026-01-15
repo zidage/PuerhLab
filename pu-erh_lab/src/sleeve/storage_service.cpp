@@ -52,6 +52,19 @@ void NodeStorageHandler::EnsureChildrenLoaded(std::shared_ptr<SleeveFolder> fold
   }
 }
 
+void NodeStorageHandler::GarbageCollect() {
+  std::vector<sl_element_id_t> to_delete;
+  for (auto& pair : storage_) {
+    auto element = pair.second;
+    if (element->sync_flag_ == SyncFlag::DELETED) {
+      to_delete.push_back(element->element_id_);
+    }
+  }
+  for (auto id : to_delete) {
+    storage_.erase(id);
+  }
+}
+
 StorageService::StorageService(std::filesystem::path db_path)
     : db_ctrl_(db_path),
       el_ctrl_(db_ctrl_.GetConnectionGuard()),

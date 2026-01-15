@@ -34,25 +34,7 @@ SleeveServiceImpl::SleeveServiceImpl(const std::filesystem::path& db_path,
   meta_path_       = meta_path;
   storage_service_ = std::make_unique<StorageService>(db_path_);
   fs_              = std::make_unique<FileSystem>(db_path_, *storage_service_, start_id);
-}
-
-template <typename TResult>
-auto SleeveServiceImpl::Read(std::function<TResult(const FileSystem&)> operation) -> TResult {
-  std::lock_guard<std::mutex> lock(fs_lock_);
-  return operation(*fs_);
-}
-
-template <typename TResult>
-auto SleeveServiceImpl::Write(std::function<TResult(FileSystem&)> operation)
-    -> std::pair<TResult, SyncResult> {
-  std::lock_guard<std::mutex> lock(fs_lock_);
-
-  // Perform the write operation
-  TResult                     result      = operation(*fs_);
-
-  // Automatic sync after write operation
-  SyncResult                  sync_result = Sync();
-  return {result, sync_result};
+  fs_->InitRoot();
 }
 
 void SleeveServiceImpl::SaveSleeve(const std::filesystem::path& meta_path) {
@@ -93,6 +75,7 @@ auto SleeveServiceImpl::Sync() -> SyncResult {
     auto& element_ctrl      = storage_service_->GetElementController();
     auto  modified_elements = fs_->GetModifiedElements();
     auto  unsynced_elements = fs_->GetUnsyncedElements();
+    auto  garbage_elements  = fs_->GetDeletedElements();
 
     // Sync unsynced elements first
     for (auto& element : unsynced_elements) {
@@ -104,6 +87,16 @@ auto SleeveServiceImpl::Sync() -> SyncResult {
       element_ctrl.UpdateElement(element);
       result.elements_synced_++;
     }
+
+    // Finally, delete the deleted elements
+    // TODO: This should be done periodically instead of every sync
+    for (auto& element : garbage_elements) {
+      element_ctrl.RemoveElement(element->element_id_);
+      result.elements_synced_++;
+    }
+    // Perform garbage collection in the storage
+    // The same goes to here, this should be done periodically
+    fs_->GarbageCollect();
   } catch (std::exception& e) {
     result.success_ = false;
     result.message_ = e.what();
