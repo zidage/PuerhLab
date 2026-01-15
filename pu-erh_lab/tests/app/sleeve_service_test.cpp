@@ -176,18 +176,18 @@ TEST_F(SleeveServiceTests, FuzzyCreateCopyTest) {
           // Ignore invalid ops to keep fuzz running
         }
       }
+      std::cout << "\r\033[2KCompleted operation " << (i + 1) << " / " << kOperations << std::flush;
     }
 
     first_tree = service.Read<std::wstring>([](FileSystem& fs) { return fs.Tree(L"/"); });
     service.SaveSleeve(meta_path_);
   }
+  std::cout << std::endl;
 
   SleeveServiceImpl reloaded_service(meta_path_);
   auto              second_tree =
       reloaded_service.Read<std::wstring>([](FileSystem& fs) { return fs.Tree(L"/"); });
 
-  std::cout << "First Tree:\n"
-            << conv::ToBytes(first_tree) << "\n";
   EXPECT_EQ(conv::ToBytes(first_tree), conv::ToBytes(second_tree));
 }
 

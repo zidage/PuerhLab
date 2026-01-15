@@ -13,6 +13,7 @@ namespace puerhlab {
 class ImportServiceTests : public ::testing::Test {
  protected:
   std::filesystem::path db_path_;
+  std::filesystem::path meta_path_;
 
   // Run before any unit test runs
   void                  SetUp() override {
@@ -20,9 +21,12 @@ class ImportServiceTests : public ::testing::Test {
     Exiv2::LogMsg::setLevel(Exiv2::LogMsg::Level::mute);
     // Create a unique db file location
     db_path_ = std::filesystem::temp_directory_path() / "test_db.db";
-    // Make sure there is not existing db
+    meta_path_ = std::filesystem::temp_directory_path() / "import_service_test.json";
     if (std::filesystem::exists(db_path_)) {
       std::filesystem::remove(db_path_);
+    }
+    if (std::filesystem::exists(meta_path_)) {
+      std::filesystem::remove(meta_path_);
     }
     RegisterAllOperators();
 #ifdef EASY_PROFILER_ENABLE
@@ -35,6 +39,9 @@ class ImportServiceTests : public ::testing::Test {
     // Clean up the DB file
     if (std::filesystem::exists(db_path_)) {
       std::filesystem::remove(db_path_);
+    }
+    if (std::filesystem::exists(meta_path_)) {
+      std::filesystem::remove(meta_path_);
     }
 #ifdef EASY_PROFILER_ENABLE
     profiler::dumpBlocksToFile(TEST_PROFILER_OUTPUT_PATH);

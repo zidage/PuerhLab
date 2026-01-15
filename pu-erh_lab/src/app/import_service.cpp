@@ -20,6 +20,7 @@
 
 #include "image/metadata_extractor.hpp"
 #include "sleeve/sleeve_element/sleeve_element.hpp"
+#include "sleeve/sleeve_filesystem.hpp"
 #include "type/supported_file_type.hpp"
 
 namespace puerhlab {
@@ -70,8 +71,10 @@ auto ImportServiceImpl::ImportToFolder(const std::vector<image_path_t>& paths,
     }
     std::shared_ptr<SleeveElement> element = nullptr;
     try {
-      element = fs_->Create(dest, image_path.filename(), ElementType::FILE);
-
+      element =
+          fs_service_.Write_NoSync<std::shared_ptr<SleeveElement>>([&dest, &image_path](FileSystem& fs) {
+            return fs.Create(dest, image_path.filename(), ElementType::FILE);
+          });
     } catch (...) {
       progress_ptr->failed_.fetch_add(1);
       if (job && job->on_progress_) {
@@ -88,6 +91,7 @@ auto ImportServiceImpl::ImportToFolder(const std::vector<image_path_t>& paths,
     }
     // Create the corresponding image file
     auto sleeve_file = std::static_pointer_cast<SleeveFile>(element);
+
     auto image_ptr   = image_pool_manager_->InsertEmpty();
 
     if (!image_ptr) {
@@ -151,22 +155,27 @@ auto ImportServiceImpl::ImportToFolder(const std::vector<image_path_t>& paths,
   return job;
 }
 
-void ImportServiceImpl::CleanupFailedImports(const ImportLogSnapshot& log_snapshot,
-                                             const image_path_t& dest) {
-  if (!fs_ || !image_pool_manager_) {
+void ImportServiceImpl::SyncImports(const ImportLogSnapshot& log_snapshot,
+                                             const image_path_t&      dest) {
+  if (!image_pool_manager_) {
     return;
   }
 
   for (const auto& entry : log_snapshot.metadata_failed_) {
     if (!entry.file_name_.empty()) {
       try {
-        fs_->Delete(dest / entry.file_name_);
+        // fs_->Delete(dest / entry.file_name_);
+        fs_service_.Write_NoSync<void>([&dest, &entry](FileSystem& fs) {
+          fs.Delete(dest / image_path_t(entry.file_name_));
+        });
       } catch (...) {
       }
     }
 
     auto& pool = image_pool_manager_->GetPool();
     pool.erase(entry.image_id_);
+
+    fs_service_.Sync();
   }
 }
 };  // namespace puerhlab

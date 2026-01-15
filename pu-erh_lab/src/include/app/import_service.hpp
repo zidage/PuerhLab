@@ -20,6 +20,7 @@
 #include <functional>
 #include <memory>
 
+#include "app/sleeve_service.hpp"
 #include "concurrency/thread_pool.hpp"
 #include "image/image.hpp"
 #include "sleeve/sleeve_filesystem.hpp"
@@ -108,20 +109,25 @@ class ImportService {
                               std::shared_ptr<ImportJob> job     = nullptr)
       -> std::shared_ptr<ImportJob>                           = 0;
 
-  virtual void CleanupFailedImports(const ImportLogSnapshot& log_snapshot,
+  virtual void SyncImports(const ImportLogSnapshot& log_snapshot,
                                     const image_path_t&      dest) = 0;
 };
 
 class ImportServiceImpl final : public ImportService {
  public:
-  ImportServiceImpl() = default;
-  ImportServiceImpl(std::shared_ptr<FileSystem>       fs,
+  
+  ImportServiceImpl() = delete;
+  ImportServiceImpl(SleeveServiceImpl& fs_service, 
                     std::shared_ptr<ImagePoolManager> image_pool_manager)
-      : fs_(fs), image_pool_manager_(image_pool_manager) {}
+      : fs_service_(fs_service), image_pool_manager_(image_pool_manager) {}
+  // ImportServiceImpl(std::shared_ptr<FileSystem>       fs,
+                    // std::shared_ptr<ImagePoolManager> image_pool_manager)
+      // : fs_(fs), image_pool_manager_(image_pool_manager), fs_service_() {}
 
   ~ImportServiceImpl()                                  = default;
 
-  std::shared_ptr<FileSystem>       fs_                 = nullptr;
+  SleeveServiceImpl& fs_service_;
+
   std::shared_ptr<ImagePoolManager> image_pool_manager_ = nullptr;
 
   ThreadPool                        thread_pool_{8};
@@ -130,7 +136,7 @@ class ImportServiceImpl final : public ImportService {
                       const ImportOptions& options = {}, std::shared_ptr<ImportJob> job = nullptr)
       -> std::shared_ptr<ImportJob> override;
 
-  void CleanupFailedImports(const ImportLogSnapshot& log_snapshot,
+  void SyncImports(const ImportLogSnapshot& log_snapshot,
                             const image_path_t&      dest) override;
 };
 };  // namespace puerhlab

@@ -71,20 +71,41 @@ class SleeveServiceImpl final : public SleeveService {
   template <typename TResult>
   auto Read(std::function<TResult(FileSystem&)> operation) -> TResult {
     std::lock_guard<std::mutex> lock(fs_lock_);
-    return operation(*fs_);
+    if constexpr (std::is_void_v<TResult>) {
+      operation(*fs_);
+      return;
+    } else {
+      return operation(*fs_);
+    }
   }
 
   template <typename TResult>
   auto Write(std::function<TResult(FileSystem&)> operation) -> std::pair<TResult, SyncResult> {
     std::lock_guard<std::mutex> lock(fs_lock_);
 
-    // Perform the write operation
-    TResult                     result      = operation(*fs_);
-
-    // Automatic sync after write operation
-    SyncResult                  sync_result = Sync();
-    return {result, sync_result};
+    if constexpr (std::is_void_v<TResult>) {
+      operation(*fs_);
+      return Sync();  // void: only return SyncResult
+    } else {
+      TResult    result      = operation(*fs_);
+      SyncResult sync_result = Sync();
+      return {result, sync_result};
+    }
   }
+
+  template <typename TResult>
+  auto Write_NoSync(std::function<TResult(FileSystem&)> operation) -> TResult {
+    std::lock_guard<std::mutex> lock(fs_lock_);
+
+    if constexpr (std::is_void_v<TResult>) {
+      operation(*fs_);
+      return;
+    } else {
+      TResult result = operation(*fs_);
+      return result;
+    }
+  }
+
 
   auto Sync() -> SyncResult override;
 
