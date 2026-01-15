@@ -40,6 +40,7 @@ auto ImportServiceImpl::ImportToFolder(const std::vector<image_path_t>& paths,
                                        const image_path_t& dest, const ImportOptions& options,
                                        std::shared_ptr<ImportJob> job)
     -> std::shared_ptr<ImportJob> {
+  (void)options;
   // TODO: Use sleeve service to interact with FS
   // The current implementation is a temporary solution
   auto import_log = std::make_shared<ImportLog>();
@@ -71,8 +72,8 @@ auto ImportServiceImpl::ImportToFolder(const std::vector<image_path_t>& paths,
     }
     std::shared_ptr<SleeveElement> element = nullptr;
     try {
-      element =
-          fs_service_.Write_NoSync<std::shared_ptr<SleeveElement>>([&dest, &image_path](FileSystem& fs) {
+      element = fs_service_->Write_NoSync<std::shared_ptr<SleeveElement>>(
+          [&dest, &image_path](FileSystem& fs) {
             return fs.Create(dest, image_path.filename(), ElementType::FILE);
           });
     } catch (...) {
@@ -156,7 +157,7 @@ auto ImportServiceImpl::ImportToFolder(const std::vector<image_path_t>& paths,
 }
 
 void ImportServiceImpl::SyncImports(const ImportLogSnapshot& log_snapshot,
-                                             const image_path_t&      dest) {
+                                    const image_path_t&      dest) {
   if (!image_pool_manager_) {
     return;
   }
@@ -165,9 +166,8 @@ void ImportServiceImpl::SyncImports(const ImportLogSnapshot& log_snapshot,
     if (!entry.file_name_.empty()) {
       try {
         // fs_->Delete(dest / entry.file_name_);
-        fs_service_.Write_NoSync<void>([&dest, &entry](FileSystem& fs) {
-          fs.Delete(dest / image_path_t(entry.file_name_));
-        });
+        fs_service_->Write_NoSync<void>(
+            [&dest, &entry](FileSystem& fs) { fs.Delete(dest / image_path_t(entry.file_name_)); });
       } catch (...) {
       }
     }
@@ -175,7 +175,7 @@ void ImportServiceImpl::SyncImports(const ImportLogSnapshot& log_snapshot,
     auto& pool = image_pool_manager_->GetPool();
     pool.erase(entry.image_id_);
 
-    fs_service_.Sync();
+    fs_service_->Sync();
   }
 }
 };  // namespace puerhlab

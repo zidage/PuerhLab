@@ -16,7 +16,10 @@
 
 #include <opencv2/core/hal/interface.h>
 
+#include <filesystem>
+#include <functional>
 #include <memory>
+#include <mutex>
 
 #include "sleeve/sleeve_filesystem.hpp"
 #include "sleeve/storage_service.hpp"
@@ -46,27 +49,23 @@ class SleeveService {
   template <typename TResult>
   auto Write(std::function<TResult(FileSystem&)> operation) -> std::pair<TResult, SyncResult>;
 
-  virtual auto Sync() -> SyncResult                               = 0;
-
-  virtual void SaveSleeve(const std::filesystem::path& meta_path) = 0;
-  virtual void LoadSleeve(const std::filesystem::path& meta_path) = 0;
+  virtual auto Sync() -> SyncResult = 0;
 };
 
 class SleeveServiceImpl final : public SleeveService {
  private:
-  std::unique_ptr<StorageService> storage_service_;
+  std::shared_ptr<StorageService> storage_service_;
   std::unique_ptr<FileSystem>     fs_;
   std::filesystem::path           db_path_;
-  std::filesystem::path           meta_path_;
 
   mutable std::mutex fs_lock_;  // Use a fat lock for now, but I have no plan to design a
                                 // fine-grained concurrency model for FS
 
  public:
   SleeveServiceImpl() = delete;
-  SleeveServiceImpl(const std::filesystem::path& meta_path);
-  SleeveServiceImpl(const std::filesystem::path& db_path, const std::filesystem::path& meta_path,
-                    sl_element_id_t start_id = 0);
+  SleeveServiceImpl(std::shared_ptr<StorageService> storage_service,
+                    const std::filesystem::path&   db_path,
+                    sl_element_id_t                start_id = 0);
 
   template <typename TResult>
   auto Read(std::function<TResult(FileSystem&)> operation) -> TResult {
@@ -109,7 +108,10 @@ class SleeveServiceImpl final : public SleeveService {
 
   auto Sync() -> SyncResult override;
 
-  void SaveSleeve(const std::filesystem::path& meta_path) override;
-  void LoadSleeve(const std::filesystem::path& meta_path) override;
+  auto GetCurrentID() const -> sl_element_id_t;
+
+  auto GetStorageService() -> std::shared_ptr<StorageService> {
+    return storage_service_;
+  }
 };
 };  // namespace puerhlab

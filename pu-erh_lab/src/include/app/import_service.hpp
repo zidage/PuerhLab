@@ -19,14 +19,12 @@
 #include <filesystem>
 #include <functional>
 #include <memory>
+#include <utility>
 
 #include "app/sleeve_service.hpp"
 #include "concurrency/thread_pool.hpp"
-#include "image/image.hpp"
-#include "sleeve/sleeve_filesystem.hpp"
 #include "storage/image_pool/image_pool_manager.hpp"
 #include "type/type.hpp"
-#include "utils/id/id_generator.hpp"
 #include "utils/import/import_log.hpp"
 
 namespace puerhlab {
@@ -117,16 +115,16 @@ class ImportServiceImpl final : public ImportService {
  public:
   
   ImportServiceImpl() = delete;
-  ImportServiceImpl(SleeveServiceImpl& fs_service, 
+  ImportServiceImpl(std::shared_ptr<SleeveServiceImpl> fs_service,
                     std::shared_ptr<ImagePoolManager> image_pool_manager)
-      : fs_service_(fs_service), image_pool_manager_(image_pool_manager) {}
+      : fs_service_(std::move(fs_service)), image_pool_manager_(std::move(image_pool_manager)) {}
   // ImportServiceImpl(std::shared_ptr<FileSystem>       fs,
                     // std::shared_ptr<ImagePoolManager> image_pool_manager)
       // : fs_(fs), image_pool_manager_(image_pool_manager), fs_service_() {}
 
   ~ImportServiceImpl()                                  = default;
 
-  SleeveServiceImpl& fs_service_;
+  std::shared_ptr<SleeveServiceImpl> fs_service_;
 
   std::shared_ptr<ImagePoolManager> image_pool_manager_ = nullptr;
 

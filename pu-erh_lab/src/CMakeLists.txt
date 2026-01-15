@@ -322,6 +322,11 @@ def_library(FSService
     PUBLIC_DEPS SleeveFS ImagePool EditHistory ImageWriter 
 )
 
+def_library(ProjectService
+    SOURCES app/project_service.cpp
+    PUBLIC_DEPS FSService StorageService StrConv JSON
+)
+
 def_library(ImportService
     SOURCES app/import_service.cpp
     PUBLIC_DEPS SleeveManager ImageWriter ImagePool

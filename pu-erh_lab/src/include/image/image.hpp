@@ -29,6 +29,8 @@
 
 namespace puerhlab {
 enum class ImageType { DEFAULT, JPEG, PNG, TIFF, ARW, CR2, CR3, NEF, DNG };
+enum class ThumbState : uint8_t { NOT_PRESENT = 0, PENDING, READY, FAILED };
+enum class ImageSyncState : uint8_t { SYNCED, UNSYNCED, MODIFIED, DELETED };
 
 /**
  * @brief Represent a tracked image file
@@ -49,6 +51,10 @@ class Image {
   ImageType               image_type_ = ImageType::DEFAULT;
 
   std::atomic<bool>       has_thumbnail_;
+
+  std::atomic<ThumbState> thumb_state_ = ThumbState::NOT_PRESENT;
+
+  std::atomic<ImageSyncState> sync_state_ = ImageSyncState::SYNCED;
 
   p_hash_t                checksum_;
 
@@ -77,7 +83,7 @@ class Image {
   auto                  GetImageData() -> cv::Mat&;
   auto                  GetThumbnailData() -> cv::Mat&;
   auto                  GetThumbnailBuffer() -> ImageBuffer&;
-  
+
   void                  SetId(image_id_t image_id);
   void                  SetExifDisplayMetaData(ExifDisplayMetaData&& exif_display);
 

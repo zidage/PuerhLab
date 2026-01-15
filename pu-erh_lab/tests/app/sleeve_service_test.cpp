@@ -1,5 +1,3 @@
-#include "app/sleeve_service.hpp"
-
 #include <gtest/gtest.h>
 
 #include <filesystem>
@@ -9,10 +7,10 @@
 #include <string>
 #include <vector>
 
+#include "app/project_service.hpp"
 #include "sleeve/sleeve_element/sleeve_element.hpp"
 #include "utils/clock/time_provider.hpp"
 #include "utils/string/convert.hpp"
-
 
 namespace puerhlab {
 class SleeveServiceTests : public ::testing::Test {
@@ -43,53 +41,56 @@ class SleeveServiceTests : public ::testing::Test {
 };
 
 TEST_F(SleeveServiceTests, InitAndCreateTest) {
-  SleeveServiceImpl service(db_path_, meta_path_, 0);
+  ProjectService project(db_path_, meta_path_, 0);
+  auto           service      = project.GetSleeveService();
 
-  auto              write_result = service.Write<std::shared_ptr<SleeveElement>>(
+  auto           write_result = service->Write<std::shared_ptr<SleeveElement>>(
       [](FileSystem& fs) { return fs.Create(L"", L"Folder", ElementType::FOLDER); });
   EXPECT_NE(write_result.first, nullptr);
   EXPECT_TRUE(write_result.second.success_);
 
-  service.Write<std::shared_ptr<SleeveElement>>(
+  service->Write<std::shared_ptr<SleeveElement>>(
       [](FileSystem& fs) { return fs.Create(L"/Folder", L"File", ElementType::FILE); });
 
-  auto file = service.Read<std::shared_ptr<SleeveElement>>(
+  auto file = service->Read<std::shared_ptr<SleeveElement>>(
       [](FileSystem& fs) { return fs.Get(L"/Folder/File", false); });
   ASSERT_NE(file, nullptr);
   EXPECT_EQ(file->element_name_, L"File");
 }
 
 TEST_F(SleeveServiceTests, DeleteTest) {
-  SleeveServiceImpl service(db_path_, meta_path_, 0);
+  ProjectService project(db_path_, meta_path_, 0);
+  auto           service = project.GetSleeveService();
 
-  service.Write<std::shared_ptr<SleeveElement>>(
+  service->Write<std::shared_ptr<SleeveElement>>(
       [](FileSystem& fs) { return fs.Create(L"", L"File", ElementType::FILE); });
-  service.Write<bool>([](FileSystem& fs) {
+  service->Write<bool>([](FileSystem& fs) {
     fs.Delete(L"/File");
     return true;
   });
 
-  EXPECT_THROW(service.Read<std::shared_ptr<SleeveElement>>(
+  EXPECT_THROW(service->Read<std::shared_ptr<SleeveElement>>(
                    [](FileSystem& fs) { return fs.Get(L"/File", false); }),
                std::runtime_error);
 }
 
 TEST_F(SleeveServiceTests, CopyTest) {
-  SleeveServiceImpl service(db_path_, meta_path_, 0);
+  ProjectService project(db_path_, meta_path_, 0);
+  auto           service = project.GetSleeveService();
 
-  service.Write<std::shared_ptr<SleeveElement>>(
+  service->Write<std::shared_ptr<SleeveElement>>(
       [](FileSystem& fs) { return fs.Create(L"", L"Folder", ElementType::FOLDER); });
-  service.Write<std::shared_ptr<SleeveElement>>(
+  service->Write<std::shared_ptr<SleeveElement>>(
       [](FileSystem& fs) { return fs.Create(L"/Folder", L"Subfolder", ElementType::FOLDER); });
-  service.Write<std::shared_ptr<SleeveElement>>(
+  service->Write<std::shared_ptr<SleeveElement>>(
       [](FileSystem& fs) { return fs.Create(L"/Folder/Subfolder", L"Linux", ElementType::FILE); });
 
-  service.Write<bool>([](FileSystem& fs) {
+  service->Write<bool>([](FileSystem& fs) {
     fs.Copy(L"/Folder/Subfolder", L"/");
     return true;
   });
 
-  auto tree     = service.Read<std::wstring>([](FileSystem& fs) { return fs.Tree(L"/"); });
+  auto tree     = service->Read<std::wstring>([](FileSystem& fs) { return fs.Tree(L"/"); });
   auto tree_str = conv::ToBytes(tree);
   EXPECT_NE(tree_str.find("Subfolder"), std::string::npos);
   EXPECT_NE(tree_str.find("Linux"), std::string::npos);
@@ -97,17 +98,20 @@ TEST_F(SleeveServiceTests, CopyTest) {
 
 TEST_F(SleeveServiceTests, SaveLoadTest) {
   {
-    SleeveServiceImpl service(db_path_, meta_path_, 0);
-    service.Write<std::shared_ptr<SleeveElement>>(
+    ProjectService project(db_path_, meta_path_, 0);
+    auto           service = project.GetSleeveService();
+    service->Write<std::shared_ptr<SleeveElement>>(
         [](FileSystem& fs) { return fs.Create(L"", L"Folder", ElementType::FOLDER); });
-    service.Write<std::shared_ptr<SleeveElement>>(
+    service->Write<std::shared_ptr<SleeveElement>>(
         [](FileSystem& fs) { return fs.Create(L"/Folder", L"File", ElementType::FILE); });
 
-    service.SaveSleeve(meta_path_);
+    project.SaveProject(meta_path_);
   }
 
-  SleeveServiceImpl reloaded_service(meta_path_);
-  auto              file = reloaded_service.Read<std::shared_ptr<SleeveElement>>(
+  ProjectService reloaded_project(db_path_, meta_path_, 0);
+  // reloaded_project.LoadProject(meta_path_);
+  auto           reloaded_service = reloaded_project.GetSleeveService();
+  auto           file             = reloaded_service->Read<std::shared_ptr<SleeveElement>>(
       [](FileSystem& fs) { return fs.Get(L"/Folder/File", false); });
   ASSERT_NE(file, nullptr);
   EXPECT_EQ(file->element_name_, L"File");
@@ -116,7 +120,8 @@ TEST_F(SleeveServiceTests, SaveLoadTest) {
 TEST_F(SleeveServiceTests, FuzzyCreateCopyTest) {
   std::wstring first_tree;
   {
-    SleeveServiceImpl         service(db_path_, meta_path_, 0);
+    ProjectService            project(db_path_, meta_path_, 0);
+    auto                      service = project.GetSleeveService();
 
     std::mt19937              gen(42);
     std::vector<std::wstring> known_paths;
@@ -151,7 +156,7 @@ TEST_F(SleeveServiceTests, FuzzyCreateCopyTest) {
         ElementType type = (gen() % 2 == 0) ? ElementType::FOLDER : ElementType::FILE;
 
         try {
-          service.Write<std::shared_ptr<SleeveElement>>(
+          service->Write_NoSync<std::shared_ptr<SleeveElement>>(
               [&](FileSystem& fs) { return fs.Create(parent, name, type); });
           std::wstring new_path = parent + L"/" + name;
           known_paths.push_back(new_path);
@@ -168,7 +173,7 @@ TEST_F(SleeveServiceTests, FuzzyCreateCopyTest) {
         std::wstring                          to_parent = known_folders[dest_dist(gen)];
 
         try {
-          service.Write<bool>([&](FileSystem& fs) {
+          service->Write_NoSync<bool>([&](FileSystem& fs) {
             fs.Copy(from_path, to_parent);
             return true;
           });
@@ -179,14 +184,17 @@ TEST_F(SleeveServiceTests, FuzzyCreateCopyTest) {
       std::cout << "\r\033[2KCompleted operation " << (i + 1) << " / " << kOperations << std::flush;
     }
 
-    first_tree = service.Read<std::wstring>([](FileSystem& fs) { return fs.Tree(L"/"); });
-    service.SaveSleeve(meta_path_);
+    first_tree = service->Read<std::wstring>([](FileSystem& fs) { return fs.Tree(L"/"); });
+    service->Sync();
+    project.SaveProject(meta_path_);
   }
   std::cout << std::endl;
 
-  SleeveServiceImpl reloaded_service(meta_path_);
-  auto              second_tree =
-      reloaded_service.Read<std::wstring>([](FileSystem& fs) { return fs.Tree(L"/"); });
+  ProjectService reloaded_project(db_path_, meta_path_, 0);
+  // reloaded_project.LoadProject(meta_path_);
+  auto           reloaded_service = reloaded_project.GetSleeveService();
+  auto           second_tree =
+      reloaded_service->Read<std::wstring>([](FileSystem& fs) { return fs.Tree(L"/"); });
 
   EXPECT_EQ(conv::ToBytes(first_tree), conv::ToBytes(second_tree));
 }

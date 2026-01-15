@@ -63,9 +63,11 @@ auto DBController::GetConnectionGuard() -> ConnectionGuard {
  */
 void DBController::InitializeDB() {
   // SQL query to create the necessary tables
+  
   std::string utf8_str = conv::ToBytes(db_path_.wstring());
-  if (duckdb_open(utf8_str.c_str(), &db_) != DuckDBSuccess) {
-    throw std::runtime_error("DB cannot be created");
+  auto        state    = duckdb_open(utf8_str.c_str(), &db_);
+  if (state != DuckDBSuccess) {
+    throw std::runtime_error("DB cannot be opened or created" );
   }
 
   // SQL query to create the tables

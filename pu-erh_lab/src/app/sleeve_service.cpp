@@ -14,59 +14,18 @@
 
 #include "app/sleeve_service.hpp"
 
-#include <mutex>
-
-#include "sleeve/storage_service.hpp"
-#include "utils/string/convert.hpp"
+#include <stdexcept>
 
 namespace puerhlab {
-SleeveServiceImpl::SleeveServiceImpl(const std::filesystem::path& meta_path) {
-  meta_path_ = meta_path;
-  // Recover a already existing sleeve
-  LoadSleeve(meta_path_);
-}
-
-SleeveServiceImpl::SleeveServiceImpl(const std::filesystem::path& db_path,
-                                     const std::filesystem::path& meta_path,
-                                     sl_element_id_t              start_id) {
-  // Create a fresh sleeve
-  db_path_         = db_path;
-  meta_path_       = meta_path;
-  storage_service_ = std::make_unique<StorageService>(db_path_);
-  fs_              = std::make_unique<FileSystem>(db_path_, *storage_service_, start_id);
+SleeveServiceImpl::SleeveServiceImpl(std::shared_ptr<StorageService> storage_service,
+                                     const std::filesystem::path&   db_path,
+                                     sl_element_id_t                start_id)
+    : storage_service_(std::move(storage_service)), db_path_(db_path) {
+  if (!storage_service_) {
+    throw std::invalid_argument("StorageService is null");
+  }
+  fs_ = std::make_unique<FileSystem>(db_path_, *storage_service_, start_id);
   fs_->InitRoot();
-}
-
-void SleeveServiceImpl::SaveSleeve(const std::filesystem::path& meta_path) {
-  std::lock_guard<std::mutex> lock(fs_lock_);
-  nlohmann::json              metadata;
-  meta_path_            = meta_path;
-  metadata["db_path"]   = conv::ToBytes(db_path_.wstring());
-  metadata["meta_path"] = conv::ToBytes(meta_path_.wstring());
-  metadata["start_id"]  = fs_->GetCurrentID();
-
-  std::ofstream file(meta_path);
-  if (file.is_open()) {
-    file << metadata.dump(4);
-    file.close();
-  }
-}
-
-void SleeveServiceImpl::LoadSleeve(const std::filesystem::path& meta_path) {
-  std::lock_guard<std::mutex> lock(fs_lock_);
-  std::ifstream               file(meta_path);
-  if (file.is_open()) {
-    nlohmann::json metadata;
-    file >> metadata;
-    db_path_                 = std::filesystem::path(conv::FromBytes(metadata["db_path"]));
-    meta_path_               = std::filesystem::path(conv::FromBytes(metadata["meta_path"]));
-    sl_element_id_t start_id = static_cast<sl_element_id_t>(metadata["start_id"]);
-    storage_service_         = std::make_unique<StorageService>(db_path_);
-    fs_                      = std::make_unique<FileSystem>(db_path_, *storage_service_, start_id);
-
-    // Re-init the root to trigger loading from DB
-    fs_->InitRoot();
-  }
 }
 
 auto SleeveServiceImpl::Sync() -> SyncResult {
@@ -102,5 +61,10 @@ auto SleeveServiceImpl::Sync() -> SyncResult {
     result.message_ = e.what();
   }
   return result;
+}
+
+auto SleeveServiceImpl::GetCurrentID() const -> sl_element_id_t {
+  std::lock_guard<std::mutex> lock(fs_lock_);
+  return fs_->GetCurrentID();
 }
 };  // namespace puerhlab
