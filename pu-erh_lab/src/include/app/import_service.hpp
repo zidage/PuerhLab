@@ -124,7 +124,7 @@ class ImportServiceImpl final : public ImportService {
   std::shared_ptr<FileSystem>       fs_                 = nullptr;
   std::shared_ptr<ImagePoolManager> image_pool_manager_ = nullptr;
 
-  ThreadPool                        thread_pool_{4};
+  ThreadPool                        thread_pool_{8};
 
   auto ImportToFolder(const std::vector<image_path_t>& paths, const image_path_t& dest,
                       const ImportOptions& options = {}, std::shared_ptr<ImportJob> job = nullptr)

@@ -120,6 +120,7 @@ void FileSystem::Copy(std::filesystem::path from, std::filesystem::path dest) {
 auto FileSystem::ApplyFilterToFolder(const std::filesystem::path&       folder_path,
                                      const std::shared_ptr<FilterCombo> filter)
     -> std::vector<std::shared_ptr<SleeveElement>> {
+  // TODO: Decouple this into a separate FilterService
   if (!resolver_.Contains(folder_path, ElementType::FOLDER)) {
     throw std::runtime_error("Filesystem: Specified folder does not exist");
   }
@@ -161,6 +162,28 @@ auto FileSystem::ApplyFilterToFolder(const std::filesystem::path&       folder_p
     result_elements.push_back(Get(id));
   }
   return result_elements;
+}
+
+auto FileSystem::GetModifiedElements() -> std::vector<std::shared_ptr<SleeveElement>> {
+  std::vector<std::shared_ptr<SleeveElement>> modified_elements;
+  for (auto& pair : storage_) {
+    auto element = pair.second;
+    if (element->sync_flag_ == SyncFlag::MODIFIED) {
+      modified_elements.push_back(element);
+    }
+  }
+  return modified_elements;
+}
+
+auto FileSystem::GetUnsyncedElements() -> std::vector<std::shared_ptr<SleeveElement>> {
+  std::vector<std::shared_ptr<SleeveElement>> unsynced_elements;
+  for (auto& pair : storage_) {
+    auto element = pair.second;
+    if (element->sync_flag_ == SyncFlag::UNSYNC) {
+      unsynced_elements.push_back(element);
+    }
+  }
+  return unsynced_elements;
 }
 
 void FileSystem::SyncToDB() {

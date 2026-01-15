@@ -23,6 +23,10 @@ target_compile_definitions(SingleThumbnailLoad PRIVATE LIBRAW_NODLL)
 # target_include_directories(ImageLoaderTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
 # target_link_libraries(ImageLoaderTest PRIVATE GTest::gtest_main ImageDecoder ImageLoader Exiv2)
 
+# FIXME: Due to the introduction of Application layer, these tests need to be reworked
+# But since they are using the low-level storage APIs, they can still be useful for testing
+# However, some unit tests will be moved to App. layer tests later.
+
 add_executable(ImagePoolTest storage/image_pool_test.cpp)
 target_include_directories(ImagePoolTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
 target_link_libraries(ImagePoolTest PRIVATE GTest::gtest_main Image ImagePool)

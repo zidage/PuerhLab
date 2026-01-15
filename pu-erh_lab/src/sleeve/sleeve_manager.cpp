@@ -65,8 +65,9 @@ auto SleeveManager::GetImgCount() -> uint32_t { return image_pool_->Capacity(Acc
 
 /**
  * @brief Load a batch of images to the destination path
- * FIXME: This function should be moved to another module
- *
+ * Update: This function is already moved to ImportService
+ * FIXME: some tests are still relying on this function
+ * 
  * @param img_os_paths
  * @param dest
  * @return uint32_t
@@ -84,6 +85,8 @@ auto SleeveManager::LoadToPath(std::vector<image_path_t> img_os_paths, sl_path_t
     total_size++;
     --expected_size;
   }
+  // FIXME: The following two function is used in the filter tests
+  // So we can't remove them yet
   fs_->SyncToDB();
   storage_service_.GetImageController().CaptureImagePool(image_pool_);
   return total_size;

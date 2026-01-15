@@ -260,7 +260,7 @@ set(SERVICE_SRCS
     storage/service/pipeline/pipeline_service.cpp
 )
 
-def_library(SleeveService
+def_library(StorageService
     SOURCES ${SERVICE_SRCS}
     PUBLIC_DEPS DuckDB DuckORM SleeveMapper StrConv PipelineScheduler
 )
@@ -275,7 +275,7 @@ set(CONTROLLER_SRCS
 
 def_library(SleeveController
     SOURCES ${CONTROLLER_SRCS}
-    PUBLIC_DEPS DuckDB SleeveService StrConv
+    PUBLIC_DEPS DuckDB StorageService StrConv
 )
 
 # ==============================================================================
@@ -317,6 +317,10 @@ def_library(ImageWriter
 # ==============================================================================
 # 9. Services
 # ==============================================================================
+def_library(FSService
+    SOURCES app/sleeve_service.cpp
+    PUBLIC_DEPS SleeveFS ImagePool EditHistory ImageWriter 
+)
 
 def_library(ImportService
     SOURCES app/import_service.cpp

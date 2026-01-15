@@ -39,6 +39,8 @@ auto ImportServiceImpl::ImportToFolder(const std::vector<image_path_t>& paths,
                                        const image_path_t& dest, const ImportOptions& options,
                                        std::shared_ptr<ImportJob> job)
     -> std::shared_ptr<ImportJob> {
+  // TODO: Use sleeve service to interact with FS
+  // The current implementation is a temporary solution
   auto import_log = std::make_shared<ImportLog>();
   if (job) {
     job->import_log_ = import_log;

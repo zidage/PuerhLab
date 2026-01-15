@@ -66,9 +66,16 @@ class FileSystem {
 
   void Copy(std::filesystem::path from, std::filesystem::path dest);
 
-  void SyncToDB();
-  void WriteSleeveMeta(const std::filesystem::path& meta_path);
-  void ReadSleeveMeta(const std::filesystem::path& meta_path);
+  [[deprecated("Deprecated, use the one from SleeveService instead")]] void SyncToDB();
+  [[deprecated("Deprecated, use the one from SleeveService instead")]] void WriteSleeveMeta(
+      const std::filesystem::path& meta_path);
+  [[deprecated("Deprecated, use the one from SleeveService instead")]] void ReadSleeveMeta(
+      const std::filesystem::path& meta_path);
+
+  auto GetCurrentID() -> sl_element_id_t { return id_gen_.GetCurrentID(); }
+
+  auto GetModifiedElements() -> std::vector<std::shared_ptr<SleeveElement>>;
+  auto GetUnsyncedElements() -> std::vector<std::shared_ptr<SleeveElement>>;
 
   auto Tree(const std::filesystem::path& path) -> std::wstring;
 };
