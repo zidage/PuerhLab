@@ -26,7 +26,7 @@
 namespace puerhlab {
 enum class ElementType { FILE, FOLDER };
 
-enum class SyncFlag { UNSYNC, MODIFIED, SYNCED };
+enum class SyncFlag { UNSYNC, MODIFIED, SYNCED, DELETED };
 /**
  * @brief Abstract objects residing in a sleeve, it can be files or folders
  *

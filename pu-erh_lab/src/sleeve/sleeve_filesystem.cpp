@@ -99,6 +99,29 @@ void FileSystem::Delete(std::filesystem::path target) {
   auto delete_node    = storage_.at(delete_node_id.value());
   delete_node->DecrementRefCount();
 
+  if (delete_node->ref_count_ <= 0) {
+    // Mark the node as deleted in storage handler
+    // If it's a folder, recursively decrement children's ref count
+    // If the child's ref count reaches 0, decrement its children's ref count, and so on.
+    if (delete_node->type_ == ElementType::FOLDER) {
+      auto delete_folder = std::static_pointer_cast<SleeveFolder>(delete_node);
+      storage_handler_.EnsureChildrenLoaded(delete_folder);
+      auto& children = delete_folder->ListElements();
+      for (auto& child_id : children) {
+        auto child = storage_.at(child_id);
+        child->DecrementRefCount();
+        if (child->ref_count_ <= 0 && child->type_ == ElementType::FOLDER) {
+          // Recursively decrement
+          std::filesystem::path child_path =
+              target / child->element_name_;  // Construct child's path for resolver
+          Delete(child_path);
+        }
+      }
+    }
+
+
+  }
+
   parent_write_node->RemoveNameFromMap(delete_node_name.wstring());
 }
 
@@ -184,6 +207,17 @@ auto FileSystem::GetUnsyncedElements() -> std::vector<std::shared_ptr<SleeveElem
     }
   }
   return unsynced_elements;
+}
+
+auto FileSystem::GetDeletedElements() -> std::vector<std::shared_ptr<SleeveElement>> {
+  std::vector<std::shared_ptr<SleeveElement>> deleted_elements;
+  for (auto& pair : storage_) {
+    auto element = pair.second;
+    if (element->sync_flag_ == SyncFlag::DELETED) {
+      deleted_elements.push_back(element);
+    }
+  }
+  return deleted_elements;
 }
 
 void FileSystem::SyncToDB() {

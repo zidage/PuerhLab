@@ -48,7 +48,12 @@ void SleeveElement::SetLastModifiedTime() {
 
 void SleeveElement::IncrementRefCount() { ++ref_count_; }
 
-void SleeveElement::DecrementRefCount() { --ref_count_; }
+void SleeveElement::DecrementRefCount() {
+  --ref_count_;
+  if (ref_count_ <= 0) {
+    sync_flag_ = SyncFlag::DELETED;
+  }
+}
 
 auto SleeveElement::IsShared() -> bool { return ref_count_ > 1; }
 

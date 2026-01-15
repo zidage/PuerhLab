@@ -92,6 +92,9 @@ auto PathResolver::Resolve(const std::filesystem::path& path) -> std::shared_ptr
     }
 
     current = storage_handler_.GetElement(next_id.value());
+    if (current->sync_flag_ == SyncFlag::DELETED) {
+      throw std::runtime_error("Path Resolver: Illegal path. Target does not exist");
+    }
   }
   directory_cache_.RecordAccess(path.wstring(), current->element_id_);
   return current;

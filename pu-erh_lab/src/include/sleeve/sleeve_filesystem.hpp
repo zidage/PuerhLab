@@ -76,6 +76,9 @@ class FileSystem {
 
   auto GetModifiedElements() -> std::vector<std::shared_ptr<SleeveElement>>;
   auto GetUnsyncedElements() -> std::vector<std::shared_ptr<SleeveElement>>;
+  auto GetDeletedElements() -> std::vector<std::shared_ptr<SleeveElement>>;
+
+  void GarbageCollect() { storage_handler_.GarbageCollect(); }
 
   auto Tree(const std::filesystem::path& path) -> std::wstring;
 };
