@@ -61,7 +61,7 @@ auto SleeveManager::GetView() -> std::shared_ptr<SleeveView> { return view_; }
 
 auto SleeveManager::GetPool() -> std::shared_ptr<ImagePoolManager> { return image_pool_; }
 
-auto SleeveManager::GetImgCount() -> uint32_t { return image_pool_->Capacity(AccessType::META); }
+auto SleeveManager::GetImgCount() -> uint32_t { return image_pool_->Capacity(); }
 
 /**
  * @brief Load a batch of images to the destination path

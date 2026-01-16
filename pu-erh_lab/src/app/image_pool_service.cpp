@@ -29,6 +29,11 @@ ImagePoolServiceImpl::ImagePoolServiceImpl(std::shared_ptr<StorageService> stora
   pool_manager_ = std::make_unique<ImagePoolManager>(start_id);
 }
 
+auto ImagePoolServiceImpl::CreateAndReturnPinnedEmpty() -> ImagePoolManager::PinnedImageHandle {
+  std::unique_lock       lock(pool_lock_);
+  return pool_manager_->CreateAndReturnPinnedEmpty();
+}
+
 void ImagePoolServiceImpl::Remove(image_id_t image_id) {
   std::unique_lock lock(pool_lock_);
   if (!pool_manager_) {
@@ -36,21 +41,20 @@ void ImagePoolServiceImpl::Remove(image_id_t image_id) {
   }
 
   // Check if the image exists in the pool
-  if (pool_manager_->PoolContains(image_id)) {
-    auto img = pool_manager_->GetPool()[image_id];
+  auto img = pool_manager_->GetImage(image_id);
+  if (img) {
     img->MarkSyncState(ImageSyncState::DELETED);
   } else {
     // Check in the storage
-    auto result = storage_service_->GetImageController().GetImageById(image_id);
-    if (!result) {
-      throw std::runtime_error(
-          std::format("[ERROR] ImagePoolService: Image with ID {} not found in storage.",
-                      image_id));
+    try {
+      storage_service_->GetImageController().RemoveImageById(image_id);
+    } catch (std::exception& e) {
+      throw std::runtime_error(std::format(
+          "[ERROR] ImagePoolService: Failed to remove image with ID {} from storage: {}", image_id,
+          e.what()));
     }
-    auto img = result;
-    img->MarkSyncState(ImageSyncState::DELETED);
-    pool_manager_->Insert(img);
   }
+
 }
 
 auto ImagePoolServiceImpl::SyncWithStorage() -> ImagePoolSyncStatus {
@@ -97,6 +101,14 @@ auto ImagePoolServiceImpl::SyncWithStorage() -> ImagePoolSyncStatus {
     pool_manager_->GetPool().erase(id);
   }
   return status;
+}
+
+auto ImagePoolServiceImpl::GetCurrentID() -> image_id_t {
+  std::unique_lock lock(pool_lock_);
+  if (!pool_manager_) {
+    throw std::runtime_error("[ERROR] ImagePoolService: Pool manager is not initialized.");
+  }
+  return pool_manager_->GetCurrentID();
 }
 
 };  // namespace puerhlab

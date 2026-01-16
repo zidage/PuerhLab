@@ -91,11 +91,12 @@ auto ImportServiceImpl::ImportToFolder(const std::vector<image_path_t>& paths,
       continue;
     }
     // Create the corresponding image file
-    auto sleeve_file = std::static_pointer_cast<SleeveFile>(element);
+    auto sleeve_file   = std::static_pointer_cast<SleeveFile>(element);
 
-    auto image_ptr   = image_pool_manager_->InsertEmpty();
+    // auto image_ptr   = image_pool_manager_->InsertEmpty();
+    auto image_handler = image_pool_service_->CreateAndReturnPinnedEmpty();
 
-    if (!image_ptr) {
+    if (!image_handler) {
       progress_ptr->failed_.fetch_add(1);
       if (job && job->on_progress_) {
         job->on_progress_(*progress_ptr);
@@ -103,6 +104,9 @@ auto ImportServiceImpl::ImportToFolder(const std::vector<image_path_t>& paths,
       continue;
     }
 
+    auto image_handler_ptr =
+        std::make_shared<ImagePoolManager::PinnedImageHandle>(std::move(image_handler));
+    auto  image_ptr = image_handler_ptr->Get();
     image_ptr->image_path_ = image_path;
     image_ptr->image_name_ = image_path.filename().wstring();
     // TODO: Parse image type for future use
@@ -118,7 +122,8 @@ auto ImportServiceImpl::ImportToFolder(const std::vector<image_path_t>& paths,
     any_threadpool_submission = true;
 
     // Submit the metadata extraction task to thread pool
-    thread_pool_.Submit([image_ptr, image_path, progress_ptr, job, import_log]() {
+    thread_pool_.Submit([image_handler_ptr, image_ptr, image_path, progress_ptr, job,
+                         import_log]() {
       if (job && job->IsCancelationAcked()) {
         return;
       }
@@ -130,6 +135,7 @@ auto ImportServiceImpl::ImportToFolder(const std::vector<image_path_t>& paths,
         }
         // Update progress
         progress_ptr->metadata_done_.fetch_add(1);
+
       } catch (...) {
         progress_ptr->failed_.fetch_add(1);
       }
@@ -158,7 +164,7 @@ auto ImportServiceImpl::ImportToFolder(const std::vector<image_path_t>& paths,
 
 void ImportServiceImpl::SyncImports(const ImportLogSnapshot& log_snapshot,
                                     const image_path_t&      dest) {
-  if (!image_pool_manager_) {
+  if (!image_pool_service_) {
     return;
   }
 
@@ -172,9 +178,7 @@ void ImportServiceImpl::SyncImports(const ImportLogSnapshot& log_snapshot,
       }
     }
 
-    auto& pool = image_pool_manager_->GetPool();
-    pool.erase(entry.image_id_);
-
+    image_pool_service_->SyncWithStorage();
     fs_service_->Sync();
   }
 }

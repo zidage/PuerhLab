@@ -41,7 +41,7 @@ class SleeveServiceTests : public ::testing::Test {
 };
 
 TEST_F(SleeveServiceTests, InitAndCreateTest) {
-  ProjectService project(db_path_, meta_path_, 0);
+  ProjectService project(db_path_, meta_path_);
   auto           service      = project.GetSleeveService();
 
   auto           write_result = service->Write<std::shared_ptr<SleeveElement>>(
@@ -59,7 +59,7 @@ TEST_F(SleeveServiceTests, InitAndCreateTest) {
 }
 
 TEST_F(SleeveServiceTests, DeleteTest) {
-  ProjectService project(db_path_, meta_path_, 0);
+  ProjectService project(db_path_, meta_path_);
   auto           service = project.GetSleeveService();
 
   service->Write<std::shared_ptr<SleeveElement>>(
@@ -75,7 +75,7 @@ TEST_F(SleeveServiceTests, DeleteTest) {
 }
 
 TEST_F(SleeveServiceTests, CopyTest) {
-  ProjectService project(db_path_, meta_path_, 0);
+  ProjectService project(db_path_, meta_path_);
   auto           service = project.GetSleeveService();
 
   service->Write<std::shared_ptr<SleeveElement>>(
@@ -98,7 +98,7 @@ TEST_F(SleeveServiceTests, CopyTest) {
 
 TEST_F(SleeveServiceTests, SaveLoadTest) {
   {
-    ProjectService project(db_path_, meta_path_, 0);
+    ProjectService project(db_path_, meta_path_);
     auto           service = project.GetSleeveService();
     service->Write<std::shared_ptr<SleeveElement>>(
         [](FileSystem& fs) { return fs.Create(L"", L"Folder", ElementType::FOLDER); });
@@ -108,7 +108,7 @@ TEST_F(SleeveServiceTests, SaveLoadTest) {
     project.SaveProject(meta_path_);
   }
 
-  ProjectService reloaded_project(db_path_, meta_path_, 0);
+  ProjectService reloaded_project(db_path_, meta_path_);
   // reloaded_project.LoadProject(meta_path_);
   auto           reloaded_service = reloaded_project.GetSleeveService();
   auto           file             = reloaded_service->Read<std::shared_ptr<SleeveElement>>(
@@ -120,7 +120,7 @@ TEST_F(SleeveServiceTests, SaveLoadTest) {
 TEST_F(SleeveServiceTests, FuzzyCreateCopyTest) {
   std::wstring first_tree;
   {
-    ProjectService            project(db_path_, meta_path_, 0);
+    ProjectService            project(db_path_, meta_path_);
     auto                      service = project.GetSleeveService();
 
     std::mt19937              gen(42);
@@ -190,7 +190,7 @@ TEST_F(SleeveServiceTests, FuzzyCreateCopyTest) {
   }
   std::cout << std::endl;
 
-  ProjectService reloaded_project(db_path_, meta_path_, 0);
+  ProjectService reloaded_project(db_path_, meta_path_);
   // reloaded_project.LoadProject(meta_path_);
   auto           reloaded_service = reloaded_project.GetSleeveService();
   auto           second_tree =

@@ -23,6 +23,7 @@
 
 #include "app/sleeve_service.hpp"
 #include "concurrency/thread_pool.hpp"
+#include "image_pool_service.hpp"
 #include "storage/image_pool/image_pool_manager.hpp"
 #include "type/type.hpp"
 #include "utils/import/import_log.hpp"
@@ -105,36 +106,33 @@ class ImportService {
   virtual auto ImportToFolder(const std::vector<image_path_t>& paths, const image_path_t& dest,
                               const ImportOptions&       options = {},
                               std::shared_ptr<ImportJob> job     = nullptr)
-      -> std::shared_ptr<ImportJob>                           = 0;
+      -> std::shared_ptr<ImportJob>                                                         = 0;
 
-  virtual void SyncImports(const ImportLogSnapshot& log_snapshot,
-                                    const image_path_t&      dest) = 0;
+  virtual void SyncImports(const ImportLogSnapshot& log_snapshot, const image_path_t& dest) = 0;
 };
 
 class ImportServiceImpl final : public ImportService {
  public:
-  
   ImportServiceImpl() = delete;
   ImportServiceImpl(std::shared_ptr<SleeveServiceImpl> fs_service,
-                    std::shared_ptr<ImagePoolManager> image_pool_manager)
-      : fs_service_(std::move(fs_service)), image_pool_manager_(std::move(image_pool_manager)) {}
+                    std::shared_ptr<ImagePoolServiceImpl>  image_pool_service)
+      : fs_service_(fs_service), image_pool_service_(image_pool_service) {}
   // ImportServiceImpl(std::shared_ptr<FileSystem>       fs,
-                    // std::shared_ptr<ImagePoolManager> image_pool_manager)
-      // : fs_(fs), image_pool_manager_(image_pool_manager), fs_service_() {}
+  // std::shared_ptr<ImagePoolManager> image_pool_manager)
+  // : fs_(fs), image_pool_manager_(image_pool_manager), fs_service_() {}
 
-  ~ImportServiceImpl()                                  = default;
+  ~ImportServiceImpl() = default;
 
-  std::shared_ptr<SleeveServiceImpl> fs_service_;
+  std::shared_ptr<SleeveServiceImpl>    fs_service_;
 
-  std::shared_ptr<ImagePoolManager> image_pool_manager_ = nullptr;
+  std::shared_ptr<ImagePoolServiceImpl> image_pool_service_ = nullptr;
 
-  ThreadPool                        thread_pool_{8};
+  ThreadPool                            thread_pool_{8};
 
   auto ImportToFolder(const std::vector<image_path_t>& paths, const image_path_t& dest,
                       const ImportOptions& options = {}, std::shared_ptr<ImportJob> job = nullptr)
       -> std::shared_ptr<ImportJob> override;
 
-  void SyncImports(const ImportLogSnapshot& log_snapshot,
-                            const image_path_t&      dest) override;
+  void SyncImports(const ImportLogSnapshot& log_snapshot, const image_path_t& dest) override;
 };
 };  // namespace puerhlab

@@ -14,11 +14,10 @@
 
 #pragma once
 
-#include <cstdint>
 #include <memory>
+#include <type_traits>
 
 #include "image/image.hpp"
-#include "image/image_buffer.hpp"
 #include "sleeve/storage_service.hpp"
 #include "storage/image_pool/image_pool_manager.hpp"
 #include "type/type.hpp"
@@ -38,7 +37,6 @@ class ImagePoolService {
  public:
   virtual ~ImagePoolService()                                                     = default;
 
-  virtual void CreateEmpty(std::function<void(std::shared_ptr<Image>)> operation) = 0;
 
   template <typename TResult>
   auto Read(image_id_t image_id, std::function<TResult(std::shared_ptr<Image>)> operation)
@@ -46,15 +44,18 @@ class ImagePoolService {
 
   template <typename TResult>
   auto Write(image_id_t image_id, std::function<TResult(std::shared_ptr<Image>)> operation)
-      -> std::pair<TResult, ImagePoolSyncStatus>;
+      -> std::conditional_t<std::is_void_v<TResult>, ImagePoolSyncStatus,
+                            std::pair<TResult, ImagePoolSyncStatus>>;
 
   template <typename TResult>
   auto Write_NoSync(image_id_t image_id, std::function<TResult(std::shared_ptr<Image>)> operation)
       -> TResult;
 
-  virtual void         Remove(image_id_t image_id) = 0;
+  virtual void Remove(image_id_t image_id)              = 0;
 
   virtual auto SyncWithStorage() -> ImagePoolSyncStatus = 0;
+
+  virtual auto GetCurrentID() -> image_id_t             = 0;
 };
 
 class ImagePoolServiceImpl final : public ImagePoolService {
@@ -71,16 +72,6 @@ class ImagePoolServiceImpl final : public ImagePoolService {
 
   ~ImagePoolServiceImpl() = default;
 
-  void CreateEmpty(std::function<void(std::shared_ptr<Image>)> operation) override {
-    std::unique_lock lock(pool_lock_);
-    if (!pool_manager_) {
-      throw std::runtime_error("[ERROR] ImagePoolService: Pool manager is not initialized.");
-    }
-    auto img = pool_manager_->InsertEmpty();
-    img->MarkSyncState(ImageSyncState::UNSYNCED);
-    operation(img);
-  }
-
   template <typename TResult>
   auto Read(image_id_t image_id, std::function<TResult(std::shared_ptr<Image>)> operation)
       -> TResult {
@@ -90,10 +81,8 @@ class ImagePoolServiceImpl final : public ImagePoolService {
     }
 
     // Check if the image exists in the pool
-    std::shared_ptr<Image> img = nullptr;
-    if (pool_manager_->PoolContains(image_id)) {
-      img = pool_manager_->GetPool()[image_id];
-    } else {
+    std::shared_ptr<Image> img = pool_manager_->GetImage(image_id);
+    if (!img) {
       // Check in the storage
       auto& img_ctrl = storage_service_->GetImageController();
       img            = img_ctrl.GetImageById(image_id);
@@ -116,21 +105,20 @@ class ImagePoolServiceImpl final : public ImagePoolService {
 
   template <typename TResult>
   auto Write(image_id_t image_id, std::function<TResult(std::shared_ptr<Image>)> operation)
-      -> std::pair<TResult, ImagePoolSyncStatus> {
+      -> std::conditional_t<std::is_void_v<TResult>, ImagePoolSyncStatus,
+                            std::pair<TResult, ImagePoolSyncStatus>> {
     std::unique_lock       lock(pool_lock_);
     ImagePoolSyncStatus    status;
     std::shared_ptr<Image> img;
 
     // Check if the image exists in the pool
-    if (pool_manager_->PoolContains(image_id)) {
-      img = pool_manager_->GetPool()[image_id];
-    } else {
+    img = pool_manager_->GetImage(image_id);
+    if (!img) {
       // Check in the storage
       auto result = storage_service_->GetImageController().GetImageById(image_id);
       if (!result) {
-        status.failed_images_.push_back(
-            {image_id, std::format("Image with ID {} not found in storage.", image_id)});
-        return status;
+        throw std::runtime_error(std::format(
+            "[ERROR] ImagePoolService: Image with ID {} not found in storage.", image_id));
       }
       img = result;
       pool_manager_->Insert(img);
@@ -152,19 +140,17 @@ class ImagePoolServiceImpl final : public ImagePoolService {
   template <typename TResult>
   auto Write_NoSync(image_id_t image_id, std::function<TResult(std::shared_ptr<Image>)> operation)
       -> TResult {
-    std::unique_lock lock(pool_lock_);
+    std::unique_lock       lock(pool_lock_);
     std::shared_ptr<Image> img;
 
     // Check if the image exists in the pool
-    if (pool_manager_->PoolContains(image_id)) {
-      img = pool_manager_->GetPool()[image_id];
-    } else {
+    img = pool_manager_->GetImage(image_id);
+    if (!img) {
       // Check in the storage
       auto result = storage_service_->GetImageController().GetImageById(image_id);
       if (!result) {
-        throw std::runtime_error(
-            std::format("[ERROR] ImagePoolService: Image with ID {} not found in storage.",
-                        image_id));
+        throw std::runtime_error(std::format(
+            "[ERROR] ImagePoolService: Image with ID {} not found in storage.", image_id));
       }
       img = result;
       pool_manager_->Insert(img);
@@ -181,7 +167,10 @@ class ImagePoolServiceImpl final : public ImagePoolService {
     }
   }
 
+  auto CreateAndReturnPinnedEmpty() -> ImagePoolManager::PinnedImageHandle;
+
   void Remove(image_id_t image_id) override;
   auto SyncWithStorage() -> ImagePoolSyncStatus override;
+  auto GetCurrentID() -> image_id_t override;
 };
 };  // namespace puerhlab

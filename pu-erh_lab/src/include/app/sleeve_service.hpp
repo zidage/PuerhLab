@@ -20,6 +20,7 @@
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <type_traits>
 
 #include "sleeve/sleeve_filesystem.hpp"
 #include "sleeve/storage_service.hpp"
@@ -43,7 +44,9 @@ class SleeveService {
   auto Read(std::function<TResult(FileSystem&)> operation) -> TResult;
 
   template <typename TResult>
-  auto Write(std::function<TResult(FileSystem&)> operation) -> std::pair<TResult, SyncResult>;
+  auto Write(std::function<TResult(FileSystem&)> operation)
+      -> std::conditional_t<std::is_void_v<TResult>, SyncResult,
+                            std::pair<TResult, SyncResult>>;
 
   virtual auto Sync() -> SyncResult = 0;
 };
@@ -75,7 +78,9 @@ class SleeveServiceImpl final : public SleeveService {
   }
 
   template <typename TResult>
-  auto Write(std::function<TResult(FileSystem&)> operation) -> std::pair<TResult, SyncResult> {
+  auto Write(std::function<TResult(FileSystem&)> operation)
+      -> std::conditional_t<std::is_void_v<TResult>, SyncResult,
+                            std::pair<TResult, SyncResult>> {
     std::lock_guard<std::mutex> lock(fs_lock_);
 
     if constexpr (std::is_void_v<TResult>) {

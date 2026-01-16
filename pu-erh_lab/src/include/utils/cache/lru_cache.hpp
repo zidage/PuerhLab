@@ -20,6 +20,7 @@
 #include <list>
 #include <optional>
 #include <unordered_map>
+#include <vector>
 namespace puerhlab {
 template <typename K>
 concept Hashable = std::copy_constructible<K> && std::equality_comparable<K> && requires(K key) {
@@ -106,6 +107,15 @@ class LRUCache {
   void Flush() {
     cache_map_.clear();
     cache_list_.clear();
+  }
+
+  auto GetLRUKeys() const -> std::vector<K> {
+    std::vector<K> keys;
+    keys.reserve(cache_list_.size());
+    for (auto it = cache_list_.rbegin(); it != cache_list_.rend(); ++it) {
+      keys.push_back(it->first);
+    }
+    return keys;
   }
 };
 };  // namespace puerhlab

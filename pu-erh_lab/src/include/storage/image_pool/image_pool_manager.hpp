@@ -15,15 +15,10 @@
 #pragma once
 
 #include <cstdint>
-#include <map>
+#include <limits>
 #include <memory>
 #include <optional>
-#include <queue>
-#include <set>
-#include <string>
 #include <unordered_map>
-#include <unordered_set>
-#include <utility>
 
 #include "image/image.hpp"
 #include "type/type.hpp"
@@ -33,17 +28,66 @@
 namespace puerhlab {
 
 class ImagePoolManager {
-  using ListIterator = std::list<image_id_t>::iterator;
+ public:
+  static constexpr uint32_t kDefaultPoolCapacity = 1024;
+
+  class PinnedImageHandle {
+   public:
+    PinnedImageHandle() = default;
+    PinnedImageHandle(ImagePoolManager* manager, image_id_t image_id,
+                      std::shared_ptr<Image> image)
+        : manager_(manager), image_id_(image_id), image_(std::move(image)) {}
+
+    PinnedImageHandle(const PinnedImageHandle&)            = delete;
+    PinnedImageHandle& operator=(const PinnedImageHandle&) = delete;
+
+    PinnedImageHandle(PinnedImageHandle&& other) noexcept
+        : manager_(other.manager_), image_id_(other.image_id_), image_(std::move(other.image_)) {
+      other.manager_ = nullptr;
+      other.image_id_ = 0;
+    }
+
+    PinnedImageHandle& operator=(PinnedImageHandle&& other) noexcept {
+      if (this != &other) {
+        Release();
+        manager_  = other.manager_;
+        image_id_ = other.image_id_;
+        image_    = std::move(other.image_);
+        other.manager_ = nullptr;
+        other.image_id_ = 0;
+      }
+      return *this;
+    }
+
+    ~PinnedImageHandle() { Release(); }
+
+    auto Get() const -> const std::shared_ptr<Image>& { return image_; }
+    auto operator->() const -> Image* { return image_.get(); }
+    auto operator*() const -> Image& { return *image_; }
+    explicit operator bool() const { return image_ != nullptr; }
+
+   private:
+    void Release();
+
+    ImagePoolManager*     manager_  = nullptr;
+    image_id_t            image_id_ = 0;
+    std::shared_ptr<Image> image_{};
+  };
 
  private:
   IncrID::IDGenerator<image_id_t>                        id_generator_{0};
   std::unordered_map<image_id_t, std::shared_ptr<Image>> image_pool_;
+  std::unordered_map<image_id_t, uint32_t>               pin_counts_;
+  LRUCache<image_id_t, image_id_t>                        lru_pool_{
+      std::numeric_limits<size_t>::max()};
+  uint32_t                                                capacity_ = kDefaultPoolCapacity;
 
-  LRUCache<image_id_t, image_id_t>                       thumb_cache_;
+  void EnsureCapacityForInsert();
+  void EvictByKey(image_id_t id);
+  void Pin(image_id_t id);
+  void Unpin(image_id_t id);
 
  public:
-  static const uint32_t default_capacity_thumb_ = 64;
-  static const uint32_t default_capacity_full_  = 3;
 
   explicit ImagePoolManager();
   explicit ImagePoolManager(uint32_t start_id);
@@ -51,16 +95,16 @@ class ImagePoolManager {
 
   auto GetPool() -> std::unordered_map<image_id_t, std::shared_ptr<Image>>&;
   void Insert(const std::shared_ptr<Image> img);
-  auto InsertEmpty() -> std::shared_ptr<Image>;
+  auto CreateAndReturnPinnedEmpty() -> PinnedImageHandle;
   auto PoolContains(const image_id_t& id) -> bool;
+
+  auto GetImage(const image_id_t& id) -> std::shared_ptr<Image>;
+  auto GetImagePinned(const image_id_t& id) -> std::optional<PinnedImageHandle>;
 
   auto Capacity() -> uint32_t;
 
-  void RecordAccess(const image_id_t& id);
-  void RemoveRecord(const image_id_t& id);
-  auto CacheContains(const image_id_t& id) -> bool;
-
   void ResizeCache(const uint32_t new_capacity);
+  void ResizePool(const uint32_t new_capacity);
 
   auto GetCurrentID() -> image_id_t { return id_generator_.GetCurrentID(); }
 

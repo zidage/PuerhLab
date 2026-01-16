@@ -20,17 +20,17 @@
 
 #include "utils/string/convert.hpp"
 
-
 namespace puerhlab {
 ProjectService::ProjectService(const std::filesystem::path& db_path,
-                               const std::filesystem::path& meta_path, sl_element_id_t start_id)
+                               const std::filesystem::path& meta_path)
     : db_path_(db_path), meta_path_(meta_path) {
   try {
     LoadProject(meta_path);
-  } catch (const std::exception& e) {
+  } catch (...) {
     // Load failed, create new project
     storage_service_ = std::make_shared<StorageService>(db_path_);
-    RecreateSleeveService(start_id);
+    RecreateSleeveService(0);
+    pool_service_ = std::make_shared<ImagePoolServiceImpl>(storage_service_, 0);
   }
 }
 
@@ -42,9 +42,10 @@ void ProjectService::SaveProject(const std::filesystem::path& meta_path) {
   meta_path_ = meta_path;
 
   nlohmann::json metadata;
-  metadata["db_path"]   = conv::ToBytes(db_path_.wstring());
-  metadata["meta_path"] = conv::ToBytes(meta_path_.wstring());
-  metadata["start_id"]  = sleeve_service_->GetCurrentID();
+  metadata["db_path"]             = conv::ToBytes(db_path_.wstring());
+  metadata["meta_path"]           = conv::ToBytes(meta_path_.wstring());
+  metadata["start_id"]            = sleeve_service_->GetCurrentID();
+  metadata["image_pool_start_id"] = pool_service_->GetCurrentID();
 
   std::ofstream file(meta_path_);
   if (!file.is_open()) {
@@ -66,9 +67,11 @@ void ProjectService::LoadProject(const std::filesystem::path& meta_path) {
   db_path_                 = std::filesystem::path(conv::FromBytes(metadata["db_path"]));
   meta_path_               = std::filesystem::path(conv::FromBytes(metadata["meta_path"]));
   sl_element_id_t start_id = static_cast<sl_element_id_t>(metadata["start_id"]);
-
-  storage_service_         = std::make_shared<StorageService>(db_path_);
+  sl_element_id_t image_pool_start_id =
+      static_cast<sl_element_id_t>(metadata["image_pool_start_id"]);
+  storage_service_ = std::make_shared<StorageService>(db_path_);
   RecreateSleeveService(start_id);
+  pool_service_ = std::make_shared<ImagePoolServiceImpl>(storage_service_, image_pool_start_id);
 }
 
 void ProjectService::RecreateSleeveService(sl_element_id_t start_id) {

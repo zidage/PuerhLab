@@ -295,14 +295,14 @@ def_library(SleeveFS
     PUBLIC_DEPS SleeveElement SleeveController
 )
 
-def_library(SleeveView
-    SOURCES sleeve/sleeve_view.cpp
-    PUBLIC_DEPS Image SleeveFS ImagePool PipelineScheduler
-)
+# def_library(SleeveView
+#     SOURCES sleeve/sleeve_view.cpp
+#     PUBLIC_DEPS Image SleeveFS ImagePool PipelineScheduler
+# )
 
 def_library(SleeveManager
     SOURCES sleeve/sleeve_manager.cpp
-    PUBLIC_DEPS SleeveFS SleeveView PipelineScheduler
+    PUBLIC_DEPS SleeveFS PipelineScheduler
 )
 
 # ==============================================================================
@@ -319,17 +319,24 @@ def_library(ImageWriter
 # ==============================================================================
 def_library(FSService
     SOURCES app/sleeve_service.cpp
-    PUBLIC_DEPS SleeveFS ImagePool EditHistory ImageWriter 
+    PUBLIC_DEPS SleeveFS EditHistory ImageWriter 
+)
+
+
+
+def_library(ImagePoolService
+    SOURCES app/image_pool_service.cpp
+    PUBLIC_DEPS ImagePool Image StorageService
 )
 
 def_library(ProjectService
     SOURCES app/project_service.cpp
-    PUBLIC_DEPS FSService StorageService StrConv JSON
+    PUBLIC_DEPS FSService StorageService ImagePoolService StrConv JSON
 )
 
 def_library(ImportService
     SOURCES app/import_service.cpp
-    PUBLIC_DEPS SleeveManager ImageWriter ImagePool
+    PUBLIC_DEPS SleeveManager ImageWriter ImagePoolService
 )
 
 # ==============================================================================
@@ -337,7 +344,7 @@ def_library(ImportService
 # ==============================================================================
 def_library(EditViewer
     SOURCES ui/edit_viewer/edit_viewer.cpp include/ui/edit_viewer/edit_viewer.hpp
-    PUBLIC_DEPS SleeveView EditPipeline glad::glad OpenGL::GL Qt6::OpenGLWidgets
+    PUBLIC_DEPS EditPipeline glad::glad OpenGL::GL Qt6::OpenGLWidgets
 )
 
 if(CUDAToolkit_FOUND)

@@ -20,6 +20,7 @@
 #include <future>
 #include <memory>
 #include <queue>
+#include <type_traits>
 #include <vector>
 
 #include "type/type.hpp"
@@ -34,6 +35,15 @@ class ThreadPool {
   ~ThreadPool();
 
   void Submit(std::function<void()> task);
+
+  template <typename F>
+  void Submit(F&& task) {
+    using TaskT = std::decay_t<F>;
+    static_assert(std::is_copy_constructible_v<TaskT>,
+                  "ThreadPool::Submit requires a copy-constructible task when using std::function."
+                  " Wrap move-only state in std::shared_ptr or provide a copyable callable.");
+    Submit(std::function<void()>(std::forward<F>(task)));
+  }
 
  private:
   std::queue<std::function<void()>> tasks_;

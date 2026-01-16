@@ -11,10 +11,9 @@
 namespace puerhlab {
 TEST_F(ImportServiceTests, InitTest) {
   {
-    auto              img_pool = std::make_shared<ImagePoolManager>(128, 4);
-
-    ProjectService    project(db_path_, meta_path_, 0);
-    auto              fs_service = project.GetSleeveService();
+    ProjectService project(db_path_, meta_path_);
+    auto           fs_service = project.GetSleeveService();
+    auto           img_pool   = project.GetImagePoolService();
 
     EXPECT_NO_THROW(std::unique_ptr<ImportService> import_service =
                         std::make_unique<ImportServiceImpl>(fs_service, img_pool));
@@ -22,13 +21,12 @@ TEST_F(ImportServiceTests, InitTest) {
 }
 
 TEST_F(ImportServiceTests, ImportEmptyTest) {
-  auto                           img_pool = std::make_shared<ImagePoolManager>(128, 4);
-
-  ProjectService                 project(db_path_, meta_path_, 0);
-  auto                           fs_service = project.GetSleeveService();
+  ProjectService                 project(db_path_, meta_path_);
+  auto                           fs_service       = project.GetSleeveService();
+  auto                           img_pool_service = project.GetImagePoolService();
 
   std::unique_ptr<ImportService> import_service =
-      std::make_unique<ImportServiceImpl>(fs_service, img_pool);
+      std::make_unique<ImportServiceImpl>(fs_service, img_pool_service);
 
   std::vector<image_path_t>  empty_paths;
 
@@ -57,13 +55,12 @@ TEST_F(ImportServiceTests, ImportEmptyTest) {
 }
 
 TEST_F(ImportServiceTests, ImportSingleFileTest) {
-  auto                           img_pool = std::make_shared<ImagePoolManager>(128, 4);
-
-  ProjectService                 project(db_path_, meta_path_, 0);
-  auto                           fs_service = project.GetSleeveService();
+  ProjectService                 project(db_path_, meta_path_);
+  auto                           fs_service       = project.GetSleeveService();
+  auto                           img_pool_service = project.GetImagePoolService();
 
   std::unique_ptr<ImportService> import_service =
-      std::make_unique<ImportServiceImpl>(fs_service, img_pool);
+      std::make_unique<ImportServiceImpl>(fs_service, img_pool_service);
 
   std::vector<image_path_t> paths;
   paths.push_back(TEST_IMG_PATH "/raw/airplane/_DSC1704.NEF");
@@ -105,13 +102,12 @@ TEST_F(ImportServiceTests, ImportSingleFileTest) {
 }
 
 TEST_F(ImportServiceTests, ImportInvalidFileTest) {
-  auto                           img_pool = std::make_shared<ImagePoolManager>(128, 4);
+  ProjectService                 project(db_path_, meta_path_);
+  auto                           fs_service       = project.GetSleeveService();
 
-  ProjectService                 project(db_path_, meta_path_, 0);
-  auto                           fs_service = project.GetSleeveService();
-
+  auto                           img_pool_service = project.GetImagePoolService();
   std::unique_ptr<ImportService> import_service =
-      std::make_unique<ImportServiceImpl>(fs_service, img_pool);
+      std::make_unique<ImportServiceImpl>(fs_service, img_pool_service);
 
   std::vector<image_path_t> paths;
   paths.push_back(TEST_IMG_PATH "/raw/airplane/invalid_file.txt");
@@ -169,12 +165,12 @@ static auto on_progress_logger = [](const ImportProgress& progress) {
 };
 
 TEST_F(ImportServiceTests, ImportWithNonExistentFiles) {
-  auto                           img_pool = std::make_shared<ImagePoolManager>(128, 4);
 
-  ProjectService                 project(db_path_, meta_path_, 0);
+  ProjectService                 project(db_path_, meta_path_);
   auto                           fs_service = project.GetSleeveService();
+  auto                           img_pool_service = project.GetImagePoolService();
   std::unique_ptr<ImportService> import_service =
-      std::make_unique<ImportServiceImpl>(fs_service, img_pool);
+      std::make_unique<ImportServiceImpl>(fs_service, img_pool_service);
 
   std::vector<image_path_t> paths;
   paths.push_back(TEST_IMG_PATH "/raw/airplane/non_existent_file.NEF");
@@ -212,12 +208,11 @@ TEST_F(ImportServiceTests, ImportWithNonExistentFiles) {
 }
 
 TEST_F(ImportServiceTests, BatchReadTest) {
-  auto                           img_pool = std::make_shared<ImagePoolManager>(128, 4);
-  ProjectService                 project(db_path_, meta_path_, 0);
+  ProjectService                 project(db_path_, meta_path_);
   auto                           fs_service = project.GetSleeveService();
+  auto                           img_pool_service = project.GetImagePoolService();
   std::unique_ptr<ImportService> import_service =
-      std::make_unique<ImportServiceImpl>(fs_service, img_pool);
-
+      std::make_unique<ImportServiceImpl>(fs_service, img_pool_service);
   std::vector<image_path_t> paths;
 
   image_path_t              img_dir = TEST_IMG_PATH "/raw/batch_import";
@@ -248,12 +243,12 @@ TEST_F(ImportServiceTests, BatchReadTest) {
 }
 
 TEST_F(ImportServiceTests, BatchCancelTest) {
-  auto                           img_pool = std::make_shared<ImagePoolManager>(128, 4);
 
-  ProjectService                 project(db_path_, meta_path_, 0);
+  ProjectService                 project(db_path_, meta_path_);
   auto                           fs_service = project.GetSleeveService();
+  auto                           img_pool_service = project.GetImagePoolService();
   std::unique_ptr<ImportService> import_service =
-      std::make_unique<ImportServiceImpl>(fs_service, img_pool);
+      std::make_unique<ImportServiceImpl>(fs_service, img_pool_service);
 
   std::vector<image_path_t> paths;
 
@@ -301,13 +296,13 @@ TEST_F(ImportServiceTests, ImportWithInvalidFilesTest) {
   }
 
   try {
-    auto                           img_pool = std::make_shared<ImagePoolManager>(128, 4);
 
     std::vector<image_path_t>      paths;
-    ProjectService                 project(db_path_, meta_path_, 0);
+    ProjectService                 project(db_path_, meta_path_);
     auto                           fs_service = project.GetSleeveService();
+    auto image_pool_service = project.GetImagePoolService();
     std::unique_ptr<ImportService> import_service =
-        std::make_unique<ImportServiceImpl>(fs_service, img_pool);
+        std::make_unique<ImportServiceImpl>(fs_service, image_pool_service);
     for (const auto& entry : std::filesystem::directory_iterator(img_dir)) {
       paths.push_back(entry.path());
     }
@@ -355,13 +350,13 @@ TEST_F(ImportServiceTests, ImportPartialSuccessWithMockRawFiles) {
   }
 
   try {
-    auto                           img_pool = std::make_shared<ImagePoolManager>(128, 4);
 
     std::vector<image_path_t>      paths;
-    ProjectService                 project(db_path_, meta_path_, 0);
+    ProjectService                 project(db_path_, meta_path_);
     auto                           fs_service = project.GetSleeveService();
+    auto                           image_pool_service = project.GetImagePoolService();
     std::unique_ptr<ImportService> import_service =
-        std::make_unique<ImportServiceImpl>(fs_service, img_pool);
+        std::make_unique<ImportServiceImpl>(fs_service, image_pool_service);
     for (const auto& entry : std::filesystem::directory_iterator(img_dir)) {
       paths.push_back(entry.path());
     }
@@ -396,7 +391,6 @@ TEST_F(ImportServiceTests, ImportPartialSuccessWithMockRawFiles) {
     FAIL() << "Failed to create SleeveManager: " << e.what();
   }
 
-
   for (int i = 0; i < num_mock_invalid_files; ++i) {
     std::filesystem::remove(img_dir.string() + "/mock_invalid_" + std::to_string(i) + ".NEF");
   }
@@ -411,13 +405,13 @@ TEST_F(ImportServiceTests, ImportWithDirectories) {
   }
 
   try {
-    auto                           img_pool = std::make_shared<ImagePoolManager>(128, 4);
 
     std::vector<image_path_t>      paths;
-    ProjectService                 project(db_path_, meta_path_, 0);
+    ProjectService                 project(db_path_, meta_path_);
     auto                           fs_service = project.GetSleeveService();
+    auto                           image_pool_service = project.GetImagePoolService();
     std::unique_ptr<ImportService> import_service =
-        std::make_unique<ImportServiceImpl>(fs_service, img_pool);
+        std::make_unique<ImportServiceImpl>(fs_service, image_pool_service);
     for (const auto& entry : std::filesystem::directory_iterator(img_dir)) {
       paths.push_back(entry.path());
     }
@@ -454,12 +448,12 @@ TEST_F(ImportServiceTests, ImportWithDirectories) {
 }
 
 TEST_F(ImportServiceTests, ImportToNonExistentDestination) {
-  auto                           img_pool = std::make_shared<ImagePoolManager>(128, 4);
 
-  ProjectService                 project(db_path_, meta_path_, 0);
+  ProjectService                 project(db_path_, meta_path_);
   auto                           fs_service = project.GetSleeveService();
+  auto                           image_pool_service = project.GetImagePoolService();
   std::unique_ptr<ImportService> import_service =
-      std::make_unique<ImportServiceImpl>(fs_service, img_pool);
+      std::make_unique<ImportServiceImpl>(fs_service, image_pool_service);
 
   std::vector<image_path_t> paths;
   paths.push_back(TEST_IMG_PATH "/raw/airplane/_DSC1704.NEF");
