@@ -27,11 +27,10 @@
 
 #include "image/image.hpp"
 #include "type/type.hpp"
+#include "utils/cache/lru_cache.hpp"
 #include "utils/id/id_generator.hpp"
 
 namespace puerhlab {
-
-enum class AccessType { THUMB, FULL_IMG, META };
 
 class ImagePoolManager {
   using ListIterator = std::list<image_id_t>::iterator;
@@ -40,17 +39,7 @@ class ImagePoolManager {
   IncrID::IDGenerator<image_id_t>                        id_generator_{0};
   std::unordered_map<image_id_t, std::shared_ptr<Image>> image_pool_;
 
-  std::unordered_map<image_id_t, ListIterator>           cache_map_thumb_;
-  std::list<image_id_t>                                  cache_list_thumb_;
-
-  std::unordered_map<image_id_t, ListIterator>           cache_map_full_;
-  std::list<image_id_t>                                  cache_list_full_;
-
-  uint32_t                                               capacity_thumb_;
-  uint32_t                                               capacity_full_;
-
-  std::unordered_set<image_id_t>                         with_thumb_;
-  std::unordered_set<image_id_t>                         with_full_;
+  LRUCache<image_id_t, image_id_t>                       thumb_cache_;
 
  public:
   static const uint32_t default_capacity_thumb_ = 64;
@@ -58,23 +47,22 @@ class ImagePoolManager {
 
   explicit ImagePoolManager();
   explicit ImagePoolManager(uint32_t start_id);
-  explicit ImagePoolManager(uint32_t capacity_thumb, uint32_t capacity_full);
-  explicit ImagePoolManager(uint32_t capacity_thumb, uint32_t capacity_full, uint32_t start_id);
+  explicit ImagePoolManager(uint32_t capacity_thumb, uint32_t start_id);
 
   auto GetPool() -> std::unordered_map<image_id_t, std::shared_ptr<Image>>&;
   void Insert(const std::shared_ptr<Image> img);
   auto InsertEmpty() -> std::shared_ptr<Image>;
   auto PoolContains(const image_id_t& id) -> bool;
 
-  auto Capacity(const AccessType type) -> uint32_t;
-  auto AccessElement(const image_id_t& id, const AccessType type)
-      -> std::optional<std::weak_ptr<Image>>;
-  void RecordAccess(const image_id_t& id, const AccessType type);
-  void RemoveRecord(const image_id_t& id, const AccessType type);
-  auto Evict(const AccessType type) -> std::optional<std::weak_ptr<Image>>;
-  auto CacheContains(const image_id_t& id, const AccessType type) -> bool;
+  auto Capacity() -> uint32_t;
 
-  void ResizeCache(const uint32_t new_capacity, const AccessType type);
+  void RecordAccess(const image_id_t& id);
+  void RemoveRecord(const image_id_t& id);
+  auto CacheContains(const image_id_t& id) -> bool;
+
+  void ResizeCache(const uint32_t new_capacity);
+
+  auto GetCurrentID() -> image_id_t { return id_generator_.GetCurrentID(); }
 
   void Flush();
   void Clear();

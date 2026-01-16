@@ -108,7 +108,8 @@ void Image::JsonToExif(std::string json_str) {
   } catch (nlohmann::json::parse_error& e) {
     throw std::runtime_error("[ERROR] Image: JSON parse error, " + std::string(e.what()));
   } catch (std::exception& e) {
-    throw std::runtime_error("[ERROR] Image: JSON to Exif conversion error, " + std::string(e.what()));
+    throw std::runtime_error("[ERROR] Image: JSON to Exif conversion error, " +
+                             std::string(e.what()));
   }
 }
 
@@ -127,4 +128,7 @@ auto Image::GetThumbnailData() -> cv::Mat& { return thumbnail_.GetCPUData(); }
 
 auto Image::GetThumbnailBuffer() -> ImageBuffer& { return thumbnail_; }
 
+void Image::MarkSyncState(ImageSyncState state) { sync_state_ = state; }
+
+auto Image::GetSyncState() -> ImageSyncState { return sync_state_.load(); }
 };  // namespace puerhlab

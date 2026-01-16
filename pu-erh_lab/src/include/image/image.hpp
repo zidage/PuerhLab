@@ -38,36 +38,36 @@ enum class ImageSyncState : uint8_t { SYNCED, UNSYNCED, MODIFIED, DELETED };
  */
 class Image {
  public:
-  image_id_t              image_id_;
-  image_path_t            image_path_;
-  file_name_t             image_name_;
+  image_id_t                  image_id_;
+  image_path_t                image_path_;
+  file_name_t                 image_name_;
 
-  Exiv2::Image::UniquePtr exif_data_;
-  nlohmann::json          exif_json_;
-  ExifDisplayMetaData     exif_display_;
+  Exiv2::Image::UniquePtr     exif_data_;
+  nlohmann::json              exif_json_;
+  ExifDisplayMetaData         exif_display_;
 
-  ImageBuffer             image_data_;
-  ImageBuffer             thumbnail_;
-  ImageType               image_type_ = ImageType::DEFAULT;
+  ImageBuffer                 image_data_;
+  ImageBuffer                 thumbnail_;
+  ImageType                   image_type_ = ImageType::DEFAULT;
 
-  std::atomic<bool>       has_thumbnail_;
+  std::atomic<bool>           has_thumbnail_;
 
-  std::atomic<ThumbState> thumb_state_ = ThumbState::NOT_PRESENT;
+  std::atomic<ThumbState>     thumb_state_ = ThumbState::NOT_PRESENT;
 
-  std::atomic<ImageSyncState> sync_state_ = ImageSyncState::SYNCED;
+  std::atomic<ImageSyncState> sync_state_  = ImageSyncState::SYNCED;
 
-  p_hash_t                checksum_;
+  p_hash_t                    checksum_;
 
-  std::atomic<bool>       has_full_img_;
-  std::atomic<bool>       has_thumb_;
-  std::atomic<bool>       has_exif_;
-  std::atomic<bool>       has_exif_json_;
-  std::atomic<bool>       has_exif_display_;
+  std::atomic<bool>           has_full_img_;
+  std::atomic<bool>           has_thumb_;
+  std::atomic<bool>           has_exif_;
+  std::atomic<bool>           has_exif_json_;
+  std::atomic<bool>           has_exif_display_;
 
-  std::atomic<bool>       thumb_pinned_ = false;
-  std::atomic<bool>       full_pinned_  = false;
+  std::atomic<bool>           thumb_pinned_ = false;
+  std::atomic<bool>           full_pinned_  = false;
 
-  explicit Image()                      = default;
+  explicit Image()                          = default;
   explicit Image(image_id_t image_id);
   explicit Image(image_id_t image_id, image_path_t image_path, ImageType image_type);
   explicit Image(image_id_t image_id, image_path_t image_path, file_name_t image_name,
@@ -92,5 +92,8 @@ class Image {
   void                  ComputeChecksum();
   auto                  ExifToJson() -> std::string;
   void                  JsonToExif(std::string json_str);
+
+  void                  MarkSyncState(ImageSyncState state);
+  auto                  GetSyncState() -> ImageSyncState;
 };
 };  // namespace puerhlab

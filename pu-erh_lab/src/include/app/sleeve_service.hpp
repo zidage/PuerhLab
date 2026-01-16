@@ -28,10 +28,6 @@
 namespace puerhlab {
 // An interaction level below SleeveManager (Future Sleeve API for UI) and above ImagePoolManager
 // and FileSystem
-enum class FSOperationType {
-  READ,  // Read-only operation, no sync required
-  WRITE  // Write operation, requires sync after operation
-};
 
 struct SyncResult {
   bool        success_         = true;

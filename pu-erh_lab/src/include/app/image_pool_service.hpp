@@ -24,33 +24,37 @@
 #include "type/type.hpp"
 
 namespace puerhlab {
+struct ImagePoolSyncErrorResult {
+  image_id_t  image_id_;
+  std::string message_{""};
+};
 
-struct ThumbStatus {
-  ThumbState  state_       = ThumbState::NOT_PRESENT;
-  std::string fail_reason_ = "";
+struct ImagePoolSyncStatus {
+  std::vector<image_id_t>               synced_images_{};
+  std::vector<ImagePoolSyncErrorResult> failed_images_{};
 };
 
 class ImagePoolService {
  public:
-  virtual ~ImagePoolService()                                                 = default;
+  virtual ~ImagePoolService()                                                     = default;
 
-  // image objects
-  virtual auto GetOrCreate(image_id_t id) -> std::shared_ptr<Image>           = 0;
-  virtual auto TryGet(image_id_t id) -> std::optional<std::shared_ptr<Image>> = 0;
+  virtual void CreateEmpty(std::function<void(std::shared_ptr<Image>)> operation) = 0;
 
-  // thumbnail state machine
-  virtual auto GetThumbStatus(image_id_t id) const -> ThumbStatus             = 0;
-  virtual auto MarkThumbPending(image_id_t id) -> bool                        = 0;
-  // epoch unmatch, skip and return
-  virtual void MarkThumbReady(image_id_t id)                                  = 0;
-  virtual void MarkThumbFailed(image_id_t id, std::string message)            = 0;
+  template <typename TResult>
+  auto Read(image_id_t image_id, std::function<TResult(std::shared_ptr<Image>)> operation)
+      -> TResult;
 
-  // epoch unmatch, skip and return
-  virtual void PutThumbnail(image_id_t id, const ImageBuffer& thumb)          = 0;
+  template <typename TResult>
+  auto Write(image_id_t image_id, std::function<TResult(std::shared_ptr<Image>)> operation)
+      -> std::pair<TResult, ImagePoolSyncStatus>;
 
-  // cache control (thumb only)
-  virtual void SetThumbCacheCapacity(uint32_t capacity)                       = 0;
-  virtual void FlushThumbCache()                                              = 0;
+  template <typename TResult>
+  auto Write_NoSync(image_id_t image_id, std::function<TResult(std::shared_ptr<Image>)> operation)
+      -> TResult;
+
+  virtual void         Remove(image_id_t image_id) = 0;
+
+  virtual auto SyncWithStorage() -> ImagePoolSyncStatus = 0;
 };
 
 class ImagePoolServiceImpl final : public ImagePoolService {
@@ -63,24 +67,121 @@ class ImagePoolServiceImpl final : public ImagePoolService {
 
  public:
   ImagePoolServiceImpl() = delete;
-  ImagePoolServiceImpl(std::shared_ptr<StorageService> storage_service);
+  ImagePoolServiceImpl(std::shared_ptr<StorageService> storage_service, image_id_t start_id);
 
   ~ImagePoolServiceImpl() = default;
 
-  auto GetOrCreate(image_id_t id) -> std::shared_ptr<Image> override;
-  auto TryGet(image_id_t id) -> std::optional<std::shared_ptr<Image>> override;
+  void CreateEmpty(std::function<void(std::shared_ptr<Image>)> operation) override {
+    std::unique_lock lock(pool_lock_);
+    if (!pool_manager_) {
+      throw std::runtime_error("[ERROR] ImagePoolService: Pool manager is not initialized.");
+    }
+    auto img = pool_manager_->InsertEmpty();
+    img->MarkSyncState(ImageSyncState::UNSYNCED);
+    operation(img);
+  }
 
-  void SyncWithStorage();
+  template <typename TResult>
+  auto Read(image_id_t image_id, std::function<TResult(std::shared_ptr<Image>)> operation)
+      -> TResult {
+    std::unique_lock lock(pool_lock_);
+    if (!pool_manager_) {
+      throw std::runtime_error("[ERROR] ImagePoolService: Pool manager is not initialized.");
+    }
 
-  auto GetThumbStatus(image_id_t id) const -> ThumbStatus override;
-  auto MarkThumbPending(image_id_t id) -> bool override;
+    // Check if the image exists in the pool
+    std::shared_ptr<Image> img = nullptr;
+    if (pool_manager_->PoolContains(image_id)) {
+      img = pool_manager_->GetPool()[image_id];
+    } else {
+      // Check in the storage
+      auto& img_ctrl = storage_service_->GetImageController();
+      img            = img_ctrl.GetImageById(image_id);
+      if (img) {
+        pool_manager_->Insert(img);
+      }
+    }
+    if (!img) {
+      throw std::runtime_error(std::format(
+          "[ERROR] ImagePoolService: Image with ID {} not found in storage.", image_id));
+    }
 
-  void MarkThumbReady(image_id_t id) override;
-  void MarkThumbFailed(image_id_t id, std::string message) override;
+    if constexpr (std::is_void_v<TResult>) {
+      operation(img);
+      return;
+    } else {
+      return operation(img);
+    }
+  }
 
-  void PutThumbnail(image_id_t id, const ImageBuffer& thumb) override;
+  template <typename TResult>
+  auto Write(image_id_t image_id, std::function<TResult(std::shared_ptr<Image>)> operation)
+      -> std::pair<TResult, ImagePoolSyncStatus> {
+    std::unique_lock       lock(pool_lock_);
+    ImagePoolSyncStatus    status;
+    std::shared_ptr<Image> img;
 
-  void SetThumbCacheCapacity(uint32_t capacity) override;
-  void FlushThumbCache() override;
+    // Check if the image exists in the pool
+    if (pool_manager_->PoolContains(image_id)) {
+      img = pool_manager_->GetPool()[image_id];
+    } else {
+      // Check in the storage
+      auto result = storage_service_->GetImageController().GetImageById(image_id);
+      if (!result) {
+        status.failed_images_.push_back(
+            {image_id, std::format("Image with ID {} not found in storage.", image_id)});
+        return status;
+      }
+      img = result;
+      pool_manager_->Insert(img);
+    }
+
+    // Perform the operation
+    img->MarkSyncState(ImageSyncState::MODIFIED);
+    if constexpr (std::is_void_v<TResult>) {
+      operation(img);
+      status = SyncWithStorage();
+      return status;
+    } else {
+      TResult result = operation(img);
+      status         = SyncWithStorage();
+      return {result, status};
+    }
+  }
+
+  template <typename TResult>
+  auto Write_NoSync(image_id_t image_id, std::function<TResult(std::shared_ptr<Image>)> operation)
+      -> TResult {
+    std::unique_lock lock(pool_lock_);
+    std::shared_ptr<Image> img;
+
+    // Check if the image exists in the pool
+    if (pool_manager_->PoolContains(image_id)) {
+      img = pool_manager_->GetPool()[image_id];
+    } else {
+      // Check in the storage
+      auto result = storage_service_->GetImageController().GetImageById(image_id);
+      if (!result) {
+        throw std::runtime_error(
+            std::format("[ERROR] ImagePoolService: Image with ID {} not found in storage.",
+                        image_id));
+      }
+      img = result;
+      pool_manager_->Insert(img);
+    }
+
+    // Perform the operation
+    img->MarkSyncState(ImageSyncState::MODIFIED);
+
+    if constexpr (std::is_void_v<TResult>) {
+      operation(img);
+      return;
+    } else {
+      return operation(img);
+    }
+  }
+
+  void Remove(image_id_t image_id) override;
+  auto SyncWithStorage() -> ImagePoolSyncStatus override;
 };
 };  // namespace puerhlab

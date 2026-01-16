@@ -48,5 +48,6 @@ class ProjectService {
   std::filesystem::path           meta_path_;
   std::shared_ptr<StorageService> storage_service_;
   std::shared_ptr<SleeveServiceImpl> sleeve_service_;
+  // TODO: Add ImagePoolServiceImpl and store its start_id into the metadata
 };
 };  // namespace puerhlab

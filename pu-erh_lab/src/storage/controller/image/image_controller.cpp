@@ -87,6 +87,10 @@ void ImageController::RemoveImageByPath(const std::wstring& path) {
   service_.RemoveByClause(std::format("image_path={}", conv::ToBytes(path)));
 }
 
+void ImageController::UpdateImage(const std::shared_ptr<Image> image) {
+  service_.Update(image, image->image_id_);
+}
+
 /**
  * @brief Get an image by its ID.
  *
@@ -96,7 +100,12 @@ void ImageController::RemoveImageByPath(const std::wstring& path) {
 auto ImageController::GetImageById(image_id_t id) -> std::shared_ptr<Image> {
   auto result = service_.GetImageById(id);
   // Assume the id is unique
-  return result[0];
+  if (result.empty()) {
+    return nullptr;
+  }
+  auto img = result[0];
+  img->MarkSyncState(ImageSyncState::SYNCED);
+  return img;
 }
 
 /**

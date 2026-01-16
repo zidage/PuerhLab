@@ -37,7 +37,9 @@ class ImageController {
   void RemoveImageById(const image_id_t remove_id);
   void RemoveImageByType(const ImageType type);
   void RemoveImageByPath(const std::wstring& path);
-  void UpdateImage(const image_id_t remove_id);
+
+  void UpdateImage(const std::shared_ptr<Image> image);
+  
   auto GetImageById(const image_id_t id) -> std::shared_ptr<Image>;
   auto GetImageByType(const ImageType type) -> std::vector<std::shared_ptr<Image>>;
   auto GetImageByName(const std::wstring& name) -> std::vector<std::shared_ptr<Image>>;
