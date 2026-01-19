@@ -52,4 +52,14 @@ auto PipelineService::GetPipelineParamByFileId(const sl_element_id_t file_id)
 
   return result.front();
 }
+
+void PipelineService::UpdatePipelineParamByFileId(
+    const sl_element_id_t file_id, const std::shared_ptr<CPUPipelineExecutor> pipeline) {
+  auto existing = GetPipelineParamByFileId(file_id);
+  if (existing != nullptr) {
+    Update(pipeline, file_id);
+  } else {
+    Insert(pipeline);
+  }
+}
 };  // namespace puerhlab

@@ -152,4 +152,10 @@ auto ElementController::GetPipelineByElementId(const sl_element_id_t element_id)
   return pipeline_service_.GetPipelineParamByFileId(element_id);
 }
 
+auto ElementController::UpdatePipelineByElementId(
+    const sl_element_id_t                      element_id,
+    const std::shared_ptr<CPUPipelineExecutor> pipeline) -> void {
+  pipeline_service_.UpdatePipelineParamByFileId(element_id, pipeline);
+    }
+
 };  // namespace puerhlab

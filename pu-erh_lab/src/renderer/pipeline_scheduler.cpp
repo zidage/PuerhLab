@@ -29,7 +29,7 @@ void PipelineTask::SetExecutorRenderParams() {
   pipeline_executor_->SetRenderRegion(desc.x_, desc.y_, desc.scale_factor_);
   if (desc.render_type_ == RenderType::FAST_PREVIEW) {
     pipeline_executor_->SetForceCPUOutput(false);
-    pipeline_executor_->SetRenderRes(false, 2048);
+    pipeline_executor_->SetRenderRes(false, 4096);
     return;
   }
   if (desc.render_type_ == RenderType::THUMBNAIL) {
@@ -46,7 +46,7 @@ void PipelineTask::ResetPreviewRenderParams() {
     return;
   }
   // A simple status machine to automatically set back to fast preview mode
-  pipeline_executor_->SetRenderRes(false);
+  pipeline_executor_->SetRenderRes(false, 4096);
   pipeline_executor_->SetForceCPUOutput(false);
 }
 

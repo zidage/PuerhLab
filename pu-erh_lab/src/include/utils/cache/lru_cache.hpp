@@ -72,6 +72,27 @@ class LRUCache {
     }
   }
 
+  auto RecordAccess_WithEvict(const K& key, const V& val) -> std::optional<V> {
+    auto it = cache_map_.find(key);
+    if (it != cache_map_.end()) {
+      cache_list_.splice(cache_list_.begin(), cache_list_, it->second);
+      if (cache_list_.front().second != val) {
+        cache_list_.front() = {key, val};
+      }
+      return std::nullopt;
+    } else {
+      std::optional<V> evicted;
+      if (cache_list_.size() >= capacity_) {
+        evicted = Evict();
+      }
+
+      cache_list_.push_front({key, val});
+      cache_map_[key] = cache_list_.begin();
+      return evicted;
+    }
+    return std::nullopt;
+  }
+
   void RemoveRecord(const K& path) {
     auto it = cache_map_.find(path);
     if (it != cache_map_.end()) {
@@ -99,9 +120,15 @@ class LRUCache {
 
   void Resize(uint32_t new_capacity) {
     if (new_capacity > capacity_) {
+      auto all_keys = GetLRUKeys();
       Flush();
+      capacity_ = new_capacity;
+      for (const auto& key : all_keys) {
+        RecordAccess(key, key);
+      }
+    } else {
+      capacity_ = new_capacity;
     }
-    capacity_ = new_capacity;
   }
 
   void Flush() {

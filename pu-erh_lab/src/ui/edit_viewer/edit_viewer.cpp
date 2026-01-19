@@ -57,8 +57,11 @@ void main() {
 )";
 
 QtEditViewer::QtEditViewer(QWidget* parent) : QOpenGLWidget(parent) {
-  // Connect the frame ready signal to the update slot
-  connect(this, &QtEditViewer::RequestUpdate, this, QOverload<>::of(&QtEditViewer::update));
+  // Connect the frame ready signal to the update slot.
+  // Use QueuedConnection explicitly so that signals from worker threads are
+  // processed on the next event-loop iteration of the GUI thread.
+  connect(this, &QtEditViewer::RequestUpdate, this, QOverload<>::of(&QtEditViewer::update),
+          Qt::QueuedConnection);
 
   // Blocking resize requests until the current resize is done
   connect(this, &QtEditViewer::RequestResize, this, &QtEditViewer::OnResizeGL,
@@ -225,31 +228,10 @@ bool QtEditViewer::InitBuffer(GLBuffer& buffer, int width, int height) {
 
 void QtEditViewer::paintGL() {
   std::lock_guard<std::mutex> lock(mutex_);
-  GLBuffer& active_buffer = buffers_[active_idx_];
-  if (!active_buffer.pbo || !active_buffer.texture || !program_ || !program_->isLinked()) return;
 
-  const float dpr = devicePixelRatioF();
-  const float vw  = std::max(1.0f, float(width()) * dpr);
-  const float vh  = std::max(1.0f, float(height()) * dpr);
-  glViewport(0, 0, int(vw), int(vh));
-
-  // Compute letterbox scale from IMAGE aspect vs WINDOW aspect
-  const float imgW = float(std::max(1, active_buffer.width));
-  const float imgH = float(std::max(1, active_buffer.height));
-  const float winAspect = vw / vh;
-  const float imgAspect = imgW / imgH;
-
-  float sx = 1.0f, sy = 1.0f;
-  if (imgAspect > winAspect) {
-    sy = winAspect / imgAspect; // image wider -> reduce Y
-  } else {
-    sx = imgAspect / winAspect; // image taller -> reduce X
-  }
-
-  const float zoom = view_zoom_;
-  const QVector2D pan = view_pan_;
-
-  // If a new frame is pending, copy staging buffer into the mapped PBO of the target buffer.
+  // First, check if there is a pending frame to copy from staging buffer.
+  // This must happen BEFORE we check the active buffer validity, because the
+  // pending frame might switch active_idx_ to a newly initialized buffer.
   const int pending_idx = pending_frame_idx_.exchange(-1, std::memory_order_acq_rel);
   GLBuffer* target_buffer = nullptr;
   if (pending_idx >= 0 && pending_idx < static_cast<int>(buffers_.size())) {
@@ -284,6 +266,31 @@ void QtEditViewer::paintGL() {
       }
     }
   }
+
+  // Now check if the active buffer is valid for rendering.
+  GLBuffer& active_buffer = buffers_[active_idx_];
+  if (!active_buffer.pbo || !active_buffer.texture || !program_ || !program_->isLinked()) return;
+
+  const float dpr = devicePixelRatioF();
+  const float vw  = std::max(1.0f, float(width()) * dpr);
+  const float vh  = std::max(1.0f, float(height()) * dpr);
+  glViewport(0, 0, int(vw), int(vh));
+
+  // Compute letterbox scale from IMAGE aspect vs WINDOW aspect
+  const float imgW = float(std::max(1, active_buffer.width));
+  const float imgH = float(std::max(1, active_buffer.height));
+  const float winAspect = vw / vh;
+  const float imgAspect = imgW / imgH;
+
+  float sx = 1.0f, sy = 1.0f;
+  if (imgAspect > winAspect) {
+    sy = winAspect / imgAspect; // image wider -> reduce Y
+  } else {
+    sx = imgAspect / winAspect; // image taller -> reduce X
+  }
+
+  const float zoom = view_zoom_;
+  const QVector2D pan = view_pan_;
 
   glClearColor(0.f, 0.f, 0.f, 1.f);
   glClear(GL_COLOR_BUFFER_BIT);

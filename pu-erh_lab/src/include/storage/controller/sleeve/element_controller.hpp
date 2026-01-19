@@ -58,6 +58,9 @@ class ElementController {
 
   void EnsureChildrenLoaded(sl_element_id_t folder_id);
 
-  auto GetPipelineByElementId(const sl_element_id_t element_id) -> std::shared_ptr<CPUPipelineExecutor>;
+  auto GetPipelineByElementId(const sl_element_id_t element_id)
+      -> std::shared_ptr<CPUPipelineExecutor>;
+  auto UpdatePipelineByElementId(const sl_element_id_t                      element_id,
+                                 const std::shared_ptr<CPUPipelineExecutor> pipeline) -> void;
 };
 };  // namespace puerhlab

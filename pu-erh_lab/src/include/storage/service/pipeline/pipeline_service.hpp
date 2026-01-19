@@ -22,7 +22,6 @@
 #include "storage/service/service_interface.hpp"
 #include "type/type.hpp"
 
-
 namespace puerhlab {
 class PipelineService
     : public ServiceInterface<PipelineService, std::shared_ptr<CPUPipelineExecutor>,
@@ -33,6 +32,9 @@ class PipelineService
   static auto ToParams(const std::shared_ptr<CPUPipelineExecutor> source) -> PipelineMapperParams;
   static auto FromParams(PipelineMapperParams&& param) -> std::shared_ptr<CPUPipelineExecutor>;
 
-  auto GetPipelineParamByFileId(const sl_element_id_t file_id) -> std::shared_ptr<CPUPipelineExecutor>;
+  auto        GetPipelineParamByFileId(const sl_element_id_t file_id)
+      -> std::shared_ptr<CPUPipelineExecutor>;
+  void UpdatePipelineParamByFileId(const sl_element_id_t                      file_id,
+                                   const std::shared_ptr<CPUPipelineExecutor> pipeline);
 };
 };  // namespace puerhlab
