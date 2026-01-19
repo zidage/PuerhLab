@@ -334,10 +334,16 @@ def_library(ProjectService
     PUBLIC_DEPS FSService StorageService ImagePoolService StrConv JSON
 )
 
+def_library(PipelineMgmtService
+    SOURCES app/pipeline_service.cpp
+    PUBLIC_DEPS ProjectService EditPipeline
+    )
+
 def_library(ImportService
     SOURCES app/import_service.cpp
     PUBLIC_DEPS SleeveManager ImageWriter ImagePoolService
 )
+
 
 # ==============================================================================
 # 9. UI Components

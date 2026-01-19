@@ -121,10 +121,18 @@ class LRUCache {
   void Resize(uint32_t new_capacity) {
     if (new_capacity > capacity_) {
       auto all_keys = GetLRUKeys();
+      auto all_values = std::vector<V>();
+      all_values.reserve(all_keys.size());
+      for (auto& key : all_keys) {
+        auto it = cache_map_.find(key);
+        if (it != cache_map_.end()) {
+          all_values.push_back(it->second->second);
+        }
+      }
       Flush();
       capacity_ = new_capacity;
-      for (const auto& key : all_keys) {
-        RecordAccess(key, key);
+      for (size_t i = 0; i < all_keys.size(); ++i) {
+        RecordAccess(all_keys[i], all_values[i]);
       }
     } else {
       capacity_ = new_capacity;

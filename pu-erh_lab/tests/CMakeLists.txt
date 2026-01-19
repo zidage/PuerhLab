@@ -164,6 +164,13 @@ if (WIN32)
 target_link_libraries(SleeveServiceTest easy_profiler)
 endif()
 
+add_executable(PipelineServiceTest app/pipeline_service_test.cpp)
+target_include_directories(PipelineServiceTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
+target_link_libraries(PipelineServiceTest ProjectService PipelineMgmtService GTest::gtest_main)
+if (WIN32)
+target_link_libraries(PipelineServiceTest easy_profiler)
+endif()
+
 include(GoogleTest)
 # set(CMAKE_GTEST_DISCOVER_TESTS_DISCOVERY_MODE PRE_TEST)
 # gtest_discover_tests(SampleTest)

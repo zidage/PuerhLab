@@ -34,6 +34,12 @@ ProjectService::ProjectService(const std::filesystem::path& db_path,
   }
 }
 
+ProjectService::~ProjectService() {
+  pool_service_.reset();
+  sleeve_service_.reset();
+  storage_service_.reset();
+}
+
 void ProjectService::SaveProject(const std::filesystem::path& meta_path) {
   if (!sleeve_service_) {
     throw std::runtime_error("SleeveService is not initialized");

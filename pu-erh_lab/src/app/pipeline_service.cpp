@@ -14,6 +14,7 @@
 
 #include "app/pipeline_service.hpp"
 
+#include <cstdint>
 #include <memory>
 #include <mutex>
 
@@ -53,14 +54,16 @@ auto PipelineMgmtService::LoadPipeline(sl_element_id_t id) -> std::shared_ptr<Pi
       }
     }
   } else {
-    auto pipeline = storage_service_->GetElementController().GetPipelineByElementId(id);
+    auto pipeline          = storage_service_->GetElementController().GetPipelineByElementId(id);
+    auto pipeline_guard    = std::make_shared<PipelineGuard>();
+    pipeline_guard->dirty_ = false;
     if (pipeline == nullptr) {
       pipeline = std::make_shared<CPUPipelineExecutor>();
+      pipeline->SetBoundFile(id);
+      pipeline_guard->dirty_ = true;
     }
-    auto pipeline_guard                    = std::make_shared<PipelineGuard>();
     pipeline_guard->pipeline_              = std::move(pipeline);
     pipeline_guard->id_                    = id;
-    pipeline_guard->dirty_                 = false;
     pipeline_guard->pinned_                = true;
     std::optional<sl_element_id_t> evicted = pipeline_cache_.RecordAccess_WithEvict(id, id);
     if (evicted.has_value()) {
@@ -89,10 +92,13 @@ void PipelineMgmtService::SavePipeline(std::shared_ptr<PipelineGuard> pipeline) 
   if (evicted.has_value()) {
     HandleEviction(evicted.value());
   }
+  // Unpin the pipeline after saving
+  pipeline->pinned_     = false;
   loaded_pipelines_[id] = pipeline;
+
+  // If eviction did not happen, but the cache size is still in "boost" range, resize it
   if (!evicted.has_value() && loaded_pipelines_.size() + 1 > default_cache_capacity_) {
-    // If no eviction happened, and the cache size is still in "boost" range, resize it
-    pipeline_cache_.Resize(loaded_pipelines_.size() - 1);
+    pipeline_cache_.Resize(static_cast<uint32_t>(loaded_pipelines_.size() - 1));
   }
 }
 
@@ -101,8 +107,8 @@ void PipelineMgmtService::Sync() {
   for (auto& pair : loaded_pipelines_) {
     auto pipeline_guard = pair.second;
     if (pipeline_guard->dirty_) {
-      storage_service_->GetElementController().UpdatePipelineByElementId(
-          pipeline_guard->id_, pipeline_guard->pipeline_);
+      storage_service_->GetElementController().UpdatePipelineByElementId(pipeline_guard->id_,
+                                                                         pipeline_guard->pipeline_);
       pipeline_guard->dirty_ = false;
     }
   }

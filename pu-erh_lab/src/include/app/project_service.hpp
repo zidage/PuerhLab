@@ -26,6 +26,7 @@ namespace puerhlab {
 class ProjectService {
  public:
   ProjectService(const std::filesystem::path& db_path, const std::filesystem::path& meta_path);
+  ~ProjectService();
 
   void SaveProject(const std::filesystem::path& meta_path);
   void LoadProject(const std::filesystem::path& meta_path);

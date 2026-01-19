@@ -276,6 +276,9 @@ auto PipelineStage::GetStageNameString() const -> std::string {
 auto PipelineStage::ExportStageParams() const -> nlohmann::json {
   nlohmann::json inner;
   for (const auto& [op_type, op_entry] : *operators_) {
+    if (!op_entry.op_) {
+      continue;
+    }
     inner[op_entry.op_->GetScriptName()] = op_entry.ExportOperatorParams();
   }
   nlohmann::json j;
