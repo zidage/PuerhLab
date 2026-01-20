@@ -47,28 +47,29 @@ Pu-erh Lab aims to provide a professional-grade workflow for photographers, comb
 
 ### 🚀 High-Performance Core
 - **Concurrency First:** Built on a tile-based rendering mechanism to maximize multi-core CPU utilization during image processing.
-- **Modern C++:** Written in C++20, trying to be **_blazingly fast_**!
+- **Modern C++:** Written in C++, trying to be **_blazingly fast_**!
 - **GPU Acceleration:** Support GPU-accelerated processing using CUDA for real-time editing performance.
 
 ### 🎨 Professional Imaging Pipeline
+- **GPU-accelerated Pipeline:** 32-bit pipeline with responsive previewing experience.
 - **RAW Support:** GPU-accelerated **LibRaw** based decoding module.
-- **Color Management:** Support ACES 2.0 Output Transform and LUT-based stylization.
-- **Non-Destructive Editing:** A flexible serializable architecture allows for infinite undo/redo and adjustment layering without altering original files.
+- **Color Management:** ACES 2.0 support using OCIO and custom pipeline for CPU processing. LUT-based stylization, support 1D/3D LUTs in `.cube` format.
+- **Non-Destructive Editing:** Flexible serializable architecture allows for infinite undo/redo and simple _version control_ without altering original files.
 
 ### 🗃️ Asset Management ("Sleeve" System)
 - A custom abstraction layer designed specifically for handling massive photo libraries, providing efficient caching and path resolution.
+- DuckDB-powered image database indexing with advanced seraching functionalities.
 
 ## 🚧 Development Status
 
 We are currently working on the foundational architecture:
 
-- [x] CMake & vcpkg build infrastructure setup
-- [x] Basic RAW image decoding (LibRaw integration)
+- [WIP] Basic RAW image decoding (LibRaw integration)
 - [x] "Sleeve" filesystem abstraction layer
 - [x] Basic pipeline model
+- [x] GPU acceleration support
 - [ ] User Interface (UI) implementation
 - [ ] Non-destructive edit history serialization
-- [ ] GPU acceleration support
 
 The detailed development roadmap can be found [here](https://github.com/zidage/PuerhLab/blob/main/docs/roadmap/roadmap.md).
 
