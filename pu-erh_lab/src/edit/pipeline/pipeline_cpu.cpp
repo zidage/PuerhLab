@@ -42,6 +42,9 @@ CPUPipelineExecutor::CPUPipelineExecutor()
                {PipelineStageName::Detail_Adjustment, enable_cache_, true},
                {PipelineStageName::Output_Transform, enable_cache_, true}}) {
   render_params_["resize"] = {};
+
+  // Initialize default pipeline
+  InitDefaultPipeline();
 }
 
 void CPUPipelineExecutor::ResetStages() {
@@ -67,6 +70,8 @@ CPUPipelineExecutor::CPUPipelineExecutor(bool enable_cache)
                {PipelineStageName::Detail_Adjustment, enable_cache_, true},
                {PipelineStageName::Output_Transform, enable_cache_, true}}) {
   render_params_["resize"] = {};
+  // Initialize default pipeline
+  InitDefaultPipeline();
 }
 
 auto CPUPipelineExecutor::GetBackend() -> PipelineBackend { return backend_; }
@@ -82,22 +87,32 @@ auto CPUPipelineExecutor::Apply(std::shared_ptr<ImageBuffer> input)
     return input;
   }
   std::shared_ptr<ImageBuffer> output;
-  if (!first_stage->CacheValid()) {
+  if (enable_cache_) {
+    if (!first_stage->CacheValid()) {
+      output = std::make_shared<ImageBuffer>(input->Clone());
+      for (auto* stage : exec_stages_) {
+        stage->SetInputImage(output);
+        stage->SetForceCPUOutput(force_cpu_output_);
+        output = stage->ApplyStage(global_params_);
+      }
+    } else {
+      // If cache is valid, use cached output
+      output = first_stage->GetOutputCache();
+      for (auto* stage : exec_stages_) {
+        if (stage != first_stage) {
+          stage->SetInputImage(output);
+          stage->SetForceCPUOutput(force_cpu_output_);
+          output = stage->ApplyStage(global_params_);
+        }
+      }
+    }
+  } else {
+    // Cache is disabled, just process the stages sequentially
     output = std::make_shared<ImageBuffer>(input->Clone());
     for (auto* stage : exec_stages_) {
       stage->SetInputImage(output);
       stage->SetForceCPUOutput(force_cpu_output_);
       output = stage->ApplyStage(global_params_);
-    }
-  } else {
-    // If cache is valid, use cached output
-    output = first_stage->GetOutputCache();
-    for (auto* stage : exec_stages_) {
-      if (stage != first_stage) {
-        stage->SetInputImage(output);
-        stage->SetForceCPUOutput(force_cpu_output_);
-        output = stage->ApplyStage(global_params_);
-      }
     }
   }
 
@@ -214,15 +229,6 @@ void CPUPipelineExecutor::SetRenderRes(bool full_res, int max_side_length) {
 void CPUPipelineExecutor::RegisterAllOperators() {
   // It is really silly to hardcode the operators here.
   // I should keep things more flexible in the future.
-  auto& image_loading_stage = stages_[static_cast<int>(PipelineStageName::Image_Loading)];
-  image_loading_stage.SetOperator(OperatorType::RAW_DECODE, {});
-
-  auto& geometry_adjustment_stage =
-      stages_[static_cast<int>(PipelineStageName::Geometry_Adjustment)];
-  geometry_adjustment_stage.SetOperator(OperatorType::RESIZE, render_params_);
-
-  auto& to_working_space_stage = stages_[static_cast<int>(PipelineStageName::To_WorkingSpace)];
-  to_working_space_stage.SetOperator(OperatorType::TO_WS, {});
 
   auto& basic_adjustment_stage = stages_[static_cast<int>(PipelineStageName::Basic_Adjustment)];
   basic_adjustment_stage.SetOperator(OperatorType::EXPOSURE, {});
@@ -245,6 +251,37 @@ void CPUPipelineExecutor::RegisterAllOperators() {
   auto& detail_adjustment_stage = stages_[static_cast<int>(PipelineStageName::Detail_Adjustment)];
   detail_adjustment_stage.SetOperator(OperatorType::SHARPEN, {});
   detail_adjustment_stage.SetOperator(OperatorType::CLARITY, {});
+}
+
+void CPUPipelineExecutor::SetTemplateParams() {
+  // Set some common parameters for template pipelines
+  auto&          raw_stage     = GetStage(PipelineStageName::Image_Loading);
+  auto&          global_params = GetGlobalParams();
+  nlohmann::json decode_params;
+#ifdef HAVE_CUDA
+  decode_params["raw"]["cuda"] = false;
+#else
+  decode_params["raw"]["cuda"] = false;
+#endif
+  decode_params["raw"]["highlights_reconstruct"] = false;
+  decode_params["raw"]["use_camera_wb"]          = true;
+  decode_params["raw"]["user_wb"]                = 7600.f;
+  decode_params["raw"]["backend"]                = "puerh";
+  raw_stage.SetOperator(OperatorType::RAW_DECODE, decode_params);
+
+  nlohmann::json output_params;
+  auto&          output_stage = GetStage(PipelineStageName::Output_Transform);
+  output_params["aces_odt"] = {{"encoding_space", "rec709"},
+                               {"encoding_etof", "gamma_2_2"},
+                               {"limiting_space", "rec709"},
+                               {"peak_luminance", 100.0f}};
+  output_stage.SetOperator(OperatorType::ODT, output_params, global_params);
+}
+
+void CPUPipelineExecutor::InitDefaultPipeline() {
+  SetTemplateParams();
+  RegisterAllOperators();
+  SetExecutionStages();
 }
 
 };  // namespace puerhlab

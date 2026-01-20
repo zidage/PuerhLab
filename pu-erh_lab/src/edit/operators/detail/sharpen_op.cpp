@@ -47,6 +47,7 @@ auto SharpenOp::GetParams() const -> nlohmann::json {
 }
 
 void SharpenOp::SetParams(const nlohmann::json& params) {
+  if (!params.contains(script_name_)) return;
   nlohmann::json inner = params[script_name_].get<nlohmann::json>();
   if (inner.contains("offset")) {
     offset_ = inner["offset"].get<float>();

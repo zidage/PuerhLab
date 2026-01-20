@@ -22,9 +22,9 @@
 namespace puerhlab {
 class CurveOp : public OperatorBase<CurveOp> {
  private:
-  std::vector<cv::Point2f> ctrl_pts_;
-  std::vector<float>       h_;
-  std::vector<float>       m_;
+  std::vector<cv::Point2f> ctrl_pts_{};
+  std::vector<float>       h_{};
+  std::vector<float>       m_{};
 
   void                     ComputeTagents();
   auto                     EvaluateCurve(float x) const -> float;

@@ -106,6 +106,7 @@ auto ColorWheelOp::GetParams() const -> nlohmann::json {
 }
 
 void ColorWheelOp::SetParams(const nlohmann::json& params) {
+  if (!params.contains(script_name_)) return;
   nlohmann::json inner = params.at(script_name_);
   if (inner.contains("lift")) inner.at("lift").get_to(lift_);
   if (inner.contains("gamma")) inner.at("gamma").get_to(gamma_);

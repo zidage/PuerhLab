@@ -47,6 +47,7 @@ class CPUPipelineExecutor : public PipelineExecutor {
 
   void                             ResetStages();
 
+  void SetTemplateParams();
  public:
   CPUPipelineExecutor();
   CPUPipelineExecutor(bool enable_cache);
@@ -89,5 +90,7 @@ class CPUPipelineExecutor : public PipelineExecutor {
   void SetRenderRes(bool full_res, int max_side_length = 2048) override;
 
   void RegisterAllOperators();
+
+  void InitDefaultPipeline();
 };
 };  // namespace puerhlab

@@ -70,8 +70,12 @@ auto ContrastOp::GetParams() const -> nlohmann::json {
 }
 
 void ContrastOp::SetParams(const nlohmann::json& params) {
-  contrast_offset_ = params[GetScriptName()];
-  scale_           = std::exp(contrast_offset_ / 100.0f);
+  if (params.contains(GetScriptName())) {
+    contrast_offset_ = params[GetScriptName()];
+  } else {
+    contrast_offset_ = 0.0f;
+  }
+  scale_ = std::exp(contrast_offset_ / 100.0f);
 }
 
 void ContrastOp::SetGlobalParams(OperatorParams& params) const {

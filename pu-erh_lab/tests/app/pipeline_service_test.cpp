@@ -4,8 +4,11 @@
 
 #include <filesystem>
 #include <memory>
+#include <atomic>
 #include <random>
+#include <thread>
 #include <unordered_map>
+#include <vector>
 
 #include "app/project_service.hpp"
 #include "edit/operators/op_base.hpp"
@@ -301,6 +304,54 @@ TEST_F(PipelineServiceTests, FuzzTest) {
       auto serialized = guard->pipeline_->ExportPipelineParams().dump();
       EXPECT_FALSE(serialized.empty());
     }
+  }
+}
+
+TEST_F(PipelineServiceTests, ThreadSafeTest) {
+  ProjectService      project(db_path_, meta_path_);
+  PipelineMgmtService pipeline_service(project.GetStorageService());
+
+  constexpr int kThreads   = 8;
+  constexpr int kOpsPerThr = 200;
+  constexpr int kIdRange   = 64;
+
+  std::atomic<int> ops_count{0};
+  std::vector<std::thread> workers;
+  workers.reserve(kThreads);
+
+  for (int t = 0; t < kThreads; ++t) {
+    workers.emplace_back([t, &pipeline_service, &ops_count]() {
+      for (int i = 0; i < kOpsPerThr; ++i) {
+        const auto id = static_cast<sl_element_id_t>((t * kOpsPerThr + i) % kIdRange + 1);
+        auto       guard = pipeline_service.LoadPipeline(id);
+        ASSERT_NE(guard, nullptr);
+        auto& stage = guard->pipeline_->GetStage(PipelineStageName::To_WorkingSpace);
+        nlohmann::json params;
+        params["exposure"] = static_cast<float>(id) + static_cast<float>(t) * 0.01f;
+        stage.SetOperator(OperatorType::EXPOSURE, params);
+        guard->dirty_ = true;
+        pipeline_service.SavePipeline(guard);
+        if (i % 10 == 0) {
+          pipeline_service.Sync();
+        }
+        ++ops_count;
+      }
+    });
+  }
+
+  for (auto& worker : workers) {
+    worker.join();
+  }
+
+  pipeline_service.Sync();
+  EXPECT_EQ(ops_count.load(), kThreads * kOpsPerThr);
+
+  const auto empty_dump = CPUPipelineExecutor().ExportPipelineParams().dump();
+  for (sl_element_id_t id = 1; id <= 10; ++id) {
+    auto guard = pipeline_service.LoadPipeline(id);
+    ASSERT_NE(guard, nullptr);
+    auto serialized = guard->pipeline_->ExportPipelineParams().dump();
+    EXPECT_NE(serialized, empty_dump);
   }
 }
 }  // namespace puerhlab

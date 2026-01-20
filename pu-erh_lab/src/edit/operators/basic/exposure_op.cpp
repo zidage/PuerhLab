@@ -60,7 +60,11 @@ auto ExposureOp::GetParams() const -> nlohmann::json {
 }
 
 void ExposureOp::SetParams(const nlohmann::json& params) {
-  exposure_offset_ = params[GetScriptName()];
+  if (!params.contains(GetScriptName())) {
+    exposure_offset_ = 0.0f;
+  } else {
+    exposure_offset_ = params[GetScriptName()];
+  }
   scale_           = exposure_offset_ / 17.52f;
 }
 

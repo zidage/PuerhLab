@@ -146,6 +146,13 @@ void HLSOp::SetParams(const nlohmann::json& params) {
     if (inner.contains("s_range")) {
       saturation_range_ = inner["s_range"].get<float>();
     }
+  } else {
+    // Default values if no params provided
+    target_hls_        = {0.0f, 0.5f, 1.0f};
+    hls_adjustment_    = {0.0f, 0.0f, 0.0f};
+    hue_range_         = 15.0f;
+    lightness_range_   = 0.1f;
+    saturation_range_  = 0.1f;
   }
 }
 

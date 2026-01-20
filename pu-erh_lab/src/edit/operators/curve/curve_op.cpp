@@ -145,6 +145,10 @@ void CurveOp::SetParams(const nlohmann::json& params) {
   }
 
   size_t N = ctrl_pts_.size();
+  if (N < 1) {
+    // Not enough points to define a curve
+    return;
+  }
   h_.resize(N - 1);
   m_.resize(N);
 

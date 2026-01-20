@@ -227,13 +227,13 @@ void ACES_ODT_Op::init_JMhParams() {
       ::puerhlab::init_JMhParams(ColorUtils::REACH_PRIMARY);
   to_output_params_.odt_params_.limit_params_ =
       ::puerhlab::init_JMhParams(ColorUtils::SpaceEnumToPrimary(limiting_space_));
-  auto prims = ColorUtils::SpaceEnumToPrimary(limiting_space_);
-  std::cout << "Limiting space primaries:\n"
-            << "[" << prims.red_[0] << ", " << prims.red_[1] << "]\n"
-            << "[" << prims.green_[0] << ", " << prims.green_[1] << "]\n"
-            << "[" << prims.blue_[0] << ", " << prims.blue_[1] << "]\n"
-            << "[" << prims.white_[0] << ", " << prims.white_[1] << "]"
-            << std::endl;
+  // auto prims = ColorUtils::SpaceEnumToPrimary(limiting_space_);
+  // std::cout << "Limiting space primaries:\n"
+  //           << "[" << prims.red_[0] << ", " << prims.red_[1] << "]\n"
+  //           << "[" << prims.green_[0] << ", " << prims.green_[1] << "]\n"
+  //           << "[" << prims.blue_[0] << ", " << prims.blue_[1] << "]\n"
+  //           << "[" << prims.white_[0] << ", " << prims.white_[1] << "]"
+  //           << std::endl;
 }
 
 void ACES_ODT_Op::init_TSParams() {
