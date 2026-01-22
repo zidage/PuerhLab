@@ -89,7 +89,7 @@ endif()
 # RawProcessorOp Target
 def_library(RawProcessorOp
     SOURCES ${RAW_OP_CPU_SRCS} ${RAW_OP_GPU_SRCS}
-    PUBLIC_DEPS ImageBuffer LibRaw Exiv2 hwy::hwy
+    PUBLIC_DEPS ImageBuffer LibRaw Exiv2 hwy::hwy Eigen3::Eigen
 )
 
 if(CUDAToolkit_FOUND)

@@ -35,9 +35,9 @@ void SetPipelineTemplate(std::shared_ptr<PipelineExecutor> executor) {
 #else
   decode_params["raw"]["cuda"] = false;
 #endif
-  decode_params["raw"]["highlights_reconstruct"] = false;
+  decode_params["raw"]["highlights_reconstruct"] = true;
   decode_params["raw"]["use_camera_wb"]          = true;
-  decode_params["raw"]["user_wb"]                = 7600.f;
+  decode_params["raw"]["user_wb"]                = 7500.f;
   decode_params["raw"]["backend"]                = "puerh";
   raw_stage.SetOperator(OperatorType::RAW_DECODE, decode_params);
   // raw_stage.SetOperator(OperatorType::CST, to_ws_params);
@@ -147,7 +147,7 @@ static void ApplyMaterialLikeTheme(QApplication& app) {
 
 int main(int argc, char* argv[]) {
   struct AdjustmentState {
-    float      exposure_   = 0.0f;
+    float      exposure_   = 1.0f;
     float      contrast_   = 1.0f;
     float      saturation_ = 0.0f;
     float      tint_       = 0.0f;
@@ -203,11 +203,23 @@ int main(int argc, char* argv[]) {
 
   UIHistoryTests tests;
   tests.SetUp();
-  
+
   // SleeveManager             manager{db_path};
-  
-  auto              img_ptr  = std::make_shared<Image>(0, std::string(TEST_IMG_PATH) + "/raw/landscape/_DSC4735.ARW",
-                                               ImageType::DNG);
+
+  std::filesystem::path  img_root_path = std::string(TEST_IMG_PATH) + "/raw/edge_case";
+  std::shared_ptr<Image> img_ptr;
+  for (const auto& entry : std::filesystem::directory_iterator(img_root_path)) {
+    // Load the first file
+    if (is_supported_file(entry)) {
+      img_ptr = std::make_shared<Image>(0, entry.path().string(), ImageType::DNG);
+      break;
+    }
+  }
+
+  if (!img_ptr) {
+    qCritical() << "No supported image found in" << QString::fromStdString(img_root_path.string());
+    return -1;
+  }
 
   PipelineScheduler scheduler{};
   PipelineTask      base_task;
@@ -219,8 +231,17 @@ int main(int argc, char* argv[]) {
   base_task.pipeline_executor_ = base_executor;
   SetPipelineTemplate(base_task.pipeline_executor_);
   base_task.options_.render_desc_.render_type_ = RenderType::FULL_RES_PREVIEW;
+
+  
   auto& global_params                          = base_task.pipeline_executor_->GetGlobalParams();
-  global_params.lmt_enabled_                   = false;
+  global_params.lmt_enabled_                   = true;
+  // global_params.color_wheel_enabled_           = false;
+  // global_params.hls_enabled_                   = false;
+  // global_params.vibrance_enabled_              = false;
+  // global_params.contrast_enabled_              = false;
+  // global_params.curve_enabled_                 = false;
+  // global_params.saturation_enabled_            = false;
+
   // Register a default exposure
   auto& basic_stage = base_task.pipeline_executor_->GetStage(PipelineStageName::Basic_Adjustment);
   basic_stage.SetOperator(OperatorType::EXPOSURE, {{"exposure", 0.0f}}, global_params);
@@ -234,7 +255,7 @@ int main(int argc, char* argv[]) {
   color_stage.SetOperator(OperatorType::SATURATION, {{"saturation", 0.0f}}, global_params);
   color_stage.SetOperator(OperatorType::TINT, {{"tint", 0.0f}}, global_params);
 
-  std::string LUT_PATH = std::string(CONFIG_PATH) + "LUTs/ACES CCT 2383 D65.cube";
+  std::string LUT_PATH = std::string(CONFIG_PATH) + "LUTs/Default_LMT.cube";
   color_stage.SetOperator(OperatorType::LMT, {{"ocio_lmt", LUT_PATH}}, global_params);
 
   auto& detail_stage = base_task.pipeline_executor_->GetStage(PipelineStageName::Detail_Adjustment);
@@ -310,7 +331,7 @@ int main(int argc, char* argv[]) {
   };
 
   addSlider(
-      "Exposure", -1000, 1000, 0,
+      "Exposure", -1000, 1000, 100,
       [&](int v) {
         adjustments.exposure_ = static_cast<float>(v) / 100.0f;
         scheduleAdjustments(adjustments);
@@ -392,7 +413,7 @@ int main(int argc, char* argv[]) {
   // Defer initial scheduling until the event loop starts so the QOpenGLWidget
   // has a valid OpenGL context before any frame sink resize/map.
   AdjustmentState init_state = adjustments;
-  init_state.type_           = RenderType::FULL_RES_PREVIEW;
+  init_state.type_           = RenderType::FULL_RES_PREVIEW; // TODO: For benchmarking only
   QTimer::singleShot(0, &window, [&, init_state]() { scheduleAdjustments(init_state); });
 
   int ret = app.exec();

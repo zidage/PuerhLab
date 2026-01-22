@@ -124,7 +124,8 @@ target_include_directories(JSON INTERFACE "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_
 # OpenCV
 find_package(OpenCV REQUIRED)
 
-
+# Eigen3
+find_package(Eigen3 CONFIG REQUIRED)
 
 # OpenGL
 find_package(OpenGL REQUIRED)

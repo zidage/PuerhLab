@@ -52,6 +52,22 @@ inline auto Trim(std::string_view sv) -> std::string_view {
   return sv.substr(b, e - b);
 }
 
+inline auto StripInlineComment(std::string_view sv) -> std::string_view {
+  const auto pos = sv.find('#');
+  if (pos != std::string_view::npos) {
+    sv = sv.substr(0, pos);
+  }
+  return Trim(sv);
+}
+
+inline auto ReplaceCommas(std::string_view sv) -> std::string {
+  std::string out(sv);
+  for (char& c : out) {
+    if (c == ',') c = ' ';
+  }
+  return out;
+}
+
 inline auto StartsWith(std::string_view sv, std::string_view prefix) -> bool {
   return sv.size() >= prefix.size() && sv.compare(0, prefix.size(), prefix) == 0;
 }
@@ -62,7 +78,8 @@ inline auto ParseInts(std::string_view line, int& out) -> bool {
 }
 
 inline auto ParseTriplet(std::string_view line, std::array<float, 3>& out) -> bool {
-  std::istringstream iss((std::string(line)));
+  const auto cleaned = ReplaceCommas(StripInlineComment(line));
+  std::istringstream iss(cleaned);
   return (iss >> out[0] >> out[1] >> out[2]) ? true : false;
 }
 

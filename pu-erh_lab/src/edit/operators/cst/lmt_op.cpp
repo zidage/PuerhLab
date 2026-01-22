@@ -67,22 +67,22 @@ void OCIO_LMT_Transform_Op::SetParams(const nlohmann::json& params) {
   }
   lmt_path_ = std::filesystem::path(conv::FromBytes(params[script_name_].get<std::string>()));
 
-  auto lmt_transform = OCIO::FileTransform::Create();
-  auto path_str      = lmt_path_.wstring();
-  lmt_transform->setSrc(conv::ToBytes(path_str).c_str());
-  lmt_transform->setInterpolation(OCIO::INTERP_BEST);
-  lmt_transform->setDirection(OCIO::TRANSFORM_DIR_FORWARD);
+  // auto lmt_transform = OCIO::FileTransform::Create();
+  // auto path_str      = lmt_path_.wstring();
+  // lmt_transform->setSrc(conv::ToBytes(path_str).c_str());
+  // lmt_transform->setInterpolation(OCIO::INTERP_BEST);
+  // lmt_transform->setDirection(OCIO::TRANSFORM_DIR_FORWARD);
 
-  auto lmt_processor = config_->getProcessor(lmt_transform);
-  auto cpu           = lmt_processor->getDefaultCPUProcessor();
-  auto gpu           = lmt_processor->getDefaultGPUProcessor();
-  cpu_processor_      = cpu;
-  gpu_processor_      = gpu;
+  // auto lmt_processor = config_->getProcessor(lmt_transform);
+  // auto cpu           = lmt_processor->getDefaultCPUProcessor();
+  // auto gpu           = lmt_processor->getDefaultGPUProcessor();
+  // cpu_processor_      = cpu;
+  // gpu_processor_      = gpu;
 }
 
 void OCIO_LMT_Transform_Op::SetGlobalParams(OperatorParams& params) const {
-  params.cpu_lmt_processor_ = cpu_processor_;
-  params.gpu_lmt_processor_ = gpu_processor_;
+  // params.cpu_lmt_processor_ = cpu_processor_;
+  // params.gpu_lmt_processor_ = gpu_processor_;
 
   params.lmt_lut_path_      = lmt_path_;
   params.to_lmt_dirty_      = true;

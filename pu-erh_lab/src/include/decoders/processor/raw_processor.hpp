@@ -19,6 +19,7 @@
 #include <cstdint>
 #include <opencv2/core/types.hpp>
 
+#include "decoders/decoder_scheduler.hpp"
 #include "image/image_buffer.hpp"
 #include "operators/cpu/raw_proc_utils.hpp"
 #include "type/type.hpp"
@@ -31,6 +32,8 @@ struct RawParams {
   uint32_t user_wb_ = 6500;  // If user wants to set a specific white balance temperature
   CPU::LightSourceType user_light_source_ =
       CPU::LightSourceType::UNKNOWN;  // If user wants to use a preset light source as the wb
+
+  DecodeRes decode_res_ = DecodeRes::FULL;
 };
 
 class RawProcessor {
@@ -40,6 +43,8 @@ class RawProcessor {
 
   const libraw_rawdata_t& raw_data_;
   LibRaw&                 raw_processor_;
+
+  void                    SetDecodeRes();
 
   /**
    * @brief A procedure similar to DNG "Mapping Raw Values to Linear Reference Values" procedure.

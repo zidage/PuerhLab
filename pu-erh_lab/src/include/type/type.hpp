@@ -47,5 +47,9 @@ namespace puerhlab {
 
 // #define version_id_t   XXH128_hash_t
 
-
+enum class DecodeRes {
+  FULL,
+  HALF,
+  QUARTER,
+};
 };  // namespace puerhlab

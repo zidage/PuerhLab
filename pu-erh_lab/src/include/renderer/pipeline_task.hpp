@@ -21,6 +21,7 @@
 
 #include "edit/operators/op_kernel.hpp"
 #include "edit/pipeline/pipeline.hpp"
+#include "edit/pipeline/pipeline_cpu.hpp"
 #include "image/image_buffer.hpp"
 #include "type/type.hpp"
 
@@ -45,7 +46,7 @@ struct TaskOptions {
 };
 struct PipelineTask {
   uint32_t                                                    task_id_;
-  std::shared_ptr<PipelineExecutor>                           pipeline_executor_;
+  std::shared_ptr<CPUPipelineExecutor>                           pipeline_executor_;
   std::shared_ptr<ImageBuffer>                                input_;
 
   std::shared_ptr<std::promise<std::shared_ptr<ImageBuffer>>> result_;    // used for blocking tasks

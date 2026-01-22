@@ -86,6 +86,7 @@ auto RawDecodeOp::GetParams() const -> nlohmann::json {
   inner["use_camera_wb"]          = params_.use_camera_wb_;
   inner["user_wb"]                = params_.user_wb_;
   inner["backend"]                = (backend_ == RawProcessBackend::PUERH) ? "puerh" : "libraw";
+  inner["decode_res"]             = static_cast<int>(params_.decode_res_);
 
   params["raw"]                   = inner;
   return params;
@@ -116,6 +117,8 @@ void RawDecodeOp::SetParams(const nlohmann::json& params) {
     else
       throw std::runtime_error("RawDecodeOp: Unknown backend " + backend);
   }
+  if (inner.contains("decode_res"))
+    params_.decode_res_ = static_cast<DecodeRes>(inner["decode_res"].get<int>());
 }
 
 void RawDecodeOp::SetGlobalParams(OperatorParams&) const {

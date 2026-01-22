@@ -30,15 +30,33 @@ void PipelineTask::SetExecutorRenderParams() {
   if (desc.render_type_ == RenderType::FAST_PREVIEW) {
     pipeline_executor_->SetForceCPUOutput(false);
     pipeline_executor_->SetRenderRes(false, 4096);
+    pipeline_executor_->SetEnableCache(true);
+    // The default decode res is full, this call will be effective only when changed before
+    pipeline_executor_->SetDecodeRes(DecodeRes::FULL);
     return;
   }
   if (desc.render_type_ == RenderType::THUMBNAIL) {
     pipeline_executor_->SetForceCPUOutput(true);
     pipeline_executor_->SetRenderRes(false, 1024);
+    pipeline_executor_->SetEnableCache(false);
+    pipeline_executor_->SetDecodeRes(DecodeRes::QUARTER);
     return;
   }
-  pipeline_executor_->SetRenderRes(true);
-  pipeline_executor_->SetForceCPUOutput(desc.render_type_ == RenderType::FULL_RES_EXPORT);
+  if (desc.render_type_ == RenderType::FULL_RES_PREVIEW) {
+    pipeline_executor_->SetRenderRes(true);
+    pipeline_executor_->SetForceCPUOutput(false);
+    pipeline_executor_->SetEnableCache(true);
+    pipeline_executor_->SetDecodeRes(DecodeRes::FULL);
+    return;
+  }
+  if (desc.render_type_ == RenderType::FULL_RES_EXPORT) {
+    pipeline_executor_->SetRenderRes(true);
+    pipeline_executor_->SetForceCPUOutput(desc.render_type_ == RenderType::FULL_RES_EXPORT);
+    pipeline_executor_->SetEnableCache(false);
+    // The default decode res is full, this call will be effective only when changed before
+    pipeline_executor_->SetDecodeRes(DecodeRes::FULL);
+  }
+  throw std::runtime_error("[ERROR] PipelineTask: Unknown render type");
 }
 
 void PipelineTask::ResetPreviewRenderParams() {
@@ -48,6 +66,8 @@ void PipelineTask::ResetPreviewRenderParams() {
   // A simple status machine to automatically set back to fast preview mode
   pipeline_executor_->SetRenderRes(false, 4096);
   pipeline_executor_->SetForceCPUOutput(false);
+  pipeline_executor_->SetEnableCache(true);
+  pipeline_executor_->SetDecodeRes(DecodeRes::FULL);
 }
 
 PipelineScheduler::PipelineScheduler() : thread_pool_(1) {}

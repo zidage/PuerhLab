@@ -67,6 +67,8 @@ enum class OperatorType : int {
   UNKNOWN  // For unrecognized operator types or placeholders
 };
 
+
+
 struct OperatorParams {
   // Basic adjustment parameters
   bool                         exposure_enabled_         = true;

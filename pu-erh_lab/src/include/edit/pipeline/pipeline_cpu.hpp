@@ -36,18 +36,22 @@ class CPUPipelineExecutor : public PipelineExecutor {
 
   bool                                                                        is_thumbnail_ = false;
 
-  bool                                                                        force_cpu_output_ = false;
+  bool                             force_cpu_output_                                        = false;
+  DecodeRes                        decode_res_    = DecodeRes::FULL;
 
-  nlohmann::json                                                              render_params_ = {};
+  nlohmann::json                   render_params_ = {};
 
-  static constexpr PipelineBackend backend_ = PipelineBackend::CPU;
+  static constexpr PipelineBackend backend_       = PipelineBackend::CPU;
 
   std::vector<PipelineStage*>      exec_stages_;
   std::unique_ptr<PipelineStage>   merged_stages_;
 
   void                             ResetStages();
 
-  void SetTemplateParams();
+  void                             ResetExecutionStagesCache();
+
+  void                             SetTemplateParams();
+
  public:
   CPUPipelineExecutor();
   CPUPipelineExecutor(bool enable_cache);
@@ -88,6 +92,7 @@ class CPUPipelineExecutor : public PipelineExecutor {
 
   void SetRenderRegion(int x, int y, float scale_factor) override;
   void SetRenderRes(bool full_res, int max_side_length = 2048) override;
+  void SetDecodeRes(DecodeRes res);
 
   void RegisterAllOperators();
 

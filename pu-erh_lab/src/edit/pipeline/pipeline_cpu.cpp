@@ -47,6 +47,12 @@ CPUPipelineExecutor::CPUPipelineExecutor()
   InitDefaultPipeline();
 }
 
+void CPUPipelineExecutor::ResetExecutionStagesCache() {
+  for (auto& stage : exec_stages_) {
+    stage->ResetCache();
+  }
+}
+
 void CPUPipelineExecutor::ResetStages() {
   for (size_t i = 0; i < stages_.size(); i++) {
     stages_[i].ResetAll();
@@ -57,7 +63,7 @@ void CPUPipelineExecutor::SetEnableCache(bool enable_cache) {
   if (enable_cache_ == enable_cache) return;
   enable_cache_ = enable_cache;
   // Reinitialize stages with the new cache setting
-  ResetStages();
+  ResetExecutionStagesCache();
 }
 
 CPUPipelineExecutor::CPUPipelineExecutor(bool enable_cache)
@@ -226,6 +232,19 @@ void CPUPipelineExecutor::SetRenderRes(bool full_res, int max_side_length) {
       OperatorType::RESIZE, render_params_);
 }
 
+void CPUPipelineExecutor::SetDecodeRes(DecodeRes res) {
+  if (decode_res_ == res) {
+    return;
+  }
+  decode_res_     = res;
+
+  // TODO: Abstraction leak, need better design later
+  auto& raw_stage = GetStage(PipelineStageName::Image_Loading);
+  auto  raw_param = raw_stage.GetOperator(OperatorType::RAW_DECODE).value()->ExportOperatorParams();
+  raw_param["params"]["raw"]["decode_res"] = static_cast<int>(res);
+  raw_stage.SetOperator(OperatorType::RAW_DECODE, raw_param["params"]);
+}
+
 void CPUPipelineExecutor::RegisterAllOperators() {
   // It is really silly to hardcode the operators here.
   // I should keep things more flexible in the future.
@@ -271,10 +290,10 @@ void CPUPipelineExecutor::SetTemplateParams() {
 
   nlohmann::json output_params;
   auto&          output_stage = GetStage(PipelineStageName::Output_Transform);
-  output_params["aces_odt"] = {{"encoding_space", "rec709"},
-                               {"encoding_etof", "gamma_2_2"},
-                               {"limiting_space", "rec709"},
-                               {"peak_luminance", 100.0f}};
+  output_params["aces_odt"]   = {{"encoding_space", "rec709"},
+                                 {"encoding_etof", "gamma_2_2"},
+                                 {"limiting_space", "rec709"},
+                                 {"peak_luminance", 100.0f}};
   output_stage.SetOperator(OperatorType::ODT, output_params, global_params);
 }
 
