@@ -79,15 +79,12 @@ PipelineScheduler::PipelineScheduler(size_t thread_count) : thread_pool_(thread_
 void PipelineScheduler::ScheduleTask(PipelineTask&& task) {
   task.task_id_ = id_generator_.GenerateID();
   thread_pool_.Submit([task = std::move(task), &lock = scheduler_lock_]() mutable {
-    EASY_BLOCK("Start Rendering");
     std::shared_ptr<ImageBuffer> result_copy;
     {
       if (task.input_desc_ && !task.input_) {
         // Load image data into buffer
-        EASY_BLOCK("Read Image Data");
         task.input_ =
             std::make_shared<ImageBuffer>(ByteBufferLoader::LoadByteBufferFromImage(task.input_desc_));
-        EASY_END_BLOCK;
       }
       if (task.input_) {
         auto& render_desc = task.options_.render_desc_;
@@ -95,9 +92,7 @@ void PipelineScheduler::ScheduleTask(PipelineTask&& task) {
           task.SetExecutorRenderParams();
         }
 
-        EASY_BLOCK("Apply Pipeline");
         auto result = task.pipeline_executor_->Apply(task.input_);
-        EASY_END_BLOCK;
 
         if (render_desc.render_type_ == RenderType::FAST_PREVIEW ||
             render_desc.render_type_ == RenderType::FULL_RES_PREVIEW || !result ||
@@ -131,7 +126,6 @@ void PipelineScheduler::ScheduleTask(PipelineTask&& task) {
       // In case of failure, set nullptr
       task.result_->set_value(nullptr);
     }
-    EASY_END_BLOCK;
   });
 }
 }  // namespace puerhlab
