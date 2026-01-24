@@ -59,7 +59,7 @@ class ThumbnailServiceTests : public ::testing::Test {
   }
 };
 
-TEST_F(ThumbnailServiceTests, DISABLED_GenerateThumbnailAndCallbacks) {
+TEST_F(ThumbnailServiceTests, GenerateThumbnailAndCallbacks) {
   using namespace std::chrono_literals;
 
   ProjectService            project(db_path_, meta_path_);
@@ -103,8 +103,7 @@ TEST_F(ThumbnailServiceTests, DISABLED_GenerateThumbnailAndCallbacks) {
 
   auto       pipeline_service = std::make_shared<PipelineMgmtService>(project.GetStorageService());
 
-  auto       scheduler        = std::make_shared<PipelineScheduler>();
-  ThumbnailService                thumbnail_service(img_pool, pipeline_service, scheduler);
+  ThumbnailService                thumbnail_service(img_pool, pipeline_service);
 
   std::shared_ptr<ThumbnailGuard> guard_1;
   std::shared_ptr<ThumbnailGuard> guard_2;
@@ -234,7 +233,7 @@ TEST_F(ThumbnailServiceTests, Generate16ThumbnailsAndValidateAll) {
 
   auto pipeline_service = std::make_shared<PipelineMgmtService>(project.GetStorageService());
   auto scheduler        = std::make_shared<PipelineScheduler>(8);
-  ThumbnailService             thumbnail_service(img_pool, pipeline_service, scheduler);
+  ThumbnailService             thumbnail_service(img_pool, pipeline_service);
 
   std::vector<sl_element_id_t> ids;
   ids.reserve(16);
@@ -301,7 +300,7 @@ TEST_F(ThumbnailServiceTests, Generate16ThumbnailsAndValidateAll) {
   }
 }
 
-TEST_F(ThumbnailServiceTests, DISABLED_MissingPipelineThrows) {
+TEST_F(ThumbnailServiceTests, MissingPipelineThrows) {
   ProjectService project(db_path_, meta_path_);
   auto           img_pool        = project.GetImagePoolService();
 
@@ -310,13 +309,13 @@ TEST_F(ThumbnailServiceTests, DISABLED_MissingPipelineThrows) {
   auto pipeline_service = std::make_shared<PipelineMgmtService>(project.GetStorageService());
   auto scheduler        = std::make_shared<PipelineScheduler>();
 
-  ThumbnailService thumbnail_service(img_pool, pipeline_service, scheduler);
+  ThumbnailService thumbnail_service(img_pool, pipeline_service);
 
   EXPECT_THROW(thumbnail_service.GetThumbnail(12345, [](std::shared_ptr<ThumbnailGuard>) {}),
                std::runtime_error);
 }
 
-TEST_F(ThumbnailServiceTests, DISABLED_MissingImageThrows) {
+TEST_F(ThumbnailServiceTests, MissingImageThrows) {
   ProjectService project(db_path_, meta_path_);
   auto           img_pool        = project.GetImagePoolService();
 
@@ -327,7 +326,7 @@ TEST_F(ThumbnailServiceTests, DISABLED_MissingImageThrows) {
 
   constexpr sl_element_id_t kMissingImageId = 7777;
 
-  ThumbnailService          thumbnail_service(img_pool, pipeline_service, scheduler);
+  ThumbnailService          thumbnail_service(img_pool, pipeline_service);
 
   EXPECT_THROW(
       thumbnail_service.GetThumbnail(kMissingImageId, [](std::shared_ptr<ThumbnailGuard>) {}),

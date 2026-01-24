@@ -127,6 +127,10 @@ void RawProcessor::ApplyLinearization() {
   }
 #endif
   auto& cpu_img = pre_debayer_buffer.GetCPUData();
+  // Apply "as shot" white balance multipliers for highlight reconstruction
+  // This step will stretch the image to original 16-bit range
+  // Because 0-65535 is mapped to 0-1 float range, we can also think this as
+  // stretching to [0, 1] range
   CPU::ToLinearRef(cpu_img, raw_processor_);
 }
 
@@ -166,6 +170,30 @@ void RawProcessor::ApplyHighlightReconstruct() {
       return;
     }
     CPU::HighlightReconstruct(img, raw_processor_);
+  }
+}
+
+void RawProcessor::ApplyGeometricCorrections() {
+  // TODO: Add lens distortion correction if needed
+
+  switch (raw_data_.sizes.flip) {
+    case 3:
+      // 180 degree
+      cv::rotate(process_buffer_.GetCPUData(), process_buffer_.GetCPUData(), cv::ROTATE_180);
+      break;
+    case 5:
+      // Rotate 90 CCW
+      cv::rotate(process_buffer_.GetCPUData(), process_buffer_.GetCPUData(),
+                 cv::ROTATE_90_COUNTERCLOCKWISE);
+      break;
+    case 6:
+      // Rotate 90 CW
+      cv::rotate(process_buffer_.GetCPUData(), process_buffer_.GetCPUData(),
+                 cv::ROTATE_90_CLOCKWISE);
+      break;
+    default:
+      // Do nothing
+      break;
   }
 }
 
@@ -214,59 +242,27 @@ auto RawProcessor::Process() -> ImageBuffer {
   //           << _raw_processor.COLOR(1, 0) << " " << _raw_processor.COLOR(1, 1) << "\n";
   CV_Assert(raw_processor_.COLOR(0, 0) == 0 && raw_processor_.COLOR(0, 1) == 1 &&
             raw_processor_.COLOR(1, 0) == 3 && raw_processor_.COLOR(1, 1) == 2);
+
+  // Convert to float32 in [0, 1]
   process_buffer_.GetCPUData().convertTo(process_buffer_.GetCPUData(), CV_32FC1, 1.0f / 65535.0f);
 
   SetDecodeRes();
 
-  using clock = std::chrono::high_resolution_clock;
-  auto start  = clock::now();
   ApplyLinearization();
-  auto                                      linear_end      = clock::now();
-  std::chrono::duration<double, std::milli> linear_duration = linear_end - start;
-  std::cout << "Linearization took " << linear_duration.count() << " ms\n";
 
   ApplyHighlightReconstruct();
-  auto                                      hl_end      = clock::now();
-  std::chrono::duration<double, std::milli> hl_duration = hl_end - linear_end;
-  std::cout << "Highlight Reconstruction took " << hl_duration.count() << " ms\n";
 
   ApplyDebayer();
-  auto                                      debayer_end      = clock::now();
-  std::chrono::duration<double, std::milli> debayer_duration = debayer_end - hl_end;
-  std::cout << "Debayering took " << debayer_duration.count() << " ms\n";
 
-  // Temporary fix for orientation
-  switch (raw_data_.sizes.flip) {
-    case 3:
-      // 180 degree
-      cv::rotate(process_buffer_.GetCPUData(), process_buffer_.GetCPUData(), cv::ROTATE_180);
-      break;
-    case 5:
-      // Rotate 90 CCW
-      cv::rotate(process_buffer_.GetCPUData(), process_buffer_.GetCPUData(),
-                 cv::ROTATE_90_COUNTERCLOCKWISE);
-      break;
-    case 6:
-      // Rotate 90 CW
-      cv::rotate(process_buffer_.GetCPUData(), process_buffer_.GetCPUData(),
-                 cv::ROTATE_90_CLOCKWISE);
-      break;
-    default:
-      // Do nothing
-      break;
-  }
+  ApplyGeometricCorrections();
 
   ConvertToWorkingSpace();
 
   cv::Mat final_img = cv::Mat();
   final_img.create(process_buffer_.GetCPUData().rows, process_buffer_.GetCPUData().cols, CV_32FC4);
   cv::cvtColor(process_buffer_.GetCPUData(), final_img, cv::COLOR_RGB2RGBA);
-  process_buffer_                                        = {std::move(final_img)};
-  auto                                      cst_end      = clock::now();
-  std::chrono::duration<double, std::milli> cst_duration = cst_end - debayer_end;
-  std::cout << "Color Space Transformation took " << cst_duration.count() << " ms\n";
-  std::cout << "Total processing took "
-            << (linear_duration + hl_duration + debayer_duration + cst_duration).count() << " ms\n";
+  process_buffer_ = {std::move(final_img)};
+
 #ifdef HAVE_CUDA
   if (params_.cuda_) {
     process_buffer_.SyncToCPU();

@@ -18,6 +18,7 @@
 #include <memory>
 #include <unordered_map>
 
+#include "app/render_service.hpp"
 #include "app/image_pool_service.hpp"
 #include "app/pipeline_service.hpp"
 #include "concurrency/thread_pool.hpp"
@@ -57,12 +58,12 @@ class ThumbnailService {
  public:
   ThumbnailService() = delete;
   ThumbnailService(std::shared_ptr<ImagePoolService>    image_pool_service,
-                   std::shared_ptr<PipelineMgmtService> pipeline_service,
-                   std::shared_ptr<PipelineScheduler>   pipeline_scheduler)
+                   std::shared_ptr<PipelineMgmtService> pipeline_service)
       : image_pool_service_(image_pool_service),
         pipeline_service_(pipeline_service),
-        thumbnail_cache_(default_cache_size_),
-        pipeline_scheduler_(pipeline_scheduler) {}
+        thumbnail_cache_(default_cache_size_) {
+    pipeline_scheduler_ = RenderService::GetThumbnailOrExportScheduler();
+         }
   ~ThumbnailService() = default;
 
   void GetThumbnail(sl_element_id_t id, ThumbnailCallback callback, bool pin_if_found = true,

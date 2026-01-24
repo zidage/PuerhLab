@@ -78,7 +78,7 @@ PipelineScheduler::PipelineScheduler(size_t thread_count) : thread_pool_(thread_
 
 void PipelineScheduler::ScheduleTask(PipelineTask&& task) {
   task.task_id_ = id_generator_.GenerateID();
-  thread_pool_.Submit([task = std::move(task), &lock = scheduler_lock_]() mutable {
+  thread_pool_.Submit([task = std::move(task)]() mutable {
     std::shared_ptr<ImageBuffer> result_copy;
     {
       if (task.input_desc_ && !task.input_) {

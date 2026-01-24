@@ -68,6 +68,8 @@ class RawProcessor {
    */
   void                    ApplyDebayer();
 
+  void                    ApplyGeometricCorrections();
+
   /**
    * @brief Apply color space transformation from camera RGB to ACES2065-1.
    *
