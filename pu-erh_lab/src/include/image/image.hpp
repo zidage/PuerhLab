@@ -37,6 +37,8 @@ enum class ImageSyncState : uint8_t { SYNCED, UNSYNCED, MODIFIED, DELETED };
  *
  */
 class Image {
+  // FIXME: Image should not hold any image data, only metadata
+  // FIXME: Remove all has_xxx_ atomic flags, use sync_state_ only
  public:
   image_id_t                  image_id_;
   image_path_t                image_path_;

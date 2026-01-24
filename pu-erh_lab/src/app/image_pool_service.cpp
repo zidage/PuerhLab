@@ -23,18 +23,18 @@
 #include "utils/string/convert.hpp"
 
 namespace puerhlab {
-ImagePoolServiceImpl::ImagePoolServiceImpl(std::shared_ptr<StorageService> storage_service,
+ImagePoolService::ImagePoolService(std::shared_ptr<StorageService> storage_service,
                                            image_id_t                      start_id)
     : storage_service_(storage_service) {
   pool_manager_ = std::make_unique<ImagePoolManager>(start_id);
 }
 
-auto ImagePoolServiceImpl::CreateAndReturnPinnedEmpty() -> ImagePoolManager::PinnedImageHandle {
+auto ImagePoolService::CreateAndReturnPinnedEmpty() -> ImagePoolManager::PinnedImageHandle {
   std::unique_lock       lock(pool_lock_);
   return pool_manager_->CreateAndReturnPinnedEmpty();
 }
 
-void ImagePoolServiceImpl::Remove(image_id_t image_id) {
+void ImagePoolService::Remove(image_id_t image_id) {
   std::unique_lock lock(pool_lock_);
   if (!pool_manager_) {
     throw std::runtime_error("[ERROR] ImagePoolService: Pool manager is not initialized.");
@@ -57,7 +57,7 @@ void ImagePoolServiceImpl::Remove(image_id_t image_id) {
 
 }
 
-auto ImagePoolServiceImpl::SyncWithStorage() -> ImagePoolSyncStatus {
+auto ImagePoolService::SyncWithStorage() -> ImagePoolSyncStatus {
   std::unique_lock        lock(pool_lock_);
   auto&                   img_ctrl = storage_service_->GetImageController();
 
@@ -103,7 +103,7 @@ auto ImagePoolServiceImpl::SyncWithStorage() -> ImagePoolSyncStatus {
   return status;
 }
 
-auto ImagePoolServiceImpl::GetCurrentID() -> image_id_t {
+auto ImagePoolService::GetCurrentID() -> image_id_t {
   std::unique_lock lock(pool_lock_);
   if (!pool_manager_) {
     throw std::runtime_error("[ERROR] ImagePoolService: Pool manager is not initialized.");

@@ -33,32 +33,8 @@ struct ImagePoolSyncStatus {
   std::vector<ImagePoolSyncErrorResult> failed_images_{};
 };
 
+
 class ImagePoolService {
- public:
-  virtual ~ImagePoolService()                                                     = default;
-
-
-  template <typename TResult>
-  auto Read(image_id_t image_id, std::function<TResult(std::shared_ptr<Image>)> operation)
-      -> TResult;
-
-  template <typename TResult>
-  auto Write(image_id_t image_id, std::function<TResult(std::shared_ptr<Image>)> operation)
-      -> std::conditional_t<std::is_void_v<TResult>, ImagePoolSyncStatus,
-                            std::pair<TResult, ImagePoolSyncStatus>>;
-
-  template <typename TResult>
-  auto Write_NoSync(image_id_t image_id, std::function<TResult(std::shared_ptr<Image>)> operation)
-      -> TResult;
-
-  virtual void Remove(image_id_t image_id)              = 0;
-
-  virtual auto SyncWithStorage() -> ImagePoolSyncStatus = 0;
-
-  virtual auto GetCurrentID() -> image_id_t             = 0;
-};
-
-class ImagePoolServiceImpl final : public ImagePoolService {
  private:
   std::unique_ptr<ImagePoolManager> pool_manager_;
   // This should be injected from sleeve service in future
@@ -67,10 +43,10 @@ class ImagePoolServiceImpl final : public ImagePoolService {
   std::mutex                        pool_lock_;
 
  public:
-  ImagePoolServiceImpl() = delete;
-  ImagePoolServiceImpl(std::shared_ptr<StorageService> storage_service, image_id_t start_id);
+  ImagePoolService() = delete;
+  ImagePoolService(std::shared_ptr<StorageService> storage_service, image_id_t start_id);
 
-  ~ImagePoolServiceImpl() = default;
+  ~ImagePoolService() = default;
 
   template <typename TResult>
   auto Read(image_id_t image_id, std::function<TResult(std::shared_ptr<Image>)> operation)
@@ -169,8 +145,8 @@ class ImagePoolServiceImpl final : public ImagePoolService {
 
   auto CreateAndReturnPinnedEmpty() -> ImagePoolManager::PinnedImageHandle;
 
-  void Remove(image_id_t image_id) override;
-  auto SyncWithStorage() -> ImagePoolSyncStatus override;
-  auto GetCurrentID() -> image_id_t override;
+  void Remove(image_id_t image_id);
+  auto SyncWithStorage() -> ImagePoolSyncStatus;
+  auto GetCurrentID() -> image_id_t;
 };
 };  // namespace puerhlab

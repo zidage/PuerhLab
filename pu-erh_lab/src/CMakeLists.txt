@@ -344,6 +344,10 @@ def_library(ImportService
     PUBLIC_DEPS SleeveManager ImageWriter ImagePoolService
 )
 
+def_library(ThumbnailService
+    SOURCES app/thumbnail_service.cpp
+    PUBLIC_DEPS EditPipeline ThreadPool StrConv ImagePoolService PipelineMgmtService
+)
 
 # ==============================================================================
 # 9. UI Components

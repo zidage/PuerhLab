@@ -93,4 +93,16 @@ auto ByteBufferLoader::LoadFromImage(std::shared_ptr<Image> img)
   return buffer;
 }
 
+auto ByteBufferLoader::LoadByteBufferFromImage(std::shared_ptr<Image> img) -> std::vector<uint8_t> {
+  std::ifstream   file(img->image_path_, std::ios::binary | std::ios::ate);
+  std::streamsize fileSize = file.tellg();
+  file.seekg(0, std::ios::beg);
+  auto buffer = std::vector<uint8_t>(fileSize);
+  if (!file.read(reinterpret_cast<char*>(buffer.data()), fileSize)) {
+    return {};
+  }
+  file.close();
+  return buffer;
+}
+
 };  // namespace puerhlab

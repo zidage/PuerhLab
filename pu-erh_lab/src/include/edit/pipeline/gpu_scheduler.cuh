@@ -24,9 +24,9 @@
 #include <iostream>
 #include <memory>
 #include <mutex>
+#include <opencv2/core/cuda.hpp>
 #include <stdexcept>
 #include <string>
-#include <opencv2/core/cuda.hpp>
 
 #include "edit/operators/GPU_kernels/param.cuh"
 #include "edit/operators/op_base.hpp"
@@ -39,36 +39,48 @@ namespace CUDA {
 template <typename KernelStreamT>
 class GPU_KernelLauncher {
  private:
-  std::shared_ptr<ImageBuffer> input_img_;
+  std::shared_ptr<ImageBuffer>               input_img_;
 
-  float4*                      work_buffer_    = nullptr;
-  float4*                      temp_buffer_    = nullptr;
-  size_t                       allocated_size_ = 0;
+  float4*                                    work_buffer_    = nullptr;
+  float4*                                    temp_buffer_    = nullptr;
+  size_t                                     allocated_size_ = 0;
 
-  std::shared_ptr<ImageBuffer> output_img_;
+  std::shared_ptr<ImageBuffer>               output_img_;
 
-  KernelStreamT                kernel_stream_;
+  KernelStreamT                              kernel_stream_;
 
-  GPUOperatorParams            params_;
+  cudaStream_t                               stream_ = nullptr;
 
-  IFrameSink*                  frame_sink_ = nullptr;
+  GPUOperatorParams                          params_;
+
+  IFrameSink*                                frame_sink_ = nullptr;
 
   // Lightweight FPS reporter (per launcher instance). Prints a single updating
   // line in the CLI, throttled to avoid spamming.
-  std::chrono::steady_clock::time_point last_report_time_{};
-  double                               ema_fps_                 = 0.0;
-  double                               last_frame_ms_           = 0.0;
-  size_t                               frames_since_report_     = 0;
-  size_t                               total_frames_rendered_   = 0;
+  std::chrono::steady_clock::time_point      last_report_time_{};
+  double                                     ema_fps_               = 0.0;
+  double                                     last_frame_ms_         = 0.0;
+  size_t                                     frames_since_report_   = 0;
+  size_t                                     total_frames_rendered_ = 0;
 
   static constexpr std::chrono::milliseconds kReportInterval{500};
-  static constexpr double                   kEmaAlpha = 0.15;  // smoothing factor
+  static constexpr double                    kEmaAlpha = 0.15;  // smoothing factor
 
  public:
   GPU_KernelLauncher(std::shared_ptr<ImageBuffer> input_img, KernelStreamT kernel_stream)
-      : input_img_(input_img), kernel_stream_(kernel_stream) {}
+      : input_img_(input_img), kernel_stream_(kernel_stream) {
+    const auto stream_err = cudaStreamCreate(&stream_);
+    if (stream_err != cudaSuccess) {
+      throw std::runtime_error(std::string("cudaStreamCreate failed: ") +
+                               cudaGetErrorString(stream_err));
+    }
+  }
 
   ~GPU_KernelLauncher() {
+    if (stream_) {
+      cudaStreamDestroy(stream_);
+      stream_ = nullptr;
+    }
     if (work_buffer_) {
       cudaFree(work_buffer_);
       work_buffer_ = nullptr;
@@ -119,93 +131,98 @@ class GPU_KernelLauncher {
       throw std::runtime_error("Input image not set or work buffer not allocated.");
     }
 
+    if (!stream_) {
+      throw std::runtime_error("CUDA stream not initialized.");
+    }
+
     cv::cuda::GpuMat gpu_mat = input_img_->GetGPUData();
     size_t           width   = gpu_mat.cols;
     size_t           height  = gpu_mat.rows;
 
-    frame_sink_->EnsureSize(width, height);
+    if (frame_sink_) frame_sink_->EnsureSize(width, height);
 
     {
-      const auto copy_err = cudaMemcpy2D(work_buffer_, width * sizeof(float4), gpu_mat.ptr<float4>(),
-                                         gpu_mat.step, width * sizeof(float4), height,
-                                         cudaMemcpyDeviceToDevice);
+      const auto copy_err = cudaMemcpy2DAsync(
+          work_buffer_, width * sizeof(float4), gpu_mat.ptr<float4>(), gpu_mat.step,
+          width * sizeof(float4), height, cudaMemcpyDeviceToDevice, stream_);
       if (copy_err != cudaSuccess) {
         throw std::runtime_error(std::string("cudaMemcpy2D (input->work) failed: ") +
                                  cudaGetErrorString(copy_err));
       }
     }
 
-    cudaStream_t stream;
-    {
-      const auto stream_err = cudaStreamCreate(&stream);
-      if (stream_err != cudaSuccess) {
-        throw std::runtime_error(std::string("cudaStreamCreate failed: ") +
-                                 cudaGetErrorString(stream_err));
-      }
-    }
-
     float4* result_ptr = kernel_stream_.Process(work_buffer_, temp_buffer_, static_cast<int>(width),
                                                 static_cast<int>(height),
-                                                static_cast<size_t>(width), params_, stream);
-    // Process() will synchronize the stream internally
-    {
-      const auto destroy_err = cudaStreamDestroy(stream);
-      if (destroy_err != cudaSuccess) {
-        throw std::runtime_error(std::string("cudaStreamDestroy failed: ") +
-                                 cudaGetErrorString(destroy_err));
+                                                static_cast<size_t>(width), params_, stream_,
+                                                /*sync=*/false);
+    // Synchronize once later, right before presenting.
+
+    if (frame_sink_) {
+      float4* mapped_ptr = frame_sink_->MapResourceForWrite();
+      if (mapped_ptr) {
+        size_t     size_bytes = width * height * sizeof(float4);
+        const auto out_copy_err =
+            cudaMemcpyAsync(mapped_ptr, result_ptr, size_bytes, cudaMemcpyDeviceToDevice, stream_);
+        if (out_copy_err != cudaSuccess) {
+          frame_sink_->UnmapResource();
+          throw std::runtime_error(std::string("cudaMemcpyAsync (work->frame) failed: ") +
+                                   cudaGetErrorString(out_copy_err));
+        }
+
+        const auto sync_err = cudaStreamSynchronize(stream_);
+        if (sync_err != cudaSuccess) {
+          frame_sink_->UnmapResource();
+          throw std::runtime_error(std::string("cudaStreamSynchronize (present) failed: ") +
+                                   cudaGetErrorString(sync_err));
+        }
+
+        frame_sink_->UnmapResource();
+        frame_sink_->NotifyFrameReady();
+
+        // FPS/frametime reporting
+        const auto   exec_end = std::chrono::steady_clock::now();
+        const double frame_ms =
+            std::chrono::duration<double, std::milli>(exec_end - exec_start).count();
+        last_frame_ms_        = frame_ms;
+        const double inst_fps = (frame_ms > 0.0) ? (1000.0 / frame_ms) : 0.0;
+        ema_fps_ =
+            (ema_fps_ <= 0.0) ? inst_fps : (ema_fps_ * (1.0 - kEmaAlpha) + inst_fps * kEmaAlpha);
+        ++frames_since_report_;
+        ++total_frames_rendered_;
+
+        if (last_report_time_.time_since_epoch().count() == 0) {
+          last_report_time_ = exec_end;
+        }
+
+        if ((exec_end - last_report_time_) >= kReportInterval) {
+          static std::mutex           print_mutex;
+          std::lock_guard<std::mutex> guard(print_mutex);
+
+          std::cout << "\r\033[2KGPU preview: " << std::fixed << std::setprecision(1) << ema_fps_
+                    << " fps"
+                    << " | last " << std::setprecision(2) << last_frame_ms_ << " ms"
+                    << " | frames " << total_frames_rendered_ << std::flush;
+
+          frames_since_report_ = 0;
+          last_report_time_    = exec_end;
+        }
       }
     }
-          
-    float4* mapped_ptr = frame_sink_->MapResourceForWrite();
-    if (mapped_ptr) {
-      size_t size_bytes = width * height * sizeof(float4);
-      cudaMemcpy(mapped_ptr, result_ptr, size_bytes, cudaMemcpyDeviceToDevice);
-      frame_sink_->UnmapResource();
-      frame_sink_->NotifyFrameReady();
 
-      // FPS/frametime reporting
-      const auto exec_end = std::chrono::steady_clock::now();
-      const double frame_ms = std::chrono::duration<double, std::milli>(exec_end - exec_start).count();
-      last_frame_ms_ = frame_ms;
-      const double inst_fps = (frame_ms > 0.0) ? (1000.0 / frame_ms) : 0.0;
-      ema_fps_ = (ema_fps_ <= 0.0) ? inst_fps : (ema_fps_ * (1.0 - kEmaAlpha) + inst_fps * kEmaAlpha);
-      ++frames_since_report_;
-      ++total_frames_rendered_;
-
-      if (last_report_time_.time_since_epoch().count() == 0) {
-        last_report_time_ = exec_end;
+    if (output_img_) {
+      output_img_->InitGPUData(width, height, CV_32FC4);
+      cv::cuda::GpuMat output_gpu_mat = output_img_->GetGPUData();
+      {
+        const auto out_copy_err = cudaMemcpy2D(
+            output_gpu_mat.ptr<float4>(), output_gpu_mat.step, result_ptr, width * sizeof(float4),
+            width * sizeof(float4), height, cudaMemcpyDeviceToDevice);
+        if (out_copy_err != cudaSuccess) {
+          throw std::runtime_error(std::string("cudaMemcpy2D (work->output) failed: ") +
+                                   cudaGetErrorString(out_copy_err));
+        }
       }
-
-      if ((exec_end - last_report_time_) >= kReportInterval) {
-        static std::mutex print_mutex;
-        std::lock_guard<std::mutex> guard(print_mutex);
-
-        std::cout << "\r\033[2KGPU preview: "
-                  << std::fixed << std::setprecision(1) << ema_fps_ << " fps"
-                  << " | last " << std::setprecision(2) << last_frame_ms_ << " ms"
-                  << " | frames " << total_frames_rendered_
-                  << std::flush;
-
-        frames_since_report_ = 0;
-        last_report_time_    = exec_end;
-      }
+      output_img_->SetGPUDataValid(true);
     }
-
-    // if (output_img_) {
-    //   output_img_->InitGPUData(width, height, CV_32FC4);
-    //   cv::cuda::GpuMat output_gpu_mat = output_img_->GetGPUData();
-    //   {
-    //     const auto out_copy_err =
-    //         cudaMemcpy2D(output_gpu_mat.ptr<float4>(), output_gpu_mat.step, result_ptr,
-    //                      width * sizeof(float4), width * sizeof(float4), height,
-    //                      cudaMemcpyDeviceToDevice);
-    //     if (out_copy_err != cudaSuccess) {
-    //       throw std::runtime_error(std::string("cudaMemcpy2D (work->output) failed: ") +
-    //                                cudaGetErrorString(out_copy_err));
-    //     }
-    //   }
-    //   output_img_->SetGPUDataValid(true);
-    // }
   }
 };
 }  // namespace CUDA

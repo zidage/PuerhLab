@@ -171,6 +171,13 @@ if (WIN32)
 target_link_libraries(PipelineServiceTest easy_profiler)
 endif()
 
+add_executable(ThumbnailServiceTest app/thumbnail_service_test.cpp)
+target_include_directories(ThumbnailServiceTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
+target_link_libraries(ThumbnailServiceTest ThumbnailService ProjectService ImportService GTest::gtest_main)
+if (WIN32)
+target_link_libraries(ThumbnailServiceTest easy_profiler)
+endif()
+
 include(GoogleTest)
 # set(CMAKE_GTEST_DISCOVER_TESTS_DISCOVERY_MODE PRE_TEST)
 # gtest_discover_tests(SampleTest)

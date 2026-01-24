@@ -206,7 +206,7 @@ int main(int argc, char* argv[]) {
 
   // SleeveManager             manager{db_path};
 
-  std::filesystem::path  img_root_path = std::string(TEST_IMG_PATH) + "/raw/edge_case";
+  std::filesystem::path  img_root_path = std::string(TEST_IMG_PATH) + "/raw/camera/leica/m10";
   std::shared_ptr<Image> img_ptr;
   for (const auto& entry : std::filesystem::directory_iterator(img_root_path)) {
     // Load the first file

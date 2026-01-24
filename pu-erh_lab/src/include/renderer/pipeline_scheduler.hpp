@@ -32,6 +32,7 @@ class PipelineScheduler {
   
  public:
   explicit PipelineScheduler();
+  explicit PipelineScheduler(size_t thread_count);
 
   /**
    * @brief Schedule a pipeline task

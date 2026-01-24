@@ -115,7 +115,7 @@ class ImportServiceImpl final : public ImportService {
  public:
   ImportServiceImpl() = delete;
   ImportServiceImpl(std::shared_ptr<SleeveServiceImpl> fs_service,
-                    std::shared_ptr<ImagePoolServiceImpl>  image_pool_service)
+                    std::shared_ptr<ImagePoolService>  image_pool_service)
       : fs_service_(fs_service), image_pool_service_(image_pool_service) {}
   // ImportServiceImpl(std::shared_ptr<FileSystem>       fs,
   // std::shared_ptr<ImagePoolManager> image_pool_manager)
@@ -125,7 +125,7 @@ class ImportServiceImpl final : public ImportService {
 
   std::shared_ptr<SleeveServiceImpl>    fs_service_;
 
-  std::shared_ptr<ImagePoolServiceImpl> image_pool_service_ = nullptr;
+  std::shared_ptr<ImagePoolService> image_pool_service_ = nullptr;
 
   ThreadPool                            thread_pool_{8};
 

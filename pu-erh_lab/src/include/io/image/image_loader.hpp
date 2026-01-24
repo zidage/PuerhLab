@@ -49,6 +49,7 @@ class ImageLoader {
 
 class ByteBufferLoader {
  public:
+  // TODO: This function has been deprecated, use LoadByteBufferFromImage instead
   /**
    * @brief Load image data from disk into a byte buffer, used only from ImagePool
    *
@@ -56,5 +57,7 @@ class ByteBufferLoader {
    * @return std::shared_ptr<std::vector<uint8_t>>
    */
   static auto LoadFromImage(std::shared_ptr<Image> img) -> std::shared_ptr<std::vector<uint8_t>>;
+
+  static auto LoadByteBufferFromImage(std::shared_ptr<Image> img) -> std::vector<uint8_t>;
 };
 };  // namespace puerhlab

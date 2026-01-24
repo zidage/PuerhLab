@@ -34,7 +34,7 @@ class ProjectService {
   auto GetStorageService() const -> std::shared_ptr<StorageService> { return storage_service_; }
 
   auto GetSleeveService() const -> std::shared_ptr<SleeveServiceImpl> { return sleeve_service_; }
-  auto GetImagePoolService() const -> std::shared_ptr<ImagePoolServiceImpl> {
+  auto GetImagePoolService() const -> std::shared_ptr<ImagePoolService> {
     return pool_service_;
   }
 
@@ -48,7 +48,7 @@ class ProjectService {
   std::filesystem::path                 meta_path_;
   std::shared_ptr<StorageService>       storage_service_;
   std::shared_ptr<SleeveServiceImpl>    sleeve_service_;
-  // TODO: Add ImagePoolServiceImpl and store its start_id into the metadata
-  std::shared_ptr<ImagePoolServiceImpl> pool_service_;
+  // TODO: Add ImagePoolService and store its start_id into the metadata
+  std::shared_ptr<ImagePoolService> pool_service_;
 };
 };  // namespace puerhlab

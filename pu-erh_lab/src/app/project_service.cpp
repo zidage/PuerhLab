@@ -30,7 +30,7 @@ ProjectService::ProjectService(const std::filesystem::path& db_path,
     // Load failed, create new project
     storage_service_ = std::make_shared<StorageService>(db_path_);
     RecreateSleeveService(0);
-    pool_service_ = std::make_shared<ImagePoolServiceImpl>(storage_service_, 0);
+    pool_service_ = std::make_shared<ImagePoolService>(storage_service_, 0);
   }
 }
 
@@ -77,7 +77,7 @@ void ProjectService::LoadProject(const std::filesystem::path& meta_path) {
       static_cast<sl_element_id_t>(metadata["image_pool_start_id"]);
   storage_service_ = std::make_shared<StorageService>(db_path_);
   RecreateSleeveService(start_id);
-  pool_service_ = std::make_shared<ImagePoolServiceImpl>(storage_service_, image_pool_start_id);
+  pool_service_ = std::make_shared<ImagePoolService>(storage_service_, image_pool_start_id);
 }
 
 void ProjectService::RecreateSleeveService(sl_element_id_t start_id) {

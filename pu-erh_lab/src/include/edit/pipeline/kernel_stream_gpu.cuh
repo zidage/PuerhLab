@@ -51,15 +51,13 @@ __global__ void GenericPointKernel(Op op, float4* __restrict src, float4* __rest
   int y = blockIdx.y * blockDim.y + threadIdx.y;
 
   if (x < width && y < height) {
-    size_t  offset = y * pitch_elems + x;
-    float4* ptr    = dst + offset;
+    const size_t offset = static_cast<size_t>(y) * pitch_elems + static_cast<size_t>(x);
 
-    if (src != dst) {
-      *ptr = src[offset];
-    }
+    float4       v      = (src != nullptr) ? src[offset] : dst[offset];
 
-    // PointOp interface: operator()(float4*, params)
-    op.template ApplyOps<0>(ptr, params);
+    op.template ApplyOps<0>(&v, params);
+
+    dst[offset] = v;
   }
 }
 
@@ -148,29 +146,19 @@ class GPU_StaticKernelStream {
         }
       }
 
-      {
-        const auto exec_err = cudaStreamSynchronize(stream);
-        if (exec_err != cudaSuccess) {
-          std::cout << "CUDA kernel execution failed at stage " << I << ": "
-                    << cudaGetErrorString(exec_err) << std::endl;
-          throw std::runtime_error(std::string("CUDA kernel execution failed at stage ") +
-                                   std::to_string(I) + ": " + cudaGetErrorString(exec_err));
-        }
-      }
-
       std::swap(src, dst);  // Ping-pong buffers
       Dispatch<I + 1>(src, dst, width, height, pitch_elems, params, grid, block, stream);
     }
   }
 
   float4* Process(float4* d_in, float4* d_temp, int width, int height, size_t pitch_elems,
-                  GPUOperatorParams& params, cudaStream_t stream = 0) {
+                  GPUOperatorParams& params, cudaStream_t stream = 0, bool sync = true) {
     dim3 block(16, 16);
     dim3 grid((width + block.x - 1) / block.x, (height + block.y - 1) / block.y);
 
     Dispatch<0>(d_in, d_temp, width, height, pitch_elems, params, grid, block, stream);
 
-    {
+    if (sync) {
       const auto sync_err = cudaStreamSynchronize(stream);
       if (sync_err != cudaSuccess) {
         throw std::runtime_error(std::string("CUDA stream sync failed: ") +
