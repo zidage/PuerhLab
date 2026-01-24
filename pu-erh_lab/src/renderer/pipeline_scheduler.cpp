@@ -72,6 +72,17 @@ void PipelineTask::ResetPreviewRenderParams() {
   pipeline_executor_->SetDecodeRes(DecodeRes::FULL);
 }
 
+void PipelineTask::ResetThumbnailRenderParams() {
+  if (!pipeline_executor_) {
+    return;
+  }
+  // To make sure thumbnail mode is idempotent
+  pipeline_executor_->SetRenderRes(true, 4096);
+  pipeline_executor_->SetForceCPUOutput(false);
+  pipeline_executor_->SetEnableCache(true);
+  pipeline_executor_->SetDecodeRes(DecodeRes::FULL);
+}
+
 PipelineScheduler::PipelineScheduler() : thread_pool_(1) {}
 
 PipelineScheduler::PipelineScheduler(size_t thread_count) : thread_pool_(thread_count) {}
@@ -105,6 +116,12 @@ void PipelineScheduler::ScheduleTask(PipelineTask&& task) {
             // Reset to fast preview mode after full res preview
             task.ResetPreviewRenderParams();
           }
+
+          if (render_desc.render_type_ == RenderType::THUMBNAIL) {
+            // Reset to FULL_RES_PREVIEW mode after thumbnail render
+            task.ResetThumbnailRenderParams();
+          }
+
           return;
         }
 

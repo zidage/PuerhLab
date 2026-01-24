@@ -60,5 +60,6 @@ struct PipelineTask {
 
   void        SetExecutorRenderParams();
   void        ResetPreviewRenderParams();
+  void        ResetThumbnailRenderParams();
 };
 };  // namespace puerhlab

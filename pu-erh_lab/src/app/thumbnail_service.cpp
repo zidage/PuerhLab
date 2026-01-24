@@ -15,13 +15,16 @@
 #include "app/thumbnail_service.hpp"
 
 #include <cstdint>
+#include <memory>
 
 #include "renderer/pipeline_task.hpp"
-
+#include "sleeve/sleeve_element/sleeve_element.hpp"
+#include "sleeve/sleeve_filesystem.hpp"
 
 namespace puerhlab {
-void ThumbnailService::GetThumbnail(sl_element_id_t id, ThumbnailCallback callback,
-                                    bool pin_if_found, CallbackDispatcher dispatcher) {
+void ThumbnailService::GetThumbnail(sl_element_id_t id, image_id_t image_id,
+                                    ThumbnailCallback callback, bool pin_if_found,
+                                    CallbackDispatcher dispatcher) {
   if (!image_pool_service_ || !pipeline_service_ || !pipeline_scheduler_) {
     throw std::runtime_error("[ERROR] ThumbnailService: Services not initialized.");
   }
@@ -67,7 +70,7 @@ void ThumbnailService::GetThumbnail(sl_element_id_t id, ThumbnailCallback callba
 
     // Read Image descriptor from pool service
     auto img_result               = image_pool_service_->Read<std::shared_ptr<Image>>(
-        id, [](std::shared_ptr<Image> img) { return img; });
+        image_id, [](std::shared_ptr<Image> img) { return img; });
     if (!img_result) {
       throw std::runtime_error(
           std::format("[ERROR] ThumbnailService: Image with ID {} not found in pool.", id));

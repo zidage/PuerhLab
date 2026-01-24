@@ -201,7 +201,7 @@ void CPUPipelineExecutor::ImportPipelineParams(const nlohmann::json& j) {
     if (j.contains(stage_name)) {
       nlohmann::json stage_json = j[stage_name];
       // When importing, stage's import function will do reset internally
-      stage.ImportStageParams(stage_json);
+      stage.ImportStageParams(stage_json, global_params_);
     }
   }
 }
@@ -250,26 +250,26 @@ void CPUPipelineExecutor::RegisterAllOperators() {
   // I should keep things more flexible in the future.
 
   auto& basic_adjustment_stage = stages_[static_cast<int>(PipelineStageName::Basic_Adjustment)];
-  basic_adjustment_stage.SetOperator(OperatorType::EXPOSURE, {});
-  basic_adjustment_stage.SetOperator(OperatorType::CONTRAST, {});
-  basic_adjustment_stage.SetOperator(OperatorType::WHITE, {});
-  basic_adjustment_stage.SetOperator(OperatorType::BLACK, {});
-  basic_adjustment_stage.SetOperator(OperatorType::HIGHLIGHTS, {});
-  basic_adjustment_stage.SetOperator(OperatorType::SHADOWS, {});
-  basic_adjustment_stage.SetOperator(OperatorType::CURVE, {});
+  basic_adjustment_stage.SetOperator(OperatorType::EXPOSURE, {}, global_params_);
+  basic_adjustment_stage.SetOperator(OperatorType::CONTRAST, {}, global_params_);
+  basic_adjustment_stage.SetOperator(OperatorType::WHITE, {}, global_params_);
+  basic_adjustment_stage.SetOperator(OperatorType::BLACK, {}, global_params_);
+  basic_adjustment_stage.SetOperator(OperatorType::HIGHLIGHTS, {}, global_params_);
+  basic_adjustment_stage.SetOperator(OperatorType::SHADOWS, {}, global_params_);
+  basic_adjustment_stage.SetOperator(OperatorType::CURVE, {}, global_params_);
 
   auto& color_adjustment_stage = stages_[static_cast<int>(PipelineStageName::Color_Adjustment)];
   color_adjustment_stage.SetOperator(
       OperatorType::TINT,
-      {});  // TODO: This thing should be in the raw decoding part. Future fix needed.
-  color_adjustment_stage.SetOperator(OperatorType::SATURATION, {});
-  color_adjustment_stage.SetOperator(OperatorType::VIBRANCE, {});
-  color_adjustment_stage.SetOperator(OperatorType::HLS, {});
-  color_adjustment_stage.SetOperator(OperatorType::COLOR_WHEEL, {});
+      {}, global_params_);  // TODO: This thing should be in the raw decoding part. Future fix needed.
+  color_adjustment_stage.SetOperator(OperatorType::SATURATION, {}, global_params_);
+  color_adjustment_stage.SetOperator(OperatorType::VIBRANCE, {}, global_params_);
+  color_adjustment_stage.SetOperator(OperatorType::HLS, {}, global_params_);
+  color_adjustment_stage.SetOperator(OperatorType::COLOR_WHEEL, {}, global_params_);
 
   auto& detail_adjustment_stage = stages_[static_cast<int>(PipelineStageName::Detail_Adjustment)];
-  detail_adjustment_stage.SetOperator(OperatorType::SHARPEN, {});
-  detail_adjustment_stage.SetOperator(OperatorType::CLARITY, {});
+  detail_adjustment_stage.SetOperator(OperatorType::SHARPEN, {}, global_params_);
+  detail_adjustment_stage.SetOperator(OperatorType::CLARITY, {}, global_params_);
 }
 
 void CPUPipelineExecutor::SetTemplateParams() {

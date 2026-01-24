@@ -18,9 +18,10 @@
 #include <memory>
 #include <unordered_map>
 
-#include "app/render_service.hpp"
 #include "app/image_pool_service.hpp"
 #include "app/pipeline_service.hpp"
+#include "app/render_service.hpp"
+#include "app/sleeve_service.hpp"
 #include "concurrency/thread_pool.hpp"
 #include "image/image_buffer.hpp"
 #include "renderer/pipeline_scheduler.hpp"
@@ -38,6 +39,7 @@ using CallbackDispatcher = std::function<void(std::function<void()>)>;
 
 class ThumbnailService {
  private:
+  std::shared_ptr<SleeveServiceImpl>         sleeve_service_     = nullptr;
   std::shared_ptr<ImagePoolService>          image_pool_service_ = nullptr;
   std::shared_ptr<PipelineMgmtService>       pipeline_service_   = nullptr;
 
@@ -57,16 +59,18 @@ class ThumbnailService {
 
  public:
   ThumbnailService() = delete;
-  ThumbnailService(std::shared_ptr<ImagePoolService>    image_pool_service,
+  ThumbnailService(std::shared_ptr<SleeveServiceImpl>   sleeve_service,
+                   std::shared_ptr<ImagePoolService>    image_pool_service,
                    std::shared_ptr<PipelineMgmtService> pipeline_service)
-      : image_pool_service_(image_pool_service),
+      : sleeve_service_(sleeve_service),
+        image_pool_service_(image_pool_service),
         pipeline_service_(pipeline_service),
         thumbnail_cache_(default_cache_size_) {
     pipeline_scheduler_ = RenderService::GetThumbnailOrExportScheduler();
-         }
+  }
   ~ThumbnailService() = default;
 
-  void GetThumbnail(sl_element_id_t id, ThumbnailCallback callback, bool pin_if_found = true,
+  void GetThumbnail(sl_element_id_t id, image_id_t image_id, ThumbnailCallback callback, bool pin_if_found = true,
                     CallbackDispatcher dispatcher = nullptr);
 
   void ReleaseThumbnail(sl_element_id_t sleeve_element_id);

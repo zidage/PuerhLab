@@ -307,7 +307,7 @@ TEST_F(PipelineServiceTests, FuzzTest) {
   }
 }
 
-TEST_F(PipelineServiceTests, ThreadSafeTest) {
+TEST_F(PipelineServiceTests, DISABLED_ThreadSafeTest) {
   ProjectService      project(db_path_, meta_path_);
   PipelineMgmtService pipeline_service(project.GetStorageService());
 

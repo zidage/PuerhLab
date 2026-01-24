@@ -32,6 +32,7 @@ auto PipelineService::FromParams(PipelineMapperParams&& param)
   pipeline->SetBoundFile(param.file_id);
   if (param.param_json) {
     pipeline->ImportPipelineParams(nlohmann::json::parse(std::move(*param.param_json)));
+    pipeline->SetExecutionStages();
   }
   return pipeline;
 }

@@ -273,6 +273,8 @@ class PipelineStage {
    * @param j
    */
   void ImportStageParams(const nlohmann::json& j);
+  
+  void ImportStageParams(const nlohmann::json& j, OperatorParams& global_params);
 
  private:
   static StageRole DetermineStageRole(PipelineStageName stage, bool is_streamable);

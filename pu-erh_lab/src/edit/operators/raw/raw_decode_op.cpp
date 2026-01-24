@@ -122,6 +122,7 @@ void RawDecodeOp::SetParams(const nlohmann::json& params) {
 }
 
 void RawDecodeOp::SetGlobalParams(OperatorParams&) const {
-  throw std::runtime_error("RawDecodeOp does not support global parameters.");
+  // throw std::runtime_error("RawDecodeOp does not support global parameters.");
+  // DO NOTHING
 }
 };  // namespace puerhlab

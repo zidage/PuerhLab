@@ -27,7 +27,7 @@ namespace puerhlab {
 PipelineStage::PipelineStage(PipelineStageName stage, bool enable_cache, bool is_streamable)
     : is_streamable_(is_streamable), enable_cache_(enable_cache), stage_(stage) {
   stage_role_ = DetermineStageRole(stage_, is_streamable_);
-  operators_ = std::make_unique<std::map<OperatorType, OperatorEntry>>();
+  operators_  = std::make_unique<std::map<OperatorType, OperatorEntry>>();
   if (stage_ == PipelineStageName::Image_Loading) {
     input_cache_valid_ = true;  // No input for image loading stage, so input cache is always valid
   }
@@ -154,9 +154,8 @@ auto PipelineStage::DetermineStageRole(PipelineStageName stage, bool is_streamab
 }
 
 bool PipelineStage::HasEnabledOperator() const {
-  return std::any_of(operators_->begin(), operators_->end(), [](const auto& entry) {
-    return entry.second.enable_;
-  });
+  return std::any_of(operators_->begin(), operators_->end(),
+                     [](const auto& entry) { return entry.second.enable_; });
 }
 
 std::shared_ptr<ImageBuffer> PipelineStage::ApplyDescriptorOnly() {
@@ -230,7 +229,11 @@ std::shared_ptr<ImageBuffer> PipelineStage::ApplyGpuStream(OperatorParams& globa
   output_cache_ = std::make_shared<ImageBuffer>();
   gpu_executor_.SetParams(global_params);
   gpu_executor_.SetInputImage(input_img_);
-  gpu_executor_.Execute(output_cache_);
+  if (force_cpu_output_) {
+    gpu_executor_.Execute(output_cache_);
+  } else {
+    gpu_executor_.Execute(nullptr);
+  }
 
   if (force_cpu_output_) {
     try {
@@ -276,7 +279,7 @@ auto PipelineStage::GetStageNameString() const -> std::string {
 auto PipelineStage::ExportStageParams() const -> nlohmann::json {
   nlohmann::json inner;
   for (const auto& [op_type, op_entry] : *operators_) {
-    if (!op_entry.op_) {
+    if (!op_entry.op_ || op_entry.op_->GetOperatorType() == OperatorType::RESIZE) {
       continue;
     }
     inner[op_entry.op_->GetScriptName()] = op_entry.ExportOperatorParams();
@@ -301,6 +304,24 @@ void PipelineStage::ImportStageParams(const nlohmann::json& j) {
     nlohmann::json params  = op_json.value("params", nlohmann::json::object());
     OperatorType   op_type = op_json.value("type", OperatorType::UNKNOWN);
     SetOperator(op_type, params);
+  }
+}
+
+void PipelineStage::ImportStageParams(const nlohmann::json& j, OperatorParams& global_params) {
+  ResetAll();
+
+  std::string stage_name = GetStageNameString();
+  if (!j.contains(stage_name)) {
+    return;
+  }
+  nlohmann::json stage_json = j[stage_name];
+  for (auto& [op_name, op_json] : stage_json.items()) {
+    if (!op_json.contains("params")) {
+      continue;
+    }
+    nlohmann::json params  = op_json.value("params", nlohmann::json::object());
+    OperatorType   op_type = op_json.value("type", OperatorType::UNKNOWN);
+    SetOperator(op_type, params, global_params);
   }
 }
 };  // namespace puerhlab

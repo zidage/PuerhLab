@@ -97,6 +97,7 @@ auto ResizeOp::SetParams(const nlohmann::json& params) -> void {
 }
 
 void ResizeOp::SetGlobalParams(OperatorParams&) const {
-  throw std::runtime_error("ResizeOp does not support global parameters.");
+  // throw std::runtime_error("ResizeOp does not support global parameters.");
+  // DO NOTHING
 }
 };  // namespace puerhlab

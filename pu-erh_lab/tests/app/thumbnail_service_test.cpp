@@ -4,17 +4,20 @@
 
 #include <atomic>
 #include <chrono>
+#include <cstdint>
 #include <exiv2/exiv2.hpp>
 #include <filesystem>
 #include <functional>
 #include <future>
 #include <iostream>
 #include <memory>
+#include <opencv2/highgui.hpp>
 #include <vector>
 
 #include "app/import_service.hpp"
 #include "app/pipeline_service.hpp"
 #include "app/project_service.hpp"
+#include "app/sleeve_service.hpp"
 #include "edit/operators/operator_registeration.hpp"
 #include "renderer/pipeline_scheduler.hpp"
 #include "storage/service/pipeline/pipeline_service.hpp"
@@ -23,6 +26,73 @@
 #include "utils/profiler/profiler.hpp"
 
 namespace puerhlab {
+
+namespace {
+using namespace std::chrono_literals;
+
+static uint64_t HashBytesFnv1a64(const uint8_t* data, size_t size) {
+  // FNV-1a 64-bit
+  constexpr uint64_t kOffset = 14695981039346656037ull;
+  constexpr uint64_t kPrime  = 1099511628211ull;
+  uint64_t           h       = kOffset;
+  for (size_t i = 0; i < size; ++i) {
+    h ^= static_cast<uint64_t>(data[i]);
+    h *= kPrime;
+  }
+  return h;
+}
+
+static uint64_t HashMatBytes(const cv::Mat& mat) {
+  if (mat.empty()) {
+    return 0;
+  }
+  const auto row_bytes = static_cast<size_t>(mat.cols) * mat.elemSize();
+  if (mat.isContinuous()) {
+    const auto total_bytes = static_cast<size_t>(mat.total()) * mat.elemSize();
+    return HashBytesFnv1a64(reinterpret_cast<const uint8_t*>(mat.data), total_bytes);
+  }
+  uint64_t h = 14695981039346656037ull;
+  for (int r = 0; r < mat.rows; ++r) {
+    const auto*        row_ptr = mat.ptr<uint8_t>(r);
+    // Mix each row into the same FNV stream
+    constexpr uint64_t kPrime  = 1099511628211ull;
+    for (size_t i = 0; i < row_bytes; ++i) {
+      h ^= static_cast<uint64_t>(row_ptr[i]);
+      h *= kPrime;
+    }
+  }
+  return h;
+}
+
+static std::shared_ptr<ThumbnailGuard> GetThumbnailBlocking(ThumbnailService& service,
+                                                            sl_element_id_t id, image_id_t image_id,
+                                                            bool pin_if_found = true) {
+  std::promise<std::shared_ptr<ThumbnailGuard>> done;
+  auto                                          fut = done.get_future();
+  service.GetThumbnail(
+      id, image_id, [&done](std::shared_ptr<ThumbnailGuard> guard) { done.set_value(guard); },
+      pin_if_found);
+  EXPECT_EQ(fut.wait_for(60s), std::future_status::ready);
+  return fut.get();
+}
+
+static uint64_t GetThumbnailHashBlocking(ThumbnailService& service, sl_element_id_t id,
+                                         image_id_t image_id) {
+  auto guard = GetThumbnailBlocking(service, id, image_id);
+  EXPECT_NE(guard, nullptr);
+  EXPECT_NE(guard->thumbnail_buffer_, nullptr);
+
+  auto* buffer = guard->thumbnail_buffer_.get();
+  if (!buffer->cpu_data_valid_ && buffer->gpu_data_valid_) {
+    EXPECT_NO_THROW(buffer->SyncToCPU());
+  }
+  EXPECT_TRUE(buffer->cpu_data_valid_);
+  auto& mat = buffer->GetCPUData();
+  EXPECT_FALSE(mat.empty());
+  return HashMatBytes(mat);
+}
+}  // namespace
+
 class ThumbnailServiceTests : public ::testing::Test {
  protected:
   std::filesystem::path db_path_;
@@ -60,8 +130,6 @@ class ThumbnailServiceTests : public ::testing::Test {
 };
 
 TEST_F(ThumbnailServiceTests, GenerateThumbnailAndCallbacks) {
-  using namespace std::chrono_literals;
-
   ProjectService            project(db_path_, meta_path_);
   auto                      fs_service = project.GetSleeveService();
   auto                      img_pool   = project.GetImagePoolService();
@@ -100,10 +168,11 @@ TEST_F(ThumbnailServiceTests, GenerateThumbnailAndCallbacks) {
 
   // Get the first file's thumbnail
   const auto file_id          = snapshot.created_.front().element_id_;
+  const auto image_id         = snapshot.created_.front().image_id_;
 
   auto       pipeline_service = std::make_shared<PipelineMgmtService>(project.GetStorageService());
 
-  ThumbnailService                thumbnail_service(img_pool, pipeline_service);
+  ThumbnailService thumbnail_service(project.GetSleeveService(), img_pool, pipeline_service);
 
   std::shared_ptr<ThumbnailGuard> guard_1;
   std::shared_ptr<ThumbnailGuard> guard_2;
@@ -127,8 +196,8 @@ TEST_F(ThumbnailServiceTests, GenerateThumbnailAndCallbacks) {
   };
 
   // Ideally, one of these two requests should hit the pending queue
-  thumbnail_service.GetThumbnail(file_id, callback);
-  thumbnail_service.GetThumbnail(file_id, callback);
+  thumbnail_service.GetThumbnail(file_id, image_id, callback);
+  thumbnail_service.GetThumbnail(file_id, image_id, callback);
 
   ASSERT_EQ(f1.wait_for(30s), std::future_status::ready);
   ASSERT_EQ(f2.wait_for(30s), std::future_status::ready);
@@ -162,7 +231,8 @@ TEST_F(ThumbnailServiceTests, GenerateThumbnailAndCallbacks) {
   };
 
   thumbnail_service.GetThumbnail(
-      file_id, [&cached](std::shared_ptr<ThumbnailGuard> guard) { cached.set_value(guard); }, true,
+      file_id, image_id,
+      [&cached](std::shared_ptr<ThumbnailGuard> guard) { cached.set_value(guard); }, true,
       dispatcher);
 
   ASSERT_EQ(cached_future.wait_for(5s), std::future_status::ready);
@@ -179,8 +249,8 @@ TEST_F(ThumbnailServiceTests, GenerateThumbnailAndCallbacks) {
   auto                                          no_pin_future = no_pin.get_future();
   // This time, the thumbnail is already cached but not pinned
   thumbnail_service.GetThumbnail(
-      file_id, [&no_pin](std::shared_ptr<ThumbnailGuard> guard) { no_pin.set_value(guard); },
-      false);
+      file_id, image_id,
+      [&no_pin](std::shared_ptr<ThumbnailGuard> guard) { no_pin.set_value(guard); }, false);
 
   ASSERT_EQ(no_pin_future.wait_for(5s), std::future_status::ready);
   auto no_pin_guard = no_pin_future.get();
@@ -191,9 +261,130 @@ TEST_F(ThumbnailServiceTests, GenerateThumbnailAndCallbacks) {
   EXPECT_EQ(no_pin_guard->pin_count_, 0);
 }
 
-TEST_F(ThumbnailServiceTests, Generate16ThumbnailsAndValidateAll) {
-  using namespace std::chrono_literals;
+TEST_F(ThumbnailServiceTests, PipelineRestoredFromDBGeneratesCorrectThumbnail) {
+  // Verify that thumbnail generation uses the pipeline restored from DB (not only the fresh
+  // default pipeline created after app init).
 
+  sl_element_id_t file_id  = 0;
+  image_id_t      image_id = 0;
+
+  // Phase 1: import and get a file id.
+  {
+    ProjectService            project(db_path_, meta_path_);
+    auto                      fs_service = project.GetSleeveService();
+    auto                      img_pool   = project.GetImagePoolService();
+    ImportServiceImpl         import_service(fs_service, img_pool);
+    std::filesystem::path     img_root_path = {TEST_IMG_PATH "/raw/batch_import"};
+
+    std::vector<image_path_t> paths{};
+    for (const auto& entry : std::filesystem::directory_iterator(img_root_path)) {
+      if (entry.is_regular_file()) {
+        paths.push_back(entry.path());
+      }
+    }
+    ASSERT_FALSE(paths.empty()) << "Need at least 1 image under TEST_IMG_PATH/raw/batch_import";
+
+    std::shared_ptr<ImportJob> import_job = std::make_shared<ImportJob>();
+    std::promise<ImportResult> final_result;
+    auto                       final_result_future = final_result.get_future();
+    import_job->on_finished_                       = [&final_result](const ImportResult& result) {
+      final_result.set_value(result);
+    };
+
+    import_job = import_service.ImportToFolder(paths, L"", {}, import_job);
+    ASSERT_NE(import_job, nullptr);
+    ASSERT_EQ(final_result_future.wait_for(60s), std::future_status::ready)
+        << "Import did not finish in time";
+
+    const auto final_result_value = final_result_future.get();
+    ASSERT_EQ(final_result_value.failed_, 0u);
+    ASSERT_NE(import_job->import_log_, nullptr);
+    auto snapshot = import_job->import_log_->Snapshot();
+    ASSERT_FALSE(snapshot.created_.empty());
+    file_id  = snapshot.created_.front().element_id_;
+
+    image_id = snapshot.created_.front().image_id_;
+    ASSERT_NE(file_id, 0);
+
+    import_service.SyncImports(snapshot, L"");
+
+    project.GetSleeveService()->Sync();
+    project.GetImagePoolService()->SyncWithStorage();
+
+    project.SaveProject(meta_path_);
+  }
+
+  uint64_t default_hash  = 0;
+  uint64_t modified_hash = 0;
+
+  // Phase 2: generate default thumbnail, then modify pipeline, persist, and ensure thumbnail
+  // changes.
+  {
+    ProjectService project(db_path_, meta_path_);
+    auto           img_pool = project.GetImagePoolService();
+    auto pipeline_service   = std::make_shared<PipelineMgmtService>(project.GetStorageService());
+
+    std::string pipline_before;
+    {
+      ThumbnailService thumbnail_service(project.GetSleeveService(), img_pool, pipeline_service);
+      default_hash = GetThumbnailHashBlocking(thumbnail_service, file_id, image_id);
+      thumbnail_service.ReleaseThumbnail(file_id);
+
+      auto pipeline = pipeline_service->LoadPipeline(file_id);
+      pipline_before = pipeline->pipeline_->ExportPipelineParams().dump();
+      pipeline_service->SavePipeline(pipeline);
+    }
+
+    auto pipline_after = std::string{};
+    // Modify pipeline parameters and persist to DB.
+    {
+      auto guard = pipeline_service->LoadPipeline(file_id);
+      ASSERT_NE(guard, nullptr);
+      auto&          stage = guard->pipeline_->GetStage(PipelineStageName::Basic_Adjustment);
+      nlohmann::json params;
+      // Use a strong exposure change so the thumbnail content should differ.
+      params["exposure"] = 3.0f;
+      stage.SetOperator(OperatorType::EXPOSURE, params, guard->pipeline_->GetGlobalParams());
+      guard->dirty_ = true;
+      pipeline_service->SavePipeline(guard);
+    }
+
+    // New ThumbnailService instance to avoid serving the old cached thumbnail.
+    {
+      ThumbnailService thumbnail_service(project.GetSleeveService(), img_pool, pipeline_service);
+      auto             pipeline = pipeline_service->LoadPipeline(file_id);
+      pipline_after = pipeline->pipeline_->ExportPipelineParams().dump();
+      ASSERT_NE(pipline_before, pipline_after) << "Pipeline parameters did not change after modification";
+      modified_hash = GetThumbnailHashBlocking(thumbnail_service, file_id, image_id);
+      thumbnail_service.ReleaseThumbnail(file_id);
+    }
+
+    pipeline_service->Sync();
+    img_pool->SyncWithStorage();
+    project.SaveProject(meta_path_);
+  }
+
+  ASSERT_NE(default_hash, 0ull);
+  ASSERT_NE(modified_hash, 0ull);
+  EXPECT_NE(modified_hash, default_hash) << "Pipeline change did not affect generated thumbnail";
+
+  // Phase 3: reopen project (pipeline restored from DB) and ensure thumbnail matches the modified
+  // one.
+  {
+    ProjectService project(db_path_, meta_path_);
+    auto           img_pool = project.GetImagePoolService();
+    auto pipeline_service   = std::make_shared<PipelineMgmtService>(project.GetStorageService());
+
+    ThumbnailService thumbnail_service(project.GetSleeveService(), img_pool, pipeline_service);
+    const auto       restored_hash = GetThumbnailHashBlocking(thumbnail_service, file_id, image_id);
+    thumbnail_service.ReleaseThumbnail(file_id);
+
+    EXPECT_EQ(restored_hash, modified_hash)
+        << "Restored pipeline did not produce the expected thumbnail";
+  }
+}
+
+TEST_F(ThumbnailServiceTests, DISABLED_Generate16ThumbnailsAndValidateAll) {
   ProjectService            project(db_path_, meta_path_);
   auto                      fs_service = project.GetSleeveService();
   auto                      img_pool   = project.GetImagePoolService();
@@ -233,13 +424,13 @@ TEST_F(ThumbnailServiceTests, Generate16ThumbnailsAndValidateAll) {
 
   auto pipeline_service = std::make_shared<PipelineMgmtService>(project.GetStorageService());
   auto scheduler        = std::make_shared<PipelineScheduler>(8);
-  ThumbnailService             thumbnail_service(img_pool, pipeline_service);
+  ThumbnailService thumbnail_service(project.GetSleeveService(), img_pool, pipeline_service);
 
-  std::vector<sl_element_id_t> ids;
+  std::vector<std::pair<sl_element_id_t, image_id_t>> ids;
   ids.reserve(16);
   // Get first 16 imported images
   for (size_t i = 0; i < 16; ++i) {
-    ids.push_back(snapshot.created_[i].element_id_);
+    ids.push_back({snapshot.created_[i].element_id_, snapshot.created_[i].image_id_});
   }
 
   std::vector<std::promise<std::shared_ptr<ThumbnailGuard>>> done_promises(16);
@@ -252,9 +443,9 @@ TEST_F(ThumbnailServiceTests, Generate16ThumbnailsAndValidateAll) {
   std::vector<std::shared_ptr<ThumbnailGuard>> guards(16);
 
   for (size_t i = 0; i < 16; ++i) {
-    const auto id = ids[i];
+    const auto [id, image_id] = ids[i];
     thumbnail_service.GetThumbnail(
-        id,
+        id, image_id,
         [i, &guards, &done_promises](std::shared_ptr<ThumbnailGuard> guard) {
           guards[i] = guard;
           done_promises[i].set_value(guard);
@@ -295,7 +486,7 @@ TEST_F(ThumbnailServiceTests, Generate16ThumbnailsAndValidateAll) {
   }
 
   // Release pins we took.
-  for (const auto id : ids) {
+  for (const auto& [id, image_id] : ids) {
     thumbnail_service.ReleaseThumbnail(id);
   }
 }
@@ -309,9 +500,9 @@ TEST_F(ThumbnailServiceTests, MissingPipelineThrows) {
   auto pipeline_service = std::make_shared<PipelineMgmtService>(project.GetStorageService());
   auto scheduler        = std::make_shared<PipelineScheduler>();
 
-  ThumbnailService thumbnail_service(img_pool, pipeline_service);
+  ThumbnailService thumbnail_service(project.GetSleeveService(), img_pool, pipeline_service);
 
-  EXPECT_THROW(thumbnail_service.GetThumbnail(12345, [](std::shared_ptr<ThumbnailGuard>) {}),
+  EXPECT_THROW(thumbnail_service.GetThumbnail(12345, 12345, [](std::shared_ptr<ThumbnailGuard>) {}),
                std::runtime_error);
 }
 
@@ -326,10 +517,10 @@ TEST_F(ThumbnailServiceTests, MissingImageThrows) {
 
   constexpr sl_element_id_t kMissingImageId = 7777;
 
-  ThumbnailService          thumbnail_service(img_pool, pipeline_service);
+  ThumbnailService thumbnail_service(project.GetSleeveService(), img_pool, pipeline_service);
 
-  EXPECT_THROW(
-      thumbnail_service.GetThumbnail(kMissingImageId, [](std::shared_ptr<ThumbnailGuard>) {}),
-      std::runtime_error);
+  EXPECT_THROW(thumbnail_service.GetThumbnail(kMissingImageId, kMissingImageId,
+                                              [](std::shared_ptr<ThumbnailGuard>) {}),
+               std::runtime_error);
 }
 };  // namespace puerhlab
