@@ -20,9 +20,7 @@
 
 #include "app/pipeline_service.hpp"
 #include "renderer/pipeline_task.hpp"
-#include "sleeve/sleeve_element/sleeve_element.hpp"
 #include "app/render_service.hpp"
-#include "sleeve/sleeve_filesystem.hpp"
 
 namespace puerhlab {
 
@@ -70,6 +68,9 @@ void ThumbnailService::GetThumbnail(sl_element_id_t id, image_id_t image_id,
 
   std::shared_ptr<ThumbnailGuard> guard = nullptr;
 
+  // Fast path: cache hit. Never invoke callbacks while holding cache_lock_.
+  bool cache_hit = false;
+
   {
     std::unique_lock lock(st->cache_lock_);
     if (st->thumbnail_cache_.Contains(id)) {
@@ -79,13 +80,17 @@ void ThumbnailService::GetThumbnail(sl_element_id_t id, image_id_t image_id,
         guard->pin_count_++;
       }
 
-      if (dispatcher) {
-        dispatcher([callback, guard]() { callback(guard); });
-      } else {
-        callback(guard);
-      }
-      return;
+      cache_hit = true;
     }
+  }
+
+  if (cache_hit) {
+    if (dispatcher) {
+      dispatcher([callback, guard]() { callback(guard); });
+    } else {
+      callback(guard);
+    }
+    return;
   }
 
   // Not found in cache, check if already pending
@@ -132,25 +137,32 @@ void ThumbnailService::GetThumbnail(sl_element_id_t id, image_id_t image_id,
       guard->thumbnail_buffer_ = std::make_unique<ImageBuffer>(std::move(result_buffer));
       guard->pin_count_        = 1;
 
+      std::vector<ThumbnailCallback> callbacks;
+
       {
         std::unique_lock lock(st->cache_lock_);
         auto             evicted = st->thumbnail_cache_.RecordAccess_WithEvict(id, id);
         HandleEvict(*st, evicted);
         st->thumbnail_cache_data_[id] = guard;
 
-        // Call all pending callbacks
-        auto callbacks            = st->pending_[id];
-        st->pending_.erase(id);
-        for (const auto& cb : callbacks) {
-          if (dispatcher) {
-            dispatcher([cb, guard]() { cb(guard); });
-            continue;
-          }
+        // Move callbacks out; invoke outside lock.
+        auto it = st->pending_.find(id);
+        if (it != st->pending_.end()) {
+          callbacks = std::move(it->second);
+          st->pending_.erase(it);
+        }
+      }
+
+      for (const auto& cb : callbacks) {
+        if (dispatcher) {
+          dispatcher([cb, guard]() { cb(guard); });
+        } else {
           cb(guard);
         }
-        // Finally, save pipeline back to storage
-        st->pipeline_service_->SavePipeline(pipeline);
       }
+
+      // Save pipeline back to storage outside lock.
+      st->pipeline_service_->SavePipeline(pipeline);
     };
 
     st->pipeline_scheduler_->ScheduleTask(std::move(thumb_task));

@@ -12,13 +12,16 @@
 #include <QWidget>
 #include <algorithm>
 #include <chrono>
+#include <condition_variable>
 #include <cstdint>
+#include <deque>
 #include <filesystem>
 #include <future>
 #include <iostream>
 #include <memory>
+#include <mutex>
 #include <opencv2/opencv.hpp>
-#include <string>
+#include <thread>
 #include <unordered_set>
 #include <utility>
 #include <vector>
@@ -33,6 +36,76 @@
 namespace puerhlab {
 namespace {
 using namespace std::chrono_literals;
+
+class BackgroundExecutor final {
+ public:
+  explicit BackgroundExecutor(size_t thread_count)
+      : stop_(false), threads_() {
+    thread_count = std::max<size_t>(1, thread_count);
+    threads_.reserve(thread_count);
+    for (size_t i = 0; i < thread_count; ++i) {
+      threads_.emplace_back([this]() { WorkerLoop(); });
+    }
+  }
+
+  ~BackgroundExecutor() {
+    {
+      std::lock_guard<std::mutex> lock(mu_);
+      stop_ = true;
+    }
+    cv_.notify_all();
+    for (auto& t : threads_) {
+      if (t.joinable()) {
+        t.join();
+      }
+    }
+  }
+
+  BackgroundExecutor(const BackgroundExecutor&)            = delete;
+  BackgroundExecutor& operator=(const BackgroundExecutor&) = delete;
+
+  void Post(std::function<void()> fn) {
+    if (!fn) {
+      return;
+    }
+    {
+      std::lock_guard<std::mutex> lock(mu_);
+      queue_.push_back(std::move(fn));
+    }
+    cv_.notify_one();
+  }
+
+ private:
+  void WorkerLoop() {
+    for (;;) {
+      std::function<void()> fn;
+      {
+        std::unique_lock<std::mutex> lock(mu_);
+        cv_.wait(lock, [this]() { return stop_ || !queue_.empty(); });
+        if (stop_ && queue_.empty()) {
+          return;
+        }
+        fn = std::move(queue_.front());
+        queue_.pop_front();
+      }
+      try {
+        fn();
+      } catch (...) {
+      }
+    }
+  }
+
+  std::mutex                       mu_;
+  std::condition_variable          cv_;
+  std::deque<std::function<void()>> queue_;
+  bool                             stop_;
+  std::vector<std::thread>         threads_;
+};
+
+static BackgroundExecutor& Bg() {
+  static BackgroundExecutor exec(std::max<unsigned>(2u, std::thread::hardware_concurrency() / 2));
+  return exec;
+}
 
 static QImage MatRgba32fToQImageCopy(const cv::Mat& rgba32f_or_u8) {
   if (rgba32f_or_u8.empty()) {
@@ -273,8 +346,8 @@ class AlbumWidget final : public QWidget {
     const auto            image_id   = ids_[idx].second;
     const uint64_t        gen        = ++cell.generation;
 
-    // Marshal callbacks to the Qt UI thread.
-    CallbackDispatcher    dispatcher = [](std::function<void()> fn) {
+    // Marshal work to the Qt UI thread.
+    CallbackDispatcher ui_dispatcher = [](std::function<void()> fn) {
       auto* obj = QCoreApplication::instance();
       if (!obj) {
         fn();
@@ -285,8 +358,8 @@ class AlbumWidget final : public QWidget {
 
     svc->GetThumbnail(
         element_id, image_id,
-        [self, svc, cell_pos, idx, element_id, gen](std::shared_ptr<ThumbnailGuard> guard) {
-          // If the cell got rebound, release immediately.
+        [self, svc, cell_pos, idx, element_id, gen, ui_dispatcher](std::shared_ptr<ThumbnailGuard> guard) {
+          // UI thread callback must stay tiny: validate, store guard, then offload heavy work.
           if (!guard) {
             return;
           }
@@ -308,7 +381,6 @@ class AlbumWidget final : public QWidget {
           }
 
           auto&      cell       = self->cells_[cell_pos];
-
           const bool still_same = (cell.bound_idx == idx) &&
                                   (cell.bound_element_id == element_id) && (cell.generation == gen);
           if (!still_same) {
@@ -325,34 +397,97 @@ class AlbumWidget final : public QWidget {
             return;
           }
 
-          auto* buffer = guard->thumbnail_buffer_.get();
-          if (!buffer->cpu_data_valid_ && buffer->gpu_data_valid_) {
+          const int target_w = self->cell_w_;
+          const int target_h = self->cell_h_;
+
+          // Do CPU sync + Mat->QImage + scaling off the UI thread.
+          Bg().Post([self, svc, cell_pos, idx, element_id, gen, guard, ui_dispatcher, target_w, target_h]() mutable {
+            QImage scaled;
+
             try {
-              buffer->SyncToCPU();
+              auto* buffer = guard->thumbnail_buffer_.get();
+              if (!buffer) {
+                return;
+              }
+
+              if (!buffer->cpu_data_valid_ && buffer->gpu_data_valid_) {
+                buffer->SyncToCPU();
+              }
+
+              if (!buffer->cpu_data_valid_) {
+                // No CPU data to render.
+                ui_dispatcher([self, svc, cell_pos, idx, element_id, gen, guard]() {
+                  if (!self || cell_pos >= self->cells_.size()) {
+                    return;
+                  }
+                  auto& cell = self->cells_[cell_pos];
+                  const bool still_same = (cell.bound_idx == idx) &&
+                                          (cell.bound_element_id == element_id) && (cell.generation == gen);
+                  if (!still_same) {
+                    return;
+                  }
+                  cell.label->setText("(no CPU data)");
+                });
+                return;
+              }
+
+              auto&  mat = buffer->GetCPUData();
+              QImage img = MatRgba32fToQImageCopy(mat);
+              if (!img.isNull()) {
+                scaled = img.scaled(target_w, target_h, Qt::KeepAspectRatio,
+                                    Qt::SmoothTransformation);
+              }
             } catch (...) {
-              cell.label->setText("(SyncToCPU failed)");
+              ui_dispatcher([self, cell_pos, idx, element_id, gen]() {
+                if (!self || cell_pos >= self->cells_.size()) {
+                  return;
+                }
+                auto& cell = self->cells_[cell_pos];
+                const bool still_same = (cell.bound_idx == idx) &&
+                                        (cell.bound_element_id == element_id) && (cell.generation == gen);
+                if (!still_same) {
+                  return;
+                }
+                cell.label->setText("(render failed)");
+              });
               return;
             }
-          }
 
-          if (!buffer->cpu_data_valid_) {
-            cell.label->setText("(no CPU data)");
-            return;
-          }
+            // Final UI update: keep it to (check + setPixmap).
+            ui_dispatcher([self, svc, cell_pos, idx, element_id, gen, guard, scaled = std::move(scaled)]() mutable {
+              if (!self) {
+                try {
+                  svc->ReleaseThumbnail(element_id);
+                } catch (...) {
+                }
+                return;
+              }
+              if (cell_pos >= self->cells_.size()) {
+                try {
+                  svc->ReleaseThumbnail(element_id);
+                } catch (...) {
+                }
+                return;
+              }
 
-          auto&  mat = buffer->GetCPUData();
-          QImage img = MatRgba32fToQImageCopy(mat);
-          if (img.isNull()) {
-            cell.label->setText("(empty image)");
-            return;
-          }
+              auto&      cell       = self->cells_[cell_pos];
+              const bool still_same = (cell.bound_idx == idx) &&
+                                      (cell.bound_element_id == element_id) && (cell.generation == gen);
+              if (!still_same) {
+                // Cell was rebound; let normal rebind/release path handle pins.
+                return;
+              }
 
-          QPixmap px = QPixmap::fromImage(img).scaled(
-              self->cell_w_, self->cell_h_, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-          cell.label->setPixmap(px);
-        //   cell.label->setText(QString("#%1").arg(static_cast<qulonglong>(idx)));
+              if (scaled.isNull()) {
+                cell.label->setText("(empty image)");
+                return;
+              }
+
+              cell.label->setPixmap(QPixmap::fromImage(std::move(scaled)));
+            });
+          });
         },
-        pin, dispatcher);
+        pin, ui_dispatcher);
   }
 
   void Prefetch() {
