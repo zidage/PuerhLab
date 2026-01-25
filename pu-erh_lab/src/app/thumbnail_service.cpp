@@ -17,6 +17,7 @@
 #include <cstdint>
 #include <memory>
 
+#include "app/pipeline_service.hpp"
 #include "renderer/pipeline_task.hpp"
 #include "sleeve/sleeve_element/sleeve_element.hpp"
 #include "sleeve/sleeve_filesystem.hpp"
@@ -57,8 +58,16 @@ void ThumbnailService::GetThumbnail(sl_element_id_t id, image_id_t image_id,
     return;
   } else {
     // Not pending, add to pending list
-    pending_[id]  = {callback};
-    auto pipeline = pipeline_service_->LoadPipeline(id);
+
+    pending_[id] = {callback};
+    std::shared_ptr<PipelineGuard> pipeline;
+    try {
+      pipeline = pipeline_service_->LoadPipeline(id);
+    } catch (std::exception& e) {
+      pending_.erase(id);
+      std::cout << "[ERROR] ThumbnailService: Failed to load pipeline for file ID " << id
+                << ": " << e.what() << std::endl;
+    }
     if (!pipeline) {
       throw std::runtime_error(
           std::format("[ERROR] ThumbnailService: Pipeline for file ID {} not available.", id));

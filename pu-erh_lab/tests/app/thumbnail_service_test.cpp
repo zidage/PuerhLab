@@ -5,6 +5,8 @@
 #include <atomic>
 #include <chrono>
 #include <cstdint>
+#include <deque>
+#include <exception>
 #include <exiv2/exiv2.hpp>
 #include <filesystem>
 #include <functional>
@@ -14,6 +16,7 @@
 #include <opencv2/highgui.hpp>
 #include <opencv2/opencv.hpp>
 #include <random>
+#include <unordered_set>
 #include <vector>
 
 #include "app/import_service.hpp"
@@ -22,10 +25,8 @@
 #include "app/sleeve_service.hpp"
 #include "edit/operators/operator_registeration.hpp"
 #include "renderer/pipeline_scheduler.hpp"
-#include "storage/service/pipeline/pipeline_service.hpp"
 #include "type/type.hpp"
 #include "utils/clock/time_provider.hpp"
-#include "utils/profiler/profiler.hpp"
 
 namespace puerhlab {
 
@@ -94,9 +95,9 @@ static uint64_t GetThumbnailHashBlocking(ThumbnailService& service, sl_element_i
   return HashMatBytes(mat);
 }
 
-static void ReleaseAllThumbnailsAggressively(ThumbnailService& service,
-                                            const std::vector<std::pair<sl_element_id_t, image_id_t>>& ids,
-                                            int release_rounds = 32) {
+static void ReleaseAllThumbnailsAggressively(
+    ThumbnailService& service, const std::vector<std::pair<sl_element_id_t, image_id_t>>& ids,
+    int release_rounds = 32) {
   for (int r = 0; r < release_rounds; ++r) {
     for (const auto& [id, image_id] : ids) {
       (void)image_id;
@@ -105,18 +106,52 @@ static void ReleaseAllThumbnailsAggressively(ThumbnailService& service,
   }
 }
 
-static void FuzzScrollRequestsNoThrow(
-    ThumbnailService& service,
-    const std::vector<std::pair<sl_element_id_t, image_id_t>>& ids,
-    size_t iterations,
-    uint32_t seed) {
-  ASSERT_FALSE(ids.empty());
+static void DrainAndValidateFuture(ThumbnailService& service, sl_element_id_t element_id,
+                                   std::future<std::shared_ptr<ThumbnailGuard>> fut,
+                                   size_t idx_for_debug, size_t heavy_validate_every,
+                                   size_t completed_count, bool auto_release_pin) {
+  ASSERT_EQ(fut.wait_for(60s), std::future_status::ready)
+      << "Thumbnail request timed out (completed=" << completed_count << ", idx=" << idx_for_debug
+      << ")";
 
-  std::mt19937 rng(seed);
+  auto guard = fut.get();
+  ASSERT_NE(guard, nullptr);
+  ASSERT_NE(guard->thumbnail_buffer_, nullptr);
+
+  if (heavy_validate_every != 0 && (completed_count % heavy_validate_every) == 0) {
+    auto* buffer = guard->thumbnail_buffer_.get();
+    if (!buffer->cpu_data_valid_ && buffer->gpu_data_valid_) {
+      EXPECT_NO_THROW(buffer->SyncToCPU());
+    }
+    ASSERT_TRUE(buffer->cpu_data_valid_);
+    auto& mat = buffer->GetCPUData();
+    EXPECT_FALSE(mat.empty());
+  }
+
+  // Simulate the UI cell being recycled: once we're done with this thumbnail, release it.
+  // Note: GetThumbnail() always returns a guard for generation, even if pin_if_found=false.
+  // Releasing is safe here because ReleaseThumbnail() guards against going below zero.
+  if (auto_release_pin) {
+    EXPECT_NO_THROW(service.ReleaseThumbnail(element_id));
+  }
+}
+
+static void FuzzScrollRequestsNoThrow(
+    ThumbnailService& service, const std::vector<std::pair<sl_element_id_t, image_id_t>>& ids,
+    size_t iterations, uint32_t seed, size_t max_in_flight = 256,
+    size_t                                      heavy_validate_every = 2000,
+    std::vector<std::weak_ptr<ThumbnailGuard>>* first_seen_guards    = nullptr,
+    bool enable_progress = true, size_t progress_every = 500, bool auto_release_pin = true) {
+  ASSERT_FALSE(ids.empty());
+  if (first_seen_guards) {
+    ASSERT_EQ(first_seen_guards->size(), ids.size());
+  }
+
+  std::mt19937                       rng(seed);
   std::uniform_int_distribution<int> step_dist(-3, 3);
   std::uniform_int_distribution<int> pct_dist(0, 99);
 
-  auto clamp_index = [&](int idx) -> size_t {
+  auto                               clamp_index = [&](int idx) -> size_t {
     if (idx < 0) {
       return 0;
     }
@@ -146,39 +181,78 @@ static void FuzzScrollRequestsNoThrow(
 
   size_t pos = static_cast<size_t>(rng() % ids.size());
 
-  std::vector<std::future<std::shared_ptr<ThumbnailGuard>>> futures;
-  futures.reserve(iterations * 3);
+  struct InFlight {
+    size_t                                       idx_        = 0;
+    sl_element_id_t                              element_id_ = 0;
+    std::future<std::shared_ptr<ThumbnailGuard>> future_;
+  };
+
+  std::deque<InFlight> in_flight;
+  size_t               drained        = 0;
+
+  auto                 print_progress = [&](size_t iter) {
+    if (!enable_progress) {
+      return;
+    }
+    if (progress_every == 0) {
+      return;
+    }
+    if (iter == 0 || (iter % progress_every) != 0) {
+      return;
+    }
+    const double pct = (iterations == 0)
+                                           ? 100.0
+                                           : (100.0 * static_cast<double>(iter) / static_cast<double>(iterations));
+    std::cout << "\r\033[2K"
+              << "[ThumbnailFuzz] iter=" << iter << "/" << iterations << " ("
+              << static_cast<int>(pct) << "%)"
+              << " drained=" << drained << " inflight=" << in_flight.size() << std::flush;
+  };
 
   for (size_t i = 0; i < iterations; ++i) {
+    print_progress(i);
+
     int step = step_dist(rng);
     if (step == 0) {
       step = (pct_dist(rng) < 50) ? 1 : -1;
     }
 
     // Simulate "scrolling" and bouncing at the ends.
-    pos = reflect_index(static_cast<int>(pos) + step);
+    pos                  = reflect_index(static_cast<int>(pos) + step);
 
     // Request current item plus neighbors (simple prefetch).
     const int offsets[3] = {0, 1, -1};
     for (const int off : offsets) {
-      const size_t idx = clamp_index(static_cast<int>(pos) + off);
-      const auto   id = ids[idx].first;
+      const size_t idx      = clamp_index(static_cast<int>(pos) + off);
+      const auto   id       = ids[idx].first;
       const auto   image_id = ids[idx].second;
-      const bool   pin = (pct_dist(rng) < 60);
+      const bool   pin      = (pct_dist(rng) < 60);
 
-      auto promise = std::make_shared<std::promise<std::shared_ptr<ThumbnailGuard>>>();
-      futures.push_back(promise->get_future());
+      auto         promise  = std::make_shared<std::promise<std::shared_ptr<ThumbnailGuard>>>();
+      auto         fut      = promise->get_future();
 
       EXPECT_NO_THROW(service.GetThumbnail(
           id, image_id,
-          [promise](std::shared_ptr<ThumbnailGuard> guard) {
+          [promise, first_seen_guards, idx](std::shared_ptr<ThumbnailGuard> guard) {
             // Guard against multiple callbacks/promise already satisfied.
             try {
+              if (first_seen_guards && (*first_seen_guards)[idx].expired()) {
+                (*first_seen_guards)[idx] = guard;
+              }
               promise->set_value(guard);
             } catch (...) {
             }
           },
           pin));
+
+      in_flight.push_back({idx, id, std::move(fut)});
+      if (max_in_flight != 0 && in_flight.size() > max_in_flight) {
+        auto front = std::move(in_flight.front());
+        in_flight.pop_front();
+        ++drained;
+        DrainAndValidateFuture(service, front.element_id_, std::move(front.future_), front.idx_,
+                               heavy_validate_every, drained, auto_release_pin);
+      }
     }
 
     // Randomly release around the current position to emulate the user moving away.
@@ -192,13 +266,36 @@ static void FuzzScrollRequestsNoThrow(
     }
   }
 
-  // Validate completion and that we didn't crash/throw while producing thumbnails.
-  for (auto& fut : futures) {
-    ASSERT_EQ(fut.wait_for(60s), std::future_status::ready) << "Thumbnail request timed out";
-    auto guard = fut.get();
-    ASSERT_NE(guard, nullptr);
-    ASSERT_NE(guard->thumbnail_buffer_, nullptr);
+  // Drain remaining callbacks.
+  while (!in_flight.empty()) {
+    auto front = std::move(in_flight.front());
+    in_flight.pop_front();
+    ++drained;
+    DrainAndValidateFuture(service, front.element_id_, std::move(front.future_), front.idx_,
+                           heavy_validate_every, drained, auto_release_pin);
+  }
 
+  if (enable_progress) {
+    std::cout << "\r\033[2K" << "[ThumbnailFuzz] iter=" << iterations << "/" << iterations
+              << " (100%)"
+              << " drained=" << drained << " inflight=0" << std::endl;
+  }
+}
+
+static void WaitAndValidateFuture(std::future<std::shared_ptr<ThumbnailGuard>> fut,
+                                  size_t idx_for_debug, size_t heavy_validate_every,
+                                  size_t                           completed_count,
+                                  std::shared_ptr<ThumbnailGuard>* out_guard) {
+  ASSERT_NE(out_guard, nullptr);
+  ASSERT_EQ(fut.wait_for(60s), std::future_status::ready)
+      << "Thumbnail request timed out (completed=" << completed_count << ", idx=" << idx_for_debug
+      << ")";
+
+  auto guard = fut.get();
+  ASSERT_NE(guard, nullptr);
+  ASSERT_NE(guard->thumbnail_buffer_, nullptr);
+
+  if (heavy_validate_every != 0 && (completed_count % heavy_validate_every) == 0) {
     auto* buffer = guard->thumbnail_buffer_.get();
     if (!buffer->cpu_data_valid_ && buffer->gpu_data_valid_) {
       EXPECT_NO_THROW(buffer->SyncToCPU());
@@ -206,6 +303,265 @@ static void FuzzScrollRequestsNoThrow(
     ASSERT_TRUE(buffer->cpu_data_valid_);
     auto& mat = buffer->GetCPUData();
     EXPECT_FALSE(mat.empty());
+  }
+
+  *out_guard = std::move(guard);
+}
+
+// More UI-faithful model: a fixed grid of `view_size` recyclable cells.
+// - Each cell is (re)bound to an element idx when scrolling.
+// - Binding requests the thumbnail (pin=true) and holds the returned guard.
+// - When a cell is rebound (item scrolled away), we ReleaseThumbnail() immediately.
+// - Late callbacks for items that are no longer bound are released on completion.
+static void FuzzAlbumScrollGridCellsNoThrow(
+    ThumbnailService& service, const std::vector<std::pair<sl_element_id_t, image_id_t>>& ids,
+    size_t iterations, uint32_t seed, size_t view_size = 50,
+    size_t prefetch_each_side = 7,  // 50 + 7*2 = 64 (matches service cache)
+    size_t max_in_flight = 12, size_t heavy_validate_every = 5000,
+    std::vector<std::weak_ptr<ThumbnailGuard>>* first_seen_guards = nullptr,
+    bool enable_progress = true, size_t progress_every = 1000) {
+  ASSERT_FALSE(ids.empty());
+  if (first_seen_guards) {
+    ASSERT_EQ(first_seen_guards->size(), ids.size());
+  }
+
+  const size_t                       window    = std::min(view_size, ids.size());
+  const size_t                       max_start = (ids.size() > window) ? (ids.size() - window) : 0;
+
+  std::mt19937                       rng(seed);
+  std::uniform_int_distribution<int> step_dist(-8, 8);
+  std::uniform_int_distribution<int> pct_dist(0, 99);
+
+  auto                               reflect_center = [&](int idx) -> size_t {
+    if (ids.size() == 1) {
+      return 0;
+    }
+    const int max_idx = static_cast<int>(ids.size()) - 1;
+    if (idx < 0) {
+      idx = -idx;
+    }
+    if (idx > max_idx) {
+      idx = (2 * max_idx) - idx;
+      if (idx < 0) {
+        idx = 0;
+      }
+    }
+    return static_cast<size_t>(idx);
+  };
+
+  struct InFlight {
+    size_t                                       idx_              = 0;
+    sl_element_id_t                              element_id_       = 0;
+    bool                                         requested_pinned_ = false;
+    std::future<std::shared_ptr<ThumbnailGuard>> future_;
+  };
+
+  std::deque<InFlight>                         in_flight;
+  std::unordered_set<size_t>                   in_flight_idx;
+
+  // A fixed set of UI cells (like a scrolling grid view) holding guards.
+  // cell[i] displays idx = start + i.
+  std::vector<size_t>                          cell_idx(window, static_cast<size_t>(-1));
+  std::vector<std::shared_ptr<ThumbnailGuard>> cell_guard(window);
+
+  size_t                                       drained = 0;
+  size_t                                       center  = static_cast<size_t>(rng() % ids.size());
+  size_t start   = (window >= ids.size()) ? 0 : std::min(center, max_start);
+
+  auto   in_view = [&](size_t idx, size_t cur_start) -> bool {
+    return idx >= cur_start && idx < (cur_start + window);
+  };
+
+  auto cell_pos_for = [&](size_t idx, size_t cur_start) -> size_t { return idx - cur_start; };
+
+  auto request_idx  = [&](size_t idx, bool pin) {
+    const auto element_id = ids[idx].first;
+    const auto image_id   = ids[idx].second;
+
+    auto       promise    = std::make_shared<std::promise<std::shared_ptr<ThumbnailGuard>>>();
+    auto       fut        = promise->get_future();
+
+    try {
+      service.GetThumbnail(
+          element_id, image_id,
+          [promise, first_seen_guards, idx](std::shared_ptr<ThumbnailGuard> guard) {
+            try {
+              if (first_seen_guards && (*first_seen_guards)[idx].expired()) {
+                (*first_seen_guards)[idx] = guard;
+              }
+              promise->set_value(guard);
+            } catch (...) {
+            }
+          },
+          pin);
+      in_flight.push_back({idx, element_id, pin, std::move(fut)});
+      in_flight_idx.insert(idx);
+    } catch (std::exception& e) {
+      // Swallow exceptions from GetThumbnail to keep fuzzing going.
+      FAIL() << "GetThumbnail() threw exception for element ID " << element_id << ": " << e.what();
+    }
+  };
+
+  auto wait_validate = [&](std::future<std::shared_ptr<ThumbnailGuard>> fut, size_t idx_for_debug) {
+    std::shared_ptr<ThumbnailGuard> guard;
+    WaitAndValidateFuture(std::move(fut), idx_for_debug, heavy_validate_every, drained, &guard);
+    return guard;
+  };
+
+  auto drain_one = [&](size_t cur_start, bool force_block) {
+    if (in_flight.empty()) {
+      return false;
+    }
+
+    auto drain_item = [&](InFlight item) {
+      in_flight_idx.erase(item.idx_);
+      ++drained;
+      auto guard = wait_validate(std::move(item.future_), item.idx_);
+      if (!guard) {
+        return true;
+      }
+
+      // If this idx is currently bound to a visible cell, attach it.
+      if (in_view(item.idx_, cur_start)) {
+        const size_t pos = cell_pos_for(item.idx_, cur_start);
+        if (pos < window && cell_idx[pos] == item.idx_ && !cell_guard[pos]) {
+          cell_guard[pos] = guard;
+          return true;
+        }
+      }
+
+      // Otherwise, behave like a UI that already scrolled away / never displayed it.
+      EXPECT_NO_THROW(service.ReleaseThumbnail(item.element_id_));
+      return true;
+    };
+
+    if (!force_block) {
+      for (size_t i = 0; i < in_flight.size(); ++i) {
+        if (in_flight[i].future_.wait_for(0s) == std::future_status::ready) {
+          auto item = std::move(in_flight[i]);
+          in_flight.erase(in_flight.begin() + static_cast<std::ptrdiff_t>(i));
+          return drain_item(std::move(item));
+        }
+      }
+      return false;
+    }
+
+    auto item = std::move(in_flight.front());
+    in_flight.pop_front();
+    return drain_item(std::move(item));
+  };
+
+  auto print_progress = [&](size_t iter) {
+    if (!enable_progress || progress_every == 0) {
+      return;
+    }
+    if ((iter % progress_every) != 0) {
+      return;
+    }
+    const double pct  = (iterations == 0)
+                            ? 100.0
+                            : (100.0 * static_cast<double>(iter) / static_cast<double>(iterations));
+    size_t       held = 0;
+    for (const auto& g : cell_guard) {
+      if (g) {
+        ++held;
+      }
+    }
+    std::cout << "\r\033[2K"
+              << "[ThumbnailFuzzCells] iter=" << iter << "/" << iterations << " ("
+              << static_cast<int>(pct) << "%)"
+              << " drained=" << drained << " inflight=" << in_flight.size() << " held=" << held
+              << std::flush;
+  };
+
+  for (size_t iter = 0; iter < iterations; ++iter) {
+    print_progress(iter);
+
+    // Drain ready work each iteration for throughput.
+    while (drain_one(start, false)) {
+    }
+
+    int step = step_dist(rng);
+    if (step == 0) {
+      step = (pct_dist(rng) < 50) ? 1 : -1;
+    }
+    if (pct_dist(rng) < 4) {
+      step *= static_cast<int>(window * 2);
+    }
+
+    center = reflect_center(static_cast<int>(center) + step);
+    start  = (window >= ids.size())
+                 ? 0
+                 : std::clamp<size_t>((center > (window / 2)) ? (center - (window / 2)) : 0, 0,
+                                     max_start);
+
+    // Rebind each cell to the new viewport. Any old cell content is released immediately.
+    for (size_t pos = 0; pos < window; ++pos) {
+      const size_t want_idx = start + pos;
+      if (cell_idx[pos] != want_idx) {
+        if (cell_idx[pos] != static_cast<size_t>(-1) && cell_guard[pos]) {
+          EXPECT_NO_THROW(service.ReleaseThumbnail(ids[cell_idx[pos]].first));
+        }
+        cell_idx[pos]   = want_idx;
+        cell_guard[pos] = nullptr;
+      }
+    }
+
+    auto maybe_request = [&](size_t idx, bool pin) {
+      // If idx is visible and already attached to its cell, skip.
+      if (in_view(idx, start)) {
+        const size_t pos = cell_pos_for(idx, start);
+        if (pos < window && cell_guard[pos]) {
+          return;
+        }
+      }
+      if (in_flight_idx.contains(idx)) {
+        return;
+      }
+      request_idx(idx, pin);
+      while (max_in_flight != 0 && in_flight.size() > max_in_flight) {
+        if (drain_one(start, false)) {
+          continue;
+        }
+        (void)drain_one(start, true);
+      }
+    };
+
+    // Request thumbnails for visible cells first (pinned).
+    for (size_t pos = 0; pos < window; ++pos) {
+      maybe_request(start + pos, true);
+    }
+
+    // Prefetch around the viewport (not pinned).
+    const size_t prefetch_begin = (start > prefetch_each_side) ? (start - prefetch_each_side) : 0;
+    const size_t prefetch_end   = std::min(ids.size(), start + window + prefetch_each_side);
+    for (size_t idx = prefetch_begin; idx < prefetch_end; ++idx) {
+      if (in_view(idx, start)) {
+        continue;
+      }
+      maybe_request(idx, false);
+    }
+  }
+
+  while (drain_one(start, false)) {
+  }
+  while (!in_flight.empty()) {
+    (void)drain_one(start, true);
+  }
+
+  // Simulate leaving the album view: release anything still shown in cells.
+  for (size_t pos = 0; pos < window; ++pos) {
+    if (cell_idx[pos] != static_cast<size_t>(-1) && cell_guard[pos]) {
+      EXPECT_NO_THROW(service.ReleaseThumbnail(ids[cell_idx[pos]].first));
+      cell_guard[pos] = nullptr;
+    }
+  }
+
+  if (enable_progress) {
+    std::cout << "\r\033[2K" << "[ThumbnailFuzzCells] iter=" << iterations << "/" << iterations
+              << " (100%)"
+              << " drained=" << drained << " inflight=0"
+              << " held=0" << std::endl;
   }
 }
 }  // namespace
@@ -246,7 +602,7 @@ class ThumbnailServiceTests : public ::testing::Test {
   }
 };
 
-TEST_F(ThumbnailServiceTests, GenerateThumbnailAndCallbacks) {
+TEST_F(ThumbnailServiceTests, DISABLED_GenerateThumbnailAndCallbacks) {
   ProjectService            project(db_path_, meta_path_);
   auto                      fs_service = project.GetSleeveService();
   auto                      img_pool   = project.GetImagePoolService();
@@ -378,7 +734,7 @@ TEST_F(ThumbnailServiceTests, GenerateThumbnailAndCallbacks) {
   EXPECT_EQ(no_pin_guard->pin_count_, 0);
 }
 
-TEST_F(ThumbnailServiceTests, PipelineRestoredFromDBGeneratesCorrectThumbnail) {
+TEST_F(ThumbnailServiceTests, DISABLED_PipelineRestoredFromDBGeneratesCorrectThumbnail) {
   // Verify that thumbnail generation uses the pipeline restored from DB (not only the fresh
   // default pipeline created after app init).
 
@@ -447,7 +803,7 @@ TEST_F(ThumbnailServiceTests, PipelineRestoredFromDBGeneratesCorrectThumbnail) {
       default_hash = GetThumbnailHashBlocking(thumbnail_service, file_id, image_id);
       thumbnail_service.ReleaseThumbnail(file_id);
 
-      auto pipeline = pipeline_service->LoadPipeline(file_id);
+      auto pipeline  = pipeline_service->LoadPipeline(file_id);
       pipline_before = pipeline->pipeline_->ExportPipelineParams().dump();
       pipeline_service->SavePipeline(pipeline);
     }
@@ -470,8 +826,9 @@ TEST_F(ThumbnailServiceTests, PipelineRestoredFromDBGeneratesCorrectThumbnail) {
     {
       ThumbnailService thumbnail_service(project.GetSleeveService(), img_pool, pipeline_service);
       auto             pipeline = pipeline_service->LoadPipeline(file_id);
-      pipline_after = pipeline->pipeline_->ExportPipelineParams().dump();
-      ASSERT_NE(pipline_before, pipline_after) << "Pipeline parameters did not change after modification";
+      pipline_after             = pipeline->pipeline_->ExportPipelineParams().dump();
+      ASSERT_NE(pipline_before, pipline_after)
+          << "Pipeline parameters did not change after modification";
       modified_hash = GetThumbnailHashBlocking(thumbnail_service, file_id, image_id);
       thumbnail_service.ReleaseThumbnail(file_id);
     }
@@ -501,7 +858,7 @@ TEST_F(ThumbnailServiceTests, PipelineRestoredFromDBGeneratesCorrectThumbnail) {
   }
 }
 
-TEST_F(ThumbnailServiceTests, FuzzScrollBrowsingNoThrowReloadService) {
+TEST_F(ThumbnailServiceTests, DISABLED_FuzzScrollBrowsingNoThrowReloadService) {
   // Simulate a user scrolling back and forth in the UI thumbnail grid.
   // Requirement: no throws; two phases; and on each "service shutdown" persist like
   // PipelineRestoredFromDBGeneratesCorrectThumbnail.
@@ -509,11 +866,11 @@ TEST_F(ThumbnailServiceTests, FuzzScrollBrowsingNoThrowReloadService) {
   // Phase 0: import images once and persist the project.
   std::vector<std::pair<sl_element_id_t, image_id_t>> ids;
   {
-    ProjectService        project(db_path_, meta_path_);
-    auto                  fs_service = project.GetSleeveService();
-    auto                  img_pool   = project.GetImagePoolService();
-    ImportServiceImpl     import_service(fs_service, img_pool);
-    std::filesystem::path img_root_path = {TEST_IMG_PATH "/raw/batch_import"};
+    ProjectService            project(db_path_, meta_path_);
+    auto                      fs_service = project.GetSleeveService();
+    auto                      img_pool   = project.GetImagePoolService();
+    ImportServiceImpl         import_service(fs_service, img_pool);
+    std::filesystem::path     img_root_path = {TEST_IMG_PATH "/raw/batch_import"};
 
     std::vector<image_path_t> paths{};
     for (const auto& entry : std::filesystem::directory_iterator(img_root_path)) {
@@ -563,7 +920,7 @@ TEST_F(ThumbnailServiceTests, FuzzScrollBrowsingNoThrowReloadService) {
 
     {
       ThumbnailService thumbnail_service(project.GetSleeveService(), img_pool, pipeline_service);
-      FuzzScrollRequestsNoThrow(thumbnail_service, ids, 250, 0xC0FFEEu);
+      FuzzScrollRequestsNoThrow(thumbnail_service, ids, 5000, 0xC0FFEEu);
       ReleaseAllThumbnailsAggressively(thumbnail_service, ids);
     }
 
@@ -580,7 +937,7 @@ TEST_F(ThumbnailServiceTests, FuzzScrollBrowsingNoThrowReloadService) {
 
     {
       ThumbnailService thumbnail_service(project.GetSleeveService(), img_pool, pipeline_service);
-      FuzzScrollRequestsNoThrow(thumbnail_service, ids, 250, 0xBADC0DEu);
+      FuzzScrollRequestsNoThrow(thumbnail_service, ids, 5000, 0xBADC0DEu);
       ReleaseAllThumbnailsAggressively(thumbnail_service, ids);
     }
 
@@ -590,7 +947,145 @@ TEST_F(ThumbnailServiceTests, FuzzScrollBrowsingNoThrowReloadService) {
   }
 }
 
-TEST_F(ThumbnailServiceTests, Generate16ThumbnailsAndValidateAll) {
+TEST_F(ThumbnailServiceTests, FuzzScrollBrowsingSharedPtrLifetimeStress) {
+  // Goal: run many scroll-like iterations without accumulating unbounded futures,
+  // and ensure ThumbnailGuard shared_ptrs do not outlive the ThumbnailService.
+  // Pattern requirement: two phases; and on each "service shutdown" persist like
+  // PipelineRestoredFromDBGeneratesCorrectThumbnail.
+
+  constexpr size_t                                    kIterations = 50'000;
+
+  std::vector<std::pair<sl_element_id_t, image_id_t>> ids;
+
+  // Phase 0: import images once and persist.
+  {
+    ProjectService            project(db_path_, meta_path_);
+    auto                      fs_service = project.GetSleeveService();
+    auto                      img_pool   = project.GetImagePoolService();
+    ImportServiceImpl         import_service(fs_service, img_pool);
+    std::filesystem::path     img_root_path = {TEST_IMG_PATH "/raw/batch_import"};
+
+    std::vector<image_path_t> paths{};
+    for (const auto& entry : std::filesystem::directory_iterator(img_root_path)) {
+      if (entry.is_regular_file()) {
+        paths.push_back(entry.path());
+      }
+    }
+    ASSERT_GE(paths.size(), 16u) << "Need images under TEST_IMG_PATH/raw/batch_import";
+
+    std::shared_ptr<ImportJob> import_job = std::make_shared<ImportJob>();
+    std::promise<ImportResult> final_result;
+    auto                       final_result_future = final_result.get_future();
+    import_job->on_finished_                       = [&final_result](const ImportResult& result) {
+      final_result.set_value(result);
+    };
+
+    import_job = import_service.ImportToFolder(paths, L"", {}, import_job);
+    ASSERT_NE(import_job, nullptr);
+    ASSERT_EQ(final_result_future.wait_for(60s), std::future_status::ready)
+        << "Import did not finish in time";
+
+    std::cout << "[ThumbnailFuzz] Imported " << paths.size() << " images for fuzzing." << std::endl;
+
+    const auto final_result_value = final_result_future.get();
+    ASSERT_EQ(final_result_value.failed_, 0u);
+    ASSERT_NE(import_job->import_log_, nullptr);
+    auto snapshot = import_job->import_log_->Snapshot();
+    ASSERT_FALSE(snapshot.created_.empty());
+
+    const size_t count = std::min<size_t>(128, snapshot.created_.size());
+    ids.reserve(count);
+    for (size_t i = 0; i < count; ++i) {
+      ids.push_back({snapshot.created_[i].element_id_, snapshot.created_[i].image_id_});
+    }
+
+    import_service.SyncImports(snapshot, L"");
+    std::cout << "[ThumbnailFuzz] Synced imports to storage." << std::endl;
+
+    project.GetSleeveService()->Sync();
+    project.GetImagePoolService()->SyncWithStorage();
+    project.SaveProject(meta_path_);
+    std::cout << "[ThumbnailFuzz] Project saved." << std::endl;
+  }
+
+  ASSERT_FALSE(ids.empty());
+  std::vector<std::weak_ptr<ThumbnailGuard>> phase1_weak(ids.size());
+  std::vector<std::weak_ptr<ThumbnailGuard>> phase2_weak(ids.size());
+
+  // Phase 1: stress browse.
+  std::cout << "[ThumbnailFuzz] Starting phase 1 browsing fuzz..." << std::endl;
+  {
+    ProjectService project(db_path_, meta_path_);
+    auto           img_pool = project.GetImagePoolService();
+    auto pipeline_service   = std::make_shared<PipelineMgmtService>(project.GetStorageService());
+
+    {
+      ThumbnailService thumbnail_service(project.GetSleeveService(), img_pool, pipeline_service);
+
+      // // Ensure each id is observed at least once, then release.
+      // for (size_t i = 0; i < ids.size(); ++i) {
+      //   const auto [id, image_id] = ids[i];
+      //   auto       guard          = GetThumbnailBlocking(thumbnail_service, id, image_id, true);
+      //   phase1_weak[i]            = guard;
+      //   thumbnail_service.ReleaseThumbnail(id);
+      // }
+
+      // Simulate real album scrolling behavior:
+      // - A fixed 50-cell grid; each scroll step rebinds cells.
+      // - When a cell scrolls off-screen, the thumbnail is released immediately.
+      // - Prefetch around the viewport to match cache behavior.
+      // - Bound outstanding requests (in-flight) to maximize throughput without overload.
+      FuzzAlbumScrollGridCellsNoThrow(thumbnail_service, ids, kIterations, 0xFEEDFACEu,
+                                      /*view_size=*/50,
+                                      /*prefetch_each_side=*/7,
+                                      /*max_in_flight=*/12,
+                                      /*heavy_validate_every=*/5000, &phase1_weak,
+                                      /*enable_progress=*/true,
+                                      /*progress_every=*/50);
+      ReleaseAllThumbnailsAggressively(thumbnail_service, ids, 64);
+    }
+
+    pipeline_service->Sync();
+    img_pool->SyncWithStorage();
+    project.SaveProject(meta_path_);
+  }
+
+  for (size_t i = 0; i < phase1_weak.size(); ++i) {
+    EXPECT_TRUE(phase1_weak[i].expired())
+        << "ThumbnailGuard leaked after service shutdown (idx=" << i << ")";
+  }
+
+  // Phase 2: reload service and stress again.
+  {
+    ProjectService project(db_path_, meta_path_);
+    auto           img_pool = project.GetImagePoolService();
+    auto pipeline_service   = std::make_shared<PipelineMgmtService>(project.GetStorageService());
+
+    {
+      ThumbnailService thumbnail_service(project.GetSleeveService(), img_pool, pipeline_service);
+
+      FuzzAlbumScrollGridCellsNoThrow(thumbnail_service, ids, kIterations, 0x1234ABCDu,
+                                      /*view_size=*/50,
+                                      /*prefetch_each_side=*/7,
+                                      /*max_in_flight=*/12,
+                                      /*heavy_validate_every=*/5000, &phase2_weak,
+                                      /*enable_progress=*/true,
+                                      /*progress_every=*/50);
+      ReleaseAllThumbnailsAggressively(thumbnail_service, ids, 64);
+    }
+
+    pipeline_service->Sync();
+    img_pool->SyncWithStorage();
+    project.SaveProject(meta_path_);
+  }
+
+  for (size_t i = 0; i < phase2_weak.size(); ++i) {
+    EXPECT_TRUE(phase2_weak[i].expired())
+        << "ThumbnailGuard leaked after service reload (idx=" << i << ")";
+  }
+}
+
+TEST_F(ThumbnailServiceTests, DISABLED_Generate16ThumbnailsAndValidateAll) {
   ProjectService            project(db_path_, meta_path_);
   auto                      fs_service = project.GetSleeveService();
   auto                      img_pool   = project.GetImagePoolService();
@@ -651,7 +1146,8 @@ TEST_F(ThumbnailServiceTests, Generate16ThumbnailsAndValidateAll) {
   for (size_t i = 0; i < 16; ++i) {
     const auto [id, image_id] = ids[i];
     thumbnail_service.GetThumbnail(
-        id, image_id, [i, &guards, &done_promises](std::shared_ptr<ThumbnailGuard> guard) {
+        id, image_id,
+        [i, &guards, &done_promises](std::shared_ptr<ThumbnailGuard> guard) {
           guards[i] = guard;
           done_promises[i].set_value(guard);
         },

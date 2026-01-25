@@ -18,6 +18,7 @@
 #include <memory>
 #include <mutex>
 
+#include "edit/pipeline/pipeline_cpu.hpp"
 #include "type/type.hpp"
 
 namespace puerhlab {
@@ -54,14 +55,23 @@ auto PipelineMgmtService::LoadPipeline(sl_element_id_t id) -> std::shared_ptr<Pi
       }
     }
   } else {
-    auto pipeline          = storage_service_->GetElementController().GetPipelineByElementId(id);
-    auto pipeline_guard    = std::make_shared<PipelineGuard>();
-    pipeline_guard->dirty_ = false;
+    std::shared_ptr<CPUPipelineExecutor> pipeline;
+    std::shared_ptr<PipelineGuard>       pipeline_guard;
+    try {
+      pipeline               = storage_service_->GetElementController().GetPipelineByElementId(id);
+      pipeline_guard         = std::make_shared<PipelineGuard>();
+      pipeline_guard->dirty_ = false;
+    } catch (std::exception& e) {
+      throw std::runtime_error(
+          "[ERROR] PipelineMgmtService: Failed to load pipeline from storage for element ID " +
+          std::to_string(id) + ": " + e.what());
+    }
     if (pipeline == nullptr) {
       pipeline = std::make_shared<CPUPipelineExecutor>();
       pipeline->SetBoundFile(id);
       pipeline_guard->dirty_ = true;
     }
+
     pipeline_guard->pipeline_              = std::move(pipeline);
     pipeline_guard->id_                    = id;
     pipeline_guard->pinned_                = true;

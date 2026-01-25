@@ -24,9 +24,9 @@
 #include "image/image_buffer.hpp"
 
 namespace puerhlab {
-
+//TODO: Default value
 ColorWheelOp::ColorWheelOp()
-    : lift_(), gamma_(), gain_(), lift_crossover_(0.25f), gain_crossover_(0.75f) {}
+    : lift_({0.f, 0.f, 0.f}, 0.f), gamma_({1.f, 1.f, 1.f}, 0.f), gain_({1.f, 1.f, 1.f}, 0.f), lift_crossover_(0.25f), gain_crossover_(0.75f) {}
 
 ColorWheelOp::ColorWheelOp(const nlohmann::json& params) { SetParams(params); }
 

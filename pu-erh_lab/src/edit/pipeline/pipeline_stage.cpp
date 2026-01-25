@@ -279,7 +279,8 @@ auto PipelineStage::GetStageNameString() const -> std::string {
 auto PipelineStage::ExportStageParams() const -> nlohmann::json {
   nlohmann::json inner;
   for (const auto& [op_type, op_entry] : *operators_) {
-    if (!op_entry.op_ || op_entry.op_->GetOperatorType() == OperatorType::RESIZE) {
+    if (!op_entry.op_ || op_entry.op_->GetOperatorType() == OperatorType::RESIZE ||
+        op_entry.op_->GetOperatorType() == OperatorType::UNKNOWN) {
       continue;
     }
     inner[op_entry.op_->GetScriptName()] = op_entry.ExportOperatorParams();
@@ -303,7 +304,9 @@ void PipelineStage::ImportStageParams(const nlohmann::json& j) {
     }
     nlohmann::json params  = op_json.value("params", nlohmann::json::object());
     OperatorType   op_type = op_json.value("type", OperatorType::UNKNOWN);
-    SetOperator(op_type, params);
+    if (op_type != OperatorType::UNKNOWN && op_type != OperatorType::RESIZE) {
+      SetOperator(op_type, params);
+    }
   }
 }
 
@@ -321,7 +324,9 @@ void PipelineStage::ImportStageParams(const nlohmann::json& j, OperatorParams& g
     }
     nlohmann::json params  = op_json.value("params", nlohmann::json::object());
     OperatorType   op_type = op_json.value("type", OperatorType::UNKNOWN);
-    SetOperator(op_type, params, global_params);
+    if (op_type != OperatorType::UNKNOWN && op_type != OperatorType::RESIZE) {
+      SetOperator(op_type, params, global_params);
+    }
   }
 }
 };  // namespace puerhlab

@@ -14,15 +14,15 @@
 
 #pragma once
 
-#include <cstdint>
+#include <functional>
 #include <memory>
 #include <unordered_map>
+#include <vector>
 
 #include "app/image_pool_service.hpp"
 #include "app/pipeline_service.hpp"
 #include "app/render_service.hpp"
 #include "app/sleeve_service.hpp"
-#include "concurrency/thread_pool.hpp"
 #include "image/image_buffer.hpp"
 #include "renderer/pipeline_scheduler.hpp"
 #include "type/type.hpp"
