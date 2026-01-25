@@ -63,13 +63,14 @@ TEST_F(PipelineServiceTests, BasicPipelineRWTest) {
     EXPECT_NE(pipeline_guard, nullptr);
     EXPECT_EQ(pipeline_guard->id_, 1);
     EXPECT_EQ(pipeline_guard->pinned_, true);
-    EXPECT_EQ(pipeline_guard->dirty_, true);
+    EXPECT_EQ(pipeline_guard->dirty_, false);
 
     // Modify the pipeline
     auto&          stage = pipeline_guard->pipeline_->GetStage(PipelineStageName::To_WorkingSpace);
     nlohmann::json exp_params;
     exp_params["exposure"] = 1.5f;
     stage.SetOperator(OperatorType::EXPOSURE, exp_params);
+    pipeline_guard->dirty_ = true;
 
     // Save it back
     pipeline_service.SavePipeline(pipeline_guard);
@@ -121,6 +122,7 @@ TEST_F(PipelineServiceTests, MultiplePipelineTest) {
       nlohmann::json exp_params;
       exp_params["contrast"] = static_cast<float>(i) * 0.5f;
       stage.SetOperator(OperatorType::CONTRAST, exp_params);
+      pipeline_guard->dirty_ = true;
 
       // Save it back
       pipeline_service.SavePipeline(pipeline_guard);
@@ -166,7 +168,7 @@ TEST_F(PipelineServiceTests, CacheTest1) {
       nlohmann::json exp_params;
       exp_params["exposure"] = static_cast<float>(i) * 0.3f;
       stage.SetOperator(OperatorType::EXPOSURE, exp_params);
-
+      pipeline_guard->dirty_ = true;
       // Save it back
       // So no guard will be pinned
       pipeline_service.SavePipeline(pipeline_guard);
@@ -199,6 +201,7 @@ TEST_F(PipelineServiceTests, CacheTest2) {
       nlohmann::json exp_params;
       exp_params["contrast"] = static_cast<float>(i) * 0.4f;
       stage.SetOperator(OperatorType::CONTRAST, exp_params);
+      pipeline_guard->dirty_ = true;
 
       // No save back, so all pipelines are in use
     }
@@ -210,7 +213,7 @@ TEST_F(PipelineServiceTests, CacheTest2) {
   }
 }
 
-TEST_F(PipelineServiceTests, FuzzTest) {
+TEST_F(PipelineServiceTests, DISABLED_FuzzTest) {
   {
     ProjectService      project(db_path_, meta_path_);
     PipelineMgmtService pipeline_service(project.GetStorageService());

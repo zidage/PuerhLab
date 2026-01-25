@@ -120,6 +120,7 @@ void PipelineScheduler::ScheduleTask(PipelineTask&& task) {
           if (render_desc.render_type_ == RenderType::THUMBNAIL) {
             // Reset to FULL_RES_PREVIEW mode after thumbnail render
             task.ResetThumbnailRenderParams();
+            task.pipeline_executor_->ClearAllIntermediateBuffers();
           }
 
           return;
@@ -138,6 +139,19 @@ void PipelineScheduler::ScheduleTask(PipelineTask&& task) {
       }
       if (task.options_.is_blocking_) {
         task.result_->set_value(result_copy);  // Notify the waiting thread
+      }
+
+      // Cleanup after callback completes
+      auto& render_desc = task.options_.render_desc_;
+      if (render_desc.render_type_ == RenderType::THUMBNAIL) {
+        task.ResetThumbnailRenderParams();
+        // Release all intermediate buffers to free memory
+        // if (task.input_) {
+        //   task.input_->ReleaseBuffer();
+        //   task.input_->ReleaseCPUData();
+        //   task.input_.reset();
+        // }
+        task.pipeline_executor_->ClearAllIntermediateBuffers();
       }
     } else if (task.options_.is_blocking_) {
       // In case of failure, set nullptr

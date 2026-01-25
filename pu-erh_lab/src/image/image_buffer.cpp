@@ -20,6 +20,17 @@
 #include <utility>
 
 namespace puerhlab {
+
+ImageBuffer::~ImageBuffer() {
+  // RAII cleanup: release all resources
+  cpu_data_.release();
+  gpu_data_.release();
+  buffer_.reset();
+  cpu_data_valid_ = false;
+  gpu_data_valid_ = false;
+  buffer_valid_   = false;
+}
+
 ImageBuffer::ImageBuffer(cv::Mat& data) : cpu_data_valid_(true) { data.copyTo(cpu_data_); }
 
 ImageBuffer::ImageBuffer(cv::Mat&& data) : cpu_data_(data), cpu_data_valid_(true) {}

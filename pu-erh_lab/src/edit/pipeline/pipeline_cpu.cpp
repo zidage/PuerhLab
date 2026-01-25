@@ -64,6 +64,9 @@ void CPUPipelineExecutor::SetEnableCache(bool enable_cache) {
   enable_cache_ = enable_cache;
   // Reinitialize stages with the new cache setting
   ResetExecutionStagesCache();
+  for (auto* stage : exec_stages_) {
+    stage->SetEnableCache(enable_cache_);
+  }
 }
 
 CPUPipelineExecutor::CPUPipelineExecutor(bool enable_cache)
@@ -301,6 +304,15 @@ void CPUPipelineExecutor::InitDefaultPipeline() {
   SetTemplateParams();
   RegisterAllOperators();
   SetExecutionStages();
+}
+
+void CPUPipelineExecutor::ClearAllIntermediateBuffers() {
+  for (auto& stage : stages_) {
+    stage.ClearIntermediateBuffers();
+  }
+  if (merged_stages_) {
+    merged_stages_->ClearIntermediateBuffers();
+  }
 }
 
 };  // namespace puerhlab

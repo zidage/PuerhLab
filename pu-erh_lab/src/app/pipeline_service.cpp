@@ -31,6 +31,8 @@ void PipelineMgmtService::HandleEviction(sl_element_id_t evicted_id) {
         storage_service_->GetElementController().UpdatePipelineByElementId(
             evicted_id, pipeline_guard->pipeline_);
       }
+      // Clear intermediate buffers before removing from cache to ensure timely memory release
+      pipeline_guard->pipeline_->ClearAllIntermediateBuffers();
       loaded_pipelines_.erase(it);
     } else {
       // This pipeline is still pinned, resize the cache and keep it in the cache
@@ -69,7 +71,7 @@ auto PipelineMgmtService::LoadPipeline(sl_element_id_t id) -> std::shared_ptr<Pi
     if (pipeline == nullptr) {
       pipeline = std::make_shared<CPUPipelineExecutor>();
       pipeline->SetBoundFile(id);
-      pipeline_guard->dirty_ = true;
+      pipeline_guard->dirty_ = false;
     }
 
     pipeline_guard->pipeline_              = std::move(pipeline);
@@ -90,7 +92,18 @@ auto PipelineMgmtService::LoadPipeline(sl_element_id_t id) -> std::shared_ptr<Pi
 }
 
 void PipelineMgmtService::SavePipeline(std::shared_ptr<PipelineGuard> pipeline) {
-  if (!pipeline || !pipeline->dirty_) {
+  if (!pipeline) {
+    return;
+  }
+
+  // Always clear intermediate buffers when returning pipeline to cache
+  // This releases memory from input/output images that are no longer needed
+  pipeline->pipeline_->ClearAllIntermediateBuffers();
+
+  if (!pipeline->dirty_) {
+    // Even if not dirty, we still need to unpin and return to cache
+    std::unique_lock<std::mutex> guard(lock_);
+    pipeline->pinned_ = false;
     return;
   }
 

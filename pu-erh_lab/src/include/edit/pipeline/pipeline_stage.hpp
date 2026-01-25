@@ -110,24 +110,23 @@ class PipelineStage {
   enum class StageRole { DescriptorOnly, CpuOperators, GpuStreamable };
 
   std::unique_ptr<std::map<OperatorType, OperatorEntry>> operators_;
-  bool                                                   is_streamable_      = true;
-  bool                                                   vec_enabled_        = false;
+  bool                                                   is_streamable_ = true;
+  bool                                                   vec_enabled_   = false;
 
-  StageRole                                              stage_role_         = StageRole::DescriptorOnly;
+  StageRole                                              stage_role_    = StageRole::DescriptorOnly;
 
-  PipelineStage*                                         prev_stage_         = nullptr;
-  PipelineStage*                                         next_stage_         = nullptr;
+  PipelineStage*                                         prev_stage_    = nullptr;
+  PipelineStage*                                         next_stage_    = nullptr;
 
-  std::shared_ptr<ImageBuffer>                           input_img_          = nullptr;
-  std::shared_ptr<ImageBuffer>                           output_cache_       = nullptr;
+  std::shared_ptr<ImageBuffer>                           input_img_     = nullptr;
+  std::shared_ptr<ImageBuffer>                           output_cache_  = nullptr;
 
-  bool                                                   enable_cache_       = false;
+  bool                                                   enable_cache_  = false;
   bool                                                   input_cache_valid_  = false;
   bool                                                   output_cache_valid_ = false;
   bool                                                   input_set_          = false;
 
   PipelineStage*                                         dependents_         = nullptr;
-
 
   static constexpr auto                                  BuildKernelStream   = []() {
     auto op_to_working = OCIO_ACES_Transform_Op_Kernel();
@@ -187,9 +186,7 @@ class PipelineStage {
     gpu_setup_done_ = true;
   }
 
-  void SetFrameSink(IFrameSink* frame_sink) {
-    gpu_executor_.SetFrameSink(frame_sink);
-  }
+  void SetFrameSink(IFrameSink* frame_sink) { gpu_executor_.SetFrameSink(frame_sink); }
 
   void SetInputImage(std::shared_ptr<ImageBuffer>);
 
@@ -248,6 +245,12 @@ class PipelineStage {
 
   auto GetStaticKernelStream() -> StaticKernelStreamType& { return static_kernel_stream_; }
 
+  void SetEnableCache(bool enable) {
+    if (enable_cache_ == enable) return;
+    enable_cache_ = enable;
+    ResetCache();
+  }
+
   /**
    * @brief Reset this stage to initial state
    *
@@ -259,6 +262,12 @@ class PipelineStage {
    *
    */
   void ResetCache();
+
+  /**
+   * @brief Clear intermediate buffers (input_img_ and output_cache_) without resetting operators.
+   *        Use this after pipeline execution to release memory while keeping the stage configuration.
+   */
+  void ClearIntermediateBuffers();
 
   /**
    * @brief Export the parameters of this stage and its operators to JSON (serialize)
@@ -273,19 +282,19 @@ class PipelineStage {
    * @param j
    */
   void ImportStageParams(const nlohmann::json& j);
-  
+
   void ImportStageParams(const nlohmann::json& j, OperatorParams& global_params);
 
  private:
-  static StageRole DetermineStageRole(PipelineStageName stage, bool is_streamable);
+  static StageRole             DetermineStageRole(PipelineStageName stage, bool is_streamable);
 
-  bool HasEnabledOperator() const;
+  bool                         HasEnabledOperator() const;
 
   std::shared_ptr<ImageBuffer> ApplyDescriptorOnly();
   std::shared_ptr<ImageBuffer> ApplyCpuOperators();
   std::shared_ptr<ImageBuffer> ApplyGpuStream(OperatorParams& global_params);
 
-  bool force_cpu_output_ = false;
+  bool                         force_cpu_output_ = false;
 };
 
 }  // namespace puerhlab

@@ -178,6 +178,10 @@ if (WIN32)
 target_link_libraries(ThumbnailServiceTest easy_profiler)
 endif()
 
+add_executable(ThumbnailAlbumQtDemo app/thumbnail_album_qt_demo.cpp)
+target_include_directories(ThumbnailAlbumQtDemo PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
+target_link_libraries(ThumbnailAlbumQtDemo PRIVATE ThumbnailService ProjectService ImportService Qt6::Widgets easy_profiler)
+
 include(GoogleTest)
 # set(CMAKE_GTEST_DISCOVER_TESTS_DISCOVERY_MODE PRE_TEST)
 # gtest_discover_tests(SampleTest)

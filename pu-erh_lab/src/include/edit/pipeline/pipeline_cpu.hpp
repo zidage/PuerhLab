@@ -97,5 +97,12 @@ class CPUPipelineExecutor : public PipelineExecutor {
   void RegisterAllOperators();
 
   void InitDefaultPipeline();
+
+  /**
+   * @brief Clear all intermediate image buffers from all stages.
+   *        Call this after pipeline execution when you want to release memory
+   *        while keeping the pipeline configuration intact.
+   */
+  void ClearAllIntermediateBuffers();
 };
 };  // namespace puerhlab

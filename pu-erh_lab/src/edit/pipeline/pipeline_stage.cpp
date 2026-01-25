@@ -140,6 +140,14 @@ void PipelineStage::ResetCache() {
   }
 }
 
+void PipelineStage::ClearIntermediateBuffers() {
+  input_img_.reset();
+  output_cache_.reset();
+  input_set_          = false;
+  input_cache_valid_  = false;
+  output_cache_valid_ = false;
+}
+
 auto PipelineStage::DetermineStageRole(PipelineStageName stage, bool is_streamable) -> StageRole {
   switch (stage) {
     case PipelineStageName::Image_Loading:

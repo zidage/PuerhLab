@@ -35,13 +35,20 @@ class ImageBuffer {
 
   bool buffer_valid_         = false;
   ImageBuffer()              = default;
+  ~ImageBuffer();
+
+  // Non-copyable
+  ImageBuffer(const ImageBuffer&)            = delete;
+  ImageBuffer& operator=(const ImageBuffer&) = delete;
+
+  // Movable
+  ImageBuffer(ImageBuffer&& other) noexcept;
+  ImageBuffer& operator=(ImageBuffer&& other) noexcept;
+
   ImageBuffer(cv::Mat& data);
   ImageBuffer(cv::Mat&& data);
   ImageBuffer(cv::cuda::GpuMat&& data);
   ImageBuffer(std::vector<uint8_t>&& buffer);
-  ImageBuffer(ImageBuffer&& other) noexcept;
-
-  ImageBuffer& operator=(ImageBuffer&& other) noexcept;
 
   void         ReadFromVectorBuffer(std::vector<uint8_t>&& buffer);
 
