@@ -12,6 +12,8 @@
 #include <iostream>
 #include <memory>
 #include <opencv2/highgui.hpp>
+#include <opencv2/opencv.hpp>
+#include <random>
 #include <vector>
 
 #include "app/import_service.hpp"
@@ -90,6 +92,121 @@ static uint64_t GetThumbnailHashBlocking(ThumbnailService& service, sl_element_i
   auto& mat = buffer->GetCPUData();
   EXPECT_FALSE(mat.empty());
   return HashMatBytes(mat);
+}
+
+static void ReleaseAllThumbnailsAggressively(ThumbnailService& service,
+                                            const std::vector<std::pair<sl_element_id_t, image_id_t>>& ids,
+                                            int release_rounds = 32) {
+  for (int r = 0; r < release_rounds; ++r) {
+    for (const auto& [id, image_id] : ids) {
+      (void)image_id;
+      service.ReleaseThumbnail(id);
+    }
+  }
+}
+
+static void FuzzScrollRequestsNoThrow(
+    ThumbnailService& service,
+    const std::vector<std::pair<sl_element_id_t, image_id_t>>& ids,
+    size_t iterations,
+    uint32_t seed) {
+  ASSERT_FALSE(ids.empty());
+
+  std::mt19937 rng(seed);
+  std::uniform_int_distribution<int> step_dist(-3, 3);
+  std::uniform_int_distribution<int> pct_dist(0, 99);
+
+  auto clamp_index = [&](int idx) -> size_t {
+    if (idx < 0) {
+      return 0;
+    }
+    const int max_idx = static_cast<int>(ids.size()) - 1;
+    if (idx > max_idx) {
+      return static_cast<size_t>(max_idx);
+    }
+    return static_cast<size_t>(idx);
+  };
+
+  auto reflect_index = [&](int idx) -> size_t {
+    if (ids.size() == 1) {
+      return 0;
+    }
+    const int max_idx = static_cast<int>(ids.size()) - 1;
+    if (idx < 0) {
+      idx = -idx;
+    }
+    if (idx > max_idx) {
+      idx = (2 * max_idx) - idx;
+      if (idx < 0) {
+        idx = 0;
+      }
+    }
+    return static_cast<size_t>(idx);
+  };
+
+  size_t pos = static_cast<size_t>(rng() % ids.size());
+
+  std::vector<std::future<std::shared_ptr<ThumbnailGuard>>> futures;
+  futures.reserve(iterations * 3);
+
+  for (size_t i = 0; i < iterations; ++i) {
+    int step = step_dist(rng);
+    if (step == 0) {
+      step = (pct_dist(rng) < 50) ? 1 : -1;
+    }
+
+    // Simulate "scrolling" and bouncing at the ends.
+    pos = reflect_index(static_cast<int>(pos) + step);
+
+    // Request current item plus neighbors (simple prefetch).
+    const int offsets[3] = {0, 1, -1};
+    for (const int off : offsets) {
+      const size_t idx = clamp_index(static_cast<int>(pos) + off);
+      const auto   id = ids[idx].first;
+      const auto   image_id = ids[idx].second;
+      const bool   pin = (pct_dist(rng) < 60);
+
+      auto promise = std::make_shared<std::promise<std::shared_ptr<ThumbnailGuard>>>();
+      futures.push_back(promise->get_future());
+
+      EXPECT_NO_THROW(service.GetThumbnail(
+          id, image_id,
+          [promise](std::shared_ptr<ThumbnailGuard> guard) {
+            // Guard against multiple callbacks/promise already satisfied.
+            try {
+              promise->set_value(guard);
+            } catch (...) {
+            }
+          },
+          pin));
+    }
+
+    // Randomly release around the current position to emulate the user moving away.
+    if (pct_dist(rng) < 35) {
+      const auto id = ids[pos].first;
+      EXPECT_NO_THROW(service.ReleaseThumbnail(id));
+    }
+    if (pct_dist(rng) < 15) {
+      const size_t idx = clamp_index(static_cast<int>(pos) + ((pct_dist(rng) < 50) ? 2 : -2));
+      EXPECT_NO_THROW(service.ReleaseThumbnail(ids[idx].first));
+    }
+  }
+
+  // Validate completion and that we didn't crash/throw while producing thumbnails.
+  for (auto& fut : futures) {
+    ASSERT_EQ(fut.wait_for(60s), std::future_status::ready) << "Thumbnail request timed out";
+    auto guard = fut.get();
+    ASSERT_NE(guard, nullptr);
+    ASSERT_NE(guard->thumbnail_buffer_, nullptr);
+
+    auto* buffer = guard->thumbnail_buffer_.get();
+    if (!buffer->cpu_data_valid_ && buffer->gpu_data_valid_) {
+      EXPECT_NO_THROW(buffer->SyncToCPU());
+    }
+    ASSERT_TRUE(buffer->cpu_data_valid_);
+    auto& mat = buffer->GetCPUData();
+    EXPECT_FALSE(mat.empty());
+  }
 }
 }  // namespace
 
@@ -384,7 +501,96 @@ TEST_F(ThumbnailServiceTests, PipelineRestoredFromDBGeneratesCorrectThumbnail) {
   }
 }
 
-TEST_F(ThumbnailServiceTests, DISABLED_Generate16ThumbnailsAndValidateAll) {
+TEST_F(ThumbnailServiceTests, FuzzScrollBrowsingNoThrowReloadService) {
+  // Simulate a user scrolling back and forth in the UI thumbnail grid.
+  // Requirement: no throws; two phases; and on each "service shutdown" persist like
+  // PipelineRestoredFromDBGeneratesCorrectThumbnail.
+
+  // Phase 0: import images once and persist the project.
+  std::vector<std::pair<sl_element_id_t, image_id_t>> ids;
+  {
+    ProjectService        project(db_path_, meta_path_);
+    auto                  fs_service = project.GetSleeveService();
+    auto                  img_pool   = project.GetImagePoolService();
+    ImportServiceImpl     import_service(fs_service, img_pool);
+    std::filesystem::path img_root_path = {TEST_IMG_PATH "/raw/batch_import"};
+
+    std::vector<image_path_t> paths{};
+    for (const auto& entry : std::filesystem::directory_iterator(img_root_path)) {
+      if (entry.is_regular_file()) {
+        paths.push_back(entry.path());
+      }
+    }
+    ASSERT_GE(paths.size(), 16u) << "Need at least 16 images under TEST_IMG_PATH/raw/batch_import";
+
+    std::shared_ptr<ImportJob> import_job = std::make_shared<ImportJob>();
+    std::promise<ImportResult> final_result;
+    auto                       final_result_future = final_result.get_future();
+    import_job->on_finished_                       = [&final_result](const ImportResult& result) {
+      final_result.set_value(result);
+    };
+
+    import_job = import_service.ImportToFolder(paths, L"", {}, import_job);
+    ASSERT_NE(import_job, nullptr);
+    ASSERT_EQ(final_result_future.wait_for(60s), std::future_status::ready)
+        << "Import did not finish in time";
+
+    const auto final_result_value = final_result_future.get();
+    ASSERT_EQ(final_result_value.failed_, 0u);
+    ASSERT_NE(import_job->import_log_, nullptr);
+    auto snapshot = import_job->import_log_->Snapshot();
+    ASSERT_GE(snapshot.created_.size(), 16u);
+
+    ids.reserve(32);
+    const size_t count = std::min<size_t>(32, snapshot.created_.size());
+    for (size_t i = 0; i < count; ++i) {
+      ids.push_back({snapshot.created_[i].element_id_, snapshot.created_[i].image_id_});
+    }
+
+    import_service.SyncImports(snapshot, L"");
+    project.GetSleeveService()->Sync();
+    project.GetImagePoolService()->SyncWithStorage();
+    project.SaveProject(meta_path_);
+  }
+
+  ASSERT_FALSE(ids.empty());
+
+  // Phase 1: browse/fuzz.
+  {
+    ProjectService project(db_path_, meta_path_);
+    auto           img_pool = project.GetImagePoolService();
+    auto pipeline_service   = std::make_shared<PipelineMgmtService>(project.GetStorageService());
+
+    {
+      ThumbnailService thumbnail_service(project.GetSleeveService(), img_pool, pipeline_service);
+      FuzzScrollRequestsNoThrow(thumbnail_service, ids, 250, 0xC0FFEEu);
+      ReleaseAllThumbnailsAggressively(thumbnail_service, ids);
+    }
+
+    pipeline_service->Sync();
+    img_pool->SyncWithStorage();
+    project.SaveProject(meta_path_);
+  }
+
+  // Phase 2: simulate reloading the service and browsing again.
+  {
+    ProjectService project(db_path_, meta_path_);
+    auto           img_pool = project.GetImagePoolService();
+    auto pipeline_service   = std::make_shared<PipelineMgmtService>(project.GetStorageService());
+
+    {
+      ThumbnailService thumbnail_service(project.GetSleeveService(), img_pool, pipeline_service);
+      FuzzScrollRequestsNoThrow(thumbnail_service, ids, 250, 0xBADC0DEu);
+      ReleaseAllThumbnailsAggressively(thumbnail_service, ids);
+    }
+
+    pipeline_service->Sync();
+    img_pool->SyncWithStorage();
+    project.SaveProject(meta_path_);
+  }
+}
+
+TEST_F(ThumbnailServiceTests, Generate16ThumbnailsAndValidateAll) {
   ProjectService            project(db_path_, meta_path_);
   auto                      fs_service = project.GetSleeveService();
   auto                      img_pool   = project.GetImagePoolService();
@@ -445,8 +651,7 @@ TEST_F(ThumbnailServiceTests, DISABLED_Generate16ThumbnailsAndValidateAll) {
   for (size_t i = 0; i < 16; ++i) {
     const auto [id, image_id] = ids[i];
     thumbnail_service.GetThumbnail(
-        id, image_id,
-        [i, &guards, &done_promises](std::shared_ptr<ThumbnailGuard> guard) {
+        id, image_id, [i, &guards, &done_promises](std::shared_ptr<ThumbnailGuard> guard) {
           guards[i] = guard;
           done_promises[i].set_value(guard);
         },
