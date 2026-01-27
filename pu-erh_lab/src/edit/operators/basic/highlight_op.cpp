@@ -44,8 +44,10 @@ void HighlightsOp::SetParams(const nlohmann::json& params) {
   } else {
     offset_ = params[script_name_].get<float>();
   }
-  curve_.control_    = clampf(offset_ / 100.0f, -1.0f, 1.0f);
-  curve_.knee_start_ = clampf(0.2f, 0.0f, 1.0f);  // ensure <= whitepoint
+  curve_.control_    = clampf(offset_ / 50.0f, -2.0f, 2.0f);
+  const float c = std::max(0.0f, curve_.control_);
+  curve_.knee_start_ = clampf(0.2f + 0.5f * c, 0.0f, 0.95f);
+  // curve_.knee_start_ = clampf(0.2f, 0.0f, 1.0f);  // ensure <= whitepoint
   // map control -> slope at whitepoint (m1)
   // design: control = +1 => strong compression (m1 -> small, e.g. 0.2)
   //         control =  0 => identity slope (1.0)
@@ -64,7 +66,7 @@ void HighlightsOp::SetParams(const nlohmann::json& params) {
 }
 
 void HighlightsOp::SetGlobalParams(OperatorParams& params) const {
-  params.highlights_offset_ = offset_ / 100.0f;
+  params.highlights_offset_ = offset_ / 50.0f;
   params.highlights_m1_     = curve_.m1_;
 }
 }  // namespace puerhlab

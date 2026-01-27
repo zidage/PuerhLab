@@ -7,12 +7,12 @@ target_link_libraries(SampleTest PRIVATE GTest::gtest_main)
 
 add_executable(SingleRawLoad raw/single_raw_decode_test.cpp)
 target_include_directories(SingleRawLoad PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
-target_link_libraries(SingleRawLoad PRIVATE GTest::gtest_main LibRaw ${OpenCV_LIBS})
+target_link_libraries(SingleRawLoad PRIVATE GTest::gtest_main libraw::raw ${OpenCV_LIBS})
 target_compile_definitions(SingleRawLoad PRIVATE LIBRAW_NODLL)
 
 add_executable(SingleThumbnailLoad raw/single_raw_thumbnail_test.cpp)
 target_include_directories(SingleThumbnailLoad PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
-target_link_libraries(SingleThumbnailLoad PRIVATE GTest::gtest_main LibRaw ${OpenCV_LIBS})
+target_link_libraries(SingleThumbnailLoad PRIVATE GTest::gtest_main libraw::raw ${OpenCV_LIBS})
 target_compile_definitions(SingleThumbnailLoad PRIVATE LIBRAW_NODLL)
 
 # add_executable(ImageDecoderTest decoders/image_decoder_test.cpp)

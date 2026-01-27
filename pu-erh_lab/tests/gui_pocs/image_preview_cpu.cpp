@@ -35,7 +35,7 @@ void SetPipelineTemplate(std::shared_ptr<PipelineExecutor> executor) {
 #else
   decode_params["raw"]["cuda"] = false;
 #endif
-  decode_params["raw"]["highlights_reconstruct"] = true;
+  decode_params["raw"]["highlights_reconstruct"] = false;
   decode_params["raw"]["use_camera_wb"]          = true;
   decode_params["raw"]["user_wb"]                = 7500.f;
   decode_params["raw"]["backend"]                = "puerh";
@@ -206,7 +206,7 @@ int main(int argc, char* argv[]) {
 
   // SleeveManager             manager{db_path};
 
-  std::filesystem::path  img_root_path = std::string(TEST_IMG_PATH) + "/raw/camera/leica/m10";
+  std::filesystem::path  img_root_path = std::string(TEST_IMG_PATH) + "/raw/camera/nikon/z5ii";
   std::shared_ptr<Image> img_ptr;
   for (const auto& entry : std::filesystem::directory_iterator(img_root_path)) {
     // Load the first file
@@ -255,7 +255,7 @@ int main(int argc, char* argv[]) {
   color_stage.SetOperator(OperatorType::SATURATION, {{"saturation", 0.0f}}, global_params);
   color_stage.SetOperator(OperatorType::TINT, {{"tint", 0.0f}}, global_params);
 
-  std::string LUT_PATH = std::string(CONFIG_PATH) + "LUTs/Default_LMT.cube";
+  std::string LUT_PATH = std::string(CONFIG_PATH) + "LUTs/CL_NEG.cube";
   color_stage.SetOperator(OperatorType::LMT, {{"ocio_lmt", LUT_PATH}}, global_params);
 
   auto& detail_stage = base_task.pipeline_executor_->GetStage(PipelineStageName::Detail_Adjustment);

@@ -32,13 +32,12 @@ struct GPU_ExposureOpKernel : GPUPointOpTag {
   }
 };
 
-
 struct GPU_ToneOpKernel : GPUPointOpTag {
   __device__ __forceinline__ void operator()(float4* p, GPUOperatorParams& params) const {
-      if (!params.white_enabled_ && !params.black_enabled_) return;
-      p->x = p->x * params.slope_ + params.black_point_;
-      p->y = p->y * params.slope_ + params.black_point_;
-      p->z = p->z * params.slope_ + params.black_point_;
+    if (!params.white_enabled_ && !params.black_enabled_) return;
+    p->x = p->x * params.slope_ + params.black_point_;
+    p->y = p->y * params.slope_ + params.black_point_;
+    p->z = p->z * params.slope_ + params.black_point_;
   }
 };
 
@@ -68,11 +67,25 @@ struct GPU_HighlightOpKernel : GPUPointOpTag {
       float H01 = -2 * t * t * t + 3 * t * t;
       float H11 = t * t * t - t * t;
       // note: tangents in Hermite are (dx * m0) and (dx * m1)
-      outL      = H00 * params.highlights_k_ + H10 * (params.highlights_dx_ * params.highlights_m0_) +
+      outL = H00 * params.highlights_k_ + H10 * (params.highlights_dx_ * params.highlights_m0_) +
              H01 * 1.0f + H11 * (params.highlights_dx_ * params.highlights_m1_);
     } else {
-      // L >= whitepoint: linear extrapolate using slope m1
-      outL = 1.0f + (L - 1.0f) * params.highlights_m1_;
+      // L >= whitepoint: prefer a soft roll-off so "extreme highlights" compress more
+      const float x  = L - 1.0f;
+      const float m1 = params.highlights_m1_;
+
+      if (m1 < 1.0f) {
+        // Rational soft-clip:
+        // outL = 1 + (m1*x) / (1 + b*x)
+        // - slope at x=0 is m1 (continuous at whitepoint)
+        // - as x->inf, outL asymptotes to 1 + m1/b (stronger "extreme highlight" suppression)
+        const float rolloff_strength = 1.0f;  // tune: 0.5 weaker, 1.0 default, 2.0 stronger
+        const float b                = fmaxf(1e-6f, (1.0f - m1) * rolloff_strength);
+        outL                         = 1.0f + (m1 * x) / (1.0f + b * x);
+      } else {
+        // if boosting highlights, keep the linear extrapolation
+        outL = 1.0f + x * m1;
+      }
     }
 
     // avoid negative or NaN
@@ -105,5 +118,5 @@ struct GPU_ShadowOpKernel : GPUPointOpTag {
     }
   }
 };
-}; // namespace CUDA
-}; // namespace puerhlab
+};  // namespace CUDA
+};  // namespace puerhlab
