@@ -94,7 +94,7 @@ static inline std::wstring FilterValueToString(const FilterValue& value) {
     return L"'" + std::get<std::wstring>(value) + L"'";
   } else if (std::holds_alternative<std::tm>(value)) {
     const std::tm& tm_value = std::get<std::tm>(value);
-    wchar_t        buffer[20];
+    wchar_t        buffer[32];
     wcsftime(buffer, sizeof(buffer), L"'%Y-%m-%d %H:%M:%S'", &tm_value);
     return L"TIMESTAMP " + std::wstring(buffer);
   }

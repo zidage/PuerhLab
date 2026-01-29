@@ -122,7 +122,6 @@ void PipelineScheduler::ScheduleTask(PipelineTask&& task) {
             task.ResetThumbnailRenderParams();
             task.pipeline_executor_->ClearAllIntermediateBuffers();
           }
-
           return;
         }
 
@@ -146,11 +145,6 @@ void PipelineScheduler::ScheduleTask(PipelineTask&& task) {
       if (render_desc.render_type_ == RenderType::THUMBNAIL) {
         task.ResetThumbnailRenderParams();
         // Release all intermediate buffers to free memory
-        // if (task.input_) {
-        //   task.input_->ReleaseBuffer();
-        //   task.input_->ReleaseCPUData();
-        //   task.input_.reset();
-        // }
         task.pipeline_executor_->ClearAllIntermediateBuffers();
       }
     } else if (task.options_.is_blocking_) {

@@ -23,6 +23,7 @@
 #include "storage/controller/controller_types.hpp"
 #include "storage/service/pipeline/pipeline_service.hpp"
 #include "storage/service/sleeve/edit_history/history_service.hpp"
+#include "storage/service/sleeve/element/element_id_service.hpp"
 #include "storage/service/sleeve/element/element_service.hpp"
 #include "storage/service/sleeve/element/file_service.hpp"
 #include "storage/service/sleeve/element/folder_service.hpp"
@@ -34,6 +35,8 @@ class ElementController {
   ConnectionGuard    guard_;
 
   ElementService     element_service_;
+  ElementIdService  element_id_service_;
+  
   FileService        file_service_;
   FolderService      folder_service_;
   EditHistoryService history_service_;
@@ -55,6 +58,10 @@ class ElementController {
   auto GetElementsInFolderByFilter(const std::shared_ptr<FilterCombo> filter,
                                    const sl_element_id_t              folder_id)
       -> std::vector<std::shared_ptr<SleeveElement>>;
+
+  auto GetElementIdsInFolderByFilter(const std::shared_ptr<FilterCombo> filter,
+                                     const sl_element_id_t folder_id)
+      -> std::vector<sl_element_id_t>;
 
   void EnsureChildrenLoaded(sl_element_id_t folder_id);
 

@@ -19,7 +19,6 @@
 #include <variant>
 #include <vector>
 
-#include "filters/sleeve_filter.hpp"
 #include "image/image.hpp"
 #include "type/type.hpp"
 
@@ -119,5 +118,7 @@ class FilterCombo {
   void              SetRoot(const FilterNode& root) { root_ = root; }
 
   auto              GenerateSQLOn(sl_element_id_t parent_id) const -> std::wstring;
+
+  auto              GenerateIdSQLOn(sl_element_id_t parent_id) const -> std::wstring;
 };
 };  // namespace puerhlab

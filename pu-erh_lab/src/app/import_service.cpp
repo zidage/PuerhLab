@@ -177,9 +177,8 @@ void ImportServiceImpl::SyncImports(const ImportLogSnapshot& log_snapshot,
       } catch (...) {
       }
     }
-
-    image_pool_service_->SyncWithStorage();
-    fs_service_->Sync();
   }
+  image_pool_service_->SyncWithStorage();
+  fs_service_->Sync();
 }
 };  // namespace puerhlab

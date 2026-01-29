@@ -236,6 +236,7 @@ set(MAPPER_SRCS
     storage/mapper/sleeve/element/file_mapper.cpp
     storage/mapper/sleeve/element/folder_mapper.cpp
     storage/mapper/sleeve/element/element_mapper.cpp
+    storage/mapper/sleeve/element/element_id_mapper.cpp
     storage/mapper/sleeve/base/base_mapper.cpp
     storage/mapper/image/image_mapper.cpp
     storage/mapper/sleeve/filter/filter_mapper.cpp
@@ -254,6 +255,7 @@ set(SERVICE_SRCS
     storage/service/sleeve/base/base_service.cpp
     storage/service/sleeve/base/root_service.cpp
     storage/service/sleeve/element/element_service.cpp
+    storage/service/sleeve/element/element_id_service.cpp
     storage/service/sleeve/element/file_service.cpp
     storage/service/sleeve/element/folder_service.cpp
     storage/service/sleeve/edit_history/history_service.cpp
@@ -347,6 +349,11 @@ def_library(ImportService
 def_library(ThumbnailService
     SOURCES app/thumbnail_service.cpp
     PUBLIC_DEPS EditPipeline ThreadPool StrConv ImagePoolService PipelineMgmtService
+)
+
+def_library(SleeveFilterService
+    SOURCES app/sleeve_filter_service.cpp
+    PUBLIC_DEPS SleeveElement StorageService SleeveFilter StrConv
 )
 
 # ==============================================================================

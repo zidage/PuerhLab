@@ -31,6 +31,7 @@ namespace puerhlab {
 ElementController::ElementController(ConnectionGuard&& guard)
     : guard_(std::move(guard)),
       element_service_(guard_.conn_),
+      element_id_service_(guard_.conn_),
       file_service_(guard_.conn_),
       folder_service_(guard_.conn_),
       history_service_(guard_.conn_),
@@ -145,6 +146,14 @@ auto ElementController::GetElementsInFolderByFilter(const std::shared_ptr<Filter
   // Build SQL query from the filter
   std::wstring filter_sql = filter->GenerateSQLOn(folder_id);
   return element_service_.GetElementsInFolderByFilter(filter_sql);  // for specialized queries only
+}
+
+auto ElementController::GetElementIdsInFolderByFilter(const std::shared_ptr<FilterCombo> filter,
+                                                        const sl_element_id_t folder_id)
+    -> std::vector<sl_element_id_t> {
+  // Build SQL query from the filter
+  std::wstring filter_sql = filter->GenerateIdSQLOn(folder_id);
+  return element_id_service_.GetElementIdsByQuery(filter_sql);  // for specialized queries only
 }
 
 auto ElementController::GetPipelineByElementId(const sl_element_id_t element_id)

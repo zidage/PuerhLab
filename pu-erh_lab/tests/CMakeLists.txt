@@ -164,6 +164,13 @@ if (WIN32)
 target_link_libraries(SleeveServiceTest easy_profiler)
 endif()
 
+add_executable(FilterServiceTest app/filter_service_test.cpp)
+target_include_directories(FilterServiceTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
+target_link_libraries(FilterServiceTest ImportService ProjectService SleeveFilterService GTest::gtest_main)
+if (WIN32)
+target_link_libraries(FilterServiceTest easy_profiler)
+endif()
+
 add_executable(PipelineServiceTest app/pipeline_service_test.cpp)
 target_include_directories(PipelineServiceTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
 target_link_libraries(PipelineServiceTest ProjectService PipelineMgmtService GTest::gtest_main)
