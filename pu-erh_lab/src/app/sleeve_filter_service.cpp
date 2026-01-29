@@ -13,6 +13,7 @@
 //  limitations under the License.
 
 #include "app/sleeve_filter_service.hpp"
+
 #include <memory>
 
 namespace puerhlab {
@@ -22,7 +23,8 @@ auto SleeveFilterService::CreateFilterCombo(const FilterNode& root) -> filter_id
   return new_id;
 }
 
-auto SleeveFilterService::GetFilterCombo(filter_id_t filter_id) -> std::optional<std::shared_ptr<FilterCombo>> {
+auto SleeveFilterService::GetFilterCombo(filter_id_t filter_id)
+    -> std::optional<std::shared_ptr<FilterCombo>> {
   auto combo_opt = filter_storage_.AccessElement(filter_id);
   if (combo_opt.has_value()) {
     return combo_opt.value();
@@ -60,4 +62,4 @@ auto SleeveFilterService::ApplyFilterOn(filter_id_t filter_id, sl_element_id_t p
   filter_result_cache_.RecordAccess(filter_id, result_ids);
   return result_ids;
 }
-};  // namespace puerhlab
+}  // namespace puerhlab

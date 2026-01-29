@@ -15,7 +15,8 @@
 #pragma once
 
 #include <memory>
-#include <unordered_map>
+#include <optional>
+#include <vector>
 
 #include "sleeve/sleeve_filter/filter_combo.hpp"
 #include "sleeve/storage_service.hpp"
@@ -51,4 +52,4 @@ class SleeveFilterService {
   auto ApplyFilterOn(filter_id_t filter_id, sl_element_id_t parent_id)
       -> std::optional<std::vector<sl_element_id_t>>;
 };
-};  // namespace puerhlab
+}  // namespace puerhlab

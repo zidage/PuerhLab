@@ -19,10 +19,10 @@
 #include <fstream>
 #include <future>
 #include <memory>
+#include <stdexcept>
 #include <vector>
 
 #include "decoders/decoder_scheduler.hpp"
-#include "type/supported_file_type.hpp"
 #include "type/type.hpp"
 
 namespace puerhlab {
@@ -82,8 +82,17 @@ auto ImageLoader::LoadImage() -> std::shared_ptr<Image> {
 
 auto ByteBufferLoader::LoadFromImage(std::shared_ptr<Image> img)
     -> std::shared_ptr<std::vector<uint8_t>> {
+  if (!img) {
+    return nullptr;
+  }
   std::ifstream   file(img->image_path_, std::ios::binary | std::ios::ate);
+  if (!file.is_open()) {
+    return nullptr;
+  }
   std::streamsize fileSize = file.tellg();
+  if (fileSize <= 0) {
+    return nullptr;
+  }
   file.seekg(0, std::ios::beg);
   auto buffer = std::make_shared<std::vector<uint8_t>>(fileSize);
   if (!file.read(reinterpret_cast<char*>(buffer->data()), fileSize)) {
@@ -94,12 +103,22 @@ auto ByteBufferLoader::LoadFromImage(std::shared_ptr<Image> img)
 }
 
 auto ByteBufferLoader::LoadByteBufferFromImage(std::shared_ptr<Image> img) -> std::vector<uint8_t> {
+  if (!img) {
+    throw std::runtime_error("ByteBufferLoader: image is null");
+  }
   std::ifstream   file(img->image_path_, std::ios::binary | std::ios::ate);
+  if (!file.is_open()) {
+    throw std::runtime_error("ByteBufferLoader: cannot open file for reading");
+  }
   std::streamsize fileSize = file.tellg();
+  if (fileSize <= 0) {
+    throw std::runtime_error("ByteBufferLoader: file size is invalid");
+  }
   file.seekg(0, std::ios::beg);
-  auto buffer = std::vector<uint8_t>(fileSize);
-  if (!file.read(reinterpret_cast<char*>(buffer.data()), fileSize)) {
-    return {};
+  auto buffer = std::vector<uint8_t>(static_cast<size_t>(fileSize));
+  if (!file.read(reinterpret_cast<char*>(buffer.data()), fileSize) ||
+      file.gcount() != fileSize) {
+    throw std::runtime_error("ByteBufferLoader: failed to read full file");
   }
   file.close();
   return buffer;

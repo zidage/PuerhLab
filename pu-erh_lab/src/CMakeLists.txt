@@ -40,7 +40,7 @@ add_library(ImageBuffer ${IMAGE_BUFFER_SRCS})
 target_include_directories(ImageBuffer PUBLIC include)
 
 # Common dependencies
-set(IMAGE_BUFFER_DEPS Exiv2 ${OpenCV_LIBS} libraw::raw TimeProvider JSON OpenMP::OpenMP_CXX StrConv)
+set(IMAGE_BUFFER_DEPS Exiv2 ${OpenCV_LIBS} libraw::raw_r TimeProvider JSON OpenMP::OpenMP_CXX StrConv)
 
 # Platform specific dependencies
 if (WIN32)
@@ -89,7 +89,7 @@ endif()
 # RawProcessorOp Target
 def_library(RawProcessorOp
     SOURCES ${RAW_OP_CPU_SRCS} ${RAW_OP_GPU_SRCS}
-    PUBLIC_DEPS ImageBuffer libraw::raw Exiv2 hwy::hwy Eigen3::Eigen
+    PUBLIC_DEPS ImageBuffer libraw::raw_r Exiv2 hwy::hwy Eigen3::Eigen
 )
 
 if(CUDAToolkit_FOUND)
@@ -160,7 +160,7 @@ def_library(PipelineScheduler
 # --- Raw Processor Wrapper ---
 def_library(RawProcessor
     SOURCES decoders/processor/raw_processor.cpp
-    PUBLIC_DEPS Image libraw::raw Exiv2 RawProcessorOp
+    PUBLIC_DEPS Image libraw::raw_r Exiv2 RawProcessorOp
 )
 
 # ==============================================================================
@@ -176,7 +176,7 @@ set(DECODER_SRCS
 
 def_library(ImageDecoder
     SOURCES ${DECODER_SRCS}
-    PUBLIC_DEPS Image ThreadPool ${OpenCV_LIBS} libraw::raw RawProcessor
+    PUBLIC_DEPS Image ThreadPool ${OpenCV_LIBS} libraw::raw_r RawProcessor
 )
 
 def_library(ImageLoader 
