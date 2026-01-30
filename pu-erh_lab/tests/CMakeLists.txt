@@ -149,6 +149,14 @@ target_link_libraries(ImagePreview Image ImageLoader EditPipeline EditViewer Ope
 if (WIN32)
 target_link_libraries(ImagePreview easy_profiler FSService )
 endif()
+target_compile_definitions(ImagePreview PRIVATE PUERHLAB_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+
+set(PUERHLAB_IMAGE_PREVIEW_FONT_SRC "${CMAKE_SOURCE_DIR}/pu-erh_lab/src/config/fonts/main_IBM.ttf")
+add_custom_command(TARGET ImagePreview POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:ImagePreview>/fonts"
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different "${PUERHLAB_IMAGE_PREVIEW_FONT_SRC}" "$<TARGET_FILE_DIR:ImagePreview>/fonts/main_IBM.ttf"
+  VERBATIM
+)
 
 add_executable(ImportServiceTest app/import_service_test.cpp)
 target_include_directories(ImportServiceTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
@@ -188,6 +196,14 @@ endif()
 add_executable(ThumbnailAlbumQtDemo app/thumbnail_album_qt_demo.cpp)
 target_include_directories(ThumbnailAlbumQtDemo PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
 target_link_libraries(ThumbnailAlbumQtDemo PRIVATE ThumbnailService ProjectService ImportService Qt6::Widgets easy_profiler SleeveFilterService)
+target_compile_definitions(ThumbnailAlbumQtDemo PRIVATE PUERHLAB_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+
+set(PUERHLAB_DEMO_FONT_SRC "${CMAKE_SOURCE_DIR}/pu-erh_lab/src/config/fonts/main_IBM.ttf")
+add_custom_command(TARGET ThumbnailAlbumQtDemo POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:ThumbnailAlbumQtDemo>/fonts"
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different "${PUERHLAB_DEMO_FONT_SRC}" "$<TARGET_FILE_DIR:ThumbnailAlbumQtDemo>/fonts/main_IBM.ttf"
+  VERBATIM
+)
 
 include(GoogleTest)
 # set(CMAKE_GTEST_DISCOVER_TESTS_DISCOVERY_MODE PRE_TEST)

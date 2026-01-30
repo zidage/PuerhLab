@@ -1,20 +1,29 @@
+#include <qfontdatabase.h>
 #include <QApplication>
 #include <QComboBox>
 #include <QCoreApplication>
+#include <QDoubleValidator>
+#include <QFontDatabase>
 #include <QFormLayout>
+#include <QFrame>
 #include <QGridLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QImage>
+#include <QIntValidator>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMessageBox>
 #include <QMetaObject>
 #include <QPointer>
 #include <QPushButton>
-#include <QSignalBlocker>
+#include <QScrollArea>
 #include <QScrollBar>
+#include <QSignalBlocker>
+#include <QStyle>
+#include <QToolButton>
 #include <QVBoxLayout>
+#include <QValidator>
 #include <QWheelEvent>
 #include <QWidget>
 #include <algorithm>
@@ -27,8 +36,9 @@
 #include <iostream>
 #include <memory>
 #include <mutex>
-#include <optional>
 #include <opencv2/opencv.hpp>
+#include <optional>
+#include <string>
 #include <thread>
 #include <unordered_map>
 #include <unordered_set>
@@ -45,10 +55,82 @@
 #include "sleeve/sleeve_filter/filter_combo.hpp"
 #include "type/supported_file_type.hpp"
 
-
 namespace puerhlab {
 namespace {
 using namespace std::chrono_literals;
+
+static QString FsPathToQString(const std::filesystem::path& path) {
+#if defined(_WIN32)
+  return QString::fromStdWString(path.wstring());
+#else
+  return QString::fromUtf8(path.string().c_str());
+#endif
+}
+
+static std::optional<std::string_view> FindArgValue(int argc, char** argv,
+                                                    std::string_view opt_name) {
+  const std::string opt_eq = std::string(opt_name) + "=";
+  for (int i = 1; i < argc; ++i) {
+    const std::string_view arg(argv[i] ? argv[i] : "");
+    if (arg == opt_name) {
+      if (i + 1 < argc && argv[i + 1]) {
+        return std::string_view(argv[i + 1]);
+      }
+      return std::nullopt;
+    }
+    if (arg.rfind(opt_eq, 0) == 0) {
+      return arg.substr(opt_eq.size());
+    }
+  }
+  return std::nullopt;
+}
+
+static void ApplyExternalAppFont(QApplication& app, int argc, char** argv) {
+  std::vector<std::filesystem::path> candidates;
+
+  if (const auto arg = FindArgValue(argc, argv, "--font"); arg.has_value()) {
+    candidates.emplace_back(std::string(arg.value()));
+  }
+  if (const auto env = qEnvironmentVariable("PUERHLAB_FONT_PATH"); !env.isEmpty()) {
+    candidates.emplace_back(env.toStdString());
+  }
+
+  const auto app_dir = std::filesystem::path(QCoreApplication::applicationDirPath().toStdWString());
+  candidates.emplace_back(app_dir / "fonts" / "main_IBM.ttf");
+
+#if defined(PUERHLAB_SOURCE_DIR)
+  candidates.emplace_back(std::filesystem::path(PUERHLAB_SOURCE_DIR) / "pu-erh_lab" / "src" / "config" /
+                          "fonts" / "main_IBM.ttf");
+#endif
+
+  for (const auto& path : candidates) {
+    std::error_code ec;
+    if (!std::filesystem::exists(path, ec) || ec) {
+      continue;
+    }
+
+    const int font_id = QFontDatabase::addApplicationFont(FsPathToQString(path));
+    if (font_id < 0) {
+      std::cerr << "[ThumbnailAlbumQtDemo] Failed to load font: " << path.string() << std::endl;
+      continue;
+    }
+
+    const auto families = QFontDatabase::applicationFontFamilies(font_id);
+    if (families.isEmpty()) {
+      std::cerr << "[ThumbnailAlbumQtDemo] Loaded font but no families reported: " << path.string()
+                << std::endl;
+      continue;
+    }
+
+    QFont f(families.front());
+    app.setFont(f);
+    return;
+  }
+
+  std::cerr << "[ThumbnailAlbumQtDemo] No external font applied. Provide `--font <path>` or set "
+               "`PUERHLAB_FONT_PATH`."
+            << std::endl;
+}
 
 enum class FilterValueKind { String, Int64, Double, DateTime };
 
@@ -70,7 +152,7 @@ static FilterValueKind KindForField(FilterField field) {
 static void PopulateCompareOps(QComboBox* combo, FilterField field) {
   combo->clear();
 
-  const auto kind = KindForField(field);
+  const auto kind   = KindForField(field);
   const auto add_op = [combo](CompareOp op, const char* label) {
     combo->addItem(QString::fromUtf8(label), static_cast<int>(op));
   };
@@ -108,7 +190,7 @@ static std::optional<std::tm> ParseDateTimeYmd(const QString& text) {
   if (parts.size() != 3) {
     return std::nullopt;
   }
-  bool ok_y = false, ok_m = false, ok_d = false;
+  bool      ok_y = false, ok_m = false, ok_d = false;
   const int year  = parts[0].toInt(&ok_y);
   const int month = parts[1].toInt(&ok_m);
   const int day   = parts[2].toInt(&ok_d);
@@ -134,16 +216,16 @@ static std::optional<FilterValue> ParseFilterValue(FilterField field, const QStr
     return FilterValue{text.toStdWString()};
   }
   if (kind == FilterValueKind::Int64) {
-    bool ok = false;
-    const qlonglong v = text.trimmed().toLongLong(&ok);
+    bool            ok = false;
+    const qlonglong v  = text.trimmed().toLongLong(&ok);
     if (!ok) {
       return std::nullopt;
     }
     return FilterValue{static_cast<int64_t>(v)};
   }
   if (kind == FilterValueKind::Double) {
-    bool ok = false;
-    const double v = text.trimmed().toDouble(&ok);
+    bool         ok = false;
+    const double v  = text.trimmed().toDouble(&ok);
     if (!ok) {
       return std::nullopt;
     }
@@ -161,40 +243,73 @@ static std::optional<FilterValue> ParseFilterValue(FilterField field, const QStr
 class FilterPanel final : public QGroupBox {
  public:
   explicit FilterPanel(QWidget* parent = nullptr) : QGroupBox("Filter", parent) {
-    setStyleSheet("QGroupBox { font-weight: 600; }");
+    setObjectName("FilterPanel");
+    setStyleSheet(FilterPanelStyleSheet());
 
-    auto* root = new QHBoxLayout(this);
+    auto* root = new QVBoxLayout(this);
+    root->setContentsMargins(12, 18, 12, 12);
+    root->setSpacing(12);
 
     join_op_ = new QComboBox(this);
+    join_op_->setToolTip("How to join multiple rules.");
     join_op_->addItem("AND", static_cast<int>(FilterOp::AND));
     join_op_->addItem("OR", static_cast<int>(FilterOp::OR));
 
     auto* form = new QFormLayout();
     form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
+    form->setContentsMargins(0, 0, 0, 0);
 
     form->addRow("Join", join_op_);
     root->addLayout(form, 1);
 
-    rows_container_ = new QVBoxLayout();
-    root->addLayout(rows_container_, 3);
+    rows_scroll_ = new QScrollArea(this);
+    rows_scroll_->setWidgetResizable(true);
+    rows_scroll_->setFrameShape(QFrame::NoFrame);
+    rows_scroll_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+
+    rows_widget_    = new QWidget(rows_scroll_);
+    rows_container_ = new QVBoxLayout(rows_widget_);
+    rows_container_->setContentsMargins(0, 0, 0, 0);
+    rows_container_->setSpacing(8);
+    rows_container_->setAlignment(Qt::AlignTop);
+    rows_scroll_->setWidget(rows_widget_);
+    root->addWidget(rows_scroll_, 3);
 
     auto* buttons = new QVBoxLayout();
-    btn_add_      = new QPushButton("Add", this);
-    btn_apply_    = new QPushButton("Apply", this);
-    btn_clear_    = new QPushButton("Clear", this);
+    buttons->setContentsMargins(0, 0, 0, 0);
+    buttons->setSpacing(8);
+
+    btn_add_   = new QPushButton("+ Add rule", this);
+    btn_apply_ = new QPushButton("Apply", this);
+    btn_clear_ = new QPushButton("Clear", this);
+    btn_add_->setObjectName("AddButton");
+    btn_apply_->setObjectName("ApplyButton");
+    btn_clear_->setObjectName("ClearButton");
+
+    btn_apply_->setIcon(style()->standardIcon(QStyle::SP_DialogApplyButton));
+    btn_clear_->setIcon(style()->standardIcon(QStyle::SP_DialogResetButton));
+
     buttons->addWidget(btn_add_);
     buttons->addWidget(btn_apply_);
     buttons->addWidget(btn_clear_);
     buttons->addStretch(1);
 
+    rules_hint_ = new QLabel(this);
+    rules_hint_->setObjectName("RulesHint");
+    rules_hint_->setTextFormat(Qt::PlainText);
+    buttons->addWidget(rules_hint_);
+
     info_ = new QLabel(this);
-    info_->setStyleSheet("QLabel { color: #9aa0a6; font-weight: 400; }");
+    info_->setObjectName("FilterInfo");
+    info_->setTextFormat(Qt::PlainText);
     buttons->addWidget(info_);
 
     sql_preview_ = new QLabel(this);
+    sql_preview_->setObjectName("SqlPreview");
+    sql_preview_->setTextFormat(Qt::PlainText);
     sql_preview_->setTextInteractionFlags(Qt::TextSelectableByMouse);
-    sql_preview_->setStyleSheet("QLabel { color: #8ab4f8; font-weight: 400; }");
     sql_preview_->setWordWrap(true);
+    sql_preview_->setFont(QFontDatabase::systemFont(QFontDatabase::FixedFont));
     buttons->addWidget(sql_preview_);
 
     root->addLayout(buttons, 0);
@@ -211,7 +326,8 @@ class FilterPanel final : public QGroupBox {
         return;
       }
       try {
-        sql_preview_->setText(QString::fromStdWString(FilterSQLCompiler::Compile(root_node_opt.value())));
+        sql_preview_->setText(
+            QString::fromStdWString(FilterSQLCompiler::Compile(root_node_opt.value())));
       } catch (...) {
         sql_preview_->setText("(SQL compile failed)");
       }
@@ -222,6 +338,7 @@ class FilterPanel final : public QGroupBox {
     });
 
     AddRow();
+    UpdateControlsState();
   }
 
   void SetOnApply(std::function<void(const FilterNode&)> fn) { on_apply_ = std::move(fn); }
@@ -231,14 +348,166 @@ class FilterPanel final : public QGroupBox {
   void ClearSqlPreview() { sql_preview_->setText({}); }
 
  private:
+  static QString FilterPanelStyleSheet() {
+    // A small, self-contained dark "card" style for the demo UI.
+    return QString::fromUtf8(R"QSS(
+      #FilterPanel {
+        background: #111315;
+        border: 1px solid #2b2f33;
+        border-radius: 12px;
+        margin-top: 18px;
+      }
+      #FilterPanel::title {
+        subcontrol-origin: margin;
+        left: 12px;
+        top: 6px;
+        padding: 0 6px;
+        color: #e8eaed;
+        font-weight: 600;
+      }
+      #FilterPanel QLabel {
+        color: #bdc1c6;
+        font-weight: 400;
+      }
+      #FilterPanel QComboBox,
+      #FilterPanel QLineEdit {
+        background: #202124;
+        border: 1px solid #3c4043;
+        border-radius: 8px;
+        padding: 6px 10px;
+        color: #e8eaed;
+        min-height: 28px;
+      }
+      #FilterPanel QComboBox::drop-down {
+        border: none;
+        width: 22px;
+      }
+      #FilterPanel QPushButton {
+        background: #303134;
+        border: 1px solid #3c4043;
+        border-radius: 8px;
+        padding: 6px 10px;
+        color: #e8eaed;
+        min-height: 30px;
+      }
+      #FilterPanel QPushButton:hover { background: #35363a; }
+      #FilterPanel QPushButton:pressed { background: #2a2b2e; }
+      #FilterPanel QPushButton#ApplyButton {
+        background: #8ab4f8;
+        color: #202124;
+        border: 1px solid #8ab4f8;
+        font-weight: 600;
+      }
+      #FilterPanel QPushButton#ApplyButton:hover { background: #a3c2ff; }
+      #FilterPanel QWidget#FilterRow {
+        background: #171a1d;
+        border: 1px solid #2b2f33;
+        border-radius: 10px;
+      }
+      #FilterPanel QToolButton#RemoveButton {
+        background: transparent;
+        border: 1px solid transparent;
+        border-radius: 6px;
+        padding: 4px;
+        color: #bdc1c6;
+        min-width: 28px;
+        min-height: 28px;
+      }
+      #FilterPanel QToolButton#RemoveButton:hover {
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid #3c4043;
+      }
+      #FilterPanel QLabel#FilterInfo { color: #9aa0a6; }
+      #FilterPanel QLabel#RulesHint { color: #9aa0a6; }
+      #FilterPanel QLabel#SqlPreview {
+        color: #8ab4f8;
+        background: #0f1113;
+        border: 1px solid #2b2f33;
+        border-radius: 10px;
+        padding: 8px 10px;
+      }
+    )QSS");
+  }
+
+  static void ReplaceValidator(QLineEdit* edit, QValidator* next) {
+    if (edit == nullptr) {
+      return;
+    }
+    const QValidator* old = edit->validator();
+    if (old != nullptr && old->parent() == edit) {
+      const_cast<QValidator*>(old)->deleteLater();
+    }
+    edit->setValidator(next);
+  }
+
+  static QString PlaceholderForField(FilterField field) {
+    switch (field) {
+      case FilterField::FileExtension:
+        return ".jpg";
+      case FilterField::ExifISO:
+        return "e.g. 800";
+      case FilterField::ExifAperture:
+        return "e.g. 2.8";
+      case FilterField::ExifFocalLength:
+        return "e.g. 50";
+      case FilterField::CaptureDate:
+      case FilterField::ImportDate:
+        return "YYYY-MM-DD";
+      case FilterField::ExifCameraModel:
+      default:
+        return "type to filter…";
+    }
+  }
+
   struct Row {
     QWidget*     container_ = nullptr;
     QComboBox*   field_     = nullptr;
     QComboBox*   op_        = nullptr;
     QLineEdit*   value_     = nullptr;
     QLineEdit*   value2_    = nullptr;
-    QPushButton* remove_    = nullptr;
+    QToolButton* remove_    = nullptr;
   };
+
+  void ConfigureEditorsForRow(Row& row, FilterField field) {
+    const auto kind = KindForField(field);
+
+    row.value_->setInputMask({});
+    row.value2_->setInputMask({});
+    ReplaceValidator(row.value_, nullptr);
+    ReplaceValidator(row.value2_, nullptr);
+
+    row.value_->setPlaceholderText(PlaceholderForField(field));
+    row.value2_->setPlaceholderText("and …");
+
+    if (kind == FilterValueKind::Int64) {
+      ReplaceValidator(row.value_, new QIntValidator(0, 1'000'000, row.value_));
+      ReplaceValidator(row.value2_, new QIntValidator(0, 1'000'000, row.value2_));
+    } else if (kind == FilterValueKind::Double) {
+      auto* v1 = new QDoubleValidator(row.value_);
+      v1->setNotation(QDoubleValidator::StandardNotation);
+      v1->setDecimals(6);
+      ReplaceValidator(row.value_, v1);
+
+      auto* v2 = new QDoubleValidator(row.value2_);
+      v2->setNotation(QDoubleValidator::StandardNotation);
+      v2->setDecimals(6);
+      ReplaceValidator(row.value2_, v2);
+    } else if (kind == FilterValueKind::DateTime) {
+      row.value_->setInputMask("0000-00-00");
+      row.value2_->setInputMask("0000-00-00");
+    }
+  }
+
+  void UpdateControlsState() {
+    btn_add_->setEnabled(rows_.size() < 6);
+
+    const bool can_remove = rows_.size() > 1;
+    for (auto& row : rows_) {
+      row.remove_->setEnabled(can_remove);
+    }
+
+    rules_hint_->setText(QString("%1 / 6 rules").arg(static_cast<int>(rows_.size())));
+  }
 
   void AddRow() {
     if (rows_.size() >= 6) {
@@ -246,9 +515,11 @@ class FilterPanel final : public QGroupBox {
     }
 
     Row r;
-    r.container_ = new QWidget(this);
-    auto* h      = new QHBoxLayout(r.container_);
-    h->setContentsMargins(0, 0, 0, 0);
+    r.container_ = new QWidget(rows_widget_);
+    r.container_->setObjectName("FilterRow");
+    auto* h = new QHBoxLayout(r.container_);
+    h->setContentsMargins(10, 8, 10, 8);
+    h->setSpacing(8);
 
     r.field_ = new QComboBox(r.container_);
     r.field_->addItem("Camera Model", static_cast<int>(FilterField::ExifCameraModel));
@@ -261,13 +532,18 @@ class FilterPanel final : public QGroupBox {
     r.op_ = new QComboBox(r.container_);
     PopulateCompareOps(r.op_, FilterField::ExifCameraModel);
 
-    r.value_  = new QLineEdit(r.container_);
+    r.value_ = new QLineEdit(r.container_);
+    r.value_->setClearButtonEnabled(true);
     r.value2_ = new QLineEdit(r.container_);
-    r.value2_->setPlaceholderText("and ...");
+    r.value2_->setClearButtonEnabled(true);
+    r.value2_->setPlaceholderText("and …");
     r.value2_->setVisible(false);
 
-    r.remove_ = new QPushButton("X", r.container_);
-    r.remove_->setFixedWidth(28);
+    r.remove_ = new QToolButton(r.container_);
+    r.remove_->setObjectName("RemoveButton");
+    r.remove_->setAutoRaise(true);
+    r.remove_->setIcon(style()->standardIcon(QStyle::SP_TitleBarCloseButton));
+    r.remove_->setToolTip("Remove rule");
 
     h->addWidget(r.field_, 2);
     h->addWidget(r.op_, 1);
@@ -283,6 +559,8 @@ class FilterPanel final : public QGroupBox {
     auto* op_box        = r.op_;
     auto* value2_edit   = r.value2_;
 
+    ConfigureEditorsForRow(rows_.back(), FilterField::ExifCameraModel);
+
     const auto find_row_index = [this, row_container]() -> std::optional<size_t> {
       for (size_t i = 0; i < rows_.size(); ++i) {
         if (rows_[i].container_ == row_container) {
@@ -297,20 +575,31 @@ class FilterPanel final : public QGroupBox {
       if (!idx_opt.has_value()) {
         return;
       }
-      auto& row = rows_[idx_opt.value()];
+      auto&      row   = rows_[idx_opt.value()];
       const auto field = static_cast<FilterField>(row.field_->currentData().toInt());
       PopulateCompareOps(row.op_, field);
+      ConfigureEditorsForRow(row, field);
+
+      const auto op = static_cast<CompareOp>(row.op_->currentData().toInt());
+      row.value2_->setVisible(op == CompareOp::BETWEEN);
+      if (op != CompareOp::BETWEEN) {
+        row.value2_->clear();
+      }
     });
 
-    connect(op_box, &QComboBox::currentIndexChanged, this, [this, find_row_index, value2_edit](int) {
-      const auto idx_opt = find_row_index();
-      if (!idx_opt.has_value()) {
-        return;
-      }
-      auto& row = rows_[idx_opt.value()];
-      const auto op = static_cast<CompareOp>(row.op_->currentData().toInt());
-      value2_edit->setVisible(op == CompareOp::BETWEEN);
-    });
+    connect(op_box, &QComboBox::currentIndexChanged, this,
+            [this, find_row_index, value2_edit](int) {
+              const auto idx_opt = find_row_index();
+              if (!idx_opt.has_value()) {
+                return;
+              }
+              auto&      row = rows_[idx_opt.value()];
+              const auto op  = static_cast<CompareOp>(row.op_->currentData().toInt());
+              value2_edit->setVisible(op == CompareOp::BETWEEN);
+              if (op != CompareOp::BETWEEN) {
+                value2_edit->clear();
+              }
+            });
 
     // Initialize BETWEEN visibility.
     {
@@ -318,7 +607,10 @@ class FilterPanel final : public QGroupBox {
       r.value2_->setVisible(op == CompareOp::BETWEEN);
     }
 
-    connect(r.remove_, &QPushButton::clicked, this, [this, row_container, find_row_index]() {
+    connect(r.value_, &QLineEdit::returnPressed, this, [this]() { btn_apply_->click(); });
+    connect(r.value2_, &QLineEdit::returnPressed, this, [this]() { btn_apply_->click(); });
+
+    connect(r.remove_, &QToolButton::clicked, this, [this, row_container, find_row_index]() {
       if (rows_.size() <= 1) {
         return;
       }
@@ -328,7 +620,10 @@ class FilterPanel final : public QGroupBox {
       }
       rows_.erase(rows_.begin() + static_cast<long long>(idx_opt.value()));
       delete row_container;
+      UpdateControlsState();
     });
+
+    UpdateControlsState();
   }
 
   std::optional<FilterNode> BuildFilterNode() {
@@ -336,8 +631,8 @@ class FilterPanel final : public QGroupBox {
     conditions.reserve(rows_.size());
 
     for (const auto& row : rows_) {
-      const auto field = static_cast<FilterField>(row.field_->currentData().toInt());
-      const auto op    = static_cast<CompareOp>(row.op_->currentData().toInt());
+      const auto field  = static_cast<FilterField>(row.field_->currentData().toInt());
+      const auto op     = static_cast<CompareOp>(row.op_->currentData().toInt());
 
       const auto v1_opt = ParseFilterValue(field, row.value_->text());
       if (!v1_opt.has_value()) {
@@ -345,7 +640,8 @@ class FilterPanel final : public QGroupBox {
         return std::nullopt;
       }
 
-      FieldCondition cond{.field_ = field, .op_ = op, .value_ = v1_opt.value(), .second_value_ = std::nullopt};
+      FieldCondition cond{
+          .field_ = field, .op_ = op, .value_ = v1_opt.value(), .second_value_ = std::nullopt};
 
       if (op == CompareOp::BETWEEN) {
         const auto v2_opt = ParseFilterValue(field, row.value2_->text());
@@ -356,7 +652,8 @@ class FilterPanel final : public QGroupBox {
         cond.second_value_ = v2_opt.value();
       }
 
-      conditions.push_back(FilterNode{FilterNode::Type::Condition, {}, {}, std::move(cond), std::nullopt});
+      conditions.push_back(
+          FilterNode{FilterNode::Type::Condition, {}, {}, std::move(cond), std::nullopt});
     }
 
     if (conditions.empty()) {
@@ -372,23 +669,25 @@ class FilterPanel final : public QGroupBox {
     return FilterNode{FilterNode::Type::Logical, join, std::move(conditions), {}, std::nullopt};
   }
 
-  QComboBox*        join_op_        = nullptr;
-  QVBoxLayout*      rows_container_ = nullptr;
-  QPushButton*      btn_add_        = nullptr;
-  QPushButton*      btn_apply_      = nullptr;
-  QPushButton*      btn_clear_      = nullptr;
-  QLabel*           info_           = nullptr;
-  QLabel*           sql_preview_    = nullptr;
-  std::vector<Row>  rows_;
+  QComboBox*                             join_op_        = nullptr;
+  QScrollArea*                           rows_scroll_    = nullptr;
+  QWidget*                               rows_widget_    = nullptr;
+  QVBoxLayout*                           rows_container_ = nullptr;
+  QPushButton*                           btn_add_        = nullptr;
+  QPushButton*                           btn_apply_      = nullptr;
+  QPushButton*                           btn_clear_      = nullptr;
+  QLabel*                                rules_hint_     = nullptr;
+  QLabel*                                info_           = nullptr;
+  QLabel*                                sql_preview_    = nullptr;
+  std::vector<Row>                       rows_;
 
   std::function<void(const FilterNode&)> on_apply_;
-  std::function<void()>                 on_clear_;
+  std::function<void()>                  on_clear_;
 };
 
 class BackgroundExecutor final {
  public:
-  explicit BackgroundExecutor(size_t thread_count)
-      : stop_(false), threads_() {
+  explicit BackgroundExecutor(size_t thread_count) : stop_(false), threads_() {
     thread_count = std::max<size_t>(1, thread_count);
     threads_.reserve(thread_count);
     for (size_t i = 0; i < thread_count; ++i) {
@@ -412,7 +711,7 @@ class BackgroundExecutor final {
   BackgroundExecutor(const BackgroundExecutor&)            = delete;
   BackgroundExecutor& operator=(const BackgroundExecutor&) = delete;
 
-  void Post(std::function<void()> fn) {
+  void                Post(std::function<void()> fn) {
     if (!fn) {
       return;
     }
@@ -443,11 +742,11 @@ class BackgroundExecutor final {
     }
   }
 
-  std::mutex                       mu_;
-  std::condition_variable          cv_;
+  std::mutex                        mu_;
+  std::condition_variable           cv_;
   std::deque<std::function<void()>> queue_;
-  bool                             stop_;
-  std::vector<std::thread>         threads_;
+  bool                              stop_;
+  std::vector<std::thread>          threads_;
 };
 
 static BackgroundExecutor& Bg() {
@@ -548,11 +847,15 @@ static AlbumIds ImportBatchToTempProject(const std::filesystem::path& db_path,
 class AlbumWidget final : public QWidget {
  public:
   AlbumWidget(std::shared_ptr<ThumbnailService>                   thumbnail_service,
-              std::shared_ptr<SleeveServiceImpl>                 sleeve_service,
-        std::shared_ptr<StorageService>                    storage_service,
+              std::shared_ptr<SleeveServiceImpl>                  sleeve_service,
+              std::shared_ptr<StorageService>                     storage_service,
               std::vector<std::pair<sl_element_id_t, image_id_t>> ids, QWidget* parent = nullptr)
-      : QWidget(parent), service_(std::move(thumbnail_service)), sleeve_(std::move(sleeve_service)),
-  filter_service_(std::move(storage_service)), base_ids_(std::move(ids)), ids_(base_ids_) {
+      : QWidget(parent),
+        service_(std::move(thumbnail_service)),
+        sleeve_(std::move(sleeve_service)),
+        filter_service_(std::move(storage_service)),
+        base_ids_(std::move(ids)),
+        ids_(base_ids_) {
     if (!service_) {
       throw std::runtime_error("ThumbnailService is null");
     }
@@ -568,10 +871,11 @@ class AlbumWidget final : public QWidget {
       element_to_image_.insert({p.first, p.second});
     }
 
-    auto* root = new QVBoxLayout(this);
+    auto* root    = new QHBoxLayout(this);
 
     filter_panel_ = new FilterPanel(this);
-    filter_panel_->SetInfoText(QString("Showing %1 images").arg(static_cast<qulonglong>(ids_.size())));
+    filter_panel_->SetInfoText(
+        QString("Showing %1 images").arg(static_cast<qulonglong>(ids_.size())));
     filter_panel_->SetOnApply([this](const FilterNode& node) { ApplyFilter(node); });
     filter_panel_->SetOnClear([this]() { ClearFilter(); });
     root->addWidget(filter_panel_, 0);
@@ -638,7 +942,8 @@ class AlbumWidget final : public QWidget {
     Prefetch();
 
     if (filter_panel_) {
-      filter_panel_->SetInfoText(QString("Showing %1 images").arg(static_cast<qulonglong>(ids_.size())));
+      filter_panel_->SetInfoText(
+          QString("Showing %1 images").arg(static_cast<qulonglong>(ids_.size())));
     }
   }
 
@@ -787,13 +1092,13 @@ class AlbumWidget final : public QWidget {
     auto                  svc = service_;
     QPointer<AlbumWidget> self(this);
 
-    auto&                 cell       = cells_[cell_pos];
-    const auto            element_id = ids_[idx].first;
-    const auto            image_id   = ids_[idx].second;
-    const uint64_t        gen        = ++cell.generation;
+    auto&                 cell          = cells_[cell_pos];
+    const auto            element_id    = ids_[idx].first;
+    const auto            image_id      = ids_[idx].second;
+    const uint64_t        gen           = ++cell.generation;
 
     // Marshal work to the Qt UI thread.
-    CallbackDispatcher ui_dispatcher = [](std::function<void()> fn) {
+    CallbackDispatcher    ui_dispatcher = [](std::function<void()> fn) {
       auto* obj = QCoreApplication::instance();
       if (!obj) {
         fn();
@@ -804,7 +1109,8 @@ class AlbumWidget final : public QWidget {
 
     svc->GetThumbnail(
         element_id, image_id,
-        [self, svc, cell_pos, idx, element_id, gen, ui_dispatcher](std::shared_ptr<ThumbnailGuard> guard) {
+        [self, svc, cell_pos, idx, element_id, gen,
+         ui_dispatcher](std::shared_ptr<ThumbnailGuard> guard) {
           // UI thread callback must stay tiny: validate, store guard, then offload heavy work.
           if (!guard) {
             return;
@@ -847,7 +1153,8 @@ class AlbumWidget final : public QWidget {
           const int target_h = self->cell_h_;
 
           // Do CPU sync + Mat->QImage + scaling off the UI thread.
-          Bg().Post([self, svc, cell_pos, idx, element_id, gen, guard, ui_dispatcher, target_w, target_h]() mutable {
+          Bg().Post([self, svc, cell_pos, idx, element_id, gen, guard, ui_dispatcher, target_w,
+                     target_h]() mutable {
             QImage scaled;
 
             try {
@@ -866,9 +1173,10 @@ class AlbumWidget final : public QWidget {
                   if (!self || cell_pos >= self->cells_.size()) {
                     return;
                   }
-                  auto& cell = self->cells_[cell_pos];
+                  auto&      cell       = self->cells_[cell_pos];
                   const bool still_same = (cell.bound_idx == idx) &&
-                                          (cell.bound_element_id == element_id) && (cell.generation == gen);
+                                          (cell.bound_element_id == element_id) &&
+                                          (cell.generation == gen);
                   if (!still_same) {
                     return;
                   }
@@ -880,17 +1188,18 @@ class AlbumWidget final : public QWidget {
               auto&  mat = buffer->GetCPUData();
               QImage img = MatRgba32fToQImageCopy(mat);
               if (!img.isNull()) {
-                scaled = img.scaled(target_w, target_h, Qt::KeepAspectRatio,
-                                    Qt::SmoothTransformation);
+                scaled =
+                    img.scaled(target_w, target_h, Qt::KeepAspectRatio, Qt::SmoothTransformation);
               }
             } catch (...) {
               ui_dispatcher([self, cell_pos, idx, element_id, gen]() {
                 if (!self || cell_pos >= self->cells_.size()) {
                   return;
                 }
-                auto& cell = self->cells_[cell_pos];
+                auto&      cell       = self->cells_[cell_pos];
                 const bool still_same = (cell.bound_idx == idx) &&
-                                        (cell.bound_element_id == element_id) && (cell.generation == gen);
+                                        (cell.bound_element_id == element_id) &&
+                                        (cell.generation == gen);
                 if (!still_same) {
                   return;
                 }
@@ -900,7 +1209,8 @@ class AlbumWidget final : public QWidget {
             }
 
             // Final UI update: keep it to (check + setPixmap).
-            ui_dispatcher([self, svc, cell_pos, idx, element_id, gen, guard, scaled = std::move(scaled)]() mutable {
+            ui_dispatcher([self, svc, cell_pos, idx, element_id, gen, guard,
+                           scaled = std::move(scaled)]() mutable {
               if (!self) {
                 try {
                   svc->ReleaseThumbnail(element_id);
@@ -918,7 +1228,8 @@ class AlbumWidget final : public QWidget {
 
               auto&      cell       = self->cells_[cell_pos];
               const bool still_same = (cell.bound_idx == idx) &&
-                                      (cell.bound_element_id == element_id) && (cell.generation == gen);
+                                      (cell.bound_element_id == element_id) &&
+                                      (cell.generation == gen);
               if (!still_same) {
                 // Cell was rebound; let normal rebind/release path handle pins.
                 return;
@@ -1007,24 +1318,24 @@ class AlbumWidget final : public QWidget {
   std::shared_ptr<ThumbnailService>                   service_;
   std::shared_ptr<SleeveServiceImpl>                  sleeve_;
 
-  SleeveFilterService                                  filter_service_;
-  std::optional<filter_id_t>                            active_filter_id_;
+  SleeveFilterService                                 filter_service_;
+  std::optional<filter_id_t>                          active_filter_id_;
 
-  std::vector<std::pair<sl_element_id_t, image_id_t>>  base_ids_;
+  std::vector<std::pair<sl_element_id_t, image_id_t>> base_ids_;
   std::vector<std::pair<sl_element_id_t, image_id_t>> ids_;
 
-  std::unordered_map<sl_element_id_t, image_id_t>      element_to_image_;
+  std::unordered_map<sl_element_id_t, image_id_t>     element_to_image_;
 
   FilterPanel*                                        filter_panel_ = nullptr;
 
-  QGridLayout*                                        grid_      = nullptr;
-  QScrollBar*                                         scrollbar_ = nullptr;
+  QGridLayout*                                        grid_         = nullptr;
+  QScrollBar*                                         scrollbar_    = nullptr;
   std::vector<Cell>                                   cells_;
 
   size_t                                              start_     = 0;
 
-  const size_t                                        columns_   = 5;
-  const size_t                                        view_size_ = 50;  // 10x5
+  const size_t                                        columns_   = 4;
+  const size_t                                        view_size_ = 12;  // 3x4
   const size_t               prefetch_each_side_                 = 7;   // match fuzz test idea
 
   const size_t               max_prefetch_inflight_              = 12;
@@ -1040,7 +1351,12 @@ class AlbumWidget final : public QWidget {
 int main(int argc, char** argv) {
   Exiv2::LogMsg::setLevel(Exiv2::LogMsg::Level::mute);
   puerhlab::RegisterAllOperators();
+
+  QGuiApplication::setHighDpiScaleFactorRoundingPolicy(
+      Qt::HighDpiScaleFactorRoundingPolicy::PassThrough);
+
   QApplication app(argc, argv);
+  puerhlab::ApplyExternalAppFont(app, argc, argv);
 
   try {
     const auto db_path   = std::filesystem::temp_directory_path() / "thumbnail_album_demo.db";
@@ -1065,7 +1381,7 @@ int main(int argc, char** argv) {
         project.GetSleeveService(), img_pool, pipeline_service);
 
     auto* w = new puerhlab::AlbumWidget(thumbnail_service, project.GetSleeveService(),
-                      project.GetStorageService(), std::move(imported.ids));
+                                        project.GetStorageService(), std::move(imported.ids));
     w->setWindowTitle("pu-erh_lab - Thumbnail Album Qt Demo");
     w->resize(1400, 900);
     w->show();

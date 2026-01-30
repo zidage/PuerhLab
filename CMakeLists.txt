@@ -52,6 +52,7 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTORCC ON)
 
+# CUDA
 find_package(CUDAToolkit)
 if (CUDAToolkit_FOUND)
     enable_language(CUDA)
@@ -243,6 +244,8 @@ add_compile_definitions(
 
 add_subdirectory(${CMAKE_SOURCE_DIR}/pu-erh_lab/src)
 add_subdirectory(${CMAKE_SOURCE_DIR}/pu-erh_lab/tests)
+
+
 
 file(GLOB_RECURSE ALL_SOURCE_FILES
     "${CMAKE_SOURCE_DIR}/pu-erh_lab/src/*.c"

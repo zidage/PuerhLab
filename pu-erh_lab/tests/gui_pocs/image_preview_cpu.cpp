@@ -3,13 +3,20 @@
 
 #include <QApplication>
 #include <QBoxLayout>
+#include <QCoreApplication>
+#include <QFontDatabase>
 #include <QImage>
 #include <QLabel>
 #include <QSlider>
 #include <QStyleFactory>
 #include <QTimer>
+#include <filesystem>
 #include <future>
 #include <memory>
+#include <optional>
+#include <string>
+#include <string_view>
+#include <vector>
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/opencv.hpp>
 
@@ -26,6 +33,77 @@
 
 using namespace puerhlab;
 
+static QString FsPathToQString(const std::filesystem::path& path) {
+#if defined(_WIN32)
+  return QString::fromStdWString(path.wstring());
+#else
+  return QString::fromUtf8(path.string().c_str());
+#endif
+}
+
+static std::optional<std::string_view> FindArgValue(int argc, char** argv,
+                                                    std::string_view opt_name) {
+  const std::string opt_eq = std::string(opt_name) + "=";
+  for (int i = 1; i < argc; ++i) {
+    const std::string_view arg(argv[i] ? argv[i] : "");
+    if (arg == opt_name) {
+      if (i + 1 < argc && argv[i + 1]) {
+        return std::string_view(argv[i + 1]);
+      }
+      return std::nullopt;
+    }
+    if (arg.rfind(opt_eq, 0) == 0) {
+      return arg.substr(opt_eq.size());
+    }
+  }
+  return std::nullopt;
+}
+
+static void ApplyExternalAppFont(QApplication& app, int argc, char** argv) {
+  std::vector<std::filesystem::path> candidates;
+
+  if (const auto arg = FindArgValue(argc, argv, "--font"); arg.has_value()) {
+    candidates.emplace_back(std::string(arg.value()));
+  }
+  if (const auto env = qEnvironmentVariable("PUERHLAB_FONT_PATH"); !env.isEmpty()) {
+    candidates.emplace_back(env.toStdString());
+  }
+
+  const auto app_dir = std::filesystem::path(QCoreApplication::applicationDirPath().toStdWString());
+  candidates.emplace_back(app_dir / "fonts" / "main_IBM.ttf");
+
+#if defined(PUERHLAB_SOURCE_DIR)
+  candidates.emplace_back(std::filesystem::path(PUERHLAB_SOURCE_DIR) / "pu-erh_lab" / "src" / "config" /
+                          "fonts" / "main_IBM.ttf");
+#endif
+
+  for (const auto& path : candidates) {
+    std::error_code ec;
+    if (!std::filesystem::exists(path, ec) || ec) {
+      continue;
+    }
+
+    const int font_id = QFontDatabase::addApplicationFont(FsPathToQString(path));
+    if (font_id < 0) {
+      qWarning() << "[ImagePreview] Failed to load font:" << FsPathToQString(path);
+      continue;
+    }
+
+    const auto families = QFontDatabase::applicationFontFamilies(font_id);
+    if (families.isEmpty()) {
+      qWarning() << "[ImagePreview] Loaded font but no families reported:" << FsPathToQString(path);
+      continue;
+    }
+
+    QFont f(families.front());
+    app.setFont(f);
+    return;
+  }
+
+  qWarning() << "[ImagePreview] No external font applied. Provide `--font <path>` or set "
+                "`PUERHLAB_FONT_PATH`.";
+}
+
 void SetPipelineTemplate(std::shared_ptr<PipelineExecutor> executor) {
   auto&          raw_stage     = executor->GetStage(PipelineStageName::Image_Loading);
   auto&          global_params = executor->GetGlobalParams();
@@ -35,7 +113,7 @@ void SetPipelineTemplate(std::shared_ptr<PipelineExecutor> executor) {
 #else
   decode_params["raw"]["cuda"] = false;
 #endif
-  decode_params["raw"]["highlights_reconstruct"] = false;
+  decode_params["raw"]["highlights_reconstruct"] = true;
   decode_params["raw"]["use_camera_wb"]          = true;
   decode_params["raw"]["user_wb"]                = 7500.f;
   decode_params["raw"]["backend"]                = "puerh";
@@ -103,6 +181,9 @@ static void ApplyMaterialLikeTheme(QApplication& app) {
       "  color: #E8EAED;"
       "  font-size: 12px;"
       "}"
+      "QSlider {"
+      "  font-size: 14px;"
+      "}"
       "QLabel {"
       "  color: #E8EAED;"
       "}"
@@ -120,7 +201,7 @@ static void ApplyMaterialLikeTheme(QApplication& app) {
       "  border-radius: 2px;"
       "}"
       "QSlider::sub-page:horizontal {"
-      "  background: #5FA2FF;"
+      "  background: #8ab4f8;"
       "  border-radius: 2px;"
       "}"
       "QSlider::add-page:horizontal {"
@@ -128,17 +209,17 @@ static void ApplyMaterialLikeTheme(QApplication& app) {
       "  border-radius: 2px;"
       "}"
       "QSlider::handle:horizontal {"
-      "  background: #5FA2FF;"
+      "  background: #8ab4f8;"
       "  width: 18px;"
       "  height: 18px;"
       "  margin: -7px 0;"  // centers handle on 4px groove
       "  border-radius: 9px;"
       "}"
       "QSlider::handle:horizontal:hover {"
-      "  background: #76B4FF;"
+      "  background: #8ab4f8;"
       "}"
       "QSlider::handle:horizontal:pressed {"
-      "  background: #4F8CF0;"
+      "  background: #8ab4f8;"
       "}"
       "QSlider::tick-mark {"
       "  background: transparent;"
@@ -164,6 +245,7 @@ int main(int argc, char* argv[]) {
   QCoreApplication::setAttribute(Qt::AA_UseDesktopOpenGL);
 
   QApplication app(argc, argv);
+  ApplyExternalAppFont(app, argc, argv);
   ApplyMaterialLikeTheme(app);
 
   QWidget window;
@@ -206,7 +288,7 @@ int main(int argc, char* argv[]) {
 
   // SleeveManager             manager{db_path};
 
-  std::filesystem::path  img_root_path = std::string(TEST_IMG_PATH) + "/raw/building";
+  std::filesystem::path  img_root_path = std::string(TEST_IMG_PATH) + "/raw/camera/nikon/z5";
   std::shared_ptr<Image> img_ptr;
   for (const auto& entry : std::filesystem::directory_iterator(img_root_path)) {
     // Load the first file
@@ -255,7 +337,7 @@ int main(int argc, char* argv[]) {
   color_stage.SetOperator(OperatorType::SATURATION, {{"saturation", 0.0f}}, global_params);
   color_stage.SetOperator(OperatorType::TINT, {{"tint", 0.0f}}, global_params);
 
-  std::string LUT_PATH = std::string(CONFIG_PATH) + "LUTs/CL_CH.cube";
+  std::string LUT_PATH = std::string(CONFIG_PATH) + "LUTs/5207.cube";
   color_stage.SetOperator(OperatorType::LMT, {{"ocio_lmt", LUT_PATH}}, global_params);
 
   auto& detail_stage = base_task.pipeline_executor_->GetStage(PipelineStageName::Detail_Adjustment);
@@ -302,7 +384,8 @@ int main(int argc, char* argv[]) {
     info->setStyleSheet(
         "QLabel {"
         "  color: #E8EAED;"
-        "  font-weight: 500;"
+        "  font-size: 14px;"
+        "  font-weight: 400;"
         "}");
 
     auto* slider = new QSlider(Qt::Horizontal, controls);
