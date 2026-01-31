@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <cstdint>
+
 namespace puerhlab {
 
 // Wide character path c string
@@ -52,4 +54,6 @@ enum class DecodeRes {
   HALF,
   QUARTER,
 };
+
+
 };  // namespace puerhlab

@@ -156,15 +156,9 @@ if(UNIX AND NOT APPLE)
 endif()
 
 # OpenColorIO
-find_package(OpenColorIO CONFIG QUIET)
+find_package(OpenColorIO CONFIG REQUIRED)
 if (TARGET OpenColorIO::OpenColorIO)
     add_library(OpenColorIO ALIAS OpenColorIO::OpenColorIO)
-elseif(WIN32)
-    add_library(OpenColorIO SHARED IMPORTED)
-    set_target_properties(OpenColorIO PROPERTIES
-        IMPORTED_LOCATION "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_party/ocio/Release/bin/OpenColorIO_2_4.dll"
-        IMPORTED_IMPLIB "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_party/ocio/Release/lib/OpenColorIO.lib"
-        INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_party/ocio/Release/include")
 else()
     find_library(OCIO_LIB NAMES OpenColorIO PATHS /opt/homebrew/lib /usr/local/lib)
     find_path(OCIO_INC NAMES OpenColorIO/OpenColorIO.h PATHS /opt/homebrew/include /usr/local/include)
@@ -176,6 +170,9 @@ else()
     endif()
 endif()
    
+# OpenImageIO
+find_package(OpenImageIO CONFIG REQUIRED)
+
 # Exiv2
 find_package(Exiv2 QUIET CONFIG)
 if (TARGET Exiv2::Exiv2 AND NOT TARGET Exiv2)

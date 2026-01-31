@@ -3,6 +3,7 @@
 
 #include <QApplication>
 #include <QBoxLayout>
+#include <QComboBox>
 #include <QCoreApplication>
 #include <QFontDatabase>
 #include <QImage>
@@ -10,6 +11,8 @@
 #include <QSlider>
 #include <QStyleFactory>
 #include <QTimer>
+#include <algorithm>
+#include <cctype>
 #include <filesystem>
 #include <future>
 #include <memory>
@@ -57,6 +60,41 @@ static std::optional<std::string_view> FindArgValue(int argc, char** argv,
     }
   }
   return std::nullopt;
+}
+
+static std::vector<std::filesystem::path> ListCubeLutsInDir(const std::filesystem::path& dir) {
+  std::vector<std::filesystem::path> results;
+  std::error_code                    ec;
+  if (!std::filesystem::exists(dir, ec) || ec || !std::filesystem::is_directory(dir, ec)) {
+    return results;
+  }
+
+  for (const auto& entry : std::filesystem::directory_iterator(dir, ec)) {
+    if (ec) {
+      break;
+    }
+    if (!entry.is_regular_file(ec) || ec) {
+      ec.clear();
+      continue;
+    }
+
+    const auto ext = entry.path().extension().string();
+    std::string ext_lower;
+    ext_lower.reserve(ext.size());
+    for (const char c : ext) {
+      ext_lower.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(c))));
+    }
+    if (ext_lower == ".cube") {
+      results.push_back(entry.path());
+    }
+  }
+
+  std::sort(results.begin(), results.end(),
+            [](const std::filesystem::path& a, const std::filesystem::path& b) {
+              return a.filename().string() < b.filename().string();
+            });
+
+  return results;
 }
 
 static void ApplyExternalAppFont(QApplication& app, int argc, char** argv) {
@@ -113,7 +151,7 @@ void SetPipelineTemplate(std::shared_ptr<PipelineExecutor> executor) {
 #else
   decode_params["raw"]["cuda"] = false;
 #endif
-  decode_params["raw"]["highlights_reconstruct"] = true;
+  decode_params["raw"]["highlights_reconstruct"] = false;
   decode_params["raw"]["use_camera_wb"]          = true;
   decode_params["raw"]["user_wb"]                = 7500.f;
   decode_params["raw"]["backend"]                = "puerh";
@@ -239,6 +277,7 @@ int main(int argc, char* argv[]) {
     float      sharpen_    = 0.0f;
     float      clarity_    = 0.0f;
 
+    std::string lut_path_;
     RenderType type_       = RenderType::FAST_PREVIEW;
   };
 
@@ -288,7 +327,7 @@ int main(int argc, char* argv[]) {
 
   // SleeveManager             manager{db_path};
 
-  std::filesystem::path  img_root_path = std::string(TEST_IMG_PATH) + "/raw/camera/nikon/z5";
+  std::filesystem::path  img_root_path = std::string(TEST_IMG_PATH) + "/raw/street";
   std::shared_ptr<Image> img_ptr;
   for (const auto& entry : std::filesystem::directory_iterator(img_root_path)) {
     // Load the first file
@@ -337,8 +376,34 @@ int main(int argc, char* argv[]) {
   color_stage.SetOperator(OperatorType::SATURATION, {{"saturation", 0.0f}}, global_params);
   color_stage.SetOperator(OperatorType::TINT, {{"tint", 0.0f}}, global_params);
 
-  std::string LUT_PATH = std::string(CONFIG_PATH) + "LUTs/5207.cube";
-  color_stage.SetOperator(OperatorType::LMT, {{"ocio_lmt", LUT_PATH}}, global_params);
+  const auto luts_dir  = std::filesystem::path(CONFIG_PATH) / "LUTs";
+  const auto lut_files = ListCubeLutsInDir(luts_dir);
+
+  std::vector<std::string> lut_paths_by_index;
+  lut_paths_by_index.emplace_back("");  // index 0 => None
+
+  QStringList lut_display_names;
+  lut_display_names.push_back("None");
+  for (const auto& p : lut_files) {
+    lut_paths_by_index.push_back(p.generic_string());
+    lut_display_names.push_back(QString::fromStdString(p.filename().string()));
+  }
+
+  int default_lut_index = 0;
+  for (int i = 1; i < static_cast<int>(lut_paths_by_index.size()); ++i) {
+    if (std::filesystem::path(lut_paths_by_index[i]).filename() == "5207.cube") {
+      default_lut_index = i;
+      break;
+    }
+  }
+
+  if (default_lut_index > 0) {
+    global_params.lmt_enabled_ = true;
+    color_stage.SetOperator(OperatorType::LMT, {{"ocio_lmt", lut_paths_by_index[default_lut_index]}},
+                            global_params);
+  } else {
+    global_params.lmt_enabled_ = false;
+  }
 
   auto& detail_stage = base_task.pipeline_executor_->GetStage(PipelineStageName::Detail_Adjustment);
   detail_stage.SetOperator(OperatorType::SHARPEN, {{"sharpen", {{"offset", 0.0f}}}}, global_params);
@@ -347,6 +412,10 @@ int main(int argc, char* argv[]) {
   base_executor->SetExecutionStages(viewer);
 
   AdjustmentState adjustments{};
+  adjustments.lut_path_ = lut_paths_by_index[default_lut_index];
+
+  std::string last_applied_lut_path = adjustments.lut_path_;
+  bool        last_lmt_enabled      = !adjustments.lut_path_.empty();
   auto            scheduleAdjustments = [&](const AdjustmentState& state) {
     PipelineTask task                       = base_task;
 
@@ -362,6 +431,20 @@ int main(int argc, char* argv[]) {
     auto& color = task.pipeline_executor_->GetStage(PipelineStageName::Color_Adjustment);
     color.SetOperator(OperatorType::SATURATION, {{"saturation", state.saturation_}}, global_params);
     color.SetOperator(OperatorType::TINT, {{"tint", state.tint_}}, global_params);
+
+    // Avoid re-applying the LUT (LMT) on every slider change; only update when it changes.
+    const bool want_lmt_enabled = !state.lut_path_.empty();
+    if (state.lut_path_ != last_applied_lut_path || want_lmt_enabled != last_lmt_enabled) {
+      if (want_lmt_enabled) {
+        global_params.lmt_enabled_ = true;
+        color.SetOperator(OperatorType::LMT, {{"ocio_lmt", state.lut_path_}}, global_params);
+      } else {
+        global_params.lmt_enabled_ = false;
+      }
+      last_applied_lut_path = state.lut_path_;
+      last_lmt_enabled      = want_lmt_enabled;
+    }
+
     auto& detail = task.pipeline_executor_->GetStage(PipelineStageName::Detail_Adjustment);
 
     detail.SetOperator(OperatorType::SHARPEN, {{"sharpen", {{"offset", state.sharpen_}}}},
@@ -377,6 +460,72 @@ int main(int argc, char* argv[]) {
 
     scheduler.ScheduleTask(std::move(task));
   };
+
+  auto addComboBox = [&](const QString& name, const QStringList& items, int initial_index,
+                         auto&& onChange) {
+    auto* label = new QLabel(name, controls);
+    label->setStyleSheet(
+        "QLabel {"
+        "  color: #E8EAED;"
+        "  font-size: 14px;"
+        "  font-weight: 400;"
+        "}");
+
+    auto* combo = new QComboBox(controls);
+    combo->addItems(items);
+    combo->setCurrentIndex(initial_index);
+    combo->setMinimumWidth(240);
+    combo->setFixedHeight(32);
+    combo->setStyleSheet(
+        "QComboBox {"
+        "  background: #202124;"
+        "  border: 1px solid #303134;"
+        "  border-radius: 8px;"
+        "  padding: 4px 8px;"
+        "}"
+        "QComboBox::drop-down {"
+        "  border: 0px;"
+        "  width: 24px;"
+        "}"
+        "QComboBox QAbstractItemView {"
+        "  background: #202124;"
+        "  border: 1px solid #303134;"
+      "  selection-background-color: #8ab4f8;"
+      "  selection-color: #080A0C;"
+      "}"
+      "QComboBox QAbstractItemView::item:hover {"
+      "  background: #2B2F33;"
+      "  color: #E8EAED;"
+      "}"
+      "QComboBox QAbstractItemView::item:selected {"
+      "  background: #8ab4f8;"
+      "  color: #080A0C;"
+        "}");
+
+    QObject::connect(combo, QOverload<int>::of(&QComboBox::currentIndexChanged), controls,
+                     [onChange = std::forward<decltype(onChange)>(onChange)](int idx) {
+                       onChange(idx);
+                     });
+
+    auto* row       = new QWidget(controls);
+    auto* rowLayout = new QHBoxLayout(row);
+    rowLayout->setContentsMargins(0, 0, 0, 0);
+    rowLayout->addWidget(label, /*stretch*/ 1);
+    rowLayout->addWidget(combo);
+
+    controlsLayout->insertWidget(controlsLayout->count() - 1, row);
+    return combo;
+  };
+
+  addComboBox(
+      "LUT", lut_display_names, default_lut_index,
+      [&](int idx) {
+        if (idx < 0 || idx >= static_cast<int>(lut_paths_by_index.size())) {
+          return;
+        }
+        adjustments.lut_path_ = lut_paths_by_index[idx];
+        scheduleAdjustments(adjustments);
+      });
 
   auto addSlider = [&](const QString& name, int min, int max, int value, auto&& onChange,
                        auto&& formatter) {

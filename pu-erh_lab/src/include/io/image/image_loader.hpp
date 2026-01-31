@@ -59,5 +59,7 @@ class ByteBufferLoader {
   static auto LoadFromImage(std::shared_ptr<Image> img) -> std::shared_ptr<std::vector<uint8_t>>;
 
   static auto LoadByteBufferFromImage(std::shared_ptr<Image> img) -> std::vector<uint8_t>;
+
+  static auto LoadByteBufferFromPath(const image_path_t& path) -> std::vector<uint8_t>;
 };
 };  // namespace puerhlab

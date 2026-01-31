@@ -15,22 +15,17 @@
 #pragma once
 
 #include <filesystem>
-#include <vector>
+#include <memory>
 
-#include "sleeve/sleeve_filesystem.hpp"
+#include "image/image_buffer.hpp"
+#include "type/supported_file_type.hpp"
 #include "type/type.hpp"
 
 namespace puerhlab {
 class ImageWriter {
- private:
-  image_path_t                 output_path_;
-
-  std::vector<sl_element_id_t> output_file_ids_;
-
-  FileSystem&                  file_system_;
-
  public:
-  ImageWriter() = delete;
-  ImageWriter(const image_path_t& output_path, FileSystem& file_system);
+  static void WriteImageToPath(const image_path_t&          src_path,
+                               std::shared_ptr<ImageBuffer> image_data,
+                               ExportFormatOptions          options);
 };
 };  // namespace puerhlab

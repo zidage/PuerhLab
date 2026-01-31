@@ -126,7 +126,7 @@ set(OPERATORS_SRCS
 
 def_library(Operators
     SOURCES ${OPERATORS_SRCS}
-    PUBLIC_DEPS ImageBuffer JSON OpenColorIO hwy::hwy glad::glad
+    PUBLIC_DEPS ImageBuffer JSON OpenColorIO::OpenColorIO hwy::hwy glad::glad
 )
 
 # --- Edit Pipeline ---
@@ -313,7 +313,7 @@ def_library(SleeveManager
 
 def_library(ImageWriter
     SOURCES io/image/image_writer.cpp
-    PUBLIC_DEPS SleeveManager DuckORM PipelineScheduler
+    PUBLIC_DEPS OpenImageIO::OpenImageIO ImageBuffer
 )
 
 # ==============================================================================

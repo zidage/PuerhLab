@@ -85,7 +85,7 @@ auto ByteBufferLoader::LoadFromImage(std::shared_ptr<Image> img)
   if (!img) {
     return nullptr;
   }
-  std::ifstream   file(img->image_path_, std::ios::binary | std::ios::ate);
+  std::ifstream file(img->image_path_, std::ios::binary | std::ios::ate);
   if (!file.is_open()) {
     return nullptr;
   }
@@ -106,7 +106,11 @@ auto ByteBufferLoader::LoadByteBufferFromImage(std::shared_ptr<Image> img) -> st
   if (!img) {
     throw std::runtime_error("ByteBufferLoader: image is null");
   }
-  std::ifstream   file(img->image_path_, std::ios::binary | std::ios::ate);
+  return LoadByteBufferFromPath(img->image_path_);
+}
+
+auto ByteBufferLoader::LoadByteBufferFromPath(const image_path_t& path) -> std::vector<uint8_t> {
+  std::ifstream file(path, std::ios::binary | std::ios::ate);
   if (!file.is_open()) {
     throw std::runtime_error("ByteBufferLoader: cannot open file for reading");
   }
@@ -116,8 +120,7 @@ auto ByteBufferLoader::LoadByteBufferFromImage(std::shared_ptr<Image> img) -> st
   }
   file.seekg(0, std::ios::beg);
   auto buffer = std::vector<uint8_t>(static_cast<size_t>(fileSize));
-  if (!file.read(reinterpret_cast<char*>(buffer.data()), fileSize) ||
-      file.gcount() != fileSize) {
+  if (!file.read(reinterpret_cast<char*>(buffer.data()), fileSize) || file.gcount() != fileSize) {
     throw std::runtime_error("ByteBufferLoader: failed to read full file");
   }
   file.close();
