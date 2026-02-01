@@ -37,7 +37,7 @@ Applied with 2383 LUT and highlight recovery.
 
 <figure>
   <img src="docs/demo/showcase.gif" width="800">
-  <figcaption>The final UI design is still a work in progress</figcaption>
+  <figcaption>The custom UI design is still a work in progress. LUTs on display will not be shipped in the release due to copyright restrictions. </figcaption>
 </figure>
 
 ## 🎯 Vision
