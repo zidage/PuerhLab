@@ -14,7 +14,6 @@
 
 #include "edit/operators/cst/lmt_op.hpp"
 
-#include "edit/operators/op_kernel.hpp"
 #include "utils/string/convert.hpp"
 
 namespace puerhlab {
@@ -84,7 +83,9 @@ void OCIO_LMT_Transform_Op::SetGlobalParams(OperatorParams& params) const {
   // params.cpu_lmt_processor_ = cpu_processor_;
   // params.gpu_lmt_processor_ = gpu_processor_;
 
-  params.lmt_lut_path_      = lmt_path_;
-  params.to_lmt_dirty_      = true;
+  params.lmt_lut_path_  = lmt_path_;
+  params.lmt_enabled_   = !lmt_path_.empty();
+  // Only mark dirty when enabled; otherwise GPU upload would attempt to parse an empty path.
+  params.to_lmt_dirty_  = params.lmt_enabled_;
 }
 };  // namespace puerhlab

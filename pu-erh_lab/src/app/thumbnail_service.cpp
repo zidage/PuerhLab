@@ -184,6 +184,21 @@ void ThumbnailService::ReleaseThumbnail(sl_element_id_t sleeve_element_id) {
   }
 }
 
+void ThumbnailService::InvalidateThumbnail(sl_element_id_t sleeve_element_id) {
+  auto st = state_;
+  if (!st) {
+    return;
+  }
+
+  std::unique_lock lock(st->cache_lock_);
+  // TODO: This is abstraction leak; we should provide an interface in ThumbnailService
+  st->thumbnail_cache_.RemoveRecord(sleeve_element_id);
+  st->thumbnail_cache_data_.erase(sleeve_element_id);
+  // Note: we intentionally do not cancel in-flight renders in pending_.
+  // A subsequent GetThumbnail() after invalidation will schedule a fresh render
+  // once the cache miss is observed.
+}
+
 void ThumbnailService::HandleEvict(State& st, std::optional<sl_element_id_t> evicted_id) {
   if (evicted_id.has_value()) {
     auto id = evicted_id.value();

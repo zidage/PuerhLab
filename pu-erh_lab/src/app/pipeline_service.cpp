@@ -22,6 +22,50 @@
 #include "type/type.hpp"
 
 namespace puerhlab {
+namespace {
+void ResetToDefaults(OperatorParams& params) {
+  // OperatorParams has const members, so it is not assignable.
+  // Reinitialize in-place to restore default values.
+  std::destroy_at(&params);
+  std::construct_at(&params);
+}
+
+void EnsureDefaultOutputTransform(CPUPipelineExecutor& exec) {
+  auto& global_params = exec.GetGlobalParams();
+  auto& output_stage  = exec.GetStage(PipelineStageName::Output_Transform);
+
+  // Older stored pipelines (or partially-initialized ones) might miss the ODT descriptor.
+  // Without it, the GPU path won't have precomputed ODT tables and can render black.
+  if (!output_stage.GetOperator(OperatorType::ODT).has_value()) {
+    nlohmann::json output_params;
+    output_params["aces_odt"] = {{"encoding_space", "rec709"},
+                                 {"encoding_etof", "gamma_2_2"},
+                                 {"limiting_space", "rec709"},
+                                 {"peak_luminance", 100.0f}};
+    output_stage.SetOperator(OperatorType::ODT, output_params, global_params);
+  }
+}
+
+void ResyncGlobalParamsFromOperators(CPUPipelineExecutor& exec) {
+  // Global params are consumed/mutated during GPU parameter conversion (dirty flags cleared).
+  // Cached pipelines also release GPU resources when returned to the service.
+  // Rebuild global params from operator params so ODT/LMT GPU resources are re-uploaded.
+  auto& global_params = exec.GetGlobalParams();
+  ResetToDefaults(global_params);
+
+  for (int i = 0; i < static_cast<int>(PipelineStageName::Stage_Count); ++i) {
+    auto& stage = exec.GetStage(static_cast<PipelineStageName>(i));
+    for (auto& [op_type, op_entry] : stage.GetAllOperators()) {
+      (void)op_type;
+      if (!op_entry.op_) {
+        continue;
+      }
+      op_entry.op_->SetGlobalParams(global_params);
+    }
+  }
+}
+}  // namespace
+
 void PipelineMgmtService::HandleEviction(sl_element_id_t evicted_id) {
   // If the would-be evicted pipeline is pinned, keep it and evict another entry instead.
   // This avoids unbounded cache growth during batch export when a pipeline is temporarily pinned.
@@ -71,6 +115,23 @@ auto PipelineMgmtService::LoadPipeline(sl_element_id_t id) -> std::shared_ptr<Pi
     if (cached_id.has_value()) {
       auto it = loaded_pipelines_.find(cached_id.value());
       if (it != loaded_pipelines_.end()) {
+        // If the pipeline was previously returned to cache (unpinned), it likely had its
+        // execution stages reset (e.g. to detach frame sinks). Re-initialize it here so callers
+        // that don't explicitly call SetExecutionStages() won't pay the cost or crash.
+        if (!it->second->pinned_) {
+          it->second->pipeline_->SetBoundFile(id);
+          it->second->pipeline_->SetExecutionStages();
+          // Reset transient render/cache state to a consistent FAST_PREVIEW baseline.
+          it->second->pipeline_->SetRenderRegion(0, 0, 1.0f);
+          it->second->pipeline_->SetRenderRes(false, 4096);
+          it->second->pipeline_->SetForceCPUOutput(false);
+          it->second->pipeline_->SetEnableCache(true);
+          it->second->pipeline_->SetDecodeRes(DecodeRes::FULL);
+
+          EnsureDefaultOutputTransform(*it->second->pipeline_);
+          ResyncGlobalParamsFromOperators(*it->second->pipeline_);
+        }
+
         it->second->pinned_ = true;
         it->second->id_     = id;
         return it->second;
@@ -93,6 +154,12 @@ auto PipelineMgmtService::LoadPipeline(sl_element_id_t id) -> std::shared_ptr<Pi
       pipeline->SetBoundFile(id);
       pipeline_guard->dirty_ = false;
     }
+
+    // Ensure the loaded pipeline is bound to the requested element id.
+    pipeline->SetBoundFile(id);
+
+    EnsureDefaultOutputTransform(*pipeline);
+    ResyncGlobalParamsFromOperators(*pipeline);
 
     pipeline->SetExecutionStages(); // TODO: Use service as the only way to set/reset execution stages
     pipeline_guard->pipeline_              = std::move(pipeline);
@@ -117,12 +184,10 @@ void PipelineMgmtService::SavePipeline(std::shared_ptr<PipelineGuard> pipeline) 
     return;
   }
 
-  // // Always clear intermediate buffers when returning pipeline to cache
-  // // This releases memory from input/output images that are no longer needed
-  // pipeline->pipeline_->ClearAllIntermediateBuffers();
-  // // Export tends to run many distinct pipelines; avoid retaining large scratch buffers in cache.
-  // pipeline->pipeline_->ReleaseAllGPUResources();
-
+  // Always clear intermediate buffers and GPU resources when returning a pipeline to cache.
+  // This prevents large cached allocations (and any frame-sink related state) from leaking across
+  // editor sessions and hurting interactive performance.
+  pipeline->pipeline_->ClearAllIntermediateBuffers();
   pipeline->pipeline_->ResetExecutionStages();
 
   if (!pipeline->dirty_) {

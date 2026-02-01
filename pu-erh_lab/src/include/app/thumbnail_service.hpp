@@ -60,6 +60,10 @@ class ThumbnailService {
   void GetThumbnail(sl_element_id_t id, image_id_t image_id, ThumbnailCallback callback, bool pin_if_found = true,
                     CallbackDispatcher dispatcher = nullptr);
 
+  // Force the cached thumbnail for this sleeve element to be discarded.
+  // Next GetThumbnail() will re-render via pipeline.
+  void InvalidateThumbnail(sl_element_id_t sleeve_element_id);
+
   void ReleaseThumbnail(sl_element_id_t sleeve_element_id);
 };
 };  // namespace puerhlab

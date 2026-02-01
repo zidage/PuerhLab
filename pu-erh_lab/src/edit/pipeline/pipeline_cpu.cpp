@@ -60,7 +60,7 @@ void CPUPipelineExecutor::ResetStages() {
 }
 
 void CPUPipelineExecutor::SetEnableCache(bool enable_cache) {
-  if (enable_cache_ == enable_cache) return;
+  // if (enable_cache_ == enable_cache) return;
   enable_cache_ = enable_cache;
   // Reinitialize stages with the new cache setting
   ResetExecutionStagesCache();

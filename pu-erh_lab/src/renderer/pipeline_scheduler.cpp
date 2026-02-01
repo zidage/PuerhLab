@@ -159,7 +159,7 @@ void PipelineScheduler::ScheduleTask(PipelineTask&& task) {
           task.ResetPreviewRenderParams();
         }
         // Release all intermediate buffers to free memory
-        // task.pipeline_executor_->ClearAllIntermediateBuffers();
+        task.pipeline_executor_->ClearAllIntermediateBuffers();
         // if (render_desc.render_type_ == RenderType::FULL_RES_EXPORT) {
         //   task.pipeline_executor_->ReleaseAllGPUResources();
         // }

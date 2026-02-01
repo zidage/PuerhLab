@@ -184,6 +184,7 @@ std::shared_ptr<ImageBuffer> PipelineStage::ApplyDescriptorOnly() {
   }
 
   if (CacheValid()) {
+    std::cout << "RAW Cache VALID" << std::endl;
     if (next_stage_ && next_stage_->CacheValid()) {
       return nullptr;
     }
