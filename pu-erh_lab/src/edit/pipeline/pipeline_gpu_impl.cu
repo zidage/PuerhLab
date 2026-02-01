@@ -67,11 +67,13 @@ class GPUPipelineImpl {
     launcher_.SetOutputImage(output_img);
     launcher_.Execute();
   }
+
+  void ReleaseResources() { launcher_.ReleaseResources(); }
 };
 
 GPUPipelineWrapper::GPUPipelineWrapper() : impl_(std::make_unique<GPUPipelineImpl>()) {}
 
-GPUPipelineWrapper::~GPUPipelineWrapper() = default;
+GPUPipelineWrapper::~GPUPipelineWrapper() {impl_->ReleaseResources();};
 
 void GPUPipelineWrapper::SetInputImage(std::shared_ptr<ImageBuffer> input_image) {
   impl_->SetInput(input_image);
@@ -82,4 +84,6 @@ void GPUPipelineWrapper::SetParams(OperatorParams& cpu_params) { impl_->SetParam
 void GPUPipelineWrapper::SetFrameSink(IFrameSink* frame_sink) { impl_->SetFrameSink(frame_sink); }
 
 void GPUPipelineWrapper::Execute(std::shared_ptr<ImageBuffer> output) { impl_->Execute(output); }
+
+void GPUPipelineWrapper::ReleaseResources() { impl_->ReleaseResources(); }
 };  // namespace puerhlab

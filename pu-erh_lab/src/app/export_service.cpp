@@ -14,10 +14,12 @@
 
 #include "app/export_service.hpp"
 
+#include <atomic>
 #include <filesystem>
 #include <memory>
 #include <mutex>
 
+#include "image/image.hpp"
 #include "image/image_buffer.hpp"
 #include "io/image/image_loader.hpp"
 #include "io/image/image_writer.hpp"
@@ -38,8 +40,10 @@ void ExportService::RunExportRenderTask(const ExportTask& task) {
 
   // Create a pipeline task for export
   PipelineTask render_task;
-  render_task.input_ =
-      std::make_shared<ImageBuffer>(ByteBufferLoader::LoadByteBufferFromPath(img_src_path));
+  // To avoid reading too many images into memory at once, we let the pipeline load the image
+  // So we create a dummy Image object with only the path set
+  render_task.input_desc_ =
+      std::make_shared<Image>(img_src_path, ImageType::DEFAULT);
   render_task.pipeline_executor_                 = pipeline_guard->pipeline_;
   render_task.options_.is_blocking_              = true;
   render_task.options_.is_callback_              = false;
@@ -54,10 +58,12 @@ void ExportService::RunExportRenderTask(const ExportTask& task) {
   pipeline_scheduler_->ScheduleTask(std::move(render_task));
   // Wait for the render to complete
   auto rendered_image = render_future.get();
+  // Save pipeline back to storage
+  pipeline_service_->SavePipeline(pipeline_guard);
   // Use ImageWriter to write the image to disk
   ImageWriter::WriteImageToPath(
       img_src_path, rendered_image,
-      task.options_);  
+      task.options_);
 }
 
 void ExportService::ExportAll(
@@ -65,12 +71,13 @@ void ExportService::ExportAll(
   std::lock_guard<std::mutex> lock(queue_mutex_);
   auto                        results = std::make_shared<std::vector<ExportResult>>();
 
+  size_t queue_size = export_queue_.size();
   while (!export_queue_.empty()) {
     ExportTask task = export_queue_.front();
     export_queue_.pop_front();
 
     // Export in thread pool
-    export_thread_pool_.Submit([this, task, results, callback]() {
+    export_thread_pool_.Submit([this, task, results, callback, queue_size]() {
       ExportResult result;
       // Do export, this call will block until done
       try {
@@ -90,7 +97,7 @@ void ExportService::ExportAll(
       // If all done, call the callback
       {
         std::lock_guard<std::mutex> res_lock(result_mutex_);
-        if (results->size() == export_queue_.size()) {
+        if (results->size() == queue_size) {
           callback(results);
         }
       }

@@ -37,6 +37,10 @@ class GPUPipelineWrapper {
 
   void Execute(std::shared_ptr<ImageBuffer> output);
 
+  // Frees persistent GPU allocations used by the pipeline (scratch buffers, LUTs, etc.).
+  // Intended for batch export to avoid holding large VRAM allocations across many pipelines.
+  void ReleaseResources();
+
  private:
   std::unique_ptr<GPUPipelineImpl> impl_;
 

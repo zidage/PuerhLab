@@ -192,6 +192,10 @@ class PipelineStage {
 
   void SetForceCPUOutput(bool force) { force_cpu_output_ = force; }
 
+  // Releases persistent GPU allocations owned by this stage (if any).
+  // Does not modify operator configuration.
+  void ReleaseGPUResources();
+
   /**
    * @brief Set the parameters for an operator with the given type in this stage.
    *

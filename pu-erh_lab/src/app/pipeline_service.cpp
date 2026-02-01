@@ -23,24 +23,44 @@
 
 namespace puerhlab {
 void PipelineMgmtService::HandleEviction(sl_element_id_t evicted_id) {
-  auto it = loaded_pipelines_.find(evicted_id);
-  if (it != loaded_pipelines_.end()) {
+  // If the would-be evicted pipeline is pinned, keep it and evict another entry instead.
+  // This avoids unbounded cache growth during batch export when a pipeline is temporarily pinned.
+  sl_element_id_t candidate = evicted_id;
+  const size_t    max_attempts =
+      loaded_pipelines_.empty() ? 1 : (loaded_pipelines_.size() + 1);
+
+  for (size_t attempt = 0; attempt < max_attempts; ++attempt) {
+    auto it = loaded_pipelines_.find(candidate);
+    if (it == loaded_pipelines_.end()) {
+      return;
+    }
+
     auto pipeline_guard = it->second;
     if (!pipeline_guard->pinned_) {
       if (pipeline_guard->dirty_) {
         storage_service_->GetElementController().UpdatePipelineByElementId(
-            evicted_id, pipeline_guard->pipeline_);
+            candidate, pipeline_guard->pipeline_);
       }
       // Clear intermediate buffers before removing from cache to ensure timely memory release
       pipeline_guard->pipeline_->ClearAllIntermediateBuffers();
+      // Release persistent GPU allocations to avoid holding VRAM for evicted pipelines.
+      pipeline_guard->pipeline_->ReleaseAllGPUResources();
       loaded_pipelines_.erase(it);
-    } else {
-      // This pipeline is still pinned, resize the cache and keep it in the cache
-      auto keys = pipeline_cache_.GetLRUKeys();
-      pipeline_cache_.Resize(keys.size() + 5);
-      pipeline_cache_.RecordAccess(evicted_id, evicted_id);
+      return;
     }
+
+    // Pinned: put it back into the LRU and evict a different entry.
+    auto next = pipeline_cache_.RecordAccess_WithEvict(candidate, candidate);
+    if (!next.has_value()) {
+      return;
+    }
+    candidate = next.value();
   }
+
+  // Fallback: if everything is pinned, allow temporary growth to avoid evicting in-use pipelines.
+  auto keys = pipeline_cache_.GetLRUKeys();
+  pipeline_cache_.Resize(static_cast<uint32_t>(keys.size() + 5));
+  pipeline_cache_.RecordAccess(evicted_id, evicted_id);
 }
 
 auto PipelineMgmtService::LoadPipeline(sl_element_id_t id) -> std::shared_ptr<PipelineGuard> {
@@ -74,6 +94,7 @@ auto PipelineMgmtService::LoadPipeline(sl_element_id_t id) -> std::shared_ptr<Pi
       pipeline_guard->dirty_ = false;
     }
 
+    pipeline->SetExecutionStages(); // TODO: Use service as the only way to set/reset execution stages
     pipeline_guard->pipeline_              = std::move(pipeline);
     pipeline_guard->id_                    = id;
     pipeline_guard->pinned_                = true;
@@ -96,9 +117,13 @@ void PipelineMgmtService::SavePipeline(std::shared_ptr<PipelineGuard> pipeline) 
     return;
   }
 
-  // Always clear intermediate buffers when returning pipeline to cache
-  // This releases memory from input/output images that are no longer needed
-  pipeline->pipeline_->ClearAllIntermediateBuffers();
+  // // Always clear intermediate buffers when returning pipeline to cache
+  // // This releases memory from input/output images that are no longer needed
+  // pipeline->pipeline_->ClearAllIntermediateBuffers();
+  // // Export tends to run many distinct pipelines; avoid retaining large scratch buffers in cache.
+  // pipeline->pipeline_->ReleaseAllGPUResources();
+
+  pipeline->pipeline_->ResetExecutionStages();
 
   if (!pipeline->dirty_) {
     // Even if not dirty, we still need to unpin and return to cache

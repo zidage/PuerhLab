@@ -13,6 +13,7 @@
 //  limitations under the License.
 
 #include "renderer/pipeline_scheduler.hpp"
+
 #include <easy/profiler.h>
 
 #include <memory>
@@ -53,10 +54,11 @@ void PipelineTask::SetExecutorRenderParams() {
   }
   if (desc.render_type_ == RenderType::FULL_RES_EXPORT) {
     pipeline_executor_->SetRenderRes(true);
-    pipeline_executor_->SetForceCPUOutput(desc.render_type_ == RenderType::FULL_RES_EXPORT);
+    pipeline_executor_->SetForceCPUOutput(true);
     pipeline_executor_->SetEnableCache(false);
     // The default decode res is full, this call will be effective only when changed before
     pipeline_executor_->SetDecodeRes(DecodeRes::FULL);
+    return;
   }
   throw std::runtime_error("[ERROR] PipelineTask: Unknown render type");
 }
@@ -94,8 +96,8 @@ void PipelineScheduler::ScheduleTask(PipelineTask&& task) {
     {
       if (task.input_desc_ && !task.input_) {
         // Load image data into buffer
-        task.input_ =
-            std::make_shared<ImageBuffer>(ByteBufferLoader::LoadByteBufferFromImage(task.input_desc_));
+        task.input_ = std::make_shared<ImageBuffer>(
+            ByteBufferLoader::LoadByteBufferFromImage(task.input_desc_));
       }
       if (task.input_) {
         auto& render_desc = task.options_.render_desc_;
@@ -120,7 +122,15 @@ void PipelineScheduler::ScheduleTask(PipelineTask&& task) {
           if (render_desc.render_type_ == RenderType::THUMBNAIL) {
             // Reset to FULL_RES_PREVIEW mode after thumbnail render
             task.ResetThumbnailRenderParams();
-            task.pipeline_executor_->ClearAllIntermediateBuffers();
+            // task.pipeline_executor_->ClearAllIntermediateBuffers();
+          }
+
+          if (render_desc.render_type_ == RenderType::FULL_RES_EXPORT) {
+            // Release all intermediate buffers after full res export to free memory
+            // task.pipeline_executor_->ClearAllIntermediateBuffers();
+            // // Also release persistent GPU allocations to avoid accumulating VRAM usage
+            // // across many cached pipelines during batch export.
+            // task.pipeline_executor_->ReleaseAllGPUResources();
           }
           return;
         }
@@ -142,10 +152,17 @@ void PipelineScheduler::ScheduleTask(PipelineTask&& task) {
 
       // Cleanup after callback completes
       auto& render_desc = task.options_.render_desc_;
-      if (render_desc.render_type_ == RenderType::THUMBNAIL) {
-        task.ResetThumbnailRenderParams();
+      if (render_desc.render_type_ == RenderType::THUMBNAIL ||
+          render_desc.render_type_ == RenderType::FULL_RES_EXPORT) {
+        if (render_desc.render_type_ == RenderType::THUMBNAIL) {
+          // Reset to fast preview mode after full res export
+          task.ResetPreviewRenderParams();
+        }
         // Release all intermediate buffers to free memory
-        task.pipeline_executor_->ClearAllIntermediateBuffers();
+        // task.pipeline_executor_->ClearAllIntermediateBuffers();
+        // if (render_desc.render_type_ == RenderType::FULL_RES_EXPORT) {
+        //   task.pipeline_executor_->ReleaseAllGPUResources();
+        // }
       }
     } else if (task.options_.is_blocking_) {
       // In case of failure, set nullptr

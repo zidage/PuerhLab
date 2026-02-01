@@ -44,7 +44,7 @@ class PipelineMgmtService final {
 
   std::mutex                                                          lock_;
 
-  static constexpr size_t                                             default_cache_capacity_ = 64;
+  static constexpr size_t                                             default_cache_capacity_ = 16;
 
   void HandleEviction(sl_element_id_t evicted_id);
 

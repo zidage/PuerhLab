@@ -313,7 +313,7 @@ def_library(SleeveManager
 
 def_library(ImageWriter
     SOURCES io/image/image_writer.cpp
-    PUBLIC_DEPS OpenImageIO::OpenImageIO ImageBuffer
+    PUBLIC_DEPS OpenImageIO::OpenImageIO ${OpenCV_LIBS} ImageBuffer 
 )
 
 # ==============================================================================
@@ -321,7 +321,7 @@ def_library(ImageWriter
 # ==============================================================================
 def_library(FSService
     SOURCES app/sleeve_service.cpp
-    PUBLIC_DEPS SleeveFS EditHistory ImageWriter 
+    PUBLIC_DEPS SleeveFS EditHistory
 )
 
 
@@ -349,6 +349,11 @@ def_library(ImportService
 def_library(ThumbnailService
     SOURCES app/thumbnail_service.cpp
     PUBLIC_DEPS EditPipeline ThreadPool StrConv ImagePoolService PipelineMgmtService
+)
+
+def_library(ExportService
+    SOURCES app/export_service.cpp
+    PUBLIC_DEPS ImageWriter ImageLoader ImagePoolService PipelineMgmtService PipelineScheduler ThreadPool
 )
 
 def_library(SleeveFilterService

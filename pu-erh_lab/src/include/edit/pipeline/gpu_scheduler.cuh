@@ -76,10 +76,9 @@ class GPU_KernelLauncher {
     }
   }
 
-  ~GPU_KernelLauncher() {
+  void ReleaseScratchBuffers() {
     if (stream_) {
-      cudaStreamDestroy(stream_);
-      stream_ = nullptr;
+      (void)cudaStreamSynchronize(stream_);
     }
     if (work_buffer_) {
       cudaFree(work_buffer_);
@@ -89,11 +88,23 @@ class GPU_KernelLauncher {
       cudaFree(temp_buffer_);
       temp_buffer_ = nullptr;
     }
+    allocated_size_ = 0;
+  }
 
+  void ReleaseResources() {
+    ReleaseScratchBuffers();
     params_.to_ws_lut_.Reset();
     params_.lmt_lut_.Reset();
     params_.to_output_lut_.Reset();
     params_.to_output_params_.odt_params_.Reset();
+  }
+
+  ~GPU_KernelLauncher() {
+    if (stream_) {
+      cudaStreamDestroy(stream_);
+      stream_ = nullptr;
+    }
+    ReleaseResources();
   }
 
   void SetInputImage(std::shared_ptr<ImageBuffer> input_img) {

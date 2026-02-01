@@ -34,7 +34,6 @@ target_compile_definitions(SingleThumbnailLoad PRIVATE LIBRAW_NODLL)
 # add_executable(SleeveMapperTest storage/sleeve_mapper_test.cpp)
 # target_include_directories(SleeveMapperTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
 # target_link_libraries(SleeveMapperTest PRIVATE GTest::gtest_main SleeveFS SleeveManager ImagePool)
-
 add_executable(SleeveFSTest sleeve/sleeve_fs_test.cpp)
 target_include_directories(SleeveFSTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
 target_link_libraries(SleeveFSTest PRIVATE GTest::gtest_main SleeveFS StrConv)
@@ -42,7 +41,6 @@ target_link_libraries(SleeveFSTest PRIVATE GTest::gtest_main SleeveFS StrConv)
 # add_executable(SleeveFilterTest sleeve/sleeve_filter_test.cpp)
 # target_include_directories(SleeveFilterTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
 # target_link_libraries(SleeveFilterTest PRIVATE GTest::gtest_main SleeveFS SleeveManager StrConv)
-
 
 # add_executable(SleeveViewTest sleeve/sleeve_view_test.cpp)
 # target_include_directories(SleeveViewTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
@@ -121,7 +119,6 @@ target_link_libraries(SleeveFSTest PRIVATE GTest::gtest_main SleeveFS StrConv)
 # target_link_libraries(EditTransactionTest easy_profiler)
 # endif()
 
-
 # add_executable(EditVersionTest edit/history/version_test.cpp)
 # target_include_directories(EditVersionTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
 # target_link_libraries(EditVersionTest GTest::gtest_main Operators SleeveManager ImageDecoder EditPipeline PipelineScheduler OpenColorIO lcms2::lcms2)
@@ -142,13 +139,14 @@ target_link_libraries(SleeveFSTest PRIVATE GTest::gtest_main SleeveFS StrConv)
 # if (WIN32)
 # target_link_libraries(PipelineSerialTest easy_profiler)
 # endif()
-
 add_executable(ImagePreview gui_pocs/image_preview_cpu.cpp)
 target_include_directories(ImagePreview PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
-target_link_libraries(ImagePreview Image ImageLoader EditPipeline EditViewer Operators  PipelineScheduler OpenColorIO::OpenColorIO lcms2::lcms2 Qt6::Widgets)
-if (WIN32)
-target_link_libraries(ImagePreview easy_profiler FSService )
+target_link_libraries(ImagePreview Image ImageLoader EditPipeline EditViewer Operators PipelineScheduler OpenColorIO::OpenColorIO lcms2::lcms2 Qt6::Widgets)
+
+if(WIN32)
+  target_link_libraries(ImagePreview easy_profiler FSService)
 endif()
+
 target_compile_definitions(ImagePreview PRIVATE PUERHLAB_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 
 set(PUERHLAB_IMAGE_PREVIEW_FONT_SRC "${CMAKE_SOURCE_DIR}/pu-erh_lab/src/config/fonts/main_IBM.ttf")
@@ -161,36 +159,49 @@ add_custom_command(TARGET ImagePreview POST_BUILD
 add_executable(ImportServiceTest app/import_service_test.cpp)
 target_include_directories(ImportServiceTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
 target_link_libraries(ImportServiceTest ImportService ProjectService GTest::gtest_main)
-if (WIN32)
-target_link_libraries(ImportServiceTest easy_profiler)
+
+if(WIN32)
+  target_link_libraries(ImportServiceTest easy_profiler)
 endif()
 
 add_executable(SleeveServiceTest app/sleeve_service_test.cpp)
 target_include_directories(SleeveServiceTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
 target_link_libraries(SleeveServiceTest ProjectService GTest::gtest_main)
-if (WIN32)
-target_link_libraries(SleeveServiceTest easy_profiler)
+
+if(WIN32)
+  target_link_libraries(SleeveServiceTest easy_profiler)
 endif()
 
 add_executable(FilterServiceTest app/filter_service_test.cpp)
 target_include_directories(FilterServiceTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
 target_link_libraries(FilterServiceTest ImportService ProjectService SleeveFilterService GTest::gtest_main)
-if (WIN32)
-target_link_libraries(FilterServiceTest easy_profiler)
+
+if(WIN32)
+  target_link_libraries(FilterServiceTest easy_profiler)
 endif()
 
 add_executable(PipelineServiceTest app/pipeline_service_test.cpp)
 target_include_directories(PipelineServiceTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
 target_link_libraries(PipelineServiceTest ProjectService PipelineMgmtService GTest::gtest_main)
-if (WIN32)
-target_link_libraries(PipelineServiceTest easy_profiler)
+
+if(WIN32)
+  target_link_libraries(PipelineServiceTest easy_profiler)
 endif()
 
 add_executable(ThumbnailServiceTest app/thumbnail_service_test.cpp)
 target_include_directories(ThumbnailServiceTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
 target_link_libraries(ThumbnailServiceTest ThumbnailService ProjectService ImportService GTest::gtest_main)
-if (WIN32)
-target_link_libraries(ThumbnailServiceTest easy_profiler)
+
+if(WIN32)
+  target_link_libraries(ThumbnailServiceTest easy_profiler)
+endif()
+
+add_executable(ExportServiceTest app/export_service_test.cpp)
+target_include_directories(ExportServiceTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
+target_link_libraries(ExportServiceTest ExportService ProjectService ImportService GTest::gtest_main ImageWriter)
+
+if(WIN32)
+  target_link_libraries(ExportServiceTest easy_profiler)
 endif()
 
 add_executable(ThumbnailAlbumQtDemo app/thumbnail_album_qt_demo.cpp)
@@ -205,7 +216,13 @@ add_custom_command(TARGET ThumbnailAlbumQtDemo POST_BUILD
   VERBATIM
 )
 
+add_executable(CompleteUIDemo gui_pocs/album_editor_qt_demo.cpp)
+target_include_directories(CompleteUIDemo PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
+target_link_libraries(CompleteUIDemo PRIVATE ThumbnailService ProjectService ImportService ExportService PipelineMgmtService FSService Qt6::Widgets easy_profiler SleeveFilterService EditPipeline EditViewer)
+target_compile_definitions(CompleteUIDemo PRIVATE PUERHLAB_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+
 include(GoogleTest)
+
 # set(CMAKE_GTEST_DISCOVER_TESTS_DISCOVERY_MODE PRE_TEST)
 # gtest_discover_tests(SampleTest)
 # gtest_discover_tests(SingleRawLoad)

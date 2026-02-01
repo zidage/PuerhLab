@@ -307,11 +307,23 @@ void CPUPipelineExecutor::InitDefaultPipeline() {
 }
 
 void CPUPipelineExecutor::ClearAllIntermediateBuffers() {
-  for (auto& stage : stages_) {
-    stage.ClearIntermediateBuffers();
+  for (auto& stage : exec_stages_) {
+    stage->ClearIntermediateBuffers();
   }
+  ReleaseAllGPUResources();
+
   if (merged_stages_) {
     merged_stages_->ClearIntermediateBuffers();
+  }
+}
+
+void CPUPipelineExecutor::ReleaseAllGPUResources() {
+  for (auto& stage : exec_stages_) {
+    stage->ReleaseGPUResources();
+  }
+
+  if (merged_stages_) {
+    merged_stages_->ReleaseGPUResources();
   }
 }
 

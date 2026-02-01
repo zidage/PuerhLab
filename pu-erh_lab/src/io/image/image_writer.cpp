@@ -72,25 +72,6 @@ auto FormatSupportsAlpha(ImageFormatType fmt) -> bool {
   }
 }
 
-auto OIIOPluginHint(ImageFormatType fmt) -> std::string {
-  switch (fmt) {
-    case ImageFormatType::JPEG:
-      return "jpeg";
-    case ImageFormatType::PNG:
-      return "png";
-    case ImageFormatType::TIFF:
-      return "tiff";
-    case ImageFormatType::WEBP:
-      return "webp";
-    case ImageFormatType::BMP:
-      return "bmp";
-    case ImageFormatType::EXR:
-      return "openexr";
-    default:
-      return {};
-  }
-}
-
 auto MakeOIIOBuffer(const cv::Mat& rgba32f, const ExportFormatOptions& options,
                     TypeDesc& out_spec_format, TypeDesc& out_input_format, int& out_channels)
     -> cv::Mat {
@@ -242,10 +223,10 @@ auto TryWriteWithOpenImageIO(const image_path_t& src_path, const std::filesystem
   ForceUprightOrientation(outspec);
   ApplyOIIOFormatOptions(outspec, options);
 
-  const std::string            plugin_hint = OIIOPluginHint(options.format_);
-  std::unique_ptr<ImageOutput> out =
-      plugin_hint.empty() ? ImageOutput::create(dst) : ImageOutput::create(dst, plugin_hint);
-  if (!out) out = ImageOutput::create(dst);
+  // OIIO v3 exports ImageOutput::create(string_view, ...) (and a UTF-16 helper).
+  // Avoid the deprecated create(std::string, std::string) overload, which can
+  // lead to unresolved externals on MSVC when linking against the DLL.
+  std::unique_ptr<ImageOutput> out = ImageOutput::create(dst);
   if (!out) {
     out_error = "OpenImageIO: failed to create ImageOutput";
     return false;

@@ -104,5 +104,12 @@ class CPUPipelineExecutor : public PipelineExecutor {
    *        while keeping the pipeline configuration intact.
    */
   void ClearAllIntermediateBuffers();
+
+  /**
+   * @brief Release persistent GPU allocations held by execution stages.
+   *        Useful for batch export to avoid holding large VRAM allocations
+   *        across many cached pipelines.
+   */
+  void ReleaseAllGPUResources();
 };
 };  // namespace puerhlab

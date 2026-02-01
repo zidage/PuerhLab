@@ -148,6 +148,14 @@ void PipelineStage::ClearIntermediateBuffers() {
   output_cache_valid_ = false;
 }
 
+void PipelineStage::ReleaseGPUResources() {
+  if (stage_role_ != StageRole::GpuStreamable) {
+    return;
+  }
+  gpu_executor_.ReleaseResources();
+  gpu_setup_done_ = false;
+}
+
 auto PipelineStage::DetermineStageRole(PipelineStageName stage, bool is_streamable) -> StageRole {
   switch (stage) {
     case PipelineStageName::Image_Loading:
@@ -246,6 +254,7 @@ std::shared_ptr<ImageBuffer> PipelineStage::ApplyGpuStream(OperatorParams& globa
   if (force_cpu_output_) {
     try {
       output_cache_->SyncToCPU();
+      output_cache_->ReleaseGPUData(); // Free GPU memory after sync
     } catch (const std::exception&) {
       // Keep GPU result if CPU sync fails; caller will validate.
     }

@@ -67,7 +67,7 @@ class ExportService {
       : sleeve_service_(std::move(sleeve_service)),
         image_pool_service_(std::move(image_pool_service)),
         pipeline_service_(std::move(pipeline_service)) {
-    pipeline_scheduler_ = RenderService::GetThumbnailOrExportScheduler(4);
+    pipeline_scheduler_ = RenderService::GetThumbnailOrExportScheduler(8);
   };
 
   ExportService(const ExportService&)            = delete;
