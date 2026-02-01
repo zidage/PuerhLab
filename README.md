@@ -36,7 +36,7 @@ Applied with 2383 LUT and highlight recovery.
 </table>
 
 <figure>
-  <img src="docs/demo/editor.gif" width="1000">
+  <img src="docs/demo/showcase.gif" width="800">
 </figure>
 
 ## 🎯 Vision
