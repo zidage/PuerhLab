@@ -49,7 +49,7 @@ void PipelineTask::SetExecutorRenderParams() {
     pipeline_executor_->SetRenderRes(true);
     pipeline_executor_->SetForceCPUOutput(false);
     pipeline_executor_->SetEnableCache(true);
-    pipeline_executor_->SetDecodeRes(DecodeRes::FULL);
+    // pipeline_executor_->SetDecodeRes(DecodeRes::FULL);
     return;
   }
   if (desc.render_type_ == RenderType::FULL_RES_EXPORT) {
@@ -70,8 +70,8 @@ void PipelineTask::ResetPreviewRenderParams() {
   // A simple status machine to automatically set back to fast preview mode
   pipeline_executor_->SetRenderRes(false, 4096);
   pipeline_executor_->SetForceCPUOutput(false);
-  pipeline_executor_->SetEnableCache(true);
-  pipeline_executor_->SetDecodeRes(DecodeRes::FULL);
+  // pipeline_executor_->SetEnableCache(true);
+  // pipeline_executor_->SetDecodeRes(DecodeRes::FULL);
 }
 
 void PipelineTask::ResetThumbnailRenderParams() {

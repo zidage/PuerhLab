@@ -56,7 +56,7 @@ void ShadowsOp::SetParams(const nlohmann::json& params) {
     offset_ = 0.0f;
   } else {
     offset_        = params[script_name_].get<float>();
-    curve_.control_ = std::clamp(offset_ / 100.0f, -1.0f, 1.0f);
+    curve_.control_ = std::clamp(offset_ / 80.0f, -1.0f, 1.0f);
     curve_.toe_end_ = std::clamp(0.55f, 0.0f, 1.0f);
     curve_.m0_      = 1.0f + curve_.control_ * curve_.slope_range_;
     curve_.x1_      = curve_.toe_end_;
@@ -66,7 +66,7 @@ void ShadowsOp::SetParams(const nlohmann::json& params) {
 }
 
 void ShadowsOp::SetGlobalParams(OperatorParams& params) const {
-  params.shadows_offset_ = offset_ / 100.0f;
+  params.shadows_offset_ = offset_ / 80.0f;
   params.shadows_m0_     = 1.0f + params.shadows_offset_ * curve_.slope_range_;
   params.shadows_x0_     = curve_.x0_;
   params.shadows_x1_     = curve_.x1_;

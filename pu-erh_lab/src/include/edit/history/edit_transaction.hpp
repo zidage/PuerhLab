@@ -14,8 +14,10 @@
 
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <string>
 
 #include "edit/operators/op_base.hpp"
 #include "edit/operators/operator_factory.hpp"
@@ -32,7 +34,7 @@ enum class TransactionType : int { _ADD, _DELETE, _EDIT };
  */
 class EditTransaction {
  private:
-  tx_id_t                       tx_id_;
+  tx_id_t                       tx_id_ = 0;
   TransactionType               type_;
 
   OperatorType                  operator_type_;
@@ -55,11 +57,14 @@ class EditTransaction {
     auto params_str = operator_params_.dump();
   }
 
-  EditTransaction(const nlohmann::json& j) { FromJSON(j); }
+ EditTransaction(const nlohmann::json& j) { FromJSON(j); }
 
   auto SetTransactionID(tx_id_t id) { tx_id_ = id; }
 
   auto GetTransactionID() const -> tx_id_t { return tx_id_; }
+
+  auto GetTransactionType() const -> TransactionType { return type_; }
+  auto GetOperatorParams() const -> const nlohmann::json& { return operator_params_; }
 
   auto ApplyTransaction(PipelineExecutor& pipeline) -> bool;
 
@@ -74,9 +79,9 @@ class EditTransaction {
     return last_operator_params_;
   }
 
-  auto UndoTransaction() -> EditTransaction {
+  auto UndoTransaction() const -> EditTransaction {
     return EditTransaction(TransactionType::_EDIT, operator_type_, stage_name_,
-                           last_operator_params_);
+                           last_operator_params_.value_or(nlohmann::json::object()));
   }
 
   auto Hash() const -> Hash128 {
@@ -92,5 +97,11 @@ class EditTransaction {
     }
     return result;
   }
+
+  static auto TransactionTypeToString(TransactionType type) -> const char*;
+  static auto OperatorTypeToString(OperatorType type) -> const char*;
+  static auto StageNameToString(PipelineStageName stage) -> const char*;
+  auto Describe(bool include_params = true, std::size_t max_params_chars = 160) const
+      -> std::string;
 };
 };  // namespace puerhlab

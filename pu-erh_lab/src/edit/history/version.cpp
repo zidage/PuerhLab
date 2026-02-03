@@ -16,6 +16,8 @@
 
 #include <xxhash.h>
 
+#include <cstdint>
+
 #include "edit/history/edit_transaction.hpp"
 #include "type/hash_type.hpp"
 #include "utils/clock/time_provider.hpp"
@@ -34,7 +36,7 @@ Version::Version(sl_element_id_t bound_image) : tx_id_generator_(0), bound_image
 }
 
 Version::Version(sl_element_id_t bound_image, version_id_t parent_version_id)
-    : tx_id_generator_(0), version_id_(parent_version_id), bound_image_(bound_image) {
+    : tx_id_generator_(0), parent_version_id_(parent_version_id), bound_image_(bound_image) {
   added_time_         = std::chrono::system_clock::to_time_t(TimeProvider::Now());
   last_modified_time_ = added_time_;
   CalculateVersionID();
@@ -43,19 +45,39 @@ Version::Version(sl_element_id_t bound_image, version_id_t parent_version_id)
 Version::Version(nlohmann::json& j) : tx_id_generator_(0) { FromJSON(j); }
 
 void Version::CalculateVersionID() {
-  version_id_ = Hash128::Blend(version_id_,
-                               Hash128::Compute(&last_modified_time_, sizeof(last_modified_time_)));
-  if (!edit_transactions_.empty()) {
-    const auto& tx = edit_transactions_.back();
-    version_id_    = Hash128::Blend(version_id_, Hash128::Compute(&tx, sizeof(EditTransaction)));
-  } else {
-    // If there are no edit transactions, use the bound image ID to ensure uniqueness
-    version_id_ =
-        Hash128::Blend(version_id_, Hash128::Compute(&bound_image_, sizeof(bound_image_)));
+  Hash128 h = parent_version_id_;
+  h         = Hash128::Blend(h, Hash128::Compute(&bound_image_, sizeof(bound_image_)));
+
+  const uint64_t tx_count = static_cast<uint64_t>(edit_transactions_.size());
+  h                      = Hash128::Blend(h, Hash128::Compute(&tx_count, sizeof(tx_count)));
+
+  // edit_transactions_ is maintained as "newest first" (push_front), so iterate oldest->newest.
+  for (auto it = edit_transactions_.rbegin(); it != edit_transactions_.rend(); ++it) {
+    h = Hash128::Blend(h, it->Hash());
   }
+  version_id_ = h;
 }
 
-auto Version::GetVersionID() const -> version_id_t { return Hash128(version_id_); }
+auto Version::GetVersionID() const -> version_id_t { return version_id_; }
+
+auto Version::GetParentVersionID() const -> version_id_t { return parent_version_id_; }
+
+auto Version::HasParentVersion() const -> bool {
+  return parent_version_id_.low64() != 0 || parent_version_id_.high64() != 0;
+}
+
+void Version::SetParentVersionID(version_id_t parent_version_id) {
+  parent_version_id_ = parent_version_id;
+  SetLastModifiedTime();
+  CalculateVersionID();
+}
+
+void Version::ClearParentVersionID() {
+  parent_version_id_ = version_id_t{};
+  SetLastModifiedTime();
+  CalculateVersionID();
+}
+
 auto Version::GetAddTime() const -> std::time_t { return added_time_; }
 
 auto Version::GetLastModifiedTime() const -> std::time_t { return last_modified_time_; }
@@ -85,7 +107,7 @@ void Version::AppendEditTransaction(EditTransaction&& edit_transaction) {
   auto& stage = base_pipeline_executor_->GetStage(last_tx.GetTxOpStageName());
   auto  op    = stage.GetOperator(last_tx.GetTxOperatorType());
   // If this operator has been registered in this stage, chain the parent transaction
-  if (op) {
+  if (!last_tx.GetLastOperatorParams().has_value() && op) {
     auto parent_params = (*op)->op_->GetParams();
     last_tx.SetLastOperatorParams(parent_params);
   }
@@ -127,8 +149,12 @@ auto Version::GetAllEditTransactions() const -> const std::list<EditTransaction>
 
 auto Version::ToJSON() const -> nlohmann::json {
   nlohmann::json j;
+  j["version_id"]         = version_id_.ToString();
   j["version_id_low"]     = version_id_.low64();
   j["version_id_high"]    = version_id_.high64();
+  j["parent_version_id"]  = parent_version_id_.ToString();
+  j["parent_version_low"] = parent_version_id_.low64();
+  j["parent_version_high"] = parent_version_id_.high64();
   j["added_time"]         = added_time_;
   j["last_modified_time"] = last_modified_time_;
   j["bound_image"]        = bound_image_;
@@ -143,14 +169,28 @@ auto Version::ToJSON() const -> nlohmann::json {
 }
 
 void Version::FromJSON(const nlohmann::json& j) {
-  if (!j.is_object() || !j.contains("version_id_low") || !j.contains("version_id_high") ||
+  if (!j.is_object() || (!j.contains("version_id_low") && !j.contains("version_id")) ||
       !j.contains("added_time") || !j.contains("last_modified_time") ||
       !j.contains("bound_image") || !j.contains("edit_transactions") ||
       !j.contains("tx_id_start")) {
     throw std::runtime_error("Version: Invalid JSON format");
   }
-  version_id_ =
-      Hash128(j.at("version_id_low").get<uint64_t>(), j.at("version_id_high").get<uint64_t>());
+  if (j.contains("version_id_low") && j.contains("version_id_high")) {
+    version_id_ =
+        Hash128(j.at("version_id_low").get<uint64_t>(), j.at("version_id_high").get<uint64_t>());
+  } else {
+    version_id_ = Hash128::FromString(j.at("version_id").get<std::string>());
+  }
+
+  if (j.contains("parent_version_low") && j.contains("parent_version_high")) {
+    parent_version_id_ = Hash128(j.at("parent_version_low").get<uint64_t>(),
+                                 j.at("parent_version_high").get<uint64_t>());
+  } else if (j.contains("parent_version_id")) {
+    parent_version_id_ = Hash128::FromString(j.at("parent_version_id").get<std::string>());
+  } else {
+    parent_version_id_ = version_id_t{};
+  }
+
   added_time_         = j.at("added_time").get<std::time_t>();
   last_modified_time_ = j.at("last_modified_time").get<std::time_t>();
   bound_image_        = j.at("bound_image").get<sl_element_id_t>();

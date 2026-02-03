@@ -97,9 +97,9 @@ TEST_F(EditHistoryMgmtServiceTests, BasicHistoryRWTest) {
 
     // Commit a version using the same patterns as edit/history tests.
     auto v1 = MakeVersionWithTwoTransactions(file_id, 1.0f, 2.2f);
-    committed_id = history_guard->history_->CommitVersion(std::move(v1));
+    committed_id = history_service.CommitVersion(history_guard, std::move(v1));
     EXPECT_NO_THROW((void)history_guard->history_->GetVersion(committed_id));
-    history_guard->dirty_ = true;
+    EXPECT_TRUE(history_guard->dirty_);
 
     // Save + sync to persist to DB.
     EXPECT_NO_THROW(history_service.SaveHistory(history_guard));
@@ -150,8 +150,8 @@ TEST_F(EditHistoryMgmtServiceTests, SyncPersistsDirtyHistoryWithoutSave) {
     std::this_thread::sleep_for(std::chrono::milliseconds(5));
 
     auto v1 = MakeVersionWithTwoTransactions(file_id, 0.3f, 0.8f);
-    committed_id = history_guard->history_->CommitVersion(std::move(v1));
-    history_guard->dirty_ = true;
+    committed_id = history_service.CommitVersion(history_guard, std::move(v1));
+    EXPECT_TRUE(history_guard->dirty_);
 
     history_service.Sync();
     EXPECT_FALSE(history_guard->dirty_);
@@ -180,4 +180,3 @@ TEST_F(EditHistoryMgmtServiceTests, SaveHistoryNullGuardNoThrow) {
   EXPECT_NO_THROW(history_service.SaveHistory(null_guard));
 }
 }  // namespace puerhlab
-

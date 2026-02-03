@@ -54,6 +54,9 @@ class EditHistoryMgmtService final {
 
   auto LoadHistory(sl_element_id_t file_id) -> std::shared_ptr<EditHistoryGuard>;
 
+  auto CommitVersion(const std::shared_ptr<EditHistoryGuard>& history_guard, Version&& version)
+      -> history_id_t;
+
   void SaveHistory(const std::shared_ptr<EditHistoryGuard>& history_guard);
 
   void Sync();

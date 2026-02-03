@@ -72,6 +72,8 @@ class EditHistory {
   auto GetLatestVersion() -> VersionNode&;
   auto RemoveVersion(history_id_t ver_id) -> bool;
 
+  auto GetCommitTree() const -> const std::list<VersionNode>& { return commit_tree_; }
+
   auto ToJSON() const -> nlohmann::json;
   void FromJSON(const nlohmann::json& j);
 };

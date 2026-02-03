@@ -114,6 +114,31 @@ auto EditHistoryMgmtService::LoadHistory(sl_element_id_t file_id)
   return history_guard;
 }
 
+auto EditHistoryMgmtService::CommitVersion(const std::shared_ptr<EditHistoryGuard>& history_guard,
+                                          Version&&                                version)
+    -> history_id_t {
+  if (!history_guard || !history_guard->history_) {
+    throw std::runtime_error("[ERROR] EditHistoryMgmtService: CommitVersion called with null guard");
+  }
+
+  std::unique_lock<std::mutex> guard(lock_);
+
+  const sl_element_id_t file_id = history_guard->file_id_;
+
+  // Ensure the guard remains tracked by the cache even if constructed externally.
+  std::optional<sl_element_id_t> evicted = cache_.RecordAccess_WithEvict(file_id, file_id);
+  if (evicted.has_value()) {
+    HandleEviction(evicted.value());
+  }
+
+  cached_histories_[file_id] = history_guard;
+  history_guard->pinned_     = true;
+
+  const history_id_t committed_id = history_guard->history_->CommitVersion(std::move(version));
+  history_guard->dirty_           = true;
+  return committed_id;
+}
+
 void EditHistoryMgmtService::SaveHistory(const std::shared_ptr<EditHistoryGuard>& history_guard) {
   if (!history_guard) {
     return;
@@ -158,4 +183,3 @@ void EditHistoryMgmtService::Sync() {
   }
 }
 }  // namespace puerhlab
-

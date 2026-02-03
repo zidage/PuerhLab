@@ -226,7 +226,7 @@ add_custom_command(TARGET ThumbnailAlbumQtDemo POST_BUILD
 
 add_executable(CompleteUIDemo gui_pocs/album_editor_qt_demo.cpp)
 target_include_directories(CompleteUIDemo PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
-target_link_libraries(CompleteUIDemo PRIVATE ThumbnailService ProjectService ImportService ExportService PipelineMgmtService FSService Qt6::Widgets easy_profiler SleeveFilterService EditPipeline EditViewer)
+target_link_libraries(CompleteUIDemo PRIVATE ThumbnailService ProjectService ImportService ExportService PipelineMgmtService EditHistoryMgmtService FSService Qt6::Widgets easy_profiler SleeveFilterService EditPipeline EditViewer)
 target_compile_definitions(CompleteUIDemo PRIVATE PUERHLAB_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 add_custom_command(TARGET CompleteUIDemo POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:CompleteUIDemo>/fonts"

@@ -86,6 +86,7 @@ auto EditHistory::CommitVersion(Version&& ver) -> history_id_t {
   }
   version_storage_[ver_id] = std::move(ver);
   commit_tree_.emplace_back(version_storage_[ver_id]);
+  commit_tree_.back().commit_id_ = static_cast<p_hash_t>(commit_tree_.size());
   SetLastModifiedTime();
   CalculateHistoryID();
   return ver_id;

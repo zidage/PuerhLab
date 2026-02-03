@@ -70,6 +70,10 @@ class Version {
 
   void CalculateVersionID();
   auto GetVersionID() const -> version_id_t;
+  auto GetParentVersionID() const -> version_id_t;
+  auto HasParentVersion() const -> bool;
+  void SetParentVersionID(version_id_t parent_version_id);
+  void ClearParentVersionID();
 
   void SetAddTime();
   auto GetAddTime() const -> std::time_t;
