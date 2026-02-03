@@ -304,4 +304,9 @@ void ACES_ODT_Op::init_ODTParams() {
       MakeUpperHullGammaTable(*odt.table_gamut_cusps_, odt));
   odt.hue_linearity_search_range_ = DetermineHueLinearitySearchRange(*odt.table_hues_);
 }
+
+void ACES_ODT_Op::EnableGlobalParams(OperatorParams& params, bool enable) {
+  params.to_output_enabled_  = enable;
+  params.to_output_dirty_    = enable;
+}
 };  // namespace puerhlab

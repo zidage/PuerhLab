@@ -97,4 +97,8 @@ void SharpenOp::SetGlobalParams(OperatorParams& params) const {
   params.sharpen_radius_    = radius_;
   params.sharpen_threshold_ = threshold_;
 }
+
+void SharpenOp::EnableGlobalParams(OperatorParams& params, bool enable) {
+  params.sharpen_enabled_ = enable;
+}
 };  // namespace puerhlab

@@ -45,5 +45,6 @@ class CVCvtColorOp : public OperatorBase<CVCvtColorOp> {
   void SetParams(const nlohmann::json& params) override;
 
   void SetGlobalParams(OperatorParams& params) const override;
+  void EnableGlobalParams(OperatorParams& params, bool enable) override;
 };
 }  // namespace puerhlab

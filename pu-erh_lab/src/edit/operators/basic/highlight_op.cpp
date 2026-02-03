@@ -69,4 +69,8 @@ void HighlightsOp::SetGlobalParams(OperatorParams& params) const {
   params.highlights_offset_ = offset_ / 50.0f;
   params.highlights_m1_     = curve_.m1_;
 }
+
+void HighlightsOp::EnableGlobalParams(OperatorParams& params, bool enable) {
+  params.highlights_enabled_ = enable;
+}
 }  // namespace puerhlab

@@ -57,5 +57,6 @@ class ACES_ODT_Op : public OperatorBase<ACES_ODT_Op> {
   auto GetParams() const -> nlohmann::json override;
   void SetParams(const nlohmann::json& j) override;
   void SetGlobalParams(OperatorParams& params) const override;
+  void EnableGlobalParams(OperatorParams& params, bool enable) override;
 };
 };  // namespace puerhlab

@@ -125,4 +125,9 @@ void RawDecodeOp::SetGlobalParams(OperatorParams&) const {
   // throw std::runtime_error("RawDecodeOp does not support global parameters.");
   // DO NOTHING
 }
+
+void RawDecodeOp::EnableGlobalParams(OperatorParams&, bool) {
+  // Still DO NOTHING
+  // RawDecodeOp is not a streamable operator
+}
 };  // namespace puerhlab

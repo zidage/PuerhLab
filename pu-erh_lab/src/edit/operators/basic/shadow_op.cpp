@@ -75,4 +75,8 @@ void ShadowsOp::SetGlobalParams(OperatorParams& params) const {
   params.shadows_m1_     = curve_.m1_;
   params.shadows_dx_     = curve_.dx_;
 }
+
+void ShadowsOp::EnableGlobalParams(OperatorParams& params, bool enable) {
+  params.shadows_enabled_ = enable;
+}
 }  // namespace puerhlab

@@ -100,4 +100,9 @@ void ResizeOp::SetGlobalParams(OperatorParams&) const {
   // throw std::runtime_error("ResizeOp does not support global parameters.");
   // DO NOTHING
 }
+
+void ResizeOp::EnableGlobalParams(OperatorParams&, bool) {
+  // Still DO NOTHING
+  // ResizeOp is not a streamable operator
+}
 };  // namespace puerhlab

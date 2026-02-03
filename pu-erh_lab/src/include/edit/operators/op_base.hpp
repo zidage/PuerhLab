@@ -67,8 +67,6 @@ enum class OperatorType : int {
   UNKNOWN  // For unrecognized operator types or placeholders
 };
 
-
-
 struct OperatorParams {
   // Basic adjustment parameters
   bool                         exposure_enabled_         = true;
@@ -205,6 +203,8 @@ class IOperatorBase {
   virtual void SetParams(const nlohmann::json&)              = 0;
 
   virtual void SetGlobalParams(OperatorParams& params) const = 0;
+
+  virtual void EnableGlobalParams(OperatorParams& params, bool enable)               = 0;
 
   virtual auto GetScriptName() const -> std::string          = 0;
 

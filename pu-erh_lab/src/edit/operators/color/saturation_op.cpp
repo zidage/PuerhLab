@@ -80,4 +80,8 @@ void SaturationOp::SetParams(const nlohmann::json& params) {
 void SaturationOp::SetGlobalParams(OperatorParams& params) const {
   params.saturation_offset_ = scale_;
 }
+
+void SaturationOp::EnableGlobalParams(OperatorParams& params, bool enable) {
+  params.saturation_enabled_ = enable;
+}
 };  // namespace puerhlab

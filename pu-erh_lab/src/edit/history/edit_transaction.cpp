@@ -19,15 +19,16 @@
 namespace puerhlab {
 auto EditTransaction::ApplyTransaction(PipelineExecutor& pipeline) -> bool {
   auto& stage = pipeline.GetStage(stage_name_);
+  auto& global_params = pipeline.GetGlobalParams();
   switch (type_) {
     case TransactionType::_ADD:
-      stage.SetOperator(operator_type_, operator_params_);
+      stage.SetOperator(operator_type_, operator_params_, global_params);
       return true;
     case TransactionType::_DELETE:
       stage.EnableOperator(operator_type_, false);
       return true;
     case TransactionType::_EDIT:
-      stage.SetOperator(operator_type_, operator_params_);
+      stage.SetOperator(operator_type_, operator_params_, global_params);
       return true;
   }
 }

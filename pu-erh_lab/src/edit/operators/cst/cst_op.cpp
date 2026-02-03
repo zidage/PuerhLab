@@ -250,4 +250,15 @@ void OCIO_ACES_Transform_Op::SetGlobalParams(OperatorParams& params) const {
       break;
   }
 }
+
+void OCIO_ACES_Transform_Op::EnableGlobalParams(OperatorParams& params, bool enable) {
+  switch (transform_type_) {
+    case TransformType::To_WorkingSpace:
+      params.to_ws_enabled_ = enable;
+      break;
+    case TransformType::To_OutputSpace:
+      params.to_output_enabled_ = enable;
+      break;
+  }
+}
 };  // namespace puerhlab

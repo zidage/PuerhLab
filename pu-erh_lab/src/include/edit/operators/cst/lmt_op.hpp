@@ -55,6 +55,7 @@ class OCIO_LMT_Transform_Op : public OperatorBase<OCIO_LMT_Transform_Op> {
   void SetParams(const nlohmann::json& params) override;
 
   void SetGlobalParams(OperatorParams& params) const override;
+  void EnableGlobalParams(OperatorParams& params, bool enable) override;
 };
 
 }  // namespace puerhlab

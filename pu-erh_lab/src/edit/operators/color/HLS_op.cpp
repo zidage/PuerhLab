@@ -171,4 +171,8 @@ void HLSOp::SetGlobalParams(OperatorParams& params) const {
   params.lightness_range_   = lightness_range_;
   params.saturation_range_  = saturation_range_;
 }
+
+void HLSOp::EnableGlobalParams(OperatorParams& params, bool enable) {
+  params.hls_enabled_ = enable;
+}
 };  // namespace puerhlab

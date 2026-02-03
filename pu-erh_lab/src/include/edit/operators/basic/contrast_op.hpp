@@ -49,5 +49,6 @@ class ContrastOp : public OperatorBase<ContrastOp> {
   auto GetParams() const -> nlohmann::json override;
   void SetParams(const nlohmann::json& params) override;
   void SetGlobalParams(OperatorParams& params) const override;
+  void EnableGlobalParams(OperatorParams& params, bool enable) override;
 };
 }  // namespace puerhlab

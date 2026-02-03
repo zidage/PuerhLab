@@ -212,6 +212,7 @@ class PipelineStage {
   auto GetOperator(OperatorType) const -> std::optional<OperatorEntry*>;
   auto GetAllOperators() const -> std::map<OperatorType, OperatorEntry>& { return *operators_; }
   void EnableOperator(OperatorType, bool enable);
+  void EnableOperator(OperatorType, bool enable, OperatorParams& global_params);
 
   void SetNeighbors(PipelineStage* prev, PipelineStage* next) {
     prev_stage_ = prev;

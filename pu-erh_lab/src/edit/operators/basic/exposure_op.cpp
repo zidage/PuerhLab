@@ -73,4 +73,8 @@ void ExposureOp::SetGlobalParams(OperatorParams& params) const {
   params.exposure_offset_ = scale_;
 }
 
+void ExposureOp::EnableGlobalParams(OperatorParams& params, bool enable) {
+  params.exposure_enabled_ = enable;
+}
+
 };  // namespace puerhlab

@@ -24,12 +24,11 @@
 namespace puerhlab {
 class WhiteOp : public OperatorBase<WhiteOp> {
  private:
-  float              offset_;
+  float offset_;
 
-  float              y_intercept_;
-  float              black_point_;
-  float              slope_;
-
+  float y_intercept_;
+  float black_point_;
+  float slope_;
 
  public:
   auto                               GetScale() -> float;
@@ -49,5 +48,6 @@ class WhiteOp : public OperatorBase<WhiteOp> {
   void        SetParams(const nlohmann::json& params) override;
 
   void        SetGlobalParams(OperatorParams& params) const override;
+  void        EnableGlobalParams(OperatorParams& params, bool enable) override;
 };
 }  // namespace puerhlab

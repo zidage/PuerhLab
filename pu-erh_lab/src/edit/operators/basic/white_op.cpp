@@ -47,4 +47,14 @@ void WhiteOp::SetGlobalParams(OperatorParams& params) const {
   params.white_point_ = y_intercept_;
   params.slope_       = (params.white_point_ - params.black_point_);
 }
+
+void WhiteOp::EnableGlobalParams(OperatorParams& params, bool enable) {
+  if (enable) {
+    params.white_point_ = y_intercept_;
+    params.slope_       = (params.white_point_ - params.black_point_);
+  } else {
+    params.white_point_ = 1.0f;
+    params.slope_       = 1.0f - params.black_point_;
+  }
+}
 }  // namespace puerhlab

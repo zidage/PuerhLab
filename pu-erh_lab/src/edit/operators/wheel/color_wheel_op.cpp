@@ -135,4 +135,8 @@ void ColorWheelOp::SetGlobalParams(OperatorParams& params) const {
   params.gamma_color_offset_[2]  = gamma_.color_offset_.z;
   params.gamma_luminance_offset_ = gamma_.luminance_offset_;
 }
+
+void ColorWheelOp::EnableGlobalParams(OperatorParams& params, bool enable) {
+  params.color_wheel_enabled_ = enable;
+}
 };  // namespace puerhlab

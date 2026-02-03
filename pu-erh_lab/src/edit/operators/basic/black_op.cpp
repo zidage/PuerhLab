@@ -27,7 +27,6 @@ auto BlackOp::GetScale() -> float { return offset_ / 3.0f; }
 
 void BlackOp::Apply(std::shared_ptr<ImageBuffer> input) { (void)input; }
 
-
 auto BlackOp::GetParams() const -> nlohmann::json { return {script_name_, offset_}; }
 
 void BlackOp::SetParams(const nlohmann::json& params) {
@@ -47,5 +46,15 @@ void BlackOp::SetGlobalParams(OperatorParams& params) const {
   // Should only be called once SetParams has been called
   params.black_point_ = y_intercept_;
   params.slope_       = (params.white_point_ - params.black_point_);
+}
+
+void BlackOp::EnableGlobalParams(OperatorParams& params, bool enable) {
+  if (enable) {
+    params.black_point_ = y_intercept_;
+    params.slope_       = (params.white_point_ - params.black_point_);
+  } else {
+    params.black_point_ = 0.0f;
+    params.slope_       = params.white_point_;
+  }
 }
 }  // namespace puerhlab

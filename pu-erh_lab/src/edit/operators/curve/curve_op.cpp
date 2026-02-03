@@ -164,4 +164,10 @@ void CurveOp::SetGlobalParams(OperatorParams& params) const {
   params.curve_m_        = m_;
   params.curve_h_        = h_;
 }
+
+void CurveOp::EnableGlobalParams(OperatorParams& params, bool enable) {
+  // CurveOp is still broken, disable for now
+  (void)enable;
+  params.curve_enabled_ = false; 
+}
 };  // namespace puerhlab

@@ -68,4 +68,7 @@ void TintOp::SetParams(const nlohmann::json& params) {
 
 void TintOp::SetGlobalParams(OperatorParams& params) const { params.tint_offset_ = scale_; }
 
+void TintOp::EnableGlobalParams(OperatorParams& params, bool enable) {
+  params.tint_enabled_ = enable;
+}
 };  // namespace puerhlab

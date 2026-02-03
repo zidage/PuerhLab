@@ -88,4 +88,9 @@ void OCIO_LMT_Transform_Op::SetGlobalParams(OperatorParams& params) const {
   // Only mark dirty when enabled; otherwise GPU upload would attempt to parse an empty path.
   params.to_lmt_dirty_  = params.lmt_enabled_;
 }
+
+void OCIO_LMT_Transform_Op::EnableGlobalParams(OperatorParams& params, bool enable) {
+  params.lmt_enabled_  = enable;
+  params.to_lmt_dirty_ = enable;
+}
 };  // namespace puerhlab

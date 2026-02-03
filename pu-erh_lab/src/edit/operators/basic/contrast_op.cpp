@@ -82,4 +82,10 @@ void ContrastOp::SetGlobalParams(OperatorParams& params) const {
   // Should only be called once SetParams has been called
   params.contrast_scale_ = scale_;
 }
+
+void ContrastOp::EnableGlobalParams(OperatorParams& params, bool enable) {
+  // Contrast op is still broken, so disable it for now
+  (void)enable;
+  params.contrast_enabled_ = false;
+}
 };  // namespace puerhlab

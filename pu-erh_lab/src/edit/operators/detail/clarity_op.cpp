@@ -115,4 +115,8 @@ void ClarityOp::SetParams(const nlohmann::json& params) {
 }
 
 void ClarityOp::SetGlobalParams(OperatorParams& params) const { params.clarity_offset_ = scale_; }
+
+void ClarityOp::EnableGlobalParams(OperatorParams& params, bool enable) {
+  params.clarity_enabled_ = enable;
+}
 };  // namespace puerhlab

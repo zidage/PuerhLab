@@ -75,6 +75,15 @@ void PipelineStage::EnableOperator(OperatorType op_type, bool enable) {
   }
 }
 
+void PipelineStage::EnableOperator(OperatorType op_type, bool enable,
+                                  OperatorParams& global_params) {
+  EnableOperator(op_type, enable);
+  auto it = operators_->find(op_type);
+  if (it != operators_->end()) {
+    it->second.op_->SetGlobalParams(global_params);
+  }
+}
+
 void PipelineStage::SetInputImage(std::shared_ptr<ImageBuffer> input) {
   input_img_ = input;
   input_set_ = true;
