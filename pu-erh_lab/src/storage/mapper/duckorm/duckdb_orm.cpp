@@ -131,14 +131,33 @@ duckdb_state update(duckdb_connection& conn, const char* table, const void* obj,
                     std::span<const DuckFieldDesc> fields, size_t field_count,
                     const char* where_clause) {
   std::ostringstream sql;
-  sql << "UPDATE " << table << " SET ";
+  // Upsert (INSERT ... ON CONFLICT DO UPDATE) using the table's PRIMARY KEY/UNIQUE constraints.
+  // The provided where_clause is applied as a conditional guard on the DO UPDATE.
+  sql << "INSERT INTO " << table << " (";
   for (size_t i = 0; i < field_count; ++i) {
-    sql << fields[i].name_ << " = ?";
+    sql << fields[i].name_;
     if (i < field_count - 1) {
       sql << ",";
     }
   }
-  sql << " WHERE " << where_clause << ";";
+  sql << ") VALUES (";
+  for (size_t i = 0; i < field_count; ++i) {
+    sql << "?";
+    if (i < field_count - 1) {
+      sql << ",";
+    }
+  }
+  sql << ") ON CONFLICT DO UPDATE SET ";
+  for (size_t i = 0; i < field_count; ++i) {
+    sql << fields[i].name_ << " = EXCLUDED." << fields[i].name_;
+    if (i < field_count - 1) {
+      sql << ",";
+    }
+  }
+  if (where_clause && where_clause[0] != '\0') {
+    sql << " WHERE " << where_clause;
+  }
+  sql << ";";
   std::string       sql_str = sql.str();
 
   PreparedStatement update_pre(conn, sql_str);
@@ -187,7 +206,6 @@ duckdb_state update(duckdb_connection& conn, const char* table, const void* obj,
             *reinterpret_cast<const bool*>(reinterpret_cast<const char*>(obj) + field.offset_));
         break;
       default:
-        duckdb_destroy_prepare(&update_pre.stmt_);
         throw std::runtime_error("Unsupported DuckFieldType in update()");  // Unsupported type
     }
   }

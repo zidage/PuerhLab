@@ -35,7 +35,8 @@ ElementController::ElementController(ConnectionGuard&& guard)
       file_service_(guard_.conn_),
       folder_service_(guard_.conn_),
       history_service_(guard_.conn_),
-      pipeline_service_(guard_.conn_) {}
+      pipeline_service_(guard_.conn_),
+      edit_history_service_(guard_.conn_) {}
 /**
  * @brief Add an element to the database.
  *
@@ -166,5 +167,16 @@ auto ElementController::UpdatePipelineByElementId(
     const std::shared_ptr<CPUPipelineExecutor> pipeline) -> void {
   pipeline_service_.UpdatePipelineParamByFileId(element_id, pipeline);
     }
+
+auto ElementController::GetEditHistoryByFileId(const sl_element_id_t file_id)
+    -> std::shared_ptr<EditHistory> {
+  return history_service_.GetEditHistoryByFileId(file_id);
+}
+
+auto ElementController::UpdateEditHistoryByFileId(const sl_element_id_t              file_id,
+                                                  const std::shared_ptr<EditHistory> history)
+    -> void {
+  history_service_.Update(history, file_id);
+}
 
 };  // namespace puerhlab

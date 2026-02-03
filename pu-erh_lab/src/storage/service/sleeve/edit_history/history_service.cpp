@@ -48,4 +48,10 @@ auto EditHistoryService::GetEditHistoryByFileId(const sl_element_id_t file_id)
   }
   return result.front();
 }
+
+void EditHistoryService::UpdateEditHistory(const std::shared_ptr<EditHistory> history) {
+  // Now the duckorm::update use the upsert semantics (I should change the interface, but
+  // anyways...), so we can directly call Update even if the record does not exist.
+  Update(history, history->GetBoundImage());
+}
 };  // namespace puerhlab

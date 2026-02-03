@@ -33,5 +33,6 @@ class EditHistoryService
   static auto FromParams(EditHistoryMapperParams&& param) -> std::shared_ptr<EditHistory>;
 
   auto        GetEditHistoryByFileId(const sl_element_id_t file_id) -> std::shared_ptr<EditHistory>;
+  void        UpdateEditHistory(const std::shared_ptr<EditHistory> history);
 };
 };  // namespace puerhlab

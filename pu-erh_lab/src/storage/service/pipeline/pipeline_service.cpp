@@ -12,10 +12,12 @@
 //  See the License for the specific language governing permissions and
 //  limitations under the License.
 
+#include "storage/service/pipeline/pipeline_service.hpp"
+
 #include <memory>
 
-#include "storage/service/pipeline/pipeline_service.hpp"
 #include "storage/mapper/pipeline/pipeline_mapper.hpp"
+
 
 namespace puerhlab {
 auto PipelineService::ToParams(const std::shared_ptr<CPUPipelineExecutor> source)
@@ -56,11 +58,8 @@ auto PipelineService::GetPipelineParamByFileId(const sl_element_id_t file_id)
 
 void PipelineService::UpdatePipelineParamByFileId(
     const sl_element_id_t file_id, const std::shared_ptr<CPUPipelineExecutor> pipeline) {
-  auto existing = GetPipelineParamByFileId(file_id);
-  if (existing != nullptr) {
-    Update(pipeline, file_id);
-  } else {
-    Insert(pipeline);
-  }
+  // Now the duckorm::update use the upsert semantics (I should change the interface, but
+  // anyways...), so we can directly call Update even if the record does not exist.
+  Update(pipeline, file_id);
 }
 };  // namespace puerhlab

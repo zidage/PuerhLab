@@ -341,6 +341,11 @@ def_library(PipelineMgmtService
     PUBLIC_DEPS ProjectService EditPipeline
     )
 
+def_library(EditHistoryMgmtService
+    SOURCES app/history_mgmt_service.cpp
+    PUBLIC_DEPS ProjectService EditHistory
+)
+
 def_library(ImportService
     SOURCES app/import_service.cpp
     PUBLIC_DEPS SleeveManager ImageWriter ImagePoolService

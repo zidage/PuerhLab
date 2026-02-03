@@ -188,6 +188,14 @@ if(WIN32)
   target_link_libraries(PipelineServiceTest easy_profiler)
 endif()
 
+add_executable(EditHistoryMgmtServiceTest app/history_mgmt_service_test.cpp)
+target_include_directories(EditHistoryMgmtServiceTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
+target_link_libraries(EditHistoryMgmtServiceTest ProjectService EditHistoryMgmtService GTest::gtest_main)
+
+if(WIN32)
+  target_link_libraries(EditHistoryMgmtServiceTest easy_profiler)
+endif()
+
 add_executable(ThumbnailServiceTest app/thumbnail_service_test.cpp)
 target_include_directories(ThumbnailServiceTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
 target_link_libraries(ThumbnailServiceTest ThumbnailService ProjectService ImportService GTest::gtest_main)
