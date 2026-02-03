@@ -4,13 +4,16 @@
 #include <QApplication>
 #include <QComboBox>
 #include <QCoreApplication>
+#include <QDoubleValidator>
 #include <QDialogButtonBox>
 #include <QDir>
 #include <QFileDialog>
 #include <QFormLayout>
+#include <QFrame>
 #include <QFontDatabase>
 #include <QHBoxLayout>
 #include <QIcon>
+#include <QIntValidator>
 #include <QLineEdit>
 #include <QLabel>
 #include <QListWidget>
@@ -21,18 +24,24 @@
 #include <QProgressDialog>
 #include <QPushButton>
 #include <QPixmap>
+#include <QScrollArea>
+#include <QSignalBlocker>
 #include <QSpinBox>
 #include <QStandardPaths>
 #include <QSlider>
+#include <QStyle>
 #include <QStyleFactory>
 #include <QTimer>
+#include <QToolButton>
 #include <QVBoxLayout>
 #include <algorithm>
 #include <cctype>
 #include <cmath>
 #include <cstdint>
+#include <ctime>
 #include <exiv2/exiv2.hpp>
 #include <filesystem>
+#include <functional>
 #include <future>
 #include <iostream>
 #include <memory>
@@ -42,6 +51,7 @@
 #include <string_view>
 #include <thread>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include <json.hpp>
@@ -52,11 +62,13 @@
 #include "app/pipeline_service.hpp"
 #include "app/project_service.hpp"
 #include "app/render_service.hpp"
+#include "app/sleeve_filter_service.hpp"
 #include "app/thumbnail_service.hpp"
 #include "edit/operators/operator_registeration.hpp"
 #include "image/image_buffer.hpp"
 #include "io/image/image_loader.hpp"
 #include "renderer/pipeline_task.hpp"
+#include "sleeve/sleeve_filter/filter_combo.hpp"
 #include "type/supported_file_type.hpp"
 #include "ui/edit_viewer/edit_viewer.hpp"
 
@@ -197,6 +209,623 @@ static void ApplyMaterialLikeTheme(QApplication& app) {
       "  background: transparent;"
       "}");
 }
+
+enum class FilterValueKind { String, Int64, Double, DateTime };
+
+static FilterValueKind KindForField(FilterField field) {
+  switch (field) {
+    case FilterField::ExifISO:
+    case FilterField::Rating:
+      return FilterValueKind::Int64;
+    case FilterField::ExifFocalLength:
+    case FilterField::ExifAperture:
+      return FilterValueKind::Double;
+    case FilterField::CaptureDate:
+    case FilterField::ImportDate:
+      return FilterValueKind::DateTime;
+    default:
+      return FilterValueKind::String;
+  }
+}
+
+static void PopulateCompareOps(QComboBox* combo, FilterField field) {
+  combo->clear();
+
+  const auto kind   = KindForField(field);
+  const auto add_op = [combo](CompareOp op, const char* label) {
+    combo->addItem(QString::fromUtf8(label), static_cast<int>(op));
+  };
+
+  if (kind == FilterValueKind::String) {
+    add_op(CompareOp::CONTAINS, "contains");
+    add_op(CompareOp::NOT_CONTAINS, "not contains");
+    add_op(CompareOp::EQUALS, "=");
+    add_op(CompareOp::NOT_EQUALS, "!=");
+    add_op(CompareOp::STARTS_WITH, "starts with");
+    add_op(CompareOp::ENDS_WITH, "ends with");
+    add_op(CompareOp::REGEX, "regex");
+  } else if (kind == FilterValueKind::Int64 || kind == FilterValueKind::Double) {
+    add_op(CompareOp::EQUALS, "=");
+    add_op(CompareOp::NOT_EQUALS, "!=");
+    add_op(CompareOp::GREATER_THAN, "> ");
+    add_op(CompareOp::LESS_THAN, "< ");
+    add_op(CompareOp::GREATER_EQUAL, ">=");
+    add_op(CompareOp::LESS_EQUAL, "<=");
+    add_op(CompareOp::BETWEEN, "between");
+  } else {
+    // Date/time
+    add_op(CompareOp::GREATER_THAN, "> ");
+    add_op(CompareOp::LESS_THAN, "< ");
+    add_op(CompareOp::GREATER_EQUAL, ">=");
+    add_op(CompareOp::LESS_EQUAL, "<=");
+    add_op(CompareOp::BETWEEN, "between");
+  }
+}
+
+static std::optional<std::tm> ParseDateTimeYmd(const QString& text) {
+  // Accept: YYYY-MM-DD
+  const auto trimmed = text.trimmed();
+  const auto parts   = trimmed.split('-', Qt::SkipEmptyParts);
+  if (parts.size() != 3) {
+    return std::nullopt;
+  }
+  bool      ok_y = false, ok_m = false, ok_d = false;
+  const int year  = parts[0].toInt(&ok_y);
+  const int month = parts[1].toInt(&ok_m);
+  const int day   = parts[2].toInt(&ok_d);
+  if (!ok_y || !ok_m || !ok_d) {
+    return std::nullopt;
+  }
+  if (year < 1900 || month < 1 || month > 12 || day < 1 || day > 31) {
+    return std::nullopt;
+  }
+
+  std::tm t{};
+  t.tm_year = year - 1900;
+  t.tm_mon  = month - 1;
+  t.tm_mday = day;
+  return t;
+}
+
+static std::optional<FilterValue> ParseFilterValue(FilterField field, const QString& text) {
+  const auto kind = KindForField(field);
+  if (kind == FilterValueKind::String) {
+    return FilterValue{text.trimmed().toStdWString()};
+  }
+  if (kind == FilterValueKind::Int64) {
+    bool ok = false;
+    const auto v = text.trimmed().toLongLong(&ok);
+    if (!ok) {
+      return std::nullopt;
+    }
+    return FilterValue{static_cast<int64_t>(v)};
+  }
+  if (kind == FilterValueKind::Double) {
+    bool ok = false;
+    const auto v = text.trimmed().toDouble(&ok);
+    if (!ok) {
+      return std::nullopt;
+    }
+    return FilterValue{v};
+  }
+
+  const auto tm_opt = ParseDateTimeYmd(text);
+  if (!tm_opt.has_value()) {
+    return std::nullopt;
+  }
+  return FilterValue{tm_opt.value()};
+}
+
+class FilterDrawer final : public QWidget {
+ public:
+  explicit FilterDrawer(QWidget* parent = nullptr) : QWidget(parent) {
+    setObjectName("FilterDrawer");
+    setMinimumWidth(360);
+    setMaximumWidth(420);
+    setStyleSheet(DrawerStyleSheet());
+
+    auto* root = new QVBoxLayout(this);
+    root->setContentsMargins(0, 0, 0, 0);
+    root->setSpacing(10);
+
+    auto* header = new QHBoxLayout();
+    header->setContentsMargins(12, 12, 12, 0);
+    header->setSpacing(8);
+
+    auto* title = new QLabel("Filters", this);
+    title->setObjectName("DrawerTitle");
+
+    collapse_btn_ = new QToolButton(this);
+    collapse_btn_->setObjectName("CollapseButton");
+    collapse_btn_->setCheckable(true);
+    collapse_btn_->setChecked(true);
+    collapse_btn_->setToolTip("Collapse / expand filter builder");
+    collapse_btn_->setArrowType(Qt::DownArrow);
+    collapse_btn_->setAutoRaise(true);
+
+    header->addWidget(title, 0);
+    header->addStretch(1);
+    header->addWidget(collapse_btn_, 0);
+    root->addLayout(header, 0);
+
+    content_ = new QWidget(this);
+    auto* content_layout = new QVBoxLayout(content_);
+    content_layout->setContentsMargins(12, 0, 12, 12);
+    content_layout->setSpacing(10);
+
+    // Quick search card.
+    auto* quick_card = new QFrame(this);
+    quick_card->setObjectName("Card");
+    auto* quick = new QVBoxLayout(quick_card);
+    quick->setContentsMargins(12, 12, 12, 12);
+    quick->setSpacing(6);
+
+    auto* quick_label = new QLabel("Quick search", this);
+    quick_label->setObjectName("CardTitle");
+
+    auto* quick_row = new QHBoxLayout();
+    quick_row->setSpacing(6);
+
+    quick_search_ = new QLineEdit(this);
+    quick_search_->setObjectName("QuickSearch");
+    quick_search_->setPlaceholderText("Search filename, camera model, tags…");
+    quick_search_->setClearButtonEnabled(true);
+
+    inline_apply_ = new QToolButton(this);
+    inline_apply_->setObjectName("InlineApply");
+    inline_apply_->setAutoRaise(true);
+    inline_apply_->setToolTip("Apply filters");
+    inline_apply_->setIcon(style()->standardIcon(QStyle::SP_DialogApplyButton));
+
+    quick_row->addWidget(quick_search_, 1);
+    quick_row->addWidget(inline_apply_, 0);
+
+    quick->addWidget(quick_label, 0);
+    quick->addLayout(quick_row, 0);
+    content_layout->addWidget(quick_card, 0);
+
+    // Rules card.
+    auto* rules_card = new QFrame(this);
+    rules_card->setObjectName("Card");
+    auto* rules = new QVBoxLayout(rules_card);
+    rules->setContentsMargins(12, 12, 12, 12);
+    rules->setSpacing(8);
+
+    auto* rules_top = new QHBoxLayout();
+    auto* rules_title = new QLabel("Rules", this);
+    rules_title->setObjectName("CardTitle");
+
+    join_op_ = new QComboBox(this);
+    join_op_->setObjectName("JoinOp");
+    join_op_->addItem("Match all rules", static_cast<int>(FilterOp::AND));
+    join_op_->addItem("Match any rule", static_cast<int>(FilterOp::OR));
+    join_op_->setToolTip("How multiple rules are combined");
+
+    rules_top->addWidget(rules_title, 0);
+    rules_top->addStretch(1);
+    rules_top->addWidget(join_op_, 0);
+    rules->addLayout(rules_top, 0);
+
+    rows_scroll_ = new QScrollArea(this);
+    rows_scroll_->setObjectName("RowsScroll");
+    rows_scroll_->setWidgetResizable(true);
+    rows_scroll_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    rows_scroll_->setFrameShape(QFrame::NoFrame);
+
+    rows_widget_ = new QWidget(this);
+    rows_container_ = new QVBoxLayout(rows_widget_);
+    rows_container_->setContentsMargins(0, 0, 0, 0);
+    rows_container_->setSpacing(8);
+    rows_container_->addStretch(1);
+    rows_scroll_->setWidget(rows_widget_);
+    rules->addWidget(rows_scroll_, 1);
+
+    btn_add_ = new QPushButton("Add rule", this);
+    btn_add_->setObjectName("AddRule");
+    btn_add_->setIcon(style()->standardIcon(QStyle::SP_FileDialogNewFolder));
+    rules->addWidget(btn_add_, 0, Qt::AlignLeft);
+
+    content_layout->addWidget(rules_card, 1);
+
+    // Footer.
+    auto* actions = new QHBoxLayout();
+    actions->setSpacing(8);
+    btn_clear_ = new QPushButton("Clear", this);
+    btn_clear_->setObjectName("ClearButton");
+    btn_clear_->setIcon(style()->standardIcon(QStyle::SP_DialogResetButton));
+    btn_apply_ = new QPushButton("Apply", this);
+    btn_apply_->setObjectName("ApplyButton");
+    btn_apply_->setIcon(style()->standardIcon(QStyle::SP_DialogApplyButton));
+    actions->addWidget(btn_clear_, 0);
+    actions->addStretch(1);
+    actions->addWidget(btn_apply_, 0);
+    content_layout->addLayout(actions, 0);
+
+    info_ = new QLabel("No images loaded.", this);
+    info_->setObjectName("FilterInfo");
+    content_layout->addWidget(info_, 0);
+
+    sql_preview_ = new QLabel("", this);
+    sql_preview_->setObjectName("SqlPreview");
+    sql_preview_->setWordWrap(true);
+    sql_preview_->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    sql_preview_->setVisible(false);
+    content_layout->addWidget(sql_preview_, 0);
+
+    root->addWidget(content_, 1);
+
+    connect(collapse_btn_, &QToolButton::toggled, this, [this](bool expanded) {
+      content_->setVisible(expanded);
+      collapse_btn_->setArrowType(expanded ? Qt::DownArrow : Qt::RightArrow);
+    });
+
+    connect(btn_add_, &QPushButton::clicked, this, [this]() { AddRuleRow(); });
+    connect(btn_clear_, &QPushButton::clicked, this, [this]() {
+      ClearAllUi();
+      if (on_clear_) {
+        on_clear_();
+      }
+    });
+
+    const auto apply_now = [this]() {
+      auto node_opt = BuildFilterNode(true);
+      if (!node_opt.has_value()) {
+        return;
+      }
+      SetSqlPreview(QString::fromStdWString(FilterSQLCompiler::Compile(node_opt.value())));
+      if (on_apply_) {
+        on_apply_(node_opt.value());
+      }
+    };
+
+    connect(btn_apply_, &QPushButton::clicked, this, apply_now);
+    connect(inline_apply_, &QToolButton::clicked, this, apply_now);
+    connect(quick_search_, &QLineEdit::returnPressed, this, apply_now);
+
+    AddRuleRow();
+  }
+
+  void SetOnApply(std::function<void(const FilterNode&)> fn) { on_apply_ = std::move(fn); }
+  void SetOnClear(std::function<void()> fn) { on_clear_ = std::move(fn); }
+
+  void SetResultsSummary(int shown, int total) {
+    if (total <= 0) {
+      info_->setText("No images loaded.");
+      return;
+    }
+    if (shown == total) {
+      info_->setText(QString("Showing %1 images").arg(total));
+      return;
+    }
+    info_->setText(QString("Showing %1 of %2").arg(shown).arg(total));
+  }
+
+ private:
+  struct Row {
+    QWidget*     container_ = nullptr;
+    QComboBox*   field_     = nullptr;
+    QComboBox*   op_        = nullptr;
+    QLineEdit*   value_     = nullptr;
+    QLabel*      between_   = nullptr;
+    QLineEdit*   value2_    = nullptr;
+    QToolButton* remove_    = nullptr;
+  };
+
+  static QString DrawerStyleSheet() {
+    return QString::fromUtf8(R"QSS(
+#FilterDrawer { background: #121212; }
+#FilterDrawer QLabel#DrawerTitle { font-size: 16px; font-weight: 600; }
+#FilterDrawer QFrame#Card { background: #1E1E1E; border: 1px solid #303134; border-radius: 12px; }
+#FilterDrawer QLabel#CardTitle { font-weight: 600; }
+#FilterDrawer QLineEdit#QuickSearch { padding: 8px 10px; border: 1px solid #3C4043; border-radius: 10px; background: #202124; }
+#FilterDrawer QComboBox, #FilterDrawer QLineEdit { padding: 6px 8px; border: 1px solid #3C4043; border-radius: 8px; background: #202124; }
+#FilterDrawer QPushButton { padding: 7px 12px; border-radius: 10px; background: #202124; border: 1px solid #3C4043; }
+#FilterDrawer QPushButton#ApplyButton { background: #8ab4f8; color: #080A0C; border: 1px solid #8ab4f8; }
+#FilterDrawer QPushButton#ApplyButton:hover { background: #a3c2ff; }
+#FilterDrawer QToolButton#RemoveRule { background: transparent; border: none; padding: 6px; }
+#FilterDrawer QToolButton#RemoveRule:hover { background: #2a2b2e; border-radius: 10px; }
+#FilterDrawer QLabel#FilterInfo { color: #9aa0a6; }
+#FilterDrawer QLabel#SqlPreview { color: #cdd0d4; font-family: 'Consolas','Courier New',monospace; font-size: 11px; padding: 8px 10px; background: #1a1b1e; border: 1px solid #303134; border-radius: 10px; }
+)QSS");
+  }
+
+  static QString PlaceholderForField(FilterField field) {
+    switch (field) {
+      case FilterField::CaptureDate:
+      case FilterField::ImportDate:
+        return "YYYY-MM-DD";
+      case FilterField::ExifISO:
+      case FilterField::Rating:
+        return "number";
+      case FilterField::ExifAperture:
+      case FilterField::ExifFocalLength:
+        return "number";
+      default:
+        return "type to filter…";
+    }
+  }
+
+  Row* FindRow(QWidget* container) {
+    for (auto& r : rows_) {
+      if (r.container_ == container) {
+        return &r;
+      }
+    }
+    return nullptr;
+  }
+
+  void ConfigureEditorsForRow(Row& row, FilterField field) {
+    PopulateCompareOps(row.op_, field);
+    row.value_->setPlaceholderText(PlaceholderForField(field));
+    row.value2_->setPlaceholderText(PlaceholderForField(field));
+
+    row.value_->setValidator(nullptr);
+    row.value2_->setValidator(nullptr);
+
+    const auto kind = KindForField(field);
+    if (kind == FilterValueKind::Int64) {
+      row.value_->setValidator(new QIntValidator(row.value_));
+      row.value2_->setValidator(new QIntValidator(row.value2_));
+    } else if (kind == FilterValueKind::Double) {
+      auto* v1 = new QDoubleValidator(row.value_);
+      v1->setNotation(QDoubleValidator::StandardNotation);
+      row.value_->setValidator(v1);
+      auto* v2 = new QDoubleValidator(row.value2_);
+      v2->setNotation(QDoubleValidator::StandardNotation);
+      row.value2_->setValidator(v2);
+    }
+  }
+
+  void UpdateRowBetweenUi(Row& row) {
+    const auto op = static_cast<CompareOp>(row.op_->currentData().toInt());
+    const bool is_between = (op == CompareOp::BETWEEN);
+    row.between_->setVisible(is_between);
+    row.value2_->setVisible(is_between);
+  }
+
+  void AddRuleRow() {
+    Row r;
+    r.container_ = new QWidget(this);
+    auto* h = new QHBoxLayout(r.container_);
+    h->setContentsMargins(0, 0, 0, 0);
+    h->setSpacing(6);
+
+    r.field_ = new QComboBox(this);
+    r.field_->addItem("Filename", static_cast<int>(FilterField::FileName));
+    r.field_->addItem("Camera Model", static_cast<int>(FilterField::ExifCameraModel));
+    r.field_->addItem("File Extension", static_cast<int>(FilterField::FileExtension));
+    r.field_->addItem("ISO", static_cast<int>(FilterField::ExifISO));
+    r.field_->addItem("Aperture", static_cast<int>(FilterField::ExifAperture));
+    r.field_->addItem("Focal Length", static_cast<int>(FilterField::ExifFocalLength));
+    r.field_->addItem("Capture Date", static_cast<int>(FilterField::CaptureDate));
+    r.field_->addItem("Import Date", static_cast<int>(FilterField::ImportDate));
+    r.field_->addItem("Rating", static_cast<int>(FilterField::Rating));
+    r.field_->addItem("Tags", static_cast<int>(FilterField::SemanticTags));
+
+    r.op_ = new QComboBox(this);
+
+    r.value_ = new QLineEdit(this);
+    r.value2_ = new QLineEdit(this);
+    r.between_ = new QLabel("to", this);
+
+    r.remove_ = new QToolButton(this);
+    r.remove_->setObjectName("RemoveRule");
+    r.remove_->setAutoRaise(true);
+    r.remove_->setIcon(style()->standardIcon(QStyle::SP_DockWidgetCloseButton));
+    r.remove_->setToolTip("Remove rule");
+
+    h->addWidget(r.field_, 1);
+    h->addWidget(r.op_, 0);
+    h->addWidget(r.value_, 1);
+    h->addWidget(r.between_, 0);
+    h->addWidget(r.value2_, 1);
+    h->addWidget(r.remove_, 0);
+
+    const auto initial_field = static_cast<FilterField>(r.field_->currentData().toInt());
+    ConfigureEditorsForRow(r, initial_field);
+    UpdateRowBetweenUi(r);
+
+    connect(r.field_, &QComboBox::currentIndexChanged, this, [this, c = r.container_]() {
+      auto* row = FindRow(c);
+      if (!row) {
+        return;
+      }
+      const auto field = static_cast<FilterField>(row->field_->currentData().toInt());
+      {
+        QSignalBlocker block(*row->op_);
+        ConfigureEditorsForRow(*row, field);
+      }
+      UpdateRowBetweenUi(*row);
+    });
+    connect(r.op_, &QComboBox::currentIndexChanged, this, [this, c = r.container_]() {
+      auto* row = FindRow(c);
+      if (!row) {
+        return;
+      }
+      UpdateRowBetweenUi(*row);
+    });
+
+    connect(r.remove_, &QToolButton::clicked, this, [this, c = r.container_]() {
+      auto it = std::find_if(rows_.begin(), rows_.end(), [c](const Row& rr) {
+        return rr.container_ == c;
+      });
+      if (it == rows_.end()) {
+        return;
+      }
+      delete it->container_;
+      rows_.erase(it);
+    });
+
+    const int stretch_index = rows_container_->count() - 1;
+    rows_container_->insertWidget(stretch_index, r.container_);
+    rows_.push_back(r);
+  }
+
+  void ClearAllUi() {
+    quick_search_->clear();
+    SetSqlPreview(QString());
+
+    for (auto& row : rows_) {
+      delete row.container_;
+    }
+    rows_.clear();
+    AddRuleRow();
+  }
+
+  void SetSqlPreview(const QString& sql) {
+    const auto trimmed = sql.trimmed();
+    if (trimmed.isEmpty()) {
+      sql_preview_->clear();
+      sql_preview_->setVisible(false);
+      return;
+    }
+    sql_preview_->setText(trimmed);
+    sql_preview_->setVisible(true);
+  }
+
+  std::optional<FilterNode> BuildFilterNode(bool show_dialogs) {
+    std::optional<FilterNode> quick_node;
+    const auto q = quick_search_->text().trimmed();
+    if (!q.isEmpty()) {
+      const FilterValue v{q.toStdWString()};
+      std::vector<FilterNode> clauses;
+      clauses.reserve(4);
+      clauses.push_back(FilterNode{FilterNode::Type::Condition,
+                                   {},
+                                   {},
+                                   FieldCondition{.field_ = FilterField::FileName,
+                                                  .op_ = CompareOp::CONTAINS,
+                                                  .value_ = v,
+                                                  .second_value_ = std::nullopt},
+                                   std::nullopt});
+      clauses.push_back(FilterNode{FilterNode::Type::Condition,
+                                   {},
+                                   {},
+                                   FieldCondition{.field_ = FilterField::ExifCameraModel,
+                                                  .op_ = CompareOp::CONTAINS,
+                                                  .value_ = v,
+                                                  .second_value_ = std::nullopt},
+                                   std::nullopt});
+      clauses.push_back(FilterNode{FilterNode::Type::Condition,
+                                   {},
+                                   {},
+                                   FieldCondition{.field_ = FilterField::SemanticTags,
+                                                  .op_ = CompareOp::CONTAINS,
+                                                  .value_ = v,
+                                                  .second_value_ = std::nullopt},
+                                   std::nullopt});
+      clauses.push_back(FilterNode{FilterNode::Type::Condition,
+                                   {},
+                                   {},
+                                   FieldCondition{.field_ = FilterField::FileExtension,
+                                                  .op_ = CompareOp::CONTAINS,
+                                                  .value_ = v,
+                                                  .second_value_ = std::nullopt},
+                                   std::nullopt});
+
+      quick_node = FilterNode{FilterNode::Type::Logical, FilterOp::OR, std::move(clauses), {},
+                              std::nullopt};
+    }
+
+    std::optional<FilterNode> rules_node;
+    std::vector<FilterNode> conditions;
+    conditions.reserve(rows_.size());
+
+    for (const auto& row : rows_) {
+      const auto field = static_cast<FilterField>(row.field_->currentData().toInt());
+      const auto op    = static_cast<CompareOp>(row.op_->currentData().toInt());
+
+      const auto v1_text = row.value_->text().trimmed();
+      if (v1_text.isEmpty()) {
+        continue;
+      }
+
+      const auto v1_opt = ParseFilterValue(field, v1_text);
+      if (!v1_opt.has_value()) {
+        if (show_dialogs) {
+          QMessageBox::warning(this, "Filter", "Invalid value. Check field type and input.");
+        }
+        return std::nullopt;
+      }
+
+      FieldCondition cond{
+          .field_ = field, .op_ = op, .value_ = v1_opt.value(), .second_value_ = std::nullopt};
+
+      if (op == CompareOp::BETWEEN) {
+        const auto v2_text = row.value2_->text().trimmed();
+        if (v2_text.isEmpty()) {
+          if (show_dialogs) {
+            QMessageBox::warning(this, "Filter", "BETWEEN needs two values.");
+          }
+          return std::nullopt;
+        }
+        const auto v2_opt = ParseFilterValue(field, v2_text);
+        if (!v2_opt.has_value()) {
+          if (show_dialogs) {
+            QMessageBox::warning(this, "Filter", "Invalid second value for BETWEEN.");
+          }
+          return std::nullopt;
+        }
+        cond.second_value_ = v2_opt.value();
+      }
+
+      conditions.push_back(
+          FilterNode{FilterNode::Type::Condition, {}, {}, std::move(cond), std::nullopt});
+    }
+
+    if (!conditions.empty()) {
+      if (conditions.size() == 1) {
+        rules_node = conditions.front();
+      } else {
+        const auto join = static_cast<FilterOp>(join_op_->currentData().toInt());
+        rules_node = FilterNode{FilterNode::Type::Logical, join, std::move(conditions), {},
+                                std::nullopt};
+      }
+    }
+
+    if (!quick_node.has_value() && !rules_node.has_value()) {
+      if (show_dialogs) {
+        QMessageBox::information(this, "Filter", "No filters set.");
+      }
+      return std::nullopt;
+    }
+    if (quick_node.has_value() && !rules_node.has_value()) {
+      return quick_node;
+    }
+    if (!quick_node.has_value() && rules_node.has_value()) {
+      return rules_node;
+    }
+
+    std::vector<FilterNode> children;
+    children.reserve(2);
+    children.push_back(std::move(quick_node.value()));
+    children.push_back(std::move(rules_node.value()));
+    return FilterNode{FilterNode::Type::Logical, FilterOp::AND, std::move(children), {},
+                      std::nullopt};
+  }
+
+  QToolButton* collapse_btn_ = nullptr;
+  QWidget*     content_      = nullptr;
+
+  QLineEdit*   quick_search_ = nullptr;
+  QToolButton* inline_apply_ = nullptr;
+
+  QComboBox*   join_op_      = nullptr;
+  QScrollArea* rows_scroll_  = nullptr;
+  QWidget*     rows_widget_  = nullptr;
+  QVBoxLayout* rows_container_ = nullptr;
+  QPushButton* btn_add_      = nullptr;
+  QPushButton* btn_apply_    = nullptr;
+  QPushButton* btn_clear_    = nullptr;
+
+  QLabel*      info_         = nullptr;
+  QLabel*      sql_preview_  = nullptr;
+
+  std::vector<Row> rows_;
+
+  std::function<void(const FilterNode&)> on_apply_;
+  std::function<void()>                  on_clear_;
+};
 
 static std::vector<std::filesystem::path> ListCubeLutsInDir(const std::filesystem::path& dir) {
   std::vector<std::filesystem::path> results;
@@ -1274,10 +1903,18 @@ class AlbumWindow final : public QWidget {
     }
 
     export_service_ = std::make_shared<ExportService>(project_->GetSleeveService(), image_pool_, pipeline_service_);
+    filter_service_ = std::make_unique<SleeveFilterService>(project_->GetStorageService());
 
-    auto* root = new QVBoxLayout(this);
-    root->setContentsMargins(10, 10, 10, 10);
+    auto* outer = new QHBoxLayout(this);
+    outer->setContentsMargins(10, 10, 10, 10);
+    outer->setSpacing(12);
+
+    filter_drawer_ = new FilterDrawer(this);
+    outer->addWidget(filter_drawer_, 0);
+
+    auto* root = new QVBoxLayout();
     root->setSpacing(8);
+    outer->addLayout(root, 1);
 
     auto* top = new QHBoxLayout();
     import_btn_ = new QPushButton("Import…", this);
@@ -1285,6 +1922,16 @@ class AlbumWindow final : public QWidget {
     status_     = new QLabel("No images. Click Import…", this);
     top->addWidget(import_btn_, 0);
     top->addWidget(export_btn_, 0);
+
+    filters_btn_ = new QToolButton(this);
+    filters_btn_->setText("Filters");
+    filters_btn_->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+    filters_btn_->setCheckable(true);
+    filters_btn_->setChecked(true);
+    filters_btn_->setIcon(style()->standardIcon(QStyle::SP_FileDialogContentsView));
+    filters_btn_->setToolTip("Show/hide filter drawer");
+    top->addWidget(filters_btn_, 0);
+
     top->addWidget(status_, 1);
     root->addLayout(top);
 
@@ -1300,6 +1947,11 @@ class AlbumWindow final : public QWidget {
 
     connect(import_btn_, &QPushButton::clicked, this, [this]() { BeginImport(); });
     connect(export_btn_, &QPushButton::clicked, this, [this]() { OpenExport(); });
+    connect(filters_btn_, &QToolButton::toggled, this, [this](bool on) {
+      if (filter_drawer_) {
+        filter_drawer_->setVisible(on);
+      }
+    });
     connect(list_, &QListWidget::itemClicked, this, [this](QListWidgetItem* item) {
       if (!item) {
         return;
@@ -1308,11 +1960,58 @@ class AlbumWindow final : public QWidget {
       const auto image_id   = static_cast<image_id_t>(item->data(Qt::UserRole + 2).toUInt());
       OpenEditor(element_id, image_id);
     });
+
+    if (filter_drawer_) {
+      filter_drawer_->SetOnApply([this](const FilterNode& node) { ApplyFilter(node, true); });
+      filter_drawer_->SetOnClear([this]() { ClearFilter(); });
+      filter_drawer_->SetResultsSummary(/*shown=*/0, /*total=*/0);
+    }
   }
 
  private:
+  int VisibleItemCount() const {
+    if (!list_) {
+      return 0;
+    }
+    int shown = 0;
+    for (int i = 0; i < list_->count(); ++i) {
+      auto* it = list_->item(i);
+      if (it && !it->isHidden()) {
+        ++shown;
+      }
+    }
+    return shown;
+  }
+
+  void UpdateStatusText() {
+    if (!status_) {
+      return;
+    }
+    const int total = list_ ? list_->count() : 0;
+    if (total <= 0) {
+      status_->setText("No images. Click Import…");
+      if (filter_drawer_) {
+        filter_drawer_->SetResultsSummary(0, 0);
+      }
+      return;
+    }
+
+    const int shown = VisibleItemCount();
+    status_->setText(QString("Showing %1 of %2 images").arg(shown).arg(total));
+    if (filter_drawer_) {
+      filter_drawer_->SetResultsSummary(shown, total);
+    }
+  }
+
   void SetBusyUi(bool busy, const QString& label) {
     import_btn_->setEnabled(!busy);
+    export_btn_->setEnabled(!busy);
+    if (filters_btn_) {
+      filters_btn_->setEnabled(!busy);
+    }
+    if (filter_drawer_) {
+      filter_drawer_->setEnabled(!busy);
+    }
     list_->setEnabled(!busy);
     if (busy) {
       if (!busy_) {
@@ -1433,7 +2132,11 @@ class AlbumWindow final : public QWidget {
       AddAlbumItem(c.element_id_, c.image_id_);
     }
 
-    status_->setText(QString("Showing %1 images").arg(list_->count()));
+    if (active_filter_node_.has_value()) {
+      ApplyFilter(active_filter_node_.value(), /*show_dialogs=*/false);
+    } else {
+      UpdateStatusText();
+    }
   }
 
   void AddAlbumItem(sl_element_id_t element_id, image_id_t image_id) {
@@ -1457,6 +2160,107 @@ class AlbumWindow final : public QWidget {
     };
 
     RefreshThumbnailForItem(element_id, image_id, item, /*invalidate=*/false);
+  }
+
+  void ClearFilter() {
+    if (active_filter_id_.has_value() && filter_service_) {
+      try {
+        filter_service_->RemoveFilterCombo(active_filter_id_.value());
+      } catch (...) {
+      }
+      active_filter_id_.reset();
+    }
+    active_filter_node_.reset();
+
+    if (!list_) {
+      return;
+    }
+    for (int i = 0; i < list_->count(); ++i) {
+      auto* it = list_->item(i);
+      if (it) {
+        it->setHidden(false);
+      }
+    }
+    list_->clearSelection();
+    UpdateStatusText();
+  }
+
+  void ApplyFilter(const FilterNode& node, bool show_dialogs) {
+    if (!filter_service_ || !list_) {
+      return;
+    }
+    if (list_->count() == 0) {
+      if (show_dialogs) {
+        QMessageBox::information(this, "Filter", "No images loaded.");
+      }
+      return;
+    }
+
+    // Filters are immutable and results are cached by filter_id_. Always create a new filter.
+    const filter_id_t new_filter_id = filter_service_->CreateFilterCombo(node);
+    const auto        filter_opt    = filter_service_->GetFilterCombo(new_filter_id);
+    if (!filter_opt.has_value() || !filter_opt.value()) {
+      if (show_dialogs) {
+        QMessageBox::warning(this, "Filter", "Filter creation failed.");
+      }
+      return;
+    }
+
+    // Replace previous filter to avoid unbounded growth of in-memory caches.
+    if (active_filter_id_.has_value()) {
+      try {
+        filter_service_->RemoveFilterCombo(active_filter_id_.value());
+      } catch (...) {
+      }
+    }
+    active_filter_id_   = new_filter_id;
+    active_filter_node_ = node;
+
+    std::vector<sl_element_id_t> filtered_ids;
+    try {
+      // Root folder id is 0.
+      const auto ids_opt = filter_service_->ApplyFilterOn(new_filter_id, /*parent_id=*/0);
+      if (!ids_opt.has_value()) {
+        if (show_dialogs) {
+          QMessageBox::warning(this, "Filter", "Unknown filter id.");
+        }
+        return;
+      }
+      filtered_ids = std::move(ids_opt.value());
+    } catch (const std::exception& e) {
+      if (show_dialogs) {
+        QMessageBox::warning(this, "Filter", QString("Filter failed: %1").arg(e.what()));
+      }
+      return;
+    }
+
+    std::unordered_set<sl_element_id_t> allow;
+    allow.reserve(filtered_ids.size() * 2 + 1);
+    for (const auto id : filtered_ids) {
+      allow.insert(id);
+    }
+
+    int shown = 0;
+    for (int i = 0; i < list_->count(); ++i) {
+      auto* it = list_->item(i);
+      if (!it) {
+        continue;
+      }
+      const auto element_id = static_cast<sl_element_id_t>(it->data(Qt::UserRole + 1).toUInt());
+      const bool keep = allow.contains(element_id);
+      it->setHidden(!keep);
+      if (keep) {
+        ++shown;
+      }
+    }
+
+    if (show_dialogs && shown == 0) {
+      QMessageBox::information(this, "Filter", "No matches.");
+    }
+
+    list_->clearSelection();
+    list_->scrollToTop();
+    UpdateStatusText();
   }
 
   void RefreshThumbnailForItem(sl_element_id_t element_id, image_id_t image_id, QListWidgetItem* item,
@@ -1623,10 +2427,16 @@ class AlbumWindow final : public QWidget {
   std::shared_ptr<ExportService>       export_service_;
   ImportServiceImpl                    import_service_;
 
+  std::unique_ptr<SleeveFilterService> filter_service_;
+  std::optional<filter_id_t>           active_filter_id_;
+  std::optional<FilterNode>            active_filter_node_;
+
   QPushButton*                         import_btn_ = nullptr;
   QPushButton*                         export_btn_ = nullptr;
+  QToolButton*                         filters_btn_ = nullptr;
   QLabel*                              status_     = nullptr;
   QListWidget*                         list_       = nullptr;
+  FilterDrawer*                        filter_drawer_ = nullptr;
 
   std::unordered_map<sl_element_id_t, QListWidgetItem*> items_by_element_{};
 
