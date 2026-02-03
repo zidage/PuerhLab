@@ -4,31 +4,33 @@
 #include <QApplication>
 #include <QComboBox>
 #include <QCoreApplication>
-#include <QDoubleValidator>
+#include <QDateTime>
 #include <QDialogButtonBox>
 #include <QDir>
+#include <QDoubleValidator>
+#include <QEventLoop>
 #include <QFileDialog>
+#include <QFontDatabase>
 #include <QFormLayout>
 #include <QFrame>
-#include <QFontDatabase>
 #include <QHBoxLayout>
 #include <QIcon>
 #include <QIntValidator>
-#include <QLineEdit>
 #include <QLabel>
+#include <QLineEdit>
 #include <QListWidget>
 #include <QMessageBox>
 #include <QMetaObject>
-#include <QPointer>
 #include <QPainter>
+#include <QPixmap>
+#include <QPointer>
 #include <QProgressDialog>
 #include <QPushButton>
-#include <QPixmap>
 #include <QScrollArea>
 #include <QSignalBlocker>
+#include <QSlider>
 #include <QSpinBox>
 #include <QStandardPaths>
-#include <QSlider>
 #include <QStyle>
 #include <QStyleFactory>
 #include <QTimer>
@@ -36,6 +38,7 @@
 #include <QVBoxLayout>
 #include <algorithm>
 #include <cctype>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <ctime>
@@ -44,7 +47,9 @@
 #include <functional>
 #include <future>
 #include <iostream>
+#include <json.hpp>
 #include <memory>
+#include <opencv2/opencv.hpp>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -54,11 +59,9 @@
 #include <unordered_set>
 #include <vector>
 
-#include <json.hpp>
-#include <opencv2/opencv.hpp>
-
-#include "app/import_service.hpp"
 #include "app/export_service.hpp"
+#include "app/import_service.hpp"
+#include "app/history_mgmt_service.hpp"
 #include "app/pipeline_service.hpp"
 #include "app/project_service.hpp"
 #include "app/render_service.hpp"
@@ -293,16 +296,16 @@ static std::optional<FilterValue> ParseFilterValue(FilterField field, const QStr
     return FilterValue{text.trimmed().toStdWString()};
   }
   if (kind == FilterValueKind::Int64) {
-    bool ok = false;
-    const auto v = text.trimmed().toLongLong(&ok);
+    bool       ok = false;
+    const auto v  = text.trimmed().toLongLong(&ok);
     if (!ok) {
       return std::nullopt;
     }
     return FilterValue{static_cast<int64_t>(v)};
   }
   if (kind == FilterValueKind::Double) {
-    bool ok = false;
-    const auto v = text.trimmed().toDouble(&ok);
+    bool       ok = false;
+    const auto v  = text.trimmed().toDouble(&ok);
     if (!ok) {
       return std::nullopt;
     }
@@ -348,7 +351,7 @@ class FilterDrawer final : public QWidget {
     header->addWidget(collapse_btn_, 0);
     root->addLayout(header, 0);
 
-    content_ = new QWidget(this);
+    content_             = new QWidget(this);
     auto* content_layout = new QVBoxLayout(content_);
     content_layout->setContentsMargins(12, 0, 12, 12);
     content_layout->setSpacing(10);
@@ -391,7 +394,7 @@ class FilterDrawer final : public QWidget {
     rules->setContentsMargins(12, 12, 12, 12);
     rules->setSpacing(8);
 
-    auto* rules_top = new QHBoxLayout();
+    auto* rules_top   = new QHBoxLayout();
     auto* rules_title = new QLabel("Rules", this);
     rules_title->setObjectName("CardTitle");
 
@@ -412,7 +415,7 @@ class FilterDrawer final : public QWidget {
     rows_scroll_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     rows_scroll_->setFrameShape(QFrame::NoFrame);
 
-    rows_widget_ = new QWidget(this);
+    rows_widget_    = new QWidget(this);
     rows_container_ = new QVBoxLayout(rows_widget_);
     rows_container_->setContentsMargins(0, 0, 0, 0);
     rows_container_->setSpacing(8);
@@ -577,7 +580,7 @@ class FilterDrawer final : public QWidget {
   }
 
   void UpdateRowBetweenUi(Row& row) {
-    const auto op = static_cast<CompareOp>(row.op_->currentData().toInt());
+    const auto op         = static_cast<CompareOp>(row.op_->currentData().toInt());
     const bool is_between = (op == CompareOp::BETWEEN);
     row.between_->setVisible(is_between);
     row.value2_->setVisible(is_between);
@@ -586,7 +589,7 @@ class FilterDrawer final : public QWidget {
   void AddRuleRow() {
     Row r;
     r.container_ = new QWidget(this);
-    auto* h = new QHBoxLayout(r.container_);
+    auto* h      = new QHBoxLayout(r.container_);
     h->setContentsMargins(0, 0, 0, 0);
     h->setSpacing(6);
 
@@ -602,13 +605,13 @@ class FilterDrawer final : public QWidget {
     r.field_->addItem("Rating", static_cast<int>(FilterField::Rating));
     r.field_->addItem("Tags", static_cast<int>(FilterField::SemanticTags));
 
-    r.op_ = new QComboBox(this);
+    r.op_      = new QComboBox(this);
 
-    r.value_ = new QLineEdit(this);
-    r.value2_ = new QLineEdit(this);
+    r.value_   = new QLineEdit(this);
+    r.value2_  = new QLineEdit(this);
     r.between_ = new QLabel("to", this);
 
-    r.remove_ = new QToolButton(this);
+    r.remove_  = new QToolButton(this);
     r.remove_->setObjectName("RemoveRule");
     r.remove_->setAutoRaise(true);
     r.remove_->setIcon(style()->standardIcon(QStyle::SP_DockWidgetCloseButton));
@@ -646,9 +649,8 @@ class FilterDrawer final : public QWidget {
     });
 
     connect(r.remove_, &QToolButton::clicked, this, [this, c = r.container_]() {
-      auto it = std::find_if(rows_.begin(), rows_.end(), [c](const Row& rr) {
-        return rr.container_ == c;
-      });
+      auto it = std::find_if(rows_.begin(), rows_.end(),
+                             [c](const Row& rr) { return rr.container_ == c; });
       if (it == rows_.end()) {
         return;
       }
@@ -685,55 +687,55 @@ class FilterDrawer final : public QWidget {
 
   std::optional<FilterNode> BuildFilterNode(bool show_dialogs) {
     std::optional<FilterNode> quick_node;
-    const auto q = quick_search_->text().trimmed();
+    const auto                q = quick_search_->text().trimmed();
     if (!q.isEmpty()) {
-      const FilterValue v{q.toStdWString()};
+      const FilterValue       v{q.toStdWString()};
       std::vector<FilterNode> clauses;
       clauses.reserve(4);
       clauses.push_back(FilterNode{FilterNode::Type::Condition,
                                    {},
                                    {},
-                                   FieldCondition{.field_ = FilterField::FileName,
-                                                  .op_ = CompareOp::CONTAINS,
-                                                  .value_ = v,
+                                   FieldCondition{.field_        = FilterField::FileName,
+                                                  .op_           = CompareOp::CONTAINS,
+                                                  .value_        = v,
                                                   .second_value_ = std::nullopt},
                                    std::nullopt});
       clauses.push_back(FilterNode{FilterNode::Type::Condition,
                                    {},
                                    {},
-                                   FieldCondition{.field_ = FilterField::ExifCameraModel,
-                                                  .op_ = CompareOp::CONTAINS,
-                                                  .value_ = v,
+                                   FieldCondition{.field_        = FilterField::ExifCameraModel,
+                                                  .op_           = CompareOp::CONTAINS,
+                                                  .value_        = v,
                                                   .second_value_ = std::nullopt},
                                    std::nullopt});
       clauses.push_back(FilterNode{FilterNode::Type::Condition,
                                    {},
                                    {},
-                                   FieldCondition{.field_ = FilterField::SemanticTags,
-                                                  .op_ = CompareOp::CONTAINS,
-                                                  .value_ = v,
+                                   FieldCondition{.field_        = FilterField::SemanticTags,
+                                                  .op_           = CompareOp::CONTAINS,
+                                                  .value_        = v,
                                                   .second_value_ = std::nullopt},
                                    std::nullopt});
       clauses.push_back(FilterNode{FilterNode::Type::Condition,
                                    {},
                                    {},
-                                   FieldCondition{.field_ = FilterField::FileExtension,
-                                                  .op_ = CompareOp::CONTAINS,
-                                                  .value_ = v,
+                                   FieldCondition{.field_        = FilterField::FileExtension,
+                                                  .op_           = CompareOp::CONTAINS,
+                                                  .value_        = v,
                                                   .second_value_ = std::nullopt},
                                    std::nullopt});
 
-      quick_node = FilterNode{FilterNode::Type::Logical, FilterOp::OR, std::move(clauses), {},
-                              std::nullopt};
+      quick_node =
+          FilterNode{FilterNode::Type::Logical, FilterOp::OR, std::move(clauses), {}, std::nullopt};
     }
 
     std::optional<FilterNode> rules_node;
-    std::vector<FilterNode> conditions;
+    std::vector<FilterNode>   conditions;
     conditions.reserve(rows_.size());
 
     for (const auto& row : rows_) {
-      const auto field = static_cast<FilterField>(row.field_->currentData().toInt());
-      const auto op    = static_cast<CompareOp>(row.op_->currentData().toInt());
+      const auto field   = static_cast<FilterField>(row.field_->currentData().toInt());
+      const auto op      = static_cast<CompareOp>(row.op_->currentData().toInt());
 
       const auto v1_text = row.value_->text().trimmed();
       if (v1_text.isEmpty()) {
@@ -778,8 +780,8 @@ class FilterDrawer final : public QWidget {
         rules_node = conditions.front();
       } else {
         const auto join = static_cast<FilterOp>(join_op_->currentData().toInt());
-        rules_node = FilterNode{FilterNode::Type::Logical, join, std::move(conditions), {},
-                                std::nullopt};
+        rules_node =
+            FilterNode{FilterNode::Type::Logical, join, std::move(conditions), {}, std::nullopt};
       }
     }
 
@@ -800,28 +802,28 @@ class FilterDrawer final : public QWidget {
     children.reserve(2);
     children.push_back(std::move(quick_node.value()));
     children.push_back(std::move(rules_node.value()));
-    return FilterNode{FilterNode::Type::Logical, FilterOp::AND, std::move(children), {},
-                      std::nullopt};
+    return FilterNode{
+        FilterNode::Type::Logical, FilterOp::AND, std::move(children), {}, std::nullopt};
   }
 
-  QToolButton* collapse_btn_ = nullptr;
-  QWidget*     content_      = nullptr;
+  QToolButton*                           collapse_btn_   = nullptr;
+  QWidget*                               content_        = nullptr;
 
-  QLineEdit*   quick_search_ = nullptr;
-  QToolButton* inline_apply_ = nullptr;
+  QLineEdit*                             quick_search_   = nullptr;
+  QToolButton*                           inline_apply_   = nullptr;
 
-  QComboBox*   join_op_      = nullptr;
-  QScrollArea* rows_scroll_  = nullptr;
-  QWidget*     rows_widget_  = nullptr;
-  QVBoxLayout* rows_container_ = nullptr;
-  QPushButton* btn_add_      = nullptr;
-  QPushButton* btn_apply_    = nullptr;
-  QPushButton* btn_clear_    = nullptr;
+  QComboBox*                             join_op_        = nullptr;
+  QScrollArea*                           rows_scroll_    = nullptr;
+  QWidget*                               rows_widget_    = nullptr;
+  QVBoxLayout*                           rows_container_ = nullptr;
+  QPushButton*                           btn_add_        = nullptr;
+  QPushButton*                           btn_apply_      = nullptr;
+  QPushButton*                           btn_clear_      = nullptr;
 
-  QLabel*      info_         = nullptr;
-  QLabel*      sql_preview_  = nullptr;
+  QLabel*                                info_           = nullptr;
+  QLabel*                                sql_preview_    = nullptr;
 
-  std::vector<Row> rows_;
+  std::vector<Row>                       rows_;
 
   std::function<void(const FilterNode&)> on_apply_;
   std::function<void()>                  on_clear_;
@@ -946,9 +948,8 @@ class ExportDialog final : public QDialog {
   };
 
   ExportDialog(std::shared_ptr<ImagePoolService> image_pool,
-               std::shared_ptr<ExportService>   export_service,
-               std::vector<Item>                items,
-               QWidget*                         parent = nullptr)
+               std::shared_ptr<ExportService> export_service, std::vector<Item> items,
+               QWidget* parent = nullptr)
       : QDialog(parent),
         image_pool_(std::move(image_pool)),
         export_service_(std::move(export_service)),
@@ -987,7 +988,8 @@ class ExportDialog final : public QDialog {
     form->addRow("Output", out_row);
 
     connect(browse, &QPushButton::clicked, this, [this]() {
-      const auto d = QFileDialog::getExistingDirectory(this, "Select export folder", out_dir_->text());
+      const auto d =
+          QFileDialog::getExistingDirectory(this, "Select export folder", out_dir_->text());
       if (!d.isEmpty()) {
         out_dir_->setText(d);
       }
@@ -1048,19 +1050,18 @@ class ExportDialog final : public QDialog {
 
  private:
   ExportFormatOptions BuildOptionsForOne(const std::filesystem::path& src_path,
-                                        sl_element_id_t              sleeve_id,
-                                        image_id_t                   image_id) const {
+                                         sl_element_id_t sleeve_id, image_id_t image_id) const {
     ExportFormatOptions opt;
 
-    const auto fmt = FormatFromName(format_->currentText());
-    opt.format_ = fmt;
+    const auto          fmt = FormatFromName(format_->currentText());
+    opt.format_             = fmt;
 
-    opt.resize_enabled_  = (resize_enabled_->currentIndex() == 1);
-    opt.max_length_side_ = opt.resize_enabled_ ? max_side_->value() : 0;
+    opt.resize_enabled_     = (resize_enabled_->currentIndex() == 1);
+    opt.max_length_side_    = opt.resize_enabled_ ? max_side_->value() : 0;
 
-    opt.quality_ = quality_->value();
+    opt.quality_            = quality_->value();
 
-    const auto bd = bit_depth_->currentText().trimmed();
+    const auto bd           = bit_depth_->currentText().trimmed();
     if (bd == "8") {
       opt.bit_depth_ = ExportFormatOptions::BIT_DEPTH::BIT_8;
     } else if (bd == "32") {
@@ -1071,7 +1072,7 @@ class ExportDialog final : public QDialog {
 
     opt.compression_level_ = png_compress_->value();
 
-    const auto tc = tiff_compress_->currentText().trimmed().toUpper();
+    const auto tc          = tiff_compress_->currentText().trimmed().toUpper();
     if (tc == "LZW") {
       opt.tiff_compress_ = ExportFormatOptions::TIFF_COMPRESS::LZW;
     } else if (tc == "ZIP") {
@@ -1085,11 +1086,11 @@ class ExportDialog final : public QDialog {
     if (stem.empty()) {
       stem = std::filesystem::path("image");
     }
-    const auto suffix = std::string("_") + std::to_string(static_cast<uint64_t>(sleeve_id)) +
-                        "_" + std::to_string(static_cast<uint64_t>(image_id));
-    const auto ext = ExtensionForExportFormat(fmt);
+    const auto suffix = std::string("_") + std::to_string(static_cast<uint64_t>(sleeve_id)) + "_" +
+                        std::to_string(static_cast<uint64_t>(image_id));
+    const auto ext   = ExtensionForExportFormat(fmt);
     opt.export_path_ = out_dir / (stem.wstring() + std::wstring(suffix.begin(), suffix.end()) +
-                                 std::wstring(ext.begin(), ext.end()));
+                                  std::wstring(ext.begin(), ext.end()));
 
     return opt;
   }
@@ -1126,54 +1127,55 @@ class ExportDialog final : public QDialog {
       if (!self) {
         return;
       }
-      QMetaObject::invokeMethod(self, [self, results]() {
-        if (!self) {
-          return;
-        }
-        int ok = 0;
-        int fail = 0;
-        QStringList errors;
-        if (results) {
-          for (const auto& r : *results) {
-            if (r.success_) {
-              ok++;
-            } else {
-              fail++;
-              if (!r.message_.empty()) {
-                errors << QString::fromUtf8(r.message_.c_str());
+      QMetaObject::invokeMethod(
+          self,
+          [self, results]() {
+            if (!self) {
+              return;
+            }
+            int         ok   = 0;
+            int         fail = 0;
+            QStringList errors;
+            if (results) {
+              for (const auto& r : *results) {
+                if (r.success_) {
+                  ok++;
+                } else {
+                  fail++;
+                  if (!r.message_.empty()) {
+                    errors << QString::fromUtf8(r.message_.c_str());
+                  }
+                }
               }
             }
-          }
-        }
 
-        if (fail == 0) {
-          QMessageBox::information(self, "Export", QString("Done: %1 file(s)").arg(ok));
-        } else {
-          QMessageBox::warning(self, "Export",
-                               QString("Done: %1 ok, %2 failed\n\n%3")
-                                   .arg(ok)
-                                   .arg(fail)
-                                   .arg(errors.join("\n")));
-        }
+            if (fail == 0) {
+              QMessageBox::information(self, "Export", QString("Done: %1 file(s)").arg(ok));
+            } else {
+              QMessageBox::warning(
+                  self, "Export",
+                  QString("Done: %1 ok, %2 failed\n\n%3").arg(ok).arg(fail).arg(errors.join("\n")));
+            }
 
-        self->accept();
-      }, Qt::QueuedConnection);
+            self->accept();
+          },
+          Qt::QueuedConnection);
     });
   }
 
   std::shared_ptr<ImagePoolService> image_pool_;
-  std::shared_ptr<ExportService>   export_service_;
-  std::vector<Item>                items_;
+  std::shared_ptr<ExportService>    export_service_;
+  std::vector<Item>                 items_;
 
-  QLineEdit* out_dir_ = nullptr;
-  QComboBox* format_ = nullptr;
-  QComboBox* resize_enabled_ = nullptr;
-  QSpinBox*  max_side_ = nullptr;
-  QSpinBox*  quality_ = nullptr;
-  QComboBox* bit_depth_ = nullptr;
-  QSpinBox*  png_compress_ = nullptr;
-  QComboBox* tiff_compress_ = nullptr;
-  QLabel*    status_ = nullptr;
+  QLineEdit*                        out_dir_        = nullptr;
+  QComboBox*                        format_         = nullptr;
+  QComboBox*                        resize_enabled_ = nullptr;
+  QSpinBox*                         max_side_       = nullptr;
+  QSpinBox*                         quality_        = nullptr;
+  QComboBox*                        bit_depth_      = nullptr;
+  QSpinBox*                         png_compress_   = nullptr;
+  QComboBox*                        tiff_compress_  = nullptr;
+  QLabel*                           status_         = nullptr;
 };
 
 [[maybe_unused]] static void SetPipelineTemplateToGlobalParams(
@@ -1255,24 +1257,29 @@ class SpinnerWidget final : public QWidget {
   }
 
  private:
-  QTimer* timer_ = nullptr;
+  QTimer* timer_     = nullptr;
   int     angle_deg_ = 0;
 };
 
 class EditorDialog final : public QDialog {
  public:
-  EditorDialog(std::shared_ptr<ImagePoolService>    image_pool,
-               std::shared_ptr<PipelineGuard>       pipeline_guard,
-               sl_element_id_t                      element_id,
-               image_id_t                           image_id,
-               QWidget*                             parent = nullptr)
+  enum class WorkingMode : int { Incremental = 0, Plain = 1 };
+
+  EditorDialog(std::shared_ptr<ImagePoolService> image_pool,
+               std::shared_ptr<PipelineGuard> pipeline_guard,
+               std::shared_ptr<EditHistoryMgmtService> history_service,
+               std::shared_ptr<EditHistoryGuard>       history_guard, sl_element_id_t element_id,
+               image_id_t image_id, QWidget* parent = nullptr)
       : QDialog(parent),
         image_pool_(std::move(image_pool)),
         pipeline_guard_(std::move(pipeline_guard)),
+        history_service_(std::move(history_service)),
+        history_guard_(std::move(history_guard)),
         element_id_(element_id),
         image_id_(image_id),
         scheduler_(RenderService::GetPreviewScheduler()) {
-    if (!image_pool_ || !pipeline_guard_ || !pipeline_guard_->pipeline_ || !scheduler_) {
+    if (!image_pool_ || !pipeline_guard_ || !pipeline_guard_->pipeline_ || !history_service_ ||
+        !history_guard_ || !history_guard_->history_ || !scheduler_) {
       throw std::runtime_error("EditorDialog: missing services");
     }
 
@@ -1282,7 +1289,7 @@ class EditorDialog final : public QDialog {
 
     auto* root = new QHBoxLayout(this);
 
-    viewer_ = new QtEditViewer(this);
+    viewer_    = new QtEditViewer(this);
     viewer_->setMinimumSize(800, 600);
     viewer_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     viewer_->setStyleSheet(
@@ -1304,7 +1311,7 @@ class EditorDialog final : public QDialog {
     viewer_grid->setRowStretch(0, 1);
     viewer_grid->setColumnStretch(0, 1);
 
-    controls_ = new QWidget(this);
+    controls_             = new QWidget(this);
     auto* controls_layout = new QVBoxLayout(controls_);
     controls_layout->setContentsMargins(16, 16, 16, 16);
     controls_layout->setSpacing(12);
@@ -1346,6 +1353,16 @@ class EditorDialog final : public QDialog {
       // Demo-friendly default: apply a LUT only for brand-new pipelines with no saved params.
       state_.lut_path_ = lut_paths_[default_lut_index];
     }
+    committed_state_ = state_;
+
+    // Seed a working version from the latest committed one (if any).
+    try {
+      const auto parent_id = history_guard_->history_->GetLatestVersion().ver_ref_.GetVersionID();
+      working_version_     = Version(element_id_, parent_id);
+    } catch (...) {
+      working_version_ = Version(element_id_);
+    }
+    working_version_.SetBasePipelineExecutor(pipeline_guard_->pipeline_);
 
     int initial_lut_index = 0;
     if (!state_.lut_path_.empty()) {
@@ -1355,8 +1372,8 @@ class EditorDialog final : public QDialog {
       } else {
         // Keep UI consistent even if LUT path comes from an external/custom location.
         lut_paths_.push_back(state_.lut_path_);
-        lut_names_.push_back(QString::fromStdString(
-            std::filesystem::path(state_.lut_path_).filename().string()));
+        lut_names_.push_back(
+            QString::fromStdString(std::filesystem::path(state_.lut_path_).filename().string()));
         initial_lut_index = static_cast<int>(lut_paths_.size() - 1);
       }
     }
@@ -1402,10 +1419,9 @@ class EditorDialog final : public QDialog {
           "  color: #080A0C;"
           "}");
 
-      QObject::connect(combo, QOverload<int>::of(&QComboBox::currentIndexChanged), controls_,
-                       [onChange = std::forward<decltype(onChange)>(onChange)](int idx) {
-                         onChange(idx);
-                       });
+      QObject::connect(
+          combo, QOverload<int>::of(&QComboBox::currentIndexChanged), controls_,
+          [onChange = std::forward<decltype(onChange)>(onChange)](int idx) { onChange(idx); });
 
       auto* row       = new QWidget(controls_);
       auto* rowLayout = new QHBoxLayout(row);
@@ -1418,9 +1434,9 @@ class EditorDialog final : public QDialog {
     };
 
     auto addSlider = [&](const QString& name, int min, int max, int value, auto&& onChange,
+                         auto&& onRelease,
                          auto&& formatter) {
-      auto* info =
-          new QLabel(QString("%1: %2").arg(name).arg(formatter(value)), controls_);
+      auto* info = new QLabel(QString("%1: %2").arg(name).arg(formatter(value)), controls_);
       info->setStyleSheet(
           "QLabel {"
           "  color: #E8EAED;"
@@ -1438,11 +1454,14 @@ class EditorDialog final : public QDialog {
 
       QObject::connect(
           slider, &QSlider::valueChanged, controls_,
-          [info, name, formatter,
-           onChange = std::forward<decltype(onChange)>(onChange)](int v) {
+          [info, name, formatter, onChange = std::forward<decltype(onChange)>(onChange)](int v) {
             info->setText(QString("%1: %2").arg(name).arg(formatter(v)));
             onChange(v);
           });
+
+      QObject::connect(
+          slider, &QSlider::sliderReleased, controls_,
+          [onRelease = std::forward<decltype(onRelease)>(onRelease)]() { onRelease(); });
 
       auto* row       = new QWidget(controls_);
       auto* rowLayout = new QHBoxLayout(row);
@@ -1454,101 +1473,283 @@ class EditorDialog final : public QDialog {
       return slider;
     };
 
-    addComboBox(
-        "LUT", lut_names_, initial_lut_index,
-        [&](int idx) {
-          if (idx < 0 || idx >= static_cast<int>(lut_paths_.size())) {
-            return;
-          }
-          state_.lut_path_ = lut_paths_[idx];
-          RequestRender();
-        });
+    lut_combo_ = addComboBox("LUT", lut_names_, initial_lut_index, [&](int idx) {
+      if (idx < 0 || idx >= static_cast<int>(lut_paths_.size())) {
+        return;
+      }
+      state_.lut_path_ = lut_paths_[idx];
+      CommitAdjustment(AdjustmentField::Lut);
+    });
 
-    addSlider(
+    exposure_slider_ = addSlider(
         "Exposure", -1000, 1000, static_cast<int>(std::lround(state_.exposure_ * 100.0f)),
         [&](int v) {
           state_.exposure_ = static_cast<float>(v) / 100.0f;
           RequestRender();
         },
+        [this]() { CommitAdjustment(AdjustmentField::Exposure); },
         [](int v) { return QString::number(v / 100.0, 'f', 2); });
 
-    addSlider(
+    contrast_slider_ = addSlider(
         "Contrast", -100, 100, static_cast<int>(std::lround(state_.contrast_)),
         [&](int v) {
           state_.contrast_ = static_cast<float>(v);
           RequestRender();
         },
+        [this]() { CommitAdjustment(AdjustmentField::Contrast); },
         [](int v) { return QString::number(v, 'f', 2); });
 
-    addSlider(
+    saturation_slider_ = addSlider(
         "Saturation", -100, 100, static_cast<int>(std::lround(state_.saturation_)),
         [&](int v) {
           state_.saturation_ = static_cast<float>(v);
           RequestRender();
         },
+        [this]() { CommitAdjustment(AdjustmentField::Saturation); },
         [](int v) { return QString::number(v, 'f', 2); });
 
-    addSlider(
+    tint_slider_ = addSlider(
         "Tint", -100, 100, static_cast<int>(std::lround(state_.tint_)),
         [&](int v) {
           state_.tint_ = static_cast<float>(v);
           RequestRender();
         },
+        [this]() { CommitAdjustment(AdjustmentField::Tint); },
         [](int v) { return QString::number(v, 'f', 2); });
 
-    addSlider(
+    blacks_slider_ = addSlider(
         "Blacks", -100, 100, static_cast<int>(std::lround(state_.blacks_)),
         [&](int v) {
           state_.blacks_ = static_cast<float>(v);
           RequestRender();
         },
+        [this]() { CommitAdjustment(AdjustmentField::Blacks); },
         [](int v) { return QString::number(v, 'f', 2); });
 
-    addSlider(
+    whites_slider_ = addSlider(
         "Whites", -100, 100, static_cast<int>(std::lround(state_.whites_)),
         [&](int v) {
           state_.whites_ = static_cast<float>(v);
           RequestRender();
         },
+        [this]() { CommitAdjustment(AdjustmentField::Whites); },
         [](int v) { return QString::number(v, 'f', 2); });
 
-    addSlider(
+    shadows_slider_ = addSlider(
         "Shadows", -100, 100, static_cast<int>(std::lround(state_.shadows_)),
         [&](int v) {
           state_.shadows_ = static_cast<float>(v);
           RequestRender();
         },
+        [this]() { CommitAdjustment(AdjustmentField::Shadows); },
         [](int v) { return QString::number(v, 'f', 2); });
 
-    addSlider(
+    highlights_slider_ = addSlider(
         "Highlights", -100, 100, static_cast<int>(std::lround(state_.highlights_)),
         [&](int v) {
           state_.highlights_ = static_cast<float>(v);
           RequestRender();
         },
+        [this]() { CommitAdjustment(AdjustmentField::Highlights); },
         [](int v) { return QString::number(v, 'f', 2); });
 
-    addSlider(
+    sharpen_slider_ = addSlider(
         "Sharpen", -100, 100, static_cast<int>(std::lround(state_.sharpen_)),
         [&](int v) {
           state_.sharpen_ = static_cast<float>(v);
           RequestRender();
         },
+        [this]() { CommitAdjustment(AdjustmentField::Sharpen); },
         [](int v) { return QString::number(v, 'f', 2); });
 
-    addSlider(
+    clarity_slider_ = addSlider(
         "Clarity", -100, 100, static_cast<int>(std::lround(state_.clarity_)),
         [&](int v) {
           state_.clarity_ = static_cast<float>(v);
           RequestRender();
         },
+        [this]() { CommitAdjustment(AdjustmentField::Clarity); },
         [](int v) { return QString::number(v, 'f', 2); });
+
+    // Edit-history commit controls.
+    {
+      auto* row = new QWidget(controls_);
+      auto* rowLayout = new QHBoxLayout(row);
+      rowLayout->setContentsMargins(0, 0, 0, 0);
+      rowLayout->setSpacing(10);
+
+      version_status_ = new QLabel(row);
+      version_status_->setStyleSheet(
+          "QLabel {"
+          "  color: #AAB0B6;"
+          "  font-size: 12px;"
+          "}");
+
+      commit_version_btn_ = new QPushButton("Commit Version", row);
+      commit_version_btn_->setFixedHeight(32);
+      commit_version_btn_->setStyleSheet(
+          "QPushButton {"
+          "  background: #2B2F33;"
+          "  border: 1px solid #303134;"
+          "  border-radius: 8px;"
+          "  padding: 6px 10px;"
+          "}"
+          "QPushButton:hover {"
+          "  background: #34383C;"
+          "}"
+          "QPushButton:disabled {"
+          "  color: #6B7075;"
+          "  background: #1E1E1E;"
+          "}");
+
+      rowLayout->addWidget(version_status_, /*stretch*/ 1);
+      rowLayout->addWidget(commit_version_btn_, /*stretch*/ 0);
+      controls_layout->insertWidget(controls_layout->count() - 1, row);
+
+      QObject::connect(commit_version_btn_, &QPushButton::clicked, this,
+                       [this]() { CommitWorkingVersion(); });
+    }
+
+    // Edit-history visualization ("git log"-like) + working version mode.
+    {
+      auto* frame = new QFrame(controls_);
+      frame->setStyleSheet(
+          "QFrame {"
+          "  background: transparent;"
+          "  border: 1px solid #303134;"
+          "  border-radius: 12px;"
+          "}");
+
+      auto* layout = new QVBoxLayout(frame);
+      layout->setContentsMargins(10, 10, 10, 10);
+      layout->setSpacing(8);
+
+      const QFont mono = QFontDatabase::systemFont(QFontDatabase::FixedFont);
+
+      auto* mode_row     = new QWidget(frame);
+      auto* mode_layout  = new QHBoxLayout(mode_row);
+      mode_layout->setContentsMargins(0, 0, 0, 0);
+      mode_layout->setSpacing(8);
+
+      auto* mode_label = new QLabel("Working version:", mode_row);
+      mode_label->setStyleSheet(
+          "QLabel {"
+          "  color: #AAB0B6;"
+          "  font-size: 12px;"
+          "}");
+
+      working_mode_combo_ = new QComboBox(mode_row);
+      working_mode_combo_->addItem("Incremental (from latest)", static_cast<int>(WorkingMode::Incremental));
+      working_mode_combo_->addItem("Plain (no parent)", static_cast<int>(WorkingMode::Plain));
+      working_mode_combo_->setFixedHeight(28);
+      working_mode_combo_->setStyleSheet(
+          "QComboBox {"
+          "  background: #202124;"
+          "  border: 1px solid #303134;"
+          "  border-radius: 8px;"
+          "  padding: 4px 8px;"
+          "}"
+          "QComboBox::drop-down {"
+          "  border: 0px;"
+          "  width: 24px;"
+          "}"
+          "QComboBox QAbstractItemView {"
+          "  background: #202124;"
+          "  border: 1px solid #303134;"
+          "  selection-background-color: #8ab4f8;"
+          "  selection-color: #080A0C;"
+          "}");
+
+      new_working_btn_ = new QPushButton("New", mode_row);
+      new_working_btn_->setFixedHeight(28);
+      new_working_btn_->setStyleSheet(
+          "QPushButton {"
+          "  background: #2B2F33;"
+          "  border: 1px solid #303134;"
+          "  border-radius: 8px;"
+          "  padding: 4px 10px;"
+          "}"
+          "QPushButton:hover {"
+          "  background: #34383C;"
+          "}");
+
+      mode_layout->addWidget(mode_label, /*stretch*/ 0);
+      mode_layout->addWidget(working_mode_combo_, /*stretch*/ 1);
+      mode_layout->addWidget(new_working_btn_, /*stretch*/ 0);
+
+      layout->addWidget(mode_row);
+
+      auto* versions_label = new QLabel("Versions", frame);
+      versions_label->setStyleSheet(
+          "QLabel {"
+          "  color: #E8EAED;"
+          "  font-size: 12px;"
+          "  font-weight: 500;"
+          "}");
+      layout->addWidget(versions_label);
+
+      version_log_ = new QListWidget(frame);
+      version_log_->setFont(mono);
+      version_log_->setSelectionMode(QAbstractItemView::SingleSelection);
+      version_log_->setUniformItemSizes(true);
+      version_log_->setMinimumHeight(150);
+      version_log_->setStyleSheet(
+          "QListWidget {"
+          "  background: #121212;"
+          "  border: 1px solid #303134;"
+          "  border-radius: 10px;"
+          "  padding: 4px;"
+          "}"
+          "QListWidget::item {"
+          "  padding: 4px 6px;"
+          "  border-radius: 6px;"
+          "}"
+          "QListWidget::item:selected {"
+          "  background: rgba(138, 180, 248, 0.22);"
+          "}");
+      layout->addWidget(version_log_);
+
+      auto* tx_label = new QLabel("Uncommitted transactions (stack)", frame);
+      tx_label->setStyleSheet(
+          "QLabel {"
+          "  color: #E8EAED;"
+          "  font-size: 12px;"
+          "  font-weight: 500;"
+          "}");
+      layout->addWidget(tx_label);
+
+      tx_stack_ = new QListWidget(frame);
+      tx_stack_->setFont(mono);
+      tx_stack_->setSelectionMode(QAbstractItemView::NoSelection);
+      tx_stack_->setUniformItemSizes(true);
+      tx_stack_->setMinimumHeight(170);
+      tx_stack_->setStyleSheet(
+          "QListWidget {"
+          "  background: #121212;"
+          "  border: 1px solid #303134;"
+          "  border-radius: 10px;"
+          "  padding: 4px;"
+          "}"
+          "QListWidget::item {"
+          "  padding: 4px 6px;"
+          "  border-radius: 6px;"
+          "}");
+      layout->addWidget(tx_stack_, /*stretch*/ 1);
+
+      controls_layout->insertWidget(controls_layout->count() - 1, frame);
+
+      QObject::connect(new_working_btn_, &QPushButton::clicked, this,
+                       [this]() { StartNewWorkingVersionFromUi(); });
+      QObject::connect(working_mode_combo_, QOverload<int>::of(&QComboBox::currentIndexChanged),
+                       this, [this](int) { UpdateVersionUi(); });
+    }
+
+    UpdateVersionUi();
 
     SetupPipeline();
 
     // Requirement (3): init state render via singleShot.
     QTimer::singleShot(0, this, [this]() {
-      first_frame_ = true;
       state_.type_ = RenderType::FULL_RES_PREVIEW;
       RequestRender();
       state_.type_ = RenderType::FAST_PREVIEW;
@@ -1556,6 +1757,20 @@ class EditorDialog final : public QDialog {
   }
 
  private:
+  enum class AdjustmentField {
+    Exposure,
+    Contrast,
+    Saturation,
+    Tint,
+    Blacks,
+    Whites,
+    Shadows,
+    Highlights,
+    Sharpen,
+    Clarity,
+    Lut,
+  };
+
   struct AdjustmentState {
     float       exposure_   = 1.0f;
     float       contrast_   = 1.0f;
@@ -1568,8 +1783,294 @@ class EditorDialog final : public QDialog {
     float       sharpen_    = 0.0f;
     float       clarity_    = 0.0f;
     std::string lut_path_;
-    RenderType  type_       = RenderType::FAST_PREVIEW;
+    RenderType  type_ = RenderType::FAST_PREVIEW;
   };
+
+  static bool NearlyEqual(float a, float b) {
+    return std::abs(a - b) <= 1e-6f;
+  }
+
+  void UpdateVersionUi() {
+    if (!version_status_ || !commit_version_btn_) {
+      return;
+    }
+
+    const size_t tx_count = working_version_.GetAllEditTransactions().size();
+    QString      label    = QString("Uncommitted: %1 tx").arg(static_cast<qulonglong>(tx_count));
+
+    if (working_version_.HasParentVersion()) {
+      label += QString(" • parent: %1").arg(QString::fromStdString(
+          working_version_.GetParentVersionID().ToString().substr(0, 8)));
+    } else {
+      label += " • plain";
+    }
+
+    if (working_mode_combo_) {
+      const auto mode = static_cast<WorkingMode>(working_mode_combo_->currentData().toInt());
+      label += (mode == WorkingMode::Plain) ? " • mode: plain" : " • mode: incremental";
+    }
+
+    if (history_guard_ && history_guard_->history_) {
+      try {
+        const auto latest_id = history_guard_->history_->GetLatestVersion().ver_ref_.GetVersionID();
+        label += QString(" • Latest: %1").arg(QString::fromStdString(latest_id.ToString().substr(
+            0, 8)));
+      } catch (...) {
+      }
+    }
+
+    version_status_->setText(label);
+    commit_version_btn_->setEnabled(tx_count > 0);
+
+    if (tx_stack_) {
+      tx_stack_->clear();
+      for (const auto& tx : working_version_.GetAllEditTransactions()) {
+        auto* item = new QListWidgetItem(QString::fromStdString(tx.Describe(true, 110)), tx_stack_);
+        item->setToolTip(QString::fromStdString(tx.ToJSON().dump(2)));
+      }
+    }
+
+    if (version_log_) {
+      version_log_->clear();
+      if (history_guard_ && history_guard_->history_) {
+        Hash128 latest_id{};
+        try {
+          latest_id = history_guard_->history_->GetLatestVersion().ver_ref_.GetVersionID();
+        } catch (...) {
+        }
+
+        const Hash128 base_parent = working_version_.GetParentVersionID();
+
+        for (auto it = history_guard_->history_->GetCommitTree().rbegin();
+             it != history_guard_->history_->GetCommitTree().rend(); ++it) {
+          const auto& ver = it->ver_ref_;
+          const auto  ver_id = ver.GetVersionID();
+          const auto  short_id = QString::fromStdString(ver_id.ToString().substr(0, 8));
+          const auto  when = QDateTime::fromSecsSinceEpoch(static_cast<qint64>(ver.GetLastModifiedTime()))
+                                .toString("yyyy-MM-dd HH:mm:ss");
+          const auto  committed_tx_count =
+              static_cast<qulonglong>(ver.GetAllEditTransactions().size());
+
+          QString tags;
+          if (ver_id == latest_id) {
+            tags += " HEAD";
+          }
+          if (base_parent == ver_id && working_version_.HasParentVersion()) {
+            tags += " base";
+          }
+          if (!ver.HasParentVersion()) {
+            tags += " plain";
+          } else {
+            tags += QString(" p:%1").arg(QString::fromStdString(
+                ver.GetParentVersionID().ToString().substr(0, 8)));
+          }
+
+          QString msg;
+          const auto& txs = ver.GetAllEditTransactions();
+          if (!txs.empty()) {
+            msg = QString::fromStdString(txs.front().Describe(true, 70));
+          } else {
+            msg = "(empty)";
+          }
+
+          const QString line =
+              QString("* %1  %2  tx:%3  %4%5").arg(short_id).arg(when).arg(committed_tx_count).arg(
+                  msg, tags);
+
+          auto* item = new QListWidgetItem(line, version_log_);
+          item->setToolTip(QString("version=%1\nparent=%2\ntx=%3")
+                               .arg(QString::fromStdString(ver_id.ToString()))
+                               .arg(QString::fromStdString(ver.GetParentVersionID().ToString()))
+                               .arg(committed_tx_count));
+        }
+      }
+    }
+  }
+
+  void CommitWorkingVersion() {
+    if (!history_service_ || !history_guard_ || !history_guard_->history_) {
+      QMessageBox::warning(this, "History", "Edit history service not available.");
+      return;
+    }
+
+    const size_t tx_count = working_version_.GetAllEditTransactions().size();
+    if (tx_count == 0) {
+      QMessageBox::information(this, "History", "No uncommitted transactions.");
+      return;
+    }
+
+    history_id_t committed_id{};
+    try {
+      committed_id = history_service_->CommitVersion(history_guard_, std::move(working_version_));
+    } catch (const std::exception& e) {
+      QMessageBox::warning(this, "History", QString("Commit failed: %1").arg(e.what()));
+      working_version_ = Version(element_id_);
+      working_version_.SetBasePipelineExecutor(pipeline_guard_->pipeline_);
+      UpdateVersionUi();
+      return;
+    }
+
+    // Start a fresh working version chained from the committed one.
+    StartNewWorkingVersionFromCommit(committed_id);
+    UpdateVersionUi();
+  }
+
+  auto CurrentWorkingMode() const -> WorkingMode {
+    if (!working_mode_combo_) {
+      return WorkingMode::Incremental;
+    }
+    return static_cast<WorkingMode>(working_mode_combo_->currentData().toInt());
+  }
+
+  void StartNewWorkingVersionFromUi() {
+    if (CurrentWorkingMode() == WorkingMode::Plain) {
+      working_version_ = Version(element_id_);
+      working_version_.SetBasePipelineExecutor(pipeline_guard_->pipeline_);
+      UpdateVersionUi();
+      return;
+    }
+
+    // Incremental: seed from latest committed version (if any).
+    try {
+      if (history_guard_ && history_guard_->history_) {
+        const auto parent_id = history_guard_->history_->GetLatestVersion().ver_ref_.GetVersionID();
+        working_version_     = Version(element_id_, parent_id);
+      } else {
+        working_version_ = Version(element_id_);
+      }
+    } catch (...) {
+      working_version_ = Version(element_id_);
+    }
+    working_version_.SetBasePipelineExecutor(pipeline_guard_->pipeline_);
+    UpdateVersionUi();
+  }
+
+  void StartNewWorkingVersionFromCommit(const Hash128& committed_id) {
+    if (CurrentWorkingMode() == WorkingMode::Plain) {
+      working_version_ = Version(element_id_);
+    } else {
+      working_version_ = Version(element_id_, committed_id);
+    }
+    working_version_.SetBasePipelineExecutor(pipeline_guard_->pipeline_);
+  }
+
+  std::pair<PipelineStageName, OperatorType> FieldSpec(AdjustmentField field) const {
+    switch (field) {
+      case AdjustmentField::Exposure:
+        return {PipelineStageName::Basic_Adjustment, OperatorType::EXPOSURE};
+      case AdjustmentField::Contrast:
+        return {PipelineStageName::Basic_Adjustment, OperatorType::CONTRAST};
+      case AdjustmentField::Saturation:
+        return {PipelineStageName::Color_Adjustment, OperatorType::SATURATION};
+      case AdjustmentField::Tint:
+        return {PipelineStageName::Color_Adjustment, OperatorType::TINT};
+      case AdjustmentField::Blacks:
+        return {PipelineStageName::Basic_Adjustment, OperatorType::BLACK};
+      case AdjustmentField::Whites:
+        return {PipelineStageName::Basic_Adjustment, OperatorType::WHITE};
+      case AdjustmentField::Shadows:
+        return {PipelineStageName::Basic_Adjustment, OperatorType::SHADOWS};
+      case AdjustmentField::Highlights:
+        return {PipelineStageName::Basic_Adjustment, OperatorType::HIGHLIGHTS};
+      case AdjustmentField::Sharpen:
+        return {PipelineStageName::Detail_Adjustment, OperatorType::SHARPEN};
+      case AdjustmentField::Clarity:
+        return {PipelineStageName::Detail_Adjustment, OperatorType::CLARITY};
+      case AdjustmentField::Lut:
+        return {PipelineStageName::Color_Adjustment, OperatorType::LMT};
+    }
+    return {PipelineStageName::Basic_Adjustment, OperatorType::EXPOSURE};
+  }
+
+  nlohmann::json ParamsForField(AdjustmentField field, const AdjustmentState& s) const {
+    switch (field) {
+      case AdjustmentField::Exposure:
+        return {{"exposure", s.exposure_}};
+      case AdjustmentField::Contrast:
+        return {{"contrast", s.contrast_}};
+      case AdjustmentField::Saturation:
+        return {{"saturation", s.saturation_}};
+      case AdjustmentField::Tint:
+        return {{"tint", s.tint_}};
+      case AdjustmentField::Blacks:
+        return {{"black", s.blacks_}};
+      case AdjustmentField::Whites:
+        return {{"white", s.whites_}};
+      case AdjustmentField::Shadows:
+        return {{"shadows", s.shadows_}};
+      case AdjustmentField::Highlights:
+        return {{"highlights", s.highlights_}};
+      case AdjustmentField::Sharpen:
+        return {{"sharpen", {{"offset", s.sharpen_}}}};
+      case AdjustmentField::Clarity:
+        return {{"clarity", s.clarity_}};
+      case AdjustmentField::Lut:
+        return {{"ocio_lmt", s.lut_path_}};
+    }
+    return {};
+  }
+
+  bool FieldChanged(AdjustmentField field) const {
+    switch (field) {
+      case AdjustmentField::Exposure:
+        return !NearlyEqual(state_.exposure_, committed_state_.exposure_);
+      case AdjustmentField::Contrast:
+        return !NearlyEqual(state_.contrast_, committed_state_.contrast_);
+      case AdjustmentField::Saturation:
+        return !NearlyEqual(state_.saturation_, committed_state_.saturation_);
+      case AdjustmentField::Tint:
+        return !NearlyEqual(state_.tint_, committed_state_.tint_);
+      case AdjustmentField::Blacks:
+        return !NearlyEqual(state_.blacks_, committed_state_.blacks_);
+      case AdjustmentField::Whites:
+        return !NearlyEqual(state_.whites_, committed_state_.whites_);
+      case AdjustmentField::Shadows:
+        return !NearlyEqual(state_.shadows_, committed_state_.shadows_);
+      case AdjustmentField::Highlights:
+        return !NearlyEqual(state_.highlights_, committed_state_.highlights_);
+      case AdjustmentField::Sharpen:
+        return !NearlyEqual(state_.sharpen_, committed_state_.sharpen_);
+      case AdjustmentField::Clarity:
+        return !NearlyEqual(state_.clarity_, committed_state_.clarity_);
+      case AdjustmentField::Lut:
+        return state_.lut_path_ != committed_state_.lut_path_;
+    }
+    return false;
+  }
+
+  void CommitAdjustment(AdjustmentField field) {
+    if (!FieldChanged(field) || !pipeline_guard_ || !pipeline_guard_->pipeline_) {
+      // Still fulfill the "full res on release/change" behavior.
+      state_.type_ = RenderType::FULL_RES_PREVIEW;
+      RequestRender();
+      state_.type_ = RenderType::FAST_PREVIEW;
+      return;
+    }
+
+    const auto [stage_name, op_type] = FieldSpec(field);
+    const auto old_params            = ParamsForField(field, committed_state_);
+    const auto new_params            = ParamsForField(field, state_);
+
+    auto exec = pipeline_guard_->pipeline_;
+    auto& stage = exec->GetStage(stage_name);
+    const auto op = stage.GetOperator(op_type);
+    const TransactionType tx_type =
+        (op.has_value() && op.value() != nullptr) ? TransactionType::_EDIT : TransactionType::_ADD;
+
+    EditTransaction tx{tx_type, op_type, stage_name, new_params};
+    tx.SetLastOperatorParams(old_params);
+    (void)tx.ApplyTransaction(*exec);
+
+    working_version_.AppendEditTransaction(std::move(tx));
+    pipeline_guard_->dirty_ = true;
+
+    committed_state_        = state_;
+    UpdateVersionUi();
+
+    state_.type_ = RenderType::FULL_RES_PREVIEW;
+    RequestRender();
+    state_.type_ = RenderType::FAST_PREVIEW;
+  }
 
   bool LoadStateFromPipelineIfPresent() {
     auto exec = pipeline_guard_ ? pipeline_guard_->pipeline_ : nullptr;
@@ -1710,10 +2211,23 @@ class EditorDialog final : public QDialog {
     base_task_.input_             = std::make_shared<ImageBuffer>(std::move(*bytes));
     base_task_.pipeline_executor_ = pipeline_guard_->pipeline_;
 
-    auto exec = pipeline_guard_->pipeline_;
+    auto           exec           = pipeline_guard_->pipeline_;
     // exec->SetPreviewMode(true);
 
     // auto& global_params = exec->GetGlobalParams();
+    auto&          loading        = exec->GetStage(PipelineStageName::Image_Loading);
+    nlohmann::json decode_params;
+#ifdef HAVE_CUDA
+    decode_params["raw"]["cuda"] = false;
+#else
+    decode_params["raw"]["cuda"] = false;
+#endif
+    decode_params["raw"]["highlights_reconstruct"] = true;
+    decode_params["raw"]["use_camera_wb"]          = true;
+    decode_params["raw"]["user_wb"]                = 7600.f;
+    decode_params["raw"]["backend"]                = "puerh";
+    loading.SetOperator(OperatorType::RAW_DECODE, decode_params);
+
     // auto& basic         = exec->GetStage(PipelineStageName::Basic_Adjustment);
     // basic.SetOperator(OperatorType::EXPOSURE, {{"exposure", 0.0f}}, global_params);
     // basic.SetOperator(OperatorType::CONTRAST, {{"contrast", 1.0f}}, global_params);
@@ -1739,19 +2253,21 @@ class EditorDialog final : public QDialog {
   }
 
   void ApplyStateToPipeline() {
-    auto exec = pipeline_guard_->pipeline_;
+    auto  exec          = pipeline_guard_->pipeline_;
     auto& global_params = exec->GetGlobalParams();
 
-    auto& basic = exec->GetStage(PipelineStageName::Basic_Adjustment);
+    auto& basic         = exec->GetStage(PipelineStageName::Basic_Adjustment);
     basic.SetOperator(OperatorType::EXPOSURE, {{"exposure", state_.exposure_}}, global_params);
     basic.SetOperator(OperatorType::CONTRAST, {{"contrast", state_.contrast_}}, global_params);
     basic.SetOperator(OperatorType::BLACK, {{"black", state_.blacks_}}, global_params);
     basic.SetOperator(OperatorType::WHITE, {{"white", state_.whites_}}, global_params);
     basic.SetOperator(OperatorType::SHADOWS, {{"shadows", state_.shadows_}}, global_params);
-    basic.SetOperator(OperatorType::HIGHLIGHTS, {{"highlights", state_.highlights_}}, global_params);
+    basic.SetOperator(OperatorType::HIGHLIGHTS, {{"highlights", state_.highlights_}},
+                      global_params);
 
     auto& color = exec->GetStage(PipelineStageName::Color_Adjustment);
-    color.SetOperator(OperatorType::SATURATION, {{"saturation", state_.saturation_}}, global_params);
+    color.SetOperator(OperatorType::SATURATION, {{"saturation", state_.saturation_}},
+                      global_params);
     color.SetOperator(OperatorType::TINT, {{"tint", state_.tint_}}, global_params);
 
     // LUT (LMT): rebind only when the path changes. The operator's SetGlobalParams now
@@ -1768,11 +2284,40 @@ class EditorDialog final : public QDialog {
   }
 
   void RequestRender() {
-    pending_ = state_;
+    pending_     = state_;
     has_pending_ = true;
     if (!inflight_) {
       StartNext();
     }
+  }
+
+  void EnsurePollTimer() {
+    if (poll_timer_) {
+      return;
+    }
+    poll_timer_ = new QTimer(this);
+    poll_timer_->setInterval(16);
+    QObject::connect(poll_timer_, &QTimer::timeout, this, [this]() { PollInflight(); });
+  }
+
+  void PollInflight() {
+    if (!inflight_future_.has_value()) {
+      if (poll_timer_ && poll_timer_->isActive() && !inflight_) {
+        poll_timer_->stop();
+      }
+      return;
+    }
+
+    if (inflight_future_->wait_for(0ms) != std::future_status::ready) {
+      return;
+    }
+
+    try {
+      (void)inflight_future_->get();
+    } catch (...) {
+    }
+    inflight_future_.reset();
+    OnRenderFinished();
   }
 
   void StartNext() {
@@ -1783,16 +2328,6 @@ class EditorDialog final : public QDialog {
     state_       = pending_;
     has_pending_ = false;
 
-    if (first_frame_) {
-      controls_->setEnabled(false);
-      waiting_ = new QProgressDialog("Rendering first frame…", QString(), 0, 0, this);
-      waiting_->setWindowModality(Qt::ApplicationModal);
-      waiting_->setCancelButton(nullptr);
-      waiting_->setMinimumDuration(0);
-      waiting_->show();
-      QCoreApplication::processEvents();
-    }
-
     if (spinner_) {
       spinner_->Start();
       // Ensure the spinner paints before any potentially blocking work.
@@ -1800,38 +2335,26 @@ class EditorDialog final : public QDialog {
     }
 
     ApplyStateToPipeline();
-    pipeline_guard_->dirty_ = true;
+    pipeline_guard_->dirty_                 = true;
 
-    PipelineTask task = base_task_;
+    PipelineTask task                       = base_task_;
     task.options_.render_desc_.render_type_ = state_.type_;
-    task.options_.is_callback_ = false;
-    task.options_.is_seq_callback_ = false;
-    task.options_.is_blocking_ = true;
+    task.options_.is_callback_              = false;
+    task.options_.is_seq_callback_          = false;
+    task.options_.is_blocking_              = true;
 
     auto promise = std::make_shared<std::promise<std::shared_ptr<ImageBuffer>>>();
-    auto fut = promise->get_future();
+    auto fut     = promise->get_future();
     task.result_ = promise;
 
-    inflight_ = true;
+    inflight_    = true;
     scheduler_->ScheduleTask(std::move(task));
 
-    // Avoid UI-thread polling. Wait for task completion on a helper thread and
-    // then post a completion handler back to the dialog's thread.
-    QPointer<EditorDialog> self(this);
-    std::thread([self, f = std::move(fut)]() mutable {
-      try {
-        (void)f.get();
-      } catch (...) {
-      }
-      if (!self) {
-        return;
-      }
-      QMetaObject::invokeMethod(self.data(), [self]() {
-        if (self) {
-          self->OnRenderFinished();
-        }
-      }, Qt::QueuedConnection);
-    }).detach();
+    inflight_future_ = std::move(fut);
+    EnsurePollTimer();
+    if (poll_timer_ && !poll_timer_->isActive()) {
+      poll_timer_->start();
+    }
   }
 
   void OnRenderFinished() {
@@ -1841,55 +2364,65 @@ class EditorDialog final : public QDialog {
       spinner_->Stop();
     }
 
-    if (first_frame_) {
-      first_frame_ = false;
-      if (waiting_) {
-        waiting_->close();
-        waiting_->deleteLater();
-        waiting_ = nullptr;
-      }
-      controls_->setEnabled(true);
-      state_.type_ = RenderType::FAST_PREVIEW;
-    }
-
     if (has_pending_) {
       StartNext();
+    } else if (poll_timer_ && poll_timer_->isActive()) {
+      poll_timer_->stop();
     }
   }
 
-  std::shared_ptr<ImagePoolService>  image_pool_;
-  std::shared_ptr<PipelineGuard>     pipeline_guard_;
-  sl_element_id_t                    element_id_ = 0;
-  image_id_t                         image_id_   = 0;
+  std::shared_ptr<ImagePoolService>                        image_pool_;
+  std::shared_ptr<PipelineGuard>                           pipeline_guard_;
+  std::shared_ptr<EditHistoryMgmtService>                  history_service_;
+  std::shared_ptr<EditHistoryGuard>                        history_guard_;
+  sl_element_id_t                                          element_id_ = 0;
+  image_id_t                                               image_id_   = 0;
 
-  std::shared_ptr<PipelineScheduler> scheduler_;
-  PipelineTask                        base_task_{};
+  std::shared_ptr<PipelineScheduler>                       scheduler_;
+  PipelineTask                                             base_task_{};
 
-  QtEditViewer*                       viewer_      = nullptr;
-  QWidget*                            viewer_container_ = nullptr;
-  SpinnerWidget*                      spinner_     = nullptr;
-  QWidget*                            controls_    = nullptr;
-  QProgressDialog*                    waiting_     = nullptr;
+  QtEditViewer*                                            viewer_           = nullptr;
+  QWidget*                                                 viewer_container_ = nullptr;
+  SpinnerWidget*                                           spinner_          = nullptr;
+  QWidget*                                                 controls_         = nullptr;
+  QComboBox*                                               lut_combo_        = nullptr;
+  QSlider*                                                 exposure_slider_  = nullptr;
+  QSlider*                                                 contrast_slider_  = nullptr;
+  QSlider*                                                 saturation_slider_ = nullptr;
+  QSlider*                                                 tint_slider_      = nullptr;
+  QSlider*                                                 blacks_slider_    = nullptr;
+  QSlider*                                                 whites_slider_    = nullptr;
+  QSlider*                                                 shadows_slider_   = nullptr;
+  QSlider*                                                 highlights_slider_ = nullptr;
+  QSlider*                                                 sharpen_slider_   = nullptr;
+  QSlider*                                                 clarity_slider_   = nullptr;
+  QLabel*                                                  version_status_   = nullptr;
+  QPushButton*                                             commit_version_btn_ = nullptr;
+  QComboBox*                                               working_mode_combo_ = nullptr;
+  QPushButton*                                             new_working_btn_ = nullptr;
+  QListWidget*                                             version_log_ = nullptr;
+  QListWidget*                                             tx_stack_ = nullptr;
+  QTimer*                                                  poll_timer_       = nullptr;
+  std::optional<std::future<std::shared_ptr<ImageBuffer>>> inflight_future_{};
 
-  std::vector<std::string>            lut_paths_{};
-  QStringList                         lut_names_{};
+  std::vector<std::string>                                 lut_paths_{};
+  QStringList                                              lut_names_{};
 
-  std::string                         last_applied_lut_path_{};
-  AdjustmentState                     state_{};
-  AdjustmentState                     pending_{};
-  bool                                first_frame_  = true;
-  bool                                inflight_     = false;
-  bool                                has_pending_  = false;
+  std::string                                              last_applied_lut_path_{};
+  AdjustmentState                                          state_{};
+  AdjustmentState                                          committed_state_{};
+  Version                                                  working_version_{};
+  AdjustmentState                                          pending_{};
+  bool                                                     inflight_    = false;
+  bool                                                     has_pending_ = false;
 };
 
 class AlbumWindow final : public QWidget {
  public:
-  AlbumWindow(std::shared_ptr<ProjectService>      project,
-              std::filesystem::path                meta_path,
+  AlbumWindow(std::shared_ptr<ProjectService> project, std::filesystem::path meta_path,
               std::shared_ptr<ThumbnailService>    thumbnail_service,
               std::shared_ptr<ImagePoolService>    image_pool,
-              std::shared_ptr<PipelineMgmtService> pipeline_service,
-              QWidget*                             parent = nullptr)
+              std::shared_ptr<PipelineMgmtService> pipeline_service, QWidget* parent = nullptr)
       : QWidget(parent),
         project_(std::move(project)),
         meta_path_(std::move(meta_path)),
@@ -1902,10 +2435,12 @@ class AlbumWindow final : public QWidget {
       throw std::runtime_error("AlbumWindow: missing services");
     }
 
-    export_service_ = std::make_shared<ExportService>(project_->GetSleeveService(), image_pool_, pipeline_service_);
+    export_service_ = std::make_shared<ExportService>(project_->GetSleeveService(), image_pool_,
+                                                      pipeline_service_);
     filter_service_ = std::make_unique<SleeveFilterService>(project_->GetStorageService());
+    history_service_ = std::make_shared<EditHistoryMgmtService>(project_->GetStorageService());
 
-    auto* outer = new QHBoxLayout(this);
+    auto* outer     = new QHBoxLayout(this);
     outer->setContentsMargins(10, 10, 10, 10);
     outer->setSpacing(12);
 
@@ -1916,7 +2451,7 @@ class AlbumWindow final : public QWidget {
     root->setSpacing(8);
     outer->addLayout(root, 1);
 
-    auto* top = new QHBoxLayout();
+    auto* top   = new QHBoxLayout();
     import_btn_ = new QPushButton("Import…", this);
     export_btn_ = new QPushButton("Export…", this);
     status_     = new QLabel("No images. Click Import…", this);
@@ -2063,7 +2598,7 @@ class AlbumWindow final : public QWidget {
     import_inflight_ = true;
     SetBusyUi(true, "Importing…");
 
-    auto job = std::make_shared<ImportJob>();
+    auto job            = std::make_shared<ImportJob>();
     current_import_job_ = job;
 
     QPointer<AlbumWindow> self(this);
@@ -2076,30 +2611,34 @@ class AlbumWindow final : public QWidget {
       const uint32_t meta_done    = p.metadata_done_.load();
       const uint32_t failed       = p.failed_.load();
 
-      QMetaObject::invokeMethod(self, [self, total, placeholders, meta_done, failed]() {
-        if (!self) {
-          return;
-        }
-        self->SetBusyUi(
-            true,
-            QString("Importing… %1/%2 (meta %3, failed %4)")
-                .arg(placeholders)
-                .arg(total)
-                .arg(meta_done)
-                .arg(failed));
-      }, Qt::QueuedConnection);
+      QMetaObject::invokeMethod(
+          self,
+          [self, total, placeholders, meta_done, failed]() {
+            if (!self) {
+              return;
+            }
+            self->SetBusyUi(true, QString("Importing… %1/%2 (meta %3, failed %4)")
+                                      .arg(placeholders)
+                                      .arg(total)
+                                      .arg(meta_done)
+                                      .arg(failed));
+          },
+          Qt::QueuedConnection);
     };
 
     job->on_finished_ = [self](const ImportResult& r) {
       if (!self) {
         return;
       }
-      QMetaObject::invokeMethod(self, [self, r]() {
-        if (!self) {
-          return;
-        }
-        self->FinishImport(r);
-      }, Qt::QueuedConnection);
+      QMetaObject::invokeMethod(
+          self,
+          [self, r]() {
+            if (!self) {
+              return;
+            }
+            self->FinishImport(r);
+          },
+          Qt::QueuedConnection);
     };
 
     current_import_job_ = import_service_.ImportToFolder(paths, image_path_t{}, {}, job);
@@ -2147,7 +2686,7 @@ class AlbumWindow final : public QWidget {
     item->setSizeHint(QSize(240, 190));
     list_->addItem(item);
 
-    items_by_element_[element_id] = item;
+    items_by_element_[element_id]    = item;
 
     // Requirement (1): clickable cells; thumbnails load async.
     CallbackDispatcher ui_dispatcher = [](std::function<void()> fn) {
@@ -2247,7 +2786,7 @@ class AlbumWindow final : public QWidget {
         continue;
       }
       const auto element_id = static_cast<sl_element_id_t>(it->data(Qt::UserRole + 1).toUInt());
-      const bool keep = allow.contains(element_id);
+      const bool keep       = allow.contains(element_id);
       it->setHidden(!keep);
       if (keep) {
         ++shown;
@@ -2263,8 +2802,8 @@ class AlbumWindow final : public QWidget {
     UpdateStatusText();
   }
 
-  void RefreshThumbnailForItem(sl_element_id_t element_id, image_id_t image_id, QListWidgetItem* item,
-                               bool invalidate) {
+  void RefreshThumbnailForItem(sl_element_id_t element_id, image_id_t image_id,
+                               QListWidgetItem* item, bool invalidate) {
     if (!item || !thumbnails_) {
       return;
     }
@@ -2295,7 +2834,8 @@ class AlbumWindow final : public QWidget {
             return;
           }
 
-          std::thread([self, svc, element_id, item, ui_dispatcher, guard = std::move(guard)]() mutable {
+          std::thread([self, svc, element_id, item, ui_dispatcher,
+                       guard = std::move(guard)]() mutable {
             QImage scaled;
             try {
               auto* buf = guard->thumbnail_buffer_.get();
@@ -2307,7 +2847,7 @@ class AlbumWindow final : public QWidget {
               }
               if (buf->cpu_data_valid_) {
                 QImage img = MatRgba32fToQImageCopy(buf->GetCPUData());
-                scaled = img.scaled(220, 160, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+                scaled     = img.scaled(220, 160, Qt::KeepAspectRatio, Qt::SmoothTransformation);
               }
             } catch (...) {
             }
@@ -2349,8 +2889,17 @@ class AlbumWindow final : public QWidget {
       return;
     }
 
+    std::shared_ptr<EditHistoryGuard> history_guard;
     try {
-      EditorDialog dlg(image_pool_, guard, element_id, image_id, this);
+      history_guard = history_service_ ? history_service_->LoadHistory(element_id) : nullptr;
+    } catch (const std::exception& e) {
+      QMessageBox::warning(this, "Editor", QString("LoadHistory failed: %1").arg(e.what()));
+      return;
+    }
+
+    try {
+      EditorDialog dlg(image_pool_, guard, history_service_, history_guard, element_id, image_id,
+                       this);
       dlg.exec();
     } catch (const std::exception& e) {
       QMessageBox::warning(this, "Editor", QString("Editor failed: %1").arg(e.what()));
@@ -2359,6 +2908,11 @@ class AlbumWindow final : public QWidget {
     // Requirement (4): return PipelineGuard back to cell / persist to DB.
     pipeline_service_->SavePipeline(guard);
     pipeline_service_->Sync();
+
+    if (history_service_) {
+      history_service_->SaveHistory(history_guard);
+      history_service_->Sync();
+    }
     project_->SaveProject(meta_path_);
 
     // Refresh thumbnail for this cell after edits.
@@ -2376,7 +2930,7 @@ class AlbumWindow final : public QWidget {
 
     std::vector<ExportDialog::Item> items;
 
-    const auto selected = list_->selectedItems();
+    const auto                      selected = list_->selectedItems();
     if (!selected.isEmpty()) {
       items.reserve(static_cast<size_t>(selected.size()));
       for (auto* it : selected) {
@@ -2419,30 +2973,31 @@ class AlbumWindow final : public QWidget {
     }
   }
 
-  std::shared_ptr<ProjectService>      project_;
-  std::filesystem::path                meta_path_;
-  std::shared_ptr<ThumbnailService>    thumbnails_;
-  std::shared_ptr<ImagePoolService>    image_pool_;
-  std::shared_ptr<PipelineMgmtService> pipeline_service_;
-  std::shared_ptr<ExportService>       export_service_;
-  ImportServiceImpl                    import_service_;
+  std::shared_ptr<ProjectService>                       project_;
+  std::filesystem::path                                 meta_path_;
+  std::shared_ptr<ThumbnailService>                     thumbnails_;
+  std::shared_ptr<ImagePoolService>                     image_pool_;
+  std::shared_ptr<PipelineMgmtService>                  pipeline_service_;
+  std::shared_ptr<EditHistoryMgmtService>              history_service_;
+  std::shared_ptr<ExportService>                        export_service_;
+  ImportServiceImpl                                     import_service_;
 
-  std::unique_ptr<SleeveFilterService> filter_service_;
-  std::optional<filter_id_t>           active_filter_id_;
-  std::optional<FilterNode>            active_filter_node_;
+  std::unique_ptr<SleeveFilterService>                  filter_service_;
+  std::optional<filter_id_t>                            active_filter_id_;
+  std::optional<FilterNode>                             active_filter_node_;
 
-  QPushButton*                         import_btn_ = nullptr;
-  QPushButton*                         export_btn_ = nullptr;
-  QToolButton*                         filters_btn_ = nullptr;
-  QLabel*                              status_     = nullptr;
-  QListWidget*                         list_       = nullptr;
-  FilterDrawer*                        filter_drawer_ = nullptr;
+  QPushButton*                                          import_btn_    = nullptr;
+  QPushButton*                                          export_btn_    = nullptr;
+  QToolButton*                                          filters_btn_   = nullptr;
+  QLabel*                                               status_        = nullptr;
+  QListWidget*                                          list_          = nullptr;
+  FilterDrawer*                                         filter_drawer_ = nullptr;
 
   std::unordered_map<sl_element_id_t, QListWidgetItem*> items_by_element_{};
 
-  bool                                 import_inflight_ = false;
-  std::shared_ptr<ImportJob>           current_import_job_{};
-  QProgressDialog*                     busy_ = nullptr;
+  bool                                                  import_inflight_ = false;
+  std::shared_ptr<ImportJob>                            current_import_job_{};
+  QProgressDialog*                                      busy_ = nullptr;
 };
 
 }  // namespace
