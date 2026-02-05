@@ -109,8 +109,9 @@ class GPU_KernelLauncher {
 
   void SetInputImage(std::shared_ptr<ImageBuffer> input_img) {
     input_img_ = input_img;
-    input_img_->SyncToGPU();
-    cv::cuda::GpuMat gpu_mat     = input_img_->GetGPUData();
+    // input_img_->SyncToGPU();
+    cv::cuda::GpuMat gpu_mat = input_img_->GetGPUData();
+    
 
     size_t           width       = gpu_mat.cols;
     size_t           height      = gpu_mat.rows;
@@ -157,6 +158,7 @@ class GPU_KernelLauncher {
           work_buffer_, width * sizeof(float4), gpu_mat.ptr<float4>(), gpu_mat.step,
           width * sizeof(float4), height, cudaMemcpyDeviceToDevice, stream_);
       if (copy_err != cudaSuccess) {
+        std::cout << "Error: " << cudaGetErrorString(copy_err) << std::endl;
         throw std::runtime_error(std::string("cudaMemcpy2D (input->work) failed: ") +
                                  cudaGetErrorString(copy_err));
       }

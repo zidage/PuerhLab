@@ -31,17 +31,16 @@ class ExposureOp : public OperatorBase<ExposureOp>, PointOpTag {
    * Positive to increase the brightness, negative to darken.
    *
    */
-  float              exposure_offset_;
+  float exposure_offset_;
 
   /**
    * @brief The actual luminance offset derived from the EV
    * dL = 2^E
    *
    */
-  float              scale_;
+  float scale_;
 
-  float              gamma_;
-
+  float gamma_;
 
  public:
   static constexpr PriorityLevel     priority_level_    = 0;
@@ -54,6 +53,7 @@ class ExposureOp : public OperatorBase<ExposureOp>, PointOpTag {
   ExposureOp(const nlohmann::json& params);
 
   void Apply(std::shared_ptr<ImageBuffer> input) override;
+  void ApplyGPU(std::shared_ptr<ImageBuffer> input) override;
   auto GetParams() const -> nlohmann::json override;
   void SetParams(const nlohmann::json& params) override;
 

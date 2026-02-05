@@ -147,7 +147,7 @@ void SetPipelineTemplate(std::shared_ptr<PipelineExecutor> executor) {
   auto&          global_params = executor->GetGlobalParams();
   nlohmann::json decode_params;
 #ifdef HAVE_CUDA
-  decode_params["raw"]["cuda"] = false;
+  decode_params["raw"]["cuda"] = true;
 #else
   decode_params["raw"]["cuda"] = false;
 #endif

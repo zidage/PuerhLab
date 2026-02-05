@@ -24,12 +24,10 @@
 namespace puerhlab {
 class BlackOp : public OperatorBase<BlackOp> {
  private:
-  float              offset_;
+  float offset_;
 
-  float              y_intercept_;
-  float              slope_;  // slope of the tone curve
-
-  
+  float y_intercept_;
+  float slope_;  // slope of the tone curve
 
  public:
   auto                               GetScale() -> float;
@@ -45,6 +43,7 @@ class BlackOp : public OperatorBase<BlackOp> {
   static void GetMask(cv::Mat& src, cv::Mat& mask);
 
   void        Apply(std::shared_ptr<ImageBuffer> input) override;
+  void        ApplyGPU(std::shared_ptr<ImageBuffer> input) override;
   auto        GetParams() const -> nlohmann::json override;
   void        SetParams(const nlohmann::json& params) override;
 

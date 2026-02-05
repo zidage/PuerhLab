@@ -130,43 +130,6 @@ static inline float _calc_refavg(const float* in, const int row, const int col, 
   // return croot_refavg[color];
 }
 
-// Calculate desaturation factor based on clipping severity
-static inline float _calc_desaturation_factor(const float* in, const int row, const int col,
-                                              const int height, const int width, const float* clips,
-                                              const int search_radius = 5) {
-  const int dymin              = std::max(0, row - search_radius);
-  const int dxmin              = std::max(0, col - search_radius);
-  const int dymax              = std::min(height - 1, row + search_radius + 1);
-  const int dxmax              = std::min(width - 1, col + search_radius + 1);
-
-  // Check how many channels are clipped in the local area
-  bool      channel_clipped[3] = {false, false, false};
-
-  for (int dy = dymin; dy < dymax; ++dy) {
-    for (int dx = dxmin; dx < dxmax; ++dx) {
-      const float val = in[dy * width + dx];
-      const int   c   = FC(dy, dx);
-      if (val >= clips[c]) {
-        channel_clipped[c] = true;
-      }
-    }
-  }
-
-  int num_channels_clipped =
-      (channel_clipped[0] ? 1 : 0) + (channel_clipped[1] ? 1 : 0) + (channel_clipped[2] ? 1 : 0);
-
-  // If all 3 channels are clipped, full desaturation
-  // If 2 channels clipped, partial desaturation
-  // If 1 channel clipped, minimal desaturation
-  if (num_channels_clipped >= 3) {
-    return 1.0f;  // Full desaturation to white/gray
-  } else if (num_channels_clipped == 2) {
-    return 1.f;  // Significant desaturation
-  } else {
-    return 0.8f;  // Slight desaturation needed
-  }
-}
-
 /**
  * @brief Adapted from
  * https://github.com/darktable-org/darktable/blob/master/src/iop/hlreconstruct/opposed.c

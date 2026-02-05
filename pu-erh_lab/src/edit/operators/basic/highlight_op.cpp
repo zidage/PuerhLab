@@ -35,6 +35,7 @@ auto                HighlightsOp::GetScale() -> float { return offset_ / 300.0f;
 
 void                HighlightsOp::Apply(std::shared_ptr<ImageBuffer> input) { (void)input; }
 
+void HighlightsOp::ApplyGPU(std::shared_ptr<ImageBuffer>) { throw std::runtime_error("HighlightsOp: ApplyGPU not implemented"); }
 
 auto HighlightsOp::GetParams() const -> nlohmann::json { return {script_name_, offset_}; }
 

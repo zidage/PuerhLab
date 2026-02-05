@@ -91,6 +91,10 @@ void SharpenOp::Apply(std::shared_ptr<ImageBuffer> input) {
   cv::threshold(img, img, 0.0f, 0.0f, cv::THRESH_TOZERO);
 }
 
+void SharpenOp::ApplyGPU(std::shared_ptr<ImageBuffer>) {
+  // GPU implementation not available yet.
+  throw std::runtime_error("SharpenOp::ApplyGPU not implemented yet.");
+}
 
 void SharpenOp::SetGlobalParams(OperatorParams& params) const {
   params.sharpen_offset_    = scale_;

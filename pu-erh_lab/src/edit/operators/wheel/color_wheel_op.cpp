@@ -92,6 +92,11 @@ void ColorWheelOp::Apply(std::shared_ptr<ImageBuffer> input) {
   });
 }
 
+void ColorWheelOp::ApplyGPU(std::shared_ptr<ImageBuffer>) {
+  // GPU implementation not available yet.
+  throw std::runtime_error("ColorWheelOp::ApplyGPU not implemented yet.");
+}
+
 auto ColorWheelOp::GetParams() const -> nlohmann::json {
   nlohmann::json o;
   nlohmann::json inner;

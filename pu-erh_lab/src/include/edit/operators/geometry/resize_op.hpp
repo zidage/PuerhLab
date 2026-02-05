@@ -28,7 +28,7 @@ class ResizeOp : public OperatorBase<ResizeOp> {
 
   bool enable_scale_ = false;
 
-  bool enable_roi_ = false;
+  bool enable_roi_   = false;
   ROI  roi_;
 
  public:
@@ -41,6 +41,7 @@ class ResizeOp : public OperatorBase<ResizeOp> {
   ResizeOp(const nlohmann::json& params);
 
   void Apply(std::shared_ptr<ImageBuffer> input) override;
+  void ApplyGPU(std::shared_ptr<ImageBuffer> input) override;
   auto GetParams() const -> nlohmann::json override;
   void SetParams(const nlohmann::json& params) override;
 

@@ -97,6 +97,10 @@ void ClarityOp::Apply(std::shared_ptr<ImageBuffer> input) {
   img += high_pass;
 }
 
+void ClarityOp::ApplyGPU(std::shared_ptr<ImageBuffer>) {
+  // GPU implementation not provided
+  throw std::runtime_error("ClarityOp: ApplyGPU not implemented");
+}
 
 auto ClarityOp::GetParams() const -> nlohmann::json {
   nlohmann::json o;

@@ -53,6 +53,7 @@ class ACES_ODT_Op : public OperatorBase<ACES_ODT_Op> {
   ACES_ODT_Op(const nlohmann::json& params);
 
   void Apply(std::shared_ptr<ImageBuffer> input) override;
+  void ApplyGPU(std::shared_ptr<ImageBuffer> input) override;
 
   auto GetParams() const -> nlohmann::json override;
   void SetParams(const nlohmann::json& j) override;

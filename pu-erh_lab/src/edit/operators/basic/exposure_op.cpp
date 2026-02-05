@@ -51,6 +51,9 @@ void ExposureOp::Apply(std::shared_ptr<ImageBuffer> input) {
   });
 }
 
+void ExposureOp::ApplyGPU(std::shared_ptr<ImageBuffer>) {
+  throw std::runtime_error("ExposureOp: ApplyGPU not implemented");
+}
 
 auto ExposureOp::GetParams() const -> nlohmann::json {
   nlohmann::json o;

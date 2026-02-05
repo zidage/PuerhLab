@@ -110,6 +110,9 @@ void HLSOp::Apply(std::shared_ptr<ImageBuffer> input) {
   cv::threshold(img, img, 0.0f, 0.0f, cv::THRESH_TOZERO);
 }
 
+void HLSOp::ApplyGPU(std::shared_ptr<ImageBuffer>) {
+  throw std::runtime_error("HLSOp: ApplyGPU not implemented");
+}
 
 auto HLSOp::GetParams() const -> nlohmann::json {
   nlohmann::json o;

@@ -38,6 +38,7 @@ class VibranceOp : public OperatorBase<VibranceOp> {
   VibranceOp(const nlohmann::json& params);
 
   void Apply(std::shared_ptr<ImageBuffer> input) override;
+  void ApplyGPU(std::shared_ptr<ImageBuffer> input) override;
   auto GetParams() const -> nlohmann::json override;
   void SetParams(const nlohmann::json& params) override;
 

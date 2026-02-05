@@ -107,7 +107,7 @@ struct OperatorEntry {
 
 class PipelineStage {
  private:
-  enum class StageRole { DescriptorOnly, CpuOperators, GpuStreamable };
+  enum class StageRole { DescriptorOnly, CpuOperators, GpuStreamable, GpuOperators };
 
   std::unique_ptr<std::map<OperatorType, OperatorEntry>> operators_;
   bool                                                   is_streamable_ = true;
@@ -297,6 +297,7 @@ class PipelineStage {
 
   std::shared_ptr<ImageBuffer> ApplyDescriptorOnly();
   std::shared_ptr<ImageBuffer> ApplyCpuOperators();
+  std::shared_ptr<ImageBuffer> ApplyGpuOperators();
   std::shared_ptr<ImageBuffer> ApplyGpuStream(OperatorParams& global_params);
 
   bool                         force_cpu_output_ = false;

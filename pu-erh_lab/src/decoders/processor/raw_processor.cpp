@@ -50,6 +50,9 @@
 #ifdef HAVE_CUDA
 #include "decoders/processor/operators/gpu/cuda_color_space_conv.hpp"
 #include "decoders/processor/operators/gpu/cuda_debayer_ahd.hpp"
+#include "decoders/processor/operators/gpu/cuda_debayer_rcd.hpp"
+#include "decoders/processor/operators/gpu/cuda_highlight_reconstruct.hpp"
+#include "decoders/processor/operators/gpu/cuda_rotate.hpp"
 #include "decoders/processor/operators/gpu/cuda_white_balance.hpp"
 #endif
 #include "image/image_buffer.hpp"
@@ -139,7 +142,12 @@ void RawProcessor::ApplyDebayer() {
 #ifdef HAVE_CUDA
   if (params_.cuda_) {
     auto& gpu_img = pre_debayer_buffer.GetGPUData();
-    CUDA::BayerRGGB2RGB_AHD(gpu_img);
+    CUDA::BayerRGGB2RGB_RCD(gpu_img);
+    if (params_.decode_res_ == DecodeRes::FULL) {
+      cv::Rect crop_rect(raw_data_.sizes.left_margin, raw_data_.sizes.top_margin,
+                         raw_data_.sizes.width, raw_data_.sizes.height);
+      gpu_img = gpu_img(crop_rect);
+    }
 
     return;
   }
@@ -159,22 +167,67 @@ void RawProcessor::ApplyDebayer() {
 }
 
 void RawProcessor::ApplyHighlightReconstruct() {
+#ifdef HAVE_CUDA
   if (params_.cuda_) {
-    throw std::runtime_error("RawProcessor: Not implemented");
-  } else {
-    auto& img = process_buffer_.GetCPUData();
+    auto& gpu_img = process_buffer_.GetGPUData();
     if (!params_.highlights_reconstruct_) {
-      // clamp to [0, 1]
-      cv::threshold(img, img, 1.0f, 1.0f, cv::THRESH_TRUNC);
-      cv::threshold(img, img, 0.0f, 0.0f, cv::THRESH_TOZERO);
+      CUDA::Clamp01(gpu_img);
       return;
     }
-    CPU::HighlightReconstruct(img, raw_processor_);
+    CUDA::HighlightReconstruct(gpu_img, raw_processor_);
+    return;
   }
+#endif
+
+  auto& img = process_buffer_.GetCPUData();
+  if (!params_.highlights_reconstruct_) {
+    // clamp to [0, 1]
+    cv::threshold(img, img, 1.0f, 1.0f, cv::THRESH_TRUNC);
+    cv::threshold(img, img, 0.0f, 0.0f, cv::THRESH_TOZERO);
+    return;
+  }
+  CPU::HighlightReconstruct(img, raw_processor_);
 }
 
 void RawProcessor::ApplyGeometricCorrections() {
   // TODO: Add lens distortion correction if needed
+
+#ifdef HAVE_CUDA
+  if (params_.cuda_) {
+    auto&            gpu_img = process_buffer_.GetGPUData();
+    cv::cuda::GpuMat tmp;
+
+    switch (raw_data_.sizes.flip) {
+      case 3:
+        // 180 degree
+        cv::cuda::flip(gpu_img, tmp, -1);
+        gpu_img = tmp;
+        break;
+      case 5:
+        // Rotate 90 CCW
+        if (gpu_img.type() == CV_32FC3 || gpu_img.type() == CV_32FC4) {
+          CUDA::Rotate90CCW(gpu_img);
+        } else {
+          cv::cuda::transpose(gpu_img, tmp);
+          cv::cuda::flip(tmp, gpu_img, 0);
+        }
+        break;
+      case 6:
+        // Rotate 90 CW
+        if (gpu_img.type() == CV_32FC3 || gpu_img.type() == CV_32FC4) {
+          CUDA::Rotate90CW(gpu_img);
+        } else {
+          cv::cuda::transpose(gpu_img, tmp);
+          cv::cuda::flip(tmp, gpu_img, 1);
+        }
+        break;
+      default:
+        // Do nothing
+        break;
+    }
+    return;
+  }
+#endif
 
   switch (raw_data_.sizes.flip) {
     case 3:
@@ -202,8 +255,15 @@ void RawProcessor::ConvertToWorkingSpace() {
   auto  color_coeffs   = raw_data_.color.rgb_cam;
 #ifdef HAVE_CUDA
   if (params_.cuda_) {
+    if (!params_.use_camera_wb_) {
+      throw std::runtime_error(
+          "RawProcessor: CUDA color space conversion does not support user-specified WB");
+    }
     auto& gpu_img = debayer_buffer.GetGPUData();
-    CUDA::ApplyColorMatrix(gpu_img, color_coeffs);
+    auto  pre_mul = raw_data_.color.pre_mul;
+    auto  cam_mul = raw_data_.color.cam_mul;
+    auto  cam_xyz = raw_data_.color.cam_xyz;
+    CUDA::ApplyColorMatrix(gpu_img, color_coeffs, pre_mul, cam_mul, cam_xyz);
     return;
   }
 #endif
@@ -231,44 +291,50 @@ auto RawProcessor::Process() -> ImageBuffer {
   cv::Mat unpacked_mat{img_sizes.raw_height, img_sizes.raw_width, CV_16UC1, img_unpacked};
   process_buffer_ = {std::move(unpacked_mat)};
 
-#ifdef HAVE_CUDA
-
-  if (params_.cuda_) {
-    process_buffer_.SyncToGPU();
-  }
-#endif
-
   // std::cout << _raw_processor.COLOR(0, 0) << " " << _raw_processor.COLOR(0, 1) << " "
   //           << _raw_processor.COLOR(1, 0) << " " << _raw_processor.COLOR(1, 1) << "\n";
   CV_Assert(raw_processor_.COLOR(0, 0) == 0 && raw_processor_.COLOR(0, 1) == 1 &&
             raw_processor_.COLOR(1, 0) == 3 && raw_processor_.COLOR(1, 1) == 2);
 
-  // Convert to float32 in [0, 1]
-  process_buffer_.GetCPUData().convertTo(process_buffer_.GetCPUData(), CV_32FC1, 1.0f / 65535.0f);
+#ifdef HAVE_CUDA
+  if (params_.cuda_) {
+    // Keep raw data in 16-bit until it reaches the CUDA linearization stage.
+    SetDecodeRes();
+    process_buffer_.SyncToGPU();
 
-  SetDecodeRes();
+    ApplyLinearization();
+    ApplyHighlightReconstruct();
+    ApplyDebayer();
+    ConvertToWorkingSpace();
 
-  ApplyLinearization();
+    // Ensure GPU buffer is CV_32FC4 (RGBA float32).
+    // TODO： Just a temporary patch, optimize later.
+    cv::cuda::cvtColor(process_buffer_.GetGPUData(), process_buffer_.GetGPUData(), cv::COLOR_RGB2RGBA);
+    ApplyGeometricCorrections();
+    
 
-  ApplyHighlightReconstruct();
+    return {std::move(process_buffer_)};
+    // process_buffer_.SyncToCPU();
+    // process_buffer_.ReleaseGPUData();
+  } else
+#endif
+  {
+    // CPU pipeline expects float32 input in [0, 1].
+    process_buffer_.GetCPUData().convertTo(process_buffer_.GetCPUData(), CV_32FC1, 1.0f / 65535.0f);
 
-  ApplyDebayer();
-
-  ApplyGeometricCorrections();
-
-  ConvertToWorkingSpace();
+    SetDecodeRes();
+    ApplyLinearization();
+    ApplyHighlightReconstruct();
+    ApplyDebayer();
+    ApplyGeometricCorrections();
+    ConvertToWorkingSpace();
+  }
 
   cv::Mat final_img = cv::Mat();
   final_img.create(process_buffer_.GetCPUData().rows, process_buffer_.GetCPUData().cols, CV_32FC4);
   cv::cvtColor(process_buffer_.GetCPUData(), final_img, cv::COLOR_RGB2RGBA);
   process_buffer_ = {std::move(final_img)};
 
-#ifdef HAVE_CUDA
-  if (params_.cuda_) {
-    process_buffer_.SyncToCPU();
-    process_buffer_.ReleaseGPUData();
-  }
-#endif
   return {std::move(process_buffer_)};
 }
 }  // namespace puerhlab

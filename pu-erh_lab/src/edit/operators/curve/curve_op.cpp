@@ -86,6 +86,10 @@ void CurveOp::Apply(std::shared_ptr<ImageBuffer> input) {
   });
 }
 
+void CurveOp::ApplyGPU(std::shared_ptr<ImageBuffer>) {
+  // GPU implementation not provided
+  throw std::runtime_error("CurveOp::ApplyGPU not implemented");
+}
 
 void CurveOp::SetCtrlPts(const std::vector<cv::Point2f>& control_points) {
   ctrl_pts_ = control_points;

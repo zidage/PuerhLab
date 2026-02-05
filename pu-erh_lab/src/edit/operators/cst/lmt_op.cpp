@@ -52,6 +52,10 @@ void OCIO_LMT_Transform_Op::Apply(std::shared_ptr<ImageBuffer> input) {
   });
 }
 
+void OCIO_LMT_Transform_Op::ApplyGPU(std::shared_ptr<ImageBuffer>) {
+  throw std::runtime_error("OCIO_LMT_Transform_Op: GPU Apply not implemented yet");
+}
+
 auto OCIO_LMT_Transform_Op::GetParams() const -> nlohmann::json {
   nlohmann::json o;
   o[script_name_] = conv::ToBytes(lmt_path_.wstring());

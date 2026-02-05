@@ -40,6 +40,7 @@ class CurveOp : public OperatorBase<CurveOp> {
   CurveOp(const nlohmann::json& params);
 
   void Apply(std::shared_ptr<ImageBuffer> input) override;
+  void ApplyGPU(std::shared_ptr<ImageBuffer> input) override;
   void SetCtrlPts(const std::vector<cv::Point2f>& control_points);
   auto GetParams() const -> nlohmann::json override;
   void SetParams(const nlohmann::json& params) override;

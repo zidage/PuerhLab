@@ -39,15 +39,15 @@ ShadowsOp::ShadowsOp(const nlohmann::json& params) {
 
 auto ShadowsOp::GetScale() -> float { return offset_ / 100.0f; }
 
-void ShadowsOp::Apply(std::shared_ptr<ImageBuffer> input) {
-  {
-  }
+void ShadowsOp::Apply(std::shared_ptr<ImageBuffer>) {}
+
+void ShadowsOp::ApplyGPU(std::shared_ptr<ImageBuffer>) {
+  throw std::runtime_error("ShadowsOp: ApplyGPU not implemented");
 }
 
 static inline float Luma(const Pixel& rgb) {
   return 0.2126f * rgb.r_ + 0.7152f * rgb.g_ + 0.0722f * rgb.b_;
 }
-
 
 auto ShadowsOp::GetParams() const -> nlohmann::json { return {script_name_, offset_}; }
 
@@ -55,7 +55,7 @@ void ShadowsOp::SetParams(const nlohmann::json& params) {
   if (!params.contains(script_name_)) {
     offset_ = 0.0f;
   } else {
-    offset_        = params[script_name_].get<float>();
+    offset_         = params[script_name_].get<float>();
     curve_.control_ = std::clamp(offset_ / 80.0f, -1.0f, 1.0f);
     curve_.toe_end_ = std::clamp(0.55f, 0.0f, 1.0f);
     curve_.m0_      = 1.0f + curve_.control_ * curve_.slope_range_;

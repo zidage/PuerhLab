@@ -48,7 +48,10 @@ void TintOp::Apply(std::shared_ptr<ImageBuffer> input) {
   cv::merge(bgr_channels, img);
 }
 
-
+void TintOp::ApplyGPU(std::shared_ptr<ImageBuffer> input) {
+  // GPU implementation can be added here in the future
+  throw std::runtime_error("GPU implementation not available for TintOp yet.");
+}
 
 auto TintOp::GetParams() const -> nlohmann::json {
   nlohmann::json o;

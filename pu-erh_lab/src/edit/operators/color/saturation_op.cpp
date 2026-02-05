@@ -59,7 +59,9 @@ void SaturationOp::Apply(std::shared_ptr<ImageBuffer> input) {
   });
 }
 
-
+void SaturationOp::ApplyGPU(std::shared_ptr<ImageBuffer>) {
+  throw std::runtime_error("SaturationOp: ApplyGPU not implemented");
+}
 
 auto SaturationOp::GetParams() const -> nlohmann::json {
   nlohmann::json o;

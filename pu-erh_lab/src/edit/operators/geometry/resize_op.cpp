@@ -14,8 +14,11 @@
 
 #include "edit/operators/geometry/resize_op.hpp"
 
+#include <opencv2/cudawarping.hpp>
+
 #include "edit/operators/op_base.hpp"
 #include "image/image_buffer.hpp"
+
 
 namespace puerhlab {
 ResizeOp::ResizeOp(const nlohmann::json& params) { SetParams(params); }
@@ -50,6 +53,49 @@ void ResizeOp::Apply(std::shared_ptr<ImageBuffer> input) {
   }
   cv::resize(img, img, cv::Size(static_cast<int>(w * scale), static_cast<int>(h * scale)), 0, 0,
              cv::INTER_AREA);
+}
+
+void ResizeOp::ApplyGPU(std::shared_ptr<ImageBuffer> input) {
+  // GPU implementation not available yet.
+  auto& img = input->GetGPUData();
+  int   w   = img.cols;
+  int   h   = img.rows;
+  if (std::max(w, h) <= maximum_edge_) return;
+  if (!enable_scale_ && !enable_roi_) return;
+
+  float scale =
+      enable_scale_ ? static_cast<float>(maximum_edge_) / static_cast<float>(std::max(w, h)) : 1.0f;
+
+  if (enable_roi_) {
+    int roi_w = static_cast<int>(w * roi_.resize_factor_);
+    int roi_h = static_cast<int>(h * roi_.resize_factor_);
+    roi_w     = std::min(roi_w, w - roi_.x_);
+    roi_h     = std::min(roi_h, h - roi_.y_);
+    cv::Rect roi_rect(roi_.x_, roi_.y_, roi_w, roi_h);
+
+    cv::cuda::GpuMat roi_src = img(roi_rect).clone();
+
+    float roi_scale =
+        static_cast<float>(maximum_edge_) / static_cast<float>(std::max(roi_w, roi_h));
+    const int out_w = static_cast<int>(roi_w * roi_scale);
+    const int out_h = static_cast<int>(roi_h * roi_scale);
+
+    cv::cuda::GpuMat roi_dst;
+    cv::cuda::createContinuous(out_h, out_w, roi_src.type(), roi_dst);
+
+    cv::cuda::resize(roi_src, roi_dst, roi_dst.size(), 0, 0, cv::INTER_AREA);
+    img = roi_dst;
+    return;
+  }
+
+  const int out_w = static_cast<int>(w * scale);
+  const int out_h = static_cast<int>(h * scale);
+
+  cv::cuda::GpuMat dst;
+  cv::cuda::createContinuous(out_h, out_w, img.type(), dst);
+
+  cv::cuda::resize(img, dst, dst.size(), 0, 0, cv::INTER_AREA);
+  img = dst;
 }
 
 auto ResizeOp::GetParams() const -> nlohmann::json {

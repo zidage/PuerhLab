@@ -77,6 +77,11 @@ void RawDecodeOp::Apply(std::shared_ptr<ImageBuffer> input) {
   *input = std::move(output);
 }
 
+void RawDecodeOp::ApplyGPU(std::shared_ptr<ImageBuffer> input) {
+  // GPU implementation not available yet.
+  Apply(input);
+}
+
 auto RawDecodeOp::GetParams() const -> nlohmann::json {
   nlohmann::json params;
   nlohmann::json inner;

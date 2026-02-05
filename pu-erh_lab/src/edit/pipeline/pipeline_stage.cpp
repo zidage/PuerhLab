@@ -21,6 +21,7 @@
 
 #include "edit/operators/op_base.hpp"
 #include "edit/operators/operator_factory.hpp"
+#include "image/image.hpp"
 #include "image/image_buffer.hpp"
 
 namespace puerhlab {
@@ -76,7 +77,7 @@ void PipelineStage::EnableOperator(OperatorType op_type, bool enable) {
 }
 
 void PipelineStage::EnableOperator(OperatorType op_type, bool enable,
-                                  OperatorParams& global_params) {
+                                   OperatorParams& global_params) {
   EnableOperator(op_type, enable);
   auto it = operators_->find(op_type);
   if (it != operators_->end()) {
@@ -119,6 +120,8 @@ auto PipelineStage::ApplyStage(OperatorParams& global_params) -> std::shared_ptr
       return ApplyCpuOperators();
     case StageRole::GpuStreamable:
       return ApplyGpuStream(global_params);
+    case StageRole::GpuOperators:
+      return ApplyGpuOperators();
   }
 
   // Fallback, should never hit.
@@ -169,7 +172,7 @@ auto PipelineStage::DetermineStageRole(PipelineStageName stage, bool is_streamab
   switch (stage) {
     case PipelineStageName::Image_Loading:
     case PipelineStageName::Geometry_Adjustment:
-      return StageRole::CpuOperators;
+      return StageRole::GpuOperators;
     case PipelineStageName::Merged_Stage:
       return StageRole::GpuStreamable;
     default:
@@ -201,6 +204,63 @@ std::shared_ptr<ImageBuffer> PipelineStage::ApplyDescriptorOnly() {
   }
 
   output_cache_ = input_img_;
+  SetOutputCacheValid(true);
+  if (next_stage_) {
+    next_stage_->SetInputCacheValid(true);
+  }
+
+  return output_cache_;
+}
+
+std::shared_ptr<ImageBuffer> PipelineStage::ApplyGpuOperators() {
+  auto execute_ops = [&]() {
+    if (!HasEnabledOperator()) return input_img_;
+    auto current_img = std::make_shared<ImageBuffer>();
+    if (input_img_->gpu_data_valid_ && !input_img_->buffer_valid_) {
+      auto& input_gpu_mat = input_img_->GetGPUData();
+      current_img->InitGPUData(input_gpu_mat.cols, input_gpu_mat.rows, input_gpu_mat.type());
+      auto& output_gpu_mat = current_img->GetGPUData();
+      input_gpu_mat.copyTo(output_gpu_mat);
+      current_img->gpu_data_valid_ = true;
+    } else if (input_img_->buffer_valid_) {
+      auto buffer = input_img_->GetBuffer();
+      current_img = std::make_shared<ImageBuffer>(std::move(buffer));
+    }
+
+    for (const auto& op_entry : *operators_) {
+      if (op_entry.second.enable_) {
+        op_entry.second.op_->ApplyGPU(current_img);
+      }
+    }
+    current_img->gpu_data_valid_ = true;
+    return current_img;
+  };
+
+  if (!input_img_->gpu_data_valid_ && !input_img_->buffer_valid_) {
+    input_img_->SyncToGPU();
+  }
+  // This is different from ApplyGpuStream, as this function applies individual GPU operators
+  if (!enable_cache_) {
+    SetOutputCacheValid(false);
+    if (next_stage_) {
+      next_stage_->SetInputCacheValid(false);
+    }
+    output_cache_ = execute_ops();
+    SetOutputCacheValid(false);
+    if (next_stage_) {
+      next_stage_->SetInputCacheValid(false);
+    }
+    return output_cache_;
+  }
+
+  if (CacheValid()) {
+    if (next_stage_ && next_stage_->CacheValid()) {
+      return nullptr;
+    }
+    return output_cache_;
+  }
+
+  output_cache_ = execute_ops();
   SetOutputCacheValid(true);
   if (next_stage_) {
     next_stage_->SetInputCacheValid(true);
@@ -264,7 +324,7 @@ std::shared_ptr<ImageBuffer> PipelineStage::ApplyGpuStream(OperatorParams& globa
   if (force_cpu_output_) {
     try {
       output_cache_->SyncToCPU();
-      output_cache_->ReleaseGPUData(); // Free GPU memory after sync
+      output_cache_->ReleaseGPUData();  // Free GPU memory after sync
     } catch (const std::exception&) {
       // Keep GPU result if CPU sync fails; caller will validate.
     }

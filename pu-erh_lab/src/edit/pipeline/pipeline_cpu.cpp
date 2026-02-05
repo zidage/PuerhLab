@@ -129,7 +129,7 @@ auto CPUPipelineExecutor::Apply(std::shared_ptr<ImageBuffer> input)
 }
 
 [[deprecated("SetPreviewMode is deprecated, set from pipeline scheduler instead")]] void
-CPUPipelineExecutor::SetPreviewMode(bool is_thumbnail) {
+CPUPipelineExecutor::SetPreviewMode(bool) {
   // is_thumbnail_  = is_thumbnail;
 
   // render_params_ = {};  // TODO: Use default params for now
@@ -281,7 +281,7 @@ void CPUPipelineExecutor::SetTemplateParams() {
   auto&          global_params = GetGlobalParams();
   nlohmann::json decode_params;
 #ifdef HAVE_CUDA
-  decode_params["raw"]["cuda"] = false;
+  decode_params["raw"]["cuda"] = true;
 #else
   decode_params["raw"]["cuda"] = false;
 #endif

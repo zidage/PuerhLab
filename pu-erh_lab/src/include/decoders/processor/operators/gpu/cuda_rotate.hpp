@@ -1,0 +1,30 @@
+//  Copyright 2026 Yurun Zi
+//
+//  Licensed under the Apache License, Version 2.0 (the "License");
+//  you may not use this file except in compliance with the License.
+//  You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+//  Unless required by applicable law or agreed to in writing, software
+//  distributed under the License is distributed on an "AS IS" BASIS,
+//  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+//  See the License for the specific language governing permissions and
+//  limitations under the License.
+
+#pragma once
+
+#include <opencv2/core/cuda.hpp>
+
+namespace puerhlab {
+namespace CUDA {
+
+// Rotate the image by 90 degrees on the GPU.
+// These are intentionally limited to the RAW pipeline's float images (CV_32FC3/CV_32FC4),
+// because OpenCV's cv::cuda::transpose does not support elemSize() == 12 or 16.
+void Rotate90CW(cv::cuda::GpuMat& img);
+void Rotate90CCW(cv::cuda::GpuMat& img);
+
+}  // namespace CUDA
+}  // namespace puerhlab
+

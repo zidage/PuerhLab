@@ -189,6 +189,13 @@ class IOperatorBase {
    * @return ImageBuffer
    */
   virtual void Apply(std::shared_ptr<ImageBuffer> input)     = 0;
+
+  /**
+   * @brief Only used in Resize operator. Other operators should throw exception.
+   * 
+   * @param input 
+   */
+  virtual void ApplyGPU(std::shared_ptr<ImageBuffer> input) = 0;
   /**
    * @brief Set the parameters of this operator from JSON
    *

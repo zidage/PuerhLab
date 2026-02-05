@@ -144,6 +144,10 @@ auto OCIO_ACES_Transform_Op::ApplyLMT(ImageBuffer& input) -> ImageBuffer {
   return {std::move(img)};
 }
 
+void OCIO_ACES_Transform_Op::ApplyGPU(std::shared_ptr<ImageBuffer>) {
+  throw std::runtime_error("OCIO_ACES_Transform_Op: GPU Apply not implemented yet");
+}
+
 auto OCIO_ACES_Transform_Op::GetParams() const -> nlohmann::json {
   nlohmann::json o;
   nlohmann::json inner;

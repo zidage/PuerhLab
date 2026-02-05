@@ -45,8 +45,8 @@ class OCIO_ACES_Transform_Op : public OperatorBase<OCIO_ACES_Transform_Op> {
   OCIO::ConstGPUProcessorRcPtr         gpu_processor_;
   OCIO::BakerRcPtr                     baker_;
 
-  void SetCSTProcessors(const char* input, const char* output);
-  void SetDisplayProcessors(const char* output);
+  void                                 SetCSTProcessors(const char* input, const char* output);
+  void                                 SetDisplayProcessors(const char* output);
 
  public:
   static constexpr PriorityLevel     priority_level_    = 2;
@@ -63,6 +63,7 @@ class OCIO_ACES_Transform_Op : public OperatorBase<OCIO_ACES_Transform_Op> {
   OCIO_ACES_Transform_Op(const nlohmann::json& params);
 
   void Apply(std::shared_ptr<ImageBuffer> input) override;
+  void ApplyGPU(std::shared_ptr<ImageBuffer> input) override;
   auto ApplyLMT(ImageBuffer& input) -> ImageBuffer;
   auto GetParams() const -> nlohmann::json override;
   void SetParams(const nlohmann::json& params) override;

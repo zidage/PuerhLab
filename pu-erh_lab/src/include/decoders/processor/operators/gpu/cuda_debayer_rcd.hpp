@@ -1,4 +1,4 @@
-//  Copyright 2025 Yurun Zi
+//  Copyright 2026 Yurun Zi
 //
 //  Licensed under the Apache License, Version 2.0 (the "License");
 //  you may not use this file except in compliance with the License.
@@ -14,14 +14,10 @@
 
 #pragma once
 
-#include <opencv2/core.hpp>
 #include <opencv2/core/cuda.hpp>
 
 namespace puerhlab {
 namespace CUDA {
-// Port of CPU::ApplyColorMatrix (camera WB path only).
-// Note: "user-specified" WB is intentionally not supported on the CUDA backend.
-void ApplyColorMatrix(cv::cuda::GpuMat& img, const float rgb_cam[][4], const float* pre_mul,
-                      const float* cam_mul, const float cam_xyz[][3]);
+void BayerRGGB2RGB_RCD(cv::cuda::GpuMat& image);
 };
 };  // namespace puerhlab

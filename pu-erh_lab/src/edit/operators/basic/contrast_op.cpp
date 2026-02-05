@@ -62,6 +62,9 @@ void ContrastOp::Apply(std::shared_ptr<ImageBuffer> input) {
   // cv::max(linear_image, 0.0f, linear_image);
 }
 
+void ContrastOp::ApplyGPU(std::shared_ptr<ImageBuffer>) {
+  throw std::runtime_error("ContrastOp: ApplyGPU not implemented");
+}
 
 auto ContrastOp::GetParams() const -> nlohmann::json {
   nlohmann::json o;

@@ -62,7 +62,7 @@ __global__ void ToLinearRefKernel(cv::cuda::PtrStep<float> image, int width, int
   pixel_val /= white_level_scale;
 
   // 5. Clamp the result to the valid 16-bit range [0, 1.0f]
-  pixel_val  = fmaxf(0.0f, fminf(1.0f, pixel_val));
+  pixel_val  = fmaxf(0.0f, pixel_val);
 
   // 6. Store the final result back to the GpuMat, rounding correctly
   image(row, col) = pixel_val;

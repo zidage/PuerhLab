@@ -60,8 +60,8 @@
 #include <vector>
 
 #include "app/export_service.hpp"
-#include "app/import_service.hpp"
 #include "app/history_mgmt_service.hpp"
+#include "app/import_service.hpp"
 #include "app/pipeline_service.hpp"
 #include "app/project_service.hpp"
 #include "app/render_service.hpp"
@@ -74,6 +74,7 @@
 #include "sleeve/sleeve_filter/filter_combo.hpp"
 #include "type/supported_file_type.hpp"
 #include "ui/edit_viewer/edit_viewer.hpp"
+#include "utils/clock/time_provider.hpp"
 
 namespace puerhlab {
 namespace {
@@ -1261,14 +1262,123 @@ class SpinnerWidget final : public QWidget {
   int     angle_deg_ = 0;
 };
 
+class HistoryLaneWidget final : public QWidget {
+ public:
+  HistoryLaneWidget(QColor dot, QColor line, bool draw_top, bool draw_bottom,
+                    QWidget* parent = nullptr)
+      : QWidget(parent),
+        dot_(std::move(dot)),
+        line_(std::move(line)),
+        draw_top_(draw_top),
+        draw_bottom_(draw_bottom) {
+    setFixedWidth(18);
+    setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
+    setAttribute(Qt::WA_TransparentForMouseEvents);
+  }
+
+  void SetConnectors(bool draw_top, bool draw_bottom) {
+    draw_top_    = draw_top;
+    draw_bottom_ = draw_bottom;
+    update();
+  }
+
+ protected:
+  void paintEvent(QPaintEvent*) override {
+    QPainter p(this);
+    p.setRenderHint(QPainter::Antialiasing, true);
+
+    const int cx = width() / 2;
+    const int cy = height() / 2;
+
+    // Vertical lane.
+    {
+      QPen pen(line_);
+      pen.setWidthF(2.0);
+      pen.setCapStyle(Qt::RoundCap);
+      p.setPen(pen);
+
+      if (draw_top_) {
+        p.drawLine(QPointF(cx, 2.0), QPointF(cx, cy - 6.0));
+      }
+      if (draw_bottom_) {
+        p.drawLine(QPointF(cx, cy + 6.0), QPointF(cx, height() - 2.0));
+      }
+    }
+
+    // Node.
+    {
+      p.setPen(Qt::NoPen);
+      p.setBrush(dot_);
+      p.drawEllipse(QPointF(cx, cy), 4.4, 4.4);
+      p.setBrush(QColor(0x12, 0x12, 0x12));
+      p.drawEllipse(QPointF(cx, cy), 2.0, 2.0);
+    }
+  }
+
+ private:
+  QColor dot_;
+  QColor line_;
+  bool   draw_top_    = false;
+  bool   draw_bottom_ = false;
+};
+
+class HistoryCardWidget final : public QFrame {
+ public:
+  explicit HistoryCardWidget(QWidget* parent = nullptr) : QFrame(parent) {
+    setObjectName("HistoryCard");
+    setAttribute(Qt::WA_StyledBackground, true);
+    setAttribute(Qt::WA_Hover, true);
+    setProperty("selected", false);
+
+    setStyleSheet(
+        "QFrame#HistoryCard {"
+        "  background: #16181A;"
+        "  border: 1px solid #303134;"
+        "  border-radius: 10px;"
+        "}"
+        "QFrame#HistoryCard:hover {"
+        "  background: #1E2124;"
+        "}"
+        "QFrame#HistoryCard[selected=\"true\"] {"
+        "  background: rgba(138, 180, 248, 0.14);"
+        "  border: 1px solid rgba(138, 180, 248, 0.55);"
+        "}");
+  }
+
+  void SetSelected(bool selected) {
+    if (property("selected").toBool() == selected) {
+      return;
+    }
+    setProperty("selected", selected);
+    style()->unpolish(this);
+    style()->polish(this);
+    update();
+  }
+};
+
+static QLabel* MakePillLabel(const QString& text, const QString& fg, const QString& bg,
+                             const QString& border, QWidget* parent) {
+  auto* l = new QLabel(text, parent);
+  l->setStyleSheet(QString("QLabel {"
+                           "  color: %1;"
+                           "  background: %2;"
+                           "  border: 1px solid %3;"
+                           "  border-radius: 10px;"
+                           "  padding: 1px 7px;"
+                           "  font-size: 11px;"
+                           "}")
+                       .arg(fg, bg, border));
+  return l;
+}
+
 class EditorDialog final : public QDialog {
  public:
   enum class WorkingMode : int { Incremental = 0, Plain = 1 };
 
-  EditorDialog(std::shared_ptr<ImagePoolService> image_pool,
-               std::shared_ptr<PipelineGuard> pipeline_guard,
+  EditorDialog(std::shared_ptr<ImagePoolService>       image_pool,
+               std::shared_ptr<PipelineGuard>          pipeline_guard,
                std::shared_ptr<EditHistoryMgmtService> history_service,
-               std::shared_ptr<EditHistoryGuard>       history_guard, sl_element_id_t element_id,
+               std::shared_ptr<EditHistoryGuard> history_guard, sl_element_id_t element_id,
                image_id_t image_id, QWidget* parent = nullptr)
       : QDialog(parent),
         image_pool_(std::move(image_pool)),
@@ -1434,8 +1544,7 @@ class EditorDialog final : public QDialog {
     };
 
     auto addSlider = [&](const QString& name, int min, int max, int value, auto&& onChange,
-                         auto&& onRelease,
-                         auto&& formatter) {
+                         auto&& onRelease, auto&& formatter) {
       auto* info = new QLabel(QString("%1: %2").arg(name).arg(formatter(value)), controls_);
       info->setStyleSheet(
           "QLabel {"
@@ -1473,7 +1582,7 @@ class EditorDialog final : public QDialog {
       return slider;
     };
 
-    lut_combo_ = addComboBox("LUT", lut_names_, initial_lut_index, [&](int idx) {
+    lut_combo_       = addComboBox("LUT", lut_names_, initial_lut_index, [&](int idx) {
       if (idx < 0 || idx >= static_cast<int>(lut_paths_.size())) {
         return;
       }
@@ -1573,7 +1682,7 @@ class EditorDialog final : public QDialog {
 
     // Edit-history commit controls.
     {
-      auto* row = new QWidget(controls_);
+      auto* row       = new QWidget(controls_);
       auto* rowLayout = new QHBoxLayout(row);
       rowLayout->setContentsMargins(0, 0, 0, 0);
       rowLayout->setSpacing(10);
@@ -1624,10 +1733,8 @@ class EditorDialog final : public QDialog {
       layout->setContentsMargins(10, 10, 10, 10);
       layout->setSpacing(8);
 
-      const QFont mono = QFontDatabase::systemFont(QFontDatabase::FixedFont);
-
-      auto* mode_row     = new QWidget(frame);
-      auto* mode_layout  = new QHBoxLayout(mode_row);
+      auto* mode_row    = new QWidget(frame);
+      auto* mode_layout = new QHBoxLayout(mode_row);
       mode_layout->setContentsMargins(0, 0, 0, 0);
       mode_layout->setSpacing(8);
 
@@ -1639,7 +1746,8 @@ class EditorDialog final : public QDialog {
           "}");
 
       working_mode_combo_ = new QComboBox(mode_row);
-      working_mode_combo_->addItem("Incremental (from latest)", static_cast<int>(WorkingMode::Incremental));
+      working_mode_combo_->addItem("Incremental (from latest)",
+                                   static_cast<int>(WorkingMode::Incremental));
       working_mode_combo_->addItem("Plain (no parent)", static_cast<int>(WorkingMode::Plain));
       working_mode_combo_->setFixedHeight(28);
       working_mode_combo_->setStyleSheet(
@@ -1689,25 +1797,27 @@ class EditorDialog final : public QDialog {
       layout->addWidget(versions_label);
 
       version_log_ = new QListWidget(frame);
-      version_log_->setFont(mono);
       version_log_->setSelectionMode(QAbstractItemView::SingleSelection);
-      version_log_->setUniformItemSizes(true);
+      version_log_->setSpacing(6);
+      version_log_->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
       version_log_->setMinimumHeight(150);
       version_log_->setStyleSheet(
           "QListWidget {"
           "  background: #121212;"
           "  border: 1px solid #303134;"
           "  border-radius: 10px;"
-          "  padding: 4px;"
+          "  padding: 6px;"
           "}"
           "QListWidget::item {"
-          "  padding: 4px 6px;"
-          "  border-radius: 6px;"
+          "  padding: 2px;"
           "}"
           "QListWidget::item:selected {"
-          "  background: rgba(138, 180, 248, 0.22);"
+          "  background: transparent;"
           "}");
       layout->addWidget(version_log_);
+
+      QObject::connect(version_log_, &QListWidget::itemSelectionChanged, this,
+                       [this]() { RefreshVersionLogSelectionStyles(); });
 
       auto* tx_label = new QLabel("Uncommitted transactions (stack)", frame);
       tx_label->setStyleSheet(
@@ -1719,20 +1829,19 @@ class EditorDialog final : public QDialog {
       layout->addWidget(tx_label);
 
       tx_stack_ = new QListWidget(frame);
-      tx_stack_->setFont(mono);
       tx_stack_->setSelectionMode(QAbstractItemView::NoSelection);
-      tx_stack_->setUniformItemSizes(true);
+      tx_stack_->setSpacing(6);
+      tx_stack_->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
       tx_stack_->setMinimumHeight(170);
       tx_stack_->setStyleSheet(
           "QListWidget {"
           "  background: #121212;"
           "  border: 1px solid #303134;"
           "  border-radius: 10px;"
-          "  padding: 4px;"
+          "  padding: 6px;"
           "}"
           "QListWidget::item {"
-          "  padding: 4px 6px;"
-          "  border-radius: 6px;"
+          "  padding: 2px;"
           "}");
       layout->addWidget(tx_stack_, /*stretch*/ 1);
 
@@ -1786,8 +1895,25 @@ class EditorDialog final : public QDialog {
     RenderType  type_ = RenderType::FAST_PREVIEW;
   };
 
-  static bool NearlyEqual(float a, float b) {
-    return std::abs(a - b) <= 1e-6f;
+  static bool NearlyEqual(float a, float b) { return std::abs(a - b) <= 1e-6f; }
+
+  void        RefreshVersionLogSelectionStyles() {
+    if (!version_log_) {
+      return;
+    }
+    for (int i = 0; i < version_log_->count(); ++i) {
+      auto* item = version_log_->item(i);
+      if (!item) {
+        continue;
+      }
+      auto* w = version_log_->itemWidget(item);
+      if (!w) {
+        continue;
+      }
+      if (auto* card = dynamic_cast<HistoryCardWidget*>(w)) {
+        card->SetSelected(item->isSelected());
+      }
+    }
   }
 
   void UpdateVersionUi() {
@@ -1799,8 +1925,9 @@ class EditorDialog final : public QDialog {
     QString      label    = QString("Uncommitted: %1 tx").arg(static_cast<qulonglong>(tx_count));
 
     if (working_version_.HasParentVersion()) {
-      label += QString(" • parent: %1").arg(QString::fromStdString(
-          working_version_.GetParentVersionID().ToString().substr(0, 8)));
+      label += QString(" • parent: %1")
+                   .arg(QString::fromStdString(
+                       working_version_.GetParentVersionID().ToString().substr(0, 8)));
     } else {
       label += " • plain";
     }
@@ -1813,8 +1940,8 @@ class EditorDialog final : public QDialog {
     if (history_guard_ && history_guard_->history_) {
       try {
         const auto latest_id = history_guard_->history_->GetLatestVersion().ver_ref_.GetVersionID();
-        label += QString(" • Latest: %1").arg(QString::fromStdString(latest_id.ToString().substr(
-            0, 8)));
+        label +=
+            QString(" • Latest: %1").arg(QString::fromStdString(latest_id.ToString().substr(0, 8)));
       } catch (...) {
       }
     }
@@ -1824,16 +1951,67 @@ class EditorDialog final : public QDialog {
 
     if (tx_stack_) {
       tx_stack_->clear();
-      for (const auto& tx : working_version_.GetAllEditTransactions()) {
-        auto* item = new QListWidgetItem(QString::fromStdString(tx.Describe(true, 110)), tx_stack_);
+      const auto&  txs   = working_version_.GetAllEditTransactions();
+      const size_t total = txs.size();
+      size_t       i     = 0;
+      for (const auto& tx : txs) {
+        const QString title = QString::fromStdString(tx.Describe(true, 110));
+
+        auto*         item  = new QListWidgetItem(tx_stack_);
         item->setToolTip(QString::fromStdString(tx.ToJSON().dump(2)));
+        item->setSizeHint(QSize(0, 58));
+
+        auto* card = new HistoryCardWidget(tx_stack_);
+        auto* row  = new QHBoxLayout(card);
+        row->setContentsMargins(10, 8, 10, 8);
+        row->setSpacing(10);
+
+        const QColor dot  = QColor(0xF2, 0xC0, 0x5C);
+        const QColor line = QColor(0x30, 0x31, 0x34);
+        auto*        lane = new HistoryLaneWidget(dot, line, /*draw_top*/ i > 0,
+                                                  /*draw_bottom*/ (i + 1) < total, card);
+        row->addWidget(lane, 0);
+
+        auto* body = new QVBoxLayout();
+        body->setContentsMargins(0, 0, 0, 0);
+        body->setSpacing(2);
+
+        auto* title_l = new QLabel(title, card);
+        title_l->setWordWrap(true);
+        title_l->setStyleSheet(
+            "QLabel {"
+            "  color: #E8EAED;"
+            "  font-size: 12px;"
+            "  font-weight: 500;"
+            "}");
+
+        auto* meta_l =
+            new QLabel(QString("uncommitted • #%1").arg(static_cast<qulonglong>(i + 1)), card);
+        meta_l->setStyleSheet(
+            "QLabel {"
+            "  color: #AAB0B6;"
+            "  font-size: 11px;"
+            "}");
+
+        body->addWidget(title_l);
+        body->addWidget(meta_l);
+        row->addLayout(body, 1);
+
+        tx_stack_->setItemWidget(item, card);
+        ++i;
       }
     }
 
     if (version_log_) {
+      QString prev_selected_id;
+      if (auto* cur = version_log_->currentItem()) {
+        prev_selected_id = cur->data(Qt::UserRole).toString();
+      }
+
       version_log_->clear();
       if (history_guard_ && history_guard_->history_) {
-        Hash128 latest_id{};
+        const auto& tree = history_guard_->history_->GetCommitTree();
+        Hash128     latest_id{};
         try {
           latest_id = history_guard_->history_->GetLatestVersion().ver_ref_.GetVersionID();
         } catch (...) {
@@ -1841,31 +2019,20 @@ class EditorDialog final : public QDialog {
 
         const Hash128 base_parent = working_version_.GetParentVersionID();
 
-        for (auto it = history_guard_->history_->GetCommitTree().rbegin();
-             it != history_guard_->history_->GetCommitTree().rend(); ++it) {
-          const auto& ver = it->ver_ref_;
-          const auto  ver_id = ver.GetVersionID();
+        int           row_index   = 0;
+        const int     total_rows  = static_cast<int>(tree.size());
+
+        for (auto it = tree.rbegin(); it != tree.rend(); ++it, ++row_index) {
+          const auto& ver      = it->ver_ref_;
+          const auto  ver_id   = ver.GetVersionID();
           const auto  short_id = QString::fromStdString(ver_id.ToString().substr(0, 8));
-          const auto  when = QDateTime::fromSecsSinceEpoch(static_cast<qint64>(ver.GetLastModifiedTime()))
-                                .toString("yyyy-MM-dd HH:mm:ss");
-          const auto  committed_tx_count =
+          const auto  when =
+              QDateTime::fromSecsSinceEpoch(static_cast<qint64>(ver.GetLastModifiedTime()))
+                  .toString("yyyy-MM-dd HH:mm:ss");
+          const auto committed_tx_count =
               static_cast<qulonglong>(ver.GetAllEditTransactions().size());
 
-          QString tags;
-          if (ver_id == latest_id) {
-            tags += " HEAD";
-          }
-          if (base_parent == ver_id && working_version_.HasParentVersion()) {
-            tags += " base";
-          }
-          if (!ver.HasParentVersion()) {
-            tags += " plain";
-          } else {
-            tags += QString(" p:%1").arg(QString::fromStdString(
-                ver.GetParentVersionID().ToString().substr(0, 8)));
-          }
-
-          QString msg;
+          QString     msg;
           const auto& txs = ver.GetAllEditTransactions();
           if (!txs.empty()) {
             msg = QString::fromStdString(txs.front().Describe(true, 70));
@@ -1873,17 +2040,114 @@ class EditorDialog final : public QDialog {
             msg = "(empty)";
           }
 
-          const QString line =
-              QString("* %1  %2  tx:%3  %4%5").arg(short_id).arg(when).arg(committed_tx_count).arg(
-                  msg, tags);
+          const bool is_head  = (ver_id == latest_id);
+          const bool is_base  = (base_parent == ver_id && working_version_.HasParentVersion());
+          const bool is_plain = !ver.HasParentVersion();
 
-          auto* item = new QListWidgetItem(line, version_log_);
+          auto*      item     = new QListWidgetItem(version_log_);
+          item->setData(Qt::UserRole, QString::fromStdString(ver_id.ToString()));
           item->setToolTip(QString("version=%1\nparent=%2\ntx=%3")
                                .arg(QString::fromStdString(ver_id.ToString()))
                                .arg(QString::fromStdString(ver.GetParentVersionID().ToString()))
                                .arg(committed_tx_count));
+          item->setSizeHint(QSize(0, 74));
+
+          auto* card = new HistoryCardWidget(version_log_);
+          auto* row  = new QHBoxLayout(card);
+          row->setContentsMargins(10, 9, 10, 9);
+          row->setSpacing(10);
+
+          const QColor dot  = is_head
+                                  ? QColor(0x8a, 0xb4, 0xf8)
+                                  : (is_base ? QColor(0x81, 0xC9, 0x95) : QColor(0x9A, 0x9E, 0xA3));
+          const QColor line = QColor(0x30, 0x31, 0x34);
+          auto*        lane = new HistoryLaneWidget(dot, line, /*draw_top*/ row_index > 0,
+                                                    /*draw_bottom*/ (row_index + 1) < total_rows, card);
+          row->addWidget(lane, 0);
+
+          auto* body = new QVBoxLayout();
+          body->setContentsMargins(0, 0, 0, 0);
+          body->setSpacing(4);
+
+          auto* top = new QHBoxLayout();
+          top->setContentsMargins(0, 0, 0, 0);
+          top->setSpacing(8);
+
+          const QFont mono   = QFontDatabase::systemFont(QFontDatabase::FixedFont);
+          auto*       hash_l = new QLabel(short_id, card);
+          hash_l->setFont(mono);
+          hash_l->setStyleSheet(
+              "QLabel {"
+              "  color: #E8EAED;"
+              "  font-size: 12px;"
+              "  font-weight: 600;"
+              "}");
+
+          top->addWidget(hash_l, 0);
+
+          if (is_head) {
+            top->addWidget(MakePillLabel("HEAD", "#0B1A2B", "rgba(138, 180, 248, 0.95)",
+                                         "rgba(138, 180, 248, 0.95)", card),
+                           0);
+          }
+          if (is_base) {
+            top->addWidget(MakePillLabel("BASE", "#071C12", "rgba(129, 201, 149, 0.90)",
+                                         "rgba(129, 201, 149, 0.90)", card),
+                           0);
+          }
+          if (is_plain) {
+            top->addWidget(MakePillLabel("PLAIN", "#202124", "rgba(170, 176, 182, 0.20)",
+                                         "rgba(170, 176, 182, 0.30)", card),
+                           0);
+          } else {
+            const auto parent_short =
+                QString::fromStdString(ver.GetParentVersionID().ToString().substr(0, 8));
+            top->addWidget(
+                MakePillLabel(QString("PARENT %1").arg(parent_short), "#AAB0B6",
+                              "rgba(170, 176, 182, 0.08)", "rgba(170, 176, 182, 0.18)", card),
+                0);
+          }
+
+          top->addStretch(1);
+
+          auto* tx_pill =
+              MakePillLabel(QString("tx %1").arg(committed_tx_count), "#AAB0B6",
+                            "rgba(170, 176, 182, 0.08)", "rgba(170, 176, 182, 0.18)", card);
+          top->addWidget(tx_pill, 0);
+
+          auto* msg_l = new QLabel(msg, card);
+          msg_l->setWordWrap(true);
+          msg_l->setStyleSheet(
+              "QLabel {"
+              "  color: #E8EAED;"
+              "  font-size: 12px;"
+              "}");
+
+          auto* meta_l = new QLabel(when, card);
+          meta_l->setStyleSheet(
+              "QLabel {"
+              "  color: #AAB0B6;"
+              "  font-size: 11px;"
+              "}");
+
+          body->addLayout(top);
+          body->addWidget(msg_l);
+          body->addWidget(meta_l);
+          row->addLayout(body, 1);
+
+          version_log_->setItemWidget(item, card);
+
+          const QString ver_id_str = QString::fromStdString(ver_id.ToString());
+          if (!prev_selected_id.isEmpty() && ver_id_str == prev_selected_id) {
+            version_log_->setCurrentItem(item);
+            item->setSelected(true);
+          } else if (prev_selected_id.isEmpty() && is_head) {
+            version_log_->setCurrentItem(item);
+            item->setSelected(true);
+          }
         }
       }
+      RefreshVersionLogSelectionStyles();
     }
   }
 
@@ -2048,12 +2312,12 @@ class EditorDialog final : public QDialog {
     }
 
     const auto [stage_name, op_type] = FieldSpec(field);
-    const auto old_params            = ParamsForField(field, committed_state_);
-    const auto new_params            = ParamsForField(field, state_);
+    const auto            old_params = ParamsForField(field, committed_state_);
+    const auto            new_params = ParamsForField(field, state_);
 
-    auto exec = pipeline_guard_->pipeline_;
-    auto& stage = exec->GetStage(stage_name);
-    const auto op = stage.GetOperator(op_type);
+    auto                  exec       = pipeline_guard_->pipeline_;
+    auto&                 stage      = exec->GetStage(stage_name);
+    const auto            op         = stage.GetOperator(op_type);
     const TransactionType tx_type =
         (op.has_value() && op.value() != nullptr) ? TransactionType::_EDIT : TransactionType::_ADD;
 
@@ -2218,7 +2482,7 @@ class EditorDialog final : public QDialog {
     auto&          loading        = exec->GetStage(PipelineStageName::Image_Loading);
     nlohmann::json decode_params;
 #ifdef HAVE_CUDA
-    decode_params["raw"]["cuda"] = false;
+    decode_params["raw"]["cuda"] = true;
 #else
     decode_params["raw"]["cuda"] = false;
 #endif
@@ -2381,28 +2645,28 @@ class EditorDialog final : public QDialog {
   std::shared_ptr<PipelineScheduler>                       scheduler_;
   PipelineTask                                             base_task_{};
 
-  QtEditViewer*                                            viewer_           = nullptr;
-  QWidget*                                                 viewer_container_ = nullptr;
-  SpinnerWidget*                                           spinner_          = nullptr;
-  QWidget*                                                 controls_         = nullptr;
-  QComboBox*                                               lut_combo_        = nullptr;
-  QSlider*                                                 exposure_slider_  = nullptr;
-  QSlider*                                                 contrast_slider_  = nullptr;
-  QSlider*                                                 saturation_slider_ = nullptr;
-  QSlider*                                                 tint_slider_      = nullptr;
-  QSlider*                                                 blacks_slider_    = nullptr;
-  QSlider*                                                 whites_slider_    = nullptr;
-  QSlider*                                                 shadows_slider_   = nullptr;
-  QSlider*                                                 highlights_slider_ = nullptr;
-  QSlider*                                                 sharpen_slider_   = nullptr;
-  QSlider*                                                 clarity_slider_   = nullptr;
-  QLabel*                                                  version_status_   = nullptr;
+  QtEditViewer*                                            viewer_             = nullptr;
+  QWidget*                                                 viewer_container_   = nullptr;
+  SpinnerWidget*                                           spinner_            = nullptr;
+  QWidget*                                                 controls_           = nullptr;
+  QComboBox*                                               lut_combo_          = nullptr;
+  QSlider*                                                 exposure_slider_    = nullptr;
+  QSlider*                                                 contrast_slider_    = nullptr;
+  QSlider*                                                 saturation_slider_  = nullptr;
+  QSlider*                                                 tint_slider_        = nullptr;
+  QSlider*                                                 blacks_slider_      = nullptr;
+  QSlider*                                                 whites_slider_      = nullptr;
+  QSlider*                                                 shadows_slider_     = nullptr;
+  QSlider*                                                 highlights_slider_  = nullptr;
+  QSlider*                                                 sharpen_slider_     = nullptr;
+  QSlider*                                                 clarity_slider_     = nullptr;
+  QLabel*                                                  version_status_     = nullptr;
   QPushButton*                                             commit_version_btn_ = nullptr;
   QComboBox*                                               working_mode_combo_ = nullptr;
-  QPushButton*                                             new_working_btn_ = nullptr;
-  QListWidget*                                             version_log_ = nullptr;
-  QListWidget*                                             tx_stack_ = nullptr;
-  QTimer*                                                  poll_timer_       = nullptr;
+  QPushButton*                                             new_working_btn_    = nullptr;
+  QListWidget*                                             version_log_        = nullptr;
+  QListWidget*                                             tx_stack_           = nullptr;
+  QTimer*                                                  poll_timer_         = nullptr;
   std::optional<std::future<std::shared_ptr<ImageBuffer>>> inflight_future_{};
 
   std::vector<std::string>                                 lut_paths_{};
@@ -2435,12 +2699,12 @@ class AlbumWindow final : public QWidget {
       throw std::runtime_error("AlbumWindow: missing services");
     }
 
-    export_service_ = std::make_shared<ExportService>(project_->GetSleeveService(), image_pool_,
-                                                      pipeline_service_);
-    filter_service_ = std::make_unique<SleeveFilterService>(project_->GetStorageService());
+    export_service_  = std::make_shared<ExportService>(project_->GetSleeveService(), image_pool_,
+                                                       pipeline_service_);
+    filter_service_  = std::make_unique<SleeveFilterService>(project_->GetStorageService());
     history_service_ = std::make_shared<EditHistoryMgmtService>(project_->GetStorageService());
 
-    auto* outer     = new QHBoxLayout(this);
+    auto* outer      = new QHBoxLayout(this);
     outer->setContentsMargins(10, 10, 10, 10);
     outer->setSpacing(12);
 
@@ -2978,7 +3242,7 @@ class AlbumWindow final : public QWidget {
   std::shared_ptr<ThumbnailService>                     thumbnails_;
   std::shared_ptr<ImagePoolService>                     image_pool_;
   std::shared_ptr<PipelineMgmtService>                  pipeline_service_;
-  std::shared_ptr<EditHistoryMgmtService>              history_service_;
+  std::shared_ptr<EditHistoryMgmtService>               history_service_;
   std::shared_ptr<ExportService>                        export_service_;
   ImportServiceImpl                                     import_service_;
 
@@ -3005,9 +3269,12 @@ class AlbumWindow final : public QWidget {
 
 int main(int argc, char* argv[]) {
   Exiv2::LogMsg::setLevel(Exiv2::LogMsg::Level::mute);
+  puerhlab::TimeProvider::Refresh();
   puerhlab::RegisterAllOperators();
 
   QCoreApplication::setAttribute(Qt::AA_UseDesktopOpenGL);
+  QCoreApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
+  QCoreApplication::setAttribute(Qt::AA_UseHighDpiPixmaps);
 
   QApplication app(argc, argv);
   puerhlab::ApplyExternalAppFont(app, argc, argv);

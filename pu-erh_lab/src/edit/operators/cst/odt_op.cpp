@@ -106,6 +106,10 @@ void ACES_ODT_Op::Apply(std::shared_ptr<ImageBuffer>) {
       "the ODT stage.");
 }
 
+void ACES_ODT_Op::ApplyGPU(std::shared_ptr<ImageBuffer>) {
+  throw std::runtime_error("ACES_ODT_Op: GPU Apply not implemented yet");
+}
+
 auto ACES_ODT_Op::GetParams() const -> nlohmann::json {
   nlohmann::json o;
   nlohmann::json j;
