@@ -1,0 +1,203 @@
+You are a Coding Agent working on a refactor task.
+
+Goal
+Refactor an existing Qt Widgets demo application (Complete Demo) into a Qt Quick (QML) application while preserving all backend logic, data flow, and service semantics. This is a UI-layer refactor plus adapter/controller glue. Do NOT rewrite business logic.
+
+USE scripts/msvc_env.cmd to compile your solution. Change the CMakeLists accordingly.
+Place all the codes in tests/gui_pocs and try not to change my projects directory structure
+
+The new QML app must reproduce the same user-visible behavior and internal call sequences.
+
+GENERAL ARCHITECTURE
+
+- Keep all existing services:
+  ProjectService
+  PipelineMgmtService
+  ThumbnailService
+  ImagePoolService
+  SleeveFilterService
+  ImportServiceImpl
+  EditHistoryMgmtService
+  ExportService
+
+All heavy work must remain off the UI thread.
+
+ALBUM / LIBRARY (Thumbnail Browser)
+
+Behavior to preserve:
+
+- Display all album items as thumbnails with text:
+  "Image <image_id> / Element <element_id>"
+
+- Thumbnails are generated asynchronously:
+  - Acquire ThumbnailGuard from ThumbnailService
+  - Convert to QImage
+  - Scale
+  - ReleaseThumbnail(element_id)
+
+- After editing an image:
+  - InvalidateThumbnail(element_id)
+  - Trigger re-fetch
+
+Refactor:
+
+- Replace QListWidget with QAbstractListModel: ThumbnailListModel
+
+QML UI:
+
+- InspectorDrawer / Side panel
+- Field dropdown
+- Operator dropdown
+- Value editor
+- Add/Remove rule
+- Apply / Clear buttons
+
+After Apply:
+- AlbumController updates model visibility flags
+
+EDITOR
+
+Behavior to preserve exactly:
+
+Opening:
+- pipeline_guard = PipelineMgmtService::LoadPipeline(elementId)
+- history_guard  = EditHistoryMgmtService::LoadHistory(elementId)
+
+Editing:
+- Parameter changes modify in-memory pipeline
+- Trigger async preview render
+
+Closing with Save:
+1) SavePipeline(pipeline_guard)
+2) Sync()
+3) SaveHistory(history_guard)
+4) Sync()
+5) SaveProject(meta_path_)
+6) InvalidateThumbnail(elementId)
+7) Album refresh
+
+Closing with Cancel:
+- No saving
+- No thumbnail invalidation
+
+Refactor:
+
+- Replace EditorDialog QWidget with QML Window: EditorWindow.qml
+
+Expose EditorController:
+
+Properties:
+- bool busy
+- bool rendering
+- QImage previewImage (or image provider key)
+- bool dirty
+
+Invokable methods:
+- open(elementId, imageId)
+- setParam(operatorName, paramName, value)
+- undo()
+- redo()
+- accept()
+- reject()
+
+Preview rendering:
+- Same render path as demo
+- Must run on worker thread
+- Results forwarded to QML on main thread
+
+QML Layout:
+- Top toolbar: Save, Cancel, Undo, Redo
+- Center: Preview area
+- Right panel: Operator controls (sliders, checkboxes, etc.)
+
+Operator metadata:
+- Use existing OperatorBase canonical/script names
+- Parameters serialized via JSON as before
+
+IMPORT (brief for completeness)
+
+- QML ImportDialog
+- Choose files/folders
+- Create ImportJob
+- Show progress
+- On finish:
+  - SyncImports
+  - SaveProject
+  - AddAlbumItem for each created element
+  - Reapply active filter if any
+
+EXPORTER
+
+Behavior to preserve:
+
+- If user selected items:
+  export those
+- Else:
+  export all album items
+
+- Show ExportDialog
+- Execute ExportService
+- Toast on success
+
+Refactor:
+
+- ExportController exposes:
+  openExportDialog()
+  executeExport(options)
+
+- QML ExportDialog:
+  - Destination folder
+  - Format/options
+  - Confirm/Cancel
+
+NAVIGATION
+
+- QML StackView or Loader-based pages:
+  - LibraryPage
+  - SettingsPage
+
+Shortcuts:
+- Ctrl+I Import
+- Ctrl+E Export
+- Ctrl+1 Library
+- Ctrl+, Settings
+
+STYLING
+
+- Dark theme
+- Card-like surfaces
+- Rounded corners
+- Accent buttons
+
+Exact pixel match not required.
+
+
+DELIVERABLES
+
+
+Qt 6 QML application with:
+
+src/main.cpp
+src/controllers/*
+src/models/ThumbnailListModel.*
+src/providers/ThumbnailImageProvider.*
+qml/Main.qml
+qml/pages/LibraryPage.qml
+qml/pages/SettingsPage.qml
+qml/pages/EditorWindow.qml
+qml/components/*
+qml/dialogs/ImportDialog.qml
+qml/dialogs/ExportDialog.qml
+
+ACCEPTANCE CRITERIA
+
+- Import adds items and thumbnails appear asynchronously
+- Clicking thumbnail opens editor
+- Saving editor refreshes thumbnail
+- Cancel editor keeps old thumbnail
+- Filters hide/unhide items correctly
+- Export works for selected or all
+- UI remains responsive
+
+
+If any behavior is unclear, infer it strictly from album_editor_qt_demo.cpp and keep business logic unchanged.

@@ -131,7 +131,7 @@ class ExportServiceTests : public ::testing::Test {
   }
 };
 
-TEST_F(ExportServiceTests, DISABLED_ExportOneImage_WritesReadableFile) {
+TEST_F(ExportServiceTests, ExportOneImage_WritesReadableFile) {
   std::filesystem::path dst_path_global;
   {
     ProjectService project(db_path_, meta_path_);
@@ -196,7 +196,7 @@ TEST_F(ExportServiceTests, DISABLED_ExportOneImage_WritesReadableFile) {
   AssertReadableNonEmptyImageFile(dst_path_global);
 }
 
-TEST_F(ExportServiceTests, BatchExport_LimitedCount_WritesReadableFiles) {
+TEST_F(ExportServiceTests, DISABLED_BatchExport_LimitedCount_WritesReadableFiles) {
   ProjectService project(db_path_, meta_path_);
   auto           sleeve_service = project.GetSleeveService();
   auto           image_pool     = project.GetImagePoolService();

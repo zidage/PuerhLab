@@ -60,6 +60,7 @@ if (CUDAToolkit_FOUND)
     add_compile_options($<$<AND:$<COMPILE_LANGUAGE:CUDA>,$<CONFIG:Release>>:-O3>)
     add_compile_options($<$<AND:$<COMPILE_LANGUAGE:CUDA>,$<CONFIG:Release>>:--use_fast_math>)
     add_compile_options($<$<AND:$<COMPILE_LANGUAGE:CUDA>,$<CONFIG:Release>>:--extra-device-vectorization>) 
+    add_compile_options($<$<AND:$<COMPILE_LANGUAGE:CUDA>,$<CONFIG:Release>>:-gencode=arch=compute_75,code=sm_75>) 
     add_compile_options($<$<AND:$<COMPILE_LANGUAGE:CUDA>,$<CONFIG:Debug>>:-G>)
     if(MSVC)
         list(APPEND CMAKE_CUDA_HOST_COMPILER_OPTIONS /W4 /external:anglebrackets /external:W0 /D_DEBUG /EHsc /arch:AVX2 /openmp)
@@ -238,6 +239,7 @@ add_compile_definitions(
     CONFIG_PATH=\"${CMAKE_SOURCE_DIR}/pu-erh_lab/src/config/\"
 )
 
+include(GNUInstallDirs)
 
 add_subdirectory(${CMAKE_SOURCE_DIR}/pu-erh_lab/src)
 add_subdirectory(${CMAKE_SOURCE_DIR}/pu-erh_lab/tests)
@@ -283,3 +285,91 @@ add_custom_target(tidy
     ${TIDY_SOURCE_FILES}
     COMMENT "Running clang-tidy on source files"
 )
+
+set(CPACK_GENERATOR "ZIP")
+set(CPACK_PACKAGE_NAME "pu-erh_lab")
+set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
+set(CPACK_PACKAGE_FILE_NAME "${CPACK_PACKAGE_NAME}-${CPACK_PACKAGE_VERSION}-${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}")
+include(CPack)
+
+if(WIN32)
+  # 1) Install MSVC runtime libraries (vcruntime/msvcp/ucrt) into bin/
+  set(CMAKE_INSTALL_SYSTEM_RUNTIME_DESTINATION "${CMAKE_INSTALL_BINDIR}")
+  include(InstallRequiredSystemLibraries)
+
+  # 2) Collect the executables you want to deploy (only those that exist)
+  set(PUERHLAB_RUNTIME_EXES "")
+  foreach(t IN ITEMS
+      CompleteUIDemo
+  )
+    if(TARGET ${t})
+      list(APPEND PUERHLAB_RUNTIME_EXES "$<TARGET_FILE:${t}>")
+    endif()
+  endforeach()
+
+  # Extra search dirs for dependency resolution (you can extend this in cache)
+  set(PUERHLAB_RUNTIME_DEP_DIRS "" CACHE STRING "Extra directories to search for runtime DLL dependencies")
+  set(_third_party_exiv2_bin "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_party/exiv2_x64-windows/bin")
+  set(_third_party_duckdb_bin "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_party/libduckdb-windows")
+
+  # Try to locate windeployqt for Qt plugins (platforms/qwindows.dll etc.)
+  set(PUERHLAB_WINDEPLOYQT "" CACHE FILEPATH "D:\\misc\\Qt\\6.9.3\\msvc2022_64\\bin\\windeployqt.exe")
+  if(PUERHLAB_WINDEPLOYQT STREQUAL "")
+    if(TARGET Qt6::qmake)
+      get_target_property(_qt_qmake_exe Qt6::qmake IMPORTED_LOCATION)
+      if(_qt_qmake_exe)
+        get_filename_component(_qt_bindir "${_qt_qmake_exe}" DIRECTORY)
+        find_program(PUERHLAB_WINDEPLOYQT windeployqt HINTS "${_qt_bindir}")
+      endif()
+    endif()
+  endif()
+
+  # Copy dependency DLLs into <prefix>/bin
+  install(CODE
+    "message(STATUS \"[pu-erh_lab] Collecting runtime DLL dependencies...\")
+     set(_bindir \"\${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_BINDIR}\")
+     file(MAKE_DIRECTORY \"\${_bindir}\")
+     file(GET_RUNTIME_DEPENDENCIES
+       EXECUTABLES ${PUERHLAB_RUNTIME_EXES}
+       DIRECTORIES
+         \"\${_bindir}\"
+         \"${_third_party_exiv2_bin}\"
+         \"${_third_party_duckdb_bin}\"
+         \${PUERHLAB_RUNTIME_DEP_DIRS}
+       RESOLVED_DEPENDENCIES_VAR _deps
+       UNRESOLVED_DEPENDENCIES_VAR _unde
+       PRE_EXCLUDE_REGEXES
+         \"api-ms-win-.*\"
+         \"ext-ms-win-.*\"
+       POST_EXCLUDE_REGEXES
+         \".*[\\\\\\\\/]Windows[\\\\\\\\/].*\"
+         \".*[\\\\\\\\/]System32[\\\\\\\\/].*\"
+     )
+     foreach(d IN LISTS _deps)
+       file(INSTALL DESTINATION \"\${_bindir}\" TYPE SHARED_LIBRARY FILES \"\${d}\")
+     endforeach()
+     if(_unde)
+       message(WARNING \"[pu-erh_lab] Unresolved runtime deps: \${_unde}\")
+     endif()
+    "
+  )
+
+  # Deploy Qt plugins (needed for Qt GUI apps)
+  if(PUERHLAB_WINDEPLOYQT AND TARGET ImagePreview)
+    install(CODE
+      "message(STATUS \"[pu-erh_lab] Running windeployqt for ImagePreview...\")
+       set(_bindir \"\${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_BINDIR}\")
+       execute_process(
+         COMMAND \"${PUERHLAB_WINDEPLOYQT}\"
+                 --no-translations
+                 --dir \"\${_bindir}\"
+                 \"$<TARGET_FILE:ImagePreview>\"
+         RESULT_VARIABLE _wdq_rc
+       )
+       if(NOT _wdq_rc EQUAL 0)
+         message(WARNING \"[pu-erh_lab] windeployqt failed with code: \${_wdq_rc}\")
+       endif()
+      "
+    )
+  endif()
+endif()

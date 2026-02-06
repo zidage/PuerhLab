@@ -234,6 +234,8 @@ add_custom_command(TARGET CompleteUIDemo POST_BUILD
   VERBATIM
 )
 
+add_subdirectory(gui_pocs/album_editor_qml)
+
 include(GoogleTest)
 
 # set(CMAKE_GTEST_DISCOVER_TESTS_DISCOVERY_MODE PRE_TEST)
@@ -255,3 +257,8 @@ include(GoogleTest)
 # gtest_discover_tests(ClarityOPTest)
 # gtest_discover_tests(SharpenOPTest)
 # gtest_discover_tests(PipelineTest)
+
+set(DEMO_BINS CompleteUIDemo AlbumEditorQmlDemo)
+install(TARGETS ${DEMO_BINS}
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+)

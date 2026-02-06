@@ -2,34 +2,44 @@
 
 #include <QAbstractItemView>
 #include <QApplication>
+#include <QCheckBox>
 #include <QComboBox>
 #include <QCoreApplication>
 #include <QDateTime>
+#include <QDialog>
 #include <QDialogButtonBox>
 #include <QDir>
 #include <QDoubleValidator>
+#include <QEvent>
 #include <QEventLoop>
 #include <QFileDialog>
+#include <QFont>
 #include <QFontDatabase>
 #include <QFormLayout>
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QIcon>
 #include <QIntValidator>
+#include <QKeySequence>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
 #include <QMessageBox>
 #include <QMetaObject>
+#include <QMenu>
 #include <QPainter>
 #include <QPixmap>
 #include <QPointer>
 #include <QProgressDialog>
+#include <QProgressBar>
 #include <QPushButton>
 #include <QScrollArea>
 #include <QSignalBlocker>
+#include <QShortcut>
 #include <QSlider>
 #include <QSpinBox>
+#include <QSplitter>
+#include <QStackedWidget>
 #include <QStandardPaths>
 #include <QStyle>
 #include <QStyleFactory>
@@ -145,73 +155,233 @@ static void ApplyExternalAppFont(QApplication& app, int argc, char** argv) {
   }
 }
 
+static void ApplyFontRenderingTuning(QApplication& app, int argc, char** argv) {
+  // Controls:
+  //   --font-aa=[on|off]
+  //   --font-hinting=[default|none|vertical|full]
+  // env fallback:
+  //   PUERHLAB_FONT_AA
+  //   PUERHLAB_FONT_HINTING
+  auto aa = FindArgValue(argc, argv, "--font-aa");
+  if (!aa.has_value()) {
+    const auto env = qEnvironmentVariable("PUERHLAB_FONT_AA");
+    if (!env.isEmpty()) {
+      aa = std::string_view(env.toStdString());
+    }
+  }
+
+  auto hinting = FindArgValue(argc, argv, "--font-hinting");
+  if (!hinting.has_value()) {
+    const auto env = qEnvironmentVariable("PUERHLAB_FONT_HINTING");
+    if (!env.isEmpty()) {
+      hinting = std::string_view(env.toStdString());
+    }
+  }
+
+  QFont tuned = app.font();
+
+  // Default to AA on for finer rendering.
+  bool enable_aa = true;
+  if (aa.has_value()) {
+    std::string aa_s(aa.value());
+    std::transform(aa_s.begin(), aa_s.end(), aa_s.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    if (aa_s == "off" || aa_s == "0" || aa_s == "false") {
+      enable_aa = false;
+    }
+  }
+
+  if (enable_aa) {
+    tuned.setStyleStrategy(QFont::PreferAntialias);
+  } else {
+    tuned.setStyleStrategy(QFont::NoAntialias);
+  }
+
+  QFont::HintingPreference pref = QFont::PreferVerticalHinting;
+  if (hinting.has_value()) {
+    std::string h(hinting.value());
+    std::transform(h.begin(), h.end(), h.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    if (h == "none") {
+      pref = QFont::PreferNoHinting;
+    } else if (h == "full") {
+      pref = QFont::PreferFullHinting;
+    } else if (h == "default") {
+      pref = QFont::HintingPreference::PreferDefaultHinting;
+    } else {
+      pref = QFont::PreferVerticalHinting;
+    }
+  }
+  tuned.setHintingPreference(pref);
+
+  app.setFont(tuned);
+}
+
 static void ApplyMaterialLikeTheme(QApplication& app) {
   app.setStyle(QStyleFactory::create("Fusion"));
 
   QPalette p;
-  p.setColor(QPalette::Window, QColor(0x12, 0x12, 0x12));
-  p.setColor(QPalette::WindowText, QColor(0xE8, 0xEA, 0xED));
-  p.setColor(QPalette::Base, QColor(0x1E, 0x1E, 0x1E));
-  p.setColor(QPalette::AlternateBase, QColor(0x20, 0x20, 0x20));
-  p.setColor(QPalette::ToolTipBase, QColor(0x20, 0x20, 0x20));
-  p.setColor(QPalette::ToolTipText, QColor(0xE8, 0xEA, 0xED));
-  p.setColor(QPalette::Text, QColor(0xE8, 0xEA, 0xED));
-  p.setColor(QPalette::Button, QColor(0x1E, 0x1E, 0x1E));
-  p.setColor(QPalette::ButtonText, QColor(0xE8, 0xEA, 0xED));
-  p.setColor(QPalette::Link, QColor(0x5F, 0xA2, 0xFF));
-  p.setColor(QPalette::Highlight, QColor(0x5F, 0xA2, 0xFF));
-  p.setColor(QPalette::HighlightedText, QColor(0x08, 0x0A, 0x0C));
+  p.setColor(QPalette::Window, QColor(0x0E, 0x13, 0x1A));
+  p.setColor(QPalette::WindowText, QColor(0xE8, 0xEE, 0xFA));
+  p.setColor(QPalette::Base, QColor(0x12, 0x18, 0x22));
+  p.setColor(QPalette::AlternateBase, QColor(0x17, 0x1F, 0x2B));
+  p.setColor(QPalette::ToolTipBase, QColor(0x18, 0x20, 0x2D));
+  p.setColor(QPalette::ToolTipText, QColor(0xEB, 0xF1, 0xFE));
+  p.setColor(QPalette::Text, QColor(0xE8, 0xEE, 0xFA));
+  p.setColor(QPalette::Button, QColor(0x17, 0x20, 0x2D));
+  p.setColor(QPalette::ButtonText, QColor(0xE8, 0xEE, 0xFA));
+  p.setColor(QPalette::Link, QColor(0x6C, 0xB0, 0xFF));
+  p.setColor(QPalette::Highlight, QColor(0x5A, 0xA2, 0xFF));
+  p.setColor(QPalette::HighlightedText, QColor(0x08, 0x0D, 0x14));
   app.setPalette(p);
 
-  // Match the ImagePreview demo's simple global QSS for consistent control look.
-  app.setStyleSheet(
-      "QWidget {"
-      "  color: #E8EAED;"
-      "  font-size: 12px;"
-      "}"
-      "QSlider {"
-      "  font-size: 14px;"
-      "}"
-      "QLabel {"
-      "  color: #E8EAED;"
-      "}"
-      "QToolTip {"
-      "  background-color: #202124;"
-      "  color: #E8EAED;"
-      "  border: 1px solid #303134;"
-      "  padding: 6px 8px;"
-      "  border-radius: 8px;"
-      "}"
-      // Material-like slider (horizontal)
-      "QSlider::groove:horizontal {"
-      "  height: 4px;"
-      "  background: #3C4043;"
-      "  border-radius: 2px;"
-      "}"
-      "QSlider::sub-page:horizontal {"
-      "  background: #8ab4f8;"
-      "  border-radius: 2px;"
-      "}"
-      "QSlider::add-page:horizontal {"
-      "  background: #3C4043;"
-      "  border-radius: 2px;"
-      "}"
-      "QSlider::handle:horizontal {"
-      "  background: #8ab4f8;"
-      "  width: 18px;"
-      "  height: 18px;"
-      "  margin: -7px 0;"
-      "  border-radius: 9px;"
-      "}"
-      "QSlider::handle:horizontal:hover {"
-      "  background: #8ab4f8;"
-      "}"
-      "QSlider::handle:horizontal:pressed {"
-      "  background: #8ab4f8;"
-      "}"
-      "QSlider::tick-mark {"
-      "  background: transparent;"
-      "}");
+  app.setStyleSheet(QString::fromUtf8(R"QSS(
+QWidget {
+  color: #E8EEFA;
+  font-size: 13px;
+}
+QToolTip {
+  background: #1A2230;
+  color: #EDF3FF;
+  border: 1px solid rgba(120, 151, 195, 0.45);
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+QFrame#CardSurface {
+  background: #151D28;
+  border: 1px solid #27354A;
+  border-radius: 16px;
+}
+QFrame#GlassSurface {
+  background: rgba(21, 29, 40, 0.88);
+  border: 1px solid rgba(64, 83, 112, 0.65);
+  border-radius: 14px;
+}
+QLabel#SectionTitle {
+  font-size: 17px;
+  font-weight: 650;
+  color: #F2F7FF;
+}
+QLabel#MetaText {
+  color: #9CADE0;
+  font-size: 12px;
+}
+QPushButton, QToolButton {
+  background: #1A2331;
+  color: #E8EEFA;
+  border: 1px solid #344760;
+  border-radius: 12px;
+  padding: 7px 12px;
+  min-height: 30px;
+}
+QPushButton:hover, QToolButton:hover {
+  background: #223044;
+  border-color: #5A78A6;
+}
+QPushButton:pressed, QToolButton:pressed {
+  background: #263952;
+}
+QPushButton#accent, QToolButton#accent {
+  background: #4F9BFF;
+  color: #0A1018;
+  border: 1px solid #4F9BFF;
+  font-weight: 600;
+}
+QPushButton#accent:hover, QToolButton#accent:hover {
+  background: #6CB0FF;
+  border-color: #6CB0FF;
+}
+QLineEdit, QComboBox, QSpinBox {
+  background: #111924;
+  border: 1px solid #344861;
+  color: #E8EEFA;
+  border-radius: 11px;
+  padding: 6px 10px;
+  min-height: 28px;
+  selection-background-color: #4F9BFF;
+}
+QLineEdit:hover, QComboBox:hover, QSpinBox:hover {
+  border-color: #5C80B6;
+}
+QLineEdit:focus, QComboBox:focus, QSpinBox:focus,
+QPushButton:focus, QToolButton:focus, QListView:focus {
+  border: 1px solid #5AA2FF;
+  outline: none;
+}
+QCheckBox {
+  spacing: 8px;
+}
+QCheckBox::indicator {
+  width: 18px;
+  height: 18px;
+  border-radius: 6px;
+  border: 1px solid #5A6E8E;
+  background: #111924;
+}
+QCheckBox::indicator:hover {
+  border-color: #5AA2FF;
+}
+QCheckBox::indicator:checked {
+  background: #5AA2FF;
+  border-color: #5AA2FF;
+}
+QSlider::groove:horizontal {
+  height: 6px;
+  border-radius: 3px;
+  background: #2A3B52;
+}
+QSlider::sub-page:horizontal {
+  background: #5AA2FF;
+  border-radius: 3px;
+}
+QSlider::handle:horizontal {
+  width: 18px;
+  height: 18px;
+  margin: -6px 0;
+  border-radius: 9px;
+  background: #E8F2FF;
+  border: 2px solid #5AA2FF;
+}
+QListWidget {
+  background: transparent;
+  border: none;
+}
+QListWidget::item {
+  border: 1px solid #2D3E55;
+  border-radius: 14px;
+  padding: 8px;
+  margin: 4px;
+  background: #131C29;
+}
+QListWidget::item:selected {
+  background: #21344D;
+  border-color: #5AA2FF;
+}
+QProgressBar {
+  background: #132033;
+  border: 1px solid #314763;
+  border-radius: 10px;
+  min-height: 16px;
+  text-align: center;
+}
+QProgressBar::chunk {
+  border-radius: 9px;
+  background: #5AA2FF;
+}
+QMenu {
+  background: rgba(18, 26, 37, 0.95);
+  border: 1px solid rgba(62, 80, 109, 0.85);
+  border-radius: 12px;
+  padding: 6px;
+}
+QMenu::item {
+  padding: 7px 12px;
+  border-radius: 8px;
+}
+QMenu::item:selected {
+  background: rgba(90, 162, 255, 0.18);
+}
+)QSS"));
 }
 
 enum class FilterValueKind { String, Int64, Double, DateTime };
@@ -517,19 +687,61 @@ class FilterDrawer final : public QWidget {
 
   static QString DrawerStyleSheet() {
     return QString::fromUtf8(R"QSS(
-#FilterDrawer { background: #121212; }
-#FilterDrawer QLabel#DrawerTitle { font-size: 16px; font-weight: 600; }
-#FilterDrawer QFrame#Card { background: #1E1E1E; border: 1px solid #303134; border-radius: 12px; }
-#FilterDrawer QLabel#CardTitle { font-weight: 600; }
-#FilterDrawer QLineEdit#QuickSearch { padding: 8px 10px; border: 1px solid #3C4043; border-radius: 10px; background: #202124; }
-#FilterDrawer QComboBox, #FilterDrawer QLineEdit { padding: 6px 8px; border: 1px solid #3C4043; border-radius: 8px; background: #202124; }
-#FilterDrawer QPushButton { padding: 7px 12px; border-radius: 10px; background: #202124; border: 1px solid #3C4043; }
-#FilterDrawer QPushButton#ApplyButton { background: #8ab4f8; color: #080A0C; border: 1px solid #8ab4f8; }
-#FilterDrawer QPushButton#ApplyButton:hover { background: #a3c2ff; }
-#FilterDrawer QToolButton#RemoveRule { background: transparent; border: none; padding: 6px; }
-#FilterDrawer QToolButton#RemoveRule:hover { background: #2a2b2e; border-radius: 10px; }
-#FilterDrawer QLabel#FilterInfo { color: #9aa0a6; }
-#FilterDrawer QLabel#SqlPreview { color: #cdd0d4; font-family: 'Consolas','Courier New',monospace; font-size: 11px; padding: 8px 10px; background: #1a1b1e; border: 1px solid #303134; border-radius: 10px; }
+#FilterDrawer { background: transparent; }
+#FilterDrawer QLabel#DrawerTitle { font-size: 17px; font-weight: 650; color: #EFF5FF; }
+#FilterDrawer QFrame#Card { background: #182231; border: 1px solid #2D3D55; border-radius: 14px; }
+#FilterDrawer QLabel#CardTitle { font-weight: 620; color: #EAF1FF; }
+#FilterDrawer QLineEdit#QuickSearch {
+  padding: 8px 10px;
+  border: 1px solid #344A66;
+  border-radius: 11px;
+  background: #111924;
+}
+#FilterDrawer QComboBox, #FilterDrawer QLineEdit {
+  padding: 6px 9px;
+  border: 1px solid #344A66;
+  border-radius: 10px;
+  background: #111924;
+}
+#FilterDrawer QPushButton {
+  padding: 7px 12px;
+  border-radius: 11px;
+  background: #1A2638;
+  border: 1px solid #344A66;
+}
+#FilterDrawer QPushButton#ApplyButton { background: #5AA2FF; color: #0A1018; border: 1px solid #5AA2FF; }
+#FilterDrawer QPushButton#ApplyButton:hover { background: #6CB0FF; }
+#FilterDrawer QToolButton#InlineApply {
+  background: rgba(90, 162, 255, 0.14);
+  border: 1px solid rgba(90, 162, 255, 0.30);
+  border-radius: 10px;
+  padding: 5px;
+}
+#FilterDrawer QToolButton#CollapseButton {
+  border-radius: 9px;
+  border: 1px solid #344A66;
+  padding: 5px;
+}
+#FilterDrawer QToolButton#RemoveRule {
+  background: transparent;
+  border: 1px solid transparent;
+  padding: 6px;
+}
+#FilterDrawer QToolButton#RemoveRule:hover {
+  background: #213047;
+  border-radius: 10px;
+  border-color: #3A4F6D;
+}
+#FilterDrawer QLabel#FilterInfo { color: #9CADCC; }
+#FilterDrawer QLabel#SqlPreview {
+  color: #E3EEFF;
+  font-family: 'Consolas','Courier New',monospace;
+  font-size: 11px;
+  padding: 8px 10px;
+  background: #111923;
+  border: 1px solid #2D3D55;
+  border-radius: 10px;
+}
 )QSS");
   }
 
@@ -712,14 +924,6 @@ class FilterDrawer final : public QWidget {
       clauses.push_back(FilterNode{FilterNode::Type::Condition,
                                    {},
                                    {},
-                                   FieldCondition{.field_        = FilterField::SemanticTags,
-                                                  .op_           = CompareOp::CONTAINS,
-                                                  .value_        = v,
-                                                  .second_value_ = std::nullopt},
-                                   std::nullopt});
-      clauses.push_back(FilterNode{FilterNode::Type::Condition,
-                                   {},
-                                   {},
                                    FieldCondition{.field_        = FilterField::FileExtension,
                                                   .op_           = CompareOp::CONTAINS,
                                                   .value_        = v,
@@ -890,6 +1094,28 @@ static QImage MatRgba32fToQImageCopy(const cv::Mat& rgba32f_or_u8) {
   return img.copy();
 }
 
+static QIcon MakeSkeletonThumbnailIcon(int width, int height, const QString& label) {
+  QPixmap px(width, height);
+  px.fill(QColor(0x11, 0x18, 0x23));
+
+  QPainter painter(&px);
+  painter.setRenderHint(QPainter::Antialiasing, true);
+
+  painter.setPen(Qt::NoPen);
+  painter.setBrush(QColor(0x1A, 0x25, 0x35));
+  painter.drawRoundedRect(QRectF(10.0, 10.0, width - 20.0, height - 20.0), 14.0, 14.0);
+
+  painter.setBrush(QColor(0x2A, 0x3B, 0x51));
+  painter.drawRoundedRect(QRectF(18.0, height - 44.0, width - 36.0, 10.0), 5.0, 5.0);
+  painter.drawRoundedRect(QRectF(18.0, height - 28.0, width - 80.0, 8.0), 4.0, 4.0);
+
+  painter.setPen(QColor(0x9A, 0xAF, 0xCE));
+  painter.drawText(QRectF(0.0, 0.0, width, height), Qt::AlignCenter, label);
+  painter.end();
+
+  return QIcon(px);
+}
+
 static std::string ExtensionForExportFormat(ImageFormatType fmt) {
   switch (fmt) {
     case ImageFormatType::JPEG:
@@ -941,6 +1167,354 @@ static ImageFormatType FormatFromName(const QString& s) {
   return ImageFormatType::JPEG;
 }
 
+class CardFrame final : public QFrame {
+ public:
+  explicit CardFrame(const QString& title = {}, QWidget* parent = nullptr) : QFrame(parent) {
+    setObjectName("CardSurface");
+    setFrameShape(QFrame::NoFrame);
+
+    auto* root = new QVBoxLayout(this);
+    root->setContentsMargins(16, 16, 16, 16);
+    root->setSpacing(12);
+
+    header_ = new QHBoxLayout();
+    header_->setContentsMargins(0, 0, 0, 0);
+    header_->setSpacing(8);
+    root->addLayout(header_, 0);
+
+    title_ = new QLabel(title, this);
+    title_->setObjectName("SectionTitle");
+    title_->setVisible(!title.isEmpty());
+    header_->addWidget(title_, 0);
+    header_->addStretch(1);
+
+    body_ = new QVBoxLayout();
+    body_->setContentsMargins(0, 0, 0, 0);
+    body_->setSpacing(12);
+    root->addLayout(body_, 1);
+
+    footer_ = new QHBoxLayout();
+    footer_->setContentsMargins(0, 0, 0, 0);
+    footer_->setSpacing(8);
+    footer_->setAlignment(Qt::AlignRight);
+    root->addLayout(footer_, 0);
+    footer_->setEnabled(false);
+    footer_->setSpacing(0);
+    footer_->setContentsMargins(0, 0, 0, 0);
+  }
+
+  auto HeaderLayout() const -> QHBoxLayout* { return header_; }
+  auto BodyLayout() const -> QVBoxLayout* { return body_; }
+  auto FooterLayout() const -> QHBoxLayout* {
+    footer_->setEnabled(true);
+    if (footer_->spacing() == 0) {
+      footer_->setSpacing(8);
+    }
+    return footer_;
+  }
+  auto TitleLabel() const -> QLabel* { return title_; }
+
+ private:
+  QHBoxLayout* header_ = nullptr;
+  QVBoxLayout* body_   = nullptr;
+  QHBoxLayout* footer_ = nullptr;
+  QLabel*      title_  = nullptr;
+};
+
+class ImportDialog final : public QDialog {
+ public:
+  explicit ImportDialog(QWidget* parent = nullptr) : QDialog(parent) {
+    setModal(true);
+    setWindowTitle("Import");
+    resize(760, 560);
+
+    auto* root = new QVBoxLayout(this);
+    root->setContentsMargins(18, 18, 18, 18);
+    root->setSpacing(12);
+
+    auto* intro = new QLabel(
+        "Import RAW/JPEG assets into the library. Files are ingested asynchronously and metadata "
+        "is progressively extracted.",
+        this);
+    intro->setWordWrap(true);
+    intro->setObjectName("MetaText");
+    root->addWidget(intro);
+
+    auto* body_split = new QSplitter(Qt::Horizontal, this);
+    body_split->setChildrenCollapsible(false);
+    body_split->setHandleWidth(8);
+    root->addWidget(body_split, 1);
+
+    auto* sources_card = new CardFrame("Sources", body_split);
+    auto* files_top    = new QHBoxLayout();
+    files_top->setContentsMargins(0, 0, 0, 0);
+    files_top->setSpacing(8);
+    auto* add_files_btn    = new QPushButton("Add files…", sources_card);
+    auto* remove_files_btn = new QPushButton("Remove selected", sources_card);
+    auto* clear_files_btn  = new QPushButton("Clear", sources_card);
+    files_top->addWidget(add_files_btn, 0);
+    files_top->addWidget(remove_files_btn, 0);
+    files_top->addWidget(clear_files_btn, 0);
+    files_top->addStretch(1);
+    sources_card->BodyLayout()->addLayout(files_top);
+
+    files_list_ = new QListWidget(sources_card);
+    files_list_->setSelectionMode(QAbstractItemView::ExtendedSelection);
+    files_list_->setAlternatingRowColors(false);
+    files_list_->setMinimumHeight(300);
+    sources_card->BodyLayout()->addWidget(files_list_, 1);
+
+    summary_ = new QLabel("No files selected.", sources_card);
+    summary_->setObjectName("MetaText");
+    sources_card->BodyLayout()->addWidget(summary_);
+
+    auto* options_card = new CardFrame("Import options", body_split);
+    auto* form         = new QFormLayout();
+    form->setContentsMargins(0, 0, 0, 0);
+    form->setHorizontalSpacing(12);
+    form->setVerticalSpacing(10);
+    options_card->BodyLayout()->addLayout(form, 0);
+
+    sort_mode_ = new QComboBox(options_card);
+    sort_mode_->addItem("File name", static_cast<int>(ImportSortMode::FILE_NAME));
+    sort_mode_->addItem("Full path", static_cast<int>(ImportSortMode::FULL_PATH));
+    sort_mode_->addItem("As selected", static_cast<int>(ImportSortMode::NONE));
+    form->addRow("Sort mode", sort_mode_);
+
+    persist_placeholders_ = new QCheckBox("Persist placeholders immediately", options_card);
+    persist_placeholders_->setChecked(false);
+    options_card->BodyLayout()->addWidget(persist_placeholders_, 0);
+
+    write_sequence_ = new QCheckBox("Record deterministic import sequence", options_card);
+    write_sequence_->setChecked(true);
+    options_card->BodyLayout()->addWidget(write_sequence_, 0);
+
+    auto* hints = new QLabel(
+        "Unsupported files are ignored. Metadata extraction runs after placeholders are created, "
+        "so thumbnails appear progressively.",
+        options_card);
+    hints->setObjectName("MetaText");
+    hints->setWordWrap(true);
+    options_card->BodyLayout()->addWidget(hints, 0);
+    options_card->BodyLayout()->addStretch(1);
+
+    body_split->setStretchFactor(0, 3);
+    body_split->setStretchFactor(1, 2);
+
+    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
+    buttons->button(QDialogButtonBox::Ok)->setText("Start Import");
+    buttons->button(QDialogButtonBox::Ok)->setProperty("class", "accent");
+    buttons->button(QDialogButtonBox::Ok)->setObjectName("accent");
+    root->addWidget(buttons, 0);
+
+    connect(add_files_btn, &QPushButton::clicked, this, [this]() { AddFiles(); });
+    connect(remove_files_btn, &QPushButton::clicked, this, [this]() { RemoveSelected(); });
+    connect(clear_files_btn, &QPushButton::clicked, this, [this]() { ClearAll(); });
+    connect(buttons, &QDialogButtonBox::accepted, this, [this]() { accept(); });
+    connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
+  }
+
+  auto SelectedPaths() const -> const std::vector<image_path_t>& { return paths_; }
+
+  auto SelectedOptions() const -> ImportOptions {
+    ImportOptions options;
+    options.sort_mode_ = static_cast<ImportSortMode>(sort_mode_->currentData().toInt());
+    options.persist_placeholders_immediately_ = persist_placeholders_->isChecked();
+    options.write_import_sequence_            = write_sequence_->isChecked();
+    return options;
+  }
+
+ protected:
+  void accept() override {
+    if (paths_.empty()) {
+      QMessageBox::information(this, "Import", "Add at least one supported image.");
+      return;
+    }
+    QDialog::accept();
+  }
+
+ private:
+  void AddFiles() {
+    const QStringList files = QFileDialog::getOpenFileNames(
+        this, "Select images", QString(),
+        "Images (*.dng *.nef *.cr2 *.cr3 *.arw *.rw2 *.raf *.tif *.tiff *.jpg *.jpeg *.png);;All "
+        "Files (*)");
+    if (files.isEmpty()) {
+      return;
+    }
+
+    int unsupported = 0;
+    for (const auto& f : files) {
+      const auto path = std::filesystem::path(f.toStdWString());
+      if (!is_supported_file(path)) {
+        ++unsupported;
+        continue;
+      }
+      const auto key = path.wstring();
+      if (seen_.contains(key)) {
+        continue;
+      }
+      seen_.insert(key);
+      paths_.push_back(path);
+
+      auto* item = new QListWidgetItem(style()->standardIcon(QStyle::SP_FileIcon),
+                                       QString::fromStdWString(path.filename().wstring()));
+      item->setToolTip(QString::fromStdWString(path.wstring()));
+      item->setData(Qt::UserRole + 1, QString::fromStdWString(path.wstring()));
+      files_list_->addItem(item);
+    }
+
+    UpdateSummary();
+    if (unsupported > 0) {
+      QMessageBox::information(this, "Import",
+                               QString("Ignored %1 unsupported file(s).").arg(unsupported));
+    }
+  }
+
+  void RemoveSelected() {
+    const auto selected = files_list_->selectedItems();
+    if (selected.isEmpty()) {
+      return;
+    }
+    std::unordered_set<std::wstring> remove_keys;
+    remove_keys.reserve(static_cast<size_t>(selected.size()));
+
+    for (auto* item : selected) {
+      if (!item) {
+        continue;
+      }
+      remove_keys.insert(item->data(Qt::UserRole + 1).toString().toStdWString());
+      delete item;
+    }
+
+    paths_.erase(std::remove_if(paths_.begin(), paths_.end(),
+                                [&remove_keys](const image_path_t& p) {
+                                  return remove_keys.contains(p.wstring());
+                                }),
+                 paths_.end());
+
+    for (const auto& k : remove_keys) {
+      seen_.erase(k);
+    }
+    UpdateSummary();
+  }
+
+  void ClearAll() {
+    paths_.clear();
+    seen_.clear();
+    files_list_->clear();
+    UpdateSummary();
+  }
+
+  void UpdateSummary() {
+    if (paths_.empty()) {
+      summary_->setText("No files selected.");
+      return;
+    }
+    summary_->setText(QString("%1 file(s) queued").arg(static_cast<int>(paths_.size())));
+  }
+
+  QListWidget*                  files_list_            = nullptr;
+  QLabel*                       summary_               = nullptr;
+  QComboBox*                    sort_mode_             = nullptr;
+  QCheckBox*                    persist_placeholders_  = nullptr;
+  QCheckBox*                    write_sequence_        = nullptr;
+  std::vector<image_path_t>     paths_;
+  std::unordered_set<std::wstring> seen_;
+};
+
+class SettingsPage final : public QWidget {
+ public:
+  explicit SettingsPage(QWidget* parent = nullptr) : QWidget(parent) {
+    auto* root = new QVBoxLayout(this);
+    root->setContentsMargins(0, 0, 0, 0);
+    root->setSpacing(12);
+
+    auto* title = new QLabel("Settings", this);
+    title->setObjectName("SectionTitle");
+    root->addWidget(title, 0, Qt::AlignLeft);
+
+    auto* subtitle = new QLabel("Appearance and performance preferences for this workstation.", this);
+    subtitle->setObjectName("MetaText");
+    root->addWidget(subtitle, 0, Qt::AlignLeft);
+
+    auto* content = new QScrollArea(this);
+    content->setFrameShape(QFrame::NoFrame);
+    content->setWidgetResizable(true);
+    root->addWidget(content, 1);
+
+    auto* pane = new QWidget(content);
+    auto* body = new QVBoxLayout(pane);
+    body->setContentsMargins(2, 2, 2, 2);
+    body->setSpacing(12);
+    content->setWidget(pane);
+
+    auto* appearance = new CardFrame("Appearance", pane);
+    auto* app_form   = new QFormLayout();
+    app_form->setContentsMargins(0, 0, 0, 0);
+    app_form->setHorizontalSpacing(12);
+    app_form->setVerticalSpacing(10);
+    appearance->BodyLayout()->addLayout(app_form);
+
+    auto* theme = new QComboBox(appearance);
+    theme->addItems({"Light", "System"});
+    auto* accent = new QComboBox(appearance);
+    accent->addItems({"Ocean Blue", "Emerald", "Graphite"});
+    auto* ui_scale = new QSpinBox(appearance);
+    ui_scale->setRange(90, 150);
+    ui_scale->setValue(100);
+    ui_scale->setSuffix("%");
+    app_form->addRow("Theme", theme);
+    app_form->addRow("Accent", accent);
+    app_form->addRow("UI scale", ui_scale);
+
+    auto* focus_rings = new QCheckBox("Always show strong keyboard focus rings", appearance);
+    focus_rings->setChecked(true);
+    auto* reduce_motion = new QCheckBox("Reduce non-essential motion", appearance);
+    appearance->BodyLayout()->addWidget(focus_rings);
+    appearance->BodyLayout()->addWidget(reduce_motion);
+    body->addWidget(appearance);
+
+    auto* perf      = new CardFrame("Performance", pane);
+    auto* perf_form = new QFormLayout();
+    perf_form->setContentsMargins(0, 0, 0, 0);
+    perf_form->setHorizontalSpacing(12);
+    perf_form->setVerticalSpacing(10);
+    perf->BodyLayout()->addLayout(perf_form);
+
+    auto* decode_threads = new QSpinBox(perf);
+    decode_threads->setRange(1, 16);
+    decode_threads->setValue(8);
+    auto* thumb_threads = new QSpinBox(perf);
+    thumb_threads->setRange(1, 16);
+    thumb_threads->setValue(6);
+    auto* cache_gb = new QSpinBox(perf);
+    cache_gb->setRange(1, 64);
+    cache_gb->setValue(8);
+    cache_gb->setSuffix(" GB");
+    perf_form->addRow("Decode workers", decode_threads);
+    perf_form->addRow("Thumbnail workers", thumb_threads);
+    perf_form->addRow("Cache budget", cache_gb);
+
+    auto* gpu_decode = new QCheckBox("Prefer GPU path when available", perf);
+    gpu_decode->setChecked(true);
+    auto* background_render = new QCheckBox("Allow background preview rendering", perf);
+    background_render->setChecked(true);
+    perf->BodyLayout()->addWidget(gpu_decode);
+    perf->BodyLayout()->addWidget(background_render);
+    body->addWidget(perf);
+
+    auto* shortcuts = new CardFrame("Shortcuts", pane);
+    auto* hints     = new QLabel(
+        "Ctrl+I Import    Ctrl+E Export    Ctrl+F Focus Search    Ctrl+, Settings", shortcuts);
+    hints->setObjectName("MetaText");
+    shortcuts->BodyLayout()->addWidget(hints);
+    body->addWidget(shortcuts);
+
+    body->addStretch(1);
+  }
+};
+
 class ExportDialog final : public QDialog {
  public:
   struct Item {
@@ -961,88 +1535,135 @@ class ExportDialog final : public QDialog {
 
     setModal(true);
     setWindowTitle("Export");
-    resize(520, 320);
+    resize(740, 560);
 
     auto* root = new QVBoxLayout(this);
-    root->setContentsMargins(16, 16, 16, 16);
+    root->setContentsMargins(18, 18, 18, 18);
     root->setSpacing(12);
 
-    auto* info = new QLabel(QString("Queue %1 item(s)").arg(static_cast<int>(items_.size())), this);
-    root->addWidget(info);
+    auto* intro = new QLabel(
+        "Export selected images using the current edit pipeline. Processing runs in the "
+        "background and updates progress once all tasks complete.",
+        this);
+    intro->setWordWrap(true);
+    intro->setObjectName("MetaText");
+    root->addWidget(intro);
 
-    auto* form = new QFormLayout();
-    form->setLabelAlignment(Qt::AlignRight);
-    form->setFormAlignment(Qt::AlignTop);
-    root->addLayout(form);
+    auto* split = new QSplitter(Qt::Horizontal, this);
+    split->setChildrenCollapsible(false);
+    split->setHandleWidth(8);
+    root->addWidget(split, 1);
 
-    // Output directory
-    auto* out_row = new QWidget(this);
+    auto* options_card = new CardFrame("Format options", split);
+    auto* form         = new QFormLayout();
+    form->setContentsMargins(0, 0, 0, 0);
+    form->setHorizontalSpacing(12);
+    form->setVerticalSpacing(10);
+    options_card->BodyLayout()->addLayout(form);
+
+    auto* out_row = new QWidget(options_card);
     auto* out_h   = new QHBoxLayout(out_row);
     out_h->setContentsMargins(0, 0, 0, 0);
-    out_dir_ = new QLineEdit(this);
+    out_h->setSpacing(8);
+
+    out_dir_ = new QLineEdit(options_card);
     out_dir_->setPlaceholderText("Select output directory");
     const auto default_dir = QStandardPaths::writableLocation(QStandardPaths::PicturesLocation);
     out_dir_->setText(default_dir.isEmpty() ? QDir::currentPath() : default_dir);
-    auto* browse = new QPushButton("Browse…", this);
+
+    auto* browse = new QPushButton("Browse…", options_card);
     out_h->addWidget(out_dir_, 1);
     out_h->addWidget(browse, 0);
     form->addRow("Output", out_row);
 
     connect(browse, &QPushButton::clicked, this, [this]() {
-      const auto d =
+      const auto picked =
           QFileDialog::getExistingDirectory(this, "Select export folder", out_dir_->text());
-      if (!d.isEmpty()) {
-        out_dir_->setText(d);
+      if (!picked.isEmpty()) {
+        out_dir_->setText(picked);
       }
     });
 
-    // Format
-    format_ = new QComboBox(this);
+    format_ = new QComboBox(options_card);
     for (auto f : {ImageFormatType::JPEG, ImageFormatType::PNG, ImageFormatType::TIFF,
                    ImageFormatType::WEBP, ImageFormatType::EXR}) {
       format_->addItem(FormatName(f));
     }
     form->addRow("Format", format_);
 
-    // Resize
-    resize_enabled_ = new QComboBox(this);
+    resize_enabled_ = new QComboBox(options_card);
     resize_enabled_->addItems({"No", "Yes"});
     form->addRow("Resize", resize_enabled_);
 
-    max_side_ = new QSpinBox(this);
+    max_side_ = new QSpinBox(options_card);
     max_side_->setRange(256, 16384);
     max_side_->setValue(4096);
     form->addRow("Max side", max_side_);
 
-    // Quality
-    quality_ = new QSpinBox(this);
+    quality_ = new QSpinBox(options_card);
     quality_->setRange(1, 100);
     quality_->setValue(95);
     form->addRow("Quality", quality_);
 
-    // Bit depth
-    bit_depth_ = new QComboBox(this);
+    bit_depth_ = new QComboBox(options_card);
     bit_depth_->addItems({"8", "16", "32"});
     bit_depth_->setCurrentText("16");
     form->addRow("Bit depth", bit_depth_);
 
-    // PNG compression
-    png_compress_ = new QSpinBox(this);
+    png_compress_ = new QSpinBox(options_card);
     png_compress_->setRange(0, 9);
     png_compress_->setValue(5);
     form->addRow("PNG level", png_compress_);
 
-    // TIFF compression
-    tiff_compress_ = new QComboBox(this);
+    tiff_compress_ = new QComboBox(options_card);
     tiff_compress_->addItems({"NONE", "LZW", "ZIP"});
     form->addRow("TIFF comp", tiff_compress_);
 
-    status_ = new QLabel("", this);
+    option_widgets_ = {out_dir_, format_, resize_enabled_, max_side_, quality_, bit_depth_,
+                       png_compress_, tiff_compress_, browse};
+
+    auto* queue_hint = new QLabel(
+        QString("Queued %1 image(s). Select rows in the browser before opening export to limit "
+                "the batch.")
+            .arg(static_cast<int>(items_.size())),
+        options_card);
+    queue_hint->setObjectName("MetaText");
+    queue_hint->setWordWrap(true);
+    options_card->BodyLayout()->addWidget(queue_hint, 0);
+
+    auto* progress_card = new CardFrame("Progress", split);
+    status_             = new QLabel("Ready to export.", progress_card);
     status_->setWordWrap(true);
-    root->addWidget(status_);
+    progress_card->BodyLayout()->addWidget(status_, 0);
+
+    progress_ = new QProgressBar(progress_card);
+    progress_->setRange(0, 100);
+    progress_->setValue(0);
+    progress_card->BodyLayout()->addWidget(progress_, 0);
+
+    queue_preview_ = new QListWidget(progress_card);
+    queue_preview_->setSelectionMode(QAbstractItemView::NoSelection);
+    queue_preview_->setMinimumHeight(220);
+    const int preview_count = std::min<int>(12, static_cast<int>(items_.size()));
+    for (int i = 0; i < preview_count; ++i) {
+      queue_preview_->addItem(QString("Image #%1  Sleeve #%2")
+                                  .arg(static_cast<qulonglong>(items_[i].image_id_))
+                                  .arg(static_cast<qulonglong>(items_[i].sleeve_id_)));
+    }
+    if (items_.size() > static_cast<size_t>(preview_count)) {
+      queue_preview_->addItem(QString("… and %1 more").arg(
+          static_cast<int>(items_.size()) - static_cast<int>(preview_count)));
+    }
+    progress_card->BodyLayout()->addWidget(queue_preview_, 1);
+
+    split->setStretchFactor(0, 3);
+    split->setStretchFactor(1, 2);
 
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
-    buttons->button(QDialogButtonBox::Ok)->setText("Export");
+    export_btn_   = buttons->button(QDialogButtonBox::Ok);
+    cancel_btn_   = buttons->button(QDialogButtonBox::Cancel);
+    export_btn_->setText("Export");
+    export_btn_->setObjectName("accent");
     root->addWidget(buttons);
 
     connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
@@ -1097,6 +1718,9 @@ class ExportDialog final : public QDialog {
   }
 
   void StartExport() {
+    if (exporting_) {
+      return;
+    }
     if (items_.empty()) {
       status_->setText("Nothing to export.");
       return;
@@ -1108,7 +1732,7 @@ class ExportDialog final : public QDialog {
       return;
     }
 
-    // Enqueue
+    export_service_->ClearAllExportTasks();
     for (const auto& it : items_) {
       const auto src_path = image_pool_->Read<std::filesystem::path>(
           it.image_id_, [](std::shared_ptr<Image> img) { return img->image_path_; });
@@ -1119,9 +1743,8 @@ class ExportDialog final : public QDialog {
       export_service_->EnqueueExportTask(task);
     }
 
-    // UI: busy
-    setEnabled(false);
-    status_->setText("Exporting…");
+    SetBusy(true, "Exporting. Rendering pipeline output and writing files...");
+    progress_->setRange(0, 0);
 
     QPointer<ExportDialog> self(this);
     export_service_->ExportAll([self](std::shared_ptr<std::vector<ExportResult>> results) {
@@ -1134,6 +1757,9 @@ class ExportDialog final : public QDialog {
             if (!self) {
               return;
             }
+            self->SetBusy(false, "Export complete.");
+            self->progress_->setRange(0, 100);
+            self->progress_->setValue(100);
             int         ok   = 0;
             int         fail = 0;
             QStringList errors;
@@ -1164,6 +1790,27 @@ class ExportDialog final : public QDialog {
     });
   }
 
+  void SetBusy(bool busy, const QString& message) {
+    exporting_ = busy;
+    for (auto* widget : option_widgets_) {
+      if (widget) {
+        widget->setEnabled(!busy);
+      }
+    }
+    if (queue_preview_) {
+      queue_preview_->setEnabled(!busy);
+    }
+    if (export_btn_) {
+      export_btn_->setEnabled(!busy);
+    }
+    if (cancel_btn_) {
+      cancel_btn_->setEnabled(!busy);
+    }
+    if (status_) {
+      status_->setText(message);
+    }
+  }
+
   std::shared_ptr<ImagePoolService> image_pool_;
   std::shared_ptr<ExportService>    export_service_;
   std::vector<Item>                 items_;
@@ -1177,6 +1824,12 @@ class ExportDialog final : public QDialog {
   QSpinBox*                         png_compress_   = nullptr;
   QComboBox*                        tiff_compress_  = nullptr;
   QLabel*                           status_         = nullptr;
+  QProgressBar*                     progress_       = nullptr;
+  QListWidget*                      queue_preview_  = nullptr;
+  QPushButton*                      export_btn_     = nullptr;
+  QPushButton*                      cancel_btn_     = nullptr;
+  std::vector<QWidget*>             option_widgets_;
+  bool                              exporting_      = false;
 };
 
 [[maybe_unused]] static void SetPipelineTemplateToGlobalParams(
@@ -1394,13 +2047,19 @@ class EditorDialog final : public QDialog {
     }
 
     setModal(true);
+    setSizeGripEnabled(true);
+    setWindowFlag(Qt::WindowMinMaxButtonsHint, true);
+    setWindowFlag(Qt::MSWindowsFixedSizeDialogHint, false);
     setWindowTitle(QString("Editor - element #%1").arg(static_cast<qulonglong>(element_id_)));
+    setMinimumSize(1080, 680);
     resize(1500, 1000);
 
     auto* root = new QHBoxLayout(this);
+    root->setContentsMargins(10, 10, 10, 10);
+    root->setSpacing(12);
 
     viewer_    = new QtEditViewer(this);
-    viewer_->setMinimumSize(800, 600);
+    viewer_->setMinimumSize(560, 360);
     viewer_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     viewer_->setStyleSheet(
         "QOpenGLWidget {"
@@ -1421,20 +2080,66 @@ class EditorDialog final : public QDialog {
     viewer_grid->setRowStretch(0, 1);
     viewer_grid->setColumnStretch(0, 1);
 
-    controls_             = new QWidget(this);
+    controls_scroll_ = new QScrollArea(this);
+    controls_scroll_->setFrameShape(QFrame::NoFrame);
+    controls_scroll_->setWidgetResizable(true);
+    controls_scroll_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    controls_scroll_->setMinimumWidth(380);
+    controls_scroll_->setMaximumWidth(540);
+    controls_scroll_->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
+    controls_scroll_->setStyleSheet(
+        "QScrollArea { background: transparent; border: none; }"
+        "QScrollBar:vertical {"
+        "  background: #101822;"
+        "  width: 10px;"
+        "  margin: 2px;"
+        "  border-radius: 5px;"
+        "}"
+        "QScrollBar::handle:vertical {"
+        "  background: #2E415A;"
+        "  border-radius: 5px;"
+        "}"
+        "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0px; }"
+        "QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }");
+
+    controls_             = new QWidget(controls_scroll_);
     auto* controls_layout = new QVBoxLayout(controls_);
     controls_layout->setContentsMargins(16, 16, 16, 16);
     controls_layout->setSpacing(12);
-    controls_->setFixedWidth(420);
+    controls_->setMinimumWidth(380);
+    controls_->setObjectName("EditorControlsPanel");
     controls_->setStyleSheet(
-        "QWidget {"
-        "  background: #1E1E1E;"
-        "  border: 1px solid #303134;"
+        "#EditorControlsPanel {"
+        "  background: #161E2A;"
+        "  border: 1px solid #2C3D55;"
+        "  border-radius: 14px;"
+        "}"
+        "#EditorControlsPanel QFrame#EditorSection {"
+        "  background: #111923;"
+        "  border: 1px solid #2B3B51;"
         "  border-radius: 12px;"
+        "}"
+        "#EditorControlsPanel QLabel#EditorSectionTitle {"
+        "  color: #EAF2FF;"
+        "  font-size: 13px;"
+        "  font-weight: 620;"
+        "}"
+        "#EditorControlsPanel QLabel#EditorSectionSub {"
+        "  color: #9DB0D0;"
+        "  font-size: 11px;"
         "}");
+    controls_scroll_->setWidget(controls_);
 
     root->addWidget(viewer_container_, 1);
-    root->addWidget(controls_, 0);
+    root->addWidget(controls_scroll_, 0);
+
+    auto* controls_header = new QLabel("Adjustments", controls_);
+    controls_header->setObjectName("SectionTitle");
+    auto* controls_sub = new QLabel("Editing controls are scoped to the active image.", controls_);
+    controls_sub->setObjectName("MetaText");
+    controls_sub->setWordWrap(true);
+    controls_layout->addWidget(controls_header, 0);
+    controls_layout->addWidget(controls_sub, 0);
 
     const auto luts_dir  = std::filesystem::path(CONFIG_PATH) / "LUTs";
     const auto lut_files = ListCubeLutsInDir(luts_dir);
@@ -1445,6 +2150,23 @@ class EditorDialog final : public QDialog {
       lut_paths_.push_back(p.generic_string());
       lut_names_.push_back(QString::fromStdString(p.filename().string()));
     }
+
+    auto addSection = [&](const QString& title, const QString& subtitle) {
+      auto* frame = new QFrame(controls_);
+      frame->setObjectName("EditorSection");
+      auto* v = new QVBoxLayout(frame);
+      v->setContentsMargins(12, 10, 12, 10);
+      v->setSpacing(2);
+
+      auto* t = new QLabel(title, frame);
+      t->setObjectName("EditorSectionTitle");
+      auto* s = new QLabel(subtitle, frame);
+      s->setObjectName("EditorSectionSub");
+      s->setWordWrap(true);
+      v->addWidget(t, 0);
+      v->addWidget(s, 0);
+      controls_layout->addWidget(frame, 0);
+    };
 
     controls_layout->addStretch();
 
@@ -1582,13 +2304,17 @@ class EditorDialog final : public QDialog {
       return slider;
     };
 
-    lut_combo_       = addComboBox("LUT", lut_names_, initial_lut_index, [&](int idx) {
+    addSection("Pipeline", "Choose LUT and render behavior.");
+
+    lut_combo_ = addComboBox("LUT", lut_names_, initial_lut_index, [&](int idx) {
       if (idx < 0 || idx >= static_cast<int>(lut_paths_.size())) {
         return;
       }
       state_.lut_path_ = lut_paths_[idx];
       CommitAdjustment(AdjustmentField::Lut);
     });
+
+    addSection("Tone", "Primary tonal shaping controls.");
 
     exposure_slider_ = addSlider(
         "Exposure", -1000, 1000, static_cast<int>(std::lround(state_.exposure_ * 100.0f)),
@@ -1607,6 +2333,8 @@ class EditorDialog final : public QDialog {
         },
         [this]() { CommitAdjustment(AdjustmentField::Contrast); },
         [](int v) { return QString::number(v, 'f', 2); });
+
+    addSection("Color", "Color balance and saturation.");
 
     saturation_slider_ = addSlider(
         "Saturation", -100, 100, static_cast<int>(std::lround(state_.saturation_)),
@@ -1662,6 +2390,8 @@ class EditorDialog final : public QDialog {
         [this]() { CommitAdjustment(AdjustmentField::Highlights); },
         [](int v) { return QString::number(v, 'f', 2); });
 
+    addSection("Detail", "Micro-contrast and sharpen controls.");
+
     sharpen_slider_ = addSlider(
         "Sharpen", -100, 100, static_cast<int>(std::lround(state_.sharpen_)),
         [&](int v) {
@@ -1679,6 +2409,8 @@ class EditorDialog final : public QDialog {
         },
         [this]() { CommitAdjustment(AdjustmentField::Clarity); },
         [](int v) { return QString::number(v, 'f', 2); });
+
+    addSection("Versioning", "Commit and inspect edit history.");
 
     // Edit-history commit controls.
     {
@@ -2647,6 +3379,7 @@ class EditorDialog final : public QDialog {
 
   QtEditViewer*                                            viewer_             = nullptr;
   QWidget*                                                 viewer_container_   = nullptr;
+  QScrollArea*                                             controls_scroll_    = nullptr;
   SpinnerWidget*                                           spinner_            = nullptr;
   QWidget*                                                 controls_           = nullptr;
   QComboBox*                                               lut_combo_          = nullptr;
@@ -2704,52 +3437,231 @@ class AlbumWindow final : public QWidget {
     filter_service_  = std::make_unique<SleeveFilterService>(project_->GetStorageService());
     history_service_ = std::make_shared<EditHistoryMgmtService>(project_->GetStorageService());
 
-    auto* outer      = new QHBoxLayout(this);
-    outer->setContentsMargins(10, 10, 10, 10);
-    outer->setSpacing(12);
+    auto* root      = new QVBoxLayout(this);
+    root->setContentsMargins(16, 16, 16, 16);
+    root->setSpacing(12);
 
-    filter_drawer_ = new FilterDrawer(this);
-    outer->addWidget(filter_drawer_, 0);
+    auto* top_bar = new QFrame(this);
+    top_bar->setObjectName("GlassSurface");
+    auto* top     = new QHBoxLayout(top_bar);
+    top->setContentsMargins(14, 12, 14, 12);
+    top->setSpacing(8);
 
-    auto* root = new QVBoxLayout();
-    root->setSpacing(8);
-    outer->addLayout(root, 1);
+    auto* app_title = new QLabel("PuerhLab", top_bar);
+    app_title->setObjectName("SectionTitle");
+    top->addWidget(app_title, 0);
 
-    auto* top   = new QHBoxLayout();
-    import_btn_ = new QPushButton("Import…", this);
-    export_btn_ = new QPushButton("Export…", this);
-    status_     = new QLabel("No images. Click Import…", this);
-    top->addWidget(import_btn_, 0);
-    top->addWidget(export_btn_, 0);
+    library_page_btn_ = new QToolButton(top_bar);
+    library_page_btn_->setText("Library");
+    library_page_btn_->setCheckable(true);
+    library_page_btn_->setChecked(true);
+    settings_page_btn_ = new QToolButton(top_bar);
+    settings_page_btn_->setText("Settings");
+    settings_page_btn_->setCheckable(true);
+    top->addWidget(library_page_btn_, 0);
+    top->addWidget(settings_page_btn_, 0);
 
-    filters_btn_ = new QToolButton(this);
-    filters_btn_->setText("Filters");
+    global_search_ = new QLineEdit(top_bar);
+    global_search_->setPlaceholderText("Search photos");
+    global_search_->setClearButtonEnabled(true);
+    top->addWidget(global_search_, 1);
+
+    import_btn_ = new QPushButton("Import…", top_bar);
+    import_btn_->setObjectName("accent");
+    export_btn_ = new QPushButton("Export…", top_bar);
+    filters_btn_ = new QToolButton(top_bar);
+    filters_btn_->setText("Inspector");
     filters_btn_->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
     filters_btn_->setCheckable(true);
     filters_btn_->setChecked(true);
     filters_btn_->setIcon(style()->standardIcon(QStyle::SP_FileDialogContentsView));
-    filters_btn_->setToolTip("Show/hide filter drawer");
+    top->addWidget(import_btn_, 0);
+    top->addWidget(export_btn_, 0);
     top->addWidget(filters_btn_, 0);
 
-    top->addWidget(status_, 1);
-    root->addLayout(top);
+    quick_actions_btn_ = new QToolButton(top_bar);
+    quick_actions_btn_->setText("Quick");
+    quick_actions_btn_->setPopupMode(QToolButton::InstantPopup);
+    auto* quick_menu = new QMenu(quick_actions_btn_);
+    quick_menu->addAction("Import  (Ctrl+I)", this, [this]() { BeginImport(); });
+    quick_menu->addAction("Export  (Ctrl+E)", this, [this]() { OpenExport(); });
+    quick_menu->addAction("Library  (Ctrl+1)", this, [this]() { ShowPage(/*settings=*/false); });
+    quick_menu->addAction("Settings  (Ctrl+,)", this, [this]() { ShowPage(/*settings=*/true); });
+    quick_actions_btn_->setMenu(quick_menu);
+    top->addWidget(quick_actions_btn_, 0);
+    root->addWidget(top_bar, 0);
 
-    list_ = new QListWidget(this);
+    auto* shell_split = new QSplitter(Qt::Horizontal, this);
+    shell_split->setChildrenCollapsible(false);
+    shell_split->setHandleWidth(8);
+    root->addWidget(shell_split, 1);
+
+    auto* side_card = new CardFrame("Library", shell_split);
+    side_card->setMinimumWidth(220);
+    side_card->setMaximumWidth(280);
+    sidebar_search_ = new QLineEdit(side_card);
+    sidebar_search_->setPlaceholderText("Search folders/collections");
+    side_card->BodyLayout()->addWidget(sidebar_search_, 0);
+
+    sidebar_list_ = new QListWidget(side_card);
+    sidebar_list_->setSelectionMode(QAbstractItemView::SingleSelection);
+    sidebar_list_->addItem("All Photos");
+    sidebar_list_->addItem("Recent Imports");
+    sidebar_list_->addItem("Collections");
+    sidebar_list_->addItem("Settings");
+    sidebar_list_->setCurrentRow(0);
+    side_card->BodyLayout()->addWidget(sidebar_list_, 1);
+
+    auto* center = new QWidget(shell_split);
+    auto* center_root = new QVBoxLayout(center);
+    center_root->setContentsMargins(0, 0, 0, 0);
+    center_root->setSpacing(12);
+
+    auto* library_toolbar = new QFrame(center);
+    library_toolbar->setObjectName("GlassSurface");
+    auto* lib_top = new QHBoxLayout(library_toolbar);
+    lib_top->setContentsMargins(12, 10, 12, 10);
+    lib_top->setSpacing(8);
+    auto* browser_title = new QLabel("Browser", library_toolbar);
+    browser_title->setObjectName("SectionTitle");
+    lib_top->addWidget(browser_title, 0);
+    auto* browser_meta = new QLabel("Responsive thumbnail grid", library_toolbar);
+    browser_meta->setObjectName("MetaText");
+    lib_top->addWidget(browser_meta, 0);
+    lib_top->addStretch(1);
+    grid_view_btn_ = new QToolButton(library_toolbar);
+    grid_view_btn_->setText("Grid");
+    grid_view_btn_->setCheckable(true);
+    grid_view_btn_->setChecked(true);
+    list_view_btn_ = new QToolButton(library_toolbar);
+    list_view_btn_->setText("List");
+    list_view_btn_->setCheckable(true);
+    list_view_btn_->setChecked(false);
+    lib_top->addWidget(grid_view_btn_, 0);
+    lib_top->addWidget(list_view_btn_, 0);
+    center_root->addWidget(library_toolbar, 0);
+
+    page_stack_ = new QStackedWidget(center);
+    center_root->addWidget(page_stack_, 1);
+
+    auto* library_page = new QWidget(page_stack_);
+    auto* lib_root = new QVBoxLayout(library_page);
+    lib_root->setContentsMargins(0, 0, 0, 0);
+    lib_root->setSpacing(12);
+
+    auto* browser_card = new CardFrame("Thumbnails", library_page);
+    status_ = new QLabel("No images loaded.", browser_card);
+    status_->setObjectName("MetaText");
+    browser_card->HeaderLayout()->addWidget(status_, 0, Qt::AlignRight);
+
+    browser_state_stack_ = new QStackedWidget(browser_card);
+    auto* list_page = new QWidget(browser_card);
+    auto* list_layout = new QVBoxLayout(list_page);
+    list_layout->setContentsMargins(0, 0, 0, 0);
+    list_layout->setSpacing(0);
+
+    list_ = new QListWidget(list_page);
     list_->setViewMode(QListView::IconMode);
     list_->setResizeMode(QListWidget::Adjust);
     list_->setMovement(QListView::Static);
     list_->setIconSize(QSize(220, 160));
-    list_->setGridSize(QSize(240, 190));
-    list_->setSpacing(8);
+    list_->setGridSize(QSize(250, 214));
+    list_->setSpacing(10);
     list_->setSelectionMode(QAbstractItemView::ExtendedSelection);
-    root->addWidget(list_, 1);
+    list_->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
+    list_layout->addWidget(list_, 1);
+
+    auto* empty_page = new QWidget(browser_card);
+    auto* empty_layout = new QVBoxLayout(empty_page);
+    empty_layout->setContentsMargins(36, 36, 36, 36);
+    empty_layout->setSpacing(12);
+    auto* empty_title = new QLabel("No Photos Yet", empty_page);
+    empty_title->setObjectName("SectionTitle");
+    auto* empty_text = new QLabel(
+        "Import your first folder to start thumbnail generation and RAW adjustments.", empty_page);
+    empty_text->setObjectName("MetaText");
+    empty_text->setWordWrap(true);
+    auto* empty_cta = new QPushButton("Import Photos…", empty_page);
+    empty_cta->setObjectName("accent");
+    empty_layout->addStretch(1);
+    empty_layout->addWidget(empty_title, 0, Qt::AlignHCenter);
+    empty_layout->addWidget(empty_text, 0, Qt::AlignHCenter);
+    empty_layout->addWidget(empty_cta, 0, Qt::AlignHCenter);
+    empty_layout->addStretch(1);
+
+    browser_state_stack_->addWidget(list_page);
+    browser_state_stack_->addWidget(empty_page);
+    browser_card->BodyLayout()->addWidget(browser_state_stack_, 1);
+    lib_root->addWidget(browser_card, 1);
+    page_stack_->addWidget(library_page);
+
+    settings_page_ = new SettingsPage(page_stack_);
+    page_stack_->addWidget(settings_page_);
+
+    inspector_host_ = new QWidget(shell_split);
+    auto* inspector_layout = new QVBoxLayout(inspector_host_);
+    inspector_layout->setContentsMargins(0, 0, 0, 0);
+    inspector_layout->setSpacing(12);
+
+    auto* inspector_scroll = new QScrollArea(inspector_host_);
+    inspector_scroll->setFrameShape(QFrame::NoFrame);
+    inspector_scroll->setWidgetResizable(true);
+    inspector_layout->addWidget(inspector_scroll, 1);
+
+    auto* inspector_panel = new QWidget(inspector_scroll);
+    auto* panel_layout = new QVBoxLayout(inspector_panel);
+    panel_layout->setContentsMargins(0, 0, 0, 0);
+    panel_layout->setSpacing(12);
+    inspector_scroll->setWidget(inspector_panel);
+
+    filter_drawer_ = new FilterDrawer(inspector_panel);
+    panel_layout->addWidget(filter_drawer_, 0);
+
+    auto* inspector_note = new QFrame(inspector_panel);
+    inspector_note->setObjectName("CardSurface");
+    auto* note_layout = new QVBoxLayout(inspector_note);
+    note_layout->setContentsMargins(12, 12, 12, 12);
+    note_layout->setSpacing(8);
+    auto* note_title = new QLabel("Inspector", inspector_note);
+    note_title->setObjectName("SectionTitle");
+    auto* note_text = new QLabel(
+        "Image adjustments are now available in EditorDialog to keep the browser focused on "
+        "library triage and filtering.",
+        inspector_note);
+    note_text->setObjectName("MetaText");
+    note_text->setWordWrap(true);
+    note_layout->addWidget(note_title, 0);
+    note_layout->addWidget(note_text, 0);
+    panel_layout->addWidget(inspector_note, 0);
+    panel_layout->addStretch(1);
+
+    shell_split->setStretchFactor(0, 0);
+    shell_split->setStretchFactor(1, 1);
+    shell_split->setStretchFactor(2, 0);
+    shell_split->setSizes({220, 860, 340});
+
+    auto* task_card = new CardFrame("Background Tasks", this);
+    auto* task_row = new QHBoxLayout();
+    task_row->setContentsMargins(0, 0, 0, 0);
+    task_row->setSpacing(10);
+    task_status_ = new QLabel("No background tasks", task_card);
+    task_status_->setObjectName("MetaText");
+    task_row->addWidget(task_status_, 1);
+    task_progress_ = new QProgressBar(task_card);
+    task_progress_->setRange(0, 100);
+    task_progress_->setValue(0);
+    task_progress_->setFixedWidth(260);
+    task_row->addWidget(task_progress_, 0);
+    task_cancel_btn_ = new QPushButton("Cancel", task_card);
+    task_cancel_btn_->setVisible(false);
+    task_row->addWidget(task_cancel_btn_, 0);
+    task_card->BodyLayout()->addLayout(task_row);
+    root->addWidget(task_card, 0);
 
     connect(import_btn_, &QPushButton::clicked, this, [this]() { BeginImport(); });
     connect(export_btn_, &QPushButton::clicked, this, [this]() { OpenExport(); });
     connect(filters_btn_, &QToolButton::toggled, this, [this](bool on) {
-      if (filter_drawer_) {
-        filter_drawer_->setVisible(on);
-      }
+      inspector_host_->setVisible(on && !showing_settings_);
     });
     connect(list_, &QListWidget::itemClicked, this, [this](QListWidgetItem* item) {
       if (!item) {
@@ -2759,15 +3671,142 @@ class AlbumWindow final : public QWidget {
       const auto image_id   = static_cast<image_id_t>(item->data(Qt::UserRole + 2).toUInt());
       OpenEditor(element_id, image_id);
     });
+    connect(empty_cta, &QPushButton::clicked, this, [this]() { BeginImport(); });
+
+    connect(library_page_btn_, &QToolButton::clicked, this, [this]() { ShowPage(false); });
+    connect(settings_page_btn_, &QToolButton::clicked, this, [this]() { ShowPage(true); });
+    connect(sidebar_list_, &QListWidget::currentRowChanged, this, [this](int row) {
+      ShowPage(row == 3);
+    });
+    connect(grid_view_btn_, &QToolButton::clicked, this, [this]() {
+      list_view_btn_->setChecked(false);
+      grid_view_btn_->setChecked(true);
+      if (!list_) {
+        return;
+      }
+      list_->setViewMode(QListView::IconMode);
+      list_->setIconSize(QSize(220, 160));
+      list_->setGridSize(QSize(250, 214));
+      list_->setSpacing(10);
+    });
+    connect(list_view_btn_, &QToolButton::clicked, this, [this]() {
+      grid_view_btn_->setChecked(false);
+      list_view_btn_->setChecked(true);
+      if (!list_) {
+        return;
+      }
+      list_->setViewMode(QListView::ListMode);
+      list_->setIconSize(QSize(96, 72));
+      list_->setGridSize(QSize(0, 88));
+      list_->setSpacing(6);
+    });
+    connect(task_cancel_btn_, &QPushButton::clicked, this, [this]() { CancelImport(); });
+
+    auto* sc_import = new QShortcut(QKeySequence("Ctrl+I"), this);
+    connect(sc_import, &QShortcut::activated, this, [this]() { BeginImport(); });
+    auto* sc_export = new QShortcut(QKeySequence("Ctrl+E"), this);
+    connect(sc_export, &QShortcut::activated, this, [this]() { OpenExport(); });
+    auto* sc_settings = new QShortcut(QKeySequence("Ctrl+,"), this);
+    connect(sc_settings, &QShortcut::activated, this, [this]() { ShowPage(true); });
+    auto* sc_library = new QShortcut(QKeySequence("Ctrl+1"), this);
+    connect(sc_library, &QShortcut::activated, this, [this]() { ShowPage(false); });
+    auto* sc_search = new QShortcut(QKeySequence("Ctrl+F"), this);
+    connect(sc_search, &QShortcut::activated, this, [this]() {
+      if (global_search_) {
+        global_search_->setFocus();
+        global_search_->selectAll();
+      }
+    });
 
     if (filter_drawer_) {
       filter_drawer_->SetOnApply([this](const FilterNode& node) { ApplyFilter(node, true); });
       filter_drawer_->SetOnClear([this]() { ClearFilter(); });
       filter_drawer_->SetResultsSummary(/*shown=*/0, /*total=*/0);
     }
+    ShowPage(false);
+    RefreshEmptyState();
+    SetBusyUi(false, "No background tasks");
   }
 
  private:
+  void ShowPage(bool settings) {
+    showing_settings_ = settings;
+    if (page_stack_) {
+      page_stack_->setCurrentIndex(settings ? 1 : 0);
+    }
+    if (library_page_btn_) {
+      library_page_btn_->setChecked(!settings);
+    }
+    if (settings_page_btn_) {
+      settings_page_btn_->setChecked(settings);
+    }
+    if (inspector_host_ && filters_btn_) {
+      inspector_host_->setVisible(filters_btn_->isChecked() && !settings);
+    }
+    if (sidebar_list_) {
+      const int target = settings ? 3 : 0;
+      if (sidebar_list_->currentRow() != target) {
+        QSignalBlocker blocker(*sidebar_list_);
+        sidebar_list_->setCurrentRow(target);
+      }
+    }
+  }
+
+  void RefreshEmptyState() {
+    if (!browser_state_stack_ || !list_) {
+      return;
+    }
+    browser_state_stack_->setCurrentIndex(list_->count() == 0 ? 1 : 0);
+  }
+
+  void CancelImport() {
+    if (!current_import_job_) {
+      return;
+    }
+    current_import_job_->canceled_.store(true);
+    SetBusyUi(true, "Cancelling import…");
+    if (task_cancel_btn_) {
+      task_cancel_btn_->setEnabled(false);
+    }
+  }
+
+  void ShowToast(const QString& message, int timeout_ms = 2400) {
+    if (message.trimmed().isEmpty()) {
+      return;
+    }
+    if (!toast_) {
+      toast_ = new QLabel(this);
+      toast_->setStyleSheet(
+          "QLabel { background: rgba(24, 32, 48, 0.9); color: #FFFFFF; border-radius: 12px; "
+          "padding: 8px 12px; }");
+      toast_->setAttribute(Qt::WA_TransparentForMouseEvents, true);
+    }
+    toast_->setText(message);
+    toast_->adjustSize();
+    const int margin = 20;
+    toast_->move(std::max(margin, width() - toast_->width() - margin),
+                 std::max(margin, height() - toast_->height() - margin));
+    toast_->show();
+    toast_->raise();
+    const uint64_t token = ++toast_token_;
+    QTimer::singleShot(timeout_ms, this, [this, token]() {
+      if (!toast_ || token != toast_token_) {
+        return;
+      }
+      toast_->hide();
+    });
+  }
+
+  bool event(QEvent* e) override {
+    const bool rc = QWidget::event(e);
+    if (e && e->type() == QEvent::Resize && toast_ && toast_->isVisible()) {
+      const int margin = 20;
+      toast_->move(std::max(margin, width() - toast_->width() - margin),
+                   std::max(margin, height() - toast_->height() - margin));
+    }
+    return rc;
+  }
+
   int VisibleItemCount() const {
     if (!list_) {
       return 0;
@@ -2788,7 +3827,7 @@ class AlbumWindow final : public QWidget {
     }
     const int total = list_ ? list_->count() : 0;
     if (total <= 0) {
-      status_->setText("No images. Click Import…");
+      status_->setText("No images loaded.");
       if (filter_drawer_) {
         filter_drawer_->SetResultsSummary(0, 0);
       }
@@ -2803,32 +3842,27 @@ class AlbumWindow final : public QWidget {
   }
 
   void SetBusyUi(bool busy, const QString& label) {
-    import_btn_->setEnabled(!busy);
-    export_btn_->setEnabled(!busy);
-    if (filters_btn_) {
-      filters_btn_->setEnabled(!busy);
+    if (import_btn_) {
+      import_btn_->setEnabled(!busy);
     }
-    if (filter_drawer_) {
-      filter_drawer_->setEnabled(!busy);
+    if (export_btn_) {
+      export_btn_->setEnabled(!busy);
     }
-    list_->setEnabled(!busy);
-    if (busy) {
-      if (!busy_) {
-        busy_ = new QProgressDialog(label, QString(), 0, 0, this);
-        busy_->setWindowModality(Qt::ApplicationModal);
-        busy_->setCancelButton(nullptr);
-        busy_->setMinimumDuration(0);
-        busy_->show();
-      } else {
-        busy_->setLabelText(label);
-        busy_->show();
+    if (list_) {
+      list_->setEnabled(!busy);
+    }
+    if (task_status_) {
+      task_status_->setText(label);
+    }
+    if (task_progress_) {
+      if (!busy) {
+        task_progress_->setRange(0, 100);
+        task_progress_->setValue(0);
       }
-    } else {
-      if (busy_) {
-        busy_->close();
-        busy_->deleteLater();
-        busy_ = nullptr;
-      }
+    }
+    if (task_cancel_btn_) {
+      task_cancel_btn_->setVisible(busy && import_inflight_);
+      task_cancel_btn_->setEnabled(import_inflight_);
     }
   }
 
@@ -2837,22 +3871,13 @@ class AlbumWindow final : public QWidget {
       return;
     }
 
-    const QStringList files = QFileDialog::getOpenFileNames(
-        this, "Import images", QString(),
-        "Images (*.dng *.nef *.cr2 *.cr3 *.arw *.rw2 *.raf *.tif *.tiff *.jpg *.jpeg *.png);;All "
-        "Files (*)");
-    if (files.isEmpty()) {
+    ImportDialog dlg(this);
+    if (dlg.exec() != QDialog::Accepted) {
       return;
     }
 
-    std::vector<image_path_t> paths;
-    paths.reserve(static_cast<size_t>(files.size()));
-    for (const auto& f : files) {
-      std::filesystem::path p = std::filesystem::path(f.toStdWString());
-      if (is_supported_file(p)) {
-        paths.push_back(std::move(p));
-      }
-    }
+    const auto& paths   = dlg.SelectedPaths();
+    const auto  options = dlg.SelectedOptions();
 
     if (paths.empty()) {
       QMessageBox::information(this, "Import", "No supported images selected.");
@@ -2860,7 +3885,12 @@ class AlbumWindow final : public QWidget {
     }
 
     import_inflight_ = true;
-    SetBusyUi(true, "Importing…");
+    SetBusyUi(true, QString("Importing %1 file(s)…").arg(paths.size()));
+    if (task_progress_) {
+      task_progress_->setRange(0, static_cast<int>(std::max<size_t>(paths.size(), 1)));
+      task_progress_->setValue(0);
+    }
+    ShowToast("Import started");
 
     auto job            = std::make_shared<ImportJob>();
     current_import_job_ = job;
@@ -2880,6 +3910,11 @@ class AlbumWindow final : public QWidget {
           [self, total, placeholders, meta_done, failed]() {
             if (!self) {
               return;
+            }
+            if (self->task_progress_) {
+              self->task_progress_->setRange(0, static_cast<int>(std::max<uint32_t>(total, 1)));
+              self->task_progress_->setValue(
+                  static_cast<int>(std::max(placeholders, meta_done)));
             }
             self->SetBusyUi(true, QString("Importing… %1/%2 (meta %3, failed %4)")
                                       .arg(placeholders)
@@ -2905,12 +3940,16 @@ class AlbumWindow final : public QWidget {
           Qt::QueuedConnection);
     };
 
-    current_import_job_ = import_service_.ImportToFolder(paths, image_path_t{}, {}, job);
+    current_import_job_ = import_service_.ImportToFolder(paths, image_path_t{}, options, job);
   }
 
   void FinishImport(const ImportResult& result) {
     import_inflight_ = false;
-    SetBusyUi(false, "");
+    SetBusyUi(false, "No background tasks");
+    if (task_progress_) {
+      task_progress_->setRange(0, 100);
+      task_progress_->setValue(100);
+    }
 
     if (!current_import_job_ || !current_import_job_->import_log_) {
       QMessageBox::warning(this, "Import", "Import finished but no log snapshot available.");
@@ -2940,14 +3979,24 @@ class AlbumWindow final : public QWidget {
     } else {
       UpdateStatusText();
     }
+    RefreshEmptyState();
+    ShowToast(QString("Import complete: %1 imported, %2 failed")
+                  .arg(result.imported_)
+                  .arg(result.failed_));
   }
 
   void AddAlbumItem(sl_element_id_t element_id, image_id_t image_id) {
+    if (!list_ || items_by_element_.contains(element_id)) {
+      return;
+    }
     auto* item = new QListWidgetItem();
-    item->setText(QString("#%1").arg(static_cast<qulonglong>(element_id)));
+    item->setText(QString("Image %1\nElement #%2")
+                      .arg(static_cast<qulonglong>(image_id))
+                      .arg(static_cast<qulonglong>(element_id)));
     item->setData(Qt::UserRole + 1, static_cast<uint32_t>(element_id));
     item->setData(Qt::UserRole + 2, static_cast<uint32_t>(image_id));
-    item->setSizeHint(QSize(240, 190));
+    item->setSizeHint(QSize(250, 214));
+    item->setIcon(MakeSkeletonThumbnailIcon(220, 160, "Loading"));
     list_->addItem(item);
 
     items_by_element_[element_id]    = item;
@@ -2963,6 +4012,7 @@ class AlbumWindow final : public QWidget {
     };
 
     RefreshThumbnailForItem(element_id, image_id, item, /*invalidate=*/false);
+    RefreshEmptyState();
   }
 
   void ClearFilter() {
@@ -2986,6 +4036,7 @@ class AlbumWindow final : public QWidget {
     }
     list_->clearSelection();
     UpdateStatusText();
+    ShowToast("Filters cleared");
   }
 
   void ApplyFilter(const FilterNode& node, bool show_dialogs) {
@@ -3064,6 +4115,7 @@ class AlbumWindow final : public QWidget {
     list_->clearSelection();
     list_->scrollToTop();
     UpdateStatusText();
+    ShowToast(QString("Filter applied: %1 match(es)").arg(shown));
   }
 
   void RefreshThumbnailForItem(sl_element_id_t element_id, image_id_t image_id,
@@ -3231,7 +4283,9 @@ class AlbumWindow final : public QWidget {
 
     try {
       ExportDialog dlg(image_pool_, export_service_, std::move(items), this);
-      dlg.exec();
+      if (dlg.exec() == QDialog::Accepted) {
+        ShowToast("Export complete");
+      }
     } catch (const std::exception& e) {
       QMessageBox::warning(this, "Export", QString("Export dialog failed: %1").arg(e.what()));
     }
@@ -3250,18 +4304,35 @@ class AlbumWindow final : public QWidget {
   std::optional<filter_id_t>                            active_filter_id_;
   std::optional<FilterNode>                             active_filter_node_;
 
-  QPushButton*                                          import_btn_    = nullptr;
-  QPushButton*                                          export_btn_    = nullptr;
-  QToolButton*                                          filters_btn_   = nullptr;
-  QLabel*                                               status_        = nullptr;
-  QListWidget*                                          list_          = nullptr;
-  FilterDrawer*                                         filter_drawer_ = nullptr;
+  QPushButton*                                          import_btn_         = nullptr;
+  QPushButton*                                          export_btn_         = nullptr;
+  QToolButton*                                          filters_btn_        = nullptr;
+  QToolButton*                                          quick_actions_btn_  = nullptr;
+  QToolButton*                                          library_page_btn_   = nullptr;
+  QToolButton*                                          settings_page_btn_  = nullptr;
+  QToolButton*                                          grid_view_btn_      = nullptr;
+  QToolButton*                                          list_view_btn_      = nullptr;
+  QLabel*                                               status_             = nullptr;
+  QLabel*                                               task_status_        = nullptr;
+  QLineEdit*                                            global_search_      = nullptr;
+  QLineEdit*                                            sidebar_search_     = nullptr;
+  QListWidget*                                          sidebar_list_       = nullptr;
+  QListWidget*                                          list_               = nullptr;
+  QStackedWidget*                                       page_stack_         = nullptr;
+  QStackedWidget*                                       browser_state_stack_ = nullptr;
+  QWidget*                                              inspector_host_     = nullptr;
+  SettingsPage*                                         settings_page_      = nullptr;
+  QProgressBar*                                         task_progress_      = nullptr;
+  QPushButton*                                          task_cancel_btn_    = nullptr;
+  FilterDrawer*                                         filter_drawer_      = nullptr;
+  QLabel*                                               toast_              = nullptr;
 
   std::unordered_map<sl_element_id_t, QListWidgetItem*> items_by_element_{};
 
   bool                                                  import_inflight_ = false;
+  bool                                                  showing_settings_ = false;
+  uint64_t                                              toast_token_      = 0;
   std::shared_ptr<ImportJob>                            current_import_job_{};
-  QProgressDialog*                                      busy_ = nullptr;
 };
 
 }  // namespace
@@ -3278,6 +4349,7 @@ int main(int argc, char* argv[]) {
 
   QApplication app(argc, argv);
   puerhlab::ApplyExternalAppFont(app, argc, argv);
+  puerhlab::ApplyFontRenderingTuning(app, argc, argv);
   puerhlab::ApplyMaterialLikeTheme(app);
 
   try {
