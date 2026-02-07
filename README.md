@@ -8,37 +8,31 @@
 
 ## 📷 Early Demo Screenshot
 
-
-
-### Image Rendering Previews 
-Applied with 2383 LUT and highlight recovery.
 <table>
-  <tr>
-    <td width="50%" align="center">
-      <img src="docs/demo/preview_01.png" alt="Preview 01 (placeholder)" width="480" />
-      <br />
-    </td>
-    <td width="50%" align="center">
-      <img src="docs/demo/preview_02.png" alt="Preview 02 (placeholder)" width="480" />
-      <br />
-    </td>
-  </tr>
-  <tr>
-    <td width="50%" align="center">
-      <img src="docs/demo/preview_03.png" alt="Preview 03 (placeholder)" width="480" />
-      <br />
-    </td>
-    <td width="50%" align="center">
-      <img src="docs/demo/preview_04.png" alt="Preview 04 (placeholder)" width="480" />
-      <br />
-    </td>
-  </tr>
+	<colgroup>
+		<col style="width: 80%" />
+		<col style="width: 20%" />
+	</colgroup>
+	<tbody>
+		<tr>
+			<td><img src="docs/demo/1.png" alt="Preview 1 (placeholder)" width="100%" /></td>
+			<td>Modern UI interface</td>
+		</tr>
+    <tr>
+			<td><img src="docs/demo/4.png" alt="Preview 4 (placeholder)" width="100%" /></td>
+			<td>Film-like Highlight Transition</td>
+		</tr>
+		<tr>
+			<td><img src="docs/demo/2.png" alt="Preview 2 (placeholder)" width="100%" /></td>
+			<td>LUT support / Unlimited History Stack</td>
+		</tr>
+		<tr>
+			<td><img src="docs/demo/3.png" alt="Preview 3 (placeholder)" width="100%" /></td>
+			<td>Full-res image preview / Git-like Version Control</td>
+		</tr>
+	</tbody>
 </table>
 
-<figure>
-  <img src="docs/demo/showcase.gif" width="800">
-  <figcaption>The custom UI design is still a work in progress. LUTs on display will not be shipped in the release due to copyright restrictions. </figcaption>
-</figure>
 
 ## 🎯 Vision
 
