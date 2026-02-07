@@ -16,7 +16,7 @@
 	<tbody>
 		<tr>
 			<td><img src="docs/demo/1.png" alt="Preview 1 (placeholder)" width="100%" /></td>
-			<td>Modern UI interface</td>
+			<td>Modern UI Interface</td>
 		</tr>
     <tr>
 			<td><img src="docs/demo/4.png" alt="Preview 4 (placeholder)" width="100%" /></td>
@@ -24,11 +24,11 @@
 		</tr>
 		<tr>
 			<td><img src="docs/demo/2.png" alt="Preview 2 (placeholder)" width="100%" /></td>
-			<td>LUT support / Unlimited History Stack</td>
+			<td>LUT Support / Unlimited History Stack</td>
 		</tr>
 		<tr>
 			<td><img src="docs/demo/3.png" alt="Preview 3 (placeholder)" width="100%" /></td>
-			<td>Full-res image preview / Git-like Version Control</td>
+			<td>Full-res Image Preview / Git-like Version Control</td>
 		</tr>
 	</tbody>
 </table>
