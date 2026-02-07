@@ -41,12 +41,47 @@ struct GPU_ToneOpKernel : GPUPointOpTag {
   }
 };
 
+GPU_FUNC float sigmoid(float t) { return 1.0f / (1.0f + expf(-t)); }
+
+GPU_FUNC float contrast_sigmoid_01(float x, float k) {
+  // x is assumed in [0,1]
+  const float a = sigmoid(-0.5f * k);
+  const float b = sigmoid(0.5f * k);
+  const float y = sigmoid(k * (x - 0.5f));
+  return (y - a) / (b - a);
+}
+
+GPU_FUNC float3 contrast_on_luma_acescc(float3 rgb_acescc, float k = 6.0f, float pivot = 0.5f,
+                                        float range = 0.35f, float eps = 1e-6f) {
+  // AP1 luma in ACEScc domain (approx approach; "professional-looking" for gentle ops)
+  const float Y =
+      0.2722287168f * rgb_acescc.x + 0.6740817658f * rgb_acescc.y + 0.0536895174f * rgb_acescc.z;
+
+  const float lo = pivot - range;
+  const float hi = pivot + range;
+
+  // Map Y -> t in [0,1] over [lo, hi]
+  const float t  = (Y - lo) / (hi - lo);
+
+  // Outside window: identical
+  if (t <= 0.0f || t >= 1.0f) return rgb_acescc;
+
+  const float t2    = contrast_sigmoid_01(t, k);
+  const float Y2    = lo + (hi - lo) * t2;
+
+  const float scale = Y2 / fmaxf(Y, eps);
+
+  return {rgb_acescc.x * scale, rgb_acescc.y * scale, rgb_acescc.z * scale};
+}
+
 struct GPU_ContrastOpKernel : GPUPointOpTag {
   __device__ __forceinline__ void operator()(float4* p, GPUOperatorParams& params) const {
     if (!params.contrast_enabled_) return;
-    p->x = (p->x - 0.05707762557f) * params.contrast_scale_ + 0.05707762557f;  // 1 stop = 1/17.52
-    p->y = (p->y - 0.05707762557f) * params.contrast_scale_ + 0.05707762557f;
-    p->z = (p->z - 0.05707762557f) * params.contrast_scale_ + 0.05707762557f;
+    float3 acescc_color = make_float3(p->x, p->y, p->z);
+    acescc_color        = contrast_on_luma_acescc(acescc_color, params.contrast_scale_);
+    p->x                = acescc_color.x;;
+    p->y                = acescc_color.y;
+    p->z                = acescc_color.z;
   }
 };
 

@@ -123,7 +123,7 @@ __device__ __forceinline__ float acescc_decode(float acescc) {
   // Threshold for denormalized region: (log2(2^-15) + 9.72) / 17.52
   const float denorm_threshold = (ACESCC_LOG2_MIN + ACESCC_A) / ACESCC_B;  // ≈ -0.3013698630
 
-  // acescc = fminf(acescc, 1.0f);  // Clamp to max value 
+  // acescc = fminf(acescc, 1.0f);  // Clamp to max value
 
   if (acescc < denorm_threshold) {
     // Denormalized region
@@ -208,6 +208,7 @@ struct GPU_LMT_Kernel : GPUPointOpTag {
   }
 };
 
+
 /**
  * GPU_OUTPUT_Kernel: RRT + ODT
  *
@@ -216,25 +217,24 @@ struct GPU_LMT_Kernel : GPUPointOpTag {
  */
 struct GPU_OUTPUT_Kernel : GPUPointOpTag {
   __device__ __forceinline__ void operator()(float4* p, GPUOperatorParams& params) const {
+
+    float3 acescc_color = make_float3(p->x, p->y, p->z);
     // Step 1: Decode ACEScc log to linear AP1
-    float  lin_r     = acescc_decode(p->x);
-    float  lin_g     = acescc_decode(p->y);
-    float  lin_b     = acescc_decode(p->z);
+    float  lin_r     = acescc_decode(acescc_color.x);
+    float  lin_g     = acescc_decode(acescc_color.y);
+    float  lin_b     = acescc_decode(acescc_color.z);
 
     float3 aces_3    = make_float3(lin_r, lin_g, lin_b);
-    // Step 2: AP1 ODT (the orginal input is in linear AP0, but it will be converted to AP1 in the
-    // RRT step)
+    // Step 1.5 Apply a simple contrast adjustment
+
+    // Step 2: AP1 ODT
     float3 odt_color = OutputTransform_fwd(aces_3, params.to_output_params_.odt_params_);
 
-    // float3 odt_color_clamped = clamp_f3(odt_color, 0.f, 1.f);
-    // float3 otd_color_ws =
-    //     ApplyWhiteScale(otd_color, params.to_output_params_.limit_to_display_matx);
     // Step 3: Display encoding
-    float3 cv_3 = DisplayEncoding(odt_color, params.to_output_params_.limit_to_display_matx,
-                                  params.to_output_params_.etof, 1.0f);
+    float3 cv_3      = DisplayEncoding(odt_color, params.to_output_params_.limit_to_display_matx,
+                                       params.to_output_params_.etof, 1.0f);
 
-    
-    *p          = make_float4(cv_3.x, cv_3.y, cv_3.z, p->w);
+    *p               = make_float4(cv_3.x, cv_3.y, cv_3.z, p->w);
     // *p = make_float4(otd_color.x, otd_color.y, otd_color.z, p->w);
 
     // // Step 1: Decode ACEScc log to linear AP1

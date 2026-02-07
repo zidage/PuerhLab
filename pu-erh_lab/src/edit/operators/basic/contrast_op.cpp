@@ -72,13 +72,20 @@ auto ContrastOp::GetParams() const -> nlohmann::json {
   return o;
 }
 
+inline float contrast_k_from_slider(int v) // v in [-100,100]
+{
+    float s = std::max(-100, std::min(100, v)) / 100.0f; // [-1,1]
+    s = s * fabsf(s);  // cubic-ish, center softer
+    return 4.0f + 4.0f * s;
+}
+
 void ContrastOp::SetParams(const nlohmann::json& params) {
   if (params.contains(GetScriptName())) {
     contrast_offset_ = params[GetScriptName()];
   } else {
     contrast_offset_ = 0.0f;
   }
-  scale_ = std::exp(contrast_offset_ / 100.0f);
+  scale_ = contrast_k_from_slider(static_cast<int>(contrast_offset_));
 }
 
 void ContrastOp::SetGlobalParams(OperatorParams& params) const {
@@ -88,7 +95,6 @@ void ContrastOp::SetGlobalParams(OperatorParams& params) const {
 
 void ContrastOp::EnableGlobalParams(OperatorParams& params, bool enable) {
   // Contrast op is still broken, so disable it for now
-  (void)enable;
-  params.contrast_enabled_ = false;
+  params.contrast_enabled_ = enable;
 }
 };  // namespace puerhlab
