@@ -965,7 +965,7 @@ void AlbumBackend::updateThumbnailDataUrl(sl_element_id_t elementId, const QStri
   }
 
   item.thumb_data_url = dataUrl;
-  rebuildThumbnailView(active_filter_ids_);
+  emit thumbnailUpdated(static_cast<uint>(elementId), dataUrl);
 }
 
 void AlbumBackend::finishImport(const ImportResult& result) {
@@ -1257,8 +1257,12 @@ void AlbumBackend::initializeEditorLuts() {
   editor_lut_paths_.push_back("");
   editor_lut_options_.push_back(QVariantMap{{"text", "None"}, {"value", 0}});
 
-  const auto lutsDir  = std::filesystem::path(CONFIG_PATH) / "LUTs";
-  const auto lutFiles = ListCubeLutsInDir(lutsDir);
+  // Prefer LUTs next to the executable (installed layout), fall back to source tree.
+  const auto appLutsDir = std::filesystem::path(
+      QCoreApplication::applicationDirPath().toStdWString()) / "LUTs";
+  const auto srcLutsDir = std::filesystem::path(CONFIG_PATH) / "LUTs";
+  const auto lutsDir    = std::filesystem::is_directory(appLutsDir) ? appLutsDir : srcLutsDir;
+  const auto lutFiles   = ListCubeLutsInDir(lutsDir);
   for (const auto& path : lutFiles) {
     editor_lut_paths_.push_back(path.generic_string());
     editor_lut_options_.push_back(

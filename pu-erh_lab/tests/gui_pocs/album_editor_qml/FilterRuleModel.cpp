@@ -179,7 +179,6 @@ auto FilterRuleModel::fieldOptions() const -> QVariantList {
       ToOption("Capture Date", static_cast<int>(FilterField::CaptureDate)),
       ToOption("Import Date", static_cast<int>(FilterField::ImportDate)),
       ToOption("Rating", static_cast<int>(FilterField::Rating)),
-      ToOption("Tags", static_cast<int>(FilterField::SemanticTags)),
   };
 }
 

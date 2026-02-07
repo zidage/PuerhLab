@@ -130,8 +130,9 @@ class AlbumBackend final : public QObject {
   Q_INVOKABLE void setEditorSharpen(double value);
   Q_INVOKABLE void setEditorClarity(double value);
 
- signals:
+signals:
   void thumbnailsChanged();
+  void thumbnailUpdated(uint elementId, const QString& dataUrl);
   void countsChanged();
   void sqlPreviewChanged();
   void validationErrorChanged();

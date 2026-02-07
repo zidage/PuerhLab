@@ -83,8 +83,10 @@
 #include "renderer/pipeline_task.hpp"
 #include "sleeve/sleeve_filter/filter_combo.hpp"
 #include "type/supported_file_type.hpp"
+#include "type/type.hpp"
 #include "ui/edit_viewer/edit_viewer.hpp"
 #include "utils/clock/time_provider.hpp"
+#include "utils/string/convert.hpp"
 
 namespace puerhlab {
 namespace {
@@ -2141,8 +2143,12 @@ class EditorDialog final : public QDialog {
     controls_layout->addWidget(controls_header, 0);
     controls_layout->addWidget(controls_sub, 0);
 
-    const auto luts_dir  = std::filesystem::path(CONFIG_PATH) / "LUTs";
-    const auto lut_files = ListCubeLutsInDir(luts_dir);
+    // Prefer LUTs next to the executable (installed layout), fall back to source tree.
+    const auto app_luts_dir = std::filesystem::path(
+        QCoreApplication::applicationDirPath().toStdWString()) / "LUTs";
+    const auto src_luts_dir = std::filesystem::path(CONFIG_PATH) / "LUTs";
+    const auto luts_dir     = std::filesystem::is_directory(app_luts_dir) ? app_luts_dir : src_luts_dir;
+    const auto lut_files    = ListCubeLutsInDir(luts_dir);
 
     lut_paths_.push_back("");  // index 0 => None
     lut_names_.push_back("None");
@@ -3971,7 +3977,7 @@ class AlbumWindow final : public QWidget {
     }
 
     for (const auto& c : snapshot.created_) {
-      AddAlbumItem(c.element_id_, c.image_id_);
+      AddAlbumItem(c.element_id_, c.image_id_, c.file_name_);
     }
 
     if (active_filter_node_.has_value()) {
@@ -3985,14 +3991,12 @@ class AlbumWindow final : public QWidget {
                   .arg(result.failed_));
   }
 
-  void AddAlbumItem(sl_element_id_t element_id, image_id_t image_id) {
+  void AddAlbumItem(sl_element_id_t element_id, image_id_t image_id, file_name_t file_name) {
     if (!list_ || items_by_element_.contains(element_id)) {
       return;
     }
     auto* item = new QListWidgetItem();
-    item->setText(QString("Image %1\nElement #%2")
-                      .arg(static_cast<qulonglong>(image_id))
-                      .arg(static_cast<qulonglong>(element_id)));
+    item->setText(QString::fromStdWString(file_name));
     item->setData(Qt::UserRole + 1, static_cast<uint32_t>(element_id));
     item->setData(Qt::UserRole + 2, static_cast<uint32_t>(image_id));
     item->setSizeHint(QSize(250, 214));

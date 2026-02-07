@@ -312,6 +312,21 @@ if(WIN32)
   set(_third_party_exiv2_bin "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_party/exiv2_x64-windows/bin")
   set(_third_party_duckdb_bin "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_party/libduckdb-windows")
 
+  # Qt bin directory for runtime DLL resolution
+  get_target_property(_qt6_core_loc Qt6::Core IMPORTED_LOCATION_RELEASE)
+  if(NOT _qt6_core_loc)
+    get_target_property(_qt6_core_loc Qt6::Core IMPORTED_LOCATION)
+  endif()
+  if(_qt6_core_loc)
+    get_filename_component(_qt6_bin_dir "${_qt6_core_loc}" DIRECTORY)
+  endif()
+
+  # CUDA bin directory for runtime DLL resolution
+  set(_cuda_bin_dir "")
+  if(CUDAToolkit_FOUND AND CUDAToolkit_BIN_DIR)
+    set(_cuda_bin_dir "${CUDAToolkit_BIN_DIR}")
+  endif()
+
   # Try to locate windeployqt for Qt plugins (platforms/qwindows.dll etc.)
   set(PUERHLAB_WINDEPLOYQT "" CACHE FILEPATH "D:\\misc\\Qt\\6.9.3\\msvc2022_64\\bin\\windeployqt.exe")
   if(PUERHLAB_WINDEPLOYQT STREQUAL "")
@@ -335,15 +350,21 @@ if(WIN32)
          \"\${_bindir}\"
          \"${_third_party_exiv2_bin}\"
          \"${_third_party_duckdb_bin}\"
+         \"${_qt6_bin_dir}\"
+         \"${_cuda_bin_dir}\"
          \${PUERHLAB_RUNTIME_DEP_DIRS}
        RESOLVED_DEPENDENCIES_VAR _deps
        UNRESOLVED_DEPENDENCIES_VAR _unde
        PRE_EXCLUDE_REGEXES
          \"api-ms-win-.*\"
-         \"ext-ms-win-.*\"
+         \"ext-ms-.*\"
        POST_EXCLUDE_REGEXES
          \".*[\\\\\\\\/]Windows[\\\\\\\\/].*\"
          \".*[\\\\\\\\/]System32[\\\\\\\\/].*\"
+         \"azureattest.*\\\\.dll\"
+         \"hvsifiletrust\\\\.dll\"
+         \"pdmutilities\\\\.dll\"
+         \"wpaxholder\\\\.dll\"
      )
      foreach(d IN LISTS _deps)
        file(INSTALL DESTINATION \"\${_bindir}\" TYPE SHARED_LIBRARY FILES \"\${d}\")

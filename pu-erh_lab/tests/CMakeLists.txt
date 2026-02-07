@@ -262,3 +262,9 @@ set(DEMO_BINS CompleteUIDemo AlbumEditorQmlDemo)
 install(TARGETS ${DEMO_BINS}
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
+
+# Install config assets (fonts, LUTs) alongside the demo binaries so the
+# installed executables can find them via app-dir-relative paths.
+set(_config_dir "${CMAKE_SOURCE_DIR}/pu-erh_lab/src/config")
+install(DIRECTORY "${_config_dir}/fonts/"  DESTINATION "${CMAKE_INSTALL_BINDIR}/fonts")
+install(DIRECTORY "${_config_dir}/LUTs/"   DESTINATION "${CMAKE_INSTALL_BINDIR}/LUTs")

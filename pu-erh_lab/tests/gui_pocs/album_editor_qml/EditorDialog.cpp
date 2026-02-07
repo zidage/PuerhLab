@@ -361,8 +361,12 @@ class EditorDialog final : public QDialog {
     controls_layout->addWidget(controls_header, 0);
     controls_layout->addWidget(controls_sub, 0);
 
-    const auto luts_dir  = std::filesystem::path(CONFIG_PATH) / "LUTs";
-    const auto lut_files = ListCubeLutsInDir(luts_dir);
+    // Prefer LUTs next to the executable (installed layout), fall back to source tree.
+    const auto app_luts_dir = std::filesystem::path(
+        QCoreApplication::applicationDirPath().toStdWString()) / "LUTs";
+    const auto src_luts_dir = std::filesystem::path(CONFIG_PATH) / "LUTs";
+    const auto luts_dir     = std::filesystem::is_directory(app_luts_dir) ? app_luts_dir : src_luts_dir;
+    const auto lut_files    = ListCubeLutsInDir(luts_dir);
 
     lut_paths_.push_back("");  // index 0 => None
     lut_names_.push_back("None");

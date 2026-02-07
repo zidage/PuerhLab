@@ -10,9 +10,11 @@ ApplicationWindow {
     visible: true
     title: "pu-erh_lab - Album + Editor (QML POC)"
 
+    // Dark steel palette (Bootstrap-like grayscale):
+    // #F8F9FA #E9ECEF #DEE2E6 #CED4DA #ADB5BD #6C757D #495057 #343A40 #212529
     Material.theme: Material.Dark
-    Material.accent: "#5AA2FF"
-    color: "#0E131A"
+    Material.accent: "#ADB5BD"
+    color: "#212529"
 
     property bool settingsPage: false
     property bool inspectorVisible: true
@@ -59,8 +61,8 @@ ApplicationWindow {
         anchors.fill: parent
         z: -1
         gradient: Gradient {
-            GradientStop { position: 0.0; color: "#0E131A" }
-            GradientStop { position: 1.0; color: "#101A26" }
+            GradientStop { position: 0.0; color: "#212529" }
+            GradientStop { position: 1.0; color: "#343A40" }
         }
     }
 
@@ -73,13 +75,16 @@ ApplicationWindow {
             Layout.fillWidth: true
             Layout.preferredHeight: 58
             radius: 14
-            color: "#172231"
-            border.color: "#32465F"
+            color: "#343A40"
+            border.color: "#495057"
 
             RowLayout {
-                anchors.fill: parent
-                anchors.margins: 10
-                Label { text: "PuerhLab"; font.pixelSize: 19; font.weight: 700; color: "#F2F7FF" }
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.leftMargin: 10
+                anchors.rightMargin: 10
+                Label { text: "PuerhLab"; font.pixelSize: 19; font.weight: 700; color: "#F8F9FA" }
                 Button { text: "Library"; checkable: true; checked: !settingsPage; onClicked: settingsPage = false }
                 Button { text: "Settings"; checkable: true; checked: settingsPage; onClicked: settingsPage = true }
                 TextField { Layout.fillWidth: true; placeholderText: "Search photos" }
@@ -94,14 +99,15 @@ ApplicationWindow {
             Layout.fillWidth: true
             Layout.preferredHeight: 34
             radius: 10
-            color: albumBackend.serviceReady ? "#133125" : "#432929"
-            border.color: albumBackend.serviceReady ? "#2A715A" : "#7D4A4A"
+            // Keep status banner within the steel palette (no greens/reds).
+            color: albumBackend.serviceReady ? "#343A40" : "#212529"
+            border.color: albumBackend.serviceReady ? "#CED4DA" : "#6C757D"
             Label {
                 anchors.fill: parent
                 anchors.margins: 8
                 text: albumBackend.serviceMessage
                 elide: Text.ElideMiddle
-                color: albumBackend.serviceReady ? "#B8E8D4" : "#FFD0D0"
+                color: albumBackend.serviceReady ? "#E9ECEF" : "#ADB5BD"
                 verticalAlignment: Text.AlignVCenter
                 font.pixelSize: 12
             }
@@ -116,13 +122,13 @@ ApplicationWindow {
                 Layout.preferredWidth: 230
                 Layout.fillHeight: true
                 radius: 14
-                color: "#151F2D"
-                border.color: "#2C4058"
+                color: "#212529"
+                border.color: "#495057"
 
                 ColumnLayout {
                     anchors.fill: parent
                     anchors.margins: 10
-                    Label { text: "Library"; font.pixelSize: 17; font.weight: 700; color: "#EAF1FF" }
+                    Label { text: "Library"; font.pixelSize: 17; font.weight: 700; color: "#F8F9FA" }
                     TextField { Layout.fillWidth: true; placeholderText: "Search folders" }
                     Button { Layout.fillWidth: true; text: "All Photos"; onClicked: settingsPage = false }
                     Button { Layout.fillWidth: true; text: "Recent Imports"; onClicked: settingsPage = false }
@@ -141,13 +147,16 @@ ApplicationWindow {
                     Layout.fillWidth: true
                     Layout.preferredHeight: 52
                     radius: 12
-                    color: "#162435"
-                    border.color: "#2F425A"
+                    color: "#343A40"
+                    border.color: "#495057"
                     RowLayout {
-                        anchors.fill: parent
-                        anchors.margins: 9
-                        Label { text: "Browser"; color: "#F2F7FF"; font.pixelSize: 17; font.weight: 700 }
-                        Label { text: "Responsive thumbnail grid"; color: "#99AFD1"; font.pixelSize: 12 }
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        anchors.leftMargin: 9
+                        anchors.rightMargin: 9
+                        Label { text: "Browser"; color: "#F8F9FA"; font.pixelSize: 17; font.weight: 700 }
+                        Label { text: "Responsive thumbnail grid"; color: "#ADB5BD"; font.pixelSize: 12 }
                         Item { Layout.fillWidth: true }
                         Button { text: "Grid"; checkable: true; checked: gridMode; onClicked: gridMode = true }
                         Button { text: "List"; checkable: true; checked: !gridMode; onClicked: gridMode = false }
@@ -161,17 +170,17 @@ ApplicationWindow {
 
                     Rectangle {
                         radius: 14
-                        color: "#151F2D"
-                        border.color: "#2E425A"
+                        color: "#212529"
+                        border.color: "#495057"
 
                         ColumnLayout {
                             anchors.fill: parent
                             anchors.margins: 10
                             RowLayout {
                                 Layout.fillWidth: true
-                                Label { text: "Thumbnails"; color: "#EDF4FF"; font.pixelSize: 16; font.weight: 700 }
+                                Label { text: "Thumbnails"; color: "#F8F9FA"; font.pixelSize: 16; font.weight: 700 }
                                 Item { Layout.fillWidth: true }
-                                Label { text: albumBackend.filterInfo; color: "#99AFD1"; font.pixelSize: 12 }
+                                Label { text: albumBackend.filterInfo; color: "#ADB5BD"; font.pixelSize: 12 }
                             }
 
                             Loader {
@@ -185,8 +194,8 @@ ApplicationWindow {
                                 Layout.fillWidth: true
                                 visible: albumBackend.shownCount === 0
                                 spacing: 8
-                                Label { text: "No Photos Yet"; color: "#EDF4FF"; font.pixelSize: 22; font.weight: 700 }
-                                Label { text: "Import your first folder to start thumbnail generation and RAW adjustments."; color: "#9BB1D1"; font.pixelSize: 12 }
+                                Label { text: "No Photos Yet"; color: "#F8F9FA"; font.pixelSize: 22; font.weight: 700 }
+                                Label { text: "Import your first folder to start thumbnail generation and RAW adjustments."; color: "#ADB5BD"; font.pixelSize: 12 }
                                 Button { text: "Import Photos"; onClicked: importDialog.open() }
                             }
                         }
@@ -194,14 +203,14 @@ ApplicationWindow {
 
                     Rectangle {
                         radius: 14
-                        color: "#162131"
-                        border.color: "#2E425A"
+                        color: "#212529"
+                        border.color: "#495057"
                         ColumnLayout {
                             anchors.fill: parent
                             anchors.margins: 12
-                            Label { text: "Settings"; color: "#EDF4FF"; font.pixelSize: 20; font.weight: 700 }
-                            Label { text: "Window #0E131A  Text #E8EEFA  Accent #5AA2FF"; color: "#99AFD1"; font.pixelSize: 12 }
-                            Label { text: "Qt Quick renderer is hardware accelerated."; color: "#99AFD1"; font.pixelSize: 12 }
+                            Label { text: "Settings"; color: "#F8F9FA"; font.pixelSize: 20; font.weight: 700 }
+                            Label { text: "Window #212529  Text #F8F9FA  Accent #ADB5BD"; color: "#ADB5BD"; font.pixelSize: 12 }
+                            Label { text: "Qt Quick renderer is hardware accelerated."; color: "#ADB5BD"; font.pixelSize: 12 }
                             Item { Layout.fillHeight: true }
                         }
                     }
@@ -213,29 +222,33 @@ ApplicationWindow {
                 Layout.preferredWidth: inspectorVisible && !settingsPage ? 350 : 0
                 Behavior on Layout.preferredWidth { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
                 radius: 14
-                color: "#121B28"
-                border.color: "#2D4058"
+                color: "#212529"
+                border.color: "#495057"
                 clip: true
                 visible: Layout.preferredWidth > 10
 
                 ScrollView {
+                    id: inspectorScroll
                     anchors.fill: parent
                     anchors.margins: 10
+                    contentWidth: availableWidth
                     ColumnLayout {
-                        width: parent.width
+                        width: inspectorScroll.availableWidth
                         spacing: 10
 
                         Rectangle {
                             Layout.fillWidth: true
+                            implicitHeight: filterCol.implicitHeight + 20
                             radius: 12
-                            color: "#182332"
-                            border.color: "#2F425A"
+                            color: "#343A40"
+                            border.color: "#495057"
                             ColumnLayout {
+                                id: filterCol
                                 anchors.fill: parent
                                 anchors.margins: 10
                                 RowLayout {
                                     Layout.fillWidth: true
-                                    Label { text: "Filters"; color: "#EEF5FF"; font.pixelSize: 17; font.weight: 700 }
+                                    Label { text: "Filters"; color: "#F8F9FA"; font.pixelSize: 17; font.weight: 700 }
                                     Item { Layout.fillWidth: true }
                                     Button { text: drawerOpen ? "Collapse" : "Expand"; onClicked: drawerOpen = !drawerOpen }
                                 }
@@ -247,7 +260,7 @@ ApplicationWindow {
 
                                     RowLayout {
                                         Layout.fillWidth: true
-                                        Label { text: "Rules"; color: "#EDF4FF" }
+                                        Label { text: "Rules"; color: "#E9ECEF" }
                                         Item { Layout.fillWidth: true }
                                         ComboBox {
                                             id: joinCombo
@@ -276,8 +289,8 @@ ApplicationWindow {
                                             width: rules.width
                                             height: showSecondValue ? 96 : 66
                                             radius: 10
-                                            color: "#101A27"
-                                            border.color: "#2D4159"
+                                            color: "#495057"
+                                            border.color: "#6C757D"
                                             Column {
                                                 anchors.fill: parent
                                                 anchors.margins: 6
@@ -306,19 +319,21 @@ ApplicationWindow {
                                         Item { Layout.fillWidth: true }
                                         Button { text: "Apply"; onClicked: applyFilter() }
                                     }
-                                    Label { text: albumBackend.filterInfo; color: "#9EB4D4"; font.pixelSize: 12 }
-                                    Label { visible: albumBackend.validationError.length > 0; text: albumBackend.validationError; color: "#FFB8B8"; wrapMode: Text.WordWrap; font.pixelSize: 12 }
-                                    Label { visible: albumBackend.sqlPreview.length > 0; text: albumBackend.sqlPreview; wrapMode: Text.WrapAnywhere; color: "#DBE9FF"; font.family: "Consolas"; font.pixelSize: 11 }
+                                    Label { text: albumBackend.filterInfo; color: "#ADB5BD"; font.pixelSize: 12 }
+                                    Label { visible: albumBackend.validationError.length > 0; text: albumBackend.validationError; color: "#CED4DA"; wrapMode: Text.WordWrap; font.pixelSize: 12 }
+                                    Label { visible: albumBackend.sqlPreview.length > 0; text: albumBackend.sqlPreview; wrapMode: Text.WrapAnywhere; color: "#E9ECEF"; font.family: "Consolas"; font.pixelSize: 11 }
                                 }
                             }
                         }
 
                         Rectangle {
                             Layout.fillWidth: true
+                            implicitHeight: editorCol.implicitHeight + 20
                             radius: 12
-                            color: "#172332"
-                            border.color: "#2E425A"
+                            color: "#343A40"
+                            border.color: "#495057"
                             ColumnLayout {
+                                id: editorCol
                                 anchors.fill: parent
                                 anchors.margins: 10
                                 spacing: 8
@@ -327,7 +342,7 @@ ApplicationWindow {
                                     Layout.fillWidth: true
                                     Label {
                                         text: "Editor"
-                                        color: "#EEF5FF"
+                                        color: "#F8F9FA"
                                         font.pixelSize: 17
                                         font.weight: 700
                                     }
@@ -337,7 +352,7 @@ ApplicationWindow {
                                 Label {
                                     Layout.fillWidth: true
                                     text: "The full OpenGL editor opens in a separate dialog window."
-                                    color: "#9EB4D4"
+                                    color: "#ADB5BD"
                                     font.pixelSize: 12
                                     wrapMode: Text.WordWrap
                                 }
@@ -345,7 +360,7 @@ ApplicationWindow {
                                 Label {
                                     Layout.fillWidth: true
                                     text: albumBackend.editorStatus
-                                    color: "#D8E7FF"
+                                    color: "#DEE2E6"
                                     font.pixelSize: 12
                                     wrapMode: Text.WordWrap
                                 }
@@ -354,7 +369,7 @@ ApplicationWindow {
                                     visible: albumBackend.editorTitle.length > 0
                                     Layout.fillWidth: true
                                     text: albumBackend.editorTitle
-                                    color: "#D8E7FF"
+                                    color: "#DEE2E6"
                                     font.pixelSize: 12
                                     elide: Text.ElideRight
                                 }
@@ -364,7 +379,7 @@ ApplicationWindow {
                                     text: albumBackend.editorActive
                                           ? "Editor window is open. Close that window to save edits."
                                           : "Click Edit on a thumbnail to open the full editor dialog."
-                                    color: "#8EA4C6"
+                                    color: "#6C757D"
                                     font.pixelSize: 12
                                     wrapMode: Text.WordWrap
                                 }
@@ -379,12 +394,12 @@ ApplicationWindow {
             Layout.fillWidth: true
             Layout.preferredHeight: 58
             radius: 12
-            color: "#172332"
-            border.color: "#2F425A"
+            color: "#343A40"
+            border.color: "#495057"
             RowLayout {
                 anchors.fill: parent
                 anchors.margins: 10
-                Label { Layout.fillWidth: true; text: albumBackend.taskStatus; color: "#99AFD1" }
+                Label { Layout.fillWidth: true; text: albumBackend.taskStatus; color: "#ADB5BD" }
                 ProgressBar { Layout.preferredWidth: 240; value: albumBackend.taskProgress / 100.0 }
                 Button { visible: albumBackend.taskCancelVisible; text: "Cancel"; onClicked: albumBackend.cancelImport() }
             }
@@ -410,11 +425,21 @@ ApplicationWindow {
                 required property int rating
                 required property string accent
                 required property string thumbUrl
+                property string liveThumbUrl: thumbUrl
+                onThumbUrlChanged: liveThumbUrl = thumbUrl
                 width: 230
                 height: 172
                 radius: 12
-                color: "#111A27"
-                border.color: albumBackend.editorActive && albumBackend.editorElementId === elementId ? "#5AA2FF" : "#2E425A"
+                color: "#495057"
+                border.color: albumBackend.editorActive && albumBackend.editorElementId === elementId ? "#DEE2E6" : "#6C757D"
+                Connections {
+                    target: albumBackend
+                    function onThumbnailUpdated(updatedElementId, updatedUrl) {
+                        if (updatedElementId === elementId) {
+                            liveThumbUrl = updatedUrl
+                        }
+                    }
+                }
                 Item {
                     anchors.left: parent.left
                     anchors.right: parent.right
@@ -425,18 +450,18 @@ ApplicationWindow {
                     Rectangle {
                         anchors.fill: parent
                         radius: 9
-                        visible: thumbUrl.length === 0
+                        visible: liveThumbUrl.length === 0
+                        // Placeholder kept in the global steel palette.
                         gradient: Gradient {
-                            GradientStop { position: 0.0; color: Qt.lighter(accent, 1.3) }
-                            GradientStop { position: 1.0; color: Qt.darker(accent, 1.6) }
+                            GradientStop { position: 0.0; color: "#495057" }
+                            GradientStop { position: 1.0; color: "#343A40" }
                         }
                     }
                     Image {
                         anchors.fill: parent
-                        source: thumbUrl
-                        visible: thumbUrl.length > 0
+                        source: liveThumbUrl
+                        visible: liveThumbUrl.length > 0
                         asynchronous: true
-                        cache: false
                         fillMode: Image.PreserveAspectFit
                     }
                     Button {
@@ -448,9 +473,9 @@ ApplicationWindow {
                     }
                 }
                 Column { anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; anchors.margins: 8; spacing: 2
-                    Label { text: fileName; color: "#EDF4FF"; font.pixelSize: 12; elide: Text.ElideRight; width: parent.width }
-                    Label { text: cameraModel + " | ISO " + iso + " | f/" + aperture; color: "#9DB3D4"; font.pixelSize: 11; elide: Text.ElideRight; width: parent.width }
-                    Label { text: captureDate + " | rating " + rating + "/5"; color: "#8299BB"; font.pixelSize: 10; elide: Text.ElideRight; width: parent.width }
+                    Label { text: fileName; color: "#F8F9FA"; font.pixelSize: 12; elide: Text.ElideRight; width: parent.width }
+                    Label { text: cameraModel + " | ISO " + iso + " | f/" + aperture; color: "#ADB5BD"; font.pixelSize: 11; elide: Text.ElideRight; width: parent.width }
+                    Label { text: captureDate + " | rating " + rating + "/5"; color: "#6C757D"; font.pixelSize: 10; elide: Text.ElideRight; width: parent.width }
                 }
             }
         }
@@ -477,11 +502,21 @@ ApplicationWindow {
                 required property string tags
                 required property string accent
                 required property string thumbUrl
+                property string liveThumbUrl: thumbUrl
+                onThumbUrlChanged: liveThumbUrl = thumbUrl
                 width: ListView.view.width
                 height: 84
                 radius: 12
-                color: "#111A27"
-                border.color: albumBackend.editorActive && albumBackend.editorElementId === elementId ? "#5AA2FF" : "#2E425A"
+                color: "#495057"
+                border.color: albumBackend.editorActive && albumBackend.editorElementId === elementId ? "#DEE2E6" : "#6C757D"
+                Connections {
+                    target: albumBackend
+                    function onThumbnailUpdated(updatedElementId, updatedUrl) {
+                        if (updatedElementId === elementId) {
+                            liveThumbUrl = updatedUrl
+                        }
+                    }
+                }
                 RowLayout {
                     anchors.fill: parent
                     anchors.margins: 8
@@ -492,29 +527,29 @@ ApplicationWindow {
                         Rectangle {
                             anchors.fill: parent
                             radius: 8
-                            visible: thumbUrl.length === 0
+                            visible: liveThumbUrl.length === 0
+                            // Placeholder kept in the global steel palette.
                             gradient: Gradient {
-                                GradientStop { position: 0.0; color: Qt.lighter(accent, 1.3) }
-                                GradientStop { position: 1.0; color: Qt.darker(accent, 1.7) }
+                                GradientStop { position: 0.0; color: "#495057" }
+                                GradientStop { position: 1.0; color: "#343A40" }
                             }
                         }
                         Image {
                             anchors.fill: parent
-                            source: thumbUrl
-                            visible: thumbUrl.length > 0
+                            source: liveThumbUrl
+                            visible: liveThumbUrl.length > 0
                             asynchronous: true
-                            cache: false
                             fillMode: Image.PreserveAspectFit
                         }
                     }
                     ColumnLayout { Layout.fillWidth: true
-                        Label { Layout.fillWidth: true; text: fileName; color: "#EDF4FF"; font.pixelSize: 13; elide: Text.ElideRight }
-                        Label { Layout.fillWidth: true; text: cameraModel + " | " + extension + " | ISO " + iso + " | f/" + aperture + " | " + focalLength + "mm"; color: "#9DB3D4"; font.pixelSize: 11; elide: Text.ElideRight }
-                        Label { Layout.fillWidth: true; text: captureDate + " | tags: " + tags; color: "#8299BB"; font.pixelSize: 10; elide: Text.ElideRight }
+                        Label { Layout.fillWidth: true; text: fileName; color: "#F8F9FA"; font.pixelSize: 13; elide: Text.ElideRight }
+                        Label { Layout.fillWidth: true; text: cameraModel + " | " + extension + " | ISO " + iso + " | f/" + aperture + " | " + focalLength + "mm"; color: "#ADB5BD"; font.pixelSize: 11; elide: Text.ElideRight }
+                        Label { Layout.fillWidth: true; text: captureDate + " | tags: " + tags; color: "#6C757D"; font.pixelSize: 10; elide: Text.ElideRight }
                     }
                     ColumnLayout {
                         spacing: 4
-                        Label { text: rating + "/5"; color: "#D6E5FF"; font.pixelSize: 12; font.weight: 700; horizontalAlignment: Text.AlignHCenter }
+                        Label { text: rating + "/5"; color: "#DEE2E6"; font.pixelSize: 12; font.weight: 700; horizontalAlignment: Text.AlignHCenter }
                         Button { text: "Edit"; onClicked: albumBackend.openEditor(elementId, imageId) }
                     }
                 }

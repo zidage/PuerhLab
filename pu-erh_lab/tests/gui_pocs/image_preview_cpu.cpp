@@ -376,8 +376,12 @@ int main(int argc, char* argv[]) {
   color_stage.SetOperator(OperatorType::SATURATION, {{"saturation", 0.0f}}, global_params);
   color_stage.SetOperator(OperatorType::TINT, {{"tint", 0.0f}}, global_params);
 
-  const auto luts_dir  = std::filesystem::path(CONFIG_PATH) / "LUTs";
-  const auto lut_files = ListCubeLutsInDir(luts_dir);
+  // Prefer LUTs next to the executable (installed layout), fall back to source tree.
+  const auto app_luts_dir = std::filesystem::path(
+      QCoreApplication::applicationDirPath().toStdWString()) / "LUTs";
+  const auto src_luts_dir = std::filesystem::path(CONFIG_PATH) / "LUTs";
+  const auto luts_dir     = std::filesystem::is_directory(app_luts_dir) ? app_luts_dir : src_luts_dir;
+  const auto lut_files    = ListCubeLutsInDir(luts_dir);
 
   std::vector<std::string> lut_paths_by_index;
   lut_paths_by_index.emplace_back("");  // index 0 => None

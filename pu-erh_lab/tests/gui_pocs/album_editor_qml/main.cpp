@@ -6,6 +6,7 @@
 #include <QQmlContext>
 #include <QQuickStyle>
 
+#include <exiv2/error.hpp>
 #include <filesystem>
 #include <optional>
 #include <string>
@@ -86,6 +87,7 @@ void ApplyExternalAppFont(QApplication& app, int argc, char** argv) {
 int main(int argc, char* argv[]) {
   puerhlab::TimeProvider::Refresh();
   puerhlab::RegisterAllOperators();
+  Exiv2::LogMsg::setLevel(Exiv2::LogMsg::Level::error);
 
   QCoreApplication::setAttribute(Qt::AA_UseDesktopOpenGL);
   QCoreApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
