@@ -104,6 +104,33 @@ TEST_F(PipelineServiceTests, BasicPipelineRWTest) {
   }
 }
 
+TEST_F(PipelineServiceTests, SharedGuardPinsUntilLastSave) {
+  ProjectService      project(db_path_, meta_path_);
+  PipelineMgmtService pipeline_service(project.GetStorageService());
+
+  auto                guard_a = pipeline_service.LoadPipeline(7);
+  auto                guard_b = pipeline_service.LoadPipeline(7);
+
+  ASSERT_NE(guard_a, nullptr);
+  ASSERT_NE(guard_b, nullptr);
+  EXPECT_EQ(guard_a.get(), guard_b.get());
+  EXPECT_TRUE(guard_a->pinned_);
+  EXPECT_EQ(guard_a->pin_count_, 2u);
+
+  pipeline_service.SavePipeline(guard_a);
+  EXPECT_TRUE(guard_b->pinned_);
+  EXPECT_EQ(guard_b->pin_count_, 1u);
+
+  pipeline_service.SavePipeline(guard_b);
+  EXPECT_FALSE(guard_b->pinned_);
+  EXPECT_EQ(guard_b->pin_count_, 0u);
+
+  auto guard_c = pipeline_service.LoadPipeline(7);
+  ASSERT_NE(guard_c, nullptr);
+  EXPECT_TRUE(guard_c->pinned_);
+  EXPECT_EQ(guard_c->pin_count_, 1u);
+}
+
 TEST_F(PipelineServiceTests, MultiplePipelineTest) {
   constexpr int                           pipeline_count = 5;
   std::array<std::string, pipeline_count> pipeline_params;

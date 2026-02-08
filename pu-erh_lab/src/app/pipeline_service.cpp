@@ -80,7 +80,9 @@ void PipelineMgmtService::HandleEviction(sl_element_id_t evicted_id) {
     }
 
     auto pipeline_guard = it->second;
-    if (!pipeline_guard->pinned_) {
+    if (pipeline_guard->pin_count_ == 0) {
+      pipeline_guard->pinned_ = false;
+      std::unique_lock<std::mutex> render_guard(pipeline_guard->pipeline_->GetRenderLock());
       if (pipeline_guard->dirty_) {
         storage_service_->GetElementController().UpdatePipelineByElementId(
             candidate, pipeline_guard->pipeline_);
@@ -132,6 +134,7 @@ auto PipelineMgmtService::LoadPipeline(sl_element_id_t id) -> std::shared_ptr<Pi
           ResyncGlobalParamsFromOperators(*it->second->pipeline_);
         }
 
+        it->second->pin_count_++;
         it->second->pinned_ = true;
         it->second->id_     = id;
         return it->second;
@@ -165,6 +168,7 @@ auto PipelineMgmtService::LoadPipeline(sl_element_id_t id) -> std::shared_ptr<Pi
     pipeline_guard->pipeline_              = std::move(pipeline);
     pipeline_guard->id_                    = id;
     pipeline_guard->pinned_                = true;
+    pipeline_guard->pin_count_             = 1;
     std::optional<sl_element_id_t> evicted = pipeline_cache_.RecordAccess_WithEvict(id, id);
     if (evicted.has_value()) {
       HandleEviction(evicted.value());
@@ -184,20 +188,32 @@ void PipelineMgmtService::SavePipeline(std::shared_ptr<PipelineGuard> pipeline) 
     return;
   }
 
-  // Always clear intermediate buffers and GPU resources when returning a pipeline to cache.
-  // This prevents large cached allocations (and any frame-sink related state) from leaking across
-  // editor sessions and hurting interactive performance.
-  pipeline->pipeline_->ClearAllIntermediateBuffers();
-  pipeline->pipeline_->ResetExecutionStages();
+  std::unique_lock<std::mutex> guard(lock_);
 
-  if (!pipeline->dirty_) {
-    // Even if not dirty, we still need to unpin and return to cache
-    std::unique_lock<std::mutex> guard(lock_);
-    pipeline->pinned_ = false;
+  if (pipeline->pin_count_ > 0) {
+    pipeline->pin_count_--;
+  }
+  const bool last_pin = (pipeline->pin_count_ == 0);
+  pipeline->pinned_   = !last_pin;
+
+  // Shared by multiple callers (e.g. thumbnail + export): only the last owner may release/reset.
+  if (!last_pin) {
     return;
   }
 
-  std::unique_lock<std::mutex>   guard(lock_);
+  // Always clear intermediate buffers and GPU resources when returning a pipeline to cache.
+  // This prevents large cached allocations (and any frame-sink related state) from leaking across
+  // editor sessions and hurting interactive performance.
+  {
+    std::unique_lock<std::mutex> render_guard(pipeline->pipeline_->GetRenderLock());
+    pipeline->pipeline_->ClearAllIntermediateBuffers();
+    pipeline->pipeline_->ResetExecutionStages();
+  }
+
+  if (!pipeline->dirty_) {
+    return;
+  }
+
   // Save the pipeline back to the cache
   sl_element_id_t                id      = pipeline->id_;
   // Store it back to the pipeline cache

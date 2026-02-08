@@ -24,18 +24,18 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QMenu>
 #include <QMessageBox>
 #include <QMetaObject>
-#include <QMenu>
 #include <QPainter>
 #include <QPixmap>
 #include <QPointer>
-#include <QProgressDialog>
 #include <QProgressBar>
+#include <QProgressDialog>
 #include <QPushButton>
 #include <QScrollArea>
-#include <QSignalBlocker>
 #include <QShortcut>
+#include <QSignalBlocker>
 #include <QSlider>
 #include <QSpinBox>
 #include <QSplitter>
@@ -180,10 +180,10 @@ static void ApplyFontRenderingTuning(QApplication& app, int argc, char** argv) {
     }
   }
 
-  QFont tuned = app.font();
+  QFont tuned     = app.font();
 
   // Default to AA on for finer rendering.
-  bool enable_aa = true;
+  bool  enable_aa = true;
   if (aa.has_value()) {
     std::string aa_s(aa.value());
     std::transform(aa_s.begin(), aa_s.end(), aa_s.begin(),
@@ -1416,12 +1416,12 @@ class ImportDialog final : public QDialog {
     summary_->setText(QString("%1 file(s) queued").arg(static_cast<int>(paths_.size())));
   }
 
-  QListWidget*                  files_list_            = nullptr;
-  QLabel*                       summary_               = nullptr;
-  QComboBox*                    sort_mode_             = nullptr;
-  QCheckBox*                    persist_placeholders_  = nullptr;
-  QCheckBox*                    write_sequence_        = nullptr;
-  std::vector<image_path_t>     paths_;
+  QListWidget*                     files_list_           = nullptr;
+  QLabel*                          summary_              = nullptr;
+  QComboBox*                       sort_mode_            = nullptr;
+  QCheckBox*                       persist_placeholders_ = nullptr;
+  QCheckBox*                       write_sequence_       = nullptr;
+  std::vector<image_path_t>        paths_;
   std::unordered_set<std::wstring> seen_;
 };
 
@@ -1436,7 +1436,8 @@ class SettingsPage final : public QWidget {
     title->setObjectName("SectionTitle");
     root->addWidget(title, 0, Qt::AlignLeft);
 
-    auto* subtitle = new QLabel("Appearance and performance preferences for this workstation.", this);
+    auto* subtitle =
+        new QLabel("Appearance and performance preferences for this workstation.", this);
     subtitle->setObjectName("MetaText");
     root->addWidget(subtitle, 0, Qt::AlignLeft);
 
@@ -1621,8 +1622,8 @@ class ExportDialog final : public QDialog {
     tiff_compress_->addItems({"NONE", "LZW", "ZIP"});
     form->addRow("TIFF comp", tiff_compress_);
 
-    option_widgets_ = {out_dir_, format_, resize_enabled_, max_side_, quality_, bit_depth_,
-                       png_compress_, tiff_compress_, browse};
+    option_widgets_  = {out_dir_,   format_,       resize_enabled_, max_side_, quality_,
+                        bit_depth_, png_compress_, tiff_compress_,  browse};
 
     auto* queue_hint = new QLabel(
         QString("Queued %1 image(s). Select rows in the browser before opening export to limit "
@@ -1653,8 +1654,9 @@ class ExportDialog final : public QDialog {
                                   .arg(static_cast<qulonglong>(items_[i].sleeve_id_)));
     }
     if (items_.size() > static_cast<size_t>(preview_count)) {
-      queue_preview_->addItem(QString("… and %1 more").arg(
-          static_cast<int>(items_.size()) - static_cast<int>(preview_count)));
+      queue_preview_->addItem(
+          QString("… and %1 more")
+              .arg(static_cast<int>(items_.size()) - static_cast<int>(preview_count)));
     }
     progress_card->BodyLayout()->addWidget(queue_preview_, 1);
 
@@ -1735,17 +1737,49 @@ class ExportDialog final : public QDialog {
     }
 
     export_service_->ClearAllExportTasks();
+    size_t queued_count = 0;
+    int    skipped_count = 0;
+    QString first_error;
     for (const auto& it : items_) {
-      const auto src_path = image_pool_->Read<std::filesystem::path>(
-          it.image_id_, [](std::shared_ptr<Image> img) { return img->image_path_; });
-      ExportTask task;
-      task.sleeve_id_ = it.sleeve_id_;
-      task.image_id_  = it.image_id_;
-      task.options_   = BuildOptionsForOne(src_path, it.sleeve_id_, it.image_id_);
-      export_service_->EnqueueExportTask(task);
+      try {
+        const auto src_path = image_pool_->Read<std::filesystem::path>(
+            it.image_id_, [](std::shared_ptr<Image> img) { return img->image_path_; });
+        ExportTask task;
+        task.sleeve_id_ = it.sleeve_id_;
+        task.image_id_  = it.image_id_;
+        task.options_   = BuildOptionsForOne(src_path, it.sleeve_id_, it.image_id_);
+        export_service_->EnqueueExportTask(task);
+        ++queued_count;
+      } catch (const std::exception& e) {
+        ++skipped_count;
+        if (first_error.isEmpty()) {
+          first_error = QString::fromUtf8(e.what());
+        }
+      } catch (...) {
+        ++skipped_count;
+        if (first_error.isEmpty()) {
+          first_error = "Unknown error while preparing export task.";
+        }
+      }
     }
 
-    SetBusy(true, "Exporting. Rendering pipeline output and writing files...");
+    if (queued_count == 0) {
+      QString msg = "No valid export tasks could be created.";
+      if (!first_error.isEmpty()) {
+        msg += QString("\n\nFirst error: %1").arg(first_error);
+      }
+      QMessageBox::warning(this, "Export", msg);
+      status_->setText("No export tasks were queued.");
+      return;
+    }
+
+    QString busy_message = "Exporting. Rendering pipeline output and writing files...";
+    if (skipped_count > 0) {
+      busy_message = QString("Exporting %1 image(s). Skipped %2 invalid item(s).")
+                         .arg(static_cast<int>(queued_count))
+                         .arg(skipped_count);
+    }
+    SetBusy(true, busy_message);
     progress_->setRange(0, 0);
 
     QPointer<ExportDialog> self(this);
@@ -1831,7 +1865,7 @@ class ExportDialog final : public QDialog {
   QPushButton*                      export_btn_     = nullptr;
   QPushButton*                      cancel_btn_     = nullptr;
   std::vector<QWidget*>             option_widgets_;
-  bool                              exporting_      = false;
+  bool                              exporting_ = false;
 };
 
 [[maybe_unused]] static void SetPipelineTemplateToGlobalParams(
@@ -2060,7 +2094,7 @@ class EditorDialog final : public QDialog {
     root->setContentsMargins(10, 10, 10, 10);
     root->setSpacing(12);
 
-    viewer_    = new QtEditViewer(this);
+    viewer_ = new QtEditViewer(this);
     viewer_->setMinimumSize(560, 360);
     viewer_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     viewer_->setStyleSheet(
@@ -2102,7 +2136,8 @@ class EditorDialog final : public QDialog {
         "  border-radius: 5px;"
         "}"
         "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0px; }"
-        "QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }");
+        "QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; "
+        "}");
 
     controls_             = new QWidget(controls_scroll_);
     auto* controls_layout = new QVBoxLayout(controls_);
@@ -2144,11 +2179,11 @@ class EditorDialog final : public QDialog {
     controls_layout->addWidget(controls_sub, 0);
 
     // Prefer LUTs next to the executable (installed layout), fall back to source tree.
-    const auto app_luts_dir = std::filesystem::path(
-        QCoreApplication::applicationDirPath().toStdWString()) / "LUTs";
+    const auto app_luts_dir =
+        std::filesystem::path(QCoreApplication::applicationDirPath().toStdWString()) / "LUTs";
     const auto src_luts_dir = std::filesystem::path(CONFIG_PATH) / "LUTs";
-    const auto luts_dir     = std::filesystem::is_directory(app_luts_dir) ? app_luts_dir : src_luts_dir;
-    const auto lut_files    = ListCubeLutsInDir(luts_dir);
+    const auto luts_dir = std::filesystem::is_directory(app_luts_dir) ? app_luts_dir : src_luts_dir;
+    const auto lut_files = ListCubeLutsInDir(luts_dir);
 
     lut_paths_.push_back("");  // index 0 => None
     lut_names_.push_back("None");
@@ -2349,6 +2384,15 @@ class EditorDialog final : public QDialog {
           RequestRender();
         },
         [this]() { CommitAdjustment(AdjustmentField::Saturation); },
+        [](int v) { return QString::number(v, 'f', 2); });
+
+    vibrance_slider_ = addSlider(
+        "Vibrance", -100, 100, static_cast<int>(std::lround(state_.vibrance_)),
+        [&](int v) {
+          state_.vibrance_ = static_cast<float>(v);
+          RequestRender();
+        },
+        [this]() { CommitAdjustment(AdjustmentField::Vibrance); },
         [](int v) { return QString::number(v, 'f', 2); });
 
     tint_slider_ = addSlider(
@@ -2608,6 +2652,7 @@ class EditorDialog final : public QDialog {
     Exposure,
     Contrast,
     Saturation,
+    Vibrance,
     Tint,
     Blacks,
     Whites,
@@ -2619,9 +2664,10 @@ class EditorDialog final : public QDialog {
   };
 
   struct AdjustmentState {
-    float       exposure_   = 1.0f;
-    float       contrast_   = 1.0f;
+    float       exposure_   = 2.0f;
+    float       contrast_   = 0.0f;
     float       saturation_ = 0.0f;
+    float       vibrance_   = 0.0f;
     float       tint_       = 0.0f;
     float       blacks_     = 0.0f;
     float       whites_     = 0.0f;
@@ -2964,6 +3010,8 @@ class EditorDialog final : public QDialog {
         return {PipelineStageName::Basic_Adjustment, OperatorType::CONTRAST};
       case AdjustmentField::Saturation:
         return {PipelineStageName::Color_Adjustment, OperatorType::SATURATION};
+      case AdjustmentField::Vibrance:
+        return {PipelineStageName::Color_Adjustment, OperatorType::VIBRANCE};
       case AdjustmentField::Tint:
         return {PipelineStageName::Color_Adjustment, OperatorType::TINT};
       case AdjustmentField::Blacks:
@@ -2992,6 +3040,8 @@ class EditorDialog final : public QDialog {
         return {{"contrast", s.contrast_}};
       case AdjustmentField::Saturation:
         return {{"saturation", s.saturation_}};
+      case AdjustmentField::Vibrance:
+        return {{"vibrance", s.vibrance_}};
       case AdjustmentField::Tint:
         return {{"tint", s.tint_}};
       case AdjustmentField::Blacks:
@@ -3020,6 +3070,8 @@ class EditorDialog final : public QDialog {
         return !NearlyEqual(state_.contrast_, committed_state_.contrast_);
       case AdjustmentField::Saturation:
         return !NearlyEqual(state_.saturation_, committed_state_.saturation_);
+      case AdjustmentField::Vibrance:
+        return !NearlyEqual(state_.vibrance_, committed_state_.vibrance_);
       case AdjustmentField::Tint:
         return !NearlyEqual(state_.tint_, committed_state_.tint_);
       case AdjustmentField::Blacks:
@@ -3178,6 +3230,11 @@ class EditorDialog final : public QDialog {
     if (const auto v = ReadFloat(color, OperatorType::SATURATION, "saturation"); v.has_value()) {
       state_.saturation_ = v.value();
     }
+
+    if (const auto v = ReadFloat(color, OperatorType::VIBRANCE, "vibrance"); v.has_value()) {
+      state_.vibrance_ = v.value();
+    }
+
     if (const auto v = ReadFloat(color, OperatorType::TINT, "tint"); v.has_value()) {
       state_.tint_ = v.value();
     }
@@ -3271,6 +3328,7 @@ class EditorDialog final : public QDialog {
     color.SetOperator(OperatorType::SATURATION, {{"saturation", state_.saturation_}},
                       global_params);
     color.SetOperator(OperatorType::TINT, {{"tint", state_.tint_}}, global_params);
+    color.SetOperator(OperatorType::VIBRANCE, {{"vibrance", state_.vibrance_}}, global_params);
 
     // LUT (LMT): rebind only when the path changes. The operator's SetGlobalParams now
     // derives lmt_enabled_/dirty state from the path, and PipelineMgmtService resyncs on load.
@@ -3392,6 +3450,7 @@ class EditorDialog final : public QDialog {
   QSlider*                                                 exposure_slider_    = nullptr;
   QSlider*                                                 contrast_slider_    = nullptr;
   QSlider*                                                 saturation_slider_  = nullptr;
+  QSlider*                                                 vibrance_slider_    = nullptr;
   QSlider*                                                 tint_slider_        = nullptr;
   QSlider*                                                 blacks_slider_      = nullptr;
   QSlider*                                                 whites_slider_      = nullptr;
@@ -3443,13 +3502,13 @@ class AlbumWindow final : public QWidget {
     filter_service_  = std::make_unique<SleeveFilterService>(project_->GetStorageService());
     history_service_ = std::make_shared<EditHistoryMgmtService>(project_->GetStorageService());
 
-    auto* root      = new QVBoxLayout(this);
+    auto* root       = new QVBoxLayout(this);
     root->setContentsMargins(16, 16, 16, 16);
     root->setSpacing(12);
 
     auto* top_bar = new QFrame(this);
     top_bar->setObjectName("GlassSurface");
-    auto* top     = new QHBoxLayout(top_bar);
+    auto* top = new QHBoxLayout(top_bar);
     top->setContentsMargins(14, 12, 14, 12);
     top->setSpacing(8);
 
@@ -3474,7 +3533,7 @@ class AlbumWindow final : public QWidget {
 
     import_btn_ = new QPushButton("Import…", top_bar);
     import_btn_->setObjectName("accent");
-    export_btn_ = new QPushButton("Export…", top_bar);
+    export_btn_  = new QPushButton("Export…", top_bar);
     filters_btn_ = new QToolButton(top_bar);
     filters_btn_->setText("Inspector");
     filters_btn_->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
@@ -3518,7 +3577,7 @@ class AlbumWindow final : public QWidget {
     sidebar_list_->setCurrentRow(0);
     side_card->BodyLayout()->addWidget(sidebar_list_, 1);
 
-    auto* center = new QWidget(shell_split);
+    auto* center      = new QWidget(shell_split);
     auto* center_root = new QVBoxLayout(center);
     center_root->setContentsMargins(0, 0, 0, 0);
     center_root->setSpacing(12);
@@ -3551,18 +3610,18 @@ class AlbumWindow final : public QWidget {
     center_root->addWidget(page_stack_, 1);
 
     auto* library_page = new QWidget(page_stack_);
-    auto* lib_root = new QVBoxLayout(library_page);
+    auto* lib_root     = new QVBoxLayout(library_page);
     lib_root->setContentsMargins(0, 0, 0, 0);
     lib_root->setSpacing(12);
 
     auto* browser_card = new CardFrame("Thumbnails", library_page);
-    status_ = new QLabel("No images loaded.", browser_card);
+    status_            = new QLabel("No images loaded.", browser_card);
     status_->setObjectName("MetaText");
     browser_card->HeaderLayout()->addWidget(status_, 0, Qt::AlignRight);
 
     browser_state_stack_ = new QStackedWidget(browser_card);
-    auto* list_page = new QWidget(browser_card);
-    auto* list_layout = new QVBoxLayout(list_page);
+    auto* list_page      = new QWidget(browser_card);
+    auto* list_layout    = new QVBoxLayout(list_page);
     list_layout->setContentsMargins(0, 0, 0, 0);
     list_layout->setSpacing(0);
 
@@ -3577,7 +3636,7 @@ class AlbumWindow final : public QWidget {
     list_->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
     list_layout->addWidget(list_, 1);
 
-    auto* empty_page = new QWidget(browser_card);
+    auto* empty_page   = new QWidget(browser_card);
     auto* empty_layout = new QVBoxLayout(empty_page);
     empty_layout->setContentsMargins(36, 36, 36, 36);
     empty_layout->setSpacing(12);
@@ -3604,7 +3663,7 @@ class AlbumWindow final : public QWidget {
     settings_page_ = new SettingsPage(page_stack_);
     page_stack_->addWidget(settings_page_);
 
-    inspector_host_ = new QWidget(shell_split);
+    inspector_host_        = new QWidget(shell_split);
     auto* inspector_layout = new QVBoxLayout(inspector_host_);
     inspector_layout->setContentsMargins(0, 0, 0, 0);
     inspector_layout->setSpacing(12);
@@ -3615,7 +3674,7 @@ class AlbumWindow final : public QWidget {
     inspector_layout->addWidget(inspector_scroll, 1);
 
     auto* inspector_panel = new QWidget(inspector_scroll);
-    auto* panel_layout = new QVBoxLayout(inspector_panel);
+    auto* panel_layout    = new QVBoxLayout(inspector_panel);
     panel_layout->setContentsMargins(0, 0, 0, 0);
     panel_layout->setSpacing(12);
     inspector_scroll->setWidget(inspector_panel);
@@ -3647,7 +3706,7 @@ class AlbumWindow final : public QWidget {
     shell_split->setSizes({220, 860, 340});
 
     auto* task_card = new CardFrame("Background Tasks", this);
-    auto* task_row = new QHBoxLayout();
+    auto* task_row  = new QHBoxLayout();
     task_row->setContentsMargins(0, 0, 0, 0);
     task_row->setSpacing(10);
     task_status_ = new QLabel("No background tasks", task_card);
@@ -3666,9 +3725,8 @@ class AlbumWindow final : public QWidget {
 
     connect(import_btn_, &QPushButton::clicked, this, [this]() { BeginImport(); });
     connect(export_btn_, &QPushButton::clicked, this, [this]() { OpenExport(); });
-    connect(filters_btn_, &QToolButton::toggled, this, [this](bool on) {
-      inspector_host_->setVisible(on && !showing_settings_);
-    });
+    connect(filters_btn_, &QToolButton::toggled, this,
+            [this](bool on) { inspector_host_->setVisible(on && !showing_settings_); });
     connect(list_, &QListWidget::itemClicked, this, [this](QListWidgetItem* item) {
       if (!item) {
         return;
@@ -3681,9 +3739,8 @@ class AlbumWindow final : public QWidget {
 
     connect(library_page_btn_, &QToolButton::clicked, this, [this]() { ShowPage(false); });
     connect(settings_page_btn_, &QToolButton::clicked, this, [this]() { ShowPage(true); });
-    connect(sidebar_list_, &QListWidget::currentRowChanged, this, [this](int row) {
-      ShowPage(row == 3);
-    });
+    connect(sidebar_list_, &QListWidget::currentRowChanged, this,
+            [this](int row) { ShowPage(row == 3); });
     connect(grid_view_btn_, &QToolButton::clicked, this, [this]() {
       list_view_btn_->setChecked(false);
       grid_view_btn_->setChecked(true);
@@ -3919,8 +3976,7 @@ class AlbumWindow final : public QWidget {
             }
             if (self->task_progress_) {
               self->task_progress_->setRange(0, static_cast<int>(std::max<uint32_t>(total, 1)));
-              self->task_progress_->setValue(
-                  static_cast<int>(std::max(placeholders, meta_done)));
+              self->task_progress_->setValue(static_cast<int>(std::max(placeholders, meta_done)));
             }
             self->SetBusyUi(true, QString("Importing… %1/%2 (meta %3, failed %4)")
                                       .arg(placeholders)
@@ -4308,32 +4364,32 @@ class AlbumWindow final : public QWidget {
   std::optional<filter_id_t>                            active_filter_id_;
   std::optional<FilterNode>                             active_filter_node_;
 
-  QPushButton*                                          import_btn_         = nullptr;
-  QPushButton*                                          export_btn_         = nullptr;
-  QToolButton*                                          filters_btn_        = nullptr;
-  QToolButton*                                          quick_actions_btn_  = nullptr;
-  QToolButton*                                          library_page_btn_   = nullptr;
-  QToolButton*                                          settings_page_btn_  = nullptr;
-  QToolButton*                                          grid_view_btn_      = nullptr;
-  QToolButton*                                          list_view_btn_      = nullptr;
-  QLabel*                                               status_             = nullptr;
-  QLabel*                                               task_status_        = nullptr;
-  QLineEdit*                                            global_search_      = nullptr;
-  QLineEdit*                                            sidebar_search_     = nullptr;
-  QListWidget*                                          sidebar_list_       = nullptr;
-  QListWidget*                                          list_               = nullptr;
-  QStackedWidget*                                       page_stack_         = nullptr;
+  QPushButton*                                          import_btn_          = nullptr;
+  QPushButton*                                          export_btn_          = nullptr;
+  QToolButton*                                          filters_btn_         = nullptr;
+  QToolButton*                                          quick_actions_btn_   = nullptr;
+  QToolButton*                                          library_page_btn_    = nullptr;
+  QToolButton*                                          settings_page_btn_   = nullptr;
+  QToolButton*                                          grid_view_btn_       = nullptr;
+  QToolButton*                                          list_view_btn_       = nullptr;
+  QLabel*                                               status_              = nullptr;
+  QLabel*                                               task_status_         = nullptr;
+  QLineEdit*                                            global_search_       = nullptr;
+  QLineEdit*                                            sidebar_search_      = nullptr;
+  QListWidget*                                          sidebar_list_        = nullptr;
+  QListWidget*                                          list_                = nullptr;
+  QStackedWidget*                                       page_stack_          = nullptr;
   QStackedWidget*                                       browser_state_stack_ = nullptr;
-  QWidget*                                              inspector_host_     = nullptr;
-  SettingsPage*                                         settings_page_      = nullptr;
-  QProgressBar*                                         task_progress_      = nullptr;
-  QPushButton*                                          task_cancel_btn_    = nullptr;
-  FilterDrawer*                                         filter_drawer_      = nullptr;
-  QLabel*                                               toast_              = nullptr;
+  QWidget*                                              inspector_host_      = nullptr;
+  SettingsPage*                                         settings_page_       = nullptr;
+  QProgressBar*                                         task_progress_       = nullptr;
+  QPushButton*                                          task_cancel_btn_     = nullptr;
+  FilterDrawer*                                         filter_drawer_       = nullptr;
+  QLabel*                                               toast_               = nullptr;
 
   std::unordered_map<sl_element_id_t, QListWidgetItem*> items_by_element_{};
 
-  bool                                                  import_inflight_ = false;
+  bool                                                  import_inflight_  = false;
   bool                                                  showing_settings_ = false;
   uint64_t                                              toast_token_      = 0;
   std::shared_ptr<ImportJob>                            current_import_job_{};

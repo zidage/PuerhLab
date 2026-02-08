@@ -32,6 +32,7 @@ struct PipelineGuard {
   sl_element_id_t                      id_;
   bool                                 dirty_  = false;
   bool                                 pinned_ = false;
+  size_t                               pin_count_ = 0;
 };
 
 class PipelineMgmtService final {

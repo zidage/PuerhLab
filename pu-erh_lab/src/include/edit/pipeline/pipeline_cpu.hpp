@@ -32,6 +32,10 @@ class CPUPipelineExecutor : public PipelineExecutor {
   bool                                                                        enable_cache_  = true;
   std::array<PipelineStage, static_cast<int>(PipelineStageName::Stage_Count)> stages_;
 
+  // The executor state (render params, stage cache, decode mode) is mutable and not thread-safe.
+  // Serialize concurrent scheduler tasks that target the same executor instance.
+  std::mutex                                                                  render_lock_;
+
   OperatorParams                                                              global_params_;
 
   bool                                                                        is_thumbnail_ = false;
@@ -63,6 +67,8 @@ class CPUPipelineExecutor : public PipelineExecutor {
   auto GetBackend() -> PipelineBackend override;
 
   void SetForceCPUOutput(bool force) override { force_cpu_output_ = force; }
+
+  auto GetRenderLock() -> std::mutex& { return render_lock_; }
 
   auto GetStage(PipelineStageName stage) -> PipelineStage& override;
   auto Apply(std::shared_ptr<ImageBuffer> input) -> std::shared_ptr<ImageBuffer> override;

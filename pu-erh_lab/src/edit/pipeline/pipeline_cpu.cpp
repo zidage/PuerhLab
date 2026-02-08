@@ -253,7 +253,7 @@ void CPUPipelineExecutor::RegisterAllOperators() {
   // I should keep things more flexible in the future.
 
   auto& basic_adjustment_stage = stages_[static_cast<int>(PipelineStageName::Basic_Adjustment)];
-  basic_adjustment_stage.SetOperator(OperatorType::EXPOSURE, {{"exposure", 1.0f}}, global_params_);
+  basic_adjustment_stage.SetOperator(OperatorType::EXPOSURE, {{"exposure", 2.0f}}, global_params_);
   basic_adjustment_stage.SetOperator(OperatorType::CONTRAST, {}, global_params_);
   basic_adjustment_stage.SetOperator(OperatorType::WHITE, {}, global_params_);
   basic_adjustment_stage.SetOperator(OperatorType::BLACK, {}, global_params_);

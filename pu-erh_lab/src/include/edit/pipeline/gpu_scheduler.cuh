@@ -100,17 +100,27 @@ class GPU_KernelLauncher {
   }
 
   ~GPU_KernelLauncher() {
+    ReleaseResources();
     if (stream_) {
       cudaStreamDestroy(stream_);
       stream_ = nullptr;
     }
-    ReleaseResources();
   }
 
   void SetInputImage(std::shared_ptr<ImageBuffer> input_img) {
     input_img_ = input_img;
-    // input_img_->SyncToGPU();
+    if (!input_img_) {
+      throw std::runtime_error("GPU_KernelLauncher: input image is null.");
+    }
+    if (input_img_ && !input_img_->gpu_data_valid_ && input_img_->cpu_data_valid_) {
+      input_img_->SyncToGPU();
+    }
     cv::cuda::GpuMat gpu_mat = input_img_->GetGPUData();
+    if (gpu_mat.type() != CV_32FC4) {
+      throw std::runtime_error(
+          std::string("GPU_KernelLauncher: expected input type CV_32FC4, got type ") +
+          std::to_string(gpu_mat.type()));
+    }
     
 
     size_t           width       = gpu_mat.cols;
@@ -122,9 +132,23 @@ class GPU_KernelLauncher {
         cudaFree(work_buffer_);
         work_buffer_ = nullptr;
       }
+      if (temp_buffer_) {
+        cudaFree(temp_buffer_);
+        temp_buffer_ = nullptr;
+      }
 
-      cudaMalloc((void**)&work_buffer_, needed_size);
-      cudaMalloc((void**)&temp_buffer_, needed_size);
+      const auto work_alloc_err = cudaMalloc((void**)&work_buffer_, needed_size);
+      if (work_alloc_err != cudaSuccess) {
+        throw std::runtime_error(std::string("cudaMalloc (work_buffer_) failed: ") +
+                                 cudaGetErrorString(work_alloc_err));
+      }
+      const auto temp_alloc_err = cudaMalloc((void**)&temp_buffer_, needed_size);
+      if (temp_alloc_err != cudaSuccess) {
+        cudaFree(work_buffer_);
+        work_buffer_ = nullptr;
+        throw std::runtime_error(std::string("cudaMalloc (temp_buffer_) failed: ") +
+                                 cudaGetErrorString(temp_alloc_err));
+      }
       allocated_size_ = needed_size;
     }
   }
@@ -148,6 +172,11 @@ class GPU_KernelLauncher {
     }
 
     cv::cuda::GpuMat gpu_mat = input_img_->GetGPUData();
+    if (gpu_mat.type() != CV_32FC4) {
+      throw std::runtime_error(
+          std::string("GPU_KernelLauncher: expected execution input type CV_32FC4, got type ") +
+          std::to_string(gpu_mat.type()));
+    }
     size_t           width   = gpu_mat.cols;
     size_t           height  = gpu_mat.rows;
 
@@ -226,12 +255,19 @@ class GPU_KernelLauncher {
       output_img_->InitGPUData(width, height, CV_32FC4);
       cv::cuda::GpuMat output_gpu_mat = output_img_->GetGPUData();
       {
-        const auto out_copy_err = cudaMemcpy2D(
+        const auto out_copy_err = cudaMemcpy2DAsync(
             output_gpu_mat.ptr<float4>(), output_gpu_mat.step, result_ptr, width * sizeof(float4),
-            width * sizeof(float4), height, cudaMemcpyDeviceToDevice);
+            width * sizeof(float4), height, cudaMemcpyDeviceToDevice, stream_);
         if (out_copy_err != cudaSuccess) {
-          throw std::runtime_error(std::string("cudaMemcpy2D (work->output) failed: ") +
+          throw std::runtime_error(std::string("cudaMemcpy2DAsync (work->output) failed: ") +
                                    cudaGetErrorString(out_copy_err));
+        }
+      }
+      {
+        const auto sync_err = cudaStreamSynchronize(stream_);
+        if (sync_err != cudaSuccess) {
+          throw std::runtime_error(std::string("cudaStreamSynchronize (output copy) failed: ") +
+                                   cudaGetErrorString(sync_err));
         }
       }
       output_img_->SetGPUDataValid(true);

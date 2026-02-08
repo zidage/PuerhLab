@@ -375,10 +375,18 @@ class GPUParamsConverter {
     // }
 
     gpu_params.lmt_enabled_        = cpu_params.lmt_enabled_;
-    if (cpu_params.to_lmt_dirty_) {
+    const bool lmt_gpu_lut_missing =
+        (orig_params.lmt_lut_.texture_object_ == 0 || orig_params.lmt_lut_.edge_size_ <= 1);
+    if (cpu_params.lmt_enabled_ && (cpu_params.to_lmt_dirty_ || lmt_gpu_lut_missing)) {
+      if (cpu_params.lmt_lut_path_.empty()) {
+        throw std::runtime_error(
+            "GPUParamsConverter: LMT is enabled but lmt_lut_path_ is empty.");
+      }
       gpu_params.lmt_lut_.Reset();  // Explicitly reset existing LUT
       gpu_params.lmt_lut_      = CreateLUTTextureObject(cpu_params.lmt_lut_path_);
       cpu_params.to_lmt_dirty_ = false;
+    } else if (!cpu_params.lmt_enabled_) {
+      gpu_params.lmt_lut_.Reset();
     } else {
       gpu_params.lmt_lut_ = orig_params.lmt_lut_;
     }

@@ -56,8 +56,16 @@ void ExportService::RunExportRenderTask(const ExportTask& task) {
   auto render_future  = render_promise->get_future();
   // Schedule the render task
   pipeline_scheduler_->ScheduleTask(std::move(render_task));
-  // Wait for the render to complete
-  auto rendered_image = render_future.get();
+
+  std::shared_ptr<ImageBuffer> rendered_image;
+  try {
+    // Wait for the render to complete
+    rendered_image = render_future.get();
+  } catch (...) {
+    pipeline_service_->SavePipeline(pipeline_guard);
+    throw;
+  }
+
   // Save pipeline back to storage
   pipeline_service_->SavePipeline(pipeline_guard);
   // Use ImageWriter to write the image to disk
@@ -68,16 +76,31 @@ void ExportService::RunExportRenderTask(const ExportTask& task) {
 
 void ExportService::ExportAll(
     std::function<void(std::shared_ptr<std::vector<ExportResult>>)> callback) {
-  std::lock_guard<std::mutex> lock(queue_mutex_);
-  auto                        results = std::make_shared<std::vector<ExportResult>>();
+  auto results = std::make_shared<std::vector<ExportResult>>();
+  std::vector<ExportTask> tasks;
 
-  size_t queue_size = export_queue_.size();
-  while (!export_queue_.empty()) {
-    ExportTask task = export_queue_.front();
-    export_queue_.pop_front();
+  {
+    std::lock_guard<std::mutex> lock(queue_mutex_);
+    tasks.reserve(export_queue_.size());
+    while (!export_queue_.empty()) {
+      tasks.push_back(export_queue_.front());
+      export_queue_.pop_front();
+    }
+  }
 
+  const size_t queue_size = tasks.size();
+  if (queue_size == 0) {
+    try {
+      callback(results);
+    } catch (...) {
+    }
+    return;
+  }
+
+  auto completed = std::make_shared<std::atomic_size_t>(0);
+  for (const auto& task : tasks) {
     // Export in thread pool
-    export_thread_pool_.Submit([this, task, results, callback, queue_size]() {
+    export_thread_pool_.Submit([this, task, results, callback, completed, queue_size]() {
       ExportResult result;
       // Do export, this call will block until done
       try {
@@ -86,19 +109,23 @@ void ExportService::ExportAll(
       } catch (const std::exception& e) {
         result.success_ = false;
         result.message_ = e.what();
+      } catch (...) {
+        result.success_ = false;
+        result.message_ = "Unknown export error";
       }
 
       // Store result
       {
         std::lock_guard<std::mutex> res_lock(result_mutex_);
-        results->push_back(result);
+        results->push_back(std::move(result));
       }
 
       // If all done, call the callback
-      {
-        std::lock_guard<std::mutex> res_lock(result_mutex_);
-        if (results->size() == queue_size) {
+      const size_t finished = completed->fetch_add(1, std::memory_order_acq_rel) + 1;
+      if (finished == queue_size) {
+        try {
           callback(results);
+        } catch (...) {
         }
       }
     });

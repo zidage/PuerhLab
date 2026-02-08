@@ -14,8 +14,10 @@
 
 #pragma once
 
+#include <list>
 #include <memory>
 #include <queue>
+#include <vector>
 
 #include "app/sleeve_service.hpp"
 #include "concurrency/thread_pool.hpp"
@@ -48,14 +50,15 @@ class ExportService {
 
   std::shared_ptr<PipelineScheduler> pipeline_scheduler_;
 
-  ThreadPool                         export_thread_pool_{4};
-
   std::list<ExportTask>              export_queue_;
   std::mutex                         queue_mutex_;
 
   // We only use one mutex to protect the result collection
   // So we only support one export session involving multiple exports at a time
   std::mutex                         result_mutex_;
+
+  // Keep this last so worker threads are joined before other members are torn down.
+  ThreadPool                         export_thread_pool_{4};
 
   void RunExportRenderTask(const ExportTask& task);
 
@@ -67,7 +70,7 @@ class ExportService {
       : sleeve_service_(std::move(sleeve_service)),
         image_pool_service_(std::move(image_pool_service)),
         pipeline_service_(std::move(pipeline_service)) {
-    pipeline_scheduler_ = RenderService::GetThumbnailOrExportScheduler(8);
+    pipeline_scheduler_ = RenderService::GetThumbnailOrExportScheduler(1);
   };
 
   ExportService(const ExportService&)            = delete;
