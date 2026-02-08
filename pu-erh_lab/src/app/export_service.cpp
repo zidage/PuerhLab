@@ -76,6 +76,12 @@ void ExportService::RunExportRenderTask(const ExportTask& task) {
 
 void ExportService::ExportAll(
     std::function<void(std::shared_ptr<std::vector<ExportResult>>)> callback) {
+  ExportAll({}, std::move(callback));
+}
+
+void ExportService::ExportAll(
+    std::function<void(const ExportProgress&)>                    progress_callback,
+    std::function<void(std::shared_ptr<std::vector<ExportResult>>)> callback) {
   auto results = std::make_shared<std::vector<ExportResult>>();
   std::vector<ExportTask> tasks;
 
@@ -98,9 +104,12 @@ void ExportService::ExportAll(
   }
 
   auto completed = std::make_shared<std::atomic_size_t>(0);
+  auto succeeded = std::make_shared<std::atomic_size_t>(0);
+  auto failed    = std::make_shared<std::atomic_size_t>(0);
   for (const auto& task : tasks) {
     // Export in thread pool
-    export_thread_pool_.Submit([this, task, results, callback, completed, queue_size]() {
+    export_thread_pool_.Submit([this, task, results, progress_callback, callback, completed,
+                                succeeded, failed, queue_size]() {
       ExportResult result;
       // Do export, this call will block until done
       try {
@@ -114,14 +123,33 @@ void ExportService::ExportAll(
         result.message_ = "Unknown export error";
       }
 
+      const bool export_ok = result.success_;
+
       // Store result
       {
         std::lock_guard<std::mutex> res_lock(result_mutex_);
         results->push_back(std::move(result));
       }
 
+      if (export_ok) {
+        succeeded->fetch_add(1, std::memory_order_acq_rel);
+      } else {
+        failed->fetch_add(1, std::memory_order_acq_rel);
+      }
+
       // If all done, call the callback
       const size_t finished = completed->fetch_add(1, std::memory_order_acq_rel) + 1;
+      if (progress_callback) {
+        try {
+          progress_callback(ExportProgress{
+              .total_     = queue_size,
+              .completed_ = finished,
+              .succeeded_ = succeeded->load(std::memory_order_acquire),
+              .failed_    = failed->load(std::memory_order_acquire),
+          });
+        } catch (...) {
+        }
+      }
       if (finished == queue_size) {
         try {
           callback(results);

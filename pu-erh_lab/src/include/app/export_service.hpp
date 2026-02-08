@@ -14,9 +14,12 @@
 
 #pragma once
 
+#include <functional>
 #include <list>
 #include <memory>
+#include <mutex>
 #include <queue>
+#include <string>
 #include <vector>
 
 #include "app/sleeve_service.hpp"
@@ -40,6 +43,13 @@ struct ExportTask {
 struct ExportResult {
   bool        success_ = false;
   std::string message_;
+};
+
+struct ExportProgress {
+  size_t total_     = 0;
+  size_t completed_ = 0;
+  size_t succeeded_ = 0;
+  size_t failed_    = 0;
 };
 
 class ExportService {
@@ -91,5 +101,7 @@ class ExportService {
   };
 
   void ExportAll(std::function<void(std::shared_ptr<std::vector<ExportResult>>)> callback);
+  void ExportAll(std::function<void(const ExportProgress&)> progress_callback,
+                 std::function<void(std::shared_ptr<std::vector<ExportResult>>)> callback);
 };
 };  // namespace puerhlab

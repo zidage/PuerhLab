@@ -1546,7 +1546,7 @@ class ExportDialog final : public QDialog {
 
     auto* intro = new QLabel(
         "Export selected images using the current edit pipeline. Processing runs in the "
-        "background and updates progress once all tasks complete.",
+        "background and updates progress for each finished image.",
         this);
     intro->setWordWrap(true);
     intro->setObjectName("MetaText");
@@ -1780,50 +1780,108 @@ class ExportDialog final : public QDialog {
                          .arg(skipped_count);
     }
     SetBusy(true, busy_message);
-    progress_->setRange(0, 0);
+    progress_->setRange(0, static_cast<int>(std::max<size_t>(queued_count, 1)));
+    progress_->setValue(0);
 
     QPointer<ExportDialog> self(this);
-    export_service_->ExportAll([self](std::shared_ptr<std::vector<ExportResult>> results) {
-      if (!self) {
-        return;
-      }
-      QMetaObject::invokeMethod(
-          self,
-          [self, results]() {
-            if (!self) {
-              return;
-            }
-            self->SetBusy(false, "Export complete.");
-            self->progress_->setRange(0, 100);
-            self->progress_->setValue(100);
-            int         ok   = 0;
-            int         fail = 0;
-            QStringList errors;
-            if (results) {
-              for (const auto& r : *results) {
-                if (r.success_) {
-                  ok++;
-                } else {
-                  fail++;
-                  if (!r.message_.empty()) {
-                    errors << QString::fromUtf8(r.message_.c_str());
+    export_service_->ExportAll(
+        [self](const ExportProgress& progress) {
+          if (!self) {
+            return;
+          }
+          QMetaObject::invokeMethod(
+              self,
+              [self, progress]() {
+                if (!self) {
+                  return;
+                }
+                bool is_stale = false;
+                if (self->progress_) {
+                  const int range_max = static_cast<int>(std::max<size_t>(progress.total_, 1));
+                  const int completed =
+                      static_cast<int>(std::min(progress.completed_, progress.total_));
+                  self->progress_->setRange(
+                      0, range_max);
+                  is_stale = completed < self->progress_->value();
+                  if (!is_stale) {
+                    self->progress_->setValue(completed);
                   }
                 }
-              }
-            }
+                if (is_stale) {
+                  return;
+                }
+                if (self->status_) {
+                  self->status_->setText(
+                      QString("Exporting... processed %1/%2, written %3, failed %4.")
+                          .arg(static_cast<qulonglong>(progress.completed_))
+                          .arg(static_cast<qulonglong>(progress.total_))
+                          .arg(static_cast<qulonglong>(progress.succeeded_))
+                          .arg(static_cast<qulonglong>(progress.failed_)));
+                }
+              },
+              Qt::QueuedConnection);
+        },
+        [self, skipped_count](std::shared_ptr<std::vector<ExportResult>> results) {
+          if (!self) {
+            return;
+          }
+          QMetaObject::invokeMethod(
+              self,
+              [self, results, skipped_count]() {
+                if (!self) {
+                  return;
+                }
+                self->SetBusy(false, "Export complete.");
+                self->progress_->setRange(0, 100);
+                self->progress_->setValue(100);
+                int         ok   = 0;
+                int         fail = 0;
+                QStringList errors;
+                if (results) {
+                  for (const auto& r : *results) {
+                    if (r.success_) {
+                      ok++;
+                    } else {
+                      fail++;
+                      if (!r.message_.empty()) {
+                        errors << QString::fromUtf8(r.message_.c_str());
+                      }
+                    }
+                  }
+                }
 
-            if (fail == 0) {
-              QMessageBox::information(self, "Export", QString("Done: %1 file(s)").arg(ok));
-            } else {
-              QMessageBox::warning(
-                  self, "Export",
-                  QString("Done: %1 ok, %2 failed\n\n%3").arg(ok).arg(fail).arg(errors.join("\n")));
-            }
+                const int total = ok + fail;
+                if (self->status_) {
+                  self->status_->setText(
+                      QString("Export complete. Written %1/%2 image(s), failed %3.")
+                          .arg(ok)
+                          .arg(total)
+                          .arg(fail));
+                }
 
-            self->accept();
-          },
-          Qt::QueuedConnection);
-    });
+                if (fail == 0) {
+                  QString info = QString("Done: %1 file(s)").arg(ok);
+                  if (skipped_count > 0) {
+                    info += QString("\nSkipped %1 invalid item(s) before export.")
+                                .arg(skipped_count);
+                  }
+                  QMessageBox::information(self, "Export", info);
+                } else {
+                  QString warning =
+                      QString("Done: %1 ok, %2 failed").arg(ok).arg(fail);
+                  if (skipped_count > 0) {
+                    warning += QString(", %1 skipped").arg(skipped_count);
+                  }
+                  if (!errors.isEmpty()) {
+                    warning += QString("\n\n%1").arg(errors.join("\n"));
+                  }
+                  QMessageBox::warning(self, "Export", warning);
+                }
+
+                self->accept();
+              },
+              Qt::QueuedConnection);
+        });
   }
 
   void SetBusy(bool busy, const QString& message) {
