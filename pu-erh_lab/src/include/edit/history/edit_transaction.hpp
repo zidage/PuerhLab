@@ -57,7 +57,7 @@ class EditTransaction {
     auto params_str = operator_params_.dump();
   }
 
- EditTransaction(const nlohmann::json& j) { FromJSON(j); }
+  EditTransaction(const nlohmann::json& j) { FromJSON(j); }
 
   auto SetTransactionID(tx_id_t id) { tx_id_ = id; }
 
@@ -66,7 +66,7 @@ class EditTransaction {
   auto GetTransactionType() const -> TransactionType { return type_; }
   auto GetOperatorParams() const -> const nlohmann::json& { return operator_params_; }
 
-  auto ApplyTransaction(PipelineExecutor& pipeline) -> bool;
+  auto ApplyTransaction(PipelineExecutor& pipeline) const -> bool;
 
   auto ToJSON() const -> nlohmann::json;
   void FromJSON(const nlohmann::json& j);
@@ -80,6 +80,20 @@ class EditTransaction {
   }
 
   auto UndoTransaction() const -> EditTransaction {
+    switch (type_) {
+      case TransactionType::_ADD: {
+        EditTransaction undo_tx(TransactionType::_DELETE, operator_type_, stage_name_,
+                                nlohmann::json::object());
+        if (last_operator_params_.has_value()) {
+          undo_tx.SetLastOperatorParams(*last_operator_params_);
+        }
+        return undo_tx;
+      }
+      case TransactionType::_DELETE:
+      case TransactionType::_EDIT:
+        return EditTransaction(TransactionType::_EDIT, operator_type_, stage_name_,
+                               last_operator_params_.value_or(nlohmann::json::object()));
+    }
     return EditTransaction(TransactionType::_EDIT, operator_type_, stage_name_,
                            last_operator_params_.value_or(nlohmann::json::object()));
   }

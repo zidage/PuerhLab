@@ -49,8 +49,6 @@ void PipelineTask::SetExecutorRenderParams() {
   if (desc.render_type_ == RenderType::FULL_RES_PREVIEW) {
     pipeline_executor_->SetRenderRes(true);
     pipeline_executor_->SetForceCPUOutput(false);
-    // pipeline_executor_->SetEnableCache(true);
-    // pipeline_executor_->SetDecodeRes(DecodeRes::FULL);
     return;
   }
   if (desc.render_type_ == RenderType::FULL_RES_EXPORT) {
@@ -68,18 +66,18 @@ void PipelineTask::ResetPreviewRenderParams() {
   if (!pipeline_executor_) {
     return;
   }
-  // A simple status machine to automatically set back to fast preview mode
+  // Transition back to fast-preview baseline state.
   pipeline_executor_->SetRenderRes(false, 4096);
   pipeline_executor_->SetForceCPUOutput(false);
-  // pipeline_executor_->SetEnableCache(true);
-  // pipeline_executor_->SetDecodeRes(DecodeRes::FULL);
+  pipeline_executor_->SetEnableCache(true);
+  pipeline_executor_->SetDecodeRes(DecodeRes::FULL);
 }
 
 void PipelineTask::ResetThumbnailRenderParams() {
   if (!pipeline_executor_) {
     return;
   }
-  // To make sure thumbnail mode is idempotent
+  // Transition to full-res preview baseline state.
   pipeline_executor_->SetRenderRes(true, 4096);
   pipeline_executor_->SetForceCPUOutput(false);
   pipeline_executor_->SetEnableCache(true);
@@ -113,6 +111,20 @@ void PipelineScheduler::ScheduleTask(PipelineTask&& task) {
       }
     };
 
+    const auto apply_state_transition_after_render = [&task]() {
+      const auto render_type = task.options_.render_desc_.render_type_;
+      if (render_type == RenderType::THUMBNAIL) {
+        // THUMBNAIL -> FULL_RES_PREVIEW baseline
+        task.ResetThumbnailRenderParams();
+        return;
+      }
+      if (render_type == RenderType::FULL_RES_PREVIEW ||
+          render_type == RenderType::FULL_RES_EXPORT) {
+        // FULL_RES_PREVIEW/FULL_RES_EXPORT -> FAST_PREVIEW baseline
+        task.ResetPreviewRenderParams();
+      }
+    };
+
     try {
       std::shared_ptr<ImageBuffer> result_copy;
       {
@@ -138,29 +150,12 @@ void PipelineScheduler::ScheduleTask(PipelineTask&& task) {
               render_desc.render_type_ == RenderType::FULL_RES_PREVIEW || !result ||
               !result->gpu_data_valid_ || result->GetCPUData().empty()) {
             set_blocking_value(result);
-
-            if (render_desc.render_type_ == RenderType::FULL_RES_PREVIEW) {
-              // Reset to fast preview mode after full res preview
-              task.ResetPreviewRenderParams();
-            }
-
-            if (render_desc.render_type_ == RenderType::THUMBNAIL) {
-              // Reset to FULL_RES_PREVIEW mode after thumbnail render
-              task.ResetThumbnailRenderParams();
-              // task.pipeline_executor_->ClearAllIntermediateBuffers();
-            }
-
-            if (render_desc.render_type_ == RenderType::FULL_RES_EXPORT) {
-              // Reset to fast preview mode after full res export so the next
-              // FAST_PREVIEW task (which skips SetExecutorRenderParams) does not
-              // inherit export-mode flags (force_cpu_output, disabled cache, full res).
-              task.ResetPreviewRenderParams();
-              task.pipeline_executor_->SetEnableCache(true);
-            }
+            apply_state_transition_after_render();
             return;
           }
 
           result_copy = std::make_shared<ImageBuffer>(result->GetCPUData());
+          apply_state_transition_after_render();
         }
       }
 
@@ -172,24 +167,6 @@ void PipelineScheduler::ScheduleTask(PipelineTask&& task) {
           (*task.seq_callback_)(*result_copy, task.task_id_);
         }
         set_blocking_value(result_copy);
-
-        // Cleanup after callback completes
-        auto& render_desc = task.options_.render_desc_;
-        if (render_desc.render_type_ == RenderType::THUMBNAIL ||
-            render_desc.render_type_ == RenderType::FULL_RES_EXPORT) {
-          if (render_desc.render_type_ == RenderType::THUMBNAIL) {
-            // Reset to fast preview mode after thumbnail render
-            task.ResetPreviewRenderParams();
-          }
-          if (render_desc.render_type_ == RenderType::FULL_RES_EXPORT) {
-            // Reset to fast preview mode after full res export
-            task.ResetPreviewRenderParams();
-          }
-          // Release all intermediate buffers to free memory
-          // if (render_desc.render_type_ == RenderType::FULL_RES_EXPORT) {
-          //   task.pipeline_executor_->ReleaseAllGPUResources();
-          // }
-        }
       } else {
         // In case of failure, set nullptr
         set_blocking_value(nullptr);

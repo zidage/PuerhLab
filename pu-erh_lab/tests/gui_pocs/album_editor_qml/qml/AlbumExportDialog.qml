@@ -21,6 +21,11 @@ Dialog {
     property var exportPreviewRows: []
     property bool exportTriggered: false
 
+    Overlay.modal: Rectangle {
+        color: "#1E1D22"
+        opacity: 0.88
+    }
+
     signal addSelectedToQueueRequested()
     signal clearQueueRequested()
     signal ensurePreviewRequested()
@@ -52,8 +57,8 @@ Dialog {
 
     background: Rectangle {
         radius: 16
-        color: "#16151A"
-        border.color: "#38373C"
+        color: "#1E1D22"
+        border.color: "#4D4C51"
         layer.enabled: true
     }
 
@@ -345,13 +350,14 @@ Dialog {
                                 width: ListView.view.width
                                 height: 22
                                 radius: 4
-                                color: index % 2 === 0 ? "transparent" : "#ffffff08"
+                                color: index % 2 === 0 ? "#16151A" : "#1E1D22"
+                                border.color: "#38373C"
                                 Label {
                                     anchors.fill: parent
                                     anchors.leftMargin: 6
                                     verticalAlignment: Text.AlignVCenter
                                     text: modelData.label
-                                    color: "#A1AC9B"
+                                    color: "#E3DFDB"
                                     elide: Text.ElideRight
                                     font.pixelSize: 11
                                 }

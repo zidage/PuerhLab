@@ -19,6 +19,7 @@
 #include <ctime>
 #include <list>
 #include <memory>
+#include <optional>
 #include <unordered_map>
 #include <vector>
 
@@ -61,6 +62,7 @@ class Version {
   std::unordered_map<tx_id_t, TxPos> tx_id_map_;
 
   std::shared_ptr<PipelineExecutor>  base_pipeline_executor_;
+  std::optional<nlohmann::json>      final_pipeline_params_ = std::nullopt;
 
  public:
   Version();
@@ -85,6 +87,11 @@ class Version {
 
   void SetBasePipelineExecutor(std::shared_ptr<PipelineExecutor> pipeline_executor) {
     base_pipeline_executor_ = pipeline_executor;
+  }
+
+  void SetFinalPipelineParams(const nlohmann::json& params) { final_pipeline_params_ = params; }
+  auto GetFinalPipelineParams() const -> std::optional<nlohmann::json> {
+    return final_pipeline_params_;
   }
 
   void AppendEditTransaction(EditTransaction&& edit_transaction);

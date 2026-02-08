@@ -265,7 +265,7 @@ void CPUPipelineExecutor::RegisterAllOperators() {
   color_adjustment_stage.SetOperator(
       OperatorType::TINT,
       {}, global_params_);  // TODO: This thing should be in the raw decoding part. Future fix needed.
-  color_adjustment_stage.SetOperator(OperatorType::SATURATION, {}, global_params_);
+  color_adjustment_stage.SetOperator(OperatorType::SATURATION, {{"saturation", 30.0f}}, global_params_);
   color_adjustment_stage.SetOperator(OperatorType::VIBRANCE, {}, global_params_);
   color_adjustment_stage.SetOperator(OperatorType::HLS, {}, global_params_);
   color_adjustment_stage.SetOperator(OperatorType::COLOR_WHEEL, {}, global_params_);

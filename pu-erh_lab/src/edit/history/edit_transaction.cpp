@@ -60,6 +60,18 @@ static std::string JsonScalarToString(const nlohmann::json& v) {
   }
   return v.dump();
 }
+
+static bool IsLutPathEmpty(const nlohmann::json& params) {
+  if (!params.is_object() || !params.contains("ocio_lmt")) {
+    return true;
+  }
+  try {
+    const auto path = params["ocio_lmt"].get<std::string>();
+    return path.empty();
+  } catch (...) {
+    return true;
+  }
+}
 }  // namespace
 
 auto EditTransaction::TransactionTypeToString(TransactionType type) -> const char* {
@@ -210,18 +222,24 @@ auto EditTransaction::Describe(bool include_params, std::size_t max_params_chars
   return oss.str();
 }
 
-auto EditTransaction::ApplyTransaction(PipelineExecutor& pipeline) -> bool {
+auto EditTransaction::ApplyTransaction(PipelineExecutor& pipeline) const -> bool {
   auto& stage = pipeline.GetStage(stage_name_);
   auto& global_params = pipeline.GetGlobalParams();
   switch (type_) {
     case TransactionType::_ADD:
       stage.SetOperator(operator_type_, operator_params_, global_params);
+      stage.EnableOperator(operator_type_, true, global_params);
       return true;
     case TransactionType::_DELETE:
-      stage.EnableOperator(operator_type_, false);
+      stage.EnableOperator(operator_type_, false, global_params);
       return true;
     case TransactionType::_EDIT:
       stage.SetOperator(operator_type_, operator_params_, global_params);
+      if (operator_type_ == OperatorType::LMT && IsLutPathEmpty(operator_params_)) {
+        stage.EnableOperator(operator_type_, false, global_params);
+      } else {
+        stage.EnableOperator(operator_type_, true, global_params);
+      }
       return true;
   }
   return false;

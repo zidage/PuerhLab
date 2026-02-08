@@ -161,6 +161,9 @@ auto Version::ToJSON() const -> nlohmann::json {
   j["edit_transactions"]  = nlohmann::json::array();
 
   j["tx_id_start"]        = tx_id_generator_.GetCurrentID();
+  if (final_pipeline_params_.has_value()) {
+    j["final_pipeline_params"] = *final_pipeline_params_;
+  }
   for (const auto& tx : edit_transactions_) {
     j["edit_transactions"].push_back(tx.ToJSON());
   }
@@ -201,6 +204,12 @@ void Version::FromJSON(const nlohmann::json& j) {
     EditTransaction tx(tx_j);
     edit_transactions_.push_back(std::move(tx));
     tx_id_map_[edit_transactions_.back().GetTransactionID()] = std::prev(edit_transactions_.end());
+  }
+
+  if (j.contains("final_pipeline_params")) {
+    final_pipeline_params_ = j.at("final_pipeline_params");
+  } else {
+    final_pipeline_params_ = std::nullopt;
   }
 }
 }  // namespace puerhlab

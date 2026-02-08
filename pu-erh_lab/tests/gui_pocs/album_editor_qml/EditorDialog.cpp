@@ -36,6 +36,7 @@
 #include "app/render_service.hpp"
 #include "edit/history/edit_transaction.hpp"
 #include "edit/history/version.hpp"
+#include "edit/pipeline/pipeline_cpu.hpp"
 #include "image/image.hpp"
 #include "io/image/image_loader.hpp"
 #include "renderer/pipeline_task.hpp"
@@ -477,7 +478,12 @@ class EditorDialog final : public QDialog {
 
       QObject::connect(
           combo, QOverload<int>::of(&QComboBox::currentIndexChanged), controls_,
-          [onChange = std::forward<decltype(onChange)>(onChange)](int idx) { onChange(idx); });
+          [this, onChange = std::forward<decltype(onChange)>(onChange)](int idx) {
+            if (syncing_controls_) {
+              return;
+            }
+            onChange(idx);
+          });
 
       auto* row       = new QWidget(controls_);
       auto* rowLayout = new QHBoxLayout(row);
@@ -509,14 +515,23 @@ class EditorDialog final : public QDialog {
 
       QObject::connect(
           slider, &QSlider::valueChanged, controls_,
-          [info, name, formatter, onChange = std::forward<decltype(onChange)>(onChange)](int v) {
+          [this, info, name, formatter, onChange = std::forward<decltype(onChange)>(onChange)](
+              int v) {
             info->setText(QString("%1: %2").arg(name).arg(formatter(v)));
+            if (syncing_controls_) {
+              return;
+            }
             onChange(v);
           });
 
       QObject::connect(
           slider, &QSlider::sliderReleased, controls_,
-          [onRelease = std::forward<decltype(onRelease)>(onRelease)]() { onRelease(); });
+          [this, onRelease = std::forward<decltype(onRelease)>(onRelease)]() {
+            if (syncing_controls_) {
+              return;
+            }
+            onRelease();
+          });
 
       auto* row       = new QWidget(controls_);
       auto* rowLayout = new QHBoxLayout(row);
@@ -650,6 +665,23 @@ class EditorDialog final : public QDialog {
           "  font-size: 12px;"
           "}");
 
+      undo_tx_btn_ = new QPushButton("Undo", row);
+      undo_tx_btn_->setFixedHeight(32);
+      undo_tx_btn_->setStyleSheet(
+          "QPushButton {"
+          "  background: #2B2F33;"
+          "  border: 1px solid #303134;"
+          "  border-radius: 8px;"
+          "  padding: 6px 10px;"
+          "}"
+          "QPushButton:hover {"
+          "  background: #34383C;"
+          "}"
+          "QPushButton:disabled {"
+          "  color: #6B7075;"
+          "  background: #1E1E1E;"
+          "}");
+
       commit_version_btn_ = new QPushButton("Commit Version", row);
       commit_version_btn_->setFixedHeight(32);
       commit_version_btn_->setStyleSheet(
@@ -668,9 +700,12 @@ class EditorDialog final : public QDialog {
           "}");
 
       rowLayout->addWidget(version_status_, /*stretch*/ 1);
+      rowLayout->addWidget(undo_tx_btn_, /*stretch*/ 0);
       rowLayout->addWidget(commit_version_btn_, /*stretch*/ 0);
       controls_layout->insertWidget(controls_layout->count() - 1, row);
 
+      QObject::connect(undo_tx_btn_, &QPushButton::clicked, this,
+                       [this]() { UndoLastTransaction(); });
       QObject::connect(commit_version_btn_, &QPushButton::clicked, this,
                        [this]() { CommitWorkingVersion(); });
     }
@@ -774,6 +809,8 @@ class EditorDialog final : public QDialog {
 
       QObject::connect(version_log_, &QListWidget::itemSelectionChanged, this,
                        [this]() { RefreshVersionLogSelectionStyles(); });
+      QObject::connect(version_log_, &QListWidget::itemClicked, this,
+                       [this](QListWidgetItem* item) { CheckoutSelectedVersion(item); });
 
       auto* tx_label = new QLabel("Uncommitted transactions (stack)", frame);
       tx_label->setStyleSheet(
@@ -837,9 +874,9 @@ class EditorDialog final : public QDialog {
   };
 
   struct AdjustmentState {
-    float       exposure_   = 1.0f;
-    float       contrast_   = 1.0f;
-    float       saturation_ = 0.0f;
+    float       exposure_   = 2.0f;
+    float       contrast_   = 0.0f;
+    float       saturation_ = 30.0f;
     float       tint_       = 0.0f;
     float       blacks_     = 0.0f;
     float       whites_     = 0.0f;
@@ -870,6 +907,248 @@ class EditorDialog final : public QDialog {
         card->SetSelected(item->isSelected());
       }
     }
+  }
+
+  void TriggerQualityPreviewRender() {
+    state_.type_ = RenderType::FULL_RES_PREVIEW;
+    RequestRender();
+    state_.type_ = RenderType::FAST_PREVIEW;
+  }
+
+  void TriggerQualityPreviewRenderFromPipeline() {
+    state_.type_ = RenderType::FULL_RES_PREVIEW;
+    RequestRenderWithoutApplyingState();
+    state_.type_ = RenderType::FAST_PREVIEW;
+  }
+
+  void SyncControlsFromState() {
+    if (!controls_) {
+      return;
+    }
+
+    syncing_controls_ = true;
+
+    if (lut_combo_) {
+      int lut_index = 0;
+      if (!state_.lut_path_.empty()) {
+        auto it = std::find(lut_paths_.begin(), lut_paths_.end(), state_.lut_path_);
+        if (it == lut_paths_.end()) {
+          lut_paths_.push_back(state_.lut_path_);
+          lut_names_.push_back(
+              QString::fromStdString(std::filesystem::path(state_.lut_path_).filename().string()));
+          lut_combo_->addItem(lut_names_.back());
+          lut_index = static_cast<int>(lut_paths_.size() - 1);
+        } else {
+          lut_index = static_cast<int>(std::distance(lut_paths_.begin(), it));
+        }
+      }
+      lut_combo_->setCurrentIndex(lut_index);
+    }
+
+    if (exposure_slider_) {
+      exposure_slider_->setValue(static_cast<int>(std::lround(state_.exposure_ * 100.0f)));
+    }
+    if (contrast_slider_) {
+      contrast_slider_->setValue(static_cast<int>(std::lround(state_.contrast_)));
+    }
+    if (saturation_slider_) {
+      saturation_slider_->setValue(static_cast<int>(std::lround(state_.saturation_)));
+    }
+    if (tint_slider_) {
+      tint_slider_->setValue(static_cast<int>(std::lround(state_.tint_)));
+    }
+    if (blacks_slider_) {
+      blacks_slider_->setValue(static_cast<int>(std::lround(state_.blacks_)));
+    }
+    if (whites_slider_) {
+      whites_slider_->setValue(static_cast<int>(std::lround(state_.whites_)));
+    }
+    if (shadows_slider_) {
+      shadows_slider_->setValue(static_cast<int>(std::lround(state_.shadows_)));
+    }
+    if (highlights_slider_) {
+      highlights_slider_->setValue(static_cast<int>(std::lround(state_.highlights_)));
+    }
+    if (sharpen_slider_) {
+      sharpen_slider_->setValue(static_cast<int>(std::lround(state_.sharpen_)));
+    }
+    if (clarity_slider_) {
+      clarity_slider_->setValue(static_cast<int>(std::lround(state_.clarity_)));
+    }
+
+    syncing_controls_ = false;
+  }
+
+  auto ExportPipelineParamsForVersion(Version& version) -> std::optional<nlohmann::json> {
+    if (const auto snapshot = version.GetFinalPipelineParams(); snapshot.has_value()) {
+      return snapshot;
+    }
+
+    if (!history_guard_ || !history_guard_->history_) {
+      return std::nullopt;
+    }
+
+    std::vector<Version*> lineage;
+    lineage.push_back(&version);
+    while (lineage.back()->HasParentVersion()) {
+      try {
+        lineage.push_back(
+            &history_guard_->history_->GetVersion(lineage.back()->GetParentVersionID()));
+      } catch (...) {
+        return std::nullopt;
+      }
+    }
+    std::reverse(lineage.begin(), lineage.end());
+
+    auto replay_exec = std::make_shared<CPUPipelineExecutor>();
+
+    size_t replay_from = 0;
+    for (size_t i = lineage.size(); i > 0; --i) {
+      if (const auto snapshot = lineage[i - 1]->GetFinalPipelineParams(); snapshot.has_value()) {
+        replay_exec->ImportPipelineParams(*snapshot);
+        replay_exec->SetExecutionStages();
+        replay_from = i;
+        break;
+      }
+    }
+
+    for (size_t i = replay_from; i < lineage.size(); ++i) {
+      const auto& txs = lineage[i]->GetAllEditTransactions();
+      for (auto it = txs.rbegin(); it != txs.rend(); ++it) {
+        (void)it->ApplyTransaction(*replay_exec);
+      }
+    }
+    return replay_exec->ExportPipelineParams();
+  }
+
+  auto ApplyPipelineParamsToEditor(const nlohmann::json& params) -> bool {
+    if (!pipeline_guard_ || !pipeline_guard_->pipeline_) {
+      return false;
+    }
+
+    auto exec = pipeline_guard_->pipeline_;
+    exec->ImportPipelineParams(params);
+    exec->SetExecutionStages(viewer_);
+    pipeline_guard_->dirty_ = true;
+    last_applied_lut_path_.clear();
+
+    if (!LoadStateFromPipelineIfPresent()) {
+      state_ = AdjustmentState{};
+    }
+    committed_state_ = state_;
+    SyncControlsFromState();
+    TriggerQualityPreviewRenderFromPipeline();
+    return true;
+  }
+
+  void CheckoutSelectedVersion(QListWidgetItem* item) {
+    if (!item || !history_guard_ || !history_guard_->history_) {
+      return;
+    }
+
+    const auto version_id_str = item->data(Qt::UserRole).toString().toStdString();
+    if (version_id_str.empty()) {
+      return;
+    }
+
+    Hash128 version_id{};
+    try {
+      version_id = Hash128::FromString(version_id_str);
+    } catch (const std::exception& e) {
+      QMessageBox::warning(this, "History", QString("Invalid version ID: %1").arg(e.what()));
+      return;
+    }
+
+    Version* selected_version = nullptr;
+    try {
+      selected_version = &history_guard_->history_->GetVersion(version_id);
+    } catch (const std::exception& e) {
+      QMessageBox::warning(this, "History",
+                           QString("Failed to load selected version: %1").arg(e.what()));
+      return;
+    }
+
+    const auto selected_params = ExportPipelineParamsForVersion(*selected_version);
+    if (!selected_params.has_value()) {
+      QMessageBox::warning(this, "History",
+                           "Could not reconstruct pipeline params for the selected version.");
+      return;
+    }
+
+    if (!ApplyPipelineParamsToEditor(*selected_params)) {
+      QMessageBox::warning(this, "History", "Failed to apply selected version to the editor.");
+      return;
+    }
+
+    if (CurrentWorkingMode() == WorkingMode::Plain) {
+      working_version_ = Version(element_id_);
+    } else {
+      working_version_ = Version(element_id_, version_id);
+    }
+    working_version_.SetBasePipelineExecutor(pipeline_guard_->pipeline_);
+    UpdateVersionUi();
+  }
+
+  void UndoLastTransaction() {
+    if (!pipeline_guard_ || !pipeline_guard_->pipeline_) {
+      return;
+    }
+
+    if (working_version_.GetAllEditTransactions().empty()) {
+      QMessageBox::information(this, "History", "No transaction to undo.");
+      return;
+    }
+
+    EditTransaction last_tx{TransactionType::_EDIT, OperatorType::UNKNOWN,
+                            PipelineStageName::Basic_Adjustment, nlohmann::json::object()};
+    try {
+      last_tx = working_version_.RemoveLastEditTransaction();
+    } catch (const std::exception& e) {
+      QMessageBox::warning(this, "History", QString("Undo failed: %1").arg(e.what()));
+      return;
+    }
+
+    auto exec = pipeline_guard_->pipeline_;
+
+    // Requirement (1): issue a delete transaction for the latest edit.
+    EditTransaction undo_delete_tx(TransactionType::_DELETE, last_tx.GetTxOperatorType(),
+                                   last_tx.GetTxOpStageName(), nlohmann::json::object());
+    if (const auto prev = last_tx.GetLastOperatorParams(); prev.has_value()) {
+      undo_delete_tx.SetLastOperatorParams(*prev);
+    }
+    (void)undo_delete_tx.ApplyTransaction(*exec);
+
+    // Re-apply the latest previous transaction for the same operator if it exists.
+    // This keeps undo fully in transaction space without resetting the whole pipeline.
+    bool restored_from_stack = false;
+    for (const auto& tx : working_version_.GetAllEditTransactions()) {
+      if (tx.GetTxOpStageName() == last_tx.GetTxOpStageName() &&
+          tx.GetTxOperatorType() == last_tx.GetTxOperatorType()) {
+        (void)tx.ApplyTransaction(*exec);
+        restored_from_stack = true;
+        break;
+      }
+    }
+
+    // No same-operator tx left in the working stack: restore from the popped tx's last params.
+    if (!restored_from_stack) {
+      if (const auto prev = last_tx.GetLastOperatorParams();
+          prev.has_value() && prev->is_object() && !prev->empty()) {
+        EditTransaction restore_tx(TransactionType::_EDIT, last_tx.GetTxOperatorType(),
+                                   last_tx.GetTxOpStageName(), *prev);
+        (void)restore_tx.ApplyTransaction(*exec);
+      }
+    }
+
+    pipeline_guard_->dirty_ = true;
+    if (!LoadStateFromPipelineIfPresent()) {
+      QMessageBox::warning(this, "History", "Undo failed while reloading pipeline state.");
+      return;
+    }
+    committed_state_ = state_;
+    SyncControlsFromState();
+    TriggerQualityPreviewRenderFromPipeline();
+    UpdateVersionUi();
   }
 
   void UpdateVersionUi() {
@@ -904,6 +1183,9 @@ class EditorDialog final : public QDialog {
 
     version_status_->setText(label);
     commit_version_btn_->setEnabled(tx_count > 0);
+    if (undo_tx_btn_) {
+      undo_tx_btn_->setEnabled(tx_count > 0);
+    }
 
     if (tx_stack_) {
       tx_stack_->clear();
@@ -1121,6 +1403,9 @@ class EditorDialog final : public QDialog {
 
     history_id_t committed_id{};
     try {
+      if (pipeline_guard_ && pipeline_guard_->pipeline_) {
+        working_version_.SetFinalPipelineParams(pipeline_guard_->pipeline_->ExportPipelineParams());
+      }
       committed_id = history_service_->CommitVersion(history_guard_, std::move(working_version_));
     } catch (const std::exception& e) {
       QMessageBox::warning(this, "History", QString("Commit failed: %1").arg(e.what()));
@@ -1261,9 +1546,7 @@ class EditorDialog final : public QDialog {
   void CommitAdjustment(AdjustmentField field) {
     if (!FieldChanged(field) || !pipeline_guard_ || !pipeline_guard_->pipeline_) {
       // Still fulfill the "full res on release/change" behavior.
-      state_.type_ = RenderType::FULL_RES_PREVIEW;
-      RequestRender();
-      state_.type_ = RenderType::FAST_PREVIEW;
+      TriggerQualityPreviewRenderFromPipeline();
       return;
     }
 
@@ -1287,9 +1570,7 @@ class EditorDialog final : public QDialog {
     committed_state_        = state_;
     UpdateVersionUi();
 
-    state_.type_ = RenderType::FULL_RES_PREVIEW;
-    RequestRender();
-    state_.type_ = RenderType::FAST_PREVIEW;
+    TriggerQualityPreviewRenderFromPipeline();
   }
 
   bool LoadStateFromPipelineIfPresent() {
@@ -1298,6 +1579,9 @@ class EditorDialog final : public QDialog {
       return false;
     }
 
+    AdjustmentState loaded_state{};
+    loaded_state.type_ = state_.type_;
+
     auto ReadFloat = [](const PipelineStage& stage, OperatorType type,
                         const char* key) -> std::optional<float> {
       const auto op = stage.GetOperator(type);
@@ -1305,6 +1589,9 @@ class EditorDialog final : public QDialog {
         return std::nullopt;
       }
       const auto j = op.value()->ExportOperatorParams();
+      if (j.contains("enable") && !j["enable"].get<bool>()) {
+        return std::nullopt;
+      }
       if (!j.contains("params")) {
         return std::nullopt;
       }
@@ -1326,6 +1613,9 @@ class EditorDialog final : public QDialog {
         return std::nullopt;
       }
       const auto j = op.value()->ExportOperatorParams();
+      if (j.contains("enable") && !j["enable"].get<bool>()) {
+        return std::nullopt;
+      }
       if (!j.contains("params")) {
         return std::nullopt;
       }
@@ -1351,6 +1641,9 @@ class EditorDialog final : public QDialog {
         return std::nullopt;
       }
       const auto j = op.value()->ExportOperatorParams();
+      if (j.contains("enable") && !j["enable"].get<bool>()) {
+        return std::nullopt;
+      }
       if (!j.contains("params")) {
         return std::nullopt;
       }
@@ -1375,48 +1668,49 @@ class EditorDialog final : public QDialog {
     }
 
     if (const auto v = ReadFloat(basic, OperatorType::EXPOSURE, "exposure"); v.has_value()) {
-      state_.exposure_ = v.value();
+      loaded_state.exposure_ = v.value();
     }
     if (const auto v = ReadFloat(basic, OperatorType::CONTRAST, "contrast"); v.has_value()) {
-      state_.contrast_ = v.value();
+      loaded_state.contrast_ = v.value();
     }
     if (const auto v = ReadFloat(basic, OperatorType::BLACK, "black"); v.has_value()) {
-      state_.blacks_ = v.value();
+      loaded_state.blacks_ = v.value();
     }
     if (const auto v = ReadFloat(basic, OperatorType::WHITE, "white"); v.has_value()) {
-      state_.whites_ = v.value();
+      loaded_state.whites_ = v.value();
     }
     if (const auto v = ReadFloat(basic, OperatorType::SHADOWS, "shadows"); v.has_value()) {
-      state_.shadows_ = v.value();
+      loaded_state.shadows_ = v.value();
     }
     if (const auto v = ReadFloat(basic, OperatorType::HIGHLIGHTS, "highlights"); v.has_value()) {
-      state_.highlights_ = v.value();
+      loaded_state.highlights_ = v.value();
     }
 
     if (const auto v = ReadFloat(color, OperatorType::SATURATION, "saturation"); v.has_value()) {
-      state_.saturation_ = v.value();
+      loaded_state.saturation_ = v.value();
     }
     if (const auto v = ReadFloat(color, OperatorType::TINT, "tint"); v.has_value()) {
-      state_.tint_ = v.value();
+      loaded_state.tint_ = v.value();
     }
 
     if (const auto v = ReadNestedFloat(detail, OperatorType::SHARPEN, "sharpen", "offset");
         v.has_value()) {
-      state_.sharpen_ = v.value();
+      loaded_state.sharpen_ = v.value();
     }
     if (const auto v = ReadFloat(detail, OperatorType::CLARITY, "clarity"); v.has_value()) {
-      state_.clarity_ = v.value();
+      loaded_state.clarity_ = v.value();
     }
 
     // LUT (LMT): if a path exists, treat it as enabled.
     const auto lut = ReadString(color, OperatorType::LMT, "ocio_lmt");
     if (lut.has_value() && !lut->empty()) {
-      state_.lut_path_ = *lut;
+      loaded_state.lut_path_ = *lut;
     } else {
       // Fall back to global flag, but keep empty path if none is specified.
-      state_.lut_path_.clear();
+      loaded_state.lut_path_.clear();
     }
 
+    state_ = loaded_state;
     return true;
   }
 
@@ -1504,8 +1798,18 @@ class EditorDialog final : public QDialog {
   }
 
   void RequestRender() {
-    pending_     = state_;
-    has_pending_ = true;
+    pending_             = state_;
+    pending_apply_state_ = true;
+    has_pending_         = true;
+    if (!inflight_) {
+      StartNext();
+    }
+  }
+
+  void RequestRenderWithoutApplyingState() {
+    pending_             = state_;
+    pending_apply_state_ = false;
+    has_pending_         = true;
     if (!inflight_) {
       StartNext();
     }
@@ -1547,6 +1851,8 @@ class EditorDialog final : public QDialog {
 
     state_       = pending_;
     has_pending_ = false;
+    const bool apply_state = pending_apply_state_;
+    pending_apply_state_   = true;
 
     if (spinner_) {
       spinner_->Start();
@@ -1554,8 +1860,10 @@ class EditorDialog final : public QDialog {
       QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
     }
 
-    ApplyStateToPipeline();
-    pipeline_guard_->dirty_                 = true;
+    if (apply_state) {
+      ApplyStateToPipeline();
+      pipeline_guard_->dirty_ = true;
+    }
 
     PipelineTask task                       = base_task_;
     task.options_.render_desc_.render_type_ = state_.type_;
@@ -1618,6 +1926,7 @@ class EditorDialog final : public QDialog {
   QSlider*                                                 sharpen_slider_     = nullptr;
   QSlider*                                                 clarity_slider_     = nullptr;
   QLabel*                                                  version_status_     = nullptr;
+  QPushButton*                                             undo_tx_btn_        = nullptr;
   QPushButton*                                             commit_version_btn_ = nullptr;
   QComboBox*                                               working_mode_combo_ = nullptr;
   QPushButton*                                             new_working_btn_    = nullptr;
@@ -1634,8 +1943,10 @@ class EditorDialog final : public QDialog {
   AdjustmentState                                          committed_state_{};
   Version                                                  working_version_{};
   AdjustmentState                                          pending_{};
-  bool                                                     inflight_    = false;
-  bool                                                     has_pending_ = false;
+  bool                                                     inflight_         = false;
+  bool                                                     has_pending_      = false;
+  bool                                                     pending_apply_state_ = true;
+  bool                                                     syncing_controls_ = false;
 };
 }  // namespace
 

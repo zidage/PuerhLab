@@ -81,7 +81,9 @@ void PipelineStage::EnableOperator(OperatorType op_type, bool enable,
   EnableOperator(op_type, enable);
   auto it = operators_->find(op_type);
   if (it != operators_->end()) {
+    // Keep value parameters synced, then apply explicit enable/disable state.
     it->second.op_->SetGlobalParams(global_params);
+    it->second.op_->EnableGlobalParams(global_params, enable);
   }
 }
 
