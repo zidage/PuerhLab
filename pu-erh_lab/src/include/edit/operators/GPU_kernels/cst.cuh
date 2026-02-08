@@ -195,6 +195,7 @@ struct GPU_TOWS_Kernel : GPUPointOpTag {
 struct GPU_LMT_Kernel : GPUPointOpTag {
   __device__ __forceinline__ void operator()(float4* p, GPUOperatorParams& params) const {
     if (!params.lmt_enabled_) return;
+    if (params.lmt_lut_.texture_object_ == 0 || params.lmt_lut_.edge_size_ <= 1) return;
 
     float scale =
         (params.lmt_lut_.edge_size_ - 1.0f) / static_cast<float>(params.lmt_lut_.edge_size_);

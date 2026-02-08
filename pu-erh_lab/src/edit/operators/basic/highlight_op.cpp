@@ -47,8 +47,8 @@ void HighlightsOp::SetParams(const nlohmann::json& params) {
   }
   curve_.control_    = clampf(offset_ / 50.0f, -2.0f, 2.0f);
   const float c = std::max(0.0f, curve_.control_);
-  curve_.knee_start_ = clampf(0.2f + 0.5f * c, 0.0f, 0.95f);
-  // curve_.knee_start_ = clampf(0.2f, 0.0f, 1.0f);  // ensure <= whitepoint
+  curve_.knee_start_ = clampf(0.75f + 0.1f * c, 0.0f, 0.95f);
+  // curve_.knee_start_ = clampf(0.8f, 0.0f, 1.0f);  // ensure <= whitepoint
   // map control -> slope at whitepoint (m1)
   // design: control = +1 => strong compression (m1 -> small, e.g. 0.2)
   //         control =  0 => identity slope (1.0)

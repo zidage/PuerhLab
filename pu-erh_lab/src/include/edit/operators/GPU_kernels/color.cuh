@@ -123,7 +123,7 @@ struct GPU_VibranceOpKernel : GPUPointOpTag {
     float chroma   = max_val - min_val;
 
     // chroma in [0, max], vibrance_offset in [-100, 100]
-    float strength = params.vibrance_offset_ / 100.0f;
+    float strength = params.vibrance_offset_;
 
     // Protect already highly saturated color
     float falloff  = expf(-3.0f * chroma);
