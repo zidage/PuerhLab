@@ -44,6 +44,10 @@ qt_add_qml_module(AlbumEditorQmlDemo
     VERSION 1.0
     QML_FILES
         qml/Main.qml
+        qml/AlbumExportDialog.qml
+        qml/InspectorPanel.qml
+        qml/ThumbnailGridView.qml
+        qml/ThumbnailListView.qml
 )
 
 target_compile_definitions(AlbumEditorQmlDemo PRIVATE PUERHLAB_SOURCE_DIR="${CMAKE_SOURCE_DIR}")

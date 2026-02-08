@@ -57,11 +57,11 @@ void ApplyExternalAppFont(QApplication& app, int argc, char** argv) {
 
   const auto app_dir =
       std::filesystem::path(QCoreApplication::applicationDirPath().toStdWString());
-  candidates.emplace_back(app_dir / "fonts" / "main_IBM.ttf");
+  candidates.emplace_back(app_dir / "fonts" / "main_Inter.ttf");
 
 #if defined(PUERHLAB_SOURCE_DIR)
   candidates.emplace_back(std::filesystem::path(PUERHLAB_SOURCE_DIR) / "pu-erh_lab" / "src" /
-                          "config" / "fonts" / "main_IBM.ttf");
+                          "config" / "fonts" / "main_Inter.ttf");
 #endif
 
   for (const auto& path : candidates) {

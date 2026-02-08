@@ -44,6 +44,15 @@ class AlbumBackend final : public QObject {
   Q_PROPERTY(QString taskStatus READ taskStatus NOTIFY taskStateChanged)
   Q_PROPERTY(int taskProgress READ taskProgress NOTIFY taskStateChanged)
   Q_PROPERTY(bool taskCancelVisible READ taskCancelVisible NOTIFY taskStateChanged)
+  Q_PROPERTY(QString defaultExportFolder READ defaultExportFolder CONSTANT)
+  Q_PROPERTY(bool exportInFlight READ exportInFlight NOTIFY exportStateChanged)
+  Q_PROPERTY(QString exportStatus READ exportStatus NOTIFY exportStateChanged)
+  Q_PROPERTY(int exportTotal READ exportTotal NOTIFY exportStateChanged)
+  Q_PROPERTY(int exportCompleted READ exportCompleted NOTIFY exportStateChanged)
+  Q_PROPERTY(int exportSucceeded READ exportSucceeded NOTIFY exportStateChanged)
+  Q_PROPERTY(int exportFailed READ exportFailed NOTIFY exportStateChanged)
+  Q_PROPERTY(int exportSkipped READ exportSkipped NOTIFY exportStateChanged)
+  Q_PROPERTY(QString exportErrorSummary READ exportErrorSummary NOTIFY exportStateChanged)
   Q_PROPERTY(bool editorActive READ editorActive NOTIFY editorStateChanged)
   Q_PROPERTY(bool editorBusy READ editorBusy NOTIFY editorStateChanged)
   Q_PROPERTY(uint editorElementId READ editorElementId NOTIFY editorStateChanged)
@@ -80,6 +89,15 @@ class AlbumBackend final : public QObject {
   const QString& taskStatus() const { return task_status_; }
   int taskProgress() const { return task_progress_; }
   bool taskCancelVisible() const { return task_cancel_visible_; }
+  const QString& defaultExportFolder() const { return default_export_folder_; }
+  bool exportInFlight() const { return export_inflight_; }
+  const QString& exportStatus() const { return export_status_; }
+  int exportTotal() const { return export_total_; }
+  int exportCompleted() const { return export_completed_; }
+  int exportSucceeded() const { return export_succeeded_; }
+  int exportFailed() const { return export_failed_; }
+  int exportSkipped() const { return export_skipped_; }
+  const QString& exportErrorSummary() const { return export_error_summary_; }
   bool editorActive() const { return editor_active_; }
   bool editorBusy() const { return editor_busy_; }
   uint editorElementId() const { return static_cast<uint>(editor_element_id_); }
@@ -106,7 +124,7 @@ class AlbumBackend final : public QObject {
   Q_INVOKABLE void setRuleValue(int index, const QString& value);
   Q_INVOKABLE void setRuleValue2(int index, const QString& value);
 
-  Q_INVOKABLE void applyFilters(const QString& quickSearch, int joinOpValue);
+  Q_INVOKABLE void applyFilters(int joinOpValue);
   Q_INVOKABLE void clearFilters();
   Q_INVOKABLE QVariantList compareOptionsForField(int fieldValue) const;
   Q_INVOKABLE QString placeholderForField(int fieldValue) const;
@@ -114,6 +132,19 @@ class AlbumBackend final : public QObject {
   Q_INVOKABLE void startImport(const QStringList& fileUrlsOrPaths);
   Q_INVOKABLE void cancelImport();
   Q_INVOKABLE void startExport(const QString& outputDirUrlOrPath);
+  Q_INVOKABLE void startExportWithOptions(const QString& outputDirUrlOrPath,
+                                          const QString& formatName, bool resizeEnabled,
+                                          int maxLengthSide, int quality, int bitDepth,
+                                          int pngCompressionLevel,
+                                          const QString& tiffCompression);
+  Q_INVOKABLE void startExportWithOptionsForTargets(const QString& outputDirUrlOrPath,
+                                                    const QString& formatName,
+                                                    bool resizeEnabled, int maxLengthSide,
+                                                    int quality, int bitDepth,
+                                                    int pngCompressionLevel,
+                                                    const QString& tiffCompression,
+                                                    const QVariantList& targetEntries);
+  Q_INVOKABLE void resetExportState();
   Q_INVOKABLE void openEditor(uint elementId, uint imageId);
   Q_INVOKABLE void closeEditor();
   Q_INVOKABLE void resetEditorAdjustments();
@@ -138,6 +169,7 @@ signals:
   void validationErrorChanged();
   void serviceStateChanged();
   void taskStateChanged();
+  void exportStateChanged();
   void editorStateChanged();
   void editorPreviewChanged();
 
@@ -187,7 +219,7 @@ signals:
   void requestThumbnail(sl_element_id_t elementId, image_id_t imageId);
   void updateThumbnailDataUrl(sl_element_id_t elementId, const QString& dataUrl);
   void finishImport(const ImportResult& result);
-  void finishExport(const std::shared_ptr<std::vector<ExportResult>>& results);
+  void finishExport(const std::shared_ptr<std::vector<ExportResult>>& results, int skippedCount);
   void reapplyCurrentFilters();
   void initializeEditorLuts();
   int lutIndexForPath(const std::string& lutPath) const;
@@ -202,7 +234,7 @@ signals:
   bool updateEditorPreviewFromBuffer(const std::shared_ptr<ImageBuffer>& buffer);
   void setEditorAdjustment(float& field, double value, double minValue, double maxValue);
 
-  BuildResult buildFilterNode(const QString& quickSearch, FilterOp joinOp) const;
+  BuildResult buildFilterNode(FilterOp joinOp) const;
   std::optional<FilterValue> parseFilterValue(FilterField field, const QString& text,
                                               QString& error) const;
   static std::optional<std::tm> parseDate(const QString& text);
@@ -215,7 +247,6 @@ signals:
   std::unordered_map<sl_element_id_t, size_t>         index_by_element_id_{};
   QVariantList                                        visible_thumbnails_{};
   std::optional<std::unordered_set<sl_element_id_t>>  active_filter_ids_{};
-  QString                                             last_quick_search_{};
   FilterOp                                            last_join_op_ = FilterOp::AND;
 
   std::shared_ptr<ProjectService>                     project_{};
@@ -227,6 +258,14 @@ signals:
   std::shared_ptr<ExportService>                      export_service_{};
   std::shared_ptr<ImportJob>                          current_import_job_{};
   bool                                                export_inflight_ = false;
+  QString                                             default_export_folder_{};
+  QString                                             export_status_    = "Ready to export.";
+  QString                                             export_error_summary_{};
+  int                                                 export_total_     = 0;
+  int                                                 export_completed_ = 0;
+  int                                                 export_succeeded_ = 0;
+  int                                                 export_failed_    = 0;
+  int                                                 export_skipped_   = 0;
   std::filesystem::path                               db_path_{};
   std::filesystem::path                               meta_path_{};
 

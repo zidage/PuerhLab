@@ -28,7 +28,7 @@ class FilterRuleModel final : public QAbstractListModel {
   Q_ENUM(Role)
 
   struct Rule {
-    FilterField field = FilterField::FileName;
+    FilterField field = FilterField::ExifCameraModel;
     CompareOp   op    = CompareOp::CONTAINS;
     QString     value{};
     QString     value2{};

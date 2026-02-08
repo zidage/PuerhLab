@@ -4,10 +4,12 @@
 #include <QBuffer>
 #include <QCoreApplication>
 #include <QDateTime>
+#include <QDir>
 #include <QFileInfo>
 #include <QImage>
 #include <QMetaObject>
 #include <QPointer>
+#include <QStandardPaths>
 #include <QTimer>
 #include <QUrl>
 
@@ -166,16 +168,73 @@ auto MatRgba32fToQImageCopy(const cv::Mat& rgba32fOrU8) -> QImage {
   return img.copy();
 }
 
-auto DefaultExportPath(const std::filesystem::path& srcPath, const std::filesystem::path& outDir,
-                       sl_element_id_t elementId, image_id_t imageId)
-    -> std::filesystem::path {
+auto ExtensionForExportFormat(ImageFormatType format) -> std::string {
+  switch (format) {
+    case ImageFormatType::JPEG:
+      return ".jpg";
+    case ImageFormatType::PNG:
+      return ".png";
+    case ImageFormatType::TIFF:
+      return ".tiff";
+    case ImageFormatType::WEBP:
+      return ".webp";
+    case ImageFormatType::EXR:
+      return ".exr";
+    default:
+      return ".jpg";
+  }
+}
+
+auto FormatFromName(const QString& value) -> ImageFormatType {
+  const QString upper = value.trimmed().toUpper();
+  if (upper == "PNG") {
+    return ImageFormatType::PNG;
+  }
+  if (upper == "TIFF") {
+    return ImageFormatType::TIFF;
+  }
+  if (upper == "WEBP") {
+    return ImageFormatType::WEBP;
+  }
+  if (upper == "EXR") {
+    return ImageFormatType::EXR;
+  }
+  return ImageFormatType::JPEG;
+}
+
+auto BitDepthFromInt(int value) -> ExportFormatOptions::BIT_DEPTH {
+  if (value == 8) {
+    return ExportFormatOptions::BIT_DEPTH::BIT_8;
+  }
+  if (value == 32) {
+    return ExportFormatOptions::BIT_DEPTH::BIT_32;
+  }
+  return ExportFormatOptions::BIT_DEPTH::BIT_16;
+}
+
+auto TiffCompressFromName(const QString& value) -> ExportFormatOptions::TIFF_COMPRESS {
+  const QString upper = value.trimmed().toUpper();
+  if (upper == "LZW") {
+    return ExportFormatOptions::TIFF_COMPRESS::LZW;
+  }
+  if (upper == "ZIP") {
+    return ExportFormatOptions::TIFF_COMPRESS::ZIP;
+  }
+  return ExportFormatOptions::TIFF_COMPRESS::NONE;
+}
+
+auto ExportPathForOptions(const std::filesystem::path& srcPath, const std::filesystem::path& outDir,
+                          sl_element_id_t elementId, image_id_t imageId,
+                          ImageFormatType format) -> std::filesystem::path {
   std::wstring stem = srcPath.stem().wstring();
   if (stem.empty()) {
     stem = L"image";
   }
-  const std::wstring suffix = L"_" + std::to_wstring(static_cast<uint64_t>(elementId)) + L"_" +
-                              std::to_wstring(static_cast<uint64_t>(imageId)) + L".jpg";
-  return outDir / (stem + suffix);
+  const std::string suffix = "_" + std::to_string(static_cast<uint64_t>(elementId)) + "_" +
+                             std::to_string(static_cast<uint64_t>(imageId));
+  const std::string ext = ExtensionForExportFormat(format);
+  return outDir / (stem + std::wstring(suffix.begin(), suffix.end()) +
+                   std::wstring(ext.begin(), ext.end()));
 }
 
 auto ListCubeLutsInDir(const std::filesystem::path& dir) -> std::vector<std::filesystem::path> {
@@ -218,10 +277,13 @@ auto ClampToRange(double value, double minValue, double maxValue) -> float {
 }  // namespace
 
 AlbumBackend::AlbumBackend(QObject* parent) : QObject(parent), rule_model_(this) {
+  const QString pictures = QStandardPaths::writableLocation(QStandardPaths::PicturesLocation);
+  default_export_folder_ = pictures.isEmpty() ? QDir::currentPath() : pictures;
+
   initializeServices();
   initializeEditorLuts();
   rebuildThumbnailView(std::nullopt);
-  applyFilters(QString(), static_cast<int>(FilterOp::AND));
+  applyFilters(static_cast<int>(FilterOp::AND));
 }
 
 AlbumBackend::~AlbumBackend() {
@@ -273,16 +335,15 @@ void AlbumBackend::setRuleValue2(int index, const QString& value) {
   rule_model_.setValue2(index, value);
 }
 
-void AlbumBackend::applyFilters(const QString& quickSearch, int joinOpValue) {
+void AlbumBackend::applyFilters(int joinOpValue) {
   auto parsedJoin = static_cast<FilterOp>(joinOpValue);
   if (parsedJoin != FilterOp::AND && parsedJoin != FilterOp::OR) {
     parsedJoin = FilterOp::AND;
   }
 
-  last_quick_search_ = quickSearch;
   last_join_op_      = parsedJoin;
 
-  const BuildResult result = buildFilterNode(quickSearch, parsedJoin);
+  const BuildResult result = buildFilterNode(parsedJoin);
   if (!result.error.isEmpty()) {
     if (validation_error_ != result.error) {
       validation_error_ = result.error;
@@ -345,7 +406,6 @@ void AlbumBackend::applyFilters(const QString& quickSearch, int joinOpValue) {
 
 void AlbumBackend::clearFilters() {
   rule_model_.clearAndReset();
-  last_quick_search_.clear();
   last_join_op_ = FilterOp::AND;
 
   if (!validation_error_.isEmpty()) {
@@ -477,18 +537,53 @@ void AlbumBackend::cancelImport() {
 }
 
 void AlbumBackend::startExport(const QString& outputDirUrlOrPath) {
+  startExportWithOptionsForTargets(outputDirUrlOrPath, "JPEG", false, 4096, 95, 16, 5, "NONE",
+                                   {});
+}
+
+void AlbumBackend::startExportWithOptions(const QString& outputDirUrlOrPath,
+                                          const QString& formatName, bool resizeEnabled,
+                                          int maxLengthSide, int quality, int bitDepth,
+                                          int pngCompressionLevel,
+                                          const QString& tiffCompression) {
+  startExportWithOptionsForTargets(outputDirUrlOrPath, formatName, resizeEnabled, maxLengthSide,
+                                   quality, bitDepth, pngCompressionLevel, tiffCompression, {});
+}
+
+void AlbumBackend::startExportWithOptionsForTargets(const QString& outputDirUrlOrPath,
+                                                    const QString& formatName,
+                                                    bool resizeEnabled, int maxLengthSide,
+                                                    int quality, int bitDepth,
+                                                    int pngCompressionLevel,
+                                                    const QString& tiffCompression,
+                                                    const QVariantList& targetEntries) {
+  const auto fail_with_status = [this](const QString& message) {
+    export_status_ = message;
+    emit exportStateChanged();
+    setTaskState(message, 0, false);
+  };
+
   if (!export_service_ || !project_) {
-    setTaskState("Export service is unavailable.", 0, false);
+    fail_with_status("Export service is unavailable.");
     return;
   }
   if (export_inflight_) {
-    setTaskState("Export already running.", task_progress_, false);
+    fail_with_status("Export already running.");
     return;
   }
 
+  export_status_        = "Preparing export queue...";
+  export_error_summary_.clear();
+  export_total_         = 0;
+  export_completed_     = 0;
+  export_succeeded_     = 0;
+  export_failed_        = 0;
+  export_skipped_       = 0;
+  emit exportStateChanged();
+
   const auto outDirOpt = InputToPath(outputDirUrlOrPath);
   if (!outDirOpt.has_value()) {
-    setTaskState("No export folder selected.", 0, false);
+    fail_with_status("No export folder selected.");
     return;
   }
 
@@ -497,78 +592,191 @@ void AlbumBackend::startExport(const QString& outputDirUrlOrPath) {
     std::filesystem::create_directories(outDirOpt.value(), ec);
   }
   if (ec || !std::filesystem::is_directory(outDirOpt.value(), ec) || ec) {
-    setTaskState("Export folder is invalid.", 0, false);
+    fail_with_status("Export folder is invalid.");
     return;
   }
 
   std::vector<std::pair<sl_element_id_t, image_id_t>> targets;
-  targets.reserve(static_cast<size_t>(visible_thumbnails_.size()));
-
-  for (const QVariant& entry : visible_thumbnails_) {
-    const auto map = entry.toMap();
-    const auto elementId = static_cast<sl_element_id_t>(map.value("elementId").toUInt());
-    const auto imageId   = static_cast<image_id_t>(map.value("imageId").toUInt());
-    if (elementId == 0 || imageId == 0) {
-      continue;
+  if (!targetEntries.empty()) {
+    targets.reserve(static_cast<size_t>(targetEntries.size()));
+    std::unordered_set<uint64_t> dedupe{};
+    dedupe.reserve(static_cast<size_t>(targetEntries.size()) * 2 + 1);
+    for (const QVariant& entry : targetEntries) {
+      const QVariantMap map = entry.toMap();
+      const auto elementId =
+          static_cast<sl_element_id_t>(map.value("elementId").toUInt());
+      const auto imageId =
+          static_cast<image_id_t>(map.value("imageId").toUInt());
+      if (elementId == 0 || imageId == 0) {
+        continue;
+      }
+      const uint64_t key = (static_cast<uint64_t>(elementId) << 32U) |
+                           static_cast<uint64_t>(imageId);
+      if (dedupe.insert(key).second) {
+        targets.emplace_back(elementId, imageId);
+      }
     }
-    targets.emplace_back(elementId, imageId);
+  } else {
+    targets.reserve(static_cast<size_t>(visible_thumbnails_.size()));
+    for (const QVariant& entry : visible_thumbnails_) {
+      const auto map = entry.toMap();
+      const auto elementId = static_cast<sl_element_id_t>(map.value("elementId").toUInt());
+      const auto imageId   = static_cast<image_id_t>(map.value("imageId").toUInt());
+      if (elementId == 0 || imageId == 0) {
+        continue;
+      }
+      targets.emplace_back(elementId, imageId);
+    }
   }
 
   if (targets.empty()) {
-    setTaskState("No images to export.", 0, false);
+    fail_with_status("No images to export.");
     return;
   }
 
+  const ImageFormatType format         = FormatFromName(formatName);
+  const bool            resizeEnabled_ = resizeEnabled;
+  const int             maxLengthSide_ = std::clamp(maxLengthSide, 256, 16384);
+  const int             quality_       = std::clamp(quality, 1, 100);
+  const auto            bitDepth_      = BitDepthFromInt(bitDepth);
+  const int             pngLevel_      = std::clamp(pngCompressionLevel, 0, 9);
+  const auto            tiffCompress_  = TiffCompressFromName(tiffCompression);
+
   export_service_->ClearAllExportTasks();
 
-  size_t queuedCount = 0;
+  size_t  queuedCount   = 0;
+  int     skippedCount  = 0;
+  QString firstError{};
   for (const auto& [elementId, imageId] : targets) {
     try {
       const auto srcPath = project_->GetImagePoolService()->Read<std::filesystem::path>(
-          imageId, [](std::shared_ptr<Image> image) { return image ? image->image_path_ : image_path_t{}; });
+          imageId, [](std::shared_ptr<Image> image) {
+            return image ? image->image_path_ : image_path_t{};
+          });
 
       if (srcPath.empty()) {
+        ++skippedCount;
+        if (firstError.isEmpty()) {
+          firstError = "Image source path is empty.";
+        }
         continue;
       }
 
       ExportTask task;
-      task.sleeve_id_              = elementId;
-      task.image_id_               = imageId;
-      task.options_.format_        = ImageFormatType::JPEG;
-      task.options_.quality_       = 95;
-      task.options_.export_path_   =
-          DefaultExportPath(srcPath, outDirOpt.value(), elementId, imageId);
+      task.sleeve_id_                 = elementId;
+      task.image_id_                  = imageId;
+      task.options_.format_           = format;
+      task.options_.resize_enabled_   = resizeEnabled_;
+      task.options_.max_length_side_  = resizeEnabled_ ? maxLengthSide_ : 0;
+      task.options_.quality_          = quality_;
+      task.options_.bit_depth_        = bitDepth_;
+      task.options_.compression_level_ = pngLevel_;
+      task.options_.tiff_compress_     = tiffCompress_;
+      task.options_.export_path_ =
+          ExportPathForOptions(srcPath, outDirOpt.value(), elementId, imageId, format);
 
       export_service_->EnqueueExportTask(task);
       ++queuedCount;
+    } catch (const std::exception& e) {
+      ++skippedCount;
+      if (firstError.isEmpty()) {
+        firstError = QString::fromUtf8(e.what());
+      }
     } catch (...) {
+      ++skippedCount;
+      if (firstError.isEmpty()) {
+        firstError = "Unknown error while preparing export task.";
+      }
     }
   }
 
   if (queuedCount == 0) {
+    export_status_ = "No export tasks were queued.";
+    if (!firstError.isEmpty()) {
+      export_error_summary_ = firstError;
+    }
+    emit exportStateChanged();
     setTaskState("No valid export tasks could be created.", 0, false);
     return;
   }
 
   export_inflight_ = true;
-  setTaskState(QString("Exporting %1 image(s)...").arg(static_cast<int>(queuedCount)), 0, false);
+  export_total_    = static_cast<int>(queuedCount);
+  export_skipped_  = skippedCount;
+  if (skippedCount > 0) {
+    export_status_ = QString("Exporting %1 image(s). Skipped %2 invalid item(s).")
+                         .arg(static_cast<int>(queuedCount))
+                         .arg(skippedCount);
+  } else {
+    export_status_ = QString("Exporting %1 image(s)...").arg(static_cast<int>(queuedCount));
+  }
+  emit exportStateChanged();
+  setTaskState(export_status_, 0, false);
 
   QPointer<AlbumBackend> self(this);
-  export_service_->ExportAll([self](std::shared_ptr<std::vector<ExportResult>> results) {
-    if (!self) {
-      return;
-    }
+  export_service_->ExportAll(
+      [self](const ExportProgress& progress) {
+        if (!self) {
+          return;
+        }
+        QMetaObject::invokeMethod(
+            self,
+            [self, progress]() {
+              if (!self) {
+                return;
+              }
+              const int completed =
+                  static_cast<int>(std::min(progress.completed_, progress.total_));
+              if (completed < self->export_completed_) {
+                return;
+              }
 
-    QMetaObject::invokeMethod(
-        self,
-        [self, results]() {
-          if (!self) {
-            return;
-          }
-          self->finishExport(results);
-        },
-        Qt::QueuedConnection);
-  });
+              self->export_total_     = static_cast<int>(std::max<size_t>(progress.total_, 1));
+              self->export_completed_ = completed;
+              self->export_succeeded_ = static_cast<int>(progress.succeeded_);
+              self->export_failed_    = static_cast<int>(progress.failed_);
+              self->export_status_    = QString("Exporting... processed %1/%2, written %3, failed %4.")
+                                          .arg(self->export_completed_)
+                                          .arg(self->export_total_)
+                                          .arg(self->export_succeeded_)
+                                          .arg(self->export_failed_);
+              emit self->exportStateChanged();
+
+              const int percent =
+                  self->export_total_ > 0 ? (self->export_completed_ * 100) / self->export_total_ : 0;
+              self->setTaskState(self->export_status_, percent, false);
+            },
+            Qt::QueuedConnection);
+      },
+      [self, skippedCount](std::shared_ptr<std::vector<ExportResult>> results) {
+        if (!self) {
+          return;
+        }
+
+        QMetaObject::invokeMethod(
+            self,
+            [self, results, skippedCount]() {
+              if (!self) {
+                return;
+              }
+              self->finishExport(results, skippedCount);
+            },
+            Qt::QueuedConnection);
+      });
+}
+
+void AlbumBackend::resetExportState() {
+  if (export_inflight_) {
+    return;
+  }
+  export_status_        = "Ready to export.";
+  export_error_summary_.clear();
+  export_total_         = 0;
+  export_completed_     = 0;
+  export_succeeded_     = 0;
+  export_failed_        = 0;
+  export_skipped_       = 0;
+  emit exportStateChanged();
 }
 
 void AlbumBackend::openEditor(uint elementId, uint imageId) {
@@ -965,6 +1173,17 @@ void AlbumBackend::updateThumbnailDataUrl(sl_element_id_t elementId, const QStri
   }
 
   item.thumb_data_url = dataUrl;
+
+  for (qsizetype i = 0; i < visible_thumbnails_.size(); ++i) {
+    QVariantMap row = visible_thumbnails_.at(i).toMap();
+    if (static_cast<sl_element_id_t>(row.value("elementId").toUInt()) != elementId) {
+      continue;
+    }
+    row.insert("thumbUrl", dataUrl);
+    visible_thumbnails_[i] = row;
+    break;
+  }
+
   emit thumbnailUpdated(static_cast<uint>(elementId), dataUrl);
 }
 
@@ -1006,20 +1225,45 @@ void AlbumBackend::finishImport(const ImportResult& result) {
   });
 }
 
-void AlbumBackend::finishExport(const std::shared_ptr<std::vector<ExportResult>>& results) {
+void AlbumBackend::finishExport(const std::shared_ptr<std::vector<ExportResult>>& results,
+                                int skippedCount) {
   export_inflight_ = false;
 
-  int ok   = 0;
-  int fail = 0;
+  int         ok   = 0;
+  int         fail = 0;
+  QStringList errors;
   if (results) {
     for (const auto& r : *results) {
       if (r.success_) {
         ++ok;
       } else {
         ++fail;
+        if (!r.message_.empty() && errors.size() < 8) {
+          errors << QString::fromUtf8(r.message_.c_str());
+        }
       }
     }
   }
+
+  const int total  = ok + fail;
+  export_total_    = std::max(export_total_, total);
+  export_completed_ = total;
+  export_succeeded_ = ok;
+  export_failed_    = fail;
+  export_skipped_   = skippedCount;
+  export_error_summary_.clear();
+  if (!errors.isEmpty()) {
+    export_error_summary_ = errors.join('\n');
+  }
+
+  export_status_ = QString("Export complete. Written %1/%2 image(s), failed %3.")
+                       .arg(ok)
+                       .arg(total)
+                       .arg(fail);
+  if (skippedCount > 0) {
+    export_status_ += QString(" Skipped %1 invalid item(s).").arg(skippedCount);
+  }
+  emit exportStateChanged();
 
   setTaskState(QString("Export complete: %1 ok, %2 failed").arg(ok).arg(fail), 100, false);
 
@@ -1031,54 +1275,10 @@ void AlbumBackend::finishExport(const std::shared_ptr<std::vector<ExportResult>>
 }
 
 void AlbumBackend::reapplyCurrentFilters() {
-  applyFilters(last_quick_search_, static_cast<int>(last_join_op_));
+  applyFilters(static_cast<int>(last_join_op_));
 }
 
-auto AlbumBackend::buildFilterNode(const QString& quickSearch, FilterOp joinOp) const -> BuildResult {
-  std::optional<FilterNode> quick_node;
-  const QString             trimmed_quick = quickSearch.trimmed();
-  if (!trimmed_quick.isEmpty()) {
-    const FilterValue value{trimmed_quick.toStdWString()};
-    std::vector<FilterNode> clauses;
-    clauses.reserve(4);
-    clauses.push_back(FilterNode{
-        FilterNode::Type::Condition,
-        {},
-        {},
-        FieldCondition{
-            .field_ = FilterField::FileName, .op_ = CompareOp::CONTAINS, .value_ = value},
-        std::nullopt,
-    });
-    clauses.push_back(FilterNode{
-        FilterNode::Type::Condition,
-        {},
-        {},
-        FieldCondition{.field_ = FilterField::ExifCameraModel,
-                       .op_ = CompareOp::CONTAINS,
-                       .value_ = value},
-        std::nullopt,
-    });
-    clauses.push_back(FilterNode{
-        FilterNode::Type::Condition,
-        {},
-        {},
-        FieldCondition{
-            .field_ = FilterField::FileExtension, .op_ = CompareOp::CONTAINS, .value_ = value},
-        std::nullopt,
-    });
-    clauses.push_back(FilterNode{
-        FilterNode::Type::Condition,
-        {},
-        {},
-        FieldCondition{
-            .field_ = FilterField::SemanticTags, .op_ = CompareOp::CONTAINS, .value_ = value},
-        std::nullopt,
-    });
-
-    quick_node = FilterNode{
-        FilterNode::Type::Logical, FilterOp::OR, std::move(clauses), {}, std::nullopt};
-  }
-
+auto AlbumBackend::buildFilterNode(FilterOp joinOp) const -> BuildResult {
   std::optional<FilterNode> rules_node;
   std::vector<FilterNode>   conditions;
 
@@ -1124,25 +1324,10 @@ auto AlbumBackend::buildFilterNode(const QString& quickSearch, FilterOp joinOp) 
     }
   }
 
-  if (!quick_node.has_value() && !rules_node.has_value()) {
-    return BuildResult{.node = std::nullopt, .error = QString()};
-  }
-  if (quick_node.has_value() && !rules_node.has_value()) {
-    return BuildResult{.node = quick_node, .error = QString()};
-  }
-  if (!quick_node.has_value() && rules_node.has_value()) {
+  if (rules_node.has_value()) {
     return BuildResult{.node = rules_node, .error = QString()};
   }
-
-  std::vector<FilterNode> children;
-  children.reserve(2);
-  children.push_back(std::move(quick_node.value()));
-  children.push_back(std::move(rules_node.value()));
-
-  return BuildResult{
-      .node = FilterNode{FilterNode::Type::Logical, FilterOp::AND, std::move(children), {}, {}},
-      .error = QString(),
-  };
+  return BuildResult{.node = std::nullopt, .error = QString()};
 }
 
 auto AlbumBackend::parseFilterValue(FilterField field, const QString& text, QString& error) const

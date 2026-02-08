@@ -170,9 +170,7 @@ void FilterRuleModel::setValue2(int index, const QString& value) {
 
 auto FilterRuleModel::fieldOptions() const -> QVariantList {
   return {
-      ToOption("Filename", static_cast<int>(FilterField::FileName)),
       ToOption("Camera Model", static_cast<int>(FilterField::ExifCameraModel)),
-      ToOption("File Extension", static_cast<int>(FilterField::FileExtension)),
       ToOption("ISO", static_cast<int>(FilterField::ExifISO)),
       ToOption("Aperture", static_cast<int>(FilterField::ExifAperture)),
       ToOption("Focal Length", static_cast<int>(FilterField::ExifFocalLength)),
@@ -208,6 +206,8 @@ auto FilterRuleModel::compareOptionsForField(FilterField field) -> QVariantList 
   }
 
   return {
+      ToOption("=", static_cast<int>(CompareOp::EQUALS)),
+      ToOption("!=", static_cast<int>(CompareOp::NOT_EQUALS)),
       ToOption(">", static_cast<int>(CompareOp::GREATER_THAN)),
       ToOption("<", static_cast<int>(CompareOp::LESS_THAN)),
       ToOption(">=", static_cast<int>(CompareOp::GREATER_EQUAL)),
@@ -262,8 +262,9 @@ auto FilterRuleModel::allowedOpsForKind(FilterValueKind kind) -> std::vector<Com
             CompareOp::LESS_THAN,    CompareOp::GREATER_EQUAL, CompareOp::LESS_EQUAL,
             CompareOp::BETWEEN};
   }
-  return {CompareOp::GREATER_THAN, CompareOp::LESS_THAN, CompareOp::GREATER_EQUAL,
-          CompareOp::LESS_EQUAL, CompareOp::BETWEEN};
+  return {CompareOp::EQUALS,       CompareOp::NOT_EQUALS,  CompareOp::GREATER_THAN,
+          CompareOp::LESS_THAN,    CompareOp::GREATER_EQUAL, CompareOp::LESS_EQUAL,
+          CompareOp::BETWEEN};
 }
 
 auto FilterRuleModel::defaultOpForField(FilterField field) -> CompareOp {
