@@ -82,6 +82,11 @@ auto ElementController::GetElementById(const sl_element_id_t id) -> std::shared_
   auto result = element_service_.GetElementById(id);
   if (result->type_ == ElementType::FILE) {
     auto file    = std::static_pointer_cast<SleeveFile>(result);
+    try {
+      file->image_id_ = file_service_.GetBoundImageById(file->element_id_);
+    } catch (...) {
+      file->image_id_ = 0;
+    }
     auto history = history_service_.GetEditHistoryByFileId(file->element_id_);
     file->SetEditHistory(history);
   }

@@ -3,12 +3,14 @@ import QtQuick.Controls
 import QtQuick.Controls.Material
 import QtQuick.Layouts
 import QtQuick.Dialogs
+import QtQuick.Effects
 
 ApplicationWindow {
     id: root
     width: 1460
     height: 900
     visible: true
+    visibility: Window.Maximized
     title: "pu-erh_lab - Album + Editor (QML POC)"
 
     // Dark palette:
@@ -115,6 +117,27 @@ ApplicationWindow {
     }
 
     FileDialog {
+        id: loadProjectDialog
+        title: "Select Project Metadata JSON"
+        fileMode: FileDialog.OpenFile
+        nameFilters: [
+            "Project Metadata (*.json)",
+            "All Files (*)"
+        ]
+        onAccepted: {
+            albumBackend.loadProject(selectedFile.toString())
+        }
+    }
+
+    FolderDialog {
+        id: createProjectFolderDialog
+        title: "Select Folder for New Project"
+        onAccepted: {
+            albumBackend.createProjectInFolder(selectedFolder.toString())
+        }
+    }
+
+    FileDialog {
         id: importDialog
         title: "Select Images"
         fileMode: FileDialog.OpenFiles
@@ -155,6 +178,11 @@ ApplicationWindow {
 
     Connections {
         target: albumBackend
+        function onProjectChanged() {
+            root.clearSelectedImages()
+            root.clearExportQueue()
+            settingsPage = false
+        }
         function onThumbnailsChanged() {
             if (exportDialog.visible) {
                 refreshExportPreview()
@@ -172,14 +200,17 @@ ApplicationWindow {
         }
     }
 
-    Rectangle {
+    Item {
+        id: mainContent
         anchors.fill: parent
-        z: -1
-        gradient: Gradient {
-            GradientStop { position: 0.0; color: "#1E1D22" }
-            GradientStop { position: 1.0; color: "#38373C" }
+
+        Rectangle {
+            anchors.fill: parent
+            gradient: Gradient {
+                GradientStop { position: 0.0; color: "#1E1D22" }
+                GradientStop { position: 1.0; color: "#38373C" }
+            }
         }
-    }
 
     ColumnLayout {
         anchors.fill: parent
@@ -203,11 +234,14 @@ ApplicationWindow {
                 Button { text: "Library"; checkable: true; checked: !settingsPage; onClicked: settingsPage = false }
                 Button { text: "Settings"; checkable: true; checked: settingsPage; onClicked: settingsPage = true }
                 TextField { Layout.fillWidth: true; placeholderText: "Search photos" }
-                Button { text: "Import"; onClicked: importDialog.open() }
-                Button { text: "Add Selected (" + root.selectedCount + ")"; enabled: root.selectedCount > 0; onClicked: root.addSelectedToExportQueue() }
+                Button { text: "Load"; enabled: !albumBackend.projectLoading; onClicked: loadProjectDialog.open() }
+                Button { text: "New"; enabled: !albumBackend.projectLoading; onClicked: createProjectFolderDialog.open() }
+                Button { text: "Save"; enabled: albumBackend.serviceReady && !albumBackend.projectLoading; onClicked: albumBackend.saveProject() }
+                Button { text: "Import"; enabled: albumBackend.serviceReady && !albumBackend.projectLoading; onClicked: importDialog.open() }
+                Button { text: "Add Selected (" + root.selectedCount + ")"; enabled: albumBackend.serviceReady && !albumBackend.projectLoading && root.selectedCount > 0; onClicked: root.addSelectedToExportQueue() }
                 Button {
                     text: "Export Queue (" + root.exportQueueCount + ")"
-                    enabled: albumBackend.shownCount > 0 || root.exportQueueCount > 0
+                    enabled: albumBackend.serviceReady && !albumBackend.projectLoading && (albumBackend.shownCount > 0 || root.exportQueueCount > 0)
                     onClicked: {
                         refreshExportPreview()
                         exportDialog.open()
@@ -222,14 +256,14 @@ ApplicationWindow {
             Layout.fillWidth: true
             Layout.preferredHeight: 34
             radius: 10
-            color: albumBackend.serviceReady ? "#38373C" : "#1E1D22"
-            border.color: albumBackend.serviceReady ? "#A1AC9B" : "#7B7D7C"
+            color: albumBackend.projectLoading ? "#1E1D22" : (albumBackend.serviceReady ? "#38373C" : "#1E1D22")
+            border.color: albumBackend.projectLoading ? "#92BCE1" : (albumBackend.serviceReady ? "#A1AC9B" : "#7B7D7C")
             Label {
                 anchors.fill: parent
                 anchors.margins: 8
                 text: albumBackend.serviceMessage
                 elide: Text.ElideMiddle
-                color: albumBackend.serviceReady ? "#E3DFDB" : "#7B7D7C"
+                color: albumBackend.projectLoading ? "#92BCE1" : (albumBackend.serviceReady ? "#E3DFDB" : "#7B7D7C")
                 verticalAlignment: Text.AlignVCenter
                 font.pixelSize: 12
             }
@@ -316,9 +350,29 @@ ApplicationWindow {
                                 Layout.fillWidth: true
                                 visible: albumBackend.shownCount === 0
                                 spacing: 8
-                                Label { text: "No Photos Yet"; color: "#E3DFDB"; font.pixelSize: 22; font.weight: 700 }
-                                Label { text: "Import your first folder to start thumbnail generation and RAW adjustments."; color: "#7B7D7C"; font.pixelSize: 12 }
-                                Button { text: "Import Photos"; onClicked: importDialog.open() }
+                                Label {
+                                    text: albumBackend.serviceReady ? "No Photos Yet" : "Open or Create a Project"
+                                    color: "#E3DFDB"
+                                    font.pixelSize: 22
+                                    font.weight: 700
+                                }
+                                Label {
+                                    text: albumBackend.serviceReady
+                                          ? "Import your first folder to start thumbnail generation and RAW adjustments."
+                                          : "Use Load or New in the header to choose the database/metadata JSON files."
+                                    color: "#7B7D7C"
+                                    font.pixelSize: 12
+                                }
+                                Button {
+                                    text: albumBackend.serviceReady ? "Import Photos" : "Load Project"
+                                    onClicked: {
+                                        if (albumBackend.serviceReady) {
+                                            importDialog.open()
+                                        } else {
+                                            loadProjectDialog.open()
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -371,6 +425,156 @@ ApplicationWindow {
             }
         }
     }
+
+    }
+
+    Item {
+        anchors.fill: parent
+        visible: !albumBackend.serviceReady && !albumBackend.projectLoading
+        z: 30
+
+        MultiEffect {
+            anchors.fill: parent
+            source: mainContent
+            blurEnabled: true
+            blur: 0.6
+            blurMax: 64
+            saturation: -0.2
+        }
+
+        Rectangle {
+            anchors.fill: parent
+            color: "#C01E1D22"
+        }
+
+        MouseArea { anchors.fill: parent; hoverEnabled: true }
+
+        Rectangle {
+            anchors.centerIn: parent
+            width: Math.min(parent.width - 36, 700)
+            height: dialogContent.implicitHeight + 36
+            radius: 14
+            color: "#1E1D22"
+            border.color: "#4D4C51"
+
+            ColumnLayout {
+                id: dialogContent
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.top: parent.top
+                anchors.margins: 18
+                spacing: 12
+
+                Label {
+                    text: "Open Project"
+                    font.pixelSize: 24
+                    font.weight: 700
+                    color: "#E3DFDB"
+                }
+                Label {
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: "Every boot asks for a project. Load an existing metadata JSON/database pair or create a new project, then choose the folder location."
+                    color: "#7B7D7C"
+                    font.pixelSize: 13
+                }
+                Label {
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: albumBackend.serviceMessage
+                    color: "#E3DFDB"
+                    font.pixelSize: 12
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 10
+
+                    Button {
+                        Layout.fillWidth: true
+                        text: "Load Existing Project"
+                        onClicked: loadProjectDialog.open()
+                    }
+                    Button {
+                        Layout.fillWidth: true
+                        text: "Create New Project"
+                        onClicked: createProjectFolderDialog.open()
+                    }
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    Item { Layout.fillWidth: true }
+                    Button {
+                        text: "Exit"
+                        onClicked: Qt.quit()
+                    }
+                }
+            }
+        }
+    }
+
+    Item {
+        anchors.fill: parent
+        visible: albumBackend.projectLoading
+        z: 40
+
+        MultiEffect {
+            anchors.fill: parent
+            source: mainContent
+            blurEnabled: true
+            blur: 0.6
+            blurMax: 64
+            saturation: -0.2
+        }
+
+        Rectangle {
+            anchors.fill: parent
+            color: "#C01E1D22"
+        }
+
+        MouseArea { anchors.fill: parent; hoverEnabled: true }
+
+        Rectangle {
+            anchors.centerIn: parent
+            width: Math.min(parent.width - 36, 520)
+            height: loadingContent.implicitHeight + 30
+            radius: 14
+            color: "#1E1D22"
+            border.color: "#4D4C51"
+
+            ColumnLayout {
+                id: loadingContent
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.top: parent.top
+                anchors.margins: 16
+                spacing: 10
+
+                Label {
+                    text: "Loading Project"
+                    font.pixelSize: 21
+                    font.weight: 700
+                    color: "#E3DFDB"
+                }
+                BusyIndicator {
+                    running: albumBackend.projectLoading
+                    Layout.alignment: Qt.AlignHCenter
+                }
+                Label {
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: albumBackend.projectLoadingMessage.length > 0
+                          ? albumBackend.projectLoadingMessage
+                          : "Preparing database and metadata..."
+                    color: "#7B7D7C"
+                    font.pixelSize: 12
+                    horizontalAlignment: Text.AlignHCenter
+                }
+            }
+        }
+    }
+
 
     Component {
         id: gridComp

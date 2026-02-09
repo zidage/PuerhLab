@@ -23,9 +23,16 @@
 #include "type/type.hpp"
 
 namespace puerhlab {
+enum class ProjectOpenMode {
+  kLoadOrCreate = 0,
+  kLoadExisting,
+  kCreateNew,
+};
+
 class ProjectService {
  public:
-  ProjectService(const std::filesystem::path& db_path, const std::filesystem::path& meta_path);
+  ProjectService(const std::filesystem::path& db_path, const std::filesystem::path& meta_path,
+                 ProjectOpenMode open_mode = ProjectOpenMode::kLoadOrCreate);
   ~ProjectService();
 
   void SaveProject(const std::filesystem::path& meta_path);

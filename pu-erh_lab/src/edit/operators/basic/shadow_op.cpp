@@ -15,6 +15,7 @@
 #include "edit/operators/basic/shadow_op.hpp"
 
 #include <opencv2/core/hal/interface.h>
+#include <string>
 
 #include <opencv2/core.hpp>
 #include <opencv2/core/types.hpp>
@@ -49,13 +50,32 @@ static inline float Luma(const Pixel& rgb) {
   return 0.2126f * rgb.r_ + 0.7152f * rgb.g_ + 0.0722f * rgb.b_;
 }
 
-auto ShadowsOp::GetParams() const -> nlohmann::json { return {script_name_, offset_}; }
+auto ShadowsOp::GetParams() const -> nlohmann::json {
+  return {{std::string(script_name_), offset_}};
+}
 
 void ShadowsOp::SetParams(const nlohmann::json& params) {
-  if (!params.contains(script_name_)) {
+  float value = 0.0f;
+  bool  found = false;
+
+  if (params.is_object() && params.contains(script_name_)) {
+    value = params[script_name_].get<float>();
+    found = true;
+  } else if (params.is_array() && params.size() == 2) {
+    // Backward compatibility for legacy snapshots serialized as ["shadows", value].
+    try {
+      if (params[0].is_string() && params[0].get<std::string>() == script_name_) {
+        value = params[1].get<float>();
+        found = true;
+      }
+    } catch (...) {
+    }
+  }
+
+  if (!found) {
     offset_ = 0.0f;
   } else {
-    offset_         = params[script_name_].get<float>();
+    offset_         = value;
     curve_.control_ = std::clamp(offset_ / 80.0f, -1.0f, 1.0f);
     curve_.toe_end_ = std::clamp(0.55f, 0.0f, 1.0f);
     curve_.m0_      = 1.0f + curve_.control_ * curve_.slope_range_;

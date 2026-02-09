@@ -15,6 +15,7 @@
 #include "edit/operators/basic/black_op.hpp"
 
 #include <opencv2/core.hpp>
+#include <string>
 
 #include "image/image_buffer.hpp"
 
@@ -29,16 +30,35 @@ void BlackOp::Apply(std::shared_ptr<ImageBuffer> input) { (void)input; }
 
 void BlackOp::ApplyGPU(std::shared_ptr<ImageBuffer>) { throw std::runtime_error("BlackOp: ApplyGPU not implemented"); }
 
-auto BlackOp::GetParams() const -> nlohmann::json { return {script_name_, offset_}; }
+auto BlackOp::GetParams() const -> nlohmann::json {
+  return {{std::string(script_name_), offset_ * 100.0f}};
+}
 
 void BlackOp::SetParams(const nlohmann::json& params) {
-  if (!params.contains(script_name_)) {
+  float value = 0.0f;
+  bool  found = false;
+
+  if (params.is_object() && params.contains(script_name_)) {
+    value = params[script_name_].get<float>();
+    found = true;
+  } else if (params.is_array() && params.size() == 2) {
+    // Backward compatibility for legacy snapshots serialized as ["black", value].
+    try {
+      if (params[0].is_string() && params[0].get<std::string>() == script_name_) {
+        value = params[1].get<float>();
+        found = true;
+      }
+    } catch (...) {
+    }
+  }
+
+  if (!found) {
     offset_      = 0.0f;
     y_intercept_ = 0.0f;
     slope_       = 1.0f;
 
   } else {
-    offset_      = params[script_name_].get<float>() / 100.0f;
+    offset_      = value / 100.0f;
     y_intercept_ = offset_ / 10.f;
     slope_       = (1.0f - y_intercept_) / 1.0f;
   }

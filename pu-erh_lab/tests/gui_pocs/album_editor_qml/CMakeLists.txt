@@ -1,4 +1,4 @@
-find_package(Qt6 REQUIRED COMPONENTS Quick Qml QuickControls2 QuickDialogs2 Widgets)
+find_package(Qt6 REQUIRED COMPONENTS Quick Qml QuickControls2 QuickDialogs2 Widgets QuickEffects)
 
 add_executable(AlbumEditorQmlDemo
     main.cpp
@@ -23,6 +23,7 @@ target_link_libraries(AlbumEditorQmlDemo
         Qt6::QuickControls2
         Qt6::QuickDialogs2
         Qt6::Widgets
+        Qt6::QuickEffects
         ProjectService
         ImportService
         ExportService

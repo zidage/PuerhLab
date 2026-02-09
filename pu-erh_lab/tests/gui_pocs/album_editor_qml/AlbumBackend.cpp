@@ -31,6 +31,8 @@
 #include "app/render_service.hpp"
 #include "image/image.hpp"
 #include "io/image/image_loader.hpp"
+#include "sleeve/sleeve_element/sleeve_file.hpp"
+#include "sleeve/sleeve_element/sleeve_folder.hpp"
 #include "sleeve/sleeve_filesystem.hpp"
 #include "type/supported_file_type.hpp"
 
@@ -274,16 +276,57 @@ auto ClampToRange(double value, double minValue, double maxValue) -> float {
   return static_cast<float>(std::clamp(value, minValue, maxValue));
 }
 
+auto BuildProjectPairInFolder(const std::filesystem::path& folder)
+    -> std::optional<std::pair<std::filesystem::path, std::filesystem::path>> {
+  std::error_code ec;
+  if (!std::filesystem::exists(folder, ec)) {
+    std::filesystem::create_directories(folder, ec);
+  }
+  if (ec || !std::filesystem::is_directory(folder, ec) || ec) {
+    return std::nullopt;
+  }
+
+  const std::wstring base_name = L"album_editor_project";
+  for (int index = 0; index < 1024; ++index) {
+    std::wstring suffix;
+    if (index > 0) {
+      suffix = L"_" + std::to_wstring(index);
+    }
+
+    const auto db_path   = folder / (base_name + suffix + L".db");
+    const auto meta_path = folder / (base_name + suffix + L".json");
+
+    ec.clear();
+    const bool db_exists = std::filesystem::exists(db_path, ec);
+    if (ec) {
+      continue;
+    }
+
+    ec.clear();
+    const bool meta_exists = std::filesystem::exists(meta_path, ec);
+    if (ec) {
+      continue;
+    }
+
+    if (!db_exists && !meta_exists) {
+      return std::make_pair(db_path, meta_path);
+    }
+  }
+
+  return std::nullopt;
+}
+
 }  // namespace
 
 AlbumBackend::AlbumBackend(QObject* parent) : QObject(parent), rule_model_(this) {
   const QString pictures = QStandardPaths::writableLocation(QStandardPaths::PicturesLocation);
   default_export_folder_ = pictures.isEmpty() ? QDir::currentPath() : pictures;
 
-  initializeServices();
   initializeEditorLuts();
-  rebuildThumbnailView(std::nullopt);
-  applyFilters(static_cast<int>(FilterOp::AND));
+  service_ready_ = false;
+  service_message_ =
+      "Select a project: load an existing metadata JSON or create a new project folder.";
+  task_status_ = "Open or create a project to begin.";
 }
 
 AlbumBackend::~AlbumBackend() {
@@ -295,10 +338,7 @@ AlbumBackend::~AlbumBackend() {
     if (pipeline_service_) {
       pipeline_service_->Sync();
     }
-    if (project_) {
-      project_->GetImagePoolService()->SyncWithStorage();
-      project_->SaveProject(meta_path_);
-    }
+    (void)persistCurrentProjectState();
   } catch (...) {
   }
 }
@@ -421,6 +461,98 @@ void AlbumBackend::clearFilters() {
   rebuildThumbnailView(std::nullopt);
 }
 
+bool AlbumBackend::loadProject(const QString& metaFileUrlOrPath) {
+  if (project_loading_) {
+    service_message_ = "A project load is already in progress.";
+    emit serviceStateChanged();
+    return false;
+  }
+
+  const auto meta_path_opt = InputToPath(metaFileUrlOrPath);
+  if (!meta_path_opt.has_value()) {
+    service_ready_   = project_ != nullptr;
+    service_message_ = "Select a valid metadata JSON file.";
+    emit serviceStateChanged();
+    return false;
+  }
+
+  std::error_code ec;
+  if (!std::filesystem::is_regular_file(meta_path_opt.value(), ec) || ec) {
+    service_ready_   = project_ != nullptr;
+    service_message_ = "Metadata JSON file was not found.";
+    emit serviceStateChanged();
+    return false;
+  }
+
+  const auto db_hint_path =
+      meta_path_opt->parent_path() / (meta_path_opt->stem().wstring() + L".db");
+  return initializeServices(db_hint_path, meta_path_opt.value(), ProjectOpenMode::kLoadExisting);
+}
+
+bool AlbumBackend::createProjectInFolder(const QString& folderUrlOrPath) {
+  if (project_loading_) {
+    service_message_ = "A project load is already in progress.";
+    emit serviceStateChanged();
+    return false;
+  }
+
+  const auto folder_path_opt = InputToPath(folderUrlOrPath);
+  if (!folder_path_opt.has_value()) {
+    service_ready_   = project_ != nullptr;
+    service_message_ = "Select a valid folder for the new project.";
+    emit serviceStateChanged();
+    return false;
+  }
+
+  const auto pair_opt = BuildProjectPairInFolder(folder_path_opt.value());
+  if (!pair_opt.has_value()) {
+    service_ready_ = project_ != nullptr;
+    service_message_ =
+        "Failed to prepare project files in the selected folder. Check write permissions.";
+    emit serviceStateChanged();
+    return false;
+  }
+
+  return initializeServices(pair_opt->first, pair_opt->second, ProjectOpenMode::kCreateNew);
+}
+
+bool AlbumBackend::saveProject() {
+  if (project_loading_) {
+    service_message_ = "Please wait until project loading finishes.";
+    emit serviceStateChanged();
+    return false;
+  }
+
+  if (!project_ || meta_path_.empty()) {
+    service_ready_   = false;
+    service_message_ = "No project is loaded yet.";
+    emit serviceStateChanged();
+    setTaskState("No project to save.", 0, false);
+    return false;
+  }
+
+  if (editor_active_) {
+    finalizeEditorSession(true);
+  }
+
+  if (!persistCurrentProjectState()) {
+    service_message_ = "Project save failed.";
+    emit serviceStateChanged();
+    setTaskState("Project save failed.", 0, false);
+    return false;
+  }
+
+  service_message_ = QString("Project saved to %1").arg(PathToQString(meta_path_));
+  emit serviceStateChanged();
+  setTaskState("Project saved.", 100, false);
+  QTimer::singleShot(1200, this, [this]() {
+    if (!export_inflight_ && !task_cancel_visible_) {
+      setTaskState("No background tasks", 0, false);
+    }
+  });
+  return true;
+}
+
 auto AlbumBackend::compareOptionsForField(int fieldValue) const -> QVariantList {
   return FilterRuleModel::compareOptionsForField(static_cast<FilterField>(fieldValue));
 }
@@ -430,6 +562,10 @@ auto AlbumBackend::placeholderForField(int fieldValue) const -> QString {
 }
 
 void AlbumBackend::startImport(const QStringList& fileUrlsOrPaths) {
+  if (project_loading_) {
+    setTaskState("Project is loading. Please wait.", 0, false);
+    return;
+  }
   if (!import_service_) {
     setTaskState("Import service is unavailable.", 0, false);
     return;
@@ -557,6 +693,13 @@ void AlbumBackend::startExportWithOptionsForTargets(const QString& outputDirUrlO
                                                     int pngCompressionLevel,
                                                     const QString& tiffCompression,
                                                     const QVariantList& targetEntries) {
+  if (project_loading_) {
+    export_status_ = "Project is loading. Please wait.";
+    emit exportStateChanged();
+    setTaskState(export_status_, 0, false);
+    return;
+  }
+
   const auto fail_with_status = [this](const QString& message) {
     export_status_ = message;
     emit exportStateChanged();
@@ -780,6 +923,11 @@ void AlbumBackend::resetExportState() {
 }
 
 void AlbumBackend::openEditor(uint elementId, uint imageId) {
+  if (project_loading_) {
+    editor_status_ = "Project is loading. Please wait.";
+    emit editorStateChanged();
+    return;
+  }
   if (!pipeline_service_ || !project_ || !history_service_) {
     editor_status_ = "Editor service is unavailable.";
     emit editorStateChanged();
@@ -926,37 +1074,322 @@ void AlbumBackend::setEditorClarity(double value) {
   setEditorAdjustment(editor_state_.clarity_, value, -100.0, 100.0);
 }
 
-void AlbumBackend::initializeServices() {
-  try {
-    db_path_   = std::filesystem::temp_directory_path() / "album_editor_qml_demo.db";
-    meta_path_ = std::filesystem::temp_directory_path() / "album_editor_qml_demo.json";
-
-    std::error_code ec;
-    std::filesystem::remove(db_path_, ec);
-    ec.clear();
-    std::filesystem::remove(meta_path_, ec);
-
-    project_ = std::make_shared<ProjectService>(db_path_, meta_path_);
-    pipeline_service_ = std::make_shared<PipelineMgmtService>(project_->GetStorageService());
-    history_service_ = std::make_shared<EditHistoryMgmtService>(project_->GetStorageService());
-    thumbnail_service_ = std::make_shared<ThumbnailService>(project_->GetSleeveService(),
-                                                            project_->GetImagePoolService(),
-                                                            pipeline_service_);
-    filter_service_ = std::make_unique<SleeveFilterService>(project_->GetStorageService());
-    import_service_ = std::make_unique<ImportServiceImpl>(project_->GetSleeveService(),
-                                                          project_->GetImagePoolService());
-    export_service_ = std::make_shared<ExportService>(project_->GetSleeveService(),
-                                                      project_->GetImagePoolService(),
-                                                      pipeline_service_);
-
-    service_ready_   = true;
-    service_message_ = QString("ProjectService initialized (%1)").arg(PathToQString(db_path_));
-  } catch (const std::exception& e) {
-    service_ready_   = false;
-    service_message_ = QString("Service init failed: %1").arg(QString::fromUtf8(e.what()));
+bool AlbumBackend::initializeServices(const std::filesystem::path& dbPath,
+                                      const std::filesystem::path& metaPath,
+                                      ProjectOpenMode              openMode) {
+  if (project_loading_) {
+    service_message_ = "A project load is already in progress.";
+    emit serviceStateChanged();
+    return false;
   }
 
+  if (current_import_job_ && !current_import_job_->IsCancelationAcked()) {
+    service_ready_   = project_ != nullptr;
+    service_message_ = "Cannot switch project while an import is running.";
+    emit serviceStateChanged();
+    return false;
+  }
+  if (export_inflight_) {
+    service_ready_   = project_ != nullptr;
+    service_message_ = "Cannot switch project while export is running.";
+    emit serviceStateChanged();
+    return false;
+  }
+
+  if (editor_active_) {
+    finalizeEditorSession(true);
+  }
+
+  service_message_ = (openMode == ProjectOpenMode::kCreateNew) ? "Creating project..."
+                                                                : "Loading project...";
   emit serviceStateChanged();
+  setProjectLoadingState(true, service_message_);
+  setTaskState("Opening project...", 0, false);
+
+  const auto request_id = ++project_load_request_id_;
+
+  auto old_project  = project_;
+  auto old_pipeline = pipeline_service_;
+  auto old_meta     = meta_path_;
+
+  QPointer<AlbumBackend> self(this);
+  std::thread([self, request_id, old_project = std::move(old_project),
+               old_pipeline = std::move(old_pipeline), old_meta = std::move(old_meta), dbPath,
+               metaPath, openMode]() mutable {
+    struct LoadResult {
+      bool                                 success_ = false;
+      QString                              error_{};
+      std::shared_ptr<ProjectService>      project_{};
+      std::shared_ptr<PipelineMgmtService> pipeline_{};
+      std::shared_ptr<EditHistoryMgmtService> history_{};
+      std::shared_ptr<ThumbnailService>    thumbnail_{};
+      std::unique_ptr<SleeveFilterService> filter_{};
+      std::unique_ptr<ImportServiceImpl>   import_{};
+      std::shared_ptr<ExportService>       export_{};
+      std::filesystem::path                db_path_{};
+      std::filesystem::path                meta_path_{};
+      std::vector<ExistingAlbumEntry>      entries_{};
+    };
+
+    auto result = std::make_shared<LoadResult>();
+
+    try {
+      if (old_pipeline) {
+        old_pipeline->Sync();
+      }
+      if (old_project && !old_meta.empty()) {
+        old_project->GetSleeveService()->Sync();
+        old_project->GetImagePoolService()->SyncWithStorage();
+        old_project->SaveProject(old_meta);
+      }
+
+      result->project_ = std::make_shared<ProjectService>(dbPath, metaPath, openMode);
+      result->pipeline_ =
+          std::make_shared<PipelineMgmtService>(result->project_->GetStorageService());
+      result->history_ =
+          std::make_shared<EditHistoryMgmtService>(result->project_->GetStorageService());
+      result->thumbnail_ = std::make_shared<ThumbnailService>(
+          result->project_->GetSleeveService(), result->project_->GetImagePoolService(),
+          result->pipeline_);
+      result->filter_ =
+          std::make_unique<SleeveFilterService>(result->project_->GetStorageService());
+      result->import_ = std::make_unique<ImportServiceImpl>(result->project_->GetSleeveService(),
+                                                            result->project_->GetImagePoolService());
+      result->export_ = std::make_shared<ExportService>(result->project_->GetSleeveService(),
+                                                        result->project_->GetImagePoolService(),
+                                                        result->pipeline_);
+
+      if (openMode == ProjectOpenMode::kCreateNew) {
+        result->project_->GetSleeveService()->Sync();
+        result->project_->GetImagePoolService()->SyncWithStorage();
+        result->project_->SaveProject(metaPath);
+      }
+
+      result->db_path_   = result->project_->GetDBPath();
+      result->meta_path_ = result->project_->GetMetaPath();
+      if (result->meta_path_.empty()) {
+        result->meta_path_ = metaPath;
+      }
+
+      if (self) {
+        result->entries_ = self->collectAlbumEntries(result->project_);
+      }
+      result->success_ = true;
+    } catch (const std::exception& e) {
+      result->success_ = false;
+      result->error_   = QString::fromUtf8(e.what());
+    } catch (...) {
+      result->success_ = false;
+      result->error_   = "Unknown project load error.";
+    }
+
+    if (!self) {
+      return;
+    }
+
+    QMetaObject::invokeMethod(
+        self,
+        [self, request_id, result]() mutable {
+          if (!self || request_id != self->project_load_request_id_) {
+            return;
+          }
+
+          if (!result->success_) {
+            self->setProjectLoadingState(false, QString());
+            self->service_ready_ = self->project_ != nullptr;
+            self->service_message_ =
+                self->project_
+                    ? QString("Requested project failed to open: %1").arg(result->error_)
+                    : QString("Project open failed: %1").arg(result->error_);
+            self->setTaskState("Project open failed.", 0, false);
+            emit self->serviceStateChanged();
+            return;
+          }
+
+          self->project_           = std::move(result->project_);
+          self->pipeline_service_  = std::move(result->pipeline_);
+          self->history_service_   = std::move(result->history_);
+          self->thumbnail_service_ = std::move(result->thumbnail_);
+          self->filter_service_    = std::move(result->filter_);
+          self->import_service_    = std::move(result->import_);
+          self->export_service_    = std::move(result->export_);
+          self->db_path_           = std::move(result->db_path_);
+          self->meta_path_         = std::move(result->meta_path_);
+
+          self->clearProjectData();
+          self->resetExportState();
+          self->pending_project_entries_      = std::move(result->entries_);
+          self->pending_project_entry_index_  = 0;
+          self->applyLoadedProjectEntriesBatch();
+        },
+        Qt::QueuedConnection);
+  }).detach();
+
+  return true;
+}
+
+bool AlbumBackend::persistCurrentProjectState() {
+  try {
+    if (pipeline_service_) {
+      pipeline_service_->Sync();
+    }
+    if (project_) {
+      project_->GetSleeveService()->Sync();
+      project_->GetImagePoolService()->SyncWithStorage();
+      if (!meta_path_.empty()) {
+        project_->SaveProject(meta_path_);
+      }
+    }
+    return true;
+  } catch (...) {
+    return false;
+  }
+}
+
+auto AlbumBackend::collectAlbumEntries(const std::shared_ptr<ProjectService>& project) const
+    -> std::vector<ExistingAlbumEntry> {
+  std::vector<ExistingAlbumEntry> entries;
+  if (!project) {
+    return entries;
+  }
+
+  try {
+    auto& element_ctrl = project->GetStorageService()->GetElementController();
+
+    std::vector<sl_element_id_t>  stack{0};
+    std::unordered_set<sl_element_id_t> visited;
+    visited.reserve(4096);
+
+    while (!stack.empty()) {
+      const sl_element_id_t current_id = stack.back();
+      stack.pop_back();
+
+      if (!visited.insert(current_id).second) {
+        continue;
+      }
+
+      std::shared_ptr<SleeveElement> element;
+      try {
+        element = element_ctrl.GetElementById(current_id);
+      } catch (...) {
+        continue;
+      }
+
+      if (!element || element->sync_flag_ == SyncFlag::DELETED) {
+        continue;
+      }
+
+      if (element->type_ == ElementType::FILE) {
+        const auto file = std::dynamic_pointer_cast<SleeveFile>(element);
+        if (!file || file->image_id_ == 0) {
+          continue;
+        }
+        entries.push_back({file->element_id_, file->image_id_, file->element_name_});
+        continue;
+      }
+
+      std::vector<sl_element_id_t> children;
+      try {
+        children = element_ctrl.GetFolderContent(current_id);
+      } catch (...) {
+        children.clear();
+      }
+
+      for (const auto child_id : children) {
+        if (child_id != current_id) {
+          stack.push_back(child_id);
+        }
+      }
+    }
+  } catch (...) {
+  }
+
+  std::sort(entries.begin(), entries.end(), [](const ExistingAlbumEntry& lhs,
+                                               const ExistingAlbumEntry& rhs) {
+    if (lhs.file_name_ != rhs.file_name_) {
+      return lhs.file_name_ < rhs.file_name_;
+    }
+    return lhs.element_id_ < rhs.element_id_;
+  });
+
+  return entries;
+}
+
+void AlbumBackend::applyLoadedProjectEntriesBatch() {
+  if (!project_loading_) {
+    return;
+  }
+
+  const size_t total = pending_project_entries_.size();
+  if (total == 0 || pending_project_entry_index_ >= total) {
+    pending_project_entries_.clear();
+    pending_project_entry_index_ = 0;
+    rebuildThumbnailView(std::nullopt);
+    setTaskState("No background tasks", 0, false);
+
+    service_ready_ = true;
+    service_message_ =
+        QString("Loaded project. DB: %1  Meta: %2")
+            .arg(PathToQString(db_path_))
+            .arg(PathToQString(meta_path_));
+    emit serviceStateChanged();
+    emit projectChanged();
+    setProjectLoadingState(false, QString());
+    return;
+  }
+
+  constexpr size_t kBatchSize = 24;
+  const size_t     end_index  = std::min(total, pending_project_entry_index_ + kBatchSize);
+
+  for (; pending_project_entry_index_ < end_index; ++pending_project_entry_index_) {
+    const auto& entry = pending_project_entries_[pending_project_entry_index_];
+    addOrUpdateAlbumItem(entry.element_id_, entry.image_id_, entry.file_name_);
+  }
+
+  const int pct =
+      total == 0 ? 0 : static_cast<int>((pending_project_entry_index_ * 100ULL) / total);
+  setTaskState(
+      QString("Loading album... %1/%2").arg(static_cast<int>(pending_project_entry_index_)).arg(
+          static_cast<int>(total)),
+      pct, false);
+  setProjectLoadingState(
+      true, QString("Loading album... %1/%2")
+                .arg(static_cast<int>(pending_project_entry_index_))
+                .arg(static_cast<int>(total)));
+
+  QTimer::singleShot(0, this, [this]() { applyLoadedProjectEntriesBatch(); });
+}
+
+void AlbumBackend::setProjectLoadingState(bool loading, const QString& message) {
+  const QString next_message = loading ? message : QString();
+  if (project_loading_ == loading && project_loading_message_ == next_message) {
+    return;
+  }
+  project_loading_         = loading;
+  project_loading_message_ = next_message;
+  emit projectLoadStateChanged();
+}
+
+void AlbumBackend::clearProjectData() {
+  all_images_.clear();
+  index_by_element_id_.clear();
+  visible_thumbnails_.clear();
+  active_filter_ids_.reset();
+
+  rule_model_.clearAndReset();
+  last_join_op_ = FilterOp::AND;
+
+  if (!sql_preview_.isEmpty()) {
+    sql_preview_.clear();
+    emit sqlPreviewChanged();
+  }
+  if (!validation_error_.isEmpty()) {
+    validation_error_.clear();
+    emit validationErrorChanged();
+  }
+
+  emit thumbnailsChanged();
+  emit countsChanged();
 }
 
 void AlbumBackend::rebuildThumbnailView(
@@ -1562,9 +1995,9 @@ auto AlbumBackend::loadEditorStateFromPipeline() -> bool {
   const auto& color  = exec->GetStage(PipelineStageName::Color_Adjustment);
   const auto& detail = exec->GetStage(PipelineStageName::Detail_Adjustment);
 
-  if (!basic.GetOperator(OperatorType::EXPOSURE).has_value()) {
-    return false;
-  }
+  // if (!basic.GetOperator(OperatorType::EXPOSURE).has_value()) {
+  //   return false;
+  // }
 
   EditorState loaded;
   if (const auto v = ReadFloat(basic, OperatorType::EXPOSURE, "exposure"); v.has_value()) {

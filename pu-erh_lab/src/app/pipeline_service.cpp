@@ -206,7 +206,6 @@ void PipelineMgmtService::SavePipeline(std::shared_ptr<PipelineGuard> pipeline) 
   // editor sessions and hurting interactive performance.
   {
     std::unique_lock<std::mutex> render_guard(pipeline->pipeline_->GetRenderLock());
-    pipeline->pipeline_->ClearAllIntermediateBuffers();
     pipeline->pipeline_->ResetExecutionStages();
   }
 

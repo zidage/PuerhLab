@@ -41,6 +41,8 @@ class AlbumBackend final : public QObject {
   Q_PROPERTY(QString validationError READ validationError NOTIFY validationErrorChanged)
   Q_PROPERTY(bool serviceReady READ serviceReady NOTIFY serviceStateChanged)
   Q_PROPERTY(QString serviceMessage READ serviceMessage NOTIFY serviceStateChanged)
+  Q_PROPERTY(bool projectLoading READ projectLoading NOTIFY projectLoadStateChanged)
+  Q_PROPERTY(QString projectLoadingMessage READ projectLoadingMessage NOTIFY projectLoadStateChanged)
   Q_PROPERTY(QString taskStatus READ taskStatus NOTIFY taskStateChanged)
   Q_PROPERTY(int taskProgress READ taskProgress NOTIFY taskStateChanged)
   Q_PROPERTY(bool taskCancelVisible READ taskCancelVisible NOTIFY taskStateChanged)
@@ -86,6 +88,8 @@ class AlbumBackend final : public QObject {
   const QString& validationError() const { return validation_error_; }
   bool serviceReady() const { return service_ready_; }
   const QString& serviceMessage() const { return service_message_; }
+  bool projectLoading() const { return project_loading_; }
+  const QString& projectLoadingMessage() const { return project_loading_message_; }
   const QString& taskStatus() const { return task_status_; }
   int taskProgress() const { return task_progress_; }
   bool taskCancelVisible() const { return task_cancel_visible_; }
@@ -131,6 +135,9 @@ class AlbumBackend final : public QObject {
 
   Q_INVOKABLE void startImport(const QStringList& fileUrlsOrPaths);
   Q_INVOKABLE void cancelImport();
+  Q_INVOKABLE bool loadProject(const QString& metaFileUrlOrPath);
+  Q_INVOKABLE bool createProjectInFolder(const QString& folderUrlOrPath);
+  Q_INVOKABLE bool saveProject();
   Q_INVOKABLE void startExport(const QString& outputDirUrlOrPath);
   Q_INVOKABLE void startExportWithOptions(const QString& outputDirUrlOrPath,
                                           const QString& formatName, bool resizeEnabled,
@@ -172,6 +179,8 @@ signals:
   void exportStateChanged();
   void editorStateChanged();
   void editorPreviewChanged();
+  void projectChanged();
+  void projectLoadStateChanged();
 
  private:
   struct AlbumItem {
@@ -210,7 +219,21 @@ signals:
     std::string lut_path_{};
   };
 
-  void initializeServices();
+  struct ExistingAlbumEntry {
+    sl_element_id_t element_id_ = 0;
+    image_id_t      image_id_   = 0;
+    file_name_t     file_name_{};
+  };
+
+  bool initializeServices(const std::filesystem::path& dbPath,
+                          const std::filesystem::path& metaPath,
+                          ProjectOpenMode              openMode);
+  bool persistCurrentProjectState();
+  auto collectAlbumEntries(const std::shared_ptr<ProjectService>& project) const
+      -> std::vector<ExistingAlbumEntry>;
+  void applyLoadedProjectEntriesBatch();
+  void setProjectLoadingState(bool loading, const QString& message);
+  void clearProjectData();
   void rebuildThumbnailView(
       const std::optional<std::unordered_set<sl_element_id_t>>& allowedElementIds);
   void addImportedEntries(const ImportLogSnapshot& snapshot);
@@ -273,6 +296,11 @@ signals:
   QString                                             validation_error_{};
   QString                                             service_message_ = "Initializing backend services...";
   bool                                                service_ready_   = false;
+  bool                                                project_loading_ = false;
+  QString                                             project_loading_message_{};
+  uint64_t                                            project_load_request_id_ = 0;
+  std::vector<ExistingAlbumEntry>                     pending_project_entries_{};
+  size_t                                              pending_project_entry_index_ = 0;
 
   QString                                             task_status_         = "No background tasks";
   int                                                 task_progress_       = 0;

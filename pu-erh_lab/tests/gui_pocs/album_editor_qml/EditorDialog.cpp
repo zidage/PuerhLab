@@ -74,6 +74,12 @@ auto ListCubeLutsInDir(const std::filesystem::path& dir) -> std::vector<std::fil
             });
   return files;
 }
+
+constexpr float kBlackSliderFromGlobalScale      = 1000.0f;
+constexpr float kWhiteSliderFromGlobalScale      = 300.0f;
+constexpr float kShadowsSliderFromGlobalScale    = 80.0f;
+constexpr float kHighlightsSliderFromGlobalScale = 50.0f;
+
 class SpinnerWidget final : public QWidget {
  public:
   explicit SpinnerWidget(QWidget* parent = nullptr) : QWidget(parent) {
@@ -979,7 +985,7 @@ class EditorDialog final : public QDialog {
     syncing_controls_ = false;
   }
 
-  auto ExportPipelineParamsForVersion(Version& version) -> std::optional<nlohmann::json> {
+  auto ReconstructPipelineParamsForVersion(Version& version) -> std::optional<nlohmann::json> {
     if (const auto snapshot = version.GetFinalPipelineParams(); snapshot.has_value()) {
       return snapshot;
     }
@@ -1021,6 +1027,20 @@ class EditorDialog final : public QDialog {
     return replay_exec->ExportPipelineParams();
   }
 
+  auto ReloadUiStateFromPipeline(bool reset_to_defaults_if_missing) -> bool {
+    const bool loaded = LoadStateFromPipelineIfPresent();
+    if (!loaded && !reset_to_defaults_if_missing) {
+      return false;
+    }
+    if (!loaded) {
+      state_ = AdjustmentState{};
+    }
+    committed_state_ = state_;
+    SyncControlsFromState();
+    TriggerQualityPreviewRenderFromPipeline();
+    return true;
+  }
+
   auto ApplyPipelineParamsToEditor(const nlohmann::json& params) -> bool {
     if (!pipeline_guard_ || !pipeline_guard_->pipeline_) {
       return false;
@@ -1032,12 +1052,24 @@ class EditorDialog final : public QDialog {
     pipeline_guard_->dirty_ = true;
     last_applied_lut_path_.clear();
 
-    if (!LoadStateFromPipelineIfPresent()) {
-      state_ = AdjustmentState{};
+    return ReloadUiStateFromPipeline(/*reset_to_defaults_if_missing=*/true);
+  }
+
+  auto ReloadEditorFromHistoryVersion(Version& version, QString* error) -> bool {
+    const auto selected_params = ReconstructPipelineParamsForVersion(version);
+    if (!selected_params.has_value()) {
+      if (error) {
+        *error = "Could not reconstruct pipeline params for the selected version.";
+      }
+      return false;
     }
-    committed_state_ = state_;
-    SyncControlsFromState();
-    TriggerQualityPreviewRenderFromPipeline();
+
+    if (!ApplyPipelineParamsToEditor(*selected_params)) {
+      if (error) {
+        *error = "Failed to apply selected version to the editor.";
+      }
+      return false;
+    }
     return true;
   }
 
@@ -1068,15 +1100,9 @@ class EditorDialog final : public QDialog {
       return;
     }
 
-    const auto selected_params = ExportPipelineParamsForVersion(*selected_version);
-    if (!selected_params.has_value()) {
-      QMessageBox::warning(this, "History",
-                           "Could not reconstruct pipeline params for the selected version.");
-      return;
-    }
-
-    if (!ApplyPipelineParamsToEditor(*selected_params)) {
-      QMessageBox::warning(this, "History", "Failed to apply selected version to the editor.");
+    QString reload_error;
+    if (!ReloadEditorFromHistoryVersion(*selected_version, &reload_error)) {
+      QMessageBox::warning(this, "History", reload_error);
       return;
     }
 
@@ -1141,13 +1167,10 @@ class EditorDialog final : public QDialog {
     }
 
     pipeline_guard_->dirty_ = true;
-    if (!LoadStateFromPipelineIfPresent()) {
+    if (!ReloadUiStateFromPipeline(/*reset_to_defaults_if_missing=*/false)) {
       QMessageBox::warning(this, "History", "Undo failed while reloading pipeline state.");
       return;
     }
-    committed_state_ = state_;
-    SyncControlsFromState();
-    TriggerQualityPreviewRenderFromPipeline();
     UpdateVersionUi();
   }
 
@@ -1579,8 +1602,26 @@ class EditorDialog final : public QDialog {
       return false;
     }
 
-    AdjustmentState loaded_state{};
-    loaded_state.type_ = state_.type_;
+    AdjustmentState loaded_state = state_;
+    loaded_state.type_           = state_.type_;
+    bool has_loaded_any          = false;
+
+    auto IsOperatorEnabled = [](const PipelineStage& stage,
+                                OperatorType type) -> std::optional<bool> {
+      const auto op = stage.GetOperator(type);
+      if (!op.has_value() || op.value() == nullptr) {
+        return std::nullopt;
+      }
+      const auto j = op.value()->ExportOperatorParams();
+      if (!j.contains("enable")) {
+        return true;
+      }
+      try {
+        return j["enable"].get<bool>();
+      } catch (...) {
+        return std::nullopt;
+      }
+    };
 
     auto ReadFloat = [](const PipelineStage& stage, OperatorType type,
                         const char* key) -> std::optional<float> {
@@ -1662,52 +1703,88 @@ class EditorDialog final : public QDialog {
     const auto& color  = exec->GetStage(PipelineStageName::Color_Adjustment);
     const auto& detail = exec->GetStage(PipelineStageName::Detail_Adjustment);
 
-    // If there is no exposure operator, treat this as a fresh pipeline without saved params.
-    if (!basic.GetOperator(OperatorType::EXPOSURE).has_value()) {
-      return false;
-    }
-
     if (const auto v = ReadFloat(basic, OperatorType::EXPOSURE, "exposure"); v.has_value()) {
       loaded_state.exposure_ = v.value();
+      has_loaded_any         = true;
     }
     if (const auto v = ReadFloat(basic, OperatorType::CONTRAST, "contrast"); v.has_value()) {
       loaded_state.contrast_ = v.value();
+      has_loaded_any         = true;
     }
-    if (const auto v = ReadFloat(basic, OperatorType::BLACK, "black"); v.has_value()) {
+
+    // Read tonal controls from global params to avoid operator-param representation drift.
+    const auto black_enabled = IsOperatorEnabled(basic, OperatorType::BLACK);
+    if (black_enabled.has_value() && black_enabled.value()) {
+      loaded_state.blacks_ =
+          exec->GetGlobalParams().black_point_ * kBlackSliderFromGlobalScale;
+      has_loaded_any = true;
+    } else if (const auto v = ReadFloat(basic, OperatorType::BLACK, "black"); v.has_value()) {
       loaded_state.blacks_ = v.value();
+      has_loaded_any       = true;
     }
-    if (const auto v = ReadFloat(basic, OperatorType::WHITE, "white"); v.has_value()) {
+
+    const auto white_enabled = IsOperatorEnabled(basic, OperatorType::WHITE);
+    if (white_enabled.has_value() && white_enabled.value()) {
+      loaded_state.whites_ =
+          (exec->GetGlobalParams().white_point_ - 1.0f) * kWhiteSliderFromGlobalScale;
+      has_loaded_any = true;
+    } else if (const auto v = ReadFloat(basic, OperatorType::WHITE, "white"); v.has_value()) {
       loaded_state.whites_ = v.value();
+      has_loaded_any       = true;
     }
-    if (const auto v = ReadFloat(basic, OperatorType::SHADOWS, "shadows"); v.has_value()) {
+
+    const auto shadows_enabled = IsOperatorEnabled(basic, OperatorType::SHADOWS);
+    if (shadows_enabled.has_value() && shadows_enabled.value()) {
+      loaded_state.shadows_ =
+          exec->GetGlobalParams().shadows_offset_ * kShadowsSliderFromGlobalScale;
+      has_loaded_any = true;
+    } else if (const auto v = ReadFloat(basic, OperatorType::SHADOWS, "shadows"); v.has_value()) {
       loaded_state.shadows_ = v.value();
+      has_loaded_any        = true;
     }
-    if (const auto v = ReadFloat(basic, OperatorType::HIGHLIGHTS, "highlights"); v.has_value()) {
+
+    const auto highlights_enabled = IsOperatorEnabled(basic, OperatorType::HIGHLIGHTS);
+    if (highlights_enabled.has_value() && highlights_enabled.value()) {
+      loaded_state.highlights_ =
+          exec->GetGlobalParams().highlights_offset_ * kHighlightsSliderFromGlobalScale;
+      has_loaded_any = true;
+    } else if (const auto v = ReadFloat(basic, OperatorType::HIGHLIGHTS, "highlights");
+               v.has_value()) {
       loaded_state.highlights_ = v.value();
+      has_loaded_any           = true;
     }
 
     if (const auto v = ReadFloat(color, OperatorType::SATURATION, "saturation"); v.has_value()) {
       loaded_state.saturation_ = v.value();
+      has_loaded_any           = true;
     }
     if (const auto v = ReadFloat(color, OperatorType::TINT, "tint"); v.has_value()) {
       loaded_state.tint_ = v.value();
+      has_loaded_any     = true;
     }
 
     if (const auto v = ReadNestedFloat(detail, OperatorType::SHARPEN, "sharpen", "offset");
         v.has_value()) {
       loaded_state.sharpen_ = v.value();
+      has_loaded_any        = true;
     }
     if (const auto v = ReadFloat(detail, OperatorType::CLARITY, "clarity"); v.has_value()) {
       loaded_state.clarity_ = v.value();
+      has_loaded_any        = true;
     }
 
-    // LUT (LMT): if a path exists, treat it as enabled.
     const auto lut = ReadString(color, OperatorType::LMT, "ocio_lmt");
-    if (lut.has_value() && !lut->empty()) {
+    if (lut.has_value()) {
       loaded_state.lut_path_ = *lut;
-    } else {
-      // Fall back to global flag, but keep empty path if none is specified.
+      has_loaded_any         = true;
+    } else if (const auto lmt_enabled = IsOperatorEnabled(color, OperatorType::LMT);
+               lmt_enabled.has_value() && !lmt_enabled.value()) {
       loaded_state.lut_path_.clear();
+      has_loaded_any = true;
+    }
+
+    if (!has_loaded_any) {
+      return false;
     }
 
     state_ = loaded_state;

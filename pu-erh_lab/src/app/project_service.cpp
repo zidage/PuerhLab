@@ -22,15 +22,30 @@
 
 namespace puerhlab {
 ProjectService::ProjectService(const std::filesystem::path& db_path,
-                               const std::filesystem::path& meta_path)
+                               const std::filesystem::path& meta_path,
+                               ProjectOpenMode              open_mode)
     : db_path_(db_path), meta_path_(meta_path) {
-  try {
-    LoadProject(meta_path);
-  } catch (...) {
-    // Load failed, create new project
+  const auto create_new_project = [this]() {
     storage_service_ = std::make_shared<StorageService>(db_path_);
     RecreateSleeveService(0);
     pool_service_ = std::make_shared<ImagePoolService>(storage_service_, 0);
+  };
+
+  switch (open_mode) {
+    case ProjectOpenMode::kLoadExisting:
+      LoadProject(meta_path);
+      return;
+    case ProjectOpenMode::kCreateNew:
+      create_new_project();
+      return;
+    case ProjectOpenMode::kLoadOrCreate:
+      break;
+  }
+
+  try {
+    LoadProject(meta_path);
+  } catch (...) {
+    create_new_project();
   }
 }
 
@@ -70,11 +85,35 @@ void ProjectService::LoadProject(const std::filesystem::path& meta_path) {
   nlohmann::json metadata;
   file >> metadata;
 
-  db_path_                 = std::filesystem::path(conv::FromBytes(metadata["db_path"]));
-  meta_path_               = std::filesystem::path(conv::FromBytes(metadata["meta_path"]));
-  sl_element_id_t start_id = static_cast<sl_element_id_t>(metadata["start_id"]);
+  if (!metadata.contains("db_path")) {
+    throw std::runtime_error("Project metadata missing db_path");
+  }
+
+  db_path_   = std::filesystem::path(conv::FromBytes(metadata.at("db_path")));
+  meta_path_ = meta_path;
+  if (metadata.contains("meta_path")) {
+    const auto stored_meta_path = std::filesystem::path(conv::FromBytes(metadata.at("meta_path")));
+    if (!stored_meta_path.empty()) {
+      meta_path_ = stored_meta_path;
+    }
+  }
+
+  if (db_path_.empty()) {
+    throw std::runtime_error("Project metadata db_path is empty");
+  }
+  if (!std::filesystem::exists(db_path_)) {
+    throw std::runtime_error("Project database file does not exist");
+  }
+
+  sl_element_id_t start_id = 0;
+  if (metadata.contains("start_id")) {
+    start_id = static_cast<sl_element_id_t>(metadata.at("start_id"));
+  }
+
   sl_element_id_t image_pool_start_id =
-      static_cast<sl_element_id_t>(metadata["image_pool_start_id"]);
+      metadata.contains("image_pool_start_id")
+          ? static_cast<sl_element_id_t>(metadata.at("image_pool_start_id"))
+          : 0;
   storage_service_ = std::make_shared<StorageService>(db_path_);
   RecreateSleeveService(start_id);
   pool_service_ = std::make_shared<ImagePoolService>(storage_service_, image_pool_start_id);

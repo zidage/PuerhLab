@@ -18,6 +18,7 @@
 #include <opencv2/core/types.hpp>
 #include <opencv2/highgui.hpp>
 #include <opencv2/opencv.hpp>
+#include <string>
 
 #include "edit/operators/op_base.hpp"
 #include "image/image_buffer.hpp"
@@ -37,13 +38,27 @@ void                HighlightsOp::Apply(std::shared_ptr<ImageBuffer> input) { (v
 
 void HighlightsOp::ApplyGPU(std::shared_ptr<ImageBuffer>) { throw std::runtime_error("HighlightsOp: ApplyGPU not implemented"); }
 
-auto HighlightsOp::GetParams() const -> nlohmann::json { return {script_name_, offset_}; }
+auto HighlightsOp::GetParams() const -> nlohmann::json {
+  return {{std::string(script_name_), offset_}};
+}
 
 void HighlightsOp::SetParams(const nlohmann::json& params) {
-  if (!params.contains(script_name_)) {
-    offset_ = 0.0f;
-  } else {
+  bool found = false;
+  if (params.is_object() && params.contains(script_name_)) {
     offset_ = params[script_name_].get<float>();
+    found   = true;
+  } else if (params.is_array() && params.size() == 2) {
+    // Backward compatibility for legacy snapshots serialized as ["highlights", value].
+    try {
+      if (params[0].is_string() && params[0].get<std::string>() == script_name_) {
+        offset_ = params[1].get<float>();
+        found   = true;
+      }
+    } catch (...) {
+    }
+  }
+  if (!found) {
+    offset_ = 0.0f;
   }
   curve_.control_    = clampf(offset_ / 50.0f, -2.0f, 2.0f);
   const float c = std::max(0.0f, curve_.control_);
