@@ -34,6 +34,9 @@ class AlbumBackend final : public QObject {
   Q_PROPERTY(puerhlab::demo::FilterRuleModel* filterRules READ filterRules CONSTANT)
   Q_PROPERTY(QVariantList fieldOptions READ fieldOptions CONSTANT)
   Q_PROPERTY(QVariantList thumbnails READ thumbnails NOTIFY thumbnailsChanged)
+  Q_PROPERTY(QVariantList folders READ folders NOTIFY foldersChanged)
+  Q_PROPERTY(uint currentFolderId READ currentFolderId NOTIFY folderSelectionChanged)
+  Q_PROPERTY(QString currentFolderPath READ currentFolderPath NOTIFY folderSelectionChanged)
   Q_PROPERTY(int shownCount READ shownCount NOTIFY countsChanged)
   Q_PROPERTY(int totalCount READ totalCount NOTIFY countsChanged)
   Q_PROPERTY(QString filterInfo READ filterInfo NOTIFY countsChanged)
@@ -81,8 +84,11 @@ class AlbumBackend final : public QObject {
   FilterRuleModel* filterRules() { return &rule_model_; }
   QVariantList fieldOptions() const;
   QVariantList thumbnails() const { return visible_thumbnails_; }
+  QVariantList folders() const { return folders_; }
+  uint currentFolderId() const { return static_cast<uint>(current_folder_id_); }
+  const QString& currentFolderPath() const { return current_folder_path_text_; }
   int shownCount() const { return static_cast<int>(visible_thumbnails_.size()); }
-  int totalCount() const { return static_cast<int>(all_images_.size()); }
+  int totalCount() const;
   QString filterInfo() const;
   const QString& sqlPreview() const { return sql_preview_; }
   const QString& validationError() const { return validation_error_; }
@@ -132,11 +138,16 @@ class AlbumBackend final : public QObject {
   Q_INVOKABLE void clearFilters();
   Q_INVOKABLE QVariantList compareOptionsForField(int fieldValue) const;
   Q_INVOKABLE QString placeholderForField(int fieldValue) const;
+  Q_INVOKABLE void selectFolder(uint folderId);
+  Q_INVOKABLE void createFolder(const QString& folderName);
+  Q_INVOKABLE void deleteFolder(uint folderId);
 
   Q_INVOKABLE void startImport(const QStringList& fileUrlsOrPaths);
   Q_INVOKABLE void cancelImport();
   Q_INVOKABLE bool loadProject(const QString& metaFileUrlOrPath);
   Q_INVOKABLE bool createProjectInFolder(const QString& folderUrlOrPath);
+  Q_INVOKABLE bool createProjectInFolderNamed(const QString& folderUrlOrPath,
+                                              const QString& projectName);
   Q_INVOKABLE bool saveProject();
   Q_INVOKABLE void startExport(const QString& outputDirUrlOrPath);
   Q_INVOKABLE void startExportWithOptions(const QString& outputDirUrlOrPath,
@@ -181,10 +192,13 @@ signals:
   void editorPreviewChanged();
   void projectChanged();
   void projectLoadStateChanged();
+  void foldersChanged();
+  void folderSelectionChanged();
 
  private:
   struct AlbumItem {
     sl_element_id_t element_id    = 0;
+    sl_element_id_t parent_folder_id = 0;
     image_id_t      image_id      = 0;
     QString         file_name{};
     QString         camera_model{};
@@ -221,24 +235,48 @@ signals:
 
   struct ExistingAlbumEntry {
     sl_element_id_t element_id_ = 0;
+    sl_element_id_t parent_folder_id_ = 0;
     image_id_t      image_id_   = 0;
     file_name_t     file_name_{};
   };
 
+  struct ExistingFolderEntry {
+    sl_element_id_t      folder_id_   = 0;
+    sl_element_id_t      parent_id_   = 0;
+    file_name_t          folder_name_{};
+    std::filesystem::path folder_path_{};
+    int                  depth_       = 0;
+  };
+
+  struct ProjectSnapshot {
+    std::vector<ExistingAlbumEntry>                    album_entries_{};
+    std::vector<ExistingFolderEntry>                   folder_entries_{};
+    std::unordered_map<sl_element_id_t, sl_element_id_t> folder_parent_by_id_{};
+    std::unordered_map<sl_element_id_t, std::filesystem::path> folder_path_by_id_{};
+  };
+
   bool initializeServices(const std::filesystem::path& dbPath,
                           const std::filesystem::path& metaPath,
-                          ProjectOpenMode              openMode);
+                          ProjectOpenMode              openMode,
+                          const std::filesystem::path& packagePath = {},
+                          const std::filesystem::path& workspaceDir = {});
   bool persistCurrentProjectState();
-  auto collectAlbumEntries(const std::shared_ptr<ProjectService>& project) const
-      -> std::vector<ExistingAlbumEntry>;
+  bool packageCurrentProjectFiles(QString* errorOut = nullptr) const;
+  auto collectProjectSnapshot(const std::shared_ptr<ProjectService>& project) const
+      -> ProjectSnapshot;
   void applyLoadedProjectEntriesBatch();
   void setProjectLoadingState(bool loading, const QString& message);
   void clearProjectData();
+  void rebuildFolderView();
+  void applyFolderSelection(sl_element_id_t folderId, bool emitSignal);
   void rebuildThumbnailView(
       const std::optional<std::unordered_set<sl_element_id_t>>& allowedElementIds);
+  void releaseVisibleThumbnailPins();
+  auto currentFolderFsPath() const -> std::filesystem::path;
   void addImportedEntries(const ImportLogSnapshot& snapshot);
   void addOrUpdateAlbumItem(sl_element_id_t elementId, image_id_t imageId,
-                            const file_name_t& fallbackName);
+                            const file_name_t& fallbackName,
+                            sl_element_id_t parentFolderId);
   void requestThumbnail(sl_element_id_t elementId, image_id_t imageId);
   void updateThumbnailDataUrl(sl_element_id_t elementId, const QString& dataUrl);
   void finishImport(const ImportResult& result);
@@ -261,6 +299,7 @@ signals:
   std::optional<FilterValue> parseFilterValue(FilterField field, const QString& text,
                                               QString& error) const;
   static std::optional<std::tm> parseDate(const QString& text);
+  bool isImageInCurrentFolder(const AlbumItem& image) const;
   QString formatFilterInfo(int shown, int total) const;
   QVariantMap makeThumbMap(const AlbumItem& image, int index) const;
   void setTaskState(const QString& status, int progress, bool cancelVisible);
@@ -269,6 +308,12 @@ signals:
   std::vector<AlbumItem>                              all_images_{};
   std::unordered_map<sl_element_id_t, size_t>         index_by_element_id_{};
   QVariantList                                        visible_thumbnails_{};
+  std::vector<ExistingFolderEntry>                    folder_entries_{};
+  std::unordered_map<sl_element_id_t, sl_element_id_t> folder_parent_by_id_{};
+  std::unordered_map<sl_element_id_t, std::filesystem::path> folder_path_by_id_{};
+  QVariantList                                        folders_{};
+  sl_element_id_t                                     current_folder_id_ = 0;
+  QString                                             current_folder_path_text_ = "/";
   std::optional<std::unordered_set<sl_element_id_t>>  active_filter_ids_{};
   FilterOp                                            last_join_op_ = FilterOp::AND;
 
@@ -291,6 +336,8 @@ signals:
   int                                                 export_skipped_   = 0;
   std::filesystem::path                               db_path_{};
   std::filesystem::path                               meta_path_{};
+  std::filesystem::path                               project_package_path_{};
+  std::filesystem::path                               project_workspace_dir_{};
 
   QString                                             sql_preview_{};
   QString                                             validation_error_{};
@@ -300,7 +347,12 @@ signals:
   QString                                             project_loading_message_{};
   uint64_t                                            project_load_request_id_ = 0;
   std::vector<ExistingAlbumEntry>                     pending_project_entries_{};
+  std::vector<ExistingFolderEntry>                    pending_folder_entries_{};
+  std::unordered_map<sl_element_id_t, sl_element_id_t> pending_folder_parent_by_id_{};
+  std::unordered_map<sl_element_id_t, std::filesystem::path> pending_folder_path_by_id_{};
   size_t                                              pending_project_entry_index_ = 0;
+  sl_element_id_t                                     import_target_folder_id_ = 0;
+  std::filesystem::path                               import_target_folder_path_{};
 
   QString                                             task_status_         = "No background tasks";
   int                                                 task_progress_       = 0;

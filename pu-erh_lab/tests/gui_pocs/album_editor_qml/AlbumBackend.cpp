@@ -9,6 +9,7 @@
 #include <QImage>
 #include <QMetaObject>
 #include <QPointer>
+#include <QRandomGenerator>
 #include <QStandardPaths>
 #include <QTimer>
 #include <QUrl>
@@ -17,14 +18,19 @@
 #include <array>
 #include <chrono>
 #include <cstdint>
-#include <cwctype>
 #include <cmath>
+#include <cwctype>
+#include <fstream>
+#include <iterator>
+#include <limits>
 #include <optional>
 #include <stdexcept>
 #include <thread>
 #include <unordered_set>
 #include <utility>
 
+#include <duckdb.h>
+#include <json.hpp>
 #include <opencv2/opencv.hpp>
 
 #include "EditorDialog.h"
@@ -35,6 +41,7 @@
 #include "sleeve/sleeve_element/sleeve_folder.hpp"
 #include "sleeve/sleeve_filesystem.hpp"
 #include "type/supported_file_type.hpp"
+#include "utils/string/convert.hpp"
 
 namespace puerhlab::demo {
 namespace {
@@ -77,6 +84,21 @@ auto InputToPath(const QString& raw) -> std::optional<std::filesystem::path> {
 #else
   return std::filesystem::path(trimmed.toStdString());
 #endif
+}
+
+auto FolderPathToDisplay(const std::filesystem::path& path) -> QString {
+  if (path.empty()) {
+    return "/";
+  }
+#if defined(_WIN32)
+  const QString text = QString::fromStdWString(path.generic_wstring());
+#else
+  const QString text = QString::fromStdString(path.generic_string());
+#endif
+  if (text == "/") {
+    return text;
+  }
+  return text.startsWith('/') ? text : ("/" + text);
 }
 
 auto DateFromTimeT(std::time_t value) -> QDate {
@@ -276,44 +298,716 @@ auto ClampToRange(double value, double minValue, double maxValue) -> float {
   return static_cast<float>(std::clamp(value, minValue, maxValue));
 }
 
-auto BuildProjectPairInFolder(const std::filesystem::path& folder)
-    -> std::optional<std::pair<std::filesystem::path, std::filesystem::path>> {
+constexpr std::wstring_view kPackedProjectExtension = L".puerhproj";
+constexpr std::array<char, 8> kPackedProjectMagic{
+    {'P', 'U', 'E', 'R', 'H', 'P', 'K', '1'}};
+constexpr uint32_t kPackedProjectVersion = 1;
+constexpr uint64_t kMaxPackedComponentBytes = 2ULL * 1024ULL * 1024ULL * 1024ULL;
+
+auto QStringToFsPath(const QString& text) -> std::filesystem::path {
+#if defined(_WIN32)
+  return std::filesystem::path(text.toStdWString());
+#else
+  return std::filesystem::path(text.toStdString());
+#endif
+}
+
+void CleanupWorkspaceDirectory(const std::filesystem::path& dir) {
+  if (dir.empty()) {
+    return;
+  }
+  std::error_code ec;
+  std::filesystem::remove_all(dir, ec);
+}
+
+auto EnsureDirectoryExists(const std::filesystem::path& dir) -> bool {
+  if (dir.empty()) {
+    return true;
+  }
+  std::error_code ec;
+  if (!std::filesystem::exists(dir, ec)) {
+    std::filesystem::create_directories(dir, ec);
+  }
+  if (ec) {
+    return false;
+  }
+  return std::filesystem::is_directory(dir, ec) && !ec;
+}
+
+auto IsMetadataJsonPath(const std::filesystem::path& path) -> bool {
+  std::wstring ext = path.extension().wstring();
+  std::transform(ext.begin(), ext.end(), ext.begin(), ::towlower);
+  return ext == L".json";
+}
+
+auto IsPackedProjectPath(const std::filesystem::path& path) -> bool {
+  std::wstring ext = path.extension().wstring();
+  std::transform(ext.begin(), ext.end(), ext.begin(), ::towlower);
+  return ext == kPackedProjectExtension;
+}
+
+auto ReadExact(std::istream& stream, char* data, std::streamsize size) -> bool {
+  stream.read(data, size);
+  return stream.good() || stream.gcount() == size;
+}
+
+auto WriteU32Le(std::ostream& stream, uint32_t value) -> bool {
+  std::array<unsigned char, 4> bytes{};
+  bytes[0] = static_cast<unsigned char>(value & 0xFFU);
+  bytes[1] = static_cast<unsigned char>((value >> 8U) & 0xFFU);
+  bytes[2] = static_cast<unsigned char>((value >> 16U) & 0xFFU);
+  bytes[3] = static_cast<unsigned char>((value >> 24U) & 0xFFU);
+  stream.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+  return static_cast<bool>(stream);
+}
+
+auto WriteU64Le(std::ostream& stream, uint64_t value) -> bool {
+  std::array<unsigned char, 8> bytes{};
+  for (size_t i = 0; i < bytes.size(); ++i) {
+    bytes[i] = static_cast<unsigned char>((value >> (i * 8ULL)) & 0xFFULL);
+  }
+  stream.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+  return static_cast<bool>(stream);
+}
+
+auto ReadU32Le(std::istream& stream, uint32_t* value) -> bool {
+  std::array<unsigned char, 4> bytes{};
+  if (!ReadExact(stream, reinterpret_cast<char*>(bytes.data()),
+                 static_cast<std::streamsize>(bytes.size()))) {
+    return false;
+  }
+  *value = static_cast<uint32_t>(bytes[0]) | (static_cast<uint32_t>(bytes[1]) << 8U) |
+           (static_cast<uint32_t>(bytes[2]) << 16U) | (static_cast<uint32_t>(bytes[3]) << 24U);
+  return true;
+}
+
+auto ReadU64Le(std::istream& stream, uint64_t* value) -> bool {
+  std::array<unsigned char, 8> bytes{};
+  if (!ReadExact(stream, reinterpret_cast<char*>(bytes.data()),
+                 static_cast<std::streamsize>(bytes.size()))) {
+    return false;
+  }
+  *value = 0;
+  for (size_t i = 0; i < bytes.size(); ++i) {
+    *value |= (static_cast<uint64_t>(bytes[i]) << (i * 8ULL));
+  }
+  return true;
+}
+
+auto ReadFileBytes(const std::filesystem::path& path, std::string* out) -> bool {
+  std::ifstream in(path, std::ios::binary);
+  if (!in.is_open()) {
+    return false;
+  }
+  in.seekg(0, std::ios::end);
+  const std::streamoff size = in.tellg();
+  if (size < 0) {
+    return false;
+  }
+  in.seekg(0, std::ios::beg);
+  out->assign(static_cast<size_t>(size), '\0');
+  if (size == 0) {
+    return true;
+  }
+  return ReadExact(in, out->data(), size);
+}
+
+auto WriteFileBytes(const std::filesystem::path& path, const std::string& data) -> bool {
+  std::ofstream out(path, std::ios::binary | std::ios::trunc);
+  if (!out.is_open()) {
+    return false;
+  }
+  if (!data.empty()) {
+    out.write(data.data(), static_cast<std::streamsize>(data.size()));
+  }
+  return static_cast<bool>(out);
+}
+
+auto IsPackedProjectFile(const std::filesystem::path& path) -> bool {
+  std::ifstream in(path, std::ios::binary);
+  if (!in.is_open()) {
+    return false;
+  }
+  std::array<char, kPackedProjectMagic.size()> magic{};
+  if (!ReadExact(in, magic.data(), static_cast<std::streamsize>(magic.size()))) {
+    return false;
+  }
+  return std::equal(magic.begin(), magic.end(), kPackedProjectMagic.begin());
+}
+
+auto ValidateProjectName(const QString& rawName, QString* errorOut) -> std::optional<QString> {
+  const QString trimmed = rawName.trimmed();
+  if (trimmed.isEmpty()) {
+    if (errorOut) {
+      *errorOut = "Project name cannot be empty.";
+    }
+    return std::nullopt;
+  }
+
+  if (trimmed == "." || trimmed == "..") {
+    if (errorOut) {
+      *errorOut = "Project name is invalid.";
+    }
+    return std::nullopt;
+  }
+
+  static const QString kInvalidChars = "<>:\"/\\|?*";
+  for (const QChar ch : trimmed) {
+    if (ch.unicode() < 32U || kInvalidChars.contains(ch)) {
+      if (errorOut) {
+        *errorOut = "Project name contains invalid characters.";
+      }
+      return std::nullopt;
+    }
+  }
+
+  if (trimmed.endsWith(' ') || trimmed.endsWith('.')) {
+    if (errorOut) {
+      *errorOut = "Project name cannot end with a space or period.";
+    }
+    return std::nullopt;
+  }
+
+  return trimmed;
+}
+
+auto BuildUniquePackedProjectPath(const std::filesystem::path& folder, const QString& projectName,
+                                  QString* errorOut) -> std::optional<std::filesystem::path> {
   std::error_code ec;
   if (!std::filesystem::exists(folder, ec)) {
     std::filesystem::create_directories(folder, ec);
   }
   if (ec || !std::filesystem::is_directory(folder, ec) || ec) {
+    if (errorOut) {
+      *errorOut = "Selected folder is invalid or not writable.";
+    }
     return std::nullopt;
   }
 
-  const std::wstring base_name = L"album_editor_project";
+  const auto valid_name = ValidateProjectName(projectName, errorOut);
+  if (!valid_name.has_value()) {
+    return std::nullopt;
+  }
+
+  QString base_name_text = valid_name.value();
+  if (base_name_text.endsWith(".puerhproj", Qt::CaseInsensitive)) {
+    base_name_text.chop(QString(".puerhproj").size());
+    base_name_text = base_name_text.trimmed();
+  }
+  if (base_name_text.isEmpty()) {
+    if (errorOut) {
+      *errorOut = "Project name cannot be only an extension.";
+    }
+    return std::nullopt;
+  }
+
+  const std::wstring base_name = base_name_text.toStdWString();
   for (int index = 0; index < 1024; ++index) {
     std::wstring suffix;
     if (index > 0) {
       suffix = L"_" + std::to_wstring(index);
     }
 
-    const auto db_path   = folder / (base_name + suffix + L".db");
-    const auto meta_path = folder / (base_name + suffix + L".json");
-
+    const auto packed_path = folder / (base_name + suffix + std::wstring(kPackedProjectExtension));
     ec.clear();
-    const bool db_exists = std::filesystem::exists(db_path, ec);
+    const bool exists = std::filesystem::exists(packed_path, ec);
     if (ec) {
       continue;
     }
-
-    ec.clear();
-    const bool meta_exists = std::filesystem::exists(meta_path, ec);
-    if (ec) {
-      continue;
-    }
-
-    if (!db_exists && !meta_exists) {
-      return std::make_pair(db_path, meta_path);
+    if (!exists) {
+      return packed_path;
     }
   }
 
+  if (errorOut) {
+    *errorOut = "A packed project with that name already exists.";
+  }
   return std::nullopt;
+}
+
+auto BuildBundlePathFromMetaPath(const std::filesystem::path& metaPath) -> std::filesystem::path {
+  if (metaPath.empty()) {
+    return {};
+  }
+  return metaPath.parent_path() /
+         (metaPath.stem().wstring() + std::wstring(kPackedProjectExtension));
+}
+
+auto CreateProjectWorkspace(const QString& projectName,
+                            std::filesystem::path* workspaceOut,
+                            QString*               errorOut) -> bool {
+  const QString temp_dir_text =
+      QStandardPaths::writableLocation(QStandardPaths::TempLocation).isEmpty()
+          ? QDir::tempPath()
+          : QStandardPaths::writableLocation(QStandardPaths::TempLocation);
+  const auto temp_dir = QStringToFsPath(temp_dir_text);
+  const auto root     = temp_dir / L"puerh_lab_album_editor_qml";
+  if (!EnsureDirectoryExists(root)) {
+    if (errorOut) {
+      *errorOut = "Unable to create project temp directory.";
+    }
+    return false;
+  }
+
+  QString normalized_name = projectName.trimmed();
+  if (normalized_name.isEmpty()) {
+    normalized_name = "project";
+  }
+  for (QChar& ch : normalized_name) {
+    if (!(ch.isLetterOrNumber() || ch == '_' || ch == '-')) {
+      ch = '_';
+    }
+  }
+
+  const auto stamp = static_cast<unsigned long long>(QDateTime::currentMSecsSinceEpoch());
+  for (int attempt = 0; attempt < 128; ++attempt) {
+    const auto nonce =
+        static_cast<unsigned long long>(QRandomGenerator::global()->generate64());
+    const std::wstring dir_name =
+        QString("runtime_%1_%2_%3")
+            .arg(normalized_name)
+            .arg(QString::number(stamp))
+            .arg(QString::number(nonce + static_cast<unsigned long long>(attempt)))
+            .toStdWString();
+
+    const auto candidate = root / dir_name;
+    std::error_code ec;
+    std::filesystem::create_directories(candidate, ec);
+    if (!ec) {
+      *workspaceOut = candidate;
+      return true;
+    }
+  }
+
+  if (errorOut) {
+    *errorOut = "Unable to allocate a unique project temp directory.";
+  }
+  return false;
+}
+
+auto BuildRuntimeProjectPair(const std::filesystem::path& workspace, const QString& projectName)
+    -> std::pair<std::filesystem::path, std::filesystem::path> {
+  QString base = projectName.trimmed();
+  if (base.isEmpty()) {
+    base = "album_editor_project";
+  }
+  if (base.endsWith(".puerhproj", Qt::CaseInsensitive)) {
+    base.chop(QString(".puerhproj").size());
+    base = base.trimmed();
+  }
+  auto valid_name = ValidateProjectName(base, nullptr);
+  if (valid_name.has_value()) {
+    base = valid_name.value();
+  } else {
+    base = "album_editor_project";
+  }
+  const std::wstring stem = base.toStdWString();
+  return {workspace / (stem + L".db"), workspace / (stem + L".json")};
+}
+
+auto EscapeSqlStringLiteral(const std::string& text) -> std::string {
+  std::string escaped;
+  escaped.reserve(text.size() + 8);
+  for (const char ch : text) {
+    if (ch == '\'') {
+      escaped.push_back('\'');
+    }
+    escaped.push_back(ch);
+  }
+  return escaped;
+}
+
+auto EscapeSqlIdentifier(const std::string& text) -> std::string {
+  std::string escaped;
+  escaped.reserve(text.size() + 8);
+  for (const char ch : text) {
+    if (ch == '"') {
+      escaped.push_back('"');
+    }
+    escaped.push_back(ch);
+  }
+  return escaped;
+}
+
+auto RunDuckDbQuery(duckdb_connection conn, const std::string& sql, const char* stage,
+                    QString* errorOut) -> bool {
+  duckdb_result result;
+  if (duckdb_query(conn, sql.c_str(), &result) != DuckDBSuccess) {
+    const char* err_msg = duckdb_result_error(&result);
+    if (errorOut) {
+      *errorOut = QString("DuckDB %1 failed: %2")
+                      .arg(QString::fromUtf8(stage))
+                      .arg(QString::fromUtf8(err_msg ? err_msg : ""));
+    }
+    duckdb_destroy_result(&result);
+    return false;
+  }
+  duckdb_destroy_result(&result);
+  return true;
+}
+
+auto QueryCurrentCatalog(duckdb_connection conn, std::string* catalogOut,
+                         QString* errorOut) -> bool {
+  duckdb_result result;
+  if (duckdb_query(conn, "SELECT current_catalog();", &result) != DuckDBSuccess) {
+    const char* err_msg = duckdb_result_error(&result);
+    if (errorOut) {
+      *errorOut = QString("DuckDB query current catalog failed: %1")
+                      .arg(QString::fromUtf8(err_msg ? err_msg : ""));
+    }
+    duckdb_destroy_result(&result);
+    return false;
+  }
+
+  const idx_t row_count = duckdb_row_count(&result);
+  const idx_t col_count = duckdb_column_count(&result);
+  if (row_count == 0 || col_count == 0) {
+    if (errorOut) {
+      *errorOut = "DuckDB query current catalog returned no rows.";
+    }
+    duckdb_destroy_result(&result);
+    return false;
+  }
+
+  const char* value = duckdb_value_varchar(&result, 0, 0);
+  if (!value || value[0] == '\0') {
+    if (errorOut) {
+      *errorOut = "DuckDB query current catalog returned empty value.";
+    }
+    if (value) {
+      duckdb_free(const_cast<char*>(value));
+    }
+    duckdb_destroy_result(&result);
+    return false;
+  }
+  *catalogOut = value;
+  duckdb_free(const_cast<char*>(value));
+  duckdb_destroy_result(&result);
+  return true;
+}
+
+auto BuildTempDbSnapshotPath(std::filesystem::path* snapshotPathOut, QString* errorOut) -> bool {
+  const QString temp_dir_text =
+      QStandardPaths::writableLocation(QStandardPaths::TempLocation).isEmpty()
+          ? QDir::tempPath()
+          : QStandardPaths::writableLocation(QStandardPaths::TempLocation);
+  const auto temp_dir = QStringToFsPath(temp_dir_text);
+  const auto root     = temp_dir / L"puerh_lab_album_editor_qml";
+  if (!EnsureDirectoryExists(root)) {
+    if (errorOut) {
+      *errorOut = "Unable to prepare temp folder for DB snapshot.";
+    }
+    return false;
+  }
+
+  const auto stamp = static_cast<unsigned long long>(QDateTime::currentMSecsSinceEpoch());
+  for (int attempt = 0; attempt < 128; ++attempt) {
+    const auto nonce =
+        static_cast<unsigned long long>(QRandomGenerator::global()->generate64());
+    const auto candidate =
+        root / QString("pack_snapshot_%1_%2.db")
+                   .arg(QString::number(stamp))
+                   .arg(QString::number(nonce + static_cast<unsigned long long>(attempt)))
+                   .toStdWString();
+    std::error_code ec;
+    if (!std::filesystem::exists(candidate, ec) || ec) {
+      *snapshotPathOut = candidate;
+      return true;
+    }
+  }
+
+  if (errorOut) {
+    *errorOut = "Unable to allocate temp DB snapshot path.";
+  }
+  return false;
+}
+
+auto CreateLiveDbSnapshot(const std::shared_ptr<ProjectService>& project,
+                          const std::filesystem::path&          snapshotPath,
+                          QString*                              errorOut) -> bool {
+  if (!project) {
+    if (errorOut) {
+      *errorOut = "No active project for DB snapshot.";
+    }
+    return false;
+  }
+
+  try {
+    auto storage = project->GetStorageService();
+    if (!storage) {
+      if (errorOut) {
+        *errorOut = "Storage service is unavailable for DB snapshot.";
+      }
+      return false;
+    }
+
+    auto& db_ctrl = storage->GetDBController();
+    auto  guard   = db_ctrl.GetConnectionGuard();
+
+    std::error_code ec;
+    std::filesystem::remove(snapshotPath, ec);
+
+    // Use POSIX separators inside SQL strings on Windows to avoid backslash escaping surprises.
+    const std::string path_utf8 = conv::ToBytes(snapshotPath.generic_wstring());
+    const std::string escaped   = EscapeSqlStringLiteral(path_utf8);
+    std::string       source_catalog;
+    if (!QueryCurrentCatalog(guard.conn_, &source_catalog, errorOut)) {
+      std::filesystem::remove(snapshotPath, ec);
+      return false;
+    }
+    const std::string source_ident = "\"" + EscapeSqlIdentifier(source_catalog) + "\"";
+
+    if (!RunDuckDbQuery(guard.conn_, "CHECKPOINT;", "checkpoint", errorOut) ||
+        !RunDuckDbQuery(guard.conn_, "ATTACH '" + escaped + "' AS pack_snapshot;",
+                        "attach snapshot", errorOut) ||
+        !RunDuckDbQuery(guard.conn_,
+                        "COPY FROM DATABASE " + source_ident + " TO pack_snapshot;",
+                        "copy database", errorOut) ||
+        !RunDuckDbQuery(guard.conn_, "CHECKPOINT pack_snapshot;", "checkpoint snapshot",
+                        errorOut) ||
+        !RunDuckDbQuery(guard.conn_, "DETACH pack_snapshot;", "detach snapshot", errorOut)) {
+      std::filesystem::remove(snapshotPath, ec);
+      return false;
+    }
+
+    ec.clear();
+    if (!std::filesystem::is_regular_file(snapshotPath, ec) || ec) {
+      if (errorOut) {
+        *errorOut = QString("DuckDB snapshot file was not created: %1")
+                        .arg(PathToQString(snapshotPath));
+      }
+      return false;
+    }
+    return true;
+  } catch (const std::exception& e) {
+    if (errorOut) {
+      *errorOut = QString("DuckDB snapshot failed: %1").arg(QString::fromUtf8(e.what()));
+    }
+    return false;
+  } catch (...) {
+    if (errorOut) {
+      *errorOut = "DuckDB snapshot failed with an unknown error.";
+    }
+    return false;
+  }
+}
+
+auto WritePackedProject(const std::filesystem::path& packedPath,
+                        const std::filesystem::path& metaPath,
+                        const std::filesystem::path& dbPath, QString* errorOut) -> bool {
+  std::string meta_bytes;
+  if (!ReadFileBytes(metaPath, &meta_bytes)) {
+    if (errorOut) {
+      *errorOut = QString("Failed to read project metadata: %1").arg(PathToQString(metaPath));
+    }
+    return false;
+  }
+
+  std::string db_bytes;
+  if (!ReadFileBytes(dbPath, &db_bytes)) {
+    if (errorOut) {
+      *errorOut = QString("Failed to read project database: %1").arg(PathToQString(dbPath));
+    }
+    return false;
+  }
+
+  if (!EnsureDirectoryExists(packedPath.parent_path())) {
+    if (errorOut) {
+      *errorOut = "Packed project destination folder is not writable.";
+    }
+    return false;
+  }
+
+  const auto temp_path = packedPath.wstring() + L".tmp";
+  std::ofstream out(std::filesystem::path(temp_path), std::ios::binary | std::ios::trunc);
+  if (!out.is_open()) {
+    if (errorOut) {
+      *errorOut = QString("Failed to open packed project file for writing: %1")
+                      .arg(PathToQString(packedPath));
+    }
+    return false;
+  }
+
+  out.write(kPackedProjectMagic.data(),
+            static_cast<std::streamsize>(kPackedProjectMagic.size()));
+  if (!WriteU32Le(out, kPackedProjectVersion) ||
+      !WriteU64Le(out, static_cast<uint64_t>(meta_bytes.size())) ||
+      !WriteU64Le(out, static_cast<uint64_t>(db_bytes.size()))) {
+    if (errorOut) {
+      *errorOut = "Failed to write packed project header.";
+    }
+    return false;
+  }
+
+  if (!meta_bytes.empty()) {
+    out.write(meta_bytes.data(), static_cast<std::streamsize>(meta_bytes.size()));
+  }
+  if (!db_bytes.empty()) {
+    out.write(db_bytes.data(), static_cast<std::streamsize>(db_bytes.size()));
+  }
+  out.flush();
+  if (!out.good()) {
+    if (errorOut) {
+      *errorOut = "Failed to write packed project payload.";
+    }
+    return false;
+  }
+  out.close();
+
+  std::error_code ec;
+  if (std::filesystem::exists(packedPath, ec) && !ec) {
+    std::filesystem::remove(packedPath, ec);
+    if (ec) {
+      if (errorOut) {
+        *errorOut =
+            QString("Failed to replace existing packed project file: %1").arg(PathToQString(packedPath));
+      }
+      std::filesystem::remove(std::filesystem::path(temp_path), ec);
+      return false;
+    }
+  }
+  ec.clear();
+  std::filesystem::rename(std::filesystem::path(temp_path), packedPath, ec);
+  if (ec) {
+    if (errorOut) {
+      *errorOut =
+          QString("Failed to finalize packed project file: %1").arg(PathToQString(packedPath));
+    }
+    std::filesystem::remove(std::filesystem::path(temp_path), ec);
+    return false;
+  }
+
+  return true;
+}
+
+auto ReadPackedProject(const std::filesystem::path& packedPath, std::string* metaBytes,
+                       std::string* dbBytes, QString* errorOut) -> bool {
+  std::ifstream in(packedPath, std::ios::binary);
+  if (!in.is_open()) {
+    if (errorOut) {
+      *errorOut =
+          QString("Failed to open packed project: %1").arg(PathToQString(packedPath));
+    }
+    return false;
+  }
+
+  std::array<char, kPackedProjectMagic.size()> magic{};
+  if (!ReadExact(in, magic.data(), static_cast<std::streamsize>(magic.size())) ||
+      !std::equal(magic.begin(), magic.end(), kPackedProjectMagic.begin())) {
+    if (errorOut) {
+      *errorOut = "Packed project signature is invalid.";
+    }
+    return false;
+  }
+
+  uint32_t version = 0;
+  if (!ReadU32Le(in, &version) || version != kPackedProjectVersion) {
+    if (errorOut) {
+      *errorOut = "Packed project version is not supported.";
+    }
+    return false;
+  }
+
+  uint64_t meta_size = 0;
+  uint64_t db_size   = 0;
+  if (!ReadU64Le(in, &meta_size) || !ReadU64Le(in, &db_size)) {
+    if (errorOut) {
+      *errorOut = "Packed project header is corrupted.";
+    }
+    return false;
+  }
+  if (meta_size > kMaxPackedComponentBytes || db_size > kMaxPackedComponentBytes) {
+    if (errorOut) {
+      *errorOut = "Packed project is too large.";
+    }
+    return false;
+  }
+  if (meta_size > static_cast<uint64_t>(std::numeric_limits<size_t>::max()) ||
+      db_size > static_cast<uint64_t>(std::numeric_limits<size_t>::max())) {
+    if (errorOut) {
+      *errorOut = "Packed project is too large for this build.";
+    }
+    return false;
+  }
+
+  metaBytes->assign(static_cast<size_t>(meta_size), '\0');
+  if (meta_size > 0 &&
+      !ReadExact(in, metaBytes->data(), static_cast<std::streamsize>(meta_size))) {
+    if (errorOut) {
+      *errorOut = "Failed to read packed metadata payload.";
+    }
+    return false;
+  }
+
+  dbBytes->assign(static_cast<size_t>(db_size), '\0');
+  if (db_size > 0 && !ReadExact(in, dbBytes->data(), static_cast<std::streamsize>(db_size))) {
+    if (errorOut) {
+      *errorOut = "Failed to read packed database payload.";
+    }
+    return false;
+  }
+
+  return true;
+}
+
+auto UnpackProjectToWorkspace(const std::filesystem::path& packedPath,
+                              const std::filesystem::path& workspaceDir,
+                              const QString& projectName,
+                              std::filesystem::path* dbPathOut,
+                              std::filesystem::path* metaPathOut,
+                              QString*               errorOut) -> bool {
+  std::string meta_bytes;
+  std::string db_bytes;
+  if (!ReadPackedProject(packedPath, &meta_bytes, &db_bytes, errorOut)) {
+    return false;
+  }
+
+  const auto runtime_pair = BuildRuntimeProjectPair(workspaceDir, projectName);
+  const auto db_path      = runtime_pair.first;
+  const auto meta_path    = runtime_pair.second;
+
+  nlohmann::json metadata;
+  try {
+    metadata = nlohmann::json::parse(meta_bytes);
+  } catch (...) {
+    if (errorOut) {
+      *errorOut = "Packed project metadata JSON is invalid.";
+    }
+    return false;
+  }
+
+  metadata["db_path"]   = conv::ToBytes(db_path.wstring());
+  metadata["meta_path"] = conv::ToBytes(meta_path.wstring());
+
+  std::error_code ec;
+  std::filesystem::create_directories(db_path.parent_path(), ec);
+  if (ec) {
+    if (errorOut) {
+      *errorOut = "Failed to prepare temp files for packed project.";
+    }
+    return false;
+  }
+
+  if (!WriteFileBytes(db_path, db_bytes)) {
+    if (errorOut) {
+      *errorOut = QString("Failed to materialize project database: %1")
+                      .arg(PathToQString(db_path));
+    }
+    return false;
+  }
+
+  const std::string meta_text = metadata.dump(4);
+  if (!WriteFileBytes(meta_path, meta_text)) {
+    if (errorOut) {
+      *errorOut = QString("Failed to materialize project metadata: %1")
+                      .arg(PathToQString(meta_path));
+    }
+    return false;
+  }
+
+  *dbPathOut   = db_path;
+  *metaPathOut = meta_path;
+  return true;
 }
 
 }  // namespace
@@ -325,7 +1019,7 @@ AlbumBackend::AlbumBackend(QObject* parent) : QObject(parent), rule_model_(this)
   initializeEditorLuts();
   service_ready_ = false;
   service_message_ =
-      "Select a project: load an existing metadata JSON or create a new project folder.";
+      "Select a project: load a .puerhproj package or metadata JSON, or create a new packed project.";
   task_status_ = "Open or create a project to begin.";
 }
 
@@ -338,7 +1032,11 @@ AlbumBackend::~AlbumBackend() {
     if (pipeline_service_) {
       pipeline_service_->Sync();
     }
-    (void)persistCurrentProjectState();
+    if (persistCurrentProjectState()) {
+      QString ignored_error;
+      (void)packageCurrentProjectFiles(&ignored_error);
+    }
+    CleanupWorkspaceDirectory(project_workspace_dir_);
   } catch (...) {
   }
 }
@@ -349,6 +1047,16 @@ auto AlbumBackend::fieldOptions() const -> QVariantList {
 
 auto AlbumBackend::filterInfo() const -> QString {
   return formatFilterInfo(shownCount(), totalCount());
+}
+
+int AlbumBackend::totalCount() const {
+  int count = 0;
+  for (const auto& image : all_images_) {
+    if (isImageInCurrentFolder(image)) {
+      ++count;
+    }
+  }
+  return count;
 }
 
 void AlbumBackend::addRule() {
@@ -420,7 +1128,7 @@ void AlbumBackend::applyFilters(int joinOpValue) {
 
   try {
     const auto filterId = filter_service_->CreateFilterCombo(result.node.value());
-    const auto idsOpt   = filter_service_->ApplyFilterOn(filterId, 0);
+    const auto idsOpt   = filter_service_->ApplyFilterOn(filterId, current_folder_id_);
     filter_service_->RemoveFilterCombo(filterId);
 
     std::unordered_set<sl_element_id_t> nextIds;
@@ -468,28 +1176,72 @@ bool AlbumBackend::loadProject(const QString& metaFileUrlOrPath) {
     return false;
   }
 
-  const auto meta_path_opt = InputToPath(metaFileUrlOrPath);
-  if (!meta_path_opt.has_value()) {
+  const auto project_path_opt = InputToPath(metaFileUrlOrPath);
+  if (!project_path_opt.has_value()) {
     service_ready_   = project_ != nullptr;
-    service_message_ = "Select a valid metadata JSON file.";
+    service_message_ = "Select a valid project file.";
     emit serviceStateChanged();
     return false;
   }
 
+  const auto project_path = project_path_opt.value();
   std::error_code ec;
-  if (!std::filesystem::is_regular_file(meta_path_opt.value(), ec) || ec) {
+  if (!std::filesystem::is_regular_file(project_path, ec) || ec) {
     service_ready_   = project_ != nullptr;
-    service_message_ = "Metadata JSON file was not found.";
+    service_message_ = "Project file was not found.";
+    emit serviceStateChanged();
+    return false;
+  }
+
+  if (IsPackedProjectPath(project_path) || IsPackedProjectFile(project_path)) {
+    const QString project_name = QFileInfo(PathToQString(project_path)).completeBaseName();
+    std::filesystem::path workspace_dir;
+    QString               workspace_error;
+    if (!CreateProjectWorkspace(project_name, &workspace_dir, &workspace_error)) {
+      service_ready_   = project_ != nullptr;
+      service_message_ =
+          workspace_error.isEmpty() ? "Failed to prepare project temp workspace."
+                                    : workspace_error;
+      emit serviceStateChanged();
+      return false;
+    }
+
+    std::filesystem::path unpacked_db_path;
+    std::filesystem::path unpacked_meta_path;
+    QString               unpack_error;
+    if (!UnpackProjectToWorkspace(project_path, workspace_dir, project_name, &unpacked_db_path,
+                                  &unpacked_meta_path, &unpack_error)) {
+      CleanupWorkspaceDirectory(workspace_dir);
+      service_ready_   = project_ != nullptr;
+      service_message_ =
+          unpack_error.isEmpty() ? "Failed to unpack project package." : unpack_error;
+      emit serviceStateChanged();
+      return false;
+    }
+
+    return initializeServices(unpacked_db_path, unpacked_meta_path, ProjectOpenMode::kLoadExisting,
+                              project_path, workspace_dir);
+  }
+
+  if (!IsMetadataJsonPath(project_path)) {
+    service_ready_   = project_ != nullptr;
+    service_message_ = "Unsupported project format. Choose a .json or .puerhproj file.";
     emit serviceStateChanged();
     return false;
   }
 
   const auto db_hint_path =
-      meta_path_opt->parent_path() / (meta_path_opt->stem().wstring() + L".db");
-  return initializeServices(db_hint_path, meta_path_opt.value(), ProjectOpenMode::kLoadExisting);
+      project_path.parent_path() / (project_path.stem().wstring() + L".db");
+  return initializeServices(db_hint_path, project_path, ProjectOpenMode::kLoadExisting,
+                            BuildBundlePathFromMetaPath(project_path), {});
 }
 
 bool AlbumBackend::createProjectInFolder(const QString& folderUrlOrPath) {
+  return createProjectInFolderNamed(folderUrlOrPath, "album_editor_project");
+}
+
+bool AlbumBackend::createProjectInFolderNamed(const QString& folderUrlOrPath,
+                                              const QString& projectName) {
   if (project_loading_) {
     service_message_ = "A project load is already in progress.";
     emit serviceStateChanged();
@@ -504,16 +1256,37 @@ bool AlbumBackend::createProjectInFolder(const QString& folderUrlOrPath) {
     return false;
   }
 
-  const auto pair_opt = BuildProjectPairInFolder(folder_path_opt.value());
-  if (!pair_opt.has_value()) {
+  QString build_error;
+  const auto packed_path_opt =
+      BuildUniquePackedProjectPath(folder_path_opt.value(), projectName, &build_error);
+  if (!packed_path_opt.has_value()) {
     service_ready_ = project_ != nullptr;
-    service_message_ =
-        "Failed to prepare project files in the selected folder. Check write permissions.";
+    service_message_ = build_error.isEmpty()
+                           ? "Failed to prepare project package path in selected folder."
+                           : build_error;
     emit serviceStateChanged();
     return false;
   }
 
-  return initializeServices(pair_opt->first, pair_opt->second, ProjectOpenMode::kCreateNew);
+  std::filesystem::path workspace_dir;
+  QString               workspace_error;
+  if (!CreateProjectWorkspace(projectName, &workspace_dir, &workspace_error)) {
+    service_ready_   = project_ != nullptr;
+    service_message_ =
+        workspace_error.isEmpty() ? "Failed to prepare project temp workspace."
+                                  : workspace_error;
+    emit serviceStateChanged();
+    return false;
+  }
+
+  const auto runtime_pair = BuildRuntimeProjectPair(workspace_dir, projectName);
+  const bool started =
+      initializeServices(runtime_pair.first, runtime_pair.second, ProjectOpenMode::kCreateNew,
+                         packed_path_opt.value(), workspace_dir);
+  if (!started) {
+    CleanupWorkspaceDirectory(workspace_dir);
+  }
+  return started;
 }
 
 bool AlbumBackend::saveProject() {
@@ -542,9 +1315,22 @@ bool AlbumBackend::saveProject() {
     return false;
   }
 
-  service_message_ = QString("Project saved to %1").arg(PathToQString(meta_path_));
+  QString package_error;
+  if (!packageCurrentProjectFiles(&package_error)) {
+    service_message_ = package_error.isEmpty() ? "Project saved, but packing failed."
+                                               : package_error;
+    emit serviceStateChanged();
+    setTaskState("Project packing failed.", 0, false);
+    return false;
+  }
+
+  service_message_ = project_package_path_.empty()
+                         ? QString("Project saved to %1").arg(PathToQString(meta_path_))
+                         : QString("Project saved and packed to %1")
+                               .arg(PathToQString(project_package_path_));
   emit serviceStateChanged();
-  setTaskState("Project saved.", 100, false);
+  setTaskState(project_package_path_.empty() ? "Project saved." : "Project saved and packed.", 100,
+               false);
   QTimer::singleShot(1200, this, [this]() {
     if (!export_inflight_ && !task_cancel_visible_) {
       setTaskState("No background tasks", 0, false);
@@ -559,6 +1345,209 @@ auto AlbumBackend::compareOptionsForField(int fieldValue) const -> QVariantList 
 
 auto AlbumBackend::placeholderForField(int fieldValue) const -> QString {
   return FilterRuleModel::placeholderForField(static_cast<FilterField>(fieldValue));
+}
+
+void AlbumBackend::selectFolder(uint folderId) {
+  if (project_loading_ || !project_) {
+    return;
+  }
+
+  applyFolderSelection(static_cast<sl_element_id_t>(folderId), true);
+  reapplyCurrentFilters();
+}
+
+void AlbumBackend::createFolder(const QString& folderName) {
+  if (project_loading_) {
+    setTaskState("Project is loading. Please wait.", 0, false);
+    return;
+  }
+  if (!project_) {
+    setTaskState("No project is loaded.", 0, false);
+    return;
+  }
+  if (current_import_job_ && !current_import_job_->IsCancelationAcked()) {
+    setTaskState("Cannot create folder while import is running.", 0, false);
+    return;
+  }
+  if (export_inflight_) {
+    setTaskState("Cannot create folder while export is running.", 0, false);
+    return;
+  }
+
+  const QString trimmed = folderName.trimmed();
+  if (trimmed.isEmpty()) {
+    setTaskState("Folder name cannot be empty.", 0, false);
+    return;
+  }
+  if (trimmed.contains('/') || trimmed.contains('\\')) {
+    setTaskState("Folder name cannot contain '/' or '\\'.", 0, false);
+    return;
+  }
+
+  const auto parent_path = currentFolderFsPath();
+  try {
+    const auto create_result = project_->GetSleeveService()->Write<std::shared_ptr<SleeveElement>>(
+        [parent_path, trimmed](FileSystem& fs) {
+          return fs.Create(parent_path, trimmed.toStdWString(), ElementType::FOLDER);
+        });
+    const auto created = create_result.first;
+    if (!create_result.second.success_ || !created || created->type_ != ElementType::FOLDER) {
+      throw std::runtime_error("Failed to create folder.");
+    }
+
+    ExistingFolderEntry folder_entry;
+    folder_entry.folder_id_   = created->element_id_;
+    folder_entry.parent_id_   = current_folder_id_;
+    folder_entry.folder_name_ = created->element_name_;
+    folder_entry.folder_path_ = parent_path / created->element_name_;
+    folder_entry.depth_       = 0;
+    for (const auto& existing : folder_entries_) {
+      if (existing.folder_id_ == current_folder_id_) {
+        folder_entry.depth_ = existing.depth_ + 1;
+        break;
+      }
+    }
+
+    folder_entries_.push_back(folder_entry);
+    folder_parent_by_id_[folder_entry.folder_id_] = folder_entry.parent_id_;
+    folder_path_by_id_[folder_entry.folder_id_]   = folder_entry.folder_path_;
+    rebuildFolderView();
+
+    if (!meta_path_.empty()) {
+      project_->SaveProject(meta_path_);
+    }
+
+    service_message_ =
+        QString("Created folder %1").arg(WStringToQString(folder_entry.folder_name_));
+    emit serviceStateChanged();
+    setTaskState(service_message_, 100, false);
+    QTimer::singleShot(1200, this, [this]() {
+      if (!export_inflight_ && !task_cancel_visible_) {
+        setTaskState("No background tasks", 0, false);
+      }
+    });
+  } catch (const std::exception& e) {
+    const QString err = QString("Failed to create folder: %1").arg(QString::fromUtf8(e.what()));
+    service_message_  = err;
+    emit serviceStateChanged();
+    setTaskState(err, 0, false);
+  }
+}
+
+void AlbumBackend::deleteFolder(uint folderId) {
+  if (project_loading_) {
+    setTaskState("Project is loading. Please wait.", 0, false);
+    return;
+  }
+  if (!project_) {
+    setTaskState("No project is loaded.", 0, false);
+    return;
+  }
+  if (current_import_job_ && !current_import_job_->IsCancelationAcked()) {
+    setTaskState("Cannot delete folder while import is running.", 0, false);
+    return;
+  }
+  if (export_inflight_) {
+    setTaskState("Cannot delete folder while export is running.", 0, false);
+    return;
+  }
+
+  const auto folder_id = static_cast<sl_element_id_t>(folderId);
+  if (folder_id == 0) {
+    setTaskState("Root folder cannot be deleted.", 0, false);
+    return;
+  }
+
+  const auto path_it = folder_path_by_id_.find(folder_id);
+  if (path_it == folder_path_by_id_.end()) {
+    setTaskState("Folder no longer exists.", 0, false);
+    return;
+  }
+  const auto parent_it_before = folder_parent_by_id_.find(folder_id);
+  const sl_element_id_t fallback_folder =
+      parent_it_before != folder_parent_by_id_.end() ? parent_it_before->second
+                                                     : static_cast<sl_element_id_t>(0);
+
+  std::unordered_set<sl_element_id_t> deleted_folder_ids;
+  deleted_folder_ids.insert(folder_id);
+  bool expanded = true;
+  while (expanded) {
+    expanded = false;
+    for (const auto& [candidate_id, parent_id] : folder_parent_by_id_) {
+      if (!deleted_folder_ids.contains(parent_id) || deleted_folder_ids.contains(candidate_id)) {
+        continue;
+      }
+      deleted_folder_ids.insert(candidate_id);
+      expanded = true;
+    }
+  }
+
+  try {
+    const auto remove_result = project_->GetSleeveService()->Write<void>(
+        [target_path = path_it->second](FileSystem& fs) { fs.Delete(target_path); });
+    if (!remove_result.success_) {
+      throw std::runtime_error(remove_result.message_);
+    }
+
+    if (!meta_path_.empty()) {
+      project_->SaveProject(meta_path_);
+    }
+  } catch (const std::exception& e) {
+    const QString err = QString("Failed to delete folder: %1").arg(QString::fromUtf8(e.what()));
+    service_message_  = err;
+    emit serviceStateChanged();
+    setTaskState(err, 0, false);
+    return;
+  }
+
+  if (thumbnail_service_) {
+    for (const auto& image : all_images_) {
+      if (!deleted_folder_ids.contains(image.parent_folder_id)) {
+        continue;
+      }
+      try {
+        thumbnail_service_->InvalidateThumbnail(image.element_id);
+        thumbnail_service_->ReleaseThumbnail(image.element_id);
+      } catch (...) {
+      }
+    }
+  }
+
+  const auto snapshot = collectProjectSnapshot(project_);
+
+  releaseVisibleThumbnailPins();
+  all_images_.clear();
+  index_by_element_id_.clear();
+  visible_thumbnails_.clear();
+  emit thumbnailsChanged();
+
+  folder_entries_      = snapshot.folder_entries_;
+  folder_parent_by_id_ = snapshot.folder_parent_by_id_;
+  folder_path_by_id_   = snapshot.folder_path_by_id_;
+  rebuildFolderView();
+
+  for (const auto& entry : snapshot.album_entries_) {
+    addOrUpdateAlbumItem(entry.element_id_, entry.image_id_, entry.file_name_,
+                         entry.parent_folder_id_);
+  }
+
+  if (folder_path_by_id_.contains(current_folder_id_)) {
+    applyFolderSelection(current_folder_id_, false);
+  } else {
+    applyFolderSelection(fallback_folder, true);
+  }
+
+  active_filter_ids_.reset();
+  reapplyCurrentFilters();
+
+  service_message_ = "Folder deleted.";
+  emit serviceStateChanged();
+  setTaskState("Folder deleted.", 100, false);
+  QTimer::singleShot(1200, this, [this]() {
+    if (!export_inflight_ && !task_cancel_visible_) {
+      setTaskState("No background tasks", 0, false);
+    }
+  });
 }
 
 void AlbumBackend::startImport(const QStringList& fileUrlsOrPaths) {
@@ -603,6 +1592,9 @@ void AlbumBackend::startImport(const QStringList& fileUrlsOrPaths) {
     setTaskState("No supported files selected.", 0, false);
     return;
   }
+
+  import_target_folder_id_   = current_folder_id_;
+  import_target_folder_path_ = currentFolderFsPath();
 
   auto job            = std::make_shared<ImportJob>();
   current_import_job_ = job;
@@ -657,7 +1649,8 @@ void AlbumBackend::startImport(const QStringList& fileUrlsOrPaths) {
 
   try {
     ImportOptions options;
-    current_import_job_ = import_service_->ImportToFolder(paths, image_path_t{}, options, job);
+    current_import_job_ =
+        import_service_->ImportToFolder(paths, import_target_folder_path_, options, job);
   } catch (const std::exception& e) {
     current_import_job_.reset();
     setTaskState(QString("Import failed: %1").arg(QString::fromUtf8(e.what())), 0, false);
@@ -1076,7 +2069,9 @@ void AlbumBackend::setEditorClarity(double value) {
 
 bool AlbumBackend::initializeServices(const std::filesystem::path& dbPath,
                                       const std::filesystem::path& metaPath,
-                                      ProjectOpenMode              openMode) {
+                                      ProjectOpenMode              openMode,
+                                      const std::filesystem::path& packagePath,
+                                      const std::filesystem::path& workspaceDir) {
   if (project_loading_) {
     service_message_ = "A project load is already in progress.";
     emit serviceStateChanged();
@@ -1111,11 +2106,14 @@ bool AlbumBackend::initializeServices(const std::filesystem::path& dbPath,
   auto old_project  = project_;
   auto old_pipeline = pipeline_service_;
   auto old_meta     = meta_path_;
+  auto old_package  = project_package_path_;
+  auto old_workspace = project_workspace_dir_;
 
   QPointer<AlbumBackend> self(this);
   std::thread([self, request_id, old_project = std::move(old_project),
-               old_pipeline = std::move(old_pipeline), old_meta = std::move(old_meta), dbPath,
-               metaPath, openMode]() mutable {
+               old_pipeline = std::move(old_pipeline), old_meta = std::move(old_meta),
+               old_package = std::move(old_package), old_workspace = std::move(old_workspace),
+               dbPath, metaPath, packagePath, workspaceDir, openMode]() mutable {
     struct LoadResult {
       bool                                 success_ = false;
       QString                              error_{};
@@ -1128,7 +2126,13 @@ bool AlbumBackend::initializeServices(const std::filesystem::path& dbPath,
       std::shared_ptr<ExportService>       export_{};
       std::filesystem::path                db_path_{};
       std::filesystem::path                meta_path_{};
-      std::vector<ExistingAlbumEntry>      entries_{};
+      std::filesystem::path                package_path_{};
+      std::filesystem::path                workspace_dir_{};
+      std::filesystem::path                workspace_to_cleanup_{};
+      std::vector<ExistingAlbumEntry>      album_entries_{};
+      std::vector<ExistingFolderEntry>     folder_entries_{};
+      std::unordered_map<sl_element_id_t, sl_element_id_t> folder_parent_by_id_{};
+      std::unordered_map<sl_element_id_t, std::filesystem::path> folder_path_by_id_{};
     };
 
     auto result = std::make_shared<LoadResult>();
@@ -1141,7 +2145,25 @@ bool AlbumBackend::initializeServices(const std::filesystem::path& dbPath,
         old_project->GetSleeveService()->Sync();
         old_project->GetImagePoolService()->SyncWithStorage();
         old_project->SaveProject(old_meta);
+        if (!old_package.empty()) {
+          QString package_error;
+          std::filesystem::path snapshot_path;
+          if (!BuildTempDbSnapshotPath(&snapshot_path, &package_error) ||
+              !CreateLiveDbSnapshot(old_project, snapshot_path, &package_error) ||
+              !WritePackedProject(old_package, old_meta, snapshot_path, &package_error)) {
+            std::error_code ec;
+            if (!snapshot_path.empty()) {
+              std::filesystem::remove(snapshot_path, ec);
+            }
+            const QByteArray err = package_error.toUtf8();
+            throw std::runtime_error(err.isEmpty() ? "Failed to pack previous project."
+                                                   : err.constData());
+          }
+          std::error_code ec;
+          std::filesystem::remove(snapshot_path, ec);
+        }
       }
+      result->workspace_to_cleanup_ = old_workspace;
 
       result->project_ = std::make_shared<ProjectService>(dbPath, metaPath, openMode);
       result->pipeline_ =
@@ -1170,9 +2192,15 @@ bool AlbumBackend::initializeServices(const std::filesystem::path& dbPath,
       if (result->meta_path_.empty()) {
         result->meta_path_ = metaPath;
       }
+      result->package_path_ = packagePath;
+      result->workspace_dir_ = workspaceDir;
 
       if (self) {
-        result->entries_ = self->collectAlbumEntries(result->project_);
+        auto snapshot              = self->collectProjectSnapshot(result->project_);
+        result->album_entries_     = std::move(snapshot.album_entries_);
+        result->folder_entries_    = std::move(snapshot.folder_entries_);
+        result->folder_parent_by_id_ = std::move(snapshot.folder_parent_by_id_);
+        result->folder_path_by_id_ = std::move(snapshot.folder_path_by_id_);
       }
       result->success_ = true;
     } catch (const std::exception& e) {
@@ -1181,6 +2209,10 @@ bool AlbumBackend::initializeServices(const std::filesystem::path& dbPath,
     } catch (...) {
       result->success_ = false;
       result->error_   = "Unknown project load error.";
+    }
+
+    if (!result->success_ && !workspaceDir.empty()) {
+      CleanupWorkspaceDirectory(workspaceDir);
     }
 
     if (!self) {
@@ -1215,12 +2247,22 @@ bool AlbumBackend::initializeServices(const std::filesystem::path& dbPath,
           self->export_service_    = std::move(result->export_);
           self->db_path_           = std::move(result->db_path_);
           self->meta_path_         = std::move(result->meta_path_);
+          self->project_package_path_ = std::move(result->package_path_);
+          self->project_workspace_dir_ = std::move(result->workspace_dir_);
 
           self->clearProjectData();
           self->resetExportState();
-          self->pending_project_entries_      = std::move(result->entries_);
+          self->pending_project_entries_      = std::move(result->album_entries_);
+          self->pending_folder_entries_       = std::move(result->folder_entries_);
+          self->pending_folder_parent_by_id_  = std::move(result->folder_parent_by_id_);
+          self->pending_folder_path_by_id_    = std::move(result->folder_path_by_id_);
           self->pending_project_entry_index_  = 0;
           self->applyLoadedProjectEntriesBatch();
+
+          if (!result->workspace_to_cleanup_.empty() &&
+              result->workspace_to_cleanup_ != self->project_workspace_dir_) {
+            CleanupWorkspaceDirectory(result->workspace_to_cleanup_);
+          }
         },
         Qt::QueuedConnection);
   }).detach();
@@ -1246,73 +2288,153 @@ bool AlbumBackend::persistCurrentProjectState() {
   }
 }
 
-auto AlbumBackend::collectAlbumEntries(const std::shared_ptr<ProjectService>& project) const
-    -> std::vector<ExistingAlbumEntry> {
-  std::vector<ExistingAlbumEntry> entries;
+bool AlbumBackend::packageCurrentProjectFiles(QString* errorOut) const {
+  if (!project_ || db_path_.empty() || meta_path_.empty() || project_package_path_.empty()) {
+    return true;
+  }
+
+  std::filesystem::path snapshot_path;
+  if (!BuildTempDbSnapshotPath(&snapshot_path, errorOut)) {
+    return false;
+  }
+
+  const bool snapshot_ok = CreateLiveDbSnapshot(project_, snapshot_path, errorOut);
+  if (!snapshot_ok) {
+    std::error_code ec;
+    std::filesystem::remove(snapshot_path, ec);
+    return false;
+  }
+
+  const bool packed_ok =
+      WritePackedProject(project_package_path_, meta_path_, snapshot_path, errorOut);
+  std::error_code ec;
+  std::filesystem::remove(snapshot_path, ec);
+  return packed_ok;
+}
+
+auto AlbumBackend::collectProjectSnapshot(const std::shared_ptr<ProjectService>& project) const
+    -> ProjectSnapshot {
+  ProjectSnapshot snapshot;
   if (!project) {
-    return entries;
+    return snapshot;
   }
 
   try {
     auto& element_ctrl = project->GetStorageService()->GetElementController();
 
-    std::vector<sl_element_id_t>  stack{0};
+    struct FolderVisit {
+      sl_element_id_t      folder_id_ = 0;
+      sl_element_id_t      parent_id_ = 0;
+      std::filesystem::path folder_path_{};
+      int                  depth_     = 0;
+    };
+
+    std::vector<FolderVisit>        stack{{0, 0, std::filesystem::path(L"/"), 0}};
     std::unordered_set<sl_element_id_t> visited;
     visited.reserve(4096);
 
     while (!stack.empty()) {
-      const sl_element_id_t current_id = stack.back();
+      const auto visit = stack.back();
       stack.pop_back();
 
-      if (!visited.insert(current_id).second) {
+      if (!visited.insert(visit.folder_id_).second) {
         continue;
       }
 
-      std::shared_ptr<SleeveElement> element;
+      std::shared_ptr<SleeveElement> folder_element;
       try {
-        element = element_ctrl.GetElementById(current_id);
+        folder_element = element_ctrl.GetElementById(visit.folder_id_);
       } catch (...) {
         continue;
       }
 
-      if (!element || element->sync_flag_ == SyncFlag::DELETED) {
+      if (!folder_element || folder_element->sync_flag_ == SyncFlag::DELETED ||
+          folder_element->type_ != ElementType::FOLDER) {
         continue;
       }
 
-      if (element->type_ == ElementType::FILE) {
-        const auto file = std::dynamic_pointer_cast<SleeveFile>(element);
-        if (!file || file->image_id_ == 0) {
-          continue;
-        }
-        entries.push_back({file->element_id_, file->image_id_, file->element_name_});
-        continue;
-      }
+      ExistingFolderEntry folder_entry;
+      folder_entry.folder_id_   = visit.folder_id_;
+      folder_entry.parent_id_   = visit.parent_id_;
+      folder_entry.folder_name_ = visit.folder_id_ == 0 ? L"" : folder_element->element_name_;
+      folder_entry.folder_path_ = visit.folder_path_;
+      folder_entry.depth_       = visit.depth_;
+      snapshot.folder_entries_.push_back(folder_entry);
+      snapshot.folder_parent_by_id_[folder_entry.folder_id_] = folder_entry.parent_id_;
+      snapshot.folder_path_by_id_[folder_entry.folder_id_]   = folder_entry.folder_path_;
 
       std::vector<sl_element_id_t> children;
       try {
-        children = element_ctrl.GetFolderContent(current_id);
+        children = element_ctrl.GetFolderContent(visit.folder_id_);
       } catch (...) {
         children.clear();
       }
 
+      std::vector<std::shared_ptr<SleeveElement>> child_elements;
+      child_elements.reserve(children.size());
       for (const auto child_id : children) {
-        if (child_id != current_id) {
-          stack.push_back(child_id);
+        if (child_id == visit.folder_id_) {
+          continue;
         }
+        try {
+          auto child = element_ctrl.GetElementById(child_id);
+          if (!child || child->sync_flag_ == SyncFlag::DELETED) {
+            continue;
+          }
+          child_elements.push_back(std::move(child));
+        } catch (...) {
+        }
+      }
+
+      std::sort(child_elements.begin(), child_elements.end(),
+                [](const std::shared_ptr<SleeveElement>& lhs,
+                   const std::shared_ptr<SleeveElement>& rhs) {
+                  if (lhs->type_ != rhs->type_) {
+                    return lhs->type_ == ElementType::FOLDER;
+                  }
+                  return lhs->element_name_ < rhs->element_name_;
+                });
+
+      for (auto it = child_elements.rbegin(); it != child_elements.rend(); ++it) {
+        const auto& child = *it;
+        if (child->type_ == ElementType::FOLDER) {
+          stack.push_back(
+              {child->element_id_, visit.folder_id_, visit.folder_path_ / child->element_name_,
+               visit.depth_ + 1});
+          continue;
+        }
+
+        const auto file = std::dynamic_pointer_cast<SleeveFile>(child);
+        if (!file || file->image_id_ == 0) {
+          continue;
+        }
+        snapshot.album_entries_.push_back(
+            {file->element_id_, visit.folder_id_, file->image_id_, file->element_name_});
       }
     }
   } catch (...) {
   }
 
-  std::sort(entries.begin(), entries.end(), [](const ExistingAlbumEntry& lhs,
-                                               const ExistingAlbumEntry& rhs) {
-    if (lhs.file_name_ != rhs.file_name_) {
-      return lhs.file_name_ < rhs.file_name_;
-    }
-    return lhs.element_id_ < rhs.element_id_;
-  });
+  std::sort(snapshot.album_entries_.begin(), snapshot.album_entries_.end(),
+            [](const ExistingAlbumEntry& lhs, const ExistingAlbumEntry& rhs) {
+              if (lhs.file_name_ != rhs.file_name_) {
+                return lhs.file_name_ < rhs.file_name_;
+              }
+              return lhs.element_id_ < rhs.element_id_;
+            });
 
-  return entries;
+  std::sort(snapshot.folder_entries_.begin(), snapshot.folder_entries_.end(),
+            [](const ExistingFolderEntry& lhs, const ExistingFolderEntry& rhs) {
+              if (lhs.folder_id_ == 0 || rhs.folder_id_ == 0) {
+                return lhs.folder_id_ == 0;
+              }
+              if (lhs.folder_path_ != rhs.folder_path_) {
+                return lhs.folder_path_.generic_wstring() < rhs.folder_path_.generic_wstring();
+              }
+              return lhs.folder_id_ < rhs.folder_id_;
+            });
+
+  return snapshot;
 }
 
 void AlbumBackend::applyLoadedProjectEntriesBatch() {
@@ -1324,14 +2446,22 @@ void AlbumBackend::applyLoadedProjectEntriesBatch() {
   if (total == 0 || pending_project_entry_index_ >= total) {
     pending_project_entries_.clear();
     pending_project_entry_index_ = 0;
+    folder_entries_     = std::move(pending_folder_entries_);
+    folder_parent_by_id_ = std::move(pending_folder_parent_by_id_);
+    folder_path_by_id_   = std::move(pending_folder_path_by_id_);
+    rebuildFolderView();
+    applyFolderSelection(0, true);
     rebuildThumbnailView(std::nullopt);
     setTaskState("No background tasks", 0, false);
 
     service_ready_ = true;
-    service_message_ =
-        QString("Loaded project. DB: %1  Meta: %2")
-            .arg(PathToQString(db_path_))
-            .arg(PathToQString(meta_path_));
+    service_message_ = project_package_path_.empty()
+                           ? QString("Loaded project. DB: %1  Meta: %2")
+                                 .arg(PathToQString(db_path_))
+                                 .arg(PathToQString(meta_path_))
+                           : QString("Loaded packed project: %1 (DB temp: %2)")
+                                 .arg(PathToQString(project_package_path_))
+                                 .arg(PathToQString(db_path_));
     emit serviceStateChanged();
     emit projectChanged();
     setProjectLoadingState(false, QString());
@@ -1343,7 +2473,8 @@ void AlbumBackend::applyLoadedProjectEntriesBatch() {
 
   for (; pending_project_entry_index_ < end_index; ++pending_project_entry_index_) {
     const auto& entry = pending_project_entries_[pending_project_entry_index_];
-    addOrUpdateAlbumItem(entry.element_id_, entry.image_id_, entry.file_name_);
+    addOrUpdateAlbumItem(entry.element_id_, entry.image_id_, entry.file_name_,
+                         entry.parent_folder_id_);
   }
 
   const int pct =
@@ -1371,10 +2502,25 @@ void AlbumBackend::setProjectLoadingState(bool loading, const QString& message) 
 }
 
 void AlbumBackend::clearProjectData() {
+  releaseVisibleThumbnailPins();
+
   all_images_.clear();
   index_by_element_id_.clear();
   visible_thumbnails_.clear();
+  folder_entries_.clear();
+  folder_parent_by_id_.clear();
+  folder_path_by_id_.clear();
+  folders_.clear();
+  current_folder_id_        = 0;
+  current_folder_path_text_ = "/";
   active_filter_ids_.reset();
+  pending_project_entries_.clear();
+  pending_folder_entries_.clear();
+  pending_folder_parent_by_id_.clear();
+  pending_folder_path_by_id_.clear();
+  pending_project_entry_index_ = 0;
+  import_target_folder_id_     = 0;
+  import_target_folder_path_.clear();
 
   rule_model_.clearAndReset();
   last_join_op_ = FilterOp::AND;
@@ -1389,20 +2535,114 @@ void AlbumBackend::clearProjectData() {
   }
 
   emit thumbnailsChanged();
+  emit foldersChanged();
+  emit folderSelectionChanged();
   emit countsChanged();
+}
+
+void AlbumBackend::rebuildFolderView() {
+  std::sort(folder_entries_.begin(), folder_entries_.end(),
+            [](const ExistingFolderEntry& lhs, const ExistingFolderEntry& rhs) {
+              if (lhs.folder_id_ == 0 || rhs.folder_id_ == 0) {
+                return lhs.folder_id_ == 0;
+              }
+              if (lhs.folder_path_ != rhs.folder_path_) {
+                return lhs.folder_path_.generic_wstring() < rhs.folder_path_.generic_wstring();
+              }
+              return lhs.folder_id_ < rhs.folder_id_;
+            });
+
+  QVariantList next;
+  next.reserve(static_cast<qsizetype>(folder_entries_.size()));
+
+  for (const auto& folder : folder_entries_) {
+    const QString name =
+        folder.folder_id_ == 0 ? "Root" : WStringToQString(folder.folder_name_);
+    next.push_back(QVariantMap{
+        {"folderId", static_cast<uint>(folder.folder_id_)},
+        {"name", name},
+        {"depth", folder.depth_},
+        {"path", FolderPathToDisplay(folder.folder_path_)},
+        {"deletable", folder.folder_id_ != 0},
+    });
+  }
+
+  folders_ = std::move(next);
+  emit foldersChanged();
+}
+
+void AlbumBackend::applyFolderSelection(sl_element_id_t folderId, bool emitSignal) {
+  sl_element_id_t next_folder_id = folderId;
+  if (!folder_path_by_id_.contains(next_folder_id)) {
+    next_folder_id = 0;
+  }
+  if (!folder_path_by_id_.contains(next_folder_id) && !folder_entries_.empty()) {
+    next_folder_id = folder_entries_.front().folder_id_;
+  }
+
+  const bool    id_changed   = current_folder_id_ != next_folder_id;
+  current_folder_id_         = next_folder_id;
+  const auto    path_it      = folder_path_by_id_.find(current_folder_id_);
+  const QString next_path_ui =
+      path_it != folder_path_by_id_.end() ? FolderPathToDisplay(path_it->second) : QString("/");
+  const bool path_changed = current_folder_path_text_ != next_path_ui;
+  current_folder_path_text_ = next_path_ui;
+
+  if (emitSignal || id_changed || path_changed) {
+    emit folderSelectionChanged();
+  }
+}
+
+auto AlbumBackend::currentFolderFsPath() const -> std::filesystem::path {
+  const auto it = folder_path_by_id_.find(current_folder_id_);
+  if (it == folder_path_by_id_.end()) {
+    return std::filesystem::path(L"/");
+  }
+  return it->second;
+}
+
+void AlbumBackend::releaseVisibleThumbnailPins() {
+  if (!thumbnail_service_ || visible_thumbnails_.empty()) {
+    return;
+  }
+
+  std::unordered_set<sl_element_id_t> visible_ids;
+  visible_ids.reserve(static_cast<size_t>(visible_thumbnails_.size()) * 2 + 1);
+  for (const auto& row_value : visible_thumbnails_) {
+    const auto row = row_value.toMap();
+    const auto id  = static_cast<sl_element_id_t>(row.value("elementId").toUInt());
+    if (id != 0) {
+      visible_ids.insert(id);
+    }
+  }
+
+  for (const auto id : visible_ids) {
+    try {
+      thumbnail_service_->ReleaseThumbnail(id);
+    } catch (...) {
+    }
+  }
 }
 
 void AlbumBackend::rebuildThumbnailView(
     const std::optional<std::unordered_set<sl_element_id_t>>& allowedElementIds) {
+  releaseVisibleThumbnailPins();
+
   QVariantList next;
   next.reserve(static_cast<qsizetype>(all_images_.size()));
 
   int index = 0;
   for (const AlbumItem& image : all_images_) {
+    if (!isImageInCurrentFolder(image)) {
+      continue;
+    }
     if (allowedElementIds.has_value() && !allowedElementIds->contains(image.element_id)) {
       continue;
     }
     next.push_back(makeThumbMap(image, index++));
+    if (image.thumb_data_url.isEmpty()) {
+      requestThumbnail(image.element_id, image.image_id);
+    }
   }
 
   visible_thumbnails_ = std::move(next);
@@ -1421,12 +2661,14 @@ void AlbumBackend::addImportedEntries(const ImportLogSnapshot& snapshot) {
     if (!metadataOk.empty() && !metadataOk.contains(created.image_id_)) {
       continue;
     }
-    addOrUpdateAlbumItem(created.element_id_, created.image_id_, created.file_name_);
+    addOrUpdateAlbumItem(created.element_id_, created.image_id_, created.file_name_,
+                         import_target_folder_id_);
   }
 }
 
 void AlbumBackend::addOrUpdateAlbumItem(sl_element_id_t elementId, image_id_t imageId,
-                                        const file_name_t& fallbackName) {
+                                        const file_name_t& fallbackName,
+                                        sl_element_id_t parentFolderId) {
   AlbumItem* item = nullptr;
 
   if (const auto it = index_by_element_id_.find(elementId); it != index_by_element_id_.end()) {
@@ -1459,6 +2701,7 @@ void AlbumBackend::addOrUpdateAlbumItem(sl_element_id_t elementId, image_id_t im
 
   item->element_id = elementId;
   item->image_id   = imageId;
+  item->parent_folder_id = parentFolderId;
 
   if (project_) {
     try {
@@ -1519,8 +2762,6 @@ void AlbumBackend::addOrUpdateAlbumItem(sl_element_id_t elementId, image_id_t im
   if (item->extension.isEmpty()) {
     item->extension = ExtensionFromFileName(item->file_name);
   }
-
-  requestThumbnail(elementId, imageId);
 }
 
 void AlbumBackend::requestThumbnail(sl_element_id_t elementId, image_id_t imageId) {
@@ -1543,7 +2784,22 @@ void AlbumBackend::requestThumbnail(sl_element_id_t elementId, image_id_t imageI
   service->GetThumbnail(
       elementId, imageId,
       [self, service, elementId](std::shared_ptr<ThumbnailGuard> guard) {
-        if (!self || !guard || !guard->thumbnail_buffer_) {
+        if (!guard || !guard->thumbnail_buffer_) {
+          try {
+            if (service) {
+              service->ReleaseThumbnail(elementId);
+            }
+          } catch (...) {
+          }
+          return;
+        }
+        if (!self) {
+          try {
+            if (service) {
+              service->ReleaseThumbnail(elementId);
+            }
+          } catch (...) {
+          }
           return;
         }
 
@@ -1631,9 +2887,10 @@ void AlbumBackend::finishImport(const ImportResult& result) {
 
   const auto snapshot = importJob->import_log_->Snapshot();
 
+  bool state_saved = true;
   try {
     if (import_service_) {
-      import_service_->SyncImports(snapshot, image_path_t{});
+      import_service_->SyncImports(snapshot, import_target_folder_path_);
     }
     if (project_) {
       project_->GetSleeveService()->Sync();
@@ -1641,15 +2898,34 @@ void AlbumBackend::finishImport(const ImportResult& result) {
       project_->SaveProject(meta_path_);
     }
   } catch (...) {
+    state_saved = false;
+  }
+
+  QString package_error;
+  bool    package_saved = true;
+  if (state_saved) {
+    package_saved = packageCurrentProjectFiles(&package_error);
   }
 
   addImportedEntries(snapshot);
   reapplyCurrentFilters();
 
-  setTaskState(QString("Import complete: %1 imported, %2 failed")
-                   .arg(result.imported_)
-                   .arg(result.failed_),
-               100, false);
+  import_target_folder_id_   = current_folder_id_;
+  import_target_folder_path_ = currentFolderFsPath();
+
+  QString task_text =
+      QString("Import complete: %1 imported, %2 failed").arg(result.imported_).arg(result.failed_);
+  if (!state_saved) {
+    task_text += " (project sync/save failed)";
+    service_message_ = "Import finished, but saving project state failed.";
+    emit serviceStateChanged();
+  } else if (!package_saved) {
+    task_text += " (project packing failed)";
+    service_message_ = package_error.isEmpty() ? "Import finished, but project packing failed."
+                                               : package_error;
+    emit serviceStateChanged();
+  }
+  setTaskState(task_text, 100, false);
 
   QTimer::singleShot(1800, this, [this]() {
     if (!export_inflight_ && !task_cancel_visible_) {
@@ -1709,6 +2985,9 @@ void AlbumBackend::finishExport(const std::shared_ptr<std::vector<ExportResult>>
 
 void AlbumBackend::reapplyCurrentFilters() {
   applyFilters(static_cast<int>(last_join_op_));
+  if (!validation_error_.isEmpty()) {
+    rebuildThumbnailView(active_filter_ids_);
+  }
 }
 
 auto AlbumBackend::buildFilterNode(FilterOp joinOp) const -> BuildResult {
@@ -1826,6 +3105,10 @@ auto AlbumBackend::parseDate(const QString& text) -> std::optional<std::tm> {
   tm.tm_mon  = month - 1;
   tm.tm_mday = day;
   return tm;
+}
+
+bool AlbumBackend::isImageInCurrentFolder(const AlbumItem& image) const {
+  return image.parent_folder_id == current_folder_id_;
 }
 
 auto AlbumBackend::formatFilterInfo(int shown, int total) const -> QString {

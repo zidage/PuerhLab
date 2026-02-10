@@ -25,6 +25,8 @@ ApplicationWindow {
     property var selectedImagesById: ({})
     property var exportQueueById: ({})
     property var exportPreviewRows: []
+    property string pendingNewProjectFolderUrl: ""
+    property string defaultNewProjectName: "album_editor_project"
     readonly property int selectedCount: Object.keys(selectedImagesById).length
     readonly property int exportQueueCount: Object.keys(exportQueueById).length
 
@@ -118,9 +120,10 @@ ApplicationWindow {
 
     FileDialog {
         id: loadProjectDialog
-        title: "Select Project Metadata JSON"
+        title: "Select Project Package or Metadata JSON"
         fileMode: FileDialog.OpenFile
         nameFilters: [
+            "Packed Project (*.puerhproj)",
             "Project Metadata (*.json)",
             "All Files (*)"
         ]
@@ -131,9 +134,78 @@ ApplicationWindow {
 
     FolderDialog {
         id: createProjectFolderDialog
-        title: "Select Folder for New Project"
+        title: "Select Parent Folder for New Project"
         onAccepted: {
-            albumBackend.createProjectInFolder(selectedFolder.toString())
+            root.pendingNewProjectFolderUrl = selectedFolder.toString()
+            createProjectNameField.text = root.defaultNewProjectName
+            createProjectNameDialog.open()
+        }
+    }
+
+    Dialog {
+        id: createProjectNameDialog
+        modal: true
+        title: "Name New Project"
+        standardButtons: Dialog.NoButton
+        closePolicy: Popup.CloseOnEscape
+        x: Math.round((root.width - width) / 2)
+        y: Math.round((root.height - height) / 2)
+
+        function submitCreateProject() {
+            const trimmed = createProjectNameField.text.trim()
+            if (trimmed.length === 0 || root.pendingNewProjectFolderUrl.length === 0) {
+                return
+            }
+            root.defaultNewProjectName = trimmed
+            albumBackend.createProjectInFolderNamed(root.pendingNewProjectFolderUrl, trimmed)
+            root.pendingNewProjectFolderUrl = ""
+            createProjectNameDialog.close()
+        }
+
+        onOpened: {
+            createProjectNameField.forceActiveFocus()
+            createProjectNameField.selectAll()
+        }
+
+        onClosed: {
+            root.pendingNewProjectFolderUrl = ""
+        }
+
+        contentItem: ColumnLayout {
+            width: 420
+            spacing: 12
+
+            Label {
+                Layout.fillWidth: true
+                text: "Choose the project package name. The app will create a single .puerhproj file."
+                wrapMode: Text.WordWrap
+                color: "#E3DFDB"
+            }
+
+            TextField {
+                id: createProjectNameField
+                Layout.fillWidth: true
+                placeholderText: "Project name"
+                onAccepted: createProjectNameDialog.submitCreateProject()
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 10
+
+                Item { Layout.fillWidth: true }
+
+                Button {
+                    text: "Cancel"
+                    onClicked: createProjectNameDialog.close()
+                }
+
+                Button {
+                    text: "Create"
+                    enabled: createProjectNameField.text.trim().length > 0
+                    onClicked: createProjectNameDialog.submitCreateProject()
+                }
+            }
         }
     }
 
@@ -182,6 +254,9 @@ ApplicationWindow {
             root.clearSelectedImages()
             root.clearExportQueue()
             settingsPage = false
+        }
+        function onFolderSelectionChanged() {
+            root.clearSelectedImages()
         }
         function onThumbnailsChanged() {
             if (exportDialog.visible) {
@@ -285,12 +360,82 @@ ApplicationWindow {
                     anchors.fill: parent
                     anchors.margins: 10
                     Label { text: "Library"; font.pixelSize: 17; font.weight: 700; color: "#E3DFDB" }
-                    TextField { Layout.fillWidth: true; placeholderText: "Search folders" }
-                    Button { Layout.fillWidth: true; text: "All Photos"; onClicked: settingsPage = false }
-                    Button { Layout.fillWidth: true; text: "Recent Imports"; onClicked: settingsPage = false }
-                    Button { Layout.fillWidth: true; text: "Collections"; onClicked: settingsPage = false }
-                    Button { Layout.fillWidth: true; text: "Settings"; onClicked: settingsPage = true }
-                    Item { Layout.fillHeight: true }
+                    Label { text: albumBackend.currentFolderPath; color: "#7B7D7C"; font.pixelSize: 11; elide: Text.ElideMiddle; Layout.fillWidth: true }
+
+                    TextField {
+                        id: folderSearchField
+                        Layout.fillWidth: true
+                        placeholderText: "Search folders"
+                    }
+
+                    TextField {
+                        id: createFolderField
+                        Layout.fillWidth: true
+                        placeholderText: "New folder name"
+                        enabled: albumBackend.serviceReady && !albumBackend.projectLoading
+                        onAccepted: {
+                            if (text.trim().length === 0) {
+                                return
+                            }
+                            albumBackend.createFolder(text)
+                            text = ""
+                        }
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Button {
+                            Layout.fillWidth: true
+                            text: "Add Folder"
+                            enabled: albumBackend.serviceReady
+                                     && !albumBackend.projectLoading
+                                     && createFolderField.text.trim().length > 0
+                            onClicked: {
+                                albumBackend.createFolder(createFolderField.text)
+                                createFolderField.text = ""
+                            }
+                        }
+                        Button {
+                            Layout.fillWidth: true
+                            text: "Delete"
+                            enabled: albumBackend.serviceReady
+                                     && !albumBackend.projectLoading
+                                     && albumBackend.currentFolderId !== 0
+                            onClicked: albumBackend.deleteFolder(albumBackend.currentFolderId)
+                        }
+                    }
+
+                    ListView {
+                        id: folderList
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        clip: true
+                        spacing: 4
+                        model: albumBackend.folders
+                        delegate: Item {
+                            required property int folderId
+                            required property string name
+                            required property int depth
+                            required property string path
+                            width: ListView.view.width
+                            height: folderButton.visible ? 32 : 0
+                            visible: folderSearchField.text.trim().length === 0
+                                     || name.toLowerCase().indexOf(folderSearchField.text.trim().toLowerCase()) >= 0
+
+                            Button {
+                                id: folderButton
+                                anchors.fill: parent
+                                text: name
+                                checkable: true
+                                checked: folderId === albumBackend.currentFolderId
+                                leftPadding: 10 + depth * 14
+                                onClicked: {
+                                    settingsPage = false
+                                    albumBackend.selectFolder(folderId)
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
@@ -474,7 +619,7 @@ ApplicationWindow {
                 Label {
                     Layout.fillWidth: true
                     wrapMode: Text.WordWrap
-                    text: "Every boot asks for a project. Load an existing metadata JSON/database pair or create a new project, then choose the folder location."
+                    text: "Every boot asks for a project. Load a packed .puerhproj file or a metadata JSON/database pair, or create a new project package."
                     color: "#7B7D7C"
                     font.pixelSize: 13
                 }
