@@ -282,7 +282,13 @@ struct GPUOperatorParams {
   GPU_TO_OUTPUT_Params to_output_params_       = {};
 
   // Curve adjustment parameters
-  bool                 curve_enabled_          = false;
+  static constexpr int kMaxCurveControlPoints  = 32;
+  bool                 curve_enabled_          = true;
+  int                  curve_ctrl_pts_size_    = 0;
+  float                curve_ctrl_pts_x_[kMaxCurveControlPoints] = {};
+  float                curve_ctrl_pts_y_[kMaxCurveControlPoints] = {};
+  float                curve_h_[kMaxCurveControlPoints - 1]      = {};
+  float                curve_m_[kMaxCurveControlPoints]          = {};
 
   // Clarity adjustment parameter
   bool                 clarity_enabled_        = true;
@@ -401,6 +407,39 @@ class GPUParamsConverter {
     // }
 
     gpu_params.curve_enabled_       = cpu_params.curve_enabled_;
+    const size_t curve_pts_count    = cpu_params.curve_ctrl_pts_.size();
+    if (curve_pts_count > static_cast<size_t>(GPUOperatorParams::kMaxCurveControlPoints)) {
+      std::ostringstream oss;
+      oss << "GPUParamsConverter: curve has " << curve_pts_count
+          << " control points, but GPU max is " << GPUOperatorParams::kMaxCurveControlPoints << ".";
+      throw std::runtime_error(oss.str());
+    }
+    if (curve_pts_count > 0 && cpu_params.curve_m_.size() < curve_pts_count) {
+      throw std::runtime_error(
+          "GPUParamsConverter: curve_m_ is smaller than curve control-point count.");
+    }
+    if (curve_pts_count > 1 && cpu_params.curve_h_.size() < (curve_pts_count - 1)) {
+      throw std::runtime_error(
+          "GPUParamsConverter: curve_h_ is smaller than curve segment count.");
+    }
+
+    gpu_params.curve_ctrl_pts_size_ = static_cast<int>(curve_pts_count);
+    for (int i = 0; i < GPUOperatorParams::kMaxCurveControlPoints; ++i) {
+      gpu_params.curve_ctrl_pts_x_[i] = 0.0f;
+      gpu_params.curve_ctrl_pts_y_[i] = 0.0f;
+      gpu_params.curve_m_[i]          = 0.0f;
+      if (i < GPUOperatorParams::kMaxCurveControlPoints - 1) {
+        gpu_params.curve_h_[i] = 0.0f;
+      }
+    }
+    for (size_t i = 0; i < curve_pts_count; ++i) {
+      gpu_params.curve_ctrl_pts_x_[i] = cpu_params.curve_ctrl_pts_[i].x;
+      gpu_params.curve_ctrl_pts_y_[i] = cpu_params.curve_ctrl_pts_[i].y;
+      gpu_params.curve_m_[i]          = cpu_params.curve_m_[i];
+    }
+    for (size_t i = 0; i + 1 < curve_pts_count; ++i) {
+      gpu_params.curve_h_[i] = cpu_params.curve_h_[i];
+    }
 
     gpu_params.clarity_enabled_     = cpu_params.clarity_enabled_;
     gpu_params.clarity_offset_      = cpu_params.clarity_offset_;

@@ -55,7 +55,7 @@ GPU_FUNC float3 contrast_on_luma_acescc(float3 rgb_acescc, float k = 6.0f, float
                                         float range = 0.35f, float eps = 1e-6f) {
   // AP1 luma in ACEScc domain (approx approach; "professional-looking" for gentle ops)
   const float Y =
-      0.2722287168f * rgb_acescc.x + 0.6740817658f * rgb_acescc.y + 0.0536895174f * rgb_acescc.z;
+      0.2126f * rgb_acescc.x + 0.7152f * rgb_acescc.y + 0.0722f * rgb_acescc.z;
 
   const float lo = pivot - range;
   const float hi = pivot + range;
@@ -151,6 +151,59 @@ struct GPU_ShadowOpKernel : GPUPointOpTag {
       p->y *= scale;
       p->z *= scale;
     }
+  }
+};
+
+GPU_FUNC float evaluate_curve_hermite(float x, const GPUOperatorParams& params) {
+  const int curve_count = params.curve_ctrl_pts_size_;
+  if (curve_count <= 0) return x;
+  if (curve_count == 1) {
+    return fminf(fmaxf(params.curve_ctrl_pts_y_[0], 0.0f), 1.0f);
+  }
+
+  if (x <= params.curve_ctrl_pts_x_[0]) return params.curve_ctrl_pts_y_[0];
+  if (x >= params.curve_ctrl_pts_x_[curve_count - 1]) return params.curve_ctrl_pts_y_[curve_count - 1];
+
+  int idx = curve_count - 2;
+  for (int i = 0; i < curve_count - 1; ++i) {
+    if (x < params.curve_ctrl_pts_x_[i + 1]) {
+      idx = i;
+      break;
+    }
+  }
+
+  const float dx = params.curve_h_[idx];
+  if (fabsf(dx) <= 1e-8f) {
+    return fminf(fmaxf(params.curve_ctrl_pts_y_[idx], 0.0f), 1.0f);
+  }
+
+  const float t   = (x - params.curve_ctrl_pts_x_[idx]) / dx;
+
+  // Hermite interpolation
+  const float h00 = 2.0f * t * t * t - 3.0f * t * t + 1.0f;
+  const float h10 = t * t * t - 2.0f * t * t + t;
+  const float h01 = -2.0f * t * t * t + 3.0f * t * t;
+  const float h11 = t * t * t - t * t;
+
+  const float y = h00 * params.curve_ctrl_pts_y_[idx] + h10 * dx * params.curve_m_[idx] +
+                  h01 * params.curve_ctrl_pts_y_[idx + 1] + h11 * dx * params.curve_m_[idx + 1];
+  return fminf(fmaxf(y, 0.0f), 1.0f);
+}
+
+struct GPU_CurveOpKernel : GPUPointOpTag {
+  __device__ __forceinline__ void operator()(float4* p, GPUOperatorParams& params) const {
+    if (!params.curve_enabled_) return;
+    if (params.curve_ctrl_pts_size_ <= 0) return;
+
+    constexpr float kCurveInfluence = 0.65f;
+
+    const float lum     = 0.2126f * p->x + 0.7152f * p->y + 0.0722f * p->z;
+    const float mapped_lum = evaluate_curve_hermite(lum, params);
+    const float new_lum    = lum + (mapped_lum - lum) * kCurveInfluence;
+    const float ratio   = (lum > 1e-5f) ? new_lum / lum : 0.0f;
+    p->x *= ratio;
+    p->y *= ratio;
+    p->z *= ratio;
   }
 };
 };  // namespace CUDA

@@ -34,6 +34,7 @@ class GPUPipelineImpl {
     auto tone  = GPU_ToneOpKernel();
     auto high   = GPU_HighlightOpKernel();
     auto shad   = GPU_ShadowOpKernel();
+    auto curve  = GPU_CurveOpKernel();
 
     auto tint   = GPU_TintOpKernel();
     auto sat    = GPU_SaturationOpKernel();
@@ -45,7 +46,7 @@ class GPUPipelineImpl {
     auto sharp  = GPU_SharpenKernel();
     auto clar   = GPU_ClarityKernel();
 
-    return GPU_StaticKernelStream(GPU_PointChain(to_ws, exp, cont, tone, high, shad, tint,
+    return GPU_StaticKernelStream(GPU_PointChain(to_ws, exp, cont, tone, high, shad, curve, tint,
                                                  sat, vib, hls, lmt, to_out),
                                   sharp, clar);
   };

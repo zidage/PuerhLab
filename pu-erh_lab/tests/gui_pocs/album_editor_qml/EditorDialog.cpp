@@ -13,7 +13,9 @@
 #include <QLabel>
 #include <QListWidget>
 #include <QMessageBox>
+#include <QMouseEvent>
 #include <QPainter>
+#include <QPainterPath>
 #include <QPushButton>
 #include <QScrollArea>
 #include <QSlider>
@@ -25,6 +27,8 @@
 #include <chrono>
 #include <cmath>
 #include <filesystem>
+#include <format>
+#include <functional>
 #include <future>
 #include <json.hpp>
 #include <optional>
@@ -79,6 +83,510 @@ constexpr float kBlackSliderFromGlobalScale      = 1000.0f;
 constexpr float kWhiteSliderFromGlobalScale      = 300.0f;
 constexpr float kShadowsSliderFromGlobalScale    = 80.0f;
 constexpr float kHighlightsSliderFromGlobalScale = 50.0f;
+constexpr float kCurveEpsilon                    = 1e-6f;
+constexpr float kCurveMinPointSpacing            = 1e-3f;
+constexpr int   kCurveMaxControlPoints           = 12;
+
+auto Clamp01(float v) -> float { return std::clamp(v, 0.0f, 1.0f); }
+
+auto DefaultCurveControlPoints() -> std::vector<QPointF> {
+  return {QPointF(0.0, 0.0), QPointF(0.25, 0.25), QPointF(0.75, 0.75), QPointF(1.0, 1.0)};
+}
+
+auto NormalizeCurveControlPoints(const std::vector<QPointF>& in) -> std::vector<QPointF> {
+  std::vector<QPointF> points;
+  points.reserve(in.size());
+  for (const auto& p : in) {
+    if (!std::isfinite(p.x()) || !std::isfinite(p.y())) {
+      continue;
+    }
+    points.emplace_back(Clamp01(static_cast<float>(p.x())), Clamp01(static_cast<float>(p.y())));
+  }
+
+  if (points.empty()) {
+    return DefaultCurveControlPoints();
+  }
+
+  std::sort(points.begin(), points.end(), [](const QPointF& a, const QPointF& b) {
+    if (std::abs(a.x() - b.x()) <= kCurveEpsilon) {
+      return a.y() < b.y();
+    }
+    return a.x() < b.x();
+  });
+
+  std::vector<QPointF> deduped;
+  deduped.reserve(points.size());
+  for (const auto& p : points) {
+    if (deduped.empty() || std::abs(p.x() - deduped.back().x()) > kCurveEpsilon) {
+      deduped.push_back(p);
+    } else {
+      deduped.back().setY(p.y());
+    }
+  }
+
+  if (deduped.front().x() > kCurveEpsilon) {
+    deduped.insert(deduped.begin(), QPointF(0.0, Clamp01(static_cast<float>(deduped.front().y()))));
+  }
+  if (deduped.back().x() < (1.0 - kCurveEpsilon)) {
+    deduped.push_back(QPointF(1.0, Clamp01(static_cast<float>(deduped.back().y()))));
+  }
+
+  deduped.front().setX(0.0);
+  deduped.front().setY(Clamp01(static_cast<float>(deduped.front().y())));
+  deduped.back().setX(1.0);
+  deduped.back().setY(Clamp01(static_cast<float>(deduped.back().y())));
+
+  std::vector<QPointF> normalized;
+  normalized.reserve(deduped.size());
+  normalized.push_back(deduped.front());
+  for (size_t i = 1; i + 1 < deduped.size(); ++i) {
+    const auto& p = deduped[i];
+    if (p.x() <= normalized.back().x() + kCurveMinPointSpacing) {
+      continue;
+    }
+    if (p.x() >= 1.0 - kCurveMinPointSpacing) {
+      continue;
+    }
+    normalized.push_back(p);
+    if (static_cast<int>(normalized.size()) >= (kCurveMaxControlPoints - 1)) {
+      break;
+    }
+  }
+  normalized.push_back(deduped.back());
+
+  if (normalized.size() < 2) {
+    return DefaultCurveControlPoints();
+  }
+
+  return normalized;
+}
+
+auto CurveControlPointsEqual(const std::vector<QPointF>& a, const std::vector<QPointF>& b,
+                             float eps = 1e-4f) -> bool {
+  if (a.size() != b.size()) {
+    return false;
+  }
+  for (size_t i = 0; i < a.size(); ++i) {
+    if (std::abs(a[i].x() - b[i].x()) > eps || std::abs(a[i].y() - b[i].y()) > eps) {
+      return false;
+    }
+  }
+  return true;
+}
+
+struct CurveHermiteCache {
+  std::vector<float> h_;
+  std::vector<float> m_;
+};
+
+auto BuildCurveHermiteCache(const std::vector<QPointF>& points) -> CurveHermiteCache {
+  CurveHermiteCache cache;
+  const size_t      n = points.size();
+  if (n == 0) {
+    return cache;
+  }
+
+  cache.m_.assign(n, 0.0f);
+  if (n == 1) {
+    return cache;
+  }
+
+  cache.h_.assign(n - 1, 0.0f);
+  std::vector<float> delta(n - 1, 0.0f);
+  for (size_t i = 0; i + 1 < n; ++i) {
+    const float dx = static_cast<float>(points[i + 1].x() - points[i].x());
+    cache.h_[i]    = dx;
+    if (std::abs(dx) > kCurveEpsilon) {
+      delta[i] =
+          static_cast<float>(points[i + 1].y() - points[i].y()) / dx;
+    }
+  }
+
+  cache.m_[0]     = delta[0];
+  cache.m_[n - 1] = delta[n - 2];
+  for (size_t i = 1; i + 1 < n; ++i) {
+    if (delta[i - 1] * delta[i] <= 0.0f) {
+      cache.m_[i] = 0.0f;
+      continue;
+    }
+    const float w1    = 2.0f * cache.h_[i] + cache.h_[i - 1];
+    const float w2    = cache.h_[i] + 2.0f * cache.h_[i - 1];
+    const float denom = (w1 / delta[i - 1]) + (w2 / delta[i]);
+    cache.m_[i]       = ((w1 + w2) > 0.0f && std::abs(denom) > kCurveEpsilon) ? (w1 + w2) / denom
+                                                                                : 0.0f;
+  }
+
+  return cache;
+}
+
+auto EvaluateCurveHermite(float x, const std::vector<QPointF>& points, const CurveHermiteCache& cache)
+    -> float {
+  const size_t n = points.size();
+  if (n == 0) {
+    return Clamp01(x);
+  }
+  if (n == 1) {
+    return Clamp01(static_cast<float>(points.front().y()));
+  }
+  if (x <= points.front().x()) {
+    return Clamp01(static_cast<float>(points.front().y()));
+  }
+  if (x >= points.back().x()) {
+    return Clamp01(static_cast<float>(points.back().y()));
+  }
+
+  int idx = static_cast<int>(n) - 2;
+  for (int i = 0; i < static_cast<int>(n) - 1; ++i) {
+    if (x < points[i + 1].x()) {
+      idx = i;
+      break;
+    }
+  }
+
+  if (idx < 0 || static_cast<size_t>(idx) >= cache.h_.size() ||
+      static_cast<size_t>(idx + 1) >= cache.m_.size()) {
+    return Clamp01(x);
+  }
+
+  const float dx = cache.h_[idx];
+  if (std::abs(dx) <= kCurveEpsilon) {
+    return Clamp01(static_cast<float>(points[idx].y()));
+  }
+
+  const float t   = (x - static_cast<float>(points[idx].x())) / dx;
+  const float h00 = 2.0f * t * t * t - 3.0f * t * t + 1.0f;
+  const float h10 = t * t * t - 2.0f * t * t + t;
+  const float h01 = -2.0f * t * t * t + 3.0f * t * t;
+  const float h11 = t * t * t - t * t;
+
+  const float y =
+      h00 * static_cast<float>(points[idx].y()) + h10 * dx * cache.m_[idx] +
+      h01 * static_cast<float>(points[idx + 1].y()) + h11 * dx * cache.m_[idx + 1];
+  return Clamp01(y);
+}
+
+auto CurveControlPointsToParams(const std::vector<QPointF>& points) -> nlohmann::json {
+  const auto normalized = NormalizeCurveControlPoints(points);
+  nlohmann::json pts    = nlohmann::json::array();
+  for (const auto& p : normalized) {
+    pts.push_back({{"x", static_cast<float>(p.x())}, {"y", static_cast<float>(p.y())}});
+  }
+  return {{"curve", {{"size", normalized.size()}, {"points", std::move(pts)}}}};
+}
+
+auto ParseCurveControlPointsFromParams(const nlohmann::json& params)
+    -> std::optional<std::vector<QPointF>> {
+  if (!params.is_object()) {
+    return std::nullopt;
+  }
+
+  const nlohmann::json* curve_json = &params;
+  if (params.contains("curve")) {
+    curve_json = &params["curve"];
+  }
+
+  if (!curve_json->is_object()) {
+    return std::nullopt;
+  }
+
+  std::vector<QPointF> points;
+
+  if (curve_json->contains("points") && (*curve_json)["points"].is_array()) {
+    for (const auto& p : (*curve_json)["points"]) {
+      if (!p.is_object() || !p.contains("x") || !p.contains("y")) {
+        continue;
+      }
+      try {
+        points.emplace_back(p["x"].get<float>(), p["y"].get<float>());
+      } catch (...) {
+      }
+    }
+  }
+
+  if (points.empty() && curve_json->contains("size")) {
+    size_t point_count = 0;
+    try {
+      point_count = (*curve_json)["size"].get<size_t>();
+    } catch (...) {
+      point_count = 0;
+    }
+    for (size_t i = 0; i < point_count; ++i) {
+      const std::string key = std::format("pts{}", i);
+      if (!curve_json->contains(key)) {
+        continue;
+      }
+      const auto& p = (*curve_json)[key];
+      if (!p.is_object() || !p.contains("x") || !p.contains("y")) {
+        continue;
+      }
+      try {
+        points.emplace_back(p["x"].get<float>(), p["y"].get<float>());
+      } catch (...) {
+      }
+    }
+  }
+
+  if (points.empty()) {
+    return std::nullopt;
+  }
+  return NormalizeCurveControlPoints(points);
+}
+
+class ToneCurveWidget final : public QWidget {
+ public:
+  using CurveCallback = std::function<void(const std::vector<QPointF>&)>;
+
+  explicit ToneCurveWidget(QWidget* parent = nullptr) : QWidget(parent) {
+    setMinimumSize(270, 220);
+    setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    setMouseTracking(true);
+    setCursor(Qt::CrossCursor);
+    points_ = DefaultCurveControlPoints();
+  }
+
+  void SetControlPoints(const std::vector<QPointF>& points) {
+    points_ = NormalizeCurveControlPoints(points);
+    active_idx_ = -1;
+    dragging_   = false;
+    update();
+  }
+
+  auto GetControlPoints() const -> const std::vector<QPointF>& { return points_; }
+
+  void SetCurveChangedCallback(CurveCallback cb) { on_curve_changed_ = std::move(cb); }
+
+  void SetCurveReleasedCallback(CurveCallback cb) { on_curve_released_ = std::move(cb); }
+
+ protected:
+  void paintEvent(QPaintEvent*) override {
+    QPainter painter(this);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+
+    painter.fillRect(rect(), QColor(0x10, 0x14, 0x1A));
+    painter.setPen(QPen(QColor(0x29, 0x37, 0x4B), 1.0));
+    painter.drawRoundedRect(rect().adjusted(0, 0, -1, -1), 10.0, 10.0);
+
+    const QRectF plot = PlotRect();
+    painter.fillRect(plot, QColor(0x15, 0x1C, 0x26));
+
+    painter.setPen(QPen(QColor(0x28, 0x38, 0x4D), 1.0));
+    for (int i = 1; i < 4; ++i) {
+      const qreal t  = static_cast<qreal>(i) / 4.0;
+      const qreal gx = plot.left() + t * plot.width();
+      const qreal gy = plot.top() + t * plot.height();
+      painter.drawLine(QPointF(gx, plot.top()), QPointF(gx, plot.bottom()));
+      painter.drawLine(QPointF(plot.left(), gy), QPointF(plot.right(), gy));
+    }
+
+    painter.setPen(QPen(QColor(0x66, 0x78, 0x90), 1.0, Qt::DashLine));
+    painter.drawLine(QPointF(plot.left(), plot.bottom()), QPointF(plot.right(), plot.top()));
+
+    const auto cache = BuildCurveHermiteCache(points_);
+    QPainterPath curve_path;
+    constexpr int kSamples = 240;
+    for (int i = 0; i <= kSamples; ++i) {
+      const float   x = static_cast<float>(i) / static_cast<float>(kSamples);
+      const float   y = EvaluateCurveHermite(x, points_, cache);
+      const QPointF p = ToWidgetPoint(QPointF(x, y));
+      if (i == 0) {
+        curve_path.moveTo(p);
+      } else {
+        curve_path.lineTo(p);
+      }
+    }
+
+    painter.setPen(QPen(QColor(0x8A, 0xC7, 0xFF), 2.0));
+    painter.drawPath(curve_path);
+
+    for (size_t i = 0; i < points_.size(); ++i) {
+      const QPointF p       = ToWidgetPoint(points_[i]);
+      const bool    active  = static_cast<int>(i) == active_idx_;
+      const bool    pinned  = (i == 0 || i + 1 == points_.size());
+      const QColor  fill    = active ? QColor(0xF2, 0xC0, 0x5C) : QColor(0xE8, 0xEA, 0xED);
+      const QColor  outline = pinned ? QColor(0x81, 0xC9, 0x95) : QColor(0x0B, 0x1A, 0x2B);
+
+      painter.setPen(QPen(outline, 1.5));
+      painter.setBrush(fill);
+      painter.drawEllipse(p, active ? 5.5 : 4.5, active ? 5.5 : 4.5);
+    }
+
+    painter.setPen(QColor(0x9D, 0xB0, 0xD0));
+    painter.drawText(QRectF(plot.left() - 2.0, plot.bottom() + 4.0, 32.0, 14.0), "0");
+    painter.drawText(QRectF(plot.right() - 10.0, plot.bottom() + 4.0, 20.0, 14.0), "1");
+    painter.drawText(QRectF(plot.left() - 16.0, plot.top() - 2.0, 14.0, 14.0), "1");
+    painter.drawText(QRectF(plot.left() - 16.0, plot.bottom() - 10.0, 14.0, 14.0), "0");
+  }
+
+  void mousePressEvent(QMouseEvent* event) override {
+    if (!event) {
+      return;
+    }
+
+    const QPointF pos = event->position();
+    if (event->button() == Qt::RightButton) {
+      const int hit_idx = HitTestPoint(pos);
+      if (hit_idx > 0 && hit_idx + 1 < static_cast<int>(points_.size())) {
+        points_.erase(points_.begin() + hit_idx);
+        points_ = NormalizeCurveControlPoints(points_);
+        active_idx_ = -1;
+        dragging_   = false;
+        NotifyCurveChanged();
+        NotifyCurveReleased();
+        update();
+      }
+      return;
+    }
+
+    if (event->button() != Qt::LeftButton) {
+      return;
+    }
+
+    const int hit_idx = HitTestPoint(pos);
+    if (hit_idx >= 0) {
+      active_idx_ = hit_idx;
+      dragging_   = true;
+      update();
+      return;
+    }
+
+    if (!PlotRect().contains(pos) || static_cast<int>(points_.size()) >= kCurveMaxControlPoints) {
+      return;
+    }
+
+    const QPointF normalized = ToNormalizedPoint(pos);
+    if (normalized.x() <= kCurveMinPointSpacing ||
+        normalized.x() >= (1.0 - kCurveMinPointSpacing)) {
+      return;
+    }
+
+    points_.push_back(normalized);
+    points_ = NormalizeCurveControlPoints(points_);
+    active_idx_ = FindClosestPointIndex(normalized);
+    dragging_   = true;
+    NotifyCurveChanged();
+    update();
+  }
+
+  void mouseMoveEvent(QMouseEvent* event) override {
+    if (!event || !dragging_ || active_idx_ < 0 || active_idx_ >= static_cast<int>(points_.size())) {
+      return;
+    }
+
+    const int last_idx = static_cast<int>(points_.size()) - 1;
+    const QPointF normalized = ToNormalizedPoint(event->position());
+    if (active_idx_ == 0) {
+      points_[0] = QPointF(0.0, Clamp01(static_cast<float>(normalized.y())));
+      NotifyCurveChanged();
+      update();
+      return;
+    }
+    if (active_idx_ == last_idx) {
+      points_[last_idx] = QPointF(1.0, Clamp01(static_cast<float>(normalized.y())));
+      NotifyCurveChanged();
+      update();
+      return;
+    }
+
+    const float   min_x =
+        static_cast<float>(points_[active_idx_ - 1].x()) + kCurveMinPointSpacing;
+    const float max_x =
+        static_cast<float>(points_[active_idx_ + 1].x()) - kCurveMinPointSpacing;
+
+    const float x = std::clamp(static_cast<float>(normalized.x()), min_x, max_x);
+    const float y = Clamp01(static_cast<float>(normalized.y()));
+    points_[active_idx_] = QPointF(x, y);
+
+    NotifyCurveChanged();
+    update();
+  }
+
+  void mouseReleaseEvent(QMouseEvent* event) override {
+    if (!event || event->button() != Qt::LeftButton) {
+      return;
+    }
+    if (!dragging_) {
+      return;
+    }
+    dragging_ = false;
+    NotifyCurveReleased();
+  }
+
+ private:
+  auto PlotRect() const -> QRectF {
+    constexpr qreal kLeft   = 22.0;
+    constexpr qreal kTop    = 14.0;
+    constexpr qreal kRight  = 12.0;
+    constexpr qreal kBottom = 24.0;
+    return QRectF(kLeft, kTop, std::max(30.0, width() - kLeft - kRight),
+                  std::max(30.0, height() - kTop - kBottom));
+  }
+
+  auto ToWidgetPoint(const QPointF& normalized) const -> QPointF {
+    const QRectF plot = PlotRect();
+    const qreal  x    = plot.left() + normalized.x() * plot.width();
+    const qreal  y    = plot.bottom() - normalized.y() * plot.height();
+    return QPointF(x, y);
+  }
+
+  auto ToNormalizedPoint(const QPointF& widget_point) const -> QPointF {
+    const QRectF plot = PlotRect();
+    const qreal  nx =
+        std::clamp((widget_point.x() - plot.left()) / std::max(1.0, plot.width()), 0.0, 1.0);
+    const qreal ny =
+        std::clamp((plot.bottom() - widget_point.y()) / std::max(1.0, plot.height()), 0.0, 1.0);
+    return QPointF(nx, ny);
+  }
+
+  auto HitTestPoint(const QPointF& widget_point) const -> int {
+    constexpr qreal kHitRadiusSq = 10.0 * 10.0;
+    for (int i = static_cast<int>(points_.size()) - 1; i >= 0; --i) {
+      const QPointF p   = ToWidgetPoint(points_[i]);
+      const qreal   dx  = p.x() - widget_point.x();
+      const qreal   dy  = p.y() - widget_point.y();
+      const qreal   dist_sq = dx * dx + dy * dy;
+      if (dist_sq <= kHitRadiusSq) {
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  auto FindClosestPointIndex(const QPointF& normalized) const -> int {
+    if (points_.empty()) {
+      return -1;
+    }
+    int   best_idx  = 0;
+    qreal best_dist = std::abs(points_[0].x() - normalized.x()) +
+                      std::abs(points_[0].y() - normalized.y());
+    for (int i = 1; i < static_cast<int>(points_.size()); ++i) {
+      const qreal dist =
+          std::abs(points_[i].x() - normalized.x()) + std::abs(points_[i].y() - normalized.y());
+      if (dist < best_dist) {
+        best_dist = dist;
+        best_idx  = i;
+      }
+    }
+    return best_idx;
+  }
+
+  void NotifyCurveChanged() {
+    if (on_curve_changed_) {
+      on_curve_changed_(points_);
+    }
+  }
+
+  void NotifyCurveReleased() {
+    if (on_curve_released_) {
+      on_curve_released_(points_);
+    }
+  }
+
+  std::vector<QPointF> points_{};
+  int                  active_idx_ = -1;
+  bool                 dragging_   = false;
+  CurveCallback        on_curve_changed_{};
+  CurveCallback        on_curve_released_{};
+};
 
 class SpinnerWidget final : public QWidget {
  public:
@@ -635,6 +1143,76 @@ class EditorDialog final : public QDialog {
         [this]() { CommitAdjustment(AdjustmentField::Highlights); },
         [](int v) { return QString::number(v, 'f', 2); });
 
+    addSection("Curve", "Smooth tone curve mapped from input [0, 1] to output [0, 1].");
+
+    {
+      auto* frame  = new QFrame(controls_);
+      auto* layout = new QVBoxLayout(frame);
+      layout->setContentsMargins(0, 0, 0, 0);
+      layout->setSpacing(8);
+
+      curve_widget_ = new ToneCurveWidget(frame);
+      curve_widget_->SetControlPoints(state_.curve_points_);
+      curve_widget_->SetCurveChangedCallback([this](const std::vector<QPointF>& points) {
+        if (syncing_controls_) {
+          return;
+        }
+        state_.curve_points_ = NormalizeCurveControlPoints(points);
+        RequestRender();
+      });
+      curve_widget_->SetCurveReleasedCallback([this](const std::vector<QPointF>& points) {
+        if (syncing_controls_) {
+          return;
+        }
+        state_.curve_points_ = NormalizeCurveControlPoints(points);
+        CommitAdjustment(AdjustmentField::Curve);
+      });
+
+      auto* actions_row       = new QWidget(frame);
+      auto* actions_row_layout = new QHBoxLayout(actions_row);
+      actions_row_layout->setContentsMargins(0, 0, 0, 0);
+      actions_row_layout->setSpacing(8);
+
+      auto* curve_hint = new QLabel("Left click/drag to shape. Right click a point to remove.",
+                                    actions_row);
+      curve_hint->setStyleSheet(
+          "QLabel {"
+          "  color: #9DB0D0;"
+          "  font-size: 11px;"
+          "}");
+      curve_hint->setWordWrap(true);
+
+      auto* reset_curve_btn = new QPushButton("Reset Curve", actions_row);
+      reset_curve_btn->setFixedHeight(28);
+      reset_curve_btn->setStyleSheet(
+          "QPushButton {"
+          "  background: #2B2F33;"
+          "  border: 1px solid #303134;"
+          "  border-radius: 8px;"
+          "  padding: 4px 10px;"
+          "}"
+          "QPushButton:hover {"
+          "  background: #34383C;"
+          "}");
+      QObject::connect(reset_curve_btn, &QPushButton::clicked, this, [this]() {
+        if (!curve_widget_) {
+          return;
+        }
+        state_.curve_points_ = DefaultCurveControlPoints();
+        curve_widget_->SetControlPoints(state_.curve_points_);
+        RequestRender();
+        CommitAdjustment(AdjustmentField::Curve);
+      });
+
+      actions_row_layout->addWidget(curve_hint, 1);
+      actions_row_layout->addWidget(reset_curve_btn, 0);
+
+      layout->addWidget(curve_widget_, 1);
+      layout->addWidget(actions_row, 0);
+
+      controls_layout->insertWidget(controls_layout->count() - 1, frame);
+    }
+
     addSection("Detail", "Micro-contrast and sharpen controls.");
 
     sharpen_slider_ = addSlider(
@@ -874,6 +1452,7 @@ class EditorDialog final : public QDialog {
     Whites,
     Shadows,
     Highlights,
+    Curve,
     Sharpen,
     Clarity,
     Lut,
@@ -888,6 +1467,7 @@ class EditorDialog final : public QDialog {
     float       whites_     = 0.0f;
     float       shadows_    = 0.0f;
     float       highlights_ = 0.0f;
+    std::vector<QPointF> curve_points_ = DefaultCurveControlPoints();
     float       sharpen_    = 0.0f;
     float       clarity_    = 0.0f;
     std::string lut_path_;
@@ -980,6 +1560,9 @@ class EditorDialog final : public QDialog {
     }
     if (clarity_slider_) {
       clarity_slider_->setValue(static_cast<int>(std::lround(state_.clarity_)));
+    }
+    if (curve_widget_) {
+      curve_widget_->SetControlPoints(state_.curve_points_);
     }
 
     syncing_controls_ = false;
@@ -1500,6 +2083,8 @@ class EditorDialog final : public QDialog {
         return {PipelineStageName::Basic_Adjustment, OperatorType::SHADOWS};
       case AdjustmentField::Highlights:
         return {PipelineStageName::Basic_Adjustment, OperatorType::HIGHLIGHTS};
+      case AdjustmentField::Curve:
+        return {PipelineStageName::Basic_Adjustment, OperatorType::CURVE};
       case AdjustmentField::Sharpen:
         return {PipelineStageName::Detail_Adjustment, OperatorType::SHARPEN};
       case AdjustmentField::Clarity:
@@ -1528,6 +2113,8 @@ class EditorDialog final : public QDialog {
         return {{"shadows", s.shadows_}};
       case AdjustmentField::Highlights:
         return {{"highlights", s.highlights_}};
+      case AdjustmentField::Curve:
+        return CurveControlPointsToParams(s.curve_points_);
       case AdjustmentField::Sharpen:
         return {{"sharpen", {{"offset", s.sharpen_}}}};
       case AdjustmentField::Clarity:
@@ -1556,6 +2143,8 @@ class EditorDialog final : public QDialog {
         return !NearlyEqual(state_.shadows_, committed_state_.shadows_);
       case AdjustmentField::Highlights:
         return !NearlyEqual(state_.highlights_, committed_state_.highlights_);
+      case AdjustmentField::Curve:
+        return !CurveControlPointsEqual(state_.curve_points_, committed_state_.curve_points_);
       case AdjustmentField::Sharpen:
         return !NearlyEqual(state_.sharpen_, committed_state_.sharpen_);
       case AdjustmentField::Clarity:
@@ -1699,6 +2288,27 @@ class EditorDialog final : public QDialog {
       }
     };
 
+    auto ReadCurvePoints = [](const PipelineStage& stage,
+                              OperatorType type) -> std::optional<std::vector<QPointF>> {
+      const auto op = stage.GetOperator(type);
+      if (!op.has_value() || op.value() == nullptr) {
+        return std::nullopt;
+      }
+      const auto j = op.value()->ExportOperatorParams();
+      if (j.contains("enable")) {
+        try {
+          if (!j["enable"].get<bool>()) {
+            return DefaultCurveControlPoints();
+          }
+        } catch (...) {
+        }
+      }
+      if (!j.contains("params")) {
+        return std::nullopt;
+      }
+      return ParseCurveControlPointsFromParams(j["params"]);
+    };
+
     const auto& basic  = exec->GetStage(PipelineStageName::Basic_Adjustment);
     const auto& color  = exec->GetStage(PipelineStageName::Color_Adjustment);
     const auto& detail = exec->GetStage(PipelineStageName::Detail_Adjustment);
@@ -1752,6 +2362,12 @@ class EditorDialog final : public QDialog {
                v.has_value()) {
       loaded_state.highlights_ = v.value();
       has_loaded_any           = true;
+    }
+
+    if (const auto curve_points = ReadCurvePoints(basic, OperatorType::CURVE);
+        curve_points.has_value()) {
+      loaded_state.curve_points_ = NormalizeCurveControlPoints(*curve_points);
+      has_loaded_any             = true;
     }
 
     if (const auto v = ReadFloat(color, OperatorType::SATURATION, "saturation"); v.has_value()) {
@@ -1854,6 +2470,8 @@ class EditorDialog final : public QDialog {
     basic.SetOperator(OperatorType::WHITE, {{"white", state_.whites_}}, global_params);
     basic.SetOperator(OperatorType::SHADOWS, {{"shadows", state_.shadows_}}, global_params);
     basic.SetOperator(OperatorType::HIGHLIGHTS, {{"highlights", state_.highlights_}},
+                      global_params);
+    basic.SetOperator(OperatorType::CURVE, CurveControlPointsToParams(state_.curve_points_),
                       global_params);
 
     auto& color = exec->GetStage(PipelineStageName::Color_Adjustment);
@@ -2000,6 +2618,7 @@ class EditorDialog final : public QDialog {
   QSlider*                                                 whites_slider_      = nullptr;
   QSlider*                                                 shadows_slider_     = nullptr;
   QSlider*                                                 highlights_slider_  = nullptr;
+  ToneCurveWidget*                                         curve_widget_       = nullptr;
   QSlider*                                                 sharpen_slider_     = nullptr;
   QSlider*                                                 clarity_slider_     = nullptr;
   QLabel*                                                  version_status_     = nullptr;

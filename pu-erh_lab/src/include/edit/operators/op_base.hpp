@@ -154,7 +154,7 @@ struct OperatorParams {
   ColorUtils::TO_OUTPUT_Params to_output_params_         = {};
 
   // Curve adjustment parameters
-  bool                         curve_enabled_            = false;
+  bool                         curve_enabled_            = true;
   std::vector<cv::Point2f>     curve_ctrl_pts_           = {};
   std::vector<float>           curve_h_                  = {};
   std::vector<float>           curve_m_                  = {};
