@@ -19,10 +19,14 @@
 #include <driver_types.h>
 #include <qopenglext.h>
 #include <qoverload.h>
+#include <QSurfaceFormat>
+#include <QByteArray>
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <mutex>
+#include <vector>
 
 namespace puerhlab {
 
@@ -56,6 +60,84 @@ void main() {
 }
 )";
 
+static const char* histogramClearShaderSource = R"(
+#version 430 core
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
+layout(std430, binding = 0) buffer HistogramCounts {
+  uint counts[];
+};
+
+uniform int uCount;
+
+void main() {
+  uint idx = gl_GlobalInvocationID.x;
+  if (idx < uint(uCount)) {
+    counts[idx] = 0u;
+  }
+}
+)";
+
+static const char* histogramComputeShaderSource = R"(
+#version 430 core
+layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+layout(binding = 0) uniform sampler2D uSourceTex;
+
+layout(std430, binding = 0) buffer HistogramCounts {
+  uint counts[];
+};
+
+uniform int uBins;
+uniform int uSampleSize;
+
+void main() {
+  uvec2 gid = gl_GlobalInvocationID.xy;
+  if (gid.x >= uint(uSampleSize) || gid.y >= uint(uSampleSize)) {
+    return;
+  }
+
+  vec2 uv = (vec2(gid) + vec2(0.5)) / float(uSampleSize);
+  vec3 rgb = clamp(textureLod(uSourceTex, uv, 0.0).rgb, 0.0, 1.0);
+
+  int r = int(rgb.r * float(uBins - 1) + 0.5);
+  int g = int(rgb.g * float(uBins - 1) + 0.5);
+  int b = int(rgb.b * float(uBins - 1) + 0.5);
+
+  atomicAdd(counts[r], 1u);
+  atomicAdd(counts[uBins + g], 1u);
+  atomicAdd(counts[uBins * 2 + b], 1u);
+}
+)";
+
+static const char* histogramNormalizeShaderSource = R"(
+#version 430 core
+layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+
+layout(std430, binding = 0) readonly buffer HistogramCounts {
+  uint counts[];
+};
+
+layout(std430, binding = 1) writeonly buffer HistogramNormalized {
+  float normalized[];
+};
+
+uniform int uBins;
+
+void main() {
+  const int count = uBins * 3;
+  uint max_count = 1u;
+  for (int i = 0; i < count; ++i) {
+    max_count = max(max_count, counts[i]);
+  }
+
+  const float inv = 1.0 / float(max_count);
+  for (int i = 0; i < count; ++i) {
+    normalized[i] = float(counts[i]) * inv;
+  }
+}
+)";
+
 QtEditViewer::QtEditViewer(QWidget* parent) : QOpenGLWidget(parent) {
   // Connect the frame ready signal to the update slot.
   // Use QueuedConnection explicitly so that signals from worker threads are
@@ -72,7 +154,9 @@ QtEditViewer::~QtEditViewer() {
   makeCurrent();
   // Clean up OpenGL resources
   FreeAllBuffers();
+  FreeHistogramResources();
   delete program_;
+  program_ = nullptr;
   doneCurrent();
 
   if (staging_ptr_) {
@@ -129,6 +213,27 @@ void QtEditViewer::ResetView() {
   update();
 }
 
+void QtEditViewer::SetHistogramFrameExpected(bool expected_fast_preview) {
+  histogram_expect_fast_frame_.store(expected_fast_preview, std::memory_order_release);
+}
+
+void QtEditViewer::SetHistogramUpdateIntervalMs(int interval_ms) {
+  histogram_update_interval_ms_ = std::max(0, interval_ms);
+}
+
+auto QtEditViewer::GetHistogramBufferId() const -> GLuint {
+  if (!histogram_resources_ready_) {
+    return 0;
+  }
+  return histogram_norm_ssbo_;
+}
+
+auto QtEditViewer::GetHistogramBinCount() const -> int { return kHistogramBins; }
+
+auto QtEditViewer::HasHistogramData() const -> bool {
+  return histogram_has_data_.load(std::memory_order_acquire);
+}
+
 float4* QtEditViewer::MapResourceForWrite() {
   mutex_.lock();
 
@@ -150,6 +255,8 @@ void QtEditViewer::UnmapResource() {
 }
 
 void QtEditViewer::NotifyFrameReady() {
+  histogram_pending_frame_.store(histogram_expect_fast_frame_.load(std::memory_order_acquire),
+                                 std::memory_order_release);
   // Wake the UI thread to update the display
   emit RequestUpdate();
 }
@@ -188,6 +295,7 @@ void QtEditViewer::initializeGL() {
   }
 
   InitBuffer(buffers_[active_idx_], buffers_[active_idx_].width, buffers_[active_idx_].height);
+  InitHistogramResources();
 }
 
 bool QtEditViewer::InitBuffer(GLBuffer& buffer, int width, int height) {
@@ -223,6 +331,224 @@ bool QtEditViewer::InitBuffer(GLBuffer& buffer, int width, int height) {
 
   buffer.width  = width;
   buffer.height = height;
+  return true;
+}
+
+auto QtEditViewer::BuildComputeProgram(const char* source, const char* debug_name,
+                                       GLuint& out_program) -> bool {
+  if (!source) {
+    return false;
+  }
+
+  if (out_program != 0) {
+    glDeleteProgram(out_program);
+    out_program = 0;
+  }
+
+  const GLuint shader = glCreateShader(GL_COMPUTE_SHADER);
+  glShaderSource(shader, 1, &source, nullptr);
+  glCompileShader(shader);
+
+  GLint compile_ok = GL_FALSE;
+  glGetShaderiv(shader, GL_COMPILE_STATUS, &compile_ok);
+  if (compile_ok != GL_TRUE) {
+    GLint log_len = 0;
+    glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &log_len);
+    std::vector<char> log(static_cast<size_t>(std::max(0, log_len)) + 1, '\0');
+    if (log_len > 0) {
+      glGetShaderInfoLog(shader, log_len, nullptr, log.data());
+    }
+    qWarning("%s compute shader compile failed: %s", debug_name, log.data());
+    glDeleteShader(shader);
+    return false;
+  }
+
+  const GLuint program = glCreateProgram();
+  glAttachShader(program, shader);
+  glLinkProgram(program);
+  glDeleteShader(shader);
+
+  GLint link_ok = GL_FALSE;
+  glGetProgramiv(program, GL_LINK_STATUS, &link_ok);
+  if (link_ok != GL_TRUE) {
+    GLint log_len = 0;
+    glGetProgramiv(program, GL_INFO_LOG_LENGTH, &log_len);
+    std::vector<char> log(static_cast<size_t>(std::max(0, log_len)) + 1, '\0');
+    if (log_len > 0) {
+      glGetProgramInfoLog(program, log_len, nullptr, log.data());
+    }
+    qWarning("%s compute program link failed: %s", debug_name, log.data());
+    glDeleteProgram(program);
+    return false;
+  }
+
+  out_program = program;
+  return true;
+}
+
+bool QtEditViewer::InitHistogramResources() {
+  if (histogram_resources_ready_) {
+    return true;
+  }
+
+  auto* gl_context = context();
+  if (!gl_context) {
+    return false;
+  }
+
+  const QSurfaceFormat format = gl_context->format();
+  const bool has_compute_support =
+      (format.majorVersion() > 4 || (format.majorVersion() == 4 && format.minorVersion() >= 3)) ||
+      gl_context->hasExtension(QByteArrayLiteral("GL_ARB_compute_shader"));
+  if (!has_compute_support) {
+    qWarning("QtEditViewer histogram disabled: OpenGL compute shaders are not supported.");
+    return false;
+  }
+
+  if (!BuildComputeProgram(histogramClearShaderSource, "HistogramClear",
+                           histogram_clear_program_)) {
+    FreeHistogramResources();
+    return false;
+  }
+  if (!BuildComputeProgram(histogramComputeShaderSource, "HistogramCompute",
+                           histogram_compute_program_)) {
+    FreeHistogramResources();
+    return false;
+  }
+  if (!BuildComputeProgram(histogramNormalizeShaderSource, "HistogramNormalize",
+                           histogram_normalize_program_)) {
+    FreeHistogramResources();
+    return false;
+  }
+
+  const GLsizeiptr count_bytes = static_cast<GLsizeiptr>(sizeof(GLuint) * kHistogramBins * 3);
+  const GLsizeiptr norm_bytes  = static_cast<GLsizeiptr>(sizeof(float) * kHistogramBins * 3);
+
+  glGenBuffers(1, &histogram_count_ssbo_);
+  glBindBuffer(GL_SHADER_STORAGE_BUFFER, histogram_count_ssbo_);
+  glBufferData(GL_SHADER_STORAGE_BUFFER, count_bytes, nullptr, GL_DYNAMIC_DRAW);
+
+  glGenBuffers(1, &histogram_norm_ssbo_);
+  glBindBuffer(GL_SHADER_STORAGE_BUFFER, histogram_norm_ssbo_);
+  glBufferData(GL_SHADER_STORAGE_BUFFER, norm_bytes, nullptr, GL_DYNAMIC_DRAW);
+  glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+
+  histogram_clear_count_loc_    = glGetUniformLocation(histogram_clear_program_, "uCount");
+  histogram_compute_tex_loc_    = glGetUniformLocation(histogram_compute_program_, "uSourceTex");
+  histogram_compute_bins_loc_   = glGetUniformLocation(histogram_compute_program_, "uBins");
+  histogram_compute_sample_loc_ = glGetUniformLocation(histogram_compute_program_, "uSampleSize");
+  histogram_norm_bins_loc_      = glGetUniformLocation(histogram_normalize_program_, "uBins");
+
+  histogram_resources_ready_ = histogram_count_ssbo_ != 0 && histogram_norm_ssbo_ != 0;
+  histogram_has_data_.store(false, std::memory_order_release);
+  last_histogram_update_time_ = {};
+  return histogram_resources_ready_;
+}
+
+void QtEditViewer::FreeHistogramResources() {
+  if (histogram_count_ssbo_) {
+    glDeleteBuffers(1, &histogram_count_ssbo_);
+    histogram_count_ssbo_ = 0;
+  }
+  if (histogram_norm_ssbo_) {
+    glDeleteBuffers(1, &histogram_norm_ssbo_);
+    histogram_norm_ssbo_ = 0;
+  }
+  if (histogram_clear_program_) {
+    glDeleteProgram(histogram_clear_program_);
+    histogram_clear_program_ = 0;
+  }
+  if (histogram_compute_program_) {
+    glDeleteProgram(histogram_compute_program_);
+    histogram_compute_program_ = 0;
+  }
+  if (histogram_normalize_program_) {
+    glDeleteProgram(histogram_normalize_program_);
+    histogram_normalize_program_ = 0;
+  }
+
+  histogram_clear_count_loc_    = -1;
+  histogram_compute_tex_loc_     = -1;
+  histogram_compute_bins_loc_    = -1;
+  histogram_compute_sample_loc_  = -1;
+  histogram_norm_bins_loc_       = -1;
+  histogram_resources_ready_     = false;
+  histogram_has_data_.store(false, std::memory_order_release);
+  histogram_pending_frame_.store(false, std::memory_order_release);
+}
+
+auto QtEditViewer::ShouldComputeHistogramNow() -> bool {
+  if (histogram_update_interval_ms_ <= 0) {
+    last_histogram_update_time_ = std::chrono::steady_clock::now();
+    return true;
+  }
+
+  const auto now = std::chrono::steady_clock::now();
+  if (last_histogram_update_time_.time_since_epoch().count() == 0) {
+    last_histogram_update_time_ = now;
+    return true;
+  }
+
+  const auto elapsed_ms =
+      std::chrono::duration_cast<std::chrono::milliseconds>(now - last_histogram_update_time_)
+          .count();
+  if (elapsed_ms < histogram_update_interval_ms_) {
+    return false;
+  }
+  last_histogram_update_time_ = now;
+  return true;
+}
+
+auto QtEditViewer::ComputeHistogram(GLuint texture_id, int width, int height) -> bool {
+  if (!histogram_resources_ready_ || texture_id == 0 || width <= 0 || height <= 0) {
+    return false;
+  }
+
+  const int histogram_values = kHistogramBins * 3;
+  glUseProgram(histogram_clear_program_);
+  if (histogram_clear_count_loc_ >= 0) {
+    glUniform1i(histogram_clear_count_loc_, histogram_values);
+  }
+  glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, histogram_count_ssbo_);
+  const GLuint clear_groups = static_cast<GLuint>((histogram_values + 64 - 1) / 64);
+  glDispatchCompute(clear_groups, 1, 1);
+  glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+
+  glUseProgram(histogram_compute_program_);
+  if (histogram_compute_tex_loc_ >= 0) {
+    glUniform1i(histogram_compute_tex_loc_, 0);
+  }
+  if (histogram_compute_bins_loc_ >= 0) {
+    glUniform1i(histogram_compute_bins_loc_, kHistogramBins);
+  }
+  if (histogram_compute_sample_loc_ >= 0) {
+    glUniform1i(histogram_compute_sample_loc_, kHistogramSampleSize);
+  }
+
+  glActiveTexture(GL_TEXTURE0);
+  glBindTexture(GL_TEXTURE_2D, texture_id);
+  glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, histogram_count_ssbo_);
+
+  const GLuint groups =
+      static_cast<GLuint>((kHistogramSampleSize + 16 - 1) / 16);
+  glDispatchCompute(groups, groups, 1);
+  glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+
+  glUseProgram(histogram_normalize_program_);
+  if (histogram_norm_bins_loc_ >= 0) {
+    glUniform1i(histogram_norm_bins_loc_, kHistogramBins);
+  }
+  glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, histogram_count_ssbo_);
+  glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, histogram_norm_ssbo_);
+  glDispatchCompute(1, 1, 1);
+  glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT | GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT);
+
+  glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, 0);
+  glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, 0);
+  glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+  glUseProgram(0);
+  glFlush();
+
   return true;
 }
 
@@ -315,6 +641,16 @@ void QtEditViewer::paintGL() {
 
   glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
   program_->release();
+
+  const bool histogram_requested = histogram_pending_frame_.exchange(false, std::memory_order_acq_rel);
+  if (histogram_requested && ShouldComputeHistogramNow()) {
+    if (histogram_resources_ready_ || InitHistogramResources()) {
+      if (ComputeHistogram(active_buffer.texture, active_buffer.width, active_buffer.height)) {
+        histogram_has_data_.store(true, std::memory_order_release);
+        emit HistogramDataUpdated();
+      }
+    }
+  }
 }
 
 void QtEditViewer::resizeGL(int w, int h) {

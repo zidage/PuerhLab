@@ -29,8 +29,8 @@ ScrollView {
         Rectangle {
             Layout.fillWidth: true
             implicitHeight: filterCol.implicitHeight + 20
-            radius: 0
-            color: "transparent"
+            radius: 8
+            color: "#242424"
             border.width: 0
             ColumnLayout {
                 id: filterCol
@@ -448,8 +448,8 @@ ScrollView {
         Rectangle {
             Layout.fillWidth: true
             implicitHeight: editorCol.implicitHeight + 20
-            radius: 0
-            color: "transparent"
+            radius: 8
+            color: "#242424"
             border.width: 0
             ColumnLayout {
                 id: editorCol

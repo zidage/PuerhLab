@@ -25,6 +25,8 @@ ApplicationWindow {
     readonly property color colBgDeep: "#141414"        // center content — darkest "stage"
     readonly property color colBgBase: "#1F1F1F"        // sunken inputs
     readonly property color colBgPanel: "#2B2B2B"       // side panels & header/footer
+    readonly property color colBgCanvas: "#111111"      // gap / outer canvas behind blocks
+    readonly property int panelRadius: 8                // uniform rounded-corner radius
     readonly property color colBorder: "transparent"     // NO borders by default
     readonly property color colText: toneMist
     readonly property color colTextMuted: "#888888"
@@ -304,14 +306,6 @@ ApplicationWindow {
             }
         }
         function onExportStateChanged() {
-            if (!exportDialog.visible) {
-                return
-            }
-            if (exportDialog.exportTriggered
-                    && !albumBackend.exportInFlight
-                    && albumBackend.exportCompleted > 0) {
-                exportDialog.close()
-            }
         }
     }
 
@@ -321,18 +315,18 @@ ApplicationWindow {
 
         Rectangle {
             anchors.fill: parent
-            color: root.colBgPanel
+            color: root.colBgCanvas
         }
 
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: 0
-        spacing: 0
+        anchors.margins: 3
+        spacing: 3
 
         Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: 50
-            radius: 0
+            radius: root.panelRadius
             color: root.colBgPanel
             border.width: 0
 
@@ -381,44 +375,18 @@ ApplicationWindow {
             }
         }
 
-        Rectangle {
-            visible: albumBackend.serviceMessage.length > 0
-            Layout.fillWidth: true
-            Layout.preferredHeight: 28
-            radius: 0
-            color: root.colBgPanel
-            border.width: 0
-
-            Rectangle {
-                anchors.bottom: parent.bottom
-                anchors.left: parent.left
-                anchors.right: parent.right
-                height: 2
-                color: albumBackend.projectLoading ? root.colAccentPrimary : "transparent"
-            }
-            Label {
-                anchors.fill: parent
-                anchors.leftMargin: 16
-                anchors.rightMargin: 16
-                text: albumBackend.serviceMessage
-                elide: Text.ElideMiddle
-                color: albumBackend.projectLoading ? root.colAccentPrimary : (albumBackend.serviceReady ? root.colTextMuted : root.colTextMuted)
-                verticalAlignment: Text.AlignVCenter
-                font.pixelSize: 11
-            }
-        }
-
         RowLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            spacing: 0
+            spacing: 3
 
             Rectangle {
                 Layout.preferredWidth: 250
                 Layout.fillHeight: true
-                radius: 0
+                radius: root.panelRadius
                 color: root.colBgPanel
                 border.width: 0
+                clip: true
 
                 ColumnLayout {
                     anchors.fill: parent
@@ -665,9 +633,15 @@ ApplicationWindow {
                 }
             }
 
-            ColumnLayout {
+            Rectangle {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
+                radius: root.panelRadius
+                color: root.colBgDeep
+                clip: true
+
+            ColumnLayout {
+                anchors.fill: parent
                 spacing: 0
 
                 Rectangle {
@@ -773,11 +747,13 @@ ApplicationWindow {
                 }
             }
 
+            } // close center block wrapper
+
             Rectangle {
                 Layout.fillHeight: true
                 Layout.preferredWidth: inspectorVisible && !settingsPage ? 350 : 0
                 Behavior on Layout.preferredWidth { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
-                radius: 0
+                radius: root.panelRadius
                 color: root.colBgPanel
                 border.width: 0
                 clip: true
@@ -793,13 +769,31 @@ ApplicationWindow {
         Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: 40
-            radius: 0
+            radius: root.panelRadius
             color: root.colBgPanel
             border.width: 0
+
+            Rectangle {
+                anchors.bottom: parent.bottom
+                anchors.left: parent.left
+                anchors.right: parent.right
+                height: 2
+                radius: 1
+                color: albumBackend.projectLoading ? root.colAccentPrimary : "transparent"
+            }
+
             RowLayout {
                 anchors.fill: parent
-                anchors.margins: 10
-                Label { Layout.fillWidth: true; text: albumBackend.taskStatus; color: root.colTextMuted }
+                anchors.leftMargin: 10
+                anchors.rightMargin: 10
+                spacing: 12
+                Label {
+                    Layout.fillWidth: true
+                    text: albumBackend.serviceMessage.length > 0 ? albumBackend.serviceMessage : albumBackend.taskStatus
+                    elide: Text.ElideMiddle
+                    color: albumBackend.projectLoading ? root.colAccentPrimary : root.colTextMuted
+                    font.pixelSize: 11
+                }
                 ProgressBar { Layout.preferredWidth: 240; value: albumBackend.taskProgress / 100.0 }
                 Button {
                     visible: albumBackend.taskCancelVisible

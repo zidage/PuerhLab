@@ -18,12 +18,14 @@
 #include <qopenglwidget.h>
 
 #include <QOpenGLFunctions>
+#include <QOpenGLExtraFunctions>
 #include <QOpenGLShaderProgram>
 #include <QOpenGLWidget>
 #include <QMouseEvent>
 #include <QWheelEvent>
 #include <array>
 #include <atomic>
+#include <chrono>
 #include <mutex>
 #include <cuda_gl_interop.h>
 
@@ -31,7 +33,7 @@
 
 namespace puerhlab {
 
-class QtEditViewer : public QOpenGLWidget, protected QOpenGLFunctions, public puerhlab::IFrameSink {
+class QtEditViewer : public QOpenGLWidget, protected QOpenGLExtraFunctions, public puerhlab::IFrameSink {
   Q_OBJECT
  public:
   explicit QtEditViewer(QWidget* parent = nullptr);
@@ -45,13 +47,21 @@ class QtEditViewer : public QOpenGLWidget, protected QOpenGLFunctions, public pu
   float4* MapResourceForWrite() override;
   void    UnmapResource() override;
   void    NotifyFrameReady() override;
-    int     GetWidth() const override { return buffers_[active_idx_].width; };
-    int     GetHeight() const override { return buffers_[active_idx_].height; };
+  int     GetWidth() const override { return buffers_[active_idx_].width; };
+  int     GetHeight() const override { return buffers_[active_idx_].height; };
+
+  void    SetHistogramFrameExpected(bool expected_fast_preview);
+  void    SetHistogramUpdateIntervalMs(int interval_ms);
+
+  auto    GetHistogramBufferId() const -> GLuint;
+  auto    GetHistogramBinCount() const -> int;
+  auto    HasHistogramData() const -> bool;
 
  signals:
   void RequestUpdate();
 
   void RequestResize(int width, int height);
+  void HistogramDataUpdated();
 
  private slots:
   void OnResizeGL(int w, int h);
@@ -103,5 +113,32 @@ class QtEditViewer : public QOpenGLWidget, protected QOpenGLFunctions, public pu
   bool                    InitBuffer(GLBuffer& buffer, int width, int height);
   void                    FreeBuffer(GLBuffer& buffer);
   void                    FreeAllBuffers();
+
+  bool                    InitHistogramResources();
+  void                    FreeHistogramResources();
+  auto                    ComputeHistogram(GLuint texture_id, int width, int height) -> bool;
+  auto                    ShouldComputeHistogramNow() -> bool;
+  auto                    BuildComputeProgram(const char* source, const char* debug_name,
+                                              GLuint& out_program) -> bool;
+
+  static constexpr int    kHistogramBins       = 256;
+  static constexpr int    kHistogramSampleSize = 256;
+
+  GLuint                  histogram_count_ssbo_       = 0;
+  GLuint                  histogram_norm_ssbo_        = 0;
+  GLuint                  histogram_clear_program_    = 0;
+  GLuint                  histogram_compute_program_  = 0;
+  GLuint                  histogram_normalize_program_ = 0;
+  GLint                   histogram_clear_count_loc_  = -1;
+  GLint                   histogram_compute_tex_loc_  = -1;
+  GLint                   histogram_compute_bins_loc_ = -1;
+  GLint                   histogram_compute_sample_loc_ = -1;
+  GLint                   histogram_norm_bins_loc_    = -1;
+  bool                    histogram_resources_ready_   = false;
+  std::atomic<bool>       histogram_expect_fast_frame_{false};
+  std::atomic<bool>       histogram_pending_frame_{false};
+  std::atomic<bool>       histogram_has_data_{false};
+  int                     histogram_update_interval_ms_ = 40;
+  std::chrono::steady_clock::time_point last_histogram_update_time_{};
 };
 };  // namespace puerhlab

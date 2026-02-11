@@ -1,6 +1,7 @@
 #include "EditorDialog.h"
 
 #include <QAbstractItemView>
+#include <QByteArray>
 #include <QComboBox>
 #include <QCoreApplication>
 #include <QDateTime>
@@ -14,12 +15,17 @@
 #include <QListWidget>
 #include <QMessageBox>
 #include <QMouseEvent>
+#include <QOpenGLContext>
+#include <QOpenGLExtraFunctions>
+#include <QOpenGLShaderProgram>
+#include <QOpenGLWidget>
 #include <QPainter>
 #include <QPainterPath>
 #include <QPushButton>
 #include <QScrollArea>
 #include <QSlider>
 #include <QStyle>
+#include <QSurfaceFormat>
 #include <QTimer>
 #include <QVBoxLayout>
 
@@ -650,6 +656,261 @@ class SpinnerWidget final : public QWidget {
   int     angle_deg_ = 0;
 };
 
+class HistogramWidget final : public QOpenGLWidget, protected QOpenGLExtraFunctions {
+ public:
+  explicit HistogramWidget(QtEditViewer* source_viewer, QWidget* parent = nullptr)
+      : QOpenGLWidget(parent), source_viewer_(source_viewer) {
+    setMinimumHeight(126);
+    setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    setAutoFillBackground(false);
+  }
+
+  ~HistogramWidget() override {
+    if (!context()) {
+      return;
+    }
+    makeCurrent();
+    CleanupGl();
+    doneCurrent();
+  }
+
+  void SetSourceViewer(QtEditViewer* source_viewer) {
+    source_viewer_ = source_viewer;
+    update();
+  }
+
+ protected:
+  void initializeGL() override {
+    initializeOpenGLFunctions();
+    glDisable(GL_DEPTH_TEST);
+    glGenVertexArrays(1, &vao_);
+    glBindVertexArray(vao_);
+    glBindVertexArray(0);
+    gl_ready_ = InitPrograms();
+  }
+
+  void paintGL() override {
+    const float dpr = devicePixelRatioF();
+    const int   vw  = std::max(1, static_cast<int>(std::lround(width() * dpr)));
+    const int   vh  = std::max(1, static_cast<int>(std::lround(height() * dpr)));
+    glViewport(0, 0, vw, vh);
+    glClearColor(0.07f, 0.07f, 0.07f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    if (!gl_ready_ || !source_viewer_ || !source_viewer_->HasHistogramData()) {
+      return;
+    }
+
+    if (context() && source_viewer_->context() &&
+        !QOpenGLContext::areSharing(context(), source_viewer_->context())) {
+      if (!warned_context_sharing_) {
+        qWarning("HistogramWidget disabled: OpenGL contexts are not sharing resources.");
+        warned_context_sharing_ = true;
+      }
+      return;
+    }
+
+    const GLuint hist_buffer = source_viewer_->GetHistogramBufferId();
+    const int    bins        = source_viewer_->GetHistogramBinCount();
+    if (hist_buffer == 0 || bins <= 1 || !glIsBuffer(hist_buffer)) {
+      return;
+    }
+
+    glBindVertexArray(vao_);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, hist_buffer);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+    auto draw_fill = [&](int channel, const QVector4D& color) {
+      if (!fill_program_) {
+        return;
+      }
+      fill_program_->bind();
+      fill_program_->setUniformValue("uBins", bins);
+      fill_program_->setUniformValue("uChannel", channel);
+      fill_program_->setUniformValue("uColor", color);
+      glDrawArrays(GL_TRIANGLE_STRIP, 0, bins * 2);
+      fill_program_->release();
+    };
+
+    auto draw_line = [&](int channel, const QVector4D& color) {
+      if (!line_program_) {
+        return;
+      }
+      line_program_->bind();
+      line_program_->setUniformValue("uBins", bins);
+      line_program_->setUniformValue("uChannel", channel);
+      line_program_->setUniformValue("uColor", color);
+      glLineWidth(1.0f);
+      glDrawArrays(GL_LINE_STRIP, 0, bins);
+      line_program_->release();
+    };
+
+    draw_fill(0, QVector4D(1.0f, 0.20f, 0.20f, 0.30f));
+    draw_fill(1, QVector4D(0.20f, 1.0f, 0.20f, 0.28f));
+    draw_fill(2, QVector4D(0.20f, 0.45f, 1.0f, 0.28f));
+
+    draw_line(0, QVector4D(1.0f, 0.45f, 0.45f, 0.24f));
+    draw_line(1, QVector4D(0.45f, 1.0f, 0.45f, 0.22f));
+    draw_line(2, QVector4D(0.45f, 0.68f, 1.0f, 0.22f));
+
+    glDisable(GL_BLEND);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, 0);
+    glBindVertexArray(0);
+  }
+
+ private:
+  auto InitPrograms() -> bool {
+    if (!context()) {
+      return false;
+    }
+
+    const auto format = context()->format();
+    const bool has_compute_compatible_ssbo =
+        (format.majorVersion() > 4 || (format.majorVersion() == 4 && format.minorVersion() >= 3)) ||
+        context()->hasExtension(QByteArrayLiteral("GL_ARB_shader_storage_buffer_object"));
+    if (!has_compute_compatible_ssbo) {
+      qWarning("HistogramWidget disabled: OpenGL SSBO support is not available.");
+      return false;
+    }
+
+    static const char* kFillVertex = R"(
+#version 430 core
+layout(std430, binding = 0) readonly buffer HistogramBuffer {
+  float hist[];
+};
+uniform int uBins;
+uniform int uChannel;
+void main() {
+  int bin = gl_VertexID >> 1;
+  int top = gl_VertexID & 1;
+  float x = (uBins > 1) ? float(bin) / float(uBins - 1) : 0.0;
+  float y = (top == 0) ? 0.0 : clamp(hist[uChannel * uBins + bin], 0.0, 1.0);
+  gl_Position = vec4(x * 2.0 - 1.0, y * 2.0 - 1.0, 0.0, 1.0);
+}
+)";
+
+    static const char* kLineVertex = R"(
+#version 430 core
+layout(std430, binding = 0) readonly buffer HistogramBuffer {
+  float hist[];
+};
+uniform int uBins;
+uniform int uChannel;
+void main() {
+  int bin = gl_VertexID;
+  float x = (uBins > 1) ? float(bin) / float(uBins - 1) : 0.0;
+  float y = clamp(hist[uChannel * uBins + bin], 0.0, 1.0);
+  gl_Position = vec4(x * 2.0 - 1.0, y * 2.0 - 1.0, 0.0, 1.0);
+}
+)";
+
+    static const char* kFragment = R"(
+#version 430 core
+uniform vec4 uColor;
+out vec4 FragColor;
+void main() {
+  FragColor = uColor;
+}
+)";
+
+    fill_program_ = new QOpenGLShaderProgram();
+    if (!fill_program_->addShaderFromSourceCode(QOpenGLShader::Vertex, kFillVertex) ||
+        !fill_program_->addShaderFromSourceCode(QOpenGLShader::Fragment, kFragment) ||
+        !fill_program_->link()) {
+      qWarning("HistogramWidget fill program failed: %s",
+               fill_program_->log().toUtf8().constData());
+      CleanupGl();
+      return false;
+    }
+
+    line_program_ = new QOpenGLShaderProgram();
+    if (!line_program_->addShaderFromSourceCode(QOpenGLShader::Vertex, kLineVertex) ||
+        !line_program_->addShaderFromSourceCode(QOpenGLShader::Fragment, kFragment) ||
+        !line_program_->link()) {
+      qWarning("HistogramWidget line program failed: %s",
+               line_program_->log().toUtf8().constData());
+      CleanupGl();
+      return false;
+    }
+    return true;
+  }
+
+  void CleanupGl() {
+    if (fill_program_) {
+      delete fill_program_;
+      fill_program_ = nullptr;
+    }
+    if (line_program_) {
+      delete line_program_;
+      line_program_ = nullptr;
+    }
+    if (vao_) {
+      glDeleteVertexArrays(1, &vao_);
+      vao_ = 0;
+    }
+    gl_ready_ = false;
+  }
+
+  QtEditViewer*          source_viewer_ = nullptr;
+  QOpenGLShaderProgram*  fill_program_  = nullptr;
+  QOpenGLShaderProgram*  line_program_  = nullptr;
+  GLuint                 vao_           = 0;
+  bool                   gl_ready_      = false;
+  bool                   warned_context_sharing_ = false;
+};
+
+class HistogramRulerWidget final : public QWidget {
+ public:
+  explicit HistogramRulerWidget(int bins, QWidget* parent = nullptr)
+      : QWidget(parent), bins_(std::max(2, bins)) {
+    setMinimumHeight(28);
+    setMaximumHeight(36);
+    setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    setAttribute(Qt::WA_TransparentForMouseEvents);
+  }
+
+  void SetBins(int bins) {
+    bins_ = std::max(2, bins);
+    update();
+  }
+
+ protected:
+  void paintEvent(QPaintEvent*) override {
+    QPainter painter(this);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+
+    QFont ruler_font = painter.font();
+    ruler_font.setPixelSize(9);
+    painter.setFont(ruler_font);
+
+    const QRectF area(10.0, 6.0, std::max(10.0, width() - 20.0), std::max(10.0, height() - 12.0));
+    const qreal  baseline_y = area.top() + 2.0;
+    const qreal  tick_h     = 7.0;
+
+    painter.setPen(QPen(QColor(0x4A, 0x4A, 0x4A), 1.0));
+    painter.drawLine(QPointF(area.left(), baseline_y), QPointF(area.right(), baseline_y));
+
+    constexpr std::array<double, 5> stops = {0.0, 0.25, 0.50, 0.75, 1.0};
+    painter.setPen(QPen(QColor(0x6F, 0x6F, 0x6F), 1.0));
+    for (const double t : stops) {
+      const qreal x = area.left() + t * area.width();
+      painter.drawLine(QPointF(x, baseline_y), QPointF(x, baseline_y + tick_h));
+    }
+
+    painter.setPen(QColor(0x9A, 0x9A, 0x9A));
+    for (const double t : stops) {
+      const qreal x = area.left() + t * area.width();
+      const QString text = QString::number(t, 'f', 2);
+      const QRectF text_rect(x - 20.0, baseline_y + tick_h + 1.0, 40.0, 14.0);
+      painter.drawText(text_rect, Qt::AlignHCenter | Qt::AlignTop, text);
+    }
+  }
+
+ private:
+  int bins_ = 256;
+};
+
 class HistoryLaneWidget final : public QWidget {
  public:
   HistoryLaneWidget(QColor dot, QColor line, bool draw_top, bool draw_bottom,
@@ -868,13 +1129,35 @@ class EditorDialog final : public QDialog {
     root->addWidget(viewer_container_, 1);
     root->addWidget(controls_scroll_, 0);
 
+    {
+      auto* histogram_frame = new QFrame(controls_);
+      histogram_frame->setObjectName("EditorSection");
+      auto* histogram_layout = new QVBoxLayout(histogram_frame);
+      histogram_layout->setContentsMargins(12, 10, 12, 10);
+      histogram_layout->setSpacing(6);
+
+      auto* histogram_title = new QLabel("Histogram", histogram_frame);
+      histogram_title->setObjectName("EditorSectionTitle");
+
+      histogram_widget_ = new HistogramWidget(viewer_, histogram_frame);
+      histogram_ruler_widget_ =
+          new HistogramRulerWidget(viewer_ ? viewer_->GetHistogramBinCount() : 256, histogram_frame);
+      histogram_layout->addWidget(histogram_title, 0);
+      histogram_layout->addWidget(histogram_widget_, 0);
+      histogram_layout->addWidget(histogram_ruler_widget_, 0);
+      controls_layout->addWidget(histogram_frame, 0);
+
+      if (viewer_ && histogram_widget_) {
+        viewer_->SetHistogramUpdateIntervalMs(40);
+        viewer_->SetHistogramFrameExpected(false);
+        QObject::connect(viewer_, &QtEditViewer::HistogramDataUpdated, histogram_widget_,
+                         QOverload<>::of(&QWidget::update), Qt::QueuedConnection);
+      }
+    }
+
     auto* controls_header = new QLabel("Adjustments", controls_);
     controls_header->setObjectName("SectionTitle");
-    auto* controls_sub = new QLabel("Editing controls are scoped to the active image.", controls_);
-    controls_sub->setObjectName("MetaText");
-    controls_sub->setWordWrap(true);
     controls_layout->addWidget(controls_header, 0);
-    controls_layout->addWidget(controls_sub, 0);
 
     // Prefer LUTs next to the executable (installed layout), fall back to source tree.
     const auto app_luts_dir = std::filesystem::path(
@@ -2570,6 +2853,12 @@ class EditorDialog final : public QDialog {
     task.options_.is_seq_callback_          = false;
     task.options_.is_blocking_              = true;
 
+    if (viewer_) {
+      const auto render_type = task.options_.render_desc_.render_type_;
+      viewer_->SetHistogramFrameExpected(render_type == RenderType::FAST_PREVIEW ||
+                                         render_type == RenderType::FULL_RES_PREVIEW);
+    }
+
     auto promise = std::make_shared<std::promise<std::shared_ptr<ImageBuffer>>>();
     auto fut     = promise->get_future();
     task.result_ = promise;
@@ -2613,6 +2902,8 @@ class EditorDialog final : public QDialog {
   QScrollArea*                                             controls_scroll_    = nullptr;
   SpinnerWidget*                                           spinner_            = nullptr;
   QWidget*                                                 controls_           = nullptr;
+  HistogramWidget*                                         histogram_widget_   = nullptr;
+  HistogramRulerWidget*                                    histogram_ruler_widget_ = nullptr;
   QComboBox*                                               lut_combo_          = nullptr;
   QSlider*                                                 exposure_slider_    = nullptr;
   QSlider*                                                 contrast_slider_    = nullptr;

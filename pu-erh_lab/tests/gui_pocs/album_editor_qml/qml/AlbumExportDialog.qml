@@ -438,7 +438,7 @@ Dialog {
             spacing: 10
 
             Button {
-                text: "Cancel"
+                text: (root.exportTriggered && !albumBackend.exportInFlight) ? "Close" : "Cancel"
                 enabled: !albumBackend.exportInFlight
                 onClicked: root.close()
             }
