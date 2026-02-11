@@ -60,6 +60,10 @@ void SleeveFolder::AddElementToMap(const std::shared_ptr<SleeveElement> element)
   // Once a pinned element is added to the current folder, current folder also becomes pinned
   pinned_ |= element->pinned_;
   element->IncrementRefCount();
+  // Mark this folder as modified so the updated content list is persisted on next sync.
+  if (sync_flag_ == SyncFlag::SYNCED) {
+    sync_flag_ = SyncFlag::MODIFIED;
+  }
 }
 
 /**
@@ -80,6 +84,10 @@ void SleeveFolder::UpdateElementMap(const file_name_t& name, const sl_element_id
       id = new_id;
       break;
     }
+  }
+  // Mark this folder as modified so the updated content list is persisted on next sync.
+  if (sync_flag_ == SyncFlag::SYNCED) {
+    sync_flag_ = SyncFlag::MODIFIED;
   }
 }
 
@@ -139,6 +147,10 @@ void SleeveFolder::RemoveNameFromMap(const file_name_t& name) {
   default_index.erase(std::remove(default_index.begin(), default_index.end(), removed_id),
                       default_index.end());
   contents_.erase(name);
+  // Mark this folder as modified so the updated content list is persisted on next sync.
+  if (sync_flag_ == SyncFlag::SYNCED) {
+    sync_flag_ = SyncFlag::MODIFIED;
+  }
 }
 
 void SleeveFolder::CreateIndex(const std::vector<std::shared_ptr<SleeveElement>>& filtered_elements,

@@ -12,6 +12,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <utility>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -178,6 +179,7 @@ class AlbumBackend final : public QObject {
   Q_INVOKABLE void setEditorHighlights(double value);
   Q_INVOKABLE void setEditorSharpen(double value);
   Q_INVOKABLE void setEditorClarity(double value);
+  Q_INVOKABLE void setThumbnailVisible(uint elementId, uint imageId, bool visible);
 
 signals:
   void thumbnailsChanged();
@@ -255,6 +257,14 @@ signals:
     std::unordered_map<sl_element_id_t, std::filesystem::path> folder_path_by_id_{};
   };
 
+  using ExportTarget = std::pair<sl_element_id_t, image_id_t>;
+
+  struct ExportQueueBuildResult {
+    int     queued_count_  = 0;
+    int     skipped_count_ = 0;
+    QString first_error_{};
+  };
+
   bool initializeServices(const std::filesystem::path& dbPath,
                           const std::filesystem::path& metaPath,
                           ProjectOpenMode              openMode,
@@ -282,6 +292,22 @@ signals:
   void finishImport(const ImportResult& result);
   void finishExport(const std::shared_ptr<std::vector<ExportResult>>& results, int skippedCount);
   void reapplyCurrentFilters();
+  void setServiceState(bool ready, const QString& message);
+  void setServiceMessageForCurrentProject(const QString& message);
+  void scheduleIdleTaskStateReset(int delayMs);
+  void setExportFailureState(const QString& message);
+  void resetExportProgressState(const QString& status);
+  auto collectExportTargets(const QVariantList& targetEntries) const -> std::vector<ExportTarget>;
+  auto buildExportQueue(const std::vector<ExportTarget>& targets,
+                        const std::filesystem::path&   outputDir,
+                        ImageFormatType                format,
+                        bool                           resizeEnabled,
+                        int                            maxLengthSide,
+                        int                            quality,
+                        ExportFormatOptions::BIT_DEPTH bitDepth,
+                        int                            pngCompressionLevel,
+                        ExportFormatOptions::TIFF_COMPRESS tiffCompression)
+      -> ExportQueueBuildResult;
   void initializeEditorLuts();
   int lutIndexForPath(const std::string& lutPath) const;
   bool loadEditorStateFromPipeline();
@@ -294,6 +320,7 @@ signals:
   void finalizeEditorSession(bool persistChanges);
   bool updateEditorPreviewFromBuffer(const std::shared_ptr<ImageBuffer>& buffer);
   void setEditorAdjustment(float& field, double value, double minValue, double maxValue);
+  bool isThumbnailPinned(sl_element_id_t elementId) const;
 
   BuildResult buildFilterNode(FilterOp joinOp) const;
   std::optional<FilterValue> parseFilterValue(FilterField field, const QString& text,
@@ -316,6 +343,7 @@ signals:
   QString                                             current_folder_path_text_ = "/";
   std::optional<std::unordered_set<sl_element_id_t>>  active_filter_ids_{};
   FilterOp                                            last_join_op_ = FilterOp::AND;
+  std::unordered_map<sl_element_id_t, uint32_t>       thumbnail_pin_ref_counts_{};
 
   std::shared_ptr<ProjectService>                     project_{};
   std::shared_ptr<PipelineMgmtService>                pipeline_service_{};

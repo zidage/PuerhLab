@@ -22,7 +22,7 @@ Dialog {
     property bool exportTriggered: false
 
     Overlay.modal: Rectangle {
-        color: "#1E1D22"
+        color: "#141414"
         opacity: 0.88
     }
 
@@ -56,9 +56,9 @@ Dialog {
     }
 
     background: Rectangle {
-        radius: 16
-        color: "#1E1D22"
-        border.color: "#4D4C51"
+        radius: 12
+        color: "#1A1A1A"
+        border.width: 0
         layer.enabled: true
     }
 
@@ -102,9 +102,9 @@ Dialog {
                 Layout.fillWidth: true
                 Layout.preferredWidth: 440
                 Layout.fillHeight: true
-                radius: 12
-                color: "#1E1D22"
-                border.color: "#38373C"
+                radius: 8
+                color: "#1F1F1F"
+                border.width: 0
 
                 ScrollView {
                     id: settingsScroll
@@ -291,9 +291,9 @@ Dialog {
                 Layout.fillWidth: true
                 Layout.preferredWidth: 300
                 Layout.fillHeight: true
-                radius: 12
-                color: "#1E1D22"
-                border.color: "#38373C"
+                radius: 8
+                color: "#1F1F1F"
+                border.width: 0
 
                 ColumnLayout {
                     anchors.fill: parent
@@ -336,9 +336,9 @@ Dialog {
                     Rectangle {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
-                        radius: 8
-                        color: "#16151A"
-                        border.color: "#38373C"
+                        radius: 6
+                        color: "#141414"
+                        border.width: 0
 
                         ListView {
                             anchors.fill: parent
@@ -349,9 +349,9 @@ Dialog {
                             delegate: Rectangle {
                                 width: ListView.view.width
                                 height: 22
-                                radius: 4
-                                color: index % 2 === 0 ? "#16151A" : "#1E1D22"
-                                border.color: "#38373C"
+                                radius: 3
+                                color: index % 2 === 0 ? "#141414" : "#1A1A1A"
+                                border.width: 0
                                 Label {
                                     anchors.fill: parent
                                     anchors.leftMargin: 6

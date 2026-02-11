@@ -298,6 +298,23 @@ auto ClampToRange(double value, double minValue, double maxValue) -> float {
   return static_cast<float>(std::clamp(value, minValue, maxValue));
 }
 
+constexpr std::array<const char*, 6> kThumbnailAccentPalette = {
+    "#5AA2FF",
+    "#4CC9A6",
+    "#F7B267",
+    "#E08BFF",
+    "#7AD1FF",
+    "#9BD65B",
+};
+
+auto AccentForIndex(size_t index) -> QString {
+  return QString::fromLatin1(kThumbnailAccentPalette[index % kThumbnailAccentPalette.size()]);
+}
+
+auto ExportTargetKey(sl_element_id_t elementId, image_id_t imageId) -> uint64_t {
+  return (static_cast<uint64_t>(elementId) << 32U) | static_cast<uint64_t>(imageId);
+}
+
 constexpr std::wstring_view kPackedProjectExtension = L".puerhproj";
 constexpr std::array<char, 8> kPackedProjectMagic{
     {'P', 'U', 'E', 'R', 'H', 'P', 'K', '1'}};
@@ -1017,14 +1034,15 @@ AlbumBackend::AlbumBackend(QObject* parent) : QObject(parent), rule_model_(this)
   default_export_folder_ = pictures.isEmpty() ? QDir::currentPath() : pictures;
 
   initializeEditorLuts();
-  service_ready_ = false;
-  service_message_ =
-      "Select a project: load a .puerhproj package or metadata JSON, or create a new packed project.";
+  setServiceState(
+      false,
+      "Select a project: load a .puerhproj package or metadata JSON, or create a new packed project.");
   task_status_ = "Open or create a project to begin.";
 }
 
 AlbumBackend::~AlbumBackend() {
   try {
+    releaseVisibleThumbnailPins();
     finalizeEditorSession(true);
     if (current_import_job_) {
       current_import_job_->canceled_.store(true);
@@ -1171,25 +1189,20 @@ void AlbumBackend::clearFilters() {
 
 bool AlbumBackend::loadProject(const QString& metaFileUrlOrPath) {
   if (project_loading_) {
-    service_message_ = "A project load is already in progress.";
-    emit serviceStateChanged();
+    setServiceMessageForCurrentProject("A project load is already in progress.");
     return false;
   }
 
   const auto project_path_opt = InputToPath(metaFileUrlOrPath);
   if (!project_path_opt.has_value()) {
-    service_ready_   = project_ != nullptr;
-    service_message_ = "Select a valid project file.";
-    emit serviceStateChanged();
+    setServiceMessageForCurrentProject("Select a valid project file.");
     return false;
   }
 
   const auto project_path = project_path_opt.value();
   std::error_code ec;
   if (!std::filesystem::is_regular_file(project_path, ec) || ec) {
-    service_ready_   = project_ != nullptr;
-    service_message_ = "Project file was not found.";
-    emit serviceStateChanged();
+    setServiceMessageForCurrentProject("Project file was not found.");
     return false;
   }
 
@@ -1198,11 +1211,9 @@ bool AlbumBackend::loadProject(const QString& metaFileUrlOrPath) {
     std::filesystem::path workspace_dir;
     QString               workspace_error;
     if (!CreateProjectWorkspace(project_name, &workspace_dir, &workspace_error)) {
-      service_ready_   = project_ != nullptr;
-      service_message_ =
+      setServiceMessageForCurrentProject(
           workspace_error.isEmpty() ? "Failed to prepare project temp workspace."
-                                    : workspace_error;
-      emit serviceStateChanged();
+                                    : workspace_error);
       return false;
     }
 
@@ -1212,10 +1223,8 @@ bool AlbumBackend::loadProject(const QString& metaFileUrlOrPath) {
     if (!UnpackProjectToWorkspace(project_path, workspace_dir, project_name, &unpacked_db_path,
                                   &unpacked_meta_path, &unpack_error)) {
       CleanupWorkspaceDirectory(workspace_dir);
-      service_ready_   = project_ != nullptr;
-      service_message_ =
-          unpack_error.isEmpty() ? "Failed to unpack project package." : unpack_error;
-      emit serviceStateChanged();
+      setServiceMessageForCurrentProject(
+          unpack_error.isEmpty() ? "Failed to unpack project package." : unpack_error);
       return false;
     }
 
@@ -1224,9 +1233,8 @@ bool AlbumBackend::loadProject(const QString& metaFileUrlOrPath) {
   }
 
   if (!IsMetadataJsonPath(project_path)) {
-    service_ready_   = project_ != nullptr;
-    service_message_ = "Unsupported project format. Choose a .json or .puerhproj file.";
-    emit serviceStateChanged();
+    setServiceMessageForCurrentProject(
+        "Unsupported project format. Choose a .json or .puerhproj file.");
     return false;
   }
 
@@ -1243,16 +1251,13 @@ bool AlbumBackend::createProjectInFolder(const QString& folderUrlOrPath) {
 bool AlbumBackend::createProjectInFolderNamed(const QString& folderUrlOrPath,
                                               const QString& projectName) {
   if (project_loading_) {
-    service_message_ = "A project load is already in progress.";
-    emit serviceStateChanged();
+    setServiceMessageForCurrentProject("A project load is already in progress.");
     return false;
   }
 
   const auto folder_path_opt = InputToPath(folderUrlOrPath);
   if (!folder_path_opt.has_value()) {
-    service_ready_   = project_ != nullptr;
-    service_message_ = "Select a valid folder for the new project.";
-    emit serviceStateChanged();
+    setServiceMessageForCurrentProject("Select a valid folder for the new project.");
     return false;
   }
 
@@ -1260,22 +1265,18 @@ bool AlbumBackend::createProjectInFolderNamed(const QString& folderUrlOrPath,
   const auto packed_path_opt =
       BuildUniquePackedProjectPath(folder_path_opt.value(), projectName, &build_error);
   if (!packed_path_opt.has_value()) {
-    service_ready_ = project_ != nullptr;
-    service_message_ = build_error.isEmpty()
-                           ? "Failed to prepare project package path in selected folder."
-                           : build_error;
-    emit serviceStateChanged();
+    setServiceMessageForCurrentProject(
+        build_error.isEmpty() ? "Failed to prepare project package path in selected folder."
+                              : build_error);
     return false;
   }
 
   std::filesystem::path workspace_dir;
   QString               workspace_error;
   if (!CreateProjectWorkspace(projectName, &workspace_dir, &workspace_error)) {
-    service_ready_   = project_ != nullptr;
-    service_message_ =
-        workspace_error.isEmpty() ? "Failed to prepare project temp workspace."
-                                  : workspace_error;
-    emit serviceStateChanged();
+    setServiceMessageForCurrentProject(workspace_error.isEmpty()
+                                           ? "Failed to prepare project temp workspace."
+                                           : workspace_error);
     return false;
   }
 
@@ -1291,15 +1292,12 @@ bool AlbumBackend::createProjectInFolderNamed(const QString& folderUrlOrPath,
 
 bool AlbumBackend::saveProject() {
   if (project_loading_) {
-    service_message_ = "Please wait until project loading finishes.";
-    emit serviceStateChanged();
+    setServiceMessageForCurrentProject("Please wait until project loading finishes.");
     return false;
   }
 
   if (!project_ || meta_path_.empty()) {
-    service_ready_   = false;
-    service_message_ = "No project is loaded yet.";
-    emit serviceStateChanged();
+    setServiceState(false, "No project is loaded yet.");
     setTaskState("No project to save.", 0, false);
     return false;
   }
@@ -1309,33 +1307,27 @@ bool AlbumBackend::saveProject() {
   }
 
   if (!persistCurrentProjectState()) {
-    service_message_ = "Project save failed.";
-    emit serviceStateChanged();
+    setServiceMessageForCurrentProject("Project save failed.");
     setTaskState("Project save failed.", 0, false);
     return false;
   }
 
   QString package_error;
   if (!packageCurrentProjectFiles(&package_error)) {
-    service_message_ = package_error.isEmpty() ? "Project saved, but packing failed."
-                                               : package_error;
-    emit serviceStateChanged();
+    setServiceMessageForCurrentProject(package_error.isEmpty() ? "Project saved, but packing failed."
+                                                               : package_error);
     setTaskState("Project packing failed.", 0, false);
     return false;
   }
 
-  service_message_ = project_package_path_.empty()
-                         ? QString("Project saved to %1").arg(PathToQString(meta_path_))
-                         : QString("Project saved and packed to %1")
-                               .arg(PathToQString(project_package_path_));
-  emit serviceStateChanged();
+  setServiceMessageForCurrentProject(project_package_path_.empty()
+                                         ? QString("Project saved to %1")
+                                               .arg(PathToQString(meta_path_))
+                                         : QString("Project saved and packed to %1")
+                                               .arg(PathToQString(project_package_path_)));
   setTaskState(project_package_path_.empty() ? "Project saved." : "Project saved and packed.", 100,
                false);
-  QTimer::singleShot(1200, this, [this]() {
-    if (!export_inflight_ && !task_cancel_visible_) {
-      setTaskState("No background tasks", 0, false);
-    }
-  });
+  scheduleIdleTaskStateReset(1200);
   return true;
 }
 
@@ -1417,19 +1409,13 @@ void AlbumBackend::createFolder(const QString& folderName) {
       project_->SaveProject(meta_path_);
     }
 
-    service_message_ =
-        QString("Created folder %1").arg(WStringToQString(folder_entry.folder_name_));
-    emit serviceStateChanged();
+    setServiceMessageForCurrentProject(
+        QString("Created folder %1").arg(WStringToQString(folder_entry.folder_name_)));
     setTaskState(service_message_, 100, false);
-    QTimer::singleShot(1200, this, [this]() {
-      if (!export_inflight_ && !task_cancel_visible_) {
-        setTaskState("No background tasks", 0, false);
-      }
-    });
+    scheduleIdleTaskStateReset(1200);
   } catch (const std::exception& e) {
     const QString err = QString("Failed to create folder: %1").arg(QString::fromUtf8(e.what()));
-    service_message_  = err;
-    emit serviceStateChanged();
+    setServiceMessageForCurrentProject(err);
     setTaskState(err, 0, false);
   }
 }
@@ -1494,8 +1480,7 @@ void AlbumBackend::deleteFolder(uint folderId) {
     }
   } catch (const std::exception& e) {
     const QString err = QString("Failed to delete folder: %1").arg(QString::fromUtf8(e.what()));
-    service_message_  = err;
-    emit serviceStateChanged();
+    setServiceMessageForCurrentProject(err);
     setTaskState(err, 0, false);
     return;
   }
@@ -1532,7 +1517,7 @@ void AlbumBackend::deleteFolder(uint folderId) {
   }
 
   if (folder_path_by_id_.contains(current_folder_id_)) {
-    applyFolderSelection(current_folder_id_, false);
+    applyFolderSelection(current_folder_id_, true);
   } else {
     applyFolderSelection(fallback_folder, true);
   }
@@ -1540,14 +1525,9 @@ void AlbumBackend::deleteFolder(uint folderId) {
   active_filter_ids_.reset();
   reapplyCurrentFilters();
 
-  service_message_ = "Folder deleted.";
-  emit serviceStateChanged();
+  setServiceMessageForCurrentProject("Folder deleted.");
   setTaskState("Folder deleted.", 100, false);
-  QTimer::singleShot(1200, this, [this]() {
-    if (!export_inflight_ && !task_cancel_visible_) {
-      setTaskState("No background tasks", 0, false);
-    }
-  });
+  scheduleIdleTaskStateReset(1200);
 }
 
 void AlbumBackend::startImport(const QStringList& fileUrlsOrPaths) {
@@ -1687,39 +1667,24 @@ void AlbumBackend::startExportWithOptionsForTargets(const QString& outputDirUrlO
                                                     const QString& tiffCompression,
                                                     const QVariantList& targetEntries) {
   if (project_loading_) {
-    export_status_ = "Project is loading. Please wait.";
-    emit exportStateChanged();
-    setTaskState(export_status_, 0, false);
+    setExportFailureState("Project is loading. Please wait.");
     return;
   }
 
-  const auto fail_with_status = [this](const QString& message) {
-    export_status_ = message;
-    emit exportStateChanged();
-    setTaskState(message, 0, false);
-  };
-
   if (!export_service_ || !project_) {
-    fail_with_status("Export service is unavailable.");
+    setExportFailureState("Export service is unavailable.");
     return;
   }
   if (export_inflight_) {
-    fail_with_status("Export already running.");
+    setExportFailureState("Export already running.");
     return;
   }
 
-  export_status_        = "Preparing export queue...";
-  export_error_summary_.clear();
-  export_total_         = 0;
-  export_completed_     = 0;
-  export_succeeded_     = 0;
-  export_failed_        = 0;
-  export_skipped_       = 0;
-  emit exportStateChanged();
+  resetExportProgressState("Preparing export queue...");
 
   const auto outDirOpt = InputToPath(outputDirUrlOrPath);
   if (!outDirOpt.has_value()) {
-    fail_with_status("No export folder selected.");
+    setExportFailureState("No export folder selected.");
     return;
   }
 
@@ -1728,108 +1693,33 @@ void AlbumBackend::startExportWithOptionsForTargets(const QString& outputDirUrlO
     std::filesystem::create_directories(outDirOpt.value(), ec);
   }
   if (ec || !std::filesystem::is_directory(outDirOpt.value(), ec) || ec) {
-    fail_with_status("Export folder is invalid.");
+    setExportFailureState("Export folder is invalid.");
     return;
   }
 
-  std::vector<std::pair<sl_element_id_t, image_id_t>> targets;
-  if (!targetEntries.empty()) {
-    targets.reserve(static_cast<size_t>(targetEntries.size()));
-    std::unordered_set<uint64_t> dedupe{};
-    dedupe.reserve(static_cast<size_t>(targetEntries.size()) * 2 + 1);
-    for (const QVariant& entry : targetEntries) {
-      const QVariantMap map = entry.toMap();
-      const auto elementId =
-          static_cast<sl_element_id_t>(map.value("elementId").toUInt());
-      const auto imageId =
-          static_cast<image_id_t>(map.value("imageId").toUInt());
-      if (elementId == 0 || imageId == 0) {
-        continue;
-      }
-      const uint64_t key = (static_cast<uint64_t>(elementId) << 32U) |
-                           static_cast<uint64_t>(imageId);
-      if (dedupe.insert(key).second) {
-        targets.emplace_back(elementId, imageId);
-      }
-    }
-  } else {
-    targets.reserve(static_cast<size_t>(visible_thumbnails_.size()));
-    for (const QVariant& entry : visible_thumbnails_) {
-      const auto map = entry.toMap();
-      const auto elementId = static_cast<sl_element_id_t>(map.value("elementId").toUInt());
-      const auto imageId   = static_cast<image_id_t>(map.value("imageId").toUInt());
-      if (elementId == 0 || imageId == 0) {
-        continue;
-      }
-      targets.emplace_back(elementId, imageId);
-    }
-  }
+  const auto targets = collectExportTargets(targetEntries);
 
   if (targets.empty()) {
-    fail_with_status("No images to export.");
+    setExportFailureState("No images to export.");
     return;
   }
 
-  const ImageFormatType format         = FormatFromName(formatName);
-  const bool            resizeEnabled_ = resizeEnabled;
-  const int             maxLengthSide_ = std::clamp(maxLengthSide, 256, 16384);
-  const int             quality_       = std::clamp(quality, 1, 100);
-  const auto            bitDepth_      = BitDepthFromInt(bitDepth);
-  const int             pngLevel_      = std::clamp(pngCompressionLevel, 0, 9);
-  const auto            tiffCompress_  = TiffCompressFromName(tiffCompression);
+  const ImageFormatType format        = FormatFromName(formatName);
+  const int             clamped_max   = std::clamp(maxLengthSide, 256, 16384);
+  const int             clamped_q     = std::clamp(quality, 1, 100);
+  const auto            bit_depth     = BitDepthFromInt(bitDepth);
+  const int             clamped_png   = std::clamp(pngCompressionLevel, 0, 9);
+  const auto            tiff_compress = TiffCompressFromName(tiffCompression);
 
   export_service_->ClearAllExportTasks();
+  const auto queue_result =
+      buildExportQueue(targets, outDirOpt.value(), format, resizeEnabled, clamped_max, clamped_q,
+                       bit_depth, clamped_png, tiff_compress);
 
-  size_t  queuedCount   = 0;
-  int     skippedCount  = 0;
-  QString firstError{};
-  for (const auto& [elementId, imageId] : targets) {
-    try {
-      const auto srcPath = project_->GetImagePoolService()->Read<std::filesystem::path>(
-          imageId, [](std::shared_ptr<Image> image) {
-            return image ? image->image_path_ : image_path_t{};
-          });
-
-      if (srcPath.empty()) {
-        ++skippedCount;
-        if (firstError.isEmpty()) {
-          firstError = "Image source path is empty.";
-        }
-        continue;
-      }
-
-      ExportTask task;
-      task.sleeve_id_                 = elementId;
-      task.image_id_                  = imageId;
-      task.options_.format_           = format;
-      task.options_.resize_enabled_   = resizeEnabled_;
-      task.options_.max_length_side_  = resizeEnabled_ ? maxLengthSide_ : 0;
-      task.options_.quality_          = quality_;
-      task.options_.bit_depth_        = bitDepth_;
-      task.options_.compression_level_ = pngLevel_;
-      task.options_.tiff_compress_     = tiffCompress_;
-      task.options_.export_path_ =
-          ExportPathForOptions(srcPath, outDirOpt.value(), elementId, imageId, format);
-
-      export_service_->EnqueueExportTask(task);
-      ++queuedCount;
-    } catch (const std::exception& e) {
-      ++skippedCount;
-      if (firstError.isEmpty()) {
-        firstError = QString::fromUtf8(e.what());
-      }
-    } catch (...) {
-      ++skippedCount;
-      if (firstError.isEmpty()) {
-        firstError = "Unknown error while preparing export task.";
-      }
-    }
-  }
-
-  if (queuedCount == 0) {
+  if (queue_result.queued_count_ == 0) {
     export_status_ = "No export tasks were queued.";
-    if (!firstError.isEmpty()) {
-      export_error_summary_ = firstError;
+    if (!queue_result.first_error_.isEmpty()) {
+      export_error_summary_ = queue_result.first_error_;
     }
     emit exportStateChanged();
     setTaskState("No valid export tasks could be created.", 0, false);
@@ -1837,14 +1727,14 @@ void AlbumBackend::startExportWithOptionsForTargets(const QString& outputDirUrlO
   }
 
   export_inflight_ = true;
-  export_total_    = static_cast<int>(queuedCount);
-  export_skipped_  = skippedCount;
-  if (skippedCount > 0) {
+  export_total_    = queue_result.queued_count_;
+  export_skipped_  = queue_result.skipped_count_;
+  if (queue_result.skipped_count_ > 0) {
     export_status_ = QString("Exporting %1 image(s). Skipped %2 invalid item(s).")
-                         .arg(static_cast<int>(queuedCount))
-                         .arg(skippedCount);
+                         .arg(queue_result.queued_count_)
+                         .arg(queue_result.skipped_count_);
   } else {
-    export_status_ = QString("Exporting %1 image(s)...").arg(static_cast<int>(queuedCount));
+    export_status_ = QString("Exporting %1 image(s)...").arg(queue_result.queued_count_);
   }
   emit exportStateChanged();
   setTaskState(export_status_, 0, false);
@@ -1884,18 +1774,18 @@ void AlbumBackend::startExportWithOptionsForTargets(const QString& outputDirUrlO
             },
             Qt::QueuedConnection);
       },
-      [self, skippedCount](std::shared_ptr<std::vector<ExportResult>> results) {
+      [self, skipped = queue_result.skipped_count_](std::shared_ptr<std::vector<ExportResult>> results) {
         if (!self) {
           return;
         }
 
         QMetaObject::invokeMethod(
             self,
-            [self, results, skippedCount]() {
+            [self, results, skipped]() {
               if (!self) {
                 return;
               }
-              self->finishExport(results, skippedCount);
+              self->finishExport(results, skipped);
             },
             Qt::QueuedConnection);
       });
@@ -1905,14 +1795,7 @@ void AlbumBackend::resetExportState() {
   if (export_inflight_) {
     return;
   }
-  export_status_        = "Ready to export.";
-  export_error_summary_.clear();
-  export_total_         = 0;
-  export_completed_     = 0;
-  export_succeeded_     = 0;
-  export_failed_        = 0;
-  export_skipped_       = 0;
-  emit exportStateChanged();
+  resetExportProgressState("Ready to export.");
 }
 
 void AlbumBackend::openEditor(uint elementId, uint imageId) {
@@ -1973,7 +1856,11 @@ void AlbumBackend::openEditor(uint elementId, uint imageId) {
         thumbnail_service_->InvalidateThumbnail(nextElementId);
       } catch (...) {
       }
-      requestThumbnail(nextElementId, nextImageId);
+      if (isThumbnailPinned(nextElementId)) {
+        requestThumbnail(nextElementId, nextImageId);
+      } else {
+        updateThumbnailDataUrl(nextElementId, QString());
+      }
     }
 
     editor_status_ = "Editor closed. Changes saved.";
@@ -2073,21 +1960,16 @@ bool AlbumBackend::initializeServices(const std::filesystem::path& dbPath,
                                       const std::filesystem::path& packagePath,
                                       const std::filesystem::path& workspaceDir) {
   if (project_loading_) {
-    service_message_ = "A project load is already in progress.";
-    emit serviceStateChanged();
+    setServiceMessageForCurrentProject("A project load is already in progress.");
     return false;
   }
 
   if (current_import_job_ && !current_import_job_->IsCancelationAcked()) {
-    service_ready_   = project_ != nullptr;
-    service_message_ = "Cannot switch project while an import is running.";
-    emit serviceStateChanged();
+    setServiceMessageForCurrentProject("Cannot switch project while an import is running.");
     return false;
   }
   if (export_inflight_) {
-    service_ready_   = project_ != nullptr;
-    service_message_ = "Cannot switch project while export is running.";
-    emit serviceStateChanged();
+    setServiceMessageForCurrentProject("Cannot switch project while export is running.");
     return false;
   }
 
@@ -2095,9 +1977,9 @@ bool AlbumBackend::initializeServices(const std::filesystem::path& dbPath,
     finalizeEditorSession(true);
   }
 
-  service_message_ = (openMode == ProjectOpenMode::kCreateNew) ? "Creating project..."
-                                                                : "Loading project...";
-  emit serviceStateChanged();
+  setServiceMessageForCurrentProject((openMode == ProjectOpenMode::kCreateNew)
+                                         ? "Creating project..."
+                                         : "Loading project...");
   setProjectLoadingState(true, service_message_);
   setTaskState("Opening project...", 0, false);
 
@@ -2228,13 +2110,11 @@ bool AlbumBackend::initializeServices(const std::filesystem::path& dbPath,
 
           if (!result->success_) {
             self->setProjectLoadingState(false, QString());
-            self->service_ready_ = self->project_ != nullptr;
-            self->service_message_ =
+            self->setServiceMessageForCurrentProject(
                 self->project_
                     ? QString("Requested project failed to open: %1").arg(result->error_)
-                    : QString("Project open failed: %1").arg(result->error_);
+                    : QString("Project open failed: %1").arg(result->error_));
             self->setTaskState("Project open failed.", 0, false);
-            emit self->serviceStateChanged();
             return;
           }
 
@@ -2454,15 +2334,13 @@ void AlbumBackend::applyLoadedProjectEntriesBatch() {
     rebuildThumbnailView(std::nullopt);
     setTaskState("No background tasks", 0, false);
 
-    service_ready_ = true;
-    service_message_ = project_package_path_.empty()
-                           ? QString("Loaded project. DB: %1  Meta: %2")
-                                 .arg(PathToQString(db_path_))
-                                 .arg(PathToQString(meta_path_))
-                           : QString("Loaded packed project: %1 (DB temp: %2)")
-                                 .arg(PathToQString(project_package_path_))
-                                 .arg(PathToQString(db_path_));
-    emit serviceStateChanged();
+    setServiceState(true, project_package_path_.empty()
+                              ? QString("Loaded project. DB: %1  Meta: %2")
+                                    .arg(PathToQString(db_path_))
+                                    .arg(PathToQString(meta_path_))
+                              : QString("Loaded packed project: %1 (DB temp: %2)")
+                                    .arg(PathToQString(project_package_path_))
+                                    .arg(PathToQString(db_path_)));
     emit projectChanged();
     setProjectLoadingState(false, QString());
     return;
@@ -2540,6 +2418,45 @@ void AlbumBackend::clearProjectData() {
   emit countsChanged();
 }
 
+void AlbumBackend::setThumbnailVisible(uint elementId, uint imageId, bool visible) {
+  const auto id       = static_cast<sl_element_id_t>(elementId);
+  const auto image_id = static_cast<image_id_t>(imageId);
+  if (id == 0 || image_id == 0) {
+    return;
+  }
+
+  if (visible) {
+    if (!thumbnail_service_) {
+      return;
+    }
+    auto& ref = thumbnail_pin_ref_counts_[id];
+    ref++;
+    if (ref == 1) {
+      requestThumbnail(id, image_id);
+    }
+    return;
+  }
+
+  const auto it = thumbnail_pin_ref_counts_.find(id);
+  if (it == thumbnail_pin_ref_counts_.end()) {
+    return;
+  }
+
+  if (it->second > 1) {
+    it->second--;
+    return;
+  }
+
+  thumbnail_pin_ref_counts_.erase(it);
+  updateThumbnailDataUrl(id, QString());
+  if (thumbnail_service_) {
+    try {
+      thumbnail_service_->ReleaseThumbnail(id);
+    } catch (...) {
+    }
+  }
+}
+
 void AlbumBackend::rebuildFolderView() {
   std::sort(folder_entries_.begin(), folder_entries_.end(),
             [](const ExistingFolderEntry& lhs, const ExistingFolderEntry& rhs) {
@@ -2602,26 +2519,23 @@ auto AlbumBackend::currentFolderFsPath() const -> std::filesystem::path {
 }
 
 void AlbumBackend::releaseVisibleThumbnailPins() {
-  if (!thumbnail_service_ || visible_thumbnails_.empty()) {
+  if (thumbnail_pin_ref_counts_.empty()) {
     return;
   }
 
-  std::unordered_set<sl_element_id_t> visible_ids;
-  visible_ids.reserve(static_cast<size_t>(visible_thumbnails_.size()) * 2 + 1);
-  for (const auto& row_value : visible_thumbnails_) {
-    const auto row = row_value.toMap();
-    const auto id  = static_cast<sl_element_id_t>(row.value("elementId").toUInt());
-    if (id != 0) {
-      visible_ids.insert(id);
+  for (const auto& [id, _] : thumbnail_pin_ref_counts_) {
+    const auto index_it = index_by_element_id_.find(id);
+    if (index_it != index_by_element_id_.end()) {
+      all_images_[index_it->second].thumb_data_url.clear();
+    }
+    if (thumbnail_service_) {
+      try {
+        thumbnail_service_->ReleaseThumbnail(id);
+      } catch (...) {
+      }
     }
   }
-
-  for (const auto id : visible_ids) {
-    try {
-      thumbnail_service_->ReleaseThumbnail(id);
-    } catch (...) {
-    }
-  }
+  thumbnail_pin_ref_counts_.clear();
 }
 
 void AlbumBackend::rebuildThumbnailView(
@@ -2640,9 +2554,6 @@ void AlbumBackend::rebuildThumbnailView(
       continue;
     }
     next.push_back(makeThumbMap(image, index++));
-    if (image.thumb_data_url.isEmpty()) {
-      requestThumbnail(image.element_id, image.image_id);
-    }
   }
 
   visible_thumbnails_ = std::move(next);
@@ -2679,16 +2590,7 @@ void AlbumBackend::addOrUpdateAlbumItem(sl_element_id_t elementId, image_id_t im
     next.image_id     = imageId;
     next.file_name    = WStringToQString(fallbackName);
     next.extension    = ExtensionFromFileName(next.file_name);
-
-    static const std::array<QString, 6> accents = {
-        "#5AA2FF",
-        "#4CC9A6",
-        "#F7B267",
-        "#E08BFF",
-        "#7AD1FF",
-        "#9BD65B",
-    };
-    next.accent = accents[all_images_.size() % accents.size()];
+    next.accent = AccentForIndex(all_images_.size());
 
     all_images_.push_back(std::move(next));
     index_by_element_id_[elementId] = all_images_.size() - 1;
@@ -2785,11 +2687,11 @@ void AlbumBackend::requestThumbnail(sl_element_id_t elementId, image_id_t imageI
       elementId, imageId,
       [self, service, elementId](std::shared_ptr<ThumbnailGuard> guard) {
         if (!guard || !guard->thumbnail_buffer_) {
-          try {
-            if (service) {
+          if (self && !self->isThumbnailPinned(elementId) && service) {
+            try {
               service->ReleaseThumbnail(elementId);
+            } catch (...) {
             }
-          } catch (...) {
           }
           return;
         }
@@ -2826,20 +2728,24 @@ void AlbumBackend::requestThumbnail(sl_element_id_t elementId, image_id_t imageI
           if (self) {
             QMetaObject::invokeMethod(
                 self,
-                [self, elementId, dataUrl]() {
+                [self, service, elementId, dataUrl]() {
                   if (!self) {
                     return;
                   }
-                  self->updateThumbnailDataUrl(elementId, dataUrl);
+                  const bool pinned = self->isThumbnailPinned(elementId);
+                  if (pinned) {
+                    self->updateThumbnailDataUrl(elementId, dataUrl);
+                  } else {
+                    self->updateThumbnailDataUrl(elementId, QString());
+                  }
+                  if (!pinned && service) {
+                    try {
+                      service->ReleaseThumbnail(elementId);
+                    } catch (...) {
+                    }
+                  }
                 },
                 Qt::QueuedConnection);
-          }
-
-          try {
-            if (service) {
-              service->ReleaseThumbnail(elementId);
-            }
-          } catch (...) {
           }
         }).detach();
       },
@@ -2847,10 +2753,6 @@ void AlbumBackend::requestThumbnail(sl_element_id_t elementId, image_id_t imageI
 }
 
 void AlbumBackend::updateThumbnailDataUrl(sl_element_id_t elementId, const QString& dataUrl) {
-  if (dataUrl.isEmpty()) {
-    return;
-  }
-
   const auto it = index_by_element_id_.find(elementId);
   if (it == index_by_element_id_.end()) {
     return;
@@ -2874,6 +2776,11 @@ void AlbumBackend::updateThumbnailDataUrl(sl_element_id_t elementId, const QStri
   }
 
   emit thumbnailUpdated(static_cast<uint>(elementId), dataUrl);
+}
+
+bool AlbumBackend::isThumbnailPinned(sl_element_id_t elementId) const {
+  const auto it = thumbnail_pin_ref_counts_.find(elementId);
+  return it != thumbnail_pin_ref_counts_.end() && it->second > 0;
 }
 
 void AlbumBackend::finishImport(const ImportResult& result) {
@@ -2917,21 +2824,15 @@ void AlbumBackend::finishImport(const ImportResult& result) {
       QString("Import complete: %1 imported, %2 failed").arg(result.imported_).arg(result.failed_);
   if (!state_saved) {
     task_text += " (project sync/save failed)";
-    service_message_ = "Import finished, but saving project state failed.";
-    emit serviceStateChanged();
+    setServiceMessageForCurrentProject("Import finished, but saving project state failed.");
   } else if (!package_saved) {
     task_text += " (project packing failed)";
-    service_message_ = package_error.isEmpty() ? "Import finished, but project packing failed."
-                                               : package_error;
-    emit serviceStateChanged();
+    setServiceMessageForCurrentProject(
+        package_error.isEmpty() ? "Import finished, but project packing failed."
+                                : package_error);
   }
   setTaskState(task_text, 100, false);
-
-  QTimer::singleShot(1800, this, [this]() {
-    if (!export_inflight_ && !task_cancel_visible_) {
-      setTaskState("No background tasks", 0, false);
-    }
-  });
+  scheduleIdleTaskStateReset(1800);
 }
 
 void AlbumBackend::finishExport(const std::shared_ptr<std::vector<ExportResult>>& results,
@@ -2975,12 +2876,7 @@ void AlbumBackend::finishExport(const std::shared_ptr<std::vector<ExportResult>>
   emit exportStateChanged();
 
   setTaskState(QString("Export complete: %1 ok, %2 failed").arg(ok).arg(fail), 100, false);
-
-  QTimer::singleShot(1800, this, [this]() {
-    if (!task_cancel_visible_) {
-      setTaskState("No background tasks", 0, false);
-    }
-  });
+  scheduleIdleTaskStateReset(1800);
 }
 
 void AlbumBackend::reapplyCurrentFilters() {
@@ -2988,6 +2884,129 @@ void AlbumBackend::reapplyCurrentFilters() {
   if (!validation_error_.isEmpty()) {
     rebuildThumbnailView(active_filter_ids_);
   }
+}
+
+void AlbumBackend::setServiceState(bool ready, const QString& message) {
+  if (service_ready_ == ready && service_message_ == message) {
+    return;
+  }
+  service_ready_   = ready;
+  service_message_ = message;
+  emit serviceStateChanged();
+}
+
+void AlbumBackend::setServiceMessageForCurrentProject(const QString& message) {
+  setServiceState(project_ != nullptr, message);
+}
+
+void AlbumBackend::scheduleIdleTaskStateReset(int delayMs) {
+  QTimer::singleShot(std::max(delayMs, 0), this, [this]() {
+    if (!export_inflight_ && !task_cancel_visible_) {
+      setTaskState("No background tasks", 0, false);
+    }
+  });
+}
+
+void AlbumBackend::setExportFailureState(const QString& message) {
+  export_status_ = message;
+  emit exportStateChanged();
+  setTaskState(message, 0, false);
+}
+
+void AlbumBackend::resetExportProgressState(const QString& status) {
+  export_status_        = status;
+  export_error_summary_.clear();
+  export_total_         = 0;
+  export_completed_     = 0;
+  export_succeeded_     = 0;
+  export_failed_        = 0;
+  export_skipped_       = 0;
+  emit exportStateChanged();
+}
+
+auto AlbumBackend::collectExportTargets(const QVariantList& targetEntries) const
+    -> std::vector<ExportTarget> {
+  const QVariantList& source = targetEntries.empty() ? visible_thumbnails_ : targetEntries;
+  std::vector<ExportTarget> targets;
+  targets.reserve(static_cast<size_t>(source.size()));
+
+  std::unordered_set<uint64_t> dedupe;
+  dedupe.reserve(static_cast<size_t>(source.size()) * 2 + 1);
+
+  for (const QVariant& entry : source) {
+    const auto map       = entry.toMap();
+    const auto elementId = static_cast<sl_element_id_t>(map.value("elementId").toUInt());
+    const auto imageId   = static_cast<image_id_t>(map.value("imageId").toUInt());
+    if (elementId == 0 || imageId == 0) {
+      continue;
+    }
+
+    if (!dedupe.insert(ExportTargetKey(elementId, imageId)).second) {
+      continue;
+    }
+    targets.emplace_back(elementId, imageId);
+  }
+  return targets;
+}
+
+auto AlbumBackend::buildExportQueue(const std::vector<ExportTarget>& targets,
+                                    const std::filesystem::path&   outputDir,
+                                    ImageFormatType                format,
+                                    bool                           resizeEnabled,
+                                    int                            maxLengthSide,
+                                    int                            quality,
+                                    ExportFormatOptions::BIT_DEPTH bitDepth,
+                                    int                            pngCompressionLevel,
+                                    ExportFormatOptions::TIFF_COMPRESS tiffCompression)
+    -> ExportQueueBuildResult {
+  ExportQueueBuildResult summary;
+  if (!project_ || !export_service_) {
+    summary.first_error_ = "Export service is unavailable.";
+    return summary;
+  }
+
+  for (const auto& [elementId, imageId] : targets) {
+    try {
+      const auto srcPath = project_->GetImagePoolService()->Read<std::filesystem::path>(
+          imageId,
+          [](const std::shared_ptr<Image>& image) { return image ? image->image_path_ : image_path_t{}; });
+      if (srcPath.empty()) {
+        ++summary.skipped_count_;
+        if (summary.first_error_.isEmpty()) {
+          summary.first_error_ = "Image source path is empty.";
+        }
+        continue;
+      }
+
+      ExportTask task;
+      task.sleeve_id_                  = elementId;
+      task.image_id_                   = imageId;
+      task.options_.format_            = format;
+      task.options_.resize_enabled_    = resizeEnabled;
+      task.options_.max_length_side_   = resizeEnabled ? maxLengthSide : 0;
+      task.options_.quality_           = quality;
+      task.options_.bit_depth_         = bitDepth;
+      task.options_.compression_level_ = pngCompressionLevel;
+      task.options_.tiff_compress_     = tiffCompression;
+      task.options_.export_path_ =
+          ExportPathForOptions(srcPath, outputDir, elementId, imageId, format);
+
+      export_service_->EnqueueExportTask(task);
+      ++summary.queued_count_;
+    } catch (const std::exception& e) {
+      ++summary.skipped_count_;
+      if (summary.first_error_.isEmpty()) {
+        summary.first_error_ = QString::fromUtf8(e.what());
+      }
+    } catch (...) {
+      ++summary.skipped_count_;
+      if (summary.first_error_.isEmpty()) {
+        summary.first_error_ = "Unknown error while preparing export task.";
+      }
+    }
+  }
+
+  return summary;
 }
 
 auto AlbumBackend::buildFilterNode(FilterOp joinOp) const -> BuildResult {
@@ -3122,15 +3141,6 @@ auto AlbumBackend::formatFilterInfo(int shown, int total) const -> QString {
 }
 
 auto AlbumBackend::makeThumbMap(const AlbumItem& image, int index) const -> QVariantMap {
-  static const std::array<QString, 6> accents = {
-      "#5AA2FF",
-      "#4CC9A6",
-      "#F7B267",
-      "#E08BFF",
-      "#7AD1FF",
-      "#9BD65B",
-  };
-
   const QString aperture = image.aperture > 0.0 ? QString::number(image.aperture, 'f', 1) : "--";
   const QString focal    = image.focal_length > 0.0 ? QString::number(image.focal_length, 'f', 0) : "--";
 
@@ -3146,7 +3156,7 @@ auto AlbumBackend::makeThumbMap(const AlbumItem& image, int index) const -> QVar
       {"captureDate", image.capture_date.isValid() ? image.capture_date.toString("yyyy-MM-dd") : "--"},
       {"rating", image.rating},
       {"tags", image.tags},
-      {"accent", image.accent.isEmpty() ? accents[static_cast<size_t>(index) % accents.size()] : image.accent},
+      {"accent", image.accent.isEmpty() ? AccentForIndex(static_cast<size_t>(index)) : image.accent},
       {"thumbUrl", image.thumb_data_url},
   };
 }
@@ -3563,7 +3573,11 @@ void AlbumBackend::finalizeEditorSession(bool persistChanges) {
       thumbnail_service_->InvalidateThumbnail(finishedElement);
     } catch (...) {
     }
-    requestThumbnail(finishedElement, finishedImage);
+    if (isThumbnailPinned(finishedElement)) {
+      requestThumbnail(finishedElement, finishedImage);
+    } else {
+      updateThumbnailDataUrl(finishedElement, QString());
+    }
   }
 
   editor_pipeline_guard_.reset();

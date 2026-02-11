@@ -29,20 +29,20 @@ ScrollView {
         Rectangle {
             Layout.fillWidth: true
             implicitHeight: filterCol.implicitHeight + 20
-            radius: 12
-            color: "#38373C"
-            border.color: "#4D4C51"
+            radius: 0
+            color: "transparent"
+            border.width: 0
             ColumnLayout {
                 id: filterCol
                 anchors.fill: parent
-                anchors.margins: 10
+                anchors.margins: 4
                 RowLayout {
                     Layout.fillWidth: true
                     Label {
                         text: "Filters"
                         color: "#E3DFDB"
-                        font.pixelSize: 17
-                        font.weight: 700
+                        font.pixelSize: 15
+                        font.weight: 600
                     }
                     Item {
                         Layout.fillWidth: true
@@ -59,8 +59,8 @@ ScrollView {
                     Label {
                         Layout.fillWidth: true
                         text: "Image metadata rules"
-                        color: "#7B7D7C"
-                        font.pixelSize: 12
+                        color: "#666666"
+                        font.pixelSize: 11
                     }
 
                     RowLayout {
@@ -134,9 +134,9 @@ ScrollView {
                             readonly property int rangeDecimals: apertureRangeField ? 1 : 0
                             width: rules.width
                             height: betweenOp ? (usesRangeSlider ? 136 : 66) : 66
-                            radius: 10
-                            color: "#4D4C51"
-                            border.color: "#7B7D7C"
+                            radius: 6
+                            color: "#1F1F1F"
+                            border.width: 0
 
                             function clampRangeValue(value) {
                                 return Math.max(rangeMin, Math.min(rangeMax, value));
@@ -441,14 +441,20 @@ ScrollView {
 
         Rectangle {
             Layout.fillWidth: true
+            Layout.preferredHeight: 1
+            color: "#363636"
+        }
+
+        Rectangle {
+            Layout.fillWidth: true
             implicitHeight: editorCol.implicitHeight + 20
-            radius: 12
-            color: "#38373C"
-            border.color: "#4D4C51"
+            radius: 0
+            color: "transparent"
+            border.width: 0
             ColumnLayout {
                 id: editorCol
                 anchors.fill: parent
-                anchors.margins: 10
+                anchors.margins: 4
                 spacing: 8
 
                 RowLayout {
@@ -456,8 +462,8 @@ ScrollView {
                     Label {
                         text: "Editor"
                         color: "#E3DFDB"
-                        font.pixelSize: 17
-                        font.weight: 700
+                        font.pixelSize: 15
+                        font.weight: 600
                     }
                     Item {
                         Layout.fillWidth: true
@@ -467,8 +473,8 @@ ScrollView {
                 Label {
                     Layout.fillWidth: true
                     text: "The full OpenGL editor opens in a separate dialog window."
-                    color: "#7B7D7C"
-                    font.pixelSize: 12
+                    color: "#666666"
+                    font.pixelSize: 11
                     wrapMode: Text.WordWrap
                 }
 
@@ -492,8 +498,8 @@ ScrollView {
                 Label {
                     Layout.fillWidth: true
                     text: albumBackend.editorActive ? "Editor window is open. Close that window to save edits." : "Click Edit on a thumbnail to open the full editor dialog."
-                    color: "#7B7D7C"
-                    font.pixelSize: 12
+                    color: "#666666"
+                    font.pixelSize: 11
                     wrapMode: Text.WordWrap
                 }
             }

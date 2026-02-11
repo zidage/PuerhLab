@@ -362,14 +362,14 @@ class ToneCurveWidget final : public QWidget {
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing, true);
 
-    painter.fillRect(rect(), QColor(0x10, 0x14, 0x1A));
-    painter.setPen(QPen(QColor(0x29, 0x37, 0x4B), 1.0));
+    painter.fillRect(rect(), QColor(0x1A, 0x1A, 0x1A));
+    painter.setPen(QPen(QColor(0x2A, 0x2A, 0x2A), 1.0));
     painter.drawRoundedRect(rect().adjusted(0, 0, -1, -1), 10.0, 10.0);
 
     const QRectF plot = PlotRect();
-    painter.fillRect(plot, QColor(0x15, 0x1C, 0x26));
+    painter.fillRect(plot, QColor(0x12, 0x12, 0x12));
 
-    painter.setPen(QPen(QColor(0x28, 0x38, 0x4D), 1.0));
+    painter.setPen(QPen(QColor(0x2A, 0x2A, 0x2A), 1.0));
     for (int i = 1; i < 4; ++i) {
       const qreal t  = static_cast<qreal>(i) / 4.0;
       const qreal gx = plot.left() + t * plot.width();
@@ -378,7 +378,7 @@ class ToneCurveWidget final : public QWidget {
       painter.drawLine(QPointF(plot.left(), gy), QPointF(plot.right(), gy));
     }
 
-    painter.setPen(QPen(QColor(0x66, 0x78, 0x90), 1.0, Qt::DashLine));
+    painter.setPen(QPen(QColor(0x8C, 0x8C, 0x8C), 1.0, Qt::DashLine));
     painter.drawLine(QPointF(plot.left(), plot.bottom()), QPointF(plot.right(), plot.top()));
 
     const auto cache = BuildCurveHermiteCache(points_);
@@ -395,22 +395,22 @@ class ToneCurveWidget final : public QWidget {
       }
     }
 
-    painter.setPen(QPen(QColor(0x8A, 0xC7, 0xFF), 2.0));
+    painter.setPen(QPen(QColor(0xFC, 0xC7, 0x04), 2.0));
     painter.drawPath(curve_path);
 
     for (size_t i = 0; i < points_.size(); ++i) {
       const QPointF p       = ToWidgetPoint(points_[i]);
       const bool    active  = static_cast<int>(i) == active_idx_;
       const bool    pinned  = (i == 0 || i + 1 == points_.size());
-      const QColor  fill    = active ? QColor(0xF2, 0xC0, 0x5C) : QColor(0xE8, 0xEA, 0xED);
-      const QColor  outline = pinned ? QColor(0x81, 0xC9, 0x95) : QColor(0x0B, 0x1A, 0x2B);
+      const QColor  fill    = active ? QColor(0xFC, 0xC7, 0x04) : QColor(0xE6, 0xE6, 0xE6);
+      const QColor  outline = pinned ? QColor(0xFC, 0xC7, 0x04) : QColor(0x2A, 0x2A, 0x2A);
 
       painter.setPen(QPen(outline, 1.5));
       painter.setBrush(fill);
       painter.drawEllipse(p, active ? 5.5 : 4.5, active ? 5.5 : 4.5);
     }
 
-    painter.setPen(QColor(0x9D, 0xB0, 0xD0));
+    painter.setPen(QColor(0x8C, 0x8C, 0x8C));
     painter.drawText(QRectF(plot.left() - 2.0, plot.bottom() + 4.0, 32.0, 14.0), "0");
     painter.drawText(QRectF(plot.right() - 10.0, plot.bottom() + 4.0, 20.0, 14.0), "1");
     painter.drawText(QRectF(plot.left() - 16.0, plot.top() - 2.0, 14.0, 14.0), "1");
@@ -628,7 +628,7 @@ class SpinnerWidget final : public QWidget {
 
     // Subtle background ring.
     {
-      QPen pen(QColor(0x30, 0x31, 0x34, 200));
+      QPen pen(QColor(0x3A, 0x3A, 0x3A, 180));
       pen.setWidthF(2.0);
       pen.setCapStyle(Qt::RoundCap);
       painter.setPen(pen);
@@ -637,7 +637,7 @@ class SpinnerWidget final : public QWidget {
 
     // Foreground arc.
     {
-      QPen pen(QColor(0x8a, 0xb4, 0xf8, 230));
+      QPen pen(QColor(0xFC, 0xC7, 0x04, 230));
       pen.setWidthF(2.2);
       pen.setCapStyle(Qt::RoundCap);
       painter.setPen(pen);
@@ -720,16 +720,16 @@ class HistoryCardWidget final : public QFrame {
 
     setStyleSheet(
         "QFrame#HistoryCard {"
-        "  background: #16181A;"
-        "  border: 1px solid #303134;"
+        "  background: #1A1A1A;"
+        "  border: none;"
         "  border-radius: 10px;"
         "}"
         "QFrame#HistoryCard:hover {"
-        "  background: #1E2124;"
+        "  background: #202020;"
         "}"
         "QFrame#HistoryCard[selected=\"true\"] {"
-        "  background: rgba(138, 180, 248, 0.14);"
-        "  border: 1px solid rgba(138, 180, 248, 0.55);"
+        "  background: rgba(252, 199, 4, 0.20);"
+        "  border: 2px solid #FCC704;"
         "}");
   }
 
@@ -799,7 +799,7 @@ class EditorDialog final : public QDialog {
     viewer_->setStyleSheet(
         "QOpenGLWidget {"
         "  background: #121212;"
-        "  border: 1px solid #303134;"
+        "  border: none;"
         "  border-radius: 12px;"
         "}");
 
@@ -825,13 +825,13 @@ class EditorDialog final : public QDialog {
     controls_scroll_->setStyleSheet(
         "QScrollArea { background: transparent; border: none; }"
         "QScrollBar:vertical {"
-        "  background: #101822;"
+        "  background: #121212;"
         "  width: 10px;"
         "  margin: 2px;"
         "  border-radius: 5px;"
         "}"
         "QScrollBar::handle:vertical {"
-        "  background: #2E415A;"
+        "  background: #FCC704;"
         "  border-radius: 5px;"
         "}"
         "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0px; }"
@@ -845,22 +845,22 @@ class EditorDialog final : public QDialog {
     controls_->setObjectName("EditorControlsPanel");
     controls_->setStyleSheet(
         "#EditorControlsPanel {"
-        "  background: #161E2A;"
-        "  border: 1px solid #2C3D55;"
+        "  background: #1A1A1A;"
+        "  border: none;"
         "  border-radius: 14px;"
         "}"
         "#EditorControlsPanel QFrame#EditorSection {"
-        "  background: #111923;"
-        "  border: 1px solid #2B3B51;"
+        "  background: #121212;"
+        "  border: none;"
         "  border-radius: 12px;"
         "}"
         "#EditorControlsPanel QLabel#EditorSectionTitle {"
-        "  color: #EAF2FF;"
+        "  color: #E6E6E6;"
         "  font-size: 13px;"
         "  font-weight: 620;"
         "}"
         "#EditorControlsPanel QLabel#EditorSectionSub {"
-        "  color: #9DB0D0;"
+        "  color: #A3A3A3;"
         "  font-size: 11px;"
         "}");
     controls_scroll_->setWidget(controls_);
@@ -954,7 +954,7 @@ class EditorDialog final : public QDialog {
       auto* label = new QLabel(name, controls_);
       label->setStyleSheet(
           "QLabel {"
-          "  color: #E8EAED;"
+          "  color: #E6E6E6;"
           "  font-size: 14px;"
           "  font-weight: 400;"
           "}");
@@ -966,8 +966,8 @@ class EditorDialog final : public QDialog {
       combo->setFixedHeight(32);
       combo->setStyleSheet(
           "QComboBox {"
-          "  background: #202124;"
-          "  border: 1px solid #303134;"
+          "  background: #1A1A1A;"
+          "  border: none;"
           "  border-radius: 8px;"
           "  padding: 4px 8px;"
           "}"
@@ -976,18 +976,18 @@ class EditorDialog final : public QDialog {
           "  width: 24px;"
           "}"
           "QComboBox QAbstractItemView {"
-          "  background: #202124;"
-          "  border: 1px solid #303134;"
-          "  selection-background-color: #8ab4f8;"
-          "  selection-color: #080A0C;"
+          "  background: #1A1A1A;"
+          "  border: none;"
+          "  selection-background-color: #FCC704;"
+          "  selection-color: #121212;"
           "}"
           "QComboBox QAbstractItemView::item:hover {"
-          "  background: #2B2F33;"
-          "  color: #E8EAED;"
+          "  background: #202020;"
+          "  color: #E6E6E6;"
           "}"
           "QComboBox QAbstractItemView::item:selected {"
-          "  background: #8ab4f8;"
-          "  color: #080A0C;"
+          "  background: #FCC704;"
+          "  color: #121212;"
           "}");
 
       QObject::connect(
@@ -1014,7 +1014,7 @@ class EditorDialog final : public QDialog {
       auto* info = new QLabel(QString("%1: %2").arg(name).arg(formatter(value)), controls_);
       info->setStyleSheet(
           "QLabel {"
-          "  color: #E8EAED;"
+          "  color: #E6E6E6;"
           "  font-size: 14px;"
           "  font-weight: 400;"
           "}");
@@ -1177,7 +1177,7 @@ class EditorDialog final : public QDialog {
                                     actions_row);
       curve_hint->setStyleSheet(
           "QLabel {"
-          "  color: #9DB0D0;"
+          "  color: #A3A3A3;"
           "  font-size: 11px;"
           "}");
       curve_hint->setWordWrap(true);
@@ -1186,13 +1186,14 @@ class EditorDialog final : public QDialog {
       reset_curve_btn->setFixedHeight(28);
       reset_curve_btn->setStyleSheet(
           "QPushButton {"
-          "  background: #2B2F33;"
-          "  border: 1px solid #303134;"
+          "  color: #121212;"
+          "  background: #FCC704;"
+          "  border: none;"
           "  border-radius: 8px;"
           "  padding: 4px 10px;"
           "}"
           "QPushButton:hover {"
-          "  background: #34383C;"
+          "  background: #FCC704;"
           "}");
       QObject::connect(reset_curve_btn, &QPushButton::clicked, this, [this]() {
         if (!curve_widget_) {
@@ -1245,7 +1246,7 @@ class EditorDialog final : public QDialog {
       version_status_ = new QLabel(row);
       version_status_->setStyleSheet(
           "QLabel {"
-          "  color: #AAB0B6;"
+          "  color: #A3A3A3;"
           "  font-size: 12px;"
           "}");
 
@@ -1253,34 +1254,36 @@ class EditorDialog final : public QDialog {
       undo_tx_btn_->setFixedHeight(32);
       undo_tx_btn_->setStyleSheet(
           "QPushButton {"
-          "  background: #2B2F33;"
-          "  border: 1px solid #303134;"
+          "  color: #121212;"
+          "  background: #FCC704;"
+          "  border: none;"
           "  border-radius: 8px;"
           "  padding: 6px 10px;"
           "}"
           "QPushButton:hover {"
-          "  background: #34383C;"
+          "  background: #F5C200;"
           "}"
           "QPushButton:disabled {"
-          "  color: #6B7075;"
-          "  background: #1E1E1E;"
+          "  color: #6A6A6A;"
+          "  background: #1A1A1A;"
           "}");
 
       commit_version_btn_ = new QPushButton("Commit Version", row);
       commit_version_btn_->setFixedHeight(32);
       commit_version_btn_->setStyleSheet(
           "QPushButton {"
-          "  background: #2B2F33;"
-          "  border: 1px solid #303134;"
+          "  color: #121212;"
+          "  background: #FCC704;"
+          "  border: none;"
           "  border-radius: 8px;"
           "  padding: 6px 10px;"
           "}"
           "QPushButton:hover {"
-          "  background: #34383C;"
+          "  background: #F5C200;"
           "}"
           "QPushButton:disabled {"
-          "  color: #6B7075;"
-          "  background: #1E1E1E;"
+          "  color: #6A6A6A;"
+          "  background: #1A1A1A;"
           "}");
 
       rowLayout->addWidget(version_status_, /*stretch*/ 1);
@@ -1300,7 +1303,7 @@ class EditorDialog final : public QDialog {
       frame->setStyleSheet(
           "QFrame {"
           "  background: transparent;"
-          "  border: 1px solid #303134;"
+          "  border: none;"
           "  border-radius: 12px;"
           "}");
 
@@ -1316,7 +1319,7 @@ class EditorDialog final : public QDialog {
       auto* mode_label = new QLabel("Working version:", mode_row);
       mode_label->setStyleSheet(
           "QLabel {"
-          "  color: #AAB0B6;"
+          "  color: #A3A3A3;"
           "  font-size: 12px;"
           "}");
 
@@ -1327,8 +1330,8 @@ class EditorDialog final : public QDialog {
       working_mode_combo_->setFixedHeight(28);
       working_mode_combo_->setStyleSheet(
           "QComboBox {"
-          "  background: #202124;"
-          "  border: 1px solid #303134;"
+          "  background: #1A1A1A;"
+          "  border: none;"
           "  border-radius: 8px;"
           "  padding: 4px 8px;"
           "}"
@@ -1337,23 +1340,24 @@ class EditorDialog final : public QDialog {
           "  width: 24px;"
           "}"
           "QComboBox QAbstractItemView {"
-          "  background: #202124;"
-          "  border: 1px solid #303134;"
-          "  selection-background-color: #8ab4f8;"
-          "  selection-color: #080A0C;"
+          "  background: #1A1A1A;"
+          "  border: none;"
+          "  selection-background-color: #FCC704;"
+          "  selection-color: #121212;"
           "}");
 
       new_working_btn_ = new QPushButton("New", mode_row);
       new_working_btn_->setFixedHeight(28);
       new_working_btn_->setStyleSheet(
           "QPushButton {"
-          "  background: #2B2F33;"
-          "  border: 1px solid #303134;"
+          "  color: #121212;"
+          "  background: #FCC704;"
+          "  border: none;"
           "  border-radius: 8px;"
           "  padding: 4px 10px;"
           "}"
           "QPushButton:hover {"
-          "  background: #34383C;"
+          "  background: #F5C200;"
           "}");
 
       mode_layout->addWidget(mode_label, /*stretch*/ 0);
@@ -1365,7 +1369,7 @@ class EditorDialog final : public QDialog {
       auto* versions_label = new QLabel("Versions", frame);
       versions_label->setStyleSheet(
           "QLabel {"
-          "  color: #E8EAED;"
+          "  color: #E6E6E6;"
           "  font-size: 12px;"
           "  font-weight: 500;"
           "}");
@@ -1379,7 +1383,7 @@ class EditorDialog final : public QDialog {
       version_log_->setStyleSheet(
           "QListWidget {"
           "  background: #121212;"
-          "  border: 1px solid #303134;"
+          "  border: none;"
           "  border-radius: 10px;"
           "  padding: 6px;"
           "}"
@@ -1399,7 +1403,7 @@ class EditorDialog final : public QDialog {
       auto* tx_label = new QLabel("Uncommitted transactions (stack)", frame);
       tx_label->setStyleSheet(
           "QLabel {"
-          "  color: #E8EAED;"
+          "  color: #E6E6E6;"
           "  font-size: 12px;"
           "  font-weight: 500;"
           "}");
@@ -1413,7 +1417,7 @@ class EditorDialog final : public QDialog {
       tx_stack_->setStyleSheet(
           "QListWidget {"
           "  background: #121212;"
-          "  border: 1px solid #303134;"
+          "  border: none;"
           "  border-radius: 10px;"
           "  padding: 6px;"
           "}"
@@ -1810,8 +1814,8 @@ class EditorDialog final : public QDialog {
         row->setContentsMargins(10, 8, 10, 8);
         row->setSpacing(10);
 
-        const QColor dot  = QColor(0xF2, 0xC0, 0x5C);
-        const QColor line = QColor(0x30, 0x31, 0x34);
+        const QColor dot  = QColor(0xFC, 0xC7, 0x04);
+        const QColor line = QColor(0x2A, 0x2A, 0x2A);
         auto*        lane = new HistoryLaneWidget(dot, line, /*draw_top*/ i > 0,
                                                   /*draw_bottom*/ (i + 1) < total, card);
         row->addWidget(lane, 0);
@@ -1824,7 +1828,7 @@ class EditorDialog final : public QDialog {
         title_l->setWordWrap(true);
         title_l->setStyleSheet(
             "QLabel {"
-            "  color: #E8EAED;"
+            "  color: #E6E6E6;"
             "  font-size: 12px;"
             "  font-weight: 500;"
             "}");
@@ -1833,7 +1837,7 @@ class EditorDialog final : public QDialog {
             new QLabel(QString("uncommitted | #%1").arg(static_cast<qulonglong>(i + 1)), card);
         meta_l->setStyleSheet(
             "QLabel {"
-            "  color: #AAB0B6;"
+            "  color: #A3A3A3;"
             "  font-size: 11px;"
             "}");
 
@@ -1902,9 +1906,9 @@ class EditorDialog final : public QDialog {
           row->setSpacing(10);
 
           const QColor dot  = is_head
-                                  ? QColor(0x8a, 0xb4, 0xf8)
-                                  : (is_base ? QColor(0x81, 0xC9, 0x95) : QColor(0x9A, 0x9E, 0xA3));
-          const QColor line = QColor(0x30, 0x31, 0x34);
+                                  ? QColor(0xFC, 0xC7, 0x04)
+                                  : (is_base ? QColor(0xFC, 0xC7, 0x04) : QColor(0x8C, 0x8C, 0x8C));
+          const QColor line = QColor(0x2A, 0x2A, 0x2A);
           auto*        lane = new HistoryLaneWidget(dot, line, /*draw_top*/ row_index > 0,
                                                     /*draw_bottom*/ (row_index + 1) < total_rows, card);
           row->addWidget(lane, 0);
@@ -1922,7 +1926,7 @@ class EditorDialog final : public QDialog {
           hash_l->setFont(mono);
           hash_l->setStyleSheet(
               "QLabel {"
-              "  color: #E8EAED;"
+              "  color: #E6E6E6;"
               "  font-size: 12px;"
               "  font-weight: 600;"
               "}");
@@ -1930,47 +1934,47 @@ class EditorDialog final : public QDialog {
           top->addWidget(hash_l, 0);
 
           if (is_head) {
-            top->addWidget(MakePillLabel("HEAD", "#0B1A2B", "rgba(138, 180, 248, 0.95)",
-                                         "rgba(138, 180, 248, 0.95)", card),
+            top->addWidget(MakePillLabel("HEAD", "#121212", "rgba(252, 199, 4, 0.95)",
+                                         "rgba(252, 199, 4, 0.95)", card),
                            0);
           }
           if (is_base) {
-            top->addWidget(MakePillLabel("BASE", "#071C12", "rgba(129, 201, 149, 0.90)",
-                                         "rgba(129, 201, 149, 0.90)", card),
+            top->addWidget(MakePillLabel("BASE", "#121212", "rgba(252, 199, 4, 0.88)",
+                                         "rgba(252, 199, 4, 0.88)", card),
                            0);
           }
           if (is_plain) {
-            top->addWidget(MakePillLabel("PLAIN", "#202124", "rgba(170, 176, 182, 0.20)",
-                                         "rgba(170, 176, 182, 0.30)", card),
+            top->addWidget(MakePillLabel("PLAIN", "#1A1A1A", "rgba(252, 199, 4, 0.22)",
+                                         "rgba(252, 199, 4, 0.40)", card),
                            0);
           } else {
             const auto parent_short =
                 QString::fromStdString(ver.GetParentVersionID().ToString().substr(0, 8));
             top->addWidget(
-                MakePillLabel(QString("PARENT %1").arg(parent_short), "#AAB0B6",
-                              "rgba(170, 176, 182, 0.08)", "rgba(170, 176, 182, 0.18)", card),
+                MakePillLabel(QString("PARENT %1").arg(parent_short), "#A3A3A3",
+                              "rgba(252, 199, 4, 0.16)", "rgba(252, 199, 4, 0.32)", card),
                 0);
           }
 
           top->addStretch(1);
 
           auto* tx_pill =
-              MakePillLabel(QString("tx %1").arg(committed_tx_count), "#AAB0B6",
-                            "rgba(170, 176, 182, 0.08)", "rgba(170, 176, 182, 0.18)", card);
+              MakePillLabel(QString("tx %1").arg(committed_tx_count), "#A3A3A3",
+                            "rgba(252, 199, 4, 0.16)", "rgba(252, 199, 4, 0.32)", card);
           top->addWidget(tx_pill, 0);
 
           auto* msg_l = new QLabel(msg, card);
           msg_l->setWordWrap(true);
           msg_l->setStyleSheet(
               "QLabel {"
-              "  color: #E8EAED;"
+              "  color: #E6E6E6;"
               "  font-size: 12px;"
               "}");
 
           auto* meta_l = new QLabel(when, card);
           meta_l->setStyleSheet(
               "QLabel {"
-              "  color: #AAB0B6;"
+              "  color: #A3A3A3;"
               "  font-size: 11px;"
               "}");
 

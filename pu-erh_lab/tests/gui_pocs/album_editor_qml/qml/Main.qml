@@ -13,109 +13,149 @@ ApplicationWindow {
     visibility: Window.Maximized
     title: "pu-erh_lab - Album + Editor (QML POC)"
 
-    // Dark palette:
-    // Bases: #1E1D22 #38373C #4D4C51  Text: #E3DFDB #7B7D7C  Accents: #A1AC9B #92BCE1 #E03D46
+    // Theme palette — borderless, luminance-separated zones
+    readonly property color toneGold: "#FCC704"
+    readonly property color toneWine: "#8A0526"
+    readonly property color toneSteel: "#4A4A4A"
+    readonly property color toneGraphite: "#1A1A1A"
+    readonly property color toneMist: "#E6E6E6"
+    readonly property color toneAmber: "#FCC704"
+    readonly property color toneRose: "#FCC704"
+
+    readonly property color colBgDeep: "#141414"        // center content — darkest "stage"
+    readonly property color colBgBase: "#1F1F1F"        // sunken inputs
+    readonly property color colBgPanel: "#2B2B2B"       // side panels & header/footer
+    readonly property color colBorder: "transparent"     // NO borders by default
+    readonly property color colText: toneMist
+    readonly property color colTextMuted: "#888888"
+    readonly property color colAccentPrimary: toneGold
+    readonly property color colAccentSecondary: toneGold
+    readonly property color colAccentSoft: toneGold
+    readonly property color colDanger: toneWine
+    readonly property color colDangerTint: Qt.rgba(138 / 255, 5 / 255, 38 / 255, 0.32)
+    readonly property color colSelectedTint: Qt.rgba(252 / 255, 199 / 255, 4 / 255, 0.18)
+    readonly property color colHover: "#333333"          // subtle hover tint
+    readonly property color colOverlay: "#C0121212"
+
     Material.theme: Material.Dark
-    Material.accent: "#92BCE1"
-    color: "#1E1D22"
+    Material.primary: root.colAccentSecondary
+    Material.accent: root.colAccentPrimary
+    Material.background: root.colBgPanel
+    Material.foreground: root.colText
+    color: root.colBgPanel
 
     property bool settingsPage: false
     property bool inspectorVisible: true
     property bool gridMode: true
-    property var selectedImagesById: ({})
-    property var exportQueueById: ({})
-    property var exportPreviewRows: []
+    property bool selectionMode: false
     property string pendingNewProjectFolderUrl: ""
     property string defaultNewProjectName: "album_editor_project"
-    readonly property int selectedCount: Object.keys(selectedImagesById).length
-    readonly property int exportQueueCount: Object.keys(exportQueueById).length
+    readonly property bool backendInteractive: albumBackend.serviceReady && !albumBackend.projectLoading
+    readonly property var selectedImagesById: selectionState.selectedImagesById
+    readonly property var exportQueueById: selectionState.exportQueueById
+    readonly property var exportPreviewRows: selectionState.exportPreviewRows
+    readonly property int selectedCount: selectionState.selectedCount
+    readonly property int exportQueueCount: selectionState.exportQueueCount
 
-    function keyForElement(elementId) {
-        return String(Number(elementId))
-    }
+    QtObject {
+        id: selectionState
+        property var selectedImagesById: ({})
+        property var exportQueueById: ({})
+        property var exportPreviewRows: []
+        readonly property int selectedCount: Object.keys(selectedImagesById).length
+        readonly property int exportQueueCount: Object.keys(exportQueueById).length
 
-    function isImageSelected(elementId) {
-        return Object.prototype.hasOwnProperty.call(
-            selectedImagesById, keyForElement(elementId))
-    }
-
-    function isImageQueued(elementId) {
-        return Object.prototype.hasOwnProperty.call(
-            exportQueueById, keyForElement(elementId))
-    }
-
-    function setImageSelected(elementId, imageId, fileName, selected) {
-        const key = keyForElement(elementId)
-        const already = Object.prototype.hasOwnProperty.call(selectedImagesById, key)
-        if (selected === already) {
-            return
+        function keyForElement(elementId) {
+            return String(Number(elementId))
         }
 
-        const next = Object.assign({}, selectedImagesById)
-        if (selected) {
-            next[key] = {
-                elementId: Number(elementId),
-                imageId: Number(imageId),
-                fileName: fileName ? fileName : "(unnamed)"
+        function setImageSelected(elementId, imageId, fileName, selected) {
+            const key = keyForElement(elementId)
+            const already = Object.prototype.hasOwnProperty.call(selectedImagesById, key)
+            if (selected === already) {
+                return
             }
-        } else {
-            delete next[key]
-        }
-        selectedImagesById = next
-    }
 
-    function clearSelectedImages() {
-        selectedImagesById = ({})
-    }
-
-    function addSelectedToExportQueue() {
-        const selected = Object.values(selectedImagesById)
-        if (selected.length === 0) {
-            return
+            const next = Object.assign({}, selectedImagesById)
+            if (selected) {
+                next[key] = {
+                    elementId: Number(elementId),
+                    imageId: Number(imageId),
+                    fileName: fileName ? fileName : "(unnamed)"
+                }
+            } else {
+                delete next[key]
+            }
+            selectedImagesById = next
         }
 
-        const next = Object.assign({}, exportQueueById)
-        for (let i = 0; i < selected.length; ++i) {
-            const item = selected[i]
-            next[keyForElement(item.elementId)] = item
+        function clearSelectedImages() {
+            selectedImagesById = ({})
         }
-        exportQueueById = next
-        clearSelectedImages()
-        refreshExportPreview()
-    }
 
-    function clearExportQueue() {
-        exportQueueById = ({})
-        refreshExportPreview()
-    }
+        function replaceSelectedImages(items) {
+            const next = {}
+            for (let i = 0; i < items.length; ++i) {
+                const item = items[i]
+                const key = keyForElement(item.elementId)
+                next[key] = {
+                    elementId: Number(item.elementId),
+                    imageId: Number(item.imageId),
+                    fileName: item.fileName ? item.fileName : "(unnamed)"
+                }
+            }
+            selectedImagesById = next
+        }
 
-    function exportQueueTargets() {
-        const rows = Object.values(exportQueueById)
-        const targets = []
-        for (let i = 0; i < rows.length; ++i) {
-            targets.push({
-                elementId: rows[i].elementId,
-                imageId: rows[i].imageId
-            })
-        }
-        return targets
-    }
+        function addSelectedToExportQueue() {
+            const selected = Object.values(selectedImagesById)
+            if (selected.length === 0) {
+                return
+            }
 
-    function refreshExportPreview() {
-        const src = Object.values(exportQueueById)
-        src.sort((a, b) => String(a.fileName).localeCompare(String(b.fileName)))
-        const next = []
-        const previewCount = Math.min(12, src.length)
-        for (let i = 0; i < previewCount; ++i) {
-            const item = src[i]
-            next.push({
-                label: "Image #" + item.imageId + "  Sleeve #" + item.elementId + "  " + item.fileName
-            })
+            const next = Object.assign({}, exportQueueById)
+            for (let i = 0; i < selected.length; ++i) {
+                const item = selected[i]
+                next[keyForElement(item.elementId)] = item
+            }
+            exportQueueById = next
+            clearSelectedImages()
+            refreshExportPreview()
         }
-        if (src.length > previewCount) {
-            next.push({ label: "... and " + (src.length - previewCount) + " more" })
+
+        function clearExportQueue() {
+            exportQueueById = ({})
+            refreshExportPreview()
         }
-        exportPreviewRows = next
+
+        function exportQueueTargets() {
+            const rows = Object.values(exportQueueById)
+            const targets = []
+            for (let i = 0; i < rows.length; ++i) {
+                targets.push({
+                    elementId: rows[i].elementId,
+                    imageId: rows[i].imageId
+                })
+            }
+            return targets
+        }
+
+        function refreshExportPreview() {
+            const src = Object.values(exportQueueById)
+            src.sort((a, b) => String(a.fileName).localeCompare(String(b.fileName)))
+            const next = []
+            const previewCount = Math.min(12, src.length)
+            for (let i = 0; i < previewCount; ++i) {
+                const item = src[i]
+                next.push({
+                    label: "Image #" + item.imageId + "  Sleeve #" + item.elementId + "  " + item.fileName
+                })
+            }
+            if (src.length > previewCount) {
+                next.push({ label: "... and " + (src.length - previewCount) + " more" })
+            }
+            exportPreviewRows = next
+        }
     }
 
     FileDialog {
@@ -179,7 +219,7 @@ ApplicationWindow {
                 Layout.fillWidth: true
                 text: "Choose the project package name. The app will create a single .puerhproj file."
                 wrapMode: Text.WordWrap
-                color: "#E3DFDB"
+                color: root.colText
             }
 
             TextField {
@@ -231,9 +271,9 @@ ApplicationWindow {
         selectedCount: root.selectedCount
         exportQueueCount: root.exportQueueCount
         exportPreviewRows: root.exportPreviewRows
-        onAddSelectedToQueueRequested: root.addSelectedToExportQueue()
-        onClearQueueRequested: root.clearExportQueue()
-        onEnsurePreviewRequested: root.refreshExportPreview()
+        onAddSelectedToQueueRequested: selectionState.addSelectedToExportQueue()
+        onClearQueueRequested: selectionState.clearExportQueue()
+        onEnsurePreviewRequested: selectionState.refreshExportPreview()
         onStartExportRequested: function(outDir, format, resizeEnabled, maxSide, quality, bitDepth, pngLevel, tiffComp) {
             albumBackend.startExportWithOptionsForTargets(
                 outDir,
@@ -244,23 +284,23 @@ ApplicationWindow {
                 bitDepth,
                 pngLevel,
                 tiffComp,
-                root.exportQueueTargets())
+                selectionState.exportQueueTargets())
         }
     }
 
     Connections {
         target: albumBackend
         function onProjectChanged() {
-            root.clearSelectedImages()
-            root.clearExportQueue()
+            selectionState.clearSelectedImages()
+            selectionState.clearExportQueue()
             settingsPage = false
         }
         function onFolderSelectionChanged() {
-            root.clearSelectedImages()
+            selectionState.clearSelectedImages()
         }
         function onThumbnailsChanged() {
             if (exportDialog.visible) {
-                refreshExportPreview()
+                selectionState.refreshExportPreview()
             }
         }
         function onExportStateChanged() {
@@ -281,47 +321,62 @@ ApplicationWindow {
 
         Rectangle {
             anchors.fill: parent
-            gradient: Gradient {
-                GradientStop { position: 0.0; color: "#1E1D22" }
-                GradientStop { position: 1.0; color: "#38373C" }
-            }
+            color: root.colBgPanel
         }
 
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: 14
-        spacing: 10
+        anchors.margins: 0
+        spacing: 0
 
         Rectangle {
             Layout.fillWidth: true
-            Layout.preferredHeight: 58
-            radius: 14
-            color: "#38373C"
-            border.color: "#4D4C51"
+            Layout.preferredHeight: 50
+            radius: 0
+            color: root.colBgPanel
+            border.width: 0
 
             RowLayout {
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
-                anchors.leftMargin: 10
-                anchors.rightMargin: 10
-                Label { text: "PuerhLab"; font.pixelSize: 19; font.weight: 700; color: "#E3DFDB" }
-                Button { text: "Library"; checkable: true; checked: !settingsPage; onClicked: settingsPage = false }
-                Button { text: "Settings"; checkable: true; checked: settingsPage; onClicked: settingsPage = true }
-                TextField { Layout.fillWidth: true; placeholderText: "Search photos" }
+                anchors.leftMargin: 16
+                anchors.rightMargin: 16
+                spacing: 4
+                Label { text: "PuerhLab"; font.pixelSize: 19; font.weight: 700; color: root.colAccentPrimary }
+                Item { Layout.preferredWidth: 8 }
                 Button { text: "Load"; enabled: !albumBackend.projectLoading; onClicked: loadProjectDialog.open() }
                 Button { text: "New"; enabled: !albumBackend.projectLoading; onClicked: createProjectFolderDialog.open() }
-                Button { text: "Save"; enabled: albumBackend.serviceReady && !albumBackend.projectLoading; onClicked: albumBackend.saveProject() }
-                Button { text: "Import"; enabled: albumBackend.serviceReady && !albumBackend.projectLoading; onClicked: importDialog.open() }
-                Button { text: "Add Selected (" + root.selectedCount + ")"; enabled: albumBackend.serviceReady && !albumBackend.projectLoading && root.selectedCount > 0; onClicked: root.addSelectedToExportQueue() }
+                Button { text: "Save"; enabled: root.backendInteractive; onClicked: albumBackend.saveProject() }
+                Item { Layout.preferredWidth: 4 }
+                Button {
+                    text: "Import"
+                    enabled: root.backendInteractive
+                    Material.background: root.colAccentSoft
+                    Material.foreground: root.colBgDeep
+                    onClicked: importDialog.open()
+                }
+                Item { Layout.fillWidth: true }
+                Button {
+                    text: "Add Selected (" + root.selectedCount + ")"
+                    enabled: root.backendInteractive && root.selectedCount > 0
+                    Material.background: root.colAccentPrimary
+                    Material.foreground: root.colBgDeep
+                    onClicked: selectionState.addSelectedToExportQueue()
+                }
                 Button {
                     text: "Export Queue (" + root.exportQueueCount + ")"
-                    enabled: albumBackend.serviceReady && !albumBackend.projectLoading && (albumBackend.shownCount > 0 || root.exportQueueCount > 0)
+                    enabled: root.backendInteractive && (albumBackend.shownCount > 0 || root.exportQueueCount > 0)
+                    Material.background: root.colAccentSecondary
+                    Material.foreground: root.colBgDeep
                     onClicked: {
-                        refreshExportPreview()
+                        selectionState.refreshExportPreview()
                         exportDialog.open()
                     }
                 }
+                Item { Layout.preferredWidth: 8 }
+                Button { text: "Library"; checkable: true; checked: !settingsPage; onClicked: settingsPage = false }
+                Button { text: "Settings"; checkable: true; checked: settingsPage; onClicked: settingsPage = true }
                 Button { text: "Inspector"; checkable: true; checked: inspectorVisible; onToggled: inspectorVisible = checked }
             }
         }
@@ -329,109 +384,280 @@ ApplicationWindow {
         Rectangle {
             visible: albumBackend.serviceMessage.length > 0
             Layout.fillWidth: true
-            Layout.preferredHeight: 34
-            radius: 10
-            color: albumBackend.projectLoading ? "#1E1D22" : (albumBackend.serviceReady ? "#38373C" : "#1E1D22")
-            border.color: albumBackend.projectLoading ? "#92BCE1" : (albumBackend.serviceReady ? "#A1AC9B" : "#7B7D7C")
+            Layout.preferredHeight: 28
+            radius: 0
+            color: root.colBgPanel
+            border.width: 0
+
+            Rectangle {
+                anchors.bottom: parent.bottom
+                anchors.left: parent.left
+                anchors.right: parent.right
+                height: 2
+                color: albumBackend.projectLoading ? root.colAccentPrimary : "transparent"
+            }
             Label {
                 anchors.fill: parent
-                anchors.margins: 8
+                anchors.leftMargin: 16
+                anchors.rightMargin: 16
                 text: albumBackend.serviceMessage
                 elide: Text.ElideMiddle
-                color: albumBackend.projectLoading ? "#92BCE1" : (albumBackend.serviceReady ? "#E3DFDB" : "#7B7D7C")
+                color: albumBackend.projectLoading ? root.colAccentPrimary : (albumBackend.serviceReady ? root.colTextMuted : root.colTextMuted)
                 verticalAlignment: Text.AlignVCenter
-                font.pixelSize: 12
+                font.pixelSize: 11
             }
         }
 
         RowLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            spacing: 10
+            spacing: 0
 
             Rectangle {
-                Layout.preferredWidth: 230
+                Layout.preferredWidth: 250
                 Layout.fillHeight: true
-                radius: 14
-                color: "#1E1D22"
-                border.color: "#4D4C51"
+                radius: 0
+                color: root.colBgPanel
+                border.width: 0
 
                 ColumnLayout {
                     anchors.fill: parent
-                    anchors.margins: 10
-                    Label { text: "Library"; font.pixelSize: 17; font.weight: 700; color: "#E3DFDB" }
-                    Label { text: albumBackend.currentFolderPath; color: "#7B7D7C"; font.pixelSize: 11; elide: Text.ElideMiddle; Layout.fillWidth: true }
+                    anchors.margins: 12
+                    spacing: 10
 
-                    TextField {
-                        id: folderSearchField
-                        Layout.fillWidth: true
-                        placeholderText: "Search folders"
-                    }
-
-                    TextField {
-                        id: createFolderField
-                        Layout.fillWidth: true
-                        placeholderText: "New folder name"
-                        enabled: albumBackend.serviceReady && !albumBackend.projectLoading
-                        onAccepted: {
-                            if (text.trim().length === 0) {
-                                return
-                            }
-                            albumBackend.createFolder(text)
-                            text = ""
-                        }
-                    }
-
+                    // ── Header ──
                     RowLayout {
                         Layout.fillWidth: true
-                        Button {
-                            Layout.fillWidth: true
-                            text: "Add Folder"
-                            enabled: albumBackend.serviceReady
-                                     && !albumBackend.projectLoading
-                                     && createFolderField.text.trim().length > 0
-                            onClicked: {
-                                albumBackend.createFolder(createFolderField.text)
-                                createFolderField.text = ""
+                        spacing: 6
+                        Label {
+                            text: "\u{1F4C1}"
+                            font.pixelSize: 18
+                        }
+                        Label {
+                            text: "Library"
+                            font.pixelSize: 17
+                            font.weight: 700
+                            color: root.colText
+                        }
+                        Item { Layout.fillWidth: true }
+                        Label {
+                            text: folderList.count + " folders"
+                            color: root.colAccentSoft
+                            font.pixelSize: 11
+                        }
+                    }
+
+                    Label {
+                        text: albumBackend.currentFolderPath
+                        color: root.colTextMuted
+                        font.pixelSize: 11
+                        elide: Text.ElideMiddle
+                        Layout.fillWidth: true
+                    }
+
+                    // ── Search ──
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 36
+                        radius: 6
+                        color: root.colBgBase
+                        border.width: 0
+                        Behavior on color { ColorAnimation { duration: 150 } }
+
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.leftMargin: 8
+                            anchors.rightMargin: 8
+                            spacing: 6
+                            Label { text: "\u{1F50D}"; font.pixelSize: 13; color: root.colTextMuted }
+                            TextField {
+                                id: folderSearchField
+                                Layout.fillWidth: true
+                                Layout.fillHeight: true
+                                placeholderText: "Search folders..."
+                                background: Item {}
+                                color: root.colText
+                                font.pixelSize: 12
                             }
                         }
-                        Button {
-                            Layout.fillWidth: true
-                            text: "Delete"
-                            enabled: albumBackend.serviceReady
-                                     && !albumBackend.projectLoading
-                                     && albumBackend.currentFolderId !== 0
+                    }
+
+                    // ── New-folder row ──
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 36
+                        radius: 6
+                        color: root.colBgBase
+                        border.width: 0
+                        Behavior on color { ColorAnimation { duration: 150 } }
+
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.leftMargin: 8
+                            anchors.rightMargin: 4
+                            spacing: 4
+                            Label { text: "+"; font.pixelSize: 16; font.weight: 700; color: root.colAccentSecondary }
+                            TextField {
+                                id: createFolderField
+                                Layout.fillWidth: true
+                                Layout.fillHeight: true
+                                placeholderText: "New folder..."
+                                background: Item {}
+                                color: root.colText
+                                font.pixelSize: 12
+                                enabled: root.backendInteractive
+                                onAccepted: {
+                                    if (text.trim().length === 0) return
+                                    albumBackend.createFolder(text)
+                                    text = ""
+                                }
+                            }
+                            Rectangle {
+                                width: 28; height: 28; radius: 6
+                                color: addBtn.hovered ? root.colBorder : "transparent"
+                                visible: root.backendInteractive && createFolderField.text.trim().length > 0
+                                Label { anchors.centerIn: parent; text: "\u2713"; color: root.colAccentSecondary; font.pixelSize: 14; font.weight: 700 }
+                                MouseArea {
+                                    id: addBtn
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    property bool hovered: false
+                                    onEntered: hovered = true
+                                    onExited: hovered = false
+                                    onClicked: {
+                                        albumBackend.createFolder(createFolderField.text)
+                                        createFolderField.text = ""
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // ── Delete-folder button ──
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 30
+                        radius: 6
+                        color: delBtn.hovered ? root.colDangerTint : "transparent"
+                        border.width: 0
+                        visible: root.backendInteractive && albumBackend.currentFolderId !== 0
+                        Behavior on color { ColorAnimation { duration: 120 } }
+                        Behavior on border.color { ColorAnimation { duration: 120 } }
+
+                        RowLayout {
+                            anchors.centerIn: parent
+                            spacing: 6
+                            Label { text: "\u{1F5D1}"; font.pixelSize: 12 }
+                            Label { text: "Delete Folder"; color: root.colDanger; font.pixelSize: 12; font.weight: 600 }
+                        }
+                        MouseArea {
+                            id: delBtn
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            property bool hovered: false
+                            onEntered: hovered = true
+                            onExited: hovered = false
                             onClicked: albumBackend.deleteFolder(albumBackend.currentFolderId)
                         }
                     }
 
+                    // ── Separator ──
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 1
+                        color: "#363636"
+                        opacity: 1.0
+                    }
+
+                    // ── Folder card list ──
                     ListView {
                         id: folderList
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         clip: true
-                        spacing: 4
+                        spacing: 6
                         model: albumBackend.folders
+
                         delegate: Item {
                             required property int folderId
                             required property string name
                             required property int depth
                             required property string path
                             width: ListView.view.width
-                            height: folderButton.visible ? 32 : 0
-                            visible: folderSearchField.text.trim().length === 0
-                                     || name.toLowerCase().indexOf(folderSearchField.text.trim().toLowerCase()) >= 0
+                            height: cardVisible ? cardHeight : 0
+                            visible: cardVisible
+                            Behavior on height { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
 
-                            Button {
-                                id: folderButton
-                                anchors.fill: parent
-                                text: name
-                                checkable: true
-                                checked: folderId === albumBackend.currentFolderId
-                                leftPadding: 10 + depth * 14
-                                onClicked: {
-                                    settingsPage = false
-                                    albumBackend.selectFolder(folderId)
+                            readonly property bool cardVisible: folderSearchField.text.trim().length === 0
+                                || name.toLowerCase().indexOf(folderSearchField.text.trim().toLowerCase()) >= 0
+                            readonly property real cardHeight: 44 + depth * 0
+                            readonly property bool isSelected: folderId === albumBackend.currentFolderId
+
+                            Rectangle {
+                                id: folderCard
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                anchors.leftMargin: depth * 12
+                                height: parent.cardHeight
+                                radius: 6
+                                color: {
+                                    if (isSelected) return root.colSelectedTint
+                                    if (cardMouse.containsMouse) return root.colHover
+                                    return "transparent"
+                                }
+                                border.width: 0
+                                Behavior on color { ColorAnimation { duration: 140 } }
+
+                                RowLayout {
+                                    anchors.fill: parent
+                                    anchors.leftMargin: 10
+                                    anchors.rightMargin: 10
+                                    spacing: 8
+
+                                    Label {
+                                        text: isSelected ? "\u{1F4C2}" : "\u{1F4C1}"
+                                        font.pixelSize: 16
+                                    }
+
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 1
+                                        Label {
+                                            text: name
+                                            Layout.fillWidth: true
+                                            elide: Text.ElideRight
+                                            color: isSelected ? root.colText : root.colText
+                                            font.pixelSize: 13
+                                            font.weight: isSelected ? 600 : 400
+                                        }
+                                        Label {
+                                            visible: depth > 0
+                                            text: path
+                                            Layout.fillWidth: true
+                                            elide: Text.ElideMiddle
+                                            color: root.colTextMuted
+                                            font.pixelSize: 10
+                                        }
+                                    }
+
+                                    Rectangle {
+                                        visible: isSelected
+                                        width: 6; height: 6; radius: 3
+                                        color: root.colAccentSecondary
+                                    }
+                                }
+
+                                MouseArea {
+                                    id: cardMouse
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        settingsPage = false
+                                        albumBackend.selectFolder(folderId)
+                                    }
                                 }
                             }
                         }
@@ -442,25 +668,34 @@ ApplicationWindow {
             ColumnLayout {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                spacing: 10
+                spacing: 0
 
                 Rectangle {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 52
-                    radius: 12
-                    color: "#38373C"
-                    border.color: "#4D4C51"
+                    Layout.preferredHeight: 40
+                    radius: 0
+                    color: root.colBgDeep
+                    border.width: 0
                     RowLayout {
                         anchors.left: parent.left
                         anchors.right: parent.right
                         anchors.verticalCenter: parent.verticalCenter
-                        anchors.leftMargin: 9
-                        anchors.rightMargin: 9
-                        Label { text: "Browser"; color: "#E3DFDB"; font.pixelSize: 17; font.weight: 700 }
-                        Label { text: "Responsive thumbnail grid"; color: "#7B7D7C"; font.pixelSize: 12 }
+                        anchors.leftMargin: 14
+                        anchors.rightMargin: 14
+                        Label { text: "Browser"; color: root.colTextMuted; font.pixelSize: 13; font.weight: 600 }
+                        Label { text: "Responsive thumbnail grid"; color: root.colTextMuted; font.pixelSize: 11 }
                         Item { Layout.fillWidth: true }
-                        Button { text: "Grid"; checkable: true; checked: gridMode; onClicked: gridMode = true }
-                        Button { text: "List"; checkable: true; checked: !gridMode; onClicked: gridMode = false }
+                        Button { text: "Grid"; checkable: true; checked: gridMode; onClicked: gridMode = true; flat: true }
+                        Button { text: "List"; checkable: true; checked: !gridMode; onClicked: gridMode = false; flat: true }
+                        Item { Layout.preferredWidth: 12 }
+                        Button {
+                            text: root.selectionMode ? "\u2611 Multi-Select" : "Multi-Select"
+                            checkable: true
+                            checked: root.selectionMode
+                            onToggled: root.selectionMode = checked
+                            flat: true
+                            Material.foreground: root.selectionMode ? root.colAccentPrimary : root.colTextMuted
+                        }
                     }
                 }
 
@@ -470,18 +705,18 @@ ApplicationWindow {
                     currentIndex: settingsPage ? 1 : 0
 
                     Rectangle {
-                        radius: 14
-                        color: "#1E1D22"
-                        border.color: "#4D4C51"
+                        radius: 0
+                        color: root.colBgDeep
+                        border.width: 0
 
                         ColumnLayout {
                             anchors.fill: parent
-                            anchors.margins: 10
+                            anchors.margins: 14
                             RowLayout {
                                 Layout.fillWidth: true
-                                Label { text: "Album"; color: "#E3DFDB"; font.pixelSize: 16; font.weight: 700 }
+                                Label { text: "Album"; color: root.colTextMuted; font.pixelSize: 14; font.weight: 600 }
                                 Item { Layout.fillWidth: true }
-                                Label { text: albumBackend.filterInfo; color: "#7B7D7C"; font.pixelSize: 12 }
+                                Label { text: albumBackend.filterInfo; color: root.colTextMuted; font.pixelSize: 11 }
                             }
 
                             Loader {
@@ -497,7 +732,7 @@ ApplicationWindow {
                                 spacing: 8
                                 Label {
                                     text: albumBackend.serviceReady ? "No Photos Yet" : "Open or Create a Project"
-                                    color: "#E3DFDB"
+                                    color: root.colText
                                     font.pixelSize: 22
                                     font.weight: 700
                                 }
@@ -505,7 +740,7 @@ ApplicationWindow {
                                     text: albumBackend.serviceReady
                                           ? "Import your first folder to start thumbnail generation and RAW adjustments."
                                           : "Use Load or New in the header to choose the database/metadata JSON files."
-                                    color: "#7B7D7C"
+                                    color: root.colTextMuted
                                     font.pixelSize: 12
                                 }
                                 Button {
@@ -523,15 +758,15 @@ ApplicationWindow {
                     }
 
                     Rectangle {
-                        radius: 14
-                        color: "#1E1D22"
-                        border.color: "#4D4C51"
+                        radius: 0
+                        color: root.colBgDeep
+                        border.width: 0
                         ColumnLayout {
                             anchors.fill: parent
                             anchors.margins: 12
-                            Label { text: "Settings"; color: "#E3DFDB"; font.pixelSize: 20; font.weight: 700 }
-                            Label { text: "Window #1E1D22  Text #E3DFDB  Accent #92BCE1"; color: "#7B7D7C"; font.pixelSize: 12 }
-                            Label { text: "Qt Quick renderer is hardware accelerated."; color: "#7B7D7C"; font.pixelSize: 12 }
+                            Label { text: "Settings"; color: root.colText; font.pixelSize: 20; font.weight: 700 }
+                            Label { text: "Window #1A1A1A  Text #E6E6E6  Accent #FCC704"; color: root.colTextMuted; font.pixelSize: 12 }
+                            Label { text: "Qt Quick renderer is hardware accelerated."; color: root.colTextMuted; font.pixelSize: 12 }
                             Item { Layout.fillHeight: true }
                         }
                     }
@@ -542,9 +777,9 @@ ApplicationWindow {
                 Layout.fillHeight: true
                 Layout.preferredWidth: inspectorVisible && !settingsPage ? 350 : 0
                 Behavior on Layout.preferredWidth { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
-                radius: 14
-                color: "#1E1D22"
-                border.color: "#4D4C51"
+                radius: 0
+                color: root.colBgPanel
+                border.width: 0
                 clip: true
                 visible: Layout.preferredWidth > 10
 
@@ -557,16 +792,22 @@ ApplicationWindow {
 
         Rectangle {
             Layout.fillWidth: true
-            Layout.preferredHeight: 58
-            radius: 12
-            color: "#38373C"
-            border.color: "#4D4C51"
+            Layout.preferredHeight: 40
+            radius: 0
+            color: root.colBgPanel
+            border.width: 0
             RowLayout {
                 anchors.fill: parent
                 anchors.margins: 10
-                Label { Layout.fillWidth: true; text: albumBackend.taskStatus; color: "#7B7D7C" }
+                Label { Layout.fillWidth: true; text: albumBackend.taskStatus; color: root.colTextMuted }
                 ProgressBar { Layout.preferredWidth: 240; value: albumBackend.taskProgress / 100.0 }
-                Button { visible: albumBackend.taskCancelVisible; text: "Cancel"; onClicked: albumBackend.cancelImport() }
+                Button {
+                    visible: albumBackend.taskCancelVisible
+                    text: "Cancel"
+                    Material.background: root.colDanger
+                    Material.foreground: root.colText
+                    onClicked: albumBackend.cancelImport()
+                }
             }
         }
     }
@@ -589,7 +830,7 @@ ApplicationWindow {
 
         Rectangle {
             anchors.fill: parent
-            color: "#C01E1D22"
+            color: root.colOverlay
         }
 
         MouseArea { anchors.fill: parent; hoverEnabled: true }
@@ -599,8 +840,8 @@ ApplicationWindow {
             width: Math.min(parent.width - 36, 700)
             height: dialogContent.implicitHeight + 36
             radius: 14
-            color: "#1E1D22"
-            border.color: "#4D4C51"
+            color: root.colBgDeep
+            border.width: 0
 
             ColumnLayout {
                 id: dialogContent
@@ -614,20 +855,20 @@ ApplicationWindow {
                     text: "Open Project"
                     font.pixelSize: 24
                     font.weight: 700
-                    color: "#E3DFDB"
+                    color: root.colText
                 }
                 Label {
                     Layout.fillWidth: true
                     wrapMode: Text.WordWrap
                     text: "Every boot asks for a project. Load a packed .puerhproj file or a metadata JSON/database pair, or create a new project package."
-                    color: "#7B7D7C"
+                    color: root.colTextMuted
                     font.pixelSize: 13
                 }
                 Label {
                     Layout.fillWidth: true
                     wrapMode: Text.WordWrap
                     text: albumBackend.serviceMessage
-                    color: "#E3DFDB"
+                    color: root.colText
                     font.pixelSize: 12
                 }
 
@@ -638,11 +879,15 @@ ApplicationWindow {
                     Button {
                         Layout.fillWidth: true
                         text: "Load Existing Project"
+                        Material.background: root.colAccentPrimary
+                        Material.foreground: root.colBgDeep
                         onClicked: loadProjectDialog.open()
                     }
                     Button {
                         Layout.fillWidth: true
                         text: "Create New Project"
+                        Material.background: root.colAccentPrimary
+                        Material.foreground: root.colBgDeep
                         onClicked: createProjectFolderDialog.open()
                     }
                 }
@@ -652,6 +897,8 @@ ApplicationWindow {
                     Item { Layout.fillWidth: true }
                     Button {
                         text: "Exit"
+                        Material.background: root.colDanger
+                        Material.foreground: root.colText
                         onClicked: Qt.quit()
                     }
                 }
@@ -675,7 +922,7 @@ ApplicationWindow {
 
         Rectangle {
             anchors.fill: parent
-            color: "#C01E1D22"
+            color: root.colOverlay
         }
 
         MouseArea { anchors.fill: parent; hoverEnabled: true }
@@ -685,8 +932,8 @@ ApplicationWindow {
             width: Math.min(parent.width - 36, 520)
             height: loadingContent.implicitHeight + 30
             radius: 14
-            color: "#1E1D22"
-            border.color: "#4D4C51"
+            color: root.colBgDeep
+            border.width: 0
 
             ColumnLayout {
                 id: loadingContent
@@ -700,7 +947,7 @@ ApplicationWindow {
                     text: "Loading Project"
                     font.pixelSize: 21
                     font.weight: 700
-                    color: "#E3DFDB"
+                    color: root.colText
                 }
                 BusyIndicator {
                     running: albumBackend.projectLoading
@@ -712,7 +959,7 @@ ApplicationWindow {
                     text: albumBackend.projectLoadingMessage.length > 0
                           ? albumBackend.projectLoadingMessage
                           : "Preparing database and metadata..."
-                    color: "#7B7D7C"
+                    color: root.colTextMuted
                     font.pixelSize: 12
                     horizontalAlignment: Text.AlignHCenter
                 }
@@ -726,8 +973,12 @@ ApplicationWindow {
         ThumbnailGridView {
             selectedImagesById: root.selectedImagesById
             exportQueueById: root.exportQueueById
+            selectionMode: root.selectionMode
             onImageSelectionChanged: function(elementId, imageId, fileName, selected) {
-                root.setImageSelected(elementId, imageId, fileName, selected)
+                selectionState.setImageSelected(elementId, imageId, fileName, selected)
+            }
+            onReplaceSelection: function(items) {
+                selectionState.replaceSelectedImages(items)
             }
         }
     }
@@ -737,9 +988,14 @@ ApplicationWindow {
         ThumbnailListView {
             selectedImagesById: root.selectedImagesById
             exportQueueById: root.exportQueueById
+            selectionMode: root.selectionMode
             onImageSelectionChanged: function(elementId, imageId, fileName, selected) {
-                root.setImageSelected(elementId, imageId, fileName, selected)
+                selectionState.setImageSelected(elementId, imageId, fileName, selected)
+            }
+            onReplaceSelection: function(items) {
+                selectionState.replaceSelectedImages(items)
             }
         }
     }
 }
+
