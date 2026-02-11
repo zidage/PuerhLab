@@ -11,7 +11,7 @@ ApplicationWindow {
     height: 900
     visible: true
     visibility: Window.Maximized
-    title: "pu-erh_lab - Album + Editor (QML POC)"
+    title: "Pu-erh Lab"
 
     // Theme palette — borderless, luminance-separated zones
     readonly property color toneGold: "#FCC704"
@@ -20,7 +20,7 @@ ApplicationWindow {
     readonly property color toneGraphite: "#1A1A1A"
     readonly property color toneMist: "#E6E6E6"
     readonly property color toneAmber: "#FCC704"
-    readonly property color toneRose: "#FCC704"
+    readonly property color toneAccentSecondary: "#ffefd5"
 
     readonly property color colBgDeep: "#141414"        // center content — darkest "stage"
     readonly property color colBgBase: "#1F1F1F"        // sunken inputs
@@ -337,15 +337,90 @@ ApplicationWindow {
                 anchors.leftMargin: 16
                 anchors.rightMargin: 16
                 spacing: 4
-                Label { text: "PuerhLab"; font.pixelSize: 19; font.weight: 700; color: root.colAccentPrimary }
+                Label { text: "Pu-erh Lab"; font.pixelSize: 19; font.weight: 700; color: root.colAccentPrimary }
                 Item { Layout.preferredWidth: 8 }
-                Button { text: "Load"; enabled: !albumBackend.projectLoading; onClicked: loadProjectDialog.open() }
-                Button { text: "New"; enabled: !albumBackend.projectLoading; onClicked: createProjectFolderDialog.open() }
-                Button { text: "Save"; enabled: root.backendInteractive; onClicked: albumBackend.saveProject() }
+
+                // ── Load / New / Save pill ──
+                Rectangle {
+                    id: projectPill
+                    Layout.preferredHeight: 36
+                    Layout.preferredWidth: pillRow.implicitWidth + 8
+                    radius: 6
+                    color: root.colBgBase
+                    border.width: 0
+
+                    Row {
+                        id: pillRow
+                        anchors.centerIn: parent
+                        spacing: 0
+
+                        Repeater {
+                            model: [
+                                { label: "Load", act: "load",  en: !albumBackend.projectLoading },
+                                { label: "New",  act: "new",   en: !albumBackend.projectLoading },
+                                { label: "Save", act: "save",  en: root.backendInteractive }
+                            ]
+                            delegate: Item {
+                                width: pillSegment.width + (index < 2 ? pillDivider.width : 0)
+                                height: projectPill.height
+
+                                Rectangle {
+                                    id: pillSegment
+                                    width: pillLabel.implicitWidth + 28
+                                    height: parent.height - 4
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    radius: 4
+                                    color: pillMouse.containsMouse && modelData.en
+                                           ? root.colHover : "transparent"
+                                    Behavior on color { ColorAnimation { duration: 120 } }
+
+                                    Label {
+                                        id: pillLabel
+                                        anchors.centerIn: parent
+                                        text: modelData.label
+                                        font.pixelSize: 12
+                                        font.weight: 500
+                                        color: modelData.en ? root.colText : root.colTextMuted
+                                        opacity: modelData.en ? 1.0 : 0.45
+                                    }
+
+                                    MouseArea {
+                                        id: pillMouse
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: modelData.en ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                        onClicked: {
+                                            if (!modelData.en) return
+                                            if (modelData.act === "load")
+                                                loadProjectDialog.open()
+                                            else if (modelData.act === "new")
+                                                createProjectFolderDialog.open()
+                                            else if (modelData.act === "save")
+                                                albumBackend.saveProject()
+                                        }
+                                    }
+                                }
+
+                                // thin divider between segments
+                                Rectangle {
+                                    id: pillDivider
+                                    visible: index < 2
+                                    anchors.right: parent.right
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    width: 1
+                                    height: parent.height * 0.48
+                                    color: "#444444"
+                                }
+                            }
+                        }
+                    }
+                }
+
                 Item { Layout.preferredWidth: 4 }
                 Button {
                     text: "Import"
                     enabled: root.backendInteractive
+                    height: 36
                     Material.background: root.colAccentSoft
                     Material.foreground: root.colBgDeep
                     onClicked: importDialog.open()
@@ -834,7 +909,7 @@ ApplicationWindow {
             width: Math.min(parent.width - 36, 700)
             height: dialogContent.implicitHeight + 36
             radius: 14
-            color: root.colBgDeep
+            color: root.colBgPanel
             border.width: 0
 
             ColumnLayout {

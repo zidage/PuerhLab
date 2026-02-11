@@ -41,8 +41,8 @@ ScrollView {
                     Label {
                         text: "Filters"
                         color: "#E3DFDB"
-                        font.pixelSize: 15
-                        font.weight: 600
+                        font.pixelSize: 17
+                        font.weight: 700
                     }
                     Item {
                         Layout.fillWidth: true
@@ -443,66 +443,6 @@ ScrollView {
             Layout.fillWidth: true
             Layout.preferredHeight: 1
             color: "#363636"
-        }
-
-        Rectangle {
-            Layout.fillWidth: true
-            implicitHeight: editorCol.implicitHeight + 20
-            radius: 8
-            color: "#242424"
-            border.width: 0
-            ColumnLayout {
-                id: editorCol
-                anchors.fill: parent
-                anchors.margins: 4
-                spacing: 8
-
-                RowLayout {
-                    Layout.fillWidth: true
-                    Label {
-                        text: "Editor"
-                        color: "#E3DFDB"
-                        font.pixelSize: 15
-                        font.weight: 600
-                    }
-                    Item {
-                        Layout.fillWidth: true
-                    }
-                }
-
-                Label {
-                    Layout.fillWidth: true
-                    text: "The full OpenGL editor opens in a separate dialog window."
-                    color: "#666666"
-                    font.pixelSize: 11
-                    wrapMode: Text.WordWrap
-                }
-
-                Label {
-                    Layout.fillWidth: true
-                    text: albumBackend.editorStatus
-                    color: "#E3DFDB"
-                    font.pixelSize: 12
-                    wrapMode: Text.WordWrap
-                }
-
-                Label {
-                    visible: albumBackend.editorTitle.length > 0
-                    Layout.fillWidth: true
-                    text: albumBackend.editorTitle
-                    color: "#E3DFDB"
-                    font.pixelSize: 12
-                    elide: Text.ElideRight
-                }
-
-                Label {
-                    Layout.fillWidth: true
-                    text: albumBackend.editorActive ? "Editor window is open. Close that window to save edits." : "Click Edit on a thumbnail to open the full editor dialog."
-                    color: "#666666"
-                    font.pixelSize: 11
-                    wrapMode: Text.WordWrap
-                }
-            }
         }
     }
 }

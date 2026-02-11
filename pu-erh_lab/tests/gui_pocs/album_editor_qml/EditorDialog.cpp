@@ -1076,35 +1076,13 @@ class EditorDialog final : public QDialog {
     viewer_grid->setRowStretch(0, 1);
     viewer_grid->setColumnStretch(0, 1);
 
-    controls_scroll_ = new QScrollArea(this);
-    controls_scroll_->setFrameShape(QFrame::NoFrame);
-    controls_scroll_->setWidgetResizable(true);
-    controls_scroll_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    controls_scroll_->setMinimumWidth(380);
-    controls_scroll_->setMaximumWidth(540);
-    controls_scroll_->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
-    controls_scroll_->setStyleSheet(
-        "QScrollArea { background: transparent; border: none; }"
-        "QScrollBar:vertical {"
-        "  background: #121212;"
-        "  width: 10px;"
-        "  margin: 2px;"
-        "  border-radius: 5px;"
-        "}"
-        "QScrollBar::handle:vertical {"
-        "  background: #FCC704;"
-        "  border-radius: 5px;"
-        "}"
-        "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0px; }"
-        "QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }");
-
-    controls_             = new QWidget(controls_scroll_);
-    auto* controls_layout = new QVBoxLayout(controls_);
-    controls_layout->setContentsMargins(16, 16, 16, 16);
-    controls_layout->setSpacing(12);
-    controls_->setMinimumWidth(380);
-    controls_->setObjectName("EditorControlsPanel");
-    controls_->setStyleSheet(
+    auto* controls_panel = new QWidget(this);
+    controls_panel->setMinimumWidth(380);
+    controls_panel->setMaximumWidth(540);
+    controls_panel->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
+    controls_panel->setObjectName("EditorControlsPanel");
+    controls_panel->setAttribute(Qt::WA_StyledBackground, true);
+    controls_panel->setStyleSheet(
         "#EditorControlsPanel {"
         "  background: #1A1A1A;"
         "  border: none;"
@@ -1124,13 +1102,41 @@ class EditorDialog final : public QDialog {
         "  color: #A3A3A3;"
         "  font-size: 11px;"
         "}");
+    auto* controls_panel_layout = new QVBoxLayout(controls_panel);
+    controls_panel_layout->setContentsMargins(16, 16, 16, 16);
+    controls_panel_layout->setSpacing(12);
+
+    controls_scroll_ = new QScrollArea(controls_panel);
+    controls_scroll_->setFrameShape(QFrame::NoFrame);
+    controls_scroll_->setWidgetResizable(true);
+    controls_scroll_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    controls_scroll_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    controls_scroll_->setStyleSheet(
+        "QScrollArea { background: transparent; border: none; }"
+        "QScrollBar:vertical {"
+        "  background: #121212;"
+        "  width: 10px;"
+        "  margin: 2px;"
+        "  border-radius: 5px;"
+        "}"
+        "QScrollBar::handle:vertical {"
+        "  background: #FCC704;"
+        "  border-radius: 5px;"
+        "}"
+        "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0px; }"
+        "QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }");
+
+    controls_             = new QWidget(controls_scroll_);
+    auto* controls_layout = new QVBoxLayout(controls_);
+    controls_layout->setContentsMargins(0, 0, 0, 0);
+    controls_layout->setSpacing(12);
     controls_scroll_->setWidget(controls_);
 
     root->addWidget(viewer_container_, 1);
-    root->addWidget(controls_scroll_, 0);
+    root->addWidget(controls_panel, 0);
 
     {
-      auto* histogram_frame = new QFrame(controls_);
+      auto* histogram_frame = new QFrame(controls_panel);
       histogram_frame->setObjectName("EditorSection");
       auto* histogram_layout = new QVBoxLayout(histogram_frame);
       histogram_layout->setContentsMargins(12, 10, 12, 10);
@@ -1145,7 +1151,7 @@ class EditorDialog final : public QDialog {
       histogram_layout->addWidget(histogram_title, 0);
       histogram_layout->addWidget(histogram_widget_, 0);
       histogram_layout->addWidget(histogram_ruler_widget_, 0);
-      controls_layout->addWidget(histogram_frame, 0);
+      controls_panel_layout->addWidget(histogram_frame, 0);
 
       if (viewer_ && histogram_widget_) {
         viewer_->SetHistogramUpdateIntervalMs(40);
@@ -1154,6 +1160,8 @@ class EditorDialog final : public QDialog {
                          QOverload<>::of(&QWidget::update), Qt::QueuedConnection);
       }
     }
+
+    controls_panel_layout->addWidget(controls_scroll_, 1);
 
     auto* controls_header = new QLabel("Adjustments", controls_);
     controls_header->setObjectName("SectionTitle");
