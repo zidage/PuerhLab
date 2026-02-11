@@ -6,8 +6,8 @@
 
 > ⚠️ **Note:** This project is currently in the **very early stages of development (Pre-Alpha)**. Features are subject to change, and the codebase is under active construction.
 
-## 📷 Early Demo Screenshot
-
+## 📷 Early Demo
+**Video Demo**: [BiliBili](https://www.bilibili.com/video/BV1bPcxzzEeM)
 <table>
 	<colgroup>
 		<col style="width: 80%" />
@@ -88,6 +88,7 @@ cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE=vcpkg/scripts/buildsystems/vcpkg.cmak
 # Build
 cmake --build build --config Release
 ```
+
 
 
 
