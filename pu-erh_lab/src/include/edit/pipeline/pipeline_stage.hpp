@@ -168,6 +168,13 @@ class PipelineStage {
   bool                                                         gpu_setup_done_ = false;
 
  public:
+  enum class RuntimeResetMode {
+    InvalidateCache,
+    ClearIntermediateBuffers,
+    ReleaseGpuResources,
+    ClearIntermediateBuffersAndGpu,
+  };
+
   PipelineStageName stage_;
   PipelineStage()                           = delete;
   PipelineStage(const PipelineStage& other) = delete;
@@ -192,9 +199,9 @@ class PipelineStage {
 
   void SetForceCPUOutput(bool force) { force_cpu_output_ = force; }
 
-  // Releases persistent GPU allocations owned by this stage (if any).
+  // Unified runtime resource reset entrypoint.
   // Does not modify operator configuration.
-  void ReleaseGPUResources();
+  void ResetRuntimeResources(RuntimeResetMode mode);
 
   /**
    * @brief Set the parameters for an operator with the given type in this stage.
@@ -253,7 +260,7 @@ class PipelineStage {
   void SetEnableCache(bool enable) {
     if (enable_cache_ == enable) return;
     enable_cache_ = enable;
-    ResetCache();
+    ResetRuntimeResources(RuntimeResetMode::InvalidateCache);
   }
 
   /**
@@ -261,18 +268,6 @@ class PipelineStage {
    *
    */
   void ResetAll();
-
-  /**
-   * @brief Reset the cache of this stage
-   *
-   */
-  void ResetCache();
-
-  /**
-   * @brief Clear intermediate buffers (input_img_ and output_cache_) without resetting operators.
-   *        Use this after pipeline execution to release memory while keeping the stage configuration.
-   */
-  void ClearIntermediateBuffers();
 
   /**
    * @brief Export the parameters of this stage and its operators to JSON (serialize)

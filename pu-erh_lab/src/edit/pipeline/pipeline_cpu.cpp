@@ -50,7 +50,7 @@ CPUPipelineExecutor::CPUPipelineExecutor()
 
 void CPUPipelineExecutor::ResetExecutionStagesCache() {
   for (auto& stage : exec_stages_) {
-    stage->ResetCache();
+    stage->ResetRuntimeResources(PipelineStage::RuntimeResetMode::InvalidateCache);
   }
 }
 
@@ -191,14 +191,12 @@ void CPUPipelineExecutor::ResetExecutionStages() {
   for (auto& stage : stages_) {
     stage.ResetDependents();
     stage.ResetNeighbors();
-    stage.ClearIntermediateBuffers();
-    stage.ReleaseGPUResources();
-    stage.ResetCache();
+    stage.ResetRuntimeResources(PipelineStage::RuntimeResetMode::ClearIntermediateBuffersAndGpu);
   }
 
   if (merged_stages_) {
-    merged_stages_->ClearIntermediateBuffers();
-    merged_stages_->ReleaseGPUResources();
+    merged_stages_->ResetRuntimeResources(
+        PipelineStage::RuntimeResetMode::ClearIntermediateBuffersAndGpu);
   }
 
   exec_stages_.clear();
@@ -344,22 +342,22 @@ void CPUPipelineExecutor::InitDefaultPipeline() {
 
 void CPUPipelineExecutor::ClearAllIntermediateBuffers() {
   for (auto& stage : exec_stages_) {
-    stage->ClearIntermediateBuffers();
+    stage->ResetRuntimeResources(PipelineStage::RuntimeResetMode::ClearIntermediateBuffers);
   }
   ReleaseAllGPUResources();
 
   if (merged_stages_) {
-    merged_stages_->ClearIntermediateBuffers();
+    merged_stages_->ResetRuntimeResources(PipelineStage::RuntimeResetMode::ClearIntermediateBuffers);
   }
 }
 
 void CPUPipelineExecutor::ReleaseAllGPUResources() {
   for (auto& stage : exec_stages_) {
-    stage->ReleaseGPUResources();
+    stage->ResetRuntimeResources(PipelineStage::RuntimeResetMode::ReleaseGpuResources);
   }
 
   if (merged_stages_) {
-    merged_stages_->ReleaseGPUResources();
+    merged_stages_->ResetRuntimeResources(PipelineStage::RuntimeResetMode::ReleaseGpuResources);
   }
 }
 

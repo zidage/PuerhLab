@@ -120,6 +120,7 @@ void PipelineStage::SetInputCacheValid(bool valid) {
   input_cache_valid_ = valid;
   if (!valid) {
     // Invalidate output cache if input cache is invalidated
+    input_img_.reset();
     SetOutputCacheValid(false);
   }
 }
@@ -170,28 +171,42 @@ void PipelineStage::ResetAll() {
   input_set_          = false;
 }
 
-void PipelineStage::ResetCache() {
-  output_cache_.reset();
-  output_cache_valid_ = false;
-  if (next_stage_) {
-    next_stage_->SetInputCacheValid(false);
-  }
-}
+void PipelineStage::ResetRuntimeResources(RuntimeResetMode mode) {
+  const auto clear_intermediate_buffers = [this]() {
+    input_img_.reset();
+    output_cache_.reset();
+    input_set_          = false;
+    input_cache_valid_  = false;
+    output_cache_valid_ = false;
+  };
 
-void PipelineStage::ClearIntermediateBuffers() {
-  input_img_.reset();
-  output_cache_.reset();
-  input_set_          = false;
-  input_cache_valid_  = false;
-  output_cache_valid_ = false;
-}
+  const auto release_gpu_resources = [this]() {
+    if (stage_role_ != StageRole::GpuStreamable) {
+      return;
+    }
+    gpu_executor_.ReleaseResources();
+    gpu_setup_done_ = false;
+  };
 
-void PipelineStage::ReleaseGPUResources() {
-  if (stage_role_ != StageRole::GpuStreamable) {
-    return;
+  switch (mode) {
+    case RuntimeResetMode::InvalidateCache:
+      output_cache_.reset();
+      output_cache_valid_ = false;
+      if (next_stage_) {
+        next_stage_->SetInputCacheValid(false);
+      }
+      return;
+    case RuntimeResetMode::ClearIntermediateBuffers:
+      clear_intermediate_buffers();
+      return;
+    case RuntimeResetMode::ReleaseGpuResources:
+      release_gpu_resources();
+      return;
+    case RuntimeResetMode::ClearIntermediateBuffersAndGpu:
+      clear_intermediate_buffers();
+      release_gpu_resources();
+      return;
   }
-  gpu_executor_.ReleaseResources();
-  gpu_setup_done_ = false;
 }
 
 auto PipelineStage::DetermineStageRole(PipelineStageName stage, bool is_streamable) -> StageRole {
