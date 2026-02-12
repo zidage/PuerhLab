@@ -16,12 +16,54 @@
 
 #include "edit/operators/cst/odt_op.hpp"
 
+#include <bit>
+#include <cstdint>
 #include <memory>
+#include <mutex>
 #include <opencv2/core.hpp>
+#include <unordered_map>
 
 #include "edit/operators/utils/color_utils.hpp"
 
 namespace puerhlab {
+namespace {
+struct ODTCacheKey {
+  ColorUtils::ColorSpace encoding_space_ = ColorUtils::ColorSpace::REC709;
+  ColorUtils::ColorSpace limiting_space_ = ColorUtils::ColorSpace::REC709;
+  std::uint32_t          peak_luminance_bits_ = 0;
+
+  auto operator==(const ODTCacheKey& other) const -> bool {
+    return encoding_space_ == other.encoding_space_ &&
+           limiting_space_ == other.limiting_space_ &&
+           peak_luminance_bits_ == other.peak_luminance_bits_;
+  }
+};
+
+struct ODTCacheKeyHash {
+  auto operator()(const ODTCacheKey& key) const noexcept -> std::size_t {
+    std::size_t h = std::hash<int>{}(static_cast<int>(key.encoding_space_));
+    h ^= std::hash<int>{}(static_cast<int>(key.limiting_space_)) + 0x9e3779b9 + (h << 6) + (h >> 2);
+    h ^= std::hash<std::uint32_t>{}(key.peak_luminance_bits_) + 0x9e3779b9 + (h << 6) + (h >> 2);
+    return h;
+  }
+};
+
+auto ODTParamsCache() -> std::unordered_map<ODTCacheKey, ColorUtils::ODTParams, ODTCacheKeyHash>& {
+  static std::unordered_map<ODTCacheKey, ColorUtils::ODTParams, ODTCacheKeyHash> cache;
+  return cache;
+}
+
+auto ODTParamsCacheMutex() -> std::mutex& {
+  static std::mutex cache_mutex;
+  return cache_mutex;
+}
+
+auto BuildODTCacheKey(ColorUtils::ColorSpace encoding_space, ColorUtils::ColorSpace limiting_space,
+                      float peak_luminance) -> ODTCacheKey {
+  return ODTCacheKey{encoding_space, limiting_space, std::bit_cast<std::uint32_t>(peak_luminance)};
+}
+}  // namespace
+
 ColorUtils::ColorSpace ACES_ODT_Op::ParseColorSpace(const std::string& cs_str) {
   if (cs_str == "rec709") {
     return ColorUtils::ColorSpace::REC709;
@@ -274,6 +316,15 @@ void ACES_ODT_Op::init_TSParams() {
 }
 
 void ACES_ODT_Op::init_ODTParams() {
+  const ODTCacheKey cache_key = BuildODTCacheKey(encoding_space_, limiting_space_, peak_luminance_);
+  std::lock_guard<std::mutex> lock(ODTParamsCacheMutex());
+  auto&                       cache = ODTParamsCache();
+  auto                        cached_it = cache.find(cache_key);
+  if (cached_it != cache.end()) {
+    to_output_params_.odt_params_ = cached_it->second;
+    return;
+  }
+
   using namespace ColorUtils;
   to_output_params_.odt_params_.peak_luminance_ = peak_luminance_;
   init_JMhParams();
@@ -307,6 +358,8 @@ void ACES_ODT_Op::init_ODTParams() {
   odt.table_upper_hull_gammas_ = std::make_shared<std::array<float, TOTAL_TABLE_SIZE>>(
       MakeUpperHullGammaTable(*odt.table_gamut_cusps_, odt));
   odt.hue_linearity_search_range_ = DetermineHueLinearitySearchRange(*odt.table_hues_);
+
+  cache.emplace(cache_key, to_output_params_.odt_params_);
 }
 
 void ACES_ODT_Op::EnableGlobalParams(OperatorParams& params, bool enable) {
