@@ -17,15 +17,46 @@
 #include <cstdint>
 #include <format>
 #include <memory>
+#include <mutex>
+#include <stdexcept>
+#include <unordered_map>
+#include <vector>
 
 #include "app/pipeline_service.hpp"
-#include "renderer/pipeline_task.hpp"
 #include "app/render_service.hpp"
+#include "renderer/pipeline_task.hpp"
 
 namespace puerhlab {
+namespace {
+void DispatchThumbnailCallback(const ThumbnailCallback&           callback,
+                               const CallbackDispatcher&          dispatcher,
+                               const std::shared_ptr<ThumbnailGuard>& guard) {
+  if (!callback) {
+    return;
+  }
+
+  try {
+    if (dispatcher) {
+      dispatcher([callback, guard]() { callback(guard); });
+    } else {
+      callback(guard);
+    }
+  } catch (...) {
+  }
+}
+
+auto IsRenderableThumbnailResult(const ImageBuffer& result_buffer) -> bool {
+  return result_buffer.buffer_valid_ || result_buffer.cpu_data_valid_ || result_buffer.gpu_data_valid_;
+}
+}  // namespace
 
 struct ThumbnailService::State {
   static constexpr size_t                    default_cache_size_ = 64;
+
+  struct PendingCallback {
+    ThumbnailCallback  callback_{};
+    CallbackDispatcher dispatcher_{};
+  };
 
   std::shared_ptr<SleeveServiceImpl>         sleeve_service_     = nullptr;
   std::shared_ptr<ImagePoolService>          image_pool_service_ = nullptr;
@@ -35,7 +66,7 @@ struct ThumbnailService::State {
 
   LRUCache<sl_element_id_t, sl_element_id_t> thumbnail_cache_;
   std::unordered_map<sl_element_id_t, std::shared_ptr<ThumbnailGuard>> thumbnail_cache_data_{};
-  std::unordered_map<sl_element_id_t, std::vector<ThumbnailCallback>>  pending_{};
+  std::unordered_map<sl_element_id_t, std::vector<PendingCallback>>    pending_{};
 
   // Pipeline scheduler (global/shared), must outlive tasks.
   std::shared_ptr<PipelineScheduler> pipeline_scheduler_ = nullptr;
@@ -52,11 +83,11 @@ struct ThumbnailService::State {
 };
 
 ThumbnailService::ThumbnailService(std::shared_ptr<SleeveServiceImpl>   sleeve_service,
-                                 std::shared_ptr<ImagePoolService>    image_pool_service,
-                                 std::shared_ptr<PipelineMgmtService> pipeline_service)
+                                   std::shared_ptr<ImagePoolService>    image_pool_service,
+                                   std::shared_ptr<PipelineMgmtService> pipeline_service)
     : state_(std::make_shared<State>(std::move(sleeve_service),
-                                    std::move(image_pool_service),
-                                    std::move(pipeline_service))) {}
+                                     std::move(image_pool_service),
+                                     std::move(pipeline_service))) {}
 
 void ThumbnailService::GetThumbnail(sl_element_id_t id, image_id_t image_id,
                                     ThumbnailCallback callback, bool pin_if_found,
@@ -66,106 +97,180 @@ void ThumbnailService::GetThumbnail(sl_element_id_t id, image_id_t image_id,
     throw std::runtime_error("[ERROR] ThumbnailService: Services not initialized.");
   }
 
-  std::shared_ptr<ThumbnailGuard> guard = nullptr;
-
-  // Fast path: cache hit. Never invoke callbacks while holding cache_lock_.
-  bool cache_hit = false;
-
+  std::shared_ptr<ThumbnailGuard> guard;
   {
     std::unique_lock lock(st->cache_lock_);
     if (st->thumbnail_cache_.Contains(id)) {
-      // Found in cache
-      guard = st->thumbnail_cache_data_[id];
-      if (pin_if_found) {
-        guard->pin_count_++;
+      auto guard_it = st->thumbnail_cache_data_.find(id);
+      if (guard_it != st->thumbnail_cache_data_.end() && guard_it->second) {
+        guard = guard_it->second;
+        if (pin_if_found) {
+          guard->pin_count_++;
+        }
+      } else {
+        // Keep LRU and payload map consistent.
+        st->thumbnail_cache_.RemoveRecord(id);
+      }
+    }
+  }
+
+  if (guard) {
+    DispatchThumbnailCallback(callback, dispatcher, guard);
+    return;
+  }
+
+  {
+    std::unique_lock lock(st->cache_lock_);
+    auto it = st->pending_.find(id);
+    if (it != st->pending_.end()) {
+      State::PendingCallback pending_cb{};
+      pending_cb.callback_   = std::move(callback);
+      pending_cb.dispatcher_ = std::move(dispatcher);
+      it->second.push_back(std::move(pending_cb));
+      return;
+    }
+    State::PendingCallback pending_cb{};
+    pending_cb.callback_   = std::move(callback);
+    pending_cb.dispatcher_ = std::move(dispatcher);
+    std::vector<State::PendingCallback> pending_callbacks;
+    pending_callbacks.push_back(std::move(pending_cb));
+    st->pending_.emplace(id, std::move(pending_callbacks));
+  }
+
+  auto fail_pending_request = [&](const std::string&               message,
+                                  const std::shared_ptr<PipelineGuard>& pipeline) -> void {
+    std::vector<State::PendingCallback> callbacks;
+    {
+      std::unique_lock lock(st->cache_lock_);
+      auto             it = st->pending_.find(id);
+      if (it != st->pending_.end()) {
+        callbacks = std::move(it->second);
+        st->pending_.erase(it);
+      }
+      st->thumbnail_cache_.RemoveRecord(id);
+      st->thumbnail_cache_data_.erase(id);
+    }
+
+    if (pipeline) {
+      try {
+        st->pipeline_service_->SavePipeline(pipeline);
+      } catch (...) {
+      }
+    }
+
+    for (const auto& pending_cb : callbacks) {
+      DispatchThumbnailCallback(pending_cb.callback_, pending_cb.dispatcher_, nullptr);
+    }
+
+    throw std::runtime_error(message);
+  };
+
+  std::shared_ptr<PipelineGuard> pipeline;
+  try {
+    pipeline = st->pipeline_service_->LoadPipeline(id);
+  } catch (const std::exception& e) {
+    fail_pending_request(
+        std::format("[ERROR] ThumbnailService: Failed to load pipeline for file ID {}: {}", id,
+                    e.what()),
+        nullptr);
+  } catch (...) {
+    fail_pending_request(
+        std::format(
+            "[ERROR] ThumbnailService: Failed to load pipeline for file ID {}: unknown error.", id),
+        nullptr);
+  }
+
+  if (!pipeline || !pipeline->pipeline_) {
+    fail_pending_request(
+        std::format("[ERROR] ThumbnailService: Pipeline for file ID {} not available.", id),
+        nullptr);
+  }
+
+  pipeline->pipeline_->SetForceCPUOutput(true);
+
+  std::shared_ptr<Image> img_result;
+  try {
+    img_result = st->image_pool_service_->Read<std::shared_ptr<Image>>(
+        image_id, [](const std::shared_ptr<Image>& img) { return img; });
+  } catch (const std::exception& e) {
+    fail_pending_request(
+        std::format("[ERROR] ThumbnailService: Failed to load image ID {} for element {}: {}",
+                    image_id, id, e.what()),
+        pipeline);
+  } catch (...) {
+    fail_pending_request(
+        std::format(
+            "[ERROR] ThumbnailService: Failed to load image ID {} for element {}: unknown error.",
+            image_id, id),
+        pipeline);
+  }
+
+  if (!img_result) {
+    fail_pending_request(
+        std::format("[ERROR] ThumbnailService: Image with ID {} not found in pool.", image_id),
+        pipeline);
+  }
+
+  PipelineTask thumb_task;
+  thumb_task.pipeline_executor_                 = pipeline->pipeline_;
+  thumb_task.input_desc_                        = std::move(img_result);
+  thumb_task.options_.render_desc_.render_type_ = RenderType::THUMBNAIL;
+  thumb_task.options_.is_blocking_              = false;
+  thumb_task.options_.is_callback_              = true;
+  thumb_task.options_.is_seq_callback_          = false;
+
+  thumb_task.callback_ = [st, id, pipeline](ImageBuffer& result_buffer) {
+    std::shared_ptr<ThumbnailGuard>      guard;
+    std::vector<State::PendingCallback> callbacks;
+
+    {
+      std::unique_lock lock(st->cache_lock_);
+
+      auto             pending_it = st->pending_.find(id);
+      const bool       request_active = (pending_it != st->pending_.end());
+      if (request_active) {
+        callbacks = std::move(pending_it->second);
+        st->pending_.erase(pending_it);
       }
 
-      cache_hit = true;
-    }
-  }
+      const bool valid_result = IsRenderableThumbnailResult(result_buffer);
+      if (request_active && valid_result) {
+        guard                   = std::make_shared<ThumbnailGuard>();
+        guard->thumbnail_buffer_ = std::make_unique<ImageBuffer>(std::move(result_buffer));
+        guard->pin_count_        = 1;
 
-  if (cache_hit) {
-    if (dispatcher) {
-      dispatcher([callback, guard]() { callback(guard); });
-    } else {
-      callback(guard);
-    }
-    return;
-  }
-
-  // Not found in cache, check if already pending
-  std::unique_lock lock(st->cache_lock_);
-  if (st->pending_.find(id) != st->pending_.end()) {
-    // Already pending, add to callback list
-    st->pending_[id].push_back(callback);
-    return;
-  } else {
-    // Not pending, add to pending list
-
-    st->pending_[id] = {callback};
-    std::shared_ptr<PipelineGuard> pipeline;
-    try {
-      pipeline = st->pipeline_service_->LoadPipeline(id);
-    } catch (std::exception& e) {
-      st->pending_.erase(id);
-      std::cout << "[ERROR] ThumbnailService: Failed to load pipeline for file ID " << id
-                << ": " << e.what() << std::endl;
-    }
-    if (!pipeline) {
-      throw std::runtime_error(
-          std::format("[ERROR] ThumbnailService: Pipeline for file ID {} not available.", id));
-    }
-    pipeline->pipeline_->SetForceCPUOutput(true);
-    // Set thumbnail task
-    PipelineTask thumb_task;
-    thumb_task.pipeline_executor_ = pipeline->pipeline_;
-
-    // Read Image descriptor from pool service
-  auto img_result               = st->image_pool_service_->Read<std::shared_ptr<Image>>(
-        image_id, [](std::shared_ptr<Image> img) { return img; });
-    if (!img_result) {
-      throw std::runtime_error(
-          std::format("[ERROR] ThumbnailService: Image with ID {} not found in pool.", id));
-    }
-    thumb_task.input_desc_                        = std::move(img_result);
-    thumb_task.options_.render_desc_.render_type_ = RenderType::THUMBNAIL;
-    thumb_task.options_.is_blocking_              = false;
-    thumb_task.options_.is_callback_              = true;
-
-    thumb_task.callback_ = [st, id, dispatcher, pipeline](ImageBuffer& result_buffer) {
-      std::shared_ptr<ThumbnailGuard> guard = std::make_shared<ThumbnailGuard>();
-      guard->thumbnail_buffer_ = std::make_unique<ImageBuffer>(std::move(result_buffer));
-      guard->pin_count_        = 1;
-
-      std::vector<ThumbnailCallback> callbacks;
-
-      {
-        std::unique_lock lock(st->cache_lock_);
-        auto             evicted = st->thumbnail_cache_.RecordAccess_WithEvict(id, id);
+        auto evicted = st->thumbnail_cache_.RecordAccess_WithEvict(id, id);
         HandleEvict(*st, evicted);
         st->thumbnail_cache_data_[id] = guard;
-
-        // Move callbacks out; invoke outside lock.
-        auto it = st->pending_.find(id);
-        if (it != st->pending_.end()) {
-          callbacks = std::move(it->second);
-          st->pending_.erase(it);
-        }
+      } else {
+        st->thumbnail_cache_.RemoveRecord(id);
+        st->thumbnail_cache_data_.erase(id);
       }
+    }
 
-      for (const auto& cb : callbacks) {
-        if (dispatcher) {
-          dispatcher([cb, guard]() { cb(guard); });
-        } else {
-          cb(guard);
-        }
-      }
-
-      // Save pipeline back to storage outside lock.
+    try {
       st->pipeline_service_->SavePipeline(pipeline);
-    };
+    } catch (...) {
+    }
 
+    for (const auto& pending_cb : callbacks) {
+      DispatchThumbnailCallback(pending_cb.callback_, pending_cb.dispatcher_, guard);
+    }
+  };
+
+  try {
     st->pipeline_scheduler_->ScheduleTask(std::move(thumb_task));
+  } catch (const std::exception& e) {
+    fail_pending_request(
+        std::format("[ERROR] ThumbnailService: Failed to schedule thumbnail for element {}: {}", id,
+                    e.what()),
+        pipeline);
+  } catch (...) {
+    fail_pending_request(
+        std::format(
+            "[ERROR] ThumbnailService: Failed to schedule thumbnail for element {}: unknown error.",
+            id),
+        pipeline);
   }
 }
 
@@ -176,11 +281,21 @@ void ThumbnailService::ReleaseThumbnail(sl_element_id_t sleeve_element_id) {
   }
 
   std::unique_lock lock(st->cache_lock_);
-  if (st->thumbnail_cache_data_.find(sleeve_element_id) != st->thumbnail_cache_data_.end()) {
-    auto guard = st->thumbnail_cache_data_[sleeve_element_id];
-    if (guard->pin_count_ > 0) {
-      guard->pin_count_--;
-    }
+  auto             it = st->thumbnail_cache_data_.find(sleeve_element_id);
+  if (it == st->thumbnail_cache_data_.end() || !it->second) {
+    st->thumbnail_cache_.RemoveRecord(sleeve_element_id);
+    return;
+  }
+
+  auto guard = it->second;
+  if (guard->pin_count_ > 0) {
+    guard->pin_count_--;
+  }
+
+  if (guard->pin_count_ == 0) {
+    // Out-of-range thumbnails should be released immediately.
+    st->thumbnail_cache_.RemoveRecord(sleeve_element_id);
+    st->thumbnail_cache_data_.erase(it);
   }
 }
 
@@ -191,24 +306,23 @@ void ThumbnailService::InvalidateThumbnail(sl_element_id_t sleeve_element_id) {
   }
 
   std::unique_lock lock(st->cache_lock_);
-  // TODO: This is abstraction leak; we should provide an interface in ThumbnailService
+  // Cancel in-flight joiners for this id and drop any cached payload.
+  st->pending_.erase(sleeve_element_id);
   st->thumbnail_cache_.RemoveRecord(sleeve_element_id);
   st->thumbnail_cache_data_.erase(sleeve_element_id);
-  // Note: we intentionally do not cancel in-flight renders in pending_.
-  // A subsequent GetThumbnail() after invalidation will schedule a fresh render
-  // once the cache miss is observed.
 }
 
 void ThumbnailService::HandleEvict(State& st, std::optional<sl_element_id_t> evicted_id) {
   if (evicted_id.has_value()) {
-    auto id = evicted_id.value();
-    if (st.thumbnail_cache_data_.find(id) != st.thumbnail_cache_data_.end()) {
-      auto guard = st.thumbnail_cache_data_[id];
-      if (guard->pin_count_ == 0) {
+    const auto id = evicted_id.value();
+    auto       it = st.thumbnail_cache_data_.find(id);
+    if (it != st.thumbnail_cache_data_.end() && it->second) {
+      auto guard = it->second;
+      if (guard->pin_count_ <= 0) {
         // RAII: erasing from map drops the shared_ptr reference.
         // When the last reference is dropped, ThumbnailGuard destructor runs,
         // which destroys thumbnail_buffer_, which in turn releases all image data.
-        st.thumbnail_cache_data_.erase(id);
+        st.thumbnail_cache_data_.erase(it);
       } else {
         // Re-insert into cache since it's still pinned
         // "Boost" the cache size to avoid immediate eviction

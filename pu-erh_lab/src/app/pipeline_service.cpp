@@ -89,8 +89,6 @@ void PipelineMgmtService::HandleEviction(sl_element_id_t evicted_id) {
       }
       // Clear intermediate buffers before removing from cache to ensure timely memory release
       pipeline_guard->pipeline_->ClearAllIntermediateBuffers();
-      // Release persistent GPU allocations to avoid holding VRAM for evicted pipelines.
-      pipeline_guard->pipeline_->ReleaseAllGPUResources();
       loaded_pipelines_.erase(it);
       return;
     }
@@ -206,6 +204,7 @@ void PipelineMgmtService::SavePipeline(std::shared_ptr<PipelineGuard> pipeline) 
   // editor sessions and hurting interactive performance.
   {
     std::unique_lock<std::mutex> render_guard(pipeline->pipeline_->GetRenderLock());
+    pipeline->pipeline_->ClearAllIntermediateBuffers();
     pipeline->pipeline_->ResetExecutionStages();
   }
 

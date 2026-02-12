@@ -191,8 +191,16 @@ void CPUPipelineExecutor::ResetExecutionStages() {
   for (auto& stage : stages_) {
     stage.ResetDependents();
     stage.ResetNeighbors();
+    stage.ClearIntermediateBuffers();
+    stage.ReleaseGPUResources();
     stage.ResetCache();
   }
+
+  if (merged_stages_) {
+    merged_stages_->ClearIntermediateBuffers();
+    merged_stages_->ReleaseGPUResources();
+  }
+
   exec_stages_.clear();
   merged_stages_.reset();
 }

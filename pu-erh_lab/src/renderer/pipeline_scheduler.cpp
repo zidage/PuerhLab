@@ -147,6 +147,26 @@ void PipelineScheduler::ScheduleTask(PipelineTask&& task) {
       }
     };
 
+    const auto notify_thumbnail_failure_callbacks = [&task]() {
+      if (task.options_.render_desc_.render_type_ != RenderType::THUMBNAIL) {
+        return;
+      }
+
+      ImageBuffer empty_result;
+      if (task.options_.is_callback_ && task.callback_) {
+        try {
+          (*task.callback_)(empty_result);
+        } catch (...) {
+        }
+      }
+      if (task.options_.is_seq_callback_ && task.seq_callback_) {
+        try {
+          (*task.seq_callback_)(empty_result, task.task_id_);
+        } catch (...) {
+        }
+      }
+    };
+
     try {
       std::shared_ptr<ImageBuffer> result_copy;
       {
@@ -165,10 +185,26 @@ void PipelineScheduler::ScheduleTask(PipelineTask&& task) {
           task.SetExecutorRenderParams();
 
           auto result = task.pipeline_executor_->Apply(task.input_);
+          bool result_has_cpu = false;
+          if (result && result->cpu_data_valid_) {
+            try {
+              result_has_cpu = !result->GetCPUData().empty();
+            } catch (...) {
+              result_has_cpu = false;
+            }
+          }
+          const bool require_gpu_valid =
+              (render_desc.render_type_ != RenderType::THUMBNAIL);
+          const bool result_valid_for_copy =
+              result && result_has_cpu && (!require_gpu_valid || result->gpu_data_valid_);
 
           if (render_desc.render_type_ == RenderType::FAST_PREVIEW ||
-              render_desc.render_type_ == RenderType::FULL_RES_PREVIEW || !result ||
-              !result->gpu_data_valid_ || result->GetCPUData().empty()) {
+              render_desc.render_type_ == RenderType::FULL_RES_PREVIEW ||
+              !result_valid_for_copy) {
+            if (render_desc.render_type_ == RenderType::THUMBNAIL &&
+                !result_valid_for_copy) {
+              notify_thumbnail_failure_callbacks();
+            }
             set_blocking_value(result);
             apply_state_transition_after_render();
             return;
@@ -192,6 +228,11 @@ void PipelineScheduler::ScheduleTask(PipelineTask&& task) {
         set_blocking_value(nullptr);
       }
     } catch (...) {
+      try {
+        apply_state_transition_after_render();
+      } catch (...) {
+      }
+      notify_thumbnail_failure_callbacks();
       set_blocking_exception();
     }
   });
