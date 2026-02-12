@@ -33,7 +33,7 @@ void PipelineTask::SetExecutorRenderParams() {
   pipeline_executor_->SetRenderRegion(desc.x_, desc.y_, desc.scale_factor_);
   if (desc.render_type_ == RenderType::FAST_PREVIEW) {
     pipeline_executor_->SetForceCPUOutput(false);
-    pipeline_executor_->SetRenderRes(false, 4096);
+    pipeline_executor_->SetRenderRes(false, 2560);
     pipeline_executor_->SetEnableCache(true);
     // The default decode res is full, this call will be effective only when changed before
     pipeline_executor_->SetDecodeRes(DecodeRes::FULL);
@@ -67,7 +67,7 @@ void PipelineTask::ResetPreviewRenderParams() {
     return;
   }
   // Transition back to fast-preview baseline state.
-  pipeline_executor_->SetRenderRes(false, 4096);
+  pipeline_executor_->SetRenderRes(false, 2560);
   pipeline_executor_->SetForceCPUOutput(false);
   pipeline_executor_->SetEnableCache(true);
   pipeline_executor_->SetDecodeRes(DecodeRes::FULL);
@@ -78,7 +78,7 @@ void PipelineTask::ResetThumbnailRenderParams() {
     return;
   }
   // Transition to full-res preview baseline state.
-  pipeline_executor_->SetRenderRes(true, 4096);
+  pipeline_executor_->SetRenderRes(true, 2560);
   pipeline_executor_->SetForceCPUOutput(false);
   pipeline_executor_->SetEnableCache(true);
   pipeline_executor_->SetDecodeRes(DecodeRes::FULL);

@@ -65,7 +65,10 @@ void CPUPipelineExecutor::SetEnableCache(bool enable_cache) {
   // Reinitialize stages with the new cache setting
   ResetExecutionStagesCache();
   for (auto* stage : exec_stages_) {
-    stage->SetEnableCache(enable_cache_);
+    const bool stage_cache_enabled = (stage->stage_ == PipelineStageName::Merged_Stage)
+                                         ? false
+                                         : enable_cache_;
+    stage->SetEnableCache(stage_cache_enabled);
   }
 }
 
@@ -148,7 +151,9 @@ void CPUPipelineExecutor::SetExecutionStages() {
   exec_stages_.clear();
   std::vector<PipelineStage*> streamable_stages;
 
-  auto merged = std::make_unique<PipelineStage>(PipelineStageName::Merged_Stage, true, true);
+  // Merged GPU stream stage is always re-executed; keeping its cache enabled only retains
+  // transient objects without reuse value.
+  auto merged = std::make_unique<PipelineStage>(PipelineStageName::Merged_Stage, false, true);
 
   exec_stages_.push_back(&stages_[static_cast<int>(PipelineStageName::Image_Loading)]);
   exec_stages_.push_back(&stages_[static_cast<int>(PipelineStageName::Geometry_Adjustment)]);

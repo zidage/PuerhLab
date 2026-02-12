@@ -306,28 +306,22 @@ bool QtEditViewer::InitBuffer(GLBuffer& buffer, int width, int height) {
 
   FreeBuffer(buffer);
 
-  glGenBuffers(1, &buffer.pbo);
-  glBindBuffer(GL_PIXEL_UNPACK_BUFFER, buffer.pbo);
-
-  size_t size = static_cast<size_t>(width) * static_cast<size_t>(height) * sizeof(float4);
-  glBufferData(GL_PIXEL_UNPACK_BUFFER, size, nullptr, GL_DYNAMIC_COPY);
-
   glGenTextures(1, &buffer.texture);
   glBindTexture(GL_TEXTURE_2D, buffer.texture);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, width, height, 0, GL_RGBA, GL_FLOAT, nullptr);
 
-  cudaError_t err = cudaGraphicsGLRegisterBuffer(&buffer.cuda_resource, buffer.pbo,
-                                                 cudaGraphicsMapFlagsWriteDiscard);
+  cudaError_t err =
+      cudaGraphicsGLRegisterImage(&buffer.cuda_resource, buffer.texture, GL_TEXTURE_2D,
+                                  cudaGraphicsRegisterFlagsWriteDiscard);
   if (err != cudaSuccess) {
-    qWarning("Failed to register PBO with CUDA: %s", cudaGetErrorString(err));
-    glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+    qWarning("Failed to register texture with CUDA: %s", cudaGetErrorString(err));
     FreeBuffer(buffer);
     return false;
   }
 
-  glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+  glBindTexture(GL_TEXTURE_2D, 0);
 
   buffer.width  = width;
   buffer.height = height;
@@ -569,17 +563,20 @@ void QtEditViewer::paintGL() {
     if (map_err != cudaSuccess) {
       qWarning("Failed to map CUDA resource (paintGL): %s", cudaGetErrorString(map_err));
     } else {
-      float4* mapped_ptr = nullptr;
-      size_t  mapped_bytes = 0;
-      cudaError_t ptr_err = cudaGraphicsResourceGetMappedPointer(
-          reinterpret_cast<void**>(&mapped_ptr), &mapped_bytes, target_buffer->cuda_resource);
-      if (ptr_err != cudaSuccess || !mapped_ptr || mapped_bytes == 0) {
-        qWarning("Failed to get mapped pointer (paintGL): %s", cudaGetErrorString(ptr_err));
+      cudaArray_t mapped_array = nullptr;
+      cudaError_t array_err =
+          cudaGraphicsSubResourceGetMappedArray(&mapped_array, target_buffer->cuda_resource, 0, 0);
+      if (array_err != cudaSuccess || !mapped_array) {
+        qWarning("Failed to map texture array (paintGL): %s", cudaGetErrorString(array_err));
       } else {
-        const size_t copy_bytes = std::min(staging_bytes_, mapped_bytes);
-        cudaError_t copy_err = cudaMemcpy(mapped_ptr, staging_ptr_, copy_bytes, cudaMemcpyDeviceToDevice);
+        const size_t row_bytes = static_cast<size_t>(target_buffer->width) * sizeof(float4);
+        const size_t max_rows  = staging_bytes_ / row_bytes;
+        const size_t copy_rows = std::min(max_rows, static_cast<size_t>(target_buffer->height));
+        cudaError_t copy_err =
+            cudaMemcpy2DToArray(mapped_array, 0, 0, staging_ptr_, row_bytes, row_bytes, copy_rows,
+                                cudaMemcpyDeviceToDevice);
         if (copy_err != cudaSuccess) {
-          qWarning("Failed to copy staging->PBO: %s", cudaGetErrorString(copy_err));
+          qWarning("Failed to copy staging->texture: %s", cudaGetErrorString(copy_err));
         } else {
           active_idx_ = pending_idx;
           write_idx_  = 1 - active_idx_;
@@ -595,7 +592,7 @@ void QtEditViewer::paintGL() {
 
   // Now check if the active buffer is valid for rendering.
   GLBuffer& active_buffer = buffers_[active_idx_];
-  if (!active_buffer.pbo || !active_buffer.texture || !program_ || !program_->isLinked()) return;
+  if (!active_buffer.texture || !program_ || !program_->isLinked()) return;
 
   const float dpr = devicePixelRatioF();
   const float vw  = std::max(1.0f, float(width()) * dpr);
@@ -628,11 +625,7 @@ void QtEditViewer::paintGL() {
 
   glActiveTexture(GL_TEXTURE0);
   program_->setUniformValue("textureSampler", 0);
-
-  glBindBuffer(GL_PIXEL_UNPACK_BUFFER, active_buffer.pbo);
   glBindTexture(GL_TEXTURE_2D, active_buffer.texture);
-  glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, active_buffer.width, active_buffer.height, GL_RGBA, GL_FLOAT, nullptr);
-  glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
 
   glBindBuffer(GL_ARRAY_BUFFER, vbo_);
   int pos_loc = program_->attributeLocation("position");
@@ -662,10 +655,6 @@ void QtEditViewer::FreeBuffer(GLBuffer& buffer) {
   if (buffer.cuda_resource) {
     cudaGraphicsUnregisterResource(buffer.cuda_resource);
     buffer.cuda_resource = nullptr;
-  }
-  if (buffer.pbo) {
-    glDeleteBuffers(1, &buffer.pbo);
-    buffer.pbo = 0;
   }
   if (buffer.texture) {
     glDeleteTextures(1, &buffer.texture);

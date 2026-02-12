@@ -79,7 +79,6 @@ class QtEditViewer : public QOpenGLWidget, protected QOpenGLExtraFunctions, publ
 
  private:
   struct GLBuffer {
-    GLuint                pbo           = 0;
     GLuint                texture       = 0;
     cudaGraphicsResource* cuda_resource = nullptr;
     int                   width         = 0;

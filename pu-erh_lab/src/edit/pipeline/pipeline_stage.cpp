@@ -25,6 +25,30 @@
 #include "image/image_buffer.hpp"
 
 namespace puerhlab {
+namespace {
+auto IsResizeEffectivelyNoOp(const IOperatorBase& op, int width, int height) -> bool {
+  const nlohmann::json params = op.GetParams();
+  if (!params.contains("resize") || !params["resize"].is_object()) {
+    return false;
+  }
+
+  const auto& resize = params["resize"];
+  const bool  enable_scale = resize.value("enable_scale", false);
+  const bool  enable_roi   = resize.value("enable_roi", false);
+  const int   maximum_edge = resize.value("maximum_edge", 2048);
+
+  if (!enable_scale && !enable_roi) {
+    return true;
+  }
+
+  if (width <= 0 || height <= 0) {
+    return false;
+  }
+
+  return std::max(width, height) <= maximum_edge;
+}
+}  // namespace
+
 PipelineStage::PipelineStage(PipelineStageName stage, bool enable_cache, bool is_streamable)
     : is_streamable_(is_streamable), enable_cache_(enable_cache), stage_(stage) {
   stage_role_ = DetermineStageRole(stage_, is_streamable_);
@@ -217,6 +241,41 @@ std::shared_ptr<ImageBuffer> PipelineStage::ApplyDescriptorOnly() {
 std::shared_ptr<ImageBuffer> PipelineStage::ApplyGpuOperators() {
   auto execute_ops = [&]() {
     if (!HasEnabledOperator()) return input_img_;
+
+    if (stage_ == PipelineStageName::Geometry_Adjustment) {
+      int width = 0;
+      int height = 0;
+      if (input_img_->gpu_data_valid_) {
+        const auto& gpu_data = input_img_->GetGPUData();
+        width                = gpu_data.cols;
+        height               = gpu_data.rows;
+      } else if (input_img_->cpu_data_valid_) {
+        const auto& cpu_data = input_img_->GetCPUData();
+        width                = cpu_data.cols;
+        height               = cpu_data.rows;
+      }
+
+      bool has_enabled = false;
+      bool all_noop    = true;
+      for (const auto& [op_type, op_entry] : *operators_) {
+        if (!op_entry.enable_ || !op_entry.op_) {
+          continue;
+        }
+        has_enabled = true;
+        if (op_type != OperatorType::RESIZE ||
+            !IsResizeEffectivelyNoOp(*op_entry.op_, width, height)) {
+          all_noop = false;
+          break;
+        }
+      }
+
+      // Geometry stage is frequently configured as "full-res passthrough" during editing.
+      // Reuse upstream cache directly to avoid holding another full-resolution GpuMat.
+      if (has_enabled && all_noop) {
+        return input_img_;
+      }
+    }
+
     auto current_img = std::make_shared<ImageBuffer>();
     if (input_img_->gpu_data_valid_ && !input_img_->buffer_valid_) {
       auto& input_gpu_mat = input_img_->GetGPUData();
