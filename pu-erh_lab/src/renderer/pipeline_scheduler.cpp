@@ -30,8 +30,24 @@ void PipelineTask::SetExecutorRenderParams() {
     return;
   }
   auto& desc = options_.render_desc_;
-  pipeline_executor_->SetRenderRegion(desc.x_, desc.y_, desc.scale_factor_);
+
+  int   region_x       = desc.x_;
+  int   region_y       = desc.y_;
+  float region_scale_x = desc.scale_factor_x_;
+  float region_scale_y = desc.scale_factor_y_;
+  if (desc.render_type_ == RenderType::FAST_PREVIEW && desc.use_viewport_region_) {
+    if (const auto viewport_region = pipeline_executor_->GetViewportRenderRegion();
+        viewport_region.has_value()) {
+      region_x       = viewport_region->x_;
+      region_y       = viewport_region->y_;
+      region_scale_x = viewport_region->scale_x_;
+      region_scale_y = viewport_region->scale_y_;
+    }
+  }
+
   if (desc.render_type_ == RenderType::FAST_PREVIEW) {
+    pipeline_executor_->SetNextFramePresentationMode(FramePresentationMode::RoiFrame);
+    pipeline_executor_->SetRenderRegion(region_x, region_y, region_scale_x, region_scale_y);
     pipeline_executor_->SetForceCPUOutput(false);
     pipeline_executor_->SetRenderRes(false, 2560);
     pipeline_executor_->SetEnableCache(true);
@@ -40,6 +56,8 @@ void PipelineTask::SetExecutorRenderParams() {
     return;
   }
   if (desc.render_type_ == RenderType::THUMBNAIL) {
+    pipeline_executor_->SetNextFramePresentationMode(FramePresentationMode::ViewportTransformed);
+    pipeline_executor_->SetRenderRegion(0, 0, 1.0f);
     pipeline_executor_->SetForceCPUOutput(true);
     pipeline_executor_->SetRenderRes(false, 1024);
     pipeline_executor_->SetEnableCache(false);
@@ -47,11 +65,15 @@ void PipelineTask::SetExecutorRenderParams() {
     return;
   }
   if (desc.render_type_ == RenderType::FULL_RES_PREVIEW) {
+    pipeline_executor_->SetNextFramePresentationMode(FramePresentationMode::ViewportTransformed);
+    pipeline_executor_->SetRenderRegion(0, 0, 1.0f);
     pipeline_executor_->SetRenderRes(true);
     pipeline_executor_->SetForceCPUOutput(false);
     return;
   }
   if (desc.render_type_ == RenderType::FULL_RES_EXPORT) {
+    pipeline_executor_->SetNextFramePresentationMode(FramePresentationMode::ViewportTransformed);
+    pipeline_executor_->SetRenderRegion(0, 0, 1.0f);
     pipeline_executor_->SetRenderRes(true);
     pipeline_executor_->SetForceCPUOutput(true);
     pipeline_executor_->SetEnableCache(false);
@@ -140,9 +162,7 @@ void PipelineScheduler::ScheduleTask(PipelineTask&& task) {
           }
 
           auto& render_desc = task.options_.render_desc_;
-          if (!(render_desc.render_type_ == RenderType::FAST_PREVIEW)) {
-            task.SetExecutorRenderParams();
-          }
+          task.SetExecutorRenderParams();
 
           auto result = task.pipeline_executor_->Apply(task.input_);
 

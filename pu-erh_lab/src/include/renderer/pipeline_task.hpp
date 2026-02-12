@@ -34,7 +34,9 @@ struct RenderDesc {
 
   int        x_            = 0;
   int        y_            = 0;
-  float      scale_factor_ = 1.0f;
+  float      scale_factor_x_ = 1.0f;
+  float      scale_factor_y_ = 1.0f;
+  bool       use_viewport_region_ = true;
 };
 
 struct TaskOptions {

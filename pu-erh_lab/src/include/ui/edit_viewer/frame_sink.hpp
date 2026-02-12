@@ -16,7 +16,21 @@
 
 #include <cuda_runtime.h>
 
+#include <optional>
+
 namespace puerhlab {
+struct ViewportRenderRegion {
+  int   x_            = 0;
+  int   y_            = 0;
+  float scale_x_      = 1.0f;
+  float scale_y_      = 1.0f;
+};
+
+enum class FramePresentationMode {
+  ViewportTransformed,
+  RoiFrame,
+};
+
 class IFrameSink {
  public:
   virtual ~IFrameSink() {}
@@ -32,5 +46,13 @@ class IFrameSink {
   // Get the size of the frame
   virtual int     GetWidth() const                  = 0;
   virtual int     GetHeight() const                 = 0;
+
+  // Returns ROI parameters derived from the current viewer transform (if any).
+  virtual auto    GetViewportRenderRegion() const -> std::optional<ViewportRenderRegion> {
+    return std::nullopt;
+  }
+
+  // Sets how the next presented frame should be displayed.
+  virtual void    SetNextFramePresentationMode(FramePresentationMode) {}
 };
 }  // namespace puerhlab

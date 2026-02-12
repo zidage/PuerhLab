@@ -19,7 +19,9 @@ namespace puerhlab {
 struct ROI {
   int   x_;
   int   y_;
-  float resize_factor_;
+  float resize_factor_x_;
+  float resize_factor_y_;
+  float resize_factor_;  // Legacy fallback for old serialized params.
 };
 
 class ResizeOp : public OperatorBase<ResizeOp> {
@@ -29,7 +31,7 @@ class ResizeOp : public OperatorBase<ResizeOp> {
   bool enable_scale_ = false;
 
   bool enable_roi_   = false;
-  ROI  roi_;
+  ROI  roi_          = {0, 0, 1.0f, 1.0f, 1.0f};
 
  public:
   static constexpr PriorityLevel     priority_level_    = 1;

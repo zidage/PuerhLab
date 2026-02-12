@@ -208,9 +208,23 @@ void QtEditViewer::EnsureSize(int width, int height) {
 }
 
 void QtEditViewer::ResetView() {
-  view_zoom_ = 1.0f;
-  view_pan_  = QVector2D(0.0f, 0.0f);
+  {
+    std::lock_guard<std::mutex> view_lock(view_state_mutex_);
+    view_zoom_ = 1.0f;
+    view_pan_  = QVector2D(0.0f, 0.0f);
+  }
+  UpdateViewportRenderRegionCache();
   update();
+}
+
+auto QtEditViewer::GetViewportRenderRegion() const -> std::optional<ViewportRenderRegion> {
+  std::lock_guard<std::mutex> view_lock(view_state_mutex_);
+  return viewport_render_region_cache_;
+}
+
+void QtEditViewer::SetNextFramePresentationMode(FramePresentationMode mode) {
+  pending_frame_presentation_mode_.store(mode, std::memory_order_release);
+  pending_presentation_mode_valid_.store(true, std::memory_order_release);
 }
 
 void QtEditViewer::SetHistogramFrameExpected(bool expected_fast_preview) {
@@ -296,6 +310,7 @@ void QtEditViewer::initializeGL() {
 
   InitBuffer(buffers_[active_idx_], buffers_[active_idx_].width, buffers_[active_idx_].height);
   InitHistogramResources();
+  UpdateViewportRenderRegionCache();
 }
 
 bool QtEditViewer::InitBuffer(GLBuffer& buffer, int width, int height) {
@@ -471,6 +486,111 @@ void QtEditViewer::FreeHistogramResources() {
   histogram_pending_frame_.store(false, std::memory_order_release);
 }
 
+auto QtEditViewer::ComputeViewportRenderRegion(int image_width, int image_height) const
+    -> std::optional<ViewportRenderRegion> {
+  const float dpr = devicePixelRatioF();
+  const float vw  = std::max(1.0f, float(width()) * dpr);
+  const float vh  = std::max(1.0f, float(height()) * dpr);
+  if (vw <= 0.0f || vh <= 0.0f) {
+    return std::nullopt;
+  }
+
+  float zoom = 1.0f;
+  QVector2D pan(0.0f, 0.0f);
+  int       base_width  = image_width;
+  int       base_height = image_height;
+  {
+    std::lock_guard<std::mutex> view_lock(view_state_mutex_);
+    zoom = std::max(view_zoom_, 1e-4f);
+    pan  = view_pan_;
+    if (render_reference_width_ > 0 && render_reference_height_ > 0) {
+      base_width  = render_reference_width_;
+      base_height = render_reference_height_;
+    }
+  }
+
+  if (base_width <= 0 || base_height <= 0) {
+    return std::nullopt;
+  }
+
+  const float imgW = static_cast<float>(base_width);
+  const float imgH = static_cast<float>(base_height);
+  const float winAspect = vw / vh;
+  const float imgAspect = imgW / imgH;
+
+  float sx = 1.0f;
+  float sy = 1.0f;
+  if (imgAspect > winAspect) {
+    sy = winAspect / imgAspect;
+  } else {
+    sx = imgAspect / winAspect;
+  }
+  sx = std::max(sx, 1e-4f);
+  sy = std::max(sy, 1e-4f);
+
+  const float inv_x = 1.0f / (sx * zoom);
+  const float inv_y = 1.0f / (sy * zoom);
+
+  float px_min = (-1.0f - pan.x()) * inv_x;
+  float px_max = (1.0f - pan.x()) * inv_x;
+  float py_min = (-1.0f - pan.y()) * inv_y;
+  float py_max = (1.0f - pan.y()) * inv_y;
+
+  if (px_min > px_max) std::swap(px_min, px_max);
+  if (py_min > py_max) std::swap(py_min, py_max);
+
+  px_min = std::clamp(px_min, -1.0f, 1.0f);
+  px_max = std::clamp(px_max, -1.0f, 1.0f);
+  py_min = std::clamp(py_min, -1.0f, 1.0f);
+  py_max = std::clamp(py_max, -1.0f, 1.0f);
+
+  const float u_min = std::clamp((px_min + 1.0f) * 0.5f, 0.0f, 1.0f);
+  const float u_max = std::clamp((px_max + 1.0f) * 0.5f, 0.0f, 1.0f);
+  const float v_min = std::clamp((1.0f - py_max) * 0.5f, 0.0f, 1.0f);
+  const float v_max = std::clamp((1.0f - py_min) * 0.5f, 0.0f, 1.0f);
+
+  const float roi_factor_x = std::clamp(u_max - u_min, 1e-4f, 1.0f);
+  const float roi_factor_y = std::clamp(v_max - v_min, 1e-4f, 1.0f);
+
+  int roi_w = std::clamp(
+      static_cast<int>(std::lround(static_cast<float>(base_width) * roi_factor_x)), 1, base_width);
+  int roi_h = std::clamp(
+      static_cast<int>(std::lround(static_cast<float>(base_height) * roi_factor_y)), 1, base_height);
+
+  const float center_u = std::clamp((u_min + u_max) * 0.5f, 0.0f, 1.0f);
+  const float center_v = std::clamp((v_min + v_max) * 0.5f, 0.0f, 1.0f);
+
+  int x = static_cast<int>(std::lround(center_u * static_cast<float>(base_width) -
+                                       static_cast<float>(roi_w) * 0.5f));
+  int y = static_cast<int>(std::lround(center_v * static_cast<float>(base_height) -
+                                       static_cast<float>(roi_h) * 0.5f));
+  x = std::clamp(x, 0, std::max(0, base_width - roi_w));
+  y = std::clamp(y, 0, std::max(0, base_height - roi_h));
+
+  ViewportRenderRegion region;
+  region.x_       = x;
+  region.y_       = y;
+  region.scale_x_ = std::clamp(static_cast<float>(roi_w) / static_cast<float>(base_width), 1e-4f,
+                               1.0f);
+  region.scale_y_ = std::clamp(static_cast<float>(roi_h) / static_cast<float>(base_height), 1e-4f,
+                               1.0f);
+  return region;
+}
+
+void QtEditViewer::UpdateViewportRenderRegionCache() {
+  int image_width = 0;
+  int image_height = 0;
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    image_width  = buffers_[active_idx_].width;
+    image_height = buffers_[active_idx_].height;
+  }
+
+  const auto region = ComputeViewportRenderRegion(image_width, image_height);
+  std::lock_guard<std::mutex> view_lock(view_state_mutex_);
+  viewport_render_region_cache_ = region;
+}
+
 auto QtEditViewer::ShouldComputeHistogramNow() -> bool {
   if (histogram_update_interval_ms_ <= 0) {
     last_histogram_update_time_ = std::chrono::steady_clock::now();
@@ -580,6 +700,11 @@ void QtEditViewer::paintGL() {
         } else {
           active_idx_ = pending_idx;
           write_idx_  = 1 - active_idx_;
+          if (pending_presentation_mode_valid_.exchange(false, std::memory_order_acq_rel)) {
+            active_frame_presentation_mode_.store(
+                pending_frame_presentation_mode_.load(std::memory_order_acquire),
+                std::memory_order_release);
+          }
         }
       }
 
@@ -612,8 +737,29 @@ void QtEditViewer::paintGL() {
     sx = imgAspect / winAspect; // image taller -> reduce X
   }
 
-  const float zoom = view_zoom_;
-  const QVector2D pan = view_pan_;
+  float     zoom = 1.0f;
+  QVector2D pan(0.0f, 0.0f);
+  {
+    std::lock_guard<std::mutex> view_lock(view_state_mutex_);
+    zoom = view_zoom_;
+    pan  = view_pan_;
+  }
+
+  const auto presentation_mode = active_frame_presentation_mode_.load(std::memory_order_acquire);
+  if (presentation_mode == FramePresentationMode::RoiFrame) {
+    zoom = 1.0f;
+    pan  = QVector2D(0.0f, 0.0f);
+  } else {
+    std::lock_guard<std::mutex> view_lock(view_state_mutex_);
+    render_reference_width_  = active_buffer.width;
+    render_reference_height_ = active_buffer.height;
+  }
+
+  const auto viewport_region = ComputeViewportRenderRegion(active_buffer.width, active_buffer.height);
+  {
+    std::lock_guard<std::mutex> view_lock(view_state_mutex_);
+    viewport_render_region_cache_ = viewport_region;
+  }
 
   glClearColor(0.f, 0.f, 0.f, 1.f);
   glClear(GL_COLOR_BUFFER_BIT);
@@ -648,7 +794,7 @@ void QtEditViewer::paintGL() {
 
 void QtEditViewer::resizeGL(int w, int h) {
   if (w <= 0 || h <= 0) return;
-
+  UpdateViewportRenderRegionCache();
 }
 
 void QtEditViewer::FreeBuffer(GLBuffer& buffer) {
@@ -682,6 +828,7 @@ void QtEditViewer::OnResizeGL(int w, int h) {
   }
   // resizeGL(w, h);
   doneCurrent();
+  UpdateViewportRenderRegionCache();
 
   // Ensure a repaint after resize
   update();
@@ -692,23 +839,28 @@ void QtEditViewer::wheelEvent(QWheelEvent* event) {
   if (!num_degrees.isNull()) {
     const float steps   = static_cast<float>(num_degrees.y()) / 120.0f;  // 120 units per notch
     const float factor  = std::pow(1.1f, steps);
-    const float oldZoom = view_zoom_;
-    view_zoom_          = std::clamp(view_zoom_ * factor, 0.1f, 20.0f);
+    float       oldZoom = 1.0f;
+    {
+      std::lock_guard<std::mutex> view_lock(view_state_mutex_);
+      oldZoom   = view_zoom_;
+      view_zoom_ = std::clamp(view_zoom_ * factor, 0.1f, 20.0f);
 
-    // Optional: adjust pan so zoom stays centered on view
-    if (std::abs(view_zoom_ - oldZoom) > 1e-4f) {
-      // Zoom towards cursor by nudging pan in normalized device space
-      const float dpr = devicePixelRatioF();
-      const float vw  = std::max(1.0f, float(width()) * dpr);
-      const float vh  = std::max(1.0f, float(height()) * dpr);
-      const QPointF p = event->position();
-      const float ndcX = (2.0f * float(p.x()) / vw) - 1.0f;
-      const float ndcY = 1.0f - (2.0f * float(p.y()) / vh);
-      const float zoomDelta = view_zoom_ - oldZoom;
-      const float adjust    = (zoomDelta / std::max(view_zoom_, 1e-4f));
-      view_pan_ -= QVector2D(ndcX, ndcY) * adjust * 0.5f;
+      // Optional: adjust pan so zoom stays centered on view
+      if (std::abs(view_zoom_ - oldZoom) > 1e-4f) {
+        // Zoom towards cursor by nudging pan in normalized device space
+        const float dpr = devicePixelRatioF();
+        const float vw  = std::max(1.0f, float(width()) * dpr);
+        const float vh  = std::max(1.0f, float(height()) * dpr);
+        const QPointF p = event->position();
+        const float ndcX = (2.0f * float(p.x()) / vw) - 1.0f;
+        const float ndcY = 1.0f - (2.0f * float(p.y()) / vh);
+        const float zoomDelta = view_zoom_ - oldZoom;
+        const float adjust    = (zoomDelta / std::max(view_zoom_, 1e-4f));
+        view_pan_ -= QVector2D(ndcX, ndcY) * adjust * 0.5f;
+      }
     }
 
+    UpdateViewportRenderRegionCache();
     update();
     event->accept();
     return;
@@ -738,7 +890,11 @@ void QtEditViewer::mouseMoveEvent(QMouseEvent* event) {
 
     // Convert pixel delta to normalized device coordinates
     QVector2D ndc_delta(2.0f * float(delta.x()) / vw, -2.0f * float(delta.y()) / vh);
-    view_pan_ += ndc_delta;
+    {
+      std::lock_guard<std::mutex> view_lock(view_state_mutex_);
+      view_pan_ += ndc_delta;
+    }
+    UpdateViewportRenderRegionCache();
     update();
     event->accept();
     return;

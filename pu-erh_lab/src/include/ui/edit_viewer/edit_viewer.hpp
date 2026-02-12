@@ -49,6 +49,8 @@ class QtEditViewer : public QOpenGLWidget, protected QOpenGLExtraFunctions, publ
   void    NotifyFrameReady() override;
   int     GetWidth() const override { return buffers_[active_idx_].width; };
   int     GetHeight() const override { return buffers_[active_idx_].height; };
+  auto    GetViewportRenderRegion() const -> std::optional<ViewportRenderRegion> override;
+  void    SetNextFramePresentationMode(FramePresentationMode mode) override;
 
   void    SetHistogramFrameExpected(bool expected_fast_preview);
   void    SetHistogramUpdateIntervalMs(int interval_ms);
@@ -108,6 +110,15 @@ class QtEditViewer : public QOpenGLWidget, protected QOpenGLExtraFunctions, publ
   QVector2D               view_pan_     = {0.0f, 0.0f};
   QPoint                  last_mouse_pos_{};
   bool                    dragging_     = false;
+  mutable std::mutex      view_state_mutex_;
+  std::optional<ViewportRenderRegion> viewport_render_region_cache_{};
+  int                     render_reference_width_  = 0;
+  int                     render_reference_height_ = 0;
+  std::atomic<FramePresentationMode>  active_frame_presentation_mode_{
+      FramePresentationMode::ViewportTransformed};
+  std::atomic<FramePresentationMode>  pending_frame_presentation_mode_{
+      FramePresentationMode::ViewportTransformed};
+  std::atomic<bool>       pending_presentation_mode_valid_{false};
 
   bool                    InitBuffer(GLBuffer& buffer, int width, int height);
   void                    FreeBuffer(GLBuffer& buffer);
@@ -115,6 +126,9 @@ class QtEditViewer : public QOpenGLWidget, protected QOpenGLExtraFunctions, publ
 
   bool                    InitHistogramResources();
   void                    FreeHistogramResources();
+  void                    UpdateViewportRenderRegionCache();
+  auto                    ComputeViewportRenderRegion(int image_width, int image_height) const
+      -> std::optional<ViewportRenderRegion>;
   auto                    ComputeHistogram(GLuint texture_id, int width, int height) -> bool;
   auto                    ShouldComputeHistogramNow() -> bool;
   auto                    BuildComputeProgram(const char* source, const char* debug_name,

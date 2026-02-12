@@ -16,6 +16,7 @@
 
 #include <memory>
 #include <mutex>
+#include <optional>
 
 #include "edit/operators/op_base.hpp"
 #include "edit/pipeline/pipeline_stage.hpp"
@@ -49,6 +50,7 @@ class CPUPipelineExecutor : public PipelineExecutor {
 
   std::vector<PipelineStage*>      exec_stages_;
   std::unique_ptr<PipelineStage>   merged_stages_;
+  IFrameSink*                      frame_sink_      = nullptr;
 
   void                             ResetStages();
 
@@ -79,6 +81,9 @@ class CPUPipelineExecutor : public PipelineExecutor {
   void SetExecutionStages(IFrameSink* frame_sink);
   void ResetExecutionStages();
 
+  auto GetViewportRenderRegion() const -> std::optional<ViewportRenderRegion>;
+  void SetNextFramePresentationMode(FramePresentationMode mode) const;
+
   auto GetGlobalParams() -> OperatorParams& override { return global_params_; }
 
   /**
@@ -96,7 +101,8 @@ class CPUPipelineExecutor : public PipelineExecutor {
    */
   void ImportPipelineParams(const nlohmann::json& j) override;
 
-  void SetRenderRegion(int x, int y, float scale_factor) override;
+  void SetRenderRegion(int x, int y, float scale_factor_x,
+                       float scale_factor_y = -1.0f) override;
   void SetRenderRes(bool full_res, int max_side_length = 2048) override;
   void SetDecodeRes(DecodeRes res);
 

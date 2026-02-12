@@ -14,6 +14,9 @@
 
 #include "edit/operators/geometry/resize_op.hpp"
 
+#include <algorithm>
+#include <cmath>
+
 #include <opencv2/cudawarping.hpp>
 
 #include "edit/operators/op_base.hpp"
@@ -27,32 +30,56 @@ void ResizeOp::Apply(std::shared_ptr<ImageBuffer> input) {
   auto& img = input->GetCPUData();
   int   w   = img.cols;
   int   h   = img.rows;
-  if (std::max(w, h) <= maximum_edge_) {
+  if (w <= 0 || h <= 0) {
     return;
   }
 
   if (!enable_scale_ && !enable_roi_) {
     return;
   }
-  float scale =
-      enable_scale_ ? static_cast<float>(maximum_edge_) / static_cast<float>(std::max(w, h)) : 1.0f;
-  cv::Mat roi_img;
+
+  const float full_scale =
+      enable_scale_
+          ? std::min(1.0f,
+                     static_cast<float>(maximum_edge_) / static_cast<float>(std::max(w, h)))
+          : 1.0f;
+
+  if (!enable_roi_ && full_scale >= (1.0f - 1e-4f)) {
+    return;
+  }
+
   if (enable_roi_) {
-    int roi_w = static_cast<int>(w * roi_.resize_factor_);
-    int roi_h = static_cast<int>(h * roi_.resize_factor_);
-    roi_w     = std::min(roi_w, w - roi_.x_);
-    roi_h     = std::min(roi_h, h - roi_.y_);
-    cv::Rect roi_rect(roi_.x_, roi_.y_, roi_w, roi_h);
-    roi_img     = img(roi_rect).clone();  // Clone to create contiguous memory
-    float scale = static_cast<float>(maximum_edge_) / static_cast<float>(std::max(roi_w, roi_h));
-    cv::resize(roi_img, roi_img,
-               cv::Size(static_cast<int>(roi_w * scale), static_cast<int>(roi_h * scale)), 0, 0,
-               cv::INTER_AREA);
+    const float roi_factor_x =
+        std::clamp(roi_.resize_factor_x_ > 0.0f ? roi_.resize_factor_x_ : roi_.resize_factor_, 1e-4f,
+                   1.0f);
+    const float roi_factor_y =
+        std::clamp(roi_.resize_factor_y_ > 0.0f ? roi_.resize_factor_y_ : roi_.resize_factor_, 1e-4f,
+                   1.0f);
+    int roi_w =
+        std::clamp(static_cast<int>(std::lround(static_cast<float>(w) * roi_factor_x)), 1, w);
+    int roi_h =
+        std::clamp(static_cast<int>(std::lround(static_cast<float>(h) * roi_factor_y)), 1, h);
+    int roi_x = std::clamp(roi_.x_, 0, std::max(0, w - roi_w));
+    int roi_y = std::clamp(roi_.y_, 0, std::max(0, h - roi_h));
+
+    cv::Rect roi_rect(roi_x, roi_y, roi_w, roi_h);
+    cv::Mat  roi_img = img(roi_rect).clone();
+
+    const float roi_scale =
+        std::min(1.0f,
+                 static_cast<float>(maximum_edge_) / static_cast<float>(std::max(roi_w, roi_h)));
+    if (roi_scale < (1.0f - 1e-4f)) {
+      const int out_w = std::max(1, static_cast<int>(std::lround(static_cast<float>(roi_w) * roi_scale)));
+      const int out_h = std::max(1, static_cast<int>(std::lround(static_cast<float>(roi_h) * roi_scale)));
+      cv::resize(roi_img, roi_img, cv::Size(out_w, out_h), 0, 0, cv::INTER_AREA);
+    }
     img = roi_img;
     return;
   }
-  cv::resize(img, img, cv::Size(static_cast<int>(w * scale), static_cast<int>(h * scale)), 0, 0,
-             cv::INTER_AREA);
+
+  const int out_w = std::max(1, static_cast<int>(std::lround(static_cast<float>(w) * full_scale)));
+  const int out_h = std::max(1, static_cast<int>(std::lround(static_cast<float>(h) * full_scale)));
+  cv::resize(img, img, cv::Size(out_w, out_h), 0, 0, cv::INTER_AREA);
 }
 
 void ResizeOp::ApplyGPU(std::shared_ptr<ImageBuffer> input) {
@@ -60,25 +87,48 @@ void ResizeOp::ApplyGPU(std::shared_ptr<ImageBuffer> input) {
   auto& img = input->GetGPUData();
   int   w   = img.cols;
   int   h   = img.rows;
-  if (std::max(w, h) <= maximum_edge_) return;
+  if (w <= 0 || h <= 0) return;
   if (!enable_scale_ && !enable_roi_) return;
 
-  float scale =
-      enable_scale_ ? static_cast<float>(maximum_edge_) / static_cast<float>(std::max(w, h)) : 1.0f;
+  const float full_scale =
+      enable_scale_
+          ? std::min(1.0f,
+                     static_cast<float>(maximum_edge_) / static_cast<float>(std::max(w, h)))
+          : 1.0f;
+
+  if (!enable_roi_ && full_scale >= (1.0f - 1e-4f)) {
+    return;
+  }
 
   if (enable_roi_) {
-    int roi_w = static_cast<int>(w * roi_.resize_factor_);
-    int roi_h = static_cast<int>(h * roi_.resize_factor_);
-    roi_w     = std::min(roi_w, w - roi_.x_);
-    roi_h     = std::min(roi_h, h - roi_.y_);
-    cv::Rect roi_rect(roi_.x_, roi_.y_, roi_w, roi_h);
+    const float roi_factor_x =
+        std::clamp(roi_.resize_factor_x_ > 0.0f ? roi_.resize_factor_x_ : roi_.resize_factor_, 1e-4f,
+                   1.0f);
+    const float roi_factor_y =
+        std::clamp(roi_.resize_factor_y_ > 0.0f ? roi_.resize_factor_y_ : roi_.resize_factor_, 1e-4f,
+                   1.0f);
+    int roi_w =
+        std::clamp(static_cast<int>(std::lround(static_cast<float>(w) * roi_factor_x)), 1, w);
+    int roi_h =
+        std::clamp(static_cast<int>(std::lround(static_cast<float>(h) * roi_factor_y)), 1, h);
+    int roi_x = std::clamp(roi_.x_, 0, std::max(0, w - roi_w));
+    int roi_y = std::clamp(roi_.y_, 0, std::max(0, h - roi_h));
+    cv::Rect roi_rect(roi_x, roi_y, roi_w, roi_h);
 
     cv::cuda::GpuMat roi_src = img(roi_rect).clone();
 
-    float roi_scale =
-        static_cast<float>(maximum_edge_) / static_cast<float>(std::max(roi_w, roi_h));
-    const int out_w = static_cast<int>(roi_w * roi_scale);
-    const int out_h = static_cast<int>(roi_h * roi_scale);
+    const float roi_scale =
+        std::min(1.0f,
+                 static_cast<float>(maximum_edge_) / static_cast<float>(std::max(roi_w, roi_h)));
+    if (roi_scale >= (1.0f - 1e-4f)) {
+      img = roi_src;
+      return;
+    }
+
+    const int out_w =
+        std::max(1, static_cast<int>(std::lround(static_cast<float>(roi_w) * roi_scale)));
+    const int out_h =
+        std::max(1, static_cast<int>(std::lround(static_cast<float>(roi_h) * roi_scale)));
 
     cv::cuda::GpuMat roi_dst;
     cv::cuda::createContinuous(out_h, out_w, roi_src.type(), roi_dst);
@@ -88,8 +138,10 @@ void ResizeOp::ApplyGPU(std::shared_ptr<ImageBuffer> input) {
     return;
   }
 
-  const int out_w = static_cast<int>(w * scale);
-  const int out_h = static_cast<int>(h * scale);
+  const int out_w =
+      std::max(1, static_cast<int>(std::lround(static_cast<float>(w) * full_scale)));
+  const int out_h =
+      std::max(1, static_cast<int>(std::lround(static_cast<float>(h) * full_scale)));
 
   cv::cuda::GpuMat dst;
   cv::cuda::createContinuous(out_h, out_w, img.type(), dst);
@@ -104,7 +156,11 @@ auto ResizeOp::GetParams() const -> nlohmann::json {
   inner["enable_scale"] = enable_scale_;
   inner["maximum_edge"] = maximum_edge_;
   inner["enable_roi"]   = enable_roi_;
-  inner["roi"]          = {{"x", roi_.x_}, {"y", roi_.y_}, {"resize_factor", roi_.resize_factor_}};
+  inner["roi"]          = {{"x", roi_.x_},
+                           {"y", roi_.y_},
+                           {"resize_factor_x", roi_.resize_factor_x_},
+                           {"resize_factor_y", roi_.resize_factor_y_},
+                           {"resize_factor", roi_.resize_factor_}};
 
   params[script_name_]  = inner;
   return params;
@@ -133,12 +189,14 @@ auto ResizeOp::SetParams(const nlohmann::json& params) -> void {
       roi_.x_             = roi_json.value("x", 0);
       roi_.y_             = roi_json.value("y", 0);
       roi_.resize_factor_ = roi_json.value("resize_factor", 1.0f);
+      roi_.resize_factor_x_ = roi_json.value("resize_factor_x", roi_.resize_factor_);
+      roi_.resize_factor_y_ = roi_json.value("resize_factor_y", roi_.resize_factor_);
     }
   } else {
     enable_scale_ = false;
     maximum_edge_ = 2048;
     enable_roi_   = false;
-    roi_          = {0, 0, 1.0f};
+    roi_          = {0, 0, 1.0f, 1.0f, 1.0f};
   }
 }
 

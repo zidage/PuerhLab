@@ -14,6 +14,7 @@
 
 #include "edit/pipeline/pipeline_cpu.hpp"
 
+#include <algorithm>
 #include <memory>
 #include <opencv2/core.hpp>
 #include <opencv2/core/mat.hpp>
@@ -149,6 +150,7 @@ CPUPipelineExecutor::SetPreviewMode(bool) {
 
 void CPUPipelineExecutor::SetExecutionStages() {
   exec_stages_.clear();
+  frame_sink_ = nullptr;
   std::vector<PipelineStage*> streamable_stages;
 
   // Merged GPU stream stage is always re-executed; keeping its cache enabled only retains
@@ -176,6 +178,7 @@ void CPUPipelineExecutor::SetExecutionStages() {
 
 void CPUPipelineExecutor::SetExecutionStages(IFrameSink* frame_sink) {
   SetExecutionStages();
+  frame_sink_ = frame_sink;
 
   // Set frame sink for the last stage
   if (!exec_stages_.empty()) {
@@ -184,6 +187,7 @@ void CPUPipelineExecutor::SetExecutionStages(IFrameSink* frame_sink) {
 }
 
 void CPUPipelineExecutor::ResetExecutionStages() {
+  frame_sink_ = nullptr;
   for (auto& stage : stages_) {
     stage.ResetDependents();
     stage.ResetNeighbors();
@@ -214,14 +218,19 @@ void CPUPipelineExecutor::ImportPipelineParams(const nlohmann::json& j) {
   }
 }
 
-void CPUPipelineExecutor::SetRenderRegion(int x, int y, float scale_factor) {
-  auto& resize_params         = render_params_["resize"];
-  // render_params_["resize"] = {
-  //   {"enable_roi", true},
-  //   {"roi", {{"x", x}, {"y", y}, {"resize_factor", scale_factor}}},
-  // };
-  resize_params["enable_roi"] = false;
-  resize_params["roi"]        = {{"x", x}, {"y", y}, {"resize_factor", scale_factor}};
+void CPUPipelineExecutor::SetRenderRegion(int x, int y, float scale_factor_x, float scale_factor_y) {
+  auto& resize_params = render_params_["resize"];
+
+  const float clamped_scale_x = std::clamp(scale_factor_x, 1e-4f, 1.0f);
+  const float clamped_scale_y =
+      std::clamp((scale_factor_y > 0.0f) ? scale_factor_y : scale_factor_x, 1e-4f, 1.0f);
+  resize_params["enable_roi"] = (clamped_scale_x < (1.0f - 1e-4f)) ||
+                                (clamped_scale_y < (1.0f - 1e-4f));
+  resize_params["roi"]        = {{"x", std::max(0, x)},
+                                 {"y", std::max(0, y)},
+                                 {"resize_factor_x", clamped_scale_x},
+                                 {"resize_factor_y", clamped_scale_y},
+                                 {"resize_factor", std::max(clamped_scale_x, clamped_scale_y)}};
 
   stages_[static_cast<int>(PipelineStageName::Geometry_Adjustment)].SetOperator(
       OperatorType::RESIZE, render_params_);
@@ -251,6 +260,20 @@ void CPUPipelineExecutor::SetDecodeRes(DecodeRes res) {
   auto  raw_param = raw_stage.GetOperator(OperatorType::RAW_DECODE).value()->ExportOperatorParams();
   raw_param["params"]["raw"]["decode_res"] = static_cast<int>(res);
   raw_stage.SetOperator(OperatorType::RAW_DECODE, raw_param["params"]);
+}
+
+auto CPUPipelineExecutor::GetViewportRenderRegion() const -> std::optional<ViewportRenderRegion> {
+  if (!frame_sink_) {
+    return std::nullopt;
+  }
+  return frame_sink_->GetViewportRenderRegion();
+}
+
+void CPUPipelineExecutor::SetNextFramePresentationMode(FramePresentationMode mode) const {
+  if (!frame_sink_) {
+    return;
+  }
+  frame_sink_->SetNextFramePresentationMode(mode);
 }
 
 void CPUPipelineExecutor::RegisterAllOperators() {
