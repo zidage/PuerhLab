@@ -4,6 +4,7 @@
 #include <QByteArray>
 #include <QComboBox>
 #include <QCoreApplication>
+#include <QColor>
 #include <QDateTime>
 #include <QDialog>
 #include <QEventLoop>
@@ -31,6 +32,7 @@
 #include <QVBoxLayout>
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <filesystem>
@@ -93,6 +95,56 @@ constexpr float kHighlightsSliderFromGlobalScale = 50.0f;
 constexpr float kCurveEpsilon                    = 1e-6f;
 constexpr float kCurveMinPointSpacing            = 1e-3f;
 constexpr int   kCurveMaxControlPoints           = 12;
+constexpr std::array<float, 8> kHlsCandidateHues = {0.0f, 45.0f, 90.0f, 135.0f,
+                                                     180.0f, 225.0f, 270.0f, 315.0f};
+constexpr float kHlsFixedTargetLightness         = 0.5f;
+constexpr float kHlsFixedTargetSaturation        = 0.5f;
+constexpr float kHlsDefaultHueRange              = 15.0f;
+constexpr float kHlsFixedLightnessRange          = 1.0f;
+constexpr float kHlsFixedSaturationRange         = 1.0f;
+constexpr float kHlsMaxHueShiftDegrees           = 15.0f;
+constexpr float kHlsAdjUiMin                     = -100.0f;
+constexpr float kHlsAdjUiMax                     = 100.0f;
+constexpr float kHlsAdjUiToParamScale            = 1000.0f;
+
+using HlsProfileArray = std::array<float, kHlsCandidateHues.size()>;
+
+auto MakeHlsFilledArray(float value) -> HlsProfileArray {
+  HlsProfileArray out{};
+  out.fill(value);
+  return out;
+}
+
+auto WrapHueDegrees(float hue) -> float {
+  hue = std::fmod(hue, 360.0f);
+  if (hue < 0.0f) {
+    hue += 360.0f;
+  }
+  return hue;
+}
+
+auto HueDistanceDegrees(float a, float b) -> float {
+  const float diff = std::abs(WrapHueDegrees(a) - WrapHueDegrees(b));
+  return std::min(diff, 360.0f - diff);
+}
+
+auto ClosestHlsCandidateHueIndex(float hue) -> int {
+  int   best_idx  = 0;
+  float best_dist = HueDistanceDegrees(hue, kHlsCandidateHues.front());
+  for (int i = 1; i < static_cast<int>(kHlsCandidateHues.size()); ++i) {
+    const float dist = HueDistanceDegrees(hue, kHlsCandidateHues[i]);
+    if (dist < best_dist) {
+      best_dist = dist;
+      best_idx  = i;
+    }
+  }
+  return best_idx;
+}
+
+auto HlsCandidateColor(float hue_degrees) -> QColor {
+  const float wrapped = WrapHueDegrees(hue_degrees);
+  return QColor::fromHslF(wrapped / 360.0f, 1.0f, 0.5f);
+}
 
 auto Clamp01(float v) -> float { return std::clamp(v, 0.0f, 1.0f); }
 
@@ -1417,6 +1469,99 @@ class EditorDialog final : public QDialog {
         [this]() { CommitAdjustment(AdjustmentField::Tint); },
         [](int v) { return QString::number(v, 'f', 2); });
 
+    addSection("HSL", "Select a target hue and adjust hue/lightness/saturation in range.");
+
+    {
+      auto* frame = new QFrame(controls_);
+      frame->setObjectName("EditorSection");
+      auto* layout = new QVBoxLayout(frame);
+      layout->setContentsMargins(12, 10, 12, 10);
+      layout->setSpacing(8);
+
+      hls_target_label_ = new QLabel(frame);
+      hls_target_label_->setStyleSheet(
+          "QLabel {"
+          "  color: #E6E6E6;"
+          "  font-size: 13px;"
+          "  font-weight: 500;"
+          "}");
+      layout->addWidget(hls_target_label_, 0);
+
+      auto* swatch_row       = new QWidget(frame);
+      auto* swatch_row_layout = new QHBoxLayout(swatch_row);
+      swatch_row_layout->setContentsMargins(0, 0, 0, 0);
+      swatch_row_layout->setSpacing(6);
+
+      hls_candidate_buttons_.clear();
+      hls_candidate_buttons_.reserve(kHlsCandidateHues.size());
+      for (int i = 0; i < static_cast<int>(kHlsCandidateHues.size()); ++i) {
+        auto* btn = new QPushButton(swatch_row);
+        btn->setFixedSize(22, 22);
+        btn->setCursor(Qt::PointingHandCursor);
+        btn->setToolTip(QString("Hue %1 deg").arg(kHlsCandidateHues[static_cast<size_t>(i)], 0, 'f',
+                                                0));
+        QObject::connect(btn, &QPushButton::clicked, this, [this, i]() {
+          if (syncing_controls_) {
+            return;
+          }
+          SaveActiveHlsProfile(state_);
+          state_.hls_target_hue_ = kHlsCandidateHues[static_cast<size_t>(i)];
+          LoadActiveHlsProfile(state_);
+          SyncControlsFromState();
+        });
+        hls_candidate_buttons_.push_back(btn);
+        swatch_row_layout->addWidget(btn);
+      }
+      swatch_row_layout->addStretch();
+      layout->addWidget(swatch_row, 0);
+
+      controls_layout->insertWidget(controls_layout->count() - 1, frame);
+      RefreshHlsTargetUi();
+    }
+
+    hls_hue_adjust_slider_ = addSlider(
+        "Hue Shift", -15, 15, static_cast<int>(std::lround(state_.hls_hue_adjust_)),
+        [&](int v) {
+          state_.hls_hue_adjust_ =
+              std::clamp(static_cast<float>(v), -kHlsMaxHueShiftDegrees, kHlsMaxHueShiftDegrees);
+          SaveActiveHlsProfile(state_);
+          RequestRender();
+        },
+        [this]() { CommitAdjustment(AdjustmentField::Hls); },
+        [](int v) { return QString("%1 deg").arg(v); });
+
+    hls_lightness_adjust_slider_ = addSlider(
+        "Lightness", -100, 100, static_cast<int>(std::lround(state_.hls_lightness_adjust_)),
+        [&](int v) {
+          state_.hls_lightness_adjust_ =
+              std::clamp(static_cast<float>(v), kHlsAdjUiMin, kHlsAdjUiMax);
+          SaveActiveHlsProfile(state_);
+          RequestRender();
+        },
+        [this]() { CommitAdjustment(AdjustmentField::Hls); },
+        [](int v) { return QString::number(v, 'f', 0); });
+
+    hls_saturation_adjust_slider_ = addSlider(
+        "HSL Saturation", -100, 100, static_cast<int>(std::lround(state_.hls_saturation_adjust_)),
+        [&](int v) {
+          state_.hls_saturation_adjust_ =
+              std::clamp(static_cast<float>(v), kHlsAdjUiMin, kHlsAdjUiMax);
+          SaveActiveHlsProfile(state_);
+          RequestRender();
+        },
+        [this]() { CommitAdjustment(AdjustmentField::Hls); },
+        [](int v) { return QString::number(v, 'f', 0); });
+
+    hls_hue_range_slider_ = addSlider(
+        "Hue Range", 1, 180, static_cast<int>(std::lround(state_.hls_hue_range_)),
+        [&](int v) {
+          state_.hls_hue_range_ = static_cast<float>(v);
+          SaveActiveHlsProfile(state_);
+          RequestRender();
+        },
+        [this]() { CommitAdjustment(AdjustmentField::Hls); },
+        [](int v) { return QString("%1 deg").arg(v); });
+
     blacks_slider_ = addSlider(
         "Blacks", -100, 100, static_cast<int>(std::lround(state_.blacks_)),
         [&](int v) {
@@ -1764,6 +1909,7 @@ class EditorDialog final : public QDialog {
     Contrast,
     Saturation,
     Tint,
+    Hls,
     Blacks,
     Whites,
     Shadows,
@@ -1779,6 +1925,15 @@ class EditorDialog final : public QDialog {
     float       contrast_   = 0.0f;
     float       saturation_ = 30.0f;
     float       tint_       = 0.0f;
+    float       hls_target_hue_           = 0.0f;
+    float       hls_hue_adjust_           = 0.0f;
+    float       hls_lightness_adjust_     = 0.0f;
+    float       hls_saturation_adjust_    = 0.0f;
+    float       hls_hue_range_            = kHlsDefaultHueRange;
+    HlsProfileArray hls_hue_adjust_table_      = {};
+    HlsProfileArray hls_lightness_adjust_table_ = {};
+    HlsProfileArray hls_saturation_adjust_table_ = {};
+    HlsProfileArray hls_hue_range_table_       = MakeHlsFilledArray(kHlsDefaultHueRange);
     float       blacks_     = 0.0f;
     float       whites_     = 0.0f;
     float       shadows_    = 0.0f;
@@ -1791,6 +1946,59 @@ class EditorDialog final : public QDialog {
   };
 
   static bool NearlyEqual(float a, float b) { return std::abs(a - b) <= 1e-6f; }
+
+  static auto ActiveHlsProfileIndex(const AdjustmentState& state) -> int {
+    return std::clamp(ClosestHlsCandidateHueIndex(state.hls_target_hue_), 0,
+                      static_cast<int>(kHlsCandidateHues.size()) - 1);
+  }
+
+  static void SaveActiveHlsProfile(AdjustmentState& state) {
+    const int idx = ActiveHlsProfileIndex(state);
+    state.hls_hue_adjust_table_[idx]        = state.hls_hue_adjust_;
+    state.hls_lightness_adjust_table_[idx]  = state.hls_lightness_adjust_;
+    state.hls_saturation_adjust_table_[idx] = state.hls_saturation_adjust_;
+    state.hls_hue_range_table_[idx]         = state.hls_hue_range_;
+  }
+
+  static void LoadActiveHlsProfile(AdjustmentState& state) {
+    const int idx = ActiveHlsProfileIndex(state);
+    state.hls_hue_adjust_        = state.hls_hue_adjust_table_[idx];
+    state.hls_lightness_adjust_  = state.hls_lightness_adjust_table_[idx];
+    state.hls_saturation_adjust_ = state.hls_saturation_adjust_table_[idx];
+    state.hls_hue_range_         = state.hls_hue_range_table_[idx];
+  }
+
+  void RefreshHlsTargetUi() {
+    if (!hls_target_label_ && hls_candidate_buttons_.empty()) {
+      return;
+    }
+
+    const float hue = WrapHueDegrees(state_.hls_target_hue_);
+    if (hls_target_label_) {
+      hls_target_label_->setText(QString("Target Hue: %1 deg").arg(hue, 0, 'f', 0));
+    }
+
+    const int selected_idx = ClosestHlsCandidateHueIndex(hue);
+    for (int i = 0; i < static_cast<int>(hls_candidate_buttons_.size()); ++i) {
+      auto* btn = hls_candidate_buttons_[i];
+      if (!btn) {
+        continue;
+      }
+      const bool   selected    = (i == selected_idx);
+      const QColor swatch      = HlsCandidateColor(kHlsCandidateHues[static_cast<size_t>(i)]);
+      const auto   border_w_px = selected ? "3px" : "1px";
+      const auto   border_col  = selected ? "#FCC704" : "#2A2A2A";
+      btn->setStyleSheet(QString("QPushButton {"
+                                 "  background: %1;"
+                                 "  border: %2 solid %3;"
+                                 "  border-radius: 11px;"
+                                 "}"
+                                 "QPushButton:hover {"
+                                 "  border-color: #FCC704;"
+                                 "}")
+                             .arg(swatch.name(QColor::HexRgb), border_w_px, border_col));
+    }
+  }
 
   void        RefreshVersionLogSelectionStyles() {
     if (!version_log_) {
@@ -1829,6 +2037,7 @@ class EditorDialog final : public QDialog {
     }
 
     syncing_controls_ = true;
+    LoadActiveHlsProfile(state_);
 
     if (lut_combo_) {
       int lut_index = 0;
@@ -1859,6 +2068,20 @@ class EditorDialog final : public QDialog {
     if (tint_slider_) {
       tint_slider_->setValue(static_cast<int>(std::lround(state_.tint_)));
     }
+    if (hls_hue_adjust_slider_) {
+      hls_hue_adjust_slider_->setValue(static_cast<int>(std::lround(state_.hls_hue_adjust_)));
+    }
+    if (hls_lightness_adjust_slider_) {
+      hls_lightness_adjust_slider_->setValue(
+          static_cast<int>(std::lround(state_.hls_lightness_adjust_)));
+    }
+    if (hls_saturation_adjust_slider_) {
+      hls_saturation_adjust_slider_->setValue(
+          static_cast<int>(std::lround(state_.hls_saturation_adjust_)));
+    }
+    if (hls_hue_range_slider_) {
+      hls_hue_range_slider_->setValue(static_cast<int>(std::lround(state_.hls_hue_range_)));
+    }
     if (blacks_slider_) {
       blacks_slider_->setValue(static_cast<int>(std::lround(state_.blacks_)));
     }
@@ -1880,6 +2103,7 @@ class EditorDialog final : public QDialog {
     if (curve_widget_) {
       curve_widget_->SetControlPoints(state_.curve_points_);
     }
+    RefreshHlsTargetUi();
 
     syncing_controls_ = false;
   }
@@ -2392,6 +2616,8 @@ class EditorDialog final : public QDialog {
         return {PipelineStageName::Color_Adjustment, OperatorType::SATURATION};
       case AdjustmentField::Tint:
         return {PipelineStageName::Color_Adjustment, OperatorType::TINT};
+      case AdjustmentField::Hls:
+        return {PipelineStageName::Color_Adjustment, OperatorType::HLS};
       case AdjustmentField::Blacks:
         return {PipelineStageName::Basic_Adjustment, OperatorType::BLACK};
       case AdjustmentField::Whites:
@@ -2422,6 +2648,45 @@ class EditorDialog final : public QDialog {
         return {{"saturation", s.saturation_}};
       case AdjustmentField::Tint:
         return {{"tint", s.tint_}};
+      case AdjustmentField::Hls:
+        {
+          nlohmann::json hue_bins     = nlohmann::json::array();
+          nlohmann::json hls_adj_table = nlohmann::json::array();
+          nlohmann::json h_range_table = nlohmann::json::array();
+          for (size_t i = 0; i < kHlsCandidateHues.size(); ++i) {
+            hue_bins.push_back(kHlsCandidateHues[i]);
+            hls_adj_table.push_back(std::array<float, 3>{
+                std::clamp(s.hls_hue_adjust_table_[i], -kHlsMaxHueShiftDegrees, kHlsMaxHueShiftDegrees),
+                std::clamp(s.hls_lightness_adjust_table_[i], kHlsAdjUiMin, kHlsAdjUiMax) /
+                    kHlsAdjUiToParamScale,
+                std::clamp(s.hls_saturation_adjust_table_[i], kHlsAdjUiMin, kHlsAdjUiMax) /
+                    kHlsAdjUiToParamScale});
+            h_range_table.push_back(std::max(s.hls_hue_range_table_[i], 1.0f));
+          }
+          const int active_idx = ActiveHlsProfileIndex(s);
+
+          return {
+              {"HLS",
+               {{"hue_bins", std::move(hue_bins)},
+                {"hls_adj_table", std::move(hls_adj_table)},
+                {"h_range_table", std::move(h_range_table)},
+                {"target_hls",
+                 std::array<float, 3>{WrapHueDegrees(s.hls_target_hue_), kHlsFixedTargetLightness,
+                                      kHlsFixedTargetSaturation}},
+                {"hls_adj",
+                 std::array<float, 3>{
+                     std::clamp(s.hls_hue_adjust_table_[active_idx], -kHlsMaxHueShiftDegrees,
+                                kHlsMaxHueShiftDegrees),
+                     std::clamp(s.hls_lightness_adjust_table_[active_idx], kHlsAdjUiMin,
+                                kHlsAdjUiMax) /
+                         kHlsAdjUiToParamScale,
+                     std::clamp(s.hls_saturation_adjust_table_[active_idx], kHlsAdjUiMin,
+                                kHlsAdjUiMax) /
+                         kHlsAdjUiToParamScale}},
+                {"h_range", std::max(s.hls_hue_range_table_[active_idx], 1.0f)},
+                {"l_range", kHlsFixedLightnessRange},
+                {"s_range", kHlsFixedSaturationRange}}}};
+        }
       case AdjustmentField::Blacks:
         return {{"black", s.blacks_}};
       case AdjustmentField::Whites:
@@ -2452,6 +2717,20 @@ class EditorDialog final : public QDialog {
         return !NearlyEqual(state_.saturation_, committed_state_.saturation_);
       case AdjustmentField::Tint:
         return !NearlyEqual(state_.tint_, committed_state_.tint_);
+      case AdjustmentField::Hls:
+        for (size_t i = 0; i < kHlsCandidateHues.size(); ++i) {
+          if (!NearlyEqual(state_.hls_hue_adjust_table_[i],
+                           committed_state_.hls_hue_adjust_table_[i]) ||
+              !NearlyEqual(state_.hls_lightness_adjust_table_[i],
+                           committed_state_.hls_lightness_adjust_table_[i]) ||
+              !NearlyEqual(state_.hls_saturation_adjust_table_[i],
+                           committed_state_.hls_saturation_adjust_table_[i]) ||
+              !NearlyEqual(state_.hls_hue_range_table_[i],
+                           committed_state_.hls_hue_range_table_[i])) {
+            return true;
+          }
+        }
+        return false;
       case AdjustmentField::Blacks:
         return !NearlyEqual(state_.blacks_, committed_state_.blacks_);
       case AdjustmentField::Whites:
@@ -2581,6 +2860,23 @@ class EditorDialog final : public QDialog {
       }
     };
 
+    auto ReadNestedObject = [](const PipelineStage& stage, OperatorType type,
+                               const char* key) -> std::optional<nlohmann::json> {
+      const auto op = stage.GetOperator(type);
+      if (!op.has_value() || op.value() == nullptr) {
+        return std::nullopt;
+      }
+      const auto j = op.value()->ExportOperatorParams();
+      if (!j.contains("params")) {
+        return std::nullopt;
+      }
+      const auto& params = j["params"];
+      if (!params.contains(key) || !params[key].is_object()) {
+        return std::nullopt;
+      }
+      return params[key];
+    };
+
     auto ReadString = [](const PipelineStage& stage, OperatorType type,
                          const char* key) -> std::optional<std::string> {
       const auto op = stage.GetOperator(type);
@@ -2695,6 +2991,115 @@ class EditorDialog final : public QDialog {
       loaded_state.tint_ = v.value();
       has_loaded_any     = true;
     }
+    if (const auto hls_json = ReadNestedObject(color, OperatorType::HLS, "HLS");
+        hls_json.has_value()) {
+      auto ReadArray3 = [](const nlohmann::json& obj, const char* key,
+                           std::array<float, 3>& out) -> bool {
+        if (!obj.contains(key) || !obj[key].is_array() || obj[key].size() < 3) {
+          return false;
+        }
+        try {
+          out[0] = obj[key][0].get<float>();
+          out[1] = obj[key][1].get<float>();
+          out[2] = obj[key][2].get<float>();
+          return true;
+        } catch (...) {
+          return false;
+        }
+      };
+
+      const auto& hls = *hls_json;
+      loaded_state.hls_hue_adjust_table_.fill(0.0f);
+      loaded_state.hls_lightness_adjust_table_.fill(0.0f);
+      loaded_state.hls_saturation_adjust_table_.fill(0.0f);
+      loaded_state.hls_hue_range_table_ = MakeHlsFilledArray(kHlsDefaultHueRange);
+      std::array<float, 3> target_hls = {loaded_state.hls_target_hue_, kHlsFixedTargetLightness,
+                                         kHlsFixedTargetSaturation};
+      std::array<float, 3> hls_adj    = {};
+      bool                 has_adj_table = false;
+      bool                 has_range_table = false;
+
+      if (hls.contains("hls_adj_table") && hls["hls_adj_table"].is_array()) {
+        const auto& adj_tbl = hls["hls_adj_table"];
+        const bool  has_bins = hls.contains("hue_bins") && hls["hue_bins"].is_array();
+        for (int i = 0; i < static_cast<int>(adj_tbl.size()); ++i) {
+          if (!adj_tbl[i].is_array() || adj_tbl[i].size() < 3) {
+            continue;
+          }
+          int idx = i;
+          if (has_bins && i < static_cast<int>(hls["hue_bins"].size())) {
+            try {
+              idx = ClosestHlsCandidateHueIndex(hls["hue_bins"][i].get<float>());
+            } catch (...) {
+            }
+          }
+          if (idx < 0 || idx >= static_cast<int>(kHlsCandidateHues.size())) {
+            continue;
+          }
+          try {
+            loaded_state.hls_hue_adjust_table_[idx] =
+                std::clamp(adj_tbl[i][0].get<float>(), -kHlsMaxHueShiftDegrees,
+                           kHlsMaxHueShiftDegrees);
+            loaded_state.hls_lightness_adjust_table_[idx] =
+                std::clamp(adj_tbl[i][1].get<float>() * kHlsAdjUiToParamScale, kHlsAdjUiMin,
+                           kHlsAdjUiMax);
+            loaded_state.hls_saturation_adjust_table_[idx] =
+                std::clamp(adj_tbl[i][2].get<float>() * kHlsAdjUiToParamScale, kHlsAdjUiMin,
+                           kHlsAdjUiMax);
+            has_adj_table = true;
+          } catch (...) {
+          }
+        }
+      }
+
+      if (hls.contains("h_range_table") && hls["h_range_table"].is_array()) {
+        const auto& range_tbl = hls["h_range_table"];
+        const bool  has_bins  = hls.contains("hue_bins") && hls["hue_bins"].is_array();
+        for (int i = 0; i < static_cast<int>(range_tbl.size()); ++i) {
+          int idx = i;
+          if (has_bins && i < static_cast<int>(hls["hue_bins"].size())) {
+            try {
+              idx = ClosestHlsCandidateHueIndex(hls["hue_bins"][i].get<float>());
+            } catch (...) {
+            }
+          }
+          if (idx < 0 || idx >= static_cast<int>(kHlsCandidateHues.size())) {
+            continue;
+          }
+          try {
+            loaded_state.hls_hue_range_table_[idx] =
+                std::clamp(range_tbl[i].get<float>(), 1.0f, 180.0f);
+            has_range_table = true;
+          } catch (...) {
+          }
+        }
+      }
+
+      (void)ReadArray3(hls, "target_hls", target_hls);
+      (void)ReadArray3(hls, "hls_adj", hls_adj);
+
+      loaded_state.hls_target_hue_        = WrapHueDegrees(target_hls[0]);
+      const int active_idx = ActiveHlsProfileIndex(loaded_state);
+      loaded_state.hls_target_hue_        = kHlsCandidateHues[static_cast<size_t>(active_idx)];
+      if (!has_adj_table) {
+        loaded_state.hls_hue_adjust_table_[active_idx] =
+            std::clamp(hls_adj[0], -kHlsMaxHueShiftDegrees, kHlsMaxHueShiftDegrees);
+        loaded_state.hls_lightness_adjust_table_[active_idx] =
+            std::clamp(hls_adj[1] * kHlsAdjUiToParamScale, kHlsAdjUiMin, kHlsAdjUiMax);
+        loaded_state.hls_saturation_adjust_table_[active_idx] =
+            std::clamp(hls_adj[2] * kHlsAdjUiToParamScale, kHlsAdjUiMin, kHlsAdjUiMax);
+      }
+
+      if (!has_range_table && hls.contains("h_range")) {
+        try {
+          loaded_state.hls_hue_range_table_[active_idx] =
+              std::clamp(hls["h_range"].get<float>(), 1.0f, 180.0f);
+        } catch (...) {
+        }
+      }
+      LoadActiveHlsProfile(loaded_state);
+      has_loaded_any = true;
+    }
 
     if (const auto v = ReadNestedFloat(detail, OperatorType::SHARPEN, "sharpen", "offset");
         v.has_value()) {
@@ -2795,6 +3200,9 @@ class EditorDialog final : public QDialog {
     color.SetOperator(OperatorType::SATURATION, {{"saturation", state_.saturation_}},
                       global_params);
     color.SetOperator(OperatorType::TINT, {{"tint", state_.tint_}}, global_params);
+    color.SetOperator(OperatorType::HLS, ParamsForField(AdjustmentField::Hls, state_),
+                      global_params);
+    color.EnableOperator(OperatorType::HLS, true, global_params);
 
     // LUT (LMT): rebind only when the path changes. The operator's SetGlobalParams now
     // derives lmt_enabled_/dirty state from the path, and PipelineMgmtService resyncs on load.
@@ -2939,6 +3347,12 @@ class EditorDialog final : public QDialog {
   QSlider*                                                 contrast_slider_    = nullptr;
   QSlider*                                                 saturation_slider_  = nullptr;
   QSlider*                                                 tint_slider_        = nullptr;
+  QLabel*                                                  hls_target_label_   = nullptr;
+  std::vector<QPushButton*>                                hls_candidate_buttons_{};
+  QSlider*                                                 hls_hue_adjust_slider_ = nullptr;
+  QSlider*                                                 hls_lightness_adjust_slider_ = nullptr;
+  QSlider*                                                 hls_saturation_adjust_slider_ = nullptr;
+  QSlider*                                                 hls_hue_range_slider_ = nullptr;
   QSlider*                                                 blacks_slider_      = nullptr;
   QSlider*                                                 whites_slider_      = nullptr;
   QSlider*                                                 shadows_slider_     = nullptr;

@@ -18,6 +18,7 @@
 #include <cuda_runtime.h>
 #include <driver_types.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <sstream>
 #include <stdexcept>
@@ -248,11 +249,17 @@ struct GPUOperatorParams {
   float                slope_                  = 1.0f;
   // HLS adjustment parameters
   bool                 hls_enabled_            = true;
-  float                target_hls_[3]          = {0.0f, 0.0f, 0.0f};
+  float                target_hls_[3]          = {0.0f, 0.5f, 1.0f};
   float                hls_adjustment_[3]      = {0.0f, 0.0f, 0.0f};
-  float                hue_range_              = 0.0f;
-  float                lightness_range_        = 0.0f;
-  float                saturation_range_       = 0.0f;
+  float                hue_range_              = 15.0f;
+  float                lightness_range_        = 0.1f;
+  float                saturation_range_       = 0.1f;
+  int                  hls_profile_count_      = OperatorParams::kHlsProfileCount;
+  float                hls_profile_hues_[OperatorParams::kHlsProfileCount] = {
+      0.0f, 45.0f, 90.0f, 135.0f, 180.0f, 225.0f, 270.0f, 315.0f};
+  float                hls_profile_adjustments_[OperatorParams::kHlsProfileCount][3] = {};
+  float                hls_profile_hue_ranges_[OperatorParams::kHlsProfileCount] = {
+      15.0f, 15.0f, 15.0f, 15.0f, 15.0f, 15.0f, 15.0f, 15.0f};
 
   // Saturation adjustment parameter
   bool                 saturation_enabled_     = true;
@@ -362,6 +369,15 @@ class GPUParamsConverter {
     gpu_params.lightness_range_    = cpu_params.lightness_range_;
 
     gpu_params.saturation_range_   = cpu_params.saturation_range_;
+    gpu_params.hls_profile_count_  =
+        std::clamp(cpu_params.hls_profile_count_, 1, OperatorParams::kHlsProfileCount);
+    for (int i = 0; i < OperatorParams::kHlsProfileCount; ++i) {
+      gpu_params.hls_profile_hues_[i]      = cpu_params.hls_profile_hues_[i];
+      gpu_params.hls_profile_hue_ranges_[i] = cpu_params.hls_profile_hue_ranges_[i];
+      gpu_params.hls_profile_adjustments_[i][0] = cpu_params.hls_profile_adjustments_[i][0];
+      gpu_params.hls_profile_adjustments_[i][1] = cpu_params.hls_profile_adjustments_[i][1];
+      gpu_params.hls_profile_adjustments_[i][2] = cpu_params.hls_profile_adjustments_[i][2];
+    }
     gpu_params.saturation_enabled_ = cpu_params.saturation_enabled_;
     gpu_params.saturation_offset_  = cpu_params.saturation_offset_;
 

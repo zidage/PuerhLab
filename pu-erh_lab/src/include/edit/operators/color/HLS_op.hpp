@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <array>
 #include <opencv2/core.hpp>
 
 #include "edit/operators/op_base.hpp"
@@ -23,6 +24,8 @@ namespace puerhlab {
 
 class HLSOp : public OperatorBase<HLSOp> {
  private:
+  static constexpr int kHueProfileCount = OperatorParams::kHlsProfileCount;
+
   cv::Vec3f target_hls_;
 
   cv::Vec3f hls_adjustment_;
@@ -30,6 +33,11 @@ class HLSOp : public OperatorBase<HLSOp> {
   float     hue_range_;
   float     lightness_range_;
   float     saturation_range_;
+
+  std::array<float, kHueProfileCount>    hue_profile_values_{};
+  std::array<cv::Vec3f, kHueProfileCount> hls_adjustment_table_{};
+  std::array<float, kHueProfileCount>    hue_range_table_{};
+  int                                    active_profile_idx_ = 0;
 
  public:
   static constexpr PriorityLevel     priority_level_    = 5;

@@ -27,50 +27,88 @@ struct GPU_HLSOpKernel : GPUPointOpTag {
   __device__ __forceinline__ void operator()(float4* p, GPUOperatorParams& params) const {
     if (!params.hls_enabled_) return;
 
-    // Convert RGB to HLS
-    float r = p->x, g = p->y, b = p->z;
+    const float kEps = 1e-6f;
+    auto WrapHue      = [](float h) -> float {
+      h = fmodf(h, 360.0f);
+      if (h < 0.0f) h += 360.0f;
+      return h;
+    };
+
+    // Convert RGB to HLS.
+    float r = fminf(fmaxf(p->x, 0.0f), 1.0f);
+    float g = fminf(fmaxf(p->y, 0.0f), 1.0f);
+    float b = fminf(fmaxf(p->z, 0.0f), 1.0f);
+
     float max_c = fmaxf(fmaxf(r, g), b);
     float min_c = fminf(fminf(r, g), b);
     float L     = (max_c + min_c) * 0.5f;
-    float H = 0.0f, S = 0.0f;
-    float d = max_c - min_c == 0.0f ? 1e-10f : max_c - min_c;
-
-    S       = (L < 0.5f) ? (d / (max_c + min_c)) : (d / (2.0f - max_c - min_c));
-    if (max_c == r) {
-      H = (g - b) / d + (g < b ? 6.0f : 0.0f);
-    } else if (max_c == g) {
-      H = (b - r) / d + 2.0f;
-    } else if (max_c == b) {
-      H = (r - g) / d + 4.0f;
+    float H = 0.0f;
+    float S = 0.0f;
+    float d = max_c - min_c;
+    if (d > kEps) {
+      const float denom = fmaxf(1.0f - fabsf(2.0f * L - 1.0f), kEps);
+      S                 = fminf(fmaxf(d / denom, 0.0f), 1.0f);
+      if (max_c == r) {
+        H = (g - b) / d + (g < b ? 6.0f : 0.0f);
+      } else if (max_c == g) {
+        H = (b - r) / d + 2.0f;
+      } else {
+        H = (r - g) / d + 4.0f;
+      }
+      H *= 60.0f;
     }
-    H *= 60.0f;
 
-    float target_h = params.target_hls_[0];
-    float target_l = params.target_hls_[1];
-    float target_s = params.target_hls_[2];
+    int profile_count = params.hls_profile_count_;
+    if (profile_count < 1) {
+      profile_count = 1;
+    }
+    if (profile_count > OperatorParams::kHlsProfileCount) {
+      profile_count = OperatorParams::kHlsProfileCount;
+    }
 
-    // Compute mask
-    float h        = H;
-    float l        = L;
-    float s        = S;
-    float hue_diff = fabsf(h - target_h);
-    float hue_dist = fminf(hue_diff, 360.0f - hue_diff);
+    const float h = WrapHue(H);
+    float       accum_h = 0.0f;
+    float       accum_l = 0.0f;
+    float       accum_s = 0.0f;
+    bool        has_contribution = false;
 
-    float weight =
-        fmaxf(0.0f, 1.0f - hue_dist / params.hue_range_) *                      // hue_w
-        fmaxf(0.0f, 1.0f - fabsf(l - target_l) / params.lightness_range_) *  // lightness_w
-        fmaxf(0.0f, 1.0f - fabsf(s - target_s) / params.saturation_range_);  // saturation_w
+#pragma unroll
+    for (int i = 0; i < OperatorParams::kHlsProfileCount; ++i) {
+      if (i >= profile_count) {
+        continue;
+      }
 
-    float adj_h      = params.hls_adjustment_[0];
-    float adj_l      = params.hls_adjustment_[1];
-    float adj_s      = params.hls_adjustment_[2];
-    float h_adjusted = fmodf(h + adj_h * weight, 360.0f);
-    if (h_adjusted < 0) h_adjusted += 360.0f;
+      const float adj_h = params.hls_profile_adjustments_[i][0];
+      const float adj_l = params.hls_profile_adjustments_[i][1];
+      const float adj_s = params.hls_profile_adjustments_[i][2];
+      if (fabsf(adj_h) <= kEps && fabsf(adj_l) <= kEps && fabsf(adj_s) <= kEps) {
+        continue;
+      }
 
-    float l_adjusted = fminf(fmaxf(l + adj_l * weight, 0.0f), 1.0f);
-    float s_adjusted = fminf(fmaxf(s + adj_s * weight, 0.0f), 1.0f);
+      const float hue_range = fmaxf(params.hls_profile_hue_ranges_[i], kEps);
+      const float target_h  = WrapHue(params.hls_profile_hues_[i]);
+      const float hue_diff  = fabsf(h - target_h);
+      const float hue_dist  = fminf(hue_diff, 360.0f - hue_diff);
+      if (hue_dist >= hue_range) {
+        continue;
+      }
+
+      const float weight = 1.0f - hue_dist / hue_range;
+      accum_h += adj_h * weight;
+      accum_l += adj_l * weight;
+      accum_s += adj_s * weight;
+      has_contribution = true;
+    }
+
+    if (!has_contribution) {
+      return;
+    }
+
+    float h_adjusted = WrapHue(h + accum_h);
+    float l_adjusted = fminf(fmaxf(L + accum_l, 0.0f), 1.0f);
+    float s_adjusted = fminf(fmaxf(S + accum_s, 0.0f), 1.0f);
     // Convert HLS back to RGB
-    if (s_adjusted == 0.0f) {
+    if (s_adjusted <= kEps) {
       p->x = l_adjusted;
       p->y = l_adjusted;
       p->z = l_adjusted;
@@ -92,6 +130,10 @@ struct GPU_HLSOpKernel : GPUPointOpTag {
       p->y = hue2rgb(_p, q, h_adjusted / 360.0f);
       p->z = hue2rgb(_p, q, h_adjusted / 360.0f - 1.0f / 3.0f);
     }
+
+    p->x = fminf(fmaxf(p->x, 0.0f), 1.0f);
+    p->y = fminf(fmaxf(p->y, 0.0f), 1.0f);
+    p->z = fminf(fmaxf(p->z, 0.0f), 1.0f);
   }
 };
 
