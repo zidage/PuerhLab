@@ -48,6 +48,9 @@ ApplicationWindow {
 
     property bool settingsPage: false
     property bool inspectorVisible: true
+    property real inspectorWidth: 350
+    readonly property real inspectorMinWidth: 250
+    readonly property real inspectorMaxWidth: 600
     property bool gridMode: true
     property bool selectionMode: false
     property string pendingNewProjectFolderUrl: ""
@@ -824,9 +827,40 @@ ApplicationWindow {
 
             } // close center block wrapper
 
+            // ── drag handle to resize inspector panel ──
             Rectangle {
                 Layout.fillHeight: true
-                Layout.preferredWidth: inspectorVisible && !settingsPage ? 350 : 0
+                Layout.preferredWidth: inspectorVisible && !settingsPage ? 5 : 0
+                color: dragArea.containsMouse || dragArea.drag.active ? root.colAccentPrimary : "transparent"
+                visible: inspectorVisible && !settingsPage
+                Behavior on color { ColorAnimation { duration: 120 } }
+
+                MouseArea {
+                    id: dragArea
+                    anchors.fill: parent
+                    anchors.margins: -3          // widen the hit area
+                    hoverEnabled: true
+                    cursorShape: Qt.SplitHCursor
+                    property real startX: 0
+                    property real startWidth: 0
+                    onPressed: function(mouse) {
+                        startX = mapToGlobal(mouse.x, 0).x
+                        startWidth = root.inspectorWidth
+                    }
+                    onPositionChanged: function(mouse) {
+                        if (!pressed) return
+                        var globalX = mapToGlobal(mouse.x, 0).x
+                        var delta = startX - globalX   // dragging left ⇒ wider
+                        root.inspectorWidth = Math.max(root.inspectorMinWidth,
+                                                      Math.min(root.inspectorMaxWidth,
+                                                               startWidth + delta))
+                    }
+                }
+            }
+
+            Rectangle {
+                Layout.fillHeight: true
+                Layout.preferredWidth: inspectorVisible && !settingsPage ? root.inspectorWidth : 0
                 Behavior on Layout.preferredWidth { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
                 radius: root.panelRadius
                 color: root.colBgPanel

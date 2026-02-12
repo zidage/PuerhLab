@@ -6,6 +6,13 @@ ScrollView {
     id: root
     contentWidth: availableWidth
 
+    // Disable flick-by-drag on the internal Flickable so that
+    // RangeSlider / Slider drag gestures are not stolen.
+    // Scroll-wheel and scroll-bar interaction remain functional.
+    Component.onCompleted: {
+        contentItem.interactive = false
+    }
+
     property bool drawerOpen: true
     readonly property int filterFieldFocalLength: 1
     readonly property int filterFieldAperture: 2

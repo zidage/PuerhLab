@@ -24,6 +24,7 @@
 #include <QPushButton>
 #include <QScrollArea>
 #include <QSlider>
+#include <QSplitter>
 #include <QStyle>
 #include <QSurfaceFormat>
 #include <QTimer>
@@ -1052,7 +1053,19 @@ class EditorDialog final : public QDialog {
 
     auto* root = new QHBoxLayout(this);
     root->setContentsMargins(10, 10, 10, 10);
-    root->setSpacing(12);
+    root->setSpacing(0);
+
+    auto* main_splitter = new QSplitter(Qt::Horizontal, this);
+    main_splitter->setObjectName("EditorMainSplitter");
+    main_splitter->setChildrenCollapsible(false);
+    main_splitter->setHandleWidth(8);
+    main_splitter->setStyleSheet(
+        "QSplitter#EditorMainSplitter::handle {"
+        "  background: #2A2A2A;"
+        "}"
+        "QSplitter#EditorMainSplitter::handle:hover {"
+        "  background: #FCC704;"
+        "}");
 
     viewer_    = new QtEditViewer(this);
     viewer_->setMinimumSize(560, 360);
@@ -1077,8 +1090,8 @@ class EditorDialog final : public QDialog {
     viewer_grid->setColumnStretch(0, 1);
 
     auto* controls_panel = new QWidget(this);
-    controls_panel->setMinimumWidth(380);
-    controls_panel->setMaximumWidth(540);
+    controls_panel->setMinimumWidth(320);
+    controls_panel->setMaximumWidth(900);
     controls_panel->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
     controls_panel->setObjectName("EditorControlsPanel");
     controls_panel->setAttribute(Qt::WA_StyledBackground, true);
@@ -1132,8 +1145,14 @@ class EditorDialog final : public QDialog {
     controls_layout->setSpacing(12);
     controls_scroll_->setWidget(controls_);
 
-    root->addWidget(viewer_container_, 1);
-    root->addWidget(controls_panel, 0);
+    main_splitter->addWidget(viewer_container_);
+    main_splitter->addWidget(controls_panel);
+    main_splitter->setStretchFactor(0, 1);
+    main_splitter->setStretchFactor(1, 0);
+    const int right_default_width =
+        std::clamp(width() / 3, controls_panel->minimumWidth(), controls_panel->maximumWidth());
+    main_splitter->setSizes({std::max(480, width() - right_default_width), right_default_width});
+    root->addWidget(main_splitter, 1);
 
     {
       auto* histogram_frame = new QFrame(controls_panel);
@@ -1540,6 +1559,8 @@ class EditorDialog final : public QDialog {
           "  color: #A3A3A3;"
           "  font-size: 12px;"
           "}");
+      version_status_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+      version_status_->setMinimumWidth(0);
 
       undo_tx_btn_ = new QPushButton("Undo", row);
       undo_tx_btn_->setFixedHeight(32);
@@ -1615,9 +1636,9 @@ class EditorDialog final : public QDialog {
           "}");
 
       working_mode_combo_ = new QComboBox(mode_row);
-      working_mode_combo_->addItem("Incremental (from latest)",
+      working_mode_combo_->addItem("Plain", static_cast<int>(WorkingMode::Plain));
+      working_mode_combo_->addItem("Incr",
                                    static_cast<int>(WorkingMode::Incremental));
-      working_mode_combo_->addItem("Plain (no parent)", static_cast<int>(WorkingMode::Plain));
       working_mode_combo_->setFixedHeight(28);
       working_mode_combo_->setStyleSheet(
           "QComboBox {"
@@ -2083,6 +2104,7 @@ class EditorDialog final : public QDialog {
     }
 
     version_status_->setText(label);
+    version_status_->setToolTip(label);
     commit_version_btn_->setEnabled(tx_count > 0);
     if (undo_tx_btn_) {
       undo_tx_btn_->setEnabled(tx_count > 0);
