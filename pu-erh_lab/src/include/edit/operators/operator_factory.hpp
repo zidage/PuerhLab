@@ -28,6 +28,8 @@ inline std::string OperatorTypeToString(OperatorType type) {
       return "RAW_DECODE";
     case OperatorType::RESIZE:
       return "RESIZE";
+    case OperatorType::CROP_ROTATE:
+      return "CROP_ROTATE";
     case OperatorType::EXPOSURE:
       return "EXPOSURE";
     case OperatorType::CONTRAST:
@@ -76,6 +78,8 @@ inline OperatorType OperatorTypeFromString(const std::string& type_str) {
     return OperatorType::RAW_DECODE;
   else if (type_str == "RESIZE")
     return OperatorType::RESIZE;
+  else if (type_str == "CROP_ROTATE")
+    return OperatorType::CROP_ROTATE;
   else if (type_str == "EXPOSURE")
     return OperatorType::EXPOSURE;
   else if (type_str == "CONTRAST")

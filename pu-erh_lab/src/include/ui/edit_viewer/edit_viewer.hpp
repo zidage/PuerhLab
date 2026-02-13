@@ -22,7 +22,10 @@
 #include <QOpenGLShaderProgram>
 #include <QOpenGLWidget>
 #include <QMouseEvent>
+#include <QTimer>
+#include <QVariantAnimation>
 #include <QWheelEvent>
+#include <QRectF>
 #include <array>
 #include <atomic>
 #include <chrono>
@@ -41,6 +44,12 @@ class QtEditViewer : public QOpenGLWidget, protected QOpenGLExtraFunctions, publ
 
   // Reset zoom/pan to default view
   void ResetView();
+  void SetCropToolEnabled(bool enabled);
+  void SetCropOverlayVisible(bool visible);
+  void SetCropOverlayRectNormalized(float x, float y, float w, float h);
+  void SetCropOverlayRotationDegrees(float angle_degrees);
+  void ResetCropOverlayRectToFull();
+  auto GetViewZoom() const -> float;
 
   // Overrides from IFrameSink
   void    EnsureSize(int width, int height) override;
@@ -64,6 +73,9 @@ class QtEditViewer : public QOpenGLWidget, protected QOpenGLExtraFunctions, publ
 
   void RequestResize(int width, int height);
   void HistogramDataUpdated();
+  void CropOverlayRectChanged(float x, float y, float w, float h, bool is_final);
+  void CropOverlayRotationChanged(float angle_degrees, bool is_final);
+  void ViewZoomChanged(float zoom);
 
  private slots:
   void OnResizeGL(int w, int h);
@@ -110,6 +122,22 @@ class QtEditViewer : public QOpenGLWidget, protected QOpenGLExtraFunctions, publ
   QVector2D               view_pan_     = {0.0f, 0.0f};
   QPoint                  last_mouse_pos_{};
   bool                    dragging_     = false;
+  enum class CropDragMode { None, Create, Move, ResizeEdge, RotateCorner };
+  enum class CropCorner { None, TopLeft, TopRight, BottomRight, BottomLeft };
+  enum class CropEdge { None, Top, Right, Bottom, Left };
+  bool                    crop_tool_enabled_   = false;
+  bool                    crop_overlay_visible_ = false;
+  QRectF                  crop_overlay_rect_    = QRectF(0.0, 0.0, 1.0, 1.0);
+  float                   crop_overlay_rotation_degrees_ = 0.0f;
+  float                   crop_overlay_metric_aspect_ = 1.0f;
+  CropDragMode            crop_drag_mode_       = CropDragMode::None;
+  CropCorner              crop_drag_corner_     = CropCorner::None;
+  CropEdge                crop_drag_edge_       = CropEdge::None;
+  QPointF                 crop_drag_anchor_uv_{};
+  QPointF                 crop_drag_anchor_widget_pos_{};
+  QRectF                  crop_drag_origin_rect_{};
+  QPointF                 crop_drag_fixed_corner_uv_{};
+  float                   crop_drag_rotation_degrees_ = 0.0f;
   mutable std::mutex      view_state_mutex_;
   std::optional<ViewportRenderRegion> viewport_render_region_cache_{};
   int                     render_reference_width_  = 0;
@@ -129,10 +157,25 @@ class QtEditViewer : public QOpenGLWidget, protected QOpenGLExtraFunctions, publ
   void                    UpdateViewportRenderRegionCache();
   auto                    ComputeViewportRenderRegion(int image_width, int image_height) const
       -> std::optional<ViewportRenderRegion>;
+  auto                    WidgetPointToImageUv(const QPointF& widget_pos, int image_width,
+                                               int image_height) const -> std::optional<QPointF>;
+  auto                    ImageUvToWidgetPoint(const QPointF& uv, int image_width, int image_height) const
+      -> std::optional<QPointF>;
+  static auto             ClampCropRect(const QRectF& rect) -> QRectF;
   auto                    ComputeHistogram(GLuint texture_id, int width, int height) -> bool;
   auto                    ShouldComputeHistogramNow() -> bool;
   auto                    BuildComputeProgram(const char* source, const char* debug_name,
                                               GLuint& out_program) -> bool;
+  void                    StopZoomAnimation();
+  void                    ApplyViewTransform(float zoom, const QVector2D& pan, bool emit_zoom_signal);
+  void                    AnimateViewTo(float target_zoom,
+                                        const std::optional<QPointF>& anchor_widget_pos,
+                                        const std::optional<QVector2D>& explicit_target_pan = std::nullopt);
+  auto                    ClampPanForZoom(float zoom, const QVector2D& pan) const -> QVector2D;
+  auto                    ComputeAnchoredPan(float target_zoom, const QPointF& anchor_widget_pos,
+                                             const QVector2D& fallback_pan) const -> QVector2D;
+  void                    ToggleClickZoomAt(const QPointF& anchor_widget_pos);
+  void                    ToggleDoubleClickZoomAt(const QPointF& anchor_widget_pos);
 
   static constexpr int    kHistogramBins       = 256;
   static constexpr int    kHistogramSampleSize = 256;
@@ -153,5 +196,29 @@ class QtEditViewer : public QOpenGLWidget, protected QOpenGLExtraFunctions, publ
   std::atomic<bool>       histogram_has_data_{false};
   int                     histogram_update_interval_ms_ = 40;
   std::chrono::steady_clock::time_point last_histogram_update_time_{};
+
+  static constexpr float   kMinInteractiveZoom       = 1.0f;
+  static constexpr float   kMaxInteractiveZoom       = 8.0f;
+  static constexpr float   kWheelZoomStep            = 1.12f;
+  static constexpr float   kSingleClickZoomFactor    = 2.0f;
+  static constexpr int     kZoomAnimationDurationMs  = 170;
+  static constexpr int     kClickDragThresholdPixels = 3;
+
+  QVariantAnimation*       zoom_animation_           = nullptr;
+  float                    zoom_animation_start_     = 1.0f;
+  float                    zoom_animation_target_    = 1.0f;
+  QVector2D                pan_animation_start_      = {0.0f, 0.0f};
+  QVector2D                pan_animation_target_     = {0.0f, 0.0f};
+  QPoint                   drag_start_mouse_pos_{};
+  bool                     dragged_since_press_      = false;
+  bool                     click_zoom_toggle_active_ = false;
+  float                    click_zoom_restore_zoom_  = 1.0f;
+  QVector2D                click_zoom_restore_pan_   = {0.0f, 0.0f};
+  float                    double_click_zoom_target_ = kSingleClickZoomFactor;
+  bool                     double_click_zoom_in_next_ = true;
+  QTimer*                  click_toggle_timer_       = nullptr;
+  QPointF                  pending_click_toggle_pos_{};
+  bool                     pending_click_toggle_      = false;
+  bool                     suppress_next_click_release_toggle_ = false;
 };
 };  // namespace puerhlab

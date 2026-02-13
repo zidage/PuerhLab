@@ -2,9 +2,9 @@
 
 #include <QAbstractItemView>
 #include <QByteArray>
+#include <QColor>
 #include <QComboBox>
 #include <QCoreApplication>
-#include <QColor>
 #include <QDateTime>
 #include <QDialog>
 #include <QEventLoop>
@@ -25,12 +25,12 @@
 #include <QPushButton>
 #include <QScrollArea>
 #include <QSlider>
+#include <QStackedWidget>
 #include <QSplitter>
 #include <QStyle>
 #include <QSurfaceFormat>
 #include <QTimer>
 #include <QVBoxLayout>
-
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -88,24 +88,27 @@ auto ListCubeLutsInDir(const std::filesystem::path& dir) -> std::vector<std::fil
   return files;
 }
 
-constexpr float kBlackSliderFromGlobalScale      = 1000.0f;
-constexpr float kWhiteSliderFromGlobalScale      = 300.0f;
-constexpr float kShadowsSliderFromGlobalScale    = 80.0f;
-constexpr float kHighlightsSliderFromGlobalScale = 50.0f;
-constexpr float kCurveEpsilon                    = 1e-6f;
-constexpr float kCurveMinPointSpacing            = 1e-3f;
-constexpr int   kCurveMaxControlPoints           = 12;
-constexpr std::array<float, 8> kHlsCandidateHues = {0.0f, 45.0f, 90.0f, 135.0f,
-                                                     180.0f, 225.0f, 270.0f, 315.0f};
-constexpr float kHlsFixedTargetLightness         = 0.5f;
-constexpr float kHlsFixedTargetSaturation        = 0.5f;
-constexpr float kHlsDefaultHueRange              = 15.0f;
-constexpr float kHlsFixedLightnessRange          = 1.0f;
-constexpr float kHlsFixedSaturationRange         = 1.0f;
-constexpr float kHlsMaxHueShiftDegrees           = 15.0f;
-constexpr float kHlsAdjUiMin                     = -100.0f;
-constexpr float kHlsAdjUiMax                     = 100.0f;
-constexpr float kHlsAdjUiToParamScale            = 1000.0f;
+constexpr float                kBlackSliderFromGlobalScale      = 1000.0f;
+constexpr float                kWhiteSliderFromGlobalScale      = 300.0f;
+constexpr float                kShadowsSliderFromGlobalScale    = 80.0f;
+constexpr float                kHighlightsSliderFromGlobalScale = 50.0f;
+constexpr float                kCurveEpsilon                    = 1e-6f;
+constexpr float                kCurveMinPointSpacing            = 1e-3f;
+constexpr int                  kCurveMaxControlPoints           = 12;
+constexpr std::array<float, 8> kHlsCandidateHues                = {0.0f,   45.0f,  90.0f,  135.0f,
+                                                                   180.0f, 225.0f, 270.0f, 315.0f};
+constexpr float                kHlsFixedTargetLightness         = 0.5f;
+constexpr float                kHlsFixedTargetSaturation        = 0.5f;
+constexpr float                kHlsDefaultHueRange              = 15.0f;
+constexpr float                kHlsFixedLightnessRange          = 1.0f;
+constexpr float                kHlsFixedSaturationRange         = 1.0f;
+constexpr float                kHlsMaxHueShiftDegrees           = 15.0f;
+constexpr float                kHlsAdjUiMin                     = -100.0f;
+constexpr float                kHlsAdjUiMax                     = 100.0f;
+constexpr float                kHlsAdjUiToParamScale            = 1000.0f;
+constexpr float                kRotationSliderScale             = 100.0f;
+constexpr float                kCropRectSliderScale             = 1000.0f;
+constexpr float                kCropRectMinSize                 = 1e-4f;
 
 using HlsProfileArray = std::array<float, kHlsCandidateHues.size()>;
 
@@ -147,6 +150,14 @@ auto HlsCandidateColor(float hue_degrees) -> QColor {
 }
 
 auto Clamp01(float v) -> float { return std::clamp(v, 0.0f, 1.0f); }
+
+auto ClampCropRect(float x, float y, float w, float h) -> std::array<float, 4> {
+  w = std::clamp(w, kCropRectMinSize, 1.0f);
+  h = std::clamp(h, kCropRectMinSize, 1.0f);
+  x = std::clamp(x, 0.0f, 1.0f - w);
+  y = std::clamp(y, 0.0f, 1.0f - h);
+  return {x, y, w, h};
+}
 
 auto DefaultCurveControlPoints() -> std::vector<QPointF> {
   return {QPointF(0.0, 0.0), QPointF(0.25, 0.25), QPointF(0.75, 0.75), QPointF(1.0, 1.0)};
@@ -256,8 +267,7 @@ auto BuildCurveHermiteCache(const std::vector<QPointF>& points) -> CurveHermiteC
     const float dx = static_cast<float>(points[i + 1].x() - points[i].x());
     cache.h_[i]    = dx;
     if (std::abs(dx) > kCurveEpsilon) {
-      delta[i] =
-          static_cast<float>(points[i + 1].y() - points[i].y()) / dx;
+      delta[i] = static_cast<float>(points[i + 1].y() - points[i].y()) / dx;
     }
   }
 
@@ -271,15 +281,14 @@ auto BuildCurveHermiteCache(const std::vector<QPointF>& points) -> CurveHermiteC
     const float w1    = 2.0f * cache.h_[i] + cache.h_[i - 1];
     const float w2    = cache.h_[i] + 2.0f * cache.h_[i - 1];
     const float denom = (w1 / delta[i - 1]) + (w2 / delta[i]);
-    cache.m_[i]       = ((w1 + w2) > 0.0f && std::abs(denom) > kCurveEpsilon) ? (w1 + w2) / denom
-                                                                                : 0.0f;
+    cache.m_[i] = ((w1 + w2) > 0.0f && std::abs(denom) > kCurveEpsilon) ? (w1 + w2) / denom : 0.0f;
   }
 
   return cache;
 }
 
-auto EvaluateCurveHermite(float x, const std::vector<QPointF>& points, const CurveHermiteCache& cache)
-    -> float {
+auto EvaluateCurveHermite(float x, const std::vector<QPointF>& points,
+                          const CurveHermiteCache& cache) -> float {
   const size_t n = points.size();
   if (n == 0) {
     return Clamp01(x);
@@ -318,15 +327,14 @@ auto EvaluateCurveHermite(float x, const std::vector<QPointF>& points, const Cur
   const float h01 = -2.0f * t * t * t + 3.0f * t * t;
   const float h11 = t * t * t - t * t;
 
-  const float y =
-      h00 * static_cast<float>(points[idx].y()) + h10 * dx * cache.m_[idx] +
-      h01 * static_cast<float>(points[idx + 1].y()) + h11 * dx * cache.m_[idx + 1];
+  const float y   = h00 * static_cast<float>(points[idx].y()) + h10 * dx * cache.m_[idx] +
+                  h01 * static_cast<float>(points[idx + 1].y()) + h11 * dx * cache.m_[idx + 1];
   return Clamp01(y);
 }
 
 auto CurveControlPointsToParams(const std::vector<QPointF>& points) -> nlohmann::json {
-  const auto normalized = NormalizeCurveControlPoints(points);
-  nlohmann::json pts    = nlohmann::json::array();
+  const auto     normalized = NormalizeCurveControlPoints(points);
+  nlohmann::json pts        = nlohmann::json::array();
   for (const auto& p : normalized) {
     pts.push_back({{"x", static_cast<float>(p.x())}, {"y", static_cast<float>(p.y())}});
   }
@@ -404,7 +412,7 @@ class ToneCurveWidget final : public QWidget {
   }
 
   void SetControlPoints(const std::vector<QPointF>& points) {
-    points_ = NormalizeCurveControlPoints(points);
+    points_     = NormalizeCurveControlPoints(points);
     active_idx_ = -1;
     dragging_   = false;
     update();
@@ -440,8 +448,8 @@ class ToneCurveWidget final : public QWidget {
     painter.setPen(QPen(QColor(0x8C, 0x8C, 0x8C), 1.0, Qt::DashLine));
     painter.drawLine(QPointF(plot.left(), plot.bottom()), QPointF(plot.right(), plot.top()));
 
-    const auto cache = BuildCurveHermiteCache(points_);
-    QPainterPath curve_path;
+    const auto    cache = BuildCurveHermiteCache(points_);
+    QPainterPath  curve_path;
     constexpr int kSamples = 240;
     for (int i = 0; i <= kSamples; ++i) {
       const float   x = static_cast<float>(i) / static_cast<float>(kSamples);
@@ -486,7 +494,7 @@ class ToneCurveWidget final : public QWidget {
       const int hit_idx = HitTestPoint(pos);
       if (hit_idx > 0 && hit_idx + 1 < static_cast<int>(points_.size())) {
         points_.erase(points_.begin() + hit_idx);
-        points_ = NormalizeCurveControlPoints(points_);
+        points_     = NormalizeCurveControlPoints(points_);
         active_idx_ = -1;
         dragging_   = false;
         NotifyCurveChanged();
@@ -519,7 +527,7 @@ class ToneCurveWidget final : public QWidget {
     }
 
     points_.push_back(normalized);
-    points_ = NormalizeCurveControlPoints(points_);
+    points_     = NormalizeCurveControlPoints(points_);
     active_idx_ = FindClosestPointIndex(normalized);
     dragging_   = true;
     NotifyCurveChanged();
@@ -527,11 +535,12 @@ class ToneCurveWidget final : public QWidget {
   }
 
   void mouseMoveEvent(QMouseEvent* event) override {
-    if (!event || !dragging_ || active_idx_ < 0 || active_idx_ >= static_cast<int>(points_.size())) {
+    if (!event || !dragging_ || active_idx_ < 0 ||
+        active_idx_ >= static_cast<int>(points_.size())) {
       return;
     }
 
-    const int last_idx = static_cast<int>(points_.size()) - 1;
+    const int     last_idx   = static_cast<int>(points_.size()) - 1;
     const QPointF normalized = ToNormalizedPoint(event->position());
     if (active_idx_ == 0) {
       points_[0] = QPointF(0.0, Clamp01(static_cast<float>(normalized.y())));
@@ -546,13 +555,11 @@ class ToneCurveWidget final : public QWidget {
       return;
     }
 
-    const float   min_x =
-        static_cast<float>(points_[active_idx_ - 1].x()) + kCurveMinPointSpacing;
-    const float max_x =
-        static_cast<float>(points_[active_idx_ + 1].x()) - kCurveMinPointSpacing;
+    const float min_x    = static_cast<float>(points_[active_idx_ - 1].x()) + kCurveMinPointSpacing;
+    const float max_x    = static_cast<float>(points_[active_idx_ + 1].x()) - kCurveMinPointSpacing;
 
-    const float x = std::clamp(static_cast<float>(normalized.x()), min_x, max_x);
-    const float y = Clamp01(static_cast<float>(normalized.y()));
+    const float x        = std::clamp(static_cast<float>(normalized.x()), min_x, max_x);
+    const float y        = Clamp01(static_cast<float>(normalized.y()));
     points_[active_idx_] = QPointF(x, y);
 
     NotifyCurveChanged();
@@ -599,9 +606,9 @@ class ToneCurveWidget final : public QWidget {
   auto HitTestPoint(const QPointF& widget_point) const -> int {
     constexpr qreal kHitRadiusSq = 10.0 * 10.0;
     for (int i = static_cast<int>(points_.size()) - 1; i >= 0; --i) {
-      const QPointF p   = ToWidgetPoint(points_[i]);
-      const qreal   dx  = p.x() - widget_point.x();
-      const qreal   dy  = p.y() - widget_point.y();
+      const QPointF p       = ToWidgetPoint(points_[i]);
+      const qreal   dx      = p.x() - widget_point.x();
+      const qreal   dy      = p.y() - widget_point.y();
       const qreal   dist_sq = dx * dx + dy * dy;
       if (dist_sq <= kHitRadiusSq) {
         return i;
@@ -614,9 +621,9 @@ class ToneCurveWidget final : public QWidget {
     if (points_.empty()) {
       return -1;
     }
-    int   best_idx  = 0;
-    qreal best_dist = std::abs(points_[0].x() - normalized.x()) +
-                      std::abs(points_[0].y() - normalized.y());
+    int   best_idx = 0;
+    qreal best_dist =
+        std::abs(points_[0].x() - normalized.x()) + std::abs(points_[0].y() - normalized.y());
     for (int i = 1; i < static_cast<int>(points_.size()); ++i) {
       const qreal dist =
           std::abs(points_[i].x() - normalized.x()) + std::abs(points_[i].y() - normalized.y());
@@ -858,7 +865,7 @@ void main() {
 }
 )";
 
-    static const char* kFragment = R"(
+    static const char* kFragment   = R"(
 #version 430 core
 uniform vec4 uColor;
 out vec4 FragColor;
@@ -867,7 +874,7 @@ void main() {
 }
 )";
 
-    fill_program_ = new QOpenGLShaderProgram();
+    fill_program_                  = new QOpenGLShaderProgram();
     if (!fill_program_->addShaderFromSourceCode(QOpenGLShader::Vertex, kFillVertex) ||
         !fill_program_->addShaderFromSourceCode(QOpenGLShader::Fragment, kFragment) ||
         !fill_program_->link()) {
@@ -905,12 +912,12 @@ void main() {
     gl_ready_ = false;
   }
 
-  QtEditViewer*          source_viewer_ = nullptr;
-  QOpenGLShaderProgram*  fill_program_  = nullptr;
-  QOpenGLShaderProgram*  line_program_  = nullptr;
-  GLuint                 vao_           = 0;
-  bool                   gl_ready_      = false;
-  bool                   warned_context_sharing_ = false;
+  QtEditViewer*         source_viewer_          = nullptr;
+  QOpenGLShaderProgram* fill_program_           = nullptr;
+  QOpenGLShaderProgram* line_program_           = nullptr;
+  GLuint                vao_                    = 0;
+  bool                  gl_ready_               = false;
+  bool                  warned_context_sharing_ = false;
 };
 
 class HistogramRulerWidget final : public QWidget {
@@ -953,9 +960,9 @@ class HistogramRulerWidget final : public QWidget {
 
     painter.setPen(QColor(0x9A, 0x9A, 0x9A));
     for (const double t : stops) {
-      const qreal x = area.left() + t * area.width();
+      const qreal   x    = area.left() + t * area.width();
       const QString text = QString::number(t, 'f', 2);
-      const QRectF text_rect(x - 20.0, baseline_y + tick_h + 1.0, 40.0, 14.0);
+      const QRectF  text_rect(x - 20.0, baseline_y + tick_h + 1.0, 40.0, 14.0);
       painter.drawText(text_rect, Qt::AlignHCenter | Qt::AlignTop, text);
     }
   }
@@ -1119,7 +1126,7 @@ class EditorDialog final : public QDialog {
         "  background: #FCC704;"
         "}");
 
-    viewer_    = new QtEditViewer(this);
+    viewer_ = new QtEditViewer(this);
     viewer_->setMinimumSize(560, 360);
     viewer_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     viewer_->setStyleSheet(
@@ -1136,10 +1143,30 @@ class EditorDialog final : public QDialog {
     viewer_grid->setSpacing(0);
     viewer_grid->addWidget(viewer_, 0, 0);
 
+    viewer_zoom_label_ = new QLabel(viewer_container_);
+    viewer_zoom_label_->setAttribute(Qt::WA_TransparentForMouseEvents, true);
+    viewer_zoom_label_->setStyleSheet(
+        "QLabel {"
+        "  color: #E6E6E6;"
+        "  background: rgba(18, 18, 18, 180);"
+        "  border: 1px solid rgba(42, 42, 42, 220);"
+        "  border-radius: 8px;"
+        "  padding: 4px 8px;"
+        "  font-size: 11px;"
+        "  font-weight: 600;"
+        "}");
+    viewer_grid->addWidget(viewer_zoom_label_, 0, 0, Qt::AlignLeft | Qt::AlignTop);
+
     spinner_ = new SpinnerWidget(viewer_container_);
     viewer_grid->addWidget(spinner_, 0, 0, Qt::AlignRight | Qt::AlignBottom);
     viewer_grid->setRowStretch(0, 1);
     viewer_grid->setColumnStretch(0, 1);
+
+    if (viewer_) {
+      QObject::connect(viewer_, &QtEditViewer::ViewZoomChanged, this,
+                       [this](float zoom) { UpdateViewerZoomLabel(zoom); });
+      UpdateViewerZoomLabel(viewer_->GetViewZoom());
+    }
 
     auto* controls_panel = new QWidget(this);
     controls_panel->setMinimumWidth(320);
@@ -1171,12 +1198,115 @@ class EditorDialog final : public QDialog {
     controls_panel_layout->setContentsMargins(16, 16, 16, 16);
     controls_panel_layout->setSpacing(12);
 
-    controls_scroll_ = new QScrollArea(controls_panel);
-    controls_scroll_->setFrameShape(QFrame::NoFrame);
-    controls_scroll_->setWidgetResizable(true);
-    controls_scroll_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    controls_scroll_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
-    controls_scroll_->setStyleSheet(
+    const QString scroll_style =
+        "QScrollArea { background: transparent; border: none; }"
+        "QScrollBar:vertical {"
+        "  background: #121212;"
+        "  width: 10px;"
+        "  margin: 2px;"
+        "  border-radius: 5px;"
+        "}"
+        "QScrollBar::handle:vertical {"
+        "  background: #FCC704;"
+        "  border-radius: 5px;"
+        "}"
+        "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0px; }"
+        "QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; "
+        "}";
+
+    tone_controls_scroll_ = new QScrollArea(controls_panel);
+    tone_controls_scroll_->setFrameShape(QFrame::NoFrame);
+    tone_controls_scroll_->setWidgetResizable(true);
+    tone_controls_scroll_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    tone_controls_scroll_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    tone_controls_scroll_->setStyleSheet(scroll_style);
+
+    tone_controls_        = new QWidget(tone_controls_scroll_);
+    controls_             = tone_controls_;
+    auto* controls_layout = new QVBoxLayout(tone_controls_);
+    controls_layout->setContentsMargins(0, 0, 0, 0);
+    controls_layout->setSpacing(12);
+    tone_controls_scroll_->setWidget(tone_controls_);
+    controls_scroll_ = tone_controls_scroll_;
+
+    geometry_controls_scroll_ = new QScrollArea(controls_panel);
+    geometry_controls_scroll_->setFrameShape(QFrame::NoFrame);
+    geometry_controls_scroll_->setWidgetResizable(true);
+    geometry_controls_scroll_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    geometry_controls_scroll_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    geometry_controls_scroll_->setStyleSheet(scroll_style);
+
+    geometry_controls_ = new QWidget(geometry_controls_scroll_);
+    auto* geometry_controls_layout = new QVBoxLayout(geometry_controls_);
+    geometry_controls_layout->setContentsMargins(0, 0, 0, 0);
+    geometry_controls_layout->setSpacing(12);
+    geometry_controls_layout->addStretch();
+    geometry_controls_scroll_->setWidget(geometry_controls_);
+
+    control_panels_stack_ = new QStackedWidget(controls_panel);
+    control_panels_stack_->addWidget(tone_controls_scroll_);
+    control_panels_stack_->addWidget(geometry_controls_scroll_);
+    control_panels_stack_->setCurrentIndex(0);
+
+    auto* panel_switch_row = new QWidget(controls_panel);
+    auto* panel_switch_layout = new QHBoxLayout(panel_switch_row);
+    panel_switch_layout->setContentsMargins(0, 0, 0, 0);
+    panel_switch_layout->setSpacing(8);
+
+    tone_panel_btn_     = new QPushButton("Tone", panel_switch_row);
+    geometry_panel_btn_ = new QPushButton("Geometry", panel_switch_row);
+    tone_panel_btn_->setCheckable(true);
+    geometry_panel_btn_->setCheckable(true);
+    tone_panel_btn_->setCursor(Qt::PointingHandCursor);
+    geometry_panel_btn_->setCursor(Qt::PointingHandCursor);
+    tone_panel_btn_->setFixedHeight(30);
+    geometry_panel_btn_->setFixedHeight(30);
+
+    panel_switch_layout->addWidget(tone_panel_btn_, 1);
+    panel_switch_layout->addWidget(geometry_panel_btn_, 1);
+
+    QObject::connect(tone_panel_btn_, &QPushButton::clicked, this,
+                     [this]() { SetActiveControlPanel(ControlPanelKind::Tone); });
+    QObject::connect(geometry_panel_btn_, &QPushButton::clicked, this,
+                     [this]() { SetActiveControlPanel(ControlPanelKind::Geometry); });
+    RefreshPanelSwitchUi();
+
+    auto* shared_versioning_root = new QWidget(this);
+    shared_versioning_root->setObjectName("EditorVersioningPanel");
+    shared_versioning_root->setMinimumWidth(220);
+    shared_versioning_root->setMaximumWidth(600);
+    shared_versioning_root->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
+    shared_versioning_root->setAttribute(Qt::WA_StyledBackground, true);
+    shared_versioning_root->setStyleSheet(
+        "#EditorVersioningPanel {"
+        "  background: #1A1A1A;"
+        "  border: none;"
+        "  border-radius: 14px;"
+        "}"
+        "#EditorVersioningPanel QFrame#EditorSection {"
+        "  background: #121212;"
+        "  border: none;"
+        "  border-radius: 12px;"
+        "}"
+        "#EditorVersioningPanel QLabel#EditorSectionTitle {"
+        "  color: #E6E6E6;"
+        "  font-size: 13px;"
+        "  font-weight: 620;"
+        "}"
+        "#EditorVersioningPanel QLabel#EditorSectionSub {"
+        "  color: #A3A3A3;"
+        "  font-size: 11px;"
+        "}");
+    auto* shared_versioning_outer_layout = new QVBoxLayout(shared_versioning_root);
+    shared_versioning_outer_layout->setContentsMargins(0, 0, 0, 0);
+    shared_versioning_outer_layout->setSpacing(0);
+
+    auto* versioning_scroll = new QScrollArea(shared_versioning_root);
+    versioning_scroll->setFrameShape(QFrame::NoFrame);
+    versioning_scroll->setWidgetResizable(true);
+    versioning_scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    versioning_scroll->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    versioning_scroll->setStyleSheet(
         "QScrollArea { background: transparent; border: none; }"
         "QScrollBar:vertical {"
         "  background: #121212;"
@@ -1191,19 +1321,26 @@ class EditorDialog final : public QDialog {
         "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0px; }"
         "QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }");
 
-    controls_             = new QWidget(controls_scroll_);
-    auto* controls_layout = new QVBoxLayout(controls_);
-    controls_layout->setContentsMargins(0, 0, 0, 0);
-    controls_layout->setSpacing(12);
-    controls_scroll_->setWidget(controls_);
+    auto* versioning_content = new QWidget(versioning_scroll);
+    versioning_content->setStyleSheet("background: transparent;");
+    auto* shared_versioning_layout = new QVBoxLayout(versioning_content);
+    shared_versioning_layout->setContentsMargins(16, 16, 16, 16);
+    shared_versioning_layout->setSpacing(8);
+    versioning_scroll->setWidget(versioning_content);
+    shared_versioning_outer_layout->addWidget(versioning_scroll, 1);
 
+    main_splitter->addWidget(shared_versioning_root);
     main_splitter->addWidget(viewer_container_);
     main_splitter->addWidget(controls_panel);
-    main_splitter->setStretchFactor(0, 1);
-    main_splitter->setStretchFactor(1, 0);
+    main_splitter->setStretchFactor(0, 0);
+    main_splitter->setStretchFactor(1, 1);
+    main_splitter->setStretchFactor(2, 0);
     const int right_default_width =
         std::clamp(width() / 3, controls_panel->minimumWidth(), controls_panel->maximumWidth());
-    main_splitter->setSizes({std::max(480, width() - right_default_width), right_default_width});
+    const int left_default_width = 280;
+    main_splitter->setSizes({left_default_width,
+                             std::max(400, width() - right_default_width - left_default_width),
+                             right_default_width});
     root->addWidget(main_splitter, 1);
 
     {
@@ -1216,9 +1353,9 @@ class EditorDialog final : public QDialog {
       auto* histogram_title = new QLabel("Histogram", histogram_frame);
       histogram_title->setObjectName("EditorSectionTitle");
 
-      histogram_widget_ = new HistogramWidget(viewer_, histogram_frame);
-      histogram_ruler_widget_ =
-          new HistogramRulerWidget(viewer_ ? viewer_->GetHistogramBinCount() : 256, histogram_frame);
+      histogram_widget_       = new HistogramWidget(viewer_, histogram_frame);
+      histogram_ruler_widget_ = new HistogramRulerWidget(
+          viewer_ ? viewer_->GetHistogramBinCount() : 256, histogram_frame);
       histogram_layout->addWidget(histogram_title, 0);
       histogram_layout->addWidget(histogram_widget_, 0);
       histogram_layout->addWidget(histogram_ruler_widget_, 0);
@@ -1232,18 +1369,19 @@ class EditorDialog final : public QDialog {
       }
     }
 
-    controls_panel_layout->addWidget(controls_scroll_, 1);
+    controls_panel_layout->addWidget(panel_switch_row, 0);
+    controls_panel_layout->addWidget(control_panels_stack_, 1);
 
     auto* controls_header = new QLabel("Adjustments", controls_);
     controls_header->setObjectName("SectionTitle");
     controls_layout->addWidget(controls_header, 0);
 
     // Prefer LUTs next to the executable (installed layout), fall back to source tree.
-    const auto app_luts_dir = std::filesystem::path(
-        QCoreApplication::applicationDirPath().toStdWString()) / "LUTs";
+    const auto app_luts_dir =
+        std::filesystem::path(QCoreApplication::applicationDirPath().toStdWString()) / "LUTs";
     const auto src_luts_dir = std::filesystem::path(CONFIG_PATH) / "LUTs";
-    const auto luts_dir     = std::filesystem::is_directory(app_luts_dir) ? app_luts_dir : src_luts_dir;
-    const auto lut_files    = ListCubeLutsInDir(luts_dir);
+    const auto luts_dir = std::filesystem::is_directory(app_luts_dir) ? app_luts_dir : src_luts_dir;
+    const auto lut_files = ListCubeLutsInDir(luts_dir);
 
     lut_paths_.push_back("");  // index 0 => None
     lut_names_.push_back("None");
@@ -1352,14 +1490,13 @@ class EditorDialog final : public QDialog {
           "  color: #121212;"
           "}");
 
-      QObject::connect(
-          combo, QOverload<int>::of(&QComboBox::currentIndexChanged), controls_,
-          [this, onChange = std::forward<decltype(onChange)>(onChange)](int idx) {
-            if (syncing_controls_) {
-              return;
-            }
-            onChange(idx);
-          });
+      QObject::connect(combo, QOverload<int>::of(&QComboBox::currentIndexChanged), controls_,
+                       [this, onChange = std::forward<decltype(onChange)>(onChange)](int idx) {
+                         if (syncing_controls_) {
+                           return;
+                         }
+                         onChange(idx);
+                       });
 
       auto* row       = new QWidget(controls_);
       auto* rowLayout = new QHBoxLayout(row);
@@ -1389,25 +1526,23 @@ class EditorDialog final : public QDialog {
       slider->setMinimumWidth(240);
       slider->setFixedHeight(32);
 
-      QObject::connect(
-          slider, &QSlider::valueChanged, controls_,
-          [this, info, name, formatter, onChange = std::forward<decltype(onChange)>(onChange)](
-              int v) {
-            info->setText(QString("%1: %2").arg(name).arg(formatter(v)));
-            if (syncing_controls_) {
-              return;
-            }
-            onChange(v);
-          });
+      QObject::connect(slider, &QSlider::valueChanged, controls_,
+                       [this, info, name, formatter,
+                        onChange = std::forward<decltype(onChange)>(onChange)](int v) {
+                         info->setText(QString("%1: %2").arg(name).arg(formatter(v)));
+                         if (syncing_controls_) {
+                           return;
+                         }
+                         onChange(v);
+                       });
 
-      QObject::connect(
-          slider, &QSlider::sliderReleased, controls_,
-          [this, onRelease = std::forward<decltype(onRelease)>(onRelease)]() {
-            if (syncing_controls_) {
-              return;
-            }
-            onRelease();
-          });
+      QObject::connect(slider, &QSlider::sliderReleased, controls_,
+                       [this, onRelease = std::forward<decltype(onRelease)>(onRelease)]() {
+                         if (syncing_controls_) {
+                           return;
+                         }
+                         onRelease();
+                       });
 
       auto* row       = new QWidget(controls_);
       auto* rowLayout = new QHBoxLayout(row);
@@ -1418,8 +1553,6 @@ class EditorDialog final : public QDialog {
       controls_layout->insertWidget(controls_layout->count() - 1, row);
       return slider;
     };
-
-    addSection("Pipeline", "Choose LUT and render behavior.");
 
     lut_combo_ = addComboBox("LUT", lut_names_, initial_lut_index, [&](int idx) {
       if (idx < 0 || idx >= static_cast<int>(lut_paths_.size())) {
@@ -1449,6 +1582,112 @@ class EditorDialog final : public QDialog {
         [this]() { CommitAdjustment(AdjustmentField::Contrast); },
         [](int v) { return QString::number(v, 'f', 2); });
 
+    highlights_slider_ = addSlider(
+        "Highlights", -100, 100, static_cast<int>(std::lround(state_.highlights_)),
+        [&](int v) {
+          state_.highlights_ = static_cast<float>(v);
+          RequestRender();
+        },
+        [this]() { CommitAdjustment(AdjustmentField::Highlights); },
+        [](int v) { return QString::number(v, 'f', 2); });
+
+    shadows_slider_ = addSlider(
+        "Shadows", -100, 100, static_cast<int>(std::lround(state_.shadows_)),
+        [&](int v) {
+          state_.shadows_ = static_cast<float>(v);
+          RequestRender();
+        },
+        [this]() { CommitAdjustment(AdjustmentField::Shadows); },
+        [](int v) { return QString::number(v, 'f', 2); });
+
+    whites_slider_ = addSlider(
+        "Whites", -100, 100, static_cast<int>(std::lround(state_.whites_)),
+        [&](int v) {
+          state_.whites_ = static_cast<float>(v);
+          RequestRender();
+        },
+        [this]() { CommitAdjustment(AdjustmentField::Whites); },
+        [](int v) { return QString::number(v, 'f', 2); });
+
+    blacks_slider_ = addSlider(
+        "Blacks", -100, 100, static_cast<int>(std::lround(state_.blacks_)),
+        [&](int v) {
+          state_.blacks_ = static_cast<float>(v);
+          RequestRender();
+        },
+        [this]() { CommitAdjustment(AdjustmentField::Blacks); },
+        [](int v) { return QString::number(v, 'f', 2); });
+
+    addSection("Curve", "Smooth tone curve mapped from input [0, 1] to output [0, 1].");
+    {
+      auto* frame  = new QFrame(controls_);
+      auto* layout = new QVBoxLayout(frame);
+      layout->setContentsMargins(0, 0, 0, 0);
+      layout->setSpacing(8);
+
+      curve_widget_ = new ToneCurveWidget(frame);
+      curve_widget_->SetControlPoints(state_.curve_points_);
+      curve_widget_->SetCurveChangedCallback([this](const std::vector<QPointF>& points) {
+        if (syncing_controls_) {
+          return;
+        }
+        state_.curve_points_ = NormalizeCurveControlPoints(points);
+        RequestRender();
+      });
+      curve_widget_->SetCurveReleasedCallback([this](const std::vector<QPointF>& points) {
+        if (syncing_controls_) {
+          return;
+        }
+        state_.curve_points_ = NormalizeCurveControlPoints(points);
+        CommitAdjustment(AdjustmentField::Curve);
+      });
+
+      auto* actions_row        = new QWidget(frame);
+      auto* actions_row_layout = new QHBoxLayout(actions_row);
+      actions_row_layout->setContentsMargins(0, 0, 0, 0);
+      actions_row_layout->setSpacing(8);
+
+      auto* curve_hint =
+          new QLabel("Left click/drag to shape. Right click a point to remove.", actions_row);
+      curve_hint->setStyleSheet(
+          "QLabel {"
+          "  color: #A3A3A3;"
+          "  font-size: 11px;"
+          "}");
+      curve_hint->setWordWrap(true);
+
+      auto* reset_curve_btn = new QPushButton("Reset Curve", actions_row);
+      reset_curve_btn->setFixedHeight(28);
+      reset_curve_btn->setStyleSheet(
+          "QPushButton {"
+          "  color: #121212;"
+          "  background: #FCC704;"
+          "  border: none;"
+          "  border-radius: 8px;"
+          "  padding: 4px 10px;"
+          "}"
+          "QPushButton:hover {"
+          "  background: #FCC704;"
+          "}");
+      QObject::connect(reset_curve_btn, &QPushButton::clicked, this, [this]() {
+        if (!curve_widget_) {
+          return;
+        }
+        state_.curve_points_ = DefaultCurveControlPoints();
+        curve_widget_->SetControlPoints(state_.curve_points_);
+        RequestRender();
+        CommitAdjustment(AdjustmentField::Curve);
+      });
+
+      actions_row_layout->addWidget(curve_hint, 1);
+      actions_row_layout->addWidget(reset_curve_btn, 0);
+
+      layout->addWidget(curve_widget_, 1);
+      layout->addWidget(actions_row, 0);
+
+      controls_layout->insertWidget(controls_layout->count() - 1, frame);
+    }
+
     addSection("Color", "Color balance and saturation.");
 
     saturation_slider_ = addSlider(
@@ -1469,8 +1708,6 @@ class EditorDialog final : public QDialog {
         [this]() { CommitAdjustment(AdjustmentField::Tint); },
         [](int v) { return QString::number(v, 'f', 2); });
 
-    addSection("HSL", "Select a target hue and adjust hue/lightness/saturation in range.");
-
     {
       auto* frame = new QFrame(controls_);
       frame->setObjectName("EditorSection");
@@ -1487,7 +1724,7 @@ class EditorDialog final : public QDialog {
           "}");
       layout->addWidget(hls_target_label_, 0);
 
-      auto* swatch_row       = new QWidget(frame);
+      auto* swatch_row        = new QWidget(frame);
       auto* swatch_row_layout = new QHBoxLayout(swatch_row);
       swatch_row_layout->setContentsMargins(0, 0, 0, 0);
       swatch_row_layout->setSpacing(6);
@@ -1498,8 +1735,8 @@ class EditorDialog final : public QDialog {
         auto* btn = new QPushButton(swatch_row);
         btn->setFixedSize(22, 22);
         btn->setCursor(Qt::PointingHandCursor);
-        btn->setToolTip(QString("Hue %1 deg").arg(kHlsCandidateHues[static_cast<size_t>(i)], 0, 'f',
-                                                0));
+        btn->setToolTip(
+            QString("Hue %1 deg").arg(kHlsCandidateHues[static_cast<size_t>(i)], 0, 'f', 0));
         QObject::connect(btn, &QPushButton::clicked, this, [this, i]() {
           if (syncing_controls_) {
             return;
@@ -1562,113 +1799,6 @@ class EditorDialog final : public QDialog {
         [this]() { CommitAdjustment(AdjustmentField::Hls); },
         [](int v) { return QString("%1 deg").arg(v); });
 
-    blacks_slider_ = addSlider(
-        "Blacks", -100, 100, static_cast<int>(std::lround(state_.blacks_)),
-        [&](int v) {
-          state_.blacks_ = static_cast<float>(v);
-          RequestRender();
-        },
-        [this]() { CommitAdjustment(AdjustmentField::Blacks); },
-        [](int v) { return QString::number(v, 'f', 2); });
-
-    whites_slider_ = addSlider(
-        "Whites", -100, 100, static_cast<int>(std::lround(state_.whites_)),
-        [&](int v) {
-          state_.whites_ = static_cast<float>(v);
-          RequestRender();
-        },
-        [this]() { CommitAdjustment(AdjustmentField::Whites); },
-        [](int v) { return QString::number(v, 'f', 2); });
-
-    shadows_slider_ = addSlider(
-        "Shadows", -100, 100, static_cast<int>(std::lround(state_.shadows_)),
-        [&](int v) {
-          state_.shadows_ = static_cast<float>(v);
-          RequestRender();
-        },
-        [this]() { CommitAdjustment(AdjustmentField::Shadows); },
-        [](int v) { return QString::number(v, 'f', 2); });
-
-    highlights_slider_ = addSlider(
-        "Highlights", -100, 100, static_cast<int>(std::lround(state_.highlights_)),
-        [&](int v) {
-          state_.highlights_ = static_cast<float>(v);
-          RequestRender();
-        },
-        [this]() { CommitAdjustment(AdjustmentField::Highlights); },
-        [](int v) { return QString::number(v, 'f', 2); });
-
-    addSection("Curve", "Smooth tone curve mapped from input [0, 1] to output [0, 1].");
-
-    {
-      auto* frame  = new QFrame(controls_);
-      auto* layout = new QVBoxLayout(frame);
-      layout->setContentsMargins(0, 0, 0, 0);
-      layout->setSpacing(8);
-
-      curve_widget_ = new ToneCurveWidget(frame);
-      curve_widget_->SetControlPoints(state_.curve_points_);
-      curve_widget_->SetCurveChangedCallback([this](const std::vector<QPointF>& points) {
-        if (syncing_controls_) {
-          return;
-        }
-        state_.curve_points_ = NormalizeCurveControlPoints(points);
-        RequestRender();
-      });
-      curve_widget_->SetCurveReleasedCallback([this](const std::vector<QPointF>& points) {
-        if (syncing_controls_) {
-          return;
-        }
-        state_.curve_points_ = NormalizeCurveControlPoints(points);
-        CommitAdjustment(AdjustmentField::Curve);
-      });
-
-      auto* actions_row       = new QWidget(frame);
-      auto* actions_row_layout = new QHBoxLayout(actions_row);
-      actions_row_layout->setContentsMargins(0, 0, 0, 0);
-      actions_row_layout->setSpacing(8);
-
-      auto* curve_hint = new QLabel("Left click/drag to shape. Right click a point to remove.",
-                                    actions_row);
-      curve_hint->setStyleSheet(
-          "QLabel {"
-          "  color: #A3A3A3;"
-          "  font-size: 11px;"
-          "}");
-      curve_hint->setWordWrap(true);
-
-      auto* reset_curve_btn = new QPushButton("Reset Curve", actions_row);
-      reset_curve_btn->setFixedHeight(28);
-      reset_curve_btn->setStyleSheet(
-          "QPushButton {"
-          "  color: #121212;"
-          "  background: #FCC704;"
-          "  border: none;"
-          "  border-radius: 8px;"
-          "  padding: 4px 10px;"
-          "}"
-          "QPushButton:hover {"
-          "  background: #FCC704;"
-          "}");
-      QObject::connect(reset_curve_btn, &QPushButton::clicked, this, [this]() {
-        if (!curve_widget_) {
-          return;
-        }
-        state_.curve_points_ = DefaultCurveControlPoints();
-        curve_widget_->SetControlPoints(state_.curve_points_);
-        RequestRender();
-        CommitAdjustment(AdjustmentField::Curve);
-      });
-
-      actions_row_layout->addWidget(curve_hint, 1);
-      actions_row_layout->addWidget(reset_curve_btn, 0);
-
-      layout->addWidget(curve_widget_, 1);
-      layout->addWidget(actions_row, 0);
-
-      controls_layout->insertWidget(controls_layout->count() - 1, frame);
-    }
-
     addSection("Detail", "Micro-contrast and sharpen controls.");
 
     sharpen_slider_ = addSlider(
@@ -1689,11 +1819,299 @@ class EditorDialog final : public QDialog {
         [this]() { CommitAdjustment(AdjustmentField::Clarity); },
         [](int v) { return QString::number(v, 'f', 2); });
 
-    addSection("Versioning", "Commit and inspect edit history.");
+    auto addGeometrySection = [&](const QString& title, const QString& subtitle) {
+      auto* frame = new QFrame(geometry_controls_);
+      frame->setObjectName("EditorSection");
+      auto* v = new QVBoxLayout(frame);
+      v->setContentsMargins(12, 10, 12, 10);
+      v->setSpacing(2);
+
+      auto* t = new QLabel(title, frame);
+      t->setObjectName("EditorSectionTitle");
+      auto* s = new QLabel(subtitle, frame);
+      s->setObjectName("EditorSectionSub");
+      s->setWordWrap(true);
+      v->addWidget(t, 0);
+      v->addWidget(s, 0);
+      geometry_controls_layout->insertWidget(geometry_controls_layout->count() - 1, frame);
+    };
+
+    auto addGeometrySlider = [&](const QString& name, int min, int max, int value, auto&& onChange,
+                                 auto&& formatter) {
+      auto* info = new QLabel(QString("%1: %2").arg(name).arg(formatter(value)), geometry_controls_);
+      info->setStyleSheet(
+          "QLabel {"
+          "  color: #E6E6E6;"
+          "  font-size: 14px;"
+          "  font-weight: 400;"
+          "}");
+
+      auto* slider = new QSlider(Qt::Horizontal, geometry_controls_);
+      slider->setRange(min, max);
+      slider->setValue(value);
+      slider->setSingleStep(1);
+      slider->setPageStep(std::max(1, (max - min) / 20));
+      slider->setMinimumWidth(240);
+      slider->setFixedHeight(32);
+
+      QObject::connect(slider, &QSlider::valueChanged, geometry_controls_,
+                       [this, info, name, formatter,
+                        onChange = std::forward<decltype(onChange)>(onChange)](int v) {
+                         info->setText(QString("%1: %2").arg(name).arg(formatter(v)));
+                         if (syncing_controls_) {
+                           return;
+                         }
+                         onChange(v);
+                       });
+
+      auto* row       = new QWidget(geometry_controls_);
+      auto* rowLayout = new QHBoxLayout(row);
+      rowLayout->setContentsMargins(0, 0, 0, 0);
+      rowLayout->addWidget(info, 1);
+      rowLayout->addWidget(slider);
+      geometry_controls_layout->insertWidget(geometry_controls_layout->count() - 1, row);
+      return slider;
+    };
+
+    addGeometrySection("Geometry", "Rotate and crop workflow. Changes apply only when committed.");
+    rotate_slider_ = addGeometrySlider(
+        "Rotate", -18000, 18000, static_cast<int>(std::lround(state_.rotate_degrees_ * kRotationSliderScale)),
+        [&](int v) {
+          state_.rotate_degrees_ = static_cast<float>(v) / kRotationSliderScale;
+          if (viewer_) {
+            viewer_->SetCropOverlayRotationDegrees(state_.rotate_degrees_);
+          }
+        },
+        [](int v) { return QString("%1 deg").arg(static_cast<double>(v) / kRotationSliderScale, 0, 'f', 2); });
+    // Double-click rotate slider to reset to 0.
+    rotate_slider_->installEventFilter(this);
+
+    geometry_crop_x_slider_ = addGeometrySlider(
+        "Crop X", 0, static_cast<int>(kCropRectSliderScale),
+        static_cast<int>(std::lround(state_.crop_x_ * kCropRectSliderScale)),
+        [&](int v) {
+          const auto clamped = ClampCropRect(static_cast<float>(v) / kCropRectSliderScale, state_.crop_y_,
+                                             state_.crop_w_, state_.crop_h_);
+          state_.crop_x_      = clamped[0];
+          state_.crop_y_      = clamped[1];
+          state_.crop_w_      = clamped[2];
+          state_.crop_h_      = clamped[3];
+          state_.crop_enabled_ = true;
+          UpdateGeometryCropRectLabel();
+          if (viewer_) {
+            viewer_->SetCropOverlayRectNormalized(state_.crop_x_, state_.crop_y_, state_.crop_w_,
+                                                  state_.crop_h_);
+          }
+        },
+        [](int v) { return QString::number(static_cast<double>(v) / kCropRectSliderScale, 'f', 3); });
+
+    geometry_crop_y_slider_ = addGeometrySlider(
+        "Crop Y", 0, static_cast<int>(kCropRectSliderScale),
+        static_cast<int>(std::lround(state_.crop_y_ * kCropRectSliderScale)),
+        [&](int v) {
+          const auto clamped = ClampCropRect(state_.crop_x_, static_cast<float>(v) / kCropRectSliderScale,
+                                             state_.crop_w_, state_.crop_h_);
+          state_.crop_x_      = clamped[0];
+          state_.crop_y_      = clamped[1];
+          state_.crop_w_      = clamped[2];
+          state_.crop_h_      = clamped[3];
+          state_.crop_enabled_ = true;
+          UpdateGeometryCropRectLabel();
+          if (viewer_) {
+            viewer_->SetCropOverlayRectNormalized(state_.crop_x_, state_.crop_y_, state_.crop_w_,
+                                                  state_.crop_h_);
+          }
+        },
+        [](int v) { return QString::number(static_cast<double>(v) / kCropRectSliderScale, 'f', 3); });
+
+    geometry_crop_w_slider_ = addGeometrySlider(
+        "Crop W", 1, static_cast<int>(kCropRectSliderScale),
+        static_cast<int>(std::lround(state_.crop_w_ * kCropRectSliderScale)),
+        [&](int v) {
+          const auto clamped = ClampCropRect(state_.crop_x_, state_.crop_y_,
+                                             static_cast<float>(v) / kCropRectSliderScale, state_.crop_h_);
+          state_.crop_x_      = clamped[0];
+          state_.crop_y_      = clamped[1];
+          state_.crop_w_      = clamped[2];
+          state_.crop_h_      = clamped[3];
+          state_.crop_enabled_ = true;
+          UpdateGeometryCropRectLabel();
+          if (viewer_) {
+            viewer_->SetCropOverlayRectNormalized(state_.crop_x_, state_.crop_y_, state_.crop_w_,
+                                                  state_.crop_h_);
+          }
+        },
+        [](int v) { return QString::number(static_cast<double>(v) / kCropRectSliderScale, 'f', 3); });
+
+    geometry_crop_h_slider_ = addGeometrySlider(
+        "Crop H", 1, static_cast<int>(kCropRectSliderScale),
+        static_cast<int>(std::lround(state_.crop_h_ * kCropRectSliderScale)),
+        [&](int v) {
+          const auto clamped = ClampCropRect(state_.crop_x_, state_.crop_y_, state_.crop_w_,
+                                             static_cast<float>(v) / kCropRectSliderScale);
+          state_.crop_x_      = clamped[0];
+          state_.crop_y_      = clamped[1];
+          state_.crop_w_      = clamped[2];
+          state_.crop_h_      = clamped[3];
+          state_.crop_enabled_ = true;
+          UpdateGeometryCropRectLabel();
+          if (viewer_) {
+            viewer_->SetCropOverlayRectNormalized(state_.crop_x_, state_.crop_y_, state_.crop_w_,
+                                                  state_.crop_h_);
+          }
+        },
+        [](int v) { return QString::number(static_cast<double>(v) / kCropRectSliderScale, 'f', 3); });
+
+    {
+      auto* frame = new QFrame(geometry_controls_);
+      frame->setObjectName("EditorSection");
+      auto* layout = new QVBoxLayout(frame);
+      layout->setContentsMargins(12, 10, 12, 10);
+      layout->setSpacing(8);
+
+      geometry_crop_rect_label_ = new QLabel(frame);
+      geometry_crop_rect_label_->setStyleSheet(
+          "QLabel {"
+          "  color: #A3A3A3;"
+          "  font-size: 12px;"
+          "}");
+      layout->addWidget(geometry_crop_rect_label_, 0);
+
+      auto* row       = new QWidget(frame);
+      auto* rowLayout = new QHBoxLayout(row);
+      rowLayout->setContentsMargins(0, 0, 0, 0);
+      rowLayout->setSpacing(8);
+
+      geometry_apply_btn_ = new QPushButton("Apply Crop", row);
+      geometry_apply_btn_->setFixedHeight(30);
+      geometry_apply_btn_->setCursor(Qt::PointingHandCursor);
+      geometry_apply_btn_->setStyleSheet(
+          "QPushButton {"
+          "  color: #121212;"
+          "  background: #FCC704;"
+          "  border: none;"
+          "  border-radius: 8px;"
+          "  font-weight: 600;"
+          "}"
+          "QPushButton:hover {"
+          "  background: #F5C200;"
+          "}");
+      QObject::connect(geometry_apply_btn_, &QPushButton::clicked, this, [this]() {
+        state_.crop_enabled_ = true;
+        CommitAdjustment(AdjustmentField::CropRotate);
+        TriggerQualityPreviewRender();
+      });
+      rowLayout->addWidget(geometry_apply_btn_, 1);
+
+      geometry_reset_btn_ = new QPushButton("Reset", row);
+      geometry_reset_btn_->setFixedHeight(30);
+      geometry_reset_btn_->setCursor(Qt::PointingHandCursor);
+      geometry_reset_btn_->setToolTip("Reset crop & rotation (Ctrl+R)");
+      geometry_reset_btn_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_R));
+      geometry_reset_btn_->setStyleSheet(
+          "QPushButton {"
+          "  color: #E6E6E6;"
+          "  background: #3A3A3A;"
+          "  border: none;"
+          "  border-radius: 8px;"
+          "  font-weight: 600;"
+          "}"
+          "QPushButton:hover {"
+          "  background: #505050;"
+          "}");
+      QObject::connect(geometry_reset_btn_, &QPushButton::clicked, this, [this]() {
+        ResetCropAndRotation();
+      });
+      rowLayout->addWidget(geometry_reset_btn_, 0);
+      layout->addWidget(row, 0);
+
+      auto* hint = new QLabel(
+          "Geometry panel edits only the crop frame overlay. Image pixels update only after Apply Crop. "
+          "Double click viewer to restore full crop frame. "
+          "Double click rotate slider to reset angle. Ctrl+R to reset all geometry.",
+          frame);
+      hint->setWordWrap(true);
+      hint->setStyleSheet(
+          "QLabel {"
+          "  color: #A3A3A3;"
+          "  font-size: 11px;"
+          "}");
+      layout->addWidget(hint, 0);
+
+      geometry_controls_layout->insertWidget(geometry_controls_layout->count() - 1, frame);
+    }
+
+    if (viewer_) {
+      QObject::connect(viewer_, &QtEditViewer::CropOverlayRectChanged, this,
+                       [this](float x, float y, float w, float h, bool /*is_final*/) {
+                         if (syncing_controls_) {
+                           return;
+                         }
+                         const auto clamped = ClampCropRect(x, y, w, h);
+                         state_.crop_x_     = clamped[0];
+                         state_.crop_y_     = clamped[1];
+                         state_.crop_w_     = clamped[2];
+                         state_.crop_h_     = clamped[3];
+                         state_.crop_enabled_ = true;
+                         UpdateGeometryCropRectLabel();
+                         const bool prev_sync = syncing_controls_;
+                         syncing_controls_     = true;
+                         if (geometry_crop_x_slider_) {
+                           geometry_crop_x_slider_->setValue(
+                               static_cast<int>(std::lround(state_.crop_x_ * kCropRectSliderScale)));
+                         }
+                         if (geometry_crop_y_slider_) {
+                           geometry_crop_y_slider_->setValue(
+                               static_cast<int>(std::lround(state_.crop_y_ * kCropRectSliderScale)));
+                         }
+                         if (geometry_crop_w_slider_) {
+                           geometry_crop_w_slider_->setValue(
+                               static_cast<int>(std::lround(state_.crop_w_ * kCropRectSliderScale)));
+                         }
+                         if (geometry_crop_h_slider_) {
+                           geometry_crop_h_slider_->setValue(
+                               static_cast<int>(std::lround(state_.crop_h_ * kCropRectSliderScale)));
+                         }
+                          syncing_controls_ = prev_sync;
+                        });
+      QObject::connect(viewer_, &QtEditViewer::CropOverlayRotationChanged, this,
+                       [this](float angle_degrees, bool /*is_final*/) {
+                         if (syncing_controls_) {
+                           return;
+                         }
+                         state_.rotate_degrees_ = angle_degrees;
+                         const bool prev_sync = syncing_controls_;
+                         syncing_controls_     = true;
+                         if (rotate_slider_) {
+                           rotate_slider_->setValue(
+                               static_cast<int>(std::lround(state_.rotate_degrees_ *
+                                                            kRotationSliderScale)));
+                         }
+                         syncing_controls_ = prev_sync;
+                       });
+    }
+    UpdateGeometryCropRectLabel();
+    RefreshGeometryModeUi();
+
+    {
+      auto* section = new QFrame(shared_versioning_root);
+      section->setObjectName("EditorSection");
+      auto* v = new QVBoxLayout(section);
+      v->setContentsMargins(12, 10, 12, 10);
+      v->setSpacing(2);
+      auto* t = new QLabel("Versioning", section);
+      t->setObjectName("EditorSectionTitle");
+      auto* s = new QLabel("Commit and inspect edit history.", section);
+      s->setObjectName("EditorSectionSub");
+      s->setWordWrap(true);
+      v->addWidget(t, 0);
+      v->addWidget(s, 0);
+      shared_versioning_layout->addWidget(section, 0);
+    }
 
     // Edit-history commit controls.
     {
-      auto* row       = new QWidget(controls_);
+      auto* row       = new QWidget(shared_versioning_root);
       auto* rowLayout = new QHBoxLayout(row);
       rowLayout->setContentsMargins(0, 0, 0, 0);
       rowLayout->setSpacing(10);
@@ -1746,7 +2164,7 @@ class EditorDialog final : public QDialog {
       rowLayout->addWidget(version_status_, /*stretch*/ 1);
       rowLayout->addWidget(undo_tx_btn_, /*stretch*/ 0);
       rowLayout->addWidget(commit_version_btn_, /*stretch*/ 0);
-      controls_layout->insertWidget(controls_layout->count() - 1, row);
+      shared_versioning_layout->addWidget(row, 0);
 
       QObject::connect(undo_tx_btn_, &QPushButton::clicked, this,
                        [this]() { UndoLastTransaction(); });
@@ -1756,14 +2174,13 @@ class EditorDialog final : public QDialog {
 
     // Edit-history visualization ("git log"-like) + working version mode.
     {
-      auto* frame = new QFrame(controls_);
+      auto* frame = new QFrame(shared_versioning_root);
       frame->setStyleSheet(
           "QFrame {"
           "  background: transparent;"
           "  border: none;"
           "  border-radius: 12px;"
           "}");
-
       auto* layout = new QVBoxLayout(frame);
       layout->setContentsMargins(10, 10, 10, 10);
       layout->setSpacing(8);
@@ -1782,8 +2199,7 @@ class EditorDialog final : public QDialog {
 
       working_mode_combo_ = new QComboBox(mode_row);
       working_mode_combo_->addItem("Plain", static_cast<int>(WorkingMode::Plain));
-      working_mode_combo_->addItem("Incr",
-                                   static_cast<int>(WorkingMode::Incremental));
+      working_mode_combo_->addItem("Incr", static_cast<int>(WorkingMode::Incremental));
       working_mode_combo_->setFixedHeight(28);
       working_mode_combo_->setStyleSheet(
           "QComboBox {"
@@ -1836,7 +2252,7 @@ class EditorDialog final : public QDialog {
       version_log_->setSelectionMode(QAbstractItemView::SingleSelection);
       version_log_->setSpacing(6);
       version_log_->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
-      version_log_->setMinimumHeight(150);
+      version_log_->setMinimumHeight(110);
       version_log_->setStyleSheet(
           "QListWidget {"
           "  background: #121212;"
@@ -1870,7 +2286,7 @@ class EditorDialog final : public QDialog {
       tx_stack_->setSelectionMode(QAbstractItemView::NoSelection);
       tx_stack_->setSpacing(6);
       tx_stack_->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
-      tx_stack_->setMinimumHeight(170);
+      tx_stack_->setMinimumHeight(130);
       tx_stack_->setStyleSheet(
           "QListWidget {"
           "  background: #121212;"
@@ -1883,7 +2299,8 @@ class EditorDialog final : public QDialog {
           "}");
       layout->addWidget(tx_stack_, /*stretch*/ 1);
 
-      controls_layout->insertWidget(controls_layout->count() - 1, frame);
+      shared_versioning_layout->addWidget(frame, 0);
+      shared_versioning_layout->addStretch();
 
       QObject::connect(new_working_btn_, &QPushButton::clicked, this,
                        [this]() { StartNewWorkingVersionFromUi(); });
@@ -1894,6 +2311,14 @@ class EditorDialog final : public QDialog {
     UpdateVersionUi();
 
     SetupPipeline();
+    pipeline_initialized_ = true;
+    if (viewer_) {
+      viewer_->SetCropOverlayRectNormalized(state_.crop_x_, state_.crop_y_, state_.crop_w_,
+                                            state_.crop_h_);
+      viewer_->SetCropOverlayRotationDegrees(state_.rotate_degrees_);
+      viewer_->SetCropOverlayVisible(false);
+      viewer_->SetCropToolEnabled(false);
+    }
 
     // Requirement (3): init state render via singleShot.
     QTimer::singleShot(0, this, [this]() {
@@ -1904,6 +2329,8 @@ class EditorDialog final : public QDialog {
   }
 
  private:
+  enum class ControlPanelKind { Tone, Geometry };
+
   enum class AdjustmentField {
     Exposure,
     Contrast,
@@ -1918,31 +2345,39 @@ class EditorDialog final : public QDialog {
     Sharpen,
     Clarity,
     Lut,
+    CropRotate,
   };
 
   struct AdjustmentState {
-    float       exposure_   = 2.0f;
-    float       contrast_   = 0.0f;
-    float       saturation_ = 30.0f;
-    float       tint_       = 0.0f;
-    float       hls_target_hue_           = 0.0f;
-    float       hls_hue_adjust_           = 0.0f;
-    float       hls_lightness_adjust_     = 0.0f;
-    float       hls_saturation_adjust_    = 0.0f;
-    float       hls_hue_range_            = kHlsDefaultHueRange;
-    HlsProfileArray hls_hue_adjust_table_      = {};
-    HlsProfileArray hls_lightness_adjust_table_ = {};
-    HlsProfileArray hls_saturation_adjust_table_ = {};
-    HlsProfileArray hls_hue_range_table_       = MakeHlsFilledArray(kHlsDefaultHueRange);
-    float       blacks_     = 0.0f;
-    float       whites_     = 0.0f;
-    float       shadows_    = 0.0f;
-    float       highlights_ = 0.0f;
-    std::vector<QPointF> curve_points_ = DefaultCurveControlPoints();
-    float       sharpen_    = 0.0f;
-    float       clarity_    = 0.0f;
-    std::string lut_path_;
-    RenderType  type_ = RenderType::FAST_PREVIEW;
+    float                exposure_                    = 2.0f;
+    float                contrast_                    = 0.0f;
+    float                saturation_                  = 30.0f;
+    float                tint_                        = 0.0f;
+    float                hls_target_hue_              = 0.0f;
+    float                hls_hue_adjust_              = 0.0f;
+    float                hls_lightness_adjust_        = 0.0f;
+    float                hls_saturation_adjust_       = 0.0f;
+    float                hls_hue_range_               = kHlsDefaultHueRange;
+    HlsProfileArray      hls_hue_adjust_table_        = {};
+    HlsProfileArray      hls_lightness_adjust_table_  = {};
+    HlsProfileArray      hls_saturation_adjust_table_ = {};
+    HlsProfileArray      hls_hue_range_table_         = MakeHlsFilledArray(kHlsDefaultHueRange);
+    float                blacks_                      = 0.0f;
+    float                whites_                      = 0.0f;
+    float                shadows_                     = 0.0f;
+    float                highlights_                  = 0.0f;
+    std::vector<QPointF> curve_points_                = DefaultCurveControlPoints();
+    float                sharpen_                     = 0.0f;
+    float                clarity_                     = 0.0f;
+    float                rotate_degrees_              = 0.0f;
+    bool                 crop_enabled_                = true;
+    float                crop_x_                      = 0.0f;
+    float                crop_y_                      = 0.0f;
+    float                crop_w_                      = 1.0f;
+    float                crop_h_                      = 1.0f;
+    bool                 crop_expand_to_fit_          = true;
+    std::string          lut_path_;
+    RenderType           type_ = RenderType::FAST_PREVIEW;
   };
 
   static bool NearlyEqual(float a, float b) { return std::abs(a - b) <= 1e-6f; }
@@ -1953,7 +2388,7 @@ class EditorDialog final : public QDialog {
   }
 
   static void SaveActiveHlsProfile(AdjustmentState& state) {
-    const int idx = ActiveHlsProfileIndex(state);
+    const int idx                           = ActiveHlsProfileIndex(state);
     state.hls_hue_adjust_table_[idx]        = state.hls_hue_adjust_;
     state.hls_lightness_adjust_table_[idx]  = state.hls_lightness_adjust_;
     state.hls_saturation_adjust_table_[idx] = state.hls_saturation_adjust_;
@@ -1961,7 +2396,7 @@ class EditorDialog final : public QDialog {
   }
 
   static void LoadActiveHlsProfile(AdjustmentState& state) {
-    const int idx = ActiveHlsProfileIndex(state);
+    const int idx                = ActiveHlsProfileIndex(state);
     state.hls_hue_adjust_        = state.hls_hue_adjust_table_[idx];
     state.hls_lightness_adjust_  = state.hls_lightness_adjust_table_[idx];
     state.hls_saturation_adjust_ = state.hls_saturation_adjust_table_[idx];
@@ -2000,7 +2435,202 @@ class EditorDialog final : public QDialog {
     }
   }
 
-  void        RefreshVersionLogSelectionStyles() {
+  void UpdateGeometryCropRectLabel() {
+    if (!geometry_crop_rect_label_) {
+      return;
+    }
+    geometry_crop_rect_label_->setText(
+        QString("Crop Rect: x=%1 y=%2 w=%3 h=%4")
+            .arg(state_.crop_x_, 0, 'f', 3)
+            .arg(state_.crop_y_, 0, 'f', 3)
+            .arg(state_.crop_w_, 0, 'f', 3)
+            .arg(state_.crop_h_, 0, 'f', 3));
+  }
+
+  void ResetCropAndRotation() {
+    state_.crop_x_         = 0.0f;
+    state_.crop_y_         = 0.0f;
+    state_.crop_w_         = 1.0f;
+    state_.crop_h_         = 1.0f;
+    state_.crop_enabled_   = true;
+    state_.rotate_degrees_ = 0.0f;
+
+    const bool prev_sync = syncing_controls_;
+    syncing_controls_     = true;
+    if (geometry_crop_x_slider_) {
+      geometry_crop_x_slider_->setValue(0);
+    }
+    if (geometry_crop_y_slider_) {
+      geometry_crop_y_slider_->setValue(0);
+    }
+    if (geometry_crop_w_slider_) {
+      geometry_crop_w_slider_->setValue(static_cast<int>(kCropRectSliderScale));
+    }
+    if (geometry_crop_h_slider_) {
+      geometry_crop_h_slider_->setValue(static_cast<int>(kCropRectSliderScale));
+    }
+    if (rotate_slider_) {
+      rotate_slider_->setValue(0);
+    }
+    syncing_controls_ = prev_sync;
+
+    UpdateGeometryCropRectLabel();
+    if (viewer_) {
+      viewer_->SetCropOverlayRectNormalized(0.0f, 0.0f, 1.0f, 1.0f);
+      viewer_->SetCropOverlayRotationDegrees(0.0f);
+    }
+  }
+
+  bool eventFilter(QObject* obj, QEvent* event) override {
+    if (obj == rotate_slider_ && event->type() == QEvent::MouseButtonDblClick) {
+      state_.rotate_degrees_ = 0.0f;
+      const bool prev_sync   = syncing_controls_;
+      syncing_controls_       = true;
+      if (rotate_slider_) {
+        rotate_slider_->setValue(0);
+      }
+      syncing_controls_ = prev_sync;
+      if (viewer_) {
+        viewer_->SetCropOverlayRotationDegrees(0.0f);
+      }
+      return true;  // consume the event
+    }
+    return QDialog::eventFilter(obj, event);
+  }
+
+  void UpdateViewerZoomLabel(float zoom) {
+    if (!viewer_zoom_label_) {
+      return;
+    }
+    const float clamped = std::max(1.0f, zoom);
+    viewer_zoom_label_->setText(
+        QString("Zoom %1% (%2x)")
+            .arg(clamped * 100.0f, 0, 'f', 0)
+            .arg(clamped, 0, 'f', 2));
+  }
+
+  void RefreshGeometryModeUi() {
+    // Geometry crop editing is always enabled when the geometry panel is active.
+  }
+
+  void RefreshPanelSwitchUi() {
+    if (!tone_panel_btn_ || !geometry_panel_btn_) {
+      return;
+    }
+    const bool tone_active = (active_panel_ == ControlPanelKind::Tone);
+    tone_panel_btn_->setChecked(tone_active);
+    geometry_panel_btn_->setChecked(!tone_active);
+
+    const QString active_style =
+        "QPushButton {"
+        "  color: #121212;"
+        "  background: #FCC704;"
+        "  border: none;"
+        "  border-radius: 8px;"
+        "  font-weight: 600;"
+        "}"
+        "QPushButton:hover {"
+        "  background: #F5C200;"
+        "}";
+    const QString inactive_style =
+        "QPushButton {"
+        "  color: #E6E6E6;"
+        "  background: #121212;"
+        "  border: 1px solid #2A2A2A;"
+        "  border-radius: 8px;"
+        "  font-weight: 500;"
+        "}"
+        "QPushButton:hover {"
+        "  border-color: #FCC704;"
+        "}";
+    tone_panel_btn_->setStyleSheet(tone_active ? active_style : inactive_style);
+    geometry_panel_btn_->setStyleSheet(tone_active ? inactive_style : active_style);
+  }
+
+  void SetActiveControlPanel(ControlPanelKind panel) {
+    active_panel_ = panel;
+    if (control_panels_stack_) {
+      control_panels_stack_->setCurrentIndex(panel == ControlPanelKind::Tone ? 0 : 1);
+    }
+
+    const bool geometry_active = (panel == ControlPanelKind::Geometry);
+
+    if (viewer_) {
+      viewer_->SetCropOverlayRectNormalized(state_.crop_x_, state_.crop_y_, state_.crop_w_,
+                                            state_.crop_h_);
+      viewer_->SetCropOverlayRotationDegrees(state_.rotate_degrees_);
+      viewer_->SetCropOverlayVisible(geometry_active);
+      viewer_->SetCropToolEnabled(geometry_active);
+    }
+    RefreshGeometryModeUi();
+    RefreshPanelSwitchUi();
+    if (pipeline_initialized_) {
+      RequestRender();
+    }
+  }
+
+  static void CopyFieldState(AdjustmentField field, const AdjustmentState& from, AdjustmentState& to) {
+    switch (field) {
+      case AdjustmentField::Exposure:
+        to.exposure_ = from.exposure_;
+        return;
+      case AdjustmentField::Contrast:
+        to.contrast_ = from.contrast_;
+        return;
+      case AdjustmentField::Saturation:
+        to.saturation_ = from.saturation_;
+        return;
+      case AdjustmentField::Tint:
+        to.tint_ = from.tint_;
+        return;
+      case AdjustmentField::Hls:
+        to.hls_target_hue_              = from.hls_target_hue_;
+        to.hls_hue_adjust_              = from.hls_hue_adjust_;
+        to.hls_lightness_adjust_        = from.hls_lightness_adjust_;
+        to.hls_saturation_adjust_       = from.hls_saturation_adjust_;
+        to.hls_hue_range_               = from.hls_hue_range_;
+        to.hls_hue_adjust_table_        = from.hls_hue_adjust_table_;
+        to.hls_lightness_adjust_table_  = from.hls_lightness_adjust_table_;
+        to.hls_saturation_adjust_table_ = from.hls_saturation_adjust_table_;
+        to.hls_hue_range_table_         = from.hls_hue_range_table_;
+        return;
+      case AdjustmentField::Blacks:
+        to.blacks_ = from.blacks_;
+        return;
+      case AdjustmentField::Whites:
+        to.whites_ = from.whites_;
+        return;
+      case AdjustmentField::Shadows:
+        to.shadows_ = from.shadows_;
+        return;
+      case AdjustmentField::Highlights:
+        to.highlights_ = from.highlights_;
+        return;
+      case AdjustmentField::Curve:
+        to.curve_points_ = from.curve_points_;
+        return;
+      case AdjustmentField::Sharpen:
+        to.sharpen_ = from.sharpen_;
+        return;
+      case AdjustmentField::Clarity:
+        to.clarity_ = from.clarity_;
+        return;
+      case AdjustmentField::Lut:
+        to.lut_path_ = from.lut_path_;
+        return;
+      case AdjustmentField::CropRotate:
+        to.rotate_degrees_     = from.rotate_degrees_;
+        to.crop_enabled_       = from.crop_enabled_;
+        to.crop_x_             = from.crop_x_;
+        to.crop_y_             = from.crop_y_;
+        to.crop_w_             = from.crop_w_;
+        to.crop_h_             = from.crop_h_;
+        to.crop_expand_to_fit_ = from.crop_expand_to_fit_;
+        return;
+    }
+  }
+
+  void RefreshVersionLogSelectionStyles() {
     if (!version_log_) {
       return;
     }
@@ -2100,8 +2730,34 @@ class EditorDialog final : public QDialog {
     if (clarity_slider_) {
       clarity_slider_->setValue(static_cast<int>(std::lround(state_.clarity_)));
     }
+    if (rotate_slider_) {
+      rotate_slider_->setValue(
+          static_cast<int>(std::lround(state_.rotate_degrees_ * kRotationSliderScale)));
+    }
+    if (geometry_crop_x_slider_) {
+      geometry_crop_x_slider_->setValue(static_cast<int>(std::lround(state_.crop_x_ * kCropRectSliderScale)));
+    }
+    if (geometry_crop_y_slider_) {
+      geometry_crop_y_slider_->setValue(static_cast<int>(std::lround(state_.crop_y_ * kCropRectSliderScale)));
+    }
+    if (geometry_crop_w_slider_) {
+      geometry_crop_w_slider_->setValue(static_cast<int>(std::lround(state_.crop_w_ * kCropRectSliderScale)));
+    }
+    if (geometry_crop_h_slider_) {
+      geometry_crop_h_slider_->setValue(static_cast<int>(std::lround(state_.crop_h_ * kCropRectSliderScale)));
+    }
     if (curve_widget_) {
       curve_widget_->SetControlPoints(state_.curve_points_);
+    }
+    UpdateGeometryCropRectLabel();
+    RefreshGeometryModeUi();
+    if (viewer_) {
+      viewer_->SetCropOverlayRectNormalized(state_.crop_x_, state_.crop_y_, state_.crop_w_,
+                                            state_.crop_h_);
+      viewer_->SetCropOverlayRotationDegrees(state_.rotate_degrees_);
+      const bool geometry_active = (active_panel_ == ControlPanelKind::Geometry);
+      viewer_->SetCropOverlayVisible(geometry_active);
+      viewer_->SetCropToolEnabled(geometry_active);
     }
     RefreshHlsTargetUi();
 
@@ -2129,7 +2785,7 @@ class EditorDialog final : public QDialog {
     }
     std::reverse(lineage.begin(), lineage.end());
 
-    auto replay_exec = std::make_shared<CPUPipelineExecutor>();
+    auto   replay_exec = std::make_shared<CPUPipelineExecutor>();
 
     size_t replay_from = 0;
     for (size_t i = lineage.size(); i > 0; --i) {
@@ -2257,7 +2913,7 @@ class EditorDialog final : public QDialog {
       return;
     }
 
-    auto exec = pipeline_guard_->pipeline_;
+    auto            exec = pipeline_guard_->pipeline_;
 
     // Requirement (1): issue a delete transaction for the latest edit.
     EditTransaction undo_delete_tx(TransactionType::_DELETE, last_tx.GetTxOperatorType(),
@@ -2321,8 +2977,8 @@ class EditorDialog final : public QDialog {
     if (history_guard_ && history_guard_->history_) {
       try {
         const auto latest_id = history_guard_->history_->GetLatestVersion().ver_ref_.GetVersionID();
-        label += QString(" | Latest: %1")
-                     .arg(QString::fromStdString(latest_id.ToString().substr(0, 8)));
+        label +=
+            QString(" | Latest: %1").arg(QString::fromStdString(latest_id.ToString().substr(0, 8)));
       } catch (...) {
       }
     }
@@ -2495,9 +3151,8 @@ class EditorDialog final : public QDialog {
 
           top->addStretch(1);
 
-          auto* tx_pill =
-              MakePillLabel(QString("tx %1").arg(committed_tx_count), "#A3A3A3",
-                            "rgba(252, 199, 4, 0.16)", "rgba(252, 199, 4, 0.32)", card);
+          auto* tx_pill = MakePillLabel(QString("tx %1").arg(committed_tx_count), "#A3A3A3",
+                                        "rgba(252, 199, 4, 0.16)", "rgba(252, 199, 4, 0.32)", card);
           top->addWidget(tx_pill, 0);
 
           auto* msg_l = new QLabel(msg, card);
@@ -2634,6 +3289,8 @@ class EditorDialog final : public QDialog {
         return {PipelineStageName::Detail_Adjustment, OperatorType::CLARITY};
       case AdjustmentField::Lut:
         return {PipelineStageName::Color_Adjustment, OperatorType::LMT};
+      case AdjustmentField::CropRotate:
+        return {PipelineStageName::Geometry_Adjustment, OperatorType::CROP_ROTATE};
     }
     return {PipelineStageName::Basic_Adjustment, OperatorType::EXPOSURE};
   }
@@ -2648,45 +3305,43 @@ class EditorDialog final : public QDialog {
         return {{"saturation", s.saturation_}};
       case AdjustmentField::Tint:
         return {{"tint", s.tint_}};
-      case AdjustmentField::Hls:
-        {
-          nlohmann::json hue_bins     = nlohmann::json::array();
-          nlohmann::json hls_adj_table = nlohmann::json::array();
-          nlohmann::json h_range_table = nlohmann::json::array();
-          for (size_t i = 0; i < kHlsCandidateHues.size(); ++i) {
-            hue_bins.push_back(kHlsCandidateHues[i]);
-            hls_adj_table.push_back(std::array<float, 3>{
-                std::clamp(s.hls_hue_adjust_table_[i], -kHlsMaxHueShiftDegrees, kHlsMaxHueShiftDegrees),
-                std::clamp(s.hls_lightness_adjust_table_[i], kHlsAdjUiMin, kHlsAdjUiMax) /
-                    kHlsAdjUiToParamScale,
-                std::clamp(s.hls_saturation_adjust_table_[i], kHlsAdjUiMin, kHlsAdjUiMax) /
-                    kHlsAdjUiToParamScale});
-            h_range_table.push_back(std::max(s.hls_hue_range_table_[i], 1.0f));
-          }
-          const int active_idx = ActiveHlsProfileIndex(s);
-
-          return {
-              {"HLS",
-               {{"hue_bins", std::move(hue_bins)},
-                {"hls_adj_table", std::move(hls_adj_table)},
-                {"h_range_table", std::move(h_range_table)},
-                {"target_hls",
-                 std::array<float, 3>{WrapHueDegrees(s.hls_target_hue_), kHlsFixedTargetLightness,
-                                      kHlsFixedTargetSaturation}},
-                {"hls_adj",
-                 std::array<float, 3>{
-                     std::clamp(s.hls_hue_adjust_table_[active_idx], -kHlsMaxHueShiftDegrees,
-                                kHlsMaxHueShiftDegrees),
-                     std::clamp(s.hls_lightness_adjust_table_[active_idx], kHlsAdjUiMin,
-                                kHlsAdjUiMax) /
-                         kHlsAdjUiToParamScale,
-                     std::clamp(s.hls_saturation_adjust_table_[active_idx], kHlsAdjUiMin,
-                                kHlsAdjUiMax) /
-                         kHlsAdjUiToParamScale}},
-                {"h_range", std::max(s.hls_hue_range_table_[active_idx], 1.0f)},
-                {"l_range", kHlsFixedLightnessRange},
-                {"s_range", kHlsFixedSaturationRange}}}};
+      case AdjustmentField::Hls: {
+        nlohmann::json hue_bins      = nlohmann::json::array();
+        nlohmann::json hls_adj_table = nlohmann::json::array();
+        nlohmann::json h_range_table = nlohmann::json::array();
+        for (size_t i = 0; i < kHlsCandidateHues.size(); ++i) {
+          hue_bins.push_back(kHlsCandidateHues[i]);
+          hls_adj_table.push_back(std::array<float, 3>{
+              std::clamp(s.hls_hue_adjust_table_[i], -kHlsMaxHueShiftDegrees,
+                         kHlsMaxHueShiftDegrees),
+              std::clamp(s.hls_lightness_adjust_table_[i], kHlsAdjUiMin, kHlsAdjUiMax) /
+                  kHlsAdjUiToParamScale,
+              std::clamp(s.hls_saturation_adjust_table_[i], kHlsAdjUiMin, kHlsAdjUiMax) /
+                  kHlsAdjUiToParamScale});
+          h_range_table.push_back(std::max(s.hls_hue_range_table_[i], 1.0f));
         }
+        const int active_idx = ActiveHlsProfileIndex(s);
+
+        return {{"HLS",
+                 {{"hue_bins", std::move(hue_bins)},
+                  {"hls_adj_table", std::move(hls_adj_table)},
+                  {"h_range_table", std::move(h_range_table)},
+                  {"target_hls",
+                   std::array<float, 3>{WrapHueDegrees(s.hls_target_hue_), kHlsFixedTargetLightness,
+                                        kHlsFixedTargetSaturation}},
+                  {"hls_adj",
+                   std::array<float, 3>{std::clamp(s.hls_hue_adjust_table_[active_idx],
+                                                   -kHlsMaxHueShiftDegrees, kHlsMaxHueShiftDegrees),
+                                        std::clamp(s.hls_lightness_adjust_table_[active_idx],
+                                                   kHlsAdjUiMin, kHlsAdjUiMax) /
+                                            kHlsAdjUiToParamScale,
+                                        std::clamp(s.hls_saturation_adjust_table_[active_idx],
+                                                   kHlsAdjUiMin, kHlsAdjUiMax) /
+                                            kHlsAdjUiToParamScale}},
+                  {"h_range", std::max(s.hls_hue_range_table_[active_idx], 1.0f)},
+                  {"l_range", kHlsFixedLightnessRange},
+                  {"s_range", kHlsFixedSaturationRange}}}};
+      }
       case AdjustmentField::Blacks:
         return {{"black", s.blacks_}};
       case AdjustmentField::Whites:
@@ -2703,6 +3358,24 @@ class EditorDialog final : public QDialog {
         return {{"clarity", s.clarity_}};
       case AdjustmentField::Lut:
         return {{"ocio_lmt", s.lut_path_}};
+      case AdjustmentField::CropRotate: {
+        const auto crop_rect = ClampCropRect(s.crop_x_, s.crop_y_, s.crop_w_, s.crop_h_);
+        const bool has_rotation = std::abs(s.rotate_degrees_) > 1e-4f;
+        const bool has_crop = s.crop_enabled_ &&
+                              (std::abs(crop_rect[0]) > 1e-4f || std::abs(crop_rect[1]) > 1e-4f ||
+                               std::abs(crop_rect[2] - 1.0f) > 1e-4f ||
+                               std::abs(crop_rect[3] - 1.0f) > 1e-4f);
+        return {{"crop_rotate",
+                 {{"enabled", has_rotation || has_crop},
+                  {"angle_degrees", s.rotate_degrees_},
+                  {"enable_crop", s.crop_enabled_},
+                  {"crop_rect",
+                   {{"x", crop_rect[0]},
+                    {"y", crop_rect[1]},
+                    {"w", crop_rect[2]},
+                    {"h", crop_rect[3]}}},
+                  {"expand_to_fit", s.crop_expand_to_fit_}}}};
+      }
     }
     return {};
   }
@@ -2747,6 +3420,18 @@ class EditorDialog final : public QDialog {
         return !NearlyEqual(state_.clarity_, committed_state_.clarity_);
       case AdjustmentField::Lut:
         return state_.lut_path_ != committed_state_.lut_path_;
+      case AdjustmentField::CropRotate: {
+        const auto state_rect = ClampCropRect(state_.crop_x_, state_.crop_y_, state_.crop_w_, state_.crop_h_);
+        const auto committed_rect = ClampCropRect(committed_state_.crop_x_, committed_state_.crop_y_,
+                                                  committed_state_.crop_w_, committed_state_.crop_h_);
+        return !NearlyEqual(state_.rotate_degrees_, committed_state_.rotate_degrees_) ||
+               state_.crop_enabled_ != committed_state_.crop_enabled_ ||
+               state_.crop_expand_to_fit_ != committed_state_.crop_expand_to_fit_ ||
+               !NearlyEqual(state_rect[0], committed_rect[0]) ||
+               !NearlyEqual(state_rect[1], committed_rect[1]) ||
+               !NearlyEqual(state_rect[2], committed_rect[2]) ||
+               !NearlyEqual(state_rect[3], committed_rect[3]);
+      }
     }
     return false;
   }
@@ -2775,7 +3460,7 @@ class EditorDialog final : public QDialog {
     working_version_.AppendEditTransaction(std::move(tx));
     pipeline_guard_->dirty_ = true;
 
-    committed_state_        = state_;
+    CopyFieldState(field, state_, committed_state_);
     UpdateVersionUi();
 
     TriggerQualityPreviewRenderFromPipeline();
@@ -2789,10 +3474,17 @@ class EditorDialog final : public QDialog {
 
     AdjustmentState loaded_state = state_;
     loaded_state.type_           = state_.type_;
+    loaded_state.rotate_degrees_ = 0.0f;
+    loaded_state.crop_enabled_   = true;
+    loaded_state.crop_x_         = 0.0f;
+    loaded_state.crop_y_         = 0.0f;
+    loaded_state.crop_w_         = 1.0f;
+    loaded_state.crop_h_         = 1.0f;
+    loaded_state.crop_expand_to_fit_ = true;
     bool has_loaded_any          = false;
 
-    auto IsOperatorEnabled = [](const PipelineStage& stage,
-                                OperatorType type) -> std::optional<bool> {
+    auto IsOperatorEnabled       = [](const PipelineStage& stage,
+                                OperatorType         type) -> std::optional<bool> {
       const auto op = stage.GetOperator(type);
       if (!op.has_value() || op.value() == nullptr) {
         return std::nullopt;
@@ -2902,7 +3594,7 @@ class EditorDialog final : public QDialog {
     };
 
     auto ReadCurvePoints = [](const PipelineStage& stage,
-                              OperatorType type) -> std::optional<std::vector<QPointF>> {
+                              OperatorType         type) -> std::optional<std::vector<QPointF>> {
       const auto op = stage.GetOperator(type);
       if (!op.has_value() || op.value() == nullptr) {
         return std::nullopt;
@@ -2922,9 +3614,10 @@ class EditorDialog final : public QDialog {
       return ParseCurveControlPointsFromParams(j["params"]);
     };
 
-    const auto& basic  = exec->GetStage(PipelineStageName::Basic_Adjustment);
-    const auto& color  = exec->GetStage(PipelineStageName::Color_Adjustment);
-    const auto& detail = exec->GetStage(PipelineStageName::Detail_Adjustment);
+    const auto& geometry = exec->GetStage(PipelineStageName::Geometry_Adjustment);
+    const auto& basic    = exec->GetStage(PipelineStageName::Basic_Adjustment);
+    const auto& color    = exec->GetStage(PipelineStageName::Color_Adjustment);
+    const auto& detail   = exec->GetStage(PipelineStageName::Detail_Adjustment);
 
     if (const auto v = ReadFloat(basic, OperatorType::EXPOSURE, "exposure"); v.has_value()) {
       loaded_state.exposure_ = v.value();
@@ -2938,9 +3631,8 @@ class EditorDialog final : public QDialog {
     // Read tonal controls from global params to avoid operator-param representation drift.
     const auto black_enabled = IsOperatorEnabled(basic, OperatorType::BLACK);
     if (black_enabled.has_value() && black_enabled.value()) {
-      loaded_state.blacks_ =
-          exec->GetGlobalParams().black_point_ * kBlackSliderFromGlobalScale;
-      has_loaded_any = true;
+      loaded_state.blacks_ = exec->GetGlobalParams().black_point_ * kBlackSliderFromGlobalScale;
+      has_loaded_any       = true;
     } else if (const auto v = ReadFloat(basic, OperatorType::BLACK, "black"); v.has_value()) {
       loaded_state.blacks_ = v.value();
       has_loaded_any       = true;
@@ -3012,15 +3704,15 @@ class EditorDialog final : public QDialog {
       loaded_state.hls_hue_adjust_table_.fill(0.0f);
       loaded_state.hls_lightness_adjust_table_.fill(0.0f);
       loaded_state.hls_saturation_adjust_table_.fill(0.0f);
-      loaded_state.hls_hue_range_table_ = MakeHlsFilledArray(kHlsDefaultHueRange);
-      std::array<float, 3> target_hls = {loaded_state.hls_target_hue_, kHlsFixedTargetLightness,
-                                         kHlsFixedTargetSaturation};
-      std::array<float, 3> hls_adj    = {};
+      loaded_state.hls_hue_range_table_  = MakeHlsFilledArray(kHlsDefaultHueRange);
+      std::array<float, 3> target_hls    = {loaded_state.hls_target_hue_, kHlsFixedTargetLightness,
+                                            kHlsFixedTargetSaturation};
+      std::array<float, 3> hls_adj       = {};
       bool                 has_adj_table = false;
       bool                 has_range_table = false;
 
       if (hls.contains("hls_adj_table") && hls["hls_adj_table"].is_array()) {
-        const auto& adj_tbl = hls["hls_adj_table"];
+        const auto& adj_tbl  = hls["hls_adj_table"];
         const bool  has_bins = hls.contains("hue_bins") && hls["hue_bins"].is_array();
         for (int i = 0; i < static_cast<int>(adj_tbl.size()); ++i) {
           if (!adj_tbl[i].is_array() || adj_tbl[i].size() < 3) {
@@ -3037,15 +3729,12 @@ class EditorDialog final : public QDialog {
             continue;
           }
           try {
-            loaded_state.hls_hue_adjust_table_[idx] =
-                std::clamp(adj_tbl[i][0].get<float>(), -kHlsMaxHueShiftDegrees,
-                           kHlsMaxHueShiftDegrees);
-            loaded_state.hls_lightness_adjust_table_[idx] =
-                std::clamp(adj_tbl[i][1].get<float>() * kHlsAdjUiToParamScale, kHlsAdjUiMin,
-                           kHlsAdjUiMax);
-            loaded_state.hls_saturation_adjust_table_[idx] =
-                std::clamp(adj_tbl[i][2].get<float>() * kHlsAdjUiToParamScale, kHlsAdjUiMin,
-                           kHlsAdjUiMax);
+            loaded_state.hls_hue_adjust_table_[idx] = std::clamp(
+                adj_tbl[i][0].get<float>(), -kHlsMaxHueShiftDegrees, kHlsMaxHueShiftDegrees);
+            loaded_state.hls_lightness_adjust_table_[idx] = std::clamp(
+                adj_tbl[i][1].get<float>() * kHlsAdjUiToParamScale, kHlsAdjUiMin, kHlsAdjUiMax);
+            loaded_state.hls_saturation_adjust_table_[idx] = std::clamp(
+                adj_tbl[i][2].get<float>() * kHlsAdjUiToParamScale, kHlsAdjUiMin, kHlsAdjUiMax);
             has_adj_table = true;
           } catch (...) {
           }
@@ -3078,9 +3767,9 @@ class EditorDialog final : public QDialog {
       (void)ReadArray3(hls, "target_hls", target_hls);
       (void)ReadArray3(hls, "hls_adj", hls_adj);
 
-      loaded_state.hls_target_hue_        = WrapHueDegrees(target_hls[0]);
-      const int active_idx = ActiveHlsProfileIndex(loaded_state);
-      loaded_state.hls_target_hue_        = kHlsCandidateHues[static_cast<size_t>(active_idx)];
+      loaded_state.hls_target_hue_ = WrapHueDegrees(target_hls[0]);
+      const int active_idx         = ActiveHlsProfileIndex(loaded_state);
+      loaded_state.hls_target_hue_ = kHlsCandidateHues[static_cast<size_t>(active_idx)];
       if (!has_adj_table) {
         loaded_state.hls_hue_adjust_table_[active_idx] =
             std::clamp(hls_adj[0], -kHlsMaxHueShiftDegrees, kHlsMaxHueShiftDegrees);
@@ -3109,6 +3798,34 @@ class EditorDialog final : public QDialog {
     if (const auto v = ReadFloat(detail, OperatorType::CLARITY, "clarity"); v.has_value()) {
       loaded_state.clarity_ = v.value();
       has_loaded_any        = true;
+    }
+
+    if (const auto crop_rotate_json =
+            ReadNestedObject(geometry, OperatorType::CROP_ROTATE, "crop_rotate");
+        crop_rotate_json.has_value()) {
+      const auto& crop_rotate   = *crop_rotate_json;
+      loaded_state.rotate_degrees_ = crop_rotate.value("angle_degrees", loaded_state.rotate_degrees_);
+      loaded_state.crop_enabled_   = crop_rotate.value("enable_crop", loaded_state.crop_enabled_);
+      loaded_state.crop_expand_to_fit_ =
+          crop_rotate.value("expand_to_fit", loaded_state.crop_expand_to_fit_);
+      bool has_non_full_crop_rect = false;
+      if (crop_rotate.contains("crop_rect") && crop_rotate["crop_rect"].is_object()) {
+        const auto& crop_rect = crop_rotate["crop_rect"];
+        const auto clamped = ClampCropRect(crop_rect.value("x", loaded_state.crop_x_),
+                                           crop_rect.value("y", loaded_state.crop_y_),
+                                           crop_rect.value("w", loaded_state.crop_w_),
+                                           crop_rect.value("h", loaded_state.crop_h_));
+        loaded_state.crop_x_ = clamped[0];
+        loaded_state.crop_y_ = clamped[1];
+        loaded_state.crop_w_ = clamped[2];
+        loaded_state.crop_h_ = clamped[3];
+        has_non_full_crop_rect = std::abs(loaded_state.crop_x_) > 1e-4f ||
+                                 std::abs(loaded_state.crop_y_) > 1e-4f ||
+                                 std::abs(loaded_state.crop_w_ - 1.0f) > 1e-4f ||
+                                 std::abs(loaded_state.crop_h_ - 1.0f) > 1e-4f;
+      }
+      loaded_state.crop_enabled_ = loaded_state.crop_enabled_ || has_non_full_crop_rect;
+      has_loaded_any = true;
     }
 
     const auto lut = ReadString(color, OperatorType::LMT, "ocio_lmt");
@@ -3184,6 +3901,29 @@ class EditorDialog final : public QDialog {
   void ApplyStateToPipeline() {
     auto  exec          = pipeline_guard_->pipeline_;
     auto& global_params = exec->GetGlobalParams();
+    auto& geometry      = exec->GetStage(PipelineStageName::Geometry_Adjustment);
+
+    // Geometry editing is overlay-only. While the geometry panel is active,
+    // render the full pre-geometry frame so recropping can always expand back
+    // to the original image bounds.
+    nlohmann::json crop_rotate_params;
+    bool           apply_crop = committed_state_.crop_enabled_;
+    if (active_panel_ == ControlPanelKind::Geometry) {
+      crop_rotate_params = {{"crop_rotate",
+                             {{"enabled", false},
+                              {"angle_degrees", 0.0f},
+                              {"enable_crop", false},
+                              {"crop_rect", {{"x", 0.0f}, {"y", 0.0f}, {"w", 1.0f}, {"h", 1.0f}}},
+                              {"expand_to_fit", committed_state_.crop_expand_to_fit_}}}};
+      apply_crop = false;
+    } else {
+      crop_rotate_params = ParamsForField(AdjustmentField::CropRotate, committed_state_);
+    }
+
+    crop_rotate_params["crop_rotate"]["enable_crop"] = apply_crop;
+    const bool geometry_enabled = crop_rotate_params["crop_rotate"].value("enabled", false);
+    geometry.SetOperator(OperatorType::CROP_ROTATE, crop_rotate_params, global_params);
+    geometry.EnableOperator(OperatorType::CROP_ROTATE, geometry_enabled, global_params);
 
     auto& basic         = exec->GetStage(PipelineStageName::Basic_Adjustment);
     basic.SetOperator(OperatorType::EXPOSURE, {{"exposure", state_.exposure_}}, global_params);
@@ -3269,8 +4009,8 @@ class EditorDialog final : public QDialog {
       return;
     }
 
-    state_       = pending_;
-    has_pending_ = false;
+    state_                 = pending_;
+    has_pending_           = false;
     const bool apply_state = pending_apply_state_;
     pending_apply_state_   = true;
 
@@ -3304,6 +4044,15 @@ class EditorDialog final : public QDialog {
     inflight_    = true;
     scheduler_->ScheduleTask(std::move(task));
 
+    // Reset render type to FAST_PREVIEW after task submission.
+    // TriggerQualityPreviewRender(FromPipeline) temporarily sets state_.type_ to
+    // FULL_RES_PREVIEW and stores it in pending_.  When StartNext() later copies
+    // pending_ back into state_, the FULL_RES_PREVIEW type leaks into state_ and
+    // subsequent slider drags would keep requesting full-res renders instead of
+    // the intended fast preview.  Resetting here ensures interactive edits always
+    // use the low-resolution preview path.
+    state_.type_ = RenderType::FAST_PREVIEW;
+
     inflight_future_ = std::move(fut);
     EnsurePollTimer();
     if (poll_timer_ && !poll_timer_->isActive()) {
@@ -3335,39 +4084,55 @@ class EditorDialog final : public QDialog {
   std::shared_ptr<PipelineScheduler>                       scheduler_;
   PipelineTask                                             base_task_{};
 
-  QtEditViewer*                                            viewer_             = nullptr;
-  QWidget*                                                 viewer_container_   = nullptr;
-  QScrollArea*                                             controls_scroll_    = nullptr;
-  SpinnerWidget*                                           spinner_            = nullptr;
-  QWidget*                                                 controls_           = nullptr;
-  HistogramWidget*                                         histogram_widget_   = nullptr;
+  QtEditViewer*                                            viewer_                 = nullptr;
+  QWidget*                                                 viewer_container_       = nullptr;
+  QLabel*                                                  viewer_zoom_label_      = nullptr;
+  QScrollArea*                                             controls_scroll_        = nullptr;
+  QScrollArea*                                             tone_controls_scroll_   = nullptr;
+  QScrollArea*                                             geometry_controls_scroll_ = nullptr;
+  QStackedWidget*                                          control_panels_stack_   = nullptr;
+  SpinnerWidget*                                           spinner_                = nullptr;
+  QWidget*                                                 controls_               = nullptr;
+  QWidget*                                                 tone_controls_          = nullptr;
+  QWidget*                                                 geometry_controls_      = nullptr;
+  QPushButton*                                             tone_panel_btn_         = nullptr;
+  QPushButton*                                             geometry_panel_btn_     = nullptr;
+  HistogramWidget*                                         histogram_widget_       = nullptr;
   HistogramRulerWidget*                                    histogram_ruler_widget_ = nullptr;
-  QComboBox*                                               lut_combo_          = nullptr;
-  QSlider*                                                 exposure_slider_    = nullptr;
-  QSlider*                                                 contrast_slider_    = nullptr;
-  QSlider*                                                 saturation_slider_  = nullptr;
-  QSlider*                                                 tint_slider_        = nullptr;
-  QLabel*                                                  hls_target_label_   = nullptr;
+  QComboBox*                                               lut_combo_              = nullptr;
+  QSlider*                                                 exposure_slider_        = nullptr;
+  QSlider*                                                 contrast_slider_        = nullptr;
+  QSlider*                                                 saturation_slider_      = nullptr;
+  QSlider*                                                 tint_slider_            = nullptr;
+  QLabel*                                                  hls_target_label_       = nullptr;
   std::vector<QPushButton*>                                hls_candidate_buttons_{};
-  QSlider*                                                 hls_hue_adjust_slider_ = nullptr;
-  QSlider*                                                 hls_lightness_adjust_slider_ = nullptr;
+  QSlider*                                                 hls_hue_adjust_slider_        = nullptr;
+  QSlider*                                                 hls_lightness_adjust_slider_  = nullptr;
   QSlider*                                                 hls_saturation_adjust_slider_ = nullptr;
-  QSlider*                                                 hls_hue_range_slider_ = nullptr;
-  QSlider*                                                 blacks_slider_      = nullptr;
-  QSlider*                                                 whites_slider_      = nullptr;
-  QSlider*                                                 shadows_slider_     = nullptr;
-  QSlider*                                                 highlights_slider_  = nullptr;
-  ToneCurveWidget*                                         curve_widget_       = nullptr;
-  QSlider*                                                 sharpen_slider_     = nullptr;
-  QSlider*                                                 clarity_slider_     = nullptr;
-  QLabel*                                                  version_status_     = nullptr;
-  QPushButton*                                             undo_tx_btn_        = nullptr;
-  QPushButton*                                             commit_version_btn_ = nullptr;
-  QComboBox*                                               working_mode_combo_ = nullptr;
-  QPushButton*                                             new_working_btn_    = nullptr;
-  QListWidget*                                             version_log_        = nullptr;
-  QListWidget*                                             tx_stack_           = nullptr;
-  QTimer*                                                  poll_timer_         = nullptr;
+  QSlider*                                                 hls_hue_range_slider_         = nullptr;
+  QSlider*                                                 blacks_slider_                = nullptr;
+  QSlider*                                                 whites_slider_                = nullptr;
+  QSlider*                                                 shadows_slider_               = nullptr;
+  QSlider*                                                 highlights_slider_            = nullptr;
+  ToneCurveWidget*                                         curve_widget_                 = nullptr;
+  QSlider*                                                 sharpen_slider_               = nullptr;
+  QSlider*                                                 clarity_slider_               = nullptr;
+  QSlider*                                                 rotate_slider_                = nullptr;
+  QSlider*                                                 geometry_crop_x_slider_       = nullptr;
+  QSlider*                                                 geometry_crop_y_slider_       = nullptr;
+  QSlider*                                                 geometry_crop_w_slider_       = nullptr;
+  QSlider*                                                 geometry_crop_h_slider_       = nullptr;
+  QLabel*                                                  geometry_crop_rect_label_     = nullptr;
+  QPushButton*                                             geometry_apply_btn_           = nullptr;
+  QPushButton*                                             geometry_reset_btn_           = nullptr;
+  QLabel*                                                  version_status_               = nullptr;
+  QPushButton*                                             undo_tx_btn_                  = nullptr;
+  QPushButton*                                             commit_version_btn_           = nullptr;
+  QComboBox*                                               working_mode_combo_           = nullptr;
+  QPushButton*                                             new_working_btn_              = nullptr;
+  QListWidget*                                             version_log_                  = nullptr;
+  QListWidget*                                             tx_stack_                     = nullptr;
+  QTimer*                                                  poll_timer_                   = nullptr;
   std::optional<std::future<std::shared_ptr<ImageBuffer>>> inflight_future_{};
 
   std::vector<std::string>                                 lut_paths_{};
@@ -3378,20 +4143,20 @@ class EditorDialog final : public QDialog {
   AdjustmentState                                          committed_state_{};
   Version                                                  working_version_{};
   AdjustmentState                                          pending_{};
-  bool                                                     inflight_         = false;
-  bool                                                     has_pending_      = false;
-  bool                                                     pending_apply_state_ = true;
-  bool                                                     syncing_controls_ = false;
+  ControlPanelKind                                         active_panel_               = ControlPanelKind::Tone;
+  bool                                                     pipeline_initialized_       = false;
+  bool                                                     inflight_                   = false;
+  bool                                                     has_pending_                = false;
+  bool                                                     pending_apply_state_        = true;
+  bool                                                     syncing_controls_           = false;
 };
 }  // namespace
 
 auto OpenEditorDialog(std::shared_ptr<ImagePoolService>       image_pool,
                       std::shared_ptr<PipelineGuard>          pipeline_guard,
                       std::shared_ptr<EditHistoryMgmtService> history_service,
-                      std::shared_ptr<EditHistoryGuard>       history_guard,
-                      sl_element_id_t                         element_id,
-                      image_id_t                              image_id,
-                      QWidget*                                parent) -> bool {
+                      std::shared_ptr<EditHistoryGuard> history_guard, sl_element_id_t element_id,
+                      image_id_t image_id, QWidget* parent) -> bool {
   EditorDialog dlg(std::move(image_pool), std::move(pipeline_guard), std::move(history_service),
                    std::move(history_guard), element_id, image_id, parent);
   dlg.exec();

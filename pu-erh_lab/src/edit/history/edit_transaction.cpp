@@ -92,6 +92,8 @@ auto EditTransaction::OperatorTypeToString(OperatorType type) -> const char* {
       return "RAW_DECODE";
     case OperatorType::RESIZE:
       return "RESIZE";
+    case OperatorType::CROP_ROTATE:
+      return "CROP_ROTATE";
     case OperatorType::EXPOSURE:
       return "EXPOSURE";
     case OperatorType::CONTRAST:

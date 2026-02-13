@@ -16,6 +16,7 @@
 
 #include <easy/profiler.h>
 
+#include <cmath>
 #include <exception>
 #include <memory>
 #include <mutex>
@@ -25,17 +26,61 @@
 #include "renderer/pipeline_task.hpp"
 
 namespace puerhlab {
+namespace {
+constexpr float kRotationPreviewEpsilon = 1e-4f;
+
+auto HasActiveGeometryRotation(const std::shared_ptr<CPUPipelineExecutor>& pipeline_executor)
+    -> bool {
+  if (!pipeline_executor) {
+    return false;
+  }
+
+  auto& geometry_stage = pipeline_executor->GetStage(PipelineStageName::Geometry_Adjustment);
+  const auto crop_rotate_op = geometry_stage.GetOperator(OperatorType::CROP_ROTATE);
+  if (!crop_rotate_op.has_value() || crop_rotate_op.value() == nullptr) {
+    return false;
+  }
+
+  const auto* entry = crop_rotate_op.value();
+  if (!entry->enable_ || !entry->op_) {
+    return false;
+  }
+
+  const auto params = entry->op_->GetParams();
+  if (!params.contains("crop_rotate") || !params["crop_rotate"].is_object()) {
+    return false;
+  }
+
+  const auto& crop_rotate = params["crop_rotate"];
+  if (!crop_rotate.value("enabled", false)) {
+    return false;
+  }
+
+  const bool enable_crop = crop_rotate.value("enable_crop", false);
+  if (!enable_crop) {
+    return false;
+  }
+
+  const float angle = crop_rotate.value("angle_degrees", 0.0f);
+  return std::abs(angle) > kRotationPreviewEpsilon;
+}
+}  // namespace
+
 void PipelineTask::SetExecutorRenderParams() {
   if (!pipeline_executor_) {
     return;
   }
   auto& desc = options_.render_desc_;
+  const bool rotation_active_fast_preview =
+      (desc.render_type_ == RenderType::FAST_PREVIEW) &&
+      HasActiveGeometryRotation(pipeline_executor_);
 
   int   region_x       = desc.x_;
   int   region_y       = desc.y_;
   float region_scale_x = desc.scale_factor_x_;
   float region_scale_y = desc.scale_factor_y_;
-  if (desc.render_type_ == RenderType::FAST_PREVIEW && desc.use_viewport_region_) {
+  if (desc.render_type_ == RenderType::FAST_PREVIEW && desc.use_viewport_region_ &&
+      !rotation_active_fast_preview) {
     if (const auto viewport_region = pipeline_executor_->GetViewportRenderRegion();
         viewport_region.has_value()) {
       region_x       = viewport_region->x_;
@@ -46,6 +91,18 @@ void PipelineTask::SetExecutorRenderParams() {
   }
 
   if (desc.render_type_ == RenderType::FAST_PREVIEW) {
+    if (rotation_active_fast_preview) {
+      // Rotation preview should use a downsampled full frame so viewport coordinates
+      // stay aligned with the rotated result.
+      pipeline_executor_->SetNextFramePresentationMode(FramePresentationMode::ViewportTransformed);
+      pipeline_executor_->SetRenderRegion(0, 0, 1.0f, 1.0f);
+      pipeline_executor_->SetForceCPUOutput(false);
+      pipeline_executor_->SetRenderRes(false, 1600);
+      pipeline_executor_->SetEnableCache(true);
+      pipeline_executor_->SetDecodeRes(DecodeRes::FULL);
+      return;
+    }
+
     pipeline_executor_->SetNextFramePresentationMode(FramePresentationMode::RoiFrame);
     pipeline_executor_->SetRenderRegion(region_x, region_y, region_scale_x, region_scale_y);
     pipeline_executor_->SetForceCPUOutput(false);

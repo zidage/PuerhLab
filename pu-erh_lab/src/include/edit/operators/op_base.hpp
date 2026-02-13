@@ -64,7 +64,8 @@ enum class OperatorType : int {
   COLOR_WHEEL,
   ACES_TONE_MAPPING,
   AUTO_EXPOSURE,
-  UNKNOWN  // For unrecognized operator types or placeholders
+  UNKNOWN,  // For unrecognized operator types or placeholders
+  CROP_ROTATE
 };
 
 struct OperatorParams {

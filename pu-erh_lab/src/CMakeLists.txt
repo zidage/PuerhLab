@@ -123,6 +123,7 @@ set(OPERATORS_SRCS
     edit/operators/cst/odt_op.cpp
     edit/operators/raw/raw_decode_op.cpp
     edit/operators/geometry/resize_op.cpp
+    edit/operators/geometry/crop_rotate_op.cpp
     edit/operators/operator_registeration.cpp
 )
 

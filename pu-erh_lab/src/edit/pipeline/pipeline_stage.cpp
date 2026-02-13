@@ -15,6 +15,7 @@
 #include "edit/pipeline/pipeline_stage.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <memory>
 #include <opencv2/highgui.hpp>
 #include <stdexcept>
@@ -46,6 +47,40 @@ auto IsResizeEffectivelyNoOp(const IOperatorBase& op, int width, int height) -> 
   }
 
   return std::max(width, height) <= maximum_edge;
+}
+
+auto IsCropRotateEffectivelyNoOp(const IOperatorBase& op) -> bool {
+  const nlohmann::json params = op.GetParams();
+  if (!params.contains("crop_rotate") || !params["crop_rotate"].is_object()) {
+    return false;
+  }
+
+  const auto& crop_rotate = params["crop_rotate"];
+  if (!crop_rotate.value("enabled", false)) {
+    return true;
+  }
+
+  const bool  enable_crop = crop_rotate.value("enable_crop", false);
+  if (!enable_crop) {
+    return true;
+  }
+
+  const float angle = crop_rotate.value("angle_degrees", 0.0f);
+  if (std::abs(angle) > 1e-4f) {
+    return false;
+  }
+
+  if (!crop_rotate.contains("crop_rect") || !crop_rotate["crop_rect"].is_object()) {
+    return true;
+  }
+  const auto& rect = crop_rotate["crop_rect"];
+  const float x    = rect.value("x", 0.0f);
+  const float y    = rect.value("y", 0.0f);
+  const float w    = rect.value("w", 1.0f);
+  const float h    = rect.value("h", 1.0f);
+
+  return std::abs(x) <= 1e-4f && std::abs(y) <= 1e-4f && std::abs(w - 1.0f) <= 1e-4f &&
+         std::abs(h - 1.0f) <= 1e-4f;
 }
 }  // namespace
 
@@ -277,8 +312,10 @@ std::shared_ptr<ImageBuffer> PipelineStage::ApplyGpuOperators() {
           continue;
         }
         has_enabled = true;
-        if (op_type != OperatorType::RESIZE ||
-            !IsResizeEffectivelyNoOp(*op_entry.op_, width, height)) {
+        if ((op_type == OperatorType::RESIZE &&
+             !IsResizeEffectivelyNoOp(*op_entry.op_, width, height)) ||
+            (op_type == OperatorType::CROP_ROTATE && !IsCropRotateEffectivelyNoOp(*op_entry.op_)) ||
+            (op_type != OperatorType::RESIZE && op_type != OperatorType::CROP_ROTATE)) {
           all_noop = false;
           break;
         }
