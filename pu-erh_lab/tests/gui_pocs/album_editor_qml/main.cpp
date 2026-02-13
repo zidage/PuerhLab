@@ -100,6 +100,7 @@ int main(int argc, char* argv[]) {
   puerhlab::demo::AlbumBackend backend;
 
   QQmlApplicationEngine engine;
+  engine.addImportPath("qrc:/");
   engine.rootContext()->setContextProperty("albumBackend", &backend);
 
   QObject::connect(&engine, &QQmlApplicationEngine::objectCreationFailed, &app,
