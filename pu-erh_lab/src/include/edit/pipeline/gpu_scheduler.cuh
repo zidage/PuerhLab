@@ -60,6 +60,13 @@ class GPU_KernelLauncher {
   std::chrono::steady_clock::time_point      last_report_time_{};
   double                                     ema_fps_               = 0.0;
   double                                     last_frame_ms_         = 0.0;
+  double                                     last_ensure_size_ms_   = 0.0;
+  double                                     last_input_copy_enqueue_ms_ = 0.0;
+  double                                     last_kernel_dispatch_ms_ = 0.0;
+  double                                     last_present_copy_enqueue_ms_ = 0.0;
+  double                                     last_present_sync_ms_  = 0.0;
+  double                                     last_output_copy_enqueue_ms_ = 0.0;
+  double                                     last_output_sync_ms_   = 0.0;
   size_t                                     frames_since_report_   = 0;
   size_t                                     total_frames_rendered_ = 0;
 
@@ -163,6 +170,13 @@ class GPU_KernelLauncher {
 
   void Execute() {
     const auto exec_start = std::chrono::steady_clock::now();
+    double     ensure_size_ms = 0.0;
+    double     input_copy_enqueue_ms = 0.0;
+    double     kernel_dispatch_ms = 0.0;
+    double     present_copy_enqueue_ms = 0.0;
+    double     present_sync_ms = 0.0;
+    double     output_copy_enqueue_ms = 0.0;
+    double     output_sync_ms = 0.0;
     if (!input_img_ || !work_buffer_) {
       throw std::runtime_error("Input image not set or work buffer not allocated.");
     }
@@ -180,12 +194,22 @@ class GPU_KernelLauncher {
     size_t           width   = gpu_mat.cols;
     size_t           height  = gpu_mat.rows;
 
-    if (frame_sink_) frame_sink_->EnsureSize(width, height);
+    if (frame_sink_) {
+      const auto ensure_size_start = std::chrono::steady_clock::now();
+      frame_sink_->EnsureSize(width, height);
+      const auto ensure_size_end   = std::chrono::steady_clock::now();
+      ensure_size_ms               =
+          std::chrono::duration<double, std::milli>(ensure_size_end - ensure_size_start).count();
+    }
 
     {
+      const auto copy_start = std::chrono::steady_clock::now();
       const auto copy_err = cudaMemcpy2DAsync(
           work_buffer_, width * sizeof(float4), gpu_mat.ptr<float4>(), gpu_mat.step,
           width * sizeof(float4), height, cudaMemcpyDeviceToDevice, stream_);
+      const auto copy_end = std::chrono::steady_clock::now();
+      input_copy_enqueue_ms =
+          std::chrono::duration<double, std::milli>(copy_end - copy_start).count();
       if (copy_err != cudaSuccess) {
         std::cout << "Error: " << cudaGetErrorString(copy_err) << std::endl;
         throw std::runtime_error(std::string("cudaMemcpy2D (input->work) failed: ") +
@@ -193,25 +217,38 @@ class GPU_KernelLauncher {
       }
     }
 
+    const auto kernel_dispatch_start = std::chrono::steady_clock::now();
     float4* result_ptr = kernel_stream_.Process(work_buffer_, temp_buffer_, static_cast<int>(width),
                                                 static_cast<int>(height),
                                                 static_cast<size_t>(width), params_, stream_,
                                                 /*sync=*/false);
+    const auto kernel_dispatch_end = std::chrono::steady_clock::now();
+    kernel_dispatch_ms = std::chrono::duration<double, std::milli>(kernel_dispatch_end -
+                                                                    kernel_dispatch_start)
+                             .count();
     // Synchronize once later, right before presenting.
 
     if (frame_sink_) {
       float4* mapped_ptr = frame_sink_->MapResourceForWrite();
       if (mapped_ptr) {
         size_t     size_bytes = width * height * sizeof(float4);
+        const auto present_copy_start = std::chrono::steady_clock::now();
         const auto out_copy_err =
             cudaMemcpyAsync(mapped_ptr, result_ptr, size_bytes, cudaMemcpyDeviceToDevice, stream_);
+        const auto present_copy_end = std::chrono::steady_clock::now();
+        present_copy_enqueue_ms =
+            std::chrono::duration<double, std::milli>(present_copy_end - present_copy_start).count();
         if (out_copy_err != cudaSuccess) {
           frame_sink_->UnmapResource();
           throw std::runtime_error(std::string("cudaMemcpyAsync (work->frame) failed: ") +
                                    cudaGetErrorString(out_copy_err));
         }
 
+        const auto present_sync_start = std::chrono::steady_clock::now();
         const auto sync_err = cudaStreamSynchronize(stream_);
+        const auto present_sync_end = std::chrono::steady_clock::now();
+        present_sync_ms =
+            std::chrono::duration<double, std::milli>(present_sync_end - present_sync_start).count();
         if (sync_err != cudaSuccess) {
           frame_sink_->UnmapResource();
           throw std::runtime_error(std::string("cudaStreamSynchronize (present) failed: ") +
@@ -226,6 +263,13 @@ class GPU_KernelLauncher {
         const double frame_ms =
             std::chrono::duration<double, std::milli>(exec_end - exec_start).count();
         last_frame_ms_        = frame_ms;
+        last_ensure_size_ms_  = ensure_size_ms;
+        last_input_copy_enqueue_ms_ = input_copy_enqueue_ms;
+        last_kernel_dispatch_ms_ = kernel_dispatch_ms;
+        last_present_copy_enqueue_ms_ = present_copy_enqueue_ms;
+        last_present_sync_ms_ = present_sync_ms;
+        last_output_copy_enqueue_ms_ = output_copy_enqueue_ms;
+        last_output_sync_ms_ = output_sync_ms;
         const double inst_fps = (frame_ms > 0.0) ? (1000.0 / frame_ms) : 0.0;
         ema_fps_ =
             (ema_fps_ <= 0.0) ? inst_fps : (ema_fps_ * (1.0 - kEmaAlpha) + inst_fps * kEmaAlpha);
@@ -243,6 +287,13 @@ class GPU_KernelLauncher {
           std::cout << "\r\033[2KGPU preview: " << std::fixed << std::setprecision(1) << ema_fps_
                     << " fps"
                     << " | last " << std::setprecision(2) << last_frame_ms_ << " ms"
+                    << " | parts e:" << std::setprecision(2) << last_ensure_size_ms_
+                    << " in:" << last_input_copy_enqueue_ms_
+                    << " k:" << last_kernel_dispatch_ms_
+                    << " pc:" << last_present_copy_enqueue_ms_
+                    << " ps:" << last_present_sync_ms_
+                    << " oc:" << last_output_copy_enqueue_ms_
+                    << " os:" << last_output_sync_ms_
                     << " | frames " << total_frames_rendered_ << std::flush;
 
           frames_since_report_ = 0;
@@ -255,16 +306,26 @@ class GPU_KernelLauncher {
       output_img_->InitGPUData(width, height, CV_32FC4);
       cv::cuda::GpuMat output_gpu_mat = output_img_->GetGPUData();
       {
+        const auto output_copy_start = std::chrono::steady_clock::now();
         const auto out_copy_err = cudaMemcpy2DAsync(
             output_gpu_mat.ptr<float4>(), output_gpu_mat.step, result_ptr, width * sizeof(float4),
             width * sizeof(float4), height, cudaMemcpyDeviceToDevice, stream_);
+        const auto output_copy_end = std::chrono::steady_clock::now();
+        output_copy_enqueue_ms = std::chrono::duration<double, std::milli>(output_copy_end -
+                                                                            output_copy_start)
+                                     .count();
         if (out_copy_err != cudaSuccess) {
           throw std::runtime_error(std::string("cudaMemcpy2DAsync (work->output) failed: ") +
                                    cudaGetErrorString(out_copy_err));
         }
       }
       {
+        const auto output_sync_start = std::chrono::steady_clock::now();
         const auto sync_err = cudaStreamSynchronize(stream_);
+        const auto output_sync_end = std::chrono::steady_clock::now();
+        output_sync_ms = std::chrono::duration<double, std::milli>(output_sync_end -
+                                                                    output_sync_start)
+                             .count();
         if (sync_err != cudaSuccess) {
           throw std::runtime_error(std::string("cudaStreamSynchronize (output copy) failed: ") +
                                    cudaGetErrorString(sync_err));

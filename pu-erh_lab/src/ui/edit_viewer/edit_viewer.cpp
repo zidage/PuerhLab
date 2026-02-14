@@ -359,7 +359,8 @@ void QtEditViewer::EnsureSize(int width, int height) {
     if (target_buf.width != width || target_buf.height != height) {
       // Prepare the alternate buffer for the new size without dropping the currently shown one.
       render_target_idx_ = write_idx_;
-      need_resize        = true;
+      const auto& write_buf = buffers_[render_target_idx_];
+      need_resize = (write_buf.width != width || write_buf.height != height);
     }
   }
 
@@ -372,18 +373,17 @@ void QtEditViewer::EnsureSize(int width, int height) {
   const size_t needed_bytes = static_cast<size_t>(width) * static_cast<size_t>(height) * sizeof(float4);
   {
     std::lock_guard<std::mutex> lock(mutex_);
-    if (needed_bytes > 0 && needed_bytes != staging_bytes_) {
-      if (staging_ptr_) {
-        cudaFree(staging_ptr_);
-        staging_ptr_ = nullptr;
-      }
-      const cudaError_t alloc_err = cudaMalloc(reinterpret_cast<void**>(&staging_ptr_), needed_bytes);
+    if (needed_bytes > 0 && needed_bytes > staging_bytes_) {
+      float4* new_staging_ptr = nullptr;
+      const cudaError_t alloc_err = cudaMalloc(reinterpret_cast<void**>(&new_staging_ptr), needed_bytes);
       if (alloc_err != cudaSuccess) {
         qWarning("Failed to allocate CUDA staging buffer (%zu bytes): %s", needed_bytes,
                  cudaGetErrorString(alloc_err));
-        staging_ptr_   = nullptr;
-        staging_bytes_ = 0;
       } else {
+        if (staging_ptr_) {
+          cudaFree(staging_ptr_);
+        }
+        staging_ptr_ = new_staging_ptr;
         staging_bytes_ = needed_bytes;
       }
     }
@@ -1470,6 +1470,21 @@ void QtEditViewer::FreeAllBuffers() {
 }
 
 void QtEditViewer::OnResizeGL(int w, int h) {
+  bool skip_resize = false;
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    const GLBuffer& target = buffers_[write_idx_];
+    if (target.texture != 0 && target.cuda_resource && target.width == w && target.height == h) {
+      render_target_idx_ = write_idx_;
+      skip_resize        = true;
+    }
+  }
+  if (skip_resize) {
+    UpdateViewportRenderRegionCache();
+    update();
+    return;
+  }
+
   makeCurrent();
   {
     std::lock_guard<std::mutex> lock(mutex_);

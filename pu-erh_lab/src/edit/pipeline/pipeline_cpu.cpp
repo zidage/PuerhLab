@@ -225,6 +225,8 @@ void CPUPipelineExecutor::ImportPipelineParams(const nlohmann::json& j) {
 }
 
 void CPUPipelineExecutor::SetRenderRegion(int x, int y, float scale_factor_x, float scale_factor_y) {
+  const nlohmann::json prev_resize_params =
+      render_params_.contains("resize") ? render_params_["resize"] : nlohmann::json::object();
   auto& resize_params = render_params_["resize"];
 
   const float clamped_scale_x = std::clamp(scale_factor_x, 1e-4f, 1.0f);
@@ -238,11 +240,15 @@ void CPUPipelineExecutor::SetRenderRegion(int x, int y, float scale_factor_x, fl
                                  {"resize_factor_y", clamped_scale_y},
                                  {"resize_factor", std::max(clamped_scale_x, clamped_scale_y)}};
 
-  stages_[static_cast<int>(PipelineStageName::Geometry_Adjustment)].SetOperator(
-      OperatorType::RESIZE, render_params_);
+  if (resize_params != prev_resize_params) {
+    stages_[static_cast<int>(PipelineStageName::Geometry_Adjustment)].SetOperator(
+        OperatorType::RESIZE, render_params_);
+  }
 }
 
 void CPUPipelineExecutor::SetRenderRes(bool full_res, int max_side_length) {
+  const nlohmann::json prev_resize_params =
+      render_params_.contains("resize") ? render_params_["resize"] : nlohmann::json::object();
   auto& resize_params           = render_params_["resize"];
   // render_params_["resize"] = {
   //   {"enable_scale", true},
@@ -251,8 +257,10 @@ void CPUPipelineExecutor::SetRenderRes(bool full_res, int max_side_length) {
   resize_params["enable_scale"] = !full_res;
   resize_params["maximum_edge"] = max_side_length;
 
-  stages_[static_cast<int>(PipelineStageName::Geometry_Adjustment)].SetOperator(
-      OperatorType::RESIZE, render_params_);
+  if (resize_params != prev_resize_params) {
+    stages_[static_cast<int>(PipelineStageName::Geometry_Adjustment)].SetOperator(
+        OperatorType::RESIZE, render_params_);
+  }
 }
 
 void CPUPipelineExecutor::SetDecodeRes(DecodeRes res) {

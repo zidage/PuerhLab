@@ -101,6 +101,12 @@ void PipelineStage::SetOperator(OperatorType op_type, nlohmann::json param) {
     SetOutputCacheValid(false);
     if (dependents_) dependents_->SetOutputCacheValid(false);
   } else {
+    if (it->second.op_) {
+      const auto current_param = it->second.op_->GetParams();
+      if (current_param == param) {
+        return;
+      }
+    }
     (it->second).op_->SetParams(param);
     SetOutputCacheValid(false);
     if (dependents_) dependents_->SetOutputCacheValid(false);

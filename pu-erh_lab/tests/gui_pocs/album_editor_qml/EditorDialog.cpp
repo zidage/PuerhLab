@@ -7,7 +7,6 @@
 #include <QCoreApplication>
 #include <QDateTime>
 #include <QDialog>
-#include <QEventLoop>
 #include <QFontDatabase>
 #include <QFrame>
 #include <QGridLayout>
@@ -2655,6 +2654,9 @@ class EditorDialog final : public QDialog {
   }
 
   void TriggerQualityPreviewRenderFromPipeline() {
+    if (quality_preview_timer_ && quality_preview_timer_->isActive()) {
+      quality_preview_timer_->stop();
+    }
     state_.type_ = RenderType::FULL_RES_PREVIEW;
     RequestRenderWithoutApplyingState();
     state_.type_ = RenderType::FAST_PREVIEW;
@@ -3438,7 +3440,7 @@ class EditorDialog final : public QDialog {
   void CommitAdjustment(AdjustmentField field) {
     if (!FieldChanged(field) || !pipeline_guard_ || !pipeline_guard_->pipeline_) {
       // Still fulfill the "full res on release/change" behavior.
-      TriggerQualityPreviewRenderFromPipeline();
+      ScheduleQualityPreviewRenderFromPipeline();
       return;
     }
 
@@ -3462,7 +3464,7 @@ class EditorDialog final : public QDialog {
     CopyFieldState(field, state_, committed_state_);
     UpdateVersionUi();
 
-    TriggerQualityPreviewRenderFromPipeline();
+    ScheduleQualityPreviewRenderFromPipeline();
   }
 
   bool LoadStateFromPipelineIfPresent() {
@@ -3957,6 +3959,22 @@ class EditorDialog final : public QDialog {
   }
 
   static constexpr std::chrono::milliseconds kFastPreviewMinSubmitInterval{16};
+  static constexpr std::chrono::milliseconds kQualityPreviewDebounceInterval{180};
+
+  void EnsureQualityPreviewTimer() {
+    if (quality_preview_timer_) {
+      return;
+    }
+    quality_preview_timer_ = new QTimer(this);
+    quality_preview_timer_->setSingleShot(true);
+    QObject::connect(quality_preview_timer_, &QTimer::timeout, this,
+                     [this]() { TriggerQualityPreviewRenderFromPipeline(); });
+  }
+
+  void ScheduleQualityPreviewRenderFromPipeline() {
+    EnsureQualityPreviewTimer();
+    quality_preview_timer_->start(static_cast<int>(kQualityPreviewDebounceInterval.count()));
+  }
 
   auto CanSubmitFastPreviewNow() const -> bool {
     if (last_fast_preview_submit_time_.time_since_epoch().count() == 0) {
@@ -4008,6 +4026,9 @@ class EditorDialog final : public QDialog {
     if (snapshot.type_ == RenderType::FAST_PREVIEW) {
       // Industry pattern for interactive rendering:
       // coalesce rapid slider updates and keep only the newest fast preview.
+      if (quality_preview_timer_ && quality_preview_timer_->isActive()) {
+        quality_preview_timer_->stop();
+      }
       pending_fast_preview_request_ = std::move(request);
     } else {
       // Keep quality requests ordered and drop stale fast previews.
@@ -4036,7 +4057,7 @@ class EditorDialog final : public QDialog {
       return;
     }
     poll_timer_ = new QTimer(this);
-    poll_timer_->setInterval(16);
+    poll_timer_->setInterval(4);
     QObject::connect(poll_timer_, &QTimer::timeout, this, [this]() { PollInflight(); });
   }
 
@@ -4089,8 +4110,6 @@ class EditorDialog final : public QDialog {
 
     if (spinner_) {
       spinner_->Start();
-      // Ensure the spinner paints before any potentially blocking work.
-      QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
     }
 
     if (next_request.apply_state_) {
@@ -4211,6 +4230,7 @@ class EditorDialog final : public QDialog {
   ControlPanelKind                                         active_panel_               = ControlPanelKind::Tone;
   bool                                                     pipeline_initialized_       = false;
   bool                                                     inflight_                   = false;
+  QTimer*                                                  quality_preview_timer_      = nullptr;
   QTimer*                                                  fast_preview_submit_timer_  = nullptr;
   std::chrono::steady_clock::time_point                    last_fast_preview_submit_time_{};
   bool                                                     syncing_controls_           = false;
