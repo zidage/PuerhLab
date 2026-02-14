@@ -60,6 +60,14 @@ auto PathToQString(const std::filesystem::path& path) -> QString {
 #endif
 }
 
+auto RootFsPath() -> std::filesystem::path {
+  return std::filesystem::path(L"/");
+}
+
+auto RootPathText() -> QString {
+  return "\\";
+}
+
 auto InputToPath(const QString& raw) -> std::optional<std::filesystem::path> {
   const QString trimmed = raw.trimmed();
   if (trimmed.isEmpty()) {
@@ -88,17 +96,22 @@ auto InputToPath(const QString& raw) -> std::optional<std::filesystem::path> {
 
 auto FolderPathToDisplay(const std::filesystem::path& path) -> QString {
   if (path.empty()) {
-    return "/";
+    return RootPathText();
   }
 #if defined(_WIN32)
   const QString text = QString::fromStdWString(path.generic_wstring());
 #else
   const QString text = QString::fromStdString(path.generic_string());
 #endif
-  if (text == "/") {
-    return text;
+  if (text == "/" || text == "\\") {
+    return RootPathText();
   }
-  return text.startsWith('/') ? text : ("/" + text);
+  QString normalized = text;
+  normalized.replace('/', '\\');
+  if (!normalized.startsWith('\\')) {
+    normalized.prepend('\\');
+  }
+  return normalized;
 }
 
 auto DateFromTimeT(std::time_t value) -> QDate {
@@ -1376,7 +1389,7 @@ void AlbumBackend::createFolder(const QString& folderName) {
     return;
   }
 
-  const auto parent_path = currentFolderFsPath();
+  const auto parent_path = RootFsPath();
   try {
     const auto create_result = project_->GetSleeveService()->Write<std::shared_ptr<SleeveElement>>(
         [parent_path, trimmed](FileSystem& fs) {
@@ -1389,16 +1402,10 @@ void AlbumBackend::createFolder(const QString& folderName) {
 
     ExistingFolderEntry folder_entry;
     folder_entry.folder_id_   = created->element_id_;
-    folder_entry.parent_id_   = current_folder_id_;
+    folder_entry.parent_id_   = 0;
     folder_entry.folder_name_ = created->element_name_;
     folder_entry.folder_path_ = parent_path / created->element_name_;
-    folder_entry.depth_       = 0;
-    for (const auto& existing : folder_entries_) {
-      if (existing.folder_id_ == current_folder_id_) {
-        folder_entry.depth_ = existing.depth_ + 1;
-        break;
-      }
-    }
+    folder_entry.depth_       = 1;
 
     folder_entries_.push_back(folder_entry);
     folder_parent_by_id_[folder_entry.folder_id_] = folder_entry.parent_id_;
@@ -2199,99 +2206,143 @@ auto AlbumBackend::collectProjectSnapshot(const std::shared_ptr<ProjectService>&
     return snapshot;
   }
 
+  const auto sleeve_service = project->GetSleeveService();
+  if (!sleeve_service) {
+    return snapshot;
+  }
+
   try {
-    auto& element_ctrl = project->GetStorageService()->GetElementController();
+    snapshot = sleeve_service->Read<ProjectSnapshot>(
+        [](FileSystem& fs) -> ProjectSnapshot {
+          ProjectSnapshot local_snapshot;
 
-    struct FolderVisit {
-      sl_element_id_t      folder_id_ = 0;
-      sl_element_id_t      parent_id_ = 0;
-      std::filesystem::path folder_path_{};
-      int                  depth_     = 0;
-    };
+          struct FolderVisit {
+            sl_element_id_t      folder_id_ = 0;
+            sl_element_id_t      parent_id_ = 0;
+            std::filesystem::path folder_path_{};
+            int                  depth_     = 0;
+          };
 
-    std::vector<FolderVisit>        stack{{0, 0, std::filesystem::path(L"/"), 0}};
-    std::unordered_set<sl_element_id_t> visited;
-    visited.reserve(4096);
-
-    while (!stack.empty()) {
-      const auto visit = stack.back();
-      stack.pop_back();
-
-      if (!visited.insert(visit.folder_id_).second) {
-        continue;
-      }
-
-      std::shared_ptr<SleeveElement> folder_element;
-      try {
-        folder_element = element_ctrl.GetElementById(visit.folder_id_);
-      } catch (...) {
-        continue;
-      }
-
-      if (!folder_element || folder_element->sync_flag_ == SyncFlag::DELETED ||
-          folder_element->type_ != ElementType::FOLDER) {
-        continue;
-      }
-
-      ExistingFolderEntry folder_entry;
-      folder_entry.folder_id_   = visit.folder_id_;
-      folder_entry.parent_id_   = visit.parent_id_;
-      folder_entry.folder_name_ = visit.folder_id_ == 0 ? L"" : folder_element->element_name_;
-      folder_entry.folder_path_ = visit.folder_path_;
-      folder_entry.depth_       = visit.depth_;
-      snapshot.folder_entries_.push_back(folder_entry);
-      snapshot.folder_parent_by_id_[folder_entry.folder_id_] = folder_entry.parent_id_;
-      snapshot.folder_path_by_id_[folder_entry.folder_id_]   = folder_entry.folder_path_;
-
-      std::vector<sl_element_id_t> children;
-      try {
-        children = element_ctrl.GetFolderContent(visit.folder_id_);
-      } catch (...) {
-        children.clear();
-      }
-
-      std::vector<std::shared_ptr<SleeveElement>> child_elements;
-      child_elements.reserve(children.size());
-      for (const auto child_id : children) {
-        if (child_id == visit.folder_id_) {
-          continue;
-        }
-        try {
-          auto child = element_ctrl.GetElementById(child_id);
-          if (!child || child->sync_flag_ == SyncFlag::DELETED) {
-            continue;
+          std::shared_ptr<SleeveElement> root_element;
+          const auto root_path = RootFsPath();
+          try {
+            root_element = fs.Get(root_path, false);
+          } catch (...) {
+            root_element.reset();
           }
-          child_elements.push_back(std::move(child));
-        } catch (...) {
-        }
-      }
 
-      std::sort(child_elements.begin(), child_elements.end(),
-                [](const std::shared_ptr<SleeveElement>& lhs,
-                   const std::shared_ptr<SleeveElement>& rhs) {
-                  if (lhs->type_ != rhs->type_) {
-                    return lhs->type_ == ElementType::FOLDER;
-                  }
-                  return lhs->element_name_ < rhs->element_name_;
-                });
+          if (!root_element || root_element->type_ != ElementType::FOLDER ||
+              root_element->sync_flag_ == SyncFlag::DELETED) {
+            return local_snapshot;
+          }
 
-      for (auto it = child_elements.rbegin(); it != child_elements.rend(); ++it) {
-        const auto& child = *it;
-        if (child->type_ == ElementType::FOLDER) {
-          stack.push_back(
-              {child->element_id_, visit.folder_id_, visit.folder_path_ / child->element_name_,
-               visit.depth_ + 1});
-          continue;
-        }
+          const auto root_id = root_element->element_id_;
+          std::vector<FolderVisit>        stack{{root_id, root_id, root_path, 0}};
+          std::unordered_set<sl_element_id_t> visited;
+          visited.reserve(4096);
 
-        const auto file = std::dynamic_pointer_cast<SleeveFile>(child);
-        if (!file || file->image_id_ == 0) {
-          continue;
-        }
-        snapshot.album_entries_.push_back(
-            {file->element_id_, visit.folder_id_, file->image_id_, file->element_name_});
-      }
-    }
+          while (!stack.empty()) {
+            const auto visit = stack.back();
+            stack.pop_back();
+
+            if (!visited.insert(visit.folder_id_).second) {
+              continue;
+            }
+
+            std::shared_ptr<SleeveElement> folder_element;
+            try {
+              folder_element = fs.Get(visit.folder_path_, false);
+            } catch (...) {
+              try {
+                folder_element = fs.Get(visit.folder_id_);
+              } catch (...) {
+                continue;
+              }
+            }
+
+            if (!folder_element || folder_element->sync_flag_ == SyncFlag::DELETED ||
+                folder_element->type_ != ElementType::FOLDER) {
+              continue;
+            }
+
+            ExistingFolderEntry folder_entry;
+            folder_entry.folder_id_ = visit.folder_id_;
+            if (visit.folder_id_ == root_id) {
+              folder_entry.parent_id_   = root_id;
+              folder_entry.folder_name_ = L"";
+              folder_entry.folder_path_ = root_path;
+              folder_entry.depth_       = 0;
+            } else {
+              folder_entry.parent_id_   = visit.parent_id_;
+              folder_entry.folder_name_ = folder_element->element_name_;
+              folder_entry.folder_path_ = visit.folder_path_;
+              folder_entry.depth_       = visit.depth_;
+            }
+            local_snapshot.folder_entries_.push_back(folder_entry);
+            local_snapshot.folder_parent_by_id_[folder_entry.folder_id_] = folder_entry.parent_id_;
+            local_snapshot.folder_path_by_id_[folder_entry.folder_id_]   = folder_entry.folder_path_;
+
+            std::vector<sl_element_id_t> children;
+            try {
+              children = fs.ListFolderContent(visit.folder_id_);
+            } catch (...) {
+              continue;
+            }
+
+            std::vector<std::shared_ptr<SleeveElement>> child_elements;
+            child_elements.reserve(children.size());
+            for (const auto child_id : children) {
+              if (child_id == visit.folder_id_) {
+                continue;
+              }
+              try {
+                auto child = fs.Get(child_id);  // Subfolders expose child ids; resolve by id.
+                if (!child || child->sync_flag_ == SyncFlag::DELETED) {
+                  continue;
+                }
+                child_elements.push_back(std::move(child));
+              } catch (...) {
+              }
+            }
+
+            std::sort(child_elements.begin(), child_elements.end(),
+                      [](const std::shared_ptr<SleeveElement>& lhs,
+                         const std::shared_ptr<SleeveElement>& rhs) {
+                        if (lhs->type_ != rhs->type_) {
+                          return lhs->type_ == ElementType::FOLDER;
+                        }
+                        return lhs->element_name_ < rhs->element_name_;
+                      });
+
+            for (auto it = child_elements.rbegin(); it != child_elements.rend(); ++it) {
+              const auto& child = *it;
+              if (child->type_ == ElementType::FOLDER) {
+                stack.push_back({child->element_id_, visit.folder_id_,
+                                 visit.folder_path_ / child->element_name_, visit.depth_ + 1});
+                continue;
+              }
+
+              std::shared_ptr<SleeveElement> file_element = child;
+              if (visit.folder_id_ == root_id) {
+                try {
+                  file_element = fs.Get(visit.folder_path_ / child->element_name_,
+                                        false);  // Root file access by path.
+                } catch (...) {
+                  continue;
+                }
+              }
+
+              const auto file = std::dynamic_pointer_cast<SleeveFile>(file_element);
+              if (!file || file->image_id_ == 0) {
+                continue;
+              }
+              local_snapshot.album_entries_.push_back(
+                  {file->element_id_, visit.folder_id_, file->image_id_, file->element_name_});
+            }
+          }
+
+          return local_snapshot;
+        });
   } catch (...) {
   }
 
@@ -2390,7 +2441,7 @@ void AlbumBackend::clearProjectData() {
   folder_path_by_id_.clear();
   folders_.clear();
   current_folder_id_        = 0;
-  current_folder_path_text_ = "/";
+  current_folder_path_text_ = RootPathText();
   active_filter_ids_.reset();
   pending_project_entries_.clear();
   pending_folder_entries_.clear();
@@ -2501,7 +2552,8 @@ void AlbumBackend::applyFolderSelection(sl_element_id_t folderId, bool emitSigna
   current_folder_id_         = next_folder_id;
   const auto    path_it      = folder_path_by_id_.find(current_folder_id_);
   const QString next_path_ui =
-      path_it != folder_path_by_id_.end() ? FolderPathToDisplay(path_it->second) : QString("/");
+      path_it != folder_path_by_id_.end() ? FolderPathToDisplay(path_it->second)
+                                          : RootPathText();
   const bool path_changed = current_folder_path_text_ != next_path_ui;
   current_folder_path_text_ = next_path_ui;
 
@@ -2513,7 +2565,7 @@ void AlbumBackend::applyFolderSelection(sl_element_id_t folderId, bool emitSigna
 auto AlbumBackend::currentFolderFsPath() const -> std::filesystem::path {
   const auto it = folder_path_by_id_.find(current_folder_id_);
   if (it == folder_path_by_id_.end()) {
-    return std::filesystem::path(L"/");
+    return RootFsPath();
   }
   return it->second;
 }
@@ -2608,8 +2660,21 @@ void AlbumBackend::addOrUpdateAlbumItem(sl_element_id_t elementId, image_id_t im
   if (project_) {
     try {
       const auto infoOpt = project_->GetSleeveService()->Read<std::optional<std::pair<QString, QDate>>>(
-          [elementId](FileSystem& fs) -> std::optional<std::pair<QString, QDate>> {
-            const auto element = fs.Get(elementId);
+          [elementId, parentFolderId, fallbackName](
+              FileSystem& fs) -> std::optional<std::pair<QString, QDate>> {
+            std::shared_ptr<SleeveElement> element;
+            if (parentFolderId == 0) {
+              const auto root_file_path = RootFsPath() / fallbackName;
+              try {
+                element = fs.Get(root_file_path, false);
+              } catch (...) {
+                element.reset();
+              }
+            }
+            if (!element) {
+              element = fs.Get(elementId);  // Subfolder entries resolve by id.
+            }
+
             if (!element || element->type_ != ElementType::FILE) {
               return std::nullopt;
             }

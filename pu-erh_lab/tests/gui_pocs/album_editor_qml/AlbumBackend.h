@@ -340,7 +340,7 @@ signals:
   std::unordered_map<sl_element_id_t, std::filesystem::path> folder_path_by_id_{};
   QVariantList                                        folders_{};
   sl_element_id_t                                     current_folder_id_ = 0;
-  QString                                             current_folder_path_text_ = "/";
+  QString                                             current_folder_path_text_ = "\\";
   std::optional<std::unordered_set<sl_element_id_t>>  active_filter_ids_{};
   FilterOp                                            last_join_op_ = FilterOp::AND;
   std::unordered_map<sl_element_id_t, uint32_t>       thumbnail_pin_ref_counts_{};

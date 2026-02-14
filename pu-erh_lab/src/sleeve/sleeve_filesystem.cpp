@@ -83,6 +83,37 @@ auto FileSystem::Get(std::filesystem::path target, bool write) -> std::shared_pt
   return resolver_.Resolve(target);
 }
 
+auto FileSystem::ListFolderContent(const std::filesystem::path& folder_path, bool write)
+    -> std::vector<sl_element_id_t> {
+  std::shared_ptr<SleeveElement> folder_element;
+  if (write) {
+    folder_element = resolver_.ResolveForWrite(folder_path);
+  } else {
+    folder_element = resolver_.Resolve(folder_path);
+  }
+
+  if (!folder_element || folder_element->type_ != ElementType::FOLDER) {
+    throw std::runtime_error("Filesystem: Specified path is not a folder");
+  }
+
+  auto folder = std::static_pointer_cast<SleeveFolder>(folder_element);
+  storage_handler_.EnsureChildrenLoaded(folder);
+  const auto& elements = folder->ListElements();
+  return std::vector<sl_element_id_t>(elements.begin(), elements.end());
+}
+
+auto FileSystem::ListFolderContent(sl_element_id_t folder_id) -> std::vector<sl_element_id_t> {
+  auto folder_element = Get(folder_id);
+  if (!folder_element || folder_element->type_ != ElementType::FOLDER) {
+    throw std::runtime_error("Filesystem: Specified id is not a folder");
+  }
+
+  auto folder = std::static_pointer_cast<SleeveFolder>(folder_element);
+  storage_handler_.EnsureChildrenLoaded(folder);
+  const auto& elements = folder->ListElements();
+  return std::vector<sl_element_id_t>(elements.begin(), elements.end());
+}
+
 void FileSystem::Delete(std::filesystem::path target) {
   if (!target.has_parent_path()) {
     throw std::runtime_error("Filesystem: root cannot be deleted");

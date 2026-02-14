@@ -59,6 +59,9 @@ class FileSystem {
   void Delete(std::filesystem::path target);
   auto Get(std::filesystem::path target, bool write) -> std::shared_ptr<SleeveElement>;
   auto Get(sl_element_id_t id) -> std::shared_ptr<SleeveElement>;
+  auto ListFolderContent(const std::filesystem::path& folder_path, bool write = false)
+      -> std::vector<sl_element_id_t>;
+  auto ListFolderContent(sl_element_id_t folder_id) -> std::vector<sl_element_id_t>;
 
   auto ApplyFilterToFolder(const std::filesystem::path&       folder_path,
                            const std::shared_ptr<FilterCombo> filter)
