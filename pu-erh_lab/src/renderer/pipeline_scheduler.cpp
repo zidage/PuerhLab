@@ -71,15 +71,20 @@ void PipelineTask::SetExecutorRenderParams() {
     return;
   }
   auto& desc = options_.render_desc_;
+  const auto requested_render_type = desc.render_type_;
+
+  // Keep explicit full-res/export requests authoritative.
+  // Even when the executor sits in FAST_PREVIEW baseline, callers still need
+  // FULL_RES_PREVIEW/FULL_RES_EXPORT to be honored (slider release/undo/version switch/crop/LUT).
   const bool rotation_active_fast_preview =
-      (desc.render_type_ == RenderType::FAST_PREVIEW) &&
+      (requested_render_type == RenderType::FAST_PREVIEW) &&
       HasActiveGeometryRotation(pipeline_executor_);
 
   int   region_x       = desc.x_;
   int   region_y       = desc.y_;
   float region_scale_x = desc.scale_factor_x_;
   float region_scale_y = desc.scale_factor_y_;
-  if (desc.render_type_ == RenderType::FAST_PREVIEW && desc.use_viewport_region_ &&
+  if (requested_render_type == RenderType::FAST_PREVIEW && desc.use_viewport_region_ &&
       !rotation_active_fast_preview) {
     if (const auto viewport_region = pipeline_executor_->GetViewportRenderRegion();
         viewport_region.has_value()) {
@@ -90,7 +95,7 @@ void PipelineTask::SetExecutorRenderParams() {
     }
   }
 
-  if (desc.render_type_ == RenderType::FAST_PREVIEW) {
+  if (requested_render_type == RenderType::FAST_PREVIEW) {
     if (rotation_active_fast_preview) {
       // Rotation preview should use a downsampled full frame so viewport coordinates
       // stay aligned with the rotated result.
@@ -112,7 +117,7 @@ void PipelineTask::SetExecutorRenderParams() {
     pipeline_executor_->SetDecodeRes(DecodeRes::FULL);
     return;
   }
-  if (desc.render_type_ == RenderType::THUMBNAIL) {
+  if (requested_render_type == RenderType::THUMBNAIL) {
     pipeline_executor_->SetNextFramePresentationMode(FramePresentationMode::ViewportTransformed);
     pipeline_executor_->SetRenderRegion(0, 0, 1.0f);
     pipeline_executor_->SetForceCPUOutput(true);
@@ -121,14 +126,14 @@ void PipelineTask::SetExecutorRenderParams() {
     pipeline_executor_->SetDecodeRes(DecodeRes::QUARTER);
     return;
   }
-  if (desc.render_type_ == RenderType::FULL_RES_PREVIEW) {
+  if (requested_render_type == RenderType::FULL_RES_PREVIEW) {
     pipeline_executor_->SetNextFramePresentationMode(FramePresentationMode::ViewportTransformed);
     pipeline_executor_->SetRenderRegion(0, 0, 1.0f);
     pipeline_executor_->SetRenderRes(true);
     pipeline_executor_->SetForceCPUOutput(false);
     return;
   }
-  if (desc.render_type_ == RenderType::FULL_RES_EXPORT) {
+  if (requested_render_type == RenderType::FULL_RES_EXPORT) {
     pipeline_executor_->SetNextFramePresentationMode(FramePresentationMode::ViewportTransformed);
     pipeline_executor_->SetRenderRegion(0, 0, 1.0f);
     pipeline_executor_->SetRenderRes(true);
@@ -168,6 +173,7 @@ PipelineScheduler::PipelineScheduler() : thread_pool_(1) {}
 PipelineScheduler::PipelineScheduler(size_t thread_count) : thread_pool_(thread_count) {}
 
 void PipelineScheduler::ScheduleTask(PipelineTask&& task) {
+  std::lock_guard<std::mutex> lock(scheduler_lock_);
   task.task_id_ = id_generator_.GenerateID();
   thread_pool_.Submit([task = std::move(task)]() mutable {
     const auto set_blocking_value = [&task](std::shared_ptr<ImageBuffer> value) {

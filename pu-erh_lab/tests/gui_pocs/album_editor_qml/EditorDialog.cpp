@@ -35,6 +35,7 @@
 #include <array>
 #include <chrono>
 #include <cmath>
+#include <deque>
 #include <filesystem>
 #include <format>
 #include <functional>
@@ -1999,7 +2000,6 @@ class EditorDialog final : public QDialog {
       QObject::connect(geometry_apply_btn_, &QPushButton::clicked, this, [this]() {
         state_.crop_enabled_ = true;
         CommitAdjustment(AdjustmentField::CropRotate);
-        TriggerQualityPreviewRender();
       });
       rowLayout->addWidget(geometry_apply_btn_, 1);
 
@@ -2320,7 +2320,7 @@ class EditorDialog final : public QDialog {
       viewer_->SetCropToolEnabled(false);
     }
 
-    // Requirement (3): init state render via singleShot.
+    // Load with a full-res preview first; scheduler transitions back to fast-preview baseline.
     QTimer::singleShot(0, this, [this]() {
       state_.type_ = RenderType::FULL_RES_PREVIEW;
       RequestRender();
@@ -2378,6 +2378,11 @@ class EditorDialog final : public QDialog {
     bool                 crop_expand_to_fit_          = true;
     std::string          lut_path_;
     RenderType           type_ = RenderType::FAST_PREVIEW;
+  };
+
+  struct PendingRenderRequest {
+    AdjustmentState state_;
+    bool            apply_state_ = true;
   };
 
   static bool NearlyEqual(float a, float b) { return std::abs(a - b) <= 1e-6f; }
@@ -2647,12 +2652,6 @@ class EditorDialog final : public QDialog {
         card->SetSelected(item->isSelected());
       }
     }
-  }
-
-  void TriggerQualityPreviewRender() {
-    state_.type_ = RenderType::FULL_RES_PREVIEW;
-    RequestRender();
-    state_.type_ = RenderType::FAST_PREVIEW;
   }
 
   void TriggerQualityPreviewRenderFromPipeline() {
@@ -3898,7 +3897,7 @@ class EditorDialog final : public QDialog {
     last_applied_lut_path_.clear();
   }
 
-  void ApplyStateToPipeline() {
+  void ApplyStateToPipeline(const AdjustmentState& render_state) {
     auto  exec          = pipeline_guard_->pipeline_;
     auto& global_params = exec->GetGlobalParams();
     auto& geometry      = exec->GetStage(PipelineStageName::Geometry_Adjustment);
@@ -3926,53 +3925,110 @@ class EditorDialog final : public QDialog {
     geometry.EnableOperator(OperatorType::CROP_ROTATE, geometry_enabled, global_params);
 
     auto& basic         = exec->GetStage(PipelineStageName::Basic_Adjustment);
-    basic.SetOperator(OperatorType::EXPOSURE, {{"exposure", state_.exposure_}}, global_params);
-    basic.SetOperator(OperatorType::CONTRAST, {{"contrast", state_.contrast_}}, global_params);
-    basic.SetOperator(OperatorType::BLACK, {{"black", state_.blacks_}}, global_params);
-    basic.SetOperator(OperatorType::WHITE, {{"white", state_.whites_}}, global_params);
-    basic.SetOperator(OperatorType::SHADOWS, {{"shadows", state_.shadows_}}, global_params);
-    basic.SetOperator(OperatorType::HIGHLIGHTS, {{"highlights", state_.highlights_}},
+    basic.SetOperator(OperatorType::EXPOSURE, {{"exposure", render_state.exposure_}}, global_params);
+    basic.SetOperator(OperatorType::CONTRAST, {{"contrast", render_state.contrast_}}, global_params);
+    basic.SetOperator(OperatorType::BLACK, {{"black", render_state.blacks_}}, global_params);
+    basic.SetOperator(OperatorType::WHITE, {{"white", render_state.whites_}}, global_params);
+    basic.SetOperator(OperatorType::SHADOWS, {{"shadows", render_state.shadows_}}, global_params);
+    basic.SetOperator(OperatorType::HIGHLIGHTS, {{"highlights", render_state.highlights_}},
                       global_params);
-    basic.SetOperator(OperatorType::CURVE, CurveControlPointsToParams(state_.curve_points_),
+    basic.SetOperator(OperatorType::CURVE, CurveControlPointsToParams(render_state.curve_points_),
                       global_params);
 
     auto& color = exec->GetStage(PipelineStageName::Color_Adjustment);
-    color.SetOperator(OperatorType::SATURATION, {{"saturation", state_.saturation_}},
+    color.SetOperator(OperatorType::SATURATION, {{"saturation", render_state.saturation_}},
                       global_params);
-    color.SetOperator(OperatorType::TINT, {{"tint", state_.tint_}}, global_params);
-    color.SetOperator(OperatorType::HLS, ParamsForField(AdjustmentField::Hls, state_),
+    color.SetOperator(OperatorType::TINT, {{"tint", render_state.tint_}}, global_params);
+    color.SetOperator(OperatorType::HLS, ParamsForField(AdjustmentField::Hls, render_state),
                       global_params);
     color.EnableOperator(OperatorType::HLS, true, global_params);
 
     // LUT (LMT): rebind only when the path changes. The operator's SetGlobalParams now
     // derives lmt_enabled_/dirty state from the path, and PipelineMgmtService resyncs on load.
-    if (state_.lut_path_ != last_applied_lut_path_) {
-      color.SetOperator(OperatorType::LMT, {{"ocio_lmt", state_.lut_path_}}, global_params);
-      last_applied_lut_path_ = state_.lut_path_;
+    if (render_state.lut_path_ != last_applied_lut_path_) {
+      color.SetOperator(OperatorType::LMT, {{"ocio_lmt", render_state.lut_path_}}, global_params);
+      last_applied_lut_path_ = render_state.lut_path_;
     }
 
     auto& detail = exec->GetStage(PipelineStageName::Detail_Adjustment);
-    detail.SetOperator(OperatorType::SHARPEN, {{"sharpen", {{"offset", state_.sharpen_}}}},
+    detail.SetOperator(OperatorType::SHARPEN, {{"sharpen", {{"offset", render_state.sharpen_}}}},
                        global_params);
-    detail.SetOperator(OperatorType::CLARITY, {{"clarity", state_.clarity_}}, global_params);
+    detail.SetOperator(OperatorType::CLARITY, {{"clarity", render_state.clarity_}}, global_params);
+  }
+
+  static constexpr std::chrono::milliseconds kFastPreviewMinSubmitInterval{16};
+
+  auto CanSubmitFastPreviewNow() const -> bool {
+    if (last_fast_preview_submit_time_.time_since_epoch().count() == 0) {
+      return true;
+    }
+    const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - last_fast_preview_submit_time_);
+    return elapsed >= kFastPreviewMinSubmitInterval;
+  }
+
+  void EnsureFastPreviewSubmitTimer() {
+    if (fast_preview_submit_timer_) {
+      return;
+    }
+    fast_preview_submit_timer_ = new QTimer(this);
+    fast_preview_submit_timer_->setSingleShot(true);
+    QObject::connect(fast_preview_submit_timer_, &QTimer::timeout, this, [this]() {
+      if (!inflight_) {
+        StartNext();
+      }
+    });
+  }
+
+  void ArmFastPreviewSubmitTimer() {
+    EnsureFastPreviewSubmitTimer();
+
+    const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - last_fast_preview_submit_time_);
+    auto       delay   = kFastPreviewMinSubmitInterval - elapsed;
+    if (delay <= 0ms) {
+      delay = 1ms;
+    }
+    const int delay_ms = static_cast<int>(delay.count());
+
+    if (!fast_preview_submit_timer_->isActive()) {
+      fast_preview_submit_timer_->start(delay_ms);
+      return;
+    }
+
+    const int current_remaining = fast_preview_submit_timer_->remainingTime();
+    if (current_remaining < 0 || delay_ms < current_remaining) {
+      fast_preview_submit_timer_->start(delay_ms);
+    }
+  }
+
+  void EnqueueRenderRequest(const AdjustmentState& snapshot, bool apply_state) {
+    PendingRenderRequest request{snapshot, apply_state};
+
+    if (snapshot.type_ == RenderType::FAST_PREVIEW) {
+      // Industry pattern for interactive rendering:
+      // coalesce rapid slider updates and keep only the newest fast preview.
+      pending_fast_preview_request_ = std::move(request);
+    } else {
+      // Keep quality requests ordered and drop stale fast previews.
+      pending_quality_render_requests_.push_back(std::move(request));
+      pending_fast_preview_request_.reset();
+      if (fast_preview_submit_timer_ && fast_preview_submit_timer_->isActive()) {
+        fast_preview_submit_timer_->stop();
+      }
+    }
+
+    if (!inflight_) {
+      StartNext();
+    }
   }
 
   void RequestRender() {
-    pending_             = state_;
-    pending_apply_state_ = true;
-    has_pending_         = true;
-    if (!inflight_) {
-      StartNext();
-    }
+    EnqueueRenderRequest(state_, true);
   }
 
   void RequestRenderWithoutApplyingState() {
-    pending_             = state_;
-    pending_apply_state_ = false;
-    has_pending_         = true;
-    if (!inflight_) {
-      StartNext();
-    }
+    EnqueueRenderRequest(state_, false);
   }
 
   void EnsurePollTimer() {
@@ -4005,14 +4061,31 @@ class EditorDialog final : public QDialog {
   }
 
   void StartNext() {
-    if (!has_pending_) {
+    if (inflight_) {
       return;
     }
 
-    state_                 = pending_;
-    has_pending_           = false;
-    const bool apply_state = pending_apply_state_;
-    pending_apply_state_   = true;
+    std::optional<PendingRenderRequest> request;
+    if (!pending_quality_render_requests_.empty()) {
+      request = pending_quality_render_requests_.front();
+      pending_quality_render_requests_.pop_front();
+    } else if (pending_fast_preview_request_.has_value()) {
+      if (!CanSubmitFastPreviewNow()) {
+        ArmFastPreviewSubmitTimer();
+        return;
+      }
+      request = pending_fast_preview_request_;
+      pending_fast_preview_request_.reset();
+      last_fast_preview_submit_time_ = std::chrono::steady_clock::now();
+      if (fast_preview_submit_timer_ && fast_preview_submit_timer_->isActive()) {
+        fast_preview_submit_timer_->stop();
+      }
+    }
+
+    if (!request.has_value()) {
+      return;
+    }
+    const PendingRenderRequest next_request = *request;
 
     if (spinner_) {
       spinner_->Start();
@@ -4020,13 +4093,13 @@ class EditorDialog final : public QDialog {
       QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
     }
 
-    if (apply_state) {
-      ApplyStateToPipeline();
+    if (next_request.apply_state_) {
+      ApplyStateToPipeline(next_request.state_);
       pipeline_guard_->dirty_ = true;
     }
 
     PipelineTask task                       = base_task_;
-    task.options_.render_desc_.render_type_ = state_.type_;
+    task.options_.render_desc_.render_type_ = next_request.state_.type_;
     task.options_.is_callback_              = false;
     task.options_.is_seq_callback_          = false;
     task.options_.is_blocking_              = true;
@@ -4044,15 +4117,6 @@ class EditorDialog final : public QDialog {
     inflight_    = true;
     scheduler_->ScheduleTask(std::move(task));
 
-    // Reset render type to FAST_PREVIEW after task submission.
-    // TriggerQualityPreviewRender(FromPipeline) temporarily sets state_.type_ to
-    // FULL_RES_PREVIEW and stores it in pending_.  When StartNext() later copies
-    // pending_ back into state_, the FULL_RES_PREVIEW type leaks into state_ and
-    // subsequent slider drags would keep requesting full-res renders instead of
-    // the intended fast preview.  Resetting here ensures interactive edits always
-    // use the low-resolution preview path.
-    state_.type_ = RenderType::FAST_PREVIEW;
-
     inflight_future_ = std::move(fut);
     EnsurePollTimer();
     if (poll_timer_ && !poll_timer_->isActive()) {
@@ -4067,7 +4131,7 @@ class EditorDialog final : public QDialog {
       spinner_->Stop();
     }
 
-    if (has_pending_) {
+    if (!pending_quality_render_requests_.empty() || pending_fast_preview_request_.has_value()) {
       StartNext();
     } else if (poll_timer_ && poll_timer_->isActive()) {
       poll_timer_->stop();
@@ -4142,12 +4206,13 @@ class EditorDialog final : public QDialog {
   AdjustmentState                                          state_{};
   AdjustmentState                                          committed_state_{};
   Version                                                  working_version_{};
-  AdjustmentState                                          pending_{};
+  std::deque<PendingRenderRequest>                         pending_quality_render_requests_{};
+  std::optional<PendingRenderRequest>                      pending_fast_preview_request_{};
   ControlPanelKind                                         active_panel_               = ControlPanelKind::Tone;
   bool                                                     pipeline_initialized_       = false;
   bool                                                     inflight_                   = false;
-  bool                                                     has_pending_                = false;
-  bool                                                     pending_apply_state_        = true;
+  QTimer*                                                  fast_preview_submit_timer_  = nullptr;
+  std::chrono::steady_clock::time_point                    last_fast_preview_submit_time_{};
   bool                                                     syncing_controls_           = false;
 };
 }  // namespace
