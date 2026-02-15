@@ -137,12 +137,21 @@ cd PuerhLab
 # Release 配置
 .\scripts\msvc_env.cmd --preset win_release `
   -DCMAKE_PREFIX_PATH="D:/Qt/6.9.3/msvc2022_64/lib/cmake" `
-  -Deasy_profiler_DIR="$PWD/pu-erh_lab/third_party/easy_profiler-v2.1.0-msvc15-win64/lib/cmake/easy_profiler" `
-  -DPUERHLAB_WINDEPLOYQT="D:/Qt/6.9.3/msvc2022_64/bin/windeployqt.exe"
+  -Deasy_profiler_DIR="$PWD/pu-erh_lab/third_party/easy_profiler-v2.1.0-msvc15-win64/lib/cmake/easy_profiler"
 
 # Release 编译 + 安装
 .\scripts\msvc_env.cmd --build build/release --parallel
 .\scripts\msvc_env.cmd --install build/release --prefix build/install
+```
+
+可选部署参数：
+
+```powershell
+# 在安装包中包含软件 OpenGL 回退 DLL（体积更大）。
+-DPUERHLAB_DEPLOY_SOFTWARE_OPENGL=ON
+
+# 传递额外参数给 Qt 部署工具（使用分号分隔）。
+-DPUERHLAB_QT_DEPLOY_TOOL_OPTIONS="--no-compiler-runtime;--no-translations;--no-system-d3d-compiler;--no-system-dxc-compiler"
 ```
 
 打包 ZIP（CPack）：

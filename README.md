@@ -137,12 +137,21 @@ Adjust the Qt/easy_profiler paths below to your local environment.
 # Release configure
 .\scripts\msvc_env.cmd --preset win_release `
   -DCMAKE_PREFIX_PATH="D:/Qt/6.9.3/msvc2022_64/lib/cmake" `
-  -Deasy_profiler_DIR="$PWD/pu-erh_lab/third_party/easy_profiler-v2.1.0-msvc15-win64/lib/cmake/easy_profiler" `
-  -DPUERHLAB_WINDEPLOYQT="D:/Qt/6.9.3/msvc2022_64/bin/windeployqt.exe"
+  -Deasy_profiler_DIR="$PWD/pu-erh_lab/third_party/easy_profiler-v2.1.0-msvc15-win64/lib/cmake/easy_profiler"
 
 # Release build + install
 .\scripts\msvc_env.cmd --build build/release --parallel
 .\scripts\msvc_env.cmd --install build/release --prefix build/install
+```
+
+Optional deploy tuning:
+
+```powershell
+# Include software OpenGL fallback DLL in the install package (larger package).
+-DPUERHLAB_DEPLOY_SOFTWARE_OPENGL=ON
+
+# Pass extra options to Qt deploy tooling (semicolon-separated list).
+-DPUERHLAB_QT_DEPLOY_TOOL_OPTIONS="--no-compiler-runtime;--no-translations;--no-system-d3d-compiler;--no-system-dxc-compiler"
 ```
 
 Create a ZIP package (CPack):
@@ -182,6 +191,4 @@ Roadmap and ongoing milestones:
 ## License
 
 Apache-2.0. See [LICENSE](LICENSE).
-
-
 

@@ -15,11 +15,15 @@
 #pragma once
 
 #include <array>
+#include <cerrno>
 #include <cctype>
+#include <cstdlib>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <istream>
-#include <sstream>
+#include <iterator>
+#include <limits>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -44,52 +48,89 @@ struct CubeLut {
 };
 
 namespace detail {
+inline auto IsSpace(char c) -> bool {
+  return std::isspace(static_cast<unsigned char>(c)) != 0;
+}
+
 inline auto Trim(std::string_view sv) -> std::string_view {
   size_t b = 0;
-  while (b < sv.size() && std::isspace(static_cast<unsigned char>(sv[b])) != 0) ++b;
+  while (b < sv.size() && IsSpace(sv[b])) ++b;
   size_t e = sv.size();
-  while (e > b && std::isspace(static_cast<unsigned char>(sv[e - 1])) != 0) --e;
+  while (e > b && IsSpace(sv[e - 1])) --e;
   return sv.substr(b, e - b);
 }
 
-inline auto StripInlineComment(std::string_view sv) -> std::string_view {
-  const auto pos = sv.find('#');
-  if (pos != std::string_view::npos) {
-    sv = sv.substr(0, pos);
+inline auto StartsWithToken(std::string_view sv, std::string_view token) -> bool {
+  if (sv.size() < token.size() || sv.compare(0, token.size(), token) != 0) {
+    return false;
   }
-  return Trim(sv);
-}
-
-inline auto ReplaceCommas(std::string_view sv) -> std::string {
-  std::string out(sv);
-  for (char& c : out) {
-    if (c == ',') c = ' ';
+  if (sv.size() == token.size()) {
+    return true;
   }
-  return out;
+  const char c = sv[token.size()];
+  return IsSpace(c);
 }
 
-inline auto StartsWith(std::string_view sv, std::string_view prefix) -> bool {
-  return sv.size() >= prefix.size() && sv.compare(0, prefix.size(), prefix) == 0;
+inline auto SkipWsAndCommas(const char* p, const char* end) -> const char* {
+  while (p < end) {
+    const char c = *p;
+    if (c == ',' || IsSpace(c)) {
+      ++p;
+      continue;
+    }
+    break;
+  }
+  return p;
 }
 
-inline auto ParseInts(std::string_view line, int& out) -> bool {
-  std::istringstream iss((std::string(line)));
-  return (iss >> out) ? true : false;
+inline auto ParseFloatToken(const char*& p, const char* end, float& out) -> bool {
+  p = SkipWsAndCommas(p, end);
+  if (p >= end || *p == '#') {
+    return false;
+  }
+
+  errno         = 0;
+  char* next    = nullptr;
+  const float v = std::strtof(p, &next);
+  if (next == p || errno == ERANGE) {
+    return false;
+  }
+
+  out = v;
+  p   = next;
+  return true;
+}
+
+inline auto ParseIntToken(const char*& p, const char* end, int& out) -> bool {
+  p = SkipWsAndCommas(p, end);
+  if (p >= end || *p == '#') {
+    return false;
+  }
+
+  errno       = 0;
+  char* next  = nullptr;
+  const long v = std::strtol(p, &next, 10);
+  if (next == p || errno == ERANGE || v < std::numeric_limits<int>::min() ||
+      v > std::numeric_limits<int>::max()) {
+    return false;
+  }
+
+  out = static_cast<int>(v);
+  p   = next;
+  return true;
 }
 
 inline auto ParseTriplet(std::string_view line, std::array<float, 3>& out) -> bool {
-  const auto cleaned = ReplaceCommas(StripInlineComment(line));
-  std::istringstream iss(cleaned);
-  return (iss >> out[0] >> out[1] >> out[2]) ? true : false;
+  const char* p   = line.data();
+  const char* end = p + line.size();
+  return ParseFloatToken(p, end, out[0]) && ParseFloatToken(p, end, out[1]) &&
+         ParseFloatToken(p, end, out[2]);
 }
 
-inline auto ParseRgb(std::string_view line, std::array<float, 3>& out, int line_no, std::string* err)
-    -> bool {
-  if (!ParseTriplet(line, out)) {
-    if (err) *err = "Failed to parse RGB values at line " + std::to_string(line_no);
-    return false;
-  }
-  return true;
+inline auto ParseInt(std::string_view line, int& out) -> bool {
+  const char* p   = line.data();
+  const char* end = p + line.size();
+  return ParseIntToken(p, end, out);
 }
 
 inline void ComputeDomainScale(CubeLut& lut) {
@@ -98,86 +139,103 @@ inline void ComputeDomainScale(CubeLut& lut) {
     lut.domain_scale_[i] = (span != 0.f) ? (1.f / span) : 0.f;
   }
 }
-}  // namespace detail
 
-inline auto ParseCubeStream(std::istream& is, CubeLut& lut, std::string* err = nullptr) -> bool {
+inline auto ParseCubeContentFast(std::string_view content, CubeLut& lut, std::string* err = nullptr)
+    -> bool {
   lut = CubeLut{};  // reset
 
-  int line_no = 0;
-  while (is.good()) {
-    std::string line_raw;
-    std::getline(is, line_raw);
+  constexpr std::string_view kTitle     = "TITLE";
+  constexpr std::string_view kDomainMin = "DOMAIN_MIN";
+  constexpr std::string_view kDomainMax = "DOMAIN_MAX";
+  constexpr std::string_view kLut1DSize = "LUT_1D_SIZE";
+  constexpr std::string_view kLut3DSize = "LUT_3D_SIZE";
+
+  size_t target_1d = 0;
+  size_t target_3d = 0;
+
+  const char* p    = content.data();
+  const char* end  = p + content.size();
+  int         line_no = 1;
+
+  while (p < end) {
+    const char* line_start = p;
+    const auto  remaining  = static_cast<size_t>(end - p);
+    const auto  nl_raw     = std::memchr(p, '\n', remaining);
+    const char* line_end   = (nl_raw != nullptr) ? static_cast<const char*>(nl_raw) : end;
+
+    if (line_end > line_start && line_end[-1] == '\r') {
+      --line_end;
+    }
+
+    std::string_view line(line_start, static_cast<size_t>(line_end - line_start));
+    line = Trim(line);
+
+    if (!line.empty() && line.front() != '#') {
+      if (StartsWithToken(line, kTitle)) {
+        // TITLE payload is informational only.
+      } else if (StartsWithToken(line, kDomainMin)) {
+        const auto payload = Trim(line.substr(kDomainMin.size()));
+        if (!ParseTriplet(payload, lut.domain_min_)) {
+          if (err) *err = "Malformed DOMAIN_MIN at line " + std::to_string(line_no);
+          return false;
+        }
+      } else if (StartsWithToken(line, kDomainMax)) {
+        const auto payload = Trim(line.substr(kDomainMax.size()));
+        if (!ParseTriplet(payload, lut.domain_max_)) {
+          if (err) *err = "Malformed DOMAIN_MAX at line " + std::to_string(line_no);
+          return false;
+        }
+      } else if (StartsWithToken(line, kLut1DSize)) {
+        const auto payload = Trim(line.substr(kLut1DSize.size()));
+        if (!ParseInt(payload, lut.size1d_) || lut.size1d_ <= 0) {
+          if (err) *err = "Malformed LUT_1D_SIZE at line " + std::to_string(line_no);
+          return false;
+        }
+        target_1d = static_cast<size_t>(lut.size1d_) * 3;
+        lut.lut1d_.reserve(target_1d);
+      } else if (StartsWithToken(line, kLut3DSize)) {
+        const auto payload = Trim(line.substr(kLut3DSize.size()));
+        if (!ParseInt(payload, lut.edge3d_) || lut.edge3d_ <= 1) {
+          if (err) *err = "Malformed LUT_3D_SIZE at line " + std::to_string(line_no);
+          return false;
+        }
+        target_3d = static_cast<size_t>(lut.edge3d_) * lut.edge3d_ * lut.edge3d_ * 3;
+        lut.lut3d_.reserve(target_3d);
+      } else {
+        // Data line (RGB triple)
+        std::array<float, 3> rgb{};
+        if (!ParseTriplet(line, rgb)) {
+          if (err) *err = "Failed to parse RGB values at line " + std::to_string(line_no);
+          return false;
+        }
+
+        if (lut.lut1d_.size() < target_1d) {
+          lut.lut1d_.push_back(rgb[0]);
+          lut.lut1d_.push_back(rgb[1]);
+          lut.lut1d_.push_back(rgb[2]);
+        } else if (lut.lut3d_.size() < target_3d) {
+          lut.lut3d_.push_back(rgb[0]);
+          lut.lut3d_.push_back(rgb[1]);
+          lut.lut3d_.push_back(rgb[2]);
+        } else {
+          if (err) *err = "Unexpected extra data at line " + std::to_string(line_no);
+          return false;
+        }
+      }
+    }
+
+    if (nl_raw == nullptr) {
+      break;
+    }
+    p = static_cast<const char*>(nl_raw) + 1;
     ++line_no;
-
-    auto line = detail::Trim(line_raw);
-    if (line.empty()) continue;
-    if (line[0] == '#') continue;
-
-    if (detail::StartsWith(line, "TITLE")) {
-      continue;  // ignore title
-    }
-    if (detail::StartsWith(line, "DOMAIN_MIN")) {
-      auto payload = detail::Trim(line.substr(std::string("DOMAIN_MIN").size()));
-      if (!detail::ParseTriplet(payload, lut.domain_min_)) {
-        if (err) *err = "Malformed DOMAIN_MIN at line " + std::to_string(line_no);
-        return false;
-      }
-      continue;
-    }
-    if (detail::StartsWith(line, "DOMAIN_MAX")) {
-      auto payload = detail::Trim(line.substr(std::string("DOMAIN_MAX").size()));
-      if (!detail::ParseTriplet(payload, lut.domain_max_)) {
-        if (err) *err = "Malformed DOMAIN_MAX at line " + std::to_string(line_no);
-        return false;
-      }
-      continue;
-    }
-    if (detail::StartsWith(line, "LUT_1D_SIZE")) {
-      auto payload = detail::Trim(line.substr(std::string("LUT_1D_SIZE").size()));
-      if (!detail::ParseInts(payload, lut.size1d_) || lut.size1d_ <= 0) {
-        if (err) *err = "Malformed LUT_1D_SIZE at line " + std::to_string(line_no);
-        return false;
-      }
-      lut.lut1d_.reserve(static_cast<size_t>(lut.size1d_) * 3);
-      continue;
-    }
-    if (detail::StartsWith(line, "LUT_3D_SIZE")) {
-      auto payload = detail::Trim(line.substr(std::string("LUT_3D_SIZE").size()));
-      if (!detail::ParseInts(payload, lut.edge3d_) || lut.edge3d_ <= 1) {
-        if (err) *err = "Malformed LUT_3D_SIZE at line " + std::to_string(line_no);
-        return false;
-      }
-      const auto total = static_cast<size_t>(lut.edge3d_) * lut.edge3d_ * lut.edge3d_ * 3;
-      lut.lut3d_.reserve(total);
-      continue;
-    }
-
-    // Data line (RGB triple)
-    std::array<float, 3> rgb{};
-    if (!detail::ParseRgb(line, rgb, line_no, err)) return false;
-
-    const size_t target_1d = (lut.size1d_ > 0) ? static_cast<size_t>(lut.size1d_) * 3 : 0;
-    if (lut.lut1d_.size() < target_1d) {
-      lut.lut1d_.insert(lut.lut1d_.end(), rgb.begin(), rgb.end());
-      continue;
-    }
-
-    const size_t target_3d = (lut.edge3d_ > 0)
-                                 ? static_cast<size_t>(lut.edge3d_) * lut.edge3d_ * lut.edge3d_ * 3
-                                 : 0;
-    if (lut.lut3d_.size() < target_3d) {
-      lut.lut3d_.insert(lut.lut3d_.end(), rgb.begin(), rgb.end());
-      continue;
-    }
-
-    if (err) *err = "Unexpected extra data at line " + std::to_string(line_no);
-    return false;
   }
 
   // Validate counts
   const size_t want_1d = (lut.size1d_ > 0) ? static_cast<size_t>(lut.size1d_) * 3 : 0;
-  const size_t want_3d = (lut.edge3d_ > 0) ? static_cast<size_t>(lut.edge3d_) * lut.edge3d_ * lut.edge3d_ * 3
-                                          : 0;
+  const size_t want_3d = (lut.edge3d_ > 0)
+                             ? static_cast<size_t>(lut.edge3d_) * lut.edge3d_ * lut.edge3d_ * 3
+                             : 0;
 
   if (lut.lut1d_.size() != want_1d) {
     if (err) {
@@ -195,25 +253,43 @@ inline auto ParseCubeStream(std::istream& is, CubeLut& lut, std::string* err = n
     return false;
   }
 
-  detail::ComputeDomainScale(lut);
+  ComputeDomainScale(lut);
   return true;
+}
+}  // namespace detail
+
+inline auto ParseCubeStream(std::istream& is, CubeLut& lut, std::string* err = nullptr) -> bool {
+  std::string content((std::istreambuf_iterator<char>(is)), std::istreambuf_iterator<char>());
+  return detail::ParseCubeContentFast(content, lut, err);
 }
 
 inline auto ParseCubeFile(const std::filesystem::path& path, CubeLut& lut, std::string* err = nullptr)
     -> bool {
-  std::ifstream ifs(path);
+  std::ifstream ifs(path, std::ios::binary | std::ios::ate);
   if (!ifs.is_open()) {
     if (err) *err = "Failed to open file: " + path.string();
     return false;
   }
-  return ParseCubeStream(ifs, lut, err);
+
+  const std::streamoff file_size = ifs.tellg();
+  if (file_size < 0) {
+    if (err) *err = "Failed to get file size: " + path.string();
+    return false;
+  }
+
+  std::string content(static_cast<size_t>(file_size), '\0');
+  ifs.seekg(0, std::ios::beg);
+  if (file_size > 0 && !ifs.read(content.data(), file_size)) {
+    if (err) *err = "Failed to read file: " + path.string();
+    return false;
+  }
+
+  return detail::ParseCubeContentFast(content, lut, err);
 }
 
 inline auto ParseCubeString(std::string_view content, CubeLut& lut, std::string* err = nullptr)
     -> bool {
-  std::string        owned(content);
-  std::istringstream iss{owned};
-  return ParseCubeStream(static_cast<std::istream&>(iss), lut, err);
+  return detail::ParseCubeContentFast(content, lut, err);
 }
 
 }  // namespace puerhlab

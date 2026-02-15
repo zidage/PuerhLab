@@ -20,8 +20,12 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <filesystem>
+#include <mutex>
 #include <sstream>
 #include <stdexcept>
+#include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "edit/operators/op_base.hpp"
@@ -44,6 +48,7 @@ struct GPU_LUT3D {
   cudaArray_t         array_              = nullptr;
   cudaTextureObject_t texture_object_     = 0;
   int                 edge_size_          = 0;
+  bool                borrowed_           = false;
 
   GPU_LUT3D()                             = default;
 
@@ -56,6 +61,13 @@ struct GPU_LUT3D {
   GPU_LUT3D& operator=(GPU_LUT3D&& other) = default;
 
   void       Reset() {
+    if (borrowed_) {
+      array_          = nullptr;
+      texture_object_ = 0;
+      edge_size_      = 0;
+      borrowed_       = false;
+      return;
+    }
     if (texture_object_) {
       cudaDestroyTextureObject(texture_object_);
       texture_object_ = 0;
@@ -639,6 +651,42 @@ class GPUParamsConverter {
   }
 
  private:
+  struct LUTPathCache {
+    std::mutex                              mutex_;
+    std::unordered_map<std::string, GPU_LUT3D> entries_;
+  };
+
+  static auto GetLUTPathCache() -> LUTPathCache& {
+    // Intentionally leaked to avoid CUDA shutdown ordering issues during static destruction.
+    static LUTPathCache* cache = new LUTPathCache();
+    return *cache;
+  }
+
+  static auto BuildLUTPathCacheKey(const std::filesystem::path& path) -> std::string {
+    std::error_code ec;
+    const auto      abs_path   = std::filesystem::absolute(path, ec);
+    const auto      normalized = (ec ? path : abs_path).lexically_normal();
+
+    std::string     key        = normalized.string();
+
+    std::error_code size_ec;
+    const auto      file_size  = std::filesystem::file_size(normalized, size_ec);
+    key += "|s=" + std::to_string(size_ec ? static_cast<std::uintmax_t>(0) : file_size);
+
+    std::error_code time_ec;
+    const auto      mtime      = std::filesystem::last_write_time(normalized, time_ec);
+    const auto      stamp      = time_ec ? 0LL : mtime.time_since_epoch().count();
+    key += "|t=" + std::to_string(stamp);
+
+    return key;
+  }
+
+  static auto BorrowLUT3D(const GPU_LUT3D& lut) -> GPU_LUT3D {
+    GPU_LUT3D borrowed = lut;
+    borrowed.borrowed_ = true;
+    return borrowed;
+  }
+
   static GPU_LUT3D CreateLUTTextureObject(const std::vector<float>& lut_data, int edge_size) {
     GPU_LUT3D gpu_lut;
     gpu_lut.edge_size_         = edge_size;
@@ -693,14 +741,41 @@ class GPUParamsConverter {
     throw std::runtime_error("GPUParamsConverter: Only 3D LUTs are supported for GPU processing.");
   };
 
-  static GPU_LUT3D CreateLUTTextureObject(std::filesystem::path& path) {
-    CubeLut lut;
-    ParseCubeFile(path, lut);
-    if (lut.Has3D()) {
-      return CreateLUTTextureObject(lut.lut3d_, lut.edge3d_);
+  static GPU_LUT3D CreateLUTTextureObject(const std::filesystem::path& path) {
+    const std::string cache_key = BuildLUTPathCacheKey(path);
+    {
+      auto&                      cache = GetLUTPathCache();
+      std::lock_guard<std::mutex> lock(cache.mutex_);
+      const auto                 it = cache.entries_.find(cache_key);
+      if (it != cache.entries_.end()) {
+        return BorrowLUT3D(it->second);
+      }
     }
-    // TODO: Add support for 1D LUTs if needed
-    throw std::runtime_error("GPUParamsConverter: Only 3D LUTs are supported for GPU processing.");
+
+    CubeLut     lut;
+    std::string parse_error;
+    if (!ParseCubeFile(path, lut, &parse_error)) {
+      std::ostringstream oss;
+      oss << "GPUParamsConverter: Failed to parse LUT file '" << path.string()
+          << "': " << parse_error;
+      throw std::runtime_error(oss.str());
+    }
+    if (!lut.Has3D()) {
+      // TODO: Add support for 1D LUTs if needed
+      throw std::runtime_error(
+          "GPUParamsConverter: Only 3D LUTs are supported for GPU processing.");
+    }
+
+    GPU_LUT3D parsed_lut = CreateLUTTextureObject(lut.lut3d_, lut.edge3d_);
+
+    auto&                      cache = GetLUTPathCache();
+    std::lock_guard<std::mutex> lock(cache.mutex_);
+    auto                       [it, inserted] = cache.entries_.emplace(cache_key, parsed_lut);
+    if (!inserted) {
+      // Another thread populated the same key first; release our duplicate upload.
+      parsed_lut.Reset();
+    }
+    return BorrowLUT3D(it->second);
   };
 };
 };  // namespace puerhlab
