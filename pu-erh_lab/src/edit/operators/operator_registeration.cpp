@@ -35,6 +35,7 @@
 #include "edit/operators/operator_factory.hpp"
 #include "edit/operators/raw/raw_decode_op.hpp"
 #include "edit/operators/wheel/color_wheel_op.hpp"
+#include "edit/operators/geometry/lens_calib_op.hpp"
 
 namespace puerhlab {
 void RegisterAllOperators() {
@@ -46,10 +47,9 @@ void RegisterAllOperators() {
     return std::make_shared<ResizeOp>(params);
   });
 
-  OperatorFactory::Instance().Register(OperatorType::CROP_ROTATE,
-                                       [](const nlohmann::json& params) {
-                                         return std::make_shared<CropRotateOp>(params);
-                                       });
+  OperatorFactory::Instance().Register(OperatorType::CROP_ROTATE, [](const nlohmann::json& params) {
+    return std::make_shared<CropRotateOp>(params);
+  });
 
   OperatorFactory::Instance().Register(OperatorType::CONTRAST, [](const nlohmann::json& params) {
     return std::make_shared<ContrastOp>(params);
@@ -126,5 +126,9 @@ void RegisterAllOperators() {
   OperatorFactory::Instance().Register(OperatorType::COLOR_WHEEL, [](const nlohmann::json& params) {
     return std::make_shared<ColorWheelOp>(params);
   });
+
+  OperatorFactory::Instance().Register(
+      OperatorType::LENS_CALIBRATION,
+      [](const nlohmann::json& params) { return std::make_shared<LensCalibOp>(params); });
 }
 };  // namespace puerhlab

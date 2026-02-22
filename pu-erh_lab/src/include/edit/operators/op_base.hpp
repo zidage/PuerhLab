@@ -65,7 +65,8 @@ enum class OperatorType : int {
   ACES_TONE_MAPPING,
   AUTO_EXPOSURE,
   UNKNOWN,  // For unrecognized operator types or placeholders
-  CROP_ROTATE
+  CROP_ROTATE,
+  LENS_CALIBRATION
 };
 
 struct OperatorParams {

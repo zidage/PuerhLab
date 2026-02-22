@@ -124,12 +124,13 @@ set(OPERATORS_SRCS
     edit/operators/raw/raw_decode_op.cpp
     edit/operators/geometry/resize_op.cpp
     edit/operators/geometry/crop_rotate_op.cpp
+    edit/operators/geometry/lens_calib_op.cpp
     edit/operators/operator_registeration.cpp
 )
 
 def_library(Operators
     SOURCES ${OPERATORS_SRCS}
-    PUBLIC_DEPS ImageBuffer JSON OpenColorIO::OpenColorIO hwy::hwy glad::glad
+    PUBLIC_DEPS ImageBuffer JSON OpenColorIO::OpenColorIO hwy::hwy glad::glad lensfun::lensfun
 )
 
 # --- Edit Pipeline ---

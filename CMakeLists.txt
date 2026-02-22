@@ -210,6 +210,72 @@ else()
     endif()
 endif()
 
+# Lensfun
+set(PUERHLAB_LENSFUN_ROOT
+    "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_party/lensfun/install"
+    CACHE PATH "Lensfun install prefix (must contain include/, lib/, and bin/)")
+
+if (WIN32)
+    # vcpkg-style package if available.
+    find_package(lensfun CONFIG QUIET)
+
+    # Fallback for local source build installs that only provide headers/libs.
+    if (NOT lensfun_FOUND)
+        unset(LENSFUN_INCLUDE_DIR CACHE)
+        unset(LENSFUN_IMPLIB CACHE)
+        unset(LENSFUN_DLL CACHE)
+
+        find_path(LENSFUN_INCLUDE_DIR
+            NAMES lensfun/lensfun.h
+            PATHS "${PUERHLAB_LENSFUN_ROOT}/include"
+            NO_DEFAULT_PATH
+            NO_CMAKE_FIND_ROOT_PATH
+        )
+        find_library(LENSFUN_IMPLIB
+            NAMES lensfun
+            PATHS "${PUERHLAB_LENSFUN_ROOT}/lib"
+            NO_DEFAULT_PATH
+            NO_CMAKE_FIND_ROOT_PATH
+        )
+        find_file(LENSFUN_DLL
+            NAMES lensfun.dll
+            PATHS "${PUERHLAB_LENSFUN_ROOT}/bin"
+            NO_DEFAULT_PATH
+            NO_CMAKE_FIND_ROOT_PATH
+        )
+
+        if (NOT LENSFUN_INCLUDE_DIR OR NOT LENSFUN_IMPLIB)
+            message(FATAL_ERROR
+                "Lensfun was not found. Install via vcpkg or set PUERHLAB_LENSFUN_ROOT "
+                "to a valid Lensfun install prefix (include/lib/bin).")
+        endif()
+
+        add_library(lensfun::lensfun SHARED IMPORTED)
+        set_target_properties(lensfun::lensfun PROPERTIES
+            IMPORTED_IMPLIB "${LENSFUN_IMPLIB}"
+            INTERFACE_INCLUDE_DIRECTORIES "${LENSFUN_INCLUDE_DIR}"
+        )
+        if (LENSFUN_DLL)
+            set_target_properties(lensfun::lensfun PROPERTIES
+                IMPORTED_LOCATION "${LENSFUN_DLL}"
+            )
+        endif()
+    endif()
+
+    if (TARGET lensfun AND NOT TARGET lensfun::lensfun)
+        add_library(lensfun::lensfun ALIAS lensfun)
+    endif()
+    if (TARGET lensfun::lensfun AND NOT TARGET lensfun)
+        add_library(lensfun INTERFACE)
+        target_link_libraries(lensfun INTERFACE lensfun::lensfun)
+    endif()
+else()
+    find_package(lensfun QUIET)
+    if (NOT lensfun_FOUND AND NOT TARGET lensfun AND NOT TARGET lensfun::lensfun)
+        message(FATAL_ERROR "Lensfun not found. Install via Homebrew (lensfun) or vcpkg.")
+    endif()
+endif()
+
 # DuckDB API
 if (WIN32)
     add_library(DuckDB SHARED IMPORTED)
