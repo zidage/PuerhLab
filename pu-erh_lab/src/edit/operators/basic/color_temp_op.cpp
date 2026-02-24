@@ -31,7 +31,6 @@
 #include <vector>
 
 #include "edit/operators/basic/camera_matrices.hpp"
-#include "edit/operators/utils/color_utils.hpp"
 
 namespace puerhlab {
 namespace {
@@ -50,6 +49,10 @@ constexpr double kD50X                = 0.34567;
 constexpr double kD50Y                = 0.35850;
 constexpr double kD60X                = 0.32168;
 constexpr double kD60Y                = 0.33767;
+// ACEScg (AP1) white is D60. This is XYZ(D60) -> AP1 in column-vector form.
+const cv::Matx33d kXyzD60ToAp1(1.6410233797, -0.3248032942, -0.2364246952, -0.6636628587,
+                               1.6153315917, 0.0167563477, 0.0117218943, -0.0082844420,
+                               0.9883948585);
 
 struct CameraMatrixPair {
   cv::Matx33d cm1_ = cv::Matx33d::eye();
@@ -636,14 +639,8 @@ void ColorTempOp::ResolveRuntime(OperatorParams& params) const {
   const cv::Matx33d cat_src_to_d50 = BuildBradfordCAT(selected_xy, cv::Vec2d(kD50X, kD50Y));
   const cv::Matx33d camera_to_xyz_d50 = cat_src_to_d50 * camera_to_xyz;
 
-  const cv::Matx33f xyz_d60_to_ap1_f = ColorUtils::XYZ_TO_RGB_f33(ColorUtils::AP1_PRIMARY);
-  const cv::Matx33d xyz_d60_to_ap1(xyz_d60_to_ap1_f(0, 0), xyz_d60_to_ap1_f(0, 1),
-                                   xyz_d60_to_ap1_f(0, 2), xyz_d60_to_ap1_f(1, 0),
-                                   xyz_d60_to_ap1_f(1, 1), xyz_d60_to_ap1_f(1, 2),
-                                   xyz_d60_to_ap1_f(2, 0), xyz_d60_to_ap1_f(2, 1),
-                                   xyz_d60_to_ap1_f(2, 2));
   const cv::Matx33d cat_d50_to_d60 = BuildBradfordCAT(cv::Vec2d(kD50X, kD50Y), cv::Vec2d(kD60X, kD60Y));
-  const cv::Matx33d xyz_d50_to_ap1 = xyz_d60_to_ap1 * cat_d50_to_d60;
+  const cv::Matx33d xyz_d50_to_ap1 = kXyzD60ToAp1 * cat_d50_to_d60;
   const cv::Matx33d camera_to_ap1  = xyz_d50_to_ap1 * camera_to_xyz_d50;
 
   StoreMatrix(camera_to_xyz, params.color_temp_cam_to_xyz_);
