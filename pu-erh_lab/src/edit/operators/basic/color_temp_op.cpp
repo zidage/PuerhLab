@@ -37,7 +37,7 @@ namespace {
 constexpr double kCalibrationLowCCT   = 2856.0;
 constexpr double kCalibrationHighCCT  = 6504.0;
 constexpr double kCustomCCTMin        = 2000.0;
-constexpr double kCustomCCTMax        = 50000.0;
+constexpr double kCustomCCTMax        = 15000.0;
 constexpr double kCustomTintMin       = -150.0;
 constexpr double kCustomTintMax       = 150.0;
 constexpr double kTintScale           = 3000.0;  // Adobe DNG SDK temperature/tint model.
@@ -364,8 +364,8 @@ auto UVToTemperatureTint(const cv::Vec2d& uv, double& out_cct, double& out_tint)
       const double vv1 = uv[1] - (kRobertsonLines[i - 1].v_ * blend +
                                   kRobertsonLines[i].v_ * (1.0 - blend));
 
-      double du1 = du * blend + last_du * (1.0 - blend);
-      double dv1 = dv * blend + last_dv * (1.0 - blend);
+      double du1 = last_du * blend + du * (1.0 - blend);
+      double dv1 = last_dv * blend + dv * (1.0 - blend);
       len        = std::sqrt(du1 * du1 + dv1 * dv1);
       if (len <= kValueEpsilon) {
         out_tint = 0.0;
@@ -392,7 +392,7 @@ auto TemperatureTintToUV(double cct, double tint) -> cv::Vec2d {
   const double mired    = 1e6 / safe_cct;
 
   size_t       index    = 1;
-  while (index < kRobertsonLines.size() && mired < kRobertsonLines[index].r_) {
+  while (index < kRobertsonLines.size() && mired > kRobertsonLines[index].r_) {
     ++index;
   }
   if (index >= kRobertsonLines.size()) {
@@ -546,10 +546,15 @@ void ColorTempOp::ApplyGPU(std::shared_ptr<ImageBuffer>) {
 }
 
 auto ColorTempOp::GetParams() const -> nlohmann::json {
+  const float effective_cct =
+      (mode_ == ColorTempMode::AS_SHOT) ? resolved_cct_ : custom_cct_;
+  const float effective_tint =
+      (mode_ == ColorTempMode::AS_SHOT) ? resolved_tint_ : custom_tint_;
+
   nlohmann::json out;
   out[std::string(script_name_)] = {{"mode", ModeToString(mode_)},
-                                    {"cct", custom_cct_},
-                                    {"tint", custom_tint_},
+                                    {"cct", effective_cct},
+                                    {"tint", effective_tint},
                                     {"resolved_cct", resolved_cct_},
                                     {"resolved_tint", resolved_tint_}};
   return out;
@@ -565,16 +570,30 @@ void ColorTempOp::SetParams(const nlohmann::json& params) {
     mode_ = ParseMode(j["mode"].get<std::string>());
   }
   if (j.contains("cct")) {
-    custom_cct_ = static_cast<float>(ClampFinite(j["cct"].get<double>(), kCustomCCTMin, kCustomCCTMax));
+    custom_cct_ =
+        static_cast<float>(ClampFinite(j["cct"].get<double>(), kCustomCCTMin, kCustomCCTMax));
   }
   if (j.contains("tint")) {
-    custom_tint_ = static_cast<float>(ClampFinite(j["tint"].get<double>(), kCustomTintMin, kCustomTintMax));
+    custom_tint_ =
+        static_cast<float>(ClampFinite(j["tint"].get<double>(), kCustomTintMin, kCustomTintMax));
   }
+  bool has_resolved_cct  = false;
+  bool has_resolved_tint = false;
   if (j.contains("resolved_cct")) {
-    resolved_cct_ = j["resolved_cct"].get<float>();
+    resolved_cct_ = static_cast<float>(
+        ClampFinite(j["resolved_cct"].get<double>(), kCustomCCTMin, kCustomCCTMax));
+    has_resolved_cct = true;
   }
   if (j.contains("resolved_tint")) {
-    resolved_tint_ = j["resolved_tint"].get<float>();
+    resolved_tint_ = static_cast<float>(
+        ClampFinite(j["resolved_tint"].get<double>(), kCustomTintMin, kCustomTintMax));
+    has_resolved_tint = true;
+  }
+  if (!has_resolved_cct) {
+    resolved_cct_ = custom_cct_;
+  }
+  if (!has_resolved_tint) {
+    resolved_tint_ = custom_tint_;
   }
 }
 
@@ -648,8 +667,12 @@ void ColorTempOp::ResolveRuntime(OperatorParams& params) const {
   StoreMatrix(xyz_d50_to_ap1, params.color_temp_xyz_d50_to_ap1_);
   StoreMatrix(camera_to_ap1, params.color_temp_cam_to_ap1_);
 
-  resolved_cct_                         = static_cast<float>(selected_cct);
-  resolved_tint_                        = static_cast<float>(selected_tint);
+  resolved_cct_ = static_cast<float>(ClampFinite(selected_cct, kCustomCCTMin, kCustomCCTMax));
+  resolved_tint_ = static_cast<float>(ClampFinite(selected_tint, kCustomTintMin, kCustomTintMax));
+
+  // Reflect runtime-selected values back into effective exported params.
+  params.color_temp_custom_cct_         = resolved_cct_;
+  params.color_temp_custom_tint_        = resolved_tint_;
   params.color_temp_resolved_cct_       = resolved_cct_;
   params.color_temp_resolved_tint_      = resolved_tint_;
   params.color_temp_resolved_xy_[0]     = static_cast<float>(selected_xy[0]);

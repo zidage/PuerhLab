@@ -106,6 +106,11 @@ constexpr float                kHlsMaxHueShiftDegrees           = 15.0f;
 constexpr float                kHlsAdjUiMin                     = -100.0f;
 constexpr float                kHlsAdjUiMax                     = 100.0f;
 constexpr float                kHlsAdjUiToParamScale            = 1000.0f;
+constexpr int                  kColorTempCctMin                 = 2000;
+constexpr int                  kColorTempCctMax                 = 15000;
+constexpr int                  kColorTempTintMin                = -150;
+constexpr int                  kColorTempTintMax                = 150;
+constexpr float                kColorTempRequestEpsilon         = 1e-3f;
 constexpr float                kRotationSliderScale             = 100.0f;
 constexpr float                kCropRectSliderScale             = 1000.0f;
 constexpr float                kCropRectMinSize                 = 1e-4f;
@@ -1699,14 +1704,90 @@ class EditorDialog final : public QDialog {
         [this]() { CommitAdjustment(AdjustmentField::Saturation); },
         [](int v) { return QString::number(v, 'f', 2); });
 
-    tint_slider_ = addSlider(
-        "Tint", -100, 100, static_cast<int>(std::lround(state_.tint_)),
+    color_temp_mode_combo_ = addComboBox(
+        "White Balance", {"As Shot", "Custom"},
+        ColorTempModeToComboIndex(state_.color_temp_mode_), [&](int idx) {
+          const auto new_mode = ComboIndexToColorTempMode(idx);
+          if (new_mode == state_.color_temp_mode_) {
+            return;
+          }
+          if (state_.color_temp_mode_ == ColorTempMode::AS_SHOT &&
+              new_mode == ColorTempMode::CUSTOM) {
+            state_.color_temp_custom_cct_  = DisplayedColorTempCct(state_);
+            state_.color_temp_custom_tint_ = DisplayedColorTempTint(state_);
+          }
+          state_.color_temp_mode_ = new_mode;
+          SyncControlsFromState();
+          RequestRender();
+          CommitAdjustment(AdjustmentField::ColorTemp);
+        });
+
+    color_temp_cct_slider_ = addSlider(
+        "Color Temp", kColorTempCctMin, kColorTempCctMax,
+        static_cast<int>(std::lround(DisplayedColorTempCct(state_))),
         [&](int v) {
-          state_.tint_ = static_cast<float>(v);
+          PromoteColorTempToCustomForEditing();
+          state_.color_temp_custom_cct_ = static_cast<float>(v);
           RequestRender();
         },
-        [this]() { CommitAdjustment(AdjustmentField::Tint); },
-        [](int v) { return QString::number(v, 'f', 2); });
+        [this]() { CommitAdjustment(AdjustmentField::ColorTemp); },
+        [](int v) { return QString("%1 K").arg(v); });
+    color_temp_cct_slider_->setStyleSheet(
+        "QSlider::groove:horizontal {"
+        "  border: 1px solid #2A2A2A;"
+        "  height: 8px;"
+        "  border-radius: 4px;"
+        "  background: qlineargradient(x1:0, y1:0, x2:1, y2:0, "
+        "stop:0 #FF8A3D, stop:0.5 #FFE8B0, stop:1 #9BD8FF);"
+        "}"
+        "QSlider::handle:horizontal {"
+        "  background: #F2F2F2;"
+        "  border: 1px solid #2A2A2A;"
+        "  width: 14px;"
+        "  margin: -4px 0;"
+        "  border-radius: 7px;"
+        "}");
+
+    color_temp_tint_slider_ = addSlider(
+        "Color Tint", kColorTempTintMin, kColorTempTintMax,
+        static_cast<int>(std::lround(DisplayedColorTempTint(state_))),
+        [&](int v) {
+          PromoteColorTempToCustomForEditing();
+          state_.color_temp_custom_tint_ = static_cast<float>(v);
+          RequestRender();
+        },
+        [this]() { CommitAdjustment(AdjustmentField::ColorTemp); },
+        [](int v) { return QString::number(v, 'f', 0); });
+    color_temp_tint_slider_->setStyleSheet(
+        "QSlider::groove:horizontal {"
+        "  border: 1px solid #2A2A2A;"
+        "  height: 8px;"
+        "  border-radius: 4px;"
+        "  background: qlineargradient(x1:0, y1:0, x2:1, y2:0, "
+        "stop:0 #49C26D, stop:0.5 #E6E6E6, stop:1 #A85AE6);"
+        "}"
+        "QSlider::handle:horizontal {"
+        "  background: #F2F2F2;"
+        "  border: 1px solid #2A2A2A;"
+        "  width: 14px;"
+        "  margin: -4px 0;"
+        "  border-radius: 7px;"
+        "}");
+
+    color_temp_unsupported_label_ =
+        new QLabel("Color temperature/tint is unavailable for this image.", controls_);
+    color_temp_unsupported_label_->setWordWrap(true);
+    color_temp_unsupported_label_->setStyleSheet(
+        "QLabel {"
+        "  color: #FFB454;"
+        "  background: rgba(255, 180, 84, 0.12);"
+        "  border: 1px solid rgba(255, 180, 84, 0.35);"
+        "  border-radius: 8px;"
+        "  padding: 6px 8px;"
+        "  font-size: 12px;"
+        "}");
+    controls_layout->insertWidget(controls_layout->count() - 1, color_temp_unsupported_label_);
+    color_temp_unsupported_label_->setVisible(!state_.color_temp_supported_);
 
     {
       auto* frame = new QFrame(controls_);
@@ -2334,7 +2415,7 @@ class EditorDialog final : public QDialog {
     Exposure,
     Contrast,
     Saturation,
-    Tint,
+    ColorTemp,
     Hls,
     Blacks,
     Whites,
@@ -2351,7 +2432,12 @@ class EditorDialog final : public QDialog {
     float                exposure_                    = 2.0f;
     float                contrast_                    = 0.0f;
     float                saturation_                  = 30.0f;
-    float                tint_                        = 0.0f;
+    ColorTempMode        color_temp_mode_             = ColorTempMode::AS_SHOT;
+    float                color_temp_custom_cct_       = 6500.0f;
+    float                color_temp_custom_tint_      = 0.0f;
+    float                color_temp_resolved_cct_     = 6500.0f;
+    float                color_temp_resolved_tint_    = 0.0f;
+    bool                 color_temp_supported_         = true;
     float                hls_target_hue_              = 0.0f;
     float                hls_hue_adjust_              = 0.0f;
     float                hls_lightness_adjust_        = 0.0f;
@@ -2405,6 +2491,48 @@ class EditorDialog final : public QDialog {
     state.hls_lightness_adjust_  = state.hls_lightness_adjust_table_[idx];
     state.hls_saturation_adjust_ = state.hls_saturation_adjust_table_[idx];
     state.hls_hue_range_         = state.hls_hue_range_table_[idx];
+  }
+
+  static auto ParseColorTempMode(const std::string& mode) -> ColorTempMode {
+    if (mode == "custom") {
+      return ColorTempMode::CUSTOM;
+    }
+    if (mode == "as-shot" || mode == "as_shot") {
+      return ColorTempMode::AS_SHOT;
+    }
+    return ColorTempMode::AS_SHOT;
+  }
+
+  static auto ColorTempModeToString(ColorTempMode mode) -> std::string {
+    switch (mode) {
+      case ColorTempMode::CUSTOM:
+        return "custom";
+      case ColorTempMode::AS_SHOT:
+      default:
+        return "as_shot";
+    }
+  }
+
+  static auto ColorTempModeToComboIndex(ColorTempMode mode) -> int {
+    return mode == ColorTempMode::CUSTOM ? 1 : 0;
+  }
+
+  static auto ComboIndexToColorTempMode(int index) -> ColorTempMode {
+    return index == 1 ? ColorTempMode::CUSTOM : ColorTempMode::AS_SHOT;
+  }
+
+  static auto DisplayedColorTempCct(const AdjustmentState& state) -> float {
+    const float cct = (state.color_temp_mode_ == ColorTempMode::AS_SHOT)
+                          ? state.color_temp_resolved_cct_
+                          : state.color_temp_custom_cct_;
+    return std::clamp(cct, static_cast<float>(kColorTempCctMin), static_cast<float>(kColorTempCctMax));
+  }
+
+  static auto DisplayedColorTempTint(const AdjustmentState& state) -> float {
+    const float tint = (state.color_temp_mode_ == ColorTempMode::AS_SHOT)
+                           ? state.color_temp_resolved_tint_
+                           : state.color_temp_custom_tint_;
+    return std::clamp(tint, static_cast<float>(kColorTempTintMin), static_cast<float>(kColorTempTintMax));
   }
 
   void RefreshHlsTargetUi() {
@@ -2573,6 +2701,57 @@ class EditorDialog final : public QDialog {
     }
   }
 
+  void PromoteColorTempToCustomForEditing() {
+    if (state_.color_temp_mode_ == ColorTempMode::CUSTOM) {
+      return;
+    }
+    state_.color_temp_custom_cct_  = DisplayedColorTempCct(state_);
+    state_.color_temp_custom_tint_ = DisplayedColorTempTint(state_);
+    state_.color_temp_mode_        = ColorTempMode::CUSTOM;
+
+    const bool prev_sync           = syncing_controls_;
+    syncing_controls_              = true;
+    if (color_temp_mode_combo_) {
+      color_temp_mode_combo_->setCurrentIndex(ColorTempModeToComboIndex(state_.color_temp_mode_));
+    }
+    syncing_controls_ = prev_sync;
+  }
+
+  void RefreshColorTempRuntimeStateFromGlobalParams() {
+    if (!pipeline_guard_ || !pipeline_guard_->pipeline_) {
+      return;
+    }
+
+    const auto& global = pipeline_guard_->pipeline_->GetGlobalParams();
+    state_.color_temp_resolved_cct_ = std::clamp(global.color_temp_resolved_cct_,
+                                                 static_cast<float>(kColorTempCctMin),
+                                                 static_cast<float>(kColorTempCctMax));
+    state_.color_temp_resolved_tint_ = std::clamp(global.color_temp_resolved_tint_,
+                                                  static_cast<float>(kColorTempTintMin),
+                                                  static_cast<float>(kColorTempTintMax));
+    state_.color_temp_supported_ = global.color_temp_matrices_valid_;
+
+    committed_state_.color_temp_resolved_cct_  = state_.color_temp_resolved_cct_;
+    committed_state_.color_temp_resolved_tint_ = state_.color_temp_resolved_tint_;
+    committed_state_.color_temp_supported_     = state_.color_temp_supported_;
+  }
+
+  struct ColorTempRequestSnapshot {
+    ColorTempMode mode_ = ColorTempMode::AS_SHOT;
+    float         cct_  = 6500.0f;
+    float         tint_ = 0.0f;
+  };
+
+  static auto BuildColorTempRequest(const AdjustmentState& state) -> ColorTempRequestSnapshot {
+    return {state.color_temp_mode_, state.color_temp_custom_cct_, state.color_temp_custom_tint_};
+  }
+
+  static auto ColorTempRequestEqual(const ColorTempRequestSnapshot& a,
+                                    const ColorTempRequestSnapshot& b) -> bool {
+    return a.mode_ == b.mode_ && std::abs(a.cct_ - b.cct_) <= kColorTempRequestEpsilon &&
+           std::abs(a.tint_ - b.tint_) <= kColorTempRequestEpsilon;
+  }
+
   static void CopyFieldState(AdjustmentField field, const AdjustmentState& from, AdjustmentState& to) {
     switch (field) {
       case AdjustmentField::Exposure:
@@ -2584,8 +2763,13 @@ class EditorDialog final : public QDialog {
       case AdjustmentField::Saturation:
         to.saturation_ = from.saturation_;
         return;
-      case AdjustmentField::Tint:
-        to.tint_ = from.tint_;
+      case AdjustmentField::ColorTemp:
+        to.color_temp_mode_          = from.color_temp_mode_;
+        to.color_temp_custom_cct_    = from.color_temp_custom_cct_;
+        to.color_temp_custom_tint_   = from.color_temp_custom_tint_;
+        to.color_temp_resolved_cct_  = from.color_temp_resolved_cct_;
+        to.color_temp_resolved_tint_ = from.color_temp_resolved_tint_;
+        to.color_temp_supported_     = from.color_temp_supported_;
         return;
       case AdjustmentField::Hls:
         to.hls_target_hue_              = from.hls_target_hue_;
@@ -2696,8 +2880,24 @@ class EditorDialog final : public QDialog {
     if (saturation_slider_) {
       saturation_slider_->setValue(static_cast<int>(std::lround(state_.saturation_)));
     }
-    if (tint_slider_) {
-      tint_slider_->setValue(static_cast<int>(std::lround(state_.tint_)));
+    if (color_temp_mode_combo_) {
+      color_temp_mode_combo_->setCurrentIndex(ColorTempModeToComboIndex(state_.color_temp_mode_));
+    }
+    if (color_temp_cct_slider_) {
+      color_temp_cct_slider_->setValue(static_cast<int>(std::lround(DisplayedColorTempCct(state_))));
+    }
+    if (color_temp_tint_slider_) {
+      color_temp_tint_slider_->setValue(
+          static_cast<int>(std::lround(DisplayedColorTempTint(state_))));
+    }
+    if (color_temp_cct_slider_) {
+      color_temp_cct_slider_->setEnabled(state_.color_temp_supported_);
+    }
+    if (color_temp_tint_slider_) {
+      color_temp_tint_slider_->setEnabled(state_.color_temp_supported_);
+    }
+    if (color_temp_unsupported_label_) {
+      color_temp_unsupported_label_->setVisible(!state_.color_temp_supported_);
     }
     if (hls_hue_adjust_slider_) {
       hls_hue_adjust_slider_->setValue(static_cast<int>(std::lround(state_.hls_hue_adjust_)));
@@ -2814,6 +3014,9 @@ class EditorDialog final : public QDialog {
     }
     if (!loaded) {
       state_ = AdjustmentState{};
+      last_submitted_color_temp_request_.reset();
+    } else {
+      last_submitted_color_temp_request_ = BuildColorTempRequest(state_);
     }
     committed_state_ = state_;
     SyncControlsFromState();
@@ -3270,8 +3473,8 @@ class EditorDialog final : public QDialog {
         return {PipelineStageName::Basic_Adjustment, OperatorType::CONTRAST};
       case AdjustmentField::Saturation:
         return {PipelineStageName::Color_Adjustment, OperatorType::SATURATION};
-      case AdjustmentField::Tint:
-        return {PipelineStageName::Color_Adjustment, OperatorType::TINT};
+      case AdjustmentField::ColorTemp:
+        return {PipelineStageName::To_WorkingSpace, OperatorType::COLOR_TEMP};
       case AdjustmentField::Hls:
         return {PipelineStageName::Color_Adjustment, OperatorType::HLS};
       case AdjustmentField::Blacks:
@@ -3304,8 +3507,21 @@ class EditorDialog final : public QDialog {
         return {{"contrast", s.contrast_}};
       case AdjustmentField::Saturation:
         return {{"saturation", s.saturation_}};
-      case AdjustmentField::Tint:
-        return {{"tint", s.tint_}};
+      case AdjustmentField::ColorTemp:
+        return {{"color_temp",
+                 {{"mode", ColorTempModeToString(s.color_temp_mode_)},
+                  {"cct", std::clamp(s.color_temp_custom_cct_,
+                                     static_cast<float>(kColorTempCctMin),
+                                     static_cast<float>(kColorTempCctMax))},
+                  {"tint", std::clamp(s.color_temp_custom_tint_,
+                                      static_cast<float>(kColorTempTintMin),
+                                      static_cast<float>(kColorTempTintMax))},
+                  {"resolved_cct", std::clamp(s.color_temp_resolved_cct_,
+                                              static_cast<float>(kColorTempCctMin),
+                                              static_cast<float>(kColorTempCctMax))},
+                  {"resolved_tint", std::clamp(s.color_temp_resolved_tint_,
+                                               static_cast<float>(kColorTempTintMin),
+                                               static_cast<float>(kColorTempTintMax))}}}};
       case AdjustmentField::Hls: {
         nlohmann::json hue_bins      = nlohmann::json::array();
         nlohmann::json hls_adj_table = nlohmann::json::array();
@@ -3389,8 +3605,11 @@ class EditorDialog final : public QDialog {
         return !NearlyEqual(state_.contrast_, committed_state_.contrast_);
       case AdjustmentField::Saturation:
         return !NearlyEqual(state_.saturation_, committed_state_.saturation_);
-      case AdjustmentField::Tint:
-        return !NearlyEqual(state_.tint_, committed_state_.tint_);
+      case AdjustmentField::ColorTemp:
+        return state_.color_temp_mode_ != committed_state_.color_temp_mode_ ||
+               !NearlyEqual(state_.color_temp_custom_cct_, committed_state_.color_temp_custom_cct_) ||
+               !NearlyEqual(state_.color_temp_custom_tint_,
+                            committed_state_.color_temp_custom_tint_);
       case AdjustmentField::Hls:
         for (size_t i = 0; i < kHlsCandidateHues.size(); ++i) {
           if (!NearlyEqual(state_.hls_hue_adjust_table_[i],
@@ -3616,6 +3835,7 @@ class EditorDialog final : public QDialog {
     };
 
     const auto& geometry = exec->GetStage(PipelineStageName::Geometry_Adjustment);
+    const auto& to_ws    = exec->GetStage(PipelineStageName::To_WorkingSpace);
     const auto& basic    = exec->GetStage(PipelineStageName::Basic_Adjustment);
     const auto& color    = exec->GetStage(PipelineStageName::Color_Adjustment);
     const auto& detail   = exec->GetStage(PipelineStageName::Detail_Adjustment);
@@ -3680,8 +3900,45 @@ class EditorDialog final : public QDialog {
       loaded_state.saturation_ = v.value();
       has_loaded_any           = true;
     }
-    if (const auto v = ReadFloat(color, OperatorType::TINT, "tint"); v.has_value()) {
-      loaded_state.tint_ = v.value();
+    if (const auto color_temp_json =
+            ReadNestedObject(to_ws, OperatorType::COLOR_TEMP, "color_temp");
+        color_temp_json.has_value()) {
+      const auto& color_temp = *color_temp_json;
+      if (color_temp.contains("mode") && color_temp["mode"].is_string()) {
+        loaded_state.color_temp_mode_ = ParseColorTempMode(color_temp["mode"].get<std::string>());
+      }
+      if (color_temp.contains("cct")) {
+        try {
+          loaded_state.color_temp_custom_cct_ =
+              std::clamp(color_temp["cct"].get<float>(), static_cast<float>(kColorTempCctMin),
+                         static_cast<float>(kColorTempCctMax));
+        } catch (...) {
+        }
+      }
+      if (color_temp.contains("tint")) {
+        try {
+          loaded_state.color_temp_custom_tint_ =
+              std::clamp(color_temp["tint"].get<float>(), static_cast<float>(kColorTempTintMin),
+                         static_cast<float>(kColorTempTintMax));
+        } catch (...) {
+        }
+      }
+      if (color_temp.contains("resolved_cct")) {
+        try {
+          loaded_state.color_temp_resolved_cct_ = std::clamp(
+              color_temp["resolved_cct"].get<float>(), static_cast<float>(kColorTempCctMin),
+              static_cast<float>(kColorTempCctMax));
+        } catch (...) {
+        }
+      }
+      if (color_temp.contains("resolved_tint")) {
+        try {
+          loaded_state.color_temp_resolved_tint_ = std::clamp(
+              color_temp["resolved_tint"].get<float>(), static_cast<float>(kColorTempTintMin),
+              static_cast<float>(kColorTempTintMax));
+        } catch (...) {
+        }
+      }
       has_loaded_any     = true;
     }
     if (const auto hls_json = ReadNestedObject(color, OperatorType::HLS, "HLS");
@@ -3839,11 +4096,20 @@ class EditorDialog final : public QDialog {
       has_loaded_any = true;
     }
 
+    loaded_state.color_temp_resolved_cct_ = std::clamp(
+        exec->GetGlobalParams().color_temp_resolved_cct_, static_cast<float>(kColorTempCctMin),
+        static_cast<float>(kColorTempCctMax));
+    loaded_state.color_temp_resolved_tint_ = std::clamp(
+        exec->GetGlobalParams().color_temp_resolved_tint_, static_cast<float>(kColorTempTintMin),
+        static_cast<float>(kColorTempTintMax));
+    loaded_state.color_temp_supported_ = exec->GetGlobalParams().color_temp_matrices_valid_;
+
     if (!has_loaded_any) {
       return false;
     }
 
     state_ = loaded_state;
+    last_submitted_color_temp_request_ = BuildColorTempRequest(state_);
     return true;
   }
 
@@ -3885,7 +4151,6 @@ class EditorDialog final : public QDialog {
 
     // auto& color = exec->GetStage(PipelineStageName::Color_Adjustment);
     // color.SetOperator(OperatorType::SATURATION, {{"saturation", 0.0f}}, global_params);
-    // color.SetOperator(OperatorType::TINT, {{"tint", 0.0f}}, global_params);
 
     // auto& detail = exec->GetStage(PipelineStageName::Detail_Adjustment);
     // detail.SetOperator(OperatorType::SHARPEN, {{"sharpen", {{"offset", 0.0f}}}}, global_params);
@@ -3903,6 +4168,19 @@ class EditorDialog final : public QDialog {
     auto  exec          = pipeline_guard_->pipeline_;
     auto& global_params = exec->GetGlobalParams();
     auto& geometry      = exec->GetStage(PipelineStageName::Geometry_Adjustment);
+    auto& to_ws         = exec->GetStage(PipelineStageName::To_WorkingSpace);
+
+    const auto color_temp_request = BuildColorTempRequest(render_state);
+    const bool color_temp_missing = !to_ws.GetOperator(OperatorType::COLOR_TEMP).has_value();
+    if (color_temp_missing || !last_submitted_color_temp_request_.has_value() ||
+        !ColorTempRequestEqual(*last_submitted_color_temp_request_, color_temp_request)) {
+      to_ws.SetOperator(OperatorType::COLOR_TEMP,
+                        ParamsForField(AdjustmentField::ColorTemp, render_state), global_params);
+      to_ws.EnableOperator(OperatorType::COLOR_TEMP, true, global_params);
+      last_submitted_color_temp_request_ = color_temp_request;
+    } else {
+      to_ws.EnableOperator(OperatorType::COLOR_TEMP, true, global_params);
+    }
 
     // Geometry editing is overlay-only. While the geometry panel is active,
     // render the full pre-geometry frame so recropping can always expand back
@@ -3940,7 +4218,7 @@ class EditorDialog final : public QDialog {
     auto& color = exec->GetStage(PipelineStageName::Color_Adjustment);
     color.SetOperator(OperatorType::SATURATION, {{"saturation", render_state.saturation_}},
                       global_params);
-    color.SetOperator(OperatorType::TINT, {{"tint", render_state.tint_}}, global_params);
+    color.EnableOperator(OperatorType::TINT, false, global_params);
     color.SetOperator(OperatorType::HLS, ParamsForField(AdjustmentField::Hls, render_state),
                       global_params);
     color.EnableOperator(OperatorType::HLS, true, global_params);
@@ -4150,6 +4428,9 @@ class EditorDialog final : public QDialog {
       spinner_->Stop();
     }
 
+    RefreshColorTempRuntimeStateFromGlobalParams();
+    SyncControlsFromState();
+
     if (!pending_quality_render_requests_.empty() || pending_fast_preview_request_.has_value()) {
       StartNext();
     } else if (poll_timer_ && poll_timer_->isActive()) {
@@ -4186,7 +4467,10 @@ class EditorDialog final : public QDialog {
   QSlider*                                                 exposure_slider_        = nullptr;
   QSlider*                                                 contrast_slider_        = nullptr;
   QSlider*                                                 saturation_slider_      = nullptr;
-  QSlider*                                                 tint_slider_            = nullptr;
+  QComboBox*                                               color_temp_mode_combo_  = nullptr;
+  QSlider*                                                 color_temp_cct_slider_  = nullptr;
+  QSlider*                                                 color_temp_tint_slider_ = nullptr;
+  QLabel*                                                  color_temp_unsupported_label_ = nullptr;
   QLabel*                                                  hls_target_label_       = nullptr;
   std::vector<QPushButton*>                                hls_candidate_buttons_{};
   QSlider*                                                 hls_hue_adjust_slider_        = nullptr;
@@ -4222,6 +4506,7 @@ class EditorDialog final : public QDialog {
   QStringList                                              lut_names_{};
 
   std::string                                              last_applied_lut_path_{};
+  std::optional<ColorTempRequestSnapshot>                  last_submitted_color_temp_request_{};
   AdjustmentState                                          state_{};
   AdjustmentState                                          committed_state_{};
   Version                                                  working_version_{};

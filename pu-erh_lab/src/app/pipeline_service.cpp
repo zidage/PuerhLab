@@ -70,7 +70,7 @@ void EnsureDefaultColorTemp(CPUPipelineExecutor& exec) {
         mode = "custom";
       }
       if (raw.contains("user_wb") && raw["user_wb"].is_number()) {
-        cct = std::clamp(raw["user_wb"].get<float>(), 2000.0f, 50000.0f);
+        cct = std::clamp(raw["user_wb"].get<float>(), 2000.0f, 15000.0f);
       }
     }
   }

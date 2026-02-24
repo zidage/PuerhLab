@@ -18,12 +18,14 @@
 #include <format>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <stdexcept>
 #include <unordered_map>
 #include <vector>
 
 #include "app/pipeline_service.hpp"
 #include "app/render_service.hpp"
+#include "json.hpp"
 #include "renderer/pipeline_task.hpp"
 
 namespace puerhlab {
@@ -47,6 +49,21 @@ void DispatchThumbnailCallback(const ThumbnailCallback&           callback,
 
 auto IsRenderableThumbnailResult(const ImageBuffer& result_buffer) -> bool {
   return result_buffer.buffer_valid_ || result_buffer.cpu_data_valid_ || result_buffer.gpu_data_valid_;
+}
+
+auto ReadColorTempOperatorParams(const std::shared_ptr<PipelineGuard>& pipeline)
+    -> std::optional<nlohmann::json> {
+  if (!pipeline || !pipeline->pipeline_) {
+    return std::nullopt;
+  }
+
+  auto& to_ws_stage = pipeline->pipeline_->GetStage(PipelineStageName::To_WorkingSpace);
+  auto  color_temp_entry = to_ws_stage.GetOperator(OperatorType::COLOR_TEMP);
+  if (!color_temp_entry.has_value() || !color_temp_entry.value() || !color_temp_entry.value()->op_) {
+    return std::nullopt;
+  }
+
+  return color_temp_entry.value()->op_->GetParams();
 }
 }  // namespace
 
@@ -219,7 +236,9 @@ void ThumbnailService::GetThumbnail(sl_element_id_t id, image_id_t image_id,
   thumb_task.options_.is_callback_              = true;
   thumb_task.options_.is_seq_callback_          = false;
 
-  thumb_task.callback_ = [st, id, pipeline](ImageBuffer& result_buffer) {
+  const auto pre_render_color_temp_params = ReadColorTempOperatorParams(pipeline);
+
+  thumb_task.callback_ = [st, id, pipeline, pre_render_color_temp_params](ImageBuffer& result_buffer) {
     std::shared_ptr<ThumbnailGuard>      guard;
     std::vector<State::PendingCallback> callbacks;
 
@@ -246,6 +265,11 @@ void ThumbnailService::GetThumbnail(sl_element_id_t id, image_id_t image_id,
         st->thumbnail_cache_.RemoveRecord(id);
         st->thumbnail_cache_data_.erase(id);
       }
+    }
+
+    const auto post_render_color_temp_params = ReadColorTempOperatorParams(pipeline);
+    if (post_render_color_temp_params != pre_render_color_temp_params) {
+      pipeline->dirty_ = true;
     }
 
     try {
