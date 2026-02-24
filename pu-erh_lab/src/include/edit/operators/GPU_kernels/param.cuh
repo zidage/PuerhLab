@@ -290,6 +290,39 @@ struct GPUOperatorParams {
   GPU_LUT3D            to_ws_lut_              = {};
   // TODO: NOT IMPLEMENTED
 
+  // RAW color temperature runtime state.
+  bool                 color_temp_enabled_      = true;
+  int                  color_temp_mode_         = 0;  // 0: as_shot, 1: custom
+  float                color_temp_custom_cct_   = 6500.0f;
+  float                color_temp_custom_tint_  = 0.0f;
+  float                color_temp_resolved_cct_ = 6500.0f;
+  float                color_temp_resolved_tint_ = 0.0f;
+  float                color_temp_resolved_xy_[2] = {0.3127f, 0.3290f};
+
+  bool                 raw_runtime_valid_       = false;
+  int                  raw_decode_input_space_  = 0;  // 0: AP0, 1: camera
+  float                raw_cam_mul_[3]          = {1.0f, 1.0f, 1.0f};
+  float                raw_pre_mul_[3]          = {1.0f, 1.0f, 1.0f};
+  float                raw_cam_xyz_[9]          = {};
+
+  bool                 color_temp_matrices_valid_ = false;
+  float                color_temp_cam_to_xyz_[9] = {
+      1.0f, 0.0f, 0.0f,
+      0.0f, 1.0f, 0.0f,
+      0.0f, 0.0f, 1.0f};
+  float                color_temp_cam_to_xyz_d50_[9] = {
+      1.0f, 0.0f, 0.0f,
+      0.0f, 1.0f, 0.0f,
+      0.0f, 0.0f, 1.0f};
+  float                color_temp_xyz_d50_to_ap1_[9] = {
+      1.0f, 0.0f, 0.0f,
+      0.0f, 1.0f, 0.0f,
+      0.0f, 0.0f, 1.0f};
+  float                color_temp_cam_to_ap1_[9] = {
+      1.0f, 0.0f, 0.0f,
+      0.0f, 1.0f, 0.0f,
+      0.0f, 0.0f, 1.0f};
+
   // Look modification transform
   bool                 lmt_enabled_            = false;
   GPU_LUT3D            lmt_lut_                = {};
@@ -407,6 +440,30 @@ class GPUParamsConverter {
     // } else {
     //   gpu_params.to_ws_lut = orig_params.to_ws_lut;
     // }
+
+    gpu_params.color_temp_enabled_      = cpu_params.color_temp_enabled_;
+    gpu_params.color_temp_mode_         = static_cast<int>(cpu_params.color_temp_mode_);
+    gpu_params.color_temp_custom_cct_   = cpu_params.color_temp_custom_cct_;
+    gpu_params.color_temp_custom_tint_  = cpu_params.color_temp_custom_tint_;
+    gpu_params.color_temp_resolved_cct_ = cpu_params.color_temp_resolved_cct_;
+    gpu_params.color_temp_resolved_tint_ = cpu_params.color_temp_resolved_tint_;
+    gpu_params.color_temp_resolved_xy_[0] = cpu_params.color_temp_resolved_xy_[0];
+    gpu_params.color_temp_resolved_xy_[1] = cpu_params.color_temp_resolved_xy_[1];
+
+    gpu_params.raw_runtime_valid_       = cpu_params.raw_runtime_valid_;
+    gpu_params.raw_decode_input_space_  = static_cast<int>(cpu_params.raw_decode_input_space_);
+    for (int i = 0; i < 3; ++i) {
+      gpu_params.raw_cam_mul_[i] = cpu_params.raw_cam_mul_[i];
+      gpu_params.raw_pre_mul_[i] = cpu_params.raw_pre_mul_[i];
+    }
+    for (int i = 0; i < 9; ++i) {
+      gpu_params.raw_cam_xyz_[i] = cpu_params.raw_cam_xyz_[i];
+      gpu_params.color_temp_cam_to_xyz_[i] = cpu_params.color_temp_cam_to_xyz_[i];
+      gpu_params.color_temp_cam_to_xyz_d50_[i] = cpu_params.color_temp_cam_to_xyz_d50_[i];
+      gpu_params.color_temp_xyz_d50_to_ap1_[i] = cpu_params.color_temp_xyz_d50_to_ap1_[i];
+      gpu_params.color_temp_cam_to_ap1_[i] = cpu_params.color_temp_cam_to_ap1_[i];
+    }
+    gpu_params.color_temp_matrices_valid_ = cpu_params.color_temp_matrices_valid_;
 
     gpu_params.lmt_enabled_        = cpu_params.lmt_enabled_;
     const bool lmt_gpu_lut_missing =

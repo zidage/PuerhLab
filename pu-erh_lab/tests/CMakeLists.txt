@@ -15,6 +15,10 @@ target_include_directories(SingleThumbnailLoad PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh
 target_link_libraries(SingleThumbnailLoad PRIVATE GTest::gtest_main libraw::raw ${OpenCV_LIBS})
 target_compile_definitions(SingleThumbnailLoad PRIVATE LIBRAW_NODLL)
 
+add_executable(ColorTempCudaSanityTest raw/color_temp_cuda_sanity_test.cpp)
+target_include_directories(ColorTempCudaSanityTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
+target_link_libraries(ColorTempCudaSanityTest PRIVATE GTest::gtest_main Operators RawProcessor)
+
 # add_executable(ImageDecoderTest decoders/image_decoder_test.cpp)
 # target_include_directories(ImageDecoderTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
 # target_link_libraries(ImageDecoderTest PRIVATE GTest::gtest_main ImageDecoder Exiv2)

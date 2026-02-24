@@ -106,6 +106,7 @@ set(OPERATORS_SRCS
     edit/operators/basic/exposure_op_vec.cpp
     edit/operators/basic/contrast_op.cpp
     edit/operators/basic/black_op.cpp
+    edit/operators/basic/color_temp_op.cpp
     edit/operators/basic/highlight_op.cpp
     edit/operators/basic/shadow_op.cpp
     edit/operators/basic/white_op.cpp

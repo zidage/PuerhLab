@@ -28,11 +28,32 @@
 #endif
 #include <opencv2/opencv.hpp>
 
+#include "edit/operators/basic/color_temp_op.hpp"
 #include "edit/operators/op_base.hpp"
 #include "edit/pipeline/pipeline_stage.hpp"
 #include "image/image_buffer.hpp"
 
 namespace puerhlab {
+namespace {
+void ResolveColorTempRuntime(PipelineStage& to_ws_stage, OperatorParams& global_params) {
+  auto color_temp_entry = to_ws_stage.GetOperator(OperatorType::COLOR_TEMP);
+  if (!color_temp_entry.has_value()) {
+    return;
+  }
+
+  OperatorEntry* entry = color_temp_entry.value();
+  if (!entry || !entry->enable_ || !entry->op_) {
+    return;
+  }
+
+  auto* color_temp = dynamic_cast<ColorTempOp*>(entry->op_.get());
+  if (!color_temp) {
+    return;
+  }
+  color_temp->ResolveRuntime(global_params);
+}
+}  // namespace
+
 CPUPipelineExecutor::CPUPipelineExecutor()
     : enable_cache_(false),
       stages_({{PipelineStageName::Image_Loading, enable_cache_, false},
@@ -104,6 +125,9 @@ auto CPUPipelineExecutor::Apply(std::shared_ptr<ImageBuffer> input)
     if (!first_stage->CacheValid()) {
       output = std::make_shared<ImageBuffer>(input->Clone());
       for (auto* stage : exec_stages_) {
+        if (stage->stage_ == PipelineStageName::Merged_Stage) {
+          ResolveColorTempRuntime(GetStage(PipelineStageName::To_WorkingSpace), global_params_);
+        }
         stage->SetInputImage(output);
         stage->SetForceCPUOutput(force_cpu_output_);
         output = stage->ApplyStage(global_params_);
@@ -113,6 +137,9 @@ auto CPUPipelineExecutor::Apply(std::shared_ptr<ImageBuffer> input)
       output = first_stage->GetOutputCache();
       for (auto* stage : exec_stages_) {
         if (stage != first_stage) {
+          if (stage->stage_ == PipelineStageName::Merged_Stage) {
+            ResolveColorTempRuntime(GetStage(PipelineStageName::To_WorkingSpace), global_params_);
+          }
           stage->SetInputImage(output);
           stage->SetForceCPUOutput(force_cpu_output_);
           output = stage->ApplyStage(global_params_);
@@ -123,6 +150,9 @@ auto CPUPipelineExecutor::Apply(std::shared_ptr<ImageBuffer> input)
     // Cache is disabled, just process the stages sequentially
     output = std::make_shared<ImageBuffer>(input->Clone());
     for (auto* stage : exec_stages_) {
+      if (stage->stage_ == PipelineStageName::Merged_Stage) {
+        ResolveColorTempRuntime(GetStage(PipelineStageName::To_WorkingSpace), global_params_);
+      }
       stage->SetInputImage(output);
       stage->SetForceCPUOutput(force_cpu_output_);
       output = stage->ApplyStage(global_params_);
@@ -332,6 +362,11 @@ void CPUPipelineExecutor::SetTemplateParams() {
   decode_params["raw"]["user_wb"]                = 7600.f;
   decode_params["raw"]["backend"]                = "puerh";
   raw_stage.SetOperator(OperatorType::RAW_DECODE, decode_params);
+
+  nlohmann::json color_temp_params;
+  auto&          to_ws_stage = GetStage(PipelineStageName::To_WorkingSpace);
+  color_temp_params["color_temp"] = {{"mode", "as_shot"}, {"cct", 6500.0f}, {"tint", 0.0f}};
+  to_ws_stage.SetOperator(OperatorType::COLOR_TEMP, color_temp_params, global_params);
 
   nlohmann::json output_params;
   auto&          output_stage = GetStage(PipelineStageName::Output_Transform);

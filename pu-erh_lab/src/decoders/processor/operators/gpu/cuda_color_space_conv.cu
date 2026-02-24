@@ -155,6 +155,11 @@ static inline cv::Matx33f BuildTotalMatrix(const float rgb_cam[][4], const float
   const cv::Matx33f        cam2srgb_matrix   = BuildCamToSrgbMatrix(rgb_cam);
   return srgb2aces2065_d60 * cam2srgb_matrix * pre_to_cam;
 }
+
+static inline cv::Matx33f BuildInverseCamMulMatrix(const float* cam_mul) {
+  const float g = std::max(cam_mul[1], kMinGain);
+  return BuildDiagonal(SafeDivide(g, cam_mul[0]), 1.0f, SafeDivide(g, cam_mul[2]));
+}
 }  // namespace
 
 void ApplyColorMatrix(cv::cuda::GpuMat& img, const float rgb_cam[][4], const float* pre_mul,
@@ -166,6 +171,14 @@ void ApplyColorMatrix(cv::cuda::GpuMat& img, const float rgb_cam[][4], const flo
   const cv::Matx33f total = BuildTotalMatrix(rgb_cam, pre_mul, cam_xyz);
   cv::cuda::Stream  stream;
   ApplyColorMatrix_Helper(img, img, cv::Mat(total), stream);
+  stream.waitForCompletion();
+}
+
+void ApplyInverseCamMul(cv::cuda::GpuMat& img, const float* cam_mul) {
+  CV_Assert(img.type() == CV_32FC3);
+  const cv::Matx33f inv_cam_mul = BuildInverseCamMulMatrix(cam_mul);
+  cv::cuda::Stream  stream;
+  ApplyColorMatrix_Helper(img, img, cv::Mat(inv_cam_mul), stream);
   stream.waitForCompletion();
 }
 };  // namespace CUDA

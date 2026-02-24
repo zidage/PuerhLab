@@ -23,5 +23,7 @@ namespace CUDA {
 // Note: "user-specified" WB is intentionally not supported on the CUDA backend.
 void ApplyColorMatrix(cv::cuda::GpuMat& img, const float rgb_cam[][4], const float* pre_mul,
                       const float* cam_mul, const float cam_xyz[][3]);
+
+void ApplyInverseCamMul(cv::cuda::GpuMat& img, const float* cam_mul);
 };
 };  // namespace puerhlab

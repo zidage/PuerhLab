@@ -189,7 +189,7 @@ auto PipelineStage::ApplyStage(OperatorParams& global_params) -> std::shared_ptr
     case StageRole::GpuStreamable:
       return ApplyGpuStream(global_params);
     case StageRole::GpuOperators:
-      return ApplyGpuOperators();
+      return ApplyGpuOperators(global_params);
   }
 
   // Fallback, should never hit.
@@ -294,7 +294,7 @@ std::shared_ptr<ImageBuffer> PipelineStage::ApplyDescriptorOnly() {
   return output_cache_;
 }
 
-std::shared_ptr<ImageBuffer> PipelineStage::ApplyGpuOperators() {
+std::shared_ptr<ImageBuffer> PipelineStage::ApplyGpuOperators(OperatorParams& global_params) {
   auto execute_ops = [&]() {
     if (!HasEnabledOperator()) return input_img_;
 
@@ -349,6 +349,7 @@ std::shared_ptr<ImageBuffer> PipelineStage::ApplyGpuOperators() {
     for (const auto& op_entry : *operators_) {
       if (op_entry.second.enable_) {
         op_entry.second.op_->ApplyGPU(current_img);
+        op_entry.second.op_->SetGlobalParams(global_params);
       }
     }
     current_img->gpu_data_valid_ = true;

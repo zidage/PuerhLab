@@ -157,9 +157,15 @@ __device__ __forceinline__ float gamma22_encode(float linear) {
  */
 struct GPU_TOWS_Kernel : GPUPointOpTag {
   __device__ __forceinline__ void operator()(float4* p, GPUOperatorParams& params) const {
-    // Step 1: AP0 to AP1 matrix transformation
     float ap1_r, ap1_g, ap1_b;
-    apply_matrix3x3(AP0_TO_AP1_MAT, p->x, p->y, p->z, &ap1_r, &ap1_g, &ap1_b);
+    const bool use_camera_to_ap1 =
+        (params.raw_decode_input_space_ == 1) && params.color_temp_matrices_valid_;
+    if (use_camera_to_ap1) {
+      apply_matrix3x3(params.color_temp_cam_to_ap1_, p->x, p->y, p->z, &ap1_r, &ap1_g, &ap1_b);
+    } else {
+      // Legacy path assumes decode input is AP0.
+      apply_matrix3x3(AP0_TO_AP1_MAT, p->x, p->y, p->z, &ap1_r, &ap1_g, &ap1_b);
+    }
 
     // // Step 2: Apply RGC
     float ach     = fmaxf(ap1_r, fmaxf(ap1_g, ap1_b));

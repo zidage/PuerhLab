@@ -33,6 +33,7 @@ class RawDecodeOp : public OperatorBase<RawDecodeOp> {
 
   RawParams                          params_;
   RawProcessBackend                  backend_;
+  RawRuntimeColorContext             latest_runtime_context_;
 
   RawDecodeOp() = delete;
 

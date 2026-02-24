@@ -70,6 +70,8 @@ inline std::string OperatorTypeToString(OperatorType type) {
       return "AUTO_EXPOSURE";
     case OperatorType::LENS_CALIBRATION:
       return "LENS_CALIBRATION";
+    case OperatorType::COLOR_TEMP:
+      return "COLOR_TEMP";
     default:
       return "UNKNOWN_OPERATOR";
   }
@@ -122,6 +124,8 @@ inline OperatorType OperatorTypeFromString(const std::string& type_str) {
     return OperatorType::AUTO_EXPOSURE;
   else if (type_str == "LENS_CALIBRATION")
     return OperatorType::LENS_CALIBRATION;
+  else if (type_str == "COLOR_TEMP")
+    return OperatorType::COLOR_TEMP;
   else
     return static_cast<OperatorType>(-1);  // Unknown operator
 }

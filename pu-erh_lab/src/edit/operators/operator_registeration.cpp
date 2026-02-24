@@ -20,6 +20,7 @@
 #include "edit/operators/basic/highlight_op.hpp"
 #include "edit/operators/basic/shadow_op.hpp"
 #include "edit/operators/basic/white_op.hpp"
+#include "edit/operators/basic/color_temp_op.hpp"
 #include "edit/operators/color/HLS_op.hpp"
 #include "edit/operators/color/saturation_op.hpp"
 #include "edit/operators/color/tint_op.hpp"
@@ -69,6 +70,10 @@ void RegisterAllOperators() {
 
   OperatorFactory::Instance().Register(OperatorType::SHADOWS, [](const nlohmann::json& params) {
     return std::make_shared<ShadowsOp>(params);
+  });
+
+  OperatorFactory::Instance().Register(OperatorType::COLOR_TEMP, [](const nlohmann::json& params) {
+    return std::make_shared<ColorTempOp>(params);
   });
 
   OperatorFactory::Instance().Register(OperatorType::HIGHLIGHTS, [](const nlohmann::json& params) {

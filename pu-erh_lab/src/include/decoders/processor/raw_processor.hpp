@@ -17,6 +17,7 @@
 #include <libraw/libraw.h>
 
 #include <cstdint>
+#include <string>
 #include <opencv2/core/types.hpp>
 
 #include "decoders/decoder_scheduler.hpp"
@@ -36,10 +37,22 @@ struct RawParams {
   DecodeRes decode_res_ = DecodeRes::FULL;
 };
 
+struct RawRuntimeColorContext {
+  bool              valid_                   = false;
+  bool              output_in_camera_space_  = false;
+  float             cam_mul_[3]              = {1.0f, 1.0f, 1.0f};
+  float             pre_mul_[3]              = {1.0f, 1.0f, 1.0f};
+  float             cam_xyz_[9]              = {};
+  float             rgb_cam_[9]              = {};
+  std::string       camera_make_             = {};
+  std::string       camera_model_            = {};
+};
+
 class RawProcessor {
  private:
   ImageBuffer             process_buffer_;
   RawParams               params_;
+  RawRuntimeColorContext  runtime_color_context_;
 
   const libraw_rawdata_t& raw_data_;
   LibRaw&                 raw_processor_;
@@ -88,5 +101,6 @@ class RawProcessor {
   RawProcessor() = delete;
   RawProcessor(const RawParams& params, const libraw_rawdata_t& rawdata, LibRaw& raw_processor);
   auto Process() -> ImageBuffer;
+  auto GetRuntimeColorContext() const -> const RawRuntimeColorContext& { return runtime_color_context_; }
 };
 };  // namespace puerhlab

@@ -27,6 +27,7 @@
 #include <opencv2/core/base.hpp>
 #include <opencv2/core/mat.hpp>
 #include <opencv2/core/utility.hpp>
+#include <string>
 
 #include "decoders/processor/operators/cpu/debayer_rcd.hpp"
 #include "decoders/processor/operators/cpu/raw_proc_utils.hpp"
@@ -93,6 +94,25 @@ auto DownsampleBayerRGGB2x(const cv::Mat& src) -> cv::Mat {
     default:
       throw std::runtime_error("RawProcessor: Unsupported Bayer type for downsample");
   }
+}
+
+void PopulateRuntimeColorContext(const libraw_rawdata_t& raw_data, const LibRaw& raw_processor,
+                                 RawRuntimeColorContext& ctx) {
+  for (int i = 0; i < 3; ++i) {
+    ctx.cam_mul_[i] = raw_data.color.cam_mul[i];
+    ctx.pre_mul_[i] = raw_data.color.pre_mul[i];
+  }
+
+  for (int r = 0; r < 3; ++r) {
+    for (int c = 0; c < 3; ++c) {
+      ctx.cam_xyz_[r * 3 + c] = raw_data.color.cam_xyz[r][c];
+      ctx.rgb_cam_[r * 3 + c] = raw_data.color.rgb_cam[r][c];
+    }
+  }
+
+  ctx.camera_make_  = raw_processor.imgdata.idata.make;
+  ctx.camera_model_ = raw_processor.imgdata.idata.model;
+  ctx.valid_        = true;
 }
 }  // namespace
 
@@ -255,15 +275,10 @@ void RawProcessor::ConvertToWorkingSpace() {
   auto  color_coeffs   = raw_data_.color.rgb_cam;
 #ifdef HAVE_CUDA
   if (params_.cuda_) {
-    if (!params_.use_camera_wb_) {
-      throw std::runtime_error(
-          "RawProcessor: CUDA color space conversion does not support user-specified WB");
-    }
     auto& gpu_img = debayer_buffer.GetGPUData();
-    auto  pre_mul = raw_data_.color.pre_mul;
     auto  cam_mul = raw_data_.color.cam_mul;
-    auto  cam_xyz = raw_data_.color.cam_xyz;
-    CUDA::ApplyColorMatrix(gpu_img, color_coeffs, pre_mul, cam_mul, cam_xyz);
+    CUDA::ApplyInverseCamMul(gpu_img, cam_mul);
+    runtime_color_context_.output_in_camera_space_ = true;
     return;
   }
 #endif
@@ -273,15 +288,16 @@ void RawProcessor::ConvertToWorkingSpace() {
   auto cam_mul   = raw_data_.color.cam_mul;
   auto wb_coeffs = raw_data_.color.WB_Coeffs;  // EXIF Lightsource Values
   auto cam_xyz   = raw_data_.color.cam_xyz;
-  auto rgb_cam   = raw_data_.color.rgb_cam;
   if (!params_.use_camera_wb_) {
     // User specified white balance temperature
     auto user_temp_indices = CPU::GetWBIndicesForTemp(static_cast<float>(params_.user_wb_));
     CPU::ApplyColorMatrix(img, color_coeffs, pre_mul, cam_mul, wb_coeffs, user_temp_indices,
                           params_.user_wb_, cam_xyz);
+    runtime_color_context_.output_in_camera_space_ = false;
     return;
   }
   CPU::ApplyColorMatrix(img, color_coeffs, pre_mul, cam_mul, cam_xyz);
+  runtime_color_context_.output_in_camera_space_ = false;
 }
 
 auto RawProcessor::Process() -> ImageBuffer {
@@ -290,6 +306,9 @@ auto RawProcessor::Process() -> ImageBuffer {
 
   cv::Mat unpacked_mat{img_sizes.raw_height, img_sizes.raw_width, CV_16UC1, img_unpacked};
   process_buffer_ = {std::move(unpacked_mat)};
+
+  PopulateRuntimeColorContext(raw_data_, raw_processor_, runtime_color_context_);
+  runtime_color_context_.output_in_camera_space_ = false;
 
   // std::cout << _raw_processor.COLOR(0, 0) << " " << _raw_processor.COLOR(0, 1) << " "
   //           << _raw_processor.COLOR(1, 0) << " " << _raw_processor.COLOR(1, 1) << "\n";
@@ -311,7 +330,7 @@ auto RawProcessor::Process() -> ImageBuffer {
     // TODO： Just a temporary patch, optimize later.
     cv::cuda::cvtColor(process_buffer_.GetGPUData(), process_buffer_.GetGPUData(), cv::COLOR_RGB2RGBA);
     ApplyGeometricCorrections();
-    
+
 
     return {std::move(process_buffer_)};
     // process_buffer_.SyncToCPU();

@@ -136,6 +136,10 @@ auto EditTransaction::OperatorTypeToString(OperatorType type) -> const char* {
       return "ACES_TONE_MAPPING";
     case OperatorType::AUTO_EXPOSURE:
       return "AUTO_EXPOSURE";
+    case OperatorType::LENS_CALIBRATION:
+      return "LENS_CALIBRATION";
+    case OperatorType::COLOR_TEMP:
+      return "COLOR_TEMP";
     case OperatorType::UNKNOWN:
       return "UNKNOWN";
   }

@@ -35,6 +35,7 @@ void RawDecodeOp::Apply(std::shared_ptr<ImageBuffer> input) {
 
   raw_processor->imgdata.params.output_bps = 16;
   ImageBuffer output;
+  latest_runtime_context_ = {};
 
   switch (backend_) {
     case RawProcessBackend::PUERH: {
@@ -42,6 +43,7 @@ void RawDecodeOp::Apply(std::shared_ptr<ImageBuffer> input) {
       RawProcessor processor{params_, raw_processor->imgdata.rawdata, *raw_processor};
 
       output = processor.Process();
+      latest_runtime_context_ = processor.GetRuntimeColorContext();
       raw_processor->recycle();
       break;
     }
@@ -69,6 +71,10 @@ void RawDecodeOp::Apply(std::shared_ptr<ImageBuffer> input) {
       result.convertTo(result, CV_32FC3, 1.0 / 65535.0);
 
       output = ImageBuffer(std::move(result));
+      latest_runtime_context_                      = {};
+      latest_runtime_context_.output_in_camera_space_ = false;
+      latest_runtime_context_.camera_make_         = raw_processor->imgdata.idata.make;
+      latest_runtime_context_.camera_model_        = raw_processor->imgdata.idata.model;
       raw_processor->dcraw_clear_mem(img);
       raw_processor->recycle();
       break;
@@ -126,9 +132,26 @@ void RawDecodeOp::SetParams(const nlohmann::json& params) {
     params_.decode_res_ = static_cast<DecodeRes>(inner["decode_res"].get<int>());
 }
 
-void RawDecodeOp::SetGlobalParams(OperatorParams&) const {
-  // throw std::runtime_error("RawDecodeOp does not support global parameters.");
-  // DO NOTHING
+void RawDecodeOp::SetGlobalParams(OperatorParams& params) const {
+  params.raw_runtime_valid_ =
+      latest_runtime_context_.valid_;
+  params.raw_decode_input_space_ = latest_runtime_context_.output_in_camera_space_
+                                       ? RawDecodeInputSpace::CAMERA
+                                       : RawDecodeInputSpace::AP0;
+
+  for (int i = 0; i < 3; ++i) {
+    params.raw_cam_mul_[i] = latest_runtime_context_.cam_mul_[i];
+    params.raw_pre_mul_[i] = latest_runtime_context_.pre_mul_[i];
+  }
+
+  for (int i = 0; i < 9; ++i) {
+    params.raw_cam_xyz_[i] = latest_runtime_context_.cam_xyz_[i];
+    params.raw_rgb_cam_[i] = latest_runtime_context_.rgb_cam_[i];
+  }
+
+  params.raw_camera_make_ = latest_runtime_context_.camera_make_;
+  params.raw_camera_model_ = latest_runtime_context_.camera_model_;
+  params.color_temp_runtime_dirty_ = true;
 }
 
 void RawDecodeOp::EnableGlobalParams(OperatorParams&, bool) {

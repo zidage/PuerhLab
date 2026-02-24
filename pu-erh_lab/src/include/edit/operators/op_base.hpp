@@ -18,6 +18,7 @@
 #include <OpenColorIO/OpenColorTypes.h>
 
 #include <memory>
+#include <string>
 
 #include "image/image_buffer.hpp"
 #include "json.hpp"
@@ -66,7 +67,18 @@ enum class OperatorType : int {
   AUTO_EXPOSURE,
   UNKNOWN,  // For unrecognized operator types or placeholders
   CROP_ROTATE,
-  LENS_CALIBRATION
+  LENS_CALIBRATION,
+  COLOR_TEMP
+};
+
+enum class ColorTempMode : int {
+  AS_SHOT = 0,
+  CUSTOM  = 1,
+};
+
+enum class RawDecodeInputSpace : int {
+  AP0    = 0,
+  CAMERA = 1,
 };
 
 struct OperatorParams {
@@ -142,6 +154,43 @@ struct OperatorParams {
   OCIO::ConstCPUProcessorRcPtr cpu_to_working_processor_ = nullptr;
   OCIO::ConstGPUProcessorRcPtr gpu_to_working_processor_ = nullptr;
   OCIO::BakerRcPtr             to_ws_lut_baker_          = nullptr;
+
+  // Dynamic RAW color temperature / white balance state.
+  bool                         color_temp_enabled_        = true;
+  ColorTempMode                color_temp_mode_           = ColorTempMode::AS_SHOT;
+  float                        color_temp_custom_cct_     = 6500.0f;
+  float                        color_temp_custom_tint_    = 0.0f;
+  float                        color_temp_resolved_cct_   = 6500.0f;
+  float                        color_temp_resolved_tint_  = 0.0f;
+  float                        color_temp_resolved_xy_[2] = {0.3127f, 0.3290f};
+
+  bool                         raw_runtime_valid_         = false;
+  RawDecodeInputSpace          raw_decode_input_space_    = RawDecodeInputSpace::AP0;
+  float                        raw_cam_mul_[3]            = {1.0f, 1.0f, 1.0f};
+  float                        raw_pre_mul_[3]            = {1.0f, 1.0f, 1.0f};
+  float                        raw_cam_xyz_[9]            = {};
+  float                        raw_rgb_cam_[9]            = {};
+  std::string                  raw_camera_make_           = {};
+  std::string                  raw_camera_model_          = {};
+
+  bool                         color_temp_runtime_dirty_  = true;
+  bool                         color_temp_matrices_valid_ = false;
+  float                        color_temp_cam_to_xyz_[9] = {
+      1.0f, 0.0f, 0.0f,
+      0.0f, 1.0f, 0.0f,
+      0.0f, 0.0f, 1.0f};
+  float                        color_temp_cam_to_xyz_d50_[9] = {
+      1.0f, 0.0f, 0.0f,
+      0.0f, 1.0f, 0.0f,
+      0.0f, 0.0f, 1.0f};
+  float                        color_temp_xyz_d50_to_ap1_[9] = {
+      1.0f, 0.0f, 0.0f,
+      0.0f, 1.0f, 0.0f,
+      0.0f, 0.0f, 1.0f};
+  float                        color_temp_cam_to_ap1_[9] = {
+      1.0f, 0.0f, 0.0f,
+      0.0f, 1.0f, 0.0f,
+      0.0f, 0.0f, 1.0f};
 
   // Look modification transform
   bool                         lmt_enabled_              = false;

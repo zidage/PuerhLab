@@ -17,6 +17,7 @@
 #include <cstdint>
 #include <memory>
 #include <mutex>
+#include <algorithm>
 
 #include "edit/pipeline/pipeline_cpu.hpp"
 #include "type/type.hpp"
@@ -44,6 +45,45 @@ void EnsureDefaultOutputTransform(CPUPipelineExecutor& exec) {
                                  {"peak_luminance", 100.0f}};
     output_stage.SetOperator(OperatorType::ODT, output_params, global_params);
   }
+}
+
+void EnsureDefaultColorTemp(CPUPipelineExecutor& exec) {
+  auto& global_params = exec.GetGlobalParams();
+  auto& to_ws_stage   = exec.GetStage(PipelineStageName::To_WorkingSpace);
+
+  if (to_ws_stage.GetOperator(OperatorType::COLOR_TEMP).has_value()) {
+    return;
+  }
+
+  std::string mode = "as_shot";
+  float       cct  = 6500.0f;
+  float       tint = 0.0f;
+
+  auto& raw_stage = exec.GetStage(PipelineStageName::Image_Loading);
+  auto  raw_entry = raw_stage.GetOperator(OperatorType::RAW_DECODE);
+  if (raw_entry.has_value() && raw_entry.value() && raw_entry.value()->op_) {
+    const nlohmann::json raw_params = raw_entry.value()->op_->GetParams();
+    if (raw_params.contains("raw") && raw_params["raw"].is_object()) {
+      const auto& raw = raw_params["raw"];
+      if (raw.contains("use_camera_wb") && raw["use_camera_wb"].is_boolean() &&
+          !raw["use_camera_wb"].get<bool>()) {
+        mode = "custom";
+      }
+      if (raw.contains("user_wb") && raw["user_wb"].is_number()) {
+        cct = std::clamp(raw["user_wb"].get<float>(), 2000.0f, 50000.0f);
+      }
+    }
+  }
+
+  nlohmann::json color_temp_params;
+  color_temp_params["color_temp"] = {
+      {"mode", mode},
+      {"cct", cct},
+      {"tint", tint},
+      {"resolved_cct", cct},
+      {"resolved_tint", tint},
+  };
+  to_ws_stage.SetOperator(OperatorType::COLOR_TEMP, color_temp_params, global_params);
 }
 
 void ResyncGlobalParamsFromOperators(CPUPipelineExecutor& exec) {
@@ -129,6 +169,7 @@ auto PipelineMgmtService::LoadPipeline(sl_element_id_t id) -> std::shared_ptr<Pi
           it->second->pipeline_->SetDecodeRes(DecodeRes::FULL);
 
           EnsureDefaultOutputTransform(*it->second->pipeline_);
+          EnsureDefaultColorTemp(*it->second->pipeline_);
           ResyncGlobalParamsFromOperators(*it->second->pipeline_);
         }
 
@@ -160,6 +201,7 @@ auto PipelineMgmtService::LoadPipeline(sl_element_id_t id) -> std::shared_ptr<Pi
     pipeline->SetBoundFile(id);
 
     EnsureDefaultOutputTransform(*pipeline);
+    EnsureDefaultColorTemp(*pipeline);
     ResyncGlobalParamsFromOperators(*pipeline);
 
     pipeline->SetExecutionStages(); // TODO: Use service as the only way to set/reset execution stages
