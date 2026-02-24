@@ -111,11 +111,63 @@ constexpr int                  kColorTempCctMax                 = 15000;
 constexpr int                  kColorTempTintMin                = -150;
 constexpr int                  kColorTempTintMax                = 150;
 constexpr float                kColorTempRequestEpsilon         = 1e-3f;
+constexpr int                  kColorTempSliderUiMin            = 0;
+constexpr int                  kColorTempSliderUiMax            = 4096;
+constexpr int                  kColorTempSliderUiMid            = 2048;
+constexpr float                kColorTempPivotCct               = 6000.0f;
 constexpr float                kRotationSliderScale             = 100.0f;
 constexpr float                kCropRectSliderScale             = 1000.0f;
 constexpr float                kCropRectMinSize                 = 1e-4f;
 
 using HlsProfileArray = std::array<float, kHlsCandidateHues.size()>;
+
+static_assert(kColorTempSliderUiMin < kColorTempSliderUiMid,
+              "Color temp slider UI midpoint must be inside range.");
+static_assert(kColorTempSliderUiMid < kColorTempSliderUiMax,
+              "Color temp slider UI midpoint must be inside range.");
+static_assert(kColorTempCctMin < static_cast<int>(kColorTempPivotCct),
+              "Color temp pivot must be inside Kelvin range.");
+static_assert(static_cast<int>(kColorTempPivotCct) < kColorTempCctMax,
+              "Color temp pivot must be inside Kelvin range.");
+
+auto ColorTempSliderPosToCct(int pos) -> float {
+  const float min_cct     = static_cast<float>(kColorTempCctMin);
+  const float max_cct     = static_cast<float>(kColorTempCctMax);
+  const int   clamped_pos = std::clamp(pos, kColorTempSliderUiMin, kColorTempSliderUiMax);
+
+  float cct = min_cct;
+  if (clamped_pos <= kColorTempSliderUiMid) {
+    const float t = static_cast<float>(clamped_pos - kColorTempSliderUiMin) /
+                    static_cast<float>(kColorTempSliderUiMid - kColorTempSliderUiMin);
+    cct = min_cct + t * (kColorTempPivotCct - min_cct);
+  } else {
+    const float t = static_cast<float>(clamped_pos - kColorTempSliderUiMid) /
+                    static_cast<float>(kColorTempSliderUiMax - kColorTempSliderUiMid);
+    cct = kColorTempPivotCct + t * (max_cct - kColorTempPivotCct);
+  }
+
+  return std::clamp(cct, min_cct, max_cct);
+}
+
+auto ColorTempCctToSliderPos(float cct) -> int {
+  const float min_cct     = static_cast<float>(kColorTempCctMin);
+  const float max_cct     = static_cast<float>(kColorTempCctMax);
+  const float clamped_cct = std::clamp(cct, min_cct, max_cct);
+
+  float pos = static_cast<float>(kColorTempSliderUiMin);
+  if (clamped_cct <= kColorTempPivotCct) {
+    const float t = (clamped_cct - min_cct) / (kColorTempPivotCct - min_cct);
+    pos           = static_cast<float>(kColorTempSliderUiMin) +
+          t * static_cast<float>(kColorTempSliderUiMid - kColorTempSliderUiMin);
+  } else {
+    const float t = (clamped_cct - kColorTempPivotCct) / (max_cct - kColorTempPivotCct);
+    pos           = static_cast<float>(kColorTempSliderUiMid) +
+          t * static_cast<float>(kColorTempSliderUiMax - kColorTempSliderUiMid);
+  }
+
+  return std::clamp(static_cast<int>(std::lround(pos)), kColorTempSliderUiMin,
+                    kColorTempSliderUiMax);
+}
 
 auto MakeHlsFilledArray(float value) -> HlsProfileArray {
   HlsProfileArray out{};
@@ -1723,22 +1775,22 @@ class EditorDialog final : public QDialog {
         });
 
     color_temp_cct_slider_ = addSlider(
-        "Color Temp", kColorTempCctMin, kColorTempCctMax,
-        static_cast<int>(std::lround(DisplayedColorTempCct(state_))),
+        "Color Temp", kColorTempSliderUiMin, kColorTempSliderUiMax,
+        ColorTempCctToSliderPos(DisplayedColorTempCct(state_)),
         [&](int v) {
           PromoteColorTempToCustomForEditing();
-          state_.color_temp_custom_cct_ = static_cast<float>(v);
+          state_.color_temp_custom_cct_ = ColorTempSliderPosToCct(v);
           RequestRender();
         },
         [this]() { CommitAdjustment(AdjustmentField::ColorTemp); },
-        [](int v) { return QString("%1 K").arg(v); });
+        [](int v) { return QString("%1 K").arg(static_cast<int>(std::lround(ColorTempSliderPosToCct(v)))); });
     color_temp_cct_slider_->setStyleSheet(
         "QSlider::groove:horizontal {"
         "  border: 1px solid #2A2A2A;"
         "  height: 8px;"
         "  border-radius: 4px;"
         "  background: qlineargradient(x1:0, y1:0, x2:1, y2:0, "
-        "stop:0 #FF8A3D, stop:0.5 #FFE8B0, stop:1 #9BD8FF);"
+        "stop:0 #9BD8FF, stop:0.5 #FFE8B0, stop:1 #FF8A3D);"
         "}"
         "QSlider::handle:horizontal {"
         "  background: #F2F2F2;"
@@ -2717,23 +2769,57 @@ class EditorDialog final : public QDialog {
     syncing_controls_ = prev_sync;
   }
 
-  void RefreshColorTempRuntimeStateFromGlobalParams() {
+  // Returns true if any resolved color temp value actually changed.
+  auto RefreshColorTempRuntimeStateFromGlobalParams() -> bool {
     if (!pipeline_guard_ || !pipeline_guard_->pipeline_) {
-      return;
+      return false;
     }
 
     const auto& global = pipeline_guard_->pipeline_->GetGlobalParams();
-    state_.color_temp_resolved_cct_ = std::clamp(global.color_temp_resolved_cct_,
-                                                 static_cast<float>(kColorTempCctMin),
-                                                 static_cast<float>(kColorTempCctMax));
-    state_.color_temp_resolved_tint_ = std::clamp(global.color_temp_resolved_tint_,
-                                                  static_cast<float>(kColorTempTintMin),
-                                                  static_cast<float>(kColorTempTintMax));
-    state_.color_temp_supported_ = global.color_temp_matrices_valid_;
+    const float new_cct  = std::clamp(global.color_temp_resolved_cct_,
+                                      static_cast<float>(kColorTempCctMin),
+                                      static_cast<float>(kColorTempCctMax));
+    const float new_tint = std::clamp(global.color_temp_resolved_tint_,
+                                      static_cast<float>(kColorTempTintMin),
+                                      static_cast<float>(kColorTempTintMax));
+    const bool  new_sup  = global.color_temp_matrices_valid_;
 
-    committed_state_.color_temp_resolved_cct_  = state_.color_temp_resolved_cct_;
-    committed_state_.color_temp_resolved_tint_ = state_.color_temp_resolved_tint_;
-    committed_state_.color_temp_supported_     = state_.color_temp_supported_;
+    const bool changed = !NearlyEqual(state_.color_temp_resolved_cct_, new_cct) ||
+                         !NearlyEqual(state_.color_temp_resolved_tint_, new_tint) ||
+                         state_.color_temp_supported_ != new_sup;
+
+    state_.color_temp_resolved_cct_  = new_cct;
+    state_.color_temp_resolved_tint_ = new_tint;
+    state_.color_temp_supported_     = new_sup;
+
+    committed_state_.color_temp_resolved_cct_  = new_cct;
+    committed_state_.color_temp_resolved_tint_ = new_tint;
+    committed_state_.color_temp_supported_     = new_sup;
+
+    return changed;
+  }
+
+  void SyncColorTempControlsFromState() {
+    const bool prev_sync = syncing_controls_;
+    syncing_controls_    = true;
+
+    if (color_temp_mode_combo_) {
+      color_temp_mode_combo_->setCurrentIndex(ColorTempModeToComboIndex(state_.color_temp_mode_));
+    }
+    if (color_temp_cct_slider_) {
+      color_temp_cct_slider_->setValue(ColorTempCctToSliderPos(DisplayedColorTempCct(state_)));
+      color_temp_cct_slider_->setEnabled(state_.color_temp_supported_);
+    }
+    if (color_temp_tint_slider_) {
+      color_temp_tint_slider_->setValue(
+          static_cast<int>(std::lround(DisplayedColorTempTint(state_))));
+      color_temp_tint_slider_->setEnabled(state_.color_temp_supported_);
+    }
+    if (color_temp_unsupported_label_) {
+      color_temp_unsupported_label_->setVisible(!state_.color_temp_supported_);
+    }
+
+    syncing_controls_ = prev_sync;
   }
 
   struct ColorTempRequestSnapshot {
@@ -2884,7 +2970,7 @@ class EditorDialog final : public QDialog {
       color_temp_mode_combo_->setCurrentIndex(ColorTempModeToComboIndex(state_.color_temp_mode_));
     }
     if (color_temp_cct_slider_) {
-      color_temp_cct_slider_->setValue(static_cast<int>(std::lround(DisplayedColorTempCct(state_))));
+      color_temp_cct_slider_->setValue(ColorTempCctToSliderPos(DisplayedColorTempCct(state_)));
     }
     if (color_temp_tint_slider_) {
       color_temp_tint_slider_->setValue(
@@ -4428,8 +4514,9 @@ class EditorDialog final : public QDialog {
       spinner_->Stop();
     }
 
-    RefreshColorTempRuntimeStateFromGlobalParams();
-    SyncControlsFromState();
+    if (RefreshColorTempRuntimeStateFromGlobalParams()) {
+      SyncColorTempControlsFromState();
+    }
 
     if (!pending_quality_render_requests_.empty() || pending_fast_preview_request_.has_value()) {
       StartNext();
