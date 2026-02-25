@@ -17,6 +17,7 @@
 #include <OpenColorIO/OpenColorIO.h>
 #include <OpenColorIO/OpenColorTypes.h>
 
+#include <cstdint>
 #include <memory>
 #include <string>
 
@@ -175,6 +176,8 @@ struct OperatorParams {
 
   bool                         color_temp_runtime_dirty_  = true;
   bool                         color_temp_matrices_valid_ = false;
+  bool                         color_temp_cache_key_valid_ = false;
+  uint64_t                     color_temp_cache_key_       = 0;
   float                        color_temp_cam_to_xyz_[9] = {
       1.0f, 0.0f, 0.0f,
       0.0f, 1.0f, 0.0f,

@@ -38,6 +38,7 @@ class GPUPipelineImpl {
 
     auto sat    = GPU_SaturationOpKernel();
     auto vib    = GPU_VibranceOpKernel();
+    auto wheel  = GPU_ColorWheelOpKernel();
     auto hls    = GPU_HLSOpKernel();
     auto lmt    = GPU_LMT_Kernel();
     auto to_out = GPU_OUTPUT_Kernel();
@@ -46,7 +47,7 @@ class GPUPipelineImpl {
     auto clar   = GPU_ClarityKernel();
 
     return GPU_StaticKernelStream(GPU_PointChain(to_ws, exp, cont, tone, high, shad, curve, sat,
-                                                 vib, hls, lmt, to_out),
+                                                 vib, wheel, hls, lmt, to_out),
                                   sharp, clar);
   };
 

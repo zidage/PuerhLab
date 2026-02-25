@@ -22,6 +22,8 @@
 #include <cctype>
 #include <cmath>
 #include <cstdint>
+#include <cstring>
+#include <functional>
 #include <limits>
 #include <mutex>
 #include <optional>
@@ -116,6 +118,41 @@ auto IsFiniteMatrix(const cv::Matx33d& m) -> bool {
     }
   }
   return true;
+}
+
+void HashCombine(std::uint64_t& seed, std::uint64_t value) {
+  seed ^= value + 0x9e3779b97f4a7c15ULL + (seed << 6) + (seed >> 2);
+}
+
+auto FloatHashBits(float value) -> std::uint64_t {
+  std::uint32_t bits = 0;
+  std::memcpy(&bits, &value, sizeof(bits));
+  return bits;
+}
+
+void HashFloatArray(std::uint64_t& seed, const float* values, int count) {
+  for (int i = 0; i < count; ++i) {
+    HashCombine(seed, FloatHashBits(values[i]));
+  }
+}
+
+auto BuildRuntimeCacheKey(const OperatorParams& params, ColorTempMode mode, float custom_cct,
+                          float custom_tint) -> std::uint64_t {
+  std::uint64_t key = 0xcbf29ce484222325ULL;
+  HashCombine(key, static_cast<std::uint64_t>(params.color_temp_enabled_));
+  HashCombine(key, static_cast<std::uint64_t>(params.raw_runtime_valid_));
+  HashCombine(key, static_cast<std::uint64_t>(mode));
+  HashCombine(key, FloatHashBits(custom_cct));
+  HashCombine(key, FloatHashBits(custom_tint));
+  HashCombine(key, static_cast<std::uint64_t>(params.raw_decode_input_space_));
+  HashCombine(key, static_cast<std::uint64_t>(std::hash<std::string>{}(params.raw_camera_make_)));
+  HashCombine(key, static_cast<std::uint64_t>(std::hash<std::string>{}(params.raw_camera_model_)));
+  HashFloatArray(key, params.raw_pre_mul_, 3);
+  HashFloatArray(key, params.raw_cam_xyz_, 9);
+  if (mode == ColorTempMode::AS_SHOT) {
+    HashFloatArray(key, params.raw_cam_mul_, 3);
+  }
+  return key;
 }
 
 auto NormalizeCameraName(const std::string& input) -> std::string {
@@ -612,23 +649,37 @@ void ColorTempOp::EnableGlobalParams(OperatorParams& params, bool enable) {
 }
 
 void ColorTempOp::ResolveRuntime(OperatorParams& params) const {
+  params.color_temp_mode_        = mode_;
+  params.color_temp_custom_cct_  = custom_cct_;
+  params.color_temp_custom_tint_ = custom_tint_;
+
+  const std::uint64_t runtime_cache_key =
+      BuildRuntimeCacheKey(params, mode_, custom_cct_, custom_tint_);
+  if (params.color_temp_cache_key_valid_ && params.color_temp_cache_key_ == runtime_cache_key) {
+    resolved_cct_                 = params.color_temp_resolved_cct_;
+    resolved_tint_                = params.color_temp_resolved_tint_;
+    params.color_temp_runtime_dirty_ = false;
+    return;
+  }
+  params.color_temp_cache_key_       = runtime_cache_key;
+  params.color_temp_cache_key_valid_ = true;
+
   if (!params.color_temp_enabled_) {
     params.color_temp_matrices_valid_ = false;
+    params.color_temp_runtime_dirty_  = false;
     return;
   }
   if (!params.raw_runtime_valid_) {
     params.color_temp_matrices_valid_ = false;
+    params.color_temp_runtime_dirty_  = false;
     return;
   }
-
-  params.color_temp_mode_        = mode_;
-  params.color_temp_custom_cct_  = custom_cct_;
-  params.color_temp_custom_tint_ = custom_tint_;
 
   cv::Matx33d cm1;
   cv::Matx33d cm2;
   if (!ResolveColorMatrixEndpoints(params, cm1, cm2)) {
     params.color_temp_matrices_valid_ = false;
+    params.color_temp_runtime_dirty_  = false;
     return;
   }
 
@@ -639,6 +690,7 @@ void ColorTempOp::ResolveRuntime(OperatorParams& params) const {
   if (mode_ == ColorTempMode::AS_SHOT) {
     if (!SolveAsShotWhiteXY(params, cm1, cm2, selected_xy, selected_cct, selected_tint)) {
       params.color_temp_matrices_valid_ = false;
+      params.color_temp_runtime_dirty_  = false;
       return;
     }
   } else {
@@ -652,6 +704,7 @@ void ColorTempOp::ResolveRuntime(OperatorParams& params) const {
   if (!Invert3x3(xyz_to_camera, camera_to_xyz)) {
     std::cout << "ColorTempOp: Failed to invert XYZ to camera matrix.\n";
     params.color_temp_matrices_valid_ = false;
+    params.color_temp_runtime_dirty_  = false;
     return;
   }
 

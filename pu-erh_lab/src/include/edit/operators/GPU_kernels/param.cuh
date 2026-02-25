@@ -353,7 +353,9 @@ struct GPUOperatorParams {
   float                sharpen_radius_         = 3.0f;
   float                sharpen_threshold_      = 0.0f;
 
-  // Color wheel adjustment parameters
+  // CDL SOP wheel terms:
+  // out = clamp(pow(max(in * slope + offset, 0), power), 0, 1)
+  // lift -> offset, gain -> slope, gamma -> power
   bool                 color_wheel_enabled_    = true;
   float                lift_color_offset_[3]   = {0.0f, 0.0f, 0.0f};
   float                lift_luminance_offset_  = 0.0f;

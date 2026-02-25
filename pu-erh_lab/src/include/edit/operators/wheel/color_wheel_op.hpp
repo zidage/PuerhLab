@@ -23,20 +23,20 @@ namespace puerhlab {
 class ColorWheelOp : public OperatorBase<ColorWheelOp> {
  public:
   struct WheelControl {
-    // x for hue (0->360.0f), y for saturation (0->1)
+    // Normalized CDL disc control point in [-1, 1], center at (0, 0).
+    cv::Point2f disc_{0.0f, 0.0f};
+    // Trackball mapping strength scalar.
+    float       strength_{0.5f};
+    // Derived per-wheel RGB term (offset/slope/power depending on wheel).
     cv::Point3f color_offset_{0.0f, 0.0f, 0.0f};
+    // Per-wheel master term, applied uniformly to all channels.
     float       luminance_offset_{0.0f};
-    NLOHMANN_DEFINE_TYPE_INTRUSIVE(WheelControl, color_offset_.x, color_offset_.y, color_offset_.z,
-                                   luminance_offset_)
   };
 
  private:
   WheelControl lift_;
   WheelControl gamma_;
   WheelControl gain_;
-
-  float        lift_crossover_;
-  float        gain_crossover_;
 
  public:
   static constexpr PriorityLevel     priority_level_    = 5;
@@ -57,7 +57,7 @@ class ColorWheelOp : public OperatorBase<ColorWheelOp> {
 };
 };  // namespace puerhlab
 
-// NLOHMANN_DEFINE_TYPE_INTRUSIVE
+// JSON helpers for cv::Point3f values used in wheel parameter serialization.
 namespace cv {
 inline void to_json(nlohmann::json& j, const Point3f& p) {
   j = {{"x", p.x}, {"y", p.y}, {"z", p.z}};

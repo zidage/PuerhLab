@@ -36,6 +36,10 @@
 namespace puerhlab {
 namespace {
 void ResolveColorTempRuntime(PipelineStage& to_ws_stage, OperatorParams& global_params) {
+  if (!global_params.color_temp_runtime_dirty_ && global_params.color_temp_cache_key_valid_) {
+    return;
+  }
+
   auto color_temp_entry = to_ws_stage.GetOperator(OperatorType::COLOR_TEMP);
   if (!color_temp_entry.has_value()) {
     return;

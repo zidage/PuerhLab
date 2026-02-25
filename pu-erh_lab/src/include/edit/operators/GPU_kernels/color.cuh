@@ -187,5 +187,36 @@ struct GPU_VibranceOpKernel : GPUPointOpTag {
     }
   }
 };
+
+struct GPU_ColorWheelOpKernel : GPUPointOpTag {
+  __device__ __forceinline__ void operator()(float4* p, GPUOperatorParams& params) const {
+    if (!params.color_wheel_enabled_) return;
+
+    constexpr float kEps = 1e-6f;
+
+    const float offset_r = params.lift_color_offset_[0] + params.lift_luminance_offset_;
+    const float offset_g = params.lift_color_offset_[1] + params.lift_luminance_offset_;
+    const float offset_b = params.lift_color_offset_[2] + params.lift_luminance_offset_;
+
+    const float slope_r  = fmaxf(params.gain_color_offset_[0] + params.gain_luminance_offset_, kEps);
+    const float slope_g  = fmaxf(params.gain_color_offset_[1] + params.gain_luminance_offset_, kEps);
+    const float slope_b  = fmaxf(params.gain_color_offset_[2] + params.gain_luminance_offset_, kEps);
+
+    const float power_r  =
+        fmaxf(params.gamma_color_offset_[0] + params.gamma_luminance_offset_, kEps);
+    const float power_g  =
+        fmaxf(params.gamma_color_offset_[1] + params.gamma_luminance_offset_, kEps);
+    const float power_b  =
+        fmaxf(params.gamma_color_offset_[2] + params.gamma_luminance_offset_, kEps);
+
+    const float base_r = fmaxf(p->x * slope_r + offset_r, 0.0f);
+    const float base_g = fmaxf(p->y * slope_g + offset_g, 0.0f);
+    const float base_b = fmaxf(p->z * slope_b + offset_b, 0.0f);
+
+    p->x               = fminf(fmaxf(powf(base_r, power_r), 0.0f), 1.0f);
+    p->y               = fminf(fmaxf(powf(base_g, power_g), 0.0f), 1.0f);
+    p->z               = fminf(fmaxf(powf(base_b, power_b), 0.0f), 1.0f);
+  }
+};
 };  // namespace CUDA
 };  // namespace puerhlab

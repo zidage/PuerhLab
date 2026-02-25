@@ -11,6 +11,7 @@
 #include <QFrame>
 #include <QGridLayout>
 #include <QHBoxLayout>
+#include <QImage>
 #include <QLabel>
 #include <QListWidget>
 #include <QMessageBox>
@@ -40,6 +41,7 @@
 #include <functional>
 #include <future>
 #include <json.hpp>
+#include <numbers>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -118,6 +120,11 @@ constexpr float                kColorTempPivotCct               = 6000.0f;
 constexpr float                kRotationSliderScale             = 100.0f;
 constexpr float                kCropRectSliderScale             = 1000.0f;
 constexpr float                kCropRectMinSize                 = 1e-4f;
+constexpr int                  kCdlWheelSliderUiMin             = -1000;
+constexpr int                  kCdlWheelSliderUiMax             = 1000;
+constexpr float                kCdlWheelSliderToParamScale      = 1000.0f;
+constexpr float                kCdlWheelStrengthDefault         = 0.25f;
+constexpr float                kCdlWheelEpsilon                 = 1e-6f;
 
 using HlsProfileArray = std::array<float, kHlsCandidateHues.size()>;
 
@@ -207,6 +214,75 @@ auto HlsCandidateColor(float hue_degrees) -> QColor {
 }
 
 auto Clamp01(float v) -> float { return std::clamp(v, 0.0f, 1.0f); }
+
+auto ClampDiscPoint(const QPointF& p) -> QPointF {
+  const float x = static_cast<float>(p.x());
+  const float y = static_cast<float>(p.y());
+  if (!std::isfinite(x) || !std::isfinite(y)) {
+    return QPointF(0.0, 0.0);
+  }
+  const float r = std::sqrt(x * x + y * y);
+  if (r <= 1.0f || r <= kCdlWheelEpsilon) {
+    return QPointF(x, y);
+  }
+  const float inv_r = 1.0f / r;
+  return QPointF(x * inv_r, y * inv_r);
+}
+
+auto HueToUnitRgb(float h) -> std::array<float, 3> {
+  h = h - std::floor(h);
+  const float scaled = h * 6.0f;
+  const int   sector = static_cast<int>(std::floor(scaled)) % 6;
+  const float f      = scaled - std::floor(scaled);
+  switch (sector) {
+    case 0:
+      return {1.0f, f, 0.0f};
+    case 1:
+      return {1.0f - f, 1.0f, 0.0f};
+    case 2:
+      return {0.0f, 1.0f, f};
+    case 3:
+      return {0.0f, 1.0f - f, 1.0f};
+    case 4:
+      return {f, 0.0f, 1.0f};
+    case 5:
+    default:
+      return {1.0f, 0.0f, 1.0f - f};
+  }
+}
+
+auto DiscToCdlDelta(const QPointF& position, float strength) -> std::array<float, 3> {
+  const QPointF p  = ClampDiscPoint(position);
+  const float   x  = static_cast<float>(p.x());
+  const float   y  = static_cast<float>(p.y());
+  const float   r  = std::clamp(std::sqrt(x * x + y * y), 0.0f, 1.0f);
+  float         h  = std::atan2(y, x) / (2.0f * std::numbers::pi_v<float>);
+  if (h < 0.0f) {
+    h += 1.0f;
+  }
+  const auto c     = HueToUnitRgb(h);
+  const float m    = (c[0] + c[1] + c[2]) / 3.0f;
+  float       dr   = c[0] - m;
+  float       dg   = c[1] - m;
+  float       db   = c[2] - m;
+  const float len  = std::sqrt(dr * dr + dg * dg + db * db);
+  const float inv  = 1.0f / (len + kCdlWheelEpsilon);
+  dr *= inv;
+  dg *= inv;
+  db *= inv;
+  const float scale = std::max(strength, 0.0f) * r;
+  return {dr * scale, dg * scale, db * scale};
+}
+
+auto CdlSliderUiToMaster(int slider_value) -> float {
+  return std::clamp(static_cast<float>(slider_value) / kCdlWheelSliderToParamScale, -1.0f, 1.0f);
+}
+
+auto CdlMasterToSliderUi(float master_value) -> int {
+  const float clamped = std::clamp(master_value, -1.0f, 1.0f);
+  return std::clamp(static_cast<int>(std::lround(clamped * kCdlWheelSliderToParamScale)),
+                    kCdlWheelSliderUiMin, kCdlWheelSliderUiMax);
+}
 
 auto ClampCropRect(float x, float y, float w, float h) -> std::array<float, 4> {
   w = std::clamp(w, kCropRectMinSize, 1.0f);
@@ -455,6 +531,208 @@ auto ParseCurveControlPointsFromParams(const nlohmann::json& params)
   }
   return NormalizeCurveControlPoints(points);
 }
+
+class CdlTrackballDiscWidget final : public QWidget {
+ public:
+  using PositionCallback = std::function<void(const QPointF&)>;
+
+  explicit CdlTrackballDiscWidget(QWidget* parent = nullptr) : QWidget(parent) {
+    setMinimumSize(56, 56);
+    setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    setMouseTracking(true);
+    setCursor(Qt::CrossCursor);
+  }
+
+  void SetPosition(const QPointF& position) {
+    const QPointF clamped = ClampDiscPoint(position);
+    if (std::abs(clamped.x() - position_.x()) <= 1e-6 && std::abs(clamped.y() - position_.y()) <= 1e-6) {
+      return;
+    }
+    position_ = clamped;
+    update();
+  }
+
+  auto GetPosition() const -> QPointF { return position_; }
+
+  void SetPositionChangedCallback(PositionCallback cb) { on_position_changed_ = std::move(cb); }
+
+  void SetPositionReleasedCallback(PositionCallback cb) { on_position_released_ = std::move(cb); }
+
+ protected:
+  void resizeEvent(QResizeEvent*) override { wheel_cache_ = QImage(); }
+
+  void paintEvent(QPaintEvent*) override {
+    QPainter painter(this);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+
+    const QRectF disc = DiscRect();
+    EnsureWheelCache(disc);
+
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(QColor(0x0F, 0x0F, 0x0F));
+    painter.drawEllipse(disc.adjusted(-2, -2, 2, 2));
+
+    painter.save();
+    QPainterPath clip_path;
+    clip_path.addEllipse(disc);
+    painter.setClipPath(clip_path);
+    if (!wheel_cache_.isNull()) {
+      painter.drawImage(disc.topLeft(), wheel_cache_);
+    }
+    painter.restore();
+
+    painter.setPen(QPen(QColor(0x2A, 0x2A, 0x2A), 1.5));
+    painter.setBrush(Qt::NoBrush);
+    painter.drawEllipse(disc);
+
+    const QPointF center = disc.center();
+    painter.setPen(QPen(QColor(0xB3, 0xB3, 0xB3, 180), 1.0));
+    painter.drawLine(QPointF(center.x() - 6.0, center.y()), QPointF(center.x() + 6.0, center.y()));
+    painter.drawLine(QPointF(center.x(), center.y() - 6.0), QPointF(center.x(), center.y() + 6.0));
+
+    const QPointF handle = ToWidgetPoint(position_, disc);
+    painter.setPen(QPen(QColor(0x12, 0x12, 0x12), 2.0));
+    painter.setBrush(QColor(0xFC, 0xC7, 0x04));
+    painter.drawEllipse(handle, 6.0, 6.0);
+    painter.setPen(QPen(QColor(0xF2, 0xF2, 0xF2), 1.0));
+    painter.setBrush(Qt::NoBrush);
+    painter.drawEllipse(handle, 9.0, 9.0);
+  }
+
+  void mousePressEvent(QMouseEvent* event) override {
+    if (event->button() != Qt::LeftButton) {
+      QWidget::mousePressEvent(event);
+      return;
+    }
+    dragging_ = true;
+    UpdateFromMouse(QPointF(event->pos()), true, false);
+    event->accept();
+  }
+
+  void mouseMoveEvent(QMouseEvent* event) override {
+    if (!dragging_) {
+      QWidget::mouseMoveEvent(event);
+      return;
+    }
+    UpdateFromMouse(QPointF(event->pos()), true, false);
+    event->accept();
+  }
+
+  void mouseReleaseEvent(QMouseEvent* event) override {
+    if (event->button() != Qt::LeftButton) {
+      QWidget::mouseReleaseEvent(event);
+      return;
+    }
+    if (!dragging_) {
+      event->accept();
+      return;
+    }
+    dragging_ = false;
+    UpdateFromMouse(QPointF(event->pos()), true, true);
+    event->accept();
+  }
+
+  void mouseDoubleClickEvent(QMouseEvent* event) override {
+    if (event->button() != Qt::LeftButton) {
+      QWidget::mouseDoubleClickEvent(event);
+      return;
+    }
+    dragging_ = false;
+    position_ = QPointF(0.0, 0.0);
+    update();
+    if (on_position_changed_) {
+      on_position_changed_(position_);
+    }
+    if (on_position_released_) {
+      on_position_released_(position_);
+    }
+    event->accept();
+  }
+
+ private:
+  auto DiscRect() const -> QRectF {
+    const float side   = std::max(1.0f, static_cast<float>(std::min(width(), height())) - 6.0f);
+    const float left   = (static_cast<float>(width()) - side) * 0.5f;
+    const float top    = (static_cast<float>(height()) - side) * 0.5f;
+    return QRectF(left, top, side, side);
+  }
+
+  auto ToWidgetPoint(const QPointF& normalized, const QRectF& disc) const -> QPointF {
+    const float radius = static_cast<float>(disc.width() * 0.5);
+    const QPointF center = disc.center();
+    const QPointF p = ClampDiscPoint(normalized);
+    return QPointF(center.x() + p.x() * radius, center.y() - p.y() * radius);
+  }
+
+  auto ToNormalizedPoint(const QPointF& widget_point, const QRectF& disc) const -> QPointF {
+    const float radius = static_cast<float>(disc.width() * 0.5);
+    if (radius <= 0.0f) {
+      return QPointF(0.0, 0.0);
+    }
+    const QPointF center = disc.center();
+    const float x        = static_cast<float>((widget_point.x() - center.x()) / radius);
+    const float y        = static_cast<float>((center.y() - widget_point.y()) / radius);
+    return ClampDiscPoint(QPointF(x, y));
+  }
+
+  void UpdateFromMouse(const QPointF& widget_point, bool emit_changed, bool emit_release) {
+    const QPointF next = ToNormalizedPoint(widget_point, DiscRect());
+    if (std::abs(next.x() - position_.x()) > 1e-6 || std::abs(next.y() - position_.y()) > 1e-6) {
+      position_ = next;
+      update();
+      if (emit_changed && on_position_changed_) {
+        on_position_changed_(position_);
+      }
+    } else if (emit_changed && on_position_changed_) {
+      on_position_changed_(position_);
+    }
+    if (emit_release && on_position_released_) {
+      on_position_released_(position_);
+    }
+  }
+
+  void EnsureWheelCache(const QRectF& disc) {
+    const int size = static_cast<int>(std::lround(disc.width()));
+    if (size <= 0) {
+      wheel_cache_ = QImage();
+      return;
+    }
+    if (!wheel_cache_.isNull() && wheel_cache_.width() == size && wheel_cache_.height() == size) {
+      return;
+    }
+
+    wheel_cache_ = QImage(size, size, QImage::Format_ARGB32_Premultiplied);
+    wheel_cache_.fill(Qt::transparent);
+
+    const float radius = static_cast<float>(size) * 0.5f;
+    const float cx     = radius - 0.5f;
+    const float cy     = radius - 0.5f;
+    for (int y = 0; y < size; ++y) {
+      QRgb* row = reinterpret_cast<QRgb*>(wheel_cache_.scanLine(y));
+      for (int x = 0; x < size; ++x) {
+        const float dx = (static_cast<float>(x) - cx) / std::max(radius, 1.0f);
+        const float dy = (cy - static_cast<float>(y)) / std::max(radius, 1.0f);
+        const float r  = std::sqrt(dx * dx + dy * dy);
+        if (r > 1.0f) {
+          row[x] = qRgba(0, 0, 0, 0);
+          continue;
+        }
+        float h = std::atan2(dy, dx) / (2.0f * std::numbers::pi_v<float>);
+        if (h < 0.0f) {
+          h += 1.0f;
+        }
+        const QColor color = QColor::fromHsvF(h, std::clamp(r, 0.0f, 1.0f), 1.0f);
+        row[x]             = qRgba(color.red(), color.green(), color.blue(), 255);
+      }
+    }
+  }
+
+  QPointF          position_{0.0, 0.0};
+  bool             dragging_ = false;
+  QImage           wheel_cache_;
+  PositionCallback on_position_changed_{};
+  PositionCallback on_position_released_{};
+};
 
 class ToneCurveWidget final : public QWidget {
  public:
@@ -1480,6 +1758,7 @@ class EditorDialog final : public QDialog {
     if (!loaded_state_from_pipeline) {
       // Demo-friendly default: apply a LUT only for brand-new pipelines with no saved params.
       state_.lut_path_ = lut_paths_[default_lut_index];
+      UpdateAllCdlWheelDerivedColors(state_);
     }
     committed_state_ = state_;
 
@@ -1931,6 +2210,138 @@ class EditorDialog final : public QDialog {
         },
         [this]() { CommitAdjustment(AdjustmentField::Hls); },
         [](int v) { return QString("%1 deg").arg(v); });
+
+    {
+      auto* wheel_frame = new QFrame(controls_);
+      wheel_frame->setObjectName("EditorSection");
+      wheel_frame->setMaximumWidth(380);
+      wheel_frame->setMaximumHeight(340);
+
+      auto* wheel_layout = new QVBoxLayout(wheel_frame);
+      wheel_layout->setContentsMargins(10, 8, 10, 8);
+      wheel_layout->setSpacing(2);
+
+      auto* wheel_title = new QLabel("CDL Wheels", wheel_frame);
+      wheel_title->setStyleSheet(
+          "QLabel {"
+          "  color: #E6E6E6;"
+          "  font-size: 12px;"
+          "  font-weight: 600;"
+          "}");
+      wheel_layout->addWidget(wheel_title, 0, Qt::AlignHCenter);
+
+      auto makeWheelUnit = [&](const QString& title, CdlWheelState& wheel_state, bool add_unity,
+                               bool invert_delta, CdlTrackballDiscWidget*& disc_widget,
+                               QLabel*& offset_label, QSlider*& slider_widget) -> QWidget* {
+        auto* unit = new QWidget(wheel_frame);
+        unit->setFixedWidth(140);
+        auto* unit_layout = new QVBoxLayout(unit);
+        unit_layout->setContentsMargins(0, 0, 0, 0);
+        unit_layout->setSpacing(2);
+
+        auto* title_label = new QLabel(title, unit);
+        title_label->setStyleSheet(
+            "QLabel {"
+            "  color: #CFCFCF;"
+            "  font-size: 10px;"
+            "  font-weight: 500;"
+            "}");
+        unit_layout->addWidget(title_label, 0, Qt::AlignHCenter);
+
+        disc_widget = new CdlTrackballDiscWidget(unit);
+        disc_widget->setFixedSize(80, 80);
+        disc_widget->SetPosition(wheel_state.disc_position_);
+        disc_widget->SetPositionChangedCallback(
+            [this, &wheel_state, add_unity, invert_delta](const QPointF& pos) {
+              if (syncing_controls_) {
+                return;
+              }
+              wheel_state.disc_position_ = ClampDiscPoint(pos);
+              UpdateCdlWheelDerivedColor(wheel_state, add_unity, invert_delta);
+              RefreshCdlOffsetLabels();
+              RequestRender();
+            });
+        disc_widget->SetPositionReleasedCallback(
+            [this, &wheel_state, add_unity, invert_delta](const QPointF& pos) {
+              if (syncing_controls_) {
+                return;
+              }
+              wheel_state.disc_position_ = ClampDiscPoint(pos);
+              UpdateCdlWheelDerivedColor(wheel_state, add_unity, invert_delta);
+              RefreshCdlOffsetLabels();
+              RequestRender();
+              CommitAdjustment(AdjustmentField::ColorWheel);
+            });
+        unit_layout->addWidget(disc_widget, 0, Qt::AlignHCenter);
+
+        offset_label = new QLabel(FormatWheelDeltaText(wheel_state, add_unity), unit);
+        offset_label->setStyleSheet(
+            "QLabel {"
+            "  color: #A9A9A9;"
+            "  font-size: 9px;"
+            "}");
+        offset_label->setAlignment(Qt::AlignHCenter);
+        unit_layout->addWidget(offset_label, 0);
+
+        slider_widget = new QSlider(Qt::Horizontal, unit);
+        slider_widget->setRange(kCdlWheelSliderUiMin, kCdlWheelSliderUiMax);
+        const float sign = invert_delta ? -1.0f : 1.0f;
+        slider_widget->setValue(CdlMasterToSliderUi(wheel_state.master_offset_ * sign));
+        slider_widget->setSingleStep(1);
+        slider_widget->setPageStep(100);
+        slider_widget->setFixedHeight(14);
+        QObject::connect(slider_widget, &QSlider::valueChanged, unit,
+                         [this, &wheel_state, sign](int value) {
+                           if (syncing_controls_) {
+                             return;
+                           }
+                           wheel_state.master_offset_ = CdlSliderUiToMaster(value) * sign;
+                           RefreshCdlOffsetLabels();
+                           RequestRender();
+                         });
+        QObject::connect(slider_widget, &QSlider::sliderReleased, unit, [this]() {
+          if (syncing_controls_) {
+            return;
+          }
+          CommitAdjustment(AdjustmentField::ColorWheel);
+        });
+        unit_layout->addWidget(slider_widget, 0);
+
+        return unit;
+      };
+
+      auto* gamma_unit = makeWheelUnit("Gamma", state_.gamma_wheel_, true, true,
+                                       gamma_disc_widget_, gamma_offset_label_,
+                                       gamma_master_slider_);
+      auto* lift_unit  = makeWheelUnit("Lift", state_.lift_wheel_, false, false,
+                                       lift_disc_widget_, lift_offset_label_,
+                                       lift_master_slider_);
+      auto* gain_unit  = makeWheelUnit("Gain", state_.gain_wheel_, true, false,
+                                       gain_disc_widget_, gain_offset_label_,
+                                       gain_master_slider_);
+
+      auto* top_row = new QWidget(wheel_frame);
+      auto* top_row_layout = new QHBoxLayout(top_row);
+      top_row_layout->setContentsMargins(0, 0, 0, 0);
+      top_row_layout->setSpacing(0);
+      top_row_layout->addStretch();
+      top_row_layout->addWidget(gamma_unit, 0);
+      top_row_layout->addStretch();
+      wheel_layout->addWidget(top_row, 0);
+
+      auto* bottom_row = new QWidget(wheel_frame);
+      auto* bottom_row_layout = new QHBoxLayout(bottom_row);
+      bottom_row_layout->setContentsMargins(0, 0, 0, 0);
+      bottom_row_layout->setSpacing(12);
+      bottom_row_layout->addStretch();
+      bottom_row_layout->addWidget(lift_unit, 0);
+      bottom_row_layout->addWidget(gain_unit, 0);
+      bottom_row_layout->addStretch();
+      wheel_layout->addWidget(bottom_row, 0);
+
+      controls_layout->insertWidget(controls_layout->count() - 1, wheel_frame, 0, Qt::AlignHCenter);
+      RefreshCdlOffsetLabels();
+    }
 
     addSection("Detail", "Micro-contrast and sharpen controls.");
 
@@ -2469,6 +2880,7 @@ class EditorDialog final : public QDialog {
     Saturation,
     ColorTemp,
     Hls,
+    ColorWheel,
     Blacks,
     Whites,
     Shadows,
@@ -2479,6 +2891,25 @@ class EditorDialog final : public QDialog {
     Lut,
     CropRotate,
   };
+
+  struct CdlWheelState {
+    QPointF             disc_position_  = QPointF(0.0, 0.0);
+    float               master_offset_  = 0.0f;
+    std::array<float, 3> color_offset_  = {0.0f, 0.0f, 0.0f};
+    float               strength_       = kCdlWheelStrengthDefault;
+  };
+
+  static auto DefaultLiftWheelState() -> CdlWheelState {
+    CdlWheelState wheel;
+    wheel.color_offset_ = {0.0f, 0.0f, 0.0f};
+    return wheel;
+  }
+
+  static auto DefaultGammaGainWheelState() -> CdlWheelState {
+    CdlWheelState wheel;
+    wheel.color_offset_ = {1.0f, 1.0f, 1.0f};
+    return wheel;
+  }
 
   struct AdjustmentState {
     float                exposure_                    = 2.0f;
@@ -2495,6 +2926,9 @@ class EditorDialog final : public QDialog {
     float                hls_lightness_adjust_        = 0.0f;
     float                hls_saturation_adjust_       = 0.0f;
     float                hls_hue_range_               = kHlsDefaultHueRange;
+    CdlWheelState        lift_wheel_                  = DefaultLiftWheelState();
+    CdlWheelState        gamma_wheel_                 = DefaultGammaGainWheelState();
+    CdlWheelState        gain_wheel_                  = DefaultGammaGainWheelState();
     HlsProfileArray      hls_hue_adjust_table_        = {};
     HlsProfileArray      hls_lightness_adjust_table_  = {};
     HlsProfileArray      hls_saturation_adjust_table_ = {};
@@ -2523,6 +2957,46 @@ class EditorDialog final : public QDialog {
   };
 
   static bool NearlyEqual(float a, float b) { return std::abs(a - b) <= 1e-6f; }
+
+  static void UpdateCdlWheelDerivedColor(CdlWheelState& wheel, bool add_unity,
+                                          bool invert_delta = false) {
+    wheel.disc_position_ = ClampDiscPoint(wheel.disc_position_);
+    wheel.strength_      = std::clamp(wheel.strength_, 0.0f, kCdlWheelStrengthDefault);
+    const auto delta     = DiscToCdlDelta(wheel.disc_position_, wheel.strength_);
+    const float base     = add_unity ? 1.0f : 0.0f;
+    const float sign     = invert_delta ? -1.0f : 1.0f;
+    wheel.color_offset_  = {base + sign * delta[0], base + sign * delta[1],
+                            base + sign * delta[2]};
+  }
+
+  static void UpdateAllCdlWheelDerivedColors(AdjustmentState& state) {
+    UpdateCdlWheelDerivedColor(state.lift_wheel_, false, false);
+    UpdateCdlWheelDerivedColor(state.gamma_wheel_, true, true);
+    UpdateCdlWheelDerivedColor(state.gain_wheel_, true, false);
+  }
+
+  static auto DisplayWheelDelta(const CdlWheelState& wheel, bool add_unity) -> std::array<float, 3> {
+    const float master = wheel.master_offset_;
+    if (add_unity) {
+      return {wheel.color_offset_[0] - 1.0f + master, wheel.color_offset_[1] - 1.0f + master,
+              wheel.color_offset_[2] - 1.0f + master};
+    }
+    return {wheel.color_offset_[0] + master, wheel.color_offset_[1] + master,
+            wheel.color_offset_[2] + master};
+  }
+
+  static auto FormatSigned3(float value) -> QString {
+    if (value >= 0.0f) {
+      return QString("+%1").arg(value, 0, 'f', 3);
+    }
+    return QString::number(value, 'f', 3);
+  }
+
+  static auto FormatWheelDeltaText(const CdlWheelState& wheel, bool add_unity) -> QString {
+    const auto delta = DisplayWheelDelta(wheel, add_unity);
+    return QString("R %1  G %2  B %3")
+        .arg(FormatSigned3(delta[0]), FormatSigned3(delta[1]), FormatSigned3(delta[2]));
+  }
 
   static auto ActiveHlsProfileIndex(const AdjustmentState& state) -> int {
     return std::clamp(ClosestHlsCandidateHueIndex(state.hls_target_hue_), 0,
@@ -2616,6 +3090,18 @@ class EditorDialog final : public QDialog {
                                  "  border-color: #FCC704;"
                                  "}")
                              .arg(swatch.name(QColor::HexRgb), border_w_px, border_col));
+    }
+  }
+
+  void RefreshCdlOffsetLabels() {
+    if (lift_offset_label_) {
+      lift_offset_label_->setText(FormatWheelDeltaText(state_.lift_wheel_, false));
+    }
+    if (gamma_offset_label_) {
+      gamma_offset_label_->setText(FormatWheelDeltaText(state_.gamma_wheel_, true));
+    }
+    if (gain_offset_label_) {
+      gain_offset_label_->setText(FormatWheelDeltaText(state_.gain_wheel_, true));
     }
   }
 
@@ -2868,6 +3354,11 @@ class EditorDialog final : public QDialog {
         to.hls_saturation_adjust_table_ = from.hls_saturation_adjust_table_;
         to.hls_hue_range_table_         = from.hls_hue_range_table_;
         return;
+      case AdjustmentField::ColorWheel:
+        to.lift_wheel_  = from.lift_wheel_;
+        to.gamma_wheel_ = from.gamma_wheel_;
+        to.gain_wheel_  = from.gain_wheel_;
+        return;
       case AdjustmentField::Blacks:
         to.blacks_ = from.blacks_;
         return;
@@ -2966,6 +3457,24 @@ class EditorDialog final : public QDialog {
     if (saturation_slider_) {
       saturation_slider_->setValue(static_cast<int>(std::lround(state_.saturation_)));
     }
+    if (lift_disc_widget_) {
+      lift_disc_widget_->SetPosition(state_.lift_wheel_.disc_position_);
+    }
+    if (gamma_disc_widget_) {
+      gamma_disc_widget_->SetPosition(state_.gamma_wheel_.disc_position_);
+    }
+    if (gain_disc_widget_) {
+      gain_disc_widget_->SetPosition(state_.gain_wheel_.disc_position_);
+    }
+    if (lift_master_slider_) {
+      lift_master_slider_->setValue(CdlMasterToSliderUi(state_.lift_wheel_.master_offset_));
+    }
+    if (gamma_master_slider_) {
+      gamma_master_slider_->setValue(CdlMasterToSliderUi(-state_.gamma_wheel_.master_offset_));
+    }
+    if (gain_master_slider_) {
+      gain_master_slider_->setValue(CdlMasterToSliderUi(state_.gain_wheel_.master_offset_));
+    }
     if (color_temp_mode_combo_) {
       color_temp_mode_combo_->setCurrentIndex(ColorTempModeToComboIndex(state_.color_temp_mode_));
     }
@@ -3047,6 +3556,7 @@ class EditorDialog final : public QDialog {
       viewer_->SetCropToolEnabled(geometry_active);
     }
     RefreshHlsTargetUi();
+    RefreshCdlOffsetLabels();
 
     syncing_controls_ = false;
   }
@@ -3100,6 +3610,7 @@ class EditorDialog final : public QDialog {
     }
     if (!loaded) {
       state_ = AdjustmentState{};
+      UpdateAllCdlWheelDerivedColors(state_);
       last_submitted_color_temp_request_.reset();
     } else {
       last_submitted_color_temp_request_ = BuildColorTempRequest(state_);
@@ -3563,6 +4074,8 @@ class EditorDialog final : public QDialog {
         return {PipelineStageName::To_WorkingSpace, OperatorType::COLOR_TEMP};
       case AdjustmentField::Hls:
         return {PipelineStageName::Color_Adjustment, OperatorType::HLS};
+      case AdjustmentField::ColorWheel:
+        return {PipelineStageName::Color_Adjustment, OperatorType::COLOR_WHEEL};
       case AdjustmentField::Blacks:
         return {PipelineStageName::Basic_Adjustment, OperatorType::BLACK};
       case AdjustmentField::Whites:
@@ -3645,6 +4158,33 @@ class EditorDialog final : public QDialog {
                   {"l_range", kHlsFixedLightnessRange},
                   {"s_range", kHlsFixedSaturationRange}}}};
       }
+      case AdjustmentField::ColorWheel: {
+        CdlWheelState lift  = s.lift_wheel_;
+        CdlWheelState gamma = s.gamma_wheel_;
+        CdlWheelState gain  = s.gain_wheel_;
+        UpdateCdlWheelDerivedColor(lift, false, false);
+        UpdateCdlWheelDerivedColor(gamma, true, true);
+        UpdateCdlWheelDerivedColor(gain, true, false);
+
+        auto WheelToJson = [](const CdlWheelState& wheel) -> nlohmann::json {
+          return {
+              {"disc",
+               {{"x", static_cast<float>(wheel.disc_position_.x())},
+                {"y", static_cast<float>(wheel.disc_position_.y())}}},
+              {"strength", wheel.strength_},
+              {"color_offset",
+               {{"x", wheel.color_offset_[0]},
+                {"y", wheel.color_offset_[1]},
+                {"z", wheel.color_offset_[2]}}},
+              {"luminance_offset", std::clamp(wheel.master_offset_, -1.0f, 1.0f)},
+          };
+        };
+
+        return {{"color_wheel",
+                 {{"lift", WheelToJson(lift)},
+                  {"gamma", WheelToJson(gamma)},
+                  {"gain", WheelToJson(gain)}}}};
+      }
       case AdjustmentField::Blacks:
         return {{"black", s.blacks_}};
       case AdjustmentField::Whites:
@@ -3710,6 +4250,22 @@ class EditorDialog final : public QDialog {
           }
         }
         return false;
+      case AdjustmentField::ColorWheel: {
+        auto WheelChanged = [](const CdlWheelState& a, const CdlWheelState& b) -> bool {
+          return !NearlyEqual(static_cast<float>(a.disc_position_.x()),
+                              static_cast<float>(b.disc_position_.x())) ||
+                 !NearlyEqual(static_cast<float>(a.disc_position_.y()),
+                              static_cast<float>(b.disc_position_.y())) ||
+                 !NearlyEqual(a.master_offset_, b.master_offset_) ||
+                 !NearlyEqual(a.strength_, b.strength_) ||
+                 !NearlyEqual(a.color_offset_[0], b.color_offset_[0]) ||
+                 !NearlyEqual(a.color_offset_[1], b.color_offset_[1]) ||
+                 !NearlyEqual(a.color_offset_[2], b.color_offset_[2]);
+        };
+        return WheelChanged(state_.lift_wheel_, committed_state_.lift_wheel_) ||
+               WheelChanged(state_.gamma_wheel_, committed_state_.gamma_wheel_) ||
+               WheelChanged(state_.gain_wheel_, committed_state_.gain_wheel_);
+      }
       case AdjustmentField::Blacks:
         return !NearlyEqual(state_.blacks_, committed_state_.blacks_);
       case AdjustmentField::Whites:
@@ -3985,6 +4541,72 @@ class EditorDialog final : public QDialog {
     if (const auto v = ReadFloat(color, OperatorType::SATURATION, "saturation"); v.has_value()) {
       loaded_state.saturation_ = v.value();
       has_loaded_any           = true;
+    }
+    if (const auto color_wheel_json =
+            ReadNestedObject(color, OperatorType::COLOR_WHEEL, "color_wheel");
+        color_wheel_json.has_value()) {
+      auto ParseWheel = [](const nlohmann::json& wheels, const char* key, CdlWheelState& wheel,
+                           bool add_unity, bool invert_delta) -> bool {
+        if (!wheels.contains(key) || !wheels.at(key).is_object()) {
+          return false;
+        }
+        const auto& src = wheels.at(key);
+        bool        loaded_any_field = false;
+        bool        has_color_offset = false;
+
+        if (src.contains("disc") && src["disc"].is_object() && src["disc"].contains("x") &&
+            src["disc"].contains("y")) {
+          try {
+            const QPointF disc(src["disc"]["x"].get<float>(), src["disc"]["y"].get<float>());
+            wheel.disc_position_ = ClampDiscPoint(disc);
+            loaded_any_field = true;
+          } catch (...) {
+          }
+        }
+
+        if (src.contains("strength")) {
+          try {
+            wheel.strength_ =
+                std::clamp(src["strength"].get<float>(), 0.0f, kCdlWheelStrengthDefault);
+            loaded_any_field = true;
+          } catch (...) {
+          }
+        }
+
+        if (src.contains("luminance_offset")) {
+          try {
+            wheel.master_offset_ = std::clamp(src["luminance_offset"].get<float>(), -1.0f, 1.0f);
+            loaded_any_field = true;
+          } catch (...) {
+          }
+        }
+
+        if (src.contains("color_offset") && src["color_offset"].is_object() &&
+            src["color_offset"].contains("x") && src["color_offset"].contains("y") &&
+            src["color_offset"].contains("z")) {
+          try {
+            wheel.color_offset_[0] = src["color_offset"]["x"].get<float>();
+            wheel.color_offset_[1] = src["color_offset"]["y"].get<float>();
+            wheel.color_offset_[2] = src["color_offset"]["z"].get<float>();
+            has_color_offset = true;
+            loaded_any_field = true;
+          } catch (...) {
+          }
+        }
+
+        if (!has_color_offset) {
+          UpdateCdlWheelDerivedColor(wheel, add_unity, invert_delta);
+        }
+        return loaded_any_field;
+      };
+
+      bool loaded_color_wheel = false;
+      loaded_color_wheel |= ParseWheel(*color_wheel_json, "lift", loaded_state.lift_wheel_, false, false);
+      loaded_color_wheel |= ParseWheel(*color_wheel_json, "gamma", loaded_state.gamma_wheel_, true, true);
+      loaded_color_wheel |= ParseWheel(*color_wheel_json, "gain", loaded_state.gain_wheel_, true, false);
+      if (loaded_color_wheel) {
+        has_loaded_any = true;
+      }
     }
     if (const auto color_temp_json =
             ReadNestedObject(to_ws, OperatorType::COLOR_TEMP, "color_temp");
@@ -4305,6 +4927,9 @@ class EditorDialog final : public QDialog {
     color.SetOperator(OperatorType::SATURATION, {{"saturation", render_state.saturation_}},
                       global_params);
     color.EnableOperator(OperatorType::TINT, false, global_params);
+    color.SetOperator(OperatorType::COLOR_WHEEL,
+                      ParamsForField(AdjustmentField::ColorWheel, render_state), global_params);
+    color.EnableOperator(OperatorType::COLOR_WHEEL, true, global_params);
     color.SetOperator(OperatorType::HLS, ParamsForField(AdjustmentField::Hls, render_state),
                       global_params);
     color.EnableOperator(OperatorType::HLS, true, global_params);
@@ -4554,6 +5179,15 @@ class EditorDialog final : public QDialog {
   QSlider*                                                 exposure_slider_        = nullptr;
   QSlider*                                                 contrast_slider_        = nullptr;
   QSlider*                                                 saturation_slider_      = nullptr;
+  CdlTrackballDiscWidget*                                  lift_disc_widget_       = nullptr;
+  CdlTrackballDiscWidget*                                  gamma_disc_widget_      = nullptr;
+  CdlTrackballDiscWidget*                                  gain_disc_widget_       = nullptr;
+  QLabel*                                                  lift_offset_label_      = nullptr;
+  QLabel*                                                  gamma_offset_label_     = nullptr;
+  QLabel*                                                  gain_offset_label_      = nullptr;
+  QSlider*                                                 lift_master_slider_     = nullptr;
+  QSlider*                                                 gamma_master_slider_    = nullptr;
+  QSlider*                                                 gain_master_slider_     = nullptr;
   QComboBox*                                               color_temp_mode_combo_  = nullptr;
   QSlider*                                                 color_temp_cct_slider_  = nullptr;
   QSlider*                                                 color_temp_tint_slider_ = nullptr;
