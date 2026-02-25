@@ -13,14 +13,11 @@
 //  limitations under the License.
 
 #include "decoders/processor/operators/gpu/cuda_debayer_ahd.hpp"
+#include "decoders/processor/operators/gpu/cuda_image_ops.hpp"
 #include "decoders/processor/operators/gpu/cuda_raw_proc_utils.hpp"
 
 #include <opencv2/core/cuda.hpp>
-#include <opencv2/core/cuda_stream_accessor.hpp>
 #include <opencv2/core/mat.hpp>
-#include <opencv2/cudaarithm.hpp>
-#include <opencv2/cudaimgproc.hpp>
-#include <opencv2/cudawarping.hpp>
 
 namespace puerhlab {
 namespace CUDA {
@@ -148,8 +145,7 @@ void BayerRGGB2RGB_AHD(cv::cuda::GpuMat& image) {
   CUDA_CHECK(cudaGetLastError());
   CUDA_CHECK(cudaDeviceSynchronize());
 
-  std::vector<cv::cuda::GpuMat> channels = {R_final, G_final, B_final};
-  cv::cuda::merge(channels, image);
+  MergeRGB(R_final, G_final, B_final, image);
 }
 };
 };  // namespace puerhlab

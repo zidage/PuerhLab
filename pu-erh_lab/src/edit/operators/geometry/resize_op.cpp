@@ -16,11 +16,14 @@
 
 #include <algorithm>
 #include <cmath>
-
-#include <opencv2/cudawarping.hpp>
+#include <stdexcept>
+#include <utility>
 
 #include "edit/operators/op_base.hpp"
 #include "image/image_buffer.hpp"
+#ifdef HAVE_CUDA
+#include "edit/operators/geometry/cuda_geometry_ops.hpp"
+#endif
 
 
 namespace puerhlab {
@@ -83,7 +86,6 @@ void ResizeOp::Apply(std::shared_ptr<ImageBuffer> input) {
 }
 
 void ResizeOp::ApplyGPU(std::shared_ptr<ImageBuffer> input) {
-  // GPU implementation not available yet.
   auto& img = input->GetGPUData();
   int   w   = img.cols;
   int   h   = img.rows;
@@ -131,10 +133,12 @@ void ResizeOp::ApplyGPU(std::shared_ptr<ImageBuffer> input) {
         std::max(1, static_cast<int>(std::lround(static_cast<float>(roi_h) * roi_scale)));
 
     cv::cuda::GpuMat roi_dst;
-    cv::cuda::createContinuous(out_h, out_w, roi_src.type(), roi_dst);
-
-    cv::cuda::resize(roi_src, roi_dst, roi_dst.size(), 0, 0, cv::INTER_AREA);
-    img = roi_dst;
+#ifdef HAVE_CUDA
+    CUDA::ResizeAreaApprox(roi_src, roi_dst, cv::Size(out_w, out_h));
+#else
+    throw std::runtime_error("ResizeOp::ApplyGPU requires HAVE_CUDA");
+#endif
+    img = std::move(roi_dst);
     return;
   }
 
@@ -144,10 +148,12 @@ void ResizeOp::ApplyGPU(std::shared_ptr<ImageBuffer> input) {
       std::max(1, static_cast<int>(std::lround(static_cast<float>(h) * full_scale)));
 
   cv::cuda::GpuMat dst;
-  cv::cuda::createContinuous(out_h, out_w, img.type(), dst);
-
-  cv::cuda::resize(img, dst, dst.size(), 0, 0, cv::INTER_AREA);
-  img = dst;
+#ifdef HAVE_CUDA
+  CUDA::ResizeAreaApprox(img, dst, cv::Size(out_w, out_h));
+#else
+  throw std::runtime_error("ResizeOp::ApplyGPU requires HAVE_CUDA");
+#endif
+  img = std::move(dst);
 }
 
 auto ResizeOp::GetParams() const -> nlohmann::json {

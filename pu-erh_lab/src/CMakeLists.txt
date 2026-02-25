@@ -21,6 +21,17 @@ endmacro()
 # 1. Utilities
 # ==============================================================================
 
+set(PUERHLAB_OPENCV_CORE_DEPS
+    opencv_core
+)
+set(PUERHLAB_OPENCV_IMAGE_DEPS
+    opencv_core
+    opencv_imgproc
+    opencv_imgcodecs
+    opencv_calib3d
+    opencv_highgui
+)
+
 def_library(ThreadPool SOURCES concurrency/thread_pool.cpp)
 
 def_library(TimeProvider SOURCES utils/clock/time_provider.cpp)
@@ -40,7 +51,7 @@ add_library(ImageBuffer ${IMAGE_BUFFER_SRCS})
 target_include_directories(ImageBuffer PUBLIC include)
 
 # Common dependencies
-set(IMAGE_BUFFER_DEPS Exiv2 ${OpenCV_LIBS} libraw::raw_r TimeProvider JSON OpenMP::OpenMP_CXX StrConv)
+set(IMAGE_BUFFER_DEPS Exiv2 ${PUERHLAB_OPENCV_CORE_DEPS} libraw::raw_r TimeProvider JSON OpenMP::OpenMP_CXX StrConv)
 
 # Platform specific dependencies
 if (WIN32)
@@ -83,6 +94,7 @@ if(CUDAToolkit_FOUND)
         decoders/processor/operators/gpu/cuda_debayer_ahd.cu
         decoders/processor/operators/gpu/cuda_debayer_rcd.cu
         decoders/processor/operators/gpu/cuda_highlight_reconstruct.cu
+        decoders/processor/operators/gpu/cuda_image_ops.cu
         decoders/processor/operators/gpu/cuda_rotate.cu
         decoders/processor/operators/gpu/cuda_white_balance.cu
     )
@@ -129,6 +141,12 @@ set(OPERATORS_SRCS
     edit/operators/operator_registeration.cpp
 )
 
+if(CUDAToolkit_FOUND)
+    list(APPEND OPERATORS_SRCS
+        edit/operators/geometry/cuda_geometry_ops.cu
+    )
+endif()
+
 def_library(Operators
     SOURCES ${OPERATORS_SRCS}
     PUBLIC_DEPS ImageBuffer JSON OpenColorIO::OpenColorIO hwy::hwy glad::glad lensfun::lensfun
@@ -155,6 +173,8 @@ def_library(EditPipeline
 if(CUDAToolkit_FOUND)
     set_target_properties(EditPipeline PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
     target_compile_definitions(EditPipeline PUBLIC HAVE_CUDA)
+    target_include_directories(EditPipeline PRIVATE ${CUDAToolkit_INCLUDE_DIRS})
+    target_link_libraries(EditPipeline PRIVATE CUDA::cudart)
 endif()
 
 set(RENDERER_SRCS renderer/pipeline_scheduler.cpp)
@@ -166,6 +186,7 @@ def_library(PipelineScheduler
 def_library(RawProcessor
     SOURCES decoders/processor/raw_processor.cpp
     PUBLIC_DEPS Image libraw::raw_r Exiv2 RawProcessorOp
+    PRIVATE_DEPS opencv_imgproc
 )
 
 # ==============================================================================
@@ -181,7 +202,8 @@ set(DECODER_SRCS
 
 def_library(ImageDecoder
     SOURCES ${DECODER_SRCS}
-    PUBLIC_DEPS Image ThreadPool ${OpenCV_LIBS} libraw::raw_r RawProcessor
+    PUBLIC_DEPS Image ThreadPool libraw::raw_r RawProcessor
+    PRIVATE_DEPS ${PUERHLAB_OPENCV_IMAGE_DEPS}
 )
 
 def_library(ImageLoader 
@@ -318,7 +340,8 @@ def_library(SleeveManager
 
 def_library(ImageWriter
     SOURCES io/image/image_writer.cpp
-    PUBLIC_DEPS OpenImageIO::OpenImageIO ${OpenCV_LIBS} ImageBuffer 
+    PUBLIC_DEPS OpenImageIO::OpenImageIO ImageBuffer
+    PRIVATE_DEPS ${PUERHLAB_OPENCV_IMAGE_DEPS}
 )
 
 # ==============================================================================

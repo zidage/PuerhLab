@@ -34,8 +34,7 @@
 #include "type/type.hpp"
 
 #ifdef HAVE_CUDA
-#include <opencv2/cudaarithm.hpp>
-#include <opencv2/cudaimgproc.hpp>
+#include "decoders/processor/operators/gpu/cuda_image_ops.hpp"
 #endif
 
 #include <opencv2/highgui.hpp>
@@ -214,32 +213,20 @@ void RawProcessor::ApplyGeometricCorrections() {
 
 #ifdef HAVE_CUDA
   if (params_.cuda_) {
-    auto&            gpu_img = process_buffer_.GetGPUData();
-    cv::cuda::GpuMat tmp;
+    auto& gpu_img = process_buffer_.GetGPUData();
 
     switch (raw_data_.sizes.flip) {
       case 3:
         // 180 degree
-        cv::cuda::flip(gpu_img, tmp, -1);
-        gpu_img = tmp;
+        CUDA::Rotate180(gpu_img);
         break;
       case 5:
         // Rotate 90 CCW
-        if (gpu_img.type() == CV_32FC3 || gpu_img.type() == CV_32FC4) {
-          CUDA::Rotate90CCW(gpu_img);
-        } else {
-          cv::cuda::transpose(gpu_img, tmp);
-          cv::cuda::flip(tmp, gpu_img, 0);
-        }
+        CUDA::Rotate90CCW(gpu_img);
         break;
       case 6:
         // Rotate 90 CW
-        if (gpu_img.type() == CV_32FC3 || gpu_img.type() == CV_32FC4) {
-          CUDA::Rotate90CW(gpu_img);
-        } else {
-          cv::cuda::transpose(gpu_img, tmp);
-          cv::cuda::flip(tmp, gpu_img, 1);
-        }
+        CUDA::Rotate90CW(gpu_img);
         break;
       default:
         // Do nothing
@@ -327,8 +314,7 @@ auto RawProcessor::Process() -> ImageBuffer {
     ConvertToWorkingSpace();
 
     // Ensure GPU buffer is CV_32FC4 (RGBA float32).
-    // TODO： Just a temporary patch, optimize later.
-    cv::cuda::cvtColor(process_buffer_.GetGPUData(), process_buffer_.GetGPUData(), cv::COLOR_RGB2RGBA);
+    CUDA::RGBToRGBA(process_buffer_.GetGPUData());
     ApplyGeometricCorrections();
 
 

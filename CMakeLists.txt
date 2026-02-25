@@ -57,6 +57,7 @@ find_package(CUDAToolkit)
 if (CUDAToolkit_FOUND)
     enable_language(CUDA)
     add_definitions(-DHAVE_CUDA)
+    include_directories(SYSTEM ${CUDAToolkit_INCLUDE_DIRS})
     add_compile_options($<$<AND:$<COMPILE_LANGUAGE:CUDA>,$<CONFIG:Release>>:-O3>)
     add_compile_options($<$<AND:$<COMPILE_LANGUAGE:CUDA>,$<CONFIG:Release>>:--use_fast_math>)
     add_compile_options($<$<AND:$<COMPILE_LANGUAGE:CUDA>,$<CONFIG:Release>>:--extra-device-vectorization>) 
@@ -124,7 +125,7 @@ target_include_directories(JSON INTERFACE "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_
 
 # Other libraries
 # OpenCV
-find_package(OpenCV REQUIRED)
+find_package(OpenCV REQUIRED COMPONENTS core imgproc imgcodecs calib3d highgui)
 
 # Eigen3
 find_package(Eigen3 CONFIG REQUIRED)

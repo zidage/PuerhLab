@@ -20,12 +20,12 @@
 */
 
 #include "decoders/processor/operators/gpu/cuda_debayer_rcd.hpp"
+#include "decoders/processor/operators/gpu/cuda_image_ops.hpp"
 
 #include <cuda_runtime.h>
 #include <opencv2/core/cuda.hpp>
 #include <opencv2/core/cuda_stream_accessor.hpp>
 #include <opencv2/core/cuda_types.hpp>
-#include <opencv2/cudaarithm.hpp>
 
 #include "decoders/processor/operators/gpu/cuda_raw_proc_utils.hpp"
 
@@ -431,8 +431,7 @@ void BayerRGGB2RGB_RCD(cv::cuda::GpuMat& image) {
   RCD_RBAtGKernel<<<blocks, threads, 0, cuda_stream>>>(vh_dir, g, r, b, width, height);
   CUDA_CHECK(cudaGetLastError());
 
-  std::vector<cv::cuda::GpuMat> channels = {r, g, b};
-  cv::cuda::merge(channels, image, stream);
+  MergeRGB(r, g, b, image, &stream);
   stream.waitForCompletion();
 }
 }

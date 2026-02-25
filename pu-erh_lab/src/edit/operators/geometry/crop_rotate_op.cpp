@@ -16,9 +16,13 @@
 
 #include <algorithm>
 #include <cmath>
+#include <stdexcept>
+#include <utility>
 
-#include <opencv2/cudawarping.hpp>
 #include <opencv2/imgproc.hpp>
+#ifdef HAVE_CUDA
+#include "edit/operators/geometry/cuda_geometry_ops.hpp"
+#endif
 
 namespace puerhlab {
 namespace {
@@ -203,10 +207,12 @@ void CropRotateOp::ApplyGPU(std::shared_ptr<ImageBuffer> input) {
   cv::Size out_size;
   cv::Mat  matrix = BuildRotatedCropMatrix(width, height, crop_rect, angle_degrees, out_size);
   cv::cuda::GpuMat rotated_crop;
-  cv::cuda::createContinuous(out_size.height, out_size.width, img.type(), rotated_crop);
-  cv::cuda::warpAffine(img, rotated_crop, matrix, out_size, cv::INTER_LINEAR | cv::WARP_INVERSE_MAP,
-                       cv::BORDER_CONSTANT, MakeWarpBorderScalar(img.channels()));
-  img = rotated_crop;
+#ifdef HAVE_CUDA
+  CUDA::WarpAffineLinear(img, rotated_crop, matrix, out_size, MakeWarpBorderScalar(img.channels()));
+#else
+  throw std::runtime_error("CropRotateOp::ApplyGPU requires HAVE_CUDA");
+#endif
+  img = std::move(rotated_crop);
 }
 
 auto CropRotateOp::GetParams() const -> nlohmann::json {

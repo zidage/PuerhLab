@@ -49,6 +49,18 @@ __global__ void Rotate90CCWKernel(cv::cuda::PtrStepSz<T> src, cv::cuda::PtrStepS
 }
 
 template <typename T>
+__global__ void Rotate180Kernel(cv::cuda::PtrStepSz<T> src, cv::cuda::PtrStepSz<T> dst) {
+  const int x = blockIdx.x * blockDim.x + threadIdx.x;
+  const int y = blockIdx.y * blockDim.y + threadIdx.y;
+
+  if (x >= dst.cols || y >= dst.rows) return;
+
+  const int src_row = src.rows - 1 - y;
+  const int src_col = src.cols - 1 - x;
+  dst(y, x)         = src(src_row, src_col);
+}
+
+template <typename T>
 static void Rotate90CW_Impl(const cv::cuda::GpuMat& src, cv::cuda::GpuMat& dst,
                             cv::cuda::Stream& stream) {
   dst.create(src.cols, src.rows, src.type());
@@ -72,7 +84,43 @@ static void Rotate90CCW_Impl(const cv::cuda::GpuMat& src, cv::cuda::GpuMat& dst,
   CUDA_CHECK(cudaGetLastError());
 }
 
+template <typename T>
+static void Rotate180_Impl(const cv::cuda::GpuMat& src, cv::cuda::GpuMat& dst,
+                           cv::cuda::Stream& stream) {
+  dst.create(src.rows, src.cols, src.type());
+  cudaStream_t cuda_stream = cv::cuda::StreamAccessor::getStream(stream);
+
+  const dim3 block(32, 8);
+  const dim3 grid((dst.cols + block.x - 1) / block.x, (dst.rows + block.y - 1) / block.y);
+  Rotate180Kernel<T><<<grid, block, 0, cuda_stream>>>(src, dst);
+  CUDA_CHECK(cudaGetLastError());
+}
+
 }  // namespace
+
+void Rotate180(cv::cuda::GpuMat& img) {
+  if (img.empty()) return;
+
+  cv::cuda::Stream stream;
+  cv::cuda::GpuMat out;
+
+  switch (img.type()) {
+    case CV_32FC4:
+      Rotate180_Impl<float4>(img, out, stream);
+      break;
+    case CV_32FC3:
+      Rotate180_Impl<float3>(img, out, stream);
+      break;
+    case CV_32FC1:
+      Rotate180_Impl<float>(img, out, stream);
+      break;
+    default:
+      CV_Error(cv::Error::StsUnsupportedFormat, "CUDA::Rotate180: unsupported type");
+  }
+
+  stream.waitForCompletion();
+  img = out;
+}
 
 void Rotate90CW(cv::cuda::GpuMat& img) {
   if (img.empty()) return;
@@ -86,6 +134,9 @@ void Rotate90CW(cv::cuda::GpuMat& img) {
       break;
     case CV_32FC3:
       Rotate90CW_Impl<float3>(img, out, stream);
+      break;
+    case CV_32FC1:
+      Rotate90CW_Impl<float>(img, out, stream);
       break;
     default:
       CV_Error(cv::Error::StsUnsupportedFormat, "CUDA::Rotate90CW: unsupported type");
@@ -108,6 +159,9 @@ void Rotate90CCW(cv::cuda::GpuMat& img) {
     case CV_32FC3:
       Rotate90CCW_Impl<float3>(img, out, stream);
       break;
+    case CV_32FC1:
+      Rotate90CCW_Impl<float>(img, out, stream);
+      break;
     default:
       CV_Error(cv::Error::StsUnsupportedFormat, "CUDA::Rotate90CCW: unsupported type");
   }
@@ -118,4 +172,3 @@ void Rotate90CCW(cv::cuda::GpuMat& img) {
 
 }  // namespace CUDA
 }  // namespace puerhlab
-

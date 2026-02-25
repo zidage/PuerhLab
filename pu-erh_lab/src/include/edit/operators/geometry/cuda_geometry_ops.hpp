@@ -15,16 +15,16 @@
 #pragma once
 
 #include <opencv2/core/cuda.hpp>
+#include <opencv2/core/mat.hpp>
 
 namespace puerhlab {
 namespace CUDA {
 
-// Rotate the image by 90 degrees on the GPU.
-// These are intentionally limited to the RAW pipeline's float images (CV_32FC3/CV_32FC4),
-// because OpenCV's cv::cuda::transpose does not support elemSize() == 12 or 16.
-void Rotate180(cv::cuda::GpuMat& img);
-void Rotate90CW(cv::cuda::GpuMat& img);
-void Rotate90CCW(cv::cuda::GpuMat& img);
+void ResizeAreaApprox(const cv::cuda::GpuMat& src, cv::cuda::GpuMat& dst, cv::Size dst_size);
+
+void WarpAffineLinear(const cv::cuda::GpuMat& src, cv::cuda::GpuMat& dst, const cv::Mat& matrix,
+                      cv::Size out_size, const cv::Scalar& border_value);
 
 }  // namespace CUDA
 }  // namespace puerhlab
+

@@ -2,22 +2,34 @@
 add_library(MemLeakDect INTERFACE leak_detector/memory_leak_detector.hpp)
 target_link_libraries(MemLeakDect INTERFACE GTest::gtest_main)
 
+set(PUERHLAB_TEST_OPENCV_MIN_DEPS
+    opencv_core
+    opencv_imgproc
+    opencv_imgcodecs
+)
+
 add_executable(SampleTest sample_test.cpp)
 target_link_libraries(SampleTest PRIVATE GTest::gtest_main)
 
 add_executable(SingleRawLoad raw/single_raw_decode_test.cpp)
 target_include_directories(SingleRawLoad PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
-target_link_libraries(SingleRawLoad PRIVATE GTest::gtest_main libraw::raw ${OpenCV_LIBS})
+target_link_libraries(SingleRawLoad PRIVATE GTest::gtest_main libraw::raw ${PUERHLAB_TEST_OPENCV_MIN_DEPS})
 target_compile_definitions(SingleRawLoad PRIVATE LIBRAW_NODLL)
 
 add_executable(SingleThumbnailLoad raw/single_raw_thumbnail_test.cpp)
 target_include_directories(SingleThumbnailLoad PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
-target_link_libraries(SingleThumbnailLoad PRIVATE GTest::gtest_main libraw::raw ${OpenCV_LIBS})
+target_link_libraries(SingleThumbnailLoad PRIVATE GTest::gtest_main libraw::raw ${PUERHLAB_TEST_OPENCV_MIN_DEPS})
 target_compile_definitions(SingleThumbnailLoad PRIVATE LIBRAW_NODLL)
 
 add_executable(ColorTempCudaSanityTest raw/color_temp_cuda_sanity_test.cpp)
 target_include_directories(ColorTempCudaSanityTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
 target_link_libraries(ColorTempCudaSanityTest PRIVATE GTest::gtest_main Operators RawProcessor)
+
+if(CUDAToolkit_FOUND)
+  add_executable(CudaImageGeometryOpsTest raw/cuda_image_geometry_ops_test.cpp)
+  target_include_directories(CudaImageGeometryOpsTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
+  target_link_libraries(CudaImageGeometryOpsTest PRIVATE GTest::gtest_main RawProcessorOp Operators ${PUERHLAB_TEST_OPENCV_MIN_DEPS})
+endif()
 
 # add_executable(ImageDecoderTest decoders/image_decoder_test.cpp)
 # target_include_directories(ImageDecoderTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
@@ -322,7 +334,6 @@ if(WIN32)
              \"${_third_party_duckdb_bin}\"
              \"${_vcpkg_bin_dir}\"
              \"${_qt6_bin_dir}\"
-             \"${_cuda_bin_dir}\"
              \${PUERHLAB_RUNTIME_DEP_DIRS}
          )
          file(GET_RUNTIME_DEPENDENCIES
@@ -341,11 +352,25 @@ if(WIN32)
                \"hvsifiletrust\\\\.dll\"
                \"pdmutilities\\\\.dll\"
                \"wpaxholder\\\\.dll\"
+               \"opencv_cudaarithm.*\\\\.dll\"
+               \"opencv_cudafilters.*\\\\.dll\"
+               \"opencv_cudaimgproc.*\\\\.dll\"
+               \"opencv_cudawarping.*\\\\.dll\"
+               \"cublasLt64_.*\\\\.dll\"
          )
          list(REMOVE_DUPLICATES _resolved)
          foreach(_dep IN LISTS _resolved)
              file(INSTALL DESTINATION \"\${_bindir}\" TYPE SHARED_LIBRARY FILES \"\${_dep}\")
          endforeach()
+         if(NOT \"${_cuda_bin_dir}\" STREQUAL \"\")
+             file(GLOB _cuda_runtime_dlls \"${_cuda_bin_dir}/cudart64_*.dll\")
+             foreach(_cuda_runtime_dll IN LISTS _cuda_runtime_dlls)
+                 file(INSTALL DESTINATION \"\${_bindir}\" TYPE SHARED_LIBRARY FILES \"\${_cuda_runtime_dll}\")
+             endforeach()
+             if(NOT _cuda_runtime_dlls)
+                 message(WARNING \"[pu-erh_lab] cudart64_*.dll not found in: ${_cuda_bin_dir}\")
+             endif()
+         endif()
          if(_unresolved)
              message(WARNING \"[pu-erh_lab] Unresolved runtime deps: \${_unresolved}\")
          endif()

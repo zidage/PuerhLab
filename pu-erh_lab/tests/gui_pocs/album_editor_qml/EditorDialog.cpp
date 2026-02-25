@@ -120,10 +120,10 @@ constexpr float                kColorTempPivotCct               = 6000.0f;
 constexpr float                kRotationSliderScale             = 100.0f;
 constexpr float                kCropRectSliderScale             = 1000.0f;
 constexpr float                kCropRectMinSize                 = 1e-4f;
-constexpr int                  kCdlWheelSliderUiMin             = -1000;
-constexpr int                  kCdlWheelSliderUiMax             = 1000;
-constexpr float                kCdlWheelSliderToParamScale      = 1000.0f;
-constexpr float                kCdlWheelStrengthDefault         = 0.25f;
+constexpr int                  kCdlWheelSliderUiMin             = -800;
+constexpr int                  kCdlWheelSliderUiMax             = 800;
+constexpr float                kCdlWheelSliderToParamScale      = 8000.0f;
+constexpr float                kCdlWheelStrengthDefault         = 0.10f;
 constexpr float                kCdlWheelEpsilon                 = 1e-6f;
 
 using HlsProfileArray = std::array<float, kHlsCandidateHues.size()>;
@@ -537,7 +537,7 @@ class CdlTrackballDiscWidget final : public QWidget {
   using PositionCallback = std::function<void(const QPointF&)>;
 
   explicit CdlTrackballDiscWidget(QWidget* parent = nullptr) : QWidget(parent) {
-    setMinimumSize(56, 56);
+    setMinimumSize(80, 80);
     setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
     setMouseTracking(true);
     setCursor(Qt::CrossCursor);
@@ -2214,8 +2214,8 @@ class EditorDialog final : public QDialog {
     {
       auto* wheel_frame = new QFrame(controls_);
       wheel_frame->setObjectName("EditorSection");
-      wheel_frame->setMaximumWidth(380);
-      wheel_frame->setMaximumHeight(340);
+      wheel_frame->setMaximumWidth(480);
+      wheel_frame->setMaximumHeight(440);
 
       auto* wheel_layout = new QVBoxLayout(wheel_frame);
       wheel_layout->setContentsMargins(10, 8, 10, 8);
@@ -2234,7 +2234,7 @@ class EditorDialog final : public QDialog {
                                bool invert_delta, CdlTrackballDiscWidget*& disc_widget,
                                QLabel*& offset_label, QSlider*& slider_widget) -> QWidget* {
         auto* unit = new QWidget(wheel_frame);
-        unit->setFixedWidth(140);
+        unit->setFixedWidth(180);
         auto* unit_layout = new QVBoxLayout(unit);
         unit_layout->setContentsMargins(0, 0, 0, 0);
         unit_layout->setSpacing(2);
@@ -2249,7 +2249,7 @@ class EditorDialog final : public QDialog {
         unit_layout->addWidget(title_label, 0, Qt::AlignHCenter);
 
         disc_widget = new CdlTrackballDiscWidget(unit);
-        disc_widget->setFixedSize(80, 80);
+        disc_widget->setFixedSize(120, 120);
         disc_widget->SetPosition(wheel_state.disc_position_);
         disc_widget->SetPositionChangedCallback(
             [this, &wheel_state, add_unity, invert_delta](const QPointF& pos) {
