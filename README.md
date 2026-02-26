@@ -73,26 +73,6 @@ Video: [BiliBili](https://www.bilibili.com/video/BV1bPcxzzEeM)
 - 500MB of free disk space for the installation and temporary working files.
 - 60+ MB for installation package and partial update support.
 
-## Known Issues (v0.1.0)
-
-### Pipeline
-
-- Only support **RGGB Bayer pattern** RAW files for now (kind of sucks). The supported camera list is consistent with LibRaw 0.22.0, excluding some Fujifilm X-Trans models and some non-RGGB models (e.g. Panasonic LUMIX S1R). The detailed list can be found in the [LibRaw documentation](https://www.libraw.org/supported-cameras). This also means that JPEG and TIFF files are not supported for importing and editing, but they can be exported from the app.
-- For some newer camera models, image can exhibit black margins, incorrect white balance, or even fail to load due to the lack of support in the current LibRaw version. This is expected to be resolved by integrating a newer LibRaw version in the future. Even though the image may be properly processed, exported file may still miss EXIF metadata due to the same reason.
-- The highlight reconstruction algorithm, which is adapted from darktable's "inpaint opposed" method, can produce visible artifacts in extreme cases (e.g., large blown-out areas). A "disable" option is planned for the future, and a more robust method may be implemented later on (depends on how capable the future LLM models are).
-- Version control still does not support branching yet, and the current implementation may fail when choosing between different versions with different LUT settings, where the LUT may not be properly applied to the preview. This can be fixed by reapplying the LUT or waiting for the future fix.
-- CDL color wheels may be a little bit too sensitive to mouse dragging.
-- When contrast is set to -100, the image will be completely black.
-- If you are editing a photo with a sunset scene, the color of the sky may not be ideal due to ACES's handling of out-of-gamut colors. This can be mitigatd by using "Default_LMT" LUT from [aces-looks](https://github.com/priikone/aces-looks), which emulates a ACES 1.3 look that "fixes" the sunset color issue.
-
-### Asset Management
-
-- The current UI does not support deleting a single image from the library nor does it support moving  images between folders. The underlying API does support these operations, but the UI for them is not implemented yet.
-- If you import a unsupported RAW file, it is possible that the library will be broken and fail to load in the future. So please make sure to only import supported RAW files for now. A more robust handling of unsupported files is planned for the future.
-- Because I don't have that many RAW photos, say, 10000+ to test with, the usability of the library under that scale is still unknown. If you have a large collection of RAW files and are willing to test the library with it, please feel free to try it out and report any issues you encounter.
-- Thumbnail generation may encounter some data race issues that can cause a abnormal look of the generated thumbnails. But the editing session and the exported image will not be affected.
-- If you are using a non-English Windows system and have _not_ enabled the "Use Unicode UTF-8 for worldwide language support" option in the system settings, it is possible that the app will crash when encountering non-ASCII file paths. If you can't enable the UTF-8 support due to compatibility concerns, please make sure to only use ASCII characters in the file paths for now, including the installation path, library path, each imported image's path and export path.
-
 ## Build from Source (Windows Only)
 
 This section is intentionally Windows-focused and mirrors the current build setup in `CMakeLists.txt` and `CMakePresets.json`.
