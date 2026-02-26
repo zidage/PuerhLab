@@ -64,7 +64,9 @@ void RawDecoder::Decode(std::vector<char>&& buffer, std::shared_ptr<Image> sourc
   raw_processor.imgdata.rawparams.use_dngsdk  = 1;
   raw_processor.unpack();
 
-  RawProcessor processor{{true, false, true, 0}, raw_processor.imgdata.rawdata, raw_processor};
+  const ExifDisplayMetaData* exif_hint = source_img ? &source_img->exif_display_ : nullptr;
+  RawProcessor processor{{true, false, true, 0}, raw_processor.imgdata.rawdata, raw_processor,
+                         exif_hint};
 
   auto         processed = processor.Process();
 

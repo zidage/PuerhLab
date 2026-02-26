@@ -16,9 +16,11 @@
 
 #include <opencv2/core/hal/interface.h>
 
+#include <cstdint>
 #include <memory>
 
 #include "decoders/processor/raw_processor.hpp"
+#include "image/metadata_extractor.hpp"
 #include "image/image_buffer.hpp"
 
 namespace puerhlab {
@@ -26,6 +28,9 @@ RawDecodeOp::RawDecodeOp(const nlohmann::json& params) { SetParams(params); }
 
 void RawDecodeOp::Apply(std::shared_ptr<ImageBuffer> input) {
   auto&                   buffer        = input->GetBuffer();
+  const ExifDisplayMetaData exif_hint =
+      MetadataExtractor::BufferToDisplayMetaData(
+          reinterpret_cast<const uint8_t*>(buffer.data()), buffer.size());
 
   std::unique_ptr<LibRaw> raw_processor = std::make_unique<LibRaw>();
   int                     ret = raw_processor->open_buffer((void*)buffer.data(), buffer.size());
@@ -40,7 +45,7 @@ void RawDecodeOp::Apply(std::shared_ptr<ImageBuffer> input) {
   switch (backend_) {
     case RawProcessBackend::PUERH: {
       raw_processor->unpack();
-      RawProcessor processor{params_, raw_processor->imgdata.rawdata, *raw_processor};
+      RawProcessor processor{params_, raw_processor->imgdata.rawdata, *raw_processor, &exif_hint};
 
       output = processor.Process();
       latest_runtime_context_ = processor.GetRuntimeColorContext();
@@ -151,6 +156,16 @@ void RawDecodeOp::SetGlobalParams(OperatorParams& params) const {
 
   params.raw_camera_make_ = latest_runtime_context_.camera_make_;
   params.raw_camera_model_ = latest_runtime_context_.camera_model_;
+  params.raw_lens_metadata_valid_ = latest_runtime_context_.lens_metadata_valid_;
+  params.raw_lens_make_           = latest_runtime_context_.lens_make_;
+  params.raw_lens_model_          = latest_runtime_context_.lens_model_;
+  params.raw_lens_focal_mm_       = latest_runtime_context_.focal_length_mm_;
+  params.raw_lens_aperture_f_     = latest_runtime_context_.aperture_f_number_;
+  params.raw_lens_focus_distance_m_ = latest_runtime_context_.focus_distance_m_;
+  params.raw_lens_focal_35mm_       = latest_runtime_context_.focal_35mm_mm_;
+  params.raw_lens_crop_factor_hint_ = latest_runtime_context_.crop_factor_hint_;
+
+  params.lens_calib_runtime_dirty_  = true;
   params.color_temp_runtime_dirty_ = true;
 }
 

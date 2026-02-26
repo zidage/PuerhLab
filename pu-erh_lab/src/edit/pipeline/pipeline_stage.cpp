@@ -33,7 +33,7 @@ auto IsResizeEffectivelyNoOp(const IOperatorBase& op, int width, int height) -> 
     return false;
   }
 
-  const auto& resize = params["resize"];
+  const auto& resize       = params["resize"];
   const bool  enable_scale = resize.value("enable_scale", false);
   const bool  enable_roi   = resize.value("enable_roi", false);
   const int   maximum_edge = resize.value("maximum_edge", 2048);
@@ -60,7 +60,7 @@ auto IsCropRotateEffectivelyNoOp(const IOperatorBase& op) -> bool {
     return true;
   }
 
-  const bool  enable_crop = crop_rotate.value("enable_crop", false);
+  const bool enable_crop = crop_rotate.value("enable_crop", false);
   if (!enable_crop) {
     return true;
   }
@@ -185,7 +185,7 @@ auto PipelineStage::ApplyStage(OperatorParams& global_params) -> std::shared_ptr
     case StageRole::DescriptorOnly:
       return ApplyDescriptorOnly();
     case StageRole::CpuOperators:
-      return ApplyCpuOperators();
+      return ApplyCpuOperators(global_params);
     case StageRole::GpuStreamable:
       return ApplyGpuStream(global_params);
     case StageRole::GpuOperators:
@@ -299,7 +299,7 @@ std::shared_ptr<ImageBuffer> PipelineStage::ApplyGpuOperators(OperatorParams& gl
     if (!HasEnabledOperator()) return input_img_;
 
     if (stage_ == PipelineStageName::Geometry_Adjustment) {
-      int width = 0;
+      int width  = 0;
       int height = 0;
       if (input_img_->gpu_data_valid_) {
         const auto& gpu_data = input_img_->GetGPUData();
@@ -348,8 +348,13 @@ std::shared_ptr<ImageBuffer> PipelineStage::ApplyGpuOperators(OperatorParams& gl
 
     for (const auto& op_entry : *operators_) {
       if (op_entry.second.enable_) {
-        op_entry.second.op_->ApplyGPU(current_img);
-        op_entry.second.op_->SetGlobalParams(global_params);
+        if (op_entry.first == OperatorType::LENS_CALIBRATION) {
+          op_entry.second.op_->SetGlobalParams(global_params);
+          op_entry.second.op_->ApplyGPU(current_img);
+        } else {
+          op_entry.second.op_->ApplyGPU(current_img);
+          op_entry.second.op_->SetGlobalParams(global_params);
+        }
       }
     }
     current_img->gpu_data_valid_ = true;
@@ -388,7 +393,7 @@ std::shared_ptr<ImageBuffer> PipelineStage::ApplyGpuOperators(OperatorParams& gl
   return output_cache_;
 }
 
-std::shared_ptr<ImageBuffer> PipelineStage::ApplyCpuOperators() {
+std::shared_ptr<ImageBuffer> PipelineStage::ApplyCpuOperators(OperatorParams& global_params) {
   auto execute_ops = [&]() {
     if (!HasEnabledOperator()) return input_img_;
     auto current_img = std::make_shared<ImageBuffer>(input_img_->Clone());

@@ -351,6 +351,7 @@ void AlbumBackend::SetupEditorPipeline() {
   editor_base_task_.options_.render_desc_.render_type_ = RenderType::FAST_PREVIEW;
 
   auto exec = editor_pipeline_guard_->pipeline_;
+  auto& global_params = exec->GetGlobalParams();
   auto& loading = exec->GetStage(PipelineStageName::Image_Loading);
 
   nlohmann::json decodeParams;
@@ -364,6 +365,20 @@ void AlbumBackend::SetupEditorPipeline() {
   decodeParams["raw"]["user_wb"]                = 7600.f;
   decodeParams["raw"]["backend"]                = "puerh";
   loading.SetOperator(OperatorType::RAW_DECODE, decodeParams);
+  loading.SetOperator(OperatorType::LENS_CALIBRATION,
+                      {{"lens_calib",
+                        {{"enabled", true},
+                         {"apply_vignetting", true},
+                         {"apply_distortion", true},
+                         {"apply_tca", true},
+                         {"apply_crop", true},
+                         {"auto_scale", true},
+                         {"use_user_scale", false},
+                         {"user_scale", 1.0f},
+                         {"projection_enabled", false},
+                         {"target_projection", "unknown"},
+                         {"lens_profile_db_path", "src/config/lens_calib"}}}},
+                      global_params);
 
   exec->SetExecutionStages();
 }

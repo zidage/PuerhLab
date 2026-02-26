@@ -29,6 +29,15 @@
 #include "type/type.hpp"
 
 namespace puerhlab {
+namespace {
+auto RationalToFloat(const Exiv2::Rational& value) -> float {
+  if (value.second == 0) {
+    return 0.0f;
+  }
+  return static_cast<float>(value.first) / static_cast<float>(value.second);
+}
+}  // namespace
+
 void GetDisplayMetadataFromExif(Exiv2::ExifData& exif_data, ExifDisplayMetaData& display_metadata) {
   if (exif_data.empty()) {
     return;
@@ -46,13 +55,18 @@ void GetDisplayMetadataFromExif(Exiv2::ExifData& exif_data, ExifDisplayMetaData&
     display_metadata.lens_make_ = exif_data["Exif.Photo.LensMake"].toString();
   }
   if (exif_data.findKey(Exiv2::ExifKey("Exif.Photo.FNumber")) != exif_data.end()) {
-    auto aperture_rational = exif_data["Exif.Photo.FNumber"].toRational();
-    display_metadata.aperture_ =
-        static_cast<float>(aperture_rational.first) / aperture_rational.second;
+    display_metadata.aperture_ = RationalToFloat(exif_data["Exif.Photo.FNumber"].toRational());
   }
   if (exif_data.findKey(Exiv2::ExifKey("Exif.Photo.FocalLength")) != exif_data.end()) {
-    auto exposure_rational = exif_data["Exif.Photo.FocalLength"].toRational();
-    display_metadata.focal_ = static_cast<float>(exposure_rational.first) / exposure_rational.second;
+    display_metadata.focal_ = RationalToFloat(exif_data["Exif.Photo.FocalLength"].toRational());
+  }
+  if (exif_data.findKey(Exiv2::ExifKey("Exif.Photo.FocalLengthIn35mmFilm")) != exif_data.end()) {
+    display_metadata.focal_35mm_ =
+        static_cast<float>(exif_data["Exif.Photo.FocalLengthIn35mmFilm"].toInt64());
+  }
+  if (exif_data.findKey(Exiv2::ExifKey("Exif.Photo.SubjectDistance")) != exif_data.end()) {
+    display_metadata.focus_distance_m_ =
+        RationalToFloat(exif_data["Exif.Photo.SubjectDistance"].toRational());
   }
   if (exif_data.findKey(Exiv2::ExifKey("Exif.Photo.ISOSpeedRatings")) != exif_data.end()) {
     display_metadata.iso_ = exif_data["Exif.Photo.ISOSpeedRatings"].toInt64();

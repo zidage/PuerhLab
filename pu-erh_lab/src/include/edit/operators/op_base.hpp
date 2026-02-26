@@ -24,6 +24,7 @@
 #include "image/image_buffer.hpp"
 #include "json.hpp"
 #include "op_kernel.hpp"
+#include "edit/operators/geometry/lens_calib_runtime.hpp"
 #include "type/type.hpp"
 #include "utils/color_utils.hpp"
 
@@ -173,6 +174,22 @@ struct OperatorParams {
   float                        raw_rgb_cam_[9]            = {};
   std::string                  raw_camera_make_           = {};
   std::string                  raw_camera_model_          = {};
+  bool                         raw_lens_metadata_valid_   = false;
+  std::string                  raw_lens_make_             = {};
+  std::string                  raw_lens_model_            = {};
+  float                        raw_lens_focal_mm_         = 0.0f;
+  float                        raw_lens_aperture_f_       = 0.0f;
+  float                        raw_lens_focus_distance_m_ = 0.0f;
+  float                        raw_lens_focal_35mm_       = 0.0f;
+  float                        raw_lens_crop_factor_hint_ = 0.0f;
+
+  bool                         lens_calib_enabled_          = true;
+  bool                         lens_calib_runtime_dirty_    = true;
+  bool                         lens_calib_runtime_valid_    = false;
+  bool                         lens_calib_runtime_failed_   = false;
+  bool                         lens_calib_cache_key_valid_  = false;
+  uint64_t                     lens_calib_cache_key_        = 0;
+  LensCalibGpuParams           lens_calib_runtime_params_   = {};
 
   bool                         color_temp_runtime_dirty_  = true;
   bool                         color_temp_matrices_valid_ = false;

@@ -144,6 +144,7 @@ set(OPERATORS_SRCS
 if(CUDAToolkit_FOUND)
     list(APPEND OPERATORS_SRCS
         edit/operators/geometry/cuda_geometry_ops.cu
+        edit/operators/geometry/cuda_lens_calib_ops.cu
     )
 endif()
 
@@ -470,4 +471,18 @@ add_custom_command(TARGET puerhlab_main POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different "${PUERHLAB_MAIN_FONT_SRC}" "$<TARGET_FILE_DIR:puerhlab_main>/fonts/main_Inter.ttf"
     VERBATIM
 )
+
+if(WIN32)
+    # The app-local dependency script may copy a different lensfun.dll from vcpkg.
+    # Force the runtime DLL that matches the import library used by this project.
+    set(PUERHLAB_MAIN_LENSFUN_DLL "${PUERHLAB_LENSFUN_ROOT}/bin/lensfun.dll")
+    if(EXISTS "${PUERHLAB_MAIN_LENSFUN_DLL}")
+        add_custom_command(TARGET puerhlab_main POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${PUERHLAB_MAIN_LENSFUN_DLL}"
+                "$<TARGET_FILE_DIR:puerhlab_main>/lensfun.dll"
+            VERBATIM
+        )
+    endif()
+endif()
 

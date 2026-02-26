@@ -291,7 +291,7 @@ class PipelineStage {
   bool                         HasEnabledOperator() const;
 
   std::shared_ptr<ImageBuffer> ApplyDescriptorOnly();
-  std::shared_ptr<ImageBuffer> ApplyCpuOperators();
+  std::shared_ptr<ImageBuffer> ApplyCpuOperators(OperatorParams& global_params);
   std::shared_ptr<ImageBuffer> ApplyGpuOperators(OperatorParams& global_params);
   std::shared_ptr<ImageBuffer> ApplyGpuStream(OperatorParams& global_params);
 

@@ -3920,7 +3920,7 @@ class EditorDialog final : public QDialog {
     auto           exec           = pipeline_guard_->pipeline_;
     // exec->SetPreviewMode(true);
 
-    // auto& global_params = exec->GetGlobalParams();
+    auto&          global_params = exec->GetGlobalParams();
     auto&          loading        = exec->GetStage(PipelineStageName::Image_Loading);
     nlohmann::json decode_params;
 #ifdef HAVE_CUDA
@@ -3933,6 +3933,20 @@ class EditorDialog final : public QDialog {
     decode_params["raw"]["user_wb"]                = 7600.f;
     decode_params["raw"]["backend"]                = "puerh";
     loading.SetOperator(OperatorType::RAW_DECODE, decode_params);
+    loading.SetOperator(OperatorType::LENS_CALIBRATION,
+                        {{"lens_calib",
+                          {{"enabled", true},
+                           {"apply_vignetting", true},
+                           {"apply_distortion", true},
+                           {"apply_tca", true},
+                           {"apply_crop", true},
+                           {"auto_scale", true},
+                           {"use_user_scale", false},
+                           {"user_scale", 1.0f},
+                           {"projection_enabled", false},
+                           {"target_projection", "unknown"},
+                           {"lens_profile_db_path", "src/config/lens_calib"}}}},
+                        global_params);
 
     // auto& basic         = exec->GetStage(PipelineStageName::Basic_Adjustment);
     // basic.SetOperator(OperatorType::EXPOSURE, {{"exposure", 0.0f}}, global_params);

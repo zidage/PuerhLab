@@ -359,6 +359,20 @@ void CPUPipelineExecutor::SetTemplateParams() {
   decode_params["raw"]["backend"]                = "puerh";
   raw_stage.SetOperator(OperatorType::RAW_DECODE, decode_params);
 
+  nlohmann::json lens_params;
+  lens_params["lens_calib"] = {{"enabled", true},
+                               {"apply_vignetting", true},
+                               {"apply_distortion", true},
+                               {"apply_tca", true},
+                               {"apply_crop", true},
+                               {"auto_scale", true},
+                               {"use_user_scale", false},
+                               {"user_scale", 1.0f},
+                               {"projection_enabled", false},
+                               {"target_projection", "unknown"},
+                               {"lens_profile_db_path", "src/config/lens_calib"}};
+  raw_stage.SetOperator(OperatorType::LENS_CALIBRATION, lens_params, global_params);
+
   nlohmann::json color_temp_params;
   auto&          to_ws_stage = GetStage(PipelineStageName::To_WorkingSpace);
   color_temp_params["color_temp"] = {{"mode", "as_shot"}, {"cct", 6500.0f}, {"tint", 0.0f}};

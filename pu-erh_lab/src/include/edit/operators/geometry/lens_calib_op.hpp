@@ -13,33 +13,53 @@
 //  limitations under the License.
 
 #pragma once
+
+#include <filesystem>
+#include <string>
+
 #include "edit/operators/op_base.hpp"
 
 namespace puerhlab {
 struct InputMeta {
-  std::string cam_maker_;
-  std::string cam_model_;
-
-  std::string lens_maker_;
-  std::string lens_model_;
-
-  float       focal_length_mm_;
-  float       aperture_f_number_;
-  float       distance_m_;
-  float       sensor_width_mm_;  // optional; used only for fallback crop-factor estimation
+  std::string cam_maker_         = {};
+  std::string cam_model_         = {};
+  std::string lens_maker_        = {};
+  std::string lens_model_        = {};
+  float       focal_length_mm_   = 0.0f;
+  float       aperture_f_number_ = 0.0f;
+  float       distance_m_        = 0.0f;
+  float       focal_35mm_mm_     = 0.0f;
+  float       crop_factor_hint_  = 0.0f;
 };
 
 class LensCalibOp : public OperatorBase<LensCalibOp> {
  private:
-  InputMeta             input_meta_;
-
+  mutable InputMeta     input_meta_;
   std::filesystem::path lens_profile_db_path_;
+  bool                  enabled_             = true;
+  bool                  apply_vignetting_    = true;
+  bool                  apply_distortion_    = true;
+  bool                  apply_tca_           = true;
+  bool                  apply_crop_          = true;
+  bool                  auto_scale_          = true;
+  bool                  use_user_scale_      = false;
+  float                 user_scale_          = 1.0f;
+  bool                  projection_enabled_  = false;
+  std::string           target_projection_   = "unknown";
+  bool                  low_precision_preview_ = false;
+  mutable LensCalibGpuParams resolved_params_ = {};
+  mutable bool            has_resolved_params_ = false;
 
-  bool                  enabled_ = true;
+  static auto           ProjectionFromString(const std::string& text)
+      -> LensCalibProjectionType;
+  static auto           ProjectionToString(LensCalibProjectionType projection) -> std::string;
+
+  void                  ResolveRuntime(OperatorParams& params) const;
+  auto                  BuildRuntimeCacheKey(const OperatorParams& params) const -> uint64_t;
 
  public:
   static constexpr PriorityLevel     priority_level_    = 1;
-  static constexpr PipelineStageName affiliation_stage_ = PipelineStageName::Geometry_Adjustment;
+  static constexpr PipelineStageName affiliation_stage_ = PipelineStageName::Image_Loading;
   static constexpr std::string_view  canonical_name_    = "LensCalibration";
   static constexpr std::string_view  script_name_       = "lens_calib";
   static constexpr OperatorType      operator_type_     = OperatorType::LENS_CALIBRATION;

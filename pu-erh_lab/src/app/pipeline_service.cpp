@@ -86,6 +86,29 @@ void EnsureDefaultColorTemp(CPUPipelineExecutor& exec) {
   to_ws_stage.SetOperator(OperatorType::COLOR_TEMP, color_temp_params, global_params);
 }
 
+void EnsureDefaultLensCalib(CPUPipelineExecutor& exec) {
+  auto& global_params = exec.GetGlobalParams();
+  auto& loading_stage = exec.GetStage(PipelineStageName::Image_Loading);
+
+  if (loading_stage.GetOperator(OperatorType::LENS_CALIBRATION).has_value()) {
+    return;
+  }
+
+  nlohmann::json lens_params;
+  lens_params["lens_calib"] = {{"enabled", true},
+                               {"apply_vignetting", true},
+                               {"apply_distortion", true},
+                               {"apply_tca", true},
+                               {"apply_crop", true},
+                               {"auto_scale", true},
+                               {"use_user_scale", false},
+                               {"user_scale", 1.0f},
+                               {"projection_enabled", false},
+                               {"target_projection", "unknown"},
+                               {"lens_profile_db_path", "src/config/lens_calib"}};
+  loading_stage.SetOperator(OperatorType::LENS_CALIBRATION, lens_params, global_params);
+}
+
 void ResyncGlobalParamsFromOperators(CPUPipelineExecutor& exec) {
   // Global params are consumed/mutated during GPU parameter conversion (dirty flags cleared).
   // Cached pipelines also release GPU resources when returned to the service.
@@ -170,6 +193,7 @@ auto PipelineMgmtService::LoadPipeline(sl_element_id_t id) -> std::shared_ptr<Pi
 
           EnsureDefaultOutputTransform(*it->second->pipeline_);
           EnsureDefaultColorTemp(*it->second->pipeline_);
+          EnsureDefaultLensCalib(*it->second->pipeline_);
           ResyncGlobalParamsFromOperators(*it->second->pipeline_);
         }
 
@@ -202,6 +226,7 @@ auto PipelineMgmtService::LoadPipeline(sl_element_id_t id) -> std::shared_ptr<Pi
 
     EnsureDefaultOutputTransform(*pipeline);
     EnsureDefaultColorTemp(*pipeline);
+    EnsureDefaultLensCalib(*pipeline);
     ResyncGlobalParamsFromOperators(*pipeline);
 
     pipeline->SetExecutionStages(); // TODO: Use service as the only way to set/reset execution stages

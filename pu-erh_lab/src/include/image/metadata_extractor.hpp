@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <cstddef>
+#include <cstdint>
 #include <exiv2/exif.hpp>
 #include <exiv2/exiv2.hpp>
 #include <json.hpp>
@@ -31,6 +33,8 @@ class MetadataExtractor {
    * @return Exiv2::Image::UniquePtr
    */
   static auto ExtractEXIF(const image_path_t& image_path) -> Exiv2::Image::UniquePtr;
+  static auto ExtractEXIFFromBuffer(const uint8_t* buffer, size_t size)
+      -> Exiv2::Image::UniquePtr;
 
   /**
    * @brief Convert EXIF data to JSON format
@@ -47,6 +51,8 @@ class MetadataExtractor {
    * @return ExifDisplayMetaData
    */
   static auto EXIFToDisplayMetaData(const Exiv2::Image::UniquePtr& exif_data)
+      -> ExifDisplayMetaData;
+  static auto BufferToDisplayMetaData(const uint8_t* buffer, size_t size)
       -> ExifDisplayMetaData;
 
   /**

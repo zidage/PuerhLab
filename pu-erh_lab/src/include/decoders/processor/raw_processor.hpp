@@ -26,6 +26,8 @@
 #include "type/type.hpp"
 
 namespace puerhlab {
+class ExifDisplayMetaData;
+
 struct RawParams {
   bool     cuda_                   = false;
   bool     highlights_reconstruct_ = false;
@@ -46,6 +48,14 @@ struct RawRuntimeColorContext {
   float             rgb_cam_[9]              = {};
   std::string       camera_make_             = {};
   std::string       camera_model_            = {};
+  bool              lens_metadata_valid_     = false;
+  std::string       lens_make_               = {};
+  std::string       lens_model_              = {};
+  float             focal_length_mm_         = 0.0f;
+  float             aperture_f_number_       = 0.0f;
+  float             focus_distance_m_        = 0.0f;
+  float             focal_35mm_mm_           = 0.0f;
+  float             crop_factor_hint_        = 0.0f;
 };
 
 class RawProcessor {
@@ -56,6 +66,7 @@ class RawProcessor {
 
   const libraw_rawdata_t& raw_data_;
   LibRaw&                 raw_processor_;
+  const ExifDisplayMetaData* metadata_hint_ = nullptr;
 
   void                    SetDecodeRes();
 
@@ -99,7 +110,8 @@ class RawProcessor {
 
  public:
   RawProcessor() = delete;
-  RawProcessor(const RawParams& params, const libraw_rawdata_t& rawdata, LibRaw& raw_processor);
+  RawProcessor(const RawParams& params, const libraw_rawdata_t& rawdata, LibRaw& raw_processor,
+               const ExifDisplayMetaData* metadata_hint = nullptr);
   auto Process() -> ImageBuffer;
   auto GetRuntimeColorContext() const -> const RawRuntimeColorContext& { return runtime_color_context_; }
 };
