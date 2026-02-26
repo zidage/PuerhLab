@@ -83,6 +83,7 @@ Video: [BiliBili](https://www.bilibili.com/video/BV1bPcxzzEeM)
 - Version control still does not support branching yet, and the current implementation may fail when choosing between different versions with different LUT settings, where the LUT may not be properly applied to the preview. This can be fixed by reapplying the LUT or waiting for the future fix.
 - CDL color wheels may be a little bit too sensitive to mouse dragging.
 - When contrast is set to -100, the image will be completely black.
+- If you are editing a photo with a sunset scene, the color of the sky may not be ideal due to ACES's handling of out-of-gamut colors. This can be mitigatd by using "Default_LMT" LUT from [aces-looks](https://github.com/priikone/aces-looks), which emulates a ACES 1.3 look that "fixes" the sunset color issue.
 
 ### Asset Management
 
