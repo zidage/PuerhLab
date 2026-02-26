@@ -44,7 +44,7 @@ Dialog {
             exportOutDir.text = albumBackend.defaultExportFolder
         }
         ensurePreviewRequested()
-        albumBackend.resetExportState()
+        albumBackend.ResetExportState()
         exportTriggered = false
     }
     onClosed: exportTriggered = false

@@ -168,7 +168,7 @@ Debug 构建后常用可执行文件路径：
 .\build\debug\pu-erh_lab\tests\CompleteUIDemo.exe
 .\build\debug\pu-erh_lab\tests\ThumbnailAlbumQtDemo.exe
 .\build\debug\pu-erh_lab\tests\ImagePreview.exe
-.\build\debug\pu-erh_lab\tests\gui_pocs\album_editor_qml\AlbumEditorQmlDemo.exe
+.\build\debug\pu-erh_lab\src\puerhlab_main.exe
 ```
 
 ### 5）测试与开发工具

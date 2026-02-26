@@ -8,7 +8,7 @@
 
 #include "sleeve/sleeve_filter/filter_combo.hpp"
 
-namespace puerhlab::demo {
+namespace puerhlab::ui {
 
 enum class FilterValueKind { String, Int64, Double, DateTime };
 
@@ -42,28 +42,28 @@ class FilterRuleModel final : public QAbstractListModel {
   auto flags(const QModelIndex& index) const -> Qt::ItemFlags override;
   auto roleNames() const -> QHash<int, QByteArray> override;
 
-  Q_INVOKABLE void addRule();
-  Q_INVOKABLE void removeRule(int index);
-  Q_INVOKABLE void clearAndReset();
-  Q_INVOKABLE void setField(int index, int fieldValue);
-  Q_INVOKABLE void setOp(int index, int opValue);
-  Q_INVOKABLE void setValue(int index, const QString& value);
-  Q_INVOKABLE void setValue2(int index, const QString& value);
+  Q_INVOKABLE void AddRule();
+  Q_INVOKABLE void RemoveRule(int index);
+  Q_INVOKABLE void ClearAndReset();
+  Q_INVOKABLE void SetField(int index, int fieldValue);
+  Q_INVOKABLE void SetOp(int index, int opValue);
+  Q_INVOKABLE void SetValue(int index, const QString& value);
+  Q_INVOKABLE void SetValue2(int index, const QString& value);
 
-  auto fieldOptions() const -> QVariantList;
-  static auto compareOptionsForField(FilterField field) -> QVariantList;
-  static auto placeholderForField(FilterField field) -> QString;
-  static auto kindForField(FilterField field) -> FilterValueKind;
-  static auto isBetween(CompareOp op) -> bool;
+  auto FieldOptions() const -> QVariantList;
+  static auto CompareOptionsForField(FilterField field) -> QVariantList;
+  static auto PlaceholderForField(FilterField field) -> QString;
+  static auto KindForField(FilterField field) -> FilterValueKind;
+  static auto IsBetween(CompareOp op) -> bool;
 
-  auto rules() const -> const std::vector<Rule>& { return rules_; }
+  auto Rules() const -> const std::vector<Rule>& { return rules_; }
 
  private:
-  static auto allowedOpsForKind(FilterValueKind kind) -> std::vector<CompareOp>;
-  static auto defaultOpForField(FilterField field) -> CompareOp;
-  static auto opAllowedForField(FilterField field, CompareOp op) -> bool;
+  static auto AllowedOpsForKind(FilterValueKind kind) -> std::vector<CompareOp>;
+  static auto DefaultOpForField(FilterField field) -> CompareOp;
+  static auto OpAllowedForField(FilterField field, CompareOp op) -> bool;
 
   std::vector<Rule> rules_{};
 };
 
-}  // namespace puerhlab::demo
+}  // namespace puerhlab::ui

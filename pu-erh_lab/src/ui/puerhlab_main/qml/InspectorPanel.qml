@@ -214,9 +214,9 @@ ScrollView {
                             }
 
                             function syncSingleValue(sliderValue) {
-                                albumBackend.setRuleValue(ruleRow, rangeText(sliderValue));
+                                albumBackend.SetRuleValue(ruleRow, rangeText(sliderValue));
                                 if (value2Text.length > 0) {
-                                    albumBackend.setRuleValue2(ruleRow, "");
+                                    albumBackend.SetRuleValue2(ruleRow, "");
                                 }
                             }
 
@@ -236,19 +236,19 @@ ScrollView {
                                     const lowText = rangeText(low);
                                     const highText = rangeText(high);
                                     if (valueText !== lowText) {
-                                        albumBackend.setRuleValue(ruleRow, lowText);
+                                        albumBackend.SetRuleValue(ruleRow, lowText);
                                     }
                                     if (value2Text !== highText) {
-                                        albumBackend.setRuleValue2(ruleRow, highText);
+                                        albumBackend.SetRuleValue2(ruleRow, highText);
                                     }
                                 } else {
                                     const value = parsedRangeValue(valueText, defaultSingleValue());
                                     const valueAsText = rangeText(value);
                                     if (valueText !== valueAsText) {
-                                        albumBackend.setRuleValue(ruleRow, valueAsText);
+                                        albumBackend.SetRuleValue(ruleRow, valueAsText);
                                     }
                                     if (value2Text.length > 0) {
-                                        albumBackend.setRuleValue2(ruleRow, "");
+                                        albumBackend.SetRuleValue2(ruleRow, "");
                                     }
                                 }
                             }
@@ -261,8 +261,8 @@ ScrollView {
                                     low = high;
                                     high = temp;
                                 }
-                                albumBackend.setRuleValue(ruleRow, rangeText(low));
-                                albumBackend.setRuleValue2(ruleRow, rangeText(high));
+                                albumBackend.SetRuleValue(ruleRow, rangeText(low));
+                                albumBackend.SetRuleValue2(ruleRow, rangeText(high));
                             }
 
                             Component.onCompleted: initializeRangeRule()
@@ -284,7 +284,7 @@ ScrollView {
                                         valueRole: "value"
                                         currentIndex: root.idxByValue(model, fieldValue)
                                         onActivated: function () {
-                                            albumBackend.setRuleField(ruleRow, currentValue);
+                                            albumBackend.SetRuleField(ruleRow, currentValue);
                                         }
                                         font.pixelSize: 12
                                         delegate: ItemDelegate {
@@ -307,7 +307,7 @@ ScrollView {
                                         valueRole: "value"
                                         currentIndex: root.idxByValue(opOptions, opValue)
                                         onActivated: function () {
-                                            albumBackend.setRuleOp(ruleRow, currentValue);
+                                            albumBackend.SetRuleOp(ruleRow, currentValue);
                                         }
                                         font.pixelSize: 12
                                         delegate: ItemDelegate {
@@ -326,7 +326,7 @@ ScrollView {
                                         width: parent.width * 0.18
                                         text: "X"
                                         onClicked: function () {
-                                            albumBackend.removeRule(ruleRow);
+                                            albumBackend.RemoveRule(ruleRow);
                                         }
                                     }
                                 }
@@ -339,7 +339,7 @@ ScrollView {
                                         text: valueText
                                         placeholderText: placeholder
                                         onTextEdited: function (editedText) {
-                                            albumBackend.setRuleValue(ruleRow, editedText);
+                                            albumBackend.SetRuleValue(ruleRow, editedText);
                                         }
                                     }
                                     TextField {
@@ -348,7 +348,7 @@ ScrollView {
                                         text: value2Text
                                         placeholderText: placeholder
                                         onTextEdited: function (editedText) {
-                                            albumBackend.setRuleValue2(ruleRow, editedText);
+                                            albumBackend.SetRuleValue2(ruleRow, editedText);
                                         }
                                     }
                                 }
@@ -403,7 +403,7 @@ ScrollView {
 
                     Button {
                         text: "Add rule"
-                        onClicked: albumBackend.addRule()
+                        onClicked: albumBackend.AddRule()
                     }
                     RowLayout {
                         Layout.fillWidth: true
@@ -411,7 +411,7 @@ ScrollView {
                             text: "Clear"
                             onClicked: {
                                 joinCombo.currentIndex = 0;
-                                albumBackend.clearFilters();
+                                albumBackend.ClearFilters();
                             }
                         }
                         Item {
@@ -419,7 +419,7 @@ ScrollView {
                         }
                         Button {
                             text: "Apply"
-                            onClicked: albumBackend.applyFilters(joinCombo.currentValue)
+                            onClicked: albumBackend.ApplyFilters(joinCombo.currentValue)
                         }
                     }
                     Label {

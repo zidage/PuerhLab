@@ -407,3 +407,67 @@ if(CUDAToolkit_FOUND)
     target_compile_definitions(EditViewer PUBLIC HAVE_CUDA)
 endif()
 
+find_package(Qt6 REQUIRED COMPONENTS Quick Qml QuickControls2 QuickDialogs2 Widgets QuickEffects)
+
+add_executable(puerhlab_main
+    ui/puerhlab_main/main.cpp
+    ui/puerhlab_main/album_backend/album_backend.cpp
+    ui/puerhlab_main/album_backend/filter_rule_model.cpp
+    ui/puerhlab_main/editor_dialog/editor_dialog.cpp
+    include/ui/puerhlab_main/album_backend/album_backend.hpp
+    include/ui/puerhlab_main/album_backend/filter_rule_model.hpp
+    include/ui/puerhlab_main/editor_dialog/editor_dialog.hpp
+)
+
+target_include_directories(puerhlab_main
+    PRIVATE
+        ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/ui/puerhlab_main
+        ${CMAKE_CURRENT_SOURCE_DIR}/ui/puerhlab_main/album_backend
+        ${CMAKE_CURRENT_SOURCE_DIR}/ui/puerhlab_main/editor_dialog
+)
+
+target_link_libraries(puerhlab_main
+    PRIVATE
+        Qt6::Quick
+        Qt6::Qml
+        Qt6::QuickControls2
+        Qt6::QuickDialogs2
+        Qt6::Widgets
+        Qt6::QuickEffects
+        ProjectService
+        ImportService
+        ExportService
+        PipelineMgmtService
+        EditHistoryMgmtService
+        ThumbnailService
+        SleeveFilterService
+        FSService
+        EditPipeline
+        EditViewer
+)
+
+if(WIN32)
+    target_link_libraries(puerhlab_main PRIVATE easy_profiler)
+endif()
+
+qt_add_qml_module(puerhlab_main
+    URI PuerhLab.Main
+    VERSION 1.0
+    QML_FILES
+        ui/puerhlab_main/qml/Main.qml
+        ui/puerhlab_main/qml/AlbumExportDialog.qml
+        ui/puerhlab_main/qml/InspectorPanel.qml
+        ui/puerhlab_main/qml/ThumbnailGridView.qml
+        ui/puerhlab_main/qml/ThumbnailListView.qml
+)
+
+target_compile_definitions(puerhlab_main PRIVATE PUERHLAB_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+
+set(PUERHLAB_MAIN_FONT_SRC "${CMAKE_SOURCE_DIR}/pu-erh_lab/src/config/fonts/main_Inter.ttf")
+add_custom_command(TARGET puerhlab_main POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:puerhlab_main>/fonts"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${PUERHLAB_MAIN_FONT_SRC}" "$<TARGET_FILE_DIR:puerhlab_main>/fonts/main_Inter.ttf"
+    VERBATIM
+)
+

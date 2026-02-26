@@ -1,8 +1,8 @@
-#include "FilterRuleModel.h"
+#include "ui/puerhlab_main/album_backend/filter_rule_model.hpp"
 
 #include <algorithm>
 
-namespace puerhlab::demo {
+namespace puerhlab::ui {
 namespace {
 
 auto ToOption(const QString& text, int value) -> QVariantMap {
@@ -38,11 +38,11 @@ auto FilterRuleModel::data(const QModelIndex& index, int role) const -> QVariant
     case Value2Role:
       return rule.value2;
     case ShowSecondValueRole:
-      return isBetween(rule.op);
+      return IsBetween(rule.op);
     case PlaceholderRole:
-      return placeholderForField(rule.field);
+      return PlaceholderForField(rule.field);
     case OpOptionsRole:
-      return compareOptionsForField(rule.field);
+      return CompareOptionsForField(rule.field);
     default:
       return {};
   }
@@ -55,16 +55,16 @@ auto FilterRuleModel::setData(const QModelIndex& index, const QVariant& value, i
 
   switch (role) {
     case FieldRole:
-      setField(index.row(), value.toInt());
+      SetField(index.row(), value.toInt());
       return true;
     case OpRole:
-      setOp(index.row(), value.toInt());
+      SetOp(index.row(), value.toInt());
       return true;
     case ValueRole:
-      setValue(index.row(), value.toString());
+      SetValue(index.row(), value.toString());
       return true;
     case Value2Role:
-      setValue2(index.row(), value.toString());
+      SetValue2(index.row(), value.toString());
       return true;
     default:
       return false;
@@ -90,14 +90,14 @@ auto FilterRuleModel::roleNames() const -> QHash<int, QByteArray> {
   };
 }
 
-void FilterRuleModel::addRule() {
+void FilterRuleModel::AddRule() {
   const int row = rowCount();
   beginInsertRows(QModelIndex(), row, row);
   rules_.push_back(Rule{});
   endInsertRows();
 }
 
-void FilterRuleModel::removeRule(int index) {
+void FilterRuleModel::RemoveRule(int index) {
   if (index < 0 || index >= rowCount()) {
     return;
   }
@@ -106,43 +106,43 @@ void FilterRuleModel::removeRule(int index) {
   endRemoveRows();
 }
 
-void FilterRuleModel::clearAndReset() {
+void FilterRuleModel::ClearAndReset() {
   beginResetModel();
   rules_.clear();
   rules_.push_back(Rule{});
   endResetModel();
 }
 
-void FilterRuleModel::setField(int index, int fieldValue) {
+void FilterRuleModel::SetField(int index, int fieldValue) {
   if (index < 0 || index >= rowCount()) {
     return;
   }
 
   auto& rule      = rules_[static_cast<size_t>(index)];
   rule.field      = static_cast<FilterField>(fieldValue);
-  if (!opAllowedForField(rule.field, rule.op)) {
-    rule.op = defaultOpForField(rule.field);
+  if (!OpAllowedForField(rule.field, rule.op)) {
+    rule.op = DefaultOpForField(rule.field);
   }
 
   emit dataChanged(createIndex(index, 0), createIndex(index, 0),
                    {FieldRole, OpRole, ShowSecondValueRole, PlaceholderRole, OpOptionsRole});
 }
 
-void FilterRuleModel::setOp(int index, int opValue) {
+void FilterRuleModel::SetOp(int index, int opValue) {
   if (index < 0 || index >= rowCount()) {
     return;
   }
 
   auto& rule = rules_[static_cast<size_t>(index)];
   rule.op    = static_cast<CompareOp>(opValue);
-  if (!opAllowedForField(rule.field, rule.op)) {
-    rule.op = defaultOpForField(rule.field);
+  if (!OpAllowedForField(rule.field, rule.op)) {
+    rule.op = DefaultOpForField(rule.field);
   }
 
   emit dataChanged(createIndex(index, 0), createIndex(index, 0), {OpRole, ShowSecondValueRole});
 }
 
-void FilterRuleModel::setValue(int index, const QString& value) {
+void FilterRuleModel::SetValue(int index, const QString& value) {
   if (index < 0 || index >= rowCount()) {
     return;
   }
@@ -155,7 +155,7 @@ void FilterRuleModel::setValue(int index, const QString& value) {
   emit dataChanged(createIndex(index, 0), createIndex(index, 0), {ValueRole});
 }
 
-void FilterRuleModel::setValue2(int index, const QString& value) {
+void FilterRuleModel::SetValue2(int index, const QString& value) {
   if (index < 0 || index >= rowCount()) {
     return;
   }
@@ -168,7 +168,7 @@ void FilterRuleModel::setValue2(int index, const QString& value) {
   emit dataChanged(createIndex(index, 0), createIndex(index, 0), {Value2Role});
 }
 
-auto FilterRuleModel::fieldOptions() const -> QVariantList {
+auto FilterRuleModel::FieldOptions() const -> QVariantList {
   return {
       ToOption("Camera Model", static_cast<int>(FilterField::ExifCameraModel)),
       ToOption("ISO", static_cast<int>(FilterField::ExifISO)),
@@ -180,8 +180,8 @@ auto FilterRuleModel::fieldOptions() const -> QVariantList {
   };
 }
 
-auto FilterRuleModel::compareOptionsForField(FilterField field) -> QVariantList {
-  const auto kind = kindForField(field);
+auto FilterRuleModel::CompareOptionsForField(FilterField field) -> QVariantList {
+  const auto kind = KindForField(field);
   if (kind == FilterValueKind::String) {
     return {
         ToOption("contains", static_cast<int>(CompareOp::CONTAINS)),
@@ -216,7 +216,7 @@ auto FilterRuleModel::compareOptionsForField(FilterField field) -> QVariantList 
   };
 }
 
-auto FilterRuleModel::placeholderForField(FilterField field) -> QString {
+auto FilterRuleModel::PlaceholderForField(FilterField field) -> QString {
   switch (field) {
     case FilterField::CaptureDate:
     case FilterField::ImportDate:
@@ -231,7 +231,7 @@ auto FilterRuleModel::placeholderForField(FilterField field) -> QString {
   }
 }
 
-auto FilterRuleModel::kindForField(FilterField field) -> FilterValueKind {
+auto FilterRuleModel::KindForField(FilterField field) -> FilterValueKind {
   switch (field) {
     case FilterField::ExifISO:
     case FilterField::Rating:
@@ -247,11 +247,11 @@ auto FilterRuleModel::kindForField(FilterField field) -> FilterValueKind {
   }
 }
 
-auto FilterRuleModel::isBetween(CompareOp op) -> bool {
+auto FilterRuleModel::IsBetween(CompareOp op) -> bool {
   return op == CompareOp::BETWEEN;
 }
 
-auto FilterRuleModel::allowedOpsForKind(FilterValueKind kind) -> std::vector<CompareOp> {
+auto FilterRuleModel::AllowedOpsForKind(FilterValueKind kind) -> std::vector<CompareOp> {
   if (kind == FilterValueKind::String) {
     return {CompareOp::CONTAINS,     CompareOp::NOT_CONTAINS, CompareOp::EQUALS,
             CompareOp::NOT_EQUALS,   CompareOp::STARTS_WITH,  CompareOp::ENDS_WITH,
@@ -267,14 +267,14 @@ auto FilterRuleModel::allowedOpsForKind(FilterValueKind kind) -> std::vector<Com
           CompareOp::BETWEEN};
 }
 
-auto FilterRuleModel::defaultOpForField(FilterField field) -> CompareOp {
-  const auto ops = allowedOpsForKind(kindForField(field));
+auto FilterRuleModel::DefaultOpForField(FilterField field) -> CompareOp {
+  const auto ops = AllowedOpsForKind(KindForField(field));
   return ops.empty() ? CompareOp::CONTAINS : ops.front();
 }
 
-auto FilterRuleModel::opAllowedForField(FilterField field, CompareOp op) -> bool {
-  const auto ops = allowedOpsForKind(kindForField(field));
+auto FilterRuleModel::OpAllowedForField(FilterField field, CompareOp op) -> bool {
+  const auto ops = AllowedOpsForKind(KindForField(field));
   return std::find(ops.begin(), ops.end(), op) != ops.end();
 }
 
-}  // namespace puerhlab::demo
+}  // namespace puerhlab::ui

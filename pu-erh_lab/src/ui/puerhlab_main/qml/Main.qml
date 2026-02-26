@@ -173,7 +173,7 @@ ApplicationWindow {
             "All Files (*)"
         ]
         onAccepted: {
-            albumBackend.loadProject(selectedFile.toString())
+            albumBackend.LoadProject(selectedFile.toString())
         }
     }
 
@@ -202,7 +202,7 @@ ApplicationWindow {
                 return
             }
             root.defaultNewProjectName = trimmed
-            albumBackend.createProjectInFolderNamed(root.pendingNewProjectFolderUrl, trimmed)
+            albumBackend.CreateProjectInFolderNamed(root.pendingNewProjectFolderUrl, trimmed)
             root.pendingNewProjectFolderUrl = ""
             createProjectNameDialog.close()
         }
@@ -267,7 +267,7 @@ ApplicationWindow {
             for (let i = 0; i < selectedFiles.length; ++i) {
                 files.push(selectedFiles[i].toString())
             }
-            albumBackend.startImport(files)
+            albumBackend.StartImport(files)
         }
     }
 
@@ -280,7 +280,7 @@ ApplicationWindow {
         onClearQueueRequested: selectionState.clearExportQueue()
         onEnsurePreviewRequested: selectionState.refreshExportPreview()
         onStartExportRequested: function(outDir, format, resizeEnabled, maxSide, quality, bitDepth, pngLevel, tiffComp) {
-            albumBackend.startExportWithOptionsForTargets(
+            albumBackend.StartExportWithOptionsForTargets(
                 outDir,
                 format,
                 resizeEnabled,
@@ -295,6 +295,7 @@ ApplicationWindow {
 
     Connections {
         target: albumBackend
+        ignoreUnknownSignals: true
         function onProjectChanged() {
             selectionState.clearSelectedImages()
             selectionState.clearExportQueue()
@@ -399,7 +400,7 @@ ApplicationWindow {
                                             else if (modelData.act === "new")
                                                 createProjectFolderDialog.open()
                                             else if (modelData.act === "save")
-                                                albumBackend.saveProject()
+                                                albumBackend.SaveProject()
                                         }
                                     }
                                 }
@@ -554,7 +555,7 @@ ApplicationWindow {
                                 enabled: root.backendInteractive
                                 onAccepted: {
                                     if (text.trim().length === 0) return
-                                    albumBackend.createFolder(text)
+                                    albumBackend.CreateFolder(text)
                                     text = ""
                                 }
                             }
@@ -572,7 +573,7 @@ ApplicationWindow {
                                     onEntered: hovered = true
                                     onExited: hovered = false
                                     onClicked: {
-                                        albumBackend.createFolder(createFolderField.text)
+                                        albumBackend.CreateFolder(createFolderField.text)
                                         createFolderField.text = ""
                                     }
                                 }
@@ -605,7 +606,7 @@ ApplicationWindow {
                             property bool hovered: false
                             onEntered: hovered = true
                             onExited: hovered = false
-                            onClicked: albumBackend.deleteFolder(albumBackend.currentFolderId)
+                            onClicked: albumBackend.DeleteFolder(albumBackend.currentFolderId)
                         }
                     }
 
@@ -702,7 +703,7 @@ ApplicationWindow {
                                     cursorShape: Qt.PointingHandCursor
                                     onClicked: {
                                         settingsPage = false
-                                        albumBackend.selectFolder(folderId)
+                                        albumBackend.SelectFolder(folderId)
                                     }
                                 }
                             }
@@ -909,7 +910,7 @@ ApplicationWindow {
                     text: "Cancel"
                     Material.background: root.colDanger
                     Material.foreground: root.colText
-                    onClicked: albumBackend.cancelImport()
+                    onClicked: albumBackend.CancelImport()
                 }
             }
         }

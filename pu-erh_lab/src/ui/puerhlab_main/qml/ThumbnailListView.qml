@@ -60,13 +60,13 @@ ListView {
                 return
             }
             if (pinnedElementId !== 0 && pinnedImageId !== 0) {
-                albumBackend.setThumbnailVisible(pinnedElementId, pinnedImageId, false)
+                albumBackend.SetThumbnailVisible(pinnedElementId, pinnedImageId, false)
             }
             pinnedElementId = elementId
             pinnedImageId = imageId
             liveThumbUrl = thumbUrl
             if (pinnedElementId !== 0 && pinnedImageId !== 0) {
-                albumBackend.setThumbnailVisible(pinnedElementId, pinnedImageId, true)
+                albumBackend.SetThumbnailVisible(pinnedElementId, pinnedImageId, true)
             }
         }
 
@@ -75,7 +75,7 @@ ListView {
         onImageIdChanged: bindThumbnailLifetime()
         Component.onDestruction: {
             if (pinnedElementId !== 0 && pinnedImageId !== 0) {
-                albumBackend.setThumbnailVisible(pinnedElementId, pinnedImageId, false)
+                albumBackend.SetThumbnailVisible(pinnedElementId, pinnedImageId, false)
             }
         }
 
@@ -92,6 +92,7 @@ ListView {
 
         Connections {
             target: albumBackend
+            ignoreUnknownSignals: true
             function onThumbnailUpdated(updatedElementId, updatedUrl) {
                 if (updatedElementId === elementId) {
                     liveThumbUrl = updatedUrl
@@ -153,7 +154,7 @@ ListView {
                     }])
                 }
             }
-            onDoubleClicked: albumBackend.openEditor(elementId, imageId)
+            onDoubleClicked: albumBackend.OpenEditor(elementId, imageId)
         }
     }
 }

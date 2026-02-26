@@ -13,7 +13,7 @@
 #include <string_view>
 #include <vector>
 
-#include "AlbumBackend.h"
+#include "ui/puerhlab_main/album_backend/album_backend.hpp"
 #include "edit/operators/operator_registeration.hpp"
 #include "utils/clock/time_provider.hpp"
 
@@ -97,7 +97,7 @@ int main(int argc, char* argv[]) {
   ApplyExternalAppFont(app, argc, argv);
   QQuickStyle::setStyle("Material");
 
-  puerhlab::demo::AlbumBackend backend;
+  puerhlab::ui::AlbumBackend backend;
 
   QQmlApplicationEngine engine;
   engine.addImportPath("qrc:/");
@@ -106,7 +106,7 @@ int main(int argc, char* argv[]) {
   QObject::connect(&engine, &QQmlApplicationEngine::objectCreationFailed, &app,
                    []() { QCoreApplication::exit(-1); }, Qt::QueuedConnection);
 
-  engine.loadFromModule("PuerhLab.AlbumEditorQml", "Main");
+  engine.loadFromModule("PuerhLab.Main", "Main");
 
   return app.exec();
 }

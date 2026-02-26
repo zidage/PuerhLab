@@ -66,13 +66,13 @@ Item {
                 return
             }
             if (pinnedElementId !== 0 && pinnedImageId !== 0) {
-                albumBackend.setThumbnailVisible(pinnedElementId, pinnedImageId, false)
+                albumBackend.SetThumbnailVisible(pinnedElementId, pinnedImageId, false)
             }
             pinnedElementId = elementId
             pinnedImageId = imageId
             liveThumbUrl = thumbUrl
             if (pinnedElementId !== 0 && pinnedImageId !== 0) {
-                albumBackend.setThumbnailVisible(pinnedElementId, pinnedImageId, true)
+                albumBackend.SetThumbnailVisible(pinnedElementId, pinnedImageId, true)
             }
         }
 
@@ -81,7 +81,7 @@ Item {
         onImageIdChanged: bindThumbnailLifetime()
         Component.onDestruction: {
             if (pinnedElementId !== 0 && pinnedImageId !== 0) {
-                albumBackend.setThumbnailVisible(pinnedElementId, pinnedImageId, false)
+                albumBackend.SetThumbnailVisible(pinnedElementId, pinnedImageId, false)
             }
         }
 
@@ -100,6 +100,7 @@ Item {
 
         Connections {
             target: albumBackend
+            ignoreUnknownSignals: true
             function onThumbnailUpdated(updatedElementId, updatedUrl) {
                 if (updatedElementId === elementId) {
                     liveThumbUrl = updatedUrl
@@ -256,7 +257,7 @@ Item {
             if (idx >= 0) {
                 const item = grid.itemAtIndex(idx)
                 if (item) {
-                    albumBackend.openEditor(item.elementId, item.imageId)
+                    albumBackend.OpenEditor(item.elementId, item.imageId)
                 }
             }
         }

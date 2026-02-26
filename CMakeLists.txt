@@ -62,6 +62,10 @@ if (CUDAToolkit_FOUND)
     add_compile_options($<$<AND:$<COMPILE_LANGUAGE:CUDA>,$<CONFIG:Release>>:--use_fast_math>)
     add_compile_options($<$<AND:$<COMPILE_LANGUAGE:CUDA>,$<CONFIG:Release>>:--extra-device-vectorization>) 
     add_compile_options($<$<AND:$<COMPILE_LANGUAGE:CUDA>,$<CONFIG:Release>>:-gencode=arch=compute_75,code=sm_75>) 
+    add_compile_options($<$<AND:$<COMPILE_LANGUAGE:CUDA>,$<CONFIG:Release>>:-gencode=arch=compute_61,code=sm_61>) 
+    add_compile_options($<$<AND:$<COMPILE_LANGUAGE:CUDA>,$<CONFIG:Release>>:-gencode=arch=compute_86,code=sm_86>) 
+    add_compile_options($<$<AND:$<COMPILE_LANGUAGE:CUDA>,$<CONFIG:Release>>:-gencode=arch=compute_89,code=sm_89>) 
+    add_compile_options($<$<AND:$<COMPILE_LANGUAGE:CUDA>,$<CONFIG:Release>>:-gencode=arch=compute_61,code=compute_61>) 
     add_compile_options($<$<AND:$<COMPILE_LANGUAGE:CUDA>,$<CONFIG:Debug>>:-G>)
     if(MSVC)
         list(APPEND CMAKE_CUDA_HOST_COMPILER_OPTIONS /W4 /external:anglebrackets /external:W0 /D_DEBUG /EHsc /arch:AVX2 /openmp)
@@ -310,6 +314,130 @@ include(GNUInstallDirs)
 
 add_subdirectory(${CMAKE_SOURCE_DIR}/pu-erh_lab/src)
 add_subdirectory(${CMAKE_SOURCE_DIR}/pu-erh_lab/tests)
+
+set(PUERHLAB_MAIN_BIN puerhlab_main)
+if(TARGET ${PUERHLAB_MAIN_BIN})
+    install(TARGETS ${PUERHLAB_MAIN_BIN}
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+    )
+
+    set(_config_dir "${CMAKE_SOURCE_DIR}/pu-erh_lab/src/config")
+    install(DIRECTORY "${_config_dir}/fonts/" DESTINATION "${CMAKE_INSTALL_BINDIR}/fonts")
+    install(DIRECTORY "${_config_dir}/LUTs/"  DESTINATION "${CMAKE_INSTALL_BINDIR}/LUTs")
+endif()
+
+if(WIN32 AND TARGET ${PUERHLAB_MAIN_BIN})
+    set(CMAKE_INSTALL_SYSTEM_RUNTIME_DESTINATION "${CMAKE_INSTALL_BINDIR}")
+    include(InstallRequiredSystemLibraries)
+
+    set(PUERHLAB_RUNTIME_DEP_DIRS "" CACHE STRING "Extra directories to search for runtime DLL dependencies during install.")
+    set(PUERHLAB_RUNTIME_EXES "$<TARGET_FILE:${PUERHLAB_MAIN_BIN}>")
+    set(PUERHLAB_RUNTIME_SEARCH_DIRS "$<TARGET_FILE_DIR:${PUERHLAB_MAIN_BIN}>")
+
+    set(_third_party_exiv2_bin "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_party/exiv2_x64-windows/bin")
+    set(_third_party_duckdb_bin "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_party/libduckdb-windows")
+
+    set(_vcpkg_bin_dir "")
+    if(DEFINED VCPKG_INSTALLED_DIR AND DEFINED VCPKG_TARGET_TRIPLET)
+        set(_vcpkg_bin_dir "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin")
+    endif()
+
+    set(_qt6_bin_dir "")
+    get_target_property(_qt6_core_loc Qt6::Core IMPORTED_LOCATION_RELEASE)
+    if(NOT _qt6_core_loc)
+        get_target_property(_qt6_core_loc Qt6::Core IMPORTED_LOCATION)
+    endif()
+    if(_qt6_core_loc)
+        get_filename_component(_qt6_bin_dir "${_qt6_core_loc}" DIRECTORY)
+    endif()
+
+    set(_cuda_bin_dir "")
+    if(CUDAToolkit_FOUND AND CUDAToolkit_BIN_DIR)
+        set(_cuda_bin_dir "${CUDAToolkit_BIN_DIR}")
+    endif()
+
+    install(CODE
+        "message(STATUS \"[pu-erh_lab] Installing runtime DLL dependencies...\")
+         set(_bindir \"\${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_BINDIR}\")
+         file(MAKE_DIRECTORY \"\${_bindir}\")
+         set(_search_dirs
+             \"\${_bindir}\"
+             ${PUERHLAB_RUNTIME_SEARCH_DIRS}
+             \"${_third_party_exiv2_bin}\"
+             \"${_third_party_duckdb_bin}\"
+             \"${_vcpkg_bin_dir}\"
+             \"${_qt6_bin_dir}\"
+             \${PUERHLAB_RUNTIME_DEP_DIRS}
+         )
+         file(GET_RUNTIME_DEPENDENCIES
+             EXECUTABLES ${PUERHLAB_RUNTIME_EXES}
+             DIRECTORIES \${_search_dirs}
+             RESOLVED_DEPENDENCIES_VAR _resolved
+             UNRESOLVED_DEPENDENCIES_VAR _unresolved
+             PRE_EXCLUDE_REGEXES
+               \"api-ms-win-.*\"
+               \"ext-ms-.*\"
+             POST_EXCLUDE_REGEXES
+               \".*[\\\\\\\\/][Ww][Ii][Nn][Dd][Oo][Ww][Ss][\\\\\\\\/].*\"
+               \".*[\\\\\\\\/][Ss][Yy][Ss][Tt][Ee][Mm]32[\\\\\\\\/].*\"
+               \".*[\\\\\\\\/][Ss][Yy][Ss][Ww][Oo][Ww]64[\\\\\\\\/].*\"
+               \"azureattest.*\\\\.dll\"
+               \"hvsifiletrust\\\\.dll\"
+               \"pdmutilities\\\\.dll\"
+               \"wpaxholder\\\\.dll\"
+               \"opencv_cudaarithm.*\\\\.dll\"
+               \"opencv_cudafilters.*\\\\.dll\"
+               \"opencv_cudaimgproc.*\\\\.dll\"
+               \"opencv_cudawarping.*\\\\.dll\"
+               \"cublasLt64_.*\\\\.dll\"
+         )
+         list(REMOVE_DUPLICATES _resolved)
+         foreach(_dep IN LISTS _resolved)
+             file(INSTALL DESTINATION \"\${_bindir}\" TYPE SHARED_LIBRARY FILES \"\${_dep}\")
+         endforeach()
+         if(NOT \"${_cuda_bin_dir}\" STREQUAL \"\")
+             file(GLOB _cuda_runtime_dlls \"${_cuda_bin_dir}/cudart64_*.dll\")
+             foreach(_cuda_runtime_dll IN LISTS _cuda_runtime_dlls)
+                 file(INSTALL DESTINATION \"\${_bindir}\" TYPE SHARED_LIBRARY FILES \"\${_cuda_runtime_dll}\")
+             endforeach()
+             if(NOT _cuda_runtime_dlls)
+                 message(WARNING \"[pu-erh_lab] cudart64_*.dll not found in: ${_cuda_bin_dir}\")
+             endif()
+         endif()
+         if(_unresolved)
+             message(WARNING \"[pu-erh_lab] Unresolved runtime deps: \${_unresolved}\")
+         endif()
+        "
+    )
+
+    if(NOT COMMAND qt_generate_deploy_app_script)
+        message(FATAL_ERROR "qt_generate_deploy_app_script is unavailable. Use a Qt 6 build with deployment tooling.")
+    endif()
+
+    option(PUERHLAB_DEPLOY_SOFTWARE_OPENGL "Bundle opengl32sw.dll for software OpenGL fallback." OFF)
+    set(PUERHLAB_QT_DEPLOY_TOOL_OPTIONS
+        --no-compiler-runtime
+        --no-translations
+        --no-system-d3d-compiler
+        --no-system-dxc-compiler
+        CACHE STRING
+        "Semicolon-separated options forwarded to Qt deploy tool during install."
+    )
+
+    set(_deploy_tool_options ${PUERHLAB_QT_DEPLOY_TOOL_OPTIONS})
+    if(NOT PUERHLAB_DEPLOY_SOFTWARE_OPENGL)
+        list(APPEND _deploy_tool_options --no-opengl-sw)
+    endif()
+    list(APPEND _deploy_tool_options --qmldir "${CMAKE_SOURCE_DIR}/pu-erh_lab/src/ui/puerhlab_main/qml")
+
+    qt_generate_deploy_app_script(
+        TARGET ${PUERHLAB_MAIN_BIN}
+        OUTPUT_SCRIPT _puerhlab_deploy_script
+        NO_UNSUPPORTED_PLATFORM_ERROR
+        DEPLOY_TOOL_OPTIONS ${_deploy_tool_options}
+    )
+    install(SCRIPT ${_puerhlab_deploy_script})
+endif()
 
 
 

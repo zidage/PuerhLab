@@ -99,7 +99,7 @@ This section is intentionally Windows-focused and mirrors the current build setu
 
 The top-level CMake currently requires/resolves:
 
-- Qt6: `Widgets`, `Quick`, `OpenGL`, `OpenGLWidgets` (plus QML demo modules in `tests/gui_pocs/album_editor_qml`)
+- Qt6: `Widgets`, `Quick`, `OpenGL`, `OpenGLWidgets` (plus app QML module in `src/ui/puerhlab_main/qml`)
 - Core libs: `OpenCV`, `Eigen3`, `OpenGL`, `glad`, `hwy`, `lcms2`, `OpenColorIO`, `OpenImageIO`, `libraw`, `xxHash`
 - Parallelism/testing: `OpenMP`, `googletest` (via `FetchContent`)
 - Windows-specific profiling: `easy_profiler`
@@ -168,7 +168,7 @@ Common demo executables after a Debug build:
 .\build\debug\pu-erh_lab\tests\CompleteUIDemo.exe
 .\build\debug\pu-erh_lab\tests\ThumbnailAlbumQtDemo.exe
 .\build\debug\pu-erh_lab\tests\ImagePreview.exe
-.\build\debug\pu-erh_lab\tests\gui_pocs\album_editor_qml\AlbumEditorQmlDemo.exe
+.\build\debug\pu-erh_lab\src\puerhlab_main.exe
 ```
 
 ### 5) Tests and Dev Utilities
@@ -191,4 +191,3 @@ Roadmap and ongoing milestones:
 ## License
 
 Apache-2.0. See [LICENSE](LICENSE).
-

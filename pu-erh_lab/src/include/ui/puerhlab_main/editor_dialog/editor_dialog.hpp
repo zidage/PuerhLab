@@ -8,7 +8,7 @@
 #include "app/image_pool_service.hpp"
 #include "app/pipeline_service.hpp"
 
-namespace puerhlab::demo {
+namespace puerhlab::ui {
 
 // Opens the OpenGL editor dialog and runs it modally.
 auto OpenEditorDialog(std::shared_ptr<ImagePoolService> image_pool,
@@ -18,4 +18,4 @@ auto OpenEditorDialog(std::shared_ptr<ImagePoolService> image_pool,
                       sl_element_id_t element_id, image_id_t image_id,
                       QWidget* parent = nullptr) -> bool;
 
-}  // namespace puerhlab::demo
+}  // namespace puerhlab::ui
