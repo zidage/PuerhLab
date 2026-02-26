@@ -2,14 +2,14 @@
 
 <p align="right"><a href="./README.md"><strong>English</strong></a> | <a href="./README.zh-CN.md">简体中文</a></p>
 
-![Build Status](https://img.shields.io/badge/build-passing-brightgreen)
 ![License](https://img.shields.io/badge/License-Apache_2.0-blue)
-![Stage](https://img.shields.io/badge/stage-pre--alpha-orange)
-![C++](https://img.shields.io/badge/C%2B%2B-20-blue)
+![CUDA](https://img.shields.io/badge/CUDA-12.8-76B900)
+![C++](https://img.shields.io/badge/C++-20-blue)
 
-Pu-erh Lab is an open-source RAW photo processor and digital asset management (DAM) project. The current codebase focuses on a high-performance, non-destructive image pipeline and a service-oriented architecture for album/project workflows.
+**Pu-erh Lab** is an open-source RAW photo editor and digital asset management (DAM) project. It is designed to provide a new choice to photographers who seek a lightweight, high-performance, and largely industry-compatible workflow for their photo editing and library management needs. 
 
-> Project stage: **Pre-Alpha**. APIs and behavior may change as modules are still being actively refactored.
+>Pu-erh Lab is _**NOT an alternative**_ to the existing commercial software nor other open-source projects.
+
 
 ## Early Demo
 
@@ -40,46 +40,57 @@ Video: [BiliBili](https://www.bilibili.com/video/BV1bPcxzzEeM)
   </tbody>
 </table>
 
-## Vision
-
-Pu-erh Lab aims to provide a professional workflow for photographers by combining:
-
-- robust digital asset management for large libraries,
-- a non-destructive, stage-based editing pipeline,
-- and a responsive UI experience designed for iterative image development.
-
 ## Key Technical Features
 
 ### High-Performance Core
 
-- Concurrency-first architecture with tile-based rendering and task scheduling.
-- Modern C++20 codebase with modular libraries.
-- Optional CUDA acceleration path for RAW processing and pipeline stages.
+- CUDA-accelerated image processing pipeline with the highest real-time preview resolution running at **60 FPS** on modern GPUs with large RAW files (e.g., 45MP).
+- Fine-grained memory management and caching strategies to optimize memory usage especially for large library browsing. The average DRAM usage for browsing a library of **786 42MP RAW** files is around **767MB** while achieving smooth scrolling and instant preview generation.
+- Written in modern C++20 with a focus on code quality, modularity, and maintainability (unfortunately, still largely a WIP).
 
 ### Professional Imaging Pipeline
 
-- 32-bit float-oriented editing workflow for preview and export stages.
-- LibRaw-based RAW decoding with CPU/GPU operator split (WIP).
-- Color management stack using OpenColorIO + lcms2, with LUT support (`.cube`) (WIP).
-- Non-destructive operation graph with history/version capabilities.
+- 32-bit floating-point processing pipeline.
+- Support **ACES 2.0 Output Rendering**.
+- Film-like highlight transition and sigmoid contrast curve.
+- **CUBE** LUT support for creative color grading.
+- Support JPEG/TIFF/PNG/EXR output with metadata write-back.
+- Unlimited history stack with Git-like version control and branching.
+- OpenImageIO/Exiv2-based image output with support for various formats and metadata handling.
+- Planning to support HDR workflow and output in the future.
 
 ### Asset Management ("Sleeve" System)
 
-- Custom Sleeve abstraction for folder/file organization and large-library navigation.
-- DuckDB-backed metadata/index storage through mapper/service layers.
-- Application services for import, filtering, thumbnailing, pipeline management, and export.
+- A simple but flexible inode-like file system using DuckDB as the storage backend, designed to manage both the original RAW files and the generated metadata (previews, thumbnails, edit history, etc.) in a unified way.
+- Lean project management with a single project file that contains all the metadata and references to the original files, enabling easy project sharing and backup without worrying about missing sidecar files or broken links.
+- Advanced search and filtering capabilities based on EXIF metadata. Planning to support semantic search and AI-assisted tagging in the future.
 
-## Recent Progress
+## System Requirements
 
-Recent updates across the codebase include:
+- Windows 10/11 x64 (Linux and macOS support are planned but not yet available in the early stages)
+- NVIDIA GPU with CUDA support (minimum compute capability 6.0 (10-series or later), recommended 7.0+ (20-series or later) for optimal performance) and preferably 6GB+ VRAM for smooth performance with high resolution RAW files (40MP+).
+- At least 8GB of system RAM (16GB+ recommended for larger libraries and smoother performance).
+- 500MB of free disk space for the installation and temporary working files.
+- 60+ MB for installation package and partial update support.
 
-- Geometry workflow: interactive crop/rotate editing and integration of `CROP_ROTATE` in the pipeline.
-- Color/tone workflow: expanded HLS adjustment model and curve editing improvements.
-- Color output path: ODT/LUT resource caching and lifecycle improvements for better runtime behavior.
-- Preview and memory: preview quality/performance tuning and VRAM usage optimization.
-- DAM/app layer: stronger project/folder management and ongoing migration to service-level workflows.
-- History/version workflow: history stack improvements, sync fixes, and album reload flow updates.
-- Export workflow: export progress reporting and stability fixes.
+## Known Issues (v0.1.0)
+
+### Pipeline
+
+- Only support **RGGB Bayer pattern** RAW files for now (kind of sucks). The supported camera list is consistent with LibRaw 0.22.0, excluding some Fujifilm X-Trans models and some non-RGGB models (e.g. Panasonic LUMIX S1R). The detailed list can be found in the [LibRaw documentation](https://www.libraw.org/supported-cameras). This also means that JPEG and TIFF files are not supported for importing and editing, but they can be exported from the app.
+- For some newer camera models, image can exhibit black margins, incorrect white balance, or even fail to load due to the lack of support in the current LibRaw version. This is expected to be resolved by integrating a newer LibRaw version in the future. Even though the image may be properly processed, exported file may still miss EXIF metadata due to the same reason.
+- The highlight reconstruction algorithm, which is adapted from darktable's "inpaint opposed" method, can produce visible artifacts in extreme cases (e.g., large blown-out areas). A "disable" option is planned for the future, and a more robust method may be implemented later on (depends on how capable the future LLM models are).
+- Version control still does not support branching yet, and the current implementation may fail when choosing between different versions with different LUT settings, where the LUT may not be properly applied to the preview. This can be fixed by reapplying the LUT or waiting for the future fix.
+- CDL color wheels may be a little bit too sensitive to mouse dragging.
+- When contrast is set to -100, the image will be completely black.
+
+### Asset Management
+
+- The current UI does not support deleting a single image from the library nor does it support moving  images between folders. The underlying API does support these operations, but the UI for them is not implemented yet.
+- If you import a unsupported RAW file, it is possible that the library will be broken and fail to load in the future. So please make sure to only import supported RAW files for now. A more robust handling of unsupported files is planned for the future.
+- Because I don't have that many RAW photos, say, 10000+ to test with, the usability of the library under that scale is still unknown. If you have a large collection of RAW files and are willing to test the library with it, please feel free to try it out and report any issues you encounter.
+- Thumbnail generation may encounter some data race issues that can cause a abnormal look of the generated thumbnails. But the editing session and the exported image will not be affected.
+- If you are using a non-English Windows system and have _not_ enabled the "Use Unicode UTF-8 for worldwide language support" option in the system settings, it is possible that the app will crash when encountering non-ASCII file paths. If you can't enable the UTF-8 support due to compatibility concerns, please make sure to only use ASCII characters in the file paths for now, including the installation path, library path, each imported image's path and export path.
 
 ## Build from Source (Windows Only)
 
