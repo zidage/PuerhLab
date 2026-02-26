@@ -35,6 +35,7 @@
 
 #include "ui/puerhlab_main/editor_dialog/editor_dialog.hpp"
 #include "app/render_service.hpp"
+#include "edit/pipeline/default_pipeline_params.hpp"
 #include "image/image.hpp"
 #include "io/image/image_loader.hpp"
 #include "sleeve/sleeve_element/sleeve_file.hpp"

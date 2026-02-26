@@ -354,31 +354,14 @@ void AlbumBackend::SetupEditorPipeline() {
   auto& global_params = exec->GetGlobalParams();
   auto& loading = exec->GetStage(PipelineStageName::Image_Loading);
 
-  nlohmann::json decodeParams;
-#ifdef HAVE_CUDA
-  decodeParams["raw"]["cuda"] = true;
-#else
-  decodeParams["raw"]["cuda"] = false;
-#endif
-  decodeParams["raw"]["highlights_reconstruct"] = true;
-  decodeParams["raw"]["use_camera_wb"]          = true;
-  decodeParams["raw"]["user_wb"]                = 7600.f;
-  decodeParams["raw"]["backend"]                = "puerh";
-  loading.SetOperator(OperatorType::RAW_DECODE, decodeParams);
-  loading.SetOperator(OperatorType::LENS_CALIBRATION,
-                      {{"lens_calib",
-                        {{"enabled", true},
-                         {"apply_vignetting", true},
-                         {"apply_distortion", true},
-                         {"apply_tca", true},
-                         {"apply_crop", true},
-                         {"auto_scale", true},
-                         {"use_user_scale", false},
-                         {"user_scale", 1.0f},
-                         {"projection_enabled", false},
-                         {"target_projection", "unknown"},
-                         {"lens_profile_db_path", "src/config/lens_calib"}}}},
-                      global_params);
+  if (!loading.GetOperator(OperatorType::RAW_DECODE).has_value()) {
+    const nlohmann::json decode_params = pipeline_defaults::MakeDefaultRawDecodeParams();
+    loading.SetOperator(OperatorType::RAW_DECODE, decode_params);
+  }
+  if (!loading.GetOperator(OperatorType::LENS_CALIBRATION).has_value()) {
+    const nlohmann::json lens_params = pipeline_defaults::MakeDefaultLensCalibParams();
+    loading.SetOperator(OperatorType::LENS_CALIBRATION, lens_params, global_params);
+  }
 
   exec->SetExecutionStages();
 }

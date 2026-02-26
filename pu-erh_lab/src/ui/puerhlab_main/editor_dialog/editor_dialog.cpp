@@ -2,6 +2,7 @@
 
 #include <QAbstractItemView>
 #include <QByteArray>
+#include <QCheckBox>
 #include <QColor>
 #include <QComboBox>
 #include <QCoreApplication>
@@ -40,7 +41,9 @@
 #include <format>
 #include <functional>
 #include <future>
+#include <fstream>
 #include <json.hpp>
+#include <map>
 #include <numbers>
 #include <optional>
 #include <stdexcept>
@@ -51,6 +54,7 @@
 #include "app/render_service.hpp"
 #include "edit/history/edit_transaction.hpp"
 #include "edit/history/version.hpp"
+#include "edit/pipeline/default_pipeline_params.hpp"
 #include "edit/pipeline/pipeline_cpu.hpp"
 #include "image/image.hpp"
 #include "io/image/image_loader.hpp"
@@ -88,6 +92,90 @@ auto ListCubeLutsInDir(const std::filesystem::path& dir) -> std::vector<std::fil
               return a.filename().wstring() < b.filename().wstring();
             });
   return files;
+}
+
+struct LensCatalog {
+  std::vector<std::string>                        brands_{};
+  std::map<std::string, std::vector<std::string>> models_by_brand_{};
+};
+
+void SortAndUniqueStrings(std::vector<std::string>* values) {
+  if (!values) {
+    return;
+  }
+  std::sort(values->begin(), values->end());
+  values->erase(std::unique(values->begin(), values->end()), values->end());
+}
+
+auto ResolveLensCatalogPath() -> std::filesystem::path {
+  const std::filesystem::path app_dir(QCoreApplication::applicationDirPath().toStdWString());
+  const std::vector<std::filesystem::path> candidates = {
+      app_dir / "lens_calib" / "lens_catalog.json",
+      app_dir / "config" / "lens_calib" / "lens_catalog.json",
+      std::filesystem::path(CONFIG_PATH) / "lens_calib" / "lens_catalog.json",
+      std::filesystem::path("src/config/lens_calib/lens_catalog.json"),
+      std::filesystem::path("pu-erh_lab/src/config/lens_calib/lens_catalog.json"),
+  };
+
+  for (const auto& path : candidates) {
+    std::error_code ec;
+    if (std::filesystem::exists(path, ec) && !ec && std::filesystem::is_regular_file(path, ec) &&
+        !ec) {
+      return path;
+    }
+  }
+  return {};
+}
+
+auto LoadLensCatalog() -> LensCatalog {
+  LensCatalog catalog;
+
+  const auto path = ResolveLensCatalogPath();
+  if (path.empty()) {
+    return catalog;
+  }
+
+  std::ifstream in(path, std::ios::binary);
+  if (!in.is_open()) {
+    return catalog;
+  }
+
+  nlohmann::json j;
+  try {
+    in >> j;
+  } catch (...) {
+    return catalog;
+  }
+
+  if (!j.is_object() || !j.contains("brands") || !j["brands"].is_object()) {
+    return catalog;
+  }
+
+  for (auto it = j["brands"].begin(); it != j["brands"].end(); ++it) {
+    const std::string brand = it.key();
+    if (brand.empty() || !it.value().is_array()) {
+      continue;
+    }
+    std::vector<std::string> models;
+    for (const auto& model_json : it.value()) {
+      if (!model_json.is_string()) {
+        continue;
+      }
+      const std::string model = model_json.get<std::string>();
+      if (!model.empty()) {
+        models.push_back(model);
+      }
+    }
+    SortAndUniqueStrings(&models);
+    if (models.empty()) {
+      continue;
+    }
+    catalog.models_by_brand_[brand] = std::move(models);
+    catalog.brands_.push_back(brand);
+  }
+
+  SortAndUniqueStrings(&catalog.brands_);
+  return catalog;
 }
 
 constexpr float                kBlackSliderFromGlobalScale      = 1000.0f;
@@ -663,9 +751,24 @@ class EditorDialog final : public QDialog {
     geometry_controls_layout->addStretch();
     geometry_controls_scroll_->setWidget(geometry_controls_);
 
+    raw_controls_scroll_ = new QScrollArea(controls_panel);
+    raw_controls_scroll_->setFrameShape(QFrame::NoFrame);
+    raw_controls_scroll_->setWidgetResizable(true);
+    raw_controls_scroll_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    raw_controls_scroll_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    raw_controls_scroll_->setStyleSheet(scroll_style);
+
+    raw_controls_ = new QWidget(raw_controls_scroll_);
+    auto* raw_controls_layout = new QVBoxLayout(raw_controls_);
+    raw_controls_layout->setContentsMargins(0, 0, 0, 0);
+    raw_controls_layout->setSpacing(12);
+    raw_controls_layout->addStretch();
+    raw_controls_scroll_->setWidget(raw_controls_);
+
     control_panels_stack_ = new QStackedWidget(controls_panel);
     control_panels_stack_->addWidget(tone_controls_scroll_);
     control_panels_stack_->addWidget(geometry_controls_scroll_);
+    control_panels_stack_->addWidget(raw_controls_scroll_);
     control_panels_stack_->setCurrentIndex(0);
 
     auto* panel_switch_row = new QWidget(controls_panel);
@@ -675,20 +778,27 @@ class EditorDialog final : public QDialog {
 
     tone_panel_btn_     = new QPushButton("Tone", panel_switch_row);
     geometry_panel_btn_ = new QPushButton("Geometry", panel_switch_row);
+    raw_panel_btn_      = new QPushButton("RAW Decode", panel_switch_row);
     tone_panel_btn_->setCheckable(true);
     geometry_panel_btn_->setCheckable(true);
+    raw_panel_btn_->setCheckable(true);
     tone_panel_btn_->setCursor(Qt::PointingHandCursor);
     geometry_panel_btn_->setCursor(Qt::PointingHandCursor);
+    raw_panel_btn_->setCursor(Qt::PointingHandCursor);
     tone_panel_btn_->setFixedHeight(30);
     geometry_panel_btn_->setFixedHeight(30);
+    raw_panel_btn_->setFixedHeight(30);
 
     panel_switch_layout->addWidget(tone_panel_btn_, 1);
     panel_switch_layout->addWidget(geometry_panel_btn_, 1);
+    panel_switch_layout->addWidget(raw_panel_btn_, 1);
 
     QObject::connect(tone_panel_btn_, &QPushButton::clicked, this,
                      [this]() { SetActiveControlPanel(ControlPanelKind::Tone); });
     QObject::connect(geometry_panel_btn_, &QPushButton::clicked, this,
                      [this]() { SetActiveControlPanel(ControlPanelKind::Geometry); });
+    QObject::connect(raw_panel_btn_, &QPushButton::clicked, this,
+                     [this]() { SetActiveControlPanel(ControlPanelKind::RawDecode); });
     RefreshPanelSwitchUi();
 
     auto* shared_versioning_root = new QWidget(this);
@@ -1721,6 +1831,165 @@ class EditorDialog final : public QDialog {
     UpdateGeometryCropRectLabel();
     RefreshGeometryModeUi();
 
+    lens_catalog_ = LoadLensCatalog();
+    {
+      auto* raw_layout = qobject_cast<QVBoxLayout*>(raw_controls_ ? raw_controls_->layout() : nullptr);
+      if (raw_layout) {
+        auto addRawSection = [&](const QString& title, const QString& subtitle) {
+          auto* frame = new QFrame(raw_controls_);
+          frame->setObjectName("EditorSection");
+          auto* v = new QVBoxLayout(frame);
+          v->setContentsMargins(12, 10, 12, 10);
+          v->setSpacing(8);
+
+          auto* t = new QLabel(title, frame);
+          t->setObjectName("EditorSectionTitle");
+          auto* s = new QLabel(subtitle, frame);
+          s->setObjectName("EditorSectionSub");
+          s->setWordWrap(true);
+          v->addWidget(t, 0);
+          v->addWidget(s, 0);
+          raw_layout->insertWidget(raw_layout->count() - 1, frame);
+          return v;
+        };
+
+        auto* decode_layout = addRawSection(
+            "RAW Decode",
+            "Configure RAW decode options. These settings are shared with thumbnail rendering.");
+
+        raw_highlights_reconstruct_checkbox_ =
+            new QCheckBox("Enable Highlight Reconstruction", raw_controls_);
+        raw_highlights_reconstruct_checkbox_->setChecked(state_.raw_highlights_reconstruct_);
+        raw_highlights_reconstruct_checkbox_->setStyleSheet(
+            "QCheckBox {"
+            "  color: #E6E6E6;"
+            "  spacing: 8px;"
+            "  font-size: 13px;"
+            "}"
+            "QCheckBox::indicator {"
+            "  width: 16px;"
+            "  height: 16px;"
+            "}"
+            "QCheckBox::indicator:unchecked {"
+            "  background: #121212;"
+            "  border: 1px solid #2A2A2A;"
+            "  border-radius: 3px;"
+            "}"
+            "QCheckBox::indicator:checked {"
+            "  background: #FCC704;"
+            "  border: 1px solid #FCC704;"
+            "  border-radius: 3px;"
+            "}");
+        QObject::connect(raw_highlights_reconstruct_checkbox_, &QCheckBox::toggled, this,
+                         [this](bool checked) {
+                           if (syncing_controls_) {
+                             return;
+                           }
+                           state_.raw_highlights_reconstruct_ = checked;
+                           RequestRender();
+                           CommitAdjustment(AdjustmentField::RawDecode);
+                         });
+        decode_layout->addWidget(raw_highlights_reconstruct_checkbox_, 0);
+
+        auto* lens_layout = addRawSection(
+            "Lens Calibration",
+            "Enable correction and optionally override lens metadata with catalog entries.");
+
+        lens_calib_enabled_checkbox_ = new QCheckBox("Enable Lens Calibration", raw_controls_);
+        lens_calib_enabled_checkbox_->setChecked(state_.lens_calib_enabled_);
+        lens_calib_enabled_checkbox_->setStyleSheet(raw_highlights_reconstruct_checkbox_->styleSheet());
+        QObject::connect(lens_calib_enabled_checkbox_, &QCheckBox::toggled, this,
+                         [this](bool checked) {
+                           if (syncing_controls_) {
+                             return;
+                           }
+                           state_.lens_calib_enabled_ = checked;
+                           RequestRender();
+                           CommitAdjustment(AdjustmentField::LensCalib);
+                         });
+        lens_layout->addWidget(lens_calib_enabled_checkbox_, 0);
+
+        auto* brand_row = new QWidget(raw_controls_);
+        auto* brand_row_layout = new QHBoxLayout(brand_row);
+        brand_row_layout->setContentsMargins(0, 0, 0, 0);
+        brand_row_layout->setSpacing(8);
+        auto* brand_label = new QLabel("Lens Brand", brand_row);
+        brand_label->setStyleSheet(
+            "QLabel {"
+            "  color: #E6E6E6;"
+            "  font-size: 13px;"
+            "}");
+        lens_brand_combo_ = new QComboBox(brand_row);
+        lens_brand_combo_->setMinimumWidth(220);
+        lens_brand_combo_->setStyleSheet(
+            "QComboBox {"
+            "  background: #1A1A1A;"
+            "  border: none;"
+            "  border-radius: 8px;"
+            "  padding: 4px 8px;"
+            "}"
+            "QComboBox::drop-down { border: 0px; width: 24px; }"
+            "QComboBox QAbstractItemView {"
+            "  background: #1A1A1A;"
+            "  border: none;"
+            "  selection-background-color: #FCC704;"
+            "  selection-color: #121212;"
+            "}");
+        QObject::connect(lens_brand_combo_, QOverload<int>::of(&QComboBox::currentIndexChanged),
+                         this, [this](int) {
+                           if (syncing_controls_ || !lens_brand_combo_) {
+                             return;
+                           }
+                           state_.lens_override_make_ =
+                               lens_brand_combo_->currentData().toString().toStdString();
+                           if (state_.lens_override_make_.empty()) {
+                             state_.lens_override_model_.clear();
+                           }
+                           RefreshLensModelComboFromState();
+                           RequestRender();
+                           CommitAdjustment(AdjustmentField::LensCalib);
+                         });
+        brand_row_layout->addWidget(brand_label, 0);
+        brand_row_layout->addWidget(lens_brand_combo_, 1);
+        lens_layout->addWidget(brand_row, 0);
+
+        auto* model_row = new QWidget(raw_controls_);
+        auto* model_row_layout = new QHBoxLayout(model_row);
+        model_row_layout->setContentsMargins(0, 0, 0, 0);
+        model_row_layout->setSpacing(8);
+        auto* model_label = new QLabel("Lens Model", model_row);
+        model_label->setStyleSheet(brand_label->styleSheet());
+        lens_model_combo_ = new QComboBox(model_row);
+        lens_model_combo_->setMinimumWidth(220);
+        lens_model_combo_->setStyleSheet(lens_brand_combo_->styleSheet());
+        QObject::connect(lens_model_combo_, QOverload<int>::of(&QComboBox::currentIndexChanged),
+                         this, [this](int) {
+                           if (syncing_controls_ || !lens_model_combo_ ||
+                               state_.lens_override_make_.empty()) {
+                             return;
+                           }
+                           state_.lens_override_model_ =
+                               lens_model_combo_->currentData().toString().toStdString();
+                           RequestRender();
+                           CommitAdjustment(AdjustmentField::LensCalib);
+                         });
+        model_row_layout->addWidget(model_label, 0);
+        model_row_layout->addWidget(lens_model_combo_, 1);
+        lens_layout->addWidget(model_row, 0);
+
+        lens_catalog_status_label_ = new QLabel(raw_controls_);
+        lens_catalog_status_label_->setWordWrap(true);
+        lens_catalog_status_label_->setStyleSheet(
+            "QLabel {"
+            "  color: #A3A3A3;"
+            "  font-size: 11px;"
+            "}");
+        lens_layout->addWidget(lens_catalog_status_label_, 0);
+
+        RefreshLensComboFromState();
+      }
+    }
+
     {
       auto* section = new QFrame(shared_versioning_root);
       section->setObjectName("EditorSection");
@@ -1957,12 +2226,14 @@ class EditorDialog final : public QDialog {
   }
 
  private:
-  enum class ControlPanelKind { Tone, Geometry };
+  enum class ControlPanelKind { Tone, Geometry, RawDecode };
 
   enum class AdjustmentField {
     Exposure,
     Contrast,
     Saturation,
+    RawDecode,
+    LensCalib,
     ColorTemp,
     Hls,
     ColorWheel,
@@ -2000,6 +2271,10 @@ class EditorDialog final : public QDialog {
     float                exposure_                    = 2.0f;
     float                contrast_                    = 0.0f;
     float                saturation_                  = 30.0f;
+    bool                 raw_highlights_reconstruct_  = true;
+    bool                 lens_calib_enabled_          = true;
+    std::string          lens_override_make_{};
+    std::string          lens_override_model_{};
     ColorTempMode        color_temp_mode_             = ColorTempMode::AS_SHOT;
     float                color_temp_custom_cct_       = 6500.0f;
     float                color_temp_custom_tint_      = 0.0f;
@@ -2268,13 +2543,120 @@ class EditorDialog final : public QDialog {
     // Geometry crop editing is always enabled when the geometry panel is active.
   }
 
-  void RefreshPanelSwitchUi() {
-    if (!tone_panel_btn_ || !geometry_panel_btn_) {
+  void EnsureLensCatalogLoaded() {
+    if (!lens_catalog_.brands_.empty() || !lens_catalog_.models_by_brand_.empty()) {
       return;
     }
-    const bool tone_active = (active_panel_ == ControlPanelKind::Tone);
+    lens_catalog_ = LoadLensCatalog();
+  }
+
+  void RefreshLensBrandComboFromState() {
+    if (!lens_brand_combo_) {
+      return;
+    }
+    EnsureLensCatalogLoaded();
+
+    const bool prev_sync = syncing_controls_;
+    syncing_controls_    = true;
+
+    lens_brand_combo_->clear();
+    lens_brand_combo_->addItem("Auto (metadata)", QString());
+    for (const auto& brand : lens_catalog_.brands_) {
+      lens_brand_combo_->addItem(QString::fromStdString(brand), QString::fromStdString(brand));
+    }
+
+    int selected_index = 0;
+    if (!state_.lens_override_make_.empty()) {
+      selected_index =
+          lens_brand_combo_->findData(QString::fromStdString(state_.lens_override_make_));
+      if (selected_index < 0) {
+        lens_brand_combo_->addItem(QString::fromStdString(state_.lens_override_make_),
+                                   QString::fromStdString(state_.lens_override_make_));
+        selected_index = lens_brand_combo_->count() - 1;
+      }
+    }
+    lens_brand_combo_->setCurrentIndex(std::max(0, selected_index));
+
+    syncing_controls_ = prev_sync;
+  }
+
+  void RefreshLensModelComboFromState() {
+    if (!lens_model_combo_) {
+      return;
+    }
+    EnsureLensCatalogLoaded();
+
+    const bool prev_sync = syncing_controls_;
+    syncing_controls_    = true;
+
+    lens_model_combo_->clear();
+
+    if (state_.lens_override_make_.empty()) {
+      lens_model_combo_->addItem("Auto (metadata)", QString());
+      lens_model_combo_->setCurrentIndex(0);
+      lens_model_combo_->setEnabled(false);
+      state_.lens_override_model_.clear();
+    } else {
+      std::vector<std::string> models;
+      if (const auto it = lens_catalog_.models_by_brand_.find(state_.lens_override_make_);
+          it != lens_catalog_.models_by_brand_.end()) {
+        models = it->second;
+      }
+      if (!state_.lens_override_model_.empty() &&
+          std::find(models.begin(), models.end(), state_.lens_override_model_) == models.end()) {
+        models.push_back(state_.lens_override_model_);
+      }
+      SortAndUniqueStrings(&models);
+      for (const auto& model : models) {
+        lens_model_combo_->addItem(QString::fromStdString(model), QString::fromStdString(model));
+      }
+
+      int selected_index = 0;
+      if (!state_.lens_override_model_.empty()) {
+        selected_index =
+            lens_model_combo_->findData(QString::fromStdString(state_.lens_override_model_));
+      }
+      if (selected_index < 0 && lens_model_combo_->count() > 0) {
+        selected_index = 0;
+      }
+      lens_model_combo_->setCurrentIndex(selected_index);
+      lens_model_combo_->setEnabled(lens_model_combo_->count() > 0);
+
+      if (lens_model_combo_->count() > 0) {
+        state_.lens_override_model_ = lens_model_combo_->currentData().toString().toStdString();
+      } else {
+        state_.lens_override_model_.clear();
+      }
+    }
+
+    if (lens_catalog_status_label_) {
+      if (lens_catalog_.brands_.empty()) {
+        lens_catalog_status_label_->setText(
+            "Lens catalog not found. You can still use Auto (metadata) mode.");
+      } else {
+        lens_catalog_status_label_->setText(
+            QString("Lens catalog: %1 brands").arg(static_cast<int>(lens_catalog_.brands_.size())));
+      }
+    }
+
+    syncing_controls_ = prev_sync;
+  }
+
+  void RefreshLensComboFromState() {
+    RefreshLensBrandComboFromState();
+    RefreshLensModelComboFromState();
+  }
+
+  void RefreshPanelSwitchUi() {
+    if (!tone_panel_btn_ || !geometry_panel_btn_ || !raw_panel_btn_) {
+      return;
+    }
+    const bool tone_active     = (active_panel_ == ControlPanelKind::Tone);
+    const bool geometry_active = (active_panel_ == ControlPanelKind::Geometry);
+    const bool raw_active      = (active_panel_ == ControlPanelKind::RawDecode);
     tone_panel_btn_->setChecked(tone_active);
-    geometry_panel_btn_->setChecked(!tone_active);
+    geometry_panel_btn_->setChecked(geometry_active);
+    raw_panel_btn_->setChecked(raw_active);
 
     const QString active_style =
         "QPushButton {"
@@ -2299,13 +2681,20 @@ class EditorDialog final : public QDialog {
         "  border-color: #FCC704;"
         "}";
     tone_panel_btn_->setStyleSheet(tone_active ? active_style : inactive_style);
-    geometry_panel_btn_->setStyleSheet(tone_active ? inactive_style : active_style);
+    geometry_panel_btn_->setStyleSheet(geometry_active ? active_style : inactive_style);
+    raw_panel_btn_->setStyleSheet(raw_active ? active_style : inactive_style);
   }
 
   void SetActiveControlPanel(ControlPanelKind panel) {
     active_panel_ = panel;
     if (control_panels_stack_) {
-      control_panels_stack_->setCurrentIndex(panel == ControlPanelKind::Tone ? 0 : 1);
+      int panel_index = 0;
+      if (panel == ControlPanelKind::Geometry) {
+        panel_index = 1;
+      } else if (panel == ControlPanelKind::RawDecode) {
+        panel_index = 2;
+      }
+      control_panels_stack_->setCurrentIndex(panel_index);
     }
 
     const bool geometry_active = (panel == ControlPanelKind::Geometry);
@@ -2419,6 +2808,14 @@ class EditorDialog final : public QDialog {
         return;
       case AdjustmentField::Saturation:
         to.saturation_ = from.saturation_;
+        return;
+      case AdjustmentField::RawDecode:
+        to.raw_highlights_reconstruct_ = from.raw_highlights_reconstruct_;
+        return;
+      case AdjustmentField::LensCalib:
+        to.lens_calib_enabled_ = from.lens_calib_enabled_;
+        to.lens_override_make_ = from.lens_override_make_;
+        to.lens_override_model_ = from.lens_override_model_;
         return;
       case AdjustmentField::ColorTemp:
         to.color_temp_mode_          = from.color_temp_mode_;
@@ -2542,6 +2939,13 @@ class EditorDialog final : public QDialog {
     if (saturation_slider_) {
       saturation_slider_->setValue(static_cast<int>(std::lround(state_.saturation_)));
     }
+    if (raw_highlights_reconstruct_checkbox_) {
+      raw_highlights_reconstruct_checkbox_->setChecked(state_.raw_highlights_reconstruct_);
+    }
+    if (lens_calib_enabled_checkbox_) {
+      lens_calib_enabled_checkbox_->setChecked(state_.lens_calib_enabled_);
+    }
+    RefreshLensComboFromState();
     if (lift_disc_widget_) {
       lift_disc_widget_->SetPosition(state_.lift_wheel_.disc_position_);
     }
@@ -3147,6 +3551,22 @@ class EditorDialog final : public QDialog {
     working_version_.SetBasePipelineExecutor(pipeline_guard_->pipeline_);
   }
 
+  auto ReadCurrentOperatorParams(PipelineStageName stage_name, OperatorType op_type) const
+      -> std::optional<nlohmann::json> {
+    if (!pipeline_guard_ || !pipeline_guard_->pipeline_) {
+      return std::nullopt;
+    }
+    const auto op = pipeline_guard_->pipeline_->GetStage(stage_name).GetOperator(op_type);
+    if (!op.has_value() || !op.value() || !op.value()->op_) {
+      return std::nullopt;
+    }
+    const auto exported = op.value()->ExportOperatorParams();
+    if (!exported.contains("params") || !exported["params"].is_object()) {
+      return std::nullopt;
+    }
+    return exported["params"];
+  }
+
   std::pair<PipelineStageName, OperatorType> FieldSpec(AdjustmentField field) const {
     switch (field) {
       case AdjustmentField::Exposure:
@@ -3155,6 +3575,10 @@ class EditorDialog final : public QDialog {
         return {PipelineStageName::Basic_Adjustment, OperatorType::CONTRAST};
       case AdjustmentField::Saturation:
         return {PipelineStageName::Color_Adjustment, OperatorType::SATURATION};
+      case AdjustmentField::RawDecode:
+        return {PipelineStageName::Image_Loading, OperatorType::RAW_DECODE};
+      case AdjustmentField::LensCalib:
+        return {PipelineStageName::Image_Loading, OperatorType::LENS_CALIBRATION};
       case AdjustmentField::ColorTemp:
         return {PipelineStageName::To_WorkingSpace, OperatorType::COLOR_TEMP};
       case AdjustmentField::Hls:
@@ -3191,6 +3615,51 @@ class EditorDialog final : public QDialog {
         return {{"contrast", s.contrast_}};
       case AdjustmentField::Saturation:
         return {{"saturation", s.saturation_}};
+      case AdjustmentField::RawDecode: {
+        const nlohmann::json defaults = pipeline_defaults::MakeDefaultRawDecodeParams();
+        nlohmann::json params =
+            ReadCurrentOperatorParams(PipelineStageName::Image_Loading, OperatorType::RAW_DECODE)
+                .value_or(defaults);
+        if (!params.is_object()) {
+          params = defaults;
+        }
+        if (!params.contains("raw") || !params["raw"].is_object()) {
+          params["raw"] = defaults.value("raw", nlohmann::json::object());
+        }
+        if (defaults.contains("raw") && defaults["raw"].is_object()) {
+          for (auto it = defaults["raw"].begin(); it != defaults["raw"].end(); ++it) {
+            if (!params["raw"].contains(it.key())) {
+              params["raw"][it.key()] = it.value();
+            }
+          }
+        }
+        params["raw"]["highlights_reconstruct"] = s.raw_highlights_reconstruct_;
+        return params;
+      }
+      case AdjustmentField::LensCalib: {
+        const nlohmann::json defaults = pipeline_defaults::MakeDefaultLensCalibParams();
+        nlohmann::json params =
+            ReadCurrentOperatorParams(PipelineStageName::Image_Loading, OperatorType::LENS_CALIBRATION)
+                .value_or(defaults);
+        if (!params.is_object()) {
+          params = defaults;
+        }
+        if (!params.contains("lens_calib") || !params["lens_calib"].is_object()) {
+          params["lens_calib"] = defaults.value("lens_calib", nlohmann::json::object());
+        }
+        if (defaults.contains("lens_calib") && defaults["lens_calib"].is_object()) {
+          for (auto it = defaults["lens_calib"].begin(); it != defaults["lens_calib"].end(); ++it) {
+            if (!params["lens_calib"].contains(it.key())) {
+              params["lens_calib"][it.key()] = it.value();
+            }
+          }
+        }
+        params["lens_calib"]["enabled"]    = s.lens_calib_enabled_;
+        params["lens_calib"]["lens_maker"] = s.lens_override_make_;
+        params["lens_calib"]["lens_model"] =
+            s.lens_override_make_.empty() ? std::string{} : s.lens_override_model_;
+        return params;
+      }
       case AdjustmentField::ColorTemp:
         return {{"color_temp",
                  {{"mode", ColorTempModeToString(s.color_temp_mode_)},
@@ -3316,6 +3785,12 @@ class EditorDialog final : public QDialog {
         return !NearlyEqual(state_.contrast_, committed_state_.contrast_);
       case AdjustmentField::Saturation:
         return !NearlyEqual(state_.saturation_, committed_state_.saturation_);
+      case AdjustmentField::RawDecode:
+        return state_.raw_highlights_reconstruct_ != committed_state_.raw_highlights_reconstruct_;
+      case AdjustmentField::LensCalib:
+        return state_.lens_calib_enabled_ != committed_state_.lens_calib_enabled_ ||
+               state_.lens_override_make_ != committed_state_.lens_override_make_ ||
+               state_.lens_override_model_ != committed_state_.lens_override_model_;
       case AdjustmentField::ColorTemp:
         return state_.color_temp_mode_ != committed_state_.color_temp_mode_ ||
                !NearlyEqual(state_.color_temp_custom_cct_, committed_state_.color_temp_custom_cct_) ||
@@ -3561,11 +4036,51 @@ class EditorDialog final : public QDialog {
       return ParseCurveControlPointsFromParams(j["params"]);
     };
 
+    const auto& loading  = exec->GetStage(PipelineStageName::Image_Loading);
     const auto& geometry = exec->GetStage(PipelineStageName::Geometry_Adjustment);
     const auto& to_ws    = exec->GetStage(PipelineStageName::To_WorkingSpace);
     const auto& basic    = exec->GetStage(PipelineStageName::Basic_Adjustment);
     const auto& color    = exec->GetStage(PipelineStageName::Color_Adjustment);
     const auto& detail   = exec->GetStage(PipelineStageName::Detail_Adjustment);
+
+    if (const auto raw_json = ReadNestedObject(loading, OperatorType::RAW_DECODE, "raw");
+        raw_json.has_value()) {
+      const auto& raw = *raw_json;
+      if (raw.contains("highlights_reconstruct")) {
+        try {
+          loaded_state.raw_highlights_reconstruct_ = raw["highlights_reconstruct"].get<bool>();
+        } catch (...) {
+        }
+      }
+      has_loaded_any = true;
+    }
+    if (const auto lens_json =
+            ReadNestedObject(loading, OperatorType::LENS_CALIBRATION, "lens_calib");
+        lens_json.has_value()) {
+      const auto& lens = *lens_json;
+      if (lens.contains("enabled")) {
+        try {
+          loaded_state.lens_calib_enabled_ = lens["enabled"].get<bool>();
+        } catch (...) {
+        }
+      }
+      if (lens.contains("lens_maker")) {
+        try {
+          loaded_state.lens_override_make_ = lens["lens_maker"].get<std::string>();
+        } catch (...) {
+        }
+      }
+      if (lens.contains("lens_model")) {
+        try {
+          loaded_state.lens_override_model_ = lens["lens_model"].get<std::string>();
+        } catch (...) {
+        }
+      }
+      if (loaded_state.lens_override_make_.empty()) {
+        loaded_state.lens_override_model_.clear();
+      }
+      has_loaded_any = true;
+    }
 
     if (const auto v = ReadFloat(basic, OperatorType::EXPOSURE, "exposure"); v.has_value()) {
       loaded_state.exposure_ = v.value();
@@ -3920,33 +4435,72 @@ class EditorDialog final : public QDialog {
     auto           exec           = pipeline_guard_->pipeline_;
     // exec->SetPreviewMode(true);
 
-    auto&          global_params = exec->GetGlobalParams();
-    auto&          loading        = exec->GetStage(PipelineStageName::Image_Loading);
-    nlohmann::json decode_params;
-#ifdef HAVE_CUDA
-    decode_params["raw"]["cuda"] = true;
-#else
-    decode_params["raw"]["cuda"] = false;
-#endif
-    decode_params["raw"]["highlights_reconstruct"] = true;
-    decode_params["raw"]["use_camera_wb"]          = true;
-    decode_params["raw"]["user_wb"]                = 7600.f;
-    decode_params["raw"]["backend"]                = "puerh";
-    loading.SetOperator(OperatorType::RAW_DECODE, decode_params);
-    loading.SetOperator(OperatorType::LENS_CALIBRATION,
-                        {{"lens_calib",
-                          {{"enabled", true},
-                           {"apply_vignetting", true},
-                           {"apply_distortion", true},
-                           {"apply_tca", true},
-                           {"apply_crop", true},
-                           {"auto_scale", true},
-                           {"use_user_scale", false},
-                           {"user_scale", 1.0f},
-                           {"projection_enabled", false},
-                           {"target_projection", "unknown"},
-                           {"lens_profile_db_path", "src/config/lens_calib"}}}},
-                        global_params);
+    auto& global_params = exec->GetGlobalParams();
+    auto& loading       = exec->GetStage(PipelineStageName::Image_Loading);
+
+    auto MergeMissingDefaults = [](nlohmann::json& target, const nlohmann::json& defaults) -> bool {
+      if (!defaults.is_object()) {
+        return false;
+      }
+      bool changed = false;
+      if (!target.is_object()) {
+        target  = nlohmann::json::object();
+        changed = true;
+      }
+      for (auto it = defaults.begin(); it != defaults.end(); ++it) {
+        if (!target.contains(it.key())) {
+          target[it.key()] = it.value();
+          changed          = true;
+          continue;
+        }
+        if (it.value().is_object()) {
+          if (!target[it.key()].is_object()) {
+            target[it.key()] = it.value();
+            changed          = true;
+            continue;
+          }
+          for (auto nested_it = it.value().begin(); nested_it != it.value().end(); ++nested_it) {
+            if (!target[it.key()].contains(nested_it.key())) {
+              target[it.key()][nested_it.key()] = nested_it.value();
+              changed                           = true;
+            }
+          }
+        }
+      }
+      return changed;
+    };
+
+    const auto EnsureLoadingOperatorDefaults =
+        [&](OperatorType type, const nlohmann::json& defaults, bool pass_global_params) {
+          const auto op = loading.GetOperator(type);
+          if (!op.has_value() || !op.value() || !op.value()->op_) {
+            if (pass_global_params) {
+              loading.SetOperator(type, defaults, global_params);
+            } else {
+              loading.SetOperator(type, defaults);
+            }
+            return;
+          }
+
+          nlohmann::json params = nlohmann::json::object();
+          const auto     exported = op.value()->ExportOperatorParams();
+          if (exported.contains("params") && exported["params"].is_object()) {
+            params = exported["params"];
+          }
+          if (!MergeMissingDefaults(params, defaults)) {
+            return;
+          }
+          if (pass_global_params) {
+            loading.SetOperator(type, params, global_params);
+          } else {
+            loading.SetOperator(type, params);
+          }
+        };
+
+    EnsureLoadingOperatorDefaults(OperatorType::RAW_DECODE,
+                                  pipeline_defaults::MakeDefaultRawDecodeParams(), false);
+    EnsureLoadingOperatorDefaults(OperatorType::LENS_CALIBRATION,
+                                  pipeline_defaults::MakeDefaultLensCalibParams(), true);
 
     // auto& basic         = exec->GetStage(PipelineStageName::Basic_Adjustment);
     // basic.SetOperator(OperatorType::EXPOSURE, {{"exposure", 0.0f}}, global_params);
@@ -3974,8 +4528,16 @@ class EditorDialog final : public QDialog {
   void ApplyStateToPipeline(const AdjustmentState& render_state) {
     auto  exec          = pipeline_guard_->pipeline_;
     auto& global_params = exec->GetGlobalParams();
+    auto& loading       = exec->GetStage(PipelineStageName::Image_Loading);
     auto& geometry      = exec->GetStage(PipelineStageName::Geometry_Adjustment);
     auto& to_ws         = exec->GetStage(PipelineStageName::To_WorkingSpace);
+
+    loading.SetOperator(OperatorType::RAW_DECODE,
+                        ParamsForField(AdjustmentField::RawDecode, render_state));
+    loading.SetOperator(OperatorType::LENS_CALIBRATION,
+                        ParamsForField(AdjustmentField::LensCalib, render_state), global_params);
+    loading.EnableOperator(OperatorType::LENS_CALIBRATION, render_state.lens_calib_enabled_,
+                           global_params);
 
     const auto color_temp_request = BuildColorTempRequest(render_state);
     const bool color_temp_missing = !to_ws.GetOperator(OperatorType::COLOR_TEMP).has_value();
@@ -4265,19 +4827,27 @@ class EditorDialog final : public QDialog {
   QScrollArea*                                             controls_scroll_        = nullptr;
   QScrollArea*                                             tone_controls_scroll_   = nullptr;
   QScrollArea*                                             geometry_controls_scroll_ = nullptr;
+  QScrollArea*                                             raw_controls_scroll_    = nullptr;
   QStackedWidget*                                          control_panels_stack_   = nullptr;
   SpinnerWidget*                                           spinner_                = nullptr;
   QWidget*                                                 controls_               = nullptr;
   QWidget*                                                 tone_controls_          = nullptr;
   QWidget*                                                 geometry_controls_      = nullptr;
+  QWidget*                                                 raw_controls_           = nullptr;
   QPushButton*                                             tone_panel_btn_         = nullptr;
   QPushButton*                                             geometry_panel_btn_     = nullptr;
+  QPushButton*                                             raw_panel_btn_          = nullptr;
   HistogramWidget*                                         histogram_widget_       = nullptr;
   HistogramRulerWidget*                                    histogram_ruler_widget_ = nullptr;
   QComboBox*                                               lut_combo_              = nullptr;
   QSlider*                                                 exposure_slider_        = nullptr;
   QSlider*                                                 contrast_slider_        = nullptr;
   QSlider*                                                 saturation_slider_      = nullptr;
+  QCheckBox*                                               raw_highlights_reconstruct_checkbox_ = nullptr;
+  QCheckBox*                                               lens_calib_enabled_checkbox_ = nullptr;
+  QComboBox*                                               lens_brand_combo_       = nullptr;
+  QComboBox*                                               lens_model_combo_       = nullptr;
+  QLabel*                                                  lens_catalog_status_label_ = nullptr;
   CdlTrackballDiscWidget*                                  lift_disc_widget_       = nullptr;
   CdlTrackballDiscWidget*                                  gamma_disc_widget_      = nullptr;
   CdlTrackballDiscWidget*                                  gain_disc_widget_       = nullptr;
@@ -4324,6 +4894,7 @@ class EditorDialog final : public QDialog {
 
   std::vector<std::string>                                 lut_paths_{};
   QStringList                                              lut_names_{};
+  LensCatalog                                              lens_catalog_{};
 
   std::string                                              last_applied_lut_path_{};
   std::optional<ColorTempRequestSnapshot>                  last_submitted_color_temp_request_{};

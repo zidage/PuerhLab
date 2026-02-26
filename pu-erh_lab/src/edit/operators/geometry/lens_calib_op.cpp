@@ -688,7 +688,8 @@ void LensCalibOp::ResolveRuntime(OperatorParams& params) const {
   if (IsFinitePositive(input_meta_.crop_factor_hint_)) {
     meta.crop_factor_hint_ = input_meta_.crop_factor_hint_;
   }
-  input_meta_ = meta;
+  // Keep input_meta_ as user overrides only. Do not persist auto-resolved metadata back into
+  // operator params; otherwise UI-side param patching can churn every frame.
 
   if (meta.lens_model_.empty() || !IsFinitePositive(meta.focal_length_mm_)) {
     params.lens_calib_runtime_valid_  = false;
@@ -905,6 +906,9 @@ void LensCalibOp::SetGlobalParams(OperatorParams& params) const {
 }
 
 void LensCalibOp::EnableGlobalParams(OperatorParams& params, bool enable) {
+  if (enabled_ == enable && params.lens_calib_enabled_ == enable) {
+    return;  // No state change; avoid unnecessary dirty marking.
+  }
   enabled_                         = enable;
   params.lens_calib_enabled_       = enable;
   params.lens_calib_runtime_dirty_ = true;

@@ -25,6 +25,7 @@
 
 #include "edit/operators/basic/color_temp_op.hpp"
 #include "edit/operators/op_base.hpp"
+#include "edit/pipeline/default_pipeline_params.hpp"
 #include "edit/pipeline/pipeline_stage.hpp"
 #include "image/image_buffer.hpp"
 
@@ -347,30 +348,10 @@ void CPUPipelineExecutor::SetTemplateParams() {
   // Set some common parameters for template pipelines
   auto&          raw_stage     = GetStage(PipelineStageName::Image_Loading);
   auto&          global_params = GetGlobalParams();
-  nlohmann::json decode_params;
-#ifdef HAVE_CUDA
-  decode_params["raw"]["cuda"] = true;
-#else
-  decode_params["raw"]["cuda"] = false;
-#endif
-  decode_params["raw"]["highlights_reconstruct"] = false;
-  decode_params["raw"]["use_camera_wb"]          = true;
-  decode_params["raw"]["user_wb"]                = 7600.f;
-  decode_params["raw"]["backend"]                = "puerh";
+  nlohmann::json decode_params = pipeline_defaults::MakeDefaultRawDecodeParams();
   raw_stage.SetOperator(OperatorType::RAW_DECODE, decode_params);
 
-  nlohmann::json lens_params;
-  lens_params["lens_calib"] = {{"enabled", true},
-                               {"apply_vignetting", true},
-                               {"apply_distortion", true},
-                               {"apply_tca", true},
-                               {"apply_crop", true},
-                               {"auto_scale", true},
-                               {"use_user_scale", false},
-                               {"user_scale", 1.0f},
-                               {"projection_enabled", false},
-                               {"target_projection", "unknown"},
-                               {"lens_profile_db_path", "src/config/lens_calib"}};
+  nlohmann::json lens_params = pipeline_defaults::MakeDefaultLensCalibParams();
   raw_stage.SetOperator(OperatorType::LENS_CALIBRATION, lens_params, global_params);
 
   nlohmann::json color_temp_params;

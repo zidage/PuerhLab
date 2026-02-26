@@ -19,6 +19,7 @@
 #include <mutex>
 #include <algorithm>
 
+#include "edit/pipeline/default_pipeline_params.hpp"
 #include "edit/pipeline/pipeline_cpu.hpp"
 #include "type/type.hpp"
 
@@ -86,6 +87,16 @@ void EnsureDefaultColorTemp(CPUPipelineExecutor& exec) {
   to_ws_stage.SetOperator(OperatorType::COLOR_TEMP, color_temp_params, global_params);
 }
 
+void EnsureDefaultRawDecode(CPUPipelineExecutor& exec) {
+  auto& loading_stage = exec.GetStage(PipelineStageName::Image_Loading);
+  if (loading_stage.GetOperator(OperatorType::RAW_DECODE).has_value()) {
+    return;
+  }
+
+  const nlohmann::json raw_params = pipeline_defaults::MakeDefaultRawDecodeParams();
+  loading_stage.SetOperator(OperatorType::RAW_DECODE, raw_params);
+}
+
 void EnsureDefaultLensCalib(CPUPipelineExecutor& exec) {
   auto& global_params = exec.GetGlobalParams();
   auto& loading_stage = exec.GetStage(PipelineStageName::Image_Loading);
@@ -94,18 +105,7 @@ void EnsureDefaultLensCalib(CPUPipelineExecutor& exec) {
     return;
   }
 
-  nlohmann::json lens_params;
-  lens_params["lens_calib"] = {{"enabled", true},
-                               {"apply_vignetting", true},
-                               {"apply_distortion", true},
-                               {"apply_tca", true},
-                               {"apply_crop", true},
-                               {"auto_scale", true},
-                               {"use_user_scale", false},
-                               {"user_scale", 1.0f},
-                               {"projection_enabled", false},
-                               {"target_projection", "unknown"},
-                               {"lens_profile_db_path", "src/config/lens_calib"}};
+  const nlohmann::json lens_params = pipeline_defaults::MakeDefaultLensCalibParams();
   loading_stage.SetOperator(OperatorType::LENS_CALIBRATION, lens_params, global_params);
 }
 
@@ -192,6 +192,7 @@ auto PipelineMgmtService::LoadPipeline(sl_element_id_t id) -> std::shared_ptr<Pi
           it->second->pipeline_->SetDecodeRes(DecodeRes::FULL);
 
           EnsureDefaultOutputTransform(*it->second->pipeline_);
+          EnsureDefaultRawDecode(*it->second->pipeline_);
           EnsureDefaultColorTemp(*it->second->pipeline_);
           EnsureDefaultLensCalib(*it->second->pipeline_);
           ResyncGlobalParamsFromOperators(*it->second->pipeline_);
@@ -225,6 +226,7 @@ auto PipelineMgmtService::LoadPipeline(sl_element_id_t id) -> std::shared_ptr<Pi
     pipeline->SetBoundFile(id);
 
     EnsureDefaultOutputTransform(*pipeline);
+    EnsureDefaultRawDecode(*pipeline);
     EnsureDefaultColorTemp(*pipeline);
     EnsureDefaultLensCalib(*pipeline);
     ResyncGlobalParamsFromOperators(*pipeline);
