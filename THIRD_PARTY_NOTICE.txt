@@ -1,0 +1,177 @@
+pu-erh_lab THIRD-PARTY NOTICE
+Generated: 2026-02-27
+
+Project license: Apache License 2.0
+This file documents third-party components referenced by CMake and additional upstream sources explicitly requested by maintainers.
+Full license texts are stored in ./third_party_licenses/.
+
+IMPORTANT
+Some components listed below are under copyleft licenses (GPL/LGPL/CDDL/CC BY-SA). If you redistribute binaries or modified sources, you must satisfy those licenses in addition to Apache-2.0.
+
+A) Components used from CMakeLists.txt
+
+1) Qt 6
+Upstream: https://github.com/qt/qtbase
+License: LGPL-3.0-only and/or LGPL-2.1-or-later (Qt also provides commercial/GPL options)
+License text files:
+- third_party_licenses/Qt-LGPL-3.0-only.txt
+- third_party_licenses/Qt-LGPL-2.1-or-later.txt
+
+2) GoogleTest
+Upstream: https://github.com/google/googletest
+License: BSD-3-Clause
+License text file: third_party_licenses/googletest-LICENSE.txt
+
+3) stduuid
+Upstream: https://github.com/mariusbancila/stduuid
+License: MIT
+License text file: third_party_licenses/stduuid-LICENSE.txt
+
+4) uuid_v4
+Upstream: https://github.com/crashoz/uuid_v4
+License: MIT
+License text file: third_party_licenses/uuid_v4-LICENSE.txt
+
+5) utfcpp
+Upstream: https://github.com/nemtrif/utfcpp
+License: Boost Software License 1.0
+License text file: third_party_licenses/utfcpp-LICENSE.txt
+
+6) MurmurHash3
+Upstream reference: https://github.com/aappleby/smhasher/blob/master/src/MurmurHash3.cpp
+License: Public domain declaration in source header
+License text file: third_party_licenses/MurmurHash3-PUBLIC-DOMAIN.txt
+
+7) xxHash
+Upstream: https://github.com/Cyan4973/xxHash
+License: BSD-2-Clause
+License text file: third_party_licenses/xxHash-LICENSE.txt
+
+8) nlohmann/json
+Upstream: https://github.com/nlohmann/json
+License: MIT
+License text file: third_party_licenses/nlohmann_json-LICENSE.MIT.txt
+
+9) OpenCV
+Upstream: https://github.com/opencv/opencv
+License: Apache-2.0
+License text file: third_party_licenses/OpenCV-LICENSE.txt
+
+10) Eigen
+Upstream: https://github.com/eigenteam/eigen-git-mirror
+License: Primarily MPL-2.0 (see upstream COPYING notes)
+License text files:
+- third_party_licenses/Eigen-COPYING.MPL2.txt
+- third_party_licenses/Eigen-COPYING.README.txt
+
+11) glad
+Upstream: https://github.com/Dav1dde/glad
+License: MIT (glad code) with Apache-2.0 text for Khronos specification material in the same LICENSE
+License text file: third_party_licenses/glad-LICENSE.txt
+
+12) easy_profiler
+Upstream: https://github.com/yse/easy_profiler
+License: MIT
+License text file: third_party_licenses/easy_profiler-LICENSE.txt
+
+13) Google Highway (hwy)
+Upstream: https://github.com/google/highway
+License: Dual Apache-2.0 / BSD-3-Clause (plus CC0 notice for specific file per upstream LICENSE)
+License text file: third_party_licenses/highway-LICENSE.txt
+
+14) Little CMS 2 (lcms2)
+Upstream: https://github.com/mm2/Little-CMS
+License: MIT-style
+License text file: third_party_licenses/Little-CMS-LICENSE.txt
+
+15) OpenColorIO
+Upstream: https://github.com/AcademySoftwareFoundation/OpenColorIO
+License: BSD-3-Clause
+License text file: third_party_licenses/OpenColorIO-LICENSE.txt
+
+16) OpenImageIO
+Upstream: https://github.com/AcademySoftwareFoundation/OpenImageIO
+License: Apache-2.0
+License text file: third_party_licenses/OpenImageIO-LICENSE.md
+
+17) Exiv2
+Upstream: https://github.com/Exiv2/exiv2
+License: GPL-2.0-or-later
+License text files:
+- third_party_licenses/Exiv2-LICENSE.txt
+- third_party_licenses/Exiv2-COPYING-GPL-2.0.txt
+
+18) LibRaw
+Upstream: https://github.com/LibRaw/LibRaw
+License: CDDL-1.0 OR LGPL-2.1-or-later (upstream dual licensing)
+License text files:
+- third_party_licenses/LibRaw-LICENSE.CDDL
+- third_party_licenses/LibRaw-LICENSE.LGPL
+
+19) Lensfun (library and database)
+Upstream: https://github.com/lensfun/lensfun
+Library license: LGPL-3.0
+Database/content license: CC BY-SA 3.0
+License text files:
+- third_party_licenses/Lensfun-COPYING.txt
+- third_party_licenses/Lensfun-COPYING.LESSER.txt
+- third_party_licenses/Lensfun-data-CC-BY-SA-3.0.txt
+
+20) DuckDB
+Upstream: https://github.com/duckdb/duckdb
+License: MIT
+License text file: third_party_licenses/DuckDB-LICENSE.txt
+
+21) CUDAToolkit / OpenMP / OpenGL
+Status: Referenced by CMake as system/runtime/toolchain components. They are not mirrored here from GitHub in this folder.
+Note: Distribution must comply with the respective vendor/runtime licenses used in the actual build environment.
+
+B) Additional upstream sources explicitly requested for attribution
+
+22) ACES core
+Upstream: https://github.com/aces-aswf/aces-core
+License: Academy Color Encoding System Components License (custom permissive license by A.M.P.A.S.)
+License text file: third_party_licenses/aces-core-LICENSE.md
+
+23) darktable
+Upstream: https://github.com/darktable-org/darktable
+License: GPL-3.0
+License text file: third_party_licenses/darktable-LICENSE
+Usage note: highlight reconstruction implementation in this project is marked as adapted from darktable.
+
+24) aces-looks
+Upstream: https://github.com/priikone/aces-looks
+License: BSD-3-Clause
+License text file: third_party_licenses/aces-looks-LICENSE.md
+
+25) RawTherapee
+Upstream: https://github.com/RawTherapee/RawTherapee
+License: GPL-3.0
+License text file: third_party_licenses/RawTherapee-LICENSE
+
+26) RCD-Demosaicing
+Upstream: https://github.com/LuisSR/RCD-Demosaicing
+License: GPL-3.0
+License text file: third_party_licenses/RCD-Demosaicing-LICENSE
+Usage note: debayer RCD implementations are marked as adapted from this source.
+
+C) File-level adaptation pointers in this repository
+
+- pu-erh_lab/src/decoders/processor/operators/cpu/highlight_reconstruct.cpp
+  Includes darktable GPL notice and adaptation note.
+
+- pu-erh_lab/src/decoders/processor/operators/cpu/debayer_rcd.cpp
+  Includes adaptation note pointing to RCD-Demosaicing.
+
+- pu-erh_lab/src/decoders/processor/operators/gpu/cuda_debayer_rcd.cu
+  Includes RCD authorship header and algorithm attribution.
+
+- pu-erh_lab/src/include/edit/operators/GPU_kernels/color_mgmt/*.cuh
+  ACES core links are referenced in comments for ported formulas.
+
+D) Redistribution reminder
+
+- Keep this notice, the Apache-2.0 LICENSE, and all files in third_party_licenses/ when redistributing source/binaries.
+- Preserve original copyright and license headers in source files.
+- Copyleft components may impose source redistribution and reciprocal licensing obligations.
+- This document is a technical attribution record and is not legal advice.

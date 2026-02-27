@@ -1,0 +1,31 @@
+pu-erh_lab NOTICE
+Copyright 2025-2026 Yurun Zi
+
+This project is licensed under the Apache License, Version 2.0.
+
+This distribution includes third-party components under separate licenses.
+See THIRD_PARTY_NOTICE.txt for the complete component list and obligations.
+See third_party_licenses/ for full license texts gathered from upstream repositories.
+
+Selected attribution highlights:
+- OpenCV (Apache-2.0)
+- OpenImageIO (Apache-2.0)
+- OpenColorIO (BSD-3-Clause)
+- DuckDB (MIT)
+- Lensfun library/database (LGPL-3.0 and CC BY-SA 3.0)
+- Qt runtime components (LGPL family)
+- Exiv2 (GPL-2.0-or-later)
+- LibRaw (CDDL-1.0 OR LGPL-2.1-or-later)
+- darktable and RCD-Demosaicing derived algorithm implementations in source files
+- ACES core and ACES looks referenced for color pipeline formulas and transforms
+
+Attribution/source pointers for adapted files:
+- pu-erh_lab/src/decoders/processor/operators/cpu/highlight_reconstruct.cpp
+  Adapted from darktable opposed highlight reconstruction implementation.
+- pu-erh_lab/src/decoders/processor/operators/cpu/debayer_rcd.cpp
+  Adapted from LuisSR/RCD-Demosaicing.
+- pu-erh_lab/src/decoders/processor/operators/gpu/cuda_debayer_rcd.cu
+  CUDA adaptation of RCD demosaicing algorithm with upstream attribution.
+
+If you redistribute this project, preserve this NOTICE file, THIRD_PARTY_NOTICE.txt,
+all relevant license texts in third_party_licenses/, and upstream copyright notices.
