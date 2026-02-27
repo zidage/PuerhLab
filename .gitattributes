@@ -1,2 +1,3 @@
 pu-erh_lab/third_party/** linguist-vendored
 docs/doxygen/** linguist-generated
+*.xml linguist-detectable=false

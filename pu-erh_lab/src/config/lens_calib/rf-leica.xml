@@ -1,0 +1,216 @@
+<!DOCTYPE lensdatabase SYSTEM "lensfun-database.dtd">
+<lensdatabase version="2">
+
+    <mount>
+        <name>Leica M</name>
+        <compat>M42</compat>
+        <compat>M39/1</compat>
+        <compat>DKL</compat>
+        <compat>T2</compat>
+        <compat>Generic</compat>
+    </mount>
+
+    <camera>
+        <maker>Leica Camera AG</maker>
+        <maker lang="en">Leica</maker>
+        <model>Leica M (Typ 240)</model>
+        <model lang="en">M (Typ 240)</model>
+        <mount>Leica M</mount>
+        <cropfactor>1</cropfactor>
+    </camera>
+
+    <camera>
+        <maker>Leica Camera AG</maker>
+        <maker lang="en">Leica</maker>
+        <model>Leica M EV1</model>
+        <model lang="en">M EV1</model>
+        <mount>Leica M</mount>
+        <cropfactor>1</cropfactor>
+    </camera>
+
+    <camera>
+        <maker>Leica Camera AG</maker>
+        <maker lang="en">Leica</maker>
+        <model>Leica M Monochrom (Typ 246)</model>
+        <model lang="en">M Monochrom (Typ 246)</model>
+        <mount>Leica M</mount>
+        <cropfactor>1</cropfactor>
+    </camera>
+
+    <camera>
+        <maker>Leica Camera AG</maker>
+        <maker lang="en">Leica</maker>
+        <model>M8 Digital Camera</model>
+        <mount>Leica M</mount>
+        <cropfactor>1.33</cropfactor>
+    </camera>
+
+    <camera>
+        <maker>Leica Camera AG</maker>
+        <maker lang="en">Leica</maker>
+        <model>M9 Digital Camera</model>
+        <mount>Leica M</mount>
+        <cropfactor>1</cropfactor>
+    </camera>
+
+    <camera>
+        <maker>Leica Camera AG</maker>
+        <maker lang="en">Leica</maker>
+        <model>Leica M10</model>
+        <model lang="en">M10</model>
+        <mount>Leica M</mount>
+        <cropfactor>1</cropfactor>
+    </camera>
+
+    <camera>
+        <maker>Leica Camera AG</maker>
+        <maker lang="en">Leica</maker>
+        <model>Leica M10 Monochrom</model>
+        <model lang="en">M10 Monochrom</model>
+        <mount>Leica M</mount>
+        <cropfactor>1</cropfactor>
+    </camera>
+
+    <camera>
+        <maker>Leica Camera AG</maker>
+        <maker lang="en">Leica</maker>
+        <model>Leica M10-D</model>
+        <model lang="en">M10-D</model>
+        <mount>Leica M</mount>
+        <cropfactor>1</cropfactor>
+    </camera>
+
+    <camera>
+        <maker>Leica Camera AG</maker>
+        <maker lang="en">Leica</maker>
+        <model>Leica M10-P</model>
+        <model lang="en">M10-P</model>
+        <mount>Leica M</mount>
+        <cropfactor>1</cropfactor>
+    </camera>
+
+    <camera>
+        <maker>Leica Camera AG</maker>
+        <maker lang="en">Leica</maker>
+        <model>Leica M10-R</model>
+        <model lang="en">M10-R</model>
+        <mount>Leica M</mount>
+        <cropfactor>1</cropfactor>
+    </camera>
+
+    <camera>
+        <maker>Leica Camera AG</maker>
+        <maker lang="en">Leica</maker>
+        <model>Leica M11</model>
+        <model lang="en">M11</model>
+        <mount>Leica M</mount>
+        <cropfactor>1</cropfactor>
+    </camera>
+
+    <camera>
+        <maker>Leica Camera AG</maker>
+        <maker lang="en">Leica</maker>
+        <model>Leica M11 Monochrom</model>
+        <model lang="en">M11 Monochrom</model>
+        <mount>Leica M</mount>
+        <cropfactor>1</cropfactor>
+    </camera>
+
+    <camera>
+        <maker>Leica Camera AG</maker>
+        <maker lang="en">Leica</maker>
+        <model>Leica M11-P</model>
+        <model lang="en">M11-P</model>
+        <mount>Leica M</mount>
+        <cropfactor>1</cropfactor>
+    </camera>
+
+    <camera>
+        <maker>Leica Camera AG</maker>
+        <maker lang="en">Leica</maker>
+        <model>Leica M11-D</model>
+        <model lang="en">M11-D</model>
+        <mount>Leica M</mount>
+        <cropfactor>1</cropfactor>
+    </camera>
+
+    <lens>
+        <maker>Leica Camera AG</maker>
+        <maker lang="en">Leica</maker>
+        <model>Elmarit-M 1:2.8/28 Asph.</model>
+        <mount>Leica M</mount>
+        <cropfactor>1</cropfactor>
+        <calibration>
+            <!-- Taken with LEICA M (Typ 240) -->
+            <distortion model="ptlens" focal="28" a="0.00349" b="-0.00508" c="-0.01721"/>
+        </calibration>
+    </lens>
+
+    <lens>
+        <maker>Leica Camera AG</maker>
+        <maker lang="en">Leica</maker>
+        <model>Elmarit-M 1:2.8/90</model>
+        <mount>Leica M</mount>
+        <cropfactor>1</cropfactor>
+        <calibration>
+            <!-- Taken with Leica M (Typ 240) -->
+            <distortion model="ptlens" focal="90" a="-0.00423" b="0.01406" c="-0.00692"/>
+        </calibration>
+    </lens>
+
+    <lens>
+        <maker>Leica Camera AG</maker>
+        <maker lang="en">Leica</maker>
+        <model>Summicron-M 1:2/50</model>
+        <!-- Model 11819/11825/11826/11816 -->
+        <mount>Leica M</mount>
+        <cropfactor>1</cropfactor>
+        <calibration>
+            <!-- Taken Leica M (Typ 240) -->
+            <distortion model="poly3" focal="50" k1="-0.00072"/>
+            <tca model="poly3" focal="50" vr="0.9999915" vb="0.9998735"/>
+        </calibration>
+    </lens>
+
+    <lens>
+        <maker>Leica Camera AG</maker>
+        <maker lang="en">Leica</maker>
+        <model>Summicron-M 1:2/28 Asph.</model>
+        <mount>Leica M</mount>
+        <cropfactor>1</cropfactor>
+        <calibration>
+            <!-- Taken with Leica M9 Digital Camera -->
+            <distortion model="ptlens" focal="28" a="0.0135748" b="-0.0502846" c="0.0486119"/>
+            <tca model="poly3" focal="28" vr="1.0001441" vb="0.9999670"/>
+        </calibration>
+    </lens>
+
+    <lens>
+        <maker>Leica Camera AG</maker>
+        <maker lang="en">Leica</maker>
+        <model>Summicron-M 1:2/35 Asph.</model>
+        <model lang="en">Summicron-M 1:2/35 Asph. (11879/11882)</model>
+        <mount>Leica M</mount>
+        <cropfactor>1.0</cropfactor>
+        <calibration>
+            <!-- Taken with Leica M10 Digital Camera -->
+            <distortion model="ptlens" focal="35" a="0.0183736" b="-0.0506454" c="0.0446071"/>
+            <tca model="poly3" focal="35" br="-0.0001021" vr="1.0001994" bb="0.0002990" vb="0.9996237"/>
+        </calibration>
+    </lens>
+
+    <lens>
+        <maker>Leica Camera AG</maker>
+        <maker lang="en">Leica</maker>
+        <model>APO-Summicron-M 1:2/75 Asph.</model>
+        <model lang="en">APO-Summicron-M 1:2/75 Asph. (11673/11701)</model>
+        <mount>Leica M</mount>
+        <cropfactor>1.0</cropfactor>
+        <calibration>
+            <!-- Taken with Leica M10 Digital Camera -->
+            <distortion model="ptlens" focal="75" a="-0.005889" b="0.0201916" c="-0.0106667"/>
+            <tca model="poly3" focal="75" br="0.0000240" vr="1.0000099" bb="-0.0000089" vb="0.9999321"/>
+        </calibration>
+    </lens>
+
+</lensdatabase>

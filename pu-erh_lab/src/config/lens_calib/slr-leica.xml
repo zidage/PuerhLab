@@ -1,0 +1,19 @@
+<!DOCTYPE lensdatabase SYSTEM "lensfun-database.dtd">
+<lensdatabase version="2">
+
+    <mount>
+        <name>Leica R</name>
+        <compat>M42</compat>
+        <compat>M39/1</compat>
+        <compat>DKL</compat>
+        <compat>T2</compat>
+        <compat>Tamron Adaptall</compat>
+        <compat>Generic</compat>
+    </mount>
+
+    <mount>
+        <name>Leica S</name>
+        <compat>Generic</compat>
+    </mount>
+
+</lensdatabase>

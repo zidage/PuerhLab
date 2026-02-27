@@ -1,0 +1,442 @@
+<!DOCTYPE lensdatabase SYSTEM "lensfun-database.dtd">
+<lensdatabase version="2">
+
+    <camera>
+        <maker>GoPro</maker>
+        <model>HD2</model>
+        <mount>goProHero</mount>
+        <cropfactor>6.4</cropfactor>
+    </camera>
+
+    <camera>
+        <maker>GoPro</maker>
+        <model>Hero3+ black</model>
+        <mount>goProHero3+</mount>
+        <cropfactor>5.42</cropfactor>
+    </camera>
+
+    <camera>
+        <maker>GoPro</maker>
+        <model>HERO4 Silver</model>
+        <mount>goProHero4</mount>
+        <cropfactor>7.66</cropfactor>
+    </camera>
+
+    <camera>
+        <maker>GoPro</maker>
+        <model>HERO4 Black</model>
+        <mount>goProHero4black</mount>
+        <cropfactor>5</cropfactor>
+    </camera>
+
+    <camera>
+        <maker>GoPro</maker>
+        <model>HERO5 Black</model>
+        <mount>goProHero4black</mount>
+        <cropfactor>5</cropfactor>
+    </camera>
+
+     <camera>
+        <maker>GoPro</maker>
+        <model>Hero10 black</model>
+        <mount>goProHero10bl</mount>
+        <cropfactor>5.5</cropfactor>
+    </camera>
+
+    <camera>
+        <maker>GoPro</maker>
+        <model>Hero11 Black</model>
+        <mount>goProHero11bl</mount>
+        <cropfactor>5.54</cropfactor>
+    </camera>
+
+    <camera>
+        <maker>DJI</maker>
+        <model>Phantom Vision FC200</model>
+        <mount>dijPhantomVisionFC200</mount>
+        <cropfactor>6</cropfactor>
+    </camera>
+
+    <camera>
+        <maker>DJI</maker>
+        <model>Phantom 3 Pro FC300X</model>
+        <mount>dijPhantom3ProFC300X</mount>
+        <cropfactor>5.5</cropfactor>
+    </camera>
+
+    <camera>
+        <!-- This camera has been rebranded as Hama Action-Cam "Star-60",
+             fantec BeastVision XHD and possibly others. -->
+        <maker>AEE DV</maker>
+        <maker lang="en">AEE</maker>
+        <model>AEE DV</model>
+        <model lang="en">AEE MagiCam SD19 &amp; compatibles</model>
+        <mount>aeeDV</mount>
+        <!-- The crop factor is only estimated from the 1/2.5" specs. -->
+        <cropfactor>6</cropfactor>
+    </camera>
+
+    <camera>
+        <maker>GitUp</maker>
+        <model>Git2</model>
+        <mount>git2</mount>
+        <cropfactor>5.57</cropfactor>
+    </camera>
+
+    <camera>
+        <maker>DJI</maker>
+        <model>Mavic Pro FC220</model>
+        <mount>djiMavicProFC220</mount>
+        <cropfactor>5.64</cropfactor>
+    </camera>
+
+    <camera>
+        <maker>DJI</maker>
+        <model>FC6310</model>
+        <mount>djiFC6310</mount>
+        <cropfactor>2.73</cropfactor>
+    </camera>
+
+    <camera>
+        <maker>DJI</maker>
+        <model>FC3411</model>
+        <model lang="en">Air 2S</model>
+        <mount>djiFC3411</mount>
+        <cropfactor>2.73</cropfactor>
+    </camera>
+
+    <camera>
+        <maker>Hasselblad</maker>
+        <model>L1D-20c</model>
+        <model lang="en">DJI Mavic 2 Pro</model>
+        <mount>l1d20c</mount>
+        <cropfactor>2.8</cropfactor>
+    </camera>
+
+    <camera>
+        <maker>Hasselblad</maker>
+        <model>L2D-20c</model>
+        <model lang="en">DJI Mavic 3</model>
+        <mount>l2d20c</mount>
+        <cropfactor>1.953</cropfactor>
+    </camera>
+
+    <camera>
+        <maker>DJI</maker>
+        <model>Mavic Air FC2103</model>
+        <mount>djiMavicAirFC2103</mount>
+        <cropfactor>5.6</cropfactor>
+    </camera>
+
+    <camera>
+        <maker>DJI</maker>
+        <model>FC3582</model>
+        <model lang="en">Mini 3 Pro</model>
+        <mount>djiFC3582</mount>
+        <cropfactor>3.6</cropfactor>
+    </camera>
+
+    <camera>
+        <maker>DJI</maker>
+        <model>FC6310R</model>
+        <model lang="en">Phantom 4 RTK</model>
+        <mount>djiFC6310R</mount>
+        <cropfactor>2.73</cropfactor>
+    </camera>
+
+
+    <lens>
+        <maker>GoPro</maker>
+        <model>HD2 &amp; compatibles</model>
+        <model lang="en">fixed lens</model>
+        <model lang="de">festes Objektiv</model>
+        <mount>goProHero</mount>
+        <type>fisheye</type>
+        <cropfactor>6.4</cropfactor>
+        <aspect-ratio>4:3</aspect-ratio>
+        <calibration>
+            <distortion model="ptlens" focal="2.5" a="-0.07664" b="0.21934" c="-0.10671"/>
+        </calibration>
+    </lens>
+
+    <lens>
+        <maker>GoPro</maker>
+        <model>GoPro Hero3+ black &amp; compatibles</model>
+        <model lang="en">fixed lens</model>
+        <model lang="de">festes Objektiv</model>
+        <mount>goProHero3+</mount>
+        <cropfactor>5.42</cropfactor>
+        <aspect-ratio>4:3</aspect-ratio>
+        <calibration>
+            <distortion model="ptlens" focal="15" a="0.01049" b="0.01663" c="-0.40901"/>
+        </calibration>
+    </lens>
+
+    <lens>
+        <maker>GoPro</maker>
+        <model>HERO4</model>
+        <model lang="en">fixed lens</model>
+        <model lang="de">festes Objektiv</model>
+        <mount>goProHero4</mount>
+        <type>equisolid</type>
+        <cropfactor>7.66</cropfactor>
+        <aspect-ratio>4:3</aspect-ratio>
+        <calibration>
+            <distortion model="ptlens" focal="3" a="0.03183" b="-0.11592" c="0"/>
+        </calibration>
+    </lens>
+
+    <lens>
+        <maker>DJI</maker>
+        <model>Phantom Vision FC200 &amp; compatibles</model>
+        <model lang="en">fixed lens</model>
+        <model lang="de">festes Objektiv</model>
+        <mount>dijPhantomVisionFC200</mount>
+        <type>equisolid</type>
+        <cropfactor>6</cropfactor>
+        <aspect-ratio>4:3</aspect-ratio>
+        <calibration>
+            <distortion model="ptlens" focal="5" a="0.02707" b="-0.10021" c="-0.09787"/>
+            <tca model="poly3" focal="5" vr="1.0002" vb="1.0007"/>
+        </calibration>
+    </lens>
+
+    <lens>
+        <maker>AEE</maker>
+        <model>AEE SD19 &amp; compatibles</model>
+        <model lang="en">fixed lens</model>
+        <model lang="de">festes Objektiv</model>
+        <mount>aeeDV</mount>
+        <type>equisolid</type>
+        <!-- The crop factor is only estimated from the 1/2.5" specs. -->
+        <cropfactor>6</cropfactor>
+        <aspect-ratio>4:3</aspect-ratio>
+        <calibration>
+            <!-- Measured with 360° panorama -->
+            <!--distortion model="ptlens" focal="5" a="0.0525" b="-0.1258" c="0.15228" real-focal="2.5" /-->
+            <!-- Measured with a single image, assuming the same FOV as above -->
+            <distortion model="ptlens" focal="5" a="0.05109" b="-0.12092" c="0.10955" real-focal="2.61"/>
+        </calibration>
+    </lens>
+
+    <lens>
+        <maker>DJI</maker>
+        <model>Phantom 3 Pro</model>
+        <model lang="en">fixed lens</model>
+        <model lang="de">festes Objektiv</model>
+        <mount>dijPhantom3ProFC300X</mount>
+        <cropfactor>5.5</cropfactor>
+        <aspect-ratio>4:3</aspect-ratio>
+        <calibration>
+            <vignetting model="pa" focal="3.6" aperture="2.8" distance="10" k1="-0.9228" k2="0.5367" k3="-0.2985"/>
+            <vignetting model="pa" focal="3.6" aperture="2.8" distance="1000" k1="-0.9228" k2="0.5367" k3="-0.2985"/>
+        </calibration>
+    </lens>
+
+    <lens>
+        <maker>GitUp</maker>
+        <model>Git2 &amp; compatibles</model>
+        <model lang="en">fixed lens</model>
+        <model lang="de">festes Objektiv</model>
+        <mount>git2</mount>
+        <type>equisolid</type>
+        <cropfactor>5.57</cropfactor>
+        <aspect-ratio>4:3</aspect-ratio>
+        <calibration>
+            <distortion model="poly3" focal="3" k1="0.01419"/>
+            <tca model="poly3" focal="3" br="-0.0000201" vr="1.0001473" bb="-0.0001084" vb="1.0005537"/>
+        </calibration>
+    </lens>
+
+    <lens>
+        <maker>GoPro</maker>
+        <model>HERO4 black</model>
+        <model lang="en">fixed lens</model>
+        <model lang="de">festes Objektiv</model>
+        <mount>goProHero4black</mount>
+        <type>stereographic</type>
+        <cropfactor>5</cropfactor>
+        <aspect-ratio>4:3</aspect-ratio>
+        <calibration>
+            <distortion model="poly3" focal="3" k1="-0.03012"/>
+        </calibration>
+    </lens>
+
+    <lens>
+        <maker>DJI</maker>
+        <model>Mavic Pro FC220 &amp; compatibles</model>
+        <model lang="en">fixed lens</model>
+        <model lang="de">festes Objektiv</model>
+        <mount>djiMavicProFC220</mount>
+        <cropfactor>5.64</cropfactor>
+        <aspect-ratio>4:3</aspect-ratio>
+        <calibration>
+            <distortion model="ptlens" focal="4.7" a="0" b="-0.014" c="0.033"/>
+            <tca model="poly3" focal="4.7" br="-0.0000054" vr="1.0000535" bb="-0.0000279" vb="1.0000246"/>
+            <vignetting model="pa" focal="4.7" aperture="2.2" distance="10" k1="-1.550" k2="1.055" k3="-0.195"/>
+            <vignetting model="pa" focal="4.7" aperture="2.2" distance="1000" k1="-1.550" k2="1.055" k3="-0.195"/>
+        </calibration>
+    </lens>
+
+    <lens>
+        <maker>DJI</maker>
+        <model>FC6310 &amp; compatibles</model>
+        <model lang="en">fixed lens</model>
+        <model lang="de">festes Objektiv</model>
+        <mount>djiFC6310</mount>
+        <cropfactor>2.73</cropfactor>
+        <aspect-ratio>16:9</aspect-ratio>
+        <calibration>
+            <distortion model="ptlens" focal="8.8" a="0.00961599" b="-0.0582928" c="-0.00551691"/>
+            <tca model="poly3" focal="8.8" vr="1.0000759" vb="1.0000033"/>
+        </calibration>
+    </lens>
+
+    <lens>
+        <maker>Hasselblad</maker>
+        <model>L1D-20c &amp; compatibles</model>
+        <model lang="en">fixed lens</model>
+        <model lang="de">festes Objektiv</model>
+        <mount>l1d20c</mount>
+        <cropfactor>2.8</cropfactor>
+        <calibration>
+            <distortion model="ptlens" focal="10" a="0.013" b="-0.071" c="0.021"/>
+        </calibration>
+    </lens>
+
+    <lens>
+        <maker>Hasselblad</maker>
+        <model>L2D-20c &amp; compatibles</model>
+        <model lang="en">fixed lens</model>
+        <model lang="de">festes Objektiv</model>
+        <mount>l2d20c</mount>
+        <cropfactor>1.953</cropfactor>
+        <aspect-ratio>4:3</aspect-ratio>
+        <calibration>
+            <distortion model="ptlens" focal="12.3" a="-0.0167982" b="0.00725109" c="-0.03131"/>
+        </calibration>
+    </lens>
+
+    <lens>
+        <maker>DJI</maker>
+        <model>FC2103 &amp; compatibles</model>
+        <model lang="en">fixed lens</model>
+        <model lang="de">festes Objektiv</model>
+        <mount>djiMavicAirFC2103</mount>
+        <cropfactor>5.6</cropfactor>
+        <calibration>
+            <distortion model="ptlens" focal="4.5" a="0.01522" b="-0.10515" c="0.13917"/>
+            <tca model="poly3" focal="4.5" vr="1.0001363" vb="1.0000660"/>
+            <vignetting model="pa" focal="4.5" aperture="2.8" distance="10" k1="-0.7961" k2="1.0400" k3="-0.5929"/>
+            <vignetting model="pa" focal="4.5" aperture="2.8" distance="1000" k1="-0.7961" k2="1.0400" k3="-0.5929"/>
+        </calibration>
+    </lens>
+
+    <lens>
+        <maker>DJI</maker>
+        <model>FC3411 &amp; compatibles</model>
+        <model lang="en">FC3411 fixed lens</model>
+        <model lang="de">FC3411 festes Objektiv</model>
+        <mount>djiFC3411</mount>
+        <cropfactor>2.63</cropfactor>
+        <aspect-ratio>3:2</aspect-ratio>
+        <calibration>
+            <distortion model="ptlens" focal="8.4" a="0.014878" b="-0.0317787" c="-0.000777849"/>
+            <tca model="poly3" focal="8.38" br="-0.0000204" vr="1.0003052" bb="-0.0000365" vb="1.0000320"/>
+            <vignetting model="pa" focal="8.4" aperture="2.8" distance="10" k1="-1.3024" k2="0.0998" k3="0.3900"/>
+            <vignetting model="pa" focal="8.4" aperture="2.8" distance="1000" k1="-1.3024" k2="0.0998" k3="0.3900"/>
+        </calibration>
+    </lens>
+
+    <lens>
+        <maker>GoPro</maker>
+        <model>HERO10 Black &amp; compatibles</model>
+        <model lang="en">fixed lens</model>
+        <model lang="de">festes Objektiv</model>
+        <mount>goProHero10bl</mount>
+        <cropfactor>5.5</cropfactor>
+        <aspect-ratio>4:3</aspect-ratio>
+        <calibration>
+            <distortion model="ptlens" focal="2.7" a="0.04608" b="-0.13007" c="-0.21816"/>
+        </calibration>
+    </lens>
+
+    <lens>
+        <maker>GoPro</maker>
+        <model>HERO11 Black &amp; compatibles</model>
+        <model lang="en">fixed lens</model>
+        <model lang="de">festes Objektiv</model>
+        <mount>goProHero11bl</mount>
+        <type>fisheye</type>
+        <cropfactor>5.54</cropfactor>   
+        <aspect-ratio>8:7</aspect-ratio>
+        <calibration>
+            <distortion model="ptlens" focal="2.7" a="0.0594752" b="-0.141715" c="-0.322349"/>
+        </calibration>
+    </lens>
+
+    <lens>
+        <maker>DJI</maker>
+        <model>FC3582 &amp; compatibles</model>
+        <model lang="en">FC3582 fixed lens</model>
+        <mount>djiFC3582</mount>
+        <cropfactor>3.6</cropfactor>
+        <aspect-ratio>4:3</aspect-ratio>
+        <calibration>
+            <distortion model="ptlens" focal="6.7" a="-0.0075" b="0.026" c="-0.0027"/>
+            <tca model="poly3" focal="6.7" vr="1.0000533" vb="0.999973"/>
+            <vignetting model="pa" focal="6.7" aperture="1.7" distance="10" k1="-2.7528" k2="3.9587" k3="-2.0068"/>
+            <vignetting model="pa" focal="6.7" aperture="1.7" distance="1000" k1="-2.7528" k2="3.9587" k3="-2.0068"/>
+        </calibration>
+    </lens>
+
+    <lens>
+        <maker>DJI</maker>
+        <model>FC6310R &amp; compatibles</model>
+        <model lang="en">FC6310R fixed lens</model>
+        <model lang="de">FC6310R festes Objektiv</model>
+        <mount>djiFC6310R</mount>
+        <cropfactor>2.73</cropfactor>
+        <aspect-ratio>4:3</aspect-ratio>
+        <calibration>
+            <distortion model="ptlens" focal="8.8" a="0.0235518" b="-0.115701" c="0.0349985"/>
+        </calibration>
+    </lens>
+
+    <lens>
+        <maker>DJI</maker>
+        <model>DJI MFT 15mm F1.7 ASPH</model>
+        <!-- Rebrandet version of Panasonics Leica DG Summilux 15mm f/1.7 Asph. -->
+        <mount>Micro 4/3 System</mount>
+        <cropfactor>2.0</cropfactor>
+        <aspect-ratio>4:3</aspect-ratio>
+        <calibration>
+            <!-- Taken with Lumix DC-GX9 -->
+            <distortion model="ptlens" focal="15.0" a="0.0155789" b="-0.065273" c="0.0103711"/>
+            <tca model="poly3" focal="15.0" br="-0.0001022" vr="1.0002528" bb="0.0001266" vb="0.9999074"/>
+            <vignetting model="pa" focal="15.0" aperture="1.7" distance="10" k1="-0.8335305" k2="0.1674747" k3="0.0205794"/>
+            <vignetting model="pa" focal="15.0" aperture="1.7" distance="1000" k1="-0.8335305" k2="0.1674747" k3="0.0205794"/>
+            <vignetting model="pa" focal="15.0" aperture="1.8" distance="10" k1="-0.5854725" k2="-0.3005059" k3="0.2703024"/>
+            <vignetting model="pa" focal="15.0" aperture="1.8" distance="1000" k1="-0.5854725" k2="-0.3005059" k3="0.2703024"/>
+            <vignetting model="pa" focal="15.0" aperture="2.0" distance="10" k1="-0.1705638" k2="-0.8262960" k3="0.4503716"/>
+            <vignetting model="pa" focal="15.0" aperture="2.0" distance="1000" k1="-0.1705638" k2="-0.8262960" k3="0.4503716"/>
+            <vignetting model="pa" focal="15.0" aperture="2.2" distance="10" k1="-0.2120204" k2="-0.3012390" k3="0.0350934"/>
+            <vignetting model="pa" focal="15.0" aperture="2.2" distance="1000" k1="-0.2120204" k2="-0.3012390" k3="0.0350934"/>
+            <vignetting model="pa" focal="15.0" aperture="2.5" distance="10" k1="-0.2947478" k2="0.0356092" k3="-0.1596075"/>
+            <vignetting model="pa" focal="15.0" aperture="2.5" distance="1000" k1="-0.2947478" k2="0.0356092" k3="-0.1596075"/>
+            <vignetting model="pa" focal="15.0" aperture="2.8" distance="10" k1="-0.3124699" k2="0.0160399" k3="-0.0638997"/>
+            <vignetting model="pa" focal="15.0" aperture="2.8" distance="1000" k1="-0.3124699" k2="0.0160399" k3="-0.0638997"/>
+            <vignetting model="pa" focal="15.0" aperture="4.0" distance="10" k1="-0.2866026" k2="-0.1246638" k3="0.0762714"/>
+            <vignetting model="pa" focal="15.0" aperture="4.0" distance="1000" k1="-0.2866026" k2="-0.1246638" k3="0.0762714"/>
+            <vignetting model="pa" focal="15.0" aperture="5.6" distance="10" k1="-0.2869685" k2="-0.1036673" k3="0.0549683"/>
+            <vignetting model="pa" focal="15.0" aperture="5.6" distance="1000" k1="-0.2869685" k2="-0.1036673" k3="0.0549683"/>
+            <vignetting model="pa" focal="15.0" aperture="8.0" distance="10" k1="-0.2790484" k2="-0.0888154" k3="0.0362853"/>
+            <vignetting model="pa" focal="15.0" aperture="8.0" distance="1000" k1="-0.2790484" k2="-0.0888154" k3="0.0362853"/>
+            <vignetting model="pa" focal="15.0" aperture="11.0" distance="10" k1="-0.2781307" k2="-0.0871034" k3="0.0339018"/>
+            <vignetting model="pa" focal="15.0" aperture="11.0" distance="1000" k1="-0.2781307" k2="-0.0871034" k3="0.0339018"/>
+            <vignetting model="pa" focal="15.0" aperture="16.0" distance="10" k1="-0.3520701" k2="-0.0242663" k3="0.0162753"/>
+            <vignetting model="pa" focal="15.0" aperture="16.0" distance="1000" k1="-0.3520701" k2="-0.0242663" k3="0.0162753"/>
+        </calibration>
+    </lens>
+
+</lensdatabase>

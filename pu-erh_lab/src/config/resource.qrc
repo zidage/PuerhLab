@@ -1,0 +1,5 @@
+<RCC>
+  <qresource prefix="/">
+    <file>fonts/main_IBM.ttf</file>
+  </qresource>
+</RCC>
