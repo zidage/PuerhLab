@@ -70,7 +70,6 @@ bool ProjectHandler::InitializeServices(const std::filesystem::path& dbPath,
       std::shared_ptr<PipelineMgmtService>    pipeline_{};
       std::shared_ptr<EditHistoryMgmtService> history_{};
       std::shared_ptr<ThumbnailService>       thumbnail_{};
-      std::unique_ptr<SleeveFilterService>    filter_{};
       std::unique_ptr<ImportServiceImpl>      import_{};
       std::shared_ptr<ExportService>          export_{};
       std::filesystem::path                   db_path_{};
@@ -123,8 +122,6 @@ bool ProjectHandler::InitializeServices(const std::filesystem::path& dbPath,
       result->thumbnail_ = std::make_shared<ThumbnailService>(
           result->project_->GetSleeveService(), result->project_->GetImagePoolService(),
           result->pipeline_);
-      result->filter_ =
-          std::make_unique<SleeveFilterService>(result->project_->GetStorageService());
       result->import_ = std::make_unique<ImportServiceImpl>(
           result->project_->GetSleeveService(), result->project_->GetImagePoolService());
       result->export_ = std::make_shared<ExportService>(
@@ -195,7 +192,6 @@ bool ProjectHandler::InitializeServices(const std::filesystem::path& dbPath,
           ph.pipeline_service_      = std::move(result->pipeline_);
           ph.history_service_       = std::move(result->history_);
           ph.thumbnail_service_     = std::move(result->thumbnail_);
-          ph.filter_service_        = std::move(result->filter_);
           ph.import_service_        = std::move(result->import_);
           ph.export_service_        = std::move(result->export_);
           ph.db_path_               = std::move(result->db_path_);
@@ -447,7 +443,8 @@ void ProjectHandler::ApplyLoadedProjectEntriesBatch() {
                                          std::move(pending_folder_path_by_id_));
     backend_.folder_ctrl_.RebuildFolderView();
     backend_.folder_ctrl_.ApplyFolderSelection(0, true);
-    backend_.filter_.RebuildThumbnailView(std::nullopt);
+    backend_.stats_.RebuildThumbnailView();
+    backend_.stats_.RefreshStats();
     backend_.SetTaskState("No background tasks", 0, false);
 
     backend_.SetServiceState(
@@ -508,19 +505,6 @@ void ProjectHandler::ClearProjectData() {
   backend_.visible_thumbnails_.clear();
   backend_.folder_ctrl_.ClearState();
   backend_.import_export_.ClearImportTarget();
-
-  backend_.rule_model_.ClearAndReset();
-
-  if (!backend_.sql_preview_.isEmpty()) {
-    backend_.sql_preview_.clear();
-    emit backend_.SqlPreviewChanged();
-  }
-  if (!backend_.validation_error_.isEmpty()) {
-    backend_.validation_error_.clear();
-    emit backend_.ValidationErrorChanged();
-  }
-
-  backend_.filter_.ResetActiveFilterIds();
 
   pending_project_entries_.clear();
   pending_folder_entries_.clear();

@@ -8,12 +8,11 @@
 #include <unordered_map>
 #include <vector>
 
-#include "ui/puerhlab_main/album_backend/filter_rule_model.hpp"
 #include "ui/puerhlab_main/album_backend/album_types.hpp"
 #include "ui/puerhlab_main/album_backend/project_handler.hpp"
 #include "ui/puerhlab_main/album_backend/thumbnail_manager.hpp"
 #include "ui/puerhlab_main/album_backend/folder_controller.hpp"
-#include "ui/puerhlab_main/album_backend/filter_engine.hpp"
+#include "ui/puerhlab_main/album_backend/stats_engine.hpp"
 #include "ui/puerhlab_main/album_backend/import_export.hpp"
 #include "ui/puerhlab_main/album_backend/editor_controller.hpp"
 
@@ -21,8 +20,6 @@ namespace puerhlab::ui {
 
 class AlbumBackend final : public QObject {
   Q_OBJECT
-  Q_PROPERTY(puerhlab::ui::FilterRuleModel* filterRules READ FilterRules CONSTANT)
-  Q_PROPERTY(QVariantList fieldOptions READ FieldOptions CONSTANT)
   Q_PROPERTY(QVariantList thumbnails READ Thumbnails NOTIFY ThumbnailsChanged)
   Q_PROPERTY(QVariantList folders READ Folders NOTIFY FoldersChanged)
   Q_PROPERTY(uint currentFolderId READ CurrentFolderId NOTIFY FolderSelectionChanged)
@@ -30,8 +27,10 @@ class AlbumBackend final : public QObject {
   Q_PROPERTY(int shownCount READ ShownCount NOTIFY CountsChanged)
   Q_PROPERTY(int totalCount READ TotalCount NOTIFY CountsChanged)
   Q_PROPERTY(QString filterInfo READ FilterInfo NOTIFY CountsChanged)
-  Q_PROPERTY(QString sqlPreview READ SqlPreview NOTIFY SqlPreviewChanged)
-  Q_PROPERTY(QString validationError READ ValidationError NOTIFY ValidationErrorChanged)
+  Q_PROPERTY(QVariantList dateStats READ DateStats NOTIFY StatsChanged)
+  Q_PROPERTY(QVariantList cameraStats READ CameraStats NOTIFY StatsChanged)
+  Q_PROPERTY(QVariantList lensStats READ LensStats NOTIFY StatsChanged)
+  Q_PROPERTY(int totalPhotoCount READ TotalPhotoCount NOTIFY StatsChanged)
   Q_PROPERTY(bool serviceReady READ ServiceReady NOTIFY ServiceStateChanged)
   Q_PROPERTY(QString serviceMessage READ ServiceMessage NOTIFY ServiceStateChanged)
   Q_PROPERTY(bool projectLoading READ ProjectLoading NOTIFY ProjectLoadStateChanged)
@@ -72,8 +71,6 @@ class AlbumBackend final : public QObject {
   ~AlbumBackend() override;
 
   // ── Q_PROPERTY getters ──────────────────────────────────────────────
-  FilterRuleModel* FilterRules() { return &rule_model_; }
-  QVariantList FieldOptions() const;
   QVariantList Thumbnails() const { return visible_thumbnails_; }
   QVariantList Folders() const { return folder_ctrl_.folders(); }
   uint CurrentFolderId() const { return static_cast<uint>(folder_ctrl_.current_folder_id()); }
@@ -81,8 +78,10 @@ class AlbumBackend final : public QObject {
   int ShownCount() const { return static_cast<int>(visible_thumbnails_.size()); }
   int TotalCount() const;
   QString FilterInfo() const;
-  const QString& SqlPreview() const { return sql_preview_; }
-  const QString& ValidationError() const { return validation_error_; }
+  QVariantList DateStats() const { return stats_.date_stats(); }
+  QVariantList CameraStats() const { return stats_.camera_stats(); }
+  QVariantList LensStats() const { return stats_.lens_stats(); }
+  int TotalPhotoCount() const { return stats_.total_photo_count(); }
   bool ServiceReady() const { return service_ready_; }
   const QString& ServiceMessage() const { return service_message_; }
   bool ProjectLoading() const { return project_handler_.project_loading(); }
@@ -118,17 +117,6 @@ class AlbumBackend final : public QObject {
   double EditorSharpen() const { return editor_.editor_state().sharpen_; }
   double EditorClarity() const { return editor_.editor_state().clarity_; }
 
-  Q_INVOKABLE void AddRule();
-  Q_INVOKABLE void RemoveRule(int index);
-  Q_INVOKABLE void SetRuleField(int index, int fieldValue);
-  Q_INVOKABLE void SetRuleOp(int index, int opValue);
-  Q_INVOKABLE void SetRuleValue(int index, const QString& value);
-  Q_INVOKABLE void SetRuleValue2(int index, const QString& value);
-
-  Q_INVOKABLE void ApplyFilters(int joinOpValue);
-  Q_INVOKABLE void ClearFilters();
-  Q_INVOKABLE QVariantList CompareOptionsForField(int fieldValue) const;
-  Q_INVOKABLE QString PlaceholderForField(int fieldValue) const;
   Q_INVOKABLE void SelectFolder(uint folderId);
   Q_INVOKABLE void CreateFolder(const QString& folderName);
   Q_INVOKABLE void DeleteFolder(uint folderId);
@@ -177,8 +165,7 @@ signals:
   void ThumbnailUpdated(uint elementId, const QString& dataUrl);
   void thumbnailUpdated(uint elementId, const QString& dataUrl);
   void CountsChanged();
-  void SqlPreviewChanged();
-  void ValidationErrorChanged();
+  void StatsChanged();
   void ServiceStateChanged();
   void TaskStateChanged();
   void ExportStateChanged();
@@ -196,7 +183,7 @@ signals:
   friend class ProjectHandler;
   friend class ThumbnailManager;
   friend class FolderController;
-  friend class FilterEngine;
+  friend class StatsEngine;
   friend class ImportExportHandler;
   friend class EditorController;
 
@@ -212,17 +199,14 @@ signals:
   ProjectHandler     project_handler_;
   ThumbnailManager   thumb_;
   FolderController   folder_ctrl_;
-  FilterEngine       filter_;
+  StatsEngine        stats_;
   ImportExportHandler import_export_;
   EditorController   editor_;
 
   // ── Shared data (accessed by helpers via friend) ────────────────────
-  FilterRuleModel                                     rule_model_;
   std::vector<AlbumItem>                              all_images_{};
   std::unordered_map<sl_element_id_t, size_t>         index_by_element_id_{};
   QVariantList                                        visible_thumbnails_{};
-  QString                                             sql_preview_{};
-  QString                                             validation_error_{};
   QString                                             service_message_ = "Initializing backend services...";
   bool                                                service_ready_   = false;
   QString                                             task_status_     = "No background tasks";

@@ -26,10 +26,9 @@ AlbumBackend::AlbumBackend(QObject* parent)
       project_handler_(*this),
       thumb_(*this),
       folder_ctrl_(*this),
-      filter_(*this),
+      stats_(*this),
       import_export_(*this),
-      editor_(*this),
-      rule_model_(this) {
+      editor_(*this) {
   editor_.InitializeEditorLuts();
   SetServiceState(
       false,
@@ -60,51 +59,28 @@ AlbumBackend::~AlbumBackend() {
 
 // ── Q_PROPERTY getters that compute ─────────────────────────────────────────
 
-auto AlbumBackend::FieldOptions() const -> QVariantList {
-  return rule_model_.FieldOptions();
-}
-
 auto AlbumBackend::FilterInfo() const -> QString {
-  return filter_.FormatFilterInfo(ShownCount(), TotalCount());
+  return stats_.FormatPhotoInfo(ShownCount(), TotalCount());
 }
 
 int AlbumBackend::TotalCount() const {
   int count = 0;
   for (const auto& image : all_images_) {
-    if (filter_.IsImageInCurrentFolder(image)) {
+    if (stats_.IsImageInCurrentFolder(image)) {
       ++count;
     }
   }
   return count;
 }
 
-// ── Q_INVOKABLE: Filter-rule forwarding ─────────────────────────────────────
-
-void AlbumBackend::AddRule() { rule_model_.AddRule(); }
-void AlbumBackend::RemoveRule(int index) { rule_model_.RemoveRule(index); }
-void AlbumBackend::SetRuleField(int index, int fieldValue) { rule_model_.SetField(index, fieldValue); }
-void AlbumBackend::SetRuleOp(int index, int opValue) { rule_model_.SetOp(index, opValue); }
-void AlbumBackend::SetRuleValue(int index, const QString& value) { rule_model_.SetValue(index, value); }
-void AlbumBackend::SetRuleValue2(int index, const QString& value) { rule_model_.SetValue2(index, value); }
-
-auto AlbumBackend::CompareOptionsForField(int fieldValue) const -> QVariantList {
-  return FilterRuleModel::CompareOptionsForField(static_cast<FilterField>(fieldValue));
-}
-
-auto AlbumBackend::PlaceholderForField(int fieldValue) const -> QString {
-  return FilterRuleModel::PlaceholderForField(static_cast<FilterField>(fieldValue));
-}
-
-// ── Q_INVOKABLE: Filter / folder delegation ─────────────────────────────────
-
-void AlbumBackend::ApplyFilters(int joinOpValue) { filter_.ApplyFilters(joinOpValue); }
-void AlbumBackend::ClearFilters() { filter_.ClearFilters(); }
+// ── Q_INVOKABLE: Folder delegation ──────────────────────────────────────────
 
 void AlbumBackend::SelectFolder(uint folderId) {
   if (project_handler_.project_loading() || !project_handler_.project()) return;
 
   folder_ctrl_.ApplyFolderSelection(static_cast<sl_element_id_t>(folderId), true);
-  filter_.ReapplyCurrentFilters();
+  stats_.RebuildThumbnailView();
+  stats_.RefreshStats();
 }
 
 void AlbumBackend::CreateFolder(const QString& folderName) { folder_ctrl_.CreateFolder(folderName); }

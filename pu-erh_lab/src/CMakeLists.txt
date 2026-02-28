@@ -413,13 +413,12 @@ find_package(Qt6 REQUIRED COMPONENTS Quick Qml QuickControls2 QuickDialogs2 Widg
 add_executable(puerhlab_main
     ui/puerhlab_main/main.cpp
     ui/puerhlab_main/album_backend/album_backend.cpp
-    ui/puerhlab_main/album_backend/filter_rule_model.cpp
     ui/puerhlab_main/album_backend/path_utils.cpp
     ui/puerhlab_main/album_backend/packed_project.cpp
     ui/puerhlab_main/album_backend/project_handler.cpp
     ui/puerhlab_main/album_backend/thumbnail_manager.cpp
     ui/puerhlab_main/album_backend/folder_controller.cpp
-    ui/puerhlab_main/album_backend/filter_engine.cpp
+    ui/puerhlab_main/album_backend/stats_engine.cpp
     ui/puerhlab_main/album_backend/import_export.cpp
     ui/puerhlab_main/album_backend/editor_controller.cpp
     ui/puerhlab_main/editor_dialog/editor_dialog.cpp
@@ -444,14 +443,13 @@ add_executable(puerhlab_main
     ui/puerhlab_main/editor_dialog/widgets/tone_curve_widget.cpp
     ui/puerhlab_main/editor_dialog/widgets/history_cards.cpp
     include/ui/puerhlab_main/album_backend/album_backend.hpp
-    include/ui/puerhlab_main/album_backend/filter_rule_model.hpp
     include/ui/puerhlab_main/album_backend/album_types.hpp
     include/ui/puerhlab_main/album_backend/path_utils.hpp
     include/ui/puerhlab_main/album_backend/packed_project.hpp
     include/ui/puerhlab_main/album_backend/project_handler.hpp
     include/ui/puerhlab_main/album_backend/thumbnail_manager.hpp
     include/ui/puerhlab_main/album_backend/folder_controller.hpp
-    include/ui/puerhlab_main/album_backend/filter_engine.hpp
+    include/ui/puerhlab_main/album_backend/stats_engine.hpp
     include/ui/puerhlab_main/album_backend/import_export.hpp
     include/ui/puerhlab_main/album_backend/editor_controller.hpp
     include/ui/puerhlab_main/editor_dialog/editor_dialog.hpp
@@ -514,6 +512,7 @@ qt_add_qml_module(puerhlab_main
         ui/puerhlab_main/qml/Main.qml
         ui/puerhlab_main/qml/AlbumExportDialog.qml
         ui/puerhlab_main/qml/InspectorPanel.qml
+        ui/puerhlab_main/qml/StatsCard.qml
         ui/puerhlab_main/qml/ThumbnailGridView.qml
         ui/puerhlab_main/qml/ThumbnailListView.qml
 )

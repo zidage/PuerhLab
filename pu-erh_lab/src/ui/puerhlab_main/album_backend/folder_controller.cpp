@@ -86,7 +86,8 @@ void FolderController::SelectFolder(uint folderId) {
   }
 
   ApplyFolderSelection(static_cast<sl_element_id_t>(folderId), true);
-  backend_.filter_.ReapplyCurrentFilters();
+  backend_.stats_.RebuildThumbnailView();
+  backend_.stats_.RefreshStats();
 }
 
 void FolderController::CreateFolder(const QString& folderName) {
@@ -266,8 +267,8 @@ void FolderController::DeleteFolder(uint folderId) {
     ApplyFolderSelection(fallback_folder, true);
   }
 
-  backend_.filter_.ResetActiveFilterIds();
-  backend_.filter_.ReapplyCurrentFilters();
+  backend_.stats_.RebuildThumbnailView();
+  backend_.stats_.RefreshStats();
 
   backend_.SetServiceMessageForCurrentProject("Folder deleted.");
   backend_.SetTaskState("Folder deleted.", 100, false);

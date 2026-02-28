@@ -305,7 +305,8 @@ void ImportExportHandler::FinishImport(const ImportResult& result) {
   }
 
   AddImportedEntries(snapshot);
-  backend_.filter_.ReapplyCurrentFilters();
+  backend_.stats_.RebuildThumbnailView();
+  backend_.stats_.RefreshStats();
 
   import_target_folder_id_   = backend_.folder_ctrl_.current_folder_id();
   import_target_folder_path_ = backend_.folder_ctrl_.CurrentFolderFsPath();

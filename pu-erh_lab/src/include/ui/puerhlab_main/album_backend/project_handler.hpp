@@ -13,7 +13,6 @@
 #include "app/import_service.hpp"
 #include "app/pipeline_service.hpp"
 #include "app/project_service.hpp"
-#include "app/sleeve_filter_service.hpp"
 #include "app/thumbnail_service.hpp"
 
 namespace puerhlab::ui {
@@ -47,7 +46,6 @@ class ProjectHandler {
   [[nodiscard]] auto thumbnail_service() const -> const std::shared_ptr<ThumbnailService>& {
     return thumbnail_service_;
   }
-  [[nodiscard]] auto filter_service() const -> SleeveFilterService* { return filter_service_.get(); }
   [[nodiscard]] auto import_service() const -> ImportServiceImpl* { return import_service_.get(); }
   [[nodiscard]] auto export_service() const -> const std::shared_ptr<ExportService>& {
     return export_service_;
@@ -67,7 +65,6 @@ class ProjectHandler {
   std::shared_ptr<PipelineMgmtService>   pipeline_service_{};
   std::shared_ptr<EditHistoryMgmtService> history_service_{};
   std::shared_ptr<ThumbnailService>      thumbnail_service_{};
-  std::unique_ptr<SleeveFilterService>   filter_service_{};
   std::unique_ptr<ImportServiceImpl>     import_service_{};
   std::shared_ptr<ExportService>         export_service_{};
 

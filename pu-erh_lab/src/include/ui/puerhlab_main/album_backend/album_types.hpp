@@ -11,7 +11,6 @@
 #include <utility>
 #include <vector>
 
-#include "sleeve/sleeve_filter/filter_combo.hpp"
 #include "type/type.hpp"
 
 namespace puerhlab::ui {
@@ -33,12 +32,6 @@ struct AlbumItem {
   QString         tags{};
   QString         accent{};
   QString         thumb_data_url{};
-};
-
-/// Result of building a filter tree from the UI model.
-struct FilterBuildResult {
-  std::optional<FilterNode> node{};
-  QString                   error{};
 };
 
 /// Per-parameter snapshot used by the embedded editor.
