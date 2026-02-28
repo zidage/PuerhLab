@@ -27,11 +27,15 @@ Video: [BiliBili](https://www.bilibili.com/video/BV1bPcxzzEeM)
     </tr>
     <tr>
       <td><img src="docs/demo/2.png" alt="Highlight transition" width="100%" /></td>
-      <td>Film-like Highlight Transition</td>
+      <td>Advanced Adjustment Controls</td>
     </tr>
     <tr>
       <td><img src="docs/demo/3.png" alt="LUT and history stack" width="100%" /></td>
       <td>LUT Support / Unlimited History Stack / Git-like Version Control</td>
+    </tr>
+    <tr>
+      <td><img src="docs/demo/5.png" alt="LUT and history stack" width="100%" /></td>
+      <td>Lens Correction Support</td>
     </tr>
     <tr>
       <td><img src="docs/demo/4.png" alt="Export workflow" width="100%" /></td>

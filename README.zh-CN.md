@@ -23,19 +23,23 @@ Pu-erh Lab (普洱工坊) 是一个开源 RAW 图像处理与数字资产管理�
   </colgroup>
   <tbody>
     <tr>
-      <td><img src="docs/demo/1.png" alt="现代化 UI 界面" width="100%" /></td>
+      <td><img src="docs/demo/1.png" alt="Modern UI interface" width="100%" /></td>
       <td>现代UI界面</td>
     </tr>
     <tr>
-      <td><img src="docs/demo/2.png" alt="高光过渡效果" width="100%" /></td>
-      <td>仿胶片高光过渡效果</td>
+      <td><img src="docs/demo/2.png" alt="Highlight transition" width="100%" /></td>
+      <td>高级调整控件</td>
     </tr>
     <tr>
-      <td><img src="docs/demo/3.png" alt="LUT 与历史栈" width="100%" /></td>
-      <td>LUT 支持 / 无限历史栈 / 类 Git 版本控制</td>
+      <td><img src="docs/demo/3.png" alt="LUT and history stack" width="100%" /></td>
+      <td>LUT 支持 / 无限历史记录 / 类 Git 版本控制</td>
     </tr>
     <tr>
-      <td><img src="docs/demo/4.png" alt="导出流程" width="100%" /></td>
+      <td><img src="docs/demo/5.png" alt="LUT and history stack" width="100%" /></td>
+      <td>镜头校正支持</td>
+    </tr>
+    <tr>
+      <td><img src="docs/demo/4.png" alt="Export workflow" width="100%" /></td>
       <td>高级导出功能</td>
     </tr>
   </tbody>
