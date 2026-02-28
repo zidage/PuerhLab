@@ -499,11 +499,7 @@ void LensCalibOp::Apply(std::shared_ptr<ImageBuffer>) {
 }
 
 void LensCalibOp::ApplyGPU(std::shared_ptr<ImageBuffer> input) {
-  std::cout << "LensCalibOp: Starting lens calibration - "
-            << "enabled=" << enabled_ << ", input_valid=" << (input != nullptr) << ", resolved=" << has_resolved_params_ << std::endl;
   if (!enabled_ || !has_resolved_params_ || !input) {
-    std::cout << "LensCalibOp: Skipping lens calibration due to disabled state, unresolved parameters, or null input."
-              << std::endl;
     return;
   }
   // if (resolved_params_.src_width <= 0 || resolved_params_.src_height <= 0) {
@@ -541,12 +537,6 @@ void LensCalibOp::ApplyGPU(std::shared_ptr<ImageBuffer> input) {
   resolved_params_.center_x = static_cast<float>((width * 0.5) * norm_scale);
   resolved_params_.center_y = static_cast<float>((height * 0.5) * norm_scale);
 
-  std::cout << "LensCalibOp: Resolved parameters - "
-            << "src_size=" << resolved_params_.src_width << "x" << resolved_params_.src_height
-            << ", dst_size=" << resolved_params_.dst_width << "x" << resolved_params_.dst_height
-            << ", norm_scale=" << resolved_params_.norm_scale
-            << ", center=(" << resolved_params_.center_x << ", " << resolved_params_.center_y
-            << ")" << std::endl;
   CUDA::ApplyLensCalibration(gpu, resolved_params_);
   input->gpu_data_valid_ = true;
 }
@@ -665,7 +655,6 @@ void LensCalibOp::ResolveRuntime(OperatorParams& params) const {
       params.lens_calib_cache_key_ == cache_key) {
     resolved_params_      = params.lens_calib_runtime_params_;
     has_resolved_params_  = params.lens_calib_runtime_valid_;
-    std::cout << "Using cached lens calibration parameters." << std::endl;
     return;
   }
 
@@ -718,20 +707,16 @@ void LensCalibOp::ResolveRuntime(OperatorParams& params) const {
     params.lens_calib_runtime_failed_ = true;
     params.lens_calib_runtime_dirty_  = false;
     has_resolved_params_              = false;
-    std::cout << "Warning: Insufficient lens metadata (model or focal length). Lens calibration will be skipped." << std::endl;
     return;
   }
 
   const auto db_root = ResolveDbRootPath(lens_profile_db_path_);
   lfDatabase* db     = GetLensfunDb(db_root);
-  std::cout << "Loading lens profile database from '" << PathToDisplayString(db_root) << "'..." << std::endl;
   if (!db) {
     params.lens_calib_runtime_valid_  = false;
     params.lens_calib_runtime_failed_ = true;
     params.lens_calib_runtime_dirty_  = false;
     has_resolved_params_              = false;
-    std::cout << "Warning: Failed to load lens profile database from '" << PathToDisplayString(db_root)
-              << "'. Lens calibration will be skipped." << std::endl;
     return;
   }
 
@@ -742,9 +727,6 @@ void LensCalibOp::ResolveRuntime(OperatorParams& params) const {
     params.lens_calib_runtime_failed_ = true;
     params.lens_calib_runtime_dirty_  = false;
     has_resolved_params_              = false;
-    std::cout << "Warning: No suitable lens profile found for camera '" << meta.cam_maker_ << " " << meta.cam_model_
-              << "' and lens '" << meta.lens_maker_ << " " << meta.lens_model_ << "'. Lens calibration will be skipped."
-              << std::endl;
     return;
   }
 
@@ -915,9 +897,6 @@ void LensCalibOp::ResolveRuntime(OperatorParams& params) const {
     params.lens_calib_runtime_dirty_   = false;
     has_resolved_params_               = false;
     params.lens_calib_runtime_params_  = runtime;
-    std::cout << "No applicable lens calibration corrections for camera '" << meta.cam_maker_ << " " << meta.cam_model_
-              << "' and lens '" << meta.lens_maker_ << " " << meta.lens_model_ << "'. Lens calibration will be skipped."
-              << std::endl;
     return;
   }
 
@@ -928,8 +907,6 @@ void LensCalibOp::ResolveRuntime(OperatorParams& params) const {
   resolved_params_                   = runtime;
   has_resolved_params_               = true;
 
-  std::cout << "Resolved lens calibration parameters for camera '" << meta.cam_maker_ << " " << meta.cam_model_
-            << "' and lens '" << meta.lens_maker_ << " " << meta.lens_model_ << "':" << std::endl;
 }
 
 void LensCalibOp::SetGlobalParams(OperatorParams& params) const {
@@ -939,7 +916,6 @@ void LensCalibOp::SetGlobalParams(OperatorParams& params) const {
     params.lens_calib_runtime_failed_ = false;
     params.lens_calib_runtime_dirty_  = false;
     has_resolved_params_              = false;
-    std::cout << "Lens calibration is disabled. Runtime parameters will not be resolved." << std::endl;
     return;
   }
   ResolveRuntime(params);

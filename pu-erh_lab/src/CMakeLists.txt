@@ -415,9 +415,45 @@ add_executable(puerhlab_main
     ui/puerhlab_main/album_backend/album_backend.cpp
     ui/puerhlab_main/album_backend/filter_rule_model.cpp
     ui/puerhlab_main/editor_dialog/editor_dialog.cpp
+    ui/puerhlab_main/editor_dialog/dialog.cpp
+    ui/puerhlab_main/editor_dialog/state.cpp
+    ui/puerhlab_main/editor_dialog/controllers/image_controller.cpp
+    ui/puerhlab_main/editor_dialog/controllers/pipeline_controller.cpp
+    ui/puerhlab_main/editor_dialog/controllers/history_controller.cpp
+    ui/puerhlab_main/editor_dialog/controllers/render_controller.cpp
+    ui/puerhlab_main/editor_dialog/modules/histogram.cpp
+    ui/puerhlab_main/editor_dialog/modules/color_temp.cpp
+    ui/puerhlab_main/editor_dialog/modules/color_wheel.cpp
+    ui/puerhlab_main/editor_dialog/modules/curve.cpp
+    ui/puerhlab_main/editor_dialog/modules/lens_calib.cpp
+    ui/puerhlab_main/editor_dialog/modules/geometry.cpp
+    ui/puerhlab_main/editor_dialog/modules/versioning.cpp
+    ui/puerhlab_main/editor_dialog/widgets/spinner.cpp
+    ui/puerhlab_main/editor_dialog/widgets/histogram_widget.cpp
+    ui/puerhlab_main/editor_dialog/widgets/trackball.cpp
+    ui/puerhlab_main/editor_dialog/widgets/tone_curve_widget.cpp
+    ui/puerhlab_main/editor_dialog/widgets/history_cards.cpp
     include/ui/puerhlab_main/album_backend/album_backend.hpp
     include/ui/puerhlab_main/album_backend/filter_rule_model.hpp
     include/ui/puerhlab_main/editor_dialog/editor_dialog.hpp
+    ui/puerhlab_main/editor_dialog/dialog.hpp
+    ui/puerhlab_main/editor_dialog/state.hpp
+    ui/puerhlab_main/editor_dialog/controllers/image_controller.hpp
+    ui/puerhlab_main/editor_dialog/controllers/pipeline_controller.hpp
+    ui/puerhlab_main/editor_dialog/controllers/history_controller.hpp
+    ui/puerhlab_main/editor_dialog/controllers/render_controller.hpp
+    ui/puerhlab_main/editor_dialog/modules/histogram.hpp
+    ui/puerhlab_main/editor_dialog/modules/color_temp.hpp
+    ui/puerhlab_main/editor_dialog/modules/color_wheel.hpp
+    ui/puerhlab_main/editor_dialog/modules/curve.hpp
+    ui/puerhlab_main/editor_dialog/modules/lens_calib.hpp
+    ui/puerhlab_main/editor_dialog/modules/geometry.hpp
+    ui/puerhlab_main/editor_dialog/modules/versioning.hpp
+    ui/puerhlab_main/editor_dialog/widgets/spinner.hpp
+    ui/puerhlab_main/editor_dialog/widgets/histogram_widget.hpp
+    ui/puerhlab_main/editor_dialog/widgets/trackball.hpp
+    ui/puerhlab_main/editor_dialog/widgets/tone_curve_widget.hpp
+    ui/puerhlab_main/editor_dialog/widgets/history_cards.hpp
 )
 
 target_include_directories(puerhlab_main

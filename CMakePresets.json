@@ -51,12 +51,24 @@
   ],
   "buildPresets": [
     {
+      "name": "win_debug",
+      "configurePreset": "win_debug",
+      "jobs": 8
+    },
+    {
+      "name": "win_release",
+      "configurePreset": "win_release",
+      "jobs": 8
+    },
+    {
       "name": "debug",
-      "configurePreset": "debug"
+      "configurePreset": "debug",
+      "jobs": 8
     },
     {
       "name": "release",
-      "configurePreset": "release"
+      "configurePreset": "release",
+      "jobs": 8
     }
   ]
 }
