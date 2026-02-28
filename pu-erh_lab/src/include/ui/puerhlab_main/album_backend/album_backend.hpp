@@ -3,30 +3,19 @@
 #include <QDate>
 #include <QObject>
 #include <QStringList>
-#include <QTimer>
 #include <QVariantList>
 
-#include <ctime>
-#include <filesystem>
-#include <future>
-#include <memory>
-#include <optional>
-#include <string>
-#include <utility>
 #include <unordered_map>
-#include <unordered_set>
 #include <vector>
 
 #include "ui/puerhlab_main/album_backend/filter_rule_model.hpp"
-#include "app/export_service.hpp"
-#include "app/history_mgmt_service.hpp"
-#include "app/import_service.hpp"
-#include "app/pipeline_service.hpp"
-#include "app/project_service.hpp"
-#include "app/sleeve_filter_service.hpp"
-#include "app/thumbnail_service.hpp"
-#include "renderer/pipeline_scheduler.hpp"
-#include "renderer/pipeline_task.hpp"
+#include "ui/puerhlab_main/album_backend/album_types.hpp"
+#include "ui/puerhlab_main/album_backend/project_handler.hpp"
+#include "ui/puerhlab_main/album_backend/thumbnail_manager.hpp"
+#include "ui/puerhlab_main/album_backend/folder_controller.hpp"
+#include "ui/puerhlab_main/album_backend/filter_engine.hpp"
+#include "ui/puerhlab_main/album_backend/import_export.hpp"
+#include "ui/puerhlab_main/album_backend/editor_controller.hpp"
 
 namespace puerhlab::ui {
 
@@ -82,12 +71,13 @@ class AlbumBackend final : public QObject {
   explicit AlbumBackend(QObject* parent = nullptr);
   ~AlbumBackend() override;
 
+  // ── Q_PROPERTY getters ──────────────────────────────────────────────
   FilterRuleModel* FilterRules() { return &rule_model_; }
   QVariantList FieldOptions() const;
   QVariantList Thumbnails() const { return visible_thumbnails_; }
-  QVariantList Folders() const { return folders_; }
-  uint CurrentFolderId() const { return static_cast<uint>(current_folder_id_); }
-  const QString& CurrentFolderPath() const { return current_folder_path_text_; }
+  QVariantList Folders() const { return folder_ctrl_.folders(); }
+  uint CurrentFolderId() const { return static_cast<uint>(folder_ctrl_.current_folder_id()); }
+  const QString& CurrentFolderPath() const { return folder_ctrl_.current_folder_path_text(); }
   int ShownCount() const { return static_cast<int>(visible_thumbnails_.size()); }
   int TotalCount() const;
   QString FilterInfo() const;
@@ -95,38 +85,38 @@ class AlbumBackend final : public QObject {
   const QString& ValidationError() const { return validation_error_; }
   bool ServiceReady() const { return service_ready_; }
   const QString& ServiceMessage() const { return service_message_; }
-  bool ProjectLoading() const { return project_loading_; }
-  const QString& ProjectLoadingMessage() const { return project_loading_message_; }
+  bool ProjectLoading() const { return project_handler_.project_loading(); }
+  const QString& ProjectLoadingMessage() const { return project_handler_.project_loading_message(); }
   const QString& TaskStatus() const { return task_status_; }
   int TaskProgress() const { return task_progress_; }
   bool TaskCancelVisible() const { return task_cancel_visible_; }
-  const QString& DefaultExportFolder() const { return default_export_folder_; }
-  bool ExportInFlight() const { return export_inflight_; }
-  const QString& ExportStatus() const { return export_status_; }
-  int ExportTotal() const { return export_total_; }
-  int ExportCompleted() const { return export_completed_; }
-  int ExportSucceeded() const { return export_succeeded_; }
-  int ExportFailed() const { return export_failed_; }
-  int ExportSkipped() const { return export_skipped_; }
-  const QString& ExportErrorSummary() const { return export_error_summary_; }
-  bool EditorActive() const { return editor_active_; }
-  bool EditorBusy() const { return editor_busy_; }
-  uint EditorElementId() const { return static_cast<uint>(editor_element_id_); }
-  const QString& EditorTitle() const { return editor_title_; }
-  const QString& EditorStatus() const { return editor_status_; }
-  const QString& EditorPreviewUrl() const { return editor_preview_url_; }
-  QVariantList EditorLutOptions() const { return editor_lut_options_; }
-  int EditorLutIndex() const { return editor_lut_index_; }
-  double EditorExposure() const { return editor_state_.exposure_; }
-  double EditorContrast() const { return editor_state_.contrast_; }
-  double EditorSaturation() const { return editor_state_.saturation_; }
-  double EditorTint() const { return editor_state_.tint_; }
-  double EditorBlacks() const { return editor_state_.blacks_; }
-  double EditorWhites() const { return editor_state_.whites_; }
-  double EditorShadows() const { return editor_state_.shadows_; }
-  double EditorHighlights() const { return editor_state_.highlights_; }
-  double EditorSharpen() const { return editor_state_.sharpen_; }
-  double EditorClarity() const { return editor_state_.clarity_; }
+  const QString& DefaultExportFolder() const { return import_export_.default_export_folder(); }
+  bool ExportInFlight() const { return import_export_.export_inflight(); }
+  const QString& ExportStatus() const { return import_export_.export_status(); }
+  int ExportTotal() const { return import_export_.export_total(); }
+  int ExportCompleted() const { return import_export_.export_completed(); }
+  int ExportSucceeded() const { return import_export_.export_succeeded(); }
+  int ExportFailed() const { return import_export_.export_failed(); }
+  int ExportSkipped() const { return import_export_.export_skipped(); }
+  const QString& ExportErrorSummary() const { return import_export_.export_error_summary(); }
+  bool EditorActive() const { return editor_.editor_active(); }
+  bool EditorBusy() const { return editor_.editor_busy(); }
+  uint EditorElementId() const { return static_cast<uint>(editor_.editor_element_id()); }
+  const QString& EditorTitle() const { return editor_.editor_title(); }
+  const QString& EditorStatus() const { return editor_.editor_status(); }
+  const QString& EditorPreviewUrl() const { return editor_.editor_preview_url(); }
+  QVariantList EditorLutOptions() const { return editor_.editor_lut_options(); }
+  int EditorLutIndex() const { return editor_.editor_lut_index(); }
+  double EditorExposure() const { return editor_.editor_state().exposure_; }
+  double EditorContrast() const { return editor_.editor_state().contrast_; }
+  double EditorSaturation() const { return editor_.editor_state().saturation_; }
+  double EditorTint() const { return editor_.editor_state().tint_; }
+  double EditorBlacks() const { return editor_.editor_state().blacks_; }
+  double EditorWhites() const { return editor_.editor_state().whites_; }
+  double EditorShadows() const { return editor_.editor_state().shadows_; }
+  double EditorHighlights() const { return editor_.editor_state().highlights_; }
+  double EditorSharpen() const { return editor_.editor_state().sharpen_; }
+  double EditorClarity() const { return editor_.editor_state().clarity_; }
 
   Q_INVOKABLE void AddRule();
   Q_INVOKABLE void RemoveRule(int index);
@@ -203,215 +193,41 @@ signals:
   void folderSelectionChanged();
 
  private:
-  struct AlbumItem {
-    sl_element_id_t element_id    = 0;
-    sl_element_id_t parent_folder_id = 0;
-    image_id_t      image_id      = 0;
-    QString         file_name{};
-    QString         camera_model{};
-    QString         extension{};
-    int             iso           = 0;
-    double          aperture      = 0.0;
-    double          focal_length  = 0.0;
-    QDate           capture_date{};
-    QDate           import_date{};
-    int             rating        = 0;
-    QString         tags{};
-    QString         accent{};
-    QString         thumb_data_url{};
-  };
+  friend class ProjectHandler;
+  friend class ThumbnailManager;
+  friend class FolderController;
+  friend class FilterEngine;
+  friend class ImportExportHandler;
+  friend class EditorController;
 
-  struct BuildResult {
-    std::optional<FilterNode> node{};
-    QString                   error{};
-  };
-
-  struct EditorState {
-    float       exposure_   = 1.0f;
-    float       contrast_   = 1.0f;
-    float       saturation_ = 0.0f;
-    float       tint_       = 0.0f;
-    float       blacks_     = 0.0f;
-    float       whites_     = 0.0f;
-    float       shadows_    = 0.0f;
-    float       highlights_ = 0.0f;
-    float       sharpen_    = 0.0f;
-    float       clarity_    = 0.0f;
-    std::string lut_path_{};
-  };
-
-  struct ExistingAlbumEntry {
-    sl_element_id_t element_id_ = 0;
-    sl_element_id_t parent_folder_id_ = 0;
-    image_id_t      image_id_   = 0;
-    file_name_t     file_name_{};
-  };
-
-  struct ExistingFolderEntry {
-    sl_element_id_t      folder_id_   = 0;
-    sl_element_id_t      parent_id_   = 0;
-    file_name_t          folder_name_{};
-    std::filesystem::path folder_path_{};
-    int                  depth_       = 0;
-  };
-
-  struct ProjectSnapshot {
-    std::vector<ExistingAlbumEntry>                    album_entries_{};
-    std::vector<ExistingFolderEntry>                   folder_entries_{};
-    std::unordered_map<sl_element_id_t, sl_element_id_t> folder_parent_by_id_{};
-    std::unordered_map<sl_element_id_t, std::filesystem::path> folder_path_by_id_{};
-  };
-
-  using ExportTarget = std::pair<sl_element_id_t, image_id_t>;
-
-  struct ExportQueueBuildResult {
-    int     queued_count_  = 0;
-    int     skipped_count_ = 0;
-    QString first_error_{};
-  };
-
-  bool InitializeServices(const std::filesystem::path& dbPath,
-                          const std::filesystem::path& metaPath,
-                          ProjectOpenMode              openMode,
-                          const std::filesystem::path& packagePath = {},
-                          const std::filesystem::path& workspaceDir = {});
-  bool PersistCurrentProjectState();
-  bool PackageCurrentProjectFiles(QString* errorOut = nullptr) const;
-  auto CollectProjectSnapshot(const std::shared_ptr<ProjectService>& project) const
-      -> ProjectSnapshot;
-  void ApplyLoadedProjectEntriesBatch();
-  void SetProjectLoadingState(bool loading, const QString& message);
-  void ClearProjectData();
-  void RebuildFolderView();
-  void ApplyFolderSelection(sl_element_id_t folderId, bool emitSignal);
-  void RebuildThumbnailView(
-      const std::optional<std::unordered_set<sl_element_id_t>>& allowedElementIds);
-  void ReleaseVisibleThumbnailPins();
-  auto CurrentFolderFsPath() const -> std::filesystem::path;
-  void AddImportedEntries(const ImportLogSnapshot& snapshot);
-  void AddOrUpdateAlbumItem(sl_element_id_t elementId, image_id_t imageId,
-                            const file_name_t& fallbackName,
-                            sl_element_id_t parentFolderId);
-  void RequestThumbnail(sl_element_id_t elementId, image_id_t imageId);
-  void UpdateThumbnailDataUrl(sl_element_id_t elementId, const QString& dataUrl);
-  void FinishImport(const ImportResult& result);
-  void FinishExport(const std::shared_ptr<std::vector<ExportResult>>& results, int skippedCount);
-  void ReapplyCurrentFilters();
   void SetServiceState(bool ready, const QString& message);
   void SetServiceMessageForCurrentProject(const QString& message);
   void ScheduleIdleTaskStateReset(int delayMs);
-  void SetExportFailureState(const QString& message);
-  void ResetExportProgressState(const QString& status);
-  auto CollectExportTargets(const QVariantList& targetEntries) const -> std::vector<ExportTarget>;
-  auto BuildExportQueue(const std::vector<ExportTarget>& targets,
-                        const std::filesystem::path&   outputDir,
-                        ImageFormatType                format,
-                        bool                           resizeEnabled,
-                        int                            maxLengthSide,
-                        int                            quality,
-                        ExportFormatOptions::BIT_DEPTH bitDepth,
-                        int                            pngCompressionLevel,
-                        ExportFormatOptions::TIFF_COMPRESS tiffCompression)
-      -> ExportQueueBuildResult;
-  void InitializeEditorLuts();
-  int LutIndexForPath(const std::string& lutPath) const;
-  bool LoadEditorStateFromPipeline();
-  void SetupEditorPipeline();
-  void ApplyEditorStateToPipeline();
-  void QueueEditorRender(RenderType renderType);
-  void StartNextEditorRender();
-  void PollEditorRender();
-  void EnsureEditorPollTimer();
-  void FinalizeEditorSession(bool persistChanges);
-  bool UpdateEditorPreviewFromBuffer(const std::shared_ptr<ImageBuffer>& buffer);
-  void SetEditorAdjustment(float& field, double value, double minValue, double maxValue);
-  bool IsThumbnailPinned(sl_element_id_t elementId) const;
-
-  BuildResult BuildFilterNode(FilterOp joinOp) const;
-  std::optional<FilterValue> ParseFilterValue(FilterField field, const QString& text,
-                                              QString& error) const;
-  static std::optional<std::tm> ParseDate(const QString& text);
-  bool IsImageInCurrentFolder(const AlbumItem& image) const;
-  QString FormatFilterInfo(int shown, int total) const;
-  QVariantMap MakeThumbMap(const AlbumItem& image, int index) const;
   void SetTaskState(const QString& status, int progress, bool cancelVisible);
+  void AddOrUpdateAlbumItem(sl_element_id_t elementId, image_id_t imageId,
+                            const file_name_t& fallbackName,
+                            sl_element_id_t parentFolderId);
 
+  // ── Helper modules ──────────────────────────────────────────────────
+  ProjectHandler     project_handler_;
+  ThumbnailManager   thumb_;
+  FolderController   folder_ctrl_;
+  FilterEngine       filter_;
+  ImportExportHandler import_export_;
+  EditorController   editor_;
+
+  // ── Shared data (accessed by helpers via friend) ────────────────────
   FilterRuleModel                                     rule_model_;
   std::vector<AlbumItem>                              all_images_{};
   std::unordered_map<sl_element_id_t, size_t>         index_by_element_id_{};
   QVariantList                                        visible_thumbnails_{};
-  std::vector<ExistingFolderEntry>                    folder_entries_{};
-  std::unordered_map<sl_element_id_t, sl_element_id_t> folder_parent_by_id_{};
-  std::unordered_map<sl_element_id_t, std::filesystem::path> folder_path_by_id_{};
-  QVariantList                                        folders_{};
-  sl_element_id_t                                     current_folder_id_ = 0;
-  QString                                             current_folder_path_text_ = "\\";
-  std::optional<std::unordered_set<sl_element_id_t>>  active_filter_ids_{};
-  FilterOp                                            last_join_op_ = FilterOp::AND;
-  std::unordered_map<sl_element_id_t, uint32_t>       thumbnail_pin_ref_counts_{};
-
-  std::shared_ptr<ProjectService>                     project_{};
-  std::shared_ptr<PipelineMgmtService>                pipeline_service_{};
-  std::shared_ptr<EditHistoryMgmtService>             history_service_{};
-  std::shared_ptr<ThumbnailService>                   thumbnail_service_{};
-  std::unique_ptr<SleeveFilterService>                filter_service_{};
-  std::unique_ptr<ImportServiceImpl>                  import_service_{};
-  std::shared_ptr<ExportService>                      export_service_{};
-  std::shared_ptr<ImportJob>                          current_import_job_{};
-  bool                                                export_inflight_ = false;
-  QString                                             default_export_folder_{};
-  QString                                             export_status_    = "Ready to export.";
-  QString                                             export_error_summary_{};
-  int                                                 export_total_     = 0;
-  int                                                 export_completed_ = 0;
-  int                                                 export_succeeded_ = 0;
-  int                                                 export_failed_    = 0;
-  int                                                 export_skipped_   = 0;
-  std::filesystem::path                               db_path_{};
-  std::filesystem::path                               meta_path_{};
-  std::filesystem::path                               project_package_path_{};
-  std::filesystem::path                               project_workspace_dir_{};
-
   QString                                             sql_preview_{};
   QString                                             validation_error_{};
   QString                                             service_message_ = "Initializing backend services...";
   bool                                                service_ready_   = false;
-  bool                                                project_loading_ = false;
-  QString                                             project_loading_message_{};
-  uint64_t                                            project_load_request_id_ = 0;
-  std::vector<ExistingAlbumEntry>                     pending_project_entries_{};
-  std::vector<ExistingFolderEntry>                    pending_folder_entries_{};
-  std::unordered_map<sl_element_id_t, sl_element_id_t> pending_folder_parent_by_id_{};
-  std::unordered_map<sl_element_id_t, std::filesystem::path> pending_folder_path_by_id_{};
-  size_t                                              pending_project_entry_index_ = 0;
-  sl_element_id_t                                     import_target_folder_id_ = 0;
-  std::filesystem::path                               import_target_folder_path_{};
-
-  QString                                             task_status_         = "No background tasks";
-  int                                                 task_progress_       = 0;
+  QString                                             task_status_     = "No background tasks";
+  int                                                 task_progress_   = 0;
   bool                                                task_cancel_visible_ = false;
-
-  bool                                                editor_active_ = false;
-  bool                                                editor_busy_   = false;
-  sl_element_id_t                                     editor_element_id_ = 0;
-  image_id_t                                          editor_image_id_   = 0;
-  QString                                             editor_title_{};
-  QString                                             editor_status_ = "Select a photo to edit.";
-  QString                                             editor_preview_url_{};
-  QVariantList                                        editor_lut_options_{};
-  std::vector<std::string>                            editor_lut_paths_{};
-  int                                                 editor_lut_index_ = 0;
-  EditorState                                         editor_state_{};
-  EditorState                                         editor_initial_state_{};
-  EditorState                                         editor_pending_state_{};
-  RenderType                                          editor_pending_render_type_ = RenderType::FAST_PREVIEW;
-  bool                                                editor_has_pending_render_  = false;
-  bool                                                editor_render_inflight_     = false;
-  std::shared_ptr<PipelineGuard>                      editor_pipeline_guard_{};
-  std::shared_ptr<PipelineScheduler>                  editor_scheduler_{};
-  PipelineTask                                        editor_base_task_{};
-  QTimer*                                             editor_poll_timer_ = nullptr;
-  std::optional<std::future<std::shared_ptr<ImageBuffer>>> editor_render_future_{};
 };
 
 }  // namespace puerhlab::ui
