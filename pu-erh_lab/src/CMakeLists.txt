@@ -427,6 +427,8 @@ add_executable(puerhlab_main
     ui/puerhlab_main/editor_dialog/modules/curve.cpp
     ui/puerhlab_main/editor_dialog/modules/lens_calib.cpp
     ui/puerhlab_main/editor_dialog/modules/geometry.cpp
+    ui/puerhlab_main/editor_dialog/modules/hls.cpp
+    ui/puerhlab_main/editor_dialog/modules/pipeline_io.cpp
     ui/puerhlab_main/editor_dialog/modules/versioning.cpp
     ui/puerhlab_main/editor_dialog/widgets/spinner.cpp
     ui/puerhlab_main/editor_dialog/widgets/histogram_widget.cpp
