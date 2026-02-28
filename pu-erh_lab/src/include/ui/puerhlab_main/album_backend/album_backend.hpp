@@ -39,6 +39,11 @@ class AlbumBackend final : public QObject {
   Q_PROPERTY(int taskProgress READ TaskProgress NOTIFY TaskStateChanged)
   Q_PROPERTY(bool taskCancelVisible READ TaskCancelVisible NOTIFY TaskStateChanged)
   Q_PROPERTY(QString defaultExportFolder READ DefaultExportFolder CONSTANT)
+  Q_PROPERTY(bool importRunning READ ImportRunning NOTIFY ImportStateChanged)
+  Q_PROPERTY(int importTotal READ ImportTotal NOTIFY ImportStateChanged)
+  Q_PROPERTY(int importCompleted READ ImportCompleted NOTIFY ImportStateChanged)
+  Q_PROPERTY(int importFailed READ ImportFailed NOTIFY ImportStateChanged)
+  Q_PROPERTY(QString importStatus READ ImportStatus NOTIFY ImportStateChanged)
   Q_PROPERTY(bool exportInFlight READ ExportInFlight NOTIFY ExportStateChanged)
   Q_PROPERTY(QString exportStatus READ ExportStatus NOTIFY ExportStateChanged)
   Q_PROPERTY(int exportTotal READ ExportTotal NOTIFY ExportStateChanged)
@@ -90,6 +95,11 @@ class AlbumBackend final : public QObject {
   int TaskProgress() const { return task_progress_; }
   bool TaskCancelVisible() const { return task_cancel_visible_; }
   const QString& DefaultExportFolder() const { return import_export_.default_export_folder(); }
+  bool ImportRunning() const { return import_export_.import_running(); }
+  int ImportTotal() const { return import_export_.import_total(); }
+  int ImportCompleted() const { return import_export_.import_completed(); }
+  int ImportFailed() const { return import_export_.import_failed(); }
+  const QString& ImportStatus() const { return import_export_.import_status(); }
   bool ExportInFlight() const { return import_export_.export_inflight(); }
   const QString& ExportStatus() const { return import_export_.export_status(); }
   int ExportTotal() const { return import_export_.export_total(); }
@@ -168,6 +178,8 @@ signals:
   void StatsChanged();
   void ServiceStateChanged();
   void TaskStateChanged();
+  void ImportStateChanged();
+  void importStateChanged();
   void ExportStateChanged();
   void exportStateChanged();
   void EditorStateChanged();

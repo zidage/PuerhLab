@@ -49,6 +49,11 @@ class ImportExportHandler {
       -> ExportQueueBuildResult;
 
   [[nodiscard]] bool export_inflight() const { return export_inflight_; }
+  [[nodiscard]] bool import_running() const { return import_running_; }
+  [[nodiscard]] int  import_total() const { return import_total_; }
+  [[nodiscard]] int  import_completed() const { return import_completed_; }
+  [[nodiscard]] int  import_failed() const { return import_failed_; }
+  [[nodiscard]] auto import_status() const -> const QString& { return import_status_; }
   [[nodiscard]] auto current_import_job() const -> const std::shared_ptr<ImportJob>& {
     return current_import_job_;
   }
@@ -81,6 +86,11 @@ class ImportExportHandler {
   AlbumBackend& backend_;
 
   std::shared_ptr<ImportJob> current_import_job_{};
+  bool    import_running_       = false;
+  int     import_total_         = 0;
+  int     import_completed_     = 0;
+  int     import_failed_        = 0;
+  QString import_status_{};
   bool    export_inflight_      = false;
   QString default_export_folder_{};
   QString export_status_        = "Ready to export.";

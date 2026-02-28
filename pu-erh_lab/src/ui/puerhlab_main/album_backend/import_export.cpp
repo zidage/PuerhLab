@@ -72,27 +72,38 @@ void ImportExportHandler::StartImport(const QStringList& fileUrlsOrPaths) {
   auto job            = std::make_shared<ImportJob>();
   current_import_job_ = job;
 
-  backend_.SetTaskState(
-      QString("Importing %1 file(s)...").arg(static_cast<int>(paths.size())), 0, true);
+  import_running_   = true;
+  import_total_     = static_cast<int>(paths.size());
+  import_completed_ = 0;
+  import_failed_    = 0;
+  import_status_    = QString("Importing %1 file(s)...").arg(import_total_);
+  emit backend_.ImportStateChanged();
+  emit backend_.importStateChanged();
+
+  backend_.SetTaskState(import_status_, 0, true);
 
   QPointer<AlbumBackend> self(&backend_);
   job->on_progress_ = [self](const ImportProgress& progress) {
     if (!self) return;
     const uint32_t total        = std::max<uint32_t>(progress.total_, 1);
-    const uint32_t placeholders = progress.placeholders_created_.load();
     const uint32_t metadataDone = progress.metadata_done_.load();
     const uint32_t failed       = progress.failed_.load();
-    const uint32_t done         = std::max(placeholders, metadataDone);
+    const uint32_t done         = metadataDone + failed;
     const int      pct          = static_cast<int>((done * 100U) / total);
 
     QMetaObject::invokeMethod(
         self,
-        [self, done, total, metadataDone, failed, pct]() {
+        [self, metadataDone, total, failed, pct]() {
           if (!self) return;
-          self->SetTaskState(
-              QString("Importing... %1/%2 (meta %3, failed %4)")
-                  .arg(done).arg(total).arg(metadataDone).arg(failed),
-              pct, true);
+          auto& ie = self->import_export_;
+          ie.import_completed_ = static_cast<int>(metadataDone);
+          ie.import_failed_    = static_cast<int>(failed);
+          ie.import_status_    =
+              QString("Importing... %1/%2 (failed %3)")
+                  .arg(metadataDone).arg(total).arg(failed);
+          emit self->ImportStateChanged();
+          emit self->importStateChanged();
+          self->SetTaskState(ie.import_status_, pct, true);
         },
         Qt::QueuedConnection);
   };
@@ -114,14 +125,20 @@ void ImportExportHandler::StartImport(const QStringList& fileUrlsOrPaths) {
         isvc->ImportToFolder(paths, import_target_folder_path_, options, job);
   } catch (const std::exception& e) {
     current_import_job_.reset();
-    backend_.SetTaskState(
-        QString("Import failed: %1").arg(QString::fromUtf8(e.what())), 0, false);
+    import_running_ = false;
+    import_status_  = QString("Import failed: %1").arg(QString::fromUtf8(e.what()));
+    emit backend_.ImportStateChanged();
+    emit backend_.importStateChanged();
+    backend_.SetTaskState(import_status_, 0, false);
   }
 }
 
 void ImportExportHandler::CancelImport() {
   if (!current_import_job_) return;
   current_import_job_->canceled_.store(true);
+  import_status_ = "Cancelling import...";
+  emit backend_.ImportStateChanged();
+  emit backend_.importStateChanged();
   backend_.SetTaskState("Cancelling import...", backend_.task_progress_, true);
 }
 
@@ -323,6 +340,13 @@ void ImportExportHandler::FinishImport(const ImportResult& result) {
         package_error.isEmpty() ? "Import finished, but project packing failed."
                                 : package_error);
   }
+  import_running_   = false;
+  import_completed_ = static_cast<int>(result.imported_);
+  import_failed_    = static_cast<int>(result.failed_);
+  import_status_    = task_text;
+  emit backend_.ImportStateChanged();
+  emit backend_.importStateChanged();
+
   backend_.SetTaskState(task_text, 100, false);
   backend_.ScheduleIdleTaskStateReset(1800);
 }

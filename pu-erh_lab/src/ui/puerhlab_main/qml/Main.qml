@@ -1071,6 +1071,103 @@ ApplicationWindow {
         }
     }
 
+    // ── Import progress overlay ──────────────────────────────────────────
+    Item {
+        anchors.fill: parent
+        visible: albumBackend.importRunning
+        z: 50
+
+        MultiEffect {
+            anchors.fill: parent
+            source: mainContent
+            blurEnabled: true
+            blur: 0.6
+            blurMax: 64
+            saturation: -0.2
+        }
+
+        Rectangle {
+            anchors.fill: parent
+            color: root.colOverlay
+        }
+
+        MouseArea { anchors.fill: parent; hoverEnabled: true }
+
+        Rectangle {
+            anchors.centerIn: parent
+            width: Math.min(parent.width - 36, 420)
+            height: importDialogContent.implicitHeight + 36
+            radius: 14
+            color: root.colBgDeep
+            border.width: 0
+
+            ColumnLayout {
+                id: importDialogContent
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.top: parent.top
+                anchors.margins: 20
+                spacing: 16
+
+                Label {
+                    text: "Importing Photos"
+                    font.pixelSize: 21
+                    font.weight: 700
+                    color: root.colText
+                    Layout.alignment: Qt.AlignHCenter
+                }
+
+                ImportProgressRing {
+                    Layout.alignment: Qt.AlignHCenter
+                    width: 160
+                    height: 160
+                    ringWidth: 14
+                    trackColor: "#333333"
+                    fillColor: root.colAccentPrimary
+                    progress: albumBackend.importTotal > 0
+                              ? albumBackend.importCompleted / albumBackend.importTotal
+                              : 0
+                }
+
+                Label {
+                    Layout.alignment: Qt.AlignHCenter
+                    text: albumBackend.importCompleted + " / " + albumBackend.importTotal
+                    font.pixelSize: 28
+                    font.weight: 600
+                    color: root.colText
+                }
+
+                Label {
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    horizontalAlignment: Text.AlignHCenter
+                    text: albumBackend.importStatus.length > 0
+                          ? albumBackend.importStatus
+                          : "Preparing..."
+                    color: root.colTextMuted
+                    font.pixelSize: 12
+                }
+
+                Label {
+                    Layout.fillWidth: true
+                    visible: albumBackend.importFailed > 0
+                    wrapMode: Text.WordWrap
+                    horizontalAlignment: Text.AlignHCenter
+                    text: albumBackend.importFailed + " file(s) failed"
+                    color: root.colDanger
+                    font.pixelSize: 12
+                }
+
+                Button {
+                    Layout.alignment: Qt.AlignHCenter
+                    text: "Cancel"
+                    Material.background: root.colDanger
+                    Material.foreground: root.colText
+                    onClicked: albumBackend.CancelImport()
+                }
+            }
+        }
+    }
 
     Component {
         id: gridComp

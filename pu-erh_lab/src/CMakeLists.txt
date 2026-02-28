@@ -511,6 +511,7 @@ qt_add_qml_module(puerhlab_main
     QML_FILES
         ui/puerhlab_main/qml/Main.qml
         ui/puerhlab_main/qml/AlbumExportDialog.qml
+        ui/puerhlab_main/qml/ImportProgressRing.qml
         ui/puerhlab_main/qml/InspectorPanel.qml
         ui/puerhlab_main/qml/StatsCard.qml
         ui/puerhlab_main/qml/ThumbnailGridView.qml
