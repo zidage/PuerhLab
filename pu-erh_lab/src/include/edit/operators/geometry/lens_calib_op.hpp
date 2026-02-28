@@ -36,7 +36,7 @@ class LensCalibOp : public OperatorBase<LensCalibOp> {
  private:
   mutable InputMeta     input_meta_;
   std::filesystem::path lens_profile_db_path_;
-  bool                  enabled_             = true;
+  bool                  enabled_             = false;
   bool                  apply_vignetting_    = true;
   bool                  apply_distortion_    = true;
   bool                  apply_tca_           = true;

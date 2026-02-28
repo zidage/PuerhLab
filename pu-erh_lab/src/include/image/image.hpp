@@ -24,6 +24,7 @@
 #include <string>
 #include <type/type.hpp>
 
+#include "decoders/processor/raw_color_context.hpp"
 #include "image/image_buffer.hpp"
 #include "image/metadata.hpp"
 
@@ -47,6 +48,8 @@ class Image {
   Exiv2::Image::UniquePtr     exif_data_;
   nlohmann::json              exif_json_;
   ExifDisplayMetaData         exif_display_;
+  RawRuntimeColorContext       raw_color_context_;
+  std::atomic<bool>           has_raw_color_context_{false};
 
   ImageBuffer                 image_data_;
   ImageBuffer                 thumbnail_;
@@ -88,6 +91,9 @@ class Image {
 
   void                  SetId(image_id_t image_id);
   void                  SetExifDisplayMetaData(ExifDisplayMetaData&& exif_display);
+  void                  SetRawColorContext(RawRuntimeColorContext&& ctx);
+  auto                  GetRawColorContext() const -> const RawRuntimeColorContext&;
+  auto                  HasRawColorContext() const -> bool;
 
   void                  ClearData();
   void                  ClearThumbnail();

@@ -21,6 +21,7 @@
 #include <opencv2/core/types.hpp>
 
 #include "decoders/decoder_scheduler.hpp"
+#include "decoders/processor/raw_color_context.hpp"
 #include "image/image_buffer.hpp"
 #include "operators/cpu/raw_proc_utils.hpp"
 #include "type/type.hpp"
@@ -37,25 +38,6 @@ struct RawParams {
       CPU::LightSourceType::UNKNOWN;  // If user wants to use a preset light source as the wb
 
   DecodeRes decode_res_ = DecodeRes::FULL;
-};
-
-struct RawRuntimeColorContext {
-  bool              valid_                   = false;
-  bool              output_in_camera_space_  = false;
-  float             cam_mul_[3]              = {1.0f, 1.0f, 1.0f};
-  float             pre_mul_[3]              = {1.0f, 1.0f, 1.0f};
-  float             cam_xyz_[9]              = {};
-  float             rgb_cam_[9]              = {};
-  std::string       camera_make_             = {};
-  std::string       camera_model_            = {};
-  bool              lens_metadata_valid_     = false;
-  std::string       lens_make_               = {};
-  std::string       lens_model_              = {};
-  float             focal_length_mm_         = 0.0f;
-  float             aperture_f_number_       = 0.0f;
-  float             focus_distance_m_        = 0.0f;
-  float             focal_35mm_mm_           = 0.0f;
-  float             crop_factor_hint_        = 0.0f;
 };
 
 class RawProcessor {

@@ -255,6 +255,11 @@ class PipelineStage {
 
   auto ApplyStage(OperatorParams& global_params) -> std::shared_ptr<ImageBuffer>;
 
+  /// Re-invoke SetGlobalParams for every enabled operator in this stage.
+  /// Used before the merged GPU stream so operators can pick up runtime
+  /// data written by earlier (non-merged) stages (e.g. raw decode context).
+  void RefreshGlobalParams(OperatorParams& global_params);
+
   auto GetStaticKernelStream() -> StaticKernelStreamType& { return static_kernel_stream_; }
 
   void SetEnableCache(bool enable) {

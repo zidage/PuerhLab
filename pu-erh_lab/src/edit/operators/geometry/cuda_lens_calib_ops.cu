@@ -15,6 +15,7 @@
 #include "edit/operators/geometry/cuda_lens_calib_ops.hpp"
 
 #include <cuda_runtime.h>
+#include <opencv2/core.hpp>
 #include <opencv2/core/cuda_types.hpp>
 
 #include <algorithm>
@@ -34,6 +35,80 @@ constexpr float kThobyK1 = 1.47f;
 constexpr float kThobyK2 = 0.713f;
 
 __constant__ LensCalibGpuParams c_lens_params;
+
+struct CropRectPx {
+  float left   = 0.0f;
+  float right  = 0.0f;
+  float top    = 0.0f;
+  float bottom = 0.0f;
+};
+
+template <typename SwapT>
+__host__ __device__ void SwapValues(SwapT& a, SwapT& b) {
+  const SwapT tmp = a;
+  a               = b;
+  b               = tmp;
+}
+
+auto ResolveCropRectPxHost(const LensCalibGpuParams& params) -> CropRectPx {
+  CropRectPx rect{};
+  const float width  = static_cast<float>(params.dst_width);
+  const float height = static_cast<float>(params.dst_height);
+  if (width <= 0.0f || height <= 0.0f) {
+    return rect;
+  }
+
+  // Lensfun crop semantics:
+  // crop[0..1] = left/right on long side, crop[2..3] = top/bottom on short side.
+  if (params.dst_width >= params.dst_height) {
+    rect.left   = params.crop_bounds[0] * width;
+    rect.right  = params.crop_bounds[1] * width;
+    rect.top    = params.crop_bounds[2] * height;
+    rect.bottom = params.crop_bounds[3] * height;
+  } else {
+    rect.left   = params.crop_bounds[2] * width;
+    rect.right  = params.crop_bounds[3] * width;
+    rect.top    = params.crop_bounds[0] * height;
+    rect.bottom = params.crop_bounds[1] * height;
+  }
+
+  if (rect.left > rect.right) {
+    SwapValues(rect.left, rect.right);
+  }
+  if (rect.top > rect.bottom) {
+    SwapValues(rect.top, rect.bottom);
+  }
+  return rect;
+}
+
+__device__ auto ResolveCropRectPxDevice() -> CropRectPx {
+  CropRectPx rect{};
+  const float width  = static_cast<float>(c_lens_params.dst_width);
+  const float height = static_cast<float>(c_lens_params.dst_height);
+  if (width <= 0.0f || height <= 0.0f) {
+    return rect;
+  }
+
+  if (c_lens_params.dst_width >= c_lens_params.dst_height) {
+    rect.left   = c_lens_params.crop_bounds[0] * width;
+    rect.right  = c_lens_params.crop_bounds[1] * width;
+    rect.top    = c_lens_params.crop_bounds[2] * height;
+    rect.bottom = c_lens_params.crop_bounds[3] * height;
+  } else {
+    rect.left   = c_lens_params.crop_bounds[2] * width;
+    rect.right  = c_lens_params.crop_bounds[3] * width;
+    rect.top    = c_lens_params.crop_bounds[0] * height;
+    rect.bottom = c_lens_params.crop_bounds[1] * height;
+  }
+
+  if (rect.left > rect.right) {
+    SwapValues(rect.left, rect.right);
+  }
+  if (rect.top > rect.bottom) {
+    SwapValues(rect.top, rect.bottom);
+  }
+  return rect;
+}
 
 __device__ auto PixelToNormalized(float x, float y) -> float2 {
   return make_float2(x * c_lens_params.norm_scale - c_lens_params.center_x,
@@ -462,10 +537,11 @@ __device__ auto ApplyCircleCropAlpha(const float4& in, int x, int y) -> float4 {
   if (c_lens_params.apply_crop_circle == 0) {
     return in;
   }
-  const float left   = c_lens_params.crop_bounds[0] * static_cast<float>(c_lens_params.dst_width);
-  const float right  = c_lens_params.crop_bounds[1] * static_cast<float>(c_lens_params.dst_width);
-  const float top    = c_lens_params.crop_bounds[2] * static_cast<float>(c_lens_params.dst_height);
-  const float bottom = c_lens_params.crop_bounds[3] * static_cast<float>(c_lens_params.dst_height);
+  const CropRectPx rect = ResolveCropRectPxDevice();
+  const float left      = rect.left;
+  const float right     = rect.right;
+  const float top       = rect.top;
+  const float bottom    = rect.bottom;
 
   const float cx = 0.5f * (left + right);
   const float cy = 0.5f * (top + bottom);
@@ -554,10 +630,12 @@ auto ComputeRectCropRoi(const LensCalibGpuParams& params) -> cv::Rect {
     return cv::Rect();
   }
 
-  int x0 = static_cast<int>(std::lround(params.crop_bounds[0] * static_cast<float>(width)));
-  int x1 = static_cast<int>(std::lround(params.crop_bounds[1] * static_cast<float>(width)));
-  int y0 = static_cast<int>(std::lround(params.crop_bounds[2] * static_cast<float>(height)));
-  int y1 = static_cast<int>(std::lround(params.crop_bounds[3] * static_cast<float>(height)));
+  const CropRectPx rect = ResolveCropRectPxHost(params);
+
+  int x0 = static_cast<int>(std::lround(rect.left));
+  int x1 = static_cast<int>(std::lround(rect.right));
+  int y0 = static_cast<int>(std::lround(rect.top));
+  int y1 = static_cast<int>(std::lround(rect.bottom));
 
   if (x0 > x1) std::swap(x0, x1);
   if (y0 > y1) std::swap(y0, y1);
@@ -567,6 +645,43 @@ auto ComputeRectCropRoi(const LensCalibGpuParams& params) -> cv::Rect {
   x1 = std::clamp(x1, x0 + 1, width);
   y1 = std::clamp(y1, y0 + 1, height);
   return cv::Rect(x0, y0, std::max(1, x1 - x0), std::max(1, y1 - y0));
+}
+
+auto ComputeAutoCropRoiFromAlpha(const cv::cuda::GpuMat& image, float alpha_threshold = 1e-4f)
+    -> cv::Rect {
+  if (image.empty() || image.type() != CV_32FC4) {
+    return cv::Rect();
+  }
+
+  cv::Mat host;
+  image.download(host);
+  if (host.empty() || host.type() != CV_32FC4) {
+    return cv::Rect();
+  }
+
+  int min_x = host.cols;
+  int min_y = host.rows;
+  int max_x = -1;
+  int max_y = -1;
+
+  for (int y = 0; y < host.rows; ++y) {
+    const auto* row = host.ptr<cv::Vec4f>(y);
+    for (int x = 0; x < host.cols; ++x) {
+      if (row[x][3] <= alpha_threshold) {
+        continue;
+      }
+      min_x = std::min(min_x, x);
+      min_y = std::min(min_y, y);
+      max_x = std::max(max_x, x);
+      max_y = std::max(max_y, y);
+    }
+  }
+
+  if (max_x < min_x || max_y < min_y) {
+    return cv::Rect(0, 0, host.cols, host.rows);
+  }
+
+  return cv::Rect(min_x, min_y, (max_x - min_x) + 1, (max_y - min_y) + 1);
 }
 
 }  // namespace
@@ -595,6 +710,10 @@ void ApplyLensCalibration(cv::cuda::GpuMat& image, const LensCalibGpuParams& par
   const bool has_rect_crop  = (launch.apply_crop != 0 &&
                               static_cast<LensCalibCropMode>(launch.crop_mode) ==
                                   LensCalibCropMode::RECTANGLE);
+  const bool has_auto_crop  = (launch.apply_crop != 0 &&
+                              static_cast<LensCalibCropMode>(launch.crop_mode) ==
+                                  LensCalibCropMode::NONE &&
+                              has_warp);
 
   if (!has_vignetting && !has_warp && !has_rect_crop) {
     return;
@@ -622,6 +741,12 @@ void ApplyLensCalibration(cv::cuda::GpuMat& image, const LensCalibGpuParams& par
   if (has_rect_crop) {
     const cv::Rect roi = ComputeRectCropRoi(launch);
     if (roi.width > 0 && roi.height > 0) {
+      image = image(roi).clone();
+    }
+  } else if (has_auto_crop) {
+    const cv::Rect roi = ComputeAutoCropRoiFromAlpha(image);
+    if (roi.width > 0 && roi.height > 0 &&
+        (roi.width < image.cols || roi.height < image.rows)) {
       image = image(roi).clone();
     }
   }

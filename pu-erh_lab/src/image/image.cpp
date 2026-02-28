@@ -120,6 +120,19 @@ void Image::SetExifDisplayMetaData(ExifDisplayMetaData&& exif_display) {
   has_exif_display_ = true;
 }
 
+void Image::SetRawColorContext(RawRuntimeColorContext&& ctx) {
+  raw_color_context_     = std::move(ctx);
+  has_raw_color_context_ = true;
+}
+
+auto Image::GetRawColorContext() const -> const RawRuntimeColorContext& {
+  return raw_color_context_;
+}
+
+auto Image::HasRawColorContext() const -> bool {
+  return has_raw_color_context_.load();
+}
+
 void Image::ComputeChecksum() { checksum_ = XXH3_64bits(this, sizeof(*this)); }
 
 auto Image::GetImageData() -> cv::Mat& { return image_data_.GetCPUData(); }

@@ -20,6 +20,7 @@
 #include <exiv2/exiv2.hpp>
 #include <json.hpp>
 
+#include "decoders/processor/raw_color_context.hpp"
 #include "image.hpp"
 #include "type/type.hpp"
 
@@ -62,5 +63,18 @@ class MetadataExtractor {
    * @param image
    */
   static void ExtractEXIF_ToImage(const image_path_t& image_path, Image& image);
+
+  /**
+   * @brief Extract metadata from a raw file using libraw and populate the Image with
+   *        both display metadata (ExifDisplayMetaData) and raw color context
+   *        (RawRuntimeColorContext). This replaces the Exiv2-based extraction for raw
+   *        files, providing better lens ID resolution (e.g. Nikon) and all data
+   *        needed for color temperature and lens calibration operators.
+   *
+   * @param image_path Path to the raw image file
+   * @param image      Image object to populate
+   * @return true if extraction succeeded
+   */
+  static auto ExtractRawMetadata_ToImage(const image_path_t& image_path, Image& image) -> bool;
 };
 }  // namespace puerhlab

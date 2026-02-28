@@ -66,8 +66,8 @@ TEST(ColorTempCudaSanity, RawContextAndFallbackMatrixPath) {
   color_temp_json["color_temp"] = {{"mode", "as_shot"}, {"cct", 6500.0f}, {"tint", 0.0f}};
   ColorTempOp color_temp_op(color_temp_json);
 
+  // SetGlobalParams now eagerly resolves matrices internally.
   color_temp_op.SetGlobalParams(params);
-  color_temp_op.ResolveRuntime(params);
   EXPECT_TRUE(params.color_temp_matrices_valid_);
   EXPECT_TRUE(std::isfinite(params.color_temp_resolved_cct_));
   EXPECT_TRUE(std::isfinite(params.color_temp_resolved_tint_));
@@ -75,7 +75,8 @@ TEST(ColorTempCudaSanity, RawContextAndFallbackMatrixPath) {
   params.raw_camera_make_         = "UnknownMake";
   params.raw_camera_model_        = "UnknownModel";
   params.color_temp_runtime_dirty_ = true;
-  color_temp_op.ResolveRuntime(params);
+  // Re-resolve via SetGlobalParams with unknown camera metadata.
+  color_temp_op.SetGlobalParams(params);
   EXPECT_TRUE(params.color_temp_matrices_valid_);
 #endif
 }

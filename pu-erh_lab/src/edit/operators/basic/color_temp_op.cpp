@@ -641,6 +641,9 @@ void ColorTempOp::SetGlobalParams(OperatorParams& params) const {
   params.color_temp_resolved_cct_ = resolved_cct_;
   params.color_temp_resolved_tint_ = resolved_tint_;
   params.color_temp_runtime_dirty_ = true;
+
+  // Eagerly resolve camera→XYZ/AP1 matrices now instead of deferring to pipeline Apply.
+  ResolveRuntime(params);
 }
 
 void ColorTempOp::EnableGlobalParams(OperatorParams& params, bool enable) {

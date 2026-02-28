@@ -15,6 +15,7 @@
 #include "edit/history/edit_transaction.hpp"
 
 #include <algorithm>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -71,6 +72,35 @@ static bool IsLutPathEmpty(const nlohmann::json& params) {
   } catch (...) {
     return true;
   }
+}
+
+static auto ExtractEmbeddedEnabled(const nlohmann::json& params) -> std::optional<bool> {
+  if (!params.is_object()) {
+    return std::nullopt;
+  }
+
+  if (params.contains("enabled") && params["enabled"].is_boolean()) {
+    return params["enabled"].get<bool>();
+  }
+
+  if (params.size() == 1) {
+    const auto& value = params.begin().value();
+    if (value.is_object() && value.contains("enabled") && value["enabled"].is_boolean()) {
+      return value["enabled"].get<bool>();
+    }
+  }
+
+  return std::nullopt;
+}
+
+static auto ResolveStageEnableForParams(OperatorType type, const nlohmann::json& params) -> bool {
+  if (type == OperatorType::LMT) {
+    return !IsLutPathEmpty(params);
+  }
+  if (const auto embedded_enabled = ExtractEmbeddedEnabled(params); embedded_enabled.has_value()) {
+    return *embedded_enabled;
+  }
+  return true;
 }
 }  // namespace
 
@@ -234,18 +264,16 @@ auto EditTransaction::ApplyTransaction(PipelineExecutor& pipeline) const -> bool
   switch (type_) {
     case TransactionType::_ADD:
       stage.SetOperator(operator_type_, operator_params_, global_params);
-      stage.EnableOperator(operator_type_, true, global_params);
+      stage.EnableOperator(operator_type_, ResolveStageEnableForParams(operator_type_, operator_params_),
+                           global_params);
       return true;
     case TransactionType::_DELETE:
       stage.EnableOperator(operator_type_, false, global_params);
       return true;
     case TransactionType::_EDIT:
       stage.SetOperator(operator_type_, operator_params_, global_params);
-      if (operator_type_ == OperatorType::LMT && IsLutPathEmpty(operator_params_)) {
-        stage.EnableOperator(operator_type_, false, global_params);
-      } else {
-        stage.EnableOperator(operator_type_, true, global_params);
-      }
+      stage.EnableOperator(operator_type_, ResolveStageEnableForParams(operator_type_, operator_params_),
+                           global_params);
       return true;
   }
   return false;

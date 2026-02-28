@@ -248,6 +248,27 @@ auto GetLensfunDb(const std::filesystem::path& preferred_root) -> lfDatabase* {
 
 auto IsFinitePositive(float value) -> bool { return std::isfinite(value) && value > 0.0f; }
 
+void RescalePaVignettingTerms(lfLensCalibVignetting* vignette, float real_focal_mm,
+                              float crop_factor) {
+  if (!vignette || vignette->Model != LF_VIGNETTING_MODEL_PA) {
+    return;
+  }
+  if (!IsFinitePositive(real_focal_mm) || !IsFinitePositive(crop_factor)) {
+    return;
+  }
+
+  const float hugin_scale_in_mm = (kFullFrameDiagonalMm / crop_factor) * 0.5f;
+  if (!IsFinitePositive(hugin_scale_in_mm)) {
+    return;
+  }
+
+  const float hugin_scaling = real_focal_mm / hugin_scale_in_mm;
+  const float hs2           = hugin_scaling * hugin_scaling;
+  vignette->Terms[0] *= hs2;
+  vignette->Terms[1] *= hs2 * hs2;
+  vignette->Terms[2] *= hs2 * hs2 * hs2;
+}
+
 auto CanonicalizeProjectionToken(std::string text) -> std::string {
   std::transform(text.begin(), text.end(), text.begin(),
                  [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
@@ -633,6 +654,7 @@ void LensCalibOp::ResolveRuntime(OperatorParams& params) const {
   if (!params.raw_runtime_valid_) {
     params.lens_calib_runtime_valid_  = false;
     params.lens_calib_runtime_failed_ = true;
+    params.lens_calib_runtime_dirty_  = false;
     has_resolved_params_              = false;
     std::cout << "Warning: Raw decoding parameters are not valid. Lens calibration will be skipped." << std::endl;
     return;
@@ -737,7 +759,10 @@ void LensCalibOp::ResolveRuntime(OperatorParams& params) const {
   lfLensCalibDistortion distortion{};
   const bool distortion_ok =
       lf_lens_interpolate_distortion(lens, crop_factor, meta.focal_length_mm_, &distortion) != 0;
-  const float real_focal_mm = meta.focal_length_mm_;
+  float real_focal_mm = meta.focal_length_mm_;
+  if (distortion_ok && IsFinitePositive(distortion.RealFocal)) {
+    real_focal_mm = distortion.RealFocal;
+  }
 
   lfLensCalibTCA tca{};
   const bool tca_ok = lf_lens_interpolate_tca(lens, crop_factor, meta.focal_length_mm_, &tca) != 0;
@@ -749,6 +774,9 @@ void LensCalibOp::ResolveRuntime(OperatorParams& params) const {
       IsFinitePositive(safe_aperture) &&
       lf_lens_interpolate_vignetting(lens, crop_factor, meta.focal_length_mm_, safe_aperture,
                                      safe_distance, &vignette) != 0;
+  if (vignette_ok) {
+    RescalePaVignettingTerms(&vignette, real_focal_mm, crop_factor);
+  }
 
   lfLensCalibCrop crop{};
   const bool crop_ok = lf_lens_interpolate_crop(lens, crop_factor, meta.focal_length_mm_, &crop) != 0;
@@ -789,13 +817,10 @@ void LensCalibOp::ResolveRuntime(OperatorParams& params) const {
       target_projection != LensTypeFromLensfun(lens->Type);
   runtime.apply_projection = (projection_enabled_ && projection_valid) ? 1 : 0;
 
-  runtime.apply_crop =
-      (apply_crop_ && crop_ok &&
-       (crop.CropMode == LF_CROP_RECTANGLE || crop.CropMode == LF_CROP_CIRCLE))
-          ? 1
-          : 0;
-  runtime.apply_crop_circle =
-      (runtime.apply_crop && crop.CropMode == LF_CROP_CIRCLE) ? 1 : 0;
+  const bool crop_profile_valid =
+      crop_ok && (crop.CropMode == LF_CROP_RECTANGLE || crop.CropMode == LF_CROP_CIRCLE);
+  runtime.apply_crop = (apply_crop_ && crop_profile_valid) ? 1 : 0;
+  runtime.apply_crop_circle = (runtime.apply_crop && crop.CropMode == LF_CROP_CIRCLE) ? 1 : 0;
 
   switch (distortion.Model) {
     case LF_DIST_MODEL_POLY3:
@@ -834,12 +859,27 @@ void LensCalibOp::ResolveRuntime(OperatorParams& params) const {
   std::memcpy(runtime.vignetting_terms, vignette.Terms, sizeof(runtime.vignetting_terms));
 
   runtime.crop_mode = static_cast<std::int32_t>(LensCalibCropMode::NONE);
-  if (crop.CropMode == LF_CROP_RECTANGLE) {
+  if (crop_profile_valid && crop.CropMode == LF_CROP_RECTANGLE) {
     runtime.crop_mode = static_cast<std::int32_t>(LensCalibCropMode::RECTANGLE);
-  } else if (crop.CropMode == LF_CROP_CIRCLE) {
+  } else if (crop_profile_valid && crop.CropMode == LF_CROP_CIRCLE) {
     runtime.crop_mode = static_cast<std::int32_t>(LensCalibCropMode::CIRCLE);
   }
   std::memcpy(runtime.crop_bounds, crop.Crop, sizeof(runtime.crop_bounds));
+
+  // Fallback path: some lens profiles do not contain explicit crop data.
+  // In that case, keep apply_crop enabled so CUDA can auto-crop transparent
+  // borders after geometric warping.
+  const bool has_geometry_warp =
+      runtime.apply_distortion != 0 || runtime.apply_tca != 0 || runtime.apply_projection != 0;
+  if (apply_crop_ && !crop_profile_valid && has_geometry_warp) {
+    runtime.apply_crop        = 1;
+    runtime.apply_crop_circle = 0;
+    runtime.crop_mode         = static_cast<std::int32_t>(LensCalibCropMode::NONE);
+    runtime.crop_bounds[0]    = 0.0f;
+    runtime.crop_bounds[1]    = 1.0f;
+    runtime.crop_bounds[2]    = 0.0f;
+    runtime.crop_bounds[3]    = 1.0f;
+  }
 
   runtime.resolved_scale = 1.0f;
   if (use_user_scale_ && IsFinitePositive(user_scale_)) {

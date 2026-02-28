@@ -21,6 +21,7 @@
 #include <memory>
 #include <string>
 
+#include "decoders/processor/raw_color_context.hpp"
 #include "image/image_buffer.hpp"
 #include "json.hpp"
 #include "op_kernel.hpp"
@@ -256,7 +257,37 @@ struct OperatorParams {
   float                        gamma_luminance_offset_   = 0.0f;
   float                        gain_color_offset_[3]     = {1.0f, 1.0f, 1.0f};
   float                        gain_luminance_offset_    = 0.0f;
-};
+  /// Populate the raw metadata fields from a RawRuntimeColorContext.
+  /// Call this at import/load time so that downstream operators (ColorTemp, LensCalib)
+  /// can resolve eagerly in their SetGlobalParams without waiting for pipeline execution.
+  void PopulateRawMetadata(const RawRuntimeColorContext& ctx) {
+    raw_runtime_valid_         = ctx.valid_;
+    raw_decode_input_space_    = ctx.output_in_camera_space_
+                                     ? RawDecodeInputSpace::CAMERA
+                                     : RawDecodeInputSpace::AP0;
+    for (int i = 0; i < 3; ++i) {
+      raw_cam_mul_[i] = ctx.cam_mul_[i];
+      raw_pre_mul_[i] = ctx.pre_mul_[i];
+    }
+    for (int i = 0; i < 9; ++i) {
+      raw_cam_xyz_[i] = ctx.cam_xyz_[i];
+      raw_rgb_cam_[i] = ctx.rgb_cam_[i];
+    }
+    raw_camera_make_           = ctx.camera_make_;
+    raw_camera_model_          = ctx.camera_model_;
+    raw_lens_metadata_valid_   = ctx.lens_metadata_valid_;
+    raw_lens_make_             = ctx.lens_make_;
+    raw_lens_model_            = ctx.lens_model_;
+    raw_lens_focal_mm_         = ctx.focal_length_mm_;
+    raw_lens_aperture_f_       = ctx.aperture_f_number_;
+    raw_lens_focus_distance_m_ = ctx.focus_distance_m_;
+    raw_lens_focal_35mm_       = ctx.focal_35mm_mm_;
+    raw_lens_crop_factor_hint_ = ctx.crop_factor_hint_;
+
+    // Mark dependent operators dirty so they re-resolve on next SetGlobalParams call
+    lens_calib_runtime_dirty_  = true;
+    color_temp_runtime_dirty_  = true;
+  }};
 
 class IOperatorBase {
  public:

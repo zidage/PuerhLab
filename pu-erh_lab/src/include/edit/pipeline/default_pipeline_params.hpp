@@ -20,7 +20,7 @@ inline auto MakeDefaultRawDecodeParams() -> nlohmann::json {
 
 inline auto MakeDefaultLensCalibParams() -> nlohmann::json {
   return {{"lens_calib",
-           {{"enabled", true},
+           {{"enabled", false},
             {"apply_vignetting", true},
             {"apply_distortion", true},
             {"apply_tca", true},

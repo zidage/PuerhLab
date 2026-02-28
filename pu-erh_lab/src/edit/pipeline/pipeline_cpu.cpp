@@ -23,36 +23,12 @@
 
 #include <opencv2/opencv.hpp>
 
-#include "edit/operators/basic/color_temp_op.hpp"
 #include "edit/operators/op_base.hpp"
 #include "edit/pipeline/default_pipeline_params.hpp"
 #include "edit/pipeline/pipeline_stage.hpp"
 #include "image/image_buffer.hpp"
 
 namespace puerhlab {
-namespace {
-void ResolveColorTempRuntime(PipelineStage& to_ws_stage, OperatorParams& global_params) {
-  if (!global_params.color_temp_runtime_dirty_ && global_params.color_temp_cache_key_valid_) {
-    return;
-  }
-
-  auto color_temp_entry = to_ws_stage.GetOperator(OperatorType::COLOR_TEMP);
-  if (!color_temp_entry.has_value()) {
-    return;
-  }
-
-  OperatorEntry* entry = color_temp_entry.value();
-  if (!entry || !entry->enable_ || !entry->op_) {
-    return;
-  }
-
-  auto* color_temp = dynamic_cast<ColorTempOp*>(entry->op_.get());
-  if (!color_temp) {
-    return;
-  }
-  color_temp->ResolveRuntime(global_params);
-}
-}  // namespace
 
 CPUPipelineExecutor::CPUPipelineExecutor()
     : enable_cache_(false),
@@ -121,13 +97,23 @@ auto CPUPipelineExecutor::Apply(std::shared_ptr<ImageBuffer> input)
     return input;
   }
   std::shared_ptr<ImageBuffer> output;
+  // Before the merged GPU stream, re-trigger SetGlobalParams for operators
+  // in stages that feed into it, so they pick up runtime data (e.g. raw decode
+  // context) written by earlier non-merged stages.
+  auto refresh_before_merged = [&](PipelineStage* stage) {
+    if (stage->stage_ == PipelineStageName::Merged_Stage) {
+      for (size_t i = static_cast<size_t>(PipelineStageName::To_WorkingSpace);
+           i < stages_.size(); ++i) {
+        stages_[i].RefreshGlobalParams(global_params_);
+      }
+    }
+  };
+
   if (enable_cache_) {
     if (!first_stage->CacheValid()) {
       output = std::make_shared<ImageBuffer>(input->Clone());
       for (auto* stage : exec_stages_) {
-        if (stage->stage_ == PipelineStageName::Merged_Stage) {
-          ResolveColorTempRuntime(GetStage(PipelineStageName::To_WorkingSpace), global_params_);
-        }
+        refresh_before_merged(stage);
         stage->SetInputImage(output);
         stage->SetForceCPUOutput(force_cpu_output_);
         output = stage->ApplyStage(global_params_);
@@ -137,9 +123,7 @@ auto CPUPipelineExecutor::Apply(std::shared_ptr<ImageBuffer> input)
       output = first_stage->GetOutputCache();
       for (auto* stage : exec_stages_) {
         if (stage != first_stage) {
-          if (stage->stage_ == PipelineStageName::Merged_Stage) {
-            ResolveColorTempRuntime(GetStage(PipelineStageName::To_WorkingSpace), global_params_);
-          }
+          refresh_before_merged(stage);
           stage->SetInputImage(output);
           stage->SetForceCPUOutput(force_cpu_output_);
           output = stage->ApplyStage(global_params_);
@@ -150,9 +134,7 @@ auto CPUPipelineExecutor::Apply(std::shared_ptr<ImageBuffer> input)
     // Cache is disabled, just process the stages sequentially
     output = std::make_shared<ImageBuffer>(input->Clone());
     for (auto* stage : exec_stages_) {
-      if (stage->stage_ == PipelineStageName::Merged_Stage) {
-        ResolveColorTempRuntime(GetStage(PipelineStageName::To_WorkingSpace), global_params_);
-      }
+      refresh_before_merged(stage);
       stage->SetInputImage(output);
       stage->SetForceCPUOutput(force_cpu_output_);
       output = stage->ApplyStage(global_params_);

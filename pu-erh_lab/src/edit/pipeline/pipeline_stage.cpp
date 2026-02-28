@@ -176,6 +176,15 @@ void PipelineStage::SetOutputCacheValid(bool valid) {
   output_cache_valid_ = valid;
 }
 
+void PipelineStage::RefreshGlobalParams(OperatorParams& global_params) {
+  if (!operators_) return;
+  for (auto& [op_type, op_entry] : *operators_) {
+    if (op_entry.enable_ && op_entry.op_) {
+      op_entry.op_->SetGlobalParams(global_params);
+    }
+  }
+}
+
 auto PipelineStage::ApplyStage(OperatorParams& global_params) -> std::shared_ptr<ImageBuffer> {
   if (!input_set_) {
     throw std::runtime_error("PipelineExecutor: No valid input image set");

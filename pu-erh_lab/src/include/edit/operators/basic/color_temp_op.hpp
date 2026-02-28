@@ -33,6 +33,10 @@ class ColorTempOp : public OperatorBase<ColorTempOp> {
   static auto   ParseMode(const std::string& mode) -> ColorTempMode;
   static auto   ModeToString(ColorTempMode mode) -> std::string;
 
+  // Resolve runtime camera → XYZ/AP1 matrices from current RAW context.
+  // Called eagerly from SetGlobalParams; not exposed publicly.
+  void ResolveRuntime(OperatorParams& params) const;
+
  public:
   static constexpr PriorityLevel     priority_level_    = 0;
   static constexpr PipelineStageName affiliation_stage_ = PipelineStageName::To_WorkingSpace;
@@ -50,8 +54,5 @@ class ColorTempOp : public OperatorBase<ColorTempOp> {
   void SetParams(const nlohmann::json& params) override;
   void SetGlobalParams(OperatorParams& params) const override;
   void EnableGlobalParams(OperatorParams& params, bool enable) override;
-
-  // Resolve runtime camera -> XYZ/AP1 matrices from current RAW context.
-  void ResolveRuntime(OperatorParams& params) const;
 };
 }  // namespace puerhlab
