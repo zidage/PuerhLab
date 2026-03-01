@@ -736,7 +736,6 @@ ApplicationWindow {
                         anchors.leftMargin: 14
                         anchors.rightMargin: 14
                         Label { text: "Browser"; color: root.colTextMuted; font.pixelSize: 13; font.weight: 600 }
-                        Label { text: "Responsive thumbnail grid"; color: root.colTextMuted; font.pixelSize: 11 }
                         Item { Layout.fillWidth: true }
                         Button { text: "Grid"; checkable: true; checked: gridMode; onClicked: gridMode = true; flat: true }
                         Button { text: "List"; checkable: true; checked: !gridMode; onClicked: gridMode = false; flat: true }
@@ -791,8 +790,8 @@ ApplicationWindow {
                                 }
                                 Label {
                                     text: albumBackend.serviceReady
-                                          ? "Import your first folder to start thumbnail generation and RAW adjustments."
-                                          : "Use Load or New in the header to choose the database/metadata JSON files."
+                                          ? "Import your images for RAW adjustments."
+                                          : "Use Load or New in the header to choose the .puerhproj files."
                                     color: root.colTextMuted
                                     font.pixelSize: 12
                                 }

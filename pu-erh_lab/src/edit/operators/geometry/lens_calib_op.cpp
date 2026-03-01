@@ -125,6 +125,7 @@ auto ResolveDefaultDbPath() -> std::filesystem::path {
 #ifdef CONFIG_PATH
   candidates.emplace_back(std::filesystem::path(CONFIG_PATH) / "lens_calib");
 #endif
+  candidates.emplace_back(std::filesystem::path("config/lens_calib"));
   candidates.emplace_back(std::filesystem::path("src/config/lens_calib"));
   candidates.emplace_back(std::filesystem::path("pu-erh_lab/src/config/lens_calib"));
 
@@ -150,7 +151,9 @@ auto ResolveDbRootPath(const std::filesystem::path& configured_root) -> std::fil
   if (!configured_root.is_absolute()) {
     if (!exe_dir.empty()) {
       candidates.emplace_back(exe_dir / configured_root);
+      candidates.emplace_back(exe_dir / "config" / configured_root);
       candidates.emplace_back(exe_dir / configured_root.filename());
+      candidates.emplace_back(exe_dir / "config" / configured_root.filename());
     }
     candidates.emplace_back(configured_root);
   } else {
