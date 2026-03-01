@@ -46,7 +46,7 @@ else()
 endif()
 
 # Qt6
-find_package(Qt6 REQUIRED COMPONENTS Widgets Quick OpenGL OpenGLWidgets)
+find_package(Qt6 REQUIRED COMPONENTS Widgets Quick OpenGL OpenGLWidgets Test)
 
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTOUIC ON)

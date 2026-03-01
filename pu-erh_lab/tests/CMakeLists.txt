@@ -271,3 +271,38 @@ include(GoogleTest)
 # gtest_discover_tests(ClarityOPTest)
 # gtest_discover_tests(SharpenOPTest)
 # gtest_discover_tests(PipelineTest)
+
+# ==============================================================================
+# UI Tests — AlbumBackend (GTest + QSignalSpy)
+# ==============================================================================
+# Uses a custom main() that creates QCoreApplication, so we link GTest::gtest
+# (not gtest_main) and compile ui_test_main.cpp into each target.
+
+# Macro to reduce boilerplate for UI test targets.
+macro(def_ui_test TARGET_NAME SOURCE_FILE)
+    add_executable(${TARGET_NAME}
+        ui/${SOURCE_FILE}
+        ui/ui_test_main.cpp
+        ui/editor_dialog_stub.cpp
+    )
+    target_include_directories(${TARGET_NAME}
+        PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include
+        PRIVATE ${CMAKE_SOURCE_DIR}/pu-erh_lab/tests
+    )
+    target_link_libraries(${TARGET_NAME}
+        PRIVATE
+            AlbumBackendLib
+            GTest::gtest
+            Qt6::Test
+            Qt6::Core
+    )
+    if(WIN32)
+        target_link_libraries(${TARGET_NAME} PRIVATE easy_profiler)
+    endif()
+    include(GoogleTest)
+    gtest_discover_tests(${TARGET_NAME})
+endmacro()
+
+def_ui_test(AlbumBackendImportTest   album_backend_import_test.cpp)
+def_ui_test(AlbumBackendProjectTest  album_backend_project_test.cpp)
+def_ui_test(AlbumBackendFolderTest   album_backend_folder_test.cpp)

@@ -410,8 +410,8 @@ endif()
 
 find_package(Qt6 REQUIRED COMPONENTS Quick Qml QuickControls2 QuickDialogs2 Widgets QuickEffects)
 
-add_executable(puerhlab_main
-    ui/puerhlab_main/main.cpp
+# ── AlbumBackendLib: reusable static library for album_backend ──────────────
+add_library(AlbumBackendLib STATIC
     ui/puerhlab_main/album_backend/album_backend.cpp
     ui/puerhlab_main/album_backend/path_utils.cpp
     ui/puerhlab_main/album_backend/packed_project.cpp
@@ -421,6 +421,51 @@ add_executable(puerhlab_main
     ui/puerhlab_main/album_backend/stats_engine.cpp
     ui/puerhlab_main/album_backend/import_export.cpp
     ui/puerhlab_main/album_backend/editor_controller.cpp
+    include/ui/puerhlab_main/album_backend/album_backend.hpp
+    include/ui/puerhlab_main/album_backend/album_types.hpp
+    include/ui/puerhlab_main/album_backend/path_utils.hpp
+    include/ui/puerhlab_main/album_backend/packed_project.hpp
+    include/ui/puerhlab_main/album_backend/project_handler.hpp
+    include/ui/puerhlab_main/album_backend/thumbnail_manager.hpp
+    include/ui/puerhlab_main/album_backend/folder_controller.hpp
+    include/ui/puerhlab_main/album_backend/stats_engine.hpp
+    include/ui/puerhlab_main/album_backend/import_export.hpp
+    include/ui/puerhlab_main/album_backend/editor_controller.hpp
+)
+
+target_include_directories(AlbumBackendLib
+    PUBLIC
+        ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include
+    PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/ui/puerhlab_main
+        ${CMAKE_CURRENT_SOURCE_DIR}/ui/puerhlab_main/album_backend
+)
+
+target_link_libraries(AlbumBackendLib
+    PUBLIC
+        Qt6::Quick
+        Qt6::Qml
+        Qt6::QuickControls2
+        Qt6::Widgets
+        ProjectService
+        ImportService
+        ExportService
+        PipelineMgmtService
+        EditHistoryMgmtService
+        ThumbnailService
+        SleeveFilterService
+        FSService
+        EditPipeline
+        EditViewer
+)
+
+if(WIN32)
+    target_link_libraries(AlbumBackendLib PUBLIC easy_profiler)
+endif()
+
+# ── puerhlab_main executable ────────────────────────────────────────────────
+add_executable(puerhlab_main
+    ui/puerhlab_main/main.cpp
     ui/puerhlab_main/editor_dialog/editor_dialog.cpp
     ui/puerhlab_main/editor_dialog/dialog.cpp
     ui/puerhlab_main/editor_dialog/state.cpp
@@ -442,16 +487,6 @@ add_executable(puerhlab_main
     ui/puerhlab_main/editor_dialog/widgets/trackball.cpp
     ui/puerhlab_main/editor_dialog/widgets/tone_curve_widget.cpp
     ui/puerhlab_main/editor_dialog/widgets/history_cards.cpp
-    include/ui/puerhlab_main/album_backend/album_backend.hpp
-    include/ui/puerhlab_main/album_backend/album_types.hpp
-    include/ui/puerhlab_main/album_backend/path_utils.hpp
-    include/ui/puerhlab_main/album_backend/packed_project.hpp
-    include/ui/puerhlab_main/album_backend/project_handler.hpp
-    include/ui/puerhlab_main/album_backend/thumbnail_manager.hpp
-    include/ui/puerhlab_main/album_backend/folder_controller.hpp
-    include/ui/puerhlab_main/album_backend/stats_engine.hpp
-    include/ui/puerhlab_main/album_backend/import_export.hpp
-    include/ui/puerhlab_main/album_backend/editor_controller.hpp
     include/ui/puerhlab_main/editor_dialog/editor_dialog.hpp
     ui/puerhlab_main/editor_dialog/dialog.hpp
     ui/puerhlab_main/editor_dialog/state.hpp
@@ -483,27 +518,14 @@ target_include_directories(puerhlab_main
 
 target_link_libraries(puerhlab_main
     PRIVATE
+        AlbumBackendLib
         Qt6::Quick
         Qt6::Qml
         Qt6::QuickControls2
         Qt6::QuickDialogs2
         Qt6::Widgets
         Qt6::QuickEffects
-        ProjectService
-        ImportService
-        ExportService
-        PipelineMgmtService
-        EditHistoryMgmtService
-        ThumbnailService
-        SleeveFilterService
-        FSService
-        EditPipeline
-        EditViewer
 )
-
-if(WIN32)
-    target_link_libraries(puerhlab_main PRIVATE easy_profiler)
-endif()
 
 qt_add_qml_module(puerhlab_main
     URI PuerhLab.Main
