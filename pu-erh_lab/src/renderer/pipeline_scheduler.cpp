@@ -242,6 +242,15 @@ void PipelineScheduler::ScheduleTask(PipelineTask&& task) {
           std::unique_lock<std::mutex> render_lock;
           if (task.pipeline_executor_) {
             render_lock = std::unique_lock<std::mutex>(task.pipeline_executor_->GetRenderLock());
+
+            // Refresh global params from the Image's pre-extracted raw metadata
+            // so that downstream operators (ColorTemp, LensCalib) resolve eagerly.
+            // Only global params are updated here; RawDecodeOp's pre-populated
+            // context is set once at pipeline setup time, not per-frame.
+            if (task.input_desc_ && task.input_desc_->HasRawColorContext()) {
+              task.pipeline_executor_->GetGlobalParams().PopulateRawMetadata(
+                  task.input_desc_->GetRawColorContext());
+            }
           }
 
           auto& render_desc = task.options_.render_desc_;

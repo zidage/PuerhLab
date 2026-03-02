@@ -84,6 +84,9 @@ void StatsEngine::RebuildThumbnailView() {
     if (!IsImageInCurrentFolder(image)) {
       continue;
     }
+    if (!MatchesActiveFilters(image)) {
+      continue;
+    }
     next.push_back(MakeThumbMap(image, index++));
   }
 
@@ -195,6 +198,64 @@ auto StatsEngine::MakeThumbMap(const AlbumItem& image, int index) const -> QVari
                                         : image.accent},
       {"thumbUrl", image.thumb_data_url},
   };
+}
+
+// ── Stats-bar filter implementation ─────────────────────────────────────────
+
+void StatsEngine::ToggleFilter(const QString& category, const QString& label) {
+  if (category == u"date") {
+    filter_date_ = (filter_date_ == label) ? QString{} : label;
+  } else if (category == u"camera") {
+    filter_camera_ = (filter_camera_ == label) ? QString{} : label;
+  } else if (category == u"lens") {
+    filter_lens_ = (filter_lens_ == label) ? QString{} : label;
+  }
+}
+
+void StatsEngine::ClearFilters() {
+  filter_date_.clear();
+  filter_camera_.clear();
+  filter_lens_.clear();
+}
+
+bool StatsEngine::HasActiveFilter() const {
+  return !filter_date_.isEmpty() || !filter_camera_.isEmpty() || !filter_lens_.isEmpty();
+}
+
+bool StatsEngine::MatchesActiveFilters(const AlbumItem& image) const {
+  if (!HasActiveFilter()) return true;
+
+  // Date filter
+  if (!filter_date_.isEmpty()) {
+    const QString imageDate =
+        image.capture_date.isValid() ? image.capture_date.toString("yyyy-MM-dd") : QString{};
+    // "(unknown)" in the stats card maps to images with no valid capture date
+    if (filter_date_ == u"(unknown)") {
+      if (image.capture_date.isValid()) return false;
+    } else {
+      if (imageDate != filter_date_) return false;
+    }
+  }
+
+  // Camera filter
+  if (!filter_camera_.isEmpty()) {
+    if (filter_camera_ == u"(unknown)") {
+      if (!image.camera_model.isEmpty()) return false;
+    } else {
+      if (image.camera_model != filter_camera_) return false;
+    }
+  }
+
+  // Lens filter
+  if (!filter_lens_.isEmpty()) {
+    if (filter_lens_ == u"(unknown)") {
+      if (!image.lens.isEmpty()) return false;
+    } else {
+      if (image.lens != filter_lens_) return false;
+    }
+  }
+
+  return true;
 }
 
 }  // namespace puerhlab::ui

@@ -34,10 +34,13 @@ class RawDecodeOp : public OperatorBase<RawDecodeOp> {
   RawParams                          params_;
   RawProcessBackend                  backend_;
   RawRuntimeColorContext             latest_runtime_context_;
+  RawRuntimeColorContext             pre_populated_ctx_;
 
   RawDecodeOp() = delete;
 
   RawDecodeOp(const nlohmann::json& params);
+
+  void SetPrePopulatedContext(const RawRuntimeColorContext& ctx) { pre_populated_ctx_ = ctx; }
 
   void Apply(std::shared_ptr<ImageBuffer> input) override;
   void ApplyGPU(std::shared_ptr<ImageBuffer> input) override;

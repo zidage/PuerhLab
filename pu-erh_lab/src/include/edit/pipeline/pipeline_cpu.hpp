@@ -111,6 +111,14 @@ class CPUPipelineExecutor : public PipelineExecutor {
   void InitDefaultPipeline();
 
   /**
+   * @brief Inject pre-extracted raw metadata into the pipeline.
+   *        Populates global params so that downstream operators (ColorTemp, LensCalib)
+   *        can resolve eagerly, and sets the pre-populated context on RawDecodeOp
+   *        so it skips re-extraction at decode time.
+   */
+  void InjectRawMetadata(const RawRuntimeColorContext& ctx);
+
+  /**
    * @brief Clear all intermediate image buffers from all stages.
    *        Call this after pipeline execution when you want to release memory
    *        while keeping the pipeline configuration intact.

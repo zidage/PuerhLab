@@ -65,6 +65,8 @@ ScrollView {
             title: "By Capture Date"
             accentColor: "#5B9BD5"
             model: albumBackend.dateStats
+            selectedLabel: albumBackend.statsFilterDate
+            onBarClicked: function(label) { albumBackend.ToggleStatsFilter("date", label) }
         }
 
         // ── Separator ───────────────────────────────────────────────────
@@ -81,6 +83,8 @@ ScrollView {
             title: "By Camera Model"
             accentColor: "#ED7D31"
             model: albumBackend.cameraStats
+            selectedLabel: albumBackend.statsFilterCamera
+            onBarClicked: function(label) { albumBackend.ToggleStatsFilter("camera", label) }
         }
 
         // ── Separator ───────────────────────────────────────────────────
@@ -97,6 +101,8 @@ ScrollView {
             title: "By Lens"
             accentColor: "#70AD47"
             model: albumBackend.lensStats
+            selectedLabel: albumBackend.statsFilterLens
+            onBarClicked: function(label) { albumBackend.ToggleStatsFilter("lens", label) }
         }
 
         // ── Bottom spacer ───────────────────────────────────────────────

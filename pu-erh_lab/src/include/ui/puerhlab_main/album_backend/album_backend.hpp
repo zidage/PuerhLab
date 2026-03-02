@@ -31,6 +31,9 @@ class AlbumBackend final : public QObject {
   Q_PROPERTY(QVariantList cameraStats READ CameraStats NOTIFY StatsChanged)
   Q_PROPERTY(QVariantList lensStats READ LensStats NOTIFY StatsChanged)
   Q_PROPERTY(int totalPhotoCount READ TotalPhotoCount NOTIFY StatsChanged)
+  Q_PROPERTY(QString statsFilterDate READ StatsFilterDate NOTIFY StatsFilterChanged)
+  Q_PROPERTY(QString statsFilterCamera READ StatsFilterCamera NOTIFY StatsFilterChanged)
+  Q_PROPERTY(QString statsFilterLens READ StatsFilterLens NOTIFY StatsFilterChanged)
   Q_PROPERTY(bool serviceReady READ ServiceReady NOTIFY ServiceStateChanged)
   Q_PROPERTY(QString serviceMessage READ ServiceMessage NOTIFY ServiceStateChanged)
   Q_PROPERTY(bool projectLoading READ ProjectLoading NOTIFY ProjectLoadStateChanged)
@@ -87,6 +90,9 @@ class AlbumBackend final : public QObject {
   QVariantList CameraStats() const { return stats_.camera_stats(); }
   QVariantList LensStats() const { return stats_.lens_stats(); }
   int TotalPhotoCount() const { return stats_.total_photo_count(); }
+  const QString& StatsFilterDate() const { return stats_.filter_date(); }
+  const QString& StatsFilterCamera() const { return stats_.filter_camera(); }
+  const QString& StatsFilterLens() const { return stats_.filter_lens(); }
   bool ServiceReady() const { return service_ready_; }
   const QString& ServiceMessage() const { return service_message_; }
   bool ProjectLoading() const { return project_handler_.project_loading(); }
@@ -168,6 +174,8 @@ class AlbumBackend final : public QObject {
   Q_INVOKABLE void SetEditorSharpen(double value);
   Q_INVOKABLE void SetEditorClarity(double value);
   Q_INVOKABLE void SetThumbnailVisible(uint elementId, uint imageId, bool visible);
+  Q_INVOKABLE void ToggleStatsFilter(const QString& category, const QString& label);
+  Q_INVOKABLE void ClearStatsFilter();
 
 signals:
   void ThumbnailsChanged();
@@ -190,6 +198,7 @@ signals:
   void FoldersChanged();
   void FolderSelectionChanged();
   void folderSelectionChanged();
+  void StatsFilterChanged();
 
  private:
   friend class ProjectHandler;

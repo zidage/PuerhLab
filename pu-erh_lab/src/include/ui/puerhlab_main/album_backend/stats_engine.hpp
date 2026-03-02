@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <QString>
 #include <QVariantList>
 #include <QVariantMap>
 
@@ -29,7 +30,7 @@ class StatsEngine {
  public:
   explicit StatsEngine(AlbumBackend& backend);
 
-  /// Rebuild the thumbnail grid for the current folder (no filtering).
+  /// Rebuild the thumbnail grid for the current folder, applying active stats filters.
   void RebuildThumbnailView();
 
   /// Execute GROUP BY aggregate queries and update stats properties.
@@ -44,12 +45,33 @@ class StatsEngine {
   [[nodiscard]] auto lens_stats() const -> const QVariantList& { return lens_stats_; }
   [[nodiscard]] int  total_photo_count() const { return total_photo_count_; }
 
+  // ── Stats-bar filter ────────────────────────────────────────────────
+  /// Toggle a single-category filter. category is "date", "camera", or "lens".
+  /// If the current filter value for that category equals label, it is cleared
+  /// (toggle off); otherwise it is set to label.
+  void ToggleFilter(const QString& category, const QString& label);
+
+  /// Clear all active stats-bar filters.
+  void ClearFilters();
+
+  [[nodiscard]] bool HasActiveFilter() const;
+  [[nodiscard]] const QString& filter_date() const { return filter_date_; }
+  [[nodiscard]] const QString& filter_camera() const { return filter_camera_; }
+  [[nodiscard]] const QString& filter_lens() const { return filter_lens_; }
+
  private:
+  /// Returns true if the image passes all currently active stats-bar filters.
+  [[nodiscard]] bool MatchesActiveFilters(const AlbumItem& image) const;
   AlbumBackend& backend_;
   QVariantList  date_stats_{};
   QVariantList  camera_stats_{};
   QVariantList  lens_stats_{};
   int           total_photo_count_ = 0;
+
+  // Active stats-bar filter values (empty = no filter for that category)
+  QString       filter_date_{};
+  QString       filter_camera_{};
+  QString       filter_lens_{};
 };
 
 }  // namespace puerhlab::ui

@@ -23,6 +23,8 @@ Rectangle {
     property var model: []
     property bool expanded: true
     readonly property int previewLimit: 10
+    property string selectedLabel: ""           // currently highlighted bar label
+    signal barClicked(string label)              // emitted when a bar is clicked
 
     // Derived
     readonly property int totalItems: model ? model.length : 0
@@ -98,6 +100,24 @@ Rectangle {
                     readonly property string entryLabel: entry ? String(entry.label) : ""
                     readonly property int entryCount: entry ? Number(entry.count) : 0
                     readonly property real fraction: entryCount / card.maxCount()
+                    readonly property bool isSelected: entryLabel === card.selectedLabel
+                                                      && card.selectedLabel !== ""
+
+                    // Click target for the entire bar row
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        hoverEnabled: true
+                        onClicked: card.barClicked(entryLabel)
+
+                        // Hover tint (only when not already selected)
+                        Rectangle {
+                            anchors.fill: parent
+                            radius: 3
+                            color: "#FFFFFF"
+                            opacity: parent.containsMouse && !isSelected ? 0.04 : 0
+                        }
+                    }
 
                     // Background bar (proportional width)
                     Rectangle {
@@ -107,7 +127,18 @@ Rectangle {
                         height: 20
                         radius: 3
                         color: card.accentColor
-                        opacity: 0.25
+                        opacity: isSelected ? 0.55 : 0.25
+                    }
+
+                    // Selected indicator (left accent strip)
+                    Rectangle {
+                        visible: isSelected
+                        anchors.left: parent.left
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 3
+                        height: 16
+                        radius: 1.5
+                        color: card.accentColor
                     }
 
                     // Labels (overlay)

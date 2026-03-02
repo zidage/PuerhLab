@@ -24,6 +24,9 @@
 #include "image.hpp"
 #include "type/type.hpp"
 
+// Forward declare LibRaw so callers that only need the header do not pull in libraw.h
+class LibRaw;
+
 namespace puerhlab {
 class MetadataExtractor {
  public:
@@ -76,5 +79,27 @@ class MetadataExtractor {
    * @return true if extraction succeeded
    */
   static auto ExtractRawMetadata_ToImage(const image_path_t& image_path, Image& image) -> bool;
+
+  /**
+   * @brief Populate a RawRuntimeColorContext from an already-opened LibRaw instance.
+   *        Requires open_file + unpack to have been called.  This is the single source
+   *        of truth for raw metadata extraction (camera/lens strings, color matrices,
+   *        Nikon lens ID lookup, etc.).
+   *
+   * @param raw_processor  A LibRaw instance after open_file + unpack
+   * @param ctx            Output context to populate
+   */
+  static void PopulateRuntimeContextFromOpenLibRaw(LibRaw& raw_processor,
+                                                   RawRuntimeColorContext& ctx);
+
+  /**
+   * @brief Merge an Exiv2-based ExifDisplayMetaData hint into a RawRuntimeColorContext,
+   *        filling in any fields that are still empty/zero.
+   *
+   * @param metadata_hint  The Exiv2-based metadata (may be nullptr — no-op in that case)
+   * @param ctx            Context to merge into
+   */
+  static void MergeMetadataHint(const ExifDisplayMetaData* metadata_hint,
+                                RawRuntimeColorContext& ctx);
 };
 }  // namespace puerhlab

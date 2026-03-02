@@ -47,6 +47,19 @@ void ExportService::RunExportRenderTask(const ExportTask& task) {
   render_task.pipeline_executor_                 = pipeline_guard->pipeline_;
   render_task.options_.is_blocking_              = true;
   render_task.options_.is_callback_              = false;
+
+  // Inject pre-extracted raw metadata from the real Image into the pipeline
+  // so downstream operators resolve eagerly.
+  try {
+    auto full_img = image_pool_service_->Read<std::shared_ptr<Image>>(
+        task.image_id_, [](const std::shared_ptr<Image>& i) { return i; });
+    if (full_img && full_img->HasRawColorContext()) {
+      pipeline_guard->pipeline_->InjectRawMetadata(full_img->GetRawColorContext());
+    }
+  } catch (...) {
+    // Non-fatal: metadata injection is best-effort.
+  }
+
   // Use full res export, even though the task requires resizing,
   // to benefit from the super sampling
   render_task.options_.render_desc_.render_type_ = RenderType::FULL_RES_EXPORT;

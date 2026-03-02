@@ -28,6 +28,7 @@
 #include "decoders/processor/raw_processor.hpp"
 #include "image/image.hpp"
 #include "image/image_buffer.hpp"
+#include "image/metadata_extractor.hpp"
 #include "type/type.hpp"
 
 namespace puerhlab {
@@ -64,9 +65,19 @@ void RawDecoder::Decode(std::vector<char>&& buffer, std::shared_ptr<Image> sourc
   raw_processor.imgdata.rawparams.use_dngsdk  = 1;
   raw_processor.unpack();
 
-  const ExifDisplayMetaData* exif_hint = source_img ? &source_img->exif_display_ : nullptr;
+  // Build a pre-populated context from the Image or extract from LibRaw.
+  RawRuntimeColorContext ctx;
+  if (source_img && source_img->HasRawColorContext()) {
+    ctx = source_img->GetRawColorContext();
+  } else {
+    MetadataExtractor::PopulateRuntimeContextFromOpenLibRaw(raw_processor, ctx);
+    if (source_img) {
+      MetadataExtractor::MergeMetadataHint(&source_img->exif_display_, ctx);
+    }
+  }
+
   RawProcessor processor{{true, false, true, 0}, raw_processor.imgdata.rawdata, raw_processor,
-                         exif_hint};
+                         ctx};
 
   auto         processed = processor.Process();
 

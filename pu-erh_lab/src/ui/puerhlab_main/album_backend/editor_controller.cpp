@@ -334,6 +334,11 @@ void EditorController::SetupEditorPipeline() {
     loading.SetOperator(OperatorType::LENS_CALIBRATION, lens_params, global_params);
   }
 
+  // Inject pre-extracted raw metadata so downstream operators resolve eagerly.
+  if (imageDesc && imageDesc->HasRawColorContext()) {
+    exec->InjectRawMetadata(imageDesc->GetRawColorContext());
+  }
+
   exec->SetExecutionStages();
 }
 

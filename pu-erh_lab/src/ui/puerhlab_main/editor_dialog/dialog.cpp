@@ -993,6 +993,18 @@ class EditorDialog final : public QDialog {
     controllers::EnsureLoadingOperatorDefaults(exec);
     controllers::AttachExecutionStages(exec, viewer_);
 
+    // Inject pre-extracted raw metadata from the Image so downstream operators
+    // (ColorTemp, LensCalib) resolve eagerly.
+    try {
+      auto img = image_pool_->Read<std::shared_ptr<Image>>(
+          image_id_, [](const std::shared_ptr<Image>& i) { return i; });
+      if (img && img->HasRawColorContext()) {
+        exec->InjectRawMetadata(img->GetRawColorContext());
+      }
+    } catch (...) {
+      // Non-fatal: metadata injection is best-effort.
+    }
+
     // Cached pipelines can clear transient GPU resources when returned to the service.
     // PipelineMgmtService now resyncs global params on load, so we no longer need a
     // per-dialog LMT rebind hack here.

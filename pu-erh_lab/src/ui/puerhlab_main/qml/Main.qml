@@ -586,7 +586,7 @@ ApplicationWindow {
                         Layout.fillWidth: true
                         Layout.preferredHeight: 30
                         radius: 6
-                        color: delBtn.hovered ? root.colDangerTint : "transparent"
+                        color: root.colDanger
                         border.width: 0
                         visible: root.backendInteractive && albumBackend.currentFolderId !== 0
                         Behavior on color { ColorAnimation { duration: 120 } }
@@ -596,7 +596,7 @@ ApplicationWindow {
                             anchors.centerIn: parent
                             spacing: 6
                             Label { text: "\u{1F5D1}"; font.pixelSize: 12 }
-                            Label { text: "Delete Folder"; color: root.colDanger; font.pixelSize: 12; font.weight: 600 }
+                            Label { text: "Delete Folder"; font.pixelSize: 12; font.weight: 600 }
                         }
                         MouseArea {
                             id: delBtn

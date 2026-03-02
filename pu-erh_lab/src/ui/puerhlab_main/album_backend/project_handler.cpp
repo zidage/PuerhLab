@@ -443,8 +443,10 @@ void ProjectHandler::ApplyLoadedProjectEntriesBatch() {
                                          std::move(pending_folder_path_by_id_));
     backend_.folder_ctrl_.RebuildFolderView();
     backend_.folder_ctrl_.ApplyFolderSelection(0, true);
+    backend_.stats_.ClearFilters();
     backend_.stats_.RebuildThumbnailView();
     backend_.stats_.RefreshStats();
+    emit backend_.StatsFilterChanged();
     backend_.SetTaskState("No background tasks", 0, false);
 
     backend_.SetServiceState(

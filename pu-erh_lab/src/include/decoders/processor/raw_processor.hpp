@@ -27,7 +27,6 @@
 #include "type/type.hpp"
 
 namespace puerhlab {
-class ExifDisplayMetaData;
 
 struct RawParams {
   bool     cuda_                   = false;
@@ -48,7 +47,6 @@ class RawProcessor {
 
   const libraw_rawdata_t& raw_data_;
   LibRaw&                 raw_processor_;
-  const ExifDisplayMetaData* metadata_hint_ = nullptr;
 
   void                    SetDecodeRes();
 
@@ -93,7 +91,7 @@ class RawProcessor {
  public:
   RawProcessor() = delete;
   RawProcessor(const RawParams& params, const libraw_rawdata_t& rawdata, LibRaw& raw_processor,
-               const ExifDisplayMetaData* metadata_hint = nullptr);
+               const RawRuntimeColorContext& pre_ctx);
   auto Process() -> ImageBuffer;
   auto GetRuntimeColorContext() const -> const RawRuntimeColorContext& { return runtime_color_context_; }
 };

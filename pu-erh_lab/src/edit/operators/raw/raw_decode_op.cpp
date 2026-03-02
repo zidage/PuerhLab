@@ -28,9 +28,6 @@ RawDecodeOp::RawDecodeOp(const nlohmann::json& params) { SetParams(params); }
 
 void RawDecodeOp::Apply(std::shared_ptr<ImageBuffer> input) {
   auto&                   buffer        = input->GetBuffer();
-  const ExifDisplayMetaData exif_hint =
-      MetadataExtractor::BufferToDisplayMetaData(
-          reinterpret_cast<const uint8_t*>(buffer.data()), buffer.size());
 
   std::unique_ptr<LibRaw> raw_processor = std::make_unique<LibRaw>();
   int                     ret = raw_processor->open_buffer((void*)buffer.data(), buffer.size());
@@ -45,7 +42,15 @@ void RawDecodeOp::Apply(std::shared_ptr<ImageBuffer> input) {
   switch (backend_) {
     case RawProcessBackend::PUERH: {
       raw_processor->unpack();
-      RawProcessor processor{params_, raw_processor->imgdata.rawdata, *raw_processor, &exif_hint};
+
+      // Use pre-populated context injected before rendering; fall back to
+      // extracting directly from the open LibRaw instance.
+      RawRuntimeColorContext ctx = pre_populated_ctx_;
+      if (!ctx.valid_) {
+        MetadataExtractor::PopulateRuntimeContextFromOpenLibRaw(*raw_processor, ctx);
+      }
+
+      RawProcessor processor{params_, raw_processor->imgdata.rawdata, *raw_processor, ctx};
 
       output = processor.Process();
       latest_runtime_context_ = processor.GetRuntimeColorContext();
@@ -61,6 +66,13 @@ void RawDecodeOp::Apply(std::shared_ptr<ImageBuffer> input) {
       raw_processor->imgdata.rawparams.use_dngsdk  = 1;
 
       raw_processor->unpack();
+
+      // Use pre-populated context or extract from LibRaw.
+      RawRuntimeColorContext ctx = pre_populated_ctx_;
+      if (!ctx.valid_) {
+        MetadataExtractor::PopulateRuntimeContextFromOpenLibRaw(*raw_processor, ctx);
+      }
+
       raw_processor->dcraw_process();
       libraw_processed_image_t* img = raw_processor->dcraw_make_mem_image(&ret);
       if (ret != LIBRAW_SUCCESS) {
@@ -76,10 +88,8 @@ void RawDecodeOp::Apply(std::shared_ptr<ImageBuffer> input) {
       result.convertTo(result, CV_32FC3, 1.0 / 65535.0);
 
       output = ImageBuffer(std::move(result));
-      latest_runtime_context_                      = {};
+      latest_runtime_context_                         = ctx;
       latest_runtime_context_.output_in_camera_space_ = false;
-      latest_runtime_context_.camera_make_         = raw_processor->imgdata.idata.make;
-      latest_runtime_context_.camera_model_        = raw_processor->imgdata.idata.model;
       raw_processor->dcraw_clear_mem(img);
       raw_processor->recycle();
       break;

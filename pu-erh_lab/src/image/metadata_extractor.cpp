@@ -19,11 +19,18 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <cstdint>
+#include <cstdio>
 #include <cstring>
+#include <filesystem>
+#include <fstream>
 #include <iostream>
+#include <sstream>
 #include <stdexcept>
 #include <string>
+#include <unordered_map>
 
+#include "json.hpp"
 #include "type/supported_file_type.hpp"
 
 namespace puerhlab {
@@ -39,7 +46,7 @@ auto IsFinitePositive(float value) -> bool {
   return std::isfinite(value) && value > 0.0f;
 }
 
-auto TrimTrailingZeroPaddedLocal(const char* s, size_t max_len = 256) -> std::string {
+auto TrimTrailingZeroPadded(const char* s, size_t max_len = 256) -> std::string {
   if (!s) return {};
   size_t len = std::min(std::strlen(s), max_len);
   while (len > 0 && (s[len - 1] == '\0' || std::isspace(static_cast<unsigned char>(s[len - 1])))) {
@@ -48,7 +55,7 @@ auto TrimTrailingZeroPaddedLocal(const char* s, size_t max_len = 256) -> std::st
   return {s, len};
 }
 
-auto TrimAsciiLocal(const std::string& value) -> std::string {
+auto TrimAscii(const std::string& value) -> std::string {
   std::string out = value;
   while (!out.empty() && (out.back() == '\0' || std::isspace(static_cast<unsigned char>(out.back())))) {
     out.pop_back();
@@ -64,7 +71,7 @@ auto TrimAsciiLocal(const std::string& value) -> std::string {
   return out;
 }
 
-auto ContainsCaseInsensitiveLocal(const std::string& text, const std::string& pattern) -> bool {
+auto ContainsCaseInsensitive(const std::string& text, const std::string& pattern) -> bool {
   if (text.empty() || pattern.empty()) return false;
   auto to_lower = [](unsigned char c) { return static_cast<char>(std::tolower(c)); };
   std::string lower_text(text.size(), '\0');
@@ -74,13 +81,212 @@ auto ContainsCaseInsensitiveLocal(const std::string& text, const std::string& pa
   return lower_text.find(lower_pattern) != std::string::npos;
 }
 
-auto IsNikonCameraLocal(const std::string& make, const std::string& model) -> bool {
-  return ContainsCaseInsensitiveLocal(make, "nikon") || ContainsCaseInsensitiveLocal(model, "nikon");
+auto IsNikonCamera(const std::string& make, const std::string& model) -> bool {
+  return ContainsCaseInsensitive(make, "nikon") || ContainsCaseInsensitive(model, "nikon");
 }
 
-auto ResolveCropFactorHintLocal(float focal_mm, float focal_35mm_mm) -> float {
+auto ResolveCropFactorHint(float focal_mm, float focal_35mm_mm) -> float {
   if (!IsFinitePositive(focal_mm) || !IsFinitePositive(focal_35mm_mm)) return 0.0f;
   return focal_35mm_mm / focal_mm;
+}
+
+// ---------------------------------------------------------------------------
+//  Nikon lens ID lookup (moved from raw_processor.cpp)
+// ---------------------------------------------------------------------------
+struct NikonLensIdLookup {
+  std::unordered_map<std::string, std::string> hex_id_map;
+  std::unordered_map<uint64_t, std::string>    numeric_id_map;
+  bool                                         valid = false;
+};
+
+auto NormalizeHexIdKey(const std::string& key) -> std::string {
+  std::istringstream iss(key);
+  std::string        token;
+  std::string        out;
+  bool               first = true;
+  while (iss >> token) {
+    if (token.size() == 1) {
+      token = "0" + token;
+    }
+    if (token.size() > 2) {
+      return {};
+    }
+    for (char& c : token) {
+      c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+    }
+    if (!first) {
+      out.push_back(' ');
+    }
+    out += token;
+    first = false;
+  }
+  return out;
+}
+
+auto UInt64ToHexIdKey(uint64_t value, bool little_endian) -> std::string {
+  char buffer[3 * 8] = {};
+  int  offset = 0;
+  for (int i = 0; i < 8; ++i) {
+    const int  index = little_endian ? i : (7 - i);
+    const auto byte  = static_cast<unsigned>((value >> (index * 8)) & 0xFFULL);
+    std::snprintf(buffer + offset, sizeof(buffer) - static_cast<size_t>(offset),
+                  (i == 0) ? "%02X" : " %02X", byte);
+    offset += (i == 0) ? 2 : 3;
+  }
+  return std::string(buffer);
+}
+
+auto LoadNikonLensIdLookup() -> NikonLensIdLookup {
+  NikonLensIdLookup db;
+  std::vector<std::filesystem::path> candidates;
+#ifdef CONFIG_PATH
+  candidates.emplace_back(std::filesystem::path(CONFIG_PATH) / "nikon_lens" / "id_map.json");
+#endif
+  candidates.emplace_back(std::filesystem::path("src/config/nikon_lens/id_map.json"));
+  candidates.emplace_back(std::filesystem::path("pu-erh_lab/src/config/nikon_lens/id_map.json"));
+
+  for (const auto& path : candidates) {
+    std::error_code ec;
+    if (!std::filesystem::exists(path, ec) || ec) {
+      continue;
+    }
+
+    try {
+      std::ifstream ifs(path, std::ios::binary);
+      if (!ifs.is_open()) {
+        continue;
+      }
+      nlohmann::json payload;
+      ifs >> payload;
+
+      if (payload.contains("hex_id_map") && payload["hex_id_map"].is_object()) {
+        for (auto it = payload["hex_id_map"].begin(); it != payload["hex_id_map"].end(); ++it) {
+          if (!it.value().is_string()) {
+            continue;
+          }
+          const std::string key = NormalizeHexIdKey(it.key());
+          if (key.empty()) {
+            continue;
+          }
+          db.hex_id_map[key] = it.value().get<std::string>();
+        }
+      }
+
+      if (payload.contains("numeric_id_map") && payload["numeric_id_map"].is_object()) {
+        for (auto it = payload["numeric_id_map"].begin(); it != payload["numeric_id_map"].end();
+             ++it) {
+          if (!it.value().is_string()) {
+            continue;
+          }
+          try {
+            const uint64_t numeric_key = std::stoull(it.key());
+            db.numeric_id_map[numeric_key] = it.value().get<std::string>();
+          } catch (...) {
+            continue;
+          }
+        }
+      }
+
+      db.valid = !db.hex_id_map.empty() || !db.numeric_id_map.empty();
+      if (db.valid) {
+        return db;
+      }
+    } catch (...) {
+      continue;
+    }
+  }
+
+  return db;
+}
+
+auto GetNikonLensIdLookup() -> const NikonLensIdLookup& {
+  static const NikonLensIdLookup db = LoadNikonLensIdLookup();
+  return db;
+}
+
+auto LookupNikonLensModelById(const libraw_lensinfo_t& lens) -> std::string {
+  const auto& db = GetNikonLensIdLookup();
+  if (!db.valid) {
+    return {};
+  }
+
+  const uint64_t numeric_candidates[] = {
+      static_cast<uint64_t>(lens.nikon.LensIDNumber),
+      static_cast<uint64_t>(lens.makernotes.LensID),
+  };
+  for (const uint64_t id : numeric_candidates) {
+    if (id == 0) {
+      continue;
+    }
+    const auto it = db.numeric_id_map.find(id);
+    if (it != db.numeric_id_map.end() && !it->second.empty()) {
+      return it->second;
+    }
+  }
+
+  const uint64_t hex_candidates[] = {
+      static_cast<uint64_t>(lens.makernotes.LensID),
+  };
+  for (const uint64_t id : hex_candidates) {
+    if (id == 0) {
+      continue;
+    }
+    const std::string key_be = UInt64ToHexIdKey(id, false);
+    auto it = db.hex_id_map.find(key_be);
+    if (it != db.hex_id_map.end() && !it->second.empty()) {
+      return it->second;
+    }
+
+    const std::string key_le = UInt64ToHexIdKey(id, true);
+    it = db.hex_id_map.find(key_le);
+    if (it != db.hex_id_map.end() && !it->second.empty()) {
+      return it->second;
+    }
+  }
+
+  return {};
+}
+
+auto ResolveNikonLensModel(const libraw_lensinfo_t& lens) -> std::string {
+  std::string candidate = TrimTrailingZeroPadded(lens.makernotes.Lens);
+  if (!candidate.empty()) {
+    return candidate;
+  }
+
+  std::string mapped = LookupNikonLensModelById(lens);
+  if (!mapped.empty()) {
+    return mapped;
+  }
+
+  const auto& nikon = lens.nikon;
+  const bool has_nikon_signature = (nikon.LensIDNumber != 0 || nikon.LensType != 0 ||
+                                    nikon.MCUVersion != 0 || nikon.LensFStops != 0 ||
+                                    IsFinitePositive(nikon.EffectiveMaxAp));
+  if (!has_nikon_signature) {
+    return {};
+  }
+
+  char model_buf[192] = {};
+  std::snprintf(model_buf, sizeof(model_buf),
+                "Nikon LensID %u (type=0x%02X mcu=%u fStops=%u effMaxAp=%.2f)",
+                static_cast<unsigned>(nikon.LensIDNumber),
+                static_cast<unsigned>(nikon.LensType),
+                static_cast<unsigned>(nikon.MCUVersion),
+                static_cast<unsigned>(nikon.LensFStops),
+                static_cast<double>(nikon.EffectiveMaxAp));
+
+  std::string model = model_buf;
+  if (IsFinitePositive(lens.MinFocal) && IsFinitePositive(lens.MaxFocal)) {
+    char focal_buf[64] = {};
+    if (std::fabs(lens.MinFocal - lens.MaxFocal) < 1e-4f) {
+      std::snprintf(focal_buf, sizeof(focal_buf), " %.1fmm", static_cast<double>(lens.MinFocal));
+    } else {
+      std::snprintf(focal_buf, sizeof(focal_buf), " %.1f-%.1fmm",
+                    static_cast<double>(lens.MinFocal), static_cast<double>(lens.MaxFocal));
+    }
+    model += focal_buf;
+  }
+  return model;
 }
 
 /// Populate a RawRuntimeColorContext directly from libraw's open-but-not-processed state.
@@ -99,50 +305,21 @@ void PopulateMetadataRuntimeContext(LibRaw& raw_processor, RawRuntimeColorContex
     }
   }
 
-  ctx.camera_make_  = TrimAsciiLocal(raw_processor.imgdata.idata.make);
-  ctx.camera_model_ = TrimAsciiLocal(raw_processor.imgdata.idata.model);
+  ctx.camera_make_  = TrimAscii(raw_processor.imgdata.idata.make);
+  ctx.camera_model_ = TrimAscii(raw_processor.imgdata.idata.model);
 
-  ctx.lens_make_  = TrimTrailingZeroPaddedLocal(raw_processor.imgdata.lens.LensMake);
-  ctx.lens_model_ = TrimTrailingZeroPaddedLocal(raw_processor.imgdata.lens.Lens);
+  ctx.lens_make_  = TrimTrailingZeroPadded(raw_processor.imgdata.lens.LensMake);
+  ctx.lens_model_ = TrimTrailingZeroPadded(raw_processor.imgdata.lens.Lens);
   if (ctx.lens_model_.empty()) {
-    ctx.lens_model_ = TrimTrailingZeroPaddedLocal(raw_processor.imgdata.lens.makernotes.Lens);
+    ctx.lens_model_ = TrimTrailingZeroPadded(raw_processor.imgdata.lens.makernotes.Lens);
   }
 
-  if (IsNikonCameraLocal(ctx.camera_make_, ctx.camera_model_)) {
+  if (IsNikonCamera(ctx.camera_make_, ctx.camera_model_)) {
     if (ctx.lens_make_.empty()) {
       ctx.lens_make_ = "Nikon";
     }
-    // Nikon lens ID resolution: use makernotes LensID if direct name is not found
     if (ctx.lens_model_.empty()) {
-      // Fallback: construct lens model from Nikon makernotes
-      const auto& nikon = raw_processor.imgdata.lens.nikon;
-      const bool has_nikon_signature = (nikon.LensIDNumber != 0 || nikon.LensType != 0 ||
-                                        nikon.MCUVersion != 0 || nikon.LensFStops != 0 ||
-                                        IsFinitePositive(nikon.EffectiveMaxAp));
-      if (has_nikon_signature) {
-        char model_buf[192] = {};
-        std::snprintf(model_buf, sizeof(model_buf),
-                      "Nikon LensID %u (type=0x%02X mcu=%u fStops=%u effMaxAp=%.2f)",
-                      static_cast<unsigned>(nikon.LensIDNumber),
-                      static_cast<unsigned>(nikon.LensType),
-                      static_cast<unsigned>(nikon.MCUVersion),
-                      static_cast<unsigned>(nikon.LensFStops),
-                      static_cast<double>(nikon.EffectiveMaxAp));
-        ctx.lens_model_ = model_buf;
-        const auto& lens = raw_processor.imgdata.lens;
-        if (IsFinitePositive(lens.MinFocal) && IsFinitePositive(lens.MaxFocal)) {
-          char focal_buf[64] = {};
-          if (std::fabs(lens.MinFocal - lens.MaxFocal) < 1e-4f) {
-            std::snprintf(focal_buf, sizeof(focal_buf), " %.1fmm",
-                          static_cast<double>(lens.MinFocal));
-          } else {
-            std::snprintf(focal_buf, sizeof(focal_buf), " %.1f-%.1fmm",
-                          static_cast<double>(lens.MinFocal),
-                          static_cast<double>(lens.MaxFocal));
-          }
-          ctx.lens_model_ += focal_buf;
-        }
-      }
+      ctx.lens_model_ = ResolveNikonLensModel(raw_processor.imgdata.lens);
     }
   }
 
@@ -167,7 +344,7 @@ void PopulateMetadataRuntimeContext(LibRaw& raw_processor, RawRuntimeColorContex
     ctx.focal_35mm_mm_ =
         static_cast<float>(raw_processor.imgdata.lens.makernotes.FocalLengthIn35mmFormat);
   }
-  ctx.crop_factor_hint_ = ResolveCropFactorHintLocal(ctx.focal_length_mm_, ctx.focal_35mm_mm_);
+  ctx.crop_factor_hint_ = ResolveCropFactorHint(ctx.focal_length_mm_, ctx.focal_35mm_mm_);
 
   ctx.lens_metadata_valid_ = !ctx.lens_model_.empty() && std::isfinite(ctx.focal_length_mm_) &&
                              ctx.focal_length_mm_ > 0.0f;
@@ -228,6 +405,54 @@ auto IsRawExtension(const std::filesystem::path& path) -> bool {
   return kRawExtensions.count(ext) > 0;
 }
 }  // namespace
+
+void MetadataExtractor::MergeMetadataHint(const ExifDisplayMetaData* metadata_hint,
+                                          RawRuntimeColorContext&    ctx) {
+  if (!metadata_hint) {
+    return;
+  }
+
+  const std::string hint_make      = TrimAscii(metadata_hint->make_);
+  const std::string hint_model     = TrimAscii(metadata_hint->model_);
+  const std::string hint_lens_make = TrimAscii(metadata_hint->lens_make_);
+  const std::string hint_lens      = TrimAscii(metadata_hint->lens_);
+
+  if (ctx.camera_make_.empty() && !hint_make.empty()) {
+    ctx.camera_make_ = hint_make;
+  }
+  if (ctx.camera_model_.empty() && !hint_model.empty()) {
+    ctx.camera_model_ = hint_model;
+  }
+  if (ctx.lens_make_.empty() && !hint_lens_make.empty()) {
+    ctx.lens_make_ = hint_lens_make;
+  }
+  if (ctx.lens_model_.empty() && !hint_lens.empty()) {
+    ctx.lens_model_ = hint_lens;
+  }
+
+  if (!IsFinitePositive(ctx.focal_length_mm_) && IsFinitePositive(metadata_hint->focal_)) {
+    ctx.focal_length_mm_ = metadata_hint->focal_;
+  }
+  if (!IsFinitePositive(ctx.aperture_f_number_) && IsFinitePositive(metadata_hint->aperture_)) {
+    ctx.aperture_f_number_ = metadata_hint->aperture_;
+  }
+  if (!IsFinitePositive(ctx.focus_distance_m_) &&
+      IsFinitePositive(metadata_hint->focus_distance_m_)) {
+    ctx.focus_distance_m_ = metadata_hint->focus_distance_m_;
+  }
+  if (!IsFinitePositive(ctx.focal_35mm_mm_) && IsFinitePositive(metadata_hint->focal_35mm_)) {
+    ctx.focal_35mm_mm_ = metadata_hint->focal_35mm_;
+  }
+
+  if (!IsFinitePositive(ctx.crop_factor_hint_)) {
+    ctx.crop_factor_hint_ = ResolveCropFactorHint(ctx.focal_length_mm_, ctx.focal_35mm_mm_);
+  }
+}
+
+void MetadataExtractor::PopulateRuntimeContextFromOpenLibRaw(LibRaw&                 raw_processor,
+                                                             RawRuntimeColorContext& ctx) {
+  PopulateMetadataRuntimeContext(raw_processor, ctx);
+}
 
 static void GetDisplayMetadataFromExif(Exiv2::ExifData&     exif_data,
                                        ExifDisplayMetaData& display_metadata) {

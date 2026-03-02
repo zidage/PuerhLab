@@ -78,13 +78,29 @@ int AlbumBackend::TotalCount() const {
 void AlbumBackend::SelectFolder(uint folderId) {
   if (project_handler_.project_loading() || !project_handler_.project()) return;
 
+  stats_.ClearFilters();
   folder_ctrl_.ApplyFolderSelection(static_cast<sl_element_id_t>(folderId), true);
   stats_.RebuildThumbnailView();
   stats_.RefreshStats();
+  emit StatsFilterChanged();
 }
 
 void AlbumBackend::CreateFolder(const QString& folderName) { folder_ctrl_.CreateFolder(folderName); }
 void AlbumBackend::DeleteFolder(uint folderId) { folder_ctrl_.DeleteFolder(folderId); }
+
+// ── Q_INVOKABLE: Stats-bar filter ──────────────────────────────────────────
+
+void AlbumBackend::ToggleStatsFilter(const QString& category, const QString& label) {
+  stats_.ToggleFilter(category, label);
+  stats_.RebuildThumbnailView();
+  emit StatsFilterChanged();
+}
+
+void AlbumBackend::ClearStatsFilter() {
+  stats_.ClearFilters();
+  stats_.RebuildThumbnailView();
+  emit StatsFilterChanged();
+}
 
 // ── Q_INVOKABLE: Import / export delegation ─────────────────────────────────
 
@@ -399,6 +415,7 @@ void AlbumBackend::AddOrUpdateAlbumItem(sl_element_id_t elementId, image_id_t im
 
             const auto& exif    = image->exif_display_;
             item->camera_model  = QString::fromUtf8(exif.model_.c_str());
+            item->lens          = QString::fromUtf8(exif.lens_.c_str());
             item->iso           = static_cast<int>(exif.iso_);
             item->aperture      = static_cast<double>(exif.aperture_);
             item->focal_length  = static_cast<double>(exif.focal_);

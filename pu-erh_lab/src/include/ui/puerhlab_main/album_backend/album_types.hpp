@@ -22,6 +22,7 @@ struct AlbumItem {
   image_id_t      image_id         = 0;
   QString         file_name{};
   QString         camera_model{};
+  QString         lens{};
   QString         extension{};
   int             iso              = 0;
   double          aperture         = 0.0;

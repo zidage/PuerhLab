@@ -24,6 +24,7 @@
 #include <opencv2/opencv.hpp>
 
 #include "edit/operators/op_base.hpp"
+#include "edit/operators/raw/raw_decode_op.hpp"
 #include "edit/pipeline/default_pipeline_params.hpp"
 #include "edit/pipeline/pipeline_stage.hpp"
 #include "image/image_buffer.hpp"
@@ -354,6 +355,20 @@ void CPUPipelineExecutor::InitDefaultPipeline() {
   SetTemplateParams();
   RegisterAllOperators();
   SetExecutionStages();
+}
+
+void CPUPipelineExecutor::InjectRawMetadata(const RawRuntimeColorContext& ctx) {
+  global_params_.PopulateRawMetadata(ctx);
+
+  // Also propagate to RawDecodeOp so it uses the pre-populated context.
+  auto& stage = stages_[static_cast<int>(PipelineStageName::Image_Loading)];
+  auto  entry = stage.GetOperator(OperatorType::RAW_DECODE);
+  if (entry.has_value()) {
+    auto* raw_op = dynamic_cast<RawDecodeOp*>(entry.value()->op_.get());
+    if (raw_op) {
+      raw_op->SetPrePopulatedContext(ctx);
+    }
+  }
 }
 
 void CPUPipelineExecutor::ClearAllIntermediateBuffers() {
