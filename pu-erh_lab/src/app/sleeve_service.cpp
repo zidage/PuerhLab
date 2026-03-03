@@ -50,7 +50,7 @@ auto SleeveServiceImpl::Sync() -> SyncResult {
     // Finally, delete the deleted elements
     // TODO: This should be done periodically instead of every sync
     for (auto& element : garbage_elements) {
-      element_ctrl.RemoveElement(element->element_id_);
+      element_ctrl.RemoveElement(element);
       result.elements_synced_++;
     }
     // Perform garbage collection in the storage

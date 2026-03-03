@@ -26,6 +26,7 @@ AlbumBackend::AlbumBackend(QObject* parent)
       project_handler_(*this),
       thumb_(*this),
       folder_ctrl_(*this),
+      image_ctrl_(*this),
       stats_(*this),
       import_export_(*this),
       editor_(*this) {
@@ -87,6 +88,9 @@ void AlbumBackend::SelectFolder(uint folderId) {
 
 void AlbumBackend::CreateFolder(const QString& folderName) { folder_ctrl_.CreateFolder(folderName); }
 void AlbumBackend::DeleteFolder(uint folderId) { folder_ctrl_.DeleteFolder(folderId); }
+auto AlbumBackend::DeleteImages(const QVariantList& targetEntries) -> QVariantMap {
+  return image_ctrl_.DeleteImages(targetEntries);
+}
 
 // ── Q_INVOKABLE: Stats-bar filter ──────────────────────────────────────────
 

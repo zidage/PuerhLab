@@ -21,6 +21,7 @@ ListView {
 
     signal imageSelectionChanged(int elementId, int imageId, string fileName, bool selected)
     signal replaceSelection(var items)
+    signal contextMenuRequested(var item, real sceneX, real sceneY)
 
     function keyForElement(elementId) {
         return String(Number(elementId))
@@ -141,8 +142,23 @@ ListView {
             id: rowHoverArea
             anchors.fill: parent
             hoverEnabled: true
+            acceptedButtons: Qt.LeftButton | Qt.RightButton
             cursorShape: Qt.PointingHandCursor
-            onClicked: {
+            onPressed: function(mouse) {
+                if (mouse.button !== Qt.RightButton) {
+                    return
+                }
+                const scenePoint = rowHoverArea.mapToItem(null, mouse.x, mouse.y)
+                root.contextMenuRequested({
+                    elementId: elementId,
+                    imageId: imageId,
+                    fileName: fileName
+                }, scenePoint.x, scenePoint.y)
+            }
+            onClicked: function(mouse) {
+                if (mouse.button !== Qt.LeftButton) {
+                    return
+                }
                 if (root.selectionMode) {
                     const nextSelected = !root.isImageSelected(elementId)
                     root.imageSelectionChanged(elementId, imageId, fileName, nextSelected)

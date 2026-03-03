@@ -4,6 +4,7 @@
 #include <QObject>
 #include <QStringList>
 #include <QVariantList>
+#include <QVariantMap>
 
 #include <unordered_map>
 #include <vector>
@@ -12,6 +13,7 @@
 #include "ui/puerhlab_main/album_backend/project_handler.hpp"
 #include "ui/puerhlab_main/album_backend/thumbnail_manager.hpp"
 #include "ui/puerhlab_main/album_backend/folder_controller.hpp"
+#include "ui/puerhlab_main/album_backend/image_controller.hpp"
 #include "ui/puerhlab_main/album_backend/stats_engine.hpp"
 #include "ui/puerhlab_main/album_backend/import_export.hpp"
 #include "ui/puerhlab_main/album_backend/editor_controller.hpp"
@@ -136,6 +138,7 @@ class AlbumBackend final : public QObject {
   Q_INVOKABLE void SelectFolder(uint folderId);
   Q_INVOKABLE void CreateFolder(const QString& folderName);
   Q_INVOKABLE void DeleteFolder(uint folderId);
+  Q_INVOKABLE QVariantMap DeleteImages(const QVariantList& targetEntries);
 
   Q_INVOKABLE void StartImport(const QStringList& fileUrlsOrPaths);
   Q_INVOKABLE void CancelImport();
@@ -204,6 +207,7 @@ signals:
   friend class ProjectHandler;
   friend class ThumbnailManager;
   friend class FolderController;
+  friend class ImageController;
   friend class StatsEngine;
   friend class ImportExportHandler;
   friend class EditorController;
@@ -220,6 +224,7 @@ signals:
   ProjectHandler     project_handler_;
   ThumbnailManager   thumb_;
   FolderController   folder_ctrl_;
+  ImageController    image_ctrl_;
   StatsEngine        stats_;
   ImportExportHandler import_export_;
   EditorController   editor_;

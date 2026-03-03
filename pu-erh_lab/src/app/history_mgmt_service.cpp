@@ -171,6 +171,16 @@ void EditHistoryMgmtService::SaveHistory(const std::shared_ptr<EditHistoryGuard>
   }
 }
 
+void EditHistoryMgmtService::DeleteHistory(sl_element_id_t file_id) {
+  std::unique_lock<std::mutex> guard(lock_);
+  cache_.RemoveRecord(file_id);
+  cached_histories_.erase(file_id);
+  try {
+    storage_service_->GetElementController().RemoveEditHistoryByFileId(file_id);
+  } catch (...) {
+  }
+}
+
 void EditHistoryMgmtService::Sync() {
   std::unique_lock<std::mutex> guard(lock_);
   for (auto& [file_id, history_guard] : cached_histories_) {

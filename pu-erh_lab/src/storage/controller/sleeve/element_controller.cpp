@@ -171,7 +171,11 @@ auto ElementController::UpdatePipelineByElementId(
     const sl_element_id_t                      element_id,
     const std::shared_ptr<CPUPipelineExecutor> pipeline) -> void {
   pipeline_service_.UpdatePipelineParamByFileId(element_id, pipeline);
-    }
+}
+
+auto ElementController::RemovePipelineByElementId(const sl_element_id_t element_id) -> void {
+  pipeline_service_.RemoveById(element_id);
+}
 
 auto ElementController::GetEditHistoryByFileId(const sl_element_id_t file_id)
     -> std::shared_ptr<EditHistory> {
@@ -182,6 +186,10 @@ auto ElementController::UpdateEditHistoryByFileId(const sl_element_id_t         
                                                   const std::shared_ptr<EditHistory> history)
     -> void {
   history_service_.Update(history, file_id);
+}
+
+auto ElementController::RemoveEditHistoryByFileId(const sl_element_id_t file_id) -> void {
+  history_service_.RemoveById(file_id);
 }
 
 };  // namespace puerhlab

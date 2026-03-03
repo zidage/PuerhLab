@@ -8,6 +8,8 @@ set(PUERHLAB_TEST_OPENCV_MIN_DEPS
     opencv_imgcodecs
 )
 
+include(GoogleTest)
+
 add_executable(SampleTest sample_test.cpp)
 target_link_libraries(SampleTest PRIVATE GTest::gtest_main)
 
@@ -199,6 +201,7 @@ endif()
 add_executable(PipelineServiceTest app/pipeline_service_test.cpp)
 target_include_directories(PipelineServiceTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
 target_link_libraries(PipelineServiceTest ProjectService PipelineMgmtService GTest::gtest_main)
+gtest_discover_tests(PipelineServiceTest TEST_PREFIX "PipelineServiceTest.")
 
 if(WIN32)
   target_link_libraries(PipelineServiceTest easy_profiler)
@@ -207,6 +210,7 @@ endif()
 add_executable(EditHistoryMgmtServiceTest app/history_mgmt_service_test.cpp)
 target_include_directories(EditHistoryMgmtServiceTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
 target_link_libraries(EditHistoryMgmtServiceTest ProjectService EditHistoryMgmtService GTest::gtest_main)
+gtest_discover_tests(EditHistoryMgmtServiceTest TEST_PREFIX "EditHistoryMgmtServiceTest.")
 
 if(WIN32)
   target_link_libraries(EditHistoryMgmtServiceTest easy_profiler)
@@ -300,9 +304,10 @@ macro(def_ui_test TARGET_NAME SOURCE_FILE)
         target_link_libraries(${TARGET_NAME} PRIVATE easy_profiler)
     endif()
     include(GoogleTest)
-    gtest_discover_tests(${TARGET_NAME})
+    gtest_discover_tests(${TARGET_NAME} TEST_PREFIX "${TARGET_NAME}.")
 endmacro()
 
 def_ui_test(AlbumBackendImportTest   album_backend_import_test.cpp)
 def_ui_test(AlbumBackendProjectTest  album_backend_project_test.cpp)
 def_ui_test(AlbumBackendFolderTest   album_backend_folder_test.cpp)
+def_ui_test(AlbumBackendImageDeleteTest album_backend_image_delete_test.cpp)

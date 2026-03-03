@@ -418,6 +418,7 @@ add_library(AlbumBackendLib STATIC
     ui/puerhlab_main/album_backend/project_handler.cpp
     ui/puerhlab_main/album_backend/thumbnail_manager.cpp
     ui/puerhlab_main/album_backend/folder_controller.cpp
+    ui/puerhlab_main/album_backend/image_controller.cpp
     ui/puerhlab_main/album_backend/stats_engine.cpp
     ui/puerhlab_main/album_backend/import_export.cpp
     ui/puerhlab_main/album_backend/editor_controller.cpp
@@ -428,6 +429,7 @@ add_library(AlbumBackendLib STATIC
     include/ui/puerhlab_main/album_backend/project_handler.hpp
     include/ui/puerhlab_main/album_backend/thumbnail_manager.hpp
     include/ui/puerhlab_main/album_backend/folder_controller.hpp
+    include/ui/puerhlab_main/album_backend/image_controller.hpp
     include/ui/puerhlab_main/album_backend/stats_engine.hpp
     include/ui/puerhlab_main/album_backend/import_export.hpp
     include/ui/puerhlab_main/album_backend/editor_controller.hpp
@@ -536,6 +538,7 @@ qt_add_qml_module(puerhlab_main
         ui/puerhlab_main/qml/ImportProgressRing.qml
         ui/puerhlab_main/qml/InspectorPanel.qml
         ui/puerhlab_main/qml/StatsCard.qml
+        ui/puerhlab_main/qml/ImageContextMenu.qml
         ui/puerhlab_main/qml/ThumbnailGridView.qml
         ui/puerhlab_main/qml/ThumbnailListView.qml
 )

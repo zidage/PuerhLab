@@ -298,6 +298,16 @@ void PipelineMgmtService::SavePipeline(std::shared_ptr<PipelineGuard> pipeline) 
   }
 }
 
+void PipelineMgmtService::DeletePipeline(sl_element_id_t id) {
+  std::unique_lock<std::mutex> guard(lock_);
+  pipeline_cache_.RemoveRecord(id);
+  loaded_pipelines_.erase(id);
+  try {
+    storage_service_->GetElementController().RemovePipelineByElementId(id);
+  } catch (...) {
+  }
+}
+
 void PipelineMgmtService::Sync() {
   std::unique_lock<std::mutex> guard(lock_);
   for (auto& pair : loaded_pipelines_) {

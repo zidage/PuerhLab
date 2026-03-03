@@ -18,6 +18,7 @@ Item {
 
     signal imageSelectionChanged(int elementId, int imageId, string fileName, bool selected)
     signal replaceSelection(var items)
+    signal contextMenuRequested(var item, real sceneX, real sceneY)
 
     function keyForElement(elementId) {
         return String(Number(elementId))
@@ -150,7 +151,7 @@ Item {
         id: overlay
         anchors.fill: parent
         hoverEnabled: true
-        acceptedButtons: Qt.LeftButton
+        acceptedButtons: Qt.LeftButton | Qt.RightButton
 
         property int hoveredIndex: -1
         property point dragStart: Qt.point(0, 0)
@@ -198,7 +199,7 @@ Item {
         }
 
         onPositionChanged: function(mouse) {
-            if (pressed) {
+            if (pressed && (pressedButtons & Qt.LeftButton)) {
                 const dx = mouse.x - dragStart.x
                 const dy = mouse.y - dragStart.y
                 if (!isDragging && (dx * dx + dy * dy) > 64) {
@@ -217,18 +218,36 @@ Item {
                         root.replaceSelection(bandItems)
                     }
                 }
-            } else {
-                hoveredIndex = gridIndexAt(mouse.x, mouse.y)
             }
+            hoveredIndex = gridIndexAt(mouse.x, mouse.y)
         }
 
         onPressed: function(mouse) {
+            if (mouse.button === Qt.RightButton) {
+                const idx = gridIndexAt(mouse.x, mouse.y)
+                if (idx >= 0) {
+                    const item = grid.itemAtIndex(idx)
+                    if (item) {
+                        const scenePoint = overlay.mapToItem(null, mouse.x, mouse.y)
+                        root.contextMenuRequested({
+                            elementId: item.elementId,
+                            imageId: item.imageId,
+                            fileName: item.fileName
+                        }, scenePoint.x, scenePoint.y)
+                    }
+                }
+                return
+            }
             dragStart = Qt.point(mouse.x, mouse.y)
             dragCurrent = Qt.point(mouse.x, mouse.y)
             isDragging = false
         }
 
         onReleased: function(mouse) {
+            if (mouse.button !== Qt.LeftButton) {
+                isDragging = false
+                return
+            }
             if (!isDragging) {
                 const idx = gridIndexAt(mouse.x, mouse.y)
                 if (idx >= 0) {

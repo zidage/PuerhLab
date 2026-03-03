@@ -177,6 +177,30 @@ bool ThumbnailManager::IsThumbnailPinned(sl_element_id_t elementId) const {
   return it != thumbnail_pin_ref_counts_.end() && it->second > 0;
 }
 
+void ThumbnailManager::RemoveThumbnailState(sl_element_id_t elementId, image_id_t imageId) {
+  (void)imageId;
+  if (elementId == 0) {
+    return;
+  }
+
+  thumbnail_pin_ref_counts_.erase(elementId);
+  UpdateThumbnailDataUrl(elementId, QString());
+
+  auto thumb_svc = backend_.project_handler_.thumbnail_service();
+  if (!thumb_svc) {
+    return;
+  }
+
+  try {
+    thumb_svc->InvalidateThumbnail(elementId);
+  } catch (...) {
+  }
+  try {
+    thumb_svc->ReleaseThumbnail(elementId);
+  } catch (...) {
+  }
+}
+
 void ThumbnailManager::ReleaseVisibleThumbnailPins() {
   if (thumbnail_pin_ref_counts_.empty()) {
     return;

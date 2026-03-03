@@ -60,6 +60,8 @@ class PipelineMgmtService final {
 
   auto LoadPipeline(sl_element_id_t id) -> std::shared_ptr<PipelineGuard>;
 
+  void DeletePipeline(sl_element_id_t id);
+
   void Sync();
 };
 }  // namespace puerhlab

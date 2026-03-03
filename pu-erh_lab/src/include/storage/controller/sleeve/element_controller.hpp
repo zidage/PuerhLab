@@ -71,10 +71,12 @@ class ElementController {
       -> std::shared_ptr<CPUPipelineExecutor>;
   auto UpdatePipelineByElementId(const sl_element_id_t                      element_id,
                                  const std::shared_ptr<CPUPipelineExecutor> pipeline) -> void;
+  auto RemovePipelineByElementId(const sl_element_id_t element_id) -> void;
 
   auto GetEditHistoryByFileId(const sl_element_id_t file_id) -> std::shared_ptr<EditHistory>;
   auto UpdateEditHistoryByFileId(const sl_element_id_t file_id,
                                  const std::shared_ptr<EditHistory> history) -> void;
+  auto RemoveEditHistoryByFileId(const sl_element_id_t file_id) -> void;
 
   auto GetEditHistoryService() -> std::shared_ptr<EditHistoryService>;
 

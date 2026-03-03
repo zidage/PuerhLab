@@ -61,6 +61,59 @@ ApplicationWindow {
     readonly property var exportPreviewRows: selectionState.exportPreviewRows
     readonly property int selectedCount: selectionState.selectedCount
     readonly property int exportQueueCount: selectionState.exportQueueCount
+    property var pendingDeleteTargets: []
+    property string deleteConfirmText: ""
+
+    function resolveDeleteTargets(clickedItem) {
+        if (root.selectedCount > 0) {
+            return Object.values(root.selectedImagesById)
+        }
+        if (!clickedItem) {
+            return []
+        }
+        return [{
+            elementId: Number(clickedItem.elementId),
+            imageId: Number(clickedItem.imageId),
+            fileName: clickedItem.fileName ? clickedItem.fileName : "(unnamed)"
+        }]
+    }
+
+    function openDeleteContextMenu(clickedItem, sceneX, sceneY) {
+        if (!root.backendInteractive) {
+            return
+        }
+        const targets = resolveDeleteTargets(clickedItem)
+        if (!targets || targets.length === 0) {
+            return
+        }
+        root.pendingDeleteTargets = targets
+        imageContextMenu.openAt(sceneX, sceneY)
+    }
+
+    function requestDeleteConfirmation() {
+        const count = root.pendingDeleteTargets.length
+        if (count <= 0) {
+            return
+        }
+        if (count === 1) {
+            root.deleteConfirmText = "Delete this image from project?"
+        } else {
+            root.deleteConfirmText = "Delete " + count + " images from project?"
+        }
+        deleteConfirmDialog.open()
+    }
+
+    function runDeleteTargets() {
+        if (!root.pendingDeleteTargets || root.pendingDeleteTargets.length === 0) {
+            return
+        }
+        const result = albumBackend.DeleteImages(root.pendingDeleteTargets)
+        const deletedIds = (result && result.deletedElementIds) ? result.deletedElementIds : []
+        if (deletedIds.length > 0) {
+            selectionState.pruneDeletedElements(deletedIds)
+        }
+        root.pendingDeleteTargets = []
+    }
 
     QtObject {
         id: selectionState
@@ -130,6 +183,40 @@ ApplicationWindow {
 
         function clearExportQueue() {
             exportQueueById = ({})
+            refreshExportPreview()
+        }
+
+        function pruneDeletedElements(elementIds) {
+            if (!elementIds || elementIds.length === 0) {
+                return
+            }
+
+            const deleted = {}
+            for (let i = 0; i < elementIds.length; ++i) {
+                deleted[keyForElement(elementIds[i])] = true
+            }
+
+            const nextSelected = {}
+            const selectedRows = Object.values(selectedImagesById)
+            for (let i = 0; i < selectedRows.length; ++i) {
+                const row = selectedRows[i]
+                const key = keyForElement(row.elementId)
+                if (!deleted[key]) {
+                    nextSelected[key] = row
+                }
+            }
+            selectedImagesById = nextSelected
+
+            const nextQueue = {}
+            const queueRows = Object.values(exportQueueById)
+            for (let i = 0; i < queueRows.length; ++i) {
+                const row = queueRows[i]
+                const key = keyForElement(row.elementId)
+                if (!deleted[key]) {
+                    nextQueue[key] = row
+                }
+            }
+            exportQueueById = nextQueue
             refreshExportPreview()
         }
 
@@ -293,16 +380,129 @@ ApplicationWindow {
         }
     }
 
+    ImageContextMenu {
+        id: imageContextMenu
+        actions: [
+            {
+                id: "delete",
+                label: "Delete",
+                enabled: root.pendingDeleteTargets.length > 0
+            }
+        ]
+        onActionRequested: function(actionId) {
+            if (actionId !== "delete") {
+                return
+            }
+            imageContextMenu.close()
+            requestDeleteConfirmation()
+        }
+    }
+
+    Popup {
+        id: deleteConfirmDialog
+        modal: true
+        focus: true
+        closePolicy: Popup.CloseOnEscape
+        width: Math.min(root.width - 36, 520)
+        height: deleteConfirmContent.implicitHeight + 36
+        x: Math.round((root.width - width) / 2)
+        y: Math.round((root.height - height) / 2)
+
+        Overlay.modal: Item {
+            anchors.fill: parent
+
+            MultiEffect {
+                anchors.fill: parent
+                source: mainContent
+                blurEnabled: true
+                blur: 0.6
+                blurMax: 64
+                saturation: -0.2
+            }
+
+            Rectangle {
+                anchors.fill: parent
+                color: root.colOverlay
+            }
+
+            MouseArea { anchors.fill: parent; hoverEnabled: true }
+        }
+
+        background: Rectangle {
+            radius: 14
+            color: root.colBgPanel
+            border.width: 0
+        }
+
+        onClosed: {
+            root.deleteConfirmText = ""
+        }
+
+        contentItem: ColumnLayout {
+            id: deleteConfirmContent
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.top: parent.top
+            anchors.margins: 18
+            spacing: 12
+
+            Label {
+                text: "Confirm Deletion"
+                font.pixelSize: 24
+                font.weight: 700
+                color: root.colText
+            }
+
+            Label {
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                text: root.deleteConfirmText.length > 0
+                      ? root.deleteConfirmText + "\nOriginal source files on disk will be kept."
+                      : ""
+                color: root.colText
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 10
+
+                Item { Layout.fillWidth: true }
+
+                Button {
+                    text: "Cancel"
+                    onClicked: {
+                        root.pendingDeleteTargets = []
+                        deleteConfirmDialog.close()
+                    }
+                }
+
+                Button {
+                    text: "Delete"
+                    Material.background: root.colDanger
+                    Material.foreground: root.colText
+                    onClicked: {
+                        deleteConfirmDialog.close()
+                        root.runDeleteTargets()
+                    }
+                }
+            }
+        }
+    }
+
     Connections {
         target: albumBackend
         ignoreUnknownSignals: true
         function onProjectChanged() {
             selectionState.clearSelectedImages()
             selectionState.clearExportQueue()
+            root.pendingDeleteTargets = []
+            deleteConfirmDialog.close()
             settingsPage = false
         }
         function onFolderSelectionChanged() {
             selectionState.clearSelectedImages()
+            root.pendingDeleteTargets = []
+            deleteConfirmDialog.close()
         }
         function onThumbnailsChanged() {
             if (exportDialog.visible) {
@@ -1180,6 +1380,9 @@ ApplicationWindow {
             onReplaceSelection: function(items) {
                 selectionState.replaceSelectedImages(items)
             }
+            onContextMenuRequested: function(item, sceneX, sceneY) {
+                root.openDeleteContextMenu(item, sceneX, sceneY)
+            }
         }
     }
 
@@ -1194,6 +1397,9 @@ ApplicationWindow {
             }
             onReplaceSelection: function(items) {
                 selectionState.replaceSelectedImages(items)
+            }
+            onContextMenuRequested: function(item, sceneX, sceneY) {
+                root.openDeleteContextMenu(item, sceneX, sceneY)
             }
         }
     }
