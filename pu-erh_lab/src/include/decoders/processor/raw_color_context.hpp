@@ -39,6 +39,12 @@ struct RawRuntimeColorContext {
   float             focus_distance_m_        = 0.0f;
   float             focal_35mm_mm_           = 0.0f;
   float             crop_factor_hint_        = 0.0f;
+
+  // Adobe DNG colour matrices resolved at import time from the camera
+  // matrix database.  Avoids repeated database lookups per frame.
+  bool              color_matrices_valid_    = false;
+  double            color_matrix_1_[9]       = {};
+  double            color_matrix_2_[9]       = {};
 };
 
 }  // namespace puerhlab

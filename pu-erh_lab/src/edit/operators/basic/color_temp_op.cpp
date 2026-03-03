@@ -19,20 +19,13 @@
 
 #include <algorithm>
 #include <array>
-#include <cctype>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <functional>
 #include <limits>
-#include <mutex>
-#include <optional>
 #include <stdexcept>
 #include <string>
-#include <unordered_map>
-#include <vector>
-
-#include "edit/operators/basic/camera_matrices.hpp"
 
 namespace puerhlab {
 namespace {
@@ -55,11 +48,6 @@ constexpr double kD60Y                = 0.33767;
 const cv::Matx33d kXyzD60ToAp1(1.6410233797, -0.3248032942, -0.2364246952, -0.6636628587,
                                1.6153315917, 0.0167563477, 0.0117218943, -0.0082844420,
                                0.9883948585);
-
-struct CameraMatrixPair {
-  cv::Matx33d cm1_ = cv::Matx33d::eye();
-  cv::Matx33d cm2_ = cv::Matx33d::eye();
-};
 
 struct RobertsonLine {
   double r_;
@@ -155,115 +143,8 @@ auto BuildRuntimeCacheKey(const OperatorParams& params, ColorTempMode mode, floa
   return key;
 }
 
-auto NormalizeCameraName(const std::string& input) -> std::string {
-  std::string normalized;
-  normalized.reserve(input.size());
-
-  bool last_space = true;
-  for (char ch : input) {
-    const unsigned char uch = static_cast<unsigned char>(ch);
-    if (std::isalnum(uch)) {
-      normalized.push_back(static_cast<char>(std::tolower(uch)));
-      last_space = false;
-    } else if (!last_space) {
-      normalized.push_back(' ');
-      last_space = true;
-    }
-  }
-
-  while (!normalized.empty() && normalized.back() == ' ') {
-    normalized.pop_back();
-  }
-  return normalized;
-}
-
 auto MatrixFromArray9(const double m[9]) -> cv::Matx33d {
   return cv::Matx33d(m[0], m[1], m[2], m[3], m[4], m[5], m[6], m[7], m[8]);
-}
-
-auto CameraMatrixDatabaseIndex() -> const std::unordered_map<std::string, CameraMatrixPair>& {
-  static const std::unordered_map<std::string, CameraMatrixPair> index = [] {
-    std::unordered_map<std::string, CameraMatrixPair> out;
-    const size_t                                       count =
-        sizeof(all_camera_matrices) / sizeof(all_camera_matrices[0]);
-    out.reserve(count);
-
-    for (size_t i = 0; i < count; ++i) {
-      const auto& item = all_camera_matrices[i];
-      const auto  key  = NormalizeCameraName(item.camera_name_);
-      if (key.empty() || out.contains(key)) {
-        continue;
-      }
-      out.emplace(key, CameraMatrixPair{MatrixFromArray9(item.color_matrix_1_),
-                                        MatrixFromArray9(item.color_matrix_2_)});
-    }
-    return out;
-  }();
-  return index;
-}
-
-auto CameraLookupCache() -> std::unordered_map<std::string, std::optional<CameraMatrixPair>>& {
-  static std::unordered_map<std::string, std::optional<CameraMatrixPair>> cache;
-  return cache;
-}
-
-auto CameraLookupCacheMutex() -> std::mutex& {
-  static std::mutex mutex;
-  return mutex;
-}
-
-auto LookupCameraMatrices(const std::string& camera_make, const std::string& camera_model,
-                          CameraMatrixPair& out) -> bool {
-  const auto full_key = NormalizeCameraName(camera_make + " " + camera_model);
-  const auto model_key = NormalizeCameraName(camera_model);
-  const auto cache_key = full_key + "|" + model_key;
-
-  {
-    std::lock_guard<std::mutex> lock(CameraLookupCacheMutex());
-    auto                        it = CameraLookupCache().find(cache_key);
-    if (it != CameraLookupCache().end()) {
-      if (!it->second.has_value()) {
-        return false;
-      }
-      out = *it->second;
-      return true;
-    }
-  }
-
-  const auto& db      = CameraMatrixDatabaseIndex();
-  auto        find_db = [&](const std::string& key) -> const CameraMatrixPair* {
-    if (key.empty()) {
-      return nullptr;
-    }
-    auto it = db.find(key);
-    if (it == db.end()) {
-      return nullptr;
-    }
-    return &it->second;
-  };
-
-  const CameraMatrixPair* found = find_db(full_key);
-  if (!found) {
-    found = find_db(model_key);
-  }
-  if (!found && !model_key.empty()) {
-    const auto make_key = NormalizeCameraName(camera_make);
-    if (!make_key.empty() && model_key.starts_with(make_key + " ")) {
-      found = find_db(model_key);
-    }
-  }
-
-  {
-    std::lock_guard<std::mutex> lock(CameraLookupCacheMutex());
-    if (found) {
-      CameraLookupCache().emplace(cache_key, *found);
-      out = *found;
-      return true;
-    }
-    CameraLookupCache().emplace(cache_key, std::nullopt);
-  }
-
-  return false;
 }
 
 auto HasValidCamXyz(const float m[9]) -> bool {
@@ -491,13 +372,15 @@ void StoreMatrix(const cv::Matx33d& src, float dst[9]) {
 
 auto ResolveColorMatrixEndpoints(const OperatorParams& params, cv::Matx33d& cm1, cv::Matx33d& cm2)
     -> bool {
-  CameraMatrixPair pair;
-  if (LookupCameraMatrices(params.raw_camera_make_, params.raw_camera_model_, pair)) {
-    cm1 = pair.cm1_;
-    cm2 = pair.cm2_;
+  // Use pre-resolved Adobe DNG colour matrices stored in OperatorParams.
+  // These are looked up once at import time by MetadataExtractor.
+  if (params.raw_color_matrices_valid_) {
+    cm1 = MatrixFromArray9(params.raw_color_matrix_1_);
+    cm2 = MatrixFromArray9(params.raw_color_matrix_2_);
     return IsFiniteMatrix(cm1) && IsFiniteMatrix(cm2);
   }
 
+  // Fallback: derive a single matrix from libraw cam_xyz / pre_mul.
   cv::Matx33d fallback;
   if (!BuildFallbackXyzToCamera(params, fallback)) {
     return false;

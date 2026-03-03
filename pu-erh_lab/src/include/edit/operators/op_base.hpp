@@ -175,6 +175,9 @@ struct OperatorParams {
   float                        raw_rgb_cam_[9]            = {};
   std::string                  raw_camera_make_           = {};
   std::string                  raw_camera_model_          = {};
+  bool                         raw_color_matrices_valid_  = false;
+  double                       raw_color_matrix_1_[9]     = {};
+  double                       raw_color_matrix_2_[9]     = {};
   bool                         raw_lens_metadata_valid_   = false;
   std::string                  raw_lens_make_             = {};
   std::string                  raw_lens_model_            = {};
@@ -275,6 +278,11 @@ struct OperatorParams {
     }
     raw_camera_make_           = ctx.camera_make_;
     raw_camera_model_          = ctx.camera_model_;
+    raw_color_matrices_valid_  = ctx.color_matrices_valid_;
+    for (int i = 0; i < 9; ++i) {
+      raw_color_matrix_1_[i] = ctx.color_matrix_1_[i];
+      raw_color_matrix_2_[i] = ctx.color_matrix_2_[i];
+    }
     raw_lens_metadata_valid_   = ctx.lens_metadata_valid_;
     raw_lens_make_             = ctx.lens_make_;
     raw_lens_model_            = ctx.lens_model_;

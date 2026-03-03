@@ -166,6 +166,11 @@ void RawDecodeOp::SetGlobalParams(OperatorParams& params) const {
 
   params.raw_camera_make_ = latest_runtime_context_.camera_make_;
   params.raw_camera_model_ = latest_runtime_context_.camera_model_;
+  params.raw_color_matrices_valid_ = latest_runtime_context_.color_matrices_valid_;
+  for (int i = 0; i < 9; ++i) {
+    params.raw_color_matrix_1_[i] = latest_runtime_context_.color_matrix_1_[i];
+    params.raw_color_matrix_2_[i] = latest_runtime_context_.color_matrix_2_[i];
+  }
   params.raw_lens_metadata_valid_ = latest_runtime_context_.lens_metadata_valid_;
   params.raw_lens_make_           = latest_runtime_context_.lens_make_;
   params.raw_lens_model_          = latest_runtime_context_.lens_model_;

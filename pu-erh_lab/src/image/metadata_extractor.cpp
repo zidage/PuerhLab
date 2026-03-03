@@ -29,7 +29,9 @@
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
+#include "edit/operators/basic/camera_matrices.hpp"
 #include "json.hpp"
 #include "type/supported_file_type.hpp"
 
@@ -289,6 +291,126 @@ auto ResolveNikonLensModel(const libraw_lensinfo_t& lens) -> std::string {
   return model;
 }
 
+// ---------------------------------------------------------------------------
+//  Adobe DNG camera colour-matrix database lookup
+//  (ported from color_temp_op.cpp – executed once at import time)
+// ---------------------------------------------------------------------------
+
+auto NormalizeCameraName(const std::string& input) -> std::string {
+  std::string normalized;
+  normalized.reserve(input.size() + input.size() / 4);
+
+  bool last_space = true;
+  bool last_alpha = false;
+  bool last_digit = false;
+  for (char ch : input) {
+    const unsigned char uch = static_cast<unsigned char>(ch);
+    if (std::isalnum(uch)) {
+      const bool is_alpha = std::isalpha(uch) != 0;
+      const bool is_digit = std::isdigit(uch) != 0;
+      // Insert space at letter↔digit boundary so "Z5" → "z 5", "5D" → "5 d".
+      if (!last_space && ((last_alpha && is_digit) || (last_digit && is_alpha))) {
+        normalized.push_back(' ');
+      }
+      normalized.push_back(static_cast<char>(std::tolower(uch)));
+      last_space = false;
+      last_alpha = is_alpha;
+      last_digit = is_digit;
+    } else if (!last_space) {
+      normalized.push_back(' ');
+      last_space = true;
+      last_alpha = false;
+      last_digit = false;
+    }
+  }
+
+  while (!normalized.empty() && normalized.back() == ' ') {
+    normalized.pop_back();
+  }
+  return normalized;
+}
+
+struct CameraColorMatrixEntry {
+  std::string name_;
+  double      cm1_[9];
+  double      cm2_[9];
+};
+
+auto CameraColorMatrixDatabaseSorted() -> const std::vector<CameraColorMatrixEntry>& {
+  static const std::vector<CameraColorMatrixEntry> index = [] {
+    std::vector<CameraColorMatrixEntry> out;
+    const size_t count = sizeof(all_camera_matrices) / sizeof(all_camera_matrices[0]);
+    out.reserve(count);
+
+    for (size_t i = 0; i < count; ++i) {
+      const auto& item = all_camera_matrices[i];
+      auto        key  = NormalizeCameraName(item.camera_name_);
+      if (key.empty()) {
+        continue;
+      }
+      CameraColorMatrixEntry entry;
+      entry.name_ = std::move(key);
+      std::memcpy(entry.cm1_, item.color_matrix_1_, sizeof(entry.cm1_));
+      std::memcpy(entry.cm2_, item.color_matrix_2_, sizeof(entry.cm2_));
+      out.push_back(std::move(entry));
+    }
+
+    // Source array is already sorted lexicographically; deduplicate only.
+    out.erase(std::unique(out.begin(), out.end(),
+                          [](const CameraColorMatrixEntry& a, const CameraColorMatrixEntry& b) {
+                            return a.name_ == b.name_;
+                          }),
+              out.end());
+    return out;
+  }();
+  return index;
+}
+
+auto FindInSortedColorMatrixDB(const std::vector<CameraColorMatrixEntry>& db,
+                               const std::string& key) -> const CameraColorMatrixEntry* {
+  if (key.empty()) {
+    return nullptr;
+  }
+  auto it = std::lower_bound(
+      db.begin(), db.end(), key,
+      [](const CameraColorMatrixEntry& entry, const std::string& k) {
+        return entry.name_ < k;
+      });
+  if (it != db.end() && it->name_ == key) {
+    return &(*it);
+  }
+  return nullptr;
+}
+
+/// Look up Adobe DNG colour matrices for a camera make/model pair and store
+/// the result directly into the provided double[9] arrays.
+auto LookupCameraColorMatrices(const std::string& camera_make,
+                               const std::string& camera_model,
+                               double cm1_out[9], double cm2_out[9]) -> bool {
+  const auto full_key  = NormalizeCameraName(camera_make + " " + camera_model);
+  const auto model_key = NormalizeCameraName(camera_model);
+
+  const auto& db = CameraColorMatrixDatabaseSorted();
+
+  const CameraColorMatrixEntry* found = FindInSortedColorMatrixDB(db, full_key);
+  if (!found) {
+    found = FindInSortedColorMatrixDB(db, model_key);
+  }
+  if (!found && !model_key.empty()) {
+    const auto make_key = NormalizeCameraName(camera_make);
+    if (!make_key.empty() && model_key.starts_with(make_key + " ")) {
+      found = FindInSortedColorMatrixDB(db, model_key);
+    }
+  }
+
+  if (found) {
+    std::memcpy(cm1_out, found->cm1_, 9 * sizeof(double));
+    std::memcpy(cm2_out, found->cm2_, 9 * sizeof(double));
+    return true;
+  }
+  return false;
+}
+
 /// Populate a RawRuntimeColorContext directly from libraw's open-but-not-processed state.
 /// Only requires open_file / unpack to have been called so that imgdata.rawdata.color,
 /// imgdata.idata, imgdata.other, imgdata.lens are populated.
@@ -348,6 +470,14 @@ void PopulateMetadataRuntimeContext(LibRaw& raw_processor, RawRuntimeColorContex
 
   ctx.lens_metadata_valid_ = !ctx.lens_model_.empty() && std::isfinite(ctx.focal_length_mm_) &&
                              ctx.focal_length_mm_ > 0.0f;
+
+  // Resolve Adobe DNG colour matrices from the camera-model database once and
+  // store them in the context so that downstream operators (ColorTempOp) never
+  // need to repeat the lookup.
+  ctx.color_matrices_valid_ = LookupCameraColorMatrices(
+      ctx.camera_make_, ctx.camera_model_,
+      ctx.color_matrix_1_, ctx.color_matrix_2_);
+
   // Mark as valid for downstream consumers (not an actual decode, just metadata)
   ctx.valid_                  = true;
   ctx.output_in_camera_space_ = true;  // no processing done, color data is camera-space
