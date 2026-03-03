@@ -20,6 +20,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 #include <stdexcept>
 
 #include "decoders/processor/operators/gpu/cuda_raw_proc_utils.hpp"
@@ -29,7 +30,9 @@ namespace CUDA {
 namespace {
 constexpr float kMinGain = 1e-6f;
 
-__constant__ float M_const[9];
+struct ColorMatrix {
+  float m[9];
+};
 
 static inline float SafeDivide(const float numerator, const float denominator) {
   return numerator / std::max(denominator, kMinGain);
@@ -85,7 +88,7 @@ static inline cv::Matx33f ComputeCam2Xyz(const cv::Matx33f& normalized_pre_mul,
 }
 
 __global__ void ApplyColorMatrixKernel(const uchar* srcptr, uchar* dstptr, int rows, int cols,
-                                      size_t src_step, size_t dst_step) {
+                                      size_t src_step, size_t dst_step, ColorMatrix mat) {
   const int x = blockIdx.x * blockDim.x + threadIdx.x;
   const int y = blockIdx.y * blockDim.y + threadIdx.y;
 
@@ -98,9 +101,9 @@ __global__ void ApplyColorMatrixKernel(const uchar* srcptr, uchar* dstptr, int r
   const float  g     = src_p[1];
   const float  b     = src_p[2];
 
-  dst_p[0]           = M_const[0] * r + M_const[1] * g + M_const[2] * b;
-  dst_p[1]           = M_const[3] * r + M_const[4] * g + M_const[5] * b;
-  dst_p[2]           = M_const[6] * r + M_const[7] * g + M_const[8] * b;
+  dst_p[0]           = mat.m[0] * r + mat.m[1] * g + mat.m[2] * b;
+  dst_p[1]           = mat.m[3] * r + mat.m[4] * g + mat.m[5] * b;
+  dst_p[2]           = mat.m[6] * r + mat.m[7] * g + mat.m[8] * b;
 }
 
 static void ApplyColorMatrix_Helper(const cv::cuda::GpuMat& src, cv::cuda::GpuMat& dst,
@@ -113,13 +116,14 @@ static void ApplyColorMatrix_Helper(const cv::cuda::GpuMat& src, cv::cuda::GpuMa
   }
 
   cudaStream_t cuda_stream = cv::cuda::StreamAccessor::getStream(stream);
-  CUDA_CHECK(cudaMemcpyToSymbolAsync(M_const, matrix.data, 9 * sizeof(float), 0,
-                                     cudaMemcpyHostToDevice, cuda_stream));
+
+  ColorMatrix mat = {};
+  std::memcpy(mat.m, matrix.data, 9 * sizeof(float));
 
   const dim3 block(32, 32);
   const dim3 grid((src.cols + block.x - 1) / block.x, (src.rows + block.y - 1) / block.y);
   ApplyColorMatrixKernel<<<grid, block, 0, cuda_stream>>>(src.data, dst.data, src.rows, src.cols,
-                                                         src.step, dst.step);
+                                                         src.step, dst.step, mat);
   CUDA_CHECK(cudaGetLastError());
 }
 

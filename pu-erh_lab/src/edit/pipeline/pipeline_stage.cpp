@@ -355,15 +355,35 @@ std::shared_ptr<ImageBuffer> PipelineStage::ApplyGpuOperators(OperatorParams& gl
       current_img = std::make_shared<ImageBuffer>(std::move(buffer));
     }
 
-    for (const auto& op_entry : *operators_) {
-      if (op_entry.second.enable_) {
-        if (op_entry.first == OperatorType::LENS_CALIBRATION) {
-          op_entry.second.op_->SetGlobalParams(global_params);
-          op_entry.second.op_->ApplyGPU(current_img);
-        } else {
-          op_entry.second.op_->ApplyGPU(current_img);
-          op_entry.second.op_->SetGlobalParams(global_params);
+    const auto apply_gpu_operator = [&](OperatorType op_type, const OperatorEntry& op_entry) {
+      if (!op_entry.enable_ || !op_entry.op_) {
+        return;
+      }
+      if (op_type == OperatorType::LENS_CALIBRATION) {
+        op_entry.op_->SetGlobalParams(global_params);
+        op_entry.op_->ApplyGPU(current_img);
+      } else {
+        op_entry.op_->ApplyGPU(current_img);
+        op_entry.op_->SetGlobalParams(global_params);
+      }
+    };
+
+    if (stage_ == PipelineStageName::Geometry_Adjustment) {
+      // Crop/rotate must run before resize so dynamic preview scaling uses
+      // post-crop dimensions instead of the uncropped source frame.
+      if (const auto crop_it = operators_->find(OperatorType::CROP_ROTATE);
+          crop_it != operators_->end()) {
+        apply_gpu_operator(crop_it->first, crop_it->second);
+      }
+      for (const auto& [op_type, op_entry] : *operators_) {
+        if (op_type == OperatorType::CROP_ROTATE) {
+          continue;
         }
+        apply_gpu_operator(op_type, op_entry);
+      }
+    } else {
+      for (const auto& [op_type, op_entry] : *operators_) {
+        apply_gpu_operator(op_type, op_entry);
       }
     }
     current_img->gpu_data_valid_ = true;

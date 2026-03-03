@@ -245,71 +245,23 @@ auto UVToXY(const cv::Vec2d& uv) -> cv::Vec2d {
   return cv::Vec2d(1.5 * uv[0] / den, uv[1] / den);
 }
 
-auto UVToTemperatureTint(const cv::Vec2d& uv, double& out_cct, double& out_tint) -> bool {
-  double last_dt = 0.0;
-  double last_du = 0.0;
-  double last_dv = 0.0;
+// ---------------------------------------------------------------------------
+// Shared helper: compute the (u, v) point on the Planckian locus AND the
+// normalised isotherm (perpendicular) direction at a given CCT, using the
+// Robertson table.  Both TemperatureTintToUV and UVToTemperatureTint use this
+// so that the (CCT, tint) <-> (u, v) mapping is exactly invertible.
+// ---------------------------------------------------------------------------
+struct PlanckianLocusPoint {
+  cv::Vec2d uv_;     // point on the Planckian locus
+  cv::Vec2d perp_;   // normalised isotherm direction at this CCT
+  bool      valid_;  // false when the perpendicular direction degenerates
+};
 
-  for (size_t i = 1; i < kRobertsonLines.size(); ++i) {
-    double du   = 1.0;
-    double dv   = kRobertsonLines[i].t_;
-    double len  = std::sqrt(1.0 + dv * dv);
-    du /= len;
-    dv /= len;
-
-    const double uu = uv[0] - kRobertsonLines[i].u_;
-    const double vv = uv[1] - kRobertsonLines[i].v_;
-    double       dt = -uu * dv + vv * du;
-
-    if (dt <= 0.0 || i == (kRobertsonLines.size() - 1)) {
-      if (dt > 0.0) {
-        dt = 0.0;
-      }
-      dt            = -dt;
-
-      double blend  = 0.0;
-      if (i > 1 && (dt + last_dt) > kValueEpsilon) {
-        blend = dt / (last_dt + dt);
-      }
-      blend = std::clamp(blend, 0.0, 1.0);
-
-      const double mired =
-          kRobertsonLines[i - 1].r_ * blend + kRobertsonLines[i].r_ * (1.0 - blend);
-      out_cct = (mired <= kValueEpsilon) ? kCustomCCTMax : (1e6 / mired);
-
-      const double uu1 = uv[0] - (kRobertsonLines[i - 1].u_ * blend +
-                                  kRobertsonLines[i].u_ * (1.0 - blend));
-      const double vv1 = uv[1] - (kRobertsonLines[i - 1].v_ * blend +
-                                  kRobertsonLines[i].v_ * (1.0 - blend));
-
-      double du1 = last_du * blend + du * (1.0 - blend);
-      double dv1 = last_dv * blend + dv * (1.0 - blend);
-      len        = std::sqrt(du1 * du1 + dv1 * dv1);
-      if (len <= kValueEpsilon) {
-        out_tint = 0.0;
-        return true;
-      }
-      du1 /= len;
-      dv1 /= len;
-
-      const double d_uv = -(uu1 * du1 + vv1 * dv1);
-      out_tint          = d_uv * kTintScale;
-      return std::isfinite(out_cct) && std::isfinite(out_tint);
-    }
-
-    last_dt = dt;
-    last_du = du;
-    last_dv = dv;
-  }
-
-  return false;
-}
-
-auto TemperatureTintToUV(double cct, double tint) -> cv::Vec2d {
+auto PlanckianLocusAtCCT(double cct) -> PlanckianLocusPoint {
   const double safe_cct = ClampFinite(cct, kCustomCCTMin, kCustomCCTMax);
   const double mired    = 1e6 / safe_cct;
 
-  size_t       index    = 1;
+  size_t index = 1;
   while (index < kRobertsonLines.size() && mired > kRobertsonLines[index].r_) {
     ++index;
   }
@@ -321,27 +273,148 @@ auto TemperatureTintToUV(double cct, double tint) -> cv::Vec2d {
   }
 
   const double denom = kRobertsonLines[index].r_ - kRobertsonLines[index - 1].r_;
-  const double blend =
-      (std::abs(denom) <= kValueEpsilon) ? 0.0 : (kRobertsonLines[index].r_ - mired) / denom;
+  const double blend = std::clamp((std::abs(denom) <= kValueEpsilon)
+                                      ? 0.0
+                                      : (kRobertsonLines[index].r_ - mired) / denom,
+                                  0.0, 1.0);
 
-  double u = kRobertsonLines[index - 1].u_ * blend + kRobertsonLines[index].u_ * (1.0 - blend);
-  double v = kRobertsonLines[index - 1].v_ * blend + kRobertsonLines[index].v_ * (1.0 - blend);
+  PlanckianLocusPoint pt;
+  pt.uv_[0] = kRobertsonLines[index - 1].u_ * blend + kRobertsonLines[index].u_ * (1.0 - blend);
+  pt.uv_[1] = kRobertsonLines[index - 1].v_ * blend + kRobertsonLines[index].v_ * (1.0 - blend);
 
-  const double uu1 = 1.0;
-  const double vv1 = kRobertsonLines[index - 1].t_;
+  const double vv1  = kRobertsonLines[index - 1].t_;
   const double len1 = std::sqrt(1.0 + vv1 * vv1);
-
-  const double uu2 = 1.0;
-  const double vv2 = kRobertsonLines[index].t_;
+  const double vv2  = kRobertsonLines[index].t_;
   const double len2 = std::sqrt(1.0 + vv2 * vv2);
 
-  const double uu3 = (uu1 / len1) * blend + (uu2 / len2) * (1.0 - blend);
-  const double vv3 = (vv1 / len1) * blend + (vv2 / len2) * (1.0 - blend);
-  const double duv = ClampFinite(tint, kCustomTintMin, kCustomTintMax) / kTintScale;
+  const double uu3  = (1.0 / len1) * blend + (1.0 / len2) * (1.0 - blend);
+  const double vv3  = (vv1 / len1) * blend + (vv2 / len2) * (1.0 - blend);
+  const double len3 = std::sqrt(uu3 * uu3 + vv3 * vv3);
 
-  u += uu3 * (-duv);
-  v += vv3 * (-duv);
-  return cv::Vec2d(u, v);
+  if (len3 <= kValueEpsilon) {
+    pt.perp_  = cv::Vec2d(0.0, 0.0);
+    pt.valid_ = false;
+  } else {
+    pt.perp_  = cv::Vec2d(uu3 / len3, vv3 / len3);
+    pt.valid_ = true;
+  }
+  return pt;
+}
+
+// ---------------------------------------------------------------------------
+// UVToTemperatureTint – improved Robertson method
+//
+//   Phase 1 : standard Robertson signed-distance bracket search  → initial CCT
+//   Phase 2 : Newton refinement of CCT so that the locus point is the true
+//             closest point (important for inputs far from the Planckian locus)
+//   Phase 3 : tint derived from the *same* locus helper used by the forward
+//             function, guaranteeing an exact roundtrip
+// ---------------------------------------------------------------------------
+auto UVToTemperatureTint(const cv::Vec2d& uv, double& out_cct, double& out_tint) -> bool {
+  // Phase 1 – Robertson bracket search for the initial CCT estimate.
+  double last_dt = 0.0;
+
+  for (size_t i = 1; i < kRobertsonLines.size(); ++i) {
+    double du  = 1.0;
+    double dv  = kRobertsonLines[i].t_;
+    double len = std::sqrt(1.0 + dv * dv);
+    du /= len;
+    dv /= len;
+
+    const double uu = uv[0] - kRobertsonLines[i].u_;
+    const double vv = uv[1] - kRobertsonLines[i].v_;
+    double       dt = -uu * dv + vv * du;
+
+    if (dt <= 0.0 || i == (kRobertsonLines.size() - 1)) {
+      if (dt > 0.0) {
+        dt = 0.0;
+      }
+      dt = -dt;
+
+      double blend = 0.0;
+      if (i > 1 && (dt + last_dt) > kValueEpsilon) {
+        blend = dt / (last_dt + dt);
+      }
+      blend = std::clamp(blend, 0.0, 1.0);
+
+      const double mired =
+          kRobertsonLines[i - 1].r_ * blend + kRobertsonLines[i].r_ * (1.0 - blend);
+      out_cct = (mired <= kValueEpsilon) ? kCustomCCTMax : (1e6 / mired);
+
+      // Phase 2 – Newton refinement of CCT.
+      // At the true closest locus point the displacement from locus to the
+      // input UV is purely along the isotherm (perpendicular to the locus
+      // tangent).  We adjust CCT until the along-tangent component vanishes.
+      {
+        constexpr int    kRefineMaxIter = 6;
+        constexpr double kRefineDeltaK  = 0.5;   // ΔK for numerical tangent
+        constexpr double kRefineEps     = 1e-8;
+
+        for (int iter = 0; iter < kRefineMaxIter; ++iter) {
+          const auto lp = PlanckianLocusAtCCT(out_cct + kRefineDeltaK);
+          const auto lm = PlanckianLocusAtCCT(out_cct - kRefineDeltaK);
+          const auto lc = PlanckianLocusAtCCT(out_cct);
+          if (!lc.valid_) {
+            break;
+          }
+
+          // Numerical tangent d(uv)/d(cct)
+          const cv::Vec2d tangent = (lp.uv_ - lm.uv_) * (0.5 / kRefineDeltaK);
+          const double    t_len2  = tangent[0] * tangent[0] + tangent[1] * tangent[1];
+          if (t_len2 <= kValueEpsilon) {
+            break;
+          }
+
+          // Along-tangent component of the displacement from locus to input
+          const double along =
+              (uv[0] - lc.uv_[0]) * tangent[0] + (uv[1] - lc.uv_[1]) * tangent[1];
+
+          // Newton step: Δcct ≈ along / |tangent|²
+          const double step = along / t_len2;
+          out_cct += step;
+          out_cct = std::clamp(out_cct, kCustomCCTMin, kCustomCCTMax);
+
+          if (std::abs(step) < kRefineEps) {
+            break;
+          }
+        }
+      }
+
+      // Phase 3 – derive tint from the same locus helper that the forward
+      // function (TemperatureTintToUV) uses, which guarantees:
+      //   TemperatureTintToUV(cct, tint) ≈ uv
+      //
+      // Forward model:  UV = locus.uv − (tint / kTintScale) · locus.perp
+      //            ⟹  tint = −kTintScale · dot(UV − locus.uv, locus.perp)
+      {
+        const auto locus = PlanckianLocusAtCCT(out_cct);
+        if (!locus.valid_) {
+          out_tint = 0.0;
+          return true;
+        }
+
+        const double delta_u = uv[0] - locus.uv_[0];
+        const double delta_v = uv[1] - locus.uv_[1];
+        out_tint = -kTintScale * (delta_u * locus.perp_[0] + delta_v * locus.perp_[1]);
+      }
+
+      return std::isfinite(out_cct) && std::isfinite(out_tint);
+    }
+
+    last_dt = dt;
+  }
+
+  return false;
+}
+
+auto TemperatureTintToUV(double cct, double tint) -> cv::Vec2d {
+  const auto locus = PlanckianLocusAtCCT(cct);
+  if (!locus.valid_) {
+    return locus.uv_;
+  }
+  const double duv = ClampFinite(tint, kCustomTintMin, kCustomTintMax) / kTintScale;
+  return cv::Vec2d(locus.uv_[0] - locus.perp_[0] * duv,
+                   locus.uv_[1] - locus.perp_[1] * duv);
 }
 
 auto BuildBradfordCAT(const cv::Vec2d& src_xy, const cv::Vec2d& dst_xy) -> cv::Matx33d {

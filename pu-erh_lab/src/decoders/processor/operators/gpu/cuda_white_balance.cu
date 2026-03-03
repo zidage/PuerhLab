@@ -21,12 +21,14 @@
 namespace puerhlab {
 namespace CUDA {
 
-__constant__ float d_black_level[4];
-__constant__ float d_wb_multipliers[4];
+struct WBParams {
+  float black_level[4];
+  float wb_multipliers[4];
+};
 
 __constant__ int   remap[4] = {0, 1, 3, 2};
 __global__ void ToLinearRefKernel(cv::cuda::PtrStep<float> image, int width, int height,
-                                             float white_level_scale) {
+                                             float white_level_scale, WBParams wb_params) {
   // Calculate the global x and y coordinates of the pixel for this thread
   const int col = blockIdx.x * blockDim.x + threadIdx.x;
   const int row = blockIdx.y * blockDim.y + threadIdx.y;
@@ -50,11 +52,11 @@ __global__ void ToLinearRefKernel(cv::cuda::PtrStep<float> image, int width, int
   float     pixel_val = image(row, col);
 
   // 2. Black Level Subtraction
-  pixel_val -= d_black_level[color_idx];
+  pixel_val -= wb_params.black_level[color_idx];
 
   // The multipliers are normalized to the green channel (index 1)
   float       mask   = (color_idx == 0 || color_idx == 2) ? 1.0f : 0.0f;
-  const float wb_mul = (d_wb_multipliers[color_idx] / d_wb_multipliers[1]) * mask + (1.0f - mask);
+  const float wb_mul = (wb_params.wb_multipliers[color_idx] / wb_params.wb_multipliers[1]) * mask + (1.0f - mask);
   pixel_val *= wb_mul;
 
   // 4. White Level Scaling (Normalization)
@@ -114,10 +116,12 @@ void ToLinearRef(cv::cuda::GpuMat& image, LibRaw& raw_processor) {
 
     // --- Full Processing Path ---
 
-    // 1. Copy black level and WB data from host to GPU's __constant__ memory.
-    // This is very fast and efficient for small, read-only data.
-    CUDA_CHECK(cudaMemcpyToSymbol(d_black_level, black_level.data(), sizeof(float) * 4));
-    CUDA_CHECK(cudaMemcpyToSymbol(d_wb_multipliers, wb, sizeof(float) * 4));
+    // 1. Build per-invocation WB parameters (passed as kernel args, thread-safe).
+    WBParams wb_params = {};
+    for (int c = 0; c < 4; ++c) {
+      wb_params.black_level[c]    = black_level[c];
+      wb_params.wb_multipliers[c] = wb[c];
+    }
 
     // 2. Define CUDA kernel launch grid dimensions
     const dim3 threads_per_block(32, 32);
@@ -126,7 +130,7 @@ void ToLinearRef(cv::cuda::GpuMat& image, LibRaw& raw_processor) {
 
     // 3. Launch the kernel
     ToLinearRefKernel<<<num_blocks, threads_per_block>>>(image, image.cols, image.rows,
-                                                                    maximum);
+                                                                    maximum, wb_params);
 
     // Check for any kernel launch errors (important for debugging)
     CUDA_CHECK(cudaGetLastError());

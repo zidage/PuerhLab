@@ -34,8 +34,6 @@ constexpr float kHuge  = 1.6e16f;
 constexpr float kThobyK1 = 1.47f;
 constexpr float kThobyK2 = 0.713f;
 
-__constant__ LensCalibGpuParams c_lens_params;
-
 struct CropRectPx {
   float left   = 0.0f;
   float right  = 0.0f;
@@ -81,24 +79,24 @@ auto ResolveCropRectPxHost(const LensCalibGpuParams& params) -> CropRectPx {
   return rect;
 }
 
-__device__ auto ResolveCropRectPxDevice() -> CropRectPx {
+__device__ auto ResolveCropRectPxDevice(const LensCalibGpuParams& p) -> CropRectPx {
   CropRectPx rect{};
-  const float width  = static_cast<float>(c_lens_params.dst_width);
-  const float height = static_cast<float>(c_lens_params.dst_height);
+  const float width  = static_cast<float>(p.dst_width);
+  const float height = static_cast<float>(p.dst_height);
   if (width <= 0.0f || height <= 0.0f) {
     return rect;
   }
 
-  if (c_lens_params.dst_width >= c_lens_params.dst_height) {
-    rect.left   = c_lens_params.crop_bounds[0] * width;
-    rect.right  = c_lens_params.crop_bounds[1] * width;
-    rect.top    = c_lens_params.crop_bounds[2] * height;
-    rect.bottom = c_lens_params.crop_bounds[3] * height;
+  if (p.dst_width >= p.dst_height) {
+    rect.left   = p.crop_bounds[0] * width;
+    rect.right  = p.crop_bounds[1] * width;
+    rect.top    = p.crop_bounds[2] * height;
+    rect.bottom = p.crop_bounds[3] * height;
   } else {
-    rect.left   = c_lens_params.crop_bounds[2] * width;
-    rect.right  = c_lens_params.crop_bounds[3] * width;
-    rect.top    = c_lens_params.crop_bounds[0] * height;
-    rect.bottom = c_lens_params.crop_bounds[1] * height;
+    rect.left   = p.crop_bounds[2] * width;
+    rect.right  = p.crop_bounds[3] * width;
+    rect.top    = p.crop_bounds[0] * height;
+    rect.bottom = p.crop_bounds[1] * height;
   }
 
   if (rect.left > rect.right) {
@@ -110,14 +108,14 @@ __device__ auto ResolveCropRectPxDevice() -> CropRectPx {
   return rect;
 }
 
-__device__ auto PixelToNormalized(float x, float y) -> float2 {
-  return make_float2(x * c_lens_params.norm_scale - c_lens_params.center_x,
-                     y * c_lens_params.norm_scale - c_lens_params.center_y);
+__device__ auto PixelToNormalized(float x, float y, const LensCalibGpuParams& p) -> float2 {
+  return make_float2(x * p.norm_scale - p.center_x,
+                     y * p.norm_scale - p.center_y);
 }
 
-__device__ auto NormalizedToPixel(const float2& p) -> float2 {
-  return make_float2((p.x + c_lens_params.center_x) * c_lens_params.norm_unscale,
-                     (p.y + c_lens_params.center_y) * c_lens_params.norm_unscale);
+__device__ auto NormalizedToPixel(const float2& pt, const LensCalibGpuParams& p) -> float2 {
+  return make_float2((pt.x + p.center_x) * p.norm_unscale,
+                     (pt.y + p.center_y) * p.norm_unscale);
 }
 
 __device__ auto SafeAtan2(float y, float x) -> float {
@@ -386,12 +384,12 @@ __device__ auto ConvertERectToProjection(const float2& in, LensCalibProjectionTy
   }
 }
 
-__device__ auto ApplyProjectionTransform(const float2& in) -> float2 {
-  if (c_lens_params.apply_projection == 0) {
+__device__ auto ApplyProjectionTransform(const float2& in, const LensCalibGpuParams& p) -> float2 {
+  if (p.apply_projection == 0) {
     return in;
   }
-  const auto target = static_cast<LensCalibProjectionType>(c_lens_params.target_projection);
-  const auto source = static_cast<LensCalibProjectionType>(c_lens_params.source_projection);
+  const auto target = static_cast<LensCalibProjectionType>(p.target_projection);
+  const auto source = static_cast<LensCalibProjectionType>(p.source_projection);
   if (target == LensCalibProjectionType::UNKNOWN || source == LensCalibProjectionType::UNKNOWN ||
       target == source) {
     return in;
@@ -400,32 +398,32 @@ __device__ auto ApplyProjectionTransform(const float2& in) -> float2 {
   return ConvertERectToProjection(erect, source);
 }
 
-__device__ auto ApplyDistortion(const float2& in) -> float2 {
-  if (c_lens_params.apply_distortion == 0) {
+__device__ auto ApplyDistortion(const float2& in, const LensCalibGpuParams& p) -> float2 {
+  if (p.apply_distortion == 0) {
     return in;
   }
 
-  const auto model = static_cast<LensCalibDistortionModel>(c_lens_params.distortion_model);
+  const auto model = static_cast<LensCalibDistortionModel>(p.distortion_model);
   const float x    = in.x;
   const float y    = in.y;
   const float ru2  = x * x + y * y;
 
   switch (model) {
     case LensCalibDistortionModel::POLY3: {
-      const float k1   = c_lens_params.distortion_terms[0];
+      const float k1   = p.distortion_terms[0];
       const float poly = 1.0f + k1 * ru2;
       return make_float2(x * poly, y * poly);
     }
     case LensCalibDistortionModel::POLY5: {
-      const float k1   = c_lens_params.distortion_terms[0];
-      const float k2   = c_lens_params.distortion_terms[1];
+      const float k1   = p.distortion_terms[0];
+      const float k2   = p.distortion_terms[1];
       const float poly = 1.0f + k1 * ru2 + k2 * ru2 * ru2;
       return make_float2(x * poly, y * poly);
     }
     case LensCalibDistortionModel::PTLENS: {
-      const float a    = c_lens_params.distortion_terms[0];
-      const float b    = c_lens_params.distortion_terms[1];
-      const float c    = c_lens_params.distortion_terms[2];
+      const float a    = p.distortion_terms[0];
+      const float b    = p.distortion_terms[1];
+      const float c    = p.distortion_terms[2];
       const float r    = sqrtf(ru2);
       const float poly = a * ru2 * r + b * ru2 + c * r + 1.0f;
       return make_float2(x * poly, y * poly);
@@ -436,29 +434,29 @@ __device__ auto ApplyDistortion(const float2& in) -> float2 {
   }
 }
 
-__device__ void ApplyTca(const float2& in, float2& red, float2& blue) {
+__device__ void ApplyTca(const float2& in, float2& red, float2& blue, const LensCalibGpuParams& p) {
   red  = in;
   blue = in;
-  if (c_lens_params.apply_tca == 0) {
+  if (p.apply_tca == 0) {
     return;
   }
 
-  const auto model = static_cast<LensCalibTCAModel>(c_lens_params.tca_model);
+  const auto model = static_cast<LensCalibTCAModel>(p.tca_model);
   switch (model) {
     case LensCalibTCAModel::LINEAR: {
-      const float k_r = c_lens_params.tca_terms[0];
-      const float k_b = c_lens_params.tca_terms[1];
+      const float k_r = p.tca_terms[0];
+      const float k_b = p.tca_terms[1];
       red             = make_float2(in.x * k_r, in.y * k_r);
       blue            = make_float2(in.x * k_b, in.y * k_b);
       return;
     }
     case LensCalibTCAModel::POLY3: {
-      const float vr  = c_lens_params.tca_terms[0];
-      const float vb  = c_lens_params.tca_terms[1];
-      const float cr  = c_lens_params.tca_terms[2];
-      const float cb  = c_lens_params.tca_terms[3];
-      const float br  = c_lens_params.tca_terms[4];
-      const float bb  = c_lens_params.tca_terms[5];
+      const float vr  = p.tca_terms[0];
+      const float vb  = p.tca_terms[1];
+      const float cr  = p.tca_terms[2];
+      const float cb  = p.tca_terms[3];
+      const float br  = p.tca_terms[4];
+      const float bb  = p.tca_terms[5];
       const float r2  = in.x * in.x + in.y * in.y;
       const float rr  = sqrtf(r2);
       const float fr  = br * r2 + cr * rr + vr;
@@ -522,10 +520,10 @@ __device__ auto BilinearSampleChannel(const cv::cuda::PtrStepSz<float4>& src, fl
   }
 }
 
-__device__ auto ApplyScaleAndPerspective(const float2& in) -> float2 {
+__device__ auto ApplyScaleAndPerspective(const float2& in, const LensCalibGpuParams& p) -> float2 {
   float2 out = in;
-  if (std::fabs(c_lens_params.resolved_scale) > kEps) {
-    const float inv_scale = 1.0f / c_lens_params.resolved_scale;
+  if (std::fabs(p.resolved_scale) > kEps) {
+    const float inv_scale = 1.0f / p.resolved_scale;
     out.x *= inv_scale;
     out.y *= inv_scale;
   }
@@ -533,11 +531,11 @@ __device__ auto ApplyScaleAndPerspective(const float2& in) -> float2 {
   return out;
 }
 
-__device__ auto ApplyCircleCropAlpha(const float4& in, int x, int y) -> float4 {
-  if (c_lens_params.apply_crop_circle == 0) {
+__device__ auto ApplyCircleCropAlpha(const float4& in, int x, int y, const LensCalibGpuParams& p) -> float4 {
+  if (p.apply_crop_circle == 0) {
     return in;
   }
-  const CropRectPx rect = ResolveCropRectPxDevice();
+  const CropRectPx rect = ResolveCropRectPxDevice(p);
   const float left      = rect.left;
   const float right     = rect.right;
   const float top       = rect.top;
@@ -562,20 +560,20 @@ __device__ auto ApplyCircleCropAlpha(const float4& in, int x, int y) -> float4 {
   return in;
 }
 
-__global__ void LensVignettingKernel(cv::cuda::PtrStepSz<float4> image) {
+__global__ void LensVignettingKernel(cv::cuda::PtrStepSz<float4> image, LensCalibGpuParams p) {
   const int x = blockIdx.x * blockDim.x + threadIdx.x;
   const int y = blockIdx.y * blockDim.y + threadIdx.y;
   if (x >= image.cols || y >= image.rows) {
     return;
   }
 
-  const float2 p = PixelToNormalized(static_cast<float>(x), static_cast<float>(y));
-  const float  r2 = p.x * p.x + p.y * p.y;
+  const float2 pt = PixelToNormalized(static_cast<float>(x), static_cast<float>(y), p);
+  const float  r2 = pt.x * pt.x + pt.y * pt.y;
   const float  r4 = r2 * r2;
   const float  r6 = r4 * r2;
-  const float  c  = 1.0f + c_lens_params.vignetting_terms[0] * r2 +
-                   c_lens_params.vignetting_terms[1] * r4 +
-                   c_lens_params.vignetting_terms[2] * r6;
+  const float  c  = 1.0f + p.vignetting_terms[0] * r2 +
+                   p.vignetting_terms[1] * r4 +
+                   p.vignetting_terms[2] * r6;
   const float gain = (std::fabs(c) > kEps) ? (1.0f / c) : 1.0f;
 
   float4 pix = image(y, x);
@@ -589,28 +587,29 @@ __global__ void LensVignettingKernel(cv::cuda::PtrStepSz<float4> image) {
 // 1) scaling, 2) perspective (stub), 3) projection conversion,
 // 4) distortion, 5) TCA, 6) sampling from source.
 __global__ void LensWarpGeometryTcaKernel(const cv::cuda::PtrStepSz<float4> src,
-                                          cv::cuda::PtrStepSz<float4> dst) {
+                                          cv::cuda::PtrStepSz<float4> dst,
+                                          LensCalibGpuParams p) {
   const int x = blockIdx.x * blockDim.x + threadIdx.x;
   const int y = blockIdx.y * blockDim.y + threadIdx.y;
   if (x >= dst.cols || y >= dst.rows) {
     return;
   }
 
-  float2 g = PixelToNormalized(static_cast<float>(x), static_cast<float>(y));
-  g        = ApplyScaleAndPerspective(g);
-  g        = ApplyProjectionTransform(g);
-  g        = ApplyDistortion(g);
+  float2 g = PixelToNormalized(static_cast<float>(x), static_cast<float>(y), p);
+  g        = ApplyScaleAndPerspective(g, p);
+  g        = ApplyProjectionTransform(g, p);
+  g        = ApplyDistortion(g, p);
 
   float2 r = g;
   float2 b = g;
-  ApplyTca(g, r, b);
+  ApplyTca(g, r, b, p);
 
-  const float2 gp = NormalizedToPixel(g);
-  const float2 rp = NormalizedToPixel(r);
-  const float2 bp = NormalizedToPixel(b);
+  const float2 gp = NormalizedToPixel(g, p);
+  const float2 rp = NormalizedToPixel(r, p);
+  const float2 bp = NormalizedToPixel(b, p);
 
   float4 out{};
-  if (c_lens_params.apply_tca != 0) {
+  if (p.apply_tca != 0) {
     out.x = BilinearSampleChannel(src, rp.x, rp.y, 0);
     out.y = BilinearSampleChannel(src, gp.x, gp.y, 1);
     out.z = BilinearSampleChannel(src, bp.x, bp.y, 2);
@@ -619,7 +618,7 @@ __global__ void LensWarpGeometryTcaKernel(const cv::cuda::PtrStepSz<float4> src,
     out = BilinearSample(src, gp.x, gp.y);
   }
 
-  out      = ApplyCircleCropAlpha(out, x, y);
+  out      = ApplyCircleCropAlpha(out, x, y, p);
   dst(y, x) = out;
 }
 
@@ -719,20 +718,18 @@ void ApplyLensCalibration(cv::cuda::GpuMat& image, const LensCalibGpuParams& par
     return;
   }
 
-  CUDA_CHECK(cudaMemcpyToSymbol(c_lens_params, &launch, sizeof(LensCalibGpuParams)));
-
   const dim3 block(16, 16);
   const dim3 grid((image.cols + block.x - 1) / block.x, (image.rows + block.y - 1) / block.y);
 
   if (has_vignetting) {
-    LensVignettingKernel<<<grid, block>>>(image);
+    LensVignettingKernel<<<grid, block>>>(image, launch);
     CUDA_CHECK(cudaGetLastError());
     CUDA_CHECK(cudaDeviceSynchronize());
   }
 
   if (has_warp) {
     cv::cuda::GpuMat warped(image.rows, image.cols, image.type());
-    LensWarpGeometryTcaKernel<<<grid, block>>>(image, warped);
+    LensWarpGeometryTcaKernel<<<grid, block>>>(image, warped, launch);
     CUDA_CHECK(cudaGetLastError());
     CUDA_CHECK(cudaDeviceSynchronize());
     image = std::move(warped);

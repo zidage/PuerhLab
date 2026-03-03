@@ -33,8 +33,10 @@ constexpr float kHilightMagic = 0.987f;  // default value from darktable
 constexpr float kHLPowerF     = 3.0f;
 constexpr float kInvHLPowerF  = 1.0f / kHLPowerF;
 
-__constant__ float d_correction[4];
-__constant__ float d_chrominance[4];
+struct HighlightCorrectionParams {
+  float correction[4];
+  float chrominance[4];
+};
 
 __device__ __forceinline__ int FC(const int y, const int x) {
   // Matches CPU highlight_reconstruct.cpp's hard-coded pattern:
@@ -65,7 +67,8 @@ __device__ __forceinline__ uint8_t MaskDilate(const uint8_t* in, const int w1) {
 }
 
 __device__ __forceinline__ float CalcRefavg(const cv::cuda::PtrStep<float> in, const int row,
-                                            const int col, const int height, const int width) {
+                                            const int col, const int height, const int width,
+                                            const float* correction) {
   const int color = FC(row, col);
   float     mean[3] = {0.0f, 0.0f, 0.0f};
   float     cnt[3]  = {0.0f, 0.0f, 0.0f};
@@ -85,7 +88,7 @@ __device__ __forceinline__ float CalcRefavg(const cv::cuda::PtrStep<float> in, c
   }
 
   for (int c = 0; c < 3; ++c) {
-    mean[c] = (cnt[c] > 0.0f) ? powf(d_correction[c] * mean[c] / cnt[c], kInvHLPowerF) : 0.0f;
+    mean[c] = (cnt[c] > 0.0f) ? powf(correction[c] * mean[c] / cnt[c], kInvHLPowerF) : 0.0f;
   }
 
   const float croot_refavg[3] = {0.5f * (mean[1] + mean[2]), 0.5f * (mean[0] + mean[2]),
@@ -153,7 +156,7 @@ __global__ void DilateMaskKernel(uint8_t* mask_buf, int m_width, int m_height, i
 __global__ void ChrominanceAccumulateKernel(cv::cuda::PtrStep<float> input, int width, int height,
                                             const uint8_t* mask_buf, int m_width, int m_size,
                                             float clip_val, float lo_clip_val, float* sums,
-                                            float* cnts) {
+                                            float* cnts, HighlightCorrectionParams hl_params) {
   const int col = blockIdx.x * blockDim.x + threadIdx.x;
   const int row = blockIdx.y * blockDim.y + threadIdx.y;
 
@@ -165,14 +168,15 @@ __global__ void ChrominanceAccumulateKernel(cv::cuda::PtrStep<float> input, int 
 
   if ((inval < clip_val) && (inval > lo_clip_val) &&
       mask_buf[(color + 3) * m_size + RawToCmap(m_width, row, col)]) {
-    const float ref = CalcRefavg(input, row, col, height, width);
+    const float ref = CalcRefavg(input, row, col, height, width, hl_params.correction);
     atomicAdd(&sums[color], inval - ref);
     atomicAdd(&cnts[color], 1.0f);
   }
 }
 
 __global__ void HighlightReconstructKernel(cv::cuda::PtrStep<float> input, cv::cuda::PtrStep<float> out,
-                                           int width, int height, float clip_val) {
+                                           int width, int height, float clip_val,
+                                           HighlightCorrectionParams hl_params) {
   const int col = blockIdx.x * blockDim.x + threadIdx.x;
   const int row = blockIdx.y * blockDim.y + threadIdx.y;
 
@@ -182,8 +186,8 @@ __global__ void HighlightReconstructKernel(cv::cuda::PtrStep<float> input, cv::c
   const float inval = fmaxf(0.0f, input(row, col));
 
   if (inval >= clip_val) {
-    const float ref = CalcRefavg(input, row, col, height, width);
-    out(row, col)   = fmaxf(inval, ref + d_chrominance[color]);
+    const float ref = CalcRefavg(input, row, col, height, width, hl_params.correction);
+    out(row, col)   = fmaxf(inval, ref + hl_params.chrominance[color]);
   } else {
     out(row, col) = inval;
   }
@@ -212,8 +216,11 @@ void HighlightReconstruct(cv::cuda::GpuMat& img, LibRaw& raw_processor) {
   const int height = img.rows;
 
   const float* cam_mul = raw_processor.imgdata.color.cam_mul;
-  float        correction[4] = {cam_mul[0] / cam_mul[1], 1.0f, cam_mul[2] / cam_mul[1], 0.0f};
-  CUDA_CHECK(cudaMemcpyToSymbol(d_correction, correction, sizeof(float) * 4));
+  HighlightCorrectionParams hl_params = {};
+  hl_params.correction[0] = cam_mul[0] / cam_mul[1];
+  hl_params.correction[1] = 1.0f;
+  hl_params.correction[2] = cam_mul[2] / cam_mul[1];
+  hl_params.correction[3] = 0.0f;
 
   const float clip_val = kHilightMagic;
 
@@ -266,7 +273,7 @@ void HighlightReconstruct(cv::cuda::GpuMat& img, LibRaw& raw_processor) {
     const dim3  threads(32, 32);
     const dim3  blocks((width + threads.x - 1) / threads.x, (height + threads.y - 1) / threads.y);
     ChrominanceAccumulateKernel<<<blocks, threads>>>(img, width, height, d_mask_buf, m_width, m_size,
-                                                     clip_val, lo_clip_val, d_sums, d_cnts);
+                                                     clip_val, lo_clip_val, d_sums, d_cnts, hl_params);
     CUDA_CHECK(cudaGetLastError());
     CUDA_CHECK(cudaDeviceSynchronize());
   }
@@ -276,11 +283,9 @@ void HighlightReconstruct(cv::cuda::GpuMat& img, LibRaw& raw_processor) {
   CUDA_CHECK(cudaMemcpy(sums.data(), d_sums, sizeof(float) * 4, cudaMemcpyDeviceToHost));
   CUDA_CHECK(cudaMemcpy(cnts.data(), d_cnts, sizeof(float) * 4, cudaMemcpyDeviceToHost));
 
-  float chrominance[4] = {0.f, 0.f, 0.f, 0.f};
   for (int c = 0; c < 3; ++c) {
-    chrominance[c] = (cnts[c] > 80.0f) ? (sums[c] / cnts[c]) : 0.0f;
+    hl_params.chrominance[c] = (cnts[c] > 80.0f) ? (sums[c] / cnts[c]) : 0.0f;
   }
-  CUDA_CHECK(cudaMemcpyToSymbol(d_chrominance, chrominance, sizeof(float) * 4));
 
   cv::cuda::GpuMat result;
   result.create(img.size(), img.type());
@@ -288,7 +293,7 @@ void HighlightReconstruct(cv::cuda::GpuMat& img, LibRaw& raw_processor) {
   {
     const dim3 threads(32, 32);
     const dim3 blocks((width + threads.x - 1) / threads.x, (height + threads.y - 1) / threads.y);
-    HighlightReconstructKernel<<<blocks, threads>>>(img, result, width, height, clip_val);
+    HighlightReconstructKernel<<<blocks, threads>>>(img, result, width, height, clip_val, hl_params);
     CUDA_CHECK(cudaGetLastError());
     CUDA_CHECK(cudaDeviceSynchronize());
   }

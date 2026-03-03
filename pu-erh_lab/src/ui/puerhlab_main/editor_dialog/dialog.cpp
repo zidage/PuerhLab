@@ -518,6 +518,7 @@ class EditorDialog final : public QDialog {
     RefreshPanelSwitchUi();
     if (pipeline_initialized_) {
       RequestRender();
+      ScheduleQualityPreviewRenderFromPipeline();
     }
   }
 
