@@ -99,7 +99,7 @@ The top-level CMake currently requires/resolves:
 - Core libs: `OpenCV`, `Eigen3`, `OpenGL`, `glad`, `hwy`, `lcms2`, `OpenColorIO`, `OpenImageIO`, `libraw`, `xxHash`
 - Parallelism/testing: `OpenMP`, `googletest` (via `FetchContent`)
 - Windows-specific profiling: `easy_profiler`
-- Local third-party imported binaries: DuckDB from `pu-erh_lab/third_party/libduckdb-windows` (fallback Exiv2 path is also defined)
+- Local third-party imported binaries: DuckDB from `pu-erh_lab/third_party/libduckdb-windows` (fallback Exiv2 path is also defined), lensfun (you have to compile locally and place it in thrid_party `pu-erh_lab/third_party` and set `PUERHLAB_LENSFUN_ROOT` to its install prefix `include/lib/bin`.
 
 ### 3) Configure and Build
 
