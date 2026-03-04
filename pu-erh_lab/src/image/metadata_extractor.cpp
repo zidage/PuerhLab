@@ -355,7 +355,13 @@ auto CameraColorMatrixDatabaseSorted() -> const std::vector<CameraColorMatrixEnt
       out.push_back(std::move(entry));
     }
 
-    // Source array is already sorted lexicographically; deduplicate only.
+    // Normalization can change ordering (e.g. "7D" -> "7 d"), so sort before binary search.
+    std::sort(out.begin(), out.end(),
+              [](const CameraColorMatrixEntry& a, const CameraColorMatrixEntry& b) {
+                return a.name_ < b.name_;
+              });
+
+    // Deduplicate normalized keys while keeping the first matrix entry.
     out.erase(std::unique(out.begin(), out.end(),
                           [](const CameraColorMatrixEntry& a, const CameraColorMatrixEntry& b) {
                             return a.name_ == b.name_;
