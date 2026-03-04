@@ -25,7 +25,6 @@ Menu {
         }
         onObjectRemoved: function(index, object) {
             root.removeItem(object)
-            object.destroy()
         }
     }
 }

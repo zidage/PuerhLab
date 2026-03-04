@@ -70,11 +70,13 @@ auto ImportServiceImpl::ImportToFolder(const std::vector<image_path_t>& paths,
       }
       continue;
     }
+    const std::wstring file_name = image_path.filename().wstring();
+
     std::shared_ptr<SleeveElement> element = nullptr;
     try {
       element = fs_service_->Write_NoSync<std::shared_ptr<SleeveElement>>(
-          [&dest, &image_path](FileSystem& fs) {
-            return fs.Create(dest, image_path.filename(), ElementType::FILE);
+          [&dest, &file_name](FileSystem& fs) {
+            return fs.Create(dest, file_name, ElementType::FILE);
           });
     } catch (...) {
       progress_ptr->failed_.fetch_add(1);
@@ -108,7 +110,7 @@ auto ImportServiceImpl::ImportToFolder(const std::vector<image_path_t>& paths,
         std::make_shared<ImagePoolManager::PinnedImageHandle>(std::move(image_handler));
     auto  image_ptr = image_handler_ptr->Get();
     image_ptr->image_path_ = image_path;
-    image_ptr->image_name_ = image_path.filename().wstring();
+    image_ptr->image_name_ = file_name;
     // TODO: Parse image type for future use
 
     // Link the image to the SleeveFile
@@ -116,7 +118,7 @@ auto ImportServiceImpl::ImportToFolder(const std::vector<image_path_t>& paths,
     progress_ptr->placeholders_created_.fetch_add(1);
     if (import_log) {
       import_log->AddPlaceholder(image_ptr->image_id_, sleeve_file->element_id_,
-                                 image_path.filename().wstring());
+                                 file_name);
     }
 
     any_threadpool_submission = true;

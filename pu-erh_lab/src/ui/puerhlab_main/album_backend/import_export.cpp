@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <thread>
 #include <unordered_set>
+#include <utility>
 
 namespace puerhlab::ui {
 
@@ -446,13 +447,24 @@ auto ImportExportHandler::BuildExportQueue(
     return summary;
   }
 
+  std::unordered_set<std::wstring> planned_export_paths;
+  planned_export_paths.reserve(targets.size() * 2 + 1);
+
   for (const auto& [elementId, imageId] : targets) {
     try {
-      const auto srcPath = proj->GetImagePoolService()->Read<std::filesystem::path>(
+      const auto source_info = proj->GetImagePoolService()->Read<std::pair<std::filesystem::path, std::wstring>>(
           imageId,
           [](const std::shared_ptr<Image>& image) {
-            return image ? image->image_path_ : image_path_t{};
+            if (!image) {
+              return std::pair<std::filesystem::path, std::wstring>{};
+            }
+            std::wstring image_name = image->image_name_;
+            if (image_name.empty() && !image->image_path_.empty()) {
+              image_name = image->image_path_.filename().wstring();
+            }
+            return std::make_pair(image->image_path_, std::move(image_name));
           });
+      const auto& srcPath = source_info.first;
       if (srcPath.empty()) {
         ++summary.skipped_count_;
         if (summary.first_error_.isEmpty()) {
@@ -460,6 +472,38 @@ auto ImportExportHandler::BuildExportQueue(
         }
         continue;
       }
+
+      std::filesystem::path name_source_path;
+      if (!source_info.second.empty()) {
+        name_source_path = std::filesystem::path(source_info.second).filename();
+      }
+      if (name_source_path.empty()) {
+        name_source_path = srcPath.filename();
+      }
+      if (name_source_path.empty()) {
+        name_source_path = std::filesystem::path(L"image");
+      }
+
+      auto       export_path = ExportPathForOptions(name_source_path, outputDir, elementId, imageId, format);
+      const auto path_exists = [](const std::filesystem::path& p) {
+        std::error_code ec;
+        return std::filesystem::exists(p, ec);
+      };
+      if (planned_export_paths.contains(export_path.wstring()) || path_exists(export_path)) {
+        const std::wstring stem = export_path.stem().wstring();
+        const std::wstring ext  = export_path.extension().wstring();
+        int                suffix_idx = 1;
+        while (true) {
+          const auto candidate =
+              outputDir / (stem + L" (" + std::to_wstring(suffix_idx) + L")" + ext);
+          if (!planned_export_paths.contains(candidate.wstring()) && !path_exists(candidate)) {
+            export_path = candidate;
+            break;
+          }
+          ++suffix_idx;
+        }
+      }
+      planned_export_paths.insert(export_path.wstring());
 
       ExportTask task;
       task.sleeve_id_                  = elementId;
@@ -471,8 +515,7 @@ auto ImportExportHandler::BuildExportQueue(
       task.options_.bit_depth_         = bitDepth;
       task.options_.compression_level_ = pngCompressionLevel;
       task.options_.tiff_compress_     = tiffCompression;
-      task.options_.export_path_ =
-          ExportPathForOptions(srcPath, outputDir, elementId, imageId, format);
+      task.options_.export_path_       = std::move(export_path);
 
       esvc->EnqueueExportTask(task);
       ++summary.queued_count_;

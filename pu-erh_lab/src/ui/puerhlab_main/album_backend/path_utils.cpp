@@ -237,15 +237,15 @@ auto ExportPathForOptions(const std::filesystem::path& srcPath,
                           const std::filesystem::path& outDir,
                           sl_element_id_t elementId, image_id_t imageId,
                           ImageFormatType format) -> std::filesystem::path {
+  (void)elementId;
+  (void)imageId;
+
   std::wstring stem = srcPath.stem().wstring();
   if (stem.empty()) {
     stem = L"image";
   }
-  const std::string suffix = "_" + std::to_string(static_cast<uint64_t>(elementId)) + "_" +
-                             std::to_string(static_cast<uint64_t>(imageId));
   const std::string ext = ExtensionForExportFormat(format);
-  return outDir / (stem + std::wstring(suffix.begin(), suffix.end()) +
-                   std::wstring(ext.begin(), ext.end()));
+  return outDir / (stem + std::wstring(ext.begin(), ext.end()));
 }
 
 auto ListCubeLutsInDir(const std::filesystem::path& dir) -> std::vector<std::filesystem::path> {

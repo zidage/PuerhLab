@@ -486,4 +486,63 @@ TEST_F(ImportServiceTests, ImportToNonExistentDestination) {
   EXPECT_NO_THROW(import_service->SyncImports(snapshot, non_existent_dest));
 }
 
+// Verify that after import, element names and image names match the original
+// file names exactly (not "Element#*" or similar placeholders).
+TEST_F(ImportServiceTests, ImportedElementNameMatchesFileName) {
+  ProjectService                 project(db_path_, meta_path_);
+  auto                           fs_service       = project.GetSleeveService();
+  auto                           img_pool_service = project.GetImagePoolService();
+
+  std::unique_ptr<ImportService> import_service =
+      std::make_unique<ImportServiceImpl>(fs_service, img_pool_service);
+
+  // Import a single known image
+  const std::filesystem::path test_image_path =
+      std::filesystem::path(TEST_IMG_PATH) / "raw" / "airplane" / "_DSC1704.NEF";
+  const std::wstring expected_name = test_image_path.filename().wstring();
+
+  std::vector<image_path_t>  paths;
+  paths.push_back(test_image_path);
+
+  std::shared_ptr<ImportJob> import_job = std::make_shared<ImportJob>();
+  std::promise<ImportResult> final_result;
+  auto                       final_result_future = final_result.get_future();
+
+  import_job->on_finished_ = [&final_result](const ImportResult& result) {
+    final_result.set_value(result);
+  };
+
+  import_job = import_service->ImportToFolder(paths, L"", {}, import_job);
+  ASSERT_NE(import_job, nullptr);
+
+  final_result_future.wait();
+  ImportResult result = final_result_future.get();
+  ASSERT_EQ(result.imported_, 1);
+
+  // Verify the import log entry has the correct file name
+  auto snapshot = import_job->import_log_->Snapshot();
+  ASSERT_EQ(snapshot.created_.size(), 1u);
+  EXPECT_EQ(snapshot.created_[0].file_name_, expected_name)
+      << "Import log file_name_ should match the original image filename";
+
+  import_service->SyncImports(snapshot, L"");
+
+  // Verify the element stored in SleeveService has the correct name
+  const auto element_id = snapshot.created_[0].element_id_;
+  auto       element    = fs_service->Read<std::shared_ptr<SleeveElement>>(
+      [element_id](FileSystem& fs) { return fs.Get(element_id); });
+  ASSERT_NE(element, nullptr);
+  EXPECT_EQ(element->element_name_, expected_name)
+      << "Element name should match the original image filename, not a "
+         "placeholder like Element#*";
+
+  // Verify the image stored in ImagePoolService has the correct name
+  const auto image_id = snapshot.created_[0].image_id_;
+  auto       img_name = img_pool_service->Read<std::wstring>(
+      image_id,
+      [](std::shared_ptr<Image> img) -> std::wstring { return img->image_name_; });
+  EXPECT_EQ(img_name, expected_name)
+      << "Image name should match the original image filename";
+}
+
 };  // namespace puerhlab

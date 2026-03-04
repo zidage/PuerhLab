@@ -169,6 +169,35 @@ constexpr float kCdlWheelStrengthDefault = color_wheel::kStrengthDefault;
 auto ColorTempSliderPosToCct(int pos) -> float { return color_temp::SliderPosToCct(pos); }
 auto ColorTempCctToSliderPos(float cct) -> int { return color_temp::CctToSliderPos(cct); }
 
+auto ResolveEditorWindowTitle(const std::shared_ptr<ImagePoolService>& image_pool,
+                              image_id_t image_id,
+                              sl_element_id_t element_id) -> QString {
+  if (image_pool && image_id != 0) {
+    try {
+      const std::wstring image_name = image_pool->Read<std::wstring>(
+          image_id,
+          [](const std::shared_ptr<Image>& image) -> std::wstring {
+            if (!image) {
+              return {};
+            }
+            if (!image->image_name_.empty()) {
+              return image->image_name_;
+            }
+            if (!image->image_path_.empty()) {
+              return image->image_path_.filename().wstring();
+            }
+            return {};
+          });
+      if (!image_name.empty()) {
+        return QString("Editor - %1").arg(QString::fromStdWString(image_name));
+      }
+    } catch (...) {
+    }
+  }
+
+  return QString("Editor - image #%1").arg(static_cast<qulonglong>(element_id));
+}
+
 class EditorDialog final : public QDialog {
  public:
   enum class WorkingMode : int { Incremental = 0, Plain = 1 };
@@ -195,7 +224,7 @@ class EditorDialog final : public QDialog {
     setSizeGripEnabled(true);
     setWindowFlag(Qt::WindowMinMaxButtonsHint, true);
     setWindowFlag(Qt::MSWindowsFixedSizeDialogHint, false);
-    setWindowTitle(QString("Editor - element #%1").arg(static_cast<qulonglong>(element_id_)));
+    setWindowTitle(ResolveEditorWindowTitle(image_pool_, image_id_, element_id_));
     setMinimumSize(1080, 680);
     resize(1500, 1000);
 
