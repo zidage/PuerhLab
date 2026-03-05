@@ -169,6 +169,7 @@ Common binaries after a Debug build:
 
 ```powershell
 .\build\debug\pu-erh_lab\src\puerhlab_main.exe
+.\build\debug\pu-erh_lab\tests\ImagePreview.exe
 ```
 
 ### 6) Tests and Dev Utilities
