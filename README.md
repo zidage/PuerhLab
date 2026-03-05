@@ -104,7 +104,7 @@ This section mirrors the current setup in `CMakeLists.txt`, `pu-erh_lab/tests/CM
 
 Build Lensfun before configuring Pu-erh Lab:
 
-- [docs/technical/lensfun_local_build.md](docs/technical/lensfun_local_build.md)
+- [docs/lensfun_build/lensfun_local_build.md](docs/lensfun_build/lensfun_local_build.md)
 
 ### 4) Configure and Build Pu-erh Lab
 
