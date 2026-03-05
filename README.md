@@ -93,7 +93,7 @@ This section mirrors the current setup in `CMakeLists.txt`, `pu-erh_lab/tests/CM
 
 ### 2) Dependency Layout Used by CMake
 
-- Vendored header/source dependencies: `stduuid`, `uuid_v4`, `UTF8-CPP` (`utfcpp`), `nlohmann/json`, `MurmurHash3`
+- Vendored header/source dependencies: `stduuid`, `uuid_v4`, `UTF8-CPP` (`utfcpp`), `nlohmann/json`, `MurmurHash3` (all these are required to install manually by the user, as they are not included in the repository)
 - Package-managed dependencies (commonly resolved through vcpkg toolchain on Windows): `OpenCV`, `Eigen3`, `OpenGL`, `glad`, `hwy`, `lcms2`, `OpenColorIO`, `OpenImageIO`, `libraw`, `xxHash`, `OpenMP`
 - Test framework: `googletest` (fetched with `FetchContent`)
 - Windows local imported binaries: `DuckDB`, `Exiv2`, `easy_profiler`
