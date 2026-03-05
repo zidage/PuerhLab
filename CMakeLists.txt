@@ -217,59 +217,49 @@ set(PUERHLAB_LENSFUN_ROOT
     CACHE PATH "Lensfun install prefix (must contain include/, lib/, and bin/)")
 
 if (WIN32)
-    # vcpkg-style package if available.
-    find_package(lensfun CONFIG QUIET)
+    # Windows build is pinned to a local Lensfun build under third_party.
+    unset(LENSFUN_INCLUDE_DIR CACHE)
+    unset(LENSFUN_IMPLIB CACHE)
+    unset(LENSFUN_DLL CACHE)
 
-    # Fallback for local source build installs that only provide headers/libs.
-    if (NOT lensfun_FOUND)
-        unset(LENSFUN_INCLUDE_DIR CACHE)
-        unset(LENSFUN_IMPLIB CACHE)
-        unset(LENSFUN_DLL CACHE)
+    find_path(LENSFUN_INCLUDE_DIR
+        NAMES lensfun/lensfun.h
+        PATHS "${PUERHLAB_LENSFUN_ROOT}/include"
+        NO_DEFAULT_PATH
+        NO_CMAKE_FIND_ROOT_PATH
+    )
+    find_library(LENSFUN_IMPLIB
+        NAMES lensfun
+        PATHS "${PUERHLAB_LENSFUN_ROOT}/lib"
+        NO_DEFAULT_PATH
+        NO_CMAKE_FIND_ROOT_PATH
+    )
+    find_file(LENSFUN_DLL
+        NAMES lensfun.dll
+        PATHS "${PUERHLAB_LENSFUN_ROOT}/bin"
+        NO_DEFAULT_PATH
+        NO_CMAKE_FIND_ROOT_PATH
+    )
 
-        find_path(LENSFUN_INCLUDE_DIR
-            NAMES lensfun/lensfun.h
-            PATHS "${PUERHLAB_LENSFUN_ROOT}/include"
-            NO_DEFAULT_PATH
-            NO_CMAKE_FIND_ROOT_PATH
-        )
-        find_library(LENSFUN_IMPLIB
-            NAMES lensfun
-            PATHS "${PUERHLAB_LENSFUN_ROOT}/lib"
-            NO_DEFAULT_PATH
-            NO_CMAKE_FIND_ROOT_PATH
-        )
-        find_file(LENSFUN_DLL
-            NAMES lensfun.dll
-            PATHS "${PUERHLAB_LENSFUN_ROOT}/bin"
-            NO_DEFAULT_PATH
-            NO_CMAKE_FIND_ROOT_PATH
-        )
+    if (NOT LENSFUN_INCLUDE_DIR OR NOT LENSFUN_IMPLIB)
+        message(FATAL_ERROR
+            "Lensfun local build not found. Build pu-erh_lab/third_party/lensfun and set "
+            "PUERHLAB_LENSFUN_ROOT to its install prefix (include/lib/bin).")
+    endif()
 
-        if (NOT LENSFUN_INCLUDE_DIR OR NOT LENSFUN_IMPLIB)
-            message(FATAL_ERROR
-                "Lensfun was not found. Install via vcpkg or set PUERHLAB_LENSFUN_ROOT "
-                "to a valid Lensfun install prefix (include/lib/bin).")
-        endif()
-
-        add_library(lensfun::lensfun SHARED IMPORTED)
+    add_library(lensfun::lensfun SHARED IMPORTED)
+    set_target_properties(lensfun::lensfun PROPERTIES
+        IMPORTED_IMPLIB "${LENSFUN_IMPLIB}"
+        INTERFACE_INCLUDE_DIRECTORIES "${LENSFUN_INCLUDE_DIR}"
+    )
+    if (LENSFUN_DLL)
         set_target_properties(lensfun::lensfun PROPERTIES
-            IMPORTED_IMPLIB "${LENSFUN_IMPLIB}"
-            INTERFACE_INCLUDE_DIRECTORIES "${LENSFUN_INCLUDE_DIR}"
+            IMPORTED_LOCATION "${LENSFUN_DLL}"
         )
-        if (LENSFUN_DLL)
-            set_target_properties(lensfun::lensfun PROPERTIES
-                IMPORTED_LOCATION "${LENSFUN_DLL}"
-            )
-        endif()
     endif()
 
-    if (TARGET lensfun AND NOT TARGET lensfun::lensfun)
-        add_library(lensfun::lensfun ALIAS lensfun)
-    endif()
-    if (TARGET lensfun::lensfun AND NOT TARGET lensfun)
-        add_library(lensfun INTERFACE)
-        target_link_libraries(lensfun INTERFACE lensfun::lensfun)
-    endif()
+    add_library(lensfun INTERFACE)
+    target_link_libraries(lensfun INTERFACE lensfun::lensfun)
 else()
     find_package(lensfun QUIET)
     if (NOT lensfun_FOUND AND NOT TARGET lensfun AND NOT TARGET lensfun::lensfun)
@@ -321,6 +311,7 @@ if(TARGET ${PUERHLAB_MAIN_BIN})
     install(DIRECTORY "${_config_dir}/fonts/" DESTINATION "${CMAKE_INSTALL_BINDIR}/fonts")
     install(DIRECTORY "${_config_dir}/LUTs/"  DESTINATION "${CMAKE_INSTALL_BINDIR}/LUTs")
     install(DIRECTORY "${_config_dir}/lens_calib/" DESTINATION "${CMAKE_INSTALL_BINDIR}/config/lens_calib")
+    install(DIRECTORY "${_config_dir}/nikon_lens/" DESTINATION "${CMAKE_INSTALL_BINDIR}/config/nikon_lens")
 endif()
 
 if(WIN32 AND TARGET ${PUERHLAB_MAIN_BIN})
@@ -483,3 +474,5 @@ set(CPACK_PACKAGE_NAME "pu-erh_lab")
 set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
 set(CPACK_PACKAGE_FILE_NAME "${CPACK_PACKAGE_NAME}-${CPACK_PACKAGE_VERSION}-${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}")
 include(CPack)
+
+

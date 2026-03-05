@@ -79,7 +79,7 @@ Video: [BiliBili](https://www.bilibili.com/video/BV1bPcxzzEeM)
 
 ## Build from Source (Windows Only)
 
-This section is intentionally Windows-focused and mirrors the current build setup in `CMakeLists.txt` and `CMakePresets.json`.
+This section mirrors the current setup in `CMakeLists.txt`, `pu-erh_lab/tests/CMakeLists.txt`, and NOTICE files.
 
 ### 1) Prerequisites
 
@@ -87,21 +87,26 @@ This section is intentionally Windows-focused and mirrors the current build setu
 - Visual Studio 2022 (MSVC toolchain, x64)
 - CMake 3.21+
 - Ninja
-- Qt 6 (MSVC 2022 x64), including modules used by the project
 - Git
-- NVIDIA CUDA Toolkit (enables CUDA targets automatically when found)
+- Qt 6 (MSVC 2022 x64), with `Widgets`, `Quick`, `OpenGL`, `OpenGLWidgets`, and `Test`
+- NVIDIA CUDA Toolkit (optional, but recommended)
 
-### 2) Dependency Resolution in CMake
+### 2) Dependency Layout Used by CMake
 
-The top-level CMake currently requires/resolves:
+- Vendored header/source dependencies: `stduuid`, `uuid_v4`, `UTF8-CPP` (`utfcpp`), `nlohmann/json`, `MurmurHash3`
+- Package-managed dependencies (commonly resolved through vcpkg toolchain on Windows): `OpenCV`, `Eigen3`, `OpenGL`, `glad`, `hwy`, `lcms2`, `OpenColorIO`, `OpenImageIO`, `libraw`, `xxHash`, `OpenMP`
+- Test framework: `googletest` (fetched with `FetchContent`)
+- Windows local imported binaries: `DuckDB`, `Exiv2`, `easy_profiler`
+- Lens correction dependency: `Lensfun` library + database from a local build in `pu-erh_lab/third_party/lensfun/install`
+- Additional required local dependency for Lensfun build: `GLib2` (expected by the vendored Lensfun CMake at `pu-erh_lab/third_party/glib-2.28.1` via `GLIB2_BASE_DIR`). This package is not included in the repository and must be provided manually.
 
-- Qt6: `Widgets`, `Quick`, `OpenGL`, `OpenGLWidgets` (plus app QML module in `src/ui/puerhlab_main/qml`)
-- Core libs: `OpenCV`, `Eigen3`, `OpenGL`, `glad`, `hwy`, `lcms2`, `OpenColorIO`, `OpenImageIO`, `libraw`, `xxHash`
-- Parallelism/testing: `OpenMP`, `googletest` (via `FetchContent`)
-- Windows-specific profiling: `easy_profiler`
-- Local third-party imported binaries: DuckDB from `pu-erh_lab/third_party/libduckdb-windows` (fallback Exiv2 path is also defined), lensfun (you have to compile locally and place it in thrid_party `pu-erh_lab/third_party` and set `PUERHLAB_LENSFUN_ROOT` to its install prefix `include/lib/bin`.
+### 3) Build Lensfun Locally (Required on Windows)
 
-### 3) Configure and Build
+Build Lensfun before configuring Pu-erh Lab:
+
+- [docs/technical/lensfun_local_build.md](docs/technical/lensfun_local_build.md)
+
+### 4) Configure and Build Pu-erh Lab
 
 Clone and initialize submodules:
 
@@ -123,7 +128,8 @@ Adjust the Qt/easy_profiler paths below to your local environment.
 # Debug configure
 .\scripts\msvc_env.cmd --preset win_debug `
   -DCMAKE_PREFIX_PATH="D:/Qt/6.9.3/msvc2022_64/lib/cmake" `
-  -Deasy_profiler_DIR="$PWD/pu-erh_lab/third_party/easy_profiler-v2.1.0-msvc15-win64/lib/cmake/easy_profiler"
+  -Deasy_profiler_DIR="$PWD/pu-erh_lab/third_party/easy_profiler-v2.1.0-msvc15-win64/lib/cmake/easy_profiler" `
+  -DPUERHLAB_LENSFUN_ROOT="$PWD/pu-erh_lab/third_party/lensfun/install"
 
 # Debug build
 .\scripts\msvc_env.cmd --build build/debug --parallel
@@ -133,7 +139,8 @@ Adjust the Qt/easy_profiler paths below to your local environment.
 # Release configure
 .\scripts\msvc_env.cmd --preset win_release `
   -DCMAKE_PREFIX_PATH="D:/Qt/6.9.3/msvc2022_64/lib/cmake" `
-  -Deasy_profiler_DIR="$PWD/pu-erh_lab/third_party/easy_profiler-v2.1.0-msvc15-win64/lib/cmake/easy_profiler"
+  -Deasy_profiler_DIR="$PWD/pu-erh_lab/third_party/easy_profiler-v2.1.0-msvc15-win64/lib/cmake/easy_profiler" `
+  -DPUERHLAB_LENSFUN_ROOT="$PWD/pu-erh_lab/third_party/lensfun/install"
 
 # Release build + install
 .\scripts\msvc_env.cmd --build build/release --parallel
@@ -156,22 +163,51 @@ Create a ZIP package (CPack):
 cpack --config build/release/CPackConfig.cmake
 ```
 
-### 4) Run Demo Binaries
+### 5) Run Main/Demo Binaries
 
-Common demo executables after a Debug build:
+Common binaries after a Debug build:
 
 ```powershell
-.\build\debug\pu-erh_lab\tests\CompleteUIDemo.exe
-.\build\debug\pu-erh_lab\tests\ThumbnailAlbumQtDemo.exe
-.\build\debug\pu-erh_lab\tests\ImagePreview.exe
 .\build\debug\pu-erh_lab\src\puerhlab_main.exe
 ```
 
-### 5) Tests and Dev Utilities
+### 6) Tests and Dev Utilities
 
-- Several tests are currently runnable as standalone executables under `build\debug\pu-erh_lab\tests\`.
-- During app-layer refactoring, some historical unit tests are intentionally disabled in `pu-erh_lab/tests/CMakeLists.txt`.
-- Formatting/lint targets are available (clang-tidy is not fully set up yet):
+Current executable targets in `pu-erh_lab/tests/CMakeLists.txt`:
+
+- `SampleTest`
+- `SingleRawLoad`
+- `SingleThumbnailLoad`
+- `ColorTempCudaSanityTest`
+- `SleeveFSTest`
+- `ImportServiceTest`
+- `SleeveServiceTest`
+- `FilterServiceTest`
+- `PipelineServiceTest`
+- `EditHistoryMgmtServiceTest`
+- `ThumbnailServiceTest`
+- `ExportServiceTest`
+- `AlbumBackendImportTest`
+- `AlbumBackendProjectTest`
+- `AlbumBackendFolderTest`
+- `AlbumBackendImageDeleteTest`
+- `CudaImageGeometryOpsTest` (only when CUDA is found)
+
+CTest-discovered suites currently include `PipelineServiceTest`, `EditHistoryMgmtServiceTest`, and all `AlbumBackend*` targets:
+
+```powershell
+ctest --test-dir build/debug --output-on-failure
+```
+
+Standalone tests can be run directly as executables, for example:
+
+```powershell
+.\build\debug\pu-erh_lab\tests\SampleTest.exe
+```
+
+Some historical unit tests remain intentionally disabled/commented during refactoring.
+
+Formatting/lint targets are available (clang-tidy integration is still partial):
 
 ```powershell
 .\scripts\msvc_env.cmd --build build/debug --target format
@@ -187,3 +223,5 @@ Roadmap and ongoing milestones:
 ## License
 
 Apache-2.0. See [LICENSE](LICENSE).
+
+
