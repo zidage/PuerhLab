@@ -96,7 +96,7 @@ This section is intentionally Windows-focused and mirrors the current build setu
 The top-level CMake currently requires/resolves:
 
 - Qt6: `Widgets`, `Quick`, `OpenGL`, `OpenGLWidgets` (plus app QML module in `src/ui/puerhlab_main/qml`)
-- Core libs: `OpenCV`, `Eigen3`, `OpenGL`, `glad`, `hwy`, `lcms2`, `OpenColorIO`, `OpenImageIO`, `libraw`, `xxHash`
+- Core libs: `OpenCV`, `Eigen3`, `OpenGL`, `glad`, `hwy`, `lcms2`, `OpenColorIO`, `OpenImageIO`, `libraw`, `xxHash`, `utfcpp`, `lensfun`
 - Parallelism/testing: `OpenMP`, `googletest` (via `FetchContent`)
 - Windows-specific profiling: `easy_profiler`
 - Local third-party imported binaries: DuckDB from `pu-erh_lab/third_party/libduckdb-windows` (fallback Exiv2 path is also defined), lensfun (you have to compile locally and place it in thrid_party `pu-erh_lab/third_party` and set `PUERHLAB_LENSFUN_ROOT` to its install prefix `include/lib/bin`.
