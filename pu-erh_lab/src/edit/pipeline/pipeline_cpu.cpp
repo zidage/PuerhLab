@@ -344,10 +344,7 @@ void CPUPipelineExecutor::SetTemplateParams() {
 
   nlohmann::json output_params;
   auto&          output_stage = GetStage(PipelineStageName::Output_Transform);
-  output_params["aces_odt"]   = {{"encoding_space", "rec709"},
-                                 {"encoding_etof", "gamma_2_2"},
-                                 {"limiting_space", "rec709"},
-                                 {"peak_luminance", 100.0f}};
+  output_params               = pipeline_defaults::MakeDefaultODTParams();
   output_stage.SetOperator(OperatorType::ODT, output_params, global_params);
 }
 

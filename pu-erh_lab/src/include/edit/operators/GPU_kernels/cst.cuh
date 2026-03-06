@@ -20,6 +20,7 @@
 #include <vector_functions.h>
 
 #include "color_mgmt/disp_enc_funcs.cuh"
+#include "color_mgmt/open_drt_funcs.cuh"
 #include "color_mgmt/odt_funcs.cuh"
 #include "color_mgmt/util_funcs.cuh"
 #include "edit/operators/op_kernel.hpp"
@@ -224,46 +225,21 @@ struct GPU_LMT_Kernel : GPUPointOpTag {
  */
 struct GPU_OUTPUT_Kernel : GPUPointOpTag {
   __device__ __forceinline__ void operator()(float4* p, GPUOperatorParams& params) const {
+    const float3 aces_linear =
+        make_float3(acescc_decode(p->x), acescc_decode(p->y), acescc_decode(p->z));
 
-    float3 acescc_color = make_float3(p->x, p->y, p->z);
-    // Step 1: Decode ACEScc log to linear AP1
-    float  lin_r     = acescc_decode(acescc_color.x);
-    float  lin_g     = acescc_decode(acescc_color.y);
-    float  lin_b     = acescc_decode(acescc_color.z);
+    float3 odt_color;
+    if (params.to_output_params_.method_ == GPU_ODTMethod::ACES_2_0) {
+      odt_color = OutputTransform_fwd(aces_linear, params.to_output_params_.aces_params_);
+    } else {
+      odt_color = OpenDRTTransform_fwd(aces_linear, params.to_output_params_.open_drt_params_);
+    }
 
-    float3 aces_3    = make_float3(lin_r, lin_g, lin_b);
-    // Step 1.5 Apply a simple contrast adjustment
+    const float3 cv_3 = DisplayEncoding(
+        odt_color, params.to_output_params_.limit_to_display_matx, params.to_output_params_.etof,
+        params.to_output_params_.display_linear_scale_);
 
-    // Step 2: AP1 ODT
-    float3 odt_color = OutputTransform_fwd(aces_3, params.to_output_params_.odt_params_);
-
-    // Step 3: Display encoding
-    float3 cv_3      = DisplayEncoding(odt_color, params.to_output_params_.limit_to_display_matx,
-                                       params.to_output_params_.etof, 1.0f);
-
-    *p               = make_float4(cv_3.x, cv_3.y, cv_3.z, p->w);
-    // *p = make_float4(otd_color.x, otd_color.y, otd_color.z, p->w);
-
-    // // Step 1: Decode ACEScc log to linear AP1
-    // float lin_r = acescc_decode(p->x);
-    // float lin_g = acescc_decode(p->y);
-    // float lin_b = acescc_decode(p->z);
-
-    // // Step 2: AP1 to sRGB matrix transformation
-    // float srgb_lin_r, srgb_lin_g, srgb_lin_b;
-    // apply_matrix3x3(AP1_TO_SRGB_MAT, lin_r, lin_g, lin_b, &srgb_lin_r, &srgb_lin_g, &srgb_lin_b);
-
-    // // Step 3: Apply Gamma 2.2 encoding
-    // float srgb_r = gamma22_encode(srgb_lin_r);
-    // float srgb_g = gamma22_encode(srgb_lin_g);
-    // float srgb_b = gamma22_encode(srgb_lin_b);
-
-    // // Clamp output to [0, 1] for display
-    // srgb_r       = fminf(fmaxf(srgb_r, 0.0f), 1.0f);
-    // srgb_g       = fminf(fmaxf(srgb_g, 0.0f), 1.0f);
-    // srgb_b       = fminf(fmaxf(srgb_b, 0.0f), 1.0f);
-
-    // *p           = make_float4(srgb_r, srgb_g, srgb_b, p->w);
+    *p = make_float4(cv_3.x, cv_3.y, cv_3.z, p->w);
   }
 };
 };  // namespace CUDA

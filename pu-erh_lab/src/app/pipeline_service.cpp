@@ -39,11 +39,7 @@ void EnsureDefaultOutputTransform(CPUPipelineExecutor& exec) {
   // Older stored pipelines (or partially-initialized ones) might miss the ODT descriptor.
   // Without it, the GPU path won't have precomputed ODT tables and can render black.
   if (!output_stage.GetOperator(OperatorType::ODT).has_value()) {
-    nlohmann::json output_params;
-    output_params["aces_odt"] = {{"encoding_space", "rec709"},
-                                 {"encoding_etof", "gamma_2_2"},
-                                 {"limiting_space", "rec709"},
-                                 {"peak_luminance", 100.0f}};
+    const nlohmann::json output_params = pipeline_defaults::MakeDefaultODTParams();
     output_stage.SetOperator(OperatorType::ODT, output_params, global_params);
   }
 }

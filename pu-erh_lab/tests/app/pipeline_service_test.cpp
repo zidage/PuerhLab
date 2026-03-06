@@ -104,6 +104,31 @@ TEST_F(PipelineServiceTests, BasicPipelineRWTest) {
   }
 }
 
+TEST_F(PipelineServiceTests, DefaultOutputTransformUsesOpenDRT) {
+  ProjectService      project(db_path_, meta_path_);
+  PipelineMgmtService pipeline_service(project.GetStorageService());
+
+  auto                pipeline_guard = pipeline_service.LoadPipeline(42);
+  ASSERT_NE(pipeline_guard, nullptr);
+
+  const nlohmann::json exported = pipeline_guard->pipeline_->ExportPipelineParams();
+  ASSERT_TRUE(exported.contains("Output Transform"));
+  ASSERT_TRUE(exported["Output Transform"].contains("Output Transform"));
+  ASSERT_TRUE(exported["Output Transform"]["Output Transform"].contains("odt"));
+  ASSERT_TRUE(exported["Output Transform"]["Output Transform"]["odt"].contains("params"));
+  ASSERT_TRUE(exported["Output Transform"]["Output Transform"]["odt"]["params"].contains("odt"));
+  EXPECT_EQ(exported["Output Transform"]["Output Transform"]["odt"]["params"]["odt"]["method"],
+            "open_drt");
+
+  pipeline_guard->dirty_ = true;
+  pipeline_service.SavePipeline(pipeline_guard);
+  pipeline_service.Sync();
+
+  auto reloaded = pipeline_service.LoadPipeline(42);
+  ASSERT_NE(reloaded, nullptr);
+  EXPECT_EQ(exported.dump(), reloaded->pipeline_->ExportPipelineParams().dump());
+}
+
 TEST_F(PipelineServiceTests, SharedGuardPinsUntilLastSave) {
   ProjectService      project(db_path_, meta_path_);
   PipelineMgmtService pipeline_service(project.GetStorageService());

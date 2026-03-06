@@ -19,6 +19,8 @@
 #include <memory>
 #include <numeric>
 #include <opencv2/core/matx.hpp>
+#include <string>
+#include <string_view>
 #include <vector>
 
 namespace puerhlab {
@@ -30,8 +32,16 @@ enum class ColorSpace : int {
   REC709,
   REC2020,
   P3_D65,
+  P3_D60,
+  P3_DCI,
+  XYZ,
   PROPHOTO,
   ADOBE_RGB,
+};
+
+enum class ODTMethod : int {
+  ACES_2_0 = 0,
+  OPEN_DRT = 1,
 };
 
 enum class ETOF : int {
@@ -69,6 +79,12 @@ const ColorSpacePrimaries REC2020_PRIMARY = {
 const ColorSpacePrimaries P3_D65_PRIMARY = {
     {0.680f, 0.320f}, {0.265f, 0.690f}, {0.150f, 0.060f}, {0.3127f, 0.3290f}};
 
+const ColorSpacePrimaries P3_D60_PRIMARY = {
+    {0.680f, 0.320f}, {0.265f, 0.690f}, {0.150f, 0.060f}, {0.32168f, 0.33767f}};
+
+const ColorSpacePrimaries P3_DCI_PRIMARY = {
+    {0.680f, 0.320f}, {0.265f, 0.690f}, {0.150f, 0.060f}, {0.314f, 0.351f}};
+
 const ColorSpacePrimaries PROPHOTO_PRIMARY = {
     {0.734699f, 0.265301f}, {0.159597f, 0.840403f}, {0.036598f, 0.000105f}, {0.345704f, 0.358540f}};
 
@@ -87,12 +103,97 @@ inline ColorSpacePrimaries SpaceEnumToPrimary(ColorSpace cs) {
       return REC2020_PRIMARY;
     case ColorSpace::P3_D65:
       return P3_D65_PRIMARY;
+    case ColorSpace::P3_D60:
+      return P3_D60_PRIMARY;
+    case ColorSpace::P3_DCI:
+      return P3_DCI_PRIMARY;
     case ColorSpace::PROPHOTO:
       return PROPHOTO_PRIMARY;
     case ColorSpace::ADOBE_RGB:
       return ADOBE_RGB_PRIMARY;
+    case ColorSpace::XYZ:
+      return REC709_PRIMARY;
     default:
       return REC709_PRIMARY;
+  }
+}
+
+inline auto ColorSpaceFromString(std::string_view cs_str) -> ColorSpace {
+  if (cs_str == "ap0") {
+    return ColorSpace::AP0;
+  }
+  if (cs_str == "ap1") {
+    return ColorSpace::AP1;
+  }
+  if (cs_str == "rec709") {
+    return ColorSpace::REC709;
+  }
+  if (cs_str == "rec2020") {
+    return ColorSpace::REC2020;
+  }
+  if (cs_str == "p3_d65") {
+    return ColorSpace::P3_D65;
+  }
+  if (cs_str == "p3_d60") {
+    return ColorSpace::P3_D60;
+  }
+  if (cs_str == "p3_dci") {
+    return ColorSpace::P3_DCI;
+  }
+  if (cs_str == "xyz") {
+    return ColorSpace::XYZ;
+  }
+  if (cs_str == "prophoto") {
+    return ColorSpace::PROPHOTO;
+  }
+  if (cs_str == "adobe_rgb") {
+    return ColorSpace::ADOBE_RGB;
+  }
+  return ColorSpace::REC709;
+}
+
+inline auto ColorSpaceToString(ColorSpace cs) -> std::string {
+  switch (cs) {
+    case ColorSpace::AP0:
+      return "ap0";
+    case ColorSpace::AP1:
+      return "ap1";
+    case ColorSpace::REC709:
+      return "rec709";
+    case ColorSpace::REC2020:
+      return "rec2020";
+    case ColorSpace::P3_D65:
+      return "p3_d65";
+    case ColorSpace::P3_D60:
+      return "p3_d60";
+    case ColorSpace::P3_DCI:
+      return "p3_dci";
+    case ColorSpace::XYZ:
+      return "xyz";
+    case ColorSpace::PROPHOTO:
+      return "prophoto";
+    case ColorSpace::ADOBE_RGB:
+      return "adobe_rgb";
+    default:
+      return "rec709";
+  }
+}
+
+inline auto ODTMethodFromString(std::string_view method_str) -> ODTMethod {
+  if (method_str == "aces_2_0") {
+    return ODTMethod::ACES_2_0;
+  }
+  return ODTMethod::OPEN_DRT;
+}
+
+inline auto ODTMethodToString(ODTMethod method) -> std::string {
+  switch (method) {
+    case ODTMethod::ACES_2_0:
+      return "aces_2_0";
+    case ODTMethod::OPEN_DRT:
+      return "open_drt";
+    default:
+      return "open_drt";
   }
 }
 
@@ -128,6 +229,66 @@ inline cv::Matx33f RGB_TO_XYZ_f33(const ColorSpacePrimaries& C, float Y = 1.0f) 
 inline cv::Matx33f XYZ_TO_RGB_f33(const ColorSpacePrimaries& C, float Y = 1.0f) {
   cv::Matx33f M = RGB_TO_XYZ_f33(C, Y);
   return M.inv();
+}
+
+inline cv::Matx33f RGB_TO_XYZ_f33(ColorSpace cs, float Y = 1.0f) {
+  if (cs == ColorSpace::XYZ) {
+    return cv::Matx33f::eye();
+  }
+  return RGB_TO_XYZ_f33(SpaceEnumToPrimary(cs), Y);
+}
+
+inline cv::Matx33f XYZ_TO_RGB_f33(ColorSpace cs, float Y = 1.0f) {
+  if (cs == ColorSpace::XYZ) {
+    return cv::Matx33f::eye();
+  }
+  return XYZ_TO_RGB_f33(SpaceEnumToPrimary(cs), Y);
+}
+
+inline auto ETOFFromString(std::string_view etof_str) -> ETOF {
+  if (etof_str == "linear") {
+    return ETOF::LINEAR;
+  }
+  if (etof_str == "st2084") {
+    return ETOF::ST2084;
+  }
+  if (etof_str == "hlg") {
+    return ETOF::HLG;
+  }
+  if (etof_str == "gamma_2_6") {
+    return ETOF::GAMMA_2_6;
+  }
+  if (etof_str == "bt1886") {
+    return ETOF::BT1886;
+  }
+  if (etof_str == "gamma_2_2") {
+    return ETOF::GAMMA_2_2;
+  }
+  if (etof_str == "gamma_1_8") {
+    return ETOF::GAMMA_1_8;
+  }
+  return ETOF::GAMMA_2_2;
+}
+
+inline auto ETOFToString(ETOF etof) -> std::string {
+  switch (etof) {
+    case ETOF::LINEAR:
+      return "linear";
+    case ETOF::ST2084:
+      return "st2084";
+    case ETOF::HLG:
+      return "hlg";
+    case ETOF::GAMMA_2_6:
+      return "gamma_2_6";
+    case ETOF::BT1886:
+      return "bt1886";
+    case ETOF::GAMMA_2_2:
+      return "gamma_2_2";
+    case ETOF::GAMMA_1_8:
+      return "gamma_1_8";
+    default:
+      return "gamma_2_2";
+  }
 }
 
 // Chroma compression
@@ -291,11 +452,102 @@ struct ODTParams {
   float                                                      chroma_compress_scale_;
 };
 
-struct TO_OUTPUT_Params {
-  struct ODTParams odt_params_;
+struct OpenDRTParams {
+  int   tn_hcon_enable_ = 0;
+  int   tn_lcon_enable_ = 0;
+  int   pt_enable_      = 1;
+  int   ptl_enable_     = 1;
+  int   ptm_enable_     = 1;
+  int   brl_enable_     = 1;
+  int   brlp_enable_    = 1;
+  int   hc_enable_      = 1;
+  int   hs_rgb_enable_  = 1;
+  int   hs_cmy_enable_  = 1;
+  int   creative_white_ = 2;
+  int   surround_       = 2;
+  int   clamp_          = 1;
+  int   display_gamut_  = 0;
+  int   display_eotf_   = 1;
 
-  cv::Matx33f      limit_to_display_matx_;
-  ETOF             etof_;
+  float tn_con_         = 1.66f;
+  float tn_sh_          = 0.5f;
+  float tn_toe_         = 0.003f;
+  float tn_off_         = 0.005f;
+  float tn_hcon_        = 0.0f;
+  float tn_hcon_pv_     = 1.0f;
+  float tn_hcon_st_     = 4.0f;
+  float tn_lcon_        = 0.0f;
+  float tn_lcon_w_      = 0.5f;
+  float cwp_lm_         = 0.25f;
+  float rs_sa_          = 0.35f;
+  float rs_rw_          = 0.25f;
+  float rs_bw_          = 0.55f;
+  float pt_lml_         = 0.25f;
+  float pt_lml_r_       = 0.5f;
+  float pt_lml_g_       = 0.0f;
+  float pt_lml_b_       = 0.1f;
+  float pt_lmh_         = 0.25f;
+  float pt_lmh_r_       = 0.5f;
+  float pt_lmh_b_       = 0.0f;
+  float ptl_c_          = 0.06f;
+  float ptl_m_          = 0.08f;
+  float ptl_y_          = 0.06f;
+  float ptm_low_        = 0.4f;
+  float ptm_low_rng_    = 0.25f;
+  float ptm_low_st_     = 0.5f;
+  float ptm_high_       = -0.8f;
+  float ptm_high_rng_   = 0.35f;
+  float ptm_high_st_    = 0.4f;
+  float brl_            = 0.0f;
+  float brl_r_          = -2.5f;
+  float brl_g_          = -1.5f;
+  float brl_b_          = -1.5f;
+  float brl_rng_        = 0.5f;
+  float brl_st_         = 0.35f;
+  float brlp_           = -0.5f;
+  float brlp_r_         = -1.25f;
+  float brlp_g_         = -1.25f;
+  float brlp_b_         = -0.25f;
+  float hc_r_           = 1.0f;
+  float hc_r_rng_       = 0.3f;
+  float hs_r_           = 0.6f;
+  float hs_r_rng_       = 0.6f;
+  float hs_g_           = 0.35f;
+  float hs_g_rng_       = 1.0f;
+  float hs_b_           = 0.66f;
+  float hs_b_rng_       = 1.0f;
+  float hs_c_           = 0.25f;
+  float hs_c_rng_       = 1.0f;
+  float hs_m_           = 0.0f;
+  float hs_m_rng_       = 1.0f;
+  float hs_y_           = 0.0f;
+  float hs_y_rng_       = 1.0f;
+
+  float ts_x1_          = 0.0f;
+  float ts_y1_          = 0.0f;
+  float ts_x0_          = 0.0f;
+  float ts_y0_          = 0.0f;
+  float ts_s0_          = 0.0f;
+  float ts_p_           = 0.0f;
+  float ts_s10_         = 0.0f;
+  float ts_m1_          = 0.0f;
+  float ts_m2_          = 0.0f;
+  float ts_s_           = 0.0f;
+  float ts_dsc_         = 0.0f;
+  float pt_cmp_Lf_      = 0.0f;
+  float s_Lp100_        = 0.0f;
+  float ts_s1_          = 0.0f;
+};
+
+struct TO_OUTPUT_Params {
+  ODTMethod        method_               = ODTMethod::OPEN_DRT;
+  ColorSpace       encoding_space_       = ColorSpace::REC709;
+  ETOF             etof_                 = ETOF::GAMMA_2_2;
+  float            peak_luminance_       = 100.0f;
+  float            display_linear_scale_ = 1.0f;
+  ODTParams        aces_params_          = {};
+  OpenDRTParams    open_drt_params_      = {};
+  cv::Matx33f      limit_to_display_matx_ = cv::Matx33f::eye();
 };
 
 inline float signum(float x) {

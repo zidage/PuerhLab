@@ -223,7 +223,7 @@ struct OperatorParams {
   OCIO::ConstGPUProcessorRcPtr gpu_lmt_processor_        = nullptr;
   std::filesystem::path        lmt_lut_path_             = {};
 
-  // To output space
+  // Output transform runtime (ACES 2.0 or OpenDRT)
   bool                         to_output_enabled_        = true;
   bool                         to_output_dirty_          = false;
   OCIO::ConstCPUProcessorRcPtr cpu_to_output_processor_  = nullptr;

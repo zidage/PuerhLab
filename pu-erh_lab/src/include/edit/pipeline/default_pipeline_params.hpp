@@ -33,4 +33,20 @@ inline auto MakeDefaultLensCalibParams() -> nlohmann::json {
             {"lens_profile_db_path", "src/config/lens_calib"}}}};
 }
 
+inline auto MakeDefaultODTParams() -> nlohmann::json {
+  return {{"odt",
+           {{"method", "open_drt"},
+            {"encoding_space", "rec709"},
+            {"encoding_etof", "gamma_2_2"},
+            {"peak_luminance", 100.0f},
+            {"open_drt",
+             {{"look_preset", "standard"},
+              {"tonescale_preset", "use_look_preset"},
+              {"creative_white", "use_look_preset"},
+              {"creative_white_limit", 0.25f},
+              {"display_grey_luminance", 10.0f},
+              {"hdr_grey_boost", 0.13f},
+              {"hdr_purity", 0.5f}}}}}};
+}
+
 }  // namespace puerhlab::pipeline_defaults

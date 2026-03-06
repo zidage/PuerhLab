@@ -216,6 +216,42 @@ GPU_FUNC float3 HLG_1000nits_to_ST2084_f3(const float3& HLG) {
   return PQ;
 }
 
+GPU_FUNC float3 HLG_from_display_linear_1000nits_f3(const float3& display_linear) {
+  float Yd = 0.2627f * display_linear.x + 0.6780f * display_linear.y + 0.0593f * display_linear.z;
+  float3 rgb = display_linear;
+  if (Yd > 0.0f) {
+    rgb = mult_f_f3(rgb, powf(Yd, (1.0f - 1.2f) / 1.2f));
+  }
+
+  const float a = 0.17883277f;
+  const float b = 0.28466892f;
+  const float c = 0.55991073f;
+  rgb.x         = (rgb.x <= (1.0f / 12.0f)) ? sqrtf(3.0f * rgb.x) : a * logf(12.0f * rgb.x - b) + c;
+  rgb.y         = (rgb.y <= (1.0f / 12.0f)) ? sqrtf(3.0f * rgb.y) : a * logf(12.0f * rgb.y - b) + c;
+  rgb.z         = (rgb.z <= (1.0f / 12.0f)) ? sqrtf(3.0f * rgb.z) : a * logf(12.0f * rgb.z - b) + c;
+  return rgb;
+}
+
+GPU_FUNC float3 HLG_to_display_linear_1000nits_f3(const float3& hlg_signal) {
+  const float a = 0.17883277f;
+  const float b = 0.28466892f;
+  const float c = 0.55991073f;
+
+  float3 rgb;
+  rgb.x = (hlg_signal.x <= 0.5f) ? (hlg_signal.x * hlg_signal.x) / 3.0f
+                                 : (expf((hlg_signal.x - c) / a) + b) / 12.0f;
+  rgb.y = (hlg_signal.y <= 0.5f) ? (hlg_signal.y * hlg_signal.y) / 3.0f
+                                 : (expf((hlg_signal.y - c) / a) + b) / 12.0f;
+  rgb.z = (hlg_signal.z <= 0.5f) ? (hlg_signal.z * hlg_signal.z) / 3.0f
+                                 : (expf((hlg_signal.z - c) / a) + b) / 12.0f;
+
+  const float Ys = 0.2627f * rgb.x + 0.6780f * rgb.y + 0.0593f * rgb.z;
+  if (Ys > 0.0f) {
+    rgb = mult_f_f3(rgb, powf(Ys, 1.2f - 1.0f));
+  }
+  return rgb;
+}
+
 GPU_FUNC float3 eotf_inv(const float3& rgb_linear_in, GPU_ETOF otf_type) {
   float3 rgb_linear = make_float3(fmaxf(0.f, rgb_linear_in.x), fmaxf(0.f, rgb_linear_in.y),
                                   fmaxf(0.f, rgb_linear_in.z));
@@ -224,8 +260,7 @@ GPU_FUNC float3 eotf_inv(const float3& rgb_linear_in, GPU_ETOF otf_type) {
   } else if (otf_type == GPU_ETOF::ST2084) {
     return Y_to_ST2084_f3(rgb_linear);
   } else if (otf_type == GPU_ETOF::HLG) {
-    // Assume 1000 nits display for HLG conversion
-    return HLG_1000nits_to_ST2084_f3(rgb_linear);
+    return HLG_from_display_linear_1000nits_f3(rgb_linear);
   } else if (otf_type == GPU_ETOF::BT1886) {
     return bt1886_inv_f3(rgb_linear, 2.4f, 1.0f, 0.0f);
   } else if (otf_type == GPU_ETOF::GAMMA_2_6) {
@@ -246,8 +281,7 @@ GPU_FUNC float3 eotf(const float3& rgb_cv, GPU_ETOF etof_enum) {
     case GPU_ETOF::ST2084:
       return mult_f_f3(ST2084_to_Y_f3(rgb_cv), 1.0f / ref_luminance);
     case GPU_ETOF::HLG:
-      // Assume 1000 nits display for HLG conversion
-      return mult_f_f3(ST2084_to_HLG_1000nits_f3(rgb_cv), 1.0f / ref_luminance);
+      return HLG_to_display_linear_1000nits_f3(rgb_cv);
     case GPU_ETOF::BT1886:
       return pow_f3(rgb_cv, 2.6f);
     case GPU_ETOF::GAMMA_2_6:

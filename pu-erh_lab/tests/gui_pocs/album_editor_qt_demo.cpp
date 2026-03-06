@@ -77,6 +77,7 @@
 #include "app/render_service.hpp"
 #include "app/sleeve_filter_service.hpp"
 #include "app/thumbnail_service.hpp"
+#include "edit/pipeline/default_pipeline_params.hpp"
 #include "edit/operators/operator_registeration.hpp"
 #include "image/image_buffer.hpp"
 #include "io/image/image_loader.hpp"
@@ -1940,10 +1941,7 @@ class ExportDialog final : public QDialog {
   auto&          output_stage = executor->GetStage(PipelineStageName::Output_Transform);
   output_params["ocio"]       = {
       {"src", "ACEScc"}, {"dst", "Camera Rec.709"}, {"limit", true}, {"transform_type", 1}};
-  output_params["aces_odt"] = {{"encoding_space", "rec709"},
-                               {"encoding_etof", "gamma_2_2"},
-                               {"limiting_space", "rec709"},
-                               {"peak_luminance", 100.0f}};
+  output_params.update(pipeline_defaults::MakeDefaultODTParams());
   output_stage.SetOperator(OperatorType::ODT, output_params, global_params);
 }
 
