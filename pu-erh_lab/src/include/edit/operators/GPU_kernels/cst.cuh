@@ -20,6 +20,7 @@
 #include <vector_functions.h>
 
 #include "color_mgmt/disp_enc_funcs.cuh"
+#include "color_mgmt/open_drt_funcs.cuh"
 #include "color_mgmt/odt_funcs.cuh"
 #include "color_mgmt/util_funcs.cuh"
 #include "edit/operators/op_kernel.hpp"
@@ -232,14 +233,17 @@ struct GPU_OUTPUT_Kernel : GPUPointOpTag {
     float  lin_b     = acescc_decode(acescc_color.z);
 
     float3 aces_3    = make_float3(lin_r, lin_g, lin_b);
-    // Step 1.5 Apply a simple contrast adjustment
-
-    // Step 2: AP1 ODT
-    float3 odt_color = OutputTransform_fwd(aces_3, params.to_output_params_.odt_params_);
+    float3 odt_color;
+    if (params.to_output_params_.method_ == GPU_OutputTransformMethod::OPEN_DRT) {
+      odt_color = OpenDRTOutputTransform_fwd(aces_3, params.to_output_params_.open_drt_params_);
+    } else {
+      odt_color = ACESOutputTransform_fwd(aces_3, params.to_output_params_.aces_odt_params_);
+    }
 
     // Step 3: Display encoding
     float3 cv_3      = DisplayEncoding(odt_color, params.to_output_params_.limit_to_display_matx,
-                                       params.to_output_params_.etof, 1.0f);
+                                       params.to_output_params_.etof,
+                                       params.to_output_params_.display_linear_scale_);
 
     *p               = make_float4(cv_3.x, cv_3.y, cv_3.z, p->w);
     // *p = make_float4(otd_color.x, otd_color.y, otd_color.z, p->w);

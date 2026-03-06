@@ -129,7 +129,7 @@ GPU_FUNC float reach_M_from_table(float h, const GPU_Table1D<float>& table) {
   return lerp_f(lo, hi, t);
 }
 
-GPU_FUNC float reach_M_from_table(float h, GPU_ODTParams& p) {
+GPU_FUNC float reach_M_from_table(float h, GPU_ACESODTParams& p) {
   return reach_M_from_table(h, p.table_reach_M_);
 }
 
@@ -285,7 +285,7 @@ GPU_FUNC float toe(float x, float limit, float k1_in, float k2_in, int invert = 
   }
 }
 
-GPU_FUNC float3 chroma_compress_fwd(const float3& JMh, float tonemapped_J, GPU_ODTParams& p,
+GPU_FUNC float3 chroma_compress_fwd(const float3& JMh, float tonemapped_J, GPU_ACESODTParams& p,
                                     bool invert = false) {
   float J       = JMh.x;
   float M       = JMh.y;
@@ -342,7 +342,7 @@ GPU_FUNC float3 chroma_compress_fwd(const float3& JMh, float tonemapped_J, GPU_O
   return make_float3(tonemapped_J, M_compr, h);
 }
 
-GPU_FUNC float3 tonemap_and_compress_fwd(const float3& JMh, GPU_ODTParams& p) {
+GPU_FUNC float3 tonemap_and_compress_fwd(const float3& JMh, GPU_ACESODTParams& p) {
   // Applies the forward tonescale, then compresses M based on J and tonemapped J
 
   // Tonemap
@@ -406,7 +406,7 @@ GPU_FUNC float2 cusp_from_table(float h, const GPU_Table1D<float4>& table) {
   return make_float2(lerp_f(lo.x, hi.x, t), lerp_f(lo.y, hi.y, t));
 }
 
-GPU_FUNC float2 cusp_from_table(float h, GPU_ODTParams& p) {
+GPU_FUNC float2 cusp_from_table(float h, GPU_ACESODTParams& p) {
   return cusp_from_table(h, p.table_gamut_cusps_);
 }
 
@@ -414,7 +414,7 @@ GPU_FUNC float compute_focus_J(float cusp_J, float mid_J, float limit_J_max) {
   return lerp_f(cusp_J, mid_J, fminf(1.f, cusp_mid_blend - (cusp_J / limit_J_max)));
 }
 
-GPU_FUNC HueDependentGamutParams init_HueDependentGamutParams(float h, GPU_ODTParams& p) {
+GPU_FUNC HueDependentGamutParams init_HueDependentGamutParams(float h, GPU_ACESODTParams& p) {
   HueDependentGamutParams hdp;
   hdp.gamma_bottom_inv = p.lower_hull_gamma_inv;
 
@@ -553,7 +553,7 @@ GPU_FUNC float remap_M(float M, float gamut_boundary_M, float reach_boundary_M,
   return threshold + reinhard_remap(scale, nd, invert);
 }
 
-GPU_FUNC float3 compress_gamut(const float3& JMh, float Jx, GPU_ODTParams& p,
+GPU_FUNC float3 compress_gamut(const float3& JMh, float Jx, GPU_ACESODTParams& p,
                                HueDependentGamutParams& hdp, bool invert = false) {
   const float J = JMh.x;
   const float M = JMh.y;
@@ -585,7 +585,7 @@ GPU_FUNC float3 compress_gamut(const float3& JMh, float Jx, GPU_ODTParams& p,
   return make_float3(J_intersect_source + remapped_M * gamut_slope, remapped_M, h);
 }
 
-GPU_FUNC float3 gamut_compress_fwd(const float3& JMh, GPU_ODTParams& p) {
+GPU_FUNC float3 gamut_compress_fwd(const float3& JMh, GPU_ACESODTParams& p) {
   const float J = JMh.x;
   const float M = JMh.y;
   const float h = JMh.z;
@@ -624,7 +624,7 @@ GPU_FUNC float3 limit_rgb_preserve_chroma(float3 rgb, float lower, float upper) 
   return rgb;
 }
 
-GPU_FUNC float3 OutputTransform_fwd(const float3& in_color, GPU_ODTParams& p) {
+GPU_FUNC float3 ACESOutputTransform_fwd(const float3& in_color, GPU_ACESODTParams& p) {
   if (!isfinite_f(in_color.x) || !isfinite_f(in_color.y) || !isfinite_f(in_color.z)) {
     return make_float3(0.f, 0.f, 0.f);
   }

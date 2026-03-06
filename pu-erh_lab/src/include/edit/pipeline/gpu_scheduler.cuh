@@ -103,7 +103,8 @@ class GPU_KernelLauncher {
     params_.to_ws_lut_.Reset();
     params_.lmt_lut_.Reset();
     params_.to_output_lut_.Reset();
-    params_.to_output_params_.odt_params_.Reset();
+    params_.to_output_params_.aces_odt_params_.Reset();
+    params_.to_output_params_.open_drt_params_.Reset();
   }
 
   ~GPU_KernelLauncher() {

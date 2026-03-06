@@ -89,7 +89,7 @@ struct OperatorParams {
   bool                         exposure_enabled_         = true;
   float                        exposure_offset_          = 0.0f;
 
-  bool                         contrast_enabled_         = true;
+  bool                         contrast_enabled_         = false;
   float                        contrast_scale_           = 0.0f;
 
   // Shadows adjustment parameter

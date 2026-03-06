@@ -30,8 +30,16 @@ enum class ColorSpace : int {
   REC709,
   REC2020,
   P3_D65,
+  P3_D60,
+  P3_DCI,
+  XYZ,
   PROPHOTO,
   ADOBE_RGB,
+};
+
+enum class OutputTransformMethod : int {
+  ACES2    = 0,
+  OPEN_DRT = 1,
 };
 
 enum class ETOF : int {
@@ -69,6 +77,12 @@ const ColorSpacePrimaries REC2020_PRIMARY = {
 const ColorSpacePrimaries P3_D65_PRIMARY = {
     {0.680f, 0.320f}, {0.265f, 0.690f}, {0.150f, 0.060f}, {0.3127f, 0.3290f}};
 
+const ColorSpacePrimaries P3_D60_PRIMARY = {
+    {0.680f, 0.320f}, {0.265f, 0.690f}, {0.150f, 0.060f}, {0.32168f, 0.33767f}};
+
+const ColorSpacePrimaries P3_DCI_PRIMARY = {
+    {0.680f, 0.320f}, {0.265f, 0.690f}, {0.150f, 0.060f}, {0.31400f, 0.35100f}};
+
 const ColorSpacePrimaries PROPHOTO_PRIMARY = {
     {0.734699f, 0.265301f}, {0.159597f, 0.840403f}, {0.036598f, 0.000105f}, {0.345704f, 0.358540f}};
 
@@ -87,6 +101,10 @@ inline ColorSpacePrimaries SpaceEnumToPrimary(ColorSpace cs) {
       return REC2020_PRIMARY;
     case ColorSpace::P3_D65:
       return P3_D65_PRIMARY;
+    case ColorSpace::P3_D60:
+      return P3_D60_PRIMARY;
+    case ColorSpace::P3_DCI:
+      return P3_DCI_PRIMARY;
     case ColorSpace::PROPHOTO:
       return PROPHOTO_PRIMARY;
     case ColorSpace::ADOBE_RGB:
@@ -125,9 +143,23 @@ inline cv::Matx33f RGB_TO_XYZ_f33(const ColorSpacePrimaries& C, float Y = 1.0f) 
   return M;
 }
 
+inline cv::Matx33f RGB_TO_XYZ_f33(ColorSpace cs, float Y = 1.0f) {
+  if (cs == ColorSpace::XYZ) {
+    return cv::Matx33f::eye();
+  }
+  return RGB_TO_XYZ_f33(SpaceEnumToPrimary(cs), Y);
+}
+
 inline cv::Matx33f XYZ_TO_RGB_f33(const ColorSpacePrimaries& C, float Y = 1.0f) {
   cv::Matx33f M = RGB_TO_XYZ_f33(C, Y);
   return M.inv();
+}
+
+inline cv::Matx33f XYZ_TO_RGB_f33(ColorSpace cs, float Y = 1.0f) {
+  if (cs == ColorSpace::XYZ) {
+    return cv::Matx33f::eye();
+  }
+  return XYZ_TO_RGB_f33(SpaceEnumToPrimary(cs), Y);
 }
 
 // Chroma compression
@@ -257,7 +289,7 @@ struct TSParams {
   float log_peak_;
 };
 
-struct ODTParams {
+struct ACESODTParams {
   float                                                      peak_luminance_;
 
   // JMh parameters
@@ -291,11 +323,117 @@ struct ODTParams {
   float                                                      chroma_compress_scale_;
 };
 
-struct TO_OUTPUT_Params {
-  struct ODTParams odt_params_;
+struct OpenDRTResolvedParams {
+  float      peak_luminance_                     = 100.0f;
+  float      tn_gb_                              = 0.13f;
+  float      pt_hdr_                             = 0.5f;
+  float      tn_Lg_                              = 10.0f;
 
-  cv::Matx33f      limit_to_display_matx_;
-  ETOF             etof_;
+  float      tn_con_                             = 1.66f;
+  float      tn_sh_                              = 0.5f;
+  float      tn_toe_                             = 0.003f;
+  float      tn_off_                             = 0.005f;
+  int        tn_hcon_enable_                     = 0;
+  float      tn_hcon_                            = 0.0f;
+  float      tn_hcon_pv_                         = 1.0f;
+  float      tn_hcon_st_                         = 4.0f;
+  int        tn_lcon_enable_                     = 0;
+  float      tn_lcon_                            = 0.0f;
+  float      tn_lcon_w_                          = 0.5f;
+
+  float      rs_sa_                              = 0.35f;
+  float      rs_rw_                              = 0.25f;
+  float      rs_bw_                              = 0.55f;
+  float      rs_w_[3]                            = {0.25f, 0.20f, 0.55f};
+
+  int        pt_enable_                          = 1;
+  float      pt_lml_                             = 0.25f;
+  float      pt_lml_r_                           = 0.5f;
+  float      pt_lml_g_                           = 0.0f;
+  float      pt_lml_b_                           = 0.1f;
+  float      pt_lmh_                             = 0.25f;
+  float      pt_lmh_r_                           = 0.5f;
+  float      pt_lmh_b_                           = 0.0f;
+
+  int        ptl_enable_                         = 1;
+  float      ptl_c_                              = 0.06f;
+  float      ptl_m_                              = 0.08f;
+  float      ptl_y_                              = 0.06f;
+
+  int        ptm_enable_                         = 1;
+  float      ptm_low_                            = 0.4f;
+  float      ptm_low_rng_                        = 0.25f;
+  float      ptm_low_st_                         = 0.5f;
+  float      ptm_high_                           = -0.8f;
+  float      ptm_high_rng_                       = 0.35f;
+  float      ptm_high_st_                        = 0.4f;
+
+  int        brl_enable_                         = 1;
+  float      brl_                                = 0.0f;
+  float      brl_r_                              = -2.5f;
+  float      brl_g_                              = -1.5f;
+  float      brl_b_                              = -1.5f;
+  float      brl_rng_                            = 0.5f;
+  float      brl_st_                             = 0.35f;
+
+  int        brlp_enable_                        = 1;
+  float      brlp_                               = -0.5f;
+  float      brlp_r_                             = -1.25f;
+  float      brlp_g_                             = -1.25f;
+  float      brlp_b_                             = -0.25f;
+
+  int        hc_enable_                          = 1;
+  float      hc_r_                               = 1.0f;
+  float      hc_r_rng_                           = 0.3f;
+
+  int        hs_rgb_enable_                      = 1;
+  float      hs_r_                               = 0.6f;
+  float      hs_r_rng_                           = 0.6f;
+  float      hs_g_                               = 0.35f;
+  float      hs_g_rng_                           = 1.0f;
+  float      hs_b_                               = 0.66f;
+  float      hs_b_rng_                           = 1.0f;
+
+  int        hs_cmy_enable_                      = 1;
+  float      hs_c_                               = 0.25f;
+  float      hs_c_rng_                           = 1.0f;
+  float      hs_m_                               = 0.0f;
+  float      hs_m_rng_                           = 1.0f;
+  float      hs_y_                               = 0.0f;
+  float      hs_y_rng_                           = 1.0f;
+
+  int        creative_white_mode_                = 2;
+  float      creative_white_luminance_mix_       = 0.25f;
+  float      creative_white_norm_                = 1.0f;
+  float      ts_x1_                              = 0.0f;
+  float      ts_y1_                              = 0.0f;
+  float      ts_x0_                              = 0.0f;
+  float      ts_y0_                              = 0.0f;
+  float      ts_s0_                              = 0.0f;
+  float      ts_p_                               = 0.0f;
+  float      ts_s10_                             = 0.0f;
+  float      ts_m1_                              = 0.0f;
+  float      ts_m2_                              = 1.0f;
+  float      ts_s_                               = 0.0f;
+  float      ts_dsc_                             = 1.0f;
+  float      pt_cmp_Lf_                          = 0.0f;
+  float      s_Lp100_                            = 0.0f;
+  float      ts_s1_                              = 0.0f;
+  float      output_linear_scale_                = 1.0f;
+
+  cv::Matx33f ap1_to_render_mat_                 = cv::Matx33f::eye();
+  cv::Matx33f render_to_limit_neutral_mat_       = cv::Matx33f::eye();
+  cv::Matx33f render_to_limit_creative_mat_      = cv::Matx33f::eye();
+};
+
+struct TO_OUTPUT_Params {
+  OutputTransformMethod method_              = OutputTransformMethod::OPEN_DRT;
+  ACESODTParams         aces_odt_params_     = {};
+  OpenDRTResolvedParams open_drt_params_     = {};
+
+  cv::Matx33f           limit_to_display_matx_ = cv::Matx33f::eye();
+  ETOF                  etof_                  = ETOF::LINEAR;
+  float                 display_linear_scale_  = 1.0f;
 };
 
 inline float signum(float x) {
@@ -474,7 +612,7 @@ inline cv::Matx13f generate_unit_cube_cusp_corners(int corner) {
 }
 
 inline void find_reach_corners_table(std::array<cv::Matx13f, total_corner_count>& jmh_corners,
-                                     JMhParams& params_reach, ODTParams& p) {
+                                     JMhParams& params_reach, ACESODTParams& p) {
   std::array<cv::Matx13f, total_corner_count> temp_JMh_corners;
 
   float limit_A   = J_to_Achromatic_n(p.limit_J_max_, params_reach.inv_cz_);
@@ -555,7 +693,7 @@ inline std::array<float, max_sorted_corners> extract_sorted_cube_hues(
 
 inline void build_limiting_cusp_tables(std::array<cv::Matx13f, total_corner_count>& RGB_corners,
                                        std::array<cv::Matx13f, total_corner_count>& JMh_corners,
-                                       JMhParams& limit_params, ODTParams& p) {
+                                       JMhParams& limit_params, ACESODTParams& p) {
   // We calculate the RGB and JMh values for the limiting gamut cusp corners
   // They are then arranged into a cycle with the lowest JMh value at [1] to
   // allow for hue wrapping
@@ -912,7 +1050,7 @@ inline bool evaluate_gamma_fit(cv::Matx12f& JM_cusp, std::array<cv::Matx13f, tes
 }
 
 inline std::array<float, TOTAL_TABLE_SIZE> MakeUpperHullGammaTable(
-    std::array<cv::Matx13f, TOTAL_TABLE_SIZE>& gamut_cusp_table, ODTParams& p) {
+    std::array<cv::Matx13f, TOTAL_TABLE_SIZE>& gamut_cusp_table, ACESODTParams& p) {
   // Find upper hull gamma values for the gamut mapper.
   // Start by taking a h angle
   // Get the cusp J value for that angle
@@ -978,7 +1116,7 @@ inline std::array<float, TOTAL_TABLE_SIZE> MakeUpperHullGammaTable(
 }
 
 inline std::shared_ptr<std::array<cv::Matx13f, TOTAL_TABLE_SIZE>> MakeUniformHueGamutTable(
-    JMhParams& reach_params, JMhParams& limit_params, ODTParams& p) {
+    JMhParams& reach_params, JMhParams& limit_params, ACESODTParams& p) {
   std::array<cv::Matx13f, total_corner_count> reach_JMh_corners{};
   std::array<cv::Matx13f, total_corner_count> limiting_RGB_corners{};
   std::array<cv::Matx13f, total_corner_count> limiting_JMh_corners{};

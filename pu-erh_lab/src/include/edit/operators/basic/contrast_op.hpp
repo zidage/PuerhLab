@@ -34,6 +34,9 @@ class ContrastOp : public OperatorBase<ContrastOp> {
    *
    */
   float scale_;
+  float gpu_strength_   = 0.0f;
+  bool  slider_enabled_ = false;
+  bool  runtime_enabled_ = true;
 
  public:
   static constexpr PriorityLevel     priority_level_    = 3;
