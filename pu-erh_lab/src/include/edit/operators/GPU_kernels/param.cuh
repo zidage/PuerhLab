@@ -34,7 +34,7 @@
 #define GPU_FUNC __device__ __forceinline__
 
 namespace puerhlab {
-enum class GPU_ETOF : int {
+enum class GPU_EOTF : int {
   LINEAR    = 0,
   ST2084    = 1,
   HLG       = 2,
@@ -311,13 +311,13 @@ struct GPU_TO_OUTPUT_Params {
   GPU_OpenDRTParams open_drt_params_     = {};
   float            limit_to_display_matx[9];
   float            display_linear_scale_ = 1.0f;
-  GPU_ETOF         etof                  = GPU_ETOF::LINEAR;
+  GPU_EOTF         eotf                  = GPU_EOTF::LINEAR;
 
   void Reset() {
     aces_params_.Reset();
     open_drt_params_ = {};
     display_linear_scale_ = 1.0f;
-    etof = GPU_ETOF::LINEAR;
+    eotf = GPU_EOTF::LINEAR;
   }
 };
 
@@ -669,7 +669,8 @@ class GPUParamsConverter {
       };
 
       copy33(to_output_cpu.limit_to_display_matx_, to_output_gpu.limit_to_display_matx);
-      to_output_gpu.etof                 = static_cast<GPU_ETOF>(static_cast<int>(to_output_cpu.etof_));
+      to_output_gpu.eotf                 =
+          static_cast<GPU_EOTF>(static_cast<int>(to_output_cpu.eotf_));
       to_output_gpu.method_              =
           static_cast<GPU_ODTMethod>(static_cast<int>(to_output_cpu.method_));
       to_output_gpu.display_linear_scale_ = to_output_cpu.display_linear_scale_;
@@ -677,8 +678,8 @@ class GPUParamsConverter {
       if (!cpu_params.to_output_enabled_) {
         to_output_gpu.Reset();
         copy33(to_output_cpu.limit_to_display_matx_, to_output_gpu.limit_to_display_matx);
-        to_output_gpu.etof                 =
-            static_cast<GPU_ETOF>(static_cast<int>(to_output_cpu.etof_));
+        to_output_gpu.eotf                 =
+            static_cast<GPU_EOTF>(static_cast<int>(to_output_cpu.eotf_));
         to_output_gpu.method_              =
             static_cast<GPU_ODTMethod>(static_cast<int>(to_output_cpu.method_));
         to_output_gpu.display_linear_scale_ = to_output_cpu.display_linear_scale_;

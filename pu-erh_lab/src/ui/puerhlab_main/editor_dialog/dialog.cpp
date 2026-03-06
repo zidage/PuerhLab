@@ -24,6 +24,7 @@
 #include <QPushButton>
 #include <QScrollArea>
 #include <QSlider>
+#include <QSpinBox>
 #include <QStackedWidget>
 #include <QSplitter>
 #include <QStyle>
@@ -166,8 +167,127 @@ constexpr int   kCdlWheelSliderUiMin     = color_wheel::kSliderUiMin;
 constexpr int   kCdlWheelSliderUiMax     = color_wheel::kSliderUiMax;
 constexpr float kCdlWheelStrengthDefault = color_wheel::kStrengthDefault;
 
+template <typename T>
+struct EnumOption {
+  T           value_;
+  const char* label_;
+};
+
+constexpr std::array<EnumOption<ColorUtils::ColorSpace>, 6> kDisplayEncodingSpaceOptions = {{
+    {ColorUtils::ColorSpace::REC709, "Rec.709"},
+    {ColorUtils::ColorSpace::P3_D65, "P3-D65"},
+    {ColorUtils::ColorSpace::P3_D60, "P3-D60"},
+    {ColorUtils::ColorSpace::P3_DCI, "P3-DCI"},
+    {ColorUtils::ColorSpace::XYZ, "XYZ"},
+    {ColorUtils::ColorSpace::REC2020, "Rec.2020"},
+}};
+
+constexpr std::array<EnumOption<ColorUtils::ColorSpace>, 7> kAcesLimitingSpaceOptions = {{
+    {ColorUtils::ColorSpace::REC709, "Rec.709"},
+    {ColorUtils::ColorSpace::REC2020, "Rec.2020"},
+    {ColorUtils::ColorSpace::P3_D65, "P3-D65"},
+    {ColorUtils::ColorSpace::P3_D60, "P3-D60"},
+    {ColorUtils::ColorSpace::P3_DCI, "P3-DCI"},
+    {ColorUtils::ColorSpace::PROPHOTO, "ProPhoto RGB"},
+    {ColorUtils::ColorSpace::ADOBE_RGB, "Adobe RGB"},
+}};
+
+constexpr std::array<EnumOption<odt_cpu::OpenDRTLookPreset>, 7> kOpenDrtLookPresetOptions = {{
+    {odt_cpu::OpenDRTLookPreset::STANDARD, "Standard"},
+    {odt_cpu::OpenDRTLookPreset::ARRIBA, "Arriba"},
+    {odt_cpu::OpenDRTLookPreset::SYLVAN, "Sylvan"},
+    {odt_cpu::OpenDRTLookPreset::COLORFUL, "Colorful"},
+    {odt_cpu::OpenDRTLookPreset::AERY, "Aery"},
+    {odt_cpu::OpenDRTLookPreset::DYSTOPIC, "Dystopic"},
+    {odt_cpu::OpenDRTLookPreset::UMBRA, "Umbra"},
+}};
+
+constexpr std::array<EnumOption<odt_cpu::OpenDRTTonescalePreset>, 14> kOpenDrtTonescaleOptions = {{
+    {odt_cpu::OpenDRTTonescalePreset::USE_LOOK_PRESET, "Use Look Preset"},
+    {odt_cpu::OpenDRTTonescalePreset::LOW_CONTRAST, "Low Contrast"},
+    {odt_cpu::OpenDRTTonescalePreset::MEDIUM_CONTRAST, "Medium Contrast"},
+    {odt_cpu::OpenDRTTonescalePreset::HIGH_CONTRAST, "High Contrast"},
+    {odt_cpu::OpenDRTTonescalePreset::ARRIBA_TONESCALE, "Arriba Tonescale"},
+    {odt_cpu::OpenDRTTonescalePreset::SYLVAN_TONESCALE, "Sylvan Tonescale"},
+    {odt_cpu::OpenDRTTonescalePreset::COLORFUL_TONESCALE, "Colorful Tonescale"},
+    {odt_cpu::OpenDRTTonescalePreset::AERY_TONESCALE, "Aery Tonescale"},
+    {odt_cpu::OpenDRTTonescalePreset::DYSTOPIC_TONESCALE, "Dystopic Tonescale"},
+    {odt_cpu::OpenDRTTonescalePreset::UMBRA_TONESCALE, "Umbra Tonescale"},
+    {odt_cpu::OpenDRTTonescalePreset::ACES_1_X, "ACES 1.x"},
+    {odt_cpu::OpenDRTTonescalePreset::ACES_2_0, "ACES 2.0"},
+    {odt_cpu::OpenDRTTonescalePreset::MARVELOUS_TONESCAPE, "Marvelous Tonscape"},
+    {odt_cpu::OpenDRTTonescalePreset::DAGRINCHI_TONEGROAN, "Dagrinchi Tonegroan"},
+}};
+
+constexpr std::array<EnumOption<odt_cpu::OpenDRTCreativeWhitePreset>, 7>
+    kOpenDrtCreativeWhiteOptions = {{
+        {odt_cpu::OpenDRTCreativeWhitePreset::USE_LOOK_PRESET, "Use Look Preset"},
+        {odt_cpu::OpenDRTCreativeWhitePreset::D93, "D93"},
+        {odt_cpu::OpenDRTCreativeWhitePreset::D75, "D75"},
+        {odt_cpu::OpenDRTCreativeWhitePreset::D65, "D65"},
+        {odt_cpu::OpenDRTCreativeWhitePreset::D60, "D60"},
+        {odt_cpu::OpenDRTCreativeWhitePreset::D55, "D55"},
+        {odt_cpu::OpenDRTCreativeWhitePreset::D50, "D50"},
+    }};
+
 auto ColorTempSliderPosToCct(int pos) -> float { return color_temp::SliderPosToCct(pos); }
 auto ColorTempCctToSliderPos(float cct) -> int { return color_temp::CctToSliderPos(cct); }
+
+auto SupportedDisplayEotfOptions(ColorUtils::ColorSpace encoding_space)
+    -> std::vector<EnumOption<ColorUtils::EOTF>> {
+  switch (encoding_space) {
+    case ColorUtils::ColorSpace::REC709:
+      return {{ColorUtils::EOTF::BT1886, "BT.1886"},
+              {ColorUtils::EOTF::GAMMA_2_2, "Gamma 2.2"}};
+    case ColorUtils::ColorSpace::P3_D65:
+      return {{ColorUtils::EOTF::GAMMA_2_2, "Gamma 2.2"},
+              {ColorUtils::EOTF::ST2084, "ST 2084 (PQ)"}};
+    case ColorUtils::ColorSpace::P3_D60:
+    case ColorUtils::ColorSpace::P3_DCI:
+    case ColorUtils::ColorSpace::XYZ:
+      return {{ColorUtils::EOTF::GAMMA_2_6, "Gamma 2.6"}};
+    case ColorUtils::ColorSpace::REC2020:
+      return {{ColorUtils::EOTF::ST2084, "ST 2084 (PQ)"},
+              {ColorUtils::EOTF::HLG, "HLG"}};
+    default:
+      return {{ColorUtils::EOTF::GAMMA_2_2, "Gamma 2.2"}};
+  }
+}
+
+auto IsSupportedDisplayEncoding(ColorUtils::ColorSpace encoding_space,
+                                ColorUtils::EOTF       encoding_eotf) -> bool {
+  const auto options = SupportedDisplayEotfOptions(encoding_space);
+  return std::any_of(options.begin(), options.end(),
+                     [encoding_eotf](const auto& option) { return option.value_ == encoding_eotf; });
+}
+
+auto DefaultDisplayEotfForSpace(ColorUtils::ColorSpace encoding_space) -> ColorUtils::EOTF {
+  const auto options = SupportedDisplayEotfOptions(encoding_space);
+  return options.empty() ? ColorUtils::EOTF::GAMMA_2_2 : options.front().value_;
+}
+
+void SanitizeOdtStateForUi(OdtState& odt_state) {
+  const bool encoding_space_supported =
+      std::any_of(kDisplayEncodingSpaceOptions.begin(), kDisplayEncodingSpaceOptions.end(),
+                  [&odt_state](const auto& option) {
+                    return option.value_ == odt_state.encoding_space_;
+                  });
+  if (!encoding_space_supported) {
+    odt_state.encoding_space_ = ColorUtils::ColorSpace::REC709;
+  }
+  if (!IsSupportedDisplayEncoding(odt_state.encoding_space_, odt_state.encoding_eotf_)) {
+    odt_state.encoding_eotf_ = DefaultDisplayEotfForSpace(odt_state.encoding_space_);
+  }
+  const bool limiting_space_supported =
+      std::any_of(kAcesLimitingSpaceOptions.begin(), kAcesLimitingSpaceOptions.end(),
+                  [&odt_state](const auto& option) {
+                    return option.value_ == odt_state.aces_.limiting_space_;
+                  });
+  if (!limiting_space_supported) {
+    odt_state.aces_.limiting_space_ = ColorUtils::ColorSpace::REC709;
+  }
+  odt_state.peak_luminance_ = std::clamp(odt_state.peak_luminance_, 100.0f, 1000.0f);
+}
 
 auto ResolveEditorWindowTitle(const std::shared_ptr<ImagePoolService>& image_pool,
                               image_id_t image_id,
@@ -232,6 +352,7 @@ class EditorDialog final : public QDialog {
     // --- Constructor body split into .inc files for maintainability ---
 #include "ctor_viewer_and_panels.inc"
 #include "ctor_tone_color.inc"
+#include "ctor_display_transform.inc"
 #include "ctor_geometry_raw.inc"
 #include "ctor_versioning.inc"
 
@@ -485,13 +606,15 @@ class EditorDialog final : public QDialog {
   }
 
   void RefreshPanelSwitchUi() {
-    if (!tone_panel_btn_ || !geometry_panel_btn_ || !raw_panel_btn_) {
+    if (!tone_panel_btn_ || !drt_panel_btn_ || !geometry_panel_btn_ || !raw_panel_btn_) {
       return;
     }
     const bool tone_active     = (active_panel_ == ControlPanelKind::Tone);
+    const bool drt_active      = (active_panel_ == ControlPanelKind::DisplayRenderingTransform);
     const bool geometry_active = (active_panel_ == ControlPanelKind::Geometry);
     const bool raw_active      = (active_panel_ == ControlPanelKind::RawDecode);
     tone_panel_btn_->setChecked(tone_active);
+    drt_panel_btn_->setChecked(drt_active);
     geometry_panel_btn_->setChecked(geometry_active);
     raw_panel_btn_->setChecked(raw_active);
 
@@ -518,6 +641,7 @@ class EditorDialog final : public QDialog {
         "  border-color: #FCC704;"
         "}";
     tone_panel_btn_->setStyleSheet(tone_active ? active_style : inactive_style);
+    drt_panel_btn_->setStyleSheet(drt_active ? active_style : inactive_style);
     geometry_panel_btn_->setStyleSheet(geometry_active ? active_style : inactive_style);
     raw_panel_btn_->setStyleSheet(raw_active ? active_style : inactive_style);
   }
@@ -526,10 +650,12 @@ class EditorDialog final : public QDialog {
     active_panel_ = panel;
     if (control_panels_stack_) {
       int panel_index = 0;
-      if (panel == ControlPanelKind::Geometry) {
+      if (panel == ControlPanelKind::DisplayRenderingTransform) {
         panel_index = 1;
-      } else if (panel == ControlPanelKind::RawDecode) {
+      } else if (panel == ControlPanelKind::Geometry) {
         panel_index = 2;
+      } else if (panel == ControlPanelKind::RawDecode) {
+        panel_index = 3;
       }
       control_panels_stack_->setCurrentIndex(panel_index);
     }
@@ -549,6 +675,82 @@ class EditorDialog final : public QDialog {
       RequestRender();
       ScheduleQualityPreviewRenderFromPipeline();
     }
+  }
+
+  void RefreshOdtMethodUi() {
+    const bool aces_active = state_.odt_.method_ == ColorUtils::ODTMethod::ACES_2_0;
+    const bool open_drt_active = state_.odt_.method_ == ColorUtils::ODTMethod::OPEN_DRT;
+
+    const QString active_style =
+        "QPushButton {"
+        "  color: #FCC704;"
+        "  background: #1A1A1A;"
+        "  border: 2px solid #FCC704;"
+        "  border-radius: 12px;"
+        "  padding: 16px 20px;"
+        "  font-size: 15px;"
+        "  font-weight: 800;"
+        "  text-align: left;"
+        "}"
+        "QPushButton:hover {"
+        "  background: #242424;"
+        "}";
+    const QString inactive_style =
+        "QPushButton {"
+        "  color: #A0A0A0;"
+        "  background: #1A1A1A;"
+        "  border: 1px solid #333333;"
+        "  border-radius: 12px;"
+        "  padding: 16px 20px;"
+        "  font-size: 15px;"
+        "  font-weight: 600;"
+        "  text-align: left;"
+        "}"
+        "QPushButton:hover {"
+        "  border: 1px solid #666666;"
+        "  background: #242424;"
+        "  color: #E6E6E6;"
+        "}";
+
+    if (odt_aces_method_card_) {
+      odt_aces_method_card_->setChecked(aces_active);
+      odt_aces_method_card_->setStyleSheet(aces_active ? active_style : inactive_style);
+    }
+    if (odt_open_drt_method_card_) {
+      odt_open_drt_method_card_->setChecked(open_drt_active);
+      odt_open_drt_method_card_->setStyleSheet(open_drt_active ? active_style : inactive_style);
+    }
+    if (odt_method_stack_) {
+      odt_method_stack_->setCurrentIndex(aces_active ? 0 : 1);
+    }
+  }
+
+  void RefreshOdtEncodingEotfComboFromState() {
+    if (!odt_encoding_eotf_combo_) {
+      return;
+    }
+
+    SanitizeOdtStateForUi(state_.odt_);
+    const bool prev_sync = syncing_controls_;
+    syncing_controls_    = true;
+
+    odt_encoding_eotf_combo_->clear();
+    const auto options = SupportedDisplayEotfOptions(state_.odt_.encoding_space_);
+    for (const auto& option : options) {
+      odt_encoding_eotf_combo_->addItem(QString::fromLatin1(option.label_),
+                                        static_cast<int>(option.value_));
+    }
+
+    int selected_index = odt_encoding_eotf_combo_->findData(
+        static_cast<int>(state_.odt_.encoding_eotf_));
+    if (selected_index < 0) {
+      state_.odt_.encoding_eotf_ = DefaultDisplayEotfForSpace(state_.odt_.encoding_space_);
+      selected_index = odt_encoding_eotf_combo_->findData(
+          static_cast<int>(state_.odt_.encoding_eotf_));
+    }
+    odt_encoding_eotf_combo_->setCurrentIndex(std::max(0, selected_index));
+
+    syncing_controls_ = prev_sync;
   }
 
   void PromoteColorTempToCustomForEditing() {
@@ -655,6 +857,7 @@ class EditorDialog final : public QDialog {
 
     syncing_controls_ = true;
     LoadActiveHlsProfile(state_);
+    SanitizeOdtStateForUi(state_.odt_);
 
     if (lut_combo_) {
       int lut_index = 0;
@@ -758,6 +961,37 @@ class EditorDialog final : public QDialog {
     if (clarity_slider_) {
       clarity_slider_->setValue(static_cast<int>(std::lround(state_.clarity_)));
     }
+    if (odt_encoding_space_combo_) {
+      const int encoding_space_index = odt_encoding_space_combo_->findData(
+          static_cast<int>(state_.odt_.encoding_space_));
+      odt_encoding_space_combo_->setCurrentIndex(std::max(0, encoding_space_index));
+    }
+    RefreshOdtEncodingEotfComboFromState();
+    if (odt_peak_luminance_slider_) {
+      odt_peak_luminance_slider_->setValue(
+          static_cast<int>(std::lround(state_.odt_.peak_luminance_)));
+    }
+    if (odt_aces_limiting_space_combo_) {
+      const int limiting_space_index = odt_aces_limiting_space_combo_->findData(
+          static_cast<int>(state_.odt_.aces_.limiting_space_));
+      odt_aces_limiting_space_combo_->setCurrentIndex(std::max(0, limiting_space_index));
+    }
+    if (odt_open_drt_look_preset_combo_) {
+      const int look_preset_index = odt_open_drt_look_preset_combo_->findData(
+          static_cast<int>(state_.odt_.open_drt_.look_preset_));
+      odt_open_drt_look_preset_combo_->setCurrentIndex(std::max(0, look_preset_index));
+    }
+    if (odt_open_drt_tonescale_preset_combo_) {
+      const int tonescale_index = odt_open_drt_tonescale_preset_combo_->findData(
+          static_cast<int>(state_.odt_.open_drt_.tonescale_preset_));
+      odt_open_drt_tonescale_preset_combo_->setCurrentIndex(std::max(0, tonescale_index));
+    }
+    if (odt_open_drt_creative_white_combo_) {
+      const int creative_white_index = odt_open_drt_creative_white_combo_->findData(
+          static_cast<int>(state_.odt_.open_drt_.creative_white_));
+      odt_open_drt_creative_white_combo_->setCurrentIndex(std::max(0, creative_white_index));
+    }
+    RefreshOdtMethodUi();
     if (rotate_slider_) {
       rotate_slider_->setValue(
           static_cast<int>(std::lround(state_.rotate_degrees_ * kRotationSliderScale)));
@@ -804,6 +1038,7 @@ class EditorDialog final : public QDialog {
     }
     if (!loaded) {
       state_ = AdjustmentState{};
+      SanitizeOdtStateForUi(state_.odt_);
       UpdateAllCdlWheelDerivedColors(state_);
       last_submitted_color_temp_request_.reset();
     } else {
@@ -1010,6 +1245,7 @@ class EditorDialog final : public QDialog {
     if (!has_loaded_any) {
       return false;
     }
+    SanitizeOdtStateForUi(loaded_state.odt_);
     state_ = loaded_state;
     last_submitted_color_temp_request_ = BuildColorTempRequest(state_);
     return true;
@@ -1042,30 +1278,41 @@ class EditorDialog final : public QDialog {
   }
 
   void ApplyStateToPipeline(const AdjustmentState& render_state) {
+    AdjustmentState render_state_sanitized = render_state;
+    SanitizeOdtStateForUi(render_state_sanitized.odt_);
+
     auto  exec          = pipeline_guard_->pipeline_;
     auto& global_params = exec->GetGlobalParams();
     auto& loading       = exec->GetStage(PipelineStageName::Image_Loading);
     auto& geometry      = exec->GetStage(PipelineStageName::Geometry_Adjustment);
     auto& to_ws         = exec->GetStage(PipelineStageName::To_WorkingSpace);
+    auto& output        = exec->GetStage(PipelineStageName::Output_Transform);
 
     loading.SetOperator(OperatorType::RAW_DECODE,
-                        ParamsForField(AdjustmentField::RawDecode, render_state));
+                        ParamsForField(AdjustmentField::RawDecode, render_state_sanitized));
     loading.SetOperator(OperatorType::LENS_CALIBRATION,
-                        ParamsForField(AdjustmentField::LensCalib, render_state), global_params);
-    loading.EnableOperator(OperatorType::LENS_CALIBRATION, render_state.lens_calib_enabled_,
-                           global_params);
+                        ParamsForField(AdjustmentField::LensCalib, render_state_sanitized),
+                        global_params);
+    loading.EnableOperator(OperatorType::LENS_CALIBRATION,
+                           render_state_sanitized.lens_calib_enabled_, global_params);
 
-    const auto color_temp_request = BuildColorTempRequest(render_state);
+    const auto color_temp_request = BuildColorTempRequest(render_state_sanitized);
     const bool color_temp_missing = !to_ws.GetOperator(OperatorType::COLOR_TEMP).has_value();
     if (color_temp_missing || !last_submitted_color_temp_request_.has_value() ||
         !ColorTempRequestEqual(*last_submitted_color_temp_request_, color_temp_request)) {
       to_ws.SetOperator(OperatorType::COLOR_TEMP,
-                        ParamsForField(AdjustmentField::ColorTemp, render_state), global_params);
+                        ParamsForField(AdjustmentField::ColorTemp, render_state_sanitized),
+                        global_params);
       to_ws.EnableOperator(OperatorType::COLOR_TEMP, true, global_params);
       last_submitted_color_temp_request_ = color_temp_request;
     } else {
       to_ws.EnableOperator(OperatorType::COLOR_TEMP, true, global_params);
     }
+
+    output.SetOperator(OperatorType::ODT,
+                       ParamsForField(AdjustmentField::Odt, render_state_sanitized),
+                       global_params);
+    output.EnableOperator(OperatorType::ODT, true, global_params);
 
     // Geometry editing is overlay-only. While the geometry panel is active,
     // render the full pre-geometry frame so recropping can always expand back
@@ -1090,38 +1337,48 @@ class EditorDialog final : public QDialog {
     geometry.EnableOperator(OperatorType::CROP_ROTATE, geometry_enabled, global_params);
 
     auto& basic         = exec->GetStage(PipelineStageName::Basic_Adjustment);
-    basic.SetOperator(OperatorType::EXPOSURE, {{"exposure", render_state.exposure_}}, global_params);
-    basic.SetOperator(OperatorType::CONTRAST, {{"contrast", render_state.contrast_}}, global_params);
-    basic.SetOperator(OperatorType::BLACK, {{"black", render_state.blacks_}}, global_params);
-    basic.SetOperator(OperatorType::WHITE, {{"white", render_state.whites_}}, global_params);
-    basic.SetOperator(OperatorType::SHADOWS, {{"shadows", render_state.shadows_}}, global_params);
-    basic.SetOperator(OperatorType::HIGHLIGHTS, {{"highlights", render_state.highlights_}},
+    basic.SetOperator(OperatorType::EXPOSURE, {{"exposure", render_state_sanitized.exposure_}},
                       global_params);
-    basic.SetOperator(OperatorType::CURVE, CurveControlPointsToParams(render_state.curve_points_),
+    basic.SetOperator(OperatorType::CONTRAST, {{"contrast", render_state_sanitized.contrast_}},
+                      global_params);
+    basic.SetOperator(OperatorType::BLACK, {{"black", render_state_sanitized.blacks_}},
+                      global_params);
+    basic.SetOperator(OperatorType::WHITE, {{"white", render_state_sanitized.whites_}},
+                      global_params);
+    basic.SetOperator(OperatorType::SHADOWS, {{"shadows", render_state_sanitized.shadows_}},
+                      global_params);
+    basic.SetOperator(OperatorType::HIGHLIGHTS,
+                      {{"highlights", render_state_sanitized.highlights_}}, global_params);
+    basic.SetOperator(OperatorType::CURVE,
+                      CurveControlPointsToParams(render_state_sanitized.curve_points_),
                       global_params);
 
     auto& color = exec->GetStage(PipelineStageName::Color_Adjustment);
-    color.SetOperator(OperatorType::SATURATION, {{"saturation", render_state.saturation_}},
-                      global_params);
+    color.SetOperator(OperatorType::SATURATION,
+                      {{"saturation", render_state_sanitized.saturation_}}, global_params);
     color.EnableOperator(OperatorType::TINT, false, global_params);
     color.SetOperator(OperatorType::COLOR_WHEEL,
-                      ParamsForField(AdjustmentField::ColorWheel, render_state), global_params);
-    color.EnableOperator(OperatorType::COLOR_WHEEL, true, global_params);
-    color.SetOperator(OperatorType::HLS, ParamsForField(AdjustmentField::Hls, render_state),
+                      ParamsForField(AdjustmentField::ColorWheel, render_state_sanitized),
                       global_params);
+    color.EnableOperator(OperatorType::COLOR_WHEEL, true, global_params);
+    color.SetOperator(OperatorType::HLS,
+                      ParamsForField(AdjustmentField::Hls, render_state_sanitized), global_params);
     color.EnableOperator(OperatorType::HLS, true, global_params);
 
     // LUT (LMT): rebind only when the path changes. The operator's SetGlobalParams now
     // derives lmt_enabled_/dirty state from the path, and PipelineMgmtService resyncs on load.
-    if (render_state.lut_path_ != last_applied_lut_path_) {
-      color.SetOperator(OperatorType::LMT, {{"ocio_lmt", render_state.lut_path_}}, global_params);
-      last_applied_lut_path_ = render_state.lut_path_;
+    if (render_state_sanitized.lut_path_ != last_applied_lut_path_) {
+      color.SetOperator(OperatorType::LMT, {{"ocio_lmt", render_state_sanitized.lut_path_}},
+                        global_params);
+      last_applied_lut_path_ = render_state_sanitized.lut_path_;
     }
 
     auto& detail = exec->GetStage(PipelineStageName::Detail_Adjustment);
-    detail.SetOperator(OperatorType::SHARPEN, {{"sharpen", {{"offset", render_state.sharpen_}}}},
+    detail.SetOperator(
+        OperatorType::SHARPEN, {{"sharpen", {{"offset", render_state_sanitized.sharpen_}}}},
+        global_params);
+    detail.SetOperator(OperatorType::CLARITY, {{"clarity", render_state_sanitized.clarity_}},
                        global_params);
-    detail.SetOperator(OperatorType::CLARITY, {{"clarity", render_state.clarity_}}, global_params);
   }
 
   static constexpr std::chrono::milliseconds kFastPreviewMinSubmitInterval =
@@ -1334,15 +1591,18 @@ class EditorDialog final : public QDialog {
   QLabel*                                                  viewer_zoom_label_      = nullptr;
   QScrollArea*                                             controls_scroll_        = nullptr;
   QScrollArea*                                             tone_controls_scroll_   = nullptr;
+  QScrollArea*                                             drt_controls_scroll_    = nullptr;
   QScrollArea*                                             geometry_controls_scroll_ = nullptr;
   QScrollArea*                                             raw_controls_scroll_    = nullptr;
   QStackedWidget*                                          control_panels_stack_   = nullptr;
   SpinnerWidget*                                           spinner_                = nullptr;
   QWidget*                                                 controls_               = nullptr;
   QWidget*                                                 tone_controls_          = nullptr;
+  QWidget*                                                 drt_controls_           = nullptr;
   QWidget*                                                 geometry_controls_      = nullptr;
   QWidget*                                                 raw_controls_           = nullptr;
   QPushButton*                                             tone_panel_btn_         = nullptr;
+  QPushButton*                                             drt_panel_btn_          = nullptr;
   QPushButton*                                             geometry_panel_btn_     = nullptr;
   QPushButton*                                             raw_panel_btn_          = nullptr;
   HistogramWidget*                                         histogram_widget_       = nullptr;
@@ -1382,6 +1642,16 @@ class EditorDialog final : public QDialog {
   ToneCurveWidget*                                         curve_widget_                 = nullptr;
   QSlider*                                                 sharpen_slider_               = nullptr;
   QSlider*                                                 clarity_slider_               = nullptr;
+  QComboBox*                                               odt_encoding_space_combo_     = nullptr;
+  QComboBox*                                               odt_encoding_eotf_combo_      = nullptr;
+  QSlider*                                                 odt_peak_luminance_slider_    = nullptr;
+  QPushButton*                                             odt_aces_method_card_         = nullptr;
+  QPushButton*                                             odt_open_drt_method_card_     = nullptr;
+  QStackedWidget*                                          odt_method_stack_             = nullptr;
+  QComboBox*                                               odt_aces_limiting_space_combo_ = nullptr;
+  QComboBox*                                               odt_open_drt_look_preset_combo_ = nullptr;
+  QComboBox*                                               odt_open_drt_tonescale_preset_combo_ = nullptr;
+  QComboBox*                                               odt_open_drt_creative_white_combo_ = nullptr;
   QSlider*                                                 rotate_slider_                = nullptr;
   QSlider*                                                 geometry_crop_x_slider_       = nullptr;
   QSlider*                                                 geometry_crop_y_slider_       = nullptr;

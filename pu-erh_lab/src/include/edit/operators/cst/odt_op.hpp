@@ -23,7 +23,7 @@ class ODT_Op : public OperatorBase<ODT_Op> {
  private:
   ColorUtils::ODTMethod      method_           = ColorUtils::ODTMethod::OPEN_DRT;
   ColorUtils::ColorSpace     encoding_space_   = ColorUtils::ColorSpace::REC709;
-  ColorUtils::ETOF           encoding_etof_    = ColorUtils::ETOF::GAMMA_2_2;
+  ColorUtils::EOTF           encoding_eotf_    = ColorUtils::EOTF::GAMMA_2_2;
   ColorUtils::ColorSpace     limiting_space_   = ColorUtils::ColorSpace::REC709;
   float                      peak_luminance_   = 100.0f;
   odt_cpu::OpenDRTSettings   open_drt_settings_ = {};

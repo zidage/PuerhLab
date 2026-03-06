@@ -13,7 +13,7 @@ TEST(ODTOpTests, DefaultRoundTripUsesOpenDRT) {
   ASSERT_TRUE(exported.contains("odt"));
   EXPECT_EQ(exported["odt"]["method"], "open_drt");
   EXPECT_EQ(exported["odt"]["encoding_space"], "rec709");
-  EXPECT_EQ(exported["odt"]["encoding_etof"], "gamma_2_2");
+  EXPECT_EQ(exported["odt"]["encoding_eotf"], "gamma_2_2");
   EXPECT_EQ(exported["odt"]["open_drt"]["look_preset"], "standard");
 }
 
@@ -50,6 +50,30 @@ TEST(ODTOpTests, PresetExpansionProducesStableResolvedRuntimeValues) {
   EXPECT_NEAR(runtime.tn_toe_, 0.04f, 1e-6f);
   EXPECT_NEAR(runtime.ts_x0_, 0.18f, 1e-6f);
   EXPECT_NEAR(runtime.ts_dsc_, 1.0f, 1e-6f);
+}
+
+TEST(ODTOpTests, MethodRoundTripPreservesBothMethodSpecificSettings) {
+  nlohmann::json params = pipeline_defaults::MakeDefaultODTParams();
+  params["odt"]["method"] = "open_drt";
+  params["odt"]["limiting_space"] = "p3_d65";
+  params["odt"]["open_drt"]["look_preset"] = "umbra";
+  params["odt"]["open_drt"]["tonescale_preset"] = "aces_2_0";
+  params["odt"]["open_drt"]["creative_white"] = "d60";
+
+  ODT_Op open_drt_op(params);
+  auto exported_open_drt = open_drt_op.GetParams();
+  EXPECT_EQ(exported_open_drt["odt"]["limiting_space"], "p3_d65");
+  EXPECT_EQ(exported_open_drt["odt"]["open_drt"]["look_preset"], "umbra");
+  EXPECT_EQ(exported_open_drt["odt"]["open_drt"]["tonescale_preset"], "aces_2_0");
+  EXPECT_EQ(exported_open_drt["odt"]["open_drt"]["creative_white"], "d60");
+
+  exported_open_drt["odt"]["method"] = "aces_2_0";
+  ODT_Op aces_op(exported_open_drt);
+  const auto exported_aces = aces_op.GetParams();
+  EXPECT_EQ(exported_aces["odt"]["limiting_space"], "p3_d65");
+  EXPECT_EQ(exported_aces["odt"]["open_drt"]["look_preset"], "umbra");
+  EXPECT_EQ(exported_aces["odt"]["open_drt"]["tonescale_preset"], "aces_2_0");
+  EXPECT_EQ(exported_aces["odt"]["open_drt"]["creative_white"], "d60");
 }
 
 }  // namespace puerhlab

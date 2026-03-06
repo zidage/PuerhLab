@@ -217,6 +217,8 @@ auto FieldSpec(AdjustmentField field) -> std::pair<PipelineStageName, OperatorTy
       return {PipelineStageName::Detail_Adjustment, OperatorType::CLARITY};
     case AdjustmentField::Lut:
       return {PipelineStageName::Color_Adjustment, OperatorType::LMT};
+    case AdjustmentField::Odt:
+      return {PipelineStageName::Output_Transform, OperatorType::ODT};
     case AdjustmentField::CropRotate:
       return {PipelineStageName::Geometry_Adjustment, OperatorType::CROP_ROTATE};
   }
@@ -383,6 +385,54 @@ auto ParamsForField(AdjustmentField field, const AdjustmentState& s,
       return {{"clarity", s.clarity_}};
     case AdjustmentField::Lut:
       return {{"ocio_lmt", s.lut_path_}};
+    case AdjustmentField::Odt: {
+      const nlohmann::json defaults = pipeline_defaults::MakeDefaultODTParams();
+      nlohmann::json params =
+          exec ? ReadCurrentOperatorParams(*exec, PipelineStageName::Output_Transform,
+                                           OperatorType::ODT)
+                     .value_or(defaults)
+               : defaults;
+      if (!params.is_object()) {
+        params = defaults;
+      }
+      if (!params.contains("odt") || !params["odt"].is_object()) {
+        params["odt"] = defaults.value("odt", nlohmann::json::object());
+      }
+      if (defaults.contains("odt") && defaults["odt"].is_object()) {
+        for (auto it = defaults["odt"].begin(); it != defaults["odt"].end(); ++it) {
+          if (!params["odt"].contains(it.key())) {
+            params["odt"][it.key()] = it.value();
+          }
+        }
+      }
+
+      auto& odt_params = params["odt"];
+      if (!odt_params.contains("open_drt") || !odt_params["open_drt"].is_object()) {
+        odt_params["open_drt"] =
+            defaults.at("odt").value("open_drt", nlohmann::json::object());
+      }
+      if (defaults.at("odt").contains("open_drt") && defaults.at("odt")["open_drt"].is_object()) {
+        for (auto it = defaults.at("odt")["open_drt"].begin();
+             it != defaults.at("odt")["open_drt"].end(); ++it) {
+          if (!odt_params["open_drt"].contains(it.key())) {
+            odt_params["open_drt"][it.key()] = it.value();
+          }
+        }
+      }
+
+      odt_params["method"]         = ColorUtils::ODTMethodToString(s.odt_.method_);
+      odt_params["encoding_space"] = ColorUtils::ColorSpaceToString(s.odt_.encoding_space_);
+      odt_params["encoding_eotf"]  = ColorUtils::EOTFToString(s.odt_.encoding_eotf_);
+      odt_params["peak_luminance"] = std::clamp(s.odt_.peak_luminance_, 100.0f, 1000.0f);
+      odt_params["limiting_space"] = ColorUtils::ColorSpaceToString(s.odt_.aces_.limiting_space_);
+      odt_params["open_drt"]["look_preset"] =
+          odt_cpu::OpenDRTLookPresetToString(s.odt_.open_drt_.look_preset_);
+      odt_params["open_drt"]["tonescale_preset"] =
+          odt_cpu::OpenDRTTonescalePresetToString(s.odt_.open_drt_.tonescale_preset_);
+      odt_params["open_drt"]["creative_white"] =
+          odt_cpu::OpenDRTCreativeWhitePresetToString(s.odt_.open_drt_.creative_white_);
+      return params;
+    }
     case AdjustmentField::CropRotate: {
       const auto crop_rect = ClampCropRect(s.crop_x_, s.crop_y_, s.crop_w_, s.crop_h_);
       const bool has_rotation = std::abs(s.rotate_degrees_) > 1e-4f;
@@ -478,6 +528,17 @@ auto FieldChanged(AdjustmentField field, const AdjustmentState& current,
       return !NearlyEqual(current.clarity_, committed.clarity_);
     case AdjustmentField::Lut:
       return current.lut_path_ != committed.lut_path_;
+    case AdjustmentField::Odt:
+      return current.odt_.method_ != committed.odt_.method_ ||
+             current.odt_.encoding_space_ != committed.odt_.encoding_space_ ||
+             current.odt_.encoding_eotf_ != committed.odt_.encoding_eotf_ ||
+             !NearlyEqual(current.odt_.peak_luminance_, committed.odt_.peak_luminance_) ||
+             current.odt_.aces_.limiting_space_ != committed.odt_.aces_.limiting_space_ ||
+             current.odt_.open_drt_.look_preset_ != committed.odt_.open_drt_.look_preset_ ||
+             current.odt_.open_drt_.tonescale_preset_ !=
+                 committed.odt_.open_drt_.tonescale_preset_ ||
+             current.odt_.open_drt_.creative_white_ !=
+                 committed.odt_.open_drt_.creative_white_;
     case AdjustmentField::CropRotate: {
       const auto state_rect =
           ClampCropRect(current.crop_x_, current.crop_y_, current.crop_w_, current.crop_h_);
@@ -525,6 +586,7 @@ auto LoadStateFromPipeline(CPUPipelineExecutor& exec,
   const auto& basic    = exec.GetStage(PipelineStageName::Basic_Adjustment);
   const auto& color    = exec.GetStage(PipelineStageName::Color_Adjustment);
   const auto& detail   = exec.GetStage(PipelineStageName::Detail_Adjustment);
+  const auto& output   = exec.GetStage(PipelineStageName::Output_Transform);
 
   // --- Raw decode ---
   if (const auto raw_json = ReadNestedObject(loading, OperatorType::RAW_DECODE, "raw");
@@ -864,6 +926,52 @@ auto LoadStateFromPipeline(CPUPipelineExecutor& exec,
   if (const auto v = ReadFloat(detail, OperatorType::CLARITY, "clarity"); v.has_value()) {
     loaded_state.clarity_ = v.value();
     has_loaded_any        = true;
+  }
+
+  // --- Output transform (ODT) ---
+  if (const auto odt_json = ReadNestedObject(output, OperatorType::ODT, "odt");
+      odt_json.has_value()) {
+    const auto& odt = *odt_json;
+    if (odt.contains("method") && odt["method"].is_string()) {
+      loaded_state.odt_.method_ = ColorUtils::ODTMethodFromString(odt["method"].get<std::string>());
+    }
+    if (odt.contains("encoding_space") && odt["encoding_space"].is_string()) {
+      loaded_state.odt_.encoding_space_ =
+          ColorUtils::ColorSpaceFromString(odt["encoding_space"].get<std::string>());
+    }
+    if (odt.contains("encoding_eotf") && odt["encoding_eotf"].is_string()) {
+      loaded_state.odt_.encoding_eotf_ =
+          ColorUtils::EOTFFromString(odt["encoding_eotf"].get<std::string>());
+    }
+    if (odt.contains("peak_luminance")) {
+      try {
+        loaded_state.odt_.peak_luminance_ =
+            std::clamp(odt["peak_luminance"].get<float>(), 100.0f, 1000.0f);
+      } catch (...) {
+      }
+    }
+    if (odt.contains("limiting_space") && odt["limiting_space"].is_string()) {
+      loaded_state.odt_.aces_.limiting_space_ =
+          ColorUtils::ColorSpaceFromString(odt["limiting_space"].get<std::string>());
+    }
+    if (odt.contains("open_drt") && odt["open_drt"].is_object()) {
+      const auto& open_drt = odt["open_drt"];
+      if (open_drt.contains("look_preset") && open_drt["look_preset"].is_string()) {
+        loaded_state.odt_.open_drt_.look_preset_ =
+            odt_cpu::OpenDRTLookPresetFromString(open_drt["look_preset"].get<std::string>());
+      }
+      if (open_drt.contains("tonescale_preset") && open_drt["tonescale_preset"].is_string()) {
+        loaded_state.odt_.open_drt_.tonescale_preset_ =
+            odt_cpu::OpenDRTTonescalePresetFromString(
+                open_drt["tonescale_preset"].get<std::string>());
+      }
+      if (open_drt.contains("creative_white") && open_drt["creative_white"].is_string()) {
+        loaded_state.odt_.open_drt_.creative_white_ =
+            odt_cpu::OpenDRTCreativeWhitePresetFromString(
+                open_drt["creative_white"].get<std::string>());
+      }
+    }
+    has_loaded_any = true;
   }
 
   // --- Crop / Rotate ---

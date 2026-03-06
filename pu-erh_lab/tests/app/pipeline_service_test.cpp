@@ -13,6 +13,7 @@
 #include "app/project_service.hpp"
 #include "edit/operators/op_base.hpp"
 #include "edit/operators/operator_registeration.hpp"
+#include "edit/pipeline/default_pipeline_params.hpp"
 #include "sleeve/storage_service.hpp"
 #include "utils/clock/time_provider.hpp"
 
@@ -117,8 +118,12 @@ TEST_F(PipelineServiceTests, DefaultOutputTransformUsesOpenDRT) {
   ASSERT_TRUE(exported["Output Transform"]["Output Transform"].contains("odt"));
   ASSERT_TRUE(exported["Output Transform"]["Output Transform"]["odt"].contains("params"));
   ASSERT_TRUE(exported["Output Transform"]["Output Transform"]["odt"]["params"].contains("odt"));
-  EXPECT_EQ(exported["Output Transform"]["Output Transform"]["odt"]["params"]["odt"]["method"],
-            "open_drt");
+  const auto& odt =
+      exported["Output Transform"]["Output Transform"]["odt"]["params"]["odt"];
+  EXPECT_EQ(odt["method"], "open_drt");
+  EXPECT_EQ(odt["encoding_eotf"], "gamma_2_2");
+  EXPECT_EQ(odt["limiting_space"], "rec709");
+  EXPECT_TRUE(odt.contains("open_drt"));
 
   pipeline_guard->dirty_ = true;
   pipeline_service.SavePipeline(pipeline_guard);
@@ -127,6 +132,50 @@ TEST_F(PipelineServiceTests, DefaultOutputTransformUsesOpenDRT) {
   auto reloaded = pipeline_service.LoadPipeline(42);
   ASSERT_NE(reloaded, nullptr);
   EXPECT_EQ(exported.dump(), reloaded->pipeline_->ExportPipelineParams().dump());
+}
+
+TEST_F(PipelineServiceTests, OutputTransformPersistencePreservesSharedAndMethodSpecificSettings) {
+  ProjectService      project(db_path_, meta_path_);
+  PipelineMgmtService pipeline_service(project.GetStorageService());
+
+  auto                pipeline_guard = pipeline_service.LoadPipeline(43);
+  ASSERT_NE(pipeline_guard, nullptr);
+
+  nlohmann::json odt_params = pipeline_defaults::MakeDefaultODTParams();
+  odt_params["odt"]["method"] = "aces_2_0";
+  odt_params["odt"]["encoding_space"] = "rec2020";
+  odt_params["odt"]["encoding_eotf"] = "st2084";
+  odt_params["odt"]["peak_luminance"] = 600.0f;
+  odt_params["odt"]["limiting_space"] = "p3_d65";
+  odt_params["odt"]["open_drt"]["look_preset"] = "umbra";
+  odt_params["odt"]["open_drt"]["tonescale_preset"] = "aces_2_0";
+  odt_params["odt"]["open_drt"]["creative_white"] = "d60";
+  odt_params["odt"]["open_drt"]["creative_white_limit"] = 23.5f;
+  odt_params["odt"]["open_drt"]["display_grey_luminance"] = 12.5f;
+
+  auto& output_stage = pipeline_guard->pipeline_->GetStage(PipelineStageName::Output_Transform);
+  output_stage.SetOperator(OperatorType::ODT, odt_params);
+
+  pipeline_guard->dirty_ = true;
+  pipeline_service.SavePipeline(pipeline_guard);
+  pipeline_service.Sync();
+
+  auto reloaded = pipeline_service.LoadPipeline(43);
+  ASSERT_NE(reloaded, nullptr);
+
+  const nlohmann::json exported = reloaded->pipeline_->ExportPipelineParams();
+  const auto& odt =
+      exported["Output Transform"]["Output Transform"]["odt"]["params"]["odt"];
+  EXPECT_EQ(odt["method"], "aces_2_0");
+  EXPECT_EQ(odt["encoding_space"], "rec2020");
+  EXPECT_EQ(odt["encoding_eotf"], "st2084");
+  EXPECT_EQ(odt["peak_luminance"], 600.0);
+  EXPECT_EQ(odt["limiting_space"], "p3_d65");
+  EXPECT_EQ(odt["open_drt"]["look_preset"], "umbra");
+  EXPECT_EQ(odt["open_drt"]["tonescale_preset"], "aces_2_0");
+  EXPECT_EQ(odt["open_drt"]["creative_white"], "d60");
+  EXPECT_EQ(odt["open_drt"]["creative_white_limit"], 23.5);
+  EXPECT_EQ(odt["open_drt"]["display_grey_luminance"], 12.5);
 }
 
 TEST_F(PipelineServiceTests, SharedGuardPinsUntilLastSave) {

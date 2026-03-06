@@ -67,7 +67,7 @@ auto OpenDRTLookPresetToString(OpenDRTLookPreset value) -> std::string;
 auto OpenDRTTonescalePresetToString(OpenDRTTonescalePreset value) -> std::string;
 auto OpenDRTCreativeWhitePresetToString(OpenDRTCreativeWhitePreset value) -> std::string;
 
-auto ResolveOpenDRTRuntime(ColorUtils::ColorSpace encoding_space, ColorUtils::ETOF encoding_etof,
+auto ResolveOpenDRTRuntime(ColorUtils::ColorSpace encoding_space, ColorUtils::EOTF encoding_eotf,
                            float peak_luminance,
                            const OpenDRTSettings& settings) -> ColorUtils::OpenDRTParams;
 

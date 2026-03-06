@@ -44,7 +44,7 @@ enum class ODTMethod : int {
   OPEN_DRT = 1,
 };
 
-enum class ETOF : int {
+enum class EOTF : int {
   LINEAR    = 0,
   ST2084    = 1,
   HLG       = 2,
@@ -245,46 +245,46 @@ inline cv::Matx33f XYZ_TO_RGB_f33(ColorSpace cs, float Y = 1.0f) {
   return XYZ_TO_RGB_f33(SpaceEnumToPrimary(cs), Y);
 }
 
-inline auto ETOFFromString(std::string_view etof_str) -> ETOF {
-  if (etof_str == "linear") {
-    return ETOF::LINEAR;
+inline auto EOTFFromString(std::string_view eotf_str) -> EOTF {
+  if (eotf_str == "linear") {
+    return EOTF::LINEAR;
   }
-  if (etof_str == "st2084") {
-    return ETOF::ST2084;
+  if (eotf_str == "st2084") {
+    return EOTF::ST2084;
   }
-  if (etof_str == "hlg") {
-    return ETOF::HLG;
+  if (eotf_str == "hlg") {
+    return EOTF::HLG;
   }
-  if (etof_str == "gamma_2_6") {
-    return ETOF::GAMMA_2_6;
+  if (eotf_str == "gamma_2_6") {
+    return EOTF::GAMMA_2_6;
   }
-  if (etof_str == "bt1886") {
-    return ETOF::BT1886;
+  if (eotf_str == "bt1886") {
+    return EOTF::BT1886;
   }
-  if (etof_str == "gamma_2_2") {
-    return ETOF::GAMMA_2_2;
+  if (eotf_str == "gamma_2_2") {
+    return EOTF::GAMMA_2_2;
   }
-  if (etof_str == "gamma_1_8") {
-    return ETOF::GAMMA_1_8;
+  if (eotf_str == "gamma_1_8") {
+    return EOTF::GAMMA_1_8;
   }
-  return ETOF::GAMMA_2_2;
+  return EOTF::GAMMA_2_2;
 }
 
-inline auto ETOFToString(ETOF etof) -> std::string {
-  switch (etof) {
-    case ETOF::LINEAR:
+inline auto EOTFToString(EOTF eotf) -> std::string {
+  switch (eotf) {
+    case EOTF::LINEAR:
       return "linear";
-    case ETOF::ST2084:
+    case EOTF::ST2084:
       return "st2084";
-    case ETOF::HLG:
+    case EOTF::HLG:
       return "hlg";
-    case ETOF::GAMMA_2_6:
+    case EOTF::GAMMA_2_6:
       return "gamma_2_6";
-    case ETOF::BT1886:
+    case EOTF::BT1886:
       return "bt1886";
-    case ETOF::GAMMA_2_2:
+    case EOTF::GAMMA_2_2:
       return "gamma_2_2";
-    case ETOF::GAMMA_1_8:
+    case EOTF::GAMMA_1_8:
       return "gamma_1_8";
     default:
       return "gamma_2_2";
@@ -542,7 +542,7 @@ struct OpenDRTParams {
 struct TO_OUTPUT_Params {
   ODTMethod        method_               = ODTMethod::OPEN_DRT;
   ColorSpace       encoding_space_       = ColorSpace::REC709;
-  ETOF             etof_                 = ETOF::GAMMA_2_2;
+  EOTF             eotf_                 = EOTF::GAMMA_2_2;
   float            peak_luminance_       = 100.0f;
   float            display_linear_scale_ = 1.0f;
   ODTParams        aces_params_          = {};

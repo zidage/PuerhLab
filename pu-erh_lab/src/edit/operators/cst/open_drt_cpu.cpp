@@ -17,7 +17,7 @@ namespace {
 
 struct OpenDRTCacheKey {
   int           encoding_space_              = 0;
-  int           encoding_etof_               = 0;
+  int           encoding_eotf_               = 0;
   int           look_preset_                 = 0;
   int           tonescale_preset_            = 0;
   int           creative_white_preset_       = 0;
@@ -29,7 +29,7 @@ struct OpenDRTCacheKey {
 
   auto operator==(const OpenDRTCacheKey& other) const -> bool {
     return encoding_space_ == other.encoding_space_ &&
-           encoding_etof_ == other.encoding_etof_ &&
+           encoding_eotf_ == other.encoding_eotf_ &&
            look_preset_ == other.look_preset_ &&
            tonescale_preset_ == other.tonescale_preset_ &&
            creative_white_preset_ == other.creative_white_preset_ &&
@@ -44,7 +44,7 @@ struct OpenDRTCacheKey {
 struct OpenDRTCacheKeyHash {
   auto operator()(const OpenDRTCacheKey& key) const noexcept -> std::size_t {
     std::size_t h = std::hash<int>{}(key.encoding_space_);
-    h ^= std::hash<int>{}(key.encoding_etof_) + 0x9e3779b9 + (h << 6) + (h >> 2);
+    h ^= std::hash<int>{}(key.encoding_eotf_) + 0x9e3779b9 + (h << 6) + (h >> 2);
     h ^= std::hash<int>{}(key.look_preset_) + 0x9e3779b9 + (h << 6) + (h >> 2);
     h ^= std::hash<int>{}(key.tonescale_preset_) + 0x9e3779b9 + (h << 6) + (h >> 2);
     h ^= std::hash<int>{}(key.creative_white_preset_) + 0x9e3779b9 + (h << 6) + (h >> 2);
@@ -70,12 +70,12 @@ auto RuntimeCacheMutex() -> std::mutex& {
   return cache_mutex;
 }
 
-auto BuildCacheKey(ColorUtils::ColorSpace encoding_space, ColorUtils::ETOF encoding_etof,
+auto BuildCacheKey(ColorUtils::ColorSpace encoding_space, ColorUtils::EOTF encoding_eotf,
                    float peak_luminance,
                    const OpenDRTSettings& settings) -> OpenDRTCacheKey {
   return OpenDRTCacheKey{
       static_cast<int>(encoding_space),
-      static_cast<int>(encoding_etof),
+      static_cast<int>(encoding_eotf),
       static_cast<int>(settings.look_preset_),
       static_cast<int>(settings.tonescale_preset_),
       static_cast<int>(settings.creative_white_),
@@ -103,7 +103,7 @@ void ApplyLookPreset(OpenDRTLookPreset look, ColorUtils::OpenDRTParams* p);
 void ApplyTonescalePreset(OpenDRTTonescalePreset tonescale, ColorUtils::OpenDRTParams* p);
 void ApplyCreativeWhitePreset(OpenDRTCreativeWhitePreset preset, float creative_white_limit,
                               ColorUtils::OpenDRTParams* p);
-void ResolveDisplayEncoding(ColorUtils::ColorSpace encoding_space, ColorUtils::ETOF encoding_etof,
+void ResolveDisplayEncoding(ColorUtils::ColorSpace encoding_space, ColorUtils::EOTF encoding_eotf,
                             ColorUtils::OpenDRTParams* p);
 void FinalizePrecompute(float peak_luminance, float display_grey_luminance, float hdr_grey_boost,
                         float hdr_purity, ColorUtils::OpenDRTParams* p);
@@ -782,66 +782,66 @@ void ApplyCreativeWhitePreset(OpenDRTCreativeWhitePreset preset, float creative_
   p->cwp_lm_ = Clamp01(creative_white_limit);
 }
 
-void ResolveDisplayEncoding(ColorUtils::ColorSpace encoding_space, ColorUtils::ETOF encoding_etof,
+void ResolveDisplayEncoding(ColorUtils::ColorSpace encoding_space, ColorUtils::EOTF encoding_eotf,
                             ColorUtils::OpenDRTParams* p) {
   if (encoding_space == ColorUtils::ColorSpace::REC709 &&
-      encoding_etof == ColorUtils::ETOF::BT1886) {
+      encoding_eotf == ColorUtils::EOTF::BT1886) {
     p->surround_ = 1;
     p->display_gamut_ = 0;
     p->display_eotf_ = 2;
     return;
   }
   if (encoding_space == ColorUtils::ColorSpace::REC709 &&
-      encoding_etof == ColorUtils::ETOF::GAMMA_2_2) {
+      encoding_eotf == ColorUtils::EOTF::GAMMA_2_2) {
     p->surround_ = 2;
     p->display_gamut_ = 0;
     p->display_eotf_ = 1;
     return;
   }
   if (encoding_space == ColorUtils::ColorSpace::P3_D65 &&
-      encoding_etof == ColorUtils::ETOF::GAMMA_2_2) {
+      encoding_eotf == ColorUtils::EOTF::GAMMA_2_2) {
     p->surround_ = 2;
     p->display_gamut_ = 1;
     p->display_eotf_ = 1;
     return;
   }
   if (encoding_space == ColorUtils::ColorSpace::P3_D60 &&
-      encoding_etof == ColorUtils::ETOF::GAMMA_2_6) {
+      encoding_eotf == ColorUtils::EOTF::GAMMA_2_6) {
     p->surround_ = 0;
     p->display_gamut_ = 3;
     p->display_eotf_ = 3;
     return;
   }
   if (encoding_space == ColorUtils::ColorSpace::P3_DCI &&
-      encoding_etof == ColorUtils::ETOF::GAMMA_2_6) {
+      encoding_eotf == ColorUtils::EOTF::GAMMA_2_6) {
     p->surround_ = 0;
     p->display_gamut_ = 4;
     p->display_eotf_ = 3;
     return;
   }
   if (encoding_space == ColorUtils::ColorSpace::XYZ &&
-      encoding_etof == ColorUtils::ETOF::GAMMA_2_6) {
+      encoding_eotf == ColorUtils::EOTF::GAMMA_2_6) {
     p->surround_ = 0;
     p->display_gamut_ = 5;
     p->display_eotf_ = 3;
     return;
   }
   if (encoding_space == ColorUtils::ColorSpace::REC2020 &&
-      encoding_etof == ColorUtils::ETOF::ST2084) {
+      encoding_eotf == ColorUtils::EOTF::ST2084) {
     p->surround_ = 0;
     p->display_gamut_ = 2;
     p->display_eotf_ = 4;
     return;
   }
   if (encoding_space == ColorUtils::ColorSpace::REC2020 &&
-      encoding_etof == ColorUtils::ETOF::HLG) {
+      encoding_eotf == ColorUtils::EOTF::HLG) {
     p->surround_ = 0;
     p->display_gamut_ = 2;
     p->display_eotf_ = 5;
     return;
   }
   if (encoding_space == ColorUtils::ColorSpace::P3_D65 &&
-      encoding_etof == ColorUtils::ETOF::ST2084) {
+      encoding_eotf == ColorUtils::EOTF::ST2084) {
     p->surround_ = 0;
     p->display_gamut_ = 1;
     p->display_eotf_ = 4;
@@ -849,8 +849,8 @@ void ResolveDisplayEncoding(ColorUtils::ColorSpace encoding_space, ColorUtils::E
   }
 
   throw std::runtime_error("ODT_Op: unsupported OpenDRT output combination for encoding_space=\"" +
-                           ColorUtils::ColorSpaceToString(encoding_space) + "\" and encoding_etof=\"" +
-                           ColorUtils::ETOFToString(encoding_etof) + "\".");
+                           ColorUtils::ColorSpaceToString(encoding_space) + "\" and encoding_eotf=\"" +
+                           ColorUtils::EOTFToString(encoding_eotf) + "\".");
 }
 
 void FinalizePrecompute(float peak_luminance, float display_grey_luminance, float hdr_grey_boost,
@@ -988,7 +988,7 @@ auto OpenDRTCreativeWhitePresetToString(OpenDRTCreativeWhitePreset value) -> std
   }
 }
 
-auto ResolveOpenDRTRuntime(ColorUtils::ColorSpace encoding_space, ColorUtils::ETOF encoding_etof,
+auto ResolveOpenDRTRuntime(ColorUtils::ColorSpace encoding_space, ColorUtils::EOTF encoding_eotf,
                            float peak_luminance,
                            const OpenDRTSettings& input_settings) -> ColorUtils::OpenDRTParams {
   OpenDRTSettings settings = input_settings;
@@ -1001,7 +1001,7 @@ auto ResolveOpenDRTRuntime(ColorUtils::ColorSpace encoding_space, ColorUtils::ET
   peak_luminance           = std::clamp(peak_luminance, 100.0f, 1000.0f);
 
   const OpenDRTCacheKey      cache_key =
-      BuildCacheKey(encoding_space, encoding_etof, peak_luminance, settings);
+      BuildCacheKey(encoding_space, encoding_eotf, peak_luminance, settings);
   std::lock_guard<std::mutex> lock(RuntimeCacheMutex());
   auto&                       cache = RuntimeCache();
   const auto                  cached_it = cache.find(cache_key);
@@ -1013,7 +1013,7 @@ auto ResolveOpenDRTRuntime(ColorUtils::ColorSpace encoding_space, ColorUtils::ET
   ApplyLookPreset(settings.look_preset_, &runtime);
   ApplyTonescalePreset(settings.tonescale_preset_, &runtime);
   ApplyCreativeWhitePreset(settings.creative_white_, settings.creative_white_limit_, &runtime);
-  ResolveDisplayEncoding(encoding_space, encoding_etof, &runtime);
+  ResolveDisplayEncoding(encoding_space, encoding_eotf, &runtime);
   FinalizePrecompute(peak_luminance, settings.display_grey_luminance_, settings.hdr_grey_boost_,
                      settings.hdr_purity_, &runtime);
 

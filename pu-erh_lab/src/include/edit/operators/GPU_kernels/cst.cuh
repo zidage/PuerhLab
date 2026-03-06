@@ -236,7 +236,7 @@ struct GPU_OUTPUT_Kernel : GPUPointOpTag {
     }
 
     const float3 cv_3 = DisplayEncoding(
-        odt_color, params.to_output_params_.limit_to_display_matx, params.to_output_params_.etof,
+        odt_color, params.to_output_params_.limit_to_display_matx, params.to_output_params_.eotf,
         params.to_output_params_.display_linear_scale_);
 
     *p = make_float4(cv_3.x, cv_3.y, cv_3.z, p->w);

@@ -121,6 +121,20 @@
     tone_controls_scroll_->setWidget(tone_controls_);
     controls_scroll_ = tone_controls_scroll_;
 
+    drt_controls_scroll_ = new QScrollArea(controls_panel);
+    drt_controls_scroll_->setFrameShape(QFrame::NoFrame);
+    drt_controls_scroll_->setWidgetResizable(true);
+    drt_controls_scroll_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    drt_controls_scroll_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    drt_controls_scroll_->setStyleSheet(scroll_style);
+
+    drt_controls_ = new QWidget(drt_controls_scroll_);
+    auto* drt_controls_layout = new QVBoxLayout(drt_controls_);
+    drt_controls_layout->setContentsMargins(0, 0, 0, 0);
+    drt_controls_layout->setSpacing(12);
+    drt_controls_layout->addStretch();
+    drt_controls_scroll_->setWidget(drt_controls_);
+
     geometry_controls_scroll_ = new QScrollArea(controls_panel);
     geometry_controls_scroll_->setFrameShape(QFrame::NoFrame);
     geometry_controls_scroll_->setWidgetResizable(true);
@@ -151,6 +165,7 @@
 
     control_panels_stack_ = new QStackedWidget(controls_panel);
     control_panels_stack_->addWidget(tone_controls_scroll_);
+    control_panels_stack_->addWidget(drt_controls_scroll_);
     control_panels_stack_->addWidget(geometry_controls_scroll_);
     control_panels_stack_->addWidget(raw_controls_scroll_);
     control_panels_stack_->setCurrentIndex(0);
@@ -161,24 +176,34 @@
     panel_switch_layout->setSpacing(8);
 
     tone_panel_btn_     = new QPushButton("Tone", panel_switch_row);
+    drt_panel_btn_      = new QPushButton("Display RT", panel_switch_row);
     geometry_panel_btn_ = new QPushButton("Geometry", panel_switch_row);
     raw_panel_btn_      = new QPushButton("RAW Decode", panel_switch_row);
     tone_panel_btn_->setCheckable(true);
+    drt_panel_btn_->setCheckable(true);
     geometry_panel_btn_->setCheckable(true);
     raw_panel_btn_->setCheckable(true);
     tone_panel_btn_->setCursor(Qt::PointingHandCursor);
+    drt_panel_btn_->setCursor(Qt::PointingHandCursor);
     geometry_panel_btn_->setCursor(Qt::PointingHandCursor);
     raw_panel_btn_->setCursor(Qt::PointingHandCursor);
     tone_panel_btn_->setFixedHeight(30);
+    drt_panel_btn_->setFixedHeight(30);
     geometry_panel_btn_->setFixedHeight(30);
     raw_panel_btn_->setFixedHeight(30);
+    drt_panel_btn_->setToolTip("Display Rendering Transform");
 
     panel_switch_layout->addWidget(tone_panel_btn_, 1);
+    panel_switch_layout->addWidget(drt_panel_btn_, 1);
     panel_switch_layout->addWidget(geometry_panel_btn_, 1);
     panel_switch_layout->addWidget(raw_panel_btn_, 1);
 
     QObject::connect(tone_panel_btn_, &QPushButton::clicked, this,
                      [this]() { SetActiveControlPanel(ControlPanelKind::Tone); });
+    QObject::connect(drt_panel_btn_, &QPushButton::clicked, this,
+                     [this]() {
+                       SetActiveControlPanel(ControlPanelKind::DisplayRenderingTransform);
+                     });
     QObject::connect(geometry_panel_btn_, &QPushButton::clicked, this,
                      [this]() { SetActiveControlPanel(ControlPanelKind::Geometry); });
     QObject::connect(raw_panel_btn_, &QPushButton::clicked, this,

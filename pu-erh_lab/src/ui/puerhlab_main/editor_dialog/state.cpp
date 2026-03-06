@@ -129,6 +129,9 @@ void CopyFieldState(AdjustmentField field, const AdjustmentState& from, Adjustme
     case AdjustmentField::Lut:
       to.lut_path_ = from.lut_path_;
       return;
+    case AdjustmentField::Odt:
+      to.odt_ = from.odt_;
+      return;
     case AdjustmentField::CropRotate:
       to.rotate_degrees_     = from.rotate_degrees_;
       to.crop_enabled_       = from.crop_enabled_;

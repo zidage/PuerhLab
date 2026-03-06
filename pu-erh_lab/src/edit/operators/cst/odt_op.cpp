@@ -38,12 +38,9 @@ auto ODT_Op::GetParams() const -> nlohmann::json {
   nlohmann::json odt;
   odt["method"]         = ColorUtils::ODTMethodToString(method_);
   odt["encoding_space"] = ColorUtils::ColorSpaceToString(encoding_space_);
-  odt["encoding_etof"]  = ColorUtils::ETOFToString(encoding_etof_);
+  odt["encoding_eotf"]  = ColorUtils::EOTFToString(encoding_eotf_);
+  odt["limiting_space"] = ColorUtils::ColorSpaceToString(limiting_space_);
   odt["peak_luminance"] = peak_luminance_;
-
-  if (method_ == ColorUtils::ODTMethod::ACES_2_0) {
-    odt["limiting_space"] = ColorUtils::ColorSpaceToString(limiting_space_);
-  }
 
   odt["open_drt"] = {
       {"look_preset", odt_cpu::OpenDRTLookPresetToString(open_drt_settings_.look_preset_)},
@@ -77,8 +74,8 @@ void ODT_Op::SetParams(const nlohmann::json& in_j) {
   if (j.contains("encoding_space") && j.at("encoding_space").is_string()) {
     encoding_space_ = ColorUtils::ColorSpaceFromString(j.at("encoding_space").get<std::string>());
   }
-  if (j.contains("encoding_etof") && j.at("encoding_etof").is_string()) {
-    encoding_etof_ = ColorUtils::ETOFFromString(j.at("encoding_etof").get<std::string>());
+  if (j.contains("encoding_eotf") && j.at("encoding_eotf").is_string()) {
+    encoding_eotf_ = ColorUtils::EOTFFromString(j.at("encoding_eotf").get<std::string>());
   }
   if (j.contains("limiting_space") && j.at("limiting_space").is_string()) {
     limiting_space_ = ColorUtils::ColorSpaceFromString(j.at("limiting_space").get<std::string>());
@@ -145,7 +142,7 @@ void ODT_Op::RebuildRuntime() {
   to_output_params_                 = {};
   to_output_params_.method_         = method_;
   to_output_params_.encoding_space_ = encoding_space_;
-  to_output_params_.etof_           = encoding_etof_;
+  to_output_params_.eotf_           = encoding_eotf_;
   to_output_params_.peak_luminance_ = peak_luminance_;
 
   if (method_ == ColorUtils::ODTMethod::ACES_2_0) {
@@ -158,7 +155,7 @@ void ODT_Op::RebuildRuntime() {
   }
 
   to_output_params_.open_drt_params_ = odt_cpu::ResolveOpenDRTRuntime(
-      encoding_space_, encoding_etof_, peak_luminance_, open_drt_settings_);
+      encoding_space_, encoding_eotf_, peak_luminance_, open_drt_settings_);
   to_output_params_.limit_to_display_matx_ = cv::Matx33f::eye();
   to_output_params_.display_linear_scale_ =
       odt_cpu::ResolveOpenDRTDisplayLinearScale(to_output_params_.open_drt_params_);
