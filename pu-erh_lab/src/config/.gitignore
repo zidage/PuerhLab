@@ -1,7 +1,6 @@
 LUTs
 CLFs
 CTLs
-DRTs
 !lens_calib/
 !lens_calib/lens_catalog.json
 !nikon_lens/id_map.json

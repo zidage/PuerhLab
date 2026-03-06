@@ -109,7 +109,7 @@ void RegisterAllOperators() {
   });
 
   OperatorFactory::Instance().Register(OperatorType::ODT, [](const nlohmann::json& params) {
-    return std::make_shared<OutputTransformOp>(params);
+    return std::make_shared<ACES_ODT_Op>(params);
   });
 
   OperatorFactory::Instance().Register(OperatorType::LMT, [](const nlohmann::json& params) {

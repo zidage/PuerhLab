@@ -44,11 +44,6 @@ enum class GPU_ETOF : int {
   GAMMA_1_8 = 6,
 };
 
-enum class GPU_OutputTransformMethod : int {
-  ACES2    = 0,
-  OPEN_DRT = 1,
-};
-
 struct GPU_LUT3D {
   cudaArray_t         array_              = nullptr;
   cudaTextureObject_t texture_object_     = 0;
@@ -165,7 +160,7 @@ static GPU_Table1D<T> Create1DLinearTableTextureObject(const T* host_data, size_
   return table;
 }
 
-struct GPU_ACESODTParams {
+struct GPU_ODTParams {
   float               peak_luminance_ = 100.0f;
 
   // JMh parameters
@@ -218,128 +213,11 @@ struct GPU_ACESODTParams {
   }
 };
 
-struct GPU_OpenDRTParams {
-  float peak_luminance_               = 100.0f;
-  float tn_gb_                        = 0.13f;
-  float pt_hdr_                       = 0.5f;
-  float tn_Lg_                        = 10.0f;
-
-  float tn_con_                       = 1.66f;
-  float tn_sh_                        = 0.5f;
-  float tn_toe_                       = 0.003f;
-  float tn_off_                       = 0.005f;
-  int   tn_hcon_enable_               = 0;
-  float tn_hcon_                      = 0.0f;
-  float tn_hcon_pv_                   = 1.0f;
-  float tn_hcon_st_                   = 4.0f;
-  int   tn_lcon_enable_               = 0;
-  float tn_lcon_                      = 0.0f;
-  float tn_lcon_w_                    = 0.5f;
-
-  float rs_sa_                        = 0.35f;
-  float rs_rw_                        = 0.25f;
-  float rs_bw_                        = 0.55f;
-  float rs_w_[3]                      = {0.25f, 0.20f, 0.55f};
-
-  int   pt_enable_                    = 1;
-  float pt_lml_                       = 0.25f;
-  float pt_lml_r_                     = 0.5f;
-  float pt_lml_g_                     = 0.0f;
-  float pt_lml_b_                     = 0.1f;
-  float pt_lmh_                       = 0.25f;
-  float pt_lmh_r_                     = 0.5f;
-  float pt_lmh_b_                     = 0.0f;
-
-  int   ptl_enable_                   = 1;
-  float ptl_c_                        = 0.06f;
-  float ptl_m_                        = 0.08f;
-  float ptl_y_                        = 0.06f;
-
-  int   ptm_enable_                   = 1;
-  float ptm_low_                      = 0.4f;
-  float ptm_low_rng_                  = 0.25f;
-  float ptm_low_st_                   = 0.5f;
-  float ptm_high_                     = -0.8f;
-  float ptm_high_rng_                 = 0.35f;
-  float ptm_high_st_                  = 0.4f;
-
-  int   brl_enable_                   = 1;
-  float brl_                          = 0.0f;
-  float brl_r_                        = -2.5f;
-  float brl_g_                        = -1.5f;
-  float brl_b_                        = -1.5f;
-  float brl_rng_                      = 0.5f;
-  float brl_st_                       = 0.35f;
-
-  int   brlp_enable_                  = 1;
-  float brlp_                         = -0.5f;
-  float brlp_r_                       = -1.25f;
-  float brlp_g_                       = -1.25f;
-  float brlp_b_                       = -0.25f;
-
-  int   hc_enable_                    = 1;
-  float hc_r_                         = 1.0f;
-  float hc_r_rng_                     = 0.3f;
-
-  int   hs_rgb_enable_                = 1;
-  float hs_r_                         = 0.6f;
-  float hs_r_rng_                     = 0.6f;
-  float hs_g_                         = 0.35f;
-  float hs_g_rng_                     = 1.0f;
-  float hs_b_                         = 0.66f;
-  float hs_b_rng_                     = 1.0f;
-
-  int   hs_cmy_enable_                = 1;
-  float hs_c_                         = 0.25f;
-  float hs_c_rng_                     = 1.0f;
-  float hs_m_                         = 0.0f;
-  float hs_m_rng_                     = 1.0f;
-  float hs_y_                         = 0.0f;
-  float hs_y_rng_                     = 1.0f;
-
-  int   creative_white_mode_          = 2;
-  float creative_white_luminance_mix_ = 0.25f;
-  float creative_white_norm_          = 1.0f;
-
-  float ts_x1_                        = 0.0f;
-  float ts_y1_                        = 0.0f;
-  float ts_x0_                        = 0.0f;
-  float ts_y0_                        = 0.0f;
-  float ts_s0_                        = 0.0f;
-  float ts_p_                         = 0.0f;
-  float ts_s10_                       = 0.0f;
-  float ts_m1_                        = 0.0f;
-  float ts_m2_                        = 1.0f;
-  float ts_s_                         = 0.0f;
-  float ts_dsc_                       = 1.0f;
-  float pt_cmp_Lf_                    = 0.0f;
-  float s_Lp100_                      = 0.0f;
-  float ts_s1_                        = 0.0f;
-
-  float ap1_to_render_mat_[9]         = {1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f};
-  float render_to_limit_neutral_mat_[9] = {
-      1.0f, 0.0f, 0.0f,
-      0.0f, 1.0f, 0.0f,
-      0.0f, 0.0f, 1.0f};
-  float render_to_limit_creative_mat_[9] = {
-      1.0f, 0.0f, 0.0f,
-      0.0f, 1.0f, 0.0f,
-      0.0f, 0.0f, 1.0f};
-
-  void Reset() { *this = GPU_OpenDRTParams{}; }
-};
-
 struct GPU_TO_OUTPUT_Params {
-  GPU_OutputTransformMethod method_           = GPU_OutputTransformMethod::OPEN_DRT;
-  GPU_ACESODTParams         aces_odt_params_  = {};
-  GPU_OpenDRTParams         open_drt_params_  = {};
+  GPU_ODTParams odt_params_ = {};
 
-  float                     limit_to_display_matx[9] = {
-      1.0f, 0.0f, 0.0f,
-      0.0f, 1.0f, 0.0f,
-      0.0f, 0.0f, 1.0f};
-  GPU_ETOF                  etof                  = GPU_ETOF::LINEAR;
-  float                     display_linear_scale_ = 1.0f;
+  float         limit_to_display_matx[9];
+  GPU_ETOF      etof = GPU_ETOF::LINEAR;
 };
 
 struct GPUOperatorParams {
@@ -347,7 +225,7 @@ struct GPUOperatorParams {
   bool                 exposure_enabled_       = true;
   float                exposure_offset_        = 0.0f;
 
-  bool                 contrast_enabled_       = false;
+  bool                 contrast_enabled_       = true;
   float                contrast_scale_         = 0.0f;
 
   // Shadows adjustment parameter
@@ -682,7 +560,28 @@ class GPUParamsConverter {
       auto&       to_output_gpu = gpu_params.to_output_params_;
       const auto& to_output_cpu = cpu_params.to_output_params_;
 
-      auto copy33 = [](const cv::Matx33f& m, float out[9]) {
+      // Fail fast if ODT precompute is missing.
+      // Without these tables, the GPU ODT path will end up calling tex1Dfetch
+      // with texture_object_=0, which is undefined and can manifest as
+      // run-to-run nondeterminism.
+      if (cpu_params.to_output_enabled_) {
+        const auto& odt_check = cpu_params.to_output_params_.odt_params_;
+        const bool  missing_tables = (!odt_check.table_reach_M_) || (!odt_check.table_hues_) ||
+                                    (!odt_check.table_upper_hull_gammas_) ||
+                                    (!odt_check.table_gamut_cusps_);
+        if (missing_tables) {
+          std::ostringstream oss;
+          oss << "GPUParamsConverter: ODT tables are not initialized:";
+          if (!odt_check.table_reach_M_) oss << " table_reach_M_";
+          if (!odt_check.table_hues_) oss << " table_hues_";
+          if (!odt_check.table_upper_hull_gammas_) oss << " table_upper_hull_gammas_";
+          if (!odt_check.table_gamut_cusps_) oss << " table_gamut_cusps_";
+          oss << ". Ensure CPU ODT precompute runs before executing the GPU pipeline.";
+          throw std::runtime_error(oss.str());
+        }
+      }
+      // Matrices: flatten cv::Matx33f into row-major float[9]
+      auto        copy33        = [](const cv::Matx33f& m, float out[9]) {
         out[0] = m(0, 0);
         out[1] = m(0, 1);
         out[2] = m(0, 2);
@@ -694,210 +593,112 @@ class GPUParamsConverter {
         out[8] = m(2, 2);
       };
 
-      to_output_gpu.method_               =
-          static_cast<GPU_OutputTransformMethod>(static_cast<int>(to_output_cpu.method_));
+      // Copy TO_OUTPUT params
+      // Limit to display matrix
       copy33(to_output_cpu.limit_to_display_matx_, to_output_gpu.limit_to_display_matx);
-      to_output_gpu.etof                  =
-          static_cast<GPU_ETOF>(static_cast<int>(to_output_cpu.etof_));
-      to_output_gpu.display_linear_scale_ = to_output_cpu.display_linear_scale_;
+      // ETOF
+      // These two enums have identical values; static_cast through int to be safe
+      to_output_gpu.etof = static_cast<GPU_ETOF>(static_cast<int>(to_output_cpu.etof_));
 
-      if (to_output_cpu.method_ == ColorUtils::OutputTransformMethod::ACES2) {
-        if (cpu_params.to_output_enabled_) {
-          const auto& odt_check = to_output_cpu.aces_odt_params_;
-          const bool  missing_tables = (!odt_check.table_reach_M_) || (!odt_check.table_hues_) ||
-                                      (!odt_check.table_upper_hull_gammas_) ||
-                                      (!odt_check.table_gamut_cusps_);
-          if (missing_tables) {
-            std::ostringstream oss;
-            oss << "GPUParamsConverter: ACES ODT tables are not initialized:";
-            if (!odt_check.table_reach_M_) oss << " table_reach_M_";
-            if (!odt_check.table_hues_) oss << " table_hues_";
-            if (!odt_check.table_upper_hull_gammas_) oss << " table_upper_hull_gammas_";
-            if (!odt_check.table_gamut_cusps_) oss << " table_gamut_cusps_";
-            throw std::runtime_error(oss.str());
-          }
+      const auto& odt_cpu           = cpu_params.to_output_params_.odt_params_;
+      auto&       odt_gpu           = gpu_params.to_output_params_.odt_params_;
+
+      odt_gpu.peak_luminance_       = odt_cpu.peak_luminance_;
+      odt_gpu.limit_J_max           = odt_cpu.limit_J_max_;
+      odt_gpu.model_gamma_inv       = odt_cpu.model_gamma_inv_;
+
+      // Tone scale
+      odt_gpu.ts_.n_                = odt_cpu.ts_params_.n_;
+      odt_gpu.ts_.n_r_              = odt_cpu.ts_params_.n_r_;
+      odt_gpu.ts_.g_                = odt_cpu.ts_params_.g_;
+      odt_gpu.ts_.t_1_              = odt_cpu.ts_params_.t_1_;
+      odt_gpu.ts_.c_t_              = odt_cpu.ts_params_.c_t_;
+      odt_gpu.ts_.s_2_              = odt_cpu.ts_params_.s_2_;
+      odt_gpu.ts_.u_2_              = odt_cpu.ts_params_.u_2_;
+      odt_gpu.ts_.m_2_              = odt_cpu.ts_params_.m_2_;
+      odt_gpu.ts_.forward_limit_    = odt_cpu.ts_params_.forward_limit_;
+      odt_gpu.ts_.inverse_limit_    = odt_cpu.ts_params_.inverse_limit_;
+      odt_gpu.ts_.log_peak_         = odt_cpu.ts_params_.log_peak_;
+
+      // Chroma compression
+      odt_gpu.sat                   = odt_cpu.sat_;
+      odt_gpu.sat_thr               = odt_cpu.sat_thr_;
+      odt_gpu.compr                 = odt_cpu.compr_;
+      odt_gpu.chroma_compress_scale = odt_cpu.chroma_compress_scale_;
+
+      // Gamut compression
+      odt_gpu.mid_J                 = odt_cpu.mid_J_;
+      odt_gpu.focus_dist            = odt_cpu.focus_dist_;
+      odt_gpu.lower_hull_gamma_inv  = odt_cpu.lower_hull_gamma_inv_;
+      odt_gpu.hue_linearity_search_range[0] =
+          static_cast<int>(odt_cpu.hue_linearity_search_range_(0));
+      odt_gpu.hue_linearity_search_range[1] =
+          static_cast<int>(odt_cpu.hue_linearity_search_range_(1));
+
+      auto copy_jmh = [&](const ColorUtils::JMhParams& src, GPU_JMhParams& dst) {
+        copy33(src.MATRIX_RGB_to_CAM16_c_, dst.MATRIX_RGB_to_CAM16_c_);
+        copy33(src.MATRIX_CAM16_c_to_RGB_, dst.MATRIX_CAM16_c_to_RGB_);
+        copy33(src.MATRIX_cone_response_to_Aab_, dst.MATRIX_cone_response_to_Aab_);
+        copy33(src.MATRIX_Aab_to_cone_response_, dst.MATRIX_Aab_to_cone_response_);
+        dst.F_L_n_     = src.F_L_n_;
+        dst.cz_        = src.cz_;
+        dst.inv_cz_    = src.inv_cz_;
+        // CTL semantics: A_w_J = _pacrc_fwd(F_L). Use inv_A_w_J_ as the
+        // authoritative value to avoid any CPU-side naming/meaning mismatches.
+        dst.A_w_J_     = (src.inv_A_w_J_ != 0.f) ? (1.f / src.inv_A_w_J_) : 0.f;
+        dst.inv_A_w_J_ = src.inv_A_w_J_;
+      };
+
+      copy_jmh(odt_cpu.input_params_, odt_gpu.input_params_);
+      copy_jmh(odt_cpu.reach_params_, odt_gpu.reach_params_);
+      copy_jmh(odt_cpu.limit_params_, odt_gpu.limit_params_);
+
+      // Upload tables (cached by shared_ptr backing address)
+      if (odt_cpu.table_reach_M_) {
+        const std::uintptr_t id = reinterpret_cast<std::uintptr_t>(odt_cpu.table_reach_M_.get());
+        if (id != odt_gpu.host_table_reach_M_id_) {
+          odt_gpu.table_reach_M_.Reset();
+          odt_gpu.table_reach_M_ = Create1DLinearTableTextureObject<float>(
+              odt_cpu.table_reach_M_->data(), TOTAL_TABLE_SIZE);
+          odt_gpu.host_table_reach_M_id_ = id;
         }
+      }
 
-        const auto& odt_cpu = to_output_cpu.aces_odt_params_;
-        auto&       odt_gpu = to_output_gpu.aces_odt_params_;
-
-        odt_gpu.peak_luminance_       = odt_cpu.peak_luminance_;
-        odt_gpu.limit_J_max           = odt_cpu.limit_J_max_;
-        odt_gpu.model_gamma_inv       = odt_cpu.model_gamma_inv_;
-        odt_gpu.ts_.n_                = odt_cpu.ts_params_.n_;
-        odt_gpu.ts_.n_r_              = odt_cpu.ts_params_.n_r_;
-        odt_gpu.ts_.g_                = odt_cpu.ts_params_.g_;
-        odt_gpu.ts_.t_1_              = odt_cpu.ts_params_.t_1_;
-        odt_gpu.ts_.c_t_              = odt_cpu.ts_params_.c_t_;
-        odt_gpu.ts_.s_2_              = odt_cpu.ts_params_.s_2_;
-        odt_gpu.ts_.u_2_              = odt_cpu.ts_params_.u_2_;
-        odt_gpu.ts_.m_2_              = odt_cpu.ts_params_.m_2_;
-        odt_gpu.ts_.forward_limit_    = odt_cpu.ts_params_.forward_limit_;
-        odt_gpu.ts_.inverse_limit_    = odt_cpu.ts_params_.inverse_limit_;
-        odt_gpu.ts_.log_peak_         = odt_cpu.ts_params_.log_peak_;
-        odt_gpu.sat                   = odt_cpu.sat_;
-        odt_gpu.sat_thr               = odt_cpu.sat_thr_;
-        odt_gpu.compr                 = odt_cpu.compr_;
-        odt_gpu.chroma_compress_scale = odt_cpu.chroma_compress_scale_;
-        odt_gpu.mid_J                 = odt_cpu.mid_J_;
-        odt_gpu.focus_dist            = odt_cpu.focus_dist_;
-        odt_gpu.lower_hull_gamma_inv  = odt_cpu.lower_hull_gamma_inv_;
-        odt_gpu.hue_linearity_search_range[0] =
-            static_cast<int>(odt_cpu.hue_linearity_search_range_(0));
-        odt_gpu.hue_linearity_search_range[1] =
-            static_cast<int>(odt_cpu.hue_linearity_search_range_(1));
-
-        auto copy_jmh = [&](const ColorUtils::JMhParams& src, GPU_JMhParams& dst) {
-          copy33(src.MATRIX_RGB_to_CAM16_c_, dst.MATRIX_RGB_to_CAM16_c_);
-          copy33(src.MATRIX_CAM16_c_to_RGB_, dst.MATRIX_CAM16_c_to_RGB_);
-          copy33(src.MATRIX_cone_response_to_Aab_, dst.MATRIX_cone_response_to_Aab_);
-          copy33(src.MATRIX_Aab_to_cone_response_, dst.MATRIX_Aab_to_cone_response_);
-          dst.F_L_n_     = src.F_L_n_;
-          dst.cz_        = src.cz_;
-          dst.inv_cz_    = src.inv_cz_;
-          dst.A_w_J_     = (src.inv_A_w_J_ != 0.f) ? (1.f / src.inv_A_w_J_) : 0.f;
-          dst.inv_A_w_J_ = src.inv_A_w_J_;
-        };
-
-        copy_jmh(odt_cpu.input_params_, odt_gpu.input_params_);
-        copy_jmh(odt_cpu.reach_params_, odt_gpu.reach_params_);
-        copy_jmh(odt_cpu.limit_params_, odt_gpu.limit_params_);
-
-        if (odt_cpu.table_reach_M_) {
-          const std::uintptr_t id = reinterpret_cast<std::uintptr_t>(odt_cpu.table_reach_M_.get());
-          if (id != odt_gpu.host_table_reach_M_id_) {
-            odt_gpu.table_reach_M_.Reset();
-            odt_gpu.table_reach_M_ = Create1DLinearTableTextureObject<float>(
-                odt_cpu.table_reach_M_->data(), TOTAL_TABLE_SIZE);
-            odt_gpu.host_table_reach_M_id_ = id;
-          }
+      if (odt_cpu.table_hues_) {
+        const std::uintptr_t id = reinterpret_cast<std::uintptr_t>(odt_cpu.table_hues_.get());
+        if (id != odt_gpu.host_table_hues_id_) {
+          odt_gpu.table_hues_.Reset();
+          odt_gpu.table_hues_ = Create1DLinearTableTextureObject<float>(odt_cpu.table_hues_->data(),
+                                                                        TOTAL_TABLE_SIZE);
+          odt_gpu.host_table_hues_id_ = id;
         }
-        if (odt_cpu.table_hues_) {
-          const std::uintptr_t id = reinterpret_cast<std::uintptr_t>(odt_cpu.table_hues_.get());
-          if (id != odt_gpu.host_table_hues_id_) {
-            odt_gpu.table_hues_.Reset();
-            odt_gpu.table_hues_ = Create1DLinearTableTextureObject<float>(
-                odt_cpu.table_hues_->data(), TOTAL_TABLE_SIZE);
-            odt_gpu.host_table_hues_id_ = id;
-          }
+      }
+
+      if (odt_cpu.table_upper_hull_gammas_) {
+        const std::uintptr_t id =
+            reinterpret_cast<std::uintptr_t>(odt_cpu.table_upper_hull_gammas_.get());
+        if (id != odt_gpu.host_table_upper_hull_gamma_id_) {
+          odt_gpu.table_upper_hull_gamma_.Reset();
+          odt_gpu.table_upper_hull_gamma_ = Create1DLinearTableTextureObject<float>(
+              odt_cpu.table_upper_hull_gammas_->data(), TOTAL_TABLE_SIZE);
+          odt_gpu.host_table_upper_hull_gamma_id_ = id;
         }
-        if (odt_cpu.table_upper_hull_gammas_) {
-          const std::uintptr_t id =
-              reinterpret_cast<std::uintptr_t>(odt_cpu.table_upper_hull_gammas_.get());
-          if (id != odt_gpu.host_table_upper_hull_gamma_id_) {
-            odt_gpu.table_upper_hull_gamma_.Reset();
-            odt_gpu.table_upper_hull_gamma_ = Create1DLinearTableTextureObject<float>(
-                odt_cpu.table_upper_hull_gammas_->data(), TOTAL_TABLE_SIZE);
-            odt_gpu.host_table_upper_hull_gamma_id_ = id;
+      }
+
+      if (odt_cpu.table_gamut_cusps_) {
+        const std::uintptr_t id =
+            reinterpret_cast<std::uintptr_t>(odt_cpu.table_gamut_cusps_.get());
+        if (id != odt_gpu.host_table_gamut_cusps_id_) {
+          odt_gpu.table_gamut_cusps_.Reset();
+          std::vector<float4> packed(TOTAL_TABLE_SIZE);
+          for (size_t i = 0; i < TOTAL_TABLE_SIZE; ++i) {
+            const auto& v = (*odt_cpu.table_gamut_cusps_)[i];
+            packed[i]     = make_float4(v(0), v(1), v(2), 0.f);
           }
+          odt_gpu.table_gamut_cusps_ =
+              Create1DLinearTableTextureObject<float4>(packed.data(), packed.size());
+          odt_gpu.host_table_gamut_cusps_id_ = id;
         }
-        if (odt_cpu.table_gamut_cusps_) {
-          const std::uintptr_t id =
-              reinterpret_cast<std::uintptr_t>(odt_cpu.table_gamut_cusps_.get());
-          if (id != odt_gpu.host_table_gamut_cusps_id_) {
-            odt_gpu.table_gamut_cusps_.Reset();
-            std::vector<float4> packed(TOTAL_TABLE_SIZE);
-            for (size_t i = 0; i < TOTAL_TABLE_SIZE; ++i) {
-              const auto& v = (*odt_cpu.table_gamut_cusps_)[i];
-              packed[i]     = make_float4(v(0), v(1), v(2), 0.f);
-            }
-            odt_gpu.table_gamut_cusps_ =
-                Create1DLinearTableTextureObject<float4>(packed.data(), packed.size());
-            odt_gpu.host_table_gamut_cusps_id_ = id;
-          }
-        }
-        to_output_gpu.open_drt_params_ = {};
-      } else {
-        to_output_gpu.aces_odt_params_.Reset();
-        const auto& odt_cpu = to_output_cpu.open_drt_params_;
-        auto&       odt_gpu = to_output_gpu.open_drt_params_;
-        odt_gpu.peak_luminance_               = odt_cpu.peak_luminance_;
-        odt_gpu.tn_gb_                        = odt_cpu.tn_gb_;
-        odt_gpu.pt_hdr_                       = odt_cpu.pt_hdr_;
-        odt_gpu.tn_Lg_                        = odt_cpu.tn_Lg_;
-        odt_gpu.tn_con_                       = odt_cpu.tn_con_;
-        odt_gpu.tn_sh_                        = odt_cpu.tn_sh_;
-        odt_gpu.tn_toe_                       = odt_cpu.tn_toe_;
-        odt_gpu.tn_off_                       = odt_cpu.tn_off_;
-        odt_gpu.tn_hcon_enable_               = odt_cpu.tn_hcon_enable_;
-        odt_gpu.tn_hcon_                      = odt_cpu.tn_hcon_;
-        odt_gpu.tn_hcon_pv_                   = odt_cpu.tn_hcon_pv_;
-        odt_gpu.tn_hcon_st_                   = odt_cpu.tn_hcon_st_;
-        odt_gpu.tn_lcon_enable_               = odt_cpu.tn_lcon_enable_;
-        odt_gpu.tn_lcon_                      = odt_cpu.tn_lcon_;
-        odt_gpu.tn_lcon_w_                    = odt_cpu.tn_lcon_w_;
-        odt_gpu.rs_sa_                        = odt_cpu.rs_sa_;
-        odt_gpu.rs_rw_                        = odt_cpu.rs_rw_;
-        odt_gpu.rs_bw_                        = odt_cpu.rs_bw_;
-        for (int i = 0; i < 3; ++i) odt_gpu.rs_w_[i] = odt_cpu.rs_w_[i];
-        odt_gpu.pt_enable_                    = odt_cpu.pt_enable_;
-        odt_gpu.pt_lml_                       = odt_cpu.pt_lml_;
-        odt_gpu.pt_lml_r_                     = odt_cpu.pt_lml_r_;
-        odt_gpu.pt_lml_g_                     = odt_cpu.pt_lml_g_;
-        odt_gpu.pt_lml_b_                     = odt_cpu.pt_lml_b_;
-        odt_gpu.pt_lmh_                       = odt_cpu.pt_lmh_;
-        odt_gpu.pt_lmh_r_                     = odt_cpu.pt_lmh_r_;
-        odt_gpu.pt_lmh_b_                     = odt_cpu.pt_lmh_b_;
-        odt_gpu.ptl_enable_                   = odt_cpu.ptl_enable_;
-        odt_gpu.ptl_c_                        = odt_cpu.ptl_c_;
-        odt_gpu.ptl_m_                        = odt_cpu.ptl_m_;
-        odt_gpu.ptl_y_                        = odt_cpu.ptl_y_;
-        odt_gpu.ptm_enable_                   = odt_cpu.ptm_enable_;
-        odt_gpu.ptm_low_                      = odt_cpu.ptm_low_;
-        odt_gpu.ptm_low_rng_                  = odt_cpu.ptm_low_rng_;
-        odt_gpu.ptm_low_st_                   = odt_cpu.ptm_low_st_;
-        odt_gpu.ptm_high_                     = odt_cpu.ptm_high_;
-        odt_gpu.ptm_high_rng_                 = odt_cpu.ptm_high_rng_;
-        odt_gpu.ptm_high_st_                  = odt_cpu.ptm_high_st_;
-        odt_gpu.brl_enable_                   = odt_cpu.brl_enable_;
-        odt_gpu.brl_                          = odt_cpu.brl_;
-        odt_gpu.brl_r_                        = odt_cpu.brl_r_;
-        odt_gpu.brl_g_                        = odt_cpu.brl_g_;
-        odt_gpu.brl_b_                        = odt_cpu.brl_b_;
-        odt_gpu.brl_rng_                      = odt_cpu.brl_rng_;
-        odt_gpu.brl_st_                       = odt_cpu.brl_st_;
-        odt_gpu.brlp_enable_                  = odt_cpu.brlp_enable_;
-        odt_gpu.brlp_                         = odt_cpu.brlp_;
-        odt_gpu.brlp_r_                       = odt_cpu.brlp_r_;
-        odt_gpu.brlp_g_                       = odt_cpu.brlp_g_;
-        odt_gpu.brlp_b_                       = odt_cpu.brlp_b_;
-        odt_gpu.hc_enable_                    = odt_cpu.hc_enable_;
-        odt_gpu.hc_r_                         = odt_cpu.hc_r_;
-        odt_gpu.hc_r_rng_                     = odt_cpu.hc_r_rng_;
-        odt_gpu.hs_rgb_enable_                = odt_cpu.hs_rgb_enable_;
-        odt_gpu.hs_r_                         = odt_cpu.hs_r_;
-        odt_gpu.hs_r_rng_                     = odt_cpu.hs_r_rng_;
-        odt_gpu.hs_g_                         = odt_cpu.hs_g_;
-        odt_gpu.hs_g_rng_                     = odt_cpu.hs_g_rng_;
-        odt_gpu.hs_b_                         = odt_cpu.hs_b_;
-        odt_gpu.hs_b_rng_                     = odt_cpu.hs_b_rng_;
-        odt_gpu.hs_cmy_enable_                = odt_cpu.hs_cmy_enable_;
-        odt_gpu.hs_c_                         = odt_cpu.hs_c_;
-        odt_gpu.hs_c_rng_                     = odt_cpu.hs_c_rng_;
-        odt_gpu.hs_m_                         = odt_cpu.hs_m_;
-        odt_gpu.hs_m_rng_                     = odt_cpu.hs_m_rng_;
-        odt_gpu.hs_y_                         = odt_cpu.hs_y_;
-        odt_gpu.hs_y_rng_                     = odt_cpu.hs_y_rng_;
-        odt_gpu.creative_white_mode_          = odt_cpu.creative_white_mode_;
-        odt_gpu.creative_white_luminance_mix_ = odt_cpu.creative_white_luminance_mix_;
-        odt_gpu.creative_white_norm_          = odt_cpu.creative_white_norm_;
-        odt_gpu.ts_x1_                        = odt_cpu.ts_x1_;
-        odt_gpu.ts_y1_                        = odt_cpu.ts_y1_;
-        odt_gpu.ts_x0_                        = odt_cpu.ts_x0_;
-        odt_gpu.ts_y0_                        = odt_cpu.ts_y0_;
-        odt_gpu.ts_s0_                        = odt_cpu.ts_s0_;
-        odt_gpu.ts_p_                         = odt_cpu.ts_p_;
-        odt_gpu.ts_s10_                       = odt_cpu.ts_s10_;
-        odt_gpu.ts_m1_                        = odt_cpu.ts_m1_;
-        odt_gpu.ts_m2_                        = odt_cpu.ts_m2_;
-        odt_gpu.ts_s_                         = odt_cpu.ts_s_;
-        odt_gpu.ts_dsc_                       = odt_cpu.ts_dsc_;
-        odt_gpu.pt_cmp_Lf_                    = odt_cpu.pt_cmp_Lf_;
-        odt_gpu.s_Lp100_                      = odt_cpu.s_Lp100_;
-        odt_gpu.ts_s1_                        = odt_cpu.ts_s1_;
-        copy33(odt_cpu.ap1_to_render_mat_, odt_gpu.ap1_to_render_mat_);
-        copy33(odt_cpu.render_to_limit_neutral_mat_, odt_gpu.render_to_limit_neutral_mat_);
-        copy33(odt_cpu.render_to_limit_creative_mat_, odt_gpu.render_to_limit_creative_mat_);
       }
 
       cpu_params.to_output_dirty_ = false;

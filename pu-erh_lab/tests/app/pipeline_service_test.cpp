@@ -131,54 +131,6 @@ TEST_F(PipelineServiceTests, SharedGuardPinsUntilLastSave) {
   EXPECT_EQ(guard_c->pin_count_, 1u);
 }
 
-TEST_F(PipelineServiceTests, DefaultPipelineExportsOpenDRTOutputTransform) {
-  ProjectService      project(db_path_, meta_path_);
-  PipelineMgmtService pipeline_service(project.GetStorageService());
-
-  auto                guard    = pipeline_service.LoadPipeline(17);
-  ASSERT_NE(guard, nullptr);
-
-  const auto exported = guard->pipeline_->ExportPipelineParams();
-  ASSERT_TRUE(exported.contains("Output Transform"));
-  ASSERT_TRUE(exported["Output Transform"].contains("Output Transform"));
-  ASSERT_TRUE(exported["Output Transform"]["Output Transform"].contains("odt"));
-
-  const auto& odt = exported["Output Transform"]["Output Transform"]["odt"]["params"]["odt"];
-  EXPECT_EQ(odt.at("method"), "open_drt");
-  EXPECT_EQ(odt.at("encoding_space"), "rec709");
-  EXPECT_EQ(odt.at("encoding_etof"), "gamma_2_2");
-  EXPECT_EQ(odt.at("limiting_space"), "rec709");
-  EXPECT_EQ(odt.at("peak_luminance"), 100.0f);
-  EXPECT_EQ(odt.at("open_drt").at("display_encoding_preset"), "srgb_display");
-}
-
-TEST_F(PipelineServiceTests, MissingOutputTransformIsRebuiltWithOpenDRTDefault) {
-  ProjectService      project(db_path_, meta_path_);
-  PipelineMgmtService pipeline_service(project.GetStorageService());
-
-  auto                guard = pipeline_service.LoadPipeline(23);
-  ASSERT_NE(guard, nullptr);
-
-  guard->pipeline_->GetStage(PipelineStageName::Output_Transform).ResetAll();
-  guard->dirty_ = true;
-  pipeline_service.SavePipeline(guard);
-  pipeline_service.Sync();
-
-  auto reloaded = pipeline_service.LoadPipeline(23);
-  ASSERT_NE(reloaded, nullptr);
-
-  const auto exported = reloaded->pipeline_->ExportPipelineParams();
-  ASSERT_TRUE(exported.contains("Output Transform"));
-  ASSERT_TRUE(exported["Output Transform"].contains("Output Transform"));
-  ASSERT_TRUE(exported["Output Transform"]["Output Transform"].contains("odt"));
-
-  const auto& odt = exported["Output Transform"]["Output Transform"]["odt"]["params"]["odt"];
-  EXPECT_EQ(odt.at("method"), "open_drt");
-  EXPECT_EQ(odt.at("encoding_space"), "rec709");
-  EXPECT_EQ(odt.at("encoding_etof"), "gamma_2_2");
-  EXPECT_EQ(odt.at("limiting_space"), "rec709");
-}
-
 TEST_F(PipelineServiceTests, MultiplePipelineTest) {
   constexpr int                           pipeline_count = 5;
   std::array<std::string, pipeline_count> pipeline_params;

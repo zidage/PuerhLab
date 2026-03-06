@@ -40,16 +40,10 @@ void EnsureDefaultOutputTransform(CPUPipelineExecutor& exec) {
   // Without it, the GPU path won't have precomputed ODT tables and can render black.
   if (!output_stage.GetOperator(OperatorType::ODT).has_value()) {
     nlohmann::json output_params;
-    output_params["odt"] = {{"method", "open_drt"},
-                            {"encoding_space", "rec709"},
-                            {"encoding_etof", "gamma_2_2"},
-                            {"limiting_space", "rec709"},
-                            {"peak_luminance", 100.0f},
-                            {"open_drt",
-                             {{"look_preset", "standard"},
-                              {"tonescale_preset", "use_look_preset"},
-                              {"display_encoding_preset", "srgb_display"},
-                              {"creative_white_preset", "use_look_preset"}}}};
+    output_params["aces_odt"] = {{"encoding_space", "rec709"},
+                                 {"encoding_etof", "gamma_2_2"},
+                                 {"limiting_space", "rec709"},
+                                 {"peak_luminance", 100.0f}};
     output_stage.SetOperator(OperatorType::ODT, output_params, global_params);
   }
 }

@@ -14,8 +14,6 @@
 
 #include "edit/operators/basic/contrast_op.hpp"
 
-#include <algorithm>
-#include <cmath>
 #include <opencv2/core/hal/interface.h>
 
 #include <opencv2/core.hpp>
@@ -30,26 +28,7 @@ namespace puerhlab {
  * @brief Default construct a new Contrast Op:: Contrast Op object
  *
  */
-namespace {
-inline float contrast_scale_from_slider(float v) {
-  const float s = std::clamp(v, -100.0f, 100.0f) / 100.0f;
-  return std::exp(s);
-}
-
-inline float contrast_k_from_slider(float v) {
-  const float s = std::clamp(v, -100.0f, 100.0f) / 100.0f;
-  if (std::abs(s) <= 1e-6f) {
-    return 0.0f;
-  }
-  return 4.0f * s * std::abs(s);
-}
-}  // namespace
-
-ContrastOp::ContrastOp() : contrast_offset_(0.0f) {
-  scale_          = 1.0f;
-  gpu_strength_   = 0.0f;
-  slider_enabled_ = false;
-}
+ContrastOp::ContrastOp() : contrast_offset_(0.0f) { scale_ = 1.0f; }
 
 /**
  * @brief Construct a new Contrast Op:: Contrast Op object
@@ -57,9 +36,7 @@ ContrastOp::ContrastOp() : contrast_offset_(0.0f) {
  * @param contrast_offset
  */
 ContrastOp::ContrastOp(float contrast_offset) : contrast_offset_(contrast_offset) {
-  scale_          = contrast_scale_from_slider(contrast_offset_);
-  gpu_strength_   = contrast_k_from_slider(contrast_offset_);
-  slider_enabled_ = std::abs(gpu_strength_) > 1e-6f;
+  scale_ = std::exp(contrast_offset / 100.0f);
 }
 
 ContrastOp::ContrastOp(const nlohmann::json& params) { SetParams(params); }
@@ -71,10 +48,6 @@ ContrastOp::ContrastOp(const nlohmann::json& params) { SetParams(params); }
  * @return ImageBuffer
  */
 void ContrastOp::Apply(std::shared_ptr<ImageBuffer> input) {
-  if (!runtime_enabled_ || !slider_enabled_ || std::abs(scale_ - 1.0f) <= 1e-6f) {
-    return;
-  }
-
   cv::Mat& linear_image = input->GetCPUData();
 
   linear_image.forEach<cv::Vec3f>([this](cv::Vec3f& pixel, const int*) -> void {
@@ -99,25 +72,29 @@ auto ContrastOp::GetParams() const -> nlohmann::json {
   return o;
 }
 
+inline float contrast_k_from_slider(int v) // v in [-100,100]
+{
+    float s = std::max(-100, std::min(100, v)) / 100.0f; // [-1,1]
+    s = s * fabsf(s);  // cubic-ish, center softer
+    return 4.0f + 4.0f * s;
+}
+
 void ContrastOp::SetParams(const nlohmann::json& params) {
   if (params.contains(GetScriptName())) {
     contrast_offset_ = params[GetScriptName()];
   } else {
     contrast_offset_ = 0.0f;
   }
-  scale_          = contrast_scale_from_slider(contrast_offset_);
-  gpu_strength_   = contrast_k_from_slider(contrast_offset_);
-  slider_enabled_ = std::abs(gpu_strength_) > 1e-6f;
+  scale_ = contrast_k_from_slider(static_cast<int>(contrast_offset_));
 }
 
 void ContrastOp::SetGlobalParams(OperatorParams& params) const {
-  params.contrast_enabled_ = runtime_enabled_ && slider_enabled_;
-  params.contrast_scale_   = params.contrast_enabled_ ? gpu_strength_ : 0.0f;
+  // Should only be called once SetParams has been called
+  params.contrast_scale_ = scale_;
 }
 
 void ContrastOp::EnableGlobalParams(OperatorParams& params, bool enable) {
-  runtime_enabled_         = enable;
-  params.contrast_enabled_ = runtime_enabled_ && slider_enabled_;
-  params.contrast_scale_   = params.contrast_enabled_ ? gpu_strength_ : 0.0f;
+  // Contrast op is still broken, so disable it for now
+  params.contrast_enabled_ = enable;
 }
 };  // namespace puerhlab
