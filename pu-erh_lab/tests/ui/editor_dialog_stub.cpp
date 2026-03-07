@@ -1,3 +1,7 @@
+//  Copyright 2026 Yurun Zi
+//  SPDX-License-Identifier: GPL-3.0-only
+//  Additional permission under GPLv3 section 7 applies; see the LICENSE file.
+
 /// @file editor_dialog_stub.cpp
 /// @brief No-op stub for OpenEditorDialog — used in headless unit tests.
 ///

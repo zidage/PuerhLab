@@ -1,12 +1,13 @@
 pu-erh_lab THIRD-PARTY NOTICE
 Generated: 2026-02-27
 
-Project license: Apache License 2.0
+Project license: GPL-3.0-only with additional permission under GPLv3 section 7 for required NVIDIA CUDA components
+Historical note: the v0.1.1 tag and earlier releases were Apache-2.0.
 This file documents third-party components referenced by CMake and additional upstream sources explicitly requested by maintainers.
 Full license texts are stored in ./third_party_licenses/.
 
 IMPORTANT
-Some components listed below are under copyleft licenses (GPL/LGPL/CDDL/CC BY-SA). If you redistribute binaries or modified sources, you must satisfy those licenses in addition to Apache-2.0.
+Some components listed below are under copyleft licenses (GPL/LGPL/CDDL/CC BY-SA). If you redistribute binaries or modified sources, you must satisfy those licenses in addition to the project GPL terms and the CUDA additional permission.
 
 A) Components used from CMakeLists.txt
 
@@ -171,7 +172,7 @@ C) File-level adaptation pointers in this repository
 
 D) Redistribution reminder
 
-- Keep this notice, the Apache-2.0 LICENSE, and all files in third_party_licenses/ when redistributing source/binaries.
+- Keep this notice, the root LICENSE, the root NOTICE, and all files in third_party_licenses/ when redistributing source/binaries.
 - Preserve original copyright and license headers in source files.
 - Copyleft components may impose source redistribution and reciprocal licensing obligations.
 - This document is a technical attribution record and is not legal advice.

@@ -1,3 +1,7 @@
+//  Copyright 2025-2026 Yurun Zi
+//  SPDX-License-Identifier: GPL-3.0-only
+//  Additional permission under GPLv3 section 7 applies; see the LICENSE file.
+
 #ifdef _WIN32
 #include <opencv2/cudaimgproc.hpp>
 #include <string>

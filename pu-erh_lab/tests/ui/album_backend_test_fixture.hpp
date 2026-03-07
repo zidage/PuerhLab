@@ -1,3 +1,7 @@
+//  Copyright 2026 Yurun Zi
+//  SPDX-License-Identifier: GPL-3.0-only
+//  Additional permission under GPLv3 section 7 applies; see the LICENSE file.
+
 /// @file album_backend_test_fixture.hpp
 /// @brief Shared test fixture for AlbumBackend UI unit tests.
 ///

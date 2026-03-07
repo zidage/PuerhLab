@@ -1,3 +1,7 @@
+//  Copyright 2025 Yurun Zi
+//  SPDX-License-Identifier: GPL-3.0-only
+//  Additional permission under GPLv3 section 7 applies; see the LICENSE file.
+
 #include "decoders/decoder_scheduler.hpp"
 #ifdef _WIN32
 #include "../leak_detector/memory_leak_detector.hpp"

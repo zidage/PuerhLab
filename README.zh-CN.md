@@ -2,7 +2,7 @@
 
 <p align="right"><a href="./README.md">English</a> | <a href="./README.zh-CN.md"><strong>简体中文</strong></a></p>
 
-![License](https://img.shields.io/badge/License-Apache_2.0-blue)
+![License](https://img.shields.io/badge/License-GPLv3-blue)
 ![CUDA](https://img.shields.io/badge/CUDA-12.8-76B900)
 ![C++](https://img.shields.io/badge/C++-20-blue)
 
@@ -123,30 +123,30 @@ cd PuerhLab
 .\vcpkg\bootstrap-vcpkg.bat
 ```
 
-推荐使用 `scripts/msvc_env.cmd` 自动注入 MSVC 构建环境。
+推荐使用 `cmd /c scripts\msvc_env.cmd ...` 自动注入 MSVC 构建环境。
 下面命令中的 Qt/easy_profiler 路径请按本机实际目录调整。
 
 ```powershell
 # Debug 配置
-.\scripts\msvc_env.cmd --preset win_debug `
+cmd /c scripts\msvc_env.cmd --preset win_debug `
   -DCMAKE_PREFIX_PATH="D:/Qt/6.9.3/msvc2022_64/lib/cmake" `
   -Deasy_profiler_DIR="$PWD/pu-erh_lab/third_party/easy_profiler-v2.1.0-msvc15-win64/lib/cmake/easy_profiler" `
   -DPUERHLAB_LENSFUN_ROOT="$PWD/pu-erh_lab/third_party/lensfun/install"
 
 # Debug 编译
-.\scripts\msvc_env.cmd --build build/debug --parallel
+cmd /c scripts\msvc_env.cmd --build --preset win_debug --parallel 4
 ```
 
 ```powershell
 # Release 配置
-.\scripts\msvc_env.cmd --preset win_release `
+cmd /c scripts\msvc_env.cmd --preset win_release `
   -DCMAKE_PREFIX_PATH="D:/Qt/6.9.3/msvc2022_64/lib/cmake" `
   -Deasy_profiler_DIR="$PWD/pu-erh_lab/third_party/easy_profiler-v2.1.0-msvc15-win64/lib/cmake/easy_profiler" `
   -DPUERHLAB_LENSFUN_ROOT="$PWD/pu-erh_lab/third_party/lensfun/install"
 
 # Release 编译 + 安装
-.\scripts\msvc_env.cmd --build build/release --parallel
-.\scripts\msvc_env.cmd --install build/release --prefix build/install
+cmd /c scripts\msvc_env.cmd --build --preset win_release --parallel 4
+cmd /c scripts\msvc_env.cmd --install build/release --prefix build/install
 ```
 
 可选部署参数：
@@ -212,8 +212,8 @@ ctest --test-dir build/debug --output-on-failure
 可用格式化/静态检查目标（clang-tidy 集成仍在完善中）：
 
 ```powershell
-.\scripts\msvc_env.cmd --build build/debug --target format
-.\scripts\msvc_env.cmd --build build/debug --target tidy
+cmd /c scripts\msvc_env.cmd --build --preset win_debug --target format
+cmd /c scripts\msvc_env.cmd --build --preset win_debug --target tidy
 ```
 
 ## 路线图
@@ -224,5 +224,6 @@ ctest --test-dir build/debug --output-on-failure
 
 ## 许可证
 
-Apache-2.0。详见 [LICENSE](LICENSE)。
-
+`v0.1.1` tag 及之前的发布版本继续遵循 Apache-2.0。
+`v0.1.1` 之后的开发版本遵循 `GPL-3.0-only`，并在根 `LICENSE` 中附带一个基于 GPLv3 第 7 节、用于组合/分发必需 NVIDIA CUDA 组件的补充许可。
+详见 [LICENSE](LICENSE) 与 [NOTICE](NOTICE)。

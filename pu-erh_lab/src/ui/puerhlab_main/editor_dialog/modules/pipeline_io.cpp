@@ -1,3 +1,7 @@
+//  Copyright 2026 Yurun Zi
+//  SPDX-License-Identifier: GPL-3.0-only
+//  Additional permission under GPLv3 section 7 applies; see the LICENSE file.
+
 // pipeline_io.cpp — Implementations for AdjustmentField <-> pipeline mapping.
 //
 // Extracted from dialog.cpp.  Every function is stateless and depends only on

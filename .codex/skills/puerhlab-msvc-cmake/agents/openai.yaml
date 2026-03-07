@@ -1,0 +1,7 @@
+interface:
+  display_name: "Pu-erh MSVC CMake"
+  short_description: "Run CMake through msvc_env.cmd"
+  default_prompt: "Use $puerhlab-msvc-cmake to configure, build, install, or test pu-erh_lab on Windows with scripts/msvc_env.cmd."
+
+policy:
+  allow_implicit_invocation: true

@@ -1,5 +1,8 @@
 //  Copyright 2026 Yurun Zi
+//  SPDX-License-Identifier: GPL-3.0-only
 //
+//  This file also contains material subject to the upstream notices below.
+
 //  This file contains GPLv3-derived logic based on OpenDRT v1.1.0
 //  by Jed Smith: https://github.com/jedypod/open-display-transform
 

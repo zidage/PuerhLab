@@ -2,7 +2,7 @@
 
 <p align="right"><a href="./README.md"><strong>English</strong></a> | <a href="./README.zh-CN.md">简体中文</a></p>
 
-![License](https://img.shields.io/badge/License-Apache_2.0-blue)
+![License](https://img.shields.io/badge/License-GPLv3-blue)
 ![CUDA](https://img.shields.io/badge/CUDA-12.8-76B900)
 ![C++](https://img.shields.io/badge/C++-20-blue)
 
@@ -121,30 +121,30 @@ Bootstrap local vcpkg if needed:
 .\vcpkg\bootstrap-vcpkg.bat
 ```
 
-Recommended: use `scripts/msvc_env.cmd` so MSVC environment variables are set automatically.
+Recommended: use `cmd /c scripts\msvc_env.cmd ...` so MSVC environment variables are set automatically.
 Adjust the Qt/easy_profiler paths below to your local environment.
 
 ```powershell
 # Debug configure
-.\scripts\msvc_env.cmd --preset win_debug `
+cmd /c scripts\msvc_env.cmd --preset win_debug `
   -DCMAKE_PREFIX_PATH="D:/Qt/6.9.3/msvc2022_64/lib/cmake" `
   -Deasy_profiler_DIR="$PWD/pu-erh_lab/third_party/easy_profiler-v2.1.0-msvc15-win64/lib/cmake/easy_profiler" `
   -DPUERHLAB_LENSFUN_ROOT="$PWD/pu-erh_lab/third_party/lensfun/install"
 
 # Debug build
-.\scripts\msvc_env.cmd --build build/debug --parallel
+cmd /c scripts\msvc_env.cmd --build --preset win_debug --parallel 4
 ```
 
 ```powershell
 # Release configure
-.\scripts\msvc_env.cmd --preset win_release `
+cmd /c scripts\msvc_env.cmd --preset win_release `
   -DCMAKE_PREFIX_PATH="D:/Qt/6.9.3/msvc2022_64/lib/cmake" `
   -Deasy_profiler_DIR="$PWD/pu-erh_lab/third_party/easy_profiler-v2.1.0-msvc15-win64/lib/cmake/easy_profiler" `
   -DPUERHLAB_LENSFUN_ROOT="$PWD/pu-erh_lab/third_party/lensfun/install"
 
 # Release build + install
-.\scripts\msvc_env.cmd --build build/release --parallel
-.\scripts\msvc_env.cmd --install build/release --prefix build/install
+cmd /c scripts\msvc_env.cmd --build --preset win_release --parallel 4
+cmd /c scripts\msvc_env.cmd --install build/release --prefix build/install
 ```
 
 Optional deploy tuning:
@@ -211,8 +211,8 @@ Some historical unit tests remain intentionally disabled/commented during refact
 Formatting/lint targets are available (clang-tidy integration is still partial):
 
 ```powershell
-.\scripts\msvc_env.cmd --build build/debug --target format
-.\scripts\msvc_env.cmd --build build/debug --target tidy
+cmd /c scripts\msvc_env.cmd --build --preset win_debug --target format
+cmd /c scripts\msvc_env.cmd --build --preset win_debug --target tidy
 ```
 
 ## Roadmap
@@ -223,6 +223,7 @@ Roadmap and ongoing milestones:
 
 ## License
 
-Apache-2.0. See [LICENSE](LICENSE).
-
+The `v0.1.1` tag and earlier releases remain under Apache-2.0.
+Development after `v0.1.1` is licensed under `GPL-3.0-only`, with an additional permission under GPLv3 section 7 for combining/distributing required NVIDIA CUDA components.
+See [LICENSE](LICENSE) and [NOTICE](NOTICE).
 
