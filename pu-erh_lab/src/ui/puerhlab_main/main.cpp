@@ -7,13 +7,12 @@
 #include <QQuickStyle>
 
 #include <exiv2/error.hpp>
-#include <filesystem>
 #include <optional>
 #include <string>
 #include <string_view>
-#include <vector>
 
 #include "ui/puerhlab_main/album_backend/album_backend.hpp"
+#include "ui/puerhlab_main/app_theme.hpp"
 #include "edit/operators/operator_registeration.hpp"
 #include "utils/clock/time_provider.hpp"
 
@@ -37,51 +36,6 @@ auto FindArgValue(int argc, char** argv, std::string_view option_name)
   return std::nullopt;
 }
 
-auto FsPathToQString(const std::filesystem::path& path) -> QString {
-#if defined(_WIN32)
-  return QString::fromStdWString(path.wstring());
-#else
-  return QString::fromUtf8(path.string().c_str());
-#endif
-}
-
-void ApplyExternalAppFont(QApplication& app, int argc, char** argv) {
-  std::vector<std::filesystem::path> candidates;
-
-  if (const auto arg = FindArgValue(argc, argv, "--font"); arg.has_value()) {
-    candidates.emplace_back(std::string(arg.value()));
-  }
-  if (const auto env = qEnvironmentVariable("PUERHLAB_FONT_PATH"); !env.isEmpty()) {
-    candidates.emplace_back(env.toStdString());
-  }
-
-  const auto app_dir =
-      std::filesystem::path(QCoreApplication::applicationDirPath().toStdWString());
-  candidates.emplace_back(app_dir / "fonts" / "main_Inter.ttf");
-
-#if defined(PUERHLAB_SOURCE_DIR)
-  candidates.emplace_back(std::filesystem::path(PUERHLAB_SOURCE_DIR) / "pu-erh_lab" / "src" /
-                          "config" / "fonts" / "main_Inter.ttf");
-#endif
-
-  for (const auto& path : candidates) {
-    std::error_code ec;
-    if (!std::filesystem::exists(path, ec) || ec) {
-      continue;
-    }
-    const int font_id = QFontDatabase::addApplicationFont(FsPathToQString(path));
-    if (font_id < 0) {
-      continue;
-    }
-    const auto families = QFontDatabase::applicationFontFamilies(font_id);
-    if (families.isEmpty()) {
-      continue;
-    }
-    app.setFont(QFont(families.front()));
-    return;
-  }
-}
-
 }  // namespace
 
 int main(int argc, char* argv[]) {
@@ -94,7 +48,13 @@ int main(int argc, char* argv[]) {
   QCoreApplication::setAttribute(Qt::AA_UseHighDpiPixmaps);
 
   QApplication app(argc, argv);
-  ApplyExternalAppFont(app, argc, argv);
+  puerhlab::ui::AppTheme::RegisterFonts();
+  if (const auto arg = FindArgValue(argc, argv, "--font"); arg.has_value()) {
+    puerhlab::ui::AppTheme::TryRegisterUiFontOverride(QString::fromUtf8(arg->data(), arg->size()));
+  } else if (const auto env = qEnvironmentVariable("PUERHLAB_FONT_PATH"); !env.isEmpty()) {
+    puerhlab::ui::AppTheme::TryRegisterUiFontOverride(env);
+  }
+  puerhlab::ui::AppTheme::ApplyApplicationFont(app);
   QQuickStyle::setStyle("Material");
 
   puerhlab::ui::AlbumBackend backend;
@@ -102,6 +62,7 @@ int main(int argc, char* argv[]) {
   QQmlApplicationEngine engine;
   engine.addImportPath("qrc:/");
   engine.rootContext()->setContextProperty("albumBackend", &backend);
+  engine.rootContext()->setContextProperty("appTheme", &puerhlab::ui::AppTheme::Instance());
 
   QObject::connect(&engine, &QQmlApplicationEngine::objectCreationFailed, &app,
                    []() { QCoreApplication::exit(-1); }, Qt::QueuedConnection);

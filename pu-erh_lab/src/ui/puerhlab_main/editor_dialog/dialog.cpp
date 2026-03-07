@@ -77,6 +77,7 @@
 #include "ui/puerhlab_main/editor_dialog/widgets/spinner.hpp"
 #include "ui/puerhlab_main/editor_dialog/widgets/tone_curve_widget.hpp"
 #include "ui/puerhlab_main/editor_dialog/widgets/trackball.hpp"
+#include "ui/puerhlab_main/app_theme.hpp"
 #include "ui/edit_viewer/edit_viewer.hpp"
 
 namespace puerhlab::ui {
@@ -347,6 +348,7 @@ class EditorDialog final : public QDialog {
     setWindowTitle(ResolveEditorWindowTitle(image_pool_, image_id_, element_id_));
     setMinimumSize(1080, 680);
     resize(1500, 1000);
+    AppTheme::ApplyFont(this, AppTheme::FontRole::UiBody);
 
 
     // --- Constructor body split into .inc files for maintainability ---
@@ -355,6 +357,8 @@ class EditorDialog final : public QDialog {
 #include "ctor_display_transform.inc"
 #include "ctor_geometry_raw.inc"
 #include "ctor_versioning.inc"
+
+    AppTheme::ApplyFontsRecursively(this);
 
     UpdateVersionUi();
 
@@ -619,27 +623,8 @@ class EditorDialog final : public QDialog {
     raw_panel_btn_->setChecked(raw_active);
 
     const QString active_style =
-        "QPushButton {"
-        "  color: #121212;"
-        "  background: #FCC704;"
-        "  border: none;"
-        "  border-radius: 8px;"
-        "  font-weight: 600;"
-        "}"
-        "QPushButton:hover {"
-        "  background: #F5C200;"
-        "}";
-    const QString inactive_style =
-        "QPushButton {"
-        "  color: #E6E6E6;"
-        "  background: #121212;"
-        "  border: 1px solid #2A2A2A;"
-        "  border-radius: 8px;"
-        "  font-weight: 500;"
-        "}"
-        "QPushButton:hover {"
-        "  border-color: #FCC704;"
-        "}";
+        AppTheme::EditorPanelToggleStyle(true);
+    const QString inactive_style = AppTheme::EditorPanelToggleStyle(false);
     tone_panel_btn_->setStyleSheet(tone_active ? active_style : inactive_style);
     drt_panel_btn_->setStyleSheet(drt_active ? active_style : inactive_style);
     geometry_panel_btn_->setStyleSheet(geometry_active ? active_style : inactive_style);
@@ -681,36 +666,8 @@ class EditorDialog final : public QDialog {
     const bool aces_active = state_.odt_.method_ == ColorUtils::ODTMethod::ACES_2_0;
     const bool open_drt_active = state_.odt_.method_ == ColorUtils::ODTMethod::OPEN_DRT;
 
-    const QString active_style =
-        "QPushButton {"
-        "  color: #FCC704;"
-        "  background: #1A1A1A;"
-        "  border: 2px solid #FCC704;"
-        "  border-radius: 12px;"
-        "  padding: 16px 20px;"
-        "  font-size: 15px;"
-        "  font-weight: 800;"
-        "  text-align: left;"
-        "}"
-        "QPushButton:hover {"
-        "  background: #242424;"
-        "}";
-    const QString inactive_style =
-        "QPushButton {"
-        "  color: #A0A0A0;"
-        "  background: #1A1A1A;"
-        "  border: 1px solid #333333;"
-        "  border-radius: 12px;"
-        "  padding: 16px 20px;"
-        "  font-size: 15px;"
-        "  font-weight: 600;"
-        "  text-align: left;"
-        "}"
-        "QPushButton:hover {"
-        "  border: 1px solid #666666;"
-        "  background: #242424;"
-        "  color: #E6E6E6;"
-        "}";
+    const QString active_style = AppTheme::EditorMethodCardStyle(true);
+    const QString inactive_style = AppTheme::EditorMethodCardStyle(false);
 
     if (odt_aces_method_card_) {
       odt_aces_method_card_->setChecked(aces_active);

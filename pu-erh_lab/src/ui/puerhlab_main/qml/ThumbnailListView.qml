@@ -9,11 +9,11 @@ ListView {
     cacheBuffer: 0
     spacing: 8
     readonly property color rowBg: "transparent"
-    readonly property color rowBgSelected: Qt.rgba(252 / 255, 199 / 255, 4 / 255, 0.10)
-    readonly property color rowBgHover: "#252525"
-    readonly property color rowMuted: "#888888"
-    readonly property color rowText: "#E6E6E6"
-    readonly property color rowAccent: "#FCC704"
+    readonly property color rowBgSelected: appTheme.selectedTintColor
+    readonly property color rowBgHover: appTheme.hoverColor
+    readonly property color rowMuted: appTheme.textMutedColor
+    readonly property color rowText: appTheme.textColor
+    readonly property color rowAccent: appTheme.accentColor
 
     property var selectedImagesById: ({})
     property var exportQueueById: ({})
@@ -112,7 +112,7 @@ ListView {
                     anchors.fill: parent
                     radius: 4
                     visible: liveThumbUrl.length === 0
-                    color: "#0D0D0D"
+                    color: appTheme.bgCanvasColor
                 }
                 Image {
                     anchors.fill: parent
@@ -124,13 +124,14 @@ ListView {
             }
             ColumnLayout {
                 Layout.fillWidth: true
-                Label { Layout.fillWidth: true; text: fileName; color: root.rowText; font.pixelSize: 13; elide: Text.ElideRight }
-                Label { Layout.fillWidth: true; text: cameraModel + " | " + extension + " | ISO " + iso + " | f/" + aperture + " | " + focalLength + "mm"; color: root.rowMuted; font.pixelSize: 11; elide: Text.ElideRight }
-                Label { Layout.fillWidth: true; text: captureDate + " | tags: " + tags; color: root.rowMuted; font.pixelSize: 10; elide: Text.ElideRight }
+                Label { Layout.fillWidth: true; text: fileName; color: root.rowText; font.family: appTheme.dataFontFamily; font.pixelSize: 13; elide: Text.ElideRight }
+                Label { Layout.fillWidth: true; text: cameraModel + " | " + extension + " | ISO " + iso + " | f/" + aperture + " | " + focalLength + "mm"; color: root.rowMuted; font.family: appTheme.dataFontFamily; font.pixelSize: 11; elide: Text.ElideRight }
+                Label { Layout.fillWidth: true; text: captureDate + " | tags: " + tags; color: root.rowMuted; font.family: appTheme.dataFontFamily; font.pixelSize: 10; elide: Text.ElideRight }
             }
             Label {
                 text: rating + "/5"
                 color: root.rowText
+                font.family: appTheme.dataFontFamily
                 font.pixelSize: 12
                 font.weight: 700
                 horizontalAlignment: Text.AlignHCenter

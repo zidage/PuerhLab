@@ -5,6 +5,11 @@ import QtQuick.Layouts
 ScrollView {
     id: root
     contentWidth: availableWidth
+    readonly property color cardColor: "#242424"
+    readonly property color separatorColor: "#363636"
+    readonly property color textColor: appTheme.textColor
+    readonly property color mutedTextColor: appTheme.textMutedColor
+    readonly property color statsMutedTextColor: "#7B7D7C"
 
     Component.onCompleted: {
         contentItem.interactive = false
@@ -20,7 +25,7 @@ ScrollView {
             Layout.margins: 4
             implicitHeight: heroCol.implicitHeight + 24
             radius: 10
-            color: "#242424"
+            color: root.cardColor
 
             ColumnLayout {
                 id: heroCol
@@ -30,7 +35,7 @@ ScrollView {
 
                 Label {
                     text: "Photo Library"
-                    color: "#888888"
+                    color: root.mutedTextColor
                     font.pixelSize: 11
                     font.weight: 600
                     font.letterSpacing: 1.2
@@ -38,14 +43,15 @@ ScrollView {
 
                 Label {
                     text: albumBackend.totalPhotoCount
-                    color: "#E3DFDB"
+                    color: root.textColor
+                    font.family: appTheme.dataFontFamily
                     font.pixelSize: 42
                     font.weight: 700
                 }
 
                 Label {
                     text: albumBackend.filterInfo
-                    color: "#7B7D7C"
+                    color: root.statsMutedTextColor
                     font.pixelSize: 11
                 }
             }
@@ -55,7 +61,7 @@ ScrollView {
         Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: 1
-            color: "#363636"
+            color: root.separatorColor
         }
 
         // ── By Capture Date ─────────────────────────────────────────────
@@ -73,7 +79,7 @@ ScrollView {
         Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: 1
-            color: "#363636"
+            color: root.separatorColor
         }
 
         // ── By Camera Model ─────────────────────────────────────────────
@@ -91,7 +97,7 @@ ScrollView {
         Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: 1
-            color: "#363636"
+            color: root.separatorColor
         }
 
         // ── By Lens ─────────────────────────────────────────────────────

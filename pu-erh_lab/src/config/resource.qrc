@@ -1,5 +1,7 @@
 <RCC>
   <qresource prefix="/">
+    <file>fonts/main_Inter.ttf</file>
+    <file>fonts/main_Inter_italic.ttf</file>
     <file>fonts/main_IBM.ttf</file>
   </qresource>
 </RCC>

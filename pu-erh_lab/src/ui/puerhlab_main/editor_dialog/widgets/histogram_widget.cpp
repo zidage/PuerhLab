@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <cmath>
 
+#include "ui/puerhlab_main/app_theme.hpp"
 #include "ui/edit_viewer/edit_viewer.hpp"
 
 namespace puerhlab::ui {
@@ -223,10 +224,9 @@ void HistogramRulerWidget::SetBins(int bins) {
 void HistogramRulerWidget::paintEvent(QPaintEvent*) {
   QPainter painter(this);
   painter.setRenderHint(QPainter::Antialiasing, true);
+  painter.setRenderHint(QPainter::TextAntialiasing, true);
 
-  QFont ruler_font = painter.font();
-  ruler_font.setPixelSize(9);
-  painter.setFont(ruler_font);
+  painter.setFont(AppTheme::Font(AppTheme::FontRole::DataCaption));
 
   const QRectF area(10.0, 6.0, std::max(10.0, width() - 20.0), std::max(10.0, height() - 12.0));
   const qreal  baseline_y = area.top() + 2.0;

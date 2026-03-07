@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cmath>
 
+#include "ui/puerhlab_main/app_theme.hpp"
 #include "ui/puerhlab_main/editor_dialog/modules/curve.hpp"
 
 namespace puerhlab::ui {
@@ -38,6 +39,8 @@ void ToneCurveWidget::SetCurveReleasedCallback(CurveCallback cb) {
 void ToneCurveWidget::paintEvent(QPaintEvent*) {
   QPainter painter(this);
   painter.setRenderHint(QPainter::Antialiasing, true);
+  painter.setRenderHint(QPainter::TextAntialiasing, true);
+  painter.setFont(AppTheme::Font(AppTheme::FontRole::DataCaption));
 
   painter.fillRect(rect(), QColor(0x1A, 0x1A, 0x1A));
   painter.setPen(QPen(QColor(0x2A, 0x2A, 0x2A), 1.0));

@@ -7,6 +7,8 @@
 
 #include <utility>
 
+#include "ui/puerhlab_main/app_theme.hpp"
+
 namespace puerhlab::ui {
 
 HistoryLaneWidget::HistoryLaneWidget(QColor dot, QColor line, bool draw_top, bool draw_bottom,
@@ -63,19 +65,7 @@ HistoryCardWidget::HistoryCardWidget(QWidget* parent) : QFrame(parent) {
   setAttribute(Qt::WA_Hover, true);
   setProperty("selected", false);
 
-  setStyleSheet(
-      "QFrame#HistoryCard {"
-      "  background: #1A1A1A;"
-      "  border: none;"
-      "  border-radius: 10px;"
-      "}"
-      "QFrame#HistoryCard:hover {"
-      "  background: #202020;"
-      "}"
-      "QFrame#HistoryCard[selected=\"true\"] {"
-      "  background: rgba(252, 199, 4, 0.20);"
-      "  border: 2px solid #FCC704;"
-      "}");
+  setStyleSheet(AppTheme::EditorHistoryCardStyle());
 }
 
 void HistoryCardWidget::SetSelected(bool selected) {
@@ -91,13 +81,13 @@ void HistoryCardWidget::SetSelected(bool selected) {
 auto MakePillLabel(const QString& text, const QString& fg, const QString& bg,
                    const QString& border, QWidget* parent) -> QLabel* {
   auto* l = new QLabel(text, parent);
+  AppTheme::MarkFontRole(l, AppTheme::FontRole::UiCaptionStrong);
   l->setStyleSheet(QString("QLabel {"
                            "  color: %1;"
                            "  background: %2;"
                            "  border: 1px solid %3;"
                            "  border-radius: 10px;"
                            "  padding: 1px 7px;"
-                           "  font-size: 11px;"
                            "}")
                        .arg(fg, bg, border));
   return l;

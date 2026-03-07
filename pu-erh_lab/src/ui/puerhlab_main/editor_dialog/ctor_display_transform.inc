@@ -22,12 +22,7 @@
     auto addDrtComboBox = [&](QWidget* parent, QVBoxLayout* parent_layout, const QString& name,
                               auto options, auto current_value, auto&& onChange) {
       auto* label = new QLabel(name, parent);
-      label->setStyleSheet(
-          "QLabel {"
-          "  color: #E6E6E6;"
-          "  font-size: 14px;"
-          "  font-weight: 400;"
-          "}");
+      label->setStyleSheet(AppTheme::EditorLabelStyle(AppTheme::Instance().textColor()));
 
       auto* combo = new QComboBox(parent);
       for (const auto& option : options) {
@@ -37,31 +32,7 @@
       combo->setCurrentIndex(std::max(0, current_index));
       combo->setMinimumWidth(240);
       combo->setFixedHeight(32);
-      combo->setStyleSheet(
-          "QComboBox {"
-          "  background: #1A1A1A;"
-          "  border: none;"
-          "  border-radius: 8px;"
-          "  padding: 4px 8px;"
-          "}"
-          "QComboBox::drop-down {"
-          "  border: 0px;"
-          "  width: 24px;"
-          "}"
-          "QComboBox QAbstractItemView {"
-          "  background: #1A1A1A;"
-          "  border: none;"
-          "  selection-background-color: #FCC704;"
-          "  selection-color: #121212;"
-          "}"
-          "QComboBox QAbstractItemView::item:hover {"
-          "  background: #202020;"
-          "  color: #E6E6E6;"
-          "}"
-          "QComboBox QAbstractItemView::item:selected {"
-          "  background: #FCC704;"
-          "  color: #121212;"
-          "}");
+      combo->setStyleSheet(AppTheme::EditorComboBoxStyle());
 
       QObject::connect(combo, QOverload<int>::of(&QComboBox::currentIndexChanged), parent,
                        [this, combo,
@@ -88,12 +59,7 @@
     auto addDrtSlider = [&](const QString& name, int min, int max, int value, auto&& onChange,
                             auto&& onRelease, const QString& suffix) {
       auto* info = new QLabel(name, drt_controls_);
-      info->setStyleSheet(
-          "QLabel {"
-          "  color: #E6E6E6;"
-          "  font-size: 14px;"
-          "  font-weight: 400;"
-          "}");
+      info->setStyleSheet(AppTheme::EditorLabelStyle(AppTheme::Instance().textColor()));
       info->setMinimumWidth(100);
 
       auto* slider = new QSlider(Qt::Horizontal, drt_controls_);
@@ -108,22 +74,8 @@
       spin->setRange(min, max);
       spin->setValue(value);
       spin->setSuffix(suffix);
-      spin->setStyleSheet(
-          "QSpinBox {"
-          "  background: #1A1A1A;"
-          "  color: #E6E6E6;"
-          "  border: 1px solid #333333;"
-          "  border-radius: 6px;"
-          "  padding: 4px 8px;"
-          "  font-size: 13px;"
-          "}"
-          "QSpinBox:focus {"
-          "  border: 1px solid #FCC704;"
-          "}"
-          "QSpinBox::up-button, QSpinBox::down-button {"
-          "  width: 0px;"
-          "}"
-      );
+      spin->setStyleSheet(AppTheme::EditorSpinBoxStyle());
+      AppTheme::MarkFontRole(spin, AppTheme::FontRole::DataBody);
       spin->setFixedWidth(80);
       spin->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
 
@@ -196,31 +148,7 @@
     odt_encoding_eotf_combo_ = new QComboBox(drt_controls_);
     odt_encoding_eotf_combo_->setMinimumWidth(240);
     odt_encoding_eotf_combo_->setFixedHeight(32);
-    odt_encoding_eotf_combo_->setStyleSheet(
-        "QComboBox {"
-        "  background: #1A1A1A;"
-        "  border: none;"
-        "  border-radius: 8px;"
-        "  padding: 4px 8px;"
-        "}"
-        "QComboBox::drop-down {"
-        "  border: 0px;"
-        "  width: 24px;"
-        "}"
-        "QComboBox QAbstractItemView {"
-        "  background: #1A1A1A;"
-        "  border: none;"
-        "  selection-background-color: #FCC704;"
-        "  selection-color: #121212;"
-        "}"
-        "QComboBox QAbstractItemView::item:hover {"
-        "  background: #202020;"
-        "  color: #E6E6E6;"
-        "}"
-        "QComboBox QAbstractItemView::item:selected {"
-        "  background: #FCC704;"
-        "  color: #121212;"
-        "}");
+    odt_encoding_eotf_combo_->setStyleSheet(AppTheme::EditorComboBoxStyle());
     QObject::connect(odt_encoding_eotf_combo_, QOverload<int>::of(&QComboBox::currentIndexChanged),
                      drt_controls_, [this](int idx) {
                        if (syncing_controls_ || idx < 0 || !odt_encoding_eotf_combo_) {
@@ -233,12 +161,7 @@
                      });
     {
       auto* label = new QLabel("Encoding EOTF", drt_controls_);
-      label->setStyleSheet(
-          "QLabel {"
-          "  color: #E6E6E6;"
-          "  font-size: 14px;"
-          "  font-weight: 400;"
-          "}");
+      label->setStyleSheet(AppTheme::EditorLabelStyle(AppTheme::Instance().textColor()));
       auto* row       = new QWidget(drt_controls_);
       auto* rowLayout = new QHBoxLayout(row);
       rowLayout->setContentsMargins(0, 0, 0, 0);
@@ -293,6 +216,7 @@
         card->setCursor(Qt::PointingHandCursor);
         card->setMinimumHeight(76);
         card->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+        AppTheme::MarkFontRole(card, AppTheme::FontRole::UiTitle);
       }
 
       QObject::connect(odt_aces_method_card_, &QPushButton::clicked, frame, [this]() {

@@ -12,14 +12,14 @@ import QtQuick.Layouts
  */
 Rectangle {
     id: card
-    radius: 8
-    color: "#1F1F1F"
+    radius: appTheme.panelRadius
+    color: appTheme.bgBaseColor
     border.width: 0
     implicitHeight: cardCol.implicitHeight + 24
 
     // ── Public interface ────────────────────────────────────────────
     property string title: ""
-    property color accentColor: "#5B9BD5"
+    property color accentColor: appTheme.accentColor
     property var model: []
     property bool expanded: true
     readonly property int previewLimit: 10
@@ -57,7 +57,7 @@ Rectangle {
 
             Label {
                 text: card.title
-                color: "#E3DFDB"
+                color: appTheme.textColor
                 font.pixelSize: 13
                 font.weight: 600
             }
@@ -65,6 +65,7 @@ Rectangle {
             Label {
                 text: "(" + card.totalItems + ")"
                 color: "#7B7D7C"
+                font.family: appTheme.dataFontFamily
                 font.pixelSize: 11
             }
 
@@ -150,7 +151,8 @@ Rectangle {
                         Label {
                             Layout.fillWidth: true
                             text: entryLabel
-                            color: "#E3DFDB"
+                            color: appTheme.textColor
+                            font.family: appTheme.dataFontFamily
                             font.pixelSize: 11
                             elide: Text.ElideRight
                         }
@@ -158,6 +160,7 @@ Rectangle {
                         Label {
                             text: entryCount
                             color: "#AAAAAA"
+                            font.family: appTheme.dataFontFamily
                             font.pixelSize: 11
                             font.weight: 600
                         }

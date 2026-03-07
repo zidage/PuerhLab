@@ -470,6 +470,7 @@ endif()
 # ── puerhlab_main executable ────────────────────────────────────────────────
 add_executable(puerhlab_main
     ui/puerhlab_main/main.cpp
+    ui/puerhlab_main/app_theme.cpp
     ui/puerhlab_main/editor_dialog/editor_dialog.cpp
     ui/puerhlab_main/editor_dialog/dialog.cpp
     ui/puerhlab_main/editor_dialog/state.cpp
@@ -491,6 +492,8 @@ add_executable(puerhlab_main
     ui/puerhlab_main/editor_dialog/widgets/trackball.cpp
     ui/puerhlab_main/editor_dialog/widgets/tone_curve_widget.cpp
     ui/puerhlab_main/editor_dialog/widgets/history_cards.cpp
+    config/resource.qrc
+    include/ui/puerhlab_main/app_theme.hpp
     include/ui/puerhlab_main/editor_dialog/editor_dialog.hpp
     ui/puerhlab_main/editor_dialog/dialog.hpp
     ui/puerhlab_main/editor_dialog/state.hpp

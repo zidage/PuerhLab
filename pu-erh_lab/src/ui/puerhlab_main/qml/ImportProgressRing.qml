@@ -16,8 +16,8 @@ Item {
 
     property real progress: 0.0
     property real ringWidth: 14
-    property color trackColor: "#333333"
-    property color fillColor: "#FCC704"
+    property color trackColor: appTheme.hoverColor
+    property color fillColor: appTheme.accentColor
 
     // Smoothly animate the arc whenever progress changes
     Behavior on progress {

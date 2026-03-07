@@ -3,7 +3,6 @@
 #include <QColor>
 #include <QComboBox>
 #include <QDateTime>
-#include <QFontDatabase>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QListWidget>
@@ -17,6 +16,7 @@
 
 #include "edit/history/edit_transaction.hpp"
 #include "edit/pipeline/pipeline_cpu.hpp"
+#include "ui/puerhlab_main/app_theme.hpp"
 #include "ui/puerhlab_main/editor_dialog/controllers/history_controller.hpp"
 #include "ui/puerhlab_main/editor_dialog/widgets/history_cards.hpp"
 
@@ -304,18 +304,13 @@ void UpdateVersionUi(const VersionUiContext& ui, const Version& working_version,
 
       auto* title_l = new QLabel(title, card);
       title_l->setWordWrap(true);
-      title_l->setStyleSheet("QLabel {"
-                             "  color: #E6E6E6;"
-                             "  font-size: 12px;"
-                             "  font-weight: 500;"
-                             "}");
+      title_l->setStyleSheet(AppTheme::EditorLabelStyle(AppTheme::Instance().textColor()));
+      AppTheme::MarkFontRole(title_l, AppTheme::FontRole::UiBody);
 
       auto* meta_l =
           new QLabel(QString("uncommitted | #%1").arg(static_cast<qulonglong>(i + 1)), card);
-      meta_l->setStyleSheet("QLabel {"
-                            "  color: #A3A3A3;"
-                            "  font-size: 11px;"
-                            "}");
+      meta_l->setStyleSheet(AppTheme::EditorLabelStyle(AppTheme::Instance().textMutedColor()));
+      AppTheme::MarkFontRole(meta_l, AppTheme::FontRole::DataCaption);
 
       body->addWidget(title_l);
       body->addWidget(meta_l);
@@ -397,14 +392,9 @@ void UpdateVersionUi(const VersionUiContext& ui, const Version& working_version,
         top->setContentsMargins(0, 0, 0, 0);
         top->setSpacing(8);
 
-        const QFont mono   = QFontDatabase::systemFont(QFontDatabase::FixedFont);
-        auto*       hash_l = new QLabel(short_id, card);
-        hash_l->setFont(mono);
-        hash_l->setStyleSheet("QLabel {"
-                              "  color: #E6E6E6;"
-                              "  font-size: 12px;"
-                              "  font-weight: 600;"
-                              "}");
+        auto* hash_l = new QLabel(short_id, card);
+        hash_l->setStyleSheet(AppTheme::EditorLabelStyle(AppTheme::Instance().textColor()));
+        AppTheme::MarkFontRole(hash_l, AppTheme::FontRole::MonoBody);
 
         top->addWidget(hash_l, 0);
 
@@ -439,16 +429,12 @@ void UpdateVersionUi(const VersionUiContext& ui, const Version& working_version,
 
         auto* msg_l = new QLabel(msg, card);
         msg_l->setWordWrap(true);
-        msg_l->setStyleSheet("QLabel {"
-                             "  color: #E6E6E6;"
-                             "  font-size: 12px;"
-                             "}");
+        msg_l->setStyleSheet(AppTheme::EditorLabelStyle(AppTheme::Instance().textColor()));
+        AppTheme::MarkFontRole(msg_l, AppTheme::FontRole::UiBody);
 
         auto* meta_l = new QLabel(when, card);
-        meta_l->setStyleSheet("QLabel {"
-                              "  color: #A3A3A3;"
-                              "  font-size: 11px;"
-                              "}");
+        meta_l->setStyleSheet(AppTheme::EditorLabelStyle(AppTheme::Instance().textMutedColor()));
+        AppTheme::MarkFontRole(meta_l, AppTheme::FontRole::DataCaption);
 
         body->addLayout(top);
         body->addWidget(msg_l);

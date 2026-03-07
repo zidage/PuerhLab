@@ -22,12 +22,8 @@
     auto addGeometrySlider = [&](const QString& name, int min, int max, int value, auto&& onChange,
                                  auto&& formatter) {
       auto* info = new QLabel(QString("%1: %2").arg(name).arg(formatter(value)), geometry_controls_);
-      info->setStyleSheet(
-          "QLabel {"
-          "  color: #E6E6E6;"
-          "  font-size: 14px;"
-          "  font-weight: 400;"
-          "}");
+      info->setStyleSheet(AppTheme::EditorLabelStyle(AppTheme::Instance().textColor()));
+      AppTheme::MarkFontRole(info, AppTheme::FontRole::DataBody);
 
       auto* slider = new QSlider(Qt::Horizontal, geometry_controls_);
       slider->setRange(min, max);
@@ -154,10 +150,8 @@
 
       geometry_crop_rect_label_ = new QLabel(frame);
       geometry_crop_rect_label_->setStyleSheet(
-          "QLabel {"
-          "  color: #A3A3A3;"
-          "  font-size: 12px;"
-          "}");
+          AppTheme::EditorLabelStyle(AppTheme::Instance().textMutedColor()));
+      AppTheme::MarkFontRole(geometry_crop_rect_label_, AppTheme::FontRole::DataBody);
       layout->addWidget(geometry_crop_rect_label_, 0);
 
       auto* row       = new QWidget(frame);
@@ -168,17 +162,7 @@
       geometry_apply_btn_ = new QPushButton("Apply Crop", row);
       geometry_apply_btn_->setFixedHeight(30);
       geometry_apply_btn_->setCursor(Qt::PointingHandCursor);
-      geometry_apply_btn_->setStyleSheet(
-          "QPushButton {"
-          "  color: #121212;"
-          "  background: #FCC704;"
-          "  border: none;"
-          "  border-radius: 8px;"
-          "  font-weight: 600;"
-          "}"
-          "QPushButton:hover {"
-          "  background: #F5C200;"
-          "}");
+      geometry_apply_btn_->setStyleSheet(AppTheme::EditorPrimaryButtonStyle());
       QObject::connect(geometry_apply_btn_, &QPushButton::clicked, this, [this]() {
         state_.crop_enabled_ = true;
         CommitAdjustment(AdjustmentField::CropRotate);
@@ -190,17 +174,7 @@
       geometry_reset_btn_->setCursor(Qt::PointingHandCursor);
       geometry_reset_btn_->setToolTip("Reset crop & rotation (Ctrl+R)");
       geometry_reset_btn_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_R));
-      geometry_reset_btn_->setStyleSheet(
-          "QPushButton {"
-          "  color: #E6E6E6;"
-          "  background: #3A3A3A;"
-          "  border: none;"
-          "  border-radius: 8px;"
-          "  font-weight: 600;"
-          "}"
-          "QPushButton:hover {"
-          "  background: #505050;"
-          "}");
+      geometry_reset_btn_->setStyleSheet(AppTheme::EditorSecondaryButtonStyle());
       QObject::connect(geometry_reset_btn_, &QPushButton::clicked, this, [this]() {
         ResetCropAndRotation();
       });
@@ -213,11 +187,8 @@
           "Double click rotate slider to reset angle. Ctrl+R to reset all geometry.",
           frame);
       hint->setWordWrap(true);
-      hint->setStyleSheet(
-          "QLabel {"
-          "  color: #A3A3A3;"
-          "  font-size: 11px;"
-          "}");
+      hint->setStyleSheet(AppTheme::EditorLabelStyle(AppTheme::Instance().textMutedColor()));
+      AppTheme::MarkFontRole(hint, AppTheme::FontRole::UiHint);
       layout->addWidget(hint, 0);
 
       geometry_controls_layout->insertWidget(geometry_controls_layout->count() - 1, frame);
@@ -304,26 +275,7 @@
         raw_highlights_reconstruct_checkbox_ =
             new QCheckBox("Enable Highlight Reconstruction", raw_controls_);
         raw_highlights_reconstruct_checkbox_->setChecked(state_.raw_highlights_reconstruct_);
-        raw_highlights_reconstruct_checkbox_->setStyleSheet(
-            "QCheckBox {"
-            "  color: #E6E6E6;"
-            "  spacing: 8px;"
-            "  font-size: 13px;"
-            "}"
-            "QCheckBox::indicator {"
-            "  width: 16px;"
-            "  height: 16px;"
-            "}"
-            "QCheckBox::indicator:unchecked {"
-            "  background: #121212;"
-            "  border: 1px solid #2A2A2A;"
-            "  border-radius: 3px;"
-            "}"
-            "QCheckBox::indicator:checked {"
-            "  background: #FCC704;"
-            "  border: 1px solid #FCC704;"
-            "  border-radius: 3px;"
-            "}");
+        raw_highlights_reconstruct_checkbox_->setStyleSheet(AppTheme::EditorCheckBoxStyle());
         QObject::connect(raw_highlights_reconstruct_checkbox_, &QCheckBox::toggled, this,
                          [this](bool checked) {
                            if (syncing_controls_) {
@@ -358,27 +310,11 @@
         brand_row_layout->setContentsMargins(0, 0, 0, 0);
         brand_row_layout->setSpacing(8);
         auto* brand_label = new QLabel("Lens Brand", brand_row);
-        brand_label->setStyleSheet(
-            "QLabel {"
-            "  color: #E6E6E6;"
-            "  font-size: 9px;"
-            "}");
+        brand_label->setStyleSheet(AppTheme::EditorLabelStyle(AppTheme::Instance().textColor()));
+        AppTheme::MarkFontRole(brand_label, AppTheme::FontRole::UiCaption);
         lens_brand_combo_ = new QComboBox(brand_row);
         lens_brand_combo_->setMinimumWidth(220);
-        lens_brand_combo_->setStyleSheet(
-            "QComboBox {"
-            "  background: #1A1A1A;"
-            "  border: none;"
-            "  border-radius: 8px;"
-            "  padding: 4px 8px;"
-            "}"
-            "QComboBox::drop-down { border: 0px; width: 24px; }"
-            "QComboBox QAbstractItemView {"
-            "  background: #1A1A1A;"
-            "  border: none;"
-            "  selection-background-color: #FCC704;"
-            "  selection-color: #121212;"
-            "}");
+        lens_brand_combo_->setStyleSheet(AppTheme::EditorComboBoxStyle());
         QObject::connect(lens_brand_combo_, QOverload<int>::of(&QComboBox::currentIndexChanged),
                          this, [this](int) {
                            if (syncing_controls_ || !lens_brand_combo_) {
@@ -403,6 +339,7 @@
         model_row_layout->setSpacing(8);
         auto* model_label = new QLabel("Lens Model", model_row);
         model_label->setStyleSheet(brand_label->styleSheet());
+        AppTheme::MarkFontRole(model_label, AppTheme::FontRole::UiCaption);
         lens_model_combo_ = new QComboBox(model_row);
         lens_model_combo_->setMinimumWidth(220);
         lens_model_combo_->setStyleSheet(lens_brand_combo_->styleSheet());
@@ -424,10 +361,8 @@
         lens_catalog_status_label_ = new QLabel(raw_controls_);
         lens_catalog_status_label_->setWordWrap(true);
         lens_catalog_status_label_->setStyleSheet(
-            "QLabel {"
-            "  color: #A3A3A3;"
-            "  font-size: 11px;"
-            "}");
+            AppTheme::EditorLabelStyle(AppTheme::Instance().textMutedColor()));
+        AppTheme::MarkFontRole(lens_catalog_status_label_, AppTheme::FontRole::UiHint);
         lens_layout->addWidget(lens_catalog_status_label_, 0);
 
         RefreshLensComboFromState();

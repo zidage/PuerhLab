@@ -37,6 +37,7 @@
 
     viewer_zoom_label_ = new QLabel(viewer_container_);
     viewer_zoom_label_->setAttribute(Qt::WA_TransparentForMouseEvents, true);
+    AppTheme::MarkFontRole(viewer_zoom_label_, AppTheme::FontRole::DataOverlay);
     viewer_zoom_label_->setStyleSheet(
         "QLabel {"
         "  color: #E6E6E6;"
@@ -44,8 +45,6 @@
         "  border: 1px solid rgba(42, 42, 42, 220);"
         "  border-radius: 8px;"
         "  padding: 4px 8px;"
-        "  font-size: 11px;"
-        "  font-weight: 600;"
         "}");
     viewer_grid->addWidget(viewer_zoom_label_, 0, 0, Qt::AlignLeft | Qt::AlignTop);
 
@@ -79,32 +78,15 @@
         "}"
         "#EditorControlsPanel QLabel#EditorSectionTitle {"
         "  color: #E6E6E6;"
-        "  font-size: 13px;"
-        "  font-weight: 620;"
         "}"
         "#EditorControlsPanel QLabel#EditorSectionSub {"
         "  color: #A3A3A3;"
-        "  font-size: 11px;"
         "}");
     auto* controls_panel_layout = new QVBoxLayout(controls_panel);
     controls_panel_layout->setContentsMargins(16, 16, 16, 16);
     controls_panel_layout->setSpacing(12);
 
-    const QString scroll_style =
-        "QScrollArea { background: transparent; border: none; }"
-        "QScrollBar:vertical {"
-        "  background: #121212;"
-        "  width: 10px;"
-        "  margin: 2px;"
-        "  border-radius: 5px;"
-        "}"
-        "QScrollBar::handle:vertical {"
-        "  background: #FCC704;"
-        "  border-radius: 5px;"
-        "}"
-        "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0px; }"
-        "QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; "
-        "}";
+    const QString scroll_style = AppTheme::EditorScrollAreaStyle();
 
     tone_controls_scroll_ = new QScrollArea(controls_panel);
     tone_controls_scroll_->setFrameShape(QFrame::NoFrame);
@@ -229,12 +211,9 @@
         "}"
         "#EditorVersioningPanel QLabel#EditorSectionTitle {"
         "  color: #E6E6E6;"
-        "  font-size: 13px;"
-        "  font-weight: 620;"
         "}"
         "#EditorVersioningPanel QLabel#EditorSectionSub {"
         "  color: #A3A3A3;"
-        "  font-size: 11px;"
         "}");
     auto* shared_versioning_outer_layout = new QVBoxLayout(shared_versioning_root);
     shared_versioning_outer_layout->setContentsMargins(0, 0, 0, 0);
@@ -245,20 +224,7 @@
     versioning_scroll->setWidgetResizable(true);
     versioning_scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     versioning_scroll->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
-    versioning_scroll->setStyleSheet(
-        "QScrollArea { background: transparent; border: none; }"
-        "QScrollBar:vertical {"
-        "  background: #121212;"
-        "  width: 10px;"
-        "  margin: 2px;"
-        "  border-radius: 5px;"
-        "}"
-        "QScrollBar::handle:vertical {"
-        "  background: #FCC704;"
-        "  border-radius: 5px;"
-        "}"
-        "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0px; }"
-        "QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }");
+    versioning_scroll->setStyleSheet(AppTheme::EditorScrollAreaStyle());
 
     auto* versioning_content = new QWidget(versioning_scroll);
     versioning_content->setStyleSheet("background: transparent;");

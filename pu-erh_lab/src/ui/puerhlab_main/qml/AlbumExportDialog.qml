@@ -5,6 +5,7 @@ import QtQuick.Dialogs
 
 Dialog {
     id: root
+    font.family: appTheme.uiFontFamily
     modal: true
     focus: true
     width: Math.min(parent ? parent.width - 36 : 820, 820)
@@ -20,9 +21,17 @@ Dialog {
     property int exportQueueCount: 0
     property var exportPreviewRows: []
     property bool exportTriggered: false
+    readonly property color overlayColor: appTheme.bgDeepColor
+    readonly property color panelColor: appTheme.toneGraphite
+    readonly property color sectionColor: appTheme.bgBaseColor
+    readonly property color separatorColor: "#38373C"
+    readonly property color textColor: appTheme.textColor
+    readonly property color mutedTextColor: "#7B7D7C"
+    readonly property color emptyTextColor: "#4D4C51"
+    readonly property string dataFontFamily: appTheme.dataFontFamily
 
     Overlay.modal: Rectangle {
-        color: "#141414"
+        color: root.overlayColor
         opacity: 0.88
     }
 
@@ -57,7 +66,7 @@ Dialog {
 
     background: Rectangle {
         radius: 12
-        color: "#1A1A1A"
+        color: root.panelColor
         border.width: 0
         layer.enabled: true
     }
@@ -76,13 +85,13 @@ Dialog {
                 font.pixelSize: 22
                 font.weight: 700
                 font.letterSpacing: -0.3
-                color: "#E3DFDB"
+                color: root.textColor
             }
             Label {
                 Layout.fillWidth: true
                 text: "Export queued images using the current edit pipeline."
                 wrapMode: Text.WordWrap
-                color: "#7B7D7C"
+                color: root.mutedTextColor
                 font.pixelSize: 12
             }
         }
@@ -90,7 +99,7 @@ Dialog {
         Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: 1
-            color: "#38373C"
+            color: root.separatorColor
         }
 
         RowLayout {
@@ -103,7 +112,7 @@ Dialog {
                 Layout.preferredWidth: 440
                 Layout.fillHeight: true
                 radius: 8
-                color: "#1F1F1F"
+                color: root.sectionColor
                 border.width: 0
 
                 ScrollView {
@@ -123,7 +132,7 @@ Dialog {
 
                             Label {
                                 text: "DESTINATION"
-                                color: "#7B7D7C"
+                                color: root.mutedTextColor
                                 font.pixelSize: 10
                                 font.weight: 700
                                 font.letterSpacing: 1.2
@@ -144,7 +153,7 @@ Dialog {
                             }
                         }
 
-                        Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: "#38373C" }
+                        Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: root.separatorColor }
 
                         ColumnLayout {
                             Layout.fillWidth: true
@@ -152,7 +161,7 @@ Dialog {
 
                             Label {
                                 text: "FORMAT"
-                                color: "#7B7D7C"
+                                color: root.mutedTextColor
                                 font.pixelSize: 10
                                 font.weight: 700
                                 font.letterSpacing: 1.2
@@ -164,7 +173,7 @@ Dialog {
                                 columnSpacing: 12
                                 rowSpacing: 10
 
-                                Label { text: "Format"; color: "#7B7D7C"; font.pixelSize: 12 }
+                                Label { text: "Format"; color: root.mutedTextColor; font.pixelSize: 12 }
                                 ComboBox {
                                     id: exportFormat
                                     Layout.fillWidth: true
@@ -179,7 +188,7 @@ Dialog {
                                     valueRole: "value"
                                 }
 
-                                Label { text: "Bit depth"; color: "#7B7D7C"; font.pixelSize: 12 }
+                                Label { text: "Bit depth"; color: root.mutedTextColor; font.pixelSize: 12 }
                                 ComboBox {
                                     id: exportBitDepth
                                     Layout.fillWidth: true
@@ -193,7 +202,7 @@ Dialog {
                                     currentIndex: 1
                                 }
 
-                                Label { text: "Quality"; color: "#7B7D7C"; font.pixelSize: 12 }
+                                Label { text: "Quality"; color: root.mutedTextColor; font.pixelSize: 12 }
                                 SpinBox {
                                     id: exportQuality
                                     Layout.fillWidth: true
@@ -205,7 +214,7 @@ Dialog {
 
                                 Label {
                                     text: "PNG level"
-                                    color: "#7B7D7C"
+                                    color: root.mutedTextColor
                                     font.pixelSize: 12
                                     visible: exportFormat.currentValue === "PNG"
                                 }
@@ -221,7 +230,7 @@ Dialog {
 
                                 Label {
                                     text: "Compression"
-                                    color: "#7B7D7C"
+                                    color: root.mutedTextColor
                                     font.pixelSize: 12
                                     visible: exportFormat.currentValue === "TIFF"
                                 }
@@ -241,7 +250,7 @@ Dialog {
                             }
                         }
 
-                        Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: "#38373C" }
+                        Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: root.separatorColor }
 
                         ColumnLayout {
                             Layout.fillWidth: true
@@ -249,7 +258,7 @@ Dialog {
 
                             Label {
                                 text: "RESIZE"
-                                color: "#7B7D7C"
+                                color: root.mutedTextColor
                                 font.pixelSize: 10
                                 font.weight: 700
                                 font.letterSpacing: 1.2
@@ -268,7 +277,7 @@ Dialog {
 
                                 Label {
                                     text: "Max side"
-                                    color: "#7B7D7C"
+                                    color: root.mutedTextColor
                                     font.pixelSize: 12
                                     visible: exportResize.currentIndex === 1
                                 }
@@ -292,7 +301,7 @@ Dialog {
                 Layout.preferredWidth: 300
                 Layout.fillHeight: true
                 radius: 8
-                color: "#1F1F1F"
+                color: root.sectionColor
                 border.width: 0
 
                 ColumnLayout {
@@ -304,7 +313,7 @@ Dialog {
                         Layout.fillWidth: true
                         Label {
                             text: "QUEUE"
-                            color: "#7B7D7C"
+                            color: root.mutedTextColor
                             font.pixelSize: 10
                             font.weight: 700
                             font.letterSpacing: 1.2
@@ -312,7 +321,8 @@ Dialog {
                         Item { Layout.fillWidth: true }
                         Label {
                             text: root.exportQueueCount + " image(s)"
-                            color: "#7B7D7C"
+                            color: root.mutedTextColor
+                            font.family: root.dataFontFamily
                             font.pixelSize: 11
                         }
                     }
@@ -337,7 +347,7 @@ Dialog {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         radius: 6
-                        color: "#141414"
+                        color: root.overlayColor
                         border.width: 0
 
                         ListView {
@@ -350,15 +360,16 @@ Dialog {
                                 width: ListView.view.width
                                 height: 22
                                 radius: 3
-                                color: index % 2 === 0 ? "#141414" : "#1A1A1A"
+                                color: index % 2 === 0 ? root.overlayColor : root.panelColor
                                 border.width: 0
                                 Label {
                                     anchors.fill: parent
                                     anchors.leftMargin: 6
                                     verticalAlignment: Text.AlignVCenter
                                     text: modelData.label
-                                    color: "#E3DFDB"
+                                    color: root.textColor
                                     elide: Text.ElideRight
+                                    font.family: root.dataFontFamily
                                     font.pixelSize: 11
                                 }
                             }
@@ -367,13 +378,13 @@ Dialog {
                             anchors.centerIn: parent
                             visible: root.exportQueueCount === 0
                             text: "Queue is empty"
-                            color: "#4D4C51"
+                            color: root.emptyTextColor
                             font.pixelSize: 12
                             font.italic: true
                         }
                     }
 
-                    Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: "#38373C" }
+                    Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: root.separatorColor }
 
                     ColumnLayout {
                         Layout.fillWidth: true
@@ -381,7 +392,7 @@ Dialog {
 
                         Label {
                             text: "PROGRESS"
-                            color: "#7B7D7C"
+                            color: root.mutedTextColor
                             font.pixelSize: 10
                             font.weight: 700
                             font.letterSpacing: 1.2
@@ -391,7 +402,8 @@ Dialog {
                             Layout.fillWidth: true
                             text: albumBackend.exportStatus
                             wrapMode: Text.WordWrap
-                            color: "#E3DFDB"
+                            color: root.textColor
+                            font.family: root.dataFontFamily
                             font.pixelSize: 12
                         }
 
@@ -410,7 +422,8 @@ Dialog {
                                   + "  ·  " + albumBackend.exportFailed + " failed"
                                   + "  ·  " + albumBackend.exportSkipped + " skipped"
                             wrapMode: Text.WordWrap
-                            color: "#7B7D7C"
+                            color: root.mutedTextColor
+                            font.family: root.dataFontFamily
                             font.pixelSize: 11
                         }
 
@@ -419,7 +432,8 @@ Dialog {
                             visible: albumBackend.exportErrorSummary.length > 0
                             text: albumBackend.exportErrorSummary
                             wrapMode: Text.WordWrap
-                            color: "#E3DFDB"
+                            color: root.textColor
+                            font.family: root.dataFontFamily
                             font.pixelSize: 11
                         }
                     }
@@ -430,7 +444,7 @@ Dialog {
         Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: 1
-            color: "#38373C"
+            color: root.separatorColor
         }
 
         RowLayout {
@@ -446,7 +460,8 @@ Dialog {
             Label {
                 visible: root.exportQueueCount > 0
                 text: root.exportQueueCount + " image(s) queued"
-                color: "#7B7D7C"
+                color: root.mutedTextColor
+                font.family: root.dataFontFamily
                 font.pixelSize: 12
             }
             Button {

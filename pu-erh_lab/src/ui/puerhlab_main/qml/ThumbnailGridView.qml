@@ -6,11 +6,11 @@ Item {
     id: root
     clip: true
     readonly property color cardBg: "transparent"
-    readonly property color cardBgSelected: Qt.rgba(252 / 255, 199 / 255, 4 / 255, 0.10)
-    readonly property color cardBgHover: "#252525"
-    readonly property color cardMuted: "#888888"
-    readonly property color cardText: "#E6E6E6"
-    readonly property color cardAccent: "#FCC704"
+    readonly property color cardBgSelected: appTheme.selectedTintColor
+    readonly property color cardBgHover: appTheme.hoverColor
+    readonly property color cardMuted: appTheme.textMutedColor
+    readonly property color cardText: appTheme.textColor
+    readonly property color cardAccent: appTheme.accentColor
 
     property var selectedImagesById: ({})
     property var exportQueueById: ({})
@@ -121,7 +121,7 @@ Item {
                     anchors.fill: parent
                     radius: 4
                     visible: liveThumbUrl.length === 0
-                    color: "#0D0D0D"
+                    color: appTheme.bgCanvasColor
                 }
                 Image {
                     anchors.fill: parent
@@ -138,9 +138,9 @@ Item {
             anchors.bottom: parent.bottom
             anchors.margins: 6
             spacing: 1
-            Label { text: fileName; color: root.cardText; font.pixelSize: 12; elide: Text.ElideRight; width: parent.width }
-            Label { text: cameraModel + " | ISO " + iso + " | f/" + aperture; color: root.cardMuted; font.pixelSize: 10; elide: Text.ElideRight; width: parent.width }
-            Label { text: captureDate + " | rating " + rating + "/5"; color: root.cardMuted; font.pixelSize: 10; elide: Text.ElideRight; width: parent.width }
+            Label { text: fileName; color: root.cardText; font.family: appTheme.dataFontFamily; font.pixelSize: 12; elide: Text.ElideRight; width: parent.width }
+            Label { text: cameraModel + " | ISO " + iso + " | f/" + aperture; color: root.cardMuted; font.family: appTheme.dataFontFamily; font.pixelSize: 10; elide: Text.ElideRight; width: parent.width }
+            Label { text: captureDate + " | rating " + rating + "/5"; color: root.cardMuted; font.family: appTheme.dataFontFamily; font.pixelSize: 10; elide: Text.ElideRight; width: parent.width }
         }
 
         }

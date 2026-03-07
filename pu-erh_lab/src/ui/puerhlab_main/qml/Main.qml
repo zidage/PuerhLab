@@ -12,32 +12,34 @@ ApplicationWindow {
     visible: true
     visibility: Window.Maximized
     title: "Pu-erh Lab"
+    font.family: appTheme.uiFontFamily
 
     // Theme palette — borderless, luminance-separated zones
-    readonly property color toneGold: "#FCC704"
-    readonly property color toneWine: "#8A0526"
-    readonly property color toneSteel: "#4A4A4A"
-    readonly property color toneGraphite: "#1A1A1A"
-    readonly property color toneMist: "#E6E6E6"
-    readonly property color toneAmber: "#FCC704"
-    readonly property color toneAccentSecondary: "#ffefd5"
+    readonly property color toneGold: appTheme.toneGold
+    readonly property color toneWine: appTheme.toneWine
+    readonly property color toneSteel: appTheme.toneSteel
+    readonly property color toneGraphite: appTheme.toneGraphite
+    readonly property color toneMist: appTheme.toneMist
+    readonly property color toneAmber: appTheme.toneGold
+    readonly property color toneAccentSecondary: appTheme.accentSecondaryColor
 
-    readonly property color colBgDeep: "#141414"        // center content — darkest "stage"
-    readonly property color colBgBase: "#1F1F1F"        // sunken inputs
-    readonly property color colBgPanel: "#2B2B2B"       // side panels & header/footer
-    readonly property color colBgCanvas: "#111111"      // gap / outer canvas behind blocks
-    readonly property int panelRadius: 8                // uniform rounded-corner radius
+    readonly property color colBgDeep: appTheme.bgDeepColor        // center content — darkest "stage"
+    readonly property color colBgBase: appTheme.bgBaseColor        // sunken inputs
+    readonly property color colBgPanel: appTheme.bgPanelColor      // side panels & header/footer
+    readonly property color colBgCanvas: appTheme.bgCanvasColor    // gap / outer canvas behind blocks
+    readonly property int panelRadius: appTheme.panelRadius        // uniform rounded-corner radius
     readonly property color colBorder: "transparent"     // NO borders by default
-    readonly property color colText: toneMist
-    readonly property color colTextMuted: "#888888"
-    readonly property color colAccentPrimary: toneGold
-    readonly property color colAccentSecondary: toneGold
-    readonly property color colAccentSoft: toneGold
-    readonly property color colDanger: toneWine
-    readonly property color colDangerTint: Qt.rgba(138 / 255, 5 / 255, 38 / 255, 0.32)
-    readonly property color colSelectedTint: Qt.rgba(252 / 255, 199 / 255, 4 / 255, 0.18)
-    readonly property color colHover: "#333333"          // subtle hover tint
-    readonly property color colOverlay: "#C0121212"
+    readonly property color colText: appTheme.textColor
+    readonly property color colTextMuted: appTheme.textMutedColor
+    readonly property color colAccentPrimary: appTheme.accentColor
+    readonly property color colAccentSecondary: appTheme.accentSecondaryColor
+    readonly property color colAccentSoft: appTheme.accentColor
+    readonly property color colDanger: appTheme.dangerColor
+    readonly property color colDangerTint: appTheme.dangerTintColor
+    readonly property color colSelectedTint: appTheme.selectedTintColor
+    readonly property color colHover: appTheme.hoverColor          // subtle hover tint
+    readonly property color colOverlay: appTheme.overlayColor
+    readonly property string dataFontFamily: appTheme.dataFontFamily
 
     Material.theme: Material.Dark
     Material.primary: root.colAccentSecondary
@@ -613,7 +615,7 @@ ApplicationWindow {
                                     anchors.verticalCenter: parent.verticalCenter
                                     width: 1
                                     height: parent.height * 0.48
-                                    color: "#444444"
+                                    color: root.toneSteel
                                 }
                             }
                         }
@@ -690,6 +692,7 @@ ApplicationWindow {
                         Label {
                             text: folderList.count + " folders"
                             color: root.colAccentSoft
+                            font.family: root.dataFontFamily
                             font.pixelSize: 11
                         }
                     }
@@ -697,6 +700,7 @@ ApplicationWindow {
                     Label {
                         text: albumBackend.currentFolderPath
                         color: root.colTextMuted
+                        font.family: root.dataFontFamily
                         font.pixelSize: 11
                         elide: Text.ElideMiddle
                         Layout.fillWidth: true
@@ -814,7 +818,7 @@ ApplicationWindow {
                     Rectangle {
                         Layout.fillWidth: true
                         Layout.preferredHeight: 1
-                        color: "#363636"
+                        color: root.toneSteel
                         opacity: 1.0
                     }
 
@@ -968,7 +972,7 @@ ApplicationWindow {
                                 Layout.fillWidth: true
                                 Label { text: "Album"; color: root.colTextMuted; font.pixelSize: 14; font.weight: 600 }
                                 Item { Layout.fillWidth: true }
-                                Label { text: albumBackend.filterInfo; color: root.colTextMuted; font.pixelSize: 11 }
+                                Label { text: albumBackend.filterInfo; color: root.colTextMuted; font.family: root.dataFontFamily; font.pixelSize: 11 }
                             }
 
                             Loader {
@@ -1321,7 +1325,7 @@ ApplicationWindow {
                     width: 160
                     height: 160
                     ringWidth: 14
-                    trackColor: "#333333"
+                    trackColor: root.colHover
                     fillColor: root.colAccentPrimary
                     progress: albumBackend.importTotal > 0
                               ? albumBackend.importCompleted / albumBackend.importTotal
@@ -1331,6 +1335,7 @@ ApplicationWindow {
                 Label {
                     Layout.alignment: Qt.AlignHCenter
                     text: albumBackend.importCompleted + " / " + albumBackend.importTotal
+                    font.family: root.dataFontFamily
                     font.pixelSize: 28
                     font.weight: 600
                     color: root.colText
@@ -1354,6 +1359,7 @@ ApplicationWindow {
                     horizontalAlignment: Text.AlignHCenter
                     text: albumBackend.importFailed + " file(s) failed"
                     color: root.colDanger
+                    font.family: root.dataFontFamily
                     font.pixelSize: 12
                 }
 

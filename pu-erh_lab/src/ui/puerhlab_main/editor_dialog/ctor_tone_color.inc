@@ -4,6 +4,8 @@
 
     auto* controls_header = new QLabel("Adjustments", controls_);
     controls_header->setObjectName("SectionTitle");
+    controls_header->setStyleSheet(AppTheme::EditorLabelStyle(AppTheme::Instance().textColor()));
+    AppTheme::MarkFontRole(controls_header, AppTheme::FontRole::UiHeadline);
     controls_layout->addWidget(controls_header, 0);
 
     // Prefer LUTs next to the executable (installed layout), fall back to source tree.
@@ -79,43 +81,14 @@
     auto addComboBox = [&](const QString& name, const QStringList& items, int initial_index,
                            auto&& onChange) {
       auto* label = new QLabel(name, controls_);
-      label->setStyleSheet(
-          "QLabel {"
-          "  color: #E6E6E6;"
-          "  font-size: 14px;"
-          "  font-weight: 400;"
-          "}");
+      label->setStyleSheet(AppTheme::EditorLabelStyle(AppTheme::Instance().textColor()));
 
       auto* combo = new QComboBox(controls_);
       combo->addItems(items);
       combo->setCurrentIndex(initial_index);
       combo->setMinimumWidth(240);
       combo->setFixedHeight(32);
-      combo->setStyleSheet(
-          "QComboBox {"
-          "  background: #1A1A1A;"
-          "  border: none;"
-          "  border-radius: 8px;"
-          "  padding: 4px 8px;"
-          "}"
-          "QComboBox::drop-down {"
-          "  border: 0px;"
-          "  width: 24px;"
-          "}"
-          "QComboBox QAbstractItemView {"
-          "  background: #1A1A1A;"
-          "  border: none;"
-          "  selection-background-color: #FCC704;"
-          "  selection-color: #121212;"
-          "}"
-          "QComboBox QAbstractItemView::item:hover {"
-          "  background: #202020;"
-          "  color: #E6E6E6;"
-          "}"
-          "QComboBox QAbstractItemView::item:selected {"
-          "  background: #FCC704;"
-          "  color: #121212;"
-          "}");
+      combo->setStyleSheet(AppTheme::EditorComboBoxStyle());
 
       QObject::connect(combo, QOverload<int>::of(&QComboBox::currentIndexChanged), controls_,
                        [this, onChange = std::forward<decltype(onChange)>(onChange)](int idx) {
@@ -138,12 +111,8 @@
     auto addSlider = [&](const QString& name, int min, int max, int value, auto&& onChange,
                          auto&& onRelease, auto&& formatter) {
       auto* info = new QLabel(QString("%1: %2").arg(name).arg(formatter(value)), controls_);
-      info->setStyleSheet(
-          "QLabel {"
-          "  color: #E6E6E6;"
-          "  font-size: 14px;"
-          "  font-weight: 400;"
-          "}");
+      info->setStyleSheet(AppTheme::EditorLabelStyle(AppTheme::Instance().textColor()));
+      AppTheme::MarkFontRole(info, AppTheme::FontRole::DataBody);
 
       auto* slider = new QSlider(Qt::Horizontal, controls_);
       slider->setRange(min, max);
@@ -276,26 +245,13 @@
 
       auto* curve_hint =
           new QLabel("Left click/drag to shape. Right click a point to remove.", actions_row);
-      curve_hint->setStyleSheet(
-          "QLabel {"
-          "  color: #A3A3A3;"
-          "  font-size: 11px;"
-          "}");
+      curve_hint->setStyleSheet(AppTheme::EditorLabelStyle(AppTheme::Instance().textMutedColor()));
+      AppTheme::MarkFontRole(curve_hint, AppTheme::FontRole::UiHint);
       curve_hint->setWordWrap(true);
 
       auto* reset_curve_btn = new QPushButton("Reset Curve", actions_row);
       reset_curve_btn->setFixedHeight(28);
-      reset_curve_btn->setStyleSheet(
-          "QPushButton {"
-          "  color: #121212;"
-          "  background: #FCC704;"
-          "  border: none;"
-          "  border-radius: 8px;"
-          "  padding: 4px 10px;"
-          "}"
-          "QPushButton:hover {"
-          "  background: #FCC704;"
-          "}");
+      reset_curve_btn->setStyleSheet(AppTheme::EditorPrimaryButtonStyle());
       QObject::connect(reset_curve_btn, &QPushButton::clicked, this, [this]() {
         if (!curve_widget_) {
           return;
@@ -399,6 +355,7 @@
     color_temp_unsupported_label_ =
         new QLabel("Color temperature/tint is unavailable for this image.", controls_);
     color_temp_unsupported_label_->setWordWrap(true);
+    AppTheme::MarkFontRole(color_temp_unsupported_label_, AppTheme::FontRole::UiHint);
     color_temp_unsupported_label_->setStyleSheet(
         "QLabel {"
         "  color: #FFB454;"
@@ -406,7 +363,6 @@
         "  border: 1px solid rgba(255, 180, 84, 0.35);"
         "  border-radius: 8px;"
         "  padding: 6px 8px;"
-        "  font-size: 12px;"
         "}");
     controls_layout->insertWidget(controls_layout->count() - 1, color_temp_unsupported_label_);
     color_temp_unsupported_label_->setVisible(!state_.color_temp_supported_);
@@ -419,12 +375,8 @@
       layout->setSpacing(8);
 
       hls_target_label_ = new QLabel(frame);
-      hls_target_label_->setStyleSheet(
-          "QLabel {"
-          "  color: #E6E6E6;"
-          "  font-size: 13px;"
-          "  font-weight: 500;"
-          "}");
+      hls_target_label_->setStyleSheet(AppTheme::EditorLabelStyle(AppTheme::Instance().textColor()));
+      AppTheme::MarkFontRole(hls_target_label_, AppTheme::FontRole::DataBodyStrong);
       layout->addWidget(hls_target_label_, 0);
 
       auto* swatch_row        = new QWidget(frame);
@@ -513,12 +465,8 @@
       wheel_layout->setSpacing(2);
 
       auto* wheel_title = new QLabel("CDL Wheels", wheel_frame);
-      wheel_title->setStyleSheet(
-          "QLabel {"
-          "  color: #E6E6E6;"
-          "  font-size: 12px;"
-          "  font-weight: 600;"
-          "}");
+      wheel_title->setStyleSheet(AppTheme::EditorLabelStyle(AppTheme::Instance().textColor()));
+      AppTheme::MarkFontRole(wheel_title, AppTheme::FontRole::UiTitle);
       wheel_layout->addWidget(wheel_title, 0, Qt::AlignHCenter);
 
       auto makeWheelUnit = [&](const QString& title, CdlWheelState& wheel_state, bool add_unity,
@@ -531,12 +479,8 @@
         unit_layout->setSpacing(2);
 
         auto* title_label = new QLabel(title, unit);
-        title_label->setStyleSheet(
-            "QLabel {"
-            "  color: #CFCFCF;"
-            "  font-size: 10px;"
-            "  font-weight: 500;"
-            "}");
+        title_label->setStyleSheet(AppTheme::EditorLabelStyle(QColor(0xCF, 0xCF, 0xCF)));
+        AppTheme::MarkFontRole(title_label, AppTheme::FontRole::UiOverline);
         unit_layout->addWidget(title_label, 0, Qt::AlignHCenter);
 
         disc_widget = new CdlTrackballDiscWidget(unit);
@@ -566,11 +510,8 @@
         unit_layout->addWidget(disc_widget, 0, Qt::AlignHCenter);
 
         offset_label = new QLabel(FormatWheelDeltaText(wheel_state, add_unity), unit);
-        offset_label->setStyleSheet(
-            "QLabel {"
-            "  color: #A9A9A9;"
-            "  font-size: 9px;"
-            "}");
+        offset_label->setStyleSheet(AppTheme::EditorLabelStyle(QColor(0xA9, 0xA9, 0xA9)));
+        AppTheme::MarkFontRole(offset_label, AppTheme::FontRole::DataCaption);
         offset_label->setAlignment(Qt::AlignHCenter);
         unit_layout->addWidget(offset_label, 0);
 
