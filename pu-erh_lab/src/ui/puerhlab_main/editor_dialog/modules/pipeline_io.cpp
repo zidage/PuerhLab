@@ -439,13 +439,16 @@ auto ParamsForField(AdjustmentField field, const AdjustmentState& s,
     }
     case AdjustmentField::CropRotate: {
       const auto crop_rect = ClampCropRect(s.crop_x_, s.crop_y_, s.crop_w_, s.crop_h_);
+      const bool has_locked_aspect =
+          geometry::HasLockedAspect(s.crop_aspect_preset_, s.crop_aspect_width_,
+                                    s.crop_aspect_height_);
       const bool has_rotation = std::abs(s.rotate_degrees_) > 1e-4f;
       const bool has_crop =
           s.crop_enabled_ &&
           (std::abs(crop_rect[0]) > 1e-4f || std::abs(crop_rect[1]) > 1e-4f ||
            std::abs(crop_rect[2] - 1.0f) > 1e-4f || std::abs(crop_rect[3] - 1.0f) > 1e-4f);
       return {{"crop_rotate",
-               {{"enabled", has_rotation || has_crop},
+               {{"enabled", has_rotation || has_crop || has_locked_aspect},
                 {"angle_degrees", s.rotate_degrees_},
                 {"enable_crop", s.crop_enabled_},
                 {"crop_rect",
@@ -453,7 +456,11 @@ auto ParamsForField(AdjustmentField field, const AdjustmentState& s,
                   {"y", crop_rect[1]},
                   {"w", crop_rect[2]},
                   {"h", crop_rect[3]}}},
-                {"expand_to_fit", s.crop_expand_to_fit_}}}};
+                {"expand_to_fit", s.crop_expand_to_fit_},
+                {"aspect_ratio_preset",
+                 std::string(geometry::CropAspectPresetToString(s.crop_aspect_preset_))},
+                {"aspect_ratio",
+                 {{"width", s.crop_aspect_width_}, {"height", s.crop_aspect_height_}}}}}};
     }
   }
   return {};
@@ -551,6 +558,9 @@ auto FieldChanged(AdjustmentField field, const AdjustmentState& current,
       return !NearlyEqual(current.rotate_degrees_, committed.rotate_degrees_) ||
              current.crop_enabled_ != committed.crop_enabled_ ||
              current.crop_expand_to_fit_ != committed.crop_expand_to_fit_ ||
+             current.crop_aspect_preset_ != committed.crop_aspect_preset_ ||
+             !NearlyEqual(current.crop_aspect_width_, committed.crop_aspect_width_) ||
+             !NearlyEqual(current.crop_aspect_height_, committed.crop_aspect_height_) ||
              !NearlyEqual(state_rect[0], committed_rect[0]) ||
              !NearlyEqual(state_rect[1], committed_rect[1]) ||
              !NearlyEqual(state_rect[2], committed_rect[2]) ||
@@ -582,6 +592,9 @@ auto LoadStateFromPipeline(CPUPipelineExecutor& exec,
   loaded_state.crop_w_             = 1.0f;
   loaded_state.crop_h_             = 1.0f;
   loaded_state.crop_expand_to_fit_ = true;
+  loaded_state.crop_aspect_preset_ = ::puerhlab::ui::geometry::CropAspectPreset::Free;
+  loaded_state.crop_aspect_width_  = 1.0f;
+  loaded_state.crop_aspect_height_ = 1.0f;
   bool has_loaded_any              = false;
 
   const auto& loading  = exec.GetStage(PipelineStageName::Image_Loading);
@@ -982,11 +995,53 @@ auto LoadStateFromPipeline(CPUPipelineExecutor& exec,
   if (const auto crop_rotate_json =
           ReadNestedObject(geometry, OperatorType::CROP_ROTATE, "crop_rotate");
       crop_rotate_json.has_value()) {
-    const auto& crop_rotate    = *crop_rotate_json;
+    const auto& crop_rotate      = *crop_rotate_json;
     loaded_state.rotate_degrees_ = crop_rotate.value("angle_degrees", loaded_state.rotate_degrees_);
     loaded_state.crop_enabled_ = crop_rotate.value("enable_crop", loaded_state.crop_enabled_);
     loaded_state.crop_expand_to_fit_ =
         crop_rotate.value("expand_to_fit", loaded_state.crop_expand_to_fit_);
+    const bool has_aspect_ratio_object =
+        crop_rotate.contains("aspect_ratio") && crop_rotate["aspect_ratio"].is_object();
+    if (has_aspect_ratio_object) {
+      const auto& aspect = crop_rotate["aspect_ratio"];
+      if (const auto normalized = ::puerhlab::ui::geometry::NormalizeCropAspect(
+              aspect.value("width", loaded_state.crop_aspect_width_),
+              aspect.value("height", loaded_state.crop_aspect_height_));
+          normalized.has_value()) {
+        loaded_state.crop_aspect_width_  = normalized->at(0);
+        loaded_state.crop_aspect_height_ = normalized->at(1);
+      }
+    }
+    if (crop_rotate.contains("aspect_ratio_preset") && crop_rotate["aspect_ratio_preset"].is_string()) {
+      const auto preset =
+          ::puerhlab::ui::geometry::ParseCropAspectPreset(
+              crop_rotate["aspect_ratio_preset"].get<std::string>());
+      if (preset.has_value()) {
+        loaded_state.crop_aspect_preset_ = *preset;
+      } else if (has_aspect_ratio_object &&
+                 ::puerhlab::ui::geometry::NormalizeCropAspect(loaded_state.crop_aspect_width_,
+                                                               loaded_state.crop_aspect_height_)
+                     .has_value()) {
+        loaded_state.crop_aspect_preset_ = ::puerhlab::ui::geometry::CropAspectPreset::Custom;
+      }
+    } else if (has_aspect_ratio_object &&
+               ::puerhlab::ui::geometry::NormalizeCropAspect(loaded_state.crop_aspect_width_,
+                                                             loaded_state.crop_aspect_height_)
+                   .has_value()) {
+      loaded_state.crop_aspect_preset_ = ::puerhlab::ui::geometry::CropAspectPreset::Custom;
+    }
+    if (!::puerhlab::ui::geometry::HasLockedAspect(loaded_state.crop_aspect_preset_,
+                                                   loaded_state.crop_aspect_width_,
+                                                   loaded_state.crop_aspect_height_)) {
+      loaded_state.crop_aspect_preset_ = ::puerhlab::ui::geometry::CropAspectPreset::Free;
+      loaded_state.crop_aspect_width_  = 1.0f;
+      loaded_state.crop_aspect_height_ = 1.0f;
+    } else if (const auto preset_ratio = ::puerhlab::ui::geometry::CropAspectPresetRatio(
+                   loaded_state.crop_aspect_preset_);
+               preset_ratio.has_value()) {
+      loaded_state.crop_aspect_width_  = preset_ratio->at(0);
+      loaded_state.crop_aspect_height_ = preset_ratio->at(1);
+    }
     bool has_non_full_crop_rect = false;
     if (crop_rotate.contains("crop_rect") && crop_rotate["crop_rect"].is_object()) {
       const auto& crop_rect = crop_rotate["crop_rect"];
@@ -1003,7 +1058,11 @@ auto LoadStateFromPipeline(CPUPipelineExecutor& exec,
                                std::abs(loaded_state.crop_w_ - 1.0f) > 1e-4f ||
                                std::abs(loaded_state.crop_h_ - 1.0f) > 1e-4f;
     }
-    loaded_state.crop_enabled_ = loaded_state.crop_enabled_ || has_non_full_crop_rect;
+    loaded_state.crop_enabled_ =
+        loaded_state.crop_enabled_ || has_non_full_crop_rect ||
+        ::puerhlab::ui::geometry::HasLockedAspect(loaded_state.crop_aspect_preset_,
+                                                  loaded_state.crop_aspect_width_,
+                                                  loaded_state.crop_aspect_height_);
     has_loaded_any             = true;
   }
 

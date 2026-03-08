@@ -54,4 +54,15 @@ inline auto MakeDefaultODTParams() -> nlohmann::json {
               {"hdr_purity", 0.5f}}}}}};
 }
 
+inline auto MakeDefaultCropRotateParams() -> nlohmann::json {
+  return {{"crop_rotate",
+           {{"enabled", false},
+            {"angle_degrees", 0.0f},
+            {"enable_crop", true},
+            {"crop_rect", {{"x", 0.0f}, {"y", 0.0f}, {"w", 1.0f}, {"h", 1.0f}}},
+            {"expand_to_fit", true},
+            {"aspect_ratio_preset", "free"},
+            {"aspect_ratio", {{"width", 1.0f}, {"height", 1.0f}}}}}};
+}
+
 }  // namespace puerhlab::pipeline_defaults

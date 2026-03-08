@@ -117,6 +117,11 @@ target_include_directories(ODTOpTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/i
 target_link_libraries(ODTOpTest PRIVATE GTest::gtest_main Operators)
 gtest_discover_tests(ODTOpTest TEST_PREFIX "ODTOpTest.")
 
+add_executable(CropRotateOpTest edit/operators/geometry/crop_rotate_op_test.cpp)
+target_include_directories(CropRotateOpTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
+target_link_libraries(CropRotateOpTest PRIVATE GTest::gtest_main Operators ${PUERHLAB_TEST_OPENCV_MIN_DEPS})
+gtest_discover_tests(CropRotateOpTest TEST_PREFIX "CropRotateOpTest.")
+
 if(CUDAToolkit_FOUND)
   add_executable(ODTCudaSmokeTest edit/operators/cst/odt_cuda_smoke_test.cu)
   target_include_directories(ODTCudaSmokeTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)

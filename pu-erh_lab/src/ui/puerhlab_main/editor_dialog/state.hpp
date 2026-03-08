@@ -18,6 +18,7 @@
 #include "ui/puerhlab_main/editor_dialog/modules/color_temp.hpp"
 #include "ui/puerhlab_main/editor_dialog/modules/color_wheel.hpp"
 #include "ui/puerhlab_main/editor_dialog/modules/curve.hpp"
+#include "ui/puerhlab_main/editor_dialog/modules/geometry.hpp"
 #include "ui/puerhlab_main/editor_dialog/modules/hls.hpp"
 
 namespace puerhlab::ui {
@@ -147,6 +148,9 @@ struct AdjustmentState {
   float                crop_w_                      = 1.0f;
   float                crop_h_                      = 1.0f;
   bool                 crop_expand_to_fit_          = true;
+  geometry::CropAspectPreset crop_aspect_preset_    = geometry::CropAspectPreset::Free;
+  float                crop_aspect_width_           = 1.0f;
+  float                crop_aspect_height_          = 1.0f;
   std::string          lut_path_;
   RenderType           type_ = RenderType::FAST_PREVIEW;
 };
@@ -154,6 +158,7 @@ struct AdjustmentState {
 struct PendingRenderRequest {
   AdjustmentState state_;
   bool            apply_state_ = true;
+  bool            use_viewport_region_ = true;
 };
 
 // ---------------------------------------------------------------------------

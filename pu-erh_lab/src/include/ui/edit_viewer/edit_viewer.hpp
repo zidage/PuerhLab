@@ -38,6 +38,7 @@ class QtEditViewer : public QOpenGLWidget, protected QOpenGLExtraFunctions, publ
   void SetCropOverlayVisible(bool visible);
   void SetCropOverlayRectNormalized(float x, float y, float w, float h);
   void SetCropOverlayRotationDegrees(float angle_degrees);
+  void SetCropOverlayAspectLock(bool enabled, float aspect_ratio);
   void ResetCropOverlayRectToFull();
   auto GetViewZoom() const -> float;
 
@@ -112,7 +113,7 @@ class QtEditViewer : public QOpenGLWidget, protected QOpenGLExtraFunctions, publ
   QVector2D               view_pan_     = {0.0f, 0.0f};
   QPoint                  last_mouse_pos_{};
   bool                    dragging_     = false;
-  enum class CropDragMode { None, Create, Move, ResizeEdge, RotateCorner };
+  enum class CropDragMode { None, Create, Move, ResizeEdge, ResizeCorner, RotateHandle };
   enum class CropCorner { None, TopLeft, TopRight, BottomRight, BottomLeft };
   enum class CropEdge { None, Top, Right, Bottom, Left };
   bool                    crop_tool_enabled_   = false;
@@ -120,6 +121,8 @@ class QtEditViewer : public QOpenGLWidget, protected QOpenGLExtraFunctions, publ
   QRectF                  crop_overlay_rect_    = QRectF(0.0, 0.0, 1.0, 1.0);
   float                   crop_overlay_rotation_degrees_ = 0.0f;
   float                   crop_overlay_metric_aspect_ = 1.0f;
+  bool                    crop_overlay_aspect_locked_ = false;
+  float                   crop_overlay_aspect_ratio_  = 1.0f;
   CropDragMode            crop_drag_mode_       = CropDragMode::None;
   CropCorner              crop_drag_corner_     = CropCorner::None;
   CropEdge                crop_drag_edge_       = CropEdge::None;

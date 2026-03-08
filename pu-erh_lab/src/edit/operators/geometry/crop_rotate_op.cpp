@@ -6,7 +6,10 @@
 
 #include <algorithm>
 #include <cmath>
+#include <optional>
 #include <stdexcept>
+#include <string>
+#include <string_view>
 #include <utility>
 
 #include <opencv2/imgproc.hpp>
@@ -19,6 +22,21 @@ namespace {
 constexpr float kAngleEpsilon = 1e-4f;
 constexpr float kCropEpsilon  = 1e-4f;
 constexpr float kPi           = 3.14159265358979323846f;
+
+enum class CropAspectPreset : int {
+  Free = 0,
+  Custom,
+  Ratio235_1_35mm,
+  Ratio1_1,
+  Ratio16_9,
+  Ratio1_9_IMAX,
+  Ratio1_85_DCI,
+  Ratio2_2_70mm,
+  Ratio1_43_70mm_IMAX,
+  Ratio4_3_35mm,
+  Ratio1_5_NativeOrVistaVision,
+  Ratio2_76_PanavisionUltra,
+};
 
 auto ClampCropRect(NormalizedCropRect r) -> NormalizedCropRect {
   r.w_ = std::clamp(r.w_, kCropEpsilon, 1.0f);
@@ -44,6 +62,185 @@ auto NormalizeAngleDegrees(float angle_degrees) -> float {
     angle_degrees += 360.0f;
   }
   return angle_degrees;
+}
+
+auto NormalizeAspectPair(float width, float height) -> std::optional<std::pair<float, float>> {
+  if (!std::isfinite(width) || !std::isfinite(height) || width <= kCropEpsilon ||
+      height <= kCropEpsilon) {
+    return std::nullopt;
+  }
+  return std::pair<float, float>{std::max(width, kCropEpsilon), std::max(height, kCropEpsilon)};
+}
+
+auto ParseAspectPreset(std::string_view preset) -> std::optional<CropAspectPreset> {
+  if (preset == "free") {
+    return CropAspectPreset::Free;
+  }
+  if (preset == "custom") {
+    return CropAspectPreset::Custom;
+  }
+  if (preset == "ratio_2_35_1_35mm") {
+    return CropAspectPreset::Ratio235_1_35mm;
+  }
+  if (preset == "ratio_1_1") {
+    return CropAspectPreset::Ratio1_1;
+  }
+  if (preset == "ratio_16_9") {
+    return CropAspectPreset::Ratio16_9;
+  }
+  if (preset == "ratio_1_9_1_imax") {
+    return CropAspectPreset::Ratio1_9_IMAX;
+  }
+  if (preset == "ratio_1_85_1_dci") {
+    return CropAspectPreset::Ratio1_85_DCI;
+  }
+  if (preset == "ratio_2_2_1_70mm") {
+    return CropAspectPreset::Ratio2_2_70mm;
+  }
+  if (preset == "ratio_1_43_1_70mm_imax") {
+    return CropAspectPreset::Ratio1_43_70mm_IMAX;
+  }
+  if (preset == "ratio_4_3_35mm") {
+    return CropAspectPreset::Ratio4_3_35mm;
+  }
+  if (preset == "ratio_1_5_1_native_vistavision") {
+    return CropAspectPreset::Ratio1_5_NativeOrVistaVision;
+  }
+  if (preset == "ratio_2_76_1_panavision_ultra") {
+    return CropAspectPreset::Ratio2_76_PanavisionUltra;
+  }
+  return std::nullopt;
+}
+
+auto AspectPresetId(CropAspectPreset preset) -> const char* {
+  switch (preset) {
+    case CropAspectPreset::Custom:
+      return "custom";
+    case CropAspectPreset::Ratio235_1_35mm:
+      return "ratio_2_35_1_35mm";
+    case CropAspectPreset::Ratio1_1:
+      return "ratio_1_1";
+    case CropAspectPreset::Ratio16_9:
+      return "ratio_16_9";
+    case CropAspectPreset::Ratio1_9_IMAX:
+      return "ratio_1_9_1_imax";
+    case CropAspectPreset::Ratio1_85_DCI:
+      return "ratio_1_85_1_dci";
+    case CropAspectPreset::Ratio2_2_70mm:
+      return "ratio_2_2_1_70mm";
+    case CropAspectPreset::Ratio1_43_70mm_IMAX:
+      return "ratio_1_43_1_70mm_imax";
+    case CropAspectPreset::Ratio4_3_35mm:
+      return "ratio_4_3_35mm";
+    case CropAspectPreset::Ratio1_5_NativeOrVistaVision:
+      return "ratio_1_5_1_native_vistavision";
+    case CropAspectPreset::Ratio2_76_PanavisionUltra:
+      return "ratio_2_76_1_panavision_ultra";
+    case CropAspectPreset::Free:
+    default:
+      return "free";
+  }
+}
+
+auto PresetAspectPair(CropAspectPreset preset) -> std::optional<std::pair<float, float>> {
+  switch (preset) {
+    case CropAspectPreset::Ratio235_1_35mm:
+      return std::pair<float, float>{2.35f, 1.0f};
+    case CropAspectPreset::Ratio1_1:
+      return std::pair<float, float>{1.0f, 1.0f};
+    case CropAspectPreset::Ratio16_9:
+      return std::pair<float, float>{16.0f, 9.0f};
+    case CropAspectPreset::Ratio1_9_IMAX:
+      return std::pair<float, float>{1.9f, 1.0f};
+    case CropAspectPreset::Ratio1_85_DCI:
+      return std::pair<float, float>{1.85f, 1.0f};
+    case CropAspectPreset::Ratio2_2_70mm:
+      return std::pair<float, float>{2.2f, 1.0f};
+    case CropAspectPreset::Ratio1_43_70mm_IMAX:
+      return std::pair<float, float>{1.43f, 1.0f};
+    case CropAspectPreset::Ratio4_3_35mm:
+      return std::pair<float, float>{4.0f, 3.0f};
+    case CropAspectPreset::Ratio1_5_NativeOrVistaVision:
+      return std::pair<float, float>{1.5f, 1.0f};
+    case CropAspectPreset::Ratio2_76_PanavisionUltra:
+      return std::pair<float, float>{2.76f, 1.0f};
+    case CropAspectPreset::Free:
+    case CropAspectPreset::Custom:
+    default:
+      return std::nullopt;
+  }
+}
+
+auto ResolveAspectRatio(CropAspectPreset preset, float aspect_width,
+                        float aspect_height) -> std::optional<float> {
+  if (preset == CropAspectPreset::Free) {
+    return std::nullopt;
+  }
+  if (const auto preset_pair = PresetAspectPair(preset); preset_pair.has_value()) {
+    return preset_pair->first / std::max(preset_pair->second, kCropEpsilon);
+  }
+  if (const auto normalized = NormalizeAspectPair(aspect_width, aspect_height);
+      normalized.has_value()) {
+    return normalized->first / std::max(normalized->second, kCropEpsilon);
+  }
+  return std::nullopt;
+}
+
+auto FitAspectRectInsideBounds(NormalizedCropRect rect, int width, int height, float aspect_ratio)
+    -> NormalizedCropRect {
+  rect = ClampCropRect(rect);
+  if (width <= 0 || height <= 0) {
+    return rect;
+  }
+
+  const float source_aspect = std::max(static_cast<float>(width) / static_cast<float>(height),
+                                       kCropEpsilon);
+  const float target_ratio  = std::max(aspect_ratio, kCropEpsilon);
+  const float max_width_from_height = rect.h_ * (target_ratio / source_aspect);
+
+  float resolved_w = rect.w_;
+  float resolved_h = rect.h_;
+  if (max_width_from_height <= rect.w_ + kCropEpsilon) {
+    resolved_w = std::clamp(max_width_from_height, kCropEpsilon, rect.w_);
+    resolved_h = std::clamp(resolved_w * (source_aspect / target_ratio), kCropEpsilon, rect.h_);
+  } else {
+    resolved_h = std::clamp(rect.w_ * (source_aspect / target_ratio), kCropEpsilon, rect.h_);
+    resolved_w = std::clamp(resolved_h * (target_ratio / source_aspect), kCropEpsilon, rect.w_);
+  }
+
+  const float cx = rect.x_ + (rect.w_ * 0.5f);
+  const float cy = rect.y_ + (rect.h_ * 0.5f);
+  return ClampCropRect({cx - (resolved_w * 0.5f), cy - (resolved_h * 0.5f), resolved_w,
+                        resolved_h});
+}
+
+void SanitizeAspectState(std::string& preset_id, float& aspect_width, float& aspect_height) {
+  const auto preset = ParseAspectPreset(preset_id);
+  if (preset.has_value() && *preset != CropAspectPreset::Custom) {
+    if (*preset == CropAspectPreset::Free) {
+      preset_id = AspectPresetId(CropAspectPreset::Free);
+      if (!NormalizeAspectPair(aspect_width, aspect_height).has_value()) {
+        aspect_width  = 1.0f;
+        aspect_height = 1.0f;
+      }
+      return;
+    }
+    if (const auto ratio = PresetAspectPair(*preset); ratio.has_value()) {
+      preset_id      = AspectPresetId(*preset);
+      aspect_width   = ratio->first;
+      aspect_height  = ratio->second;
+      return;
+    }
+  }
+
+  if (NormalizeAspectPair(aspect_width, aspect_height).has_value()) {
+    preset_id = AspectPresetId(CropAspectPreset::Custom);
+    return;
+  }
+
+  preset_id      = AspectPresetId(CropAspectPreset::Free);
+  aspect_width   = 1.0f;
+  aspect_height  = 1.0f;
 }
 
 auto ClampCropRectForRotation(NormalizedCropRect rect, float angle_degrees) -> NormalizedCropRect {
@@ -130,6 +327,17 @@ auto BuildRotatedCropMatrix(int width, int height, const NormalizedCropRect& rec
   out_size = cv::Size(out_w, out_h);
   return matrix;
 }
+
+auto ResolveRuntimeCropRect(const NormalizedCropRect& rect, int width, int height,
+                            const std::string& aspect_ratio_preset, float aspect_ratio_width,
+                            float aspect_ratio_height) -> NormalizedCropRect {
+  const auto preset = ParseAspectPreset(aspect_ratio_preset).value_or(CropAspectPreset::Free);
+  const auto ratio  = ResolveAspectRatio(preset, aspect_ratio_width, aspect_ratio_height);
+  if (!ratio.has_value()) {
+    return ClampCropRect(rect);
+  }
+  return FitAspectRectInsideBounds(rect, width, height, *ratio);
+}
 }  // namespace
 
 CropRotateOp::CropRotateOp(const nlohmann::json& params) { SetParams(params); }
@@ -147,7 +355,9 @@ void CropRotateOp::Apply(std::shared_ptr<ImageBuffer> input) {
   }
 
   const float angle_degrees = NormalizeAngleDegrees(angle_degrees_);
-  const auto  crop_rect     = ClampCropRectForRotation(crop_rect_, angle_degrees);
+  const auto  resolved_rect = ResolveRuntimeCropRect(crop_rect_, width, height, aspect_ratio_preset_,
+                                                     aspect_ratio_width_, aspect_ratio_height_);
+  const auto  crop_rect     = ClampCropRectForRotation(resolved_rect, angle_degrees);
   const bool  has_rotation  = std::abs(angle_degrees) > kAngleEpsilon;
   if (IsFullCropRect(crop_rect) && !has_rotation) {
     return;
@@ -181,7 +391,9 @@ void CropRotateOp::ApplyGPU(std::shared_ptr<ImageBuffer> input) {
   }
 
   const float angle_degrees = NormalizeAngleDegrees(angle_degrees_);
-  const auto  crop_rect     = ClampCropRectForRotation(crop_rect_, angle_degrees);
+  const auto  resolved_rect = ResolveRuntimeCropRect(crop_rect_, width, height, aspect_ratio_preset_,
+                                                     aspect_ratio_width_, aspect_ratio_height_);
+  const auto  crop_rect     = ClampCropRectForRotation(resolved_rect, angle_degrees);
   const bool  has_rotation  = std::abs(angle_degrees) > kAngleEpsilon;
   if (IsFullCropRect(crop_rect) && !has_rotation) {
     return;
@@ -209,18 +421,23 @@ auto CropRotateOp::GetParams() const -> nlohmann::json {
   return {{std::string(script_name_),
            {{"enabled", enabled_},
             {"angle_degrees", angle_degrees_},
-            {"enable_crop", enable_crop_},
+           {"enable_crop", enable_crop_},
             {"crop_rect",
              {{"x", crop_rect_.x_}, {"y", crop_rect_.y_}, {"w", crop_rect_.w_}, {"h", crop_rect_.h_}}},
-            {"expand_to_fit", expand_to_fit_}}}};
+            {"expand_to_fit", expand_to_fit_},
+            {"aspect_ratio_preset", aspect_ratio_preset_},
+            {"aspect_ratio", {{"width", aspect_ratio_width_}, {"height", aspect_ratio_height_}}}}}};
 }
 
 void CropRotateOp::SetParams(const nlohmann::json& params) {
-  enabled_       = false;
-  angle_degrees_ = 0.0f;
-  enable_crop_   = false;
-  crop_rect_     = {};
-  expand_to_fit_ = true;
+  enabled_             = false;
+  angle_degrees_       = 0.0f;
+  enable_crop_         = false;
+  crop_rect_           = {};
+  expand_to_fit_       = true;
+  aspect_ratio_preset_ = "free";
+  aspect_ratio_width_  = 1.0f;
+  aspect_ratio_height_ = 1.0f;
 
   if (!params.contains(script_name_) || !params[script_name_].is_object()) {
     return;
@@ -238,8 +455,18 @@ void CropRotateOp::SetParams(const nlohmann::json& params) {
     crop_rect_.w_    = rect.value("w", crop_rect_.w_);
     crop_rect_.h_    = rect.value("h", crop_rect_.h_);
   }
+  if (inner.contains("aspect_ratio_preset") && inner["aspect_ratio_preset"].is_string()) {
+    aspect_ratio_preset_ = inner["aspect_ratio_preset"].get<std::string>();
+  }
+  if (inner.contains("aspect_ratio") && inner["aspect_ratio"].is_object()) {
+    const auto& aspect  = inner["aspect_ratio"];
+    aspect_ratio_width_ = aspect.value("width", aspect_ratio_width_);
+    aspect_ratio_height_ = aspect.value("height", aspect_ratio_height_);
+  }
+
   angle_degrees_ = NormalizeAngleDegrees(angle_degrees_);
-  crop_rect_     = ClampCropRectForRotation(crop_rect_, angle_degrees_);
+  SanitizeAspectState(aspect_ratio_preset_, aspect_ratio_width_, aspect_ratio_height_);
+  crop_rect_ = ClampCropRect(crop_rect_);
 }
 
 void CropRotateOp::SetGlobalParams(OperatorParams&) const {

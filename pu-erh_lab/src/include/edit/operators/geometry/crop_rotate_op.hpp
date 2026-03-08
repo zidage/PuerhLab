@@ -4,6 +4,8 @@
 
 #pragma once
 
+#include <string>
+
 #include "edit/operators/op_base.hpp"
 
 namespace puerhlab {
@@ -22,6 +24,9 @@ class CropRotateOp : public OperatorBase<CropRotateOp> {
   bool               enable_crop_   = false;
   NormalizedCropRect crop_rect_     = {};
   bool               expand_to_fit_ = true;
+  std::string        aspect_ratio_preset_ = "free";
+  float              aspect_ratio_width_  = 1.0f;
+  float              aspect_ratio_height_ = 1.0f;
 
  public:
   static constexpr PriorityLevel     priority_level_    = 2;

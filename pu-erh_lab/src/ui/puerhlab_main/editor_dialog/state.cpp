@@ -144,6 +144,9 @@ void CopyFieldState(AdjustmentField field, const AdjustmentState& from, Adjustme
       to.crop_w_             = from.crop_w_;
       to.crop_h_             = from.crop_h_;
       to.crop_expand_to_fit_ = from.crop_expand_to_fit_;
+      to.crop_aspect_preset_ = from.crop_aspect_preset_;
+      to.crop_aspect_width_  = from.crop_aspect_width_;
+      to.crop_aspect_height_ = from.crop_aspect_height_;
       return;
   }
 }

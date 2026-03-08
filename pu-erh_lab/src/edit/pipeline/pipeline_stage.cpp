@@ -60,6 +60,13 @@ auto IsCropRotateEffectivelyNoOp(const IOperatorBase& op) -> bool {
     return false;
   }
 
+  if (crop_rotate.contains("aspect_ratio_preset") && crop_rotate["aspect_ratio_preset"].is_string()) {
+    const std::string preset = crop_rotate["aspect_ratio_preset"].get<std::string>();
+    if (preset != "free") {
+      return false;
+    }
+  }
+
   if (!crop_rotate.contains("crop_rect") || !crop_rotate["crop_rect"].is_object()) {
     return true;
   }

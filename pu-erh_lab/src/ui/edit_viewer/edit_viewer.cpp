@@ -138,7 +138,9 @@ constexpr float kCropMinSize               = 1e-4f;
 constexpr float kCropCornerHitRadiusPx     = 12.0f;
 constexpr float kCropEdgeHitRadiusPx       = 10.0f;
 constexpr float kCropCornerDrawRadiusPx    = 4.0f;
-constexpr float kCropRotateDegreesPerPixel = 0.25f;
+constexpr float kCropRotateHandleOffsetPx  = 28.0f;
+constexpr float kCropRotateHandleHitRadiusPx = 14.0f;
+constexpr float kCropRotateHandleDrawRadiusPx = 5.0f;
 constexpr float kPi                        = 3.14159265358979323846f;
 
 auto Clamp01(float v) -> float { return std::clamp(v, 0.0f, 1.0f); }
@@ -199,6 +201,29 @@ auto InverseRotateVector(const QPointF& v, float angle_degrees) -> QPointF {
 auto MakeRectFromCenterSize(const QPointF& center, float width, float height) -> QRectF {
   return QRectF(center.x() - (static_cast<qreal>(width) * 0.5),
                 center.y() - (static_cast<qreal>(height) * 0.5), width, height);
+}
+
+auto ClampAspectRatio(float aspect_ratio) -> float {
+  return std::max(aspect_ratio, kCropMinSize);
+}
+
+auto MakeAspectLockedRectFromDiagonal(const QPointF& anchor_uv, const QPointF& cursor_uv,
+                                      float image_aspect, float aspect_ratio) -> QRectF {
+  const float   target_ratio   = ClampAspectRatio(aspect_ratio);
+  const QPointF anchor_metric  = UvToMetric(anchor_uv, image_aspect);
+  const QPointF cursor_metric  = UvToMetric(cursor_uv, image_aspect);
+  const QPointF delta_metric   = cursor_metric - anchor_metric;
+  const float   sign_x         = delta_metric.x() >= 0.0 ? 1.0f : -1.0f;
+  const float   sign_y         = delta_metric.y() >= 0.0 ? 1.0f : -1.0f;
+  const float   abs_width      = std::max(kCropMinSize * image_aspect, std::abs(static_cast<float>(delta_metric.x())));
+  const float   abs_height     = std::max(kCropMinSize, std::abs(static_cast<float>(delta_metric.y())));
+  const bool    width_limited  = (abs_width / std::max(abs_height, kCropMinSize)) <= target_ratio;
+  const float   rect_width_m   = width_limited ? abs_width : (abs_height * target_ratio);
+  const float   rect_height_m  = width_limited ? (abs_width / target_ratio) : abs_height;
+  const QPointF corner_metric  = anchor_metric +
+                                QPointF(sign_x * rect_width_m, sign_y * rect_height_m);
+  return QRectF(MetricToUv(anchor_metric, image_aspect), MetricToUv(corner_metric, image_aspect))
+      .normalized();
 }
 
 auto ClampCropRectForRotation(const QRectF& rect, float angle_degrees, float aspect) -> QRectF {
@@ -284,6 +309,85 @@ auto PointSegmentDistanceSquared(const QPointF& p, const QPointF& a, const QPoin
 
 auto LerpPoint(const QPointF& a, const QPointF& b, float t) -> QPointF {
   return QPointF(a.x() + (b.x() - a.x()) * t, a.y() + (b.y() - a.y()) * t);
+}
+
+auto VectorLengthSquared(const QPointF& v) -> float { return Dot2(v, v); }
+
+auto NormalizeVector(const QPointF& v, const QPointF& fallback) -> QPointF {
+  const float len2 = VectorLengthSquared(v);
+  if (len2 <= 1e-8f) {
+    return fallback;
+  }
+  const float inv_len = 1.0f / std::sqrt(len2);
+  return QPointF(static_cast<float>(v.x()) * inv_len, static_cast<float>(v.y()) * inv_len);
+}
+
+auto CropCenterWidgetPoint(const std::array<QPointF, 4>& corners) -> QPointF {
+  return QPointF((corners[0].x() + corners[2].x()) * 0.5, (corners[0].y() + corners[2].y()) * 0.5);
+}
+
+auto CropRotateHandleWidgetPoint(const std::array<QPointF, 4>& corners) -> std::pair<QPointF, QPointF> {
+  const QPointF top_mid = LerpPoint(corners[0], corners[1], 0.5f);
+  const QPointF center  = CropCenterWidgetPoint(corners);
+  const QPointF dir     = NormalizeVector(top_mid - center, QPointF(0.0, -1.0));
+  const QPointF handle(top_mid.x() + (dir.x() * kCropRotateHandleOffsetPx),
+                       top_mid.y() + (dir.y() * kCropRotateHandleOffsetPx));
+  return {top_mid, handle};
+}
+
+auto CursorForCropCorner(int corner_index) -> Qt::CursorShape {
+  return (corner_index == 0 || corner_index == 2) ? Qt::SizeFDiagCursor : Qt::SizeBDiagCursor;
+}
+
+auto OppositeCropCornerIndex(int corner_index) -> int {
+  switch (corner_index) {
+    case 0:
+      return 2;
+    case 1:
+      return 3;
+    case 2:
+      return 0;
+    case 3:
+      return 1;
+    default:
+      return -1;
+  }
+}
+
+auto ResizeRotatedCropFromFixedCorner(const QPointF& fixed_corner_uv, const QPointF& cursor_uv,
+                                      float angle_degrees, float metric_aspect,
+                                      bool aspect_locked, float aspect_ratio) -> QRectF {
+  const QPointF fixed_metric  = UvToMetric(fixed_corner_uv, metric_aspect);
+  const QPointF cursor_metric = UvToMetric(cursor_uv, metric_aspect);
+  const QPointF local_delta =
+      InverseRotateVector(cursor_metric - fixed_metric, angle_degrees);
+
+  const float sign_x = local_delta.x() >= 0.0 ? 1.0f : -1.0f;
+  const float sign_y = local_delta.y() >= 0.0 ? 1.0f : -1.0f;
+  float       width_metric =
+      std::max(kCropMinSize * metric_aspect, std::abs(static_cast<float>(local_delta.x())));
+  float height_metric = std::max(kCropMinSize, std::abs(static_cast<float>(local_delta.y())));
+
+  if (aspect_locked) {
+    const float locked_ratio  = ClampAspectRatio(aspect_ratio);
+    const bool  width_limited = (width_metric / std::max(height_metric, kCropMinSize)) <= locked_ratio;
+    if (width_limited) {
+      height_metric = std::max(kCropMinSize, width_metric / locked_ratio);
+    } else {
+      width_metric = std::max(kCropMinSize * metric_aspect, height_metric * locked_ratio);
+    }
+  }
+
+  const QPointF center_metric =
+      fixed_metric +
+      RotateVector(QPointF(sign_x * width_metric * 0.5f, sign_y * height_metric * 0.5f),
+                   angle_degrees);
+  const QPointF center_uv = MetricToUv(center_metric, metric_aspect);
+  const float   width_uv =
+      std::max(kCropMinSize, width_metric / std::max(metric_aspect, kCropMinSize));
+  const float   height_uv = std::max(kCropMinSize, height_metric);
+  return ClampCropRectForRotation(MakeRectFromCenterSize(center_uv, width_uv, height_uv),
+                                  angle_degrees, metric_aspect);
 }
 
 QtEditViewer::QtEditViewer(QWidget* parent) : QOpenGLWidget(parent) {
@@ -685,6 +789,15 @@ void QtEditViewer::SetCropOverlayRotationDegrees(float angle_degrees) {
                                 static_cast<float>(adjusted_rect.y()),
                                 static_cast<float>(adjusted_rect.width()),
                                 static_cast<float>(adjusted_rect.height()), false);
+  }
+  update();
+}
+
+void QtEditViewer::SetCropOverlayAspectLock(bool enabled, float aspect_ratio) {
+  {
+    std::lock_guard<std::mutex> view_lock(view_state_mutex_);
+    crop_overlay_aspect_locked_ = enabled;
+    crop_overlay_aspect_ratio_  = ClampAspectRatio(aspect_ratio);
   }
   update();
 }
@@ -1387,6 +1500,8 @@ void QtEditViewer::paintGL() {
     if (crop_corners_valid && image_top_left_opt && image_bottom_right_opt) {
       const QRectF image_rect = QRectF(*image_top_left_opt, *image_bottom_right_opt).normalized();
       if (image_rect.isValid()) {
+        const auto [rotate_stem_widget, rotate_handle_widget] =
+            CropRotateHandleWidgetPoint(crop_corners_widget);
         QPolygonF crop_polygon;
         crop_polygon.reserve(static_cast<int>(crop_corners_widget.size()));
         for (const auto& p : crop_corners_widget) {
@@ -1406,6 +1521,7 @@ void QtEditViewer::paintGL() {
         painter.setPen(QPen(QColor(252, 199, 4, 220), 1.2));
         painter.setBrush(Qt::NoBrush);
         painter.drawPolygon(crop_polygon);
+        painter.drawLine(rotate_stem_widget, rotate_handle_widget);
 
         painter.setPen(QPen(QColor(252, 199, 4, 150), 1.0, Qt::DashLine));
         for (const float t : {1.0f / 3.0f, 2.0f / 3.0f}) {
@@ -1420,6 +1536,10 @@ void QtEditViewer::paintGL() {
         for (const auto& corner : crop_corners_widget) {
           painter.drawEllipse(corner, kCropCornerDrawRadiusPx, kCropCornerDrawRadiusPx);
         }
+        painter.setPen(QPen(QColor(18, 18, 18, 230), 1.0));
+        painter.setBrush(QColor(252, 199, 4, 245));
+        painter.drawEllipse(rotate_handle_widget, kCropRotateHandleDrawRadiusPx,
+                            kCropRotateHandleDrawRadiusPx);
       }
     }
   }
@@ -1550,118 +1670,152 @@ void QtEditViewer::mousePressEvent(QMouseEvent* event) {
     }
 
     if (crop_tool_enabled && crop_overlay_visible) {
-      const auto uv_opt = WidgetPointToImageUv(event->position(), image_width, image_height);
-      if (uv_opt.has_value()) {
-        const float  metric_aspect = SafeAspect(image_width, image_height);
-        const QPointF uv_point(Clamp01(static_cast<float>(uv_opt->x())),
-                               Clamp01(static_cast<float>(uv_opt->y())));
+      const float metric_aspect = SafeAspect(image_width, image_height);
+      const auto  crop_corners_uv =
+          RotatedCropCornersUv(crop_rect, crop_rotation_degrees, metric_aspect);
+      std::array<QPointF, 4> crop_corners_widget{};
+      bool                   corners_valid = true;
+      for (int i = 0; i < static_cast<int>(crop_corners_uv.size()); ++i) {
+        const auto corner_widget =
+            ImageUvToWidgetPoint(crop_corners_uv[static_cast<size_t>(i)], image_width, image_height);
+        if (!corner_widget.has_value()) {
+          corners_valid = false;
+          break;
+        }
+        crop_corners_widget[static_cast<size_t>(i)] = *corner_widget;
+      }
 
-        int   hit_corner = -1;
+      int hit_corner = -1;
+      if (corners_valid) {
         float best_dist2 = kCropCornerHitRadiusPx * kCropCornerHitRadiusPx;
-        const auto crop_corners_uv =
-            RotatedCropCornersUv(crop_rect, crop_rotation_degrees, metric_aspect);
-        std::array<QPointF, 4> crop_corners_widget{};
-        bool                   corners_valid = true;
-        for (int i = 0; i < static_cast<int>(crop_corners_uv.size()); ++i) {
-          const auto corner_widget =
-              ImageUvToWidgetPoint(crop_corners_uv[static_cast<size_t>(i)], image_width, image_height);
-          if (!corner_widget.has_value()) {
-            corners_valid = false;
-            break;
-          }
-          crop_corners_widget[static_cast<size_t>(i)] = *corner_widget;
-          const float dx = static_cast<float>(corner_widget->x() - event->position().x());
-          const float dy = static_cast<float>(corner_widget->y() - event->position().y());
+        for (int i = 0; i < static_cast<int>(crop_corners_widget.size()); ++i) {
+          const float dx = static_cast<float>(crop_corners_widget[static_cast<size_t>(i)].x() -
+                                              event->position().x());
+          const float dy = static_cast<float>(crop_corners_widget[static_cast<size_t>(i)].y() -
+                                              event->position().y());
           const float d2 = (dx * dx) + (dy * dy);
           if (d2 <= best_dist2) {
-            best_dist2  = d2;
+            best_dist2 = d2;
             hit_corner = i;
           }
         }
+      }
 
-        CropEdge hit_edge = CropEdge::None;
-        if (hit_corner < 0 && corners_valid) {
-          const float edge_hit_dist2 = kCropEdgeHitRadiusPx * kCropEdgeHitRadiusPx;
-          const float top_d2 = PointSegmentDistanceSquared(event->position(), crop_corners_widget[0],
-                                                           crop_corners_widget[1]);
-          const float right_d2 = PointSegmentDistanceSquared(event->position(), crop_corners_widget[1],
-                                                             crop_corners_widget[2]);
-          const float bottom_d2 = PointSegmentDistanceSquared(event->position(), crop_corners_widget[2],
-                                                              crop_corners_widget[3]);
-          const float left_d2 = PointSegmentDistanceSquared(event->position(), crop_corners_widget[3],
-                                                            crop_corners_widget[0]);
-          float min_edge_d2 = edge_hit_dist2;
-          auto  try_edge = [&](float d2, CropEdge edge) {
-            if (d2 <= min_edge_d2) {
-              min_edge_d2 = d2;
-              hit_edge    = edge;
-            }
-          };
-          try_edge(top_d2, CropEdge::Top);
-          try_edge(right_d2, CropEdge::Right);
-          try_edge(bottom_d2, CropEdge::Bottom);
-          try_edge(left_d2, CropEdge::Left);
-        }
+      bool    hit_rotate_handle = false;
+      QPointF rotate_handle_widget;
+      if (corners_valid) {
+        const auto handle_geom = CropRotateHandleWidgetPoint(crop_corners_widget);
+        rotate_handle_widget   = handle_geom.second;
+        const float dx         = static_cast<float>(rotate_handle_widget.x() - event->position().x());
+        const float dy         = static_cast<float>(rotate_handle_widget.y() - event->position().y());
+        const float d2         = (dx * dx) + (dy * dy);
+        hit_rotate_handle =
+            d2 <= (kCropRotateHandleHitRadiusPx * kCropRotateHandleHitRadiusPx);
+      }
 
-        const bool inside_crop =
-            IsPointInsideRotatedCrop(uv_point, crop_rect, crop_rotation_degrees, metric_aspect);
-        QRectF     emit_rect;
-        {
-          std::lock_guard<std::mutex> view_lock(view_state_mutex_);
-          crop_overlay_metric_aspect_  = metric_aspect;
-          crop_drag_anchor_uv_         = uv_point;
-          crop_drag_anchor_widget_pos_ = event->position();
-          crop_drag_origin_rect_       = crop_rect;
-          crop_drag_rotation_degrees_  = crop_rotation_degrees;
-          crop_drag_corner_            = CropCorner::None;
-          crop_drag_edge_              = CropEdge::None;
-
-          if (hit_corner >= 0) {
-            crop_drag_mode_ = CropDragMode::RotateCorner;
-            switch (hit_corner) {
-              case 0:
-                crop_drag_corner_ = CropCorner::TopLeft;
-                break;
-              case 1:
-                crop_drag_corner_ = CropCorner::TopRight;
-                break;
-              case 2:
-                crop_drag_corner_ = CropCorner::BottomRight;
-                break;
-              case 3:
-                crop_drag_corner_ = CropCorner::BottomLeft;
-                break;
-              default:
-                crop_drag_corner_ = CropCorner::None;
-                break;
-            }
-            setCursor(Qt::SizeHorCursor);
-          } else if (hit_edge != CropEdge::None) {
-            crop_drag_mode_ = CropDragMode::ResizeEdge;
-            crop_drag_edge_ = hit_edge;
-            setCursor(Qt::SizeAllCursor);
-          } else if (inside_crop) {
-            crop_drag_mode_ = CropDragMode::Move;
-            setCursor(Qt::SizeAllCursor);
-          } else {
-            crop_drag_mode_ = CropDragMode::Create;
-            crop_overlay_rect_ = ClampCropRectForRotation(
-                QRectF(uv_point, QSizeF(kCropMinSize, kCropMinSize)), crop_rotation_degrees,
-                metric_aspect);
-            crop_drag_origin_rect_ = crop_overlay_rect_;
-            setCursor(Qt::CrossCursor);
+      CropEdge hit_edge = CropEdge::None;
+      if (!hit_rotate_handle && hit_corner < 0 && corners_valid) {
+        const float edge_hit_dist2 = kCropEdgeHitRadiusPx * kCropEdgeHitRadiusPx;
+        const float top_d2 = PointSegmentDistanceSquared(event->position(), crop_corners_widget[0],
+                                                         crop_corners_widget[1]);
+        const float right_d2 = PointSegmentDistanceSquared(event->position(), crop_corners_widget[1],
+                                                           crop_corners_widget[2]);
+        const float bottom_d2 = PointSegmentDistanceSquared(event->position(), crop_corners_widget[2],
+                                                            crop_corners_widget[3]);
+        const float left_d2 = PointSegmentDistanceSquared(event->position(), crop_corners_widget[3],
+                                                          crop_corners_widget[0]);
+        float min_edge_d2 = edge_hit_dist2;
+        auto  try_edge = [&](float d2, CropEdge edge) {
+          if (d2 <= min_edge_d2) {
+            min_edge_d2 = d2;
+            hit_edge    = edge;
           }
-          emit_rect = crop_overlay_rect_;
-        }
+        };
+        try_edge(top_d2, CropEdge::Top);
+        try_edge(right_d2, CropEdge::Right);
+        try_edge(bottom_d2, CropEdge::Bottom);
+        try_edge(left_d2, CropEdge::Left);
+      }
 
-        emit CropOverlayRectChanged(static_cast<float>(emit_rect.x()),
-                                    static_cast<float>(emit_rect.y()),
-                                    static_cast<float>(emit_rect.width()),
-                                    static_cast<float>(emit_rect.height()), false);
-        update();
+      const auto uv_opt = WidgetPointToImageUv(event->position(), image_width, image_height);
+      if (!hit_rotate_handle && !uv_opt.has_value()) {
         event->accept();
         return;
       }
+
+      const QPointF uv_point =
+          uv_opt.has_value()
+              ? QPointF(Clamp01(static_cast<float>(uv_opt->x())),
+                        Clamp01(static_cast<float>(uv_opt->y())))
+              : QPointF();
+      const bool inside_crop =
+          uv_opt.has_value() &&
+          IsPointInsideRotatedCrop(uv_point, crop_rect, crop_rotation_degrees, metric_aspect);
+      QRectF emit_rect;
+      {
+        std::lock_guard<std::mutex> view_lock(view_state_mutex_);
+        crop_overlay_metric_aspect_   = metric_aspect;
+        crop_drag_anchor_uv_          = uv_point;
+        crop_drag_anchor_widget_pos_  = event->position();
+        crop_drag_origin_rect_        = crop_rect;
+        crop_drag_rotation_degrees_   = crop_rotation_degrees;
+        crop_drag_corner_             = CropCorner::None;
+        crop_drag_edge_               = CropEdge::None;
+        crop_drag_fixed_corner_uv_    = QPointF();
+
+        if (hit_rotate_handle) {
+          crop_drag_mode_ = CropDragMode::RotateHandle;
+          setCursor(Qt::ClosedHandCursor);
+        } else if (hit_corner >= 0) {
+          crop_drag_mode_ = CropDragMode::ResizeCorner;
+          switch (hit_corner) {
+            case 0:
+              crop_drag_corner_ = CropCorner::TopLeft;
+              break;
+            case 1:
+              crop_drag_corner_ = CropCorner::TopRight;
+              break;
+            case 2:
+              crop_drag_corner_ = CropCorner::BottomRight;
+              break;
+            case 3:
+              crop_drag_corner_ = CropCorner::BottomLeft;
+              break;
+            default:
+              crop_drag_corner_ = CropCorner::None;
+              break;
+          }
+          const int opposite_corner = OppositeCropCornerIndex(hit_corner);
+          if (opposite_corner >= 0) {
+            crop_drag_fixed_corner_uv_ =
+                crop_corners_uv[static_cast<size_t>(opposite_corner)];
+          }
+          setCursor(CursorForCropCorner(hit_corner));
+        } else if (hit_edge != CropEdge::None) {
+          crop_drag_mode_ = CropDragMode::ResizeEdge;
+          crop_drag_edge_ = hit_edge;
+          setCursor(Qt::SizeAllCursor);
+        } else if (inside_crop) {
+          crop_drag_mode_ = CropDragMode::Move;
+          setCursor(Qt::SizeAllCursor);
+        } else {
+          crop_drag_mode_ = CropDragMode::Create;
+          crop_overlay_rect_ = ClampCropRectForRotation(
+              QRectF(uv_point, QSizeF(kCropMinSize, kCropMinSize)), crop_rotation_degrees,
+              metric_aspect);
+          crop_drag_origin_rect_ = crop_overlay_rect_;
+          setCursor(Qt::CrossCursor);
+        }
+        emit_rect = crop_overlay_rect_;
+      }
+
+      emit CropOverlayRectChanged(static_cast<float>(emit_rect.x()),
+                                  static_cast<float>(emit_rect.y()),
+                                  static_cast<float>(emit_rect.width()),
+                                  static_cast<float>(emit_rect.height()), false);
+      update();
+      event->accept();
+      return;
     }
   }
 
@@ -1700,10 +1854,13 @@ void QtEditViewer::mouseMoveEvent(QMouseEvent* event) {
     CropEdge     crop_edge = CropEdge::None;
     QPointF      anchor_uv{};
     QPointF      anchor_widget_pos{};
+    QPointF      fixed_corner_uv{};
     QRectF       origin_rect{};
     float        drag_rotation_degrees = 0.0f;
     bool         tool_enabled = false;
     bool         overlay_visible = false;
+    bool         aspect_locked = false;
+    float        crop_aspect_ratio = 1.0f;
     int          image_width = 0;
     int          image_height = 0;
     {
@@ -1718,16 +1875,19 @@ void QtEditViewer::mouseMoveEvent(QMouseEvent* event) {
       crop_edge              = crop_drag_edge_;
       anchor_uv              = crop_drag_anchor_uv_;
       anchor_widget_pos      = crop_drag_anchor_widget_pos_;
+      fixed_corner_uv        = crop_drag_fixed_corner_uv_;
       origin_rect            = crop_drag_origin_rect_;
       drag_rotation_degrees  = crop_drag_rotation_degrees_;
       tool_enabled           = crop_tool_enabled_;
       overlay_visible        = crop_overlay_visible_;
+      aspect_locked          = crop_overlay_aspect_locked_;
+      crop_aspect_ratio      = crop_overlay_aspect_ratio_;
     }
 
     if (tool_enabled && overlay_visible && crop_mode != CropDragMode::None) {
       const float metric_aspect = SafeAspect(image_width, image_height);
       QPointF     uv{};
-      if (crop_mode != CropDragMode::RotateCorner) {
+      if (crop_mode != CropDragMode::RotateHandle) {
         const auto uv_opt = WidgetPointToImageUv(event->position(), image_width, image_height);
         if (!uv_opt.has_value()) {
           event->accept();
@@ -1740,9 +1900,12 @@ void QtEditViewer::mouseMoveEvent(QMouseEvent* event) {
       float  new_rotation_degrees = drag_rotation_degrees;
       bool   rotation_changed = false;
       if (crop_mode == CropDragMode::Create) {
+        const QRectF draft_rect =
+            aspect_locked
+                ? MakeAspectLockedRectFromDiagonal(anchor_uv, uv, metric_aspect, crop_aspect_ratio)
+                : QRectF(anchor_uv, uv).normalized();
         new_rect =
-            ClampCropRectForRotation(QRectF(anchor_uv, uv).normalized(), drag_rotation_degrees,
-                                     metric_aspect);
+            ClampCropRectForRotation(draft_rect, drag_rotation_degrees, metric_aspect);
       } else if (crop_mode == CropDragMode::Move) {
         const QPointF delta_metric = UvToMetric(uv, metric_aspect) - UvToMetric(anchor_uv, metric_aspect);
         const QPointF new_center_metric =
@@ -1769,25 +1932,73 @@ void QtEditViewer::mouseMoveEvent(QMouseEvent* event) {
 
         float center_local_x = 0.0f;
         float center_local_y = 0.0f;
-        switch (crop_edge) {
-          case CropEdge::Right:
-            right          = std::max(left + min_width_metric, static_cast<float>(local.x()));
-            center_local_x = (left + right) * 0.5f;
-            break;
-          case CropEdge::Left:
-            left           = std::min(right - min_width_metric, static_cast<float>(local.x()));
-            center_local_x = (left + right) * 0.5f;
-            break;
-          case CropEdge::Top:
-            top            = std::min(bottom - min_height_metric, static_cast<float>(local.y()));
-            center_local_y = (top + bottom) * 0.5f;
-            break;
-          case CropEdge::Bottom:
-            bottom         = std::max(top + min_height_metric, static_cast<float>(local.y()));
-            center_local_y = (top + bottom) * 0.5f;
-            break;
-          default:
-            break;
+        if (aspect_locked) {
+          const float locked_ratio = ClampAspectRatio(crop_aspect_ratio);
+          switch (crop_edge) {
+            case CropEdge::Right: {
+              right = std::max(left + min_width_metric, static_cast<float>(local.x()));
+              const float width_metric = std::max(min_width_metric, right - left);
+              const float half_height = std::max(min_height_metric * 0.5f,
+                                                 (width_metric / locked_ratio) * 0.5f);
+              center_local_x = (left + right) * 0.5f;
+              top            = -half_height;
+              bottom         = half_height;
+              break;
+            }
+            case CropEdge::Left: {
+              left = std::min(right - min_width_metric, static_cast<float>(local.x()));
+              const float width_metric = std::max(min_width_metric, right - left);
+              const float half_height = std::max(min_height_metric * 0.5f,
+                                                 (width_metric / locked_ratio) * 0.5f);
+              center_local_x = (left + right) * 0.5f;
+              top            = -half_height;
+              bottom         = half_height;
+              break;
+            }
+            case CropEdge::Top: {
+              top = std::min(bottom - min_height_metric, static_cast<float>(local.y()));
+              const float height_metric = std::max(min_height_metric, bottom - top);
+              const float half_width = std::max(min_width_metric * 0.5f,
+                                                (height_metric * locked_ratio) * 0.5f);
+              center_local_y = (top + bottom) * 0.5f;
+              left           = -half_width;
+              right          = half_width;
+              break;
+            }
+            case CropEdge::Bottom: {
+              bottom = std::max(top + min_height_metric, static_cast<float>(local.y()));
+              const float height_metric = std::max(min_height_metric, bottom - top);
+              const float half_width = std::max(min_width_metric * 0.5f,
+                                                (height_metric * locked_ratio) * 0.5f);
+              center_local_y = (top + bottom) * 0.5f;
+              left           = -half_width;
+              right          = half_width;
+              break;
+            }
+            default:
+              break;
+          }
+        } else {
+          switch (crop_edge) {
+            case CropEdge::Right:
+              right          = std::max(left + min_width_metric, static_cast<float>(local.x()));
+              center_local_x = (left + right) * 0.5f;
+              break;
+            case CropEdge::Left:
+              left           = std::min(right - min_width_metric, static_cast<float>(local.x()));
+              center_local_x = (left + right) * 0.5f;
+              break;
+            case CropEdge::Top:
+              top            = std::min(bottom - min_height_metric, static_cast<float>(local.y()));
+              center_local_y = (top + bottom) * 0.5f;
+              break;
+            case CropEdge::Bottom:
+              bottom         = std::max(top + min_height_metric, static_cast<float>(local.y()));
+              center_local_y = (top + bottom) * 0.5f;
+              break;
+            default:
+              break;
+          }
         }
 
         const float   new_hw = std::max((kCropMinSize * metric_aspect) * 0.5f, (right - left) * 0.5f);
@@ -1801,14 +2012,31 @@ void QtEditViewer::mouseMoveEvent(QMouseEvent* event) {
         new_rect =
             ClampCropRectForRotation(MakeRectFromCenterSize(new_center_uv, new_width_uv, new_height_uv),
                                      drag_rotation_degrees, metric_aspect);
-      } else if (crop_mode == CropDragMode::RotateCorner) {
-        const float drag_dx =
-            static_cast<float>(event->position().x() - anchor_widget_pos.x());
-        const int corner_sign = (crop_corner == CropCorner::TopRight || crop_corner == CropCorner::BottomRight)
-                                    ? 1
-                                    : -1;
-        new_rotation_degrees = NormalizeAngleDegrees(
-            drag_rotation_degrees + (static_cast<float>(corner_sign) * drag_dx * kCropRotateDegreesPerPixel));
+      } else if (crop_mode == CropDragMode::ResizeCorner) {
+        new_rect = ResizeRotatedCropFromFixedCorner(
+            fixed_corner_uv, uv, drag_rotation_degrees, metric_aspect, aspect_locked,
+            crop_aspect_ratio);
+      } else if (crop_mode == CropDragMode::RotateHandle) {
+        const auto center_widget =
+            ImageUvToWidgetPoint(origin_rect.center(), image_width, image_height);
+        if (!center_widget.has_value()) {
+          event->accept();
+          return;
+        }
+        const QPointF start_vector = anchor_widget_pos - *center_widget;
+        const QPointF current_vector = event->position() - *center_widget;
+        if (VectorLengthSquared(start_vector) <= 1e-8f ||
+            VectorLengthSquared(current_vector) <= 1e-8f) {
+          event->accept();
+          return;
+        }
+        const float start_angle =
+            std::atan2(static_cast<float>(start_vector.y()), static_cast<float>(start_vector.x()));
+        const float current_angle = std::atan2(static_cast<float>(current_vector.y()),
+                                               static_cast<float>(current_vector.x()));
+        const float delta_degrees = (current_angle - start_angle) * (180.0f / kPi);
+        new_rotation_degrees =
+            NormalizeAngleDegrees(drag_rotation_degrees + delta_degrees);
         new_rect = ClampCropRectForRotation(origin_rect, new_rotation_degrees, metric_aspect);
         rotation_changed = true;
       }
@@ -1891,7 +2119,7 @@ void QtEditViewer::mouseReleaseEvent(QMouseEvent* event) {
                                   static_cast<float>(crop_rect.y()),
                                   static_cast<float>(crop_rect.width()),
                                   static_cast<float>(crop_rect.height()), true);
-      if (crop_mode == CropDragMode::RotateCorner) {
+      if (crop_mode == CropDragMode::RotateHandle) {
         emit CropOverlayRotationChanged(crop_rotation_degrees, true);
       }
       event->accept();
