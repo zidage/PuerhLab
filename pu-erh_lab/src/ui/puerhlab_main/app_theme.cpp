@@ -64,7 +64,7 @@ auto MakeFont(const QString& family, qreal point_size, QFont::Weight weight, boo
   font.setPointSizeF(point_size);
   font.setWeight(weight);
   font.setItalic(italic);
-  font.setHintingPreference(QFont::PreferFullHinting);
+  font.setStyleStrategy(QFont::PreferAntialias);
   return font;
 }
 
@@ -119,7 +119,7 @@ void AppTheme::ApplyApplicationFont(QApplication& app) {
 
   QFont app_font = app.font();
   app_font.setFamily(FontState().ui);
-  app_font.setHintingPreference(QFont::PreferFullHinting);
+  app_font.setStyleStrategy(QFont::PreferAntialias);
   app.setFont(app_font);
 }
 
@@ -129,19 +129,19 @@ auto AppTheme::Font(FontRole role) -> QFont {
 
   switch (role) {
     case FontRole::UiBody:
-      return MakeFont(families.ui, 10.5, QFont::Normal);
+      return MakeFont(families.ui, 11.0, QFont::Normal);
     case FontRole::UiBodyStrong:
-      return MakeFont(families.ui, 10.5, QFont::DemiBold);
+      return MakeFont(families.ui, 11.0, QFont::DemiBold);
     case FontRole::UiCaption:
-      return MakeFont(families.ui, 9.5, QFont::Normal);
+      return MakeFont(families.ui, 10.0, QFont::Normal);
     case FontRole::UiCaptionStrong:
-      return MakeFont(families.ui, 9.5, QFont::DemiBold);
+      return MakeFont(families.ui, 10.0, QFont::DemiBold);
     case FontRole::UiTitle:
       return MakeFont(families.ui, 11.0, QFont::DemiBold);
     case FontRole::UiHeadline:
-      return MakeFont(families.ui, 13.5, QFont::Bold);
+      return MakeFont(families.ui, 14.0, QFont::Bold);
     case FontRole::UiOverline: {
-      QFont font = MakeFont(families.ui, 8.5, QFont::DemiBold);
+      QFont font = MakeFont(families.ui, 9.0, QFont::DemiBold);
       font.setCapitalization(QFont::AllUppercase);
       font.setLetterSpacing(QFont::AbsoluteSpacing, 0.8);
       return font;
@@ -149,22 +149,22 @@ auto AppTheme::Font(FontRole role) -> QFont {
     case FontRole::UiHint:
       return MakeFont(families.ui, 9.0, QFont::Normal);
     case FontRole::DataBody:
-      return MakeFont(families.data, 10.5, QFont::Normal);
+      return MakeFont(families.data, 11.0, QFont::Normal);
     case FontRole::DataBodyStrong:
-      return MakeFont(families.data, 10.5, QFont::DemiBold);
+      return MakeFont(families.data, 11.0, QFont::DemiBold);
     case FontRole::DataCaption:
-      return MakeFont(families.data, 9.5, QFont::Normal);
+      return MakeFont(families.data, 10.0, QFont::Normal);
     case FontRole::DataNumeric:
       return MakeFont(families.data, 12.0, QFont::DemiBold);
     case FontRole::DataOverlay:
-      return MakeFont(families.data, 9.5, QFont::DemiBold);
+      return MakeFont(families.data, 10.0, QFont::DemiBold);
     case FontRole::MonoBody:
       return MakeFont(families.mono, 10.0, QFont::DemiBold);
     case FontRole::MonoCaption:
       return MakeFont(families.mono, 9.0, QFont::Normal);
   }
 
-  return MakeFont(families.ui, 10.5, QFont::Normal);
+  return MakeFont(families.ui, 11.0, QFont::Normal);
 }
 
 void AppTheme::ApplyFont(QWidget* widget, FontRole role) {
@@ -352,19 +352,28 @@ auto AppTheme::EditorCheckBoxStyle() -> QString {
 }
 
 auto AppTheme::EditorScrollAreaStyle() -> QString {
-  return QStringLiteral("QScrollArea { background: transparent; border: none; }"
+  const auto& theme         = AppTheme::Instance();
+  const QString bg_base     = theme.bgBaseColor().name(QColor::HexRgb);
+  const QString bg_canvas   = theme.bgCanvasColor().name(QColor::HexRgb);
+  const QString accent      = theme.accentColor().name(QColor::HexRgb);
+
+  return QStringLiteral("QScrollArea { background: %1; border: none; }"
+                        "QScrollArea > QWidget, QScrollArea > QWidget > QWidget {"
+                        "  background: %1;"
+                        "}"
                         "QScrollBar:vertical {"
-                        "  background: #121212;"
+                        "  background: %2;"
                         "  width: 10px;"
                         "  margin: 2px;"
                         "  border-radius: 5px;"
                         "}"
                         "QScrollBar::handle:vertical {"
-                        "  background: #FCC704;"
+                        "  background: %3;"
                         "  border-radius: 5px;"
                         "}"
                         "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0px; }"
-                        "QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }");
+                        "QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }")
+      .arg(bg_base, bg_canvas, accent);
 }
 
 auto AppTheme::EditorListWidgetStyle() -> QString {

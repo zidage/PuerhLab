@@ -443,6 +443,75 @@ class EditorDialog final : public QDialog {
             .arg(state_.crop_h_, 0, 'f', 3));
   }
 
+  static auto DefaultAdjustmentState() -> const AdjustmentState& {
+    static const AdjustmentState defaults{};
+    return defaults;
+  }
+
+  void CacheAsShotColorTemp(float cct, float tint) {
+    last_known_as_shot_cct_ =
+        std::clamp(cct, static_cast<float>(kColorTempCctMin), static_cast<float>(kColorTempCctMax));
+    last_known_as_shot_tint_ = std::clamp(tint, static_cast<float>(kColorTempTintMin),
+                                          static_cast<float>(kColorTempTintMax));
+    has_last_known_as_shot_color_temp_ = true;
+  }
+
+  void PrimeColorTempDisplayForAsShot() {
+    if (!has_last_known_as_shot_color_temp_) {
+      return;
+    }
+    state_.color_temp_resolved_cct_   = last_known_as_shot_cct_;
+    state_.color_temp_resolved_tint_  = last_known_as_shot_tint_;
+    committed_state_.color_temp_resolved_cct_  = last_known_as_shot_cct_;
+    committed_state_.color_temp_resolved_tint_ = last_known_as_shot_tint_;
+  }
+
+  void RegisterSliderReset(QSlider* slider, std::function<void()> on_reset) {
+    if (!slider || !on_reset) {
+      return;
+    }
+    slider->installEventFilter(this);
+    slider_reset_callbacks_[slider] = std::move(on_reset);
+  }
+
+  void RegisterCurveReset(ToneCurveWidget* widget, std::function<void()> on_reset) {
+    if (!widget || !on_reset) {
+      return;
+    }
+    widget->installEventFilter(this);
+    curve_reset_callback_ = std::move(on_reset);
+  }
+
+  void ResetFieldToDefault(AdjustmentField field,
+                           const std::function<void(const AdjustmentState&)>& apply_default) {
+    if (!apply_default) {
+      return;
+    }
+    const auto& defaults = DefaultAdjustmentState();
+    apply_default(defaults);
+    SyncControlsFromState();
+    RequestRender();
+    CommitAdjustment(field);
+  }
+
+  void ResetColorTempToAsShot() {
+    if (state_.color_temp_mode_ == ColorTempMode::AS_SHOT) {
+      return;
+    }
+    state_.color_temp_mode_ = ColorTempMode::AS_SHOT;
+    PrimeColorTempDisplayForAsShot();
+    SyncColorTempControlsFromState();
+    RequestRender();
+    CommitAdjustment(AdjustmentField::ColorTemp);
+  }
+
+  void ResetCurveToDefault() {
+    state_.curve_points_ = DefaultCurveControlPoints();
+    SyncControlsFromState();
+    RequestRender();
+    CommitAdjustment(AdjustmentField::Curve);
+  }
+
   void ResetCropAndRotation() {
     state_.crop_x_         = 0.0f;
     state_.crop_y_         = 0.0f;
@@ -478,18 +547,22 @@ class EditorDialog final : public QDialog {
   }
 
   bool eventFilter(QObject* obj, QEvent* event) override {
-    if (obj == rotate_slider_ && event->type() == QEvent::MouseButtonDblClick) {
-      state_.rotate_degrees_ = 0.0f;
-      const bool prev_sync   = syncing_controls_;
-      syncing_controls_       = true;
-      if (rotate_slider_) {
-        rotate_slider_->setValue(0);
+    if (event && event->type() == QEvent::MouseButtonDblClick) {
+      if (auto* slider = qobject_cast<QSlider*>(obj)) {
+        const auto it = slider_reset_callbacks_.find(slider);
+        if (it != slider_reset_callbacks_.end()) {
+          if (!syncing_controls_ && it->second) {
+            it->second();
+          }
+          return true;
+        }
       }
-      syncing_controls_ = prev_sync;
-      if (viewer_) {
-        viewer_->SetCropOverlayRotationDegrees(0.0f);
+      if (obj == curve_widget_ && curve_reset_callback_) {
+        if (!syncing_controls_) {
+          curve_reset_callback_();
+        }
+        return true;
       }
-      return true;  // consume the event
     }
     return QDialog::eventFilter(obj, event);
   }
@@ -756,6 +829,9 @@ class EditorDialog final : public QDialog {
     committed_state_.color_temp_resolved_cct_  = new_cct;
     committed_state_.color_temp_resolved_tint_ = new_tint;
     committed_state_.color_temp_supported_     = new_sup;
+    if (state_.color_temp_mode_ == ColorTempMode::AS_SHOT && new_sup) {
+      CacheAsShotColorTemp(new_cct, new_tint);
+    }
 
     return changed;
   }
@@ -1207,6 +1283,11 @@ class EditorDialog final : public QDialog {
       return false;
     }
     SanitizeOdtStateForUi(loaded_state.odt_);
+    if (loaded_state.color_temp_mode_ == ColorTempMode::AS_SHOT &&
+        loaded_state.color_temp_supported_) {
+      CacheAsShotColorTemp(loaded_state.color_temp_resolved_cct_,
+                           loaded_state.color_temp_resolved_tint_);
+    }
     state_ = loaded_state;
     last_submitted_color_temp_request_ = BuildColorTempRequest(state_);
     return true;
@@ -1649,6 +1730,11 @@ class EditorDialog final : public QDialog {
   QTimer*                                                  fast_preview_submit_timer_  = nullptr;
   std::chrono::steady_clock::time_point                    last_fast_preview_submit_time_{};
   bool                                                     syncing_controls_           = false;
+  float                                                    last_known_as_shot_cct_     = 6500.0f;
+  float                                                    last_known_as_shot_tint_    = 0.0f;
+  bool                                                     has_last_known_as_shot_color_temp_ = false;
+  std::map<QSlider*, std::function<void()>>                slider_reset_callbacks_{};
+  std::function<void()>                                    curve_reset_callback_{};
 };
 }  // namespace
 

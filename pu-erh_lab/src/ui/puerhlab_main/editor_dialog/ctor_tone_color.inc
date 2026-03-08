@@ -109,7 +109,7 @@
     };
 
     auto addSlider = [&](const QString& name, int min, int max, int value, auto&& onChange,
-                         auto&& onRelease, auto&& formatter) {
+                         auto&& onRelease, auto&& onReset, auto&& formatter) {
       auto* info = new QLabel(QString("%1: %2").arg(name).arg(formatter(value)), controls_);
       info->setStyleSheet(AppTheme::EditorLabelStyle(AppTheme::Instance().textColor()));
       AppTheme::MarkFontRole(info, AppTheme::FontRole::DataBody);
@@ -140,6 +140,14 @@
                          onRelease();
                        });
 
+      RegisterSliderReset(
+          slider, [this, onReset = std::forward<decltype(onReset)>(onReset)]() mutable {
+            if (syncing_controls_) {
+              return;
+            }
+            onReset();
+          });
+
       auto* row       = new QWidget(controls_);
       auto* rowLayout = new QHBoxLayout(row);
       rowLayout->setContentsMargins(0, 0, 0, 0);
@@ -167,6 +175,11 @@
           RequestRender();
         },
         [this]() { CommitAdjustment(AdjustmentField::Exposure); },
+        [this]() {
+          ResetFieldToDefault(AdjustmentField::Exposure, [this](const AdjustmentState& defaults) {
+            state_.exposure_ = defaults.exposure_;
+          });
+        },
         [](int v) { return QString::number(v / 100.0, 'f', 2); });
 
     contrast_slider_ = addSlider(
@@ -176,6 +189,11 @@
           RequestRender();
         },
         [this]() { CommitAdjustment(AdjustmentField::Contrast); },
+        [this]() {
+          ResetFieldToDefault(AdjustmentField::Contrast, [this](const AdjustmentState& defaults) {
+            state_.contrast_ = defaults.contrast_;
+          });
+        },
         [](int v) { return QString::number(v, 'f', 2); });
 
     highlights_slider_ = addSlider(
@@ -185,6 +203,12 @@
           RequestRender();
         },
         [this]() { CommitAdjustment(AdjustmentField::Highlights); },
+        [this]() {
+          ResetFieldToDefault(AdjustmentField::Highlights,
+                              [this](const AdjustmentState& defaults) {
+                                state_.highlights_ = defaults.highlights_;
+                              });
+        },
         [](int v) { return QString::number(v, 'f', 2); });
 
     shadows_slider_ = addSlider(
@@ -194,6 +218,11 @@
           RequestRender();
         },
         [this]() { CommitAdjustment(AdjustmentField::Shadows); },
+        [this]() {
+          ResetFieldToDefault(AdjustmentField::Shadows, [this](const AdjustmentState& defaults) {
+            state_.shadows_ = defaults.shadows_;
+          });
+        },
         [](int v) { return QString::number(v, 'f', 2); });
 
     whites_slider_ = addSlider(
@@ -203,6 +232,11 @@
           RequestRender();
         },
         [this]() { CommitAdjustment(AdjustmentField::Whites); },
+        [this]() {
+          ResetFieldToDefault(AdjustmentField::Whites, [this](const AdjustmentState& defaults) {
+            state_.whites_ = defaults.whites_;
+          });
+        },
         [](int v) { return QString::number(v, 'f', 2); });
 
     blacks_slider_ = addSlider(
@@ -212,6 +246,11 @@
           RequestRender();
         },
         [this]() { CommitAdjustment(AdjustmentField::Blacks); },
+        [this]() {
+          ResetFieldToDefault(AdjustmentField::Blacks, [this](const AdjustmentState& defaults) {
+            state_.blacks_ = defaults.blacks_;
+          });
+        },
         [](int v) { return QString::number(v, 'f', 2); });
 
     addSection("Curve", "Smooth tone curve mapped from input [0, 1] to output [0, 1].");
@@ -237,14 +276,16 @@
         state_.curve_points_ = NormalizeCurveControlPoints(points);
         CommitAdjustment(AdjustmentField::Curve);
       });
+      RegisterCurveReset(curve_widget_, [this]() { ResetCurveToDefault(); });
 
       auto* actions_row        = new QWidget(frame);
       auto* actions_row_layout = new QHBoxLayout(actions_row);
       actions_row_layout->setContentsMargins(0, 0, 0, 0);
       actions_row_layout->setSpacing(8);
 
-      auto* curve_hint =
-          new QLabel("Left click/drag to shape. Right click a point to remove.", actions_row);
+      auto* curve_hint = new QLabel(
+          "Left click/drag to shape. Right click a point to remove. Double click to reset.",
+          actions_row);
       curve_hint->setStyleSheet(AppTheme::EditorLabelStyle(AppTheme::Instance().textMutedColor()));
       AppTheme::MarkFontRole(curve_hint, AppTheme::FontRole::UiHint);
       curve_hint->setWordWrap(true);
@@ -252,15 +293,8 @@
       auto* reset_curve_btn = new QPushButton("Reset Curve", actions_row);
       reset_curve_btn->setFixedHeight(28);
       reset_curve_btn->setStyleSheet(AppTheme::EditorPrimaryButtonStyle());
-      QObject::connect(reset_curve_btn, &QPushButton::clicked, this, [this]() {
-        if (!curve_widget_) {
-          return;
-        }
-        state_.curve_points_ = DefaultCurveControlPoints();
-        curve_widget_->SetControlPoints(state_.curve_points_);
-        RequestRender();
-        CommitAdjustment(AdjustmentField::Curve);
-      });
+      QObject::connect(reset_curve_btn, &QPushButton::clicked, this,
+                       [this]() { ResetCurveToDefault(); });
 
       actions_row_layout->addWidget(curve_hint, 1);
       actions_row_layout->addWidget(reset_curve_btn, 0);
@@ -280,6 +314,12 @@
           RequestRender();
         },
         [this]() { CommitAdjustment(AdjustmentField::Saturation); },
+        [this]() {
+          ResetFieldToDefault(AdjustmentField::Saturation,
+                              [this](const AdjustmentState& defaults) {
+                                state_.saturation_ = defaults.saturation_;
+                              });
+        },
         [](int v) { return QString::number(v, 'f', 2); });
 
     color_temp_mode_combo_ = addComboBox(
@@ -295,6 +335,9 @@
             state_.color_temp_custom_tint_ = DisplayedColorTempTint(state_);
           }
           state_.color_temp_mode_ = new_mode;
+          if (new_mode == ColorTempMode::AS_SHOT) {
+            PrimeColorTempDisplayForAsShot();
+          }
           SyncControlsFromState();
           RequestRender();
           CommitAdjustment(AdjustmentField::ColorTemp);
@@ -309,6 +352,7 @@
           RequestRender();
         },
         [this]() { CommitAdjustment(AdjustmentField::ColorTemp); },
+        [this]() { ResetColorTempToAsShot(); },
         [](int v) { return QString("%1 K").arg(static_cast<int>(std::lround(ColorTempSliderPosToCct(v)))); });
     color_temp_cct_slider_->setStyleSheet(
         "QSlider::groove:horizontal {"
@@ -335,6 +379,7 @@
           RequestRender();
         },
         [this]() { CommitAdjustment(AdjustmentField::ColorTemp); },
+        [this]() { ResetColorTempToAsShot(); },
         [](int v) { return QString::number(v, 'f', 0); });
     color_temp_tint_slider_->setStyleSheet(
         "QSlider::groove:horizontal {"
@@ -420,6 +465,12 @@
           RequestRender();
         },
         [this]() { CommitAdjustment(AdjustmentField::Hls); },
+        [this]() {
+          ResetFieldToDefault(AdjustmentField::Hls, [this](const AdjustmentState& defaults) {
+            state_.hls_hue_adjust_ = defaults.hls_hue_adjust_;
+            SaveActiveHlsProfile(state_);
+          });
+        },
         [](int v) { return QString("%1 deg").arg(v); });
 
     hls_lightness_adjust_slider_ = addSlider(
@@ -431,6 +482,12 @@
           RequestRender();
         },
         [this]() { CommitAdjustment(AdjustmentField::Hls); },
+        [this]() {
+          ResetFieldToDefault(AdjustmentField::Hls, [this](const AdjustmentState& defaults) {
+            state_.hls_lightness_adjust_ = defaults.hls_lightness_adjust_;
+            SaveActiveHlsProfile(state_);
+          });
+        },
         [](int v) { return QString::number(v, 'f', 0); });
 
     hls_saturation_adjust_slider_ = addSlider(
@@ -442,6 +499,12 @@
           RequestRender();
         },
         [this]() { CommitAdjustment(AdjustmentField::Hls); },
+        [this]() {
+          ResetFieldToDefault(AdjustmentField::Hls, [this](const AdjustmentState& defaults) {
+            state_.hls_saturation_adjust_ = defaults.hls_saturation_adjust_;
+            SaveActiveHlsProfile(state_);
+          });
+        },
         [](int v) { return QString::number(v, 'f', 0); });
 
     hls_hue_range_slider_ = addSlider(
@@ -452,6 +515,12 @@
           RequestRender();
         },
         [this]() { CommitAdjustment(AdjustmentField::Hls); },
+        [this]() {
+          ResetFieldToDefault(AdjustmentField::Hls, [this](const AdjustmentState& defaults) {
+            state_.hls_hue_range_ = defaults.hls_hue_range_;
+            SaveActiveHlsProfile(state_);
+          });
+        },
         [](int v) { return QString("%1 deg").arg(v); });
 
     {
@@ -537,6 +606,12 @@
           }
           CommitAdjustment(AdjustmentField::ColorWheel);
         });
+        RegisterSliderReset(slider_widget, [this, &wheel_state]() {
+          wheel_state.master_offset_ = 0.0f;
+          SyncControlsFromState();
+          RequestRender();
+          CommitAdjustment(AdjustmentField::ColorWheel);
+        });
         unit_layout->addWidget(slider_widget, 0);
 
         return unit;
@@ -584,6 +659,11 @@
           RequestRender();
         },
         [this]() { CommitAdjustment(AdjustmentField::Sharpen); },
+        [this]() {
+          ResetFieldToDefault(AdjustmentField::Sharpen, [this](const AdjustmentState& defaults) {
+            state_.sharpen_ = defaults.sharpen_;
+          });
+        },
         [](int v) { return QString::number(v, 'f', 2); });
 
     clarity_slider_ = addSlider(
@@ -593,5 +673,10 @@
           RequestRender();
         },
         [this]() { CommitAdjustment(AdjustmentField::Clarity); },
+        [this]() {
+          ResetFieldToDefault(AdjustmentField::Clarity, [this](const AdjustmentState& defaults) {
+            state_.clarity_ = defaults.clarity_;
+          });
+        },
         [](int v) { return QString::number(v, 'f', 2); });
 

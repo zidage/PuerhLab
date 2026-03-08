@@ -20,7 +20,7 @@
     };
 
     auto addGeometrySlider = [&](const QString& name, int min, int max, int value, auto&& onChange,
-                                 auto&& formatter) {
+                                 auto&& onReset, auto&& formatter) {
       auto* info = new QLabel(QString("%1: %2").arg(name).arg(formatter(value)), geometry_controls_);
       info->setStyleSheet(AppTheme::EditorLabelStyle(AppTheme::Instance().textColor()));
       AppTheme::MarkFontRole(info, AppTheme::FontRole::DataBody);
@@ -43,6 +43,14 @@
                          onChange(v);
                        });
 
+      RegisterSliderReset(
+          slider, [this, onReset = std::forward<decltype(onReset)>(onReset)]() mutable {
+            if (syncing_controls_) {
+              return;
+            }
+            onReset();
+          });
+
       auto* row       = new QWidget(geometry_controls_);
       auto* rowLayout = new QHBoxLayout(row);
       rowLayout->setContentsMargins(0, 0, 0, 0);
@@ -61,9 +69,8 @@
             viewer_->SetCropOverlayRotationDegrees(state_.rotate_degrees_);
           }
         },
+        [this]() { ResetCropAndRotation(); },
         [](int v) { return QString("%1 deg").arg(static_cast<double>(v) / kRotationSliderScale, 0, 'f', 2); });
-    // Double-click rotate slider to reset to 0.
-    rotate_slider_->installEventFilter(this);
 
     geometry_crop_x_slider_ = addGeometrySlider(
         "Crop X", 0, static_cast<int>(kCropRectSliderScale),
@@ -82,6 +89,7 @@
                                                   state_.crop_h_);
           }
         },
+        [this]() { ResetCropAndRotation(); },
         [](int v) { return QString::number(static_cast<double>(v) / kCropRectSliderScale, 'f', 3); });
 
     geometry_crop_y_slider_ = addGeometrySlider(
@@ -101,6 +109,7 @@
                                                   state_.crop_h_);
           }
         },
+        [this]() { ResetCropAndRotation(); },
         [](int v) { return QString::number(static_cast<double>(v) / kCropRectSliderScale, 'f', 3); });
 
     geometry_crop_w_slider_ = addGeometrySlider(
@@ -120,6 +129,7 @@
                                                   state_.crop_h_);
           }
         },
+        [this]() { ResetCropAndRotation(); },
         [](int v) { return QString::number(static_cast<double>(v) / kCropRectSliderScale, 'f', 3); });
 
     geometry_crop_h_slider_ = addGeometrySlider(
@@ -139,6 +149,7 @@
                                                   state_.crop_h_);
           }
         },
+        [this]() { ResetCropAndRotation(); },
         [](int v) { return QString::number(static_cast<double>(v) / kCropRectSliderScale, 'f', 3); });
 
     {
@@ -184,7 +195,7 @@
       auto* hint = new QLabel(
           "Geometry panel edits only the crop frame overlay. Image pixels update only after Apply Crop. "
           "Double click viewer to restore full crop frame. "
-          "Double click rotate slider to reset angle. Ctrl+R to reset all geometry.",
+          "Double click any geometry slider to restore the full-frame crop and zero rotation. Ctrl+R to reset all geometry.",
           frame);
       hint->setWordWrap(true);
       hint->setStyleSheet(AppTheme::EditorLabelStyle(AppTheme::Instance().textMutedColor()));

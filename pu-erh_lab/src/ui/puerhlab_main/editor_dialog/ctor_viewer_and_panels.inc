@@ -98,7 +98,7 @@
     tone_controls_        = new QWidget(tone_controls_scroll_);
     controls_             = tone_controls_;
     auto* controls_layout = new QVBoxLayout(tone_controls_);
-    controls_layout->setContentsMargins(0, 0, 0, 0);
+    controls_layout->setContentsMargins(12, 12, 12, 12);
     controls_layout->setSpacing(12);
     tone_controls_scroll_->setWidget(tone_controls_);
     controls_scroll_ = tone_controls_scroll_;
@@ -112,7 +112,7 @@
 
     drt_controls_ = new QWidget(drt_controls_scroll_);
     auto* drt_controls_layout = new QVBoxLayout(drt_controls_);
-    drt_controls_layout->setContentsMargins(0, 0, 0, 0);
+    drt_controls_layout->setContentsMargins(12, 12, 12, 12);
     drt_controls_layout->setSpacing(12);
     drt_controls_layout->addStretch();
     drt_controls_scroll_->setWidget(drt_controls_);
@@ -126,7 +126,7 @@
 
     geometry_controls_ = new QWidget(geometry_controls_scroll_);
     auto* geometry_controls_layout = new QVBoxLayout(geometry_controls_);
-    geometry_controls_layout->setContentsMargins(0, 0, 0, 0);
+    geometry_controls_layout->setContentsMargins(12, 12, 12, 12);
     geometry_controls_layout->setSpacing(12);
     geometry_controls_layout->addStretch();
     geometry_controls_scroll_->setWidget(geometry_controls_);
@@ -140,7 +140,7 @@
 
     raw_controls_ = new QWidget(raw_controls_scroll_);
     auto* raw_controls_layout = new QVBoxLayout(raw_controls_);
-    raw_controls_layout->setContentsMargins(0, 0, 0, 0);
+    raw_controls_layout->setContentsMargins(12, 12, 12, 12);
     raw_controls_layout->setSpacing(12);
     raw_controls_layout->addStretch();
     raw_controls_scroll_->setWidget(raw_controls_);
@@ -276,4 +276,3 @@
 
     controls_panel_layout->addWidget(panel_switch_row, 0);
     controls_panel_layout->addWidget(control_panels_stack_, 1);
-

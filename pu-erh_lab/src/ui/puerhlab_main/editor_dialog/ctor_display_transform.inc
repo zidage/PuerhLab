@@ -57,7 +57,7 @@
     };
 
     auto addDrtSlider = [&](const QString& name, int min, int max, int value, auto&& onChange,
-                            auto&& onRelease, const QString& suffix) {
+                            auto&& onRelease, auto&& onReset, const QString& suffix) {
       auto* info = new QLabel(name, drt_controls_);
       info->setStyleSheet(AppTheme::EditorLabelStyle(AppTheme::Instance().textColor()));
       info->setMinimumWidth(100);
@@ -115,6 +115,14 @@
                          }
                          onRelease();
                        });
+
+      RegisterSliderReset(
+          slider, [this, onReset = std::forward<decltype(onReset)>(onReset)]() mutable {
+            if (syncing_controls_) {
+              return;
+            }
+            onReset();
+          });
 
       auto* row       = new QWidget(drt_controls_);
       auto* rowLayout = new QHBoxLayout(row);
@@ -178,6 +186,11 @@
           RequestRender();
         },
         [this]() { CommitAdjustment(AdjustmentField::Odt); },
+        [this]() {
+          ResetFieldToDefault(AdjustmentField::Odt, [this](const AdjustmentState& defaults) {
+            state_.odt_.peak_luminance_ = defaults.odt_.peak_luminance_;
+          });
+        },
         " nits");
 
     {
@@ -204,12 +217,10 @@
       cards_layout->setSpacing(12);
 
       odt_aces_method_card_ = new QPushButton(
-          "ACES 2.0\n"
-          "Industry standard reference-oriented output transform",
+          "ACES 2.0",
           cards_row);
       odt_open_drt_method_card_ = new QPushButton(
-          "OpenDRT\n"
-          "Preset-driven display transform tailored for look dev",
+          "OpenDRT",
           cards_row);
       for (QPushButton* card : {odt_aces_method_card_, odt_open_drt_method_card_}) {
         card->setCheckable(true);
