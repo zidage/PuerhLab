@@ -95,8 +95,14 @@ RawProcessor::RawProcessor(const RawParams& params, const libraw_rawdata_t& rawd
       runtime_color_context_(pre_ctx) {}
 
 void RawProcessor::SetDecodeRes() {
+  // Auto-downscale: if the longest side exceeds 8500px, force 1/8th resolution
+  auto& cpu_data   = process_buffer_.GetCPUData();
+  int   long_side  = std::max(cpu_data.rows, cpu_data.cols);
+  if (long_side > 8500 && params_.decode_res_ == DecodeRes::QUARTER) {
+    params_.decode_res_ = DecodeRes::EIGHTH;
+  }
+
   // Adjust internal parameters based on decode resolution
-  auto& cpu_data = process_buffer_.GetCPUData();
   switch (params_.decode_res_) {
     case DecodeRes::FULL:
       // No changes needed for full resolution
@@ -108,6 +114,10 @@ void RawProcessor::SetDecodeRes() {
     case DecodeRes::QUARTER:
       // Downscale by factor of 4
       cpu_data = DownsampleBayerRGGB2x(DownsampleBayerRGGB2x(cpu_data));
+      break;
+    case DecodeRes::EIGHTH:
+      // Downscale by factor of 8
+      cpu_data = DownsampleBayerRGGB2x(DownsampleBayerRGGB2x(DownsampleBayerRGGB2x(cpu_data)));
       break;
     default:
       throw std::runtime_error("RawProcessor: Unknown decode resolution");

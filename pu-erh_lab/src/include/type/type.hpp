@@ -43,6 +43,7 @@ enum class DecodeRes {
   FULL,
   HALF,
   QUARTER,
+  EIGHTH,
 };
 
 

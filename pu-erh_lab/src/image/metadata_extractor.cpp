@@ -19,6 +19,7 @@
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "edit/operators/basic/camera_matrices.hpp"
@@ -320,8 +321,102 @@ auto NormalizeCameraName(const std::string& input) -> std::string {
   return normalized;
 }
 
+auto CompactNormalizedCameraName(std::string normalized) -> std::string {
+  normalized.erase(std::remove(normalized.begin(), normalized.end(), ' '), normalized.end());
+  return normalized;
+}
+
+auto CompactCameraName(const std::string& input) -> std::string {
+  return CompactNormalizedCameraName(NormalizeCameraName(input));
+}
+
+auto TokenizeCameraNameLoose(const std::string& input) -> std::vector<std::string> {
+  std::vector<std::string> tokens;
+  std::string              token;
+  token.reserve(input.size());
+
+  for (char ch : input) {
+    const unsigned char uch = static_cast<unsigned char>(ch);
+    if (std::isalnum(uch)) {
+      token.push_back(static_cast<char>(std::tolower(uch)));
+    } else if (!token.empty()) {
+      tokens.push_back(std::move(token));
+      token.clear();
+    }
+  }
+
+  if (!token.empty()) {
+    tokens.push_back(std::move(token));
+  }
+  return tokens;
+}
+
+auto IsMeaningfulCameraMatchToken(const std::string& token) -> bool {
+  if (token.size() >= 2) {
+    return true;
+  }
+  return !token.empty() && std::isdigit(static_cast<unsigned char>(token.front())) != 0;
+}
+
+auto UniqueMeaningfulCameraTokens(const std::vector<std::string>& tokens) -> std::vector<std::string> {
+  std::vector<std::string> out;
+  out.reserve(tokens.size());
+  for (const auto& token : tokens) {
+    if (!IsMeaningfulCameraMatchToken(token)) {
+      continue;
+    }
+    if (std::find(out.begin(), out.end(), token) == out.end()) {
+      out.push_back(token);
+    }
+  }
+  return out;
+}
+
+auto ContainsCameraToken(const std::vector<std::string>& tokens, const std::string& token) -> bool {
+  return std::find(tokens.begin(), tokens.end(), token) != tokens.end();
+}
+
+auto ContainsCameraTokenFragment(const std::vector<std::string>& tokens, const std::string& fragment)
+    -> bool {
+  if (fragment.empty()) {
+    return false;
+  }
+  return std::any_of(tokens.begin(), tokens.end(), [&](const std::string& token) {
+    return token.find(fragment) != std::string::npos;
+  });
+}
+
+auto ResolveCameraColorMatrixAlias(const std::string& camera_make,
+                                   const std::string& camera_model) -> std::string {
+  const auto make_tokens  = TokenizeCameraNameLoose(camera_make);
+  const auto model_tokens = TokenizeCameraNameLoose(camera_model);
+
+  const bool is_hasselblad =
+      ContainsCameraToken(make_tokens, "hasselblad") ||
+      ContainsCameraToken(model_tokens, "hasselblad");
+  if (!is_hasselblad) {
+    return {};
+  }
+
+  const bool has_x2d  = ContainsCameraToken(model_tokens, "x2d") ||
+                       ContainsCameraTokenFragment(model_tokens, "x2d");
+  const bool has_100c = ContainsCameraToken(model_tokens, "100c") ||
+                        ContainsCameraTokenFragment(model_tokens, "100c");
+  if (!has_x2d || !has_100c) {
+    return {};
+  }
+
+  if (ContainsCameraToken(model_tokens, "ii") ||
+      ContainsCameraTokenFragment(model_tokens, "x2dii")) {
+    return NormalizeCameraName("Hasselblad 100-22-Coated6");
+  }
+  return NormalizeCameraName("Hasselblad 100-20-Coated6");
+}
+
 struct CameraColorMatrixEntry {
   std::string name_;
+  std::string compact_name_;
+  std::vector<std::string> match_tokens_;
   double      cm1_[9];
   double      cm2_[9];
 };
@@ -339,7 +434,9 @@ auto CameraColorMatrixDatabaseSorted() -> const std::vector<CameraColorMatrixEnt
         continue;
       }
       CameraColorMatrixEntry entry;
-      entry.name_ = std::move(key);
+      entry.name_         = std::move(key);
+      entry.compact_name_ = CompactNormalizedCameraName(entry.name_);
+      entry.match_tokens_ = UniqueMeaningfulCameraTokens(TokenizeCameraNameLoose(item.camera_name_));
       std::memcpy(entry.cm1_, item.color_matrix_1_, sizeof(entry.cm1_));
       std::memcpy(entry.cm2_, item.color_matrix_2_, sizeof(entry.cm2_));
       out.push_back(std::move(entry));
@@ -378,6 +475,121 @@ auto FindInSortedColorMatrixDB(const std::vector<CameraColorMatrixEntry>& db,
   return nullptr;
 }
 
+struct CameraMatrixCandidateScore {
+  int total_score  = 0;
+  int model_signal = 0;
+};
+
+auto ScoreApproximateColorMatrixCandidate(const CameraColorMatrixEntry& entry,
+                                          const std::string& make_key,
+                                          const std::string& make_compact,
+                                          const std::string& full_compact,
+                                          const std::string& model_compact,
+                                          const std::vector<std::string>& model_tokens)
+    -> CameraMatrixCandidateScore {
+  CameraMatrixCandidateScore score;
+
+  if (!make_key.empty()) {
+    if (entry.name_ == make_key || entry.name_.starts_with(make_key + " ")) {
+      score.total_score += 1200;
+    } else if (!make_compact.empty() &&
+               entry.compact_name_.find(make_compact) != std::string::npos) {
+      score.total_score += 700;
+    }
+  }
+
+  if (!full_compact.empty()) {
+    if (entry.compact_name_ == full_compact) {
+      score.model_signal += 900;
+    } else if (full_compact.size() >= 6 &&
+               (entry.compact_name_.find(full_compact) != std::string::npos ||
+                full_compact.find(entry.compact_name_) != std::string::npos)) {
+      score.model_signal += 260;
+    }
+  }
+
+  if (!model_compact.empty()) {
+    if (entry.compact_name_ == model_compact ||
+        entry.compact_name_.ends_with(model_compact)) {
+      score.model_signal += 700;
+    } else if (model_compact.size() >= 4 &&
+               (entry.compact_name_.find(model_compact) != std::string::npos ||
+                model_compact.find(entry.compact_name_) != std::string::npos)) {
+      score.model_signal += 260;
+    }
+  }
+
+  for (const auto& token : model_tokens) {
+    if (ContainsCameraToken(entry.match_tokens_, token)) {
+      score.model_signal += 120;
+      continue;
+    }
+    if (token.size() < 3) {
+      continue;
+    }
+    const bool partial_match = std::any_of(
+        entry.match_tokens_.begin(), entry.match_tokens_.end(),
+        [&](const std::string& candidate_token) {
+          return candidate_token.find(token) != std::string::npos ||
+                 token.find(candidate_token) != std::string::npos;
+        });
+    if (partial_match) {
+      score.model_signal += 40;
+    }
+  }
+
+  score.total_score += score.model_signal;
+  score.total_score -=
+      static_cast<int>(std::abs(static_cast<int>(entry.match_tokens_.size()) -
+                                static_cast<int>(model_tokens.size()))) *
+      15;
+  return score;
+}
+
+auto FindApproximateColorMatrixMatch(const std::vector<CameraColorMatrixEntry>& db,
+                                     const std::string& camera_make,
+                                     const std::string& camera_model)
+    -> const CameraColorMatrixEntry* {
+  const auto make_key     = NormalizeCameraName(camera_make);
+  const auto make_compact = CompactNormalizedCameraName(make_key);
+  const auto full_compact = CompactCameraName(camera_make + " " + camera_model);
+  const auto model_compact = CompactCameraName(camera_model);
+  auto       model_tokens  = UniqueMeaningfulCameraTokens(TokenizeCameraNameLoose(camera_model));
+  if (model_tokens.empty()) {
+    model_tokens = UniqueMeaningfulCameraTokens(TokenizeCameraNameLoose(camera_make + " " +
+                                                                        camera_model));
+  }
+  if (model_tokens.empty() && model_compact.empty()) {
+    return nullptr;
+  }
+
+  const CameraColorMatrixEntry* best          = nullptr;
+  int                           best_score    = -1;
+  int                           runner_up     = -1;
+  for (const auto& entry : db) {
+    const auto score = ScoreApproximateColorMatrixCandidate(
+        entry, make_key, make_compact, full_compact, model_compact, model_tokens);
+    if (score.model_signal < 120 || score.total_score < 650) {
+      continue;
+    }
+    if (score.total_score > best_score) {
+      runner_up  = best_score;
+      best_score = score.total_score;
+      best       = &entry;
+    } else if (score.total_score > runner_up) {
+      runner_up = score.total_score;
+    }
+  }
+
+  if (!best) {
+    return nullptr;
+  }
+  if (runner_up >= 0 && best_score < runner_up + 140) {
+    return nullptr;
+  }
+  return best;
+}
+
 /// Look up Adobe DNG colour matrices for a camera make/model pair and store
 /// the result directly into the provided double[9] arrays.
 auto LookupCameraColorMatrices(const std::string& camera_make,
@@ -397,6 +609,15 @@ auto LookupCameraColorMatrices(const std::string& camera_make,
     if (!make_key.empty() && model_key.starts_with(make_key + " ")) {
       found = FindInSortedColorMatrixDB(db, model_key);
     }
+  }
+  if (!found) {
+    const auto alias_key = ResolveCameraColorMatrixAlias(camera_make, camera_model);
+    if (!alias_key.empty()) {
+      found = FindInSortedColorMatrixDB(db, alias_key);
+    }
+  }
+  if (!found) {
+    found = FindApproximateColorMatrixMatch(db, camera_make, camera_model);
   }
 
   if (found) {
