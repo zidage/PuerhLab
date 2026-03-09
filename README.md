@@ -13,8 +13,6 @@
 
 ## Early Demo
 
-Video: [BiliBili](https://www.bilibili.com/video/BV1bPcxzzEeM)
-
 <table>
   <colgroup>
     <col style="width: 80%" />
