@@ -123,6 +123,13 @@ Item {
                     visible: liveThumbUrl.length === 0
                     color: appTheme.bgCanvasColor
                 }
+                BusyIndicator {
+                    anchors.centerIn: parent
+                    width: 28
+                    height: 28
+                    visible: liveThumbUrl.length === 0
+                    running: visible
+                }
                 Image {
                     anchors.fill: parent
                     source: liveThumbUrl
