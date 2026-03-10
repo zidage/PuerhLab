@@ -44,7 +44,7 @@ class QtEditViewer : public QOpenGLWidget, protected QOpenGLExtraFunctions, publ
 
   // Overrides from IFrameSink
   void    EnsureSize(int width, int height) override;
-  float4* MapResourceForWrite() override;
+  auto    MapResourceForWrite() -> FrameWriteMapping override;
   void    UnmapResource() override;
   void    NotifyFrameReady() override;
   int     GetWidth() const override { return buffers_[active_idx_].width; };

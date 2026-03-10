@@ -10,8 +10,10 @@ namespace puerhlab::pipeline_defaults {
 
 inline auto MakeDefaultRawDecodeParams() -> nlohmann::json {
   nlohmann::json decode_params;
+  decode_params["raw"]["gpu_backend"] = "cpu";
 #ifdef HAVE_CUDA
-  decode_params["raw"]["cuda"] = true;
+  decode_params["raw"]["gpu_backend"] = "cuda";
+  decode_params["raw"]["cuda"]        = true;
 #else
   decode_params["raw"]["cuda"] = false;
 #endif

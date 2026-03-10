@@ -4,7 +4,7 @@
 
 #pragma once
 
-#include <cuda_runtime.h>
+#include <cstddef>
 
 #include <optional>
 
@@ -21,13 +21,31 @@ enum class FramePresentationMode {
   RoiFrame,
 };
 
+enum class FramePixelFormat {
+  RGBA32F,
+};
+
+enum class FrameMemoryDomain {
+  HostVisible,
+  CudaDevice,
+};
+
+struct FrameWriteMapping {
+  void*             data          = nullptr;
+  size_t            row_bytes     = 0;
+  FramePixelFormat  pixel_format  = FramePixelFormat::RGBA32F;
+  FrameMemoryDomain memory_domain = FrameMemoryDomain::HostVisible;
+
+  explicit operator bool() const { return data != nullptr; }
+};
+
 class IFrameSink {
  public:
   virtual ~IFrameSink() {}
 
   virtual void    EnsureSize(int width, int height) = 0;
 
-  virtual float4* MapResourceForWrite()             = 0;
+  virtual auto    MapResourceForWrite() -> FrameWriteMapping = 0;
 
   virtual void    UnmapResource()                   = 0;
 

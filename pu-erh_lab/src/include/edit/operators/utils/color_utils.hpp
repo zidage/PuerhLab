@@ -8,7 +8,7 @@
 #include <cmath>
 #include <memory>
 #include <numeric>
-#include <opencv2/core/matx.hpp>
+#include <opencv2/core.hpp>
 #include <string>
 #include <string_view>
 #include <vector>

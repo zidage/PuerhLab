@@ -57,5 +57,13 @@ void GPUPipelineWrapper::Execute(std::shared_ptr<ImageBuffer> output) {
   impl_->Execute(std::move(output));
 }
 
+auto GPUPipelineWrapper::HasAcceleratedBackend() const -> bool {
+#ifdef HAVE_CUDA
+  return true;
+#else
+  return false;
+#endif
+}
+
 void GPUPipelineWrapper::ReleaseResources() { impl_->ReleaseResources(); }
 }  // namespace puerhlab

@@ -65,35 +65,40 @@ void EditorController::OpenEditor(sl_element_id_t elementId, image_id_t imageId)
                         .arg(backend_.index_by_element_id_.contains(elementId)
                                  ? backend_.all_images_[backend_.index_by_element_id_.at(elementId)].file_name
                                  : QString("image #%1").arg(imageId));
-    editor_status_ = "OpenGL editor window is active.";
+    editor_status_ = "Opening editor...";
     editor_active_ = true;
     editor_busy_   = false;
     emit backend_.EditorStateChanged();
 
-    OpenEditorDialog(proj->GetImagePoolService(), pipeline_guard, hsvc, history_guard,
-                     elementId, imageId, QApplication::activeWindow());
+    const bool opened = OpenEditorDialog(proj->GetImagePoolService(), pipeline_guard, hsvc,
+                                         history_guard, elementId, imageId,
+                                         QApplication::activeWindow());
 
-    psvc->SavePipeline(pipeline_guard);
-    psvc->Sync();
-    hsvc->SaveHistory(history_guard);
-    hsvc->Sync();
-    proj->GetImagePoolService()->SyncWithStorage();
-    proj->SaveProject(backend_.project_handler_.meta_path());
+    if (!opened) {
+      editor_status_ = "This build does not include the editor backend yet.";
+    } else {
+      psvc->SavePipeline(pipeline_guard);
+      psvc->Sync();
+      hsvc->SaveHistory(history_guard);
+      hsvc->Sync();
+      proj->GetImagePoolService()->SyncWithStorage();
+      proj->SaveProject(backend_.project_handler_.meta_path());
 
-    const auto& tsvc = backend_.project_handler_.thumbnail_service();
-    if (tsvc) {
-      try {
-        tsvc->InvalidateThumbnail(elementId);
-      } catch (...) {
+      const auto& tsvc = backend_.project_handler_.thumbnail_service();
+      if (tsvc) {
+        try {
+          tsvc->InvalidateThumbnail(elementId);
+        } catch (...) {
+        }
+        if (backend_.thumb_.IsThumbnailPinned(elementId)) {
+          backend_.thumb_.RequestThumbnail(elementId, imageId);
+        } else {
+          backend_.thumb_.UpdateThumbnailDataUrl(elementId, QString());
+        }
       }
-      if (backend_.thumb_.IsThumbnailPinned(elementId)) {
-        backend_.thumb_.RequestThumbnail(elementId, imageId);
-      } else {
-        backend_.thumb_.UpdateThumbnailDataUrl(elementId, QString());
-      }
+
+      editor_status_ = "Editor closed. Changes saved.";
     }
-
-    editor_status_ = "Editor closed. Changes saved.";
   } catch (const std::exception& e) {
     editor_status_ = QString("Failed to open editor: %1").arg(QString::fromUtf8(e.what()));
   }

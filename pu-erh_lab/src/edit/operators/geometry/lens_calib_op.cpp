@@ -4,7 +4,7 @@
 
 #include "edit/operators/geometry/lens_calib_op.hpp"
 
-#include "../../../../third_party/lensfun/install/include/lensfun/lensfun.h"
+#include <lensfun/lensfun.h>
 
 #include <algorithm>
 #include <cctype>
@@ -26,7 +26,9 @@
 #include <Windows.h>
 #endif
 
+#ifdef HAVE_CUDA
 #include "edit/operators/geometry/cuda_lens_calib_ops.hpp"
+#endif
 #include "utils/string/convert.hpp"
 
 namespace puerhlab {
@@ -189,19 +191,7 @@ auto LoadPortableDbXmls(lfDatabase* db, const std::filesystem::path& root) -> bo
   if (!db || root.empty() || !std::filesystem::exists(root) || !std::filesystem::is_directory(root)) {
     return false;
   }
-
-  bool any_loaded = false;
-  for (const auto& entry : std::filesystem::recursive_directory_iterator(root)) {
-    if (!entry.is_regular_file()) {
-      continue;
-    }
-    if (entry.path().extension() != ".xml") {
-      continue;
-    }
-    const auto load_result = lf_db_load_path(db, entry.path().string().c_str());
-    any_loaded             = any_loaded || (load_result == LF_NO_ERROR);
-  }
-  return any_loaded;
+  return lf_db_load_path(db, root.string().c_str()) == LF_NO_ERROR;
 }
 
 auto GetLensfunDb(const std::filesystem::path& preferred_root) -> lfDatabase* {
@@ -389,8 +379,8 @@ auto FindBestLens(const lfDatabase* db, const lfCamera* camera, const InputMeta&
   return best;
 }
 
-auto ResolveScaleFromModifier(const lfLens* lens, float focal_mm, float crop_factor, int width, int height,
-                              const lfLensCalibDistortion* distortion_model,
+auto ResolveScaleFromModifier(const lfLens* lens, float focal_mm, float crop_factor, int width,
+                              int height, const lfLensCalibDistortion* distortion_model,
                               const lfLensCalibTCA* tca_model, bool apply_projection,
                               lfLensType target_projection) -> float {
   if (!lens || !IsFinitePositive(focal_mm) || !IsFinitePositive(crop_factor)) {
@@ -398,19 +388,36 @@ auto ResolveScaleFromModifier(const lfLens* lens, float focal_mm, float crop_fac
   }
 
   auto modifier = std::unique_ptr<lfModifier, LensfunModifierDeleter>(
-      lf_modifier_create(lens, focal_mm, crop_factor, width, height, LF_PF_F32, true));
+      lf_modifier_create(lens, focal_mm, crop_factor, width, height, LF_PF_F32, false));
   if (!modifier) {
     return 1.0f;
   }
 
-  if (distortion_model) {
+  int flags = 0;
+  if (distortion_model != nullptr) {
+    flags |= LF_MODIFY_DISTORTION;
+  }
+  if (tca_model != nullptr) {
+    flags |= LF_MODIFY_TCA;
+  }
+  if (apply_projection) {
+    flags |= LF_MODIFY_GEOMETRY;
+  }
+  if (flags == 0) {
+    return 1.0f;
+  }
+
+  const lfLensType source_projection = lens->Type;
+  const lfLensType resolved_target =
+      apply_projection ? target_projection : source_projection;
+  if (distortion_model != nullptr) {
     (void)lf_modifier_enable_distortion_correction(modifier.get());
   }
-  if (tca_model) {
+  if (tca_model != nullptr) {
     (void)lf_modifier_enable_tca_correction(modifier.get());
   }
   if (apply_projection) {
-    (void)lf_modifier_enable_projection_transform(modifier.get(), target_projection);
+    (void)lf_modifier_enable_projection_transform(modifier.get(), resolved_target);
   }
 
   const float scale = lf_modifier_get_auto_scale(modifier.get(), false);
@@ -488,7 +495,8 @@ auto LensCalibOp::ProjectionToString(LensCalibProjectionType projection) -> std:
 }
 
 void LensCalibOp::Apply(std::shared_ptr<ImageBuffer>) {
-  throw std::runtime_error("LensCalibOp does not support CPU processing. Use ApplyGPU instead.");
+  // CPU and non-CUDA builds keep lens calibration as a no-op until a non-CUDA
+  // accelerated backend (for example Metal) is implemented.
 }
 
 void LensCalibOp::ApplyGPU(std::shared_ptr<ImageBuffer> input) {
@@ -530,7 +538,12 @@ void LensCalibOp::ApplyGPU(std::shared_ptr<ImageBuffer> input) {
   resolved_params_.center_x = static_cast<float>((width * 0.5) * norm_scale);
   resolved_params_.center_y = static_cast<float>((height * 0.5) * norm_scale);
 
+#ifdef HAVE_CUDA
   CUDA::ApplyLensCalibration(gpu, resolved_params_);
+#else
+  (void)gpu;
+  return;
+#endif
   input->gpu_data_valid_ = true;
 }
 
@@ -747,8 +760,8 @@ void LensCalibOp::ResolveRuntime(OperatorParams& params) const {
   const float safe_distance = IsFinitePositive(meta.distance_m_) ? meta.distance_m_ : kDefaultFarDistanceM;
   const bool vignette_ok =
       IsFinitePositive(safe_aperture) &&
-      lf_lens_interpolate_vignetting(lens, crop_factor, meta.focal_length_mm_, safe_aperture,
-                                     safe_distance, &vignette) != 0;
+      lf_lens_interpolate_vignetting(lens, crop_factor, meta.focal_length_mm_, safe_aperture, safe_distance,
+                                     &vignette) != 0;
   if (vignette_ok) {
     RescalePaVignettingTerms(&vignette, real_focal_mm, crop_factor);
   }

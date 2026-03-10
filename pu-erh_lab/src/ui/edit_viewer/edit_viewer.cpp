@@ -837,7 +837,7 @@ auto QtEditViewer::HasHistogramData() const -> bool {
   return histogram_has_data_.load(std::memory_order_acquire);
 }
 
-float4* QtEditViewer::MapResourceForWrite() {
+auto QtEditViewer::MapResourceForWrite() -> FrameWriteMapping {
   mutex_.lock();
 
   // IMPORTANT: Do NOT map the OpenGL PBO from this thread. On Windows this often
@@ -845,10 +845,15 @@ float4* QtEditViewer::MapResourceForWrite() {
   // owned by the GUI thread.
   if (!staging_ptr_ || staging_bytes_ == 0) {
     mutex_.unlock();
-    return nullptr;
+    return {};
   }
 
-  return staging_ptr_;
+  return {
+      staging_ptr_,
+      static_cast<size_t>(buffers_[render_target_idx_].width) * sizeof(float4),
+      FramePixelFormat::RGBA32F,
+      FrameMemoryDomain::CudaDevice,
+  };
 }
 
 void QtEditViewer::UnmapResource() {

@@ -18,8 +18,14 @@
 
 namespace puerhlab {
 
+enum class RawGpuBackend {
+  CPU,
+  CUDA,
+  Metal,
+};
+
 struct RawParams {
-  bool     cuda_                   = false;
+  RawGpuBackend gpu_backend_       = RawGpuBackend::CPU;
   bool     highlights_reconstruct_ = false;
   bool     use_camera_wb_          = true;
   uint32_t user_wb_ = 6500;  // If user wants to set a specific white balance temperature

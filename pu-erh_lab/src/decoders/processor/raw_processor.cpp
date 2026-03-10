@@ -127,7 +127,7 @@ void RawProcessor::SetDecodeRes() {
 void RawProcessor::ApplyLinearization() {
   auto& pre_debayer_buffer = process_buffer_;
 #ifdef HAVE_CUDA
-  if (params_.cuda_) {
+  if (params_.gpu_backend_ == RawGpuBackend::CUDA) {
     auto& gpu_img = pre_debayer_buffer.GetGPUData();
     CUDA::ToLinearRef(gpu_img, raw_processor_);
     return;
@@ -144,7 +144,7 @@ void RawProcessor::ApplyLinearization() {
 void RawProcessor::ApplyDebayer() {
   auto& pre_debayer_buffer = process_buffer_;
 #ifdef HAVE_CUDA
-  if (params_.cuda_) {
+  if (params_.gpu_backend_ == RawGpuBackend::CUDA) {
     auto& gpu_img = pre_debayer_buffer.GetGPUData();
     CUDA::BayerRGGB2RGB_RCD(gpu_img);
     if (params_.decode_res_ == DecodeRes::FULL) {
@@ -172,7 +172,7 @@ void RawProcessor::ApplyDebayer() {
 
 void RawProcessor::ApplyHighlightReconstruct() {
 #ifdef HAVE_CUDA
-  if (params_.cuda_) {
+  if (params_.gpu_backend_ == RawGpuBackend::CUDA) {
     auto& gpu_img = process_buffer_.GetGPUData();
     if (!params_.highlights_reconstruct_) {
       CUDA::Clamp01(gpu_img);
@@ -197,7 +197,7 @@ void RawProcessor::ApplyGeometricCorrections() {
   // TODO: Add lens distortion correction if needed
 
 #ifdef HAVE_CUDA
-  if (params_.cuda_) {
+  if (params_.gpu_backend_ == RawGpuBackend::CUDA) {
     auto& gpu_img = process_buffer_.GetGPUData();
 
     switch (raw_data_.sizes.flip) {
@@ -246,7 +246,7 @@ void RawProcessor::ConvertToWorkingSpace() {
   auto& debayer_buffer = process_buffer_;
   auto  color_coeffs   = raw_data_.color.rgb_cam;
 #ifdef HAVE_CUDA
-  if (params_.cuda_) {
+  if (params_.gpu_backend_ == RawGpuBackend::CUDA) {
     auto& gpu_img = debayer_buffer.GetGPUData();
     auto  cam_mul = raw_data_.color.cam_mul;
     CUDA::ApplyInverseCamMul(gpu_img, cam_mul);
@@ -289,7 +289,7 @@ auto RawProcessor::Process() -> ImageBuffer {
             raw_processor_.COLOR(1, 0) == 3 && raw_processor_.COLOR(1, 1) == 2);
 
 #ifdef HAVE_CUDA
-  if (params_.cuda_) {
+  if (params_.gpu_backend_ == RawGpuBackend::CUDA) {
     // Keep raw data in 16-bit until it reaches the CUDA linearization stage.
     SetDecodeRes();
     process_buffer_.SyncToGPU();

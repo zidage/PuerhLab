@@ -27,7 +27,7 @@ add_executable(ColorTempCudaSanityTest raw/color_temp_cuda_sanity_test.cpp)
 target_include_directories(ColorTempCudaSanityTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
 target_link_libraries(ColorTempCudaSanityTest PRIVATE GTest::gtest_main Operators RawProcessor)
 
-if(CUDAToolkit_FOUND)
+if(PUERHLAB_CUDA_ENABLED)
   add_executable(CudaImageGeometryOpsTest raw/cuda_image_geometry_ops_test.cpp)
   target_include_directories(CudaImageGeometryOpsTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
   target_link_libraries(CudaImageGeometryOpsTest PRIVATE GTest::gtest_main RawProcessorOp Operators ${PUERHLAB_TEST_OPENCV_MIN_DEPS})
@@ -122,7 +122,7 @@ target_include_directories(CropRotateOpTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_la
 target_link_libraries(CropRotateOpTest PRIVATE GTest::gtest_main Operators ${PUERHLAB_TEST_OPENCV_MIN_DEPS})
 gtest_discover_tests(CropRotateOpTest TEST_PREFIX "CropRotateOpTest.")
 
-if(CUDAToolkit_FOUND)
+if(PUERHLAB_CUDA_ENABLED)
   add_executable(ODTCudaSmokeTest edit/operators/cst/odt_cuda_smoke_test.cu)
   target_include_directories(ODTCudaSmokeTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
   target_link_libraries(ODTCudaSmokeTest PRIVATE GTest::gtest_main Operators ${PUERHLAB_TEST_OPENCV_MIN_DEPS} CUDA::cudart)
@@ -175,22 +175,24 @@ endif()
 # if (WIN32)
 # target_link_libraries(PipelineSerialTest easy_profiler)
 # endif()
-add_executable(ImagePreview gui_pocs/image_preview_cpu.cpp)
-target_include_directories(ImagePreview PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
-target_link_libraries(ImagePreview Image ImageLoader EditPipeline EditViewer Operators PipelineScheduler OpenColorIO::OpenColorIO lcms2::lcms2 Qt6::Widgets)
+if(TARGET EditViewer)
+  add_executable(ImagePreview gui_pocs/image_preview_cpu.cpp)
+  target_include_directories(ImagePreview PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
+  target_link_libraries(ImagePreview Image ImageLoader EditPipeline EditViewer Operators PipelineScheduler OpenColorIO::OpenColorIO lcms2::lcms2 Qt6::Widgets)
 
-if(WIN32)
-  target_link_libraries(ImagePreview easy_profiler FSService)
+  if(WIN32)
+    target_link_libraries(ImagePreview easy_profiler FSService)
+  endif()
+
+  target_compile_definitions(ImagePreview PRIVATE PUERHLAB_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+
+  set(PUERHLAB_IMAGE_PREVIEW_FONT_SRC "${CMAKE_SOURCE_DIR}/pu-erh_lab/src/config/fonts/main_IBM.ttf")
+  add_custom_command(TARGET ImagePreview POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:ImagePreview>/fonts"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${PUERHLAB_IMAGE_PREVIEW_FONT_SRC}" "$<TARGET_FILE_DIR:ImagePreview>/fonts/main_IBM.ttf"
+    VERBATIM
+  )
 endif()
-
-target_compile_definitions(ImagePreview PRIVATE PUERHLAB_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
-
-set(PUERHLAB_IMAGE_PREVIEW_FONT_SRC "${CMAKE_SOURCE_DIR}/pu-erh_lab/src/config/fonts/main_IBM.ttf")
-add_custom_command(TARGET ImagePreview POST_BUILD
-  COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:ImagePreview>/fonts"
-  COMMAND ${CMAKE_COMMAND} -E copy_if_different "${PUERHLAB_IMAGE_PREVIEW_FONT_SRC}" "$<TARGET_FILE_DIR:ImagePreview>/fonts/main_IBM.ttf"
-  VERBATIM
-)
 
 add_executable(ImportServiceTest app/import_service_test.cpp)
 target_include_directories(ImportServiceTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
@@ -252,7 +254,10 @@ endif()
 
 add_executable(ThumbnailAlbumQtDemo app/thumbnail_album_qt_demo.cpp)
 target_include_directories(ThumbnailAlbumQtDemo PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
-target_link_libraries(ThumbnailAlbumQtDemo PRIVATE ThumbnailService ProjectService ImportService Qt6::Widgets easy_profiler SleeveFilterService)
+target_link_libraries(ThumbnailAlbumQtDemo PRIVATE ThumbnailService ProjectService ImportService Qt6::Widgets SleeveFilterService)
+if(WIN32)
+  target_link_libraries(ThumbnailAlbumQtDemo PRIVATE easy_profiler)
+endif()
 target_compile_definitions(ThumbnailAlbumQtDemo PRIVATE PUERHLAB_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 
 set(PUERHLAB_DEMO_FONT_SRC "${CMAKE_SOURCE_DIR}/pu-erh_lab/src/config/fonts/main_IBM.ttf")
@@ -262,15 +267,20 @@ add_custom_command(TARGET ThumbnailAlbumQtDemo POST_BUILD
   VERBATIM
 )
 
-add_executable(CompleteUIDemo gui_pocs/album_editor_qt_demo.cpp)
-target_include_directories(CompleteUIDemo PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
-target_link_libraries(CompleteUIDemo PRIVATE ThumbnailService ProjectService ImportService ExportService PipelineMgmtService EditHistoryMgmtService FSService Qt6::Widgets easy_profiler SleeveFilterService EditPipeline EditViewer)
-target_compile_definitions(CompleteUIDemo PRIVATE PUERHLAB_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
-add_custom_command(TARGET CompleteUIDemo POST_BUILD
-  COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:CompleteUIDemo>/fonts"
-  COMMAND ${CMAKE_COMMAND} -E copy_if_different "${PUERHLAB_DEMO_FONT_SRC}" "$<TARGET_FILE_DIR:CompleteUIDemo>/fonts/main_IBM.ttf"
-  VERBATIM
-)
+if(TARGET EditViewer)
+  add_executable(CompleteUIDemo gui_pocs/album_editor_qt_demo.cpp)
+  target_include_directories(CompleteUIDemo PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
+  target_link_libraries(CompleteUIDemo PRIVATE ThumbnailService ProjectService ImportService ExportService PipelineMgmtService EditHistoryMgmtService FSService Qt6::Widgets SleeveFilterService EditPipeline EditViewer)
+  if(WIN32)
+    target_link_libraries(CompleteUIDemo PRIVATE easy_profiler)
+  endif()
+  target_compile_definitions(CompleteUIDemo PRIVATE PUERHLAB_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+  add_custom_command(TARGET CompleteUIDemo POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:CompleteUIDemo>/fonts"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${PUERHLAB_DEMO_FONT_SRC}" "$<TARGET_FILE_DIR:CompleteUIDemo>/fonts/main_IBM.ttf"
+    VERBATIM
+  )
+endif()
 
 include(GoogleTest)
 

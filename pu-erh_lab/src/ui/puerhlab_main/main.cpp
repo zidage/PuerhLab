@@ -47,10 +47,6 @@ int main(int argc, char* argv[]) {
   puerhlab::RegisterAllOperators();
   Exiv2::LogMsg::setLevel(Exiv2::LogMsg::Level::error);
 
-  QCoreApplication::setAttribute(Qt::AA_UseDesktopOpenGL);
-  QCoreApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
-  QCoreApplication::setAttribute(Qt::AA_UseHighDpiPixmaps);
-
   QApplication app(argc, argv);
   puerhlab::ui::AppTheme::RegisterFonts();
   if (const auto arg = FindArgValue(argc, argv, "--font"); arg.has_value()) {

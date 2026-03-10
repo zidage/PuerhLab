@@ -4,13 +4,12 @@
 
 #include "renderer/pipeline_scheduler.hpp"
 
-#include <easy/profiler.h>
-
 #include <cmath>
 #include <exception>
 #include <memory>
 #include <mutex>
 
+#include "utils/profiler/profiler.hpp"
 #include "image/image_buffer.hpp"
 #include "io/image/image_loader.hpp"
 #include "renderer/pipeline_task.hpp"

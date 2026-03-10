@@ -6,3 +6,6 @@
 	path = pu-erh_lab/third_party/opencv_contrib
 	url = https://github.com/opencv/opencv_contrib.git
 	branch = 4.x
+[submodule "pu-erh_lab/src/third_party/lensfun"]
+	path = pu-erh_lab/src/third_party/lensfun
+	url = https://github.com/lensfun/lensfun.git

@@ -69,15 +69,18 @@
 
 ## System Requirements
 
-- Windows 10/11 x64 (Linux and macOS support are planned but not yet available in the early stages)
+- Windows 10/11 x64 for the current full CUDA/OpenGL editor build.
+- macOS for an experimental CPU-only Qt application build. The editor backend is disabled there for now; future accelerated work on macOS is planned around Metal.
 - NVIDIA GPU with CUDA support (minimum compute capability 6.0 (10-series or later), recommended 7.0+ (20-series or later) for optimal performance) and preferably 6GB+ VRAM for smooth performance with high resolution RAW files (40MP+).
 - At least 8GB of system RAM (16GB+ recommended for larger libraries and smoother performance).
 - 500MB of free disk space for the installation and temporary working files.
 - 60+ MB for installation package and partial update support.
 
-## Build from Source (Windows Only)
+## Build from Source
 
 This section mirrors the current setup in `CMakeLists.txt`, `pu-erh_lab/tests/CMakeLists.txt`, and NOTICE files.
+
+### Windows (current full feature set)
 
 ### 1) Prerequisites
 
@@ -92,15 +95,21 @@ This section mirrors the current setup in `CMakeLists.txt`, `pu-erh_lab/tests/CM
 ### 2) Dependency Layout Used by CMake
 
 - Vendored header/source dependencies: `stduuid`, `uuid_v4`, `UTF8-CPP` (`utfcpp`), `nlohmann/json`, `MurmurHash3` (all these are required to install manually by the user, as they are not included in the repository)
-- Package-managed dependencies (commonly resolved through vcpkg toolchain on Windows): `OpenCV`, `Eigen3`, `OpenGL`, `glad`, `hwy`, `lcms2`, `OpenColorIO`, `OpenImageIO`, `libraw`, `xxHash`, `OpenMP`
+- Package-managed dependencies (commonly resolved through vcpkg toolchain on Windows): `OpenCV`, `Eigen3`, `OpenGL`, `hwy`, `lcms2`, `OpenColorIO`, `OpenImageIO`, `libraw`, `xxHash`, `OpenMP`
 - Test framework: `googletest` (fetched with `FetchContent`)
 - Windows local imported binaries: `DuckDB`, `Exiv2`, `easy_profiler`
-- Lens correction dependency: `Lensfun` library + database from a local build in `pu-erh_lab/third_party/lensfun/install`
-- Additional required local dependency for Lensfun build: `GLib2` (expected by the vendored Lensfun CMake at `pu-erh_lab/third_party/glib-2.28.1` via `GLIB2_BASE_DIR`). This package is not included in the repository and must be provided manually.
+- Lens correction dependency: the upstream `Lensfun` source checkout in `pu-erh_lab/src/third_party/lensfun`, built automatically by the top-level CMake build
+- Additional Windows dependency for the bundled Lensfun build: `GLib2`, configured through `PUERHLAB_LENSFUN_GLIB2_BASE_DIR` (defaults to `pu-erh_lab/third_party/glib-2.28.1`). This package is not included in the repository and must be provided manually.
 
-### 3) Build Lensfun Locally (Required on Windows)
+### 3) Initialize the Bundled Lensfun Source
 
-Build Lensfun before configuring Pu-erh Lab:
+Make sure the upstream Lensfun submodule is present before configuring Pu-erh Lab:
+
+```powershell
+git submodule update --init --recursive pu-erh_lab/src/third_party/lensfun
+```
+
+For details about the Windows GLib2 prerequisite used by the bundled build:
 
 - [docs/lensfun_build/lensfun_local_build.md](docs/lensfun_build/lensfun_local_build.md)
 
@@ -126,8 +135,7 @@ Adjust the Qt/easy_profiler paths below to your local environment.
 # Debug configure
 cmd /c scripts\msvc_env.cmd --preset win_debug `
   -DCMAKE_PREFIX_PATH="D:/Qt/6.9.3/msvc2022_64/lib/cmake" `
-  -Deasy_profiler_DIR="$PWD/pu-erh_lab/third_party/easy_profiler-v2.1.0-msvc15-win64/lib/cmake/easy_profiler" `
-  -DPUERHLAB_LENSFUN_ROOT="$PWD/pu-erh_lab/third_party/lensfun/install"
+  -Deasy_profiler_DIR="$PWD/pu-erh_lab/third_party/easy_profiler-v2.1.0-msvc15-win64/lib/cmake/easy_profiler"
 
 # Debug build
 cmd /c scripts\msvc_env.cmd --build --preset win_debug --parallel 4
@@ -137,12 +145,17 @@ cmd /c scripts\msvc_env.cmd --build --preset win_debug --parallel 4
 # Release configure
 cmd /c scripts\msvc_env.cmd --preset win_release `
   -DCMAKE_PREFIX_PATH="D:/Qt/6.9.3/msvc2022_64/lib/cmake" `
-  -Deasy_profiler_DIR="$PWD/pu-erh_lab/third_party/easy_profiler-v2.1.0-msvc15-win64/lib/cmake/easy_profiler" `
-  -DPUERHLAB_LENSFUN_ROOT="$PWD/pu-erh_lab/third_party/lensfun/install"
+  -Deasy_profiler_DIR="$PWD/pu-erh_lab/third_party/easy_profiler-v2.1.0-msvc15-win64/lib/cmake/easy_profiler"
 
 # Release build + install
 cmd /c scripts\msvc_env.cmd --build --preset win_release --parallel 4
 cmd /c scripts\msvc_env.cmd --install build/release --prefix build/install
+```
+
+If your Windows GLib2 package is stored somewhere other than `pu-erh_lab/third_party/glib-2.28.1`, add:
+
+```powershell
+-DPUERHLAB_LENSFUN_GLIB2_BASE_DIR="<path-to-glib2>"
 ```
 
 Optional deploy tuning:
@@ -213,6 +226,35 @@ cmd /c scripts\msvc_env.cmd --build --preset win_debug --target format
 cmd /c scripts\msvc_env.cmd --build --preset win_debug --target tidy
 ```
 
+### macOS (experimental CPU-only app build)
+
+Install the required dependencies with Homebrew:
+
+```bash
+brew install cmake ninja qt opencv opencolorio duckdb exiv2 glib libraw little-cms2 highway openimageio pkg-config xxhash eigen libomp
+```
+
+Configure and build the main Qt application:
+
+```bash
+git submodule update --init --recursive pu-erh_lab/src/third_party/lensfun
+cmake --preset macos_debug
+cmake --build --preset macos_debug --target puerhlab_main
+```
+
+Run the app:
+
+```bash
+./build/macos-debug/pu-erh_lab/src/puerhlab_main
+```
+
+Notes:
+
+- The `macos_debug` and `macos_release` presets build the main app without CUDA, without the OpenGL editor, and without tests.
+- If Homebrew is installed in a nonstandard prefix, pass `-DCMAKE_PREFIX_PATH=/path/to/prefix` when configuring.
+- The current macOS build is meant to keep the Qt application runnable without CUDA/OpenGL. Opening the editor entry point will report that the editor backend is unavailable.
+- Future macOS acceleration work is expected to target Metal rather than CUDA/OpenGL.
+
 ## Roadmap
 
 Roadmap and ongoing milestones:
@@ -224,4 +266,3 @@ Roadmap and ongoing milestones:
 The `v0.1.1` tag and earlier releases remain under Apache-2.0.
 Development after `v0.1.1` is licensed under `GPL-3.0-only`, with an additional permission under GPLv3 section 7 for combining/distributing required NVIDIA CUDA components.
 See [LICENSE](LICENSE) and [NOTICE](NOTICE).
-

@@ -66,8 +66,17 @@ void RawDecoder::Decode(std::vector<char>&& buffer, std::shared_ptr<Image> sourc
     }
   }
 
-  RawProcessor processor{{true, false, true, 0}, raw_processor.imgdata.rawdata, raw_processor,
-                         ctx};
+  RawParams raw_params;
+#ifdef HAVE_CUDA
+  raw_params.gpu_backend_ = RawGpuBackend::CUDA;
+#else
+  raw_params.gpu_backend_ = RawGpuBackend::CPU;
+#endif
+  raw_params.highlights_reconstruct_ = false;
+  raw_params.use_camera_wb_          = true;
+  raw_params.user_wb_                = 0;
+
+  RawProcessor processor{raw_params, raw_processor.imgdata.rawdata, raw_processor, ctx};
 
   auto         processed = processor.Process();
 

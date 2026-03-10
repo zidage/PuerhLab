@@ -1,73 +1,47 @@
-# Local Lensfun Build Guide (Windows)
+# Bundled Lensfun Build Notes (Windows)
 
-Pu-erh Lab expects Lensfun to be built locally from `pu-erh_lab/third_party/lensfun` and installed into:
+Pu-erh Lab now builds Lensfun directly from the upstream submodule at:
 
-- `pu-erh_lab/third_party/lensfun/install`
+- `pu-erh_lab/src/third_party/lensfun`
 
-The top-level build reads this location through `PUERHLAB_LENSFUN_ROOT` and expects:
+You do not need to configure or install Lensfun separately anymore. The top-level build drives a dedicated out-of-source Lensfun build under your active CMake build tree:
 
-- `include/lensfun/lensfun.h`
-- `lib/lensfun.lib`
-- `bin/lensfun.dll` (optional at configure time, required at runtime)
-- `share/lensfun/version_2/*.xml` (Lensfun database files)
+- `build/<preset>/third_party/lensfun`
 
-## Use the Custom Lensfun CMakeLists
+## Required Setup
 
-Use the vendored file:
+1. Initialize the submodule:
 
-- `pu-erh_lab/third_party/lensfun/CMakeLists.txt`
+```powershell
+git submodule update --init --recursive pu-erh_lab/src/third_party/lensfun
+```
 
-For Pu-erh Lab, configure Lensfun with these options from that CMake file:
+2. Provide the Windows GLib2 package expected by the upstream Lensfun build.
 
-- `BUILD_STATIC=OFF`
-- `BUILD_TESTS=OFF`
-- `BUILD_LENSTOOL=OFF`
-- `BUILD_DOC=OFF`
-- `CMAKE_INSTALL_PREFIX=<repo>/pu-erh_lab/third_party/lensfun/install`
-
-## Missing Third-Party Folder You Must Provide
-
-The Lensfun custom CMake defaults `GLIB2_BASE_DIR` to:
+By default, Pu-erh Lab forwards this path to Lensfun:
 
 - `pu-erh_lab/third_party/glib-2.28.1`
 
-This `glib-2.28.1` package is required for building Lensfun on Windows, is not committed in this repository, and should be provided as a local third-party folder (instead of relying on Pu-erh Lab's vcpkg dependency flow).
+If your GLib2 package lives elsewhere, pass `PUERHLAB_LENSFUN_GLIB2_BASE_DIR` when configuring Pu-erh Lab.
 
-## Build Steps
-
-From repository root (`D:\Projects\pu-erh_lab`):
+## Example Top-Level Configure
 
 ```powershell
-# Configure Lensfun with the custom CMakeLists.txt
-.\scripts\msvc_env.cmd -S pu-erh_lab\third_party\lensfun -B pu-erh_lab\third_party\lensfun\build-puerhlab -G Ninja `
-  -DCMAKE_BUILD_TYPE=Release `
-  -DCMAKE_TOOLCHAIN_FILE="$PWD/vcpkg/scripts/buildsystems/vcpkg.cmake" `
-  -DVCPKG_TARGET_TRIPLET=x64-windows `
-  -DBUILD_STATIC=OFF `
-  -DBUILD_TESTS=OFF `
-  -DBUILD_LENSTOOL=OFF `
-  -DBUILD_DOC=OFF `
-  -DGLIB2_BASE_DIR="$PWD/pu-erh_lab/third_party/glib-2.28.1" `
-  -DCMAKE_INSTALL_PREFIX="$PWD/pu-erh_lab/third_party/lensfun/install"
-
-# Build + install Lensfun
-.\scripts\msvc_env.cmd --build pu-erh_lab\third_party\lensfun\build-puerhlab --parallel
-.\scripts\msvc_env.cmd --install pu-erh_lab\third_party\lensfun\build-puerhlab --config Release
+cmd /c scripts\msvc_env.cmd --preset win_debug `
+  -DCMAKE_PREFIX_PATH="D:/Qt/6.9.3/msvc2022_64/lib/cmake" `
+  -Deasy_profiler_DIR="$PWD/pu-erh_lab/third_party/easy_profiler-v2.1.0-msvc15-win64/lib/cmake/easy_profiler" `
+  -DPUERHLAB_LENSFUN_GLIB2_BASE_DIR="$PWD/pu-erh_lab/third_party/glib-2.28.1"
 ```
 
-If your GLib2 package is stored elsewhere, adjust `-DGLIB2_BASE_DIR=<path>`.
-
-## Verify Before Building Pu-erh Lab
+Then build Pu-erh Lab as usual:
 
 ```powershell
-Test-Path .\pu-erh_lab\third_party\lensfun\install\include\lensfun\lensfun.h
-Test-Path .\pu-erh_lab\third_party\lensfun\install\lib\lensfun.lib
-Test-Path .\pu-erh_lab\third_party\lensfun\install\bin\lensfun.dll
+cmd /c scripts\msvc_env.cmd --build --preset win_debug --parallel 4
 ```
 
-Then configure Pu-erh Lab with:
+If the bundled Lensfun configure step fails on Windows, verify both of these paths exist:
 
 ```powershell
--DPUERHLAB_LENSFUN_ROOT="$PWD/pu-erh_lab/third_party/lensfun/install"
+Test-Path .\pu-erh_lab\src\third_party\lensfun\CMakeLists.txt
+Test-Path .\pu-erh_lab\third_party\glib-2.28.1
 ```
-

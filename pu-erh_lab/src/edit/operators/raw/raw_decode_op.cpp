@@ -14,6 +14,20 @@
 #include "image/image_buffer.hpp"
 
 namespace puerhlab {
+namespace {
+auto RawGpuBackendToString(RawGpuBackend backend) -> const char* {
+  switch (backend) {
+    case RawGpuBackend::CUDA:
+      return "cuda";
+    case RawGpuBackend::Metal:
+      return "metal";
+    case RawGpuBackend::CPU:
+    default:
+      return "cpu";
+  }
+}
+}  // namespace
+
 RawDecodeOp::RawDecodeOp(const nlohmann::json& params) { SetParams(params); }
 
 void RawDecodeOp::Apply(std::shared_ptr<ImageBuffer> input) {
@@ -97,7 +111,8 @@ auto RawDecodeOp::GetParams() const -> nlohmann::json {
   nlohmann::json params;
   nlohmann::json inner;
 
-  inner["cuda"]                   = params_.cuda_;
+  inner["gpu_backend"]            = RawGpuBackendToString(params_.gpu_backend_);
+  inner["cuda"]                   = (params_.gpu_backend_ == RawGpuBackend::CUDA);
   inner["highlights_reconstruct"] = params_.highlights_reconstruct_;
   inner["use_camera_wb"]          = params_.use_camera_wb_;
   inner["user_wb"]                = params_.user_wb_;
@@ -119,7 +134,20 @@ void RawDecodeOp::SetParams(const nlohmann::json& params) {
   } else {
     return;
   }
-  if (inner.contains("cuda")) params_.cuda_ = inner["cuda"].get<bool>();
+  if (inner.contains("gpu_backend") && inner["gpu_backend"].is_string()) {
+    const std::string backend = inner["gpu_backend"].get<std::string>();
+    if (backend == "cpu") {
+      params_.gpu_backend_ = RawGpuBackend::CPU;
+    } else if (backend == "cuda") {
+      params_.gpu_backend_ = RawGpuBackend::CUDA;
+    } else if (backend == "metal") {
+      params_.gpu_backend_ = RawGpuBackend::Metal;
+    } else {
+      throw std::runtime_error("RawDecodeOp: Unknown gpu_backend " + backend);
+    }
+  } else if (inner.contains("cuda")) {
+    params_.gpu_backend_ = inner["cuda"].get<bool>() ? RawGpuBackend::CUDA : RawGpuBackend::CPU;
+  }
   if (inner.contains("highlights_reconstruct"))
     params_.highlights_reconstruct_ = inner["highlights_reconstruct"].get<bool>();
   if (inner.contains("use_camera_wb")) params_.use_camera_wb_ = inner["use_camera_wb"].get<bool>();

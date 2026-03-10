@@ -88,7 +88,7 @@ set(RAW_OP_CPU_SRCS
     decoders/processor/operators/cpu/raw_proc_utils.cpp
 )
 
-if(CUDAToolkit_FOUND)
+if(PUERHLAB_CUDA_ENABLED)
     set(RAW_OP_GPU_SRCS
         decoders/processor/operators/gpu/cuda_color_space_conv.cu
         decoders/processor/operators/gpu/cuda_debayer_ahd.cu
@@ -106,7 +106,7 @@ def_library(RawProcessorOp
     PUBLIC_DEPS ImageBuffer libraw::raw_r Exiv2 hwy::hwy Eigen3::Eigen
 )
 
-if(CUDAToolkit_FOUND)
+if(PUERHLAB_CUDA_ENABLED)
     set_target_properties(RawProcessorOp PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
     target_compile_definitions(RawProcessorOp PUBLIC HAVE_CUDA)
 endif()
@@ -143,7 +143,7 @@ set(OPERATORS_SRCS
     edit/operators/operator_registeration.cpp
 )
 
-if(CUDAToolkit_FOUND)
+if(PUERHLAB_CUDA_ENABLED)
     list(APPEND OPERATORS_SRCS
         edit/operators/geometry/cuda_geometry_ops.cu
         edit/operators/geometry/cuda_lens_calib_ops.cu
@@ -152,8 +152,11 @@ endif()
 
 def_library(Operators
     SOURCES ${OPERATORS_SRCS}
-    PUBLIC_DEPS ImageBuffer JSON OpenColorIO::OpenColorIO hwy::hwy glad::glad lensfun::lensfun
+    PUBLIC_DEPS ImageBuffer JSON OpenColorIO::OpenColorIO hwy::hwy lensfun::lensfun
 )
+if(DEFINED PUERHLAB_LENSFUN_INCLUDE_DIR AND NOT "${PUERHLAB_LENSFUN_INCLUDE_DIR}" STREQUAL "")
+    target_include_directories(Operators SYSTEM BEFORE PUBLIC "${PUERHLAB_LENSFUN_INCLUDE_DIR}")
+endif()
 
 # --- Edit Pipeline ---
 set(PIPELINE_SRCS
@@ -162,7 +165,7 @@ set(PIPELINE_SRCS
     edit/pipeline/pipeline_gpu_wrapper.cpp
 )
 
-if(CUDAToolkit_FOUND)
+if(PUERHLAB_CUDA_ENABLED)
     set(GPU_PIPELINE_SRCS
         edit/pipeline/pipeline_gpu_impl.cu
     )
@@ -170,10 +173,10 @@ endif()
 
 def_library(EditPipeline
     SOURCES ${PIPELINE_SRCS} ${GPU_PIPELINE_SRCS}
-    PUBLIC_DEPS Operators glad::glad OpenGL::GL
+    PUBLIC_DEPS Operators
 )
 
-if(CUDAToolkit_FOUND)
+if(PUERHLAB_CUDA_ENABLED)
     set_target_properties(EditPipeline PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
     target_compile_definitions(EditPipeline PUBLIC HAVE_CUDA)
     target_include_directories(EditPipeline PRIVATE ${CUDAToolkit_INCLUDE_DIRS})
@@ -400,17 +403,17 @@ def_library(SleeveFilterService
 # ==============================================================================
 # 9. UI Components
 # ==============================================================================
-def_library(EditViewer
-    SOURCES ui/edit_viewer/edit_viewer.cpp include/ui/edit_viewer/edit_viewer.hpp
-    PUBLIC_DEPS EditPipeline glad::glad OpenGL::GL Qt6::OpenGLWidgets
-)
+if(PUERHLAB_REAL_OPENGL_EDITOR)
+    def_library(EditViewer
+        SOURCES ui/edit_viewer/edit_viewer.cpp include/ui/edit_viewer/edit_viewer.hpp
+        PUBLIC_DEPS EditPipeline OpenGL::GL Qt6::OpenGLWidgets
+    )
 
-if(CUDAToolkit_FOUND)
-    set_target_properties(EditViewer PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
-    target_compile_definitions(EditViewer PUBLIC HAVE_CUDA)
+    if(PUERHLAB_CUDA_ENABLED)
+        set_target_properties(EditViewer PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
+        target_compile_definitions(EditViewer PUBLIC HAVE_CUDA)
+    endif()
 endif()
-
-find_package(Qt6 REQUIRED COMPONENTS Quick Qml QuickControls2 QuickDialogs2 Widgets QuickEffects)
 
 # ── AlbumBackendLib: reusable static library for album_backend ──────────────
 add_library(AlbumBackendLib STATIC
@@ -460,59 +463,73 @@ target_link_libraries(AlbumBackendLib
         SleeveFilterService
         FSService
         EditPipeline
-        EditViewer
 )
+
+if(TARGET EditViewer)
+    target_link_libraries(AlbumBackendLib PUBLIC EditViewer)
+endif()
 
 if(WIN32)
     target_link_libraries(AlbumBackendLib PUBLIC easy_profiler)
+endif()
+
+set(PUERHLAB_EDITOR_DIALOG_SRCS
+    ui/puerhlab_main/editor_dialog/editor_dialog_stub.cpp
+    include/ui/puerhlab_main/editor_dialog/editor_dialog.hpp
+)
+
+if(PUERHLAB_REAL_OPENGL_EDITOR)
+    set(PUERHLAB_EDITOR_DIALOG_SRCS
+        ui/puerhlab_main/editor_dialog/editor_dialog.cpp
+        ui/puerhlab_main/editor_dialog/dialog.cpp
+        ui/puerhlab_main/editor_dialog/state.cpp
+        ui/puerhlab_main/editor_dialog/controllers/image_controller.cpp
+        ui/puerhlab_main/editor_dialog/controllers/pipeline_controller.cpp
+        ui/puerhlab_main/editor_dialog/controllers/history_controller.cpp
+        ui/puerhlab_main/editor_dialog/controllers/render_controller.cpp
+        ui/puerhlab_main/editor_dialog/modules/histogram.cpp
+        ui/puerhlab_main/editor_dialog/modules/color_temp.cpp
+        ui/puerhlab_main/editor_dialog/modules/color_wheel.cpp
+        ui/puerhlab_main/editor_dialog/modules/curve.cpp
+        ui/puerhlab_main/editor_dialog/modules/lens_calib.cpp
+        ui/puerhlab_main/editor_dialog/modules/geometry.cpp
+        ui/puerhlab_main/editor_dialog/modules/hls.cpp
+        ui/puerhlab_main/editor_dialog/modules/pipeline_io.cpp
+        ui/puerhlab_main/editor_dialog/modules/versioning.cpp
+        ui/puerhlab_main/editor_dialog/widgets/spinner.cpp
+        ui/puerhlab_main/editor_dialog/widgets/histogram_widget.cpp
+        ui/puerhlab_main/editor_dialog/widgets/trackball.cpp
+        ui/puerhlab_main/editor_dialog/widgets/tone_curve_widget.cpp
+        ui/puerhlab_main/editor_dialog/widgets/history_cards.cpp
+        include/ui/puerhlab_main/editor_dialog/editor_dialog.hpp
+        ui/puerhlab_main/editor_dialog/dialog.hpp
+        ui/puerhlab_main/editor_dialog/state.hpp
+        ui/puerhlab_main/editor_dialog/controllers/image_controller.hpp
+        ui/puerhlab_main/editor_dialog/controllers/pipeline_controller.hpp
+        ui/puerhlab_main/editor_dialog/controllers/history_controller.hpp
+        ui/puerhlab_main/editor_dialog/controllers/render_controller.hpp
+        ui/puerhlab_main/editor_dialog/modules/histogram.hpp
+        ui/puerhlab_main/editor_dialog/modules/color_temp.hpp
+        ui/puerhlab_main/editor_dialog/modules/color_wheel.hpp
+        ui/puerhlab_main/editor_dialog/modules/curve.hpp
+        ui/puerhlab_main/editor_dialog/modules/lens_calib.hpp
+        ui/puerhlab_main/editor_dialog/modules/geometry.hpp
+        ui/puerhlab_main/editor_dialog/modules/versioning.hpp
+        ui/puerhlab_main/editor_dialog/widgets/spinner.hpp
+        ui/puerhlab_main/editor_dialog/widgets/histogram_widget.hpp
+        ui/puerhlab_main/editor_dialog/widgets/trackball.hpp
+        ui/puerhlab_main/editor_dialog/widgets/tone_curve_widget.hpp
+        ui/puerhlab_main/editor_dialog/widgets/history_cards.hpp
+    )
 endif()
 
 # ── puerhlab_main executable ────────────────────────────────────────────────
 add_executable(puerhlab_main
     ui/puerhlab_main/main.cpp
     ui/puerhlab_main/app_theme.cpp
-    ui/puerhlab_main/editor_dialog/editor_dialog.cpp
-    ui/puerhlab_main/editor_dialog/dialog.cpp
-    ui/puerhlab_main/editor_dialog/state.cpp
-    ui/puerhlab_main/editor_dialog/controllers/image_controller.cpp
-    ui/puerhlab_main/editor_dialog/controllers/pipeline_controller.cpp
-    ui/puerhlab_main/editor_dialog/controllers/history_controller.cpp
-    ui/puerhlab_main/editor_dialog/controllers/render_controller.cpp
-    ui/puerhlab_main/editor_dialog/modules/histogram.cpp
-    ui/puerhlab_main/editor_dialog/modules/color_temp.cpp
-    ui/puerhlab_main/editor_dialog/modules/color_wheel.cpp
-    ui/puerhlab_main/editor_dialog/modules/curve.cpp
-    ui/puerhlab_main/editor_dialog/modules/lens_calib.cpp
-    ui/puerhlab_main/editor_dialog/modules/geometry.cpp
-    ui/puerhlab_main/editor_dialog/modules/hls.cpp
-    ui/puerhlab_main/editor_dialog/modules/pipeline_io.cpp
-    ui/puerhlab_main/editor_dialog/modules/versioning.cpp
-    ui/puerhlab_main/editor_dialog/widgets/spinner.cpp
-    ui/puerhlab_main/editor_dialog/widgets/histogram_widget.cpp
-    ui/puerhlab_main/editor_dialog/widgets/trackball.cpp
-    ui/puerhlab_main/editor_dialog/widgets/tone_curve_widget.cpp
-    ui/puerhlab_main/editor_dialog/widgets/history_cards.cpp
     config/resource.qrc
     include/ui/puerhlab_main/app_theme.hpp
-    include/ui/puerhlab_main/editor_dialog/editor_dialog.hpp
-    ui/puerhlab_main/editor_dialog/dialog.hpp
-    ui/puerhlab_main/editor_dialog/state.hpp
-    ui/puerhlab_main/editor_dialog/controllers/image_controller.hpp
-    ui/puerhlab_main/editor_dialog/controllers/pipeline_controller.hpp
-    ui/puerhlab_main/editor_dialog/controllers/history_controller.hpp
-    ui/puerhlab_main/editor_dialog/controllers/render_controller.hpp
-    ui/puerhlab_main/editor_dialog/modules/histogram.hpp
-    ui/puerhlab_main/editor_dialog/modules/color_temp.hpp
-    ui/puerhlab_main/editor_dialog/modules/color_wheel.hpp
-    ui/puerhlab_main/editor_dialog/modules/curve.hpp
-    ui/puerhlab_main/editor_dialog/modules/lens_calib.hpp
-    ui/puerhlab_main/editor_dialog/modules/geometry.hpp
-    ui/puerhlab_main/editor_dialog/modules/versioning.hpp
-    ui/puerhlab_main/editor_dialog/widgets/spinner.hpp
-    ui/puerhlab_main/editor_dialog/widgets/histogram_widget.hpp
-    ui/puerhlab_main/editor_dialog/widgets/trackball.hpp
-    ui/puerhlab_main/editor_dialog/widgets/tone_curve_widget.hpp
-    ui/puerhlab_main/editor_dialog/widgets/history_cards.hpp
+    ${PUERHLAB_EDITOR_DIALOG_SRCS}
 )
 
 target_include_directories(puerhlab_main
@@ -550,6 +567,10 @@ qt_add_qml_module(puerhlab_main
 
 target_compile_definitions(puerhlab_main PRIVATE PUERHLAB_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 
+if(DEFINED PUERHLAB_LENSFUN_LIBRARY_DIR AND NOT "${PUERHLAB_LENSFUN_LIBRARY_DIR}" STREQUAL "")
+    set_property(TARGET puerhlab_main APPEND PROPERTY BUILD_RPATH "${PUERHLAB_LENSFUN_LIBRARY_DIR}")
+endif()
+
 set(PUERHLAB_MAIN_FONT_SRC "${CMAKE_SOURCE_DIR}/pu-erh_lab/src/config/fonts/main_Inter.ttf")
 add_custom_command(TARGET puerhlab_main POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:puerhlab_main>/fonts"
@@ -557,16 +578,11 @@ add_custom_command(TARGET puerhlab_main POST_BUILD
     VERBATIM
 )
 
-if(WIN32)
-    # The app-local dependency script may copy a different lensfun.dll from vcpkg.
-    # Force the runtime DLL that matches the import library used by this project.
-    set(PUERHLAB_MAIN_LENSFUN_DLL "${PUERHLAB_LENSFUN_ROOT}/bin/lensfun.dll")
-    if(EXISTS "${PUERHLAB_MAIN_LENSFUN_DLL}")
-        add_custom_command(TARGET puerhlab_main POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                "${PUERHLAB_MAIN_LENSFUN_DLL}"
-                "$<TARGET_FILE_DIR:puerhlab_main>/lensfun.dll"
-            VERBATIM
-        )
-    endif()
+if(WIN32 AND TARGET puerhlab_lensfun)
+    add_custom_command(TARGET puerhlab_main POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "$<TARGET_FILE:puerhlab_lensfun>"
+            "$<TARGET_FILE_DIR:puerhlab_main>/lensfun.dll"
+        VERBATIM
+    )
 endif()

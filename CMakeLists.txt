@@ -12,6 +12,61 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 # set(BUILD_STATIC_LIBS ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+if(APPLE)
+    set(PUERHLAB_ENABLE_CUDA_DEFAULT OFF)
+    set(PUERHLAB_ENABLE_OPENGL_EDITOR_DEFAULT OFF)
+else()
+    set(PUERHLAB_ENABLE_CUDA_DEFAULT ON)
+    set(PUERHLAB_ENABLE_OPENGL_EDITOR_DEFAULT ON)
+endif()
+
+option(PUERHLAB_ENABLE_CUDA "Enable CUDA-accelerated pipeline backends when CUDA is available." ${PUERHLAB_ENABLE_CUDA_DEFAULT})
+option(PUERHLAB_ENABLE_OPENGL_EDITOR "Build the OpenGL-based editor UI when the required backend is available." ${PUERHLAB_ENABLE_OPENGL_EDITOR_DEFAULT})
+option(PUERHLAB_BUILD_TESTS "Build pu-erh_lab tests and demos." ON)
+
+function(puerhlab_append_existing_prefix prefix)
+    if(EXISTS "${prefix}")
+        list(APPEND CMAKE_PREFIX_PATH "${prefix}")
+        set(CMAKE_PREFIX_PATH "${CMAKE_PREFIX_PATH}" PARENT_SCOPE)
+    endif()
+endfunction()
+
+puerhlab_append_existing_prefix("/opt/homebrew")
+puerhlab_append_existing_prefix("/opt/homebrew/opt/qt")
+puerhlab_append_existing_prefix("/opt/homebrew/opt/opencv")
+puerhlab_append_existing_prefix("/opt/homebrew/opt/opencolorio")
+puerhlab_append_existing_prefix("/opt/homebrew/opt/openimageio")
+puerhlab_append_existing_prefix("/opt/homebrew/opt/exiv2")
+puerhlab_append_existing_prefix("/opt/homebrew/opt/glib")
+puerhlab_append_existing_prefix("/opt/homebrew/opt/libraw")
+puerhlab_append_existing_prefix("/opt/homebrew/opt/xxhash")
+puerhlab_append_existing_prefix("/opt/homebrew/opt/duckdb")
+puerhlab_append_existing_prefix("/opt/homebrew/opt/little-cms2")
+puerhlab_append_existing_prefix("/opt/homebrew/opt/highway")
+puerhlab_append_existing_prefix("/usr/local")
+puerhlab_append_existing_prefix("/usr/local/opt/qt")
+puerhlab_append_existing_prefix("/usr/local/opt/opencv")
+puerhlab_append_existing_prefix("/usr/local/opt/opencolorio")
+puerhlab_append_existing_prefix("/usr/local/opt/openimageio")
+puerhlab_append_existing_prefix("/usr/local/opt/exiv2")
+puerhlab_append_existing_prefix("/usr/local/opt/glib")
+puerhlab_append_existing_prefix("/usr/local/opt/libraw")
+puerhlab_append_existing_prefix("/usr/local/opt/xxhash")
+puerhlab_append_existing_prefix("/usr/local/opt/duckdb")
+puerhlab_append_existing_prefix("/usr/local/opt/little-cms2")
+puerhlab_append_existing_prefix("/usr/local/opt/highway")
+
+set(PUERHLAB_LIBRARY_HINTS "")
+set(PUERHLAB_INCLUDE_HINTS "")
+foreach(_prefix IN LISTS CMAKE_PREFIX_PATH)
+    if(EXISTS "${_prefix}")
+        list(APPEND PUERHLAB_LIBRARY_HINTS "${_prefix}/lib")
+        list(APPEND PUERHLAB_INCLUDE_HINTS "${_prefix}/include")
+    endif()
+endforeach()
+list(REMOVE_DUPLICATES PUERHLAB_LIBRARY_HINTS)
+list(REMOVE_DUPLICATES PUERHLAB_INCLUDE_HINTS)
+
 
 
 if (MSVC)
@@ -40,21 +95,34 @@ else()
     )
     if(APPLE)
         add_compile_definitions(__MACOSX_CORE__)
-    # FIXME: Hardcoded Qt path for macOS, consider making it configurable
-    set(CMAKE_PREFIX_PATH "/Users/zidage/Qt/6.9.3/macos/lib/cmake;${CMAKE_PREFIX_PATH}")
     endif()
 endif()
 
 # Qt6
-find_package(Qt6 REQUIRED COMPONENTS Widgets Quick OpenGL OpenGLWidgets Test)
+set(PUERHLAB_QT_COMPONENTS
+    Core
+    Widgets
+    Quick
+    Qml
+    QuickControls2
+    QuickDialogs2
+    QuickEffects
+)
+if(PUERHLAB_BUILD_TESTS)
+    list(APPEND PUERHLAB_QT_COMPONENTS Test)
+endif()
+find_package(Qt6 REQUIRED COMPONENTS ${PUERHLAB_QT_COMPONENTS})
 
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTORCC ON)
 
 # CUDA
-find_package(CUDAToolkit)
-if (CUDAToolkit_FOUND)
+set(PUERHLAB_CUDA_ENABLED OFF)
+if(PUERHLAB_ENABLE_CUDA)
+    find_package(CUDAToolkit QUIET)
+endif()
+if (PUERHLAB_ENABLE_CUDA AND CUDAToolkit_FOUND)
     enable_language(CUDA)
     add_definitions(-DHAVE_CUDA)
     set(CMAKE_CUDA_ARCHITECTURES 60-real 61-real 75-real 86-real 86-virtual 89-real 90-real)
@@ -66,19 +134,24 @@ if (CUDAToolkit_FOUND)
     if(MSVC)
         list(APPEND CMAKE_CUDA_HOST_COMPILER_OPTIONS /W4 /external:anglebrackets /external:W0 /D_DEBUG /EHsc /arch:AVX2 /openmp)
     endif()
+    set(PUERHLAB_CUDA_ENABLED ON)
+elseif(PUERHLAB_ENABLE_CUDA)
+    message(STATUS "CUDA toolkit not found; building without CUDA backends.")
 endif()
 
 # Dependencies
 # GTest
-include(FetchContent)
-FetchContent_Declare(
-  googletest
-  URL https://github.com/google/googletest/archive/refs/tags/v1.17.0.zip
-)
-# For Windows: Prevent overriding the parent project's compiler/linker settings
-set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
-FetchContent_MakeAvailable(googletest)
-enable_testing() 
+if(PUERHLAB_BUILD_TESTS)
+    include(FetchContent)
+    FetchContent_Declare(
+      googletest
+      URL https://github.com/google/googletest/archive/refs/tags/v1.17.0.zip
+    )
+    # For Windows: Prevent overriding the parent project's compiler/linker settings
+    set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+    FetchContent_MakeAvailable(googletest)
+    enable_testing()
+endif()
 
 # OpenMP
 find_package(OpenMP REQUIRED)
@@ -130,9 +203,14 @@ find_package(OpenCV REQUIRED COMPONENTS core imgproc imgcodecs calib3d highgui)
 # Eigen3
 find_package(Eigen3 CONFIG REQUIRED)
 
-# OpenGL
-find_package(OpenGL REQUIRED)
-find_package(glad CONFIG REQUIRED)
+set(PUERHLAB_REAL_OPENGL_EDITOR OFF)
+if(PUERHLAB_ENABLE_OPENGL_EDITOR AND PUERHLAB_CUDA_ENABLED)
+    find_package(Qt6 REQUIRED COMPONENTS OpenGL OpenGLWidgets)
+    find_package(OpenGL REQUIRED)
+    set(PUERHLAB_REAL_OPENGL_EDITOR ON)
+elseif(PUERHLAB_ENABLE_OPENGL_EDITOR)
+    message(STATUS "OpenGL editor requested, but no accelerated backend is available. Building editor stub only.")
+endif()
 
 # Profiler/hwy/lcms2
 if (WIN32)
@@ -144,13 +222,13 @@ find_package(hwy CONFIG REQUIRED)
 if (WIN32)
 find_package(lcms2 CONFIG REQUIRED)
 elseif(APPLE)
-    find_library(LCMS2_LIB NAMES lcms2 PATHS /opt/homebrew/lib /usr/local/lib)
-    find_path(LCMS2_INC NAMES lcms2.h PATHS /opt/homebrew/include /usr/local/include)
+    find_library(LCMS2_LIB NAMES lcms2 PATHS ${PUERHLAB_LIBRARY_HINTS})
+    find_path(LCMS2_INC NAMES lcms2.h PATHS ${PUERHLAB_INCLUDE_HINTS})
     if(LCMS2_LIB AND LCMS2_INC)
         add_library(lcms2::lcms2 SHARED IMPORTED)
         set_target_properties(lcms2::lcms2 PROPERTIES IMPORTED_LOCATION "${LCMS2_LIB}" INTERFACE_INCLUDE_DIRECTORIES "${LCMS2_INC}")
     else()
-        message(FATAL_ERROR "lcms2 not found. Install via Homebrew (lcms2) or vcpkg.")
+        message(FATAL_ERROR "lcms2 not found. Install via Homebrew (little-cms2) or set CMAKE_PREFIX_PATH to its prefix.")
     endif()
 endif()
 if(UNIX AND NOT APPLE)
@@ -162,18 +240,35 @@ find_package(OpenColorIO CONFIG REQUIRED)
 if (TARGET OpenColorIO::OpenColorIO)
     add_library(OpenColorIO ALIAS OpenColorIO::OpenColorIO)
 else()
-    find_library(OCIO_LIB NAMES OpenColorIO PATHS /opt/homebrew/lib /usr/local/lib)
-    find_path(OCIO_INC NAMES OpenColorIO/OpenColorIO.h PATHS /opt/homebrew/include /usr/local/include)
+    find_library(OCIO_LIB NAMES OpenColorIO PATHS ${PUERHLAB_LIBRARY_HINTS})
+    find_path(OCIO_INC NAMES OpenColorIO/OpenColorIO.h PATHS ${PUERHLAB_INCLUDE_HINTS})
     if(OCIO_LIB AND OCIO_INC)
         add_library(OpenColorIO SHARED IMPORTED)
         set_target_properties(OpenColorIO PROPERTIES IMPORTED_LOCATION "${OCIO_LIB}" INTERFACE_INCLUDE_DIRECTORIES "${OCIO_INC}")
     else()
-        message(FATAL_ERROR "OpenColorIO not found. Install via Homebrew (opencolorio) or vcpkg.")
+        message(FATAL_ERROR "OpenColorIO not found. Install via Homebrew (opencolorio) or set CMAKE_PREFIX_PATH to its prefix.")
     endif()
 endif()
    
 # OpenImageIO
-find_package(OpenImageIO CONFIG REQUIRED)
+find_package(OpenImageIO CONFIG QUIET)
+if (NOT TARGET OpenImageIO::OpenImageIO)
+    if (TARGET OpenImageIO)
+        add_library(OpenImageIO::OpenImageIO ALIAS OpenImageIO)
+    else()
+        find_library(OPENIMAGEIO_LIB NAMES OpenImageIO PATHS ${PUERHLAB_LIBRARY_HINTS})
+        find_path(OPENIMAGEIO_INC NAMES OpenImageIO/imageio.h PATHS ${PUERHLAB_INCLUDE_HINTS})
+        if(OPENIMAGEIO_LIB AND OPENIMAGEIO_INC)
+            add_library(OpenImageIO::OpenImageIO SHARED IMPORTED)
+            set_target_properties(OpenImageIO::OpenImageIO PROPERTIES
+                IMPORTED_LOCATION "${OPENIMAGEIO_LIB}"
+                INTERFACE_INCLUDE_DIRECTORIES "${OPENIMAGEIO_INC}"
+            )
+        else()
+            message(FATAL_ERROR "OpenImageIO not found. Install via Homebrew (openimageio) or set CMAKE_PREFIX_PATH to its prefix.")
+        endif()
+    endif()
+endif()
 
 # Exiv2
 find_package(Exiv2 QUIET CONFIG)
@@ -187,13 +282,13 @@ elseif(WIN32)
         INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_party/exiv2_x64-windows/include"
     )
 else()
-  find_library(EXIV2_LIB NAMES exiv2 PATHS /opt/homebrew/lib /usr/local/lib)
-  find_path(EXIV2_INC NAMES exiv2/exiv2.hpp PATHS /opt/homebrew/include /usr/local/include)
+  find_library(EXIV2_LIB NAMES exiv2 PATHS ${PUERHLAB_LIBRARY_HINTS})
+  find_path(EXIV2_INC NAMES exiv2/exiv2.hpp PATHS ${PUERHLAB_INCLUDE_HINTS})
   if(EXIV2_LIB AND EXIV2_INC)
     add_library(Exiv2 SHARED IMPORTED)
     set_target_properties(Exiv2 PROPERTIES IMPORTED_LOCATION "${EXIV2_LIB}" INTERFACE_INCLUDE_DIRECTORIES "${EXIV2_INC}")
   else()
-    message(FATAL_ERROR "Exiv2 not found. Install via Homebrew (exiv2) or vcpkg.")
+    message(FATAL_ERROR "Exiv2 not found. Install via Homebrew (exiv2) or set CMAKE_PREFIX_PATH to its prefix.")
   endif()
 endif()
 
@@ -201,70 +296,27 @@ endif()
 if (WIN32)
     find_package(libraw CONFIG REQUIRED)
 else()
-    find_path(LIBRAW_INC NAMES libraw/libraw.h PATHS /opt/homebrew/include /usr/local/include PATH_SUFFIXES libraw)
-    find_library(LIBRAW_LIB NAMES raw libraw PATHS /opt/homebrew/lib /usr/local/lib)
+    find_path(LIBRAW_INC NAMES libraw/libraw.h PATHS ${PUERHLAB_INCLUDE_HINTS})
+    find_library(LIBRAW_LIB NAMES raw_r raw libraw PATHS ${PUERHLAB_LIBRARY_HINTS})
     if(LIBRAW_INC AND LIBRAW_LIB)
-        add_library(LibRaw SHARED IMPORTED)
-        set_target_properties(LibRaw PROPERTIES IMPORTED_LOCATION "${LIBRAW_LIB}" INTERFACE_INCLUDE_DIRECTORIES "${LIBRAW_INC}")
+        add_library(libraw::raw_r SHARED IMPORTED)
+        set_target_properties(libraw::raw_r PROPERTIES
+            IMPORTED_LOCATION "${LIBRAW_LIB}"
+            INTERFACE_INCLUDE_DIRECTORIES "${LIBRAW_INC}"
+        )
     else()
-        message(FATAL_ERROR "LibRaw not found. Install via Homebrew (libraw) or vcpkg.")
+        message(FATAL_ERROR "LibRaw not found. Install via Homebrew (libraw) or set CMAKE_PREFIX_PATH to its prefix.")
     endif()
 endif()
 
-# Lensfun
-set(PUERHLAB_LENSFUN_ROOT
-    "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_party/lensfun/install"
-    CACHE PATH "Lensfun install prefix (must contain include/, lib/, and bin/)")
+if(TARGET libraw::raw AND NOT TARGET libraw::raw_r)
+    add_library(libraw::raw_r ALIAS libraw::raw)
+elseif(TARGET libraw::raw_r AND NOT TARGET libraw::raw)
+    add_library(libraw::raw ALIAS libraw::raw_r)
+endif()
 
-if (WIN32)
-    # Windows build is pinned to a local Lensfun build under third_party.
-    unset(LENSFUN_INCLUDE_DIR CACHE)
-    unset(LENSFUN_IMPLIB CACHE)
-    unset(LENSFUN_DLL CACHE)
-
-    find_path(LENSFUN_INCLUDE_DIR
-        NAMES lensfun/lensfun.h
-        PATHS "${PUERHLAB_LENSFUN_ROOT}/include"
-        NO_DEFAULT_PATH
-        NO_CMAKE_FIND_ROOT_PATH
-    )
-    find_library(LENSFUN_IMPLIB
-        NAMES lensfun
-        PATHS "${PUERHLAB_LENSFUN_ROOT}/lib"
-        NO_DEFAULT_PATH
-        NO_CMAKE_FIND_ROOT_PATH
-    )
-    find_file(LENSFUN_DLL
-        NAMES lensfun.dll
-        PATHS "${PUERHLAB_LENSFUN_ROOT}/bin"
-        NO_DEFAULT_PATH
-        NO_CMAKE_FIND_ROOT_PATH
-    )
-
-    if (NOT LENSFUN_INCLUDE_DIR OR NOT LENSFUN_IMPLIB)
-        message(FATAL_ERROR
-            "Lensfun local build not found. Build pu-erh_lab/third_party/lensfun and set "
-            "PUERHLAB_LENSFUN_ROOT to its install prefix (include/lib/bin).")
-    endif()
-
-    add_library(lensfun::lensfun SHARED IMPORTED)
-    set_target_properties(lensfun::lensfun PROPERTIES
-        IMPORTED_IMPLIB "${LENSFUN_IMPLIB}"
-        INTERFACE_INCLUDE_DIRECTORIES "${LENSFUN_INCLUDE_DIR}"
-    )
-    if (LENSFUN_DLL)
-        set_target_properties(lensfun::lensfun PROPERTIES
-            IMPORTED_LOCATION "${LENSFUN_DLL}"
-        )
-    endif()
-
-    add_library(lensfun INTERFACE)
-    target_link_libraries(lensfun INTERFACE lensfun::lensfun)
-else()
-    find_package(lensfun QUIET)
-    if (NOT lensfun_FOUND AND NOT TARGET lensfun AND NOT TARGET lensfun::lensfun)
-        message(FATAL_ERROR "Lensfun not found. Install via Homebrew (lensfun) or vcpkg.")
-    endif()
+if(TARGET libraw::raw_r AND NOT TARGET LibRaw)
+    add_library(LibRaw ALIAS libraw::raw_r)
 endif()
 
 # DuckDB API
@@ -275,13 +327,13 @@ if (WIN32)
         IMPORTED_IMPLIB "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_party/libduckdb-windows/duckdb.lib"
         INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_party/libduckdb-windows")
 else()        
-  find_path(DUCKDB_INC NAMES duckdb.h PATHS /opt/homebrew/include /usr/local/include)
-  find_library(DUCKDB_LIB NAMES duckdb PATHS /opt/homebrew/lib /usr/local/lib)
+  find_path(DUCKDB_INC NAMES duckdb.h PATHS ${PUERHLAB_INCLUDE_HINTS})
+  find_library(DUCKDB_LIB NAMES duckdb PATHS ${PUERHLAB_LIBRARY_HINTS})
   if(DUCKDB_INC AND DUCKDB_LIB)
     add_library(DuckDB SHARED IMPORTED)
     set_target_properties(DuckDB PROPERTIES IMPORTED_LOCATION "${DUCKDB_LIB}" INTERFACE_INCLUDE_DIRECTORIES "${DUCKDB_INC}")
   else()
-    message(FATAL_ERROR "DuckDB not found. Install via Homebrew (duckdb) or vcpkg.")
+    message(FATAL_ERROR "DuckDB not found. Install via Homebrew (duckdb) or set CMAKE_PREFIX_PATH to its prefix.")
   endif()
 endif()
 
@@ -298,8 +350,11 @@ add_compile_definitions(
 
 include(GNUInstallDirs)
 
+add_subdirectory(${CMAKE_SOURCE_DIR}/pu-erh_lab/src/third_party)
 add_subdirectory(${CMAKE_SOURCE_DIR}/pu-erh_lab/src)
-add_subdirectory(${CMAKE_SOURCE_DIR}/pu-erh_lab/tests)
+if(PUERHLAB_BUILD_TESTS)
+    add_subdirectory(${CMAKE_SOURCE_DIR}/pu-erh_lab/tests)
+endif()
 
 set(PUERHLAB_MAIN_BIN puerhlab_main)
 if(TARGET ${PUERHLAB_MAIN_BIN})
@@ -340,7 +395,7 @@ if(WIN32 AND TARGET ${PUERHLAB_MAIN_BIN})
     endif()
 
     set(_cuda_bin_dir "")
-    if(CUDAToolkit_FOUND AND CUDAToolkit_BIN_DIR)
+    if(PUERHLAB_CUDA_ENABLED AND CUDAToolkit_BIN_DIR)
         set(_cuda_bin_dir "${CUDAToolkit_BIN_DIR}")
     endif()
 
@@ -474,5 +529,3 @@ set(CPACK_PACKAGE_NAME "pu-erh_lab")
 set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
 set(CPACK_PACKAGE_FILE_NAME "${CPACK_PACKAGE_NAME}-${CPACK_PACKAGE_VERSION}-${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}")
 include(CPack)
-
-

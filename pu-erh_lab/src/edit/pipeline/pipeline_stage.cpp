@@ -260,7 +260,11 @@ auto PipelineStage::DetermineStageRole(PipelineStageName stage, bool is_streamab
   switch (stage) {
     case PipelineStageName::Image_Loading:
     case PipelineStageName::Geometry_Adjustment:
+#ifdef HAVE_CUDA
       return StageRole::GpuOperators;
+#else
+      return StageRole::CpuOperators;
+#endif
     case PipelineStageName::Merged_Stage:
       return StageRole::GpuStreamable;
     default:
@@ -422,10 +426,70 @@ std::shared_ptr<ImageBuffer> PipelineStage::ApplyGpuOperators(OperatorParams& gl
 std::shared_ptr<ImageBuffer> PipelineStage::ApplyCpuOperators(OperatorParams& global_params) {
   auto execute_ops = [&]() {
     if (!HasEnabledOperator()) return input_img_;
+
+    if (stage_ == PipelineStageName::Geometry_Adjustment) {
+      int width  = 0;
+      int height = 0;
+      if (input_img_->gpu_data_valid_) {
+        const auto& gpu_data = input_img_->GetGPUData();
+        width                = gpu_data.cols;
+        height               = gpu_data.rows;
+      } else if (input_img_->cpu_data_valid_) {
+        const auto& cpu_data = input_img_->GetCPUData();
+        width                = cpu_data.cols;
+        height               = cpu_data.rows;
+      }
+
+      bool has_enabled = false;
+      bool all_noop    = true;
+      for (const auto& [op_type, op_entry] : *operators_) {
+        if (!op_entry.enable_ || !op_entry.op_) {
+          continue;
+        }
+        has_enabled = true;
+        if ((op_type == OperatorType::RESIZE &&
+             !IsResizeEffectivelyNoOp(*op_entry.op_, width, height)) ||
+            (op_type == OperatorType::CROP_ROTATE && !IsCropRotateEffectivelyNoOp(*op_entry.op_)) ||
+            (op_type != OperatorType::RESIZE && op_type != OperatorType::CROP_ROTATE)) {
+          all_noop = false;
+          break;
+        }
+      }
+
+      if (has_enabled && all_noop) {
+        return input_img_;
+      }
+    }
+
     auto current_img = std::make_shared<ImageBuffer>(input_img_->Clone());
-    for (const auto& op_entry : *operators_) {
-      if (op_entry.second.enable_) {
-        op_entry.second.op_->Apply(current_img);
+
+    const auto apply_cpu_operator = [&](OperatorType op_type, const OperatorEntry& op_entry) {
+      if (!op_entry.enable_ || !op_entry.op_) {
+        return;
+      }
+      if (op_type == OperatorType::LENS_CALIBRATION) {
+        op_entry.op_->SetGlobalParams(global_params);
+        op_entry.op_->Apply(current_img);
+      } else {
+        op_entry.op_->Apply(current_img);
+        op_entry.op_->SetGlobalParams(global_params);
+      }
+    };
+
+    if (stage_ == PipelineStageName::Geometry_Adjustment) {
+      if (const auto crop_it = operators_->find(OperatorType::CROP_ROTATE);
+          crop_it != operators_->end()) {
+        apply_cpu_operator(crop_it->first, crop_it->second);
+      }
+      for (const auto& [op_type, op_entry] : *operators_) {
+        if (op_type == OperatorType::CROP_ROTATE) {
+          continue;
+        }
+        apply_cpu_operator(op_type, op_entry);
+      }
+    } else {
+      for (const auto& [op_type, op_entry] : *operators_) {
+        apply_cpu_operator(op_type, op_entry);
       }
     }
     return current_img;
@@ -451,7 +515,8 @@ std::shared_ptr<ImageBuffer> PipelineStage::ApplyCpuOperators(OperatorParams& gl
   SetOutputCacheValid(true);
   if (next_stage_) {
     next_stage_->SetInputCacheValid(true);
-    if (next_stage_->stage_role_ == StageRole::GpuStreamable) {
+    if (next_stage_->stage_role_ == StageRole::GpuStreamable &&
+        next_stage_->gpu_executor_.HasAcceleratedBackend()) {
       output_cache_->SyncToGPU();
     }
   }
@@ -459,6 +524,21 @@ std::shared_ptr<ImageBuffer> PipelineStage::ApplyCpuOperators(OperatorParams& gl
 }
 
 std::shared_ptr<ImageBuffer> PipelineStage::ApplyGpuStream(OperatorParams& global_params) {
+  if (!gpu_executor_.HasAcceleratedBackend()) {
+    if (!static_tile_scheduler_) {
+      SetStaticTileScheduler();
+    } else {
+      static_tile_scheduler_->SetInputImage(input_img_);
+    }
+
+    output_cache_ = static_tile_scheduler_->ApplyOps(global_params);
+    SetOutputCacheValid(false);
+    if (next_stage_) {
+      next_stage_->SetInputCacheValid(false);
+    }
+    return output_cache_;
+  }
+
   if (!gpu_setup_done_) {
     SetGPUExecutor();
   }

@@ -219,12 +219,20 @@ class GPU_KernelLauncher {
     // Synchronize once later, right before presenting.
 
     if (frame_sink_) {
-      float4* mapped_ptr = frame_sink_->MapResourceForWrite();
-      if (mapped_ptr) {
-        size_t     size_bytes = width * height * sizeof(float4);
+      const FrameWriteMapping mapping = frame_sink_->MapResourceForWrite();
+      if (mapping) {
+        if (mapping.pixel_format != FramePixelFormat::RGBA32F ||
+            mapping.memory_domain != FrameMemoryDomain::CudaDevice) {
+          frame_sink_->UnmapResource();
+          throw std::runtime_error("GPU frame sink does not expose a CUDA RGBA32F mapping.");
+        }
+
+        auto*      mapped_ptr = static_cast<float4*>(mapping.data);
+        const size_t row_bytes = static_cast<size_t>(width) * sizeof(float4);
         const auto present_copy_start = std::chrono::steady_clock::now();
-        const auto out_copy_err =
-            cudaMemcpyAsync(mapped_ptr, result_ptr, size_bytes, cudaMemcpyDeviceToDevice, stream_);
+        const auto out_copy_err = cudaMemcpy2DAsync(
+            mapped_ptr, mapping.row_bytes, result_ptr, row_bytes, row_bytes,
+            static_cast<size_t>(height), cudaMemcpyDeviceToDevice, stream_);
         const auto present_copy_end = std::chrono::steady_clock::now();
         present_copy_enqueue_ms =
             std::chrono::duration<double, std::milli>(present_copy_end - present_copy_start).count();
