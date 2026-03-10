@@ -379,7 +379,10 @@ void CropRotateOp::Apply(std::shared_ptr<ImageBuffer> input) {
 }
 
 void CropRotateOp::ApplyGPU(std::shared_ptr<ImageBuffer> input) {
-  auto& img = input->GetGPUData();
+#ifndef HAVE_CUDA
+  throw std::runtime_error("CropRotateOp::ApplyGPU requires HAVE_CUDA");
+#else
+  auto& img = input->GetCUDAImage();
   const int width  = img.cols;
   const int height = img.rows;
   if (width <= 0 || height <= 0) {
@@ -415,6 +418,7 @@ void CropRotateOp::ApplyGPU(std::shared_ptr<ImageBuffer> input) {
   throw std::runtime_error("CropRotateOp::ApplyGPU requires HAVE_CUDA");
 #endif
   img = std::move(rotated_crop);
+#endif
 }
 
 auto CropRotateOp::GetParams() const -> nlohmann::json {

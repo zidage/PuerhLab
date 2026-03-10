@@ -11,11 +11,12 @@ namespace puerhlab::pipeline_defaults {
 inline auto MakeDefaultRawDecodeParams() -> nlohmann::json {
   nlohmann::json decode_params;
   decode_params["raw"]["gpu_backend"] = "cpu";
-#ifdef HAVE_CUDA
-  decode_params["raw"]["gpu_backend"] = "cuda";
-  decode_params["raw"]["cuda"]        = true;
-#else
+#if defined(HAVE_CUDA) || defined(HAVE_METAL)
+  decode_params["raw"]["gpu_backend"] = "gpu";
+#endif
   decode_params["raw"]["cuda"] = false;
+#ifdef HAVE_CUDA
+  decode_params["raw"]["cuda"] = true;
 #endif
   decode_params["raw"]["highlights_reconstruct"] = true;
   decode_params["raw"]["use_camera_wb"]          = true;

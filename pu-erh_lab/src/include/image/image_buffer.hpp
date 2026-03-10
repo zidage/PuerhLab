@@ -6,16 +6,64 @@
 
 #include <cstdint>
 #include <memory>
-#include <opencv2/core/cuda.hpp>
 #include <opencv2/opencv.hpp>
 #include <utility>
 #include <vector>
 
+#ifdef HAVE_CUDA
+#include <opencv2/core/cuda.hpp>
+#endif
+
+#ifdef HAVE_METAL
+#include "metal_image.hpp"
+#endif
+
 namespace puerhlab {
+class GpuImageWrapper {
+ public:
+  GpuImageWrapper()                                   = default;
+  ~GpuImageWrapper()                                  = default;
+  GpuImageWrapper(const GpuImageWrapper&)             = delete;
+  auto operator=(const GpuImageWrapper&) -> GpuImageWrapper& = delete;
+  GpuImageWrapper(GpuImageWrapper&&) noexcept         = default;
+  auto operator=(GpuImageWrapper&&) noexcept -> GpuImageWrapper& = default;
+
+#ifdef HAVE_CUDA
+  explicit GpuImageWrapper(cv::cuda::GpuMat&& image);
+  auto GetCUDAImage() -> cv::cuda::GpuMat&;
+  auto GetCUDAImage() const -> const cv::cuda::GpuMat&;
+#endif
+
+#ifdef HAVE_METAL
+  explicit GpuImageWrapper(metal::MetalImage&& image);
+  auto GetMetalImage() -> metal::MetalImage&;
+  auto GetMetalImage() const -> const metal::MetalImage&;
+#endif
+
+  auto Empty() const -> bool;
+  auto Width() const -> int;
+  auto Height() const -> int;
+  auto Type() const -> int;
+
+  void Create(int width, int height, int type);
+  void Upload(const cv::Mat& cpu_data);
+  void Download(cv::Mat& cpu_data) const;
+  void CopyTo(GpuImageWrapper& dst) const;
+  void ConvertTo(GpuImageWrapper& dst, int type, double alpha = 1.0, double beta = 0.0) const;
+  void Release();
+
+ private:
+#if defined(HAVE_CUDA)
+  cv::cuda::GpuMat image_;
+#elif defined(HAVE_METAL)
+  metal::MetalImage image_;
+#endif
+};
+
 class ImageBuffer {
  private:
   cv::Mat                               cpu_data_;
-  cv::cuda::GpuMat                      gpu_data_;
+  GpuImageWrapper                       gpu_data_;
 
   std::unique_ptr<std::vector<uint8_t>> buffer_;
 
@@ -37,17 +85,36 @@ class ImageBuffer {
 
   ImageBuffer(cv::Mat& data);
   ImageBuffer(cv::Mat&& data);
+#ifdef HAVE_CUDA
   ImageBuffer(cv::cuda::GpuMat&& data);
+#endif
+#ifdef HAVE_METAL
+  ImageBuffer(metal::MetalImage&& data);
+#endif
   ImageBuffer(std::vector<uint8_t>&& buffer);
 
   void         ReadFromVectorBuffer(std::vector<uint8_t>&& buffer);
 
   auto         GetCPUData() -> cv::Mat&;
-  auto         GetGPUData() -> cv::cuda::GpuMat&;
   auto         GetBuffer() -> std::vector<uint8_t>&;
+
+#ifdef HAVE_CUDA
+  auto         GetCUDAImage() -> cv::cuda::GpuMat&;
+  auto         GetCUDAImage() const -> const cv::cuda::GpuMat&;
+#endif
+#ifdef HAVE_METAL
+  auto         GetMetalImage() -> metal::MetalImage&;
+  auto         GetMetalImage() const -> const metal::MetalImage&;
+#endif
+
+  auto         GetGPUWidth() const -> int;
+  auto         GetGPUHeight() const -> int;
+  auto         GetGPUType() const -> int;
 
   void         SyncToGPU();
   void         SyncToCPU();
+  void         ConvertGPUDataTo(int type, double alpha = 1.0, double beta = 0.0);
+  void         CopyGPUDataTo(ImageBuffer& dst) const;
 
   void         InitGPUData(int width, int height, int type);
   void         SetGPUDataValid(bool valid);

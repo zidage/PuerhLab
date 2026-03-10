@@ -17,10 +17,8 @@ namespace puerhlab {
 namespace {
 auto RawGpuBackendToString(RawGpuBackend backend) -> const char* {
   switch (backend) {
-    case RawGpuBackend::CUDA:
-      return "cuda";
-    case RawGpuBackend::Metal:
-      return "metal";
+    case RawGpuBackend::GPU:
+      return "gpu";
     case RawGpuBackend::CPU:
     default:
       return "cpu";
@@ -112,7 +110,10 @@ auto RawDecodeOp::GetParams() const -> nlohmann::json {
   nlohmann::json inner;
 
   inner["gpu_backend"]            = RawGpuBackendToString(params_.gpu_backend_);
-  inner["cuda"]                   = (params_.gpu_backend_ == RawGpuBackend::CUDA);
+  inner["cuda"]                   = false;
+#ifdef HAVE_CUDA
+  inner["cuda"]                   = (params_.gpu_backend_ == RawGpuBackend::GPU);
+#endif
   inner["highlights_reconstruct"] = params_.highlights_reconstruct_;
   inner["use_camera_wb"]          = params_.use_camera_wb_;
   inner["user_wb"]                = params_.user_wb_;
@@ -138,15 +139,13 @@ void RawDecodeOp::SetParams(const nlohmann::json& params) {
     const std::string backend = inner["gpu_backend"].get<std::string>();
     if (backend == "cpu") {
       params_.gpu_backend_ = RawGpuBackend::CPU;
-    } else if (backend == "cuda") {
-      params_.gpu_backend_ = RawGpuBackend::CUDA;
-    } else if (backend == "metal") {
-      params_.gpu_backend_ = RawGpuBackend::Metal;
+    } else if (backend == "gpu" || backend == "cuda" || backend == "metal") {
+      params_.gpu_backend_ = RawGpuBackend::GPU;
     } else {
       throw std::runtime_error("RawDecodeOp: Unknown gpu_backend " + backend);
     }
   } else if (inner.contains("cuda")) {
-    params_.gpu_backend_ = inner["cuda"].get<bool>() ? RawGpuBackend::CUDA : RawGpuBackend::CPU;
+    params_.gpu_backend_ = inner["cuda"].get<bool>() ? RawGpuBackend::GPU : RawGpuBackend::CPU;
   }
   if (inner.contains("highlights_reconstruct"))
     params_.highlights_reconstruct_ = inner["highlights_reconstruct"].get<bool>();

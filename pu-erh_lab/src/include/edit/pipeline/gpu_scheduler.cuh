@@ -112,7 +112,7 @@ class GPU_KernelLauncher {
     if (input_img_ && !input_img_->gpu_data_valid_ && input_img_->cpu_data_valid_) {
       input_img_->SyncToGPU();
     }
-    cv::cuda::GpuMat gpu_mat = input_img_->GetGPUData();
+    cv::cuda::GpuMat gpu_mat = input_img_->GetCUDAImage();
     if (gpu_mat.type() != CV_32FC4) {
       throw std::runtime_error(
           std::string("GPU_KernelLauncher: expected input type CV_32FC4, got type ") +
@@ -175,7 +175,7 @@ class GPU_KernelLauncher {
       throw std::runtime_error("CUDA stream not initialized.");
     }
 
-    cv::cuda::GpuMat gpu_mat = input_img_->GetGPUData();
+    cv::cuda::GpuMat gpu_mat = input_img_->GetCUDAImage();
     if (gpu_mat.type() != CV_32FC4) {
       throw std::runtime_error(
           std::string("GPU_KernelLauncher: expected execution input type CV_32FC4, got type ") +
@@ -302,7 +302,7 @@ class GPU_KernelLauncher {
 
     if (output_img_) {
       output_img_->InitGPUData(width, height, CV_32FC4);
-      cv::cuda::GpuMat output_gpu_mat = output_img_->GetGPUData();
+      cv::cuda::GpuMat output_gpu_mat = output_img_->GetCUDAImage();
       {
         const auto output_copy_start = std::chrono::steady_clock::now();
         const auto out_copy_err = cudaMemcpy2DAsync(

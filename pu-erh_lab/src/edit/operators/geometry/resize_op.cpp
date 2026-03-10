@@ -76,7 +76,10 @@ void ResizeOp::Apply(std::shared_ptr<ImageBuffer> input) {
 }
 
 void ResizeOp::ApplyGPU(std::shared_ptr<ImageBuffer> input) {
-  auto& img = input->GetGPUData();
+#ifndef HAVE_CUDA
+  throw std::runtime_error("ResizeOp::ApplyGPU requires HAVE_CUDA");
+#else
+  auto& img = input->GetCUDAImage();
   int   w   = img.cols;
   int   h   = img.rows;
   if (w <= 0 || h <= 0) return;
@@ -144,6 +147,7 @@ void ResizeOp::ApplyGPU(std::shared_ptr<ImageBuffer> input) {
   throw std::runtime_error("ResizeOp::ApplyGPU requires HAVE_CUDA");
 #endif
   img = std::move(dst);
+#endif
 }
 
 auto ResizeOp::GetParams() const -> nlohmann::json {

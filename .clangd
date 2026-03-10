@@ -17,6 +17,6 @@ CompileFlags:
 If:
     PathMatch: .*\.(c|h)pp
 CompileFlags:
-    CompilationDatabase: build/release
+    CompilationDatabase: build/macos-debug
 Diagnostics:
   Suppress: redefinition_different_typedef

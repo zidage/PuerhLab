@@ -172,7 +172,7 @@ TEST_F(PipelineTests, SimpleTest1) {
 
         output->SyncToGPU();
 
-        auto& gpu_data = output->GetGPUData();
+        auto& gpu_data = output->GetCUDAImage();
         gpu_data.convertTo(to_save_rec709, CV_16UC3, 65535.0f);
         cv::cuda::cvtColor(to_save_rec709, to_save_rec709, cv::COLOR_RGB2BGR);
         to_save_rec709.download(to_save_rec709_cpu);

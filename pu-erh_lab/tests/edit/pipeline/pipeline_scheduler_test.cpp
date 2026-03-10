@@ -82,7 +82,7 @@ TEST_F(PipelineTests, SchedulerBasic) {
       task.callback_             = [img_ptr](ImageBuffer& output) {
         output.SyncToGPU();
 
-        auto&            gpu_data = output.GetGPUData();
+        auto&            gpu_data = output.GetCUDAImage();
         gpu_data.convertTo(gpu_data, CV_16UC3, 65535.0f);
         cv::cuda::cvtColor(gpu_data, gpu_data, cv::COLOR_RGB2BGR);
 

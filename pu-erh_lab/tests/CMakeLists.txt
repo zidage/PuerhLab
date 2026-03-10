@@ -33,6 +33,18 @@ if(PUERHLAB_CUDA_ENABLED)
   target_link_libraries(CudaImageGeometryOpsTest PRIVATE GTest::gtest_main RawProcessorOp Operators ${PUERHLAB_TEST_OPENCV_MIN_DEPS})
 endif()
 
+if(PUERHLAB_METAL_ENABLED)
+  add_executable(ImageBufferMetalTest image/image_buffer_metal_test.cpp)
+  target_include_directories(ImageBufferMetalTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
+  target_link_libraries(ImageBufferMetalTest PRIVATE GTest::gtest_main ImageBuffer MetalImage ${PUERHLAB_TEST_OPENCV_MIN_DEPS})
+  gtest_discover_tests(ImageBufferMetalTest TEST_PREFIX "ImageBufferMetalTest.")
+
+  add_executable(MetalUtilsTest metal/metal_utils_test.cpp)
+  target_include_directories(MetalUtilsTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
+  target_link_libraries(MetalUtilsTest PRIVATE GTest::gtest_main MetalImage MetalUtils ${PUERHLAB_TEST_OPENCV_MIN_DEPS})
+  gtest_discover_tests(MetalUtilsTest TEST_PREFIX "MetalUtilsTest.")
+endif()
+
 # add_executable(ImageDecoderTest decoders/image_decoder_test.cpp)
 # target_include_directories(ImageDecoderTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
 # target_link_libraries(ImageDecoderTest PRIVATE GTest::gtest_main ImageDecoder Exiv2)

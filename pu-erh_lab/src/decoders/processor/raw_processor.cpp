@@ -85,6 +85,16 @@ auto DownsampleBayerRGGB2x(const cv::Mat& src) -> cv::Mat {
       throw std::runtime_error("RawProcessor: Unsupported Bayer type for downsample");
   }
 }
+
+void ThrowUnsupportedGPUBackend(const char* op_name) {
+#ifdef HAVE_METAL
+  throw std::runtime_error(std::string("RawProcessor: ") + op_name +
+                           " is not implemented for the Metal GPU backend.");
+#else
+  throw std::runtime_error(std::string("RawProcessor: ") + op_name +
+                           " requires a compiled GPU backend implementation.");
+#endif
+}
 }  // namespace
 
 RawProcessor::RawProcessor(const RawParams& params, const libraw_rawdata_t& rawdata,
@@ -126,13 +136,14 @@ void RawProcessor::SetDecodeRes() {
 
 void RawProcessor::ApplyLinearization() {
   auto& pre_debayer_buffer = process_buffer_;
+  if (params_.gpu_backend_ == RawGpuBackend::GPU) {
 #ifdef HAVE_CUDA
-  if (params_.gpu_backend_ == RawGpuBackend::CUDA) {
-    auto& gpu_img = pre_debayer_buffer.GetGPUData();
+    auto& gpu_img = pre_debayer_buffer.GetCUDAImage();
     CUDA::ToLinearRef(gpu_img, raw_processor_);
     return;
-  }
 #endif
+    ThrowUnsupportedGPUBackend("ApplyLinearization");
+  }
   auto& cpu_img = pre_debayer_buffer.GetCPUData();
   // Apply "as shot" white balance multipliers for highlight reconstruction
   // This step will stretch the image to original 16-bit range
@@ -143,9 +154,9 @@ void RawProcessor::ApplyLinearization() {
 
 void RawProcessor::ApplyDebayer() {
   auto& pre_debayer_buffer = process_buffer_;
+  if (params_.gpu_backend_ == RawGpuBackend::GPU) {
 #ifdef HAVE_CUDA
-  if (params_.gpu_backend_ == RawGpuBackend::CUDA) {
-    auto& gpu_img = pre_debayer_buffer.GetGPUData();
+    auto& gpu_img = pre_debayer_buffer.GetCUDAImage();
     CUDA::BayerRGGB2RGB_RCD(gpu_img);
     if (params_.decode_res_ == DecodeRes::FULL) {
       cv::Rect crop_rect(raw_data_.sizes.left_margin, raw_data_.sizes.top_margin,
@@ -154,8 +165,9 @@ void RawProcessor::ApplyDebayer() {
     }
 
     return;
-  }
 #endif
+    ThrowUnsupportedGPUBackend("ApplyDebayer");
+  }
   auto& img = pre_debayer_buffer.GetCPUData();
   CPU::BayerRGGB2RGB_RCD(img);
   // Crop to valid area
@@ -171,17 +183,18 @@ void RawProcessor::ApplyDebayer() {
 }
 
 void RawProcessor::ApplyHighlightReconstruct() {
+  if (params_.gpu_backend_ == RawGpuBackend::GPU) {
 #ifdef HAVE_CUDA
-  if (params_.gpu_backend_ == RawGpuBackend::CUDA) {
-    auto& gpu_img = process_buffer_.GetGPUData();
+    auto& gpu_img = process_buffer_.GetCUDAImage();
     if (!params_.highlights_reconstruct_) {
       CUDA::Clamp01(gpu_img);
       return;
     }
     CUDA::HighlightReconstruct(gpu_img, raw_processor_);
     return;
-  }
 #endif
+    ThrowUnsupportedGPUBackend("ApplyHighlightReconstruct");
+  }
 
   auto& img = process_buffer_.GetCPUData();
   if (!params_.highlights_reconstruct_) {
@@ -196,9 +209,9 @@ void RawProcessor::ApplyHighlightReconstruct() {
 void RawProcessor::ApplyGeometricCorrections() {
   // TODO: Add lens distortion correction if needed
 
+  if (params_.gpu_backend_ == RawGpuBackend::GPU) {
 #ifdef HAVE_CUDA
-  if (params_.gpu_backend_ == RawGpuBackend::CUDA) {
-    auto& gpu_img = process_buffer_.GetGPUData();
+    auto& gpu_img = process_buffer_.GetCUDAImage();
 
     switch (raw_data_.sizes.flip) {
       case 3:
@@ -218,8 +231,9 @@ void RawProcessor::ApplyGeometricCorrections() {
         break;
     }
     return;
-  }
 #endif
+    ThrowUnsupportedGPUBackend("ApplyGeometricCorrections");
+  }
 
   switch (raw_data_.sizes.flip) {
     case 3:
@@ -245,15 +259,16 @@ void RawProcessor::ApplyGeometricCorrections() {
 void RawProcessor::ConvertToWorkingSpace() {
   auto& debayer_buffer = process_buffer_;
   auto  color_coeffs   = raw_data_.color.rgb_cam;
+  if (params_.gpu_backend_ == RawGpuBackend::GPU) {
 #ifdef HAVE_CUDA
-  if (params_.gpu_backend_ == RawGpuBackend::CUDA) {
-    auto& gpu_img = debayer_buffer.GetGPUData();
+    auto& gpu_img = debayer_buffer.GetCUDAImage();
     auto  cam_mul = raw_data_.color.cam_mul;
     CUDA::ApplyInverseCamMul(gpu_img, cam_mul);
     runtime_color_context_.output_in_camera_space_ = true;
     return;
-  }
 #endif
+    ThrowUnsupportedGPUBackend("ConvertToWorkingSpace");
+  }
   auto& img = debayer_buffer.GetCPUData();
   img.convertTo(img, CV_32FC3);
   auto pre_mul   = raw_data_.color.pre_mul;
@@ -288,8 +303,8 @@ auto RawProcessor::Process() -> ImageBuffer {
   CV_Assert(raw_processor_.COLOR(0, 0) == 0 && raw_processor_.COLOR(0, 1) == 1 &&
             raw_processor_.COLOR(1, 0) == 3 && raw_processor_.COLOR(1, 1) == 2);
 
+  if (params_.gpu_backend_ == RawGpuBackend::GPU) {
 #ifdef HAVE_CUDA
-  if (params_.gpu_backend_ == RawGpuBackend::CUDA) {
     // Keep raw data in 16-bit until it reaches the CUDA linearization stage.
     SetDecodeRes();
     process_buffer_.SyncToGPU();
@@ -300,25 +315,26 @@ auto RawProcessor::Process() -> ImageBuffer {
     ConvertToWorkingSpace();
 
     // Ensure GPU buffer is CV_32FC4 (RGBA float32).
-    CUDA::RGBToRGBA(process_buffer_.GetGPUData());
+    CUDA::RGBToRGBA(process_buffer_.GetCUDAImage());
     ApplyGeometricCorrections();
 
     return {std::move(process_buffer_)};
     // process_buffer_.SyncToCPU();
     // process_buffer_.ReleaseGPUData();
-  } else
+#else
+    ThrowUnsupportedGPUBackend("Process");
 #endif
-  {
-    // CPU pipeline expects float32 input in [0, 1].
-    process_buffer_.GetCPUData().convertTo(process_buffer_.GetCPUData(), CV_32FC1, 1.0f / 65535.0f);
-
-    SetDecodeRes();
-    ApplyLinearization();
-    ApplyHighlightReconstruct();
-    ApplyDebayer();
-    ApplyGeometricCorrections();
-    ConvertToWorkingSpace();
   }
+
+  // CPU pipeline expects float32 input in [0, 1].
+  process_buffer_.GetCPUData().convertTo(process_buffer_.GetCPUData(), CV_32FC1, 1.0f / 65535.0f);
+
+  SetDecodeRes();
+  ApplyLinearization();
+  ApplyHighlightReconstruct();
+  ApplyDebayer();
+  ApplyGeometricCorrections();
+  ConvertToWorkingSpace();
 
   cv::Mat final_img = cv::Mat();
   final_img.create(process_buffer_.GetCPUData().rows, process_buffer_.GetCPUData().cols, CV_32FC4);

@@ -174,3 +174,73 @@ set(PUERHLAB_LENSFUN_INCLUDE_DIR "${PUERHLAB_LENSFUN_INSTALL_DIR}/include" CACHE
     "Header directory for the bundled Lensfun build.")
 set(PUERHLAB_LENSFUN_LIBRARY_DIR "${PUERHLAB_LENSFUN_INSTALL_DIR}/lib" CACHE INTERNAL
     "Runtime library directory for the bundled Lensfun build.")
+
+set(PUERHLAB_METALCPP_SOURCE_DIR
+    "${CMAKE_CURRENT_SOURCE_DIR}/metal-cpp"
+    CACHE PATH
+    "Path to the bundled metal-cpp source checkout.")
+set(PUERHLAB_METALCPP_HELPER_INCLUDE_DIR
+    "${CMAKE_CURRENT_SOURCE_DIR}/include"
+    CACHE INTERNAL
+    "Header directory for project-local metal-cpp wrapper headers.")
+
+if(NOT EXISTS "${PUERHLAB_METALCPP_SOURCE_DIR}/Metal/Metal.hpp")
+    message(FATAL_ERROR
+        "Bundled metal-cpp source was not found at ${PUERHLAB_METALCPP_SOURCE_DIR}. "
+        "Run `git submodule update --init --recursive pu-erh_lab/src/third_party/metal-cpp` and re-configure.")
+endif()
+
+add_library(puerhlab_metal_cpp INTERFACE)
+target_include_directories(puerhlab_metal_cpp
+    INTERFACE
+        "${PUERHLAB_METALCPP_HELPER_INCLUDE_DIR}"
+)
+target_include_directories(puerhlab_metal_cpp
+    SYSTEM INTERFACE
+        "${PUERHLAB_METALCPP_SOURCE_DIR}"
+)
+target_compile_features(puerhlab_metal_cpp INTERFACE cxx_std_20)
+
+if(APPLE)
+    find_library(PUERHLAB_FOUNDATION_FRAMEWORK Foundation REQUIRED)
+    find_library(PUERHLAB_QUARTZCORE_FRAMEWORK QuartzCore REQUIRED)
+    find_library(PUERHLAB_METAL_FRAMEWORK Metal REQUIRED)
+
+    add_library(puerhlab_metal_cpp_runtime STATIC
+        "${CMAKE_CURRENT_SOURCE_DIR}/puerhlab_metal_cpp_implementation.cpp"
+    )
+    set_target_properties(puerhlab_metal_cpp_runtime PROPERTIES
+        AUTOMOC OFF
+        AUTOUIC OFF
+        AUTORCC OFF
+    )
+    target_link_libraries(puerhlab_metal_cpp_runtime
+        PUBLIC
+            "${PUERHLAB_FOUNDATION_FRAMEWORK}"
+            "${PUERHLAB_QUARTZCORE_FRAMEWORK}"
+            "${PUERHLAB_METAL_FRAMEWORK}"
+    )
+    target_include_directories(puerhlab_metal_cpp_runtime
+        PRIVATE
+            "${PUERHLAB_METALCPP_HELPER_INCLUDE_DIR}"
+    )
+    target_include_directories(puerhlab_metal_cpp_runtime
+        SYSTEM PRIVATE
+            "${PUERHLAB_METALCPP_SOURCE_DIR}"
+    )
+
+    target_link_libraries(puerhlab_metal_cpp
+        INTERFACE
+            puerhlab_metal_cpp_runtime
+            "${PUERHLAB_FOUNDATION_FRAMEWORK}"
+            "${PUERHLAB_QUARTZCORE_FRAMEWORK}"
+            "${PUERHLAB_METAL_FRAMEWORK}"
+    )
+endif()
+
+if(NOT TARGET puerhlab::metal_cpp)
+    add_library(puerhlab::metal_cpp ALIAS puerhlab_metal_cpp)
+endif()
+
+set(PUERHLAB_METALCPP_INCLUDE_DIR "${PUERHLAB_METALCPP_SOURCE_DIR}" CACHE INTERNAL
+    "Header directory for the bundled metal-cpp checkout.")

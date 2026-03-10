@@ -41,6 +41,62 @@ def_library(StrConv
     PUBLIC_DEPS utfcpp
 )
 
+if(PUERHLAB_METAL_ENABLED)
+    set(METAL_UTILS_SRC "${CMAKE_CURRENT_SOURCE_DIR}/metal/metal_utils/metal_convert.metal")
+    set(METAL_UTILS_AIR "${CMAKE_CURRENT_BINARY_DIR}/metal/metal_utils/metal_convert.air")
+    set(METAL_UTILS_METALLIB "${CMAKE_CURRENT_BINARY_DIR}/metal/metal_utils/metal_convert.metallib")
+    find_program(PUERHLAB_XCRUN_EXECUTABLE xcrun REQUIRED)
+    execute_process(
+        COMMAND ${PUERHLAB_XCRUN_EXECUTABLE} --sdk macosx --find metal
+        RESULT_VARIABLE PUERHLAB_METAL_COMPILER_STATUS
+        OUTPUT_VARIABLE PUERHLAB_METAL_EXECUTABLE
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_VARIABLE PUERHLAB_METAL_COMPILER_ERROR
+    )
+    if(NOT PUERHLAB_METAL_COMPILER_STATUS EQUAL 0)
+        string(STRIP "${PUERHLAB_METAL_COMPILER_ERROR}" PUERHLAB_METAL_COMPILER_ERROR)
+        message(FATAL_ERROR "Metal compiler is not available via xcrun. ${PUERHLAB_METAL_COMPILER_ERROR}")
+    endif()
+    execute_process(
+        COMMAND ${PUERHLAB_XCRUN_EXECUTABLE} --sdk macosx --find metallib
+        RESULT_VARIABLE PUERHLAB_METALLIB_STATUS
+        OUTPUT_VARIABLE PUERHLAB_METALLIB_EXECUTABLE
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_VARIABLE PUERHLAB_METALLIB_ERROR
+    )
+    if(NOT PUERHLAB_METALLIB_STATUS EQUAL 0)
+        string(STRIP "${PUERHLAB_METALLIB_ERROR}" PUERHLAB_METALLIB_ERROR)
+        message(FATAL_ERROR "Metal library linker is not available via xcrun. ${PUERHLAB_METALLIB_ERROR}")
+    endif()
+
+    add_custom_command(
+        OUTPUT ${METAL_UTILS_AIR}
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/metal/metal_utils"
+        COMMAND ${PUERHLAB_METAL_EXECUTABLE} -c "${METAL_UTILS_SRC}" -o "${METAL_UTILS_AIR}"
+        DEPENDS ${METAL_UTILS_SRC}
+        COMMENT "Compiling Metal utility shaders"
+        VERBATIM
+    )
+    add_custom_command(
+        OUTPUT ${METAL_UTILS_METALLIB}
+        COMMAND ${PUERHLAB_METALLIB_EXECUTABLE} "${METAL_UTILS_AIR}" -o "${METAL_UTILS_METALLIB}"
+        DEPENDS ${METAL_UTILS_AIR}
+        COMMENT "Linking Metal utility library"
+        VERBATIM
+    )
+    add_custom_target(MetalUtilsShaders DEPENDS ${METAL_UTILS_METALLIB})
+
+    def_library(MetalContext SOURCES metal/metal_context.cpp)
+    target_link_libraries(MetalContext PUBLIC puerhlab::metal_cpp)
+    def_library(MetalUtils
+        SOURCES metal/metal_utils/metal_convert_utils.cpp
+        PUBLIC_DEPS MetalContext puerhlab::metal_cpp ${PUERHLAB_OPENCV_CORE_DEPS}
+    )
+    add_dependencies(MetalUtils MetalUtilsShaders)
+    target_compile_definitions(MetalUtils PRIVATE PUERHLAB_METAL_UTILS_METALLIB_PATH="${METAL_UTILS_METALLIB}")
+    def_library(MetalImage SOURCES image/metal_image.cpp PUBLIC_DEPS MetalContext MetalUtils puerhlab::metal_cpp ${PUERHLAB_OPENCV_CORE_DEPS})
+endif()
+
 # ==============================================================================
 # 2. Core Image Handling 
 # ==============================================================================
@@ -56,6 +112,8 @@ set(IMAGE_BUFFER_DEPS Exiv2 ${PUERHLAB_OPENCV_CORE_DEPS} libraw::raw_r TimeProvi
 # Platform specific dependencies
 if (WIN32)
     target_link_libraries(ImageBuffer PUBLIC ${IMAGE_BUFFER_DEPS} easy_profiler xxHash::xxhash)
+elseif(PUERHLAB_METAL_ENABLED)
+    target_link_libraries(ImageBuffer PUBLIC ${IMAGE_BUFFER_DEPS} xxHash MetalImage)
 else()
     target_link_libraries(ImageBuffer PUBLIC ${IMAGE_BUFFER_DEPS} xxHash)
 endif()

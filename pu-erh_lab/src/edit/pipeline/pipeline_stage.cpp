@@ -312,9 +312,8 @@ std::shared_ptr<ImageBuffer> PipelineStage::ApplyGpuOperators(OperatorParams& gl
       int width  = 0;
       int height = 0;
       if (input_img_->gpu_data_valid_) {
-        const auto& gpu_data = input_img_->GetGPUData();
-        width                = gpu_data.cols;
-        height               = gpu_data.rows;
+        width                = input_img_->GetGPUWidth();
+        height               = input_img_->GetGPUHeight();
       } else if (input_img_->cpu_data_valid_) {
         const auto& cpu_data = input_img_->GetCPUData();
         width                = cpu_data.cols;
@@ -346,10 +345,9 @@ std::shared_ptr<ImageBuffer> PipelineStage::ApplyGpuOperators(OperatorParams& gl
 
     auto current_img = std::make_shared<ImageBuffer>();
     if (input_img_->gpu_data_valid_ && !input_img_->buffer_valid_) {
-      auto& input_gpu_mat = input_img_->GetGPUData();
-      current_img->InitGPUData(input_gpu_mat.cols, input_gpu_mat.rows, input_gpu_mat.type());
-      auto& output_gpu_mat = current_img->GetGPUData();
-      input_gpu_mat.copyTo(output_gpu_mat);
+      current_img->InitGPUData(input_img_->GetGPUWidth(), input_img_->GetGPUHeight(),
+                               input_img_->GetGPUType());
+      input_img_->CopyGPUDataTo(*current_img);
       current_img->gpu_data_valid_ = true;
     } else if (input_img_->buffer_valid_) {
       auto buffer = input_img_->GetBuffer();
@@ -431,9 +429,8 @@ std::shared_ptr<ImageBuffer> PipelineStage::ApplyCpuOperators(OperatorParams& gl
       int width  = 0;
       int height = 0;
       if (input_img_->gpu_data_valid_) {
-        const auto& gpu_data = input_img_->GetGPUData();
-        width                = gpu_data.cols;
-        height               = gpu_data.rows;
+        width                = input_img_->GetGPUWidth();
+        height               = input_img_->GetGPUHeight();
       } else if (input_img_->cpu_data_valid_) {
         const auto& cpu_data = input_img_->GetCPUData();
         width                = cpu_data.cols;

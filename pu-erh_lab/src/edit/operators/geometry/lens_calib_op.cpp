@@ -511,7 +511,10 @@ void LensCalibOp::ApplyGPU(std::shared_ptr<ImageBuffer> input) {
   if (!input->gpu_data_valid_) {
     input->SyncToGPU();
   }
-  auto& gpu = input->GetGPUData();
+#ifndef HAVE_CUDA
+  throw std::runtime_error("LensCalibOp::ApplyGPU requires HAVE_CUDA");
+#else
+  auto& gpu = input->GetCUDAImage();
   if (gpu.empty()) {
     std::cout << "LensCalibOp: Input GPU data is empty, skipping lens calibration." << std::endl;
     return;
@@ -540,11 +543,9 @@ void LensCalibOp::ApplyGPU(std::shared_ptr<ImageBuffer> input) {
 
 #ifdef HAVE_CUDA
   CUDA::ApplyLensCalibration(gpu, resolved_params_);
-#else
-  (void)gpu;
-  return;
-#endif
   input->gpu_data_valid_ = true;
+#endif
+#endif
 }
 
 auto LensCalibOp::GetParams() const -> nlohmann::json {

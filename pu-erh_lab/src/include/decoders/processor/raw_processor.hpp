@@ -20,8 +20,7 @@ namespace puerhlab {
 
 enum class RawGpuBackend {
   CPU,
-  CUDA,
-  Metal,
+  GPU,
 };
 
 struct RawParams {

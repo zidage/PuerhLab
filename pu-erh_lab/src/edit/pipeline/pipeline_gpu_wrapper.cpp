@@ -22,7 +22,7 @@ class UnavailableGPUPipeline final : public GPUPipelineImpl {
   void SetFrameSink(IFrameSink*) override {}
 
   void Execute(std::shared_ptr<ImageBuffer>) override {
-    throw std::runtime_error("GPU backend unavailable: CUDA support was not compiled.");
+    throw std::runtime_error("GPU backend unavailable: compiled GPU pipeline implementation is missing.");
   }
 
   void ReleaseResources() override {}
@@ -58,7 +58,7 @@ void GPUPipelineWrapper::Execute(std::shared_ptr<ImageBuffer> output) {
 }
 
 auto GPUPipelineWrapper::HasAcceleratedBackend() const -> bool {
-#ifdef HAVE_CUDA
+#if defined(HAVE_CUDA) || defined(HAVE_METAL)
   return true;
 #else
   return false;

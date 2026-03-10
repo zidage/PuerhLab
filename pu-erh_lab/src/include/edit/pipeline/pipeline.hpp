@@ -12,7 +12,7 @@
 
 
 namespace puerhlab {
-enum class PipelineBackend { CPU, CUDA, Metal, OpenCL };
+enum class PipelineBackend { CPU, GPU };
 
 class PipelineExecutor {
  public:

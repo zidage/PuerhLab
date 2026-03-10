@@ -14,13 +14,16 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 if(APPLE)
     set(PUERHLAB_ENABLE_CUDA_DEFAULT OFF)
+    set(PUERHLAB_ENABLE_METAL_DEFAULT ON)
     set(PUERHLAB_ENABLE_OPENGL_EDITOR_DEFAULT OFF)
 else()
     set(PUERHLAB_ENABLE_CUDA_DEFAULT ON)
+    set(PUERHLAB_ENABLE_METAL_DEFAULT OFF)
     set(PUERHLAB_ENABLE_OPENGL_EDITOR_DEFAULT ON)
 endif()
 
 option(PUERHLAB_ENABLE_CUDA "Enable CUDA-accelerated pipeline backends when CUDA is available." ${PUERHLAB_ENABLE_CUDA_DEFAULT})
+option(PUERHLAB_ENABLE_METAL "Enable Metal-accelerated pipeline backends when building on Apple platforms." ${PUERHLAB_ENABLE_METAL_DEFAULT})
 option(PUERHLAB_ENABLE_OPENGL_EDITOR "Build the OpenGL-based editor UI when the required backend is available." ${PUERHLAB_ENABLE_OPENGL_EDITOR_DEFAULT})
 option(PUERHLAB_BUILD_TESTS "Build pu-erh_lab tests and demos." ON)
 
@@ -137,6 +140,15 @@ if (PUERHLAB_ENABLE_CUDA AND CUDAToolkit_FOUND)
     set(PUERHLAB_CUDA_ENABLED ON)
 elseif(PUERHLAB_ENABLE_CUDA)
     message(STATUS "CUDA toolkit not found; building without CUDA backends.")
+endif()
+
+# Metal
+set(PUERHLAB_METAL_ENABLED OFF)
+if(PUERHLAB_ENABLE_METAL AND APPLE)
+    add_compile_definitions(HAVE_METAL)
+    set(PUERHLAB_METAL_ENABLED ON)
+elseif(PUERHLAB_ENABLE_METAL)
+    message(STATUS "Metal support is only available on Apple platforms; building without Metal backends.")
 endif()
 
 # Dependencies

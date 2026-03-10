@@ -67,8 +67,8 @@ void RawDecoder::Decode(std::vector<char>&& buffer, std::shared_ptr<Image> sourc
   }
 
   RawParams raw_params;
-#ifdef HAVE_CUDA
-  raw_params.gpu_backend_ = RawGpuBackend::CUDA;
+#if defined(HAVE_CUDA) || defined(HAVE_METAL)
+  raw_params.gpu_backend_ = RawGpuBackend::GPU;
 #else
   raw_params.gpu_backend_ = RawGpuBackend::CPU;
 #endif
