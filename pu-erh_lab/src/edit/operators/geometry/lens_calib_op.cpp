@@ -29,6 +29,9 @@
 #ifdef HAVE_CUDA
 #include "edit/operators/geometry/cuda_lens_calib_ops.hpp"
 #endif
+#ifdef HAVE_METAL
+#include "edit/operators/geometry/metal_lens_calib.hpp"
+#endif
 #include "utils/string/convert.hpp"
 
 namespace puerhlab {
@@ -495,8 +498,8 @@ auto LensCalibOp::ProjectionToString(LensCalibProjectionType projection) -> std:
 }
 
 void LensCalibOp::Apply(std::shared_ptr<ImageBuffer>) {
-  // CPU and non-CUDA builds keep lens calibration as a no-op until a non-CUDA
-  // accelerated backend (for example Metal) is implemented.
+  // CPU builds keep lens calibration as a no-op. GPU backends are implemented
+  // in ApplyGPU().
 }
 
 void LensCalibOp::ApplyGPU(std::shared_ptr<ImageBuffer> input) {
@@ -511,9 +514,7 @@ void LensCalibOp::ApplyGPU(std::shared_ptr<ImageBuffer> input) {
   if (!input->gpu_data_valid_) {
     input->SyncToGPU();
   }
-#ifndef HAVE_CUDA
-  throw std::runtime_error("LensCalibOp::ApplyGPU requires HAVE_CUDA");
-#else
+#if defined(HAVE_CUDA)
   auto& gpu = input->GetCUDAImage();
   if (gpu.empty()) {
     std::cout << "LensCalibOp: Input GPU data is empty, skipping lens calibration." << std::endl;
@@ -545,6 +546,38 @@ void LensCalibOp::ApplyGPU(std::shared_ptr<ImageBuffer> input) {
   CUDA::ApplyLensCalibration(gpu, resolved_params_);
   input->gpu_data_valid_ = true;
 #endif
+#elif defined(HAVE_METAL)
+  auto& gpu = input->GetMetalImage();
+  if (gpu.Empty()) {
+    std::cout << "LensCalibOp: Input GPU data is empty, skipping lens calibration." << std::endl;
+    return;
+  }
+
+  resolved_params_.src_width  = static_cast<std::int32_t>(gpu.Width());
+  resolved_params_.src_height = static_cast<std::int32_t>(gpu.Height());
+  resolved_params_.dst_width  = static_cast<std::int32_t>(gpu.Width());
+  resolved_params_.dst_height = static_cast<std::int32_t>(gpu.Height());
+
+  const double width  = (gpu.Width() >= 2U) ? static_cast<double>(gpu.Width() - 1U) : 1.0;
+  const double height = (gpu.Height() >= 2U) ? static_cast<double>(gpu.Height() - 1U) : 1.0;
+  const double crop_factor =
+      IsFinitePositive(resolved_params_.camera_crop_factor) ? resolved_params_.camera_crop_factor : 1.0;
+  const double real_focal =
+      IsFinitePositive(resolved_params_.real_focal_mm) ? resolved_params_.real_focal_mm : 1.0;
+
+  const double norm_scale =
+      static_cast<double>(kFullFrameDiagonalMm) / crop_factor / std::hypot(width + 1.0, height + 1.0) /
+      real_focal;
+  resolved_params_.norm_scale = static_cast<float>(norm_scale);
+  resolved_params_.norm_unscale =
+      (std::fabs(norm_scale) > kEpsilon) ? static_cast<float>(1.0 / norm_scale) : 1.0f;
+  resolved_params_.center_x = static_cast<float>((width * 0.5) * norm_scale);
+  resolved_params_.center_y = static_cast<float>((height * 0.5) * norm_scale);
+
+  metal::ApplyLensCalibration(gpu, resolved_params_);
+  input->gpu_data_valid_ = true;
+#else
+  throw std::runtime_error("LensCalibOp::ApplyGPU requires HAVE_CUDA or HAVE_METAL");
 #endif
 }
 

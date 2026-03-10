@@ -45,6 +45,12 @@ if(PUERHLAB_METAL_ENABLED)
     set(METAL_UTILS_SRC "${CMAKE_CURRENT_SOURCE_DIR}/metal/metal_utils/metal_convert.metal")
     set(METAL_UTILS_AIR "${CMAKE_CURRENT_BINARY_DIR}/metal/metal_utils/metal_convert.air")
     set(METAL_UTILS_METALLIB "${CMAKE_CURRENT_BINARY_DIR}/metal/metal_utils/metal_convert.metallib")
+    set(METAL_GEOMETRY_UTILS_SRC "${CMAKE_CURRENT_SOURCE_DIR}/metal/metal_utils/geometry_utils.metal")
+    set(METAL_GEOMETRY_UTILS_AIR "${CMAKE_CURRENT_BINARY_DIR}/metal/metal_utils/geometry_utils.air")
+    set(METAL_GEOMETRY_UTILS_METALLIB "${CMAKE_CURRENT_BINARY_DIR}/metal/metal_utils/geometry_utils.metallib")
+    set(METAL_LENS_CALIB_SRC "${CMAKE_CURRENT_SOURCE_DIR}/edit/operators/geometry/metal_shader/lens_calib.metal")
+    set(METAL_LENS_CALIB_AIR "${CMAKE_CURRENT_BINARY_DIR}/edit/operators/geometry/metal_shader/lens_calib.air")
+    set(METAL_LENS_CALIB_METALLIB "${CMAKE_CURRENT_BINARY_DIR}/edit/operators/geometry/metal_shader/lens_calib.metallib")
     set(METAL_TO_LINEAR_REF_SRC "${CMAKE_CURRENT_SOURCE_DIR}/decoders/processor/operators/gpu/metal_shader/to_linear_ref.metal")
     set(METAL_TO_LINEAR_REF_AIR "${CMAKE_CURRENT_BINARY_DIR}/decoders/processor/operators/gpu/metal_shader/to_linear_ref.air")
     set(METAL_TO_LINEAR_REF_METALLIB "${CMAKE_CURRENT_BINARY_DIR}/decoders/processor/operators/gpu/metal_shader/to_linear_ref.metallib")
@@ -97,6 +103,40 @@ if(PUERHLAB_METAL_ENABLED)
         VERBATIM
     )
     add_custom_target(MetalUtilsShaders DEPENDS ${METAL_UTILS_METALLIB})
+
+    add_custom_command(
+        OUTPUT ${METAL_GEOMETRY_UTILS_AIR}
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/metal/metal_utils"
+        COMMAND ${PUERHLAB_METAL_EXECUTABLE} -c "${METAL_GEOMETRY_UTILS_SRC}" -o "${METAL_GEOMETRY_UTILS_AIR}"
+        DEPENDS ${METAL_GEOMETRY_UTILS_SRC}
+        COMMENT "Compiling Metal geometry utility shaders"
+        VERBATIM
+    )
+    add_custom_command(
+        OUTPUT ${METAL_GEOMETRY_UTILS_METALLIB}
+        COMMAND ${PUERHLAB_METALLIB_EXECUTABLE} "${METAL_GEOMETRY_UTILS_AIR}" -o "${METAL_GEOMETRY_UTILS_METALLIB}"
+        DEPENDS ${METAL_GEOMETRY_UTILS_AIR}
+        COMMENT "Linking Metal geometry utility library"
+        VERBATIM
+    )
+    add_custom_target(MetalGeometryUtilsShaders DEPENDS ${METAL_GEOMETRY_UTILS_METALLIB})
+
+    add_custom_command(
+        OUTPUT ${METAL_LENS_CALIB_AIR}
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/edit/operators/geometry/metal_shader"
+        COMMAND ${PUERHLAB_METAL_EXECUTABLE} -c "${METAL_LENS_CALIB_SRC}" -o "${METAL_LENS_CALIB_AIR}"
+        DEPENDS ${METAL_LENS_CALIB_SRC}
+        COMMENT "Compiling Metal lens calibration shader"
+        VERBATIM
+    )
+    add_custom_command(
+        OUTPUT ${METAL_LENS_CALIB_METALLIB}
+        COMMAND ${PUERHLAB_METALLIB_EXECUTABLE} "${METAL_LENS_CALIB_AIR}" -o "${METAL_LENS_CALIB_METALLIB}"
+        DEPENDS ${METAL_LENS_CALIB_AIR}
+        COMMENT "Linking Metal lens calibration library"
+        VERBATIM
+    )
+    add_custom_target(LensCalibOpMetalShaders DEPENDS ${METAL_LENS_CALIB_METALLIB})
 
     add_custom_command(
         OUTPUT ${METAL_TO_LINEAR_REF_AIR}
@@ -174,6 +214,12 @@ if(PUERHLAB_METAL_ENABLED)
     add_dependencies(MetalUtils MetalUtilsShaders)
     target_compile_definitions(MetalUtils PRIVATE PUERHLAB_METAL_UTILS_METALLIB_PATH="${METAL_UTILS_METALLIB}")
     def_library(MetalImage SOURCES image/metal_image.cpp PUBLIC_DEPS MetalContext MetalUtils puerhlab::metal_cpp ${PUERHLAB_OPENCV_CORE_DEPS})
+    def_library(MetalGeometryUtils
+        SOURCES metal/metal_utils/geometry_utils.cpp
+        PUBLIC_DEPS MetalImage puerhlab::metal_cpp ${PUERHLAB_OPENCV_CORE_DEPS}
+    )
+    add_dependencies(MetalGeometryUtils MetalGeometryUtilsShaders)
+    target_compile_definitions(MetalGeometryUtils PRIVATE PUERHLAB_METAL_GEOMETRY_UTILS_METALLIB_PATH="${METAL_GEOMETRY_UTILS_METALLIB}")
 endif()
 
 # ==============================================================================
@@ -302,11 +348,23 @@ if(PUERHLAB_CUDA_ENABLED)
         edit/operators/geometry/cuda_lens_calib_ops.cu
     )
 endif()
+if(PUERHLAB_METAL_ENABLED)
+    list(APPEND OPERATORS_SRCS
+        edit/operators/geometry/metal_lens_calib.cpp
+    )
+endif()
 
 def_library(Operators
     SOURCES ${OPERATORS_SRCS}
     PUBLIC_DEPS ImageBuffer JSON OpenColorIO::OpenColorIO hwy::hwy lensfun::lensfun
 )
+if(PUERHLAB_METAL_ENABLED)
+    add_dependencies(Operators LensCalibOpMetalShaders)
+    target_link_libraries(Operators PRIVATE MetalGeometryUtils)
+    target_compile_definitions(Operators PRIVATE
+        PUERHLAB_METAL_LENS_CALIB_METALLIB_PATH="${METAL_LENS_CALIB_METALLIB}"
+    )
+endif()
 if(DEFINED PUERHLAB_LENSFUN_INCLUDE_DIR AND NOT "${PUERHLAB_LENSFUN_INCLUDE_DIR}" STREQUAL "")
     target_include_directories(Operators SYSTEM BEFORE PUBLIC "${PUERHLAB_LENSFUN_INCLUDE_DIR}")
 endif()

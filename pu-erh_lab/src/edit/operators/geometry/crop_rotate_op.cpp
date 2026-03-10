@@ -16,6 +16,9 @@
 #ifdef HAVE_CUDA
 #include "edit/operators/geometry/cuda_geometry_ops.hpp"
 #endif
+#ifdef HAVE_METAL
+#include "metal/metal_utils/geometry_utils.hpp"
+#endif
 
 namespace puerhlab {
 namespace {
@@ -286,6 +289,12 @@ auto MakeWarpBorderScalar(int channels) -> cv::Scalar {
   return cv::Scalar::all(0.0);
 }
 
+#ifdef HAVE_METAL
+auto MakeMetalWarpBorderScalar(const metal::MetalImage& image) -> cv::Scalar {
+  return MakeWarpBorderScalar(CV_MAT_CN(metal::MetalImage::CVTypeFromPixelFormat(image.Format())));
+}
+#endif
+
 auto ComputeCropRoi(int width, int height, const NormalizedCropRect& rect) -> cv::Rect {
   const auto clamped = ClampCropRect(rect);
   const int  roi_w =
@@ -379,9 +388,9 @@ void CropRotateOp::Apply(std::shared_ptr<ImageBuffer> input) {
 }
 
 void CropRotateOp::ApplyGPU(std::shared_ptr<ImageBuffer> input) {
-#ifndef HAVE_CUDA
-  throw std::runtime_error("CropRotateOp::ApplyGPU requires HAVE_CUDA");
-#else
+#if !defined(HAVE_CUDA) && !defined(HAVE_METAL)
+  throw std::runtime_error("CropRotateOp::ApplyGPU requires HAVE_CUDA or HAVE_METAL");
+#elif defined(HAVE_CUDA)
   auto& img = input->GetCUDAImage();
   const int width  = img.cols;
   const int height = img.rows;
@@ -418,6 +427,40 @@ void CropRotateOp::ApplyGPU(std::shared_ptr<ImageBuffer> input) {
   throw std::runtime_error("CropRotateOp::ApplyGPU requires HAVE_CUDA");
 #endif
   img = std::move(rotated_crop);
+#elif defined(HAVE_METAL)
+  auto& img = input->GetMetalImage();
+  const int width  = static_cast<int>(img.Width());
+  const int height = static_cast<int>(img.Height());
+  if (width <= 0 || height <= 0) {
+    return;
+  }
+
+  if (!enabled_ || !enable_crop_) {
+    return;
+  }
+
+  const float angle_degrees = NormalizeAngleDegrees(angle_degrees_);
+  const auto  resolved_rect = ResolveRuntimeCropRect(crop_rect_, width, height, aspect_ratio_preset_,
+                                                     aspect_ratio_width_, aspect_ratio_height_);
+  const auto  crop_rect     = ClampCropRectForRotation(resolved_rect, angle_degrees);
+  const bool  has_rotation  = std::abs(angle_degrees) > kAngleEpsilon;
+  if (IsFullCropRect(crop_rect) && !has_rotation) {
+    return;
+  }
+
+  metal::MetalImage dst;
+  if (!has_rotation) {
+    const cv::Rect roi = ComputeCropRoi(width, height, crop_rect);
+    metal::utils::CropResizeTexture(img, dst, roi, roi.size());
+    img = std::move(dst);
+    return;
+  }
+
+  // In rotated-crop-frame semantics, expand_to_fit is intentionally ignored.
+  cv::Size out_size;
+  cv::Mat  matrix = BuildRotatedCropMatrix(width, height, crop_rect, angle_degrees, out_size);
+  metal::utils::WarpAffineLinearTexture(img, dst, matrix, out_size, MakeMetalWarpBorderScalar(img));
+  img = std::move(dst);
 #endif
 }
 
@@ -425,7 +468,7 @@ auto CropRotateOp::GetParams() const -> nlohmann::json {
   return {{std::string(script_name_),
            {{"enabled", enabled_},
             {"angle_degrees", angle_degrees_},
-           {"enable_crop", enable_crop_},
+            {"enable_crop", enable_crop_},
             {"crop_rect",
              {{"x", crop_rect_.x_}, {"y", crop_rect_.y_}, {"w", crop_rect_.w_}, {"h", crop_rect_.h_}}},
             {"expand_to_fit", expand_to_fit_},
