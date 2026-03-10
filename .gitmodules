@@ -9,3 +9,9 @@
 [submodule "pu-erh_lab/src/third_party/lensfun"]
 	path = pu-erh_lab/src/third_party/lensfun
 	url = https://github.com/lensfun/lensfun.git
+[submodule "metal-cpp"]
+	path = metal-cpp
+	url = https://github.com/bkaradzic/metal-cpp
+[submodule "pu-erh_lab/src/third_party/metal-cpp"]
+	path = pu-erh_lab/src/third_party/metal-cpp
+	url = https://github.com/bkaradzic/metal-cpp
