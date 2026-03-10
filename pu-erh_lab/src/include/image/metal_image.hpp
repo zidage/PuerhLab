@@ -5,6 +5,7 @@
 
 #include <cstdint>
 #include <opencv2/core/mat.hpp>
+#include <opencv2/core/types.hpp>
 
 #ifdef HAVE_METAL
 #include <puerhlab/metal/Metal.hpp>
@@ -56,6 +57,7 @@ class MetalImage {
   void              Upload(const cv::Mat& host_image);
   void              Download(cv::Mat& host_image) const;
   void              CopyTo(MetalImage& dst) const;
+  void              CropTo(MetalImage& dst, const cv::Rect& crop_rect) const;
   void              ConvertTo(MetalImage& dst, PixelFormat dst_format, double alpha = 1.0,
                               double beta = 0.0) const;
   void              Release() noexcept;

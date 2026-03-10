@@ -15,7 +15,16 @@ CompileFlags:
 ---
 
 If:
-    PathMatch: .*\.(c|h)pp
+    PathMatch: ^pu-erh_lab/tests/.*\.(c|h)pp$
+CompileFlags:
+    CompilationDatabase: build/macos-debug-tests
+Diagnostics:
+  Suppress: redefinition_different_typedef
+
+---
+
+If:
+    PathMatch: ^pu-erh_lab/src/.*\.(c|h)pp$
 CompileFlags:
     CompilationDatabase: build/macos-debug
 Diagnostics:

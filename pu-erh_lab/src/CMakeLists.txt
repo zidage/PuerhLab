@@ -45,6 +45,18 @@ if(PUERHLAB_METAL_ENABLED)
     set(METAL_UTILS_SRC "${CMAKE_CURRENT_SOURCE_DIR}/metal/metal_utils/metal_convert.metal")
     set(METAL_UTILS_AIR "${CMAKE_CURRENT_BINARY_DIR}/metal/metal_utils/metal_convert.air")
     set(METAL_UTILS_METALLIB "${CMAKE_CURRENT_BINARY_DIR}/metal/metal_utils/metal_convert.metallib")
+    set(METAL_TO_LINEAR_REF_SRC "${CMAKE_CURRENT_SOURCE_DIR}/decoders/processor/operators/gpu/metal_shader/to_linear_ref.metal")
+    set(METAL_TO_LINEAR_REF_AIR "${CMAKE_CURRENT_BINARY_DIR}/decoders/processor/operators/gpu/metal_shader/to_linear_ref.air")
+    set(METAL_TO_LINEAR_REF_METALLIB "${CMAKE_CURRENT_BINARY_DIR}/decoders/processor/operators/gpu/metal_shader/to_linear_ref.metallib")
+    set(METAL_DEBAYER_RCD_SRC "${CMAKE_CURRENT_SOURCE_DIR}/decoders/processor/operators/gpu/metal_shader/debayer_rcd.metal")
+    set(METAL_DEBAYER_RCD_AIR "${CMAKE_CURRENT_BINARY_DIR}/decoders/processor/operators/gpu/metal_shader/debayer_rcd.air")
+    set(METAL_DEBAYER_RCD_METALLIB "${CMAKE_CURRENT_BINARY_DIR}/decoders/processor/operators/gpu/metal_shader/debayer_rcd.metallib")
+    set(METAL_CVT_REF_SPACE_SRC "${CMAKE_CURRENT_SOURCE_DIR}/decoders/processor/operators/gpu/metal_shader/cvt_ref_space.metal")
+    set(METAL_CVT_REF_SPACE_AIR "${CMAKE_CURRENT_BINARY_DIR}/decoders/processor/operators/gpu/metal_shader/cvt_ref_space.air")
+    set(METAL_CVT_REF_SPACE_METALLIB "${CMAKE_CURRENT_BINARY_DIR}/decoders/processor/operators/gpu/metal_shader/cvt_ref_space.metallib")
+    set(METAL_HIGHLIGHT_RECONSTRUCT_SRC "${CMAKE_CURRENT_SOURCE_DIR}/decoders/processor/operators/gpu/metal_shader/highlight_reconstruct.metal")
+    set(METAL_HIGHLIGHT_RECONSTRUCT_AIR "${CMAKE_CURRENT_BINARY_DIR}/decoders/processor/operators/gpu/metal_shader/highlight_reconstruct.air")
+    set(METAL_HIGHLIGHT_RECONSTRUCT_METALLIB "${CMAKE_CURRENT_BINARY_DIR}/decoders/processor/operators/gpu/metal_shader/highlight_reconstruct.metallib")
     find_program(PUERHLAB_XCRUN_EXECUTABLE xcrun REQUIRED)
     execute_process(
         COMMAND ${PUERHLAB_XCRUN_EXECUTABLE} --sdk macosx --find metal
@@ -85,6 +97,73 @@ if(PUERHLAB_METAL_ENABLED)
         VERBATIM
     )
     add_custom_target(MetalUtilsShaders DEPENDS ${METAL_UTILS_METALLIB})
+
+    add_custom_command(
+        OUTPUT ${METAL_TO_LINEAR_REF_AIR}
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/decoders/processor/operators/gpu/metal_shader"
+        COMMAND ${PUERHLAB_METAL_EXECUTABLE} -c "${METAL_TO_LINEAR_REF_SRC}" -o "${METAL_TO_LINEAR_REF_AIR}"
+        DEPENDS ${METAL_TO_LINEAR_REF_SRC}
+        COMMENT "Compiling Metal ToLinearRef shader"
+        VERBATIM
+    )
+    add_custom_command(
+        OUTPUT ${METAL_TO_LINEAR_REF_METALLIB}
+        COMMAND ${PUERHLAB_METALLIB_EXECUTABLE} "${METAL_TO_LINEAR_REF_AIR}" -o "${METAL_TO_LINEAR_REF_METALLIB}"
+        DEPENDS ${METAL_TO_LINEAR_REF_AIR}
+        COMMENT "Linking Metal ToLinearRef library"
+        VERBATIM
+    )
+    add_custom_command(
+        OUTPUT ${METAL_DEBAYER_RCD_AIR}
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/decoders/processor/operators/gpu/metal_shader"
+        COMMAND ${PUERHLAB_METAL_EXECUTABLE} -c "${METAL_DEBAYER_RCD_SRC}" -o "${METAL_DEBAYER_RCD_AIR}"
+        DEPENDS ${METAL_DEBAYER_RCD_SRC}
+        COMMENT "Compiling Metal Debayer RCD shader"
+        VERBATIM
+    )
+    add_custom_command(
+        OUTPUT ${METAL_DEBAYER_RCD_METALLIB}
+        COMMAND ${PUERHLAB_METALLIB_EXECUTABLE} "${METAL_DEBAYER_RCD_AIR}" -o "${METAL_DEBAYER_RCD_METALLIB}"
+        DEPENDS ${METAL_DEBAYER_RCD_AIR}
+        COMMENT "Linking Metal Debayer RCD library"
+        VERBATIM
+    )
+    add_custom_command(
+        OUTPUT ${METAL_HIGHLIGHT_RECONSTRUCT_AIR}
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/decoders/processor/operators/gpu/metal_shader"
+        COMMAND ${PUERHLAB_METAL_EXECUTABLE} -c "${METAL_HIGHLIGHT_RECONSTRUCT_SRC}" -o "${METAL_HIGHLIGHT_RECONSTRUCT_AIR}"
+        DEPENDS ${METAL_HIGHLIGHT_RECONSTRUCT_SRC}
+        COMMENT "Compiling Metal HighlightReconstruct shader"
+        VERBATIM
+    )
+    add_custom_command(
+        OUTPUT ${METAL_CVT_REF_SPACE_AIR}
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/decoders/processor/operators/gpu/metal_shader"
+        COMMAND ${PUERHLAB_METAL_EXECUTABLE} -c "${METAL_CVT_REF_SPACE_SRC}" -o "${METAL_CVT_REF_SPACE_AIR}"
+        DEPENDS ${METAL_CVT_REF_SPACE_SRC}
+        COMMENT "Compiling Metal ConvertToRefSpace shader"
+        VERBATIM
+    )
+    add_custom_command(
+        OUTPUT ${METAL_HIGHLIGHT_RECONSTRUCT_METALLIB}
+        COMMAND ${PUERHLAB_METALLIB_EXECUTABLE} "${METAL_HIGHLIGHT_RECONSTRUCT_AIR}" -o "${METAL_HIGHLIGHT_RECONSTRUCT_METALLIB}"
+        DEPENDS ${METAL_HIGHLIGHT_RECONSTRUCT_AIR}
+        COMMENT "Linking Metal HighlightReconstruct library"
+        VERBATIM
+    )
+    add_custom_command(
+        OUTPUT ${METAL_CVT_REF_SPACE_METALLIB}
+        COMMAND ${PUERHLAB_METALLIB_EXECUTABLE} "${METAL_CVT_REF_SPACE_AIR}" -o "${METAL_CVT_REF_SPACE_METALLIB}"
+        DEPENDS ${METAL_CVT_REF_SPACE_AIR}
+        COMMENT "Linking Metal ConvertToRefSpace library"
+        VERBATIM
+    )
+    add_custom_target(RawProcessorOpMetalShaders DEPENDS
+        ${METAL_TO_LINEAR_REF_METALLIB}
+        ${METAL_DEBAYER_RCD_METALLIB}
+        ${METAL_HIGHLIGHT_RECONSTRUCT_METALLIB}
+        ${METAL_CVT_REF_SPACE_METALLIB}
+    )
 
     def_library(MetalContext SOURCES metal/metal_context.cpp)
     target_link_libraries(MetalContext PUBLIC puerhlab::metal_cpp)
@@ -156,6 +235,13 @@ if(PUERHLAB_CUDA_ENABLED)
         decoders/processor/operators/gpu/cuda_rotate.cu
         decoders/processor/operators/gpu/cuda_white_balance.cu
     )
+elseif(PUERHLAB_METAL_ENABLED)
+    set(RAW_OP_GPU_SRCS
+        decoders/processor/operators/gpu/metal_cvt_ref_space.cpp
+        decoders/processor/operators/gpu/metal_debayer_rcd.cpp
+        decoders/processor/operators/gpu/metal_highlight_reconstruct.cpp
+        decoders/processor/operators/gpu/metal_to_linear_ref.cpp
+    )
 endif()
 
 # RawProcessorOp Target
@@ -167,6 +253,15 @@ def_library(RawProcessorOp
 if(PUERHLAB_CUDA_ENABLED)
     set_target_properties(RawProcessorOp PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
     target_compile_definitions(RawProcessorOp PUBLIC HAVE_CUDA)
+endif()
+if(PUERHLAB_METAL_ENABLED)
+    add_dependencies(RawProcessorOp RawProcessorOpMetalShaders)
+    target_compile_definitions(RawProcessorOp PRIVATE
+        PUERHLAB_METAL_TO_LINEAR_REF_METALLIB_PATH="${METAL_TO_LINEAR_REF_METALLIB}"
+        PUERHLAB_METAL_DEBAYER_RCD_METALLIB_PATH="${METAL_DEBAYER_RCD_METALLIB}"
+        PUERHLAB_METAL_HIGHLIGHT_RECONSTRUCT_METALLIB_PATH="${METAL_HIGHLIGHT_RECONSTRUCT_METALLIB}"
+        PUERHLAB_METAL_CVT_REF_SPACE_METALLIB_PATH="${METAL_CVT_REF_SPACE_METALLIB}"
+    )
 endif()
 
 # --- Edit Operators ---

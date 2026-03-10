@@ -43,6 +43,16 @@ if(PUERHLAB_METAL_ENABLED)
   target_include_directories(MetalUtilsTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
   target_link_libraries(MetalUtilsTest PRIVATE GTest::gtest_main MetalImage MetalUtils ${PUERHLAB_TEST_OPENCV_MIN_DEPS})
   gtest_discover_tests(MetalUtilsTest TEST_PREFIX "MetalUtilsTest.")
+
+  add_executable(MetalRawOpsTest raw/metal_raw_ops_test.cpp)
+  target_include_directories(MetalRawOpsTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
+  target_link_libraries(MetalRawOpsTest PRIVATE GTest::gtest_main RawProcessorOp ${PUERHLAB_TEST_OPENCV_MIN_DEPS})
+  gtest_discover_tests(MetalRawOpsTest TEST_PREFIX "MetalRawOpsTest.")
+
+  add_executable(MetalRawStagePreviewTest raw/metal_raw_stage_preview_test.cpp)
+  target_include_directories(MetalRawStagePreviewTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
+  target_link_libraries(MetalRawStagePreviewTest PRIVATE GTest::gtest_main EditPipeline RawProcessor ThreadPool opencv_highgui ${PUERHLAB_TEST_OPENCV_MIN_DEPS})
+  gtest_discover_tests(MetalRawStagePreviewTest TEST_PREFIX "MetalRawStagePreviewTest.")
 endif()
 
 # add_executable(ImageDecoderTest decoders/image_decoder_test.cpp)

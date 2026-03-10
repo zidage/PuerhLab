@@ -313,6 +313,16 @@ void MetalImage::CopyTo(MetalImage& dst) const {
   SubmitAndWait(command_buffer);
 }
 
+void MetalImage::CropTo(MetalImage& dst, const cv::Rect& crop_rect) const {
+  if (Empty()) {
+    throw std::runtime_error("MetalImage: Cannot crop an empty texture.");
+  }
+
+  dst.Create(static_cast<uint32_t>(crop_rect.width), static_cast<uint32_t>(crop_rect.height), format_,
+             true, true, HasUsageFlag(usage_flags_, MTL::TextureUsageRenderTarget));
+  utils::CropTexture(*this, dst, crop_rect);
+}
+
 void MetalImage::ConvertTo(MetalImage& dst, PixelFormat dst_format, double alpha, double beta) const {
   if (Empty()) {
     throw std::runtime_error("MetalImage: Cannot convert an empty texture.");

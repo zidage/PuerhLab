@@ -46,6 +46,13 @@
 #include "decoders/processor/operators/gpu/cuda_rotate.hpp"
 #include "decoders/processor/operators/gpu/cuda_white_balance.hpp"
 #endif
+#ifdef HAVE_METAL
+#include "decoders/processor/operators/gpu/metal_cvt_ref_space.hpp"
+#include "decoders/processor/operators/gpu/metal_debayer_rcd.hpp"
+#include "decoders/processor/operators/gpu/metal_highlight_reconstruct.hpp"
+#include "decoders/processor/operators/gpu/metal_to_linear_ref.hpp"
+#include "metal/metal_utils/metal_convert_utils.hpp"
+#endif
 #include "image/image_buffer.hpp"
 
 namespace puerhlab {
@@ -100,14 +107,14 @@ void ThrowUnsupportedGPUBackend(const char* op_name) {
 RawProcessor::RawProcessor(const RawParams& params, const libraw_rawdata_t& rawdata,
                            LibRaw& raw_processor, const RawRuntimeColorContext& pre_ctx)
     : params_(params),
+      runtime_color_context_(pre_ctx),
       raw_data_(rawdata),
-      raw_processor_(raw_processor),
-      runtime_color_context_(pre_ctx) {}
+      raw_processor_(raw_processor) {}
 
 void RawProcessor::SetDecodeRes() {
   // Auto-downscale: if the longest side exceeds 8500px, force 1/8th resolution
-  auto& cpu_data   = process_buffer_.GetCPUData();
-  int   long_side  = std::max(cpu_data.rows, cpu_data.cols);
+  auto& cpu_data  = process_buffer_.GetCPUData();
+  int   long_side = std::max(cpu_data.rows, cpu_data.cols);
   if (long_side > 8500 && params_.decode_res_ == DecodeRes::QUARTER) {
     params_.decode_res_ = DecodeRes::EIGHTH;
   }
@@ -141,8 +148,13 @@ void RawProcessor::ApplyLinearization() {
     auto& gpu_img = pre_debayer_buffer.GetCUDAImage();
     CUDA::ToLinearRef(gpu_img, raw_processor_);
     return;
-#endif
+#elif defined(HAVE_METAL)
+    auto& gpu_img = pre_debayer_buffer.GetMetalImage();
+    metal::ToLinearRef(gpu_img, raw_processor_);
+    return;
+#else
     ThrowUnsupportedGPUBackend("ApplyLinearization");
+#endif
   }
   auto& cpu_img = pre_debayer_buffer.GetCPUData();
   // Apply "as shot" white balance multipliers for highlight reconstruction
@@ -165,8 +177,20 @@ void RawProcessor::ApplyDebayer() {
     }
 
     return;
-#endif
+#elif defined(HAVE_METAL)
+    auto& gpu_img = pre_debayer_buffer.GetMetalImage();
+    metal::BayerRGGB2RGB_RCD(gpu_img);
+    if (params_.decode_res_ == DecodeRes::FULL) {
+      cv::Rect crop_rect(raw_data_.sizes.left_margin, raw_data_.sizes.top_margin,
+                         raw_data_.sizes.width, raw_data_.sizes.height);
+      metal::MetalImage cropped;
+      gpu_img.CropTo(cropped, crop_rect);
+      gpu_img = std::move(cropped);
+    }
+    return;
+#else
     ThrowUnsupportedGPUBackend("ApplyDebayer");
+#endif
   }
   auto& img = pre_debayer_buffer.GetCPUData();
   CPU::BayerRGGB2RGB_RCD(img);
@@ -191,6 +215,14 @@ void RawProcessor::ApplyHighlightReconstruct() {
       return;
     }
     CUDA::HighlightReconstruct(gpu_img, raw_processor_);
+    return;
+#elif defined(HAVE_METAL)
+    auto& gpu_img = process_buffer_.GetMetalImage();
+    if (!params_.highlights_reconstruct_) {
+      metal::utils::ClampTexture(gpu_img);
+      return;
+    }
+    metal::HighlightReconstruct(gpu_img, raw_processor_);
     return;
 #endif
     ThrowUnsupportedGPUBackend("ApplyHighlightReconstruct");
@@ -231,6 +263,23 @@ void RawProcessor::ApplyGeometricCorrections() {
         break;
     }
     return;
+#elif defined(HAVE_METAL)
+    auto& gpu_img = process_buffer_.GetMetalImage();
+
+    switch (raw_data_.sizes.flip) {
+      case 3:
+        metal::utils::Rotate180(gpu_img);
+        break;
+      case 5:
+        metal::utils::Rotate90CCW(gpu_img);
+        break;
+      case 6:
+        metal::utils::Rotate90CW(gpu_img);
+        break;
+      default:
+        break;
+    }
+    return;
 #endif
     ThrowUnsupportedGPUBackend("ApplyGeometricCorrections");
   }
@@ -266,6 +315,12 @@ void RawProcessor::ConvertToWorkingSpace() {
     CUDA::ApplyInverseCamMul(gpu_img, cam_mul);
     runtime_color_context_.output_in_camera_space_ = true;
     return;
+#elif defined(HAVE_METAL)
+    auto& gpu_img = debayer_buffer.GetMetalImage();
+    auto  cam_mul = raw_data_.color.cam_mul;
+    metal::ApplyInverseCamMul(gpu_img, cam_mul);
+    runtime_color_context_.output_in_camera_space_ = true;
+    return;
 #endif
     ThrowUnsupportedGPUBackend("ConvertToWorkingSpace");
   }
@@ -292,7 +347,7 @@ auto RawProcessor::Process() -> ImageBuffer {
   auto&   img_sizes    = raw_data_.sizes;
 
   cv::Mat unpacked_mat{img_sizes.raw_height, img_sizes.raw_width, CV_16UC1, img_unpacked};
-  process_buffer_ = {std::move(unpacked_mat)};
+  process_buffer_                                = {std::move(unpacked_mat)};
 
   // runtime_color_context_ is pre-populated by the caller (via MetadataExtractor).
   // Only update the output color-space flag which depends on the decode pipeline.
@@ -321,6 +376,15 @@ auto RawProcessor::Process() -> ImageBuffer {
     return {std::move(process_buffer_)};
     // process_buffer_.SyncToCPU();
     // process_buffer_.ReleaseGPUData();
+#elif defined(HAVE_METAL)
+    SetDecodeRes();
+    process_buffer_.SyncToGPU();
+    ApplyLinearization();
+    ApplyHighlightReconstruct();
+    ApplyDebayer();
+    ConvertToWorkingSpace();
+    ApplyGeometricCorrections();
+    return {std::move(process_buffer_)};
 #else
     ThrowUnsupportedGPUBackend("Process");
 #endif
