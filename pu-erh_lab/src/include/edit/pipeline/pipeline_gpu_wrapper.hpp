@@ -6,13 +6,22 @@
 
 #include <memory>
 
-#include "edit/operators/GPU_kernels/param.cuh"
 #include "edit/operators/op_base.hpp"
-#include "image/image_buffer.hpp"
-#include "ui/edit_viewer/frame_sink.hpp"
 
 namespace puerhlab {
-class GPUPipelineImpl;
+class ImageBuffer;
+class IFrameSink;
+
+class GPUPipelineImpl {
+ public:
+  virtual ~GPUPipelineImpl() = default;
+
+  virtual void SetInputImage(std::shared_ptr<ImageBuffer> input_image) = 0;
+  virtual void SetParams(OperatorParams& params)                        = 0;
+  virtual void SetFrameSink(IFrameSink* frame_sink)                    = 0;
+  virtual void Execute(std::shared_ptr<ImageBuffer> output)            = 0;
+  virtual void ReleaseResources()                                      = 0;
+};
 
 class GPUPipelineWrapper {
  public:
@@ -33,7 +42,5 @@ class GPUPipelineWrapper {
 
  private:
   std::unique_ptr<GPUPipelineImpl> impl_;
-
-
 };
-};  // namespace puerhlab
+}  // namespace puerhlab

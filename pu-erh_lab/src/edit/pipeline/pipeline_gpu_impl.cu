@@ -15,7 +15,7 @@
 namespace puerhlab {
 using namespace CUDA;
 
-class GPUPipelineImpl {
+class CUDA_GPUPipeline final : public GPUPipelineImpl {
  private:
   static constexpr auto BuildKernelStream = []() {
     auto to_ws  = GPU_TOWS_Kernel();
@@ -46,35 +46,25 @@ class GPUPipelineImpl {
   GPU_KernelLauncher<StaticKernelStreamType> launcher_;
 
  public:
-  GPUPipelineImpl() : launcher_(nullptr, static_kernel_stream_) {}
+  CUDA_GPUPipeline() : launcher_(nullptr, static_kernel_stream_) {}
 
-  void SetInput(std::shared_ptr<ImageBuffer> input_img) { launcher_.SetInputImage(input_img); }
+  void SetInputImage(std::shared_ptr<ImageBuffer> input_img) override {
+    launcher_.SetInputImage(std::move(input_img));
+  }
 
-  void SetParams(OperatorParams& cpu_params) { launcher_.SetParams(cpu_params); }
+  void SetParams(OperatorParams& cpu_params) override { launcher_.SetParams(cpu_params); }
 
-  void SetFrameSink(IFrameSink* frame_sink) { launcher_.SetFrameSink(frame_sink); }
+  void SetFrameSink(IFrameSink* frame_sink) override { launcher_.SetFrameSink(frame_sink); }
 
-  void Execute(std::shared_ptr<ImageBuffer> output_img) {
+  void Execute(std::shared_ptr<ImageBuffer> output_img) override {
     launcher_.SetOutputImage(output_img);
     launcher_.Execute();
   }
 
-  void ReleaseResources() { launcher_.ReleaseResources(); }
+  void ReleaseResources() override { launcher_.ReleaseResources(); }
 };
 
-GPUPipelineWrapper::GPUPipelineWrapper() : impl_(std::make_unique<GPUPipelineImpl>()) {}
-
-GPUPipelineWrapper::~GPUPipelineWrapper() {impl_->ReleaseResources();};
-
-void GPUPipelineWrapper::SetInputImage(std::shared_ptr<ImageBuffer> input_image) {
-  impl_->SetInput(input_image);
+auto CreateCUDAGPUPipeline() -> std::unique_ptr<GPUPipelineImpl> {
+  return std::make_unique<CUDA_GPUPipeline>();
 }
-
-void GPUPipelineWrapper::SetParams(OperatorParams& cpu_params) { impl_->SetParams(cpu_params); }
-
-void GPUPipelineWrapper::SetFrameSink(IFrameSink* frame_sink) { impl_->SetFrameSink(frame_sink); }
-
-void GPUPipelineWrapper::Execute(std::shared_ptr<ImageBuffer> output) { impl_->Execute(output); }
-
-void GPUPipelineWrapper::ReleaseResources() { impl_->ReleaseResources(); }
-};  // namespace puerhlab
+}  // namespace puerhlab
