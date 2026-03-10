@@ -24,6 +24,8 @@ endif()
 
 set(_puerhlab_lensfun_cmake_args
     "-DCMAKE_INSTALL_PREFIX:PATH=${PUERHLAB_LENSFUN_INSTALL_DIR}"
+    "-DCMAKE_INSTALL_DATAROOTDIR:PATH=share"
+    "-DCMAKE_MODULE_PATH:STRING=${CMAKE_CURRENT_SOURCE_DIR}/cmake"
     "-DBUILD_STATIC:BOOL=OFF"
     "-DBUILD_TESTS:BOOL=OFF"
     "-DBUILD_LENSTOOL:BOOL=OFF"
@@ -64,17 +66,43 @@ if(DEFINED CMAKE_OSX_DEPLOYMENT_TARGET AND NOT "${CMAKE_OSX_DEPLOYMENT_TARGET}" 
 endif()
 
 if(WIN32)
+    set(_puerhlab_lensfun_legacy_glib2_base
+        "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_party/glib-2.28.1")
+    set(_puerhlab_lensfun_default_glib2_base
+        "${_puerhlab_lensfun_legacy_glib2_base}")
+    if(DEFINED VCPKG_INSTALLED_DIR AND DEFINED VCPKG_TARGET_TRIPLET)
+        set(_puerhlab_lensfun_vcpkg_glib2_base
+            "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}")
+        if(EXISTS "${_puerhlab_lensfun_vcpkg_glib2_base}/include/glib-2.0/glib.h")
+            set(_puerhlab_lensfun_default_glib2_base
+                "${_puerhlab_lensfun_vcpkg_glib2_base}")
+        endif()
+    endif()
+
+    set(_puerhlab_lensfun_configured_glib2_base "${PUERHLAB_LENSFUN_GLIB2_BASE_DIR}")
+    if(NOT DEFINED PUERHLAB_LENSFUN_GLIB2_BASE_DIR
+       OR "${_puerhlab_lensfun_configured_glib2_base}" STREQUAL ""
+       OR ("${_puerhlab_lensfun_configured_glib2_base}" STREQUAL "${_puerhlab_lensfun_legacy_glib2_base}"
+           AND NOT EXISTS "${_puerhlab_lensfun_configured_glib2_base}"))
+        set(_puerhlab_lensfun_configured_glib2_base
+            "${_puerhlab_lensfun_default_glib2_base}")
+        set(_puerhlab_lensfun_force_glib2_base FORCE)
+    else()
+        set(_puerhlab_lensfun_force_glib2_base)
+    endif()
+
     set(PUERHLAB_LENSFUN_GLIB2_BASE_DIR
-        "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_party/glib-2.28.1"
+        "${_puerhlab_lensfun_configured_glib2_base}"
         CACHE PATH
-        "Base path of the GLib2 package used by the bundled Lensfun build on Windows.")
+        "Base path of the GLib2 package used by the bundled Lensfun build on Windows."
+        ${_puerhlab_lensfun_force_glib2_base})
     if(EXISTS "${PUERHLAB_LENSFUN_GLIB2_BASE_DIR}")
         list(APPEND _puerhlab_lensfun_cmake_args
             "-DGLIB2_BASE_DIR:PATH=${PUERHLAB_LENSFUN_GLIB2_BASE_DIR}")
     else()
         message(STATUS
             "PUERHLAB_LENSFUN_GLIB2_BASE_DIR does not exist. "
-            "Set it explicitly if the bundled Lensfun configure step cannot find GLib2 on Windows.")
+            "Install vcpkg package `glib` or set it explicitly if the bundled Lensfun configure step cannot find GLib2 on Windows.")
     endif()
 endif()
 

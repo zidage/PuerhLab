@@ -16,21 +16,26 @@ You do not need to configure or install Lensfun separately anymore. The top-leve
 git submodule update --init --recursive pu-erh_lab/src/third_party/lensfun
 ```
 
-2. Provide the Windows GLib2 package expected by the upstream Lensfun build.
+2. Make sure the Windows GLib2 dependency is available.
 
-By default, Pu-erh Lab forwards this path to Lensfun:
+When you configure Pu-erh Lab with the repository's vcpkg toolchain, the bundled Lensfun build will first try to use:
 
-- `pu-erh_lab/third_party/glib-2.28.1`
+- `vcpkg/installed/<triplet>`
 
-If your GLib2 package lives elsewhere, pass `PUERHLAB_LENSFUN_GLIB2_BASE_DIR` when configuring Pu-erh Lab.
+If `glib` is not installed there yet, install it first:
+
+```powershell
+.\vcpkg\vcpkg.exe install glib:x64-windows
+```
+
+If you want to use a non-vcpkg GLib2 package, pass `PUERHLAB_LENSFUN_GLIB2_BASE_DIR` explicitly when configuring Pu-erh Lab.
 
 ## Example Top-Level Configure
 
 ```powershell
 cmd /c scripts\msvc_env.cmd --preset win_debug `
   -DCMAKE_PREFIX_PATH="D:/Qt/6.9.3/msvc2022_64/lib/cmake" `
-  -Deasy_profiler_DIR="$PWD/pu-erh_lab/third_party/easy_profiler-v2.1.0-msvc15-win64/lib/cmake/easy_profiler" `
-  -DPUERHLAB_LENSFUN_GLIB2_BASE_DIR="$PWD/pu-erh_lab/third_party/glib-2.28.1"
+  -Deasy_profiler_DIR="$PWD/pu-erh_lab/third_party/easy_profiler-v2.1.0-msvc15-win64/lib/cmake/easy_profiler"
 ```
 
 Then build Pu-erh Lab as usual:
@@ -39,9 +44,11 @@ Then build Pu-erh Lab as usual:
 cmd /c scripts\msvc_env.cmd --build --preset win_debug --parallel 4
 ```
 
-If the bundled Lensfun configure step fails on Windows, verify both of these paths exist:
+If the bundled Lensfun configure step still fails on Windows, verify the Lensfun submodule exists and that either the vcpkg GLib2 headers or your override path exists:
 
 ```powershell
 Test-Path .\pu-erh_lab\src\third_party\lensfun\CMakeLists.txt
-Test-Path .\pu-erh_lab\third_party\glib-2.28.1
+Test-Path .\vcpkg\installed\x64-windows\include\glib-2.0\glib.h
+# or, if you passed an override:
+Test-Path <your-glib2-path>
 ```

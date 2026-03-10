@@ -95,11 +95,11 @@ This section mirrors the current setup in `CMakeLists.txt`, `pu-erh_lab/tests/CM
 ### 2) Dependency Layout Used by CMake
 
 - Vendored header/source dependencies: `stduuid`, `uuid_v4`, `UTF8-CPP` (`utfcpp`), `nlohmann/json`, `MurmurHash3` (all these are required to install manually by the user, as they are not included in the repository)
-- Package-managed dependencies (commonly resolved through vcpkg toolchain on Windows): `OpenCV`, `Eigen3`, `OpenGL`, `hwy`, `lcms2`, `OpenColorIO`, `OpenImageIO`, `libraw`, `xxHash`, `OpenMP`
+- Package-managed dependencies (commonly resolved through vcpkg toolchain on Windows): `OpenCV`, `Eigen3`, `OpenGL`, `hwy`, `lcms2`, `OpenColorIO`, `OpenImageIO`, `libraw`, `xxHash`, `OpenMP`, `glib`
 - Test framework: `googletest` (fetched with `FetchContent`)
 - Windows local imported binaries: `DuckDB`, `Exiv2`, `easy_profiler`
 - Lens correction dependency: the upstream `Lensfun` source checkout in `pu-erh_lab/src/third_party/lensfun`, built automatically by the top-level CMake build
-- Additional Windows dependency for the bundled Lensfun build: `GLib2`, configured through `PUERHLAB_LENSFUN_GLIB2_BASE_DIR` (defaults to `pu-erh_lab/third_party/glib-2.28.1`). This package is not included in the repository and must be provided manually.
+- Additional Windows dependency for the bundled Lensfun build: `GLib2`. When the vcpkg toolchain is active, Pu-erh Lab will use `vcpkg/installed/<triplet>` automatically. `PUERHLAB_LENSFUN_GLIB2_BASE_DIR` is only needed to override that auto-detected location or to point at a non-vcpkg GLib2 package.
 
 ### 3) Initialize the Bundled Lensfun Source
 
@@ -152,7 +152,7 @@ cmd /c scripts\msvc_env.cmd --build --preset win_release --parallel 4
 cmd /c scripts\msvc_env.cmd --install build/release --prefix build/install
 ```
 
-If your Windows GLib2 package is stored somewhere other than `pu-erh_lab/third_party/glib-2.28.1`, add:
+If you are not using the vcpkg-provided `glib` package, or you want to override the auto-detected GLib2 location, add:
 
 ```powershell
 -DPUERHLAB_LENSFUN_GLIB2_BASE_DIR="<path-to-glib2>"
