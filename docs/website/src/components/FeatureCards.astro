@@ -1,0 +1,94 @@
+---
+import { t } from '../i18n';
+
+interface Props {
+  lang: string;
+}
+
+const { lang } = Astro.props;
+const i = t(lang);
+
+const icons = [
+  // GPU chip
+  '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 3.75H6.912a2.25 2.25 0 00-2.15 1.588L2.35 13.177a2.25 2.25 0 00-.1.661V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18v-4.162c0-.224-.034-.447-.1-.661L19.24 5.338a2.25 2.25 0 00-2.15-1.588H15M2.25 13.5h3.86a2.25 2.25 0 012.012 1.244l.256.512a2.25 2.25 0 002.013 1.244h3.218a2.25 2.25 0 002.013-1.244l.256-.512a2.25 2.25 0 012.013-1.244h3.859" />',
+  // Palette / color
+  '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4.098 19.902a3.75 3.75 0 005.304 0l6.401-6.402M6.75 21A3.75 3.75 0 013 17.25V4.125C3 3.504 3.504 3 4.125 3h5.25c.621 0 1.125.504 1.125 1.125v4.072M6.75 21a3.75 3.75 0 003.75-3.75V8.197M6.75 21h13.125c.621 0 1.125-.504 1.125-1.125v-5.25c0-.621-.504-1.125-1.125-1.125h-4.072M10.5 8.197l2.88-2.88c.438-.439 1.15-.439 1.59 0l3.712 3.713c.44.44.44 1.152 0 1.59l-2.879 2.88M6.75 17.25h.008v.008H6.75v-.008z" />',
+  // Adjustments / sliders
+  '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75" />',
+  // Camera / lens
+  '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0z" />',
+  // Folder / DAM
+  '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z" />',
+  // Git branch
+  '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M6 3v12m0 0a3 3 0 103 3H15a3 3 0 100-6H9a3 3 0 00-3 3zm12-6a3 3 0 10 0-6 3 3 0 000 6z" />',
+];
+---
+
+<section id="features" class="relative py-24 px-4">
+  <div class="max-w-7xl mx-auto">
+    <!-- Section header -->
+    <div class="text-center mb-16 reveal">
+      <h2 class="text-3xl sm:text-4xl font-bold text-mist mb-3">
+        {i.features.sectionTitle}
+      </h2>
+      <div class="w-16 h-0.5 bg-gold mx-auto mb-4"></div>
+      <p class="text-muted text-lg max-w-xl mx-auto">
+        {i.features.sectionSubtitle}
+      </p>
+    </div>
+
+    <!-- Cards grid -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      {
+        i.features.items.map((item, idx) => (
+          <div
+            class="feature-card reveal group"
+            style={`transition-delay: ${idx * 100}ms`}
+          >
+            <div class="p-6">
+              <div class="w-12 h-12 mb-4 text-gold">
+                <svg
+                  class="w-full h-full"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <Fragment set:html={icons[idx]} />
+                </svg>
+              </div>
+              <h3 class="text-lg font-semibold text-mist mb-2 group-hover:text-gold transition-colors">
+                {item.title}
+              </h3>
+              <p class="text-sm text-muted leading-relaxed">
+                {item.description}
+              </p>
+            </div>
+          </div>
+        ))
+      }
+    </div>
+  </div>
+</section>
+
+<style>
+  .feature-card {
+    @apply relative rounded-panel overflow-hidden transition-all duration-300;
+    background: rgba(43, 43, 43, 0.5);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(54, 54, 54, 0.6);
+  }
+  .feature-card::before {
+    content: '';
+    @apply absolute top-0 left-0 right-0 h-0.5 bg-gold opacity-0 transition-opacity duration-300;
+  }
+  .feature-card:hover {
+    transform: translateY(-4px);
+    box-shadow:
+      0 8px 32px rgba(0, 0, 0, 0.3),
+      0 0 0 1px rgba(252, 199, 4, 0.15);
+  }
+  .feature-card:hover::before {
+    @apply opacity-100;
+  }
+</style>

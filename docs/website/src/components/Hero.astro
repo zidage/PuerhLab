@@ -1,0 +1,174 @@
+---
+import { t } from '../i18n';
+
+interface Props {
+  lang: string;
+}
+
+const { lang } = Astro.props;
+const i = t(lang);
+---
+
+<section
+  id="hero"
+  class="relative min-h-screen flex items-center justify-center overflow-hidden"
+>
+  <!-- Particle canvas -->
+  <canvas id="particle-canvas" class="absolute inset-0 w-full h-full"></canvas>
+
+  <!-- Radial gradient overlay -->
+  <div
+    class="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_#1a1a1a_0%,_#111111_70%)]"
+  >
+  </div>
+
+  <!-- Content -->
+  <div class="relative z-10 text-center px-4 max-w-4xl mx-auto">
+    <h1
+      class="text-5xl sm:text-6xl lg:text-7xl font-bold text-gold mb-4 opacity-0 animate-[fadeInUp_0.8s_ease-out_0.2s_forwards]"
+    >
+      {i.hero.title}
+    </h1>
+    <p
+      class="text-xl sm:text-2xl text-mist mb-3 opacity-0 animate-[fadeInUp_0.8s_ease-out_0.4s_forwards]"
+    >
+      {i.hero.subtitle}
+    </p>
+    <p
+      class="text-base text-muted max-w-2xl mx-auto mb-8 opacity-0 animate-[fadeInUp_0.8s_ease-out_0.5s_forwards]"
+    >
+      {i.hero.description}
+    </p>
+
+    <!-- Version badge -->
+    <div
+      class="inline-block mb-8 opacity-0 animate-[fadeInUp_0.8s_ease-out_0.6s_forwards]"
+    >
+      <span
+        class="px-4 py-1.5 rounded-full border border-gold/40 bg-panel/60 text-gold text-sm font-data"
+      >
+        {i.hero.version}
+      </span>
+    </div>
+
+    <!-- CTAs -->
+    <div
+      class="flex flex-col sm:flex-row items-center justify-center gap-4 opacity-0 animate-[fadeInUp_0.8s_ease-out_0.7s_forwards]"
+    >
+      <a
+        href="https://github.com/zidage/PuerhLab"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="px-8 py-3 bg-gold text-canvas font-semibold rounded-panel hover:bg-gold/90 transition-all hover:shadow-[0_0_24px_rgba(252,199,4,0.3)] flex items-center gap-2"
+      >
+        <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+          <path
+            d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"
+          ></path>
+        </svg>
+        {i.hero.ctaGithub}
+      </a>
+      <a
+        href="#install"
+        class="px-8 py-3 border border-gold text-gold font-semibold rounded-panel hover:bg-gold/10 transition-all"
+      >
+        {i.hero.ctaStart}
+      </a>
+    </div>
+  </div>
+
+  <!-- Scroll hint -->
+  <div
+    class="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 opacity-0 animate-[fadeInUp_0.8s_ease-out_1s_forwards]"
+  >
+    <span class="text-xs text-muted">{i.hero.scrollHint}</span>
+    <svg
+      class="w-5 h-5 text-gold animate-bounce-slow"
+      fill="none"
+      stroke="currentColor"
+      viewBox="0 0 24 24"
+    >
+      <path
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="2"
+        d="M19 14l-7 7m0 0l-7-7m7 7V3"></path>
+    </svg>
+  </div>
+</section>
+
+<script>
+  const canvas = document.getElementById(
+    'particle-canvas'
+  ) as HTMLCanvasElement;
+  if (canvas) {
+    const ctx = canvas.getContext('2d')!;
+    let w: number, h: number;
+    interface Particle {
+      x: number;
+      y: number;
+      vx: number;
+      vy: number;
+      r: number;
+      a: number;
+    }
+    const particles: Particle[] = [];
+    const count = 60;
+    const maxDist = 120;
+
+    function resize() {
+      w = canvas.width = canvas.offsetWidth;
+      h = canvas.height = canvas.offsetHeight;
+    }
+
+    function init() {
+      resize();
+      for (let i = 0; i < count; i++) {
+        particles.push({
+          x: Math.random() * w,
+          y: Math.random() * h,
+          vx: (Math.random() - 0.5) * 0.4,
+          vy: (Math.random() - 0.5) * 0.4,
+          r: Math.random() * 1.5 + 0.5,
+          a: Math.random() * 0.5 + 0.2,
+        });
+      }
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, w, h);
+      for (let i = 0; i < particles.length; i++) {
+        const p = particles[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        if (p.x < 0 || p.x > w) p.vx *= -1;
+        if (p.y < 0 || p.y > h) p.vy *= -1;
+
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(252, 199, 4, ${p.a})`;
+        ctx.fill();
+
+        for (let j = i + 1; j < particles.length; j++) {
+          const q = particles[j];
+          const dx = p.x - q.x;
+          const dy = p.y - q.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < maxDist) {
+            ctx.beginPath();
+            ctx.moveTo(p.x, p.y);
+            ctx.lineTo(q.x, q.y);
+            ctx.strokeStyle = `rgba(252, 199, 4, ${0.15 * (1 - dist / maxDist)})`;
+            ctx.lineWidth = 0.5;
+            ctx.stroke();
+          }
+        }
+      }
+      requestAnimationFrame(draw);
+    }
+
+    init();
+    draw();
+    window.addEventListener('resize', resize);
+  }
+</script>

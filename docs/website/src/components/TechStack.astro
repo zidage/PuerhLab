@@ -1,0 +1,62 @@
+---
+import { t } from '../i18n';
+
+interface Props {
+  lang: string;
+}
+
+const { lang } = Astro.props;
+const i = t(lang);
+---
+
+<section id="tech-stack" class="relative py-24 px-4 bg-deep/50">
+  <div class="max-w-5xl mx-auto">
+    <!-- Section header -->
+    <div class="text-center mb-16 reveal">
+      <h2 class="text-3xl sm:text-4xl font-bold text-mist mb-3">
+        {i.techStack.sectionTitle}
+      </h2>
+      <div class="w-16 h-0.5 bg-gold mx-auto mb-4"></div>
+      <p class="text-muted text-lg max-w-xl mx-auto">
+        {i.techStack.sectionSubtitle}
+      </p>
+    </div>
+
+    <!-- Category rows -->
+    <div class="space-y-8">
+      {
+        i.techStack.categories.map((cat, catIdx) => (
+          <div
+            class="reveal"
+            style={`transition-delay: ${catIdx * 100}ms`}
+          >
+            <h3 class="text-sm font-semibold text-gold uppercase tracking-wider mb-3 font-data">
+              {cat.label}
+            </h3>
+            <div class="flex flex-wrap gap-3">
+              {cat.items.map((item, itemIdx) => (
+                <span
+                  class="tech-pill"
+                  style={`transition-delay: ${catIdx * 100 + itemIdx * 50}ms`}
+                >
+                  {item}
+                </span>
+              ))}
+            </div>
+          </div>
+        ))
+      }
+    </div>
+  </div>
+</section>
+
+<style>
+  .tech-pill {
+    @apply px-4 py-2 rounded-full text-sm text-mist bg-panel border border-separator
+           hover:border-gold hover:text-gold
+           transition-all duration-300 cursor-default;
+  }
+  .tech-pill:hover {
+    box-shadow: 0 0 16px rgba(252, 199, 4, 0.15);
+  }
+</style>

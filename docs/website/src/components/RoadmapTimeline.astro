@@ -1,0 +1,96 @@
+---
+import { t } from '../i18n';
+
+interface Props {
+  lang: string;
+}
+
+const { lang } = Astro.props;
+const i = t(lang);
+---
+
+<section id="roadmap" class="relative py-24 px-4">
+  <div class="max-w-5xl mx-auto">
+    <!-- Section header -->
+    <div class="text-center mb-16 reveal">
+      <h2 class="text-3xl sm:text-4xl font-bold text-mist mb-3">
+        {i.roadmap.sectionTitle}
+      </h2>
+      <div class="w-16 h-0.5 bg-gold mx-auto mb-4"></div>
+      <p class="text-muted text-lg max-w-xl mx-auto">
+        {i.roadmap.sectionSubtitle}
+      </p>
+    </div>
+
+    <!-- Timeline -->
+    <div class="relative">
+      <!-- Vertical line -->
+      <div
+        class="absolute left-4 md:left-1/2 md:-translate-x-px top-0 bottom-0 w-0.5 bg-gradient-to-b from-gold/60 via-gold/30 to-gold/10"
+      >
+      </div>
+
+      {
+        i.roadmap.items.map((item, idx) => (
+          <div
+            class={`relative flex items-start mb-12 last:mb-0 ${idx % 2 === 0 ? 'md:flex-row' : 'md:flex-row-reverse'}`}
+          >
+            {/* Timeline dot */}
+            <div class="absolute left-4 md:left-1/2 -translate-x-1/2 z-10">
+              <div class="timeline-dot reveal w-4 h-4 rounded-full bg-gold border-4 border-canvas shadow-[0_0_12px_rgba(252,199,4,0.4)]" />
+            </div>
+
+            {/* Content card */}
+            <div
+              class={`ml-12 md:ml-0 md:w-[calc(50%-2rem)] reveal ${idx % 2 === 0 ? 'md:pr-8 md:text-right' : 'md:pl-8'}`}
+              style={`transition-delay: ${idx * 150}ms`}
+            >
+              <div class="timeline-card p-5 rounded-panel">
+                <span class="text-gold text-sm font-data font-semibold">
+                  {item.date}
+                </span>
+                <h3 class="text-lg font-semibold text-mist mt-1 mb-3">
+                  {item.title}
+                </h3>
+                <ul
+                  class={`space-y-1.5 ${idx % 2 === 0 ? 'md:text-right' : ''}`}
+                >
+                  {item.entries.map((entry) => (
+                    <li class="text-sm text-muted flex items-start gap-2 {idx % 2 === 0 ? 'md:flex-row-reverse' : ''}">
+                      <span class="text-gold/60 mt-1 shrink-0">•</span>
+                      <span>{entry}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </div>
+        ))
+      }
+    </div>
+  </div>
+</section>
+
+<style>
+  .timeline-card {
+    background: rgba(43, 43, 43, 0.5);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(54, 54, 54, 0.6);
+  }
+  .timeline-dot {
+    transition: box-shadow 0.3s ease;
+  }
+  .timeline-dot.visible {
+    animation: pulseGold 2s ease-in-out 1;
+  }
+  @keyframes pulseGold {
+    0%,
+    100% {
+      box-shadow: 0 0 0 0 rgba(252, 199, 4, 0.4);
+    }
+    50% {
+      box-shadow: 0 0 0 10px rgba(252, 199, 4, 0);
+    }
+  }
+</style>

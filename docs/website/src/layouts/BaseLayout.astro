@@ -1,0 +1,98 @@
+---
+interface Props {
+  title?: string;
+  lang?: string;
+}
+
+const { title = 'Pu-erh Lab', lang = 'en' } = Astro.props;
+const base = import.meta.env.BASE_URL;
+---
+
+<!doctype html>
+<html lang={lang} class="scroll-smooth">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{title}</title>
+    <meta
+      name="description"
+      content="Pu-erh Lab — Open-source RAW photo editor and digital asset manager. CUDA-accelerated 60 FPS editing, ACES 2.0 color management, and Git-like version control."
+    />
+    <!-- Open Graph -->
+    <meta property="og:title" content={title} />
+    <meta
+      property="og:description"
+      content="Open-source RAW photo editor with CUDA 60 FPS, ACES 2.0, and Git-like versioning."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:image" content={`${base}demo/1.png`} />
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600&family=Inter:wght@400;600;700&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body
+    class="bg-canvas text-mist font-sans antialiased overflow-x-hidden selection:bg-gold/30 selection:text-canvas"
+  >
+    <slot />
+    <style is:global>
+      /* Custom scrollbar */
+      ::-webkit-scrollbar {
+        width: 8px;
+      }
+      ::-webkit-scrollbar-track {
+        background: #111111;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #2b2b2b;
+        border-radius: 4px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: #363636;
+      }
+
+      /* Scroll reveal base state */
+      .reveal {
+        opacity: 0;
+        transform: translateY(30px);
+        transition:
+          opacity 0.6s ease-out,
+          transform 0.6s ease-out;
+      }
+      .reveal.visible {
+        opacity: 1;
+        transform: translateY(0);
+      }
+      .reveal-scale {
+        opacity: 0;
+        transform: scale(1.05);
+        transition:
+          opacity 0.8s ease-out,
+          transform 0.8s ease-out;
+      }
+      .reveal-scale.visible {
+        opacity: 1;
+        transform: scale(1);
+      }
+    </style>
+    <script>
+      // Global scroll reveal observer
+      const observer = new IntersectionObserver(
+        (entries) => {
+          entries.forEach((entry) => {
+            if (entry.isIntersecting) {
+              entry.target.classList.add('visible');
+            }
+          });
+        },
+        { threshold: 0.1 }
+      );
+      document
+        .querySelectorAll('.reveal, .reveal-scale')
+        .forEach((el) => observer.observe(el));
+    </script>
+  </body>
+</html>

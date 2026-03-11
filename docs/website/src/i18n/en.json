@@ -1,0 +1,131 @@
+{
+  "nav": {
+    "features": "Features",
+    "gallery": "Gallery",
+    "roadmap": "Roadmap",
+    "techStack": "Tech Stack",
+    "install": "Install",
+    "contribute": "Contribute"
+  },
+  "hero": {
+    "title": "Pu-erh Lab",
+    "subtitle": "Open-Source RAW Photo Editor & Digital Asset Manager",
+    "description": "A lightweight, high-performance, and largely industry-compatible workflow for photo editing and library management.",
+    "version": "v0.1.2 · GPL-3.0",
+    "ctaGithub": "View on GitHub",
+    "ctaStart": "Get Started",
+    "scrollHint": "Scroll to explore"
+  },
+  "features": {
+    "sectionTitle": "Key Features",
+    "sectionSubtitle": "Built for photographers who demand performance and precision",
+    "items": [
+      {
+        "title": "CUDA 60 FPS",
+        "description": "Full-resolution real-time preview at 60 FPS on modern GPUs, even with 45MP RAW files. Average 767 MB DRAM for browsing 786 images."
+      },
+      {
+        "title": "ACES 2.0 & OpenDRT",
+        "description": "Industry-standard color management with ACES 2.0 Output Rendering and OpenDRT support. Multiple rendering transforms available."
+      },
+      {
+        "title": "LUT & Tone Curves",
+        "description": "CUBE LUT support for creative color grading, film-like sigmoid contrast curve, and fully interactive custom tone curves."
+      },
+      {
+        "title": "Lens Correction",
+        "description": "Built-in Lensfun-based lens distortion, vignetting, and chromatic aberration correction with an extensive lens catalog."
+      },
+      {
+        "title": "Sleeve DAM System",
+        "description": "Lightweight DuckDB-backed asset management. A single .puerhproj file captures your entire project — edits, history, and library structure."
+      },
+      {
+        "title": "Git-like Versioning",
+        "description": "Unlimited undo with branching version control. Create, compare, and switch between edit versions non-destructively."
+      }
+    ]
+  },
+  "gallery": {
+    "sectionTitle": "See It in Action",
+    "sectionSubtitle": "A modern workflow from import to export",
+    "items": [
+      { "title": "Modern UI Interface", "description": "Clean, responsive thumbnail grid with advanced filtering by capture date, camera model, and lens." },
+      { "title": "Advanced Adjustment Controls", "description": "Precise white balance, HSL, CDL color wheels, and real-time histogram — all at 60 FPS." },
+      { "title": "LUT / History / Versioning", "description": "Apply CUBE LUTs, interact with tone curves, and manage edits with an unlimited, branchable history stack." },
+      { "title": "Lens Correction", "description": "Automatic lens profile matching with manual override. Correct distortion, vignetting, and CA in one click." },
+      { "title": "Advanced Export", "description": "Batch export to JPEG, PNG, TIFF, WebP, or EXR with full metadata write-back and resize options." }
+    ]
+  },
+  "roadmap": {
+    "sectionTitle": "Roadmap",
+    "sectionSubtitle": "What's coming next",
+    "items": [
+      {
+        "date": "Dec 2025",
+        "title": "Foundation",
+        "entries": ["SleeveFS integration with rolling thumbnail cache", "Preliminary CUDA pipeline implementation", "RCD as default demosaicing algorithm", "Experimental panorama stitching module", "Custom white balance in RAW processing"]
+      },
+      {
+        "date": "Jan 2026",
+        "title": "Stability",
+        "entries": ["Global parameter synchronization", "LUT texture lifecycle management", "CUDA pipeline stability improvements"]
+      },
+      {
+        "date": "Mar 2026",
+        "title": "v0.1.2 Release",
+        "entries": ["OpenDRT rendering transform support", "Rendering transform selection UI", "Image deletion from projects", "Filter UI improvements"]
+      },
+      {
+        "date": "Future",
+        "title": "Vision",
+        "entries": ["JSON pipeline configuration", "HDR workflow and output", "Metal acceleration for macOS", "Semantic search & AI-assisted tagging", "Full panorama stitching integration"]
+      }
+    ]
+  },
+  "techStack": {
+    "sectionTitle": "Built With",
+    "sectionSubtitle": "A robust foundation of proven open-source technologies",
+    "categories": [
+      { "label": "Core", "items": ["C++20", "CUDA 12.8", "Qt 6", "CMake"] },
+      { "label": "Imaging", "items": ["OpenImageIO", "OpenColorIO", "LibRaw", "lcms2", "OpenCV", "Eigen"] },
+      { "label": "Storage", "items": ["DuckDB"] },
+      { "label": "Lens", "items": ["Lensfun"] },
+      { "label": "Metadata", "items": ["Exiv2"] },
+      { "label": "Performance", "items": ["Highway (SIMD)", "OpenMP", "xxHash"] }
+    ]
+  },
+  "install": {
+    "sectionTitle": "Get Started",
+    "sectionSubtitle": "Build from source in minutes",
+    "tabs": {
+      "windows": "Windows",
+      "macos": "macOS"
+    },
+    "windows": [
+      "git clone --recursive https://github.com/zidage/PuerhLab.git",
+      "cd PuerhLab",
+      ".\\vcpkg\\bootstrap-vcpkg.bat",
+      "cmd /c scripts\\msvc_env.cmd --preset win_debug -DCMAKE_PREFIX_PATH=\"<Qt-path>\"",
+      "cmd /c scripts\\msvc_env.cmd --build --preset win_debug --parallel 4"
+    ],
+    "macos": [
+      "brew install cmake ninja qt opencv opencolorio duckdb exiv2 glib libraw little-cms2 highway openimageio pkg-config xxhash eigen libomp",
+      "git clone --recursive https://github.com/zidage/PuerhLab.git && cd PuerhLab",
+      "git submodule update --init --recursive pu-erh_lab/src/third_party/lensfun",
+      "cmake --preset macos_debug",
+      "cmake --build --preset macos_debug --target puerhlab_main"
+    ]
+  },
+  "contributing": {
+    "sectionTitle": "Contribute",
+    "description": "Pu-erh Lab is an open-source project and contributions are welcome. Open issues, submit pull requests, or share your ideas.",
+    "ctaGithub": "View on GitHub",
+    "ctaDocs": "Read the Docs"
+  },
+  "footer": {
+    "copyright": "© 2025-2026 Yurun Zi",
+    "license": "Licensed under GPL-3.0-only",
+    "builtWith": "Built with Astro & Tailwind CSS"
+  }
+}

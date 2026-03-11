@@ -1,0 +1,88 @@
+---
+import { t } from '../i18n';
+
+interface Props {
+  lang: string;
+}
+
+const { lang } = Astro.props;
+const i = t(lang);
+const base = import.meta.env.BASE_URL;
+
+const images = ['1.png', '2.png', '3.png', '5.png', '4.png'];
+---
+
+<section id="gallery" class="relative py-24">
+  <!-- Section header -->
+  <div class="text-center mb-16 px-4 reveal">
+    <h2 class="text-3xl sm:text-4xl font-bold text-mist mb-3">
+      {i.gallery.sectionTitle}
+    </h2>
+    <div class="w-16 h-0.5 bg-gold mx-auto mb-4"></div>
+    <p class="text-muted text-lg max-w-xl mx-auto">
+      {i.gallery.sectionSubtitle}
+    </p>
+  </div>
+
+  <!-- Screenshot sections -->
+  <div class="flex flex-col gap-0">
+    {
+      i.gallery.items.map((item, idx) => (
+        <div class="gallery-section relative overflow-hidden" data-idx={idx}>
+          {/* Image container with parallax */}
+          <div class="gallery-img-wrap relative w-full h-[60vh] sm:h-[70vh] lg:h-[80vh]">
+            <img
+              src={`${base}demo/${images[idx]}`}
+              alt={item.title}
+              class="gallery-img absolute inset-0 w-full h-full object-cover object-center"
+              loading={idx === 0 ? 'eager' : 'lazy'}
+            />
+            {/* Gradient overlay */}
+            <div class="absolute inset-0 bg-gradient-to-t from-canvas via-canvas/40 to-transparent" />
+            <div class="absolute inset-0 bg-gradient-to-r from-canvas/60 to-transparent" />
+          </div>
+
+          {/* Text overlay */}
+          <div class="absolute bottom-0 left-0 right-0 p-6 sm:p-10 lg:p-16">
+            <div class="max-w-7xl mx-auto reveal">
+              <span class="text-gold text-sm font-data font-semibold tracking-wider uppercase mb-2 block">
+                0{idx + 1}
+              </span>
+              <h3 class="text-2xl sm:text-3xl lg:text-4xl font-bold text-mist mb-3">
+                {item.title}
+              </h3>
+              <p class="text-muted text-base sm:text-lg max-w-xl">
+                {item.description}
+              </p>
+            </div>
+          </div>
+        </div>
+      ))
+    }
+  </div>
+</section>
+
+<style>
+  .gallery-img {
+    transition: transform 0.8s ease-out;
+    transform: scale(1.05);
+  }
+  .gallery-section.in-view .gallery-img {
+    transform: scale(1);
+  }
+</style>
+
+<script>
+  const sections = document.querySelectorAll('.gallery-section');
+  const obs = new IntersectionObserver(
+    (entries) => {
+      entries.forEach((e) => {
+        if (e.isIntersecting) {
+          e.target.classList.add('in-view');
+        }
+      });
+    },
+    { threshold: 0.15 }
+  );
+  sections.forEach((s) => obs.observe(s));
+</script>

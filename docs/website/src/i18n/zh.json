@@ -1,0 +1,131 @@
+{
+  "nav": {
+    "features": "特性",
+    "gallery": "截图",
+    "roadmap": "路线图",
+    "techStack": "技术栈",
+    "install": "安装",
+    "contribute": "贡献"
+  },
+  "hero": {
+    "title": "Pu-erh Lab",
+    "subtitle": "开源 RAW 图像处理与数字资产管理",
+    "description": "为摄影师打造的轻量级、高性能、行业兼容的照片编辑与库管理工作流。",
+    "version": "v0.1.2 · GPL-3.0",
+    "ctaGithub": "查看源码",
+    "ctaStart": "开始使用",
+    "scrollHint": "向下滚动探索"
+  },
+  "features": {
+    "sectionTitle": "核心特性",
+    "sectionSubtitle": "为追求性能与精度的摄影师而生",
+    "items": [
+      {
+        "title": "CUDA 60 FPS",
+        "description": "现代 GPU 上实现全分辨率 60 FPS 实时预览，支持 45MP RAW 文件。浏览 786 张照片平均 DRAM 占用仅 767 MB。"
+      },
+      {
+        "title": "ACES 2.0 与 OpenDRT",
+        "description": "支持 ACES 2.0 输出渲染与 OpenDRT，行业标准色彩管理体系，多种渲染变换可选。"
+      },
+      {
+        "title": "LUT 与曲线",
+        "description": "支持 CUBE LUT 风格化调色、负片般的 Sigmoid 对比度曲线，以及完全可交互的自定义曲线。"
+      },
+      {
+        "title": "镜头校正",
+        "description": "内置 Lensfun 镜头畸变、暗角和色差校正，拥有丰富的镜头数据库。"
+      },
+      {
+        "title": "Sleeve 资产管理",
+        "description": "基于 DuckDB 的轻量级数字资产管理。一个 .puerhproj 文件即可保存整个项目——编辑、历史和库结构。"
+      },
+      {
+        "title": "类 Git 版本控制",
+        "description": "无限撤销与分支版本控制。创建、对比和切换不同编辑版本，完全无损。"
+      }
+    ]
+  },
+  "gallery": {
+    "sectionTitle": "功能展示",
+    "sectionSubtitle": "从导入到导出的现代工作流",
+    "items": [
+      { "title": "现代 UI 界面", "description": "简洁响应式缩略图网格，支持按拍摄日期、相机型号、镜头等多条件高级过滤。" },
+      { "title": "高级调整控件", "description": "精确的白平衡、HSL、CDL 色轮和实时直方图——全部以 60 FPS 运行。" },
+      { "title": "LUT / 历史 / 版本控制", "description": "应用 CUBE LUT 调色，交互式曲线编辑，无限可分支历史栈管理编辑。" },
+      { "title": "镜头校正", "description": "自动镜头配置匹配与手动覆盖。一键校正畸变、暗角和色差。" },
+      { "title": "高级导出", "description": "批量导出 JPEG/PNG/TIFF/WebP/EXR，完整元数据写回与缩放选项。" }
+    ]
+  },
+  "roadmap": {
+    "sectionTitle": "路线图",
+    "sectionSubtitle": "即将推出的功能",
+    "items": [
+      {
+        "date": "2025年12月",
+        "title": "基础建设",
+        "entries": ["SleeveFS 集成滚动缩略图缓存", "CUDA 管线初步实现", "RCD 作为默认去马赛克算法", "实验性全景拼接模块", "RAW 处理自定义白平衡"]
+      },
+      {
+        "date": "2026年1月",
+        "title": "稳定性提升",
+        "entries": ["全局参数同步", "LUT 纹理生命周期管理", "CUDA 管线稳定性改进"]
+      },
+      {
+        "date": "2026年3月",
+        "title": "v0.1.2 发布",
+        "entries": ["OpenDRT 渲染变换支持", "渲染变换选择 UI", "项目图片删除功能", "筛选器 UI 改进"]
+      },
+      {
+        "date": "未来计划",
+        "title": "愿景",
+        "entries": ["JSON 管线配置序列化", "HDR 工作流与输出", "macOS Metal 加速", "语义搜索与 AI 辅助标签", "全景拼接完整集成"]
+      }
+    ]
+  },
+  "techStack": {
+    "sectionTitle": "技术栈",
+    "sectionSubtitle": "基于成熟开源技术构建的坚实基础",
+    "categories": [
+      { "label": "核心", "items": ["C++20", "CUDA 12.8", "Qt 6", "CMake"] },
+      { "label": "影像处理", "items": ["OpenImageIO", "OpenColorIO", "LibRaw", "lcms2", "OpenCV", "Eigen"] },
+      { "label": "存储", "items": ["DuckDB"] },
+      { "label": "镜头", "items": ["Lensfun"] },
+      { "label": "元数据", "items": ["Exiv2"] },
+      { "label": "性能优化", "items": ["Highway (SIMD)", "OpenMP", "xxHash"] }
+    ]
+  },
+  "install": {
+    "sectionTitle": "开始使用",
+    "sectionSubtitle": "几分钟内从源码构建",
+    "tabs": {
+      "windows": "Windows",
+      "macos": "macOS"
+    },
+    "windows": [
+      "git clone --recursive https://github.com/zidage/PuerhLab.git",
+      "cd PuerhLab",
+      ".\\vcpkg\\bootstrap-vcpkg.bat",
+      "cmd /c scripts\\msvc_env.cmd --preset win_debug -DCMAKE_PREFIX_PATH=\"<Qt路径>\"",
+      "cmd /c scripts\\msvc_env.cmd --build --preset win_debug --parallel 4"
+    ],
+    "macos": [
+      "brew install cmake ninja qt opencv opencolorio duckdb exiv2 glib libraw little-cms2 highway openimageio pkg-config xxhash eigen libomp",
+      "git clone --recursive https://github.com/zidage/PuerhLab.git && cd PuerhLab",
+      "git submodule update --init --recursive pu-erh_lab/src/third_party/lensfun",
+      "cmake --preset macos_debug",
+      "cmake --build --preset macos_debug --target puerhlab_main"
+    ]
+  },
+  "contributing": {
+    "sectionTitle": "参与贡献",
+    "description": "Pu-erh Lab 是一个开源项目，欢迎贡献。提交 Issue、Pull Request，或分享你的想法。",
+    "ctaGithub": "查看源码",
+    "ctaDocs": "阅读文档"
+  },
+  "footer": {
+    "copyright": "© 2025-2026 Yurun Zi",
+    "license": "基于 GPL-3.0-only 许可证",
+    "builtWith": "使用 Astro 与 Tailwind CSS 构建"
+  }
+}

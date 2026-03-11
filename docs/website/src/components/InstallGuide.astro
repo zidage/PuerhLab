@@ -1,0 +1,170 @@
+---
+import { t } from '../i18n';
+
+interface Props {
+  lang: string;
+}
+
+const { lang } = Astro.props;
+const i = t(lang);
+---
+
+<section id="install" class="relative py-24 px-4">
+  <div class="max-w-4xl mx-auto">
+    <!-- Section header -->
+    <div class="text-center mb-12 reveal">
+      <h2 class="text-3xl sm:text-4xl font-bold text-mist mb-3">
+        {i.install.sectionTitle}
+      </h2>
+      <div class="w-16 h-0.5 bg-gold mx-auto mb-4"></div>
+      <p class="text-muted text-lg max-w-xl mx-auto">
+        {i.install.sectionSubtitle}
+      </p>
+    </div>
+
+    <!-- Tabs -->
+    <div class="reveal">
+      <div class="flex border-b border-separator mb-0">
+        <button
+          class="install-tab active"
+          data-tab="windows"
+        >
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801" />
+          </svg>
+          {i.install.tabs.windows}
+        </button>
+        <button
+          class="install-tab"
+          data-tab="macos"
+        >
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z" />
+          </svg>
+          {i.install.tabs.macos}
+        </button>
+      </div>
+
+      <!-- Windows panel -->
+      <div class="install-panel active" data-panel="windows">
+        <div class="code-block">
+          <div class="code-header">
+            <span class="text-muted text-xs font-data">PowerShell</span>
+            <button class="copy-btn" data-target="windows-code" aria-label="Copy">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+              </svg>
+            </button>
+          </div>
+          <pre id="windows-code" class="text-sm font-mono"><code>{i.install.windows.map((line, idx) => (
+  <Fragment>
+    <span class="text-muted select-none">{`${String(idx + 1).padStart(2)} `}</span>
+    <span class="text-mist">{line}</span>{'\n'}
+  </Fragment>
+))}</code></pre>
+        </div>
+      </div>
+
+      <!-- macOS panel -->
+      <div class="install-panel hidden" data-panel="macos">
+        <div class="code-block">
+          <div class="code-header">
+            <span class="text-muted text-xs font-data">Bash</span>
+            <button class="copy-btn" data-target="macos-code" aria-label="Copy">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+              </svg>
+            </button>
+          </div>
+          <pre id="macos-code" class="text-sm font-mono"><code>{i.install.macos.map((line, idx) => (
+  <Fragment>
+    <span class="text-muted select-none">{`${String(idx + 1).padStart(2)} `}</span>
+    <span class="text-mist">{line}</span>{'\n'}
+  </Fragment>
+))}</code></pre>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<style>
+  .install-tab {
+    @apply flex items-center gap-2 px-5 py-3 text-sm font-semibold text-muted border-b-2 border-transparent
+           transition-all duration-200 cursor-pointer;
+    background: none;
+  }
+  .install-tab.active {
+    @apply text-gold border-gold;
+  }
+  .install-tab:hover:not(.active) {
+    @apply text-mist;
+  }
+  .code-block {
+    @apply rounded-b-panel overflow-hidden;
+    background: #1a1a1a;
+    border: 1px solid rgba(54, 54, 54, 0.6);
+    border-top: none;
+  }
+  .code-header {
+    @apply flex items-center justify-between px-4 py-2;
+    background: rgba(43, 43, 43, 0.5);
+    border-bottom: 1px solid rgba(54, 54, 54, 0.4);
+  }
+  .copy-btn {
+    @apply text-muted hover:text-gold transition-colors p-1 rounded;
+    background: none;
+    border: none;
+    cursor: pointer;
+  }
+  pre {
+    @apply p-4 overflow-x-auto;
+    line-height: 1.8;
+  }
+</style>
+
+<script>
+  const tabs = document.querySelectorAll('.install-tab');
+  const panels = document.querySelectorAll('.install-panel');
+
+  tabs.forEach((tab) => {
+    tab.addEventListener('click', () => {
+      const target = tab.getAttribute('data-tab');
+      tabs.forEach((t) => t.classList.remove('active'));
+      panels.forEach((p) => {
+        if (p.getAttribute('data-panel') === target) {
+          p.classList.remove('hidden');
+          p.classList.add('active');
+        } else {
+          p.classList.add('hidden');
+          p.classList.remove('active');
+        }
+      });
+      tab.classList.add('active');
+    });
+  });
+
+  // Copy button
+  document.querySelectorAll('.copy-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const targetId = btn.getAttribute('data-target');
+      const el = document.getElementById(targetId!);
+      if (el) {
+        const text = el.textContent || '';
+        // Strip line numbers
+        const cleaned = text
+          .split('\n')
+          .map((l) => l.replace(/^\s*\d+\s/, ''))
+          .filter((l) => l.trim())
+          .join('\n');
+        navigator.clipboard.writeText(cleaned);
+        btn.innerHTML =
+          '<svg class="w-4 h-4 text-success" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>';
+        setTimeout(() => {
+          btn.innerHTML =
+            '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>';
+        }, 2000);
+      }
+    });
+  });
+</script>

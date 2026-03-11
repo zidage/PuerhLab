@@ -1,0 +1,135 @@
+---
+import { t, getOtherLang, getOtherLangLabel } from '../i18n';
+
+interface Props {
+  lang: string;
+}
+
+const { lang } = Astro.props;
+const i = t(lang);
+const otherLang = getOtherLang(lang);
+const otherLabel = getOtherLangLabel(lang);
+const base = import.meta.env.BASE_URL;
+---
+
+<nav
+  id="navbar"
+  class="fixed top-0 left-0 right-0 z-50 transition-all duration-300"
+>
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="flex items-center justify-between h-16">
+      <!-- Logo -->
+      <a href={`${base}${lang}/`} class="flex items-center gap-2 shrink-0">
+        <span class="text-xl font-bold">
+          <span class="text-gold">Pu-erh</span>
+          <span class="text-mist"> Lab</span>
+        </span>
+      </a>
+
+      <!-- Desktop nav links -->
+      <div class="hidden md:flex items-center gap-8">
+        <a href="#features" class="nav-link">{i.nav.features}</a>
+        <a href="#gallery" class="nav-link">{i.nav.gallery}</a>
+        <a href="#roadmap" class="nav-link">{i.nav.roadmap}</a>
+        <a href="#tech-stack" class="nav-link">{i.nav.techStack}</a>
+        <a href="#install" class="nav-link">{i.nav.install}</a>
+      </div>
+
+      <!-- Right side -->
+      <div class="flex items-center gap-3">
+        <!-- Language toggle -->
+        <a
+          href={`${base}${otherLang}/`}
+          class="px-3 py-1 rounded-full text-sm border border-separator text-muted hover:text-gold hover:border-gold transition-colors"
+        >
+          {otherLabel}
+        </a>
+        <!-- GitHub -->
+        <a
+          href="https://github.com/zidage/PuerhLab"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-panel text-mist text-sm hover:bg-hover transition-colors"
+        >
+          <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+            <path
+              d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"
+            ></path>
+          </svg>
+           GitHub
+        </a>
+        <!-- Mobile hamburger -->
+        <button
+          id="mobile-toggle"
+          class="md:hidden p-2 text-muted hover:text-gold transition-colors"
+          aria-label="Menu"
+        >
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M4 6h16M4 12h16M4 18h16"></path>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Mobile menu -->
+  <div
+    id="mobile-menu"
+    class="md:hidden hidden bg-deep/95 backdrop-blur-lg border-t border-separator"
+  >
+    <div class="px-4 py-4 flex flex-col gap-3">
+      <a href="#features" class="mobile-nav-link">{i.nav.features}</a>
+      <a href="#gallery" class="mobile-nav-link">{i.nav.gallery}</a>
+      <a href="#roadmap" class="mobile-nav-link">{i.nav.roadmap}</a>
+      <a href="#tech-stack" class="mobile-nav-link">{i.nav.techStack}</a>
+      <a href="#install" class="mobile-nav-link">{i.nav.install}</a>
+    </div>
+  </div>
+</nav>
+
+<style>
+  .nav-link {
+    @apply text-sm text-muted hover:text-gold transition-colors relative;
+  }
+  .nav-link::after {
+    content: '';
+    @apply absolute bottom-0 left-0 w-0 h-0.5 bg-gold transition-all duration-300;
+  }
+  .nav-link:hover::after {
+    @apply w-full;
+  }
+  .mobile-nav-link {
+    @apply text-mist text-base py-2 px-3 rounded-panel hover:bg-panel transition-colors;
+  }
+  #navbar.scrolled {
+    @apply bg-canvas/80 backdrop-blur-lg shadow-lg;
+    border-bottom: 1px solid rgba(54, 54, 54, 0.5);
+  }
+</style>
+
+<script>
+  const navbar = document.getElementById('navbar');
+  const toggle = document.getElementById('mobile-toggle');
+  const menu = document.getElementById('mobile-menu');
+
+  window.addEventListener('scroll', () => {
+    if (window.scrollY > 50) {
+      navbar?.classList.add('scrolled');
+    } else {
+      navbar?.classList.remove('scrolled');
+    }
+  });
+
+  toggle?.addEventListener('click', () => {
+    menu?.classList.toggle('hidden');
+  });
+
+  // Close mobile menu on link click
+  menu?.querySelectorAll('a').forEach((a) => {
+    a.addEventListener('click', () => menu?.classList.add('hidden'));
+  });
+</script>
