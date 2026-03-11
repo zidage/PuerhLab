@@ -1182,7 +1182,7 @@ ApplicationWindow {
             anchors.centerIn: parent
             width: Math.min(parent.width - 36, 700)
             height: dialogContent.implicitHeight + 36
-            radius: 14
+            radius: root.panelRadius
             color: root.colBgPanel
             border.width: 0
 
@@ -1194,30 +1194,20 @@ ApplicationWindow {
                 anchors.margins: 18
                 spacing: 12
 
-                Label {
-                    text: qsTr("Open Project")
-                    font.pixelSize: 24
-                    font.weight: 700
-                    color: root.colText
-                }
-                Label {
-                    Layout.fillWidth: true
-                    wrapMode: Text.WordWrap
-                    text: qsTr("Every boot asks for a project. Load a packed .puerhproj file or a metadata JSON/database pair, or create a new project package.")
-                    color: root.colTextMuted
-                    font.pixelSize: 13
-                }
                 RowLayout {
                     Layout.fillWidth: true
-                    spacing: 10
+                    spacing: 8
                     Label {
-                        text: qsTr("Language")
+                        text: qsTr("Open Project")
+                        font.pixelSize: 24
+                        font.weight: 700
                         color: root.colText
-                        font.pixelSize: 12
-                        font.weight: 600
                     }
+                    Item { Layout.fillWidth: true }
                     ComboBox {
-                        Layout.preferredWidth: 220
+                        id: welcomeLangCombo
+                        Layout.preferredWidth: 130
+                        font.pixelSize: 11
                         model: root.languageOptions
                         textRole: "label"
                         currentIndex: root.languageIndexForCode(languageManager.currentLanguageCode)
@@ -1227,7 +1217,16 @@ ApplicationWindow {
                                 languageManager.setLanguage(item.code)
                             }
                         }
+                        Material.background: root.colBgBase
+                        Material.foreground: root.colText
                     }
+                }
+                Label {
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: qsTr("Every boot asks for a project. Load a packed .puerhproj file or a metadata JSON/database pair, or create a new project package.")
+                    color: root.colTextMuted
+                    font.pixelSize: 13
                 }
                 Label {
                     Layout.fillWidth: true
