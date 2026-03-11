@@ -73,8 +73,8 @@ list(REMOVE_DUPLICATES PUERHLAB_INCLUDE_HINTS)
 
 
 if (MSVC)
-    set(CMAKE_CXX_FLAGS_DEBUG "/Zi /arch:AVX /bigobj /W4 /external:anglebrackets /external:W0 /D_DEBUG /EHsc /openmp")
-    set(CMAKE_CXX_FLAGS_RELEASE "/O2 /Ob3 /arch:AVX2 /bigobj /W4 /external:anglebrackets /external:W0 /EHsc /openmp /GL")
+    set(CMAKE_CXX_FLAGS_DEBUG "/Zi /arch:AVX /bigobj /W4 /external:anglebrackets /external:W0 /D_DEBUG /EHsc /openmp /Zc:preprocessor")
+    set(CMAKE_CXX_FLAGS_RELEASE "/O2 /Ob3 /arch:AVX2 /bigobj /W4 /external:anglebrackets /external:W0 /EHsc /openmp /GL /Zc:preprocessor")
     # add_link_options(/DEBUG)
     set(CMAKE_VS_USE_DEBUG_LIBRARIES "$<CONFIG:Debug,Custom>")
     # FIXME: Hardcoded Qt path for Windows, consider making it configurable
@@ -129,6 +129,7 @@ endif()
 if (PUERHLAB_ENABLE_CUDA AND CUDAToolkit_FOUND)
     enable_language(CUDA)
     add_definitions(-DHAVE_CUDA)
+    set(CMAKE_CUDA_RUNTIME_LIBRARY Shared)
     set(CMAKE_CUDA_ARCHITECTURES 60-real 61-real 75-real 86-real 86-virtual 89-real 90-real)
     include_directories(SYSTEM ${CUDAToolkit_INCLUDE_DIRS})
     add_compile_options($<$<AND:$<COMPILE_LANGUAGE:CUDA>,$<CONFIG:Release>>:-O3>)
