@@ -4,7 +4,7 @@
 
 #include "ui/edit_viewer/edit_viewer.hpp"
 
-#include "ui/edit_viewer/opengl_viewer_renderer.hpp"
+#include "opengl_viewer_renderer.hpp"
 
 #include <qoverload.h>
 
@@ -377,7 +377,7 @@ void QtEditViewer::StopZoomAnimation() {
 }
 
 auto QtEditViewer::CurrentWidgetInfo() const -> ViewportWidgetInfo {
-  return {width(), height(), devicePixelRatioF()};
+  return {width(), height(), static_cast<float>(devicePixelRatioF())};
 }
 
 auto QtEditViewer::CurrentImageInfo() const -> ViewportImageInfo {

@@ -2,7 +2,7 @@
 //  SPDX-License-Identifier: GPL-3.0-only
 //  Additional permission under GPLv3 section 7 applies; see the LICENSE file.
 
-#include "ui/edit_viewer/opengl_viewer_renderer.hpp"
+#include "opengl_viewer_renderer.hpp"
 
 #include <GL/gl.h>
 #include <cuda_runtime_api.h>
@@ -240,7 +240,8 @@ auto OpenGLViewerRenderer::Render(QOpenGLWidget& widget, const FrameMailbox::Act
     return result;
   }
 
-  const ViewportWidgetInfo widget_info{widget.width(), widget.height(), widget.devicePixelRatioF()};
+  const ViewportWidgetInfo widget_info{
+      widget.width(), widget.height(), static_cast<float>(widget.devicePixelRatioF())};
   const ViewportImageInfo  image_info{active_frame.width, active_frame.height};
   const auto               scale = ViewportMapper::ComputeLetterboxScale(widget_info, image_info);
   const float dpr = std::max(widget_info.device_pixel_ratio, 1e-4f);
