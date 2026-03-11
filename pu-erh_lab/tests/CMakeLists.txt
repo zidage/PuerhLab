@@ -13,6 +13,17 @@ include(GoogleTest)
 add_executable(SampleTest sample_test.cpp)
 target_link_libraries(SampleTest PRIVATE GTest::gtest_main)
 
+add_executable(EditViewerLogicTest
+  ui/edit_viewer_logic_test.cpp
+  ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/ui/edit_viewer/viewport_mapper.cpp
+  ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/ui/edit_viewer/crop_geometry.cpp
+  ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/ui/edit_viewer/view_transform_controller.cpp
+  ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/ui/edit_viewer/crop_interaction_controller.cpp
+)
+target_include_directories(EditViewerLogicTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
+target_link_libraries(EditViewerLogicTest PRIVATE GTest::gtest_main Qt6::Widgets)
+gtest_discover_tests(EditViewerLogicTest TEST_PREFIX "EditViewerLogicTest.")
+
 add_executable(SingleRawLoad raw/single_raw_decode_test.cpp)
 target_include_directories(SingleRawLoad PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
 target_link_libraries(SingleRawLoad PRIVATE GTest::gtest_main libraw::raw ${PUERHLAB_TEST_OPENCV_MIN_DEPS})

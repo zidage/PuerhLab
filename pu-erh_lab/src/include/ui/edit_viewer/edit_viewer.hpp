@@ -4,29 +4,26 @@
 
 #pragma once
 
-#include <qopenglshaderprogram.h>
-#include <qopenglwidget.h>
-
-#include <QOpenGLFunctions>
-#include <QOpenGLExtraFunctions>
-#include <QOpenGLShaderProgram>
 #include <QOpenGLWidget>
 #include <QMouseEvent>
+#include <QRectF>
 #include <QTimer>
 #include <QVariantAnimation>
 #include <QWheelEvent>
-#include <QRectF>
-#include <array>
-#include <atomic>
-#include <chrono>
-#include <mutex>
-#include <cuda_gl_interop.h>
 
-#include "frame_sink.hpp"
+#include "ui/edit_viewer/crop_interaction_controller.hpp"
+#include "ui/edit_viewer/crop_geometry.hpp"
+#include "ui/edit_viewer/frame_mailbox.hpp"
+#include "ui/edit_viewer/frame_sink.hpp"
+#include "ui/edit_viewer/view_transform_controller.hpp"
+#include "ui/edit_viewer/viewer_state.hpp"
+#include "ui/edit_viewer/viewport_mapper.hpp"
 
 namespace puerhlab {
 
-class QtEditViewer : public QOpenGLWidget, protected QOpenGLExtraFunctions, public puerhlab::IFrameSink {
+class OpenGLViewerRenderer;
+
+class QtEditViewer : public QOpenGLWidget, public puerhlab::IFrameSink {
   Q_OBJECT
  public:
   explicit QtEditViewer(QWidget* parent = nullptr);
@@ -47,8 +44,8 @@ class QtEditViewer : public QOpenGLWidget, protected QOpenGLExtraFunctions, publ
   auto    MapResourceForWrite() -> FrameWriteMapping override;
   void    UnmapResource() override;
   void    NotifyFrameReady() override;
-  int     GetWidth() const override { return buffers_[active_idx_].width; };
-  int     GetHeight() const override { return buffers_[active_idx_].height; };
+  int     GetWidth() const override;
+  int     GetHeight() const override;
   auto    GetViewportRenderRegion() const -> std::optional<ViewportRenderRegion> override;
   void    SetNextFramePresentationMode(FramePresentationMode mode) override;
 
@@ -83,135 +80,21 @@ class QtEditViewer : public QOpenGLWidget, protected QOpenGLExtraFunctions, publ
   void mouseDoubleClickEvent(QMouseEvent* event) override;
 
  private:
-  struct GLBuffer {
-    GLuint                texture       = 0;
-    cudaGraphicsResource* cuda_resource = nullptr;
-    int                   width         = 0;
-    int                   height        = 0;
-  };
-
-  std::array<GLBuffer, 2> buffers_{};
-
-  GLuint                  vbo_               = 0;
-  QOpenGLShaderProgram*   program_           = nullptr;
-
-  int                     active_idx_        = 0;  // Currently displayed buffer
-  int                     write_idx_         = 1;  // Buffer to render next frame into
-  int                     render_target_idx_ = 0;  // Which buffer next GPU frame should use
-
-  // CUDA staging buffer (written by worker thread). We only map the PBO in paintGL
-  // on the GUI thread to avoid "invalid OpenGL or DirectX context".
-  float4*                 staging_ptr_     = nullptr;
-  size_t                  staging_bytes_   = 0;
-  std::atomic<int>        pending_frame_idx_{-1};
-
-  // Thread synchronization
-  std::mutex              mutex_;
-
-  // Interaction state (UI thread only)
-  float                   view_zoom_    = 1.0f;
-  QVector2D               view_pan_     = {0.0f, 0.0f};
-  QPoint                  last_mouse_pos_{};
-  bool                    dragging_     = false;
-  enum class CropDragMode { None, Create, Move, ResizeEdge, ResizeCorner, RotateHandle };
-  enum class CropCorner { None, TopLeft, TopRight, BottomRight, BottomLeft };
-  enum class CropEdge { None, Top, Right, Bottom, Left };
-  bool                    crop_tool_enabled_   = false;
-  bool                    crop_overlay_visible_ = false;
-  QRectF                  crop_overlay_rect_    = QRectF(0.0, 0.0, 1.0, 1.0);
-  float                   crop_overlay_rotation_degrees_ = 0.0f;
-  float                   crop_overlay_metric_aspect_ = 1.0f;
-  bool                    crop_overlay_aspect_locked_ = false;
-  float                   crop_overlay_aspect_ratio_  = 1.0f;
-  CropDragMode            crop_drag_mode_       = CropDragMode::None;
-  CropCorner              crop_drag_corner_     = CropCorner::None;
-  CropEdge                crop_drag_edge_       = CropEdge::None;
-  QPointF                 crop_drag_anchor_uv_{};
-  QPointF                 crop_drag_anchor_widget_pos_{};
-  QRectF                  crop_drag_origin_rect_{};
-  QPointF                 crop_drag_fixed_corner_uv_{};
-  float                   crop_drag_rotation_degrees_ = 0.0f;
-  mutable std::mutex      view_state_mutex_;
-  std::optional<ViewportRenderRegion> viewport_render_region_cache_{};
-  int                     render_reference_width_  = 0;
-  int                     render_reference_height_ = 0;
-  std::atomic<FramePresentationMode>  active_frame_presentation_mode_{
-      FramePresentationMode::ViewportTransformed};
-  std::atomic<FramePresentationMode>  pending_frame_presentation_mode_{
-      FramePresentationMode::ViewportTransformed};
-  std::atomic<bool>       pending_presentation_mode_valid_{false};
-
-  bool                    InitBuffer(GLBuffer& buffer, int width, int height);
-  void                    FreeBuffer(GLBuffer& buffer);
-  void                    FreeAllBuffers();
-
-  bool                    InitHistogramResources();
-  void                    FreeHistogramResources();
   void                    UpdateViewportRenderRegionCache();
-  auto                    ComputeViewportRenderRegion(int image_width, int image_height) const
-      -> std::optional<ViewportRenderRegion>;
-  auto                    WidgetPointToImageUv(const QPointF& widget_pos, int image_width,
-                                               int image_height) const -> std::optional<QPointF>;
-  auto                    ImageUvToWidgetPoint(const QPointF& uv, int image_width, int image_height) const
-      -> std::optional<QPointF>;
-  static auto             ClampCropRect(const QRectF& rect) -> QRectF;
-  auto                    ComputeHistogram(GLuint texture_id, int width, int height) -> bool;
-  auto                    ShouldComputeHistogramNow() -> bool;
-  auto                    BuildComputeProgram(const char* source, const char* debug_name,
-                                              GLuint& out_program) -> bool;
   void                    StopZoomAnimation();
-  void                    ApplyViewTransform(float zoom, const QVector2D& pan, bool emit_zoom_signal);
-  void                    AnimateViewTo(float target_zoom,
-                                        const std::optional<QPointF>& anchor_widget_pos,
-                                        const std::optional<QVector2D>& explicit_target_pan = std::nullopt);
-  auto                    ClampPanForZoom(float zoom, const QVector2D& pan) const -> QVector2D;
-  auto                    ComputeAnchoredPan(float target_zoom, const QPointF& anchor_widget_pos,
-                                             const QVector2D& fallback_pan) const -> QVector2D;
-  void                    ToggleClickZoomAt(const QPointF& anchor_widget_pos);
-  void                    ToggleDoubleClickZoomAt(const QPointF& anchor_widget_pos);
+  auto                    CurrentWidgetInfo() const -> ViewportWidgetInfo;
+  auto                    CurrentImageInfo() const -> ViewportImageInfo;
+  void                    ApplyViewTransformResult(const ViewTransformResult& result);
+  void                    ApplyCropInteractionResult(const CropInteractionResult& result);
 
-  static constexpr int    kHistogramBins       = 256;
-  static constexpr int    kHistogramSampleSize = 256;
+  static constexpr int     kZoomAnimationDurationMs = 170;
 
-  GLuint                  histogram_count_ssbo_       = 0;
-  GLuint                  histogram_norm_ssbo_        = 0;
-  GLuint                  histogram_clear_program_    = 0;
-  GLuint                  histogram_compute_program_  = 0;
-  GLuint                  histogram_normalize_program_ = 0;
-  GLint                   histogram_clear_count_loc_  = -1;
-  GLint                   histogram_compute_tex_loc_  = -1;
-  GLint                   histogram_compute_bins_loc_ = -1;
-  GLint                   histogram_compute_sample_loc_ = -1;
-  GLint                   histogram_norm_bins_loc_    = -1;
-  bool                    histogram_resources_ready_   = false;
-  std::atomic<bool>       histogram_expect_fast_frame_{false};
-  std::atomic<bool>       histogram_pending_frame_{false};
-  std::atomic<bool>       histogram_has_data_{false};
-  int                     histogram_update_interval_ms_ = 40;
-  std::chrono::steady_clock::time_point last_histogram_update_time_{};
-
-  static constexpr float   kMinInteractiveZoom       = 1.0f;
-  static constexpr float   kMaxInteractiveZoom       = 8.0f;
-  static constexpr float   kWheelZoomStep            = 1.12f;
-  static constexpr float   kSingleClickZoomFactor    = 2.0f;
-  static constexpr int     kZoomAnimationDurationMs  = 170;
-  static constexpr int     kClickDragThresholdPixels = 3;
-
-  QVariantAnimation*       zoom_animation_           = nullptr;
-  float                    zoom_animation_start_     = 1.0f;
-  float                    zoom_animation_target_    = 1.0f;
-  QVector2D                pan_animation_start_      = {0.0f, 0.0f};
-  QVector2D                pan_animation_target_     = {0.0f, 0.0f};
-  QPoint                   drag_start_mouse_pos_{};
-  bool                     dragged_since_press_      = false;
-  bool                     click_zoom_toggle_active_ = false;
-  float                    click_zoom_restore_zoom_  = 1.0f;
-  QVector2D                click_zoom_restore_pan_   = {0.0f, 0.0f};
-  float                    double_click_zoom_target_ = kSingleClickZoomFactor;
-  bool                     double_click_zoom_in_next_ = true;
-  QTimer*                  click_toggle_timer_       = nullptr;
-  QPointF                  pending_click_toggle_pos_{};
-  bool                     pending_click_toggle_      = false;
-  bool                     suppress_next_click_release_toggle_ = false;
+  ViewerState              viewer_state_{};
+  FrameMailbox             frame_mailbox_{};
+  ViewTransformController  view_transform_controller_{};
+  CropInteractionController crop_interaction_controller_{};
+  OpenGLViewerRenderer*    renderer_ = nullptr;
+  QVariantAnimation*       zoom_animation_ = nullptr;
+  QTimer*                  click_toggle_timer_ = nullptr;
 };
 };  // namespace puerhlab
