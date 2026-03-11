@@ -8,7 +8,7 @@
 
 #include <algorithm>
 
-#include "ui/edit_viewer/opengl_viewer_renderer.hpp"
+#include "opengl_viewer_renderer.hpp"
 
 namespace puerhlab {
 
