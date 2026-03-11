@@ -45,6 +45,10 @@ def_library(StrConv
 )
 
 if(PUERHLAB_METAL_ENABLED)
+    if(POLICY CMP0116)
+        cmake_policy(SET CMP0116 NEW)
+    endif()
+
     set(METAL_UTILS_SRC "${CMAKE_CURRENT_SOURCE_DIR}/metal/metal_utils/metal_convert.metal")
     set(METAL_UTILS_AIR "${CMAKE_CURRENT_BINARY_DIR}/metal/metal_utils/metal_convert.air")
     set(METAL_UTILS_METALLIB "${CMAKE_CURRENT_BINARY_DIR}/metal/metal_utils/metal_convert.metallib")
@@ -100,139 +104,134 @@ if(PUERHLAB_METAL_ENABLED)
         message(FATAL_ERROR "Metal library linker is not available via xcrun. ${PUERHLAB_METALLIB_ERROR}")
     endif()
 
-    add_custom_command(
-        OUTPUT ${METAL_UTILS_AIR}
-        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/metal/metal_utils"
-        COMMAND ${PUERHLAB_METAL_EXECUTABLE} -c "${METAL_UTILS_SRC}" -o "${METAL_UTILS_AIR}"
-        DEPENDS ${METAL_UTILS_SRC}
-        COMMENT "Compiling Metal utility shaders"
-        VERBATIM
+    set(PUERHLAB_METAL_COMMON_COMPILE_FLAGS
+        -MMD
+        -fno-color-diagnostics
     )
-    add_custom_command(
-        OUTPUT ${METAL_UTILS_METALLIB}
-        COMMAND ${PUERHLAB_METALLIB_EXECUTABLE} "${METAL_UTILS_AIR}" -o "${METAL_UTILS_METALLIB}"
-        DEPENDS ${METAL_UTILS_AIR}
-        COMMENT "Linking Metal utility library"
-        VERBATIM
+    set(PUERHLAB_METAL_MODULE_CACHE_DIR "${CMAKE_CURRENT_BINARY_DIR}/metal/module-cache")
+    set(PUERHLAB_METAL_CONFIG_COMPILE_FLAGS
+        $<$<CONFIG:Debug>:-gline-tables-only>
+        $<$<CONFIG:RelWithDebInfo>:-O2>
+        $<$<CONFIG:RelWithDebInfo>:-gline-tables-only>
+        $<$<OR:$<CONFIG:Release>,$<CONFIG:MinSizeRel>>:-O3>
     )
-    add_custom_target(MetalUtilsShaders DEPENDS ${METAL_UTILS_METALLIB})
 
-    add_custom_command(
-        OUTPUT ${METAL_GEOMETRY_UTILS_AIR}
-        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/metal/metal_utils"
-        COMMAND ${PUERHLAB_METAL_EXECUTABLE} -c "${METAL_GEOMETRY_UTILS_SRC}" -o "${METAL_GEOMETRY_UTILS_AIR}"
-        DEPENDS ${METAL_GEOMETRY_UTILS_SRC}
-        COMMENT "Compiling Metal geometry utility shaders"
-        VERBATIM
-    )
-    add_custom_command(
-        OUTPUT ${METAL_GEOMETRY_UTILS_METALLIB}
-        COMMAND ${PUERHLAB_METALLIB_EXECUTABLE} "${METAL_GEOMETRY_UTILS_AIR}" -o "${METAL_GEOMETRY_UTILS_METALLIB}"
-        DEPENDS ${METAL_GEOMETRY_UTILS_AIR}
-        COMMENT "Linking Metal geometry utility library"
-        VERBATIM
-    )
-    add_custom_target(MetalGeometryUtilsShaders DEPENDS ${METAL_GEOMETRY_UTILS_METALLIB})
+    function(puerhlab_add_metal_library shader_target source_file air_file metallib_file compile_comment
+             link_comment)
+        set(options)
+        set(oneValueArgs)
+        set(multiValueArgs DEPENDS)
+        cmake_parse_arguments(ARG "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
-    add_custom_command(
-        OUTPUT ${METAL_LENS_CALIB_AIR}
-        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/edit/operators/geometry/metal_shader"
-        COMMAND ${PUERHLAB_METAL_EXECUTABLE} -c "${METAL_LENS_CALIB_SRC}" -o "${METAL_LENS_CALIB_AIR}"
-        DEPENDS ${METAL_LENS_CALIB_SRC}
-        COMMENT "Compiling Metal lens calibration shader"
-        VERBATIM
-    )
-    add_custom_command(
-        OUTPUT ${METAL_LENS_CALIB_METALLIB}
-        COMMAND ${PUERHLAB_METALLIB_EXECUTABLE} "${METAL_LENS_CALIB_AIR}" -o "${METAL_LENS_CALIB_METALLIB}"
-        DEPENDS ${METAL_LENS_CALIB_AIR}
-        COMMENT "Linking Metal lens calibration library"
-        VERBATIM
-    )
-    add_custom_target(LensCalibOpMetalShaders DEPENDS ${METAL_LENS_CALIB_METALLIB})
+        get_filename_component(_air_dir "${air_file}" DIRECTORY)
+        set(_depfile "${air_file}.d")
 
-    add_custom_command(
-        OUTPUT ${METAL_FUSED_PIPELINE_AIR}
-        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/edit/pipeline/metal_shader"
-        COMMAND ${PUERHLAB_METAL_EXECUTABLE} -c "${METAL_FUSED_PIPELINE_SRC}" -o "${METAL_FUSED_PIPELINE_AIR}"
-        DEPENDS ${METAL_FUSED_PIPELINE_SRC} ${METAL_FUSED_PIPELINE_DEPS}
-        COMMENT "Compiling Metal fused pipeline shader"
-        VERBATIM
-    )
-    add_custom_command(
-        OUTPUT ${METAL_FUSED_PIPELINE_METALLIB}
-        COMMAND ${PUERHLAB_METALLIB_EXECUTABLE} "${METAL_FUSED_PIPELINE_AIR}" -o "${METAL_FUSED_PIPELINE_METALLIB}"
-        DEPENDS ${METAL_FUSED_PIPELINE_AIR}
-        COMMENT "Linking Metal fused pipeline library"
-        VERBATIM
-    )
-    add_custom_target(EditPipelineMetalShaders DEPENDS ${METAL_FUSED_PIPELINE_METALLIB})
+        add_custom_command(
+            OUTPUT "${air_file}"
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${_air_dir}"
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${PUERHLAB_METAL_MODULE_CACHE_DIR}"
+            COMMAND ${PUERHLAB_METAL_EXECUTABLE}
+                    ${PUERHLAB_METAL_COMMON_COMPILE_FLAGS}
+                    ${PUERHLAB_METAL_CONFIG_COMPILE_FLAGS}
+                    -fmodules-cache-path="${PUERHLAB_METAL_MODULE_CACHE_DIR}"
+                    -MF "${_depfile}"
+                    -c "${source_file}"
+                    -o "${air_file}"
+            DEPENDS "${source_file}" ${ARG_DEPENDS}
+            DEPFILE "${_depfile}"
+            BYPRODUCTS "${_depfile}"
+            COMMENT "${compile_comment}"
+            VERBATIM
+            COMMAND_EXPAND_LISTS
+        )
+        add_custom_command(
+            OUTPUT "${metallib_file}"
+            COMMAND ${PUERHLAB_METALLIB_EXECUTABLE} "${air_file}" -o "${metallib_file}"
+            DEPENDS "${air_file}"
+            COMMENT "${link_comment}"
+            VERBATIM
+        )
+        add_custom_target(${shader_target} DEPENDS "${metallib_file}")
+    endfunction()
 
-    add_custom_command(
-        OUTPUT ${METAL_TO_LINEAR_REF_AIR}
-        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/decoders/processor/operators/gpu/metal_shader"
-        COMMAND ${PUERHLAB_METAL_EXECUTABLE} -c "${METAL_TO_LINEAR_REF_SRC}" -o "${METAL_TO_LINEAR_REF_AIR}"
-        DEPENDS ${METAL_TO_LINEAR_REF_SRC}
-        COMMENT "Compiling Metal ToLinearRef shader"
-        VERBATIM
+    puerhlab_add_metal_library(
+        MetalUtilsShaders
+        "${METAL_UTILS_SRC}"
+        "${METAL_UTILS_AIR}"
+        "${METAL_UTILS_METALLIB}"
+        "Compiling Metal utility shaders"
+        "Linking Metal utility library"
     )
-    add_custom_command(
-        OUTPUT ${METAL_TO_LINEAR_REF_METALLIB}
-        COMMAND ${PUERHLAB_METALLIB_EXECUTABLE} "${METAL_TO_LINEAR_REF_AIR}" -o "${METAL_TO_LINEAR_REF_METALLIB}"
-        DEPENDS ${METAL_TO_LINEAR_REF_AIR}
-        COMMENT "Linking Metal ToLinearRef library"
-        VERBATIM
+
+    puerhlab_add_metal_library(
+        MetalGeometryUtilsShaders
+        "${METAL_GEOMETRY_UTILS_SRC}"
+        "${METAL_GEOMETRY_UTILS_AIR}"
+        "${METAL_GEOMETRY_UTILS_METALLIB}"
+        "Compiling Metal geometry utility shaders"
+        "Linking Metal geometry utility library"
     )
-    add_custom_command(
-        OUTPUT ${METAL_DEBAYER_RCD_AIR}
-        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/decoders/processor/operators/gpu/metal_shader"
-        COMMAND ${PUERHLAB_METAL_EXECUTABLE} -c "${METAL_DEBAYER_RCD_SRC}" -o "${METAL_DEBAYER_RCD_AIR}"
-        DEPENDS ${METAL_DEBAYER_RCD_SRC}
-        COMMENT "Compiling Metal Debayer RCD shader"
-        VERBATIM
+
+    puerhlab_add_metal_library(
+        LensCalibOpMetalShaders
+        "${METAL_LENS_CALIB_SRC}"
+        "${METAL_LENS_CALIB_AIR}"
+        "${METAL_LENS_CALIB_METALLIB}"
+        "Compiling Metal lens calibration shader"
+        "Linking Metal lens calibration library"
     )
-    add_custom_command(
-        OUTPUT ${METAL_DEBAYER_RCD_METALLIB}
-        COMMAND ${PUERHLAB_METALLIB_EXECUTABLE} "${METAL_DEBAYER_RCD_AIR}" -o "${METAL_DEBAYER_RCD_METALLIB}"
-        DEPENDS ${METAL_DEBAYER_RCD_AIR}
-        COMMENT "Linking Metal Debayer RCD library"
-        VERBATIM
+
+    puerhlab_add_metal_library(
+        EditPipelineMetalShaders
+        "${METAL_FUSED_PIPELINE_SRC}"
+        "${METAL_FUSED_PIPELINE_AIR}"
+        "${METAL_FUSED_PIPELINE_METALLIB}"
+        "Compiling Metal fused pipeline shader"
+        "Linking Metal fused pipeline library"
+        DEPENDS ${METAL_FUSED_PIPELINE_DEPS}
     )
-    add_custom_command(
-        OUTPUT ${METAL_HIGHLIGHT_RECONSTRUCT_AIR}
-        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/decoders/processor/operators/gpu/metal_shader"
-        COMMAND ${PUERHLAB_METAL_EXECUTABLE} -c "${METAL_HIGHLIGHT_RECONSTRUCT_SRC}" -o "${METAL_HIGHLIGHT_RECONSTRUCT_AIR}"
-        DEPENDS ${METAL_HIGHLIGHT_RECONSTRUCT_SRC}
-        COMMENT "Compiling Metal HighlightReconstruct shader"
-        VERBATIM
+
+    puerhlab_add_metal_library(
+        MetalToLinearRefShaders
+        "${METAL_TO_LINEAR_REF_SRC}"
+        "${METAL_TO_LINEAR_REF_AIR}"
+        "${METAL_TO_LINEAR_REF_METALLIB}"
+        "Compiling Metal ToLinearRef shader"
+        "Linking Metal ToLinearRef library"
     )
-    add_custom_command(
-        OUTPUT ${METAL_CVT_REF_SPACE_AIR}
-        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/decoders/processor/operators/gpu/metal_shader"
-        COMMAND ${PUERHLAB_METAL_EXECUTABLE} -c "${METAL_CVT_REF_SPACE_SRC}" -o "${METAL_CVT_REF_SPACE_AIR}"
-        DEPENDS ${METAL_CVT_REF_SPACE_SRC}
-        COMMENT "Compiling Metal ConvertToRefSpace shader"
-        VERBATIM
+
+    puerhlab_add_metal_library(
+        MetalDebayerRcdShaders
+        "${METAL_DEBAYER_RCD_SRC}"
+        "${METAL_DEBAYER_RCD_AIR}"
+        "${METAL_DEBAYER_RCD_METALLIB}"
+        "Compiling Metal Debayer RCD shader"
+        "Linking Metal Debayer RCD library"
     )
-    add_custom_command(
-        OUTPUT ${METAL_HIGHLIGHT_RECONSTRUCT_METALLIB}
-        COMMAND ${PUERHLAB_METALLIB_EXECUTABLE} "${METAL_HIGHLIGHT_RECONSTRUCT_AIR}" -o "${METAL_HIGHLIGHT_RECONSTRUCT_METALLIB}"
-        DEPENDS ${METAL_HIGHLIGHT_RECONSTRUCT_AIR}
-        COMMENT "Linking Metal HighlightReconstruct library"
-        VERBATIM
+
+    puerhlab_add_metal_library(
+        MetalHighlightReconstructShaders
+        "${METAL_HIGHLIGHT_RECONSTRUCT_SRC}"
+        "${METAL_HIGHLIGHT_RECONSTRUCT_AIR}"
+        "${METAL_HIGHLIGHT_RECONSTRUCT_METALLIB}"
+        "Compiling Metal HighlightReconstruct shader"
+        "Linking Metal HighlightReconstruct library"
     )
-    add_custom_command(
-        OUTPUT ${METAL_CVT_REF_SPACE_METALLIB}
-        COMMAND ${PUERHLAB_METALLIB_EXECUTABLE} "${METAL_CVT_REF_SPACE_AIR}" -o "${METAL_CVT_REF_SPACE_METALLIB}"
-        DEPENDS ${METAL_CVT_REF_SPACE_AIR}
-        COMMENT "Linking Metal ConvertToRefSpace library"
-        VERBATIM
+
+    puerhlab_add_metal_library(
+        MetalCvtRefSpaceShaders
+        "${METAL_CVT_REF_SPACE_SRC}"
+        "${METAL_CVT_REF_SPACE_AIR}"
+        "${METAL_CVT_REF_SPACE_METALLIB}"
+        "Compiling Metal ConvertToRefSpace shader"
+        "Linking Metal ConvertToRefSpace library"
     )
+
     add_custom_target(RawProcessorOpMetalShaders DEPENDS
-        ${METAL_TO_LINEAR_REF_METALLIB}
-        ${METAL_DEBAYER_RCD_METALLIB}
-        ${METAL_HIGHLIGHT_RECONSTRUCT_METALLIB}
-        ${METAL_CVT_REF_SPACE_METALLIB}
+        "${METAL_TO_LINEAR_REF_METALLIB}"
+        "${METAL_DEBAYER_RCD_METALLIB}"
+        "${METAL_HIGHLIGHT_RECONSTRUCT_METALLIB}"
+        "${METAL_CVT_REF_SPACE_METALLIB}"
     )
 
     def_library(MetalContext SOURCES metal/metal_context.cpp)

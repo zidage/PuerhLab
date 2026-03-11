@@ -23,7 +23,7 @@ namespace {
 
 struct WBParams {
   float black_level[4];
-  float wb_multipliers[4];
+  float wb_scale[4];
 };
 
 struct ToLinearRefParams {
@@ -184,10 +184,13 @@ void ToLinearRef(MetalImage& img, LibRaw& raw_processor) {
     img = std::move(linearized);
 
     WBParams wb_params = {};
+    const float green_wb = wb[1];
     for (int c = 0; c < 4; ++c) {
-      wb_params.black_level[c]    = black_level[c];
-      wb_params.wb_multipliers[c] = wb[c];
+      wb_params.black_level[c] = black_level[c];
+      wb_params.wb_scale[c]    = 1.0f;
     }
+    wb_params.wb_scale[0] = wb[0] / green_wb;
+    wb_params.wb_scale[2] = wb[2] / green_wb;
 
     DispatchToLinearRef(img, maximum, wb_params);
   } else {

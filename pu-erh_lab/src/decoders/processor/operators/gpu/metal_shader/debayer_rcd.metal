@@ -46,6 +46,35 @@ static inline float LowPassAt(device const float* raw, constant SinglePlaneParam
   return 0.25f * c + 0.125f * (n + s + w + e) + 0.0625f * (nw + ne + sw + se);
 }
 
+static inline float ReconstructRbAtGreen(device const float* channel,
+                                         constant SinglePlaneParams& params, int y, int x,
+                                         float g_c, float g_m2, float g_p2, float g_l2, float g_r2,
+                                         float g_m1, float g_p1, float g_l1, float g_r1,
+                                         float vh_disc) {
+  const float ch_m1 = LoadPlane(channel, params, y - 1, x);
+  const float ch_p1 = LoadPlane(channel, params, y + 1, x);
+  const float ch_m3 = LoadPlane(channel, params, y - 3, x);
+  const float ch_p3 = LoadPlane(channel, params, y + 3, x);
+  const float ch_l1 = LoadPlane(channel, params, y, x - 1);
+  const float ch_r1 = LoadPlane(channel, params, y, x + 1);
+  const float ch_l3 = LoadPlane(channel, params, y, x - 3);
+  const float ch_r3 = LoadPlane(channel, params, y, x + 3);
+
+  const float N_grad = kEps + fabs(g_c - g_m2) + fabs(ch_m1 - ch_p1) + fabs(ch_m1 - ch_m3);
+  const float S_grad = kEps + fabs(g_c - g_p2) + fabs(ch_p1 - ch_m1) + fabs(ch_p1 - ch_p3);
+  const float W_grad = kEps + fabs(g_c - g_l2) + fabs(ch_l1 - ch_r1) + fabs(ch_l1 - ch_l3);
+  const float E_grad = kEps + fabs(g_c - g_r2) + fabs(ch_r1 - ch_l1) + fabs(ch_r1 - ch_r3);
+
+  const float N_est = ch_m1 - g_m1;
+  const float S_est = ch_p1 - g_p1;
+  const float W_est = ch_l1 - g_l1;
+  const float E_est = ch_r1 - g_r1;
+
+  const float V_est = (N_grad * S_est + S_grad * N_est) / (N_grad + S_grad);
+  const float H_est = (E_grad * W_est + W_grad * E_est) / (E_grad + W_grad);
+  return max(0.f, g_c + (1.f - vh_disc) * V_est + vh_disc * H_est);
+}
+
 kernel void rcd_init_and_vh(device const float* raw [[buffer(0)]],
                             device float*       r [[buffer(1)]],
                             device float*       g [[buffer(2)]],
@@ -355,66 +384,16 @@ kernel void rcd_rb_at_g(device const float* vh_dir [[buffer(0)]],
   const float g_p2 = LoadPlane(g, params, y + 2, x);
   const float g_l2 = LoadPlane(g, params, y, x - 2);
   const float g_r2 = LoadPlane(g, params, y, x + 2);
+  const float g_m1 = LoadPlane(g, params, y - 1, x);
+  const float g_p1 = LoadPlane(g, params, y + 1, x);
+  const float g_l1 = LoadPlane(g, params, y, x - 1);
+  const float g_r1 = LoadPlane(g, params, y, x + 1);
+  const uint index = gid.y * params.stride + gid.x;
 
-  {
-    const float ch_m1 = LoadPlane(r, params, y - 1, x);
-    const float ch_p1 = LoadPlane(r, params, y + 1, x);
-    const float ch_m3 = LoadPlane(r, params, y - 3, x);
-    const float ch_p3 = LoadPlane(r, params, y + 3, x);
-    const float ch_l1 = LoadPlane(r, params, y, x - 1);
-    const float ch_r1 = LoadPlane(r, params, y, x + 1);
-    const float ch_l3 = LoadPlane(r, params, y, x - 3);
-    const float ch_r3 = LoadPlane(r, params, y, x + 3);
-
-    const float N_grad =
-        kEps + fabs(g_c - g_m2) + fabs(ch_m1 - ch_p1) + fabs(ch_m1 - ch_m3);
-    const float S_grad =
-        kEps + fabs(g_c - g_p2) + fabs(ch_p1 - ch_m1) + fabs(ch_p1 - ch_p3);
-    const float W_grad =
-        kEps + fabs(g_c - g_l2) + fabs(ch_l1 - ch_r1) + fabs(ch_l1 - ch_l3);
-    const float E_grad =
-        kEps + fabs(g_c - g_r2) + fabs(ch_r1 - ch_l1) + fabs(ch_r1 - ch_r3);
-
-    const float N_est = ch_m1 - LoadPlane(g, params, y - 1, x);
-    const float S_est = ch_p1 - LoadPlane(g, params, y + 1, x);
-    const float W_est = ch_l1 - LoadPlane(g, params, y, x - 1);
-    const float E_est = ch_r1 - LoadPlane(g, params, y, x + 1);
-
-    const float V_est = (N_grad * S_est + S_grad * N_est) / (N_grad + S_grad);
-    const float H_est = (E_grad * W_est + W_grad * E_est) / (E_grad + W_grad);
-
-    r[gid.y * params.stride + gid.x] = max(0.f, g_c + (1.f - VH_disc) * V_est + VH_disc * H_est);
-  }
-
-  {
-    const float ch_m1 = LoadPlane(b, params, y - 1, x);
-    const float ch_p1 = LoadPlane(b, params, y + 1, x);
-    const float ch_m3 = LoadPlane(b, params, y - 3, x);
-    const float ch_p3 = LoadPlane(b, params, y + 3, x);
-    const float ch_l1 = LoadPlane(b, params, y, x - 1);
-    const float ch_r1 = LoadPlane(b, params, y, x + 1);
-    const float ch_l3 = LoadPlane(b, params, y, x - 3);
-    const float ch_r3 = LoadPlane(b, params, y, x + 3);
-
-    const float N_grad =
-        kEps + fabs(g_c - g_m2) + fabs(ch_m1 - ch_p1) + fabs(ch_m1 - ch_m3);
-    const float S_grad =
-        kEps + fabs(g_c - g_p2) + fabs(ch_p1 - ch_m1) + fabs(ch_p1 - ch_p3);
-    const float W_grad =
-        kEps + fabs(g_c - g_l2) + fabs(ch_l1 - ch_r1) + fabs(ch_l1 - ch_l3);
-    const float E_grad =
-        kEps + fabs(g_c - g_r2) + fabs(ch_r1 - ch_l1) + fabs(ch_r1 - ch_r3);
-
-    const float N_est = ch_m1 - LoadPlane(g, params, y - 1, x);
-    const float S_est = ch_p1 - LoadPlane(g, params, y + 1, x);
-    const float W_est = ch_l1 - LoadPlane(g, params, y, x - 1);
-    const float E_est = ch_r1 - LoadPlane(g, params, y, x + 1);
-
-    const float V_est = (N_grad * S_est + S_grad * N_est) / (N_grad + S_grad);
-    const float H_est = (E_grad * W_est + W_grad * E_est) / (E_grad + W_grad);
-
-    b[gid.y * params.stride + gid.x] = max(0.f, g_c + (1.f - VH_disc) * V_est + VH_disc * H_est);
-  }
+  r[index] = ReconstructRbAtGreen(r, params, y, x, g_c, g_m2, g_p2, g_l2, g_r2, g_m1, g_p1, g_l1,
+                                  g_r1, VH_disc);
+  b[index] = ReconstructRbAtGreen(b, params, y, x, g_c, g_m2, g_p2, g_l2, g_r2, g_m1, g_p1, g_l1,
+                                  g_r1, VH_disc);
 }
 
 kernel void rcd_merge_rgba(device const float* r [[buffer(0)]],
