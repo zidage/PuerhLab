@@ -36,12 +36,23 @@ struct CropInteractionResult {
   bool                       rotation_is_final = false;
 };
 
+struct CropPressContext {
+  QPointF                    event_pos{};
+  std::optional<QPointF>     image_uv{};
+  CropHitTestResult          hit_test{};
+  bool                       inside_image = false;
+};
+
 class CropInteractionController {
  public:
   CropInteractionController() = default;
 
   auto HandlePress(ViewerState& state, const ViewportWidgetInfo& widget_info,
                    const ViewportImageInfo& image_info, const QPointF& event_pos)
+      -> CropInteractionResult;
+
+  auto HandlePress(ViewerState& state, const ViewportImageInfo& image_info,
+                   const CropPressContext& press_context)
       -> CropInteractionResult;
 
   auto HandleMove(ViewerState& state, const ViewportWidgetInfo& widget_info,

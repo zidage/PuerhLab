@@ -13,7 +13,6 @@
 
 #include <cuda_gl_interop.h>
 
-#include "ui/edit_viewer/crop_geometry.hpp"
 #include "ui/edit_viewer/frame_mailbox.hpp"
 #include "ui/edit_viewer/viewer_state.hpp"
 #include "ui/edit_viewer/viewport_mapper.hpp"

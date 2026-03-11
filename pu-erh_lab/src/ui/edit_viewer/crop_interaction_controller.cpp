@@ -34,9 +34,49 @@ auto CropInteractionController::HandlePress(ViewerState& state,
                                             const ViewportWidgetInfo& widget_info,
                                             const ViewportImageInfo& image_info,
                                             const QPointF& event_pos) -> CropInteractionResult {
+  const auto crop_state = state.GetCropOverlay();
+  const auto view_state = state.GetViewTransform();
+
+  CropPressContext press_context;
+  press_context.event_pos = event_pos;
+  press_context.image_uv =
+      ViewportMapper::WidgetPointToImageUv(event_pos, widget_info, image_info, view_state.zoom,
+                                           view_state.pan);
+  press_context.inside_image = press_context.image_uv.has_value();
+
+  if (crop_state.tool_enabled && crop_state.overlay_visible) {
+    const float metric_aspect = CropGeometry::SafeAspect(image_info.image_width, image_info.image_height);
+    const auto  crop_corners_uv = CropGeometry::RotatedCropCornersUv(
+        crop_state.rect, crop_state.rotation_degrees, metric_aspect);
+    std::array<QPointF, 4> crop_corners_widget{};
+    bool                   corners_valid = true;
+    for (int i = 0; i < static_cast<int>(crop_corners_uv.size()); ++i) {
+      const auto corner_widget = ViewportMapper::ImageUvToWidgetPoint(
+          crop_corners_uv[static_cast<size_t>(i)], widget_info, image_info, view_state.zoom,
+          view_state.pan);
+      if (!corner_widget.has_value()) {
+        corners_valid = false;
+        break;
+      }
+      crop_corners_widget[static_cast<size_t>(i)] = *corner_widget;
+    }
+    if (corners_valid) {
+      press_context.hit_test = CropGeometry::HitTestWidgetGeometry(crop_corners_widget, event_pos);
+      if (press_context.image_uv.has_value()) {
+        press_context.hit_test.inside_crop = CropGeometry::IsPointInsideRotatedCrop(
+            *press_context.image_uv, crop_state.rect, crop_state.rotation_degrees, metric_aspect);
+      }
+    }
+  }
+
+  return HandlePress(state, image_info, press_context);
+}
+
+auto CropInteractionController::HandlePress(ViewerState& state, const ViewportImageInfo& image_info,
+                                            const CropPressContext& press_context)
+    -> CropInteractionResult {
   CropInteractionResult result;
   const auto            crop_state = state.GetCropOverlay();
-  const auto            view_state = state.GetViewTransform();
   if (!crop_state.tool_enabled || !crop_state.overlay_visible) {
     return result;
   }
@@ -44,45 +84,21 @@ auto CropInteractionController::HandlePress(ViewerState& state,
   const float metric_aspect = CropGeometry::SafeAspect(image_info.image_width, image_info.image_height);
   const auto  crop_corners_uv = CropGeometry::RotatedCropCornersUv(
       crop_state.rect, crop_state.rotation_degrees, metric_aspect);
-  std::array<QPointF, 4> crop_corners_widget{};
-  bool                   corners_valid = true;
-  for (int i = 0; i < static_cast<int>(crop_corners_uv.size()); ++i) {
-    const auto corner_widget = ViewportMapper::ImageUvToWidgetPoint(
-        crop_corners_uv[static_cast<size_t>(i)], widget_info, image_info, view_state.zoom,
-        view_state.pan);
-    if (!corner_widget.has_value()) {
-      corners_valid = false;
-      break;
-    }
-    crop_corners_widget[static_cast<size_t>(i)] = *corner_widget;
-  }
-
-  CropHitTestResult hit_test{};
-  if (corners_valid) {
-    hit_test = CropGeometry::HitTestWidgetGeometry(crop_corners_widget, event_pos);
-  }
-
-  const auto uv_opt =
-      ViewportMapper::WidgetPointToImageUv(event_pos, widget_info, image_info, view_state.zoom,
-                                           view_state.pan);
-  if (!hit_test.rotate_handle_hit && !uv_opt.has_value()) {
+  CropHitTestResult hit_test = press_context.hit_test;
+  if (!hit_test.rotate_handle_hit && !press_context.inside_image) {
     result.consumed = true;
     return result;
   }
 
-  const QPointF uv_point =
-      uv_opt.has_value()
-          ? QPointF(CropGeometry::Clamp01(static_cast<float>(uv_opt->x())),
-                    CropGeometry::Clamp01(static_cast<float>(uv_opt->y())))
-          : QPointF();
-  hit_test.inside_crop =
-      uv_opt.has_value() && CropGeometry::IsPointInsideRotatedCrop(
-                                uv_point, crop_state.rect, crop_state.rotation_degrees, metric_aspect);
+  const QPointF uv_point = press_context.image_uv.has_value()
+                               ? QPointF(CropGeometry::Clamp01(static_cast<float>(press_context.image_uv->x())),
+                                         CropGeometry::Clamp01(static_cast<float>(press_context.image_uv->y())))
+                               : QPointF();
 
   CropOverlayState new_state = crop_state;
   new_state.metric_aspect    = metric_aspect;
   drag_anchor_uv_            = uv_point;
-  drag_anchor_widget_pos_    = event_pos;
+  drag_anchor_widget_pos_    = press_context.event_pos;
   drag_origin_rect_          = crop_state.rect;
   drag_rotation_degrees_     = crop_state.rotation_degrees;
   drag_corner_               = CropCorner::None;
@@ -347,7 +363,7 @@ auto CropInteractionController::HandleRelease(ViewerState& state) -> CropInterac
 auto CropInteractionController::HandleDoubleClick(ViewerState& state) -> CropInteractionResult {
   CropInteractionResult result;
   auto                  crop_state = state.GetCropOverlay();
-  if (!crop_state.overlay_visible) {
+  if (!crop_state.tool_enabled || !crop_state.overlay_visible) {
     return result;
   }
 

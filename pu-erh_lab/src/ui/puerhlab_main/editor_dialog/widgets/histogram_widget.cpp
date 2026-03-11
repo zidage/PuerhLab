@@ -62,8 +62,8 @@ void HistogramWidget::paintGL() {
     return;
   }
 
-  if (context() && source_viewer_->context() &&
-      !QOpenGLContext::areSharing(context(), source_viewer_->context())) {
+  if (context() && source_viewer_->GetRenderSurfaceContext() &&
+      !QOpenGLContext::areSharing(context(), source_viewer_->GetRenderSurfaceContext())) {
     if (!warned_context_sharing_) {
       qWarning("HistogramWidget disabled: OpenGL contexts are not sharing resources.");
       warned_context_sharing_ = true;

@@ -658,6 +658,7 @@ if(PUERHLAB_REAL_OPENGL_EDITOR)
     def_library(EditViewer
         SOURCES
             ui/edit_viewer/edit_viewer.cpp
+            ui/edit_viewer/edit_viewer_overlay_geometry.cpp
             ui/edit_viewer/viewport_mapper.cpp
             ui/edit_viewer/crop_geometry.cpp
             ui/edit_viewer/view_transform_controller.cpp
@@ -665,6 +666,7 @@ if(PUERHLAB_REAL_OPENGL_EDITOR)
             ui/edit_viewer/frame_mailbox.cpp
             ui/edit_viewer/opengl_viewer_renderer.cpp
             include/ui/edit_viewer/edit_viewer.hpp
+            include/ui/edit_viewer/edit_viewer_overlay_geometry.hpp
             include/ui/edit_viewer/viewer_state.hpp
             include/ui/edit_viewer/viewport_mapper.hpp
             include/ui/edit_viewer/crop_geometry.hpp

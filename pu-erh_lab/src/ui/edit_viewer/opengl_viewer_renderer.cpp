@@ -11,14 +11,9 @@
 #include <QByteArray>
 #include <QDebug>
 #include <QOpenGLContext>
-#include <QPainter>
-#include <QPainterPath>
-#include <QPen>
-#include <QPolygonF>
 #include <QSurfaceFormat>
 
 #include <algorithm>
-#include <vector>
 
 namespace puerhlab {
 namespace {
@@ -272,73 +267,6 @@ auto OpenGLViewerRenderer::Render(QOpenGLWidget& widget, const FrameMailbox::Act
   program_->setAttributeBuffer(pos_loc, GL_FLOAT, 0, 2, 2 * sizeof(float));
   glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
   program_->release();
-
-  if (state_snapshot.crop_overlay.overlay_visible) {
-    const auto image_top_left_opt = ViewportMapper::ImageUvToWidgetPoint(
-        QPointF(0.0, 0.0), widget_info, image_info, zoom, pan);
-    const auto image_bottom_right_opt = ViewportMapper::ImageUvToWidgetPoint(
-        QPointF(1.0, 1.0), widget_info, image_info, zoom, pan);
-    const auto crop_corners_uv = CropGeometry::RotatedCropCornersUv(
-        state_snapshot.crop_overlay.rect, state_snapshot.crop_overlay.rotation_degrees,
-        state_snapshot.crop_overlay.metric_aspect);
-    std::array<QPointF, 4> crop_corners_widget{};
-    bool                   crop_corners_valid = true;
-    for (size_t i = 0; i < crop_corners_uv.size(); ++i) {
-      const auto corner_widget =
-          ViewportMapper::ImageUvToWidgetPoint(crop_corners_uv[i], widget_info, image_info, zoom, pan);
-      if (!corner_widget.has_value()) {
-        crop_corners_valid = false;
-        break;
-      }
-      crop_corners_widget[i] = *corner_widget;
-    }
-
-    if (crop_corners_valid && image_top_left_opt.has_value() && image_bottom_right_opt.has_value()) {
-      const QRectF image_rect = QRectF(*image_top_left_opt, *image_bottom_right_opt).normalized();
-      if (image_rect.isValid()) {
-        const auto [rotate_stem_widget, rotate_handle_widget] =
-            CropGeometry::CropRotateHandleWidgetPoint(crop_corners_widget);
-        QPolygonF crop_polygon;
-        crop_polygon.reserve(static_cast<int>(crop_corners_widget.size()));
-        for (const auto& point : crop_corners_widget) {
-          crop_polygon.push_back(point);
-        }
-
-        QPainter painter(&widget);
-        painter.setRenderHint(QPainter::Antialiasing, true);
-
-        QPainterPath image_path;
-        image_path.addRect(image_rect);
-        QPainterPath crop_path;
-        crop_path.addPolygon(crop_polygon);
-        crop_path.closeSubpath();
-        painter.fillPath(image_path.subtracted(crop_path), QColor(0, 0, 0, 110));
-
-        painter.setPen(QPen(QColor(252, 199, 4, 220), 1.2));
-        painter.setBrush(Qt::NoBrush);
-        painter.drawPolygon(crop_polygon);
-        painter.drawLine(rotate_stem_widget, rotate_handle_widget);
-
-        painter.setPen(QPen(QColor(252, 199, 4, 150), 1.0, Qt::DashLine));
-        for (const float t : {1.0f / 3.0f, 2.0f / 3.0f}) {
-          painter.drawLine(CropGeometry::LerpPoint(crop_corners_widget[0], crop_corners_widget[1], t),
-                           CropGeometry::LerpPoint(crop_corners_widget[3], crop_corners_widget[2], t));
-          painter.drawLine(CropGeometry::LerpPoint(crop_corners_widget[0], crop_corners_widget[3], t),
-                           CropGeometry::LerpPoint(crop_corners_widget[1], crop_corners_widget[2], t));
-        }
-
-        painter.setPen(QPen(QColor(18, 18, 18, 230), 1.0));
-        painter.setBrush(QColor(252, 199, 4, 230));
-        for (const auto& corner : crop_corners_widget) {
-          painter.drawEllipse(corner, CropGeometry::kCropCornerDrawRadiusPx,
-                              CropGeometry::kCropCornerDrawRadiusPx);
-        }
-        painter.setBrush(QColor(252, 199, 4, 245));
-        painter.drawEllipse(rotate_handle_widget, CropGeometry::kCropRotateHandleDrawRadiusPx,
-                            CropGeometry::kCropRotateHandleDrawRadiusPx);
-      }
-    }
-  }
 
   if (histogram_requested && ShouldComputeHistogramNow()) {
     if ((histogram_resources_ready_ || InitHistogramResources()) &&
