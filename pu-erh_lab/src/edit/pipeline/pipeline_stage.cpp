@@ -543,11 +543,7 @@ std::shared_ptr<ImageBuffer> PipelineStage::ApplyGpuStream(OperatorParams& globa
   output_cache_ = std::make_shared<ImageBuffer>();
   gpu_executor_.SetParams(global_params);
   gpu_executor_.SetInputImage(input_img_);
-  if (force_cpu_output_) {
-    gpu_executor_.Execute(output_cache_);
-  } else {
-    gpu_executor_.Execute(nullptr);
-  }
+  gpu_executor_.Execute(output_cache_);
 
   if (force_cpu_output_) {
     try {

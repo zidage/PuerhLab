@@ -214,5 +214,4 @@ struct NeighborOpTag {};
 struct GPUPointOpTag {};
 struct GPUNeighborOpTag {};
 
-
 };  // namespace puerhlab

@@ -53,6 +53,11 @@ if(PUERHLAB_METAL_ENABLED)
   target_include_directories(MetalRawStagePreviewTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
   target_link_libraries(MetalRawStagePreviewTest PRIVATE GTest::gtest_main EditPipeline RawProcessor ThreadPool opencv_highgui ${PUERHLAB_TEST_OPENCV_MIN_DEPS})
   gtest_discover_tests(MetalRawStagePreviewTest TEST_PREFIX "MetalRawStagePreviewTest.")
+
+  add_executable(MetalFullPipelinePreviewTest raw/metal_full_pipeline_preview_test.cpp)
+  target_include_directories(MetalFullPipelinePreviewTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
+  target_link_libraries(MetalFullPipelinePreviewTest PRIVATE GTest::gtest_main EditPipeline RawProcessor ThreadPool opencv_highgui ${PUERHLAB_TEST_OPENCV_MIN_DEPS})
+  gtest_discover_tests(MetalFullPipelinePreviewTest TEST_PREFIX "MetalFullPipelinePreviewTest.")
 endif()
 
 # add_executable(ImageDecoderTest decoders/image_decoder_test.cpp)

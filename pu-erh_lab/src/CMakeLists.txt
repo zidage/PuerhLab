@@ -51,6 +51,16 @@ if(PUERHLAB_METAL_ENABLED)
     set(METAL_LENS_CALIB_SRC "${CMAKE_CURRENT_SOURCE_DIR}/edit/operators/geometry/metal_shader/lens_calib.metal")
     set(METAL_LENS_CALIB_AIR "${CMAKE_CURRENT_BINARY_DIR}/edit/operators/geometry/metal_shader/lens_calib.air")
     set(METAL_LENS_CALIB_METALLIB "${CMAKE_CURRENT_BINARY_DIR}/edit/operators/geometry/metal_shader/lens_calib.metallib")
+    set(METAL_FUSED_PIPELINE_SRC "${CMAKE_CURRENT_SOURCE_DIR}/edit/pipeline/metal_shader/fused_pipeline.metal")
+    set(METAL_FUSED_PIPELINE_AIR "${CMAKE_CURRENT_BINARY_DIR}/edit/pipeline/metal_shader/fused_pipeline.air")
+    set(METAL_FUSED_PIPELINE_METALLIB "${CMAKE_CURRENT_BINARY_DIR}/edit/pipeline/metal_shader/fused_pipeline.metallib")
+    set(METAL_FUSED_PIPELINE_DEPS
+        "${CMAKE_CURRENT_SOURCE_DIR}/edit/pipeline/metal_shader/common.metal"
+        "${CMAKE_CURRENT_SOURCE_DIR}/edit/pipeline/metal_shader/GPU_kernels/basic.metal"
+        "${CMAKE_CURRENT_SOURCE_DIR}/edit/pipeline/metal_shader/GPU_kernels/color.metal"
+        "${CMAKE_CURRENT_SOURCE_DIR}/edit/pipeline/metal_shader/GPU_kernels/cst.metal"
+        "${CMAKE_CURRENT_SOURCE_DIR}/edit/pipeline/metal_shader/GPU_kernels/detail.metal"
+    )
     set(METAL_TO_LINEAR_REF_SRC "${CMAKE_CURRENT_SOURCE_DIR}/decoders/processor/operators/gpu/metal_shader/to_linear_ref.metal")
     set(METAL_TO_LINEAR_REF_AIR "${CMAKE_CURRENT_BINARY_DIR}/decoders/processor/operators/gpu/metal_shader/to_linear_ref.air")
     set(METAL_TO_LINEAR_REF_METALLIB "${CMAKE_CURRENT_BINARY_DIR}/decoders/processor/operators/gpu/metal_shader/to_linear_ref.metallib")
@@ -137,6 +147,23 @@ if(PUERHLAB_METAL_ENABLED)
         VERBATIM
     )
     add_custom_target(LensCalibOpMetalShaders DEPENDS ${METAL_LENS_CALIB_METALLIB})
+
+    add_custom_command(
+        OUTPUT ${METAL_FUSED_PIPELINE_AIR}
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/edit/pipeline/metal_shader"
+        COMMAND ${PUERHLAB_METAL_EXECUTABLE} -c "${METAL_FUSED_PIPELINE_SRC}" -o "${METAL_FUSED_PIPELINE_AIR}"
+        DEPENDS ${METAL_FUSED_PIPELINE_SRC} ${METAL_FUSED_PIPELINE_DEPS}
+        COMMENT "Compiling Metal fused pipeline shader"
+        VERBATIM
+    )
+    add_custom_command(
+        OUTPUT ${METAL_FUSED_PIPELINE_METALLIB}
+        COMMAND ${PUERHLAB_METALLIB_EXECUTABLE} "${METAL_FUSED_PIPELINE_AIR}" -o "${METAL_FUSED_PIPELINE_METALLIB}"
+        DEPENDS ${METAL_FUSED_PIPELINE_AIR}
+        COMMENT "Linking Metal fused pipeline library"
+        VERBATIM
+    )
+    add_custom_target(EditPipelineMetalShaders DEPENDS ${METAL_FUSED_PIPELINE_METALLIB})
 
     add_custom_command(
         OUTPUT ${METAL_TO_LINEAR_REF_AIR}
@@ -381,6 +408,11 @@ if(PUERHLAB_CUDA_ENABLED)
         edit/pipeline/pipeline_gpu_impl.cu
     )
 endif()
+if(PUERHLAB_METAL_ENABLED)
+    list(APPEND GPU_PIPELINE_SRCS
+        edit/pipeline/pipeline_metal_impl.cpp
+    )
+endif()
 
 def_library(EditPipeline
     SOURCES ${PIPELINE_SRCS} ${GPU_PIPELINE_SRCS}
@@ -392,6 +424,14 @@ if(PUERHLAB_CUDA_ENABLED)
     target_compile_definitions(EditPipeline PUBLIC HAVE_CUDA)
     target_include_directories(EditPipeline PRIVATE ${CUDAToolkit_INCLUDE_DIRS})
     target_link_libraries(EditPipeline PRIVATE CUDA::cudart)
+endif()
+if(PUERHLAB_METAL_ENABLED)
+    add_dependencies(EditPipeline EditPipelineMetalShaders)
+    target_compile_definitions(EditPipeline PUBLIC HAVE_METAL)
+    target_compile_definitions(EditPipeline PRIVATE
+        PUERHLAB_METAL_FUSED_PIPELINE_METALLIB_PATH="${METAL_FUSED_PIPELINE_METALLIB}"
+    )
+    target_link_libraries(EditPipeline PRIVATE MetalImage MetalContext)
 endif()
 
 set(RENDERER_SRCS renderer/pipeline_scheduler.cpp)

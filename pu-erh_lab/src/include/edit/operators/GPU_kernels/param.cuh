@@ -5,6 +5,7 @@
 #pragma once
 
 #include <OpenColorIO/OpenColorIO.h>
+#include <array>
 #include <cuda_runtime.h>
 #include <driver_types.h>
 
@@ -19,26 +20,12 @@
 #include <vector>
 
 #include "edit/operators/op_base.hpp"
+#include "edit/operators/GPU_kernels/fused_param.hpp"
 #include "utils/lut/cube_lut.hpp"
 
 #define GPU_FUNC __device__ __forceinline__
 
 namespace puerhlab {
-enum class GPU_EOTF : int {
-  LINEAR    = 0,
-  ST2084    = 1,
-  HLG       = 2,
-  GAMMA_2_6 = 3,
-  BT1886    = 4,
-  GAMMA_2_2 = 5,
-  GAMMA_1_8 = 6,
-};
-
-enum class GPU_ODTMethod : int {
-  ACES_2_0 = 0,
-  OPEN_DRT = 1,
-};
-
 struct GPU_LUT3D {
   cudaArray_t         array_              = nullptr;
   cudaTextureObject_t texture_object_     = 0;
@@ -456,111 +443,120 @@ struct GPUOperatorParams {
   float                gain_luminance_offset_  = 0.0f;
 };
 
-class GPUParamsConverter {
+struct CudaFusedResources {
+  FusedOperatorParams common_params_ = {};
+  GPUOperatorParams   uploaded_params_ = {};
+
+  void Reset() {
+    uploaded_params_.to_ws_lut_.Reset();
+    uploaded_params_.lmt_lut_.Reset();
+    uploaded_params_.to_output_lut_.Reset();
+    uploaded_params_.to_output_params_.Reset();
+  }
+};
+
+class CudaFusedParamUploader {
  public:
-  static GPUOperatorParams ConvertFromCPU(OperatorParams&    cpu_params,
-                                          GPUOperatorParams& orig_params) {
-    // TODO: Improve param synchronization to avoid unnecessary data transfers
-    GPUOperatorParams gpu_params       = orig_params;
+  static auto Upload(const FusedOperatorParams& fused_params, OperatorParams& cpu_params,
+                     CudaFusedResources& orig_resources) -> CudaFusedResources {
+    CudaFusedResources resources = orig_resources;
+    resources.common_params_     = fused_params;
+    GPUOperatorParams& gpu_params = resources.uploaded_params_;
 
-    gpu_params.exposure_enabled_       = cpu_params.exposure_enabled_;
-    gpu_params.exposure_offset_        = cpu_params.exposure_offset_;
+    gpu_params.exposure_enabled_       = fused_params.exposure_enabled_;
+    gpu_params.exposure_offset_        = fused_params.exposure_offset_;
 
-    gpu_params.contrast_enabled_       = cpu_params.contrast_enabled_;
-    gpu_params.contrast_scale_         = cpu_params.contrast_scale_;
+    gpu_params.contrast_enabled_       = fused_params.contrast_enabled_;
+    gpu_params.contrast_scale_         = fused_params.contrast_scale_;
 
-    gpu_params.shadows_enabled_        = cpu_params.shadows_enabled_;
-    gpu_params.shadows_offset_         = cpu_params.shadows_offset_;
-    gpu_params.shadows_x0_             = cpu_params.shadows_x0_;
-    gpu_params.shadows_x1_             = cpu_params.shadows_x1_;
-    gpu_params.shadows_y0_             = cpu_params.shadows_y0_;
-    gpu_params.shadows_y1_             = cpu_params.shadows_y1_;
-    gpu_params.shadows_m0_             = cpu_params.shadows_m0_;
-    gpu_params.shadows_m1_             = cpu_params.shadows_m1_;
-    gpu_params.shadows_dx_             = cpu_params.shadows_dx_;
+    gpu_params.shadows_enabled_        = fused_params.shadows_enabled_;
+    gpu_params.shadows_offset_         = fused_params.shadows_offset_;
+    gpu_params.shadows_x0_             = fused_params.shadows_x0_;
+    gpu_params.shadows_x1_             = fused_params.shadows_x1_;
+    gpu_params.shadows_y0_             = fused_params.shadows_y0_;
+    gpu_params.shadows_y1_             = fused_params.shadows_y1_;
+    gpu_params.shadows_m0_             = fused_params.shadows_m0_;
+    gpu_params.shadows_m1_             = fused_params.shadows_m1_;
+    gpu_params.shadows_dx_             = fused_params.shadows_dx_;
 
-    gpu_params.highlights_enabled_     = cpu_params.highlights_enabled_;
-    gpu_params.highlights_k_           = cpu_params.highlights_k_;
-    gpu_params.highlights_offset_      = cpu_params.highlights_offset_;
-    gpu_params.highlights_slope_range_ = cpu_params.highlights_slope_range_;
-    gpu_params.highlights_m0_          = cpu_params.highlights_m0_;
-    gpu_params.highlights_m1_          = cpu_params.highlights_m1_;
-    gpu_params.highlights_x0_          = cpu_params.highlights_x0_;
-    gpu_params.highlights_y0_          = cpu_params.highlights_y0_;
-    gpu_params.highlights_y1_          = cpu_params.highlights_y1_;
-    gpu_params.highlights_dx_          = cpu_params.highlights_dx_;
+    gpu_params.highlights_enabled_     = fused_params.highlights_enabled_;
+    gpu_params.highlights_k_           = fused_params.highlights_k_;
+    gpu_params.highlights_offset_      = fused_params.highlights_offset_;
+    gpu_params.highlights_slope_range_ = fused_params.highlights_slope_range_;
+    gpu_params.highlights_m0_          = fused_params.highlights_m0_;
+    gpu_params.highlights_m1_          = fused_params.highlights_m1_;
+    gpu_params.highlights_x0_          = fused_params.highlights_x0_;
+    gpu_params.highlights_y0_          = fused_params.highlights_y0_;
+    gpu_params.highlights_y1_          = fused_params.highlights_y1_;
+    gpu_params.highlights_dx_          = fused_params.highlights_dx_;
 
-    gpu_params.white_enabled_          = cpu_params.white_enabled_;
-    gpu_params.white_point_            = cpu_params.white_point_;
+    gpu_params.white_enabled_          = fused_params.white_enabled_;
+    gpu_params.white_point_            = fused_params.white_point_;
 
-    gpu_params.black_enabled_          = cpu_params.black_enabled_;
-    gpu_params.black_point_            = cpu_params.black_point_;
+    gpu_params.black_enabled_          = fused_params.black_enabled_;
+    gpu_params.black_point_            = fused_params.black_point_;
 
-    gpu_params.slope_                  = cpu_params.slope_;
+    gpu_params.slope_                  = fused_params.slope_;
 
-    gpu_params.hls_enabled_            = cpu_params.hls_enabled_;
+    gpu_params.hls_enabled_            = fused_params.hls_enabled_;
     for (int i = 0; i < 3; ++i) {
-      gpu_params.target_hls_[i]     = cpu_params.target_hls_[i];
-      gpu_params.hls_adjustment_[i] = cpu_params.hls_adjustment_[i];
+      gpu_params.target_hls_[i]     = fused_params.target_hls_[i];
+      gpu_params.hls_adjustment_[i] = fused_params.hls_adjustment_[i];
     }
-    gpu_params.hue_range_          = cpu_params.hue_range_;
-    gpu_params.lightness_range_    = cpu_params.lightness_range_;
-
-    gpu_params.saturation_range_   = cpu_params.saturation_range_;
-    gpu_params.hls_profile_count_  =
-        std::clamp(cpu_params.hls_profile_count_, 1, OperatorParams::kHlsProfileCount);
+    gpu_params.hue_range_          = fused_params.hue_range_;
+    gpu_params.lightness_range_    = fused_params.lightness_range_;
+    gpu_params.saturation_range_   = fused_params.saturation_range_;
+    gpu_params.hls_profile_count_  = fused_params.hls_profile_count_;
     for (int i = 0; i < OperatorParams::kHlsProfileCount; ++i) {
-      gpu_params.hls_profile_hues_[i]      = cpu_params.hls_profile_hues_[i];
-      gpu_params.hls_profile_hue_ranges_[i] = cpu_params.hls_profile_hue_ranges_[i];
-      gpu_params.hls_profile_adjustments_[i][0] = cpu_params.hls_profile_adjustments_[i][0];
-      gpu_params.hls_profile_adjustments_[i][1] = cpu_params.hls_profile_adjustments_[i][1];
-      gpu_params.hls_profile_adjustments_[i][2] = cpu_params.hls_profile_adjustments_[i][2];
+      gpu_params.hls_profile_hues_[i]            = fused_params.hls_profile_hues_[i];
+      gpu_params.hls_profile_hue_ranges_[i]      = fused_params.hls_profile_hue_ranges_[i];
+      gpu_params.hls_profile_adjustments_[i][0]  = fused_params.hls_profile_adjustments_[i][0];
+      gpu_params.hls_profile_adjustments_[i][1]  = fused_params.hls_profile_adjustments_[i][1];
+      gpu_params.hls_profile_adjustments_[i][2]  = fused_params.hls_profile_adjustments_[i][2];
     }
-    gpu_params.saturation_enabled_ = cpu_params.saturation_enabled_;
-    gpu_params.saturation_offset_  = cpu_params.saturation_offset_;
-
-    gpu_params.tint_enabled_       = cpu_params.tint_enabled_;
-    gpu_params.tint_offset_        = cpu_params.tint_offset_;
-
-    gpu_params.vibrance_enabled_   = cpu_params.vibrance_enabled_;
-    gpu_params.vibrance_offset_    = cpu_params.vibrance_offset_;
-
-    gpu_params.to_ws_enabled_      = cpu_params.to_ws_enabled_;
+    gpu_params.saturation_enabled_ = fused_params.saturation_enabled_;
+    gpu_params.saturation_offset_  = fused_params.saturation_offset_;
+    gpu_params.tint_enabled_       = fused_params.tint_enabled_;
+    gpu_params.tint_offset_        = fused_params.tint_offset_;
+    gpu_params.vibrance_enabled_   = fused_params.vibrance_enabled_;
+    gpu_params.vibrance_offset_    = fused_params.vibrance_offset_;
+    gpu_params.to_ws_enabled_      = fused_params.to_ws_enabled_;
     // if (cpu_params.to_ws_dirty) {
     //   gpu_params.to_ws_lut.Reset();  // Explicitly reset existing LUT
     //   gpu_params.to_ws_lut        = CreateLUTTextureObject(cpu_params.to_ws_lut_baker);
     //   cpu_params.to_ws_dirty      = false;
     // } else {
-    //   gpu_params.to_ws_lut = orig_params.to_ws_lut;
+    //   gpu_params.to_ws_lut = orig_resources.uploaded_params_.to_ws_lut;
     // }
 
-    gpu_params.color_temp_enabled_      = cpu_params.color_temp_enabled_;
-    gpu_params.color_temp_mode_         = static_cast<int>(cpu_params.color_temp_mode_);
-    gpu_params.color_temp_custom_cct_   = cpu_params.color_temp_custom_cct_;
-    gpu_params.color_temp_custom_tint_  = cpu_params.color_temp_custom_tint_;
-    gpu_params.color_temp_resolved_cct_ = cpu_params.color_temp_resolved_cct_;
-    gpu_params.color_temp_resolved_tint_ = cpu_params.color_temp_resolved_tint_;
-    gpu_params.color_temp_resolved_xy_[0] = cpu_params.color_temp_resolved_xy_[0];
-    gpu_params.color_temp_resolved_xy_[1] = cpu_params.color_temp_resolved_xy_[1];
+    gpu_params.color_temp_enabled_       = fused_params.color_temp_enabled_;
+    gpu_params.color_temp_mode_          = fused_params.color_temp_mode_;
+    gpu_params.color_temp_custom_cct_    = fused_params.color_temp_custom_cct_;
+    gpu_params.color_temp_custom_tint_   = fused_params.color_temp_custom_tint_;
+    gpu_params.color_temp_resolved_cct_  = fused_params.color_temp_resolved_cct_;
+    gpu_params.color_temp_resolved_tint_ = fused_params.color_temp_resolved_tint_;
+    gpu_params.color_temp_resolved_xy_[0] = fused_params.color_temp_resolved_xy_[0];
+    gpu_params.color_temp_resolved_xy_[1] = fused_params.color_temp_resolved_xy_[1];
 
-    gpu_params.raw_runtime_valid_       = cpu_params.raw_runtime_valid_;
-    gpu_params.raw_decode_input_space_  = static_cast<int>(cpu_params.raw_decode_input_space_);
+    gpu_params.raw_runtime_valid_       = fused_params.raw_runtime_valid_;
+    gpu_params.raw_decode_input_space_  = fused_params.raw_decode_input_space_;
     for (int i = 0; i < 3; ++i) {
-      gpu_params.raw_cam_mul_[i] = cpu_params.raw_cam_mul_[i];
-      gpu_params.raw_pre_mul_[i] = cpu_params.raw_pre_mul_[i];
+      gpu_params.raw_cam_mul_[i] = fused_params.raw_cam_mul_[i];
+      gpu_params.raw_pre_mul_[i] = fused_params.raw_pre_mul_[i];
     }
     for (int i = 0; i < 9; ++i) {
-      gpu_params.raw_cam_xyz_[i] = cpu_params.raw_cam_xyz_[i];
-      gpu_params.color_temp_cam_to_xyz_[i] = cpu_params.color_temp_cam_to_xyz_[i];
-      gpu_params.color_temp_cam_to_xyz_d50_[i] = cpu_params.color_temp_cam_to_xyz_d50_[i];
-      gpu_params.color_temp_xyz_d50_to_ap1_[i] = cpu_params.color_temp_xyz_d50_to_ap1_[i];
-      gpu_params.color_temp_cam_to_ap1_[i] = cpu_params.color_temp_cam_to_ap1_[i];
+      gpu_params.raw_cam_xyz_[i]              = fused_params.raw_cam_xyz_[i];
+      gpu_params.color_temp_cam_to_xyz_[i]    = fused_params.color_temp_cam_to_xyz_[i];
+      gpu_params.color_temp_cam_to_xyz_d50_[i] = fused_params.color_temp_cam_to_xyz_d50_[i];
+      gpu_params.color_temp_xyz_d50_to_ap1_[i] = fused_params.color_temp_xyz_d50_to_ap1_[i];
+      gpu_params.color_temp_cam_to_ap1_[i]     = fused_params.color_temp_cam_to_ap1_[i];
     }
-    gpu_params.color_temp_matrices_valid_ = cpu_params.color_temp_matrices_valid_;
+    gpu_params.color_temp_matrices_valid_ = fused_params.color_temp_matrices_valid_;
 
-    gpu_params.lmt_enabled_        = cpu_params.lmt_enabled_;
+    gpu_params.lmt_enabled_        = fused_params.lmt_enabled_;
     const bool lmt_gpu_lut_missing =
-        (orig_params.lmt_lut_.texture_object_ == 0 || orig_params.lmt_lut_.edge_size_ <= 1);
+        (orig_resources.uploaded_params_.lmt_lut_.texture_object_ == 0 ||
+         orig_resources.uploaded_params_.lmt_lut_.edge_size_ <= 1);
     if (cpu_params.lmt_enabled_ && (cpu_params.to_lmt_dirty_ || lmt_gpu_lut_missing)) {
       if (cpu_params.lmt_lut_path_.empty()) {
         throw std::runtime_error(
@@ -572,71 +568,44 @@ class GPUParamsConverter {
     } else if (!cpu_params.lmt_enabled_) {
       gpu_params.lmt_lut_.Reset();
     } else {
-      gpu_params.lmt_lut_ = orig_params.lmt_lut_;
+      gpu_params.lmt_lut_ = orig_resources.uploaded_params_.lmt_lut_;
     }
 
-    gpu_params.to_output_enabled_   = cpu_params.to_output_enabled_;
+    gpu_params.to_output_enabled_   = fused_params.to_output_enabled_;
     // if (cpu_params.to_output_dirty) {
     //   gpu_params.to_output_lut.Reset();  // Explicitly reset existing LUT
     //   gpu_params.to_output_lut        = CreateLUTTextureObject(cpu_params.to_output_lut_baker);
     //   cpu_params.to_output_dirty      = false;
     // } else {
-    //   gpu_params.to_output_lut = orig_params.to_output_lut;
+    //   gpu_params.to_output_lut = orig_resources.uploaded_params_.to_output_lut;
     // }
 
-    gpu_params.curve_enabled_       = cpu_params.curve_enabled_;
-    const size_t curve_pts_count    = cpu_params.curve_ctrl_pts_.size();
-    if (curve_pts_count > static_cast<size_t>(GPUOperatorParams::kMaxCurveControlPoints)) {
-      std::ostringstream oss;
-      oss << "GPUParamsConverter: curve has " << curve_pts_count
-          << " control points, but GPU max is " << GPUOperatorParams::kMaxCurveControlPoints << ".";
-      throw std::runtime_error(oss.str());
-    }
-    if (curve_pts_count > 0 && cpu_params.curve_m_.size() < curve_pts_count) {
-      throw std::runtime_error(
-          "GPUParamsConverter: curve_m_ is smaller than curve control-point count.");
-    }
-    if (curve_pts_count > 1 && cpu_params.curve_h_.size() < (curve_pts_count - 1)) {
-      throw std::runtime_error(
-          "GPUParamsConverter: curve_h_ is smaller than curve segment count.");
-    }
-
-    gpu_params.curve_ctrl_pts_size_ = static_cast<int>(curve_pts_count);
+    gpu_params.curve_enabled_       = fused_params.curve_enabled_;
+    gpu_params.curve_ctrl_pts_size_ = fused_params.curve_ctrl_pts_size_;
     for (int i = 0; i < GPUOperatorParams::kMaxCurveControlPoints; ++i) {
-      gpu_params.curve_ctrl_pts_x_[i] = 0.0f;
-      gpu_params.curve_ctrl_pts_y_[i] = 0.0f;
-      gpu_params.curve_m_[i]          = 0.0f;
+      gpu_params.curve_ctrl_pts_x_[i] = fused_params.curve_ctrl_pts_x_[i];
+      gpu_params.curve_ctrl_pts_y_[i] = fused_params.curve_ctrl_pts_y_[i];
+      gpu_params.curve_m_[i]          = fused_params.curve_m_[i];
       if (i < GPUOperatorParams::kMaxCurveControlPoints - 1) {
-        gpu_params.curve_h_[i] = 0.0f;
+        gpu_params.curve_h_[i] = fused_params.curve_h_[i];
       }
     }
-    for (size_t i = 0; i < curve_pts_count; ++i) {
-      gpu_params.curve_ctrl_pts_x_[i] = cpu_params.curve_ctrl_pts_[i].x;
-      gpu_params.curve_ctrl_pts_y_[i] = cpu_params.curve_ctrl_pts_[i].y;
-      gpu_params.curve_m_[i]          = cpu_params.curve_m_[i];
-    }
-    for (size_t i = 0; i + 1 < curve_pts_count; ++i) {
-      gpu_params.curve_h_[i] = cpu_params.curve_h_[i];
-    }
-
-    gpu_params.clarity_enabled_     = cpu_params.clarity_enabled_;
-    gpu_params.clarity_offset_      = cpu_params.clarity_offset_;
-    gpu_params.clarity_radius_      = cpu_params.clarity_radius_;
-
-    gpu_params.sharpen_enabled_     = cpu_params.sharpen_enabled_;
-    gpu_params.sharpen_offset_      = cpu_params.sharpen_offset_;
-    gpu_params.sharpen_radius_      = cpu_params.sharpen_radius_;
-    gpu_params.sharpen_threshold_   = cpu_params.sharpen_threshold_;
-
-    gpu_params.color_wheel_enabled_ = cpu_params.color_wheel_enabled_;
+    gpu_params.clarity_enabled_     = fused_params.clarity_enabled_;
+    gpu_params.clarity_offset_      = fused_params.clarity_offset_;
+    gpu_params.clarity_radius_      = fused_params.clarity_radius_;
+    gpu_params.sharpen_enabled_     = fused_params.sharpen_enabled_;
+    gpu_params.sharpen_offset_      = fused_params.sharpen_offset_;
+    gpu_params.sharpen_radius_      = fused_params.sharpen_radius_;
+    gpu_params.sharpen_threshold_   = fused_params.sharpen_threshold_;
+    gpu_params.color_wheel_enabled_ = fused_params.color_wheel_enabled_;
     for (int i = 0; i < 3; ++i) {
-      gpu_params.lift_color_offset_[i]  = cpu_params.lift_color_offset_[i];
-      gpu_params.gamma_color_offset_[i] = cpu_params.gamma_color_offset_[i];
-      gpu_params.gain_color_offset_[i]  = cpu_params.gain_color_offset_[i];
+      gpu_params.lift_color_offset_[i]  = fused_params.lift_color_offset_[i];
+      gpu_params.gamma_color_offset_[i] = fused_params.gamma_color_offset_[i];
+      gpu_params.gain_color_offset_[i]  = fused_params.gain_color_offset_[i];
     }
-    gpu_params.lift_luminance_offset_  = cpu_params.lift_luminance_offset_;
-    gpu_params.gamma_luminance_offset_ = cpu_params.gamma_luminance_offset_;
-    gpu_params.gain_luminance_offset_  = cpu_params.gain_luminance_offset_;
+    gpu_params.lift_luminance_offset_  = fused_params.lift_luminance_offset_;
+    gpu_params.gamma_luminance_offset_ = fused_params.gamma_luminance_offset_;
+    gpu_params.gain_luminance_offset_  = fused_params.gain_luminance_offset_;
 
     // ----------------------------------------------------------------------
     // Generic ODT runtime upload. ACES keeps its precomputed table upload path,
@@ -868,10 +837,10 @@ class GPUParamsConverter {
         cpu_params.to_output_dirty_ = false;
       }
     } else {
-      gpu_params.to_output_params_ = orig_params.to_output_params_;
+      gpu_params.to_output_params_ = orig_resources.uploaded_params_.to_output_params_;
     }
 
-    return gpu_params;
+    return resources;
   }
 
  private:
@@ -1001,5 +970,17 @@ class GPUParamsConverter {
     }
     return BorrowLUT3D(it->second);
   };
+};
+
+class GPUParamsConverter {
+ public:
+  static auto ConvertFromCPU(OperatorParams& cpu_params,
+                             GPUOperatorParams& orig_params) -> GPUOperatorParams {
+    FusedOperatorParams fused = FusedParamsConverter::ConvertFromCPU(cpu_params);
+    CudaFusedResources  resources;
+    resources.uploaded_params_ = orig_params;
+    resources                  = CudaFusedParamUploader::Upload(fused, cpu_params, resources);
+    return resources.uploaded_params_;
+  }
 };
 };  // namespace puerhlab

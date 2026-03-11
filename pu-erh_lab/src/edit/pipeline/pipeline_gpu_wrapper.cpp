@@ -11,6 +11,9 @@ namespace puerhlab {
 #ifdef HAVE_CUDA
 auto CreateCUDAGPUPipeline() -> std::unique_ptr<GPUPipelineImpl>;
 #endif
+#ifdef HAVE_METAL
+auto CreateMetalGPUPipeline() -> std::unique_ptr<GPUPipelineImpl>;
+#endif
 
 namespace {
 class UnavailableGPUPipeline final : public GPUPipelineImpl {
@@ -31,6 +34,8 @@ class UnavailableGPUPipeline final : public GPUPipelineImpl {
 auto CreateDefaultGPUPipeline() -> std::unique_ptr<GPUPipelineImpl> {
 #ifdef HAVE_CUDA
   return CreateCUDAGPUPipeline();
+#elif defined(HAVE_METAL)
+  return CreateMetalGPUPipeline();
 #else
   return std::make_unique<UnavailableGPUPipeline>();
 #endif
