@@ -33,6 +33,9 @@ set(PUERHLAB_OPENCV_IMAGE_DEPS
 )
 
 def_library(ThreadPool SOURCES concurrency/thread_pool.cpp)
+if(PUERHLAB_METAL_ENABLED)
+    target_link_libraries(ThreadPool PUBLIC puerhlab::metal_cpp)
+endif()
 
 def_library(TimeProvider SOURCES utils/clock/time_provider.cpp)
 
@@ -654,34 +657,66 @@ def_library(SleeveFilterService
 # ==============================================================================
 # 9. UI Components
 # ==============================================================================
-if(PUERHLAB_REAL_OPENGL_EDITOR)
-    def_library(EditViewer
-        SOURCES
-            ui/edit_viewer/edit_viewer.cpp
-            ui/edit_viewer/edit_viewer_overlay_geometry.cpp
-            ui/edit_viewer/viewport_mapper.cpp
-            ui/edit_viewer/crop_geometry.cpp
-            ui/edit_viewer/view_transform_controller.cpp
-            ui/edit_viewer/crop_interaction_controller.cpp
+if(PUERHLAB_REAL_WIDGET_EDITOR)
+    set(EDIT_VIEWER_COMMON_SRCS
+        ui/edit_viewer/edit_viewer.cpp
+        ui/edit_viewer/edit_viewer_overlay_geometry.cpp
+        ui/edit_viewer/viewport_mapper.cpp
+        ui/edit_viewer/crop_geometry.cpp
+        ui/edit_viewer/view_transform_controller.cpp
+        ui/edit_viewer/crop_interaction_controller.cpp
+        include/ui/edit_viewer/edit_viewer.hpp
+        include/ui/edit_viewer/edit_viewer_overlay_geometry.hpp
+        include/ui/edit_viewer/edit_viewer_surface.hpp
+        include/ui/edit_viewer/viewer_state.hpp
+        include/ui/edit_viewer/viewport_mapper.hpp
+        include/ui/edit_viewer/crop_geometry.hpp
+        include/ui/edit_viewer/view_transform_controller.hpp
+        include/ui/edit_viewer/crop_interaction_controller.hpp
+    )
+
+    set(EDIT_VIEWER_BACKEND_SRCS)
+    set(EDIT_VIEWER_PUBLIC_DEPS EditPipeline Qt6::Widgets)
+
+    if(PUERHLAB_REAL_OPENGL_EDITOR)
+        list(APPEND EDIT_VIEWER_BACKEND_SRCS
             ui/edit_viewer/frame_mailbox.cpp
             ui/edit_viewer/gl_edit_viewer_surface.cpp
             ui/edit_viewer/opengl_viewer_renderer.cpp
-            include/ui/edit_viewer/edit_viewer.hpp
-            include/ui/edit_viewer/edit_viewer_overlay_geometry.hpp
-            include/ui/edit_viewer/edit_viewer_surface.hpp
-            include/ui/edit_viewer/gl_edit_viewer_surface.hpp
-            include/ui/edit_viewer/viewer_state.hpp
-            include/ui/edit_viewer/viewport_mapper.hpp
-            include/ui/edit_viewer/crop_geometry.hpp
-            include/ui/edit_viewer/view_transform_controller.hpp
-            include/ui/edit_viewer/crop_interaction_controller.hpp
             include/ui/edit_viewer/frame_mailbox.hpp
-        PUBLIC_DEPS EditPipeline OpenGL::GL Qt6::OpenGLWidgets
+            include/ui/edit_viewer/gl_edit_viewer_surface.hpp
+        )
+        list(APPEND EDIT_VIEWER_PUBLIC_DEPS OpenGL::GL Qt6::OpenGLWidgets)
+    endif()
+
+    if(PUERHLAB_RHI_WIDGET_EDITOR)
+        list(APPEND EDIT_VIEWER_BACKEND_SRCS
+            ui/edit_viewer/rhi_edit_viewer_surface.cpp
+            include/ui/edit_viewer/rhi_edit_viewer_surface.hpp
+        )
+        list(APPEND EDIT_VIEWER_PUBLIC_DEPS Qt6::GuiPrivate Qt6::ShaderTools)
+    endif()
+
+    def_library(EditViewer
+        SOURCES ${EDIT_VIEWER_COMMON_SRCS} ${EDIT_VIEWER_BACKEND_SRCS}
+        PUBLIC_DEPS ${EDIT_VIEWER_PUBLIC_DEPS}
     )
 
     if(PUERHLAB_CUDA_ENABLED)
         set_target_properties(EditViewer PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
         target_compile_definitions(EditViewer PUBLIC HAVE_CUDA)
+    endif()
+
+    if(PUERHLAB_RHI_WIDGET_EDITOR)
+        qt_add_shaders(EditViewer "editviewer_rhi_shaders"
+            PREFIX
+                "/shaders/edit_viewer"
+            BASE
+                "ui/edit_viewer/shaders"
+            FILES
+                ui/edit_viewer/shaders/rhi_image.vert
+                ui/edit_viewer/shaders/rhi_image.frag
+        )
     endif()
 endif()
 
@@ -748,7 +783,7 @@ set(PUERHLAB_EDITOR_DIALOG_SRCS
     include/ui/puerhlab_main/editor_dialog/editor_dialog.hpp
 )
 
-if(PUERHLAB_REAL_OPENGL_EDITOR)
+if(PUERHLAB_REAL_WIDGET_EDITOR)
     set(PUERHLAB_EDITOR_DIALOG_SRCS
         ui/puerhlab_main/editor_dialog/editor_dialog.cpp
         ui/puerhlab_main/editor_dialog/dialog.cpp

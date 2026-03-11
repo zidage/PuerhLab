@@ -162,13 +162,13 @@ void HighlightReconstruct(MetalImage& img, LibRaw& raw_processor) {
     throw std::runtime_error("Metal HighlightReconstruct: Metal queue is unavailable.");
   }
 
-  auto mask_command_buffer = NS::TransferPtr(queue->commandBuffer());
+  auto mask_command_buffer = NS::RetainPtr(queue->commandBuffer());
   if (!mask_command_buffer) {
     throw std::runtime_error("Metal HighlightReconstruct: failed to create command buffer.");
   }
 
   {
-    auto blit = NS::TransferPtr(mask_command_buffer->blitCommandEncoder());
+    auto blit = NS::RetainPtr(mask_command_buffer->blitCommandEncoder());
     blit->copyFromTexture(img.Texture(), 0, 0, MTL::Origin{0, 0, 0}, MTL::Size{width, height, 1},
                           input_buffer.get(), 0, row_bytes, img_size);
     blit->endEncoding();
@@ -176,7 +176,7 @@ void HighlightReconstruct(MetalImage& img, LibRaw& raw_processor) {
 
   {
     auto pipeline = GetPipelineState(Kernel::BuildMask);
-    auto compute  = NS::TransferPtr(mask_command_buffer->computeCommandEncoder());
+    auto compute  = NS::RetainPtr(mask_command_buffer->computeCommandEncoder());
     compute->setComputePipelineState(pipeline.get());
     compute->setBuffer(input_buffer.get(), 0, 0);
     compute->setBuffer(mask_buffer.get(), 0, 1);
@@ -187,7 +187,7 @@ void HighlightReconstruct(MetalImage& img, LibRaw& raw_processor) {
 
   {
     auto pipeline = GetPipelineState(Kernel::DilateMask);
-    auto compute  = NS::TransferPtr(mask_command_buffer->computeCommandEncoder());
+    auto compute  = NS::RetainPtr(mask_command_buffer->computeCommandEncoder());
     compute->setComputePipelineState(pipeline.get());
     compute->setBuffer(mask_buffer.get(), 0, 0);
     compute->setBytes(&params, sizeof(params), 1);
@@ -197,7 +197,7 @@ void HighlightReconstruct(MetalImage& img, LibRaw& raw_processor) {
 
   {
     auto pipeline = GetPipelineState(Kernel::ChrominanceContrib);
-    auto compute  = NS::TransferPtr(mask_command_buffer->computeCommandEncoder());
+    auto compute  = NS::RetainPtr(mask_command_buffer->computeCommandEncoder());
     compute->setComputePipelineState(pipeline.get());
     compute->setBuffer(input_buffer.get(), 0, 0);
     compute->setBuffer(mask_buffer.get(), 0, 1);
@@ -248,14 +248,14 @@ void HighlightReconstruct(MetalImage& img, LibRaw& raw_processor) {
 
   auto output_buffer = MakeSharedBuffer(img_size);
 
-  auto reconstruct_command_buffer = NS::TransferPtr(queue->commandBuffer());
+  auto reconstruct_command_buffer = NS::RetainPtr(queue->commandBuffer());
   if (!reconstruct_command_buffer) {
     throw std::runtime_error("Metal HighlightReconstruct: failed to create command buffer.");
   }
 
   {
     auto pipeline = GetPipelineState(Kernel::Reconstruct);
-    auto compute  = NS::TransferPtr(reconstruct_command_buffer->computeCommandEncoder());
+    auto compute  = NS::RetainPtr(reconstruct_command_buffer->computeCommandEncoder());
     compute->setComputePipelineState(pipeline.get());
     compute->setBuffer(input_buffer.get(), 0, 0);
     compute->setBuffer(output_buffer.get(), 0, 1);
@@ -265,7 +265,7 @@ void HighlightReconstruct(MetalImage& img, LibRaw& raw_processor) {
   }
 
   {
-    auto blit = NS::TransferPtr(reconstruct_command_buffer->blitCommandEncoder());
+    auto blit = NS::RetainPtr(reconstruct_command_buffer->blitCommandEncoder());
     blit->copyFromBuffer(output_buffer.get(), 0, row_bytes, img_size,
                          MTL::Size{width, height, 1}, img.Texture(), 0, 0,
                          MTL::Origin{0, 0, 0});

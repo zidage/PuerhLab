@@ -4,10 +4,6 @@
 
 #include "ui/puerhlab_main/editor_dialog/widgets/histogram_widget.hpp"
 
-#include <QByteArray>
-#include <QOpenGLContext>
-#include <QOpenGLShader>
-#include <QOpenGLShaderProgram>
 #include <QPainter>
 #include <QPen>
 
@@ -16,25 +12,39 @@
 #include <cmath>
 
 #include "ui/edit_viewer/edit_viewer.hpp"
+#ifdef PUERHLAB_HAS_LEGACY_GL_VIEWER
 #include "ui/edit_viewer/gl_edit_viewer_surface.hpp"
+#include <QByteArray>
+#include <QOpenGLContext>
+#include <QOpenGLShader>
+#include <QOpenGLShaderProgram>
+#endif
 #include "ui/puerhlab_main/app_theme.hpp"
 
 namespace puerhlab::ui {
 
 HistogramWidget::HistogramWidget(QtEditViewer* source_viewer, QWidget* parent)
-    : QOpenGLWidget(parent), source_viewer_(source_viewer) {
+    :
+#ifdef PUERHLAB_HAS_LEGACY_GL_VIEWER
+      QOpenGLWidget(parent),
+#else
+      QWidget(parent),
+#endif
+      source_viewer_(source_viewer) {
   setMinimumHeight(126);
   setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
   setAutoFillBackground(false);
 }
 
 HistogramWidget::~HistogramWidget() {
+#ifdef PUERHLAB_HAS_LEGACY_GL_VIEWER
   if (!context()) {
     return;
   }
   makeCurrent();
   CleanupGl();
   doneCurrent();
+#endif
 }
 
 void HistogramWidget::SetSourceViewer(QtEditViewer* source_viewer) {
@@ -42,6 +52,7 @@ void HistogramWidget::SetSourceViewer(QtEditViewer* source_viewer) {
   update();
 }
 
+#ifdef PUERHLAB_HAS_LEGACY_GL_VIEWER
 void HistogramWidget::initializeGL() {
   initializeOpenGLFunctions();
   glDisable(GL_DEPTH_TEST);
@@ -215,6 +226,16 @@ void HistogramWidget::CleanupGl() {
   }
   gl_ready_ = false;
 }
+#else
+void HistogramWidget::paintEvent(QPaintEvent*) {
+  QPainter painter(this);
+  painter.setRenderHint(QPainter::Antialiasing, true);
+  painter.fillRect(rect(), QColor(0x12, 0x12, 0x12));
+  painter.setPen(QColor(0xA3, 0xA3, 0xA3));
+  painter.drawText(rect().adjusted(12, 12, -12, -12), Qt::AlignCenter,
+                   QStringLiteral("Histogram is not implemented for the RHI viewer yet."));
+}
+#endif
 
 HistogramRulerWidget::HistogramRulerWidget(int bins, QWidget* parent)
     : QWidget(parent), bins_(std::max(2, bins)) {

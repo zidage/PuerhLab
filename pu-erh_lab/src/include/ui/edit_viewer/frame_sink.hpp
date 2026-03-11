@@ -5,6 +5,7 @@
 #pragma once
 
 #include <cstddef>
+#include <memory>
 
 #include <optional>
 
@@ -19,7 +20,8 @@ struct ViewportRenderRegion {
 };
 
 enum class FramePresentationMode {
-  ViewportTransformed,
+  FullFrame,
+  ViewportTransformed = FullFrame,
   RoiFrame,
 };
 
@@ -41,6 +43,30 @@ struct FrameWriteMapping {
   explicit operator bool() const { return data != nullptr; }
 };
 
+struct ViewerFrame {
+  int                   width               = 0;
+  int                   height              = 0;
+  size_t                row_bytes           = 0;
+  std::shared_ptr<const void> pixels{};
+  FramePresentationMode presentation_mode   = FramePresentationMode::FullFrame;
+
+  explicit operator bool() const {
+    return width > 0 && height > 0 && row_bytes > 0 && pixels != nullptr;
+  }
+};
+
+struct ViewerGpuFrameUpload {
+  int                   width               = 0;
+  int                   height              = 0;
+  size_t                row_bytes           = 0;
+  std::shared_ptr<const void> pixels{};
+  FramePresentationMode presentation_mode   = FramePresentationMode::FullFrame;
+
+  explicit operator bool() const {
+    return width > 0 && height > 0 && row_bytes > 0 && pixels != nullptr;
+  }
+};
+
 class IFrameSink {
  public:
   virtual ~IFrameSink() {}
@@ -52,6 +78,8 @@ class IFrameSink {
   virtual void    UnmapResource()                   = 0;
 
   virtual void    NotifyFrameReady()                = 0;
+
+  virtual void    SubmitHostFrame(const ViewerFrame&) {}
 
   // Get the size of the frame
   virtual int     GetWidth() const                  = 0;

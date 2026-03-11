@@ -159,7 +159,7 @@ auto MakeCommandBuffer() -> NS::SharedPtr<MTL::CommandBuffer> {
     throw std::runtime_error("Metal geometry utils: Metal queue is unavailable.");
   }
 
-  auto command_buffer = NS::TransferPtr(queue->commandBuffer());
+  auto command_buffer = NS::RetainPtr(queue->commandBuffer());
   if (!command_buffer) {
     throw std::runtime_error("Metal geometry utils: failed to create command buffer.");
   }
@@ -168,7 +168,7 @@ auto MakeCommandBuffer() -> NS::SharedPtr<MTL::CommandBuffer> {
 
 void EncodeTextureToBuffer(MTL::CommandBuffer* command_buffer, const MetalImage& src,
                            MTL::Buffer* buffer, size_t row_bytes, size_t buffer_size) {
-  auto blit = NS::TransferPtr(command_buffer->blitCommandEncoder());
+  auto blit = NS::RetainPtr(command_buffer->blitCommandEncoder());
   blit->copyFromTexture(src.Texture(), 0, 0, MTL::Origin{0, 0, 0},
                         MTL::Size{src.Width(), src.Height(), 1}, buffer, 0, row_bytes, buffer_size);
   blit->endEncoding();
@@ -176,7 +176,7 @@ void EncodeTextureToBuffer(MTL::CommandBuffer* command_buffer, const MetalImage&
 
 void EncodeBufferToTexture(MTL::CommandBuffer* command_buffer, const MetalImage& dst,
                            MTL::Buffer* buffer, size_t row_bytes, size_t buffer_size) {
-  auto blit = NS::TransferPtr(command_buffer->blitCommandEncoder());
+  auto blit = NS::RetainPtr(command_buffer->blitCommandEncoder());
   blit->copyFromBuffer(buffer, 0, row_bytes, buffer_size, MTL::Size{dst.Width(), dst.Height(), 1},
                        dst.Texture(), 0, 0, MTL::Origin{0, 0, 0});
   blit->endEncoding();
@@ -248,7 +248,7 @@ void DispatchCropResize(const MetalImage& src, MetalImage& dst, const cv::Rect& 
 
   {
     auto pipeline = GetGeometryPipelineState(mode, src.Format());
-    auto compute  = NS::TransferPtr(command_buffer->computeCommandEncoder());
+    auto compute  = NS::RetainPtr(command_buffer->computeCommandEncoder());
 
     compute->setComputePipelineState(pipeline.get());
     compute->setBuffer(src_buffer.get(), 0, 0);
@@ -300,7 +300,7 @@ void DispatchWarpAffine(const MetalImage& src, MetalImage& dst, const cv::Mat& m
 
   {
     auto pipeline = GetGeometryPipelineState(GeometryKernel::WarpAffineLinear, src.Format());
-    auto compute  = NS::TransferPtr(command_buffer->computeCommandEncoder());
+    auto compute  = NS::RetainPtr(command_buffer->computeCommandEncoder());
 
     compute->setComputePipelineState(pipeline.get());
     compute->setBuffer(src_buffer.get(), 0, 0);

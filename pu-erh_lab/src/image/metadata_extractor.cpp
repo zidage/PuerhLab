@@ -926,12 +926,13 @@ void MetadataExtractor::ExtractEXIF_ToImage(const image_path_t& image_path, Imag
 
 auto MetadataExtractor::ExtractRawMetadata_ToImage(const image_path_t& image_path, Image& image)
     -> bool {
-  LibRaw raw_processor;
+  // LibRaw is large enough to blow worker-thread stacks under ASan if allocated locally.
+  auto raw_processor = std::make_unique<LibRaw>();
 
 #if defined(_WIN32)
-  int ret = raw_processor.open_file(image_path.wstring().c_str());
+  int ret = raw_processor->open_file(image_path.wstring().c_str());
 #else
-  int ret = raw_processor.open_file(image_path.string().c_str());
+  int ret = raw_processor->open_file(image_path.string().c_str());
 #endif
   if (ret != LIBRAW_SUCCESS) {
     std::cerr << "MetadataExtractor: libraw open_file failed for '"
@@ -939,21 +940,21 @@ auto MetadataExtractor::ExtractRawMetadata_ToImage(const image_path_t& image_pat
     return false;
   }
 
-  ret = raw_processor.unpack();
+  ret = raw_processor->unpack();
   if (ret != LIBRAW_SUCCESS) {
     std::cerr << "MetadataExtractor: libraw unpack failed for '"
               << image_path.string() << "' (error " << ret << ")" << std::endl;
-    raw_processor.recycle();
+    raw_processor->recycle();
     return false;
   }
 
   RawRuntimeColorContext ctx{};
-  PopulateMetadataRuntimeContext(raw_processor, ctx);
+  PopulateMetadataRuntimeContext(*raw_processor, ctx);
 
   ExifDisplayMetaData display{};
-  PopulateDisplayMetadataFromLibRaw(raw_processor, ctx, display);
+  PopulateDisplayMetadataFromLibRaw(*raw_processor, ctx, display);
 
-  raw_processor.recycle();
+  raw_processor->recycle();
 
   image.SetExifDisplayMetaData(std::move(display));
   image.SetRawColorContext(std::move(ctx));

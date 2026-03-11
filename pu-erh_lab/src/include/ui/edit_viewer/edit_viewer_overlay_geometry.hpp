@@ -21,7 +21,7 @@ struct EditViewerOverlaySnapshot {
   ViewerStateSnapshot   viewer_state{};
   ViewportWidgetInfo    widget_info{};
   ViewportImageInfo     image_info{};
-  FramePresentationMode presentation_mode = FramePresentationMode::ViewportTransformed;
+  FramePresentationMode presentation_mode = FramePresentationMode::FullFrame;
 };
 
 struct CropOverlayWidgetGeometry {

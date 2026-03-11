@@ -38,29 +38,30 @@ void RawDecoder::Decode(std::vector<char> buffer, std::filesystem::path file_pat
 void RawDecoder::Decode(std::vector<char>&& buffer, std::shared_ptr<Image> source_img) {
   // TODO: Add Implementation
 
-  LibRaw raw_processor;
-  int    ret = raw_processor.open_buffer((void*)buffer.data(), buffer.size());
+  // LibRaw is too large for ASan-instrumented worker-thread stacks on macOS.
+  auto raw_processor = std::make_unique<LibRaw>();
+  int  ret           = raw_processor->open_buffer((void*)buffer.data(), buffer.size());
   if (ret != LIBRAW_SUCCESS) {
     throw std::runtime_error("RawDecoder: Unable to read raw file using LibRAW");
   }
 
   // Default set output color space to ACES2065-1 (AP0)
-  raw_processor.imgdata.params.output_color   = 6;
-  raw_processor.imgdata.params.output_bps     = 16;
-  raw_processor.imgdata.params.gamm[0]        = 1.0;  // Linear gamma
-  raw_processor.imgdata.params.gamm[1]        = 1.0;
-  raw_processor.imgdata.params.no_auto_bright = 0;  // Disable auto brightness
-  raw_processor.imgdata.params.use_camera_wb  = 1;
+  raw_processor->imgdata.params.output_color   = 6;
+  raw_processor->imgdata.params.output_bps     = 16;
+  raw_processor->imgdata.params.gamm[0]        = 1.0;  // Linear gamma
+  raw_processor->imgdata.params.gamm[1]        = 1.0;
+  raw_processor->imgdata.params.no_auto_bright = 0;  // Disable auto brightness
+  raw_processor->imgdata.params.use_camera_wb  = 1;
 
-  raw_processor.imgdata.rawparams.use_dngsdk  = 1;
-  raw_processor.unpack();
+  raw_processor->imgdata.rawparams.use_dngsdk  = 1;
+  raw_processor->unpack();
 
   // Build a pre-populated context from the Image or extract from LibRaw.
   RawRuntimeColorContext ctx;
   if (source_img && source_img->HasRawColorContext()) {
     ctx = source_img->GetRawColorContext();
   } else {
-    MetadataExtractor::PopulateRuntimeContextFromOpenLibRaw(raw_processor, ctx);
+    MetadataExtractor::PopulateRuntimeContextFromOpenLibRaw(*raw_processor, ctx);
     if (source_img) {
       MetadataExtractor::MergeMetadataHint(&source_img->exif_display_, ctx);
     }
@@ -76,11 +77,11 @@ void RawDecoder::Decode(std::vector<char>&& buffer, std::shared_ptr<Image> sourc
   raw_params.use_camera_wb_          = true;
   raw_params.user_wb_                = 0;
 
-  RawProcessor processor{raw_params, raw_processor.imgdata.rawdata, raw_processor, ctx};
+  RawProcessor processor{raw_params, raw_processor->imgdata.rawdata, *raw_processor, ctx};
 
   auto         processed = processor.Process();
 
-  raw_processor.recycle();
+  raw_processor->recycle();
   source_img->LoadOriginalData(std::move(processed));
 }
 

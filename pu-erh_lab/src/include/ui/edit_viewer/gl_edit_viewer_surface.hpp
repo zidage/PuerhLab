@@ -36,6 +36,7 @@ class GlEditViewerSurface final : public IOpenGLEditViewerSurface,
  public:
   struct Callbacks {
     std::function<std::optional<FrameMailbox::PendingFrame>()> consume_pending_frame;
+    std::function<bool()> consume_histogram_request;
     std::function<void(int slot_index, bool apply_presentation_mode)> frame_presented;
     std::function<void()> histogram_data_updated;
   };
@@ -43,7 +44,7 @@ class GlEditViewerSurface final : public IOpenGLEditViewerSurface,
   explicit GlEditViewerSurface(const Callbacks& callbacks, QWidget* parent = nullptr);
   ~GlEditViewerSurface() override;
 
-  auto widget() -> QWidget* override;
+ auto widget() -> QWidget* override;
   void submitFrame(const ViewerFrame& frame) override;
   void setViewState(const ViewerViewState& state) override;
   void requestRedraw() override;
@@ -71,7 +72,7 @@ class GlEditViewerSurface final : public IOpenGLEditViewerSurface,
   Callbacks             callbacks_{};
   SurfaceWidget*        widget_   = nullptr;
   OpenGLViewerRenderer* renderer_ = nullptr;
-  ViewerFrame           frame_{};
+  FrameMailbox::ActiveFrame active_frame_{};
   ViewerViewState       view_state_{};
 };
 

@@ -4,7 +4,12 @@
 
 #include "ui/edit_viewer/edit_viewer.hpp"
 
+#ifdef HAVE_CUDA
 #include "ui/edit_viewer/gl_edit_viewer_surface.hpp"
+#endif
+#ifdef HAVE_METAL
+#include "ui/edit_viewer/rhi_edit_viewer_surface.hpp"
+#endif
 
 #include <QApplication>
 #include <QEasingCurve>
@@ -49,8 +54,12 @@ QtEditViewer::QtEditViewer(QWidget* parent) : QWidget(parent) {
   setContentsMargins(0, 0, 0, 0);
   setAutoFillBackground(false);
 
+#ifdef HAVE_CUDA
   GlEditViewerSurface::Callbacks surface_callbacks;
   surface_callbacks.consume_pending_frame = [this]() { return frame_mailbox_.ConsumePendingFrame(); };
+  surface_callbacks.consume_histogram_request = [this]() {
+    return frame_mailbox_.ConsumeHistogramPendingFrame();
+  };
   surface_callbacks.frame_presented = [this](int slot_index, bool apply_presentation_mode) {
     frame_mailbox_.MarkFramePresented(slot_index, apply_presentation_mode);
     RefreshFrameDerivedState();
@@ -60,8 +69,14 @@ QtEditViewer::QtEditViewer(QWidget* parent) : QWidget(parent) {
 
   surface_ = std::make_unique<GlEditViewerSurface>(surface_callbacks, this);
   render_target_surface_ = dynamic_cast<IEditViewerRenderTargetSurface*>(surface_.get());
+#elif defined(HAVE_METAL)
+  surface_ = std::make_unique<RhiEditViewerSurface>(this);
+#endif
+
   overlay_ = new EditViewerOverlayWidget(*this, this);
+#ifdef HAVE_CUDA
   frame_mailbox_.InitializeDefaultSize(std::max(1, width()), std::max(1, height()));
+#endif
   RefreshFrameDerivedState();
   ResizeChildWidgets();
   overlay_->raise();
@@ -182,31 +197,85 @@ void QtEditViewer::ResetCropOverlayRectToFull() { SetCropOverlayRectNormalized(0
 auto QtEditViewer::GetViewZoom() const -> float { return viewer_state_.GetViewZoom(); }
 
 void QtEditViewer::EnsureSize(int width, int height) {
+#ifdef HAVE_CUDA
   const auto decision = frame_mailbox_.EnsureSize(width, height);
   if (decision.need_resize) {
     emit RequestResize(width, height);
   }
+#else
+  (void)width;
+  (void)height;
+#endif
 }
 
-auto QtEditViewer::MapResourceForWrite() -> FrameWriteMapping { return frame_mailbox_.MapResourceForWrite(); }
+auto QtEditViewer::MapResourceForWrite() -> FrameWriteMapping {
+#ifdef HAVE_CUDA
+  return frame_mailbox_.MapResourceForWrite();
+#else
+  return {};
+#endif
+}
 
-void QtEditViewer::UnmapResource() { frame_mailbox_.UnmapResource(); }
+void QtEditViewer::UnmapResource() {
+#ifdef HAVE_CUDA
+  frame_mailbox_.UnmapResource();
+#endif
+}
 
 void QtEditViewer::NotifyFrameReady() {
+#ifdef HAVE_CUDA
   frame_mailbox_.NotifyFrameReady();
   emit RequestUpdate();
+#endif
 }
 
-auto QtEditViewer::GetWidth() const -> int { return frame_mailbox_.GetWidth(); }
+void QtEditViewer::SubmitHostFrame(const ViewerFrame& frame) {
+#ifdef HAVE_METAL
+  {
+    std::lock_guard<std::mutex> lock(host_frame_mutex_);
+    ViewerFrame submitted_frame = frame;
+    if (pending_presentation_mode_valid_) {
+      submitted_frame.presentation_mode = pending_presentation_mode_;
+      pending_presentation_mode_valid_ = false;
+    }
+    pending_host_frame_ = std::move(submitted_frame);
+  }
+  emit RequestUpdate();
+#else
+  (void)frame;
+#endif
+}
 
-auto QtEditViewer::GetHeight() const -> int { return frame_mailbox_.GetHeight(); }
+auto QtEditViewer::GetWidth() const -> int {
+#ifdef HAVE_CUDA
+  return frame_mailbox_.GetWidth();
+#else
+  std::lock_guard<std::mutex> lock(host_frame_mutex_);
+  return active_host_frame_.width;
+#endif
+}
+
+auto QtEditViewer::GetHeight() const -> int {
+#ifdef HAVE_CUDA
+  return frame_mailbox_.GetHeight();
+#else
+  std::lock_guard<std::mutex> lock(host_frame_mutex_);
+  return active_host_frame_.height;
+#endif
+}
 
 auto QtEditViewer::GetViewportRenderRegion() const -> std::optional<ViewportRenderRegion> {
   return viewer_state_.GetViewportRenderRegion();
 }
 
 void QtEditViewer::SetNextFramePresentationMode(FramePresentationMode mode) {
+#ifdef HAVE_CUDA
   frame_mailbox_.SetNextFramePresentationMode(mode);
+#else
+  std::lock_guard<std::mutex> lock(host_frame_mutex_);
+  pending_presentation_mode_       = mode;
+  pending_presentation_mode_valid_ = true;
+#endif
 }
 
 auto QtEditViewer::GetViewerSurface() -> IEditViewerSurface* { return surface_.get(); }
@@ -214,14 +283,22 @@ auto QtEditViewer::GetViewerSurface() -> IEditViewerSurface* { return surface_.g
 auto QtEditViewer::GetViewerSurface() const -> const IEditViewerSurface* { return surface_.get(); }
 
 void QtEditViewer::SetHistogramFrameExpected(bool expected_fast_preview) {
+#ifdef HAVE_CUDA
   frame_mailbox_.SetHistogramFrameExpected(expected_fast_preview);
+#else
+  (void)expected_fast_preview;
+#endif
 }
 
 void QtEditViewer::SetHistogramUpdateIntervalMs(int interval_ms) {
+#ifdef HAVE_CUDA
   auto* gl_surface = dynamic_cast<IOpenGLEditViewerSurface*>(surface_.get());
   if (gl_surface) {
     gl_surface->setHistogramUpdateIntervalMs(interval_ms);
   }
+#else
+  (void)interval_ms;
+#endif
 }
 
 void QtEditViewer::resizeEvent(QResizeEvent* event) {
@@ -411,6 +488,7 @@ void QtEditViewer::HandleQueuedUpdate() {
 }
 
 void QtEditViewer::OnResizeSurface(int w, int h) {
+#ifdef HAVE_CUDA
   if (!surface_ || !render_target_surface_) {
     return;
   }
@@ -429,6 +507,10 @@ void QtEditViewer::OnResizeSurface(int w, int h) {
   }
   UpdateSurface();
   UpdateOverlay();
+#else
+  (void)w;
+  (void)h;
+#endif
 }
 
 void QtEditViewer::ResizeChildWidgets() {
@@ -457,7 +539,15 @@ void QtEditViewer::UpdateViewportRenderRegionCache() {
 }
 
 void QtEditViewer::RefreshFrameDerivedState() {
+#ifdef HAVE_CUDA
   const auto active_frame = frame_mailbox_.GetActiveFrame();
+#else
+  ViewerFrame active_frame;
+  {
+    std::lock_guard<std::mutex> lock(host_frame_mutex_);
+    active_frame = active_host_frame_;
+  }
+#endif
   if (active_frame.presentation_mode != FramePresentationMode::RoiFrame && active_frame.width > 0 &&
       active_frame.height > 0) {
     viewer_state_.SetRenderReferenceSize(active_frame.width, active_frame.height);
@@ -472,10 +562,19 @@ void QtEditViewer::SyncSurfaceState() {
     return;
   }
 
+#ifdef HAVE_METAL
+  {
+    std::lock_guard<std::mutex> lock(host_frame_mutex_);
+    if (pending_host_frame_.has_value()) {
+      active_host_frame_ = *pending_host_frame_;
+      surface_->submitFrame(*pending_host_frame_);
+      pending_host_frame_.reset();
+    }
+  }
+#endif
+
   RefreshFrameDerivedState();
   surface_->setViewState({viewer_state_.Snapshot()});
-  surface_->submitFrame(
-      {frame_mailbox_.GetActiveFrame(), frame_mailbox_.ConsumeHistogramPendingFrame()});
 }
 
 void QtEditViewer::StopZoomAnimation() {
@@ -489,12 +588,22 @@ auto QtEditViewer::CurrentWidgetInfo() const -> ViewportWidgetInfo {
 }
 
 auto QtEditViewer::CurrentImageInfo() const -> ViewportImageInfo {
+#ifdef HAVE_CUDA
   const auto active_frame = frame_mailbox_.GetActiveFrame();
   return {active_frame.width, active_frame.height};
+#else
+  std::lock_guard<std::mutex> lock(host_frame_mutex_);
+  return {active_host_frame_.width, active_host_frame_.height};
+#endif
 }
 
 auto QtEditViewer::CurrentPresentationMode() const -> FramePresentationMode {
+#ifdef HAVE_CUDA
   return frame_mailbox_.GetActiveFrame().presentation_mode;
+#else
+  std::lock_guard<std::mutex> lock(host_frame_mutex_);
+  return active_host_frame_.presentation_mode;
+#endif
 }
 
 auto QtEditViewer::CurrentOverlaySnapshot() const -> EditViewerOverlaySnapshot {

@@ -257,8 +257,8 @@ void MetalImage::Upload(const cv::Mat& host_image) {
     throw std::runtime_error("MetalImage: Metal queue is unavailable.");
   }
 
-  auto command_buffer = NS::TransferPtr(queue->commandBuffer());
-  auto blit           = NS::TransferPtr(command_buffer->blitCommandEncoder());
+  auto command_buffer = NS::RetainPtr(queue->commandBuffer());
+  auto blit           = NS::RetainPtr(command_buffer->blitCommandEncoder());
   blit->copyFromBuffer(staging_buffer.get(), 0, row_bytes, buffer_size,
                        MTL::Size{width_, height_, 1}, Texture(), 0, 0, MTL::Origin{0, 0, 0});
   blit->endEncoding();
@@ -282,8 +282,8 @@ void MetalImage::Download(cv::Mat& host_image) const {
     throw std::runtime_error("MetalImage: Metal queue is unavailable.");
   }
 
-  auto command_buffer = NS::TransferPtr(queue->commandBuffer());
-  auto blit           = NS::TransferPtr(command_buffer->blitCommandEncoder());
+  auto command_buffer = NS::RetainPtr(queue->commandBuffer());
+  auto blit           = NS::RetainPtr(command_buffer->blitCommandEncoder());
   blit->copyFromTexture(Texture(), 0, 0, MTL::Origin{0, 0, 0}, MTL::Size{width_, height_, 1},
                         staging_buffer.get(), 0, row_bytes, buffer_size);
   blit->endEncoding();
@@ -306,8 +306,8 @@ void MetalImage::CopyTo(MetalImage& dst) const {
     throw std::runtime_error("MetalImage: Metal queue is unavailable.");
   }
 
-  auto command_buffer = NS::TransferPtr(queue->commandBuffer());
-  auto blit           = NS::TransferPtr(command_buffer->blitCommandEncoder());
+  auto command_buffer = NS::RetainPtr(queue->commandBuffer());
+  auto blit           = NS::RetainPtr(command_buffer->blitCommandEncoder());
   blit->copyFromTexture(Texture(), dst.Texture());
   blit->endEncoding();
   SubmitAndWait(command_buffer);

@@ -20,10 +20,6 @@
 #include <QListWidget>
 #include <QMessageBox>
 #include <QMouseEvent>
-#include <QOpenGLContext>
-#include <QOpenGLExtraFunctions>
-#include <QOpenGLShaderProgram>
-#include <QOpenGLWidget>
 #include <QPainter>
 #include <QPainterPath>
 #include <QPushButton>

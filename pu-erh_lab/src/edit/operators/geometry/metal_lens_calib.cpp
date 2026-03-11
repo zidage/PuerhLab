@@ -98,7 +98,7 @@ auto MakeCommandBuffer() -> NS::SharedPtr<MTL::CommandBuffer> {
     throw std::runtime_error("Metal lens calibration: Metal queue is unavailable.");
   }
 
-  auto command_buffer = NS::TransferPtr(queue->commandBuffer());
+  auto command_buffer = NS::RetainPtr(queue->commandBuffer());
   if (!command_buffer) {
     throw std::runtime_error("Metal lens calibration: failed to create command buffer.");
   }
@@ -117,7 +117,7 @@ void DispatchThreads(MTL::ComputeCommandEncoder* encoder, MTL::ComputePipelineSt
 
 void EncodeTextureToBuffer(MTL::CommandBuffer* command_buffer, const MetalImage& src,
                            MTL::Buffer* buffer, size_t row_bytes, size_t buffer_size) {
-  auto blit = NS::TransferPtr(command_buffer->blitCommandEncoder());
+  auto blit = NS::RetainPtr(command_buffer->blitCommandEncoder());
   blit->copyFromTexture(src.Texture(), 0, 0, MTL::Origin{0, 0, 0},
                         MTL::Size{src.Width(), src.Height(), 1}, buffer, 0, row_bytes, buffer_size);
   blit->endEncoding();
@@ -125,7 +125,7 @@ void EncodeTextureToBuffer(MTL::CommandBuffer* command_buffer, const MetalImage&
 
 void EncodeBufferToTexture(MTL::CommandBuffer* command_buffer, const MetalImage& dst,
                            MTL::Buffer* buffer, size_t row_bytes, size_t buffer_size) {
-  auto blit = NS::TransferPtr(command_buffer->blitCommandEncoder());
+  auto blit = NS::RetainPtr(command_buffer->blitCommandEncoder());
   blit->copyFromBuffer(buffer, 0, row_bytes, buffer_size, MTL::Size{dst.Width(), dst.Height(), 1},
                        dst.Texture(), 0, 0, MTL::Origin{0, 0, 0});
   blit->endEncoding();
@@ -228,7 +228,7 @@ auto ComputeAutoCropRoiFromAlpha(const cv::Mat& image, float alpha_threshold = 1
 void DispatchVignetting(MTL::CommandBuffer* command_buffer, MTL::Buffer* image_buffer,
                         const LensCalibDispatchParams& params, uint32_t width, uint32_t height) {
   auto pipeline = GetLensPipelineState(LensKernel::Vignetting);
-  auto compute  = NS::TransferPtr(command_buffer->computeCommandEncoder());
+  auto compute  = NS::RetainPtr(command_buffer->computeCommandEncoder());
 
   compute->setComputePipelineState(pipeline.get());
   compute->setBuffer(image_buffer, 0, 0);
@@ -240,7 +240,7 @@ void DispatchVignetting(MTL::CommandBuffer* command_buffer, MTL::Buffer* image_b
 void DispatchWarp(MTL::CommandBuffer* command_buffer, MTL::Buffer* src_buffer, MTL::Buffer* dst_buffer,
                   const LensCalibDispatchParams& params, uint32_t width, uint32_t height) {
   auto pipeline = GetLensPipelineState(LensKernel::Warp);
-  auto compute  = NS::TransferPtr(command_buffer->computeCommandEncoder());
+  auto compute  = NS::RetainPtr(command_buffer->computeCommandEncoder());
 
   compute->setComputePipelineState(pipeline.get());
   compute->setBuffer(src_buffer, 0, 0);

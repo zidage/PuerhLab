@@ -4,17 +4,11 @@
 
 #pragma once
 
-#include "ui/edit_viewer/frame_mailbox.hpp"
 #include "ui/edit_viewer/viewer_state.hpp"
 
 class QWidget;
 
 namespace puerhlab {
-
-struct ViewerFrame {
-  FrameMailbox::ActiveFrame active_frame{};
-  bool                      histogram_requested = false;
-};
 
 struct ViewerViewState {
   ViewerStateSnapshot snapshot{};

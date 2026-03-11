@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <stdexcept>
 #include <utility>
+#include <vector>
 
 #include "edit/operators/GPU_kernels/fused_param.hpp"
 #include "edit/operators/GPU_kernels/metal_param.hpp"
@@ -32,7 +33,7 @@ auto MakeCommandBuffer() -> NS::SharedPtr<MTL::CommandBuffer> {
   if (queue == nullptr) {
     throw std::runtime_error("Metal fused pipeline: Metal queue is unavailable.");
   }
-  auto command_buffer = NS::TransferPtr(queue->commandBuffer());
+  auto command_buffer = NS::RetainPtr(queue->commandBuffer());
   if (!command_buffer) {
     throw std::runtime_error("Metal fused pipeline: failed to create command buffer.");
   }
@@ -90,7 +91,7 @@ class MetalGPUPipeline final : public GPUPipelineImpl {
     if (!fused_pipeline_) {
       fused_pipeline_ = GetPipelineState(kFusedPipelineKernelName, kFusedPipelineDebugLabel);
     }
-    auto encoder = NS::TransferPtr(command_buffer->computeCommandEncoder());
+    auto encoder = NS::RetainPtr(command_buffer->computeCommandEncoder());
     encoder->setComputePipelineState(fused_pipeline_.get());
     encoder->setTexture(src.Texture(), 0);
     encoder->setTexture(dst.Texture(), 1);
@@ -102,7 +103,7 @@ class MetalGPUPipeline final : public GPUPipelineImpl {
 
   void EncodeDetailKernel(MTL::CommandBuffer* command_buffer, MTL::ComputePipelineState* pipeline,
                           const metal::MetalImage& src, metal::MetalImage& dst) {
-    auto encoder = NS::TransferPtr(command_buffer->computeCommandEncoder());
+    auto encoder = NS::RetainPtr(command_buffer->computeCommandEncoder());
     encoder->setComputePipelineState(pipeline);
     encoder->setTexture(src.Texture(), 0);
     encoder->setTexture(dst.Texture(), 1);
@@ -189,10 +190,31 @@ class MetalGPUPipeline final : public GPUPipelineImpl {
     }
 
     metal::MetalImage result = RunMetalPipeline();
+    if (frame_sink_) {
+      cv::Mat host_image;
+      result.Download(host_image);
+      if (host_image.type() != CV_32FC4) {
+        throw std::runtime_error("Metal fused pipeline: expected RGBA32F host frame for viewer.");
+      }
+
+      const size_t row_bytes =
+          static_cast<size_t>(host_image.cols) * static_cast<size_t>(sizeof(cv::Vec4f));
+      auto host_pixels =
+          std::make_shared<std::vector<float>>(static_cast<size_t>(host_image.cols) *
+                                               static_cast<size_t>(host_image.rows) * 4U);
+      cv::Mat contiguous_host(host_image.rows, host_image.cols, CV_32FC4, host_pixels->data(),
+                              row_bytes);
+      host_image.copyTo(contiguous_host);
+
+      frame_sink_->SubmitHostFrame(
+          ViewerFrame{host_image.cols, host_image.rows, row_bytes,
+                      std::shared_ptr<const void>(host_pixels, host_pixels->data()),
+                      FramePresentationMode::FullFrame});
+    }
+
     if (output_img) {
       *output_img = ImageBuffer(std::move(result));
     }
-    (void)frame_sink_;
   }
 
   void ReleaseResources() override {

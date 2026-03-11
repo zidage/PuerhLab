@@ -11,16 +11,21 @@
 #include <QWidget>
 
 #include <memory>
+#include <mutex>
+#include <optional>
 
 #include "ui/edit_viewer/crop_interaction_controller.hpp"
 #include "ui/edit_viewer/crop_geometry.hpp"
 #include "ui/edit_viewer/edit_viewer_overlay_geometry.hpp"
 #include "ui/edit_viewer/edit_viewer_surface.hpp"
-#include "ui/edit_viewer/frame_mailbox.hpp"
 #include "ui/edit_viewer/frame_sink.hpp"
 #include "ui/edit_viewer/view_transform_controller.hpp"
 #include "ui/edit_viewer/viewer_state.hpp"
 #include "ui/edit_viewer/viewport_mapper.hpp"
+
+#ifdef HAVE_CUDA
+#include "ui/edit_viewer/frame_mailbox.hpp"
+#endif
 
 class QMouseEvent;
 class QWheelEvent;
@@ -50,6 +55,7 @@ class QtEditViewer : public QWidget, public puerhlab::IFrameSink {
   auto    MapResourceForWrite() -> FrameWriteMapping override;
   void    UnmapResource() override;
   void    NotifyFrameReady() override;
+  void    SubmitHostFrame(const ViewerFrame& frame) override;
   int     GetWidth() const override;
   int     GetHeight() const override;
   auto    GetViewportRenderRegion() const -> std::optional<ViewportRenderRegion> override;
@@ -105,7 +111,6 @@ class QtEditViewer : public QWidget, public puerhlab::IFrameSink {
   static constexpr int     kZoomAnimationDurationMs = 170;
 
   ViewerState              viewer_state_{};
-  FrameMailbox             frame_mailbox_{};
   ViewTransformController  view_transform_controller_{};
   CropInteractionController crop_interaction_controller_{};
   std::unique_ptr<IEditViewerSurface> surface_{};
@@ -113,5 +118,15 @@ class QtEditViewer : public QWidget, public puerhlab::IFrameSink {
   EditViewerOverlayWidget* overlay_ = nullptr;
   QVariantAnimation*       zoom_animation_ = nullptr;
   QTimer*                  click_toggle_timer_ = nullptr;
+
+#ifdef HAVE_CUDA
+  FrameMailbox             frame_mailbox_{};
+#endif
+
+  ViewerFrame              active_host_frame_{};
+  std::optional<ViewerFrame> pending_host_frame_{};
+  bool                     pending_presentation_mode_valid_ = false;
+  FramePresentationMode    pending_presentation_mode_ = FramePresentationMode::FullFrame;
+  mutable std::mutex       host_frame_mutex_{};
 };
 };  // namespace puerhlab

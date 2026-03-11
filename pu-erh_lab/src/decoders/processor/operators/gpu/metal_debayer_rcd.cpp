@@ -140,13 +140,13 @@ void BayerRGGB2RGB_RCD(MetalImage& image) {
     throw std::runtime_error("Metal Debayer RCD: Metal queue is unavailable.");
   }
 
-  auto command_buffer = NS::TransferPtr(queue->commandBuffer());
+  auto command_buffer = NS::RetainPtr(queue->commandBuffer());
   if (!command_buffer) {
     throw std::runtime_error("Metal Debayer RCD: failed to create command buffer.");
   }
 
   {
-    auto blit = NS::TransferPtr(command_buffer->blitCommandEncoder());
+    auto blit = NS::RetainPtr(command_buffer->blitCommandEncoder());
     blit->copyFromTexture(image.Texture(), 0, 0, MTL::Origin{0, 0, 0}, MTL::Size{width, height, 1},
                           raw_buffer.get(), 0, plane_row_bytes, plane_size);
     blit->endEncoding();
@@ -166,7 +166,7 @@ void BayerRGGB2RGB_RCD(MetalImage& image) {
 
   {
     auto pipeline = GetPipelineState(Kernel::InitAndVH);
-    auto compute  = NS::TransferPtr(command_buffer->computeCommandEncoder());
+    auto compute  = NS::RetainPtr(command_buffer->computeCommandEncoder());
     compute->setComputePipelineState(pipeline.get());
     compute->setBuffer(raw_buffer.get(), 0, 0);
     compute->setBuffer(r_buffer.get(), 0, 1);
@@ -180,7 +180,7 @@ void BayerRGGB2RGB_RCD(MetalImage& image) {
 
   {
     auto pipeline = GetPipelineState(Kernel::GreenAtRB);
-    auto compute  = NS::TransferPtr(command_buffer->computeCommandEncoder());
+    auto compute  = NS::RetainPtr(command_buffer->computeCommandEncoder());
     compute->setComputePipelineState(pipeline.get());
     compute->setBuffer(raw_buffer.get(), 0, 0);
     compute->setBuffer(vh_buffer.get(), 0, 1);
@@ -192,7 +192,7 @@ void BayerRGGB2RGB_RCD(MetalImage& image) {
 
   {
     auto pipeline = GetPipelineState(Kernel::PQDir);
-    auto compute  = NS::TransferPtr(command_buffer->computeCommandEncoder());
+    auto compute  = NS::RetainPtr(command_buffer->computeCommandEncoder());
     compute->setComputePipelineState(pipeline.get());
     compute->setBuffer(raw_buffer.get(), 0, 0);
     compute->setBuffer(pq_buffer.get(), 0, 1);
@@ -203,7 +203,7 @@ void BayerRGGB2RGB_RCD(MetalImage& image) {
 
   {
     auto pipeline = GetPipelineState(Kernel::RBAtRB);
-    auto compute  = NS::TransferPtr(command_buffer->computeCommandEncoder());
+    auto compute  = NS::RetainPtr(command_buffer->computeCommandEncoder());
     compute->setComputePipelineState(pipeline.get());
     compute->setBuffer(pq_buffer.get(), 0, 0);
     compute->setBuffer(g_buffer.get(), 0, 1);
@@ -216,7 +216,7 @@ void BayerRGGB2RGB_RCD(MetalImage& image) {
 
   {
     auto pipeline = GetPipelineState(Kernel::RBAtG);
-    auto compute  = NS::TransferPtr(command_buffer->computeCommandEncoder());
+    auto compute  = NS::RetainPtr(command_buffer->computeCommandEncoder());
     compute->setComputePipelineState(pipeline.get());
     compute->setBuffer(vh_buffer.get(), 0, 0);
     compute->setBuffer(g_buffer.get(), 0, 1);
@@ -229,7 +229,7 @@ void BayerRGGB2RGB_RCD(MetalImage& image) {
 
   {
     auto pipeline = GetPipelineState(Kernel::MergeRGBA);
-    auto compute  = NS::TransferPtr(command_buffer->computeCommandEncoder());
+    auto compute  = NS::RetainPtr(command_buffer->computeCommandEncoder());
     compute->setComputePipelineState(pipeline.get());
     compute->setBuffer(r_buffer.get(), 0, 0);
     compute->setBuffer(g_buffer.get(), 0, 1);
@@ -241,7 +241,7 @@ void BayerRGGB2RGB_RCD(MetalImage& image) {
   }
 
   {
-    auto blit = NS::TransferPtr(command_buffer->blitCommandEncoder());
+    auto blit = NS::RetainPtr(command_buffer->blitCommandEncoder());
     blit->copyFromBuffer(rgba_buffer.get(), 0, rgba_row_bytes, rgba_size, MTL::Size{width, height, 1},
                          output.Texture(), 0, 0, MTL::Origin{0, 0, 0});
     blit->endEncoding();

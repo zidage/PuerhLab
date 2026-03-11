@@ -215,13 +215,24 @@ find_package(OpenCV REQUIRED COMPONENTS core imgproc imgcodecs calib3d highgui)
 # Eigen3
 find_package(Eigen3 CONFIG REQUIRED)
 
+set(PUERHLAB_REAL_WIDGET_EDITOR OFF)
 set(PUERHLAB_REAL_OPENGL_EDITOR OFF)
+set(PUERHLAB_RHI_WIDGET_EDITOR OFF)
 if(PUERHLAB_ENABLE_OPENGL_EDITOR AND PUERHLAB_CUDA_ENABLED)
     find_package(Qt6 REQUIRED COMPONENTS OpenGL OpenGLWidgets)
     find_package(OpenGL REQUIRED)
     set(PUERHLAB_REAL_OPENGL_EDITOR ON)
+    set(PUERHLAB_REAL_WIDGET_EDITOR ON)
+    add_compile_definitions(PUERHLAB_HAS_LEGACY_GL_VIEWER)
 elseif(PUERHLAB_ENABLE_OPENGL_EDITOR)
     message(STATUS "OpenGL editor requested, but no accelerated backend is available. Building editor stub only.")
+endif()
+
+if(APPLE AND PUERHLAB_METAL_ENABLED)
+    find_package(Qt6 REQUIRED COMPONENTS ShaderTools GuiPrivate)
+    set(PUERHLAB_RHI_WIDGET_EDITOR ON)
+    set(PUERHLAB_REAL_WIDGET_EDITOR ON)
+    add_compile_definitions(PUERHLAB_HAS_RHI_VIEWER)
 endif()
 
 # Profiler/hwy/lcms2

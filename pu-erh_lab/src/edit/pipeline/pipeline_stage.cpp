@@ -513,7 +513,11 @@ std::shared_ptr<ImageBuffer> PipelineStage::ApplyCpuOperators(OperatorParams& gl
   if (next_stage_) {
     next_stage_->SetInputCacheValid(true);
     if (next_stage_->stage_role_ == StageRole::GpuStreamable &&
-        next_stage_->gpu_executor_.HasAcceleratedBackend()) {
+        next_stage_->gpu_executor_.HasAcceleratedBackend() && !output_cache_->gpu_data_valid_) {
+      if (!output_cache_->cpu_data_valid_) {
+        throw std::runtime_error(
+            "PipelineStage: cannot prepare GPU input for merged stage without CPU or GPU data.");
+      }
       output_cache_->SyncToGPU();
     }
   }

@@ -10,6 +10,10 @@
 #include <mutex>
 #include <vector>
 
+#ifdef HAVE_METAL
+#include <puerhlab/metal/Metal.hpp>
+#endif
+
 namespace puerhlab {
 ThreadPool::ThreadPool(size_t thread_count) : stop_(false) {
   for (size_t i = 0; i < thread_count; ++i) {
@@ -46,6 +50,9 @@ void ThreadPool::WorkerThread() {
       task = std::move(tasks_.front());
       tasks_.pop();
     }
+#ifdef HAVE_METAL
+    auto autorelease_pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
+#endif
     task();
   }
 }

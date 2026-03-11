@@ -257,13 +257,13 @@ void DispatchConversion(const MetalImage& src, MetalImage& dst, double alpha, do
     throw std::runtime_error("Metal convert utils: Metal queue is unavailable.");
   }
 
-  auto command_buffer = NS::TransferPtr(queue->commandBuffer());
+  auto command_buffer = NS::RetainPtr(queue->commandBuffer());
   if (!command_buffer) {
     throw std::runtime_error("Metal convert utils: failed to create command buffer.");
   }
 
   {
-    auto blit = NS::TransferPtr(command_buffer->blitCommandEncoder());
+    auto blit = NS::RetainPtr(command_buffer->blitCommandEncoder());
     blit->copyFromTexture(src.Texture(), 0, 0, MTL::Origin{0, 0, 0},
                           MTL::Size{src.Width(), src.Height(), 1}, src_buffer.get(), 0,
                           src_row_bytes, src_size);
@@ -272,7 +272,7 @@ void DispatchConversion(const MetalImage& src, MetalImage& dst, double alpha, do
 
   {
     auto pipeline = GetPipelineState(src.Format(), dst.Format());
-    auto compute  = NS::TransferPtr(command_buffer->computeCommandEncoder());
+    auto compute  = NS::RetainPtr(command_buffer->computeCommandEncoder());
     const ConvertParams params{
         .alpha      = static_cast<float>(alpha),
         .beta       = static_cast<float>(beta),
@@ -293,7 +293,7 @@ void DispatchConversion(const MetalImage& src, MetalImage& dst, double alpha, do
   }
 
   {
-    auto blit = NS::TransferPtr(command_buffer->blitCommandEncoder());
+    auto blit = NS::RetainPtr(command_buffer->blitCommandEncoder());
     blit->copyFromBuffer(dst_buffer.get(), 0, dst_row_bytes, dst_size,
                          MTL::Size{dst.Width(), dst.Height(), 1}, dst.Texture(), 0, 0,
                          MTL::Origin{0, 0, 0});
@@ -318,13 +318,13 @@ void DispatchCrop(const MetalImage& src, MetalImage& dst, const cv::Rect& crop_r
     throw std::runtime_error("Metal convert utils: Metal queue is unavailable.");
   }
 
-  auto command_buffer = NS::TransferPtr(queue->commandBuffer());
+  auto command_buffer = NS::RetainPtr(queue->commandBuffer());
   if (!command_buffer) {
     throw std::runtime_error("Metal convert utils: failed to create command buffer.");
   }
 
   {
-    auto blit = NS::TransferPtr(command_buffer->blitCommandEncoder());
+    auto blit = NS::RetainPtr(command_buffer->blitCommandEncoder());
     blit->copyFromTexture(src.Texture(), 0, 0, MTL::Origin{0, 0, 0},
                           MTL::Size{src.Width(), src.Height(), 1}, src_buffer.get(), 0,
                           src_row_bytes, src_size);
@@ -333,7 +333,7 @@ void DispatchCrop(const MetalImage& src, MetalImage& dst, const cv::Rect& crop_r
 
   {
     auto pipeline = GetCropPipelineState(src.Format());
-    auto compute  = NS::TransferPtr(command_buffer->computeCommandEncoder());
+    auto compute  = NS::RetainPtr(command_buffer->computeCommandEncoder());
     const CropParams params{
         .origin_x    = static_cast<uint32_t>(crop_rect.x),
         .origin_y    = static_cast<uint32_t>(crop_rect.y),
@@ -354,7 +354,7 @@ void DispatchCrop(const MetalImage& src, MetalImage& dst, const cv::Rect& crop_r
   }
 
   {
-    auto blit = NS::TransferPtr(command_buffer->blitCommandEncoder());
+    auto blit = NS::RetainPtr(command_buffer->blitCommandEncoder());
     blit->copyFromBuffer(dst_buffer.get(), 0, dst_row_bytes, dst_size,
                          MTL::Size{dst.Width(), dst.Height(), 1}, dst.Texture(), 0, 0,
                          MTL::Origin{0, 0, 0});
@@ -376,13 +376,13 @@ void DispatchClamp(MetalImage& image, float lo, float hi) {
     throw std::runtime_error("Metal convert utils: Metal queue is unavailable.");
   }
 
-  auto command_buffer = NS::TransferPtr(queue->commandBuffer());
+  auto command_buffer = NS::RetainPtr(queue->commandBuffer());
   if (!command_buffer) {
     throw std::runtime_error("Metal convert utils: failed to create command buffer.");
   }
 
   {
-    auto blit = NS::TransferPtr(command_buffer->blitCommandEncoder());
+    auto blit = NS::RetainPtr(command_buffer->blitCommandEncoder());
     blit->copyFromTexture(image.Texture(), 0, 0, MTL::Origin{0, 0, 0},
                           MTL::Size{image.Width(), image.Height(), 1}, buffer.get(), 0, row_bytes,
                           size);
@@ -391,7 +391,7 @@ void DispatchClamp(MetalImage& image, float lo, float hi) {
 
   {
     auto pipeline = GetClampPipelineState(image.Format());
-    auto compute  = NS::TransferPtr(command_buffer->computeCommandEncoder());
+    auto compute  = NS::RetainPtr(command_buffer->computeCommandEncoder());
     const ClampParams params{
         .lo     = lo,
         .hi     = hi,
@@ -409,7 +409,7 @@ void DispatchClamp(MetalImage& image, float lo, float hi) {
   }
 
   {
-    auto blit = NS::TransferPtr(command_buffer->blitCommandEncoder());
+    auto blit = NS::RetainPtr(command_buffer->blitCommandEncoder());
     blit->copyFromBuffer(buffer.get(), 0, row_bytes, size,
                          MTL::Size{image.Width(), image.Height(), 1}, image.Texture(), 0, 0,
                          MTL::Origin{0, 0, 0});
@@ -434,13 +434,13 @@ void DispatchRotate(const MetalImage& src, MetalImage& dst, RotationOp op) {
     throw std::runtime_error("Metal convert utils: Metal queue is unavailable.");
   }
 
-  auto command_buffer = NS::TransferPtr(queue->commandBuffer());
+  auto command_buffer = NS::RetainPtr(queue->commandBuffer());
   if (!command_buffer) {
     throw std::runtime_error("Metal convert utils: failed to create command buffer.");
   }
 
   {
-    auto blit = NS::TransferPtr(command_buffer->blitCommandEncoder());
+    auto blit = NS::RetainPtr(command_buffer->blitCommandEncoder());
     blit->copyFromTexture(src.Texture(), 0, 0, MTL::Origin{0, 0, 0},
                           MTL::Size{src.Width(), src.Height(), 1}, src_buffer.get(), 0,
                           src_row_bytes, src_size);
@@ -449,7 +449,7 @@ void DispatchRotate(const MetalImage& src, MetalImage& dst, RotationOp op) {
 
   {
     auto pipeline = GetRotatePipelineState(op, src.Format());
-    auto compute  = NS::TransferPtr(command_buffer->computeCommandEncoder());
+    auto compute  = NS::RetainPtr(command_buffer->computeCommandEncoder());
     const RotateParams params{
         .src_width  = src.Width(),
         .src_height = src.Height(),
@@ -470,7 +470,7 @@ void DispatchRotate(const MetalImage& src, MetalImage& dst, RotationOp op) {
   }
 
   {
-    auto blit = NS::TransferPtr(command_buffer->blitCommandEncoder());
+    auto blit = NS::RetainPtr(command_buffer->blitCommandEncoder());
     blit->copyFromBuffer(dst_buffer.get(), 0, dst_row_bytes, dst_size,
                          MTL::Size{dst.Width(), dst.Height(), 1}, dst.Texture(), 0, 0,
                          MTL::Origin{0, 0, 0});

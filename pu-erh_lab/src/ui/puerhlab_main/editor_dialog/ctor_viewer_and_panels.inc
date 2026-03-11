@@ -22,7 +22,7 @@
     viewer_->setMinimumSize(560, 360);
     viewer_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     viewer_->setStyleSheet(
-        "QOpenGLWidget {"
+        "QWidget {"
         "  background: #121212;"
         "  border: none;"
         "  border-radius: 12px;"
@@ -268,8 +268,10 @@
       if (viewer_ && histogram_widget_) {
         viewer_->SetHistogramUpdateIntervalMs(histogram::kDefaultUpdateIntervalMs);
         viewer_->SetHistogramFrameExpected(false);
+#ifdef PUERHLAB_HAS_LEGACY_GL_VIEWER
         QObject::connect(viewer_, &QtEditViewer::HistogramDataUpdated, histogram_widget_,
                          QOverload<>::of(&QWidget::update), Qt::QueuedConnection);
+#endif
       }
     }
 

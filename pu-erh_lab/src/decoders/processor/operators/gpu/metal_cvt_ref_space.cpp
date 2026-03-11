@@ -72,13 +72,13 @@ void DispatchInverseCamMul(MetalImage& image, const float* cam_mul) {
     throw std::runtime_error("Metal ApplyInverseCamMul: Metal queue is unavailable.");
   }
 
-  auto command_buffer = NS::TransferPtr(queue->commandBuffer());
+  auto command_buffer = NS::RetainPtr(queue->commandBuffer());
   if (!command_buffer) {
     throw std::runtime_error("Metal ApplyInverseCamMul: failed to create command buffer.");
   }
 
   {
-    auto blit = NS::TransferPtr(command_buffer->blitCommandEncoder());
+    auto blit = NS::RetainPtr(command_buffer->blitCommandEncoder());
     blit->copyFromTexture(image.Texture(), 0, 0, MTL::Origin{0, 0, 0},
                           MTL::Size{image.Width(), image.Height(), 1}, staging_buffer.get(), 0,
                           row_bytes, buffer_size);
@@ -87,7 +87,7 @@ void DispatchInverseCamMul(MetalImage& image, const float* cam_mul) {
 
   {
     auto pipeline = GetPipelineState();
-    auto compute  = NS::TransferPtr(command_buffer->computeCommandEncoder());
+    auto compute  = NS::RetainPtr(command_buffer->computeCommandEncoder());
     const float g = std::max(cam_mul[1], kMinGain);
     const InverseCamMulParams params{
         .scale_r = g / std::max(cam_mul[0], kMinGain),
@@ -113,7 +113,7 @@ void DispatchInverseCamMul(MetalImage& image, const float* cam_mul) {
   }
 
   {
-    auto blit = NS::TransferPtr(command_buffer->blitCommandEncoder());
+    auto blit = NS::RetainPtr(command_buffer->blitCommandEncoder());
     blit->copyFromBuffer(staging_buffer.get(), 0, row_bytes, buffer_size,
                          MTL::Size{image.Width(), image.Height(), 1}, image.Texture(), 0, 0,
                          MTL::Origin{0, 0, 0});

@@ -346,7 +346,10 @@ auto RawProcessor::Process() -> ImageBuffer {
   auto    img_unpacked = raw_data_.raw_image;
   auto&   img_sizes    = raw_data_.sizes;
 
-  cv::Mat unpacked_mat{img_sizes.raw_height, img_sizes.raw_width, CV_16UC1, img_unpacked};
+  // LibRaw owns raw_image and frees it during recycle(), so the pipeline must
+  // materialize an owned copy before returning ImageBuffer state to callers.
+  cv::Mat unpacked_view{img_sizes.raw_height, img_sizes.raw_width, CV_16UC1, img_unpacked};
+  cv::Mat unpacked_mat = unpacked_view.clone();
   process_buffer_                                = {std::move(unpacked_mat)};
 
   // runtime_color_context_ is pre-populated by the caller (via MetadataExtractor).

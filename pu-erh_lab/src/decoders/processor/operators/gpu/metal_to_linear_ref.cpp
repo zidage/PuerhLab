@@ -82,13 +82,13 @@ void DispatchToLinearRef(MetalImage& image, float white_level_scale, const WBPar
     throw std::runtime_error("[ERROR] Metal ToLinearRef: Metal queue is unavailable.");
   }
 
-  auto command_buffer = NS::TransferPtr(queue->commandBuffer());
+  auto command_buffer = NS::RetainPtr(queue->commandBuffer());
   if (!command_buffer) {
     throw std::runtime_error("[ERROR] Metal ToLinearRef: failed to create command buffer.");
   }
 
   {
-    auto blit = NS::TransferPtr(command_buffer->blitCommandEncoder());
+    auto blit = NS::RetainPtr(command_buffer->blitCommandEncoder());
     blit->copyFromTexture(image.Texture(), 0, 0, MTL::Origin{0, 0, 0},
                           MTL::Size{image.Width(), image.Height(), 1}, staging_buffer.get(), 0,
                           row_bytes, buffer_size);
@@ -97,7 +97,7 @@ void DispatchToLinearRef(MetalImage& image, float white_level_scale, const WBPar
 
   {
     auto pipeline = GetPipelineState();
-    auto compute  = NS::TransferPtr(command_buffer->computeCommandEncoder());
+    auto compute  = NS::RetainPtr(command_buffer->computeCommandEncoder());
 
     const ToLinearRefParams params{
         .white_level_scale = white_level_scale,
@@ -123,7 +123,7 @@ void DispatchToLinearRef(MetalImage& image, float white_level_scale, const WBPar
   }
 
   {
-    auto blit = NS::TransferPtr(command_buffer->blitCommandEncoder());
+    auto blit = NS::RetainPtr(command_buffer->blitCommandEncoder());
     blit->copyFromBuffer(staging_buffer.get(), 0, row_bytes, buffer_size,
                          MTL::Size{image.Width(), image.Height(), 1}, image.Texture(), 0, 0,
                          MTL::Origin{0, 0, 0});

@@ -49,10 +49,7 @@ GlEditViewerSurface::~GlEditViewerSurface() {
 
 auto GlEditViewerSurface::widget() -> QWidget* { return widget_; }
 
-void GlEditViewerSurface::submitFrame(const ViewerFrame& frame) {
-  frame_.active_frame        = frame.active_frame;
-  frame_.histogram_requested = frame_.histogram_requested || frame.histogram_requested;
-}
+void GlEditViewerSurface::submitFrame(const ViewerFrame& frame) { (void)frame; }
 
 void GlEditViewerSurface::setViewState(const ViewerViewState& state) { view_state_ = state; }
 
@@ -134,7 +131,7 @@ void GlEditViewerSurface::paint() {
     return;
   }
 
-  auto active_frame = frame_.active_frame;
+  auto active_frame = active_frame_;
   if (callbacks_.consume_pending_frame) {
     if (const auto pending_frame = callbacks_.consume_pending_frame(); pending_frame.has_value()) {
       if (ensureRenderTargetCurrentContext(pending_frame->slot_index, pending_frame->width,
@@ -150,7 +147,7 @@ void GlEditViewerSurface::paint() {
         if (pending_frame->apply_presentation_mode) {
           active_frame.presentation_mode = pending_frame->presentation_mode;
         }
-        frame_.active_frame = active_frame;
+        active_frame_ = active_frame;
       }
     }
   }
@@ -161,9 +158,10 @@ void GlEditViewerSurface::paint() {
                                            active_frame.height);
   }
 
+  const bool histogram_requested =
+      callbacks_.consume_histogram_request ? callbacks_.consume_histogram_request() : false;
   const auto render_result =
-      renderer_->Render(*widget_, active_frame, view_state_.snapshot, frame_.histogram_requested);
-  frame_.histogram_requested = false;
+      renderer_->Render(*widget_, active_frame, view_state_.snapshot, histogram_requested);
   if (render_result.histogram_data_updated && callbacks_.histogram_data_updated) {
     callbacks_.histogram_data_updated();
   }

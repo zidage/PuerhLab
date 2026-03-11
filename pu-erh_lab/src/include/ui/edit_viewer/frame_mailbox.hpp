@@ -30,7 +30,7 @@ class FrameMailbox {
     int                   slot_index         = 0;
     int                   width              = 0;
     int                   height             = 0;
-    FramePresentationMode presentation_mode  = FramePresentationMode::ViewportTransformed;
+    FramePresentationMode presentation_mode  = FramePresentationMode::FullFrame;
   };
 
   struct PendingFrame {
@@ -40,7 +40,7 @@ class FrameMailbox {
     void*                 staging_ptr               = nullptr;
     size_t                staging_bytes             = 0;
     bool                  apply_presentation_mode   = false;
-    FramePresentationMode presentation_mode         = FramePresentationMode::ViewportTransformed;
+    FramePresentationMode presentation_mode         = FramePresentationMode::FullFrame;
   };
 
   FrameMailbox();
@@ -79,9 +79,9 @@ class FrameMailbox {
   mutable std::mutex                    mutex_;
   std::atomic<int>                      pending_frame_idx_{-1};
   std::atomic<FramePresentationMode>    active_presentation_mode_{
-      FramePresentationMode::ViewportTransformed};
+      FramePresentationMode::FullFrame};
   std::atomic<FramePresentationMode>    pending_presentation_mode_{
-      FramePresentationMode::ViewportTransformed};
+      FramePresentationMode::FullFrame};
   std::atomic<bool>                     pending_presentation_mode_valid_{false};
   std::atomic<bool>                     histogram_expect_fast_frame_{false};
   std::atomic<bool>                     histogram_pending_frame_{false};

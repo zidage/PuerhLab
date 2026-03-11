@@ -4,9 +4,12 @@
 
 #pragma once
 
+#include <QWidget>
+
+#ifdef PUERHLAB_HAS_LEGACY_GL_VIEWER
 #include <QOpenGLExtraFunctions>
 #include <QOpenGLWidget>
-#include <QWidget>
+#endif
 
 class QOpenGLShaderProgram;
 
@@ -16,7 +19,12 @@ class QtEditViewer;
 
 namespace puerhlab::ui {
 
-class HistogramWidget final : public QOpenGLWidget, protected QOpenGLExtraFunctions {
+class HistogramWidget final
+#ifdef PUERHLAB_HAS_LEGACY_GL_VIEWER
+    : public QOpenGLWidget, protected QOpenGLExtraFunctions {
+#else
+    : public QWidget {
+#endif
  public:
   explicit HistogramWidget(QtEditViewer* source_viewer, QWidget* parent = nullptr);
   ~HistogramWidget() override;
@@ -24,19 +32,27 @@ class HistogramWidget final : public QOpenGLWidget, protected QOpenGLExtraFuncti
   void SetSourceViewer(QtEditViewer* source_viewer);
 
  protected:
+#ifdef PUERHLAB_HAS_LEGACY_GL_VIEWER
   void initializeGL() override;
   void paintGL() override;
+#else
+  void paintEvent(QPaintEvent*) override;
+#endif
 
  private:
+#ifdef PUERHLAB_HAS_LEGACY_GL_VIEWER
   auto InitPrograms() -> bool;
   void CleanupGl();
+#endif
 
   QtEditViewer*         source_viewer_          = nullptr;
+#ifdef PUERHLAB_HAS_LEGACY_GL_VIEWER
   QOpenGLShaderProgram* fill_program_           = nullptr;
   QOpenGLShaderProgram* line_program_           = nullptr;
   unsigned int          vao_                    = 0;
   bool                  gl_ready_               = false;
   bool                  warned_context_sharing_ = false;
+#endif
 };
 
 class HistogramRulerWidget final : public QWidget {
