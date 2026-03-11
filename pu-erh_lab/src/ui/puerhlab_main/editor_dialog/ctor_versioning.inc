@@ -16,11 +16,11 @@
       version_status_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
       version_status_->setMinimumWidth(0);
 
-      undo_tx_btn_ = new QPushButton("Undo", row);
+      undo_tx_btn_ = new QPushButton(Tr("Undo"), row);
       undo_tx_btn_->setFixedHeight(32);
       undo_tx_btn_->setStyleSheet(AppTheme::EditorPrimaryButtonStyle(true));
 
-      commit_version_btn_ = new QPushButton("Commit Version", row);
+      commit_version_btn_ = new QPushButton(Tr("Commit Version"), row);
       commit_version_btn_->setFixedHeight(32);
       commit_version_btn_->setStyleSheet(AppTheme::EditorPrimaryButtonStyle(true));
 
@@ -48,17 +48,17 @@
       mode_layout->setContentsMargins(0, 0, 0, 0);
       mode_layout->setSpacing(8);
 
-      auto* mode_label = new QLabel("Working version:", mode_row);
+      auto* mode_label = new QLabel(Tr("Working version:"), mode_row);
       mode_label->setStyleSheet(AppTheme::EditorLabelStyle(AppTheme::Instance().textMutedColor()));
       AppTheme::MarkFontRole(mode_label, AppTheme::FontRole::UiCaption);
 
       working_mode_combo_ = new QComboBox(mode_row);
-      working_mode_combo_->addItem("Plain", static_cast<int>(WorkingMode::Plain));
-      working_mode_combo_->addItem("Incr", static_cast<int>(WorkingMode::Incremental));
+      working_mode_combo_->addItem(Tr("Plain"), static_cast<int>(WorkingMode::Plain));
+      working_mode_combo_->addItem(Tr("Incr"), static_cast<int>(WorkingMode::Incremental));
       working_mode_combo_->setFixedHeight(28);
       working_mode_combo_->setStyleSheet(AppTheme::EditorComboBoxStyle());
 
-      new_working_btn_ = new QPushButton("New", mode_row);
+      new_working_btn_ = new QPushButton(Tr("New"), mode_row);
       new_working_btn_->setFixedHeight(28);
       new_working_btn_->setStyleSheet(AppTheme::EditorPrimaryButtonStyle());
 
@@ -68,7 +68,7 @@
 
       layout->addWidget(mode_row);
 
-      auto* versions_label = new QLabel("Versions", frame);
+      auto* versions_label = new QLabel(Tr("Versions"), frame);
       versions_label->setStyleSheet(AppTheme::EditorLabelStyle(AppTheme::Instance().textColor()));
       AppTheme::MarkFontRole(versions_label, AppTheme::FontRole::UiBodyStrong);
       layout->addWidget(versions_label);
@@ -86,7 +86,7 @@
       QObject::connect(version_log_, &QListWidget::itemClicked, this,
                        [this](QListWidgetItem* item) { CheckoutSelectedVersion(item); });
 
-      auto* tx_label = new QLabel("Uncommitted transactions (stack)", frame);
+      auto* tx_label = new QLabel(Tr("Uncommitted transactions (stack)"), frame);
       tx_label->setStyleSheet(AppTheme::EditorLabelStyle(AppTheme::Instance().textColor()));
       AppTheme::MarkFontRole(tx_label, AppTheme::FontRole::UiBodyStrong);
       layout->addWidget(tx_label);

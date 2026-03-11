@@ -60,7 +60,7 @@ Dialog {
 
     FolderDialog {
         id: exportFolderDialog
-        title: "Select Export Folder"
+        title: qsTr("Select Export Folder")
         onAccepted: exportOutDir.text = selectedFolder.toString()
     }
 
@@ -81,7 +81,7 @@ Dialog {
             spacing: 4
             Label {
                 Layout.fillWidth: true
-                text: "Export Images"
+                text: qsTr("Export Images")
                 font.pixelSize: 22
                 font.weight: 700
                 font.letterSpacing: -0.3
@@ -89,7 +89,7 @@ Dialog {
             }
             Label {
                 Layout.fillWidth: true
-                text: "Export queued images using the current edit pipeline."
+                text: qsTr("Export queued images using the current edit pipeline.")
                 wrapMode: Text.WordWrap
                 color: root.mutedTextColor
                 font.pixelSize: 12
@@ -131,7 +131,7 @@ Dialog {
                             spacing: 6
 
                             Label {
-                                text: "DESTINATION"
+                                text: qsTr("DESTINATION")
                                 color: root.mutedTextColor
                                 font.pixelSize: 10
                                 font.weight: 700
@@ -143,10 +143,10 @@ Dialog {
                                 TextField {
                                     id: exportOutDir
                                     Layout.fillWidth: true
-                                    placeholderText: "Select output directory..."
+                                    placeholderText: qsTr("Select output directory...")
                                 }
                                 Button {
-                                    text: "Browse..."
+                                    text: qsTr("Browse...")
                                     enabled: !albumBackend.exportInFlight
                                     onClicked: exportFolderDialog.open()
                                 }
@@ -160,7 +160,7 @@ Dialog {
                             spacing: 6
 
                             Label {
-                                text: "FORMAT"
+                                text: qsTr("FORMAT")
                                 color: root.mutedTextColor
                                 font.pixelSize: 10
                                 font.weight: 700
@@ -173,7 +173,7 @@ Dialog {
                                 columnSpacing: 12
                                 rowSpacing: 10
 
-                                Label { text: "Format"; color: root.mutedTextColor; font.pixelSize: 12 }
+                                Label { text: qsTr("Format"); color: root.mutedTextColor; font.pixelSize: 12 }
                                 ComboBox {
                                     id: exportFormat
                                     Layout.fillWidth: true
@@ -188,7 +188,7 @@ Dialog {
                                     valueRole: "value"
                                 }
 
-                                Label { text: "Bit depth"; color: root.mutedTextColor; font.pixelSize: 12 }
+                                Label { text: qsTr("Bit depth"); color: root.mutedTextColor; font.pixelSize: 12 }
                                 ComboBox {
                                     id: exportBitDepth
                                     Layout.fillWidth: true
@@ -202,7 +202,7 @@ Dialog {
                                     currentIndex: 1
                                 }
 
-                                Label { text: "Quality"; color: root.mutedTextColor; font.pixelSize: 12 }
+                                Label { text: qsTr("Quality"); color: root.mutedTextColor; font.pixelSize: 12 }
                                 SpinBox {
                                     id: exportQuality
                                     Layout.fillWidth: true
@@ -213,7 +213,7 @@ Dialog {
                                 }
 
                                 Label {
-                                    text: "PNG level"
+                                    text: qsTr("PNG level")
                                     color: root.mutedTextColor
                                     font.pixelSize: 12
                                     visible: exportFormat.currentValue === "PNG"
@@ -229,7 +229,7 @@ Dialog {
                                 }
 
                                 Label {
-                                    text: "Compression"
+                                    text: qsTr("Compression")
                                     color: root.mutedTextColor
                                     font.pixelSize: 12
                                     visible: exportFormat.currentValue === "TIFF"
@@ -239,7 +239,7 @@ Dialog {
                                     Layout.fillWidth: true
                                     visible: exportFormat.currentValue === "TIFF"
                                     model: [
-                                        { text: "None", value: "NONE" },
+                                        { text: qsTr("None"), value: "NONE" },
                                         { text: "LZW", value: "LZW" },
                                         { text: "ZIP", value: "ZIP" }
                                     ]
@@ -257,7 +257,7 @@ Dialog {
                             spacing: 6
 
                             Label {
-                                text: "RESIZE"
+                                text: qsTr("RESIZE")
                                 color: root.mutedTextColor
                                 font.pixelSize: 10
                                 font.weight: 700
@@ -271,12 +271,12 @@ Dialog {
                                 ComboBox {
                                     id: exportResize
                                     Layout.preferredWidth: 100
-                                    model: [ "No", "Yes" ]
+                                    model: [ qsTr("No"), qsTr("Yes") ]
                                     currentIndex: 0
                                 }
 
                                 Label {
-                                    text: "Max side"
+                                    text: qsTr("Max side")
                                     color: root.mutedTextColor
                                     font.pixelSize: 12
                                     visible: exportResize.currentIndex === 1
@@ -312,7 +312,7 @@ Dialog {
                     RowLayout {
                         Layout.fillWidth: true
                         Label {
-                            text: "QUEUE"
+                            text: qsTr("QUEUE")
                             color: root.mutedTextColor
                             font.pixelSize: 10
                             font.weight: 700
@@ -320,7 +320,7 @@ Dialog {
                         }
                         Item { Layout.fillWidth: true }
                         Label {
-                            text: root.exportQueueCount + " image(s)"
+                            text: qsTr("%1 image(s)").arg(root.exportQueueCount)
                             color: root.mutedTextColor
                             font.family: root.dataFontFamily
                             font.pixelSize: 11
@@ -332,12 +332,12 @@ Dialog {
                         spacing: 6
                         Button {
                             Layout.fillWidth: true
-                            text: "Add Selected (" + root.selectedCount + ")"
+                            text: qsTr("Add Selected (%1)").arg(root.selectedCount)
                             enabled: !albumBackend.exportInFlight && root.selectedCount > 0
                             onClicked: root.addSelectedToQueueRequested()
                         }
                         Button {
-                            text: "Clear"
+                            text: qsTr("Clear")
                             enabled: !albumBackend.exportInFlight && root.exportQueueCount > 0
                             onClicked: root.clearQueueRequested()
                         }
@@ -377,7 +377,7 @@ Dialog {
                         Label {
                             anchors.centerIn: parent
                             visible: root.exportQueueCount === 0
-                            text: "Queue is empty"
+                            text: qsTr("Queue is empty")
                             color: root.emptyTextColor
                             font.pixelSize: 12
                             font.italic: true
@@ -391,7 +391,7 @@ Dialog {
                         spacing: 6
 
                         Label {
-                            text: "PROGRESS"
+                            text: qsTr("PROGRESS")
                             color: root.mutedTextColor
                             font.pixelSize: 10
                             font.weight: 700
@@ -417,10 +417,12 @@ Dialog {
                         Label {
                             Layout.fillWidth: true
                             visible: albumBackend.exportTotal > 0 || albumBackend.exportSkipped > 0
-                            text: albumBackend.exportCompleted + "/" + albumBackend.exportTotal
-                                  + " done  ·  " + albumBackend.exportSucceeded + " written"
-                                  + "  ·  " + albumBackend.exportFailed + " failed"
-                                  + "  ·  " + albumBackend.exportSkipped + " skipped"
+                            text: qsTr("%1/%2 done  ·  %3 written  ·  %4 failed  ·  %5 skipped")
+                                .arg(albumBackend.exportCompleted)
+                                .arg(albumBackend.exportTotal)
+                                .arg(albumBackend.exportSucceeded)
+                                .arg(albumBackend.exportFailed)
+                                .arg(albumBackend.exportSkipped)
                             wrapMode: Text.WordWrap
                             color: root.mutedTextColor
                             font.family: root.dataFontFamily
@@ -452,21 +454,23 @@ Dialog {
             spacing: 10
 
             Button {
-                text: (root.exportTriggered && !albumBackend.exportInFlight) ? "Close" : "Cancel"
+                text: (root.exportTriggered && !albumBackend.exportInFlight)
+                    ? qsTr("Close")
+                    : qsTr("Cancel")
                 enabled: !albumBackend.exportInFlight
                 onClicked: root.close()
             }
             Item { Layout.fillWidth: true }
             Label {
                 visible: root.exportQueueCount > 0
-                text: root.exportQueueCount + " image(s) queued"
+                text: qsTr("%1 image(s) queued").arg(root.exportQueueCount)
                 color: root.mutedTextColor
                 font.family: root.dataFontFamily
                 font.pixelSize: 12
             }
             Button {
                 highlighted: true
-                text: albumBackend.exportInFlight ? "Exporting..." : "Export"
+                text: albumBackend.exportInFlight ? qsTr("Exporting...") : qsTr("Export")
                 enabled: !albumBackend.exportInFlight && root.exportQueueCount > 0
                 onClicked: {
                     root.exportTriggered = true

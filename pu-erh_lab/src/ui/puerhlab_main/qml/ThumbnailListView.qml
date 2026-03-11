@@ -132,11 +132,30 @@ ListView {
             ColumnLayout {
                 Layout.fillWidth: true
                 Label { Layout.fillWidth: true; text: fileName; color: root.rowText; font.family: appTheme.dataFontFamily; font.pixelSize: 13; elide: Text.ElideRight }
-                Label { Layout.fillWidth: true; text: cameraModel + " | " + extension + " | ISO " + iso + " | f/" + aperture + " | " + focalLength + "mm"; color: root.rowMuted; font.family: appTheme.dataFontFamily; font.pixelSize: 11; elide: Text.ElideRight }
-                Label { Layout.fillWidth: true; text: captureDate + " | tags: " + tags; color: root.rowMuted; font.family: appTheme.dataFontFamily; font.pixelSize: 10; elide: Text.ElideRight }
+                Label {
+                    Layout.fillWidth: true
+                    text: qsTr("%1 | %2 | ISO %3 | f/%4 | %5mm")
+                        .arg(cameraModel)
+                        .arg(extension)
+                        .arg(iso)
+                        .arg(aperture)
+                        .arg(focalLength)
+                    color: root.rowMuted
+                    font.family: appTheme.dataFontFamily
+                    font.pixelSize: 11
+                    elide: Text.ElideRight
+                }
+                Label {
+                    Layout.fillWidth: true
+                    text: qsTr("%1 | Tags: %2").arg(captureDate).arg(tags)
+                    color: root.rowMuted
+                    font.family: appTheme.dataFontFamily
+                    font.pixelSize: 10
+                    elide: Text.ElideRight
+                }
             }
             Label {
-                text: rating + "/5"
+                text: qsTr("%1/5").arg(rating)
                 color: root.rowText
                 font.family: appTheme.dataFontFamily
                 font.pixelSize: 12

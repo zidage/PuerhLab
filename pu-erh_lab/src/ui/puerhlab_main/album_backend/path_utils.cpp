@@ -5,6 +5,7 @@
 #include "ui/puerhlab_main/album_backend/path_utils.hpp"
 
 #include <QBuffer>
+#include <QCoreApplication>
 #include <QDateTime>
 #include <QDir>
 #include <QUrl>
@@ -15,7 +16,17 @@
 
 #include <opencv2/opencv.hpp>
 
+#include "ui/puerhlab_main/i18n.hpp"
+
 namespace puerhlab::ui::album_util {
+
+namespace {
+
+auto Tr(const char* text) -> QString {
+  return QCoreApplication::translate(PUERHLAB_I18N_CONTEXT, text);
+}
+
+}  // namespace
 
 auto WStringToQString(const std::wstring& value) -> QString {
   return QString::fromStdWString(value);
@@ -325,14 +336,14 @@ auto ValidateProjectName(const QString& rawName, QString* errorOut) -> std::opti
   const QString trimmed = rawName.trimmed();
   if (trimmed.isEmpty()) {
     if (errorOut) {
-      *errorOut = "Project name cannot be empty.";
+      *errorOut = Tr("Project name cannot be empty.");
     }
     return std::nullopt;
   }
 
   if (trimmed == "." || trimmed == "..") {
     if (errorOut) {
-      *errorOut = "Project name is invalid.";
+      *errorOut = Tr("Project name is invalid.");
     }
     return std::nullopt;
   }
@@ -341,7 +352,7 @@ auto ValidateProjectName(const QString& rawName, QString* errorOut) -> std::opti
   for (const QChar ch : trimmed) {
     if (ch.unicode() < 32U || kInvalidChars.contains(ch)) {
       if (errorOut) {
-        *errorOut = "Project name contains invalid characters.";
+        *errorOut = Tr("Project name contains invalid characters.");
       }
       return std::nullopt;
     }
@@ -349,7 +360,7 @@ auto ValidateProjectName(const QString& rawName, QString* errorOut) -> std::opti
 
   if (trimmed.endsWith(' ') || trimmed.endsWith('.')) {
     if (errorOut) {
-      *errorOut = "Project name cannot end with a space or period.";
+      *errorOut = Tr("Project name cannot end with a space or period.");
     }
     return std::nullopt;
   }

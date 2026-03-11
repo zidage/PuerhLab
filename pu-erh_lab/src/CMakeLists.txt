@@ -39,6 +39,17 @@ endif()
 
 def_library(TimeProvider SOURCES utils/clock/time_provider.cpp)
 
+def_library(UiLocalization
+    SOURCES
+        include/ui/puerhlab_main/i18n.hpp
+        include/ui/puerhlab_main/language_manager.hpp
+        ui/puerhlab_main/i18n.cpp
+        ui/puerhlab_main/language_manager.cpp
+    PUBLIC_DEPS
+        Qt6::Core
+        Qt6::Qml
+)
+
 def_library(StrConv 
     SOURCES utils/string/converter.cpp 
     PUBLIC_DEPS utfcpp
@@ -754,6 +765,7 @@ target_include_directories(AlbumBackendLib
 
 target_link_libraries(AlbumBackendLib
     PUBLIC
+        UiLocalization
         Qt6::Quick
         Qt6::Qml
         Qt6::QuickControls2
@@ -833,6 +845,8 @@ add_executable(puerhlab_main
     ui/puerhlab_main/app_theme.cpp
     config/resource.qrc
     include/ui/puerhlab_main/app_theme.hpp
+    include/ui/puerhlab_main/i18n.hpp
+    include/ui/puerhlab_main/language_manager.hpp
     ${PUERHLAB_EDITOR_DIALOG_SRCS}
 )
 
@@ -847,6 +861,7 @@ target_include_directories(puerhlab_main
 target_link_libraries(puerhlab_main
     PRIVATE
         AlbumBackendLib
+        UiLocalization
         Qt6::Quick
         Qt6::Qml
         Qt6::QuickControls2
@@ -867,6 +882,24 @@ qt_add_qml_module(puerhlab_main
         ui/puerhlab_main/qml/ImageContextMenu.qml
         ui/puerhlab_main/qml/ThumbnailGridView.qml
         ui/puerhlab_main/qml/ThumbnailListView.qml
+)
+
+set(PUERHLAB_TRANSLATION_TS_FILES
+    ${CMAKE_CURRENT_SOURCE_DIR}/ui/puerhlab_main/i18n/puerhlab_main_en.ts
+    ${CMAKE_CURRENT_SOURCE_DIR}/ui/puerhlab_main/i18n/puerhlab_main_zh_CN.ts
+)
+
+qt_add_translations(TARGETS puerhlab_main
+    SOURCE_TARGETS
+        puerhlab_main
+        AlbumBackendLib
+        UiLocalization
+    TS_FILES
+        ${PUERHLAB_TRANSLATION_TS_FILES}
+    RESOURCE_PREFIX
+        "/i18n"
+    QM_OUTPUT_DIRECTORY
+        "${CMAKE_CURRENT_BINARY_DIR}"
 )
 
 target_compile_definitions(puerhlab_main PRIVATE PUERHLAB_SOURCE_DIR="${CMAKE_SOURCE_DIR}")

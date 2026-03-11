@@ -5,6 +5,7 @@
 #include "ui/puerhlab_main/album_backend/packed_project.hpp"
 
 #include <QDateTime>
+#include <QCoreApplication>
 #include <QDir>
 #include <QRandomGenerator>
 #include <QStandardPaths>
@@ -18,11 +19,16 @@
 #include <json.hpp>
 
 #include "ui/puerhlab_main/album_backend/path_utils.hpp"
+#include "ui/puerhlab_main/i18n.hpp"
 #include "utils/string/convert.hpp"
 
 namespace puerhlab::ui::packed_proj {
 
 namespace {
+
+auto Tr(const char* text) -> QString {
+  return QCoreApplication::translate(PUERHLAB_I18N_CONTEXT, text);
+}
 
 auto ReadExact(std::istream& stream, char* data, std::streamsize size) -> bool {
   stream.read(data, size);
@@ -138,7 +144,7 @@ auto BuildUniquePackedProjectPath(const std::filesystem::path& folder,
   }
   if (ec || !std::filesystem::is_directory(folder, ec) || ec) {
     if (errorOut) {
-      *errorOut = "Selected folder is invalid or not writable.";
+      *errorOut = Tr("Selected folder is invalid or not writable.");
     }
     return std::nullopt;
   }
@@ -155,7 +161,7 @@ auto BuildUniquePackedProjectPath(const std::filesystem::path& folder,
   }
   if (base_name_text.isEmpty()) {
     if (errorOut) {
-      *errorOut = "Project name cannot be only an extension.";
+      *errorOut = Tr("Project name cannot be only an extension.");
     }
     return std::nullopt;
   }
@@ -179,7 +185,7 @@ auto BuildUniquePackedProjectPath(const std::filesystem::path& folder,
   }
 
   if (errorOut) {
-    *errorOut = "A packed project with that name already exists.";
+    *errorOut = Tr("A packed project with that name already exists.");
   }
   return std::nullopt;
 }
@@ -203,7 +209,7 @@ auto CreateProjectWorkspace(const QString& projectName,
   const auto root     = temp_dir / L"puerh_lab_main";
   if (!album_util::EnsureDirectoryExists(root)) {
     if (errorOut) {
-      *errorOut = "Unable to create project temp directory.";
+      *errorOut = Tr("Unable to create project temp directory.");
     }
     return false;
   }
@@ -239,7 +245,7 @@ auto CreateProjectWorkspace(const QString& projectName,
   }
 
   if (errorOut) {
-    *errorOut = "Unable to allocate a unique project temp directory.";
+    *errorOut = Tr("Unable to allocate a unique project temp directory.");
   }
   return false;
 }
@@ -271,7 +277,7 @@ auto RunDuckDbQuery(duckdb_connection conn, const std::string& sql,
   if (duckdb_query(conn, sql.c_str(), &result) != DuckDBSuccess) {
     const char* err_msg = duckdb_result_error(&result);
     if (errorOut) {
-      *errorOut = QString("DuckDB %1 failed: %2")
+      *errorOut = Tr("DuckDB %1 failed: %2")
                       .arg(QString::fromUtf8(stage))
                       .arg(QString::fromUtf8(err_msg ? err_msg : ""));
     }
@@ -288,7 +294,7 @@ auto QueryCurrentCatalog(duckdb_connection conn, std::string* catalogOut,
   if (duckdb_query(conn, "SELECT current_catalog();", &result) != DuckDBSuccess) {
     const char* err_msg = duckdb_result_error(&result);
     if (errorOut) {
-      *errorOut = QString("DuckDB query current catalog failed: %1")
+      *errorOut = Tr("DuckDB query current catalog failed: %1")
                       .arg(QString::fromUtf8(err_msg ? err_msg : ""));
     }
     duckdb_destroy_result(&result);
@@ -299,7 +305,7 @@ auto QueryCurrentCatalog(duckdb_connection conn, std::string* catalogOut,
   const idx_t col_count = duckdb_column_count(&result);
   if (row_count == 0 || col_count == 0) {
     if (errorOut) {
-      *errorOut = "DuckDB query current catalog returned no rows.";
+      *errorOut = Tr("DuckDB query current catalog returned no rows.");
     }
     duckdb_destroy_result(&result);
     return false;
@@ -308,7 +314,7 @@ auto QueryCurrentCatalog(duckdb_connection conn, std::string* catalogOut,
   const char* value = duckdb_value_varchar(&result, 0, 0);
   if (!value || value[0] == '\0') {
     if (errorOut) {
-      *errorOut = "DuckDB query current catalog returned empty value.";
+      *errorOut = Tr("DuckDB query current catalog returned empty value.");
     }
     if (value) {
       duckdb_free(const_cast<char*>(value));
@@ -332,7 +338,7 @@ auto BuildTempDbSnapshotPath(std::filesystem::path* snapshotPathOut,
   const auto root     = temp_dir / L"puerh_lab_main";
   if (!album_util::EnsureDirectoryExists(root)) {
     if (errorOut) {
-      *errorOut = "Unable to prepare temp folder for DB snapshot.";
+      *errorOut = Tr("Unable to prepare temp folder for DB snapshot.");
     }
     return false;
   }
@@ -354,7 +360,7 @@ auto BuildTempDbSnapshotPath(std::filesystem::path* snapshotPathOut,
   }
 
   if (errorOut) {
-    *errorOut = "Unable to allocate temp DB snapshot path.";
+    *errorOut = Tr("Unable to allocate temp DB snapshot path.");
   }
   return false;
 }
@@ -364,7 +370,7 @@ auto CreateLiveDbSnapshot(const std::shared_ptr<ProjectService>& project,
                           QString* errorOut) -> bool {
   if (!project) {
     if (errorOut) {
-      *errorOut = "No active project for DB snapshot.";
+      *errorOut = Tr("No active project for DB snapshot.");
     }
     return false;
   }
@@ -373,7 +379,7 @@ auto CreateLiveDbSnapshot(const std::shared_ptr<ProjectService>& project,
     auto storage = project->GetStorageService();
     if (!storage) {
       if (errorOut) {
-        *errorOut = "Storage service is unavailable for DB snapshot.";
+        *errorOut = Tr("Storage service is unavailable for DB snapshot.");
       }
       return false;
     }
@@ -410,7 +416,7 @@ auto CreateLiveDbSnapshot(const std::shared_ptr<ProjectService>& project,
     ec.clear();
     if (!std::filesystem::is_regular_file(snapshotPath, ec) || ec) {
       if (errorOut) {
-        *errorOut = QString("DuckDB snapshot file was not created: %1")
+        *errorOut = Tr("DuckDB snapshot file was not created: %1")
                         .arg(album_util::PathToQString(snapshotPath));
       }
       return false;
@@ -418,12 +424,12 @@ auto CreateLiveDbSnapshot(const std::shared_ptr<ProjectService>& project,
     return true;
   } catch (const std::exception& e) {
     if (errorOut) {
-      *errorOut = QString("DuckDB snapshot failed: %1").arg(QString::fromUtf8(e.what()));
+      *errorOut = Tr("DuckDB snapshot failed: %1").arg(QString::fromUtf8(e.what()));
     }
     return false;
   } catch (...) {
     if (errorOut) {
-      *errorOut = "DuckDB snapshot failed with an unknown error.";
+      *errorOut = Tr("DuckDB snapshot failed with an unknown error.");
     }
     return false;
   }
@@ -436,7 +442,7 @@ auto WritePackedProject(const std::filesystem::path& packedPath,
   std::string meta_bytes;
   if (!ReadFileBytes(metaPath, &meta_bytes)) {
     if (errorOut) {
-      *errorOut = QString("Failed to read project metadata: %1")
+      *errorOut = Tr("Failed to read project metadata: %1")
                       .arg(album_util::PathToQString(metaPath));
     }
     return false;
@@ -445,7 +451,7 @@ auto WritePackedProject(const std::filesystem::path& packedPath,
   std::string db_bytes;
   if (!ReadFileBytes(dbPath, &db_bytes)) {
     if (errorOut) {
-      *errorOut = QString("Failed to read project database: %1")
+      *errorOut = Tr("Failed to read project database: %1")
                       .arg(album_util::PathToQString(dbPath));
     }
     return false;
@@ -453,7 +459,7 @@ auto WritePackedProject(const std::filesystem::path& packedPath,
 
   if (!album_util::EnsureDirectoryExists(packedPath.parent_path())) {
     if (errorOut) {
-      *errorOut = "Packed project destination folder is not writable.";
+      *errorOut = Tr("Packed project destination folder is not writable.");
     }
     return false;
   }
@@ -462,7 +468,7 @@ auto WritePackedProject(const std::filesystem::path& packedPath,
   std::ofstream out(std::filesystem::path(temp_path), std::ios::binary | std::ios::trunc);
   if (!out.is_open()) {
     if (errorOut) {
-      *errorOut = QString("Failed to open packed project file for writing: %1")
+      *errorOut = Tr("Failed to open packed project file for writing: %1")
                       .arg(album_util::PathToQString(packedPath));
     }
     return false;
@@ -474,7 +480,7 @@ auto WritePackedProject(const std::filesystem::path& packedPath,
       !WriteU64Le(out, static_cast<uint64_t>(meta_bytes.size())) ||
       !WriteU64Le(out, static_cast<uint64_t>(db_bytes.size()))) {
     if (errorOut) {
-      *errorOut = "Failed to write packed project header.";
+      *errorOut = Tr("Failed to write packed project header.");
     }
     return false;
   }
@@ -488,7 +494,7 @@ auto WritePackedProject(const std::filesystem::path& packedPath,
   out.flush();
   if (!out.good()) {
     if (errorOut) {
-      *errorOut = "Failed to write packed project payload.";
+      *errorOut = Tr("Failed to write packed project payload.");
     }
     return false;
   }
@@ -499,7 +505,7 @@ auto WritePackedProject(const std::filesystem::path& packedPath,
     std::filesystem::remove(packedPath, ec);
     if (ec) {
       if (errorOut) {
-        *errorOut = QString("Failed to replace existing packed project file: %1")
+        *errorOut = Tr("Failed to replace existing packed project file: %1")
                         .arg(album_util::PathToQString(packedPath));
       }
       std::filesystem::remove(std::filesystem::path(temp_path), ec);
@@ -510,7 +516,7 @@ auto WritePackedProject(const std::filesystem::path& packedPath,
   std::filesystem::rename(std::filesystem::path(temp_path), packedPath, ec);
   if (ec) {
     if (errorOut) {
-      *errorOut = QString("Failed to finalize packed project file: %1")
+      *errorOut = Tr("Failed to finalize packed project file: %1")
                       .arg(album_util::PathToQString(packedPath));
     }
     std::filesystem::remove(std::filesystem::path(temp_path), ec);
@@ -526,7 +532,7 @@ auto ReadPackedProject(const std::filesystem::path& packedPath,
   std::ifstream in(packedPath, std::ios::binary);
   if (!in.is_open()) {
     if (errorOut) {
-      *errorOut = QString("Failed to open packed project: %1")
+      *errorOut = Tr("Failed to open packed project: %1")
                       .arg(album_util::PathToQString(packedPath));
     }
     return false;
@@ -536,7 +542,7 @@ auto ReadPackedProject(const std::filesystem::path& packedPath,
   if (!ReadExact(in, magic.data(), static_cast<std::streamsize>(magic.size())) ||
       !std::equal(magic.begin(), magic.end(), kPackedProjectMagic.begin())) {
     if (errorOut) {
-      *errorOut = "Packed project signature is invalid.";
+      *errorOut = Tr("Packed project signature is invalid.");
     }
     return false;
   }
@@ -544,7 +550,7 @@ auto ReadPackedProject(const std::filesystem::path& packedPath,
   uint32_t version = 0;
   if (!ReadU32Le(in, &version) || version != kPackedProjectVersion) {
     if (errorOut) {
-      *errorOut = "Packed project version is not supported.";
+      *errorOut = Tr("Packed project version is not supported.");
     }
     return false;
   }
@@ -553,20 +559,20 @@ auto ReadPackedProject(const std::filesystem::path& packedPath,
   uint64_t db_size   = 0;
   if (!ReadU64Le(in, &meta_size) || !ReadU64Le(in, &db_size)) {
     if (errorOut) {
-      *errorOut = "Packed project header is corrupted.";
+      *errorOut = Tr("Packed project header is corrupted.");
     }
     return false;
   }
   if (meta_size > kMaxPackedComponentBytes || db_size > kMaxPackedComponentBytes) {
     if (errorOut) {
-      *errorOut = "Packed project is too large.";
+      *errorOut = Tr("Packed project is too large.");
     }
     return false;
   }
   if (meta_size > static_cast<uint64_t>(std::numeric_limits<size_t>::max()) ||
       db_size > static_cast<uint64_t>(std::numeric_limits<size_t>::max())) {
     if (errorOut) {
-      *errorOut = "Packed project is too large for this build.";
+      *errorOut = Tr("Packed project is too large for this build.");
     }
     return false;
   }
@@ -575,7 +581,7 @@ auto ReadPackedProject(const std::filesystem::path& packedPath,
   if (meta_size > 0 &&
       !ReadExact(in, metaBytes->data(), static_cast<std::streamsize>(meta_size))) {
     if (errorOut) {
-      *errorOut = "Failed to read packed metadata payload.";
+      *errorOut = Tr("Failed to read packed metadata payload.");
     }
     return false;
   }
@@ -583,7 +589,7 @@ auto ReadPackedProject(const std::filesystem::path& packedPath,
   dbBytes->assign(static_cast<size_t>(db_size), '\0');
   if (db_size > 0 && !ReadExact(in, dbBytes->data(), static_cast<std::streamsize>(db_size))) {
     if (errorOut) {
-      *errorOut = "Failed to read packed database payload.";
+      *errorOut = Tr("Failed to read packed database payload.");
     }
     return false;
   }
@@ -612,7 +618,7 @@ auto UnpackProjectToWorkspace(const std::filesystem::path& packedPath,
     metadata = nlohmann::json::parse(meta_bytes);
   } catch (...) {
     if (errorOut) {
-      *errorOut = "Packed project metadata JSON is invalid.";
+      *errorOut = Tr("Packed project metadata JSON is invalid.");
     }
     return false;
   }
@@ -624,14 +630,14 @@ auto UnpackProjectToWorkspace(const std::filesystem::path& packedPath,
   std::filesystem::create_directories(db_path.parent_path(), ec);
   if (ec) {
     if (errorOut) {
-      *errorOut = "Failed to prepare temp files for packed project.";
+      *errorOut = Tr("Failed to prepare temp files for packed project.");
     }
     return false;
   }
 
   if (!WriteFileBytes(db_path, db_bytes)) {
     if (errorOut) {
-      *errorOut = QString("Failed to materialize project database: %1")
+      *errorOut = Tr("Failed to materialize project database: %1")
                       .arg(album_util::PathToQString(db_path));
     }
     return false;
@@ -640,7 +646,7 @@ auto UnpackProjectToWorkspace(const std::filesystem::path& packedPath,
   const std::string meta_text = metadata.dump(4);
   if (!WriteFileBytes(meta_path, meta_text)) {
     if (errorOut) {
-      *errorOut = QString("Failed to materialize project metadata: %1")
+      *errorOut = Tr("Failed to materialize project metadata: %1")
                       .arg(album_util::PathToQString(meta_path));
     }
     return false;

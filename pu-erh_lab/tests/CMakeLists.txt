@@ -378,3 +378,22 @@ def_ui_test(AlbumBackendProjectTest  album_backend_project_test.cpp)
 def_ui_test(AlbumBackendFolderTest   album_backend_folder_test.cpp)
 def_ui_test(AlbumBackendImageDeleteTest album_backend_image_delete_test.cpp)
 def_ui_test(AlbumBackendThumbnailTest album_backend_thumbnail_test.cpp)
+def_ui_test(AlbumBackendI18nTest album_backend_i18n_test.cpp)
+
+add_executable(LanguageManagerTest
+    ui/language_manager_test.cpp
+    ui/ui_test_main.cpp
+)
+target_include_directories(LanguageManagerTest
+    PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include
+    PRIVATE ${CMAKE_SOURCE_DIR}/pu-erh_lab/tests
+)
+target_link_libraries(LanguageManagerTest
+    PRIVATE
+        UiLocalization
+        GTest::gtest
+        Qt6::Test
+        Qt6::Core
+        Qt6::Qml
+)
+gtest_discover_tests(LanguageManagerTest TEST_PREFIX "LanguageManagerTest.")

@@ -6,6 +6,7 @@
 
 #include <QColor>
 #include <QComboBox>
+#include <QCoreApplication>
 #include <QDateTime>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -21,13 +22,22 @@
 #include "edit/history/edit_transaction.hpp"
 #include "edit/pipeline/pipeline_cpu.hpp"
 #include "ui/puerhlab_main/app_theme.hpp"
+#include "ui/puerhlab_main/i18n.hpp"
 #include "ui/puerhlab_main/editor_dialog/controllers/history_controller.hpp"
 #include "ui/puerhlab_main/editor_dialog/widgets/history_cards.hpp"
 
 namespace puerhlab::ui::versioning {
 
+namespace {
+
+auto Tr(const char* text) -> QString {
+  return QCoreApplication::translate(PUERHLAB_I18N_CONTEXT, text);
+}
+
+}  // namespace
+
 auto MakeTxCountLabel(size_t tx_count) -> QString {
-  return QString("Uncommitted: %1 tx").arg(static_cast<qulonglong>(tx_count));
+  return Tr("Uncommitted: %1 tx").arg(static_cast<qulonglong>(tx_count));
 }
 
 auto IsPlainModeSelected(const QComboBox* working_mode_combo) -> bool {
@@ -100,7 +110,7 @@ auto ResolveSelectedVersion(QListWidgetItem* item,
     version_id = Hash128::FromString(version_id_str);
   } catch (const std::exception& e) {
     if (error) {
-      *error = QString("Invalid version ID: %1").arg(e.what());
+      *error = Tr("Invalid version ID: %1").arg(e.what());
     }
     return false;
   }
@@ -110,7 +120,7 @@ auto ResolveSelectedVersion(QListWidgetItem* item,
     selected_version = &history_guard->history_->GetVersion(version_id);
   } catch (const std::exception& e) {
     if (error) {
-      *error = QString("Failed to load selected version: %1").arg(e.what());
+      *error = Tr("Failed to load selected version: %1").arg(e.what());
     }
     return false;
   }
@@ -140,7 +150,7 @@ auto UndoLastTransaction(Version& working_version,
   try {
     last_tx = working_version.RemoveLastEditTransaction();
   } catch (const std::exception& e) {
-    result.error = QString("Undo failed: %1").arg(e.what());
+    result.error = Tr("Undo failed: %1").arg(e.what());
     return result;
   }
 
@@ -185,7 +195,7 @@ auto CommitWorkingVersion(const std::shared_ptr<EditHistoryMgmtService>& history
   CommitResult result{};
 
   if (!history_service || !history_guard || !history_guard->history_) {
-    result.error = "Edit history service not available.";
+    result.error = Tr("Edit history service not available.");
     return result;
   }
 
@@ -202,7 +212,7 @@ auto CommitWorkingVersion(const std::shared_ptr<EditHistoryMgmtService>& history
         history_service, history_guard, std::move(working_version));
     return result;
   } catch (const std::exception& e) {
-    result.error = QString("Commit failed: %1").arg(e.what());
+    result.error = Tr("Commit failed: %1").arg(e.what());
   }
 
   Version recovery(element_id);
@@ -250,16 +260,16 @@ void UpdateVersionUi(const VersionUiContext& ui, const Version& working_version,
 
   if (working_version.HasParentVersion()) {
     label +=
-        QString(" | parent: %1")
+        Tr(" | parent: %1")
             .arg(QString::fromStdString(
                 working_version.GetParentVersionID().ToString().substr(0, 8)));
   } else {
-    label += " | plain";
+    label += Tr(" | plain");
   }
 
   if (ui.working_mode_combo) {
-    label += IsPlainModeSelected(ui.working_mode_combo) ? " | mode: plain"
-                                                         : " | mode: incremental";
+    label += IsPlainModeSelected(ui.working_mode_combo) ? Tr(" | mode: plain")
+                                                        : Tr(" | mode: incremental");
   }
 
   if (history_guard && history_guard->history_) {
@@ -267,7 +277,7 @@ void UpdateVersionUi(const VersionUiContext& ui, const Version& working_version,
       const auto latest_id =
           history_guard->history_->GetLatestVersion().ver_ref_.GetVersionID();
       label +=
-          QString(" | Latest: %1").arg(QString::fromStdString(latest_id.ToString().substr(0, 8)));
+          Tr(" | Latest: %1").arg(QString::fromStdString(latest_id.ToString().substr(0, 8)));
     } catch (...) {
     }
   }
@@ -312,7 +322,7 @@ void UpdateVersionUi(const VersionUiContext& ui, const Version& working_version,
       AppTheme::MarkFontRole(title_l, AppTheme::FontRole::UiBody);
 
       auto* meta_l =
-          new QLabel(QString("uncommitted | #%1").arg(static_cast<qulonglong>(i + 1)), card);
+          new QLabel(Tr("Uncommitted | #%1").arg(static_cast<qulonglong>(i + 1)), card);
       meta_l->setStyleSheet(AppTheme::EditorLabelStyle(AppTheme::Instance().textMutedColor()));
       AppTheme::MarkFontRole(meta_l, AppTheme::FontRole::DataCaption);
 
@@ -360,7 +370,7 @@ void UpdateVersionUi(const VersionUiContext& ui, const Version& working_version,
         if (!txs.empty()) {
           msg = QString::fromStdString(txs.front().Describe(true, 70));
         } else {
-          msg = "(empty)";
+          msg = Tr("(empty)");
         }
 
         const bool is_head  = (ver_id == latest_id);
@@ -403,31 +413,31 @@ void UpdateVersionUi(const VersionUiContext& ui, const Version& working_version,
         top->addWidget(hash_l, 0);
 
         if (is_head) {
-          top->addWidget(MakePillLabel("HEAD", "#121212", "rgba(252, 199, 4, 0.95)",
+          top->addWidget(MakePillLabel(Tr("HEAD"), "#121212", "rgba(252, 199, 4, 0.95)",
                                        "rgba(252, 199, 4, 0.95)", card),
                          0);
         }
         if (is_base) {
-          top->addWidget(MakePillLabel("BASE", "#121212", "rgba(252, 199, 4, 0.88)",
+          top->addWidget(MakePillLabel(Tr("BASE"), "#121212", "rgba(252, 199, 4, 0.88)",
                                        "rgba(252, 199, 4, 0.88)", card),
                          0);
         }
         if (is_plain) {
-          top->addWidget(MakePillLabel("PLAIN", "#1A1A1A", "rgba(252, 199, 4, 0.22)",
+          top->addWidget(MakePillLabel(Tr("PLAIN"), "#1A1A1A", "rgba(252, 199, 4, 0.22)",
                                        "rgba(252, 199, 4, 0.40)", card),
                          0);
         } else {
           const auto parent_short =
               QString::fromStdString(ver.GetParentVersionID().ToString().substr(0, 8));
           top->addWidget(
-              MakePillLabel(QString("PARENT %1").arg(parent_short), "#A3A3A3",
+              MakePillLabel(Tr("PARENT %1").arg(parent_short), "#A3A3A3",
                             "rgba(252, 199, 4, 0.16)", "rgba(252, 199, 4, 0.32)", card),
               0);
         }
 
         top->addStretch(1);
 
-        auto* tx_pill = MakePillLabel(QString("tx %1").arg(committed_tx_count), "#A3A3A3",
+        auto* tx_pill = MakePillLabel(Tr("tx %1").arg(committed_tx_count), "#A3A3A3",
                                       "rgba(252, 199, 4, 0.16)", "rgba(252, 199, 4, 0.32)", card);
         top->addWidget(tx_pill, 0);
 

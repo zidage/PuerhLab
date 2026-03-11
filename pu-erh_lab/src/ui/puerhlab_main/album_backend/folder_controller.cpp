@@ -16,6 +16,11 @@
 
 namespace puerhlab::ui {
 
+#define PL_TEXT(text, ...)                                                    \
+  i18n::MakeLocalizedText(PUERHLAB_I18N_CONTEXT,                              \
+                          QT_TRANSLATE_NOOP(PUERHLAB_I18N_CONTEXT, text)      \
+                              __VA_OPT__(, ) __VA_ARGS__)
+
 FolderController::FolderController(AlbumBackend& backend) : backend_(backend) {}
 
 void FolderController::RebuildFolderView() {
@@ -35,7 +40,7 @@ void FolderController::RebuildFolderView() {
 
   for (const auto& folder : folder_entries_) {
     const QString name = folder.folder_id_ == 0
-                             ? "Root"
+                             ? PL_TEXT("Root").Render()
                              : album_util::WStringToQString(folder.folder_name_);
     next.push_back(QVariantMap{
         {"folderId", static_cast<uint>(folder.folder_id_)},
@@ -99,30 +104,30 @@ void FolderController::SelectFolder(uint folderId) {
 void FolderController::CreateFolder(const QString& folderName) {
   auto& ph = backend_.project_handler_;
   if (ph.project_loading()) {
-    backend_.SetTaskState("Project is loading. Please wait.", 0, false);
+    backend_.SetTaskState(PL_TEXT("Project is loading. Please wait."), 0, false);
     return;
   }
   if (!ph.project()) {
-    backend_.SetTaskState("No project is loaded.", 0, false);
+    backend_.SetTaskState(PL_TEXT("No project is loaded."), 0, false);
     return;
   }
   auto& ie = backend_.import_export_;
   if (ie.current_import_job() && !ie.current_import_job()->IsCancelationAcked()) {
-    backend_.SetTaskState("Cannot create folder while import is running.", 0, false);
+    backend_.SetTaskState(PL_TEXT("Cannot create folder while import is running."), 0, false);
     return;
   }
   if (ie.export_inflight()) {
-    backend_.SetTaskState("Cannot create folder while export is running.", 0, false);
+    backend_.SetTaskState(PL_TEXT("Cannot create folder while export is running."), 0, false);
     return;
   }
 
   const QString trimmed = folderName.trimmed();
   if (trimmed.isEmpty()) {
-    backend_.SetTaskState("Folder name cannot be empty.", 0, false);
+    backend_.SetTaskState(PL_TEXT("Folder name cannot be empty."), 0, false);
     return;
   }
   if (trimmed.contains('/') || trimmed.contains('\\')) {
-    backend_.SetTaskState("Folder name cannot contain '/' or '\\'.", 0, false);
+    backend_.SetTaskState(PL_TEXT("Folder name cannot contain '/' or '\\'."), 0, false);
     return;
   }
 
@@ -155,47 +160,47 @@ void FolderController::CreateFolder(const QString& folderName) {
     }
 
     backend_.SetServiceMessageForCurrentProject(
-        QString("Created folder %1")
-            .arg(album_util::WStringToQString(folder_entry.folder_name_)));
-    backend_.SetTaskState(backend_.service_message_, 100, false);
+        PL_TEXT("Created folder %1", album_util::WStringToQString(folder_entry.folder_name_)));
+    backend_.SetTaskState(
+        PL_TEXT("Created folder %1", album_util::WStringToQString(folder_entry.folder_name_)),
+        100, false);
     backend_.ScheduleIdleTaskStateReset(1200);
   } catch (const std::exception& e) {
-    const QString err =
-        QString("Failed to create folder: %1").arg(QString::fromUtf8(e.what()));
-    backend_.SetServiceMessageForCurrentProject(err);
-    backend_.SetTaskState(err, 0, false);
+    const QString err = QString::fromUtf8(e.what());
+    backend_.SetServiceMessageForCurrentProject(PL_TEXT("Failed to create folder: %1", err));
+    backend_.SetTaskState(PL_TEXT("Failed to create folder: %1", err), 0, false);
   }
 }
 
 void FolderController::DeleteFolder(uint folderId) {
   auto& ph = backend_.project_handler_;
   if (ph.project_loading()) {
-    backend_.SetTaskState("Project is loading. Please wait.", 0, false);
+    backend_.SetTaskState(PL_TEXT("Project is loading. Please wait."), 0, false);
     return;
   }
   if (!ph.project()) {
-    backend_.SetTaskState("No project is loaded.", 0, false);
+    backend_.SetTaskState(PL_TEXT("No project is loaded."), 0, false);
     return;
   }
   auto& ie = backend_.import_export_;
   if (ie.current_import_job() && !ie.current_import_job()->IsCancelationAcked()) {
-    backend_.SetTaskState("Cannot delete folder while import is running.", 0, false);
+    backend_.SetTaskState(PL_TEXT("Cannot delete folder while import is running."), 0, false);
     return;
   }
   if (ie.export_inflight()) {
-    backend_.SetTaskState("Cannot delete folder while export is running.", 0, false);
+    backend_.SetTaskState(PL_TEXT("Cannot delete folder while export is running."), 0, false);
     return;
   }
 
   const auto folder_id = static_cast<sl_element_id_t>(folderId);
   if (folder_id == 0) {
-    backend_.SetTaskState("Root folder cannot be deleted.", 0, false);
+    backend_.SetTaskState(PL_TEXT("Root folder cannot be deleted."), 0, false);
     return;
   }
 
   const auto path_it = folder_path_by_id_.find(folder_id);
   if (path_it == folder_path_by_id_.end()) {
-    backend_.SetTaskState("Folder no longer exists.", 0, false);
+    backend_.SetTaskState(PL_TEXT("Folder no longer exists."), 0, false);
     return;
   }
   const auto parent_it_before = folder_parent_by_id_.find(folder_id);
@@ -228,10 +233,9 @@ void FolderController::DeleteFolder(uint folderId) {
       ph.project()->SaveProject(ph.meta_path());
     }
   } catch (const std::exception& e) {
-    const QString err =
-        QString("Failed to delete folder: %1").arg(QString::fromUtf8(e.what()));
-    backend_.SetServiceMessageForCurrentProject(err);
-    backend_.SetTaskState(err, 0, false);
+    const QString err = QString::fromUtf8(e.what());
+    backend_.SetServiceMessageForCurrentProject(PL_TEXT("Failed to delete folder: %1", err));
+    backend_.SetTaskState(PL_TEXT("Failed to delete folder: %1", err), 0, false);
     return;
   }
 
@@ -278,8 +282,8 @@ void FolderController::DeleteFolder(uint folderId) {
   backend_.stats_.RefreshStats();
   emit backend_.StatsFilterChanged();
 
-  backend_.SetServiceMessageForCurrentProject("Folder deleted.");
-  backend_.SetTaskState("Folder deleted.", 100, false);
+  backend_.SetServiceMessageForCurrentProject(PL_TEXT("Folder deleted."));
+  backend_.SetTaskState(PL_TEXT("Folder deleted."), 100, false);
   backend_.ScheduleIdleTaskStateReset(1200);
 }
 
@@ -302,3 +306,5 @@ void FolderController::ClearState() {
 }
 
 }  // namespace puerhlab::ui
+
+#undef PL_TEXT

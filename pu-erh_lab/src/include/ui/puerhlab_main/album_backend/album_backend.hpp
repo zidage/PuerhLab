@@ -13,6 +13,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "ui/puerhlab_main/i18n.hpp"
 #include "ui/puerhlab_main/album_backend/album_types.hpp"
 #include "ui/puerhlab_main/album_backend/project_handler.hpp"
 #include "ui/puerhlab_main/album_backend/thumbnail_manager.hpp"
@@ -100,10 +101,10 @@ class AlbumBackend final : public QObject {
   const QString& StatsFilterCamera() const { return stats_.filter_camera(); }
   const QString& StatsFilterLens() const { return stats_.filter_lens(); }
   bool ServiceReady() const { return service_ready_; }
-  const QString& ServiceMessage() const { return service_message_; }
+  QString ServiceMessage() const { return service_message_text_.Render(); }
   bool ProjectLoading() const { return project_handler_.project_loading(); }
-  const QString& ProjectLoadingMessage() const { return project_handler_.project_loading_message(); }
-  const QString& TaskStatus() const { return task_status_; }
+  QString ProjectLoadingMessage() const { return project_handler_.project_loading_message(); }
+  QString TaskStatus() const { return task_status_text_.Render(); }
   int TaskProgress() const { return task_progress_; }
   bool TaskCancelVisible() const { return task_cancel_visible_; }
   const QString& DefaultExportFolder() const { return import_export_.default_export_folder(); }
@@ -111,20 +112,20 @@ class AlbumBackend final : public QObject {
   int ImportTotal() const { return import_export_.import_total(); }
   int ImportCompleted() const { return import_export_.import_completed(); }
   int ImportFailed() const { return import_export_.import_failed(); }
-  const QString& ImportStatus() const { return import_export_.import_status(); }
+  QString ImportStatus() const { return import_export_.import_status(); }
   bool ExportInFlight() const { return import_export_.export_inflight(); }
-  const QString& ExportStatus() const { return import_export_.export_status(); }
+  QString ExportStatus() const { return import_export_.export_status(); }
   int ExportTotal() const { return import_export_.export_total(); }
   int ExportCompleted() const { return import_export_.export_completed(); }
   int ExportSucceeded() const { return import_export_.export_succeeded(); }
   int ExportFailed() const { return import_export_.export_failed(); }
   int ExportSkipped() const { return import_export_.export_skipped(); }
-  const QString& ExportErrorSummary() const { return import_export_.export_error_summary(); }
+  QString ExportErrorSummary() const { return import_export_.export_error_summary(); }
   bool EditorActive() const { return editor_.editor_active(); }
   bool EditorBusy() const { return editor_.editor_busy(); }
   uint EditorElementId() const { return static_cast<uint>(editor_.editor_element_id()); }
-  const QString& EditorTitle() const { return editor_.editor_title(); }
-  const QString& EditorStatus() const { return editor_.editor_status(); }
+  QString EditorTitle() const { return editor_.editor_title(); }
+  QString EditorStatus() const { return editor_.editor_status(); }
   const QString& EditorPreviewUrl() const { return editor_.editor_preview_url(); }
   QVariantList EditorLutOptions() const { return editor_.editor_lut_options(); }
   int EditorLutIndex() const { return editor_.editor_lut_index(); }
@@ -216,10 +217,11 @@ signals:
   friend class ImportExportHandler;
   friend class EditorController;
 
-  void SetServiceState(bool ready, const QString& message);
-  void SetServiceMessageForCurrentProject(const QString& message);
+  void SetServiceState(bool ready, const i18n::LocalizedText& message);
+  void SetServiceMessageForCurrentProject(const i18n::LocalizedText& message);
   void ScheduleIdleTaskStateReset(int delayMs);
-  void SetTaskState(const QString& status, int progress, bool cancelVisible);
+  void SetTaskState(const i18n::LocalizedText& status, int progress, bool cancelVisible);
+  void RefreshTranslations();
   void AddOrUpdateAlbumItem(sl_element_id_t elementId, image_id_t imageId,
                             const file_name_t& fallbackName,
                             sl_element_id_t parentFolderId);
@@ -237,9 +239,9 @@ signals:
   std::vector<AlbumItem>                              all_images_{};
   std::unordered_map<sl_element_id_t, size_t>         index_by_element_id_{};
   QVariantList                                        visible_thumbnails_{};
-  QString                                             service_message_ = "Initializing backend services...";
+  i18n::LocalizedText                                 service_message_text_{};
   bool                                                service_ready_   = false;
-  QString                                             task_status_     = "No background tasks";
+  i18n::LocalizedText                                 task_status_text_{};
   int                                                 task_progress_   = 0;
   bool                                                task_cancel_visible_ = false;
 };

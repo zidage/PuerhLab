@@ -13,6 +13,7 @@
 #include <string>
 #include <vector>
 
+#include "ui/puerhlab_main/i18n.hpp"
 #include "ui/puerhlab_main/album_backend/album_types.hpp"
 #include "app/pipeline_service.hpp"
 #include "renderer/pipeline_scheduler.hpp"
@@ -49,8 +50,8 @@ class EditorController {
   [[nodiscard]] bool editor_busy() const { return editor_busy_; }
   [[nodiscard]] auto editor_element_id() const -> sl_element_id_t { return editor_element_id_; }
   [[nodiscard]] auto editor_image_id() const -> image_id_t { return editor_image_id_; }
-  [[nodiscard]] auto editor_title() const -> const QString& { return editor_title_; }
-  [[nodiscard]] auto editor_status() const -> const QString& { return editor_status_; }
+  [[nodiscard]] auto editor_title() const -> QString { return editor_title_text_.Render(); }
+  [[nodiscard]] auto editor_status() const -> QString { return editor_status_text_.Render(); }
   [[nodiscard]] auto editor_preview_url() const -> const QString& { return editor_preview_url_; }
   [[nodiscard]] auto editor_lut_options() const -> const QVariantList& { return editor_lut_options_; }
   [[nodiscard]] int  editor_lut_index() const { return editor_lut_index_; }
@@ -74,8 +75,8 @@ class EditorController {
   bool            editor_busy_        = false;
   sl_element_id_t editor_element_id_  = 0;
   image_id_t      editor_image_id_    = 0;
-  QString         editor_title_{};
-  QString         editor_status_      = "Select a photo to edit.";
+  i18n::LocalizedText editor_title_text_{};
+  i18n::LocalizedText editor_status_text_{};
   QString         editor_preview_url_{};
   QVariantList    editor_lut_options_{};
   std::vector<std::string> editor_lut_paths_{};

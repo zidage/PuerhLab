@@ -2,7 +2,7 @@
 // This file is #included from the constructor body in dialog.cpp.
 // It shares the constructor scope and has access to all local variables.
 
-    auto* controls_header = new QLabel("Adjustments", controls_);
+    auto* controls_header = new QLabel(Tr("Adjustments"), controls_);
     controls_header->setObjectName("SectionTitle");
     controls_header->setStyleSheet(AppTheme::EditorLabelStyle(AppTheme::Instance().textColor()));
     AppTheme::MarkFontRole(controls_header, AppTheme::FontRole::UiHeadline);
@@ -16,7 +16,7 @@
     const auto lut_files = ListCubeLutsInDir(luts_dir);
 
     lut_paths_.push_back("");  // index 0 => None
-    lut_names_.push_back("None");
+    lut_names_.push_back(Tr("None"));
     for (const auto& p : lut_files) {
       lut_paths_.push_back(p.generic_string());
       lut_names_.push_back(QString::fromStdString(p.filename().string()));
@@ -158,7 +158,7 @@
       return slider;
     };
 
-    lut_combo_ = addComboBox("LUT", lut_names_, initial_lut_index, [&](int idx) {
+    lut_combo_ = addComboBox(Tr("LUT"), lut_names_, initial_lut_index, [&](int idx) {
       if (idx < 0 || idx >= static_cast<int>(lut_paths_.size())) {
         return;
       }
@@ -166,10 +166,10 @@
       CommitAdjustment(AdjustmentField::Lut);
     });
 
-    addSection("Tone", "Primary tonal shaping controls.");
+    addSection(Tr("Tone"), Tr("Primary tonal shaping controls."));
 
     exposure_slider_ = addSlider(
-        "Exposure", -1000, 1000, static_cast<int>(std::lround(state_.exposure_ * 100.0f)),
+        Tr("Exposure"), -1000, 1000, static_cast<int>(std::lround(state_.exposure_ * 100.0f)),
         [&](int v) {
           state_.exposure_ = static_cast<float>(v) / 100.0f;
           RequestRender();
@@ -183,7 +183,7 @@
         [](int v) { return QString::number(v / 100.0, 'f', 2); });
 
     contrast_slider_ = addSlider(
-        "Contrast", -100, 100, static_cast<int>(std::lround(state_.contrast_)),
+        Tr("Contrast"), -100, 100, static_cast<int>(std::lround(state_.contrast_)),
         [&](int v) {
           state_.contrast_ = static_cast<float>(v);
           RequestRender();
@@ -197,7 +197,7 @@
         [](int v) { return QString::number(v, 'f', 2); });
 
     highlights_slider_ = addSlider(
-        "Highlights", -100, 100, static_cast<int>(std::lround(state_.highlights_)),
+        Tr("Highlights"), -100, 100, static_cast<int>(std::lround(state_.highlights_)),
         [&](int v) {
           state_.highlights_ = static_cast<float>(v);
           RequestRender();
@@ -212,7 +212,7 @@
         [](int v) { return QString::number(v, 'f', 2); });
 
     shadows_slider_ = addSlider(
-        "Shadows", -100, 100, static_cast<int>(std::lround(state_.shadows_)),
+        Tr("Shadows"), -100, 100, static_cast<int>(std::lround(state_.shadows_)),
         [&](int v) {
           state_.shadows_ = static_cast<float>(v);
           RequestRender();
@@ -226,7 +226,7 @@
         [](int v) { return QString::number(v, 'f', 2); });
 
     whites_slider_ = addSlider(
-        "Whites", -100, 100, static_cast<int>(std::lround(state_.whites_)),
+        Tr("Whites"), -100, 100, static_cast<int>(std::lround(state_.whites_)),
         [&](int v) {
           state_.whites_ = static_cast<float>(v);
           RequestRender();
@@ -240,7 +240,7 @@
         [](int v) { return QString::number(v, 'f', 2); });
 
     blacks_slider_ = addSlider(
-        "Blacks", -100, 100, static_cast<int>(std::lround(state_.blacks_)),
+        Tr("Blacks"), -100, 100, static_cast<int>(std::lround(state_.blacks_)),
         [&](int v) {
           state_.blacks_ = static_cast<float>(v);
           RequestRender();
@@ -253,7 +253,7 @@
         },
         [](int v) { return QString::number(v, 'f', 2); });
 
-    addSection("Curve", "Smooth tone curve mapped from input [0, 1] to output [0, 1].");
+    addSection(Tr("Curve"), Tr("Smooth tone curve mapped from input [0, 1] to output [0, 1]."));
     {
       auto* frame  = new QFrame(controls_);
       auto* layout = new QVBoxLayout(frame);
@@ -284,13 +284,13 @@
       actions_row_layout->setSpacing(8);
 
       auto* curve_hint = new QLabel(
-          "Left click/drag to shape. Right click a point to remove. Double click to reset.",
+          Tr("Left click/drag to shape. Right click a point to remove. Double click to reset."),
           actions_row);
       curve_hint->setStyleSheet(AppTheme::EditorLabelStyle(AppTheme::Instance().textMutedColor()));
       AppTheme::MarkFontRole(curve_hint, AppTheme::FontRole::UiHint);
       curve_hint->setWordWrap(true);
 
-      auto* reset_curve_btn = new QPushButton("Reset Curve", actions_row);
+      auto* reset_curve_btn = new QPushButton(Tr("Reset Curve"), actions_row);
       reset_curve_btn->setFixedHeight(28);
       reset_curve_btn->setStyleSheet(AppTheme::EditorPrimaryButtonStyle());
       QObject::connect(reset_curve_btn, &QPushButton::clicked, this,
@@ -305,10 +305,10 @@
       controls_layout->insertWidget(controls_layout->count() - 1, frame);
     }
 
-    addSection("Color", "Color balance and saturation.");
+    addSection(Tr("Color"), Tr("Color balance and saturation."));
 
     saturation_slider_ = addSlider(
-        "Saturation", -100, 100, static_cast<int>(std::lround(state_.saturation_)),
+        Tr("Saturation"), -100, 100, static_cast<int>(std::lround(state_.saturation_)),
         [&](int v) {
           state_.saturation_ = static_cast<float>(v);
           RequestRender();
@@ -323,7 +323,7 @@
         [](int v) { return QString::number(v, 'f', 2); });
 
     color_temp_mode_combo_ = addComboBox(
-        "White Balance", {"As Shot", "Custom"},
+        Tr("White Balance"), {Tr("As Shot"), Tr("Custom")},
         ColorTempModeToComboIndex(state_.color_temp_mode_), [&](int idx) {
           const auto new_mode = ComboIndexToColorTempMode(idx);
           if (new_mode == state_.color_temp_mode_) {
@@ -344,7 +344,7 @@
         });
 
     color_temp_cct_slider_ = addSlider(
-        "Color Temp", kColorTempSliderUiMin, kColorTempSliderUiMax,
+        Tr("Color Temp"), kColorTempSliderUiMin, kColorTempSliderUiMax,
         ColorTempCctToSliderPos(DisplayedColorTempCct(state_)),
         [&](int v) {
           PromoteColorTempToCustomForEditing();
@@ -371,7 +371,7 @@
         "}");
 
     color_temp_tint_slider_ = addSlider(
-        "Color Tint", kColorTempTintMin, kColorTempTintMax,
+        Tr("Color Tint"), kColorTempTintMin, kColorTempTintMax,
         static_cast<int>(std::lround(DisplayedColorTempTint(state_))),
         [&](int v) {
           PromoteColorTempToCustomForEditing();
@@ -398,7 +398,7 @@
         "}");
 
     color_temp_unsupported_label_ =
-        new QLabel("Color temperature/tint is unavailable for this image.", controls_);
+        new QLabel(Tr("Color temperature/tint is unavailable for this image."), controls_);
     color_temp_unsupported_label_->setWordWrap(true);
     AppTheme::MarkFontRole(color_temp_unsupported_label_, AppTheme::FontRole::UiHint);
     color_temp_unsupported_label_->setStyleSheet(
@@ -436,7 +436,7 @@
         btn->setFixedSize(22, 22);
         btn->setCursor(Qt::PointingHandCursor);
         btn->setToolTip(
-            QString("Hue %1 deg").arg(kHlsCandidateHues[static_cast<size_t>(i)], 0, 'f', 0));
+            Tr("Hue %1 deg").arg(kHlsCandidateHues[static_cast<size_t>(i)], 0, 'f', 0));
         QObject::connect(btn, &QPushButton::clicked, this, [this, i]() {
           if (syncing_controls_) {
             return;
@@ -457,7 +457,7 @@
     }
 
     hls_hue_adjust_slider_ = addSlider(
-        "Hue Shift", -15, 15, static_cast<int>(std::lround(state_.hls_hue_adjust_)),
+        Tr("Hue Shift"), -15, 15, static_cast<int>(std::lround(state_.hls_hue_adjust_)),
         [&](int v) {
           state_.hls_hue_adjust_ =
               std::clamp(static_cast<float>(v), -kHlsMaxHueShiftDegrees, kHlsMaxHueShiftDegrees);
@@ -474,7 +474,7 @@
         [](int v) { return QString("%1 deg").arg(v); });
 
     hls_lightness_adjust_slider_ = addSlider(
-        "Lightness", -100, 100, static_cast<int>(std::lround(state_.hls_lightness_adjust_)),
+        Tr("Lightness"), -100, 100, static_cast<int>(std::lround(state_.hls_lightness_adjust_)),
         [&](int v) {
           state_.hls_lightness_adjust_ =
               std::clamp(static_cast<float>(v), kHlsAdjUiMin, kHlsAdjUiMax);
@@ -491,7 +491,8 @@
         [](int v) { return QString::number(v, 'f', 0); });
 
     hls_saturation_adjust_slider_ = addSlider(
-        "HSL Saturation", -100, 100, static_cast<int>(std::lround(state_.hls_saturation_adjust_)),
+        Tr("HSL Saturation"), -100, 100,
+        static_cast<int>(std::lround(state_.hls_saturation_adjust_)),
         [&](int v) {
           state_.hls_saturation_adjust_ =
               std::clamp(static_cast<float>(v), kHlsAdjUiMin, kHlsAdjUiMax);
@@ -508,7 +509,7 @@
         [](int v) { return QString::number(v, 'f', 0); });
 
     hls_hue_range_slider_ = addSlider(
-        "Hue Range", 1, 180, static_cast<int>(std::lround(state_.hls_hue_range_)),
+        Tr("Hue Range"), 1, 180, static_cast<int>(std::lround(state_.hls_hue_range_)),
         [&](int v) {
           state_.hls_hue_range_ = static_cast<float>(v);
           SaveActiveHlsProfile(state_);
@@ -533,7 +534,7 @@
       wheel_layout->setContentsMargins(10, 8, 10, 8);
       wheel_layout->setSpacing(2);
 
-      auto* wheel_title = new QLabel("CDL Wheels", wheel_frame);
+      auto* wheel_title = new QLabel(Tr("CDL Wheels"), wheel_frame);
       wheel_title->setStyleSheet(AppTheme::EditorLabelStyle(AppTheme::Instance().textColor()));
       AppTheme::MarkFontRole(wheel_title, AppTheme::FontRole::UiTitle);
       wheel_layout->addWidget(wheel_title, 0, Qt::AlignHCenter);
@@ -617,13 +618,13 @@
         return unit;
       };
 
-      auto* gamma_unit = makeWheelUnit("Gamma", state_.gamma_wheel_, true, true,
+      auto* gamma_unit = makeWheelUnit(Tr("Gamma"), state_.gamma_wheel_, true, true,
                                        gamma_disc_widget_, gamma_offset_label_,
                                        gamma_master_slider_);
-      auto* lift_unit  = makeWheelUnit("Lift", state_.lift_wheel_, false, false,
+      auto* lift_unit  = makeWheelUnit(Tr("Lift"), state_.lift_wheel_, false, false,
                                        lift_disc_widget_, lift_offset_label_,
                                        lift_master_slider_);
-      auto* gain_unit  = makeWheelUnit("Gain", state_.gain_wheel_, true, false,
+      auto* gain_unit  = makeWheelUnit(Tr("Gain"), state_.gain_wheel_, true, false,
                                        gain_disc_widget_, gain_offset_label_,
                                        gain_master_slider_);
 
@@ -650,10 +651,10 @@
       RefreshCdlOffsetLabels();
     }
 
-    addSection("Detail", "Micro-contrast and sharpen controls.");
+    addSection(Tr("Detail"), Tr("Micro-contrast and sharpen controls."));
 
     sharpen_slider_ = addSlider(
-        "Sharpen", -100, 100, static_cast<int>(std::lround(state_.sharpen_)),
+        Tr("Sharpen"), -100, 100, static_cast<int>(std::lround(state_.sharpen_)),
         [&](int v) {
           state_.sharpen_ = static_cast<float>(v);
           RequestRender();
@@ -667,7 +668,7 @@
         [](int v) { return QString::number(v, 'f', 2); });
 
     clarity_slider_ = addSlider(
-        "Clarity", -100, 100, static_cast<int>(std::lround(state_.clarity_)),
+        Tr("Clarity"), -100, 100, static_cast<int>(std::lround(state_.clarity_)),
         [&](int v) {
           state_.clarity_ = static_cast<float>(v);
           RequestRender();

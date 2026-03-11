@@ -14,6 +14,11 @@
 
 namespace puerhlab::ui {
 
+#define PL_TEXT(text, ...)                                                    \
+  i18n::MakeLocalizedText(PUERHLAB_I18N_CONTEXT,                              \
+                          QT_TRANSLATE_NOOP(PUERHLAB_I18N_CONTEXT, text)      \
+                              __VA_OPT__(, ) __VA_ARGS__)
+
 // ── Helper: run a two-column (VARCHAR, BIGINT) GROUP BY query ───────────────
 
 static auto RunGroupByQuery(duckdb_connection conn,
@@ -31,7 +36,7 @@ static auto RunGroupByQuery(duckdb_connection conn,
     const QString label =
         (label_raw && label_raw[0] != '\0')
             ? QString::fromUtf8(label_raw)
-            : QStringLiteral("(unknown)");
+            : PL_TEXT("(unknown)").Render();
     if (label_raw) {
       duckdb_free(label_raw);
     }
@@ -157,12 +162,12 @@ bool StatsEngine::IsImageInCurrentFolder(const AlbumItem& image) const {
 
 auto StatsEngine::FormatPhotoInfo(int shown, int total) const -> QString {
   if (total <= 0) {
-    return "No images loaded.";
+    return PL_TEXT("No images loaded.").Render();
   }
   if (shown == total) {
-    return QString("Showing %1 images").arg(total);
+    return PL_TEXT("Showing %1 images", total).Render();
   }
-  return QString("Showing %1 of %2").arg(shown).arg(total);
+  return PL_TEXT("Showing %1 of %2", shown, total).Render();
 }
 
 auto StatsEngine::MakeThumbMap(const AlbumItem& image, int index) const -> QVariantMap {
@@ -174,8 +179,9 @@ auto StatsEngine::MakeThumbMap(const AlbumItem& image, int index) const -> QVari
   return QVariantMap{
       {"elementId", static_cast<uint>(image.element_id)},
       {"imageId", static_cast<uint>(image.image_id)},
-      {"fileName", image.file_name.isEmpty() ? "(unnamed)" : image.file_name},
-      {"cameraModel", image.camera_model.isEmpty() ? "Unknown" : image.camera_model},
+      {"fileName", image.file_name.isEmpty() ? PL_TEXT("(unnamed)").Render() : image.file_name},
+      {"cameraModel", image.camera_model.isEmpty() ? PL_TEXT("Unknown").Render()
+                                                   : image.camera_model},
       {"extension", image.extension.isEmpty() ? "--" : image.extension},
       {"iso", image.iso},
       {"aperture", aperture},
@@ -220,7 +226,7 @@ bool StatsEngine::MatchesActiveFilters(const AlbumItem& image) const {
     const QString imageDate =
         image.capture_date.isValid() ? image.capture_date.toString("yyyy-MM-dd") : QString{};
     // "(unknown)" in the stats card maps to images with no valid capture date
-    if (filter_date_ == u"(unknown)") {
+    if (filter_date_ == PL_TEXT("(unknown)").Render()) {
       if (image.capture_date.isValid()) return false;
     } else {
       if (imageDate != filter_date_) return false;
@@ -229,7 +235,7 @@ bool StatsEngine::MatchesActiveFilters(const AlbumItem& image) const {
 
   // Camera filter
   if (!filter_camera_.isEmpty()) {
-    if (filter_camera_ == u"(unknown)") {
+    if (filter_camera_ == PL_TEXT("(unknown)").Render()) {
       if (!image.camera_model.isEmpty()) return false;
     } else {
       if (image.camera_model != filter_camera_) return false;
@@ -238,7 +244,7 @@ bool StatsEngine::MatchesActiveFilters(const AlbumItem& image) const {
 
   // Lens filter
   if (!filter_lens_.isEmpty()) {
-    if (filter_lens_ == u"(unknown)") {
+    if (filter_lens_ == PL_TEXT("(unknown)").Render()) {
       if (!image.lens.isEmpty()) return false;
     } else {
       if (image.lens != filter_lens_) return false;
@@ -249,3 +255,5 @@ bool StatsEngine::MatchesActiveFilters(const AlbumItem& image) const {
 }
 
 }  // namespace puerhlab::ui
+
+#undef PL_TEXT

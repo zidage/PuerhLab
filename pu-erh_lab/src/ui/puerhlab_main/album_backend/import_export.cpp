@@ -21,26 +21,32 @@ namespace puerhlab::ui {
 
 using namespace album_util;
 
+#define PL_TEXT(text, ...)                                                    \
+  i18n::MakeLocalizedText(PUERHLAB_I18N_CONTEXT,                              \
+                          QT_TRANSLATE_NOOP(PUERHLAB_I18N_CONTEXT, text)      \
+                              __VA_OPT__(, ) __VA_ARGS__)
+
 ImportExportHandler::ImportExportHandler(AlbumBackend& backend) : backend_(backend) {
   const QString pictures =
       QStandardPaths::writableLocation(QStandardPaths::PicturesLocation);
   if (!pictures.isEmpty()) {
     default_export_folder_ = pictures;
   }
+  export_status_text_ = PL_TEXT("Ready to export.");
 }
 
 void ImportExportHandler::StartImport(const QStringList& fileUrlsOrPaths) {
   if (backend_.project_handler_.project_loading()) {
-    backend_.SetTaskState("Project is loading. Please wait.", 0, false);
+    backend_.SetTaskState(PL_TEXT("Project is loading. Please wait."), 0, false);
     return;
   }
   auto* isvc = backend_.project_handler_.import_service();
   if (!isvc) {
-    backend_.SetTaskState("Import service is unavailable.", 0, false);
+    backend_.SetTaskState(PL_TEXT("Import service is unavailable."), 0, false);
     return;
   }
   if (current_import_job_ && !current_import_job_->IsCancelationAcked()) {
-    backend_.SetTaskState("Import already running.", backend_.task_progress_, true);
+    backend_.SetTaskState(PL_TEXT("Import already running."), backend_.task_progress_, true);
     return;
   }
 
@@ -67,7 +73,7 @@ void ImportExportHandler::StartImport(const QStringList& fileUrlsOrPaths) {
   }
 
   if (paths.empty()) {
-    backend_.SetTaskState("No supported files selected.", 0, false);
+    backend_.SetTaskState(PL_TEXT("No supported files selected."), 0, false);
     return;
   }
 
@@ -81,11 +87,11 @@ void ImportExportHandler::StartImport(const QStringList& fileUrlsOrPaths) {
   import_total_     = static_cast<int>(paths.size());
   import_completed_ = 0;
   import_failed_    = 0;
-  import_status_    = QString("Importing %1 file(s)...").arg(import_total_);
+  import_status_text_ = PL_TEXT("Importing %1 file(s)...", import_total_);
   emit backend_.ImportStateChanged();
   emit backend_.importStateChanged();
 
-  backend_.SetTaskState(import_status_, 0, true);
+  backend_.SetTaskState(import_status_text_, 0, true);
 
   QPointer<AlbumBackend> self(&backend_);
   job->on_progress_ = [self](const ImportProgress& progress) {
@@ -103,12 +109,11 @@ void ImportExportHandler::StartImport(const QStringList& fileUrlsOrPaths) {
           auto& ie = self->import_export_;
           ie.import_completed_ = static_cast<int>(metadataDone);
           ie.import_failed_    = static_cast<int>(failed);
-          ie.import_status_    =
-              QString("Importing... %1/%2 (failed %3)")
-                  .arg(metadataDone).arg(total).arg(failed);
+          ie.import_status_text_ =
+              PL_TEXT("Importing... %1/%2 (failed %3)", metadataDone, total, failed);
           emit self->ImportStateChanged();
           emit self->importStateChanged();
-          self->SetTaskState(ie.import_status_, pct, true);
+          self->SetTaskState(ie.import_status_text_, pct, true);
         },
         Qt::QueuedConnection);
   };
@@ -131,20 +136,20 @@ void ImportExportHandler::StartImport(const QStringList& fileUrlsOrPaths) {
   } catch (const std::exception& e) {
     current_import_job_.reset();
     import_running_ = false;
-    import_status_  = QString("Import failed: %1").arg(QString::fromUtf8(e.what()));
+    import_status_text_ = PL_TEXT("Import failed: %1", QString::fromUtf8(e.what()));
     emit backend_.ImportStateChanged();
     emit backend_.importStateChanged();
-    backend_.SetTaskState(import_status_, 0, false);
+    backend_.SetTaskState(import_status_text_, 0, false);
   }
 }
 
 void ImportExportHandler::CancelImport() {
   if (!current_import_job_) return;
   current_import_job_->canceled_.store(true);
-  import_status_ = "Cancelling import...";
+  import_status_text_ = PL_TEXT("Cancelling import...");
   emit backend_.ImportStateChanged();
   emit backend_.importStateChanged();
-  backend_.SetTaskState("Cancelling import...", backend_.task_progress_, true);
+  backend_.SetTaskState(PL_TEXT("Cancelling import..."), backend_.task_progress_, true);
 }
 
 void ImportExportHandler::StartExport(const QString& outputDirUrlOrPath) {
@@ -167,26 +172,26 @@ void ImportExportHandler::StartExportWithOptionsForTargets(
     int maxLengthSide, int quality, int bitDepth, int pngCompressionLevel,
     const QString& tiffCompression, const QVariantList& targetEntries) {
   if (backend_.project_handler_.project_loading()) {
-    SetExportFailureState("Project is loading. Please wait.");
+    SetExportFailureState(PL_TEXT("Project is loading. Please wait."));
     return;
   }
 
   const auto& esvc = backend_.project_handler_.export_service();
   auto  proj = backend_.project_handler_.project();
   if (!esvc || !proj) {
-    SetExportFailureState("Export service is unavailable.");
+    SetExportFailureState(PL_TEXT("Export service is unavailable."));
     return;
   }
   if (export_inflight_) {
-    SetExportFailureState("Export already running.");
+    SetExportFailureState(PL_TEXT("Export already running."));
     return;
   }
 
-  ResetExportProgressState("Preparing export queue...");
+  ResetExportProgressState(PL_TEXT("Preparing export queue..."));
 
   const auto outDirOpt = InputToPath(outputDirUrlOrPath);
   if (!outDirOpt.has_value()) {
-    SetExportFailureState("No export folder selected.");
+    SetExportFailureState(PL_TEXT("No export folder selected."));
     return;
   }
 
@@ -195,13 +200,13 @@ void ImportExportHandler::StartExportWithOptionsForTargets(
     std::filesystem::create_directories(outDirOpt.value(), ec);
   }
   if (ec || !std::filesystem::is_directory(outDirOpt.value(), ec) || ec) {
-    SetExportFailureState("Export folder is invalid.");
+    SetExportFailureState(PL_TEXT("Export folder is invalid."));
     return;
   }
 
   const auto targets = CollectExportTargets(targetEntries);
   if (targets.empty()) {
-    SetExportFailureState("No images to export.");
+    SetExportFailureState(PL_TEXT("No images to export."));
     return;
   }
 
@@ -218,13 +223,13 @@ void ImportExportHandler::StartExportWithOptionsForTargets(
                        clamped_q, bit_depth, clamped_png, tiff_compress);
 
   if (queue_result.queued_count_ == 0) {
-    export_status_ = "No export tasks were queued.";
+    export_status_text_ = PL_TEXT("No export tasks were queued.");
     if (!queue_result.first_error_.isEmpty()) {
-      export_error_summary_ = queue_result.first_error_;
+      export_error_summary_text_ = PL_TEXT("%1", queue_result.first_error_);
     }
     emit backend_.ExportStateChanged();
     emit backend_.exportStateChanged();
-    backend_.SetTaskState("No valid export tasks could be created.", 0, false);
+    backend_.SetTaskState(PL_TEXT("No valid export tasks could be created."), 0, false);
     return;
   }
 
@@ -232,15 +237,14 @@ void ImportExportHandler::StartExportWithOptionsForTargets(
   export_total_    = queue_result.queued_count_;
   export_skipped_  = queue_result.skipped_count_;
   if (queue_result.skipped_count_ > 0) {
-    export_status_ = QString("Exporting %1 image(s). Skipped %2 invalid item(s).")
-                         .arg(queue_result.queued_count_)
-                         .arg(queue_result.skipped_count_);
+    export_status_text_ = PL_TEXT("Exporting %1 image(s). Skipped %2 invalid item(s).",
+                                  queue_result.queued_count_, queue_result.skipped_count_);
   } else {
-    export_status_ = QString("Exporting %1 image(s)...").arg(queue_result.queued_count_);
+    export_status_text_ = PL_TEXT("Exporting %1 image(s)...", queue_result.queued_count_);
   }
   emit backend_.ExportStateChanged();
   emit backend_.exportStateChanged();
-  backend_.SetTaskState(export_status_, 0, false);
+  backend_.SetTaskState(export_status_text_, 0, false);
 
   QPointer<AlbumBackend> self(&backend_);
   esvc->ExportAll(
@@ -259,19 +263,17 @@ void ImportExportHandler::StartExportWithOptionsForTargets(
               ie.export_completed_ = completed;
               ie.export_succeeded_ = static_cast<int>(progress.succeeded_);
               ie.export_failed_    = static_cast<int>(progress.failed_);
-              ie.export_status_    =
-                  QString("Exporting... processed %1/%2, written %3, failed %4.")
-                      .arg(ie.export_completed_)
-                      .arg(ie.export_total_)
-                      .arg(ie.export_succeeded_)
-                      .arg(ie.export_failed_);
+              ie.export_status_text_ =
+                  PL_TEXT("Exporting... processed %1/%2, written %3, failed %4.",
+                          ie.export_completed_, ie.export_total_, ie.export_succeeded_,
+                          ie.export_failed_);
               emit self->ExportStateChanged();
 
               const int percent =
                   ie.export_total_ > 0
                       ? (ie.export_completed_ * 100) / ie.export_total_
                       : 0;
-              self->SetTaskState(ie.export_status_, percent, false);
+              self->SetTaskState(ie.export_status_text_, percent, false);
             },
             Qt::QueuedConnection);
       },
@@ -290,7 +292,7 @@ void ImportExportHandler::StartExportWithOptionsForTargets(
 
 void ImportExportHandler::ResetExportState() {
   if (export_inflight_) return;
-  ResetExportProgressState("Ready to export.");
+  ResetExportProgressState(PL_TEXT("Ready to export."));
 }
 
 void ImportExportHandler::FinishImport(const ImportResult& result) {
@@ -298,7 +300,7 @@ void ImportExportHandler::FinishImport(const ImportResult& result) {
   current_import_job_.reset();
 
   if (!importJob || !importJob->import_log_) {
-    backend_.SetTaskState("Import finished but no log snapshot is available.", 0, false);
+    backend_.SetTaskState(PL_TEXT("Import finished but no log snapshot is available."), 0, false);
     return;
   }
 
@@ -335,22 +337,20 @@ void ImportExportHandler::FinishImport(const ImportResult& result) {
   import_target_folder_id_   = backend_.folder_ctrl_.current_folder_id();
   import_target_folder_path_ = backend_.folder_ctrl_.CurrentFolderFsPath();
 
-  QString task_text =
-      QString("Import complete: %1 imported, %2 failed").arg(result.imported_).arg(result.failed_);
+  auto task_text = PL_TEXT("Import complete: %1 imported, %2 failed", result.imported_,
+                           result.failed_);
   if (!state_saved) {
-    task_text += " (project sync/save failed)";
     backend_.SetServiceMessageForCurrentProject(
-        "Import finished, but saving project state failed.");
+        PL_TEXT("Import finished, but saving project state failed."));
   } else if (!package_saved) {
-    task_text += " (project packing failed)";
     backend_.SetServiceMessageForCurrentProject(
-        package_error.isEmpty() ? "Import finished, but project packing failed."
-                                : package_error);
+        package_error.isEmpty() ? PL_TEXT("Import finished, but project packing failed.")
+                                : PL_TEXT("%1", package_error));
   }
   import_running_   = false;
   import_completed_ = static_cast<int>(result.imported_);
   import_failed_    = static_cast<int>(result.failed_);
-  import_status_    = task_text;
+  import_status_text_ = task_text;
   emit backend_.ImportStateChanged();
   emit backend_.importStateChanged();
 
@@ -384,21 +384,23 @@ void ImportExportHandler::FinishExport(
   export_succeeded_ = ok;
   export_failed_    = fail;
   export_skipped_   = skippedCount;
-  export_error_summary_.clear();
+  export_error_summary_text_ = {};
   if (!errors.isEmpty()) {
-    export_error_summary_ = errors.join('\n');
+    export_error_summary_text_ = PL_TEXT("%1", errors.join('\n'));
   }
 
-  export_status_ = QString("Export complete. Written %1/%2 image(s), failed %3.")
-                       .arg(ok).arg(total).arg(fail);
+  export_status_text_ = PL_TEXT("Export complete. Written %1/%2 image(s), failed %3.", ok, total,
+                                fail);
   if (skippedCount > 0) {
-    export_status_ += QString(" Skipped %1 invalid item(s).").arg(skippedCount);
+    export_status_text_ = PL_TEXT(
+        "Export complete. Written %1/%2 image(s), failed %3. Skipped %4 invalid item(s).", ok,
+        total, fail, skippedCount);
   }
   emit backend_.ExportStateChanged();
   emit backend_.exportStateChanged();
 
   backend_.SetTaskState(
-      QString("Export complete: %1 ok, %2 failed").arg(ok).arg(fail), 100, false);
+      PL_TEXT("Export complete: %1 ok, %2 failed", ok, fail), 100, false);
   backend_.ScheduleIdleTaskStateReset(1800);
 }
 
@@ -447,7 +449,7 @@ auto ImportExportHandler::BuildExportQueue(
   auto  proj = backend_.project_handler_.project();
   const auto& esvc = backend_.project_handler_.export_service();
   if (!proj || !esvc) {
-    summary.first_error_ = "Export service is unavailable.";
+    summary.first_error_ = PL_TEXT("Export service is unavailable.").Render();
     return summary;
   }
 
@@ -472,7 +474,7 @@ auto ImportExportHandler::BuildExportQueue(
       if (srcPath.empty()) {
         ++summary.skipped_count_;
         if (summary.first_error_.isEmpty()) {
-          summary.first_error_ = "Image source path is empty.";
+          summary.first_error_ = PL_TEXT("Image source path is empty.").Render();
         }
         continue;
       }
@@ -531,16 +533,16 @@ auto ImportExportHandler::BuildExportQueue(
     } catch (...) {
       ++summary.skipped_count_;
       if (summary.first_error_.isEmpty()) {
-        summary.first_error_ = "Unknown error while preparing export task.";
+        summary.first_error_ = PL_TEXT("Unknown error while preparing export task.").Render();
       }
     }
   }
   return summary;
 }
 
-void ImportExportHandler::ResetExportProgressState(const QString& status) {
-  export_status_ = status;
-  export_error_summary_.clear();
+void ImportExportHandler::ResetExportProgressState(const i18n::LocalizedText& status) {
+  export_status_text_        = status;
+  export_error_summary_text_ = {};
   export_total_     = 0;
   export_completed_ = 0;
   export_succeeded_ = 0;
@@ -550,11 +552,14 @@ void ImportExportHandler::ResetExportProgressState(const QString& status) {
   emit backend_.exportStateChanged();
 }
 
-void ImportExportHandler::SetExportFailureState(const QString& message) {
-  export_status_ = message;
+void ImportExportHandler::SetExportFailureState(const i18n::LocalizedText& message) {
+  export_status_text_        = message;
+  export_error_summary_text_ = {};
   emit backend_.ExportStateChanged();
   emit backend_.exportStateChanged();
   backend_.SetTaskState(message, 0, false);
 }
 
 }  // namespace puerhlab::ui
+
+#undef PL_TEXT

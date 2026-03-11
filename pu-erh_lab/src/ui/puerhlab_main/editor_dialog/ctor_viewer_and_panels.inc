@@ -157,10 +157,10 @@
     panel_switch_layout->setContentsMargins(0, 0, 0, 0);
     panel_switch_layout->setSpacing(8);
 
-    tone_panel_btn_     = new QPushButton("Tone", panel_switch_row);
-    drt_panel_btn_      = new QPushButton("Display RT", panel_switch_row);
-    geometry_panel_btn_ = new QPushButton("Geometry", panel_switch_row);
-    raw_panel_btn_      = new QPushButton("RAW Decode", panel_switch_row);
+    tone_panel_btn_     = new QPushButton(Tr("Tone"), panel_switch_row);
+    drt_panel_btn_      = new QPushButton(Tr("Display RT"), panel_switch_row);
+    geometry_panel_btn_ = new QPushButton(Tr("Geometry"), panel_switch_row);
+    raw_panel_btn_      = new QPushButton(Tr("RAW Decode"), panel_switch_row);
     tone_panel_btn_->setCheckable(true);
     drt_panel_btn_->setCheckable(true);
     geometry_panel_btn_->setCheckable(true);
@@ -173,7 +173,7 @@
     drt_panel_btn_->setFixedHeight(30);
     geometry_panel_btn_->setFixedHeight(30);
     raw_panel_btn_->setFixedHeight(30);
-    drt_panel_btn_->setToolTip("Display Rendering Transform");
+    drt_panel_btn_->setToolTip(Tr("Display Rendering Transform"));
 
     panel_switch_layout->addWidget(tone_panel_btn_, 1);
     panel_switch_layout->addWidget(drt_panel_btn_, 1);
@@ -255,7 +255,7 @@
       histogram_layout->setContentsMargins(12, 10, 12, 10);
       histogram_layout->setSpacing(6);
 
-      auto* histogram_title = new QLabel("Histogram", histogram_frame);
+      auto* histogram_title = new QLabel(Tr("Histogram"), histogram_frame);
       histogram_title->setObjectName("EditorSectionTitle");
 
       histogram_widget_       = new HistogramWidget(viewer_, histogram_frame);

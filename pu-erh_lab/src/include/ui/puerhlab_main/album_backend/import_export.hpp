@@ -11,6 +11,7 @@
 #include <memory>
 #include <vector>
 
+#include "ui/puerhlab_main/i18n.hpp"
 #include "ui/puerhlab_main/album_backend/album_types.hpp"
 #include "app/export_service.hpp"
 #include "app/import_service.hpp"
@@ -57,13 +58,15 @@ class ImportExportHandler {
   [[nodiscard]] int  import_total() const { return import_total_; }
   [[nodiscard]] int  import_completed() const { return import_completed_; }
   [[nodiscard]] int  import_failed() const { return import_failed_; }
-  [[nodiscard]] auto import_status() const -> const QString& { return import_status_; }
+  [[nodiscard]] auto import_status() const -> QString { return import_status_text_.Render(); }
   [[nodiscard]] auto current_import_job() const -> const std::shared_ptr<ImportJob>& {
     return current_import_job_;
   }
   [[nodiscard]] auto default_export_folder() const -> const QString& { return default_export_folder_; }
-  [[nodiscard]] auto export_status() const -> const QString& { return export_status_; }
-  [[nodiscard]] auto export_error_summary() const -> const QString& { return export_error_summary_; }
+  [[nodiscard]] auto export_status() const -> QString { return export_status_text_.Render(); }
+  [[nodiscard]] auto export_error_summary() const -> QString {
+    return export_error_summary_text_.Render();
+  }
   [[nodiscard]] int  export_total() const { return export_total_; }
   [[nodiscard]] int  export_completed() const { return export_completed_; }
   [[nodiscard]] int  export_succeeded() const { return export_succeeded_; }
@@ -84,8 +87,8 @@ class ImportExportHandler {
   }
 
  private:
-  void ResetExportProgressState(const QString& status);
-  void SetExportFailureState(const QString& message);
+  void ResetExportProgressState(const i18n::LocalizedText& status);
+  void SetExportFailureState(const i18n::LocalizedText& message);
 
   AlbumBackend& backend_;
 
@@ -94,11 +97,11 @@ class ImportExportHandler {
   int     import_total_         = 0;
   int     import_completed_     = 0;
   int     import_failed_        = 0;
-  QString import_status_{};
+  i18n::LocalizedText import_status_text_{};
   bool    export_inflight_      = false;
   QString default_export_folder_{};
-  QString export_status_        = "Ready to export.";
-  QString export_error_summary_{};
+  i18n::LocalizedText export_status_text_{};
+  i18n::LocalizedText export_error_summary_text_{};
   int     export_total_         = 0;
   int     export_completed_     = 0;
   int     export_succeeded_     = 0;

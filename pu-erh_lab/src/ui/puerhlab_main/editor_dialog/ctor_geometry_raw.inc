@@ -60,9 +60,11 @@
       return slider;
     };
 
-    addGeometrySection("Geometry", "Rotate and crop workflow. Changes apply only when committed.");
+    addGeometrySection(Tr("Geometry"),
+                       Tr("Rotate and crop workflow. Changes apply only when committed."));
     rotate_slider_ = addGeometrySlider(
-        "Rotate", -18000, 18000, static_cast<int>(std::lround(state_.rotate_degrees_ * kRotationSliderScale)),
+        Tr("Rotate"), -18000, 18000,
+        static_cast<int>(std::lround(state_.rotate_degrees_ * kRotationSliderScale)),
         [&](int v) {
           state_.rotate_degrees_ = static_cast<float>(v) / kRotationSliderScale;
           if (viewer_) {
@@ -84,7 +86,7 @@
       preset_row_layout->setContentsMargins(0, 0, 0, 0);
       preset_row_layout->setSpacing(4);
 
-      auto* preset_label = new QLabel("Aspect Preset", preset_row);
+      auto* preset_label = new QLabel(Tr("Aspect Preset"), preset_row);
       preset_label->setStyleSheet(AppTheme::EditorLabelStyle(AppTheme::Instance().textColor()));
       AppTheme::MarkFontRole(preset_label, AppTheme::FontRole::UiCaption);
       preset_row_layout->addWidget(preset_label, 0);
@@ -120,7 +122,7 @@
       ratio_row_layout->setContentsMargins(0, 0, 0, 0);
       ratio_row_layout->setSpacing(8);
 
-      auto* width_label = new QLabel("Width", ratio_row);
+      auto* width_label = new QLabel(Tr("Width"), ratio_row);
       width_label->setStyleSheet(preset_label->styleSheet());
       AppTheme::MarkFontRole(width_label, AppTheme::FontRole::UiCaption);
       ratio_row_layout->addWidget(width_label, 0);
@@ -153,7 +155,7 @@
                        });
       ratio_row_layout->addWidget(geometry_crop_aspect_width_spin_, 1);
 
-      auto* height_label = new QLabel("Height", ratio_row);
+      auto* height_label = new QLabel(Tr("Height"), ratio_row);
       height_label->setStyleSheet(width_label->styleSheet());
       AppTheme::MarkFontRole(height_label, AppTheme::FontRole::UiCaption);
       ratio_row_layout->addWidget(height_label, 0);
@@ -192,7 +194,7 @@
     }
 
     geometry_crop_x_slider_ = addGeometrySlider(
-        "Crop X", 0, static_cast<int>(kCropRectSliderScale),
+        Tr("Crop X"), 0, static_cast<int>(kCropRectSliderScale),
         static_cast<int>(std::lround(state_.crop_x_ * kCropRectSliderScale)),
         [&](int v) {
           SetCropRectState(static_cast<float>(v) / kCropRectSliderScale, state_.crop_y_, state_.crop_w_,
@@ -202,7 +204,7 @@
         [](int v) { return QString::number(static_cast<double>(v) / kCropRectSliderScale, 'f', 3); });
 
     geometry_crop_y_slider_ = addGeometrySlider(
-        "Crop Y", 0, static_cast<int>(kCropRectSliderScale),
+        Tr("Crop Y"), 0, static_cast<int>(kCropRectSliderScale),
         static_cast<int>(std::lround(state_.crop_y_ * kCropRectSliderScale)),
         [&](int v) {
           SetCropRectState(state_.crop_x_, static_cast<float>(v) / kCropRectSliderScale, state_.crop_w_,
@@ -212,7 +214,7 @@
         [](int v) { return QString::number(static_cast<double>(v) / kCropRectSliderScale, 'f', 3); });
 
     geometry_crop_w_slider_ = addGeometrySlider(
-        "Crop W", 1, static_cast<int>(kCropRectSliderScale),
+        Tr("Crop W"), 1, static_cast<int>(kCropRectSliderScale),
         static_cast<int>(std::lround(state_.crop_w_ * kCropRectSliderScale)),
         [&](int v) {
           ResizeCropRectWithAspect(static_cast<float>(v) / kCropRectSliderScale, true);
@@ -221,7 +223,7 @@
         [](int v) { return QString::number(static_cast<double>(v) / kCropRectSliderScale, 'f', 3); });
 
     geometry_crop_h_slider_ = addGeometrySlider(
-        "Crop H", 1, static_cast<int>(kCropRectSliderScale),
+        Tr("Crop H"), 1, static_cast<int>(kCropRectSliderScale),
         static_cast<int>(std::lround(state_.crop_h_ * kCropRectSliderScale)),
         [&](int v) {
           ResizeCropRectWithAspect(static_cast<float>(v) / kCropRectSliderScale, false);
@@ -247,7 +249,7 @@
       rowLayout->setContentsMargins(0, 0, 0, 0);
       rowLayout->setSpacing(8);
 
-      geometry_apply_btn_ = new QPushButton("Apply Crop", row);
+      geometry_apply_btn_ = new QPushButton(Tr("Apply Crop"), row);
       geometry_apply_btn_->setFixedHeight(30);
       geometry_apply_btn_->setCursor(Qt::PointingHandCursor);
       geometry_apply_btn_->setStyleSheet(AppTheme::EditorPrimaryButtonStyle());
@@ -257,10 +259,10 @@
       });
       rowLayout->addWidget(geometry_apply_btn_, 1);
 
-      geometry_reset_btn_ = new QPushButton("Reset", row);
+      geometry_reset_btn_ = new QPushButton(Tr("Reset"), row);
       geometry_reset_btn_->setFixedHeight(30);
       geometry_reset_btn_->setCursor(Qt::PointingHandCursor);
-      geometry_reset_btn_->setToolTip("Reset crop & rotation (Ctrl+R)");
+      geometry_reset_btn_->setToolTip(Tr("Reset crop & rotation (Ctrl+R)"));
       geometry_reset_btn_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_R));
       geometry_reset_btn_->setStyleSheet(AppTheme::EditorSecondaryButtonStyle());
       QObject::connect(geometry_reset_btn_, &QPushButton::clicked, this, [this]() {
@@ -270,10 +272,10 @@
       layout->addWidget(row, 0);
 
       auto* hint = new QLabel(
-          "Geometry panel edits only the crop frame overlay. Image pixels update only after Apply Crop. "
-          "Aspect presets lock crop resizing until switched back to Free. "
-          "Double click viewer to restore full crop frame. "
-          "Double click any geometry slider to restore the full-frame crop and zero rotation. Ctrl+R to reset all geometry.",
+          Tr("Geometry panel edits only the crop frame overlay. Image pixels update only after Apply Crop. "
+             "Aspect presets lock crop resizing until switched back to Free. "
+             "Double click viewer to restore full crop frame. "
+             "Double click any geometry slider to restore the full-frame crop and zero rotation. Ctrl+R to reset all geometry."),
           frame);
       hint->setWordWrap(true);
       hint->setStyleSheet(AppTheme::EditorLabelStyle(AppTheme::Instance().textMutedColor()));
@@ -333,11 +335,11 @@
         };
 
         auto* decode_layout = addRawSection(
-            "RAW Decode",
-            "Configure RAW decode options. These settings are shared with thumbnail rendering.");
+            Tr("RAW Decode"),
+            Tr("Configure RAW decode options. These settings are shared with thumbnail rendering."));
 
         raw_highlights_reconstruct_checkbox_ =
-            new QCheckBox("Enable Highlight Reconstruction", raw_controls_);
+            new QCheckBox(Tr("Enable Highlight Reconstruction"), raw_controls_);
         raw_highlights_reconstruct_checkbox_->setChecked(state_.raw_highlights_reconstruct_);
         raw_highlights_reconstruct_checkbox_->setStyleSheet(AppTheme::EditorCheckBoxStyle());
         QObject::connect(raw_highlights_reconstruct_checkbox_, &QCheckBox::toggled, this,
@@ -352,10 +354,10 @@
         decode_layout->addWidget(raw_highlights_reconstruct_checkbox_, 0);
 
         auto* lens_layout = addRawSection(
-            "Lens Calibration",
-            "Enable correction and optionally override lens metadata with catalog entries.");
+            Tr("Lens Calibration"),
+            Tr("Enable correction and optionally override lens metadata with catalog entries."));
 
-        lens_calib_enabled_checkbox_ = new QCheckBox("Enable Lens Calibration", raw_controls_);
+        lens_calib_enabled_checkbox_ = new QCheckBox(Tr("Enable Lens Calibration"), raw_controls_);
         lens_calib_enabled_checkbox_->setChecked(state_.lens_calib_enabled_);
         lens_calib_enabled_checkbox_->setStyleSheet(raw_highlights_reconstruct_checkbox_->styleSheet());
         QObject::connect(lens_calib_enabled_checkbox_, &QCheckBox::toggled, this,
@@ -373,7 +375,7 @@
         auto* brand_row_layout = new QHBoxLayout(brand_row);
         brand_row_layout->setContentsMargins(0, 0, 0, 0);
         brand_row_layout->setSpacing(8);
-        auto* brand_label = new QLabel("Lens Brand", brand_row);
+        auto* brand_label = new QLabel(Tr("Lens Brand"), brand_row);
         brand_label->setStyleSheet(AppTheme::EditorLabelStyle(AppTheme::Instance().textColor()));
         AppTheme::MarkFontRole(brand_label, AppTheme::FontRole::UiCaption);
         lens_brand_combo_ = new QComboBox(brand_row);
@@ -401,7 +403,7 @@
         auto* model_row_layout = new QHBoxLayout(model_row);
         model_row_layout->setContentsMargins(0, 0, 0, 0);
         model_row_layout->setSpacing(8);
-        auto* model_label = new QLabel("Lens Model", model_row);
+        auto* model_label = new QLabel(Tr("Lens Model"), model_row);
         model_label->setStyleSheet(brand_label->styleSheet());
         AppTheme::MarkFontRole(model_label, AppTheme::FontRole::UiCaption);
         lens_model_combo_ = new QComboBox(model_row);
@@ -439,9 +441,9 @@
       auto* v = new QVBoxLayout(section);
       v->setContentsMargins(12, 10, 12, 10);
       v->setSpacing(2);
-      auto* t = new QLabel("Versioning", section);
+      auto* t = new QLabel(Tr("Versioning"), section);
       t->setObjectName("EditorSectionTitle");
-      auto* s = new QLabel("Commit and inspect edit history.", section);
+      auto* s = new QLabel(Tr("Commit and inspect edit history."), section);
       s->setObjectName("EditorSectionSub");
       s->setWordWrap(true);
       v->addWidget(t, 0);

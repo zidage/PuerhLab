@@ -63,7 +63,7 @@ Rectangle {
             }
 
             Label {
-                text: "(" + card.totalItems + ")"
+                text: qsTr("(%1)").arg(card.totalItems)
                 color: "#7B7D7C"
                 font.family: appTheme.dataFontFamily
                 font.pixelSize: 11
@@ -72,7 +72,7 @@ Rectangle {
             Item { Layout.fillWidth: true }
 
             Label {
-                text: card.expanded ? "▲" : "▼"
+                text: card.expanded ? qsTr("▲") : qsTr("▼")
                 color: "#7B7D7C"
                 font.pixelSize: 11
                 MouseArea {
@@ -171,7 +171,9 @@ Rectangle {
             // ── "Show more / less" toggle ───────────────────────────
             Label {
                 visible: card.hasOverflow && card.expanded
-                text: card.showAll ? "Show less ▲" : "Show all " + card.totalItems + " ▼"
+                text: card.showAll
+                    ? qsTr("Show less ▲")
+                    : qsTr("Show all %1 ▼").arg(card.totalItems)
                 color: card.accentColor
                 font.pixelSize: 11
                 font.underline: true
@@ -188,7 +190,7 @@ Rectangle {
             // ── Empty state ─────────────────────────────────────────
             Label {
                 visible: card.totalItems === 0 && card.expanded
-                text: "No data available"
+                text: qsTr("No data available")
                 color: "#555555"
                 font.pixelSize: 11
                 font.italic: true

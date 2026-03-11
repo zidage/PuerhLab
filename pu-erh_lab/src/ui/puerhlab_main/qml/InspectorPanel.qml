@@ -34,7 +34,7 @@ ScrollView {
                 spacing: 4
 
                 Label {
-                    text: "Photo Library"
+                    text: qsTr("Photo Library")
                     color: root.mutedTextColor
                     font.pixelSize: 11
                     font.weight: 600
@@ -68,7 +68,7 @@ ScrollView {
         StatsCard {
             Layout.fillWidth: true
             Layout.margins: 4
-            title: "By Capture Date"
+            title: qsTr("By Capture Date")
             accentColor: "#5B9BD5"
             model: albumBackend.dateStats
             selectedLabel: albumBackend.statsFilterDate
@@ -86,7 +86,7 @@ ScrollView {
         StatsCard {
             Layout.fillWidth: true
             Layout.margins: 4
-            title: "By Camera Model"
+            title: qsTr("By Camera Model")
             accentColor: "#ED7D31"
             model: albumBackend.cameraStats
             selectedLabel: albumBackend.statsFilterCamera
@@ -104,7 +104,7 @@ ScrollView {
         StatsCard {
             Layout.fillWidth: true
             Layout.margins: 4
-            title: "By Lens"
+            title: qsTr("By Lens")
             accentColor: "#70AD47"
             model: albumBackend.lensStats
             selectedLabel: albumBackend.statsFilterLens

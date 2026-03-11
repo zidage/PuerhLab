@@ -12,6 +12,7 @@
 #include <QCoreApplication>
 #include <QDialog>
 #include <QDoubleSpinBox>
+#include <QEvent>
 #include <QFrame>
 #include <QGridLayout>
 #include <QHBoxLayout>
@@ -79,10 +80,15 @@
 #include "ui/puerhlab_main/editor_dialog/widgets/tone_curve_widget.hpp"
 #include "ui/puerhlab_main/editor_dialog/widgets/trackball.hpp"
 #include "ui/puerhlab_main/app_theme.hpp"
+#include "ui/puerhlab_main/i18n.hpp"
 #include "ui/edit_viewer/edit_viewer.hpp"
 
 namespace puerhlab::ui {
 namespace {
+
+auto Tr(const char* text) -> QString {
+  return QCoreApplication::translate(PUERHLAB_I18N_CONTEXT, text);
+}
 
 using namespace std::chrono_literals;
 
@@ -314,13 +320,13 @@ auto ResolveEditorWindowTitle(const std::shared_ptr<ImagePoolService>& image_poo
             return {};
           });
       if (!image_name.empty()) {
-        return QString("Editor - %1").arg(QString::fromStdWString(image_name));
+        return Tr("Editor - %1").arg(QString::fromStdWString(image_name));
       }
     } catch (...) {
     }
   }
 
-  return QString("Editor - image #%1").arg(static_cast<qulonglong>(element_id));
+  return Tr("Editor - image #%1").arg(static_cast<qulonglong>(element_id));
 }
 
 class EditorDialog final : public QDialog {
@@ -395,7 +401,7 @@ class EditorDialog final : public QDialog {
 
     const float hue = WrapHueDegrees(state_.hls_target_hue_);
     if (hls_target_label_) {
-      hls_target_label_->setText(QString("Target Hue: %1 deg").arg(hue, 0, 'f', 0));
+      hls_target_label_->setText(Tr("Target Hue: %1 deg").arg(hue, 0, 'f', 0));
     }
 
     const int selected_idx = ClosestHlsCandidateHueIndex(hue);
@@ -408,6 +414,7 @@ class EditorDialog final : public QDialog {
       const QColor swatch      = HlsCandidateColor(kHlsCandidateHues[static_cast<size_t>(i)]);
       const auto   border_w_px = selected ? "3px" : "1px";
       const auto   border_col  = selected ? "#FCC704" : "#2A2A2A";
+      btn->setToolTip(Tr("Hue %1 deg").arg(kHlsCandidateHues[static_cast<size_t>(i)], 0, 'f', 0));
       btn->setStyleSheet(QString("QPushButton {"
                                  "  background: %1;"
                                  "  border: %2 solid %3;"
@@ -446,15 +453,15 @@ class EditorDialog final : public QDialog {
         state_.crop_aspect_preset_, state_.crop_aspect_width_, state_.crop_aspect_height_,
         source_width, source_height);
 
-    QString text = QString("Crop Rect: x=%1 y=%2 w=%3 h=%4")
+    QString text = Tr("Crop Rect: x=%1 y=%2 w=%3 h=%4")
                        .arg(state_.crop_x_, 0, 'f', 3)
                        .arg(state_.crop_y_, 0, 'f', 3)
                        .arg(state_.crop_w_, 0, 'f', 3)
                        .arg(state_.crop_h_, 0, 'f', 3);
     if (resolved.pixel_width_ > 0 && resolved.pixel_height_ > 0) {
-      text += QString(" | Output: %1x%2").arg(resolved.pixel_width_).arg(resolved.pixel_height_);
+      text += Tr(" | Output: %1x%2").arg(resolved.pixel_width_).arg(resolved.pixel_height_);
     }
-    text += QString(" | Aspect: %1:1").arg(resolved.aspect_ratio_, 0, 'f', 3);
+    text += Tr(" | Aspect: %1:1").arg(resolved.aspect_ratio_, 0, 'f', 3);
     geometry_crop_rect_label_->setText(text);
   }
 
@@ -735,15 +742,95 @@ class EditorDialog final : public QDialog {
     return QDialog::eventFilter(obj, event);
   }
 
+  void changeEvent(QEvent* event) override {
+    if (event && event->type() == QEvent::LanguageChange) {
+      RetranslateUi();
+    }
+    QDialog::changeEvent(event);
+  }
+
   void UpdateViewerZoomLabel(float zoom) {
     if (!viewer_zoom_label_) {
       return;
     }
     const float clamped = std::max(1.0f, zoom);
     viewer_zoom_label_->setText(
-        QString("Zoom %1% (%2x)")
+        Tr("Zoom %1% (%2x)")
             .arg(clamped * 100.0f, 0, 'f', 0)
             .arg(clamped, 0, 'f', 2));
+  }
+
+  void RetranslateUi() {
+    setWindowTitle(ResolveEditorWindowTitle(image_pool_, image_id_, element_id_));
+
+    if (tone_panel_btn_) {
+      tone_panel_btn_->setText(Tr("Tone"));
+    }
+    if (drt_panel_btn_) {
+      drt_panel_btn_->setText(Tr("Display RT"));
+      drt_panel_btn_->setToolTip(Tr("Display Rendering Transform"));
+    }
+    if (geometry_panel_btn_) {
+      geometry_panel_btn_->setText(Tr("Geometry"));
+    }
+    if (raw_panel_btn_) {
+      raw_panel_btn_->setText(Tr("RAW Decode"));
+    }
+    if (geometry_apply_btn_) {
+      geometry_apply_btn_->setText(Tr("Apply Crop"));
+    }
+    if (geometry_reset_btn_) {
+      geometry_reset_btn_->setText(Tr("Reset"));
+      geometry_reset_btn_->setToolTip(Tr("Reset crop & rotation (Ctrl+R)"));
+    }
+    if (undo_tx_btn_) {
+      undo_tx_btn_->setText(Tr("Undo"));
+    }
+    if (commit_version_btn_) {
+      commit_version_btn_->setText(Tr("Commit Version"));
+    }
+    if (new_working_btn_) {
+      new_working_btn_->setText(Tr("New"));
+    }
+    if (color_temp_unsupported_label_) {
+      color_temp_unsupported_label_->setText(
+          Tr("Color temperature/tint is unavailable for this image."));
+    }
+    if (working_mode_combo_) {
+      const int current_value = working_mode_combo_->currentData().toInt();
+      const bool prev_sync = syncing_controls_;
+      syncing_controls_ = true;
+      working_mode_combo_->clear();
+      working_mode_combo_->addItem(Tr("Plain"), static_cast<int>(WorkingMode::Plain));
+      working_mode_combo_->addItem(Tr("Incr"), static_cast<int>(WorkingMode::Incremental));
+      const int index = working_mode_combo_->findData(current_value);
+      working_mode_combo_->setCurrentIndex(std::max(0, index));
+      syncing_controls_ = prev_sync;
+    }
+    if (geometry_crop_aspect_preset_combo_) {
+      const int current_value = geometry_crop_aspect_preset_combo_->currentData().toInt();
+      const bool prev_sync = syncing_controls_;
+      syncing_controls_ = true;
+      geometry_crop_aspect_preset_combo_->clear();
+      for (const auto& option : geometry::CropAspectPresetOptions()) {
+        geometry_crop_aspect_preset_combo_->addItem(Tr(option.label_),
+                                                    static_cast<int>(option.value_));
+      }
+      const int index = geometry_crop_aspect_preset_combo_->findData(current_value);
+      geometry_crop_aspect_preset_combo_->setCurrentIndex(std::max(0, index));
+      syncing_controls_ = prev_sync;
+    }
+    if (lut_combo_ && !lut_names_.isEmpty()) {
+      lut_names_[0] = Tr("None");
+      lut_combo_->setItemText(0, lut_names_.front());
+    }
+
+    RefreshLensComboFromState();
+    RefreshOdtEncodingEotfComboFromState();
+    RefreshHlsTargetUi();
+    UpdateGeometryCropRectLabel();
+    UpdateViewerZoomLabel(viewer_ ? viewer_->GetViewZoom() : 1.0f);
+    UpdateVersionUi();
   }
 
   void RefreshGeometryModeUi() {
@@ -772,7 +859,7 @@ class EditorDialog final : public QDialog {
     syncing_controls_    = true;
 
     lens_brand_combo_->clear();
-    lens_brand_combo_->addItem("Auto (metadata)", QString());
+    lens_brand_combo_->addItem(Tr("Auto (metadata)"), QString());
     for (const auto& brand : lens_catalog_.brands_) {
       lens_brand_combo_->addItem(QString::fromStdString(brand), QString::fromStdString(brand));
     }
@@ -804,7 +891,7 @@ class EditorDialog final : public QDialog {
     lens_model_combo_->clear();
 
     if (state_.lens_override_make_.empty()) {
-      lens_model_combo_->addItem("Auto (metadata)", QString());
+      lens_model_combo_->addItem(Tr("Auto (metadata)"), QString());
       lens_model_combo_->setCurrentIndex(0);
       lens_model_combo_->setEnabled(false);
       state_.lens_override_model_.clear();
@@ -844,10 +931,10 @@ class EditorDialog final : public QDialog {
     if (lens_catalog_status_label_) {
       if (lens_catalog_.brands_.empty()) {
         lens_catalog_status_label_->setText(
-            "Lens catalog not found. You can still use Auto (metadata) mode.");
+            Tr("Lens catalog not found. You can still use Auto (metadata) mode."));
       } else {
         lens_catalog_status_label_->setText(
-            QString("Lens catalog: %1 brands").arg(static_cast<int>(lens_catalog_.brands_.size())));
+            Tr("Lens catalog: %1 brands").arg(static_cast<int>(lens_catalog_.brands_.size())));
       }
     }
 
@@ -949,8 +1036,7 @@ class EditorDialog final : public QDialog {
     odt_encoding_eotf_combo_->clear();
     const auto options = SupportedDisplayEotfOptions(state_.odt_.encoding_space_);
     for (const auto& option : options) {
-      odt_encoding_eotf_combo_->addItem(QString::fromLatin1(option.label_),
-                                        static_cast<int>(option.value_));
+      odt_encoding_eotf_combo_->addItem(Tr(option.label_), static_cast<int>(option.value_));
     }
 
     int selected_index = odt_encoding_eotf_combo_->findData(
@@ -1271,14 +1357,14 @@ class EditorDialog final : public QDialog {
     const auto selected_params = ReconstructPipelineParamsForVersion(version);
     if (!selected_params.has_value()) {
       if (error) {
-        *error = "Could not reconstruct pipeline params for the selected version.";
+        *error = Tr("Could not reconstruct pipeline params for the selected version.");
       }
       return false;
     }
 
     if (!ApplyPipelineParamsToEditor(*selected_params)) {
       if (error) {
-        *error = "Failed to apply selected version to the editor.";
+        *error = Tr("Failed to apply selected version to the editor.");
       }
       return false;
     }
@@ -1291,14 +1377,14 @@ class EditorDialog final : public QDialog {
     if (!versioning::ResolveSelectedVersion(item, history_guard_, &selection,
                                             &selection_error)) {
       if (!selection_error.isEmpty()) {
-        QMessageBox::warning(this, "History", selection_error);
+        QMessageBox::warning(this, Tr("History"), selection_error);
       }
       return;
     }
 
     QString reload_error;
     if (!selection.version || !ReloadEditorFromHistoryVersion(*selection.version, &reload_error)) {
-      QMessageBox::warning(this, "History", reload_error);
+      QMessageBox::warning(this, Tr("History"), reload_error);
       return;
     }
 
@@ -1315,18 +1401,19 @@ class EditorDialog final : public QDialog {
 
     const auto undo_result = versioning::UndoLastTransaction(working_version_, pipeline_guard_);
     if (undo_result.no_transaction) {
-      QMessageBox::information(this, "History", "No transaction to undo.");
+      QMessageBox::information(this, Tr("History"), Tr("No transaction to undo."));
       return;
     }
     if (!undo_result.error.isEmpty()) {
-      QMessageBox::warning(this, "History", undo_result.error);
+      QMessageBox::warning(this, Tr("History"), undo_result.error);
       return;
     }
     if (!undo_result.undone) {
       return;
     }
     if (!ReloadUiStateFromPipeline(/*reset_to_defaults_if_missing=*/false)) {
-      QMessageBox::warning(this, "History", "Undo failed while reloading pipeline state.");
+      QMessageBox::warning(this, Tr("History"),
+                           Tr("Undo failed while reloading pipeline state."));
       return;
     }
     UpdateVersionUi();
@@ -1350,12 +1437,12 @@ class EditorDialog final : public QDialog {
         history_service_, history_guard_, pipeline_guard_, element_id_,
         std::move(working_version_));
     if (commit_result.no_transactions) {
-      QMessageBox::information(this, "History", "No uncommitted transactions.");
+      QMessageBox::information(this, Tr("History"), Tr("No uncommitted transactions."));
       return;
     }
     if (!commit_result.committed_id.has_value()) {
-      QMessageBox::warning(this, "History",
-                           commit_result.error.isEmpty() ? "Commit failed."
+      QMessageBox::warning(this, Tr("History"),
+                           commit_result.error.isEmpty() ? Tr("Commit failed.")
                                                          : commit_result.error);
       if (commit_result.recovery_working_version.has_value()) {
         working_version_ = std::move(*commit_result.recovery_working_version);

@@ -23,6 +23,11 @@ namespace puerhlab::ui {
 using namespace album_util;
 using namespace packed_proj;
 
+#define PL_TEXT(text, ...)                                                    \
+  i18n::MakeLocalizedText(PUERHLAB_I18N_CONTEXT,                              \
+                          QT_TRANSLATE_NOOP(PUERHLAB_I18N_CONTEXT, text)      \
+                              __VA_OPT__(, ) __VA_ARGS__)
+
 // ── Constructor / Destructor ────────────────────────────────────────────────
 
 AlbumBackend::AlbumBackend(QObject* parent)
@@ -34,11 +39,12 @@ AlbumBackend::AlbumBackend(QObject* parent)
       stats_(*this),
       import_export_(*this),
       editor_(*this) {
+  QObject::connect(&i18n::TranslationNotifier::Instance(), &i18n::TranslationNotifier::LanguageChanged,
+                   this, &AlbumBackend::RefreshTranslations);
   editor_.InitializeEditorLuts();
-  SetServiceState(
-      false,
-      "Select a project: load a .puerhproj package or metadata JSON, or create a new packed project.");
-  task_status_ = "Open or create a project to begin.";
+  SetServiceState(false, PL_TEXT("Select a project: load a .puerhproj package or metadata JSON, "
+                                 "or create a new packed project."));
+  task_status_text_ = PL_TEXT("Open or create a project to begin.");
 }
 
 AlbumBackend::~AlbumBackend() {
@@ -172,20 +178,20 @@ void AlbumBackend::SetThumbnailVisible(uint elementId, uint imageId, bool visibl
 
 bool AlbumBackend::LoadProject(const QString& metaFileUrlOrPath) {
   if (project_handler_.project_loading()) {
-    SetServiceMessageForCurrentProject("A project load is already in progress.");
+    SetServiceMessageForCurrentProject(PL_TEXT("A project load is already in progress."));
     return false;
   }
 
   const auto project_path_opt = InputToPath(metaFileUrlOrPath);
   if (!project_path_opt.has_value()) {
-    SetServiceMessageForCurrentProject("Select a valid project file.");
+    SetServiceMessageForCurrentProject(PL_TEXT("Select a valid project file."));
     return false;
   }
 
   const auto project_path = project_path_opt.value();
   std::error_code ec;
   if (!std::filesystem::is_regular_file(project_path, ec) || ec) {
-    SetServiceMessageForCurrentProject("Project file was not found.");
+    SetServiceMessageForCurrentProject(PL_TEXT("Project file was not found."));
     return false;
   }
 
@@ -195,8 +201,9 @@ bool AlbumBackend::LoadProject(const QString& metaFileUrlOrPath) {
     QString               workspace_error;
     if (!CreateProjectWorkspace(project_name, &workspace_dir, &workspace_error)) {
       SetServiceMessageForCurrentProject(
-          workspace_error.isEmpty() ? "Failed to prepare project temp workspace."
-                                    : workspace_error);
+          workspace_error.isEmpty()
+              ? PL_TEXT("Failed to prepare project temp workspace.")
+              : PL_TEXT("%1", workspace_error));
       return false;
     }
 
@@ -207,7 +214,8 @@ bool AlbumBackend::LoadProject(const QString& metaFileUrlOrPath) {
                                   &unpacked_meta_path, &unpack_error)) {
       CleanupWorkspaceDirectory(workspace_dir);
       SetServiceMessageForCurrentProject(
-          unpack_error.isEmpty() ? "Failed to unpack project package." : unpack_error);
+          unpack_error.isEmpty() ? PL_TEXT("Failed to unpack project package.")
+                                 : PL_TEXT("%1", unpack_error));
       return false;
     }
 
@@ -218,7 +226,7 @@ bool AlbumBackend::LoadProject(const QString& metaFileUrlOrPath) {
 
   if (!IsMetadataJsonPath(project_path)) {
     SetServiceMessageForCurrentProject(
-        "Unsupported project format. Choose a .json or .puerhproj file.");
+        PL_TEXT("Unsupported project format. Choose a .json or .puerhproj file."));
     return false;
   }
 
@@ -236,13 +244,13 @@ bool AlbumBackend::CreateProjectInFolder(const QString& folderUrlOrPath) {
 bool AlbumBackend::CreateProjectInFolderNamed(const QString& folderUrlOrPath,
                                               const QString& projectName) {
   if (project_handler_.project_loading()) {
-    SetServiceMessageForCurrentProject("A project load is already in progress.");
+    SetServiceMessageForCurrentProject(PL_TEXT("A project load is already in progress."));
     return false;
   }
 
   const auto folder_path_opt = InputToPath(folderUrlOrPath);
   if (!folder_path_opt.has_value()) {
-    SetServiceMessageForCurrentProject("Select a valid folder for the new project.");
+    SetServiceMessageForCurrentProject(PL_TEXT("Select a valid folder for the new project."));
     return false;
   }
 
@@ -251,17 +259,17 @@ bool AlbumBackend::CreateProjectInFolderNamed(const QString& folderUrlOrPath,
       BuildUniquePackedProjectPath(folder_path_opt.value(), projectName, &build_error);
   if (!packed_path_opt.has_value()) {
     SetServiceMessageForCurrentProject(
-        build_error.isEmpty() ? "Failed to prepare project package path in selected folder."
-                              : build_error);
+        build_error.isEmpty() ? PL_TEXT("Failed to prepare project package path in selected folder.")
+                              : PL_TEXT("%1", build_error));
     return false;
   }
 
   std::filesystem::path workspace_dir;
   QString               workspace_error;
   if (!CreateProjectWorkspace(projectName, &workspace_dir, &workspace_error)) {
-    SetServiceMessageForCurrentProject(workspace_error.isEmpty()
-                                           ? "Failed to prepare project temp workspace."
-                                           : workspace_error);
+    SetServiceMessageForCurrentProject(
+        workspace_error.isEmpty() ? PL_TEXT("Failed to prepare project temp workspace.")
+                                  : PL_TEXT("%1", workspace_error));
     return false;
   }
 
@@ -278,13 +286,13 @@ bool AlbumBackend::CreateProjectInFolderNamed(const QString& folderUrlOrPath,
 
 bool AlbumBackend::SaveProject() {
   if (project_handler_.project_loading()) {
-    SetServiceMessageForCurrentProject("Please wait until project loading finishes.");
+    SetServiceMessageForCurrentProject(PL_TEXT("Please wait until project loading finishes."));
     return false;
   }
 
   if (!project_handler_.project() || project_handler_.meta_path().empty()) {
-    SetServiceState(false, "No project is loaded yet.");
-    SetTaskState("No project to save.", 0, false);
+    SetServiceState(false, PL_TEXT("No project is loaded yet."));
+    SetTaskState(PL_TEXT("No project to save."), 0, false);
     return false;
   }
 
@@ -293,26 +301,27 @@ bool AlbumBackend::SaveProject() {
   }
 
   if (!project_handler_.PersistCurrentProjectState()) {
-    SetServiceMessageForCurrentProject("Project save failed.");
-    SetTaskState("Project save failed.", 0, false);
+    SetServiceMessageForCurrentProject(PL_TEXT("Project save failed."));
+    SetTaskState(PL_TEXT("Project save failed."), 0, false);
     return false;
   }
 
   QString package_error;
   if (!project_handler_.PackageCurrentProjectFiles(&package_error)) {
     SetServiceMessageForCurrentProject(
-        package_error.isEmpty() ? "Project saved, but packing failed." : package_error);
-    SetTaskState("Project packing failed.", 0, false);
+        package_error.isEmpty() ? PL_TEXT("Project saved, but packing failed.")
+                                : PL_TEXT("%1", package_error));
+    SetTaskState(PL_TEXT("Project packing failed."), 0, false);
     return false;
   }
 
   SetServiceMessageForCurrentProject(
       project_handler_.package_path().empty()
-          ? QString("Project saved to %1").arg(PathToQString(project_handler_.meta_path()))
-          : QString("Project saved and packed to %1").arg(PathToQString(project_handler_.package_path())));
-  SetTaskState(project_handler_.package_path().empty()
-                   ? "Project saved."
-                   : "Project saved and packed.",
+          ? PL_TEXT("Project saved to %1", PathToQString(project_handler_.meta_path()))
+          : PL_TEXT("Project saved and packed to %1",
+                    PathToQString(project_handler_.package_path())));
+  SetTaskState(project_handler_.package_path().empty() ? PL_TEXT("Project saved.")
+                                                       : PL_TEXT("Project saved and packed."),
                100, false);
   ScheduleIdleTaskStateReset(1200);
   return true;
@@ -320,30 +329,51 @@ bool AlbumBackend::SaveProject() {
 
 // ── Shared internal methods ─────────────────────────────────────────────────
 
-void AlbumBackend::SetServiceState(bool ready, const QString& message) {
-  if (service_ready_ == ready && service_message_ == message) return;
+void AlbumBackend::SetServiceState(bool ready, const i18n::LocalizedText& message) {
+  if (service_ready_ == ready && service_message_text_.source_ == message.source_ &&
+      service_message_text_.args_ == message.args_) {
+    return;
+  }
   service_ready_   = ready;
-  service_message_ = message;
+  service_message_text_ = message;
   emit ServiceStateChanged();
 }
 
-void AlbumBackend::SetServiceMessageForCurrentProject(const QString& message) {
+void AlbumBackend::SetServiceMessageForCurrentProject(const i18n::LocalizedText& message) {
   SetServiceState(project_handler_.project() != nullptr, message);
 }
 
 void AlbumBackend::ScheduleIdleTaskStateReset(int delayMs) {
   QTimer::singleShot(std::max(delayMs, 0), this, [this]() {
     if (!import_export_.export_inflight() && !task_cancel_visible_) {
-      SetTaskState("No background tasks", 0, false);
+      SetTaskState(PL_TEXT("No background tasks"), 0, false);
     }
   });
 }
 
-void AlbumBackend::SetTaskState(const QString& status, int progress, bool cancelVisible) {
-  task_status_         = status;
+void AlbumBackend::SetTaskState(const i18n::LocalizedText& status, int progress, bool cancelVisible) {
+  task_status_text_    = status;
   task_progress_       = std::clamp(progress, 0, 100);
   task_cancel_visible_ = cancelVisible;
   emit TaskStateChanged();
+}
+
+void AlbumBackend::RefreshTranslations() {
+  if (!folder_ctrl_.folder_entries().empty()) {
+    folder_ctrl_.RebuildFolderView();
+  }
+  if (!all_images_.empty()) {
+    stats_.RebuildThumbnailView();
+  }
+  stats_.RefreshStats();
+  emit ServiceStateChanged();
+  emit TaskStateChanged();
+  emit ProjectLoadStateChanged();
+  emit ImportStateChanged();
+  emit importStateChanged();
+  emit ExportStateChanged();
+  emit exportStateChanged();
+  emit EditorStateChanged();
 }
 
 void AlbumBackend::AddOrUpdateAlbumItem(sl_element_id_t elementId, image_id_t imageId,
@@ -446,3 +476,5 @@ void AlbumBackend::AddOrUpdateAlbumItem(sl_element_id_t elementId, image_id_t im
 }
 
 }  // namespace puerhlab::ui
+
+#undef PL_TEXT

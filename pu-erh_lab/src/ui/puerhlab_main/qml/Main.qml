@@ -11,7 +11,7 @@ ApplicationWindow {
     height: 900
     visible: true
     visibility: Window.Maximized
-    title: "Pu-erh Lab"
+    title: qsTr("Pu-erh Lab")
     font.family: appTheme.uiFontFamily
 
     // Theme palette — borderless, luminance-separated zones
@@ -63,8 +63,18 @@ ApplicationWindow {
     readonly property var exportPreviewRows: selectionState.exportPreviewRows
     readonly property int selectedCount: selectionState.selectedCount
     readonly property int exportQueueCount: selectionState.exportQueueCount
+    readonly property var languageOptions: languageManager.availableLanguages
     property var pendingDeleteTargets: []
     property string deleteConfirmText: ""
+
+    function languageIndexForCode(code) {
+        for (let i = 0; i < languageOptions.length; ++i) {
+            if (languageOptions[i].code === code) {
+                return i
+            }
+        }
+        return 0
+    }
 
     function resolveDeleteTargets(clickedItem) {
         if (root.selectedCount > 0) {
@@ -76,7 +86,7 @@ ApplicationWindow {
         return [{
             elementId: Number(clickedItem.elementId),
             imageId: Number(clickedItem.imageId),
-            fileName: clickedItem.fileName ? clickedItem.fileName : "(unnamed)"
+            fileName: clickedItem.fileName ? clickedItem.fileName : qsTr("(unnamed)")
         }]
     }
 
@@ -98,9 +108,9 @@ ApplicationWindow {
             return
         }
         if (count === 1) {
-            root.deleteConfirmText = "Delete this image from project?"
+            root.deleteConfirmText = qsTr("Delete this image from project?")
         } else {
-            root.deleteConfirmText = "Delete " + count + " images from project?"
+            root.deleteConfirmText = qsTr("Delete %1 images from project?").arg(count)
         }
         deleteConfirmDialog.open()
     }
@@ -141,7 +151,7 @@ ApplicationWindow {
                 next[key] = {
                     elementId: Number(elementId),
                     imageId: Number(imageId),
-                    fileName: fileName ? fileName : "(unnamed)"
+                    fileName: fileName ? fileName : qsTr("(unnamed)")
                 }
             } else {
                 delete next[key]
@@ -161,7 +171,7 @@ ApplicationWindow {
                 next[key] = {
                     elementId: Number(item.elementId),
                     imageId: Number(item.imageId),
-                    fileName: item.fileName ? item.fileName : "(unnamed)"
+                    fileName: item.fileName ? item.fileName : qsTr("(unnamed)")
                 }
             }
             selectedImagesById = next
@@ -242,11 +252,14 @@ ApplicationWindow {
             for (let i = 0; i < previewCount; ++i) {
                 const item = src[i]
                 next.push({
-                    label: "Image #" + item.imageId + "  Sleeve #" + item.elementId + "  " + item.fileName
+                    label: qsTr("Image #%1  Sleeve #%2  %3")
+                        .arg(item.imageId)
+                        .arg(item.elementId)
+                        .arg(item.fileName)
                 })
             }
             if (src.length > previewCount) {
-                next.push({ label: "... and " + (src.length - previewCount) + " more" })
+                next.push({ label: qsTr("... and %1 more").arg(src.length - previewCount) })
             }
             exportPreviewRows = next
         }
@@ -254,12 +267,12 @@ ApplicationWindow {
 
     FileDialog {
         id: loadProjectDialog
-        title: "Select Project Package or Metadata JSON"
+        title: qsTr("Select Project Package or Metadata JSON")
         fileMode: FileDialog.OpenFile
         nameFilters: [
-            "Packed Project (*.puerhproj)",
-            "Project Metadata (*.json)",
-            "All Files (*)"
+            qsTr("Packed Project (*.puerhproj)"),
+            qsTr("Project Metadata (*.json)"),
+            qsTr("All Files (*)")
         ]
         onAccepted: {
             albumBackend.LoadProject(selectedFile.toString())
@@ -268,7 +281,7 @@ ApplicationWindow {
 
     FolderDialog {
         id: createProjectFolderDialog
-        title: "Select Parent Folder for New Project"
+        title: qsTr("Select Parent Folder for New Project")
         onAccepted: {
             root.pendingNewProjectFolderUrl = selectedFolder.toString()
             createProjectNameField.text = root.defaultNewProjectName
@@ -279,7 +292,7 @@ ApplicationWindow {
     Dialog {
         id: createProjectNameDialog
         modal: true
-        title: "Name New Project"
+        title: qsTr("Name New Project")
         standardButtons: Dialog.NoButton
         closePolicy: Popup.CloseOnEscape
         x: Math.round((root.width - width) / 2)
@@ -311,7 +324,7 @@ ApplicationWindow {
 
             Label {
                 Layout.fillWidth: true
-                text: "Choose the project package name. The app will create a single .puerhproj file."
+                text: qsTr("Choose the project package name. The app will create a single .puerhproj file.")
                 wrapMode: Text.WordWrap
                 color: root.colText
             }
@@ -319,7 +332,7 @@ ApplicationWindow {
             TextField {
                 id: createProjectNameField
                 Layout.fillWidth: true
-                placeholderText: "Project name"
+                placeholderText: qsTr("Project name")
                 onAccepted: createProjectNameDialog.submitCreateProject()
             }
 
@@ -330,12 +343,12 @@ ApplicationWindow {
                 Item { Layout.fillWidth: true }
 
                 Button {
-                    text: "Cancel"
+                    text: qsTr("Cancel")
                     onClicked: createProjectNameDialog.close()
                 }
 
                 Button {
-                    text: "Create"
+                    text: qsTr("Create")
                     enabled: createProjectNameField.text.trim().length > 0
                     onClicked: createProjectNameDialog.submitCreateProject()
                 }
@@ -345,11 +358,11 @@ ApplicationWindow {
 
     FileDialog {
         id: importDialog
-        title: "Select Images"
+        title: qsTr("Select Images")
         fileMode: FileDialog.OpenFiles
         nameFilters: [
-            "Images (*.dng *.nef *.cr2 *.cr3 *.arw *.rw2 *.raf *.tif *.tiff *.jpg *.jpeg *.png)",
-            "All Files (*)"
+            qsTr("Images (*.dng *.nef *.cr2 *.cr3 *.arw *.rw2 *.raf *.tif *.tiff *.jpg *.jpeg *.png)"),
+            qsTr("All Files (*)")
         ]
         onAccepted: {
             const files = []
@@ -387,7 +400,7 @@ ApplicationWindow {
         actions: [
             {
                 id: "delete",
-                label: "Delete",
+                label: qsTr("Delete"),
                 enabled: root.pendingDeleteTargets.length > 0
             }
         ]
@@ -449,7 +462,7 @@ ApplicationWindow {
             spacing: 12
 
             Label {
-                text: "Confirm Deletion"
+                text: qsTr("Confirm Deletion")
                 font.pixelSize: 24
                 font.weight: 700
                 color: root.colText
@@ -459,7 +472,8 @@ ApplicationWindow {
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
                 text: root.deleteConfirmText.length > 0
-                      ? root.deleteConfirmText + "\nOriginal source files on disk will be kept."
+                      ? qsTr("%1\nOriginal source files on disk will be kept.")
+                            .arg(root.deleteConfirmText)
                       : ""
                 color: root.colText
             }
@@ -471,7 +485,7 @@ ApplicationWindow {
                 Item { Layout.fillWidth: true }
 
                 Button {
-                    text: "Cancel"
+                    text: qsTr("Cancel")
                     onClicked: {
                         root.pendingDeleteTargets = []
                         deleteConfirmDialog.close()
@@ -479,7 +493,7 @@ ApplicationWindow {
                 }
 
                 Button {
-                    text: "Delete"
+                    text: qsTr("Delete")
                     Material.background: root.colDanger
                     Material.foreground: root.colText
                     onClicked: {
@@ -543,7 +557,7 @@ ApplicationWindow {
                 anchors.leftMargin: 16
                 anchors.rightMargin: 16
                 spacing: 4
-                Label { text: "Pu-erh Lab"; font.pixelSize: 19; font.weight: 700; color: root.colAccentPrimary }
+                Label { text: qsTr("Pu-erh Lab"); font.pixelSize: 19; font.weight: 700; color: root.colAccentPrimary }
                 Item { Layout.preferredWidth: 8 }
 
                 // ── Load / New / Save pill ──
@@ -562,9 +576,9 @@ ApplicationWindow {
 
                         Repeater {
                             model: [
-                                { label: "Load", act: "load",  en: !albumBackend.projectLoading },
-                                { label: "New",  act: "new",   en: !albumBackend.projectLoading },
-                                { label: "Save", act: "save",  en: root.backendInteractive }
+                                { label: qsTr("Load"), act: "load",  en: !albumBackend.projectLoading },
+                                { label: qsTr("New"),  act: "new",   en: !albumBackend.projectLoading },
+                                { label: qsTr("Save"), act: "save",  en: root.backendInteractive }
                             ]
                             delegate: Item {
                                 width: pillSegment.width + (index < 2 ? pillDivider.width : 0)
@@ -624,7 +638,7 @@ ApplicationWindow {
 
                 Item { Layout.preferredWidth: 4 }
                 Button {
-                    text: "Import"
+                    text: qsTr("Import")
                     enabled: root.backendInteractive
                     height: 36
                     Material.background: root.colAccentSoft
@@ -633,14 +647,14 @@ ApplicationWindow {
                 }
                 Item { Layout.fillWidth: true }
                 Button {
-                    text: "Add Selected (" + root.selectedCount + ")"
+                    text: qsTr("Add Selected (%1)").arg(root.selectedCount)
                     enabled: root.backendInteractive && root.selectedCount > 0
                     Material.background: root.colAccentPrimary
                     Material.foreground: root.colBgDeep
                     onClicked: selectionState.addSelectedToExportQueue()
                 }
                 Button {
-                    text: "Export Queue (" + root.exportQueueCount + ")"
+                    text: qsTr("Export Queue (%1)").arg(root.exportQueueCount)
                     enabled: root.backendInteractive && (albumBackend.shownCount > 0 || root.exportQueueCount > 0)
                     Material.background: root.colAccentSecondary
                     Material.foreground: root.colBgDeep
@@ -650,9 +664,9 @@ ApplicationWindow {
                     }
                 }
                 Item { Layout.preferredWidth: 8 }
-                Button { text: "Library"; checkable: true; checked: !settingsPage; onClicked: settingsPage = false }
-                Button { text: "Settings"; checkable: true; checked: settingsPage; onClicked: settingsPage = true }
-                Button { text: "Inspector"; checkable: true; checked: inspectorVisible; onToggled: inspectorVisible = checked }
+                Button { text: qsTr("Library"); checkable: true; checked: !settingsPage; onClicked: settingsPage = false }
+                Button { text: qsTr("Settings"); checkable: true; checked: settingsPage; onClicked: settingsPage = true }
+                Button { text: qsTr("Inspector"); checkable: true; checked: inspectorVisible; onToggled: inspectorVisible = checked }
             }
         }
 
@@ -683,14 +697,14 @@ ApplicationWindow {
                             font.pixelSize: 18
                         }
                         Label {
-                            text: "Library"
+                            text: qsTr("Library")
                             font.pixelSize: 17
                             font.weight: 700
                             color: root.colText
                         }
                         Item { Layout.fillWidth: true }
                         Label {
-                            text: folderList.count + " folders"
+                            text: qsTr("%1 folders").arg(folderList.count)
                             color: root.colAccentSoft
                             font.family: root.dataFontFamily
                             font.pixelSize: 11
@@ -725,7 +739,7 @@ ApplicationWindow {
                                 id: folderSearchField
                                 Layout.fillWidth: true
                                 Layout.fillHeight: true
-                                placeholderText: "Search folders..."
+                                placeholderText: qsTr("Search folders...")
                                 background: Item {}
                                 color: root.colText
                                 font.pixelSize: 12
@@ -752,7 +766,7 @@ ApplicationWindow {
                                 id: createFolderField
                                 Layout.fillWidth: true
                                 Layout.fillHeight: true
-                                placeholderText: "New folder..."
+                                placeholderText: qsTr("New folder...")
                                 background: Item {}
                                 color: root.colText
                                 font.pixelSize: 12
@@ -800,7 +814,7 @@ ApplicationWindow {
                             anchors.centerIn: parent
                             spacing: 6
                             Label { text: "\u{1F5D1}"; font.pixelSize: 12 }
-                            Label { text: "Delete Folder"; font.pixelSize: 12; font.weight: 600 }
+                            Label { text: qsTr("Delete Folder"); font.pixelSize: 12; font.weight: 600 }
                         }
                         MouseArea {
                             id: delBtn
@@ -939,13 +953,13 @@ ApplicationWindow {
                         anchors.verticalCenter: parent.verticalCenter
                         anchors.leftMargin: 14
                         anchors.rightMargin: 14
-                        Label { text: "Browser"; color: root.colTextMuted; font.pixelSize: 13; font.weight: 600 }
+                        Label { text: qsTr("Browser"); color: root.colTextMuted; font.pixelSize: 13; font.weight: 600 }
                         Item { Layout.fillWidth: true }
-                        Button { text: "Grid"; checkable: true; checked: gridMode; onClicked: gridMode = true; flat: true }
-                        Button { text: "List"; checkable: true; checked: !gridMode; onClicked: gridMode = false; flat: true }
+                        Button { text: qsTr("Grid"); checkable: true; checked: gridMode; onClicked: gridMode = true; flat: true }
+                        Button { text: qsTr("List"); checkable: true; checked: !gridMode; onClicked: gridMode = false; flat: true }
                         Item { Layout.preferredWidth: 12 }
                         Button {
-                            text: root.selectionMode ? "\u2611 Multi-Select" : "Multi-Select"
+                            text: root.selectionMode ? qsTr("\u2611 Multi-Select") : qsTr("Multi-Select")
                             checkable: true
                             checked: root.selectionMode
                             onToggled: root.selectionMode = checked
@@ -970,7 +984,7 @@ ApplicationWindow {
                             anchors.margins: 14
                             RowLayout {
                                 Layout.fillWidth: true
-                                Label { text: "Album"; color: root.colTextMuted; font.pixelSize: 14; font.weight: 600 }
+                                Label { text: qsTr("Album"); color: root.colTextMuted; font.pixelSize: 14; font.weight: 600 }
                                 Item { Layout.fillWidth: true }
                                 Label { text: albumBackend.filterInfo; color: root.colTextMuted; font.family: root.dataFontFamily; font.pixelSize: 11 }
                             }
@@ -987,20 +1001,20 @@ ApplicationWindow {
                                 visible: albumBackend.shownCount === 0
                                 spacing: 8
                                 Label {
-                                    text: albumBackend.serviceReady ? "No Photos Yet" : "Open or Create a Project"
+                                    text: albumBackend.serviceReady ? qsTr("No Photos Yet") : qsTr("Open or Create a Project")
                                     color: root.colText
                                     font.pixelSize: 22
                                     font.weight: 700
                                 }
                                 Label {
                                     text: albumBackend.serviceReady
-                                          ? "Import your images for RAW adjustments."
-                                          : "Use Load or New in the header to choose the .puerhproj files."
+                                          ? qsTr("Import your images for RAW adjustments.")
+                                          : qsTr("Use Load or New in the header to choose the .puerhproj files.")
                                     color: root.colTextMuted
                                     font.pixelSize: 12
                                 }
                                 Button {
-                                    text: albumBackend.serviceReady ? "Import Photos" : "Load Project"
+                                    text: albumBackend.serviceReady ? qsTr("Import Photos") : qsTr("Load Project")
                                     onClicked: {
                                         if (albumBackend.serviceReady) {
                                             importDialog.open()
@@ -1020,9 +1034,31 @@ ApplicationWindow {
                         ColumnLayout {
                             anchors.fill: parent
                             anchors.margins: 12
-                            Label { text: "Settings"; color: root.colText; font.pixelSize: 20; font.weight: 700 }
-                            Label { text: "Window #1A1A1A  Text #E6E6E6  Accent #FCC704"; color: root.colTextMuted; font.pixelSize: 12 }
-                            Label { text: "Qt Quick renderer is hardware accelerated."; color: root.colTextMuted; font.pixelSize: 12 }
+                            Label { text: qsTr("Settings"); color: root.colText; font.pixelSize: 20; font.weight: 700 }
+                            Label { text: qsTr("Theme tokens: Window #1A1A1A  Text #E6E6E6  Accent #FCC704"); color: root.colTextMuted; font.pixelSize: 12 }
+                            Label { text: qsTr("Qt Quick renderer is hardware accelerated."); color: root.colTextMuted; font.pixelSize: 12 }
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: 10
+                                Label {
+                                    text: qsTr("Language")
+                                    color: root.colText
+                                    font.pixelSize: 13
+                                    font.weight: 600
+                                }
+                                ComboBox {
+                                    Layout.preferredWidth: 220
+                                    model: root.languageOptions
+                                    textRole: "label"
+                                    currentIndex: root.languageIndexForCode(languageManager.currentLanguageCode)
+                                    onActivated: function(index) {
+                                        const item = model[index]
+                                        if (item) {
+                                            languageManager.setLanguage(item.code)
+                                        }
+                                    }
+                                }
+                            }
                             Item { Layout.fillHeight: true }
                         }
                     }
@@ -1110,7 +1146,7 @@ ApplicationWindow {
                 ProgressBar { Layout.preferredWidth: 240; value: albumBackend.taskProgress / 100.0 }
                 Button {
                     visible: albumBackend.taskCancelVisible
-                    text: "Cancel"
+                    text: qsTr("Cancel")
                     Material.background: root.colDanger
                     Material.foreground: root.colText
                     onClicked: albumBackend.CancelImport()
@@ -1159,7 +1195,7 @@ ApplicationWindow {
                 spacing: 12
 
                 Label {
-                    text: "Open Project"
+                    text: qsTr("Open Project")
                     font.pixelSize: 24
                     font.weight: 700
                     color: root.colText
@@ -1167,9 +1203,31 @@ ApplicationWindow {
                 Label {
                     Layout.fillWidth: true
                     wrapMode: Text.WordWrap
-                    text: "Every boot asks for a project. Load a packed .puerhproj file or a metadata JSON/database pair, or create a new project package."
+                    text: qsTr("Every boot asks for a project. Load a packed .puerhproj file or a metadata JSON/database pair, or create a new project package.")
                     color: root.colTextMuted
                     font.pixelSize: 13
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 10
+                    Label {
+                        text: qsTr("Language")
+                        color: root.colText
+                        font.pixelSize: 12
+                        font.weight: 600
+                    }
+                    ComboBox {
+                        Layout.preferredWidth: 220
+                        model: root.languageOptions
+                        textRole: "label"
+                        currentIndex: root.languageIndexForCode(languageManager.currentLanguageCode)
+                        onActivated: function(index) {
+                            const item = model[index]
+                            if (item) {
+                                languageManager.setLanguage(item.code)
+                            }
+                        }
+                    }
                 }
                 Label {
                     Layout.fillWidth: true
@@ -1185,14 +1243,14 @@ ApplicationWindow {
 
                     Button {
                         Layout.fillWidth: true
-                        text: "Load Existing Project"
+                        text: qsTr("Load Existing Project")
                         Material.background: root.colAccentPrimary
                         Material.foreground: root.colBgDeep
                         onClicked: loadProjectDialog.open()
                     }
                     Button {
                         Layout.fillWidth: true
-                        text: "Create New Project"
+                        text: qsTr("Create New Project")
                         Material.background: root.colAccentPrimary
                         Material.foreground: root.colBgDeep
                         onClicked: createProjectFolderDialog.open()
@@ -1203,7 +1261,7 @@ ApplicationWindow {
                     Layout.fillWidth: true
                     Item { Layout.fillWidth: true }
                     Button {
-                        text: "Exit"
+                        text: qsTr("Exit")
                         Material.background: root.colDanger
                         Material.foreground: root.colText
                         onClicked: Qt.quit()
@@ -1251,7 +1309,7 @@ ApplicationWindow {
                 spacing: 10
 
                 Label {
-                    text: "Loading Project"
+                    text: qsTr("Loading Project")
                     font.pixelSize: 21
                     font.weight: 700
                     color: root.colText
@@ -1265,7 +1323,7 @@ ApplicationWindow {
                     wrapMode: Text.WordWrap
                     text: albumBackend.projectLoadingMessage.length > 0
                           ? albumBackend.projectLoadingMessage
-                          : "Preparing database and metadata..."
+                          : qsTr("Preparing database and metadata...")
                     color: root.colTextMuted
                     font.pixelSize: 12
                     horizontalAlignment: Text.AlignHCenter
@@ -1313,7 +1371,7 @@ ApplicationWindow {
                 spacing: 16
 
                 Label {
-                    text: "Importing Photos"
+                    text: qsTr("Importing Photos")
                     font.pixelSize: 21
                     font.weight: 700
                     color: root.colText
@@ -1334,7 +1392,7 @@ ApplicationWindow {
 
                 Label {
                     Layout.alignment: Qt.AlignHCenter
-                    text: albumBackend.importCompleted + " / " + albumBackend.importTotal
+                    text: qsTr("%1 / %2").arg(albumBackend.importCompleted).arg(albumBackend.importTotal)
                     font.family: root.dataFontFamily
                     font.pixelSize: 28
                     font.weight: 600
@@ -1347,7 +1405,7 @@ ApplicationWindow {
                     horizontalAlignment: Text.AlignHCenter
                     text: albumBackend.importStatus.length > 0
                           ? albumBackend.importStatus
-                          : "Preparing..."
+                          : qsTr("Preparing...")
                     color: root.colTextMuted
                     font.pixelSize: 12
                 }
@@ -1357,7 +1415,7 @@ ApplicationWindow {
                     visible: albumBackend.importFailed > 0
                     wrapMode: Text.WordWrap
                     horizontalAlignment: Text.AlignHCenter
-                    text: albumBackend.importFailed + " file(s) failed"
+                    text: qsTr("%1 file(s) failed").arg(albumBackend.importFailed)
                     color: root.colDanger
                     font.family: root.dataFontFamily
                     font.pixelSize: 12
@@ -1365,7 +1423,7 @@ ApplicationWindow {
 
                 Button {
                     Layout.alignment: Qt.AlignHCenter
-                    text: "Cancel"
+                    text: qsTr("Cancel")
                     Material.background: root.colDanger
                     Material.foreground: root.colText
                     onClicked: albumBackend.CancelImport()
@@ -1410,4 +1468,3 @@ ApplicationWindow {
         }
     }
 }
-

@@ -15,6 +15,11 @@
 
 namespace puerhlab::ui {
 
+#define PL_TEXT(text, ...)                                                    \
+  i18n::MakeLocalizedText(PUERHLAB_I18N_CONTEXT,                              \
+                          QT_TRANSLATE_NOOP(PUERHLAB_I18N_CONTEXT, text)      \
+                              __VA_OPT__(, ) __VA_ARGS__)
+
 namespace {
 auto ToVariantIdList(const std::vector<sl_element_id_t>& ids) -> QVariantList {
   QVariantList out;
@@ -105,37 +110,37 @@ auto ImageController::DeleteImages(const QVariantList& targetEntries) -> QVarian
 
   auto& ph = backend_.project_handler_;
   if (ph.project_loading()) {
-    const QString msg = "Project is loading. Please wait.";
+    const auto msg = PL_TEXT("Project is loading. Please wait.");
     backend_.SetTaskState(msg, 0, false);
-    result["message"] = msg;
+    result["message"] = msg.Render();
     return result;
   }
   if (!ph.project()) {
-    const QString msg = "No project is loaded.";
+    const auto msg = PL_TEXT("No project is loaded.");
     backend_.SetTaskState(msg, 0, false);
-    result["message"] = msg;
+    result["message"] = msg.Render();
     return result;
   }
 
   auto& ie = backend_.import_export_;
   if (ie.current_import_job() && !ie.current_import_job()->IsCancelationAcked()) {
-    const QString msg = "Cannot delete images while import is running.";
+    const auto msg = PL_TEXT("Cannot delete images while import is running.");
     backend_.SetTaskState(msg, 0, false);
-    result["message"] = msg;
+    result["message"] = msg.Render();
     return result;
   }
   if (ie.export_inflight()) {
-    const QString msg = "Cannot delete images while export is running.";
+    const auto msg = PL_TEXT("Cannot delete images while export is running.");
     backend_.SetTaskState(msg, 0, false);
-    result["message"] = msg;
+    result["message"] = msg.Render();
     return result;
   }
 
   const auto targets = CollectDeleteTargets(targetEntries);
   if (targets.empty()) {
-    const QString msg = "No valid images selected for deletion.";
+    const auto msg = PL_TEXT("No valid images selected for deletion.");
     backend_.SetTaskState(msg, 0, false);
-    result["message"] = msg;
+    result["message"] = msg.Render();
     return result;
   }
 
@@ -258,16 +263,16 @@ auto ImageController::DeleteImages(const QVariantList& targetEntries) -> QVarian
   const int deleted_count = static_cast<int>(deleted_ids.size());
   const int failed_count  = static_cast<int>(failed_ids.size());
 
-  QString msg;
+  auto msg = i18n::LocalizedText{};
   if (deleted_count == 0) {
-    msg = "No images were deleted.";
+    msg = PL_TEXT("No images were deleted.");
   } else if (failed_count == 0) {
-    msg = QString("Deleted %1 image(s).").arg(deleted_count);
+    msg = PL_TEXT("Deleted %1 image(s).", deleted_count);
   } else {
-    msg = QString("Deleted %1 image(s); %2 failed.").arg(deleted_count).arg(failed_count);
+    msg = PL_TEXT("Deleted %1 image(s); %2 failed.", deleted_count, failed_count);
   }
   if (!save_ok) {
-    msg += " Project state save failed.";
+    msg = PL_TEXT("%1 Project state save failed.", msg.Render());
   }
 
   backend_.SetServiceMessageForCurrentProject(msg);
@@ -281,8 +286,10 @@ auto ImageController::DeleteImages(const QVariantList& targetEntries) -> QVarian
   result["failedCount"]       = failed_count;
   result["deletedElementIds"] = ToVariantIdList(deleted_ids);
   result["failedElementIds"]  = ToVariantIdList(failed_ids);
-  result["message"]           = msg;
+  result["message"]           = msg.Render();
   return result;
 }
 
 }  // namespace puerhlab::ui
+
+#undef PL_TEXT

@@ -6,6 +6,7 @@
 #include <QCoreApplication>
 #include <QFont>
 #include <QFontDatabase>
+#include <QSettings>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQuickStyle>
@@ -17,6 +18,7 @@
 
 #include "ui/puerhlab_main/album_backend/album_backend.hpp"
 #include "ui/puerhlab_main/app_theme.hpp"
+#include "ui/puerhlab_main/language_manager.hpp"
 #include "edit/operators/operator_registeration.hpp"
 #include "utils/clock/time_provider.hpp"
 
@@ -48,6 +50,9 @@ int main(int argc, char* argv[]) {
   Exiv2::LogMsg::setLevel(Exiv2::LogMsg::Level::error);
 
   QApplication app(argc, argv);
+  QCoreApplication::setOrganizationName(QStringLiteral("PuerhLab"));
+  QCoreApplication::setOrganizationDomain(QStringLiteral("puerhlab.app"));
+  QCoreApplication::setApplicationName(QStringLiteral("PuerhLab"));
   puerhlab::ui::AppTheme::RegisterFonts();
   if (const auto arg = FindArgValue(argc, argv, "--font"); arg.has_value()) {
     puerhlab::ui::AppTheme::TryRegisterUiFontOverride(QString::fromUtf8(arg->data(), arg->size()));
@@ -58,11 +63,14 @@ int main(int argc, char* argv[]) {
   QQuickStyle::setStyle("Material");
 
   puerhlab::ui::AlbumBackend backend;
+  puerhlab::ui::LanguageManager language_manager(&app);
 
   QQmlApplicationEngine engine;
   engine.addImportPath("qrc:/");
+  language_manager.AttachEngine(&engine);
   engine.rootContext()->setContextProperty("albumBackend", &backend);
   engine.rootContext()->setContextProperty("appTheme", &puerhlab::ui::AppTheme::Instance());
+  engine.rootContext()->setContextProperty("languageManager", &language_manager);
 
   QObject::connect(&engine, &QQmlApplicationEngine::objectCreationFailed, &app,
                    []() { QCoreApplication::exit(-1); }, Qt::QueuedConnection);

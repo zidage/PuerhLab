@@ -26,7 +26,7 @@
 
       auto* combo = new QComboBox(parent);
       for (const auto& option : options) {
-        combo->addItem(QString::fromLatin1(option.label_), static_cast<int>(option.value_));
+        combo->addItem(Tr(option.label_), static_cast<int>(option.value_));
       }
       const int current_index = combo->findData(static_cast<int>(current_value));
       combo->setCurrentIndex(std::max(0, current_index));
@@ -136,12 +136,12 @@
       return slider;
     };
 
-    addDrtSection("Display Rendering Transform",
-                  "Shared display encoding controls with switchable ACES 2.0 and OpenDRT "
-                  "method presets.");
+    addDrtSection(Tr("Display Rendering Transform"),
+                  Tr("Shared display encoding controls with switchable ACES 2.0 and OpenDRT "
+                     "method presets."));
 
     odt_encoding_space_combo_ = addDrtComboBox(
-        drt_controls_, drt_controls_layout, "Encoding Space", kDisplayEncodingSpaceOptions,
+        drt_controls_, drt_controls_layout, Tr("Encoding Space"), kDisplayEncodingSpaceOptions,
         state_.odt_.encoding_space_, [this](int value) {
           state_.odt_.encoding_space_ = static_cast<ColorUtils::ColorSpace>(value);
           if (!IsSupportedDisplayEncoding(state_.odt_.encoding_space_,
@@ -168,7 +168,7 @@
                        CommitAdjustment(AdjustmentField::Odt);
                      });
     {
-      auto* label = new QLabel("Encoding EOTF", drt_controls_);
+      auto* label = new QLabel(Tr("Encoding EOTF"), drt_controls_);
       label->setStyleSheet(AppTheme::EditorLabelStyle(AppTheme::Instance().textColor()));
       auto* row       = new QWidget(drt_controls_);
       auto* rowLayout = new QHBoxLayout(row);
@@ -180,7 +180,8 @@
     RefreshOdtEncodingEotfComboFromState();
 
     odt_peak_luminance_slider_ = addDrtSlider(
-        "Peak Luminance", 100, 1000, static_cast<int>(std::lround(state_.odt_.peak_luminance_)),
+        Tr("Peak Luminance"), 100, 1000,
+        static_cast<int>(std::lround(state_.odt_.peak_luminance_)),
         [this](int value) {
           state_.odt_.peak_luminance_ = static_cast<float>(value);
           RequestRender();
@@ -200,11 +201,11 @@
       layout->setContentsMargins(12, 12, 12, 12);
       layout->setSpacing(10);
 
-      auto* title = new QLabel("Rendering Method", frame);
+      auto* title = new QLabel(Tr("Rendering Method"), frame);
       title->setObjectName("EditorSectionTitle");
       auto* sub = new QLabel(
-          "Choose the transform family. Shared encoding settings stay above; method-specific "
-          "settings stay preserved per method.",
+          Tr("Choose the transform family. Shared encoding settings stay above; method-specific "
+             "settings stay preserved per method."),
           frame);
       sub->setObjectName("EditorSectionSub");
       sub->setWordWrap(true);
@@ -217,10 +218,10 @@
       cards_layout->setSpacing(12);
 
       odt_aces_method_card_ = new QPushButton(
-          "ACES 2.0",
+          Tr("ACES 2.0"),
           cards_row);
       odt_open_drt_method_card_ = new QPushButton(
-          "OpenDRT",
+          Tr("OpenDRT"),
           cards_row);
       for (QPushButton* card : {odt_aces_method_card_, odt_open_drt_method_card_}) {
         card->setCheckable(true);
@@ -254,7 +255,7 @@
       aces_layout->setContentsMargins(0, 4, 0, 0);
       aces_layout->setSpacing(8);
       odt_aces_limiting_space_combo_ = addDrtComboBox(
-          aces_page, aces_layout, "Limiting Space", kAcesLimitingSpaceOptions,
+          aces_page, aces_layout, Tr("Limiting Space"), kAcesLimitingSpaceOptions,
           state_.odt_.aces_.limiting_space_, [this](int value) {
             state_.odt_.aces_.limiting_space_ = static_cast<ColorUtils::ColorSpace>(value);
             RequestRender();
@@ -268,7 +269,7 @@
       open_drt_layout->setContentsMargins(0, 4, 0, 0);
       open_drt_layout->setSpacing(8);
       odt_open_drt_look_preset_combo_ = addDrtComboBox(
-          open_drt_page, open_drt_layout, "Look Preset", kOpenDrtLookPresetOptions,
+          open_drt_page, open_drt_layout, Tr("Look Preset"), kOpenDrtLookPresetOptions,
           state_.odt_.open_drt_.look_preset_, [this](int value) {
             state_.odt_.open_drt_.look_preset_ =
                 static_cast<odt_cpu::OpenDRTLookPreset>(value);
@@ -276,7 +277,7 @@
             CommitAdjustment(AdjustmentField::Odt);
           });
       odt_open_drt_tonescale_preset_combo_ = addDrtComboBox(
-          open_drt_page, open_drt_layout, "Tonescale Preset", kOpenDrtTonescaleOptions,
+          open_drt_page, open_drt_layout, Tr("Tonescale Preset"), kOpenDrtTonescaleOptions,
           state_.odt_.open_drt_.tonescale_preset_, [this](int value) {
             state_.odt_.open_drt_.tonescale_preset_ =
                 static_cast<odt_cpu::OpenDRTTonescalePreset>(value);
@@ -284,7 +285,7 @@
             CommitAdjustment(AdjustmentField::Odt);
           });
       odt_open_drt_creative_white_combo_ = addDrtComboBox(
-          open_drt_page, open_drt_layout, "Creative White", kOpenDrtCreativeWhiteOptions,
+          open_drt_page, open_drt_layout, Tr("Creative White"), kOpenDrtCreativeWhiteOptions,
           state_.odt_.open_drt_.creative_white_, [this](int value) {
             state_.odt_.open_drt_.creative_white_ =
                 static_cast<odt_cpu::OpenDRTCreativeWhitePreset>(value);

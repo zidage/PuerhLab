@@ -146,8 +146,22 @@ Item {
             anchors.margins: 6
             spacing: 1
             Label { text: fileName; color: root.cardText; font.family: appTheme.dataFontFamily; font.pixelSize: 12; elide: Text.ElideRight; width: parent.width }
-            Label { text: cameraModel + " | ISO " + iso + " | f/" + aperture; color: root.cardMuted; font.family: appTheme.dataFontFamily; font.pixelSize: 10; elide: Text.ElideRight; width: parent.width }
-            Label { text: captureDate + " | rating " + rating + "/5"; color: root.cardMuted; font.family: appTheme.dataFontFamily; font.pixelSize: 10; elide: Text.ElideRight; width: parent.width }
+            Label {
+                text: qsTr("%1 | ISO %2 | f/%3").arg(cameraModel).arg(iso).arg(aperture)
+                color: root.cardMuted
+                font.family: appTheme.dataFontFamily
+                font.pixelSize: 10
+                elide: Text.ElideRight
+                width: parent.width
+            }
+            Label {
+                text: qsTr("%1 | Rating %2/5").arg(captureDate).arg(rating)
+                color: root.cardMuted
+                font.family: appTheme.dataFontFamily
+                font.pixelSize: 10
+                elide: Text.ElideRight
+                width: parent.width
+            }
         }
 
         }

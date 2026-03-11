@@ -23,11 +23,18 @@ namespace puerhlab::ui {
 
 using namespace album_util;
 
-EditorController::EditorController(AlbumBackend& backend) : backend_(backend) {}
+#define PL_TEXT(text, ...)                                                    \
+  i18n::MakeLocalizedText(PUERHLAB_I18N_CONTEXT,                              \
+                          QT_TRANSLATE_NOOP(PUERHLAB_I18N_CONTEXT, text)      \
+                              __VA_OPT__(, ) __VA_ARGS__)
+
+EditorController::EditorController(AlbumBackend& backend) : backend_(backend) {
+  editor_status_text_ = PL_TEXT("Select a photo to edit.");
+}
 
 void EditorController::OpenEditor(sl_element_id_t elementId, image_id_t imageId) {
   if (backend_.project_handler_.project_loading()) {
-    editor_status_ = "Project is loading. Please wait.";
+    editor_status_text_ = PL_TEXT("Project is loading. Please wait.");
     emit backend_.EditorStateChanged();
     return;
   }
@@ -36,7 +43,7 @@ void EditorController::OpenEditor(sl_element_id_t elementId, image_id_t imageId)
   auto  proj = backend_.project_handler_.project();
   const auto& hsvc = backend_.project_handler_.history_service();
   if (!psvc || !proj || !hsvc) {
-    editor_status_ = "Editor service is unavailable.";
+    editor_status_text_ = PL_TEXT("Editor service is unavailable.");
     emit backend_.EditorStateChanged();
     return;
   }
@@ -61,11 +68,12 @@ void EditorController::OpenEditor(sl_element_id_t elementId, image_id_t imageId)
     editor_element_id_ = elementId;
     editor_image_id_   = imageId;
 
-    editor_title_ = QString("Editing %1")
-                        .arg(backend_.index_by_element_id_.contains(elementId)
-                                 ? backend_.all_images_[backend_.index_by_element_id_.at(elementId)].file_name
-                                 : QString("image #%1").arg(imageId));
-    editor_status_ = "Opening editor...";
+    editor_title_text_ =
+        backend_.index_by_element_id_.contains(elementId)
+            ? PL_TEXT("Editing %1",
+                      backend_.all_images_[backend_.index_by_element_id_.at(elementId)].file_name)
+            : PL_TEXT("Editing %1", PL_TEXT("image #%1", imageId).Render());
+    editor_status_text_ = PL_TEXT("Opening editor...");
     editor_active_ = true;
     editor_busy_   = false;
     emit backend_.EditorStateChanged();
@@ -75,7 +83,7 @@ void EditorController::OpenEditor(sl_element_id_t elementId, image_id_t imageId)
                                          QApplication::activeWindow());
 
     if (!opened) {
-      editor_status_ = "This build does not include the editor backend yet.";
+      editor_status_text_ = PL_TEXT("This build does not include the editor backend yet.");
     } else {
       psvc->SavePipeline(pipeline_guard);
       psvc->Sync();
@@ -97,10 +105,10 @@ void EditorController::OpenEditor(sl_element_id_t elementId, image_id_t imageId)
         }
       }
 
-      editor_status_ = "Editor closed. Changes saved.";
+      editor_status_text_ = PL_TEXT("Editor closed. Changes saved.");
     }
   } catch (const std::exception& e) {
-    editor_status_ = QString("Failed to open editor: %1").arg(QString::fromUtf8(e.what()));
+    editor_status_text_ = PL_TEXT("Failed to open editor: %1", QString::fromUtf8(e.what()));
   }
 
   if (!editor_preview_url_.isEmpty()) {
@@ -111,7 +119,7 @@ void EditorController::OpenEditor(sl_element_id_t elementId, image_id_t imageId)
   editor_busy_       = false;
   editor_element_id_ = 0;
   editor_image_id_   = 0;
-  editor_title_.clear();
+  editor_title_text_ = {};
   emit backend_.EditorStateChanged();
 }
 
@@ -189,7 +197,7 @@ void EditorController::InitializeEditorLuts() {
   editor_lut_options_.clear();
 
   editor_lut_paths_.push_back("");
-  editor_lut_options_.push_back(QVariantMap{{"text", "None"}, {"value", 0}});
+  editor_lut_options_.push_back(QVariantMap{{"text", PL_TEXT("None").Render()}, {"value", 0}});
 
   const auto appLutsDir = std::filesystem::path(
       QCoreApplication::applicationDirPath().toStdWString()) / "LUTs";
@@ -406,7 +414,7 @@ void EditorController::StartNextEditorRender() {
   try {
     ApplyEditorStateToPipeline();
   } catch (...) {
-    editor_status_ = "Failed to apply editor pipeline state.";
+    editor_status_text_ = PL_TEXT("Failed to apply editor pipeline state.");
     editor_busy_   = false;
     emit backend_.EditorStateChanged();
     return;
@@ -424,7 +432,7 @@ void EditorController::StartNextEditorRender() {
   task.result_ = std::move(promise);
 
   editor_render_inflight_ = true;
-  editor_status_          = "Rendering preview...";
+  editor_status_text_     = PL_TEXT("Rendering preview...");
   emit backend_.EditorStateChanged();
 
   editor_scheduler_->ScheduleTask(std::move(task));
@@ -457,9 +465,9 @@ void EditorController::PollEditorRender() {
   editor_render_inflight_ = false;
 
   if (!UpdateEditorPreviewFromBuffer(result)) {
-    editor_status_ = "Preview render did not produce an image.";
+    editor_status_text_ = PL_TEXT("Preview render did not produce an image.");
   } else {
-    editor_status_ = "Preview ready.";
+    editor_status_text_ = PL_TEXT("Preview ready.");
   }
 
   if (editor_has_pending_render_) {
@@ -554,8 +562,8 @@ void EditorController::FinalizeEditorSession(bool persistChanges) {
   editor_busy_       = false;
   editor_element_id_ = 0;
   editor_image_id_   = 0;
-  editor_title_.clear();
-  editor_status_ = persistChanges ? "Edits saved." : "Editor closed.";
+  editor_title_text_  = {};
+  editor_status_text_ = persistChanges ? PL_TEXT("Edits saved.") : PL_TEXT("Editor closed.");
   if (!editor_preview_url_.isEmpty()) {
     editor_preview_url_.clear();
     emit backend_.EditorPreviewChanged();
@@ -602,3 +610,5 @@ void EditorController::SetEditorAdjustment(float& field, double value,
 }
 
 }  // namespace puerhlab::ui
+
+#undef PL_TEXT

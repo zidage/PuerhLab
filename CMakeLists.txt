@@ -104,6 +104,7 @@ endif()
 # Qt6
 set(PUERHLAB_QT_COMPONENTS
     Core
+    LinguistTools
     Widgets
     Quick
     Qml

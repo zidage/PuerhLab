@@ -11,6 +11,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "ui/puerhlab_main/i18n.hpp"
 #include "ui/puerhlab_main/album_backend/album_types.hpp"
 #include "app/export_service.hpp"
 #include "app/history_mgmt_service.hpp"
@@ -37,7 +38,7 @@ class ProjectHandler {
   bool PackageCurrentProjectFiles(QString* errorOut = nullptr) const;
   auto CollectProjectSnapshot() const -> ProjectSnapshot;
   void ApplyLoadedProjectEntriesBatch();
-  void SetProjectLoadingState(bool loading, const QString& message);
+  void SetProjectLoadingState(bool loading, const i18n::LocalizedText& message);
   void ClearProjectData();
 
   [[nodiscard]] auto project() const -> const std::shared_ptr<ProjectService>& { return project_; }
@@ -60,7 +61,9 @@ class ProjectHandler {
   [[nodiscard]] auto package_path() const -> const std::filesystem::path& { return project_package_path_; }
   [[nodiscard]] auto workspace_dir() const -> const std::filesystem::path& { return project_workspace_dir_; }
   [[nodiscard]] bool project_loading() const { return project_loading_; }
-  [[nodiscard]] auto project_loading_message() const -> const QString& { return project_loading_message_; }
+  [[nodiscard]] auto project_loading_message() const -> QString {
+    return project_loading_message_text_.Render();
+  }
 
  private:
   AlbumBackend& backend_;
@@ -78,7 +81,7 @@ class ProjectHandler {
   std::filesystem::path project_workspace_dir_{};
 
   bool     project_loading_         = false;
-  QString  project_loading_message_{};
+  i18n::LocalizedText project_loading_message_text_{};
   uint64_t project_load_request_id_ = 0;
 
   std::vector<ExistingAlbumEntry>                          pending_project_entries_{};

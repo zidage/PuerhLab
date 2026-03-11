@@ -23,6 +23,11 @@
 
 namespace puerhlab::ui {
 
+#define PL_TEXT(text, ...)                                                    \
+  i18n::MakeLocalizedText(PUERHLAB_I18N_CONTEXT,                              \
+                          QT_TRANSLATE_NOOP(PUERHLAB_I18N_CONTEXT, text)      \
+                              __VA_OPT__(, ) __VA_ARGS__)
+
 ProjectHandler::ProjectHandler(AlbumBackend& backend) : backend_(backend) {}
 
 bool ProjectHandler::InitializeServices(const std::filesystem::path& dbPath,
@@ -31,17 +36,19 @@ bool ProjectHandler::InitializeServices(const std::filesystem::path& dbPath,
                                         const std::filesystem::path& packagePath,
                                         const std::filesystem::path& workspaceDir) {
   if (project_loading_) {
-    backend_.SetServiceMessageForCurrentProject("A project load is already in progress.");
+    backend_.SetServiceMessageForCurrentProject(PL_TEXT("A project load is already in progress."));
     return false;
   }
 
   auto& ie = backend_.import_export_;
   if (ie.current_import_job() && !ie.current_import_job()->IsCancelationAcked()) {
-    backend_.SetServiceMessageForCurrentProject("Cannot switch project while an import is running.");
+    backend_.SetServiceMessageForCurrentProject(
+        PL_TEXT("Cannot switch project while an import is running."));
     return false;
   }
   if (ie.export_inflight()) {
-    backend_.SetServiceMessageForCurrentProject("Cannot switch project while export is running.");
+    backend_.SetServiceMessageForCurrentProject(
+        PL_TEXT("Cannot switch project while export is running."));
     return false;
   }
 
@@ -50,9 +57,12 @@ bool ProjectHandler::InitializeServices(const std::filesystem::path& dbPath,
   }
 
   backend_.SetServiceMessageForCurrentProject(
-      (openMode == ProjectOpenMode::kCreateNew) ? "Creating project..." : "Loading project...");
-  SetProjectLoadingState(true, backend_.service_message_);
-  backend_.SetTaskState("Opening project...", 0, false);
+      (openMode == ProjectOpenMode::kCreateNew) ? PL_TEXT("Creating project...")
+                                                : PL_TEXT("Loading project..."));
+  SetProjectLoadingState(true, (openMode == ProjectOpenMode::kCreateNew)
+                                   ? PL_TEXT("Creating project...")
+                                   : PL_TEXT("Loading project..."));
+  backend_.SetTaskState(PL_TEXT("Opening project..."), 0, false);
 
   const auto request_id = ++project_load_request_id_;
 
@@ -162,7 +172,7 @@ bool ProjectHandler::InitializeServices(const std::filesystem::path& dbPath,
       result->error_   = QString::fromUtf8(e.what());
     } catch (...) {
       result->success_ = false;
-      result->error_   = "Unknown project load error.";
+      result->error_   = PL_TEXT("Unknown project load error.").Render();
     }
 
     if (!result->success_ && !workspaceDir.empty()) {
@@ -183,12 +193,12 @@ bool ProjectHandler::InitializeServices(const std::filesystem::path& dbPath,
           auto& ph = self->project_handler_;
 
           if (!result->success_) {
-            ph.SetProjectLoadingState(false, QString());
+            ph.SetProjectLoadingState(false, {});
             self->SetServiceMessageForCurrentProject(
                 ph.project_
-                    ? QString("Requested project failed to open: %1").arg(result->error_)
-                    : QString("Project open failed: %1").arg(result->error_));
-            self->SetTaskState("Project open failed.", 0, false);
+                    ? PL_TEXT("Requested project failed to open: %1", result->error_)
+                    : PL_TEXT("Project open failed: %1", result->error_));
+            self->SetTaskState(PL_TEXT("Project open failed."), 0, false);
             return;
           }
 
@@ -451,20 +461,19 @@ void ProjectHandler::ApplyLoadedProjectEntriesBatch() {
     backend_.stats_.RebuildThumbnailView();
     backend_.stats_.RefreshStats();
     emit backend_.StatsFilterChanged();
-    backend_.SetTaskState("No background tasks", 0, false);
+    backend_.SetTaskState(PL_TEXT("No background tasks"), 0, false);
 
     backend_.SetServiceState(
         true,
         project_package_path_.empty()
-            ? QString("Loaded project. DB: %1  Meta: %2")
-                  .arg(album_util::PathToQString(db_path_))
-                  .arg(album_util::PathToQString(meta_path_))
-            : QString("Loaded packed project: %1 (DB temp: %2)")
-                  .arg(album_util::PathToQString(project_package_path_))
-                  .arg(album_util::PathToQString(db_path_)));
+            ? PL_TEXT("Loaded project. DB: %1  Meta: %2", album_util::PathToQString(db_path_),
+                      album_util::PathToQString(meta_path_))
+            : PL_TEXT("Loaded packed project: %1 (DB temp: %2)",
+                      album_util::PathToQString(project_package_path_),
+                      album_util::PathToQString(db_path_)));
     emit backend_.ProjectChanged();
     emit backend_.projectChanged();
-    SetProjectLoadingState(false, QString());
+    SetProjectLoadingState(false, {});
     return;
   }
 
@@ -480,26 +489,26 @@ void ProjectHandler::ApplyLoadedProjectEntriesBatch() {
   const int pct =
       total == 0 ? 0 : static_cast<int>((pending_project_entry_index_ * 100ULL) / total);
   backend_.SetTaskState(
-      QString("Loading album... %1/%2")
-          .arg(static_cast<int>(pending_project_entry_index_))
-          .arg(static_cast<int>(total)),
+      PL_TEXT("Loading album... %1/%2", static_cast<int>(pending_project_entry_index_),
+              static_cast<int>(total)),
       pct, false);
   SetProjectLoadingState(
       true,
-      QString("Loading album... %1/%2")
-          .arg(static_cast<int>(pending_project_entry_index_))
-          .arg(static_cast<int>(total)));
+      PL_TEXT("Loading album... %1/%2", static_cast<int>(pending_project_entry_index_),
+              static_cast<int>(total)));
 
   QTimer::singleShot(0, &backend_, [this]() { ApplyLoadedProjectEntriesBatch(); });
 }
 
-void ProjectHandler::SetProjectLoadingState(bool loading, const QString& message) {
-  const QString next_message = loading ? message : QString();
-  if (project_loading_ == loading && project_loading_message_ == next_message) {
+void ProjectHandler::SetProjectLoadingState(bool loading, const i18n::LocalizedText& message) {
+  const i18n::LocalizedText next_message = loading ? message : i18n::LocalizedText{};
+  if (project_loading_ == loading &&
+      project_loading_message_text_.source_ == next_message.source_ &&
+      project_loading_message_text_.args_ == next_message.args_) {
     return;
   }
-  project_loading_         = loading;
-  project_loading_message_ = next_message;
+  project_loading_              = loading;
+  project_loading_message_text_ = next_message;
   emit backend_.ProjectLoadStateChanged();
 }
 
@@ -527,3 +536,5 @@ void ProjectHandler::ClearProjectData() {
 }
 
 }  // namespace puerhlab::ui
+
+#undef PL_TEXT
