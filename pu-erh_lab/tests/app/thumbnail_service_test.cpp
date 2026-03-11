@@ -28,14 +28,31 @@
 #include "app/project_service.hpp"
 #include "app/sleeve_service.hpp"
 #include "edit/operators/operator_registeration.hpp"
+#include "edit/pipeline/default_pipeline_params.hpp"
 #include "renderer/pipeline_scheduler.hpp"
 #include "type/type.hpp"
 #include "utils/clock/time_provider.hpp"
+#ifdef HAVE_METAL
+#include "image/metal_image.hpp"
+#endif
 
 namespace puerhlab {
 
 namespace {
 using namespace std::chrono_literals;
+
+auto MetalAvailable() -> bool {
+#ifdef HAVE_METAL
+  auto* device = MTL::CreateSystemDefaultDevice();
+  if (device == nullptr) {
+    return false;
+  }
+  device->release();
+  return true;
+#else
+  return false;
+#endif
+}
 
 static uint64_t HashBytesFnv1a64(const uint8_t* data, size_t size) {
   // FNV-1a 64-bit
@@ -736,6 +753,101 @@ TEST_F(ThumbnailServiceTests, DISABLED_GenerateThumbnailAndCallbacks) {
 
   thumbnail_service.ReleaseThumbnail(file_id);
   EXPECT_EQ(no_pin_guard->pin_count_, 0);
+}
+
+TEST_F(ThumbnailServiceTests, MetalGeometryPipelineThumbnailStillRenders) {
+#ifndef HAVE_METAL
+  GTEST_SKIP() << "Metal is not enabled in this build.";
+#else
+  if (!MetalAvailable()) {
+    GTEST_SKIP() << "Metal device is unavailable in this environment.";
+  }
+
+  const auto raw_path =
+      std::filesystem::path(TEST_IMG_PATH) / "raw" / "still_life" / "DSC_2674.NEF";
+  if (!std::filesystem::exists(raw_path)) {
+    GTEST_SKIP() << "Sample RAW file is missing: " << raw_path.string();
+  }
+
+  ProjectService    project(db_path_, meta_path_);
+  auto              fs_service = project.GetSleeveService();
+  auto              img_pool   = project.GetImagePoolService();
+  ImportServiceImpl import_service(fs_service, img_pool);
+
+  std::shared_ptr<ImportJob> import_job = std::make_shared<ImportJob>();
+  std::promise<ImportResult> final_result;
+  auto                       final_result_future = final_result.get_future();
+  import_job->on_finished_ = [&final_result](const ImportResult& result) {
+    final_result.set_value(result);
+  };
+
+  import_job = import_service.ImportToFolder({raw_path}, L"", {}, import_job);
+  ASSERT_NE(import_job, nullptr);
+  ASSERT_EQ(final_result_future.wait_for(60s), std::future_status::ready);
+
+  const auto import_result = final_result_future.get();
+  ASSERT_EQ(import_result.imported_, 1u);
+  ASSERT_EQ(import_result.failed_, 0u);
+  ASSERT_NE(import_job->import_log_, nullptr);
+
+  const auto snapshot = import_job->import_log_->Snapshot();
+  ASSERT_EQ(snapshot.created_.size(), 1u);
+
+  import_service.SyncImports(snapshot, L"");
+  project.GetSleeveService()->Sync();
+  project.GetImagePoolService()->SyncWithStorage();
+  project.SaveProject(meta_path_);
+
+  const auto element_id = snapshot.created_.front().element_id_;
+  const auto image_id   = snapshot.created_.front().image_id_;
+
+  auto pipeline_service = std::make_shared<PipelineMgmtService>(project.GetStorageService());
+  auto pipeline_guard   = pipeline_service->LoadPipeline(element_id);
+  ASSERT_NE(pipeline_guard, nullptr);
+  ASSERT_NE(pipeline_guard->pipeline_, nullptr);
+
+  auto exec = pipeline_guard->pipeline_;
+  auto& global_params  = exec->GetGlobalParams();
+  auto& loading_stage  = exec->GetStage(PipelineStageName::Image_Loading);
+  auto& geometry_stage = exec->GetStage(PipelineStageName::Geometry_Adjustment);
+
+  nlohmann::json raw_params = pipeline_defaults::MakeDefaultRawDecodeParams();
+  raw_params["raw"]["gpu_backend"] = "gpu";
+  raw_params["raw"]["backend"]     = "puerh";
+  loading_stage.SetOperator(OperatorType::RAW_DECODE, raw_params);
+
+  nlohmann::json crop_params = pipeline_defaults::MakeDefaultCropRotateParams();
+  crop_params["crop_rotate"]["enabled"]       = true;
+  crop_params["crop_rotate"]["enable_crop"]   = true;
+  crop_params["crop_rotate"]["angle_degrees"] = 0.0f;
+  crop_params["crop_rotate"]["crop_rect"]     = {
+      {"x", 0.10f},
+      {"y", 0.10f},
+      {"w", 0.65f},
+      {"h", 0.60f},
+  };
+  geometry_stage.SetOperator(OperatorType::CROP_ROTATE, crop_params, global_params);
+
+  pipeline_guard->dirty_ = true;
+  pipeline_service->SavePipeline(pipeline_guard);
+  pipeline_service->Sync();
+
+  ThumbnailService thumbnail_service(project.GetSleeveService(), img_pool, pipeline_service);
+  auto             guard = GetThumbnailBlocking(thumbnail_service, element_id, image_id);
+
+  ASSERT_NE(guard, nullptr);
+  ASSERT_NE(guard->thumbnail_buffer_, nullptr);
+
+  auto* buffer = guard->thumbnail_buffer_.get();
+  if (!buffer->cpu_data_valid_ && buffer->gpu_data_valid_) {
+    ASSERT_NO_THROW(buffer->SyncToCPU());
+  }
+  ASSERT_TRUE(buffer->cpu_data_valid_);
+  const cv::Mat& mat = buffer->GetCPUData();
+  ASSERT_FALSE(mat.empty());
+  EXPECT_EQ(mat.type(), CV_32FC4);
+  EXPECT_LE(std::max(mat.cols, mat.rows), 1024);
+#endif
 }
 
 TEST_F(ThumbnailServiceTests, DISABLED_PipelineRestoredFromDBGeneratesCorrectThumbnail) {

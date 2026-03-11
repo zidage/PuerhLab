@@ -260,7 +260,7 @@ auto PipelineStage::DetermineStageRole(PipelineStageName stage, bool is_streamab
   switch (stage) {
     case PipelineStageName::Image_Loading:
     case PipelineStageName::Geometry_Adjustment:
-#ifdef HAVE_CUDA
+#if defined(HAVE_CUDA) || defined(HAVE_METAL)
       return StageRole::GpuOperators;
 #else
       return StageRole::CpuOperators;
@@ -553,8 +553,11 @@ std::shared_ptr<ImageBuffer> PipelineStage::ApplyGpuStream(OperatorParams& globa
     try {
       output_cache_->SyncToCPU();
       output_cache_->ReleaseGPUData();  // Free GPU memory after sync
-    } catch (const std::exception&) {
+    } catch (const std::exception& e) {
       // Keep GPU result if CPU sync fails; caller will validate.
+      std::cerr << std::format("Failed to sync GPU stream output to CPU: {}. Keeping GPU data for downstream stages."
+                               , e.what())
+                << std::endl;
     }
   }
 

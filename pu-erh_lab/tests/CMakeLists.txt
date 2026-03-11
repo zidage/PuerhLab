@@ -67,7 +67,7 @@ if(PUERHLAB_METAL_ENABLED)
 
   add_executable(MetalFullPipelinePreviewTest raw/metal_full_pipeline_preview_test.cpp)
   target_include_directories(MetalFullPipelinePreviewTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
-  target_link_libraries(MetalFullPipelinePreviewTest PRIVATE GTest::gtest_main EditPipeline RawProcessor ThreadPool opencv_highgui ${PUERHLAB_TEST_OPENCV_MIN_DEPS})
+  target_link_libraries(MetalFullPipelinePreviewTest PRIVATE GTest::gtest_main EditPipeline RawProcessor PipelineScheduler ThreadPool opencv_highgui ${PUERHLAB_TEST_OPENCV_MIN_DEPS})
   gtest_discover_tests(MetalFullPipelinePreviewTest TEST_PREFIX "MetalFullPipelinePreviewTest.")
 endif()
 
@@ -377,3 +377,4 @@ def_ui_test(AlbumBackendImportTest   album_backend_import_test.cpp)
 def_ui_test(AlbumBackendProjectTest  album_backend_project_test.cpp)
 def_ui_test(AlbumBackendFolderTest   album_backend_folder_test.cpp)
 def_ui_test(AlbumBackendImageDeleteTest album_backend_image_delete_test.cpp)
+def_ui_test(AlbumBackendThumbnailTest album_backend_thumbnail_test.cpp)

@@ -440,7 +440,7 @@ endif()
 set(RENDERER_SRCS renderer/pipeline_scheduler.cpp)
 def_library(PipelineScheduler
     SOURCES ${RENDERER_SRCS}
-    PUBLIC_DEPS EditPipeline ThreadPool)
+    PUBLIC_DEPS EditPipeline ThreadPool ImageLoader)
 
 # --- Raw Processor Wrapper ---
 def_library(RawProcessor

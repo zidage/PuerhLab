@@ -22,7 +22,7 @@ class RawDecodeOp : public OperatorBase<RawDecodeOp> {
   static constexpr OperatorType      operator_type_     = OperatorType::RAW_DECODE;
 
   RawParams                          params_;
-  RawProcessBackend                  backend_;
+  RawProcessBackend                  backend_ = RawProcessBackend::PUERH;
   RawRuntimeColorContext             latest_runtime_context_;
   RawRuntimeColorContext             pre_populated_ctx_;
 

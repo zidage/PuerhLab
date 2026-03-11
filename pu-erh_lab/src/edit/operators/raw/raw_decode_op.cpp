@@ -5,6 +5,7 @@
 #include "edit/operators/raw/raw_decode_op.hpp"
 
 #include <opencv2/core/hal/interface.h>
+#include <opencv2/imgproc.hpp>
 
 #include <cstdint>
 #include <memory>
@@ -87,10 +88,13 @@ void RawDecodeOp::Apply(std::shared_ptr<ImageBuffer> input) {
         throw std::runtime_error("RawDecodeOp: Only support 3-channel image from LibRAW");
       }
       cv::Mat result_view(img->height, img->width, CV_16UC3, img->data);
-      cv::Mat result;
-      result_view.convertTo(result, CV_32FC3, 1.0 / 65535.0);
+      cv::Mat result_rgb;
+      result_view.convertTo(result_rgb, CV_32FC3, 1.0 / 65535.0);
 
-      output                                         = ImageBuffer(std::move(result));
+      cv::Mat result_rgba;
+      cv::cvtColor(result_rgb, result_rgba, cv::COLOR_RGB2RGBA);
+
+      output                                         = ImageBuffer(std::move(result_rgba));
       latest_runtime_context_                         = ctx;
       latest_runtime_context_.output_in_camera_space_ = false;
       raw_processor->dcraw_clear_mem(img);
