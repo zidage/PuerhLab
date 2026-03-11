@@ -259,8 +259,7 @@
       histogram_title->setObjectName("EditorSectionTitle");
 
       histogram_widget_       = new HistogramWidget(viewer_, histogram_frame);
-      histogram_ruler_widget_ = new HistogramRulerWidget(
-          viewer_ ? viewer_->GetHistogramBinCount() : 256, histogram_frame);
+      histogram_ruler_widget_ = new HistogramRulerWidget(256, histogram_frame);
       histogram_layout->addWidget(histogram_title, 0);
       histogram_layout->addWidget(histogram_widget_, 0);
       histogram_layout->addWidget(histogram_ruler_widget_, 0);

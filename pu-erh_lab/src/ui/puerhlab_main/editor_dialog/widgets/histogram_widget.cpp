@@ -15,8 +15,9 @@
 #include <algorithm>
 #include <cmath>
 
-#include "ui/puerhlab_main/app_theme.hpp"
 #include "ui/edit_viewer/edit_viewer.hpp"
+#include "ui/edit_viewer/gl_edit_viewer_surface.hpp"
+#include "ui/puerhlab_main/app_theme.hpp"
 
 namespace puerhlab::ui {
 
@@ -58,12 +59,15 @@ void HistogramWidget::paintGL() {
   glClearColor(0.07f, 0.07f, 0.07f, 1.0f);
   glClear(GL_COLOR_BUFFER_BIT);
 
-  if (!gl_ready_ || !source_viewer_ || !source_viewer_->HasHistogramData()) {
+  auto* source_surface =
+      source_viewer_ ? dynamic_cast<IOpenGLEditViewerSurface*>(source_viewer_->GetViewerSurface())
+                     : nullptr;
+  if (!gl_ready_ || !source_surface || !source_surface->hasHistogramData()) {
     return;
   }
 
-  if (context() && source_viewer_->GetRenderSurfaceContext() &&
-      !QOpenGLContext::areSharing(context(), source_viewer_->GetRenderSurfaceContext())) {
+  if (context() && source_surface->context() &&
+      !QOpenGLContext::areSharing(context(), source_surface->context())) {
     if (!warned_context_sharing_) {
       qWarning("HistogramWidget disabled: OpenGL contexts are not sharing resources.");
       warned_context_sharing_ = true;
@@ -71,8 +75,8 @@ void HistogramWidget::paintGL() {
     return;
   }
 
-  const GLuint hist_buffer = source_viewer_->GetHistogramBufferId();
-  const int    bins        = source_viewer_->GetHistogramBinCount();
+  const GLuint hist_buffer = source_surface->histogramBufferId();
+  const int    bins        = source_surface->histogramBinCount();
   if (hist_buffer == 0 || bins <= 1 || !glIsBuffer(hist_buffer)) {
     return;
   }

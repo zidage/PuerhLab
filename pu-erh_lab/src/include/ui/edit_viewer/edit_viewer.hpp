@@ -4,16 +4,18 @@
 
 #pragma once
 
-#include <QOpenGLContext>
 #include <QRectF>
 #include <QResizeEvent>
 #include <QTimer>
 #include <QVariantAnimation>
 #include <QWidget>
 
+#include <memory>
+
 #include "ui/edit_viewer/crop_interaction_controller.hpp"
 #include "ui/edit_viewer/crop_geometry.hpp"
 #include "ui/edit_viewer/edit_viewer_overlay_geometry.hpp"
+#include "ui/edit_viewer/edit_viewer_surface.hpp"
 #include "ui/edit_viewer/frame_mailbox.hpp"
 #include "ui/edit_viewer/frame_sink.hpp"
 #include "ui/edit_viewer/view_transform_controller.hpp"
@@ -21,13 +23,10 @@
 #include "ui/edit_viewer/viewport_mapper.hpp"
 
 class QMouseEvent;
-class QOpenGLWidget;
 class QWheelEvent;
 
 namespace puerhlab {
 
-class OpenGLViewerRenderer;
-class EditViewerSurfaceWidget;
 class EditViewerOverlayWidget;
 
 class QtEditViewer : public QWidget, public puerhlab::IFrameSink {
@@ -55,16 +54,11 @@ class QtEditViewer : public QWidget, public puerhlab::IFrameSink {
   int     GetHeight() const override;
   auto    GetViewportRenderRegion() const -> std::optional<ViewportRenderRegion> override;
   void    SetNextFramePresentationMode(FramePresentationMode mode) override;
+  auto    GetViewerSurface() -> IEditViewerSurface* override;
+  auto    GetViewerSurface() const -> const IEditViewerSurface* override;
 
   void    SetHistogramFrameExpected(bool expected_fast_preview);
   void    SetHistogramUpdateIntervalMs(int interval_ms);
-
-  auto    GetHistogramBufferId() const -> GLuint;
-  auto    GetHistogramBinCount() const -> int;
-  auto    HasHistogramData() const -> bool;
-  auto    GetRenderSurfaceContext() const -> QOpenGLContext*;
-  void    MakeRenderSurfaceCurrent();
-  void    DoneRenderSurfaceCurrent();
 
  signals:
   void RequestUpdate();
@@ -76,18 +70,19 @@ class QtEditViewer : public QWidget, public puerhlab::IFrameSink {
   void ViewZoomChanged(float zoom);
 
  private slots:
-  void OnResizeGL(int w, int h);
+  void OnResizeSurface(int w, int h);
 
  protected:
   void resizeEvent(QResizeEvent* event) override;
 
  private:
-  friend class EditViewerSurfaceWidget;
   friend class EditViewerOverlayWidget;
 
   void                    HandleQueuedUpdate();
   void                    ResizeChildWidgets();
   void                    UpdateViewportRenderRegionCache();
+  void                    RefreshFrameDerivedState();
+  void                    SyncSurfaceState();
   void                    StopZoomAnimation();
   auto                    CurrentWidgetInfo() const -> ViewportWidgetInfo;
   auto                    CurrentImageInfo() const -> ViewportImageInfo;
@@ -99,10 +94,6 @@ class QtEditViewer : public QWidget, public puerhlab::IFrameSink {
   void                    ApplyCropInteractionResult(const CropInteractionResult& result);
   void                    UpdateSurface();
   void                    UpdateOverlay();
-
-  void                    InitializeSurfaceGL();
-  void                    ResizeSurfaceGL(int w, int h);
-  void                    PaintSurfaceGL(QOpenGLWidget& widget);
   void                    PaintOverlay(QWidget& widget);
   void                    HandleOverlayWheel(QWheelEvent* event);
   void                    HandleOverlayMousePress(QMouseEvent* event);
@@ -117,9 +108,9 @@ class QtEditViewer : public QWidget, public puerhlab::IFrameSink {
   FrameMailbox             frame_mailbox_{};
   ViewTransformController  view_transform_controller_{};
   CropInteractionController crop_interaction_controller_{};
-  EditViewerSurfaceWidget* surface_ = nullptr;
+  std::unique_ptr<IEditViewerSurface> surface_{};
+  IEditViewerRenderTargetSurface* render_target_surface_ = nullptr;
   EditViewerOverlayWidget* overlay_ = nullptr;
-  OpenGLViewerRenderer*    renderer_ = nullptr;
   QVariantAnimation*       zoom_animation_ = nullptr;
   QTimer*                  click_toggle_timer_ = nullptr;
 };

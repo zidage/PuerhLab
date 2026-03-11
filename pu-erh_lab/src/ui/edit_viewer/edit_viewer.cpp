@@ -4,12 +4,11 @@
 
 #include "ui/edit_viewer/edit_viewer.hpp"
 
-#include "opengl_viewer_renderer.hpp"
+#include "ui/edit_viewer/gl_edit_viewer_surface.hpp"
 
 #include <QApplication>
 #include <QEasingCurve>
 #include <QMouseEvent>
-#include <QOpenGLWidget>
 #include <QPainter>
 #include <QPainterPath>
 #include <QPen>
@@ -20,23 +19,6 @@
 #include <cmath>
 
 namespace puerhlab {
-
-class EditViewerSurfaceWidget final : public QOpenGLWidget {
- public:
-  explicit EditViewerSurfaceWidget(QtEditViewer& owner, QWidget* parent = nullptr)
-      : QOpenGLWidget(parent), owner_(owner) {
-    setAutoFillBackground(false);
-    setMouseTracking(false);
-  }
-
- protected:
-  void initializeGL() override { owner_.InitializeSurfaceGL(); }
-  void resizeGL(int w, int h) override { owner_.ResizeSurfaceGL(w, h); }
-  void paintGL() override { owner_.PaintSurfaceGL(*this); }
-
- private:
-  QtEditViewer& owner_;
-};
 
 class EditViewerOverlayWidget final : public QWidget {
  public:
@@ -63,18 +45,30 @@ class EditViewerOverlayWidget final : public QWidget {
   QtEditViewer& owner_;
 };
 
-QtEditViewer::QtEditViewer(QWidget* parent) : QWidget(parent), renderer_(new OpenGLViewerRenderer()) {
+QtEditViewer::QtEditViewer(QWidget* parent) : QWidget(parent) {
   setContentsMargins(0, 0, 0, 0);
   setAutoFillBackground(false);
 
-  surface_ = new EditViewerSurfaceWidget(*this, this);
+  GlEditViewerSurface::Callbacks surface_callbacks;
+  surface_callbacks.consume_pending_frame = [this]() { return frame_mailbox_.ConsumePendingFrame(); };
+  surface_callbacks.frame_presented = [this](int slot_index, bool apply_presentation_mode) {
+    frame_mailbox_.MarkFramePresented(slot_index, apply_presentation_mode);
+    RefreshFrameDerivedState();
+    UpdateOverlay();
+  };
+  surface_callbacks.histogram_data_updated = [this]() { emit HistogramDataUpdated(); };
+
+  surface_ = std::make_unique<GlEditViewerSurface>(surface_callbacks, this);
+  render_target_surface_ = dynamic_cast<IEditViewerRenderTargetSurface*>(surface_.get());
   overlay_ = new EditViewerOverlayWidget(*this, this);
+  frame_mailbox_.InitializeDefaultSize(std::max(1, width()), std::max(1, height()));
+  RefreshFrameDerivedState();
   ResizeChildWidgets();
   overlay_->raise();
 
   connect(this, &QtEditViewer::RequestUpdate, this, &QtEditViewer::HandleQueuedUpdate,
           Qt::QueuedConnection);
-  connect(this, &QtEditViewer::RequestResize, this, &QtEditViewer::OnResizeGL,
+  connect(this, &QtEditViewer::RequestResize, this, &QtEditViewer::OnResizeSurface,
           Qt::BlockingQueuedConnection);
 
   zoom_animation_ = new QVariantAnimation(this);
@@ -104,19 +98,7 @@ QtEditViewer::QtEditViewer(QWidget* parent) : QWidget(parent), renderer_(new Ope
   });
 }
 
-QtEditViewer::~QtEditViewer() {
-  if (!surface_ || !renderer_ || !surface_->context()) {
-    delete renderer_;
-    renderer_ = nullptr;
-    return;
-  }
-
-  surface_->makeCurrent();
-  renderer_->Shutdown();
-  delete renderer_;
-  renderer_ = nullptr;
-  surface_->doneCurrent();
-}
+QtEditViewer::~QtEditViewer() = default;
 
 void QtEditViewer::ResetView() {
   StopZoomAnimation();
@@ -227,96 +209,25 @@ void QtEditViewer::SetNextFramePresentationMode(FramePresentationMode mode) {
   frame_mailbox_.SetNextFramePresentationMode(mode);
 }
 
+auto QtEditViewer::GetViewerSurface() -> IEditViewerSurface* { return surface_.get(); }
+
+auto QtEditViewer::GetViewerSurface() const -> const IEditViewerSurface* { return surface_.get(); }
+
 void QtEditViewer::SetHistogramFrameExpected(bool expected_fast_preview) {
   frame_mailbox_.SetHistogramFrameExpected(expected_fast_preview);
 }
 
 void QtEditViewer::SetHistogramUpdateIntervalMs(int interval_ms) {
-  if (renderer_) {
-    renderer_->SetHistogramUpdateIntervalMs(interval_ms);
-  }
-}
-
-auto QtEditViewer::GetHistogramBufferId() const -> GLuint {
-  return renderer_ ? renderer_->GetHistogramBufferId() : 0;
-}
-
-auto QtEditViewer::GetHistogramBinCount() const -> int {
-  return renderer_ ? renderer_->GetHistogramBinCount() : 0;
-}
-
-auto QtEditViewer::HasHistogramData() const -> bool {
-  return renderer_ ? renderer_->HasHistogramData() : false;
-}
-
-auto QtEditViewer::GetRenderSurfaceContext() const -> QOpenGLContext* {
-  return surface_ ? surface_->context() : nullptr;
-}
-
-void QtEditViewer::MakeRenderSurfaceCurrent() {
-  if (surface_ && surface_->context()) {
-    surface_->makeCurrent();
-  }
-}
-
-void QtEditViewer::DoneRenderSurfaceCurrent() {
-  if (surface_ && surface_->context()) {
-    surface_->doneCurrent();
+  auto* gl_surface = dynamic_cast<IOpenGLEditViewerSurface*>(surface_.get());
+  if (gl_surface) {
+    gl_surface->setHistogramUpdateIntervalMs(interval_ms);
   }
 }
 
 void QtEditViewer::resizeEvent(QResizeEvent* event) {
   QWidget::resizeEvent(event);
   ResizeChildWidgets();
-  UpdateViewportRenderRegionCache();
-  UpdateOverlay();
-}
-
-void QtEditViewer::InitializeSurfaceGL() {
-  if (!renderer_) {
-    renderer_ = new OpenGLViewerRenderer();
-  }
-  renderer_->Initialize();
-  frame_mailbox_.InitializeDefaultSize(std::max(1, width()), std::max(1, height()));
-  const auto active_frame = frame_mailbox_.GetActiveFrame();
-  renderer_->EnsureSlot(active_frame.slot_index, std::max(1, active_frame.width),
-                        std::max(1, active_frame.height));
-  UpdateViewportRenderRegionCache();
-  UpdateOverlay();
-}
-
-void QtEditViewer::ResizeSurfaceGL(int w, int h) {
-  if (w <= 0 || h <= 0) {
-    return;
-  }
-  UpdateViewportRenderRegionCache();
-  UpdateOverlay();
-}
-
-void QtEditViewer::PaintSurfaceGL(QOpenGLWidget& widget) {
-  if (!renderer_) {
-    return;
-  }
-
-  const auto pending_frame = frame_mailbox_.ConsumePendingFrame();
-  if (pending_frame.has_value() && renderer_->UploadPendingFrame(*pending_frame)) {
-    frame_mailbox_.MarkFramePresented(pending_frame->slot_index, pending_frame->apply_presentation_mode);
-  }
-
-  const auto active_frame = frame_mailbox_.GetActiveFrame();
-  if (active_frame.presentation_mode != FramePresentationMode::RoiFrame && active_frame.width > 0 &&
-      active_frame.height > 0) {
-    viewer_state_.SetRenderReferenceSize(active_frame.width, active_frame.height);
-  }
-  viewer_state_.SetCropOverlayMetricAspect(
-      CropGeometry::SafeAspect(active_frame.width, active_frame.height));
-  UpdateViewportRenderRegionCache();
-
-  const auto render_result = renderer_->Render(widget, active_frame, viewer_state_.Snapshot(),
-                                               frame_mailbox_.ConsumeHistogramPendingFrame());
-  if (render_result.histogram_data_updated) {
-    emit HistogramDataUpdated();
-  }
+  UpdateSurface();
   UpdateOverlay();
 }
 
@@ -499,31 +410,23 @@ void QtEditViewer::HandleQueuedUpdate() {
   UpdateOverlay();
 }
 
-void QtEditViewer::OnResizeGL(int w, int h) {
-  if (!renderer_ || !surface_) {
+void QtEditViewer::OnResizeSurface(int w, int h) {
+  if (!surface_ || !render_target_surface_) {
     return;
   }
 
   const int target_slot = frame_mailbox_.GetRenderTargetSlotIndex();
-  if (renderer_->HasSlot(target_slot, w, h)) {
+  if (render_target_surface_->hasRenderTarget(target_slot, w, h)) {
     frame_mailbox_.CommitResize(target_slot, w, h);
-    UpdateViewportRenderRegionCache();
     UpdateSurface();
     UpdateOverlay();
     return;
   }
 
-  if (!surface_->context()) {
-    return;
-  }
-
-  surface_->makeCurrent();
-  const bool resized = renderer_->EnsureSlot(target_slot, w, h);
-  surface_->doneCurrent();
+  const bool resized = render_target_surface_->ensureRenderTarget(target_slot, w, h);
   if (resized) {
     frame_mailbox_.CommitResize(target_slot, w, h);
   }
-  UpdateViewportRenderRegionCache();
   UpdateSurface();
   UpdateOverlay();
 }
@@ -531,7 +434,9 @@ void QtEditViewer::OnResizeGL(int w, int h) {
 void QtEditViewer::ResizeChildWidgets() {
   const QRect area = rect();
   if (surface_) {
-    surface_->setGeometry(area);
+    if (QWidget* surface_widget = surface_->widget()) {
+      surface_widget->setGeometry(area);
+    }
   }
   if (overlay_) {
     overlay_->setGeometry(area);
@@ -549,6 +454,28 @@ void QtEditViewer::UpdateViewportRenderRegionCache() {
   viewer_state_.SetViewportRenderRegion(ViewportMapper::ComputeViewportRenderRegion(
       CurrentWidgetInfo(), snapshot.view_transform.zoom, snapshot.view_transform.pan,
       snapshot.render_reference_width, snapshot.render_reference_height));
+}
+
+void QtEditViewer::RefreshFrameDerivedState() {
+  const auto active_frame = frame_mailbox_.GetActiveFrame();
+  if (active_frame.presentation_mode != FramePresentationMode::RoiFrame && active_frame.width > 0 &&
+      active_frame.height > 0) {
+    viewer_state_.SetRenderReferenceSize(active_frame.width, active_frame.height);
+  }
+  viewer_state_.SetCropOverlayMetricAspect(
+      CropGeometry::SafeAspect(active_frame.width, active_frame.height));
+  UpdateViewportRenderRegionCache();
+}
+
+void QtEditViewer::SyncSurfaceState() {
+  if (!surface_) {
+    return;
+  }
+
+  RefreshFrameDerivedState();
+  surface_->setViewState({viewer_state_.Snapshot()});
+  surface_->submitFrame(
+      {frame_mailbox_.GetActiveFrame(), frame_mailbox_.ConsumeHistogramPendingFrame()});
 }
 
 void QtEditViewer::StopZoomAnimation() {
@@ -636,7 +563,8 @@ void QtEditViewer::ApplyCropInteractionResult(const CropInteractionResult& resul
 
 void QtEditViewer::UpdateSurface() {
   if (surface_) {
-    surface_->update();
+    SyncSurfaceState();
+    surface_->requestRedraw();
   }
 }
 

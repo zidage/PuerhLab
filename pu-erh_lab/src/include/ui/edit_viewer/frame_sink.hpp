@@ -9,6 +9,8 @@
 #include <optional>
 
 namespace puerhlab {
+class IEditViewerSurface;
+
 struct ViewportRenderRegion {
   int   x_            = 0;
   int   y_            = 0;
@@ -62,5 +64,9 @@ class IFrameSink {
 
   // Sets how the next presented frame should be displayed.
   virtual void    SetNextFramePresentationMode(FramePresentationMode) {}
+
+  // Exposes the presentation surface when a sink is backed by a live viewer.
+  virtual auto    GetViewerSurface() -> IEditViewerSurface* { return nullptr; }
+  virtual auto    GetViewerSurface() const -> const IEditViewerSurface* { return nullptr; }
 };
 }  // namespace puerhlab
