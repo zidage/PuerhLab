@@ -529,6 +529,13 @@ class EditorDialog final : public QDialog {
     viewer_->SetCropOverlayRotationDegrees(state_.rotate_degrees_);
   }
 
+  void SyncViewerDisplayEncoding() {
+    if (!viewer_) {
+      return;
+    }
+    viewer_->SetDisplayEncoding(state_.odt_.encoding_space_, state_.odt_.encoding_eotf_);
+  }
+
   void SetCropRectState(float x, float y, float w, float h, bool sync_controls = true,
                         bool sync_viewer = true) {
     const auto clamped = ClampCropRect(x, y, w, h);
@@ -1305,6 +1312,7 @@ class EditorDialog final : public QDialog {
     UpdateGeometryCropRectLabel();
     RefreshGeometryModeUi();
     if (viewer_) {
+      SyncViewerDisplayEncoding();
       PushGeometryStateToViewer();
       const bool geometry_active = (active_panel_ == ControlPanelKind::Geometry);
       viewer_->SetCropOverlayVisible(geometry_active);
@@ -1556,6 +1564,7 @@ class EditorDialog final : public QDialog {
     auto           exec           = pipeline_guard_->pipeline_;
     controllers::EnsureLoadingOperatorDefaults(exec);
     controllers::AttachExecutionStages(exec, viewer_);
+    SyncViewerDisplayEncoding();
 
     // Inject pre-extracted raw metadata from the Image so downstream operators
     // (ColorTemp, LensCalib) resolve eagerly.

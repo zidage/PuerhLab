@@ -23,6 +23,7 @@ class IEditViewerSurface {
 #ifdef HAVE_METAL
   virtual void submitMetalFrame(const ViewerMetalFrame& frame) { (void)frame; }
 #endif
+  virtual void setDisplayConfig(const ViewerDisplayConfig& config) = 0;
   virtual void setViewState(const ViewerViewState& state) = 0;
   virtual void requestRedraw()                            = 0;
 };

@@ -10,8 +10,17 @@
 
 #include <optional>
 
+#include "edit/operators/utils/color_utils.hpp"
+
 namespace puerhlab {
 class IEditViewerSurface;
+
+struct ViewerDisplayConfig {
+  ColorUtils::ColorSpace encoding_space = ColorUtils::ColorSpace::REC709;
+  ColorUtils::EOTF       encoding_eotf  = ColorUtils::EOTF::GAMMA_2_2;
+
+  auto operator==(const ViewerDisplayConfig& other) const -> bool = default;
+};
 
 struct ViewportRenderRegion {
   int   x_            = 0;
@@ -49,6 +58,7 @@ struct ViewerFrame {
   int                   height              = 0;
   size_t                row_bytes           = 0;
   std::shared_ptr<const void> pixels{};
+  ViewerDisplayConfig   display_config{};
   FramePresentationMode presentation_mode   = FramePresentationMode::FullFrame;
 
   explicit operator bool() const {
@@ -61,6 +71,7 @@ struct ViewerGpuFrameUpload {
   int                   height              = 0;
   size_t                row_bytes           = 0;
   std::shared_ptr<const void> pixels{};
+  ViewerDisplayConfig   display_config{};
   FramePresentationMode presentation_mode   = FramePresentationMode::FullFrame;
 
   explicit operator bool() const {
@@ -74,6 +85,7 @@ struct ViewerMetalFrame {
   int                   height              = 0;
   std::uintptr_t        texture_handle      = 0;
   std::shared_ptr<const void> owner{};
+  ViewerDisplayConfig   display_config{};
   FramePresentationMode presentation_mode   = FramePresentationMode::FullFrame;
 
   explicit operator bool() const {

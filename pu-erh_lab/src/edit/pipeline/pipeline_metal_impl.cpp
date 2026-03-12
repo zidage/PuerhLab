@@ -178,6 +178,11 @@ auto UploadStageParams(const MetalNeighborStageParams& params) -> NS::SharedPtr<
   return buffer;
 }
 
+auto ResolveViewerDisplayConfig(const OperatorParams& params) -> ViewerDisplayConfig {
+  return ViewerDisplayConfig{params.to_output_params_.encoding_space_,
+                             params.to_output_params_.eotf_};
+}
+
 auto BuildGaussianWeights(float sigma, uint32_t radius)
     -> std::array<float, kMetalNeighborMaxTapCount> {
   std::array<float, kMetalNeighborMaxTapCount> weights{};
@@ -415,6 +420,7 @@ class MetalGPUPipeline final : public GPUPipelineImpl {
     const auto         exec_start = std::chrono::steady_clock::now();
     MetalExecutionStats stats;
     metal::MetalImage   result = RunMetalPipeline(stats);
+    const ViewerDisplayConfig display_config = ResolveViewerDisplayConfig(*cpu_params_);
 
     if (frame_sink_) {
       const auto submit_start = std::chrono::steady_clock::now();
@@ -425,6 +431,7 @@ class MetalGPUPipeline final : public GPUPipelineImpl {
           ViewerMetalFrame{static_cast<int>(result.Width()), static_cast<int>(result.Height()),
                            reinterpret_cast<std::uintptr_t>(retained_texture->get()),
                            std::shared_ptr<const void>(retained_texture, retained_texture->get()),
+                           display_config,
                            FramePresentationMode::FullFrame});
 #else
       cv::Mat host_image;
@@ -447,7 +454,7 @@ class MetalGPUPipeline final : public GPUPipelineImpl {
       host_image.copyTo(contiguous_host);
       frame_sink_->SubmitHostFrame(
           ViewerFrame{host_image.cols, host_image.rows, row_bytes,
-                      std::shared_ptr<const void>(host_pixels, host_pixels->data()),
+                      std::shared_ptr<const void>(host_pixels, host_pixels->data()), display_config,
                       FramePresentationMode::FullFrame});
 #endif
       const auto submit_end = std::chrono::steady_clock::now();

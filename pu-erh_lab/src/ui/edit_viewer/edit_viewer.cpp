@@ -196,6 +196,21 @@ void QtEditViewer::ResetCropOverlayRectToFull() { SetCropOverlayRectNormalized(0
 
 auto QtEditViewer::GetViewZoom() const -> float { return viewer_state_.GetViewZoom(); }
 
+void QtEditViewer::SetDisplayEncoding(ColorUtils::ColorSpace encoding_space,
+                                      ColorUtils::EOTF       encoding_eotf) {
+#ifdef HAVE_METAL
+  {
+    std::lock_guard<std::mutex> lock(host_frame_mutex_);
+    pending_display_config_       = ViewerDisplayConfig{encoding_space, encoding_eotf};
+    pending_display_config_valid_ = true;
+  }
+  emit RequestUpdate();
+#else
+  (void)encoding_space;
+  (void)encoding_eotf;
+#endif
+}
+
 void QtEditViewer::EnsureSize(int width, int height) {
 #ifdef HAVE_CUDA
   const auto decision = frame_mailbox_.EnsureSize(width, height);
@@ -585,26 +600,51 @@ void QtEditViewer::SyncSurfaceState() {
     return;
   }
 
+  ViewerDisplayConfig display_config = active_display_config_;
+#ifdef HAVE_METAL
+  std::optional<ViewerFrame> host_frame_to_submit;
+  std::optional<ViewerMetalFrame> metal_frame_to_submit;
+#endif
+
 #ifdef HAVE_METAL
   {
     std::lock_guard<std::mutex> lock(host_frame_mutex_);
+    if (pending_display_config_valid_) {
+      active_display_config_        = pending_display_config_;
+      pending_display_config_valid_ = false;
+    }
     if (pending_metal_frame_.has_value()) {
-      active_metal_frame_       = *pending_metal_frame_;
-      active_host_frame_        = {};
-      active_frame_width_       = pending_metal_frame_->width;
-      active_frame_height_      = pending_metal_frame_->height;
-      active_presentation_mode_ = pending_metal_frame_->presentation_mode;
-      surface_->submitMetalFrame(*pending_metal_frame_);
+      active_metal_frame_        = *pending_metal_frame_;
+      active_host_frame_         = {};
+      active_display_config_     = pending_metal_frame_->display_config;
+      active_frame_width_        = pending_metal_frame_->width;
+      active_frame_height_       = pending_metal_frame_->height;
+      active_presentation_mode_  = pending_metal_frame_->presentation_mode;
+      display_config             = active_display_config_;
+      metal_frame_to_submit      = *pending_metal_frame_;
       pending_metal_frame_.reset();
     } else if (pending_host_frame_.has_value()) {
-      active_host_frame_ = *pending_host_frame_;
-      active_metal_frame_ = {};
-      active_frame_width_ = pending_host_frame_->width;
-      active_frame_height_ = pending_host_frame_->height;
+      active_host_frame_         = *pending_host_frame_;
+      active_metal_frame_        = {};
+      active_display_config_     = pending_host_frame_->display_config;
+      active_frame_width_        = pending_host_frame_->width;
+      active_frame_height_       = pending_host_frame_->height;
       active_presentation_mode_ = pending_host_frame_->presentation_mode;
-      surface_->submitFrame(*pending_host_frame_);
+      display_config            = active_display_config_;
+      host_frame_to_submit      = *pending_host_frame_;
       pending_host_frame_.reset();
+    } else {
+      display_config = active_display_config_;
     }
+  }
+#endif
+
+  surface_->setDisplayConfig(display_config);
+#ifdef HAVE_METAL
+  if (metal_frame_to_submit.has_value()) {
+    surface_->submitMetalFrame(*metal_frame_to_submit);
+  } else if (host_frame_to_submit.has_value()) {
+    surface_->submitFrame(*host_frame_to_submit);
   }
 #endif
 

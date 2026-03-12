@@ -17,6 +17,15 @@
 #include "type/type.hpp"
 
 namespace puerhlab {
+namespace {
+
+auto ResolveExportColorProfileConfig(const OperatorParams& params) -> ExportColorProfileConfig {
+  return ExportColorProfileConfig{params.to_output_params_.encoding_space_,
+                                  params.to_output_params_.eotf_};
+}
+
+}  // namespace
+
 void ExportService::RunExportRenderTask(const ExportTask& task) {
   // Get the pipeline executor from sleeve service
   auto pipeline_guard = pipeline_service_->LoadPipeline(task.sleeve_id_);
@@ -70,11 +79,11 @@ void ExportService::RunExportRenderTask(const ExportTask& task) {
   }
 
   // Save pipeline back to storage
+  const auto export_profile =
+      ResolveExportColorProfileConfig(pipeline_guard->pipeline_->GetGlobalParams());
   pipeline_service_->SavePipeline(pipeline_guard);
   // Use ImageWriter to write the image to disk
-  ImageWriter::WriteImageToPath(
-      img_src_path, rendered_image,
-      task.options_);
+  ImageWriter::WriteImageToPath(img_src_path, rendered_image, task.options_, export_profile);
 }
 
 void ExportService::ExportAll(

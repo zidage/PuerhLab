@@ -4,10 +4,13 @@
 
 #include "ui/edit_viewer/rhi_edit_viewer_surface.hpp"
 
+#include "ui/edit_viewer/color_manager.hpp"
+
 #include <QtGui/rhi/qshader.h>
 #include <QtGui/rhi/qrhi.h>
 
 #include <QFile>
+#include <QWidget>
 
 #include <array>
 #include <limits>
@@ -372,6 +375,7 @@ void RhiEditViewerSurface::submitFrame(const ViewerFrame& frame) {
   if (frame) {
     pending_upload_ = std::make_unique<ViewerGpuFrameUpload>(
         ViewerGpuFrameUpload{frame.width, frame.height, frame.row_bytes, frame.pixels,
+                             frame.display_config,
                              frame.presentation_mode});
   } else {
     pending_upload_.reset();
@@ -391,22 +395,36 @@ void RhiEditViewerSurface::submitMetalFrame(const ViewerMetalFrame& frame) {
 }
 #endif
 
+void RhiEditViewerSurface::setDisplayConfig(const ViewerDisplayConfig& config) {
+  if (config == display_config_ && !display_config_dirty_) {
+    return;
+  }
+  display_config_       = config;
+  display_config_dirty_ = true;
+  applyDisplayConfig();
+}
+
 void RhiEditViewerSurface::setViewState(const ViewerViewState& state) { view_state_ = state; }
 
 void RhiEditViewerSurface::requestRedraw() { update(); }
 
 void RhiEditViewerSurface::initialize(QRhiCommandBuffer* command_buffer) {
+  applyDisplayConfig();
   renderer_.initialize(rhi(), renderTarget(), command_buffer);
   if (latest_frame_) {
     pending_upload_ = std::make_unique<ViewerGpuFrameUpload>(
         ViewerGpuFrameUpload{latest_frame_.width, latest_frame_.height, latest_frame_.row_bytes,
-                             latest_frame_.pixels, latest_frame_.presentation_mode});
+                             latest_frame_.pixels, latest_frame_.display_config,
+                             latest_frame_.presentation_mode});
   } else if (latest_metal_frame_) {
     pending_metal_frame_ = std::make_unique<ViewerMetalFrame>(latest_metal_frame_);
   }
 }
 
 void RhiEditViewerSurface::render(QRhiCommandBuffer* command_buffer) {
+  if (display_config_dirty_) {
+    applyDisplayConfig();
+  }
   renderer_.render(
       command_buffer, renderTarget(), view_state_,
       ViewportWidgetInfo{width(), height(), static_cast<float>(devicePixelRatioF())}, latest_frame_,
@@ -416,5 +434,21 @@ void RhiEditViewerSurface::render(QRhiCommandBuffer* command_buffer) {
 }
 
 void RhiEditViewerSurface::releaseResources() { renderer_.releaseResources(); }
+
+void RhiEditViewerSurface::applyDisplayConfig() {
+  QWidget* host_window = window();
+  if (!host_window) {
+    return;
+  }
+
+  const auto native_handle = reinterpret_cast<void*>(host_window->effectiveWinId());
+  if (!native_handle) {
+    return;
+  }
+
+  if (ColorManager::ApplyMetalWindowColorSpace(native_handle, display_config_)) {
+    display_config_dirty_ = false;
+  }
+}
 
 }  // namespace puerhlab

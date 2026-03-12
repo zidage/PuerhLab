@@ -49,6 +49,8 @@ class QtEditViewer : public QWidget, public puerhlab::IFrameSink {
   void SetCropOverlayAspectLock(bool enabled, float aspect_ratio);
   void ResetCropOverlayRectToFull();
   auto GetViewZoom() const -> float;
+  void SetDisplayEncoding(ColorUtils::ColorSpace encoding_space,
+                          ColorUtils::EOTF       encoding_eotf);
 
   // Overrides from IFrameSink
   void    EnsureSize(int width, int height) override;
@@ -132,11 +134,14 @@ class QtEditViewer : public QWidget, public puerhlab::IFrameSink {
   ViewerMetalFrame         active_metal_frame_{};
   std::optional<ViewerMetalFrame> pending_metal_frame_{};
 #endif
+  ViewerDisplayConfig      active_display_config_{};
+  ViewerDisplayConfig      pending_display_config_{};
   int                      active_frame_width_ = 0;
   int                      active_frame_height_ = 0;
   FramePresentationMode    active_presentation_mode_ = FramePresentationMode::FullFrame;
   bool                     pending_presentation_mode_valid_ = false;
   FramePresentationMode    pending_presentation_mode_ = FramePresentationMode::FullFrame;
+  bool                     pending_display_config_valid_ = false;
   mutable std::mutex       host_frame_mutex_{};
 };
 };  // namespace puerhlab

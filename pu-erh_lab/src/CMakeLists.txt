@@ -614,6 +614,10 @@ def_library(ImageWriter
     PRIVATE_DEPS ${PUERHLAB_OPENCV_IMAGE_DEPS}
 )
 
+if(APPLE)
+    target_link_libraries(ImageWriter PRIVATE "-framework CoreGraphics")
+endif()
+
 # ==============================================================================
 # 9. Services
 # ==============================================================================
@@ -678,6 +682,7 @@ if(PUERHLAB_REAL_WIDGET_EDITOR)
         include/ui/edit_viewer/edit_viewer.hpp
         include/ui/edit_viewer/edit_viewer_overlay_geometry.hpp
         include/ui/edit_viewer/edit_viewer_surface.hpp
+        include/ui/edit_viewer/color_manager.hpp
         include/ui/edit_viewer/viewer_state.hpp
         include/ui/edit_viewer/viewport_mapper.hpp
         include/ui/edit_viewer/crop_geometry.hpp
@@ -701,9 +706,15 @@ if(PUERHLAB_REAL_WIDGET_EDITOR)
 
     if(PUERHLAB_RHI_WIDGET_EDITOR)
         list(APPEND EDIT_VIEWER_BACKEND_SRCS
+            ui/edit_viewer/color_manager.cpp
             ui/edit_viewer/rhi_edit_viewer_surface.cpp
             include/ui/edit_viewer/rhi_edit_viewer_surface.hpp
         )
+        if(APPLE)
+            list(REMOVE_ITEM EDIT_VIEWER_BACKEND_SRCS ui/edit_viewer/color_manager.cpp)
+            list(APPEND EDIT_VIEWER_BACKEND_SRCS ui/edit_viewer/color_manager.mm)
+            set_source_files_properties(ui/edit_viewer/color_manager.mm PROPERTIES LANGUAGE OBJCXX)
+        endif()
         list(APPEND EDIT_VIEWER_PUBLIC_DEPS Qt6::GuiPrivate Qt6::ShaderTools)
     endif()
 
@@ -715,6 +726,14 @@ if(PUERHLAB_REAL_WIDGET_EDITOR)
     if(PUERHLAB_CUDA_ENABLED)
         set_target_properties(EditViewer PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
         target_compile_definitions(EditViewer PUBLIC HAVE_CUDA)
+    endif()
+
+    if(PUERHLAB_RHI_WIDGET_EDITOR AND APPLE)
+        target_link_libraries(EditViewer PRIVATE
+            "-framework AppKit"
+            "-framework QuartzCore"
+            "-framework CoreGraphics"
+        )
     endif()
 
     if(PUERHLAB_RHI_WIDGET_EDITOR)

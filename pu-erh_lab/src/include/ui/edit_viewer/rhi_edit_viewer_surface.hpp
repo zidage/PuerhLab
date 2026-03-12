@@ -75,6 +75,7 @@ class RhiEditViewerSurface final : public QRhiWidget, public IEditViewerSurface 
 #ifdef HAVE_METAL
   void submitMetalFrame(const ViewerMetalFrame& frame) override;
 #endif
+  void setDisplayConfig(const ViewerDisplayConfig& config) override;
   void setViewState(const ViewerViewState& state) override;
   void requestRedraw() override;
 
@@ -84,12 +85,16 @@ class RhiEditViewerSurface final : public QRhiWidget, public IEditViewerSurface 
   void releaseResources() override;
 
  private:
+  void applyDisplayConfig();
+
   RhiImageRenderer             renderer_{};
   ViewerViewState              view_state_{};
   ViewerFrame                  latest_frame_{};
   ViewerMetalFrame             latest_metal_frame_{};
   std::unique_ptr<ViewerGpuFrameUpload> pending_upload_{};
   std::unique_ptr<ViewerMetalFrame> pending_metal_frame_{};
+  ViewerDisplayConfig          display_config_{};
+  bool                         display_config_dirty_ = true;
 };
 
 }  // namespace puerhlab

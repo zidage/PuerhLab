@@ -17,6 +17,10 @@
 #include <utility>
 #include <vector>
 
+#if defined(__APPLE__)
+#include <CoreGraphics/CGColorSpace.h>
+#endif
+
 namespace puerhlab {
 namespace {
 OIIO_NAMESPACE_USING
@@ -185,8 +189,134 @@ auto ForceUprightOrientation(ImageSpec& spec) -> void {
   spec.attribute("Orientation", 1);
 }
 
+#if defined(__APPLE__)
+auto ResolveLinearExportColorSpace(ColorUtils::ColorSpace encoding_space) -> CFStringRef {
+  switch (encoding_space) {
+    case ColorUtils::ColorSpace::REC709:
+      return kCGColorSpaceLinearSRGB;
+    case ColorUtils::ColorSpace::P3_D65:
+    case ColorUtils::ColorSpace::P3_D60:
+    case ColorUtils::ColorSpace::P3_DCI:
+      return kCGColorSpaceExtendedLinearDisplayP3;
+    case ColorUtils::ColorSpace::REC2020:
+      return kCGColorSpaceExtendedLinearITUR_2020;
+    case ColorUtils::ColorSpace::XYZ:
+      return kCGColorSpaceGenericXYZ;
+    default:
+      return kCGColorSpaceExtendedLinearSRGB;
+  }
+}
+
+auto ResolveExportColorSpace(const ExportColorProfileConfig& config) -> CFStringRef {
+  if (config.encoding_eotf == ColorUtils::EOTF::LINEAR) {
+    return ResolveLinearExportColorSpace(config.encoding_space);
+  }
+
+  switch (config.encoding_space) {
+    case ColorUtils::ColorSpace::REC709:
+      switch (config.encoding_eotf) {
+        case ColorUtils::EOTF::ST2084:
+          return kCGColorSpaceITUR_709_PQ;
+        case ColorUtils::EOTF::HLG:
+          return kCGColorSpaceITUR_709_HLG;
+        default:
+          return kCGColorSpaceITUR_709;
+      }
+    case ColorUtils::ColorSpace::P3_D65:
+      switch (config.encoding_eotf) {
+        case ColorUtils::EOTF::ST2084:
+          return kCGColorSpaceDisplayP3_PQ;
+        case ColorUtils::EOTF::HLG:
+          return kCGColorSpaceDisplayP3_HLG;
+        default:
+          return kCGColorSpaceDisplayP3;
+      }
+    case ColorUtils::ColorSpace::P3_D60:
+      return kCGColorSpaceDisplayP3;
+    case ColorUtils::ColorSpace::P3_DCI:
+      return kCGColorSpaceDCIP3;
+    case ColorUtils::ColorSpace::REC2020:
+      switch (config.encoding_eotf) {
+        case ColorUtils::EOTF::ST2084:
+          return kCGColorSpaceITUR_2100_PQ;
+        case ColorUtils::EOTF::HLG:
+          return kCGColorSpaceITUR_2100_HLG;
+        default:
+          return kCGColorSpaceITUR_2020;
+      }
+    case ColorUtils::ColorSpace::XYZ:
+      return kCGColorSpaceGenericXYZ;
+    default:
+      return kCGColorSpaceSRGB;
+  }
+}
+
+auto BuildICCProfileBytes(const ExportColorProfileConfig& config) -> std::vector<uint8_t> {
+  std::vector<uint8_t> bytes;
+  CFStringRef          color_name = ResolveExportColorSpace(config);
+  if (!color_name) {
+    return bytes;
+  }
+
+  CGColorSpaceRef color_space = CGColorSpaceCreateWithName(color_name);
+  if (!color_space) {
+    return bytes;
+  }
+
+  CFDataRef icc_data = CGColorSpaceCopyICCData(color_space);
+  CGColorSpaceRelease(color_space);
+  if (!icc_data) {
+    return bytes;
+  }
+
+  const auto size = static_cast<size_t>(CFDataGetLength(icc_data));
+  bytes.resize(size);
+  if (size > 0) {
+    CFDataGetBytes(icc_data, CFRangeMake(0, static_cast<CFIndex>(size)), bytes.data());
+  }
+  CFRelease(icc_data);
+  return bytes;
+}
+
+void RemoveEmbeddedColorProfileMetadata(ImageSpec& spec) {
+  spec.extra_attribs.remove("ICCProfile", TypeDesc::UNKNOWN, false);
+  spec.extra_attribs.remove("icc_profile", TypeDesc::UNKNOWN, false);
+  spec.extra_attribs.remove("Exif:ColorSpace", TypeDesc::UNKNOWN, false);
+  spec.extra_attribs.remove("EXIF:ColorSpace", TypeDesc::UNKNOWN, false);
+  spec.extra_attribs.remove("exif:ColorSpace", TypeDesc::UNKNOWN, false);
+}
+
+void ApplyMacExportColorProfile(ImageSpec& spec,
+                                const std::optional<ExportColorProfileConfig>& color_profile) {
+  if (!color_profile.has_value()) {
+    return;
+  }
+
+  const std::vector<uint8_t> icc_bytes = BuildICCProfileBytes(*color_profile);
+  if (icc_bytes.empty()) {
+    return;
+  }
+
+  RemoveEmbeddedColorProfileMetadata(spec);
+  spec.attribute("oiio:ColorSpace",
+                 ColorUtils::ColorSpaceToString(color_profile->encoding_space) + ":" +
+                     ColorUtils::EOTFToString(color_profile->encoding_eotf));
+  spec.attribute("ICCProfile",
+                 TypeDesc(TypeDesc::UINT8, TypeDesc::SCALAR, TypeDesc::NOSEMANTICS,
+                          static_cast<int>(icc_bytes.size())),
+                 icc_bytes.data());
+}
+#else
+void ApplyMacExportColorProfile(ImageSpec& spec,
+                                const std::optional<ExportColorProfileConfig>& color_profile) {
+  (void)spec;
+  (void)color_profile;
+}
+#endif
+
 auto TryWriteWithOpenImageIO(const image_path_t& src_path, const std::filesystem::path& export_path,
                              const cv::Mat& rgba32f, const ExportFormatOptions& options,
+                             const std::optional<ExportColorProfileConfig>& color_profile,
                              std::string& out_error) -> bool {
   const std::string dst          = PathToUtf8(export_path);
 
@@ -212,6 +342,7 @@ auto TryWriteWithOpenImageIO(const image_path_t& src_path, const std::filesystem
 
   ForceUprightOrientation(outspec);
   ApplyOIIOFormatOptions(outspec, options);
+  ApplyMacExportColorProfile(outspec, color_profile);
 
   // OIIO v3 exports ImageOutput::create(string_view, ...) (and a UTF-16 helper).
   // Avoid the deprecated create(std::string, std::string) overload, which can
@@ -306,7 +437,8 @@ auto TryWriteWithOpenCV(const std::filesystem::path& export_path, const cv::Mat&
 
 void ImageWriter::WriteImageToPath(const image_path_t&          src_path,
                                    std::shared_ptr<ImageBuffer> image_data,
-                                   ExportFormatOptions          options) {
+                                   ExportFormatOptions          options,
+                                   std::optional<ExportColorProfileConfig> color_profile) {
   if (!image_data) {
     throw std::runtime_error("ImageWriter: image_data is null");
   }
@@ -340,7 +472,8 @@ void ImageWriter::WriteImageToPath(const image_path_t&          src_path,
 
   std::string oiio_err;
   try {
-    if (TryWriteWithOpenImageIO(src_path, export_path, working, options, oiio_err)) {
+    if (TryWriteWithOpenImageIO(src_path, export_path, working, options, color_profile,
+                                oiio_err)) {
       return;
     }
   } catch (const std::exception& e) {

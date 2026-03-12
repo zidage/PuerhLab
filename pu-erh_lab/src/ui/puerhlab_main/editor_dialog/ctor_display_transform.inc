@@ -149,6 +149,7 @@
             state_.odt_.encoding_eotf_ = DefaultDisplayEotfForSpace(state_.odt_.encoding_space_);
           }
           RefreshOdtEncodingEotfComboFromState();
+          SyncViewerDisplayEncoding();
           RequestRender();
           CommitAdjustment(AdjustmentField::Odt);
         });
@@ -164,6 +165,7 @@
                        }
                        state_.odt_.encoding_eotf_ = static_cast<ColorUtils::EOTF>(
                            odt_encoding_eotf_combo_->itemData(idx).toInt());
+                       SyncViewerDisplayEncoding();
                        RequestRender();
                        CommitAdjustment(AdjustmentField::Odt);
                      });

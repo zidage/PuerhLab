@@ -47,6 +47,7 @@ class GlEditViewerSurface final : public IOpenGLEditViewerSurface,
 
  auto widget() -> QWidget* override;
   void submitFrame(const ViewerFrame& frame) override;
+  void setDisplayConfig(const ViewerDisplayConfig& config) override;
   void setViewState(const ViewerViewState& state) override;
   void requestRedraw() override;
 

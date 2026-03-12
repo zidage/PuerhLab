@@ -51,6 +51,8 @@ auto GlEditViewerSurface::widget() -> QWidget* { return widget_; }
 
 void GlEditViewerSurface::submitFrame(const ViewerFrame& frame) { (void)frame; }
 
+void GlEditViewerSurface::setDisplayConfig(const ViewerDisplayConfig& config) { (void)config; }
+
 void GlEditViewerSurface::setViewState(const ViewerViewState& state) { view_state_ = state; }
 
 void GlEditViewerSurface::requestRedraw() {
