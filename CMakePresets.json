@@ -87,7 +87,8 @@
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
         "PUERHLAB_ENABLE_CUDA": "OFF",
         "PUERHLAB_ENABLE_OPENGL_EDITOR": "OFF",
-        "PUERHLAB_BUILD_TESTS": "OFF"
+        "PUERHLAB_BUILD_TESTS": "OFF",
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/build/install"
       }
     }
   ],

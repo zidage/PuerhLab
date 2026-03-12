@@ -382,15 +382,36 @@ endif()
 
 set(PUERHLAB_MAIN_BIN puerhlab_main)
 if(TARGET ${PUERHLAB_MAIN_BIN})
-    install(TARGETS ${PUERHLAB_MAIN_BIN}
-        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
-    )
+    if(APPLE)
+        # Match the app bundle name to the QML module URI (PuerhLab.Main)
+        # so that Qt's QML deploy puts files in the correct bundle.
+        set_target_properties(${PUERHLAB_MAIN_BIN} PROPERTIES OUTPUT_NAME PuerhLab)
 
-    set(_config_dir "${CMAKE_SOURCE_DIR}/pu-erh_lab/src/config")
-    install(DIRECTORY "${_config_dir}/fonts/" DESTINATION "${CMAKE_INSTALL_BINDIR}/fonts")
-    install(DIRECTORY "${_config_dir}/LUTs/"  DESTINATION "${CMAKE_INSTALL_BINDIR}/LUTs")
-    install(DIRECTORY "${_config_dir}/lens_calib/" DESTINATION "${CMAKE_INSTALL_BINDIR}/config/lens_calib")
-    install(DIRECTORY "${_config_dir}/nikon_lens/" DESTINATION "${CMAKE_INSTALL_BINDIR}/config/nikon_lens")
+        # macOS: install the .app bundle into the prefix root so that
+        # CPack picks up  PuerhLab.app/  directly.
+        install(TARGETS ${PUERHLAB_MAIN_BIN}
+            BUNDLE  DESTINATION .
+            RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+        )
+
+        # Copy asset folders into Contents/MacOS/ (next to the executable)
+        set(_config_dir "${CMAKE_SOURCE_DIR}/pu-erh_lab/src/config")
+        set(_bundle_macos_dest "PuerhLab.app/Contents/MacOS")
+        install(DIRECTORY "${_config_dir}/fonts/" DESTINATION "${_bundle_macos_dest}/fonts")
+        install(DIRECTORY "${_config_dir}/LUTs/"  DESTINATION "${_bundle_macos_dest}/LUTs")
+        install(DIRECTORY "${_config_dir}/lens_calib/" DESTINATION "${_bundle_macos_dest}/config/lens_calib")
+        install(DIRECTORY "${_config_dir}/nikon_lens/" DESTINATION "${_bundle_macos_dest}/config/nikon_lens")
+    else()
+        install(TARGETS ${PUERHLAB_MAIN_BIN}
+            RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+        )
+
+        set(_config_dir "${CMAKE_SOURCE_DIR}/pu-erh_lab/src/config")
+        install(DIRECTORY "${_config_dir}/fonts/" DESTINATION "${CMAKE_INSTALL_BINDIR}/fonts")
+        install(DIRECTORY "${_config_dir}/LUTs/"  DESTINATION "${CMAKE_INSTALL_BINDIR}/LUTs")
+        install(DIRECTORY "${_config_dir}/lens_calib/" DESTINATION "${CMAKE_INSTALL_BINDIR}/config/lens_calib")
+        install(DIRECTORY "${_config_dir}/nikon_lens/" DESTINATION "${CMAKE_INSTALL_BINDIR}/config/nikon_lens")
+    endif()
 endif()
 
 if(WIN32 AND TARGET ${PUERHLAB_MAIN_BIN})
@@ -506,6 +527,324 @@ if(WIN32 AND TARGET ${PUERHLAB_MAIN_BIN})
     install(SCRIPT ${_puerhlab_deploy_script})
 endif()
 
+# ── macOS deployment ────────────────────────────────────────────────────────
+# Bundles Homebrew dylibs + Qt frameworks/plugins/QML modules into
+# PuerhLab.app so the ZIP is self-contained.
+#
+# Build & package workflow:
+#   cmake --preset macos_install
+#   cmake --build build/macos-release
+#   cmake --install build/macos-release          # populates build/install/
+#   cd build/install && cpack                    # creates the ZIP
+#
+# End-user can run the app from the terminal after extracting the ZIP:
+#   ./PuerhLab.app/Contents/MacOS/PuerhLab
+# ────────────────────────────────────────────────────────────────────────────
+if(APPLE AND TARGET ${PUERHLAB_MAIN_BIN})
+
+    # --- Qt deployment (frameworks, plugins) --------------------------------
+    # Use simple macdeployqt-based deploy. QML module deployment is handled
+    # manually in the fixup code to avoid broken symlinks that crash macdeployqt.
+    if(NOT COMMAND qt_generate_deploy_app_script)
+        message(FATAL_ERROR
+            "qt_generate_deploy_app_script is unavailable. "
+            "Use a Qt 6 build with deployment tooling.")
+    endif()
+
+    qt_generate_deploy_app_script(
+        TARGET ${PUERHLAB_MAIN_BIN}
+        OUTPUT_SCRIPT _puerhlab_macos_deploy_script
+        NO_UNSUPPORTED_PLATFORM_ERROR
+    )
+    install(SCRIPT ${_puerhlab_macos_deploy_script})
+
+    # --- Comprehensive dylib fixup pass ---------------------------------------
+    # After macdeployqt runs, scan ALL binaries in the .app using otool -L
+    # and copy + rewrite any remaining external (Homebrew / non-system) refs.
+    # This catches transitive deps that macdeployqt did not handle.
+    set(_macos_search_dirs ${PUERHLAB_LIBRARY_HINTS})
+    if(DEFINED PUERHLAB_LENSFUN_LIBRARY_DIR AND NOT "${PUERHLAB_LENSFUN_LIBRARY_DIR}" STREQUAL "")
+        list(APPEND _macos_search_dirs "${PUERHLAB_LENSFUN_LIBRARY_DIR}")
+    endif()
+    # Join with | so we can split inside install(CODE) without CMake list issues.
+    list(JOIN _macos_search_dirs "|" _macos_search_dirs_joined)
+
+    install(CODE
+        "set(_app_dir \"\${CMAKE_INSTALL_PREFIX}/PuerhLab.app\")
+         set(_fw_dir  \"\${_app_dir}/Contents/Frameworks\")
+         set(_exe     \"\${_app_dir}/Contents/MacOS/PuerhLab\")
+         string(REPLACE \"|\" \";\" _search_dirs \"${_macos_search_dirs_joined}\")
+         file(MAKE_DIRECTORY \"\${_fw_dir}\")
+
+         # Ensure there is an rpath entry pointing at Frameworks.
+         execute_process(COMMAND install_name_tool
+             -add_rpath \"@executable_path/../Frameworks\" \"\${_exe}\"
+             ERROR_QUIET)
+
+         # Copy the bundled Lensfun dylib if it was built.
+         # The executable references @rpath/liblensfun.2.dylib (the SONAME).
+         set(_lensfun_dir \"${PUERHLAB_LENSFUN_LIBRARY_DIR}\")
+         set(_lf_soname \"liblensfun.2.dylib\")
+         set(_lf_sopath \"\${_lensfun_dir}/\${_lf_soname}\")
+         if(EXISTS \"\${_lf_sopath}\")
+             file(REAL_PATH \"\${_lf_sopath}\" _lf_real)
+             file(COPY \"\${_lf_real}\" DESTINATION \"\${_fw_dir}\")
+             get_filename_component(_lf_real_name \"\${_lf_real}\" NAME)
+             if(NOT \"\${_lf_real_name}\" STREQUAL \"\${_lf_soname}\")
+                 file(RENAME \"\${_fw_dir}/\${_lf_real_name}\" \"\${_fw_dir}/\${_lf_soname}\")
+             endif()
+             execute_process(COMMAND codesign --remove-signature
+                 \"\${_fw_dir}/\${_lf_soname}\" ERROR_QUIET)
+             execute_process(COMMAND install_name_tool
+                 -id \"@rpath/\${_lf_soname}\" \"\${_fw_dir}/\${_lf_soname}\")
+         endif()
+
+         # ── Deploy QML modules ───────────────────────────────────────────
+         # Copy Qt QML modules needed at runtime. We copy real files (not
+         # symlinks) to avoid the broken-symlink issue that crashes macdeployqt.
+         set(_qt_qml_root \"${QT6_INSTALL_PREFIX}/share/qt/qml\")
+         set(_qml_dest \"\${_app_dir}/Contents/Resources/qml\")
+         set(_qml_modules
+             QtQuick QtQml QtQml/Models QtQml/WorkerScript
+             QtQuick/Controls QtQuick/Controls/Basic QtQuick/Controls/Basic/impl
+             QtQuick/Controls/Fusion QtQuick/Controls/Fusion/impl
+             QtQuick/Controls/Material QtQuick/Controls/Material/impl
+             QtQuick/Controls/Imagine QtQuick/Controls/Imagine/impl
+             QtQuick/Controls/Universal QtQuick/Controls/Universal/impl
+             QtQuick/Controls/FluentWinUI3 QtQuick/Controls/FluentWinUI3/impl
+             QtQuick/Controls/macOS QtQuick/Controls/macOS/impl
+             QtQuick/Controls/iOS QtQuick/Controls/iOS/impl
+             QtQuick/Controls/impl
+             QtQuick/Dialogs QtQuick/Dialogs/quickimpl
+             QtQuick/Effects QtQuick/Layouts QtQuick/NativeStyle
+             QtQuick/Shapes QtQuick/Templates QtQuick/Window
+             Qt/labs/qmlmodels Qt/labs/folderlistmodel)
+         foreach(_qmod IN LISTS _qml_modules)
+             set(_src \"\${_qt_qml_root}/\${_qmod}\")
+             set(_dst \"\${_qml_dest}/\${_qmod}\")
+             if(EXISTS \"\${_src}\" AND NOT EXISTS \"\${_dst}/qmldir\")
+                 file(MAKE_DIRECTORY \"\${_dst}\")
+                 # Copy qmldir (resolve symlinks)
+                 if(EXISTS \"\${_src}/qmldir\")
+                     execute_process(COMMAND cp -L \"\${_src}/qmldir\" \"\${_dst}/qmldir\")
+                 endif()
+                 # Copy dylib plugins (resolve symlinks)
+                 file(GLOB _qdylibs \"\${_src}/*.dylib\")
+                 foreach(_qdlib IN LISTS _qdylibs)
+                     get_filename_component(_qdlib_name \"\${_qdlib}\" NAME)
+                     execute_process(COMMAND cp -L \"\${_qdlib}\" \"\${_dst}/\${_qdlib_name}\")
+                 endforeach()
+             endif()
+         endforeach()
+         # Write a qt.conf that tells Qt where to find QML modules.
+         set(_qtconf \"\${_app_dir}/Contents/Resources/qt.conf\")
+         if(NOT EXISTS \"\${_qtconf}\")
+             file(WRITE \"\${_qtconf}\"
+                 \"[Paths]\\nPrefix = ..\\nBin = MacOS\\nLib = Frameworks\\nPlugins = PlugIns\\nQml2Imports = Resources/qml\\n\")
+         endif()
+
+         # ── Recursive otool-based fixup ──────────────────────────────────
+         # Repeatedly scan all Mach-O files in the bundle for external refs.
+         # Copy referenced dylibs into Frameworks and rewrite the references.
+         # Loop until no new libraries are added (handles transitive deps).
+         #
+         # Also handle missing Qt framework dependencies: if a binary references
+         # @rpath/QtFoo.framework/Versions/A/QtFoo but that framework is not in
+         # the bundle, copy it from the Qt installation.
+         set(_qt_lib_dir \"${QT6_INSTALL_PREFIX}/lib\")
+         set(_max_passes 10)
+         set(_pass 0)
+         set(_changed TRUE)
+         while(_changed AND _pass LESS _max_passes)
+             set(_changed FALSE)
+             math(EXPR _pass \"\${_pass} + 1\")
+
+             # Collect all Mach-O binaries to scan: the main executable,
+             # dylibs in Frameworks, and bare Qt framework binaries.
+             file(GLOB _macos_bins \"\${_app_dir}/Contents/MacOS/*\")
+             file(GLOB_RECURSE _fw_dylibs \"\${_fw_dir}/*.dylib\")
+             # Qt framework binaries (bare Mach-O in Versions/A/).
+             file(GLOB_RECURSE _fw_framework_bins \"\${_fw_dir}/*.framework/Versions/A/*\")
+             file(GLOB_RECURSE _plugin_dylibs \"\${_app_dir}/Contents/PlugIns/*.dylib\")
+             file(GLOB_RECURSE _qml_dylibs \"\${_app_dir}/Contents/Resources/qml/*.dylib\")
+             set(_all_binaries \${_macos_bins} \${_fw_dylibs} \${_fw_framework_bins} \${_plugin_dylibs} \${_qml_dylibs})
+
+             foreach(_bin IN LISTS _all_binaries)
+                 if(IS_DIRECTORY \"\${_bin}\")
+                     continue()
+                 endif()
+                 # Skip non-Mach-O files (plists, resources, etc.)
+                 execute_process(COMMAND file \"\${_bin}\"
+                     OUTPUT_VARIABLE _file_type ERROR_QUIET OUTPUT_STRIP_TRAILING_WHITESPACE)
+                 if(NOT _file_type MATCHES \"Mach-O\")
+                     continue()
+                 endif()
+
+                 # Get linked libraries via otool.
+                 execute_process(
+                     COMMAND otool -L \"\${_bin}\"
+                     OUTPUT_VARIABLE _otool_out
+                     ERROR_QUIET
+                     OUTPUT_STRIP_TRAILING_WHITESPACE
+                 )
+
+                 # Parse each line for references.
+                 string(REPLACE \"\\n\" \";\" _otool_lines \"\${_otool_out}\")
+                 foreach(_line IN LISTS _otool_lines)
+                     # Match absolute dylib paths.
+                     string(REGEX MATCH \"^[ \\t]*(/[^ ]+\\\\.dylib)\" _match \"\${_line}\")
+                     if(_match)
+                         set(_ref_path \"\${CMAKE_MATCH_1}\")
+
+                         # Skip system libraries and already-fixed references.
+                         if(_ref_path MATCHES \"^/usr/lib/\" OR
+                            _ref_path MATCHES \"^/System/\" OR
+                            _ref_path MATCHES \"^@rpath/\" OR
+                            _ref_path MATCHES \"^@executable_path/\" OR
+                            _ref_path MATCHES \"^@loader_path/\")
+                             continue()
+                         endif()
+
+                         get_filename_component(_dep_name \"\${_ref_path}\" NAME)
+
+                         # If not yet in Frameworks, copy it there.
+                         if(NOT EXISTS \"\${_fw_dir}/\${_dep_name}\")
+                             if(EXISTS \"\${_ref_path}\")
+                                 file(REAL_PATH \"\${_ref_path}\" _real_path)
+                                 file(COPY \"\${_real_path}\" DESTINATION \"\${_fw_dir}\")
+                                 get_filename_component(_real_name \"\${_real_path}\" NAME)
+                                 if(NOT \"\${_real_name}\" STREQUAL \"\${_dep_name}\")
+                                     file(RENAME \"\${_fw_dir}/\${_real_name}\" \"\${_fw_dir}/\${_dep_name}\")
+                                 endif()
+                                 # Strip code signature so install_name_tool can modify.
+                                 execute_process(COMMAND codesign --remove-signature
+                                     \"\${_fw_dir}/\${_dep_name}\" ERROR_QUIET)
+                                 execute_process(COMMAND install_name_tool
+                                     -id \"@rpath/\${_dep_name}\"
+                                     \"\${_fw_dir}/\${_dep_name}\")
+                                 set(_changed TRUE)
+                             else()
+                                 message(WARNING \"[pu-erh_lab] Dylib not found: \${_ref_path}\")
+                             endif()
+                         endif()
+
+                         # Strip code signature on the binary being patched, then rewrite.
+                         execute_process(COMMAND codesign --remove-signature
+                             \"\${_bin}\" ERROR_QUIET)
+                         execute_process(COMMAND install_name_tool
+                             -change \"\${_ref_path}\" \"@rpath/\${_dep_name}\"
+                             \"\${_bin}\"
+                             ERROR_QUIET)
+                         continue()
+                     endif()
+
+                     # Match @rpath Qt framework references that may be missing.
+                     string(REGEX MATCH \"^[ \\t]*@rpath/(Qt[A-Za-z0-9_]+\\\\.framework/Versions/A/[^ ]+)\" _fw_match \"\${_line}\")
+                     if(_fw_match)
+                         set(_fw_rel \"\${CMAKE_MATCH_1}\")
+                         # Extract framework dir name (e.g. QtDBus.framework).
+                         string(REGEX MATCH \"(Qt[A-Za-z0-9_]+\\\\.framework)\" _fw_dir_name \"\${_fw_rel}\")
+                         if(NOT EXISTS \"\${_fw_dir}/\${_fw_rel}\")
+                             # Copy from Qt installation (cp -RH dereferences Homebrew symlink
+                             # but preserves internal framework symlinks for codesign).
+                             set(_qt_fw_src \"\${_qt_lib_dir}/\${_fw_dir_name}\")
+                             if(EXISTS \"\${_qt_fw_src}\")
+                                 execute_process(COMMAND cp -RH
+                                     \"\${_qt_fw_src}\" \"\${_fw_dir}/\")
+                                 # Remove Headers, .prl files, and stale code signatures.
+                                 # Remove real dirs and their top-level symlinks.
+                                 file(REMOVE_RECURSE
+                                     \"\${_fw_dir}/\${_fw_dir_name}/Versions/A/Headers\"
+                                     \"\${_fw_dir}/\${_fw_dir_name}/Versions/A/_CodeSignature\")
+                                 # Remove top-level symlink to Headers.
+                                 file(REMOVE \"\${_fw_dir}/\${_fw_dir_name}/Headers\")
+                                 file(GLOB _prl_files
+                                     \"\${_fw_dir}/\${_fw_dir_name}/Resources/*.prl\"
+                                     \"\${_fw_dir}/\${_fw_dir_name}/Versions/A/Resources/*.prl\")
+                                 if(_prl_files)
+                                     file(REMOVE \${_prl_files})
+                                 endif()
+                                 set(_changed TRUE)
+                                 message(STATUS \"[pu-erh_lab] Copied missing Qt framework: \${_fw_dir_name}\")
+                             endif()
+                         endif()
+                     endif()
+
+                     # Match @rpath dylib references that may not exist in Frameworks.
+                     string(REGEX MATCH \"^[ \\t]*@rpath/([^ ]+\\\\.dylib)\" _rpath_match \"\${_line}\")
+                     if(_rpath_match)
+                         set(_rpath_dep \"\${CMAKE_MATCH_1}\")
+                         if(NOT EXISTS \"\${_fw_dir}/\${_rpath_dep}\")
+                             # Search for this dylib in known library directories.
+                             set(_found_rpath_dep \"\")
+                             foreach(_search_dir IN LISTS _search_dirs)
+                                 if(EXISTS \"\${_search_dir}/\${_rpath_dep}\")
+                                     set(_found_rpath_dep \"\${_search_dir}/\${_rpath_dep}\")
+                                     break()
+                                 endif()
+                             endforeach()
+                             if(_found_rpath_dep)
+                                 file(REAL_PATH \"\${_found_rpath_dep}\" _rp_real)
+                                 file(COPY \"\${_rp_real}\" DESTINATION \"\${_fw_dir}\")
+                                 get_filename_component(_rp_real_name \"\${_rp_real}\" NAME)
+                                 if(NOT \"\${_rp_real_name}\" STREQUAL \"\${_rpath_dep}\")
+                                     file(RENAME \"\${_fw_dir}/\${_rp_real_name}\" \"\${_fw_dir}/\${_rpath_dep}\")
+                                 endif()
+                                 execute_process(COMMAND codesign --remove-signature
+                                     \"\${_fw_dir}/\${_rpath_dep}\" ERROR_QUIET)
+                                 execute_process(COMMAND install_name_tool
+                                     -id \"@rpath/\${_rpath_dep}\"
+                                     \"\${_fw_dir}/\${_rpath_dep}\")
+                                 set(_changed TRUE)
+                                 message(STATUS \"[pu-erh_lab] Copied missing @rpath dep: \${_rpath_dep}\")
+                             endif()
+                         endif()
+                     endif()
+                 endforeach()
+
+                 # Ensure each dylib in Frameworks has @loader_path rpath.
+                 if(\"\${_bin}\" MATCHES \"/Frameworks/\")
+                     execute_process(COMMAND install_name_tool
+                         -add_rpath \"@loader_path\" \"\${_bin}\"
+                         ERROR_QUIET)
+                 endif()
+             endforeach()
+         endwhile()
+
+         # Fix install IDs for all dylibs in Frameworks.
+         file(GLOB_RECURSE _id_fix_bins \"\${_fw_dir}/*.dylib\")
+         foreach(_ibin IN LISTS _id_fix_bins)
+             get_filename_component(_iname \"\${_ibin}\" NAME)
+             execute_process(COMMAND codesign --remove-signature
+                 \"\${_ibin}\" ERROR_QUIET)
+             execute_process(COMMAND install_name_tool
+                 -id \"@rpath/\${_iname}\" \"\${_ibin}\" ERROR_QUIET)
+         endforeach()
+
+         # Ad-hoc sign every Mach-O binary individually (required on Apple Silicon).
+         # We sign individual binaries rather than bundles to avoid issues with
+         # non-code assets in Contents/MacOS/ blocking bundle signing.
+         file(GLOB_RECURSE _all_to_sign
+             \"\${_fw_dir}/*\"
+             \"\${_app_dir}/Contents/MacOS/*\"
+             \"\${_app_dir}/Contents/PlugIns/*\"
+             \"\${_app_dir}/Contents/Resources/qml/*.dylib\")
+         foreach(_sbin IN LISTS _all_to_sign)
+             if(IS_DIRECTORY \"\${_sbin}\")
+                 continue()
+             endif()
+             execute_process(COMMAND file \"\${_sbin}\"
+                 OUTPUT_VARIABLE _ftype ERROR_QUIET OUTPUT_STRIP_TRAILING_WHITESPACE)
+             if(_ftype MATCHES \"Mach-O\")
+                 execute_process(COMMAND codesign --force --sign - \"\${_sbin}\"
+                     ERROR_QUIET)
+             endif()
+         endforeach()
+
+         message(STATUS \"[pu-erh_lab] macOS dylib fixup completed in \${_pass} pass(es).\")
+        "
+    )
+endif()
 
 
 file(GLOB_RECURSE ALL_SOURCE_FILES
@@ -552,4 +891,9 @@ set(CPACK_GENERATOR "ZIP")
 set(CPACK_PACKAGE_NAME "pu-erh_lab")
 set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
 set(CPACK_PACKAGE_FILE_NAME "${CPACK_PACKAGE_NAME}-${CPACK_PACKAGE_VERSION}-${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}")
+if(APPLE)
+    # Include the .app bundle at the top level of the ZIP so the user
+    # extracts it and finds PuerhLab.app/ directly.
+    set(CPACK_INCLUDE_TOPLEVEL_DIRECTORY OFF)
+endif()
 include(CPack)

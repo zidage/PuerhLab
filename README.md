@@ -248,6 +248,35 @@ Run the app:
 ./build/macos-debug/pu-erh_lab/src/puerhlab_main
 ```
 
+#### Release Build & Standalone ZIP (for GitHub Releases)
+
+Build, install, and package a self-contained `.app` bundle:
+
+```bash
+cmake --preset macos_release
+cmake --build --preset macos_release
+cmake --install build/macos-release          # → build/install/PuerhLab.app
+cd build/macos-release && cpack -G ZIP       # → pu-erh_lab-<version>-Darwin-arm64.zip
+```
+
+Run the installed app directly:
+
+```bash
+./build/install/PuerhLab.app/Contents/MacOS/PuerhLab
+```
+
+Or extract the ZIP and run from anywhere:
+
+```bash
+unzip pu-erh_lab-*-Darwin-arm64.zip -d ~/Desktop
+~/Desktop/PuerhLab.app/Contents/MacOS/PuerhLab
+```
+
+The ZIP is fully standalone — all Homebrew libraries, Qt frameworks, and QML
+modules are bundled inside the `.app`. No Homebrew installation is needed on the
+target machine. Code signing and notarization are not applied; macOS Gatekeeper
+may require `xattr -cr PuerhLab.app` before first launch.
+
 Notes:
 
 - The `macos_debug` and `macos_release` presets build the main app without CUDA, without the OpenGL editor, and without tests.
