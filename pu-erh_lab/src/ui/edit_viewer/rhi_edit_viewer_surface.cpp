@@ -54,6 +54,8 @@ void RhiImageRenderer::releaseResources() {
   bound_render_target_   = nullptr;
   source_texture_width_  = 0;
   source_texture_height_ = 0;
+  source_texture_native_object_ = 0;
+  source_texture_is_imported_ = false;
   static_upload_pending_ = false;
   rhi_                   = nullptr;
 }
@@ -61,7 +63,9 @@ void RhiImageRenderer::releaseResources() {
 void RhiImageRenderer::render(QRhiCommandBuffer* command_buffer, QRhiRenderTarget* render_target,
                               const ViewerViewState& view_state,
                               const ViewportWidgetInfo& widget_info, const ViewerFrame& frame,
-                              ViewerGpuFrameUpload* pending_upload) {
+                              const ViewerMetalFrame& metal_frame,
+                              ViewerGpuFrameUpload* pending_upload,
+                              const ViewerMetalFrame* pending_metal_frame) {
   if (!command_buffer || !render_target || !rhi_) {
     return;
   }
@@ -85,15 +89,24 @@ void RhiImageRenderer::render(QRhiCommandBuffer* command_buffer, QRhiRenderTarge
                                QRhiTextureUploadEntry(0, 0, upload_desc)));
     }
   }
+  if (pending_metal_frame && *pending_metal_frame && metal_frame) {
+    ensureImportedSourceTexture(*pending_metal_frame, command_buffer);
+  }
 
   UniformData uniform_data;
-  if (frame) {
+  const bool has_frame = frame || metal_frame;
+  const int  frame_width = metal_frame ? metal_frame.width : frame.width;
+  const int  frame_height = metal_frame ? metal_frame.height : frame.height;
+  const auto presentation_mode =
+      metal_frame ? metal_frame.presentation_mode : frame.presentation_mode;
+
+  if (has_frame) {
     const auto scale = ViewportMapper::ComputeLetterboxScale(
-        widget_info, ViewportImageInfo{frame.width, frame.height});
+        widget_info, ViewportImageInfo{frame_width, frame_height});
     float zoom = view_state.snapshot.view_transform.zoom;
     float pan_x = view_state.snapshot.view_transform.pan.x();
     float pan_y = view_state.snapshot.view_transform.pan.y();
-    if (frame.presentation_mode == FramePresentationMode::RoiFrame) {
+    if (presentation_mode == FramePresentationMode::RoiFrame) {
       zoom  = 1.0f;
       pan_x = 0.0f;
       pan_y = 0.0f;
@@ -105,12 +118,12 @@ void RhiImageRenderer::render(QRhiCommandBuffer* command_buffer, QRhiRenderTarge
     uniform_data.pan_mode[0]   = pan_x;
     uniform_data.pan_mode[1]   = pan_y;
     uniform_data.pan_mode[2] =
-        frame.presentation_mode == FramePresentationMode::RoiFrame ? 1.0f : 0.0f;
+        presentation_mode == FramePresentationMode::RoiFrame ? 1.0f : 0.0f;
   }
   resource_updates->updateDynamicBuffer(uniform_buffer_, 0, sizeof(UniformData), &uniform_data);
 
   command_buffer->beginPass(render_target, Qt::black, {1.0f, 0}, resource_updates);
-  if (frame && pipeline_ && shader_resource_bindings_ && vertex_buffer_) {
+  if (has_frame && pipeline_ && shader_resource_bindings_ && vertex_buffer_) {
     const QSize rt_size = render_target->pixelSize();
     const QRhiCommandBuffer::VertexInput vertex_input[] = {{vertex_buffer_, 0}};
     command_buffer->setGraphicsPipeline(pipeline_);
@@ -188,11 +201,13 @@ void RhiImageRenderer::ensureStaticResources(QRhiRenderTarget* render_target,
   }
 
   if (!source_texture_) {
-    source_texture_ = rhi_->newTexture(QRhiTexture::RGBA32F, QSize(1, 1), 1);
-    source_texture_->create();
-    source_texture_width_  = 1;
-    source_texture_height_ = 1;
-    static_upload_pending_ = true;
+  source_texture_ = rhi_->newTexture(QRhiTexture::RGBA32F, QSize(1, 1), 1);
+  source_texture_->create();
+  source_texture_width_  = 1;
+  source_texture_height_ = 1;
+  source_texture_native_object_ = 0;
+  source_texture_is_imported_ = false;
+  static_upload_pending_ = true;
   }
 
   if (!sampler_) {
@@ -268,7 +283,7 @@ void RhiImageRenderer::ensureSourceTexture(const ViewerFrame& frame,
   }
 
   if (frame.width == source_texture_width_ && frame.height == source_texture_height_ &&
-      source_texture_) {
+      source_texture_ && !source_texture_is_imported_) {
     return;
   }
 
@@ -280,7 +295,46 @@ void RhiImageRenderer::ensureSourceTexture(const ViewerFrame& frame,
   source_texture_->create();
   source_texture_width_  = frame.width;
   source_texture_height_ = frame.height;
+  source_texture_native_object_ = 0;
+  source_texture_is_imported_ = false;
   static_upload_pending_ = true;
+
+  recreateShaderResources();
+  ensureStaticResources(bound_render_target_, command_buffer);
+}
+
+void RhiImageRenderer::ensureImportedSourceTexture(const ViewerMetalFrame& frame,
+                                                   QRhiCommandBuffer* command_buffer) {
+  if (!rhi_ || !frame) {
+    return;
+  }
+
+  const quint64 native_object = static_cast<quint64>(frame.texture_handle);
+  if (source_texture_ && source_texture_is_imported_ &&
+      source_texture_width_ == frame.width && source_texture_height_ == frame.height &&
+      source_texture_native_object_ == native_object) {
+    return;
+  }
+
+  destroyResource(pipeline_);
+  destroyResource(shader_resource_bindings_);
+  destroyResource(source_texture_);
+
+  source_texture_ = rhi_->newTexture(QRhiTexture::RGBA32F, QSize(frame.width, frame.height), 1);
+  if (!source_texture_->createFrom({native_object, 0})) {
+    destroyResource(source_texture_);
+    source_texture_width_         = 0;
+    source_texture_height_        = 0;
+    source_texture_native_object_ = 0;
+    source_texture_is_imported_   = false;
+    return;
+  }
+
+  source_texture_width_         = frame.width;
+  source_texture_height_        = frame.height;
+  source_texture_native_object_ = native_object;
+  source_texture_is_imported_   = true;
+  static_upload_pending_        = false;
 
   recreateShaderResources();
   ensureStaticResources(bound_render_target_, command_buffer);
@@ -314,6 +368,7 @@ auto RhiEditViewerSurface::widget() -> QWidget* { return this; }
 
 void RhiEditViewerSurface::submitFrame(const ViewerFrame& frame) {
   latest_frame_ = frame;
+  latest_metal_frame_ = {};
   if (frame) {
     pending_upload_ = std::make_unique<ViewerGpuFrameUpload>(
         ViewerGpuFrameUpload{frame.width, frame.height, frame.row_bytes, frame.pixels,
@@ -322,6 +377,19 @@ void RhiEditViewerSurface::submitFrame(const ViewerFrame& frame) {
     pending_upload_.reset();
   }
 }
+
+#ifdef HAVE_METAL
+void RhiEditViewerSurface::submitMetalFrame(const ViewerMetalFrame& frame) {
+  latest_frame_       = {};
+  latest_metal_frame_ = frame;
+  pending_upload_.reset();
+  if (frame) {
+    pending_metal_frame_ = std::make_unique<ViewerMetalFrame>(frame);
+  } else {
+    pending_metal_frame_.reset();
+  }
+}
+#endif
 
 void RhiEditViewerSurface::setViewState(const ViewerViewState& state) { view_state_ = state; }
 
@@ -333,6 +401,8 @@ void RhiEditViewerSurface::initialize(QRhiCommandBuffer* command_buffer) {
     pending_upload_ = std::make_unique<ViewerGpuFrameUpload>(
         ViewerGpuFrameUpload{latest_frame_.width, latest_frame_.height, latest_frame_.row_bytes,
                              latest_frame_.pixels, latest_frame_.presentation_mode});
+  } else if (latest_metal_frame_) {
+    pending_metal_frame_ = std::make_unique<ViewerMetalFrame>(latest_metal_frame_);
   }
 }
 
@@ -340,8 +410,9 @@ void RhiEditViewerSurface::render(QRhiCommandBuffer* command_buffer) {
   renderer_.render(
       command_buffer, renderTarget(), view_state_,
       ViewportWidgetInfo{width(), height(), static_cast<float>(devicePixelRatioF())}, latest_frame_,
-      pending_upload_.get());
+      latest_metal_frame_, pending_upload_.get(), pending_metal_frame_.get());
   pending_upload_.reset();
+  pending_metal_frame_.reset();
 }
 
 void RhiEditViewerSurface::releaseResources() { renderer_.releaseResources(); }

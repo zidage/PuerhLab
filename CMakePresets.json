@@ -59,7 +59,8 @@
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
         "PUERHLAB_ENABLE_CUDA": "OFF",
         "PUERHLAB_ENABLE_OPENGL_EDITOR": "OFF",
-        "PUERHLAB_BUILD_TESTS": "OFF"
+        "PUERHLAB_BUILD_TESTS": "OFF",
+        "PUERHLAB_MACOS_BUNDLE": "OFF"
       }
     },
     {
@@ -73,7 +74,8 @@
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
         "PUERHLAB_ENABLE_CUDA": "OFF",
         "PUERHLAB_ENABLE_OPENGL_EDITOR": "OFF",
-        "PUERHLAB_BUILD_TESTS": "ON"
+        "PUERHLAB_BUILD_TESTS": "ON",
+        "PUERHLAB_MACOS_BUNDLE": "OFF"
       }
     },
     {
@@ -88,6 +90,7 @@
         "PUERHLAB_ENABLE_CUDA": "OFF",
         "PUERHLAB_ENABLE_OPENGL_EDITOR": "OFF",
         "PUERHLAB_BUILD_TESTS": "OFF",
+        "PUERHLAB_MACOS_BUNDLE": "ON",
         "CMAKE_INSTALL_PREFIX": "${sourceDir}/build/install"
       }
     }

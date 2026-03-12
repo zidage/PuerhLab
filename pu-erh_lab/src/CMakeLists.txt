@@ -840,8 +840,7 @@ if(PUERHLAB_REAL_WIDGET_EDITOR)
 endif()
 
 # ── puerhlab_main executable ────────────────────────────────────────────────
-add_executable(puerhlab_main
-    MACOSX_BUNDLE
+set(PUERHLAB_MAIN_SOURCES
     ui/puerhlab_main/main.cpp
     ui/puerhlab_main/app_theme.cpp
     config/resource.qrc
@@ -850,6 +849,11 @@ add_executable(puerhlab_main
     include/ui/puerhlab_main/language_manager.hpp
     ${PUERHLAB_EDITOR_DIALOG_SRCS}
 )
+if(APPLE AND PUERHLAB_MACOS_BUNDLE)
+    add_executable(puerhlab_main MACOSX_BUNDLE ${PUERHLAB_MAIN_SOURCES})
+else()
+    add_executable(puerhlab_main ${PUERHLAB_MAIN_SOURCES})
+endif()
 
 target_include_directories(puerhlab_main
     PRIVATE
@@ -911,20 +915,21 @@ endif()
 
 set(PUERHLAB_MAIN_FONT_SRC "${CMAKE_SOURCE_DIR}/pu-erh_lab/src/config/fonts/main_Inter.ttf")
 set(PUERHLAB_MAIN_ZH_FONT_SRC "${CMAKE_SOURCE_DIR}/pu-erh_lab/src/config/fonts/main_NotoSans_zh.ttf")
-if(APPLE)
+if(APPLE AND PUERHLAB_MACOS_BUNDLE)
     # Inside .app bundle, resources go next to the executable in Contents/MacOS/
     add_custom_command(TARGET puerhlab_main POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_BUNDLE_CONTENT_DIR:puerhlab_main>/MacOS/fonts"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${PUERHLAB_MAIN_FONT_SRC}" "$<TARGET_BUNDLE_CONTENT_DIR:puerhlab_main>/MacOS/fonts/main_Inter.ttf"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${PUERHLAB_MAIN_ZH_FONT_SRC}" "$<TARGET_BUNDLE_CONTENT_DIR:puerhlab_main>/MacOS/fonts/main_NotoSans_zh.ttf"
         VERBATIM
     )
 else()
-add_custom_command(TARGET puerhlab_main POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:puerhlab_main>/fonts"
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${PUERHLAB_MAIN_FONT_SRC}" "$<TARGET_FILE_DIR:puerhlab_main>/fonts/main_Inter.ttf"
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${PUERHLAB_MAIN_ZH_FONT_SRC}" "$<TARGET_FILE_DIR:puerhlab_main>/fonts/main_NotoSans_zh.ttf"
-    VERBATIM
-)
+    add_custom_command(TARGET puerhlab_main POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:puerhlab_main>/fonts"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${PUERHLAB_MAIN_FONT_SRC}" "$<TARGET_FILE_DIR:puerhlab_main>/fonts/main_Inter.ttf"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${PUERHLAB_MAIN_ZH_FONT_SRC}" "$<TARGET_FILE_DIR:puerhlab_main>/fonts/main_NotoSans_zh.ttf"
+        VERBATIM
+    )
 endif()
 
 if(WIN32 AND TARGET puerhlab_lensfun)

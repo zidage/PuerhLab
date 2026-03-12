@@ -31,8 +31,8 @@ class RhiImageRenderer {
   void releaseResources();
   void render(QRhiCommandBuffer* command_buffer, QRhiRenderTarget* render_target,
               const ViewerViewState& view_state, const ViewportWidgetInfo& widget_info,
-              const ViewerFrame& frame,
-              ViewerGpuFrameUpload* pending_upload);
+              const ViewerFrame& frame, const ViewerMetalFrame& metal_frame,
+              ViewerGpuFrameUpload* pending_upload, const ViewerMetalFrame* pending_metal_frame);
 
  private:
   struct UniformData;
@@ -46,6 +46,8 @@ class RhiImageRenderer {
   void destroyResource(QRhiGraphicsPipeline*& resource);
   void ensureStaticResources(QRhiRenderTarget* render_target, QRhiCommandBuffer* command_buffer);
   void ensureSourceTexture(const ViewerFrame& frame, QRhiCommandBuffer* command_buffer);
+  void ensureImportedSourceTexture(const ViewerMetalFrame& frame,
+                                   QRhiCommandBuffer* command_buffer);
   void recreateShaderResources();
 
   QRhi*                       rhi_                       = nullptr;
@@ -58,6 +60,8 @@ class RhiImageRenderer {
   QRhiRenderTarget*           bound_render_target_       = nullptr;
   int                         source_texture_width_      = 0;
   int                         source_texture_height_     = 0;
+  quint64                     source_texture_native_object_ = 0;
+  bool                        source_texture_is_imported_ = false;
   bool                        static_upload_pending_     = false;
 };
 
@@ -68,6 +72,9 @@ class RhiEditViewerSurface final : public QRhiWidget, public IEditViewerSurface 
 
   auto widget() -> QWidget* override;
   void submitFrame(const ViewerFrame& frame) override;
+#ifdef HAVE_METAL
+  void submitMetalFrame(const ViewerMetalFrame& frame) override;
+#endif
   void setViewState(const ViewerViewState& state) override;
   void requestRedraw() override;
 
@@ -80,7 +87,9 @@ class RhiEditViewerSurface final : public QRhiWidget, public IEditViewerSurface 
   RhiImageRenderer             renderer_{};
   ViewerViewState              view_state_{};
   ViewerFrame                  latest_frame_{};
+  ViewerMetalFrame             latest_metal_frame_{};
   std::unique_ptr<ViewerGpuFrameUpload> pending_upload_{};
+  std::unique_ptr<ViewerMetalFrame> pending_metal_frame_{};
 };
 
 }  // namespace puerhlab

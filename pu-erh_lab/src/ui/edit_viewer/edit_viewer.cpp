@@ -239,6 +239,7 @@ void QtEditViewer::SubmitHostFrame(const ViewerFrame& frame) {
       pending_presentation_mode_valid_ = false;
     }
     pending_host_frame_ = std::move(submitted_frame);
+    pending_metal_frame_.reset();
   }
   emit RequestUpdate();
 #else
@@ -246,12 +247,28 @@ void QtEditViewer::SubmitHostFrame(const ViewerFrame& frame) {
 #endif
 }
 
+#ifdef HAVE_METAL
+void QtEditViewer::SubmitMetalFrame(const ViewerMetalFrame& frame) {
+  {
+    std::lock_guard<std::mutex> lock(host_frame_mutex_);
+    ViewerMetalFrame submitted_frame = frame;
+    if (pending_presentation_mode_valid_) {
+      submitted_frame.presentation_mode = pending_presentation_mode_;
+      pending_presentation_mode_valid_ = false;
+    }
+    pending_metal_frame_ = std::move(submitted_frame);
+    pending_host_frame_.reset();
+  }
+  emit RequestUpdate();
+}
+#endif
+
 auto QtEditViewer::GetWidth() const -> int {
 #ifdef HAVE_CUDA
   return frame_mailbox_.GetWidth();
 #else
   std::lock_guard<std::mutex> lock(host_frame_mutex_);
-  return active_host_frame_.width;
+  return active_frame_width_;
 #endif
 }
 
@@ -260,7 +277,7 @@ auto QtEditViewer::GetHeight() const -> int {
   return frame_mailbox_.GetHeight();
 #else
   std::lock_guard<std::mutex> lock(host_frame_mutex_);
-  return active_host_frame_.height;
+  return active_frame_height_;
 #endif
 }
 
@@ -542,10 +559,16 @@ void QtEditViewer::RefreshFrameDerivedState() {
 #ifdef HAVE_CUDA
   const auto active_frame = frame_mailbox_.GetActiveFrame();
 #else
-  ViewerFrame active_frame;
+  struct FrameState {
+    int                   width = 0;
+    int                   height = 0;
+    FramePresentationMode presentation_mode = FramePresentationMode::FullFrame;
+  } active_frame;
   {
     std::lock_guard<std::mutex> lock(host_frame_mutex_);
-    active_frame = active_host_frame_;
+    active_frame.width             = active_frame_width_;
+    active_frame.height            = active_frame_height_;
+    active_frame.presentation_mode = active_presentation_mode_;
   }
 #endif
   if (active_frame.presentation_mode != FramePresentationMode::RoiFrame && active_frame.width > 0 &&
@@ -565,8 +588,20 @@ void QtEditViewer::SyncSurfaceState() {
 #ifdef HAVE_METAL
   {
     std::lock_guard<std::mutex> lock(host_frame_mutex_);
-    if (pending_host_frame_.has_value()) {
+    if (pending_metal_frame_.has_value()) {
+      active_metal_frame_       = *pending_metal_frame_;
+      active_host_frame_        = {};
+      active_frame_width_       = pending_metal_frame_->width;
+      active_frame_height_      = pending_metal_frame_->height;
+      active_presentation_mode_ = pending_metal_frame_->presentation_mode;
+      surface_->submitMetalFrame(*pending_metal_frame_);
+      pending_metal_frame_.reset();
+    } else if (pending_host_frame_.has_value()) {
       active_host_frame_ = *pending_host_frame_;
+      active_metal_frame_ = {};
+      active_frame_width_ = pending_host_frame_->width;
+      active_frame_height_ = pending_host_frame_->height;
+      active_presentation_mode_ = pending_host_frame_->presentation_mode;
       surface_->submitFrame(*pending_host_frame_);
       pending_host_frame_.reset();
     }
@@ -593,7 +628,7 @@ auto QtEditViewer::CurrentImageInfo() const -> ViewportImageInfo {
   return {active_frame.width, active_frame.height};
 #else
   std::lock_guard<std::mutex> lock(host_frame_mutex_);
-  return {active_host_frame_.width, active_host_frame_.height};
+  return {active_frame_width_, active_frame_height_};
 #endif
 }
 
@@ -602,7 +637,7 @@ auto QtEditViewer::CurrentPresentationMode() const -> FramePresentationMode {
   return frame_mailbox_.GetActiveFrame().presentation_mode;
 #else
   std::lock_guard<std::mutex> lock(host_frame_mutex_);
-  return active_host_frame_.presentation_mode;
+  return active_presentation_mode_;
 #endif
 }
 

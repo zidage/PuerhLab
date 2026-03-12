@@ -56,6 +56,9 @@ class QtEditViewer : public QWidget, public puerhlab::IFrameSink {
   void    UnmapResource() override;
   void    NotifyFrameReady() override;
   void    SubmitHostFrame(const ViewerFrame& frame) override;
+#ifdef HAVE_METAL
+  void    SubmitMetalFrame(const ViewerMetalFrame& frame) override;
+#endif
   int     GetWidth() const override;
   int     GetHeight() const override;
   auto    GetViewportRenderRegion() const -> std::optional<ViewportRenderRegion> override;
@@ -125,6 +128,13 @@ class QtEditViewer : public QWidget, public puerhlab::IFrameSink {
 
   ViewerFrame              active_host_frame_{};
   std::optional<ViewerFrame> pending_host_frame_{};
+#ifdef HAVE_METAL
+  ViewerMetalFrame         active_metal_frame_{};
+  std::optional<ViewerMetalFrame> pending_metal_frame_{};
+#endif
+  int                      active_frame_width_ = 0;
+  int                      active_frame_height_ = 0;
+  FramePresentationMode    active_presentation_mode_ = FramePresentationMode::FullFrame;
   bool                     pending_presentation_mode_valid_ = false;
   FramePresentationMode    pending_presentation_mode_ = FramePresentationMode::FullFrame;
   mutable std::mutex       host_frame_mutex_{};

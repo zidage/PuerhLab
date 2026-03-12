@@ -6,14 +6,26 @@
 
 #include "common.metal"
 
+#define METAL_NEIGHBOR_MAX_TAP_COUNT 24
+
+constant uint kMetalNeighborOpSharpen = 1u;
+constant uint kMetalNeighborOpClarity = 2u;
+
+struct MetalNeighborStageParams {
+  uint  kind_;
+  uint  radius_;
+  uint  tap_count_;
+  float amount_;
+  float threshold_;
+  float reserved0_;
+  float reserved1_;
+  float reserved2_;
+  float weights_[METAL_NEIGHBOR_MAX_TAP_COUNT];
+};
+
 static inline float metal_detail_luminance(float4 c) {
   // Match the CUDA implementation's COLOR_BGR2GRAY coefficients.
   return c.x * 0.114f + c.y * 0.587f + c.z * 0.299f;
-}
-
-static inline float metal_detail_gaussian(float dx, float dy, float sigma) {
-  const float inv2sigma2 = 0.5f / (sigma * sigma);
-  return exp(-(dx * dx + dy * dy) * inv2sigma2);
 }
 
 static inline float4 metal_detail_read_clamped(texture2d<float, access::read> src, int2 coord) {
@@ -22,85 +34,108 @@ static inline float4 metal_detail_read_clamped(texture2d<float, access::read> sr
   return src.read(uint2(static_cast<uint>(x), static_cast<uint>(y)));
 }
 
-static inline float4 metal_detail_gaussian_blur(texture2d<float, access::read> src, uint2 gid,
-                                                float sigma, int max_radius) {
-  const float safe_sigma = fmax(sigma, 1.0e-4f);
-  int radius             = static_cast<int>(ceil(3.0f * safe_sigma));
-  radius                 = clamp(radius, 1, max_radius);
-
-  float4 blur            = float4(0.0f);
-  float sum_w            = 0.0f;
-  const int2 center      = int2(static_cast<int>(gid.x), static_cast<int>(gid.y));
-
-  for (int dy = -radius; dy <= radius; ++dy) {
-    for (int dx = -radius; dx <= radius; ++dx) {
-      const float  w = metal_detail_gaussian(static_cast<float>(dx), static_cast<float>(dy), safe_sigma);
-      const float4 v = metal_detail_read_clamped(src, center + int2(dx, dy));
-      blur += v * w;
-      sum_w += w;
-    }
+static inline float4 metal_neighbor_blur_horizontal(texture2d<float, access::read> src, uint2 gid,
+                                                    constant MetalNeighborStageParams& params) {
+  if (params.tap_count_ == 0u) {
+    return src.read(gid);
   }
 
-  return (sum_w > 0.0f) ? (blur / sum_w) : metal_detail_read_clamped(src, center);
+  const int2 center = int2(static_cast<int>(gid.x), static_cast<int>(gid.y));
+  float4     blur   = metal_detail_read_clamped(src, center) * params.weights_[0];
+  for (uint tap = 1u; tap < params.tap_count_; ++tap) {
+    const int    dx = static_cast<int>(tap);
+    const float  w  = params.weights_[tap];
+    const float4 a  = metal_detail_read_clamped(src, center + int2(dx, 0));
+    const float4 b  = metal_detail_read_clamped(src, center - int2(dx, 0));
+    blur += (a + b) * w;
+  }
+  return blur;
 }
 
-static inline float4 GPU_SharpenKernel(texture2d<float, access::read> src, uint2 gid, float4 px,
-                                       constant MetalFusedParams& params) {
-  if (params.sharpen_enabled_ == 0u || params.sharpen_offset_ == 0.0f ||
-      params.sharpen_radius_ <= 0.0f) {
+static inline float4 metal_neighbor_blur_vertical(texture2d<float, access::read> src, uint2 gid,
+                                                  constant MetalNeighborStageParams& params) {
+  if (params.tap_count_ == 0u) {
+    return src.read(gid);
+  }
+
+  const int2 center = int2(static_cast<int>(gid.x), static_cast<int>(gid.y));
+  float4     blur   = metal_detail_read_clamped(src, center) * params.weights_[0];
+  for (uint tap = 1u; tap < params.tap_count_; ++tap) {
+    const int    dy = static_cast<int>(tap);
+    const float  w  = params.weights_[tap];
+    const float4 a  = metal_detail_read_clamped(src, center + int2(0, dy));
+    const float4 b  = metal_detail_read_clamped(src, center - int2(0, dy));
+    blur += (a + b) * w;
+  }
+  return blur;
+}
+
+static inline float4 metal_apply_sharpen(float4 px, float4 blur,
+                                         constant MetalNeighborStageParams& params) {
+  if (params.amount_ == 0.0f || params.tap_count_ == 0u) {
     return px;
   }
 
-  const float4 blur = metal_detail_gaussian_blur(src, gid, params.sharpen_radius_, 15);
   float4 high       = px - blur;
 
-  if (params.sharpen_threshold_ > 0.0f) {
+  if (params.threshold_ > 0.0f) {
     const float hp_gray = metal_detail_luminance(high);
-    const float mask    = (fabs(hp_gray) > params.sharpen_threshold_) ? 1.0f : 0.0f;
+    const float mask    = (fabs(hp_gray) > params.threshold_) ? 1.0f : 0.0f;
     high *= mask;
   }
 
-  return px + high * params.sharpen_offset_;
+  return px + high * params.amount_;
 }
 
-static inline float4 GPU_ClarityKernel(texture2d<float, access::read> src, uint2 gid, float4 px,
-                                       constant MetalFusedParams& params) {
-  if (params.clarity_enabled_ == 0u) {
+static inline float4 metal_apply_clarity(float4 px, float4 blur,
+                                         constant MetalNeighborStageParams& params) {
+  if (params.amount_ == 0.0f || params.tap_count_ == 0u) {
     return px;
   }
 
-  const float4 blur = metal_detail_gaussian_blur(src, gid, params.clarity_radius_, 20);
   float4 high       = float4(px.x - blur.x, px.y - blur.y, px.z - blur.z, px.w);
 
   const float lum   = metal_detail_luminance(px);
   const float t     = (lum - 0.5f) * 2.0f;
   const float mask  = 1.0f - t * t;
-  const float w     = mask * params.clarity_offset_;
+  const float w     = mask * params.amount_;
   high.xyz *= w;
 
   return float4(px.x + high.x, px.y + high.y, px.z + high.z, px.w);
 }
 
-kernel void metal_detail_sharpen_rgba32f(texture2d<float, access::read> src [[texture(0)]],
-                                         texture2d<float, access::write> dst [[texture(1)]],
-                                         constant MetalFusedParams& params [[buffer(0)]],
-                                         uint2 gid [[thread_position_in_grid]]) {
+kernel void metal_neighbor_blur_h_rgba32f(texture2d<float, access::read> src [[texture(0)]],
+                                          texture2d<float, access::write> dst [[texture(1)]],
+                                          constant MetalNeighborStageParams& params [[buffer(0)]],
+                                          uint2 gid [[thread_position_in_grid]]) {
   if (gid.x >= dst.get_width() || gid.y >= dst.get_height()) {
     return;
   }
 
-  const float4 px = src.read(gid);
-  dst.write(GPU_SharpenKernel(src, gid, px, params), gid);
+  dst.write(metal_neighbor_blur_horizontal(src, gid, params), gid);
 }
 
-kernel void metal_detail_clarity_rgba32f(texture2d<float, access::read> src [[texture(0)]],
-                                         texture2d<float, access::write> dst [[texture(1)]],
-                                         constant MetalFusedParams& params [[buffer(0)]],
-                                         uint2 gid [[thread_position_in_grid]]) {
+kernel void metal_neighbor_apply_v_rgba32f(texture2d<float, access::read> src [[texture(0)]],
+                                           texture2d<float, access::read> blur_h [[texture(1)]],
+                                           texture2d<float, access::write> dst [[texture(2)]],
+                                           constant MetalNeighborStageParams& params [[buffer(0)]],
+                                           uint2 gid [[thread_position_in_grid]]) {
   if (gid.x >= dst.get_width() || gid.y >= dst.get_height()) {
     return;
   }
 
-  const float4 px = src.read(gid);
-  dst.write(GPU_ClarityKernel(src, gid, px, params), gid);
+  const float4 px   = src.read(gid);
+  const float4 blur = metal_neighbor_blur_vertical(blur_h, gid, params);
+
+  switch (params.kind_) {
+    case kMetalNeighborOpSharpen:
+      dst.write(metal_apply_sharpen(px, blur, params), gid);
+      break;
+    case kMetalNeighborOpClarity:
+      dst.write(metal_apply_clarity(px, blur, params), gid);
+      break;
+    default:
+      dst.write(px, gid);
+      break;
+  }
 }

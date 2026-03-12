@@ -20,6 +20,9 @@ class IEditViewerSurface {
 
   virtual auto widget() -> QWidget*                       = 0;
   virtual void submitFrame(const ViewerFrame& frame)      = 0;
+#ifdef HAVE_METAL
+  virtual void submitMetalFrame(const ViewerMetalFrame& frame) { (void)frame; }
+#endif
   virtual void setViewState(const ViewerViewState& state) = 0;
   virtual void requestRedraw()                            = 0;
 };

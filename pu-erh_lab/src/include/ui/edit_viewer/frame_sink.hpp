@@ -5,6 +5,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <memory>
 
 #include <optional>
@@ -67,6 +68,20 @@ struct ViewerGpuFrameUpload {
   }
 };
 
+#ifdef HAVE_METAL
+struct ViewerMetalFrame {
+  int                   width               = 0;
+  int                   height              = 0;
+  std::uintptr_t        texture_handle      = 0;
+  std::shared_ptr<const void> owner{};
+  FramePresentationMode presentation_mode   = FramePresentationMode::FullFrame;
+
+  explicit operator bool() const {
+    return width > 0 && height > 0 && texture_handle != 0 && owner != nullptr;
+  }
+};
+#endif
+
 class IFrameSink {
  public:
   virtual ~IFrameSink() {}
@@ -80,6 +95,9 @@ class IFrameSink {
   virtual void    NotifyFrameReady()                = 0;
 
   virtual void    SubmitHostFrame(const ViewerFrame&) {}
+#ifdef HAVE_METAL
+  virtual void    SubmitMetalFrame(const ViewerMetalFrame&) {}
+#endif
 
   // Get the size of the frame
   virtual int     GetWidth() const                  = 0;

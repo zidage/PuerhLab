@@ -26,6 +26,9 @@ option(PUERHLAB_ENABLE_CUDA "Enable CUDA-accelerated pipeline backends when CUDA
 option(PUERHLAB_ENABLE_METAL "Enable Metal-accelerated pipeline backends when building on Apple platforms." ${PUERHLAB_ENABLE_METAL_DEFAULT})
 option(PUERHLAB_ENABLE_OPENGL_EDITOR "Build the OpenGL-based editor UI when the required backend is available." ${PUERHLAB_ENABLE_OPENGL_EDITOR_DEFAULT})
 option(PUERHLAB_BUILD_TESTS "Build pu-erh_lab tests and demos." ON)
+option(PUERHLAB_MACOS_BUNDLE
+       "Build puerhlab_main as a macOS .app bundle (intended for packaging/install)."
+       OFF)
 
 function(puerhlab_append_existing_prefix prefix)
     if(EXISTS "${prefix}")
@@ -383,7 +386,7 @@ endif()
 
 set(PUERHLAB_MAIN_BIN puerhlab_main)
 if(TARGET ${PUERHLAB_MAIN_BIN})
-    if(APPLE)
+    if(APPLE AND PUERHLAB_MACOS_BUNDLE)
         # Match the app bundle name to the QML module URI (PuerhLab.Main)
         # so that Qt's QML deploy puts files in the correct bundle.
         set_target_properties(${PUERHLAB_MAIN_BIN} PROPERTIES OUTPUT_NAME PuerhLab)
@@ -561,7 +564,7 @@ endif()
 # End-user can run the app from the terminal after extracting the ZIP:
 #   ./PuerhLab.app/Contents/MacOS/PuerhLab
 # ────────────────────────────────────────────────────────────────────────────
-if(APPLE AND TARGET ${PUERHLAB_MAIN_BIN})
+if(APPLE AND PUERHLAB_MACOS_BUNDLE AND TARGET ${PUERHLAB_MAIN_BIN})
 
     # --- Qt deployment (frameworks, plugins) --------------------------------
     # Use simple macdeployqt-based deploy. QML module deployment is handled
@@ -912,7 +915,7 @@ set(CPACK_GENERATOR "ZIP")
 set(CPACK_PACKAGE_NAME "pu-erh_lab")
 set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
 set(CPACK_PACKAGE_FILE_NAME "${CPACK_PACKAGE_NAME}-${CPACK_PACKAGE_VERSION}-${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}")
-if(APPLE)
+if(APPLE AND PUERHLAB_MACOS_BUNDLE)
     # Include the .app bundle at the top level of the ZIP so the user
     # extracts it and finds PuerhLab.app/ directly.
     set(CPACK_INCLUDE_TOPLEVEL_DIRECTORY OFF)
