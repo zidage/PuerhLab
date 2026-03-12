@@ -4,7 +4,7 @@
 
 #pragma once
 
-#include "../common.metal"
+#include "common.metal"
 
 static inline float metal_detail_luminance(float4 c) {
   // Match the CUDA implementation's COLOR_BGR2GRAY coefficients.

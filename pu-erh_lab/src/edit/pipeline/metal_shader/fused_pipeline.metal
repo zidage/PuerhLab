@@ -2,11 +2,11 @@
 //  SPDX-License-Identifier: GPL-3.0-only
 //  Additional permission under GPLv3 section 7 applies; see the LICENSE file.
 
-#include "common.metal"
-#include "GPU_kernels/basic.metal"
-#include "GPU_kernels/color.metal"
-#include "GPU_kernels/cst.metal"
-#include "GPU_kernels/detail.metal"
+#include "../../operators/GPU_kernels/metal_shader/common.metal"
+#include "../../operators/GPU_kernels/metal_shader/basic.metal"
+#include "../../operators/GPU_kernels/metal_shader/color.metal"
+#include "../../operators/GPU_kernels/metal_shader/cst.metal"
+#include "../../operators/GPU_kernels/metal_shader/detail.metal"
 
 kernel void metal_fused_pipeline_rgba32f(texture2d<float, access::read> src [[texture(0)]],
                                          texture2d<float, access::write> dst [[texture(1)]],

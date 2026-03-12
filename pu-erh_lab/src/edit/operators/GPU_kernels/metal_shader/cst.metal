@@ -4,7 +4,7 @@
 
 #pragma once
 
-#include "../common.metal"
+#include "common.metal"
 
 constant int kMetalOdtMethodAces20   = 0;
 constant int kMetalOdtMethodOpenDrt  = 1;

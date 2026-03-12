@@ -4,7 +4,7 @@
 
 #pragma once
 
-#include "../common.metal"
+#include "common.metal"
 
 constant int kMetalHlsProfileCount = 8;
 

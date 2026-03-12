@@ -4,7 +4,7 @@
 
 #pragma once
 
-#include "../common.metal"
+#include "common.metal"
 
 static inline float metal_sigmoid(float t) { return 1.0f / (1.0f + exp(-t)); }
 
