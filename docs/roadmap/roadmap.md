@@ -1,29 +1,42 @@
 # Roadmap
 
-## Upcoming Features and Improvements
+## Recently Completed
 
-### December 2025
+### v0.1.2 release
 
-#### SleeveFS
+- [x] Added OpenDRT support and rendering transform selection UI.
+- [x] Added image deletion inside projects.
+- [x] Improved filter UI usability.
+- [x] Landed follow-up color-management fixes around the release.
 
-- Refactor `ImageLoader` module for `SleeveFS` integration.
-- Integrate `SleeveView` (rolling thubmbnail cache) with `Pipeline`  for thumbnail generation.
+### Workflow polish after v0.1.2
 
-#### Pipeline and Image Processing
+- [x] Added reset adjustments in the editor.
+- [x] Added aspect ratio selection.
+- [x] Added waiting animation for thumbnails.
+- [x] Optimized high-resolution camera loading time.
 
-- [x] Add preliminary implementation for CUDA pipelines.
-- [ ] Modify preview mode in `PipelineScheduler` to support full-resolution image silent processing.
-- [x] Implement RCD algorithm as the default method for raw demosaicing.
-- [x] Add experimental panorama stitching module (complete algorithm, needs integration).
-- [x] Fix magic numbers in highlight reconstruction algorithm (sort of, thanks to Claude Opus 4.5).
-- [ ] Explore multi-threading / SIMD optimizations for image processing tasks (on-going).
-- [ ] Add support for JSON serialization of pipeline configurations.
-- [x] Add support for custom WB adjustments in raw processing pipeline.
+### macOS / Metal bring-up on main
 
-### January 2026
+- [x] Added compile support for macOS.
+- [x] Added initial Metal support for image processing.
+- [x] Added Metal raw processing utilities.
+- [x] Added Metal support for image resizing and lens calibration.
+- [x] Integrated Metal into the pipeline.
+- [x] Fixed geometry pipeline path issues and cleaned up Metal shader compilation.
+- [x] Added macOS packaging logic.
 
-#### Pipeline and Image Processing
+### Website and localization
 
-- [ ] Add global parameter sychronization across different devices.
-- [ ] Modify LUT texture object lifecycle management
-- [ ] Improve CUDA pipeline stability and error handling.
+- [x] Added the demo website.
+- [x] Added i18n support for the website.
+- [x] Added deployment workflow for the website.
+- [x] Updated the zh-CN website font stack.
+
+## Still Planned
+
+- [ ] Add JSON serialization for pipeline configurations.
+- [ ] Extend HDR workflow and output.
+- [ ] Continue semantic search and AI-assisted tagging work.
+- [ ] Integrate the panorama stitching module into the main workflow.
+- [ ] Keep closing the feature and stability gap between the Windows/CUDA and macOS/Metal paths.

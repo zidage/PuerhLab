@@ -1,5 +1,7 @@
 # Pu-erh Lab
 
+[Project website](https://zidage.github.io/PuerhLab/en/) | [项目网页](https://zidage.github.io/PuerhLab/zh/)
+
 <p align="right"><a href="./README.md"><strong>English</strong></a> | <a href="./README.zh-CN.md">简体中文</a></p>
 
 ![License](https://img.shields.io/badge/License-GPLv3-blue)
@@ -70,8 +72,9 @@
 ## System Requirements
 
 - Windows 10/11 x64 for the current full CUDA/OpenGL editor build.
-- macOS for an experimental CPU-only Qt application build. The editor backend is disabled there for now; future accelerated work on macOS is planned around Metal.
-- NVIDIA GPU with CUDA support (minimum compute capability 6.0 (10-series or later), recommended 7.0+ (20-series or later) for optimal performance) and preferably 6GB+ VRAM for smooth performance with high resolution RAW files (40MP+).
+- macOS on Apple platforms for the Metal-backed Qt application build. The current presets disable the legacy OpenGL editor there, but keep Apple-native pipeline backends enabled.
+- NVIDIA GPU with CUDA support (minimum compute capability 6.0 (10-series or later), recommended 7.0+ (20-series or later) for optimal performance) and preferably 6GB+ VRAM for smooth performance with high resolution RAW files (40MP+) on the Windows/CUDA build.
+- A Metal-capable Mac for the macOS/Metal build.
 - At least 8GB of system RAM (16GB+ recommended for larger libraries and smoother performance).
 - 500MB of free disk space for the installation and temporary working files.
 - 60+ MB for installation package and partial update support.
@@ -226,7 +229,7 @@ cmd /c scripts\msvc_env.cmd --build --preset win_debug --target format
 cmd /c scripts\msvc_env.cmd --build --preset win_debug --target tidy
 ```
 
-### macOS (experimental CPU-only app build)
+### macOS (Metal-enabled app build)
 
 Install the required dependencies with Homebrew:
 
@@ -279,10 +282,9 @@ may require `xattr -cr PuerhLab.app` before first launch.
 
 Notes:
 
-- The `macos_debug` and `macos_release` presets build the main app without CUDA, without the OpenGL editor, and without tests.
+- The `macos_debug` and `macos_release` presets build the main app without CUDA, without the legacy OpenGL editor, and without tests. On Apple platforms, the project uses the Metal backend path instead.
 - If Homebrew is installed in a nonstandard prefix, pass `-DCMAKE_PREFIX_PATH=/path/to/prefix` when configuring.
-- The current macOS build is meant to keep the Qt application runnable without CUDA/OpenGL. Opening the editor entry point will report that the editor backend is unavailable.
-- Future macOS acceleration work is expected to target Metal rather than CUDA/OpenGL.
+- The current macOS build targets the Qt application with Metal-enabled pipeline integration rather than the Windows/CUDA path. Some editor-specific parity work is still ongoing.
 
 ## Roadmap
 

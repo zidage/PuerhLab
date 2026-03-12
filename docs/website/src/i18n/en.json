@@ -9,100 +9,107 @@
   },
   "hero": {
     "title": "Pu-erh Lab",
-    "subtitle": "Open-Source RAW Photo Editor & Digital Asset Manager",
-    "description": "A lightweight, high-performance, and largely industry-compatible workflow for photo editing and library management.",
-    "version": "v0.1.2 · GPL-3.0",
+    "subtitle": "Cross-Platform RAW Editor & Digital Asset Manager",
+    "description": "The main branch now spans a full Windows/CUDA editing path and a macOS/Metal pipeline track, pairing responsive asset management with modern color workflows.",
+    "version": "main · post-v0.1.2 development",
     "ctaGithub": "View on GitHub",
     "ctaStart": "Get Started",
     "scrollHint": "Scroll to explore"
   },
   "features": {
     "sectionTitle": "Key Features",
-    "sectionSubtitle": "Built for photographers who demand performance and precision",
+    "sectionSubtitle": "Recent work since v0.1.2 has focused on dual-platform GPU backends and workflow polish",
     "items": [
       {
-        "title": "CUDA 60 FPS",
-        "description": "Full-resolution real-time preview at 60 FPS on modern GPUs, even with 45MP RAW files. Average 767 MB DRAM for browsing 786 images."
+        "title": "Windows / CUDA Editor",
+        "description": "The current Windows build is the full CUDA/OpenGL editor path, delivering 60 FPS full-resolution preview on modern GPUs while keeping library browsing memory usage low."
+      },
+      {
+        "title": "macOS / Metal Pipeline",
+        "description": "Post-v0.1.2 development added macOS build support, Metal raw utilities, Metal resize and lens calibration, and pipeline-level Metal integration."
       },
       {
         "title": "ACES 2.0 & OpenDRT",
-        "description": "Industry-standard color management with ACES 2.0 Output Rendering and OpenDRT support. Multiple rendering transforms available."
+        "description": "Industry-standard color management now includes ACES 2.0 Output Rendering and OpenDRT, with display-transform selection exposed directly in the UI."
       },
       {
-        "title": "LUT & Tone Curves",
-        "description": "CUBE LUT support for creative color grading, film-like sigmoid contrast curve, and fully interactive custom tone curves."
+        "title": "Custom Color Science",
+        "description": "Build custom color pipelines with selectable display transforms, LUT-driven looks, and enough control over rendering intent to tune each project deliberately."
       },
       {
-        "title": "Lens Correction",
-        "description": "Built-in Lensfun-based lens distortion, vignetting, and chromatic aberration correction with an extensive lens catalog."
+        "title": "Responsive Library Workflow",
+        "description": "Thumbnail waiting states, faster high-resolution loading, folder-aware browsing, filters, and in-project image deletion keep larger shoots manageable."
       },
       {
-        "title": "Sleeve DAM System",
-        "description": "Lightweight DuckDB-backed asset management. A single .puerhproj file captures your entire project — edits, history, and library structure."
-      },
-      {
-        "title": "Git-like Versioning",
-        "description": "Unlimited undo with branching version control. Create, compare, and switch between edit versions non-destructively."
+        "title": "Versioned Editing",
+        "description": "Reset adjustments, branchable history, aspect-ratio selection, and export queue tools keep iteration non-destructive from first import to final delivery."
       }
     ]
   },
   "gallery": {
     "sectionTitle": "See It in Action",
-    "sectionSubtitle": "A modern workflow from import to export",
+    "sectionSubtitle": "Recent views from the current library, editor, calibration, and export workflow",
     "items": [
-      { "title": "Modern UI Interface", "description": "Clean, responsive thumbnail grid with advanced filtering by capture date, camera model, and lens." },
-      { "title": "Advanced Adjustment Controls", "description": "Precise white balance, HSL, CDL color wheels, and real-time histogram — all at 60 FPS." },
-      { "title": "LUT / History / Versioning", "description": "Apply CUBE LUTs, interact with tone curves, and manage edits with an unlimited, branchable history stack." },
-      { "title": "Lens Correction", "description": "Automatic lens profile matching with manual override. Correct distortion, vignetting, and CA in one click." },
-      { "title": "Advanced Export", "description": "Batch export to JPEG, PNG, TIFF, WebP, or EXR with full metadata write-back and resize options." }
+      { "title": "Library Browser", "description": "Folder tree, responsive thumbnail grid, filters, and live counts keep large projects readable at a glance." },
+      { "title": "Adjustment Workspace", "description": "White balance, HSL, CDL wheels, tone shaping, and histogram-driven controls stay close to the live preview." },
+      { "title": "LUT & History", "description": "Apply LUTs, compare looks, and keep a branchable edit history close at hand while iterating on color and tone." },
+      { "title": "Custom Color Science", "description": "Build a project around custom display transforms, rendering intent, and look development instead of being locked into a single default color pipeline." },
+      { "title": "Export Queue", "description": "Batch export with format, bit-depth, resize, and metadata options for finishing multiple images in one pass." }
     ]
   },
   "roadmap": {
     "sectionTitle": "Roadmap",
-    "sectionSubtitle": "What's coming next",
+    "sectionSubtitle": "Recent milestones on main after v0.1.2, plus what is still ahead",
     "items": [
       {
-        "date": "Dec 2025",
-        "title": "Foundation",
-        "entries": ["SleeveFS integration with rolling thumbnail cache", "Preliminary CUDA pipeline implementation", "RCD as default demosaicing algorithm", "Experimental panorama stitching module", "Custom white balance in RAW processing"]
-      },
-      {
-        "date": "Jan 2026",
-        "title": "Stability",
-        "entries": ["Global parameter synchronization", "LUT texture lifecycle management", "CUDA pipeline stability improvements"]
+        "date": "Mar 2026",
+        "title": "v0.1.2 Shipped",
+        "entries": ["OpenDRT support and rendering-transform selection UI", "Project image deletion", "Filter UI improvements", "Core color-management fixes"]
       },
       {
         "date": "Mar 2026",
-        "title": "v0.1.2 Release",
-        "entries": ["OpenDRT rendering transform support", "Rendering transform selection UI", "Image deletion from projects", "Filter UI improvements"]
+        "title": "Workflow Polish on main",
+        "entries": ["Reset adjustments in the editor", "Aspect-ratio selection", "Waiting animation for thumbnails", "Faster high-resolution camera loading"]
       },
       {
-        "date": "Future",
-        "title": "Vision",
-        "entries": ["JSON pipeline configuration", "HDR workflow and output", "Metal acceleration for macOS", "Semantic search & AI-assisted tagging", "Full panorama stitching integration"]
+        "date": "Mar 2026",
+        "title": "macOS / Metal Bring-up",
+        "entries": ["macOS compile support", "Initial Metal image processing", "Metal RAW processing utilities", "Metal resize and lens calibration"]
+      },
+      {
+        "date": "Mar 2026",
+        "title": "Metal Pipeline Integration",
+        "entries": ["Metal integrated into the pipeline", "Geometry pipeline fixes", "Shader compilation cleanup", "macOS packaging logic and follow-up fixes"]
+      },
+      {
+        "date": "Next",
+        "title": "Forward Path",
+        "entries": ["JSON pipeline serialization", "HDR workflow and output", "Semantic search and AI-assisted tagging", "Panorama integration", "Continued parity between Windows/CUDA and macOS/Metal"]
       }
     ]
   },
   "techStack": {
     "sectionTitle": "Built With",
-    "sectionSubtitle": "A robust foundation of proven open-source technologies",
+    "sectionSubtitle": "A cross-platform stack built around dedicated Windows/CUDA and macOS/Metal paths",
     "categories": [
-      { "label": "Core", "items": ["C++20", "CUDA 12.8", "Qt 6", "CMake"] },
-      { "label": "Imaging", "items": ["OpenImageIO", "OpenColorIO", "LibRaw", "lcms2", "OpenCV", "Eigen"] },
+      { "label": "Platform", "items": ["Windows / CUDA", "macOS / Metal"] },
+      { "label": "Core", "items": ["C++20", "Qt 6", "CMake"] },
+      { "label": "Imaging", "items": ["OpenImageIO", "LibRaw", "OpenCV", "Eigen"] },
+      { "label": "Color", "items": ["OpenColorIO", "ACES 2.0", "OpenDRT", "lcms2"] },
       { "label": "Storage", "items": ["DuckDB"] },
-      { "label": "Lens", "items": ["Lensfun"] },
-      { "label": "Metadata", "items": ["Exiv2"] },
+      { "label": "Lens & Metadata", "items": ["Lensfun", "Exiv2"] },
       { "label": "Performance", "items": ["Highway (SIMD)", "OpenMP", "xxHash"] }
     ]
   },
   "install": {
     "sectionTitle": "Get Started",
-    "sectionSubtitle": "Build from source in minutes",
+    "sectionSubtitle": "Build the current Windows/CUDA or macOS/Metal tracks from source",
     "tabs": {
       "windows": "Windows",
       "macos": "macOS"
     },
     "windows": [
+      "# Windows / CUDA toolchain",
       "git clone --recursive https://github.com/zidage/PuerhLab.git",
       "cd PuerhLab",
       ".\\vcpkg\\bootstrap-vcpkg.bat",
@@ -110,6 +117,7 @@
       "cmd /c scripts\\msvc_env.cmd --build --preset win_debug --parallel 4"
     ],
     "macos": [
+      "# macOS / Metal toolchain",
       "brew install cmake ninja qt opencv opencolorio duckdb exiv2 glib libraw little-cms2 highway openimageio pkg-config xxhash eigen libomp",
       "git clone --recursive https://github.com/zidage/PuerhLab.git && cd PuerhLab",
       "git submodule update --init --recursive pu-erh_lab/src/third_party/lensfun",

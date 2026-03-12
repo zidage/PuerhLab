@@ -9,100 +9,107 @@
   },
   "hero": {
     "title": "Pu-erh Lab",
-    "subtitle": "开源 RAW 图像处理与数字资产管理",
-    "description": "为摄影师打造的轻量级、高性能、行业兼容的照片编辑与库管理工作流。",
-    "version": "v0.1.2 · GPL-3.0",
+    "subtitle": "跨平台 RAW 图像处理与数字资产管理",
+    "description": "当前 main 分支已经形成完整的 Windows/CUDA 编辑链路，以及正在持续集成的 macOS/Metal 管线方向，把响应迅速的资产管理与现代色彩工作流放在同一套应用里。",
+    "version": "main · v0.1.2 之后的持续开发",
     "ctaGithub": "查看源码",
     "ctaStart": "开始使用",
     "scrollHint": "向下滚动探索"
   },
   "features": {
     "sectionTitle": "核心特性",
-    "sectionSubtitle": "为追求性能与精度的摄影师而生",
+    "sectionSubtitle": "自 v0.1.2 之后，开发重点已经转向双平台 GPU 后端与工作流打磨",
     "items": [
       {
-        "title": "CUDA 60 FPS",
-        "description": "现代 GPU 上实现全分辨率 60 FPS 实时预览，支持 45MP RAW 文件。浏览 786 张照片平均 DRAM 占用仅 767 MB。"
+        "title": "Windows / CUDA 编辑器",
+        "description": "当前 Windows 构建仍然是完整的 CUDA/OpenGL 编辑器路径，在现代 GPU 上提供全分辨率 60 FPS 预览，并保持较低的库浏览内存占用。"
+      },
+      {
+        "title": "macOS / Metal 管线",
+        "description": "v0.1.2 之后已经补齐 macOS 编译支持、Metal RAW 工具、Metal 缩放与镜头校正，并把 Metal 接进了主 pipeline。"
       },
       {
         "title": "ACES 2.0 与 OpenDRT",
-        "description": "支持 ACES 2.0 输出渲染与 OpenDRT，行业标准色彩管理体系，多种渲染变换可选。"
+        "description": "支持 ACES 2.0 输出渲染与 OpenDRT，渲染变换选择已经直接进入界面，方便在同一项目里切换显示策略。"
       },
       {
-        "title": "LUT 与曲线",
-        "description": "支持 CUBE LUT 风格化调色、负片般的 Sigmoid 对比度曲线，以及完全可交互的自定义曲线。"
+        "title": "自定义“色彩科学”",
+        "description": "围绕可选显示变换、LUT 驱动的 look 与可调渲染意图来组织色彩管线，让每个项目都能按目标风格单独打磨。"
       },
       {
-        "title": "镜头校正",
-        "description": "内置 Lensfun 镜头畸变、暗角和色差校正，拥有丰富的镜头数据库。"
+        "title": "响应式图库工作流",
+        "description": "缩略图等待动画、更快的高分辨率加载、文件夹浏览、筛选器与项目内图片删除，让大批量照片管理更顺手。"
       },
       {
-        "title": "Sleeve 资产管理",
-        "description": "基于 DuckDB 的轻量级数字资产管理。一个 .puerhproj 文件即可保存整个项目——编辑、历史和库结构。"
-      },
-      {
-        "title": "类 Git 版本控制",
-        "description": "无限撤销与分支版本控制。创建、对比和切换不同编辑版本，完全无损。"
+        "title": "版本化编辑",
+        "description": "重置调整、可分支历史、宽高比选择与导出队列工具已经形成一条完整的无损迭代路径。"
       }
     ]
   },
   "gallery": {
     "sectionTitle": "功能展示",
-    "sectionSubtitle": "从导入到导出的现代工作流",
+    "sectionSubtitle": "当前库浏览、编辑、校正与导出工作流中的几个典型界面",
     "items": [
-      { "title": "现代 UI 界面", "description": "简洁响应式缩略图网格，支持按拍摄日期、相机型号、镜头等多条件高级过滤。" },
-      { "title": "高级调整控件", "description": "精确的白平衡、HSL、CDL 色轮和实时直方图——全部以 60 FPS 运行。" },
-      { "title": "LUT / 历史 / 版本控制", "description": "应用 CUBE LUT 调色，交互式曲线编辑，无限可分支历史栈管理编辑。" },
-      { "title": "镜头校正", "description": "自动镜头配置匹配与手动覆盖。一键校正畸变、暗角和色差。" },
-      { "title": "高级导出", "description": "批量导出 JPEG/PNG/TIFF/WebP/EXR，完整元数据写回与缩放选项。" }
+      { "title": "图库浏览器", "description": "文件夹树、响应式缩略图网格、多条件筛选与实时计数，让大项目也能快速定位。" },
+      { "title": "调整工作区", "description": "白平衡、HSL、CDL 色轮、色调塑形与实时直方图都围绕实时预览展开。" },
+      { "title": "LUT 与历史", "description": "一边套用和比较不同 LUT，一边保留就近可见、可分支的编辑历史，方便反复迭代色彩与明暗风格。" },
+      { "title": "自定义“色彩科学”", "description": "围绕自定义显示变换、渲染意图与 look 开发来组织项目流程，而不是被单一默认色彩管线固定住。" },
+      { "title": "导出队列", "description": "批量导出支持格式、位深、缩放与元数据选项，适合一次性完成整组交付。" }
     ]
   },
   "roadmap": {
     "sectionTitle": "路线图",
-    "sectionSubtitle": "即将推出的功能",
+    "sectionSubtitle": "从 v0.1.2 之后的 main 分支里程碑，到接下来仍在推进的方向",
     "items": [
       {
-        "date": "2025年12月",
-        "title": "基础建设",
-        "entries": ["SleeveFS 集成滚动缩略图缓存", "CUDA 管线初步实现", "RCD 作为默认去马赛克算法", "实验性全景拼接模块", "RAW 处理自定义白平衡"]
-      },
-      {
-        "date": "2026年1月",
-        "title": "稳定性提升",
-        "entries": ["全局参数同步", "LUT 纹理生命周期管理", "CUDA 管线稳定性改进"]
+        "date": "2026年3月",
+        "title": "v0.1.2 已发布",
+        "entries": ["OpenDRT 支持与渲染变换选择 UI", "项目图片删除", "筛选器界面改进", "核心色彩管理修复"]
       },
       {
         "date": "2026年3月",
-        "title": "v0.1.2 发布",
-        "entries": ["OpenDRT 渲染变换支持", "渲染变换选择 UI", "项目图片删除功能", "筛选器 UI 改进"]
+        "title": "主线工作流打磨",
+        "entries": ["编辑器重置调整", "宽高比选择", "缩略图等待动画", "更快的高分辨率相机加载"]
       },
       {
-        "date": "未来计划",
-        "title": "愿景",
-        "entries": ["JSON 管线配置序列化", "HDR 工作流与输出", "macOS Metal 加速", "语义搜索与 AI 辅助标签", "全景拼接完整集成"]
+        "date": "2026年3月",
+        "title": "macOS / Metal 补齐",
+        "entries": ["macOS 编译支持", "Metal 图像处理初始版本", "Metal RAW 处理工具", "Metal 缩放与镜头校正"]
+      },
+      {
+        "date": "2026年3月",
+        "title": "Metal 接入主管线",
+        "entries": ["Metal 接入主 pipeline", "几何管线修复", "Shader 编译链路整理", "macOS 打包逻辑与后续修复"]
+      },
+      {
+        "date": "下一阶段",
+        "title": "继续推进",
+        "entries": ["JSON 管线序列化", "HDR 工作流与输出", "语义搜索与 AI 辅助标签", "全景拼接集成", "继续缩小 Windows/CUDA 与 macOS/Metal 的功能差距"]
       }
     ]
   },
   "techStack": {
     "sectionTitle": "技术栈",
-    "sectionSubtitle": "基于成熟开源技术构建的坚实基础",
+    "sectionSubtitle": "围绕 Windows/CUDA 与 macOS/Metal 两条平台路径搭建的跨平台技术栈",
     "categories": [
-      { "label": "核心", "items": ["C++20", "CUDA 12.8", "Qt 6", "CMake"] },
-      { "label": "影像处理", "items": ["OpenImageIO", "OpenColorIO", "LibRaw", "lcms2", "OpenCV", "Eigen"] },
+      { "label": "平台", "items": ["Windows / CUDA", "macOS / Metal"] },
+      { "label": "核心", "items": ["C++20", "Qt 6", "CMake"] },
+      { "label": "影像处理", "items": ["OpenImageIO", "LibRaw", "OpenCV", "Eigen"] },
+      { "label": "色彩", "items": ["OpenColorIO", "ACES 2.0", "OpenDRT", "lcms2"] },
       { "label": "存储", "items": ["DuckDB"] },
-      { "label": "镜头", "items": ["Lensfun"] },
-      { "label": "元数据", "items": ["Exiv2"] },
+      { "label": "镜头与元数据", "items": ["Lensfun", "Exiv2"] },
       { "label": "性能优化", "items": ["Highway (SIMD)", "OpenMP", "xxHash"] }
     ]
   },
   "install": {
     "sectionTitle": "开始使用",
-    "sectionSubtitle": "几分钟内从源码构建",
+    "sectionSubtitle": "从源码构建当前的 Windows/CUDA 或 macOS/Metal 分支",
     "tabs": {
       "windows": "Windows",
       "macos": "macOS"
     },
     "windows": [
+      "# Windows / CUDA 工具链",
       "git clone --recursive https://github.com/zidage/PuerhLab.git",
       "cd PuerhLab",
       ".\\vcpkg\\bootstrap-vcpkg.bat",
@@ -110,6 +117,7 @@
       "cmd /c scripts\\msvc_env.cmd --build --preset win_debug --parallel 4"
     ],
     "macos": [
+      "# macOS / Metal 工具链",
       "brew install cmake ninja qt opencv opencolorio duckdb exiv2 glib libraw little-cms2 highway openimageio pkg-config xxhash eigen libomp",
       "git clone --recursive https://github.com/zidage/PuerhLab.git && cd PuerhLab",
       "git submodule update --init --recursive pu-erh_lab/src/third_party/lensfun",

@@ -9,7 +9,14 @@ const { lang } = Astro.props;
 const i = t(lang);
 const base = import.meta.env.BASE_URL;
 
-const images = ['1.png', '2.png', '3.png', '5.png', '4.png'];
+const imageSuffix = lang === 'zh' ? '_zh' : '';
+const images = [
+  `1${imageSuffix}.png`,
+  `2${imageSuffix}.png`,
+  `3${imageSuffix}.png`,
+  `5${imageSuffix}.png`,
+  `4${imageSuffix}.png`,
+];
 ---
 
 <section id="gallery" class="relative py-24">

@@ -51,7 +51,7 @@
     {
       "name": "macos_debug",
       "displayName": "macOS Debug",
-      "description": "macOS: CPU-only app build without the OpenGL editor",
+      "description": "macOS: Metal-enabled app build without the legacy OpenGL editor",
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/macos-debug",
       "cacheVariables": {
@@ -65,7 +65,7 @@
     {
       "name": "macos_debug_tests",
       "displayName": "macOS Debug Tests",
-      "description": "macOS: Debug test build for CMake Tools and clangd",
+      "description": "macOS: Debug test build for the Metal backend path, CMake Tools, and clangd",
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/macos-debug-tests",
       "cacheVariables": {
@@ -79,7 +79,7 @@
     {
       "name": "macos_release",
       "displayName": "macOS Release",
-      "description": "macOS: CPU-only app build without the OpenGL editor",
+      "description": "macOS: Metal-enabled app build without the legacy OpenGL editor",
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/macos-release",
       "cacheVariables": {
