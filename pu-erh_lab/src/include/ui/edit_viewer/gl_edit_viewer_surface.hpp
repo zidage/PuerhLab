@@ -10,6 +10,7 @@
 #include <QOpenGLContext>
 
 #include "ui/edit_viewer/edit_viewer_surface.hpp"
+#include "ui/edit_viewer/frame_mailbox.hpp"
 
 class QWidget;
 

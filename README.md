@@ -165,7 +165,7 @@ Optional deploy tuning:
 -DPUERHLAB_DEPLOY_SOFTWARE_OPENGL=ON
 
 # Pass extra options to Qt deploy tooling (semicolon-separated list).
--DPUERHLAB_QT_DEPLOY_TOOL_OPTIONS="--no-compiler-runtime;--no-translations;--no-system-d3d-compiler;--no-system-dxc-compiler"
+-DPUERHLAB_QT_DEPLOY_TOOL_OPTIONS="--no-compiler-runtime;--no-system-d3d-compiler;--no-system-dxc-compiler"
 ```
 
 Create a ZIP package (CPack):

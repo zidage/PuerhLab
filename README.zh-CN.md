@@ -169,7 +169,7 @@ cmd /c scripts\msvc_env.cmd --install build/release --prefix build/install
 -DPUERHLAB_DEPLOY_SOFTWARE_OPENGL=ON
 
 # 向 Qt 部署工具传递额外参数（分号分隔）
--DPUERHLAB_QT_DEPLOY_TOOL_OPTIONS="--no-compiler-runtime;--no-translations;--no-system-d3d-compiler;--no-system-dxc-compiler"
+-DPUERHLAB_QT_DEPLOY_TOOL_OPTIONS="--no-compiler-runtime;--no-system-d3d-compiler;--no-system-dxc-compiler"
 ```
 
 生成 ZIP 安装包（CPack）：
