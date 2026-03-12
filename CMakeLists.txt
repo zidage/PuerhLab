@@ -483,14 +483,34 @@ if(WIN32 AND TARGET ${PUERHLAB_MAIN_BIN})
     endif()
 
     option(PUERHLAB_DEPLOY_SOFTWARE_OPENGL "Bundle opengl32sw.dll for software OpenGL fallback." OFF)
-    set(PUERHLAB_QT_DEPLOY_TOOL_OPTIONS
+
+    set(_puerhlab_qt_deploy_tool_options_default
+        --no-compiler-runtime
+        --no-system-d3d-compiler
+        --no-system-dxc-compiler
+    )
+    set(_puerhlab_qt_deploy_tool_options_legacy_default
         --no-compiler-runtime
         --no-translations
         --no-system-d3d-compiler
         --no-system-dxc-compiler
-        CACHE STRING
-        "Semicolon-separated options forwarded to Qt deploy tool during install."
     )
+
+    if(NOT DEFINED PUERHLAB_QT_DEPLOY_TOOL_OPTIONS OR
+       "${PUERHLAB_QT_DEPLOY_TOOL_OPTIONS}" STREQUAL "${_puerhlab_qt_deploy_tool_options_legacy_default}")
+        set(PUERHLAB_QT_DEPLOY_TOOL_OPTIONS
+            ${_puerhlab_qt_deploy_tool_options_default}
+            CACHE STRING
+            "Semicolon-separated options forwarded to Qt deploy tool during install."
+            FORCE
+        )
+    else()
+        set(PUERHLAB_QT_DEPLOY_TOOL_OPTIONS
+            "${PUERHLAB_QT_DEPLOY_TOOL_OPTIONS}"
+            CACHE STRING
+            "Semicolon-separated options forwarded to Qt deploy tool during install."
+        )
+    endif()
 
     set(_deploy_tool_options ${PUERHLAB_QT_DEPLOY_TOOL_OPTIONS})
     if(NOT PUERHLAB_DEPLOY_SOFTWARE_OPENGL)

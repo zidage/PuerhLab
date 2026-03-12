@@ -7,6 +7,7 @@
 #include <QApplication>
 #include <QCheckBox>
 #include <QComboBox>
+#include <QCoreApplication>
 #include <QFontDatabase>
 #include <QListWidget>
 #include <QPushButton>
@@ -19,7 +20,10 @@ namespace {
 constexpr char kThemeFontRoleProperty[] = "puerhlabFontRole";
 
 struct FontFamilies {
-  QString ui = QStringLiteral("Inter");
+  QString ui_latin = QStringLiteral("Inter");
+  QString ui_zh = QStringLiteral("Noto Sans SC");
+  QString ui_override;
+  QString effective_language_code = QStringLiteral("en");
   QString data = QStringLiteral("IBM Plex Sans");
   QString mono;
 };
@@ -32,6 +36,27 @@ auto FontState() -> FontFamilies& {
 auto FontsRegisteredFlag() -> bool& {
   static bool loaded = false;
   return loaded;
+}
+
+auto IsChineseLanguageCode(const QString& code) -> bool {
+  return code.startsWith(QStringLiteral("zh"), Qt::CaseInsensitive);
+}
+
+auto ActiveUiFamily(const FontFamilies& families) -> const QString& {
+  if (!families.ui_override.isEmpty()) {
+    return families.ui_override;
+  }
+  if (IsChineseLanguageCode(families.effective_language_code)) {
+    return families.ui_zh;
+  }
+  return families.ui_latin;
+}
+
+void RefreshTopLevelWidgetFonts() {
+  const auto widgets = QApplication::topLevelWidgets();
+  for (QWidget* widget : widgets) {
+    AppTheme::ApplyFontsRecursively(widget);
+  }
 }
 
 auto RegisterFontResource(const QString& path, const QString& preferred_family) -> QString {
@@ -83,14 +108,33 @@ void AppTheme::RegisterFonts() {
   }
 
   auto& families = FontState();
-  families.ui =
+  families.ui_latin =
       RegisterFontResource(QStringLiteral(":/fonts/main_Inter.ttf"), QStringLiteral("Inter"));
-  RegisterFontResource(QStringLiteral(":/fonts/main_Inter_italic.ttf"), families.ui);
+  RegisterFontResource(QStringLiteral(":/fonts/main_Inter_italic.ttf"), families.ui_latin);
+  families.ui_zh = RegisterFontResource(QStringLiteral(":/fonts/main_NotoSans_zh.ttf"),
+                                        QStringLiteral("Noto Sans SC"));
   families.data = RegisterFontResource(QStringLiteral(":/fonts/main_IBM.ttf"),
                                        QStringLiteral("IBM Plex Sans"));
   families.mono = QFontDatabase::systemFont(QFontDatabase::FixedFont).family();
 
   FontsRegisteredFlag() = true;
+}
+
+void AppTheme::SetEffectiveLanguageCode(const QString& code) {
+  RegisterFonts();
+
+  auto& families = FontState();
+  const QString previous_family = ActiveUiFamily(families);
+  const QString normalized_code =
+      code.trimmed().isEmpty() ? QStringLiteral("en") : code.trimmed();
+  families.effective_language_code = normalized_code;
+
+  if (ActiveUiFamily(families) == previous_family) {
+    return;
+  }
+
+  RefreshTopLevelWidgetFonts();
+  emit Instance().UiFontFamilyChanged();
 }
 
 auto AppTheme::TryRegisterUiFontOverride(const QString& path) -> bool {
@@ -110,7 +154,13 @@ auto AppTheme::TryRegisterUiFontOverride(const QString& path) -> bool {
     return false;
   }
 
-  FontState().ui = families.front();
+  auto& state = FontState();
+  const QString previous_family = ActiveUiFamily(state);
+  state.ui_override = families.front();
+  if (ActiveUiFamily(state) != previous_family) {
+    RefreshTopLevelWidgetFonts();
+    emit Instance().UiFontFamilyChanged();
+  }
   return true;
 }
 
@@ -118,36 +168,44 @@ void AppTheme::ApplyApplicationFont(QApplication& app) {
   RegisterFonts();
 
   QFont app_font = app.font();
-  app_font.setFamily(FontState().ui);
+  app_font.setFamily(ActiveUiFamily(FontState()));
   app_font.setStyleStrategy(QFont::PreferAntialias);
   app.setFont(app_font);
+  RefreshTopLevelWidgetFonts();
+}
+
+void AppTheme::ApplyApplicationFont() {
+  if (auto* app = qobject_cast<QApplication*>(QCoreApplication::instance())) {
+    ApplyApplicationFont(*app);
+  }
 }
 
 auto AppTheme::Font(FontRole role) -> QFont {
   RegisterFonts();
   const auto& families = FontState();
+  const QString ui_family = ActiveUiFamily(families);
 
   switch (role) {
     case FontRole::UiBody:
-      return MakeFont(families.ui, 11.0, QFont::Normal);
+      return MakeFont(ui_family, 11.0, QFont::Normal);
     case FontRole::UiBodyStrong:
-      return MakeFont(families.ui, 11.0, QFont::DemiBold);
+      return MakeFont(ui_family, 11.0, QFont::DemiBold);
     case FontRole::UiCaption:
-      return MakeFont(families.ui, 10.0, QFont::Normal);
+      return MakeFont(ui_family, 10.0, QFont::Normal);
     case FontRole::UiCaptionStrong:
-      return MakeFont(families.ui, 10.0, QFont::DemiBold);
+      return MakeFont(ui_family, 10.0, QFont::DemiBold);
     case FontRole::UiTitle:
-      return MakeFont(families.ui, 11.0, QFont::DemiBold);
+      return MakeFont(ui_family, 11.0, QFont::DemiBold);
     case FontRole::UiHeadline:
-      return MakeFont(families.ui, 14.0, QFont::Bold);
+      return MakeFont(ui_family, 14.0, QFont::Bold);
     case FontRole::UiOverline: {
-      QFont font = MakeFont(families.ui, 9.0, QFont::DemiBold);
+      QFont font = MakeFont(ui_family, 9.0, QFont::DemiBold);
       font.setCapitalization(QFont::AllUppercase);
       font.setLetterSpacing(QFont::AbsoluteSpacing, 0.8);
       return font;
     }
     case FontRole::UiHint:
-      return MakeFont(families.ui, 9.0, QFont::Normal);
+      return MakeFont(ui_family, 9.0, QFont::Normal);
     case FontRole::DataBody:
       return MakeFont(families.data, 11.0, QFont::Normal);
     case FontRole::DataBodyStrong:
@@ -164,7 +222,7 @@ auto AppTheme::Font(FontRole role) -> QFont {
       return MakeFont(families.mono, 9.0, QFont::Normal);
   }
 
-  return MakeFont(families.ui, 11.0, QFont::Normal);
+  return MakeFont(ui_family, 11.0, QFont::Normal);
 }
 
 void AppTheme::ApplyFont(QWidget* widget, FontRole role) {
@@ -414,9 +472,18 @@ auto AppTheme::EditorTransparentFrameStyle() -> QString {
                         "}");
 }
 
-auto AppTheme::uiFontFamily() const -> QString { return FontState().ui; }
-auto AppTheme::dataFontFamily() const -> QString { return FontState().data; }
-auto AppTheme::monoFontFamily() const -> QString { return FontState().mono; }
+auto AppTheme::uiFontFamily() const -> QString {
+  RegisterFonts();
+  return ActiveUiFamily(FontState());
+}
+auto AppTheme::dataFontFamily() const -> QString {
+  RegisterFonts();
+  return FontState().data;
+}
+auto AppTheme::monoFontFamily() const -> QString {
+  RegisterFonts();
+  return FontState().mono;
+}
 
 auto AppTheme::toneGold() const -> QColor { return QColor(QStringLiteral("#FCC704")); }
 auto AppTheme::toneWine() const -> QColor { return QColor(QStringLiteral("#8A0526")); }

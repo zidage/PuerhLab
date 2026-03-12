@@ -16,7 +16,7 @@ namespace puerhlab::ui {
 
 class AppTheme final : public QObject {
   Q_OBJECT
-  Q_PROPERTY(QString uiFontFamily READ uiFontFamily CONSTANT)
+  Q_PROPERTY(QString uiFontFamily READ uiFontFamily NOTIFY UiFontFamilyChanged)
   Q_PROPERTY(QString dataFontFamily READ dataFontFamily CONSTANT)
   Q_PROPERTY(QString monoFontFamily READ monoFontFamily CONSTANT)
   Q_PROPERTY(QColor toneGold READ toneGold CONSTANT)
@@ -62,6 +62,8 @@ class AppTheme final : public QObject {
   static auto Instance() -> AppTheme&;
 
   static void RegisterFonts();
+  static void SetEffectiveLanguageCode(const QString& code);
+  static void ApplyApplicationFont();
   static auto TryRegisterUiFontOverride(const QString& path) -> bool;
   static void ApplyApplicationFont(QApplication& app);
 
@@ -107,6 +109,9 @@ class AppTheme final : public QObject {
   auto hoverColor() const -> QColor;
   auto overlayColor() const -> QColor;
   auto panelRadius() const -> int;
+
+ signals:
+  void UiFontFamilyChanged();
 
  private:
   explicit AppTheme(QObject* parent = nullptr);

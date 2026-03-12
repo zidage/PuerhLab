@@ -59,11 +59,18 @@ int main(int argc, char* argv[]) {
   } else if (const auto env = qEnvironmentVariable("PUERHLAB_FONT_PATH"); !env.isEmpty()) {
     puerhlab::ui::AppTheme::TryRegisterUiFontOverride(env);
   }
+  puerhlab::ui::LanguageManager language_manager(&app);
+  puerhlab::ui::AppTheme::SetEffectiveLanguageCode(language_manager.EffectiveLanguageCode());
   puerhlab::ui::AppTheme::ApplyApplicationFont(app);
+  QObject::connect(&language_manager, &puerhlab::ui::LanguageManager::EffectiveLanguageCodeChanged,
+                   &app, [&app, &language_manager]() {
+                     puerhlab::ui::AppTheme::SetEffectiveLanguageCode(
+                         language_manager.EffectiveLanguageCode());
+                     puerhlab::ui::AppTheme::ApplyApplicationFont(app);
+                   });
   QQuickStyle::setStyle("Material");
 
   puerhlab::ui::AlbumBackend backend;
-  puerhlab::ui::LanguageManager language_manager(&app);
 
   QQmlApplicationEngine engine;
   engine.addImportPath("qrc:/");

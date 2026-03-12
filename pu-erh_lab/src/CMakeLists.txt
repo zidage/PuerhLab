@@ -909,9 +909,11 @@ if(DEFINED PUERHLAB_LENSFUN_LIBRARY_DIR AND NOT "${PUERHLAB_LENSFUN_LIBRARY_DIR}
 endif()
 
 set(PUERHLAB_MAIN_FONT_SRC "${CMAKE_SOURCE_DIR}/pu-erh_lab/src/config/fonts/main_Inter.ttf")
+set(PUERHLAB_MAIN_ZH_FONT_SRC "${CMAKE_SOURCE_DIR}/pu-erh_lab/src/config/fonts/main_NotoSans_zh.ttf")
 add_custom_command(TARGET puerhlab_main POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:puerhlab_main>/fonts"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different "${PUERHLAB_MAIN_FONT_SRC}" "$<TARGET_FILE_DIR:puerhlab_main>/fonts/main_Inter.ttf"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${PUERHLAB_MAIN_ZH_FONT_SRC}" "$<TARGET_FILE_DIR:puerhlab_main>/fonts/main_NotoSans_zh.ttf"
     VERBATIM
 )
 
