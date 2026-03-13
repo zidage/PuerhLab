@@ -275,11 +275,15 @@ struct FusedOperatorParams {
   bool  clarity_enabled_        = true;
   float clarity_offset_         = 0.0f;
   float clarity_radius_         = 5.0f;
+  int   clarity_gaussian_tap_count_ = 0;
+  float clarity_gaussian_weights_[OperatorParams::kDetailMaxGaussianTapCount] = {};
 
   bool  sharpen_enabled_        = true;
   float sharpen_offset_         = 0.0f;
   float sharpen_radius_         = 3.0f;
   float sharpen_threshold_      = 0.0f;
+  int   sharpen_gaussian_tap_count_ = 0;
+  float sharpen_gaussian_weights_[OperatorParams::kDetailMaxGaussianTapCount] = {};
 
   bool  color_wheel_enabled_    = true;
   float lift_color_offset_[3]   = {0.0f, 0.0f, 0.0f};
@@ -412,10 +416,22 @@ class FusedParamsConverter {
     fused.clarity_enabled_     = cpu_params.clarity_enabled_;
     fused.clarity_offset_      = cpu_params.clarity_offset_;
     fused.clarity_radius_      = cpu_params.clarity_radius_;
+    fused.clarity_gaussian_tap_count_ =
+        std::clamp(cpu_params.clarity_gaussian_tap_count_, 0,
+                   OperatorParams::kDetailMaxGaussianTapCount);
+    for (int i = 0; i < OperatorParams::kDetailMaxGaussianTapCount; ++i) {
+      fused.clarity_gaussian_weights_[i] = cpu_params.clarity_gaussian_weights_[i];
+    }
     fused.sharpen_enabled_     = cpu_params.sharpen_enabled_;
     fused.sharpen_offset_      = cpu_params.sharpen_offset_;
     fused.sharpen_radius_      = cpu_params.sharpen_radius_;
     fused.sharpen_threshold_   = cpu_params.sharpen_threshold_;
+    fused.sharpen_gaussian_tap_count_ =
+        std::clamp(cpu_params.sharpen_gaussian_tap_count_, 0,
+                   OperatorParams::kDetailMaxGaussianTapCount);
+    for (int i = 0; i < OperatorParams::kDetailMaxGaussianTapCount; ++i) {
+      fused.sharpen_gaussian_weights_[i] = cpu_params.sharpen_gaussian_weights_[i];
+    }
     fused.color_wheel_enabled_ = cpu_params.color_wheel_enabled_;
     for (int i = 0; i < 3; ++i) {
       fused.lift_color_offset_[i]  = cpu_params.lift_color_offset_[i];

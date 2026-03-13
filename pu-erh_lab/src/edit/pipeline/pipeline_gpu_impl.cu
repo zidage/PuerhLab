@@ -33,12 +33,14 @@ class CUDA_GPUPipeline final : public GPUPipelineImpl {
     auto lmt    = GPU_LMT_Kernel();
     auto to_out = GPU_OUTPUT_Kernel();
 
-    auto sharp  = GPU_SharpenKernel();
-    auto clar   = GPU_ClarityKernel();
+    auto sharp_h = GPU_SharpenBlurHorizontalKernel();
+    auto sharp_v = GPU_SharpenApplyVerticalKernel();
+    auto clar_h  = GPU_ClarityBlurHorizontalKernel();
+    auto clar_v  = GPU_ClarityApplyVerticalKernel();
 
     return GPU_StaticKernelStream(GPU_PointChain(to_ws, exp, cont, tone, high, shad, curve, sat,
                                                  vib, wheel, hls, lmt, to_out),
-                                  sharp, clar);
+                                  sharp_h, sharp_v, clar_h, clar_v);
   };
 
   using StaticKernelStreamType                                     = decltype(BuildKernelStream());

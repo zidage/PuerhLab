@@ -424,12 +424,16 @@ struct GPUOperatorParams {
   bool                 clarity_enabled_        = true;
   float                clarity_offset_         = 0.0f;
   float                clarity_radius_         = 5.0f;
+  int                  clarity_gaussian_tap_count_ = 0;
+  float                clarity_gaussian_weights_[OperatorParams::kDetailMaxGaussianTapCount] = {};
 
   // Sharpen adjustment parameter
   bool                 sharpen_enabled_        = true;
   float                sharpen_offset_         = 0.0f;
   float                sharpen_radius_         = 3.0f;
   float                sharpen_threshold_      = 0.0f;
+  int                  sharpen_gaussian_tap_count_ = 0;
+  float                sharpen_gaussian_weights_[OperatorParams::kDetailMaxGaussianTapCount] = {};
 
   // CDL SOP wheel terms:
   // out = clamp(pow(max(in * slope + offset, 0), power), 0, 1)
@@ -593,10 +597,22 @@ class CudaFusedParamUploader {
     gpu_params.clarity_enabled_     = fused_params.clarity_enabled_;
     gpu_params.clarity_offset_      = fused_params.clarity_offset_;
     gpu_params.clarity_radius_      = fused_params.clarity_radius_;
+    gpu_params.clarity_gaussian_tap_count_ =
+        std::clamp(fused_params.clarity_gaussian_tap_count_, 0,
+                   OperatorParams::kDetailMaxGaussianTapCount);
+    for (int i = 0; i < OperatorParams::kDetailMaxGaussianTapCount; ++i) {
+      gpu_params.clarity_gaussian_weights_[i] = fused_params.clarity_gaussian_weights_[i];
+    }
     gpu_params.sharpen_enabled_     = fused_params.sharpen_enabled_;
     gpu_params.sharpen_offset_      = fused_params.sharpen_offset_;
     gpu_params.sharpen_radius_      = fused_params.sharpen_radius_;
     gpu_params.sharpen_threshold_   = fused_params.sharpen_threshold_;
+    gpu_params.sharpen_gaussian_tap_count_ =
+        std::clamp(fused_params.sharpen_gaussian_tap_count_, 0,
+                   OperatorParams::kDetailMaxGaussianTapCount);
+    for (int i = 0; i < OperatorParams::kDetailMaxGaussianTapCount; ++i) {
+      gpu_params.sharpen_gaussian_weights_[i] = fused_params.sharpen_gaussian_weights_[i];
+    }
     gpu_params.color_wheel_enabled_ = fused_params.color_wheel_enabled_;
     for (int i = 0; i < 3; ++i) {
       gpu_params.lift_color_offset_[i]  = fused_params.lift_color_offset_[i];

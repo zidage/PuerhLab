@@ -231,16 +231,22 @@ struct OperatorParams {
   std::vector<float>           curve_h_                  = {};
   std::vector<float>           curve_m_                  = {};
 
+  static constexpr int         kDetailMaxGaussianTapCount = 24;
+
   // Clarity adjustment parameter
   bool                         clarity_enabled_          = true;
   float                        clarity_offset_           = 0.0f;
   float                        clarity_radius_           = 5.0f;
+  int                          clarity_gaussian_tap_count_ = 0;
+  float                        clarity_gaussian_weights_[kDetailMaxGaussianTapCount] = {};
 
   // Sharpen adjustment parameter
   bool                         sharpen_enabled_          = true;
   float                        sharpen_offset_           = 0.0f;
   float                        sharpen_radius_           = 3.0f;
   float                        sharpen_threshold_        = 0.0f;
+  int                          sharpen_gaussian_tap_count_ = 0;
+  float                        sharpen_gaussian_weights_[kDetailMaxGaussianTapCount] = {};
 
   // Color wheel adjustment parameters
   bool                         color_wheel_enabled_      = true;

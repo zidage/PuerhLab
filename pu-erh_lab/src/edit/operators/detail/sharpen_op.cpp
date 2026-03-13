@@ -4,6 +4,8 @@
 
 #include "edit/operators/detail/sharpen_op.hpp"
 
+#include <algorithm>
+#include <cmath>
 #include <opencv2/core.hpp>
 #include <opencv2/core/base.hpp>
 #include <opencv2/opencv.hpp>
@@ -14,6 +16,40 @@
 #include "json.hpp"
 
 namespace puerhlab {
+namespace {
+
+void BuildGaussianKernel(float sigma, int max_radius, int& tap_count,
+                         float (&weights)[OperatorParams::kDetailMaxGaussianTapCount]) {
+  std::fill_n(weights, OperatorParams::kDetailMaxGaussianTapCount, 0.0f);
+  tap_count = 0;
+
+  if (sigma <= 0.0f) {
+    return;
+  }
+
+  const float safe_sigma = std::max(sigma, 1.0e-4f);
+  const int   radius =
+      std::clamp(static_cast<int>(std::ceil(3.0f * safe_sigma)), 1, max_radius);
+  tap_count = std::min(radius + 1, OperatorParams::kDetailMaxGaussianTapCount);
+
+  const double inv2sigma2  = 0.5 / (static_cast<double>(safe_sigma) * safe_sigma);
+  double       full_weight = 1.0;
+  weights[0]               = 1.0f;
+  for (int tap = 1; tap < tap_count; ++tap) {
+    const double w = std::exp(-(static_cast<double>(tap) * static_cast<double>(tap)) * inv2sigma2);
+    weights[tap]   = static_cast<float>(w);
+    full_weight += 2.0 * w;
+  }
+
+  if (full_weight > 0.0) {
+    for (int tap = 0; tap < tap_count; ++tap) {
+      weights[tap] = static_cast<float>(static_cast<double>(weights[tap]) / full_weight);
+    }
+  }
+}
+
+}  // namespace
+
 SharpenOp::SharpenOp(float offset, float radius, float threshold)
     : offset_(offset), radius_(radius), threshold_(threshold) {
   ComputeScale();
@@ -90,6 +126,8 @@ void SharpenOp::SetGlobalParams(OperatorParams& params) const {
   params.sharpen_offset_    = scale_;
   params.sharpen_radius_    = radius_;
   params.sharpen_threshold_ = threshold_;
+  BuildGaussianKernel(radius_, 15, params.sharpen_gaussian_tap_count_,
+                      params.sharpen_gaussian_weights_);
 }
 
 void SharpenOp::EnableGlobalParams(OperatorParams& params, bool enable) {

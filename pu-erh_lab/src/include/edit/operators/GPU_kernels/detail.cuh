@@ -13,145 +13,164 @@
 
 namespace puerhlab {
 namespace CUDA {
-struct GPU_ClarityKernel : GPUNeighborOpTag {
-  __device__ __forceinline__ float luminance(const float4& c) const {
-    // COLOR_BGR2GRAY (matching OpenCV convention)
-    return c.x * 0.114f + c.y * 0.587f + c.z * 0.299f;
+
+GPU_FUNC float detail_luminance(const float4& c) {
+  // Match the CPU COLOR_BGR2GRAY coefficients.
+  return c.x * 0.114f + c.y * 0.587f + c.z * 0.299f;
+}
+
+GPU_FUNC float4 detail_read_clamped(const float4* __restrict src, int x, int y, int width,
+                                    int height, size_t pitch_elems) {
+  const int clamped_x = min(max(x, 0), width - 1);
+  const int clamped_y = min(max(y, 0), height - 1);
+  return src[static_cast<size_t>(clamped_y) * pitch_elems + static_cast<size_t>(clamped_x)];
+}
+
+GPU_FUNC float4 detail_blur_horizontal(int x, int y, const float4* __restrict src, int width,
+                                       int height, size_t pitch_elems, int tap_count,
+                                       const float* __restrict weights) {
+  if (tap_count <= 0) {
+    return detail_read_clamped(src, x, y, width, height, pitch_elems);
   }
 
-  __device__ __forceinline__ float gaussian(float dx, float dy, float sigma) const {
-    const float inv2sigma2 = 0.5f / (sigma * sigma);
-    return expf(-(dx * dx + dy * dy) * inv2sigma2);
+  const float4 center = detail_read_clamped(src, x, y, width, height, pitch_elems);
+  float4       blur   = make_float4(center.x * weights[0], center.y * weights[0],
+                                    center.z * weights[0], center.w * weights[0]);
+  for (int tap = 1; tap < tap_count; ++tap) {
+    const float  w = weights[tap];
+    const float4 a = detail_read_clamped(src, x + tap, y, width, height, pitch_elems);
+    const float4 b = detail_read_clamped(src, x - tap, y, width, height, pitch_elems);
+    blur.x += (a.x + b.x) * w;
+    blur.y += (a.y + b.y) * w;
+    blur.z += (a.z + b.z) * w;
+    blur.w += (a.w + b.w) * w;
+  }
+  return blur;
+}
+
+GPU_FUNC float4 detail_blur_vertical(int x, int y, const float4* __restrict src, int width,
+                                     int height, size_t pitch_elems, int tap_count,
+                                     const float* __restrict weights) {
+  if (tap_count <= 0) {
+    return detail_read_clamped(src, x, y, width, height, pitch_elems);
   }
 
+  const float4 center = detail_read_clamped(src, x, y, width, height, pitch_elems);
+  float4       blur   = make_float4(center.x * weights[0], center.y * weights[0],
+                                    center.z * weights[0], center.w * weights[0]);
+  for (int tap = 1; tap < tap_count; ++tap) {
+    const float  w = weights[tap];
+    const float4 a = detail_read_clamped(src, x, y + tap, width, height, pitch_elems);
+    const float4 b = detail_read_clamped(src, x, y - tap, width, height, pitch_elems);
+    blur.x += (a.x + b.x) * w;
+    blur.y += (a.y + b.y) * w;
+    blur.z += (a.z + b.z) * w;
+    blur.w += (a.w + b.w) * w;
+  }
+  return blur;
+}
+
+struct GPU_ClarityBlurHorizontalKernel : GPUNeighborOpTag {
   __device__ __forceinline__ void operator()(int x, int y, const float4* __restrict src,
                                              float4* __restrict dst, int width, int height,
-                                             size_t pitch_elems,  // pitch in float4 units
+                                             size_t pitch_elems,
                                              GPUOperatorParams& params) const {
-    if (!params.clarity_enabled_) {
-      dst[y * pitch_elems + x] = src[y * pitch_elems + x];
+    const size_t offset = static_cast<size_t>(y) * pitch_elems + static_cast<size_t>(x);
+    if (!params.clarity_enabled_ || params.clarity_offset_ == 0.0f || params.clarity_radius_ <= 0.0f ||
+        params.clarity_gaussian_tap_count_ <= 0) {
+      dst[offset] = src[offset];
       return;
     }
 
-    // Use sigma = 5.0 to match CPU implementation (cv::GaussianBlur with sigma 5.0)
-    const float sigma  = params.clarity_radius_;
-    int         radius = (int)ceilf(3.0f * sigma);
-    radius             = max(1, min(radius, 20));  // Clamp radius to reasonable range
+    dst[offset] = detail_blur_horizontal(x, y, src, width, height, pitch_elems,
+                                         params.clarity_gaussian_tap_count_,
+                                         params.clarity_gaussian_weights_);
+  }
+};
 
-    // Compute Gaussian blur with dynamic kernel size
-    float4 blur = make_float4(0, 0, 0, 0);
-    float  sumW = 0.0f;
-
-    for (int dy = -radius; dy <= radius; ++dy) {
-      int           yy  = min(max(y + dy, 0), height - 1);
-      const float4* row = src + yy * pitch_elems;
-      for (int dx = -radius; dx <= radius; ++dx) {
-        int    xx = min(max(x + dx, 0), width - 1);
-        float  w  = gaussian((float)dx, (float)dy, sigma);
-        float4 v  = row[xx];
-        blur.x += v.x * w;
-        blur.y += v.y * w;
-        blur.z += v.z * w;
-        blur.w += v.w * w;
-        sumW += w;
-      }
+struct GPU_ClarityApplyVerticalKernel : GPUNeighborOpTag {
+  __device__ __forceinline__ void operator()(int x, int y, const float4* __restrict src,
+                                             float4* __restrict dst, int width, int height,
+                                             size_t pitch_elems,
+                                             GPUOperatorParams& params) const {
+    const size_t offset = static_cast<size_t>(y) * pitch_elems + static_cast<size_t>(x);
+    if (!params.clarity_enabled_ || params.clarity_offset_ == 0.0f || params.clarity_radius_ <= 0.0f ||
+        params.clarity_gaussian_tap_count_ <= 0) {
+      dst[offset] = src[offset];
+      return;
     }
 
-    // Normalize blur result
-    const float invSum = 1.0f / sumW;
-    blur.x *= invSum;
-    blur.y *= invSum;
-    blur.z *= invSum;
-    blur.w *= invSum;
+    const float4 orig = dst[offset];
+    const float4 blur = detail_blur_vertical(x, y, src, width, height, pitch_elems,
+                                             params.clarity_gaussian_tap_count_,
+                                             params.clarity_gaussian_weights_);
 
-    // High-pass = original - blur
-    const float4 orig = src[y * pitch_elems + x];
-    float4       high = make_float4(orig.x - blur.x, orig.y - blur.y, orig.z - blur.z,
-                                    orig.w);  // alpha unchanged
+    float4 high = make_float4(orig.x - blur.x, orig.y - blur.y, orig.z - blur.z, orig.w);
 
-    // Midtone mask: "U" shape curve -> 1 - ((L - 0.5) * 2)^2
-    // This emphasizes midtones and reduces effect on shadows/highlights
-    float lum  = luminance(orig);
-    float t    = (lum - 0.5f) * 2.0f;
-    float mask = 1.0f - t * t;
-
-    // Apply clarity with midtone weighting
-    float w = mask * params.clarity_offset_;
+    const float lum  = detail_luminance(orig);
+    const float t    = (lum - 0.5f) * 2.0f;
+    const float mask = 1.0f - t * t;
+    const float w    = mask * params.clarity_offset_;
     high.x *= w;
     high.y *= w;
     high.z *= w;
 
-    // Output = original + weighted high-pass (alpha unchanged)
-    float4 out               = make_float4(orig.x + high.x, orig.y + high.y, orig.z + high.z,
-                                           orig.w);
-    dst[y * pitch_elems + x] = out;
+    dst[offset] = make_float4(orig.x + high.x, orig.y + high.y, orig.z + high.z, orig.w);
   }
 };
 
-struct GPU_SharpenKernel : GPUNeighborOpTag {
-  __device__ __forceinline__ float luminance(const float4& c) const {
-    return c.x * 0.114f + c.y * 0.587f + c.z * 0.299f;
-  }
-
-  __device__ __forceinline__ float gaussian(float dx, float dy, float sigma) const {
-    const float inv2sigma2 = 0.5f / (sigma * sigma);
-    return expf(-(dx * dx + dy * dy) * inv2sigma2);
-  }
-
+struct GPU_SharpenBlurHorizontalKernel : GPUNeighborOpTag {
   __device__ __forceinline__ void operator()(int x, int y, const float4* __restrict src,
                                              float4* __restrict dst, int width, int height,
-                                             size_t pitch_elems,  // pitch in float4 units
+                                             size_t pitch_elems,
                                              GPUOperatorParams& params) const {
-    if (!params.sharpen_enabled_ || params.sharpen_offset_ == 0.0f || params.sharpen_radius_ <= 0.0f) {
-      dst[y * pitch_elems + x] = src[y * pitch_elems + x];
+    const size_t offset = static_cast<size_t>(y) * pitch_elems + static_cast<size_t>(x);
+    if (!params.sharpen_enabled_ || params.sharpen_offset_ == 0.0f || params.sharpen_radius_ <= 0.0f ||
+        params.sharpen_gaussian_tap_count_ <= 0) {
+      dst[offset] = src[offset];
       return;
     }
 
-    const float sigma  = params.sharpen_radius_;
-    int         radius = (int)ceilf(3.0f * sigma);
-    radius             = max(1, min(radius, 15));
+    dst[offset] = detail_blur_horizontal(x, y, src, width, height, pitch_elems,
+                                         params.sharpen_gaussian_tap_count_,
+                                         params.sharpen_gaussian_weights_);
+  }
+};
 
-    float4 blur        = make_float4(0, 0, 0, 0);
-    float  sumW        = 0.0f;
-
-    for (int dy = -radius; dy <= radius; ++dy) {
-      int           yy  = min(max(y + dy, 0), height - 1);
-      const float4* row = src + yy * pitch_elems;
-      for (int dx = -radius; dx <= radius; ++dx) {
-        int    xx = min(max(x + dx, 0), width - 1);
-        float  w  = gaussian((float)dx, (float)dy, sigma);
-        float4 v  = row[xx];
-        blur.x += v.x * w;
-        blur.y += v.y * w;
-        blur.z += v.z * w;
-        blur.w += v.w * w;
-        sumW += w;
-      }
+struct GPU_SharpenApplyVerticalKernel : GPUNeighborOpTag {
+  __device__ __forceinline__ void operator()(int x, int y, const float4* __restrict src,
+                                             float4* __restrict dst, int width, int height,
+                                             size_t pitch_elems,
+                                             GPUOperatorParams& params) const {
+    const size_t offset = static_cast<size_t>(y) * pitch_elems + static_cast<size_t>(x);
+    if (!params.sharpen_enabled_ || params.sharpen_offset_ == 0.0f || params.sharpen_radius_ <= 0.0f ||
+        params.sharpen_gaussian_tap_count_ <= 0) {
+      dst[offset] = src[offset];
+      return;
     }
-    const float invSum = 1.0f / sumW;
-    blur.x *= invSum;
-    blur.y *= invSum;
-    blur.z *= invSum;
-    blur.w *= invSum;
 
-    const float4 orig = src[y * pitch_elems + x];
-    float4 high = make_float4(orig.x - blur.x, orig.y - blur.y, orig.z - blur.z, orig.w - blur.w);
+    const float4 orig = dst[offset];
+    const float4 blur = detail_blur_vertical(x, y, src, width, height, pitch_elems,
+                                             params.sharpen_gaussian_tap_count_,
+                                             params.sharpen_gaussian_weights_);
+
+    float4 high = make_float4(orig.x - blur.x, orig.y - blur.y, orig.z - blur.z,
+                              orig.w - blur.w);
 
     if (params.sharpen_threshold_ > 0.0f) {
-      float hp_gray = luminance(high);
-      float mask    = (fabsf(hp_gray) > params.sharpen_threshold_) ? 1.0f : 0.0f;
+      const float hp_gray = detail_luminance(high);
+      const float mask    = (fabsf(hp_gray) > params.sharpen_threshold_) ? 1.0f : 0.0f;
       high.x *= mask;
       high.y *= mask;
       high.z *= mask;
       high.w *= mask;
     }
 
-    // USM: out = orig + high * offset
-    float4 out = make_float4(
+    dst[offset] = make_float4(
         orig.x + high.x * params.sharpen_offset_, orig.y + high.y * params.sharpen_offset_,
         orig.z + high.z * params.sharpen_offset_, orig.w + high.w * params.sharpen_offset_);
-    dst[y * pitch_elems + x] = out;
   }
 };
+
 };  // namespace CUDA
 };  // namespace puerhlab
