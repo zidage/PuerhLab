@@ -17,7 +17,9 @@
 #include <opencv2/imgcodecs.hpp>
 #include <string>
 #include <vector>
+#if defined(PUERHLAB_HAS_ULTRAHDR)
 #include <ultrahdr_api.h>
+#endif
 
 #include "app/import_service.hpp"
 #include "app/pipeline_service.hpp"
@@ -220,6 +222,9 @@ TEST_F(ExportServiceTests, ExportOneImage_WritesReadableFile) {
 }
 
 TEST_F(ExportServiceTests, ExportHdrJpeg_WritesUltraHdrFile) {
+#if !defined(PUERHLAB_HAS_ULTRAHDR)
+  GTEST_SKIP() << "Ultra HDR support is not enabled in this build.";
+#else
   std::filesystem::path dst_path_global;
   {
     ProjectService project(db_path_, meta_path_);
@@ -323,6 +328,7 @@ TEST_F(ExportServiceTests, ExportHdrJpeg_WritesUltraHdrFile) {
   ASSERT_NE(decoded, nullptr);
   EXPECT_GT(decoded->w, 0u);
   EXPECT_GT(decoded->h, 0u);
+#endif
 }
 
 TEST_F(ExportServiceTests, DISABLED_BatchExport_LimitedCount_WritesReadableFiles) {

@@ -338,6 +338,7 @@ def_library(RawProcessorOp
 
 if(PUERHLAB_CUDA_ENABLED)
     set_target_properties(RawProcessorOp PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
+    set_target_properties(RawProcessorOp PROPERTIES CUDA_RESOLVE_DEVICE_SYMBOLS ON)
     target_compile_definitions(RawProcessorOp PUBLIC HAVE_CUDA)
 endif()
 if(PUERHLAB_METAL_ENABLED)
@@ -399,6 +400,9 @@ def_library(Operators
     PUBLIC_DEPS ImageBuffer JSON OpenColorIO::OpenColorIO hwy::hwy lensfun::lensfun
     PRIVATE_DEPS ${PUERHLAB_OPENCV_IMAGE_DEPS} RawProcessor
 )
+if(PUERHLAB_CUDA_ENABLED)
+    set_target_properties(Operators PROPERTIES CUDA_RESOLVE_DEVICE_SYMBOLS ON)
+endif()
 if(PUERHLAB_METAL_ENABLED)
     add_dependencies(Operators LensCalibOpMetalShaders)
     target_link_libraries(Operators PRIVATE MetalGeometryUtils)
@@ -436,6 +440,7 @@ def_library(EditPipeline
 
 if(PUERHLAB_CUDA_ENABLED)
     set_target_properties(EditPipeline PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
+    set_target_properties(EditPipeline PROPERTIES CUDA_RESOLVE_DEVICE_SYMBOLS ON)
     target_compile_definitions(EditPipeline PUBLIC HAVE_CUDA)
     target_include_directories(EditPipeline PRIVATE ${CUDAToolkit_INCLUDE_DIRS})
     target_link_libraries(EditPipeline PRIVATE CUDA::cudart)
@@ -596,22 +601,27 @@ def_library(SleeveManager
 # 8. I/O  
 # ==============================================================================
 
-def_library(UltraHdrWriter
-    SOURCES io/image/ultra_hdr_writer.cpp
-    PUBLIC_DEPS OpenImageIO::OpenImageIO ImageBuffer Exiv2 puerhlab::uhdr
-    PRIVATE_DEPS opencv_core
-)
+if(PUERHLAB_ULTRAHDR_AVAILABLE)
+    def_library(UltraHdrWriter
+        SOURCES io/image/ultra_hdr_writer.cpp
+        PUBLIC_DEPS OpenImageIO::OpenImageIO ImageBuffer Exiv2 puerhlab::uhdr
+        PRIVATE_DEPS opencv_core
+    )
 
-if(APPLE)
-    target_link_libraries(UltraHdrWriter PRIVATE "-framework CoreGraphics" "-framework CoreFoundation")
+    if(APPLE)
+        target_link_libraries(UltraHdrWriter PRIVATE "-framework CoreGraphics" "-framework CoreFoundation")
+    endif()
 endif()
 
 def_library(ImageWriter
     SOURCES io/image/image_writer.cpp
-    PUBLIC_DEPS OpenImageIO::OpenImageIO ImageBuffer UltraHdrWriter
+    PUBLIC_DEPS OpenImageIO::OpenImageIO ImageBuffer
     PRIVATE_DEPS ${PUERHLAB_OPENCV_IMAGE_DEPS}
 )
-target_compile_definitions(ImageWriter PUBLIC PUERHLAB_HAS_ULTRAHDR=1)
+if(PUERHLAB_ULTRAHDR_AVAILABLE)
+    target_link_libraries(ImageWriter PUBLIC UltraHdrWriter)
+    target_compile_definitions(ImageWriter PUBLIC PUERHLAB_HAS_ULTRAHDR=1)
+endif()
 
 if(APPLE)
     target_link_libraries(ImageWriter PRIVATE "-framework CoreGraphics" "-framework CoreFoundation")

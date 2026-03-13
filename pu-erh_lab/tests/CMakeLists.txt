@@ -9,6 +9,7 @@ set(PUERHLAB_TEST_OPENCV_MIN_DEPS
 )
 
 include(GoogleTest)
+set(CMAKE_GTEST_DISCOVER_TESTS_DISCOVERY_MODE PRE_TEST)
 
 add_executable(SampleTest sample_test.cpp)
 target_link_libraries(SampleTest PRIVATE GTest::gtest_main)
@@ -21,7 +22,7 @@ add_executable(EditViewerLogicTest
   ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/ui/edit_viewer/crop_interaction_controller.cpp
 )
 target_include_directories(EditViewerLogicTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
-target_link_libraries(EditViewerLogicTest PRIVATE GTest::gtest_main Qt6::Widgets)
+target_link_libraries(EditViewerLogicTest PRIVATE GTest::gtest_main Qt6::Widgets opencv_core)
 gtest_discover_tests(EditViewerLogicTest TEST_PREFIX "EditViewerLogicTest.")
 
 add_executable(SingleRawLoad raw/single_raw_decode_test.cpp)

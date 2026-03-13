@@ -7,6 +7,8 @@ cmake_minimum_required(VERSION 3.19)
 
 project(pu-erh_lab VERSION 0.1.2 LANGUAGES C CXX)
 
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build pu-erh_lab libraries as static by default." FORCE)
+
 if(APPLE)
     enable_language(OBJCXX)
 endif()

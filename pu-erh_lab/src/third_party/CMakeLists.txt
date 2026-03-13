@@ -199,24 +199,38 @@ set(UHDR_ENABLE_WERROR OFF CACHE BOOL "Disable libultrahdr -Werror" FORCE)
 set(UHDR_WRITE_XMP ON CACHE BOOL "Enable XMP gainmap metadata packets" FORCE)
 set(UHDR_WRITE_ISO ON CACHE BOOL "Enable ISO 21496-1 gainmap metadata packets" FORCE)
 
-add_subdirectory(
-    "${PUERHLAB_ULTRAHDR_SOURCE_DIR}"
-    "${CMAKE_BINARY_DIR}/third_party/libultrahdr"
-)
+set(PUERHLAB_ULTRAHDR_IMAGE_IO_HEADER
+    "${PUERHLAB_ULTRAHDR_SOURCE_DIR}/third_party/image_io/includes/image_io/base/data_segment_data_source.h")
+set(PUERHLAB_ULTRAHDR_AVAILABLE OFF)
+if(EXISTS "${PUERHLAB_ULTRAHDR_IMAGE_IO_HEADER}")
+    add_subdirectory(
+        "${PUERHLAB_ULTRAHDR_SOURCE_DIR}"
+        "${CMAKE_BINARY_DIR}/third_party/libultrahdr"
+    )
 
-if(TARGET uhdr)
-    add_library(puerhlab_ultrahdr INTERFACE)
-    target_link_libraries(puerhlab_ultrahdr INTERFACE uhdr)
-elseif(TARGET uhdr-static)
-    add_library(puerhlab_ultrahdr INTERFACE)
-    target_link_libraries(puerhlab_ultrahdr INTERFACE uhdr-static)
+    if(TARGET uhdr)
+        add_library(puerhlab_ultrahdr INTERFACE)
+        target_link_libraries(puerhlab_ultrahdr INTERFACE uhdr)
+    elseif(TARGET uhdr-static)
+        add_library(puerhlab_ultrahdr INTERFACE)
+        target_link_libraries(puerhlab_ultrahdr INTERFACE uhdr-static)
+    else()
+        message(FATAL_ERROR "Bundled libultrahdr was configured, but no usable target was exported.")
+    endif()
+
+    if(NOT TARGET puerhlab::uhdr)
+        add_library(puerhlab::uhdr ALIAS puerhlab_ultrahdr)
+    endif()
+
+    set(PUERHLAB_ULTRAHDR_AVAILABLE ON)
 else()
-    message(FATAL_ERROR "Bundled libultrahdr was configured, but no usable target was exported.")
+    message(WARNING
+        "Bundled libultrahdr is incomplete: missing ${PUERHLAB_ULTRAHDR_IMAGE_IO_HEADER}. "
+        "Ultra HDR support will be disabled for this build.")
 endif()
 
-if(NOT TARGET puerhlab::uhdr)
-    add_library(puerhlab::uhdr ALIAS puerhlab_ultrahdr)
-endif()
+set(PUERHLAB_ULTRAHDR_AVAILABLE "${PUERHLAB_ULTRAHDR_AVAILABLE}" CACHE INTERNAL
+    "Whether the bundled libultrahdr checkout is complete enough to build.")
 
 set(PUERHLAB_METALCPP_SOURCE_DIR
     "${CMAKE_CURRENT_SOURCE_DIR}/metal-cpp"
