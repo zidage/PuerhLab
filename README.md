@@ -48,7 +48,7 @@
 
 ### High-Performance Core
 
-- CUDA-accelerated image processing pipeline with the highest real-time preview resolution running at **60 FPS** on modern GPUs with large RAW files (e.g., 45MP).
+- CUDA-accelerated image processing pipeline with the highest real-time preview resolution running at ***300 FPS*** on modern NVIDIA GPUs with large RAW files (e.g., 45MP). Even the full-resolution 42MP preview generation takes only around **20ms** on a mid-range GPU (RTX 3080 Laptop 8GB).
 - Fine-grained memory management and caching strategies to optimize memory usage especially for large library browsing. The average DRAM usage for browsing a library of **786 42MP RAW** files is around **767MB** while achieving smooth scrolling and instant preview generation.
 - Written in modern C++20 with a focus on code quality, modularity, and maintainability (unfortunately, still largely a WIP).
 
