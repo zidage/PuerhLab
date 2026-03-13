@@ -247,13 +247,13 @@ if(PUERHLAB_METAL_ENABLED)
 
     def_library(MetalContext SOURCES metal/metal_context.cpp)
     target_link_libraries(MetalContext PUBLIC puerhlab::metal_cpp)
+    def_library(MetalImage SOURCES image/metal_image.cpp PUBLIC_DEPS MetalContext puerhlab::metal_cpp ${PUERHLAB_OPENCV_CORE_DEPS})
     def_library(MetalUtils
         SOURCES metal/metal_utils/metal_convert_utils.cpp
-        PUBLIC_DEPS MetalContext puerhlab::metal_cpp ${PUERHLAB_OPENCV_CORE_DEPS}
+        PUBLIC_DEPS MetalContext MetalImage puerhlab::metal_cpp ${PUERHLAB_OPENCV_CORE_DEPS}
     )
     add_dependencies(MetalUtils MetalUtilsShaders)
     target_compile_definitions(MetalUtils PRIVATE PUERHLAB_METAL_UTILS_METALLIB_PATH="${METAL_UTILS_METALLIB}")
-    def_library(MetalImage SOURCES image/metal_image.cpp PUBLIC_DEPS MetalContext MetalUtils puerhlab::metal_cpp ${PUERHLAB_OPENCV_CORE_DEPS})
     def_library(MetalGeometryUtils
         SOURCES metal/metal_utils/geometry_utils.cpp
         PUBLIC_DEPS MetalImage puerhlab::metal_cpp ${PUERHLAB_OPENCV_CORE_DEPS}
@@ -278,7 +278,7 @@ set(IMAGE_BUFFER_DEPS Exiv2 ${PUERHLAB_OPENCV_CORE_DEPS} libraw::raw_r TimeProvi
 if (WIN32)
     target_link_libraries(ImageBuffer PUBLIC ${IMAGE_BUFFER_DEPS} easy_profiler xxHash::xxhash)
 elseif(PUERHLAB_METAL_ENABLED)
-    target_link_libraries(ImageBuffer PUBLIC ${IMAGE_BUFFER_DEPS} xxHash MetalImage)
+    target_link_libraries(ImageBuffer PUBLIC ${IMAGE_BUFFER_DEPS} xxHash MetalImage MetalUtils)
 else()
     target_link_libraries(ImageBuffer PUBLIC ${IMAGE_BUFFER_DEPS} xxHash)
 endif()
@@ -397,6 +397,7 @@ endif()
 def_library(Operators
     SOURCES ${OPERATORS_SRCS}
     PUBLIC_DEPS ImageBuffer JSON OpenColorIO::OpenColorIO hwy::hwy lensfun::lensfun
+    PRIVATE_DEPS ${PUERHLAB_OPENCV_IMAGE_DEPS} RawProcessor
 )
 if(PUERHLAB_METAL_ENABLED)
     add_dependencies(Operators LensCalibOpMetalShaders)
@@ -430,6 +431,7 @@ endif()
 def_library(EditPipeline
     SOURCES ${PIPELINE_SRCS} ${GPU_PIPELINE_SRCS}
     PUBLIC_DEPS Operators
+    PRIVATE_DEPS ThreadPool opencv_imgproc
 )
 
 if(PUERHLAB_CUDA_ENABLED)
@@ -548,6 +550,11 @@ def_library(SleeveMapper
 
 # Services
 set(SERVICE_SRCS
+    sleeve/storage_service.cpp
+    storage/controller/controller_types.cpp
+    storage/controller/db_controller.cpp
+    storage/controller/image/image_controller.cpp
+    storage/controller/sleeve/element_controller.cpp
     storage/service/image/image_service.cpp
     storage/service/sleeve/base/base_service.cpp
     storage/service/sleeve/base/root_service.cpp
@@ -564,19 +571,6 @@ def_library(StorageService
     PUBLIC_DEPS DuckDB DuckORM SleeveMapper StrConv PipelineScheduler
 )
 
-# Controllers
-set(CONTROLLER_SRCS
-    storage/controller/controller_types.cpp
-    storage/controller/db_controller.cpp
-    storage/controller/image/image_controller.cpp
-    storage/controller/sleeve/element_controller.cpp
-)
-
-def_library(SleeveController
-    SOURCES ${CONTROLLER_SRCS}
-    PUBLIC_DEPS DuckDB StorageService StrConv
-)
-
 # ==============================================================================
 # 7. Filesystem & View Manager
 # ==============================================================================
@@ -584,20 +578,14 @@ def_library(SleeveController
 set(FS_SRCS
     sleeve/sleeve_base.cpp
     sleeve/path_resolver.cpp
-    sleeve/storage_service.cpp
     sleeve/dentry_cache_manager.cpp
     sleeve/sleeve_filesystem.cpp
 )
 
 def_library(SleeveFS
     SOURCES ${FS_SRCS}
-    PUBLIC_DEPS SleeveElement SleeveController
+    PUBLIC_DEPS SleeveElement StorageService
 )
-
-# def_library(SleeveView
-#     SOURCES sleeve/sleeve_view.cpp
-#     PUBLIC_DEPS Image SleeveFS ImagePool PipelineScheduler
-# )
 
 def_library(SleeveManager
     SOURCES sleeve/sleeve_manager.cpp
@@ -608,14 +596,25 @@ def_library(SleeveManager
 # 8. I/O  
 # ==============================================================================
 
-def_library(ImageWriter
-    SOURCES io/image/image_writer.cpp
-    PUBLIC_DEPS OpenImageIO::OpenImageIO ImageBuffer
-    PRIVATE_DEPS ${PUERHLAB_OPENCV_IMAGE_DEPS}
+def_library(UltraHdrWriter
+    SOURCES io/image/ultra_hdr_writer.cpp
+    PUBLIC_DEPS OpenImageIO::OpenImageIO ImageBuffer Exiv2 puerhlab::uhdr
+    PRIVATE_DEPS opencv_core
 )
 
 if(APPLE)
-    target_link_libraries(ImageWriter PRIVATE "-framework CoreGraphics")
+    target_link_libraries(UltraHdrWriter PRIVATE "-framework CoreGraphics" "-framework CoreFoundation")
+endif()
+
+def_library(ImageWriter
+    SOURCES io/image/image_writer.cpp
+    PUBLIC_DEPS OpenImageIO::OpenImageIO ImageBuffer UltraHdrWriter
+    PRIVATE_DEPS ${PUERHLAB_OPENCV_IMAGE_DEPS}
+)
+target_compile_definitions(ImageWriter PUBLIC PUERHLAB_HAS_ULTRAHDR=1)
+
+if(APPLE)
+    target_link_libraries(ImageWriter PRIVATE "-framework CoreGraphics" "-framework CoreFoundation")
 endif()
 
 # ==============================================================================
@@ -650,7 +649,7 @@ def_library(EditHistoryMgmtService
 
 def_library(ImportService
     SOURCES app/import_service.cpp
-    PUBLIC_DEPS SleeveManager ImageWriter ImagePoolService
+    PUBLIC_DEPS SleeveManager ImageWriter ImagePoolService FSService
 )
 
 def_library(ThumbnailService

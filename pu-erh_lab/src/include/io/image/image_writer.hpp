@@ -17,10 +17,15 @@ namespace puerhlab {
 struct ExportColorProfileConfig {
   ColorUtils::ColorSpace encoding_space = ColorUtils::ColorSpace::REC709;
   ColorUtils::EOTF       encoding_eotf  = ColorUtils::EOTF::GAMMA_2_2;
+  float                  peak_luminance = 100.0f;
 };
 
 class ImageWriter {
  public:
+  static auto ShouldWriteUltraHdr(
+      const ExportFormatOptions&                          options,
+      const std::optional<ExportColorProfileConfig>& color_profile) -> bool;
+
   static void WriteImageToPath(const image_path_t&          src_path,
                                std::shared_ptr<ImageBuffer> image_data,
                                ExportFormatOptions          options,

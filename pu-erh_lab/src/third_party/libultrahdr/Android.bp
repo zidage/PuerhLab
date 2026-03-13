@@ -1,0 +1,132 @@
+// Copyright 2022 The Android Open Source Project
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package {
+    // See: http://go/android-license-faq
+    default_applicable_licenses: [
+        "external_libultrahdr_license",
+        "adobe_hdr_gain_map_license",
+    ],
+}
+
+license {
+    name: "external_libultrahdr_license",
+    visibility: [":__subpackages__"],
+    license_kinds: [
+        "SPDX-license-identifier-Apache-2.0",
+    ],
+    license_text: [
+        "LICENSE",
+    ],
+}
+
+cc_library {
+    name: "libultrahdr",
+    host_supported: true,
+    vendor_available: true,
+    export_include_dirs: [
+        ".",
+        "lib/include",
+    ],
+    local_include_dirs: ["lib/include"],
+    cflags: ["-DUHDR_ENABLE_INTRINSICS",
+        "-DUHDR_WRITE_XMP",],
+    srcs: [
+        "lib/src/icc.cpp",
+        "lib/src/jpegr.cpp",
+        "lib/src/gainmapmath.cpp",
+        "lib/src/gainmapmetadata.cpp",
+        "lib/src/jpegrutils.cpp",
+        "lib/src/multipictureformat.cpp",
+        "lib/src/editorhelper.cpp",
+        "lib/src/ultrahdr_api.cpp",
+    ],
+    shared_libs: [
+        "libimage_io",
+        "libjpeg",
+        "libjpegencoder",
+        "libjpegdecoder",
+        "liblog",
+    ],
+    rtti: true,
+    target: {
+        windows: {
+            enabled: true,
+        },
+        android: {
+            srcs: [
+                "lib/src/gpu/applygainmap_gl.cpp",
+                "lib/src/gpu/editorhelper_gl.cpp",
+                "lib/src/gpu/uhdr_gl_utils.cpp",
+            ],
+            cflags: ["-DUHDR_ENABLE_GLES"],
+            shared_libs: [
+                "libEGL",
+                "libGLESv3",
+            ],
+        },
+    },
+    arch: {
+        arm: {
+            srcs: [
+                "lib/src/dsp/arm/editorhelper_neon.cpp",
+                "lib/src/dsp/arm/gainmapmath_neon.cpp",
+            ],
+        },
+        arm64: {
+            srcs: [
+                "lib/src/dsp/arm/editorhelper_neon.cpp",
+                "lib/src/dsp/arm/gainmapmath_neon.cpp",
+            ],
+        },
+    },
+}
+
+cc_library {
+    name: "libjpegencoder",
+    host_supported: true,
+    vendor_available: true,
+    shared_libs: [
+        "libjpeg",
+        "liblog",
+    ],
+    export_include_dirs: ["lib/include"],
+    srcs: [
+        "lib/src/jpegencoderhelper.cpp",
+    ],
+    target: {
+        windows: {
+            enabled: true,
+        },
+    },
+}
+
+cc_library {
+    name: "libjpegdecoder",
+    host_supported: true,
+    vendor_available: true,
+    shared_libs: [
+        "libjpeg",
+        "liblog",
+    ],
+    export_include_dirs: ["lib/include"],
+    srcs: [
+        "lib/src/jpegdecoderhelper.cpp",
+    ],
+    target: {
+        windows: {
+            enabled: true,
+        },
+    },
+}

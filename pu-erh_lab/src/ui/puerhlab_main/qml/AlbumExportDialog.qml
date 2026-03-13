@@ -248,6 +248,15 @@ Dialog {
                                     currentIndex: 0
                                 }
                             }
+
+                            Label {
+                                Layout.fillWidth: true
+                                visible: exportFormat.currentValue === "JPEG"
+                                wrapMode: Text.WordWrap
+                                color: root.mutedTextColor
+                                font.pixelSize: 11
+                                text: qsTr("JPEG exports from PQ or HLG pipelines are written as Ultra HDR with SDR fallback for legacy viewers.")
+                            }
                         }
 
                         Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: root.separatorColor }

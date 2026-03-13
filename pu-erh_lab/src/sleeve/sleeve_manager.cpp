@@ -32,7 +32,6 @@ SleeveManager::SleeveManager(std::filesystem::path db_path) : storage_service_(d
   fs_ = std::make_shared<FileSystem>(db_path, storage_service_, 0);
   fs_->InitRoot();
   image_pool_ = std::make_shared<ImagePoolManager>(128, 4);
-  view_       = std::make_shared<SleeveView>(fs_, image_pool_);
 }
 
 /**

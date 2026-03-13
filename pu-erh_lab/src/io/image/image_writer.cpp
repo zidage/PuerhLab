@@ -3,6 +3,7 @@
 //  Additional permission under GPLv3 section 7 applies; see the LICENSE file.
 
 #include "io/image/image_writer.hpp"
+#include "io/image/ultra_hdr_writer.hpp"
 
 #include <OpenImageIO/imageio.h>
 
@@ -64,6 +65,10 @@ auto FormatSupportsAlpha(ImageFormatType fmt) -> bool {
     default:
       return false;
   }
+}
+
+auto IsUltraHdrTransfer(ColorUtils::EOTF eotf) -> bool {
+  return eotf == ColorUtils::EOTF::ST2084 || eotf == ColorUtils::EOTF::HLG;
 }
 
 auto MakeOIIOBuffer(const cv::Mat& rgba32f, const ExportFormatOptions& options,
@@ -435,6 +440,13 @@ auto TryWriteWithOpenCV(const std::filesystem::path& export_path, const cv::Mat&
 }
 }  // namespace
 
+auto ImageWriter::ShouldWriteUltraHdr(
+    const ExportFormatOptions&                       options,
+    const std::optional<ExportColorProfileConfig>& color_profile) -> bool {
+  return options.format_ == ImageFormatType::JPEG && color_profile.has_value() &&
+         IsUltraHdrTransfer(color_profile->encoding_eotf);
+}
+
 void ImageWriter::WriteImageToPath(const image_path_t&          src_path,
                                    std::shared_ptr<ImageBuffer> image_data,
                                    ExportFormatOptions          options,
@@ -469,6 +481,16 @@ void ImageWriter::WriteImageToPath(const image_path_t&          src_path,
   }
 
   cv::Mat     working = ResizeRGBA32F(src_rgba32f.clone(), options);
+
+  if (ShouldWriteUltraHdr(options, color_profile)) {
+#if defined(PUERHLAB_HAS_ULTRAHDR)
+    UltraHdrWriter::WriteImageToPath(src_path, export_path, working, options, *color_profile);
+    return;
+#else
+    throw std::runtime_error(
+        "ImageWriter: JPEG HDR export requires Ultra HDR support in this build.");
+#endif
+  }
 
   std::string oiio_err;
   try {

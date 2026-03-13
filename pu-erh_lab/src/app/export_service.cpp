@@ -21,7 +21,8 @@ namespace {
 
 auto ResolveExportColorProfileConfig(const OperatorParams& params) -> ExportColorProfileConfig {
   return ExportColorProfileConfig{params.to_output_params_.encoding_space_,
-                                  params.to_output_params_.eotf_};
+                                  params.to_output_params_.eotf_,
+                                  params.to_output_params_.peak_luminance_};
 }
 
 }  // namespace

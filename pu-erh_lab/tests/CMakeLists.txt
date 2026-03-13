@@ -284,11 +284,17 @@ endif()
 
 add_executable(ExportServiceTest app/export_service_test.cpp)
 target_include_directories(ExportServiceTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
-target_link_libraries(ExportServiceTest ExportService ProjectService ImportService GTest::gtest_main ImageWriter)
+target_link_libraries(ExportServiceTest ExportService ProjectService ImportService GTest::gtest_main ImageWriter ${PUERHLAB_TEST_OPENCV_MIN_DEPS})
+gtest_discover_tests(ExportServiceTest TEST_PREFIX "ExportServiceTest.")
 
 if(WIN32)
   target_link_libraries(ExportServiceTest easy_profiler)
 endif()
+
+add_executable(ImageWriterTest io/image_writer_test.cpp)
+target_include_directories(ImageWriterTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
+target_link_libraries(ImageWriterTest PRIVATE GTest::gtest_main ImageWriter ${PUERHLAB_TEST_OPENCV_MIN_DEPS})
+gtest_discover_tests(ImageWriterTest TEST_PREFIX "ImageWriterTest.")
 
 add_executable(ThumbnailAlbumQtDemo app/thumbnail_album_qt_demo.cpp)
 target_include_directories(ThumbnailAlbumQtDemo PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)

@@ -6,7 +6,6 @@
 #include "image/metal_image.hpp"
 
 #include "metal/metal_context.hpp"
-#include "metal/metal_utils/metal_convert_utils.hpp"
 
 #include <cstring>
 #include <stdexcept>
@@ -142,56 +141,11 @@ MetalImage::MetalImage(NS::SharedPtr<MTL::Texture>&& texture_owner, uint32_t wid
       format_(format),
       texture_owner_(std::move(texture_owner)) {}
 
-auto MetalImage::Create2D(uint32_t width, uint32_t height, PixelFormat format, bool shader_read,
-                          bool shader_write, bool render_target) -> MetalImage {
-  MetalImage image;
-  image.Create(width, height, format, shader_read, shader_write, render_target);
-  return image;
-}
-
 auto MetalImage::Wrap(MetalTextureHandle texture) -> MetalImage {
   Validate2DTexture(texture);
   return MetalImage(NS::RetainPtr(texture), static_cast<uint32_t>(texture->width()),
                     static_cast<uint32_t>(texture->height()),
                     FromMetalPixelFormat(texture->pixelFormat()), texture->usage());
-}
-
-auto MetalImage::PixelFormatFromCVType(int cv_type) -> PixelFormat {
-  switch (cv_type) {
-    case CV_16UC1:
-      return PixelFormat::R16UINT;
-    case CV_16UC4:
-      return PixelFormat::RGBA16UINT;
-    case CV_16FC1:
-      return PixelFormat::R16FLOAT;
-    case CV_16FC4:
-      return PixelFormat::RGBA16FLOAT;
-    case CV_32FC1:
-      return PixelFormat::R32FLOAT;
-    case CV_32FC4:
-      return PixelFormat::RGBA32FLOAT;
-    default:
-      throw std::invalid_argument("MetalImage: Unsupported OpenCV type for Metal texture.");
-  }
-}
-
-auto MetalImage::CVTypeFromPixelFormat(PixelFormat format) -> int {
-  switch (format) {
-    case PixelFormat::R16UINT:
-      return CV_16UC1;
-    case PixelFormat::RGBA16UINT:
-      return CV_16UC4;
-    case PixelFormat::R16FLOAT:
-      return CV_16FC1;
-    case PixelFormat::RGBA16FLOAT:
-      return CV_16FC4;
-    case PixelFormat::R32FLOAT:
-      return CV_32FC1;
-    case PixelFormat::RGBA32FLOAT:
-      return CV_32FC4;
-  }
-
-  throw std::invalid_argument("MetalImage: Unsupported Metal pixel format.");
 }
 
 void MetalImage::Create(uint32_t width, uint32_t height, PixelFormat format, bool shader_read,
@@ -311,31 +265,6 @@ void MetalImage::CopyTo(MetalImage& dst) const {
   blit->copyFromTexture(Texture(), dst.Texture());
   blit->endEncoding();
   SubmitAndWait(command_buffer);
-}
-
-void MetalImage::CropTo(MetalImage& dst, const cv::Rect& crop_rect) const {
-  if (Empty()) {
-    throw std::runtime_error("MetalImage: Cannot crop an empty texture.");
-  }
-
-  dst.Create(static_cast<uint32_t>(crop_rect.width), static_cast<uint32_t>(crop_rect.height), format_,
-             true, true, HasUsageFlag(usage_flags_, MTL::TextureUsageRenderTarget));
-  utils::CropTexture(*this, dst, crop_rect);
-}
-
-void MetalImage::ConvertTo(MetalImage& dst, PixelFormat dst_format, double alpha, double beta) const {
-  if (Empty()) {
-    throw std::runtime_error("MetalImage: Cannot convert an empty texture.");
-  }
-
-  if (format_ == dst_format && alpha == 1.0 && beta == 0.0) {
-    CopyTo(dst);
-    return;
-  }
-
-  dst.Create(width_, height_, dst_format, true, true,
-             HasUsageFlag(usage_flags_, MTL::TextureUsageRenderTarget));
-  utils::ConvertTexture(*this, dst, alpha, beta);
 }
 
 void MetalImage::Release() noexcept {

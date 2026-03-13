@@ -175,6 +175,49 @@ set(PUERHLAB_LENSFUN_INCLUDE_DIR "${PUERHLAB_LENSFUN_INSTALL_DIR}/include" CACHE
 set(PUERHLAB_LENSFUN_LIBRARY_DIR "${PUERHLAB_LENSFUN_INSTALL_DIR}/lib" CACHE INTERNAL
     "Runtime library directory for the bundled Lensfun build.")
 
+set(PUERHLAB_ULTRAHDR_SOURCE_DIR
+    "${CMAKE_CURRENT_SOURCE_DIR}/libultrahdr"
+    CACHE PATH
+    "Path to the bundled libultrahdr source checkout.")
+
+if(NOT EXISTS "${PUERHLAB_ULTRAHDR_SOURCE_DIR}/CMakeLists.txt")
+    message(FATAL_ERROR
+        "Bundled libultrahdr source was not found at ${PUERHLAB_ULTRAHDR_SOURCE_DIR}. "
+        "Ensure pu-erh_lab/src/third_party/libultrahdr is present and re-configure.")
+endif()
+
+set(UHDR_BUILD_EXAMPLES OFF CACHE BOOL "Disable libultrahdr examples" FORCE)
+set(UHDR_BUILD_TESTS OFF CACHE BOOL "Disable libultrahdr tests" FORCE)
+set(UHDR_BUILD_BENCHMARK OFF CACHE BOOL "Disable libultrahdr benchmarks" FORCE)
+set(UHDR_BUILD_FUZZERS OFF CACHE BOOL "Disable libultrahdr fuzzers" FORCE)
+set(UHDR_BUILD_DEPS OFF CACHE BOOL "Use system libjpeg when building libultrahdr" FORCE)
+set(UHDR_BUILD_JAVA OFF CACHE BOOL "Disable libultrahdr JNI bindings" FORCE)
+set(UHDR_BUILD_PACKAGING OFF CACHE BOOL "Disable libultrahdr packaging" FORCE)
+set(UHDR_ENABLE_INSTALL OFF CACHE BOOL "Disable libultrahdr install target" FORCE)
+set(UHDR_ENABLE_GLES OFF CACHE BOOL "Disable libultrahdr GLES path" FORCE)
+set(UHDR_ENABLE_WERROR OFF CACHE BOOL "Disable libultrahdr -Werror" FORCE)
+set(UHDR_WRITE_XMP ON CACHE BOOL "Enable XMP gainmap metadata packets" FORCE)
+set(UHDR_WRITE_ISO ON CACHE BOOL "Enable ISO 21496-1 gainmap metadata packets" FORCE)
+
+add_subdirectory(
+    "${PUERHLAB_ULTRAHDR_SOURCE_DIR}"
+    "${CMAKE_BINARY_DIR}/third_party/libultrahdr"
+)
+
+if(TARGET uhdr)
+    add_library(puerhlab_ultrahdr INTERFACE)
+    target_link_libraries(puerhlab_ultrahdr INTERFACE uhdr)
+elseif(TARGET uhdr-static)
+    add_library(puerhlab_ultrahdr INTERFACE)
+    target_link_libraries(puerhlab_ultrahdr INTERFACE uhdr-static)
+else()
+    message(FATAL_ERROR "Bundled libultrahdr was configured, but no usable target was exported.")
+endif()
+
+if(NOT TARGET puerhlab::uhdr)
+    add_library(puerhlab::uhdr ALIAS puerhlab_ultrahdr)
+endif()
+
 set(PUERHLAB_METALCPP_SOURCE_DIR
     "${CMAKE_CURRENT_SOURCE_DIR}/metal-cpp"
     CACHE PATH
