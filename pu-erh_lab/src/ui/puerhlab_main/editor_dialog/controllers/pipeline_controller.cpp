@@ -7,8 +7,6 @@
 #include <json.hpp>
 
 #include "edit/pipeline/default_pipeline_params.hpp"
-#include "ui/edit_viewer/edit_viewer.hpp"
-
 namespace puerhlab::ui::controllers {
 namespace {
 
@@ -88,11 +86,11 @@ void EnsureLoadingOperatorDefaults(const std::shared_ptr<CPUPipelineExecutor>& e
 }
 
 void AttachExecutionStages(const std::shared_ptr<CPUPipelineExecutor>& exec,
-                           QtEditViewer* viewer) {
+                           IFrameSink* frame_sink) {
   if (!exec) {
     return;
   }
-  exec->SetExecutionStages(viewer);
+  exec->SetExecutionStages(frame_sink);
 }
 
 }  // namespace puerhlab::ui::controllers

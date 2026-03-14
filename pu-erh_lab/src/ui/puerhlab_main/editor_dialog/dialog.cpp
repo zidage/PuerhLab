@@ -57,6 +57,8 @@
 #include "edit/history/version.hpp"
 #include "edit/pipeline/default_pipeline_params.hpp"
 #include "edit/pipeline/pipeline_cpu.hpp"
+#include "edit/scope/final_display_frame_tap.hpp"
+#include "edit/scope/scope_analyzer.hpp"
 #include "image/image.hpp"
 #include "io/image/image_loader.hpp"
 #include "renderer/pipeline_task.hpp"
@@ -73,8 +75,8 @@
 #include "ui/puerhlab_main/editor_dialog/modules/lens_calib.hpp"
 #include "ui/puerhlab_main/editor_dialog/modules/pipeline_io.hpp"
 #include "ui/puerhlab_main/editor_dialog/modules/versioning.hpp"
+#include "ui/puerhlab_main/editor_dialog/scope/scope_panel.hpp"
 #include "ui/puerhlab_main/editor_dialog/state.hpp"
-#include "ui/puerhlab_main/editor_dialog/widgets/histogram_widget.hpp"
 #include "ui/puerhlab_main/editor_dialog/widgets/history_cards.hpp"
 #include "ui/puerhlab_main/editor_dialog/widgets/spinner.hpp"
 #include "ui/puerhlab_main/editor_dialog/widgets/tone_curve_widget.hpp"
@@ -534,6 +536,13 @@ class EditorDialog final : public QDialog {
       return;
     }
     viewer_->SetDisplayEncoding(state_.odt_.encoding_space_, state_.odt_.encoding_eotf_);
+  }
+
+  auto CurrentFrameSink() -> IFrameSink* {
+    if (final_display_frame_tap_) {
+      return final_display_frame_tap_.get();
+    }
+    return viewer_;
   }
 
   void SetCropRectState(float x, float y, float w, float h, bool sync_controls = true,
@@ -1354,7 +1363,7 @@ class EditorDialog final : public QDialog {
 
     auto exec = pipeline_guard_->pipeline_;
     exec->ImportPipelineParams(params);
-    exec->SetExecutionStages(viewer_);
+    exec->SetExecutionStages(CurrentFrameSink());
     pipeline_guard_->dirty_ = true;
     last_applied_lut_path_.clear();
 
@@ -1563,7 +1572,23 @@ class EditorDialog final : public QDialog {
 
     auto           exec           = pipeline_guard_->pipeline_;
     controllers::EnsureLoadingOperatorDefaults(exec);
-    controllers::AttachExecutionStages(exec, viewer_);
+    if (!scope_analyzer_) {
+      scope_analyzer_ = CreateDefaultScopeAnalyzer();
+    }
+    if (!final_display_frame_tap_) {
+      final_display_frame_tap_ =
+          std::make_unique<FinalDisplayFrameTapSink>(viewer_, scope_analyzer_);
+      if (scope_panel_) {
+        scope_panel_->SetAnalyzer(scope_analyzer_);
+        scope_panel_->SetRequestChangedCallback([this](const ScopeRequest& request) {
+          if (final_display_frame_tap_) {
+            final_display_frame_tap_->SetScopeRequest(request);
+          }
+        });
+        final_display_frame_tap_->SetScopeRequest(scope_panel_->CurrentRequest());
+      }
+    }
+    controllers::AttachExecutionStages(exec, CurrentFrameSink());
     SyncViewerDisplayEncoding();
 
     // Inject pre-extracted raw metadata from the Image so downstream operators
@@ -1844,12 +1869,6 @@ class EditorDialog final : public QDialog {
     task.options_.is_seq_callback_          = false;
     task.options_.is_blocking_              = true;
 
-    if (viewer_) {
-      const auto render_type = task.options_.render_desc_.render_type_;
-      viewer_->SetHistogramFrameExpected(render_type == RenderType::FAST_PREVIEW ||
-                                         render_type == RenderType::FULL_RES_PREVIEW);
-    }
-
     auto promise = std::make_shared<std::promise<std::shared_ptr<ImageBuffer>>>();
     auto fut     = promise->get_future();
     task.result_ = promise;
@@ -1895,6 +1914,7 @@ class EditorDialog final : public QDialog {
   QtEditViewer*                                            viewer_                 = nullptr;
   QWidget*                                                 viewer_container_       = nullptr;
   QLabel*                                                  viewer_zoom_label_      = nullptr;
+  ScopePanel*                                              scope_panel_            = nullptr;
   QScrollArea*                                             controls_scroll_        = nullptr;
   QScrollArea*                                             tone_controls_scroll_   = nullptr;
   QScrollArea*                                             drt_controls_scroll_    = nullptr;
@@ -1911,8 +1931,6 @@ class EditorDialog final : public QDialog {
   QPushButton*                                             drt_panel_btn_          = nullptr;
   QPushButton*                                             geometry_panel_btn_     = nullptr;
   QPushButton*                                             raw_panel_btn_          = nullptr;
-  HistogramWidget*                                         histogram_widget_       = nullptr;
-  HistogramRulerWidget*                                    histogram_ruler_widget_ = nullptr;
   QComboBox*                                               lut_combo_              = nullptr;
   QSlider*                                                 exposure_slider_        = nullptr;
   QSlider*                                                 contrast_slider_        = nullptr;
@@ -2001,6 +2019,8 @@ class EditorDialog final : public QDialog {
   float                                                    last_known_as_shot_cct_     = 6500.0f;
   float                                                    last_known_as_shot_tint_    = 0.0f;
   bool                                                     has_last_known_as_shot_color_temp_ = false;
+  std::shared_ptr<IScopeAnalyzer>                          scope_analyzer_         = {};
+  std::unique_ptr<FinalDisplayFrameTapSink>                final_display_frame_tap_ = {};
   std::map<QSlider*, std::function<void()>>                slider_reset_callbacks_{};
   std::function<void()>                                    curve_reset_callback_{};
 };

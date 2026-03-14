@@ -248,32 +248,14 @@
                              right_default_width});
     root->addWidget(main_splitter, 1);
 
-    if (viewer_ && viewer_->SupportsHistogram()) {
-      auto* histogram_frame = new QFrame(controls_panel);
-      histogram_frame->setObjectName("EditorSection");
-      auto* histogram_layout = new QVBoxLayout(histogram_frame);
-      histogram_layout->setContentsMargins(12, 10, 12, 10);
-      histogram_layout->setSpacing(6);
-
-      auto* histogram_title = new QLabel(Tr("Histogram"), histogram_frame);
-      histogram_title->setObjectName("EditorSectionTitle");
-
-      histogram_widget_       = new HistogramWidget(viewer_, histogram_frame);
-      histogram_ruler_widget_ = new HistogramRulerWidget(256, histogram_frame);
-      histogram_layout->addWidget(histogram_title, 0);
-      histogram_layout->addWidget(histogram_widget_, 0);
-      histogram_layout->addWidget(histogram_ruler_widget_, 0);
-      controls_panel_layout->addWidget(histogram_frame, 0);
-
-      if (viewer_ && histogram_widget_) {
-        viewer_->SetHistogramUpdateIntervalMs(histogram::kDefaultUpdateIntervalMs);
-        viewer_->SetHistogramFrameExpected(false);
-#ifdef PUERHLAB_HAS_LEGACY_GL_VIEWER
-        QObject::connect(viewer_, &QtEditViewer::HistogramDataUpdated, histogram_widget_,
-                         QOverload<>::of(&QWidget::update), Qt::QueuedConnection);
-#endif
-      }
-    }
+    auto* scope_frame = new QFrame(controls_panel);
+    scope_frame->setObjectName("EditorSection");
+    auto* scope_layout = new QVBoxLayout(scope_frame);
+    scope_layout->setContentsMargins(0, 0, 0, 0);
+    scope_layout->setSpacing(0);
+    scope_panel_ = new ScopePanel(scope_frame);
+    scope_layout->addWidget(scope_panel_, 1);
+    controls_panel_layout->addWidget(scope_frame, 0);
 
     controls_panel_layout->addWidget(panel_switch_row, 0);
     controls_panel_layout->addWidget(control_panels_stack_, 1);

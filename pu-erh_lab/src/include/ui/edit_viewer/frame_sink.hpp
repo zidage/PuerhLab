@@ -14,6 +14,7 @@
 
 namespace puerhlab {
 class IEditViewerSurface;
+struct FinalDisplayFrameView;
 
 struct ViewerDisplayConfig {
   ColorUtils::ColorSpace encoding_space = ColorUtils::ColorSpace::REC709;
@@ -118,6 +119,7 @@ class IFrameSink {
 #ifdef HAVE_METAL
   virtual void    SubmitMetalFrame(const ViewerMetalFrame&) {}
 #endif
+  virtual void    SubmitFinalDisplayFrame(const FinalDisplayFrameView&) {}
 
   // Get the size of the frame
   virtual int     GetWidth() const                  = 0;

@@ -419,11 +419,14 @@ set(PIPELINE_SRCS
     edit/pipeline/pipeline_cpu.cpp
     edit/pipeline/pipeline_stage.cpp
     edit/pipeline/pipeline_gpu_wrapper.cpp
+    edit/scope/scope_analyzer.cpp
+    edit/scope/final_display_frame_tap.cpp
 )
 
 if(PUERHLAB_CUDA_ENABLED)
     set(GPU_PIPELINE_SRCS
         edit/pipeline/pipeline_gpu_impl.cu
+        edit/scope/cuda_scope_analyzer.cu
     )
 endif()
 if(PUERHLAB_METAL_ENABLED)
@@ -843,6 +846,9 @@ if(PUERHLAB_REAL_WIDGET_EDITOR)
         ui/puerhlab_main/editor_dialog/modules/hls.cpp
         ui/puerhlab_main/editor_dialog/modules/pipeline_io.cpp
         ui/puerhlab_main/editor_dialog/modules/versioning.cpp
+        ui/puerhlab_main/editor_dialog/scope/scope_panel.cpp
+        ui/puerhlab_main/editor_dialog/scope/scope_plot_widgets.cpp
+        ui/puerhlab_main/editor_dialog/scope/scope_renderer.cpp
         ui/puerhlab_main/editor_dialog/widgets/spinner.cpp
         ui/puerhlab_main/editor_dialog/widgets/histogram_widget.cpp
         ui/puerhlab_main/editor_dialog/widgets/trackball.cpp
@@ -862,6 +868,9 @@ if(PUERHLAB_REAL_WIDGET_EDITOR)
         ui/puerhlab_main/editor_dialog/modules/lens_calib.hpp
         ui/puerhlab_main/editor_dialog/modules/geometry.hpp
         ui/puerhlab_main/editor_dialog/modules/versioning.hpp
+        ui/puerhlab_main/editor_dialog/scope/scope_panel.hpp
+        ui/puerhlab_main/editor_dialog/scope/scope_plot_widgets.hpp
+        ui/puerhlab_main/editor_dialog/scope/scope_renderer.hpp
         ui/puerhlab_main/editor_dialog/widgets/spinner.hpp
         ui/puerhlab_main/editor_dialog/widgets/histogram_widget.hpp
         ui/puerhlab_main/editor_dialog/widgets/trackball.hpp

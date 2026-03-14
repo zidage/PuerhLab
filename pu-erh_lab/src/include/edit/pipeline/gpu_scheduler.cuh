@@ -19,6 +19,8 @@
 #include <string>
 
 #include "edit/operators/GPU_kernels/param.cuh"
+#include "edit/scope/detail/scope_cuda_shared.cuh"
+#include "edit/scope/scope_analyzer.hpp"
 #include "edit/operators/op_base.hpp"
 #include "image/image_buffer.hpp"
 #include "kernel_stream_gpu.cuh"
@@ -42,6 +44,7 @@ class GPU_KernelLauncher {
   cudaStream_t                               stream_ = nullptr;
 
   GPUOperatorParams                          params_;
+  ViewerDisplayConfig                       display_config_{};
 
   IFrameSink*                                frame_sink_ = nullptr;
 
@@ -154,6 +157,8 @@ class GPU_KernelLauncher {
 
   void SetParams(OperatorParams& cpu_params) {
     params_ = GPUParamsConverter::ConvertFromCPU(cpu_params, params_);
+    display_config_ = ViewerDisplayConfig{cpu_params.to_output_params_.encoding_space_,
+                                          cpu_params.to_output_params_.eotf_};
   }
 
   void SetFrameSink(IFrameSink* frame_sink) { frame_sink_ = frame_sink; }
@@ -252,6 +257,30 @@ class GPU_KernelLauncher {
           throw std::runtime_error(std::string("cudaMemcpyAsync (work->frame) failed: ") +
                                    cudaGetErrorString(out_copy_err));
         }
+
+        auto final_image =
+            std::make_shared<scope::cuda_detail::CudaLinearImageResource>();
+        final_image->device_ptr    = result_ptr;
+        final_image->row_bytes     = row_bytes;
+        final_image->width         = static_cast<int>(width);
+        final_image->height        = static_cast<int>(height);
+        final_image->format        = FramePixelFormat::RGBA32F;
+        final_image->owns_memory   = false;
+        final_image->native_object = mapping.native_object;
+
+        auto ready_signal = std::make_shared<scope::cuda_detail::CudaStreamSignalResource>();
+        ready_signal->stream = stream_;
+
+        frame_sink_->SubmitFinalDisplayFrame(FinalDisplayFrameView{
+            SharedGpuImageHandle{GpuBackend::Cuda, std::move(final_image), static_cast<int>(width),
+                                 static_cast<int>(height), row_bytes, FramePixelFormat::RGBA32F},
+            static_cast<int>(width),
+            static_cast<int>(height),
+            FramePixelFormat::RGBA32F,
+            display_config_,
+            AnalysisDomain::DisplayEncoded,
+            GpuSignalHandle{GpuBackend::Cuda, std::move(ready_signal)},
+            total_frames_rendered_ + 1});
 
         const auto present_sync_start = std::chrono::steady_clock::now();
         const auto sync_err = cudaStreamSynchronize(stream_);
