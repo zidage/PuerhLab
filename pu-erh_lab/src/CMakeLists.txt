@@ -744,6 +744,9 @@ if(PUERHLAB_REAL_WIDGET_EDITOR)
             "-framework CoreGraphics"
         )
     endif()
+    if(PUERHLAB_RHI_WIDGET_EDITOR AND WIN32)
+        target_link_libraries(EditViewer PRIVATE d3d11 dxgi)
+    endif()
 
     if(PUERHLAB_RHI_WIDGET_EDITOR)
         qt_add_shaders(EditViewer "editviewer_rhi_shaders"

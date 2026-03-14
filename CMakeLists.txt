@@ -239,7 +239,7 @@ elseif(PUERHLAB_ENABLE_OPENGL_EDITOR)
     message(STATUS "OpenGL editor requested, but no accelerated backend is available. Building editor stub only.")
 endif()
 
-if(APPLE AND PUERHLAB_METAL_ENABLED)
+if((WIN32 AND PUERHLAB_CUDA_ENABLED) OR (APPLE AND PUERHLAB_METAL_ENABLED))
     find_package(Qt6 REQUIRED COMPONENTS ShaderTools GuiPrivate)
     set(PUERHLAB_RHI_WIDGET_EDITOR ON)
     set(PUERHLAB_REAL_WIDGET_EDITOR ON)

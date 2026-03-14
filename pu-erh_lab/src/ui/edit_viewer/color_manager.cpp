@@ -6,8 +6,8 @@
 
 namespace puerhlab {
 
-auto ColorManager::ApplyMetalWindowColorSpace(void* native_view_or_window,
-                                              const ViewerDisplayConfig& config) -> bool {
+auto ColorManager::ApplyWindowColorSpace(void* native_view_or_window,
+                                         const ViewerDisplayConfig& config) -> bool {
   (void)native_view_or_window;
   (void)config;
   return false;

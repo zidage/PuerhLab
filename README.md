@@ -71,7 +71,7 @@
 
 ## System Requirements
 
-- Windows 10/11 x64 for the current full CUDA/OpenGL editor build.
+- Windows 10/11 x64 for the current CUDA editor build, which now defaults to the Qt RHI/D3D11 viewer path. The legacy OpenGL viewer remains optional for compatibility/debugging.
 - macOS on Apple platforms for the Metal-backed Qt application build. The current presets disable the legacy OpenGL editor there, but keep Apple-native pipeline backends enabled.
 - NVIDIA GPU with CUDA support (minimum compute capability 6.0 (10-series or later), recommended 7.0+ (20-series or later) for optimal performance) and preferably 6GB+ VRAM for smooth performance with high resolution RAW files (40MP+) on the Windows/CUDA build.
 - A Metal-capable Mac for the macOS/Metal build.
@@ -92,7 +92,7 @@ This section mirrors the current setup in `CMakeLists.txt`, `pu-erh_lab/tests/CM
 - CMake 3.21+
 - Ninja
 - Git
-- Qt 6 (MSVC 2022 x64), with `Widgets`, `Quick`, `OpenGL`, `OpenGLWidgets`, and `Test`
+- Qt 6 (MSVC 2022 x64), with `Widgets`, `Quick`, `ShaderTools`, and `Test`. `OpenGL` and `OpenGLWidgets` are only needed when building the optional legacy viewer fallback.
 - NVIDIA CUDA Toolkit (optional, but recommended)
 
 ### 2) Dependency Layout Used by CMake

@@ -227,12 +227,23 @@ class GPU_KernelLauncher {
           throw std::runtime_error("GPU frame sink does not expose a CUDA RGBA32F mapping.");
         }
 
-        auto*      mapped_ptr = static_cast<float4*>(mapping.data);
         const size_t row_bytes = static_cast<size_t>(width) * sizeof(float4);
         const auto present_copy_start = std::chrono::steady_clock::now();
-        const auto out_copy_err = cudaMemcpy2DAsync(
-            mapped_ptr, mapping.row_bytes, result_ptr, row_bytes, row_bytes,
-            static_cast<size_t>(height), cudaMemcpyDeviceToDevice, stream_);
+        cudaError_t out_copy_err = cudaSuccess;
+        if (mapping.target_type == FrameWriteTargetType::LinearBuffer) {
+          auto* mapped_ptr = static_cast<float4*>(mapping.data);
+          out_copy_err = cudaMemcpy2DAsync(
+              mapped_ptr, mapping.row_bytes, result_ptr, row_bytes, row_bytes,
+              static_cast<size_t>(height), cudaMemcpyDeviceToDevice, stream_);
+        } else if (mapping.target_type == FrameWriteTargetType::CudaArray) {
+          auto mapped_array = reinterpret_cast<cudaArray_t>(mapping.image_array);
+          out_copy_err = cudaMemcpy2DToArrayAsync(
+              mapped_array, 0, 0, result_ptr, row_bytes, row_bytes,
+              static_cast<size_t>(height), cudaMemcpyDeviceToDevice, stream_);
+        } else {
+          frame_sink_->UnmapResource();
+          throw std::runtime_error("Unsupported GPU frame sink target type.");
+        }
         const auto present_copy_end = std::chrono::steady_clock::now();
         present_copy_enqueue_ms =
             std::chrono::duration<double, std::milli>(present_copy_end - present_copy_start).count();

@@ -10,8 +10,8 @@ namespace puerhlab {
 
 class ColorManager {
  public:
-  static auto ApplyMetalWindowColorSpace(void* native_view_or_window,
-                                         const ViewerDisplayConfig& config) -> bool;
+  static auto ApplyWindowColorSpace(void* native_view_or_window,
+                                    const ViewerDisplayConfig& config) -> bool;
 };
 
 }  // namespace puerhlab

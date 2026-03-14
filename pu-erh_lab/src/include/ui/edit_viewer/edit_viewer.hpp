@@ -70,6 +70,7 @@ class QtEditViewer : public QWidget, public puerhlab::IFrameSink {
 
   void    SetHistogramFrameExpected(bool expected_fast_preview);
   void    SetHistogramUpdateIntervalMs(int interval_ms);
+  auto    SupportsHistogram() const -> bool;
 
  signals:
   void RequestUpdate();

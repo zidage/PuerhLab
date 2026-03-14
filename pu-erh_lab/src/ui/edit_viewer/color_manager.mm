@@ -164,8 +164,8 @@ void LogFallbackColorSpace(const ViewerDisplayConfig& config, CFStringRef resolv
 
 }  // namespace
 
-auto ColorManager::ApplyMetalWindowColorSpace(void* native_view_or_window,
-                                              const ViewerDisplayConfig& config) -> bool {
+auto ColorManager::ApplyWindowColorSpace(void* native_view_or_window,
+                                         const ViewerDisplayConfig& config) -> bool {
   if (!native_view_or_window) {
     return false;
   }

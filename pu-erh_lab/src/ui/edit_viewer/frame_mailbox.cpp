@@ -72,8 +72,13 @@ auto FrameMailbox::MapResourceForWrite() -> FrameWriteMapping {
   }
 
   const auto& slot = slots_[render_target_idx_];
-  return {staging_ptr_, static_cast<size_t>(std::max(slot.width, 0)) * sizeof(float4),
-          FramePixelFormat::RGBA32F, FrameMemoryDomain::CudaDevice};
+  return {staging_ptr_,
+          nullptr,
+          static_cast<size_t>(std::max(slot.width, 0)) * sizeof(float4),
+          FramePixelFormat::RGBA32F,
+          FrameMemoryDomain::CudaDevice,
+          FrameWriteTargetType::LinearBuffer,
+          0};
 }
 
 void FrameMailbox::UnmapResource() {

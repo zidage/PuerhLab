@@ -44,13 +44,21 @@ enum class FrameMemoryDomain {
   CudaDevice,
 };
 
+enum class FrameWriteTargetType {
+  LinearBuffer,
+  CudaArray,
+};
+
 struct FrameWriteMapping {
   void*             data          = nullptr;
+  void*             image_array   = nullptr;
   size_t            row_bytes     = 0;
   FramePixelFormat  pixel_format  = FramePixelFormat::RGBA32F;
   FrameMemoryDomain memory_domain = FrameMemoryDomain::HostVisible;
+  FrameWriteTargetType target_type = FrameWriteTargetType::LinearBuffer;
+  std::uintptr_t    native_object = 0;
 
-  explicit operator bool() const { return data != nullptr; }
+  explicit operator bool() const { return data != nullptr || image_array != nullptr; }
 };
 
 struct ViewerFrame {

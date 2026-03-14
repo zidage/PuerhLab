@@ -4,14 +4,15 @@
 
 #include "ui/edit_viewer/edit_viewer.hpp"
 
-#ifdef HAVE_CUDA
+#ifdef PUERHLAB_HAS_LEGACY_GL_VIEWER
 #include "ui/edit_viewer/gl_edit_viewer_surface.hpp"
 #endif
-#ifdef HAVE_METAL
+#ifdef PUERHLAB_HAS_RHI_VIEWER
 #include "ui/edit_viewer/rhi_edit_viewer_surface.hpp"
 #endif
 
 #include <QApplication>
+#include <QByteArray>
 #include <QEasingCurve>
 #include <QMouseEvent>
 #include <QPainter>
@@ -22,8 +23,98 @@
 
 #include <algorithm>
 #include <cmath>
+#include <mutex>
+
+#if defined(PUERHLAB_HAS_RHI_VIEWER) && defined(Q_OS_WIN) && defined(HAVE_CUDA)
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <dxgi.h>
+#include <wrl/client.h>
+
+#include <cuda_d3d11_interop.h>
+#include <cuda_runtime_api.h>
+#endif
 
 namespace puerhlab {
+
+namespace {
+
+auto HasLegacyGlSurface(const IEditViewerSurface* surface) -> bool {
+#ifdef PUERHLAB_HAS_LEGACY_GL_VIEWER
+  return dynamic_cast<const IOpenGLEditViewerSurface*>(surface) != nullptr;
+#else
+  (void)surface;
+  return false;
+#endif
+}
+
+#if defined(PUERHLAB_HAS_RHI_VIEWER) && defined(Q_OS_WIN) && defined(HAVE_CUDA)
+using Microsoft::WRL::ComPtr;
+
+auto DescribeDxgiAdapter(IDXGIAdapter1* adapter) -> QString {
+  if (!adapter) {
+    return QStringLiteral("<null>");
+  }
+
+  DXGI_ADAPTER_DESC1 desc{};
+  if (FAILED(adapter->GetDesc1(&desc))) {
+    return QStringLiteral("<unknown>");
+  }
+  return QString::fromWCharArray(desc.Description);
+}
+
+void ConfigureQtD3D11AdapterForCurrentCudaDevice() {
+  static std::once_flag once;
+  std::call_once(once, []() {
+    if (!qEnvironmentVariableIsEmpty("QT_D3D_ADAPTER_INDEX")) {
+      return;
+    }
+
+    int current_cuda_device = -1;
+    const cudaError_t current_device_err = cudaGetDevice(&current_cuda_device);
+    if (current_device_err != cudaSuccess || current_cuda_device < 0) {
+      qWarning("QtEditViewer: cudaGetDevice failed before selecting Qt D3D11 adapter: %s",
+               cudaGetErrorString(current_device_err));
+      return;
+    }
+
+    ComPtr<IDXGIFactory1> factory;
+    if (FAILED(CreateDXGIFactory1(IID_PPV_ARGS(factory.GetAddressOf())))) {
+      qWarning("QtEditViewer: CreateDXGIFactory1 failed while selecting Qt D3D11 adapter.");
+      return;
+    }
+
+    for (UINT adapter_index = 0;; ++adapter_index) {
+      ComPtr<IDXGIAdapter1> adapter;
+      const HRESULT enum_hr = factory->EnumAdapters1(adapter_index, adapter.GetAddressOf());
+      if (enum_hr == DXGI_ERROR_NOT_FOUND) {
+        break;
+      }
+      if (FAILED(enum_hr)) {
+        continue;
+      }
+
+      int adapter_cuda_device = -1;
+      const cudaError_t adapter_err = cudaD3D11GetDevice(&adapter_cuda_device, adapter.Get());
+      if (adapter_err != cudaSuccess || adapter_cuda_device != current_cuda_device) {
+        continue;
+      }
+
+      qputenv("QT_D3D_ADAPTER_INDEX", QByteArray::number(adapter_index));
+      qInfo("QtEditViewer: using DXGI adapter %u ('%s') for Qt D3D11 to match CUDA device %d.",
+            adapter_index, qPrintable(DescribeDxgiAdapter(adapter.Get())), current_cuda_device);
+      return;
+    }
+
+    qWarning("QtEditViewer: no DXGI adapter matched current CUDA device %d. "
+             "Qt D3D11 may select an incompatible adapter for CUDA interop.",
+             current_cuda_device);
+  });
+}
+#endif
+
+}  // namespace
 
 class EditViewerOverlayWidget final : public QWidget {
  public:
@@ -54,7 +145,13 @@ QtEditViewer::QtEditViewer(QWidget* parent) : QWidget(parent) {
   setContentsMargins(0, 0, 0, 0);
   setAutoFillBackground(false);
 
-#ifdef HAVE_CUDA
+#ifdef PUERHLAB_HAS_RHI_VIEWER
+#if defined(Q_OS_WIN) && defined(HAVE_CUDA)
+  ConfigureQtD3D11AdapterForCurrentCudaDevice();
+#endif
+  surface_ = std::make_unique<RhiEditViewerSurface>(this);
+  render_target_surface_ = dynamic_cast<IEditViewerRenderTargetSurface*>(surface_.get());
+#elif defined(PUERHLAB_HAS_LEGACY_GL_VIEWER)
   GlEditViewerSurface::Callbacks surface_callbacks;
   surface_callbacks.consume_pending_frame = [this]() { return frame_mailbox_.ConsumePendingFrame(); };
   surface_callbacks.consume_histogram_request = [this]() {
@@ -69,12 +166,10 @@ QtEditViewer::QtEditViewer(QWidget* parent) : QWidget(parent) {
 
   surface_ = std::make_unique<GlEditViewerSurface>(surface_callbacks, this);
   render_target_surface_ = dynamic_cast<IEditViewerRenderTargetSurface*>(surface_.get());
-#elif defined(HAVE_METAL)
-  surface_ = std::make_unique<RhiEditViewerSurface>(this);
 #endif
 
   overlay_ = new EditViewerOverlayWidget(*this, this);
-#ifdef HAVE_CUDA
+#ifdef PUERHLAB_HAS_LEGACY_GL_VIEWER
   frame_mailbox_.InitializeDefaultSize(std::max(1, width()), std::max(1, height()));
 #endif
   RefreshFrameDerivedState();
@@ -198,21 +293,23 @@ auto QtEditViewer::GetViewZoom() const -> float { return viewer_state_.GetViewZo
 
 void QtEditViewer::SetDisplayEncoding(ColorUtils::ColorSpace encoding_space,
                                       ColorUtils::EOTF       encoding_eotf) {
-#ifdef HAVE_METAL
   {
     std::lock_guard<std::mutex> lock(host_frame_mutex_);
     pending_display_config_       = ViewerDisplayConfig{encoding_space, encoding_eotf};
     pending_display_config_valid_ = true;
   }
   emit RequestUpdate();
-#else
-  (void)encoding_space;
-  (void)encoding_eotf;
-#endif
 }
 
 void QtEditViewer::EnsureSize(int width, int height) {
 #ifdef HAVE_CUDA
+  if (render_target_surface_ && render_target_surface_->supportsDirectCudaPresent()) {
+    const auto decision = render_target_surface_->prepareRenderTarget(width, height);
+    if (decision.need_resize) {
+      emit RequestResize(width, height);
+    }
+    return;
+  }
   const auto decision = frame_mailbox_.EnsureSize(width, height);
   if (decision.need_resize) {
     emit RequestResize(width, height);
@@ -225,6 +322,9 @@ void QtEditViewer::EnsureSize(int width, int height) {
 
 auto QtEditViewer::MapResourceForWrite() -> FrameWriteMapping {
 #ifdef HAVE_CUDA
+  if (render_target_surface_ && render_target_surface_->supportsDirectCudaPresent()) {
+    return render_target_surface_->mapResourceForWrite();
+  }
   return frame_mailbox_.MapResourceForWrite();
 #else
   return {};
@@ -233,19 +333,27 @@ auto QtEditViewer::MapResourceForWrite() -> FrameWriteMapping {
 
 void QtEditViewer::UnmapResource() {
 #ifdef HAVE_CUDA
+  if (render_target_surface_ && render_target_surface_->supportsDirectCudaPresent()) {
+    render_target_surface_->unmapResource();
+    return;
+  }
   frame_mailbox_.UnmapResource();
 #endif
 }
 
 void QtEditViewer::NotifyFrameReady() {
 #ifdef HAVE_CUDA
+  if (render_target_surface_ && render_target_surface_->supportsDirectCudaPresent()) {
+    render_target_surface_->notifyFrameReady();
+    emit RequestUpdate();
+    return;
+  }
   frame_mailbox_.NotifyFrameReady();
   emit RequestUpdate();
 #endif
 }
 
 void QtEditViewer::SubmitHostFrame(const ViewerFrame& frame) {
-#ifdef HAVE_METAL
   {
     std::lock_guard<std::mutex> lock(host_frame_mutex_);
     ViewerFrame submitted_frame = frame;
@@ -254,12 +362,11 @@ void QtEditViewer::SubmitHostFrame(const ViewerFrame& frame) {
       pending_presentation_mode_valid_ = false;
     }
     pending_host_frame_ = std::move(submitted_frame);
+#ifdef HAVE_METAL
     pending_metal_frame_.reset();
+#endif
   }
   emit RequestUpdate();
-#else
-  (void)frame;
-#endif
 }
 
 #ifdef HAVE_METAL
@@ -280,7 +387,17 @@ void QtEditViewer::SubmitMetalFrame(const ViewerMetalFrame& frame) {
 
 auto QtEditViewer::GetWidth() const -> int {
 #ifdef HAVE_CUDA
-  return frame_mailbox_.GetWidth();
+  if (render_target_surface_ && render_target_surface_->supportsDirectCudaPresent()) {
+    const auto state = render_target_surface_->activeRenderTargetState();
+    if (state.width > 0) {
+      return state.width;
+    }
+  }
+  if (HasLegacyGlSurface(surface_.get())) {
+    return frame_mailbox_.GetWidth();
+  }
+  std::lock_guard<std::mutex> lock(host_frame_mutex_);
+  return active_frame_width_;
 #else
   std::lock_guard<std::mutex> lock(host_frame_mutex_);
   return active_frame_width_;
@@ -289,7 +406,17 @@ auto QtEditViewer::GetWidth() const -> int {
 
 auto QtEditViewer::GetHeight() const -> int {
 #ifdef HAVE_CUDA
-  return frame_mailbox_.GetHeight();
+  if (render_target_surface_ && render_target_surface_->supportsDirectCudaPresent()) {
+    const auto state = render_target_surface_->activeRenderTargetState();
+    if (state.height > 0) {
+      return state.height;
+    }
+  }
+  if (HasLegacyGlSurface(surface_.get())) {
+    return frame_mailbox_.GetHeight();
+  }
+  std::lock_guard<std::mutex> lock(host_frame_mutex_);
+  return active_frame_height_;
 #else
   std::lock_guard<std::mutex> lock(host_frame_mutex_);
   return active_frame_height_;
@@ -302,6 +429,10 @@ auto QtEditViewer::GetViewportRenderRegion() const -> std::optional<ViewportRend
 
 void QtEditViewer::SetNextFramePresentationMode(FramePresentationMode mode) {
 #ifdef HAVE_CUDA
+  if (render_target_surface_ && render_target_surface_->supportsDirectCudaPresent()) {
+    render_target_surface_->setNextFramePresentationMode(mode);
+    return;
+  }
   frame_mailbox_.SetNextFramePresentationMode(mode);
 #else
   std::lock_guard<std::mutex> lock(host_frame_mutex_);
@@ -314,8 +445,16 @@ auto QtEditViewer::GetViewerSurface() -> IEditViewerSurface* { return surface_.g
 
 auto QtEditViewer::GetViewerSurface() const -> const IEditViewerSurface* { return surface_.get(); }
 
+auto QtEditViewer::SupportsHistogram() const -> bool {
+#ifdef PUERHLAB_HAS_LEGACY_GL_VIEWER
+  return HasLegacyGlSurface(surface_.get());
+#else
+  return false;
+#endif
+}
+
 void QtEditViewer::SetHistogramFrameExpected(bool expected_fast_preview) {
-#ifdef HAVE_CUDA
+#ifdef PUERHLAB_HAS_LEGACY_GL_VIEWER
   frame_mailbox_.SetHistogramFrameExpected(expected_fast_preview);
 #else
   (void)expected_fast_preview;
@@ -323,7 +462,7 @@ void QtEditViewer::SetHistogramFrameExpected(bool expected_fast_preview) {
 }
 
 void QtEditViewer::SetHistogramUpdateIntervalMs(int interval_ms) {
-#ifdef HAVE_CUDA
+#ifdef PUERHLAB_HAS_LEGACY_GL_VIEWER
   auto* gl_surface = dynamic_cast<IOpenGLEditViewerSurface*>(surface_.get());
   if (gl_surface) {
     gl_surface->setHistogramUpdateIntervalMs(interval_ms);
@@ -525,6 +664,24 @@ void QtEditViewer::OnResizeSurface(int w, int h) {
     return;
   }
 
+  if (render_target_surface_->supportsDirectCudaPresent()) {
+    const auto decision = render_target_surface_->prepareRenderTarget(w, h);
+    if (render_target_surface_->hasRenderTarget(decision.slot_index, w, h)) {
+      render_target_surface_->commitRenderTargetResize(decision.slot_index, w, h);
+      UpdateSurface();
+      UpdateOverlay();
+      return;
+    }
+
+    const bool resized = render_target_surface_->ensureRenderTarget(decision.slot_index, w, h);
+    if (resized) {
+      render_target_surface_->commitRenderTargetResize(decision.slot_index, w, h);
+    }
+    UpdateSurface();
+    UpdateOverlay();
+    return;
+  }
+
   const int target_slot = frame_mailbox_.GetRenderTargetSlotIndex();
   if (render_target_surface_->hasRenderTarget(target_slot, w, h)) {
     frame_mailbox_.CommitResize(target_slot, w, h);
@@ -572,7 +729,22 @@ void QtEditViewer::UpdateViewportRenderRegionCache() {
 
 void QtEditViewer::RefreshFrameDerivedState() {
 #ifdef HAVE_CUDA
-  const auto active_frame = frame_mailbox_.GetActiveFrame();
+  EditViewerRenderTargetState active_frame{};
+  if (render_target_surface_ && render_target_surface_->supportsDirectCudaPresent()) {
+    active_frame = render_target_surface_->activeRenderTargetState();
+  }
+  if (active_frame.width <= 0 || active_frame.height <= 0) {
+    if (HasLegacyGlSurface(surface_.get())) {
+      const auto mailbox_frame = frame_mailbox_.GetActiveFrame();
+      active_frame             = {mailbox_frame.slot_index, mailbox_frame.width, mailbox_frame.height,
+                                  mailbox_frame.presentation_mode};
+    } else {
+      std::lock_guard<std::mutex> lock(host_frame_mutex_);
+      active_frame.width             = active_frame_width_;
+      active_frame.height            = active_frame_height_;
+      active_frame.presentation_mode = active_presentation_mode_;
+    }
+  }
 #else
   struct FrameState {
     int                   width = 0;
@@ -601,18 +773,18 @@ void QtEditViewer::SyncSurfaceState() {
   }
 
   ViewerDisplayConfig display_config = active_display_config_;
-#ifdef HAVE_METAL
   std::optional<ViewerFrame> host_frame_to_submit;
+#ifdef HAVE_METAL
   std::optional<ViewerMetalFrame> metal_frame_to_submit;
 #endif
 
-#ifdef HAVE_METAL
   {
     std::lock_guard<std::mutex> lock(host_frame_mutex_);
     if (pending_display_config_valid_) {
       active_display_config_        = pending_display_config_;
       pending_display_config_valid_ = false;
     }
+#ifdef HAVE_METAL
     if (pending_metal_frame_.has_value()) {
       active_metal_frame_        = *pending_metal_frame_;
       active_host_frame_         = {};
@@ -629,21 +801,38 @@ void QtEditViewer::SyncSurfaceState() {
       active_display_config_     = pending_host_frame_->display_config;
       active_frame_width_        = pending_host_frame_->width;
       active_frame_height_       = pending_host_frame_->height;
-      active_presentation_mode_ = pending_host_frame_->presentation_mode;
-      display_config            = active_display_config_;
-      host_frame_to_submit      = *pending_host_frame_;
+      active_presentation_mode_  = pending_host_frame_->presentation_mode;
+      display_config             = active_display_config_;
+      host_frame_to_submit       = *pending_host_frame_;
       pending_host_frame_.reset();
     } else {
       display_config = active_display_config_;
     }
-  }
+#else
+    if (pending_host_frame_.has_value()) {
+      active_host_frame_         = *pending_host_frame_;
+      active_display_config_     = pending_host_frame_->display_config;
+      active_frame_width_        = pending_host_frame_->width;
+      active_frame_height_       = pending_host_frame_->height;
+      active_presentation_mode_  = pending_host_frame_->presentation_mode;
+      display_config             = active_display_config_;
+      host_frame_to_submit       = *pending_host_frame_;
+      pending_host_frame_.reset();
+    } else {
+      display_config = active_display_config_;
+    }
 #endif
+  }
 
   surface_->setDisplayConfig(display_config);
 #ifdef HAVE_METAL
   if (metal_frame_to_submit.has_value()) {
     surface_->submitMetalFrame(*metal_frame_to_submit);
   } else if (host_frame_to_submit.has_value()) {
+    surface_->submitFrame(*host_frame_to_submit);
+  }
+#else
+  if (host_frame_to_submit.has_value()) {
     surface_->submitFrame(*host_frame_to_submit);
   }
 #endif
@@ -664,7 +853,20 @@ auto QtEditViewer::CurrentWidgetInfo() const -> ViewportWidgetInfo {
 
 auto QtEditViewer::CurrentImageInfo() const -> ViewportImageInfo {
 #ifdef HAVE_CUDA
-  const auto active_frame = frame_mailbox_.GetActiveFrame();
+  EditViewerRenderTargetState active_frame{};
+  if (render_target_surface_ && render_target_surface_->supportsDirectCudaPresent()) {
+    active_frame = render_target_surface_->activeRenderTargetState();
+  }
+  if (active_frame.width <= 0 || active_frame.height <= 0) {
+    if (HasLegacyGlSurface(surface_.get())) {
+      const auto mailbox_frame = frame_mailbox_.GetActiveFrame();
+      active_frame             = {mailbox_frame.slot_index, mailbox_frame.width, mailbox_frame.height,
+                                  mailbox_frame.presentation_mode};
+    } else {
+      std::lock_guard<std::mutex> lock(host_frame_mutex_);
+      return {active_frame_width_, active_frame_height_};
+    }
+  }
   return {active_frame.width, active_frame.height};
 #else
   std::lock_guard<std::mutex> lock(host_frame_mutex_);
@@ -674,7 +876,17 @@ auto QtEditViewer::CurrentImageInfo() const -> ViewportImageInfo {
 
 auto QtEditViewer::CurrentPresentationMode() const -> FramePresentationMode {
 #ifdef HAVE_CUDA
-  return frame_mailbox_.GetActiveFrame().presentation_mode;
+  if (render_target_surface_ && render_target_surface_->supportsDirectCudaPresent()) {
+    const auto state = render_target_surface_->activeRenderTargetState();
+    if (state.width > 0 && state.height > 0) {
+      return state.presentation_mode;
+    }
+  }
+  if (HasLegacyGlSurface(surface_.get())) {
+    return frame_mailbox_.GetActiveFrame().presentation_mode;
+  }
+  std::lock_guard<std::mutex> lock(host_frame_mutex_);
+  return active_presentation_mode_;
 #else
   std::lock_guard<std::mutex> lock(host_frame_mutex_);
   return active_presentation_mode_;

@@ -14,6 +14,18 @@ struct ViewerViewState {
   ViewerStateSnapshot snapshot{};
 };
 
+struct EditViewerRenderTargetResizeDecision {
+  bool need_resize = false;
+  int  slot_index  = 0;
+};
+
+struct EditViewerRenderTargetState {
+  int                   slot_index         = 0;
+  int                   width              = 0;
+  int                   height             = 0;
+  FramePresentationMode presentation_mode  = FramePresentationMode::FullFrame;
+};
+
 class IEditViewerSurface {
  public:
   virtual ~IEditViewerSurface() = default;
@@ -32,6 +44,23 @@ class IEditViewerRenderTargetSurface {
  public:
   virtual ~IEditViewerRenderTargetSurface() = default;
 
+  virtual auto supportsDirectCudaPresent() const -> bool { return false; }
+  virtual auto prepareRenderTarget(int width, int height)
+      -> EditViewerRenderTargetResizeDecision {
+    (void)width;
+    (void)height;
+    return {};
+  }
+  virtual void commitRenderTargetResize(int slot_index, int width, int height) {
+    (void)slot_index;
+    (void)width;
+    (void)height;
+  }
+  virtual auto mapResourceForWrite() -> FrameWriteMapping { return {}; }
+  virtual void unmapResource() {}
+  virtual void notifyFrameReady() {}
+  virtual void setNextFramePresentationMode(FramePresentationMode) {}
+  virtual auto activeRenderTargetState() const -> EditViewerRenderTargetState { return {}; }
   virtual auto hasRenderTarget(int slot_index, int width, int height) const -> bool = 0;
   virtual auto ensureRenderTarget(int slot_index, int width, int height) -> bool     = 0;
 };

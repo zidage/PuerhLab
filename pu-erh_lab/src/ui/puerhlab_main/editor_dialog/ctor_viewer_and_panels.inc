@@ -248,7 +248,7 @@
                              right_default_width});
     root->addWidget(main_splitter, 1);
 
-    {
+    if (viewer_ && viewer_->SupportsHistogram()) {
       auto* histogram_frame = new QFrame(controls_panel);
       histogram_frame->setObjectName("EditorSection");
       auto* histogram_layout = new QVBoxLayout(histogram_frame);
