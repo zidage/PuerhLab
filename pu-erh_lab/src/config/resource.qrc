@@ -1,5 +1,6 @@
 <RCC>
   <qresource prefix="/">
+    <file>ICON/unnamed.png</file>
     <file>fonts/main_Inter.ttf</file>
     <file>fonts/main_Inter_italic.ttf</file>
     <file>fonts/main_IBM.ttf</file>

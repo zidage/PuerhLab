@@ -930,6 +930,15 @@ if(APPLE)
     set_target_properties(puerhlab_main PROPERTIES MACOSX_BUNDLE_ICON_FILE "puerhlab_main.icns")
 endif()
 
+if(WIN32)
+    set(PUERHLAB_MAIN_ICON_RC "${CMAKE_CURRENT_SOURCE_DIR}/config/ICON/puerhlab_main.rc")
+    if(EXISTS "${PUERHLAB_MAIN_ICON_RC}")
+        target_sources(puerhlab_main PRIVATE "${PUERHLAB_MAIN_ICON_RC}")
+    else()
+        message(WARNING "Windows app icon resource not found: ${PUERHLAB_MAIN_ICON_RC}")
+    endif()
+endif()
+
 target_include_directories(puerhlab_main
     PRIVATE
         ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include

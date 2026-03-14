@@ -7,6 +7,7 @@ interface Props {
 
 const { lang } = Astro.props;
 const i = t(lang);
+const base = import.meta.env.BASE_URL;
 const windowsReleaseUrl =
   'https://github.com/zidage/PuerhLab/releases/download/v0.1.2/pu-erh_lab-0.1.2-Windows-AMD64.7z';
 ---
@@ -26,11 +27,20 @@ const windowsReleaseUrl =
 
   <!-- Content -->
   <div class="relative z-10 text-center px-4 max-w-4xl mx-auto">
-    <h1
-      class="text-5xl sm:text-6xl lg:text-7xl font-bold text-gold mb-4 opacity-0 animate-[fadeInUp_0.8s_ease-out_0.2s_forwards]"
+    <div
+      class="flex items-center justify-center gap-4 sm:gap-6 mb-4 opacity-0 animate-[fadeInUp_0.8s_ease-out_0.2s_forwards]"
     >
-      {i.hero.title}
-    </h1>
+      <img
+        src={`${base}brand/app-icon.png`}
+        alt="Pu-erh Lab logo"
+        class="w-16 h-16 sm:w-20 sm:h-20 lg:w-24 lg:h-24 drop-shadow-[0_0_24px_rgba(252,199,4,0.4)]"
+        loading="eager"
+      />
+      <h1 class="text-5xl sm:text-6xl lg:text-7xl font-bold">
+        <span class="text-gold">Pu-erh</span>
+        <span class="text-mist"> Lab</span>
+      </h1>
+    </div>
     <p
       class="text-xl sm:text-2xl text-mist mb-3 opacity-0 animate-[fadeInUp_0.8s_ease-out_0.4s_forwards]"
     >

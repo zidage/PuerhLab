@@ -7,6 +7,7 @@
 #include <QFont>
 #include <QFontDatabase>
 #include <QGuiApplication>
+#include <QIcon>
 #include <QSettings>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
@@ -60,6 +61,7 @@ int main(int argc, char* argv[]) {
   Exiv2::LogMsg::setLevel(Exiv2::LogMsg::Level::error);
 
   QApplication app(argc, argv);
+  app.setWindowIcon(QIcon(QStringLiteral(":/ICON/unnamed.png")));
   {
     QFont default_font = app.font();
     default_font.setStyleStrategy(QFont::PreferAntialias);
