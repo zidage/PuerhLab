@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.2.0] (03344c0..b8c2fa3) — 2026-03-07 ~ 2026-03-14
+
+### Features
+- **Cross-platform rendering expansion**: Added macOS build support and integrated the Metal pipeline (briefly: raw/resize/lens utilities, pipeline wiring, and performance/refactor passes) (`5eed41d`, `0a37cfa`, `aefa6f0`)
+- **macOS visual pipeline upgrades**: Added basic color management and experimental HDR support on macOS (`880234c`, `4c879c3`)
+- **Windows preview backend update**: Ported Windows preview surface to D3D11 (`3a079ad`)
+- **Internationalization**: Added i18n support, language selection UI adjustments, and zh-CN font updates (`2caeaed`, `9657bf5`, `44b5401`)
+- **New scopes & controls**: Added histogram/waveform display, aspect ratio selection, thumbnail waiting animation, and reset adjustments support (`5f47c71`, `e559e1e`, `85a4440`, `2c18f7f`)
+- **Versioning UI refresh**: Improved versioning UI design (`a0a5931`)
+
+### Bug Fixes
+- **Windows build stability**: Fixed multiple Windows compile issues during cross-platform integration (`e794c4e`, `a6d8968`, `2eca003`, `4f89c41`)
+- **Metal pipeline path fix**: Corrected wrong geometry pipeline path in Metal (`34242aa`)
+- **Renderer include/path fixes**: Updated include path handling for OpenGL viewer renderer (`cefe155`)
+- **Editor background issue**: Fixed editor background issue in reset-adjustments workflow (`2c18f7f`)
+
+### Documentation
+- Added changelog documentation (`805996f`)
+- Added demo website and updated project website content (`f6b76d8`, `2eff447`)
+- Updated README content (performance data, removed outdated video link) (`1699e67`, `adc1912`)
+
+### Miscellaneous
+- Added website deployment GitHub Actions workflow (`385ecec`)
+- Added/updated dependency submodules (`metal-cpp`, `libultrahdr`) and Windows support integration (`7ffd7c5`, `65e1372`)
+- Removed unnecessary `third_party` folder cleanup (`b8c2fa3`)
+
 ## [0.1.2] (846e9d3..03344c0) — 2026-03-01 ~ 2026-03-07
 
 ### Features
@@ -28,6 +54,32 @@
 ---
 
 # 更新日志
+
+## [0.2.0] (03344c0..b8c2fa3) — 2026-03-07 ~ 2026-03-14
+
+### 新功能
+- **跨平台渲染扩展**：新增 macOS 编译支持并完成 Metal 流水线集成（简述：Raw/缩放/镜头校正能力接入、流水线贯通，以及性能优化与重构） (`5eed41d`, `0a37cfa`, `aefa6f0`)
+- **macOS 视觉流水线升级**：新增 macOS 基础色彩管理与实验性 HDR 支持 (`880234c`, `4c879c3`)
+- **Windows 预览后端更新**：将 Windows 预览 Surface 移植到 D3D11 (`3a079ad`)
+- **国际化支持**：新增 i18n、优化语言选择 UI，并更新 zh-CN 字体 (`2caeaed`, `9657bf5`, `44b5401`)
+- **新示波与控制能力**：新增直方图/波形显示、画幅比例选择、缩略图等待动画，以及重置调整支持 (`5f47c71`, `e559e1e`, `85a4440`, `2c18f7f`)
+- **版本信息界面优化**：改进 versioning UI 设计 (`a0a5931`)
+
+### 缺陷修复
+- **Windows 构建稳定性**：修复跨平台集成过程中多处 Windows 编译问题 (`e794c4e`, `a6d8968`, `2eca003`, `4f89c41`)
+- **Metal 流水线路径修复**：修复 Metal 中几何管线路径错误 (`34242aa`)
+- **渲染器包含路径修复**：修复 OpenGL viewer renderer 的 include/path 处理 (`cefe155`)
+- **编辑器背景问题**：修复重置调整流程中的编辑器背景问题 (`2c18f7f`)
+
+### 文档更新
+- 新增 changelog 文档 (`805996f`)
+- 新增 demo 网站并更新项目网站内容 (`f6b76d8`, `2eff447`)
+- 更新 README（性能数据、移除过时视频链接） (`1699e67`, `adc1912`)
+
+### 其他
+- 新增网站部署 GitHub Actions 工作流 (`385ecec`)
+- 新增/更新依赖子模块（`metal-cpp`、`libultrahdr`）并集成 Windows 支持 (`7ffd7c5`, `65e1372`)
+- 清理并移除不再需要的 `third_party` 目录 (`b8c2fa3`)
 
 ## [0.1.2] (846e9d3..03344c0) — 2026-03-01 ~ 2026-03-07
 
