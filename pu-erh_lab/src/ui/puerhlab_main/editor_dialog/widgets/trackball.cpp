@@ -49,6 +49,7 @@ void CdlTrackballDiscWidget::resizeEvent(QResizeEvent*) { wheel_cache_ = QImage(
 void CdlTrackballDiscWidget::paintEvent(QPaintEvent*) {
   QPainter painter(this);
   painter.setRenderHint(QPainter::Antialiasing, true);
+  painter.setRenderHint(QPainter::TextAntialiasing, true);
 
   const QRectF disc = DiscRect();
   EnsureWheelCache(disc);

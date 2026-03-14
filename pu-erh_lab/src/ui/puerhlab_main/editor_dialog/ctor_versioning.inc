@@ -3,6 +3,46 @@
 // It shares the constructor scope and has access to all local variables.
 
 
+  const QString version_primary_btn_style = QStringLiteral(
+    "QPushButton {"
+    "  color: #141414;"
+    "  background: #FCC704;"
+    "  border: none;"
+    "  border-radius: 6px;"
+    "  padding: 0 12px;"
+    "}"
+    "QPushButton:hover {"
+    "  background: #F5C200;"
+    "}"
+    "QPushButton:pressed {"
+    "  background: #E8B800;"
+    "}"
+    "QPushButton:disabled {"
+    "  color: #6A6A6A;"
+    "  background: #222222;"
+    "}");
+
+  const QString version_secondary_btn_style = QStringLiteral(
+    "QPushButton {"
+    "  color: #FCC704;"
+    "  background: transparent;"
+    "  border: 1px solid rgba(252, 199, 4, 0.85);"
+    "  border-radius: 6px;"
+    "  padding: 0 12px;"
+    "}"
+    "QPushButton:hover {"
+    "  color: #141414;"
+    "  background: #FCC704;"
+    "}"
+    "QPushButton:pressed {"
+    "  background: #E8B800;"
+    "}"
+    "QPushButton:disabled {"
+    "  color: #666666;"
+    "  border-color: #3A3A3A;"
+    "  background: transparent;"
+    "}");
+
     // Edit-history commit controls.
     {
       auto* row       = new QWidget(shared_versioning_root);
@@ -18,11 +58,11 @@
 
       undo_tx_btn_ = new QPushButton(Tr("Undo"), row);
       undo_tx_btn_->setFixedHeight(32);
-      undo_tx_btn_->setStyleSheet(AppTheme::EditorPrimaryButtonStyle(true));
+      undo_tx_btn_->setStyleSheet(version_secondary_btn_style);
 
       commit_version_btn_ = new QPushButton(Tr("Commit Version"), row);
       commit_version_btn_->setFixedHeight(32);
-      commit_version_btn_->setStyleSheet(AppTheme::EditorPrimaryButtonStyle(true));
+      commit_version_btn_->setStyleSheet(version_primary_btn_style);
 
       rowLayout->addWidget(version_status_, /*stretch*/ 1);
       rowLayout->addWidget(undo_tx_btn_, /*stretch*/ 0);
@@ -60,7 +100,7 @@
 
       new_working_btn_ = new QPushButton(Tr("New"), mode_row);
       new_working_btn_->setFixedHeight(28);
-      new_working_btn_->setStyleSheet(AppTheme::EditorPrimaryButtonStyle());
+      new_working_btn_->setStyleSheet(version_secondary_btn_style);
 
       mode_layout->addWidget(mode_label, /*stretch*/ 0);
       mode_layout->addWidget(working_mode_combo_, /*stretch*/ 1);

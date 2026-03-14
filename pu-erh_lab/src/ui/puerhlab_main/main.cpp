@@ -6,10 +6,12 @@
 #include <QCoreApplication>
 #include <QFont>
 #include <QFontDatabase>
+#include <QGuiApplication>
 #include <QSettings>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQuickStyle>
+#include <QtGlobal>
 
 #include <exiv2/error.hpp>
 #include <optional>
@@ -45,11 +47,24 @@ auto FindArgValue(int argc, char** argv, std::string_view option_name)
 }  // namespace
 
 int main(int argc, char* argv[]) {
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
+  QCoreApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
+  QCoreApplication::setAttribute(Qt::AA_UseHighDpiPixmaps);
+#else
+  QGuiApplication::setHighDpiScaleFactorRoundingPolicy(
+      Qt::HighDpiScaleFactorRoundingPolicy::PassThrough);
+#endif
+
   puerhlab::TimeProvider::Refresh();
   puerhlab::RegisterAllOperators();
   Exiv2::LogMsg::setLevel(Exiv2::LogMsg::Level::error);
 
   QApplication app(argc, argv);
+  {
+    QFont default_font = app.font();
+    default_font.setStyleStrategy(QFont::PreferAntialias);
+    app.setFont(default_font);
+  }
   QCoreApplication::setOrganizationName(QStringLiteral("PuerhLab"));
   QCoreApplication::setOrganizationDomain(QStringLiteral("puerhlab.app"));
   QCoreApplication::setApplicationName(QStringLiteral("PuerhLab"));

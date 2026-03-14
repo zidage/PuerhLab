@@ -91,6 +91,8 @@ void ScopeWaveformWidget::SetPresentation(const ScopeWaveformPresentation& prese
 
 void ScopeWaveformWidget::paintEvent(QPaintEvent*) {
   QPainter painter(this);
+  painter.setRenderHint(QPainter::Antialiasing, true);
+  painter.setRenderHint(QPainter::TextAntialiasing, true);
   painter.setRenderHint(QPainter::SmoothPixmapTransform, false);
   painter.fillRect(rect(), QColor(0x10, 0x10, 0x10));
 

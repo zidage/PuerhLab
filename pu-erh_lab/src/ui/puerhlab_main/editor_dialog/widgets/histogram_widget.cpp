@@ -230,6 +230,7 @@ void HistogramWidget::CleanupGl() {
 void HistogramWidget::paintEvent(QPaintEvent*) {
   QPainter painter(this);
   painter.setRenderHint(QPainter::Antialiasing, true);
+  painter.setRenderHint(QPainter::TextAntialiasing, true);
   painter.fillRect(rect(), QColor(0x12, 0x12, 0x12));
   painter.setPen(QColor(0xA3, 0xA3, 0xA3));
   painter.drawText(rect().adjusted(12, 12, -12, -12), Qt::AlignCenter,

@@ -187,11 +187,11 @@ auto AppTheme::Font(FontRole role) -> QFont {
 
   switch (role) {
     case FontRole::UiBody:
-      return MakeFont(ui_family, 11.0, QFont::Normal);
+      return MakeFont(ui_family, 11.0, QFont::Medium);
     case FontRole::UiBodyStrong:
       return MakeFont(ui_family, 11.0, QFont::DemiBold);
     case FontRole::UiCaption:
-      return MakeFont(ui_family, 10.0, QFont::Normal);
+      return MakeFont(ui_family, 10.0, QFont::Medium);
     case FontRole::UiCaptionStrong:
       return MakeFont(ui_family, 10.0, QFont::DemiBold);
     case FontRole::UiTitle:
@@ -205,13 +205,13 @@ auto AppTheme::Font(FontRole role) -> QFont {
       return font;
     }
     case FontRole::UiHint:
-      return MakeFont(ui_family, 9.0, QFont::Normal);
+      return MakeFont(ui_family, 9.0, QFont::Medium);
     case FontRole::DataBody:
-      return MakeFont(families.data, 11.0, QFont::Normal);
+      return MakeFont(families.data, 11.0, QFont::Medium);
     case FontRole::DataBodyStrong:
       return MakeFont(families.data, 11.0, QFont::DemiBold);
     case FontRole::DataCaption:
-      return MakeFont(families.data, 10.0, QFont::Normal);
+      return MakeFont(families.data, 10.0, QFont::Medium);
     case FontRole::DataNumeric:
       return MakeFont(families.data, 12.0, QFont::DemiBold);
     case FontRole::DataOverlay:
@@ -436,9 +436,9 @@ auto AppTheme::EditorScrollAreaStyle() -> QString {
 
 auto AppTheme::EditorListWidgetStyle() -> QString {
   return QStringLiteral("QListWidget {"
-                        "  background: #121212;"
+                        "  background: #171717;"
                         "  border: none;"
-                        "  border-radius: 10px;"
+                        "  border-radius: 6px;"
                         "  padding: 6px;"
                         "}"
                         "QListWidget::item {"
@@ -446,21 +446,47 @@ auto AppTheme::EditorListWidgetStyle() -> QString {
                         "}"
                         "QListWidget::item:selected {"
                         "  background: transparent;"
+                        "}"
+                        "QScrollBar:vertical {"
+                        "  background: transparent;"
+                        "  width: 6px;"
+                        "  margin: 4px 2px 4px 0;"
+                        "}"
+                        "QScrollBar::handle:vertical {"
+                        "  background: rgba(148, 148, 148, 120);"
+                        "  border-radius: 3px;"
+                        "  min-height: 24px;"
+                        "}"
+                        "QScrollBar::handle:vertical:hover,"
+                        "QScrollBar::handle:vertical:pressed {"
+                        "  background: #FCC704;"
+                        "}"
+                        "QScrollBar::add-line:vertical,"
+                        "QScrollBar::sub-line:vertical {"
+                        "  height: 0px;"
+                        "}"
+                        "QScrollBar::add-page:vertical,"
+                        "QScrollBar::sub-page:vertical {"
+                        "  background: transparent;"
                         "}");
 }
 
 auto AppTheme::EditorHistoryCardStyle() -> QString {
   return QStringLiteral("QFrame#HistoryCard {"
-                        "  background: #1A1A1A;"
+                        "  background: #2A2A2A;"
                         "  border: none;"
-                        "  border-radius: 10px;"
+                        "  border-radius: 6px;"
                         "}"
                         "QFrame#HistoryCard:hover {"
-                        "  background: #202020;"
+                        "  background: #303030;"
                         "}"
                         "QFrame#HistoryCard[selected=\"true\"] {"
-                        "  background: rgba(252, 199, 4, 0.20);"
-                        "  border: 2px solid #FCC704;"
+                        "  background: rgba(252, 199, 4, 0.05);"
+                        "  border: none;"
+                        "  border-left: 4px solid #FCC704;"
+                        "}"
+                        "QFrame#HistoryCard[selected=\"true\"]:hover {"
+                        "  background: rgba(252, 199, 4, 0.08);"
                         "}");
 }
 
@@ -495,7 +521,7 @@ auto AppTheme::bgCanvasColor() const -> QColor { return QColor(QStringLiteral("#
 auto AppTheme::bgDeepColor() const -> QColor { return QColor(QStringLiteral("#141414")); }
 auto AppTheme::bgBaseColor() const -> QColor { return QColor(QStringLiteral("#1F1F1F")); }
 auto AppTheme::bgPanelColor() const -> QColor { return QColor(QStringLiteral("#2B2B2B")); }
-auto AppTheme::textColor() const -> QColor { return toneMist(); }
+auto AppTheme::textColor() const -> QColor { return QColor(QStringLiteral("#D0D0D0")); }
 auto AppTheme::textMutedColor() const -> QColor { return QColor(QStringLiteral("#888888")); }
 auto AppTheme::accentColor() const -> QColor { return toneGold(); }
 auto AppTheme::accentSecondaryColor() const -> QColor { return toneGold(); }

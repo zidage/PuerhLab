@@ -299,32 +299,40 @@ void UpdateVersionUi(const VersionUiContext& ui, const Version& working_version,
 
       auto* item = new QListWidgetItem(ui.tx_stack);
       item->setToolTip(QString::fromStdString(tx.ToJSON().dump(2)));
-      item->setSizeHint(QSize(0, 58));
+      item->setSizeHint(QSize(0, 66));
 
       auto* card = new HistoryCardWidget(ui.tx_stack);
       auto* row  = new QHBoxLayout(card);
-      row->setContentsMargins(10, 8, 10, 8);
+      row->setContentsMargins(14, 10, 14, 10);
       row->setSpacing(10);
 
-      const QColor dot  = QColor(0xFC, 0xC7, 0x04);
-      const QColor line = QColor(0x2A, 0x2A, 0x2A);
+      const QColor dot  = QColor(0x5A, 0x5A, 0x5A);
+      const QColor line = QColor(0x34, 0x34, 0x34);
       auto* lane        = new HistoryLaneWidget(dot, line, /*draw_top*/ i > 0,
-                                                /*draw_bottom*/ (i + 1) < total, card);
+                                                /*draw_bottom*/ (i + 1) < total,
+                                                /*solid_dot*/ false, card);
       row->addWidget(lane, 0);
 
       auto* body = new QVBoxLayout();
       body->setContentsMargins(0, 0, 0, 0);
-      body->setSpacing(2);
+        body->setSpacing(6);
 
-      auto* title_l = new QLabel(title, card);
-      title_l->setWordWrap(true);
-      title_l->setStyleSheet(AppTheme::EditorLabelStyle(AppTheme::Instance().textColor()));
-      AppTheme::MarkFontRole(title_l, AppTheme::FontRole::UiBody);
+        auto* title_l = new ElidedLabel(title, card);
+        QFont title_font = AppTheme::Font(AppTheme::FontRole::UiBodyStrong);
+        title_font.setPointSizeF(13.0);
+        title_font.setWeight(QFont::Medium);
+        title_font.setStyleStrategy(QFont::PreferAntialias);
+        title_l->setFont(title_font);
+        title_l->setStyleSheet(QStringLiteral("QLabel { color: #E6E6E6; }"));
 
       auto* meta_l =
           new QLabel(Tr("Uncommitted | #%1").arg(static_cast<qulonglong>(i + 1)), card);
-      meta_l->setStyleSheet(AppTheme::EditorLabelStyle(AppTheme::Instance().textMutedColor()));
-      AppTheme::MarkFontRole(meta_l, AppTheme::FontRole::DataCaption);
+        QFont meta_font = AppTheme::Font(AppTheme::FontRole::DataCaption);
+        meta_font.setPointSizeF(11.0);
+        meta_font.setWeight(QFont::Normal);
+        meta_font.setStyleStrategy(QFont::PreferAntialias);
+        meta_l->setFont(meta_font);
+        meta_l->setStyleSheet(QStringLiteral("QLabel { color: #888888; }"));
 
       body->addWidget(title_l);
       body->addWidget(meta_l);
@@ -365,95 +373,114 @@ void UpdateVersionUi(const VersionUiContext& ui, const Version& working_version,
         const auto committed_tx_count =
             static_cast<qulonglong>(ver.GetAllEditTransactions().size());
 
-        QString     msg;
         const auto& txs = ver.GetAllEditTransactions();
-        if (!txs.empty()) {
-          msg = QString::fromStdString(txs.front().Describe(true, 70));
-        } else {
-          msg = Tr("(empty)");
-        }
 
         const bool is_head  = (ver_id == latest_id);
         const bool is_base  = (base_parent == ver_id && working_version.HasParentVersion());
         const bool is_plain = !ver.HasParentVersion();
+        const int  version_number = std::max(1, total_rows - row_index);
+        const QString version_title =
+            is_plain ? Tr("Plain") : Tr("Version %1").arg(static_cast<qulonglong>(version_number));
+
+        QString last_tx_summary;
+        QString last_tx_full;
+        if (!txs.empty()) {
+          last_tx_summary = QString::fromStdString(txs.front().Describe(true, 220));
+          last_tx_full    = QString::fromStdString(txs.front().Describe(true, 4096));
+        } else {
+          last_tx_summary = Tr("(empty)");
+          last_tx_full    = last_tx_summary;
+        }
+
+        const QString parent_id =
+            is_plain ? Tr("(none)") : QString::fromStdString(ver.GetParentVersionID().ToString());
+        const QString meta = Tr("%1 · %2 · tx %3").arg(short_id, when).arg(committed_tx_count);
+        const QString card_tooltip =
+            Tr("Version: %1\nID: %2\nParent: %3\nUpdated: %4\nTransactions: %5\nLast operation: %6")
+                .arg(version_title)
+                .arg(QString::fromStdString(ver_id.ToString()))
+                .arg(parent_id)
+                .arg(when)
+                .arg(committed_tx_count)
+                .arg(last_tx_full);
 
         auto* item = new QListWidgetItem(ui.version_log);
         item->setData(Qt::UserRole, QString::fromStdString(ver_id.ToString()));
-        item->setToolTip(QString("version=%1\nparent=%2\ntx=%3")
-                             .arg(QString::fromStdString(ver_id.ToString()))
-                             .arg(QString::fromStdString(ver.GetParentVersionID().ToString()))
-                             .arg(committed_tx_count));
-        item->setSizeHint(QSize(0, 74));
+        item->setToolTip(card_tooltip);
+        item->setSizeHint(QSize(0, 96));
 
         auto* card = new HistoryCardWidget(ui.version_log);
+        card->setToolTip(card_tooltip);
         auto* row  = new QHBoxLayout(card);
-        row->setContentsMargins(10, 9, 10, 9);
+        row->setContentsMargins(14, 10, 14, 10);
         row->setSpacing(10);
 
-        const QColor dot =
-            is_head ? QColor(0xFC, 0xC7, 0x04)
-                    : (is_base ? QColor(0xFC, 0xC7, 0x04) : QColor(0x8C, 0x8C, 0x8C));
-        const QColor line = QColor(0x2A, 0x2A, 0x2A);
+        const QColor dot  = is_head ? QColor(0xFC, 0xC7, 0x04) : QColor(0x5A, 0x5A, 0x5A);
+        const QColor line = QColor(0x34, 0x34, 0x34);
         auto* lane        = new HistoryLaneWidget(dot, line, /*draw_top*/ row_index > 0,
-                                                  /*draw_bottom*/ (row_index + 1) < total_rows, card);
+                                                  /*draw_bottom*/ (row_index + 1) < total_rows,
+                                                  /*solid_dot*/ is_head, card);
         row->addWidget(lane, 0);
 
         auto* body = new QVBoxLayout();
         body->setContentsMargins(0, 0, 0, 0);
         body->setSpacing(4);
 
-        auto* top = new QHBoxLayout();
-        top->setContentsMargins(0, 0, 0, 0);
-        top->setSpacing(8);
+        auto* title_l = new ElidedLabel(version_title, card);
+        QFont title_font = AppTheme::Font(AppTheme::FontRole::UiBodyStrong);
+        title_font.setPointSizeF(14.0);
+        title_font.setWeight(QFont::Medium);
+        title_font.setStyleStrategy(QFont::PreferAntialias);
+        title_l->setFont(title_font);
+        title_l->setStyleSheet(QStringLiteral("QLabel { color: #D8D8D8; }"));
+        title_l->setAttribute(Qt::WA_TransparentForMouseEvents, true);
 
-        auto* hash_l = new QLabel(short_id, card);
-        hash_l->setStyleSheet(AppTheme::EditorLabelStyle(AppTheme::Instance().textColor()));
-        AppTheme::MarkFontRole(hash_l, AppTheme::FontRole::MonoBody);
+        auto* subtitle_l = new ElidedLabel(last_tx_summary, card);
+        QFont subtitle_font = AppTheme::Font(AppTheme::FontRole::UiCaption);
+        subtitle_font.setPointSizeF(11.0);
+        subtitle_font.setWeight(QFont::Medium);
+        subtitle_font.setStyleStrategy(QFont::PreferAntialias);
+        subtitle_l->setFont(subtitle_font);
+        subtitle_l->setStyleSheet(QStringLiteral("QLabel { color: #777777; }"));
+        subtitle_l->setAttribute(Qt::WA_TransparentForMouseEvents, true);
 
-        top->addWidget(hash_l, 0);
+        auto* meta_l = new ElidedLabel(meta, card);
+        QFont meta_font = AppTheme::Font(AppTheme::FontRole::DataCaption);
+        meta_font.setPointSizeF(10.0);
+        meta_font.setWeight(QFont::Medium);
+        meta_font.setStyleStrategy(QFont::PreferAntialias);
+        meta_l->setFont(meta_font);
+        meta_l->setStyleSheet(QStringLiteral("QLabel { color: #777777; }"));
+        meta_l->setAttribute(Qt::WA_TransparentForMouseEvents, true);
+
+        body->addWidget(title_l);
+        body->addWidget(subtitle_l);
+        body->addWidget(meta_l);
+        row->addLayout(body, 1);
+
+        auto* badges = new QVBoxLayout();
+        badges->setContentsMargins(0, 0, 0, 0);
+        badges->setSpacing(4);
+        badges->setAlignment(Qt::AlignTop | Qt::AlignRight);
 
         if (is_head) {
-          top->addWidget(MakePillLabel(Tr("HEAD"), "#121212", "rgba(252, 199, 4, 0.95)",
-                                       "rgba(252, 199, 4, 0.95)", card),
-                         0);
+          badges->addWidget(MakePillLabel(Tr("HEAD"), card), 0, Qt::AlignRight);
         }
         if (is_base) {
-          top->addWidget(MakePillLabel(Tr("BASE"), "#121212", "rgba(252, 199, 4, 0.88)",
-                                       "rgba(252, 199, 4, 0.88)", card),
-                         0);
+          badges->addWidget(MakePillLabel(Tr("BASE"), card), 0, Qt::AlignRight);
         }
         if (is_plain) {
-          top->addWidget(MakePillLabel(Tr("PLAIN"), "#1A1A1A", "rgba(252, 199, 4, 0.22)",
-                                       "rgba(252, 199, 4, 0.40)", card),
-                         0);
+          badges->addWidget(MakePillLabel(Tr("PLAIN"), card), 0, Qt::AlignRight);
         } else {
           const auto parent_short =
               QString::fromStdString(ver.GetParentVersionID().ToString().substr(0, 8));
-          top->addWidget(
-              MakePillLabel(Tr("PARENT %1").arg(parent_short), "#A3A3A3",
-                            "rgba(252, 199, 4, 0.16)", "rgba(252, 199, 4, 0.32)", card),
-              0);
+          badges->addWidget(MakePillLabel(Tr("PARENT %1").arg(parent_short), card), 0,
+                            Qt::AlignRight);
         }
+        badges->addWidget(MakePillLabel(Tr("tx %1").arg(committed_tx_count), card), 0,
+                          Qt::AlignRight);
 
-        top->addStretch(1);
-
-        auto* tx_pill = MakePillLabel(Tr("tx %1").arg(committed_tx_count), "#A3A3A3",
-                                      "rgba(252, 199, 4, 0.16)", "rgba(252, 199, 4, 0.32)", card);
-        top->addWidget(tx_pill, 0);
-
-        auto* msg_l = new QLabel(msg, card);
-        msg_l->setWordWrap(true);
-        msg_l->setStyleSheet(AppTheme::EditorLabelStyle(AppTheme::Instance().textColor()));
-        AppTheme::MarkFontRole(msg_l, AppTheme::FontRole::UiBody);
-
-        auto* meta_l = new QLabel(when, card);
-        meta_l->setStyleSheet(AppTheme::EditorLabelStyle(AppTheme::Instance().textMutedColor()));
-        AppTheme::MarkFontRole(meta_l, AppTheme::FontRole::DataCaption);
-
-        body->addLayout(top);
-        body->addWidget(msg_l);
-        body->addWidget(meta_l);
-        row->addLayout(body, 1);
+        row->addLayout(badges, 0);
 
         ui.version_log->setItemWidget(item, card);
 
