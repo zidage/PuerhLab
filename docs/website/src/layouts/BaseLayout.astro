@@ -6,6 +6,7 @@ interface Props {
 
 const { title = 'Pu-erh Lab', lang = 'en' } = Astro.props;
 const base = import.meta.env.BASE_URL;
+const iconPath = `${base}brand/app-icon.png`;
 ---
 
 <!doctype html>
@@ -25,7 +26,9 @@ const base = import.meta.env.BASE_URL;
       content="Open-source RAW photo editor with CUDA 60 FPS, ACES 2.0, and Git-like versioning."
     />
     <meta property="og:type" content="website" />
-    <meta property="og:image" content={`${base}demo/1.png`} />
+    <meta property="og:image" content={iconPath} />
+    <link rel="icon" type="image/png" href={iconPath} />
+    <link rel="apple-touch-icon" href={iconPath} />
     <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />

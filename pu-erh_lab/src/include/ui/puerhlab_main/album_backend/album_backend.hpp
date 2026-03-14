@@ -147,6 +147,8 @@ class AlbumBackend final : public QObject {
 
   Q_INVOKABLE void StartImport(const QStringList& fileUrlsOrPaths);
   Q_INVOKABLE void CancelImport();
+  Q_INVOKABLE bool PromptAndLoadProject();
+  Q_INVOKABLE bool PromptAndCreateProject();
   Q_INVOKABLE bool LoadProject(const QString& metaFileUrlOrPath);
   Q_INVOKABLE bool CreateProjectInFolder(const QString& folderUrlOrPath);
   Q_INVOKABLE bool CreateProjectInFolderNamed(const QString& folderUrlOrPath,

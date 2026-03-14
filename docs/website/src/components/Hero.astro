@@ -7,6 +7,8 @@ interface Props {
 
 const { lang } = Astro.props;
 const i = t(lang);
+const windowsReleaseUrl =
+  'https://github.com/zidage/PuerhLab/releases/download/v0.1.2/pu-erh_lab-0.1.2-Windows-AMD64.7z';
 ---
 
 <section
@@ -56,10 +58,18 @@ const i = t(lang);
       class="flex flex-col sm:flex-row items-center justify-center gap-4 opacity-0 animate-[fadeInUp_0.8s_ease-out_0.7s_forwards]"
     >
       <a
+        href={windowsReleaseUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        class="px-8 py-3 bg-gold text-canvas font-semibold rounded-panel hover:bg-gold/90 transition-all hover:shadow-[0_0_24px_rgba(252,199,4,0.3)]"
+      >
+        {i.hero.ctaDownloadWindows}
+      </a>
+      <a
         href="https://github.com/zidage/PuerhLab"
         target="_blank"
         rel="noopener noreferrer"
-        class="px-8 py-3 bg-gold text-canvas font-semibold rounded-panel hover:bg-gold/90 transition-all hover:shadow-[0_0_24px_rgba(252,199,4,0.3)] flex items-center gap-2"
+        class="px-8 py-3 border border-gold text-gold font-semibold rounded-panel hover:bg-gold/10 transition-all flex items-center gap-2"
       >
         <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
           <path

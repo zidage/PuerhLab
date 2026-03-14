@@ -55,8 +55,6 @@ ApplicationWindow {
     readonly property real inspectorMaxWidth: 600
     property bool gridMode: true
     property bool selectionMode: false
-    property string pendingNewProjectFolderUrl: ""
-    property string defaultNewProjectName: "album_editor_project"
     readonly property bool backendInteractive: albumBackend.serviceReady && !albumBackend.projectLoading
     readonly property var selectedImagesById: selectionState.selectedImagesById
     readonly property var exportQueueById: selectionState.exportQueueById
@@ -262,97 +260,6 @@ ApplicationWindow {
                 next.push({ label: qsTr("... and %1 more").arg(src.length - previewCount) })
             }
             exportPreviewRows = next
-        }
-    }
-
-    FileDialog {
-        id: loadProjectDialog
-        title: qsTr("Select Project Package or Metadata JSON")
-        fileMode: FileDialog.OpenFile
-        nameFilters: [
-            qsTr("Packed Project (*.puerhproj)"),
-            qsTr("Project Metadata (*.json)"),
-            qsTr("All Files (*)")
-        ]
-        onAccepted: {
-            albumBackend.LoadProject(selectedFile.toString())
-        }
-    }
-
-    FolderDialog {
-        id: createProjectFolderDialog
-        title: qsTr("Select Parent Folder for New Project")
-        onAccepted: {
-            root.pendingNewProjectFolderUrl = selectedFolder.toString()
-            createProjectNameField.text = root.defaultNewProjectName
-            createProjectNameDialog.open()
-        }
-    }
-
-    Dialog {
-        id: createProjectNameDialog
-        modal: true
-        title: qsTr("Name New Project")
-        standardButtons: Dialog.NoButton
-        closePolicy: Popup.CloseOnEscape
-        x: Math.round((root.width - width) / 2)
-        y: Math.round((root.height - height) / 2)
-
-        function submitCreateProject() {
-            const trimmed = createProjectNameField.text.trim()
-            if (trimmed.length === 0 || root.pendingNewProjectFolderUrl.length === 0) {
-                return
-            }
-            root.defaultNewProjectName = trimmed
-            albumBackend.CreateProjectInFolderNamed(root.pendingNewProjectFolderUrl, trimmed)
-            root.pendingNewProjectFolderUrl = ""
-            createProjectNameDialog.close()
-        }
-
-        onOpened: {
-            createProjectNameField.forceActiveFocus()
-            createProjectNameField.selectAll()
-        }
-
-        onClosed: {
-            root.pendingNewProjectFolderUrl = ""
-        }
-
-        contentItem: ColumnLayout {
-            width: 420
-            spacing: 12
-
-            Label {
-                Layout.fillWidth: true
-                text: qsTr("Choose the project package name. The app will create a single .puerhproj file.")
-                wrapMode: Text.WordWrap
-                color: root.colText
-            }
-
-            TextField {
-                id: createProjectNameField
-                Layout.fillWidth: true
-                placeholderText: qsTr("Project name")
-                onAccepted: createProjectNameDialog.submitCreateProject()
-            }
-
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: 10
-
-                Item { Layout.fillWidth: true }
-
-                Button {
-                    text: qsTr("Cancel")
-                    onClicked: createProjectNameDialog.close()
-                }
-
-                Button {
-                    text: qsTr("Create")
-                    enabled: createProjectNameField.text.trim().length > 0
-                    onClicked: createProjectNameDialog.submitCreateProject()
-                }
-            }
         }
     }
 
@@ -612,9 +519,9 @@ ApplicationWindow {
                                         onClicked: {
                                             if (!modelData.en) return
                                             if (modelData.act === "load")
-                                                loadProjectDialog.open()
+                                                albumBackend.PromptAndLoadProject()
                                             else if (modelData.act === "new")
-                                                createProjectFolderDialog.open()
+                                                albumBackend.PromptAndCreateProject()
                                             else if (modelData.act === "save")
                                                 albumBackend.SaveProject()
                                         }
@@ -1019,7 +926,7 @@ ApplicationWindow {
                                         if (albumBackend.serviceReady) {
                                             importDialog.open()
                                         } else {
-                                            loadProjectDialog.open()
+                                            albumBackend.PromptAndLoadProject()
                                         }
                                     }
                                 }
@@ -1245,14 +1152,14 @@ ApplicationWindow {
                         text: qsTr("Load Existing Project")
                         Material.background: root.colAccentPrimary
                         Material.foreground: root.colBgDeep
-                        onClicked: loadProjectDialog.open()
+                        onClicked: albumBackend.PromptAndLoadProject()
                     }
                     Button {
                         Layout.fillWidth: true
                         text: qsTr("Create New Project")
                         Material.background: root.colAccentPrimary
                         Material.foreground: root.colBgDeep
-                        onClicked: createProjectFolderDialog.open()
+                        onClicked: albumBackend.PromptAndCreateProject()
                     }
                 }
 

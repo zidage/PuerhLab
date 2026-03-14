@@ -7,6 +7,8 @@ interface Props {
 
 const { lang } = Astro.props;
 const i = t(lang);
+const windowsReleaseUrl =
+  'https://github.com/zidage/PuerhLab/releases/download/v0.1.2/pu-erh_lab-0.1.2-Windows-AMD64.7z';
 ---
 
 <section id="install" class="relative py-24 px-4">
@@ -47,6 +49,16 @@ const i = t(lang);
 
       <!-- Windows panel -->
       <div class="install-panel active" data-panel="windows">
+        <div class="download-row">
+          <a
+            href={windowsReleaseUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            class="download-btn"
+          >
+            {i.install.download.windows}
+          </a>
+        </div>
         <div class="code-block">
           <div class="code-header">
             <span class="text-muted text-xs font-data">PowerShell</span>
@@ -67,6 +79,9 @@ const i = t(lang);
 
       <!-- macOS panel -->
       <div class="install-panel hidden" data-panel="macos">
+        <div class="download-row">
+          <span class="download-placeholder">{i.install.download.macos}</span>
+        </div>
         <div class="code-block">
           <div class="code-header">
             <span class="text-muted text-xs font-data">Bash</span>
@@ -105,6 +120,18 @@ const i = t(lang);
     background: #1a1a1a;
     border: 1px solid rgba(54, 54, 54, 0.6);
     border-top: none;
+  }
+  .download-row {
+    @apply py-4 px-4 border-x border-t border-separator;
+    background: #151515;
+  }
+  .download-btn {
+    @apply inline-flex items-center px-4 py-2 rounded-panel font-semibold text-sm;
+    @apply bg-gold text-canvas hover:bg-gold/90 transition-colors;
+  }
+  .download-placeholder {
+    @apply inline-flex items-center px-4 py-2 rounded-panel font-semibold text-sm;
+    @apply bg-panel text-muted border border-separator;
   }
   .code-header {
     @apply flex items-center justify-between px-4 py-2;

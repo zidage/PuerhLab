@@ -895,6 +895,41 @@ else()
     add_executable(puerhlab_main ${PUERHLAB_MAIN_SOURCES})
 endif()
 
+if(APPLE)
+    set(PUERHLAB_MAIN_ICON_PNG "${CMAKE_CURRENT_SOURCE_DIR}/config/ICON/unnamed.png")
+    set(PUERHLAB_MAIN_ICONSET_DIR "${CMAKE_CURRENT_BINARY_DIR}/puerhlab_main.iconset")
+    set(PUERHLAB_MAIN_ICON_ICNS "${CMAKE_CURRENT_BINARY_DIR}/puerhlab_main.icns")
+
+    find_program(PUERHLAB_SIPS_EXECUTABLE sips REQUIRED)
+    find_program(PUERHLAB_ICONUTIL_EXECUTABLE iconutil REQUIRED)
+
+    add_custom_command(
+        OUTPUT "${PUERHLAB_MAIN_ICON_ICNS}"
+        COMMAND ${CMAKE_COMMAND} -E rm -rf "${PUERHLAB_MAIN_ICONSET_DIR}"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${PUERHLAB_MAIN_ICONSET_DIR}"
+        COMMAND ${PUERHLAB_SIPS_EXECUTABLE} -z 16 16 "${PUERHLAB_MAIN_ICON_PNG}" --out "${PUERHLAB_MAIN_ICONSET_DIR}/icon_16x16.png"
+        COMMAND ${PUERHLAB_SIPS_EXECUTABLE} -z 32 32 "${PUERHLAB_MAIN_ICON_PNG}" --out "${PUERHLAB_MAIN_ICONSET_DIR}/icon_16x16@2x.png"
+        COMMAND ${PUERHLAB_SIPS_EXECUTABLE} -z 32 32 "${PUERHLAB_MAIN_ICON_PNG}" --out "${PUERHLAB_MAIN_ICONSET_DIR}/icon_32x32.png"
+        COMMAND ${PUERHLAB_SIPS_EXECUTABLE} -z 64 64 "${PUERHLAB_MAIN_ICON_PNG}" --out "${PUERHLAB_MAIN_ICONSET_DIR}/icon_32x32@2x.png"
+        COMMAND ${PUERHLAB_SIPS_EXECUTABLE} -z 128 128 "${PUERHLAB_MAIN_ICON_PNG}" --out "${PUERHLAB_MAIN_ICONSET_DIR}/icon_128x128.png"
+        COMMAND ${PUERHLAB_SIPS_EXECUTABLE} -z 256 256 "${PUERHLAB_MAIN_ICON_PNG}" --out "${PUERHLAB_MAIN_ICONSET_DIR}/icon_128x128@2x.png"
+        COMMAND ${PUERHLAB_SIPS_EXECUTABLE} -z 256 256 "${PUERHLAB_MAIN_ICON_PNG}" --out "${PUERHLAB_MAIN_ICONSET_DIR}/icon_256x256.png"
+        COMMAND ${PUERHLAB_SIPS_EXECUTABLE} -z 512 512 "${PUERHLAB_MAIN_ICON_PNG}" --out "${PUERHLAB_MAIN_ICONSET_DIR}/icon_256x256@2x.png"
+        COMMAND ${PUERHLAB_SIPS_EXECUTABLE} -z 512 512 "${PUERHLAB_MAIN_ICON_PNG}" --out "${PUERHLAB_MAIN_ICONSET_DIR}/icon_512x512.png"
+        COMMAND ${PUERHLAB_SIPS_EXECUTABLE} -z 1024 1024 "${PUERHLAB_MAIN_ICON_PNG}" --out "${PUERHLAB_MAIN_ICONSET_DIR}/icon_512x512@2x.png"
+        COMMAND ${PUERHLAB_ICONUTIL_EXECUTABLE} -c icns "${PUERHLAB_MAIN_ICONSET_DIR}" -o "${PUERHLAB_MAIN_ICON_ICNS}"
+        DEPENDS "${PUERHLAB_MAIN_ICON_PNG}"
+        COMMENT "Generating macOS app icon from ${PUERHLAB_MAIN_ICON_PNG}"
+        VERBATIM
+    )
+
+    add_custom_target(PuerhLabMainIcon DEPENDS "${PUERHLAB_MAIN_ICON_ICNS}")
+    add_dependencies(puerhlab_main PuerhLabMainIcon)
+    set_source_files_properties("${PUERHLAB_MAIN_ICON_ICNS}" PROPERTIES MACOSX_PACKAGE_LOCATION "Resources")
+    target_sources(puerhlab_main PRIVATE "${PUERHLAB_MAIN_ICON_ICNS}")
+    set_target_properties(puerhlab_main PROPERTIES MACOSX_BUNDLE_ICON_FILE "puerhlab_main.icns")
+endif()
+
 target_include_directories(puerhlab_main
     PRIVATE
         ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include
@@ -928,6 +963,10 @@ qt_add_qml_module(puerhlab_main
         ui/puerhlab_main/qml/ThumbnailGridView.qml
         ui/puerhlab_main/qml/ThumbnailListView.qml
 )
+set_target_properties(puerhlab_main PROPERTIES
+    QT_QMLCACHEGEN_ARGUMENTS "--only-bytecode"
+    MACOSX_BUNDLE TRUE
+)
 
 set(PUERHLAB_TRANSLATION_TS_FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/ui/puerhlab_main/i18n/puerhlab_main_en.ts
@@ -946,6 +985,12 @@ qt_add_translations(TARGETS puerhlab_main
     QM_OUTPUT_DIRECTORY
         "${CMAKE_CURRENT_BINARY_DIR}"
 )
+
+if(COMMAND qt_finalize_target)
+    qt_finalize_target(puerhlab_main)
+elseif(COMMAND qt_finalize_executable)
+    qt_finalize_executable(puerhlab_main)
+endif()
 
 target_compile_definitions(puerhlab_main PRIVATE PUERHLAB_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 

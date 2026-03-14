@@ -12,6 +12,7 @@
     "subtitle": "跨平台 RAW 图像处理与数字资产管理",
     "description": "当前 main 分支已经形成完整的 Windows/CUDA 编辑链路，以及正在持续集成的 macOS/Metal 管线方向，把响应迅速的资产管理与现代色彩工作流放在同一套应用里。",
     "version": "main · v0.1.2 之后的持续开发",
+    "ctaDownloadWindows": "下载 Windows 版本",
     "ctaGithub": "查看源码",
     "ctaStart": "开始使用",
     "scrollHint": "向下滚动探索"
@@ -107,6 +108,10 @@
     "tabs": {
       "windows": "Windows",
       "macos": "macOS"
+    },
+    "download": {
+      "windows": "下载 Windows v0.1.2（.7z）",
+      "macos": "macOS 下载：Coming Soon"
     },
     "windows": [
       "# Windows / CUDA 工具链",

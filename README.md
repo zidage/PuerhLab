@@ -258,13 +258,15 @@ cmake --preset macos_debug
 cmake --build --preset macos_debug --target puerhlab_main
 ```
 
+This repository's macOS release preset is configured for the Qt installation at `/Users/zidage/Qt/6.9.3/macos` on this machine instead of the Homebrew Qt prefix.
+
 Run the app:
 
 ```bash
 ./build/macos-debug/pu-erh_lab/src/puerhlab_main
 ```
 
-#### Release Build & Standalone ZIP (for GitHub Releases)
+#### Release Build & Standalone DMG/ZIP
 
 Build, install, and package a self-contained `.app` bundle:
 
@@ -272,6 +274,7 @@ Build, install, and package a self-contained `.app` bundle:
 cmake --preset macos_release
 cmake --build --preset macos_release
 cmake --install build/macos-release          # → build/install/PuerhLab.app
+cd build/macos-release && cpack -G DragNDrop # → pu-erh_lab-<version>-Darwin-arm64.dmg
 cd build/macos-release && cpack -G ZIP       # → pu-erh_lab-<version>-Darwin-arm64.zip
 ```
 

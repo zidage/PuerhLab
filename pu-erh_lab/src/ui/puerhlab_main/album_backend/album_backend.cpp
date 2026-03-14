@@ -8,8 +8,13 @@
 #include "ui/puerhlab_main/album_backend/packed_project.hpp"
 
 #include <QDir>
+#include <QFileDialog>
 #include <QFileInfo>
+#include <QInputDialog>
+#include <QLineEdit>
+#include <QStandardPaths>
 #include <QTimer>
+#include <QUrl>
 
 #include <algorithm>
 
@@ -175,6 +180,43 @@ void AlbumBackend::SetThumbnailVisible(uint elementId, uint imageId, bool visibl
 }
 
 // ── Q_INVOKABLE: Project I/O ────────────────────────────────────────────────
+
+bool AlbumBackend::PromptAndLoadProject() {
+  const QString start_dir = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation);
+  const QString selected_path =
+      QFileDialog::getOpenFileName(nullptr, tr("Select Project Package or Metadata JSON"), start_dir,
+                                   tr("Packed Project (*.puerhproj);;Project Metadata (*.json);;All Files (*)"));
+  if (selected_path.isEmpty()) {
+    return false;
+  }
+  return LoadProject(QUrl::fromLocalFile(selected_path).toString());
+}
+
+bool AlbumBackend::PromptAndCreateProject() {
+  const QString start_dir = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation);
+  const QString selected_dir =
+      QFileDialog::getExistingDirectory(nullptr, tr("Select Parent Folder for New Project"), start_dir,
+                                        QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks);
+  if (selected_dir.isEmpty()) {
+    return false;
+  }
+
+  bool accepted = false;
+  QString project_name = QInputDialog::getText(
+      nullptr, tr("Name New Project"), tr("Project name"), QLineEdit::Normal,
+      QStringLiteral("album_editor_project"), &accepted);
+  if (!accepted) {
+    return false;
+  }
+
+  project_name = project_name.trimmed();
+  if (project_name.isEmpty()) {
+    SetServiceMessageForCurrentProject(PL_TEXT("Project name cannot be empty."));
+    return false;
+  }
+
+  return CreateProjectInFolderNamed(QUrl::fromLocalFile(selected_dir).toString(), project_name);
+}
 
 bool AlbumBackend::LoadProject(const QString& metaFileUrlOrPath) {
   if (project_handler_.project_loading()) {

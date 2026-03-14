@@ -12,6 +12,7 @@
     "subtitle": "Cross-Platform RAW Editor & Digital Asset Manager",
     "description": "The main branch now spans a full Windows/CUDA editing path and a macOS/Metal pipeline track, pairing responsive asset management with modern color workflows.",
     "version": "main · post-v0.1.2 development",
+    "ctaDownloadWindows": "Download for Windows",
     "ctaGithub": "View on GitHub",
     "ctaStart": "Get Started",
     "scrollHint": "Scroll to explore"
@@ -107,6 +108,10 @@
     "tabs": {
       "windows": "Windows",
       "macos": "macOS"
+    },
+    "download": {
+      "windows": "Download Windows v0.1.2 (.7z)",
+      "macos": "macOS Download: Coming Soon"
     },
     "windows": [
       "# Windows / CUDA toolchain",
