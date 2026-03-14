@@ -10,32 +10,32 @@
   "hero": {
     "title": "Pu-erh Lab",
     "subtitle": "跨平台 RAW 图像处理与数字资产管理",
-    "description": "当前 main 分支已经形成完整的 Windows/CUDA 编辑链路，以及正在持续集成的 macOS/Metal 管线方向，把响应迅速的资产管理与现代色彩工作流放在同一套应用里。",
-    "version": "main · v0.1.2 之后的持续开发",
+    "description": "现在支持 Windows/CUDA 与 Apple Silicon",
+    "version": "v0.2.0",
     "ctaDownloadWindows": "下载 Windows 版本",
     "ctaGithub": "查看源码",
     "ctaStart": "开始使用",
-    "scrollHint": "向下滚动探索"
+    "scrollHint": ""
   },
   "features": {
     "sectionTitle": "核心特性",
-    "sectionSubtitle": "自 v0.1.2 之后，开发重点已经转向双平台 GPU 后端与工作流打磨",
+    "sectionSubtitle": "",
     "items": [
       {
-        "title": "Windows / CUDA 编辑器",
-        "description": "当前 Windows 构建仍然是完整的 CUDA/OpenGL 编辑器路径，在现代 GPU 上提供全分辨率 60 FPS 预览，并保持较低的库浏览内存占用。"
+        "title": "Windows/CUDA，macOS/Metal 双平台 GPU 后端",
+        "description": "在现代 GPU 上提供 2K 300 FPS 预览，6K 60FPS 渲染，并保持较低的内存占用。"
       },
       {
-        "title": "macOS / Metal 管线",
-        "description": "v0.1.2 之后已经补齐 macOS 编译支持、Metal RAW 工具、Metal 缩放与镜头校正，并把 Metal 接进了主 pipeline。"
+        "title": "HDR 工作流与现代色彩管理",
+        "description": "在 macOS 上支持 HDR 图片的编辑，并可导出 Ultra HDR 格式的 JPEG 文件。"
       },
       {
         "title": "ACES 2.0 与 OpenDRT",
-        "description": "支持 ACES 2.0 输出渲染与 OpenDRT，渲染变换选择已经直接进入界面，方便在同一项目里切换显示策略。"
+        "description": "支持 ACES 2.0 与 OpenDRT，一键切换“色彩科学”。"
       },
       {
-        "title": "自定义“色彩科学”",
-        "description": "围绕可选显示变换、LUT 驱动的 look 与可调渲染意图来组织色彩管线，让每个项目都能按目标风格单独打磨。"
+        "title": "LUT 支持",
+        "description": "可使用 .cube LUT 来对色彩进行风格化处理"
       },
       {
         "title": "响应式图库工作流",
@@ -43,15 +43,15 @@
       },
       {
         "title": "版本化编辑",
-        "description": "重置调整、可分支历史、宽高比选择与导出队列工具已经形成一条完整的无损迭代路径。"
+        "description": "每张图片都可以重置调整、可分支历史、宽高比选择与导出队列工具已经形成一条完整的无损迭代路径。"
       }
     ]
   },
   "gallery": {
     "sectionTitle": "功能展示",
-    "sectionSubtitle": "当前库浏览、编辑、校正与导出工作流中的几个典型界面",
+    "sectionSubtitle": "",
     "items": [
-      { "title": "图库浏览器", "description": "文件夹树、响应式缩略图网格、多条件筛选与实时计数，让大项目也能快速定位。" },
+      { "title": "图库浏览器", "description": "文件夹树、响应式缩略图网格、多条件筛选与实时计数，让大图库也能快速定位。" },
       { "title": "调整工作区", "description": "白平衡、HSL、CDL 色轮、色调塑形与实时直方图都围绕实时预览展开。" },
       { "title": "LUT 与历史", "description": "一边套用和比较不同 LUT，一边保留就近可见、可分支的编辑历史，方便反复迭代色彩与明暗风格。" },
       { "title": "自定义“色彩科学”", "description": "围绕自定义显示变换、渲染意图与 look 开发来组织项目流程，而不是被单一默认色彩管线固定住。" },
@@ -60,7 +60,7 @@
   },
   "roadmap": {
     "sectionTitle": "路线图",
-    "sectionSubtitle": "从 v0.1.2 之后的 main 分支里程碑，到接下来仍在推进的方向",
+    "sectionSubtitle": "",
     "items": [
       {
         "date": "2026年3月",
@@ -85,7 +85,7 @@
       {
         "date": "下一阶段",
         "title": "继续推进",
-        "entries": ["JSON 管线序列化", "HDR 工作流与输出", "语义搜索与 AI 辅助标签", "全景拼接集成", "继续缩小 Windows/CUDA 与 macOS/Metal 的功能差距"]
+        "entries": ["预设导出", "HDR 工作流与输出", "语义搜索与 AI 辅助标签", "全景拼接集成", "继续缩小 Windows/CUDA 与 macOS/Metal 的功能差距"]
       }
     ]
   },
@@ -96,10 +96,10 @@
       { "label": "平台", "items": ["Windows / CUDA", "macOS / Metal"] },
       { "label": "核心", "items": ["C++20", "Qt 6", "CMake"] },
       { "label": "影像处理", "items": ["OpenImageIO", "LibRaw", "OpenCV", "Eigen"] },
-      { "label": "色彩", "items": ["OpenColorIO", "ACES 2.0", "OpenDRT", "lcms2"] },
+      { "label": "色彩", "items": ["OpenColorIO", "ACES 2.0", "OpenDRT"] },
       { "label": "存储", "items": ["DuckDB"] },
-      { "label": "镜头与元数据", "items": ["Lensfun", "Exiv2"] },
-      { "label": "性能优化", "items": ["Highway (SIMD)", "OpenMP", "xxHash"] }
+      { "label": "镜头与元数据", "items": ["Lensfun", "Exiv2", "OpenImageIO"] },
+      { "label": "性能优化", "items": ["CUDA", "Metal"] }
     ]
   },
   "install": {
@@ -110,8 +110,8 @@
       "macos": "macOS"
     },
     "download": {
-      "windows": "下载 Windows v0.1.2（.7z）",
-      "macos": "macOS 下载：Coming Soon"
+      "windows": "下载 Windows v0.2.0（.7z）",
+      "macos": "下载 macOS v0.2.0（.dmg)"
     },
     "windows": [
       "# Windows / CUDA 工具链",

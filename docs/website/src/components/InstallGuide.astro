@@ -8,7 +8,9 @@ interface Props {
 const { lang } = Astro.props;
 const i = t(lang);
 const windowsReleaseUrl =
-  'https://github.com/zidage/PuerhLab/releases/download/v0.1.2/pu-erh_lab-0.1.2-Windows-AMD64.7z';
+  'https://github.com/zidage/PuerhLab/releases/download/v0.2.0/pu-erh_lab-0.2.0-Windows-AMD64.7z';
+const macosReleaseUrl =
+  'https://github.com/zidage/PuerhLab/releases/download/v0.2.0/pu-erh_lab-0.2.0-Darwin-arm64.dmg';
 ---
 
 <section id="install" class="relative py-24 px-4">
@@ -49,7 +51,7 @@ const windowsReleaseUrl =
 
       <!-- Windows panel -->
       <div class="install-panel active" data-panel="windows">
-        <div class="download-row">
+        <div class="download-row !rounded-b-panel">
           <a
             href={windowsReleaseUrl}
             target="_blank"
@@ -59,44 +61,19 @@ const windowsReleaseUrl =
             {i.install.download.windows}
           </a>
         </div>
-        <div class="code-block">
-          <div class="code-header">
-            <span class="text-muted text-xs font-data">PowerShell</span>
-            <button class="copy-btn" data-target="windows-code" aria-label="Copy">
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-              </svg>
-            </button>
-          </div>
-          <pre id="windows-code" class="text-sm font-mono"><code>{i.install.windows.map((line, idx) => (
-  <Fragment>
-    <span class="text-muted select-none">{`${String(idx + 1).padStart(2)} `}</span>
-    <span class="text-mist">{line}</span>{'\n'}
-  </Fragment>
-))}</code></pre>
-        </div>
       </div>
 
       <!-- macOS panel -->
       <div class="install-panel hidden" data-panel="macos">
-        <div class="download-row">
-          <span class="download-placeholder">{i.install.download.macos}</span>
-        </div>
-        <div class="code-block">
-          <div class="code-header">
-            <span class="text-muted text-xs font-data">Bash</span>
-            <button class="copy-btn" data-target="macos-code" aria-label="Copy">
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-              </svg>
-            </button>
-          </div>
-          <pre id="macos-code" class="text-sm font-mono"><code>{i.install.macos.map((line, idx) => (
-  <Fragment>
-    <span class="text-muted select-none">{`${String(idx + 1).padStart(2)} `}</span>
-    <span class="text-mist">{line}</span>{'\n'}
-  </Fragment>
-))}</code></pre>
+        <div class="download-row !rounded-b-panel">
+          <a
+            href={macosReleaseUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            class="download-btn"
+          >
+            {i.install.download.macos}
+          </a>
         </div>
       </div>
     </div>
@@ -115,38 +92,13 @@ const windowsReleaseUrl =
   .install-tab:hover:not(.active) {
     @apply text-mist;
   }
-  .code-block {
-    @apply rounded-b-panel overflow-hidden;
-    background: #1a1a1a;
-    border: 1px solid rgba(54, 54, 54, 0.6);
-    border-top: none;
-  }
   .download-row {
-    @apply py-4 px-4 border-x border-t border-separator;
+    @apply py-8 px-8 border border-separator flex items-center justify-center;
     background: #151515;
   }
   .download-btn {
-    @apply inline-flex items-center px-4 py-2 rounded-panel font-semibold text-sm;
-    @apply bg-gold text-canvas hover:bg-gold/90 transition-colors;
-  }
-  .download-placeholder {
-    @apply inline-flex items-center px-4 py-2 rounded-panel font-semibold text-sm;
-    @apply bg-panel text-muted border border-separator;
-  }
-  .code-header {
-    @apply flex items-center justify-between px-4 py-2;
-    background: rgba(43, 43, 43, 0.5);
-    border-bottom: 1px solid rgba(54, 54, 54, 0.4);
-  }
-  .copy-btn {
-    @apply text-muted hover:text-gold transition-colors p-1 rounded;
-    background: none;
-    border: none;
-    cursor: pointer;
-  }
-  pre {
-    @apply p-4 overflow-x-auto;
-    line-height: 1.8;
+    @apply inline-flex items-center px-6 py-3 rounded-panel font-semibold text-base;
+    @apply bg-gold text-canvas hover:bg-gold/90 transition-colors hover:shadow-[0_0_16px_rgba(252,199,4,0.2)];
   }
 </style>
 
@@ -168,30 +120,6 @@ const windowsReleaseUrl =
         }
       });
       tab.classList.add('active');
-    });
-  });
-
-  // Copy button
-  document.querySelectorAll('.copy-btn').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const targetId = btn.getAttribute('data-target');
-      const el = document.getElementById(targetId!);
-      if (el) {
-        const text = el.textContent || '';
-        // Strip line numbers
-        const cleaned = text
-          .split('\n')
-          .map((l) => l.replace(/^\s*\d+\s/, ''))
-          .filter((l) => l.trim())
-          .join('\n');
-        navigator.clipboard.writeText(cleaned);
-        btn.innerHTML =
-          '<svg class="w-4 h-4 text-success" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>';
-        setTimeout(() => {
-          btn.innerHTML =
-            '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>';
-        }, 2000);
-      }
     });
   });
 </script>
