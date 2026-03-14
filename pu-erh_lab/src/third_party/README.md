@@ -9,3 +9,11 @@ Because we need to build the source code of lensfun, and on Windows machines, we
 ## How about the `metal-cpp` Folder?
 
 Since Pu-erh Lab v0.2.0, a new Metal support has been added, and we need to include the source code of metal-cpp in our project. We will update the source code of metal-cpp when there is a new release, and we will also update the source code of metal-cpp if there are some critical bugs that need to be fixed.
+
+## How about the `libultrahdr` Folder?
+
+`libultrahdr` is managed as an upstream git submodule in `pu-erh_lab/src/third_party/libultrahdr` so Pu-erh Lab does not vendor a private copy of the library. The build expects a complete submodule checkout there; if it is missing, initialize it with:
+
+```powershell
+git submodule update --init --recursive pu-erh_lab/src/third_party/libultrahdr
+```

@@ -178,12 +178,13 @@ set(PUERHLAB_LENSFUN_LIBRARY_DIR "${PUERHLAB_LENSFUN_INSTALL_DIR}/lib" CACHE INT
 set(PUERHLAB_ULTRAHDR_SOURCE_DIR
     "${CMAKE_CURRENT_SOURCE_DIR}/libultrahdr"
     CACHE PATH
-    "Path to the bundled libultrahdr source checkout.")
+    "Path to the libultrahdr submodule checkout.")
 
 if(NOT EXISTS "${PUERHLAB_ULTRAHDR_SOURCE_DIR}/CMakeLists.txt")
     message(FATAL_ERROR
-        "Bundled libultrahdr source was not found at ${PUERHLAB_ULTRAHDR_SOURCE_DIR}. "
-        "Ensure pu-erh_lab/src/third_party/libultrahdr is present and re-configure.")
+        "libultrahdr source was not found at ${PUERHLAB_ULTRAHDR_SOURCE_DIR}. "
+        "Run `git submodule update --init --recursive pu-erh_lab/src/third_party/libultrahdr` "
+        "and re-configure.")
 endif()
 
 set(UHDR_BUILD_EXAMPLES OFF CACHE BOOL "Disable libultrahdr examples" FORCE)
@@ -218,6 +219,11 @@ if(EXISTS "${PUERHLAB_ULTRAHDR_IMAGE_IO_HEADER}")
         message(FATAL_ERROR "Bundled libultrahdr was configured, but no usable target was exported.")
     endif()
 
+    target_include_directories(puerhlab_ultrahdr
+        INTERFACE
+            "${PUERHLAB_ULTRAHDR_SOURCE_DIR}"
+            "${PUERHLAB_ULTRAHDR_SOURCE_DIR}/lib/include")
+
     if(NOT TARGET puerhlab::uhdr)
         add_library(puerhlab::uhdr ALIAS puerhlab_ultrahdr)
     endif()
@@ -225,12 +231,13 @@ if(EXISTS "${PUERHLAB_ULTRAHDR_IMAGE_IO_HEADER}")
     set(PUERHLAB_ULTRAHDR_AVAILABLE ON)
 else()
     message(WARNING
-        "Bundled libultrahdr is incomplete: missing ${PUERHLAB_ULTRAHDR_IMAGE_IO_HEADER}. "
-        "Ultra HDR support will be disabled for this build.")
+        "libultrahdr checkout is incomplete: missing ${PUERHLAB_ULTRAHDR_IMAGE_IO_HEADER}. "
+        "Run `git submodule update --init --recursive pu-erh_lab/src/third_party/libultrahdr` "
+        "and re-configure. Ultra HDR support will be disabled for this build.")
 endif()
 
 set(PUERHLAB_ULTRAHDR_AVAILABLE "${PUERHLAB_ULTRAHDR_AVAILABLE}" CACHE INTERNAL
-    "Whether the bundled libultrahdr checkout is complete enough to build.")
+    "Whether the libultrahdr submodule checkout is complete enough to build.")
 
 set(PUERHLAB_METALCPP_SOURCE_DIR
     "${CMAKE_CURRENT_SOURCE_DIR}/metal-cpp"

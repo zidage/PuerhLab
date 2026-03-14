@@ -102,14 +102,17 @@ This section mirrors the current setup in `CMakeLists.txt`, `pu-erh_lab/tests/CM
 - Test framework: `googletest` (fetched with `FetchContent`)
 - Windows local imported binaries: `DuckDB`, `Exiv2`, `easy_profiler`
 - Lens correction dependency: the upstream `Lensfun` source checkout in `pu-erh_lab/src/third_party/lensfun`, built automatically by the top-level CMake build
+- Ultra HDR dependency: the upstream `libultrahdr` source checkout in `pu-erh_lab/src/third_party/libultrahdr`, consumed as a git submodule by the top-level CMake build
 - Additional Windows dependency for the bundled Lensfun build: `GLib2`. When the vcpkg toolchain is active, Pu-erh Lab will use `vcpkg/installed/<triplet>` automatically. `PUERHLAB_LENSFUN_GLIB2_BASE_DIR` is only needed to override that auto-detected location or to point at a non-vcpkg GLib2 package.
 
-### 3) Initialize the Bundled Lensfun Source
+### 3) Initialize Bundled Source Submodules
 
-Make sure the upstream Lensfun submodule is present before configuring Pu-erh Lab:
+Make sure the upstream `Lensfun` and `libultrahdr` submodules are present before configuring Pu-erh Lab:
 
 ```powershell
-git submodule update --init --recursive pu-erh_lab/src/third_party/lensfun
+git submodule update --init --recursive `
+  pu-erh_lab/src/third_party/lensfun `
+  pu-erh_lab/src/third_party/libultrahdr
 ```
 
 For details about the Windows GLib2 prerequisite used by the bundled build:
@@ -123,6 +126,14 @@ Clone and initialize submodules:
 ```powershell
 git clone --recursive https://github.com/zidage/PuerhLab.git
 cd PuerhLab
+```
+
+If you cloned earlier without `--recursive`, initialize the source submodules before configuring:
+
+```powershell
+git submodule update --init --recursive `
+  pu-erh_lab/src/third_party/lensfun `
+  pu-erh_lab/src/third_party/libultrahdr
 ```
 
 Bootstrap local vcpkg if needed:
@@ -240,7 +251,9 @@ brew install cmake ninja qt opencv opencolorio duckdb exiv2 glib libraw little-c
 Configure and build the main Qt application:
 
 ```bash
-git submodule update --init --recursive pu-erh_lab/src/third_party/lensfun
+git submodule update --init --recursive \
+  pu-erh_lab/src/third_party/lensfun \
+  pu-erh_lab/src/third_party/libultrahdr
 cmake --preset macos_debug
 cmake --build --preset macos_debug --target puerhlab_main
 ```
