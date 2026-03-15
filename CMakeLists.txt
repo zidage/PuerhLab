@@ -74,6 +74,9 @@ puerhlab_append_existing_prefix("/opt/homebrew/opt/xxhash")
 puerhlab_append_existing_prefix("/opt/homebrew/opt/duckdb")
 puerhlab_append_existing_prefix("/opt/homebrew/opt/little-cms2")
 puerhlab_append_existing_prefix("/opt/homebrew/opt/highway")
+puerhlab_append_existing_prefix("/opt/homebrew/opt/openblas")
+puerhlab_append_existing_prefix("/opt/homebrew/opt/gcc")
+
 puerhlab_append_existing_prefix("/usr/local")
 puerhlab_append_existing_prefix("/usr/local/opt/qt")
 puerhlab_append_existing_prefix("/usr/local/opt/opencv")
@@ -86,15 +89,45 @@ puerhlab_append_existing_prefix("/usr/local/opt/xxhash")
 puerhlab_append_existing_prefix("/usr/local/opt/duckdb")
 puerhlab_append_existing_prefix("/usr/local/opt/little-cms2")
 puerhlab_append_existing_prefix("/usr/local/opt/highway")
+puerhlab_append_existing_prefix("/usr/local/opt/openblas")
+puerhlab_append_existing_prefix("/usr/local/opt/gcc")
 
 set(PUERHLAB_LIBRARY_HINTS "")
 set(PUERHLAB_INCLUDE_HINTS "")
+
 foreach(_prefix IN LISTS CMAKE_PREFIX_PATH)
     if(EXISTS "${_prefix}")
-        list(APPEND PUERHLAB_LIBRARY_HINTS "${_prefix}/lib")
-        list(APPEND PUERHLAB_INCLUDE_HINTS "${_prefix}/include")
+        if(EXISTS "${_prefix}/lib")
+            list(APPEND PUERHLAB_LIBRARY_HINTS "${_prefix}/lib")
+        endif()
+        if(EXISTS "${_prefix}/include")
+            list(APPEND PUERHLAB_INCLUDE_HINTS "${_prefix}/include")
+        endif()
     endif()
 endforeach()
+
+# Extra GCC runtime directories for libgfortran/libquadmath/libgcc_s.
+# Homebrew gcc may place runtime dylibs in versioned subdirectories.
+foreach(_gcc_prefix IN ITEMS "/opt/homebrew/opt/gcc" "/usr/local/opt/gcc")
+    if(EXISTS "${_gcc_prefix}")
+        if(EXISTS "${_gcc_prefix}/lib")
+            list(APPEND PUERHLAB_LIBRARY_HINTS "${_gcc_prefix}/lib")
+        endif()
+
+        file(GLOB _puerhlab_gcc_runtime_dirs
+            LIST_DIRECTORIES true
+            "${_gcc_prefix}/lib/gcc/current"
+            "${_gcc_prefix}/lib/gcc/*"
+        )
+        foreach(_dir IN LISTS _puerhlab_gcc_runtime_dirs)
+            if(IS_DIRECTORY "${_dir}")
+                list(APPEND PUERHLAB_LIBRARY_HINTS "${_dir}")
+            endif()
+        endforeach()
+        unset(_puerhlab_gcc_runtime_dirs)
+    endif()
+endforeach()
+
 list(REMOVE_DUPLICATES PUERHLAB_LIBRARY_HINTS)
 list(REMOVE_DUPLICATES PUERHLAB_INCLUDE_HINTS)
 
@@ -683,9 +716,11 @@ if(APPLE AND PUERHLAB_MACOS_BUNDLE AND TARGET ${PUERHLAB_MAIN_BIN})
             list(APPEND _puerhlab_macos_libpaths "-libpath=${_lib_dir}")
         endif()
     endforeach()
+
     if(DEFINED PUERHLAB_LENSFUN_LIBRARY_DIR AND NOT "${PUERHLAB_LENSFUN_LIBRARY_DIR}" STREQUAL "")
         list(APPEND _puerhlab_macos_libpaths "-libpath=${PUERHLAB_LENSFUN_LIBRARY_DIR}")
     endif()
+
     list(REMOVE_DUPLICATES _puerhlab_macos_libpaths)
     list(APPEND _puerhlab_macos_deploy_tool_options ${_puerhlab_macos_libpaths})
 
@@ -704,17 +739,134 @@ if(APPLE AND PUERHLAB_MACOS_BUNDLE AND TARGET ${PUERHLAB_MAIN_BIN})
     )
     install(SCRIPT ${_puerhlab_macos_deploy_script})
 
+    # Build a search-dir list for manual GCC/OpenBLAS runtime fixups.
+    set(_puerhlab_runtime_dirs ${PUERHLAB_LIBRARY_HINTS})
+    if(DEFINED PUERHLAB_LENSFUN_LIBRARY_DIR AND NOT "${PUERHLAB_LENSFUN_LIBRARY_DIR}" STREQUAL "")
+        list(APPEND _puerhlab_runtime_dirs "${PUERHLAB_LENSFUN_LIBRARY_DIR}")
+    endif()
+    list(REMOVE_DUPLICATES _puerhlab_runtime_dirs)
+    list(JOIN _puerhlab_runtime_dirs ";" _puerhlab_runtime_dirs_joined)
+
+    # Qt/macdeployqt already does the main deployment pass.
+    # Here we only patch the OpenBLAS -> libgfortran -> libquadmath/libgcc_s chain.
+    install(CODE
+        "
+        set(_puerhlab_app_path \"\${CMAKE_INSTALL_PREFIX}/PuerhLab.app\")
+        set(_puerhlab_fw_dir   \"\${_puerhlab_app_path}/Contents/Frameworks\")
+        set(_puerhlab_search_dirs \"${_puerhlab_runtime_dirs_joined}\")
+
+        if(NOT EXISTS \"\${_puerhlab_app_path}\")
+            message(FATAL_ERROR \"macOS bundle not found: \${_puerhlab_app_path}\")
+        endif()
+
+        file(MAKE_DIRECTORY \"\${_puerhlab_fw_dir}\")
+
+        function(_puerhlab_find_lib _out _name)
+            set(_found \"\")
+            foreach(_dir IN LISTS _puerhlab_search_dirs)
+                if(EXISTS \"\${_dir}/\${_name}\")
+                    set(_found \"\${_dir}/\${_name}\")
+                    break()
+                endif()
+            endforeach()
+            set(\${_out} \"\${_found}\" PARENT_SCOPE)
+        endfunction()
+
+        function(_puerhlab_copy_lib_if_missing _name)
+            set(_dst \"\${_puerhlab_fw_dir}/\${_name}\")
+            if(NOT EXISTS \"\${_dst}\")
+                _puerhlab_find_lib(_src \"\${_name}\")
+                if(\"\${_src}\" STREQUAL \"\")
+                    message(FATAL_ERROR \"Required runtime library not found: \${_name}\")
+                endif()
+
+                execute_process(
+                    COMMAND /bin/cp -fL \"\${_src}\" \"\${_dst}\"
+                    RESULT_VARIABLE _copy_result
+                )
+                if(NOT _copy_result EQUAL 0)
+                    message(FATAL_ERROR \"Failed to copy \${_src} -> \${_dst}\")
+                endif()
+            endif()
+
+            execute_process(COMMAND /bin/chmod u+w \"\${_dst}\" ERROR_QUIET)
+        endfunction()
+
+        # Ensure the GCC runtime chain exists in the bundle.
+        _puerhlab_copy_lib_if_missing(\"libgfortran.5.dylib\")
+        _puerhlab_copy_lib_if_missing(\"libquadmath.0.dylib\")
+        _puerhlab_copy_lib_if_missing(\"libgcc_s.1.1.dylib\")
+
+        # Patch libgfortran to use sibling dylibs in Frameworks.
+        execute_process(
+            COMMAND /usr/bin/install_name_tool
+                    -change @rpath/libquadmath.0.dylib @loader_path/libquadmath.0.dylib
+                    \"\${_puerhlab_fw_dir}/libgfortran.5.dylib\"
+            RESULT_VARIABLE _ignore_quadmath
+            ERROR_QUIET
+        )
+        execute_process(
+            COMMAND /usr/bin/install_name_tool
+                    -change @rpath/libgcc_s.1.1.dylib @loader_path/libgcc_s.1.1.dylib
+                    \"\${_puerhlab_fw_dir}/libgfortran.5.dylib\"
+            RESULT_VARIABLE _ignore_gcc
+            ERROR_QUIET
+        )
+
+        # Make libopenblas prefer the bundled libgfortran when applicable.
+        if(EXISTS \"\${_puerhlab_fw_dir}/libopenblas.0.dylib\")
+            execute_process(COMMAND /bin/chmod u+w \"\${_puerhlab_fw_dir}/libopenblas.0.dylib\" ERROR_QUIET)
+
+            execute_process(
+                COMMAND /usr/bin/install_name_tool
+                        -change @rpath/libgfortran.5.dylib @loader_path/libgfortran.5.dylib
+                        \"\${_puerhlab_fw_dir}/libopenblas.0.dylib\"
+                RESULT_VARIABLE _ignore_openblas_rpath
+                ERROR_QUIET
+            )
+            execute_process(
+                COMMAND /usr/bin/install_name_tool
+                        -change @executable_path/../Frameworks/libgfortran.5.dylib @loader_path/libgfortran.5.dylib
+                        \"\${_puerhlab_fw_dir}/libopenblas.0.dylib\"
+                RESULT_VARIABLE _ignore_openblas_exec
+                ERROR_QUIET
+            )
+        endif()
+
+        # Optional sanity check for the patched libgfortran.
+        execute_process(
+            COMMAND /usr/bin/otool -L \"\${_puerhlab_fw_dir}/libgfortran.5.dylib\"
+            RESULT_VARIABLE _gfortran_otool_result
+            OUTPUT_VARIABLE _gfortran_otool_output
+            ERROR_VARIABLE  _gfortran_otool_error
+        )
+        if(NOT _gfortran_otool_result EQUAL 0)
+            message(FATAL_ERROR
+                \"otool failed for libgfortran.5.dylib: \${_gfortran_otool_error}\")
+        endif()
+
+        message(STATUS \"Patched GCC runtime chain for macOS bundle\")
+        "
+    )
+
+    # Sign only after all bundle mutations are complete.
     if(NOT "${PUERHLAB_MACOS_CODESIGN_IDENTITY}" STREQUAL "")
         install(CODE
             "set(_puerhlab_app_path \"\${CMAKE_INSTALL_PREFIX}/PuerhLab.app\")
              if(EXISTS \"\${_puerhlab_app_path}\")
                  if(EXISTS \"/usr/bin/codesign\")
                      execute_process(
-                         COMMAND /usr/bin/codesign --force --deep --sign \"${PUERHLAB_MACOS_CODESIGN_IDENTITY}\" --timestamp=none \"\${_puerhlab_app_path}\"
+                         COMMAND /usr/bin/codesign
+                                 --force
+                                 --deep
+                                 --sign \"${PUERHLAB_MACOS_CODESIGN_IDENTITY}\"
+                                 --timestamp=none
+                                 \"\${_puerhlab_app_path}\"
                          RESULT_VARIABLE _puerhlab_codesign_result
                      )
                      if(NOT _puerhlab_codesign_result EQUAL 0)
-                         message(FATAL_ERROR \"codesign failed for \${_puerhlab_app_path} (exit=\${_puerhlab_codesign_result})\")
+                         message(FATAL_ERROR
+                             \"codesign failed for \${_puerhlab_app_path} (exit=\${_puerhlab_codesign_result})\")
                      endif()
                  else()
                      message(WARNING \"/usr/bin/codesign not found; skipping macOS bundle re-sign\")
