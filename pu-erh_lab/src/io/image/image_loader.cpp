@@ -16,6 +16,30 @@
 #include "type/type.hpp"
 
 namespace puerhlab {
+namespace {
+
+auto ReadWholeFile(const image_path_t& path) -> std::vector<uint8_t> {
+  std::ifstream file(path, std::ios::binary | std::ios::ate);
+  if (!file.is_open()) {
+    throw std::runtime_error("ByteBufferLoader: cannot open file for reading");
+  }
+
+  const std::streamsize file_size = file.tellg();
+  if (file_size <= 0) {
+    throw std::runtime_error("ByteBufferLoader: file size is invalid");
+  }
+
+  file.seekg(0, std::ios::beg);
+  auto buffer = std::vector<uint8_t>(static_cast<size_t>(file_size));
+  if (!file.read(reinterpret_cast<char*>(buffer.data()), file_size) || file.gcount() != file_size) {
+    throw std::runtime_error("ByteBufferLoader: failed to read full file");
+  }
+
+  return buffer;
+}
+
+}  // namespace
+
 /**
  * @brief Construct a new ImageLoader::ImageLoader object
  *
@@ -75,21 +99,12 @@ auto ByteBufferLoader::LoadFromImage(std::shared_ptr<Image> img)
   if (!img) {
     return nullptr;
   }
-  std::ifstream file(img->image_path_, std::ios::binary | std::ios::ate);
-  if (!file.is_open()) {
+
+  try {
+    return std::make_shared<std::vector<uint8_t>>(ReadWholeFile(img->image_path_));
+  } catch (...) {
     return nullptr;
   }
-  std::streamsize fileSize = file.tellg();
-  if (fileSize <= 0) {
-    return nullptr;
-  }
-  file.seekg(0, std::ios::beg);
-  auto buffer = std::make_shared<std::vector<uint8_t>>(fileSize);
-  if (!file.read(reinterpret_cast<char*>(buffer->data()), fileSize)) {
-    return nullptr;
-  }
-  file.close();
-  return buffer;
 }
 
 auto ByteBufferLoader::LoadByteBufferFromImage(std::shared_ptr<Image> img) -> std::vector<uint8_t> {
@@ -100,21 +115,7 @@ auto ByteBufferLoader::LoadByteBufferFromImage(std::shared_ptr<Image> img) -> st
 }
 
 auto ByteBufferLoader::LoadByteBufferFromPath(const image_path_t& path) -> std::vector<uint8_t> {
-  std::ifstream file(path, std::ios::binary | std::ios::ate);
-  if (!file.is_open()) {
-    throw std::runtime_error("ByteBufferLoader: cannot open file for reading");
-  }
-  std::streamsize fileSize = file.tellg();
-  if (fileSize <= 0) {
-    throw std::runtime_error("ByteBufferLoader: file size is invalid");
-  }
-  file.seekg(0, std::ios::beg);
-  auto buffer = std::vector<uint8_t>(static_cast<size_t>(fileSize));
-  if (!file.read(reinterpret_cast<char*>(buffer.data()), fileSize) || file.gcount() != fileSize) {
-    throw std::runtime_error("ByteBufferLoader: failed to read full file");
-  }
-  file.close();
-  return buffer;
+  return ReadWholeFile(path);
 }
 
 };  // namespace puerhlab

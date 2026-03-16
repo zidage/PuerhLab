@@ -297,6 +297,11 @@ target_include_directories(ImageWriterTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab
 target_link_libraries(ImageWriterTest PRIVATE GTest::gtest_main ImageWriter ${PUERHLAB_TEST_OPENCV_MIN_DEPS})
 gtest_discover_tests(ImageWriterTest TEST_PREFIX "ImageWriterTest.")
 
+add_executable(ImagePathEncodingTest io/image_path_encoding_test.cpp)
+target_include_directories(ImagePathEncodingTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
+target_link_libraries(ImagePathEncodingTest PRIVATE GTest::gtest_main ImageLoader StorageService)
+gtest_discover_tests(ImagePathEncodingTest TEST_PREFIX "ImagePathEncodingTest.")
+
 add_executable(ThumbnailAlbumQtDemo app/thumbnail_album_qt_demo.cpp)
 target_include_directories(ThumbnailAlbumQtDemo PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
 target_link_libraries(ThumbnailAlbumQtDemo PRIVATE ThumbnailService ProjectService ImportService Qt6::Widgets SleeveFilterService)

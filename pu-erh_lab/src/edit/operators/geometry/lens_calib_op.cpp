@@ -58,10 +58,10 @@ struct LensfunModifierDeleter {
 };
 
 struct LensfunDbState {
-  std::mutex                                   mutex_;
-  std::unique_ptr<lfDatabase, LensfunDbDeleter> db_ = {};
-  std::filesystem::path                        root_ = {};
-  bool                                         valid_ = false;
+  std::mutex                                    mutex_;
+  std::unique_ptr<lfDatabase, LensfunDbDeleter> db_    = {};
+  std::filesystem::path                         root_  = {};
+  bool                                          valid_ = false;
 };
 
 auto GlobalDbState() -> LensfunDbState& {
@@ -82,7 +82,7 @@ auto CanonicalPath(const std::filesystem::path& path) -> std::filesystem::path {
     return {};
   }
   std::error_code ec;
-  const auto canonical = std::filesystem::weakly_canonical(path, ec);
+  const auto      canonical = std::filesystem::weakly_canonical(path, ec);
   if (!ec) {
     return canonical;
   }
@@ -93,7 +93,8 @@ auto GetExecutableDir() -> std::filesystem::path {
 #if defined(_WIN32)
   std::wstring buffer(MAX_PATH, L'\0');
   while (true) {
-    const DWORD copied = GetModuleFileNameW(nullptr, buffer.data(), static_cast<DWORD>(buffer.size()));
+    const DWORD copied =
+        GetModuleFileNameW(nullptr, buffer.data(), static_cast<DWORD>(buffer.size()));
     if (copied == 0) {
       return {};
     }
@@ -111,7 +112,7 @@ auto GetExecutableDir() -> std::filesystem::path {
 auto ResolveDefaultDbPath() -> std::filesystem::path {
   std::vector<std::filesystem::path> candidates;
 
-  const auto exe_dir = GetExecutableDir();
+  const auto                         exe_dir = GetExecutableDir();
   if (!exe_dir.empty()) {
     candidates.emplace_back(exe_dir / "lens_calib");
     candidates.emplace_back(exe_dir / "config" / "lens_calib");
@@ -191,14 +192,15 @@ auto PathToDisplayString(const std::filesystem::path& path) -> std::string {
 }
 
 auto LoadPortableDbXmls(lfDatabase* db, const std::filesystem::path& root) -> bool {
-  if (!db || root.empty() || !std::filesystem::exists(root) || !std::filesystem::is_directory(root)) {
+  if (!db || root.empty() || !std::filesystem::exists(root) ||
+      !std::filesystem::is_directory(root)) {
     return false;
   }
   return lf_db_load_path(db, root.string().c_str()) == LF_NO_ERROR;
 }
 
 auto GetLensfunDb(const std::filesystem::path& preferred_root) -> lfDatabase* {
-  auto& state = GlobalDbState();
+  auto&                       state = GlobalDbState();
   std::lock_guard<std::mutex> guard(state.mutex_);
 
   const std::filesystem::path canonical_root = ResolveDbRootPath(preferred_root);
@@ -360,15 +362,15 @@ auto FindBestLens(const lfDatabase* db, const lfCamera* camera, const InputMeta&
     return nullptr;
   }
 
-  const char* lens_maker = input.lens_maker_.empty() ? nullptr : input.lens_maker_.c_str();
-  constexpr int flags    = LF_SEARCH_SORT_AND_UNIQUIFY | LF_SEARCH_LOOSE;
+  const char*    lens_maker = input.lens_maker_.empty() ? nullptr : input.lens_maker_.c_str();
+  constexpr int  flags      = LF_SEARCH_SORT_AND_UNIQUIFY | LF_SEARCH_LOOSE;
   const lfLens** lenses =
       lf_db_find_lenses(db, camera, lens_maker, input.lens_model_.c_str(), flags);
   if (!lenses) {
     return nullptr;
   }
 
-  const lfLens* best      = nullptr;
+  const lfLens* best       = nullptr;
   int           best_score = std::numeric_limits<int>::min();
   for (int i = 0; lenses[i] != nullptr; ++i) {
     const int score = ScoreLensCandidate(lenses[i], input);
@@ -411,8 +413,7 @@ auto ResolveScaleFromModifier(const lfLens* lens, float focal_mm, float crop_fac
   }
 
   const lfLensType source_projection = lens->Type;
-  const lfLensType resolved_target =
-      apply_projection ? target_projection : source_projection;
+  const lfLensType resolved_target   = apply_projection ? target_projection : source_projection;
   if (distortion_model != nullptr) {
     (void)lf_modifier_enable_distortion_correction(modifier.get());
   }
@@ -526,16 +527,16 @@ void LensCalibOp::ApplyGPU(std::shared_ptr<ImageBuffer> input) {
   resolved_params_.dst_width  = gpu.cols;
   resolved_params_.dst_height = gpu.rows;
 
-  const double width  = (gpu.cols >= 2) ? static_cast<double>(gpu.cols - 1) : 1.0;
-  const double height = (gpu.rows >= 2) ? static_cast<double>(gpu.rows - 1) : 1.0;
-  const double crop_factor =
-      IsFinitePositive(resolved_params_.camera_crop_factor) ? resolved_params_.camera_crop_factor : 1.0;
+  const double width          = (gpu.cols >= 2) ? static_cast<double>(gpu.cols - 1) : 1.0;
+  const double height         = (gpu.rows >= 2) ? static_cast<double>(gpu.rows - 1) : 1.0;
+  const double crop_factor    = IsFinitePositive(resolved_params_.camera_crop_factor)
+                                    ? resolved_params_.camera_crop_factor
+                                    : 1.0;
   const double real_focal =
       IsFinitePositive(resolved_params_.real_focal_mm) ? resolved_params_.real_focal_mm : 1.0;
 
-  const double norm_scale =
-      static_cast<double>(kFullFrameDiagonalMm) / crop_factor / std::hypot(width + 1.0, height + 1.0) /
-      real_focal;
+  const double norm_scale = static_cast<double>(kFullFrameDiagonalMm) / crop_factor /
+                            std::hypot(width + 1.0, height + 1.0) / real_focal;
   resolved_params_.norm_scale = static_cast<float>(norm_scale);
   resolved_params_.norm_unscale =
       (std::fabs(norm_scale) > kEpsilon) ? static_cast<float>(1.0 / norm_scale) : 1.0f;
@@ -558,16 +559,16 @@ void LensCalibOp::ApplyGPU(std::shared_ptr<ImageBuffer> input) {
   resolved_params_.dst_width  = static_cast<std::int32_t>(gpu.Width());
   resolved_params_.dst_height = static_cast<std::int32_t>(gpu.Height());
 
-  const double width  = (gpu.Width() >= 2U) ? static_cast<double>(gpu.Width() - 1U) : 1.0;
-  const double height = (gpu.Height() >= 2U) ? static_cast<double>(gpu.Height() - 1U) : 1.0;
-  const double crop_factor =
-      IsFinitePositive(resolved_params_.camera_crop_factor) ? resolved_params_.camera_crop_factor : 1.0;
+  const double width          = (gpu.Width() >= 2U) ? static_cast<double>(gpu.Width() - 1U) : 1.0;
+  const double height         = (gpu.Height() >= 2U) ? static_cast<double>(gpu.Height() - 1U) : 1.0;
+  const double crop_factor    = IsFinitePositive(resolved_params_.camera_crop_factor)
+                                    ? resolved_params_.camera_crop_factor
+                                    : 1.0;
   const double real_focal =
       IsFinitePositive(resolved_params_.real_focal_mm) ? resolved_params_.real_focal_mm : 1.0;
 
-  const double norm_scale =
-      static_cast<double>(kFullFrameDiagonalMm) / crop_factor / std::hypot(width + 1.0, height + 1.0) /
-      real_focal;
+  const double norm_scale = static_cast<double>(kFullFrameDiagonalMm) / crop_factor /
+                            std::hypot(width + 1.0, height + 1.0) / real_focal;
   resolved_params_.norm_scale = static_cast<float>(norm_scale);
   resolved_params_.norm_unscale =
       (std::fabs(norm_scale) > kEpsilon) ? static_cast<float>(1.0 / norm_scale) : 1.0f;
@@ -583,44 +584,45 @@ void LensCalibOp::ApplyGPU(std::shared_ptr<ImageBuffer> input) {
 
 auto LensCalibOp::GetParams() const -> nlohmann::json {
   nlohmann::json inner;
-  inner["enabled"]             = enabled_;
-  inner["apply_vignetting"]    = apply_vignetting_;
-  inner["apply_distortion"]    = apply_distortion_;
-  inner["apply_tca"]           = apply_tca_;
-  inner["apply_crop"]          = apply_crop_;
-  inner["auto_scale"]          = auto_scale_;
-  inner["use_user_scale"]      = use_user_scale_;
-  inner["user_scale"]          = user_scale_;
-  inner["projection_enabled"]  = projection_enabled_;
-  inner["target_projection"]   = target_projection_;
+  inner["enabled"]               = enabled_;
+  inner["apply_vignetting"]      = apply_vignetting_;
+  inner["apply_distortion"]      = apply_distortion_;
+  inner["apply_tca"]             = apply_tca_;
+  inner["apply_crop"]            = apply_crop_;
+  inner["auto_scale"]            = auto_scale_;
+  inner["use_user_scale"]        = use_user_scale_;
+  inner["user_scale"]            = user_scale_;
+  inner["projection_enabled"]    = projection_enabled_;
+  inner["target_projection"]     = target_projection_;
   inner["low_precision_preview"] = low_precision_preview_;
 
-  inner["cam_maker"]           = input_meta_.cam_maker_;
-  inner["cam_model"]           = input_meta_.cam_model_;
-  inner["lens_maker"]          = input_meta_.lens_maker_;
-  inner["lens_model"]          = input_meta_.lens_model_;
-  inner["focal_length_mm"]     = input_meta_.focal_length_mm_;
-  inner["aperture_f_number"]   = input_meta_.aperture_f_number_;
-  inner["distance_m"]          = input_meta_.distance_m_;
-  inner["focal_35mm_mm"]       = input_meta_.focal_35mm_mm_;
-  inner["crop_factor_hint"]    = input_meta_.crop_factor_hint_;
-  inner["lens_profile_db_path"] = conv::ToBytes(lens_profile_db_path_.wstring());
+  inner["cam_maker"]             = input_meta_.cam_maker_;
+  inner["cam_model"]             = input_meta_.cam_model_;
+  inner["lens_maker"]            = input_meta_.lens_maker_;
+  inner["lens_model"]            = input_meta_.lens_model_;
+  inner["focal_length_mm"]       = input_meta_.focal_length_mm_;
+  inner["aperture_f_number"]     = input_meta_.aperture_f_number_;
+  inner["distance_m"]            = input_meta_.distance_m_;
+  inner["focal_35mm_mm"]         = input_meta_.focal_35mm_mm_;
+  inner["crop_factor_hint"]      = input_meta_.crop_factor_hint_;
+  inner["lens_profile_db_path"]  = conv::ToBytes(lens_profile_db_path_.wstring());
   return {{std::string(script_name_), std::move(inner)}};
 }
 
 void LensCalibOp::SetParams(const nlohmann::json& params) {
-  nlohmann::json inner = params.contains(script_name_) ? params[script_name_] : nlohmann::json::object();
-  enabled_             = inner.value("enabled", enabled_);
-  apply_vignetting_    = inner.value("apply_vignetting", apply_vignetting_);
-  apply_distortion_    = inner.value("apply_distortion", apply_distortion_);
-  apply_tca_           = inner.value("apply_tca", apply_tca_);
-  apply_crop_          = inner.value("apply_crop", apply_crop_);
-  auto_scale_          = inner.value("auto_scale", auto_scale_);
-  use_user_scale_      = inner.value("use_user_scale", use_user_scale_);
-  user_scale_          = inner.value("user_scale", user_scale_);
-  projection_enabled_  = inner.value("projection_enabled", projection_enabled_);
-  target_projection_   = inner.value("target_projection", target_projection_);
-  low_precision_preview_ = inner.value("low_precision_preview", low_precision_preview_);
+  nlohmann::json inner =
+      params.contains(script_name_) ? params[script_name_] : nlohmann::json::object();
+  enabled_                       = inner.value("enabled", enabled_);
+  apply_vignetting_              = inner.value("apply_vignetting", apply_vignetting_);
+  apply_distortion_              = inner.value("apply_distortion", apply_distortion_);
+  apply_tca_                     = inner.value("apply_tca", apply_tca_);
+  apply_crop_                    = inner.value("apply_crop", apply_crop_);
+  auto_scale_                    = inner.value("auto_scale", auto_scale_);
+  use_user_scale_                = inner.value("use_user_scale", use_user_scale_);
+  user_scale_                    = inner.value("user_scale", user_scale_);
+  projection_enabled_            = inner.value("projection_enabled", projection_enabled_);
+  target_projection_             = inner.value("target_projection", target_projection_);
+  low_precision_preview_         = inner.value("low_precision_preview", low_precision_preview_);
 
   input_meta_.cam_maker_         = inner.value("cam_maker", input_meta_.cam_maker_);
   input_meta_.cam_model_         = inner.value("cam_model", input_meta_.cam_model_);
@@ -635,9 +637,8 @@ void LensCalibOp::SetParams(const nlohmann::json& params) {
   if (inner.contains("lens_profile_db_path")) {
     std::string configured = inner.value("lens_profile_db_path", std::string{});
     configured             = StripWrappedQuotes(std::move(configured));
-    lens_profile_db_path_  = configured.empty()
-                                 ? std::filesystem::path{}
-                                 : std::filesystem::path(conv::FromBytes(configured));
+    lens_profile_db_path_  = configured.empty() ? std::filesystem::path{}
+                                                : std::filesystem::path(conv::FromBytes(configured));
   }
   if (lens_profile_db_path_.empty()) {
     lens_profile_db_path_ = ResolveDefaultDbPath();
@@ -676,8 +677,21 @@ auto LensCalibOp::BuildRuntimeCacheKey(const OperatorParams& params) const -> ui
   HashCombine(key, HashFloatBits(input_meta_.distance_m_));
   HashCombine(key, HashFloatBits(input_meta_.focal_35mm_mm_));
   HashCombine(key, HashFloatBits(input_meta_.crop_factor_hint_));
-  HashCombine(key, static_cast<std::uint64_t>(std::hash<std::string>{}(lens_profile_db_path_.string())));
+  HashCombine(key,
+              static_cast<std::uint64_t>(std::hash<std::string>{}(lens_profile_db_path_.string())));
   return key;
+}
+
+static void PrintResolvedParams(const OperatorParams& params) {
+  std::cout << "Current raw parameters: " << std::endl;
+  std::cout << "  Camera Make: " << params.raw_camera_make_ << std::endl;
+  std::cout << "  Camera Model: " << params.raw_camera_model_ << std::endl;
+  std::cout << "  Lens Make: " << params.raw_lens_make_ << std::endl;
+  std::cout << "  Lens Model: " << params.raw_lens_model_ << std::endl;
+  std::cout << "  Focal Length (mm): " << params.raw_lens_focal_mm_ << std::endl;
+  std::cout << "  Aperture (f-number): " << params.raw_lens_aperture_f_ << std::endl;
+  std::cout << "  Focus Distance (m): " << params.raw_lens_focus_distance_m_ << std::endl;
+  std::cout << "  Crop Factor Hint: " << params.raw_lens_crop_factor_hint_ << std::endl;
 }
 
 void LensCalibOp::ResolveRuntime(OperatorParams& params) const {
@@ -686,15 +700,17 @@ void LensCalibOp::ResolveRuntime(OperatorParams& params) const {
     params.lens_calib_runtime_failed_ = true;
     params.lens_calib_runtime_dirty_  = false;
     has_resolved_params_              = false;
-    std::cout << "Warning: Raw decoding parameters are not valid. Lens calibration will be skipped." << std::endl;
+    std::cout << "Warning: Raw decoding parameters are not valid. Lens calibration will be skipped."
+              << std::endl;
+    PrintResolvedParams(params);
     return;
   }
 
   const auto cache_key = BuildRuntimeCacheKey(params);
   if (!params.lens_calib_runtime_dirty_ && params.lens_calib_cache_key_valid_ &&
       params.lens_calib_cache_key_ == cache_key) {
-    resolved_params_      = params.lens_calib_runtime_params_;
-    has_resolved_params_  = params.lens_calib_runtime_valid_;
+    resolved_params_     = params.lens_calib_runtime_params_;
+    has_resolved_params_ = params.lens_calib_runtime_valid_;
     return;
   }
 
@@ -750,8 +766,8 @@ void LensCalibOp::ResolveRuntime(OperatorParams& params) const {
     return;
   }
 
-  const auto db_root = ResolveDbRootPath(lens_profile_db_path_);
-  lfDatabase* db     = GetLensfunDb(db_root);
+  const auto  db_root = ResolveDbRootPath(lens_profile_db_path_);
+  lfDatabase* db      = GetLensfunDb(db_root);
   if (!db) {
     params.lens_calib_runtime_valid_  = false;
     params.lens_calib_runtime_failed_ = true;
@@ -779,7 +795,7 @@ void LensCalibOp::ResolveRuntime(OperatorParams& params) const {
   }
 
   lfLensCalibDistortion distortion{};
-  const bool distortion_ok =
+  const bool            distortion_ok =
       lf_lens_interpolate_distortion(lens, crop_factor, meta.focal_length_mm_, &distortion) != 0;
   float real_focal_mm = meta.focal_length_mm_;
   if (distortion_ok && IsFinitePositive(distortion.RealFocal)) {
@@ -790,58 +806,58 @@ void LensCalibOp::ResolveRuntime(OperatorParams& params) const {
   const bool tca_ok = lf_lens_interpolate_tca(lens, crop_factor, meta.focal_length_mm_, &tca) != 0;
 
   lfLensCalibVignetting vignette{};
-  const float safe_aperture = IsFinitePositive(meta.aperture_f_number_) ? meta.aperture_f_number_ : 0.0f;
-  const float safe_distance = IsFinitePositive(meta.distance_m_) ? meta.distance_m_ : kDefaultFarDistanceM;
+  const float           safe_aperture =
+      IsFinitePositive(meta.aperture_f_number_) ? meta.aperture_f_number_ : 0.0f;
+  const float safe_distance =
+      IsFinitePositive(meta.distance_m_) ? meta.distance_m_ : kDefaultFarDistanceM;
   const bool vignette_ok =
       IsFinitePositive(safe_aperture) &&
-      lf_lens_interpolate_vignetting(lens, crop_factor, meta.focal_length_mm_, safe_aperture, safe_distance,
-                                     &vignette) != 0;
+      lf_lens_interpolate_vignetting(lens, crop_factor, meta.focal_length_mm_, safe_aperture,
+                                     safe_distance, &vignette) != 0;
   if (vignette_ok) {
     RescalePaVignettingTerms(&vignette, real_focal_mm, crop_factor);
   }
 
   lfLensCalibCrop crop{};
-  const bool crop_ok = lf_lens_interpolate_crop(lens, crop_factor, meta.focal_length_mm_, &crop) != 0;
+  const bool      crop_ok =
+      lf_lens_interpolate_crop(lens, crop_factor, meta.focal_length_mm_, &crop) != 0;
 
   LensCalibGpuParams runtime{};
-  runtime.src_width          = 0;
-  runtime.src_height         = 0;
-  runtime.nominal_focal_mm   = meta.focal_length_mm_;
-  runtime.real_focal_mm      = real_focal_mm;
-  runtime.camera_crop_factor = crop_factor;
-  runtime.user_scale         = user_scale_;
-  runtime.use_user_scale     = use_user_scale_ ? 1 : 0;
-  runtime.use_auto_scale     = (auto_scale_ && !use_user_scale_) ? 1 : 0;
+  runtime.src_width             = 0;
+  runtime.src_height            = 0;
+  runtime.nominal_focal_mm      = meta.focal_length_mm_;
+  runtime.real_focal_mm         = real_focal_mm;
+  runtime.camera_crop_factor    = crop_factor;
+  runtime.user_scale            = user_scale_;
+  runtime.use_user_scale        = use_user_scale_ ? 1 : 0;
+  runtime.use_auto_scale        = (auto_scale_ && !use_user_scale_) ? 1 : 0;
   runtime.low_precision_preview = low_precision_preview_ ? 1 : 0;
 
-  runtime.source_projection =
-      static_cast<std::int32_t>(LensTypeFromLensfun(lens->Type));
-  const auto target_projection = projection_enabled_ ? ProjectionFromString(target_projection_)
-                                                     : LensCalibProjectionType::UNKNOWN;
-  runtime.target_projection = static_cast<std::int32_t>(target_projection);
+  runtime.source_projection     = static_cast<std::int32_t>(LensTypeFromLensfun(lens->Type));
+  const auto target_projection  = projection_enabled_ ? ProjectionFromString(target_projection_)
+                                                      : LensCalibProjectionType::UNKNOWN;
+  runtime.target_projection     = static_cast<std::int32_t>(target_projection);
 
-  runtime.apply_distortion = (apply_distortion_ && distortion_ok &&
-                              (distortion.Model == LF_DIST_MODEL_POLY3 ||
-                               distortion.Model == LF_DIST_MODEL_POLY5 ||
-                               distortion.Model == LF_DIST_MODEL_PTLENS))
-                                 ? 1
-                                 : 0;
-  runtime.apply_tca =
-      (apply_tca_ && tca_ok &&
-       (tca.Model == LF_TCA_MODEL_LINEAR || tca.Model == LF_TCA_MODEL_POLY3))
+  runtime.apply_distortion =
+      (apply_distortion_ && distortion_ok &&
+       (distortion.Model == LF_DIST_MODEL_POLY3 || distortion.Model == LF_DIST_MODEL_POLY5 ||
+        distortion.Model == LF_DIST_MODEL_PTLENS))
           ? 1
           : 0;
+  runtime.apply_tca = (apply_tca_ && tca_ok &&
+                       (tca.Model == LF_TCA_MODEL_LINEAR || tca.Model == LF_TCA_MODEL_POLY3))
+                          ? 1
+                          : 0;
   runtime.apply_vignetting =
       (apply_vignetting_ && vignette_ok && vignette.Model == LF_VIGNETTING_MODEL_PA) ? 1 : 0;
 
-  const bool projection_valid =
-      target_projection != LensCalibProjectionType::UNKNOWN &&
-      target_projection != LensTypeFromLensfun(lens->Type);
+  const bool projection_valid = target_projection != LensCalibProjectionType::UNKNOWN &&
+                                target_projection != LensTypeFromLensfun(lens->Type);
   runtime.apply_projection = (projection_enabled_ && projection_valid) ? 1 : 0;
 
   const bool crop_profile_valid =
       crop_ok && (crop.CropMode == LF_CROP_RECTANGLE || crop.CropMode == LF_CROP_CIRCLE);
-  runtime.apply_crop = (apply_crop_ && crop_profile_valid) ? 1 : 0;
+  runtime.apply_crop        = (apply_crop_ && crop_profile_valid) ? 1 : 0;
   runtime.apply_crop_circle = (runtime.apply_crop && crop.CropMode == LF_CROP_CIRCLE) ? 1 : 0;
 
   switch (distortion.Model) {
@@ -875,8 +891,7 @@ void LensCalibOp::ResolveRuntime(OperatorParams& params) const {
 
   runtime.vignetting_model = static_cast<std::int32_t>(LensCalibVignettingModel::NONE);
   if (vignette.Model == LF_VIGNETTING_MODEL_PA) {
-    runtime.vignetting_model =
-        static_cast<std::int32_t>(LensCalibVignettingModel::PA);
+    runtime.vignetting_model = static_cast<std::int32_t>(LensCalibVignettingModel::PA);
   }
   std::memcpy(runtime.vignetting_terms, vignette.Terms, sizeof(runtime.vignetting_terms));
 
@@ -910,10 +925,9 @@ void LensCalibOp::ResolveRuntime(OperatorParams& params) const {
     const lfLensCalibDistortion* distortion_for_scale =
         (runtime.apply_distortion != 0) ? &distortion : nullptr;
     const lfLensCalibTCA* tca_for_scale = (runtime.apply_tca != 0) ? &tca : nullptr;
-    runtime.resolved_scale = ResolveScaleFromModifier(
-        lens, meta.focal_length_mm_, crop_factor, 4096, 4096, distortion_for_scale,
-        tca_for_scale, runtime.apply_projection != 0,
-        LensTypeToLensfun(target_projection));
+    runtime.resolved_scale              = ResolveScaleFromModifier(
+        lens, meta.focal_length_mm_, crop_factor, 4096, 4096, distortion_for_scale, tca_for_scale,
+        runtime.apply_projection != 0, LensTypeToLensfun(target_projection));
   }
   if (!IsFinitePositive(runtime.resolved_scale)) {
     runtime.resolved_scale = 1.0f;
@@ -932,21 +946,20 @@ void LensCalibOp::ResolveRuntime(OperatorParams& params) const {
 
   if (runtime.apply_vignetting == 0 && runtime.apply_distortion == 0 && runtime.apply_tca == 0 &&
       runtime.apply_projection == 0 && runtime.apply_crop == 0) {
-    params.lens_calib_runtime_valid_   = false;
-    params.lens_calib_runtime_failed_  = false;
-    params.lens_calib_runtime_dirty_   = false;
-    has_resolved_params_               = false;
-    params.lens_calib_runtime_params_  = runtime;
+    params.lens_calib_runtime_valid_  = false;
+    params.lens_calib_runtime_failed_ = false;
+    params.lens_calib_runtime_dirty_  = false;
+    has_resolved_params_              = false;
+    params.lens_calib_runtime_params_ = runtime;
     return;
   }
 
-  params.lens_calib_runtime_valid_   = true;
-  params.lens_calib_runtime_failed_  = false;
-  params.lens_calib_runtime_dirty_   = false;
-  params.lens_calib_runtime_params_  = runtime;
-  resolved_params_                   = runtime;
-  has_resolved_params_               = true;
-
+  params.lens_calib_runtime_valid_  = true;
+  params.lens_calib_runtime_failed_ = false;
+  params.lens_calib_runtime_dirty_  = false;
+  params.lens_calib_runtime_params_ = runtime;
+  resolved_params_                  = runtime;
+  has_resolved_params_              = true;
 }
 
 void LensCalibOp::SetGlobalParams(OperatorParams& params) const {
