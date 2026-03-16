@@ -42,10 +42,6 @@ static inline float metal_evaluate_curve_hermite(float x, constant MetalFusedPar
     return x;
   }
   if (curve_count == 1) {
-    return clamp(params.curve_ctrl_pts_y_[0], 0.0f, 1.0f);
-  }
-
-  if (x <= params.curve_ctrl_pts_x_[0]) {
     return params.curve_ctrl_pts_y_[0];
   }
   if (x >= params.curve_ctrl_pts_x_[curve_count - 1]) {
@@ -62,7 +58,7 @@ static inline float metal_evaluate_curve_hermite(float x, constant MetalFusedPar
 
   const float dx = params.curve_h_[idx];
   if (fabs(dx) <= 1e-8f) {
-    return clamp(params.curve_ctrl_pts_y_[idx], 0.0f, 1.0f);
+    return params.curve_ctrl_pts_y_[idx];
   }
 
   const float t   = (x - params.curve_ctrl_pts_x_[idx]) / dx;
@@ -72,7 +68,7 @@ static inline float metal_evaluate_curve_hermite(float x, constant MetalFusedPar
   const float h11 = t * t * t - t * t;
   const float y   = h00 * params.curve_ctrl_pts_y_[idx] + h10 * dx * params.curve_m_[idx] +
                   h01 * params.curve_ctrl_pts_y_[idx + 1] + h11 * dx * params.curve_m_[idx + 1];
-  return clamp(y, 0.0f, 1.0f);
+  return y;
 }
 
 static inline float4 GPU_ExposureOpKernel(float4 px, constant MetalFusedParams& params) {

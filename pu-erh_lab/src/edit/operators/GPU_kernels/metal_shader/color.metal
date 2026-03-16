@@ -104,9 +104,9 @@ static inline float4 GPU_ColorWheelOpKernel(float4 px, constant MetalFusedParams
   const float base_g   = fmax(px.y * slope_g + offset_g, 0.0f);
   const float base_b   = fmax(px.z * slope_b + offset_b, 0.0f);
 
-  px.x                 = clamp(pow(base_r, power_r), 0.0f, 1.0f);
-  px.y                 = clamp(pow(base_g, power_g), 0.0f, 1.0f);
-  px.z                 = clamp(pow(base_b, power_b), 0.0f, 1.0f);
+  px.x                 = pow(base_r, power_r);
+  px.y                 = pow(base_g, power_g);
+  px.z                 = pow(base_b, power_b);
   return px;
 }
 
@@ -201,6 +201,5 @@ static inline float4 GPU_HLSOpKernel(float4 px, constant MetalFusedParams& param
     px.z = metal_hue2rgb(p, q, h_adjusted / 360.0f - 1.0f / 3.0f);
   }
 
-  px.xyz = clamp(px.xyz, float3(0.0f), float3(1.0f));
   return px;
 }

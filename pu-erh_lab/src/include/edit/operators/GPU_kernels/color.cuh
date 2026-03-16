@@ -122,9 +122,9 @@ struct GPU_HLSOpKernel : GPUPointOpTag {
       p->z = hue2rgb(_p, q, h_adjusted / 360.0f - 1.0f / 3.0f);
     }
 
-    p->x = fminf(fmaxf(p->x, 0.0f), 1.0f);
-    p->y = fminf(fmaxf(p->y, 0.0f), 1.0f);
-    p->z = fminf(fmaxf(p->z, 0.0f), 1.0f);
+    // p->x = fminf(fmaxf(p->x, 0.0f), 1.0f);
+    // p->y = fminf(fmaxf(p->y, 0.0f), 1.0f);
+    // p->z = fminf(fmaxf(p->z, 0.0f), 1.0f);
   }
 };
 
@@ -204,9 +204,12 @@ struct GPU_ColorWheelOpKernel : GPUPointOpTag {
     const float base_g = fmaxf(p->y * slope_g + offset_g, 0.0f);
     const float base_b = fmaxf(p->z * slope_b + offset_b, 0.0f);
 
-    p->x               = fminf(fmaxf(powf(base_r, power_r), 0.0f), 1.0f);
-    p->y               = fminf(fmaxf(powf(base_g, power_g), 0.0f), 1.0f);
-    p->z               = fminf(fmaxf(powf(base_b, power_b), 0.0f), 1.0f);
+    // p->x               = fminf(fmaxf(powf(base_r, power_r), 0.0f), 1.0f);
+    // p->y               = fminf(fmaxf(powf(base_g, power_g), 0.0f), 1.0f);
+    // p->z               = fminf(fmaxf(powf(base_b, power_b), 0.0f), 1.0f);
+    p->x               = powf(base_r, power_r);
+    p->y               = powf(base_g, power_g);
+    p->z               = powf(base_b, power_b);
   }
 };
 };  // namespace CUDA

@@ -148,7 +148,7 @@ GPU_FUNC float evaluate_curve_hermite(float x, const GPUOperatorParams& params) 
   const int curve_count = params.curve_ctrl_pts_size_;
   if (curve_count <= 0) return x;
   if (curve_count == 1) {
-    return fminf(fmaxf(params.curve_ctrl_pts_y_[0], 0.0f), 1.0f);
+    return params.curve_ctrl_pts_y_[0];
   }
 
   if (x <= params.curve_ctrl_pts_x_[0]) return params.curve_ctrl_pts_y_[0];
@@ -164,7 +164,7 @@ GPU_FUNC float evaluate_curve_hermite(float x, const GPUOperatorParams& params) 
 
   const float dx = params.curve_h_[idx];
   if (fabsf(dx) <= 1e-8f) {
-    return fminf(fmaxf(params.curve_ctrl_pts_y_[idx], 0.0f), 1.0f);
+    return params.curve_ctrl_pts_y_[idx];
   }
 
   const float t   = (x - params.curve_ctrl_pts_x_[idx]) / dx;
@@ -177,7 +177,7 @@ GPU_FUNC float evaluate_curve_hermite(float x, const GPUOperatorParams& params) 
 
   const float y = h00 * params.curve_ctrl_pts_y_[idx] + h10 * dx * params.curve_m_[idx] +
                   h01 * params.curve_ctrl_pts_y_[idx + 1] + h11 * dx * params.curve_m_[idx + 1];
-  return fminf(fmaxf(y, 0.0f), 1.0f);
+  return y;
 }
 
 struct GPU_CurveOpKernel : GPUPointOpTag {
