@@ -9,10 +9,6 @@
 
 #include <algorithm>
 #include <stdexcept>
-#include <unordered_set>
-
-#include "sleeve/sleeve_element/sleeve_folder.hpp"
-#include "sleeve/sleeve_filesystem.hpp"
 
 namespace puerhlab::ui {
 
@@ -42,13 +38,11 @@ void FolderController::RebuildFolderView() {
     const QString name = folder.folder_id_ == 0
                              ? PL_TEXT("Root").Render()
                              : album_util::WStringToQString(folder.folder_name_);
-    next.push_back(QVariantMap{
-        {"folderId", static_cast<uint>(folder.folder_id_)},
-        {"name", name},
-        {"depth", folder.depth_},
-        {"path", album_util::FolderPathToDisplay(folder.folder_path_)},
-        {"deletable", folder.folder_id_ != 0},
-    });
+    next.push_back(QVariantMap{{"folderId", static_cast<uint>(folder.folder_id_)},
+                               {"name", name},
+                               {"depth", folder.depth_},
+                               {"path", album_util::FolderPathToDisplay(folder.folder_path_)},
+                               {"deletable", folder.folder_id_ != 0}});
   }
 
   folders_ = std::move(next);
@@ -68,10 +62,9 @@ void FolderController::ApplyFolderSelection(sl_element_id_t folderId, bool emitS
   current_folder_id_    = next_folder_id;
   const auto path_it    = folder_path_by_id_.find(current_folder_id_);
   const QString next_path_ui =
-      path_it != folder_path_by_id_.end()
-          ? album_util::FolderPathToDisplay(path_it->second)
-          : album_util::RootPathText();
-  const bool path_changed     = current_folder_path_text_ != next_path_ui;
+      path_it != folder_path_by_id_.end() ? album_util::FolderPathToDisplay(path_it->second)
+                                          : album_util::RootPathText();
+  const bool path_changed = current_folder_path_text_ != next_path_ui;
   current_folder_path_text_ = next_path_ui;
 
   if (emitSignal || id_changed || path_changed) {
@@ -96,8 +89,7 @@ void FolderController::SelectFolder(uint folderId) {
 
   ApplyFolderSelection(static_cast<sl_element_id_t>(folderId), true);
   backend_.stats_.ClearFilters();
-  backend_.stats_.RebuildThumbnailView();
-  backend_.stats_.RefreshStats();
+  backend_.ReloadCurrentFolder();
   emit backend_.StatsFilterChanged();
 }
 
@@ -131,45 +123,40 @@ void FolderController::CreateFolder(const QString& folderName) {
     return;
   }
 
-  const auto parent_path = album_util::RootFsPath();
+  auto browse = ph.project()->GetAlbumBrowseService();
+  if (!browse) {
+    backend_.SetTaskState(PL_TEXT("Folder service is unavailable."), 0, false);
+    return;
+  }
+
+  const auto created = browse->CreateFolder(current_folder_id_, trimmed.toStdWString());
+  if (!created.has_value()) {
+    backend_.SetTaskState(PL_TEXT("Failed to create folder."), 0, false);
+    return;
+  }
+
+  bool save_ok = true;
   try {
-    const auto create_result =
-        ph.project()->GetSleeveService()->Write<std::shared_ptr<SleeveElement>>(
-            [parent_path, trimmed](FileSystem& fs) {
-              return fs.Create(parent_path, trimmed.toStdWString(), ElementType::FOLDER);
-            });
-    const auto created = create_result.first;
-    if (!create_result.second.success_ || !created || created->type_ != ElementType::FOLDER) {
-      throw std::runtime_error("Failed to create folder.");
-    }
-
-    ExistingFolderEntry folder_entry;
-    folder_entry.folder_id_   = created->element_id_;
-    folder_entry.parent_id_   = 0;
-    folder_entry.folder_name_ = created->element_name_;
-    folder_entry.folder_path_ = parent_path / created->element_name_;
-    folder_entry.depth_       = 1;
-
-    folder_entries_.push_back(folder_entry);
-    folder_parent_by_id_[folder_entry.folder_id_] = folder_entry.parent_id_;
-    folder_path_by_id_[folder_entry.folder_id_]   = folder_entry.folder_path_;
-    RebuildFolderView();
-
     if (!ph.meta_path().empty()) {
       ph.project()->SaveProject(ph.meta_path());
     }
-
-    backend_.SetServiceMessageForCurrentProject(
-        PL_TEXT("Created folder %1", album_util::WStringToQString(folder_entry.folder_name_)));
-    backend_.SetTaskState(
-        PL_TEXT("Created folder %1", album_util::WStringToQString(folder_entry.folder_name_)),
-        100, false);
-    backend_.ScheduleIdleTaskStateReset(1200);
-  } catch (const std::exception& e) {
-    const QString err = QString::fromUtf8(e.what());
-    backend_.SetServiceMessageForCurrentProject(PL_TEXT("Failed to create folder: %1", err));
-    backend_.SetTaskState(PL_TEXT("Failed to create folder: %1", err), 0, false);
+    QString ignored_error;
+    if (!ph.PackageCurrentProjectFiles(&ignored_error)) {
+      save_ok = false;
+    }
+  } catch (...) {
+    save_ok = false;
   }
+
+  backend_.ReloadFolderTree();
+
+  auto msg = PL_TEXT("Created folder %1", album_util::WStringToQString(created->folder_name_));
+  if (!save_ok) {
+    msg = PL_TEXT("%1 Project state save failed.", msg.Render());
+  }
+  backend_.SetServiceMessageForCurrentProject(msg);
+  backend_.SetTaskState(msg, 100, false);
+  backend_.ScheduleIdleTaskStateReset(1200);
 }
 
 void FolderController::DeleteFolder(uint folderId) {
@@ -198,98 +185,48 @@ void FolderController::DeleteFolder(uint folderId) {
     return;
   }
 
-  const auto path_it = folder_path_by_id_.find(folder_id);
-  if (path_it == folder_path_by_id_.end()) {
-    backend_.SetTaskState(PL_TEXT("Folder no longer exists."), 0, false);
-    return;
-  }
   const auto parent_it_before = folder_parent_by_id_.find(folder_id);
   const sl_element_id_t fallback_folder =
       parent_it_before != folder_parent_by_id_.end() ? parent_it_before->second
                                                      : static_cast<sl_element_id_t>(0);
 
-  std::unordered_set<sl_element_id_t> deleted_folder_ids;
-  deleted_folder_ids.insert(folder_id);
-  bool expanded = true;
-  while (expanded) {
-    expanded = false;
-    for (const auto& [candidate_id, parent_id] : folder_parent_by_id_) {
-      if (!deleted_folder_ids.contains(parent_id) || deleted_folder_ids.contains(candidate_id)) {
-        continue;
-      }
-      deleted_folder_ids.insert(candidate_id);
-      expanded = true;
-    }
-  }
-
-  try {
-    const auto remove_result = ph.project()->GetSleeveService()->Write<void>(
-        [target_path = path_it->second](FileSystem& fs) { fs.Delete(target_path); });
-    if (!remove_result.success_) {
-      throw std::runtime_error(remove_result.message_);
-    }
-
-    if (!ph.meta_path().empty()) {
-      ph.project()->SaveProject(ph.meta_path());
-    }
-  } catch (const std::exception& e) {
-    const QString err = QString::fromUtf8(e.what());
-    backend_.SetServiceMessageForCurrentProject(PL_TEXT("Failed to delete folder: %1", err));
-    backend_.SetTaskState(PL_TEXT("Failed to delete folder: %1", err), 0, false);
+  auto browse = ph.project()->GetAlbumBrowseService();
+  if (!browse || !browse->DeleteFolder(folder_id)) {
+    backend_.SetTaskState(PL_TEXT("Failed to delete folder."), 0, false);
     return;
   }
 
-  auto thumb_svc = ph.thumbnail_service();
-  if (thumb_svc) {
-    for (const auto& image : backend_.all_images_) {
-      if (!deleted_folder_ids.contains(image.parent_folder_id)) {
-        continue;
-      }
-      try {
-        thumb_svc->InvalidateThumbnail(image.element_id);
-        thumb_svc->ReleaseThumbnail(image.element_id);
-      } catch (...) {
-      }
+  bool save_ok = true;
+  try {
+    if (!ph.meta_path().empty()) {
+      ph.project()->SaveProject(ph.meta_path());
     }
+    QString ignored_error;
+    if (!ph.PackageCurrentProjectFiles(&ignored_error)) {
+      save_ok = false;
+    }
+  } catch (...) {
+    save_ok = false;
   }
 
-  const auto snapshot = ph.CollectProjectSnapshot();
-
-  backend_.thumb_.ReleaseVisibleThumbnailPins();
-  backend_.all_images_.clear();
-  backend_.index_by_element_id_.clear();
-  backend_.visible_thumbnails_.clear();
-  emit backend_.ThumbnailsChanged();
-  emit backend_.thumbnailsChanged();
-
-  SetFolderState(snapshot.folder_entries_, snapshot.folder_parent_by_id_,
-                 snapshot.folder_path_by_id_);
-  RebuildFolderView();
-
-  for (const auto& entry : snapshot.album_entries_) {
-    backend_.AddOrUpdateAlbumItem(entry.element_id_, entry.image_id_, entry.file_name_,
-                                  entry.parent_folder_id_);
-  }
-
-  if (folder_path_by_id_.contains(current_folder_id_)) {
-    ApplyFolderSelection(current_folder_id_, true);
-  } else {
-    ApplyFolderSelection(fallback_folder, true);
-  }
-
+  backend_.ReloadFolderTree();
+  backend_.folder_ctrl_.ApplyFolderSelection(fallback_folder, true);
   backend_.stats_.ClearFilters();
-  backend_.stats_.RebuildThumbnailView();
-  backend_.stats_.RefreshStats();
+  backend_.ReloadCurrentFolder();
   emit backend_.StatsFilterChanged();
 
-  backend_.SetServiceMessageForCurrentProject(PL_TEXT("Folder deleted."));
-  backend_.SetTaskState(PL_TEXT("Folder deleted."), 100, false);
+  auto msg = PL_TEXT("Folder deleted.");
+  if (!save_ok) {
+    msg = PL_TEXT("%1 Project state save failed.", msg.Render());
+  }
+  backend_.SetServiceMessageForCurrentProject(msg);
+  backend_.SetTaskState(msg, 100, false);
   backend_.ScheduleIdleTaskStateReset(1200);
 }
 
 void FolderController::SetFolderState(
-    std::vector<ExistingFolderEntry>                          entries,
-    std::unordered_map<sl_element_id_t, sl_element_id_t>     parents,
+    std::vector<ExistingFolderEntry> entries,
+    std::unordered_map<sl_element_id_t, sl_element_id_t> parents,
     std::unordered_map<sl_element_id_t, std::filesystem::path> paths) {
   folder_entries_      = std::move(entries);
   folder_parent_by_id_ = std::move(parents);

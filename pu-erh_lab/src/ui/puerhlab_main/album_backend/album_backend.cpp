@@ -4,8 +4,8 @@
 
 #include "ui/puerhlab_main/album_backend/album_backend.hpp"
 
+#include "app/project_package_service.hpp"
 #include "ui/puerhlab_main/album_backend/path_utils.hpp"
-#include "ui/puerhlab_main/album_backend/packed_project.hpp"
 
 #include <QDir>
 #include <QFileDialog>
@@ -19,14 +19,10 @@
 #include <algorithm>
 
 #include "image/image.hpp"
-#include "sleeve/sleeve_element/sleeve_file.hpp"
-#include "sleeve/sleeve_element/sleeve_folder.hpp"
-#include "sleeve/sleeve_filesystem.hpp"
 
 namespace puerhlab::ui {
 
 using namespace album_util;
-using namespace packed_proj;
 
 #define PL_TEXT(text, ...)                                                    \
   i18n::MakeLocalizedText(PUERHLAB_I18N_CONTEXT,                              \
@@ -81,7 +77,7 @@ auto AlbumBackend::FilterInfo() const -> QString {
 
 int AlbumBackend::TotalCount() const {
   int count = 0;
-  for (const auto& image : all_images_) {
+  for (const auto& image : view_state_.all_images_) {
     if (stats_.IsImageInCurrentFolder(image)) {
       ++count;
     }
@@ -96,8 +92,7 @@ void AlbumBackend::SelectFolder(uint folderId) {
 
   stats_.ClearFilters();
   folder_ctrl_.ApplyFolderSelection(static_cast<sl_element_id_t>(folderId), true);
-  stats_.RebuildThumbnailView();
-  stats_.RefreshStats();
+  ReloadCurrentFolder();
   emit StatsFilterChanged();
 }
 
@@ -237,11 +232,14 @@ bool AlbumBackend::LoadProject(const QString& metaFileUrlOrPath) {
     return false;
   }
 
-  if (IsPackedProjectPath(project_path) || IsPackedProjectFile(project_path)) {
+  ProjectPackageService package_service;
+
+  if (package_service.IsPackedProjectPath(project_path) ||
+      package_service.IsPackedProjectFile(project_path)) {
     const QString project_name = QFileInfo(PathToQString(project_path)).completeBaseName();
     std::filesystem::path workspace_dir;
     QString               workspace_error;
-    if (!CreateProjectWorkspace(project_name, &workspace_dir, &workspace_error)) {
+    if (!package_service.CreateProjectWorkspace(project_name, &workspace_dir, &workspace_error)) {
       SetServiceMessageForCurrentProject(
           workspace_error.isEmpty()
               ? PL_TEXT("Failed to prepare project temp workspace.")
@@ -252,8 +250,9 @@ bool AlbumBackend::LoadProject(const QString& metaFileUrlOrPath) {
     std::filesystem::path unpacked_db_path;
     std::filesystem::path unpacked_meta_path;
     QString               unpack_error;
-    if (!UnpackProjectToWorkspace(project_path, workspace_dir, project_name, &unpacked_db_path,
-                                  &unpacked_meta_path, &unpack_error)) {
+    if (!package_service.UnpackProjectToWorkspace(project_path, workspace_dir, project_name,
+                                                  &unpacked_db_path, &unpacked_meta_path,
+                                                  &unpack_error)) {
       CleanupWorkspaceDirectory(workspace_dir);
       SetServiceMessageForCurrentProject(
           unpack_error.isEmpty() ? PL_TEXT("Failed to unpack project package.")
@@ -266,7 +265,7 @@ bool AlbumBackend::LoadProject(const QString& metaFileUrlOrPath) {
                                                project_path, workspace_dir);
   }
 
-  if (!IsMetadataJsonPath(project_path)) {
+  if (!package_service.IsMetadataJsonPath(project_path)) {
     SetServiceMessageForCurrentProject(
         PL_TEXT("Unsupported project format. Choose a .json or .puerhproj file."));
     return false;
@@ -276,7 +275,8 @@ bool AlbumBackend::LoadProject(const QString& metaFileUrlOrPath) {
       project_path.parent_path() / (project_path.stem().wstring() + L".db");
   return project_handler_.InitializeServices(db_hint_path, project_path,
                                              ProjectOpenMode::kLoadExisting,
-                                             BuildBundlePathFromMetaPath(project_path), {});
+                                             package_service.BuildBundlePathFromMetaPath(project_path),
+                                             {});
 }
 
 bool AlbumBackend::CreateProjectInFolder(const QString& folderUrlOrPath) {
@@ -296,9 +296,12 @@ bool AlbumBackend::CreateProjectInFolderNamed(const QString& folderUrlOrPath,
     return false;
   }
 
+  ProjectPackageService package_service;
+
   QString build_error;
   const auto packed_path_opt =
-      BuildUniquePackedProjectPath(folder_path_opt.value(), projectName, &build_error);
+      package_service.BuildUniquePackedProjectPath(folder_path_opt.value(), projectName,
+                                                   &build_error);
   if (!packed_path_opt.has_value()) {
     SetServiceMessageForCurrentProject(
         build_error.isEmpty() ? PL_TEXT("Failed to prepare project package path in selected folder.")
@@ -308,14 +311,14 @@ bool AlbumBackend::CreateProjectInFolderNamed(const QString& folderUrlOrPath,
 
   std::filesystem::path workspace_dir;
   QString               workspace_error;
-  if (!CreateProjectWorkspace(projectName, &workspace_dir, &workspace_error)) {
+  if (!package_service.CreateProjectWorkspace(projectName, &workspace_dir, &workspace_error)) {
     SetServiceMessageForCurrentProject(
         workspace_error.isEmpty() ? PL_TEXT("Failed to prepare project temp workspace.")
                                   : PL_TEXT("%1", workspace_error));
     return false;
   }
 
-  const auto runtime_pair = BuildRuntimeProjectPair(workspace_dir, projectName);
+  const auto runtime_pair = package_service.BuildRuntimeProjectPair(workspace_dir, projectName);
   const bool started =
       project_handler_.InitializeServices(runtime_pair.first, runtime_pair.second,
                                           ProjectOpenMode::kCreateNew,
@@ -404,7 +407,7 @@ void AlbumBackend::RefreshTranslations() {
   if (!folder_ctrl_.folder_entries().empty()) {
     folder_ctrl_.RebuildFolderView();
   }
-  if (!all_images_.empty()) {
+  if (!view_state_.all_images_.empty()) {
     stats_.RebuildThumbnailView();
   }
   stats_.RefreshStats();
@@ -418,24 +421,86 @@ void AlbumBackend::RefreshTranslations() {
   emit EditorStateChanged();
 }
 
+void AlbumBackend::ReloadFolderTree() {
+  auto proj = project_handler_.project();
+  if (!proj) {
+    folder_ctrl_.ClearState();
+    emit FoldersChanged();
+    emit FolderSelectionChanged();
+    emit folderSelectionChanged();
+    return;
+  }
+
+  auto browse = proj->GetAlbumBrowseService();
+  if (!browse) {
+    return;
+  }
+
+  const auto snapshot = browse->ListFolders();
+  std::vector<ExistingFolderEntry> folders;
+  folders.reserve(snapshot.folders_.size());
+  for (const auto& folder : snapshot.folders_) {
+    folders.push_back(
+        {folder.folder_id_, folder.parent_id_, folder.folder_name_, folder.folder_path_,
+         folder.depth_});
+  }
+
+  folder_ctrl_.SetFolderState(std::move(folders), snapshot.parent_by_id_, snapshot.path_by_id_);
+  folder_ctrl_.RebuildFolderView();
+  folder_ctrl_.ApplyFolderSelection(folder_ctrl_.current_folder_id(), true);
+}
+
+void AlbumBackend::ReloadCurrentFolder() {
+  thumb_.ReleaseVisibleThumbnailPins();
+
+  view_state_.all_images_.clear();
+  view_state_.index_by_element_id_.clear();
+  view_state_.visible_thumbnails_.clear();
+  emit ThumbnailsChanged();
+  emit thumbnailsChanged();
+  emit CountsChanged();
+
+  auto proj = project_handler_.project();
+  if (!proj) {
+    stats_.RebuildThumbnailView();
+    stats_.RefreshStats();
+    return;
+  }
+
+  auto browse = proj->GetAlbumBrowseService();
+  if (!browse) {
+    stats_.RebuildThumbnailView();
+    stats_.RefreshStats();
+    return;
+  }
+
+  const auto files = browse->ListFilesInFolder(folder_ctrl_.current_folder_id());
+  for (const auto& file : files) {
+    AddOrUpdateAlbumItem(file.element_id_, file.image_id_, file.file_name_, file.parent_folder_id_);
+  }
+
+  stats_.RebuildThumbnailView();
+  stats_.RefreshStats();
+}
+
 void AlbumBackend::AddOrUpdateAlbumItem(sl_element_id_t elementId, image_id_t imageId,
                                         const file_name_t& fallbackName,
                                         sl_element_id_t parentFolderId) {
   AlbumItem* item = nullptr;
 
-  if (const auto it = index_by_element_id_.find(elementId); it != index_by_element_id_.end()) {
-    item = &all_images_[it->second];
+  if (const auto it = view_state_.index_by_element_id_.find(elementId); it != view_state_.index_by_element_id_.end()) {
+    item = &view_state_.all_images_[it->second];
   } else {
     AlbumItem next;
     next.element_id = elementId;
     next.image_id   = imageId;
     next.file_name  = WStringToQString(fallbackName);
     next.extension  = ExtensionFromFileName(next.file_name);
-    next.accent     = AccentForIndex(all_images_.size());
+    next.accent     = AccentForIndex(view_state_.all_images_.size());
 
-    all_images_.push_back(std::move(next));
-    index_by_element_id_[elementId] = all_images_.size() - 1;
-    item = &all_images_.back();
+    view_state_.all_images_.push_back(std::move(next));
+    view_state_.index_by_element_id_[elementId] = view_state_.all_images_.size() - 1;
+    item = &view_state_.all_images_.back();
   }
 
   if (!item) return;
@@ -446,41 +511,6 @@ void AlbumBackend::AddOrUpdateAlbumItem(sl_element_id_t elementId, image_id_t im
 
   auto proj = project_handler_.project();
   if (proj) {
-    try {
-      const auto infoOpt =
-          proj->GetSleeveService()->Read<std::optional<std::pair<QString, QDate>>>(
-              [elementId, parentFolderId, fallbackName](
-                  FileSystem& fs) -> std::optional<std::pair<QString, QDate>> {
-                std::shared_ptr<SleeveElement> element;
-                if (parentFolderId == 0) {
-                  const auto root_file_path = RootFsPath() / fallbackName;
-                  try {
-                    element = fs.Get(root_file_path, false);
-                  } catch (...) {
-                    element.reset();
-                  }
-                }
-                if (!element) {
-                  element = fs.Get(elementId);
-                }
-                if (!element || element->type_ != ElementType::FILE) {
-                  return std::nullopt;
-                }
-                return std::make_pair(WStringToQString(element->element_name_),
-                                      DateFromTimeT(element->added_time_));
-              });
-
-      if (infoOpt.has_value()) {
-        if (!infoOpt->first.isEmpty()) {
-          item->file_name = infoOpt->first;
-        }
-        if (infoOpt->second.isValid()) {
-          item->import_date = infoOpt->second;
-        }
-      }
-    } catch (...) {
-    }
-
     try {
       proj->GetImagePoolService()->Read<void>(
           imageId,

@@ -150,25 +150,25 @@ void ThumbnailManager::RequestThumbnail(sl_element_id_t elementId, image_id_t im
 }
 
 void ThumbnailManager::UpdateThumbnailDataUrl(sl_element_id_t elementId, const QString& dataUrl) {
-  const auto it = backend_.index_by_element_id_.find(elementId);
-  if (it == backend_.index_by_element_id_.end()) {
+  const auto it = backend_.view_state_.index_by_element_id_.find(elementId);
+  if (it == backend_.view_state_.index_by_element_id_.end()) {
     return;
   }
 
-  auto& item = backend_.all_images_[it->second];
+  auto& item = backend_.view_state_.all_images_[it->second];
   if (item.thumb_data_url == dataUrl) {
     return;
   }
 
   item.thumb_data_url = dataUrl;
 
-  for (qsizetype i = 0; i < backend_.visible_thumbnails_.size(); ++i) {
-    QVariantMap row = backend_.visible_thumbnails_.at(i).toMap();
+  for (qsizetype i = 0; i < backend_.view_state_.visible_thumbnails_.size(); ++i) {
+    QVariantMap row = backend_.view_state_.visible_thumbnails_.at(i).toMap();
     if (static_cast<sl_element_id_t>(row.value("elementId").toUInt()) != elementId) {
       continue;
     }
     row.insert("thumbUrl", dataUrl);
-    backend_.visible_thumbnails_[i] = row;
+    backend_.view_state_.visible_thumbnails_[i] = row;
     break;
   }
 
@@ -213,9 +213,9 @@ void ThumbnailManager::ReleaseVisibleThumbnailPins() {
   auto thumb_svc = backend_.project_handler_.thumbnail_service();
 
   for (const auto& [id, _] : thumbnail_pin_ref_counts_) {
-    const auto index_it = backend_.index_by_element_id_.find(id);
-    if (index_it != backend_.index_by_element_id_.end()) {
-      backend_.all_images_[index_it->second].thumb_data_url.clear();
+    const auto index_it = backend_.view_state_.index_by_element_id_.find(id);
+    if (index_it != backend_.view_state_.index_by_element_id_.end()) {
+      backend_.view_state_.all_images_[index_it->second].thumb_data_url.clear();
     }
     if (thumb_svc) {
       try {

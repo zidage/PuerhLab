@@ -6,12 +6,11 @@
 
 #include <QDate>
 #include <QString>
+#include <QVariantList>
 
 #include <filesystem>
-#include <optional>
 #include <string>
 #include <unordered_map>
-#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -54,14 +53,6 @@ struct EditorState {
   std::string lut_path_{};
 };
 
-/// Sleeve element entry used when loading / snapshotting a project.
-struct ExistingAlbumEntry {
-  sl_element_id_t element_id_       = 0;
-  sl_element_id_t parent_folder_id_ = 0;
-  image_id_t      image_id_         = 0;
-  file_name_t     file_name_{};
-};
-
 /// Folder entry in the sleeve tree.
 struct ExistingFolderEntry {
   sl_element_id_t       folder_id_   = 0;
@@ -71,12 +62,11 @@ struct ExistingFolderEntry {
   int                   depth_       = 0;
 };
 
-/// Full flat snapshot of the sleeve tree at a point in time.
-struct ProjectSnapshot {
-  std::vector<ExistingAlbumEntry>                          album_entries_{};
-  std::vector<ExistingFolderEntry>                         folder_entries_{};
-  std::unordered_map<sl_element_id_t, sl_element_id_t>     folder_parent_by_id_{};
-  std::unordered_map<sl_element_id_t, std::filesystem::path> folder_path_by_id_{};
+/// UI-only display cache state. No filesystem or DB ownership.
+struct AlbumViewState {
+  std::vector<AlbumItem>                      all_images_{};
+  std::unordered_map<sl_element_id_t, size_t> index_by_element_id_{};
+  QVariantList                                visible_thumbnails_{};
 };
 
 /// Key for (element, image) pairs used in export.

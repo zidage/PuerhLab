@@ -638,6 +638,10 @@ def_library(FSService
     PUBLIC_DEPS SleeveFS EditHistory
 )
 
+def_library(AlbumBrowseService
+    SOURCES app/album_browse_service.cpp
+    PUBLIC_DEPS FSService SleeveElement
+)
 
 
 def_library(ImagePoolService
@@ -647,7 +651,8 @@ def_library(ImagePoolService
 
 def_library(ProjectService
     SOURCES app/project_service.cpp
-    PUBLIC_DEPS FSService StorageService ImagePoolService StrConv JSON
+    PUBLIC_DEPS FSService StorageService ImagePoolService AlbumBrowseService
+                StrConv JSON
 )
 
 def_library(PipelineMgmtService
@@ -768,8 +773,9 @@ endif()
 add_library(AlbumBackendLib STATIC
     ui/puerhlab_main/album_backend/album_backend.cpp
     ui/puerhlab_main/album_backend/path_utils.cpp
-    ui/puerhlab_main/album_backend/packed_project.cpp
+    app/project_package_backend.cpp
     ui/puerhlab_main/album_backend/project_handler.cpp
+    app/project_package_service.cpp
     ui/puerhlab_main/album_backend/thumbnail_manager.cpp
     ui/puerhlab_main/album_backend/folder_controller.cpp
     ui/puerhlab_main/album_backend/image_controller.cpp
@@ -779,7 +785,6 @@ add_library(AlbumBackendLib STATIC
     include/ui/puerhlab_main/album_backend/album_backend.hpp
     include/ui/puerhlab_main/album_backend/album_types.hpp
     include/ui/puerhlab_main/album_backend/path_utils.hpp
-    include/ui/puerhlab_main/album_backend/packed_project.hpp
     include/ui/puerhlab_main/album_backend/project_handler.hpp
     include/ui/puerhlab_main/album_backend/thumbnail_manager.hpp
     include/ui/puerhlab_main/album_backend/folder_controller.hpp
@@ -974,8 +979,12 @@ qt_add_qml_module(puerhlab_main
 )
 set_target_properties(puerhlab_main PROPERTIES
     QT_QMLCACHEGEN_ARGUMENTS "--only-bytecode"
-    MACOSX_BUNDLE TRUE
 )
+if(APPLE)
+    set_target_properties(puerhlab_main PROPERTIES
+        MACOSX_BUNDLE ${PUERHLAB_MACOS_BUNDLE}
+    )
+endif()
 
 set(PUERHLAB_TRANSLATION_TS_FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/ui/puerhlab_main/i18n/puerhlab_main_en.ts

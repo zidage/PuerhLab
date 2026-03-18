@@ -8,11 +8,9 @@
 
 #include <filesystem>
 #include <memory>
-#include <unordered_map>
 #include <vector>
 
 #include "ui/puerhlab_main/i18n.hpp"
-#include "ui/puerhlab_main/album_backend/album_types.hpp"
 #include "app/export_service.hpp"
 #include "app/history_mgmt_service.hpp"
 #include "app/import_service.hpp"
@@ -36,8 +34,6 @@ class ProjectHandler {
                           const std::filesystem::path& workspaceDir = {});
   bool PersistCurrentProjectState();
   bool PackageCurrentProjectFiles(QString* errorOut = nullptr) const;
-  auto CollectProjectSnapshot() const -> ProjectSnapshot;
-  void ApplyLoadedProjectEntriesBatch();
   void SetProjectLoadingState(bool loading, const i18n::LocalizedText& message);
   void ClearProjectData();
 
@@ -83,12 +79,6 @@ class ProjectHandler {
   bool     project_loading_         = false;
   i18n::LocalizedText project_loading_message_text_{};
   uint64_t project_load_request_id_ = 0;
-
-  std::vector<ExistingAlbumEntry>                          pending_project_entries_{};
-  std::vector<ExistingFolderEntry>                         pending_folder_entries_{};
-  std::unordered_map<sl_element_id_t, sl_element_id_t>     pending_folder_parent_by_id_{};
-  std::unordered_map<sl_element_id_t, std::filesystem::path> pending_folder_path_by_id_{};
-  size_t pending_project_entry_index_ = 0;
 };
 
 }  // namespace puerhlab::ui

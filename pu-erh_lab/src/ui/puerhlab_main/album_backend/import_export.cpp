@@ -328,10 +328,8 @@ void ImportExportHandler::FinishImport(const ImportResult& result) {
     package_saved = backend_.project_handler_.PackageCurrentProjectFiles(&package_error);
   }
 
-  AddImportedEntries(snapshot);
+  backend_.ReloadCurrentFolder();
   backend_.stats_.ClearFilters();
-  backend_.stats_.RebuildThumbnailView();
-  backend_.stats_.RefreshStats();
   emit backend_.StatsFilterChanged();
 
   import_target_folder_id_   = backend_.folder_ctrl_.current_folder_id();
@@ -405,24 +403,14 @@ void ImportExportHandler::FinishExport(
 }
 
 void ImportExportHandler::AddImportedEntries(const ImportLogSnapshot& snapshot) {
-  std::unordered_set<image_id_t> metadataOk;
-  metadataOk.reserve(snapshot.metadata_ok_.size() * 2 + 1);
-  for (const auto id : snapshot.metadata_ok_) {
-    metadataOk.insert(id);
-  }
-
-  for (const auto& created : snapshot.created_) {
-    if (!metadataOk.empty() && !metadataOk.contains(created.image_id_)) {
-      continue;
-    }
-    backend_.AddOrUpdateAlbumItem(created.element_id_, created.image_id_,
-                                  created.file_name_, import_target_folder_id_);
-  }
+  (void)snapshot;
+  // Deprecated path: folder content is now reloaded through AlbumBrowseService.
 }
 
 auto ImportExportHandler::CollectExportTargets(const QVariantList& targetEntries) const
     -> std::vector<ExportTarget> {
-  const QVariantList& source = targetEntries.empty() ? backend_.visible_thumbnails_ : targetEntries;
+  const QVariantList& source =
+      targetEntries.empty() ? backend_.view_state_.visible_thumbnails_ : targetEntries;
   std::vector<ExportTarget> targets;
   targets.reserve(static_cast<size_t>(source.size()));
 
@@ -446,8 +434,8 @@ auto ImportExportHandler::BuildExportQueue(
     ExportFormatOptions::BIT_DEPTH bitDepth, int pngCompressionLevel,
     ExportFormatOptions::TIFF_COMPRESS tiffCompression) -> ExportQueueBuildResult {
   ExportQueueBuildResult summary;
-  auto  proj = backend_.project_handler_.project();
-  const auto& esvc = backend_.project_handler_.export_service();
+  auto                   proj = backend_.project_handler_.project();
+  const auto&            esvc = backend_.project_handler_.export_service();
   if (!proj || !esvc) {
     summary.first_error_ = PL_TEXT("Export service is unavailable.").Render();
     return summary;
@@ -458,18 +446,18 @@ auto ImportExportHandler::BuildExportQueue(
 
   for (const auto& [elementId, imageId] : targets) {
     try {
-      const auto source_info = proj->GetImagePoolService()->Read<std::pair<std::filesystem::path, std::wstring>>(
-          imageId,
-          [](const std::shared_ptr<Image>& image) {
-            if (!image) {
-              return std::pair<std::filesystem::path, std::wstring>{};
-            }
-            std::wstring image_name = image->image_name_;
-            if (image_name.empty() && !image->image_path_.empty()) {
-              image_name = image->image_path_.filename().wstring();
-            }
-            return std::make_pair(image->image_path_, std::move(image_name));
-          });
+      const auto source_info =
+          proj->GetImagePoolService()->Read<std::pair<std::filesystem::path, std::wstring>>(
+              imageId, [](const std::shared_ptr<Image>& image) {
+                if (!image) {
+                  return std::pair<std::filesystem::path, std::wstring>{};
+                }
+                std::wstring image_name = image->image_name_;
+                if (image_name.empty() && !image->image_path_.empty()) {
+                  image_name = image->image_path_.filename().wstring();
+                }
+                return std::make_pair(image->image_path_, std::move(image_name));
+              });
       const auto& srcPath = source_info.first;
       if (srcPath.empty()) {
         ++summary.skipped_count_;
@@ -543,11 +531,11 @@ auto ImportExportHandler::BuildExportQueue(
 void ImportExportHandler::ResetExportProgressState(const i18n::LocalizedText& status) {
   export_status_text_        = status;
   export_error_summary_text_ = {};
-  export_total_     = 0;
-  export_completed_ = 0;
-  export_succeeded_ = 0;
-  export_failed_    = 0;
-  export_skipped_   = 0;
+  export_total_              = 0;
+  export_completed_          = 0;
+  export_succeeded_          = 0;
+  export_failed_             = 0;
+  export_skipped_            = 0;
   emit backend_.ExportStateChanged();
   emit backend_.exportStateChanged();
 }

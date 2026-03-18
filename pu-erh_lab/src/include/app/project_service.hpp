@@ -7,12 +7,15 @@
 #include <filesystem>
 #include <memory>
 
+#include "app/album_browse_service.hpp"
 #include "app/sleeve_service.hpp"
+#include "app/sleeve_filter_service.hpp"
 #include "image_pool_service.hpp"
 #include "sleeve/storage_service.hpp"
 #include "type/type.hpp"
 
 namespace puerhlab {
+class ProjectPackageService;
 enum class ProjectOpenMode {
   kLoadOrCreate = 0,
   kLoadExisting,
@@ -34,6 +37,15 @@ class ProjectService {
   auto GetImagePoolService() const -> std::shared_ptr<ImagePoolService> {
     return pool_service_;
   }
+  auto GetSleeveFilterService() const -> std::shared_ptr<SleeveFilterService> {
+    return filter_service_;
+  }
+  auto GetAlbumBrowseService() const -> std::shared_ptr<AlbumBrowseService> {
+    return browse_service_;
+  }
+  auto GetProjectPackageService() const -> std::shared_ptr<ProjectPackageService> {
+    return package_service_;
+  }
 
   auto GetDBPath() const -> const std::filesystem::path& { return db_path_; }
   auto GetMetaPath() const -> const std::filesystem::path& { return meta_path_; }
@@ -46,6 +58,9 @@ class ProjectService {
   std::shared_ptr<StorageService>       storage_service_;
   std::shared_ptr<SleeveServiceImpl>    sleeve_service_;
   // TODO: Add ImagePoolService and store its start_id into the metadata
-  std::shared_ptr<ImagePoolService> pool_service_;
+  std::shared_ptr<ImagePoolService>      pool_service_;
+  std::shared_ptr<SleeveFilterService>   filter_service_;
+  std::shared_ptr<AlbumBrowseService>    browse_service_;
+  std::shared_ptr<ProjectPackageService> package_service_;
 };
 };  // namespace puerhlab

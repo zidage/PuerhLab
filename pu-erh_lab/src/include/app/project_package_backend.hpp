@@ -4,18 +4,22 @@
 
 #pragma once
 
-#include <QString>
-
 #include <array>
 #include <cstdint>
 #include <filesystem>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 
-#include "app/project_service.hpp"
+#include <duckdb.h>
 
-namespace puerhlab::ui::packed_proj {
+class QString;
+namespace puerhlab {
+class ProjectService;
+}
+
+namespace puerhlab::project_pack {
 
 constexpr std::wstring_view kPackedProjectExtension = L".puerhproj";
 constexpr std::array<char, 8> kPackedProjectMagic{
@@ -68,4 +72,4 @@ auto UnpackProjectToWorkspace(const std::filesystem::path& packedPath,
                               std::filesystem::path* metaPathOut,
                               QString* errorOut) -> bool;
 
-}  // namespace puerhlab::ui::packed_proj
+}  // namespace puerhlab::project_pack

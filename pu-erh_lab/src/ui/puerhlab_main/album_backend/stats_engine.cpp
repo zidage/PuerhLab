@@ -7,11 +7,6 @@
 #include "ui/puerhlab_main/album_backend/album_backend.hpp"
 #include "ui/puerhlab_main/album_backend/path_utils.hpp"
 
-#include <duckdb.h>
-
-#include <format>
-#include <string>
-
 namespace puerhlab::ui {
 
 #define PL_TEXT(text, ...)                                                    \
@@ -19,52 +14,19 @@ namespace puerhlab::ui {
                           QT_TRANSLATE_NOOP(PUERHLAB_I18N_CONTEXT, text)      \
                               __VA_OPT__(, ) __VA_ARGS__)
 
-// ── Helper: run a two-column (VARCHAR, BIGINT) GROUP BY query ───────────────
-
-static auto RunGroupByQuery(duckdb_connection conn,
-                            const std::string& sql) -> QVariantList {
+namespace {
+auto ToStatsRows(const std::vector<puerhlab::StatsBucket>& buckets) -> QVariantList {
   QVariantList rows;
-  duckdb_result result;
-  if (duckdb_query(conn, sql.c_str(), &result) != DuckDBSuccess) {
-    duckdb_destroy_result(&result);
-    return rows;
+  rows.reserve(static_cast<qsizetype>(buckets.size()));
+  for (const auto& bucket : buckets) {
+    const QString label = bucket.label_.empty()
+                              ? PL_TEXT("(unknown)").Render()
+                              : QString::fromUtf8(bucket.label_.c_str());
+    rows.push_back(QVariantMap{{"label", label}, {"count", bucket.count_}});
   }
-
-  const auto row_count = duckdb_row_count(&result);
-  for (idx_t r = 0; r < row_count; ++r) {
-    char* label_raw = duckdb_value_varchar(&result, 0, r);
-    const QString label =
-        (label_raw && label_raw[0] != '\0')
-            ? QString::fromUtf8(label_raw)
-            : PL_TEXT("(unknown)").Render();
-    if (label_raw) {
-      duckdb_free(label_raw);
-    }
-
-    const int64_t count = duckdb_value_int64(&result, 1, r);
-    rows.push_back(QVariantMap{{"label", label}, {"count", static_cast<int>(count)}});
-  }
-
-  duckdb_destroy_result(&result);
   return rows;
 }
-
-static auto RunScalarInt64(duckdb_connection conn,
-                           const std::string& sql) -> int64_t {
-  duckdb_result result;
-  if (duckdb_query(conn, sql.c_str(), &result) != DuckDBSuccess) {
-    duckdb_destroy_result(&result);
-    return 0;
-  }
-  int64_t value = 0;
-  if (duckdb_row_count(&result) > 0) {
-    value = duckdb_value_int64(&result, 0, 0);
-  }
-  duckdb_destroy_result(&result);
-  return value;
-}
-
-// ── StatsEngine ─────────────────────────────────────────────────────────────
+}  // namespace
 
 StatsEngine::StatsEngine(AlbumBackend& backend) : backend_(backend) {}
 
@@ -72,10 +34,10 @@ void StatsEngine::RebuildThumbnailView() {
   backend_.thumb_.ReleaseVisibleThumbnailPins();
 
   QVariantList next;
-  next.reserve(static_cast<qsizetype>(backend_.all_images_.size()));
+  next.reserve(static_cast<qsizetype>(backend_.view_state_.all_images_.size()));
 
   int index = 0;
-  for (const AlbumItem& image : backend_.all_images_) {
+  for (const AlbumItem& image : backend_.view_state_.all_images_) {
     if (!IsImageInCurrentFolder(image)) {
       continue;
     }
@@ -85,7 +47,7 @@ void StatsEngine::RebuildThumbnailView() {
     next.push_back(MakeThumbMap(image, index++));
   }
 
-  backend_.visible_thumbnails_ = std::move(next);
+  backend_.view_state_.visible_thumbnails_ = std::move(next);
   emit backend_.ThumbnailsChanged();
   emit backend_.thumbnailsChanged();
   emit backend_.CountsChanged();
@@ -102,55 +64,20 @@ void StatsEngine::RefreshStats() {
     return;
   }
 
+  auto filter_service = proj->GetSleeveFilterService();
+  if (!filter_service) {
+    emit backend_.StatsChanged();
+    return;
+  }
+
   try {
-    auto guard = proj->GetStorageService()->GetDBController().GetConnectionGuard();
-    const auto folder_id = backend_.folder_ctrl_.current_folder_id();
-
-    // ── Base JOIN clause ────────────────────────────────────────────────
-    // Mirrors the JOIN used by FilterCombo::GenerateIdSQLOn() so that
-    // we query the same set of rows that appear in the thumbnail grid.
-    const std::string base_join = std::format(
-        "FROM FolderContent fc "
-        "JOIN Element e ON fc.element_id = e.id "
-        "JOIN FileImage fi ON fi.file_id = e.id "
-        "JOIN Image i ON i.id = fi.image_id "
-        "WHERE fc.folder_id = {} AND e.type = 0",
-        folder_id);
-
-    // ── Total count ─────────────────────────────────────────────────────
-    total_photo_count_ = static_cast<int>(RunScalarInt64(
-        guard.conn_,
-        std::format("SELECT COUNT(*) {}", base_join)));
-
-    // ── By capture date (day) ───────────────────────────────────────────
-    date_stats_ = RunGroupByQuery(
-        guard.conn_,
-        std::format(
-            "SELECT CAST(json_extract(i.metadata, '$.DateTimeString') AS DATE)::VARCHAR AS d, "
-            "COUNT(*) AS c {} "
-            "GROUP BY d ORDER BY d DESC",
-            base_join));
-
-    // ── By camera model ─────────────────────────────────────────────────
-    camera_stats_ = RunGroupByQuery(
-        guard.conn_,
-        std::format(
-            "SELECT COALESCE(NULLIF(json_extract_string(i.metadata, '$.Model'), ''), '(unknown)') AS m, "
-            "COUNT(*) AS c {} "
-            "GROUP BY m ORDER BY c DESC",
-            base_join));
-
-    // ── By lens ─────────────────────────────────────────────────────────
-    lens_stats_ = RunGroupByQuery(
-        guard.conn_,
-        std::format(
-            "SELECT COALESCE(NULLIF(json_extract_string(i.metadata, '$.Lens'), ''), '(unknown)') AS l, "
-            "COUNT(*) AS c {} "
-            "GROUP BY l ORDER BY c DESC",
-            base_join));
-
+    const auto stats = filter_service->BuildFolderStats(backend_.folder_ctrl_.current_folder_id());
+    total_photo_count_ = stats.total_photo_count_;
+    date_stats_        = ToStatsRows(stats.date_stats_);
+    camera_stats_      = ToStatsRows(stats.camera_stats_);
+    lens_stats_        = ToStatsRows(stats.lens_stats_);
   } catch (...) {
-    // If DB access fails, keep whatever stats we had.
+    // Keep previous stats if service query failed.
   }
 
   emit backend_.StatsChanged();
@@ -171,32 +98,30 @@ auto StatsEngine::FormatPhotoInfo(int shown, int total) const -> QString {
 }
 
 auto StatsEngine::MakeThumbMap(const AlbumItem& image, int index) const -> QVariantMap {
-  const QString aperture =
-      image.aperture > 0.0 ? QString::number(image.aperture, 'f', 1) : "--";
-  const QString focal =
-      image.focal_length > 0.0 ? QString::number(image.focal_length, 'f', 0) : "--";
+  const QString aperture = image.aperture > 0.0 ? QString::number(image.aperture, 'f', 1) : "--";
+  const QString focal = image.focal_length > 0.0 ? QString::number(image.focal_length, 'f', 0) : "--";
 
-  return QVariantMap{
-      {"elementId", static_cast<uint>(image.element_id)},
-      {"imageId", static_cast<uint>(image.image_id)},
-      {"fileName", image.file_name.isEmpty() ? PL_TEXT("(unnamed)").Render() : image.file_name},
-      {"cameraModel", image.camera_model.isEmpty() ? PL_TEXT("Unknown").Render()
+  return QVariantMap{{"elementId", static_cast<uint>(image.element_id)},
+                     {"imageId", static_cast<uint>(image.image_id)},
+                     {"fileName", image.file_name.isEmpty() ? PL_TEXT("(unnamed)").Render()
+                                                             : image.file_name},
+                     {"cameraModel",
+                      image.camera_model.isEmpty() ? PL_TEXT("Unknown").Render()
                                                    : image.camera_model},
-      {"extension", image.extension.isEmpty() ? "--" : image.extension},
-      {"iso", image.iso},
-      {"aperture", aperture},
-      {"focalLength", focal},
-      {"captureDate",
-       image.capture_date.isValid() ? image.capture_date.toString("yyyy-MM-dd") : "--"},
-      {"rating", image.rating},
-      {"tags", image.tags},
-      {"accent", image.accent.isEmpty() ? album_util::AccentForIndex(static_cast<size_t>(index))
-                                        : image.accent},
-      {"thumbUrl", image.thumb_data_url},
-  };
+                     {"extension", image.extension.isEmpty() ? "--" : image.extension},
+                     {"iso", image.iso},
+                     {"aperture", aperture},
+                     {"focalLength", focal},
+                     {"captureDate",
+                      image.capture_date.isValid() ? image.capture_date.toString("yyyy-MM-dd")
+                                                   : "--"},
+                     {"rating", image.rating},
+                     {"tags", image.tags},
+                     {"accent", image.accent.isEmpty()
+                                    ? album_util::AccentForIndex(static_cast<size_t>(index))
+                                    : image.accent},
+                     {"thumbUrl", image.thumb_data_url}};
 }
-
-// ── Stats-bar filter implementation ─────────────────────────────────────────
 
 void StatsEngine::ToggleFilter(const QString& category, const QString& label) {
   if (category == u"date") {
@@ -221,11 +146,9 @@ bool StatsEngine::HasActiveFilter() const {
 bool StatsEngine::MatchesActiveFilters(const AlbumItem& image) const {
   if (!HasActiveFilter()) return true;
 
-  // Date filter
   if (!filter_date_.isEmpty()) {
     const QString imageDate =
         image.capture_date.isValid() ? image.capture_date.toString("yyyy-MM-dd") : QString{};
-    // "(unknown)" in the stats card maps to images with no valid capture date
     if (filter_date_ == PL_TEXT("(unknown)").Render()) {
       if (image.capture_date.isValid()) return false;
     } else {
@@ -233,7 +156,6 @@ bool StatsEngine::MatchesActiveFilters(const AlbumItem& image) const {
     }
   }
 
-  // Camera filter
   if (!filter_camera_.isEmpty()) {
     if (filter_camera_ == PL_TEXT("(unknown)").Render()) {
       if (!image.camera_model.isEmpty()) return false;
@@ -242,7 +164,6 @@ bool StatsEngine::MatchesActiveFilters(const AlbumItem& image) const {
     }
   }
 
-  // Lens filter
   if (!filter_lens_.isEmpty()) {
     if (filter_lens_ == PL_TEXT("(unknown)").Render()) {
       if (!image.lens.isEmpty()) return false;

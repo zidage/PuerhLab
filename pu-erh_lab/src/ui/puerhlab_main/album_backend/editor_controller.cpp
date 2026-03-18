@@ -69,9 +69,9 @@ void EditorController::OpenEditor(sl_element_id_t elementId, image_id_t imageId)
     editor_image_id_   = imageId;
 
     editor_title_text_ =
-        backend_.index_by_element_id_.contains(elementId)
+        backend_.view_state_.index_by_element_id_.contains(elementId)
             ? PL_TEXT("Editing %1",
-                      backend_.all_images_[backend_.index_by_element_id_.at(elementId)].file_name)
+                      backend_.view_state_.all_images_[backend_.view_state_.index_by_element_id_.at(elementId)].file_name)
             : PL_TEXT("Editing %1", PL_TEXT("image #%1", imageId).Render());
     editor_status_text_ = PL_TEXT("Opening editor...");
     editor_active_ = true;

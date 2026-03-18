@@ -6,6 +6,7 @@
 
 #include <memory>
 #include <optional>
+#include <string>
 #include <vector>
 
 #include "sleeve/sleeve_filter/filter_combo.hpp"
@@ -15,6 +16,18 @@
 #include "utils/id/id_generator.hpp"
 
 namespace puerhlab {
+struct StatsBucket {
+  std::string label_{};
+  int         count_ = 0;
+};
+
+struct AlbumStatsView {
+  int                      total_photo_count_ = 0;
+  std::vector<StatsBucket> date_stats_{};
+  std::vector<StatsBucket> camera_stats_{};
+  std::vector<StatsBucket> lens_stats_{};
+};
+
 // This service should not be used in multi-threaded scenarios.
 class SleeveFilterService {
  private:
@@ -41,5 +54,8 @@ class SleeveFilterService {
   void RemoveFilterCombo(filter_id_t filter_id);
   auto ApplyFilterOn(filter_id_t filter_id, sl_element_id_t parent_id)
       -> std::optional<std::vector<sl_element_id_t>>;
+  auto BuildFolderStats(sl_element_id_t parent_id,
+                        const std::optional<FilterNode>& extra_filter = std::nullopt)
+      -> AlbumStatsView;
 };
 }  // namespace puerhlab

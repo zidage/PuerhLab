@@ -2,7 +2,7 @@
 //  SPDX-License-Identifier: GPL-3.0-only
 //  Additional permission under GPLv3 section 7 applies; see the LICENSE file.
 
-#include "ui/puerhlab_main/album_backend/packed_project.hpp"
+#include "app/project_package_backend.hpp"
 
 #include <QDateTime>
 #include <QCoreApplication>
@@ -18,11 +18,14 @@
 #include <duckdb.h>
 #include <json.hpp>
 
+#include "app/project_service.hpp"
 #include "ui/puerhlab_main/album_backend/path_utils.hpp"
 #include "ui/puerhlab_main/i18n.hpp"
 #include "utils/string/convert.hpp"
 
-namespace puerhlab::ui::packed_proj {
+namespace puerhlab::project_pack {
+
+namespace album_util = ::puerhlab::ui::album_util;
 
 namespace {
 
@@ -657,4 +660,4 @@ auto UnpackProjectToWorkspace(const std::filesystem::path& packedPath,
   return true;
 }
 
-}  // namespace puerhlab::ui::packed_proj
+}  // namespace puerhlab::project_pack

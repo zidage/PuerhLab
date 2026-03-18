@@ -8,6 +8,7 @@
 #include <json.hpp>
 #include <stdexcept>
 
+#include "app/project_package_service.hpp"
 #include "utils/string/convert.hpp"
 
 namespace puerhlab {
@@ -19,6 +20,9 @@ ProjectService::ProjectService(const std::filesystem::path& db_path,
     storage_service_ = std::make_shared<StorageService>(db_path_);
     RecreateSleeveService(0);
     pool_service_ = std::make_shared<ImagePoolService>(storage_service_, 0);
+    filter_service_  = std::make_shared<SleeveFilterService>(storage_service_);
+    browse_service_  = std::make_shared<AlbumBrowseService>(sleeve_service_);
+    package_service_ = std::make_shared<ProjectPackageService>();
   };
 
   switch (open_mode) {
@@ -40,6 +44,9 @@ ProjectService::ProjectService(const std::filesystem::path& db_path,
 }
 
 ProjectService::~ProjectService() {
+  package_service_.reset();
+  browse_service_.reset();
+  filter_service_.reset();
   pool_service_.reset();
   sleeve_service_.reset();
   storage_service_.reset();
@@ -107,6 +114,9 @@ void ProjectService::LoadProject(const std::filesystem::path& meta_path) {
   storage_service_ = std::make_shared<StorageService>(db_path_);
   RecreateSleeveService(start_id);
   pool_service_ = std::make_shared<ImagePoolService>(storage_service_, image_pool_start_id);
+  filter_service_  = std::make_shared<SleeveFilterService>(storage_service_);
+  browse_service_  = std::make_shared<AlbumBrowseService>(sleeve_service_);
+  package_service_ = std::make_shared<ProjectPackageService>();
 }
 
 void ProjectService::RecreateSleeveService(sl_element_id_t start_id) {

@@ -4,12 +4,12 @@
 
 #pragma once
 
+#include <QString>
 #include <cstdint>
 #include <unordered_map>
 
-#include <QString>
-
 #include "type/type.hpp"
+
 
 namespace puerhlab::ui {
 
@@ -24,11 +24,12 @@ class ThumbnailManager {
   void RequestThumbnail(sl_element_id_t elementId, image_id_t imageId);
   void UpdateThumbnailDataUrl(sl_element_id_t elementId, const QString& dataUrl);
   [[nodiscard]] bool IsThumbnailPinned(sl_element_id_t elementId) const;
-  void RemoveThumbnailState(sl_element_id_t elementId, image_id_t imageId);
-  void ReleaseVisibleThumbnailPins();
+  void               RemoveThumbnailState(sl_element_id_t elementId, image_id_t imageId);
+  void               ReleaseVisibleThumbnailPins();
 
  private:
-  AlbumBackend& backend_;
+  AlbumBackend&                                 backend_;
+  // TODO: Move pin ref-count tracking into ThumbnailService.
   std::unordered_map<sl_element_id_t, uint32_t> thumbnail_pin_ref_counts_{};
 };
 

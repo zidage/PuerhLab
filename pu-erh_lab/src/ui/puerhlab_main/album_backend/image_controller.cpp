@@ -5,13 +5,9 @@
 #include "ui/puerhlab_main/album_backend/image_controller.hpp"
 
 #include "ui/puerhlab_main/album_backend/album_backend.hpp"
-#include "ui/puerhlab_main/album_backend/path_utils.hpp"
 
-#include <filesystem>
-#include <stdexcept>
+#include <algorithm>
 #include <unordered_set>
-
-#include "sleeve/sleeve_filesystem.hpp"
 
 namespace puerhlab::ui {
 
@@ -42,8 +38,8 @@ auto ImageController::CollectDeleteTargets(const QVariantList& targetEntries) co
   seen_element_ids.reserve(static_cast<size_t>(targetEntries.size()) * 2 + 1);
 
   for (const QVariant& row_var : targetEntries) {
-    const QVariantMap row      = row_var.toMap();
-    const auto        element_id = static_cast<sl_element_id_t>(row.value("elementId").toUInt());
+    const QVariantMap row = row_var.toMap();
+    const auto element_id = static_cast<sl_element_id_t>(row.value("elementId").toUInt());
     if (element_id == 0 || !seen_element_ids.insert(element_id).second) {
       continue;
     }
@@ -52,9 +48,9 @@ auto ImageController::CollectDeleteTargets(const QVariantList& targetEntries) co
     target.element_id_ = element_id;
     target.image_id_   = static_cast<image_id_t>(row.value("imageId").toUInt());
 
-    const auto item_it = backend_.index_by_element_id_.find(element_id);
-    if (item_it != backend_.index_by_element_id_.end()) {
-      const auto& item = backend_.all_images_[item_it->second];
+    const auto item_it = backend_.view_state_.index_by_element_id_.find(element_id);
+    if (item_it != backend_.view_state_.index_by_element_id_.end()) {
+      const auto& item = backend_.view_state_.all_images_[item_it->second];
       if (target.image_id_ == 0) {
         target.image_id_ = item.image_id;
       }
@@ -67,46 +63,13 @@ auto ImageController::CollectDeleteTargets(const QVariantList& targetEntries) co
   return targets;
 }
 
-void ImageController::RebuildProjectViews(sl_element_id_t preferredFolderId) {
-  auto& ph       = backend_.project_handler_;
-  const auto snapshot = ph.CollectProjectSnapshot();
-
-  backend_.thumb_.ReleaseVisibleThumbnailPins();
-
-  backend_.all_images_.clear();
-  backend_.index_by_element_id_.clear();
-  backend_.visible_thumbnails_.clear();
-  emit backend_.ThumbnailsChanged();
-  emit backend_.thumbnailsChanged();
-
-  backend_.folder_ctrl_.SetFolderState(snapshot.folder_entries_, snapshot.folder_parent_by_id_,
-                                       snapshot.folder_path_by_id_);
-  backend_.folder_ctrl_.RebuildFolderView();
-
-  for (const auto& entry : snapshot.album_entries_) {
-    backend_.AddOrUpdateAlbumItem(entry.element_id_, entry.image_id_, entry.file_name_,
-                                  entry.parent_folder_id_);
-  }
-
-  if (backend_.folder_ctrl_.folder_path_by_id().contains(preferredFolderId)) {
-    backend_.folder_ctrl_.ApplyFolderSelection(preferredFolderId, true);
-  } else {
-    backend_.folder_ctrl_.ApplyFolderSelection(0, true);
-  }
-
-  backend_.stats_.RebuildThumbnailView();
-  backend_.stats_.RefreshStats();
-}
-
 auto ImageController::DeleteImages(const QVariantList& targetEntries) -> QVariantMap {
-  QVariantMap result{
-      {"success", false},
-      {"deletedCount", 0},
-      {"failedCount", 0},
-      {"deletedElementIds", QVariantList{}},
-      {"failedElementIds", QVariantList{}},
-      {"message", QString{}},
-  };
+  QVariantMap result{{"success", false},
+                     {"deletedCount", 0},
+                     {"failedCount", 0},
+                     {"deletedElementIds", QVariantList{}},
+                     {"failedElementIds", QVariantList{}},
+                     {"message", QString{}}};
 
   auto& ph = backend_.project_handler_;
   if (ph.project_loading()) {
@@ -146,8 +109,11 @@ auto ImageController::DeleteImages(const QVariantList& targetEntries) -> QVarian
 
   std::unordered_set<sl_element_id_t> target_ids;
   target_ids.reserve(targets.size() * 2 + 1);
+  std::vector<sl_element_id_t> delete_ids;
+  delete_ids.reserve(targets.size());
   for (const auto& target : targets) {
     target_ids.insert(target.element_id_);
+    delete_ids.push_back(target.element_id_);
   }
 
   if (backend_.editor_.editor_active() &&
@@ -155,51 +121,30 @@ auto ImageController::DeleteImages(const QVariantList& targetEntries) -> QVarian
     backend_.editor_.FinalizeEditorSession(true);
   }
 
-  auto proj          = ph.project();
-  auto image_pool    = proj->GetImagePoolService();
-  auto export_svc    = ph.export_service();
-  auto pipeline_svc  = ph.pipeline_service();
-  auto history_svc   = ph.history_service();
-  const auto& folder_paths = backend_.folder_ctrl_.folder_path_by_id();
+  auto proj       = ph.project();
+  auto browse     = proj->GetAlbumBrowseService();
+  auto image_pool = proj->GetImagePoolService();
+  auto export_svc = ph.export_service();
+  auto pipeline_svc = ph.pipeline_service();
+  auto history_svc = ph.history_service();
 
-  std::vector<sl_element_id_t> deleted_ids;
-  std::vector<sl_element_id_t> failed_ids;
-  deleted_ids.reserve(targets.size());
-  failed_ids.reserve(targets.size());
+  if (!browse) {
+    const auto msg = PL_TEXT("Image service is unavailable.");
+    backend_.SetTaskState(msg, 0, false);
+    result["message"] = msg.Render();
+    return result;
+  }
+
+  const auto delete_result = browse->DeleteFiles(delete_ids);
+  std::vector<sl_element_id_t> deleted_ids = delete_result.deleted_ids_;
+  std::vector<sl_element_id_t> failed_ids  = delete_result.failed_ids_;
 
   bool image_pool_dirty = false;
   for (const auto& target : targets) {
-    bool deleted = false;
-    try {
-      const auto remove_result = proj->GetSleeveService()->Write<void>(
-          [target, &folder_paths](FileSystem& fs) {
-            auto element = fs.Get(target.element_id_);
-            if (!element || element->type_ != ElementType::FILE) {
-              throw std::runtime_error("Target element is not a file.");
-            }
-
-            std::filesystem::path parent_path = album_util::RootFsPath();
-            const auto parent_it = folder_paths.find(target.parent_folder_id_);
-            if (parent_it != folder_paths.end()) {
-              parent_path = parent_it->second;
-            }
-
-            fs.Delete(parent_path / element->element_name_);
-          });
-      if (!remove_result.success_) {
-        throw std::runtime_error(remove_result.message_);
-      }
-      deleted = true;
-    } catch (...) {
-      deleted = false;
-    }
-
-    if (!deleted) {
-      failed_ids.push_back(target.element_id_);
+    if (std::find(deleted_ids.begin(), deleted_ids.end(), target.element_id_) ==
+        deleted_ids.end()) {
       continue;
     }
-
-    deleted_ids.push_back(target.element_id_);
 
     try {
       backend_.thumb_.RemoveThumbnailState(target.element_id_, target.image_id_);
@@ -257,7 +202,7 @@ auto ImageController::DeleteImages(const QVariantList& targetEntries) -> QVarian
   }
 
   if (!deleted_ids.empty()) {
-    RebuildProjectViews(backend_.folder_ctrl_.current_folder_id());
+    backend_.ReloadCurrentFolder();
   }
 
   const int deleted_count = static_cast<int>(deleted_ids.size());

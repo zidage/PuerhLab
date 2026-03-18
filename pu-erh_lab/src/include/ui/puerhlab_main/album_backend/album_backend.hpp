@@ -86,11 +86,11 @@ class AlbumBackend final : public QObject {
   ~AlbumBackend() override;
 
   // ── Q_PROPERTY getters ──────────────────────────────────────────────
-  QVariantList Thumbnails() const { return visible_thumbnails_; }
+  QVariantList Thumbnails() const { return view_state_.visible_thumbnails_; }
   QVariantList Folders() const { return folder_ctrl_.folders(); }
   uint CurrentFolderId() const { return static_cast<uint>(folder_ctrl_.current_folder_id()); }
   const QString& CurrentFolderPath() const { return folder_ctrl_.current_folder_path_text(); }
-  int ShownCount() const { return static_cast<int>(visible_thumbnails_.size()); }
+  int ShownCount() const { return static_cast<int>(view_state_.visible_thumbnails_.size()); }
   int TotalCount() const;
   QString FilterInfo() const;
   QVariantList DateStats() const { return stats_.date_stats(); }
@@ -224,6 +224,8 @@ signals:
   void ScheduleIdleTaskStateReset(int delayMs);
   void SetTaskState(const i18n::LocalizedText& status, int progress, bool cancelVisible);
   void RefreshTranslations();
+  void ReloadFolderTree();
+  void ReloadCurrentFolder();
   void AddOrUpdateAlbumItem(sl_element_id_t elementId, image_id_t imageId,
                             const file_name_t& fallbackName,
                             sl_element_id_t parentFolderId);
@@ -238,9 +240,7 @@ signals:
   EditorController   editor_;
 
   // ── Shared data (accessed by helpers via friend) ────────────────────
-  std::vector<AlbumItem>                              all_images_{};
-  std::unordered_map<sl_element_id_t, size_t>         index_by_element_id_{};
-  QVariantList                                        visible_thumbnails_{};
+  AlbumViewState                                      view_state_{};
   i18n::LocalizedText                                 service_message_text_{};
   bool                                                service_ready_   = false;
   i18n::LocalizedText                                 task_status_text_{};

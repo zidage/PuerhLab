@@ -31,7 +31,6 @@ class ImageController {
 
   [[nodiscard]] auto CollectDeleteTargets(const QVariantList& targetEntries) const
       -> std::vector<DeleteTarget>;
-  void RebuildProjectViews(sl_element_id_t preferredFolderId);
 
   AlbumBackend& backend_;
 };
