@@ -10,6 +10,7 @@ struct SinglePlaneParams {
   uint width;
   uint height;
   uint stride;
+  uint rgb_fc[4];
 };
 
 struct MergeParams {
@@ -22,8 +23,8 @@ struct MergeParams {
 constant float kEps   = 1e-5f;
 constant float kEpsSq = 1e-10f;
 
-static inline uint FC(uint y, uint x) {
-  return (y & 1u) ? ((x & 1u) ? 2u : 1u) : ((x & 1u) ? 1u : 0u);
+static inline uint FC(constant SinglePlaneParams& params, uint y, uint x) {
+  return params.rgb_fc[((y & 1u) << 1u) | (x & 1u)];
 }
 
 static inline float LoadPlane(device const float* plane, constant SinglePlaneParams& params, int y,
@@ -88,7 +89,7 @@ kernel void rcd_init_and_vh(device const float* raw [[buffer(0)]],
 
   const uint index = gid.y * params.stride + gid.x;
   const float val  = raw[index];
-  const uint color = FC(gid.y, gid.x);
+  const uint color = FC(params, gid.y, gid.x);
 
   r[index]         = (color == 0u) ? val : 0.0f;
   g[index]         = (color == 1u) ? val : 0.0f;
@@ -160,7 +161,7 @@ kernel void rcd_green_at_rb(device const float* raw [[buffer(0)]],
     return;
   }
 
-  if (FC(gid.y, gid.x) == 1u) {
+  if (FC(params, gid.y, gid.x) == 1u) {
     return;
   }
 
@@ -226,7 +227,7 @@ kernel void rcd_pq_dir(device const float* raw [[buffer(0)]],
 
   float pq = 0.0f;
   if (gid.x >= 4u && gid.y >= 4u && gid.x + 4u < params.width && gid.y + 4u < params.height &&
-      FC(gid.y, gid.x) != 1u) {
+      FC(params, gid.y, gid.x) != 1u) {
     const int x = static_cast<int>(gid.x);
     const int y = static_cast<int>(gid.y);
     const float c   = LoadPlane(raw, params, y, x);
@@ -292,7 +293,7 @@ kernel void rcd_rb_at_rb(device const float* pq_dir [[buffer(0)]],
     return;
   }
 
-  const uint color = FC(gid.y, gid.x);
+  const uint color = FC(params, gid.y, gid.x);
   if (color == 1u) {
     return;
   }
@@ -364,7 +365,8 @@ kernel void rcd_rb_at_g(device const float* vh_dir [[buffer(0)]],
                         constant SinglePlaneParams& params [[buffer(4)]],
                         uint2 gid [[thread_position_in_grid]]) {
   if (gid.x >= params.width || gid.y >= params.height || gid.x < 4u || gid.y < 4u ||
-      gid.x + 4u >= params.width || gid.y + 4u >= params.height || FC(gid.y, gid.x) != 1u) {
+      gid.x + 4u >= params.width || gid.y + 4u >= params.height ||
+      FC(params, gid.y, gid.x) != 1u) {
     return;
   }
 

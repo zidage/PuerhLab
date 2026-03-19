@@ -17,13 +17,14 @@ struct HighlightParams {
   uint  m_width;
   uint  m_height;
   uint  m_size;
+  uint  rgb_fc[4];
 };
 
 constant float kHLPowerF    = 3.0f;
 constant float kInvHLPowerF = 1.0f / kHLPowerF;
 
-static inline uint FC(int y, int x) {
-  return (y & 1) ? ((x & 1) ? 1u : 2u) : ((x & 1) ? 1u : 0u);
+static inline uint FC(constant HighlightParams& params, int y, int x) {
+  return params.rgb_fc[((static_cast<uint>(y) & 1u) << 1u) | (static_cast<uint>(x) & 1u)];
 }
 
 static inline uint RawToCmap(uint m_width, int row, int col) {
@@ -57,7 +58,7 @@ static inline uchar MaskDilate(device const uchar* in, uint w1) {
 
 static inline float CalcRefavg(device const float* in, int row, int col,
                                constant HighlightParams& params) {
-  const uint color = FC(row, col);
+  const uint color = FC(params, row, col);
   float      mean[3] = {0.0f, 0.0f, 0.0f};
   float      cnt[3]  = {0.0f, 0.0f, 0.0f};
 
@@ -71,7 +72,7 @@ static inline float CalcRefavg(device const float* in, int row, int col,
   for (int dy = dymin; dy < dymax; ++dy) {
     for (int dx = dxmin; dx < dxmax; ++dx) {
       const float val = max(0.0f, in[static_cast<uint>(dy) * params.stride + static_cast<uint>(dx)]);
-      const uint  c   = FC(dy, dx);
+      const uint  c   = FC(params, dy, dx);
       mean[c] += val;
       cnt[c] += 1.0f;
     }
@@ -109,7 +110,7 @@ kernel void hlr_build_mask(device const float* input [[buffer(0)]],
       const int raw_y   = base_raw_y + y;
       const int raw_x   = base_raw_x + x;
       const float val   = input[static_cast<uint>(raw_y) * params.stride + static_cast<uint>(raw_x)];
-      const uint  color = FC(row + y, col + x);
+      const uint  color = FC(params, row + y, col + x);
       mbuff[color] += (val >= params.clip_val) ? 1 : 0;
     }
   }
@@ -153,7 +154,7 @@ kernel void hlr_chrominance_contrib(device const float* input [[buffer(0)]],
 
   const int   row   = static_cast<int>(gid.y);
   const int   col   = static_cast<int>(gid.x);
-  const uint  color = FC(row, col);
+  const uint  color = FC(params, row, col);
   const uint  index = gid.y * params.stride + gid.x;
   const float inval = input[index];
 
@@ -174,7 +175,7 @@ kernel void hlr_reconstruct(device const float* input [[buffer(0)]],
 
   const int   row   = static_cast<int>(gid.y);
   const int   col   = static_cast<int>(gid.x);
-  const uint  color = FC(row, col);
+  const uint  color = FC(params, row, col);
   const uint  index = gid.y * params.stride + gid.x;
   const float inval = max(0.0f, input[index]);
 

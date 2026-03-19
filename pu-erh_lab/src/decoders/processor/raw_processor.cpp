@@ -191,7 +191,7 @@ void RawProcessor::ApplyLinearization() {
     return;
 #elif defined(HAVE_METAL)
     auto& gpu_img = pre_debayer_buffer.GetMetalImage();
-    metal::ToLinearRef(gpu_img, raw_processor_);
+    metal::ToLinearRef(gpu_img, raw_processor_, bayer_pattern_);
     return;
 #else
     ThrowUnsupportedGPUBackend("ApplyLinearization");
@@ -220,7 +220,7 @@ void RawProcessor::ApplyDebayer() {
     return;
 #elif defined(HAVE_METAL)
     auto& gpu_img = pre_debayer_buffer.GetMetalImage();
-    metal::BayerRGGB2RGB_RCD(gpu_img);
+    metal::Bayer2x2ToRGB_RCD(gpu_img, bayer_pattern_);
     if (params_.decode_res_ == DecodeRes::FULL) {
       cv::Rect crop_rect(raw_data_.sizes.left_margin, raw_data_.sizes.top_margin,
                          raw_data_.sizes.width, raw_data_.sizes.height);
@@ -263,7 +263,7 @@ void RawProcessor::ApplyHighlightReconstruct() {
       metal::utils::ClampTexture(gpu_img);
       return;
     }
-    metal::HighlightReconstruct(gpu_img, raw_processor_);
+    metal::HighlightReconstruct(gpu_img, raw_processor_, bayer_pattern_);
     return;
 #endif
     ThrowUnsupportedGPUBackend("ApplyHighlightReconstruct");
@@ -431,10 +431,6 @@ auto RawProcessor::Process() -> ImageBuffer {
       throw std::runtime_error("RawProcessor: CPU backend only supports RGGB Bayer input; got " +
                                DescribeBayerPattern(bayer_pattern_) + ".");
     }
-#ifdef HAVE_METAL
-    throw std::runtime_error("RawProcessor: Metal backend only supports RGGB Bayer input; got " +
-                             DescribeBayerPattern(bayer_pattern_) + ".");
-#endif
   }
 
   auto  img_unpacked = raw_data_.raw_image;

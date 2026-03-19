@@ -31,6 +31,7 @@ struct ToLinearRefParams {
   uint32_t width;
   uint32_t height;
   uint32_t stride;
+  uint32_t raw_fc[4];
 };
 
 constexpr uint32_t kRowAlignmentBytes = 256;
@@ -63,7 +64,8 @@ auto MakeSharedBuffer(size_t length) -> NS::SharedPtr<MTL::Buffer> {
   return buffer;
 }
 
-void DispatchToLinearRef(MetalImage& image, float white_level_scale, const WBParams& wb_params) {
+void DispatchToLinearRef(MetalImage& image, float white_level_scale, const WBParams& wb_params,
+                         const BayerPattern2x2& pattern) {
   if (image.Empty()) {
     throw std::runtime_error("[ERROR] Metal ToLinearRef: image is empty.");
   }
@@ -104,6 +106,10 @@ void DispatchToLinearRef(MetalImage& image, float white_level_scale, const WBPar
         .width             = image.Width(),
         .height            = image.Height(),
         .stride            = stride,
+        .raw_fc            = {static_cast<uint32_t>(pattern.raw_fc[0]),
+                              static_cast<uint32_t>(pattern.raw_fc[1]),
+                              static_cast<uint32_t>(pattern.raw_fc[2]),
+                              static_cast<uint32_t>(pattern.raw_fc[3])},
     };
 
     // Follow Apple's guidance for image kernels: align threadgroup width to the execution width
@@ -160,7 +166,7 @@ static auto GetWBCoeff(const libraw_rawdata_t& raw_data) -> const float* {
 
 }  // namespace
 
-void ToLinearRef(MetalImage& img, LibRaw& raw_processor) {
+void ToLinearRef(MetalImage& img, LibRaw& raw_processor, const BayerPattern2x2& pattern) {
   auto black_level = CalculateBlackLevel(raw_processor.imgdata.rawdata);
   auto wb          = GetWBCoeff(raw_processor.imgdata.rawdata);
 
@@ -192,7 +198,7 @@ void ToLinearRef(MetalImage& img, LibRaw& raw_processor) {
     wb_params.wb_scale[0] = wb[0] / green_wb;
     wb_params.wb_scale[2] = wb[2] / green_wb;
 
-    DispatchToLinearRef(img, maximum, wb_params);
+    DispatchToLinearRef(img, maximum, wb_params, pattern);
   } else {
     MetalImage converted;
     img.ConvertTo(converted, PixelFormat::R32FLOAT);

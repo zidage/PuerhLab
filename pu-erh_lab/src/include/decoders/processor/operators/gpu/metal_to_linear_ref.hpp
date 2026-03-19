@@ -6,10 +6,11 @@
 
 #include <libraw/libraw.h>
 
+#include "decoders/processor/raw_processor_pattern.hpp"
 #include "image/metal_image.hpp"
 
 namespace puerhlab {
 namespace metal {
-void ToLinearRef(metal::MetalImage& img, LibRaw& raw_processor);
+void ToLinearRef(metal::MetalImage& img, LibRaw& raw_processor, const BayerPattern2x2& pattern);
 };
 };

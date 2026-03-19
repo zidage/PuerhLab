@@ -16,9 +16,8 @@ struct ToLinearRefParams {
   uint  width;
   uint  height;
   uint  stride;
+  uint  raw_fc[4];
 };
-
-constant ushort kRemap[4] = {0, 1, 3, 2};
 
 kernel void to_linear_ref_r32f(device float*                image [[buffer(0)]],
                                constant ToLinearRefParams&  params [[buffer(1)]],
@@ -28,7 +27,7 @@ kernel void to_linear_ref_r32f(device float*                image [[buffer(0)]],
     return;
   }
 
-  const uint color_idx = kRemap[((gid.y & 1u) << 1u) | (gid.x & 1u)];
+  const uint color_idx = params.raw_fc[((gid.y & 1u) << 1u) | (gid.x & 1u)];
   const uint index     = gid.y * params.stride + gid.x;
 
   float pixel_val      = image[index];

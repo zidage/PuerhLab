@@ -8,11 +8,12 @@
 
 #include <libraw/libraw.h>
 
+#include "decoders/processor/raw_processor_pattern.hpp"
 #include "image/metal_image.hpp"
 
 namespace puerhlab {
 namespace metal {
-void HighlightReconstruct(MetalImage& img, LibRaw& raw_processor);
+void HighlightReconstruct(MetalImage& img, LibRaw& raw_processor, const BayerPattern2x2& pattern);
 };
 };
 

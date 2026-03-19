@@ -6,10 +6,11 @@
 
 #include <libraw/libraw.h>
 
+#include "decoders/processor/raw_processor_pattern.hpp"
 #include "image/metal_image.hpp"
 
 namespace puerhlab {
 namespace metal {
-void BayerRGGB2RGB_RCD(MetalImage& image);
+void Bayer2x2ToRGB_RCD(MetalImage& image, const BayerPattern2x2& pattern);
 };
 };

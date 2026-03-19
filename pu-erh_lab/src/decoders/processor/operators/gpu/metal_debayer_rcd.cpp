@@ -23,6 +23,7 @@ struct SinglePlaneParams {
   uint32_t width;
   uint32_t height;
   uint32_t stride;
+  uint32_t rgb_fc[4];
 };
 
 struct MergeParams {
@@ -102,7 +103,7 @@ void DispatchThreads(MTL::ComputeCommandEncoder* encoder, MTL::ComputePipelineSt
 
 }  // namespace
 
-void BayerRGGB2RGB_RCD(MetalImage& image) {
+void Bayer2x2ToRGB_RCD(MetalImage& image, const BayerPattern2x2& pattern) {
   if (image.Empty()) {
     throw std::runtime_error("Metal Debayer RCD: input image is empty.");
   }
@@ -156,6 +157,10 @@ void BayerRGGB2RGB_RCD(MetalImage& image) {
       .width  = width,
       .height = height,
       .stride = plane_stride,
+      .rgb_fc = {static_cast<uint32_t>(pattern.rgb_fc[0]),
+                 static_cast<uint32_t>(pattern.rgb_fc[1]),
+                 static_cast<uint32_t>(pattern.rgb_fc[2]),
+                 static_cast<uint32_t>(pattern.rgb_fc[3])},
   };
   const MergeParams merge_params{
       .width       = width,

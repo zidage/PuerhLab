@@ -36,6 +36,7 @@ struct HighlightParams {
   uint32_t m_width;
   uint32_t m_height;
   uint32_t m_size;
+  uint32_t rgb_fc[4];
 };
 
 enum class Kernel : uint32_t {
@@ -55,8 +56,8 @@ auto RoundSize(int size, int alignment) -> int {
   return ((size % alignment) == 0) ? size : ((size - 1) / alignment + 1) * alignment;
 }
 
-auto FC(int y, int x) -> int {
-  return (y & 1) ? ((x & 1) ? 1 : 2) : ((x & 1) ? 1 : 0);
+auto FC(const BayerPattern2x2& pattern, int y, int x) -> int {
+  return pattern.rgb_fc[BayerCellIndex(y, x)];
 }
 
 auto KernelNameFor(Kernel kernel) -> const char* {
@@ -111,7 +112,7 @@ void DispatchThreads(MTL::ComputeCommandEncoder* encoder, MTL::ComputePipelineSt
 
 }  // namespace
 
-void HighlightReconstruct(MetalImage& img, LibRaw& raw_processor) {
+void HighlightReconstruct(MetalImage& img, LibRaw& raw_processor, const BayerPattern2x2& pattern) {
   if (img.Empty()) {
     throw std::runtime_error("Metal HighlightReconstruct: input image is empty.");
   }
@@ -147,6 +148,10 @@ void HighlightReconstruct(MetalImage& img, LibRaw& raw_processor) {
   params.m_height         = height / 3;
   params.m_size           = static_cast<uint32_t>(
       RoundSize(static_cast<int>((params.m_width + 1) * (params.m_height + 1)), 16));
+  params.rgb_fc[0]        = static_cast<uint32_t>(pattern.rgb_fc[0]);
+  params.rgb_fc[1]        = static_cast<uint32_t>(pattern.rgb_fc[1]);
+  params.rgb_fc[2]        = static_cast<uint32_t>(pattern.rgb_fc[2]);
+  params.rgb_fc[3]        = static_cast<uint32_t>(pattern.rgb_fc[3]);
 
   auto input_buffer   = MakeSharedBuffer(img_size);
   auto mask_buffer    = MakeSharedBuffer(static_cast<size_t>(6) * params.m_size * sizeof(uint8_t));
@@ -235,7 +240,7 @@ void HighlightReconstruct(MetalImage& img, LibRaw& raw_processor) {
         continue;
       }
 
-      const int color = FC(static_cast<int>(row), static_cast<int>(col));
+      const int color = FC(pattern, static_cast<int>(row), static_cast<int>(col));
       const size_t contrib_index = static_cast<size_t>(row) * stride + col;
       sums[color] += contrib_data[contrib_index];
       cnts[color] += 1.0f;
