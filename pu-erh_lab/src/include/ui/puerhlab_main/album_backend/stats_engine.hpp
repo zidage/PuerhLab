@@ -26,7 +26,6 @@ class StatsEngine {
   /// Execute GROUP BY aggregate queries and update stats properties.
   void RefreshStats();
 
-  [[nodiscard]] bool IsImageInCurrentFolder(const AlbumItem& image) const;
   [[nodiscard]] auto FormatPhotoInfo(int shown, int total) const -> QString;
   [[nodiscard]] auto MakeThumbMap(const AlbumItem& image, int index) const -> QVariantMap;
 

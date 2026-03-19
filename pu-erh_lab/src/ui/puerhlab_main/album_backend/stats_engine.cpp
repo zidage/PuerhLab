@@ -38,9 +38,6 @@ void StatsEngine::RebuildThumbnailView() {
 
   int index = 0;
   for (const AlbumItem& image : backend_.view_state_.all_images_) {
-    if (!IsImageInCurrentFolder(image)) {
-      continue;
-    }
     if (!MatchesActiveFilters(image)) {
       continue;
     }
@@ -71,7 +68,17 @@ void StatsEngine::RefreshStats() {
   }
 
   try {
-    const auto stats = filter_service->BuildFolderStats(backend_.folder_ctrl_.current_folder_id());
+    const auto folder_id = backend_.folder_ctrl_.CurrentFolderElementId();
+    if (!folder_id.has_value()) {
+      date_stats_.clear();
+      camera_stats_.clear();
+      lens_stats_.clear();
+      total_photo_count_ = 0;
+      emit backend_.StatsChanged();
+      return;
+    }
+
+    const auto stats = filter_service->BuildFolderStats(folder_id.value());
     total_photo_count_ = stats.total_photo_count_;
     date_stats_        = ToStatsRows(stats.date_stats_);
     camera_stats_      = ToStatsRows(stats.camera_stats_);
@@ -81,10 +88,6 @@ void StatsEngine::RefreshStats() {
   }
 
   emit backend_.StatsChanged();
-}
-
-bool StatsEngine::IsImageInCurrentFolder(const AlbumItem& image) const {
-  return image.parent_folder_id == backend_.folder_ctrl_.current_folder_id();
 }
 
 auto StatsEngine::FormatPhotoInfo(int shown, int total) const -> QString {

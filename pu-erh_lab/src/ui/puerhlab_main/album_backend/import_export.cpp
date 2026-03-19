@@ -77,7 +77,7 @@ void ImportExportHandler::StartImport(const QStringList& fileUrlsOrPaths) {
     return;
   }
 
-  import_target_folder_id_   = backend_.folder_ctrl_.current_folder_id();
+  import_target_folder_id_   = backend_.folder_ctrl_.CurrentFolderElementId().value_or(0);
   import_target_folder_path_ = backend_.folder_ctrl_.CurrentFolderFsPath();
 
   auto job            = std::make_shared<ImportJob>();
@@ -332,7 +332,7 @@ void ImportExportHandler::FinishImport(const ImportResult& result) {
   backend_.stats_.ClearFilters();
   emit backend_.StatsFilterChanged();
 
-  import_target_folder_id_   = backend_.folder_ctrl_.current_folder_id();
+  import_target_folder_id_   = backend_.folder_ctrl_.CurrentFolderElementId().value_or(0);
   import_target_folder_path_ = backend_.folder_ctrl_.CurrentFolderFsPath();
 
   auto task_text = PL_TEXT("Import complete: %1 imported, %2 failed", result.imported_,

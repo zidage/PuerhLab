@@ -7,6 +7,7 @@
 #include <QVariantList>
 #include <QVariantMap>
 
+#include <filesystem>
 #include <vector>
 
 #include "type/type.hpp"
@@ -26,7 +27,7 @@ class ImageController {
   struct DeleteTarget {
     sl_element_id_t element_id_       = 0;
     image_id_t      image_id_         = 0;
-    sl_element_id_t parent_folder_id_ = 0;
+    std::filesystem::path file_path_{};
   };
 
   [[nodiscard]] auto CollectDeleteTargets(const QVariantList& targetEntries) const

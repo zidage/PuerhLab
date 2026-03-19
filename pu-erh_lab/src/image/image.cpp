@@ -1,7 +1,6 @@
 //  Copyright 2025 Yurun Zi
 //  SPDX-License-Identifier: GPL-3.0-only
 //  Additional permission under GPLv3 section 7 applies; see the LICENSE file.
-
 #include "image/image.hpp"
 
 #include <xxhash.h>
@@ -119,9 +118,7 @@ auto Image::GetRawColorContext() const -> const RawRuntimeColorContext& {
   return raw_color_context_;
 }
 
-auto Image::HasRawColorContext() const -> bool {
-  return has_raw_color_context_.load();
-}
+auto Image::HasRawColorContext() const -> bool { return has_raw_color_context_.load(); }
 
 void Image::ComputeChecksum() { checksum_ = XXH3_64bits(this, sizeof(*this)); }
 

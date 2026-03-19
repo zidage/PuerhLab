@@ -48,13 +48,11 @@ auto ImageController::CollectDeleteTargets(const QVariantList& targetEntries) co
     target.element_id_ = element_id;
     target.image_id_   = static_cast<image_id_t>(row.value("imageId").toUInt());
 
-    const auto item_it = backend_.view_state_.index_by_element_id_.find(element_id);
-    if (item_it != backend_.view_state_.index_by_element_id_.end()) {
-      const auto& item = backend_.view_state_.all_images_[item_it->second];
+    if (const auto* item = backend_.FindAlbumItem(element_id); item) {
       if (target.image_id_ == 0) {
-        target.image_id_ = item.image_id;
+        target.image_id_ = item->image_id;
       }
-      target.parent_folder_id_ = item.parent_folder_id;
+      target.file_path_ = item->file_path_;
     }
 
     targets.push_back(target);
@@ -109,11 +107,13 @@ auto ImageController::DeleteImages(const QVariantList& targetEntries) -> QVarian
 
   std::unordered_set<sl_element_id_t> target_ids;
   target_ids.reserve(targets.size() * 2 + 1);
-  std::vector<sl_element_id_t> delete_ids;
-  delete_ids.reserve(targets.size());
+  std::vector<std::filesystem::path> delete_paths;
+  delete_paths.reserve(targets.size());
   for (const auto& target : targets) {
     target_ids.insert(target.element_id_);
-    delete_ids.push_back(target.element_id_);
+    if (!target.file_path_.empty()) {
+      delete_paths.push_back(target.file_path_);
+    }
   }
 
   if (backend_.editor_.editor_active() &&
@@ -135,9 +135,28 @@ auto ImageController::DeleteImages(const QVariantList& targetEntries) -> QVarian
     return result;
   }
 
-  const auto delete_result = browse->DeleteFiles(delete_ids);
-  std::vector<sl_element_id_t> deleted_ids = delete_result.deleted_ids_;
-  std::vector<sl_element_id_t> failed_ids  = delete_result.failed_ids_;
+  const auto delete_result = browse->DeleteFiles(delete_paths);
+  std::vector<sl_element_id_t> deleted_ids;
+  deleted_ids.reserve(delete_result.deleted_files_.size());
+  for (const auto& file : delete_result.deleted_files_) {
+    deleted_ids.push_back(file.element_id_);
+  }
+
+  std::vector<sl_element_id_t> failed_ids;
+  failed_ids.reserve(targets.size());
+  for (const auto& target : targets) {
+    if (target.file_path_.empty()) {
+      failed_ids.push_back(target.element_id_);
+    }
+  }
+  for (const auto& path : delete_result.failed_paths_) {
+    const auto it = std::find_if(targets.begin(), targets.end(), [&path](const DeleteTarget& target) {
+      return target.file_path_.lexically_normal() == path.lexically_normal();
+    });
+    if (it != targets.end()) {
+      failed_ids.push_back(it->element_id_);
+    }
+  }
 
   bool image_pool_dirty = false;
   for (const auto& target : targets) {

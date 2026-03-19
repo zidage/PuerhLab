@@ -121,6 +121,44 @@ TEST_F(SleeveServiceTests, SaveLoadTest) {
   EXPECT_EQ(file->element_name_, L"File");
 }
 
+TEST_F(SleeveServiceTests, ResolveAndListImmediateChildrenByPath) {
+  ProjectService project(db_path_, meta_path_);
+  auto           service = project.GetSleeveService();
+
+  service->CreateFolder(L"/", L"Folder");
+  service->CreateFolder(L"/Folder", L"Nested");
+  service->Write<std::shared_ptr<SleeveElement>>(
+      [](FileSystem& fs) { return fs.Create(L"/Folder/Nested", L"Image", ElementType::FILE); });
+
+  const auto root_entries = service->ListFolderEntries(L"/");
+  ASSERT_EQ(root_entries.size(), 1u);
+  EXPECT_EQ(root_entries.front()->element_name_, L"Folder");
+  EXPECT_EQ(root_entries.front()->type_, ElementType::FOLDER);
+
+  const auto folder = service->ResolveFolder(L"/Folder");
+  ASSERT_NE(folder, nullptr);
+  EXPECT_EQ(folder->element_name_, L"Folder");
+
+  const auto nested_entries = service->ListFolderEntries(L"/Folder");
+  ASSERT_EQ(nested_entries.size(), 1u);
+  EXPECT_EQ(nested_entries.front()->element_name_, L"Nested");
+  EXPECT_EQ(nested_entries.front()->type_, ElementType::FOLDER);
+}
+
+TEST_F(SleeveServiceTests, CreateAndDeleteFolderByPathApi) {
+  ProjectService project(db_path_, meta_path_);
+  auto           service = project.GetSleeveService();
+
+  const auto created = service->CreateFolder(L"/", L"ToDelete");
+  ASSERT_NE(created.first, nullptr);
+  EXPECT_TRUE(created.second.success_);
+  EXPECT_EQ(created.first->element_name_, L"ToDelete");
+
+  const auto deleted = service->DeletePath(L"/ToDelete");
+  EXPECT_TRUE(deleted.success_);
+  EXPECT_THROW(service->ResolveFolder(L"/ToDelete"), std::runtime_error);
+}
+
 TEST_F(SleeveServiceTests, FuzzyCreateCopyTest) {
   std::wstring first_tree;
   {

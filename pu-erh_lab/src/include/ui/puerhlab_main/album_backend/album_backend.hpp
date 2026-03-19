@@ -10,7 +10,7 @@
 #include <QVariantList>
 #include <QVariantMap>
 
-#include <unordered_map>
+#include <filesystem>
 #include <vector>
 
 #include "ui/puerhlab_main/i18n.hpp"
@@ -224,11 +224,13 @@ signals:
   void ScheduleIdleTaskStateReset(int delayMs);
   void SetTaskState(const i18n::LocalizedText& status, int progress, bool cancelVisible);
   void RefreshTranslations();
-  void ReloadFolderTree();
+  void ReloadFolderTree(const std::filesystem::path& preferredFolderPath = {});
   void ReloadCurrentFolder();
   void AddOrUpdateAlbumItem(sl_element_id_t elementId, image_id_t imageId,
                             const file_name_t& fallbackName,
-                            sl_element_id_t parentFolderId);
+                            const std::filesystem::path& filePath);
+  auto FindAlbumItem(sl_element_id_t elementId) -> AlbumItem*;
+  auto FindAlbumItem(sl_element_id_t elementId) const -> const AlbumItem*;
 
   // ── Helper modules ──────────────────────────────────────────────────
   ProjectHandler     project_handler_;

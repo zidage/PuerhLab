@@ -6,7 +6,9 @@
 
 #include <QVariantList>
 #include <filesystem>
+#include <optional>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "ui/puerhlab_main/album_backend/album_types.hpp"
@@ -15,20 +17,25 @@ namespace puerhlab::ui {
 
 class AlbumBackend;
 
-/// Owns folder tree state and handles folder CRUD operations.
+/// Owns lazy folder-tree state and handles folder CRUD operations.
 class FolderController {
  public:
   explicit FolderController(AlbumBackend& backend);
 
+  void               ReloadTree(const std::filesystem::path& preferredFolderPath);
   void               RebuildFolderView();
-  void               ApplyFolderSelection(sl_element_id_t folderId, bool emitSignal);
+  void               ApplyFolderSelection(uint folderUiId, bool emitSignal);
   [[nodiscard]] auto CurrentFolderFsPath() const -> std::filesystem::path;
-  void               SelectFolder(uint folderId);
+  [[nodiscard]] auto CurrentFolderElementId() const -> std::optional<sl_element_id_t>;
+  void               SelectFolder(uint folderUiId);
   void               CreateFolder(const QString& folderName);
-  void               DeleteFolder(uint folderId);
+  void               DeleteFolder(uint folderUiId);
 
   [[nodiscard]] auto folders() const -> const QVariantList& { return folders_; }
-  [[nodiscard]] auto current_folder_id() const -> sl_element_id_t { return current_folder_id_; }
+  [[nodiscard]] auto current_folder_id() const -> uint32_t { return current_folder_ui_id_; }
+  [[nodiscard]] auto current_folder_path() const -> const std::filesystem::path& {
+    return current_folder_path_;
+  }
   [[nodiscard]] auto current_folder_path_text() const -> const QString& {
     return current_folder_path_text_;
   }
@@ -36,31 +43,43 @@ class FolderController {
   [[nodiscard]] auto folder_entries() const -> const std::vector<ExistingFolderEntry>& {
     return folder_entries_;
   }
-  [[nodiscard]] auto folder_parent_by_id() const
-      -> const std::unordered_map<sl_element_id_t, sl_element_id_t>& {
-    return folder_parent_by_id_;
-  }
-  [[nodiscard]] auto folder_path_by_id() const
-      -> const std::unordered_map<sl_element_id_t, std::filesystem::path>& {
-    return folder_path_by_id_;
-  }
 
-  /// Replace folder state wholesale (used after service reload / project load).
-  void SetFolderState(std::vector<ExistingFolderEntry>                           entries,
-                      std::unordered_map<sl_element_id_t, sl_element_id_t>       parents,
-                      std::unordered_map<sl_element_id_t, std::filesystem::path> paths);
-  /// Clear everything.
   void ClearState();
 
  private:
-  AlbumBackend&                                              backend_;
+  struct FolderNodeState {
+    uint32_t              ui_id_         = 0;
+    file_name_t           folder_name_{};
+    std::filesystem::path folder_path_{};
+    int                   depth_         = 0;
+    bool                  expanded_      = false;
+  };
 
+  [[nodiscard]] auto PathKey(const std::filesystem::path& path) const -> std::wstring;
+  void               EnsureRootNode();
+  void               ResetTreeState();
+  void               EnsurePathExpanded(const std::filesystem::path& folderPath);
+  void               LoadChildren(const std::filesystem::path& parentPath);
+  void               AppendVisibleEntries(const std::filesystem::path& folderPath,
+                                          std::vector<ExistingFolderEntry>& out) const;
+  [[nodiscard]] auto TryGetPathForUiId(uint folderUiId) const
+      -> std::optional<std::filesystem::path>;
+  [[nodiscard]] auto EnsureNode(const std::filesystem::path& folderPath,
+                                const file_name_t&           folderName,
+                                int                          depth) -> FolderNodeState&;
+
+  AlbumBackend& backend_;
+
+  std::unordered_map<std::wstring, FolderNodeState>          nodes_by_path_{};
+  std::unordered_map<std::wstring, std::vector<std::wstring>> child_keys_by_path_{};
+  std::unordered_map<uint32_t, std::wstring>                 path_key_by_ui_id_{};
+  std::unordered_set<std::wstring>                           loaded_paths_{};
   std::vector<ExistingFolderEntry>                           folder_entries_{};
-  std::unordered_map<sl_element_id_t, sl_element_id_t>       folder_parent_by_id_{};
-  std::unordered_map<sl_element_id_t, std::filesystem::path> folder_path_by_id_{};
   QVariantList                                               folders_{};
-  sl_element_id_t                                            current_folder_id_        = 0;
-  QString                                                    current_folder_path_text_ = "\\";
+  std::filesystem::path                                      current_folder_path_{};
+  QString                                                    current_folder_path_text_{};
+  uint32_t                                                   current_folder_ui_id_     = 0;
+  uint32_t                                                   next_folder_ui_id_        = 1;
 };
 
 }  // namespace puerhlab::ui

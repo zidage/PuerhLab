@@ -12,6 +12,8 @@
 #include <mutex>
 #include <type_traits>
 
+#include "sleeve/sleeve_element/sleeve_file.hpp"
+#include "sleeve/sleeve_element/sleeve_folder.hpp"
 #include "sleeve/sleeve_filesystem.hpp"
 #include "sleeve/storage_service.hpp"
 #include "type/type.hpp"
@@ -100,6 +102,14 @@ class SleeveServiceImpl final : public SleeveService {
   auto Sync() -> SyncResult override;
 
   auto GetCurrentID() const -> sl_element_id_t;
+  auto ResolveElement(const std::filesystem::path& path) -> std::shared_ptr<SleeveElement>;
+  auto ResolveFolder(const std::filesystem::path& path) -> std::shared_ptr<SleeveFolder>;
+  auto ResolveFile(const std::filesystem::path& path) -> std::shared_ptr<SleeveFile>;
+  auto ListFolderEntries(const std::filesystem::path& folder_path)
+      -> std::vector<std::shared_ptr<SleeveElement>>;
+  auto CreateFolder(const std::filesystem::path& parent_path, const file_name_t& name)
+      -> std::pair<std::shared_ptr<SleeveFolder>, SyncResult>;
+  auto DeletePath(const std::filesystem::path& target_path) -> SyncResult;
 
   auto GetStorageService() -> std::shared_ptr<StorageService> {
     return storage_service_;

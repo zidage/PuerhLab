@@ -76,24 +76,13 @@ auto AlbumBackend::FilterInfo() const -> QString {
 }
 
 int AlbumBackend::TotalCount() const {
-  int count = 0;
-  for (const auto& image : view_state_.all_images_) {
-    if (stats_.IsImageInCurrentFolder(image)) {
-      ++count;
-    }
-  }
-  return count;
+  return static_cast<int>(view_state_.all_images_.size());
 }
 
 // ── Q_INVOKABLE: Folder delegation ──────────────────────────────────────────
 
 void AlbumBackend::SelectFolder(uint folderId) {
-  if (project_handler_.project_loading() || !project_handler_.project()) return;
-
-  stats_.ClearFilters();
-  folder_ctrl_.ApplyFolderSelection(static_cast<sl_element_id_t>(folderId), true);
-  ReloadCurrentFolder();
-  emit StatsFilterChanged();
+  folder_ctrl_.SelectFolder(folderId);
 }
 
 void AlbumBackend::CreateFolder(const QString& folderName) { folder_ctrl_.CreateFolder(folderName); }
@@ -421,7 +410,7 @@ void AlbumBackend::RefreshTranslations() {
   emit EditorStateChanged();
 }
 
-void AlbumBackend::ReloadFolderTree() {
+void AlbumBackend::ReloadFolderTree(const std::filesystem::path& preferredFolderPath) {
   auto proj = project_handler_.project();
   if (!proj) {
     folder_ctrl_.ClearState();
@@ -436,25 +425,14 @@ void AlbumBackend::ReloadFolderTree() {
     return;
   }
 
-  const auto snapshot = browse->ListFolders();
-  std::vector<ExistingFolderEntry> folders;
-  folders.reserve(snapshot.folders_.size());
-  for (const auto& folder : snapshot.folders_) {
-    folders.push_back(
-        {folder.folder_id_, folder.parent_id_, folder.folder_name_, folder.folder_path_,
-         folder.depth_});
-  }
-
-  folder_ctrl_.SetFolderState(std::move(folders), snapshot.parent_by_id_, snapshot.path_by_id_);
-  folder_ctrl_.RebuildFolderView();
-  folder_ctrl_.ApplyFolderSelection(folder_ctrl_.current_folder_id(), true);
+  folder_ctrl_.ReloadTree(preferredFolderPath.empty() ? folder_ctrl_.current_folder_path()
+                                                      : preferredFolderPath);
 }
 
 void AlbumBackend::ReloadCurrentFolder() {
   thumb_.ReleaseVisibleThumbnailPins();
 
   view_state_.all_images_.clear();
-  view_state_.index_by_element_id_.clear();
   view_state_.visible_thumbnails_.clear();
   emit ThumbnailsChanged();
   emit thumbnailsChanged();
@@ -474,9 +452,9 @@ void AlbumBackend::ReloadCurrentFolder() {
     return;
   }
 
-  const auto files = browse->ListFilesInFolder(folder_ctrl_.current_folder_id());
+  const auto files = browse->ListFilesInFolder(folder_ctrl_.CurrentFolderFsPath());
   for (const auto& file : files) {
-    AddOrUpdateAlbumItem(file.element_id_, file.image_id_, file.file_name_, file.parent_folder_id_);
+    AddOrUpdateAlbumItem(file.element_id_, file.image_id_, file.file_name_, file.file_path_);
   }
 
   stats_.RebuildThumbnailView();
@@ -485,21 +463,19 @@ void AlbumBackend::ReloadCurrentFolder() {
 
 void AlbumBackend::AddOrUpdateAlbumItem(sl_element_id_t elementId, image_id_t imageId,
                                         const file_name_t& fallbackName,
-                                        sl_element_id_t parentFolderId) {
-  AlbumItem* item = nullptr;
+                                        const std::filesystem::path& filePath) {
+  AlbumItem* item = FindAlbumItem(elementId);
 
-  if (const auto it = view_state_.index_by_element_id_.find(elementId); it != view_state_.index_by_element_id_.end()) {
-    item = &view_state_.all_images_[it->second];
-  } else {
+  if (!item) {
     AlbumItem next;
     next.element_id = elementId;
     next.image_id   = imageId;
+    next.file_path_ = filePath;
     next.file_name  = WStringToQString(fallbackName);
     next.extension  = ExtensionFromFileName(next.file_name);
     next.accent     = AccentForIndex(view_state_.all_images_.size());
 
     view_state_.all_images_.push_back(std::move(next));
-    view_state_.index_by_element_id_[elementId] = view_state_.all_images_.size() - 1;
     item = &view_state_.all_images_.back();
   }
 
@@ -507,7 +483,7 @@ void AlbumBackend::AddOrUpdateAlbumItem(sl_element_id_t elementId, image_id_t im
 
   item->element_id       = elementId;
   item->image_id         = imageId;
-  item->parent_folder_id = parentFolderId;
+  item->file_path_       = filePath;
 
   auto proj = project_handler_.project();
   if (proj) {
@@ -545,6 +521,24 @@ void AlbumBackend::AddOrUpdateAlbumItem(sl_element_id_t elementId, image_id_t im
   if (item->extension.isEmpty()) {
     item->extension = ExtensionFromFileName(item->file_name);
   }
+}
+
+auto AlbumBackend::FindAlbumItem(sl_element_id_t elementId) -> AlbumItem* {
+  for (auto& item : view_state_.all_images_) {
+    if (item.element_id == elementId) {
+      return &item;
+    }
+  }
+  return nullptr;
+}
+
+auto AlbumBackend::FindAlbumItem(sl_element_id_t elementId) const -> const AlbumItem* {
+  for (const auto& item : view_state_.all_images_) {
+    if (item.element_id == elementId) {
+      return &item;
+    }
+  }
+  return nullptr;
 }
 
 }  // namespace puerhlab::ui

@@ -77,6 +77,44 @@ TEST_F(FolderTests, SelectFolder_ValidId_EmitsFolderSelectionChanged) {
   EXPECT_EQ(backend.CurrentFolderId(), subFolderId);
 }
 
+TEST_F(FolderTests, SelectNestedFolder_LazyPathExpansionUpdatesCurrentPath) {
+  AlbumBackend backend;
+  ASSERT_TRUE(CreateTestProject(backend));
+
+  backend.CreateFolder("ParentFolder");
+  ProcessEvents(500);
+
+  uint parentId = 0;
+  for (const auto& v : backend.Folders()) {
+    const auto map = v.toMap();
+    if (map.value("name").toString() == "ParentFolder") {
+      parentId = map.value("folderId").toUInt();
+      break;
+    }
+  }
+  ASSERT_NE(parentId, 0u);
+
+  backend.SelectFolder(parentId);
+  ProcessEvents(300);
+  backend.CreateFolder("ChildFolder");
+  ProcessEvents(500);
+
+  uint childId = 0;
+  for (const auto& v : backend.Folders()) {
+    const auto map = v.toMap();
+    if (map.value("name").toString() == "ChildFolder") {
+      childId = map.value("folderId").toUInt();
+      break;
+    }
+  }
+  ASSERT_NE(childId, 0u);
+
+  backend.SelectFolder(childId);
+  ProcessEvents(300);
+
+  EXPECT_EQ(backend.CurrentFolderPath(), "\\ParentFolder\\ChildFolder");
+}
+
 // ── Select folder — invalid ID ─────────────────────────────────────────────
 
 TEST_F(FolderTests, SelectFolder_InvalidId_NoCrash) {

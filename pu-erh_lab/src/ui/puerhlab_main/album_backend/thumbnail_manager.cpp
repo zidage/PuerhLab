@@ -150,17 +150,16 @@ void ThumbnailManager::RequestThumbnail(sl_element_id_t elementId, image_id_t im
 }
 
 void ThumbnailManager::UpdateThumbnailDataUrl(sl_element_id_t elementId, const QString& dataUrl) {
-  const auto it = backend_.view_state_.index_by_element_id_.find(elementId);
-  if (it == backend_.view_state_.index_by_element_id_.end()) {
+  auto* item = backend_.FindAlbumItem(elementId);
+  if (!item) {
     return;
   }
 
-  auto& item = backend_.view_state_.all_images_[it->second];
-  if (item.thumb_data_url == dataUrl) {
+  if (item->thumb_data_url == dataUrl) {
     return;
   }
 
-  item.thumb_data_url = dataUrl;
+  item->thumb_data_url = dataUrl;
 
   for (qsizetype i = 0; i < backend_.view_state_.visible_thumbnails_.size(); ++i) {
     QVariantMap row = backend_.view_state_.visible_thumbnails_.at(i).toMap();
@@ -213,9 +212,9 @@ void ThumbnailManager::ReleaseVisibleThumbnailPins() {
   auto thumb_svc = backend_.project_handler_.thumbnail_service();
 
   for (const auto& [id, _] : thumbnail_pin_ref_counts_) {
-    const auto index_it = backend_.view_state_.index_by_element_id_.find(id);
-    if (index_it != backend_.view_state_.index_by_element_id_.end()) {
-      backend_.view_state_.all_images_[index_it->second].thumb_data_url.clear();
+    auto* item = backend_.FindAlbumItem(id);
+    if (item) {
+      item->thumb_data_url.clear();
     }
     if (thumb_svc) {
       try {

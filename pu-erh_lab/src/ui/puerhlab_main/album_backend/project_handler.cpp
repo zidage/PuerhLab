@@ -293,7 +293,6 @@ void ProjectHandler::ClearProjectData() {
   backend_.thumb_.ReleaseVisibleThumbnailPins();
 
   backend_.view_state_.all_images_.clear();
-  backend_.view_state_.index_by_element_id_.clear();
   backend_.view_state_.visible_thumbnails_.clear();
   backend_.folder_ctrl_.ClearState();
   backend_.import_export_.ClearImportTarget();

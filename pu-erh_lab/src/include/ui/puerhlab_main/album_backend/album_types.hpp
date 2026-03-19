@@ -10,7 +10,6 @@
 
 #include <filesystem>
 #include <string>
-#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -21,8 +20,8 @@ namespace puerhlab::ui {
 /// Album grid item shown to the user.
 struct AlbumItem {
   sl_element_id_t element_id       = 0;
-  sl_element_id_t parent_folder_id = 0;
   image_id_t      image_id         = 0;
+  std::filesystem::path file_path_{};
   QString         file_name{};
   QString         camera_model{};
   QString         lens{};
@@ -55,18 +54,17 @@ struct EditorState {
 
 /// Folder entry in the sleeve tree.
 struct ExistingFolderEntry {
-  sl_element_id_t       folder_id_   = 0;
-  sl_element_id_t       parent_id_   = 0;
+  uint32_t              ui_id_       = 0;
   file_name_t           folder_name_{};
   std::filesystem::path folder_path_{};
   int                   depth_       = 0;
+  bool                  expanded_    = false;
 };
 
 /// UI-only display cache state. No filesystem or DB ownership.
 struct AlbumViewState {
-  std::vector<AlbumItem>                      all_images_{};
-  std::unordered_map<sl_element_id_t, size_t> index_by_element_id_{};
-  QVariantList                                visible_thumbnails_{};
+  std::vector<AlbumItem> all_images_{};
+  QVariantList           visible_thumbnails_{};
 };
 
 /// Key for (element, image) pairs used in export.
