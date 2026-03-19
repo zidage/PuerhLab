@@ -17,6 +17,30 @@ namespace {
 
 using FolderTests = AlbumBackendTestFixture;
 
+auto FindPackedProjectPath(const std::filesystem::path& dir)
+    -> std::optional<std::filesystem::path> {
+  for (const auto& entry : std::filesystem::directory_iterator(dir)) {
+    if (entry.is_regular_file() && entry.path().extension() == ".puerhproj") {
+      return entry.path();
+    }
+  }
+  return std::nullopt;
+}
+
+auto FindFolderId(const QVariantList& folders, const QString& name) -> uint {
+  for (const auto& v : folders) {
+    const auto map = v.toMap();
+    if (map.value("name").toString() == name) {
+      return map.value("folderId").toUInt();
+    }
+  }
+  return 0;
+}
+
+auto ContainsFolderName(const QVariantList& folders, const QString& name) -> bool {
+  return FindFolderId(folders, name) != 0;
+}
+
 // ── Create folder — signal emitted, folder visible ─────────────────────────
 
 TEST_F(FolderTests, CreateFolder_ValidName_EmitsFoldersChanged) {
@@ -113,6 +137,37 @@ TEST_F(FolderTests, SelectNestedFolder_LazyPathExpansionUpdatesCurrentPath) {
   ProcessEvents(300);
 
   EXPECT_EQ(backend.CurrentFolderPath(), "\\ParentFolder\\ChildFolder");
+}
+
+TEST_F(FolderTests, ReloadProject_PreservesVisibleNestedFolderUnderSelectedParent) {
+  AlbumBackend backend;
+  ASSERT_TRUE(CreateTestProject(backend, "nested_reload"));
+
+  backend.CreateFolder("ParentFolder");
+  ProcessEvents(500);
+
+  const uint parent_id = FindFolderId(backend.Folders(), "ParentFolder");
+  ASSERT_NE(parent_id, 0u);
+
+  backend.SelectFolder(parent_id);
+  ProcessEvents(300);
+  backend.CreateFolder("ChildFolder");
+  ProcessEvents(500);
+
+  ASSERT_EQ(backend.CurrentFolderPath(), "\\ParentFolder");
+  ASSERT_TRUE(ContainsFolderName(backend.Folders(), "ChildFolder"));
+  ASSERT_TRUE(backend.SaveProject());
+
+  const auto packed_project_path = FindPackedProjectPath(temp_dir_);
+  ASSERT_TRUE(packed_project_path.has_value());
+
+  QSignalSpy project_changed_spy(&backend, &AlbumBackend::ProjectChanged);
+  ASSERT_TRUE(backend.LoadProject(PathToQString(*packed_project_path)));
+  ASSERT_TRUE(WaitForSignal(project_changed_spy, 15000));
+  ProcessEvents(500);
+
+  EXPECT_EQ(backend.CurrentFolderPath(), "\\ParentFolder");
+  EXPECT_TRUE(ContainsFolderName(backend.Folders(), "ChildFolder"));
 }
 
 // ── Select folder — invalid ID ─────────────────────────────────────────────

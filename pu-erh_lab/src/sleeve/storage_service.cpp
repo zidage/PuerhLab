@@ -34,7 +34,7 @@ void NodeStorageHandler::EnsureChildrenLoaded(std::shared_ptr<SleeveFolder> fold
       auto folder_content = db_ctrl_.GetFolderContent(folder->element_id_);
       for (auto& content_id : folder_content) {
         auto content = GetElement(content_id);
-        folder->AddElementToMap(content);
+        folder->AddElementToMap(content, false);
       }
     } catch (std::exception& e) {
       // TODO: LOG

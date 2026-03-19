@@ -19,6 +19,26 @@ namespace {
 
 using ImportTests = AlbumBackendTestFixture;
 
+auto FindPackedProjectPath(const std::filesystem::path& dir)
+    -> std::optional<std::filesystem::path> {
+  for (const auto& entry : std::filesystem::directory_iterator(dir)) {
+    if (entry.is_regular_file() && entry.path().extension() == ".puerhproj") {
+      return entry.path();
+    }
+  }
+  return std::nullopt;
+}
+
+auto FindFolderId(const QVariantList& folders, const QString& name) -> uint {
+  for (const auto& v : folders) {
+    const auto map = v.toMap();
+    if (map.value("name").toString() == name) {
+      return map.value("folderId").toUInt();
+    }
+  }
+  return 0;
+}
+
 // ── Helper: wait until importRunning becomes false ─────────────────────────
 
 void WaitForImportFinished(AlbumBackend& backend, int timeoutMs = 30000) {
@@ -305,6 +325,113 @@ TEST_F(ImportTests, Import_CorruptedFileValidExtension_NoCrash) {
 
   // Must not crash. Import may report 0 succeeded + 1 failed, or skip it.
   EXPECT_FALSE(backend.ImportRunning());
+}
+
+TEST_F(ImportTests, ImportIntoSubfolder_PersistsAcrossFreshProjectLoad) {
+  auto images = CollectRawTestImages("airplane", 1);
+  if (images.empty()) {
+    GTEST_SKIP() << "No test RAW images available";
+  }
+
+  const QString expected_name = PathToQString(images.front().filename());
+
+  {
+    AlbumBackend backend;
+    ASSERT_TRUE(CreateTestProject(backend, "subfolder_import_reload"));
+
+    backend.CreateFolder("Imports");
+    ProcessEvents(500);
+
+    const uint imports_folder_id = FindFolderId(backend.Folders(), "Imports");
+    ASSERT_NE(imports_folder_id, 0u);
+
+    backend.SelectFolder(imports_folder_id);
+    ProcessEvents(300);
+    ASSERT_EQ(backend.CurrentFolderPath(), "\\Imports");
+
+    backend.StartImport(PathsToQStringList(images));
+    WaitForImportFinished(backend);
+
+    ASSERT_FALSE(backend.ImportRunning());
+    ASSERT_EQ(backend.ShownCount(), 1);
+    ASSERT_EQ(backend.Thumbnails().size(), 1);
+
+    const QVariantMap imported = backend.Thumbnails().front().toMap();
+    EXPECT_EQ(imported.value("fileName").toString(), expected_name);
+    ASSERT_TRUE(backend.SaveProject());
+  }
+
+  const auto packed_project_path = FindPackedProjectPath(temp_dir_);
+  ASSERT_TRUE(packed_project_path.has_value());
+
+  AlbumBackend reloaded_backend;
+  QSignalSpy   project_spy(&reloaded_backend, &AlbumBackend::ProjectChanged);
+  ASSERT_TRUE(reloaded_backend.LoadProject(PathToQString(*packed_project_path)));
+  ASSERT_TRUE(WaitForSignal(project_spy, 15000));
+  ProcessEvents(500);
+
+  const uint imports_folder_id = FindFolderId(reloaded_backend.Folders(), "Imports");
+  ASSERT_NE(imports_folder_id, 0u);
+
+  reloaded_backend.SelectFolder(imports_folder_id);
+  ProcessEvents(500);
+
+  EXPECT_EQ(reloaded_backend.CurrentFolderPath(), "\\Imports");
+  ASSERT_EQ(reloaded_backend.ShownCount(), 1);
+  ASSERT_EQ(reloaded_backend.Thumbnails().size(), 1);
+
+  const QVariantMap imported = reloaded_backend.Thumbnails().front().toMap();
+  EXPECT_EQ(imported.value("fileName").toString(), expected_name);
+}
+
+TEST_F(ImportTests, ImportIntoNestedSubfolder_PersistsAcrossProjectReload) {
+  auto images = CollectRawTestImages("airplane", 1);
+  if (images.empty()) {
+    GTEST_SKIP() << "No test RAW images available";
+  }
+
+  const QString expected_name = PathToQString(images.front().filename());
+
+  AlbumBackend backend;
+  ASSERT_TRUE(CreateTestProject(backend, "nested_subfolder_import_reload"));
+
+  backend.CreateFolder("ParentFolder");
+  ProcessEvents(500);
+
+  const uint parent_folder_id = FindFolderId(backend.Folders(), "ParentFolder");
+  ASSERT_NE(parent_folder_id, 0u);
+
+  backend.SelectFolder(parent_folder_id);
+  ProcessEvents(300);
+  backend.CreateFolder("ChildFolder");
+  ProcessEvents(500);
+
+  const uint child_folder_id = FindFolderId(backend.Folders(), "ChildFolder");
+  ASSERT_NE(child_folder_id, 0u);
+
+  backend.SelectFolder(child_folder_id);
+  ProcessEvents(300);
+  ASSERT_EQ(backend.CurrentFolderPath(), "\\ParentFolder\\ChildFolder");
+
+  backend.StartImport(PathsToQStringList(images));
+  WaitForImportFinished(backend);
+
+  ASSERT_FALSE(backend.ImportRunning());
+  ASSERT_EQ(backend.ShownCount(), 1);
+  ASSERT_EQ(backend.Thumbnails().size(), 1);
+  EXPECT_EQ(backend.Thumbnails().front().toMap().value("fileName").toString(), expected_name);
+  const auto packed_project_path = FindPackedProjectPath(temp_dir_);
+  ASSERT_TRUE(packed_project_path.has_value());
+
+  QSignalSpy project_spy(&backend, &AlbumBackend::ProjectChanged);
+  ASSERT_TRUE(backend.LoadProject(PathToQString(*packed_project_path)));
+  ASSERT_TRUE(WaitForSignal(project_spy, 15000));
+  ProcessEvents(500);
+
+  EXPECT_EQ(backend.CurrentFolderPath(), "\\ParentFolder\\ChildFolder");
+  ASSERT_EQ(backend.ShownCount(), 1);
+  ASSERT_EQ(backend.Thumbnails().size(), 1);
+  EXPECT_EQ(backend.Thumbnails().front().toMap().value("fileName").toString(), expected_name);
 }
 
 }  // namespace

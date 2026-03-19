@@ -7,6 +7,7 @@
 #include <gtest/gtest.h>
 
 #include <memory>
+#include <unordered_set>
 
 #include "app/project_service.hpp"
 #include "import_test_fixation.hpp"
@@ -547,6 +548,90 @@ TEST_F(ImportServiceTests, ImportedElementNameMatchesFileName) {
       [](std::shared_ptr<Image> img) -> std::wstring { return img->image_name_; });
   EXPECT_EQ(img_name, expected_name)
       << "Image name should match the original image filename";
+}
+
+TEST_F(ImportServiceTests, ImportToSubfolder_KeepsUnsyncedAndModifiedSetsDisjoint) {
+  ProjectService                 project(db_path_, meta_path_);
+  auto                           fs_service       = project.GetSleeveService();
+  auto                           img_pool_service = project.GetImagePoolService();
+  std::unique_ptr<ImportService> import_service =
+      std::make_unique<ImportServiceImpl>(fs_service, img_pool_service);
+
+  const std::wstring subfolder = L"Imports";
+  const auto         created   = fs_service->CreateFolder(L"/", subfolder);
+  ASSERT_NE(created.first, nullptr);
+  ASSERT_TRUE(created.second.success_);
+
+  std::vector<image_path_t> paths;
+  paths.push_back(TEST_IMG_PATH "/raw/airplane/_DSC1704.NEF");
+
+  std::shared_ptr<ImportJob> import_job = std::make_shared<ImportJob>();
+  std::promise<ImportResult> final_result;
+  auto                       final_result_future = final_result.get_future();
+  import_job->on_finished_                       = [&final_result](const ImportResult& result) {
+    final_result.set_value(result);
+  };
+
+  import_job = import_service->ImportToFolder(paths, L"/Imports", {}, import_job);
+  ASSERT_NE(import_job, nullptr);
+
+  final_result_future.wait();
+  const ImportResult result = final_result_future.get();
+  ASSERT_EQ(result.imported_, 1u);
+  ASSERT_NE(import_job->import_log_, nullptr);
+
+  const auto unsynced_before_sync =
+      fs_service->Read<std::vector<std::shared_ptr<SleeveElement>>>([](FileSystem& fs) {
+        return fs.GetUnsyncedElements();
+      });
+  const auto modified_before_sync =
+      fs_service->Read<std::vector<std::shared_ptr<SleeveElement>>>([](FileSystem& fs) {
+        return fs.GetModifiedElements();
+      });
+
+  std::unordered_set<sl_element_id_t> unsynced_ids;
+  for (const auto& element : unsynced_before_sync) {
+    ASSERT_NE(element, nullptr);
+    unsynced_ids.insert(element->element_id_);
+  }
+
+  for (const auto& element : modified_before_sync) {
+    ASSERT_NE(element, nullptr);
+    EXPECT_FALSE(unsynced_ids.contains(element->element_id_))
+        << "Element id " << element->element_id_
+        << " must not appear in both unsynced and modified sets";
+  }
+
+  bool found_unsynced_file  = false;
+  bool found_modified_folder = false;
+  for (const auto& element : unsynced_before_sync) {
+    if (element->type_ == ElementType::FILE &&
+        element->element_name_ == std::filesystem::path(paths.front()).filename().wstring()) {
+      found_unsynced_file = true;
+    }
+  }
+  for (const auto& element : modified_before_sync) {
+    if (element->type_ == ElementType::FOLDER && element->element_name_ == subfolder) {
+      found_modified_folder = true;
+    }
+  }
+  EXPECT_TRUE(found_unsynced_file);
+  EXPECT_TRUE(found_modified_folder);
+
+  const auto snapshot = import_job->import_log_->Snapshot();
+  import_service->SyncImports(snapshot, L"/Imports");
+
+  const auto unsynced_after_sync =
+      fs_service->Read<std::vector<std::shared_ptr<SleeveElement>>>([](FileSystem& fs) {
+        return fs.GetUnsyncedElements();
+      });
+  const auto modified_after_sync =
+      fs_service->Read<std::vector<std::shared_ptr<SleeveElement>>>([](FileSystem& fs) {
+        return fs.GetModifiedElements();
+      });
+
+  EXPECT_TRUE(unsynced_after_sync.empty());
+  EXPECT_TRUE(modified_after_sync.empty());
 }
 
 };  // namespace puerhlab

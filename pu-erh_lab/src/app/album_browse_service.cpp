@@ -7,10 +7,12 @@
 #include <algorithm>
 #include <unordered_set>
 
+#include "utils/string/convert.hpp"
+
 namespace puerhlab {
 namespace {
 
-auto BuildFolderView(const std::filesystem::path& parent_path,
+auto BuildFolderView(const std::filesystem::path&         parent_path,
                      const std::shared_ptr<SleeveFolder>& folder) -> AlbumFolderView {
   AlbumFolderView out;
   out.folder_name_ = folder ? folder->element_name_ : file_name_t{};
@@ -18,7 +20,7 @@ auto BuildFolderView(const std::filesystem::path& parent_path,
   return out;
 }
 
-auto BuildFileView(const std::filesystem::path& parent_path,
+auto BuildFileView(const std::filesystem::path&       parent_path,
                    const std::shared_ptr<SleeveFile>& file) -> AlbumFileView {
   AlbumFileView out;
   out.element_id_ = file ? file->element_id_ : 0;
@@ -41,8 +43,10 @@ auto AlbumBrowseService::ListFolders(const std::filesystem::path& folder_path) c
     const auto entries = sleeve_service_->ListFolderEntries(folder_path);
     folders.reserve(entries.size());
     for (const auto& entry : entries) {
-      if (!entry || entry->type_ != ElementType::FOLDER ||
-          entry->sync_flag_ == SyncFlag::DELETED) {
+      std::cout << "[LOG] AlbumBrowseService: Found file/folder "
+                << conv::ToBytes(entry->element_name_) << " in " << folder_path.string()
+                << " with size " << entries.size() << std::endl;
+      if (!entry || entry->type_ != ElementType::FOLDER || entry->sync_flag_ == SyncFlag::DELETED) {
         continue;
       }
       auto folder = std::dynamic_pointer_cast<SleeveFolder>(entry);
@@ -55,12 +59,13 @@ auto AlbumBrowseService::ListFolders(const std::filesystem::path& folder_path) c
     return {};
   }
 
-  std::sort(folders.begin(), folders.end(), [](const AlbumFolderView& lhs, const AlbumFolderView& rhs) {
-    if (lhs.folder_name_ != rhs.folder_name_) {
-      return lhs.folder_name_ < rhs.folder_name_;
-    }
-    return lhs.folder_path_.generic_wstring() < rhs.folder_path_.generic_wstring();
-  });
+  std::sort(folders.begin(), folders.end(),
+            [](const AlbumFolderView& lhs, const AlbumFolderView& rhs) {
+              if (lhs.folder_name_ != rhs.folder_name_) {
+                return lhs.folder_name_ < rhs.folder_name_;
+              }
+              return lhs.folder_path_.generic_wstring() < rhs.folder_path_.generic_wstring();
+            });
   return folders;
 }
 
@@ -75,8 +80,7 @@ auto AlbumBrowseService::ListFilesInFolder(const std::filesystem::path& folder_p
     const auto entries = sleeve_service_->ListFolderEntries(folder_path);
     files.reserve(entries.size());
     for (const auto& entry : entries) {
-      if (!entry || entry->type_ != ElementType::FILE ||
-          entry->sync_flag_ == SyncFlag::DELETED) {
+      if (!entry || entry->type_ != ElementType::FILE || entry->sync_flag_ == SyncFlag::DELETED) {
         continue;
       }
       auto file = std::dynamic_pointer_cast<SleeveFile>(entry);
@@ -99,8 +103,7 @@ auto AlbumBrowseService::ListFilesInFolder(const std::filesystem::path& folder_p
 }
 
 auto AlbumBrowseService::CreateFolder(const std::filesystem::path& parent_folder_path,
-                                      const file_name_t&          name)
-    -> std::optional<AlbumFolderView> {
+                                      const file_name_t& name) -> std::optional<AlbumFolderView> {
   if (!sleeve_service_) {
     return std::nullopt;
   }

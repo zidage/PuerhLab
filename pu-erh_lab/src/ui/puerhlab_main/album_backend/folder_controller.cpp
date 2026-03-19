@@ -8,6 +8,7 @@
 
 #include "ui/puerhlab_main/album_backend/album_backend.hpp"
 #include "ui/puerhlab_main/album_backend/path_utils.hpp"
+#include "utils/string/convert.hpp"
 
 namespace puerhlab::ui {
 
@@ -77,6 +78,7 @@ auto FolderController::EnsureNode(const std::filesystem::path& folderPath,
 }
 
 void FolderController::LoadChildren(const std::filesystem::path& parentPath) {
+  std::cout << "[LOG] FolderController: Loading Child for: " << parentPath.string() << std::endl;
   auto proj = backend_.project_handler_.project();
   if (!proj) {
     return;
@@ -157,12 +159,16 @@ void FolderController::AppendVisibleEntries(const std::filesystem::path&      fo
     return;
   }
 
+  std::cout << "[LOG] FolderController: Finding child for " << conv::ToBytes(key) << std::endl;
   const auto child_it = child_keys_by_path_.find(key);
   if (child_it == child_keys_by_path_.end()) {
+    std::cout << "No child for " << conv::ToBytes(key) << std::endl;
     return;
   }
 
   for (const auto& child_key : child_it->second) {
+    std::cout << "[LOG] FolderController: Child for " << conv::ToBytes(key)
+              << " found: " << conv::ToBytes(child_key) << std::endl;
     const auto node_it = nodes_by_path_.find(child_key);
     if (node_it == nodes_by_path_.end()) {
       continue;
@@ -225,7 +231,8 @@ void FolderController::ApplyFolderSelection(uint folderUiId, bool emitSignal) {
   const bool    text_changed  = current_folder_path_text_ != next_path_ui;
   current_folder_path_text_   = next_path_ui;
 
-  std::cout << "Folder Selected: " << next_path_ui.toStdString() << std::endl;
+  std::cout << "[LOG] FolderController: Folder Selected: " << next_path_ui.toStdString()
+            << std::endl;
 
   RebuildFolderView();
 

@@ -196,9 +196,10 @@ bool ProjectHandler::InitializeServices(const std::filesystem::path& dbPath,
           ph.project_package_path_  = std::move(result->package_path_);
           ph.project_workspace_dir_ = std::move(result->workspace_dir_);
 
+          const auto preferred_folder_path = self->folder_ctrl_.current_folder_path();
           ph.ClearProjectData();
           self->import_export_.ResetExportState();
-          self->ReloadFolderTree();
+          self->ReloadFolderTree(preferred_folder_path);
           self->stats_.ClearFilters();
           self->ReloadCurrentFolder();
           emit self->StatsFilterChanged();

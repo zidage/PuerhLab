@@ -139,8 +139,6 @@ void FileSystem::Delete(std::filesystem::path target) {
         }
       }
     }
-
-
   }
 
   parent_write_node->RemoveNameFromMap(delete_node_name.wstring());

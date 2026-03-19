@@ -14,6 +14,7 @@
 #include "sleeve/sleeve_element/sleeve_element_factory.hpp"
 #include "sleeve/sleeve_filter/filter_combo.hpp"
 #include "type/type.hpp"
+#include "utils/string/convert.hpp"
 
 namespace puerhlab {
 /**
@@ -45,13 +46,17 @@ auto SleeveFolder::Copy(sl_element_id_t new_id) const -> std::shared_ptr<SleeveE
  * @param element
  */
 void SleeveFolder::AddElementToMap(const std::shared_ptr<SleeveElement> element) {
+  AddElementToMap(element, true);
+}
+
+void SleeveFolder::AddElementToMap(const std::shared_ptr<SleeveElement> element, bool change_sync) {
   contents_[element->element_name_] = element->element_id_;
   indicies_cache_[default_filter_].push_back(element->element_id_);
   // Once a pinned element is added to the current folder, current folder also becomes pinned
   pinned_ |= element->pinned_;
   element->IncrementRefCount();
   // Mark this folder as modified so the updated content list is persisted on next sync.
-  if (sync_flag_ == SyncFlag::SYNCED) {
+  if (change_sync && sync_flag_ == SyncFlag::SYNCED) {
     sync_flag_ = SyncFlag::MODIFIED;
   }
 }
@@ -166,6 +171,6 @@ void SleeveFolder::DecrementFileCount() { --file_count_; }
 
 void SleeveFolder::IncrementFolderCount() { ++folder_count_; }
 
-void SleeveFolder::DecrementFolderCount() { --folder_count_; }  
+void SleeveFolder::DecrementFolderCount() { --folder_count_; }
 auto SleeveFolder::ContentSize() -> size_t { return contents_.size(); }
 };  // namespace puerhlab

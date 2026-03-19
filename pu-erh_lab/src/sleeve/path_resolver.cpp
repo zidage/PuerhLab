@@ -87,6 +87,10 @@ auto PathResolver::Resolve(const std::filesystem::path& path) -> std::shared_ptr
     }
   }
   directory_cache_.RecordAccess(path.wstring(), current->element_id_);
+
+  if (current->type_ == ElementType::FOLDER) {
+    storage_handler_.EnsureChildrenLoaded(std::static_pointer_cast<SleeveFolder>(current));
+  }
   return current;
 }
 
