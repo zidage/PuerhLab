@@ -28,10 +28,8 @@ struct HighlightCorrectionParams {
   float chrominance[4];
 };
 
-__device__ __forceinline__ int FC(const int y, const int x) {
-  // Matches CPU highlight_reconstruct.cpp's hard-coded pattern:
-  // static int fc[2][2] = {{0, 1}, {2, 1}};
-  return (y & 1) ? ((x & 1) ? 1 : 2) : ((x & 1) ? 1 : 0);
+__device__ __forceinline__ int FC(const BayerPattern2x2& pattern, const int y, const int x) {
+  return pattern.rgb_fc[BayerCellIndex(y, x)];
 }
 
 __device__ __forceinline__ int RawToCmap(const int m_width, const int row, const int col) {
@@ -58,8 +56,9 @@ __device__ __forceinline__ uint8_t MaskDilate(const uint8_t* in, const int w1) {
 
 __device__ __forceinline__ float CalcRefavg(const cv::cuda::PtrStep<float> in, const int row,
                                             const int col, const int height, const int width,
-                                            const float* correction) {
-  const int color = FC(row, col);
+                                            const float* correction,
+                                            const BayerPattern2x2& pattern) {
+  const int color = FC(pattern, row, col);
   float     mean[3] = {0.0f, 0.0f, 0.0f};
   float     cnt[3]  = {0.0f, 0.0f, 0.0f};
 
@@ -71,7 +70,7 @@ __device__ __forceinline__ float CalcRefavg(const cv::cuda::PtrStep<float> in, c
   for (int dy = dymin; dy < dymax; ++dy) {
     for (int dx = dxmin; dx < dxmax; ++dx) {
       const float val = fmaxf(0.0f, in(dy, dx));
-      const int   c   = FC(dy, dx);
+      const int   c   = FC(pattern, dy, dx);
       mean[c] += val;
       cnt[c] += 1.0f;
     }
@@ -97,7 +96,7 @@ __global__ void Clamp01Kernel(cv::cuda::PtrStep<float> img, int width, int heigh
 
 __global__ void BuildMaskKernel(cv::cuda::PtrStep<float> input, int width, int height,
                                 uint8_t* mask_buf, int m_width, int m_height, int m_size,
-                                float clip_val, int* anyclipped) {
+                                float clip_val, int* anyclipped, BayerPattern2x2 pattern) {
   const int col = blockIdx.x * blockDim.x + threadIdx.x;
   const int row = blockIdx.y * blockDim.y + threadIdx.y;
 
@@ -115,7 +114,7 @@ __global__ void BuildMaskKernel(cv::cuda::PtrStep<float> input, int width, int h
 
       // Mirror CPU behavior: no explicit bounds check (ranges are constructed to be safe).
       const float val     = input(raw_y, raw_x);
-      const int   color   = FC(row + y, col + x);
+      const int   color   = FC(pattern, row + y, col + x);
       const char  clipped = (val >= clip_val) ? 1 : 0;
       mbuff[color] += clipped;
     }
@@ -146,19 +145,20 @@ __global__ void DilateMaskKernel(uint8_t* mask_buf, int m_width, int m_height, i
 __global__ void ChrominanceAccumulateKernel(cv::cuda::PtrStep<float> input, int width, int height,
                                             const uint8_t* mask_buf, int m_width, int m_size,
                                             float clip_val, float lo_clip_val, float* sums,
-                                            float* cnts, HighlightCorrectionParams hl_params) {
+                                            float* cnts, HighlightCorrectionParams hl_params,
+                                            BayerPattern2x2 pattern) {
   const int col = blockIdx.x * blockDim.x + threadIdx.x;
   const int row = blockIdx.y * blockDim.y + threadIdx.y;
 
   if (col >= width || row >= height) return;
   if (col < 3 || col >= width - 3 || row < 3 || row >= height - 3) return;
 
-  const int   color = FC(row, col);
+  const int   color = FC(pattern, row, col);
   const float inval = input(row, col);
 
   if ((inval < clip_val) && (inval > lo_clip_val) &&
       mask_buf[(color + 3) * m_size + RawToCmap(m_width, row, col)]) {
-    const float ref = CalcRefavg(input, row, col, height, width, hl_params.correction);
+    const float ref = CalcRefavg(input, row, col, height, width, hl_params.correction, pattern);
     atomicAdd(&sums[color], inval - ref);
     atomicAdd(&cnts[color], 1.0f);
   }
@@ -166,17 +166,18 @@ __global__ void ChrominanceAccumulateKernel(cv::cuda::PtrStep<float> input, int 
 
 __global__ void HighlightReconstructKernel(cv::cuda::PtrStep<float> input, cv::cuda::PtrStep<float> out,
                                            int width, int height, float clip_val,
-                                           HighlightCorrectionParams hl_params) {
+                                           HighlightCorrectionParams hl_params,
+                                           BayerPattern2x2 pattern) {
   const int col = blockIdx.x * blockDim.x + threadIdx.x;
   const int row = blockIdx.y * blockDim.y + threadIdx.y;
 
   if (col >= width || row >= height) return;
 
-  const int   color = FC(row, col);
+  const int   color = FC(pattern, row, col);
   const float inval = fmaxf(0.0f, input(row, col));
 
   if (inval >= clip_val) {
-    const float ref = CalcRefavg(input, row, col, height, width, hl_params.correction);
+    const float ref = CalcRefavg(input, row, col, height, width, hl_params.correction, pattern);
     out(row, col)   = fmaxf(inval, ref + hl_params.chrominance[color]);
   } else {
     out(row, col) = inval;
@@ -199,7 +200,8 @@ void Clamp01(cv::cuda::GpuMat& img) {
   CUDA_CHECK(cudaDeviceSynchronize());
 }
 
-void HighlightReconstruct(cv::cuda::GpuMat& img, LibRaw& raw_processor) {
+void HighlightReconstruct(cv::cuda::GpuMat& img, LibRaw& raw_processor,
+                          const BayerPattern2x2& pattern) {
   CV_Assert(img.type() == CV_32FC1);
 
   const int width  = img.cols;
@@ -229,8 +231,8 @@ void HighlightReconstruct(cv::cuda::GpuMat& img, LibRaw& raw_processor) {
   {
     const dim3 threads(32, 32);
     const dim3 blocks((m_width + threads.x - 1) / threads.x, (m_height + threads.y - 1) / threads.y);
-    BuildMaskKernel<<<blocks, threads>>>(img, width, height, d_mask_buf, m_width, m_height, m_size,
-                                         clip_val, d_anyclipped);
+    BuildMaskKernel<<<blocks, threads>>>(img, width, height, d_mask_buf, m_width, m_height,
+                                         m_size, clip_val, d_anyclipped, pattern);
     CUDA_CHECK(cudaGetLastError());
     CUDA_CHECK(cudaDeviceSynchronize());
   }
@@ -263,7 +265,8 @@ void HighlightReconstruct(cv::cuda::GpuMat& img, LibRaw& raw_processor) {
     const dim3  threads(32, 32);
     const dim3  blocks((width + threads.x - 1) / threads.x, (height + threads.y - 1) / threads.y);
     ChrominanceAccumulateKernel<<<blocks, threads>>>(img, width, height, d_mask_buf, m_width, m_size,
-                                                     clip_val, lo_clip_val, d_sums, d_cnts, hl_params);
+                                                     clip_val, lo_clip_val, d_sums, d_cnts,
+                                                     hl_params, pattern);
     CUDA_CHECK(cudaGetLastError());
     CUDA_CHECK(cudaDeviceSynchronize());
   }
@@ -283,7 +286,8 @@ void HighlightReconstruct(cv::cuda::GpuMat& img, LibRaw& raw_processor) {
   {
     const dim3 threads(32, 32);
     const dim3 blocks((width + threads.x - 1) / threads.x, (height + threads.y - 1) / threads.y);
-    HighlightReconstructKernel<<<blocks, threads>>>(img, result, width, height, clip_val, hl_params);
+    HighlightReconstructKernel<<<blocks, threads>>>(img, result, width, height, clip_val,
+                                                    hl_params, pattern);
     CUDA_CHECK(cudaGetLastError());
     CUDA_CHECK(cudaDeviceSynchronize());
   }

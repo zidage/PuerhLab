@@ -28,9 +28,8 @@ namespace {
 constexpr float kEps   = 1e-5f;
 constexpr float kEpsSq = 1e-10f;
 
-__device__ __forceinline__ int FC(const int y, const int x) {
-  // Matches CPU debayer_rcd.cpp: static int fc[2][2] = {{0, 1}, {1, 2}};
-  return (y & 1) ? ((x & 1) ? 2 : 1) : ((x & 1) ? 1 : 0);
+__device__ __forceinline__ int FC(const BayerPattern2x2& pattern, const int y, const int x) {
+  return pattern.rgb_fc[BayerCellIndex(y, x)];
 }
 
 __device__ __forceinline__ float LowPassAt(const cv::cuda::PtrStep<float> raw, const int y,
@@ -56,13 +55,13 @@ __device__ __forceinline__ float LowPassAt(const cv::cuda::PtrStep<float> raw, c
 __global__ void RCD_InitAndVHKernel(const cv::cuda::PtrStep<float> raw, cv::cuda::PtrStep<float> r,
                                    cv::cuda::PtrStep<float> g, cv::cuda::PtrStep<float> b,
                                    cv::cuda::PtrStep<float> vh_dir, const int width,
-                                   const int height) {
+                                   const int height, BayerPattern2x2 pattern) {
   const int x = blockIdx.x * blockDim.x + threadIdx.x;
   const int y = blockIdx.y * blockDim.y + threadIdx.y;
   if (x >= width || y >= height) return;
 
   const float val   = raw.ptr(y)[x];
-  const int   color = FC(y, x);
+  const int   color = FC(pattern, y, x);
 
   r.ptr(y)[x]       = (color == 0) ? val : 0.0f;
   g.ptr(y)[x]       = (color == 1) ? val : 0.0f;
@@ -124,13 +123,13 @@ __global__ void RCD_InitAndVHKernel(const cv::cuda::PtrStep<float> raw, cv::cuda
 
 __global__ void RCD_GreenAtRBKernel(const cv::cuda::PtrStep<float> raw,
                                    const cv::cuda::PtrStep<float> vh_dir, cv::cuda::PtrStep<float> g,
-                                   const int width, const int height) {
+                                   const int width, const int height, BayerPattern2x2 pattern) {
   const int x = blockIdx.x * blockDim.x + threadIdx.x;
   const int y = blockIdx.y * blockDim.y + threadIdx.y;
   if (x >= width || y >= height) return;
   if (y < 4 || y >= height - 4 || x < 4 || x >= width - 4) return;
 
-  const int color = FC(y, x);
+  const int color = FC(pattern, y, x);
   if (color == 1) return;
 
   const float VH_central = vh_dir.ptr(y)[x];
@@ -182,14 +181,14 @@ __global__ void RCD_GreenAtRBKernel(const cv::cuda::PtrStep<float> raw,
 }
 
 __global__ void RCD_PQDirKernel(const cv::cuda::PtrStep<float> raw, cv::cuda::PtrStep<float> pq_dir,
-                               const int width, const int height) {
+                               const int width, const int height, BayerPattern2x2 pattern) {
   const int x = blockIdx.x * blockDim.x + threadIdx.x;
   const int y = blockIdx.y * blockDim.y + threadIdx.y;
   if (x >= width || y >= height) return;
 
   float pq = 0.0f;
   if (y >= 4 && y < height - 4 && x >= 4 && x < width - 4) {
-    const int color = FC(y, x);
+    const int color = FC(pattern, y, x);
     if (color != 1) {
       const float c   = raw.ptr(y)[x];
 
@@ -246,13 +245,13 @@ __global__ void RCD_PQDirKernel(const cv::cuda::PtrStep<float> raw, cv::cuda::Pt
 
 __global__ void RCD_RBAtRBKernel(const cv::cuda::PtrStep<float> pq_dir, const cv::cuda::PtrStep<float> g,
                                 cv::cuda::PtrStep<float> r, cv::cuda::PtrStep<float> b,
-                                const int width, const int height) {
+                                const int width, const int height, BayerPattern2x2 pattern) {
   const int x = blockIdx.x * blockDim.x + threadIdx.x;
   const int y = blockIdx.y * blockDim.y + threadIdx.y;
   if (x >= width || y >= height) return;
   if (y < 4 || y >= height - 4 || x < 4 || x >= width - 4) return;
 
-  const int color = FC(y, x);
+  const int color = FC(pattern, y, x);
   if (color == 1) return;
 
   const int   c        = 2 - color;  // missing channel at RB position (R->B, B->R)
@@ -308,13 +307,13 @@ __global__ void RCD_RBAtRBKernel(const cv::cuda::PtrStep<float> pq_dir, const cv
 
 __global__ void RCD_RBAtGKernel(const cv::cuda::PtrStep<float> vh_dir, const cv::cuda::PtrStep<float> g,
                                cv::cuda::PtrStep<float> r, cv::cuda::PtrStep<float> b,
-                               const int width, const int height) {
+                               const int width, const int height, BayerPattern2x2 pattern) {
   const int x = blockIdx.x * blockDim.x + threadIdx.x;
   const int y = blockIdx.y * blockDim.y + threadIdx.y;
   if (x >= width || y >= height) return;
   if (y < 4 || y >= height - 4 || x < 4 || x >= width - 4) return;
 
-  const int color = FC(y, x);
+  const int color = FC(pattern, y, x);
   if (color != 1) return;
 
   const float VH_central = vh_dir.ptr(y)[x];
@@ -387,7 +386,7 @@ __global__ void RCD_RBAtGKernel(const cv::cuda::PtrStep<float> vh_dir, const cv:
 
 }  // namespace
 
-void BayerRGGB2RGB_RCD(cv::cuda::GpuMat& image) {
+void Bayer2x2ToRGB_RCD(cv::cuda::GpuMat& image, const BayerPattern2x2& pattern) {
   CV_Assert(image.type() == CV_32FC1);
 
   const int width  = image.cols;
@@ -407,19 +406,21 @@ void BayerRGGB2RGB_RCD(cv::cuda::GpuMat& image) {
   const dim3       threads(32, 8);
   const dim3       blocks((width + threads.x - 1) / threads.x, (height + threads.y - 1) / threads.y);
 
-  RCD_InitAndVHKernel<<<blocks, threads, 0, cuda_stream>>>(image, r, g, b, vh_dir, width, height);
+  RCD_InitAndVHKernel<<<blocks, threads, 0, cuda_stream>>>(image, r, g, b, vh_dir, width, height,
+                                                           pattern);
   CUDA_CHECK(cudaGetLastError());
 
-  RCD_GreenAtRBKernel<<<blocks, threads, 0, cuda_stream>>>(image, vh_dir, g, width, height);
+  RCD_GreenAtRBKernel<<<blocks, threads, 0, cuda_stream>>>(image, vh_dir, g, width, height,
+                                                           pattern);
   CUDA_CHECK(cudaGetLastError());
 
-  RCD_PQDirKernel<<<blocks, threads, 0, cuda_stream>>>(image, pq_dir, width, height);
+  RCD_PQDirKernel<<<blocks, threads, 0, cuda_stream>>>(image, pq_dir, width, height, pattern);
   CUDA_CHECK(cudaGetLastError());
 
-  RCD_RBAtRBKernel<<<blocks, threads, 0, cuda_stream>>>(pq_dir, g, r, b, width, height);
+  RCD_RBAtRBKernel<<<blocks, threads, 0, cuda_stream>>>(pq_dir, g, r, b, width, height, pattern);
   CUDA_CHECK(cudaGetLastError());
 
-  RCD_RBAtGKernel<<<blocks, threads, 0, cuda_stream>>>(vh_dir, g, r, b, width, height);
+  RCD_RBAtGKernel<<<blocks, threads, 0, cuda_stream>>>(vh_dir, g, r, b, width, height, pattern);
   CUDA_CHECK(cudaGetLastError());
 
   MergeRGB(r, g, b, image, &stream);

@@ -6,8 +6,10 @@
 
 #include <opencv2/core/cuda.hpp>
 
+#include "decoders/processor/raw_processor_pattern.hpp"
+
 namespace puerhlab {
 namespace CUDA {
-void BayerRGGB2RGB_RCD(cv::cuda::GpuMat& image);
+void Bayer2x2ToRGB_RCD(cv::cuda::GpuMat& image, const BayerPattern2x2& pattern);
 };
 };  // namespace puerhlab

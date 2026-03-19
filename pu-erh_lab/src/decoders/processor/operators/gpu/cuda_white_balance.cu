@@ -16,9 +16,9 @@ struct WBParams {
   float wb_multipliers[4];
 };
 
-__constant__ int   remap[4] = {0, 1, 3, 2};
 __global__ void ToLinearRefKernel(cv::cuda::PtrStep<float> image, int width, int height,
-                                             float white_level_scale, WBParams wb_params) {
+                                  float white_level_scale, WBParams wb_params,
+                                  BayerPattern2x2 pattern) {
   // Calculate the global x and y coordinates of the pixel for this thread
   const int col = blockIdx.x * blockDim.x + threadIdx.x;
   const int row = blockIdx.y * blockDim.y + threadIdx.y;
@@ -32,7 +32,7 @@ __global__ void ToLinearRefKernel(cv::cuda::PtrStep<float> image, int width, int
   // This standard calculation assumes a 2x2 Bayer pattern (like RGGB, GRBG, etc.).
   // The 'bayer_pattern_offset' helps align to the specific pattern from LibRaw's `idata.filters`.
   // The LibRaw COLOR(row, col) macro can often be simplified to this.
-  const int color_idx = remap[(((row % 2) * 2) + (col % 2)) % 4];
+  const int color_idx = pattern.raw_fc[BayerCellIndex(row, col)];
 
 
 
@@ -84,11 +84,9 @@ static auto GetWBCoeff(const libraw_rawdata_t& raw_data) -> const float* {
   return raw_data.color.cam_mul;
 }
 
-void ToLinearRef(cv::cuda::GpuMat& image, LibRaw& raw_processor) {
+void ToLinearRef(cv::cuda::GpuMat& image, LibRaw& raw_processor, const BayerPattern2x2& pattern) {
   auto black_level = CalculateBlackLevel(raw_processor.imgdata.rawdata);
   auto wb          = GetWBCoeff(raw_processor.imgdata.rawdata);
-  int w = image.cols;
-  int h = image.rows;
 
   if (raw_processor.imgdata.color.as_shot_wb_applied != 1) {
     for (int c = 0; c < 4; ++c) {
@@ -119,8 +117,8 @@ void ToLinearRef(cv::cuda::GpuMat& image, LibRaw& raw_processor) {
                           (image.rows + threads_per_block.y - 1) / threads_per_block.y);
 
     // 3. Launch the kernel
-    ToLinearRefKernel<<<num_blocks, threads_per_block>>>(image, image.cols, image.rows,
-                                                                    maximum, wb_params);
+    ToLinearRefKernel<<<num_blocks, threads_per_block>>>(image, image.cols, image.rows, maximum,
+                                                         wb_params, pattern);
 
     // Check for any kernel launch errors (important for debugging)
     CUDA_CHECK(cudaGetLastError());

@@ -39,6 +39,11 @@ add_executable(ColorTempCudaSanityTest raw/color_temp_cuda_sanity_test.cpp)
 target_include_directories(ColorTempCudaSanityTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
 target_link_libraries(ColorTempCudaSanityTest PRIVATE GTest::gtest_main Operators RawProcessor)
 
+add_executable(RawProcessorPatternTest raw/raw_processor_pattern_test.cpp)
+target_include_directories(RawProcessorPatternTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
+target_link_libraries(RawProcessorPatternTest PRIVATE GTest::gtest_main Operators RawProcessor ${PUERHLAB_TEST_OPENCV_MIN_DEPS})
+gtest_discover_tests(RawProcessorPatternTest TEST_PREFIX "RawProcessorPatternTest.")
+
 if(PUERHLAB_CUDA_ENABLED)
   add_executable(CudaImageGeometryOpsTest raw/cuda_image_geometry_ops_test.cpp)
   target_include_directories(CudaImageGeometryOpsTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)

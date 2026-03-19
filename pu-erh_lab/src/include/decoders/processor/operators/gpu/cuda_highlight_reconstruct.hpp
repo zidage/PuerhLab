@@ -7,10 +7,12 @@
 #include <libraw/libraw.h>
 #include <opencv2/core/cuda.hpp>
 
+#include "decoders/processor/raw_processor_pattern.hpp"
+
 namespace puerhlab {
 namespace CUDA {
-void HighlightReconstruct(cv::cuda::GpuMat& img, LibRaw& raw_processor);
+void HighlightReconstruct(cv::cuda::GpuMat& img, LibRaw& raw_processor,
+                          const BayerPattern2x2& pattern);
 void Clamp01(cv::cuda::GpuMat& img);
 };  // namespace CUDA
 };  // namespace puerhlab
-

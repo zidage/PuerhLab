@@ -57,42 +57,6 @@
 
 namespace puerhlab {
 namespace {
-template <typename T>
-auto DownsampleBayerRGGB2xTyped(const cv::Mat& src) -> cv::Mat {
-  const int out_rows = src.rows / 2;
-  const int out_cols = src.cols / 2;
-  cv::Mat   dst(out_rows, out_cols, src.type());
-
-  for (int y = 0; y < out_rows; ++y) {
-    const T* row0 = src.ptr<T>(2 * y);
-    const T* row1 = src.ptr<T>(2 * y + 1);
-    T*       drow = dst.ptr<T>(y);
-    for (int x = 0; x < out_cols; ++x) {
-      const int sx = 2 * x;
-      if ((y & 1) == 0) {
-        // R G
-        // G B
-        drow[x] = (x & 1) == 0 ? row0[sx] : row0[sx + 1];
-      } else {
-        drow[x] = (x & 1) == 0 ? row1[sx] : row1[sx + 1];
-      }
-    }
-  }
-
-  return dst;
-}
-
-auto DownsampleBayerRGGB2x(const cv::Mat& src) -> cv::Mat {
-  switch (src.type()) {
-    case CV_32FC1:
-      return DownsampleBayerRGGB2xTyped<float>(src);
-    case CV_16UC1:
-      return DownsampleBayerRGGB2xTyped<uint16_t>(src);
-    default:
-      throw std::runtime_error("RawProcessor: Unsupported Bayer type for downsample");
-  }
-}
-
 void ThrowUnsupportedGPUBackend(const char* op_name) {
 #ifdef HAVE_METAL
   throw std::runtime_error(std::string("RawProcessor: ") + op_name +
@@ -101,6 +65,81 @@ void ThrowUnsupportedGPUBackend(const char* op_name) {
   throw std::runtime_error(std::string("RawProcessor: ") + op_name +
                            " requires a compiled GPU backend implementation.");
 #endif
+}
+
+auto BuildActiveAreaRect(const libraw_image_sizes_t& sizes, const cv::Size& image_size) -> cv::Rect {
+  const int left   = std::clamp(static_cast<int>(sizes.left_margin), 0, image_size.width);
+  const int top    = std::clamp(static_cast<int>(sizes.top_margin), 0, image_size.height);
+  const int width  = std::clamp(static_cast<int>(sizes.width), 0, image_size.width - left);
+  const int height = std::clamp(static_cast<int>(sizes.height), 0, image_size.height - top);
+
+  if (width <= 0 || height <= 0) {
+    return {0, 0, image_size.width, image_size.height};
+  }
+  return {left, top, width, height};
+}
+
+auto CropToActiveArea(const cv::Mat& src, const libraw_image_sizes_t& sizes) -> cv::Mat {
+  const cv::Rect active_rect = BuildActiveAreaRect(sizes, src.size());
+  return src(active_rect).clone();
+}
+
+auto BuildDirectRgbRgba(const libraw_rawdata_t& raw_data) -> cv::Mat {
+  const auto& sizes     = raw_data.sizes;
+  const int   raw_width = static_cast<int>(sizes.raw_width);
+  const int   raw_height = static_cast<int>(sizes.raw_height);
+
+  if (raw_data.color3_image != nullptr) {
+    const size_t row_step = sizes.raw_pitch != 0 ? static_cast<size_t>(sizes.raw_pitch)
+                                                 : static_cast<size_t>(raw_width) * sizeof(uint16_t) * 3;
+    cv::Mat view(raw_height, raw_width, CV_16UC3, raw_data.color3_image, row_step);
+    cv::Mat rgb32f;
+    CropToActiveArea(view, sizes).convertTo(rgb32f, CV_32FC3, 1.0 / 65535.0);
+    cv::Mat rgba32f;
+    cv::cvtColor(rgb32f, rgba32f, cv::COLOR_RGB2RGBA);
+    return rgba32f;
+  }
+
+  if (raw_data.float3_image != nullptr) {
+    const size_t row_step = sizes.raw_pitch != 0 ? static_cast<size_t>(sizes.raw_pitch)
+                                                 : static_cast<size_t>(raw_width) * sizeof(float) * 3;
+    cv::Mat view(raw_height, raw_width, CV_32FC3, raw_data.float3_image, row_step);
+    cv::Mat rgba32f;
+    cv::cvtColor(CropToActiveArea(view, sizes), rgba32f, cv::COLOR_RGB2RGBA);
+    return rgba32f;
+  }
+
+  throw std::runtime_error("RawProcessor: direct RGB input is missing a 3-channel source buffer.");
+}
+
+auto DescribeUnsupportedRawInput(LibRaw& raw_processor, const RawInputKind input_kind) -> std::string {
+  const auto& idata   = raw_processor.imgdata.idata;
+  const auto& rawdata = raw_processor.imgdata.rawdata;
+  if (idata.is_foveon != 0U) {
+    return "Foveon/X3F input is not supported by the pu-erh raw pipeline.";
+  }
+  if (raw_processor.is_fuji_rotated() != 0) {
+    return "Fuji rotated CFA layouts are not supported.";
+  }
+  if (rawdata.color4_image != nullptr || rawdata.float4_image != nullptr) {
+    return "4-channel decoded raw input is not supported.";
+  }
+  if (rawdata.float_image != nullptr) {
+    return "single-channel float raw input is not supported.";
+  }
+  if (idata.filters == 0U) {
+    return "the file does not expose a classic Bayer CFA.";
+  }
+  if (idata.filters == 1U) {
+    return "non-2x2 tiled CFA layouts are not supported.";
+  }
+  if (idata.filters == 9U) {
+    return "X-Trans CFA layouts are not supported.";
+  }
+  if (input_kind == RawInputKind::Unsupported) {
+    return "no supported raw image plane was provided by LibRaw.";
+  }
+  return "unsupported raw input layout.";
 }
 }  // namespace
 
@@ -126,15 +165,17 @@ void RawProcessor::SetDecodeRes() {
       break;
     case DecodeRes::HALF:
       // Downscale by factor of 2
-      cpu_data = DownsampleBayerRGGB2x(cpu_data);
+      cpu_data = DownsampleBayer2x(cpu_data, bayer_pattern_);
       break;
     case DecodeRes::QUARTER:
       // Downscale by factor of 4
-      cpu_data = DownsampleBayerRGGB2x(DownsampleBayerRGGB2x(cpu_data));
+      cpu_data = DownsampleBayer2x(DownsampleBayer2x(cpu_data, bayer_pattern_), bayer_pattern_);
       break;
     case DecodeRes::EIGHTH:
       // Downscale by factor of 8
-      cpu_data = DownsampleBayerRGGB2x(DownsampleBayerRGGB2x(DownsampleBayerRGGB2x(cpu_data)));
+      cpu_data = DownsampleBayer2x(
+          DownsampleBayer2x(DownsampleBayer2x(cpu_data, bayer_pattern_), bayer_pattern_),
+          bayer_pattern_);
       break;
     default:
       throw std::runtime_error("RawProcessor: Unknown decode resolution");
@@ -146,7 +187,7 @@ void RawProcessor::ApplyLinearization() {
   if (params_.gpu_backend_ == RawGpuBackend::GPU) {
 #ifdef HAVE_CUDA
     auto& gpu_img = pre_debayer_buffer.GetCUDAImage();
-    CUDA::ToLinearRef(gpu_img, raw_processor_);
+    CUDA::ToLinearRef(gpu_img, raw_processor_, bayer_pattern_);
     return;
 #elif defined(HAVE_METAL)
     auto& gpu_img = pre_debayer_buffer.GetMetalImage();
@@ -169,7 +210,7 @@ void RawProcessor::ApplyDebayer() {
   if (params_.gpu_backend_ == RawGpuBackend::GPU) {
 #ifdef HAVE_CUDA
     auto& gpu_img = pre_debayer_buffer.GetCUDAImage();
-    CUDA::BayerRGGB2RGB_RCD(gpu_img);
+    CUDA::Bayer2x2ToRGB_RCD(gpu_img, bayer_pattern_);
     if (params_.decode_res_ == DecodeRes::FULL) {
       cv::Rect crop_rect(raw_data_.sizes.left_margin, raw_data_.sizes.top_margin,
                          raw_data_.sizes.width, raw_data_.sizes.height);
@@ -214,7 +255,7 @@ void RawProcessor::ApplyHighlightReconstruct() {
       CUDA::Clamp01(gpu_img);
       return;
     }
-    CUDA::HighlightReconstruct(gpu_img, raw_processor_);
+    CUDA::HighlightReconstruct(gpu_img, raw_processor_, bayer_pattern_);
     return;
 #elif defined(HAVE_METAL)
     auto& gpu_img = process_buffer_.GetMetalImage();
@@ -343,23 +384,67 @@ void RawProcessor::ConvertToWorkingSpace() {
 }
 
 auto RawProcessor::Process() -> ImageBuffer {
-  auto    img_unpacked = raw_data_.raw_image;
-  auto&   img_sizes    = raw_data_.sizes;
-
-  // LibRaw owns raw_image and frees it during recycle(), so the pipeline must
-  // materialize an owned copy before returning ImageBuffer state to callers.
-  cv::Mat unpacked_view{img_sizes.raw_height, img_sizes.raw_width, CV_16UC1, img_unpacked};
-  cv::Mat unpacked_mat = unpacked_view.clone();
-  process_buffer_                                = {std::move(unpacked_mat)};
+  input_kind_ = ClassifyRawInput(raw_data_);
 
   // runtime_color_context_ is pre-populated by the caller (via MetadataExtractor).
   // Only update the output color-space flag which depends on the decode pipeline.
   runtime_color_context_.output_in_camera_space_ = false;
 
-  // std::cout << _raw_processor.COLOR(0, 0) << " " << _raw_processor.COLOR(0, 1) << " "
-  //           << _raw_processor.COLOR(1, 0) << " " << _raw_processor.COLOR(1, 1) << "\n";
-  CV_Assert(raw_processor_.COLOR(0, 0) == 0 && raw_processor_.COLOR(0, 1) == 1 &&
-            raw_processor_.COLOR(1, 0) == 3 && raw_processor_.COLOR(1, 1) == 2);
+  if (input_kind_ == RawInputKind::DebayeredRgb) {
+    process_buffer_ = {BuildDirectRgbRgba(raw_data_)};
+    runtime_color_context_.output_in_camera_space_ = true;
+
+    if (params_.gpu_backend_ == RawGpuBackend::GPU) {
+#if defined(HAVE_CUDA) || defined(HAVE_METAL)
+      process_buffer_.SyncToGPU();
+      ApplyGeometricCorrections();
+      return {std::move(process_buffer_)};
+#else
+      ThrowUnsupportedGPUBackend("Process");
+#endif
+    }
+
+    ApplyGeometricCorrections();
+    return {std::move(process_buffer_)};
+  }
+
+  if (input_kind_ != RawInputKind::BayerRaw) {
+    throw std::runtime_error("RawProcessor: " +
+                             DescribeUnsupportedRawInput(raw_processor_, input_kind_));
+  }
+
+  if (raw_processor_.imgdata.idata.is_foveon != 0U || raw_processor_.imgdata.idata.filters == 0U ||
+      raw_processor_.imgdata.idata.filters == 1U || raw_processor_.imgdata.idata.filters == 9U ||
+      raw_processor_.is_fuji_rotated() != 0) {
+    throw std::runtime_error("RawProcessor: " +
+                             DescribeUnsupportedRawInput(raw_processor_, input_kind_));
+  }
+
+  bayer_pattern_ = ReadLibRawBayerPattern(raw_processor_);
+  if (!IsClassic2x2Bayer(bayer_pattern_)) {
+    throw std::runtime_error("RawProcessor: unsupported 2x2 CFA pattern " +
+                             DescribeBayerPattern(bayer_pattern_) + ".");
+  }
+
+  if (!IsRGGBPattern(bayer_pattern_)) {
+    if (params_.gpu_backend_ == RawGpuBackend::CPU) {
+      throw std::runtime_error("RawProcessor: CPU backend only supports RGGB Bayer input; got " +
+                               DescribeBayerPattern(bayer_pattern_) + ".");
+    }
+#ifdef HAVE_METAL
+    throw std::runtime_error("RawProcessor: Metal backend only supports RGGB Bayer input; got " +
+                             DescribeBayerPattern(bayer_pattern_) + ".");
+#endif
+  }
+
+  auto  img_unpacked = raw_data_.raw_image;
+  auto& img_sizes    = raw_data_.sizes;
+
+  // LibRaw owns raw_image and frees it during recycle(), so the pipeline must
+  // materialize an owned copy before returning ImageBuffer state to callers.
+  cv::Mat unpacked_view{img_sizes.raw_height, img_sizes.raw_width, CV_16UC1, img_unpacked};
+  cv::Mat unpacked_mat = unpacked_view.clone();
+  process_buffer_      = {std::move(unpacked_mat)};
 
   if (params_.gpu_backend_ == RawGpuBackend::GPU) {
 #ifdef HAVE_CUDA

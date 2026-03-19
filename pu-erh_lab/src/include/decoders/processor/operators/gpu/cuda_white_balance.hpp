@@ -8,10 +8,11 @@
 
 #include <opencv2/core.hpp>
 
+#include "decoders/processor/raw_processor_pattern.hpp"
 #include "image/image_buffer.hpp"
 
 namespace puerhlab {
 namespace CUDA {
-void ToLinearRef(cv::cuda::GpuMat& img, LibRaw& raw_processor);
+void ToLinearRef(cv::cuda::GpuMat& img, LibRaw& raw_processor, const BayerPattern2x2& pattern);
 };
 };  // namespace puerhlab

@@ -12,6 +12,7 @@
 
 #include "decoders/decoder_scheduler.hpp"
 #include "decoders/processor/raw_color_context.hpp"
+#include "decoders/processor/raw_processor_pattern.hpp"
 #include "image/image_buffer.hpp"
 #include "operators/cpu/raw_proc_utils.hpp"
 #include "type/type.hpp"
@@ -39,6 +40,8 @@ class RawProcessor {
   ImageBuffer             process_buffer_;
   RawParams               params_;
   RawRuntimeColorContext  runtime_color_context_;
+  BayerPattern2x2         bayer_pattern_;
+  RawInputKind            input_kind_ = RawInputKind::Unsupported;
 
   const libraw_rawdata_t& raw_data_;
   LibRaw&                 raw_processor_;
