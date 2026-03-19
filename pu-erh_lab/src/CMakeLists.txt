@@ -119,6 +119,22 @@ if(PUERHLAB_METAL_ENABLED)
         -MMD
         -fno-color-diagnostics
     )
+    if(DEFINED CMAKE_OSX_DEPLOYMENT_TARGET AND NOT "${CMAKE_OSX_DEPLOYMENT_TARGET}" STREQUAL "")
+        set(PUERHLAB_METAL_SHADER_DEPLOYMENT_TARGET_DEFAULT "${CMAKE_OSX_DEPLOYMENT_TARGET}")
+    else()
+        set(PUERHLAB_METAL_SHADER_DEPLOYMENT_TARGET_DEFAULT "13.0")
+    endif()
+    set(PUERHLAB_METAL_SHADER_DEPLOYMENT_TARGET
+        "${PUERHLAB_METAL_SHADER_DEPLOYMENT_TARGET_DEFAULT}"
+        CACHE STRING
+        "macOS deployment target used when compiling Metal shaders."
+    )
+    set(PUERHLAB_METAL_PLATFORM_COMPILE_FLAGS)
+    if(NOT "${PUERHLAB_METAL_SHADER_DEPLOYMENT_TARGET}" STREQUAL "")
+        list(APPEND PUERHLAB_METAL_PLATFORM_COMPILE_FLAGS
+            "-mmacosx-version-min=${PUERHLAB_METAL_SHADER_DEPLOYMENT_TARGET}"
+        )
+    endif()
     set(PUERHLAB_METAL_MODULE_CACHE_DIR "${CMAKE_CURRENT_BINARY_DIR}/metal/module-cache")
     set(PUERHLAB_METAL_CONFIG_COMPILE_FLAGS
         $<$<CONFIG:Debug>:-gline-tables-only>
@@ -143,6 +159,7 @@ if(PUERHLAB_METAL_ENABLED)
             COMMAND ${CMAKE_COMMAND} -E make_directory "${PUERHLAB_METAL_MODULE_CACHE_DIR}"
             COMMAND ${PUERHLAB_METAL_EXECUTABLE}
                     ${PUERHLAB_METAL_COMMON_COMPILE_FLAGS}
+                    ${PUERHLAB_METAL_PLATFORM_COMPILE_FLAGS}
                     ${PUERHLAB_METAL_CONFIG_COMPILE_FLAGS}
                     -fmodules-cache-path="${PUERHLAB_METAL_MODULE_CACHE_DIR}"
                     -MF "${_depfile}"
@@ -243,6 +260,19 @@ if(PUERHLAB_METAL_ENABLED)
         "${METAL_DEBAYER_RCD_METALLIB}"
         "${METAL_HIGHLIGHT_RECONSTRUCT_METALLIB}"
         "${METAL_CVT_REF_SPACE_METALLIB}"
+    )
+    set(PUERHLAB_METAL_RUNTIME_LIBS
+        "${METAL_UTILS_METALLIB}"
+        "${METAL_GEOMETRY_UTILS_METALLIB}"
+        "${METAL_LENS_CALIB_METALLIB}"
+        "${METAL_FUSED_PIPELINE_METALLIB}"
+        "${METAL_TO_LINEAR_REF_METALLIB}"
+        "${METAL_DEBAYER_RCD_METALLIB}"
+        "${METAL_HIGHLIGHT_RECONSTRUCT_METALLIB}"
+        "${METAL_CVT_REF_SPACE_METALLIB}"
+    )
+    set(PUERHLAB_METAL_RUNTIME_LIBS "${PUERHLAB_METAL_RUNTIME_LIBS}" CACHE INTERNAL
+        "Metal shader libraries required at runtime."
     )
 
     def_library(MetalContext SOURCES metal/metal_context.cpp)
@@ -1031,6 +1061,23 @@ else()
         COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:puerhlab_main>/fonts"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${PUERHLAB_MAIN_FONT_SRC}" "$<TARGET_FILE_DIR:puerhlab_main>/fonts/main_Inter.ttf"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${PUERHLAB_MAIN_ZH_FONT_SRC}" "$<TARGET_FILE_DIR:puerhlab_main>/fonts/main_NotoSans_zh.ttf"
+        VERBATIM
+    )
+endif()
+
+if(APPLE AND PUERHLAB_METAL_ENABLED AND PUERHLAB_METAL_RUNTIME_LIBS)
+    if(PUERHLAB_MACOS_BUNDLE)
+        set(_puerhlab_metallib_runtime_dir "$<TARGET_BUNDLE_CONTENT_DIR:puerhlab_main>/Resources/metallib")
+    else()
+        set(_puerhlab_metallib_runtime_dir "$<TARGET_FILE_DIR:puerhlab_main>/metallib")
+    endif()
+
+    add_custom_command(TARGET puerhlab_main POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${_puerhlab_metallib_runtime_dir}"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            ${PUERHLAB_METAL_RUNTIME_LIBS}
+            "${_puerhlab_metallib_runtime_dir}"
+        COMMAND_EXPAND_LISTS
         VERBATIM
     )
 endif()

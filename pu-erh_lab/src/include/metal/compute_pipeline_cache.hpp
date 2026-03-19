@@ -8,11 +8,14 @@
 
 #include <condition_variable>
 #include <exception>
+#include <filesystem>
 #include <memory>
 #include <mutex>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
+#include <vector>
 
 #include <puerhlab/metal/Metal.hpp>
 
@@ -59,6 +62,75 @@ class ComputePipelineCache {
       slot = std::make_shared<PipelineSlot>();
     }
     return slot;
+  }
+
+  static void AppendUniquePath(std::vector<std::filesystem::path>&    candidates,
+                               std::unordered_set<std::string>&       seen,
+                               const std::filesystem::path& candidate) {
+    if (candidate.empty()) {
+      return;
+    }
+
+    const auto normalized = candidate.lexically_normal().string();
+    if (normalized.empty()) {
+      return;
+    }
+    if (seen.insert(normalized).second) {
+      candidates.emplace_back(candidate);
+    }
+  }
+
+  static auto ResolveMetallibPath(const char* configured_path, const char* debug_label)
+      -> std::string {
+    std::filesystem::path configured(configured_path);
+    const auto           shader_name = configured.filename();
+
+    std::vector<std::filesystem::path> candidates;
+    std::unordered_set<std::string>    seen;
+    AppendUniquePath(candidates, seen, configured);
+
+    if (!shader_name.empty()) {
+      if (auto* bundle = NS::Bundle::mainBundle(); bundle != nullptr) {
+        if (auto* resource_path = bundle->resourcePath();
+            resource_path != nullptr && resource_path->utf8String() != nullptr) {
+          AppendUniquePath(candidates, seen,
+                           std::filesystem::path(resource_path->utf8String()) / "metallib" /
+                               shader_name);
+        }
+
+        if (auto* executable_path = bundle->executablePath();
+            executable_path != nullptr && executable_path->utf8String() != nullptr) {
+          const auto executable_dir =
+              std::filesystem::path(executable_path->utf8String()).parent_path();
+          AppendUniquePath(candidates, seen, executable_dir / "metallib" / shader_name);
+          AppendUniquePath(candidates, seen,
+                           executable_dir.parent_path() / "Resources" / "metallib" / shader_name);
+        }
+      }
+
+      std::error_code cwd_error;
+      const auto      cwd = std::filesystem::current_path(cwd_error);
+      if (!cwd_error) {
+        AppendUniquePath(candidates, seen, cwd / "metallib" / shader_name);
+      }
+    }
+
+    std::error_code exists_error;
+    for (const auto& candidate : candidates) {
+      if (std::filesystem::exists(candidate, exists_error) && !exists_error) {
+        return candidate.string();
+      }
+      exists_error.clear();
+    }
+
+    std::string error_message =
+        std::string(debug_label) + ": metallib file was not found. Configured path: " +
+        std::string(configured_path) + ". Tried:";
+    for (const auto& candidate : candidates) {
+      error_message += "\n  - ";
+      error_message += candidate.string();
+    }
+    throw std::runtime_error(error_message);
   }
 
   auto LoadLibrary(const std::string& metallib_path, const char* debug_label)
@@ -135,9 +207,9 @@ class ComputePipelineCache {
       throw std::runtime_error(std::string(debug_label) + ": compute function name is empty.");
     }
 
-    const std::string library_key = metallib_path;
-    const std::string pipeline_key =
-        library_key + '\n' + std::string(function_name);
+    const std::string resolved_metallib_path = ResolveMetallibPath(metallib_path, debug_label);
+    const std::string library_key            = resolved_metallib_path;
+    const std::string pipeline_key           = library_key + '\n' + std::string(function_name);
     auto pipeline_slot = GetPipelineSlot(pipeline_key);
 
     std::unique_lock<std::mutex> lock(mutex_);

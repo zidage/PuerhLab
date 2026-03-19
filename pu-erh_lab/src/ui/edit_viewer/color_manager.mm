@@ -3,15 +3,16 @@
 //  Additional permission under GPLv3 section 7 applies; see the LICENSE file.
 
 #import <AppKit/AppKit.h>
+#include <CoreGraphics/CGColorSpace.h>
+#import <CoreGraphics/CoreGraphics.h>
 #import <QuartzCore/CAMetalLayer.h>
 #import <QuartzCore/QuartzCore.h>
-#import <CoreGraphics/CoreGraphics.h>
 
 #include "ui/edit_viewer/color_manager.hpp"
 
-#include <QString>
-#include <QDebug>
 #include <QtCore/qlogging.h>
+#include <QDebug>
+#include <QString>
 
 namespace puerhlab {
 namespace {
@@ -78,8 +79,7 @@ auto ResolveLinearColorSpace(ColorUtils::ColorSpace encoding_space, bool* exact_
   }
 }
 
-auto ResolveNamedColorSpace(const ViewerDisplayConfig& config, bool* exact_match)
-    -> CFStringRef {
+auto ResolveNamedColorSpace(const ViewerDisplayConfig& config, bool* exact_match) -> CFStringRef {
   if (config.encoding_eotf == ColorUtils::EOTF::LINEAR) {
     return ResolveLinearColorSpace(config.encoding_space, exact_match);
   }
@@ -97,12 +97,12 @@ auto ResolveNamedColorSpace(const ViewerDisplayConfig& config, bool* exact_match
           return kCGColorSpaceITUR_709_HLG;
         case ColorUtils::EOTF::BT1886:
         case ColorUtils::EOTF::GAMMA_2_2:
-          return kCGColorSpaceITUR_709;
+          return kCGColorSpaceSRGB;
         default:
           if (exact_match) {
             *exact_match = false;
           }
-          return kCGColorSpaceITUR_709;
+          return kCGColorSpaceSRGB;
       }
     case ColorUtils::ColorSpace::P3_D65:
       switch (config.encoding_eotf) {
@@ -157,20 +157,20 @@ void LogFallbackColorSpace(const ViewerDisplayConfig& config, CFStringRef resolv
   }
   qWarning().noquote()
       << QStringLiteral("ColorManager: falling back to %1 for encoding_space=%2 encoding_eotf=%3")
-             .arg(resolved, QString::fromStdString(ColorUtils::ColorSpaceToString(
-                                config.encoding_space)),
+             .arg(resolved,
+                  QString::fromStdString(ColorUtils::ColorSpaceToString(config.encoding_space)),
                   QString::fromStdString(ColorUtils::EOTFToString(config.encoding_eotf)));
 }
 
 }  // namespace
 
-auto ColorManager::ApplyWindowColorSpace(void* native_view_or_window,
+auto ColorManager::ApplyWindowColorSpace(void*                      native_view_or_window,
                                          const ViewerDisplayConfig& config) -> bool {
   if (!native_view_or_window) {
     return false;
   }
 
-  id object = (__bridge id)native_view_or_window;
+  id        object = (__bridge id)native_view_or_window;
 
   NSWindow* window = nil;
   NSView*   view   = nil;
