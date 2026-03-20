@@ -91,6 +91,9 @@ if(PUERHLAB_METAL_ENABLED)
     set(METAL_HIGHLIGHT_RECONSTRUCT_SRC "${CMAKE_CURRENT_SOURCE_DIR}/decoders/processor/operators/gpu/metal_shader/highlight_reconstruct.metal")
     set(METAL_HIGHLIGHT_RECONSTRUCT_AIR "${CMAKE_CURRENT_BINARY_DIR}/decoders/processor/operators/gpu/metal_shader/highlight_reconstruct.air")
     set(METAL_HIGHLIGHT_RECONSTRUCT_METALLIB "${CMAKE_CURRENT_BINARY_DIR}/decoders/processor/operators/gpu/metal_shader/highlight_reconstruct.metallib")
+    set(METAL_XTRANS_INTERPOLATE_SRC "${CMAKE_CURRENT_SOURCE_DIR}/decoders/processor/operators/gpu/metal_shader/xtrans_interpolate.metal")
+    set(METAL_XTRANS_INTERPOLATE_AIR "${CMAKE_CURRENT_BINARY_DIR}/decoders/processor/operators/gpu/metal_shader/xtrans_interpolate.air")
+    set(METAL_XTRANS_INTERPOLATE_METALLIB "${CMAKE_CURRENT_BINARY_DIR}/decoders/processor/operators/gpu/metal_shader/xtrans_interpolate.metallib")
     find_program(PUERHLAB_XCRUN_EXECUTABLE xcrun REQUIRED)
     execute_process(
         COMMAND ${PUERHLAB_XCRUN_EXECUTABLE} --sdk macosx --find metal
@@ -247,6 +250,15 @@ if(PUERHLAB_METAL_ENABLED)
     )
 
     puerhlab_add_metal_library(
+        MetalXTransInterpolateShaders
+        "${METAL_XTRANS_INTERPOLATE_SRC}"
+        "${METAL_XTRANS_INTERPOLATE_AIR}"
+        "${METAL_XTRANS_INTERPOLATE_METALLIB}"
+        "Compiling Metal X-Trans interpolate shader"
+        "Linking Metal X-Trans interpolate library"
+    )
+
+    puerhlab_add_metal_library(
         MetalCvtRefSpaceShaders
         "${METAL_CVT_REF_SPACE_SRC}"
         "${METAL_CVT_REF_SPACE_AIR}"
@@ -259,6 +271,7 @@ if(PUERHLAB_METAL_ENABLED)
         "${METAL_TO_LINEAR_REF_METALLIB}"
         "${METAL_DEBAYER_RCD_METALLIB}"
         "${METAL_HIGHLIGHT_RECONSTRUCT_METALLIB}"
+        "${METAL_XTRANS_INTERPOLATE_METALLIB}"
         "${METAL_CVT_REF_SPACE_METALLIB}"
     )
     set(PUERHLAB_METAL_RUNTIME_LIBS
@@ -269,6 +282,7 @@ if(PUERHLAB_METAL_ENABLED)
         "${METAL_TO_LINEAR_REF_METALLIB}"
         "${METAL_DEBAYER_RCD_METALLIB}"
         "${METAL_HIGHLIGHT_RECONSTRUCT_METALLIB}"
+        "${METAL_XTRANS_INTERPOLATE_METALLIB}"
         "${METAL_CVT_REF_SPACE_METALLIB}"
     )
     set(PUERHLAB_METAL_RUNTIME_LIBS "${PUERHLAB_METAL_RUNTIME_LIBS}" CACHE INTERNAL
@@ -302,7 +316,7 @@ add_library(ImageBuffer ${IMAGE_BUFFER_SRCS})
 target_include_directories(ImageBuffer PUBLIC include)
 
 # Common dependencies
-set(IMAGE_BUFFER_DEPS Exiv2 ${PUERHLAB_OPENCV_CORE_DEPS} libraw::raw_r TimeProvider JSON OpenMP::OpenMP_CXX StrConv)
+set(IMAGE_BUFFER_DEPS Exiv2 ${PUERHLAB_OPENCV_CORE_DEPS} libraw::raw_r TimeProvider JSON StrConv)
 
 # Platform specific dependencies
 if (WIN32)
@@ -357,6 +371,7 @@ elseif(PUERHLAB_METAL_ENABLED)
         decoders/processor/operators/gpu/metal_debayer_rcd.cpp
         decoders/processor/operators/gpu/metal_highlight_reconstruct.cpp
         decoders/processor/operators/gpu/metal_to_linear_ref.cpp
+        decoders/processor/operators/gpu/metal_xtrans_interpolate.cpp
     )
 endif()
 
@@ -377,6 +392,7 @@ if(PUERHLAB_METAL_ENABLED)
         PUERHLAB_METAL_TO_LINEAR_REF_METALLIB_PATH="${METAL_TO_LINEAR_REF_METALLIB}"
         PUERHLAB_METAL_DEBAYER_RCD_METALLIB_PATH="${METAL_DEBAYER_RCD_METALLIB}"
         PUERHLAB_METAL_HIGHLIGHT_RECONSTRUCT_METALLIB_PATH="${METAL_HIGHLIGHT_RECONSTRUCT_METALLIB}"
+        PUERHLAB_METAL_XTRANS_INTERPOLATE_METALLIB_PATH="${METAL_XTRANS_INTERPOLATE_METALLIB}"
         PUERHLAB_METAL_CVT_REF_SPACE_METALLIB_PATH="${METAL_CVT_REF_SPACE_METALLIB}"
     )
 endif()

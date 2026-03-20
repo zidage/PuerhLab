@@ -25,13 +25,38 @@ enum class RawInputKind {
   Unsupported,
 };
 
+enum class RawCfaKind {
+  Bayer2x2,
+  XTrans6x6,
+};
+
 struct BayerPattern2x2 {
   int raw_fc[4] = {0, 1, 3, 2};
   int rgb_fc[4] = {0, 1, 1, 2};
 };
 
+struct XTransPattern6x6 {
+  int raw_fc[36] = {};
+  int rgb_fc[36] = {};
+};
+
+struct RawCfaPattern {
+  RawCfaKind     kind          = RawCfaKind::Bayer2x2;
+  BayerPattern2x2 bayer_pattern = {};
+  XTransPattern6x6 xtrans_pattern = {};
+};
+
 PUERHLAB_HD inline auto BayerCellIndex(const int y, const int x) -> int {
   return ((y & 1) << 1) | (x & 1);
+}
+
+inline auto WrapPatternCoord(const int coord, const int period) -> int {
+  const int wrapped = coord % period;
+  return wrapped < 0 ? wrapped + period : wrapped;
+}
+
+inline auto XTransCellIndex(const int y, const int x) -> int {
+  return WrapPatternCoord(y, 6) * 6 + WrapPatternCoord(x, 6);
 }
 
 PUERHLAB_HD inline auto FoldRawColorToRgb(const int raw_color) -> int {
@@ -58,6 +83,28 @@ PUERHLAB_HD inline auto RgbColorAt(const BayerPattern2x2& pattern, const int y, 
   return pattern.rgb_fc[BayerCellIndex(y, x)];
 }
 
+inline auto RawColorAt(const XTransPattern6x6& pattern, const int y, const int x) -> int {
+  return pattern.raw_fc[XTransCellIndex(y, x)];
+}
+
+inline auto RgbColorAt(const XTransPattern6x6& pattern, const int y, const int x) -> int {
+  return pattern.rgb_fc[XTransCellIndex(y, x)];
+}
+
+inline auto RawColorAt(const RawCfaPattern& pattern, const int y, const int x) -> int {
+  if (pattern.kind == RawCfaKind::XTrans6x6) {
+    return RawColorAt(pattern.xtrans_pattern, y, x);
+  }
+  return RawColorAt(pattern.bayer_pattern, y, x);
+}
+
+inline auto RgbColorAt(const RawCfaPattern& pattern, const int y, const int x) -> int {
+  if (pattern.kind == RawCfaKind::XTrans6x6) {
+    return RgbColorAt(pattern.xtrans_pattern, y, x);
+  }
+  return RgbColorAt(pattern.bayer_pattern, y, x);
+}
+
 inline auto DescribeRgbColor(const int color) -> char {
   switch (color) {
     case 0:
@@ -79,6 +126,13 @@ inline auto DescribeBayerPattern(const BayerPattern2x2& pattern) -> std::string 
   return desc;
 }
 
+inline auto DescribeRawCfaPattern(const RawCfaPattern& pattern) -> std::string {
+  if (pattern.kind == RawCfaKind::XTrans6x6) {
+    return "X-Trans";
+  }
+  return DescribeBayerPattern(pattern.bayer_pattern);
+}
+
 inline auto IsClassic2x2Bayer(const BayerPattern2x2& pattern) -> bool {
   int raw_sorted[4] = {pattern.raw_fc[0], pattern.raw_fc[1], pattern.raw_fc[2], pattern.raw_fc[3]};
   std::sort(std::begin(raw_sorted), std::end(raw_sorted));
@@ -98,6 +152,10 @@ inline auto IsRGGBPattern(const BayerPattern2x2& pattern) -> bool {
   return std::equal(std::begin(pattern.raw_fc), std::end(pattern.raw_fc), std::begin(kRggbRaw));
 }
 
+inline auto IsXTransPattern(const RawCfaPattern& pattern) -> bool {
+  return pattern.kind == RawCfaKind::XTrans6x6;
+}
+
 inline auto ReadLibRawBayerPattern(LibRaw& raw_processor) -> BayerPattern2x2 {
   BayerPattern2x2 pattern = {};
   for (int row = 0; row < 2; ++row) {
@@ -107,6 +165,31 @@ inline auto ReadLibRawBayerPattern(LibRaw& raw_processor) -> BayerPattern2x2 {
       pattern.rgb_fc[index] = FoldRawColorToRgb(pattern.raw_fc[index]);
     }
   }
+  return pattern;
+}
+
+inline auto ReadLibRawXTransPattern(LibRaw& raw_processor) -> XTransPattern6x6 {
+  XTransPattern6x6 pattern = {};
+  for (int row = 0; row < 6; ++row) {
+    for (int col = 0; col < 6; ++col) {
+      const int index       = XTransCellIndex(row, col);
+      pattern.raw_fc[index] = raw_processor.imgdata.idata.xtrans[row][col];
+      pattern.rgb_fc[index] = FoldRawColorToRgb(pattern.raw_fc[index]);
+    }
+  }
+  return pattern;
+}
+
+inline auto ReadLibRawCfaPattern(LibRaw& raw_processor) -> RawCfaPattern {
+  RawCfaPattern pattern = {};
+  if (raw_processor.imgdata.idata.filters == 9U) {
+    pattern.kind           = RawCfaKind::XTrans6x6;
+    pattern.xtrans_pattern = ReadLibRawXTransPattern(raw_processor);
+    return pattern;
+  }
+
+  pattern.kind          = RawCfaKind::Bayer2x2;
+  pattern.bayer_pattern = ReadLibRawBayerPattern(raw_processor);
   return pattern;
 }
 
@@ -160,6 +243,50 @@ inline auto DownsampleBayer2x(const cv::Mat& src, const BayerPattern2x2& pattern
     default:
       throw std::runtime_error("RawProcessor: unsupported Bayer type for downsample");
   }
+}
+
+template <typename T>
+auto DownsampleXTrans2xTyped(const cv::Mat& src, XTransPattern6x6& pattern) -> cv::Mat {
+  const int out_rows = src.rows / 2;
+  const int out_cols = src.cols / 2;
+  cv::Mat   dst(out_rows, out_cols, src.type());
+
+  for (int y = 0; y < out_rows; ++y) {
+    T* drow = dst.ptr<T>(y);
+    const T* srow = src.ptr<T>(2 * y);
+    for (int x = 0; x < out_cols; ++x) {
+      drow[x] = srow[2 * x];
+    }
+  }
+
+  XTransPattern6x6 sampled_pattern = {};
+  for (int row = 0; row < 6; ++row) {
+    for (int col = 0; col < 6; ++col) {
+      const int index                = XTransCellIndex(row, col);
+      sampled_pattern.raw_fc[index]  = RawColorAt(pattern, 2 * row, 2 * col);
+      sampled_pattern.rgb_fc[index]  = FoldRawColorToRgb(sampled_pattern.raw_fc[index]);
+    }
+  }
+  pattern = sampled_pattern;
+  return dst;
+}
+
+inline auto DownsampleXTrans2x(const cv::Mat& src, XTransPattern6x6& pattern) -> cv::Mat {
+  switch (src.type()) {
+    case CV_32FC1:
+      return DownsampleXTrans2xTyped<float>(src, pattern);
+    case CV_16UC1:
+      return DownsampleXTrans2xTyped<uint16_t>(src, pattern);
+    default:
+      throw std::runtime_error("RawProcessor: unsupported X-Trans type for downsample");
+  }
+}
+
+inline auto DownsampleRaw2x(const cv::Mat& src, RawCfaPattern& pattern) -> cv::Mat {
+  if (pattern.kind == RawCfaKind::XTrans6x6) {
+    return DownsampleXTrans2x(src, pattern.xtrans_pattern);
+  }
+  return DownsampleBayer2x(src, pattern.bayer_pattern);
 }
 
 }  // namespace puerhlab

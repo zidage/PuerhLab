@@ -19,16 +19,18 @@ static auto CalculateBlackLevel(const libraw_rawdata_t& raw_data) -> std::array<
       base_black_level + static_cast<float>(raw_data.color.cblack[2]),
       base_black_level + static_cast<float>(raw_data.color.cblack[3])};
 
-  if (raw_data.color.cblack[4] == 2 && raw_data.color.cblack[5] == 2) {
-    for (unsigned int x = 0; x < raw_data.color.cblack[4]; ++x) {
-      for (unsigned int y = 0; y < raw_data.color.cblack[5]; ++y) {
-        const auto index   = y * 2 + x;
-        black_level[index] = raw_data.color.cblack[6 + index];
-      }
-    }
-  }
-
   return black_level;
+}
+
+static inline auto PatternBlackAt(const libraw_rawdata_t& raw_data, int y, int x) -> float {
+  const int tile_width  = raw_data.color.cblack[4];
+  const int tile_height = raw_data.color.cblack[5];
+  if (tile_width <= 0 || tile_height <= 0) {
+    return 0.0f;
+  }
+  const int tile_y = ((y % tile_height) + tile_height) % tile_height;
+  const int tile_x = ((x % tile_width) + tile_width) % tile_width;
+  return static_cast<float>(raw_data.color.cblack[6 + tile_y * tile_width + tile_x]) / 65535.0f;
 }
 
 static auto GetWBCoeff(const libraw_rawdata_t& raw_data) -> const float* {
@@ -36,23 +38,9 @@ static auto GetWBCoeff(const libraw_rawdata_t& raw_data) -> const float* {
 }
 
 inline static auto GetScaleMul(const libraw_rawdata_t& raw_data) -> std::array<float, 4> {
-  // cam_mul for as-shot white balance, pre_mul for D65
-  auto                 cam_mul = raw_data.color.cam_mul;
-  auto                 pre_mul = raw_data.color.pre_mul;
-
-  auto                 c_white = (int)raw_data.color.maximum;
-  auto                 c_black = (int)raw_data.color.black;
-
-  // From dcraw.c
-
-  std::array<float, 4> scale_mul;
+  std::array<float, 4> scale_mul = {};
   for (int c = 0; c < 4; ++c) {
-    float mul_c = cam_mul[c];
-    if (mul_c == 0.f) {
-      mul_c = cam_mul[1];
-    }
-
-    scale_mul[c] = (mul_c / cam_mul[1]) / ((c_white - c_black) / 65535.0f);
+    scale_mul[c] = raw_data.color.cam_mul[c];
   }
 
   return scale_mul;
@@ -68,16 +56,7 @@ void ToLinearRef(cv::Mat& img, LibRaw& raw_processor) {
     for (float& level : black_level) {
       level /= 65535.0f;
     }
-    float min            = black_level[0];
-    auto  linear_maximum = raw_processor.imgdata.rawdata.color.linear_max;
-    float maximum[4];
-    for (int i = 0; i < 4; ++i) {
-      if (linear_maximum[i] == 0) {
-        maximum[i] = raw_processor.imgdata.rawdata.color.maximum / 65535.0f - min;
-      } else {
-        maximum[i] = linear_maximum[i] / 65535.0f - min;
-      }
-    }
+    const float maximum = raw_processor.imgdata.rawdata.color.maximum / 65535.0f - black_level[0];
 
     auto scale_mul = GetScaleMul(raw_processor.imgdata.rawdata);
 #pragma omp parallel for schedule(dynamic)
@@ -87,26 +66,12 @@ void ToLinearRef(cv::Mat& img, LibRaw& raw_processor) {
 
         float pixel         = img.at<float>(y, x);
 
-        pixel               = std::max(0.0f, pixel - black_level[color_idx]);
-        pixel               = pixel * scale_mul[color_idx];
+        pixel -= black_level[color_idx] + PatternBlackAt(raw_processor.imgdata.rawdata, y, x);
 
-        // //
-        // pixel               = std::min(1.2f, pixel);
-        pixel               = std::max(0.0f, pixel);
-        // float muled_pixel = pixel;
-        // float mask        = (color_idx == 0 || color_idx == 2) ? 1.0f : 0.0f;
-        // //
-        // float wb_mul      = (wb[color_idx] / wb[1]) * mask + (1.0f - mask);
-
-        // muled_pixel       = muled_pixel * wb_mul;
-
-        // pixel             = muled_pixel;
-
-        // if (pixel > maximum[color_idx]) {
-        //   pixel = maximum[color_idx];
-        // }
-
-        // // pixel /= maximum[color_idx];
+        const float mask   = (color_idx == 0 || color_idx == 2) ? 1.0f : 0.0f;
+        const float wb_mul = (scale_mul[color_idx] / scale_mul[1]) * mask + (1.0f - mask);
+        pixel *= wb_mul;
+        pixel /= maximum;
 
         img.at<float>(y, x) = pixel;
       }

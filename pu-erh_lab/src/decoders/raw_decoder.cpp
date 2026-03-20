@@ -16,6 +16,7 @@
 #include <stdexcept>
 
 #include "decoders/processor/raw_processor.hpp"
+#include "decoders/libraw_unpack_guard.hpp"
 #include "image/image.hpp"
 #include "image/image_buffer.hpp"
 #include "image/metadata_extractor.hpp"
@@ -54,7 +55,7 @@ void RawDecoder::Decode(std::vector<char>&& buffer, std::shared_ptr<Image> sourc
   raw_processor->imgdata.params.use_camera_wb  = 1;
 
   raw_processor->imgdata.rawparams.use_dngsdk  = 1;
-  raw_processor->unpack();
+  libraw_guard::Unpack(*raw_processor);
 
   // Build a pre-populated context from the Image or extract from LibRaw.
   RawRuntimeColorContext ctx;

@@ -4,15 +4,20 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
+#include <array>
 #include <stdexcept>
 
 #include <opencv2/core.hpp>
 
 #include "decoders/processor/operators/cpu/highlight_reconstruct.hpp"
-#include "decoders/processor/raw_processor_pattern.hpp"
 #include "decoders/processor/operators/gpu/metal_debayer_rcd.hpp"
 #include "decoders/processor/operators/gpu/metal_highlight_reconstruct.hpp"
+#include "decoders/processor/operators/gpu/metal_to_linear_ref.hpp"
+#include "decoders/processor/operators/gpu/metal_xtrans_interpolate.hpp"
+#include "decoders/processor/raw_processor_pattern.hpp"
 #include "image/metal_image.hpp"
+#include "metal/metal_context.hpp"
 #include "metal/metal_utils/metal_convert_utils.hpp"
 
 namespace puerhlab {
@@ -45,6 +50,10 @@ auto CFAColorAt(const BayerPattern2x2& pattern, int y, int x) -> int {
   return pattern.rgb_fc[BayerCellIndex(y, x)];
 }
 
+auto CFAColorAt(const XTransPattern6x6& pattern, int y, int x) -> int {
+  return RgbColorAt(pattern, y, x);
+}
+
 auto MakePattern(const int top_left_raw_color) -> BayerPattern2x2 {
   switch (top_left_raw_color) {
     case 0:
@@ -71,6 +80,36 @@ auto MakeClampedImage() -> cv::Mat {
   return img;
 }
 
+auto MakeXTransPattern() -> XTransPattern6x6 {
+  static constexpr int kRawFc[36] = {
+      1, 2, 1, 1, 0, 1,
+      1, 0, 1, 2, 1, 2,
+      0, 1, 0, 1, 2, 1,
+      1, 2, 1, 1, 0, 1,
+      1, 0, 1, 2, 1, 2,
+      2, 1, 2, 0, 1, 0,
+  };
+
+  XTransPattern6x6 pattern = {};
+  for (int i = 0; i < 36; ++i) {
+    pattern.raw_fc[i] = kRawFc[i];
+    pattern.rgb_fc[i] = FoldRawColorToRgb(kRawFc[i]);
+  }
+  return pattern;
+}
+
+auto MakeXTransRaw(int rows, int cols, const XTransPattern6x6& pattern) -> cv::Mat {
+  cv::Mat raw(rows, cols, CV_32FC1);
+  for (int y = 0; y < rows; ++y) {
+    float* row = raw.ptr<float>(y);
+    for (int x = 0; x < cols; ++x) {
+      static constexpr float kByColor[3] = {0.75f, 0.52f, 0.21f};
+      row[x] = kByColor[CFAColorAt(pattern, y, x)] + 0.001f * float((7 * y + 3 * x) % 11);
+    }
+  }
+  return raw;
+}
+
 auto MakeHighlightInput(int rows, int cols, const BayerPattern2x2& pattern) -> cv::Mat {
   cv::Mat img(rows, cols, CV_32FC1);
   for (int y = 0; y < rows; ++y) {
@@ -95,12 +134,97 @@ void InitHighlightRawProcessor(LibRaw& raw_processor) {
   raw_processor.imgdata.color.cam_mul[3] = 1.0f;
 }
 
+auto MetalRuntimeAvailable() -> bool {
+  try {
+    return MetalContext::Instance().Device() != nullptr;
+  } catch (const std::exception&) {
+    return false;
+  }
+}
+
+void InitLinearizationRawProcessor(LibRaw& raw_processor) {
+  raw_processor.imgdata.color.as_shot_wb_applied = 0;
+  raw_processor.imgdata.rawdata.color.black      = 512;
+  raw_processor.imgdata.rawdata.color.cblack[0]  = 16;
+  raw_processor.imgdata.rawdata.color.cblack[1]  = 32;
+  raw_processor.imgdata.rawdata.color.cblack[2]  = 48;
+  raw_processor.imgdata.rawdata.color.cblack[3]  = 32;
+  raw_processor.imgdata.rawdata.color.cblack[4]  = 6;
+  raw_processor.imgdata.rawdata.color.cblack[5]  = 6;
+  for (int i = 0; i < 36; ++i) {
+    raw_processor.imgdata.rawdata.color.cblack[6 + i] = static_cast<unsigned short>(8 + (i % 5) * 3);
+  }
+  raw_processor.imgdata.rawdata.color.maximum    = 15000;
+  raw_processor.imgdata.rawdata.color.linear_max[0] = 14000;
+  raw_processor.imgdata.rawdata.color.linear_max[1] = 14500;
+  raw_processor.imgdata.rawdata.color.linear_max[2] = 14300;
+  raw_processor.imgdata.rawdata.color.linear_max[3] = 14500;
+  raw_processor.imgdata.rawdata.color.cam_mul[0] = 2.4f;
+  raw_processor.imgdata.rawdata.color.cam_mul[1] = 1.0f;
+  raw_processor.imgdata.rawdata.color.cam_mul[2] = 1.7f;
+  raw_processor.imgdata.rawdata.color.cam_mul[3] = 1.0f;
+  raw_processor.imgdata.rawdata.color.pre_mul[0] = 2.1f;
+  raw_processor.imgdata.rawdata.color.pre_mul[1] = 1.0f;
+  raw_processor.imgdata.rawdata.color.pre_mul[2] = 1.6f;
+  raw_processor.imgdata.rawdata.color.pre_mul[3] = 1.0f;
+  raw_processor.imgdata.color.as_shot_wb_applied = 0;
+}
+
+auto ComputeLinearizedReference(const cv::Mat& raw_u16, const RawCfaPattern& pattern,
+                                const LibRaw& raw_processor) -> cv::Mat {
+  cv::Mat expected(raw_u16.rows, raw_u16.cols, CV_32FC1);
+
+  std::array<float, 4> black_level = {
+      static_cast<float>(raw_processor.imgdata.rawdata.color.black +
+                         raw_processor.imgdata.rawdata.color.cblack[0]) /
+          65535.0f,
+      static_cast<float>(raw_processor.imgdata.rawdata.color.black +
+                         raw_processor.imgdata.rawdata.color.cblack[1]) /
+          65535.0f,
+      static_cast<float>(raw_processor.imgdata.rawdata.color.black +
+                         raw_processor.imgdata.rawdata.color.cblack[2]) /
+          65535.0f,
+      static_cast<float>(raw_processor.imgdata.rawdata.color.black +
+                         raw_processor.imgdata.rawdata.color.cblack[3]) /
+          65535.0f,
+  };
+  const float maximum = raw_processor.imgdata.rawdata.color.maximum / 65535.0f - black_level[0];
+
+  for (int y = 0; y < raw_u16.rows; ++y) {
+    for (int x = 0; x < raw_u16.cols; ++x) {
+      const int color = RawColorAt(pattern, y, x);
+      float pixel     = static_cast<float>(raw_u16.at<uint16_t>(y, x)) / 65535.0f;
+      const int tile_y = y % raw_processor.imgdata.rawdata.color.cblack[5];
+      const int tile_x = x % raw_processor.imgdata.rawdata.color.cblack[4];
+      const float pattern_black =
+          static_cast<float>(raw_processor.imgdata.rawdata.color.cblack[6 +
+                                                                        tile_y * raw_processor.imgdata.rawdata.color.cblack[4] +
+                                                                        tile_x]) /
+          65535.0f;
+      pixel -= black_level[color] + pattern_black;
+      const float mask = (color == 0 || color == 2) ? 1.0f : 0.0f;
+      const float wb_mul =
+          (raw_processor.imgdata.rawdata.color.cam_mul[color] /
+           raw_processor.imgdata.rawdata.color.cam_mul[1]) *
+              mask +
+          (1.0f - mask);
+      pixel *= wb_mul;
+      expected.at<float>(y, x) = pixel / maximum;
+    }
+  }
+
+  return expected;
+}
+
 }  // namespace
 
 TEST(MetalRawOpsTest, CropRectMatchesCPUReference) {
 #ifndef HAVE_METAL
   GTEST_SKIP() << "Metal is not enabled in this build.";
 #else
+  if (!MetalRuntimeAvailable()) {
+    GTEST_SKIP() << "Metal device is unavailable in this environment.";
+  }
   const cv::Mat src = MakeRGBAImage(9, 11);
   const cv::Rect crop_rect(2, 3, 5, 4);
 
@@ -124,6 +248,9 @@ TEST(MetalRawOpsTest, DebayerRcdProducesRGBAAndPreservesCFASamples) {
 #ifndef HAVE_METAL
   GTEST_SKIP() << "Metal is not enabled in this build.";
 #else
+  if (!MetalRuntimeAvailable()) {
+    GTEST_SKIP() << "Metal device is unavailable in this environment.";
+  }
   const cv::Mat bayer = MakeBayerPattern(18, 20);
   const auto    pattern = MakePattern(1);
 
@@ -170,6 +297,9 @@ TEST(MetalRawOpsTest, ClampTextureOnlyClampsUpperBound) {
 #ifndef HAVE_METAL
   GTEST_SKIP() << "Metal is not enabled in this build.";
 #else
+  if (!MetalRuntimeAvailable()) {
+    GTEST_SKIP() << "Metal device is unavailable in this environment.";
+  }
   const cv::Mat src = MakeClampedImage();
 
   metal::MetalImage image;
@@ -193,6 +323,9 @@ TEST(MetalRawOpsTest, HighlightReconstructMatchesCPUReference) {
 #ifndef HAVE_METAL
   GTEST_SKIP() << "Metal is not enabled in this build.";
 #else
+  if (!MetalRuntimeAvailable()) {
+    GTEST_SKIP() << "Metal device is unavailable in this environment.";
+  }
   LibRaw raw_processor;
   InitHighlightRawProcessor(raw_processor);
   const auto pattern = MakePattern(0);
@@ -219,6 +352,9 @@ TEST(MetalRawOpsTest, HighlightReconstructSupportsNonRggbBayerPatterns) {
 #ifndef HAVE_METAL
   GTEST_SKIP() << "Metal is not enabled in this build.";
 #else
+  if (!MetalRuntimeAvailable()) {
+    GTEST_SKIP() << "Metal device is unavailable in this environment.";
+  }
   LibRaw raw_processor;
   InitHighlightRawProcessor(raw_processor);
   const auto pattern = MakePattern(3);
@@ -235,6 +371,93 @@ TEST(MetalRawOpsTest, HighlightReconstructSupportsNonRggbBayerPatterns) {
   ASSERT_EQ(gpu_result.type(), CV_32FC1);
   ASSERT_EQ(gpu_result.size(), input.size());
   EXPECT_TRUE(cv::checkRange(gpu_result, true, nullptr, 0.0, 4.0));
+#endif
+}
+
+TEST(MetalRawOpsTest, ToLinearRefMatchesScalarReferenceForBayerAndXTrans) {
+#ifndef HAVE_METAL
+  GTEST_SKIP() << "Metal is not enabled in this build.";
+#else
+  if (!MetalRuntimeAvailable()) {
+    GTEST_SKIP() << "Metal device is unavailable in this environment.";
+  }
+  LibRaw raw_processor;
+  InitLinearizationRawProcessor(raw_processor);
+
+  const BayerPattern2x2 bayer_pattern = MakePattern(0);
+  RawCfaPattern         bayer_cfa = {};
+  bayer_cfa.kind                    = RawCfaKind::Bayer2x2;
+  bayer_cfa.bayer_pattern           = bayer_pattern;
+
+  cv::Mat bayer_raw(6, 8, CV_16UC1);
+  for (int y = 0; y < bayer_raw.rows; ++y) {
+    for (int x = 0; x < bayer_raw.cols; ++x) {
+      bayer_raw.at<uint16_t>(y, x) = static_cast<uint16_t>(1500 + 47 * y + 31 * x);
+    }
+  }
+
+  metal::MetalImage bayer_image;
+  bayer_image.Upload(bayer_raw);
+  ASSERT_NO_THROW(metal::ToLinearRef(bayer_image, raw_processor, bayer_cfa));
+
+  cv::Mat bayer_gpu;
+  bayer_image.Download(bayer_gpu);
+  const cv::Mat bayer_expected = ComputeLinearizedReference(bayer_raw, bayer_cfa, raw_processor);
+  EXPECT_LE(cv::norm(bayer_gpu, bayer_expected, cv::NORM_INF), 2e-5);
+
+  const XTransPattern6x6 xtrans_pattern = MakeXTransPattern();
+  RawCfaPattern         xtrans_cfa = {};
+  xtrans_cfa.kind                    = RawCfaKind::XTrans6x6;
+  xtrans_cfa.xtrans_pattern          = xtrans_pattern;
+
+  cv::Mat xtrans_raw(8, 10, CV_16UC1);
+  for (int y = 0; y < xtrans_raw.rows; ++y) {
+    for (int x = 0; x < xtrans_raw.cols; ++x) {
+      xtrans_raw.at<uint16_t>(y, x) = static_cast<uint16_t>(1800 + 29 * y + 19 * x);
+    }
+  }
+
+  metal::MetalImage xtrans_image;
+  xtrans_image.Upload(xtrans_raw);
+  ASSERT_NO_THROW(metal::ToLinearRef(xtrans_image, raw_processor, xtrans_cfa));
+
+  cv::Mat xtrans_gpu;
+  xtrans_image.Download(xtrans_gpu);
+  const cv::Mat xtrans_expected = ComputeLinearizedReference(xtrans_raw, xtrans_cfa, raw_processor);
+  EXPECT_LE(cv::norm(xtrans_gpu, xtrans_expected, cv::NORM_INF), 2e-5);
+#endif
+}
+
+TEST(MetalRawOpsTest, XTransInterpolateProducesRGBAAndPreservesKnownSamples) {
+#ifndef HAVE_METAL
+  GTEST_SKIP() << "Metal is not enabled in this build.";
+#else
+  if (!MetalRuntimeAvailable()) {
+    GTEST_SKIP() << "Metal device is unavailable in this environment.";
+  }
+  const XTransPattern6x6 pattern = MakeXTransPattern();
+  const cv::Mat raw = MakeXTransRaw(18, 18, pattern);
+
+  metal::MetalImage image;
+  image.Upload(raw);
+  ASSERT_NO_THROW(metal::XTransToRGB_Ref(image, pattern, 1));
+
+  cv::Mat rgba;
+  image.Download(rgba);
+
+  ASSERT_EQ(rgba.type(), CV_32FC4);
+  ASSERT_EQ(rgba.size(), raw.size());
+  EXPECT_TRUE(cv::checkRange(rgba, true, nullptr, 0.0, 4.0));
+
+  for (int y = 0; y < rgba.rows; ++y) {
+    const float* raw_row = raw.ptr<float>(y);
+    const cv::Vec4f* rgba_row = rgba.ptr<cv::Vec4f>(y);
+    for (int x = 0; x < rgba.cols; ++x) {
+      const int color = CFAColorAt(pattern, y, x);
+      EXPECT_NEAR(rgba_row[x][3], 1.0f, 1e-6);
+      EXPECT_NEAR(rgba_row[x][color], raw_row[x], 1e-6);
+    }
+  }
 #endif
 }
 

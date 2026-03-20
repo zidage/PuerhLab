@@ -12,6 +12,7 @@
 #include <cstdint>
 #include <stdexcept>
 #include <utility>
+#include <vector>
 
 #include "image/metal_image.hpp"
 #include "metal/compute_pipeline_cache.hpp"
@@ -23,15 +24,19 @@ namespace {
 
 struct WBParams {
   float black_level[4];
-  float wb_scale[4];
+  float wb_multipliers[4];
 };
 
 struct ToLinearRefParams {
-  float    white_level_scale;
+  float white_level_scale;
   uint32_t width;
   uint32_t height;
   uint32_t stride;
-  uint32_t raw_fc[4];
+  uint32_t tile_width;
+  uint32_t tile_height;
+  uint32_t black_tile_width;
+  uint32_t black_tile_height;
+  uint32_t raw_fc[36];
 };
 
 constexpr uint32_t kRowAlignmentBytes = 256;
@@ -65,7 +70,9 @@ auto MakeSharedBuffer(size_t length) -> NS::SharedPtr<MTL::Buffer> {
 }
 
 void DispatchToLinearRef(MetalImage& image, float white_level_scale, const WBParams& wb_params,
-                         const BayerPattern2x2& pattern) {
+                         const RawCfaPattern& pattern,
+                         const std::vector<float>& black_pattern, uint32_t black_tile_width,
+                         uint32_t black_tile_height) {
   if (image.Empty()) {
     throw std::runtime_error("[ERROR] Metal ToLinearRef: image is empty.");
   }
@@ -78,6 +85,14 @@ void DispatchToLinearRef(MetalImage& image, float white_level_scale, const WBPar
   const auto stride      = static_cast<uint32_t>(row_bytes / sizeof(float));
 
   auto staging_buffer = MakeSharedBuffer(buffer_size);
+  auto black_pattern_buffer =
+      MakeSharedBuffer(std::max<size_t>(black_pattern.size(), 1) * sizeof(float));
+  std::fill_n(static_cast<float*>(black_pattern_buffer->contents()),
+              std::max<size_t>(black_pattern.size(), 1), 0.0f);
+  if (!black_pattern.empty()) {
+    std::copy(black_pattern.begin(), black_pattern.end(),
+              static_cast<float*>(black_pattern_buffer->contents()));
+  }
 
   auto* queue = MetalContext::Instance().Queue();
   if (queue == nullptr) {
@@ -101,16 +116,26 @@ void DispatchToLinearRef(MetalImage& image, float white_level_scale, const WBPar
     auto pipeline = GetPipelineState();
     auto compute  = NS::RetainPtr(command_buffer->computeCommandEncoder());
 
-    const ToLinearRefParams params{
-        .white_level_scale = white_level_scale,
-        .width             = image.Width(),
-        .height            = image.Height(),
-        .stride            = stride,
-        .raw_fc            = {static_cast<uint32_t>(pattern.raw_fc[0]),
-                              static_cast<uint32_t>(pattern.raw_fc[1]),
-                              static_cast<uint32_t>(pattern.raw_fc[2]),
-                              static_cast<uint32_t>(pattern.raw_fc[3])},
-    };
+    ToLinearRefParams params = {};
+    params.white_level_scale = white_level_scale;
+    params.width             = image.Width();
+    params.height            = image.Height();
+    params.stride            = stride;
+    if (pattern.kind == RawCfaKind::XTrans6x6) {
+      params.tile_width  = 6;
+      params.tile_height = 6;
+      for (int i = 0; i < 36; ++i) {
+        params.raw_fc[i] = static_cast<uint32_t>(pattern.xtrans_pattern.raw_fc[i]);
+      }
+    } else {
+      params.tile_width  = 2;
+      params.tile_height = 2;
+      for (int i = 0; i < 4; ++i) {
+        params.raw_fc[i] = static_cast<uint32_t>(pattern.bayer_pattern.raw_fc[i]);
+      }
+    }
+    params.black_tile_width  = black_tile_width;
+    params.black_tile_height = black_tile_height;
 
     // Follow Apple's guidance for image kernels: align threadgroup width to the execution width
     // and fill the remaining threadgroup budget in Y.
@@ -124,6 +149,7 @@ void DispatchToLinearRef(MetalImage& image, float white_level_scale, const WBPar
     compute->setBuffer(staging_buffer.get(), 0, 0);
     compute->setBytes(&params, sizeof(params), 1);
     compute->setBytes(&wb_params, sizeof(wb_params), 2);
+    compute->setBuffer(black_pattern_buffer.get(), 0, 3);
     compute->dispatchThreads(threads_per_grid, threads_per_threadgroup);
     compute->endEncoding();
   }
@@ -148,15 +174,6 @@ static auto CalculateBlackLevel(const libraw_rawdata_t& raw_data) -> std::array<
       base_black_level + static_cast<float>(raw_data.color.cblack[2]),
       base_black_level + static_cast<float>(raw_data.color.cblack[3])};
 
-  if (raw_data.color.cblack[4] == 2 && raw_data.color.cblack[5] == 2) {
-    for (unsigned int x = 0; x < raw_data.color.cblack[4]; ++x) {
-      for (unsigned int y = 0; y < raw_data.color.cblack[5]; ++y) {
-        const auto index   = y * 2 + x;
-        black_level[index] = raw_data.color.cblack[6 + index];
-      }
-    }
-  }
-
   return black_level;
 }
 
@@ -164,11 +181,29 @@ static auto GetWBCoeff(const libraw_rawdata_t& raw_data) -> const float* {
   return raw_data.color.cam_mul;
 }
 
+static auto GetPatternBlackLevels(const libraw_rawdata_t& raw_data) -> std::vector<float> {
+  const uint32_t tile_width  = raw_data.color.cblack[4];
+  const uint32_t tile_height = raw_data.color.cblack[5];
+  const uint32_t entries     = tile_width * tile_height;
+  if (entries == 0U) {
+    return {};
+  }
+
+  std::vector<float> pattern_black(entries, 0.0f);
+  for (uint32_t i = 0; i < entries; ++i) {
+    pattern_black[i] = static_cast<float>(raw_data.color.cblack[6 + i]) / 65535.0f;
+  }
+  return pattern_black;
+}
+
 }  // namespace
 
-void ToLinearRef(MetalImage& img, LibRaw& raw_processor, const BayerPattern2x2& pattern) {
+void ToLinearRef(MetalImage& img, LibRaw& raw_processor, const RawCfaPattern& pattern) {
   auto black_level = CalculateBlackLevel(raw_processor.imgdata.rawdata);
   auto wb          = GetWBCoeff(raw_processor.imgdata.rawdata);
+  auto black_pattern = GetPatternBlackLevels(raw_processor.imgdata.rawdata);
+  const uint32_t black_tile_width  = raw_processor.imgdata.rawdata.color.cblack[4];
+  const uint32_t black_tile_height = raw_processor.imgdata.rawdata.color.cblack[5];
 
   if (raw_processor.imgdata.color.as_shot_wb_applied != 1) {
     for (int c = 0; c < 4; ++c) {
@@ -179,9 +214,9 @@ void ToLinearRef(MetalImage& img, LibRaw& raw_processor, const BayerPattern2x2& 
     const float maximum = raw_processor.imgdata.rawdata.color.maximum / 65535.0f - min;
 
     if (img.Format() != metal::PixelFormat::R16UINT) {
-      throw std::runtime_error("Metal ToLinearRef: expected R16UINT Bayer input.");
+      throw std::runtime_error("Metal ToLinearRef: expected R16UINT raw input.");
     }
-    if (maximum <= 0.f) {
+    if (maximum <= 0.0f) {
       throw std::runtime_error("Metal ToLinearRef: invalid white level scale.");
     }
 
@@ -190,15 +225,13 @@ void ToLinearRef(MetalImage& img, LibRaw& raw_processor, const BayerPattern2x2& 
     img = std::move(linearized);
 
     WBParams wb_params = {};
-    const float green_wb = wb[1];
     for (int c = 0; c < 4; ++c) {
-      wb_params.black_level[c] = black_level[c];
-      wb_params.wb_scale[c]    = 1.0f;
+      wb_params.black_level[c]    = black_level[c];
+      wb_params.wb_multipliers[c] = wb[c];
     }
-    wb_params.wb_scale[0] = wb[0] / green_wb;
-    wb_params.wb_scale[2] = wb[2] / green_wb;
 
-    DispatchToLinearRef(img, maximum, wb_params, pattern);
+    DispatchToLinearRef(img, maximum, wb_params, pattern, black_pattern, black_tile_width,
+                        black_tile_height);
   } else {
     MetalImage converted;
     img.ConvertTo(converted, PixelFormat::R32FLOAT);

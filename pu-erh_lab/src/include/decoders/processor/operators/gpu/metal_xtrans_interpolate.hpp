@@ -4,13 +4,17 @@
 
 #pragma once
 
-#include <libraw/libraw.h>
+#ifdef HAVE_METAL
 
 #include "decoders/processor/raw_processor_pattern.hpp"
 #include "image/metal_image.hpp"
 
 namespace puerhlab {
 namespace metal {
-void ToLinearRef(metal::MetalImage& img, LibRaw& raw_processor, const RawCfaPattern& pattern);
-};
-};
+
+void XTransToRGB_Ref(MetalImage& image, const XTransPattern6x6& pattern, int passes);
+
+}  // namespace metal
+}  // namespace puerhlab
+
+#endif

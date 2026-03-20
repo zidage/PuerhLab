@@ -51,6 +51,7 @@
 #include "decoders/processor/operators/gpu/metal_debayer_rcd.hpp"
 #include "decoders/processor/operators/gpu/metal_highlight_reconstruct.hpp"
 #include "decoders/processor/operators/gpu/metal_to_linear_ref.hpp"
+#include "decoders/processor/operators/gpu/metal_xtrans_interpolate.hpp"
 #include "metal/metal_utils/metal_convert_utils.hpp"
 #endif
 #include "image/image_buffer.hpp"
@@ -161,21 +162,16 @@ void RawProcessor::SetDecodeRes() {
   // Adjust internal parameters based on decode resolution
   switch (params_.decode_res_) {
     case DecodeRes::FULL:
-      // No changes needed for full resolution
       break;
     case DecodeRes::HALF:
-      // Downscale by factor of 2
-      cpu_data = DownsampleBayer2x(cpu_data, bayer_pattern_);
+      cpu_data = DownsampleRaw2x(cpu_data, cfa_pattern_);
       break;
     case DecodeRes::QUARTER:
-      // Downscale by factor of 4
-      cpu_data = DownsampleBayer2x(DownsampleBayer2x(cpu_data, bayer_pattern_), bayer_pattern_);
+      cpu_data = DownsampleRaw2x(DownsampleRaw2x(cpu_data, cfa_pattern_), cfa_pattern_);
       break;
     case DecodeRes::EIGHTH:
-      // Downscale by factor of 8
-      cpu_data = DownsampleBayer2x(
-          DownsampleBayer2x(DownsampleBayer2x(cpu_data, bayer_pattern_), bayer_pattern_),
-          bayer_pattern_);
+      cpu_data = DownsampleRaw2x(
+          DownsampleRaw2x(DownsampleRaw2x(cpu_data, cfa_pattern_), cfa_pattern_), cfa_pattern_);
       break;
     default:
       throw std::runtime_error("RawProcessor: Unknown decode resolution");
@@ -187,11 +183,14 @@ void RawProcessor::ApplyLinearization() {
   if (params_.gpu_backend_ == RawGpuBackend::GPU) {
 #ifdef HAVE_CUDA
     auto& gpu_img = pre_debayer_buffer.GetCUDAImage();
-    CUDA::ToLinearRef(gpu_img, raw_processor_, bayer_pattern_);
+    if (cfa_pattern_.kind != RawCfaKind::Bayer2x2) {
+      throw std::runtime_error("RawProcessor: CUDA linearization only supports classic Bayer CFA.");
+    }
+    CUDA::ToLinearRef(gpu_img, raw_processor_, cfa_pattern_.bayer_pattern);
     return;
 #elif defined(HAVE_METAL)
     auto& gpu_img = pre_debayer_buffer.GetMetalImage();
-    metal::ToLinearRef(gpu_img, raw_processor_, bayer_pattern_);
+    metal::ToLinearRef(gpu_img, raw_processor_, cfa_pattern_);
     return;
 #else
     ThrowUnsupportedGPUBackend("ApplyLinearization");
@@ -210,7 +209,10 @@ void RawProcessor::ApplyDebayer() {
   if (params_.gpu_backend_ == RawGpuBackend::GPU) {
 #ifdef HAVE_CUDA
     auto& gpu_img = pre_debayer_buffer.GetCUDAImage();
-    CUDA::Bayer2x2ToRGB_RCD(gpu_img, bayer_pattern_);
+    if (cfa_pattern_.kind != RawCfaKind::Bayer2x2) {
+      throw std::runtime_error("RawProcessor: CUDA debayer only supports classic Bayer CFA.");
+    }
+    CUDA::Bayer2x2ToRGB_RCD(gpu_img, cfa_pattern_.bayer_pattern);
     if (params_.decode_res_ == DecodeRes::FULL) {
       cv::Rect crop_rect(raw_data_.sizes.left_margin, raw_data_.sizes.top_margin,
                          raw_data_.sizes.width, raw_data_.sizes.height);
@@ -220,7 +222,12 @@ void RawProcessor::ApplyDebayer() {
     return;
 #elif defined(HAVE_METAL)
     auto& gpu_img = pre_debayer_buffer.GetMetalImage();
-    metal::Bayer2x2ToRGB_RCD(gpu_img, bayer_pattern_);
+    if (cfa_pattern_.kind == RawCfaKind::XTrans6x6) {
+      const int passes = params_.decode_res_ == DecodeRes::FULL ? 3 : 1;
+      metal::XTransToRGB_Ref(gpu_img, cfa_pattern_.xtrans_pattern, passes);
+    } else {
+      metal::Bayer2x2ToRGB_RCD(gpu_img, cfa_pattern_.bayer_pattern);
+    }
     if (params_.decode_res_ == DecodeRes::FULL) {
       cv::Rect crop_rect(raw_data_.sizes.left_margin, raw_data_.sizes.top_margin,
                          raw_data_.sizes.width, raw_data_.sizes.height);
@@ -234,6 +241,9 @@ void RawProcessor::ApplyDebayer() {
 #endif
   }
   auto& img = pre_debayer_buffer.GetCPUData();
+  if (cfa_pattern_.kind != RawCfaKind::Bayer2x2) {
+    throw std::runtime_error("RawProcessor: CPU debayer only supports classic Bayer CFA.");
+  }
   CPU::BayerRGGB2RGB_RCD(img);
   // Crop to valid area
   // cv::Rect crop_rect(_raw_data.sizes.raw_inset_crops[0].cleft,
@@ -251,19 +261,27 @@ void RawProcessor::ApplyHighlightReconstruct() {
   if (params_.gpu_backend_ == RawGpuBackend::GPU) {
 #ifdef HAVE_CUDA
     auto& gpu_img = process_buffer_.GetCUDAImage();
+    if (cfa_pattern_.kind != RawCfaKind::Bayer2x2) {
+      throw std::runtime_error(
+          "RawProcessor: CUDA highlight reconstruction only supports classic Bayer CFA.");
+    }
     if (!params_.highlights_reconstruct_) {
       CUDA::Clamp01(gpu_img);
       return;
     }
-    CUDA::HighlightReconstruct(gpu_img, raw_processor_, bayer_pattern_);
+    CUDA::HighlightReconstruct(gpu_img, raw_processor_, cfa_pattern_.bayer_pattern);
     return;
 #elif defined(HAVE_METAL)
     auto& gpu_img = process_buffer_.GetMetalImage();
+    if (cfa_pattern_.kind == RawCfaKind::XTrans6x6) {
+      metal::utils::ClampTexture(gpu_img);
+      return;
+    }
     if (!params_.highlights_reconstruct_) {
       metal::utils::ClampTexture(gpu_img);
       return;
     }
-    metal::HighlightReconstruct(gpu_img, raw_processor_, bayer_pattern_);
+    metal::HighlightReconstruct(gpu_img, raw_processor_, cfa_pattern_.bayer_pattern);
     return;
 #endif
     ThrowUnsupportedGPUBackend("ApplyHighlightReconstruct");
@@ -414,23 +432,26 @@ auto RawProcessor::Process() -> ImageBuffer {
   }
 
   if (raw_processor_.imgdata.idata.is_foveon != 0U || raw_processor_.imgdata.idata.filters == 0U ||
-      raw_processor_.imgdata.idata.filters == 1U || raw_processor_.imgdata.idata.filters == 9U ||
-      raw_processor_.is_fuji_rotated() != 0) {
+      raw_processor_.imgdata.idata.filters == 1U || raw_processor_.is_fuji_rotated() != 0) {
     throw std::runtime_error("RawProcessor: " +
                              DescribeUnsupportedRawInput(raw_processor_, input_kind_));
   }
 
-  bayer_pattern_ = ReadLibRawBayerPattern(raw_processor_);
-  if (!IsClassic2x2Bayer(bayer_pattern_)) {
+  cfa_pattern_ = ReadLibRawCfaPattern(raw_processor_);
+  if (cfa_pattern_.kind == RawCfaKind::Bayer2x2 &&
+      !IsClassic2x2Bayer(cfa_pattern_.bayer_pattern)) {
     throw std::runtime_error("RawProcessor: unsupported 2x2 CFA pattern " +
-                             DescribeBayerPattern(bayer_pattern_) + ".");
+                             DescribeBayerPattern(cfa_pattern_.bayer_pattern) + ".");
   }
 
-  if (!IsRGGBPattern(bayer_pattern_)) {
+  if (cfa_pattern_.kind == RawCfaKind::Bayer2x2 && !IsRGGBPattern(cfa_pattern_.bayer_pattern)) {
     if (params_.gpu_backend_ == RawGpuBackend::CPU) {
       throw std::runtime_error("RawProcessor: CPU backend only supports RGGB Bayer input; got " +
-                               DescribeBayerPattern(bayer_pattern_) + ".");
+                               DescribeBayerPattern(cfa_pattern_.bayer_pattern) + ".");
     }
+  }
+  if (cfa_pattern_.kind == RawCfaKind::XTrans6x6 && params_.gpu_backend_ != RawGpuBackend::GPU) {
+    throw std::runtime_error("RawProcessor: CPU backend does not support X-Trans CFA input.");
   }
 
   auto  img_unpacked = raw_data_.raw_image;

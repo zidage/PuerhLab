@@ -28,6 +28,24 @@ struct SampleSelection {
   libraw_image_sizes_t  sizes;
 };
 
+auto MakeXTransPattern() -> XTransPattern6x6 {
+  static constexpr int kRawFc[36] = {
+      1, 2, 1, 1, 0, 1,
+      1, 0, 1, 2, 1, 2,
+      0, 1, 0, 1, 2, 1,
+      1, 2, 1, 1, 0, 1,
+      1, 0, 1, 2, 1, 2,
+      2, 1, 2, 0, 1, 0,
+  };
+
+  XTransPattern6x6 pattern = {};
+  for (int i = 0; i < 36; ++i) {
+    pattern.raw_fc[i] = kRawFc[i];
+    pattern.rgb_fc[i] = FoldRawColorToRgb(kRawFc[i]);
+  }
+  return pattern;
+}
+
 auto ReadFileToBuffer(const std::filesystem::path& path) -> std::vector<uint8_t> {
   std::ifstream file(path, std::ios::binary);
   if (!file.is_open()) {
@@ -167,6 +185,24 @@ TEST(RawProcessorPattern, ClassifyRawInputLayouts) {
   EXPECT_EQ(ClassifyRawInput(raw_data), RawInputKind::Unsupported);
 }
 
+TEST(RawProcessorPattern, ReadLibRawDetectsXTransPattern) {
+  LibRaw raw_processor;
+  raw_processor.imgdata.idata.filters = 9U;
+  const XTransPattern6x6 expected = MakeXTransPattern();
+  for (int row = 0; row < 6; ++row) {
+    for (int col = 0; col < 6; ++col) {
+      raw_processor.imgdata.idata.xtrans[row][col] =
+          static_cast<char>(expected.raw_fc[row * 6 + col]);
+    }
+  }
+
+  const RawCfaPattern pattern = ReadLibRawCfaPattern(raw_processor);
+  EXPECT_EQ(pattern.kind, RawCfaKind::XTrans6x6);
+  EXPECT_EQ(RawColorAt(pattern, 0, 0), expected.raw_fc[0]);
+  EXPECT_EQ(RawColorAt(pattern, 4, 5), expected.raw_fc[4 * 6 + 5]);
+  EXPECT_EQ(RgbColorAt(pattern, 5, 3), expected.rgb_fc[5 * 6 + 3]);
+}
+
 TEST(RawProcessorPattern, DownsampleKeepsBayerCellParity) {
   const BayerPattern2x2 pattern = {{1, 0, 2, 3}, {1, 0, 2, 1}};
 
@@ -184,6 +220,31 @@ TEST(RawProcessorPattern, DownsampleKeepsBayerCellParity) {
   EXPECT_EQ(downsampled.at<uint16_t>(0, 1), src.at<uint16_t>(0, 3));
   EXPECT_EQ(downsampled.at<uint16_t>(1, 0), src.at<uint16_t>(3, 0));
   EXPECT_EQ(downsampled.at<uint16_t>(1, 1), src.at<uint16_t>(3, 3));
+}
+
+TEST(RawProcessorPattern, DownsampleXTransKeepsSampledPhase) {
+  RawCfaPattern pattern = {};
+  pattern.kind          = RawCfaKind::XTrans6x6;
+  pattern.xtrans_pattern = MakeXTransPattern();
+
+  cv::Mat src(12, 12, CV_16UC1);
+  for (int y = 0; y < src.rows; ++y) {
+    for (int x = 0; x < src.cols; ++x) {
+      src.at<uint16_t>(y, x) = static_cast<uint16_t>(100 * y + x);
+    }
+  }
+
+  const XTransPattern6x6 original_pattern = pattern.xtrans_pattern;
+  const cv::Mat half = DownsampleRaw2x(src, pattern);
+
+  ASSERT_EQ(half.rows, 6);
+  ASSERT_EQ(half.cols, 6);
+  EXPECT_EQ(half.at<uint16_t>(0, 0), src.at<uint16_t>(0, 0));
+  EXPECT_EQ(half.at<uint16_t>(1, 2), src.at<uint16_t>(2, 4));
+  EXPECT_EQ(half.at<uint16_t>(5, 5), src.at<uint16_t>(10, 10));
+  EXPECT_EQ(RawColorAt(pattern, 0, 0), RawColorAt(original_pattern, 0, 0));
+  EXPECT_EQ(RawColorAt(pattern, 1, 1), RawColorAt(original_pattern, 2, 2));
+  EXPECT_EQ(RawColorAt(pattern, 4, 5), RawColorAt(original_pattern, 8, 10));
 }
 
 TEST(RawProcessorPattern, CpuBackendRejectsNonRggbBayer) {

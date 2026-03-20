@@ -40,7 +40,7 @@ class RawProcessor {
   ImageBuffer             process_buffer_;
   RawParams               params_;
   RawRuntimeColorContext  runtime_color_context_;
-  BayerPattern2x2         bayer_pattern_;
+  RawCfaPattern           cfa_pattern_;
   RawInputKind            input_kind_ = RawInputKind::Unsupported;
 
   const libraw_rawdata_t& raw_data_;

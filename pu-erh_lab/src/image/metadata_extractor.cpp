@@ -22,6 +22,7 @@
 #include <unordered_set>
 #include <vector>
 
+#include "decoders/libraw_unpack_guard.hpp"
 #include "edit/operators/basic/camera_matrices.hpp"
 #include "json.hpp"
 #include "type/supported_file_type.hpp"
@@ -940,7 +941,7 @@ auto MetadataExtractor::ExtractRawMetadata_ToImage(const image_path_t& image_pat
     return false;
   }
 
-  ret = raw_processor->unpack();
+  ret = libraw_guard::Unpack(*raw_processor);
   if (ret != LIBRAW_SUCCESS) {
     std::cerr << "MetadataExtractor: libraw unpack failed for '"
               << image_path.string() << "' (error " << ret << ")" << std::endl;

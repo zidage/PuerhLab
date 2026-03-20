@@ -148,15 +148,11 @@ else()
     add_compile_options(
         $<$<CONFIG:Debug>:-g>
         $<$<CONFIG:Debug>:-O2>
-        $<$<CONFIG:Debug>:-fsanitize=address>
         $<$<CONFIG:Debug>:-fno-omit-frame-pointer>
         $<$<CONFIG:Release>:-O3>
         $<$<CONFIG:Release>:-DNDEBUG>
     )
 
-    add_link_options(
-        $<$<CONFIG:Debug>:-fsanitize=address>
-    )
     if(APPLE)
         add_compile_definitions(__MACOSX_CORE__)
     endif()

@@ -14,6 +14,9 @@ namespace CUDA {
 struct WBParams {
   float black_level[4];
   float wb_multipliers[4];
+  int   black_tile_width;
+  int   black_tile_height;
+  float pattern_black[36];
 };
 
 __global__ void ToLinearRefKernel(cv::cuda::PtrStep<float> image, int width, int height,
@@ -42,7 +45,14 @@ __global__ void ToLinearRefKernel(cv::cuda::PtrStep<float> image, int width, int
   float     pixel_val = image(row, col);
 
   // 2. Black Level Subtraction
-  pixel_val -= wb_params.black_level[color_idx];
+  float pattern_black = 0.0f;
+  if (wb_params.black_tile_width > 0 && wb_params.black_tile_height > 0) {
+    const int tile_y = row % wb_params.black_tile_height;
+    const int tile_x = col % wb_params.black_tile_width;
+    pattern_black =
+        wb_params.pattern_black[tile_y * wb_params.black_tile_width + tile_x];
+  }
+  pixel_val -= wb_params.black_level[color_idx] + pattern_black;
 
   // The multipliers are normalized to the green channel (index 1)
   float       mask   = (color_idx == 0 || color_idx == 2) ? 1.0f : 0.0f;
@@ -67,15 +77,6 @@ static auto CalculateBlackLevel(const libraw_rawdata_t& raw_data) -> std::array<
       base_black_level + static_cast<float>(raw_data.color.cblack[1]),
       base_black_level + static_cast<float>(raw_data.color.cblack[2]),
       base_black_level + static_cast<float>(raw_data.color.cblack[3])};
-
-  if (raw_data.color.cblack[4] == 2 && raw_data.color.cblack[5] == 2) {
-    for (unsigned int x = 0; x < raw_data.color.cblack[4]; ++x) {
-      for (unsigned int y = 0; y < raw_data.color.cblack[5]; ++y) {
-        const auto index   = y * 2 + x;
-        black_level[index] = raw_data.color.cblack[6 + index];
-      }
-    }
-  }
 
   return black_level;
 }
@@ -109,6 +110,19 @@ void ToLinearRef(cv::cuda::GpuMat& image, LibRaw& raw_processor, const BayerPatt
     for (int c = 0; c < 4; ++c) {
       wb_params.black_level[c]    = black_level[c];
       wb_params.wb_multipliers[c] = wb[c];
+    }
+    wb_params.black_tile_width = 0;
+    wb_params.black_tile_height = 0;
+    const int tile_width = raw_processor.imgdata.rawdata.color.cblack[4];
+    const int tile_height = raw_processor.imgdata.rawdata.color.cblack[5];
+    const int entries = tile_width * tile_height;
+    if (entries > 0 && entries <= 36) {
+      wb_params.black_tile_width = tile_width;
+      wb_params.black_tile_height = tile_height;
+      for (int i = 0; i < entries; ++i) {
+        wb_params.pattern_black[i] =
+            static_cast<float>(raw_processor.imgdata.rawdata.color.cblack[6 + i]) / 65535.0f;
+      }
     }
 
     // 2. Define CUDA kernel launch grid dimensions

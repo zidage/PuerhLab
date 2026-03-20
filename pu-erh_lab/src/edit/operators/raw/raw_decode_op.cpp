@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <memory>
 
+#include "decoders/libraw_unpack_guard.hpp"
 #include "decoders/processor/raw_processor.hpp"
 #include "image/metadata_extractor.hpp"
 #include "image/image_buffer.hpp"
@@ -44,7 +45,7 @@ void RawDecodeOp::Apply(std::shared_ptr<ImageBuffer> input) {
 
   switch (backend_) {
     case RawProcessBackend::PUERH: {
-      raw_processor->unpack();
+      libraw_guard::Unpack(*raw_processor);
 
       // Use pre-populated context injected before rendering; fall back to
       // extracting directly from the open LibRaw instance.
@@ -68,7 +69,7 @@ void RawDecodeOp::Apply(std::shared_ptr<ImageBuffer> input) {
       raw_processor->imgdata.params.use_camera_wb  = 1;  // Discarded if user_wb is set for now
       raw_processor->imgdata.rawparams.use_dngsdk  = 1;
 
-      raw_processor->unpack();
+      libraw_guard::Unpack(*raw_processor);
 
       // Use pre-populated context or extract from LibRaw.
       RawRuntimeColorContext ctx = pre_populated_ctx_;
