@@ -103,7 +103,8 @@ auto DownsampleAlgorithmToParam(ResizeDownsampleAlgorithm algorithm) -> const ch
 }
 
 auto ParseDownsampleAlgorithm(const nlohmann::json& resize_params) -> ResizeDownsampleAlgorithm {
-  const std::string algorithm = resize_params.value("downsample_algorithm", std::string("inter_area"));
+  const std::string algorithm =
+      resize_params.value("downsample_algorithm", std::string("inter_area"));
   if (algorithm == "bilinear" || algorithm == "linear") {
     return ResizeDownsampleAlgorithm::Bilinear;
   }
@@ -126,8 +127,8 @@ auto ToOpenCvInterpolation(ResizeDownsampleAlgorithm algorithm) -> int {
 }
 
 #ifdef HAVE_CUDA
-void ResizeGpuMatWithCuda(const cv::cuda::GpuMat& src, cv::cuda::GpuMat& dst,
-                          cv::Size output_size, ResizeDownsampleAlgorithm downsample_algorithm) {
+void ResizeGpuMatWithCuda(const cv::cuda::GpuMat& src, cv::cuda::GpuMat& dst, cv::Size output_size,
+                          ResizeDownsampleAlgorithm downsample_algorithm) {
   if (output_size.width <= 0 || output_size.height <= 0) {
     throw std::runtime_error("ResizeOp::ApplyGPU: destination size must be positive");
   }
@@ -180,11 +181,8 @@ void ResizeOp::ApplyGPU(std::shared_ptr<ImageBuffer> input) {
 #if !defined(HAVE_CUDA) && !defined(HAVE_METAL)
   throw std::runtime_error("ResizeOp::ApplyGPU requires HAVE_CUDA or HAVE_METAL");
 #elif defined(HAVE_CUDA)
-  using clock      = std::chrono::high_resolution_clock;
 
-  auto       start = clock::now();
-
-  auto&      img   = input->GetCUDAImage();
+  auto&      img = input->GetCUDAImage();
   const auto plan =
       BuildResizePlan(img.cols, img.rows, enable_scale_, maximum_edge_, enable_roi_, roi_);
   if (plan.noop) {
@@ -206,10 +204,7 @@ void ResizeOp::ApplyGPU(std::shared_ptr<ImageBuffer> input) {
 
   cv::cuda::GpuMat dst;
   ResizeGpuMatWithCuda(img, dst, plan.output_size, downsample_algorithm_);
-  auto                          end  = clock::now();
-  std::chrono::duration<double> diff = end - start;
 
-  std::cout << "[LOG] ResizeOp takes " << diff << "ms to run\n";
   img = std::move(dst);
 #elif defined(HAVE_METAL)
   auto&      img  = input->GetMetalImage();
@@ -233,17 +228,17 @@ void ResizeOp::ApplyGPU(std::shared_ptr<ImageBuffer> input) {
 auto ResizeOp::GetParams() const -> nlohmann::json {
   nlohmann::json params;
   nlohmann::json inner;
-  inner["enable_scale"] = enable_scale_;
-  inner["maximum_edge"] = maximum_edge_;
-  inner["enable_roi"]   = enable_roi_;
+  inner["enable_scale"]         = enable_scale_;
+  inner["maximum_edge"]         = maximum_edge_;
+  inner["enable_roi"]           = enable_roi_;
   inner["downsample_algorithm"] = DownsampleAlgorithmToParam(downsample_algorithm_);
-  inner["roi"]          = {{"x", roi_.x_},
-                           {"y", roi_.y_},
-                           {"resize_factor_x", roi_.resize_factor_x_},
-                           {"resize_factor_y", roi_.resize_factor_y_},
-                           {"resize_factor", roi_.resize_factor_}};
+  inner["roi"]                  = {{"x", roi_.x_},
+                                   {"y", roi_.y_},
+                                   {"resize_factor_x", roi_.resize_factor_x_},
+                                   {"resize_factor_y", roi_.resize_factor_y_},
+                                   {"resize_factor", roi_.resize_factor_}};
 
-  params[script_name_]  = inner;
+  params[script_name_]          = inner;
   return params;
 }
 
@@ -275,11 +270,11 @@ auto ResizeOp::SetParams(const nlohmann::json& params) -> void {
       roi_.resize_factor_y_ = roi_json.value("resize_factor_y", roi_.resize_factor_);
     }
   } else {
-    enable_scale_ = false;
-    maximum_edge_ = 2048;
-    enable_roi_   = false;
+    enable_scale_         = false;
+    maximum_edge_         = 2048;
+    enable_roi_           = false;
     downsample_algorithm_ = ResizeDownsampleAlgorithm::Area;
-    roi_          = {0, 0, 1.0f, 1.0f, 1.0f};
+    roi_                  = {0, 0, 1.0f, 1.0f, 1.0f};
   }
 }
 

@@ -24,7 +24,7 @@ struct WBParams {
 };
 
 __global__ void ToLinearRefKernel(cv::cuda::PtrStep<float> image, int width, int height,
-                                  WBParams wb_params, BayerPattern2x2 pattern) {
+                                  WBParams wb_params, RawCfaPattern pattern) {
   // Calculate the global x and y coordinates of the pixel for this thread
   const int col = blockIdx.x * blockDim.x + threadIdx.x;
   const int row = blockIdx.y * blockDim.y + threadIdx.y;
@@ -38,7 +38,7 @@ __global__ void ToLinearRefKernel(cv::cuda::PtrStep<float> image, int width, int
   // This standard calculation assumes a 2x2 Bayer pattern (like RGGB, GRBG, etc.).
   // The 'bayer_pattern_offset' helps align to the specific pattern from LibRaw's `idata.filters`.
   // The LibRaw COLOR(row, col) macro can often be simplified to this.
-  const int color_idx = pattern.raw_fc[BayerCellIndex(row, col)];
+  const int color_idx = RawColorAt(pattern, row, col);
 
 
 
@@ -68,7 +68,7 @@ static auto GetWBCoeff(const libraw_rawdata_t& raw_data) -> const float* {
   return raw_data.color.cam_mul;
 }
 
-void ToLinearRef(cv::cuda::GpuMat& image, LibRaw& raw_processor, const BayerPattern2x2& pattern) {
+void ToLinearRef(cv::cuda::GpuMat& image, LibRaw& raw_processor, const RawCfaPattern& pattern) {
   const auto raw_curve = raw_norm::BuildLinearizationCurve(raw_processor.imgdata.rawdata);
   const auto wb        = GetWBCoeff(raw_processor.imgdata.rawdata);
 
@@ -108,5 +108,5 @@ void ToLinearRef(cv::cuda::GpuMat& image, LibRaw& raw_processor, const BayerPatt
   CUDA_CHECK(cudaGetLastError());
   CUDA_CHECK(cudaDeviceSynchronize());
 }
-};  // namespace GPU
+};  // namespace CUDA
 };  // namespace puerhlab

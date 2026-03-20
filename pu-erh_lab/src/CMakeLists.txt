@@ -364,6 +364,7 @@ if(PUERHLAB_CUDA_ENABLED)
         decoders/processor/operators/gpu/cuda_image_ops.cu
         decoders/processor/operators/gpu/cuda_rotate.cu
         decoders/processor/operators/gpu/cuda_white_balance.cu
+        decoders/processor/operators/gpu/cuda_xtrans_interpolate.cu
     )
 elseif(PUERHLAB_METAL_ENABLED)
     set(RAW_OP_GPU_SRCS

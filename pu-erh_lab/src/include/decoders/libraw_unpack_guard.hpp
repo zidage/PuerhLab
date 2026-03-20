@@ -6,9 +6,11 @@
 
 #include <libraw/libraw.h>
 
+#if !defined(_WIN32)
 #include <cstdlib>
 #include <dlfcn.h>
 #include <mutex>
+#endif
 
 namespace puerhlab {
 namespace libraw_guard {
@@ -24,13 +26,18 @@ inline constexpr bool kAsanEnabled =
 #endif
 
 inline constexpr bool kNeedOpenMpUnpackGuard =
-#if defined(__APPLE__)
+#if defined(_WIN32)
+    false;
+#elif defined(__APPLE__)
     true;
 #else
     kAsanEnabled;
 #endif
 
 inline void ConfigureOpenMpEnvironment() {
+#if defined(_WIN32)
+  return;
+#else
   if constexpr (!kNeedOpenMpUnpackGuard) {
     return;
   }
@@ -45,9 +52,13 @@ inline void ConfigureOpenMpEnvironment() {
     return true;
   }();
   (void)configured;
+#endif
 }
 
 inline void ConfigureOpenMpRuntime() {
+#if defined(_WIN32)
+  return;
+#else
   if constexpr (!kNeedOpenMpUnpackGuard) {
     return;
   }
@@ -77,9 +88,13 @@ inline void ConfigureOpenMpRuntime() {
       set_num_threads != nullptr) {
     set_num_threads(1);
   }
+#endif
 }
 
 inline auto Unpack(LibRaw& raw_processor) -> int {
+#if defined(_WIN32)
+  return raw_processor.unpack();
+#else
   if constexpr (!kNeedOpenMpUnpackGuard) {
     return raw_processor.unpack();
   }
@@ -88,6 +103,7 @@ inline auto Unpack(LibRaw& raw_processor) -> int {
   std::lock_guard<std::mutex> lock(unpack_mutex);
   ConfigureOpenMpRuntime();
   return raw_processor.unpack();
+#endif
 }
 
 }  // namespace libraw_guard

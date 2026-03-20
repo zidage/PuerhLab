@@ -50,12 +50,12 @@ PUERHLAB_HD inline auto BayerCellIndex(const int y, const int x) -> int {
   return ((y & 1) << 1) | (x & 1);
 }
 
-inline auto WrapPatternCoord(const int coord, const int period) -> int {
+PUERHLAB_HD inline auto WrapPatternCoord(const int coord, const int period) -> int {
   const int wrapped = coord % period;
   return wrapped < 0 ? wrapped + period : wrapped;
 }
 
-inline auto XTransCellIndex(const int y, const int x) -> int {
+PUERHLAB_HD inline auto XTransCellIndex(const int y, const int x) -> int {
   return WrapPatternCoord(y, 6) * 6 + WrapPatternCoord(x, 6);
 }
 
@@ -83,22 +83,26 @@ PUERHLAB_HD inline auto RgbColorAt(const BayerPattern2x2& pattern, const int y, 
   return pattern.rgb_fc[BayerCellIndex(y, x)];
 }
 
-inline auto RawColorAt(const XTransPattern6x6& pattern, const int y, const int x) -> int {
+PUERHLAB_HD inline auto RawColorAt(const XTransPattern6x6& pattern, const int y, const int x)
+    -> int {
   return pattern.raw_fc[XTransCellIndex(y, x)];
 }
 
-inline auto RgbColorAt(const XTransPattern6x6& pattern, const int y, const int x) -> int {
+PUERHLAB_HD inline auto RgbColorAt(const XTransPattern6x6& pattern, const int y, const int x)
+    -> int {
   return pattern.rgb_fc[XTransCellIndex(y, x)];
 }
 
-inline auto RawColorAt(const RawCfaPattern& pattern, const int y, const int x) -> int {
+PUERHLAB_HD inline auto RawColorAt(const RawCfaPattern& pattern, const int y, const int x)
+    -> int {
   if (pattern.kind == RawCfaKind::XTrans6x6) {
     return RawColorAt(pattern.xtrans_pattern, y, x);
   }
   return RawColorAt(pattern.bayer_pattern, y, x);
 }
 
-inline auto RgbColorAt(const RawCfaPattern& pattern, const int y, const int x) -> int {
+PUERHLAB_HD inline auto RgbColorAt(const RawCfaPattern& pattern, const int y, const int x)
+    -> int {
   if (pattern.kind == RawCfaKind::XTrans6x6) {
     return RgbColorAt(pattern.xtrans_pattern, y, x);
   }

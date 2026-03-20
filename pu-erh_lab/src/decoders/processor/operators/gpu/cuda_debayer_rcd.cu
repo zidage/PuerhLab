@@ -27,9 +27,19 @@ namespace {
 
 constexpr float kEps   = 1e-5f;
 constexpr float kEpsSq = 1e-10f;
+constexpr int   kEdgeFallbackRadius = 4;
 
 __device__ __forceinline__ int FC(const BayerPattern2x2& pattern, const int y, const int x) {
   return pattern.rgb_fc[BayerCellIndex(y, x)];
+}
+
+__device__ __forceinline__ int ClampCoord(const int value, const int limit) {
+  return max(0, min(value, limit - 1));
+}
+
+__device__ __forceinline__ float SafeRawRead(const cv::cuda::PtrStep<float> raw, const int width,
+                                             const int height, const int y, const int x) {
+  return raw.ptr(ClampCoord(y, height))[ClampCoord(x, width)];
 }
 
 __device__ __forceinline__ float LowPassAt(const cv::cuda::PtrStep<float> raw, const int y,
@@ -50,6 +60,46 @@ __device__ __forceinline__ float LowPassAt(const cv::cuda::PtrStep<float> raw, c
   const float  se     = row_p1[x + 1];
 
   return 0.25f * c + 0.125f * (n + s + w + e) + 0.0625f * (nw + ne + sw + se);
+}
+
+__device__ float EstimateEdgeChannel(const cv::cuda::PtrStep<float> raw, const int width,
+                                     const int height, const BayerPattern2x2& pattern, const int y,
+                                     const int x, const int target_color) {
+  if (FC(pattern, y, x) == target_color) {
+    return raw.ptr(y)[x];
+  }
+
+  float weighted_sum = 0.0f;
+  float weight_sum   = 0.0f;
+
+  for (int radius = 1; radius <= kEdgeFallbackRadius; ++radius) {
+    for (int dy = -radius; dy <= radius; ++dy) {
+      for (int dx = -radius; dx <= radius; ++dx) {
+        if (max(abs(dx), abs(dy)) != radius) {
+          continue;
+        }
+
+        const int sample_y = ClampCoord(y + dy, height);
+        const int sample_x = ClampCoord(x + dx, width);
+        if (FC(pattern, sample_y, sample_x) != target_color) {
+          continue;
+        }
+
+        const float weight = 1.0f / static_cast<float>(abs(dx) + abs(dy));
+        weighted_sum += SafeRawRead(raw, width, height, sample_y, sample_x) * weight;
+        weight_sum += weight;
+      }
+    }
+
+    if (weight_sum > 0.0f) {
+      break;
+    }
+  }
+
+  if (weight_sum > 0.0f) {
+    return weighted_sum / weight_sum;
+  }
+  return raw.ptr(y)[x];
 }
 
 __global__ void RCD_InitAndVHKernel(const cv::cuda::PtrStep<float> raw, cv::cuda::PtrStep<float> r,
@@ -384,6 +434,27 @@ __global__ void RCD_RBAtGKernel(const cv::cuda::PtrStep<float> vh_dir, const cv:
   }
 }
 
+__global__ void RCD_FillEdgeKernel(const cv::cuda::PtrStep<float> raw, cv::cuda::PtrStep<float> r,
+                                   cv::cuda::PtrStep<float> g, cv::cuda::PtrStep<float> b,
+                                   const int width, const int height, BayerPattern2x2 pattern) {
+  const int x = blockIdx.x * blockDim.x + threadIdx.x;
+  const int y = blockIdx.y * blockDim.y + threadIdx.y;
+  if (x >= width || y >= height) {
+    return;
+  }
+
+  if (y >= kEdgeFallbackRadius && y < height - kEdgeFallbackRadius && x >= kEdgeFallbackRadius &&
+      x < width - kEdgeFallbackRadius) {
+    return;
+  }
+
+  // RCD needs a 4-pixel neighborhood. Fill the border band with a simple CFA-aware fallback
+  // instead of cropping away valid output pixels.
+  r.ptr(y)[x] = EstimateEdgeChannel(raw, width, height, pattern, y, x, 0);
+  g.ptr(y)[x] = EstimateEdgeChannel(raw, width, height, pattern, y, x, 1);
+  b.ptr(y)[x] = EstimateEdgeChannel(raw, width, height, pattern, y, x, 2);
+}
+
 }  // namespace
 
 void Bayer2x2ToRGB_RCD(cv::cuda::GpuMat& image, const BayerPattern2x2& pattern) {
@@ -421,6 +492,9 @@ void Bayer2x2ToRGB_RCD(cv::cuda::GpuMat& image, const BayerPattern2x2& pattern) 
   CUDA_CHECK(cudaGetLastError());
 
   RCD_RBAtGKernel<<<blocks, threads, 0, cuda_stream>>>(vh_dir, g, r, b, width, height, pattern);
+  CUDA_CHECK(cudaGetLastError());
+
+  RCD_FillEdgeKernel<<<blocks, threads, 0, cuda_stream>>>(image, r, g, b, width, height, pattern);
   CUDA_CHECK(cudaGetLastError());
 
   MergeRGB(r, g, b, image, &stream);

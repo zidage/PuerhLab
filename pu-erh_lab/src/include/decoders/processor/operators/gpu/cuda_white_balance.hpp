@@ -13,6 +13,6 @@
 
 namespace puerhlab {
 namespace CUDA {
-void ToLinearRef(cv::cuda::GpuMat& img, LibRaw& raw_processor, const BayerPattern2x2& pattern);
+void ToLinearRef(cv::cuda::GpuMat& img, LibRaw& raw_processor, const RawCfaPattern& pattern);
 };
 };  // namespace puerhlab

@@ -45,6 +45,7 @@
 #include "decoders/processor/operators/gpu/cuda_highlight_reconstruct.hpp"
 #include "decoders/processor/operators/gpu/cuda_rotate.hpp"
 #include "decoders/processor/operators/gpu/cuda_white_balance.hpp"
+#include "decoders/processor/operators/gpu/cuda_xtrans_interpolate.hpp"
 #endif
 #ifdef HAVE_METAL
 #include "decoders/processor/operators/gpu/metal_cvt_ref_space.hpp"
@@ -183,10 +184,7 @@ void RawProcessor::ApplyLinearization() {
   if (params_.gpu_backend_ == RawGpuBackend::GPU) {
 #ifdef HAVE_CUDA
     auto& gpu_img = pre_debayer_buffer.GetCUDAImage();
-    if (cfa_pattern_.kind != RawCfaKind::Bayer2x2) {
-      throw std::runtime_error("RawProcessor: CUDA linearization only supports classic Bayer CFA.");
-    }
-    CUDA::ToLinearRef(gpu_img, raw_processor_, cfa_pattern_.bayer_pattern);
+    CUDA::ToLinearRef(gpu_img, raw_processor_, cfa_pattern_);
     return;
 #elif defined(HAVE_METAL)
     auto& gpu_img = pre_debayer_buffer.GetMetalImage();
@@ -209,10 +207,12 @@ void RawProcessor::ApplyDebayer() {
   if (params_.gpu_backend_ == RawGpuBackend::GPU) {
 #ifdef HAVE_CUDA
     auto& gpu_img = pre_debayer_buffer.GetCUDAImage();
-    if (cfa_pattern_.kind != RawCfaKind::Bayer2x2) {
-      throw std::runtime_error("RawProcessor: CUDA debayer only supports classic Bayer CFA.");
+    if (cfa_pattern_.kind == RawCfaKind::XTrans6x6) {
+      const int passes = params_.decode_res_ == DecodeRes::FULL ? 3 : 1;
+      CUDA::XTransToRGB_Ref(gpu_img, cfa_pattern_.xtrans_pattern, passes);
+    } else {
+      CUDA::Bayer2x2ToRGB_RCD(gpu_img, cfa_pattern_.bayer_pattern);
     }
-    CUDA::Bayer2x2ToRGB_RCD(gpu_img, cfa_pattern_.bayer_pattern);
     if (params_.decode_res_ == DecodeRes::FULL) {
       cv::Rect crop_rect(raw_data_.sizes.left_margin, raw_data_.sizes.top_margin,
                          raw_data_.sizes.width, raw_data_.sizes.height);
@@ -261,9 +261,9 @@ void RawProcessor::ApplyHighlightReconstruct() {
   if (params_.gpu_backend_ == RawGpuBackend::GPU) {
 #ifdef HAVE_CUDA
     auto& gpu_img = process_buffer_.GetCUDAImage();
-    if (cfa_pattern_.kind != RawCfaKind::Bayer2x2) {
-      throw std::runtime_error(
-          "RawProcessor: CUDA highlight reconstruction only supports classic Bayer CFA.");
+    if (cfa_pattern_.kind == RawCfaKind::XTrans6x6) {
+      CUDA::Clamp01(gpu_img);
+      return;
     }
     if (!params_.highlights_reconstruct_) {
       CUDA::Clamp01(gpu_img);
