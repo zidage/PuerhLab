@@ -8,11 +8,13 @@ using namespace metal;
 
 struct WBParams {
   float black_level[4];
+  float white_level[4];
   float wb_multipliers[4];
+  uint  apply_white_balance;
+  uint  padding[3];
 };
 
 struct ToLinearRefParams {
-  float white_level_scale;
   uint  width;
   uint  height;
   uint  stride;
@@ -51,14 +53,16 @@ kernel void to_linear_ref_r32f(device float*                image [[buffer(0)]],
   const uint color_idx = RawColorAt(params, gid.y, gid.x);
   const uint index     = gid.y * params.stride + gid.x;
 
-  float pixel_val      = image[index];
-  pixel_val -= wb_params.black_level[color_idx] + PatternBlackAt(params, pattern_black, gid.y, gid.x);
+  const float sample = image[index];
+  const float black =
+      wb_params.black_level[color_idx] + PatternBlackAt(params, pattern_black, gid.y, gid.x);
+  const float denom = wb_params.white_level[color_idx] - black;
+  float       pixel_val = denom > 0.0f ? clamp((sample - black) / denom, 0.0f, 1.0f) : 0.0f;
 
-  const float mask = (color_idx == 0u || color_idx == 2u) ? 1.0f : 0.0f;
-  const float wb_mul = (wb_params.wb_multipliers[color_idx] / wb_params.wb_multipliers[1]) * mask +
-                       (1.0f - mask);
-  pixel_val *= wb_mul;
-  pixel_val /= params.white_level_scale;
+  if (wb_params.apply_white_balance != 0u && wb_params.wb_multipliers[1] > 0.0f &&
+      (color_idx == 0u || color_idx == 2u)) {
+    pixel_val *= wb_params.wb_multipliers[color_idx] / wb_params.wb_multipliers[1];
+  }
 
   image[index] = pixel_val;
 }

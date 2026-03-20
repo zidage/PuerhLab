@@ -495,9 +495,6 @@ auto RawProcessor::Process() -> ImageBuffer {
 #endif
   }
 
-  // CPU pipeline expects float32 input in [0, 1].
-  process_buffer_.GetCPUData().convertTo(process_buffer_.GetCPUData(), CV_32FC1, 1.0f / 65535.0f);
-
   SetDecodeRes();
   ApplyLinearization();
   ApplyHighlightReconstruct();

@@ -14,6 +14,7 @@
 #include <utility>
 #include <vector>
 
+#include "decoders/processor/raw_normalization.hpp"
 #include "image/metal_image.hpp"
 #include "metal/compute_pipeline_cache.hpp"
 #include "metal/metal_context.hpp"
@@ -24,11 +25,13 @@ namespace {
 
 struct WBParams {
   float black_level[4];
+  float white_level[4];
   float wb_multipliers[4];
+  uint32_t apply_white_balance;
+  uint32_t padding[3];
 };
 
 struct ToLinearRefParams {
-  float white_level_scale;
   uint32_t width;
   uint32_t height;
   uint32_t stride;
@@ -69,8 +72,7 @@ auto MakeSharedBuffer(size_t length) -> NS::SharedPtr<MTL::Buffer> {
   return buffer;
 }
 
-void DispatchToLinearRef(MetalImage& image, float white_level_scale, const WBParams& wb_params,
-                         const RawCfaPattern& pattern,
+void DispatchToLinearRef(MetalImage& image, const WBParams& wb_params, const RawCfaPattern& pattern,
                          const std::vector<float>& black_pattern, uint32_t black_tile_width,
                          uint32_t black_tile_height) {
   if (image.Empty()) {
@@ -117,7 +119,6 @@ void DispatchToLinearRef(MetalImage& image, float white_level_scale, const WBPar
     auto compute  = NS::RetainPtr(command_buffer->computeCommandEncoder());
 
     ToLinearRefParams params = {};
-    params.white_level_scale = white_level_scale;
     params.width             = image.Width();
     params.height            = image.Height();
     params.stride            = stride;
@@ -166,17 +167,6 @@ void DispatchToLinearRef(MetalImage& image, float white_level_scale, const WBPar
   command_buffer->waitUntilCompleted();
 }
 
-static auto CalculateBlackLevel(const libraw_rawdata_t& raw_data) -> std::array<float, 4> {
-  const auto           base_black_level = static_cast<float>(raw_data.color.black);
-  std::array<float, 4> black_level      = {
-      base_black_level + static_cast<float>(raw_data.color.cblack[0]),
-      base_black_level + static_cast<float>(raw_data.color.cblack[1]),
-      base_black_level + static_cast<float>(raw_data.color.cblack[2]),
-      base_black_level + static_cast<float>(raw_data.color.cblack[3])};
-
-  return black_level;
-}
-
 static auto GetWBCoeff(const libraw_rawdata_t& raw_data) -> const float* {
   return raw_data.color.cam_mul;
 }
@@ -191,7 +181,7 @@ static auto GetPatternBlackLevels(const libraw_rawdata_t& raw_data) -> std::vect
 
   std::vector<float> pattern_black(entries, 0.0f);
   for (uint32_t i = 0; i < entries; ++i) {
-    pattern_black[i] = static_cast<float>(raw_data.color.cblack[6 + i]) / 65535.0f;
+    pattern_black[i] = static_cast<float>(raw_data.color.cblack[6 + i]);
   }
   return pattern_black;
 }
@@ -199,44 +189,29 @@ static auto GetPatternBlackLevels(const libraw_rawdata_t& raw_data) -> std::vect
 }  // namespace
 
 void ToLinearRef(MetalImage& img, LibRaw& raw_processor, const RawCfaPattern& pattern) {
-  auto black_level = CalculateBlackLevel(raw_processor.imgdata.rawdata);
-  auto wb          = GetWBCoeff(raw_processor.imgdata.rawdata);
-  auto black_pattern = GetPatternBlackLevels(raw_processor.imgdata.rawdata);
+  const auto raw_curve = raw_norm::BuildLinearizationCurve(raw_processor.imgdata.rawdata);
+  const auto wb        = GetWBCoeff(raw_processor.imgdata.rawdata);
+  auto       black_pattern = GetPatternBlackLevels(raw_processor.imgdata.rawdata);
   const uint32_t black_tile_width  = raw_processor.imgdata.rawdata.color.cblack[4];
   const uint32_t black_tile_height = raw_processor.imgdata.rawdata.color.cblack[5];
 
-  if (raw_processor.imgdata.color.as_shot_wb_applied != 1) {
-    for (int c = 0; c < 4; ++c) {
-      black_level[c] /= 65535.0f;
-    }
-
-    const float min     = black_level[0];
-    const float maximum = raw_processor.imgdata.rawdata.color.maximum / 65535.0f - min;
-
-    if (img.Format() != metal::PixelFormat::R16UINT) {
-      throw std::runtime_error("Metal ToLinearRef: expected R16UINT raw input.");
-    }
-    if (maximum <= 0.0f) {
-      throw std::runtime_error("Metal ToLinearRef: invalid white level scale.");
-    }
-
-    MetalImage linearized;
-    img.ConvertTo(linearized, PixelFormat::R32FLOAT, 1.0f / 65535.0f);
-    img = std::move(linearized);
-
-    WBParams wb_params = {};
-    for (int c = 0; c < 4; ++c) {
-      wb_params.black_level[c]    = black_level[c];
-      wb_params.wb_multipliers[c] = wb[c];
-    }
-
-    DispatchToLinearRef(img, maximum, wb_params, pattern, black_pattern, black_tile_width,
-                        black_tile_height);
-  } else {
-    MetalImage converted;
-    img.ConvertTo(converted, PixelFormat::R32FLOAT);
-    img = std::move(converted);
+  if (img.Format() != metal::PixelFormat::R16UINT) {
+    throw std::runtime_error("Metal ToLinearRef: expected R16UINT raw input.");
   }
+
+  MetalImage linearized;
+  img.ConvertTo(linearized, PixelFormat::R32FLOAT);
+  img = std::move(linearized);
+
+  WBParams wb_params = {};
+  for (int c = 0; c < 4; ++c) {
+    wb_params.black_level[c]    = raw_curve.black_level[c];
+    wb_params.white_level[c]    = raw_curve.white_level[c];
+    wb_params.wb_multipliers[c] = wb[c];
+  }
+  wb_params.apply_white_balance = raw_processor.imgdata.color.as_shot_wb_applied != 1 ? 1u : 0u;
+
+  DispatchToLinearRef(img, wb_params, pattern, black_pattern, black_tile_width, black_tile_height);
 }
 
 };  // namespace metal

@@ -11,6 +11,7 @@
 #include <opencv2/core.hpp>
 
 #include "decoders/processor/operators/cpu/highlight_reconstruct.hpp"
+#include "decoders/processor/raw_normalization.hpp"
 #include "decoders/processor/operators/gpu/metal_debayer_rcd.hpp"
 #include "decoders/processor/operators/gpu/metal_highlight_reconstruct.hpp"
 #include "decoders/processor/operators/gpu/metal_to_linear_ref.hpp"
@@ -173,43 +174,19 @@ void InitLinearizationRawProcessor(LibRaw& raw_processor) {
 auto ComputeLinearizedReference(const cv::Mat& raw_u16, const RawCfaPattern& pattern,
                                 const LibRaw& raw_processor) -> cv::Mat {
   cv::Mat expected(raw_u16.rows, raw_u16.cols, CV_32FC1);
-
-  std::array<float, 4> black_level = {
-      static_cast<float>(raw_processor.imgdata.rawdata.color.black +
-                         raw_processor.imgdata.rawdata.color.cblack[0]) /
-          65535.0f,
-      static_cast<float>(raw_processor.imgdata.rawdata.color.black +
-                         raw_processor.imgdata.rawdata.color.cblack[1]) /
-          65535.0f,
-      static_cast<float>(raw_processor.imgdata.rawdata.color.black +
-                         raw_processor.imgdata.rawdata.color.cblack[2]) /
-          65535.0f,
-      static_cast<float>(raw_processor.imgdata.rawdata.color.black +
-                         raw_processor.imgdata.rawdata.color.cblack[3]) /
-          65535.0f,
-  };
-  const float maximum = raw_processor.imgdata.rawdata.color.maximum / 65535.0f - black_level[0];
+  const auto raw_curve = raw_norm::BuildLinearizationCurve(raw_processor.imgdata.rawdata);
+  const bool apply_wb  = raw_processor.imgdata.color.as_shot_wb_applied != 1;
 
   for (int y = 0; y < raw_u16.rows; ++y) {
     for (int x = 0; x < raw_u16.cols; ++x) {
       const int color = RawColorAt(pattern, y, x);
-      float pixel     = static_cast<float>(raw_u16.at<uint16_t>(y, x)) / 65535.0f;
-      const int tile_y = y % raw_processor.imgdata.rawdata.color.cblack[5];
-      const int tile_x = x % raw_processor.imgdata.rawdata.color.cblack[4];
-      const float pattern_black =
-          static_cast<float>(raw_processor.imgdata.rawdata.color.cblack[6 +
-                                                                        tile_y * raw_processor.imgdata.rawdata.color.cblack[4] +
-                                                                        tile_x]) /
-          65535.0f;
-      pixel -= black_level[color] + pattern_black;
-      const float mask = (color == 0 || color == 2) ? 1.0f : 0.0f;
-      const float wb_mul =
-          (raw_processor.imgdata.rawdata.color.cam_mul[color] /
-           raw_processor.imgdata.rawdata.color.cam_mul[1]) *
-              mask +
-          (1.0f - mask);
-      pixel *= wb_mul;
-      expected.at<float>(y, x) = pixel / maximum;
+      const float sample = static_cast<float>(raw_u16.at<uint16_t>(y, x));
+      const float black =
+          raw_curve.black_level[color] + raw_norm::PatternBlackAt(raw_processor.imgdata.rawdata, y, x);
+      float pixel = raw_norm::NormalizeSample(sample, black, raw_curve.white_level[color]);
+      pixel *= raw_norm::RelativeWhiteBalanceMultiplier(raw_processor.imgdata.rawdata.color.cam_mul,
+                                                        color, apply_wb);
+      expected.at<float>(y, x) = pixel;
     }
   }
 
