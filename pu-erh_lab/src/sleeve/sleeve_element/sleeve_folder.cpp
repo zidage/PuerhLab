@@ -46,15 +46,22 @@ auto SleeveFolder::Copy(sl_element_id_t new_id) const -> std::shared_ptr<SleeveE
  * @param element
  */
 void SleeveFolder::AddElementToMap(const std::shared_ptr<SleeveElement> element) {
-  AddElementToMap(element, true);
+  AddElementToMap(element, true, true);
 }
 
 void SleeveFolder::AddElementToMap(const std::shared_ptr<SleeveElement> element, bool change_sync) {
+  AddElementToMap(element, change_sync, true);
+}
+
+void SleeveFolder::AddElementToMap(const std::shared_ptr<SleeveElement> element, bool change_sync,
+                                   bool increment_ref_count) {
   contents_[element->element_name_] = element->element_id_;
   indicies_cache_[default_filter_].push_back(element->element_id_);
   // Once a pinned element is added to the current folder, current folder also becomes pinned
   pinned_ |= element->pinned_;
-  element->IncrementRefCount();
+  if (increment_ref_count) {
+    element->IncrementRefCount();
+  }
   // Mark this folder as modified so the updated content list is persisted on next sync.
   if (change_sync && sync_flag_ == SyncFlag::SYNCED) {
     sync_flag_ = SyncFlag::MODIFIED;

@@ -159,6 +159,49 @@ TEST_F(SleeveServiceTests, CreateAndDeleteFolderByPathApi) {
   EXPECT_THROW(service->ResolveFolder(L"/ToDelete"), std::runtime_error);
 }
 
+TEST_F(SleeveServiceTests, ReloadedFolderWriteDoesNotCloneSingleParentFolder) {
+  {
+    ProjectService project(db_path_, meta_path_);
+    auto           service = project.GetSleeveService();
+
+    const auto created = service->CreateFolder(L"/", L"test");
+    ASSERT_NE(created.first, nullptr);
+    ASSERT_TRUE(created.second.success_);
+
+    const auto sync = service->Sync();
+    ASSERT_TRUE(sync.success_);
+    project.SaveProject(meta_path_);
+  }
+
+  ProjectService reloaded_project(db_path_, meta_path_);
+  auto           service = reloaded_project.GetSleeveService();
+
+  const auto root_entries = service->ListFolderEntries(L"/");
+  ASSERT_EQ(root_entries.size(), 1u);
+  ASSERT_EQ(root_entries.front()->element_name_, L"test");
+
+  const auto folder_before = service->ResolveFolder(L"/test");
+  ASSERT_NE(folder_before, nullptr);
+  const auto folder_id_before = folder_before->element_id_;
+  EXPECT_EQ(folder_before->ref_count_, 1u);
+
+  auto created_file = service->Write_NoSync<std::shared_ptr<SleeveElement>>(
+      [](FileSystem& fs) { return fs.Create(L"/test", L"after_reload.arw", ElementType::FILE); });
+  ASSERT_NE(created_file, nullptr);
+
+  const auto sync = service->Sync();
+  EXPECT_TRUE(sync.success_);
+
+  const auto folder_after = service->ResolveFolder(L"/test");
+  ASSERT_NE(folder_after, nullptr);
+  EXPECT_EQ(folder_after->element_id_, folder_id_before);
+
+  const auto nested_entries = service->ListFolderEntries(L"/test");
+  ASSERT_EQ(nested_entries.size(), 1u);
+  EXPECT_EQ(nested_entries.front()->element_name_, L"after_reload.arw");
+  EXPECT_EQ(nested_entries.front()->type_, ElementType::FILE);
+}
+
 TEST_F(SleeveServiceTests, FuzzyCreateCopyTest) {
   std::wstring first_tree;
   {

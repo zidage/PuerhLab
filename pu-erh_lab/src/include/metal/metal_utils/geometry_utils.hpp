@@ -9,15 +9,20 @@
 #include <opencv2/core/mat.hpp>
 #include <opencv2/core/types.hpp>
 
+#include "edit/operators/geometry/resize_algorithm.hpp"
+
 namespace puerhlab::metal {
 class MetalImage;
 }
 
 namespace puerhlab::metal::utils {
 
-void ResizeTexture(const MetalImage& src, MetalImage& dst, cv::Size dst_size);
+void ResizeTexture(const MetalImage& src, MetalImage& dst, cv::Size dst_size,
+                   ResizeDownsampleAlgorithm downsample_algorithm = ResizeDownsampleAlgorithm::Area);
 void CropResizeTexture(const MetalImage& src, MetalImage& dst, const cv::Rect& crop_rect,
-                       cv::Size dst_size);
+                       cv::Size dst_size,
+                       ResizeDownsampleAlgorithm downsample_algorithm =
+                           ResizeDownsampleAlgorithm::Area);
 void WarpAffineLinearTexture(const MetalImage& src, MetalImage& dst, const cv::Mat& matrix,
                              cv::Size out_size, const cv::Scalar& border_value);
 

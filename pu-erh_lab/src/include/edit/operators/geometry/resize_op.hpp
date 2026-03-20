@@ -3,6 +3,7 @@
 //  Additional permission under GPLv3 section 7 applies; see the LICENSE file.
 
 #pragma once
+#include "edit/operators/geometry/resize_algorithm.hpp"
 #include "edit/operators/op_base.hpp"
 
 namespace puerhlab {
@@ -22,6 +23,7 @@ class ResizeOp : public OperatorBase<ResizeOp> {
 
   bool enable_roi_   = false;
   ROI  roi_          = {0, 0, 1.0f, 1.0f, 1.0f};
+  ResizeDownsampleAlgorithm downsample_algorithm_ = ResizeDownsampleAlgorithm::Area;
 
  public:
   static constexpr PriorityLevel     priority_level_    = 1;

@@ -214,7 +214,8 @@ auto MakeBorderArray(const cv::Scalar& border_value) -> std::array<float, 4> {
           static_cast<float>(border_value[2]), static_cast<float>(border_value[3])};
 }
 
-void DispatchCropResize(const MetalImage& src, MetalImage& dst, const cv::Rect& crop_rect) {
+void DispatchCropResize(const MetalImage& src, MetalImage& dst, const cv::Rect& crop_rect,
+                        ResizeDownsampleAlgorithm downsample_algorithm) {
   const auto src_row_bytes = RowBytesFor(src.Width(), src.Format());
   const auto dst_row_bytes = RowBytesFor(dst.Width(), dst.Format());
   const auto src_size      = src_row_bytes * src.Height();
@@ -240,9 +241,10 @@ void DispatchCropResize(const MetalImage& src, MetalImage& dst, const cv::Rect& 
       .scale_y     = static_cast<float>(crop_rect.height) / static_cast<float>(dst.Height()),
   };
 
-  const auto mode =
-      (params.scale_x <= 1.0f || params.scale_y <= 1.0f) ? GeometryKernel::Linear
-                                                         : GeometryKernel::Area;
+  const auto mode = (params.scale_x <= 1.0f || params.scale_y <= 1.0f ||
+                     downsample_algorithm == ResizeDownsampleAlgorithm::Bilinear)
+                        ? GeometryKernel::Linear
+                        : GeometryKernel::Area;
 
   EncodeTextureToBuffer(command_buffer.get(), src, src_buffer.get(), src_row_bytes, src_size);
 
@@ -318,14 +320,15 @@ void DispatchWarpAffine(const MetalImage& src, MetalImage& dst, const cv::Mat& m
 
 }  // namespace
 
-void ResizeTexture(const MetalImage& src, MetalImage& dst, cv::Size dst_size) {
+void ResizeTexture(const MetalImage& src, MetalImage& dst, cv::Size dst_size,
+                   ResizeDownsampleAlgorithm downsample_algorithm) {
   CropResizeTexture(src, dst,
                     cv::Rect(0, 0, static_cast<int>(src.Width()), static_cast<int>(src.Height())),
-                    dst_size);
+                    dst_size, downsample_algorithm);
 }
 
 void CropResizeTexture(const MetalImage& src, MetalImage& dst, const cv::Rect& crop_rect,
-                       cv::Size dst_size) {
+                       cv::Size dst_size, ResizeDownsampleAlgorithm downsample_algorithm) {
   if (src.Empty()) {
     throw std::runtime_error("Metal geometry utils: source texture is empty.");
   }
@@ -352,7 +355,7 @@ void CropResizeTexture(const MetalImage& src, MetalImage& dst, const cv::Rect& c
 
   dst.Create(static_cast<uint32_t>(dst_size.width), static_cast<uint32_t>(dst_size.height),
              src.Format(), true, true, HasRenderTargetUsage(src));
-  DispatchCropResize(src, dst, crop_rect);
+  DispatchCropResize(src, dst, crop_rect, downsample_algorithm);
 }
 
 void WarpAffineLinearTexture(const MetalImage& src, MetalImage& dst, const cv::Mat& matrix,

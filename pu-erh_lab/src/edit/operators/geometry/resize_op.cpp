@@ -5,6 +5,7 @@
 #include "edit/operators/geometry/resize_op.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <stdexcept>
 #include <utility>
@@ -31,8 +32,8 @@ struct ResizePlan {
   cv::Size output_size;
 };
 
-auto BuildResizePlan(int w, int h, bool enable_scale, int maximum_edge, bool enable_roi, const ROI& roi)
-    -> ResizePlan {
+auto BuildResizePlan(int w, int h, bool enable_scale, int maximum_edge, bool enable_roi,
+                     const ROI& roi) -> ResizePlan {
   ResizePlan plan;
   if (w <= 0 || h <= 0 || (!enable_scale && !enable_roi)) {
     plan.noop = true;
@@ -41,8 +42,7 @@ auto BuildResizePlan(int w, int h, bool enable_scale, int maximum_edge, bool ena
 
   const float full_scale =
       enable_scale
-          ? std::min(1.0f,
-                     static_cast<float>(maximum_edge) / static_cast<float>(std::max(w, h)))
+          ? std::min(1.0f, static_cast<float>(maximum_edge) / static_cast<float>(std::max(w, h)))
           : 1.0f;
 
   if (!enable_roi) {
@@ -58,12 +58,10 @@ auto BuildResizePlan(int w, int h, bool enable_scale, int maximum_edge, bool ena
     return plan;
   }
 
-  const float roi_factor_x =
-      std::clamp(roi.resize_factor_x_ > 0.0f ? roi.resize_factor_x_ : roi.resize_factor_, 1e-4f,
-                 1.0f);
-  const float roi_factor_y =
-      std::clamp(roi.resize_factor_y_ > 0.0f ? roi.resize_factor_y_ : roi.resize_factor_, 1e-4f,
-                 1.0f);
+  const float roi_factor_x = std::clamp(
+      roi.resize_factor_x_ > 0.0f ? roi.resize_factor_x_ : roi.resize_factor_, 1e-4f, 1.0f);
+  const float roi_factor_y = std::clamp(
+      roi.resize_factor_y_ > 0.0f ? roi.resize_factor_y_ : roi.resize_factor_, 1e-4f, 1.0f);
   const int roi_w =
       std::clamp(static_cast<int>(std::lround(static_cast<float>(w) * roi_factor_x)), 1, w);
   const int roi_h =
@@ -71,16 +69,15 @@ auto BuildResizePlan(int w, int h, bool enable_scale, int maximum_edge, bool ena
   const int roi_x = std::clamp(roi.x_, 0, std::max(0, w - roi_w));
   const int roi_y = std::clamp(roi.y_, 0, std::max(0, h - roi_h));
 
-  plan.use_roi  = true;
-  plan.roi_rect = cv::Rect(roi_x, roi_y, roi_w, roi_h);
+  plan.use_roi    = true;
+  plan.roi_rect   = cv::Rect(roi_x, roi_y, roi_w, roi_h);
 
   const float roi_scale =
-      std::min(1.0f,
-               static_cast<float>(maximum_edge) / static_cast<float>(std::max(roi_w, roi_h)));
+      std::min(1.0f, static_cast<float>(maximum_edge) / static_cast<float>(std::max(roi_w, roi_h)));
   if (roi_scale < (1.0f - kScaleEpsilon)) {
-    plan.output_size = cv::Size(
-        std::max(1, static_cast<int>(std::lround(static_cast<float>(roi_w) * roi_scale))),
-        std::max(1, static_cast<int>(std::lround(static_cast<float>(roi_h) * roi_scale))));
+    plan.output_size =
+        cv::Size(std::max(1, static_cast<int>(std::lround(static_cast<float>(roi_w) * roi_scale))),
+                 std::max(1, static_cast<int>(std::lround(static_cast<float>(roi_h) * roi_scale))));
     plan.needs_resize = true;
   } else {
     plan.output_size = cv::Size(roi_w, roi_h);
@@ -94,12 +91,72 @@ auto BuildResizePlan(int w, int h, bool enable_scale, int maximum_edge, bool ena
   return plan;
 }
 
+auto DownsampleAlgorithmToParam(ResizeDownsampleAlgorithm algorithm) -> const char* {
+  switch (algorithm) {
+    case ResizeDownsampleAlgorithm::Bilinear:
+      return "bilinear";
+    case ResizeDownsampleAlgorithm::Area:
+      return "inter_area";
+  }
+
+  throw std::runtime_error("ResizeOp: unsupported downsample algorithm");
+}
+
+auto ParseDownsampleAlgorithm(const nlohmann::json& resize_params) -> ResizeDownsampleAlgorithm {
+  const std::string algorithm = resize_params.value("downsample_algorithm", std::string("inter_area"));
+  if (algorithm == "bilinear" || algorithm == "linear") {
+    return ResizeDownsampleAlgorithm::Bilinear;
+  }
+  if (algorithm == "inter_area" || algorithm == "area") {
+    return ResizeDownsampleAlgorithm::Area;
+  }
+
+  throw std::runtime_error("ResizeOp::SetParams: unsupported downsample_algorithm");
+}
+
+auto ToOpenCvInterpolation(ResizeDownsampleAlgorithm algorithm) -> int {
+  switch (algorithm) {
+    case ResizeDownsampleAlgorithm::Bilinear:
+      return cv::INTER_LINEAR;
+    case ResizeDownsampleAlgorithm::Area:
+      return cv::INTER_AREA;
+  }
+
+  throw std::runtime_error("ResizeOp: unsupported downsample algorithm");
+}
+
+#ifdef HAVE_CUDA
+void ResizeGpuMatWithCuda(const cv::cuda::GpuMat& src, cv::cuda::GpuMat& dst,
+                          cv::Size output_size, ResizeDownsampleAlgorithm downsample_algorithm) {
+  if (output_size.width <= 0 || output_size.height <= 0) {
+    throw std::runtime_error("ResizeOp::ApplyGPU: destination size must be positive");
+  }
+
+  if (src.cols == output_size.width && src.rows == output_size.height) {
+    src.copyTo(dst);
+    return;
+  }
+
+  if (src.cols <= output_size.width || src.rows <= output_size.height) {
+    CUDA::ResizeLinear(src, dst, output_size);
+    return;
+  }
+
+  if (downsample_algorithm == ResizeDownsampleAlgorithm::Bilinear) {
+    CUDA::ResizeLinear(src, dst, output_size);
+    return;
+  }
+
+  CUDA::ResizeAreaApprox(src, dst, output_size);
+}
+#endif
+
 }  // namespace
 
 ResizeOp::ResizeOp(const nlohmann::json& params) { SetParams(params); }
 
 void ResizeOp::Apply(std::shared_ptr<ImageBuffer> input) {
-  auto& img  = input->GetCPUData();
+  auto&      img = input->GetCPUData();
   const auto plan =
       BuildResizePlan(img.cols, img.rows, enable_scale_, maximum_edge_, enable_roi_, roi_);
   if (plan.noop) {
@@ -109,43 +166,53 @@ void ResizeOp::Apply(std::shared_ptr<ImageBuffer> input) {
   if (plan.use_roi) {
     cv::Mat roi_img = img(plan.roi_rect).clone();
     if (plan.needs_resize) {
-      cv::resize(roi_img, roi_img, plan.output_size, 0, 0, cv::INTER_AREA);
+      cv::resize(roi_img, roi_img, plan.output_size, 0, 0,
+                 ToOpenCvInterpolation(downsample_algorithm_));
     }
     img = roi_img;
     return;
   }
 
-  cv::resize(img, img, plan.output_size, 0, 0, cv::INTER_AREA);
+  cv::resize(img, img, plan.output_size, 0, 0, ToOpenCvInterpolation(downsample_algorithm_));
 }
 
 void ResizeOp::ApplyGPU(std::shared_ptr<ImageBuffer> input) {
 #if !defined(HAVE_CUDA) && !defined(HAVE_METAL)
   throw std::runtime_error("ResizeOp::ApplyGPU requires HAVE_CUDA or HAVE_METAL");
 #elif defined(HAVE_CUDA)
-  auto& img  = input->GetCUDAImage();
-  const auto plan = BuildResizePlan(img.cols, img.rows, enable_scale_, maximum_edge_, enable_roi_, roi_);
+  using clock      = std::chrono::high_resolution_clock;
+
+  auto       start = clock::now();
+
+  auto&      img   = input->GetCUDAImage();
+  const auto plan =
+      BuildResizePlan(img.cols, img.rows, enable_scale_, maximum_edge_, enable_roi_, roi_);
   if (plan.noop) {
     return;
   }
 
   if (plan.use_roi) {
-    cv::cuda::GpuMat roi_src = img(plan.roi_rect).clone();
+    cv::cuda::GpuMat roi_src = img(plan.roi_rect);
     if (!plan.needs_resize) {
-      img = std::move(roi_src);
+      img = roi_src.clone();
       return;
     }
 
     cv::cuda::GpuMat roi_dst;
-    CUDA::ResizeAreaApprox(roi_src, roi_dst, plan.output_size);
+    ResizeGpuMatWithCuda(roi_src, roi_dst, plan.output_size, downsample_algorithm_);
     img = std::move(roi_dst);
     return;
   }
 
   cv::cuda::GpuMat dst;
-  CUDA::ResizeAreaApprox(img, dst, plan.output_size);
+  ResizeGpuMatWithCuda(img, dst, plan.output_size, downsample_algorithm_);
+  auto                          end  = clock::now();
+  std::chrono::duration<double> diff = end - start;
+
+  std::cout << "[LOG] ResizeOp takes " << diff << "ms to run\n";
   img = std::move(dst);
 #elif defined(HAVE_METAL)
-  auto& img  = input->GetMetalImage();
+  auto&      img  = input->GetMetalImage();
   const auto plan = BuildResizePlan(static_cast<int>(img.Width()), static_cast<int>(img.Height()),
                                     enable_scale_, maximum_edge_, enable_roi_, roi_);
   if (plan.noop) {
@@ -154,9 +221,10 @@ void ResizeOp::ApplyGPU(std::shared_ptr<ImageBuffer> input) {
 
   metal::MetalImage dst;
   if (plan.use_roi) {
-    metal::utils::CropResizeTexture(img, dst, plan.roi_rect, plan.output_size);
+    metal::utils::CropResizeTexture(img, dst, plan.roi_rect, plan.output_size,
+                                    downsample_algorithm_);
   } else {
-    metal::utils::ResizeTexture(img, dst, plan.output_size);
+    metal::utils::ResizeTexture(img, dst, plan.output_size, downsample_algorithm_);
   }
   img = std::move(dst);
 #endif
@@ -168,13 +236,14 @@ auto ResizeOp::GetParams() const -> nlohmann::json {
   inner["enable_scale"] = enable_scale_;
   inner["maximum_edge"] = maximum_edge_;
   inner["enable_roi"]   = enable_roi_;
+  inner["downsample_algorithm"] = DownsampleAlgorithmToParam(downsample_algorithm_);
   inner["roi"]          = {{"x", roi_.x_},
                            {"y", roi_.y_},
                            {"resize_factor_x", roi_.resize_factor_x_},
                            {"resize_factor_y", roi_.resize_factor_y_},
                            {"resize_factor", roi_.resize_factor_}};
 
-  params[script_name_] = inner;
+  params[script_name_]  = inner;
   return params;
 }
 
@@ -196,6 +265,7 @@ auto ResizeOp::SetParams(const nlohmann::json& params) -> void {
     } else {
       enable_roi_ = false;
     }
+    downsample_algorithm_ = ParseDownsampleAlgorithm(inner);
     if (enable_roi_ && inner.contains("roi")) {
       auto roi_json         = inner.at("roi");
       roi_.x_               = roi_json.value("x", 0);
@@ -208,6 +278,7 @@ auto ResizeOp::SetParams(const nlohmann::json& params) -> void {
     enable_scale_ = false;
     maximum_edge_ = 2048;
     enable_roi_   = false;
+    downsample_algorithm_ = ResizeDownsampleAlgorithm::Area;
     roi_          = {0, 0, 1.0f, 1.0f, 1.0f};
   }
 }

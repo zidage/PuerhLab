@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <memory>
+#include <stdexcept>
 #include <opencv2/core.hpp>
 #include <opencv2/core/mat.hpp>
 
@@ -21,6 +22,21 @@
 
 namespace puerhlab {
 
+namespace {
+
+auto ToResizeAlgorithmParam(ResizeDownsampleAlgorithm algorithm) -> const char* {
+  switch (algorithm) {
+    case ResizeDownsampleAlgorithm::Bilinear:
+      return "bilinear";
+    case ResizeDownsampleAlgorithm::Area:
+      return "inter_area";
+  }
+
+  throw std::runtime_error("CPUPipelineExecutor: unsupported resize downsample algorithm");
+}
+
+}  // namespace
+
 CPUPipelineExecutor::CPUPipelineExecutor()
     : enable_cache_(false),
       stages_({{PipelineStageName::Image_Loading, enable_cache_, false},
@@ -30,7 +46,9 @@ CPUPipelineExecutor::CPUPipelineExecutor()
                {PipelineStageName::Color_Adjustment, enable_cache_, true},
                {PipelineStageName::Detail_Adjustment, enable_cache_, true},
                {PipelineStageName::Output_Transform, enable_cache_, true}}) {
-  render_params_["resize"] = {};
+  render_params_["resize"]                         = {};
+  render_params_["resize"]["downsample_algorithm"] = ToResizeAlgorithmParam(
+      ResizeDownsampleAlgorithm::Area);
 
   // Initialize default pipeline
   InitDefaultPipeline();
@@ -70,7 +88,9 @@ CPUPipelineExecutor::CPUPipelineExecutor(bool enable_cache)
                {PipelineStageName::Color_Adjustment, enable_cache_, true},
                {PipelineStageName::Detail_Adjustment, enable_cache_, true},
                {PipelineStageName::Output_Transform, enable_cache_, true}}) {
-  render_params_["resize"] = {};
+  render_params_["resize"]                         = {};
+  render_params_["resize"]["downsample_algorithm"] = ToResizeAlgorithmParam(
+      ResizeDownsampleAlgorithm::Area);
   // Initialize default pipeline
   InitDefaultPipeline();
 }
@@ -259,6 +279,19 @@ void CPUPipelineExecutor::SetRenderRes(bool full_res, int max_side_length) {
   // };
   resize_params["enable_scale"] = !full_res;
   resize_params["maximum_edge"] = max_side_length;
+
+  if (resize_params != prev_resize_params) {
+    stages_[static_cast<int>(PipelineStageName::Geometry_Adjustment)].SetOperator(
+        OperatorType::RESIZE, render_params_);
+  }
+}
+
+void CPUPipelineExecutor::SetResizeDownsampleAlgorithm(ResizeDownsampleAlgorithm algorithm) {
+  const nlohmann::json prev_resize_params =
+      render_params_.contains("resize") ? render_params_["resize"] : nlohmann::json::object();
+  auto& resize_params = render_params_["resize"];
+
+  resize_params["downsample_algorithm"] = ToResizeAlgorithmParam(algorithm);
 
   if (resize_params != prev_resize_params) {
     stages_[static_cast<int>(PipelineStageName::Geometry_Adjustment)].SetOperator(

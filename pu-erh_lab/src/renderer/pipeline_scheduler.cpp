@@ -89,6 +89,7 @@ void PipelineTask::SetExecutorRenderParams() {
       // Rotation preview should use a downsampled full frame so viewport coordinates
       // stay aligned with the rotated result.
       pipeline_executor_->SetNextFramePresentationMode(FramePresentationMode::ViewportTransformed);
+      pipeline_executor_->SetResizeDownsampleAlgorithm(ResizeDownsampleAlgorithm::Bilinear);
       pipeline_executor_->SetRenderRegion(0, 0, 1.0f, 1.0f);
       pipeline_executor_->SetForceCPUOutput(false);
       pipeline_executor_->SetRenderRes(false, 1600);
@@ -98,6 +99,7 @@ void PipelineTask::SetExecutorRenderParams() {
     }
 
     pipeline_executor_->SetNextFramePresentationMode(FramePresentationMode::RoiFrame);
+    pipeline_executor_->SetResizeDownsampleAlgorithm(ResizeDownsampleAlgorithm::Bilinear);
     pipeline_executor_->SetRenderRegion(region_x, region_y, region_scale_x, region_scale_y);
     pipeline_executor_->SetForceCPUOutput(false);
     pipeline_executor_->SetRenderRes(false, 2560);
@@ -108,6 +110,7 @@ void PipelineTask::SetExecutorRenderParams() {
   }
   if (requested_render_type == RenderType::THUMBNAIL) {
     pipeline_executor_->SetNextFramePresentationMode(FramePresentationMode::ViewportTransformed);
+    pipeline_executor_->SetResizeDownsampleAlgorithm(ResizeDownsampleAlgorithm::Bilinear);
     pipeline_executor_->SetRenderRegion(0, 0, 1.0f);
     pipeline_executor_->SetForceCPUOutput(true);
     pipeline_executor_->SetRenderRes(false, 1024);
@@ -117,6 +120,7 @@ void PipelineTask::SetExecutorRenderParams() {
   }
   if (requested_render_type == RenderType::FULL_RES_PREVIEW) {
     pipeline_executor_->SetNextFramePresentationMode(FramePresentationMode::ViewportTransformed);
+    pipeline_executor_->SetResizeDownsampleAlgorithm(ResizeDownsampleAlgorithm::Area);
     pipeline_executor_->SetRenderRegion(0, 0, 1.0f);
     pipeline_executor_->SetRenderRes(true);
     pipeline_executor_->SetForceCPUOutput(false);
@@ -124,6 +128,7 @@ void PipelineTask::SetExecutorRenderParams() {
   }
   if (requested_render_type == RenderType::FULL_RES_EXPORT) {
     pipeline_executor_->SetNextFramePresentationMode(FramePresentationMode::ViewportTransformed);
+    pipeline_executor_->SetResizeDownsampleAlgorithm(ResizeDownsampleAlgorithm::Area);
     pipeline_executor_->SetRenderRegion(0, 0, 1.0f);
     pipeline_executor_->SetRenderRes(true);
     pipeline_executor_->SetForceCPUOutput(true);
@@ -140,6 +145,7 @@ void PipelineTask::ResetPreviewRenderParams() {
     return;
   }
   // Transition back to fast-preview baseline state.
+  pipeline_executor_->SetResizeDownsampleAlgorithm(ResizeDownsampleAlgorithm::Bilinear);
   pipeline_executor_->SetRenderRes(false, 2560);
   pipeline_executor_->SetForceCPUOutput(false);
   pipeline_executor_->SetEnableCache(true);
@@ -151,6 +157,7 @@ void PipelineTask::ResetThumbnailRenderParams() {
     return;
   }
   // Transition to full-res preview baseline state.
+  pipeline_executor_->SetResizeDownsampleAlgorithm(ResizeDownsampleAlgorithm::Area);
   pipeline_executor_->SetRenderRes(true, 2560);
   pipeline_executor_->SetForceCPUOutput(false);
   pipeline_executor_->SetEnableCache(true);

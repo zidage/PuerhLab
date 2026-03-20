@@ -171,6 +171,7 @@ auto PipelineMgmtService::LoadPipeline(sl_element_id_t id) -> std::shared_ptr<Pi
           it->second->pipeline_->SetBoundFile(id);
           it->second->pipeline_->SetExecutionStages();
           // Reset transient render/cache state to a consistent FAST_PREVIEW baseline.
+          it->second->pipeline_->SetResizeDownsampleAlgorithm(ResizeDownsampleAlgorithm::Bilinear);
           it->second->pipeline_->SetRenderRegion(0, 0, 1.0f);
           it->second->pipeline_->SetRenderRes(false, 4096);
           it->second->pipeline_->SetForceCPUOutput(false);

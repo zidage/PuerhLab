@@ -6,6 +6,7 @@
 
 #include <memory>
 
+#include "edit/operators/geometry/resize_algorithm.hpp"
 #include "edit/operators/op_base.hpp"
 #include "image/image_buffer.hpp"
 #include "pipeline_stage.hpp"
@@ -29,6 +30,7 @@ class PipelineExecutor {
   virtual void SetRenderRegion(int x, int y, float scale_factor_x,
                                float scale_factor_y = -1.0f)                                            = 0;
   virtual void SetRenderRes(bool full_res, int max_side_length = 2048)                                         = 0;
+  virtual void SetResizeDownsampleAlgorithm(ResizeDownsampleAlgorithm algorithm)                               = 0;
 
   // Optional: request CPU output from GPU-backed stages (used for export/thumbnail callbacks)
   virtual void SetForceCPUOutput(bool /*force*/) {}

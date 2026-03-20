@@ -59,13 +59,6 @@ auto AlbumBrowseService::ListFolders(const std::filesystem::path& folder_path) c
     return {};
   }
 
-  std::sort(folders.begin(), folders.end(),
-            [](const AlbumFolderView& lhs, const AlbumFolderView& rhs) {
-              if (lhs.folder_name_ != rhs.folder_name_) {
-                return lhs.folder_name_ < rhs.folder_name_;
-              }
-              return lhs.folder_path_.generic_wstring() < rhs.folder_path_.generic_wstring();
-            });
   return folders;
 }
 
@@ -93,12 +86,6 @@ auto AlbumBrowseService::ListFilesInFolder(const std::filesystem::path& folder_p
     return {};
   }
 
-  std::sort(files.begin(), files.end(), [](const AlbumFileView& lhs, const AlbumFileView& rhs) {
-    if (lhs.file_name_ != rhs.file_name_) {
-      return lhs.file_name_ < rhs.file_name_;
-    }
-    return lhs.element_id_ < rhs.element_id_;
-  });
   return files;
 }
 

@@ -10,6 +10,10 @@
 namespace puerhlab {
 namespace CUDA {
 
+void Downsample2xBox(const cv::cuda::GpuMat& src, cv::cuda::GpuMat& dst);
+
+void ResizeLinear(const cv::cuda::GpuMat& src, cv::cuda::GpuMat& dst, cv::Size dst_size);
+
 void ResizeAreaApprox(const cv::cuda::GpuMat& src, cv::cuda::GpuMat& dst, cv::Size dst_size);
 
 void WarpAffineLinear(const cv::cuda::GpuMat& src, cv::cuda::GpuMat& dst, const cv::Mat& matrix,
@@ -17,4 +21,3 @@ void WarpAffineLinear(const cv::cuda::GpuMat& src, cv::cuda::GpuMat& dst, const 
 
 }  // namespace CUDA
 }  // namespace puerhlab
-

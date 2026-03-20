@@ -125,7 +125,7 @@ auto PathResolver::ResolveForWrite(const std::filesystem::path& path)
   if (current->sync_flag_ == SyncFlag::SYNCED) {
     current->SetSyncFlag(SyncFlag::MODIFIED);
   }
-  directory_cache_.RecordAccess(path.wstring(), current->element_id_);
+  // directory_cache_.RecordAccess(path.wstring(), current->element_id_);
   return current;
 }
 

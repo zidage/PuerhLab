@@ -48,11 +48,13 @@ PUERHLAB_HD inline auto FoldRawColorToRgb(const int raw_color) -> int {
   }
 }
 
-PUERHLAB_HD inline auto RawColorAt(const BayerPattern2x2& pattern, const int y, const int x) -> int {
+PUERHLAB_HD inline auto RawColorAt(const BayerPattern2x2& pattern, const int y, const int x)
+    -> int {
   return pattern.raw_fc[BayerCellIndex(y, x)];
 }
 
-PUERHLAB_HD inline auto RgbColorAt(const BayerPattern2x2& pattern, const int y, const int x) -> int {
+PUERHLAB_HD inline auto RgbColorAt(const BayerPattern2x2& pattern, const int y, const int x)
+    -> int {
   return pattern.rgb_fc[BayerCellIndex(y, x)];
 }
 
@@ -127,9 +129,9 @@ auto DownsampleBayer2xTyped(const cv::Mat& src, const BayerPattern2x2& pattern) 
   for (int y = 0; y < out_rows; ++y) {
     T* drow = dst.ptr<T>(y);
     for (int x = 0; x < out_cols; ++x) {
-      const int dst_index       = BayerCellIndex(y, x);
-      const int expected_color  = pattern.raw_fc[dst_index];
-      int       src_index       = -1;
+      const int dst_index      = BayerCellIndex(y, x);
+      const int expected_color = pattern.raw_fc[dst_index];
+      int       src_index      = -1;
       for (int i = 0; i < 4; ++i) {
         if (pattern.raw_fc[i] == expected_color) {
           src_index = i;

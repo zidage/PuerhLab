@@ -34,7 +34,10 @@ void NodeStorageHandler::EnsureChildrenLoaded(std::shared_ptr<SleeveFolder> fold
       auto folder_content = db_ctrl_.GetFolderContent(folder->element_id_);
       for (auto& content_id : folder_content) {
         auto content = GetElement(content_id);
-        folder->AddElementToMap(content, false);
+        // DB-backed children already carry persisted ref counts. Rehydrating the in-memory
+        // folder map must not add an extra parent reference or the next write will trigger
+        // a bogus copy-on-write clone.
+        folder->AddElementToMap(content, false, false);
       }
     } catch (std::exception& e) {
       // TODO: LOG

@@ -94,6 +94,7 @@ class CPUPipelineExecutor : public PipelineExecutor {
   void SetRenderRegion(int x, int y, float scale_factor_x,
                        float scale_factor_y = -1.0f) override;
   void SetRenderRes(bool full_res, int max_side_length = 2048) override;
+  void SetResizeDownsampleAlgorithm(ResizeDownsampleAlgorithm algorithm) override;
   void SetDecodeRes(DecodeRes res);
 
   void RegisterAllOperators();
