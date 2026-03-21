@@ -11,7 +11,7 @@
     "title": "Pu-erh Lab",
     "subtitle": "Cross-Platform RAW Editor & Digital Asset Manager",
     "description": "Now supports Windows/CUDA and Apple Silicon",
-    "version": "v0.2.0",
+    "version": "v0.2.1",
     "ctaDownloadWindows": "Download for Windows",
     "ctaGithub": "View on GitHub",
     "ctaStart": "View Tutorial",
@@ -110,8 +110,8 @@
       "macos": "macOS"
     },
     "download": {
-      "windows": "Download Windows v0.2.0 (.7z)",
-      "macos": "Download macOS v0.2.0-hotfix (.dmg)"
+      "windows": "Download Windows v0.2.1 (.7z)",
+      "macos": "Download macOS v0.2.1 (.dmg)"
     },
     "windows": [
       "# Windows / CUDA toolchain",

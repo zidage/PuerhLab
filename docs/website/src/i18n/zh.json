@@ -8,10 +8,10 @@
     "contribute": "贡献"
   },
   "hero": {
-    "title": "Pu-erh Lab",
+    "title": "普洱工坊",
     "subtitle": "跨平台 RAW 图像处理与数字资产管理",
     "description": "现在支持 Windows/CUDA 与 Apple Silicon",
-    "version": "v0.2.0",
+    "version": "v0.2.1",
     "ctaDownloadWindows": "下载 Windows 版本",
     "ctaGithub": "查看源码",
     "ctaStart": "查看教程",
@@ -110,8 +110,8 @@
       "macos": "macOS"
     },
     "download": {
-      "windows": "下载 Windows v0.2.0（.7z）",
-      "macos": "下载 macOS v0.2.0-hotfix（.dmg)"
+      "windows": "下载 Windows v0.2.1（.7z）",
+      "macos": "下载 macOS v0.2.1（.dmg)"
     },
     "windows": [
       "# Windows / CUDA 工具链",

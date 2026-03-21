@@ -21,8 +21,17 @@ const base = import.meta.env.BASE_URL;
       <!-- Logo -->
       <a href={`${base}${lang}/`} class="flex items-center gap-2 shrink-0">
         <span class="text-xl font-bold">
-          <span class="text-gold">Pu-erh</span>
-          <span class="text-mist"> Lab</span>
+          {lang === 'zh' ? (
+            <>
+              <span class="text-gold">普洱</span>
+              <span class="text-mist">工坊</span>
+            </>
+          ) : (
+            <>
+              <span class="text-gold">Pu-erh</span>
+              <span class="text-mist"> Lab</span>
+            </>
+          )}
         </span>
       </a>
 

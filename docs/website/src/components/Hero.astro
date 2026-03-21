@@ -9,9 +9,9 @@ const { lang } = Astro.props;
 const i = t(lang);
 const base = import.meta.env.BASE_URL;
 const windowsReleaseUrl =
-  'https://github.com/zidage/PuerhLab/releases/download/v0.2.0/pu-erh_lab-0.2.0-Windows-AMD64.7z';
+  'https://github.com/zidage/PuerhLab/releases/download/v0.2.1/pu-erh_lab-0.2.1-Windows-AMD64.7z';
 const macosReleaseUrl =
-  'https://github.com/zidage/PuerhLab/releases/download/v0.2.0-hotfix/pu-erh_lab-0.2.0-hotfix-Darwin-arm64.dmg';
+  'https://github.com/zidage/PuerhLab/releases/download/v0.2.1/pu-erh_lab-0.2.1-Darwin-arm64.dmg';
 ---
 
 <section
@@ -34,13 +34,22 @@ const macosReleaseUrl =
     >
       <img
         src={`${base}brand/app-icon.png`}
-        alt="Pu-erh Lab logo"
+        alt={lang === 'zh' ? '普洱工坊 logo' : 'Pu-erh Lab logo'}
         class="w-16 h-16 sm:w-20 sm:h-20 lg:w-24 lg:h-24 drop-shadow-[0_0_24px_rgba(252,199,4,0.4)]"
         loading="eager"
       />
       <h1 class="text-5xl sm:text-6xl lg:text-7xl font-bold">
-        <span class="text-gold">Pu-erh</span>
-        <span class="text-mist"> Lab</span>
+        {lang === 'zh' ? (
+          <>
+            <span class="text-gold">普洱</span>
+            <span class="text-mist">工坊</span>
+          </>
+        ) : (
+          <>
+            <span class="text-gold">Pu-erh</span>
+            <span class="text-mist"> Lab</span>
+          </>
+        )}
       </h1>
     </div>
     <p
