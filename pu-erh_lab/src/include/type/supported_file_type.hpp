@@ -35,6 +35,11 @@ struct ExportFormatOptions {
 
   enum class BIT_DEPTH : uint8_t { BIT_8 = 8, BIT_16 = 16, BIT_32 = 32 };
 
+  enum class HDR_EXPORT_MODE : uint8_t {
+    ULTRA_HDR,
+    EMBEDDED_PROFILE_ONLY,
+  };
+
   std::filesystem::path export_path_;
 
   ImageFormatType       format_            = ImageFormatType::JPEG;
@@ -45,6 +50,7 @@ struct ExportFormatOptions {
   BIT_DEPTH             bit_depth_         = BIT_DEPTH::BIT_16;    // For TIFF/PNG
   int                   compression_level_ = 5;                    // For PNG
   TIFF_COMPRESS         tiff_compress_     = TIFF_COMPRESS::NONE;  // For TIFF
+  HDR_EXPORT_MODE       hdr_export_mode_   = HDR_EXPORT_MODE::ULTRA_HDR;
 };
 
 static const std::unordered_set<std::wstring> supported_extensions = {

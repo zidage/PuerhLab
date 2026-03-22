@@ -27,7 +27,9 @@ auto ResolveExportColorProfileConfig(const OperatorParams& params) -> ExportColo
 
 }  // namespace
 
-void ExportService::RunExportRenderTask(const ExportTask& task) {
+auto ExportService::RunExportRenderTask(const ExportTask& task) -> ExportResult {
+  ExportResult result;
+
   // Get the pipeline executor from sleeve service
   auto pipeline_guard = pipeline_service_->LoadPipeline(task.sleeve_id_);
   if (!pipeline_guard || !pipeline_guard->pipeline_) {
@@ -82,9 +84,17 @@ void ExportService::RunExportRenderTask(const ExportTask& task) {
   // Save pipeline back to storage
   const auto export_profile =
       ResolveExportColorProfileConfig(pipeline_guard->pipeline_->GetGlobalParams());
+  const bool wrote_ultra_hdr = ImageWriter::ShouldWriteUltraHdr(task.options_, export_profile);
+  const bool requested_ultra_hdr =
+      task.options_.hdr_export_mode_ == ExportFormatOptions::HDR_EXPORT_MODE::ULTRA_HDR &&
+      task.options_.format_ == ImageFormatType::JPEG;
   pipeline_service_->SavePipeline(pipeline_guard);
   // Use ImageWriter to write the image to disk
   ImageWriter::WriteImageToPath(img_src_path, rendered_image, task.options_, export_profile);
+  result.success_ = true;
+  result.wrote_ultra_hdr_ = wrote_ultra_hdr;
+  result.used_embedded_profile_fallback_ = requested_ultra_hdr && !wrote_ultra_hdr;
+  return result;
 }
 
 void ExportService::ExportAll(
@@ -126,8 +136,7 @@ void ExportService::ExportAll(
       ExportResult result;
       // Do export, this call will block until done
       try {
-        RunExportRenderTask(task);
-        result.success_ = true;
+        result = RunExportRenderTask(task);
       } catch (const std::exception& e) {
         result.success_ = false;
         result.message_ = e.what();

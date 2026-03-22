@@ -156,12 +156,14 @@ class AlbumBackend final : public QObject {
   Q_INVOKABLE bool SaveProject();
   Q_INVOKABLE void StartExport(const QString& outputDirUrlOrPath);
   Q_INVOKABLE void StartExportWithOptions(const QString& outputDirUrlOrPath,
-                                          const QString& formatName, bool resizeEnabled,
+                                          const QString& formatName,
+                                          const QString& hdrExportMode, bool resizeEnabled,
                                           int maxLengthSide, int quality, int bitDepth,
                                           int pngCompressionLevel,
                                           const QString& tiffCompression);
   Q_INVOKABLE void StartExportWithOptionsForTargets(const QString& outputDirUrlOrPath,
                                                     const QString& formatName,
+                                                    const QString& hdrExportMode,
                                                     bool resizeEnabled, int maxLengthSide,
                                                     int quality, int bitDepth,
                                                     int pngCompressionLevel,

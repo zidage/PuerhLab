@@ -115,24 +115,26 @@ void AlbumBackend::StartExport(const QString& outputDirUrlOrPath) {
 }
 
 void AlbumBackend::StartExportWithOptions(const QString& outputDirUrlOrPath,
-                                          const QString& formatName, bool resizeEnabled,
+                                          const QString& formatName,
+                                          const QString& hdrExportMode, bool resizeEnabled,
                                           int maxLengthSide, int quality, int bitDepth,
                                           int pngCompressionLevel,
                                           const QString& tiffCompression) {
-  import_export_.StartExportWithOptions(outputDirUrlOrPath, formatName, resizeEnabled,
-                                        maxLengthSide, quality, bitDepth, pngCompressionLevel,
-                                        tiffCompression);
+  import_export_.StartExportWithOptions(outputDirUrlOrPath, formatName, hdrExportMode,
+                                        resizeEnabled, maxLengthSide, quality, bitDepth,
+                                        pngCompressionLevel, tiffCompression);
 }
 
 void AlbumBackend::StartExportWithOptionsForTargets(const QString& outputDirUrlOrPath,
                                                     const QString& formatName,
+                                                    const QString& hdrExportMode,
                                                     bool resizeEnabled, int maxLengthSide,
                                                     int quality, int bitDepth,
                                                     int pngCompressionLevel,
                                                     const QString& tiffCompression,
                                                     const QVariantList& targetEntries) {
-  import_export_.StartExportWithOptionsForTargets(outputDirUrlOrPath, formatName, resizeEnabled,
-                                                  maxLengthSide, quality, bitDepth,
+  import_export_.StartExportWithOptionsForTargets(outputDirUrlOrPath, formatName, hdrExportMode,
+                                                  resizeEnabled, maxLengthSide, quality, bitDepth,
                                                   pngCompressionLevel, tiffCompression,
                                                   targetEntries);
 }

@@ -30,12 +30,13 @@ class ImportExportHandler {
   void CancelImport();
   void StartExport(const QString& outputDirUrlOrPath);
   void StartExportWithOptions(const QString& outputDirUrlOrPath, const QString& formatName,
-                              bool resizeEnabled, int maxLengthSide, int quality, int bitDepth,
-                              int pngCompressionLevel, const QString& tiffCompression);
+                              const QString& hdrExportMode, bool resizeEnabled, int maxLengthSide,
+                              int quality, int bitDepth, int pngCompressionLevel,
+                              const QString& tiffCompression);
   void StartExportWithOptionsForTargets(const QString& outputDirUrlOrPath,
-                                        const QString& formatName, bool resizeEnabled,
-                                        int maxLengthSide, int quality, int bitDepth,
-                                        int pngCompressionLevel,
+                                        const QString& formatName, const QString& hdrExportMode,
+                                        bool resizeEnabled, int maxLengthSide, int quality,
+                                        int bitDepth, int pngCompressionLevel,
                                         const QString& tiffCompression,
                                         const QVariantList& targetEntries);
   void ResetExportState();
@@ -48,8 +49,9 @@ class ImportExportHandler {
       -> std::vector<ExportTarget>;
   auto BuildExportQueue(const std::vector<ExportTarget>& targets,
                         const std::filesystem::path& outputDir, ImageFormatType format,
-                        bool resizeEnabled, int maxLengthSide, int quality,
-                        ExportFormatOptions::BIT_DEPTH bitDepth, int pngCompressionLevel,
+                        ExportFormatOptions::HDR_EXPORT_MODE hdrExportMode, bool resizeEnabled,
+                        int maxLengthSide, int quality, ExportFormatOptions::BIT_DEPTH bitDepth,
+                        int pngCompressionLevel,
                         ExportFormatOptions::TIFF_COMPRESS tiffCompression)
       -> ExportQueueBuildResult;
 

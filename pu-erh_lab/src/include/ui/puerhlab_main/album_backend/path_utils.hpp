@@ -38,6 +38,7 @@ auto MatRgba32fToQImageCopy(const cv::Mat& rgba32fOrU8) -> QImage;
 
 auto ExtensionForExportFormat(ImageFormatType format) -> std::string;
 auto FormatFromName(const QString& value) -> ImageFormatType;
+auto HdrExportModeFromName(const QString& value) -> ExportFormatOptions::HDR_EXPORT_MODE;
 auto BitDepthFromInt(int value) -> ExportFormatOptions::BIT_DEPTH;
 auto TiffCompressFromName(const QString& value) -> ExportFormatOptions::TIFF_COMPRESS;
 auto ExportPathForOptions(const std::filesystem::path& srcPath,

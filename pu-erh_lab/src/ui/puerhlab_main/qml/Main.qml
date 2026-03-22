@@ -288,10 +288,11 @@ ApplicationWindow {
         onAddSelectedToQueueRequested: selectionState.addSelectedToExportQueue()
         onClearQueueRequested: selectionState.clearExportQueue()
         onEnsurePreviewRequested: selectionState.refreshExportPreview()
-        onStartExportRequested: function(outDir, format, resizeEnabled, maxSide, quality, bitDepth, pngLevel, tiffComp) {
+        onStartExportRequested: function(outDir, format, hdrExportMode, resizeEnabled, maxSide, quality, bitDepth, pngLevel, tiffComp) {
             albumBackend.StartExportWithOptionsForTargets(
                 outDir,
                 format,
+                hdrExportMode,
                 resizeEnabled,
                 maxSide,
                 quality,

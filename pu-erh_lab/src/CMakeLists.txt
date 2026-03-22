@@ -651,10 +651,23 @@ def_library(SleeveManager
 # 8. I/O  
 # ==============================================================================
 
+def_library(ExportIccProfileResolver
+    SOURCES
+        include/io/image/export_color_profile_config.hpp
+        include/io/image/export_icc_profile_resolver.hpp
+        io/image/export_icc_profile_resolver.cpp
+    PUBLIC_DEPS
+        opencv_core
+)
+
+if(APPLE)
+    target_link_libraries(ExportIccProfileResolver PRIVATE "-framework CoreGraphics" "-framework CoreFoundation")
+endif()
+
 if(PUERHLAB_ULTRAHDR_AVAILABLE)
     def_library(UltraHdrWriter
         SOURCES io/image/ultra_hdr_writer.cpp
-        PUBLIC_DEPS OpenImageIO::OpenImageIO ImageBuffer Exiv2 puerhlab::uhdr
+        PUBLIC_DEPS OpenImageIO::OpenImageIO ImageBuffer Exiv2 puerhlab::uhdr ExportIccProfileResolver
         PRIVATE_DEPS opencv_core
     )
 
@@ -665,7 +678,7 @@ endif()
 
 def_library(ImageWriter
     SOURCES io/image/image_writer.cpp
-    PUBLIC_DEPS OpenImageIO::OpenImageIO ImageBuffer
+    PUBLIC_DEPS OpenImageIO::OpenImageIO ImageBuffer ExportIccProfileResolver
     PRIVATE_DEPS ${PUERHLAB_OPENCV_IMAGE_DEPS}
 )
 if(PUERHLAB_ULTRAHDR_AVAILABLE)

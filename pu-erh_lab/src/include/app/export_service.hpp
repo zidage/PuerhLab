@@ -32,6 +32,8 @@ struct ExportTask {
 
 struct ExportResult {
   bool        success_ = false;
+  bool        wrote_ultra_hdr_ = false;
+  bool        used_embedded_profile_fallback_ = false;
   std::string message_;
 };
 
@@ -60,7 +62,7 @@ class ExportService {
   // Keep this last so worker threads are joined before other members are torn down.
   ThreadPool                         export_thread_pool_{4};
 
-  void RunExportRenderTask(const ExportTask& task);
+  auto RunExportRenderTask(const ExportTask& task) -> ExportResult;
 
  public:
   ExportService() = delete;

@@ -227,6 +227,14 @@ auto FormatFromName(const QString& value) -> ImageFormatType {
   return ImageFormatType::JPEG;
 }
 
+auto HdrExportModeFromName(const QString& value) -> ExportFormatOptions::HDR_EXPORT_MODE {
+  const QString upper = value.trimmed().toUpper();
+  if (upper == "EMBEDDED_PROFILE_ONLY") {
+    return ExportFormatOptions::HDR_EXPORT_MODE::EMBEDDED_PROFILE_ONLY;
+  }
+  return ExportFormatOptions::HDR_EXPORT_MODE::ULTRA_HDR;
+}
+
 auto BitDepthFromInt(int value) -> ExportFormatOptions::BIT_DEPTH {
   if (value == 8) {
     return ExportFormatOptions::BIT_DEPTH::BIT_8;

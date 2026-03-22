@@ -41,12 +41,14 @@ Dialog {
     signal startExportRequested(
         string outDir,
         string format,
+        string hdrExportMode,
         bool resizeEnabled,
         int maxSide,
         int quality,
         int bitDepth,
         int pngLevel,
         string tiffCompression)
+    readonly property bool ultraHdrSelected: hdrExportMode.currentValue === "ULTRA_HDR"
 
     onOpened: {
         if (exportOutDir.text.length === 0) {
@@ -160,6 +162,55 @@ Dialog {
                             spacing: 6
 
                             Label {
+                                text: qsTr("HDR")
+                                color: root.mutedTextColor
+                                font.pixelSize: 10
+                                font.weight: 700
+                                font.letterSpacing: 1.2
+                            }
+
+                            GridLayout {
+                                Layout.fillWidth: true
+                                columns: 2
+                                columnSpacing: 12
+                                rowSpacing: 10
+
+                                Label { text: qsTr("Mode"); color: root.mutedTextColor; font.pixelSize: 12 }
+                                ComboBox {
+                                    id: hdrExportMode
+                                    Layout.fillWidth: true
+                                    model: [
+                                        { text: qsTr("Ultra HDR"), value: "ULTRA_HDR" },
+                                        { text: qsTr("Embed HDR ICC"), value: "EMBEDDED_PROFILE_ONLY" }
+                                    ]
+                                    textRole: "text"
+                                    valueRole: "value"
+                                    onCurrentValueChanged: {
+                                        if (currentValue === "ULTRA_HDR") {
+                                            exportFormat.currentIndex = 0
+                                        }
+                                    }
+                                }
+                            }
+
+                            Label {
+                                Layout.fillWidth: true
+                                wrapMode: Text.WordWrap
+                                color: root.mutedTextColor
+                                font.pixelSize: 11
+                                text: root.ultraHdrSelected
+                                    ? qsTr("Ultra HDR exports are written as JPEG. Non-HDR items in the queue fall back to regular JPEG export with an embedded ICC profile.")
+                                    : qsTr("Embed the active output ICC profile without Ultra HDR encoding. This mode keeps all export formats available.")
+                            }
+                        }
+
+                        Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: root.separatorColor }
+
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 6
+
+                            Label {
                                 text: qsTr("FORMAT")
                                 color: root.mutedTextColor
                                 font.pixelSize: 10
@@ -177,6 +228,7 @@ Dialog {
                                 ComboBox {
                                     id: exportFormat
                                     Layout.fillWidth: true
+                                    enabled: !root.ultraHdrSelected
                                     model: [
                                         { text: "JPEG", value: "JPEG" },
                                         { text: "PNG", value: "PNG" },
@@ -251,7 +303,7 @@ Dialog {
 
                             Label {
                                 Layout.fillWidth: true
-                                visible: exportFormat.currentValue === "JPEG"
+                                visible: exportFormat.currentValue === "JPEG" && !root.ultraHdrSelected
                                 wrapMode: Text.WordWrap
                                 color: root.mutedTextColor
                                 font.pixelSize: 11
@@ -486,6 +538,7 @@ Dialog {
                     root.startExportRequested(
                         exportOutDir.text,
                         exportFormat.currentValue,
+                        hdrExportMode.currentValue,
                         exportResize.currentIndex === 1,
                         exportMaxSide.value,
                         exportQuality.value,

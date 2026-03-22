@@ -153,24 +153,27 @@ void ImportExportHandler::CancelImport() {
 }
 
 void ImportExportHandler::StartExport(const QString& outputDirUrlOrPath) {
-  StartExportWithOptionsForTargets(outputDirUrlOrPath, "JPEG", false, 4096, 95, 16, 5, "NONE",
-                                   {});
+  StartExportWithOptionsForTargets(outputDirUrlOrPath, "JPEG", "ULTRA_HDR", false, 4096, 95, 16,
+                                   5, "NONE", {});
 }
 
 void ImportExportHandler::StartExportWithOptions(const QString& outputDirUrlOrPath,
-                                                  const QString& formatName,
-                                                  bool resizeEnabled, int maxLengthSide,
-                                                  int quality, int bitDepth,
-                                                  int pngCompressionLevel,
-                                                  const QString& tiffCompression) {
-  StartExportWithOptionsForTargets(outputDirUrlOrPath, formatName, resizeEnabled, maxLengthSide,
-                                   quality, bitDepth, pngCompressionLevel, tiffCompression, {});
+                                                 const QString& formatName,
+                                                 const QString& hdrExportMode,
+                                                 bool resizeEnabled, int maxLengthSide,
+                                                 int quality, int bitDepth,
+                                                 int pngCompressionLevel,
+                                                 const QString& tiffCompression) {
+  StartExportWithOptionsForTargets(outputDirUrlOrPath, formatName, hdrExportMode, resizeEnabled,
+                                   maxLengthSide, quality, bitDepth, pngCompressionLevel,
+                                   tiffCompression, {});
 }
 
 void ImportExportHandler::StartExportWithOptionsForTargets(
-    const QString& outputDirUrlOrPath, const QString& formatName, bool resizeEnabled,
-    int maxLengthSide, int quality, int bitDepth, int pngCompressionLevel,
-    const QString& tiffCompression, const QVariantList& targetEntries) {
+    const QString& outputDirUrlOrPath, const QString& formatName, const QString& hdrExportMode,
+    bool resizeEnabled, int maxLengthSide, int quality, int bitDepth,
+    int pngCompressionLevel, const QString& tiffCompression,
+    const QVariantList& targetEntries) {
   if (backend_.project_handler_.project_loading()) {
     SetExportFailureState(PL_TEXT("Project is loading. Please wait."));
     return;
@@ -211,6 +214,7 @@ void ImportExportHandler::StartExportWithOptionsForTargets(
   }
 
   const ImageFormatType format        = FormatFromName(formatName);
+  const auto            hdr_mode      = HdrExportModeFromName(hdrExportMode);
   const int             clamped_max   = std::clamp(maxLengthSide, 256, 16384);
   const int             clamped_q     = std::clamp(quality, 1, 100);
   const auto            bit_depth     = BitDepthFromInt(bitDepth);
@@ -219,7 +223,7 @@ void ImportExportHandler::StartExportWithOptionsForTargets(
 
   esvc->ClearAllExportTasks();
   const auto queue_result =
-      BuildExportQueue(targets, outDirOpt.value(), format, resizeEnabled, clamped_max,
+      BuildExportQueue(targets, outDirOpt.value(), format, hdr_mode, resizeEnabled, clamped_max,
                        clamped_q, bit_depth, clamped_png, tiff_compress);
 
   if (queue_result.queued_count_ == 0) {
@@ -362,11 +366,15 @@ void ImportExportHandler::FinishExport(
 
   int         ok   = 0;
   int         fail = 0;
+  int         ultra_hdr_fallbacks = 0;
   QStringList errors;
   if (results) {
     for (const auto& r : *results) {
       if (r.success_) {
         ++ok;
+        if (r.used_embedded_profile_fallback_) {
+          ++ultra_hdr_fallbacks;
+        }
       } else {
         ++fail;
         if (!r.message_.empty() && errors.size() < 8) {
@@ -393,6 +401,16 @@ void ImportExportHandler::FinishExport(
     export_status_text_ = PL_TEXT(
         "Export complete. Written %1/%2 image(s), failed %3. Skipped %4 invalid item(s).", ok,
         total, fail, skippedCount);
+  }
+  if (ultra_hdr_fallbacks > 0) {
+    export_status_text_ = PL_TEXT(
+        "Export complete. Written %1/%2 image(s), failed %3. %4 item(s) used embedded ICC fallback instead of Ultra HDR.",
+        ok, total, fail, ultra_hdr_fallbacks);
+    if (skippedCount > 0) {
+      export_status_text_ = PL_TEXT(
+          "Export complete. Written %1/%2 image(s), failed %3. Skipped %4 invalid item(s). %5 item(s) used embedded ICC fallback instead of Ultra HDR.",
+          ok, total, fail, skippedCount, ultra_hdr_fallbacks);
+    }
   }
   emit backend_.ExportStateChanged();
   emit backend_.exportStateChanged();
@@ -430,8 +448,9 @@ auto ImportExportHandler::CollectExportTargets(const QVariantList& targetEntries
 
 auto ImportExportHandler::BuildExportQueue(
     const std::vector<ExportTarget>& targets, const std::filesystem::path& outputDir,
-    ImageFormatType format, bool resizeEnabled, int maxLengthSide, int quality,
-    ExportFormatOptions::BIT_DEPTH bitDepth, int pngCompressionLevel,
+    ImageFormatType format, ExportFormatOptions::HDR_EXPORT_MODE hdrExportMode,
+    bool resizeEnabled, int maxLengthSide, int quality, ExportFormatOptions::BIT_DEPTH bitDepth,
+    int pngCompressionLevel,
     ExportFormatOptions::TIFF_COMPRESS tiffCompression) -> ExportQueueBuildResult {
   ExportQueueBuildResult summary;
   auto                   proj = backend_.project_handler_.project();
@@ -509,6 +528,7 @@ auto ImportExportHandler::BuildExportQueue(
       task.options_.bit_depth_         = bitDepth;
       task.options_.compression_level_ = pngCompressionLevel;
       task.options_.tiff_compress_     = tiffCompression;
+      task.options_.hdr_export_mode_   = hdrExportMode;
       task.options_.export_path_       = std::move(export_path);
 
       esvc->EnqueueExportTask(task);

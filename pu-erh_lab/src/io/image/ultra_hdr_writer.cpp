@@ -3,6 +3,7 @@
 //  Additional permission under GPLv3 section 7 applies; see the LICENSE file.
 
 #include "io/image/ultra_hdr_writer.hpp"
+#include "io/image/export_icc_profile_resolver.hpp"
 
 #include <OpenImageIO/imageio.h>
 #include <exiv2/exiv2.hpp>
@@ -18,11 +19,6 @@
 #include <string>
 #include <thread>
 #include <vector>
-
-#if defined(__APPLE__)
-#include <CoreFoundation/CoreFoundation.h>
-#include <CoreGraphics/CGColorSpace.h>
-#endif
 
 namespace puerhlab {
 namespace {
@@ -182,56 +178,9 @@ void SanitizeExifData(Exiv2::ExifData& exif_data, int width, int height) {
   exif_data["Exif.Photo.PixelYDimension"] = static_cast<uint32_t>(std::max(height, 1));
 }
 
-#if defined(__APPLE__)
-auto ResolveBaseExportColorSpace(const ExportColorProfileConfig& config) -> CFStringRef {
-  switch (config.encoding_space) {
-    case ColorUtils::ColorSpace::REC709:
-      return kCGColorSpaceSRGB;
-    case ColorUtils::ColorSpace::P3_D65:
-    case ColorUtils::ColorSpace::P3_D60:
-    case ColorUtils::ColorSpace::P3_DCI:
-      return kCGColorSpaceDisplayP3;
-    case ColorUtils::ColorSpace::REC2020:
-      return kCGColorSpaceITUR_2020_sRGBGamma;
-    case ColorUtils::ColorSpace::XYZ:
-      return kCGColorSpaceGenericXYZ;
-    default:
-      return kCGColorSpaceSRGB;
-  }
-}
-
-auto BuildICCProfileBytes(const ExportColorProfileConfig& config) -> std::vector<uint8_t> {
-  std::vector<uint8_t> bytes;
-  CFStringRef          color_name = ResolveBaseExportColorSpace(config);
-  if (!color_name) {
-    return bytes;
-  }
-
-  CGColorSpaceRef color_space = CGColorSpaceCreateWithName(color_name);
-  if (!color_space) {
-    return bytes;
-  }
-
-  CFDataRef icc_data = CGColorSpaceCopyICCData(color_space);
-  CGColorSpaceRelease(color_space);
-  if (!icc_data) {
-    return bytes;
-  }
-
-  const auto size = static_cast<size_t>(CFDataGetLength(icc_data));
-  bytes.resize(size);
-  if (size > 0) {
-    CFDataGetBytes(icc_data, CFRangeMake(0, static_cast<CFIndex>(size)), bytes.data());
-  }
-  CFRelease(icc_data);
-  return bytes;
-}
-#else
-auto BuildICCProfileBytes(const ExportColorProfileConfig&) -> std::vector<uint8_t> { return {}; }
-#endif
-
 void ApplyBaseJpegColorProfile(ImageSpec& spec, const ExportColorProfileConfig& color_profile) {
-  const std::vector<uint8_t> icc_bytes = BuildICCProfileBytes(color_profile);
+  const std::vector<uint8_t> icc_bytes =
+      ExportIccProfileResolver::ResolveIccProfileBytes(color_profile);
   if (icc_bytes.empty()) {
     return;
   }
