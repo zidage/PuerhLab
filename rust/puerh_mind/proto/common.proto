@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package common;
+
+service HealthService {
+    rpc Ping(PingRequest) returns (PingResponse);
+    rpc GetVersion(GetVersionRequest) returns (GetVersionResponse);
+}
+
+message PingRequest {}
+
+message PingResponse {
+    string message = 1;
+}
+
+message GetVersionRequest {}
+
+message GetVersionResponse {
+    string version = 1;
+}
