@@ -53,6 +53,7 @@
 #include <vector>
 
 #include "app/render_service.hpp"
+#include "edit/operators/basic/color_temp_op.hpp"
 #include "edit/history/edit_transaction.hpp"
 #include "edit/history/version.hpp"
 #include "edit/pipeline/default_pipeline_params.hpp"
@@ -640,6 +641,31 @@ class EditorDialog final : public QDialog {
     state_.color_temp_resolved_tint_  = last_known_as_shot_tint_;
     committed_state_.color_temp_resolved_cct_  = last_known_as_shot_cct_;
     committed_state_.color_temp_resolved_tint_ = last_known_as_shot_tint_;
+  }
+
+  void WarmAsShotColorTempCacheFromRawMetadata() {
+    if (has_last_known_as_shot_color_temp_ || !pipeline_guard_ || !pipeline_guard_->pipeline_) {
+      return;
+    }
+
+    auto params = pipeline_guard_->pipeline_->GetGlobalParams();
+    try {
+      static const nlohmann::json kAsShotColorTempParams = {
+          {"color_temp", {{"mode", "as_shot"}, {"cct", 6500.0f}, {"tint", 0.0f}}}};
+      ColorTempOp                  as_shot_probe(kAsShotColorTempParams);
+      as_shot_probe.SetGlobalParams(params);
+    } catch (...) {
+      return;
+    }
+
+    if (!params.color_temp_matrices_valid_) {
+      return;
+    }
+
+    CacheAsShotColorTemp(params.color_temp_resolved_cct_, params.color_temp_resolved_tint_);
+    if (state_.color_temp_mode_ == ColorTempMode::AS_SHOT) {
+      PrimeColorTempDisplayForAsShot();
+    }
   }
 
   void RegisterSliderReset(QSlider* slider, std::function<void()> on_reset) {
@@ -1598,6 +1624,7 @@ class EditorDialog final : public QDialog {
           image_id_, [](const std::shared_ptr<Image>& i) { return i; });
       if (img && img->HasRawColorContext()) {
         exec->InjectRawMetadata(img->GetRawColorContext());
+        WarmAsShotColorTempCacheFromRawMetadata();
       }
     } catch (...) {
       // Non-fatal: metadata injection is best-effort.
