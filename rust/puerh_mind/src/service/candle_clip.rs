@@ -4,7 +4,10 @@ use candle_nn::VarBuilder;
 use tokenizers::Tokenizer;
 
 use crate::config::SemanticConfig;
+
 use crate::service::clip_text::ClipTextModel;
+use crate::service::clip_vision::ClipVisionModel;
+
 use crate::service::embedding::EmbeddingEngine;
 use crate::service::model_assets::ClipModelPaths;
 use crate::service::open_clip_config::OpenClipConfig;
@@ -19,6 +22,7 @@ pub struct CandleClipEngine {
     tokenizer: Tokenizer,
     device: Device,
     text_model: ClipTextModel,
+    vision_model: ClipVisionModel,
 }
 
 impl CandleClipEngine {
@@ -47,12 +51,17 @@ impl CandleClipEngine {
         )
         .expect("text model should load");
 
+        let vision_model =
+            ClipVisionModel::load(vb.pp("visual"), open_clip_config.model_cfg.embed_dim)
+                .expect("vision model should load");
+
         Ok(Self {
             model_id: config.model_id.clone(),
             open_clip_config,
             tokenizer,
             device,
             text_model,
+            vision_model,
         })
     }
 
@@ -137,6 +146,55 @@ impl CandleClipEngine {
         }
         Ok(Self::l2_normalize(rows.remove(0))?)
     }
+
+    /* Image Part */
+    fn prepare_image_tensor(&self, rgb: &image::RgbImage) -> anyhow::Result<Tensor> {
+        let target = self.open_clip_config.model_cfg.vision_cfg.image_size as u32;
+
+        let (src_w, src_h) = rgb.dimensions();
+        if src_w == 0 || src_h == 0 {
+            anyhow::bail!("image must not be empty");
+        }
+
+        let scale = if src_w < src_h {
+            target as f32 / src_w as f32
+        } else {
+            target as f32 / src_h as f32
+        };
+
+        let resized_w = ((src_w as f32) * scale).round() as u32;
+        let resized_h = ((src_h as f32) * scale).round() as u32;
+
+        let resized = image::imageops::resize(
+            rgb,
+            resized_w,
+            resized_h,
+            image::imageops::FilterType::Triangle,
+        );
+
+        let crop_x = (resized_w - target) / 2;
+        let crop_y = (resized_h - target) / 2;
+
+        let cropped =
+            image::imageops::crop_imm(&resized, crop_x, crop_y, target, target).to_image();
+
+        let mut data = Vec::with_capacity((3 * target * target) as usize);
+
+        for channel in 0..3usize {
+            for y in 0..target {
+                for x in 0..target {
+                    let pixel = cropped.get_pixel(x, y);
+                    let value = pixel[channel] as f32 / 255.0;
+                    data.push(value);
+                }
+            }
+        }
+
+        let tensor =
+            Tensor::from_vec(data, (1, 3, target as usize, target as usize), &self.device)?;
+
+        Ok(tensor)
+    }
 }
 
 impl EmbeddingEngine for CandleClipEngine {
@@ -145,7 +203,9 @@ impl EmbeddingEngine for CandleClipEngine {
     }
 
     fn embed_image(&self, _rgb: &image::RgbImage) -> Result<Vec<f32>> {
-        bail!("image embedding is not implemented yet")
+        let image = self.prepare_image_tensor(_rgb)?;
+        let dims = image.dims().to_vec();
+        bail!("image tower is not implemented yet, prepared image tensor with shape {dims:?}")
     }
 
     fn default_text_model_name(&self) -> &str {
@@ -310,5 +370,66 @@ mod tests {
             .sqrt();
 
         assert!((norm - 1.0).abs() < 1e-3, "norm was {norm}");
+    }
+
+    #[test]
+    fn prepare_image_tensor_returns_nchw_f32_shape() {
+        let engine = make_test_engine();
+
+        let width = 320;
+        let height = 200;
+        let rgb = image::RgbImage::from_fn(width, height, |x, y| {
+            image::Rgb([(x % 256) as u8, (y % 256) as u8, ((x + y) % 256) as u8])
+        });
+
+        let tensor = engine
+            .prepare_image_tensor(&rgb)
+            .expect("image tensor should be prepared");
+
+        assert_eq!(tensor.dims(), &[1, 3, 256, 256]);
+        assert_eq!(tensor.dtype(), candle_core::DType::F32);
+
+        let values = tensor.flatten_all().unwrap().to_vec1::<f32>().unwrap();
+        assert!(values.iter().all(|v| *v >= 0.0 && *v <= 1.0));
+    }
+
+    #[test]
+    fn prepare_image_tensor_resizes_shortest_edge_then_center_crops() {
+        let engine = make_test_engine();
+
+        let width = 400;
+        let height = 200;
+        let rgb = image::RgbImage::from_fn(width, height, |x, _y| {
+            let red = if (80..320).contains(&x) { 255 } else { 0 };
+            image::Rgb([red, 0, 0])
+        });
+
+        let tensor = engine
+            .prepare_image_tensor(&rgb)
+            .expect("image tensor should be prepared");
+
+        let chw = tensor.squeeze(0).unwrap();
+        let values = chw.to_vec3::<f32>().unwrap();
+
+        let red = &values[0];
+        let left = red[128][0];
+        let center = red[128][128];
+        let right = red[128][255];
+
+        assert!(left > 0.85, "left={left}");
+        assert!(center > 0.95, "center={center}");
+        assert!(right > 0.85, "right={right}");
+    }
+
+    #[test]
+    fn embed_image_reaches_preprocessing_before_failing() {
+        let engine = make_test_engine();
+
+        let rgb = image::RgbImage::from_pixel(300, 200, image::Rgb([128, 64, 32]));
+        let err = engine.embed_image(&rgb).unwrap_err();
+
+        let message = err.to_string();
+        assert!(message.contains("image tower is not implemented yet"));
+        assert!(message.contains("[1, 3, 256, 256]"));
     }
 }

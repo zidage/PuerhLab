@@ -9,3 +9,4 @@ pub mod open_clip_config;
 pub mod text_inputs;
 
 pub mod clip_text;
+pub mod clip_vision;
