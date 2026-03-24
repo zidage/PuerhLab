@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use anyhow::{bail};
+use anyhow::bail;
 
 pub struct ClipModelPaths {
     pub root: PathBuf,
@@ -27,6 +27,10 @@ impl ClipModelPaths {
     }
 
     pub fn validate(&self) -> anyhow::Result<()> {
+        if !self.root.exists() {
+            bail!("missing model root directory: {}", self.root.display());
+        }
+
         if !self.weights.exists() {
             bail!("missing weights file: {}", self.weights.display());
         }

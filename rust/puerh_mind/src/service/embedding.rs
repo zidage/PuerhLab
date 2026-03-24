@@ -3,10 +3,11 @@ use anyhow::Result;
 pub trait EmbeddingEngine: Send + Sync {
     fn embed_text(&self, text: &str) -> Result<Vec<f32>>;
     fn embed_image(&self, rgb: &image::RgbImage) -> Result<Vec<f32>>;
-    fn default_text_model_name(&self) -> &'static str;
-    fn default_image_model_name(&self) -> &'static str;
+    fn default_text_model_name(&self) -> &str;
+    fn default_image_model_name(&self) -> &str;
 }
 
+#[allow(dead_code)]
 pub struct MockEmbeddingEngine;
 
 impl EmbeddingEngine for MockEmbeddingEngine {
@@ -49,5 +50,4 @@ impl EmbeddingEngine for MockEmbeddingEngine {
         "mock-image-v1"
     }
 }
-
 

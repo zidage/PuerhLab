@@ -1,22 +1,24 @@
 use anyhow::{Result, bail};
 
+use candle_nn::VarBuilder;
 use tokenizers::Tokenizer;
 
 use crate::config::SemanticConfig;
+use crate::service::clip_text::ClipTextModel;
 use crate::service::embedding::EmbeddingEngine;
 use crate::service::model_assets::ClipModelPaths;
-use crate::service::open_clip_config::{self, OpenClipConfig};
+use crate::service::open_clip_config::OpenClipConfig;
 use crate::service::text_inputs::{TextBatch, TextTensors};
 
 use candle_core::Device;
-use candle_core::{DType, Tensor};
+use candle_core::Tensor;
 
 pub struct CandleClipEngine {
     model_id: String,
-    model_paths: ClipModelPaths,
     open_clip_config: OpenClipConfig,
     tokenizer: Tokenizer,
     device: Device,
+    text_model: ClipTextModel,
 }
 
 impl CandleClipEngine {
@@ -29,12 +31,28 @@ impl CandleClipEngine {
             .map_err(|e| anyhow::anyhow!("failed to load tokenizer: {e}"))?;
         let device = Device::Cpu;
 
+        let vb = unsafe {
+            VarBuilder::from_mmaped_safetensors(
+                &[model_paths.weights.clone()],
+                candle_core::DType::F32,
+                &device,
+            )
+            .expect("weights should load")
+        };
+
+        let text_model = ClipTextModel::load(
+            vb.pp("text"),
+            &open_clip_config.model_cfg.text_cfg,
+            open_clip_config.model_cfg.embed_dim,
+        )
+        .expect("text model should load");
+
         Ok(Self {
             model_id: config.model_id.clone(),
-            model_paths,
             open_clip_config,
             tokenizer,
             device,
+            text_model,
         })
     }
 
@@ -90,27 +108,52 @@ impl CandleClipEngine {
         let batch = self.prepare_text_input(text)?;
         self.text_batch_to_tensors(&batch)
     }
+
+    fn l2_normalize(mut embedding: Vec<f32>) -> anyhow::Result<Vec<f32>> {
+        let norm = embedding
+            .iter()
+            .map(|v| (*v as f64) * (*v as f64))
+            .sum::<f64>()
+            .sqrt();
+
+        if norm == 0.0 {
+            anyhow::bail!("text embedding norm is zero");
+        }
+
+        for value in &mut embedding {
+            *value = (*value as f64 / norm) as f32;
+        }
+
+        Ok(embedding)
+    }
+
+    fn forward_text_embedding(&self, text: &str) -> anyhow::Result<Vec<f32>> {
+        let tensors = self.prepare_text_tensors(text)?;
+
+        let feature = self.text_model.forward_text_feature(&tensors.input_ids)?;
+        let mut rows = feature.to_vec2::<f32>()?;
+        if rows.len() != 1 {
+            anyhow::bail!("expected one text feature row, got {}", rows.len());
+        }
+        Ok(Self::l2_normalize(rows.remove(0))?)
+    }
 }
 
 impl EmbeddingEngine for CandleClipEngine {
-    fn embed_text(&self, _text: &str) -> Result<Vec<f32>> {
-        let batch = self.prepare_text_input(_text)?;
-        Ok(vec![
-            batch.input_ids.len() as f32,
-            batch.attention_mask.iter().sum::<u32>() as f32,
-        ])
+    fn embed_text(&self, text: &str) -> Result<Vec<f32>> {
+        self.forward_text_embedding(text)
     }
 
     fn embed_image(&self, _rgb: &image::RgbImage) -> Result<Vec<f32>> {
         bail!("image embedding is not implemented yet")
     }
 
-    fn default_text_model_name(&self) -> &'static str {
-        "MobileCLIP2-S2-OpenCLIP"
+    fn default_text_model_name(&self) -> &str {
+        &self.model_id
     }
 
-    fn default_image_model_name(&self) -> &'static str {
-        "MobileCLIP2-S2-OpenCLIP"
+    fn default_image_model_name(&self) -> &str {
+        &self.model_id
     }
 }
 
@@ -229,5 +272,43 @@ mod tests {
         for (prefix, count) in counts {
             println!("{prefix}: {count}");
         }
+    }
+
+    #[test]
+    fn embeds_text_with_clip_text_model() {
+        let config = SemanticConfig {
+            model_id: "timm/MobileCLIP2-S2-OpenCLIP".to_string(),
+            model_dir: "./models/mobileclip2-s2-openclip".to_string(),
+        };
+
+        let engine = CandleClipEngine::new(&config).expect("engine should load");
+
+        let embedding = engine
+            .embed_text("a red tea cake")
+            .expect("text embedding should succeed");
+
+        assert_eq!(embedding.len(), engine.open_clip_config.model_cfg.embed_dim);
+    }
+
+    #[test]
+    fn normalizes_text_embedding_to_unit_length() {
+        let config = SemanticConfig {
+            model_id: "timm/MobileCLIP2-S2-OpenCLIP".to_string(),
+            model_dir: "./models/mobileclip2-s2-openclip".to_string(),
+        };
+
+        let engine = CandleClipEngine::new(&config).expect("engine should load");
+
+        let embedding = engine
+            .embed_text("a red tea cake")
+            .expect("text embedding should succeed");
+
+        let norm = embedding
+            .iter()
+            .map(|v| (*v as f64) * (*v as f64))
+            .sum::<f64>()
+            .sqrt();
+
+        assert!((norm - 1.0).abs() < 1e-3, "norm was {norm}");
     }
 }

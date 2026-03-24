@@ -1,4 +1,3 @@
-
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -28,18 +27,16 @@ impl SemanticServiceImpl {
         Ok(())
     }
 
-
     fn decode_rgb8_image(&self, image_bytes: &[u8]) -> Result<image::RgbImage, Status> {
         if image_bytes.is_empty() {
             return Err(Status::invalid_argument("image_bytes must not be empty"));
         }
 
-        let image = image::load_from_memory(image_bytes)  
+        let image = image::load_from_memory(image_bytes)
             .map_err(|e| Status::invalid_argument(format!("failed to decode image: {e}")))?;
 
         Ok(image.to_rgb8())
     }
-
 }
 
 #[tonic::async_trait]
@@ -121,5 +118,61 @@ impl SemanticService for SemanticServiceImpl {
         };
 
         Ok(Response::new(response))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use tonic::Request;
+
+    use super::*;
+    use crate::config::SemanticConfig;
+    use crate::service::candle_clip::CandleClipEngine;
+
+    fn test_semantic_config() -> SemanticConfig {
+        SemanticConfig {
+            model_id: "timm/MobileCLIP2-S2-OpenCLIP".to_string(),
+            model_dir: "./models/mobileclip2-s2-openclip".to_string(),
+        }
+    }
+
+    #[test]
+    fn uses_configured_model_id_as_default_name() {
+        let config = SemanticConfig {
+            model_id: "timm/MobileCLIP2-S2-OpenCLIP".to_string(),
+            model_dir: "./models/mobileclip2-s2-openclip".to_string(),
+        };
+
+        let engine = CandleClipEngine::new(&config).expect("engine should load");
+
+        assert_eq!(engine.default_text_model_name(), config.model_id);
+        assert_eq!(engine.default_image_model_name(), config.model_id);
+    }
+
+    #[tokio::test]
+    async fn embeds_text_request_with_candle_engine() {
+        let config = test_semantic_config();
+        let engine = Arc::new(CandleClipEngine::new(&config).expect("engine should load"));
+        let service = SemanticServiceImpl::new(engine);
+
+        let request = Request::new(EmbedTextRequest {
+            request_id: "test-1".to_string(),
+            text: "a red tea cake".to_string(),
+            model_name: String::new(),
+        });
+
+        let response = service
+            .embed_text(request)
+            .await
+            .expect("embed text should succeed")
+            .into_inner();
+
+        assert_eq!(response.request_id, "test-1");
+        assert_eq!(response.dimension as usize, response.embedding.len());
+        assert!(!response.embedding.is_empty());
+        assert_eq!(response.model_name, "timm/MobileCLIP2-S2-OpenCLIP");
+        assert!(response.elapsed_ms <= u64::MAX);
     }
 }

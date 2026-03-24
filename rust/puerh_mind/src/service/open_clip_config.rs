@@ -6,12 +6,14 @@ use std::path::Path;
 use anyhow::Result;
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 pub struct OpenClipConfig {
     pub model_cfg: ModelConfig,
     pub preprocess_cfg: PreprocessConfig,
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 pub struct ModelConfig {
     pub embed_dim: usize,
     pub vision_cfg: VisionConfig,
@@ -21,6 +23,7 @@ pub struct ModelConfig {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 pub struct VisionConfig {
     pub timm_model_name: String,
     #[serde(default)]
@@ -37,6 +40,7 @@ pub struct VisionConfig {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 pub struct TextConfig {
     pub context_length: usize,
     pub vocab_size: usize,
@@ -49,6 +53,7 @@ pub struct TextConfig {
 
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 pub struct PreprocessConfig {
     pub mean: Vec<f32>,
     pub std: Vec<f32>,
