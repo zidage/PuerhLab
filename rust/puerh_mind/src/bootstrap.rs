@@ -10,7 +10,7 @@ pub async fn start_server() -> Result<(), Box<dyn std::error::Error>> {
 
     info!("staring puerh_mind on {}", addr);
 
-    let router = register_services(Server::builder());
+    let router = register_services(Server::builder(), &config)?;
     
     router.serve(addr).await?;
 

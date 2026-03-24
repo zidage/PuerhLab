@@ -1,38 +1,24 @@
+
+use std::sync::Arc;
 use std::time::Instant;
-use tonic::{Request, Response, Status};
+
 use tracing::info;
+
+use tonic::{Request, Response, Status};
 
 use crate::proto::semantic::{
     EmbedImageRequest, EmbedTextRequest, EmbeddingResponse, PingRequest, PingResponse,
     semantic_service_server::SemanticService,
 };
+use crate::service::embedding::EmbeddingEngine;
 
-pub struct SemanticServiceImpl;
+pub struct SemanticServiceImpl {
+    engine: Arc<dyn EmbeddingEngine>,
+}
 
 impl SemanticServiceImpl {
-    pub fn new() -> Self {
-        Self
-    }
-
-    fn mock_text_embedding(&self, text: &str) -> Vec<f32> {
-        let len = text.len() as f32;
-
-        vec![
-            len,
-            len + 1.0,
-            len + 2.0,
-            len + 3.0,
-            len + 4.0,
-            len + 5.0,
-            len + 6.0,
-            len + 7.0,
-        ]
-    }
-
-    fn mock_image_embedding(&self, image_bytes: &[u8]) -> Vec<f32> {
-        let len = image_bytes.len() as f32;
-
-        vec![len, len * 0.5, len * 0.25, len * 0.125, 1.0, 2.0, 3.0, 4.0]
+    pub fn new(engine: Arc<dyn EmbeddingEngine>) -> Self {
+        Self { engine }
     }
 
     fn validate_text_request(&self, req: &EmbedTextRequest) -> Result<(), Status> {
@@ -42,17 +28,25 @@ impl SemanticServiceImpl {
         Ok(())
     }
 
-    fn validate_image_request(&self, req: &EmbedImageRequest) -> Result<(), Status> {
-        if req.image_bytes.is_empty() {
+
+    fn decode_rgb8_image(&self, image_bytes: &[u8]) -> Result<image::RgbImage, Status> {
+        if image_bytes.is_empty() {
             return Err(Status::invalid_argument("image_bytes must not be empty"));
         }
-        Ok(())
+
+        let image = image::load_from_memory(image_bytes)  
+            .map_err(|e| Status::invalid_argument(format!("failed to decode image: {e}")))?;
+
+        Ok(image.to_rgb8())
     }
+
 }
 
 #[tonic::async_trait]
 impl SemanticService for SemanticServiceImpl {
     async fn ping(&self, request: Request<PingRequest>) -> Result<Response<PingResponse>, Status> {
+        info!("[SemanticService]: received Ping request");
+
         let start = std::time::Instant::now();
 
         let inner = request.into_inner();
@@ -71,12 +65,16 @@ impl SemanticService for SemanticServiceImpl {
         &self,
         request: Request<EmbedTextRequest>,
     ) -> Result<Response<EmbeddingResponse>, Status> {
+        info!("[SemanticService]: received EmbedText request");
         let start = Instant::now();
         let req = request.into_inner();
 
         self.validate_text_request(&req)?;
 
-        let embedding = self.mock_text_embedding(&req.text);
+        let embedding = self
+            .engine
+            .embed_text(&req.text)
+            .map_err(|e| Status::internal(format!("failed to embed text: {e}")))?;
         let dimension = embedding.len() as u32;
 
         let response = EmbeddingResponse {
@@ -84,7 +82,7 @@ impl SemanticService for SemanticServiceImpl {
             embedding,
             dimension,
             model_name: if req.model_name.is_empty() {
-                "mock-text-v1".to_string()
+                self.engine.default_text_model_name().to_string()
             } else {
                 req.model_name
             },
@@ -98,12 +96,16 @@ impl SemanticService for SemanticServiceImpl {
         &self,
         request: Request<EmbedImageRequest>,
     ) -> Result<Response<EmbeddingResponse>, Status> {
+        info!("[SemanticService]: received EmbedImg request");
         let start = Instant::now();
         let req = request.into_inner();
 
-        self.validate_image_request(&req)?;
+        let rgb = self.decode_rgb8_image(&req.image_bytes)?;
 
-        let embedding = self.mock_image_embedding(&req.image_bytes);
+        let embedding = self
+            .engine
+            .embed_image(&rgb)
+            .map_err(|e| Status::internal(format!("failed to embed image: {e}")))?;
         let dimension = embedding.len() as u32;
 
         let response = EmbeddingResponse {
@@ -111,7 +113,7 @@ impl SemanticService for SemanticServiceImpl {
             embedding,
             dimension,
             model_name: if req.model_name.is_empty() {
-                "mock-image-v1".to_string()
+                self.engine.default_image_model_name().to_string()
             } else {
                 req.model_name
             },
