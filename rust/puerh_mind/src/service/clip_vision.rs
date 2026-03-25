@@ -337,6 +337,7 @@ pub struct LargeSmallConv {
     pub large_conv: ConvBn2d,
     pub small_conv: ConvBn2d,
     pub se: Option<SqueezeExcite>,
+    pub act: Activation,
 }
 
 impl LargeSmallConv {
@@ -373,6 +374,7 @@ impl LargeSmallConv {
             large_conv,
             small_conv,
             se,
+            act: Activation::Gelu,
         })
     }
 
@@ -385,7 +387,7 @@ impl LargeSmallConv {
             y = se.forward(&y)?;
         }
 
-        Ok(y)
+        self.act.forward(&y).map_err(Into::into)
     }
 }
 

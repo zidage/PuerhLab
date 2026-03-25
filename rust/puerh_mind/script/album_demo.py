@@ -4,6 +4,7 @@ import argparse
 import base64
 import json
 import math
+import os
 import shutil
 import signal
 import subprocess
@@ -30,24 +31,40 @@ CLIP_DEFAULT_CLASSES = [
 ]
 
 CLIP_PROMPT_TEMPLATES = [
-    "a photo of a {}.",
-    "a blurry photo of a {}.",
-    "a black and white photo of a {}.",
-    "a low contrast photo of a {}.",
-    "a high contrast photo of a {}.",
-    "a bad photo of a {}.",
-    "a good photo of a {}.",
-    "a photo of a small {}.",
-    "a photo of a big {}.",
-    "a photo of the {}.",
-    "a blurry photo of the {}.",
-    "a black and white photo of the {}.",
-    "a low contrast photo of the {}.",
-    "a high contrast photo of the {}.",
-    "a bad photo of the {}.",
-    "a good photo of the {}.",
-    "a photo of the small {}.",
-    "a photo of the big {}.",
+    'a photo of a {}.',
+    'a painting of a {}.',
+    'a plastic {}.',
+    'a sculpture of a {}.',
+    'a sketch of a {}.',
+    'a tattoo of a {}.',
+    'a toy {}.',
+    'a rendition of a {}.',
+    'a embroidered {}.',
+    'a cartoon {}.',
+    'a {} in a video game.',
+    'a plushie {}.',
+    'a origami {}.',
+    'art of a {}.',
+    'graffiti of a {}.',
+    'a drawing of a {}.',
+    'a doodle of a {}.',
+    'a photo of the {}.',
+    'a painting of the {}.',
+    'the plastic {}.',
+    'a sculpture of the {}.',
+    'a sketch of the {}.',
+    'a tattoo of the {}.',
+    'the toy {}.',
+    'a rendition of the {}.',
+    'the embroidered {}.',
+    'the cartoon {}.',
+    'the {} in a video game.',
+    'the plushie {}.',
+    'the origami {}.',
+    'art of the {}.',
+    'graffiti of the {}.',
+    'a drawing of the {}.',
+    'a doodle of the {}.',
 ]
 
 CLIP_CLASS_SYNONYMS = {
@@ -109,16 +126,17 @@ def average_normalized_embeddings(vectors):
 
 
 def grpc_call(address, method, payload):
+    payload_json = json.dumps(payload, ensure_ascii=False)
     cmd = [
         "grpcurl",
         "-plaintext",
         "-d",
-        json.dumps(payload, ensure_ascii=False),
+        "@",
         address,
         f"{SEMANTIC_SERVICE}/{method}",
     ]
 
-    proc = subprocess.run(cmd, capture_output=True, text=True)
+    proc = subprocess.run(cmd, input=payload_json, capture_output=True, text=True)
     if proc.returncode != 0:
         raise RuntimeError(
             f"grpcurl call failed for {method}\n"
@@ -134,9 +152,9 @@ def grpc_call(address, method, payload):
         ) from exc
 
 
-def wait_until_ready(address, timeout_sec=120):
-    deadline = time.time() + timeout_sec
-    while time.time() < deadline:
+def wait_until_ready(address, timeout_sec=None):
+    deadline = None if timeout_sec is None else time.time() + timeout_sec
+    while deadline is None or time.time() < deadline:
         try:
             grpc_call(
                 address,
@@ -149,15 +167,34 @@ def wait_until_ready(address, timeout_sec=120):
     return False
 
 
+def cargo_msvc_cmd(repo_root):
+    cmd_path = repo_root / "script" / "cargo_msvc.cmd"
+    if not cmd_path.exists():
+        raise RuntimeError(f"cargo wrapper not found: {cmd_path}")
+    return cmd_path
+
+
+def cargo_run_command(repo_root):
+    cargo_cmd = cargo_msvc_cmd(repo_root)
+    return [str(cargo_cmd), "run", "--release", "--features", "cuda"]
+
+
+def server_environment():
+    env = os.environ.copy()
+    env["PUERH_MIND_DEVICE"] = "cuda"
+    return env
+
+
 def start_server(repo_root, address):
     server_proc = subprocess.Popen(
-        ["cargo", "run", "--release"],
+        cargo_run_command(repo_root),
         cwd=repo_root,
+        env=server_environment(),
         stdout=None,
         stderr=None,
     )
 
-    ready = wait_until_ready(address)
+    ready = wait_until_ready(address, timeout_sec=None)
     if not ready:
         if server_proc.poll() is None:
             server_proc.terminate()
@@ -301,7 +338,15 @@ def decide_prediction(scores, min_score=0.20, min_margin=0.02):
 
 
 def ensure_dependencies():
-    missing = [binary for binary in ["cargo", "grpcurl"] if shutil.which(binary) is None]
+    repo_root = Path(__file__).resolve().parents[1]
+    cargo_cmd = cargo_msvc_cmd(repo_root)
+
+    missing = []
+    if not cargo_cmd.exists():
+        missing.append(str(cargo_cmd))
+    if shutil.which("grpcurl") is None:
+        missing.append("grpcurl")
+
     if missing:
         raise RuntimeError(
             "missing required tools: "
@@ -368,7 +413,10 @@ def main():
                 raise RuntimeError(f"server is not reachable at {address}")
             print(f"using existing server at {address}")
         else:
-            print(f"starting rust server with cargo run at {repo_root} ...")
+            print(
+                f"starting rust server with {' '.join(cargo_run_command(repo_root))} "
+                f"and PUERH_MIND_DEVICE=cuda at {repo_root} ..."
+            )
             server_proc, owns_server = start_server(repo_root, address)
             if owns_server:
                 print(f"server started at {address}")

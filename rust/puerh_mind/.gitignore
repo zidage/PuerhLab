@@ -23,3 +23,5 @@ target
 /models/
 
 /.venv/source
+
+/.pydeps/

@@ -2,6 +2,7 @@ use anyhow::{Result, bail};
 
 use candle_nn::VarBuilder;
 use tokenizers::Tokenizer;
+use tracing::{debug, info};
 
 use crate::config::SemanticConfig;
 
@@ -14,6 +15,7 @@ use crate::service::open_clip_config::OpenClipConfig;
 use crate::service::text_inputs::{TextBatch, TextTensors};
 
 use candle_core::Device;
+use candle_core::DeviceLocation;
 use candle_core::Tensor;
 
 pub struct CandleClipEngine {
@@ -25,17 +27,99 @@ pub struct CandleClipEngine {
     vision_model: ClipVisionModel,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DeviceRequest {
+    Auto,
+    Cpu,
+    Cuda(usize),
+    Metal(usize),
+}
+
 impl CandleClipEngine {
+    fn parse_device_request(value: &str) -> Result<DeviceRequest> {
+        let value = value.trim();
+        if value.is_empty() {
+            bail!(
+                "unsupported PUERH_MIND_DEVICE value {value:?}, expected \"auto\", \"cpu\", \"cuda\", \"cuda:N\", \"metal\", or \"metal:N\""
+            );
+        }
+
+        if value.eq_ignore_ascii_case("auto") {
+            return Ok(DeviceRequest::Auto);
+        }
+        if value.eq_ignore_ascii_case("cpu") {
+            return Ok(DeviceRequest::Cpu);
+        }
+        if let Some(ordinal) = Self::parse_device_ordinal(value, "cuda")? {
+            return Ok(DeviceRequest::Cuda(ordinal));
+        }
+        if let Some(ordinal) = Self::parse_device_ordinal(value, "metal")? {
+            return Ok(DeviceRequest::Metal(ordinal));
+        }
+
+        bail!(
+            "unsupported PUERH_MIND_DEVICE value {value:?}, expected \"auto\", \"cpu\", \"cuda\", \"cuda:N\", \"metal\", or \"metal:N\""
+        )
+    }
+
+    fn parse_device_ordinal(value: &str, backend: &str) -> Result<Option<usize>> {
+        if value.eq_ignore_ascii_case(backend) {
+            return Ok(Some(0));
+        }
+
+        let Some((prefix, ordinal)) = value.split_once(':') else {
+            return Ok(None);
+        };
+        if !prefix.eq_ignore_ascii_case(backend) {
+            return Ok(None);
+        }
+
+        let ordinal = ordinal.trim();
+        if ordinal.is_empty() {
+            bail!("missing device ordinal for backend {backend:?} in {value:?}");
+        }
+
+        let ordinal = ordinal
+            .parse::<usize>()
+            .map_err(|_| anyhow::anyhow!("invalid device ordinal {ordinal:?} in {value:?}"))?;
+
+        Ok(Some(ordinal))
+    }
+
+    fn initialize_device(request: DeviceRequest) -> Result<Device> {
+        match request {
+            DeviceRequest::Auto => Ok(Self::select_best_available_device()),
+            DeviceRequest::Cpu => Ok(Device::Cpu),
+            DeviceRequest::Cuda(ordinal) => Device::new_cuda(ordinal)
+                .map_err(|e| anyhow::anyhow!("failed to initialize cuda device {ordinal}: {e}")),
+            DeviceRequest::Metal(ordinal) => Device::new_metal(ordinal)
+                .map_err(|e| anyhow::anyhow!("failed to initialize metal device {ordinal}: {e}")),
+        }
+    }
+
+    fn select_best_available_device() -> Device {
+        for request in [DeviceRequest::Cuda(0), DeviceRequest::Metal(0)] {
+            match Self::initialize_device(request) {
+                Ok(device) => return device,
+                Err(err) => debug!("skipping device {request:?} during auto-selection: {err}"),
+            }
+        }
+
+        Device::Cpu
+    }
+
+    fn describe_device(device: &Device) -> String {
+        match device.location() {
+            DeviceLocation::Cpu => "cpu".to_string(),
+            DeviceLocation::Cuda { gpu_id } => format!("cuda:{gpu_id}"),
+            DeviceLocation::Metal { gpu_id } => format!("metal:{gpu_id}"),
+        }
+    }
+
     fn select_device() -> Result<Device> {
         match std::env::var("PUERH_MIND_DEVICE") {
-            Ok(value) if value.eq_ignore_ascii_case("cpu") => Ok(Device::Cpu),
-            Ok(value) if value.eq_ignore_ascii_case("metal") => Device::new_metal(0)
-                .map_err(|e| anyhow::anyhow!("failed to initialize metal device: {e}")),
-            Ok(value) => bail!(
-                "unsupported PUERH_MIND_DEVICE value {value:?}, expected \"cpu\" or \"metal\""
-            ),
-            Err(std::env::VarError::NotPresent) => Device::metal_if_available(0)
-                .map_err(|e| anyhow::anyhow!("failed to initialize preferred device: {e}")),
+            Ok(value) => Self::initialize_device(Self::parse_device_request(&value)?),
+            Err(std::env::VarError::NotPresent) => Ok(Self::select_best_available_device()),
             Err(err) => bail!("failed to read PUERH_MIND_DEVICE: {err}"),
         }
     }
@@ -48,6 +132,11 @@ impl CandleClipEngine {
         let tokenizer = Tokenizer::from_file(&model_paths.tokenizer_json)
             .map_err(|e| anyhow::anyhow!("failed to load tokenizer: {e}"))?;
         let device = Self::select_device()?;
+        info!(
+            "loading candle clip model {} on {}",
+            config.model_id,
+            Self::describe_device(&device)
+        );
 
         let vb = unsafe {
             VarBuilder::from_mmaped_safetensors(
@@ -324,6 +413,44 @@ mod tests {
     use crate::config::SemanticConfig;
     use image::ImageReader;
     use std::path::Path;
+
+    #[test]
+    fn parses_auto_device_request() {
+        assert_eq!(
+            CandleClipEngine::parse_device_request("auto").unwrap(),
+            DeviceRequest::Auto
+        );
+    }
+
+    #[test]
+    fn parses_cuda_device_request_with_default_ordinal() {
+        assert_eq!(
+            CandleClipEngine::parse_device_request("cuda").unwrap(),
+            DeviceRequest::Cuda(0)
+        );
+    }
+
+    #[test]
+    fn parses_cuda_device_request_with_explicit_ordinal() {
+        assert_eq!(
+            CandleClipEngine::parse_device_request("cuda:2").unwrap(),
+            DeviceRequest::Cuda(2)
+        );
+    }
+
+    #[test]
+    fn parses_metal_device_request_with_explicit_ordinal() {
+        assert_eq!(
+            CandleClipEngine::parse_device_request("metal:1").unwrap(),
+            DeviceRequest::Metal(1)
+        );
+    }
+
+    #[test]
+    fn rejects_invalid_device_request() {
+        let err = CandleClipEngine::parse_device_request("cuda:abc").unwrap_err();
+        assert!(err.to_string().contains("invalid device ordinal"));
+    }
 
     fn make_test_engine() -> CandleClipEngine {
         unsafe {

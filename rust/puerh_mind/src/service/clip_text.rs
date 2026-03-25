@@ -84,7 +84,7 @@ impl ClipTextModel {
         let mut x = self.embed_tokens(input_ids)?;
 
         for block in &self.blocks {
-            x = block.forward(&x)?;
+            x = block.forward(&x, None)?;
         }
 
         let x = self.ln_final.forward(&x)?; // all the way to [B, T, C]
@@ -243,7 +243,7 @@ impl MultiHeadAttention {
         Ok((q, k, v))
     }
 
-    pub fn forward(&self, x: &Tensor) -> anyhow::Result<Tensor> {
+    pub fn forward(&self, x: &Tensor, attn_mask: Option<&Tensor>) -> anyhow::Result<Tensor> {
         let (q, k, v) = self.project_qkv_heads(x)?; // [B, H, T, D]
         let (batch, num_heads, seq_len, head_dim) = q.dims4()?;
 
@@ -253,7 +253,11 @@ impl MultiHeadAttention {
 
         let attn = q.matmul(&k.transpose(1, 2)?)?; // [B*H, T, T]
         let scale = 1f64 / (head_dim as f64).sqrt();
-        let attn = attn.affine(scale, 0.0)?;
+        let mut attn = attn.affine(scale, 0.0)?;
+
+        if let Some(attn_mask) = attn_mask {
+            attn = attn.broadcast_add(attn_mask)?;
+        }
 
         let attn = softmax(&attn, candle_core::D::Minus1)?;
         let y = attn.matmul(&v)?; // [B*H, T, D]
@@ -306,15 +310,15 @@ impl ResidualAttentionBlock {
         })
     }
 
-    pub fn forward_attention(&self, x: &Tensor) -> anyhow::Result<Tensor> {
+    pub fn forward_attention(&self, x: &Tensor, attn_mask: Option<&Tensor>) -> anyhow::Result<Tensor> {
         let h = self.ln_1.forward(x)?;
-        let h = self.attn.forward(&h)?; // [B, T, C]
+        let h = self.attn.forward(&h, attn_mask)?; // [B, T, C]
         let y = x.broadcast_add(&h)?; // [B, T, C] + [B, T, C]
         Ok(y)
     }
 
-    pub fn forward(&self, x: &Tensor) -> anyhow::Result<Tensor> {
-        let x = self.forward_attention(x)?; // [B, T, C]
+    pub fn forward(&self, x: &Tensor, attn_mask: Option<&Tensor>) -> anyhow::Result<Tensor> {
+        let x = self.forward_attention(x, attn_mask)?; // [B, T, C]
         let h = self.ln_2.forward(&x)?; // [B, T, C]
         let h = self.mlp.forward(&h)?; // [B, T, C]
         let y = x.broadcast_add(&h)?; // [B, T, C]
@@ -503,7 +507,7 @@ mod tests {
 
         let y = text_model.blocks[0]
             .attn
-            .forward(&x)
+            .forward(&x, None)
             .expect("attention forward should succeed");
 
         assert_eq!(y.dims().to_vec(), vec![1, seq_len, width]);
@@ -521,7 +525,7 @@ mod tests {
             .expect("token embedding should succeed");
 
         let y = text_model.blocks[0]
-            .forward_attention(&x)
+            .forward_attention(&x, None)
             .expect("residual attention path should succeed");
 
         assert_eq!(y.dims().to_vec(), vec![1, seq_len, width]);
@@ -539,7 +543,7 @@ mod tests {
             .expect("token embedding should succeed");
 
         let y = text_model.blocks[0]
-            .forward(&x)
+            .forward(&x, None)
             .expect("full residual attention block should succeed");
 
         assert_eq!(y.dims().to_vec(), vec![1, seq_len, width]);
@@ -596,5 +600,50 @@ mod tests {
             .expect("batched text features should succeed");
 
         assert_eq!(feature.dims().to_vec(), vec![2, embed_dim]);
+    }
+
+    #[test]
+    fn photo_prompt_variants_do_not_collapse() {
+        let (open_clip_config, device, text_model) = load_test_model();
+        let seq_len = open_clip_config.model_cfg.text_cfg.context_length;
+        let prompts = vec![
+            vec![49406u32, 320, 1125, 539, 320, 1929, 269, 49407],
+            vec![49406u32, 320, 1125, 539, 320, 2368, 269, 49407],
+            vec![49406u32, 320, 1125, 539, 320, 1615, 269, 49407],
+        ];
+
+        let mut flat_ids = Vec::with_capacity(prompts.len() * seq_len);
+        for mut prompt in prompts {
+            prompt.resize(seq_len, 0);
+            flat_ids.extend(prompt);
+        }
+
+        let input_ids = Tensor::from_vec(flat_ids, (3, seq_len), &device)
+            .expect("input ids should build");
+
+        let features = text_model
+            .forward_text_feature(&input_ids)
+            .expect("text features should succeed")
+            .to_vec2::<f32>()
+            .expect("features should materialize");
+
+        fn cosine_similarity(left: &[f32], right: &[f32]) -> f32 {
+            let dot = left
+                .iter()
+                .zip(right.iter())
+                .map(|(lhs, rhs)| lhs * rhs)
+                .sum::<f32>();
+            let left_norm = left.iter().map(|value| value * value).sum::<f32>().sqrt();
+            let right_norm = right.iter().map(|value| value * value).sum::<f32>().sqrt();
+            dot / (left_norm * right_norm)
+        }
+
+        let dog_cat = cosine_similarity(&features[0], &features[1]);
+        let dog_car = cosine_similarity(&features[0], &features[2]);
+        let cat_car = cosine_similarity(&features[1], &features[2]);
+
+        assert!(dog_cat < 0.95, "dog vs cat prompt similarity was {dog_cat}");
+        assert!(dog_car < 0.95, "dog vs car prompt similarity was {dog_car}");
+        assert!(cat_car < 0.95, "cat vs car prompt similarity was {cat_car}");
     }
 }
