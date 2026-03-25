@@ -26,6 +26,20 @@ pub struct CandleClipEngine {
 }
 
 impl CandleClipEngine {
+    fn select_device() -> Result<Device> {
+        match std::env::var("PUERH_MIND_DEVICE") {
+            Ok(value) if value.eq_ignore_ascii_case("cpu") => Ok(Device::Cpu),
+            Ok(value) if value.eq_ignore_ascii_case("metal") => Device::new_metal(0)
+                .map_err(|e| anyhow::anyhow!("failed to initialize metal device: {e}")),
+            Ok(value) => bail!(
+                "unsupported PUERH_MIND_DEVICE value {value:?}, expected \"cpu\" or \"metal\""
+            ),
+            Err(std::env::VarError::NotPresent) => Device::metal_if_available(0)
+                .map_err(|e| anyhow::anyhow!("failed to initialize preferred device: {e}")),
+            Err(err) => bail!("failed to read PUERH_MIND_DEVICE: {err}"),
+        }
+    }
+
     pub fn new(config: &SemanticConfig) -> Result<Self> {
         let model_paths = ClipModelPaths::from_root(&config.model_dir);
         model_paths.validate()?;
@@ -33,7 +47,7 @@ impl CandleClipEngine {
         let open_clip_config = OpenClipConfig::load(&model_paths.config)?;
         let tokenizer = Tokenizer::from_file(&model_paths.tokenizer_json)
             .map_err(|e| anyhow::anyhow!("failed to load tokenizer: {e}"))?;
-        let device = Device::Cpu;
+        let device = Self::select_device()?;
 
         let vb = unsafe {
             VarBuilder::from_mmaped_safetensors(
@@ -65,27 +79,38 @@ impl CandleClipEngine {
         })
     }
 
-    fn prepare_text_input(&self, text: &str) -> Result<TextBatch> {
-        if text.trim().is_empty() {
-            bail!("text must not be empty");
+    fn prepare_text_batch(&self, texts: &[&str]) -> Result<TextBatch> {
+        if texts.is_empty() {
+            bail!("text batch must not be empty");
         }
 
-        let encoding = self
-            .tokenizer
-            .encode(text, true)
-            .map_err(|e| anyhow::anyhow!("failed to tokenize text {e}"))?;
-
-        let mut input_ids = encoding.get_ids().to_vec();
-        let mut attention_mask = encoding.get_attention_mask().to_vec();
-
         let max_len = self.open_clip_config.model_cfg.text_cfg.context_length;
+        let mut input_ids = Vec::with_capacity(texts.len());
+        let mut attention_mask = Vec::with_capacity(texts.len());
 
-        input_ids.truncate(max_len);
-        attention_mask.truncate(max_len);
+        for (index, text) in texts.iter().enumerate() {
+            if text.trim().is_empty() {
+                bail!("text at batch index {index} must not be empty");
+            }
 
-        while input_ids.len() < max_len {
-            input_ids.push(0);
-            attention_mask.push(0);
+            let encoding = self
+                .tokenizer
+                .encode(*text, true)
+                .map_err(|e| anyhow::anyhow!("failed to tokenize text: {e}"))?;
+
+            let mut row_input_ids = encoding.get_ids().to_vec();
+            let mut row_attention_mask = encoding.get_attention_mask().to_vec();
+
+            row_input_ids.truncate(max_len);
+            row_attention_mask.truncate(max_len);
+
+            while row_input_ids.len() < max_len {
+                row_input_ids.push(0);
+                row_attention_mask.push(0);
+            }
+
+            input_ids.push(row_input_ids);
+            attention_mask.push(row_attention_mask);
         }
 
         Ok(TextBatch {
@@ -94,16 +119,65 @@ impl CandleClipEngine {
         })
     }
 
+    fn prepare_text_input(&self, text: &str) -> Result<TextBatch> {
+        self.prepare_text_batch(&[text])
+    }
+
     fn text_batch_to_tensors(&self, batch: &TextBatch) -> anyhow::Result<TextTensors> {
+        if batch.input_ids.is_empty() {
+            anyhow::bail!("text batch must not be empty");
+        }
+        if batch.input_ids.len() != batch.attention_mask.len() {
+            anyhow::bail!(
+                "input_ids batch size {} did not match attention_mask batch size {}",
+                batch.input_ids.len(),
+                batch.attention_mask.len()
+            );
+        }
+
+        let batch_size = batch.input_ids.len();
+        let seq_len = batch.input_ids[0].len();
+        if seq_len == 0 {
+            anyhow::bail!("text batch sequence length must not be zero");
+        }
+
+        for (row_idx, row) in batch.input_ids.iter().enumerate() {
+            if row.len() != seq_len {
+                anyhow::bail!(
+                    "input_ids row {row_idx} had length {}, expected {seq_len}",
+                    row.len()
+                );
+            }
+        }
+
+        for (row_idx, row) in batch.attention_mask.iter().enumerate() {
+            if row.len() != seq_len {
+                anyhow::bail!(
+                    "attention_mask row {row_idx} had length {}, expected {seq_len}",
+                    row.len()
+                );
+            }
+        }
+
         let input_ids = Tensor::from_vec(
-            batch.input_ids.clone(),
-            (1, batch.input_ids.len()),
+            batch
+                .input_ids
+                .iter()
+                .flatten()
+                .copied()
+                .collect::<Vec<_>>(),
+            (batch_size, seq_len),
             &self.device,
         )?;
 
         let attention_mask = Tensor::from_vec(
-            batch.attention_mask.clone(),
-            (1, batch.attention_mask.len()),
+            batch
+                .attention_mask
+                .iter()
+                .flatten()
+                .copied()
+                .collect::<Vec<_>>(),
+            (batch_size, seq_len),
             &self.device,
         )?;
 
@@ -118,7 +192,16 @@ impl CandleClipEngine {
         self.text_batch_to_tensors(&batch)
     }
 
+    fn prepare_text_batch_tensors(&self, texts: &[&str]) -> anyhow::Result<TextTensors> {
+        let batch = self.prepare_text_batch(texts)?;
+        self.text_batch_to_tensors(&batch)
+    }
+
     fn l2_normalize(mut embedding: Vec<f32>) -> anyhow::Result<Vec<f32>> {
+        if embedding.iter().any(|v| !v.is_finite()) {
+            anyhow::bail!("embedding contains non-finite values");
+        }
+
         let norm = embedding
             .iter()
             .map(|v| (*v as f64) * (*v as f64))
@@ -136,15 +219,23 @@ impl CandleClipEngine {
         Ok(embedding)
     }
 
-    fn forward_text_embedding(&self, text: &str) -> anyhow::Result<Vec<f32>> {
-        let tensors = self.prepare_text_tensors(text)?;
+    pub fn forward_text_embeddings(&self, texts: &[&str]) -> anyhow::Result<Vec<Vec<f32>>> {
+        let tensors = self.prepare_text_batch_tensors(texts)?;
 
         let feature = self.text_model.forward_text_feature(&tensors.input_ids)?;
-        let mut rows = feature.to_vec2::<f32>()?;
-        if rows.len() != 1 {
-            anyhow::bail!("expected one text feature row, got {}", rows.len());
+        feature
+            .to_vec2::<f32>()?
+            .into_iter()
+            .map(Self::l2_normalize)
+            .collect()
+    }
+
+    fn forward_text_embedding(&self, text: &str) -> anyhow::Result<Vec<f32>> {
+        let mut embeddings = self.forward_text_embeddings(&[text])?;
+        if embeddings.len() != 1 {
+            anyhow::bail!("expected one text embedding row, got {}", embeddings.len());
         }
-        Ok(Self::l2_normalize(rows.remove(0))?)
+        Ok(embeddings.remove(0))
     }
 
     /* Image Part */
@@ -195,6 +286,18 @@ impl CandleClipEngine {
 
         Ok(tensor)
     }
+
+    fn forward_image_embedding(&self, rgb: &image::RgbImage) -> anyhow::Result<Vec<f32>> {
+        let image = self.prepare_image_tensor(rgb)?;
+
+        let feature = self.vision_model.forward(&image)?;
+        let mut rows = feature.to_vec2::<f32>()?;
+        if rows.len() != 1 {
+            anyhow::bail!("expected one image feature row, got {}", rows.len());
+        }
+
+        Self::l2_normalize(rows.remove(0))
+    }
 }
 
 impl EmbeddingEngine for CandleClipEngine {
@@ -202,10 +305,8 @@ impl EmbeddingEngine for CandleClipEngine {
         self.forward_text_embedding(text)
     }
 
-    fn embed_image(&self, _rgb: &image::RgbImage) -> Result<Vec<f32>> {
-        let image = self.prepare_image_tensor(_rgb)?;
-        let dims = image.dims().to_vec();
-        bail!("image tower is not implemented yet, prepared image tensor with shape {dims:?}")
+    fn embed_image(&self, rgb: &image::RgbImage) -> Result<Vec<f32>> {
+        self.forward_image_embedding(rgb)
     }
 
     fn default_text_model_name(&self) -> &str {
@@ -221,8 +322,13 @@ impl EmbeddingEngine for CandleClipEngine {
 mod tests {
     use super::*;
     use crate::config::SemanticConfig;
+    use image::ImageReader;
+    use std::path::Path;
 
     fn make_test_engine() -> CandleClipEngine {
+        unsafe {
+            std::env::set_var("PUERH_MIND_DEVICE", "cpu");
+        }
         let config = SemanticConfig {
             model_id: "timm/MobileCLIP2-S2-OpenCLIP".to_string(),
             model_dir: "./models/mobileclip2-s2-openclip".to_string(),
@@ -247,9 +353,11 @@ mod tests {
         let engine = make_test_engine();
         let batch = engine.prepare_text_input("a red tea cake").unwrap();
 
-        assert_eq!(batch.input_ids.len(), 77);
-        assert_eq!(batch.attention_mask.len(), 77);
-        assert!(batch.attention_mask.iter().any(|&v| v == 1));
+        assert_eq!(batch.input_ids.len(), 1);
+        assert_eq!(batch.attention_mask.len(), 1);
+        assert_eq!(batch.input_ids[0].len(), 77);
+        assert_eq!(batch.attention_mask[0].len(), 77);
+        assert!(batch.attention_mask[0].iter().any(|&v| v == 1));
     }
 
     #[test]
@@ -257,7 +365,10 @@ mod tests {
         let engine = make_test_engine();
         let err = engine.prepare_text_input("   ").unwrap_err();
 
-        assert!(err.to_string().contains("text must not be empty"));
+        assert!(
+            err.to_string()
+                .contains("text at batch index 0 must not be empty")
+        );
     }
 
     #[test]
@@ -266,8 +377,8 @@ mod tests {
         let long_text = "tea ".repeat(200);
         let batch = engine.prepare_text_input(&long_text).unwrap();
 
-        assert_eq!(batch.input_ids.len(), 77);
-        assert_eq!(batch.attention_mask.len(), 77);
+        assert_eq!(batch.input_ids[0].len(), 77);
+        assert_eq!(batch.attention_mask[0].len(), 77);
     }
 
     #[test]
@@ -277,6 +388,19 @@ mod tests {
 
         assert_eq!(tensors.input_ids.dims(), &[1, 77]);
         assert_eq!(tensors.attention_mask.dims(), &[1, 77]);
+        assert_eq!(tensors.input_ids.dtype(), candle_core::DType::U32);
+        assert_eq!(tensors.attention_mask.dtype(), candle_core::DType::U32);
+    }
+
+    #[test]
+    fn prepare_text_batch_tensors_returns_expected_shape() {
+        let engine = make_test_engine();
+        let tensors = engine
+            .prepare_text_batch_tensors(&["dog", "cat", "car"])
+            .unwrap();
+
+        assert_eq!(tensors.input_ids.dims(), &[3, 77]);
+        assert_eq!(tensors.attention_mask.dims(), &[3, 77]);
         assert_eq!(tensors.input_ids.dtype(), candle_core::DType::U32);
         assert_eq!(tensors.attention_mask.dtype(), candle_core::DType::U32);
     }
@@ -422,14 +546,164 @@ mod tests {
     }
 
     #[test]
-    fn embed_image_reaches_preprocessing_before_failing() {
+    fn embeds_image_with_clip_vision_model() {
         let engine = make_test_engine();
 
         let rgb = image::RgbImage::from_pixel(300, 200, image::Rgb([128, 64, 32]));
-        let err = engine.embed_image(&rgb).unwrap_err();
+        let embedding = engine
+            .embed_image(&rgb)
+            .expect("image embedding should succeed");
 
-        let message = err.to_string();
-        assert!(message.contains("image tower is not implemented yet"));
-        assert!(message.contains("[1, 3, 256, 256]"));
+        assert_eq!(embedding.len(), engine.open_clip_config.model_cfg.embed_dim);
+    }
+
+    #[test]
+    fn vision_forward_stages_remain_finite_for_image_input() {
+        let engine = make_test_engine();
+
+        let rgb = image::RgbImage::from_fn(300, 200, |x, y| {
+            image::Rgb([(x % 256) as u8, (y % 256) as u8, ((x + y) % 256) as u8])
+        });
+
+        fn tensor_is_finite(tensor: &Tensor) -> bool {
+            tensor
+                .flatten_all()
+                .unwrap()
+                .to_vec1::<f32>()
+                .unwrap()
+                .into_iter()
+                .all(|v| v.is_finite())
+        }
+
+        let x = engine
+            .prepare_image_tensor(&rgb)
+            .expect("image tensor should be prepared");
+        assert!(tensor_is_finite(&x), "prepared image tensor was not finite");
+
+        let x = engine
+            .vision_model
+            .forward_stem(&x)
+            .expect("stem should succeed");
+        assert!(tensor_is_finite(&x), "stem output was not finite");
+
+        let x = engine
+            .vision_model
+            .forward_stage0(&x)
+            .expect("stage0 should succeed");
+        assert!(tensor_is_finite(&x), "stage0 output was not finite");
+
+        let x = engine
+            .vision_model
+            .forward_stage1(&x)
+            .expect("stage1 should succeed");
+        assert!(tensor_is_finite(&x), "stage1 output was not finite");
+
+        let x = engine
+            .vision_model
+            .forward_stage2(&x)
+            .expect("stage2 should succeed");
+        assert!(tensor_is_finite(&x), "stage2 output was not finite");
+
+        let x = engine
+            .vision_model
+            .forward_stage3(&x)
+            .expect("stage3 should succeed");
+        assert!(tensor_is_finite(&x), "stage3 output was not finite");
+
+        let x = engine
+            .vision_model
+            .forward_final_conv(&x)
+            .expect("final conv should succeed");
+        assert!(tensor_is_finite(&x), "final conv output was not finite");
+
+        let x = engine
+            .vision_model
+            .forward_head(&x)
+            .expect("head should succeed");
+        assert!(tensor_is_finite(&x), "head output was not finite");
+    }
+
+    #[test]
+    fn normalizes_image_embedding_to_unit_length() {
+        let engine = make_test_engine();
+
+        let rgb = image::RgbImage::from_fn(300, 200, |x, y| {
+            image::Rgb([(x % 256) as u8, (y % 256) as u8, ((x + y) % 256) as u8])
+        });
+        let embedding = engine
+            .embed_image(&rgb)
+            .expect("image embedding should succeed");
+
+        let norm = embedding
+            .iter()
+            .map(|v| (*v as f64) * (*v as f64))
+            .sum::<f64>()
+            .sqrt();
+
+        assert!((norm - 1.0).abs() < 1e-3, "norm was {norm}");
+    }
+
+    #[test]
+    fn embeds_text_batch_with_clip_text_model() {
+        let engine = make_test_engine();
+
+        let embeddings = engine
+            .forward_text_embeddings(&["dog", "cat", "car"])
+            .expect("batched text embeddings should succeed");
+
+        assert_eq!(embeddings.len(), 3);
+        for embedding in embeddings {
+            assert_eq!(embedding.len(), engine.open_clip_config.model_cfg.embed_dim);
+
+            let norm = embedding
+                .iter()
+                .map(|v| (*v as f64) * (*v as f64))
+                .sum::<f64>()
+                .sqrt();
+
+            assert!((norm - 1.0).abs() < 1e-3, "norm was {norm}");
+        }
+    }
+
+    fn cosine_similarity(left: &[f32], right: &[f32]) -> f32 {
+        left.iter()
+            .zip(right.iter())
+            .map(|(lhs, rhs)| lhs * rhs)
+            .sum()
+    }
+
+    #[test]
+    fn dog_image_ranks_batched_text_tags() {
+        let engine = make_test_engine();
+        let image_path = Path::new("./testdata/dog.png");
+        let image = ImageReader::open(image_path)
+            .expect("dog test image should open")
+            .decode()
+            .expect("dog test image should decode")
+            .to_rgb8();
+
+        let image_embedding = engine
+            .embed_image(&image)
+            .expect("image embedding should succeed");
+
+        let labels = ["dog", "cat", "car"];
+        let text_embeddings = engine
+            .forward_text_embeddings(&labels)
+            .expect("batched text embeddings should succeed");
+
+        let mut scored_labels = labels
+            .iter()
+            .zip(text_embeddings.iter())
+            .map(|(label, embedding)| (*label, cosine_similarity(&image_embedding, embedding)))
+            .collect::<Vec<_>>();
+        scored_labels.sort_by(|(_, left), (_, right)| right.total_cmp(left));
+
+        let (best_label, best_score) = scored_labels[0];
+        let (_, worst_score) = scored_labels[scored_labels.len() - 1];
+
+        assert!(labels.contains(&best_label));
+        assert!(best_score.is_finite());
+        assert!(worst_score.is_finite());
+        assert!(best_score > worst_score);
     }
 }

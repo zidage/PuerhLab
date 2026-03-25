@@ -50,4 +50,3 @@ impl EmbeddingEngine for MockEmbeddingEngine {
         "mock-image-v1"
     }
 }
-

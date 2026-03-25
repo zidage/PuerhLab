@@ -91,34 +91,42 @@ impl ClipTextModel {
         Ok(x)
     }
 
-    fn select_eot_index(&self, input_ids: &Tensor) -> anyhow::Result<usize> {
-        // Get the largest token id
+    fn select_eot_indices(&self, input_ids: &Tensor) -> anyhow::Result<Vec<usize>> {
         let ids = input_ids.to_vec2::<u32>()?;
-        let row = &ids[0];
-
-        if ids.len() != 1 {
-            anyhow::bail!(
-                "forward_text_feature currently supports batch size 1, got {}",
-                ids.len()
-            );
+        if ids.is_empty() {
+            anyhow::bail!("input_ids batch is empty");
         }
 
-        let (index, _) = row
-            .iter()
-            .enumerate()
-            .max_by_key(|(_, token_id)| *token_id)
-            .ok_or_else(|| anyhow::anyhow!("input_ids row is empty"))?;
-
-        Ok(index)
+        ids.into_iter()
+            .map(|row| {
+                row.iter()
+                    .enumerate()
+                    .max_by_key(|(_, token_id)| *token_id)
+                    .map(|(index, _)| index)
+                    .ok_or_else(|| anyhow::anyhow!("input_ids row is empty"))
+            })
+            .collect()
     }
 
     pub fn forward_text_feature(&self, input_ids: &Tensor) -> anyhow::Result<Tensor> {
         let hidden = self.forward_hidden_states(input_ids)?;
-        let eot_index = self.select_eot_index(input_ids)?;
+        let eot_indices = self.select_eot_indices(input_ids)?;
 
-        let (_, _, width) = hidden.dims3()?;
-        let token_hidden = hidden.i((0, eot_index, ..))?;
-        let token_hidden = token_hidden.reshape((1, width))?;
+        let (batch_size, _, width) = hidden.dims3()?;
+        if eot_indices.len() != batch_size {
+            anyhow::bail!(
+                "eot index count {} did not match hidden batch size {batch_size}",
+                eot_indices.len()
+            );
+        }
+
+        let mut token_hidden_rows = Vec::with_capacity(batch_size);
+        for (batch_idx, eot_index) in eot_indices.into_iter().enumerate() {
+            let token_hidden = hidden.i((batch_idx, eot_index, ..))?;
+            token_hidden_rows.push(token_hidden.reshape((1, width))?);
+        }
+
+        let token_hidden = Tensor::cat(&token_hidden_rows, 0)?;
 
         let text_feature = token_hidden.matmul(&self.text_projection)?;
         Ok(text_feature)
@@ -237,17 +245,21 @@ impl MultiHeadAttention {
 
     pub fn forward(&self, x: &Tensor) -> anyhow::Result<Tensor> {
         let (q, k, v) = self.project_qkv_heads(x)?; // [B, H, T, D]
-        let k_t = k.transpose(2, 3)?; // [B, H, D, T]
-        let attn = q.matmul(&k_t)?; // [B, H, T, T]
-        let (_, _, _, head_dim) = q.dims4()?;
+        let (batch, num_heads, seq_len, head_dim) = q.dims4()?;
+
+        let q = q.reshape((batch * num_heads, seq_len, head_dim))?;
+        let k = k.reshape((batch * num_heads, seq_len, head_dim))?;
+        let v = v.reshape((batch * num_heads, seq_len, head_dim))?;
+
+        let attn = q.matmul(&k.transpose(1, 2)?)?; // [B*H, T, T]
         let scale = 1f64 / (head_dim as f64).sqrt();
         let attn = attn.affine(scale, 0.0)?;
 
         let attn = softmax(&attn, candle_core::D::Minus1)?;
-        let y = attn.matmul(&v)?; // [B, H, T, D]
+        let y = attn.matmul(&v)?; // [B*H, T, D]
+        let y = y.reshape((batch, num_heads, seq_len, head_dim))?;
         let y = y.transpose(1, 2)?; // [B, T, H, D]
 
-        let (batch, seq_len, num_heads, head_dim) = y.dims4()?;
         let y = y.reshape((batch, seq_len, num_heads * head_dim))?;
 
         let y = self.out_proj.forward(&y)?;
@@ -564,5 +576,25 @@ mod tests {
             .expect("text feature should succeed");
 
         assert_eq!(feature.dims().to_vec(), vec![1, embed_dim]);
+    }
+
+    #[test]
+    fn produces_batched_text_features_from_each_row_eot_position() {
+        let (open_clip_config, device, text_model) = load_test_model();
+        let seq_len = open_clip_config.model_cfg.text_cfg.context_length;
+        let embed_dim = open_clip_config.model_cfg.embed_dim;
+
+        let mut ids = vec![1u32; 2 * seq_len];
+        ids[5] = 49407;
+        ids[seq_len + 9] = 49407;
+
+        let input_ids =
+            Tensor::from_vec(ids, (2, seq_len), &device).expect("input ids should build");
+
+        let feature = text_model
+            .forward_text_feature(&input_ids)
+            .expect("batched text features should succeed");
+
+        assert_eq!(feature.dims().to_vec(), vec![2, embed_dim]);
     }
 }

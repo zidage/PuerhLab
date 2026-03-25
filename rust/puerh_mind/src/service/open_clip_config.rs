@@ -51,7 +51,6 @@ pub struct TextConfig {
     pub no_causal_mask: bool,
 }
 
-
 #[derive(Debug, Deserialize)]
 #[allow(dead_code)]
 pub struct PreprocessConfig {

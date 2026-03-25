@@ -4,14 +4,17 @@ use tonic::transport::Server;
 
 use crate::config::AppConfig;
 use crate::proto::common::health_service_server::HealthServiceServer;
-use crate::server::health::HealthServiceImpl;
 use crate::proto::semantic::semantic_service_server::SemanticServiceServer;
+use crate::server::health::HealthServiceImpl;
 use crate::server::semantic::SemanticServiceImpl;
 use crate::service::candle_clip::CandleClipEngine;
 
 const FILE_DESCRIPTOR_SET: &[u8] = tonic::include_file_descriptor_set!("semantic_descriptor");
 
-pub fn register_services(mut builder: Server, config: &AppConfig) -> anyhow::Result<tonic::transport::server::Router> {
+pub fn register_services(
+    mut builder: Server,
+    config: &AppConfig,
+) -> anyhow::Result<tonic::transport::server::Router> {
     let health_service = HealthServiceImpl;
     let semantic_engine = Arc::new(CandleClipEngine::new(&config.semantic)?);
     let semantic_service = SemanticServiceImpl::new(semantic_engine);

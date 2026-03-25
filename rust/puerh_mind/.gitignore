@@ -21,3 +21,5 @@ target
 #.idea/
 
 /models/
+
+/.venv/source

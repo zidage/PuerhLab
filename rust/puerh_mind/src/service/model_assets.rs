@@ -40,7 +40,10 @@ impl ClipModelPaths {
         }
 
         if !self.tokenizer_json.exists() {
-            bail!("missing tokenizer_json file: {}", self.tokenizer_json.display());
+            bail!(
+                "missing tokenizer_json file: {}",
+                self.tokenizer_json.display()
+            );
         }
 
         if !self.vocab.exists() {
@@ -52,7 +55,10 @@ impl ClipModelPaths {
         }
 
         if !self.tokenizer_config.exists() {
-            bail!("missing tokenizer_config file: {}", self.tokenizer_config.display());
+            bail!(
+                "missing tokenizer_config file: {}",
+                self.tokenizer_config.display()
+            );
         }
 
         Ok(())

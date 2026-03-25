@@ -1,7 +1,7 @@
 #[derive(Debug)]
 pub struct TextBatch {
-    pub input_ids: Vec<u32>,
-    pub attention_mask: Vec<u32>,
+    pub input_ids: Vec<Vec<u32>>,
+    pub attention_mask: Vec<Vec<u32>>,
 }
 
 use candle_core::Tensor;
