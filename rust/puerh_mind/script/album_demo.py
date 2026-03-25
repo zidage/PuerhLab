@@ -10,10 +10,58 @@ import subprocess
 import sys
 import time
 import uuid
+from collections import OrderedDict
 from pathlib import Path
 
 
 SEMANTIC_SERVICE = "semantic.SemanticService"
+
+CLIP_DEFAULT_CLASSES = [
+    "airplane",
+    "automobile",
+    "bird",
+    "cat",
+    "deer",
+    "dog",
+    "frog",
+    "horse",
+    "ship",
+    "truck",
+]
+
+CLIP_PROMPT_TEMPLATES = [
+    "a photo of a {}.",
+    "a blurry photo of a {}.",
+    "a black and white photo of a {}.",
+    "a low contrast photo of a {}.",
+    "a high contrast photo of a {}.",
+    "a bad photo of a {}.",
+    "a good photo of a {}.",
+    "a photo of a small {}.",
+    "a photo of a big {}.",
+    "a photo of the {}.",
+    "a blurry photo of the {}.",
+    "a black and white photo of the {}.",
+    "a low contrast photo of the {}.",
+    "a high contrast photo of the {}.",
+    "a bad photo of the {}.",
+    "a good photo of the {}.",
+    "a photo of the small {}.",
+    "a photo of the big {}.",
+]
+
+CLIP_CLASS_SYNONYMS = {
+    "airplane": ["airplane", "aeroplane", "jet", "aircraft"],
+    "automobile": ["automobile", "car", "sedan", "passenger car"],
+    "bird": ["bird", "wild bird", "small bird"],
+    "cat": ["cat", "kitten", "domestic cat", "house cat"],
+    "deer": ["deer", "stag", "doe"],
+    "dog": ["dog", "puppy", "canine", "pet dog"],
+    "frog": ["frog", "toad", "green frog"],
+    "horse": ["horse", "pony", "stallion"],
+    "ship": ["ship", "boat", "vessel"],
+    "truck": ["truck", "lorry", "pickup truck", "cargo truck"],
+}
 
 
 def cosine_similarity(vec_a, vec_b):
@@ -26,6 +74,38 @@ def cosine_similarity(vec_a, vec_b):
     if norm_a == 0 or norm_b == 0:
         return -1.0
     return dot / (norm_a * norm_b)
+
+
+def average_embeddings(vectors):
+    if not vectors:
+        raise ValueError("no embeddings to average")
+
+    dim = len(vectors[0])
+    for idx, vec in enumerate(vectors, start=1):
+        if len(vec) != dim:
+            raise ValueError(
+                f"embedding dimension mismatch in average: expected {dim}, got {len(vec)} at item {idx}"
+            )
+
+    summed = [0.0] * dim
+    for vec in vectors:
+        for i, value in enumerate(vec):
+            summed[i] += value
+
+    count = float(len(vectors))
+    return [value / count for value in summed]
+
+
+def l2_normalize(vector):
+    norm = math.sqrt(sum(value * value for value in vector))
+    if norm == 0.0:
+        raise ValueError("embedding norm is zero")
+    return [value / norm for value in vector]
+
+
+def average_normalized_embeddings(vectors):
+    normalized_vectors = [l2_normalize(vector) for vector in vectors]
+    return l2_normalize(average_embeddings(normalized_vectors))
 
 
 def grpc_call(address, method, payload):
@@ -71,7 +151,7 @@ def wait_until_ready(address, timeout_sec=120):
 
 def start_server(repo_root, address):
     server_proc = subprocess.Popen(
-        ["cargo", "run"],
+        ["cargo", "run", "--release"],
         cwd=repo_root,
         stdout=None,
         stderr=None,
@@ -129,12 +209,17 @@ def choose_image(images):
 
 
 def choose_labels():
-    print("\nExample labels: dog, cat, puppy")
+    print("\nCLIP default classes:")
+    print(", ".join(CLIP_DEFAULT_CLASSES))
+    print("Enter labels (comma-separated). Press Enter to use default classes.")
     while True:
         raw = input("Please enter candidate labels (comma-separated): ").strip()
+        if not raw:
+            return CLIP_DEFAULT_CLASSES.copy()
         labels = [item.strip() for item in raw.split(",") if item.strip()]
         if labels:
-            return labels
+            deduped = list(OrderedDict.fromkeys(labels))
+            return deduped
         print("Please enter at least one label")
 
 
@@ -157,19 +242,62 @@ def embed_text(address, text):
     return grpc_call(address, "EmbedText", payload)
 
 
+def embed_text_prompt_ensemble(address, label):
+    prompt_embeddings = []
+    for template in CLIP_PROMPT_TEMPLATES:
+        prompt = template.format(label)
+        txt_result = embed_text(address, prompt)
+        txt_embedding = txt_result.get("embedding", [])
+        if not txt_embedding:
+            raise RuntimeError(f"empty text embedding for prompt: {prompt}")
+        prompt_embeddings.append(txt_embedding)
+
+    return average_normalized_embeddings(prompt_embeddings)
+
+
+def embed_text_label_prototype(address, label):
+    synonyms = CLIP_CLASS_SYNONYMS.get(label.lower(), [label])
+    synonym_embeddings = []
+    for synonym in synonyms:
+        synonym_embedding = embed_text_prompt_ensemble(address, synonym)
+        synonym_embeddings.append(synonym_embedding)
+
+    return average_normalized_embeddings(synonym_embeddings)
+
+
 def classify_image_by_labels(address, image_path, labels):
     img_result = embed_image(address, image_path)
     img_embedding = img_result.get("embedding", [])
+    if not img_embedding:
+        raise RuntimeError("empty image embedding")
+    img_embedding = l2_normalize(img_embedding)
 
     scores = []
     for label in labels:
-        txt_result = embed_text(address, label)
-        txt_embedding = txt_result.get("embedding", [])
+        txt_embedding = embed_text_label_prototype(address, label)
         score = cosine_similarity(img_embedding, txt_embedding)
         scores.append((label, score))
 
     scores.sort(key=lambda item: item[1], reverse=True)
     return scores
+
+
+def decide_prediction(scores, min_score=0.20, min_margin=0.02):
+    if not scores:
+        raise RuntimeError("no score candidates")
+
+    best_label, best_score = scores[0]
+    second_score = scores[1][1] if len(scores) > 1 else -1.0
+    margin = best_score - second_score
+
+    confident = best_score >= min_score and margin >= min_margin
+    return {
+        "label": best_label,
+        "score": best_score,
+        "second_score": second_score,
+        "margin": margin,
+        "confident": confident,
+    }
 
 
 def ensure_dependencies():
@@ -198,6 +326,18 @@ def parse_args():
         "--no-spawn",
         action="store_true",
         help="do not spawn cargo run; use existing server",
+    )
+    parser.add_argument(
+        "--min-score",
+        default=0.20,
+        type=float,
+        help="minimum top-1 cosine score to accept prediction",
+    )
+    parser.add_argument(
+        "--min-margin",
+        default=0.02,
+        type=float,
+        help="minimum (top1-top2) margin to accept prediction",
     )
     return parser.parse_args()
 
@@ -245,9 +385,24 @@ def main():
         for idx, (label, score) in enumerate(scores, start=1):
             print(f"{idx}. {label:20s} score={score:.6f}")
 
-        best_label, best_score = scores[0]
+        decision = decide_prediction(
+            scores,
+            min_score=args.min_score,
+            min_margin=args.min_margin,
+        )
         print("\n=== Predicted Label ===")
-        print(f"image={image_path.name} -> label={best_label} (score={best_score:.6f})")
+        if decision["confident"]:
+            print(
+                f"image={image_path.name} -> label={decision['label']} "
+                f"(score={decision['score']:.6f}, margin={decision['margin']:.6f})"
+            )
+        else:
+            print(
+                f"image={image_path.name} -> uncertain "
+                f"(best={decision['label']}, score={decision['score']:.6f}, "
+                f"margin={decision['margin']:.6f}; "
+                f"thresholds: score>={args.min_score:.3f}, margin>={args.min_margin:.3f})"
+            )
 
     finally:
         if owns_server:
