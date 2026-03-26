@@ -10,11 +10,12 @@
 #include <vector_functions.h>
 
 #include "color_mgmt/disp_enc_funcs.cuh"
-#include "color_mgmt/open_drt_funcs.cuh"
 #include "color_mgmt/odt_funcs.cuh"
+#include "color_mgmt/open_drt_funcs.cuh"
 #include "color_mgmt/util_funcs.cuh"
 #include "edit/operators/op_kernel.hpp"
 #include "param.cuh"
+
 
 namespace puerhlab {
 namespace CUDA {
@@ -97,8 +98,8 @@ __device__ __forceinline__ float rgc_compress_curve(float dist, float lim, float
 // Reference: S-2014-003 ACEScc – A Quasi-Logarithmic Encoding of ACES Data
 __device__ __forceinline__ float acescc_encode(float x) {
   if (x <= 0.0f) {
-    // Negative and zero values map to the minimum ACEScc value
-    return (ACESCC_LOG2_DENORM + ACESCC_A) / ACESCC_B;
+    // Negative and zero values remains as they are
+    return x;
   } else if (x < ACESCC_DENORM_TRANS) {
     // Denormalized region: linear ramp to avoid log(0)
     return (log2f(ACESCC_DENORM_OFFSET + x * 0.5f) + ACESCC_A) / ACESCC_B;
@@ -116,7 +117,9 @@ __device__ __forceinline__ float acescc_decode(float acescc) {
 
   // acescc = fminf(acescc, 1.0f);  // Clamp to max value
 
-  if (acescc < denorm_threshold) {
+  if (acescc <= 0) {
+    return acescc;
+  } else if (acescc < denorm_threshold) {
     // Denormalized region
     float linear = (exp2f(acescc * ACESCC_B - ACESCC_A) - ACESCC_DENORM_OFFSET) * 2.0f;
     return linear;
@@ -148,7 +151,7 @@ __device__ __forceinline__ float gamma22_encode(float linear) {
  */
 struct GPU_TOWS_Kernel : GPUPointOpTag {
   __device__ __forceinline__ void operator()(float4* p, GPUOperatorParams& params) const {
-    float ap1_r, ap1_g, ap1_b;
+    float      ap1_r, ap1_g, ap1_b;
     const bool use_camera_to_ap1 =
         (params.raw_decode_input_space_ == 1) && params.color_temp_matrices_valid_;
     if (use_camera_to_ap1) {
@@ -206,7 +209,6 @@ struct GPU_LMT_Kernel : GPUPointOpTag {
   }
 };
 
-
 /**
  * GPU_OUTPUT_Kernel: RRT + ODT
  *
@@ -225,11 +227,11 @@ struct GPU_OUTPUT_Kernel : GPUPointOpTag {
       odt_color = OpenDRTTransform_fwd(aces_linear, params.to_output_params_.open_drt_params_);
     }
 
-    const float3 cv_3 = DisplayEncoding(
-        odt_color, params.to_output_params_.limit_to_display_matx, params.to_output_params_.eotf,
-        params.to_output_params_.display_linear_scale_);
+    const float3 cv_3 = DisplayEncoding(odt_color, params.to_output_params_.limit_to_display_matx,
+                                        params.to_output_params_.eotf,
+                                        params.to_output_params_.display_linear_scale_);
 
-    *p = make_float4(cv_3.x, cv_3.y, cv_3.z, p->w);
+    *p                = make_float4(cv_3.x, cv_3.y, cv_3.z, p->w);
   }
 };
 };  // namespace CUDA

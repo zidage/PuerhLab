@@ -64,7 +64,7 @@ auto ContrastOp::GetParams() const -> nlohmann::json {
 
 inline float contrast_k_from_slider(int v) // v in [-100,100]
 {
-    float s = std::max(-100, std::min(100, v)) / 100.0f; // [-1,1]
+    float s = std::max(-99, std::min(100, v)) / 100.0f; // [-1,1]
     s = s * fabsf(s);  // cubic-ish, center softer
     return 4.0f + 4.0f * s;
 }
