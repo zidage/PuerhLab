@@ -48,6 +48,12 @@ if(PUERHLAB_CUDA_ENABLED)
   add_executable(CudaImageGeometryOpsTest raw/cuda_image_geometry_ops_test.cpp)
   target_include_directories(CudaImageGeometryOpsTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
   target_link_libraries(CudaImageGeometryOpsTest PRIVATE GTest::gtest_main RawProcessorOp Operators ${PUERHLAB_TEST_OPENCV_MIN_DEPS})
+  gtest_discover_tests(CudaImageGeometryOpsTest TEST_PREFIX "CudaImageGeometryOpsTest.")
+
+  add_executable(CudaRawOpsTest raw/cuda_raw_ops_test.cpp)
+  target_include_directories(CudaRawOpsTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
+  target_link_libraries(CudaRawOpsTest PRIVATE GTest::gtest_main RawProcessorOp ${PUERHLAB_TEST_OPENCV_MIN_DEPS})
+  gtest_discover_tests(CudaRawOpsTest TEST_PREFIX "CudaRawOpsTest.")
 endif()
 
 if(PUERHLAB_METAL_ENABLED)

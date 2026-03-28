@@ -11,8 +11,7 @@
 
 namespace puerhlab {
 namespace CUDA {
-void HighlightReconstruct(cv::cuda::GpuMat& img, LibRaw& raw_processor,
-                          const BayerPattern2x2& pattern);
+void HighlightReconstruct(cv::cuda::GpuMat& img, LibRaw& raw_processor);
 void Clamp01(cv::cuda::GpuMat& img);
 };  // namespace CUDA
 };  // namespace puerhlab

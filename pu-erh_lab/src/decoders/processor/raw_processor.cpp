@@ -261,6 +261,18 @@ void RawProcessor::ApplyHighlightReconstruct() {
   if (params_.gpu_backend_ == RawGpuBackend::GPU) {
 #ifdef HAVE_CUDA
     auto& gpu_img = process_buffer_.GetCUDAImage();
+    if (gpu_img.type() == CV_32FC3) {
+      if (!params_.highlights_reconstruct_) {
+        CUDA::Clamp01(gpu_img);
+        return;
+      }
+      CUDA::HighlightReconstruct(gpu_img, raw_processor_);
+      return;
+    }
+    if (gpu_img.type() != CV_32FC1) {
+      throw std::runtime_error("RawProcessor: CUDA highlight reconstruction expects CV_32FC1 "
+                               "raw input or CV_32FC3 debayered RGB input.");
+    }
     if (cfa_pattern_.kind == RawCfaKind::XTrans6x6) {
       CUDA::Clamp01(gpu_img);
       return;
@@ -269,8 +281,8 @@ void RawProcessor::ApplyHighlightReconstruct() {
       CUDA::Clamp01(gpu_img);
       return;
     }
-    CUDA::HighlightReconstruct(gpu_img, raw_processor_, cfa_pattern_.bayer_pattern);
-    return;
+    throw std::runtime_error("RawProcessor: CUDA Bayer highlight reconstruction must run after "
+                             "debayering.");
 #elif defined(HAVE_METAL)
     auto& gpu_img = process_buffer_.GetMetalImage();
     if (cfa_pattern_.kind == RawCfaKind::XTrans6x6) {
@@ -470,8 +482,13 @@ auto RawProcessor::Process() -> ImageBuffer {
     process_buffer_.SyncToGPU();
 
     ApplyLinearization();
-    ApplyHighlightReconstruct();
-    ApplyDebayer();
+    if (cfa_pattern_.kind == RawCfaKind::Bayer2x2 && params_.highlights_reconstruct_) {
+      ApplyDebayer();
+      ApplyHighlightReconstruct();
+    } else {
+      ApplyHighlightReconstruct();
+      ApplyDebayer();
+    }
     ConvertToWorkingSpace();
 
     // Ensure GPU buffer is CV_32FC4 (RGBA float32).

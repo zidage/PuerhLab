@@ -12,6 +12,7 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <stdexcept>
 
 #include "decoders/processor/operators/gpu/cuda_raw_proc_utils.hpp"
 
@@ -19,284 +20,374 @@ namespace puerhlab {
 namespace CUDA {
 namespace {
 
-constexpr float kHilightMagic = 0.987f;  // default value from darktable
-constexpr float kHLPowerF     = 3.0f;
-constexpr float kInvHLPowerF  = 1.0f / kHLPowerF;
+constexpr float kHilightMagic   = 0.987f;
+constexpr int   kDilateRadius   = 3;
+constexpr int   kNeutralRadius  = 2;
+constexpr int   kMaskPlanes     = 8;
+constexpr int   kPlaneBaseR     = 0;
+constexpr int   kPlaneBaseG     = 1;
+constexpr int   kPlaneBaseB     = 2;
+constexpr int   kPlaneDilatedR  = 3;
+constexpr int   kPlaneDilatedG  = 4;
+constexpr int   kPlaneDilatedB  = 5;
+constexpr int   kPlaneBaseMulti = 6;
+constexpr int   kPlaneDilMulti  = 7;
 
 struct HighlightCorrectionParams {
-  float correction[4];
+  float clips[4];
+  float clipdark[4];
   float chrominance[4];
 };
 
-__device__ __forceinline__ int FC(const BayerPattern2x2& pattern, const int y, const int x) {
-  return pattern.rgb_fc[BayerCellIndex(y, x)];
+__device__ __forceinline__ float Cube(const float value) { return value * value * value; }
+
+__device__ __forceinline__ float3 ClampRgb(const float3& value) {
+  return make_float3(fminf(1.0f, fmaxf(0.0f, value.x)), fminf(1.0f, fmaxf(0.0f, value.y)),
+                     fminf(1.0f, fmaxf(0.0f, value.z)));
 }
 
-__device__ __forceinline__ int RawToCmap(const int m_width, const int row, const int col) {
-  return (row / 3) * m_width + (col / 3);
+__device__ __forceinline__ float3 MaxRgb(const float3& value) {
+  return make_float3(fmaxf(0.0f, value.x), fmaxf(0.0f, value.y), fmaxf(0.0f, value.z));
 }
 
-__device__ __forceinline__ uint8_t MaskDilate(const uint8_t* in, const int w1) {
-  if (in[0]) return 1;
+__device__ __forceinline__ float3 CalcRefavg(const cv::cuda::PtrStepSz<float3> input, const int row,
+                                             const int col) {
+  float mean[3] = {0.0f, 0.0f, 0.0f};
+  float cnt[3]  = {0.0f, 0.0f, 0.0f};
 
-  if (in[-w1 - 1] | in[-w1] | in[-w1 + 1] | in[-1] | in[1] | in[w1 - 1] | in[w1] | in[w1 + 1])
-    return 1;
+  const int dymin = max(0, row - 1);
+  const int dxmin = max(0, col - 1);
+  const int dymax = min(input.rows - 1, row + 1);
+  const int dxmax = min(input.cols - 1, col + 1);
 
-  const int w2 = 2 * w1;
-  const int w3 = 3 * w1;
-  return (in[-w3 - 2] | in[-w3 - 1] | in[-w3] | in[-w3 + 1] | in[-w3 + 2] | in[-w2 - 3] |
-          in[-w2 - 2] | in[-w2 - 1] | in[-w2] | in[-w2 + 1] | in[-w2 + 2] | in[-w2 + 3] |
-          in[-w1 - 3] | in[-w1 - 2] | in[-w1 + 2] | in[-w1 + 3] | in[-3] | in[-2] | in[2] | in[3] |
-          in[w1 - 3] | in[w1 - 2] | in[w1 + 2] | in[w1 + 3] | in[w2 - 3] | in[w2 - 2] | in[w2 - 1] |
-          in[w2] | in[w2 + 1] | in[w2 + 2] | in[w2 + 3] | in[w3 - 2] | in[w3 - 1] | in[w3] |
-          in[w3 + 1] | in[w3 + 2])
-             ? 1
-             : 0;
-}
-
-__device__ __forceinline__ float CalcRefavg(const cv::cuda::PtrStep<float> in, const int row,
-                                            const int col, const int height, const int width,
-                                            const float* correction,
-                                            const BayerPattern2x2& pattern) {
-  const int color = FC(pattern, row, col);
-  float     mean[3] = {0.0f, 0.0f, 0.0f};
-  float     cnt[3]  = {0.0f, 0.0f, 0.0f};
-
-  const int dymin = (row > 0) ? (row - 1) : 0;
-  const int dxmin = (col > 0) ? (col - 1) : 0;
-  const int dymax = (row + 2 < height - 1) ? (row + 2) : (height - 1);
-  const int dxmax = (col + 2 < width - 1) ? (col + 2) : (width - 1);
-
-  for (int dy = dymin; dy < dymax; ++dy) {
-    for (int dx = dxmin; dx < dxmax; ++dx) {
-      const float val = fmaxf(0.0f, in(dy, dx));
-      const int   c   = FC(pattern, dy, dx);
-      mean[c] += val;
-      cnt[c] += 1.0f;
+  for (int dy = dymin; dy <= dymax; ++dy) {
+    const float3* row_ptr = input.ptr(dy);
+    for (int dx = dxmin; dx <= dxmax; ++dx) {
+      const float3 sample = MaxRgb(row_ptr[dx]);
+      mean[0] += sample.x;
+      mean[1] += sample.y;
+      mean[2] += sample.z;
+      cnt[0] += 1.0f;
+      cnt[1] += 1.0f;
+      cnt[2] += 1.0f;
     }
   }
 
   for (int c = 0; c < 3; ++c) {
-    mean[c] = (cnt[c] > 0.0f) ? powf(correction[c] * mean[c] / cnt[c], kInvHLPowerF) : 0.0f;
+    mean[c] = (cnt[c] > 0.0f) ? cbrtf(mean[c] / cnt[c]) : 0.0f;
   }
 
-  const float croot_refavg[3] = {0.5f * (mean[1] + mean[2]), 0.5f * (mean[0] + mean[2]),
-                                 0.5f * (mean[0] + mean[1])};
-  return powf(croot_refavg[color], kHLPowerF);
+  return make_float3(Cube(0.5f * (mean[1] + mean[2])), Cube(0.5f * (mean[0] + mean[2])),
+                     Cube(0.5f * (mean[0] + mean[1])));
 }
 
-__global__ void Clamp01Kernel(cv::cuda::PtrStep<float> img, int width, int height) {
-  const int col = blockIdx.x * blockDim.x + threadIdx.x;
-  const int row = blockIdx.y * blockDim.y + threadIdx.y;
-  if (col >= width || row >= height) return;
+__device__ __forceinline__ uint8_t DilateMaskAt(const uint8_t* plane, const int width,
+                                                const int height, const int row, const int col,
+                                                const int radius) {
+  const int y0 = max(0, row - radius);
+  const int x0 = max(0, col - radius);
+  const int y1 = min(height - 1, row + radius);
+  const int x1 = min(width - 1, col + radius);
 
-  const float v = img(row, col);
-  img(row, col) = fminf(1.0f, fmaxf(0.0f, v));
-}
-
-__global__ void BuildMaskKernel(cv::cuda::PtrStep<float> input, int width, int height,
-                                uint8_t* mask_buf, int m_width, int m_height, int m_size,
-                                float clip_val, int* anyclipped, BayerPattern2x2 pattern) {
-  const int col = blockIdx.x * blockDim.x + threadIdx.x;
-  const int row = blockIdx.y * blockDim.y + threadIdx.y;
-
-  if (col >= m_width || row >= m_height) return;
-  if (col < 1 || col >= m_width - 1 || row < 1 || row >= m_height - 1) return;
-
-  char mbuff[3] = {0, 0, 0};
-  const int base_raw_y = 3 * row;
-  const int base_raw_x = 3 * col;
-
-  for (int y = -1; y <= 1; ++y) {
-    for (int x = -1; x <= 1; ++x) {
-      const int raw_y = base_raw_y + y;
-      const int raw_x = base_raw_x + x;
-
-      // Mirror CPU behavior: no explicit bounds check (ranges are constructed to be safe).
-      const float val     = input(raw_y, raw_x);
-      const int   color   = FC(pattern, row + y, col + x);
-      const char  clipped = (val >= clip_val) ? 1 : 0;
-      mbuff[color] += clipped;
+  for (int y = y0; y <= y1; ++y) {
+    const int row_offset = y * width;
+    for (int x = x0; x <= x1; ++x) {
+      if (plane[row_offset + x] != 0) {
+        return 1;
+      }
     }
   }
 
-  const int idx = row * m_width + col;
-  for (int c = 0; c < 3; ++c) {
-    if (mbuff[c]) {
-      mask_buf[c * m_size + idx] = 1;
-      atomicExch(anyclipped, 1);
+  return 0;
+}
+
+__device__ __forceinline__ int CountClippedChannels(const float3& pixel, const float* clips) {
+  int count = 0;
+  count += pixel.x >= clips[0] ? 1 : 0;
+  count += pixel.y >= clips[1] ? 1 : 0;
+  count += pixel.z >= clips[2] ? 1 : 0;
+  return count;
+}
+
+__device__ __forceinline__ float LocalNeutralTarget(const cv::cuda::PtrStepSz<float3> input,
+                                                    const uint8_t* multi_mask, const int row,
+                                                    const int col) {
+  const int y0 = max(0, row - kNeutralRadius);
+  const int x0 = max(0, col - kNeutralRadius);
+  const int y1 = min(input.rows - 1, row + kNeutralRadius);
+  const int x1 = min(input.cols - 1, col + kNeutralRadius);
+
+  float neutral_sum = 0.0f;
+  float neutral_cnt = 0.0f;
+  for (int y = y0; y <= y1; ++y) {
+    const float3* row_ptr = input.ptr(y);
+    const int     row_off = y * input.cols;
+    for (int x = x0; x <= x1; ++x) {
+      if (multi_mask[row_off + x] == 0) {
+        continue;
+      }
+      const float3 sample = MaxRgb(row_ptr[x]);
+      neutral_sum += fmaxf(sample.x, fmaxf(sample.y, sample.z));
+      neutral_cnt += 1.0f;
     }
   }
+
+  if (neutral_cnt > 0.0f) {
+    return neutral_sum / neutral_cnt;
+  }
+
+  const float3 current = MaxRgb(input.ptr(row)[col]);
+  return fmaxf(current.x, fmaxf(current.y, current.z));
 }
 
-__global__ void DilateMaskKernel(uint8_t* mask_buf, int m_width, int m_height, int m_size) {
+__global__ void Clamp01KernelGray(cv::cuda::PtrStep<float> img, const int width, const int height) {
   const int col = blockIdx.x * blockDim.x + threadIdx.x;
   const int row = blockIdx.y * blockDim.y + threadIdx.y;
+  if (col >= width || row >= height) {
+    return;
+  }
 
-  if (col >= m_width || row >= m_height) return;
-  if (col < 3 || col >= m_width - 3 || row < 3 || row >= m_height - 3) return;
-
-  const int idx = row * m_width + col;
-  mask_buf[3 * m_size + idx] = MaskDilate(mask_buf + 0 * m_size + idx, m_width);
-  mask_buf[4 * m_size + idx] = MaskDilate(mask_buf + 1 * m_size + idx, m_width);
-  mask_buf[5 * m_size + idx] = MaskDilate(mask_buf + 2 * m_size + idx, m_width);
+  img(row, col) = fminf(1.0f, fmaxf(0.0f, img(row, col)));
 }
 
-__global__ void ChrominanceAccumulateKernel(cv::cuda::PtrStep<float> input, int width, int height,
-                                            const uint8_t* mask_buf, int m_width, int m_size,
-                                            float clip_val, float lo_clip_val, float* sums,
-                                            float* cnts, HighlightCorrectionParams hl_params,
-                                            BayerPattern2x2 pattern) {
+__global__ void Clamp01KernelRgb(cv::cuda::PtrStepSz<float3> img) {
   const int col = blockIdx.x * blockDim.x + threadIdx.x;
   const int row = blockIdx.y * blockDim.y + threadIdx.y;
+  if (col >= img.cols || row >= img.rows) {
+    return;
+  }
 
-  if (col >= width || row >= height) return;
-  if (col < 3 || col >= width - 3 || row < 3 || row >= height - 3) return;
+  img.ptr(row)[col] = ClampRgb(img.ptr(row)[col]);
+}
 
-  const int   color = FC(pattern, row, col);
-  const float inval = input(row, col);
+__global__ void BuildMaskKernel(const cv::cuda::PtrStepSz<float3> input, uint8_t* mask_buf,
+                                int* anyclipped, HighlightCorrectionParams params) {
+  const int col = blockIdx.x * blockDim.x + threadIdx.x;
+  const int row = blockIdx.y * blockDim.y + threadIdx.y;
+  if (col >= input.cols || row >= input.rows) {
+    return;
+  }
 
-  if ((inval < clip_val) && (inval > lo_clip_val) &&
-      mask_buf[(color + 3) * m_size + RawToCmap(m_width, row, col)]) {
-    const float ref = CalcRefavg(input, row, col, height, width, hl_params.correction, pattern);
-    atomicAdd(&sums[color], inval - ref);
-    atomicAdd(&cnts[color], 1.0f);
+  const int    idx   = row * input.cols + col;
+  const float3 pixel = MaxRgb(input.ptr(row)[col]);
+  const int    count = CountClippedChannels(pixel, params.clips);
+
+  mask_buf[kPlaneBaseR * input.rows * input.cols + idx] = pixel.x >= params.clips[0] ? 1 : 0;
+  mask_buf[kPlaneBaseG * input.rows * input.cols + idx] = pixel.y >= params.clips[1] ? 1 : 0;
+  mask_buf[kPlaneBaseB * input.rows * input.cols + idx] = pixel.z >= params.clips[2] ? 1 : 0;
+  mask_buf[kPlaneBaseMulti * input.rows * input.cols + idx] = count >= 2 ? 1 : 0;
+
+  if (count > 0) {
+    atomicExch(anyclipped, 1);
   }
 }
 
-__global__ void HighlightReconstructKernel(cv::cuda::PtrStep<float> input, cv::cuda::PtrStep<float> out,
-                                           int width, int height, float clip_val,
-                                           HighlightCorrectionParams hl_params,
-                                           BayerPattern2x2 pattern) {
+__global__ void DilateMaskKernel(const uint8_t* mask_buf, uint8_t* dilated_mask_buf, const int width,
+                                 const int height) {
   const int col = blockIdx.x * blockDim.x + threadIdx.x;
   const int row = blockIdx.y * blockDim.y + threadIdx.y;
+  if (col >= width || row >= height) {
+    return;
+  }
 
-  if (col >= width || row >= height) return;
+  const int size = width * height;
+  const int idx  = row * width + col;
+  dilated_mask_buf[kPlaneDilatedR * size + idx] =
+      DilateMaskAt(mask_buf + kPlaneBaseR * size, width, height, row, col, kDilateRadius);
+  dilated_mask_buf[kPlaneDilatedG * size + idx] =
+      DilateMaskAt(mask_buf + kPlaneBaseG * size, width, height, row, col, kDilateRadius);
+  dilated_mask_buf[kPlaneDilatedB * size + idx] =
+      DilateMaskAt(mask_buf + kPlaneBaseB * size, width, height, row, col, kDilateRadius);
+  dilated_mask_buf[kPlaneDilMulti * size + idx] =
+      DilateMaskAt(mask_buf + kPlaneBaseMulti * size, width, height, row, col, kDilateRadius);
+}
 
-  const int   color = FC(pattern, row, col);
-  const float inval = fmaxf(0.0f, input(row, col));
+__global__ void ChrominanceAccumulateKernel(const cv::cuda::PtrStepSz<float3> input,
+                                            const uint8_t* dilated_mask_buf, float* sums,
+                                            float* cnts, HighlightCorrectionParams params) {
+  const int col = blockIdx.x * blockDim.x + threadIdx.x;
+  const int row = blockIdx.y * blockDim.y + threadIdx.y;
+  if (col >= input.cols || row >= input.rows) {
+    return;
+  }
 
-  if (inval >= clip_val) {
-    const float ref = CalcRefavg(input, row, col, height, width, hl_params.correction, pattern);
-    out(row, col)   = fmaxf(inval, ref + hl_params.chrominance[color]);
-  } else {
-    out(row, col) = inval;
+  const int    size  = input.rows * input.cols;
+  const int    idx   = row * input.cols + col;
+  const float3 pixel = MaxRgb(input.ptr(row)[col]);
+  const float3 ref   = CalcRefavg(input, row, col);
+
+  if (dilated_mask_buf[kPlaneDilatedR * size + idx] && pixel.x > params.clipdark[0] &&
+      pixel.x < params.clips[0]) {
+    atomicAdd(&sums[0], pixel.x - ref.x);
+    atomicAdd(&cnts[0], 1.0f);
+  }
+  if (dilated_mask_buf[kPlaneDilatedG * size + idx] && pixel.y > params.clipdark[1] &&
+      pixel.y < params.clips[1]) {
+    atomicAdd(&sums[1], pixel.y - ref.y);
+    atomicAdd(&cnts[1], 1.0f);
+  }
+  if (dilated_mask_buf[kPlaneDilatedB * size + idx] && pixel.z > params.clipdark[2] &&
+      pixel.z < params.clips[2]) {
+    atomicAdd(&sums[2], pixel.z - ref.z);
+    atomicAdd(&cnts[2], 1.0f);
   }
 }
 
-static int RoundSize(const int size, const int alignment) {
-  return ((size % alignment) == 0) ? size : ((size - 1) / alignment + 1) * alignment;
+__global__ void HighlightReconstructKernel(const cv::cuda::PtrStepSz<float3> input,
+                                           cv::cuda::PtrStepSz<float3> output,
+                                           const uint8_t* dilated_mask_buf,
+                                           HighlightCorrectionParams params) {
+  const int col = blockIdx.x * blockDim.x + threadIdx.x;
+  const int row = blockIdx.y * blockDim.y + threadIdx.y;
+  if (col >= input.cols || row >= input.rows) {
+    return;
+  }
+
+  const int    size  = input.rows * input.cols;
+  const float3 pixel = MaxRgb(input.ptr(row)[col]);
+  const int    count = CountClippedChannels(pixel, params.clips);
+
+  if (count == 0) {
+    output.ptr(row)[col] = pixel;
+    return;
+  }
+
+  float3 result = pixel;
+  const float3 ref = CalcRefavg(input, row, col);
+
+  if (pixel.x >= params.clips[0]) {
+    result.x = fmaxf(pixel.x, ref.x + params.chrominance[0]);
+  }
+  if (pixel.y >= params.clips[1]) {
+    result.y = fmaxf(pixel.y, ref.y + params.chrominance[1]);
+  }
+  if (pixel.z >= params.clips[2]) {
+    result.z = fmaxf(pixel.z, ref.z + params.chrominance[2]);
+  }
+
+  // if (count >= 2) {
+  //   const float neutral =
+  //       LocalNeutralTarget(input, dilated_mask_buf + kPlaneDilMulti * size, row, col);
+  //   if (count == 3) {
+  //     result = make_float3(neutral, neutral, neutral);
+  //   } else {
+  //     constexpr float kDesatBlend = 0.5f;
+  //     result.x = result.x * (1.0f - kDesatBlend) + neutral * kDesatBlend;
+  //     result.y = result.y * (1.0f - kDesatBlend) + neutral * kDesatBlend;
+  //     result.z = result.z * (1.0f - kDesatBlend) + neutral * kDesatBlend;
+  //   }
+  // }
+
+  output.ptr(row)[col] = result;
 }
 
 }  // namespace
 
 void Clamp01(cv::cuda::GpuMat& img) {
-  CV_Assert(img.type() == CV_32FC1);
+  if (img.type() != CV_32FC1 && img.type() != CV_32FC3) {
+    throw std::runtime_error("CUDA::Clamp01: only CV_32FC1/CV_32FC3 are supported");
+  }
 
-  const dim3 threads(32, 32);
+  const dim3 threads(32, 8);
   const dim3 blocks((img.cols + threads.x - 1) / threads.x, (img.rows + threads.y - 1) / threads.y);
-  Clamp01Kernel<<<blocks, threads>>>(img, img.cols, img.rows);
+
+  if (img.type() == CV_32FC1) {
+    Clamp01KernelGray<<<blocks, threads>>>(img, img.cols, img.rows);
+  } else {
+    Clamp01KernelRgb<<<blocks, threads>>>(img);
+  }
+
   CUDA_CHECK(cudaGetLastError());
   CUDA_CHECK(cudaDeviceSynchronize());
 }
 
-void HighlightReconstruct(cv::cuda::GpuMat& img, LibRaw& raw_processor,
-                          const BayerPattern2x2& pattern) {
-  CV_Assert(img.type() == CV_32FC1);
+void HighlightReconstruct(cv::cuda::GpuMat& img, LibRaw& raw_processor) {
+  CV_Assert(img.type() == CV_32FC3);
 
   const int width  = img.cols;
   const int height = img.rows;
+  if (width == 0 || height == 0) {
+    return;
+  }
 
   const float* cam_mul = raw_processor.imgdata.color.cam_mul;
-  HighlightCorrectionParams hl_params = {};
-  hl_params.correction[0] = cam_mul[0] / cam_mul[1];
-  hl_params.correction[1] = 1.0f;
-  hl_params.correction[2] = cam_mul[2] / cam_mul[1];
-  hl_params.correction[3] = 0.0f;
+  const float  green   = std::max(cam_mul[1], 1e-6f);
 
-  const float clip_val = kHilightMagic;
+  HighlightCorrectionParams params = {};
+  params.clips[0]                  = kHilightMagic * (cam_mul[0] / green);
+  params.clips[1]                  = kHilightMagic;
+  params.clips[2]                  = kHilightMagic * (cam_mul[2] / green);
+  params.clipdark[0]               = 0.03f * params.clips[0];
+  params.clipdark[1]               = 0.125f * params.clips[1];
+  params.clipdark[2]               = 0.03f * params.clips[2];
 
-  const int   m_width  = width / 3;
-  const int   m_height = height / 3;
-  const int   m_size   = RoundSize((m_width + 1) * (m_height + 1), 16);
+  const int size = width * height;
 
-  uint8_t*    d_mask_buf = nullptr;
-  int*        d_anyclipped = nullptr;
-  CUDA_CHECK(cudaMalloc(&d_mask_buf, static_cast<size_t>(6) * m_size * sizeof(uint8_t)));
-  CUDA_CHECK(cudaMemset(d_mask_buf, 0, static_cast<size_t>(6) * m_size * sizeof(uint8_t)));
+  uint8_t* d_mask_buf     = nullptr;
+  uint8_t* d_dilated_mask = nullptr;
+  int*     d_anyclipped   = nullptr;
+  float*   d_sums         = nullptr;
+  float*   d_cnts         = nullptr;
+
+  CUDA_CHECK(cudaMalloc(&d_mask_buf, static_cast<size_t>(kMaskPlanes) * size * sizeof(uint8_t)));
+  CUDA_CHECK(
+      cudaMalloc(&d_dilated_mask, static_cast<size_t>(kMaskPlanes) * size * sizeof(uint8_t)));
+  CUDA_CHECK(cudaMemset(d_mask_buf, 0, static_cast<size_t>(kMaskPlanes) * size * sizeof(uint8_t)));
+  CUDA_CHECK(
+      cudaMemset(d_dilated_mask, 0, static_cast<size_t>(kMaskPlanes) * size * sizeof(uint8_t)));
 
   CUDA_CHECK(cudaMalloc(&d_anyclipped, sizeof(int)));
   CUDA_CHECK(cudaMemset(d_anyclipped, 0, sizeof(int)));
 
-  {
-    const dim3 threads(32, 32);
-    const dim3 blocks((m_width + threads.x - 1) / threads.x, (m_height + threads.y - 1) / threads.y);
-    BuildMaskKernel<<<blocks, threads>>>(img, width, height, d_mask_buf, m_width, m_height,
-                                         m_size, clip_val, d_anyclipped, pattern);
-    CUDA_CHECK(cudaGetLastError());
-    CUDA_CHECK(cudaDeviceSynchronize());
-  }
+  const dim3 threads(32, 8);
+  const dim3 blocks((width + threads.x - 1) / threads.x, (height + threads.y - 1) / threads.y);
+
+  BuildMaskKernel<<<blocks, threads>>>(img, d_mask_buf, d_anyclipped, params);
+  CUDA_CHECK(cudaGetLastError());
+  CUDA_CHECK(cudaDeviceSynchronize());
 
   int anyclipped = 0;
   CUDA_CHECK(cudaMemcpy(&anyclipped, d_anyclipped, sizeof(int), cudaMemcpyDeviceToHost));
   if (!anyclipped) {
     CUDA_CHECK(cudaFree(d_anyclipped));
+    CUDA_CHECK(cudaFree(d_dilated_mask));
     CUDA_CHECK(cudaFree(d_mask_buf));
     return;
   }
 
-  {
-    const dim3 threads(32, 32);
-    const dim3 blocks((m_width + threads.x - 1) / threads.x, (m_height + threads.y - 1) / threads.y);
-    DilateMaskKernel<<<blocks, threads>>>(d_mask_buf, m_width, m_height, m_size);
-    CUDA_CHECK(cudaGetLastError());
-    CUDA_CHECK(cudaDeviceSynchronize());
-  }
+  DilateMaskKernel<<<blocks, threads>>>(d_mask_buf, d_dilated_mask, width, height);
+  CUDA_CHECK(cudaGetLastError());
+  CUDA_CHECK(cudaDeviceSynchronize());
 
-  float* d_sums = nullptr;
-  float* d_cnts = nullptr;
   CUDA_CHECK(cudaMalloc(&d_sums, sizeof(float) * 4));
   CUDA_CHECK(cudaMalloc(&d_cnts, sizeof(float) * 4));
   CUDA_CHECK(cudaMemset(d_sums, 0, sizeof(float) * 4));
   CUDA_CHECK(cudaMemset(d_cnts, 0, sizeof(float) * 4));
 
-  {
-    const float lo_clip_val = 0.99f * clip_val;
-    const dim3  threads(32, 32);
-    const dim3  blocks((width + threads.x - 1) / threads.x, (height + threads.y - 1) / threads.y);
-    ChrominanceAccumulateKernel<<<blocks, threads>>>(img, width, height, d_mask_buf, m_width, m_size,
-                                                     clip_val, lo_clip_val, d_sums, d_cnts,
-                                                     hl_params, pattern);
-    CUDA_CHECK(cudaGetLastError());
-    CUDA_CHECK(cudaDeviceSynchronize());
-  }
+  ChrominanceAccumulateKernel<<<blocks, threads>>>(img, d_dilated_mask, d_sums, d_cnts, params);
+  CUDA_CHECK(cudaGetLastError());
+  CUDA_CHECK(cudaDeviceSynchronize());
 
-  std::array<float, 4> sums = {0.f, 0.f, 0.f, 0.f};
-  std::array<float, 4> cnts = {0.f, 0.f, 0.f, 0.f};
+  std::array<float, 4> sums = {0.0f, 0.0f, 0.0f, 0.0f};
+  std::array<float, 4> cnts = {0.0f, 0.0f, 0.0f, 0.0f};
   CUDA_CHECK(cudaMemcpy(sums.data(), d_sums, sizeof(float) * 4, cudaMemcpyDeviceToHost));
   CUDA_CHECK(cudaMemcpy(cnts.data(), d_cnts, sizeof(float) * 4, cudaMemcpyDeviceToHost));
 
   for (int c = 0; c < 3; ++c) {
-    hl_params.chrominance[c] = (cnts[c] > 80.0f) ? (sums[c] / cnts[c]) : 0.0f;
+    params.chrominance[c] = (cnts[c] > 0.0f) ? (sums[c] / cnts[c]) : 0.0f;
   }
 
-  cv::cuda::GpuMat result;
-  result.create(img.size(), img.type());
-
-  {
-    const dim3 threads(32, 32);
-    const dim3 blocks((width + threads.x - 1) / threads.x, (height + threads.y - 1) / threads.y);
-    HighlightReconstructKernel<<<blocks, threads>>>(img, result, width, height, clip_val,
-                                                    hl_params, pattern);
-    CUDA_CHECK(cudaGetLastError());
-    CUDA_CHECK(cudaDeviceSynchronize());
-  }
+  cv::cuda::GpuMat result(img.size(), img.type());
+  HighlightReconstructKernel<<<blocks, threads>>>(img, result, d_dilated_mask, params);
+  CUDA_CHECK(cudaGetLastError());
+  CUDA_CHECK(cudaDeviceSynchronize());
 
   img = result;
 
   CUDA_CHECK(cudaFree(d_cnts));
   CUDA_CHECK(cudaFree(d_sums));
   CUDA_CHECK(cudaFree(d_anyclipped));
+  CUDA_CHECK(cudaFree(d_dilated_mask));
   CUDA_CHECK(cudaFree(d_mask_buf));
 }
 
