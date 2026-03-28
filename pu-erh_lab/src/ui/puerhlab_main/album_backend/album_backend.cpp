@@ -90,6 +90,9 @@ void AlbumBackend::DeleteFolder(uint folderId) { folder_ctrl_.DeleteFolder(folde
 auto AlbumBackend::DeleteImages(const QVariantList& targetEntries) -> QVariantMap {
   return image_ctrl_.DeleteImages(targetEntries);
 }
+auto AlbumBackend::GetImageDetails(uint elementId, uint imageId) -> QVariantMap {
+  return image_ctrl_.GetImageDetails(elementId, imageId);
+}
 
 // ── Q_INVOKABLE: Stats-bar filter ──────────────────────────────────────────
 

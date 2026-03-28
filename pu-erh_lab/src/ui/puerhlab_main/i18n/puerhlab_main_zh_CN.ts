@@ -363,6 +363,11 @@
         <translation>%1 个文件失败</translation>
     </message>
     <message>
+        <location filename="../qml/Main.qml" line="344"/>
+        <source>Details</source>
+        <translation>详细信息</translation>
+    </message>
+    <message>
         <location filename="../qml/Main.qml" line="668"/>
         <location filename="../qml/Main.qml" line="1037"/>
         <source>Settings</source>
@@ -504,6 +509,14 @@ Original source files on disk will be kept.</source>
         <location filename="../qml/Main.qml" line="581"/>
         <source>Save</source>
         <translation>保存</translation>
+    </message>
+</context>
+<context>
+    <name>ImageDetailsDialog</name>
+    <message>
+        <location filename="../qml/ImageDetailsDialog.qml" line="160"/>
+        <source>Close</source>
+        <translation>关闭</translation>
     </message>
 </context>
 <context>
@@ -755,6 +768,70 @@ Original source files on disk will be kept.</source>
     <message>
         <source>Unknown error while preparing export task.</source>
         <translation>准备导出任务时发生未知错误。</translation>
+    </message>
+    <message>
+        <source>Capture</source>
+        <translation>拍摄信息</translation>
+    </message>
+    <message>
+        <source>Gear</source>
+        <translation>设备信息</translation>
+    </message>
+    <message>
+        <source>Original Size</source>
+        <translation>原始尺寸</translation>
+    </message>
+    <message>
+        <source>Original Aspect Ratio</source>
+        <translation>原始宽高比</translation>
+    </message>
+    <message>
+        <source>Captured At</source>
+        <translation>拍摄时间</translation>
+    </message>
+    <message>
+        <source>Camera Brand</source>
+        <translation>相机品牌</translation>
+    </message>
+    <message>
+        <source>Camera Model</source>
+        <translation>相机型号</translation>
+    </message>
+    <message>
+        <source>Aperture</source>
+        <translation>光圈</translation>
+    </message>
+    <message>
+        <source>Shutter</source>
+        <translation>快门</translation>
+    </message>
+    <message>
+        <source>ISO</source>
+        <translation>ISO</translation>
+    </message>
+    <message>
+        <source>Focal Length</source>
+        <translation>焦距</translation>
+    </message>
+    <message>
+        <source>35mm Equivalent</source>
+        <translation>35mm 等效焦距</translation>
+    </message>
+    <message>
+        <source>Focus Distance</source>
+        <translation>对焦距离</translation>
+    </message>
+    <message>
+        <source>Rating</source>
+        <translation>评分</translation>
+    </message>
+    <message>
+        <source>No valid image was selected.</source>
+        <translation>未选择有效图像。</translation>
+    </message>
+    <message>
+        <source>Failed to load image details.</source>
+        <translation>加载图像详细信息失败。</translation>
     </message>
     <message>
         <source>Root</source>

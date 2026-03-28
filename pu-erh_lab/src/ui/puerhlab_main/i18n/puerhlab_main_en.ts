@@ -504,6 +504,98 @@ Original source files on disk will be kept.</source>
         <source>%1 file(s) failed</source>
         <translation type="unfinished"></translation>
     </message>
+    <message>
+        <location filename="../qml/Main.qml" line="344"/>
+        <source>Details</source>
+        <translation>Details</translation>
+    </message>
+</context>
+<context>
+    <name>ImageDetailsDialog</name>
+    <message>
+        <location filename="../qml/ImageDetailsDialog.qml" line="160"/>
+        <source>Close</source>
+        <translation>Close</translation>
+    </message>
+</context>
+<context>
+    <name>PuerhLab</name>
+    <message>
+        <source>Capture</source>
+        <translation>Capture</translation>
+    </message>
+    <message>
+        <source>Gear</source>
+        <translation>Gear</translation>
+    </message>
+    <message>
+        <source>Original Size</source>
+        <translation>Original Size</translation>
+    </message>
+    <message>
+        <source>Original Aspect Ratio</source>
+        <translation>Original Aspect Ratio</translation>
+    </message>
+    <message>
+        <source>Captured At</source>
+        <translation>Captured At</translation>
+    </message>
+    <message>
+        <source>Camera Brand</source>
+        <translation>Camera Brand</translation>
+    </message>
+    <message>
+        <source>Camera Model</source>
+        <translation>Camera Model</translation>
+    </message>
+    <message>
+        <source>Lens Brand</source>
+        <translation>Lens Brand</translation>
+    </message>
+    <message>
+        <source>Lens Model</source>
+        <translation>Lens Model</translation>
+    </message>
+    <message>
+        <source>Exposure</source>
+        <translation>Exposure</translation>
+    </message>
+    <message>
+        <source>Aperture</source>
+        <translation>Aperture</translation>
+    </message>
+    <message>
+        <source>Shutter</source>
+        <translation>Shutter</translation>
+    </message>
+    <message>
+        <source>ISO</source>
+        <translation>ISO</translation>
+    </message>
+    <message>
+        <source>Focal Length</source>
+        <translation>Focal Length</translation>
+    </message>
+    <message>
+        <source>35mm Equivalent</source>
+        <translation>35mm Equivalent</translation>
+    </message>
+    <message>
+        <source>Focus Distance</source>
+        <translation>Focus Distance</translation>
+    </message>
+    <message>
+        <source>Rating</source>
+        <translation>Rating</translation>
+    </message>
+    <message>
+        <source>No valid image was selected.</source>
+        <translation>No valid image was selected.</translation>
+    </message>
+    <message>
+        <source>Failed to load image details.</source>
+        <translation>Failed to load image details.</translation>
+    </message>
 </context>
 <context>
     <name>StatsCard</name>

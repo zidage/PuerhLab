@@ -405,6 +405,7 @@ def_ui_test(AlbumBackendImportTest   album_backend_import_test.cpp)
 def_ui_test(AlbumBackendProjectTest  album_backend_project_test.cpp)
 def_ui_test(AlbumBackendFolderTest   album_backend_folder_test.cpp)
 def_ui_test(AlbumBackendImageDeleteTest album_backend_image_delete_test.cpp)
+def_ui_test(AlbumBackendImageDetailsTest album_backend_image_details_test.cpp)
 def_ui_test(AlbumBackendThumbnailTest album_backend_thumbnail_test.cpp)
 def_ui_test(AlbumBackendI18nTest album_backend_i18n_test.cpp)
 

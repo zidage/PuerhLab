@@ -22,6 +22,7 @@ class ImageController {
   explicit ImageController(AlbumBackend& backend);
 
   auto DeleteImages(const QVariantList& targetEntries) -> QVariantMap;
+  auto GetImageDetails(uint elementId, uint imageId) -> QVariantMap;
 
  private:
   struct DeleteTarget {

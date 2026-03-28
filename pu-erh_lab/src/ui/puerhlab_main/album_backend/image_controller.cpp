@@ -6,8 +6,19 @@
 
 #include "ui/puerhlab_main/album_backend/album_backend.hpp"
 
+#include <QCoreApplication>
+#include <QStringList>
+
 #include <algorithm>
+#include <cmath>
+#include <cstdint>
+#include <exception>
+#include <numeric>
 #include <unordered_set>
+
+#include <json.hpp>
+
+#include "ui/puerhlab_main/album_backend/path_utils.hpp"
 
 namespace puerhlab::ui {
 
@@ -17,6 +28,8 @@ namespace puerhlab::ui {
                               __VA_OPT__(, ) __VA_ARGS__)
 
 namespace {
+using json = nlohmann::json;
+
 auto ToVariantIdList(const std::vector<sl_element_id_t>& ids) -> QVariantList {
   QVariantList out;
   out.reserve(static_cast<qsizetype>(ids.size()));
@@ -24,6 +37,208 @@ auto ToVariantIdList(const std::vector<sl_element_id_t>& ids) -> QVariantList {
     out.push_back(static_cast<uint>(id));
   }
   return out;
+}
+
+auto Tr(const char* text) -> QString {
+  return QCoreApplication::translate(PUERHLAB_I18N_CONTEXT, text);
+}
+
+auto DashValue() -> QString {
+  return QString::fromUtf8("\u2014");
+}
+
+auto ToDisplayText(const std::string& value) -> QString {
+  const QString text = QString::fromUtf8(value.c_str()).trimmed();
+  return text.isEmpty() ? DashValue() : text;
+}
+
+auto ToOptionalDisplayText(const std::string& value) -> QString {
+  return QString::fromUtf8(value.c_str()).trimmed();
+}
+
+auto FormatUnsigned(uint64_t value) -> QString {
+  return value > 0 ? QString::number(value) : DashValue();
+}
+
+auto FormatFixed(double value, int precision, const QString& prefix = QString{},
+                 const QString& suffix = QString{}) -> QString {
+  if (!std::isfinite(value) || value <= 0.0) {
+    return DashValue();
+  }
+  return prefix + QString::number(value, 'f', precision) + suffix;
+}
+
+auto FormatRating(int value) -> QString {
+  return value > 0 ? QStringLiteral("%1/5").arg(value) : DashValue();
+}
+
+auto JsonNumberOrZero(const json& metadata, const char* key) -> double {
+  if (!metadata.contains(key)) {
+    return 0.0;
+  }
+  const auto& value = metadata.at(key);
+  return value.is_number() ? value.get<double>() : 0.0;
+}
+
+auto JsonUnsignedOrZero(const json& metadata, const char* key) -> uint32_t {
+  if (!metadata.contains(key)) {
+    return 0;
+  }
+  const auto& value = metadata.at(key);
+  return value.is_number_unsigned() ? value.get<uint32_t>()
+         : value.is_number_integer() ? static_cast<uint32_t>(std::max<int64_t>(value.get<int64_t>(), 0))
+                                     : 0;
+}
+
+auto JsonStringOrEmpty(const json& metadata, const char* key) -> std::string {
+  if (!metadata.contains(key)) {
+    return {};
+  }
+  const auto& value = metadata.at(key);
+  return value.is_string() ? value.get<std::string>() : std::string{};
+}
+
+auto FormatAspectRatio(uint32_t width, uint32_t height) -> QString {
+  if (width == 0 || height == 0) {
+    return DashValue();
+  }
+  const auto divisor = std::gcd(width, height);
+  if (divisor == 0) {
+    return DashValue();
+  }
+  return QStringLiteral("%1:%2").arg(width / divisor).arg(height / divisor);
+}
+
+auto FormatDimensions(uint32_t width, uint32_t height) -> QString {
+  if (width == 0 || height == 0) {
+    return DashValue();
+  }
+  return QStringLiteral("%1 × %2 px").arg(width).arg(height);
+}
+
+auto FormatShutterSpeed(const json& metadata) -> QString {
+  if (!metadata.contains("ShutterSpeed")) {
+    return DashValue();
+  }
+  const auto& value = metadata.at("ShutterSpeed");
+  if (!value.is_array() || value.size() < 2 || !value[0].is_number_integer() ||
+      !value[1].is_number_integer()) {
+    return DashValue();
+  }
+
+  const int64_t numerator   = value[0].get<int64_t>();
+  const int64_t denominator = value[1].get<int64_t>();
+  if (numerator <= 0 || denominator <= 0) {
+    return DashValue();
+  }
+  if (denominator == 1) {
+    return QStringLiteral("%1 s").arg(numerator);
+  }
+  return QStringLiteral("%1/%2 s").arg(numerator).arg(denominator);
+}
+
+auto MakeDetailsRow(const QString& section, const QString& label, const QString& value,
+                    bool emphasized = false) -> QVariantMap {
+  return QVariantMap{{"section", section},
+                     {"label", label},
+                     {"value", value},
+                     {"emphasized", emphasized}};
+}
+
+void AppendDetailsRow(QVariantList& rows, const QString& section, const QString& label,
+                      const QString& value, bool emphasized = false) {
+  rows.push_back(MakeDetailsRow(section, label, value, emphasized));
+}
+
+auto ComposeSubtitle(const json& metadata) -> QString {
+  const QString camera = ToOptionalDisplayText(JsonStringOrEmpty(metadata, "Model"));
+  const QString lens   = ToOptionalDisplayText(JsonStringOrEmpty(metadata, "Lens"));
+
+  QStringList parts;
+  if (!camera.isEmpty()) {
+    parts.push_back(camera);
+  }
+  if (!lens.isEmpty()) {
+    parts.push_back(lens);
+  }
+  return parts.join(QStringLiteral(" · "));
+}
+
+auto ResolveTitle(const AlbumItem* item, const std::shared_ptr<Image>& image) -> QString {
+  if (item && !item->file_name.trimmed().isEmpty()) {
+    return item->file_name.trimmed();
+  }
+  if (image && !image->image_name_.empty()) {
+    const QString from_image = album_util::WStringToQString(image->image_name_).trimmed();
+    if (!from_image.isEmpty()) {
+      return from_image;
+    }
+  }
+  return Tr("(unnamed)");
+}
+
+auto ParseExifDisplayJson(const std::shared_ptr<Image>& image) -> json {
+  if (!image) {
+    return json::object();
+  }
+  try {
+    const std::string exif_text = image->ExifToJson();
+    if (exif_text.empty()) {
+      return json::object();
+    }
+    const json parsed = json::parse(exif_text, nullptr, false);
+    return parsed.is_discarded() ? json::object() : parsed;
+  } catch (...) {
+    return json::object();
+  }
+}
+
+auto BuildDetailsResult(const AlbumItem* item, const std::shared_ptr<Image>& image) -> QVariantMap {
+  const json metadata = ParseExifDisplayJson(image);
+  const QString section_capture  = Tr("Capture");
+  const QString section_gear     = Tr("Gear");
+  const QString section_exposure = Tr("Exposure");
+  const uint32_t width           = JsonUnsignedOrZero(metadata, "ImageWidth");
+  const uint32_t height          = JsonUnsignedOrZero(metadata, "ImageHeight");
+
+  QVariantList rows;
+  rows.reserve(14);
+
+  AppendDetailsRow(rows, section_capture, Tr("Original Size"), FormatDimensions(width, height), true);
+  AppendDetailsRow(rows, section_capture, Tr("Original Aspect Ratio"),
+                   FormatAspectRatio(width, height));
+  AppendDetailsRow(rows, section_capture, Tr("Captured At"),
+                   ToDisplayText(JsonStringOrEmpty(metadata, "DateTimeString")));
+
+  AppendDetailsRow(rows, section_gear, Tr("Camera Brand"),
+                   ToDisplayText(JsonStringOrEmpty(metadata, "Make")));
+  AppendDetailsRow(rows, section_gear, Tr("Camera Model"),
+                   ToDisplayText(JsonStringOrEmpty(metadata, "Model")), true);
+  AppendDetailsRow(rows, section_gear, Tr("Lens Brand"),
+                   ToDisplayText(JsonStringOrEmpty(metadata, "LensMake")));
+  AppendDetailsRow(rows, section_gear, Tr("Lens Model"),
+                   ToDisplayText(JsonStringOrEmpty(metadata, "Lens")), true);
+
+  AppendDetailsRow(rows, section_exposure, Tr("Aperture"),
+                   FormatFixed(JsonNumberOrZero(metadata, "Aperture"), 1, "f/"));
+  AppendDetailsRow(rows, section_exposure, Tr("Shutter"), FormatShutterSpeed(metadata));
+  AppendDetailsRow(rows, section_exposure, Tr("ISO"),
+                   FormatUnsigned(JsonUnsignedOrZero(metadata, "ISO")));
+  AppendDetailsRow(rows, section_exposure, Tr("Focal Length"),
+                   FormatFixed(JsonNumberOrZero(metadata, "FocalLength"), 0, QString{}, " mm"));
+  AppendDetailsRow(rows, section_exposure, Tr("35mm Equivalent"),
+                   FormatFixed(JsonNumberOrZero(metadata, "FocalLength35mm"), 0, QString{},
+                               " mm"));
+  AppendDetailsRow(rows, section_exposure, Tr("Focus Distance"),
+                   FormatFixed(JsonNumberOrZero(metadata, "FocusDistanceM"), 2, QString{}, " m"));
+  AppendDetailsRow(rows, section_exposure, Tr("Rating"),
+                   FormatRating(static_cast<int>(JsonUnsignedOrZero(metadata, "Rating"))));
+
+  return QVariantMap{{"success", true},
+                     {"message", QString{}},
+                     {"title", ResolveTitle(item, image)},
+                     {"subtitle", ComposeSubtitle(metadata)},
+                     {"rows", rows}};
 }
 }  // namespace
 
@@ -252,6 +467,66 @@ auto ImageController::DeleteImages(const QVariantList& targetEntries) -> QVarian
   result["failedElementIds"]  = ToVariantIdList(failed_ids);
   result["message"]           = msg.Render();
   return result;
+}
+
+auto ImageController::GetImageDetails(uint elementId, uint imageId) -> QVariantMap {
+  QVariantMap result{{"success", false},
+                     {"message", QString{}},
+                     {"title", QString{}},
+                     {"subtitle", QString{}},
+                     {"rows", QVariantList{}}};
+
+  auto& ph = backend_.project_handler_;
+  if (ph.project_loading()) {
+    const auto msg = PL_TEXT("Project is loading. Please wait.");
+    backend_.SetTaskState(msg, 0, false);
+    result["message"] = msg.Render();
+    return result;
+  }
+  if (!ph.project()) {
+    const auto msg = PL_TEXT("No project is loaded.");
+    backend_.SetTaskState(msg, 0, false);
+    result["message"] = msg.Render();
+    return result;
+  }
+
+  image_id_t resolved_image_id = static_cast<image_id_t>(imageId);
+  const auto resolved_element_id = static_cast<sl_element_id_t>(elementId);
+  const auto* item =
+      resolved_element_id != 0 ? backend_.FindAlbumItem(resolved_element_id) : nullptr;
+  if (resolved_image_id == 0 && item) {
+    resolved_image_id = item->image_id;
+  }
+  if (resolved_image_id == 0) {
+    const auto msg = PL_TEXT("No valid image was selected.");
+    backend_.SetTaskState(msg, 0, false);
+    result["message"] = msg.Render();
+    return result;
+  }
+
+  auto image_pool = ph.project()->GetImagePoolService();
+  if (!image_pool) {
+    const auto msg = PL_TEXT("Image service is unavailable.");
+    backend_.SetTaskState(msg, 0, false);
+    result["message"] = msg.Render();
+    return result;
+  }
+
+  try {
+    return image_pool->Read<QVariantMap>(
+        resolved_image_id,
+        [item](const std::shared_ptr<Image>& image) { return BuildDetailsResult(item, image); });
+  } catch (const std::exception&) {
+    const auto msg = PL_TEXT("Failed to load image details.");
+    backend_.SetTaskState(msg, 0, false);
+    result["message"] = msg.Render();
+    return result;
+  } catch (...) {
+    const auto msg = PL_TEXT("Failed to load image details.");
+    backend_.SetTaskState(msg, 0, false);
+    result["message"] = msg.Render();
+    return result;
+  }
 }
 
 }  // namespace puerhlab::ui

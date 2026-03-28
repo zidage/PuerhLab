@@ -63,7 +63,13 @@ ApplicationWindow {
     readonly property int exportQueueCount: selectionState.exportQueueCount
     readonly property var languageOptions: languageManager.availableLanguages
     property var pendingDeleteTargets: []
+    property var pendingDetailsTarget: ({})
     property string deleteConfirmText: ""
+    property var imageDetailsData: ({
+        title: "",
+        subtitle: "",
+        rows: []
+    })
 
     function languageIndexForCode(code) {
         for (let i = 0; i < languageOptions.length; ++i) {
@@ -88,8 +94,11 @@ ApplicationWindow {
         }]
     }
 
-    function openDeleteContextMenu(clickedItem, sceneX, sceneY) {
+    function openImageContextMenu(clickedItem, sceneX, sceneY) {
         if (!root.backendInteractive) {
+            return
+        }
+        if (!clickedItem) {
             return
         }
         const targets = resolveDeleteTargets(clickedItem)
@@ -97,6 +106,11 @@ ApplicationWindow {
             return
         }
         root.pendingDeleteTargets = targets
+        root.pendingDetailsTarget = {
+            elementId: Number(clickedItem.elementId),
+            imageId: Number(clickedItem.imageId),
+            fileName: clickedItem.fileName ? clickedItem.fileName : qsTr("(unnamed)")
+        }
         imageContextMenu.openAt(sceneX, sceneY)
     }
 
@@ -123,6 +137,25 @@ ApplicationWindow {
             selectionState.pruneDeletedElements(deletedIds)
         }
         root.pendingDeleteTargets = []
+    }
+
+    function requestImageDetails() {
+        if (!root.pendingDetailsTarget || Number(root.pendingDetailsTarget.imageId) <= 0) {
+            return
+        }
+        const result = albumBackend.GetImageDetails(
+            Number(root.pendingDetailsTarget.elementId),
+            Number(root.pendingDetailsTarget.imageId))
+        if (!result || result.success !== true) {
+            imageDetailsDialog.close()
+            return
+        }
+        root.imageDetailsData = {
+            title: result.title ? result.title : qsTr("(unnamed)"),
+            subtitle: result.subtitle ? result.subtitle : "",
+            rows: result.rows ? result.rows : []
+        }
+        imageDetailsDialog.open()
     }
 
     QtObject {
@@ -307,17 +340,40 @@ ApplicationWindow {
         id: imageContextMenu
         actions: [
             {
+                id: "details",
+                label: qsTr("Details"),
+                enabled: Number(root.pendingDetailsTarget.imageId) > 0
+            },
+            {
                 id: "delete",
                 label: qsTr("Delete"),
                 enabled: root.pendingDeleteTargets.length > 0
             }
         ]
         onActionRequested: function(actionId) {
-            if (actionId !== "delete") {
+            imageContextMenu.close()
+            if (actionId === "details") {
+                requestImageDetails()
                 return
             }
-            imageContextMenu.close()
-            requestDeleteConfirmation()
+            if (actionId === "delete") {
+                requestDeleteConfirmation()
+            }
+        }
+    }
+
+    ImageDetailsDialog {
+        id: imageDetailsDialog
+        parent: Overlay.overlay
+        titleText: root.imageDetailsData.title
+        subtitleText: root.imageDetailsData.subtitle
+        detailRows: root.imageDetailsData.rows
+        onClosed: {
+            root.imageDetailsData = {
+                title: "",
+                subtitle: "",
+                rows: []
+            }
         }
     }
 
@@ -420,13 +476,17 @@ ApplicationWindow {
             selectionState.clearSelectedImages()
             selectionState.clearExportQueue()
             root.pendingDeleteTargets = []
+            root.pendingDetailsTarget = ({})
             deleteConfirmDialog.close()
+            imageDetailsDialog.close()
             settingsPage = false
         }
         function onFolderSelectionChanged() {
             selectionState.clearSelectedImages()
             root.pendingDeleteTargets = []
+            root.pendingDetailsTarget = ({})
             deleteConfirmDialog.close()
+            imageDetailsDialog.close()
         }
         function onThumbnailsChanged() {
             if (exportDialog.visible) {
@@ -1352,7 +1412,7 @@ ApplicationWindow {
                 selectionState.replaceSelectedImages(items)
             }
             onContextMenuRequested: function(item, sceneX, sceneY) {
-                root.openDeleteContextMenu(item, sceneX, sceneY)
+                root.openImageContextMenu(item, sceneX, sceneY)
             }
         }
     }
@@ -1370,7 +1430,7 @@ ApplicationWindow {
                 selectionState.replaceSelectedImages(items)
             }
             onContextMenuRequested: function(item, sceneX, sceneY) {
-                root.openDeleteContextMenu(item, sceneX, sceneY)
+                root.openImageContextMenu(item, sceneX, sceneY)
             }
         }
     }
