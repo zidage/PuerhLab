@@ -285,6 +285,18 @@ void RawProcessor::ApplyHighlightReconstruct() {
                              "debayering.");
 #elif defined(HAVE_METAL)
     auto& gpu_img = process_buffer_.GetMetalImage();
+    if (gpu_img.Format() == metal::PixelFormat::RGBA32FLOAT) {
+      if (!params_.highlights_reconstruct_) {
+        metal::utils::ClampTexture(gpu_img);
+        return;
+      }
+      metal::HighlightReconstruct(gpu_img, raw_processor_);
+      return;
+    }
+    if (gpu_img.Format() != metal::PixelFormat::R32FLOAT) {
+      throw std::runtime_error("RawProcessor: Metal highlight reconstruction expects R32FLOAT "
+                               "raw input or RGBA32FLOAT debayered RGB input.");
+    }
     if (cfa_pattern_.kind == RawCfaKind::XTrans6x6) {
       metal::utils::ClampTexture(gpu_img);
       return;
@@ -293,7 +305,8 @@ void RawProcessor::ApplyHighlightReconstruct() {
       metal::utils::ClampTexture(gpu_img);
       return;
     }
-    metal::HighlightReconstruct(gpu_img, raw_processor_, cfa_pattern_.bayer_pattern);
+    throw std::runtime_error("RawProcessor: Metal Bayer highlight reconstruction must run after "
+                             "debayering.");
     return;
 #endif
     ThrowUnsupportedGPUBackend("ApplyHighlightReconstruct");
@@ -502,8 +515,13 @@ auto RawProcessor::Process() -> ImageBuffer {
     SetDecodeRes();
     process_buffer_.SyncToGPU();
     ApplyLinearization();
-    ApplyHighlightReconstruct();
-    ApplyDebayer();
+    if (cfa_pattern_.kind == RawCfaKind::Bayer2x2 && params_.highlights_reconstruct_) {
+      ApplyDebayer();
+      ApplyHighlightReconstruct();
+    } else {
+      ApplyHighlightReconstruct();
+      ApplyDebayer();
+    }
     ConvertToWorkingSpace();
     ApplyGeometricCorrections();
     return {std::move(process_buffer_)};

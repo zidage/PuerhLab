@@ -7,182 +7,196 @@
 using namespace metal;
 
 struct HighlightParams {
-  float correction[4];
+  float clips[4];
+  float clipdark[4];
   float chrominance[4];
-  float clip_val;
-  float lo_clip_val;
   uint  width;
   uint  height;
   uint  stride;
-  uint  m_width;
-  uint  m_height;
-  uint  m_size;
-  uint  rgb_fc[4];
 };
 
-constant float kHLPowerF    = 3.0f;
-constant float kInvHLPowerF = 1.0f / kHLPowerF;
+constant uint kDilateRadius  = 3u;
+constant uint kPlaneBaseR    = 0u;
+constant uint kPlaneBaseG    = 1u;
+constant uint kPlaneBaseB    = 2u;
+constant uint kPlaneDilatedR = 3u;
+constant uint kPlaneDilatedG = 4u;
+constant uint kPlaneDilatedB = 5u;
+constant uint kPlaneBaseMulti = 6u;
+constant uint kPlaneDilMulti  = 7u;
 
-static inline uint FC(constant HighlightParams& params, int y, int x) {
-  return params.rgb_fc[((static_cast<uint>(y) & 1u) << 1u) | (static_cast<uint>(x) & 1u)];
+static inline float Cube(float value) { return value * value * value; }
+
+static inline float3 MaxRgb(float4 value) { return max(value.rgb, float3(0.0f)); }
+
+static inline int CountClippedChannels(float3 pixel, constant HighlightParams& params) {
+  int count = 0;
+  count += pixel.x >= params.clips[0] ? 1 : 0;
+  count += pixel.y >= params.clips[1] ? 1 : 0;
+  count += pixel.z >= params.clips[2] ? 1 : 0;
+  return count;
 }
 
-static inline uint RawToCmap(uint m_width, int row, int col) {
-  return static_cast<uint>(row / 3) * m_width + static_cast<uint>(col / 3);
-}
+static inline float3 CalcRefavg(device const float4* input, int row, int col,
+                                constant HighlightParams& params) {
+  float mean[3] = {0.0f, 0.0f, 0.0f};
+  float cnt[3]  = {0.0f, 0.0f, 0.0f};
 
-static inline uchar MaskDilate(device const uchar* in, uint w1) {
-  if (in[0]) {
-    return 1;
-  }
+  const int dymin = max(0, row - 1);
+  const int dxmin = max(0, col - 1);
+  const int dymax = min(static_cast<int>(params.height) - 1, row + 1);
+  const int dxmax = min(static_cast<int>(params.width) - 1, col + 1);
 
-  if (in[-static_cast<int>(w1) - 1] | in[-static_cast<int>(w1)] | in[-static_cast<int>(w1) + 1] |
-      in[-1] | in[1] | in[static_cast<int>(w1) - 1] | in[static_cast<int>(w1)] |
-      in[static_cast<int>(w1) + 1]) {
-    return 1;
-  }
-
-  const int w2 = 2 * static_cast<int>(w1);
-  const int w3 = 3 * static_cast<int>(w1);
-  return (in[-w3 - 2] | in[-w3 - 1] | in[-w3] | in[-w3 + 1] | in[-w3 + 2] | in[-w2 - 3] |
-          in[-w2 - 2] | in[-w2 - 1] | in[-w2] | in[-w2 + 1] | in[-w2 + 2] | in[-w2 + 3] |
-          in[-static_cast<int>(w1) - 3] | in[-static_cast<int>(w1) - 2] |
-          in[-static_cast<int>(w1) + 2] | in[-static_cast<int>(w1) + 3] | in[-3] | in[-2] |
-          in[2] | in[3] | in[static_cast<int>(w1) - 3] | in[static_cast<int>(w1) - 2] |
-          in[static_cast<int>(w1) + 2] | in[static_cast<int>(w1) + 3] | in[w2 - 3] |
-          in[w2 - 2] | in[w2 - 1] | in[w2] | in[w2 + 1] | in[w2 + 2] | in[w2 + 3] |
-          in[w3 - 2] | in[w3 - 1] | in[w3] | in[w3 + 1] | in[w3 + 2])
-             ? 1
-             : 0;
-}
-
-static inline float CalcRefavg(device const float* in, int row, int col,
-                               constant HighlightParams& params) {
-  const uint color = FC(params, row, col);
-  float      mean[3] = {0.0f, 0.0f, 0.0f};
-  float      cnt[3]  = {0.0f, 0.0f, 0.0f};
-
-  const int dymin = (row > 0) ? (row - 1) : 0;
-  const int dxmin = (col > 0) ? (col - 1) : 0;
-  const int dymax = (row + 2 < static_cast<int>(params.height) - 1) ? (row + 2)
-                                                                     : (static_cast<int>(params.height) - 1);
-  const int dxmax = (col + 2 < static_cast<int>(params.width) - 1) ? (col + 2)
-                                                                    : (static_cast<int>(params.width) - 1);
-
-  for (int dy = dymin; dy < dymax; ++dy) {
-    for (int dx = dxmin; dx < dxmax; ++dx) {
-      const float val = max(0.0f, in[static_cast<uint>(dy) * params.stride + static_cast<uint>(dx)]);
-      const uint  c   = FC(params, dy, dx);
-      mean[c] += val;
-      cnt[c] += 1.0f;
+  for (int dy = dymin; dy <= dymax; ++dy) {
+    for (int dx = dxmin; dx <= dxmax; ++dx) {
+      const float3 sample =
+          MaxRgb(input[static_cast<uint>(dy) * params.stride + static_cast<uint>(dx)]);
+      mean[0] += sample.x;
+      mean[1] += sample.y;
+      mean[2] += sample.z;
+      cnt[0] += 1.0f;
+      cnt[1] += 1.0f;
+      cnt[2] += 1.0f;
     }
   }
 
   for (uint c = 0; c < 3u; ++c) {
-    mean[c] = (cnt[c] > 0.0f) ? pow(params.correction[c] * mean[c] / cnt[c], kInvHLPowerF) : 0.0f;
+    mean[c] = (cnt[c] > 0.0f) ? pow(mean[c] / cnt[c], 1.0f / 3.0f) : 0.0f;
   }
 
-  const float croot_refavg[3] = {0.5f * (mean[1] + mean[2]), 0.5f * (mean[0] + mean[2]),
-                                 0.5f * (mean[0] + mean[1])};
-  return pow(croot_refavg[color], kHLPowerF);
+  return float3(Cube(0.5f * (mean[1] + mean[2])), Cube(0.5f * (mean[0] + mean[2])),
+                Cube(0.5f * (mean[0] + mean[1])));
 }
 
-kernel void hlr_build_mask(device const float* input [[buffer(0)]],
-                           device uchar*       mask_buf [[buffer(1)]],
-                           constant HighlightParams& params [[buffer(2)]],
+static inline uchar DilateMaskAt(device const uchar* plane, uint width, uint height, int row,
+                                 int col, int radius) {
+  const int y0 = max(0, row - radius);
+  const int x0 = max(0, col - radius);
+  const int y1 = min(static_cast<int>(height) - 1, row + radius);
+  const int x1 = min(static_cast<int>(width) - 1, col + radius);
+
+  for (int y = y0; y <= y1; ++y) {
+    const int row_offset = y * static_cast<int>(width);
+    for (int x = x0; x <= x1; ++x) {
+      if (plane[row_offset + x] != 0) {
+        return 1;
+      }
+    }
+  }
+
+  return 0;
+}
+
+kernel void hlr_build_mask(device const float4* input [[buffer(0)]],
+                           device uchar*        mask_buf [[buffer(1)]],
+                           device atomic_uint*  anyclipped [[buffer(2)]],
+                           constant HighlightParams& params [[buffer(3)]],
                            uint2 gid [[thread_position_in_grid]]) {
-  if (gid.x >= params.m_width || gid.y >= params.m_height) {
+  if (gid.x >= params.width || gid.y >= params.height) {
     return;
   }
-  if (gid.x < 1u || gid.x >= params.m_width - 1u || gid.y < 1u || gid.y >= params.m_height - 1u) {
-    return;
-  }
+  const uint   size  = params.width * params.height;
+  const uint   index = gid.y * params.stride + gid.x;
+  const uint   idx   = gid.y * params.width + gid.x;
+  const float3 pixel = MaxRgb(input[index]);
+  const int    count = CountClippedChannels(pixel, params);
 
-  const int row = static_cast<int>(gid.y);
-  const int col = static_cast<int>(gid.x);
+  mask_buf[kPlaneBaseR * size + idx]    = pixel.x >= params.clips[0] ? 1 : 0;
+  mask_buf[kPlaneBaseG * size + idx]    = pixel.y >= params.clips[1] ? 1 : 0;
+  mask_buf[kPlaneBaseB * size + idx]    = pixel.z >= params.clips[2] ? 1 : 0;
+  mask_buf[kPlaneBaseMulti * size + idx] = count >= 2 ? 1 : 0;
 
-  uchar mbuff[3] = {0, 0, 0};
-  const int base_raw_y = 3 * row;
-  const int base_raw_x = 3 * col;
-
-  for (int y = -1; y <= 1; ++y) {
-    for (int x = -1; x <= 1; ++x) {
-      const int raw_y   = base_raw_y + y;
-      const int raw_x   = base_raw_x + x;
-      const float val   = input[static_cast<uint>(raw_y) * params.stride + static_cast<uint>(raw_x)];
-      const uint  color = FC(params, row + y, col + x);
-      mbuff[color] += (val >= params.clip_val) ? 1 : 0;
-    }
-  }
-
-  const uint idx = gid.y * params.m_width + gid.x;
-  for (uint c = 0; c < 3u; ++c) {
-    if (mbuff[c]) {
-      mask_buf[c * params.m_size + idx] = 1;
-    }
+  if (count > 0) {
+    atomic_store_explicit(anyclipped, 1u, memory_order_relaxed);
   }
 }
 
-kernel void hlr_dilate_mask(device uchar* mask_buf [[buffer(0)]],
-                            constant HighlightParams& params [[buffer(1)]],
+kernel void hlr_dilate_mask(device const uchar* mask_buf [[buffer(0)]],
+                            device uchar*       dilated_mask_buf [[buffer(1)]],
+                            constant HighlightParams& params [[buffer(2)]],
                             uint2 gid [[thread_position_in_grid]]) {
-  if (gid.x >= params.m_width || gid.y >= params.m_height) {
+  if (gid.x >= params.width || gid.y >= params.height) {
     return;
   }
-  if (gid.x < 3u || gid.x >= params.m_width - 3u || gid.y < 3u || gid.y >= params.m_height - 3u) {
-    return;
-  }
+  const uint size = params.width * params.height;
+  const uint idx  = gid.y * params.width + gid.x;
 
-  const uint idx = gid.y * params.m_width + gid.x;
-  mask_buf[3u * params.m_size + idx] = MaskDilate(mask_buf + 0u * params.m_size + idx, params.m_width);
-  mask_buf[4u * params.m_size + idx] = MaskDilate(mask_buf + 1u * params.m_size + idx, params.m_width);
-  mask_buf[5u * params.m_size + idx] = MaskDilate(mask_buf + 2u * params.m_size + idx, params.m_width);
+  dilated_mask_buf[kPlaneDilatedR * size + idx] =
+      DilateMaskAt(mask_buf + kPlaneBaseR * size, params.width, params.height,
+                   static_cast<int>(gid.y), static_cast<int>(gid.x), static_cast<int>(kDilateRadius));
+  dilated_mask_buf[kPlaneDilatedG * size + idx] =
+      DilateMaskAt(mask_buf + kPlaneBaseG * size, params.width, params.height,
+                   static_cast<int>(gid.y), static_cast<int>(gid.x), static_cast<int>(kDilateRadius));
+  dilated_mask_buf[kPlaneDilatedB * size + idx] =
+      DilateMaskAt(mask_buf + kPlaneBaseB * size, params.width, params.height,
+                   static_cast<int>(gid.y), static_cast<int>(gid.x), static_cast<int>(kDilateRadius));
+  dilated_mask_buf[kPlaneDilMulti * size + idx] =
+      DilateMaskAt(mask_buf + kPlaneBaseMulti * size, params.width, params.height,
+                   static_cast<int>(gid.y), static_cast<int>(gid.x), static_cast<int>(kDilateRadius));
 }
 
-kernel void hlr_chrominance_contrib(device const float* input [[buffer(0)]],
-                                    device const uchar* mask_buf [[buffer(1)]],
-                                    device float*       contrib [[buffer(2)]],
-                                    device uint*        flags [[buffer(3)]],
+kernel void hlr_chrominance_contrib(device const float4* input [[buffer(0)]],
+                                    device const uchar*  mask_buf [[buffer(1)]],
+                                    device float4*       contrib [[buffer(2)]],
+                                    device float4*       counts [[buffer(3)]],
                                     constant HighlightParams& params [[buffer(4)]],
                                     uint2 gid [[thread_position_in_grid]]) {
   if (gid.x >= params.width || gid.y >= params.height) {
     return;
   }
-  if (gid.x < 3u || gid.x >= params.width - 3u || gid.y < 3u || gid.y >= params.height - 3u) {
-    return;
+
+  const uint   size  = params.width * params.height;
+  const uint   index = gid.y * params.stride + gid.x;
+  const uint   idx   = gid.y * params.width + gid.x;
+  const float3 pixel = MaxRgb(input[index]);
+  const float3 ref   = CalcRefavg(input, static_cast<int>(gid.y), static_cast<int>(gid.x), params);
+
+  float4 contrib_value = float4(0.0f);
+  float4 count_value   = float4(0.0f);
+
+  if (mask_buf[kPlaneDilatedR * size + idx] && pixel.x > params.clipdark[0] &&
+      pixel.x < params.clips[0]) {
+    contrib_value.x = pixel.x - ref.x;
+    count_value.x   = 1.0f;
+  }
+  if (mask_buf[kPlaneDilatedG * size + idx] && pixel.y > params.clipdark[1] &&
+      pixel.y < params.clips[1]) {
+    contrib_value.y = pixel.y - ref.y;
+    count_value.y   = 1.0f;
+  }
+  if (mask_buf[kPlaneDilatedB * size + idx] && pixel.z > params.clipdark[2] &&
+      pixel.z < params.clips[2]) {
+    contrib_value.z = pixel.z - ref.z;
+    count_value.z   = 1.0f;
   }
 
-  const int   row   = static_cast<int>(gid.y);
-  const int   col   = static_cast<int>(gid.x);
-  const uint  color = FC(params, row, col);
-  const uint  index = gid.y * params.stride + gid.x;
-  const float inval = input[index];
-
-  if ((inval < params.clip_val) && (inval > params.lo_clip_val) &&
-      mask_buf[(color + 3u) * params.m_size + RawToCmap(params.m_width, row, col)]) {
-    contrib[index] = inval - CalcRefavg(input, row, col, params);
-    flags[index]   = 1u;
-  }
+  contrib[index] = contrib_value;
+  counts[index]  = count_value;
 }
 
-kernel void hlr_reconstruct(device const float* input [[buffer(0)]],
-                            device float*       output [[buffer(1)]],
+kernel void hlr_reconstruct(device const float4* input [[buffer(0)]],
+                            device float4*       output [[buffer(1)]],
                             constant HighlightParams& params [[buffer(2)]],
                             uint2 gid [[thread_position_in_grid]]) {
   if (gid.x >= params.width || gid.y >= params.height) {
     return;
   }
 
-  const int   row   = static_cast<int>(gid.y);
-  const int   col   = static_cast<int>(gid.x);
-  const uint  color = FC(params, row, col);
   const uint  index = gid.y * params.stride + gid.x;
-  const float inval = max(0.0f, input[index]);
+  const float4 input_pixel = input[index];
+  const float3 pixel       = MaxRgb(input_pixel);
+  const float3 ref         = CalcRefavg(input, static_cast<int>(gid.y), static_cast<int>(gid.x), params);
 
-  if (inval >= params.clip_val) {
-    const float ref = CalcRefavg(input, row, col, params);
-    output[index]   = max(inval, ref + params.chrominance[color]);
-  } else {
-    output[index] = inval;
+  float3 result = pixel;
+  if (pixel.x >= params.clips[0]) {
+    result.x = max(pixel.x, ref.x + params.chrominance[0]);
   }
+  if (pixel.y >= params.clips[1]) {
+    result.y = max(pixel.y, ref.y + params.chrominance[1]);
+  }
+  if (pixel.z >= params.clips[2]) {
+    result.z = max(pixel.z, ref.z + params.chrominance[2]);
+  }
+
+  output[index] = float4(result, input_pixel.w);
 }
