@@ -6,12 +6,18 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
+#include <cstring>
 #include <limits>
 
 #ifdef HAVE_CUDA
 #include <cuda_runtime_api.h>
 
 #include "edit/scope/detail/scope_cuda_shared.cuh"
+#endif
+
+#ifdef HAVE_METAL
+#include "edit/scope/detail/scope_metal_shared.hpp"
 #endif
 
 namespace puerhlab {
@@ -73,15 +79,31 @@ auto NormalizeWaveformToUnitRange(const std::vector<float>& rgba, int width, int
   return data;
 }
 
+auto NormalizeWaveformCountsToUnitRange(const std::vector<uint32_t>& rgba, int width, int height)
+    -> ScopeWaveformRenderData {
+  if (width <= 0 || height <= 0 ||
+      rgba.size() < static_cast<size_t>(width) * static_cast<size_t>(height) * 4U) {
+    return {};
+  }
+
+  std::vector<float> waveform(rgba.size(), 0.0f);
+  for (size_t i = 0; i < rgba.size(); ++i) {
+    waveform[i] = static_cast<float>(rgba[i]);
+  }
+  return NormalizeWaveformToUnitRange(waveform, width, height);
+}
+
 }  // namespace
 
 #ifdef HAVE_CUDA
 auto CreateCudaScopeAnalyzer() -> std::shared_ptr<IScopeAnalyzer>;
 #endif
 
+#ifndef HAVE_METAL
 auto CreateMetalScopeAnalyzer() -> std::shared_ptr<IScopeAnalyzer> {
   return std::make_shared<NullScopeAnalyzer>();
 }
+#endif
 
 auto CreateDefaultScopeAnalyzer() -> std::shared_ptr<IScopeAnalyzer> {
 #ifdef HAVE_CUDA
@@ -131,7 +153,46 @@ auto ReadScopeRenderSnapshot(const ScopeOutputSet& output) -> ScopeRenderSnapsho
       }
     }
   }
-#else
+#endif
+
+#ifdef HAVE_METAL
+  if (output.histogram_valid && output.histogram_buffer &&
+      output.histogram_buffer.backend == GpuBackend::Metal) {
+    const auto* resource = static_cast<const scope::metal_detail::MetalBufferResource*>(
+        output.histogram_buffer.resource.get());
+    if (resource && resource->buffer && output.histogram_bins > 0) {
+      std::vector<uint32_t> counts(static_cast<size_t>(output.histogram_bins) * 3U, 0U);
+      const size_t expected_bytes = counts.size() * sizeof(uint32_t);
+      if (resource->size_bytes >= expected_bytes) {
+        std::memcpy(counts.data(), resource->buffer->contents(), expected_bytes);
+        snapshot.histogram = NormalizeHistogramToUnitRange(counts, output.histogram_bins);
+      }
+    }
+  }
+
+  if (output.waveform_valid && output.waveform_image &&
+      output.waveform_image.backend == GpuBackend::Metal) {
+    const auto* resource = static_cast<const scope::metal_detail::MetalLinearImageResource*>(
+        output.waveform_image.resource.get());
+    if (resource && resource->buffer && output.waveform_width > 0 && output.waveform_height > 0 &&
+        resource->storage == scope::metal_detail::MetalLinearImageStorage::UInt32RGBA) {
+      std::vector<uint32_t> rgba(static_cast<size_t>(output.waveform_width) *
+                                     static_cast<size_t>(output.waveform_height) * 4U,
+                                 0U);
+      const size_t row_bytes = static_cast<size_t>(output.waveform_width) * sizeof(uint32_t) * 4U;
+      const auto*  src_bytes = static_cast<const std::byte*>(resource->buffer->contents());
+      for (int y = 0; y < output.waveform_height; ++y) {
+        std::memcpy(rgba.data() +
+                        static_cast<size_t>(y) * static_cast<size_t>(output.waveform_width) * 4U,
+                    src_bytes + static_cast<size_t>(y) * resource->row_bytes, row_bytes);
+      }
+      snapshot.waveform =
+          NormalizeWaveformCountsToUnitRange(rgba, output.waveform_width, output.waveform_height);
+    }
+  }
+#endif
+
+#if !defined(HAVE_CUDA) && !defined(HAVE_METAL)
   (void)output;
 #endif
 

@@ -22,6 +22,7 @@
 #include "edit/operators/GPU_kernels/fused_param.hpp"
 #include "edit/operators/GPU_kernels/metal_param.hpp"
 #include "edit/scope/scope_analyzer.hpp"
+#include "edit/scope/detail/scope_metal_shared.hpp"
 #include "image/image_buffer.hpp"
 #include "image/metal_image.hpp"
 #include "metal/compute_pipeline_cache.hpp"
@@ -426,15 +427,22 @@ class MetalGPUPipeline final : public GPUPipelineImpl {
     if (frame_sink_) {
       const auto submit_start = std::chrono::steady_clock::now();
 #ifdef HAVE_METAL
-      auto retained_texture =
-          std::make_shared<NS::SharedPtr<MTL::Texture>>(NS::RetainPtr(result.Texture()));
+      auto final_image_resource =
+          std::make_shared<scope::metal_detail::MetalTextureImageResource>();
+      final_image_resource->texture       = NS::RetainPtr(result.Texture());
+      final_image_resource->width         = static_cast<int>(result.Width());
+      final_image_resource->height        = static_cast<int>(result.Height());
+      final_image_resource->format        = FramePixelFormat::RGBA32F;
+      final_image_resource->native_object =
+          reinterpret_cast<std::uintptr_t>(final_image_resource->texture.get());
       frame_sink_->SubmitFinalDisplayFrame(FinalDisplayFrameView{
-          SharedGpuImageHandle{GpuBackend::Metal,
-                               std::shared_ptr<void>(retained_texture, retained_texture.get()),
-                               static_cast<int>(result.Width()),
-                               static_cast<int>(result.Height()),
-                               0,
-                               FramePixelFormat::RGBA32F},
+          SharedGpuImageHandle{
+              GpuBackend::Metal,
+              std::shared_ptr<void>(final_image_resource, final_image_resource.get()),
+              static_cast<int>(result.Width()),
+              static_cast<int>(result.Height()),
+              0,
+              FramePixelFormat::RGBA32F},
           static_cast<int>(result.Width()),
           static_cast<int>(result.Height()),
           FramePixelFormat::RGBA32F,
@@ -444,8 +452,9 @@ class MetalGPUPipeline final : public GPUPipelineImpl {
           0});
       frame_sink_->SubmitMetalFrame(
           ViewerMetalFrame{static_cast<int>(result.Width()), static_cast<int>(result.Height()),
-                           reinterpret_cast<std::uintptr_t>(retained_texture->get()),
-                           std::shared_ptr<const void>(retained_texture, retained_texture->get()),
+                           reinterpret_cast<std::uintptr_t>(final_image_resource->texture.get()),
+                           std::shared_ptr<const void>(final_image_resource,
+                                                       final_image_resource->texture.get()),
                            display_config,
                            FramePresentationMode::FullFrame});
 #else

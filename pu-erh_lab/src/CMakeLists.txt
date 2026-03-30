@@ -72,6 +72,9 @@ if(PUERHLAB_METAL_ENABLED)
     set(METAL_FUSED_PIPELINE_SRC "${CMAKE_CURRENT_SOURCE_DIR}/edit/pipeline/metal_shader/fused_pipeline.metal")
     set(METAL_FUSED_PIPELINE_AIR "${CMAKE_CURRENT_BINARY_DIR}/edit/pipeline/metal_shader/fused_pipeline.air")
     set(METAL_FUSED_PIPELINE_METALLIB "${CMAKE_CURRENT_BINARY_DIR}/edit/pipeline/metal_shader/fused_pipeline.metallib")
+    set(METAL_SCOPE_ANALYZER_SRC "${CMAKE_CURRENT_SOURCE_DIR}/edit/scope/metal_shader/scope_analyzer.metal")
+    set(METAL_SCOPE_ANALYZER_AIR "${CMAKE_CURRENT_BINARY_DIR}/edit/scope/metal_shader/scope_analyzer.air")
+    set(METAL_SCOPE_ANALYZER_METALLIB "${CMAKE_CURRENT_BINARY_DIR}/edit/scope/metal_shader/scope_analyzer.metallib")
     set(METAL_FUSED_PIPELINE_DEPS
         "${CMAKE_CURRENT_SOURCE_DIR}/edit/operators/GPU_kernels/metal_shader/common.metal"
         "${CMAKE_CURRENT_SOURCE_DIR}/edit/operators/GPU_kernels/metal_shader/basic.metal"
@@ -223,6 +226,15 @@ if(PUERHLAB_METAL_ENABLED)
     )
 
     puerhlab_add_metal_library(
+        ScopeAnalyzerMetalShaders
+        "${METAL_SCOPE_ANALYZER_SRC}"
+        "${METAL_SCOPE_ANALYZER_AIR}"
+        "${METAL_SCOPE_ANALYZER_METALLIB}"
+        "Compiling Metal scope analyzer shader"
+        "Linking Metal scope analyzer library"
+    )
+
+    puerhlab_add_metal_library(
         MetalToLinearRefShaders
         "${METAL_TO_LINEAR_REF_SRC}"
         "${METAL_TO_LINEAR_REF_AIR}"
@@ -279,6 +291,7 @@ if(PUERHLAB_METAL_ENABLED)
         "${METAL_GEOMETRY_UTILS_METALLIB}"
         "${METAL_LENS_CALIB_METALLIB}"
         "${METAL_FUSED_PIPELINE_METALLIB}"
+        "${METAL_SCOPE_ANALYZER_METALLIB}"
         "${METAL_TO_LINEAR_REF_METALLIB}"
         "${METAL_DEBAYER_RCD_METALLIB}"
         "${METAL_HIGHLIGHT_RECONSTRUCT_METALLIB}"
@@ -479,6 +492,7 @@ endif()
 if(PUERHLAB_METAL_ENABLED)
     list(APPEND GPU_PIPELINE_SRCS
         edit/pipeline/pipeline_metal_impl.cpp
+        edit/scope/metal_scope_analyzer.cpp
     )
 endif()
 
@@ -496,10 +510,11 @@ if(PUERHLAB_CUDA_ENABLED)
     target_link_libraries(EditPipeline PRIVATE CUDA::cudart)
 endif()
 if(PUERHLAB_METAL_ENABLED)
-    add_dependencies(EditPipeline EditPipelineMetalShaders)
+    add_dependencies(EditPipeline EditPipelineMetalShaders ScopeAnalyzerMetalShaders)
     target_compile_definitions(EditPipeline PUBLIC HAVE_METAL)
     target_compile_definitions(EditPipeline PRIVATE
         PUERHLAB_METAL_FUSED_PIPELINE_METALLIB_PATH="${METAL_FUSED_PIPELINE_METALLIB}"
+        PUERHLAB_METAL_SCOPE_ANALYZER_METALLIB_PATH="${METAL_SCOPE_ANALYZER_METALLIB}"
     )
     target_link_libraries(EditPipeline PRIVATE MetalImage MetalContext)
 endif()
