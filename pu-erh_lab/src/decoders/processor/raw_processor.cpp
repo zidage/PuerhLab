@@ -86,7 +86,20 @@ auto CropToActiveArea(const cv::Mat& src, const libraw_image_sizes_t& sizes) -> 
   return src(active_rect).clone();
 }
 
-auto BuildDirectRgbRgba(const libraw_rawdata_t& raw_data) -> cv::Mat {
+auto BuildOpaqueRgbaFromRgb(const cv::Mat& rgb) -> cv::Mat {
+  cv::Mat rgba;
+  cv::cvtColor(rgb, rgba, cv::COLOR_RGB2RGBA);
+  return rgba;
+}
+
+auto ExtractRgbFromFourChannel(const cv::Mat& src) -> cv::Mat {
+  cv::Mat rgb(src.rows, src.cols, CV_MAKETYPE(src.depth(), 3));
+  const int from_to[] = {0, 0, 1, 1, 2, 2};
+  cv::mixChannels(&src, 1, &rgb, 1, from_to, 3);
+  return rgb;
+}
+
+auto BuildDirectRgbRgba(const libraw_rawdata_t& raw_data, const libraw_iparams_t& idata) -> cv::Mat {
   const auto& sizes     = raw_data.sizes;
   const int   raw_width = static_cast<int>(sizes.raw_width);
   const int   raw_height = static_cast<int>(sizes.raw_height);
@@ -97,18 +110,31 @@ auto BuildDirectRgbRgba(const libraw_rawdata_t& raw_data) -> cv::Mat {
     cv::Mat view(raw_height, raw_width, CV_16UC3, raw_data.color3_image, row_step);
     cv::Mat rgb32f;
     CropToActiveArea(view, sizes).convertTo(rgb32f, CV_32FC3, 1.0 / 65535.0);
-    cv::Mat rgba32f;
-    cv::cvtColor(rgb32f, rgba32f, cv::COLOR_RGB2RGBA);
-    return rgba32f;
+    return BuildOpaqueRgbaFromRgb(rgb32f);
   }
 
   if (raw_data.float3_image != nullptr) {
     const size_t row_step = sizes.raw_pitch != 0 ? static_cast<size_t>(sizes.raw_pitch)
                                                  : static_cast<size_t>(raw_width) * sizeof(float) * 3;
     cv::Mat view(raw_height, raw_width, CV_32FC3, raw_data.float3_image, row_step);
-    cv::Mat rgba32f;
-    cv::cvtColor(CropToActiveArea(view, sizes), rgba32f, cv::COLOR_RGB2RGBA);
-    return rgba32f;
+    return BuildOpaqueRgbaFromRgb(CropToActiveArea(view, sizes));
+  }
+
+  if (raw_data.color4_image != nullptr && idata.colors == 3) {
+    const size_t row_step = sizes.raw_pitch != 0 ? static_cast<size_t>(sizes.raw_pitch)
+                                                 : static_cast<size_t>(raw_width) * sizeof(uint16_t) * 4;
+    cv::Mat view(raw_height, raw_width, CV_16UC4, raw_data.color4_image, row_step);
+    cv::Mat rgb16 = ExtractRgbFromFourChannel(CropToActiveArea(view, sizes));
+    cv::Mat rgb32f;
+    rgb16.convertTo(rgb32f, CV_32FC3, 1.0 / 65535.0);
+    return BuildOpaqueRgbaFromRgb(rgb32f);
+  }
+
+  if (raw_data.float4_image != nullptr && idata.colors == 3) {
+    const size_t row_step = sizes.raw_pitch != 0 ? static_cast<size_t>(sizes.raw_pitch)
+                                                 : static_cast<size_t>(raw_width) * sizeof(float) * 4;
+    cv::Mat view(raw_height, raw_width, CV_32FC4, raw_data.float4_image, row_step);
+    return BuildOpaqueRgbaFromRgb(ExtractRgbFromFourChannel(CropToActiveArea(view, sizes)));
   }
 
   throw std::runtime_error("RawProcessor: direct RGB input is missing a 3-channel source buffer.");
@@ -124,7 +150,10 @@ auto DescribeUnsupportedRawInput(LibRaw& raw_processor, const RawInputKind input
     return "Fuji rotated CFA layouts are not supported.";
   }
   if (rawdata.color4_image != nullptr || rawdata.float4_image != nullptr) {
-    return "4-channel decoded raw input is not supported.";
+    if (idata.colors == 3) {
+      return "3-color decoded raw input stored in a 4-channel buffer is not supported.";
+    }
+    return "4-color decoded raw input is not supported.";
   }
   if (rawdata.float_image != nullptr) {
     return "single-channel float raw input is not supported.";
@@ -427,14 +456,15 @@ void RawProcessor::ConvertToWorkingSpace() {
 }
 
 auto RawProcessor::Process() -> ImageBuffer {
-  input_kind_ = ClassifyRawInput(raw_data_);
+  input_kind_ = ClassifyRawInput(raw_data_, raw_processor_.imgdata.idata);
 
   // runtime_color_context_ is pre-populated by the caller (via MetadataExtractor).
   // Only update the output color-space flag which depends on the decode pipeline.
   runtime_color_context_.output_in_camera_space_ = false;
 
   if (input_kind_ == RawInputKind::DebayeredRgb) {
-    process_buffer_ = {BuildDirectRgbRgba(raw_data_)};
+    params_.highlights_reconstruct_ = false;
+    process_buffer_                 = {BuildDirectRgbRgba(raw_data_, raw_processor_.imgdata.idata)};
     runtime_color_context_.output_in_camera_space_ = true;
 
     if (params_.gpu_backend_ == RawGpuBackend::GPU) {

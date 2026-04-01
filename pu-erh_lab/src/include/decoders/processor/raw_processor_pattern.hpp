@@ -197,12 +197,16 @@ inline auto ReadLibRawCfaPattern(LibRaw& raw_processor) -> RawCfaPattern {
   return pattern;
 }
 
-inline auto ClassifyRawInput(const libraw_rawdata_t& raw_data) -> RawInputKind {
-  if (raw_data.raw_image != nullptr) {
-    return RawInputKind::BayerRaw;
-  }
+inline auto ClassifyRawInput(const libraw_rawdata_t& raw_data, const libraw_iparams_t& idata)
+    -> RawInputKind {
   if (raw_data.color3_image != nullptr || raw_data.float3_image != nullptr) {
     return RawInputKind::DebayeredRgb;
+  }
+  if ((raw_data.color4_image != nullptr || raw_data.float4_image != nullptr) && idata.colors == 3) {
+    return RawInputKind::DebayeredRgb;
+  }
+  if (raw_data.raw_image != nullptr) {
+    return RawInputKind::BayerRaw;
   }
   return RawInputKind::Unsupported;
 }

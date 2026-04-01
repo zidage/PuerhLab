@@ -97,7 +97,8 @@ auto TrySelectNonRggbSample(const std::filesystem::path& path) -> std::optional<
     return std::nullopt;
   }
 
-  const RawInputKind input_kind = ClassifyRawInput(raw_processor.imgdata.rawdata);
+  const RawInputKind input_kind =
+      ClassifyRawInput(raw_processor.imgdata.rawdata, raw_processor.imgdata.idata);
   if (input_kind != RawInputKind::BayerRaw || raw_processor.imgdata.idata.is_foveon != 0U ||
       raw_processor.imgdata.idata.filters == 0U || raw_processor.imgdata.idata.filters == 1U ||
       raw_processor.imgdata.idata.filters == 9U || raw_processor.is_fuji_rotated() != 0) {
@@ -142,6 +143,10 @@ auto ExpectedHalfDecodeSize(const libraw_image_sizes_t& sizes) -> cv::Size {
   return {width, height};
 }
 
+auto LinearDngSamplePath() -> std::filesystem::path {
+  return std::filesystem::path(TEST_IMG_PATH) / "raw" / "linear_dng" / "mfzoty.dng";
+}
+
 }  // namespace
 
 TEST(RawProcessorPattern, DescribeAndValidateClassicPatterns) {
@@ -168,21 +173,48 @@ TEST(RawProcessorPattern, DescribeAndValidateClassicPatterns) {
 
 TEST(RawProcessorPattern, ClassifyRawInputLayouts) {
   libraw_rawdata_t raw_data = {};
+  libraw_iparams_t idata    = {};
 
   raw_data.raw_image = reinterpret_cast<ushort*>(1);
-  EXPECT_EQ(ClassifyRawInput(raw_data), RawInputKind::BayerRaw);
+  EXPECT_EQ(ClassifyRawInput(raw_data, idata), RawInputKind::BayerRaw);
 
   raw_data.raw_image    = nullptr;
   raw_data.color3_image = reinterpret_cast<ushort(*)[3]>(1);
-  EXPECT_EQ(ClassifyRawInput(raw_data), RawInputKind::DebayeredRgb);
+  EXPECT_EQ(ClassifyRawInput(raw_data, idata), RawInputKind::DebayeredRgb);
 
   raw_data.color3_image = nullptr;
   raw_data.float3_image = reinterpret_cast<float(*)[3]>(1);
-  EXPECT_EQ(ClassifyRawInput(raw_data), RawInputKind::DebayeredRgb);
+  EXPECT_EQ(ClassifyRawInput(raw_data, idata), RawInputKind::DebayeredRgb);
 
   raw_data.float3_image = nullptr;
   raw_data.color4_image = reinterpret_cast<ushort(*)[4]>(1);
-  EXPECT_EQ(ClassifyRawInput(raw_data), RawInputKind::Unsupported);
+  EXPECT_EQ(ClassifyRawInput(raw_data, idata), RawInputKind::Unsupported);
+
+  idata.colors = 3;
+  EXPECT_EQ(ClassifyRawInput(raw_data, idata), RawInputKind::DebayeredRgb);
+}
+
+TEST(RawProcessorPattern, LibRawRecognizesLinearDngAsThreeColorFullImage) {
+  const std::filesystem::path sample_path = LinearDngSamplePath();
+  if (!std::filesystem::exists(sample_path)) {
+    GTEST_SKIP() << "Linear DNG sample not found: " << sample_path.string();
+  }
+
+  LibRaw raw_processor;
+  ASSERT_EQ(raw_processor.open_file(sample_path.string().c_str()), LIBRAW_SUCCESS);
+  ASSERT_EQ(raw_processor.unpack(), LIBRAW_SUCCESS);
+
+  const auto& idata   = raw_processor.imgdata.idata;
+  const auto& rawdata = raw_processor.imgdata.rawdata;
+
+  EXPECT_NE(idata.dng_version, 0U);
+  EXPECT_EQ(idata.filters, 0U);
+  EXPECT_EQ(idata.colors, 3);
+  EXPECT_EQ(rawdata.raw_image, nullptr);
+  EXPECT_NE(rawdata.color4_image, nullptr);
+  EXPECT_EQ(ClassifyRawInput(rawdata, idata), RawInputKind::DebayeredRgb);
+
+  raw_processor.recycle();
 }
 
 TEST(RawProcessorPattern, ReadLibRawDetectsXTransPattern) {
@@ -297,6 +329,80 @@ TEST(RawProcessorPattern, CudaDecodeSupportsNonRggbClassicBayer) {
   EXPECT_EQ(input->GetGPUType(), CV_32FC4);
   EXPECT_EQ(input->GetGPUWidth(), expected_size.width);
   EXPECT_EQ(input->GetGPUHeight(), expected_size.height);
+
+  OperatorParams params;
+  raw_decode_op.SetGlobalParams(params);
+  EXPECT_TRUE(params.raw_runtime_valid_);
+  EXPECT_EQ(params.raw_decode_input_space_, RawDecodeInputSpace::CAMERA);
+#endif
+}
+
+TEST(RawProcessorPattern, CpuDecodeSupportsLinearDngSampleAndSkipsHighlightRecovery) {
+  const std::filesystem::path sample_path = LinearDngSamplePath();
+  if (!std::filesystem::exists(sample_path)) {
+    GTEST_SKIP() << "Linear DNG sample not found: " << sample_path.string();
+  }
+
+  std::vector<uint8_t> raw_bytes = ReadFileToBuffer(sample_path);
+  ASSERT_FALSE(raw_bytes.empty());
+
+  auto input = std::make_shared<ImageBuffer>(std::move(raw_bytes));
+
+  nlohmann::json decode_params;
+  decode_params["raw"] = {{"gpu_backend", "cpu"},
+                          {"highlights_reconstruct", true},
+                          {"use_camera_wb", true},
+                          {"backend", "puerh"},
+                          {"decode_res", static_cast<int>(DecodeRes::FULL)}};
+
+  RawDecodeOp raw_decode_op(decode_params);
+  ASSERT_NO_THROW(raw_decode_op.Apply(input));
+
+  cv::Mat& decoded = input->GetCPUData();
+  ASSERT_FALSE(decoded.empty());
+  EXPECT_EQ(decoded.type(), CV_32FC4);
+  EXPECT_EQ(decoded.cols, 6000);
+  EXPECT_EQ(decoded.rows, 4000);
+
+  const cv::Vec4f center = decoded.at<cv::Vec4f>(decoded.rows / 2, decoded.cols / 2);
+  EXPECT_GE(center[0], 0.0f);
+  EXPECT_GE(center[1], 0.0f);
+  EXPECT_GE(center[2], 0.0f);
+  EXPECT_FLOAT_EQ(center[3], 1.0f);
+
+  OperatorParams params;
+  raw_decode_op.SetGlobalParams(params);
+  EXPECT_TRUE(params.raw_runtime_valid_);
+  EXPECT_EQ(params.raw_decode_input_space_, RawDecodeInputSpace::CAMERA);
+}
+
+TEST(RawProcessorPattern, GpuDecodeSupportsLinearDngSample) {
+#ifndef HAVE_CUDA
+  GTEST_SKIP() << "CUDA is not enabled in this build.";
+#else
+  const std::filesystem::path sample_path = LinearDngSamplePath();
+  if (!std::filesystem::exists(sample_path)) {
+    GTEST_SKIP() << "Linear DNG sample not found: " << sample_path.string();
+  }
+
+  std::vector<uint8_t> raw_bytes = ReadFileToBuffer(sample_path);
+  ASSERT_FALSE(raw_bytes.empty());
+
+  auto input = std::make_shared<ImageBuffer>(std::move(raw_bytes));
+
+  nlohmann::json decode_params;
+  decode_params["raw"] = {{"gpu_backend", "gpu"},
+                          {"highlights_reconstruct", true},
+                          {"use_camera_wb", true},
+                          {"backend", "puerh"},
+                          {"decode_res", static_cast<int>(DecodeRes::FULL)}};
+
+  RawDecodeOp raw_decode_op(decode_params);
+  ASSERT_NO_THROW(raw_decode_op.Apply(input));
+
+  EXPECT_EQ(input->GetGPUType(), CV_32FC4);
+  EXPECT_EQ(input->GetGPUWidth(), 6000);
+  EXPECT_EQ(input->GetGPUHeight(), 4000);
 
   OperatorParams params;
   raw_decode_op.SetGlobalParams(params);
