@@ -301,7 +301,7 @@ ApplicationWindow {
         title: qsTr("Select Images")
         fileMode: FileDialog.OpenFiles
         nameFilters: [
-            qsTr("Images (*.dng *.nef *.cr2 *.cr3 *.arw *.rw2 *.raf *.tif *.tiff *.jpg *.jpeg *.png)"),
+            qsTr("RAW Images (*.raw *.dng *.nef *.cr2 *.cr3 *.arw *.rw2 *.raf *.3fr)"),
             qsTr("All Files (*)")
         ]
         onAccepted: {
@@ -536,11 +536,13 @@ ApplicationWindow {
         spacing: 3
 
         Rectangle {
+            id: topToolbar
             Layout.fillWidth: true
             Layout.preferredHeight: 50
             radius: root.panelRadius
             color: root.colBgPanel
             border.width: 0
+            z: 1
 
             RowLayout {
                 anchors.left: parent.left
@@ -549,7 +551,12 @@ ApplicationWindow {
                 anchors.leftMargin: 16
                 anchors.rightMargin: 16
                 spacing: 4
-                Label { text: qsTr("Pu-erh Lab"); font.pixelSize: 19; font.weight: 700; color: root.colAccentPrimary }
+                Row {
+                    spacing: 0
+                    Label { text: qsTr("Pu-erh"); font.pixelSize: 19; font.weight: 700; color: "#FFD700" }
+                    Label { text: " "; font.pixelSize: 19; font.weight: 700 }
+                    Label { text: qsTr("Lab"); font.pixelSize: 19; font.weight: 700; color: "#FFFFFF" }
+                }
                 Item { Layout.preferredWidth: 8 }
 
                 // ── Load / New / Save pill ──
@@ -584,7 +591,9 @@ ApplicationWindow {
                                     radius: 4
                                     color: pillMouse.containsMouse && modelData.en
                                            ? root.colHover : "transparent"
+                                    scale: pillMouse.containsMouse && modelData.en ? 1.03 : 1.0
                                     Behavior on color { ColorAnimation { duration: 120 } }
+                                    Behavior on scale { NumberAnimation { duration: 100; easing.type: Easing.OutCubic } }
 
                                     Label {
                                         id: pillLabel
@@ -630,35 +639,71 @@ ApplicationWindow {
 
                 Item { Layout.preferredWidth: 4 }
                 Button {
+                    id: importBtn
                     text: qsTr("Import")
                     enabled: root.backendInteractive
                     height: 36
                     Material.background: root.colAccentSoft
                     Material.foreground: root.colBgDeep
+                    scale: importBtn.hovered && enabled ? 1.03 : 1.0
+                    Behavior on scale { NumberAnimation { duration: 100; easing.type: Easing.OutCubic } }
                     onClicked: importDialog.open()
                 }
                 Item { Layout.fillWidth: true }
                 Button {
+                    id: addSelectedBtn
                     text: qsTr("Add Selected (%1)").arg(root.selectedCount)
                     enabled: root.backendInteractive && root.selectedCount > 0
                     Material.background: root.colAccentPrimary
                     Material.foreground: root.colBgDeep
+                    scale: addSelectedBtn.hovered && enabled ? 1.03 : 1.0
+                    Behavior on scale { NumberAnimation { duration: 100; easing.type: Easing.OutCubic } }
                     onClicked: selectionState.addSelectedToExportQueue()
                 }
                 Button {
+                    id: exportQueueBtn
                     text: qsTr("Export Queue (%1)").arg(root.exportQueueCount)
                     enabled: root.backendInteractive && (albumBackend.shownCount > 0 || root.exportQueueCount > 0)
                     Material.background: root.colAccentSecondary
                     Material.foreground: root.colBgDeep
+                    scale: exportQueueBtn.hovered && enabled ? 1.03 : 1.0
+                    Behavior on scale { NumberAnimation { duration: 100; easing.type: Easing.OutCubic } }
                     onClicked: {
                         selectionState.refreshExportPreview()
                         exportDialog.open()
                     }
                 }
                 Item { Layout.preferredWidth: 8 }
-                Button { text: qsTr("Library"); checkable: true; checked: !settingsPage; onClicked: settingsPage = false }
-                Button { text: qsTr("Settings"); checkable: true; checked: settingsPage; onClicked: settingsPage = true }
-                Button { text: qsTr("Inspector"); checkable: true; checked: inspectorVisible; onToggled: inspectorVisible = checked }
+                Button {
+                    id: libraryBtn
+                    text: qsTr("Library"); checkable: true; checked: !settingsPage; onClicked: settingsPage = false
+                    scale: libraryBtn.hovered ? 1.03 : 1.0
+                    Behavior on scale { NumberAnimation { duration: 100; easing.type: Easing.OutCubic } }
+                }
+                Button {
+                    id: settingsBtn
+                    text: qsTr("Settings"); checkable: true; checked: settingsPage; onClicked: settingsPage = true
+                    scale: settingsBtn.hovered ? 1.03 : 1.0
+                    Behavior on scale { NumberAnimation { duration: 100; easing.type: Easing.OutCubic } }
+                }
+                Button {
+                    id: inspectorBtn
+                    text: qsTr("Inspector"); checkable: true; checked: inspectorVisible; onToggled: inspectorVisible = checked
+                    scale: inspectorBtn.hovered ? 1.03 : 1.0
+                    Behavior on scale { NumberAnimation { duration: 100; easing.type: Easing.OutCubic } }
+                }
+            }
+        }
+
+        // ── Toolbar bottom shadow (rendered above content) ──
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.preferredHeight: 8
+            Layout.topMargin: -8
+            z: 2
+            gradient: Gradient {
+                GradientStop { position: 0.0; color: Qt.rgba(0, 0, 0, 0.18) }
+                GradientStop { position: 1.0; color: "transparent" }
             }
         }
 

@@ -420,6 +420,7 @@ auto ResolveCameraColorMatrixAlias(const std::string& camera_make,
                                    const std::string& camera_model) -> std::string {
   const auto make_tokens  = TokenizeCameraNameLoose(camera_make);
   const auto model_tokens = TokenizeCameraNameLoose(camera_model);
+  const auto model_compact = CompactCameraName(camera_model);
 
   const bool is_hasselblad =
       ContainsCameraToken(make_tokens, "hasselblad") ||
@@ -428,16 +429,38 @@ auto ResolveCameraColorMatrixAlias(const std::string& camera_make,
     return {};
   }
 
-  const bool has_x2d  = ContainsCameraToken(model_tokens, "x2d") ||
-                       ContainsCameraTokenFragment(model_tokens, "x2d");
+  // Adobe's Hasselblad entries in this database are grouped by sensor generation rather than
+  // modern retail model names. Current Hasselblad camera names still expose the sensor tier in
+  // the model string (e.g. 39, 50C, 100C), so resolve to the closest Adobe family by that tier.
+  const bool has_39 = ContainsCameraToken(model_tokens, "39") ||
+                      ContainsCameraTokenFragment(model_tokens, "39") ||
+                      model_compact.ends_with("39") ||
+                      model_compact.find("39ms") != std::string::npos;
+  if (has_39) {
+    return NormalizeCameraName("Hasselblad 39-Coated");
+  }
+
+  const bool has_50c = ContainsCameraToken(model_tokens, "50c") ||
+                       ContainsCameraTokenFragment(model_tokens, "50c") ||
+                       model_compact.find("50c") != std::string::npos;
+  if (has_50c) {
+    return NormalizeCameraName("Hasselblad 50-15-Coated5");
+  }
+
   const bool has_100c = ContainsCameraToken(model_tokens, "100c") ||
-                        ContainsCameraTokenFragment(model_tokens, "100c");
-  if (!has_x2d || !has_100c) {
+                        ContainsCameraTokenFragment(model_tokens, "100c") ||
+                        model_compact.find("100c") != std::string::npos;
+  if (!has_100c) {
     return {};
   }
 
-  if (ContainsCameraToken(model_tokens, "ii") ||
-      ContainsCameraTokenFragment(model_tokens, "x2dii")) {
+  const bool has_x2d = ContainsCameraToken(model_tokens, "x2d") ||
+                       ContainsCameraTokenFragment(model_tokens, "x2d") ||
+                       model_compact.find("x2d") != std::string::npos;
+  if (has_x2d &&
+      (ContainsCameraToken(model_tokens, "ii") ||
+       ContainsCameraTokenFragment(model_tokens, "x2dii") ||
+       model_compact.find("x2dii") != std::string::npos)) {
     return NormalizeCameraName("Hasselblad 100-22-Coated6");
   }
   return NormalizeCameraName("Hasselblad 100-20-Coated6");

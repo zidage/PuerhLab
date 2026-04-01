@@ -286,7 +286,7 @@
     </message>
     <message>
         <location filename="../qml/Main.qml" line="364"/>
-        <source>Images (*.dng *.nef *.cr2 *.cr3 *.arw *.rw2 *.raf *.tif *.tiff *.jpg *.jpeg *.png)</source>
+        <source>RAW Images (*.raw *.dng *.nef *.cr2 *.cr3 *.arw *.rw2 *.raf *.3fr)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
