@@ -74,13 +74,15 @@ Popup {
     }
 
     contentItem: ScrollView {
+        id: scrollView
         anchors.fill: parent
+        contentWidth: width - 56
         padding: 28
         clip: true
         ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
 
         ColumnLayout {
-            width: root.availableWidth - leftPadding - rightPadding
+            width: scrollView.width - 56
             spacing: 22
 
             ColumnLayout {
@@ -112,6 +114,7 @@ Popup {
                     wrapMode: Text.WordWrap
                     font.pixelSize: 14
                     lineHeight: 1.2
+                    Layout.minimumWidth: 100
                 }
             }
 
@@ -156,6 +159,7 @@ Popup {
                                 font.pixelSize: 15
                                 font.weight: 700
                                 lineHeight: 1.18
+                                Layout.minimumWidth: 50
                             }
 
                             Label {
@@ -164,6 +168,7 @@ Popup {
                                 color: root.mutedText
                                 wrapMode: Text.WordWrap
                                 font.pixelSize: 12
+                                Layout.minimumWidth: 50
                             }
                         }
                     }
@@ -200,6 +205,7 @@ Popup {
 
                 Rectangle {
                     Layout.fillWidth: true
+                    Layout.preferredWidth: Math.max(350, root.width * 0.6)
                     Layout.preferredHeight: Math.max(320, Math.min(460, root.height * 0.46))
                     radius: 16
                     color: root.sectionColor
@@ -225,6 +231,7 @@ Popup {
                             color: root.mutedText
                             wrapMode: Text.WordWrap
                             font.pixelSize: 12
+                            Layout.minimumWidth: 50
                         }
 
                         Rectangle {
@@ -288,6 +295,7 @@ Popup {
                 }
 
                 Rectangle {
+                    Layout.fillWidth: true
                     Layout.preferredWidth: Math.max(260, root.width * 0.32)
                     Layout.preferredHeight: Math.max(320, Math.min(460, root.height * 0.46))
                     Layout.alignment: Qt.AlignTop
@@ -314,6 +322,7 @@ Popup {
                             color: root.mutedText
                             wrapMode: Text.WordWrap
                             font.pixelSize: 12
+                            Layout.minimumWidth: 50
                         }
 
                         Rectangle {
@@ -348,6 +357,7 @@ Popup {
                                     font.family: appTheme.dataFontFamily
                                     font.pixelSize: 12
                                     wrapMode: Text.WrapAnywhere
+                                    Layout.minimumWidth: 50
                                 }
 
                                 Button {
@@ -364,6 +374,7 @@ Popup {
                             color: root.mutedText
                             wrapMode: Text.WordWrap
                             font.pixelSize: 12
+                            Layout.minimumWidth: 50
                         }
                     }
                 }
