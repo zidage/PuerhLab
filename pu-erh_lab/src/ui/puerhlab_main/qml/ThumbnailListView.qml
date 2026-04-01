@@ -14,6 +14,8 @@ ListView {
     readonly property color rowMuted: appTheme.textMutedColor
     readonly property color rowText: appTheme.textColor
     readonly property color rowAccent: appTheme.accentColor
+    readonly property color rowDanger: appTheme.dangerColor
+    readonly property color rowDangerTint: appTheme.dangerTintColor
 
     property var selectedImagesById: ({})
     property var exportQueueById: ({})
@@ -51,10 +53,20 @@ ListView {
         required property string tags
         required property string accent
         required property string thumbUrl
+        required property bool thumbLoading
+        required property bool thumbMissingSource
         property string liveThumbUrl: thumbUrl
         onThumbUrlChanged: liveThumbUrl = thumbUrl
+        property bool liveThumbLoading: thumbLoading
+        onThumbLoadingChanged: liveThumbLoading = thumbLoading
+        property bool liveThumbMissingSource: thumbMissingSource
+        onThumbMissingSourceChanged: liveThumbMissingSource = thumbMissingSource
         property int pinnedElementId: 0
         property int pinnedImageId: 0
+        readonly property bool thumbnailReady: liveThumbUrl.length > 0
+        readonly property bool thumbnailLoadingState: liveThumbLoading
+        readonly property bool thumbnailMissingState: !thumbnailReady && !thumbnailLoadingState && liveThumbMissingSource
+        readonly property bool thumbnailIdleState: !thumbnailReady && !thumbnailLoadingState && !thumbnailMissingState
 
         function bindThumbnailLifetime() {
             if (pinnedElementId === elementId && pinnedImageId === imageId) {
@@ -66,6 +78,8 @@ ListView {
             pinnedElementId = elementId
             pinnedImageId = imageId
             liveThumbUrl = thumbUrl
+            liveThumbLoading = thumbLoading
+            liveThumbMissingSource = thumbMissingSource
             if (pinnedElementId !== 0 && pinnedImageId !== 0) {
                 albumBackend.SetThumbnailVisible(pinnedElementId, pinnedImageId, true)
             }
@@ -94,9 +108,11 @@ ListView {
         Connections {
             target: albumBackend
             ignoreUnknownSignals: true
-            function onThumbnailUpdated(updatedElementId, updatedUrl) {
+            function onThumbnailUpdated(updatedElementId, updatedUrl, loading, missingSource) {
                 if (updatedElementId === elementId) {
                     liveThumbUrl = updatedUrl
+                    liveThumbLoading = loading
+                    liveThumbMissingSource = missingSource
                 }
             }
         }
@@ -111,23 +127,50 @@ ListView {
                 Rectangle {
                     anchors.fill: parent
                     radius: 4
-                    visible: liveThumbUrl.length === 0
+                    visible: !thumbnailReady
                     color: appTheme.bgCanvasColor
                 }
                 BusyIndicator {
                     anchors.centerIn: parent
                     width: 28
                     height: 28
-                    visible: liveThumbUrl.length === 0
+                    visible: thumbnailLoadingState
                     running: visible
                 }
                 Image {
                     anchors.fill: parent
                     source: liveThumbUrl
-                    visible: liveThumbUrl.length > 0
+                    visible: thumbnailReady
                     asynchronous: true
                     fillMode: Image.PreserveAspectFit
                 }
+                Rectangle {
+                    anchors.top: parent.top
+                    anchors.right: parent.right
+                    anchors.margins: 6
+                    width: 16
+                    height: 16
+                    radius: 8
+                    visible: thumbnailMissingState
+                    color: root.rowDangerTint
+                    border.width: 1
+                    border.color: root.rowDanger
+                }
+                Label {
+                    anchors.centerIn: parent
+                    visible: thumbnailMissingState
+                    text: "!"
+                    color: root.rowDanger
+                    font.family: appTheme.dataFontFamily
+                    font.pixelSize: 28
+                    font.weight: 700
+                }
+                HoverHandler {
+                    id: thumbHover
+                }
+                ToolTip.visible: thumbnailMissingState && thumbHover.hovered
+                ToolTip.text: qsTr("Source file was moved or deleted")
+                ToolTip.delay: 150
             }
             ColumnLayout {
                 Layout.fillWidth: true

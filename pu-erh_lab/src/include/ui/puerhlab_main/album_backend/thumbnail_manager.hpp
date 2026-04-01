@@ -6,6 +6,7 @@
 
 #include <QString>
 #include <cstdint>
+#include <filesystem>
 #include <unordered_map>
 
 #include "type/type.hpp"
@@ -22,12 +23,18 @@ class ThumbnailManager {
 
   void SetThumbnailVisible(sl_element_id_t elementId, image_id_t imageId, bool visible);
   void RequestThumbnail(sl_element_id_t elementId, image_id_t imageId);
-  void UpdateThumbnailDataUrl(sl_element_id_t elementId, const QString& dataUrl);
+  void UpdateThumbnailState(sl_element_id_t elementId, const QString& dataUrl, bool loading,
+                            bool missingSource);
   [[nodiscard]] bool IsThumbnailPinned(sl_element_id_t elementId) const;
-  void               RemoveThumbnailState(sl_element_id_t elementId, image_id_t imageId);
+ void               RemoveThumbnailState(sl_element_id_t elementId, image_id_t imageId);
   void               ReleaseVisibleThumbnailPins();
 
  private:
+  [[nodiscard]] auto ResolveThumbnailSourcePath(sl_element_id_t elementId,
+                                                image_id_t imageId) const
+      -> std::filesystem::path;
+  [[nodiscard]] static auto PathExists(const std::filesystem::path& path) -> bool;
+
   AlbumBackend&                                 backend_;
   // TODO: Move pin ref-count tracking into ThumbnailService.
   std::unordered_map<sl_element_id_t, uint32_t> thumbnail_pin_ref_counts_{};

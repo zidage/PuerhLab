@@ -12,18 +12,57 @@
 #include <QMetaObject>
 #include <QPointer>
 
+#include <filesystem>
+#include <system_error>
 #include <thread>
 
 #include <opencv2/opencv.hpp>
 
 #include "app/thumbnail_service.hpp"
+#include "image/image.hpp"
 #include "image/image_buffer.hpp"
 
 namespace puerhlab::ui {
 
+auto ThumbnailManager::PathExists(const std::filesystem::path& path) -> bool {
+  if (path.empty()) {
+    return false;
+  }
+
+  std::error_code exists_error;
+  return std::filesystem::exists(path, exists_error) && !exists_error;
+}
+
+auto ThumbnailManager::ResolveThumbnailSourcePath(sl_element_id_t elementId,
+                                                  image_id_t imageId) const
+    -> std::filesystem::path {
+  if (const auto* item = backend_.FindAlbumItem(elementId);
+      item != nullptr && !item->file_path_.empty()) {
+    return item->file_path_;
+  }
+
+  auto proj = backend_.project_handler_.project();
+  if (!proj) {
+    return {};
+  }
+
+  try {
+    return proj->GetImagePoolService()->Read<std::filesystem::path>(
+        imageId, [](const std::shared_ptr<Image>& image) -> std::filesystem::path {
+          if (!image) {
+            return {};
+          }
+          return image->image_path_;
+        });
+  } catch (...) {
+    return {};
+  }
+}
+
 ThumbnailManager::ThumbnailManager(AlbumBackend& backend) : backend_(backend) {}
 
-void ThumbnailManager::SetThumbnailVisible(sl_element_id_t elementId, image_id_t imageId, bool visible) {
+void ThumbnailManager::SetThumbnailVisible(sl_element_id_t elementId, image_id_t imageId,
+                                          bool visible) {
   if (elementId == 0 || imageId == 0) {
     return;
   }
@@ -37,6 +76,13 @@ void ThumbnailManager::SetThumbnailVisible(sl_element_id_t elementId, image_id_t
     auto& ref = thumbnail_pin_ref_counts_[elementId];
     ref++;
     if (ref == 1) {
+      const auto* item = backend_.FindAlbumItem(elementId);
+      const bool known_missing = item != nullptr && item->thumb_missing_source;
+      const auto source_path = ResolveThumbnailSourcePath(elementId, imageId);
+      if (known_missing && !source_path.empty() && !PathExists(source_path)) {
+        UpdateThumbnailState(elementId, QString(), false, true);
+        return;
+      }
       RequestThumbnail(elementId, imageId);
     }
     return;
@@ -53,7 +99,9 @@ void ThumbnailManager::SetThumbnailVisible(sl_element_id_t elementId, image_id_t
   }
 
   thumbnail_pin_ref_counts_.erase(it);
-  UpdateThumbnailDataUrl(elementId, QString());
+  const auto* item = backend_.FindAlbumItem(elementId);
+  const bool  missing_source = item != nullptr && item->thumb_missing_source;
+  UpdateThumbnailState(elementId, QString(), false, missing_source);
   if (thumb_svc) {
     try {
       thumb_svc->ReleaseThumbnail(elementId);
@@ -67,6 +115,8 @@ void ThumbnailManager::RequestThumbnail(sl_element_id_t elementId, image_id_t im
   if (!thumb_svc) {
     return;
   }
+
+  UpdateThumbnailState(elementId, QString(), true, false);
 
   auto                   service = thumb_svc;
   QPointer<AlbumBackend> self(&backend_);
@@ -82,8 +132,13 @@ void ThumbnailManager::RequestThumbnail(sl_element_id_t elementId, image_id_t im
 
   service->GetThumbnail(
       elementId, imageId,
-      [self, service, elementId](std::shared_ptr<ThumbnailGuard> guard) {
+      [self, service, elementId, imageId](std::shared_ptr<ThumbnailGuard> guard) {
         if (!guard || !guard->thumbnail_buffer_) {
+          if (self) {
+            const auto source_path = self->thumb_.ResolveThumbnailSourcePath(elementId, imageId);
+            const bool missing_source = !source_path.empty() && !PathExists(source_path);
+            self->thumb_.UpdateThumbnailState(elementId, QString(), false, missing_source);
+          }
           if (self && !self->thumb_.IsThumbnailPinned(elementId) && service) {
             try {
               service->ReleaseThumbnail(elementId);
@@ -131,9 +186,9 @@ void ThumbnailManager::RequestThumbnail(sl_element_id_t elementId, image_id_t im
                   }
                   const bool pinned = self->thumb_.IsThumbnailPinned(elementId);
                   if (pinned) {
-                    self->thumb_.UpdateThumbnailDataUrl(elementId, dataUrl);
+                    self->thumb_.UpdateThumbnailState(elementId, dataUrl, false, false);
                   } else {
-                    self->thumb_.UpdateThumbnailDataUrl(elementId, QString());
+                    self->thumb_.UpdateThumbnailState(elementId, QString(), false, false);
                   }
                   if (!pinned && service) {
                     try {
@@ -149,17 +204,21 @@ void ThumbnailManager::RequestThumbnail(sl_element_id_t elementId, image_id_t im
       true, dispatcher);
 }
 
-void ThumbnailManager::UpdateThumbnailDataUrl(sl_element_id_t elementId, const QString& dataUrl) {
+void ThumbnailManager::UpdateThumbnailState(sl_element_id_t elementId, const QString& dataUrl,
+                                            bool loading, bool missingSource) {
   auto* item = backend_.FindAlbumItem(elementId);
   if (!item) {
     return;
   }
 
-  if (item->thumb_data_url == dataUrl) {
+  if (item->thumb_data_url == dataUrl && item->thumb_loading == loading &&
+      item->thumb_missing_source == missingSource) {
     return;
   }
 
-  item->thumb_data_url = dataUrl;
+  item->thumb_data_url        = dataUrl;
+  item->thumb_loading         = loading;
+  item->thumb_missing_source  = missingSource;
 
   for (qsizetype i = 0; i < backend_.view_state_.visible_thumbnails_.size(); ++i) {
     QVariantMap row = backend_.view_state_.visible_thumbnails_.at(i).toMap();
@@ -167,12 +226,14 @@ void ThumbnailManager::UpdateThumbnailDataUrl(sl_element_id_t elementId, const Q
       continue;
     }
     row.insert("thumbUrl", dataUrl);
+    row.insert("thumbLoading", loading);
+    row.insert("thumbMissingSource", missingSource);
     backend_.view_state_.visible_thumbnails_[i] = row;
     break;
   }
 
-  emit backend_.ThumbnailUpdated(static_cast<uint>(elementId), dataUrl);
-  emit backend_.thumbnailUpdated(static_cast<uint>(elementId), dataUrl);
+  emit backend_.ThumbnailUpdated(static_cast<uint>(elementId), dataUrl, loading, missingSource);
+  emit backend_.thumbnailUpdated(static_cast<uint>(elementId), dataUrl, loading, missingSource);
 }
 
 bool ThumbnailManager::IsThumbnailPinned(sl_element_id_t elementId) const {
@@ -187,7 +248,7 @@ void ThumbnailManager::RemoveThumbnailState(sl_element_id_t elementId, image_id_
   }
 
   thumbnail_pin_ref_counts_.erase(elementId);
-  UpdateThumbnailDataUrl(elementId, QString());
+  UpdateThumbnailState(elementId, QString(), false, false);
 
   auto thumb_svc = backend_.project_handler_.thumbnail_service();
   if (!thumb_svc) {
@@ -215,6 +276,7 @@ void ThumbnailManager::ReleaseVisibleThumbnailPins() {
     auto* item = backend_.FindAlbumItem(id);
     if (item) {
       item->thumb_data_url.clear();
+      item->thumb_loading = false;
     }
     if (thumb_svc) {
       try {

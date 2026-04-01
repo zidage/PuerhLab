@@ -193,8 +193,10 @@ class AlbumBackend final : public QObject {
 signals:
   void ThumbnailsChanged();
   void thumbnailsChanged();
-  void ThumbnailUpdated(uint elementId, const QString& dataUrl);
-  void thumbnailUpdated(uint elementId, const QString& dataUrl);
+  void ThumbnailUpdated(uint elementId, const QString& dataUrl, bool loading,
+                        bool missingSource);
+  void thumbnailUpdated(uint elementId, const QString& dataUrl, bool loading,
+                        bool missingSource);
   void CountsChanged();
   void StatsChanged();
   void ServiceStateChanged();

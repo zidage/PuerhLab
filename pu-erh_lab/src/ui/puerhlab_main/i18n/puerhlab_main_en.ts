@@ -633,31 +633,41 @@ Original source files on disk will be kept.</source>
 <context>
     <name>ThumbnailGridView</name>
     <message>
-        <location filename="../qml/ThumbnailGridView.qml" line="150"/>
+        <location filename="../qml/ThumbnailGridView.qml" line="167"/>
         <source>%1 | ISO %2 | f/%3</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/ThumbnailGridView.qml" line="158"/>
+        <location filename="../qml/ThumbnailGridView.qml" line="175"/>
         <source>%1 | Rating %2/5</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../qml/ThumbnailGridView.qml" line="157"/>
+        <source>Source file was moved or deleted</source>
         <translation type="unfinished"></translation>
     </message>
 </context>
 <context>
     <name>ThumbnailListView</name>
     <message>
-        <location filename="../qml/ThumbnailListView.qml" line="137"/>
+        <location filename="../qml/ThumbnailListView.qml" line="157"/>
         <source>%1 | %2 | ISO %3 | f/%4 | %5mm</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/ThumbnailListView.qml" line="150"/>
+        <location filename="../qml/ThumbnailListView.qml" line="170"/>
         <source>%1 | Tags: %2</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/ThumbnailListView.qml" line="158"/>
+        <location filename="../qml/ThumbnailListView.qml" line="178"/>
         <source>%1/5</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../qml/ThumbnailListView.qml" line="147"/>
+        <source>Source file was moved or deleted</source>
         <translation type="unfinished"></translation>
     </message>
 </context>

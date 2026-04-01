@@ -101,7 +101,7 @@ void EditorController::OpenEditor(sl_element_id_t elementId, image_id_t imageId)
         if (backend_.thumb_.IsThumbnailPinned(elementId)) {
           backend_.thumb_.RequestThumbnail(elementId, imageId);
         } else {
-          backend_.thumb_.UpdateThumbnailDataUrl(elementId, QString());
+          backend_.thumb_.UpdateThumbnailState(elementId, QString(), false, false);
         }
       }
 
@@ -552,7 +552,7 @@ void EditorController::FinalizeEditorSession(bool persistChanges) {
     if (backend_.thumb_.IsThumbnailPinned(finishedElement)) {
       backend_.thumb_.RequestThumbnail(finishedElement, finishedImage);
     } else {
-      backend_.thumb_.UpdateThumbnailDataUrl(finishedElement, QString());
+      backend_.thumb_.UpdateThumbnailState(finishedElement, QString(), false, false);
     }
   }
 

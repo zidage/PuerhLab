@@ -11,6 +11,8 @@ Item {
     readonly property color cardMuted: appTheme.textMutedColor
     readonly property color cardText: appTheme.textColor
     readonly property color cardAccent: appTheme.accentColor
+    readonly property color cardDanger: appTheme.dangerColor
+    readonly property color cardDangerTint: appTheme.dangerTintColor
 
     property var selectedImagesById: ({})
     property var exportQueueById: ({})
@@ -57,10 +59,20 @@ Item {
         required property int rating
         required property string accent
         required property string thumbUrl
+        required property bool thumbLoading
+        required property bool thumbMissingSource
         property string liveThumbUrl: thumbUrl
         onThumbUrlChanged: liveThumbUrl = thumbUrl
+        property bool liveThumbLoading: thumbLoading
+        onThumbLoadingChanged: liveThumbLoading = thumbLoading
+        property bool liveThumbMissingSource: thumbMissingSource
+        onThumbMissingSourceChanged: liveThumbMissingSource = thumbMissingSource
         property int pinnedElementId: 0
         property int pinnedImageId: 0
+        readonly property bool thumbnailReady: liveThumbUrl.length > 0
+        readonly property bool thumbnailLoadingState: liveThumbLoading
+        readonly property bool thumbnailMissingState: !thumbnailReady && !thumbnailLoadingState && liveThumbMissingSource
+        readonly property bool thumbnailIdleState: !thumbnailReady && !thumbnailLoadingState && !thumbnailMissingState
 
         function bindThumbnailLifetime() {
             if (pinnedElementId === elementId && pinnedImageId === imageId) {
@@ -72,6 +84,8 @@ Item {
             pinnedElementId = elementId
             pinnedImageId = imageId
             liveThumbUrl = thumbUrl
+            liveThumbLoading = thumbLoading
+            liveThumbMissingSource = thumbMissingSource
             if (pinnedElementId !== 0 && pinnedImageId !== 0) {
                 albumBackend.SetThumbnailVisible(pinnedElementId, pinnedImageId, true)
             }
@@ -102,9 +116,11 @@ Item {
         Connections {
             target: albumBackend
             ignoreUnknownSignals: true
-            function onThumbnailUpdated(updatedElementId, updatedUrl) {
+            function onThumbnailUpdated(updatedElementId, updatedUrl, loading, missingSource) {
                 if (updatedElementId === elementId) {
                     liveThumbUrl = updatedUrl
+                    liveThumbLoading = loading
+                    liveThumbMissingSource = missingSource
                 }
             }
         }
@@ -120,23 +136,50 @@ Item {
                 Rectangle {
                     anchors.fill: parent
                     radius: 4
-                    visible: liveThumbUrl.length === 0
+                    visible: !thumbnailReady
                     color: appTheme.bgCanvasColor
                 }
                 BusyIndicator {
                     anchors.centerIn: parent
                     width: 28
                     height: 28
-                    visible: liveThumbUrl.length === 0
+                    visible: thumbnailLoadingState
                     running: visible
                 }
                 Image {
                     anchors.fill: parent
                     source: liveThumbUrl
-                    visible: liveThumbUrl.length > 0
+                    visible: thumbnailReady
                     asynchronous: true
                     fillMode: Image.PreserveAspectFit
                 }
+                Rectangle {
+                    anchors.top: parent.top
+                    anchors.right: parent.right
+                    anchors.margins: 8
+                    width: 18
+                    height: 18
+                    radius: 9
+                    visible: thumbnailMissingState
+                    color: root.cardDangerTint
+                    border.width: 1
+                    border.color: root.cardDanger
+                }
+                Label {
+                    anchors.centerIn: parent
+                    visible: thumbnailMissingState
+                    text: "!"
+                    color: root.cardDanger
+                    font.family: appTheme.dataFontFamily
+                    font.pixelSize: 30
+                    font.weight: 700
+                }
+                HoverHandler {
+                    id: thumbHover
+                }
+                ToolTip.visible: thumbnailMissingState && thumbHover.hovered
+                ToolTip.text: qsTr("Source file was moved or deleted")
+                ToolTip.delay: 150
         }
 
         Column {

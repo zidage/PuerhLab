@@ -6,6 +6,9 @@
 
 #include <QSignalSpy>
 
+#include <filesystem>
+#include <functional>
+
 #include "app/pipeline_service.hpp"
 #include "app/project_service.hpp"
 #include "edit/pipeline/default_pipeline_params.hpp"
@@ -55,6 +58,27 @@ auto WaitForThumbnailUrl(AlbumBackend& backend, sl_element_id_t element_id,
       const QString thumb_url = row.value("thumbUrl").toString();
       if (expect_non_empty ? !thumb_url.isEmpty() : thumb_url.isEmpty()) {
         return thumb_url;
+      }
+      break;
+    }
+    ProcessEvents(100);
+  }
+  return {};
+}
+
+auto WaitForThumbnailRow(AlbumBackend& backend, sl_element_id_t element_id,
+                         const std::function<bool(const QVariantMap&)>& predicate,
+                         int timeout_ms = 30000) -> QVariantMap {
+  const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
+  while (std::chrono::steady_clock::now() < deadline) {
+    const QVariantList thumbnails = backend.Thumbnails();
+    for (const QVariant& row_value : thumbnails) {
+      const QVariantMap row = row_value.toMap();
+      if (static_cast<sl_element_id_t>(row.value("elementId").toUInt()) != element_id) {
+        continue;
+      }
+      if (predicate(row)) {
+        return row;
       }
       break;
     }
@@ -139,6 +163,17 @@ TEST_F(ThumbnailTests, MetalThumbnailGridLifecycleWithGeometryOperatorsProducesD
   ASSERT_FALSE(first_thumb_url.isEmpty())
       << "ThumbnailGridView-style pinning did not produce a thumbUrl.";
 
+  const QVariantMap loaded_row = WaitForThumbnailRow(
+      backend, element_id,
+      [](const QVariantMap& row) {
+        return !row.value("thumbUrl").toString().isEmpty() &&
+               !row.value("thumbLoading").toBool() &&
+               !row.value("thumbMissingSource").toBool();
+      },
+      10000);
+  ASSERT_FALSE(loaded_row.isEmpty())
+      << "Loaded thumbnail row did not clear loading state or unexpectedly marked source missing.";
+
   backend.SetThumbnailVisible(static_cast<uint>(element_id), static_cast<uint>(image_id), false);
   ProcessEvents(500);
 
@@ -146,6 +181,56 @@ TEST_F(ThumbnailTests, MetalThumbnailGridLifecycleWithGeometryOperatorsProducesD
   EXPECT_TRUE(cleared_thumb_url.isEmpty())
       << "ThumbnailGridView-style unpinning should clear the visible thumbUrl.";
 #endif
+}
+
+TEST_F(ThumbnailTests, MissingSourceThumbnailStopsLoadingAndSetsMissingFlag) {
+  AlbumBackend backend;
+  ASSERT_TRUE(CreateTestProject(backend));
+
+  auto images = CollectRawTestImages("airplane", 1);
+  if (images.empty()) {
+    images = CollectRawTestImages("still_life", 1);
+  }
+  ASSERT_FALSE(images.empty()) << "No RAW test image available for missing-source thumbnail test.";
+
+  const auto copied_image = temp_dir_ / images.front().filename();
+  std::filesystem::copy_file(images.front(), copied_image,
+                             std::filesystem::copy_options::overwrite_existing);
+
+  backend.StartImport(PathsToQStringList({copied_image}));
+  WaitForImportFinished(backend);
+
+  ASSERT_FALSE(backend.ImportRunning());
+  ASSERT_GE(backend.ShownCount(), 1);
+
+  const QVariantMap first_row = backend.Thumbnails().front().toMap();
+  const auto        element_id =
+      static_cast<sl_element_id_t>(first_row.value("elementId").toUInt());
+  const auto image_id = static_cast<image_id_t>(first_row.value("imageId").toUInt());
+  ASSERT_NE(element_id, 0);
+  ASSERT_NE(image_id, 0);
+
+  std::filesystem::remove(copied_image);
+
+  QSignalSpy thumb_spy(&backend, &AlbumBackend::ThumbnailUpdated);
+  backend.SetThumbnailVisible(static_cast<uint>(element_id), static_cast<uint>(image_id), true);
+
+  ASSERT_TRUE(WaitForSignal(thumb_spy, 10000))
+      << "Timed out waiting for ThumbnailUpdated after source file removal.";
+
+  const QVariantMap missing_row = WaitForThumbnailRow(
+      backend, element_id,
+      [](const QVariantMap& row) {
+        return row.value("thumbUrl").toString().isEmpty() &&
+               !row.value("thumbLoading").toBool() &&
+               row.value("thumbMissingSource").toBool();
+      },
+      10000);
+  ASSERT_FALSE(missing_row.isEmpty())
+      << "Missing-source thumbnail row did not settle into the expected error state.";
+
+  backend.SetThumbnailVisible(static_cast<uint>(element_id), static_cast<uint>(image_id), false);
+  ProcessEvents(250);
 }
 
 }  // namespace puerhlab::ui::test
