@@ -524,6 +524,94 @@ Original source files on disk will be kept.</source>
     </message>
 </context>
 <context>
+    <name>NikonHeRecoveryDialog</name>
+    <message>
+        <location filename="../qml/NikonHeRecoveryDialog.qml" line="91"/>
+        <source>RECOVERY</source>
+        <translation>恢复</translation>
+    </message>
+    <message>
+        <location filename="../qml/NikonHeRecoveryDialog.qml" line="100"/>
+        <source>Nikon HE / HE* RAW Needs Conversion</source>
+        <translation>Nikon HE / HE* RAW 需要转换</translation>
+    </message>
+    <message>
+        <location filename="../qml/NikonHeRecoveryDialog.qml" line="110"/>
+        <source>Pu-erh Lab cannot decode these Nikon files with the built-in RAW pipeline. Convert them to DNG, then the import can continue.</source>
+        <translation>Pu-erh Lab 目前无法使用内置 RAW 管线解码这些 Nikon 文件。请先将它们转换为 DNG，然后再继续导入。</translation>
+    </message>
+    <message>
+        <location filename="../qml/NikonHeRecoveryDialog.qml" line="153"/>
+        <source>Preparing recovery workflow...</source>
+        <translation>正在准备恢复流程...</translation>
+    </message>
+    <message>
+        <location filename="../qml/NikonHeRecoveryDialog.qml" line="163"/>
+        <source>This step is still running. The dialog will update automatically when conversion finishes.</source>
+        <translation>此步骤仍在进行中。转换完成后，此对话框会自动更新。</translation>
+    </message>
+    <message>
+        <location filename="../qml/NikonHeRecoveryDialog.qml" line="184"/>
+        <source>%1 / %2 converted files reimported · %3 failed</source>
+        <translation>已重新导入 %1 / %2 个已转换文件 · 失败 %3 个</translation>
+    </message>
+    <message>
+        <location filename="../qml/NikonHeRecoveryDialog.qml" line="215"/>
+        <source>Affected Files</source>
+        <translation>受影响的文件</translation>
+    </message>
+    <message>
+        <location filename="../qml/NikonHeRecoveryDialog.qml" line="223"/>
+        <source>%1 file(s) will be removed from the project and replaced by converted DNG files when available.</source>
+        <translation>将从项目中移除 %1 个文件，并在转换后的 DNG 可用时用其替换。</translation>
+    </message>
+    <message>
+        <location filename="../qml/NikonHeRecoveryDialog.qml" line="305"/>
+        <source>Converter</source>
+        <translation>转换器</translation>
+    </message>
+    <message>
+        <location filename="../qml/NikonHeRecoveryDialog.qml" line="313"/>
+        <source>Adobe DNG Converter runs in the source folders and creates side-by-side DNG files. Original NEF files on disk will be kept.</source>
+        <translation>Adobe DNG Converter 会在源文件所在文件夹中运行，并在旁边生成 DNG 文件。磁盘上的原始 NEF 文件会保留。</translation>
+    </message>
+    <message>
+        <location filename="../qml/NikonHeRecoveryDialog.qml" line="335"/>
+        <source>Executable Path</source>
+        <translation>可执行文件路径</translation>
+    </message>
+    <message>
+        <location filename="../qml/NikonHeRecoveryDialog.qml" line="346"/>
+        <source>Not selected in this session.</source>
+        <translation>当前会话尚未选择。</translation>
+    </message>
+    <message>
+        <location filename="../qml/NikonHeRecoveryDialog.qml" line="354"/>
+        <source>Browse Converter...</source>
+        <translation>浏览转换器...</translation>
+    </message>
+    <message>
+        <location filename="../qml/NikonHeRecoveryDialog.qml" line="363"/>
+        <source>Exit removes the unsupported Nikon entries from the project only. Nothing in the source folders will be deleted.</source>
+        <translation>退出只会从项目中移除这些不受支持的 Nikon 条目。源文件夹中的任何内容都不会被删除。</translation>
+    </message>
+    <message>
+        <location filename="../qml/NikonHeRecoveryDialog.qml" line="379"/>
+        <source>Exit And Remove From Project</source>
+        <translation>退出并从项目中移除</translation>
+    </message>
+    <message>
+        <location filename="../qml/NikonHeRecoveryDialog.qml" line="386"/>
+        <source>Convert To DNG And Continue</source>
+        <translation>转换为 DNG 并继续</translation>
+    </message>
+    <message>
+        <location filename="../qml/NikonHeRecoveryDialog.qml" line="387"/>
+        <source>Choose Converter And Continue</source>
+        <translation>选择转换器并继续</translation>
+    </message>
+</context>
+<context>
     <name>PuerhLab</name>
     <message>
         <source>Select a project: load a .puerhproj package or metadata JSON, or create a new packed project.</source>
@@ -1676,6 +1764,110 @@ Original source files on disk will be kept.</source>
     <message>
         <source>High Contrast</source>
         <translation>高对比度</translation>
+    </message>
+    <message>
+        <source>Executable Files (*.exe);;All Files (*)</source>
+        <translation>可执行文件 (*.exe);;所有文件 (*)</translation>
+    </message>
+    <message>
+        <source>These Nikon HE/HE* files need Adobe DNG Converter before they can be imported.</source>
+        <translation>这些 Nikon HE/HE* 文件需要先通过 Adobe DNG Converter 转换后才能导入。</translation>
+    </message>
+    <message>
+        <source>Select Adobe DNG Converter</source>
+        <translation>选择 Adobe DNG Converter</translation>
+    </message>
+    <message>
+        <source>Choose the Adobe DNG Converter executable to continue.</source>
+        <translation>请选择 Adobe DNG Converter 可执行文件以继续。</translation>
+    </message>
+    <message>
+        <source>Adobe DNG Converter was not found. Choose a valid executable or exit.</source>
+        <translation>未找到 Adobe DNG Converter。请选择有效的可执行文件，或直接退出。</translation>
+    </message>
+    <message>
+        <source>Adobe DNG Converter failed to start. Unsupported Nikon HE images were removed from the project.</source>
+        <translation>Adobe DNG Converter 启动失败。项目中不受支持的 Nikon HE 图像已被移除。</translation>
+    </message>
+    <message>
+        <source>Adobe DNG Converter failed to start (%1). Unsupported Nikon HE images were removed from the project.</source>
+        <translation>Adobe DNG Converter 启动失败（%1）。项目中不受支持的 Nikon HE 图像已被移除。</translation>
+    </message>
+    <message>
+        <source>Running Adobe DNG Converter for %1 file(s)...</source>
+        <translation>正在为 %1 个文件运行 Adobe DNG Converter...</translation>
+    </message>
+    <message>
+        <source>Unsupported Nikon HE images were removed from the project. Source files were left untouched.</source>
+        <translation>项目中不受支持的 Nikon HE 图像已被移除。源文件保持不变。</translation>
+    </message>
+    <message>
+        <source>Reimporting converted DNG files... %1/%2 (failed %3)</source>
+        <translation>正在重新导入已转换的 DNG 文件... %1/%2（失败 %3）</translation>
+    </message>
+    <message>
+        <source>Converted Nikon HE files were reimported: %1 imported, %2 failed.</source>
+        <translation>已重新导入转换后的 Nikon HE 文件：成功导入 %1 个，失败 %2 个。</translation>
+    </message>
+    <message>
+        <source>Review Unsupported Files</source>
+        <translation>查看不受支持的文件</translation>
+    </message>
+    <message>
+        <source>Select Converter</source>
+        <translation>选择转换器</translation>
+    </message>
+    <message>
+        <source>Running Converter</source>
+        <translation>正在运行转换器</translation>
+    </message>
+    <message>
+        <source>Validating DNG</source>
+        <translation>正在验证 DNG</translation>
+    </message>
+    <message>
+        <source>Removing Project Items</source>
+        <translation>正在移除项目条目</translation>
+    </message>
+    <message>
+        <source>Reimporting DNG</source>
+        <translation>正在重新导入 DNG</translation>
+    </message>
+    <message>
+        <source>Finished</source>
+        <translation>已完成</translation>
+    </message>
+    <message>
+        <source>Aborted</source>
+        <translation>已中止</translation>
+    </message>
+    <message>
+        <source>unknown error</source>
+        <translation>未知错误</translation>
+    </message>
+    <message>
+        <source>Adobe DNG Converter failed (%1). Unsupported Nikon HE images were removed from the project.</source>
+        <translation>Adobe DNG Converter 执行失败（%1）。项目中不受支持的 Nikon HE 图像已被移除。</translation>
+    </message>
+    <message>
+        <source>Validating converted DNG files...</source>
+        <translation>正在验证已转换的 DNG 文件...</translation>
+    </message>
+    <message>
+        <source>Adobe DNG Converter finished, but no converted DNG files were found.</source>
+        <translation>Adobe DNG Converter 已运行完成，但未找到已转换的 DNG 文件。</translation>
+    </message>
+    <message>
+        <source>%1 file(s) were converted. Missing DNG output for: %2</source>
+        <translation>已转换 %1 个文件，但以下文件缺少 DNG 输出：%2</translation>
+    </message>
+    <message>
+        <source>Removing unsupported Nikon HE items from the project...</source>
+        <translation>正在从项目中移除不受支持的 Nikon HE 条目...</translation>
+    </message>
+    <message>
+        <source>Reimporting %1 converted DNG file(s)...</source>
+        <translation>正在重新导入 %1 个已转换的 DNG 文件...</translation>
     </message>
 </context>
 <context>

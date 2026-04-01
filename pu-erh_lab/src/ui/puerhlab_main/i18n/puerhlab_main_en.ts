@@ -523,6 +523,94 @@ Original source files on disk will be kept.</source>
     </message>
 </context>
 <context>
+    <name>NikonHeRecoveryDialog</name>
+    <message>
+        <location filename="../qml/NikonHeRecoveryDialog.qml" line="91"/>
+        <source>RECOVERY</source>
+        <translation>RECOVERY</translation>
+    </message>
+    <message>
+        <location filename="../qml/NikonHeRecoveryDialog.qml" line="100"/>
+        <source>Nikon HE / HE* RAW Needs Conversion</source>
+        <translation>Nikon HE / HE* RAW Needs Conversion</translation>
+    </message>
+    <message>
+        <location filename="../qml/NikonHeRecoveryDialog.qml" line="110"/>
+        <source>Pu-erh Lab cannot decode these Nikon files with the built-in RAW pipeline. Convert them to DNG, then the import can continue.</source>
+        <translation>Pu-erh Lab cannot decode these Nikon files with the built-in RAW pipeline. Convert them to DNG, then the import can continue.</translation>
+    </message>
+    <message>
+        <location filename="../qml/NikonHeRecoveryDialog.qml" line="153"/>
+        <source>Preparing recovery workflow...</source>
+        <translation>Preparing recovery workflow...</translation>
+    </message>
+    <message>
+        <location filename="../qml/NikonHeRecoveryDialog.qml" line="163"/>
+        <source>This step is still running. The dialog will update automatically when conversion finishes.</source>
+        <translation>This step is still running. The dialog will update automatically when conversion finishes.</translation>
+    </message>
+    <message>
+        <location filename="../qml/NikonHeRecoveryDialog.qml" line="184"/>
+        <source>%1 / %2 converted files reimported · %3 failed</source>
+        <translation>%1 / %2 converted files reimported · %3 failed</translation>
+    </message>
+    <message>
+        <location filename="../qml/NikonHeRecoveryDialog.qml" line="215"/>
+        <source>Affected Files</source>
+        <translation>Affected Files</translation>
+    </message>
+    <message>
+        <location filename="../qml/NikonHeRecoveryDialog.qml" line="223"/>
+        <source>%1 file(s) will be removed from the project and replaced by converted DNG files when available.</source>
+        <translation>%1 file(s) will be removed from the project and replaced by converted DNG files when available.</translation>
+    </message>
+    <message>
+        <location filename="../qml/NikonHeRecoveryDialog.qml" line="305"/>
+        <source>Converter</source>
+        <translation>Converter</translation>
+    </message>
+    <message>
+        <location filename="../qml/NikonHeRecoveryDialog.qml" line="313"/>
+        <source>Adobe DNG Converter runs in the source folders and creates side-by-side DNG files. Original NEF files on disk will be kept.</source>
+        <translation>Adobe DNG Converter runs in the source folders and creates side-by-side DNG files. Original NEF files on disk will be kept.</translation>
+    </message>
+    <message>
+        <location filename="../qml/NikonHeRecoveryDialog.qml" line="335"/>
+        <source>Executable Path</source>
+        <translation>Executable Path</translation>
+    </message>
+    <message>
+        <location filename="../qml/NikonHeRecoveryDialog.qml" line="346"/>
+        <source>Not selected in this session.</source>
+        <translation>Not selected in this session.</translation>
+    </message>
+    <message>
+        <location filename="../qml/NikonHeRecoveryDialog.qml" line="354"/>
+        <source>Browse Converter...</source>
+        <translation>Browse Converter...</translation>
+    </message>
+    <message>
+        <location filename="../qml/NikonHeRecoveryDialog.qml" line="363"/>
+        <source>Exit removes the unsupported Nikon entries from the project only. Nothing in the source folders will be deleted.</source>
+        <translation>Exit removes the unsupported Nikon entries from the project only. Nothing in the source folders will be deleted.</translation>
+    </message>
+    <message>
+        <location filename="../qml/NikonHeRecoveryDialog.qml" line="379"/>
+        <source>Exit And Remove From Project</source>
+        <translation>Exit And Remove From Project</translation>
+    </message>
+    <message>
+        <location filename="../qml/NikonHeRecoveryDialog.qml" line="386"/>
+        <source>Convert To DNG And Continue</source>
+        <translation>Convert To DNG And Continue</translation>
+    </message>
+    <message>
+        <location filename="../qml/NikonHeRecoveryDialog.qml" line="387"/>
+        <source>Choose Converter And Continue</source>
+        <translation>Choose Converter And Continue</translation>
+    </message>
+</context>
+<context>
     <name>PuerhLab</name>
     <message>
         <source>Capture</source>
@@ -615,6 +703,110 @@ Original source files on disk will be kept.</source>
     <message>
         <source>Failed to open source directory.</source>
         <translation>Failed to open source directory.</translation>
+    </message>
+    <message>
+        <source>Executable Files (*.exe);;All Files (*)</source>
+        <translation>Executable Files (*.exe);;All Files (*)</translation>
+    </message>
+    <message>
+        <source>These Nikon HE/HE* files need Adobe DNG Converter before they can be imported.</source>
+        <translation>These Nikon HE/HE* files need Adobe DNG Converter before they can be imported.</translation>
+    </message>
+    <message>
+        <source>Select Adobe DNG Converter</source>
+        <translation>Select Adobe DNG Converter</translation>
+    </message>
+    <message>
+        <source>Choose the Adobe DNG Converter executable to continue.</source>
+        <translation>Choose the Adobe DNG Converter executable to continue.</translation>
+    </message>
+    <message>
+        <source>Adobe DNG Converter was not found. Choose a valid executable or exit.</source>
+        <translation>Adobe DNG Converter was not found. Choose a valid executable or exit.</translation>
+    </message>
+    <message>
+        <source>Adobe DNG Converter failed to start. Unsupported Nikon HE images were removed from the project.</source>
+        <translation>Adobe DNG Converter failed to start. Unsupported Nikon HE images were removed from the project.</translation>
+    </message>
+    <message>
+        <source>Adobe DNG Converter failed to start (%1). Unsupported Nikon HE images were removed from the project.</source>
+        <translation>Adobe DNG Converter failed to start (%1). Unsupported Nikon HE images were removed from the project.</translation>
+    </message>
+    <message>
+        <source>Running Adobe DNG Converter for %1 file(s)...</source>
+        <translation>Running Adobe DNG Converter for %1 file(s)...</translation>
+    </message>
+    <message>
+        <source>Unsupported Nikon HE images were removed from the project. Source files were left untouched.</source>
+        <translation>Unsupported Nikon HE images were removed from the project. Source files were left untouched.</translation>
+    </message>
+    <message>
+        <source>Reimporting converted DNG files... %1/%2 (failed %3)</source>
+        <translation>Reimporting converted DNG files... %1/%2 (failed %3)</translation>
+    </message>
+    <message>
+        <source>Converted Nikon HE files were reimported: %1 imported, %2 failed.</source>
+        <translation>Converted Nikon HE files were reimported: %1 imported, %2 failed.</translation>
+    </message>
+    <message>
+        <source>Review Unsupported Files</source>
+        <translation>Review Unsupported Files</translation>
+    </message>
+    <message>
+        <source>Select Converter</source>
+        <translation>Select Converter</translation>
+    </message>
+    <message>
+        <source>Running Converter</source>
+        <translation>Running Converter</translation>
+    </message>
+    <message>
+        <source>Validating DNG</source>
+        <translation>Validating DNG</translation>
+    </message>
+    <message>
+        <source>Removing Project Items</source>
+        <translation>Removing Project Items</translation>
+    </message>
+    <message>
+        <source>Reimporting DNG</source>
+        <translation>Reimporting DNG</translation>
+    </message>
+    <message>
+        <source>Finished</source>
+        <translation>Finished</translation>
+    </message>
+    <message>
+        <source>Aborted</source>
+        <translation>Aborted</translation>
+    </message>
+    <message>
+        <source>unknown error</source>
+        <translation>unknown error</translation>
+    </message>
+    <message>
+        <source>Adobe DNG Converter failed (%1). Unsupported Nikon HE images were removed from the project.</source>
+        <translation>Adobe DNG Converter failed (%1). Unsupported Nikon HE images were removed from the project.</translation>
+    </message>
+    <message>
+        <source>Validating converted DNG files...</source>
+        <translation>Validating converted DNG files...</translation>
+    </message>
+    <message>
+        <source>Adobe DNG Converter finished, but no converted DNG files were found.</source>
+        <translation>Adobe DNG Converter finished, but no converted DNG files were found.</translation>
+    </message>
+    <message>
+        <source>%1 file(s) were converted. Missing DNG output for: %2</source>
+        <translation>%1 file(s) were converted. Missing DNG output for: %2</translation>
+    </message>
+    <message>
+        <source>Removing unsupported Nikon HE items from the project...</source>
+        <translation>Removing unsupported Nikon HE items from the project...</translation>
+    </message>
+    <message>
+        <source>Reimporting %1 converted DNG file(s)...</source>
+        <translation>Reimporting %1 converted DNG file(s)...</translation>
     </message>
 </context>
 <context>
