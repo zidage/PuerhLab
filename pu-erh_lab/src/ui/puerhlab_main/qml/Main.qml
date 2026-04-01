@@ -368,6 +368,11 @@ ApplicationWindow {
         titleText: root.imageDetailsData.title
         subtitleText: root.imageDetailsData.subtitle
         detailRows: root.imageDetailsData.rows
+        onRowActionRequested: function(actionId, actionValue) {
+            if (actionId === "open-directory") {
+                albumBackend.OpenDirectoryInFileManager(actionValue)
+            }
+        }
         onClosed: {
             root.imageDetailsData = {
                 title: "",

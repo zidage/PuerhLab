@@ -514,6 +514,10 @@ Original source files on disk will be kept.</source>
 <context>
     <name>ImageDetailsDialog</name>
     <message>
+        <source>Open in file manager</source>
+        <translation>在文件管理器中打开</translation>
+    </message>
+    <message>
         <location filename="../qml/ImageDetailsDialog.qml" line="160"/>
         <source>Close</source>
         <translation>关闭</translation>
@@ -778,6 +782,10 @@ Original source files on disk will be kept.</source>
         <translation>设备信息</translation>
     </message>
     <message>
+        <source>Storage</source>
+        <translation>存储信息</translation>
+    </message>
+    <message>
         <source>Original Size</source>
         <translation>原始尺寸</translation>
     </message>
@@ -826,12 +834,24 @@ Original source files on disk will be kept.</source>
         <translation>评分</translation>
     </message>
     <message>
+        <source>Source Directory</source>
+        <translation>源目录</translation>
+    </message>
+    <message>
         <source>No valid image was selected.</source>
         <translation>未选择有效图像。</translation>
     </message>
     <message>
         <source>Failed to load image details.</source>
         <translation>加载图像详细信息失败。</translation>
+    </message>
+    <message>
+        <source>Source directory is unavailable.</source>
+        <translation>源目录不可用。</translation>
+    </message>
+    <message>
+        <source>Failed to open source directory.</source>
+        <translation>打开源目录失败。</translation>
     </message>
     <message>
         <source>Root</source>

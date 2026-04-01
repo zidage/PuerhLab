@@ -17,6 +17,7 @@ Dialog {
     property string titleText: ""
     property string subtitleText: ""
     property var detailRows: []
+    signal rowActionRequested(string actionId, string actionValue)
     readonly property color overlayColor: appTheme.bgDeepColor
     readonly property color panelColor: appTheme.toneGraphite
     readonly property color sectionColor: appTheme.bgBaseColor
@@ -24,6 +25,9 @@ Dialog {
     readonly property color textColor: appTheme.textColor
     readonly property color mutedTextColor: appTheme.textMutedColor
     readonly property color accentColor: appTheme.accentColor
+    readonly property color actionBgColor: Qt.rgba(accentColor.r, accentColor.g, accentColor.b, 0.12)
+    readonly property color actionHoverBgColor: Qt.rgba(accentColor.r, accentColor.g, accentColor.b, 0.2)
+    readonly property color actionBorderColor: Qt.rgba(accentColor.r, accentColor.g, accentColor.b, 0.34)
     readonly property string dataFontFamily: appTheme.dataFontFamily
 
     Overlay.modal: Rectangle {
@@ -101,6 +105,11 @@ Dialog {
 
                             readonly property bool showSection:
                                 index === 0 || root.detailRows[index - 1].section !== modelData.section
+                            readonly property bool hasAction:
+                                typeof modelData.actionId === "string"
+                                && modelData.actionId.length > 0
+                                && typeof modelData.actionValue === "string"
+                                && modelData.actionValue.length > 0
 
                             Label {
                                 width: parent.width
@@ -126,15 +135,60 @@ Dialog {
                                     wrapMode: Text.WordWrap
                                 }
 
-                                Label {
+                                RowLayout {
                                     Layout.fillWidth: true
                                     Layout.alignment: Qt.AlignTop
-                                    text: modelData.value
-                                    color: root.textColor
-                                    font.family: root.dataFontFamily
-                                    font.pixelSize: modelData.emphasized ? 15 : 13
-                                    font.weight: modelData.emphasized ? 600 : 400
-                                    wrapMode: Text.WordWrap
+                                    spacing: 10
+
+                                    Label {
+                                        Layout.fillWidth: true
+                                        Layout.alignment: Qt.AlignTop
+                                        text: modelData.value
+                                        color: root.textColor
+                                        font.family: root.dataFontFamily
+                                        font.pixelSize: modelData.emphasized ? 15 : 13
+                                        font.weight: modelData.emphasized ? 600 : 400
+                                        wrapMode: Text.WordWrap
+                                    }
+
+                                    Button {
+                                        visible: hasAction
+                                        Layout.alignment: Qt.AlignTop
+                                        Layout.preferredWidth: 34
+                                        Layout.preferredHeight: 34
+                                        padding: 0
+                                        hoverEnabled: true
+                                        display: AbstractButton.IconOnly
+                                        text: ""
+                                        background: Rectangle {
+                                            radius: 9
+                                            color: parent.down ? root.actionHoverBgColor
+                                                  : parent.hovered ? root.actionHoverBgColor
+                                                  : root.actionBgColor
+                                            border.width: 1
+                                            border.color: root.actionBorderColor
+                                        }
+                                        contentItem: Item {
+                                            implicitWidth: 34
+                                            implicitHeight: 34
+
+                                            Text {
+                                                anchors.centerIn: parent
+                                                text: "\u2197"
+                                                color: root.accentColor
+                                                font.family: root.dataFontFamily
+                                                font.pixelSize: 14
+                                                font.weight: 700
+                                            }
+                                        }
+                                        ToolTip.visible: hovered
+                                        ToolTip.text: typeof modelData.actionTooltip === "string"
+                                                      && modelData.actionTooltip.length > 0
+                                                      ? modelData.actionTooltip
+                                                      : qsTr("Open in file manager")
+                                        onClicked: root.rowActionRequested(modelData.actionId,
+                                                                           modelData.actionValue)
+                                    }
                                 }
                             }
 

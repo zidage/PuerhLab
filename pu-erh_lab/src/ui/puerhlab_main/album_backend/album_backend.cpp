@@ -7,6 +7,7 @@
 #include "app/project_package_service.hpp"
 #include "ui/puerhlab_main/album_backend/path_utils.hpp"
 
+#include <QDesktopServices>
 #include <QDir>
 #include <QFileDialog>
 #include <QFileInfo>
@@ -92,6 +93,28 @@ auto AlbumBackend::DeleteImages(const QVariantList& targetEntries) -> QVariantMa
 }
 auto AlbumBackend::GetImageDetails(uint elementId, uint imageId) -> QVariantMap {
   return image_ctrl_.GetImageDetails(elementId, imageId);
+}
+bool AlbumBackend::OpenDirectoryInFileManager(const QString& dirUrlOrPath) {
+  const auto dir_path_opt = InputToPath(dirUrlOrPath);
+  if (!dir_path_opt.has_value()) {
+    SetServiceMessageForCurrentProject(PL_TEXT("Source directory is unavailable."));
+    return false;
+  }
+
+  const std::filesystem::path dir_path = dir_path_opt.value().lexically_normal();
+  std::error_code ec;
+  if (!std::filesystem::exists(dir_path, ec) || ec || !std::filesystem::is_directory(dir_path, ec) ||
+      ec) {
+    SetServiceMessageForCurrentProject(PL_TEXT("Source directory is unavailable."));
+    return false;
+  }
+
+  if (!QDesktopServices::openUrl(QUrl::fromLocalFile(PathToQString(dir_path)))) {
+    SetServiceMessageForCurrentProject(PL_TEXT("Failed to open source directory."));
+    return false;
+  }
+
+  return true;
 }
 
 // ── Q_INVOKABLE: Stats-bar filter ──────────────────────────────────────────

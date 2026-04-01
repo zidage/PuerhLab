@@ -138,16 +138,49 @@ auto FormatShutterSpeed(const json& metadata) -> QString {
 }
 
 auto MakeDetailsRow(const QString& section, const QString& label, const QString& value,
-                    bool emphasized = false) -> QVariantMap {
+                    bool emphasized = false, const QString& actionId = QString{},
+                    const QString& actionValue = QString{},
+                    const QString& actionTooltip = QString{}) -> QVariantMap {
   return QVariantMap{{"section", section},
                      {"label", label},
                      {"value", value},
-                     {"emphasized", emphasized}};
+                     {"emphasized", emphasized},
+                     {"actionId", actionId},
+                     {"actionValue", actionValue},
+                     {"actionTooltip", actionTooltip}};
 }
 
 void AppendDetailsRow(QVariantList& rows, const QString& section, const QString& label,
-                      const QString& value, bool emphasized = false) {
-  rows.push_back(MakeDetailsRow(section, label, value, emphasized));
+                      const QString& value, bool emphasized = false,
+                      const QString& actionId = QString{},
+                      const QString& actionValue = QString{},
+                      const QString& actionTooltip = QString{}) {
+  rows.push_back(
+      MakeDetailsRow(section, label, value, emphasized, actionId, actionValue, actionTooltip));
+}
+
+struct SourceDirectoryInfo {
+  QString displayText = DashValue();
+  QString pathText{};
+  bool    canOpen = false;
+};
+
+auto ResolveSourceDirectory(const std::shared_ptr<Image>& image) -> SourceDirectoryInfo {
+  if (!image || image->image_path_.empty()) {
+    return {};
+  }
+
+  const std::filesystem::path directory = image->image_path_.parent_path().lexically_normal();
+  if (directory.empty()) {
+    return {};
+  }
+
+  const QString pathText = album_util::PathToQString(directory);
+  if (pathText.trimmed().isEmpty()) {
+    return {};
+  }
+
+  return SourceDirectoryInfo{pathText, pathText, true};
 }
 
 auto ComposeSubtitle(const json& metadata) -> QString {
@@ -198,11 +231,13 @@ auto BuildDetailsResult(const AlbumItem* item, const std::shared_ptr<Image>& ima
   const QString section_capture  = Tr("Capture");
   const QString section_gear     = Tr("Gear");
   const QString section_exposure = Tr("Exposure");
+  const QString section_storage  = Tr("Storage");
   const uint32_t width           = JsonUnsignedOrZero(metadata, "ImageWidth");
   const uint32_t height          = JsonUnsignedOrZero(metadata, "ImageHeight");
+  const SourceDirectoryInfo source_directory = ResolveSourceDirectory(image);
 
   QVariantList rows;
-  rows.reserve(14);
+  rows.reserve(15);
 
   AppendDetailsRow(rows, section_capture, Tr("Original Size"), FormatDimensions(width, height), true);
   AppendDetailsRow(rows, section_capture, Tr("Original Aspect Ratio"),
@@ -233,6 +268,10 @@ auto BuildDetailsResult(const AlbumItem* item, const std::shared_ptr<Image>& ima
                    FormatFixed(JsonNumberOrZero(metadata, "FocusDistanceM"), 2, QString{}, " m"));
   AppendDetailsRow(rows, section_exposure, Tr("Rating"),
                    FormatRating(static_cast<int>(JsonUnsignedOrZero(metadata, "Rating"))));
+  AppendDetailsRow(rows, section_storage, Tr("Source Directory"), source_directory.displayText,
+                   false, source_directory.canOpen ? QStringLiteral("open-directory") : QString{},
+                   source_directory.pathText,
+                   source_directory.canOpen ? Tr("Open in file manager") : QString{});
 
   return QVariantMap{{"success", true},
                      {"message", QString{}},

@@ -46,6 +46,16 @@ auto FindRowValue(const QVariantList& rows, const QString& label) -> QString {
   return {};
 }
 
+auto FindRow(const QVariantList& rows, const QString& label) -> QVariantMap {
+  for (const QVariant& rowVar : rows) {
+    const QVariantMap row = rowVar.toMap();
+    if (row.value("label").toString() == label) {
+      return row;
+    }
+  }
+  return {};
+}
+
 TEST_F(ImageDetailsTests, GetImageDetails_ReturnsStructuredExifSummary) {
   AlbumBackend backend;
   ASSERT_TRUE(CreateDirectProject(backend, db_path_, meta_path_));
@@ -74,6 +84,12 @@ TEST_F(ImageDetailsTests, GetImageDetails_ReturnsStructuredExifSummary) {
   EXPECT_FALSE(FindRowValue(rows, "Camera Model").isEmpty());
   EXPECT_FALSE(FindRowValue(rows, "Lens Model").isEmpty());
   EXPECT_FALSE(FindRowValue(rows, "Captured At").isEmpty());
+
+  const QVariantMap sourceRow = FindRow(rows, "Source Directory");
+  ASSERT_FALSE(sourceRow.isEmpty());
+  EXPECT_EQ(sourceRow.value("value").toString(), PathToQString(images.front().parent_path()));
+  EXPECT_EQ(sourceRow.value("actionId").toString(), QStringLiteral("open-directory"));
+  EXPECT_EQ(sourceRow.value("actionValue").toString(), PathToQString(images.front().parent_path()));
 }
 
 TEST_F(ImageDetailsTests, GetImageDetails_RejectsInvalidIds) {

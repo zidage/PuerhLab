@@ -513,6 +513,10 @@ Original source files on disk will be kept.</source>
 <context>
     <name>ImageDetailsDialog</name>
     <message>
+        <source>Open in file manager</source>
+        <translation>Open in file manager</translation>
+    </message>
+    <message>
         <location filename="../qml/ImageDetailsDialog.qml" line="160"/>
         <source>Close</source>
         <translation>Close</translation>
@@ -527,6 +531,10 @@ Original source files on disk will be kept.</source>
     <message>
         <source>Gear</source>
         <translation>Gear</translation>
+    </message>
+    <message>
+        <source>Storage</source>
+        <translation>Storage</translation>
     </message>
     <message>
         <source>Original Size</source>
@@ -589,12 +597,24 @@ Original source files on disk will be kept.</source>
         <translation>Rating</translation>
     </message>
     <message>
+        <source>Source Directory</source>
+        <translation>Source Directory</translation>
+    </message>
+    <message>
         <source>No valid image was selected.</source>
         <translation>No valid image was selected.</translation>
     </message>
     <message>
         <source>Failed to load image details.</source>
         <translation>Failed to load image details.</translation>
+    </message>
+    <message>
+        <source>Source directory is unavailable.</source>
+        <translation>Source directory is unavailable.</translation>
+    </message>
+    <message>
+        <source>Failed to open source directory.</source>
+        <translation>Failed to open source directory.</translation>
     </message>
 </context>
 <context>
