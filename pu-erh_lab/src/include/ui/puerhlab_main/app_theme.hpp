@@ -75,7 +75,8 @@ class AppTheme final : public QObject {
   static auto EditorLabelStyle(const QColor& color) -> QString;
   static auto EditorPrimaryButtonStyle(bool include_disabled = false) -> QString;
   static auto EditorSecondaryButtonStyle() -> QString;
-  static auto EditorPanelToggleStyle(bool active) -> QString;
+  static auto EditorPanelToggleStyle(bool active, bool is_first = false,
+                                     bool is_last = false) -> QString;
   static auto EditorMethodCardStyle(bool active) -> QString;
   static auto EditorComboBoxStyle() -> QString;
   static auto EditorSpinBoxStyle() -> QString;

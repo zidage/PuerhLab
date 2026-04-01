@@ -13,6 +13,7 @@
 
 #include "ui/puerhlab_main/i18n.hpp"
 #include "ui/puerhlab_main/album_backend/album_types.hpp"
+#include "ui/puerhlab_main/album_backend/nikon_he_recovery_types.hpp"
 #include "app/export_service.hpp"
 #include "app/import_service.hpp"
 #include "type/supported_file_type.hpp"
@@ -27,6 +28,7 @@ class ImportExportHandler {
   explicit ImportExportHandler(AlbumBackend& backend);
 
   void StartImport(const QStringList& fileUrlsOrPaths);
+  void StartImportPaths(const std::vector<image_path_t>& paths, bool preserveTarget = false);
   void CancelImport();
   void StartExport(const QString& outputDirUrlOrPath);
   void StartExportWithOptions(const QString& outputDirUrlOrPath, const QString& formatName,
@@ -89,6 +91,7 @@ class ImportExportHandler {
   }
 
  private:
+  void StartImportResolvedPaths(std::vector<image_path_t> paths, bool preserveTarget);
   void ResetExportProgressState(const i18n::LocalizedText& status);
   void SetExportFailureState(const i18n::LocalizedText& message);
 

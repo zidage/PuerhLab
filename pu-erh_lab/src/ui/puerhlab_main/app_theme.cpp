@@ -291,28 +291,46 @@ auto AppTheme::EditorSecondaryButtonStyle() -> QString {
                         "}");
 }
 
-auto AppTheme::EditorPanelToggleStyle(bool active) -> QString {
+auto AppTheme::EditorPanelToggleStyle(bool active, bool is_first, bool is_last) -> QString {
+  const QString top_left_radius = is_first ? QStringLiteral("8px") : QStringLiteral("0px");
+  const QString bottom_left_radius = is_first ? QStringLiteral("8px") : QStringLiteral("0px");
+  const QString top_right_radius = is_last ? QStringLiteral("8px") : QStringLiteral("0px");
+  const QString bottom_right_radius = is_last ? QStringLiteral("8px") : QStringLiteral("0px");
+
   if (active) {
     return QStringLiteral("QPushButton {"
                           "  color: #121212;"
                           "  background: #FCC704;"
                           "  border: none;"
-                          "  border-radius: 8px;"
+                          "  padding: 0px;"
+                          "  border-top-left-radius: %1;"
+                          "  border-bottom-left-radius: %2;"
+                          "  border-top-right-radius: %3;"
+                          "  border-bottom-right-radius: %4;"
                           "}"
                           "QPushButton:hover {"
                           "  background: #F5C200;"
-                          "}");
+                          "}")
+        .arg(top_left_radius, bottom_left_radius, top_right_radius, bottom_right_radius);
   }
 
   return QStringLiteral("QPushButton {"
                         "  color: #E6E6E6;"
-                        "  background: #121212;"
-                        "  border: 1px solid #2A2A2A;"
-                        "  border-radius: 8px;"
+                        "  background: transparent;"
+                        "  border: none;"
+                        "  padding: 0px;"
+                        "  border-top-left-radius: %1;"
+                        "  border-bottom-left-radius: %2;"
+                        "  border-top-right-radius: %3;"
+                        "  border-bottom-right-radius: %4;"
                         "}"
                         "QPushButton:hover {"
-                        "  border-color: #FCC704;"
-                        "}");
+                        "  background: #181818;"
+                        "}"
+                        "QPushButton:pressed {"
+                        "  background: #202020;"
+                        "}")
+      .arg(top_left_radius, bottom_left_radius, top_right_radius, bottom_right_radius);
 }
 
 auto AppTheme::EditorMethodCardStyle(bool active) -> QString {

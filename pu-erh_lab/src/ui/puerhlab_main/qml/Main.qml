@@ -382,6 +382,25 @@ ApplicationWindow {
         }
     }
 
+    NikonHeRecoveryDialog {
+        id: nikonHeRecoveryDialog
+        parent: Overlay.overlay
+        backgroundSource: mainContent
+        recoveryActive: albumBackend.nikonHeRecoveryActive
+        recoveryBusy: albumBackend.nikonHeRecoveryBusy
+        recoveryPhase: albumBackend.nikonHeRecoveryPhase
+        recoveryStatus: albumBackend.nikonHeRecoveryStatus
+        unsupportedFiles: albumBackend.nikonHeUnsupportedFiles
+        converterPath: albumBackend.nikonHeConverterPath
+        showImportProgress: albumBackend.importRunning && albumBackend.nikonHeRecoveryActive
+        importCompleted: albumBackend.importCompleted
+        importTotal: albumBackend.importTotal
+        importFailed: albumBackend.importFailed
+        onBrowseRequested: albumBackend.BrowseNikonHeConverter()
+        onConvertRequested: albumBackend.StartNikonHeConversion()
+        onExitRequested: albumBackend.ExitNikonHeRecovery()
+    }
+
     Popup {
         id: deleteConfirmDialog
         modal: true
@@ -1307,7 +1326,7 @@ ApplicationWindow {
     // ── Import progress overlay ──────────────────────────────────────────
     Item {
         anchors.fill: parent
-        visible: albumBackend.importRunning
+        visible: albumBackend.importRunning && !albumBackend.nikonHeRecoveryActive
         z: 50
 
         MultiEffect {

@@ -21,6 +21,8 @@
 #include "ui/puerhlab_main/album_backend/image_controller.hpp"
 #include "ui/puerhlab_main/album_backend/stats_engine.hpp"
 #include "ui/puerhlab_main/album_backend/import_export.hpp"
+#include "ui/puerhlab_main/album_backend/nikon_he_recovery_types.hpp"
+#include "ui/puerhlab_main/album_backend/nikon_he_recovery_controller.hpp"
 #include "ui/puerhlab_main/album_backend/editor_controller.hpp"
 
 namespace puerhlab::ui {
@@ -62,6 +64,12 @@ class AlbumBackend final : public QObject {
   Q_PROPERTY(int exportFailed READ ExportFailed NOTIFY ExportStateChanged)
   Q_PROPERTY(int exportSkipped READ ExportSkipped NOTIFY ExportStateChanged)
   Q_PROPERTY(QString exportErrorSummary READ ExportErrorSummary NOTIFY ExportStateChanged)
+  Q_PROPERTY(bool nikonHeRecoveryActive READ NikonHeRecoveryActive NOTIFY NikonHeRecoveryStateChanged)
+  Q_PROPERTY(bool nikonHeRecoveryBusy READ NikonHeRecoveryBusy NOTIFY NikonHeRecoveryStateChanged)
+  Q_PROPERTY(QString nikonHeRecoveryPhase READ NikonHeRecoveryPhase NOTIFY NikonHeRecoveryStateChanged)
+  Q_PROPERTY(QString nikonHeRecoveryStatus READ NikonHeRecoveryStatus NOTIFY NikonHeRecoveryStateChanged)
+  Q_PROPERTY(QVariantList nikonHeUnsupportedFiles READ NikonHeUnsupportedFiles NOTIFY NikonHeRecoveryStateChanged)
+  Q_PROPERTY(QString nikonHeConverterPath READ NikonHeConverterPath NOTIFY NikonHeRecoveryStateChanged)
   Q_PROPERTY(bool editorActive READ EditorActive NOTIFY EditorStateChanged)
   Q_PROPERTY(bool editorBusy READ EditorBusy NOTIFY EditorStateChanged)
   Q_PROPERTY(uint editorElementId READ EditorElementId NOTIFY EditorStateChanged)
@@ -121,6 +129,12 @@ class AlbumBackend final : public QObject {
   int ExportFailed() const { return import_export_.export_failed(); }
   int ExportSkipped() const { return import_export_.export_skipped(); }
   QString ExportErrorSummary() const { return import_export_.export_error_summary(); }
+  bool NikonHeRecoveryActive() const { return nikon_he_recovery_.is_active(); }
+  bool NikonHeRecoveryBusy() const { return nikon_he_recovery_.is_busy(); }
+  QString NikonHeRecoveryPhase() const { return nikon_he_recovery_.phase_text(); }
+  QString NikonHeRecoveryStatus() const { return nikon_he_recovery_.status_text(); }
+  QVariantList NikonHeUnsupportedFiles() const { return nikon_he_recovery_.unsupported_files(); }
+  QString NikonHeConverterPath() const { return nikon_he_recovery_.converter_path(); }
   bool EditorActive() const { return editor_.editor_active(); }
   bool EditorBusy() const { return editor_.editor_busy(); }
   uint EditorElementId() const { return static_cast<uint>(editor_.editor_element_id()); }
@@ -172,6 +186,9 @@ class AlbumBackend final : public QObject {
                                                     const QString& tiffCompression,
                                                     const QVariantList& targetEntries);
   Q_INVOKABLE void ResetExportState();
+  Q_INVOKABLE void BrowseNikonHeConverter();
+  Q_INVOKABLE void StartNikonHeConversion();
+  Q_INVOKABLE void ExitNikonHeRecovery();
   Q_INVOKABLE void OpenEditor(uint elementId, uint imageId);
   Q_INVOKABLE void CloseEditor();
   Q_INVOKABLE void ResetEditorAdjustments();
@@ -206,6 +223,7 @@ signals:
   void importStateChanged();
   void ExportStateChanged();
   void exportStateChanged();
+  void NikonHeRecoveryStateChanged();
   void EditorStateChanged();
   void EditorPreviewChanged();
   void ProjectChanged();
@@ -223,6 +241,7 @@ signals:
   friend class ImageController;
   friend class StatsEngine;
   friend class ImportExportHandler;
+  friend class NikonHeRecoveryController;
   friend class EditorController;
 
   void SetServiceState(bool ready, const i18n::LocalizedText& message);
@@ -245,6 +264,7 @@ signals:
   ImageController    image_ctrl_;
   StatsEngine        stats_;
   ImportExportHandler import_export_;
+  NikonHeRecoveryController nikon_he_recovery_;
   EditorController   editor_;
 
   // ── Shared data (accessed by helpers via friend) ────────────────────

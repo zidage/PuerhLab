@@ -36,7 +36,7 @@ struct EditorDialogTiming {
 //  Enums
 // ---------------------------------------------------------------------------
 
-enum class ControlPanelKind { Tone, DisplayRenderingTransform, Geometry, RawDecode };
+enum class ControlPanelKind { Tone, Look, DisplayRenderingTransform, Geometry, RawDecode };
 
 enum class AdjustmentField {
   Exposure,

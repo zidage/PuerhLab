@@ -79,6 +79,35 @@ auto IsNikonCamera(const std::string& make, const std::string& model) -> bool {
   return ContainsCaseInsensitive(make, "nikon") || ContainsCaseInsensitive(model, "nikon");
 }
 
+constexpr uint16_t kNikonHeCompression  = 13;
+constexpr uint16_t kNikonHeStarCompression = 14;
+
+auto IsUnsupportedNikonHeCompression(const uint16_t nef_compression) -> bool {
+  return nef_compression == kNikonHeCompression || nef_compression == kNikonHeStarCompression;
+}
+
+auto IsDngExtension(const std::filesystem::path& path) -> bool {
+  std::string ext = path.extension().string();
+  std::transform(ext.begin(), ext.end(), ext.begin(),
+                 [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+  return ext == ".dng";
+}
+
+auto IsNefExtension(const std::filesystem::path& path) -> bool {
+  std::string ext = path.extension().string();
+  std::transform(ext.begin(), ext.end(), ext.begin(),
+                 [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+  return ext == ".nef";
+}
+
+auto BuildUnsupportedNikonHeMessage(const image_path_t& image_path,
+                                    const uint16_t      nef_compression) -> std::string {
+  std::ostringstream oss;
+  oss << "Unsupported Nikon HE/HE* raw detected: " << image_path.string()
+      << " (NEFCompression=" << nef_compression << ")";
+  return oss.str();
+}
+
 auto ResolveCropFactorHint(float focal_mm, float focal_35mm_mm) -> float {
   if (!IsFinitePositive(focal_mm) || !IsFinitePositive(focal_35mm_mm)) return 0.0f;
   return focal_35mm_mm / focal_mm;
@@ -807,6 +836,9 @@ static void GetDisplayMetadataFromExif(Exiv2::ExifData&     exif_data,
   if (exif_data.empty()) {
     return;
   }
+  const auto find_key = [&exif_data](const char* key) {
+    return exif_data.findKey(Exiv2::ExifKey(key));
+  };
   if (exif_data.findKey(Exiv2::ExifKey("Exif.Image.Make")) != exif_data.end()) {
     display_metadata.make_ = exif_data["Exif.Image.Make"].toString();
   }
@@ -835,23 +867,35 @@ static void GetDisplayMetadataFromExif(Exiv2::ExifData&     exif_data,
   }
   if (exif_data.findKey(Exiv2::ExifKey("Exif.Photo.ISOSpeedRatings")) != exif_data.end()) {
     display_metadata.iso_ = exif_data["Exif.Photo.ISOSpeedRatings"].toInt64();
+  } else if (find_key("Exif.Photo.ISOSpeed") != exif_data.end()) {
+    display_metadata.iso_ = exif_data["Exif.Photo.ISOSpeed"].toInt64();
   }
-  if (exif_data.findKey(Exiv2::ExifKey("Exif.Image.ShutterSpeedValue")) != exif_data.end()) {
+  if (find_key("Exif.Photo.ExposureTime") != exif_data.end()) {
+    display_metadata.shutter_speed_ = exif_data["Exif.Photo.ExposureTime"].toRational();
+  } else if (find_key("Exif.Photo.ShutterSpeedValue") != exif_data.end()) {
+    display_metadata.shutter_speed_ = exif_data["Exif.Photo.ShutterSpeedValue"].toRational();
+  } else if (find_key("Exif.Image.ShutterSpeedValue") != exif_data.end()) {
     display_metadata.shutter_speed_ = exif_data["Exif.Image.ShutterSpeedValue"].toRational();
   }
-  if (exif_data.findKey(Exiv2::ExifKey("Exif.Image.ImageLength")) != exif_data.end()) {
+  if (find_key("Exif.Photo.PixelYDimension") != exif_data.end()) {
+    display_metadata.height_ = exif_data["Exif.Photo.PixelYDimension"].toUint32();
+  } else if (exif_data.findKey(Exiv2::ExifKey("Exif.Image.ImageLength")) != exif_data.end()) {
     display_metadata.height_ = exif_data["Exif.Image.ImageLength"].toUint32();
   }
-  if (exif_data.findKey(Exiv2::ExifKey("Exif.Image.ImageWidth")) != exif_data.end()) {
+  if (find_key("Exif.Photo.PixelXDimension") != exif_data.end()) {
+    display_metadata.width_ = exif_data["Exif.Photo.PixelXDimension"].toUint32();
+  } else if (exif_data.findKey(Exiv2::ExifKey("Exif.Image.ImageWidth")) != exif_data.end()) {
     display_metadata.width_ = exif_data["Exif.Image.ImageWidth"].toUint32();
   }
-  if (exif_data.findKey(Exiv2::ExifKey("Exif.Image.DateTime")) != exif_data.end()) {
+  if (find_key("Exif.Photo.DateTimeOriginal") != exif_data.end()) {
+    display_metadata.date_time_str_ = exif_data["Exif.Photo.DateTimeOriginal"].toString();
+  } else if (exif_data.findKey(Exiv2::ExifKey("Exif.Image.DateTime")) != exif_data.end()) {
     display_metadata.date_time_str_ = exif_data["Exif.Image.DateTime"].toString();
-    if (display_metadata.date_time_str_.size() >= 10) {
-      display_metadata.date_time_str_[4] =
-          '-';  // Change from "YYYY:MM:DD HH:MM:SS" to "YYYY-MM-DD HH:MM:SS"
-      display_metadata.date_time_str_[7] = '-';
-    }
+  }
+  if (display_metadata.date_time_str_.size() >= 10) {
+    display_metadata.date_time_str_[4] =
+        '-';  // Change from "YYYY:MM:DD HH:MM:SS" to "YYYY-MM-DD HH:MM:SS"
+    display_metadata.date_time_str_[7] = '-';
   }
 }
 
@@ -909,11 +953,12 @@ auto MetadataExtractor::EXIFToJSON(const Exiv2::Image::UniquePtr& exif_data) -> 
 void MetadataExtractor::ExtractEXIF_ToImage(const image_path_t& image_path, Image& image) {
   // For raw files, prefer the libraw-based extraction path which also provides
   // RawRuntimeColorContext for pipeline operators.
-  if (IsRawExtension(image_path)) {
+  const bool is_dng = IsDngExtension(image_path);
+  if (IsRawExtension(image_path) && !is_dng) {
     if (ExtractRawMetadata_ToImage(image_path, image)) {
       return;
     }
-    // Fall through to Exiv2 if libraw extraction fails
+    // Fall through to Exiv2 if libraw extraction fails.
   }
 
   auto exif_data = ExtractEXIF(image_path);
@@ -941,8 +986,23 @@ auto MetadataExtractor::ExtractRawMetadata_ToImage(const image_path_t& image_pat
     return false;
   }
 
+  const auto nef_compression = raw_processor->imgdata.makernotes.nikon.NEFCompression;
+  if (IsNefExtension(image_path) && IsUnsupportedNikonHeCompression(nef_compression)) {
+    throw MetadataExtractionError(
+        ImportErrorCode::UNSUPPORTED_NIKON_HE_RAW, image_path,
+        BuildUnsupportedNikonHeMessage(image_path, nef_compression), nef_compression);
+  }
+
   ret = libraw_guard::Unpack(*raw_processor);
   if (ret != LIBRAW_SUCCESS) {
+    if (IsNefExtension(image_path) && ret == LIBRAW_FILE_UNSUPPORTED &&
+        IsUnsupportedNikonHeCompression(raw_processor->imgdata.makernotes.nikon.NEFCompression)) {
+      throw MetadataExtractionError(
+          ImportErrorCode::UNSUPPORTED_NIKON_HE_RAW, image_path,
+          BuildUnsupportedNikonHeMessage(
+              image_path, raw_processor->imgdata.makernotes.nikon.NEFCompression),
+          raw_processor->imgdata.makernotes.nikon.NEFCompression);
+    }
     std::cerr << "MetadataExtractor: libraw unpack failed for '"
               << image_path.string() << "' (error " << ret << ")" << std::endl;
     raw_processor->recycle();

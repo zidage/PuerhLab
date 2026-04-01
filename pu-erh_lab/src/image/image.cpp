@@ -79,7 +79,15 @@ void Image::ClearThumbnail() {
 }
 
 auto Image::ExifToJson() -> std::string {
-  // If the image has exif json, return it directly
+  // exif_display_ is the canonical display-metadata source while importing.
+  // Always rebuild the JSON from it when available so stale cached JSON cannot
+  // overwrite newer metadata during storage sync.
+  if (has_exif_display_) {
+    exif_json_     = exif_display_.ToJson();
+    has_exif_json_ = true;
+    return nlohmann::to_string(exif_json_);
+  }
+
   if (has_exif_json_) {
     return nlohmann::to_string(exif_json_);
   }
@@ -94,6 +102,7 @@ void Image::JsonToExif(std::string json_str) {
     exif_json_     = nlohmann::json::parse(json_str);
     has_exif_json_ = true;
     exif_display_.FromJson(exif_json_);
+    has_exif_display_ = true;
   } catch (nlohmann::json::parse_error& e) {
     throw std::runtime_error("[ERROR] Image: JSON parse error, " + std::string(e.what()));
   } catch (std::exception& e) {
@@ -107,6 +116,10 @@ void Image::SetId(image_id_t image_id) { image_id_ = image_id; }
 void Image::SetExifDisplayMetaData(ExifDisplayMetaData&& exif_display) {
   exif_display_     = std::move(exif_display);
   has_exif_display_ = true;
+  has_exif_json_    = false;
+  if (sync_state_.load() == ImageSyncState::SYNCED) {
+    sync_state_ = ImageSyncState::MODIFIED;
+  }
 }
 
 void Image::SetRawColorContext(RawRuntimeColorContext&& ctx) {

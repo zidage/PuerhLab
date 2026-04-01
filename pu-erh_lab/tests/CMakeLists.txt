@@ -167,6 +167,16 @@ target_include_directories(ODTOpTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/i
 target_link_libraries(ODTOpTest PRIVATE GTest::gtest_main Operators)
 gtest_discover_tests(ODTOpTest TEST_PREFIX "ODTOpTest.")
 
+add_executable(LutCatalogTest
+    ui/lut_catalog_test.cpp
+    ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/ui/puerhlab_main/editor_dialog/modules/lut_catalog.cpp
+)
+target_include_directories(LutCatalogTest
+    PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include
+)
+target_link_libraries(LutCatalogTest PRIVATE GTest::gtest_main Qt6::Core)
+gtest_discover_tests(LutCatalogTest TEST_PREFIX "LutCatalogTest.")
+
 add_executable(CropRotateOpTest edit/operators/geometry/crop_rotate_op_test.cpp)
 target_include_directories(CropRotateOpTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
 target_link_libraries(CropRotateOpTest PRIVATE GTest::gtest_main Operators ${PUERHLAB_TEST_OPENCV_MIN_DEPS})

@@ -117,6 +117,22 @@
     drt_controls_layout->addStretch();
     drt_controls_scroll_->setWidget(drt_controls_);
 
+    look_controls_scroll_ = new QScrollArea(controls_panel);
+    look_controls_scroll_->setFrameShape(QFrame::NoFrame);
+    look_controls_scroll_->setWidgetResizable(true);
+    look_controls_scroll_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    look_controls_scroll_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    look_controls_scroll_->setStyleSheet(scroll_style);
+
+    look_controls_ = new QWidget(look_controls_scroll_);
+    auto* look_controls_layout = new QVBoxLayout(look_controls_);
+    look_controls_layout->setContentsMargins(12, 12, 12, 12);
+    look_controls_layout->setSpacing(12);
+
+    lut_browser_widget_ = new LutBrowserWidget(look_controls_);
+    look_controls_layout->addWidget(lut_browser_widget_, 1);
+    look_controls_scroll_->setWidget(look_controls_);
+
     geometry_controls_scroll_ = new QScrollArea(controls_panel);
     geometry_controls_scroll_->setFrameShape(QFrame::NoFrame);
     geometry_controls_scroll_->setWidgetResizable(true);
@@ -147,41 +163,52 @@
 
     control_panels_stack_ = new QStackedWidget(controls_panel);
     control_panels_stack_->addWidget(tone_controls_scroll_);
+    control_panels_stack_->addWidget(look_controls_scroll_);
     control_panels_stack_->addWidget(drt_controls_scroll_);
     control_panels_stack_->addWidget(geometry_controls_scroll_);
     control_panels_stack_->addWidget(raw_controls_scroll_);
     control_panels_stack_->setCurrentIndex(0);
 
     auto* panel_switch_row = new QWidget(controls_panel);
+    panel_switch_row->setObjectName("EditorPanelSwitchRow");
+    panel_switch_row->setAttribute(Qt::WA_StyledBackground, true);
+    panel_switch_row->setStyleSheet(
+        "#EditorPanelSwitchRow {"
+        "  background: #121212;"
+        "  border: 1px solid #2A2A2A;"
+        "  border-radius: 8px;"
+        "}");
     auto* panel_switch_layout = new QHBoxLayout(panel_switch_row);
     panel_switch_layout->setContentsMargins(0, 0, 0, 0);
-    panel_switch_layout->setSpacing(8);
+    panel_switch_layout->setSpacing(0);
 
-    tone_panel_btn_     = new QPushButton(Tr("Tone"), panel_switch_row);
-    drt_panel_btn_      = new QPushButton(Tr("Display RT"), panel_switch_row);
-    geometry_panel_btn_ = new QPushButton(Tr("Geometry"), panel_switch_row);
-    raw_panel_btn_      = new QPushButton(Tr("RAW Decode"), panel_switch_row);
-    tone_panel_btn_->setCheckable(true);
-    drt_panel_btn_->setCheckable(true);
-    geometry_panel_btn_->setCheckable(true);
-    raw_panel_btn_->setCheckable(true);
-    tone_panel_btn_->setCursor(Qt::PointingHandCursor);
-    drt_panel_btn_->setCursor(Qt::PointingHandCursor);
-    geometry_panel_btn_->setCursor(Qt::PointingHandCursor);
-    raw_panel_btn_->setCursor(Qt::PointingHandCursor);
-    tone_panel_btn_->setFixedHeight(30);
-    drt_panel_btn_->setFixedHeight(30);
-    geometry_panel_btn_->setFixedHeight(30);
-    raw_panel_btn_->setFixedHeight(30);
-    drt_panel_btn_->setToolTip(Tr("Display Rendering Transform"));
+    tone_panel_btn_     = new QPushButton(panel_switch_row);
+    look_panel_btn_     = new QPushButton(panel_switch_row);
+    drt_panel_btn_      = new QPushButton(panel_switch_row);
+    geometry_panel_btn_ = new QPushButton(panel_switch_row);
+    raw_panel_btn_      = new QPushButton(panel_switch_row);
+
+    ConfigurePanelToggleButton(tone_panel_btn_, Tr("Tone"),
+                               QStringLiteral(":/panel_icons/adjustments.svg"));
+    ConfigurePanelToggleButton(look_panel_btn_, Tr("Look"),
+                               QStringLiteral(":/panel_icons/palette.svg"));
+    ConfigurePanelToggleButton(drt_panel_btn_, Tr("Display Rendering Transform"),
+                               QStringLiteral(":/panel_icons/color-filter.svg"));
+    ConfigurePanelToggleButton(geometry_panel_btn_, Tr("Geometry"),
+                               QStringLiteral(":/panel_icons/crop.svg"));
+    ConfigurePanelToggleButton(raw_panel_btn_, Tr("RAW Decode"),
+                               QStringLiteral(":/panel_icons/aperture.svg"));
 
     panel_switch_layout->addWidget(tone_panel_btn_, 1);
+    panel_switch_layout->addWidget(look_panel_btn_, 1);
     panel_switch_layout->addWidget(drt_panel_btn_, 1);
     panel_switch_layout->addWidget(geometry_panel_btn_, 1);
     panel_switch_layout->addWidget(raw_panel_btn_, 1);
 
     QObject::connect(tone_panel_btn_, &QPushButton::clicked, this,
                      [this]() { SetActiveControlPanel(ControlPanelKind::Tone); });
+    QObject::connect(look_panel_btn_, &QPushButton::clicked, this,
+                     [this]() { SetActiveControlPanel(ControlPanelKind::Look); });
     QObject::connect(drt_panel_btn_, &QPushButton::clicked, this,
                      [this]() {
                        SetActiveControlPanel(ControlPanelKind::DisplayRenderingTransform);

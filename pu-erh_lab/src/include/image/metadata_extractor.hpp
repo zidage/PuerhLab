@@ -6,10 +6,12 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <stdexcept>
 #include <exiv2/exif.hpp>
 #include <exiv2/exiv2.hpp>
 #include <json.hpp>
 
+#include "utils/import/import_error_code.hpp"
 #include "decoders/processor/raw_color_context.hpp"
 #include "image.hpp"
 #include "type/type.hpp"
@@ -18,6 +20,29 @@
 class LibRaw;
 
 namespace puerhlab {
+
+class MetadataExtractionError : public std::runtime_error {
+ public:
+  MetadataExtractionError(ImportErrorCode code, image_path_t path, std::string message,
+                          uint16_t nef_compression = 0)
+      : std::runtime_error(message),
+        code_(code),
+        path_(std::move(path)),
+        message_(std::move(message)),
+        nef_compression_(nef_compression) {}
+
+  [[nodiscard]] auto code() const -> ImportErrorCode { return code_; }
+  [[nodiscard]] auto path() const -> const image_path_t& { return path_; }
+  [[nodiscard]] auto message() const -> const std::string& { return message_; }
+  [[nodiscard]] auto nef_compression() const -> uint16_t { return nef_compression_; }
+
+ private:
+  ImportErrorCode code_            = ImportErrorCode::UNKNOWN;
+  image_path_t    path_{};
+  std::string     message_{};
+  uint16_t        nef_compression_ = 0;
+};
+
 class MetadataExtractor {
  public:
   /**

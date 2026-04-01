@@ -16,6 +16,7 @@
 #include "image_pool_service.hpp"
 #include "storage/image_pool/image_pool_manager.hpp"
 #include "type/type.hpp"
+#include "utils/import/import_error_code.hpp"
 #include "utils/import/import_log.hpp"
 
 namespace puerhlab {
@@ -44,17 +45,6 @@ struct ImportProgress {
   std::atomic<uint32_t> metadata_done_        = 0;
 
   std::atomic<uint32_t> failed_               = 0;
-};
-
-enum class ImportErrorCode : uint8_t {
-  UNKNOWN = 0,
-  FILE_NOT_FOUND,
-  UNSUPPORTED_FORMAT,
-  READ_FAILED,
-  METADATA_EXTRACTION_FAILED,
-  SLEEVE_CREATE_FAILED,
-  DB_WRITE_FAILED,
-  CANCELED
 };
 
 struct ImportError {

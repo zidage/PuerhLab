@@ -162,6 +162,7 @@ endif()
 set(PUERHLAB_QT_COMPONENTS
     Core
     LinguistTools
+    Svg
     Widgets
     Quick
     Qml

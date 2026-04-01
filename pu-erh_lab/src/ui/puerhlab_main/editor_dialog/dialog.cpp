@@ -12,12 +12,15 @@
 #include <QColor>
 #include <QComboBox>
 #include <QCoreApplication>
+#include <QDesktopServices>
 #include <QDialog>
 #include <QDoubleSpinBox>
 #include <QEvent>
+#include <QFile>
 #include <QFrame>
 #include <QGridLayout>
 #include <QHBoxLayout>
+#include <QIcon>
 #include <QImage>
 #include <QLabel>
 #include <QLineEdit>
@@ -28,6 +31,7 @@
 #include <QPainterPath>
 #include <QPlainTextEdit>
 #include <QPushButton>
+#include <QPixmap>
 #include <QScrollArea>
 #include <QSlider>
 #include <QSpinBox>
@@ -37,7 +41,9 @@
 #include <QSurfaceFormat>
 #include <QTimer>
 #include <QTextEdit>
+#include <QUrl>
 #include <QVBoxLayout>
+#include <QSvgRenderer>
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -70,6 +76,7 @@
 #include "renderer/pipeline_task.hpp"
 #include "ui/puerhlab_main/editor_dialog/controllers/history_controller.hpp"
 #include "ui/puerhlab_main/editor_dialog/controllers/image_controller.hpp"
+#include "ui/puerhlab_main/editor_dialog/controllers/lut_controller.hpp"
 #include "ui/puerhlab_main/editor_dialog/controllers/pipeline_controller.hpp"
 #include "ui/puerhlab_main/editor_dialog/controllers/render_controller.hpp"
 #include "ui/puerhlab_main/editor_dialog/modules/color_temp.hpp"
@@ -79,11 +86,13 @@
 #include "ui/puerhlab_main/editor_dialog/modules/histogram.hpp"
 #include "ui/puerhlab_main/editor_dialog/modules/hls.hpp"
 #include "ui/puerhlab_main/editor_dialog/modules/lens_calib.hpp"
+#include "ui/puerhlab_main/editor_dialog/modules/lut_catalog.hpp"
 #include "ui/puerhlab_main/editor_dialog/modules/pipeline_io.hpp"
 #include "ui/puerhlab_main/editor_dialog/modules/versioning.hpp"
 #include "ui/puerhlab_main/editor_dialog/scope/scope_panel.hpp"
 #include "ui/puerhlab_main/editor_dialog/state.hpp"
 #include "ui/puerhlab_main/editor_dialog/widgets/history_cards.hpp"
+#include "ui/puerhlab_main/editor_dialog/widgets/lut_browser_widget.hpp"
 #include "ui/puerhlab_main/editor_dialog/widgets/spinner.hpp"
 #include "ui/puerhlab_main/editor_dialog/widgets/tone_curve_widget.hpp"
 #include "ui/puerhlab_main/editor_dialog/widgets/trackball.hpp"
@@ -99,38 +108,13 @@ auto Tr(const char* text) -> QString {
   return QCoreApplication::translate(PUERHLAB_I18N_CONTEXT, text);
 }
 
-const auto kShortcutUndoHistoryId  = QStringLiteral("editor_dialog.undo_history_transaction");
+const auto kShortcutUndoHistoryId   = QStringLiteral("editor_dialog.undo_history_transaction");
 const auto kShortcutResetGeometryId = QStringLiteral("editor_dialog.reset_geometry");
+constexpr char kPanelIconPathProperty[] = "puerhlabPanelIconPath";
+const QSize     kPanelToggleIconSize(18, 18);
+constexpr int   kPanelToggleButtonHeight = 44;
 
 using namespace std::chrono_literals;
-
-auto ListCubeLutsInDir(const std::filesystem::path& dir) -> std::vector<std::filesystem::path> {
-  std::vector<std::filesystem::path> files;
-  std::error_code                    ec;
-  if (!std::filesystem::exists(dir, ec) || ec) {
-    return files;
-  }
-
-  for (const auto& entry : std::filesystem::directory_iterator(dir, ec)) {
-    if (ec) {
-      break;
-    }
-    if (!entry.is_regular_file()) {
-      continue;
-    }
-    std::wstring ext = entry.path().extension().wstring();
-    std::transform(ext.begin(), ext.end(), ext.begin(), ::towlower);
-    if (ext == L".cube") {
-      files.push_back(entry.path());
-    }
-  }
-
-  std::sort(files.begin(), files.end(),
-            [](const std::filesystem::path& a, const std::filesystem::path& b) {
-              return a.filename().wstring() < b.filename().wstring();
-            });
-  return files;
-}
 
 using LensCatalog = lens_calib::LensCatalog;
 using lens_calib::LoadLensCatalog;
@@ -189,6 +173,54 @@ constexpr double kCropAspectSpinMax      = 100.0;
 constexpr int   kCdlWheelSliderUiMin     = color_wheel::kSliderUiMin;
 constexpr int   kCdlWheelSliderUiMax     = color_wheel::kSliderUiMax;
 constexpr float kCdlWheelStrengthDefault = color_wheel::kStrengthDefault;
+
+auto RenderPanelToggleIcon(const QString& resource_path, const QColor& color, const QSize& size,
+                           qreal device_pixel_ratio) -> QIcon {
+  QFile svg_file(resource_path);
+  if (!svg_file.open(QIODevice::ReadOnly)) {
+    return {};
+  }
+
+  QByteArray svg_data = svg_file.readAll();
+  svg_data.replace("currentColor", color.name(QColor::HexRgb).toUtf8());
+
+  QSvgRenderer renderer(svg_data);
+  if (!renderer.isValid()) {
+    return {};
+  }
+
+  const qreal scale = std::max<qreal>(1.0, device_pixel_ratio);
+  const QSize physical_size(std::max(1, qRound(size.width() * scale)),
+                            std::max(1, qRound(size.height() * scale)));
+  QPixmap     pixmap(physical_size);
+  pixmap.fill(Qt::transparent);
+  pixmap.setDevicePixelRatio(scale);
+
+  QPainter painter(&pixmap);
+  painter.setRenderHint(QPainter::Antialiasing, true);
+  renderer.render(&painter, QRectF(QPointF(0.0, 0.0), QSizeF(size)));
+  return QIcon(pixmap);
+}
+
+void ConfigurePanelToggleButton(QPushButton*    button,
+                                const QString& tooltip,
+                                const QString& icon_resource_path) {
+  if (!button) {
+    return;
+  }
+
+  button->setText(QString());
+  button->setCheckable(true);
+  button->setAutoDefault(false);
+  button->setDefault(false);
+  button->setCursor(Qt::PointingHandCursor);
+  button->setFixedHeight(kPanelToggleButtonHeight);
+  button->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+  button->setToolTip(tooltip);
+  button->setAccessibleName(tooltip);
+  button->setIconSize(kPanelToggleIconSize);
+  button->setProperty(kPanelIconPathProperty, icon_resource_path);
+}
 
 template <typename T>
 struct EnumOption {
@@ -867,6 +899,9 @@ class EditorDialog final : public QDialog {
     if (tone_panel_btn_) {
       tone_panel_btn_->setText(Tr("Tone"));
     }
+    if (look_panel_btn_) {
+      look_panel_btn_->setText(Tr("Look"));
+    }
     if (drt_panel_btn_) {
       drt_panel_btn_->setText(Tr("Display RT"));
       drt_panel_btn_->setToolTip(Tr("Display Rendering Transform"));
@@ -921,9 +956,9 @@ class EditorDialog final : public QDialog {
       geometry_crop_aspect_preset_combo_->setCurrentIndex(std::max(0, index));
       syncing_controls_ = prev_sync;
     }
-    if (lut_combo_ && !lut_names_.isEmpty()) {
-      lut_names_[0] = Tr("None");
-      lut_combo_->setItemText(0, lut_names_.front());
+    if (lut_browser_widget_) {
+      lut_browser_widget_->RetranslateUi();
+      RefreshLutBrowserUi();
     }
 
     RefreshLensComboFromState();
@@ -1047,26 +1082,70 @@ class EditorDialog final : public QDialog {
     RefreshLensModelComboFromState();
   }
 
+  void RefreshLutBrowserUi() {
+    if (!lut_browser_widget_) {
+      return;
+    }
+    const auto view_model = lut_controller_.Refresh(state_.lut_path_, false);
+    lut_browser_widget_->SetDirectoryInfo(view_model.directory_text_,
+                                          view_model.status_text_,
+                                          view_model.can_open_directory_);
+    lut_browser_widget_->SetEntries(view_model.entries_, view_model.selected_path_);
+  }
+
+  void ForceRefreshLutBrowserUi() {
+    if (!lut_browser_widget_) {
+      return;
+    }
+    const auto view_model = lut_controller_.Refresh(state_.lut_path_, true);
+    lut_browser_widget_->SetDirectoryInfo(view_model.directory_text_,
+                                          view_model.status_text_,
+                                          view_model.can_open_directory_);
+    lut_browser_widget_->SetEntries(view_model.entries_, view_model.selected_path_);
+  }
+
+  void OpenLutFolder() {
+    const auto& directory = lut_controller_.directory();
+    std::error_code ec;
+    if (directory.empty() || !std::filesystem::is_directory(directory, ec) || ec) {
+      QMessageBox::warning(this, Tr("LUT"), Tr("LUT folder is unavailable."));
+      return;
+    }
+    if (!QDesktopServices::openUrl(QUrl::fromLocalFile(QString::fromStdWString(directory.wstring())))) {
+      QMessageBox::warning(this, Tr("LUT"), Tr("Failed to open the LUT folder."));
+    }
+  }
+
   void RefreshPanelSwitchUi() {
-    if (!tone_panel_btn_ || !drt_panel_btn_ || !geometry_panel_btn_ || !raw_panel_btn_) {
+    if (!tone_panel_btn_ || !look_panel_btn_ || !drt_panel_btn_ ||
+        !geometry_panel_btn_ || !raw_panel_btn_) {
       return;
     }
     const bool tone_active     = (active_panel_ == ControlPanelKind::Tone);
+    const bool look_active     = (active_panel_ == ControlPanelKind::Look);
     const bool drt_active      = (active_panel_ == ControlPanelKind::DisplayRenderingTransform);
     const bool geometry_active = (active_panel_ == ControlPanelKind::Geometry);
     const bool raw_active      = (active_panel_ == ControlPanelKind::RawDecode);
-    tone_panel_btn_->setChecked(tone_active);
-    drt_panel_btn_->setChecked(drt_active);
-    geometry_panel_btn_->setChecked(geometry_active);
-    raw_panel_btn_->setChecked(raw_active);
 
-    const QString active_style =
-        AppTheme::EditorPanelToggleStyle(true);
-    const QString inactive_style = AppTheme::EditorPanelToggleStyle(false);
-    tone_panel_btn_->setStyleSheet(tone_active ? active_style : inactive_style);
-    drt_panel_btn_->setStyleSheet(drt_active ? active_style : inactive_style);
-    geometry_panel_btn_->setStyleSheet(geometry_active ? active_style : inactive_style);
-    raw_panel_btn_->setStyleSheet(raw_active ? active_style : inactive_style);
+    const auto apply_panel_button_state = [](QPushButton* button, bool active, bool is_first,
+                                             bool is_last) {
+      if (!button) {
+        return;
+      }
+
+      button->setChecked(active);
+      button->setIcon(RenderPanelToggleIcon(
+          button->property(kPanelIconPathProperty).toString(),
+          active ? QColor(QStringLiteral("#121212")) : QColor(QStringLiteral("#E6E6E6")),
+          kPanelToggleIconSize, button->devicePixelRatioF()));
+      button->setStyleSheet(AppTheme::EditorPanelToggleStyle(active, is_first, is_last));
+    };
+
+    apply_panel_button_state(tone_panel_btn_, tone_active, true, false);
+    apply_panel_button_state(look_panel_btn_, look_active, false, false);
+    apply_panel_button_state(drt_panel_btn_, drt_active, false, false);
+    apply_panel_button_state(geometry_panel_btn_, geometry_active, false, false);
+    apply_panel_button_state(raw_panel_btn_, raw_active, false, true);
   }
 
   void SetActiveControlPanel(ControlPanelKind panel) {
@@ -1074,12 +1153,14 @@ class EditorDialog final : public QDialog {
     active_panel_ = panel;
     if (control_panels_stack_) {
       int panel_index = 0;
-      if (panel == ControlPanelKind::DisplayRenderingTransform) {
+      if (panel == ControlPanelKind::Look) {
         panel_index = 1;
-      } else if (panel == ControlPanelKind::Geometry) {
+      } else if (panel == ControlPanelKind::DisplayRenderingTransform) {
         panel_index = 2;
-      } else if (panel == ControlPanelKind::RawDecode) {
+      } else if (panel == ControlPanelKind::Geometry) {
         panel_index = 3;
+      } else if (panel == ControlPanelKind::RawDecode) {
+        panel_index = 4;
       }
       control_panels_stack_->setCurrentIndex(panel_index);
     }
@@ -1260,23 +1341,7 @@ class EditorDialog final : public QDialog {
     syncing_controls_ = true;
     LoadActiveHlsProfile(state_);
     SanitizeOdtStateForUi(state_.odt_);
-
-    if (lut_combo_) {
-      int lut_index = 0;
-      if (!state_.lut_path_.empty()) {
-        auto it = std::find(lut_paths_.begin(), lut_paths_.end(), state_.lut_path_);
-        if (it == lut_paths_.end()) {
-          lut_paths_.push_back(state_.lut_path_);
-          lut_names_.push_back(
-              QString::fromStdString(std::filesystem::path(state_.lut_path_).filename().string()));
-          lut_combo_->addItem(lut_names_.back());
-          lut_index = static_cast<int>(lut_paths_.size() - 1);
-        } else {
-          lut_index = static_cast<int>(std::distance(lut_paths_.begin(), it));
-        }
-      }
-      lut_combo_->setCurrentIndex(lut_index);
-    }
+    RefreshLutBrowserUi();
 
     if (exposure_slider_) {
       exposure_slider_->setValue(static_cast<int>(std::lround(state_.exposure_ * 100.0f)));
@@ -2003,6 +2068,7 @@ class EditorDialog final : public QDialog {
   ScopePanel*                                              scope_panel_            = nullptr;
   QScrollArea*                                             controls_scroll_        = nullptr;
   QScrollArea*                                             tone_controls_scroll_   = nullptr;
+  QScrollArea*                                             look_controls_scroll_   = nullptr;
   QScrollArea*                                             drt_controls_scroll_    = nullptr;
   QScrollArea*                                             geometry_controls_scroll_ = nullptr;
   QScrollArea*                                             raw_controls_scroll_    = nullptr;
@@ -2010,14 +2076,16 @@ class EditorDialog final : public QDialog {
   SpinnerWidget*                                           spinner_                = nullptr;
   QWidget*                                                 controls_               = nullptr;
   QWidget*                                                 tone_controls_          = nullptr;
+  QWidget*                                                 look_controls_          = nullptr;
   QWidget*                                                 drt_controls_           = nullptr;
   QWidget*                                                 geometry_controls_      = nullptr;
   QWidget*                                                 raw_controls_           = nullptr;
   QPushButton*                                             tone_panel_btn_         = nullptr;
+  QPushButton*                                             look_panel_btn_         = nullptr;
   QPushButton*                                             drt_panel_btn_          = nullptr;
   QPushButton*                                             geometry_panel_btn_     = nullptr;
   QPushButton*                                             raw_panel_btn_          = nullptr;
-  QComboBox*                                               lut_combo_              = nullptr;
+  LutBrowserWidget*                                        lut_browser_widget_     = nullptr;
   QSlider*                                                 exposure_slider_        = nullptr;
   QSlider*                                                 contrast_slider_        = nullptr;
   QSlider*                                                 saturation_slider_      = nullptr;
@@ -2084,8 +2152,7 @@ class EditorDialog final : public QDialog {
   QTimer*                                                  poll_timer_                   = nullptr;
   std::optional<std::future<std::shared_ptr<ImageBuffer>>> inflight_future_{};
 
-  std::vector<std::string>                                 lut_paths_{};
-  QStringList                                              lut_names_{};
+  controllers::LutController                               lut_controller_{};
   LensCatalog                                              lens_catalog_{};
 
   std::string                                              last_applied_lut_path_{};

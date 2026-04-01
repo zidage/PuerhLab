@@ -40,6 +40,7 @@ AlbumBackend::AlbumBackend(QObject* parent)
       image_ctrl_(*this),
       stats_(*this),
       import_export_(*this),
+      nikon_he_recovery_(*this),
       editor_(*this) {
   QObject::connect(&i18n::TranslationNotifier::Instance(), &i18n::TranslationNotifier::LanguageChanged,
                    this, &AlbumBackend::RefreshTranslations);
@@ -166,6 +167,9 @@ void AlbumBackend::StartExportWithOptionsForTargets(const QString& outputDirUrlO
 }
 
 void AlbumBackend::ResetExportState() { import_export_.ResetExportState(); }
+void AlbumBackend::BrowseNikonHeConverter() { nikon_he_recovery_.BrowseConverter(); }
+void AlbumBackend::StartNikonHeConversion() { nikon_he_recovery_.StartConversion(); }
+void AlbumBackend::ExitNikonHeRecovery() { nikon_he_recovery_.ExitRecovery(); }
 
 // ── Q_INVOKABLE: Editor delegation ──────────────────────────────────────────
 

@@ -316,24 +316,38 @@ auto ImageController::CollectDeleteTargets(const QVariantList& targetEntries) co
 }
 
 auto ImageController::DeleteImages(const QVariantList& targetEntries) -> QVariantMap {
+  const auto delete_result = DeleteTargets(CollectDeleteTargets(targetEntries));
+
   QVariantMap result{{"success", false},
                      {"deletedCount", 0},
                      {"failedCount", 0},
                      {"deletedElementIds", QVariantList{}},
                      {"failedElementIds", QVariantList{}},
-                     {"message", QString{}}};
+                     {"message", delete_result.message_}};
+
+  result["success"]           = delete_result.success_;
+  result["deletedCount"]      = delete_result.deleted_count_;
+  result["failedCount"]       = delete_result.failed_count_;
+  result["deletedElementIds"] = ToVariantIdList(delete_result.deleted_element_ids_);
+  result["failedElementIds"]  = ToVariantIdList(delete_result.failed_element_ids_);
+  return result;
+}
+
+auto ImageController::DeleteTargets(const std::vector<DeleteTarget>& targets)
+    -> DeleteExecutionResult {
+  DeleteExecutionResult result;
 
   auto& ph = backend_.project_handler_;
   if (ph.project_loading()) {
     const auto msg = PL_TEXT("Project is loading. Please wait.");
     backend_.SetTaskState(msg, 0, false);
-    result["message"] = msg.Render();
+    result.message_ = msg.Render();
     return result;
   }
   if (!ph.project()) {
     const auto msg = PL_TEXT("No project is loaded.");
     backend_.SetTaskState(msg, 0, false);
-    result["message"] = msg.Render();
+    result.message_ = msg.Render();
     return result;
   }
 
@@ -341,21 +355,20 @@ auto ImageController::DeleteImages(const QVariantList& targetEntries) -> QVarian
   if (ie.current_import_job() && !ie.current_import_job()->IsCancelationAcked()) {
     const auto msg = PL_TEXT("Cannot delete images while import is running.");
     backend_.SetTaskState(msg, 0, false);
-    result["message"] = msg.Render();
+    result.message_ = msg.Render();
     return result;
   }
   if (ie.export_inflight()) {
     const auto msg = PL_TEXT("Cannot delete images while export is running.");
     backend_.SetTaskState(msg, 0, false);
-    result["message"] = msg.Render();
+    result.message_ = msg.Render();
     return result;
   }
 
-  const auto targets = CollectDeleteTargets(targetEntries);
   if (targets.empty()) {
     const auto msg = PL_TEXT("No valid images selected for deletion.");
     backend_.SetTaskState(msg, 0, false);
-    result["message"] = msg.Render();
+    result.message_ = msg.Render();
     return result;
   }
 
@@ -363,7 +376,19 @@ auto ImageController::DeleteImages(const QVariantList& targetEntries) -> QVarian
   target_ids.reserve(targets.size() * 2 + 1);
   std::vector<std::filesystem::path> delete_paths;
   delete_paths.reserve(targets.size());
-  for (const auto& target : targets) {
+  std::vector<DeleteTarget> resolved_targets = targets;
+  for (auto& target : resolved_targets) {
+    if (target.image_id_ == 0 || target.file_path_.empty()) {
+      if (const auto* item = backend_.FindAlbumItem(target.element_id_); item) {
+        if (target.image_id_ == 0) {
+          target.image_id_ = item->image_id;
+        }
+        if (target.file_path_.empty()) {
+          target.file_path_ = item->file_path_;
+        }
+      }
+    }
+
     target_ids.insert(target.element_id_);
     if (!target.file_path_.empty()) {
       delete_paths.push_back(target.file_path_);
@@ -385,7 +410,7 @@ auto ImageController::DeleteImages(const QVariantList& targetEntries) -> QVarian
   if (!browse) {
     const auto msg = PL_TEXT("Image service is unavailable.");
     backend_.SetTaskState(msg, 0, false);
-    result["message"] = msg.Render();
+    result.message_ = msg.Render();
     return result;
   }
 
@@ -397,23 +422,24 @@ auto ImageController::DeleteImages(const QVariantList& targetEntries) -> QVarian
   }
 
   std::vector<sl_element_id_t> failed_ids;
-  failed_ids.reserve(targets.size());
-  for (const auto& target : targets) {
+  failed_ids.reserve(resolved_targets.size());
+  for (const auto& target : resolved_targets) {
     if (target.file_path_.empty()) {
       failed_ids.push_back(target.element_id_);
     }
   }
   for (const auto& path : delete_result.failed_paths_) {
-    const auto it = std::find_if(targets.begin(), targets.end(), [&path](const DeleteTarget& target) {
+    const auto it = std::find_if(resolved_targets.begin(), resolved_targets.end(),
+                                 [&path](const DeleteTarget& target) {
       return target.file_path_.lexically_normal() == path.lexically_normal();
     });
-    if (it != targets.end()) {
+    if (it != resolved_targets.end()) {
       failed_ids.push_back(it->element_id_);
     }
   }
 
   bool image_pool_dirty = false;
-  for (const auto& target : targets) {
+  for (const auto& target : resolved_targets) {
     if (std::find(deleted_ids.begin(), deleted_ids.end(), target.element_id_) ==
         deleted_ids.end()) {
       continue;
@@ -499,12 +525,12 @@ auto ImageController::DeleteImages(const QVariantList& targetEntries) -> QVarian
     backend_.ScheduleIdleTaskStateReset(1500);
   }
 
-  result["success"]           = deleted_count > 0;
-  result["deletedCount"]      = deleted_count;
-  result["failedCount"]       = failed_count;
-  result["deletedElementIds"] = ToVariantIdList(deleted_ids);
-  result["failedElementIds"]  = ToVariantIdList(failed_ids);
-  result["message"]           = msg.Render();
+  result.success_             = deleted_count > 0;
+  result.deleted_count_       = deleted_count;
+  result.failed_count_        = failed_count;
+  result.deleted_element_ids_ = std::move(deleted_ids);
+  result.failed_element_ids_  = std::move(failed_ids);
+  result.message_             = msg.Render();
   return result;
 }
 

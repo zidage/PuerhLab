@@ -36,20 +36,6 @@ ImportExportHandler::ImportExportHandler(AlbumBackend& backend) : backend_(backe
 }
 
 void ImportExportHandler::StartImport(const QStringList& fileUrlsOrPaths) {
-  if (backend_.project_handler_.project_loading()) {
-    backend_.SetTaskState(PL_TEXT("Project is loading. Please wait."), 0, false);
-    return;
-  }
-  auto* isvc = backend_.project_handler_.import_service();
-  if (!isvc) {
-    backend_.SetTaskState(PL_TEXT("Import service is unavailable."), 0, false);
-    return;
-  }
-  if (current_import_job_ && !current_import_job_->IsCancelationAcked()) {
-    backend_.SetTaskState(PL_TEXT("Import already running."), backend_.task_progress_, true);
-    return;
-  }
-
   std::vector<image_path_t>        paths;
   std::unordered_set<std::wstring> seen;
 
@@ -76,9 +62,51 @@ void ImportExportHandler::StartImport(const QStringList& fileUrlsOrPaths) {
     backend_.SetTaskState(PL_TEXT("No supported files selected."), 0, false);
     return;
   }
+  StartImportResolvedPaths(std::move(paths), false);
+}
 
-  import_target_folder_id_   = backend_.folder_ctrl_.CurrentFolderElementId().value_or(0);
-  import_target_folder_path_ = backend_.folder_ctrl_.CurrentFolderFsPath();
+void ImportExportHandler::StartImportPaths(const std::vector<image_path_t>& paths,
+                                           const bool                      preserveTarget) {
+  std::vector<image_path_t> deduped_paths;
+  std::unordered_set<std::wstring> seen;
+  deduped_paths.reserve(paths.size());
+  for (const auto& path : paths) {
+    if (path.empty()) {
+      continue;
+    }
+    const std::wstring key = path.wstring();
+    if (!seen.insert(key).second) {
+      continue;
+    }
+    deduped_paths.push_back(path);
+  }
+  if (deduped_paths.empty()) {
+    backend_.SetTaskState(PL_TEXT("No supported files selected."), 0, false);
+    return;
+  }
+  StartImportResolvedPaths(std::move(deduped_paths), preserveTarget);
+}
+
+void ImportExportHandler::StartImportResolvedPaths(std::vector<image_path_t> paths,
+                                                   const bool preserveTarget) {
+  if (backend_.project_handler_.project_loading()) {
+    backend_.SetTaskState(PL_TEXT("Project is loading. Please wait."), 0, false);
+    return;
+  }
+  auto* isvc = backend_.project_handler_.import_service();
+  if (!isvc) {
+    backend_.SetTaskState(PL_TEXT("Import service is unavailable."), 0, false);
+    return;
+  }
+  if (current_import_job_ && !current_import_job_->IsCancelationAcked()) {
+    backend_.SetTaskState(PL_TEXT("Import already running."), backend_.task_progress_, true);
+    return;
+  }
+
+  if (!preserveTarget) {
+    import_target_folder_id_   = backend_.folder_ctrl_.CurrentFolderElementId().value_or(0);
+    import_target_folder_path_ = backend_.folder_ctrl_.CurrentFolderFsPath();
+  }
 
   auto job            = std::make_shared<ImportJob>();
   current_import_job_ = job;
@@ -114,6 +142,9 @@ void ImportExportHandler::StartImport(const QStringList& fileUrlsOrPaths) {
           emit self->ImportStateChanged();
           emit self->importStateChanged();
           self->SetTaskState(ie.import_status_text_, pct, true);
+          if (self->nikon_he_recovery_.is_reimporting()) {
+            self->nikon_he_recovery_.UpdateReimportProgress(metadataDone, total, failed);
+          }
         },
         Qt::QueuedConnection);
   };
@@ -309,6 +340,9 @@ void ImportExportHandler::FinishImport(const ImportResult& result) {
   }
 
   const auto snapshot = importJob->import_log_->Snapshot();
+  const bool reimporting_nikon_he = backend_.nikon_he_recovery_.is_reimporting();
+  const auto recovery_target_folder_id = import_target_folder_id_;
+  const auto recovery_target_folder_path = import_target_folder_path_;
 
   bool state_saved = true;
   try {
@@ -358,6 +392,17 @@ void ImportExportHandler::FinishImport(const ImportResult& result) {
 
   backend_.SetTaskState(task_text, 100, false);
   backend_.ScheduleIdleTaskStateReset(1800);
+
+  if (reimporting_nikon_he) {
+    backend_.nikon_he_recovery_.HandleReimportFinished(result);
+    return;
+  }
+
+  if (!snapshot.unsupported_nikon_he_.empty()) {
+    backend_.nikon_he_recovery_.BeginRecovery(snapshot.unsupported_nikon_he_,
+                                              recovery_target_folder_id,
+                                              recovery_target_folder_path);
+  }
 }
 
 void ImportExportHandler::FinishExport(

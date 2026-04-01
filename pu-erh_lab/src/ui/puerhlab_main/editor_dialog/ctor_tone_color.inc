@@ -8,20 +8,6 @@
     AppTheme::MarkFontRole(controls_header, AppTheme::FontRole::UiHeadline);
     controls_layout->addWidget(controls_header, 0);
 
-    // Prefer LUTs next to the executable (installed layout), fall back to source tree.
-    const auto app_luts_dir =
-        std::filesystem::path(QCoreApplication::applicationDirPath().toStdWString()) / "LUTs";
-    const auto src_luts_dir = std::filesystem::path(CONFIG_PATH) / "LUTs";
-    const auto luts_dir = std::filesystem::is_directory(app_luts_dir) ? app_luts_dir : src_luts_dir;
-    const auto lut_files = ListCubeLutsInDir(luts_dir);
-
-    lut_paths_.push_back("");  // index 0 => None
-    lut_names_.push_back(Tr("None"));
-    for (const auto& p : lut_files) {
-      lut_paths_.push_back(p.generic_string());
-      lut_names_.push_back(QString::fromStdString(p.filename().string()));
-    }
-
     auto addSection = [&](const QString& title, const QString& subtitle) {
       auto* frame = new QFrame(controls_);
       frame->setObjectName("EditorSection");
@@ -41,20 +27,15 @@
 
     controls_layout->addStretch();
 
-    int default_lut_index = 0;
-    for (int i = 1; i < static_cast<int>(lut_paths_.size()); ++i) {
-      if (std::filesystem::path(lut_paths_[i]).filename() == "5207.cube") {
-        default_lut_index = i;
-        break;
-      }
-    }
+    const auto lut_view_model = lut_controller_.Refresh(state_.lut_path_);
+    const auto default_lut_path = lut_controller_.DefaultLutPath();
 
     // If the pipeline already has operator params (loaded from PipelineService/storage),
     // initialize UI state from those params rather than overwriting them.
     const bool loaded_state_from_pipeline = LoadStateFromPipelineIfPresent();
     if (!loaded_state_from_pipeline) {
       // Demo-friendly default: apply a LUT only for brand-new pipelines with no saved params.
-      state_.lut_path_ = lut_paths_[default_lut_index];
+      state_.lut_path_ = default_lut_path;
       UpdateAllCdlWheelDerivedColors(state_);
     }
     committed_state_ = state_;
@@ -63,20 +44,6 @@
     working_version_ =
         controllers::SeedWorkingVersionFromLatest(element_id_, history_guard_);
     working_version_.SetBasePipelineExecutor(pipeline_guard_->pipeline_);
-
-    int initial_lut_index = 0;
-    if (!state_.lut_path_.empty()) {
-      auto it = std::find(lut_paths_.begin(), lut_paths_.end(), state_.lut_path_);
-      if (it != lut_paths_.end()) {
-        initial_lut_index = static_cast<int>(std::distance(lut_paths_.begin(), it));
-      } else {
-        // Keep UI consistent even if LUT path comes from an external/custom location.
-        lut_paths_.push_back(state_.lut_path_);
-        lut_names_.push_back(
-            QString::fromStdString(std::filesystem::path(state_.lut_path_).filename().string()));
-        initial_lut_index = static_cast<int>(lut_paths_.size() - 1);
-      }
-    }
 
     auto addComboBox = [&](const QString& name, const QStringList& items, int initial_index,
                            auto&& onChange) {
@@ -158,13 +125,27 @@
       return slider;
     };
 
-    lut_combo_ = addComboBox(Tr("LUT"), lut_names_, initial_lut_index, [&](int idx) {
-      if (idx < 0 || idx >= static_cast<int>(lut_paths_.size())) {
-        return;
-      }
-      state_.lut_path_ = lut_paths_[idx];
-      CommitAdjustment(AdjustmentField::Lut);
-    });
+    if (lut_browser_widget_) {
+      lut_browser_widget_->SetDirectoryInfo(lut_view_model.directory_text_,
+                                            lut_view_model.status_text_,
+                                            lut_view_model.can_open_directory_);
+      lut_browser_widget_->SetEntries(lut_view_model.entries_, lut_view_model.selected_path_);
+
+      QObject::connect(lut_browser_widget_, &LutBrowserWidget::RefreshRequested, this,
+                       [this]() { ForceRefreshLutBrowserUi(); });
+      QObject::connect(lut_browser_widget_, &LutBrowserWidget::OpenFolderRequested, this,
+                       [this]() { OpenLutFolder(); });
+      QObject::connect(lut_browser_widget_, &LutBrowserWidget::LutPathActivated, this,
+                       [this](const QString& entry_path) {
+                         const auto resolved_path = lut_controller_.TryResolveSelection(entry_path);
+                         if (!resolved_path.has_value() || *resolved_path == state_.lut_path_) {
+                           return;
+                         }
+                         state_.lut_path_ = *resolved_path;
+                         CommitAdjustment(AdjustmentField::Lut);
+                       });
+      RefreshLutBrowserUi();
+    }
 
     addSection(Tr("Tone"), Tr("Primary tonal shaping controls."));
 

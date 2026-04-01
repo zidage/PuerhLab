@@ -856,6 +856,7 @@ add_library(AlbumBackendLib STATIC
     ui/puerhlab_main/album_backend/image_controller.cpp
     ui/puerhlab_main/album_backend/stats_engine.cpp
     ui/puerhlab_main/album_backend/import_export.cpp
+    ui/puerhlab_main/album_backend/nikon_he_recovery_controller.cpp
     ui/puerhlab_main/album_backend/editor_controller.cpp
     include/ui/puerhlab_main/album_backend/album_backend.hpp
     include/ui/puerhlab_main/album_backend/album_types.hpp
@@ -866,6 +867,8 @@ add_library(AlbumBackendLib STATIC
     include/ui/puerhlab_main/album_backend/image_controller.hpp
     include/ui/puerhlab_main/album_backend/stats_engine.hpp
     include/ui/puerhlab_main/album_backend/import_export.hpp
+    include/ui/puerhlab_main/album_backend/nikon_he_recovery_controller.hpp
+    include/ui/puerhlab_main/album_backend/nikon_he_recovery_types.hpp
     include/ui/puerhlab_main/album_backend/editor_controller.hpp
 )
 
@@ -916,12 +919,14 @@ if(PUERHLAB_REAL_WIDGET_EDITOR)
         ui/puerhlab_main/editor_dialog/controllers/image_controller.cpp
         ui/puerhlab_main/editor_dialog/controllers/pipeline_controller.cpp
         ui/puerhlab_main/editor_dialog/controllers/history_controller.cpp
+        ui/puerhlab_main/editor_dialog/controllers/lut_controller.cpp
         ui/puerhlab_main/editor_dialog/controllers/render_controller.cpp
         ui/puerhlab_main/editor_dialog/modules/histogram.cpp
         ui/puerhlab_main/editor_dialog/modules/color_temp.cpp
         ui/puerhlab_main/editor_dialog/modules/color_wheel.cpp
         ui/puerhlab_main/editor_dialog/modules/curve.cpp
         ui/puerhlab_main/editor_dialog/modules/lens_calib.cpp
+        ui/puerhlab_main/editor_dialog/modules/lut_catalog.cpp
         ui/puerhlab_main/editor_dialog/modules/geometry.cpp
         ui/puerhlab_main/editor_dialog/modules/hls.cpp
         ui/puerhlab_main/editor_dialog/modules/pipeline_io.cpp
@@ -934,7 +939,11 @@ if(PUERHLAB_REAL_WIDGET_EDITOR)
         ui/puerhlab_main/editor_dialog/widgets/trackball.cpp
         ui/puerhlab_main/editor_dialog/widgets/tone_curve_widget.cpp
         ui/puerhlab_main/editor_dialog/widgets/history_cards.cpp
+        ui/puerhlab_main/editor_dialog/widgets/lut_browser_widget.cpp
         include/ui/puerhlab_main/editor_dialog/editor_dialog.hpp
+        include/ui/puerhlab_main/editor_dialog/controllers/lut_controller.hpp
+        include/ui/puerhlab_main/editor_dialog/modules/lut_catalog.hpp
+        include/ui/puerhlab_main/editor_dialog/widgets/lut_browser_widget.hpp
         ui/puerhlab_main/editor_dialog/dialog.hpp
         ui/puerhlab_main/editor_dialog/state.hpp
         ui/puerhlab_main/editor_dialog/controllers/image_controller.hpp
@@ -1038,6 +1047,7 @@ target_link_libraries(puerhlab_main
         Qt6::QuickControls2
         Qt6::QuickDialogs2
         Qt6::Widgets
+        Qt6::Svg
         Qt6::QuickEffects
 )
 
@@ -1048,6 +1058,7 @@ qt_add_qml_module(puerhlab_main
         ui/puerhlab_main/qml/Main.qml
         ui/puerhlab_main/qml/AlbumExportDialog.qml
         ui/puerhlab_main/qml/ImageDetailsDialog.qml
+        ui/puerhlab_main/qml/NikonHeRecoveryDialog.qml
         ui/puerhlab_main/qml/ImportProgressRing.qml
         ui/puerhlab_main/qml/InspectorPanel.qml
         ui/puerhlab_main/qml/StatsCard.qml

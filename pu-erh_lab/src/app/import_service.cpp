@@ -105,10 +105,10 @@ auto ImportServiceImpl::ImportToFolder(const std::vector<image_path_t>& paths,
 
     // Link the image to the SleeveFile
     sleeve_file->SetImage(image_ptr);
-    progress_ptr->placeholders_created_.fetch_add(1);
+      progress_ptr->placeholders_created_.fetch_add(1);
     if (import_log) {
       import_log->AddPlaceholder(image_ptr->image_id_, sleeve_file->element_id_,
-                                 file_name);
+                                 file_name, image_path);
     }
 
     any_threadpool_submission = true;
@@ -128,7 +128,22 @@ auto ImportServiceImpl::ImportToFolder(const std::vector<image_path_t>& paths,
         // Update progress
         progress_ptr->metadata_done_.fetch_add(1);
 
+      } catch (const MetadataExtractionError& e) {
+        if (import_log) {
+          import_log->MarkMetadataFailure(image_ptr->image_id_, e.code(), e.message());
+        }
+        progress_ptr->failed_.fetch_add(1);
+      } catch (const std::exception& e) {
+        if (import_log) {
+          import_log->MarkMetadataFailure(image_ptr->image_id_,
+                                          ImportErrorCode::METADATA_EXTRACTION_FAILED, e.what());
+        }
+        progress_ptr->failed_.fetch_add(1);
       } catch (...) {
+        if (import_log) {
+          import_log->MarkMetadataFailure(image_ptr->image_id_,
+                                          ImportErrorCode::METADATA_EXTRACTION_FAILED);
+        }
         progress_ptr->failed_.fetch_add(1);
       }
 
