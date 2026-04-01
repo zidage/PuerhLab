@@ -5,6 +5,8 @@
 #include "ui/puerhlab_main/editor_dialog/dialog.hpp"
 
 #include <QAbstractItemView>
+#include <QAbstractSpinBox>
+#include <QApplication>
 #include <QByteArray>
 #include <QCheckBox>
 #include <QColor>
@@ -18,11 +20,13 @@
 #include <QHBoxLayout>
 #include <QImage>
 #include <QLabel>
+#include <QLineEdit>
 #include <QListWidget>
 #include <QMessageBox>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
+#include <QPlainTextEdit>
 #include <QPushButton>
 #include <QScrollArea>
 #include <QSlider>
@@ -32,6 +36,7 @@
 #include <QStyle>
 #include <QSurfaceFormat>
 #include <QTimer>
+#include <QTextEdit>
 #include <QVBoxLayout>
 #include <algorithm>
 #include <array>
@@ -84,6 +89,7 @@
 #include "ui/puerhlab_main/editor_dialog/widgets/trackball.hpp"
 #include "ui/puerhlab_main/app_theme.hpp"
 #include "ui/puerhlab_main/i18n.hpp"
+#include "ui/puerhlab_main/shortcut_registry.hpp"
 #include "ui/edit_viewer/edit_viewer.hpp"
 
 namespace puerhlab::ui {
@@ -92,6 +98,9 @@ namespace {
 auto Tr(const char* text) -> QString {
   return QCoreApplication::translate(PUERHLAB_I18N_CONTEXT, text);
 }
+
+const auto kShortcutUndoHistoryId  = QStringLiteral("editor_dialog.undo_history_transaction");
+const auto kShortcutResetGeometryId = QStringLiteral("editor_dialog.reset_geometry");
 
 using namespace std::chrono_literals;
 
@@ -371,6 +380,9 @@ class EditorDialog final : public QDialog {
 #include "ctor_geometry_raw.inc"
 #include "ctor_versioning.inc"
 
+    shortcut_registry_ = std::make_unique<ShortcutRegistry>(this);
+    RegisterShortcuts();
+
     AppTheme::ApplyFontsRecursively(this);
 
     UpdateVersionUi();
@@ -396,6 +408,53 @@ class EditorDialog final : public QDialog {
 
  private:
   // Types, enums, and state helpers are defined in state.hpp / state.cpp.
+
+  void RegisterShortcuts() {
+    if (!shortcut_registry_) {
+      return;
+    }
+
+    shortcut_registry_->Register({
+        .id               = kShortcutUndoHistoryId,
+        .description      = Tr("Undo last uncommitted transaction"),
+        .default_sequence = QKeySequence(QKeySequence::Undo),
+        .context          = Qt::WidgetWithChildrenShortcut,
+        .on_trigger       = [this]() {
+          if (!ShouldConsumeUndoShortcutLocally()) {
+            UndoLastTransaction();
+          }
+        },
+    });
+    shortcut_registry_->Register({
+        .id               = kShortcutResetGeometryId,
+        .description      = Tr("Reset crop & rotation"),
+        .default_sequence = QKeySequence(Qt::CTRL | Qt::Key_R),
+        .context          = Qt::WidgetWithChildrenShortcut,
+        .on_trigger       = [this]() { ResetCropAndRotation(); },
+    });
+
+    if (undo_tx_btn_) {
+      undo_tx_btn_->setToolTip(shortcut_registry_->DecorateTooltip(
+          Tr("Undo last uncommitted transaction"), kShortcutUndoHistoryId));
+    }
+    if (geometry_reset_btn_) {
+      geometry_reset_btn_->setToolTip(
+          shortcut_registry_->DecorateTooltip(Tr("Reset crop & rotation"),
+                                             kShortcutResetGeometryId));
+    }
+  }
+
+  auto ShouldConsumeUndoShortcutLocally() const -> bool {
+    QWidget* const focus_widget = QApplication::focusWidget();
+    if (!focus_widget || !isAncestorOf(focus_widget)) {
+      return false;
+    }
+
+    return qobject_cast<QLineEdit*>(focus_widget) != nullptr ||
+           qobject_cast<QTextEdit*>(focus_widget) != nullptr ||
+           qobject_cast<QPlainTextEdit*>(focus_widget) != nullptr ||
+           qobject_cast<QAbstractSpinBox*>(focus_widget) != nullptr;
+  }
 
   void RefreshHlsTargetUi() {
     if (!hls_target_label_ && hls_candidate_buttons_.empty()) {
@@ -2017,6 +2076,7 @@ class EditorDialog final : public QDialog {
   QLabel*                                                  version_status_               = nullptr;
   QPushButton*                                             undo_tx_btn_                  = nullptr;
   QPushButton*                                             commit_version_btn_           = nullptr;
+  std::unique_ptr<ShortcutRegistry>                        shortcut_registry_{};
   QComboBox*                                               working_mode_combo_           = nullptr;
   QPushButton*                                             new_working_btn_              = nullptr;
   QListWidget*                                             version_log_                  = nullptr;

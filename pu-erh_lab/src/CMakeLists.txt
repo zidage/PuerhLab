@@ -963,10 +963,12 @@ endif()
 set(PUERHLAB_MAIN_SOURCES
     ui/puerhlab_main/main.cpp
     ui/puerhlab_main/app_theme.cpp
+    ui/puerhlab_main/shortcut_registry.cpp
     config/resource.qrc
     include/ui/puerhlab_main/app_theme.hpp
     include/ui/puerhlab_main/i18n.hpp
     include/ui/puerhlab_main/language_manager.hpp
+    include/ui/puerhlab_main/shortcut_registry.hpp
     ${PUERHLAB_EDITOR_DIALOG_SRCS}
 )
 if(APPLE AND PUERHLAB_MACOS_BUNDLE)

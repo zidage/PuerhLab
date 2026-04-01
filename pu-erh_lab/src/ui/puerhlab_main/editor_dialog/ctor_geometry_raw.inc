@@ -262,8 +262,6 @@
       geometry_reset_btn_ = new QPushButton(Tr("Reset"), row);
       geometry_reset_btn_->setFixedHeight(30);
       geometry_reset_btn_->setCursor(Qt::PointingHandCursor);
-      geometry_reset_btn_->setToolTip(Tr("Reset crop & rotation (Ctrl+R)"));
-      geometry_reset_btn_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_R));
       geometry_reset_btn_->setStyleSheet(AppTheme::EditorSecondaryButtonStyle());
       QObject::connect(geometry_reset_btn_, &QPushButton::clicked, this, [this]() {
         ResetCropAndRotation();
