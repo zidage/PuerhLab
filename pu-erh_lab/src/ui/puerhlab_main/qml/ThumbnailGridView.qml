@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QtQuick.Effects
 
 Item {
     id: root
@@ -43,7 +44,7 @@ Item {
         clip: true
         cacheBuffer: 0
         cellWidth: 242
-        cellHeight: 186
+        cellHeight: 240
         interactive: false
 
         delegate: Rectangle {
@@ -104,8 +105,8 @@ Item {
             readonly property bool isHovered: overlay.hoveredIndex === index
 
         width: 230
-        height: 172
-        radius: 6
+        height: 224
+        radius: appTheme.panelRadius
             color: isSelected ? root.cardBgSelected
                    : (isHovered ? root.cardBgHover : root.cardBg)
             border.width: isSelected ? 2 : 0
@@ -129,15 +130,16 @@ Item {
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.top: parent.top
-                anchors.margins: 6
-            height: 96
-            clip: true
+                anchors.margins: 8
+                height: width * 2 / 3
+                clip: true
 
                 Rectangle {
                     anchors.fill: parent
-                    radius: 4
-                    visible: !thumbnailReady
-                    color: appTheme.bgCanvasColor
+                    radius: 10
+                    color: appTheme.bgBaseColor
+                    border.width: 1
+                    border.color: appTheme.dividerColor
                 }
                 BusyIndicator {
                     anchors.centerIn: parent
@@ -147,11 +149,28 @@ Item {
                     running: visible
                 }
                 Image {
-                    anchors.fill: parent
+                    id: thumbImage
+                    anchors.centerIn: parent
+                    width: parent.width
+                    height: parent.height
                     source: liveThumbUrl
-                    visible: thumbnailReady
+                    visible: false
                     asynchronous: true
                     fillMode: Image.PreserveAspectFit
+                }
+                Rectangle {
+                    id: thumbMask
+                    anchors.fill: thumbImage
+                    radius: 10
+                    visible: false
+                    layer.enabled: true
+                }
+                MultiEffect {
+                    anchors.fill: thumbImage
+                    source: thumbImage
+                    maskEnabled: true
+                    maskSource: thumbMask
+                    visible: thumbnailReady
                 }
                 Rectangle {
                     anchors.top: parent.top
@@ -186,8 +205,8 @@ Item {
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.bottom: parent.bottom
-            anchors.margins: 6
-            spacing: 1
+            anchors.margins: 8
+            spacing: 2
             Label { text: fileName; color: root.cardText; font.family: appTheme.dataFontFamily; font.pixelSize: 12; elide: Text.ElideRight; width: parent.width }
             Label {
                 text: qsTr("%1 | ISO %2 | f/%3").arg(cameraModel).arg(iso).arg(aperture)

@@ -33,8 +33,8 @@ constexpr int kDefaultTargetFps          = 20;
 
 ScopePanel::ScopePanel(QWidget* parent) : QWidget(parent) {
   auto* root = new QVBoxLayout(this);
-  root->setContentsMargins(12, 10, 12, 10);
-  root->setSpacing(8);
+  root->setContentsMargins(14, 12, 14, 12);
+  root->setSpacing(10);
 
   auto* header = new QHBoxLayout();
   auto* title = new QLabel(TrScope("Scopes"), this);
@@ -58,24 +58,36 @@ ScopePanel::ScopePanel(QWidget* parent) : QWidget(parent) {
   waveform_switch_btn_->setCursor(Qt::PointingHandCursor);
   histogram_switch_btn_->setFixedHeight(30);
   waveform_switch_btn_->setFixedHeight(30);
+  const auto& theme = AppTheme::Instance();
   scope_switch_row->setStyleSheet(
-      "QPushButton {"
-      "  background: #202020;"
-      "  color: #CFCFCF;"
-      "  border: 1px solid #2A2A2A;"
-      "  border-radius: 8px;"
-      "  padding: 6px 10px;"
-      "}"
-      "QPushButton:hover {"
-      "  border-color: #FCC704;"
-      "  color: #F2F2F2;"
-      "}"
-      "QPushButton:checked {"
-      "  background: #FCC704;"
-      "  color: #101010;"
-      "  border-color: #FCC704;"
-      "  font-weight: 600;"
-      "}");
+      QStringLiteral(
+          "QPushButton {"
+          "  background: %1;"
+          "  color: %2;"
+          "  border: 1px solid %3;"
+          "  border-radius: 10px;"
+          "  padding: 6px 10px;"
+          "}"
+          "QPushButton:hover {"
+          "  border-color: %4;"
+          "  background: %5;"
+          "  color: %6;"
+          "}"
+          "QPushButton:checked {"
+          "  background: %7;"
+          "  color: %8;"
+          "  border-color: %9;"
+          "  font-weight: 600;"
+          "}")
+          .arg(theme.bgDeepColor().name(QColor::HexArgb), theme.textMutedColor().name(QColor::HexRgb),
+               theme.glassStrokeColor().name(QColor::HexArgb),
+               theme.accentSecondaryColor().name(QColor::HexRgb),
+               theme.hoverColor().name(QColor::HexArgb), theme.textColor().name(QColor::HexRgb),
+               QColor(theme.accentColor().red(), theme.accentColor().green(),
+                      theme.accentColor().blue(), 224)
+                   .name(QColor::HexArgb),
+               theme.bgCanvasColor().name(QColor::HexRgb),
+               theme.accentSecondaryColor().name(QColor::HexRgb)));
   scope_switch_layout->addWidget(histogram_switch_btn_, 1);
   scope_switch_layout->addWidget(waveform_switch_btn_, 1);
   root->addWidget(scope_switch_row, 0);

@@ -2,8 +2,56 @@
 // This file is #included from the constructor body in dialog.cpp.
 // It shares the constructor scope and has access to all local variables.
 
+    const auto& theme = AppTheme::Instance();
+    const QString borderless_panel_style = QStringLiteral(
+        "#EditorControlsPanel {"
+        "  background: %1;"
+        "  border: 1px solid %2;"
+        "  border-radius: 14px;"
+        "}"
+        "#EditorControlsPanel QFrame#EditorSection {"
+        "  background: %3;"
+        "  border: 1px solid %4;"
+        "  border-radius: 12px;"
+        "}"
+        "#EditorControlsPanel QLabel#EditorSectionTitle {"
+        "  color: %5;"
+        "}"
+        "#EditorControlsPanel QLabel#EditorSectionSub {"
+        "  color: %6;"
+        "}")
+                                             .arg(theme.glassPanelColor().name(QColor::HexArgb),
+                                                  theme.glassStrokeColor().name(QColor::HexArgb),
+                                                  theme.bgBaseColor().name(QColor::HexArgb),
+                                                  theme.dividerColor().name(QColor::HexArgb),
+                                                  theme.textColor().name(QColor::HexRgb),
+                                                  theme.textMutedColor().name(QColor::HexRgb));
+    const QString version_panel_style = QStringLiteral(
+        "#EditorVersioningPanel {"
+        "  background: %1;"
+        "  border: 1px solid %2;"
+        "  border-radius: 14px;"
+        "}"
+        "#EditorVersioningPanel QFrame#EditorSection {"
+        "  background: %3;"
+        "  border: 1px solid %4;"
+        "  border-radius: 12px;"
+        "}"
+        "#EditorVersioningPanel QLabel#EditorSectionTitle {"
+        "  color: %5;"
+        "}"
+        "#EditorVersioningPanel QLabel#EditorSectionSub {"
+        "  color: %6;"
+        "}")
+                                           .arg(theme.glassPanelColor().name(QColor::HexArgb),
+                                                theme.glassStrokeColor().name(QColor::HexArgb),
+                                                theme.bgBaseColor().name(QColor::HexArgb),
+                                                theme.dividerColor().name(QColor::HexArgb),
+                                                theme.textColor().name(QColor::HexRgb),
+                                                theme.textMutedColor().name(QColor::HexRgb));
+
     auto* root = new QHBoxLayout(this);
-    root->setContentsMargins(10, 10, 10, 10);
+    root->setContentsMargins(14, 14, 14, 14);
     root->setSpacing(0);
 
     auto* main_splitter = new QSplitter(Qt::Horizontal, this);
@@ -12,10 +60,10 @@
     main_splitter->setHandleWidth(8);
     main_splitter->setStyleSheet(
         "QSplitter#EditorMainSplitter::handle {"
-        "  background: #2A2A2A;"
+        "  background: rgba(233, 227, 216, 0.08);"
         "}"
         "QSplitter#EditorMainSplitter::handle:hover {"
-        "  background: #FCC704;"
+        "  background: rgba(185, 138, 74, 0.7);"
         "}");
 
     viewer_ = new QtEditViewer(this);
@@ -23,7 +71,7 @@
     viewer_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     viewer_->setStyleSheet(
         "QWidget {"
-        "  background: #121212;"
+        "  background: #151A20;"
         "  border: none;"
         "  border-radius: 12px;"
         "}");
@@ -38,14 +86,17 @@
     viewer_zoom_label_ = new QLabel(viewer_container_);
     viewer_zoom_label_->setAttribute(Qt::WA_TransparentForMouseEvents, true);
     AppTheme::MarkFontRole(viewer_zoom_label_, AppTheme::FontRole::DataOverlay);
-    viewer_zoom_label_->setStyleSheet(
-        "QLabel {"
-        "  color: #E6E6E6;"
-        "  background: rgba(18, 18, 18, 180);"
-        "  border: 1px solid rgba(42, 42, 42, 220);"
-        "  border-radius: 8px;"
-        "  padding: 4px 8px;"
-        "}");
+    viewer_zoom_label_->setStyleSheet(QStringLiteral(
+                                          "QLabel {"
+                                          "  color: %1;"
+                                          "  background: %2;"
+                                          "  border: 1px solid %3;"
+                                          "  border-radius: 10px;"
+                                          "  padding: 4px 8px;"
+                                          "}")
+                                          .arg(theme.textColor().name(QColor::HexRgb),
+                                               QColor(21, 26, 32, 184).name(QColor::HexArgb),
+                                               theme.glassStrokeColor().name(QColor::HexArgb)));
     viewer_grid->addWidget(viewer_zoom_label_, 0, 0, Qt::AlignLeft | Qt::AlignTop);
 
     spinner_ = new SpinnerWidget(viewer_container_);
@@ -65,25 +116,9 @@
     controls_panel->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
     controls_panel->setObjectName("EditorControlsPanel");
     controls_panel->setAttribute(Qt::WA_StyledBackground, true);
-    controls_panel->setStyleSheet(
-        "#EditorControlsPanel {"
-        "  background: #1A1A1A;"
-        "  border: none;"
-        "  border-radius: 14px;"
-        "}"
-        "#EditorControlsPanel QFrame#EditorSection {"
-        "  background: #121212;"
-        "  border: none;"
-        "  border-radius: 12px;"
-        "}"
-        "#EditorControlsPanel QLabel#EditorSectionTitle {"
-        "  color: #E6E6E6;"
-        "}"
-        "#EditorControlsPanel QLabel#EditorSectionSub {"
-        "  color: #A3A3A3;"
-        "}");
+    controls_panel->setStyleSheet(borderless_panel_style);
     auto* controls_panel_layout = new QVBoxLayout(controls_panel);
-    controls_panel_layout->setContentsMargins(16, 16, 16, 16);
+    controls_panel_layout->setContentsMargins(18, 18, 18, 18);
     controls_panel_layout->setSpacing(12);
 
     const QString scroll_style = AppTheme::EditorScrollAreaStyle();
@@ -98,7 +133,7 @@
     tone_controls_        = new QWidget(tone_controls_scroll_);
     controls_             = tone_controls_;
     auto* controls_layout = new QVBoxLayout(tone_controls_);
-    controls_layout->setContentsMargins(12, 12, 12, 12);
+    controls_layout->setContentsMargins(14, 14, 14, 14);
     controls_layout->setSpacing(12);
     tone_controls_scroll_->setWidget(tone_controls_);
     controls_scroll_ = tone_controls_scroll_;
@@ -112,7 +147,7 @@
 
     drt_controls_ = new QWidget(drt_controls_scroll_);
     auto* drt_controls_layout = new QVBoxLayout(drt_controls_);
-    drt_controls_layout->setContentsMargins(12, 12, 12, 12);
+    drt_controls_layout->setContentsMargins(14, 14, 14, 14);
     drt_controls_layout->setSpacing(12);
     drt_controls_layout->addStretch();
     drt_controls_scroll_->setWidget(drt_controls_);
@@ -126,7 +161,7 @@
 
     look_controls_ = new QWidget(look_controls_scroll_);
     auto* look_controls_layout = new QVBoxLayout(look_controls_);
-    look_controls_layout->setContentsMargins(12, 12, 12, 12);
+    look_controls_layout->setContentsMargins(14, 14, 14, 14);
     look_controls_layout->setSpacing(12);
 
     lut_browser_widget_ = new LutBrowserWidget(look_controls_);
@@ -142,7 +177,7 @@
 
     geometry_controls_ = new QWidget(geometry_controls_scroll_);
     auto* geometry_controls_layout = new QVBoxLayout(geometry_controls_);
-    geometry_controls_layout->setContentsMargins(12, 12, 12, 12);
+    geometry_controls_layout->setContentsMargins(14, 14, 14, 14);
     geometry_controls_layout->setSpacing(12);
     geometry_controls_layout->addStretch();
     geometry_controls_scroll_->setWidget(geometry_controls_);
@@ -156,7 +191,7 @@
 
     raw_controls_ = new QWidget(raw_controls_scroll_);
     auto* raw_controls_layout = new QVBoxLayout(raw_controls_);
-    raw_controls_layout->setContentsMargins(12, 12, 12, 12);
+    raw_controls_layout->setContentsMargins(14, 14, 14, 14);
     raw_controls_layout->setSpacing(12);
     raw_controls_layout->addStretch();
     raw_controls_scroll_->setWidget(raw_controls_);
@@ -174,9 +209,9 @@
     panel_switch_row->setAttribute(Qt::WA_StyledBackground, true);
     panel_switch_row->setStyleSheet(
         "#EditorPanelSwitchRow {"
-        "  background: #121212;"
-        "  border: 1px solid #2A2A2A;"
-        "  border-radius: 8px;"
+        "  background: rgba(21, 26, 32, 0.84);"
+        "  border: 1px solid rgba(233, 227, 216, 0.08);"
+        "  border-radius: 10px;"
         "}");
     auto* panel_switch_layout = new QHBoxLayout(panel_switch_row);
     panel_switch_layout->setContentsMargins(0, 0, 0, 0);
@@ -225,23 +260,7 @@
     shared_versioning_root->setMaximumWidth(600);
     shared_versioning_root->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
     shared_versioning_root->setAttribute(Qt::WA_StyledBackground, true);
-    shared_versioning_root->setStyleSheet(
-        "#EditorVersioningPanel {"
-        "  background: #1A1A1A;"
-        "  border: none;"
-        "  border-radius: 14px;"
-        "}"
-        "#EditorVersioningPanel QFrame#EditorSection {"
-        "  background: #121212;"
-        "  border: none;"
-        "  border-radius: 12px;"
-        "}"
-        "#EditorVersioningPanel QLabel#EditorSectionTitle {"
-        "  color: #E6E6E6;"
-        "}"
-        "#EditorVersioningPanel QLabel#EditorSectionSub {"
-        "  color: #A3A3A3;"
-        "}");
+    shared_versioning_root->setStyleSheet(version_panel_style);
     auto* shared_versioning_outer_layout = new QVBoxLayout(shared_versioning_root);
     shared_versioning_outer_layout->setContentsMargins(0, 0, 0, 0);
     shared_versioning_outer_layout->setSpacing(0);
@@ -256,8 +275,8 @@
     auto* versioning_content = new QWidget(versioning_scroll);
     versioning_content->setStyleSheet("background: transparent;");
     auto* shared_versioning_layout = new QVBoxLayout(versioning_content);
-    shared_versioning_layout->setContentsMargins(16, 16, 16, 16);
-    shared_versioning_layout->setSpacing(8);
+    shared_versioning_layout->setContentsMargins(18, 18, 18, 18);
+    shared_versioning_layout->setSpacing(10);
     versioning_scroll->setWidget(versioning_content);
     shared_versioning_outer_layout->addWidget(versioning_scroll, 1);
 

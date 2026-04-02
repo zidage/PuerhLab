@@ -17,23 +17,20 @@ Rectangle {
     border.width: 0
     implicitHeight: cardCol.implicitHeight + 24
 
-    // ── Public interface ────────────────────────────────────────────
     property string title: ""
     property color accentColor: appTheme.accentColor
     property var model: []
     property bool expanded: true
     readonly property int previewLimit: 10
-    property string selectedLabel: ""           // currently highlighted bar label
-    signal barClicked(string label)              // emitted when a bar is clicked
+    property string selectedLabel: ""
+    signal barClicked(string label)
 
-    // Derived
     readonly property int totalItems: model ? model.length : 0
     readonly property bool hasOverflow: totalItems > previewLimit
     property bool showAll: false
     readonly property int visibleCount: showAll ? totalItems
                                                 : Math.min(totalItems, previewLimit)
 
-    // Compute maximum count for proportional bars
     function maxCount() {
         let m = 1;
         if (!model) return m;
@@ -51,7 +48,6 @@ Rectangle {
         anchors.margins: 12
         spacing: 8
 
-        // ── Header row ──────────────────────────────────────────────
         RowLayout {
             Layout.fillWidth: true
 
@@ -83,7 +79,6 @@ Rectangle {
             }
         }
 
-        // ── Bar list ────────────────────────────────────────────────
         ColumnLayout {
             visible: card.expanded
             Layout.fillWidth: true
@@ -104,14 +99,12 @@ Rectangle {
                     readonly property bool isSelected: entryLabel === card.selectedLabel
                                                       && card.selectedLabel !== ""
 
-                    // Click target for the entire bar row
                     MouseArea {
                         anchors.fill: parent
                         cursorShape: Qt.PointingHandCursor
                         hoverEnabled: true
                         onClicked: card.barClicked(entryLabel)
 
-                        // Hover tint (only when not already selected)
                         Rectangle {
                             anchors.fill: parent
                             radius: 3
@@ -120,7 +113,6 @@ Rectangle {
                         }
                     }
 
-                    // Background bar (proportional width)
                     Rectangle {
                         anchors.left: parent.left
                         anchors.verticalCenter: parent.verticalCenter
@@ -131,7 +123,6 @@ Rectangle {
                         opacity: isSelected ? 0.55 : 0.25
                     }
 
-                    // Selected indicator (left accent strip)
                     Rectangle {
                         visible: isSelected
                         anchors.left: parent.left
@@ -142,7 +133,6 @@ Rectangle {
                         color: card.accentColor
                     }
 
-                    // Labels (overlay)
                     RowLayout {
                         anchors.fill: parent
                         anchors.leftMargin: 6
@@ -168,7 +158,6 @@ Rectangle {
                 }
             }
 
-            // ── "Show more / less" toggle ───────────────────────────
             Label {
                 visible: card.hasOverflow && card.expanded
                 text: card.showAll
@@ -187,7 +176,6 @@ Rectangle {
                 }
             }
 
-            // ── Empty state ─────────────────────────────────────────
             Label {
                 visible: card.totalItems === 0 && card.expanded
                 text: qsTr("No data available")

@@ -12,12 +12,96 @@
 #include <QListWidget>
 #include <QPushButton>
 #include <QSpinBox>
+#include <QVariantMap>
 #include <QWidget>
+
+#include <algorithm>
 
 namespace puerhlab::ui {
 namespace {
 
 constexpr char kThemeFontRoleProperty[] = "puerhlabFontRole";
+
+struct ThemeColors {
+  QColor tone_gold;
+  QColor tone_wine;
+  QColor tone_steel;
+  QColor tone_graphite;
+  QColor tone_mist;
+  QColor bg_canvas;
+  QColor bg_deep;
+  QColor bg_base;
+  QColor bg_panel;
+  QColor text;
+  QColor text_muted;
+  QColor accent_secondary;
+  QColor danger_tint;
+  QColor selected_tint;
+  QColor hover;
+  QColor divider;
+  QColor glass_panel;
+  QColor glass_stroke;
+  QColor overlay;
+  int panel_radius;
+};
+
+// Theme 0: Pu-erh (current warm theme)
+auto MakePuerhTheme() -> ThemeColors {
+  return ThemeColors{
+      .tone_gold = QColor(0xB9, 0x8A, 0x4A),
+      .tone_wine = QColor(0x7A, 0x3E, 0x47),
+      .tone_steel = QColor(0x46, 0x51, 0x5E),
+      .tone_graphite = QColor(0x15, 0x1A, 0x20),
+      .tone_mist = QColor(0xE8, 0xE1, 0xD6),
+      .bg_canvas = QColor(0x11, 0x14, 0x19),
+      .bg_deep = QColor(0x15, 0x1A, 0x20),
+      .bg_base = QColor(0x1A, 0x20, 0x27),
+      .bg_panel = QColor(0x1D, 0x24, 0x2C),
+      .text = QColor(0xE8, 0xE1, 0xD6),
+      .text_muted = QColor(0xA7, 0x9F, 0x93),
+      .accent_secondary = QColor(0xD2, 0xA5, 0x66),
+      .danger_tint = QColor(122, 62, 71, 92),
+      .selected_tint = QColor(185, 138, 74, 46),
+      .hover = QColor(0x25, 0x2D, 0x36),
+      .divider = QColor(233, 227, 216, 20),
+      .glass_panel = QColor(29, 36, 44, 224),
+      .glass_stroke = QColor(233, 227, 216, 28),
+      .overlay = QColor(0x11, 0x14, 0x19, 0xC0),
+      .panel_radius = 10,
+  };
+}
+
+// Theme 1: Classic (previous neutral theme)
+auto MakeClassicTheme() -> ThemeColors {
+  return ThemeColors{
+      .tone_gold = QColor(0xFC, 0xC7, 0x04),
+      .tone_wine = QColor(0x8A, 0x05, 0x26),
+      .tone_steel = QColor(0x4A, 0x4A, 0x4A),
+      .tone_graphite = QColor(0x1A, 0x1A, 0x1A),
+      .tone_mist = QColor(0xE6, 0xE6, 0xE6),
+      .bg_canvas = QColor(0x11, 0x11, 0x11),
+      .bg_deep = QColor(0x14, 0x14, 0x14),
+      .bg_base = QColor(0x1F, 0x1F, 0x1F),
+      .bg_panel = QColor(0x2B, 0x2B, 0x2B),
+      .text = QColor(0xD0, 0xD0, 0xD0),
+      .text_muted = QColor(0x88, 0x88, 0x88),
+      .accent_secondary = QColor(0xFC, 0xC7, 0x04),
+      .danger_tint = QColor(138, 5, 38, 82),
+      .selected_tint = QColor(252, 199, 4, 46),
+      .hover = QColor(0x33, 0x33, 0x33),
+      .divider = QColor(230, 230, 230, 20),
+      .glass_panel = QColor(43, 43, 43, 224),
+      .glass_stroke = QColor(230, 230, 230, 28),
+      .overlay = QColor(0x12, 0x12, 0x12, 0xC0),
+      .panel_radius = 8,
+  };
+}
+
+auto GetTheme(int index) -> const ThemeColors& {
+  static const ThemeColors kPuerhTheme = MakePuerhTheme();
+  static const ThemeColors kClassicTheme = MakeClassicTheme();
+  return index == 1 ? kClassicTheme : kPuerhTheme;
+}
 
 struct FontFamilies {
   QString ui_latin = QStringLiteral("Inter");
@@ -91,6 +175,20 @@ auto MakeFont(const QString& family, qreal point_size, QFont::Weight weight, boo
   font.setItalic(italic);
   font.setStyleStrategy(QFont::PreferAntialias);
   return font;
+}
+
+auto Hex(const QColor& color) -> QString {
+  return color.name(QColor::HexRgb);
+}
+
+auto Rgba(const QColor& color) -> QString {
+  return color.name(QColor::HexArgb);
+}
+
+auto WithAlpha(const QColor& color, int alpha) -> QColor {
+  QColor tinted(color);
+  tinted.setAlpha(std::clamp(alpha, 0, 255));
+  return tinted;
 }
 
 }  // namespace
@@ -260,155 +358,225 @@ auto AppTheme::EditorLabelStyle(const QColor& color) -> QString {
 }
 
 auto AppTheme::EditorPrimaryButtonStyle(bool include_disabled) -> QString {
+  const auto&  theme         = AppTheme::Instance();
+  const QColor accent        = theme.accentColor();
+  const QColor accent_hover  = theme.accentSecondaryColor();
+  const QColor dark_text     = theme.bgCanvasColor();
+  const QColor disabled_text = theme.textMutedColor();
+  const QColor disabled_bg   = theme.bgBaseColor();
   QString style =
       QStringLiteral("QPushButton {"
-                     "  color: #121212;"
-                     "  background: #FCC704;"
+                     "  color: %1;"
+                     "  background: %2;"
                      "  border: none;"
-                     "  border-radius: 8px;"
+                     "  border-radius: 10px;"
+                     "  padding: 0 14px;"
                      "}"
                      "QPushButton:hover {"
-                     "  background: #F5C200;"
-                     "}");
+                     "  background: %3;"
+                     "}"
+                     "QPushButton:pressed {"
+                     "  background: %2;"
+                     "}")
+          .arg(Hex(dark_text), Hex(accent), Hex(accent_hover));
   if (include_disabled) {
     style += QStringLiteral("QPushButton:disabled {"
-                            "  color: #6A6A6A;"
-                            "  background: #1A1A1A;"
-                            "}");
+                            "  color: %1;"
+                            "  background: %2;"
+                            "}")
+                 .arg(Hex(disabled_text), Hex(disabled_bg));
   }
   return style;
 }
 
 auto AppTheme::EditorSecondaryButtonStyle() -> QString {
+  const auto&  theme   = AppTheme::Instance();
+  const QColor text    = theme.textColor();
+  const QColor bg      = theme.bgPanelColor();
+  const QColor hover   = theme.hoverColor();
+  const QColor border  = theme.glassStrokeColor();
   return QStringLiteral("QPushButton {"
-                        "  color: #E6E6E6;"
-                        "  background: #3A3A3A;"
-                        "  border: none;"
-                        "  border-radius: 8px;"
+                        "  color: %1;"
+                        "  background: %2;"
+                        "  border: 1px solid %3;"
+                        "  border-radius: 10px;"
+                        "  padding: 0 14px;"
                         "}"
                         "QPushButton:hover {"
-                        "  background: #505050;"
-                        "}");
+                        "  background: %4;"
+                        "  border-color: %5;"
+                        "}"
+                        "QPushButton:pressed {"
+                        "  background: %6;"
+                        "}")
+      .arg(Hex(text), Rgba(WithAlpha(bg, 224)), Rgba(border), Rgba(WithAlpha(hover, 245)),
+           Rgba(WithAlpha(border, 176)), Rgba(WithAlpha(hover, 255)));
 }
 
 auto AppTheme::EditorPanelToggleStyle(bool active, bool is_first, bool is_last) -> QString {
-  const QString top_left_radius = is_first ? QStringLiteral("8px") : QStringLiteral("0px");
-  const QString bottom_left_radius = is_first ? QStringLiteral("8px") : QStringLiteral("0px");
-  const QString top_right_radius = is_last ? QStringLiteral("8px") : QStringLiteral("0px");
-  const QString bottom_right_radius = is_last ? QStringLiteral("8px") : QStringLiteral("0px");
+  const auto&  theme               = AppTheme::Instance();
+  const QString top_left_radius    = is_first ? QStringLiteral("10px") : QStringLiteral("0px");
+  const QString bottom_left_radius = is_first ? QStringLiteral("10px") : QStringLiteral("0px");
+  const QString top_right_radius   = is_last ? QStringLiteral("10px") : QStringLiteral("0px");
+  const QString bottom_right_radius = is_last ? QStringLiteral("10px") : QStringLiteral("0px");
 
   if (active) {
     return QStringLiteral("QPushButton {"
-                          "  color: #121212;"
-                          "  background: #FCC704;"
-                          "  border: none;"
+                          "  color: %1;"
+                          "  background: %2;"
+                          "  border: 1px solid %3;"
                           "  padding: 0px;"
-                          "  border-top-left-radius: %1;"
-                          "  border-bottom-left-radius: %2;"
-                          "  border-top-right-radius: %3;"
-                          "  border-bottom-right-radius: %4;"
+                          "  border-top-left-radius: %4;"
+                          "  border-bottom-left-radius: %5;"
+                          "  border-top-right-radius: %6;"
+                          "  border-bottom-right-radius: %7;"
                           "}"
                           "QPushButton:hover {"
-                          "  background: #F5C200;"
+                          "  background: %8;"
                           "}")
-        .arg(top_left_radius, bottom_left_radius, top_right_radius, bottom_right_radius);
+        .arg(Hex(theme.bgCanvasColor()), Rgba(WithAlpha(theme.accentColor(), 224)),
+             Rgba(WithAlpha(theme.accentSecondaryColor(), 112)), top_left_radius,
+             bottom_left_radius, top_right_radius, bottom_right_radius,
+             Rgba(WithAlpha(theme.accentSecondaryColor(), 255)));
   }
 
   return QStringLiteral("QPushButton {"
-                        "  color: #E6E6E6;"
+                        "  color: %1;"
                         "  background: transparent;"
-                        "  border: none;"
+                        "  border: 1px solid transparent;"
                         "  padding: 0px;"
-                        "  border-top-left-radius: %1;"
-                        "  border-bottom-left-radius: %2;"
-                        "  border-top-right-radius: %3;"
-                        "  border-bottom-right-radius: %4;"
+                        "  border-top-left-radius: %2;"
+                        "  border-bottom-left-radius: %3;"
+                        "  border-top-right-radius: %4;"
+                        "  border-bottom-right-radius: %5;"
                         "}"
                         "QPushButton:hover {"
-                        "  background: #181818;"
+                        "  background: %6;"
                         "}"
                         "QPushButton:pressed {"
-                        "  background: #202020;"
+                        "  background: %7;"
                         "}")
-      .arg(top_left_radius, bottom_left_radius, top_right_radius, bottom_right_radius);
+      .arg(Hex(theme.textColor()), top_left_radius, bottom_left_radius, top_right_radius,
+           bottom_right_radius, Rgba(WithAlpha(theme.hoverColor(), 210)),
+           Rgba(WithAlpha(theme.hoverColor(), 255)));
 }
 
 auto AppTheme::EditorMethodCardStyle(bool active) -> QString {
+  const auto&  theme   = AppTheme::Instance();
+  const QColor accent  = theme.accentColor();
+  const QColor bg      = theme.bgBaseColor();
+  const QColor hover   = theme.hoverColor();
+  const QColor muted   = theme.textMutedColor();
+  const QColor text    = theme.textColor();
+  const QColor divider = theme.dividerColor();
   if (active) {
     return QStringLiteral("QPushButton {"
-                          "  color: #FCC704;"
-                          "  background: #1A1A1A;"
-                          "  border: 2px solid #FCC704;"
+                          "  color: %1;"
+                          "  background: %2;"
+                          "  border: 1px solid %3;"
                           "  border-radius: 12px;"
                           "  padding: 16px 20px;"
                           "  text-align: left;"
                           "}"
                           "QPushButton:hover {"
-                          "  background: #242424;"
-                          "}");
+                          "  background: %4;"
+                          "}")
+        .arg(Hex(accent), Rgba(WithAlpha(bg, 240)), Rgba(WithAlpha(accent, 136)),
+             Rgba(WithAlpha(hover, 255)));
   }
 
   return QStringLiteral("QPushButton {"
-                        "  color: #A0A0A0;"
-                        "  background: #1A1A1A;"
-                        "  border: 1px solid #333333;"
+                        "  color: %1;"
+                        "  background: %2;"
+                        "  border: 1px solid %3;"
                         "  border-radius: 12px;"
                         "  padding: 16px 20px;"
                         "  text-align: left;"
                         "}"
                         "QPushButton:hover {"
-                        "  border: 1px solid #666666;"
-                        "  background: #242424;"
-                        "  color: #E6E6E6;"
-                        "}");
+                        "  border: 1px solid %4;"
+                        "  background: %5;"
+                        "  color: %6;"
+                        "}")
+      .arg(Hex(muted), Rgba(WithAlpha(bg, 224)), Rgba(divider),
+           Rgba(WithAlpha(theme.glassStrokeColor(), 176)), Rgba(WithAlpha(hover, 245)),
+           Hex(text));
 }
 
 auto AppTheme::EditorComboBoxStyle() -> QString {
+  const auto&  theme  = AppTheme::Instance();
+  const QColor bg     = theme.bgBaseColor();
+  const QColor text   = theme.textColor();
+  const QColor accent = theme.accentColor();
+  const QColor hover  = theme.hoverColor();
+  const QColor border = theme.glassStrokeColor();
   return QStringLiteral("QComboBox {"
-                        "  background: #1A1A1A;"
-                        "  border: none;"
-                        "  border-radius: 8px;"
+                        "  background: %1;"
+                        "  color: %2;"
+                        "  border: 1px solid %3;"
+                        "  border-radius: 10px;"
                         "  padding: 4px 8px;"
+                        "}"
+                        "QComboBox:hover {"
+                        "  border-color: %4;"
                         "}"
                         "QComboBox::drop-down {"
                         "  border: 0px;"
                         "  width: 24px;"
                         "}"
                         "QComboBox QAbstractItemView {"
-                        "  background: #1A1A1A;"
-                        "  border: none;"
-                        "  selection-background-color: #FCC704;"
-                        "  selection-color: #121212;"
+                        "  background: %1;"
+                        "  color: %2;"
+                        "  border: 1px solid %3;"
+                        "  selection-background-color: %5;"
+                        "  selection-color: %6;"
                         "}"
                         "QComboBox QAbstractItemView::item:hover {"
-                        "  background: #202020;"
-                        "  color: #E6E6E6;"
+                        "  background: %7;"
+                        "  color: %2;"
                         "}"
                         "QComboBox QAbstractItemView::item:selected {"
-                        "  background: #FCC704;"
-                        "  color: #121212;"
-                        "}");
+                        "  background: %5;"
+                        "  color: %6;"
+                        "}")
+      .arg(Rgba(WithAlpha(bg, 240)), Hex(text), Rgba(border), Rgba(WithAlpha(border, 196)),
+           Hex(accent), Hex(theme.bgCanvasColor()), Rgba(WithAlpha(hover, 255)));
 }
 
 auto AppTheme::EditorSpinBoxStyle() -> QString {
+  const auto&  theme  = AppTheme::Instance();
+  const QColor bg     = theme.bgBaseColor();
+  const QColor text   = theme.textColor();
+  const QColor border = theme.glassStrokeColor();
+  const QColor accent = theme.accentColor();
   return QStringLiteral("QSpinBox {"
-                        "  background: #1A1A1A;"
-                        "  color: #E6E6E6;"
-                        "  border: 1px solid #333333;"
-                        "  border-radius: 6px;"
+                        "  background: %1;"
+                        "  color: %2;"
+                        "  border: 1px solid %3;"
+                        "  border-radius: 8px;"
                         "  padding: 4px 8px;"
                         "}"
+                        "QSpinBox:hover {"
+                        "  border-color: %4;"
+                        "}"
                         "QSpinBox:focus {"
-                        "  border: 1px solid #FCC704;"
+                        "  border: 1px solid %5;"
                         "}"
                         "QSpinBox::up-button, QSpinBox::down-button {"
                         "  width: 0px;"
-                        "}");
+                        "}")
+      .arg(Rgba(WithAlpha(bg, 240)), Hex(text), Rgba(border), Rgba(WithAlpha(border, 196)),
+           Rgba(WithAlpha(accent, 224)));
 }
 
 auto AppTheme::EditorCheckBoxStyle() -> QString {
+  const auto&  theme  = AppTheme::Instance();
+  const QColor text   = theme.textColor();
+  const QColor base   = theme.bgDeepColor();
+  const QColor stroke = theme.glassStrokeColor();
+  const QColor accent = theme.accentColor();
   return QStringLiteral("QCheckBox {"
-                        "  color: #E6E6E6;"
+                        "  color: %1;"
                         "  spacing: 8px;"
                         "}"
                         "QCheckBox::indicator {"
@@ -416,22 +584,23 @@ auto AppTheme::EditorCheckBoxStyle() -> QString {
                         "  height: 16px;"
                         "}"
                         "QCheckBox::indicator:unchecked {"
-                        "  background: #121212;"
-                        "  border: 1px solid #2A2A2A;"
-                        "  border-radius: 3px;"
+                        "  background: %2;"
+                        "  border: 1px solid %3;"
+                        "  border-radius: 4px;"
                         "}"
                         "QCheckBox::indicator:checked {"
-                        "  background: #FCC704;"
-                        "  border: 1px solid #FCC704;"
-                        "  border-radius: 3px;"
-                        "}");
+                        "  background: %4;"
+                        "  border: 1px solid %4;"
+                        "  border-radius: 4px;"
+                        "}")
+      .arg(Hex(text), Rgba(WithAlpha(base, 232)), Rgba(stroke), Hex(accent));
 }
 
 auto AppTheme::EditorScrollAreaStyle() -> QString {
-  const auto& theme         = AppTheme::Instance();
-  const QString bg_base     = theme.bgBaseColor().name(QColor::HexRgb);
-  const QString bg_canvas   = theme.bgCanvasColor().name(QColor::HexRgb);
-  const QString accent      = theme.accentColor().name(QColor::HexRgb);
+  const auto& theme       = AppTheme::Instance();
+  const QString bg_base   = Rgba(WithAlpha(theme.bgBaseColor(), 236));
+  const QString bg_canvas = Rgba(WithAlpha(theme.bgCanvasColor(), 170));
+  const QString accent    = Hex(theme.accentColor());
 
   return QStringLiteral("QScrollArea { background: %1; border: none; }"
                         "QScrollArea > QWidget, QScrollArea > QWidget > QWidget {"
@@ -453,11 +622,14 @@ auto AppTheme::EditorScrollAreaStyle() -> QString {
 }
 
 auto AppTheme::EditorListWidgetStyle() -> QString {
+  const auto&  theme  = AppTheme::Instance();
+  const QColor bg     = theme.bgDeepColor();
+  const QColor border = theme.dividerColor();
   return QStringLiteral("QListWidget {"
-                        "  background: #171717;"
-                        "  border: none;"
-                        "  border-radius: 6px;"
-                        "  padding: 6px;"
+                        "  background: %1;"
+                        "  border: 1px solid %2;"
+                        "  border-radius: 10px;"
+                        "  padding: 8px;"
                         "}"
                         "QListWidget::item {"
                         "  padding: 2px;"
@@ -471,13 +643,13 @@ auto AppTheme::EditorListWidgetStyle() -> QString {
                         "  margin: 4px 2px 4px 0;"
                         "}"
                         "QScrollBar::handle:vertical {"
-                        "  background: rgba(148, 148, 148, 120);"
+                        "  background: %3;"
                         "  border-radius: 3px;"
                         "  min-height: 24px;"
                         "}"
                         "QScrollBar::handle:vertical:hover,"
                         "QScrollBar::handle:vertical:pressed {"
-                        "  background: #FCC704;"
+                        "  background: %4;"
                         "}"
                         "QScrollBar::add-line:vertical,"
                         "QScrollBar::sub-line:vertical {"
@@ -486,26 +658,34 @@ auto AppTheme::EditorListWidgetStyle() -> QString {
                         "QScrollBar::add-page:vertical,"
                         "QScrollBar::sub-page:vertical {"
                         "  background: transparent;"
-                        "}");
+                        "}")
+      .arg(Rgba(WithAlpha(bg, 216)), Rgba(border), Rgba(WithAlpha(theme.textMutedColor(), 132)),
+           Hex(theme.accentColor()));
 }
 
 auto AppTheme::EditorHistoryCardStyle() -> QString {
+  const auto& theme = AppTheme::Instance();
   return QStringLiteral("QFrame#HistoryCard {"
-                        "  background: #2A2A2A;"
-                        "  border: none;"
-                        "  border-radius: 6px;"
+                        "  background: %1;"
+                        "  border: 1px solid %2;"
+                        "  border-radius: 10px;"
                         "}"
                         "QFrame#HistoryCard:hover {"
-                        "  background: #303030;"
+                        "  background: %3;"
+                        "  border-color: %4;"
                         "}"
                         "QFrame#HistoryCard[selected=\"true\"] {"
-                        "  background: rgba(252, 199, 4, 0.05);"
-                        "  border: none;"
-                        "  border-left: 4px solid #FCC704;"
+                        "  background: %5;"
+                        "  border: 1px solid %6;"
                         "}"
                         "QFrame#HistoryCard[selected=\"true\"]:hover {"
-                        "  background: rgba(252, 199, 4, 0.08);"
-                        "}");
+                        "  background: %7;"
+                        "}")
+      .arg(Rgba(WithAlpha(theme.bgPanelColor(), 224)), Rgba(theme.dividerColor()),
+           Rgba(WithAlpha(theme.hoverColor(), 245)),
+           Rgba(WithAlpha(theme.glassStrokeColor(), 180)), Rgba(theme.selectedTintColor()),
+           Rgba(WithAlpha(theme.accentColor(), 144)),
+           Rgba(WithAlpha(theme.selectedTintColor(), 68)));
 }
 
 auto AppTheme::EditorTransparentFrameStyle() -> QString {
@@ -529,26 +709,49 @@ auto AppTheme::monoFontFamily() const -> QString {
   return FontState().mono;
 }
 
-auto AppTheme::toneGold() const -> QColor { return QColor(QStringLiteral("#FCC704")); }
-auto AppTheme::toneWine() const -> QColor { return QColor(QStringLiteral("#8A0526")); }
-auto AppTheme::toneSteel() const -> QColor { return QColor(QStringLiteral("#4A4A4A")); }
-auto AppTheme::toneGraphite() const -> QColor { return QColor(QStringLiteral("#1A1A1A")); }
-auto AppTheme::toneMist() const -> QColor { return QColor(QStringLiteral("#E6E6E6")); }
+auto AppTheme::toneGold() const -> QColor { return GetTheme(current_theme_index_).tone_gold; }
+auto AppTheme::toneWine() const -> QColor { return GetTheme(current_theme_index_).tone_wine; }
+auto AppTheme::toneSteel() const -> QColor { return GetTheme(current_theme_index_).tone_steel; }
+auto AppTheme::toneGraphite() const -> QColor { return GetTheme(current_theme_index_).tone_graphite; }
+auto AppTheme::toneMist() const -> QColor { return GetTheme(current_theme_index_).tone_mist; }
 
-auto AppTheme::bgCanvasColor() const -> QColor { return QColor(QStringLiteral("#111111")); }
-auto AppTheme::bgDeepColor() const -> QColor { return QColor(QStringLiteral("#141414")); }
-auto AppTheme::bgBaseColor() const -> QColor { return QColor(QStringLiteral("#1F1F1F")); }
-auto AppTheme::bgPanelColor() const -> QColor { return QColor(QStringLiteral("#2B2B2B")); }
-auto AppTheme::textColor() const -> QColor { return QColor(QStringLiteral("#D0D0D0")); }
-auto AppTheme::textMutedColor() const -> QColor { return QColor(QStringLiteral("#888888")); }
+auto AppTheme::bgCanvasColor() const -> QColor { return GetTheme(current_theme_index_).bg_canvas; }
+auto AppTheme::bgDeepColor() const -> QColor { return GetTheme(current_theme_index_).bg_deep; }
+auto AppTheme::bgBaseColor() const -> QColor { return GetTheme(current_theme_index_).bg_base; }
+auto AppTheme::bgPanelColor() const -> QColor { return GetTheme(current_theme_index_).bg_panel; }
+auto AppTheme::textColor() const -> QColor { return GetTheme(current_theme_index_).text; }
+auto AppTheme::textMutedColor() const -> QColor { return GetTheme(current_theme_index_).text_muted; }
 auto AppTheme::accentColor() const -> QColor { return toneGold(); }
-auto AppTheme::accentSecondaryColor() const -> QColor { return toneGold(); }
+auto AppTheme::accentSecondaryColor() const -> QColor { return GetTheme(current_theme_index_).accent_secondary; }
 auto AppTheme::dangerColor() const -> QColor { return toneWine(); }
-auto AppTheme::dangerTintColor() const -> QColor { return QColor(138, 5, 38, 82); }
-auto AppTheme::selectedTintColor() const -> QColor { return QColor(252, 199, 4, 46); }
-auto AppTheme::hoverColor() const -> QColor { return QColor(QStringLiteral("#333333")); }
-auto AppTheme::overlayColor() const -> QColor { return QColor(QStringLiteral("#C0121212")); }
-auto AppTheme::panelRadius() const -> int { return 8; }
+auto AppTheme::dangerTintColor() const -> QColor { return GetTheme(current_theme_index_).danger_tint; }
+auto AppTheme::selectedTintColor() const -> QColor { return GetTheme(current_theme_index_).selected_tint; }
+auto AppTheme::hoverColor() const -> QColor { return GetTheme(current_theme_index_).hover; }
+auto AppTheme::dividerColor() const -> QColor { return GetTheme(current_theme_index_).divider; }
+auto AppTheme::glassPanelColor() const -> QColor { return GetTheme(current_theme_index_).glass_panel; }
+auto AppTheme::glassStrokeColor() const -> QColor { return GetTheme(current_theme_index_).glass_stroke; }
+auto AppTheme::overlayColor() const -> QColor { return GetTheme(current_theme_index_).overlay; }
+auto AppTheme::panelRadius() const -> int { return GetTheme(current_theme_index_).panel_radius; }
+
+auto AppTheme::currentThemeIndex() const -> int { return current_theme_index_; }
+
+void AppTheme::setCurrentThemeIndex(int index) {
+  if (index < 0 || index > 1) {
+    return;
+  }
+  if (current_theme_index_ == index) {
+    return;
+  }
+  current_theme_index_ = index;
+  emit ThemeChanged();
+}
+
+auto AppTheme::availableThemes() const -> QVariantList {
+  return QVariantList{
+      QVariantMap{{QStringLiteral("label"), tr("Pu-erh")}, {QStringLiteral("index"), 0}},
+      QVariantMap{{QStringLiteral("label"), tr("Classic")}, {QStringLiteral("index"), 1}},
+  };
+}
 
 auto AppTheme::ResolveRole(QWidget* widget) -> FontRole {
   if (!widget) {

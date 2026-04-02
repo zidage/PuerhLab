@@ -306,8 +306,8 @@ void UpdateVersionUi(const VersionUiContext& ui, const Version& working_version,
       row->setContentsMargins(14, 10, 14, 10);
       row->setSpacing(10);
 
-      const QColor dot  = QColor(0x5A, 0x5A, 0x5A);
-      const QColor line = QColor(0x34, 0x34, 0x34);
+      const QColor dot  = AppTheme::Instance().textMutedColor();
+      const QColor line = AppTheme::Instance().dividerColor();
       auto* lane        = new HistoryLaneWidget(dot, line, /*draw_top*/ i > 0,
                                                 /*draw_bottom*/ (i + 1) < total,
                                                 /*solid_dot*/ false, card);
@@ -323,7 +323,8 @@ void UpdateVersionUi(const VersionUiContext& ui, const Version& working_version,
         title_font.setWeight(QFont::Medium);
         title_font.setStyleStrategy(QFont::PreferAntialias);
         title_l->setFont(title_font);
-        title_l->setStyleSheet(QStringLiteral("QLabel { color: #E6E6E6; }"));
+        title_l->setStyleSheet(
+            AppTheme::EditorLabelStyle(AppTheme::Instance().textColor()));
 
       auto* meta_l =
           new QLabel(Tr("Uncommitted | #%1").arg(static_cast<qulonglong>(i + 1)), card);
@@ -332,7 +333,8 @@ void UpdateVersionUi(const VersionUiContext& ui, const Version& working_version,
         meta_font.setWeight(QFont::Normal);
         meta_font.setStyleStrategy(QFont::PreferAntialias);
         meta_l->setFont(meta_font);
-        meta_l->setStyleSheet(QStringLiteral("QLabel { color: #888888; }"));
+        meta_l->setStyleSheet(
+            AppTheme::EditorLabelStyle(AppTheme::Instance().textMutedColor()));
 
       body->addWidget(title_l);
       body->addWidget(meta_l);
@@ -415,8 +417,9 @@ void UpdateVersionUi(const VersionUiContext& ui, const Version& working_version,
         row->setContentsMargins(14, 10, 14, 10);
         row->setSpacing(10);
 
-        const QColor dot  = is_head ? QColor(0xFC, 0xC7, 0x04) : QColor(0x5A, 0x5A, 0x5A);
-        const QColor line = QColor(0x34, 0x34, 0x34);
+        const QColor dot =
+            is_head ? AppTheme::Instance().accentColor() : AppTheme::Instance().textMutedColor();
+        const QColor line = AppTheme::Instance().dividerColor();
         auto* lane        = new HistoryLaneWidget(dot, line, /*draw_top*/ row_index > 0,
                                                   /*draw_bottom*/ (row_index + 1) < total_rows,
                                                   /*solid_dot*/ is_head, card);
@@ -432,7 +435,8 @@ void UpdateVersionUi(const VersionUiContext& ui, const Version& working_version,
         title_font.setWeight(QFont::Medium);
         title_font.setStyleStrategy(QFont::PreferAntialias);
         title_l->setFont(title_font);
-        title_l->setStyleSheet(QStringLiteral("QLabel { color: #D8D8D8; }"));
+        title_l->setStyleSheet(
+            AppTheme::EditorLabelStyle(AppTheme::Instance().textColor()));
         title_l->setAttribute(Qt::WA_TransparentForMouseEvents, true);
 
         auto* subtitle_l = new ElidedLabel(last_tx_summary, card);
@@ -441,7 +445,8 @@ void UpdateVersionUi(const VersionUiContext& ui, const Version& working_version,
         subtitle_font.setWeight(QFont::Medium);
         subtitle_font.setStyleStrategy(QFont::PreferAntialias);
         subtitle_l->setFont(subtitle_font);
-        subtitle_l->setStyleSheet(QStringLiteral("QLabel { color: #777777; }"));
+        subtitle_l->setStyleSheet(
+            AppTheme::EditorLabelStyle(AppTheme::Instance().textMutedColor()));
         subtitle_l->setAttribute(Qt::WA_TransparentForMouseEvents, true);
 
         auto* meta_l = new ElidedLabel(meta, card);
@@ -450,7 +455,8 @@ void UpdateVersionUi(const VersionUiContext& ui, const Version& working_version,
         meta_font.setWeight(QFont::Medium);
         meta_font.setStyleStrategy(QFont::PreferAntialias);
         meta_l->setFont(meta_font);
-        meta_l->setStyleSheet(QStringLiteral("QLabel { color: #777777; }"));
+        meta_l->setStyleSheet(
+            AppTheme::EditorLabelStyle(AppTheme::Instance().textMutedColor()));
         meta_l->setAttribute(Qt::WA_TransparentForMouseEvents, true);
 
         body->addWidget(title_l);

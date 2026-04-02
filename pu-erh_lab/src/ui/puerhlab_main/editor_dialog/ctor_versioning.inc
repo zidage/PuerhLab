@@ -2,46 +2,8 @@
 // This file is #included from the constructor body in dialog.cpp.
 // It shares the constructor scope and has access to all local variables.
 
-
-  const QString version_primary_btn_style = QStringLiteral(
-    "QPushButton {"
-    "  color: #141414;"
-    "  background: #FCC704;"
-    "  border: none;"
-    "  border-radius: 6px;"
-    "  padding: 0 12px;"
-    "}"
-    "QPushButton:hover {"
-    "  background: #F5C200;"
-    "}"
-    "QPushButton:pressed {"
-    "  background: #E8B800;"
-    "}"
-    "QPushButton:disabled {"
-    "  color: #6A6A6A;"
-    "  background: #222222;"
-    "}");
-
-  const QString version_secondary_btn_style = QStringLiteral(
-    "QPushButton {"
-    "  color: #FCC704;"
-    "  background: transparent;"
-    "  border: 1px solid rgba(252, 199, 4, 0.85);"
-    "  border-radius: 6px;"
-    "  padding: 0 12px;"
-    "}"
-    "QPushButton:hover {"
-    "  color: #141414;"
-    "  background: #FCC704;"
-    "}"
-    "QPushButton:pressed {"
-    "  background: #E8B800;"
-    "}"
-    "QPushButton:disabled {"
-    "  color: #666666;"
-    "  border-color: #3A3A3A;"
-    "  background: transparent;"
-    "}");
+  const QString version_primary_btn_style   = AppTheme::EditorPrimaryButtonStyle(true);
+  const QString version_secondary_btn_style = AppTheme::EditorSecondaryButtonStyle();
 
     // Edit-history commit controls.
     {
@@ -80,8 +42,8 @@
       auto* frame = new QFrame(shared_versioning_root);
       frame->setStyleSheet(AppTheme::EditorTransparentFrameStyle());
       auto* layout = new QVBoxLayout(frame);
-      layout->setContentsMargins(10, 10, 10, 10);
-      layout->setSpacing(8);
+      layout->setContentsMargins(14, 12, 14, 12);
+      layout->setSpacing(10);
 
       auto* mode_row    = new QWidget(frame);
       auto* mode_layout = new QHBoxLayout(mode_row);

@@ -318,8 +318,8 @@
     </message>
     <message>
         <location filename="../qml/Main.qml" line="1038"/>
-        <source>Theme tokens: Window #1A1A1A  Text #E6E6E6  Accent #FCC704</source>
-        <translation>主题标记：Window #1A1A1A  Text #E6E6E6  Accent #FCC704</translation>
+        <source>Theme tokens: Canvas #111419  Text #E8E1D6  Accent #B98A4A</source>
+        <translation>主题标记：Canvas #111419  Text #E8E1D6  Accent #B98A4A</translation>
     </message>
     <message>
         <location filename="../qml/Main.qml" line="1039"/>

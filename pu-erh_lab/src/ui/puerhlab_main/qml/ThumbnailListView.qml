@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QtQuick.Effects
 
 ListView {
     id: root
@@ -95,8 +96,8 @@ ListView {
         }
 
         width: ListView.view.width
-        height: 84
-        radius: 6
+        height: 116
+        radius: appTheme.panelRadius
         color: root.isImageSelected(elementId)
               ? root.rowBgSelected
               : (rowHoverArea.containsMouse ? root.rowBgHover : root.rowBg)
@@ -121,14 +122,16 @@ ListView {
             anchors.fill: parent
             anchors.margins: 8
             Item {
-                Layout.preferredWidth: 96
-                Layout.fillHeight: true
+                Layout.preferredWidth: 132
+                Layout.preferredHeight: 88
+                Layout.alignment: Qt.AlignVCenter
                 clip: true
                 Rectangle {
                     anchors.fill: parent
-                    radius: 4
-                    visible: !thumbnailReady
-                    color: appTheme.bgCanvasColor
+                    radius: 10
+                    color: appTheme.bgBaseColor
+                    border.width: 1
+                    border.color: appTheme.dividerColor
                 }
                 BusyIndicator {
                     anchors.centerIn: parent
@@ -138,11 +141,28 @@ ListView {
                     running: visible
                 }
                 Image {
-                    anchors.fill: parent
+                    id: thumbImage
+                    anchors.centerIn: parent
+                    width: parent.width
+                    height: parent.height
                     source: liveThumbUrl
-                    visible: thumbnailReady
+                    visible: false
                     asynchronous: true
                     fillMode: Image.PreserveAspectFit
+                }
+                Rectangle {
+                    id: thumbMask
+                    anchors.fill: thumbImage
+                    radius: 10
+                    visible: false
+                    layer.enabled: true
+                }
+                MultiEffect {
+                    anchors.fill: thumbImage
+                    source: thumbImage
+                    maskEnabled: true
+                    maskSource: thumbMask
+                    visible: thumbnailReady
                 }
                 Rectangle {
                     anchors.top: parent.top
@@ -174,6 +194,8 @@ ListView {
             }
             ColumnLayout {
                 Layout.fillWidth: true
+                Layout.alignment: Qt.AlignVCenter
+                spacing: 4
                 Label { Layout.fillWidth: true; text: fileName; color: root.rowText; font.family: appTheme.dataFontFamily; font.pixelSize: 13; elide: Text.ElideRight }
                 Label {
                     Layout.fillWidth: true

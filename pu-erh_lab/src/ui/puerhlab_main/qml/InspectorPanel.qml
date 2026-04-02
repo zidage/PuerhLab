@@ -19,7 +19,6 @@ ScrollView {
         width: root.availableWidth
         spacing: 12
 
-        // ── Total photo count hero card ─────────────────────────────────
         Rectangle {
             Layout.fillWidth: true
             Layout.margins: 4
@@ -57,14 +56,12 @@ ScrollView {
             }
         }
 
-        // ── Separator ───────────────────────────────────────────────────
         Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: 1
             color: root.separatorColor
         }
 
-        // ── By Capture Date ─────────────────────────────────────────────
         StatsCard {
             Layout.fillWidth: true
             Layout.margins: 4
@@ -75,14 +72,12 @@ ScrollView {
             onBarClicked: function(label) { albumBackend.ToggleStatsFilter("date", label) }
         }
 
-        // ── Separator ───────────────────────────────────────────────────
         Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: 1
             color: root.separatorColor
         }
 
-        // ── By Camera Model ─────────────────────────────────────────────
         StatsCard {
             Layout.fillWidth: true
             Layout.margins: 4
@@ -93,14 +88,12 @@ ScrollView {
             onBarClicked: function(label) { albumBackend.ToggleStatsFilter("camera", label) }
         }
 
-        // ── Separator ───────────────────────────────────────────────────
         Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: 1
             color: root.separatorColor
         }
 
-        // ── By Lens ─────────────────────────────────────────────────────
         StatsCard {
             Layout.fillWidth: true
             Layout.margins: 4
@@ -111,7 +104,6 @@ ScrollView {
             onBarClicked: function(label) { albumBackend.ToggleStatsFilter("lens", label) }
         }
 
-        // ── Bottom spacer ───────────────────────────────────────────────
         Item {
             Layout.fillWidth: true
             Layout.preferredHeight: 8

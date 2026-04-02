@@ -38,8 +38,16 @@ ApplicationWindow {
     readonly property color colDangerTint: appTheme.dangerTintColor
     readonly property color colSelectedTint: appTheme.selectedTintColor
     readonly property color colHover: appTheme.hoverColor          // subtle hover tint
+    readonly property color colDivider: appTheme.dividerColor
+    readonly property color colGlassPanel: appTheme.glassPanelColor
+    readonly property color colGlassStroke: appTheme.glassStrokeColor
     readonly property color colOverlay: appTheme.overlayColor
     readonly property string dataFontFamily: appTheme.dataFontFamily
+    readonly property real settingsFieldLabelWidth: 84
+    readonly property string themeTokenSummary: appTheme.currentThemeIndex === 1
+                                                 ? qsTr("Theme tokens: Canvas #111111  Text #D0D0D0  Accent #FCC704")
+                                                 : qsTr("Theme tokens: Canvas #111419  Text #E8E1D6  Accent #B98A4A")
+    readonly property int controlRadius: 10
 
     Material.theme: Material.Dark
     Material.primary: root.colAccentSecondary
@@ -532,41 +540,43 @@ ApplicationWindow {
 
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: 3
-        spacing: 3
+        anchors.margins: 12
+        spacing: 12
 
         Rectangle {
             id: topToolbar
             Layout.fillWidth: true
-            Layout.preferredHeight: 50
+            Layout.preferredHeight: 56
             radius: root.panelRadius
-            color: root.colBgPanel
-            border.width: 0
+            color: root.colGlassPanel
+            border.width: 1
+            border.color: root.colGlassStroke
             z: 1
 
             RowLayout {
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
-                anchors.leftMargin: 16
-                anchors.rightMargin: 16
-                spacing: 4
+                anchors.leftMargin: 20
+                anchors.rightMargin: 20
+                spacing: 10
                 Row {
                     spacing: 0
-                    Label { text: qsTr("Pu-erh"); font.pixelSize: 19; font.weight: 700; color: "#FFD700" }
+                    Label { text: qsTr("Pu-erh"); font.pixelSize: 19; font.weight: 700; color: root.colAccentPrimary }
                     Label { text: " "; font.pixelSize: 19; font.weight: 700 }
-                    Label { text: qsTr("Lab"); font.pixelSize: 19; font.weight: 700; color: "#FFFFFF" }
+                    Label { text: qsTr("Lab"); font.pixelSize: 19; font.weight: 700; color: root.colText }
                 }
-                Item { Layout.preferredWidth: 8 }
+                Item { Layout.preferredWidth: 12 }
 
                 // ── Load / New / Save pill ──
                 Rectangle {
                     id: projectPill
                     Layout.preferredHeight: 36
                     Layout.preferredWidth: pillRow.implicitWidth + 8
-                    radius: 6
+                    radius: root.controlRadius
                     color: root.colBgBase
-                    border.width: 0
+                    border.width: 1
+                    border.color: root.colDivider
 
                     Row {
                         id: pillRow
@@ -588,7 +598,7 @@ ApplicationWindow {
                                     width: pillLabel.implicitWidth + 28
                                     height: parent.height - 4
                                     anchors.verticalCenter: parent.verticalCenter
-                                    radius: 4
+                                    radius: 8
                                     color: pillMouse.containsMouse && modelData.en
                                            ? root.colHover : "transparent"
                                     scale: pillMouse.containsMouse && modelData.en ? 1.03 : 1.0
@@ -630,14 +640,14 @@ ApplicationWindow {
                                     anchors.verticalCenter: parent.verticalCenter
                                     width: 1
                                     height: parent.height * 0.48
-                                    color: root.toneSteel
+                                    color: root.colDivider
                                 }
                             }
                         }
                     }
                 }
 
-                Item { Layout.preferredWidth: 4 }
+                Item { Layout.preferredWidth: 6 }
                 Button {
                     id: importBtn
                     text: qsTr("Import")
@@ -677,18 +687,27 @@ ApplicationWindow {
                 Button {
                     id: libraryBtn
                     text: qsTr("Library"); checkable: true; checked: !settingsPage; onClicked: settingsPage = false
+                    flat: true
+                    Material.background: checked ? Qt.rgba(root.colAccentPrimary.r, root.colAccentPrimary.g, root.colAccentPrimary.b, 0.16) : "transparent"
+                    Material.foreground: checked ? root.colText : root.colTextMuted
                     scale: libraryBtn.hovered ? 1.03 : 1.0
                     Behavior on scale { NumberAnimation { duration: 100; easing.type: Easing.OutCubic } }
                 }
                 Button {
                     id: settingsBtn
                     text: qsTr("Settings"); checkable: true; checked: settingsPage; onClicked: settingsPage = true
+                    flat: true
+                    Material.background: checked ? Qt.rgba(root.colAccentPrimary.r, root.colAccentPrimary.g, root.colAccentPrimary.b, 0.16) : "transparent"
+                    Material.foreground: checked ? root.colText : root.colTextMuted
                     scale: settingsBtn.hovered ? 1.03 : 1.0
                     Behavior on scale { NumberAnimation { duration: 100; easing.type: Easing.OutCubic } }
                 }
                 Button {
                     id: inspectorBtn
                     text: qsTr("Inspector"); checkable: true; checked: inspectorVisible; onToggled: inspectorVisible = checked
+                    flat: true
+                    Material.background: checked ? Qt.rgba(root.colAccentPrimary.r, root.colAccentPrimary.g, root.colAccentPrimary.b, 0.16) : "transparent"
+                    Material.foreground: checked ? root.colText : root.colTextMuted
                     scale: inspectorBtn.hovered ? 1.03 : 1.0
                     Behavior on scale { NumberAnimation { duration: 100; easing.type: Easing.OutCubic } }
                 }
@@ -710,20 +729,21 @@ ApplicationWindow {
         RowLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            spacing: 3
+            spacing: 12
 
             Rectangle {
                 Layout.preferredWidth: 250
                 Layout.fillHeight: true
                 radius: root.panelRadius
-                color: root.colBgPanel
-                border.width: 0
+                color: root.colGlassPanel
+                border.width: 1
+                border.color: root.colGlassStroke
                 clip: true
 
                 ColumnLayout {
                     anchors.fill: parent
-                    anchors.margins: 12
-                    spacing: 10
+                    anchors.margins: 16
+                    spacing: 12
 
                     // ── Header ──
                     RowLayout {
@@ -760,10 +780,11 @@ ApplicationWindow {
                     // ── Search ──
                     Rectangle {
                         Layout.fillWidth: true
-                        Layout.preferredHeight: 36
-                        radius: 6
+                        Layout.preferredHeight: 38
+                        radius: root.controlRadius
                         color: root.colBgBase
-                        border.width: 0
+                        border.width: 1
+                        border.color: root.colDivider
                         Behavior on color { ColorAnimation { duration: 150 } }
 
                         RowLayout {
@@ -787,10 +808,11 @@ ApplicationWindow {
                     // ── New-folder row ──
                     Rectangle {
                         Layout.fillWidth: true
-                        Layout.preferredHeight: 36
-                        radius: 6
+                        Layout.preferredHeight: 38
+                        radius: root.controlRadius
                         color: root.colBgBase
-                        border.width: 0
+                        border.width: 1
+                        border.color: root.colDivider
                         Behavior on color { ColorAnimation { duration: 150 } }
 
                         RowLayout {
@@ -815,8 +837,8 @@ ApplicationWindow {
                                 }
                             }
                             Rectangle {
-                                width: 28; height: 28; radius: 6
-                                color: addBtn.hovered ? root.colBorder : "transparent"
+                                width: 28; height: 28; radius: 8
+                                color: addBtn.hovered ? root.colHover : "transparent"
                                 visible: root.backendInteractive && createFolderField.text.trim().length > 0
                                 Label { anchors.centerIn: parent; text: "\u2713"; color: root.colAccentSecondary; font.pixelSize: 14; font.weight: 700 }
                                 MouseArea {
@@ -840,9 +862,10 @@ ApplicationWindow {
                     Rectangle {
                         Layout.fillWidth: true
                         Layout.preferredHeight: 30
-                        radius: 6
+                        radius: root.controlRadius
                         color: root.colDanger
-                        border.width: 0
+                        border.width: 1
+                        border.color: Qt.rgba(root.colDanger.r, root.colDanger.g, root.colDanger.b, 0.24)
                         visible: root.backendInteractive && albumBackend.currentFolderId !== 0
                         Behavior on color { ColorAnimation { duration: 120 } }
                         Behavior on border.color { ColorAnimation { duration: 120 } }
@@ -869,8 +892,7 @@ ApplicationWindow {
                     Rectangle {
                         Layout.fillWidth: true
                         Layout.preferredHeight: 1
-                        color: root.toneSteel
-                        opacity: 1.0
+                        color: root.colDivider
                     }
 
                     // ── Folder card list ──
@@ -903,13 +925,14 @@ ApplicationWindow {
                                 anchors.right: parent.right
                                 anchors.leftMargin: depth * 12
                                 height: parent.cardHeight
-                                radius: 6
+                                radius: 8
                                 color: {
                                     if (isSelected) return root.colSelectedTint
                                     if (cardMouse.containsMouse) return root.colHover
                                     return "transparent"
                                 }
-                                border.width: 0
+                                border.width: isSelected ? 1 : 0
+                                border.color: root.colGlassStroke
                                 Behavior on color { ColorAnimation { duration: 140 } }
 
                                 RowLayout {
@@ -972,6 +995,8 @@ ApplicationWindow {
                 Layout.fillHeight: true
                 radius: root.panelRadius
                 color: root.colBgDeep
+                border.width: 1
+                border.color: root.colDivider
                 clip: true
 
             ColumnLayout {
@@ -988,8 +1013,8 @@ ApplicationWindow {
                         anchors.left: parent.left
                         anchors.right: parent.right
                         anchors.verticalCenter: parent.verticalCenter
-                        anchors.leftMargin: 14
-                        anchors.rightMargin: 14
+                        anchors.leftMargin: 18
+                        anchors.rightMargin: 18
                         Label { text: qsTr("Browser"); color: root.colTextMuted; font.pixelSize: 13; font.weight: 600 }
                         Item { Layout.fillWidth: true }
                         Button { text: qsTr("Grid"); checkable: true; checked: gridMode; onClicked: gridMode = true; flat: true }
@@ -1018,7 +1043,7 @@ ApplicationWindow {
 
                         ColumnLayout {
                             anchors.fill: parent
-                            anchors.margins: 14
+                            anchors.margins: 18
                             RowLayout {
                                 Layout.fillWidth: true
                                 Label { text: qsTr("Album"); color: root.colTextMuted; font.pixelSize: 14; font.weight: 600 }
@@ -1070,14 +1095,38 @@ ApplicationWindow {
                         border.width: 0
                         ColumnLayout {
                             anchors.fill: parent
-                            anchors.margins: 12
+                            anchors.margins: 18
                             Label { text: qsTr("Settings"); color: root.colText; font.pixelSize: 20; font.weight: 700 }
-                            Label { text: qsTr("Theme tokens: Window #1A1A1A  Text #E6E6E6  Accent #FCC704"); color: root.colTextMuted; font.pixelSize: 12 }
+                            Label { text: root.themeTokenSummary; color: root.colTextMuted; font.pixelSize: 12 }
                             Label { text: qsTr("Qt Quick renderer is hardware accelerated."); color: root.colTextMuted; font.pixelSize: 12 }
                             RowLayout {
                                 Layout.fillWidth: true
                                 spacing: 10
                                 Label {
+                                    Layout.preferredWidth: root.settingsFieldLabelWidth
+                                    text: qsTr("Theme")
+                                    color: root.colText
+                                    font.pixelSize: 13
+                                    font.weight: 600
+                                }
+                                ComboBox {
+                                    Layout.preferredWidth: 220
+                                    model: appTheme.availableThemes
+                                    textRole: "label"
+                                    currentIndex: appTheme.currentThemeIndex
+                                    onActivated: function(index) {
+                                        const item = model[index]
+                                        if (item) {
+                                            appTheme.currentThemeIndex = item.index
+                                        }
+                                    }
+                                }
+                            }
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: 10
+                                Label {
+                                    Layout.preferredWidth: root.settingsFieldLabelWidth
                                     text: qsTr("Language")
                                     color: root.colText
                                     font.pixelSize: 13
@@ -1156,8 +1205,9 @@ ApplicationWindow {
             Layout.fillWidth: true
             Layout.preferredHeight: 40
             radius: root.panelRadius
-            color: root.colBgPanel
-            border.width: 0
+            color: root.colGlassPanel
+            border.width: 1
+            border.color: root.colGlassStroke
 
             Rectangle {
                 anchors.bottom: parent.bottom

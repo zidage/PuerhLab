@@ -435,7 +435,7 @@ Original source files on disk will be kept.</source>
     </message>
     <message>
         <location filename="../qml/Main.qml" line="1038"/>
-        <source>Theme tokens: Window #1A1A1A  Text #E6E6E6  Accent #FCC704</source>
+        <source>Theme tokens: Canvas #111419  Text #E8E1D6  Accent #B98A4A</source>
         <translation type="unfinished"></translation>
     </message>
     <message>

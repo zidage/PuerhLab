@@ -507,7 +507,9 @@ class EditorDialog final : public QDialog {
       const bool   selected    = (i == selected_idx);
       const QColor swatch      = HlsCandidateColor(kHlsCandidateHues[static_cast<size_t>(i)]);
       const auto   border_w_px = selected ? "3px" : "1px";
-      const auto   border_col  = selected ? "#FCC704" : "#2A2A2A";
+      const QString border_col = selected
+                                     ? AppTheme::Instance().accentColor().name(QColor::HexRgb)
+                                     : AppTheme::Instance().glassStrokeColor().name(QColor::HexArgb);
       btn->setToolTip(Tr("Hue %1 deg").arg(kHlsCandidateHues[static_cast<size_t>(i)], 0, 'f', 0));
       btn->setStyleSheet(QString("QPushButton {"
                                  "  background: %1;"
@@ -515,9 +517,10 @@ class EditorDialog final : public QDialog {
                                  "  border-radius: 11px;"
                                  "}"
                                  "QPushButton:hover {"
-                                 "  border-color: #FCC704;"
+                                 "  border-color: %4;"
                                  "}")
-                             .arg(swatch.name(QColor::HexRgb), border_w_px, border_col));
+                             .arg(swatch.name(QColor::HexRgb), border_w_px, border_col,
+                                  AppTheme::Instance().accentSecondaryColor().name(QColor::HexRgb)));
     }
   }
 
@@ -1136,7 +1139,7 @@ class EditorDialog final : public QDialog {
       button->setChecked(active);
       button->setIcon(RenderPanelToggleIcon(
           button->property(kPanelIconPathProperty).toString(),
-          active ? QColor(QStringLiteral("#121212")) : QColor(QStringLiteral("#E6E6E6")),
+          active ? AppTheme::Instance().bgCanvasColor() : AppTheme::Instance().textColor(),
           kPanelToggleIconSize, button->devicePixelRatioF()));
       button->setStyleSheet(AppTheme::EditorPanelToggleStyle(active, is_first, is_last));
     };

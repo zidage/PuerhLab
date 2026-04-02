@@ -69,11 +69,46 @@ void ThrowUnsupportedGPUBackend(const char* op_name) {
 #endif
 }
 
-auto BuildActiveAreaRect(const libraw_image_sizes_t& sizes, const cv::Size& image_size) -> cv::Rect {
-  const int left   = std::clamp(static_cast<int>(sizes.left_margin), 0, image_size.width);
-  const int top    = std::clamp(static_cast<int>(sizes.top_margin), 0, image_size.height);
-  const int width  = std::clamp(static_cast<int>(sizes.width), 0, image_size.width - left);
-  const int height = std::clamp(static_cast<int>(sizes.height), 0, image_size.height - top);
+auto DecodeResScaleDivisor(const DecodeRes decode_res) -> int {
+  switch (decode_res) {
+    case DecodeRes::FULL:
+      return 1;
+    case DecodeRes::HALF:
+      return 2;
+    case DecodeRes::QUARTER:
+      return 4;
+    case DecodeRes::EIGHTH:
+      return 8;
+    default:
+      throw std::runtime_error("RawProcessor: Unknown decode resolution");
+  }
+}
+
+auto ScaleCoordFloor(const int value, const int divisor) -> int { return value / divisor; }
+
+auto ScaleCoordCeil(const int value, const int divisor) -> int {
+  return (value + divisor - 1) / divisor;
+}
+
+auto BuildActiveAreaRect(const libraw_image_sizes_t& sizes, const cv::Size& image_size,
+                         const int scale_divisor = 1) -> cv::Rect {
+  const int raw_width  = std::max(static_cast<int>(sizes.raw_width), 0);
+  const int raw_height = std::max(static_cast<int>(sizes.raw_height), 0);
+
+  const int raw_left = std::clamp(static_cast<int>(sizes.left_margin), 0, raw_width);
+  const int raw_top  = std::clamp(static_cast<int>(sizes.top_margin), 0, raw_height);
+  const int raw_right =
+      std::clamp(raw_left + static_cast<int>(sizes.width), raw_left, raw_width);
+  const int raw_bottom =
+      std::clamp(raw_top + static_cast<int>(sizes.height), raw_top, raw_height);
+
+  const int left  = std::clamp(ScaleCoordFloor(raw_left, scale_divisor), 0, image_size.width);
+  const int top   = std::clamp(ScaleCoordFloor(raw_top, scale_divisor), 0, image_size.height);
+  const int right = std::clamp(ScaleCoordCeil(raw_right, scale_divisor), left, image_size.width);
+  const int bottom =
+      std::clamp(ScaleCoordCeil(raw_bottom, scale_divisor), top, image_size.height);
+  const int width  = right - left;
+  const int height = bottom - top;
 
   if (width <= 0 || height <= 0) {
     return {0, 0, image_size.width, image_size.height};
@@ -84,6 +119,16 @@ auto BuildActiveAreaRect(const libraw_image_sizes_t& sizes, const cv::Size& imag
 auto CropToActiveArea(const cv::Mat& src, const libraw_image_sizes_t& sizes) -> cv::Mat {
   const cv::Rect active_rect = BuildActiveAreaRect(sizes, src.size());
   return src(active_rect).clone();
+}
+
+auto BuildDecodeCropRect(const libraw_image_sizes_t& sizes, const cv::Size& image_size,
+                         const DecodeRes decode_res) -> cv::Rect {
+  return BuildActiveAreaRect(sizes, image_size, DecodeResScaleDivisor(decode_res));
+}
+
+auto IsFullImageRect(const cv::Rect& rect, const cv::Size& image_size) -> bool {
+  return rect.x == 0 && rect.y == 0 && rect.width == image_size.width &&
+         rect.height == image_size.height;
 }
 
 auto BuildOpaqueRgbaFromRgb(const cv::Mat& rgb) -> cv::Mat {
@@ -242,9 +287,8 @@ void RawProcessor::ApplyDebayer() {
     } else {
       CUDA::Bayer2x2ToRGB_RCD(gpu_img, cfa_pattern_.bayer_pattern);
     }
-    if (params_.decode_res_ == DecodeRes::FULL) {
-      cv::Rect crop_rect(raw_data_.sizes.left_margin, raw_data_.sizes.top_margin,
-                         raw_data_.sizes.width, raw_data_.sizes.height);
+    const cv::Rect crop_rect = BuildDecodeCropRect(raw_data_.sizes, gpu_img.size(), params_.decode_res_);
+    if (!IsFullImageRect(crop_rect, gpu_img.size())) {
       gpu_img = gpu_img(crop_rect);
     }
 
@@ -257,9 +301,10 @@ void RawProcessor::ApplyDebayer() {
     } else {
       metal::Bayer2x2ToRGB_RCD(gpu_img, cfa_pattern_.bayer_pattern);
     }
-    if (params_.decode_res_ == DecodeRes::FULL) {
-      cv::Rect crop_rect(raw_data_.sizes.left_margin, raw_data_.sizes.top_margin,
-                         raw_data_.sizes.width, raw_data_.sizes.height);
+    const cv::Rect crop_rect =
+        BuildDecodeCropRect(raw_data_.sizes, cv::Size(gpu_img.Width(), gpu_img.Height()),
+                            params_.decode_res_);
+    if (!IsFullImageRect(crop_rect, cv::Size(gpu_img.Width(), gpu_img.Height()))) {
       metal::MetalImage cropped;
       gpu_img.CropTo(cropped, crop_rect);
       gpu_img = std::move(cropped);
@@ -279,9 +324,8 @@ void RawProcessor::ApplyDebayer() {
   // _raw_data.sizes.raw_inset_crops[0].ctop,
   //                    _raw_data.sizes.raw_inset_crops[0].cwidth,
   //                    _raw_data.sizes.raw_inset_crops[0].cheight);
-  if (params_.decode_res_ == DecodeRes::FULL) {
-    cv::Rect crop_rect(raw_data_.sizes.left_margin, raw_data_.sizes.top_margin,
-                       raw_data_.sizes.width, raw_data_.sizes.height);
+  const cv::Rect crop_rect = BuildDecodeCropRect(raw_data_.sizes, img.size(), params_.decode_res_);
+  if (!IsFullImageRect(crop_rect, img.size())) {
     img = img(crop_rect);
   }
 }

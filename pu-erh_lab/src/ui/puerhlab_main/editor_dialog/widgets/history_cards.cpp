@@ -125,6 +125,7 @@ void ElidedLabel::UpdateElidedText() {
 
 auto MakePillLabel(const QString& text, QWidget* parent) -> QLabel* {
   auto* l = new QLabel(text, parent);
+  const auto& theme = AppTheme::Instance();
   QFont badge_font = AppTheme::Font(AppTheme::FontRole::UiCaptionStrong);
   badge_font.setPointSizeF(9.0);
   badge_font.setWeight(QFont::Medium);
@@ -132,14 +133,21 @@ auto MakePillLabel(const QString& text, QWidget* parent) -> QLabel* {
   l->setFont(badge_font);
   l->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Fixed);
   l->setStyleSheet(QStringLiteral("QLabel {"
-                                  "  color: #FCC704;"
-                                  "  background: rgba(252, 199, 4, 0.14);"
-                                  "  border: none;"
+                                  "  color: %1;"
+                                  "  background: %2;"
+                                  "  border: 1px solid %3;"
                                   "  border-radius: 6px;"
                                   "  font-size: 9px;"
                                   "  font-weight: 500;"
                                   "  padding: 2px 6px;"
-                                  "}"));
+                                  "}")
+                       .arg(theme.accentColor().name(QColor::HexRgb),
+                            QColor(theme.accentColor().red(), theme.accentColor().green(),
+                                   theme.accentColor().blue(), 32)
+                                .name(QColor::HexArgb),
+                            QColor(theme.accentColor().red(), theme.accentColor().green(),
+                                   theme.accentColor().blue(), 72)
+                                .name(QColor::HexArgb)));
   return l;
 }
 

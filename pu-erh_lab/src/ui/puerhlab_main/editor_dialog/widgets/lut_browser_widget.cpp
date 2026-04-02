@@ -56,6 +56,7 @@ class LutEntryItemWidget final : public QFrame {
 
   void Bind(const lut_catalog::LutCatalogEntry& entry) {
     entry_ = entry;
+    const auto& theme = AppTheme::Instance();
     title_label_->SetRawText(entry.display_name_);
     subtitle_label_->SetRawText(entry.secondary_text_);
     status_label_->setVisible(!entry.status_text_.isEmpty());
@@ -79,19 +80,31 @@ class LutEntryItemWidget final : public QFrame {
                                                   "}"));
     } else {
       status_label_->setStyleSheet(QStringLiteral("QLabel {"
-                                                  "  color: #FCC704;"
-                                                  "  background: rgba(252, 199, 4, 0.14);"
-                                                  "  border: none;"
+                                                  "  color: %1;"
+                                                  "  background: %2;"
+                                                  "  border: 1px solid %3;"
                                                   "  border-radius: 6px;"
                                                   "  padding: 2px 6px;"
-                                                  "}"));
+                                                  "}")
+                                       .arg(theme.accentColor().name(QColor::HexRgb),
+                                            QColor(theme.accentColor().red(),
+                                                   theme.accentColor().green(),
+                                                   theme.accentColor().blue(), 28)
+                                                .name(QColor::HexArgb),
+                                            QColor(theme.accentColor().red(),
+                                                   theme.accentColor().green(),
+                                                   theme.accentColor().blue(), 62)
+                                                .name(QColor::HexArgb)));
     }
     SetSelected(false);
   }
 
   void SetSelected(bool selected) {
-    QString border_color = QStringLiteral("#2A2A2A");
-    QString background   = QStringLiteral("#141414");
+    QString border_color = AppTheme::Instance().dividerColor().name(QColor::HexArgb);
+    QString background   = QColor(AppTheme::Instance().bgDeepColor().red(),
+                                  AppTheme::Instance().bgDeepColor().green(),
+                                  AppTheme::Instance().bgDeepColor().blue(), 230)
+                             .name(QColor::HexArgb);
     QString title_color  = AppTheme::Instance().textColor().name(QColor::HexRgb);
     QString sub_color    = AppTheme::Instance().textMutedColor().name(QColor::HexRgb);
 
@@ -105,8 +118,11 @@ class LutEntryItemWidget final : public QFrame {
                        : QStringLiteral("#FFB8B8");
     }
     if (selected) {
-      border_color = QStringLiteral("#FCC704");
-      background   = QStringLiteral("#1C1A12");
+      border_color = QColor(AppTheme::Instance().accentColor().red(),
+                            AppTheme::Instance().accentColor().green(),
+                            AppTheme::Instance().accentColor().blue(), 148)
+                         .name(QColor::HexArgb);
+      background   = AppTheme::Instance().selectedTintColor().name(QColor::HexArgb);
     }
 
     setStyleSheet(QStringLiteral("QFrame {"
