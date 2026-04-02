@@ -457,7 +457,8 @@ __global__ void RCD_FillEdgeKernel(const cv::cuda::PtrStep<float> raw, cv::cuda:
 
 }  // namespace
 
-void Bayer2x2ToRGB_RCD(cv::cuda::GpuMat& image, const BayerPattern2x2& pattern) {
+void Bayer2x2ToRGB_RCD(cv::cuda::GpuMat& image, const BayerPattern2x2& pattern,
+                       RcdWorkspace* workspace, cv::cuda::Stream* stream) {
   CV_Assert(image.type() == CV_32FC1);
 
   const int width  = image.cols;
@@ -465,14 +466,19 @@ void Bayer2x2ToRGB_RCD(cv::cuda::GpuMat& image, const BayerPattern2x2& pattern) 
 
   if (width <= 0 || height <= 0) return;
 
-  cv::cuda::GpuMat r(height, width, CV_32FC1);
-  cv::cuda::GpuMat g(height, width, CV_32FC1);
-  cv::cuda::GpuMat b(height, width, CV_32FC1);
-  cv::cuda::GpuMat vh_dir(height, width, CV_32FC1);
-  cv::cuda::GpuMat pq_dir(height, width, CV_32FC1);
+  RcdWorkspace local_workspace;
+  RcdWorkspace& active_workspace = workspace == nullptr ? local_workspace : *workspace;
+  active_workspace.Reserve(cv::Size(width, height));
 
-  cv::cuda::Stream stream;
-  cudaStream_t     cuda_stream = cv::cuda::StreamAccessor::getStream(stream);
+  cv::cuda::GpuMat& r      = active_workspace.r;
+  cv::cuda::GpuMat& g      = active_workspace.g;
+  cv::cuda::GpuMat& b      = active_workspace.b;
+  cv::cuda::GpuMat& vh_dir = active_workspace.vh_dir;
+  cv::cuda::GpuMat& pq_dir = active_workspace.pq_dir;
+
+  cv::cuda::Stream local_stream;
+  cv::cuda::Stream& active_stream = stream == nullptr ? local_stream : *stream;
+  cudaStream_t     cuda_stream = cv::cuda::StreamAccessor::getStream(active_stream);
 
   const dim3       threads(32, 8);
   const dim3       blocks((width + threads.x - 1) / threads.x, (height + threads.y - 1) / threads.y);
@@ -497,8 +503,10 @@ void Bayer2x2ToRGB_RCD(cv::cuda::GpuMat& image, const BayerPattern2x2& pattern) 
   RCD_FillEdgeKernel<<<blocks, threads, 0, cuda_stream>>>(image, r, g, b, width, height, pattern);
   CUDA_CHECK(cudaGetLastError());
 
-  MergeRGB(r, g, b, image, &stream);
-  stream.waitForCompletion();
+  MergeRGB(r, g, b, image, &active_stream);
+  if (stream == nullptr) {
+    active_stream.waitForCompletion();
+  }
 }
 }
 }

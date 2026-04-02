@@ -10,6 +10,26 @@
 
 namespace puerhlab {
 namespace CUDA {
-void Bayer2x2ToRGB_RCD(cv::cuda::GpuMat& image, const BayerPattern2x2& pattern);
+struct RcdWorkspace {
+  cv::cuda::GpuMat r;
+  cv::cuda::GpuMat g;
+  cv::cuda::GpuMat b;
+  cv::cuda::GpuMat vh_dir;
+  cv::cuda::GpuMat pq_dir;
+
+  void Reserve(const cv::Size& size) {
+    if (size.width <= 0 || size.height <= 0) {
+      return;
+    }
+    r.create(size, CV_32FC1);
+    g.create(size, CV_32FC1);
+    b.create(size, CV_32FC1);
+    vh_dir.create(size, CV_32FC1);
+    pq_dir.create(size, CV_32FC1);
+  }
+};
+
+void Bayer2x2ToRGB_RCD(cv::cuda::GpuMat& image, const BayerPattern2x2& pattern,
+                       RcdWorkspace* workspace = nullptr, cv::cuda::Stream* stream = nullptr);
 };
 };  // namespace puerhlab

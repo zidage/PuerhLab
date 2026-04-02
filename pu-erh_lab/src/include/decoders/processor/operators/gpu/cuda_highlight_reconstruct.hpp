@@ -4,6 +4,9 @@
 
 #pragma once
 
+#include <array>
+#include <cstddef>
+
 #include <libraw/libraw.h>
 #include <opencv2/core/cuda.hpp>
 
@@ -11,7 +14,68 @@
 
 namespace puerhlab {
 namespace CUDA {
-void HighlightReconstruct(cv::cuda::GpuMat& img, LibRaw& raw_processor);
-void Clamp01(cv::cuda::GpuMat& img);
+
+struct HighlightCorrection {
+  bool                 any_clipped = false;
+  std::array<float, 4> clips       = {};
+  std::array<float, 4> clipdark    = {};
+  std::array<float, 4> chrominance = {};
+};
+
+struct HighlightAccumulation {
+  bool                  any_clipped = false;
+  std::array<double, 4> sums        = {};
+  std::array<double, 4> cnts        = {};
+};
+
+class HighlightWorkspace {
+ public:
+  HighlightWorkspace();
+  ~HighlightWorkspace();
+
+  HighlightWorkspace(const HighlightWorkspace&)                    = delete;
+  auto operator=(const HighlightWorkspace&) -> HighlightWorkspace& = delete;
+  HighlightWorkspace(HighlightWorkspace&& other) noexcept;
+  auto operator=(HighlightWorkspace&& other) noexcept -> HighlightWorkspace&;
+
+ private:
+  friend auto BuildHighlightCorrection(LibRaw& raw_processor) -> HighlightCorrection;
+  friend void Clamp01(cv::cuda::GpuMat& img, cv::cuda::Stream* stream);
+  friend void AccumulateHighlightStats(const cv::cuda::GpuMat& img,
+                                       const HighlightCorrection& correction,
+                                       const cv::Rect& inner_region,
+                                       HighlightWorkspace& workspace,
+                                       HighlightAccumulation& accumulation,
+                                       cv::cuda::Stream* stream);
+  friend void ApplyHighlightCorrection(cv::cuda::GpuMat& img,
+                                       const HighlightCorrection& correction,
+                                       HighlightWorkspace* workspace,
+                                       cv::cuda::Stream* stream);
+  void Reserve(int width, int height);
+  void Release();
+
+  uint8_t*         mask_buf_      = nullptr;
+  uint8_t*         dilated_mask_  = nullptr;
+  int*             anyclipped_    = nullptr;
+  float*           sums_          = nullptr;
+  float*           cnts_          = nullptr;
+  size_t           mask_capacity_ = 0;
+  cv::cuda::GpuMat result_;
+};
+
+auto BuildHighlightCorrection(LibRaw& raw_processor) -> HighlightCorrection;
+void FinalizeHighlightCorrection(const HighlightAccumulation& accumulation,
+                                 HighlightCorrection& correction);
+void AccumulateHighlightStats(const cv::cuda::GpuMat& img, const HighlightCorrection& correction,
+                              const cv::Rect& inner_region, HighlightWorkspace& workspace,
+                              HighlightAccumulation& accumulation,
+                              cv::cuda::Stream* stream = nullptr);
+void ApplyHighlightCorrection(cv::cuda::GpuMat& img, const HighlightCorrection& correction,
+                              HighlightWorkspace* workspace = nullptr,
+                              cv::cuda::Stream* stream = nullptr);
+void HighlightReconstruct(cv::cuda::GpuMat& img, LibRaw& raw_processor,
+                          HighlightWorkspace* workspace = nullptr,
+                          cv::cuda::Stream* stream = nullptr);
+void Clamp01(cv::cuda::GpuMat& img, cv::cuda::Stream* stream = nullptr);
 };  // namespace CUDA
 };  // namespace puerhlab

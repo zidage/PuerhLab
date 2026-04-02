@@ -88,75 +88,81 @@ static void Rotate180_Impl(const cv::cuda::GpuMat& src, cv::cuda::GpuMat& dst,
 
 }  // namespace
 
-void Rotate180(cv::cuda::GpuMat& img) {
+void Rotate180(cv::cuda::GpuMat& img, cv::cuda::Stream* stream) {
   if (img.empty()) return;
-
-  cv::cuda::Stream stream;
+  cv::cuda::Stream local_stream;
+  cv::cuda::Stream& active_stream = stream == nullptr ? local_stream : *stream;
   cv::cuda::GpuMat out;
 
   switch (img.type()) {
     case CV_32FC4:
-      Rotate180_Impl<float4>(img, out, stream);
+      Rotate180_Impl<float4>(img, out, active_stream);
       break;
     case CV_32FC3:
-      Rotate180_Impl<float3>(img, out, stream);
+      Rotate180_Impl<float3>(img, out, active_stream);
       break;
     case CV_32FC1:
-      Rotate180_Impl<float>(img, out, stream);
+      Rotate180_Impl<float>(img, out, active_stream);
       break;
     default:
       CV_Error(cv::Error::StsUnsupportedFormat, "CUDA::Rotate180: unsupported type");
   }
 
-  stream.waitForCompletion();
+  if (stream == nullptr) {
+    active_stream.waitForCompletion();
+  }
   img = out;
 }
 
-void Rotate90CW(cv::cuda::GpuMat& img) {
+void Rotate90CW(cv::cuda::GpuMat& img, cv::cuda::Stream* stream) {
   if (img.empty()) return;
-
-  cv::cuda::Stream stream;
+  cv::cuda::Stream local_stream;
+  cv::cuda::Stream& active_stream = stream == nullptr ? local_stream : *stream;
   cv::cuda::GpuMat out;
 
   switch (img.type()) {
     case CV_32FC4:
-      Rotate90CW_Impl<float4>(img, out, stream);
+      Rotate90CW_Impl<float4>(img, out, active_stream);
       break;
     case CV_32FC3:
-      Rotate90CW_Impl<float3>(img, out, stream);
+      Rotate90CW_Impl<float3>(img, out, active_stream);
       break;
     case CV_32FC1:
-      Rotate90CW_Impl<float>(img, out, stream);
+      Rotate90CW_Impl<float>(img, out, active_stream);
       break;
     default:
       CV_Error(cv::Error::StsUnsupportedFormat, "CUDA::Rotate90CW: unsupported type");
   }
 
-  stream.waitForCompletion();
+  if (stream == nullptr) {
+    active_stream.waitForCompletion();
+  }
   img = out;
 }
 
-void Rotate90CCW(cv::cuda::GpuMat& img) {
+void Rotate90CCW(cv::cuda::GpuMat& img, cv::cuda::Stream* stream) {
   if (img.empty()) return;
-
-  cv::cuda::Stream stream;
+  cv::cuda::Stream local_stream;
+  cv::cuda::Stream& active_stream = stream == nullptr ? local_stream : *stream;
   cv::cuda::GpuMat out;
 
   switch (img.type()) {
     case CV_32FC4:
-      Rotate90CCW_Impl<float4>(img, out, stream);
+      Rotate90CCW_Impl<float4>(img, out, active_stream);
       break;
     case CV_32FC3:
-      Rotate90CCW_Impl<float3>(img, out, stream);
+      Rotate90CCW_Impl<float3>(img, out, active_stream);
       break;
     case CV_32FC1:
-      Rotate90CCW_Impl<float>(img, out, stream);
+      Rotate90CCW_Impl<float>(img, out, active_stream);
       break;
     default:
       CV_Error(cv::Error::StsUnsupportedFormat, "CUDA::Rotate90CCW: unsupported type");
   }
 
-  stream.waitForCompletion();
+  if (stream == nullptr) {
+    active_stream.waitForCompletion();
+  }
   img = out;
 }
 

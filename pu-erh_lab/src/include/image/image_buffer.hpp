@@ -48,6 +48,7 @@ class GpuImageWrapper {
   void Create(int width, int height, int type);
   void Upload(const cv::Mat& cpu_data);
   void Download(cv::Mat& cpu_data) const;
+  void ShareFrom(const GpuImageWrapper& src);
   void CopyTo(GpuImageWrapper& dst) const;
   void ConvertTo(GpuImageWrapper& dst, int type, double alpha = 1.0, double beta = 0.0) const;
   void Release();
@@ -114,6 +115,7 @@ class ImageBuffer {
   void         SyncToGPU();
   void         SyncToCPU();
   void         ConvertGPUDataTo(int type, double alpha = 1.0, double beta = 0.0);
+  void         ShareGPUDataFrom(const ImageBuffer& src);
   void         CopyGPUDataTo(ImageBuffer& dst) const;
 
   void         InitGPUData(int width, int height, int type);

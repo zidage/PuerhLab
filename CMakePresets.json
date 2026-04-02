@@ -25,7 +25,8 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
         "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/vcpkg/scripts/buildsystems/vcpkg.cmake",
-        "CMAKE_INSTALL_PREFIX": "${sourceDir}/build/install"
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/build/install",
+        "PUERHLAB_BUILD_TESTS": "OFF"
       }
     },
     {
@@ -105,7 +106,10 @@
     {
       "name": "win_release",
       "configurePreset": "win_release",
-      "jobs": 8
+      "jobs": 8,
+      "targets": [
+        "puerhlab_main"
+      ]
     },
     {
       "name": "debug",

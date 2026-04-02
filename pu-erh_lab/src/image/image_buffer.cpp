@@ -105,6 +105,22 @@ void GpuImageWrapper::Download(cv::Mat& cpu_data) const {
 #endif
 }
 
+void GpuImageWrapper::ShareFrom(const GpuImageWrapper& src) {
+  if (src.Empty()) {
+    Release();
+    return;
+  }
+
+#ifdef HAVE_CUDA
+  image_ = src.image_;
+#elif defined(HAVE_METAL)
+  image_ = src.image_;
+#else
+  (void)src;
+  throw std::runtime_error("GpuImageWrapper: No compiled GPU backend.");
+#endif
+}
+
 void GpuImageWrapper::CopyTo(GpuImageWrapper& dst) const {
   if (Empty()) {
     throw std::runtime_error("GpuImageWrapper: Cannot copy empty GPU data.");
@@ -296,6 +312,15 @@ void ImageBuffer::ConvertGPUDataTo(int type, double alpha, double beta) {
   GpuImageWrapper converted;
   gpu_data_.ConvertTo(converted, type, alpha, beta);
   gpu_data_       = std::move(converted);
+  gpu_data_valid_ = true;
+}
+
+void ImageBuffer::ShareGPUDataFrom(const ImageBuffer& src) {
+  if (!src.gpu_data_valid_ || src.gpu_data_.Empty()) {
+    throw std::runtime_error("ImageBuffer: No valid GPU data to share.");
+  }
+
+  gpu_data_.ShareFrom(src.gpu_data_);
   gpu_data_valid_ = true;
 }
 

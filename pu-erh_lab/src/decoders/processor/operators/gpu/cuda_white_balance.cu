@@ -3,6 +3,7 @@
 //  Additional permission under GPLv3 section 7 applies; see the LICENSE file.
 
 #include <opencv2/core/cuda_types.hpp>
+#include <opencv2/core/cuda_stream_accessor.hpp>
 
 #include "decoders/processor/raw_normalization.hpp"
 #include "decoders/processor/operators/gpu/cuda_raw_proc_utils.hpp"
@@ -11,6 +12,22 @@
 
 namespace puerhlab {
 namespace CUDA {
+namespace {
+
+auto GetCudaStream(cv::cuda::Stream* stream) -> cudaStream_t {
+  if (stream == nullptr) {
+    return nullptr;
+  }
+  return cv::cuda::StreamAccessor::getStream(*stream);
+}
+
+void MaybeWait(cv::cuda::Stream* stream) {
+  if (stream == nullptr) {
+    CUDA_CHECK(cudaDeviceSynchronize());
+  }
+}
+
+}  // namespace
 
 struct WBParams {
   float black_level[4];
@@ -68,7 +85,8 @@ static auto GetWBCoeff(const libraw_rawdata_t& raw_data) -> const float* {
   return raw_data.color.cam_mul;
 }
 
-void ToLinearRef(cv::cuda::GpuMat& image, LibRaw& raw_processor, const RawCfaPattern& pattern) {
+void ToLinearRef(cv::cuda::GpuMat& image, LibRaw& raw_processor, const RawCfaPattern& pattern,
+                 cv::cuda::Stream* stream) {
   const auto raw_curve = raw_norm::BuildLinearizationCurve(raw_processor.imgdata.rawdata);
   const auto wb        = GetWBCoeff(raw_processor.imgdata.rawdata);
 
@@ -102,11 +120,12 @@ void ToLinearRef(cv::cuda::GpuMat& image, LibRaw& raw_processor, const RawCfaPat
   const dim3 num_blocks((image.cols + threads_per_block.x - 1) / threads_per_block.x,
                         (image.rows + threads_per_block.y - 1) / threads_per_block.y);
 
-  ToLinearRefKernel<<<num_blocks, threads_per_block>>>(image, image.cols, image.rows, wb_params,
-                                                       pattern);
+  const cudaStream_t cuda_stream = GetCudaStream(stream);
+  ToLinearRefKernel<<<num_blocks, threads_per_block, 0, cuda_stream>>>(
+      image, image.cols, image.rows, wb_params, pattern);
 
   CUDA_CHECK(cudaGetLastError());
-  CUDA_CHECK(cudaDeviceSynchronize());
+  MaybeWait(stream);
 }
 };  // namespace CUDA
 };  // namespace puerhlab

@@ -7,12 +7,14 @@
 #include <libraw/libraw.h>
 
 #include <opencv2/core.hpp>
+#include <opencv2/core/cuda.hpp>
 
 #include "decoders/processor/raw_processor_pattern.hpp"
 #include "image/image_buffer.hpp"
 
 namespace puerhlab {
 namespace CUDA {
-void ToLinearRef(cv::cuda::GpuMat& img, LibRaw& raw_processor, const RawCfaPattern& pattern);
+void ToLinearRef(cv::cuda::GpuMat& img, LibRaw& raw_processor, const RawCfaPattern& pattern,
+                 cv::cuda::Stream* stream = nullptr);
 };
 };  // namespace puerhlab

@@ -79,6 +79,21 @@ auto IsCropRotateEffectivelyNoOp(const IOperatorBase& op) -> bool {
   return std::abs(x) <= 1e-4f && std::abs(y) <= 1e-4f && std::abs(w - 1.0f) <= 1e-4f &&
          std::abs(h - 1.0f) <= 1e-4f;
 }
+
+auto CanShareGeometryGpuInputWithoutCopy(const std::map<OperatorType, OperatorEntry>& operators)
+    -> bool {
+  for (const auto& [op_type, op_entry] : operators) {
+    if (!op_entry.enable_ || !op_entry.op_) {
+      continue;
+    }
+
+    if (op_type != OperatorType::RESIZE && op_type != OperatorType::CROP_ROTATE) {
+      return false;
+    }
+  }
+
+  return true;
+}
 }  // namespace
 
 PipelineStage::PipelineStage(PipelineStageName stage, bool enable_cache, bool is_streamable)
@@ -345,10 +360,17 @@ std::shared_ptr<ImageBuffer> PipelineStage::ApplyGpuOperators(OperatorParams& gl
 
     auto current_img = std::make_shared<ImageBuffer>();
     if (input_img_->gpu_data_valid_ && !input_img_->buffer_valid_) {
-      current_img->InitGPUData(input_img_->GetGPUWidth(), input_img_->GetGPUHeight(),
-                               input_img_->GetGPUType());
-      input_img_->CopyGPUDataTo(*current_img);
-      current_img->gpu_data_valid_ = true;
+      const bool can_share_input =
+          stage_ == PipelineStageName::Geometry_Adjustment &&
+          CanShareGeometryGpuInputWithoutCopy(*operators_);
+      if (can_share_input) {
+        current_img->ShareGPUDataFrom(*input_img_);
+      } else {
+        current_img->InitGPUData(input_img_->GetGPUWidth(), input_img_->GetGPUHeight(),
+                                 input_img_->GetGPUType());
+        input_img_->CopyGPUDataTo(*current_img);
+        current_img->gpu_data_valid_ = true;
+      }
     } else if (input_img_->buffer_valid_) {
       auto buffer = input_img_->GetBuffer();
       current_img = std::make_shared<ImageBuffer>(std::move(buffer));

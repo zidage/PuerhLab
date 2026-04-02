@@ -47,6 +47,17 @@ class RawProcessor {
   LibRaw&                 raw_processor_;
 
   void                    SetDecodeRes();
+  auto                    ProcessGpu() -> ImageBuffer;
+#ifdef HAVE_CUDA
+  auto                    ProcessCuda() -> ImageBuffer;
+  auto                    ProcessCudaFullFrame() -> ImageBuffer;
+  auto                    ProcessCudaTiled() -> ImageBuffer;
+  auto                    ProcessDirectRgbCuda() -> ImageBuffer;
+#endif
+#ifdef HAVE_METAL
+  auto                    ProcessMetal() -> ImageBuffer;
+  auto                    ProcessDirectRgbMetal() -> ImageBuffer;
+#endif
 
   /**
    * @brief A procedure similar to DNG "Mapping Raw Values to Linear Reference Values" procedure.

@@ -525,8 +525,15 @@ def_library(PipelineScheduler
     PUBLIC_DEPS EditPipeline ThreadPool ImageLoader)
 
 # --- Raw Processor Wrapper ---
+set(RAW_PROCESSOR_BACKEND_SRCS)
+if(PUERHLAB_CUDA_ENABLED)
+    list(APPEND RAW_PROCESSOR_BACKEND_SRCS decoders/processor/raw_processor_cuda.cpp)
+elseif(PUERHLAB_METAL_ENABLED)
+    list(APPEND RAW_PROCESSOR_BACKEND_SRCS decoders/processor/raw_processor_metal.cpp)
+endif()
+
 def_library(RawProcessor
-    SOURCES decoders/processor/raw_processor.cpp
+    SOURCES decoders/processor/raw_processor.cpp ${RAW_PROCESSOR_BACKEND_SRCS}
     PUBLIC_DEPS Image libraw::raw_r Exiv2 RawProcessorOp
     PRIVATE_DEPS opencv_imgproc
 )

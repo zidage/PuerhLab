@@ -7,13 +7,16 @@
 
 #include <filesystem>
 #include <fstream>
+#include <limits>
 #include <optional>
 #include <string_view>
 #include <utility>
 #include <vector>
 
 #include <opencv2/core.hpp>
+#include <opencv2/core/cuda.hpp>
 
+#include "decoders/processor/raw_processor_internal.hpp"
 #include "decoders/processor/raw_processor_pattern.hpp"
 #include "edit/operators/raw/raw_decode_op.hpp"
 #include "image/image_buffer.hpp"
@@ -145,6 +148,156 @@ auto ExpectedHalfDecodeSize(const libraw_image_sizes_t& sizes) -> cv::Size {
 
 auto LinearDngSamplePath() -> std::filesystem::path {
   return std::filesystem::path(TEST_IMG_PATH) / "raw" / "linear_dng" / "mfzoty.dng";
+}
+
+auto EnsureCudaDevice() -> bool {
+  const int device_count = cv::cuda::getCudaEnabledDeviceCount();
+  if (device_count <= 0) {
+    return false;
+  }
+  cv::cuda::setDevice(0);
+  return true;
+}
+
+auto CandidateLargeBayerSamplePaths() -> std::vector<std::filesystem::path> {
+  const auto root = std::filesystem::path(TEST_IMG_PATH) / "raw";
+  return {
+      root / "camera" / "nikon" / "z8" / "DSC_1211.dng",
+      root / "camera" / "sony" / "a7rv" / "DSC00064.ARW",
+  };
+}
+
+auto TrySelectLargeBayerSample(const std::filesystem::path& path) -> std::optional<SampleSelection> {
+  LibRaw raw_processor;
+  if (raw_processor.open_file(path.string().c_str()) != LIBRAW_SUCCESS) {
+    return std::nullopt;
+  }
+  if (raw_processor.unpack() != LIBRAW_SUCCESS) {
+    raw_processor.recycle();
+    return std::nullopt;
+  }
+
+  const RawInputKind input_kind =
+      ClassifyRawInput(raw_processor.imgdata.rawdata, raw_processor.imgdata.idata);
+  if (input_kind != RawInputKind::BayerRaw || raw_processor.imgdata.idata.is_foveon != 0U ||
+      raw_processor.imgdata.idata.filters == 0U || raw_processor.imgdata.idata.filters == 1U ||
+      raw_processor.is_fuji_rotated() != 0) {
+    raw_processor.recycle();
+    return std::nullopt;
+  }
+
+  const RawCfaPattern cfa_pattern = ReadLibRawCfaPattern(raw_processor);
+  if (cfa_pattern.kind != RawCfaKind::Bayer2x2) {
+    raw_processor.recycle();
+    return std::nullopt;
+  }
+
+  const cv::Rect active_rect =
+      detail::BuildDecodeCropRect(raw_processor.imgdata.sizes,
+                                  cv::Size(static_cast<int>(raw_processor.imgdata.sizes.raw_width),
+                                           static_cast<int>(raw_processor.imgdata.sizes.raw_height)),
+                                  DecodeRes::FULL);
+  const int long_edge = std::max(active_rect.width, active_rect.height);
+  if (long_edge <= detail::kCudaTileThresholdLongEdge) {
+    raw_processor.recycle();
+    return std::nullopt;
+  }
+
+  SampleSelection result = {
+      .path    = path,
+      .pattern = cfa_pattern.bayer_pattern,
+      .sizes   = raw_processor.imgdata.sizes,
+  };
+  raw_processor.recycle();
+  return result;
+}
+
+auto FindLargeBayerSample() -> std::optional<SampleSelection> {
+  for (const auto& candidate : CandidateLargeBayerSamplePaths()) {
+    if (!std::filesystem::exists(candidate)) {
+      continue;
+    }
+    if (auto sample = TrySelectLargeBayerSample(candidate)) {
+      return sample;
+    }
+  }
+  return std::nullopt;
+}
+
+auto MaxAbsDiff(const cv::Mat& lhs, const cv::Mat& rhs) -> float {
+  if (lhs.size() != rhs.size() || lhs.type() != rhs.type()) {
+    return std::numeric_limits<float>::infinity();
+  }
+
+  float max_diff = 0.0f;
+  for (int y = 0; y < lhs.rows; ++y) {
+    const cv::Vec4f* lhs_row = lhs.ptr<cv::Vec4f>(y);
+    const cv::Vec4f* rhs_row = rhs.ptr<cv::Vec4f>(y);
+    for (int x = 0; x < lhs.cols; ++x) {
+      const cv::Vec4f delta = lhs_row[x] - rhs_row[x];
+      max_diff = std::max(max_diff, std::abs(delta[0]));
+      max_diff = std::max(max_diff, std::abs(delta[1]));
+      max_diff = std::max(max_diff, std::abs(delta[2]));
+      max_diff = std::max(max_diff, std::abs(delta[3]));
+    }
+  }
+  return max_diff;
+}
+
+auto MaxAbsDiffNearTileSeams(const cv::Mat& lhs, const cv::Mat& rhs) -> float {
+  if (lhs.size() != rhs.size() || lhs.type() != rhs.type()) {
+    return std::numeric_limits<float>::infinity();
+  }
+
+  const int seam_stride = detail::kCudaTileInnerSize;
+  float     max_diff    = 0.0f;
+  for (int y = 0; y < lhs.rows; ++y) {
+    const cv::Vec4f* lhs_row = lhs.ptr<cv::Vec4f>(y);
+    const cv::Vec4f* rhs_row = rhs.ptr<cv::Vec4f>(y);
+    const bool on_y_seam = y > 0 && (y % seam_stride == 0 || y % seam_stride == 1 ||
+                                     y % seam_stride == seam_stride - 1);
+    for (int x = 0; x < lhs.cols; ++x) {
+      const bool on_x_seam = x > 0 && (x % seam_stride == 0 || x % seam_stride == 1 ||
+                                       x % seam_stride == seam_stride - 1);
+      if (!on_x_seam && !on_y_seam) {
+        continue;
+      }
+      const cv::Vec4f delta = lhs_row[x] - rhs_row[x];
+      max_diff = std::max(max_diff, std::abs(delta[0]));
+      max_diff = std::max(max_diff, std::abs(delta[1]));
+      max_diff = std::max(max_diff, std::abs(delta[2]));
+      max_diff = std::max(max_diff, std::abs(delta[3]));
+    }
+  }
+  return max_diff;
+}
+
+auto DecodeLargeRawWithMode(const std::filesystem::path& path, const detail::CudaExecutionMode mode,
+                            const bool highlights_reconstruct) -> cv::Mat {
+  std::vector<uint8_t> raw_bytes = ReadFileToBuffer(path);
+  if (raw_bytes.empty()) {
+    return {};
+  }
+
+  auto input = std::make_shared<ImageBuffer>(std::move(raw_bytes));
+  nlohmann::json decode_params;
+  decode_params["raw"] = {{"gpu_backend", "gpu"},
+                          {"highlights_reconstruct", highlights_reconstruct},
+                          {"use_camera_wb", true},
+                          {"backend", "puerh"},
+                          {"decode_res", static_cast<int>(DecodeRes::FULL)}};
+
+  struct ModeOverrideGuard {
+    ~ModeOverrideGuard() { detail::SetCudaExecutionModeOverrideForTesting(std::nullopt); }
+  } guard;
+
+  detail::SetCudaExecutionModeOverrideForTesting(mode);
+  RawDecodeOp raw_decode_op(decode_params);
+  raw_decode_op.Apply(input);
+
+  cv::Mat decoded;
+  input->GetCUDAImage().download(decoded);
+  return decoded;
 }
 
 }  // namespace
@@ -408,6 +561,77 @@ TEST(RawProcessorPattern, GpuDecodeSupportsLinearDngSample) {
   raw_decode_op.SetGlobalParams(params);
   EXPECT_TRUE(params.raw_runtime_valid_);
   EXPECT_EQ(params.raw_decode_input_space_, RawDecodeInputSpace::CAMERA);
+#endif
+}
+
+TEST(RawProcessorPattern, CudaExecutionModeUsesLongEdgeThresholdForLargeBayer) {
+  RawParams params;
+  params.gpu_backend_ = RawGpuBackend::GPU;
+
+  RawCfaPattern bayer_pattern = {};
+  bayer_pattern.kind          = RawCfaKind::Bayer2x2;
+  EXPECT_EQ(detail::SelectCudaExecutionMode(params, bayer_pattern, cv::Rect(0, 0, 8500, 6000)),
+            detail::CudaExecutionMode::FullFrame);
+  EXPECT_EQ(detail::SelectCudaExecutionMode(params, bayer_pattern, cv::Rect(0, 0, 8501, 6000)),
+            detail::CudaExecutionMode::Tiled);
+  EXPECT_EQ(detail::SelectCudaExecutionMode(params, bayer_pattern, cv::Rect(0, 0, 6000, 4000)),
+            detail::CudaExecutionMode::FullFrame);
+
+  RawCfaPattern xtrans_pattern = {};
+  xtrans_pattern.kind          = RawCfaKind::XTrans6x6;
+  EXPECT_EQ(detail::SelectCudaExecutionMode(params, xtrans_pattern, cv::Rect(0, 0, 10240, 7680)),
+            detail::CudaExecutionMode::FullFrame);
+}
+
+TEST(RawProcessorPattern, CudaLargeBayerForcedTiledMatchesFullFrameWithoutHighlight) {
+#ifndef HAVE_CUDA
+  GTEST_SKIP() << "CUDA is not enabled in this build.";
+#else
+  if (!EnsureCudaDevice()) {
+    GTEST_SKIP() << "CUDA device is unavailable in this environment.";
+  }
+
+  const auto sample = FindLargeBayerSample();
+  if (!sample.has_value()) {
+    GTEST_SKIP() << "No Bayer RAW sample above the CUDA tile long-edge threshold was found.";
+  }
+
+  const cv::Mat full = DecodeLargeRawWithMode(sample->path, detail::CudaExecutionMode::FullFrame,
+                                              false);
+  const cv::Mat tiled =
+      DecodeLargeRawWithMode(sample->path, detail::CudaExecutionMode::Tiled, false);
+  ASSERT_FALSE(full.empty());
+  ASSERT_FALSE(tiled.empty());
+  EXPECT_EQ(full.size(), tiled.size());
+  EXPECT_EQ(full.type(), tiled.type());
+  EXPECT_LE(MaxAbsDiff(full, tiled), 1e-6f);
+  EXPECT_LE(MaxAbsDiffNearTileSeams(full, tiled), 1e-6f);
+#endif
+}
+
+TEST(RawProcessorPattern, CudaLargeBayerForcedTiledMatchesFullFrameWithHighlight) {
+#ifndef HAVE_CUDA
+  GTEST_SKIP() << "CUDA is not enabled in this build.";
+#else
+  if (!EnsureCudaDevice()) {
+    GTEST_SKIP() << "CUDA device is unavailable in this environment.";
+  }
+
+  const auto sample = FindLargeBayerSample();
+  if (!sample.has_value()) {
+    GTEST_SKIP() << "No Bayer RAW sample above the CUDA tile long-edge threshold was found.";
+  }
+
+  const cv::Mat full = DecodeLargeRawWithMode(sample->path, detail::CudaExecutionMode::FullFrame,
+                                              true);
+  const cv::Mat tiled =
+      DecodeLargeRawWithMode(sample->path, detail::CudaExecutionMode::Tiled, true);
+  ASSERT_FALSE(full.empty());
+  ASSERT_FALSE(tiled.empty());
+  EXPECT_EQ(full.size(), tiled.size());
+  EXPECT_EQ(full.type(), tiled.type());
+  EXPECT_LE(MaxAbsDiff(full, tiled), 1e-6f);
+  EXPECT_LE(MaxAbsDiffNearTileSeams(full, tiled), 1e-6f);
 #endif
 }
 

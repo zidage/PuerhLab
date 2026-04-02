@@ -157,23 +157,30 @@ static inline cv::Matx33f BuildInverseCamMulMatrix(const float* cam_mul) {
 }  // namespace
 
 void ApplyColorMatrix(cv::cuda::GpuMat& img, const float rgb_cam[][4], const float* pre_mul,
-                      const float* cam_mul, const float cam_xyz[][3]) {
+                      const float* cam_mul, const float cam_xyz[][3],
+                      cv::cuda::Stream* stream) {
   (void)cam_mul;  // Kept for signature parity with CPU backend.
 
   CV_Assert(img.type() == CV_32FC3);
 
   const cv::Matx33f total = BuildTotalMatrix(rgb_cam, pre_mul, cam_xyz);
-  cv::cuda::Stream  stream;
-  ApplyColorMatrix_Helper(img, img, cv::Mat(total), stream);
-  stream.waitForCompletion();
+  cv::cuda::Stream  local_stream;
+  cv::cuda::Stream& active_stream = stream == nullptr ? local_stream : *stream;
+  ApplyColorMatrix_Helper(img, img, cv::Mat(total), active_stream);
+  if (stream == nullptr) {
+    active_stream.waitForCompletion();
+  }
 }
 
-void ApplyInverseCamMul(cv::cuda::GpuMat& img, const float* cam_mul) {
+void ApplyInverseCamMul(cv::cuda::GpuMat& img, const float* cam_mul, cv::cuda::Stream* stream) {
   CV_Assert(img.type() == CV_32FC3);
   const cv::Matx33f inv_cam_mul = BuildInverseCamMulMatrix(cam_mul);
-  cv::cuda::Stream  stream;
-  ApplyColorMatrix_Helper(img, img, cv::Mat(inv_cam_mul), stream);
-  stream.waitForCompletion();
+  cv::cuda::Stream  local_stream;
+  cv::cuda::Stream& active_stream = stream == nullptr ? local_stream : *stream;
+  ApplyColorMatrix_Helper(img, img, cv::Mat(inv_cam_mul), active_stream);
+  if (stream == nullptr) {
+    active_stream.waitForCompletion();
+  }
 }
 };  // namespace CUDA
 };  // namespace puerhlab
