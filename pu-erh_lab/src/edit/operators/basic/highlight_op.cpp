@@ -10,6 +10,7 @@
 #include <opencv2/opencv.hpp>
 #include <string>
 
+#include "edit/operators/basic/shadows_highlights_shared_curve.hpp"
 #include "edit/operators/op_base.hpp"
 #include "image/image_buffer.hpp"
 
@@ -19,6 +20,18 @@ HighlightsOp::HighlightsOp(float offset) : offset_(offset) {}
 HighlightsOp::HighlightsOp(const nlohmann::json& params) { SetParams(params); }
 
 static inline float clampf(float v, float a, float b) { return std::max(a, std::min(b, v)); }
+
+namespace {
+void UpdateSharedToneCurvePayload(OperatorParams& params) {
+  const bool shadows_active = params.shadows_operator_present_ && params.shadows_enabled_;
+  const bool highlights_active = params.highlights_operator_present_ && params.highlights_enabled_;
+  const auto curve = detail::BuildSharedToneCurve(shadows_active, params.shadows_slider_value_,
+                                                  highlights_active, params.highlights_slider_value_);
+  detail::StoreSharedToneCurve(curve, params);
+  params.shared_tone_curve_apply_in_shadows_    = shadows_active;
+  params.shared_tone_curve_apply_in_highlights_ = (!shadows_active) && highlights_active;
+}
+}  // namespace
 
 // Luminance (linear, BGR)
 
@@ -72,8 +85,11 @@ void HighlightsOp::SetParams(const nlohmann::json& params) {
 }
 
 void HighlightsOp::SetGlobalParams(OperatorParams& params) const {
+  params.highlights_operator_present_ = true;
+  params.highlights_slider_value_     = offset_;
   params.highlights_offset_ = offset_ / 50.0f;
   params.highlights_m1_     = curve_.m1_;
+  UpdateSharedToneCurvePayload(params);
 }
 
 void HighlightsOp::EnableGlobalParams(OperatorParams& params, bool enable) {

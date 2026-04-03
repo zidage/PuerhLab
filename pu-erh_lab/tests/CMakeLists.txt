@@ -119,6 +119,13 @@ target_link_libraries(SleeveFSTest PRIVATE GTest::gtest_main SleeveFS StrConv)
 # target_include_directories(ExposureOPTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
 # target_link_libraries(ExposureOPTest GTest::gtest_main Operators SleeveManager)
 
+if(PUERHLAB_CUDA_ENABLED)
+  add_executable(SharedToneCurveTest edit/operators/basic/shared_tone_curve_test.cpp)
+  target_include_directories(SharedToneCurveTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
+  target_link_libraries(SharedToneCurveTest PRIVATE GTest::gtest_main Operators CUDA::cudart)
+  gtest_discover_tests(SharedToneCurveTest TEST_PREFIX "SharedToneCurveTest.")
+endif()
+
 # add_executable(ContrastOPTest edit/operators/basic/contrast_op_test.cpp)
 # target_include_directories(ContrastOPTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
 # target_link_libraries(ContrastOPTest GTest::gtest_main Operators SleeveManager)

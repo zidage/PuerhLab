@@ -36,6 +36,79 @@ static inline float metal_luma(float3 rgb) {
   return 0.2126f * rgb.x + 0.7152f * rgb.y + 0.0722f * rgb.z;
 }
 
+static inline float metal_shared_tone_luma(float3 rgb) {
+  return 0.2126f * rgb.x + 0.7152f * rgb.y + 0.0722f * rgb.z;
+}
+
+static inline float metal_evaluate_shared_tone_curve(float x, constant MetalFusedParams& params) {
+  const int curve_count = params.shared_tone_curve_ctrl_pts_size_;
+  if (curve_count <= 0) {
+    return x;
+  }
+  if (curve_count == 1) {
+    return params.shared_tone_curve_ctrl_pts_y_[0];
+  }
+  if (x <= params.shared_tone_curve_ctrl_pts_x_[0]) {
+    return params.shared_tone_curve_ctrl_pts_y_[0];
+  }
+  if (x >= params.shared_tone_curve_ctrl_pts_x_[curve_count - 1]) {
+    return params.shared_tone_curve_ctrl_pts_y_[curve_count - 1] +
+           (x - params.shared_tone_curve_ctrl_pts_x_[curve_count - 1]) *
+               params.shared_tone_curve_m_[curve_count - 1];
+  }
+
+  int idx = curve_count - 2;
+  for (int i = 0; i < curve_count - 1; ++i) {
+    if (x < params.shared_tone_curve_ctrl_pts_x_[i + 1]) {
+      idx = i;
+      break;
+    }
+  }
+
+  const float dx = params.shared_tone_curve_h_[idx];
+  if (fabs(dx) <= 1e-8f) {
+    return params.shared_tone_curve_ctrl_pts_y_[idx];
+  }
+
+  const float t   = (x - params.shared_tone_curve_ctrl_pts_x_[idx]) / dx;
+  const float h00 = 2.0f * t * t * t - 3.0f * t * t + 1.0f;
+  const float h10 = t * t * t - 2.0f * t * t + t;
+  const float h01 = -2.0f * t * t * t + 3.0f * t * t;
+  const float h11 = t * t * t - t * t;
+  return h00 * params.shared_tone_curve_ctrl_pts_y_[idx] +
+         h10 * dx * params.shared_tone_curve_m_[idx] +
+         h01 * params.shared_tone_curve_ctrl_pts_y_[idx + 1] +
+         h11 * dx * params.shared_tone_curve_m_[idx + 1];
+}
+
+static inline float3 metal_reconstruct_shared_tone_rgb(float3 rgb, float source_luma,
+                                                       float mapped_luma) {
+  const float3 delta        = rgb - float3(source_luma);
+
+  float scale        = 1.0f;
+  if (delta.x < 0.0f) scale = min(scale, mapped_luma / -delta.x);
+  if (delta.y < 0.0f) scale = min(scale, mapped_luma / -delta.y);
+  if (delta.z < 0.0f) scale = min(scale, mapped_luma / -delta.z);
+  scale              = clamp(scale, 0.0f, 1.0f);
+
+  return float3(mapped_luma) + delta * scale;
+}
+
+static inline float4 metal_apply_shared_tone_mapping(float4 px, constant MetalFusedParams& params) {
+  if (params.shared_tone_curve_enabled_ == 0u) {
+    return px;
+  }
+
+  const float source_l = metal_shared_tone_luma(px.xyz);
+  float       mapped_l = metal_evaluate_shared_tone_curve(source_l, params);
+  if (!isfinite(mapped_l)) {
+    mapped_l = source_l;
+  }
+
+  px.xyz = metal_reconstruct_shared_tone_rgb(px.xyz, source_l, mapped_l);
+  return px;
+}
+
 static inline float metal_evaluate_curve_hermite(float x, constant MetalFusedParams& params) {
   const int curve_count = params.curve_ctrl_pts_size_;
   if (curve_count <= 0) {
@@ -96,62 +169,17 @@ static inline float4 GPU_ContrastOpKernel(float4 px, constant MetalFusedParams& 
 }
 
 static inline float4 GPU_HighlightOpKernel(float4 px, constant MetalFusedParams& params) {
-  if (params.highlights_enabled_ == 0u) {
+  if (params.highlights_enabled_ == 0u || params.shared_tone_curve_apply_in_highlights_ == 0u) {
     return px;
   }
-
-  const float L = metal_luma(px.xyz);
-  float outL    = L;
-  if (L <= params.highlights_k_) {
-    outL = L;
-  } else if (L < 1.0f) {
-    const float t   = (L - params.highlights_k_) / params.highlights_dx_;
-    const float H00 = 2.0f * t * t * t - 3.0f * t * t + 1.0f;
-    const float H10 = t * t * t - 2.0f * t * t + t;
-    const float H01 = -2.0f * t * t * t + 3.0f * t * t;
-    const float H11 = t * t * t - t * t;
-    outL            = H00 * params.highlights_k_ +
-           H10 * (params.highlights_dx_ * params.highlights_m0_) + H01 * 1.0f +
-           H11 * (params.highlights_dx_ * params.highlights_m1_);
-  } else {
-    const float x  = L - 1.0f;
-    const float m1 = params.highlights_m1_;
-
-    if (m1 < 1.0f) {
-      const float rolloff_strength = 1.0f;
-      const float b                = fmax(1e-6f, (1.0f - m1) * rolloff_strength);
-      outL                         = 1.0f + (m1 * x) / (1.0f + b * x);
-    } else {
-      outL = 1.0f + x * m1;
-    }
-  }
-
-  if (!isfinite(outL)) {
-    outL = L;
-  }
-  const float scale = (L > 1e-8f) ? (outL / L) : 1.0f;
-  px.xyz *= scale;
-  return px;
+  return metal_apply_shared_tone_mapping(px, params);
 }
 
 static inline float4 GPU_ShadowOpKernel(float4 px, constant MetalFusedParams& params) {
-  if (params.shadows_enabled_ == 0u) {
+  if (params.shadows_enabled_ == 0u || params.shared_tone_curve_apply_in_shadows_ == 0u) {
     return px;
   }
-
-  const float L = metal_luma(px.xyz);
-  if (L < params.shadows_x1_) {
-    const float t    = (L - params.shadows_x0_) / params.shadows_dx_;
-    const float H00  = 2.0f * t * t * t - 3.0f * t * t + 1.0f;
-    const float H10  = t * t * t - 2.0f * t * t + t;
-    const float H01  = -2.0f * t * t * t + 3.0f * t * t;
-    const float H11  = t * t * t - t * t;
-    const float outL = H00 * params.shadows_y0_ + H10 * (params.shadows_dx_ * params.shadows_m0_) +
-                     H01 * params.shadows_y1_ + H11 * (params.shadows_dx_ * params.shadows_m1_);
-    const float scale = (L > 1e-8f) ? (outL / L) : 1.0f;
-    px.xyz *= scale;
-  }
-  return px;
+  return metal_apply_shared_tone_mapping(px, params);
 }
 
 static inline float4 GPU_CurveOpKernel(float4 px, constant MetalFusedParams& params) {

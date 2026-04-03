@@ -176,6 +176,14 @@ struct MetalFusedParams {
   float highlights_y0_;
   float highlights_y1_;
   float highlights_dx_;
+  uint  shared_tone_curve_enabled_;
+  uint  shared_tone_curve_apply_in_shadows_;
+  uint  shared_tone_curve_apply_in_highlights_;
+  int   shared_tone_curve_ctrl_pts_size_;
+  float shared_tone_curve_ctrl_pts_x_[5];
+  float shared_tone_curve_ctrl_pts_y_[5];
+  float shared_tone_curve_h_[4];
+  float shared_tone_curve_m_[5];
   uint  white_enabled_;
   float white_point_;
   uint  black_enabled_;

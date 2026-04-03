@@ -329,6 +329,15 @@ struct GPUOperatorParams {
   float                highlights_y1_          = 1.0f;
   float                highlights_dx_          = 0.8f;
 
+  bool                 shared_tone_curve_enabled_ = false;
+  bool                 shared_tone_curve_apply_in_shadows_ = false;
+  bool                 shared_tone_curve_apply_in_highlights_ = false;
+  int                  shared_tone_curve_ctrl_pts_size_ = 0;
+  float                shared_tone_curve_ctrl_pts_x_[OperatorParams::kSharedToneCurveControlPointCount] = {};
+  float                shared_tone_curve_ctrl_pts_y_[OperatorParams::kSharedToneCurveControlPointCount] = {};
+  float                shared_tone_curve_h_[OperatorParams::kSharedToneCurveControlPointCount - 1] = {};
+  float                shared_tone_curve_m_[OperatorParams::kSharedToneCurveControlPointCount] = {};
+
   // White and Black point adjustment parameters
   bool                 white_enabled_          = true;
   float                white_point_            = 1.0f;
@@ -493,6 +502,20 @@ class CudaFusedParamUploader {
     gpu_params.highlights_y0_          = fused_params.highlights_y0_;
     gpu_params.highlights_y1_          = fused_params.highlights_y1_;
     gpu_params.highlights_dx_          = fused_params.highlights_dx_;
+    gpu_params.shared_tone_curve_enabled_ = fused_params.shared_tone_curve_enabled_;
+    gpu_params.shared_tone_curve_apply_in_shadows_ =
+        fused_params.shared_tone_curve_apply_in_shadows_;
+    gpu_params.shared_tone_curve_apply_in_highlights_ =
+        fused_params.shared_tone_curve_apply_in_highlights_;
+    gpu_params.shared_tone_curve_ctrl_pts_size_ = fused_params.shared_tone_curve_ctrl_pts_size_;
+    for (int i = 0; i < OperatorParams::kSharedToneCurveControlPointCount; ++i) {
+      gpu_params.shared_tone_curve_ctrl_pts_x_[i] = fused_params.shared_tone_curve_ctrl_pts_x_[i];
+      gpu_params.shared_tone_curve_ctrl_pts_y_[i] = fused_params.shared_tone_curve_ctrl_pts_y_[i];
+      gpu_params.shared_tone_curve_m_[i]          = fused_params.shared_tone_curve_m_[i];
+      if (i < OperatorParams::kSharedToneCurveControlPointCount - 1) {
+        gpu_params.shared_tone_curve_h_[i] = fused_params.shared_tone_curve_h_[i];
+      }
+    }
 
     gpu_params.white_enabled_          = fused_params.white_enabled_;
     gpu_params.white_point_            = fused_params.white_point_;

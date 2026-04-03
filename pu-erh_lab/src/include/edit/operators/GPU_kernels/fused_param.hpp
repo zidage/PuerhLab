@@ -195,6 +195,15 @@ struct FusedOperatorParams {
   float highlights_y1_          = 1.0f;
   float highlights_dx_          = 0.8f;
 
+  bool  shared_tone_curve_enabled_ = false;
+  bool  shared_tone_curve_apply_in_shadows_ = false;
+  bool  shared_tone_curve_apply_in_highlights_ = false;
+  int   shared_tone_curve_ctrl_pts_size_ = 0;
+  float shared_tone_curve_ctrl_pts_x_[OperatorParams::kSharedToneCurveControlPointCount] = {};
+  float shared_tone_curve_ctrl_pts_y_[OperatorParams::kSharedToneCurveControlPointCount] = {};
+  float shared_tone_curve_h_[OperatorParams::kSharedToneCurveControlPointCount - 1]      = {};
+  float shared_tone_curve_m_[OperatorParams::kSharedToneCurveControlPointCount]          = {};
+
   bool  white_enabled_          = true;
   float white_point_            = 1.0f;
 
@@ -323,6 +332,19 @@ class FusedParamsConverter {
     fused.highlights_y0_          = cpu_params.highlights_y0_;
     fused.highlights_y1_          = cpu_params.highlights_y1_;
     fused.highlights_dx_          = cpu_params.highlights_dx_;
+    fused.shared_tone_curve_enabled_ = cpu_params.shared_tone_curve_enabled_;
+    fused.shared_tone_curve_apply_in_shadows_ = cpu_params.shared_tone_curve_apply_in_shadows_;
+    fused.shared_tone_curve_apply_in_highlights_ =
+        cpu_params.shared_tone_curve_apply_in_highlights_;
+    fused.shared_tone_curve_ctrl_pts_size_ = cpu_params.shared_tone_curve_ctrl_pts_size_;
+    for (int i = 0; i < OperatorParams::kSharedToneCurveControlPointCount; ++i) {
+      fused.shared_tone_curve_ctrl_pts_x_[i] = cpu_params.shared_tone_curve_ctrl_pts_x_[i];
+      fused.shared_tone_curve_ctrl_pts_y_[i] = cpu_params.shared_tone_curve_ctrl_pts_y_[i];
+      fused.shared_tone_curve_m_[i]          = cpu_params.shared_tone_curve_m_[i];
+      if (i < OperatorParams::kSharedToneCurveControlPointCount - 1) {
+        fused.shared_tone_curve_h_[i] = cpu_params.shared_tone_curve_h_[i];
+      }
+    }
     fused.white_enabled_          = cpu_params.white_enabled_;
     fused.white_point_            = cpu_params.white_point_;
     fused.black_enabled_          = cpu_params.black_enabled_;

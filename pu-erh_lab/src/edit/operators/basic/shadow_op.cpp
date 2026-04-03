@@ -12,6 +12,7 @@
 #include <opencv2/opencv.hpp>
 
 #include "edit/operators/op_kernel.hpp"
+#include "edit/operators/basic/shadows_highlights_shared_curve.hpp"
 #include "edit/operators/utils/functions.hpp"
 #include "hwy/contrib/math/math-inl.h"
 #include "image/image_buffer.hpp"
@@ -43,6 +44,18 @@ static inline float Luma(const Pixel& rgb) {
 auto ShadowsOp::GetParams() const -> nlohmann::json {
   return {{std::string(script_name_), offset_}};
 }
+
+namespace {
+void UpdateSharedToneCurvePayload(OperatorParams& params) {
+  const bool shadows_active = params.shadows_operator_present_ && params.shadows_enabled_;
+  const bool highlights_active = params.highlights_operator_present_ && params.highlights_enabled_;
+  const auto curve = detail::BuildSharedToneCurve(shadows_active, params.shadows_slider_value_,
+                                                  highlights_active, params.highlights_slider_value_);
+  detail::StoreSharedToneCurve(curve, params);
+  params.shared_tone_curve_apply_in_shadows_    = shadows_active;
+  params.shared_tone_curve_apply_in_highlights_ = (!shadows_active) && highlights_active;
+}
+}  // namespace
 
 void ShadowsOp::SetParams(const nlohmann::json& params) {
   float value = 0.0f;
@@ -76,6 +89,8 @@ void ShadowsOp::SetParams(const nlohmann::json& params) {
 }
 
 void ShadowsOp::SetGlobalParams(OperatorParams& params) const {
+  params.shadows_operator_present_ = true;
+  params.shadows_slider_value_     = offset_;
   params.shadows_offset_ = offset_ / 80.0f;
   params.shadows_m0_     = 1.0f + params.shadows_offset_ * curve_.slope_range_;
   params.shadows_x0_     = curve_.x0_;
@@ -84,6 +99,7 @@ void ShadowsOp::SetGlobalParams(OperatorParams& params) const {
   params.shadows_y1_     = curve_.y1_;
   params.shadows_m1_     = curve_.m1_;
   params.shadows_dx_     = curve_.dx_;
+  UpdateSharedToneCurvePayload(params);
 }
 
 void ShadowsOp::EnableGlobalParams(OperatorParams& params, bool enable) {

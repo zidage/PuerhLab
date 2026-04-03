@@ -82,6 +82,13 @@ struct OperatorParams {
   bool                         contrast_enabled_         = true;
   float                        contrast_scale_           = 0.0f;
 
+  bool                         shadows_operator_present_ = false;
+  bool                         highlights_operator_present_ = false;
+
+  // Host-side slider state used to rebuild the GPU-only shared tone curve.
+  float                        shadows_slider_value_     = 0.0f;
+  float                        highlights_slider_value_  = 0.0f;
+
   // Shadows adjustment parameter
   bool                         shadows_enabled_          = true;
   float                        shadows_offset_           = 0.0f;
@@ -104,6 +111,17 @@ struct OperatorParams {
   float                        highlights_y0_            = 0.2f;
   float                        highlights_y1_            = 1.0f;
   float                        highlights_dx_            = 0.8f;
+
+  // GPU-only shared shadows/highlights tone curve parameters.
+  static constexpr int         kSharedToneCurveControlPointCount = 5;
+  bool                         shared_tone_curve_enabled_ = false;
+  bool                         shared_tone_curve_apply_in_shadows_ = false;
+  bool                         shared_tone_curve_apply_in_highlights_ = false;
+  int                          shared_tone_curve_ctrl_pts_size_ = 0;
+  float                        shared_tone_curve_ctrl_pts_x_[kSharedToneCurveControlPointCount] = {};
+  float                        shared_tone_curve_ctrl_pts_y_[kSharedToneCurveControlPointCount] = {};
+  float                        shared_tone_curve_h_[kSharedToneCurveControlPointCount - 1] = {};
+  float                        shared_tone_curve_m_[kSharedToneCurveControlPointCount] = {};
 
   // White and Black point adjustment parameters
   bool                         white_enabled_            = true;

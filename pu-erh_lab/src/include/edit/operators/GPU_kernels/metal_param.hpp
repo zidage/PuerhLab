@@ -205,6 +205,15 @@ struct MetalFusedParams {
   float    highlights_y1_          = 1.0f;
   float    highlights_dx_          = 0.8f;
 
+  uint32_t shared_tone_curve_enabled_ = 0;
+  uint32_t shared_tone_curve_apply_in_shadows_ = 0;
+  uint32_t shared_tone_curve_apply_in_highlights_ = 0;
+  int32_t  shared_tone_curve_ctrl_pts_size_ = 0;
+  float    shared_tone_curve_ctrl_pts_x_[OperatorParams::kSharedToneCurveControlPointCount] = {};
+  float    shared_tone_curve_ctrl_pts_y_[OperatorParams::kSharedToneCurveControlPointCount] = {};
+  float    shared_tone_curve_h_[OperatorParams::kSharedToneCurveControlPointCount - 1] = {};
+  float    shared_tone_curve_m_[OperatorParams::kSharedToneCurveControlPointCount] = {};
+
   uint32_t white_enabled_          = 1;
   float    white_point_            = 1.0f;
   uint32_t black_enabled_          = 1;
@@ -344,6 +353,20 @@ class MetalFusedParamUploader {
     params.highlights_y0_      = fused_params.highlights_y0_;
     params.highlights_y1_      = fused_params.highlights_y1_;
     params.highlights_dx_      = fused_params.highlights_dx_;
+    params.shared_tone_curve_enabled_ = fused_params.shared_tone_curve_enabled_ ? 1U : 0U;
+    params.shared_tone_curve_apply_in_shadows_ =
+        fused_params.shared_tone_curve_apply_in_shadows_ ? 1U : 0U;
+    params.shared_tone_curve_apply_in_highlights_ =
+        fused_params.shared_tone_curve_apply_in_highlights_ ? 1U : 0U;
+    params.shared_tone_curve_ctrl_pts_size_ = fused_params.shared_tone_curve_ctrl_pts_size_;
+    std::memcpy(params.shared_tone_curve_ctrl_pts_x_, fused_params.shared_tone_curve_ctrl_pts_x_,
+                sizeof(params.shared_tone_curve_ctrl_pts_x_));
+    std::memcpy(params.shared_tone_curve_ctrl_pts_y_, fused_params.shared_tone_curve_ctrl_pts_y_,
+                sizeof(params.shared_tone_curve_ctrl_pts_y_));
+    std::memcpy(params.shared_tone_curve_h_, fused_params.shared_tone_curve_h_,
+                sizeof(params.shared_tone_curve_h_));
+    std::memcpy(params.shared_tone_curve_m_, fused_params.shared_tone_curve_m_,
+                sizeof(params.shared_tone_curve_m_));
     params.white_enabled_      = fused_params.white_enabled_ ? 1U : 0U;
     params.white_point_        = fused_params.white_point_;
     params.black_enabled_      = fused_params.black_enabled_ ? 1U : 0U;

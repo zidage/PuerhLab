@@ -75,72 +75,94 @@ struct GPU_ContrastOpKernel : GPUPointOpTag {
   }
 };
 
+GPU_FUNC float shared_tone_luma(const float3& rgb) {
+  return 0.2126f * rgb.x + 0.7152f * rgb.y + 0.0722f * rgb.z;
+}
+
+GPU_FUNC float evaluate_shared_tone_curve(float x, const GPUOperatorParams& params) {
+  const int curve_count = params.shared_tone_curve_ctrl_pts_size_;
+  if (curve_count <= 0) return x;
+  if (curve_count == 1) {
+    return params.shared_tone_curve_ctrl_pts_y_[0];
+  }
+  if (x <= params.shared_tone_curve_ctrl_pts_x_[0]) {
+    return params.shared_tone_curve_ctrl_pts_y_[0];
+  }
+  if (x >= params.shared_tone_curve_ctrl_pts_x_[curve_count - 1]) {
+    return params.shared_tone_curve_ctrl_pts_y_[curve_count - 1] +
+           (x - params.shared_tone_curve_ctrl_pts_x_[curve_count - 1]) *
+               params.shared_tone_curve_m_[curve_count - 1];
+  }
+
+  int idx = curve_count - 2;
+  for (int i = 0; i < curve_count - 1; ++i) {
+    if (x < params.shared_tone_curve_ctrl_pts_x_[i + 1]) {
+      idx = i;
+      break;
+    }
+  }
+
+  const float dx = params.shared_tone_curve_h_[idx];
+  if (fabsf(dx) <= 1e-8f) {
+    return params.shared_tone_curve_ctrl_pts_y_[idx];
+  }
+
+  const float t   = (x - params.shared_tone_curve_ctrl_pts_x_[idx]) / dx;
+  const float h00 = 2.0f * t * t * t - 3.0f * t * t + 1.0f;
+  const float h10 = t * t * t - 2.0f * t * t + t;
+  const float h01 = -2.0f * t * t * t + 3.0f * t * t;
+  const float h11 = t * t * t - t * t;
+
+  return h00 * params.shared_tone_curve_ctrl_pts_y_[idx] +
+         h10 * dx * params.shared_tone_curve_m_[idx] +
+         h01 * params.shared_tone_curve_ctrl_pts_y_[idx + 1] +
+         h11 * dx * params.shared_tone_curve_m_[idx + 1];
+}
+
+GPU_FUNC float3 reconstruct_shared_tone_rgb(const float3& rgb, float source_luma, float mapped_luma) {
+  const float3 neutral = make_float3(source_luma, source_luma, source_luma);
+  const float3 delta        = make_float3(rgb.x - neutral.x, rgb.y - neutral.y, rgb.z - neutral.z);
+
+  float scale          = 1.0f;
+  if (delta.x < 0.0f) scale = fminf(scale, mapped_luma / -delta.x);
+  if (delta.y < 0.0f) scale = fminf(scale, mapped_luma / -delta.y);
+  if (delta.z < 0.0f) scale = fminf(scale, mapped_luma / -delta.z);
+  scale                = fminf(1.0f, fmaxf(0.0f, scale));
+
+  return make_float3(mapped_luma + delta.x * scale, mapped_luma + delta.y * scale,
+                     mapped_luma + delta.z * scale);
+}
+
+GPU_FUNC float4 apply_shared_tone_mapping(float4 px, const GPUOperatorParams& params) {
+  if (!params.shared_tone_curve_enabled_) {
+    return px;
+  }
+
+  const float3 rgb      = make_float3(px.x, px.y, px.z);
+  const float  source_l = shared_tone_luma(rgb);
+  float        mapped_l = evaluate_shared_tone_curve(source_l, params);
+  if (!isfinite(mapped_l)) {
+    mapped_l = source_l;
+  }
+
+  const float3 mapped_rgb = reconstruct_shared_tone_rgb(rgb, source_l, mapped_l);
+  px.x                    = mapped_rgb.x;
+  px.y                    = mapped_rgb.y;
+  px.z                    = mapped_rgb.z;
+  return px;
+}
+
 struct GPU_HighlightOpKernel : GPUPointOpTag {
   __device__ __forceinline__ void operator()(float4* p, GPUOperatorParams& params) const {
-    if (!params.highlights_enabled_) return;
-    float L    = 0.2126f * p->x + 0.7152f * p->y + 0.0722f * p->z;
-    float outL = L;
-    if (L <= params.highlights_k_) {
-      // below knee_start: identity
-      outL = L;
-    } else if (L < 1.0f) {
-      // inside the Hermite segment: parameterize t in [0,1]
-      float t   = (L - params.highlights_k_) / params.highlights_dx_;
-      // Hermite interpolation:
-      float H00 = 2 * t * t * t - 3 * t * t + 1;
-      float H10 = t * t * t - 2 * t * t + t;
-      float H01 = -2 * t * t * t + 3 * t * t;
-      float H11 = t * t * t - t * t;
-      // note: tangents in Hermite are (dx * m0) and (dx * m1)
-      outL = H00 * params.highlights_k_ + H10 * (params.highlights_dx_ * params.highlights_m0_) +
-             H01 * 1.0f + H11 * (params.highlights_dx_ * params.highlights_m1_);
-    } else {
-      // L >= whitepoint: prefer a soft roll-off so "extreme highlights" compress more
-      const float x  = L - 1.0f;
-      const float m1 = params.highlights_m1_;
-
-      if (m1 < 1.0f) {
-        // Rational soft-clip:
-        // outL = 1 + (m1*x) / (1 + b*x)
-        // - slope at x=0 is m1 (continuous at whitepoint)
-        // - as x->inf, outL asymptotes to 1 + m1/b (stronger "extreme highlight" suppression)
-        const float rolloff_strength = 1.0f;  // tune: 0.5 weaker, 1.0 default, 2.0 stronger
-        const float b                = fmaxf(1e-6f, (1.0f - m1) * rolloff_strength);
-        outL                         = 1.0f + (m1 * x) / (1.0f + b * x);
-      } else {
-        // if boosting highlights, keep the linear extrapolation
-        outL = 1.0f + x * m1;
-      }
-    }
-
-    // avoid negative or NaN
-    if (!isfinite(outL)) outL = L;
-    // Preserve hue/chroma by scaling RGB by ratio outL/L (guard L==0)
-    float scale = (L > 1e-8f) ? (outL / L) : 1.0f;
-    p->x *= (scale);
-    p->y *= (scale);
-    p->z *= (scale);
+    if (!params.highlights_enabled_ || !params.shared_tone_curve_apply_in_highlights_) return;
+    *p = apply_shared_tone_mapping(*p, params);
   }
 };
 
 struct GPU_ShadowOpKernel : GPUPointOpTag {
   __device__ __forceinline__ void operator()(float4* p, GPUOperatorParams& params) const {
-    if (!params.shadows_enabled_) return;
-    float L = 0.2126f * p->x + 0.7152f * p->y + 0.0722f * p->z;
-    if (L < params.shadows_x1_) {
-      float t    = (L - params.shadows_x0_) / params.shadows_dx_;
-      float H00  = 2 * t * t * t - 3 * t * t + 1;
-      float H10  = t * t * t - 2 * t * t + t;
-      float H01  = -2 * t * t * t + 3 * t * t;
-      float H11  = t * t * t - t * t;
-      float outL = H00 * params.shadows_y0_ + H10 * (params.shadows_dx_ * params.shadows_m0_) +
-                   H01 * params.shadows_y1_ + H11 * (params.shadows_dx_ * params.shadows_m1_);
-
-      float scale = (L > 1e-8f) ? (outL / L) : 1.0f;
-      p->x *= scale;
-      p->y *= scale;
-      p->z *= scale;
-    }
+    if (!params.shadows_enabled_ || !params.shared_tone_curve_apply_in_shadows_) return;
+    *p = apply_shared_tone_mapping(*p, params);
   }
 };
 
