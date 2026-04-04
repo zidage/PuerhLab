@@ -326,6 +326,8 @@ ApplicationWindow {
         selectedCount: root.selectedCount
         exportQueueCount: root.exportQueueCount
         exportPreviewRows: root.exportPreviewRows
+        hdrExportAvailable: root.exportQueueCount > 0
+            && albumBackend.CanUseHdrExportForTargets(Object.values(root.exportQueueById))
         onAddSelectedToQueueRequested: selectionState.addSelectedToExportQueue()
         onClearQueueRequested: selectionState.clearExportQueue()
         onEnsurePreviewRequested: selectionState.refreshExportPreview()

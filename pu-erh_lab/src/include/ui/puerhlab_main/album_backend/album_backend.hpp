@@ -186,6 +186,7 @@ class AlbumBackend final : public QObject {
                                                     const QString& tiffCompression,
                                                     const QVariantList& targetEntries);
   Q_INVOKABLE void ResetExportState();
+  Q_INVOKABLE bool CanUseHdrExportForTargets(const QVariantList& targetEntries) const;
   Q_INVOKABLE void BrowseNikonHeConverter();
   Q_INVOKABLE void StartNikonHeConversion();
   Q_INVOKABLE void ExitNikonHeRecovery();

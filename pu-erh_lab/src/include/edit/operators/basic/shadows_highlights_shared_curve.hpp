@@ -92,10 +92,12 @@ inline auto BuildSharedToneCurve(bool shadows_enabled, float shadows_slider_valu
   constexpr float kHighlightPointRange = 0.4f;
 
   curve.y[1] = std::clamp(kSharedToneShadowPivot + shadow_control * kShadowPointRange, 0.02f, 0.73f);
-  float y2_offset = -highlight_control * (kHighlightPointRange * 0.25f);
-  curve.y[2] = std::clamp(kSharedToneHighlightPivot - y2_offset, 0.4f, 1.0f);
-  curve.y[3] =
-      std::clamp(1.0f - highlight_control * kHighlightPointRange, curve.y[2], 1.3f);
+  float highlight_pull = highlight_control * kHighlightPointRange;
+  
+  curve.y[3] = std::clamp(1.0f - highlight_pull, 0.85f, 1.3f); 
+  
+  float y2_offset = -highlight_pull * 0.2f;
+  curve.y[2] = std::clamp(kSharedToneHighlightPivot - y2_offset, 0.65f, 1.0f);
   ComputeSharedToneTangents(curve);
 
   return curve;

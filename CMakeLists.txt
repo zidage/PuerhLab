@@ -5,7 +5,7 @@ cmake_minimum_required(VERSION 3.19)
 #set(CMAKE_CXX_COMPILER "clang++")
 # Compiler flags.
 
-project(pu-erh_lab VERSION 0.2.1 LANGUAGES C CXX)
+project(pu-erh_lab VERSION 0.2.2 LANGUAGES C CXX)
 
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build pu-erh_lab libraries as static by default." FORCE)
 

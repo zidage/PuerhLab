@@ -20,6 +20,7 @@ Dialog {
     property int selectedCount: 0
     property int exportQueueCount: 0
     property var exportPreviewRows: []
+    property bool hdrExportAvailable: false
     property bool exportTriggered: false
     readonly property color overlayColor: appTheme.bgDeepColor
     readonly property color panelColor: appTheme.toneGraphite
@@ -48,17 +49,96 @@ Dialog {
         int bitDepth,
         int pngLevel,
         string tiffCompression)
-    readonly property bool ultraHdrSelected: hdrExportMode.currentValue === "ULTRA_HDR"
+    readonly property bool ultraHdrSelected: hdrExportAvailable
+                                            && hdrExportMode.currentValue === "ULTRA_HDR"
+    readonly property string effectiveExportFormat: root.ultraHdrSelected
+                                                    ? "JPEG"
+                                                    : exportFormat.currentValue
+
+    function bitDepthOptionsFor(formatValue) {
+        switch (formatValue) {
+        case "JPEG":
+        case "WEBP":
+            return [
+                { text: "8-bit", value: 8 }
+            ]
+        case "PNG":
+            return [
+                { text: "8-bit", value: 8 },
+                { text: "16-bit", value: 16 }
+            ]
+        case "TIFF":
+            return [
+                { text: "8-bit", value: 8 },
+                { text: "16-bit", value: 16 },
+                { text: "32-bit", value: 32 }
+            ]
+        case "EXR":
+            return [
+                { text: "16-bit", value: 16 },
+                { text: "32-bit", value: 32 }
+            ]
+        default:
+            return [
+                { text: "8-bit", value: 8 }
+            ]
+        }
+    }
+
+    function preferredBitDepthFor(formatValue) {
+        switch (formatValue) {
+        case "JPEG":
+        case "WEBP":
+            return 8
+        case "PNG":
+        case "TIFF":
+        case "EXR":
+            return 16
+        default:
+            return 8
+        }
+    }
+
+    function ensureValidBitDepthSelection() {
+        const options = root.bitDepthOptionsFor(root.effectiveExportFormat)
+        const current = Number(exportBitDepth.currentValue)
+        for (let i = 0; i < options.length; ++i) {
+            if (Number(options[i].value) === current) {
+                return
+            }
+        }
+
+        const preferred = root.preferredBitDepthFor(root.effectiveExportFormat)
+        for (let i = 0; i < options.length; ++i) {
+            if (Number(options[i].value) === preferred) {
+                exportBitDepth.currentIndex = i
+                return
+            }
+        }
+
+        exportBitDepth.currentIndex = 0
+    }
 
     onOpened: {
         if (exportOutDir.text.length === 0) {
             exportOutDir.text = albumBackend.defaultExportFolder
         }
+        if (!hdrExportAvailable) {
+            hdrExportMode.currentIndex = 1
+        }
+        ensureValidBitDepthSelection()
         ensurePreviewRequested()
         albumBackend.ResetExportState()
         exportTriggered = false
     }
     onClosed: exportTriggered = false
+    onHdrExportAvailableChanged: {
+        if (!hdrExportAvailable) {
+            hdrExportMode.currentIndex = 1
+        }
+        ensureValidBitDepthSelection()
+    }
+    onEffectiveExportFormatChanged: ensureValidBitDepthSelection()
 
     FolderDialog {
         id: exportFolderDialog
@@ -179,9 +259,10 @@ Dialog {
                                 ComboBox {
                                     id: hdrExportMode
                                     Layout.fillWidth: true
+                                    enabled: hdrExportAvailable && !albumBackend.exportInFlight
                                     model: [
                                         { text: qsTr("Ultra HDR"), value: "ULTRA_HDR" },
-                                        { text: qsTr("Embed HDR ICC"), value: "EMBEDDED_PROFILE_ONLY" }
+                                        { text: qsTr("Embed ICC Profile"), value: "EMBEDDED_PROFILE_ONLY" }
                                     ]
                                     textRole: "text"
                                     valueRole: "value"
@@ -198,8 +279,10 @@ Dialog {
                                 wrapMode: Text.WordWrap
                                 color: root.mutedTextColor
                                 font.pixelSize: 11
-                                text: root.ultraHdrSelected
-                                    ? qsTr("Ultra HDR exports are written as JPEG. Non-HDR items in the queue fall back to regular JPEG export with an embedded ICC profile.")
+                                text: !root.hdrExportAvailable
+                                    ? qsTr("Ultra HDR is only available when every queued item uses an HDR output EOTF (PQ or HLG). For SDR output, only ICC profile embedding is available.")
+                                    : root.ultraHdrSelected
+                                    ? qsTr("Ultra HDR exports are written as JPEG and include SDR fallback for legacy viewers.")
                                     : qsTr("Embed the active output ICC profile without Ultra HDR encoding. This mode keeps all export formats available.")
                             }
                         }
@@ -244,20 +327,25 @@ Dialog {
                                 ComboBox {
                                     id: exportBitDepth
                                     Layout.fillWidth: true
-                                    model: [
-                                        { text: "8-bit", value: 8 },
-                                        { text: "16-bit", value: 16 },
-                                        { text: "32-bit", value: 32 }
-                                    ]
+                                    enabled: root.bitDepthOptionsFor(root.effectiveExportFormat).length > 1
+                                             && !albumBackend.exportInFlight
+                                    model: root.bitDepthOptionsFor(root.effectiveExportFormat)
                                     textRole: "text"
                                     valueRole: "value"
-                                    currentIndex: 1
                                 }
 
-                                Label { text: qsTr("Quality"); color: root.mutedTextColor; font.pixelSize: 12 }
+                                Label {
+                                    text: qsTr("Quality")
+                                    color: root.mutedTextColor
+                                    font.pixelSize: 12
+                                    visible: root.effectiveExportFormat === "JPEG"
+                                             || root.effectiveExportFormat === "WEBP"
+                                }
                                 SpinBox {
                                     id: exportQuality
                                     Layout.fillWidth: true
+                                    visible: root.effectiveExportFormat === "JPEG"
+                                             || root.effectiveExportFormat === "WEBP"
                                     from: 1
                                     to: 100
                                     value: 95
@@ -268,7 +356,7 @@ Dialog {
                                     text: qsTr("PNG level")
                                     color: root.mutedTextColor
                                     font.pixelSize: 12
-                                    visible: exportFormat.currentValue === "PNG"
+                                    visible: root.effectiveExportFormat === "PNG"
                                 }
                                 SpinBox {
                                     id: exportPngLevel
@@ -277,19 +365,19 @@ Dialog {
                                     to: 9
                                     value: 5
                                     editable: true
-                                    visible: exportFormat.currentValue === "PNG"
+                                    visible: root.effectiveExportFormat === "PNG"
                                 }
 
                                 Label {
                                     text: qsTr("Compression")
                                     color: root.mutedTextColor
                                     font.pixelSize: 12
-                                    visible: exportFormat.currentValue === "TIFF"
+                                    visible: root.effectiveExportFormat === "TIFF"
                                 }
                                 ComboBox {
                                     id: exportTiffComp
                                     Layout.fillWidth: true
-                                    visible: exportFormat.currentValue === "TIFF"
+                                    visible: root.effectiveExportFormat === "TIFF"
                                     model: [
                                         { text: qsTr("None"), value: "NONE" },
                                         { text: "LZW", value: "LZW" },
@@ -303,11 +391,13 @@ Dialog {
 
                             Label {
                                 Layout.fillWidth: true
-                                visible: exportFormat.currentValue === "JPEG" && !root.ultraHdrSelected
+                                visible: root.effectiveExportFormat === "JPEG"
+                                         && !root.ultraHdrSelected
+                                         && root.hdrExportAvailable
                                 wrapMode: Text.WordWrap
                                 color: root.mutedTextColor
                                 font.pixelSize: 11
-                                text: qsTr("JPEG exports from PQ or HLG pipelines are written as Ultra HDR with SDR fallback for legacy viewers.")
+                                text: qsTr("PQ or HLG JPEG exports can be written as Ultra HDR with SDR fallback for legacy viewers.")
                             }
                         }
 

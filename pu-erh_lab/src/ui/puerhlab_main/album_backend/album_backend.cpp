@@ -5,6 +5,7 @@
 #include "ui/puerhlab_main/album_backend/album_backend.hpp"
 
 #include "app/project_package_service.hpp"
+#include "edit/operators/utils/color_utils.hpp"
 #include "ui/puerhlab_main/album_backend/path_utils.hpp"
 
 #include <QDesktopServices>
@@ -29,6 +30,14 @@ using namespace album_util;
   i18n::MakeLocalizedText(PUERHLAB_I18N_CONTEXT,                              \
                           QT_TRANSLATE_NOOP(PUERHLAB_I18N_CONTEXT, text)      \
                               __VA_OPT__(, ) __VA_ARGS__)
+
+namespace {
+
+auto IsHdrExportEotf(const ColorUtils::EOTF eotf) -> bool {
+  return eotf == ColorUtils::EOTF::ST2084 || eotf == ColorUtils::EOTF::HLG;
+}
+
+}  // namespace
 
 // ── Constructor / Destructor ────────────────────────────────────────────────
 
@@ -167,6 +176,45 @@ void AlbumBackend::StartExportWithOptionsForTargets(const QString& outputDirUrlO
 }
 
 void AlbumBackend::ResetExportState() { import_export_.ResetExportState(); }
+bool AlbumBackend::CanUseHdrExportForTargets(const QVariantList& targetEntries) const {
+  if (project_handler_.project_loading()) {
+    return false;
+  }
+
+  const auto& psvc = project_handler_.pipeline_service();
+  auto        proj = project_handler_.project();
+  if (!psvc || !proj) {
+    return false;
+  }
+
+  const auto targets = import_export_.CollectExportTargets(targetEntries);
+  if (targets.empty()) {
+    return false;
+  }
+
+  for (const auto& [elementId, imageId] : targets) {
+    (void)imageId;
+
+    bool hdr_eotf = false;
+    try {
+      auto pipeline_guard = psvc->LoadPipeline(elementId);
+      if (!pipeline_guard || !pipeline_guard->pipeline_) {
+        return false;
+      }
+      hdr_eotf = IsHdrExportEotf(
+          pipeline_guard->pipeline_->GetGlobalParams().to_output_params_.eotf_);
+      psvc->SavePipeline(pipeline_guard);
+    } catch (...) {
+      return false;
+    }
+
+    if (!hdr_eotf) {
+      return false;
+    }
+  }
+
+  return true;
+}
 void AlbumBackend::BrowseNikonHeConverter() { nikon_he_recovery_.BrowseConverter(); }
 void AlbumBackend::StartNikonHeConversion() { nikon_he_recovery_.StartConversion(); }
 void AlbumBackend::ExitNikonHeRecovery() { nikon_he_recovery_.ExitRecovery(); }

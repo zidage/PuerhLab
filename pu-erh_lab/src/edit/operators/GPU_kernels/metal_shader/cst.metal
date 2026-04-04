@@ -189,8 +189,9 @@ static inline float rgc_compress_curve(float dist, float lim, float thr, float p
 }
 
 static inline float acescc_encode(float x) {
+  const float encode_floor = (kAcesccLog2Denorm + kAcesccA) / kAcesccB;
   if (x <= 0.0f) {
-    return (kAcesccLog2Denorm + kAcesccA) / kAcesccB;
+    return encode_floor + x;
   }
   if (x < kAcesccDenormTrans) {
     return (log2(kAcesccDenormOffset + x * 0.5f) + kAcesccA) / kAcesccB;
@@ -199,8 +200,12 @@ static inline float acescc_encode(float x) {
 }
 
 static inline float acescc_decode(float acescc) {
+  const float encode_floor     = (kAcesccLog2Denorm + kAcesccA) / kAcesccB;
   const float denorm_threshold = (kAcesccLog2Min + kAcesccA) / kAcesccB;
-  if (acescc < denorm_threshold) {
+  if (acescc < encode_floor) {
+    return acescc - encode_floor;
+  }
+  if (acescc <= denorm_threshold) {
     return (exp2(acescc * kAcesccB - kAcesccA) - kAcesccDenormOffset) * 2.0f;
   }
   return exp2(acescc * kAcesccB - kAcesccA);

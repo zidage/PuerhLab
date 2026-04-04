@@ -96,27 +96,37 @@ __device__ __forceinline__ float rgc_compress_curve(float dist, float lim, float
 // ACEScc log encoding: linear (AP1) -> ACEScc
 // Reference: S-2014-003 ACEScc – A Quasi-Logarithmic Encoding of ACES Data
 __device__ __forceinline__ float acescc_encode(float x) {
+  const float encode_floor = (ACESCC_LOG2_DENORM + ACESCC_A) / ACESCC_B;
+
+  if (x <= 0.0f) {
+    // Appendix A leaves negative-value preservation implementation-defined.
+    // Keep the official ACEScc range for non-negative AP1 values and place
+    // preserved negatives below the standard ACEScc floor so round-trips stay lossless.
+    return encode_floor + x;
+  }
   if (x < ACESCC_DENORM_TRANS) {
     // Denormalized region: linear ramp to avoid log(0)
     return (log2f(ACESCC_DENORM_OFFSET + x * 0.5f) + ACESCC_A) / ACESCC_B;
-  } else {
-    // Normal region: standard log encoding
-    return (log2f(x) + ACESCC_A) / ACESCC_B;
   }
+  // Normal region: standard log encoding
+  return (log2f(x) + ACESCC_A) / ACESCC_B;
 }
 // ACEScc log decoding: ACEScc -> linear (AP1)
 // Reference: S-2014-003 ACEScc – A Quasi-Logarithmic Encoding of ACES Data
 __device__ __forceinline__ float acescc_decode(float acescc) {
+  const float encode_floor     = (ACESCC_LOG2_DENORM + ACESCC_A) / ACESCC_B;
   // Threshold for denormalized region: (log2(2^-15) + 9.72) / 17.52
   const float denorm_threshold = (ACESCC_LOG2_MIN + ACESCC_A) / ACESCC_B;  // ≈ -0.3013698630
 
-  if (acescc < denorm_threshold) {
+  if (acescc < encode_floor) {
+    return acescc - encode_floor;
+  }
+  if (acescc <= denorm_threshold) {
     // Denormalized region
     return (exp2f(acescc * ACESCC_B - ACESCC_A) - ACESCC_DENORM_OFFSET) * 2.0f;
-  } else {
-    // Normal region
-    return exp2f(acescc * ACESCC_B - ACESCC_A);
   }
+  // Normal region
+  return exp2f(acescc * ACESCC_B - ACESCC_A);
 }
 // Gamma 2.2 encoding: linear -> gamma encoded
 __device__ __forceinline__ float gamma22_encode(float linear) {

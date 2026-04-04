@@ -26,6 +26,39 @@ using namespace album_util;
                           QT_TRANSLATE_NOOP(PUERHLAB_I18N_CONTEXT, text)      \
                               __VA_OPT__(, ) __VA_ARGS__)
 
+namespace {
+
+auto EffectiveExportFormat(ImageFormatType format,
+                           ExportFormatOptions::HDR_EXPORT_MODE hdrExportMode) -> ImageFormatType {
+  if (hdrExportMode == ExportFormatOptions::HDR_EXPORT_MODE::ULTRA_HDR) {
+    return ImageFormatType::JPEG;
+  }
+  return format;
+}
+
+auto SanitizeBitDepth(ImageFormatType format,
+                      ExportFormatOptions::BIT_DEPTH requested) -> ExportFormatOptions::BIT_DEPTH {
+  switch (format) {
+    case ImageFormatType::JPEG:
+    case ImageFormatType::WEBP:
+      return ExportFormatOptions::BIT_DEPTH::BIT_8;
+    case ImageFormatType::PNG:
+      return requested == ExportFormatOptions::BIT_DEPTH::BIT_8
+                 ? ExportFormatOptions::BIT_DEPTH::BIT_8
+                 : ExportFormatOptions::BIT_DEPTH::BIT_16;
+    case ImageFormatType::EXR:
+      return requested == ExportFormatOptions::BIT_DEPTH::BIT_32
+                 ? ExportFormatOptions::BIT_DEPTH::BIT_32
+                 : ExportFormatOptions::BIT_DEPTH::BIT_16;
+    case ImageFormatType::TIFF:
+      return requested;
+    default:
+      return ExportFormatOptions::BIT_DEPTH::BIT_8;
+  }
+}
+
+}  // namespace
+
 ImportExportHandler::ImportExportHandler(AlbumBackend& backend) : backend_(backend) {
   const QString pictures =
       QStandardPaths::writableLocation(QStandardPaths::PicturesLocation);
@@ -244,17 +277,18 @@ void ImportExportHandler::StartExportWithOptionsForTargets(
     return;
   }
 
-  const ImageFormatType format        = FormatFromName(formatName);
-  const auto            hdr_mode      = HdrExportModeFromName(hdrExportMode);
+  const ImageFormatType requested_format = FormatFromName(formatName);
+  const auto            hdr_mode         = HdrExportModeFromName(hdrExportMode);
   const int             clamped_max   = std::clamp(maxLengthSide, 256, 16384);
   const int             clamped_q     = std::clamp(quality, 1, 100);
-  const auto            bit_depth     = BitDepthFromInt(bitDepth);
+  const ImageFormatType effective_format = EffectiveExportFormat(requested_format, hdr_mode);
+  const auto            bit_depth        = SanitizeBitDepth(effective_format, BitDepthFromInt(bitDepth));
   const int             clamped_png   = std::clamp(pngCompressionLevel, 0, 9);
   const auto            tiff_compress = TiffCompressFromName(tiffCompression);
 
   esvc->ClearAllExportTasks();
   const auto queue_result =
-      BuildExportQueue(targets, outDirOpt.value(), format, hdr_mode, resizeEnabled, clamped_max,
+      BuildExportQueue(targets, outDirOpt.value(), effective_format, hdr_mode, resizeEnabled, clamped_max,
                        clamped_q, bit_depth, clamped_png, tiff_compress);
 
   if (queue_result.queued_count_ == 0) {
