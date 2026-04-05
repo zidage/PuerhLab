@@ -310,7 +310,11 @@ impl ResidualAttentionBlock {
         })
     }
 
-    pub fn forward_attention(&self, x: &Tensor, attn_mask: Option<&Tensor>) -> anyhow::Result<Tensor> {
+    pub fn forward_attention(
+        &self,
+        x: &Tensor,
+        attn_mask: Option<&Tensor>,
+    ) -> anyhow::Result<Tensor> {
         let h = self.ln_1.forward(x)?;
         let h = self.attn.forward(&h, attn_mask)?; // [B, T, C]
         let y = x.broadcast_add(&h)?; // [B, T, C] + [B, T, C]
@@ -618,8 +622,8 @@ mod tests {
             flat_ids.extend(prompt);
         }
 
-        let input_ids = Tensor::from_vec(flat_ids, (3, seq_len), &device)
-            .expect("input ids should build");
+        let input_ids =
+            Tensor::from_vec(flat_ids, (3, seq_len), &device).expect("input ids should build");
 
         let features = text_model
             .forward_text_feature(&input_ids)

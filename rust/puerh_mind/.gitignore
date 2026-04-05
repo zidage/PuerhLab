@@ -25,3 +25,5 @@ target
 /.venv/source
 
 /.pydeps/
+
+/testdata/

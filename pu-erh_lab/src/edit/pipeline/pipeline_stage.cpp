@@ -60,7 +60,8 @@ auto IsCropRotateEffectivelyNoOp(const IOperatorBase& op) -> bool {
     return false;
   }
 
-  if (crop_rotate.contains("aspect_ratio_preset") && crop_rotate["aspect_ratio_preset"].is_string()) {
+  if (crop_rotate.contains("aspect_ratio_preset") &&
+      crop_rotate["aspect_ratio_preset"].is_string()) {
     const std::string preset = crop_rotate["aspect_ratio_preset"].get<std::string>();
     if (preset != "free") {
       return false;
@@ -327,8 +328,8 @@ std::shared_ptr<ImageBuffer> PipelineStage::ApplyGpuOperators(OperatorParams& gl
       int width  = 0;
       int height = 0;
       if (input_img_->gpu_data_valid_) {
-        width                = input_img_->GetGPUWidth();
-        height               = input_img_->GetGPUHeight();
+        width  = input_img_->GetGPUWidth();
+        height = input_img_->GetGPUHeight();
       } else if (input_img_->cpu_data_valid_) {
         const auto& cpu_data = input_img_->GetCPUData();
         width                = cpu_data.cols;
@@ -360,9 +361,8 @@ std::shared_ptr<ImageBuffer> PipelineStage::ApplyGpuOperators(OperatorParams& gl
 
     auto current_img = std::make_shared<ImageBuffer>();
     if (input_img_->gpu_data_valid_ && !input_img_->buffer_valid_) {
-      const bool can_share_input =
-          stage_ == PipelineStageName::Geometry_Adjustment &&
-          CanShareGeometryGpuInputWithoutCopy(*operators_);
+      const bool can_share_input = stage_ == PipelineStageName::Geometry_Adjustment &&
+                                   CanShareGeometryGpuInputWithoutCopy(*operators_);
       if (can_share_input) {
         current_img->ShareGPUDataFrom(*input_img_);
       } else {
@@ -389,23 +389,8 @@ std::shared_ptr<ImageBuffer> PipelineStage::ApplyGpuOperators(OperatorParams& gl
       }
     };
 
-    if (stage_ == PipelineStageName::Geometry_Adjustment) {
-      // Crop/rotate must run before resize so dynamic preview scaling uses
-      // post-crop dimensions instead of the uncropped source frame.
-      if (const auto crop_it = operators_->find(OperatorType::CROP_ROTATE);
-          crop_it != operators_->end()) {
-        apply_gpu_operator(crop_it->first, crop_it->second);
-      }
-      for (const auto& [op_type, op_entry] : *operators_) {
-        if (op_type == OperatorType::CROP_ROTATE) {
-          continue;
-        }
-        apply_gpu_operator(op_type, op_entry);
-      }
-    } else {
-      for (const auto& [op_type, op_entry] : *operators_) {
-        apply_gpu_operator(op_type, op_entry);
-      }
+    for (const auto& [op_type, op_entry] : *operators_) {
+      apply_gpu_operator(op_type, op_entry);
     }
     current_img->gpu_data_valid_ = true;
     return current_img;
@@ -451,8 +436,8 @@ std::shared_ptr<ImageBuffer> PipelineStage::ApplyCpuOperators(OperatorParams& gl
       int width  = 0;
       int height = 0;
       if (input_img_->gpu_data_valid_) {
-        width                = input_img_->GetGPUWidth();
-        height               = input_img_->GetGPUHeight();
+        width  = input_img_->GetGPUWidth();
+        height = input_img_->GetGPUHeight();
       } else if (input_img_->cpu_data_valid_) {
         const auto& cpu_data = input_img_->GetCPUData();
         width                = cpu_data.cols;
@@ -480,7 +465,7 @@ std::shared_ptr<ImageBuffer> PipelineStage::ApplyCpuOperators(OperatorParams& gl
       }
     }
 
-    auto current_img = std::make_shared<ImageBuffer>(input_img_->Clone());
+    auto       current_img        = std::make_shared<ImageBuffer>(input_img_->Clone());
 
     const auto apply_cpu_operator = [&](OperatorType op_type, const OperatorEntry& op_entry) {
       if (!op_entry.enable_ || !op_entry.op_) {
@@ -577,8 +562,10 @@ std::shared_ptr<ImageBuffer> PipelineStage::ApplyGpuStream(OperatorParams& globa
       output_cache_->ReleaseGPUData();  // Free GPU memory after sync
     } catch (const std::exception& e) {
       // Keep GPU result if CPU sync fails; caller will validate.
-      std::cerr << std::format("Failed to sync GPU stream output to CPU: {}. Keeping GPU data for downstream stages."
-                               , e.what())
+      std::cerr << std::format(
+                       "Failed to sync GPU stream output to CPU: {}. Keeping GPU data for "
+                       "downstream stages.",
+                       e.what())
                 << std::endl;
     }
   }

@@ -48,7 +48,7 @@ class LensCalibOp : public OperatorBase<LensCalibOp> {
   auto                  BuildRuntimeCacheKey(const OperatorParams& params) const -> uint64_t;
 
  public:
-  static constexpr PriorityLevel     priority_level_    = 1;
+  static constexpr PriorityLevel     priority_level_    = 3;
   static constexpr PipelineStageName affiliation_stage_ = PipelineStageName::Image_Loading;
   static constexpr std::string_view  canonical_name_    = "LensCalibration";
   static constexpr std::string_view  script_name_       = "lens_calib";

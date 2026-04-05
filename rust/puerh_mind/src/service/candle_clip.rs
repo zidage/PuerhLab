@@ -2,7 +2,7 @@ use anyhow::{Result, bail};
 
 use candle_nn::VarBuilder;
 use tokenizers::Tokenizer;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 use crate::config::SemanticConfig;
 
@@ -14,6 +14,7 @@ use crate::service::model_assets::ClipModelPaths;
 use crate::service::open_clip_config::OpenClipConfig;
 use crate::service::text_inputs::{TextBatch, TextTensors};
 
+use candle_core::DType;
 use candle_core::Device;
 use candle_core::DeviceLocation;
 use candle_core::Tensor;
@@ -23,6 +24,7 @@ pub struct CandleClipEngine {
     open_clip_config: OpenClipConfig,
     tokenizer: Tokenizer,
     device: Device,
+    compute_dtype: DType,
     text_model: ClipTextModel,
     vision_model: ClipVisionModel,
 }
@@ -33,6 +35,13 @@ enum DeviceRequest {
     Cpu,
     Cuda(usize),
     Metal(usize),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DTypeRequest {
+    Auto,
+    F16,
+    F32,
 }
 
 impl CandleClipEngine {
@@ -97,6 +106,88 @@ impl CandleClipEngine {
         }
     }
 
+    fn parse_dtype_request(value: &str) -> Result<DTypeRequest> {
+        let value = value.trim();
+        if value.is_empty() {
+            bail!(
+                "unsupported PUERH_MIND_DTYPE value {value:?}, expected \"auto\", \"fp16\", or \"fp32\""
+            );
+        }
+
+        if value.eq_ignore_ascii_case("auto") {
+            return Ok(DTypeRequest::Auto);
+        }
+
+        if ["fp16", "f16", "float16", "half"]
+            .iter()
+            .any(|candidate| value.eq_ignore_ascii_case(candidate))
+        {
+            return Ok(DTypeRequest::F16);
+        }
+
+        if ["fp32", "f32", "float32"]
+            .iter()
+            .any(|candidate| value.eq_ignore_ascii_case(candidate))
+        {
+            return Ok(DTypeRequest::F32);
+        }
+
+        bail!(
+            "unsupported PUERH_MIND_DTYPE value {value:?}, expected \"auto\", \"fp16\", or \"fp32\""
+        )
+    }
+
+    fn select_dtype_request() -> Result<DTypeRequest> {
+        match std::env::var("PUERH_MIND_DTYPE") {
+            Ok(value) => Self::parse_dtype_request(&value),
+            Err(std::env::VarError::NotPresent) => Ok(DTypeRequest::Auto),
+            Err(err) => bail!("failed to read PUERH_MIND_DTYPE: {err}"),
+        }
+    }
+
+    fn select_model_dtype(device: &Device, request: DTypeRequest) -> DType {
+        match request {
+            DTypeRequest::Auto => match device.location() {
+                DeviceLocation::Cpu => DType::F32,
+                DeviceLocation::Cuda { .. } | DeviceLocation::Metal { .. } => DType::F16,
+            },
+            DTypeRequest::F16 => DType::F16,
+            DTypeRequest::F32 => DType::F32,
+        }
+    }
+
+    fn load_var_builder(
+        weights_path: &std::path::Path,
+        dtype: DType,
+        device: &Device,
+    ) -> Result<VarBuilder<'static>> {
+        unsafe {
+            VarBuilder::from_mmaped_safetensors(&[weights_path.to_path_buf()], dtype, device)
+                .map_err(|e| {
+                    anyhow::anyhow!(
+                        "failed to map safetensors with dtype {dtype:?} on {}: {e}",
+                        Self::describe_device(device)
+                    )
+                })
+        }
+    }
+
+    fn cast_feature_to_f32(feature: Tensor) -> anyhow::Result<Tensor> {
+        if feature.dtype() == DType::F32 {
+            Ok(feature)
+        } else {
+            Ok(feature.to_dtype(DType::F32)?)
+        }
+    }
+
+    fn cast_image_tensor_for_model(&self, image_tensor: Tensor) -> anyhow::Result<Tensor> {
+        if self.compute_dtype == DType::F32 {
+            Ok(image_tensor)
+        } else {
+            Ok(image_tensor.to_dtype(self.compute_dtype)?)
+        }
+    }
+
     fn select_best_available_device() -> Device {
         for request in [DeviceRequest::Cuda(0), DeviceRequest::Metal(0)] {
             match Self::initialize_device(request) {
@@ -132,19 +223,42 @@ impl CandleClipEngine {
         let tokenizer = Tokenizer::from_file(&model_paths.tokenizer_json)
             .map_err(|e| anyhow::anyhow!("failed to load tokenizer: {e}"))?;
         let device = Self::select_device()?;
+        let dtype_request = Self::select_dtype_request()?;
+        let requested_dtype = Self::select_model_dtype(&device, dtype_request);
+
         info!(
-            "loading candle clip model {} on {}",
+            "loading candle clip model {} on {} with {:?}",
             config.model_id,
-            Self::describe_device(&device)
+            Self::describe_device(&device),
+            requested_dtype,
         );
 
-        let vb = unsafe {
-            VarBuilder::from_mmaped_safetensors(
-                &[model_paths.weights.clone()],
-                candle_core::DType::F32,
-                &device,
-            )
-            .expect("weights should load")
+        let (vb, compute_dtype) =
+            match Self::load_var_builder(&model_paths.weights, requested_dtype, &device) {
+                Ok(vb) => (vb, requested_dtype),
+                Err(initial_err) => {
+                    if dtype_request == DTypeRequest::Auto && requested_dtype == DType::F16 {
+                        warn!(
+                            "failed to load {:?} weights on {}, falling back to F32: {}",
+                            requested_dtype,
+                            Self::describe_device(&device),
+                            initial_err
+                        );
+                        let fallback_dtype = DType::F32;
+                        let vb =
+                            Self::load_var_builder(&model_paths.weights, fallback_dtype, &device)?;
+                        (vb, fallback_dtype)
+                    } else {
+                        return Err(initial_err);
+                    }
+                }
+            };
+
+        if compute_dtype != requested_dtype {
+            info!(
+                "loaded candle clip model {} with fallback dtype {:?}",
+                config.model_id, compute_dtype
+            );
         };
 
         let text_model = ClipTextModel::load(
@@ -152,17 +266,18 @@ impl CandleClipEngine {
             &open_clip_config.model_cfg.text_cfg,
             open_clip_config.model_cfg.embed_dim,
         )
-        .expect("text model should load");
+        .map_err(|e| anyhow::anyhow!("failed to load text model: {e}"))?;
 
         let vision_model =
             ClipVisionModel::load(vb.pp("visual"), open_clip_config.model_cfg.embed_dim)
-                .expect("vision model should load");
+                .map_err(|e| anyhow::anyhow!("failed to load vision model: {e}"))?;
 
         Ok(Self {
             model_id: config.model_id.clone(),
             open_clip_config,
             tokenizer,
             device,
+            compute_dtype,
             text_model,
             vision_model,
         })
@@ -312,6 +427,7 @@ impl CandleClipEngine {
         let tensors = self.prepare_text_batch_tensors(texts)?;
 
         let feature = self.text_model.forward_text_feature(&tensors.input_ids)?;
+        let feature = Self::cast_feature_to_f32(feature)?;
         feature
             .to_vec2::<f32>()?
             .into_iter()
@@ -328,7 +444,7 @@ impl CandleClipEngine {
     }
 
     /* Image Part */
-    fn prepare_image_tensor(&self, rgb: &image::RgbImage) -> anyhow::Result<Tensor> {
+    fn prepare_image_tensor_data(&self, rgb: &image::RgbImage) -> anyhow::Result<Vec<f32>> {
         let target = self.open_clip_config.model_cfg.vision_cfg.image_size as u32;
 
         let (src_w, src_h) = rgb.dimensions();
@@ -370,22 +486,65 @@ impl CandleClipEngine {
             }
         }
 
-        let tensor =
-            Tensor::from_vec(data, (1, 3, target as usize, target as usize), &self.device)?;
+        Ok(data)
+    }
 
-        Ok(tensor)
+    fn prepare_image_tensor(&self, rgb: &image::RgbImage) -> anyhow::Result<Tensor> {
+        let target = self.open_clip_config.model_cfg.vision_cfg.image_size;
+        let data = self.prepare_image_tensor_data(rgb)?;
+
+        let image_tensor = Tensor::from_vec(
+            data,
+            (1, 3, target, target),
+            &self.device,
+        )?;
+
+        self.cast_image_tensor_for_model(image_tensor)
+    }
+
+    fn prepare_image_batch_tensor(&self, rgbs: &[image::RgbImage]) -> anyhow::Result<Tensor> {
+        if rgbs.is_empty() {
+            anyhow::bail!("image batch must not be empty");
+        }
+
+        let target = self.open_clip_config.model_cfg.vision_cfg.image_size;
+        let per_image_len = 3 * target * target;
+        let mut batch_data = Vec::with_capacity(per_image_len * rgbs.len());
+
+        for rgb in rgbs {
+            batch_data.extend(self.prepare_image_tensor_data(rgb)?);
+        }
+
+        let image_tensor = Tensor::from_vec(
+            batch_data,
+            (rgbs.len(), 3, target, target),
+            &self.device,
+        )?;
+
+        self.cast_image_tensor_for_model(image_tensor)
+    }
+
+    pub fn forward_image_embeddings(
+        &self,
+        rgbs: &[image::RgbImage],
+    ) -> anyhow::Result<Vec<Vec<f32>>> {
+        let images = self.prepare_image_batch_tensor(rgbs)?;
+        let feature = self.vision_model.forward(&images)?;
+        let feature = Self::cast_feature_to_f32(feature)?;
+
+        feature
+            .to_vec2::<f32>()?
+            .into_iter()
+            .map(Self::l2_normalize)
+            .collect()
     }
 
     fn forward_image_embedding(&self, rgb: &image::RgbImage) -> anyhow::Result<Vec<f32>> {
-        let image = self.prepare_image_tensor(rgb)?;
-
-        let feature = self.vision_model.forward(&image)?;
-        let mut rows = feature.to_vec2::<f32>()?;
-        if rows.len() != 1 {
-            anyhow::bail!("expected one image feature row, got {}", rows.len());
+        let mut embeddings = self.forward_image_embeddings(std::slice::from_ref(rgb))?;
+        if embeddings.len() != 1 {
+            anyhow::bail!("expected one image feature row, got {}", embeddings.len());
         }
-
-        Self::l2_normalize(rows.remove(0))
+        Ok(embeddings.remove(0))
     }
 }
 
@@ -396,6 +555,10 @@ impl EmbeddingEngine for CandleClipEngine {
 
     fn embed_image(&self, rgb: &image::RgbImage) -> Result<Vec<f32>> {
         self.forward_image_embedding(rgb)
+    }
+
+    fn embed_images(&self, rgbs: &[image::RgbImage]) -> Result<Vec<Vec<f32>>> {
+        self.forward_image_embeddings(rgbs)
     }
 
     fn default_text_model_name(&self) -> &str {
@@ -450,6 +613,44 @@ mod tests {
     fn rejects_invalid_device_request() {
         let err = CandleClipEngine::parse_device_request("cuda:abc").unwrap_err();
         assert!(err.to_string().contains("invalid device ordinal"));
+    }
+
+    #[test]
+    fn parses_auto_dtype_request() {
+        assert_eq!(
+            CandleClipEngine::parse_dtype_request("auto").unwrap(),
+            DTypeRequest::Auto
+        );
+    }
+
+    #[test]
+    fn parses_fp16_dtype_request_aliases() {
+        assert_eq!(
+            CandleClipEngine::parse_dtype_request("fp16").unwrap(),
+            DTypeRequest::F16
+        );
+        assert_eq!(
+            CandleClipEngine::parse_dtype_request("half").unwrap(),
+            DTypeRequest::F16
+        );
+    }
+
+    #[test]
+    fn parses_fp32_dtype_request_aliases() {
+        assert_eq!(
+            CandleClipEngine::parse_dtype_request("fp32").unwrap(),
+            DTypeRequest::F32
+        );
+        assert_eq!(
+            CandleClipEngine::parse_dtype_request("float32").unwrap(),
+            DTypeRequest::F32
+        );
+    }
+
+    #[test]
+    fn rejects_invalid_dtype_request() {
+        let err = CandleClipEngine::parse_dtype_request("bf16").unwrap_err();
+        assert!(err.to_string().contains("PUERH_MIND_DTYPE"));
     }
 
     fn make_test_engine() -> CandleClipEngine {
@@ -682,6 +883,51 @@ mod tests {
             .expect("image embedding should succeed");
 
         assert_eq!(embedding.len(), engine.open_clip_config.model_cfg.embed_dim);
+    }
+
+    #[test]
+    fn prepare_image_batch_tensor_returns_batched_nchw_shape() {
+        let engine = make_test_engine();
+
+        let batch = vec![
+            image::RgbImage::from_pixel(300, 200, image::Rgb([128, 64, 32])),
+            image::RgbImage::from_pixel(200, 300, image::Rgb([16, 96, 220])),
+        ];
+
+        let tensor = engine
+            .prepare_image_batch_tensor(&batch)
+            .expect("image batch tensor should be prepared");
+
+        assert_eq!(tensor.dims(), &[2, 3, 256, 256]);
+        assert_eq!(tensor.dtype(), candle_core::DType::F32);
+    }
+
+    #[test]
+    fn embeds_image_batch_with_clip_vision_model() {
+        let engine = make_test_engine();
+        let batch = vec![
+            image::RgbImage::from_pixel(300, 200, image::Rgb([128, 64, 32])),
+            image::RgbImage::from_fn(300, 200, |x, y| {
+                image::Rgb([(x % 256) as u8, (y % 256) as u8, ((x + y) % 256) as u8])
+            }),
+        ];
+
+        let embeddings = engine
+            .forward_image_embeddings(&batch)
+            .expect("image batch embedding should succeed");
+
+        assert_eq!(embeddings.len(), 2);
+        for embedding in embeddings {
+            assert_eq!(embedding.len(), engine.open_clip_config.model_cfg.embed_dim);
+
+            let norm = embedding
+                .iter()
+                .map(|v| (*v as f64) * (*v as f64))
+                .sum::<f64>()
+                .sqrt();
+
+            assert!((norm - 1.0).abs() < 1e-3, "norm was {norm}");
+        }
     }
 
     #[test]

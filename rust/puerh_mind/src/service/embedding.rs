@@ -3,6 +3,9 @@ use anyhow::Result;
 pub trait EmbeddingEngine: Send + Sync {
     fn embed_text(&self, text: &str) -> Result<Vec<f32>>;
     fn embed_image(&self, rgb: &image::RgbImage) -> Result<Vec<f32>>;
+    fn embed_images(&self, rgbs: &[image::RgbImage]) -> Result<Vec<Vec<f32>>> {
+        rgbs.iter().map(|rgb| self.embed_image(rgb)).collect()
+    }
     fn default_text_model_name(&self) -> &str;
     fn default_image_model_name(&self) -> &str;
 }
@@ -40,6 +43,10 @@ impl EmbeddingEngine for MockEmbeddingEngine {
             3.0,
             4.0,
         ])
+    }
+
+    fn embed_images(&self, rgbs: &[image::RgbImage]) -> Result<Vec<Vec<f32>>> {
+        rgbs.iter().map(|rgb| self.embed_image(rgb)).collect()
     }
 
     fn default_text_model_name(&self) -> &'static str {
