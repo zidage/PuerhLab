@@ -96,6 +96,18 @@ __global__ void ApplyColorMatrixKernel(const uchar* srcptr, uchar* dstptr, int r
   dst_p[2]           = mat.m[6] * r + mat.m[7] * g + mat.m[8] * b;
 }
 
+__global__ void ApplyInverseCamMulAndPackRGBAKernel(cv::cuda::PtrStepSz<float3> src,
+                                                    cv::cuda::PtrStepSz<float4> dst,
+                                                    const float3 gain) {
+  const int x = blockIdx.x * blockDim.x + threadIdx.x;
+  const int y = blockIdx.y * blockDim.y + threadIdx.y;
+
+  if (x >= src.cols || y >= src.rows) return;
+
+  const float3 rgb = src.ptr(y)[x];
+  dst.ptr(y)[x]    = make_float4(rgb.x * gain.x, rgb.y * gain.y, rgb.z * gain.z, 1.0f);
+}
+
 static void ApplyColorMatrix_Helper(const cv::cuda::GpuMat& src, cv::cuda::GpuMat& dst,
                                     const cv::Mat& matrix, cv::cuda::Stream& stream) {
   CV_Assert(src.type() == CV_32FC3);
@@ -150,9 +162,14 @@ static inline cv::Matx33f BuildTotalMatrix(const float rgb_cam[][4], const float
   return srgb2aces2065_d60 * cam2srgb_matrix * pre_to_cam;
 }
 
-static inline cv::Matx33f BuildInverseCamMulMatrix(const float* cam_mul) {
+static inline float3 BuildInverseCamMulScale(const float* cam_mul) {
   const float g = std::max(cam_mul[1], kMinGain);
-  return BuildDiagonal(SafeDivide(g, cam_mul[0]), 1.0f, SafeDivide(g, cam_mul[2]));
+  return make_float3(SafeDivide(g, cam_mul[0]), 1.0f, SafeDivide(g, cam_mul[2]));
+}
+
+static inline cv::Matx33f BuildInverseCamMulMatrix(const float* cam_mul) {
+  const float3 scale = BuildInverseCamMulScale(cam_mul);
+  return BuildDiagonal(scale.x, scale.y, scale.z);
 }
 }  // namespace
 
@@ -178,6 +195,28 @@ void ApplyInverseCamMul(cv::cuda::GpuMat& img, const float* cam_mul, cv::cuda::S
   cv::cuda::Stream  local_stream;
   cv::cuda::Stream& active_stream = stream == nullptr ? local_stream : *stream;
   ApplyColorMatrix_Helper(img, img, cv::Mat(inv_cam_mul), active_stream);
+  if (stream == nullptr) {
+    active_stream.waitForCompletion();
+  }
+}
+
+void ApplyInverseCamMulAndPackRGBA(const cv::cuda::GpuMat& src, cv::cuda::GpuMat& dst,
+                                   const float* cam_mul, cv::cuda::Stream* stream) {
+  CV_Assert(src.type() == CV_32FC3);
+  if (dst.empty() || dst.size() != src.size() || dst.type() != CV_32FC4) {
+    dst.create(src.size(), CV_32FC4);
+  }
+
+  cv::cuda::Stream  local_stream;
+  cv::cuda::Stream& active_stream = stream == nullptr ? local_stream : *stream;
+  const cudaStream_t cuda_stream  = cv::cuda::StreamAccessor::getStream(active_stream);
+  const float3 gain               = BuildInverseCamMulScale(cam_mul);
+
+  const dim3 block(32, 32);
+  const dim3 grid((src.cols + block.x - 1) / block.x, (src.rows + block.y - 1) / block.y);
+  ApplyInverseCamMulAndPackRGBAKernel<<<grid, block, 0, cuda_stream>>>(src, dst, gain);
+  CUDA_CHECK(cudaGetLastError());
+
   if (stream == nullptr) {
     active_stream.waitForCompletion();
   }

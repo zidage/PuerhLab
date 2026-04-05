@@ -178,8 +178,6 @@ void ResizeOp::Apply(std::shared_ptr<ImageBuffer> input) {
 }
 
 void ResizeOp::ApplyGPU(std::shared_ptr<ImageBuffer> input) {
-  using clock = std::chrono::high_resolution_clock;
-  auto start  = clock::now();
 #if !defined(HAVE_CUDA) && !defined(HAVE_METAL)
   throw std::runtime_error("ResizeOp::ApplyGPU requires HAVE_CUDA or HAVE_METAL");
 #elif defined(HAVE_CUDA)
@@ -200,11 +198,7 @@ void ResizeOp::ApplyGPU(std::shared_ptr<ImageBuffer> input) {
     cv::cuda::GpuMat roi_dst;
     ResizeGpuMatWithCuda(roi_src, roi_dst, plan.output_size, downsample_algorithm_);
     img      = std::move(roi_dst);
-    auto end = clock::now();
 
-    std::cout << "[LOG] ResizeOp takes "
-              << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count()
-              << " ms\n";
     return;
   }
 
@@ -212,11 +206,6 @@ void ResizeOp::ApplyGPU(std::shared_ptr<ImageBuffer> input) {
   ResizeGpuMatWithCuda(img, dst, plan.output_size, downsample_algorithm_);
 
   img      = std::move(dst);
-  auto end = clock::now();
-
-  std::cout << "[LOG] ResizeOp takes "
-            << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count()
-            << " ms\n";
 #elif defined(HAVE_METAL)
   auto&      img  = input->GetMetalImage();
   const auto plan = BuildResizePlan(static_cast<int>(img.Width()), static_cast<int>(img.Height()),

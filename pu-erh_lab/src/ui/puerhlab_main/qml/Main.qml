@@ -309,7 +309,7 @@ ApplicationWindow {
         title: qsTr("Select Images")
         fileMode: FileDialog.OpenFiles
         nameFilters: [
-            qsTr("RAW Images (*.raw *.dng *.nef *.cr2 *.cr3 *.arw *.rw2 *.raf *.3fr)"),
+            qsTr("RAW Images (*.raw *.dng *.nef *.cr2 *.cr3 *.arw *.rw2 *.raf *.3fr *.fff)"),
             qsTr("All Files (*)")
         ]
         onAccepted: {

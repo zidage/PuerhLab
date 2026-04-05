@@ -51,6 +51,12 @@ class HighlightWorkspace {
                                        const HighlightCorrection& correction,
                                        HighlightWorkspace* workspace,
                                        cv::cuda::Stream* stream);
+  friend void ApplyHighlightCorrectionAndPackRGBA(const cv::cuda::GpuMat& img,
+                                                  cv::cuda::GpuMat& dst,
+                                                  const HighlightCorrection& correction,
+                                                  const float* cam_mul,
+                                                  HighlightWorkspace* workspace,
+                                                  cv::cuda::Stream* stream);
   void Reserve(int width, int height);
   void Release();
 
@@ -73,6 +79,11 @@ void AccumulateHighlightStats(const cv::cuda::GpuMat& img, const HighlightCorrec
 void ApplyHighlightCorrection(cv::cuda::GpuMat& img, const HighlightCorrection& correction,
                               HighlightWorkspace* workspace = nullptr,
                               cv::cuda::Stream* stream = nullptr);
+void ApplyHighlightCorrectionAndPackRGBA(const cv::cuda::GpuMat& img, cv::cuda::GpuMat& dst,
+                                         const HighlightCorrection& correction,
+                                         const float* cam_mul,
+                                         HighlightWorkspace* workspace = nullptr,
+                                         cv::cuda::Stream* stream = nullptr);
 void HighlightReconstruct(cv::cuda::GpuMat& img, LibRaw& raw_processor,
                           HighlightWorkspace* workspace = nullptr,
                           cv::cuda::Stream* stream = nullptr);

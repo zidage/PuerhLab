@@ -88,7 +88,7 @@ void RGBToRGBA(cv::cuda::GpuMat& img, cv::cuda::Stream* stream) {
 
   cv::cuda::GpuMat out(img.rows, img.cols, CV_32FC4);
 
-  const dim3 block(32, 8);
+  const dim3 block(32, 32);
   const dim3 grid((img.cols + block.x - 1) / block.x, (img.rows + block.y - 1) / block.y);
 
   const cudaStream_t cuda_stream = GetCudaStream(stream);

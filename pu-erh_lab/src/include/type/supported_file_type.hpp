@@ -27,7 +27,8 @@ enum class ImageFormatType : uint8_t {
   RAF,
   _3FR,
   RW2,
-  EXR
+  EXR,
+  FFF
 };
 
 struct ExportFormatOptions {
@@ -55,7 +56,7 @@ struct ExportFormatOptions {
 
 static const std::unordered_set<std::wstring> supported_extensions = {
     L".raw", L".cr2", L".nef", L".dng", L".arw", L".cr3", L".raf", L".3fr", L".rw2",
-    L".RAW", L".CR2", L".NEF", L".DNG", L".ARW", L".CR3", L".RAF", L".3FR", L".RW2"};
+    L".RAW", L".CR2", L".NEF", L".DNG", L".ARW", L".CR3", L".RAF", L".3FR", L".RW2", L".fff", L".FFF"};
 
 inline bool is_supported_file(const fs::path& path) {
   if (!fs::is_regular_file(path)) return false;

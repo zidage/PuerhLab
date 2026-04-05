@@ -21,8 +21,8 @@ enum class CudaExecutionMode {
   Tiled,
 };
 
-inline constexpr int kCudaTileThresholdLongEdge = 8500;
-inline constexpr int kCudaTileInnerSize         = 4096;
+inline constexpr int kCudaTileThresholdLongEdge = 9000;
+inline constexpr int kCudaTileInnerSize         = 1024;
 inline constexpr int kCudaTileHaloSize          = 16;
 
 inline auto DecodeResScaleDivisor(const DecodeRes decode_res) -> int {

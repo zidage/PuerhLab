@@ -459,8 +459,8 @@
     </message>
     <message>
         <location filename="../qml/Main.qml" line="364"/>
-        <source>RAW Images (*.raw *.dng *.nef *.cr2 *.cr3 *.arw *.rw2 *.raf *.3fr)</source>
-        <translation>RAW 图像 (*.raw *.dng *.nef *.cr2 *.cr3 *.arw *.rw2 *.raf *.3fr)</translation>
+      <source>RAW Images (*.raw *.dng *.nef *.cr2 *.cr3 *.arw *.rw2 *.raf *.3fr *.fff)</source>
+        <translation>RAW 图像 (*.raw *.dng *.nef *.cr2 *.cr3 *.arw *.rw2 *.raf *.3fr *.fff)</translation>
     </message>
     <message>
         <location filename="../qml/Main.qml" line="403"/>

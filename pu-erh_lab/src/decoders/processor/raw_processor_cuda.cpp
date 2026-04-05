@@ -15,7 +15,6 @@
 #include "decoders/processor/operators/gpu/cuda_color_space_conv.hpp"
 #include "decoders/processor/operators/gpu/cuda_debayer_rcd.hpp"
 #include "decoders/processor/operators/gpu/cuda_highlight_reconstruct.hpp"
-#include "decoders/processor/operators/gpu/cuda_image_ops.hpp"
 #include "decoders/processor/operators/gpu/cuda_rotate.hpp"
 #include "decoders/processor/operators/gpu/cuda_white_balance.hpp"
 #include "decoders/processor/operators/gpu/cuda_xtrans_interpolate.hpp"
@@ -23,6 +22,24 @@
 
 namespace puerhlab {
 namespace {
+
+using ProfileClock = std::chrono::steady_clock;
+
+void PrintProfileMs(const char* label, const ProfileClock::duration elapsed) {
+  std::cout << "[LOG] " << label << " takes: "
+            << std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count()
+            << " ms\n";
+}
+
+void LogCpuProfileStep(const char* label, const ProfileClock::time_point start) {
+  PrintProfileMs(label, ProfileClock::now() - start);
+}
+
+void LogCudaProfileStep(cv::cuda::Stream& stream, const char* label,
+                        const ProfileClock::time_point start) {
+  stream.waitForCompletion();
+  PrintProfileMs(label, ProfileClock::now() - start);
+}
 
 struct CudaTileJob {
   cv::Rect source_rect;
@@ -89,68 +106,130 @@ void ApplyCudaGeometricCorrections(cv::cuda::GpuMat& gpu_img, const int flip,
 }  // namespace
 
 auto RawProcessor::ProcessCudaFullFrame() -> ImageBuffer {
+  const auto full_frame_start = ProfileClock::now();
+
+  const auto stage_upload_start = ProfileClock::now();
   process_buffer_.SyncToGPU();
   process_buffer_.ReleaseCPUData();
+  LogCpuProfileStep("RAW CUDA FullFrame sync/upload", stage_upload_start);
 
   cv::cuda::Stream        stream;
   CUDA::RcdWorkspace       rcd_workspace;
   CUDA::HighlightWorkspace highlight_workspace;
   auto&                    gpu_img   = process_buffer_.GetCUDAImage();
+  cv::cuda::GpuMat         output_rgba;
   const cv::Rect crop_rect =
       detail::BuildDecodeCropRect(raw_data_.sizes, gpu_img.size(), params_.decode_res_);
 
+  const auto stage_linear_start = ProfileClock::now();
   CUDA::ToLinearRef(gpu_img, raw_processor_, cfa_pattern_, &stream);
+  LogCudaProfileStep(stream, "RAW CUDA FullFrame to-linear", stage_linear_start);
 
   if (cfa_pattern_.kind == RawCfaKind::Bayer2x2 && params_.highlights_reconstruct_) {
+    const auto stage_debayer_start = ProfileClock::now();
     CUDA::Bayer2x2ToRGB_RCD(gpu_img, cfa_pattern_.bayer_pattern, &rcd_workspace, &stream);
+    LogCudaProfileStep(stream, "RAW CUDA FullFrame debayer", stage_debayer_start);
+
+    const auto stage_crop_start = ProfileClock::now();
     if (!detail::IsFullImageRect(crop_rect, gpu_img.size())) {
       gpu_img = gpu_img(crop_rect);
     }
-    CUDA::HighlightReconstruct(gpu_img, raw_processor_, &highlight_workspace, &stream);
+    LogCpuProfileStep("RAW CUDA FullFrame crop", stage_crop_start);
+
+    const auto stage_highlight_start = ProfileClock::now();
+    CUDA::HighlightCorrection correction = CUDA::BuildHighlightCorrection(raw_processor_);
+    CUDA::HighlightAccumulation accumulation;
+    CUDA::AccumulateHighlightStats(gpu_img, correction, cv::Rect{}, highlight_workspace,
+                                   accumulation, &stream);
+    CUDA::FinalizeHighlightCorrection(accumulation, correction);
+    output_rgba.create(gpu_img.size(), CV_32FC4);
+    CUDA::ApplyHighlightCorrectionAndPackRGBA(gpu_img, output_rgba, correction,
+                                             raw_data_.color.cam_mul, &highlight_workspace,
+                                             &stream);
+    LogCudaProfileStep(stream, "RAW CUDA FullFrame highlight reconstruct + pack rgba",
+                       stage_highlight_start);
+
+    runtime_color_context_.output_in_camera_space_ = true;
+
+    const auto stage_geo_start = ProfileClock::now();
+    ApplyCudaGeometricCorrections(output_rgba, raw_data_.sizes.flip, &stream);
+    LogCudaProfileStep(stream, "RAW CUDA FullFrame geometric corrections", stage_geo_start);
+
+    process_buffer_ = {std::move(output_rgba)};
+    PrintProfileMs("RAW CUDA FullFrame", ProfileClock::now() - full_frame_start);
+    return {std::move(process_buffer_)};
   } else {
+    const auto stage_clamp_start = ProfileClock::now();
     CUDA::Clamp01(gpu_img, &stream);
+    LogCudaProfileStep(stream, "RAW CUDA FullFrame clamp", stage_clamp_start);
+
     if (cfa_pattern_.kind == RawCfaKind::XTrans6x6) {
       const int passes = params_.decode_res_ == DecodeRes::FULL ? 3 : 1;
+      const auto stage_xtrans_start = ProfileClock::now();
       stream.waitForCompletion();
       CUDA::XTransToRGB_Ref(gpu_img, cfa_pattern_.xtrans_pattern, passes);
+      LogCpuProfileStep("RAW CUDA FullFrame xtrans interpolate", stage_xtrans_start);
     } else {
+      const auto stage_debayer_start = ProfileClock::now();
       CUDA::Bayer2x2ToRGB_RCD(gpu_img, cfa_pattern_.bayer_pattern, &rcd_workspace, &stream);
+      LogCudaProfileStep(stream, "RAW CUDA FullFrame debayer", stage_debayer_start);
     }
+
+    const auto stage_crop_start = ProfileClock::now();
     if (!detail::IsFullImageRect(crop_rect, gpu_img.size())) {
       gpu_img = gpu_img(crop_rect);
     }
+    LogCpuProfileStep("RAW CUDA FullFrame crop", stage_crop_start);
   }
 
-  CUDA::ApplyInverseCamMul(gpu_img, raw_data_.color.cam_mul, &stream);
-  runtime_color_context_.output_in_camera_space_ = true;
-  CUDA::RGBToRGBA(gpu_img, &stream);
+  const auto stage_geo_start = ProfileClock::now();
   ApplyCudaGeometricCorrections(gpu_img, raw_data_.sizes.flip, &stream);
-  stream.waitForCompletion();
+  LogCudaProfileStep(stream, "RAW CUDA FullFrame geometric corrections", stage_geo_start);
+
+  const auto stage_pack_start = ProfileClock::now();
+  output_rgba.create(gpu_img.size(), CV_32FC4);
+  CUDA::ApplyInverseCamMulAndPackRGBA(gpu_img, output_rgba, raw_data_.color.cam_mul, &stream);
+  LogCudaProfileStep(stream, "RAW CUDA FullFrame apply inverse cam mul + pack rgba", stage_pack_start);
+
+  runtime_color_context_.output_in_camera_space_ = true;
+  process_buffer_                                = {std::move(output_rgba)};
+
+  PrintProfileMs("RAW CUDA FullFrame", ProfileClock::now() - full_frame_start);
 
   return {std::move(process_buffer_)};
 }
 
 auto RawProcessor::ProcessCudaTiled() -> ImageBuffer {
+  const auto tiled_start = ProfileClock::now();
+
+  const auto stage_upload_start = ProfileClock::now();
   process_buffer_.SyncToGPU();
   process_buffer_.ReleaseCPUData();
+  LogCpuProfileStep("RAW CUDA Tiled sync/upload", stage_upload_start);
 
   cv::cuda::Stream         stream;
   CUDA::RcdWorkspace       rcd_workspace;
   CUDA::HighlightWorkspace highlight_workspace;
   auto&                    linear_raw = process_buffer_.GetCUDAImage();
 
+  const auto stage_linear_start = ProfileClock::now();
   CUDA::ToLinearRef(linear_raw, raw_processor_, cfa_pattern_, &stream);
+  LogCudaProfileStep(stream, "RAW CUDA Tiled to-linear", stage_linear_start);
 
+  const auto stage_jobs_start = ProfileClock::now();
   const cv::Rect active_rect =
       detail::BuildDecodeCropRect(raw_data_.sizes, linear_raw.size(), params_.decode_res_);
   auto jobs = BuildTileJobs(active_rect, linear_raw.size());
+  LogCpuProfileStep("RAW CUDA Tiled build tile jobs", stage_jobs_start);
 
   CUDA::HighlightCorrection   correction = CUDA::BuildHighlightCorrection(raw_processor_);
   CUDA::HighlightAccumulation accumulation;
+  cv::cuda::GpuMat            output_rgba;
 
   if (params_.highlights_reconstruct_) {
+    const auto stage_highlight_stats_start = ProfileClock::now();
+    cv::cuda::GpuMat tile_raw;
     for (const auto& job : jobs) {
-      cv::cuda::GpuMat tile_raw;
       linear_raw(job.source_rect).copyTo(tile_raw, stream);
       const BayerPattern2x2 tile_pattern =
           ShiftBayerPattern(cfa_pattern_.bayer_pattern, job.source_rect.y, job.source_rect.x);
@@ -159,30 +238,56 @@ auto RawProcessor::ProcessCudaTiled() -> ImageBuffer {
                                      accumulation, &stream);
     }
     CUDA::FinalizeHighlightCorrection(accumulation, correction);
+    LogCudaProfileStep(stream, "RAW CUDA Tiled highlight stats", stage_highlight_stats_start);
   }
 
-  cv::cuda::GpuMat output(active_rect.height, active_rect.width, CV_32FC4);
-  for (const auto& job : jobs) {
-    cv::cuda::GpuMat tile_raw;
-    linear_raw(job.source_rect).copyTo(tile_raw, stream);
-    const BayerPattern2x2 tile_pattern =
-        ShiftBayerPattern(cfa_pattern_.bayer_pattern, job.source_rect.y, job.source_rect.x);
-    if (params_.highlights_reconstruct_) {
+  const auto stage_tiles_start = ProfileClock::now();
+  cv::cuda::GpuMat tile_raw;
+  if (params_.highlights_reconstruct_) {
+    output_rgba.create(active_rect.height, active_rect.width, CV_32FC4);
+    cv::cuda::GpuMat tile_rgba;
+    for (const auto& job : jobs) {
+      linear_raw(job.source_rect).copyTo(tile_raw, stream);
+      const BayerPattern2x2 tile_pattern =
+          ShiftBayerPattern(cfa_pattern_.bayer_pattern, job.source_rect.y, job.source_rect.x);
       CUDA::Bayer2x2ToRGB_RCD(tile_raw, tile_pattern, &rcd_workspace, &stream);
-      CUDA::ApplyHighlightCorrection(tile_raw, correction, &highlight_workspace, &stream);
-    } else {
+      CUDA::ApplyHighlightCorrectionAndPackRGBA(tile_raw, tile_rgba, correction,
+                                               raw_data_.color.cam_mul, &highlight_workspace,
+                                               &stream);
+      tile_rgba(job.inner_rect_in_tile).copyTo(output_rgba(job.output_rect), stream);
+    }
+    LogCudaProfileStep(stream, "RAW CUDA Tiled highlight reconstruct + pack tile assembly",
+                       stage_tiles_start);
+
+    const auto stage_geo_start = ProfileClock::now();
+    ApplyCudaGeometricCorrections(output_rgba, raw_data_.sizes.flip, &stream);
+    LogCudaProfileStep(stream, "RAW CUDA Tiled geometric corrections", stage_geo_start);
+  } else {
+    cv::cuda::GpuMat output_rgb;
+    output_rgb.create(active_rect.height, active_rect.width, CV_32FC3);
+    for (const auto& job : jobs) {
+      linear_raw(job.source_rect).copyTo(tile_raw, stream);
+      const BayerPattern2x2 tile_pattern =
+          ShiftBayerPattern(cfa_pattern_.bayer_pattern, job.source_rect.y, job.source_rect.x);
       CUDA::Clamp01(tile_raw, &stream);
       CUDA::Bayer2x2ToRGB_RCD(tile_raw, tile_pattern, &rcd_workspace, &stream);
+      tile_raw(job.inner_rect_in_tile).copyTo(output_rgb(job.output_rect), stream);
     }
-    CUDA::ApplyInverseCamMul(tile_raw, raw_data_.color.cam_mul, &stream);
-    CUDA::RGBToRGBA(tile_raw, &stream);
-    tile_raw(job.inner_rect_in_tile).copyTo(output(job.output_rect), stream);
+    LogCudaProfileStep(stream, "RAW CUDA Tiled tile assembly", stage_tiles_start);
+
+    const auto stage_geo_start = ProfileClock::now();
+    ApplyCudaGeometricCorrections(output_rgb, raw_data_.sizes.flip, &stream);
+    LogCudaProfileStep(stream, "RAW CUDA Tiled geometric corrections", stage_geo_start);
+
+    const auto stage_pack_start = ProfileClock::now();
+    output_rgba.create(output_rgb.size(), CV_32FC4);
+    CUDA::ApplyInverseCamMulAndPackRGBA(output_rgb, output_rgba, raw_data_.color.cam_mul, &stream);
+    LogCudaProfileStep(stream, "RAW CUDA Tiled apply inverse cam mul + pack rgba", stage_pack_start);
   }
 
   runtime_color_context_.output_in_camera_space_ = true;
-  ApplyCudaGeometricCorrections(output, raw_data_.sizes.flip, &stream);
-  stream.waitForCompletion();
-  process_buffer_ = {std::move(output)};
+  process_buffer_                                = {std::move(output_rgba)};
+  PrintProfileMs("RAW CUDA Tiled", ProfileClock::now() - tiled_start);
   return {std::move(process_buffer_)};
 }
 

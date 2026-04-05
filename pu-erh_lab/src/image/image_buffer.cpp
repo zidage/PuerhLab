@@ -4,6 +4,7 @@
 
 #include "image/image_buffer.hpp"
 
+#include <chrono>
 #include <stdexcept>
 #include <utility>
 

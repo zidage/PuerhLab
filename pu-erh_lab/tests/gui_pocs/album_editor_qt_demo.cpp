@@ -1344,7 +1344,7 @@ class ImportDialog final : public QDialog {
   void AddFiles() {
     const QStringList files = QFileDialog::getOpenFileNames(
         this, "Select images", QString(),
-        "Images (*.dng *.nef *.cr2 *.cr3 *.arw *.rw2 *.raf *.tif *.tiff *.jpg *.jpeg *.png);;All "
+        "Images (*.dng *.nef *.cr2 *.cr3 *.arw *.rw2 *.raf *.tif *.tiff *.jpg *.jpeg *.png *.fff);;All "
         "Files (*)");
     if (files.isEmpty()) {
       return;

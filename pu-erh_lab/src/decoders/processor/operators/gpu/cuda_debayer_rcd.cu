@@ -25,9 +25,14 @@ namespace CUDA {
 
 namespace {
 
-constexpr float kEps   = 1e-5f;
-constexpr float kEpsSq = 1e-10f;
-constexpr int   kEdgeFallbackRadius = 4;
+constexpr float kEps              = 1e-5f;
+constexpr float kEpsSq            = 1e-10f;
+constexpr int   kRcdRadius        = 4;
+constexpr int   kEdgeFallbackRadius = kRcdRadius;
+constexpr int   kThreadsX         = 32;
+constexpr int   kThreadsY         = 8;
+constexpr int   kTileWidth        = kThreadsX + 2 * kRcdRadius;
+constexpr int   kTileHeight       = kThreadsY + 2 * kRcdRadius;
 
 __device__ __forceinline__ int FC(const BayerPattern2x2& pattern, const int y, const int x) {
   return pattern.rgb_fc[BayerCellIndex(y, x)];
@@ -42,22 +47,34 @@ __device__ __forceinline__ float SafeRawRead(const cv::cuda::PtrStep<float> raw,
   return raw.ptr(ClampCoord(y, height))[ClampCoord(x, width)];
 }
 
-__device__ __forceinline__ float LowPassAt(const cv::cuda::PtrStep<float> raw, const int y,
-                                           const int x) {
-  const float* row_m1 = raw.ptr(y - 1);
-  const float* row_0  = raw.ptr(y);
-  const float* row_p1 = raw.ptr(y + 1);
+__device__ __forceinline__ void LoadRawTileFull(const cv::cuda::PtrStep<float> raw, const int width,
+                                                const int height,
+                                                float tile[kTileHeight][kTileWidth]) {
+  const int tile_x0 = static_cast<int>(blockIdx.x) * blockDim.x - kRcdRadius;
+  const int tile_y0 = static_cast<int>(blockIdx.y) * blockDim.y - kRcdRadius;
 
-  const float  c      = row_0[x];
-  const float  n      = row_m1[x];
-  const float  s      = row_p1[x];
-  const float  w      = row_0[x - 1];
-  const float  e      = row_0[x + 1];
+  for (int tile_y = threadIdx.y; tile_y < kTileHeight; tile_y += blockDim.y) {
+    const int    gy       = ClampCoord(tile_y0 + tile_y, height);
+    const float* raw_row  = raw.ptr(gy);
+    float*       tile_row = tile[tile_y];
+    for (int tile_x = threadIdx.x; tile_x < kTileWidth; tile_x += blockDim.x) {
+      tile_row[tile_x] = raw_row[ClampCoord(tile_x0 + tile_x, width)];
+    }
+  }
+}
 
-  const float  nw     = row_m1[x - 1];
-  const float  ne     = row_m1[x + 1];
-  const float  sw     = row_p1[x - 1];
-  const float  se     = row_p1[x + 1];
+__device__ __forceinline__ float LowPassAtTile(const float tile[kTileHeight][kTileWidth],
+                                                const int y, const int x) {
+  const float c  = tile[y][x];
+  const float n  = tile[y - 1][x];
+  const float s  = tile[y + 1][x];
+  const float w  = tile[y][x - 1];
+  const float e  = tile[y][x + 1];
+
+  const float nw = tile[y - 1][x - 1];
+  const float ne = tile[y - 1][x + 1];
+  const float sw = tile[y + 1][x - 1];
+  const float se = tile[y + 1][x + 1];
 
   return 0.25f * c + 0.125f * (n + s + w + e) + 0.0625f * (nw + ne + sw + se);
 }
@@ -103,41 +120,49 @@ __device__ float EstimateEdgeChannel(const cv::cuda::PtrStep<float> raw, const i
 }
 
 __global__ void RCD_InitAndVHKernel(const cv::cuda::PtrStep<float> raw, cv::cuda::PtrStep<float> r,
-                                   cv::cuda::PtrStep<float> g, cv::cuda::PtrStep<float> b,
-                                   cv::cuda::PtrStep<float> vh_dir, const int width,
-                                   const int height, BayerPattern2x2 pattern) {
+                                    cv::cuda::PtrStep<float> g, cv::cuda::PtrStep<float> b,
+                                    cv::cuda::PtrStep<float> vh_dir, cv::cuda::PtrStep<float> pq_dir,
+                                    const int width,
+                                    const int height, BayerPattern2x2 pattern) {
+  __shared__ float raw_tile[kTileHeight][kTileWidth];
+  LoadRawTileFull(raw, width, height, raw_tile);
+  __syncthreads();
+
   const int x = blockIdx.x * blockDim.x + threadIdx.x;
   const int y = blockIdx.y * blockDim.y + threadIdx.y;
   if (x >= width || y >= height) return;
 
-  const float val   = raw.ptr(y)[x];
+  const int   tx    = threadIdx.x + kRcdRadius;
+  const int   ty    = threadIdx.y + kRcdRadius;
+  const float val   = raw_tile[ty][tx];
   const int   color = FC(pattern, y, x);
 
   r.ptr(y)[x]       = (color == 0) ? val : 0.0f;
   g.ptr(y)[x]       = (color == 1) ? val : 0.0f;
   b.ptr(y)[x]       = (color == 2) ? val : 0.0f;
+  pq_dir.ptr(y)[x]  = 0.0f;
 
   float vh          = 0.0f;
-  if (y >= 4 && y < height - 4 && x >= 4 && x < width - 4) {
+  if (y >= kRcdRadius && y < height - kRcdRadius && x >= kRcdRadius && x < width - kRcdRadius) {
     const float c   = val;
 
-    const float vm1 = raw.ptr(y - 1)[x];
-    const float vp1 = raw.ptr(y + 1)[x];
-    const float vm2 = raw.ptr(y - 2)[x];
-    const float vp2 = raw.ptr(y + 2)[x];
-    const float vm3 = raw.ptr(y - 3)[x];
-    const float vp3 = raw.ptr(y + 3)[x];
-    const float vm4 = raw.ptr(y - 4)[x];
-    const float vp4 = raw.ptr(y + 4)[x];
+    const float vm1 = raw_tile[ty - 1][tx];
+    const float vp1 = raw_tile[ty + 1][tx];
+    const float vm2 = raw_tile[ty - 2][tx];
+    const float vp2 = raw_tile[ty + 2][tx];
+    const float vm3 = raw_tile[ty - 3][tx];
+    const float vp3 = raw_tile[ty + 3][tx];
+    const float vm4 = raw_tile[ty - 4][tx];
+    const float vp4 = raw_tile[ty + 4][tx];
 
-    const float hm1 = raw.ptr(y)[x - 1];
-    const float hp1 = raw.ptr(y)[x + 1];
-    const float hm2 = raw.ptr(y)[x - 2];
-    const float hp2 = raw.ptr(y)[x + 2];
-    const float hm3 = raw.ptr(y)[x - 3];
-    const float hp3 = raw.ptr(y)[x + 3];
-    const float hm4 = raw.ptr(y)[x - 4];
-    const float hp4 = raw.ptr(y)[x + 4];
+    const float hm1 = raw_tile[ty][tx - 1];
+    const float hp1 = raw_tile[ty][tx + 1];
+    const float hm2 = raw_tile[ty][tx - 2];
+    const float hp2 = raw_tile[ty][tx + 2];
+    const float hm3 = raw_tile[ty][tx - 3];
+    const float hp3 = raw_tile[ty][tx + 3];
+    const float hm4 = raw_tile[ty][tx - 4];
+    const float hp4 = raw_tile[ty][tx + 4];
 
     const float V_stat = fmaxf(
         -18.f * c * vm1 - 18.f * c * vp1 - 36.f * c * vm2 - 36.f * c * vp2 + 18.f * c * vm3 +
@@ -172,12 +197,16 @@ __global__ void RCD_InitAndVHKernel(const cv::cuda::PtrStep<float> raw, cv::cuda
 }
 
 __global__ void RCD_GreenAtRBKernel(const cv::cuda::PtrStep<float> raw,
-                                   const cv::cuda::PtrStep<float> vh_dir, cv::cuda::PtrStep<float> g,
-                                   const int width, const int height, BayerPattern2x2 pattern) {
+                                    const cv::cuda::PtrStep<float> vh_dir, cv::cuda::PtrStep<float> g,
+                                    const int width, const int height, BayerPattern2x2 pattern) {
+  __shared__ float raw_tile[kTileHeight][kTileWidth];
+  LoadRawTileFull(raw, width, height, raw_tile);
+  __syncthreads();
+
   const int x = blockIdx.x * blockDim.x + threadIdx.x;
   const int y = blockIdx.y * blockDim.y + threadIdx.y;
   if (x >= width || y >= height) return;
-  if (y < 4 || y >= height - 4 || x < 4 || x >= width - 4) return;
+  if (y < kRcdRadius || y >= height - kRcdRadius || x < kRcdRadius || x >= width - kRcdRadius) return;
 
   const int color = FC(pattern, y, x);
   if (color == 1) return;
@@ -188,31 +217,34 @@ __global__ void RCD_GreenAtRBKernel(const cv::cuda::PtrStep<float> raw,
   const float VH_disc =
       (fabsf(0.5f - VH_central) < fabsf(0.5f - VH_neigh)) ? VH_neigh : VH_central;
 
-  const float c   = raw.ptr(y)[x];
+  const int tx = threadIdx.x + kRcdRadius;
+  const int ty = threadIdx.y + kRcdRadius;
 
-  const float vm1 = raw.ptr(y - 1)[x];
-  const float vp1 = raw.ptr(y + 1)[x];
-  const float vm2 = raw.ptr(y - 2)[x];
-  const float vp2 = raw.ptr(y + 2)[x];
-  const float vm3 = raw.ptr(y - 3)[x];
-  const float vp3 = raw.ptr(y + 3)[x];
-  const float vm4 = raw.ptr(y - 4)[x];
-  const float vp4 = raw.ptr(y + 4)[x];
+  const float c   = raw_tile[ty][tx];
 
-  const float hm1 = raw.ptr(y)[x - 1];
-  const float hp1 = raw.ptr(y)[x + 1];
-  const float hm2 = raw.ptr(y)[x - 2];
-  const float hp2 = raw.ptr(y)[x + 2];
-  const float hm3 = raw.ptr(y)[x - 3];
-  const float hp3 = raw.ptr(y)[x + 3];
-  const float hm4 = raw.ptr(y)[x - 4];
-  const float hp4 = raw.ptr(y)[x + 4];
+  const float vm1 = raw_tile[ty - 1][tx];
+  const float vp1 = raw_tile[ty + 1][tx];
+  const float vm2 = raw_tile[ty - 2][tx];
+  const float vp2 = raw_tile[ty + 2][tx];
+  const float vm3 = raw_tile[ty - 3][tx];
+  const float vp3 = raw_tile[ty + 3][tx];
+  const float vm4 = raw_tile[ty - 4][tx];
+  const float vp4 = raw_tile[ty + 4][tx];
 
-  const float lpf_c  = LowPassAt(raw, y, x);
-  const float lpf_n2 = LowPassAt(raw, y - 2, x);
-  const float lpf_s2 = LowPassAt(raw, y + 2, x);
-  const float lpf_w2 = LowPassAt(raw, y, x - 2);
-  const float lpf_e2 = LowPassAt(raw, y, x + 2);
+  const float hm1 = raw_tile[ty][tx - 1];
+  const float hp1 = raw_tile[ty][tx + 1];
+  const float hm2 = raw_tile[ty][tx - 2];
+  const float hp2 = raw_tile[ty][tx + 2];
+  const float hm3 = raw_tile[ty][tx - 3];
+  const float hp3 = raw_tile[ty][tx + 3];
+  const float hm4 = raw_tile[ty][tx - 4];
+  const float hp4 = raw_tile[ty][tx + 4];
+
+  const float lpf_c  = LowPassAtTile(raw_tile, ty, tx);
+  const float lpf_n2 = LowPassAtTile(raw_tile, ty - 2, tx);
+  const float lpf_s2 = LowPassAtTile(raw_tile, ty + 2, tx);
+  const float lpf_w2 = LowPassAtTile(raw_tile, ty, tx - 2);
+  const float lpf_e2 = LowPassAtTile(raw_tile, ty, tx + 2);
 
   const float N_grad = kEps + fabsf(vm1 - vp1) + fabsf(c - vm2) + fabsf(vm1 - vm3) + fabsf(vm2 - vm4);
   const float S_grad = kEps + fabsf(vp1 - vm1) + fabsf(c - vp2) + fabsf(vp1 - vp3) + fabsf(vp2 - vp4);
@@ -231,34 +263,41 @@ __global__ void RCD_GreenAtRBKernel(const cv::cuda::PtrStep<float> raw,
 }
 
 __global__ void RCD_PQDirKernel(const cv::cuda::PtrStep<float> raw, cv::cuda::PtrStep<float> pq_dir,
-                               const int width, const int height, BayerPattern2x2 pattern) {
+                                const int width, const int height, BayerPattern2x2 pattern) {
+  __shared__ float raw_tile[kTileHeight][kTileWidth];
+  LoadRawTileFull(raw, width, height, raw_tile);
+  __syncthreads();
+
   const int x = blockIdx.x * blockDim.x + threadIdx.x;
   const int y = blockIdx.y * blockDim.y + threadIdx.y;
   if (x >= width || y >= height) return;
 
   float pq = 0.0f;
-  if (y >= 4 && y < height - 4 && x >= 4 && x < width - 4) {
+  if (y >= kRcdRadius && y < height - kRcdRadius && x >= kRcdRadius && x < width - kRcdRadius) {
     const int color = FC(pattern, y, x);
     if (color != 1) {
-      const float c   = raw.ptr(y)[x];
+      const int tx = threadIdx.x + kRcdRadius;
+      const int ty = threadIdx.y + kRcdRadius;
 
-      const float nw1 = raw.ptr(y - 1)[x - 1];
-      const float se1 = raw.ptr(y + 1)[x + 1];
-      const float nw2 = raw.ptr(y - 2)[x - 2];
-      const float se2 = raw.ptr(y + 2)[x + 2];
-      const float nw3 = raw.ptr(y - 3)[x - 3];
-      const float se3 = raw.ptr(y + 3)[x + 3];
-      const float nw4 = raw.ptr(y - 4)[x - 4];
-      const float se4 = raw.ptr(y + 4)[x + 4];
+      const float c   = raw_tile[ty][tx];
 
-      const float sw1 = raw.ptr(y + 1)[x - 1];
-      const float ne1 = raw.ptr(y - 1)[x + 1];
-      const float sw2 = raw.ptr(y + 2)[x - 2];
-      const float ne2 = raw.ptr(y - 2)[x + 2];
-      const float sw3 = raw.ptr(y + 3)[x - 3];
-      const float ne3 = raw.ptr(y - 3)[x + 3];
-      const float sw4 = raw.ptr(y + 4)[x - 4];
-      const float ne4 = raw.ptr(y - 4)[x + 4];
+      const float nw1 = raw_tile[ty - 1][tx - 1];
+      const float se1 = raw_tile[ty + 1][tx + 1];
+      const float nw2 = raw_tile[ty - 2][tx - 2];
+      const float se2 = raw_tile[ty + 2][tx + 2];
+      const float nw3 = raw_tile[ty - 3][tx - 3];
+      const float se3 = raw_tile[ty + 3][tx + 3];
+      const float nw4 = raw_tile[ty - 4][tx - 4];
+      const float se4 = raw_tile[ty + 4][tx + 4];
+
+      const float sw1 = raw_tile[ty + 1][tx - 1];
+      const float ne1 = raw_tile[ty - 1][tx + 1];
+      const float sw2 = raw_tile[ty + 2][tx - 2];
+      const float ne2 = raw_tile[ty - 2][tx + 2];
+      const float sw3 = raw_tile[ty + 3][tx - 3];
+      const float ne3 = raw_tile[ty - 3][tx + 3];
+      const float sw4 = raw_tile[ty + 4][tx - 4];
+      const float ne4 = raw_tile[ty - 4][tx + 4];
 
       const float P_stat = fmaxf(
           -18.f * c * nw1 - 18.f * c * se1 - 36.f * c * nw2 - 36.f * c * se2 + 18.f * c * nw3 +
@@ -294,49 +333,105 @@ __global__ void RCD_PQDirKernel(const cv::cuda::PtrStep<float> raw, cv::cuda::Pt
 }
 
 __global__ void RCD_RBAtRBKernel(const cv::cuda::PtrStep<float> pq_dir, const cv::cuda::PtrStep<float> g,
-                                cv::cuda::PtrStep<float> r, cv::cuda::PtrStep<float> b,
-                                const int width, const int height, BayerPattern2x2 pattern) {
+                                 cv::cuda::PtrStep<float> r, cv::cuda::PtrStep<float> b,
+                                 const int width, const int height, BayerPattern2x2 pattern) {
+  __shared__ float pq_tile[kThreadsY + 2][kThreadsX + 2];
+  __shared__ float g_tile[kThreadsY + 4][kThreadsX + 4];
+  __shared__ float r_tile[kThreadsY + 7][kThreadsX + 7];
+  __shared__ float b_tile[kThreadsY + 7][kThreadsX + 7];
+
+  {
+    const int tile_x0 = static_cast<int>(blockIdx.x) * blockDim.x - 1;
+    const int tile_y0 = static_cast<int>(blockIdx.y) * blockDim.y - 1;
+    for (int ty = threadIdx.y; ty < (kThreadsY + 2); ty += blockDim.y) {
+      const int    gy      = ClampCoord(tile_y0 + ty, height);
+      const float* pq_row  = pq_dir.ptr(gy);
+      float*       tile_row = pq_tile[ty];
+      for (int tx = threadIdx.x; tx < (kThreadsX + 2); tx += blockDim.x) {
+        tile_row[tx] = pq_row[ClampCoord(tile_x0 + tx, width)];
+      }
+    }
+  }
+
+  {
+    const int tile_x0 = static_cast<int>(blockIdx.x) * blockDim.x - 2;
+    const int tile_y0 = static_cast<int>(blockIdx.y) * blockDim.y - 2;
+    for (int ty = threadIdx.y; ty < (kThreadsY + 4); ty += blockDim.y) {
+      const int    gy      = ClampCoord(tile_y0 + ty, height);
+      const float* g_row   = g.ptr(gy);
+      float*       tile_row = g_tile[ty];
+      for (int tx = threadIdx.x; tx < (kThreadsX + 4); tx += blockDim.x) {
+        tile_row[tx] = g_row[ClampCoord(tile_x0 + tx, width)];
+      }
+    }
+  }
+
+  {
+    const int tile_x0 = static_cast<int>(blockIdx.x) * blockDim.x - 3;
+    const int tile_y0 = static_cast<int>(blockIdx.y) * blockDim.y - 3;
+    for (int ty = threadIdx.y; ty < (kThreadsY + 7); ty += blockDim.y) {
+      const int    gy       = ClampCoord(tile_y0 + ty, height);
+      const float* r_row    = r.ptr(gy);
+      const float* b_row    = b.ptr(gy);
+      float*       r_trow   = r_tile[ty];
+      float*       b_trow   = b_tile[ty];
+      for (int tx = threadIdx.x; tx < (kThreadsX + 7); tx += blockDim.x) {
+        const int gx = ClampCoord(tile_x0 + tx, width);
+        r_trow[tx] = r_row[gx];
+        b_trow[tx] = b_row[gx];
+      }
+    }
+  }
+  __syncthreads();
+
   const int x = blockIdx.x * blockDim.x + threadIdx.x;
   const int y = blockIdx.y * blockDim.y + threadIdx.y;
   if (x >= width || y >= height) return;
-  if (y < 4 || y >= height - 4 || x < 4 || x >= width - 4) return;
+  if (y < kRcdRadius || y >= height - kRcdRadius || x < kRcdRadius || x >= width - kRcdRadius) return;
 
   const int color = FC(pattern, y, x);
   if (color == 1) return;
 
   const int   c        = 2 - color;  // missing channel at RB position (R->B, B->R)
 
-  const float PQ_c     = pq_dir.ptr(y)[x];
-  const float PQ_n     = 0.25f * (pq_dir.ptr(y - 1)[x - 1] + pq_dir.ptr(y - 1)[x + 1] +
-                                pq_dir.ptr(y + 1)[x - 1] + pq_dir.ptr(y + 1)[x + 1]);
+  const int ptx = threadIdx.x + 1;
+  const int pty = threadIdx.y + 1;
+  const int gtx = threadIdx.x + 2;
+  const int gty = threadIdx.y + 2;
+  const int ctx = threadIdx.x + 3;
+  const int cty = threadIdx.y + 3;
+
+  const float PQ_c     = pq_tile[pty][ptx];
+  const float PQ_n     = 0.25f * (pq_tile[pty - 1][ptx - 1] + pq_tile[pty - 1][ptx + 1] +
+                                 pq_tile[pty + 1][ptx - 1] + pq_tile[pty + 1][ptx + 1]);
   const float PQ_disc  = (fabsf(0.5f - PQ_c) < fabsf(0.5f - PQ_n)) ? PQ_n : PQ_c;
 
-  const float g_c      = g.ptr(y)[x];
+  const float g_c      = g_tile[gty][gtx];
 
-  const float ch_nw1   = (c == 0) ? r.ptr(y - 1)[x - 1] : b.ptr(y - 1)[x - 1];
-  const float ch_ne1   = (c == 0) ? r.ptr(y - 1)[x + 1] : b.ptr(y - 1)[x + 1];
-  const float ch_sw1   = (c == 0) ? r.ptr(y + 1)[x - 1] : b.ptr(y + 1)[x - 1];
-  const float ch_se1   = (c == 0) ? r.ptr(y + 1)[x + 1] : b.ptr(y + 1)[x + 1];
+  const float ch_nw1   = (c == 0) ? r_tile[cty - 1][ctx - 1] : b_tile[cty - 1][ctx - 1];
+  const float ch_ne1   = (c == 0) ? r_tile[cty - 1][ctx + 1] : b_tile[cty - 1][ctx + 1];
+  const float ch_sw1   = (c == 0) ? r_tile[cty + 1][ctx - 1] : b_tile[cty + 1][ctx - 1];
+  const float ch_se1   = (c == 0) ? r_tile[cty + 1][ctx + 1] : b_tile[cty + 1][ctx + 1];
 
-  const float ch_nw3   = (c == 0) ? r.ptr(y - 3)[x - 3] : b.ptr(y - 3)[x - 3];
-  const float ch_ne3   = (c == 0) ? r.ptr(y - 3)[x + 3] : b.ptr(y - 3)[x + 3];
-  const float ch_sw3   = (c == 0) ? r.ptr(y + 3)[x - 3] : b.ptr(y + 3)[x - 3];
-  const float ch_se3   = (c == 0) ? r.ptr(y + 3)[x + 3] : b.ptr(y + 3)[x + 3];
+  const float ch_nw3   = (c == 0) ? r_tile[cty - 3][ctx - 3] : b_tile[cty - 3][ctx - 3];
+  const float ch_ne3   = (c == 0) ? r_tile[cty - 3][ctx + 3] : b_tile[cty - 3][ctx + 3];
+  const float ch_sw3   = (c == 0) ? r_tile[cty + 3][ctx - 3] : b_tile[cty + 3][ctx - 3];
+  const float ch_se3   = (c == 0) ? r_tile[cty + 3][ctx + 3] : b_tile[cty + 3][ctx + 3];
 
-  const float g_nw2    = g.ptr(y - 2)[x - 2];
-  const float g_ne2    = g.ptr(y - 2)[x + 2];
-  const float g_sw2    = g.ptr(y + 2)[x - 2];
-  const float g_se2    = g.ptr(y + 2)[x + 2];
+  const float g_nw2    = g_tile[gty - 2][gtx - 2];
+  const float g_ne2    = g_tile[gty - 2][gtx + 2];
+  const float g_sw2    = g_tile[gty + 2][gtx - 2];
+  const float g_se2    = g_tile[gty + 2][gtx + 2];
 
   const float NW_grad  = kEps + fabsf(ch_nw1 - ch_se1) + fabsf(ch_nw1 - ch_nw3) + fabsf(g_c - g_nw2);
   const float NE_grad  = kEps + fabsf(ch_ne1 - ch_sw1) + fabsf(ch_ne1 - ch_ne3) + fabsf(g_c - g_ne2);
   const float SW_grad  = kEps + fabsf(ch_sw1 - ch_ne1) + fabsf(ch_sw1 - ch_sw3) + fabsf(g_c - g_sw2);
   const float SE_grad  = kEps + fabsf(ch_se1 - ch_nw1) + fabsf(ch_se1 - ch_se3) + fabsf(g_c - g_se2);
 
-  const float g_nw1    = g.ptr(y - 1)[x - 1];
-  const float g_ne1    = g.ptr(y - 1)[x + 1];
-  const float g_sw1    = g.ptr(y + 1)[x - 1];
-  const float g_se1    = g.ptr(y + 1)[x + 1];
+  const float g_nw1    = g_tile[gty - 1][gtx - 1];
+  const float g_ne1    = g_tile[gty - 1][gtx + 1];
+  const float g_sw1    = g_tile[gty + 1][gtx - 1];
+  const float g_se1    = g_tile[gty + 1][gtx + 1];
 
   const float NW_est   = ch_nw1 - g_nw1;
   const float NE_est   = ch_ne1 - g_ne1;
@@ -356,49 +451,105 @@ __global__ void RCD_RBAtRBKernel(const cv::cuda::PtrStep<float> pq_dir, const cv
 }
 
 __global__ void RCD_RBAtGKernel(const cv::cuda::PtrStep<float> vh_dir, const cv::cuda::PtrStep<float> g,
-                               cv::cuda::PtrStep<float> r, cv::cuda::PtrStep<float> b,
-                               const int width, const int height, BayerPattern2x2 pattern) {
+                                cv::cuda::PtrStep<float> r, cv::cuda::PtrStep<float> b,
+                                const int width, const int height, BayerPattern2x2 pattern) {
+  __shared__ float vh_tile[kThreadsY + 2][kThreadsX + 2];
+  __shared__ float g_tile[kThreadsY + 4][kThreadsX + 4];
+  __shared__ float r_tile[kThreadsY + 7][kThreadsX + 7];
+  __shared__ float b_tile[kThreadsY + 7][kThreadsX + 7];
+
+  {
+    const int tile_x0 = static_cast<int>(blockIdx.x) * blockDim.x - 1;
+    const int tile_y0 = static_cast<int>(blockIdx.y) * blockDim.y - 1;
+    for (int ty = threadIdx.y; ty < (kThreadsY + 2); ty += blockDim.y) {
+      const int    gy      = ClampCoord(tile_y0 + ty, height);
+      const float* vh_row  = vh_dir.ptr(gy);
+      float*       tile_row = vh_tile[ty];
+      for (int tx = threadIdx.x; tx < (kThreadsX + 2); tx += blockDim.x) {
+        tile_row[tx] = vh_row[ClampCoord(tile_x0 + tx, width)];
+      }
+    }
+  }
+
+  {
+    const int tile_x0 = static_cast<int>(blockIdx.x) * blockDim.x - 2;
+    const int tile_y0 = static_cast<int>(blockIdx.y) * blockDim.y - 2;
+    for (int ty = threadIdx.y; ty < (kThreadsY + 4); ty += blockDim.y) {
+      const int    gy      = ClampCoord(tile_y0 + ty, height);
+      const float* g_row   = g.ptr(gy);
+      float*       tile_row = g_tile[ty];
+      for (int tx = threadIdx.x; tx < (kThreadsX + 4); tx += blockDim.x) {
+        tile_row[tx] = g_row[ClampCoord(tile_x0 + tx, width)];
+      }
+    }
+  }
+
+  {
+    const int tile_x0 = static_cast<int>(blockIdx.x) * blockDim.x - 3;
+    const int tile_y0 = static_cast<int>(blockIdx.y) * blockDim.y - 3;
+    for (int ty = threadIdx.y; ty < (kThreadsY + 7); ty += blockDim.y) {
+      const int    gy      = ClampCoord(tile_y0 + ty, height);
+      const float* r_row   = r.ptr(gy);
+      const float* b_row   = b.ptr(gy);
+      float*       r_trow  = r_tile[ty];
+      float*       b_trow  = b_tile[ty];
+      for (int tx = threadIdx.x; tx < (kThreadsX + 7); tx += blockDim.x) {
+        const int gx = ClampCoord(tile_x0 + tx, width);
+        r_trow[tx] = r_row[gx];
+        b_trow[tx] = b_row[gx];
+      }
+    }
+  }
+  __syncthreads();
+
   const int x = blockIdx.x * blockDim.x + threadIdx.x;
   const int y = blockIdx.y * blockDim.y + threadIdx.y;
   if (x >= width || y >= height) return;
-  if (y < 4 || y >= height - 4 || x < 4 || x >= width - 4) return;
+  if (y < kRcdRadius || y >= height - kRcdRadius || x < kRcdRadius || x >= width - kRcdRadius) return;
 
   const int color = FC(pattern, y, x);
   if (color != 1) return;
 
-  const float VH_central = vh_dir.ptr(y)[x];
-  const float VH_neigh   = 0.25f * (vh_dir.ptr(y - 1)[x - 1] + vh_dir.ptr(y - 1)[x + 1] +
-                                  vh_dir.ptr(y + 1)[x - 1] + vh_dir.ptr(y + 1)[x + 1]);
+  const int vtx = threadIdx.x + 1;
+  const int vty = threadIdx.y + 1;
+  const int gtx = threadIdx.x + 2;
+  const int gty = threadIdx.y + 2;
+  const int ctx = threadIdx.x + 3;
+  const int cty = threadIdx.y + 3;
+
+  const float VH_central = vh_tile[vty][vtx];
+  const float VH_neigh   = 0.25f * (vh_tile[vty - 1][vtx - 1] + vh_tile[vty - 1][vtx + 1] +
+                                   vh_tile[vty + 1][vtx - 1] + vh_tile[vty + 1][vtx + 1]);
   const float VH_disc =
       (fabsf(0.5f - VH_central) < fabsf(0.5f - VH_neigh)) ? VH_neigh : VH_central;
 
-  const float g_c = g.ptr(y)[x];
+  const float g_c = g_tile[gty][gtx];
 
-  const float g_m2 = g.ptr(y - 2)[x];
-  const float g_p2 = g.ptr(y + 2)[x];
-  const float g_l2 = g.ptr(y)[x - 2];
-  const float g_r2 = g.ptr(y)[x + 2];
+  const float g_m2 = g_tile[gty - 2][gtx];
+  const float g_p2 = g_tile[gty + 2][gtx];
+  const float g_l2 = g_tile[gty][gtx - 2];
+  const float g_r2 = g_tile[gty][gtx + 2];
 
   // --- R @ G ---
   {
-    const float ch_m1  = r.ptr(y - 1)[x];
-    const float ch_p1  = r.ptr(y + 1)[x];
-    const float ch_m3  = r.ptr(y - 3)[x];
-    const float ch_p3  = r.ptr(y + 3)[x];
-    const float ch_l1  = r.ptr(y)[x - 1];
-    const float ch_r1  = r.ptr(y)[x + 1];
-    const float ch_l3  = r.ptr(y)[x - 3];
-    const float ch_r3  = r.ptr(y)[x + 3];
+    const float ch_m1  = r_tile[cty - 1][ctx];
+    const float ch_p1  = r_tile[cty + 1][ctx];
+    const float ch_m3  = r_tile[cty - 3][ctx];
+    const float ch_p3  = r_tile[cty + 3][ctx];
+    const float ch_l1  = r_tile[cty][ctx - 1];
+    const float ch_r1  = r_tile[cty][ctx + 1];
+    const float ch_l3  = r_tile[cty][ctx - 3];
+    const float ch_r3  = r_tile[cty][ctx + 3];
 
     const float N_grad = kEps + fabsf(g_c - g_m2) + fabsf(ch_m1 - ch_p1) + fabsf(ch_m1 - ch_m3);
     const float S_grad = kEps + fabsf(g_c - g_p2) + fabsf(ch_p1 - ch_m1) + fabsf(ch_p1 - ch_p3);
     const float W_grad = kEps + fabsf(g_c - g_l2) + fabsf(ch_l1 - ch_r1) + fabsf(ch_l1 - ch_l3);
     const float E_grad = kEps + fabsf(g_c - g_r2) + fabsf(ch_r1 - ch_l1) + fabsf(ch_r1 - ch_r3);
 
-    const float N_est  = ch_m1 - g.ptr(y - 1)[x];
-    const float S_est  = ch_p1 - g.ptr(y + 1)[x];
-    const float W_est  = ch_l1 - g.ptr(y)[x - 1];
-    const float E_est  = ch_r1 - g.ptr(y)[x + 1];
+    const float N_est  = ch_m1 - g_tile[gty - 1][gtx];
+    const float S_est  = ch_p1 - g_tile[gty + 1][gtx];
+    const float W_est  = ch_l1 - g_tile[gty][gtx - 1];
+    const float E_est  = ch_r1 - g_tile[gty][gtx + 1];
 
     const float V_est  = (N_grad * S_est + S_grad * N_est) / (N_grad + S_grad);
     const float H_est  = (E_grad * W_est + W_grad * E_est) / (E_grad + W_grad);
@@ -408,24 +559,24 @@ __global__ void RCD_RBAtGKernel(const cv::cuda::PtrStep<float> vh_dir, const cv:
 
   // --- B @ G ---
   {
-    const float ch_m1  = b.ptr(y - 1)[x];
-    const float ch_p1  = b.ptr(y + 1)[x];
-    const float ch_m3  = b.ptr(y - 3)[x];
-    const float ch_p3  = b.ptr(y + 3)[x];
-    const float ch_l1  = b.ptr(y)[x - 1];
-    const float ch_r1  = b.ptr(y)[x + 1];
-    const float ch_l3  = b.ptr(y)[x - 3];
-    const float ch_r3  = b.ptr(y)[x + 3];
+    const float ch_m1  = b_tile[cty - 1][ctx];
+    const float ch_p1  = b_tile[cty + 1][ctx];
+    const float ch_m3  = b_tile[cty - 3][ctx];
+    const float ch_p3  = b_tile[cty + 3][ctx];
+    const float ch_l1  = b_tile[cty][ctx - 1];
+    const float ch_r1  = b_tile[cty][ctx + 1];
+    const float ch_l3  = b_tile[cty][ctx - 3];
+    const float ch_r3  = b_tile[cty][ctx + 3];
 
     const float N_grad = kEps + fabsf(g_c - g_m2) + fabsf(ch_m1 - ch_p1) + fabsf(ch_m1 - ch_m3);
     const float S_grad = kEps + fabsf(g_c - g_p2) + fabsf(ch_p1 - ch_m1) + fabsf(ch_p1 - ch_p3);
     const float W_grad = kEps + fabsf(g_c - g_l2) + fabsf(ch_l1 - ch_r1) + fabsf(ch_l1 - ch_l3);
     const float E_grad = kEps + fabsf(g_c - g_r2) + fabsf(ch_r1 - ch_l1) + fabsf(ch_r1 - ch_r3);
 
-    const float N_est  = ch_m1 - g.ptr(y - 1)[x];
-    const float S_est  = ch_p1 - g.ptr(y + 1)[x];
-    const float W_est  = ch_l1 - g.ptr(y)[x - 1];
-    const float E_est  = ch_r1 - g.ptr(y)[x + 1];
+    const float N_est  = ch_m1 - g_tile[gty - 1][gtx];
+    const float S_est  = ch_p1 - g_tile[gty + 1][gtx];
+    const float W_est  = ch_l1 - g_tile[gty][gtx - 1];
+    const float E_est  = ch_r1 - g_tile[gty][gtx + 1];
 
     const float V_est  = (N_grad * S_est + S_grad * N_est) / (N_grad + S_grad);
     const float H_est  = (E_grad * W_est + W_grad * E_est) / (E_grad + W_grad);
@@ -480,11 +631,11 @@ void Bayer2x2ToRGB_RCD(cv::cuda::GpuMat& image, const BayerPattern2x2& pattern,
   cv::cuda::Stream& active_stream = stream == nullptr ? local_stream : *stream;
   cudaStream_t     cuda_stream = cv::cuda::StreamAccessor::getStream(active_stream);
 
-  const dim3       threads(32, 8);
+  const dim3       threads(kThreadsX, kThreadsY);
   const dim3       blocks((width + threads.x - 1) / threads.x, (height + threads.y - 1) / threads.y);
 
-  RCD_InitAndVHKernel<<<blocks, threads, 0, cuda_stream>>>(image, r, g, b, vh_dir, width, height,
-                                                           pattern);
+  RCD_InitAndVHKernel<<<blocks, threads, 0, cuda_stream>>>(image, r, g, b, vh_dir, pq_dir, width,
+                                                            height, pattern);
   CUDA_CHECK(cudaGetLastError());
 
   RCD_GreenAtRBKernel<<<blocks, threads, 0, cuda_stream>>>(image, vh_dir, g, width, height,

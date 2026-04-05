@@ -74,6 +74,12 @@ auto ToParams(const HighlightCorrection& correction) -> HighlightCorrectionParam
   return params;
 }
 
+auto BuildInverseCamMulScale(const float* cam_mul) -> float3 {
+  const float green = std::max(cam_mul[1], 1e-6f);
+  return make_float3(green / std::max(cam_mul[0], 1e-6f), 1.0f,
+                     green / std::max(cam_mul[2], 1e-6f));
+}
+
 __device__ __forceinline__ float Cube(const float value) { return value * value * value; }
 
 __device__ __forceinline__ float3 ClampRgb(const float3& value) {
@@ -284,7 +290,6 @@ __global__ void HighlightReconstructKernel(const cv::cuda::PtrStepSz<float3> inp
     return;
   }
 
-  const int    size  = input.rows * input.cols;
   const float3 pixel = MaxRgb(input.ptr(row)[col]);
   const int    count = CountClippedChannels(pixel, params.clips);
 
@@ -308,6 +313,51 @@ __global__ void HighlightReconstructKernel(const cv::cuda::PtrStepSz<float3> inp
 
 
   output.ptr(row)[col] = result;
+}
+
+__global__ void ClampAndPackRGBAKernel(const cv::cuda::PtrStepSz<float3> input,
+                                       cv::cuda::PtrStepSz<float4> output, const float3 gain) {
+  const int col = blockIdx.x * blockDim.x + threadIdx.x;
+  const int row = blockIdx.y * blockDim.y + threadIdx.y;
+  if (col >= input.cols || row >= input.rows) {
+    return;
+  }
+
+  const float3 pixel = ClampRgb(input.ptr(row)[col]);
+  output.ptr(row)[col] =
+      make_float4(pixel.x * gain.x, pixel.y * gain.y, pixel.z * gain.z, 1.0f);
+}
+
+__global__ void HighlightReconstructAndPackRGBAKernel(const cv::cuda::PtrStepSz<float3> input,
+                                                      cv::cuda::PtrStepSz<float4> output,
+                                                      const uint8_t* dilated_mask_buf,
+                                                      HighlightCorrectionParams params,
+                                                      const float3 gain) {
+  const int col = blockIdx.x * blockDim.x + threadIdx.x;
+  const int row = blockIdx.y * blockDim.y + threadIdx.y;
+  if (col >= input.cols || row >= input.rows) {
+    return;
+  }
+
+  const float3 pixel = MaxRgb(input.ptr(row)[col]);
+  const int    count = CountClippedChannels(pixel, params.clips);
+
+  float3 result = pixel;
+  if (count != 0) {
+    const float3 ref = CalcRefavg(input, row, col);
+    if (pixel.x >= params.clips[0]) {
+      result.x = fmaxf(pixel.x, ref.x + params.chrominance[0]);
+    }
+    if (pixel.y >= params.clips[1]) {
+      result.y = fmaxf(pixel.y, ref.y + params.chrominance[1]);
+    }
+    if (pixel.z >= params.clips[2]) {
+      result.z = fmaxf(pixel.z, ref.z + params.chrominance[2]);
+    }
+  }
+
+  output.ptr(row)[col] =
+      make_float4(result.x * gain.x, result.y * gain.y, result.z * gain.z, 1.0f);
 }
 
 }  // namespace
@@ -538,6 +588,58 @@ void ApplyHighlightCorrection(cv::cuda::GpuMat& img, const HighlightCorrection& 
     WaitForStream(stream);
   }
   img = active_workspace.result_;
+}
+
+void ApplyHighlightCorrectionAndPackRGBA(const cv::cuda::GpuMat& img, cv::cuda::GpuMat& dst,
+                                         const HighlightCorrection& correction,
+                                         const float* cam_mul,
+                                         HighlightWorkspace* workspace,
+                                         cv::cuda::Stream* stream) {
+  CV_Assert(img.type() == CV_32FC3);
+  if (dst.empty() || dst.size() != img.size() || dst.type() != CV_32FC4) {
+    dst.create(img.size(), CV_32FC4);
+  }
+
+  HighlightWorkspace local_workspace;
+  HighlightWorkspace& active_workspace = workspace == nullptr ? local_workspace : *workspace;
+  active_workspace.Reserve(img.cols, img.rows);
+
+  const dim3 threads(32, 8);
+  const dim3 blocks((img.cols + threads.x - 1) / threads.x, (img.rows + threads.y - 1) / threads.y);
+  const auto params      = ToParams(correction);
+  const auto cuda_stream = GetCudaStream(stream);
+  const float3 gain      = BuildInverseCamMulScale(cam_mul);
+
+  if (!correction.any_clipped) {
+    ClampAndPackRGBAKernel<<<blocks, threads, 0, cuda_stream>>>(img, dst, gain);
+    CUDA_CHECK(cudaGetLastError());
+    if (stream == nullptr) {
+      WaitForStream(stream);
+    }
+    return;
+  }
+
+  const size_t pixels = static_cast<size_t>(img.cols) * static_cast<size_t>(img.rows);
+  CUDA_CHECK(cudaMemsetAsync(active_workspace.mask_buf_, 0, static_cast<size_t>(kMaskPlanes) * pixels,
+                             cuda_stream));
+  CUDA_CHECK(cudaMemsetAsync(active_workspace.dilated_mask_, 0,
+                             static_cast<size_t>(kMaskPlanes) * pixels, cuda_stream));
+
+  BuildMaskKernel<<<blocks, threads, 0, cuda_stream>>>(img, active_workspace.mask_buf_,
+                                                       active_workspace.anyclipped_, params);
+  CUDA_CHECK(cudaGetLastError());
+  DilateMaskKernel<<<blocks, threads, 0, cuda_stream>>>(active_workspace.mask_buf_,
+                                                        active_workspace.dilated_mask_, img.cols,
+                                                        img.rows);
+  CUDA_CHECK(cudaGetLastError());
+
+  HighlightReconstructAndPackRGBAKernel<<<blocks, threads, 0, cuda_stream>>>(
+      img, dst, active_workspace.dilated_mask_, params, gain);
+  CUDA_CHECK(cudaGetLastError());
+
+  if (stream == nullptr) {
+    WaitForStream(stream);
+  }
 }
 
 void HighlightReconstruct(cv::cuda::GpuMat& img, LibRaw& raw_processor,

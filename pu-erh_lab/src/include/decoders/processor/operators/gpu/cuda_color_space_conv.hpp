@@ -17,5 +17,8 @@ void ApplyColorMatrix(cv::cuda::GpuMat& img, const float rgb_cam[][4], const flo
 
 void ApplyInverseCamMul(cv::cuda::GpuMat& img, const float* cam_mul,
                         cv::cuda::Stream* stream = nullptr);
+
+void ApplyInverseCamMulAndPackRGBA(const cv::cuda::GpuMat& src, cv::cuda::GpuMat& dst,
+                                   const float* cam_mul, cv::cuda::Stream* stream = nullptr);
 };
 };  // namespace puerhlab

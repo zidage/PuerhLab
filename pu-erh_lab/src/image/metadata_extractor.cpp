@@ -796,7 +796,7 @@ void PopulateDisplayMetadataFromLibRaw(LibRaw& raw_processor, const RawRuntimeCo
 
 /// Set of raw file extensions (lowercase).
 static const std::unordered_set<std::string> kRawExtensions = {
-    ".arw", ".cr2", ".cr3", ".nef", ".dng", ".raw", ".raf", ".3fr", ".rw2"};
+    ".arw", ".cr2", ".cr3", ".nef", ".dng", ".raw", ".raf", ".3fr", ".rw2", ".fff"};
 
 auto IsRawExtension(const std::filesystem::path& path) -> bool {
   std::string ext = path.extension().string();
