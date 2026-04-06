@@ -10,6 +10,7 @@ use crate::server::semantic::SemanticServiceImpl;
 use crate::service::candle_clip::CandleClipEngine;
 
 const FILE_DESCRIPTOR_SET: &[u8] = tonic::include_file_descriptor_set!("semantic_descriptor");
+const GRPC_MAX_MESSAGE_BYTES: usize = 16 * 1024 * 1024;
 
 pub fn register_services(
     mut builder: Server,
@@ -27,5 +28,9 @@ pub fn register_services(
     Ok(builder
         .add_service(reflection_service)
         .add_service(HealthServiceServer::new(health_service))
-        .add_service(SemanticServiceServer::new(semantic_service)))
+        .add_service(
+            SemanticServiceServer::new(semantic_service)
+                .max_decoding_message_size(GRPC_MAX_MESSAGE_BYTES)
+                .max_encoding_message_size(GRPC_MAX_MESSAGE_BYTES),
+        ))
 }

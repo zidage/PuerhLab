@@ -92,7 +92,7 @@ def parse_args():
 def main():
     args = parse_args()
     repo_root = Path(__file__).resolve().parents[1]
-    ensure_dependencies(repo_root, require_cargo=False, require_grpcurl=True)
+    ensure_dependencies(repo_root, require_cargo=False, require_grpc=True)
 
     address = f"{args.host}:{args.port}"
     testdata_dir = Path(args.testdata_dir)
@@ -118,7 +118,7 @@ def main():
             if wait_until_ready(address, timeout_sec=1):
                 print(f"using existing server at {address} (skip spawn)")
             else:
-                ensure_dependencies(repo_root, require_cargo=True, require_grpcurl=False)
+                ensure_dependencies(repo_root, require_cargo=True, require_grpc=True)
                 print(
                     f"starting rust server with {' '.join(cargo_run_command(repo_root))} "
                     f"and PUERH_MIND_DEVICE={args.device} at {repo_root} ..."

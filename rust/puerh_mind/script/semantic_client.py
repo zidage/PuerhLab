@@ -1,51 +1,79 @@
 #!/usr/bin/env python3
 
-import base64
-import json
+import importlib
+import importlib.util
 import os
-import shutil
 import subprocess
 import time
 import uuid
 from pathlib import Path
 
+GRPC_MAX_MESSAGE_BYTES = 64 * 1024 * 1024
+GRPC_CHANNEL_OPTIONS = [
+    ("grpc.max_send_message_length", GRPC_MAX_MESSAGE_BYTES),
+    ("grpc.max_receive_message_length", GRPC_MAX_MESSAGE_BYTES),
+]
 
-SEMANTIC_SERVICE = "semantic.SemanticService"
+
+def _load_grpc_modules():
+    grpc = importlib.import_module("grpc")
+    semantic_pb2 = importlib.import_module("semantic_pb2")
+    semantic_pb2_grpc = importlib.import_module("semantic_pb2_grpc")
+    return grpc, semantic_pb2, semantic_pb2_grpc
 
 
-def grpc_call(address, method, payload):
-    payload_json = json.dumps(payload, ensure_ascii=False)
-    cmd = [
-        "grpcurl",
-        "-plaintext",
-        "-d",
-        "@",
-        address,
-        f"{SEMANTIC_SERVICE}/{method}",
-    ]
-
-    proc = subprocess.run(cmd, input=payload_json, capture_output=True, text=True)
-    if proc.returncode != 0:
-        raise RuntimeError(
-            f"grpcurl call failed for {method}\n"
-            f"command: {' '.join(cmd)}\n"
-            f"stderr: {proc.stderr.strip()}"
+def _grpc_runtime_error(grpc, method, address, exc):
+    if isinstance(exc, grpc.RpcError):
+        status = exc.code()
+        code_name = status.name if status is not None else "UNKNOWN"
+        details = exc.details() or str(exc)
+        return RuntimeError(
+            f"grpc call failed for {method}\n"
+            f"address: {address}\n"
+            f"code: {code_name}\n"
+            f"details: {details}"
         )
 
-    try:
-        return json.loads(proc.stdout)
-    except json.JSONDecodeError as exc:
-        raise RuntimeError(
-            f"invalid grpcurl json output for {method}: {proc.stdout.strip()}"
-        ) from exc
+    return RuntimeError(
+        f"grpc call failed for {method}\n"
+        f"address: {address}\n"
+        f"error: {exc}"
+    )
+
+
+def _call_semantic(address, method, request):
+    grpc, _, semantic_pb2_grpc = _load_grpc_modules()
+
+    with grpc.insecure_channel(address, options=GRPC_CHANNEL_OPTIONS) as channel:
+        stub = semantic_pb2_grpc.SemanticServiceStub(channel)
+        rpc = getattr(stub, method)
+        try:
+            return rpc(request)
+        except Exception as exc:
+            raise _grpc_runtime_error(grpc, method, address, exc) from exc
+
+
+def _embedding_response_to_dict(response):
+    return {
+        "request_id": response.request_id,
+        "embedding": list(response.embedding),
+        "dimension": int(response.dimension),
+        "model_name": response.model_name,
+        "elapsed_ms": int(response.elapsed_ms),
+    }
 
 
 def ping(address, request_id=None):
-    return grpc_call(
-        address,
-        "Ping",
-        {"request_id": request_id or f"wait-{uuid.uuid4().hex[:8]}"},
+    _, semantic_pb2, _ = _load_grpc_modules()
+    request = semantic_pb2.PingRequest(
+        request_id=request_id or f"wait-{uuid.uuid4().hex[:8]}"
     )
+    response = _call_semantic(address, "Ping", request)
+    return {
+        "request_id": response.request_id,
+        "message": response.message,
+        "elapsed_ms": int(response.elapsed_ms),
+    }
 
 
 def wait_until_ready(address, timeout_sec=None, server_proc=None):
@@ -68,8 +96,20 @@ def cargo_msvc_cmd(repo_root):
     return cmd_path
 
 
+def cargo_command(repo_root, *cargo_args):
+    wrapper = str(cargo_msvc_cmd(repo_root))
+
+    # .cmd files should be launched through cmd.exe for reliable argument
+    # forwarding and environment setup on Windows.
+    if os.name == "nt":
+        comspec = os.environ.get("COMSPEC", "cmd.exe")
+        return [comspec, "/d", "/s", "/c", wrapper, *cargo_args]
+
+    return [wrapper, *cargo_args]
+
+
 def cargo_run_command(repo_root):
-    return [str(cargo_msvc_cmd(repo_root)), "run", "--release", "--features", "cuda"]
+    return cargo_command(repo_root, "run", "--release", "--features", "cuda")
 
 
 def server_environment(device="cuda", rust_log=None):
@@ -132,38 +172,89 @@ def stop_server(server_proc):
         server_proc.wait(timeout=5)
 
 
-def ensure_dependencies(repo_root, require_cargo=True, require_grpcurl=True):
+def ensure_dependencies(
+    repo_root,
+    require_cargo=True,
+    require_grpc=True,
+    require_grpcurl=False,
+):
+    # Backward compatibility for existing callers that still pass require_grpcurl.
+    if require_grpcurl:
+        require_grpc = True
+
     missing = []
 
     if require_cargo:
         cargo_cmd = repo_root / "script" / "cargo_msvc.cmd"
         if not cargo_cmd.exists():
             missing.append(str(cargo_cmd))
+        else:
+            cargo_check = subprocess.run(
+                cargo_command(repo_root, "--version"),
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+            )
+            if cargo_check.returncode != 0:
+                missing.append("usable cargo_msvc.cmd (MSVC environment setup failed)")
 
-    if require_grpcurl and shutil.which("grpcurl") is None:
-        missing.append("grpcurl")
+    if require_grpc:
+        python_modules = {
+            "grpc": "grpcio",
+            "google.protobuf": "protobuf",
+        }
+        missing_python = []
+        for module, package in python_modules.items():
+            try:
+                available = importlib.util.find_spec(module) is not None
+            except ModuleNotFoundError:
+                available = False
+
+            if not available:
+                missing_python.append(package)
+
+        if missing_python:
+            missing.append("python packages: " + ", ".join(missing_python))
+
+        script_dir = Path(__file__).resolve().parent
+        missing_stubs = []
+        for generated in ("semantic_pb2.py", "semantic_pb2_grpc.py"):
+            if not (script_dir / generated).exists():
+                missing_stubs.append(generated)
+
+        if missing_stubs:
+            missing.append("generated gRPC stubs: " + ", ".join(missing_stubs))
 
     if missing:
-        raise RuntimeError(
-            "missing required tools: "
-            + ", ".join(missing)
-            + "\nplease install them and retry"
-        )
+        install_hint = ""
+        if require_grpc:
+            install_hint = (
+                "\ninstall gRPC deps with: pip install grpcio protobuf grpcio-tools"
+                "\nthen generate stubs with: "
+                "python -m grpc_tools.protoc -I proto --python_out=script "
+                "--grpc_python_out=script proto/semantic.proto"
+            )
+
+        raise RuntimeError("missing required dependencies: " + ", ".join(missing) + install_hint)
 
 
 def embed_image(address, image_path, request_id=None):
+    _, semantic_pb2, _ = _load_grpc_modules()
     image_bytes = image_path.read_bytes()
-    payload = {
-        "request_id": request_id or f"img-{uuid.uuid4().hex[:8]}",
-        "image_bytes": base64.b64encode(image_bytes).decode("ascii"),
-        "image_format_hint": image_path.suffix.replace(".", "").lower(),
-    }
-    return grpc_call(address, "EmbedImage", payload)
+    request = semantic_pb2.EmbedImageRequest(
+        request_id=request_id or f"img-{uuid.uuid4().hex[:8]}",
+        image_bytes=image_bytes,
+        image_format_hint=image_path.suffix.replace(".", "").lower(),
+    )
+    response = _call_semantic(address, "EmbedImage", request)
+    return _embedding_response_to_dict(response)
 
 
 def embed_text(address, text):
-    payload = {
-        "request_id": f"txt-{uuid.uuid4().hex[:8]}",
-        "text": text,
-    }
-    return grpc_call(address, "EmbedText", payload)
+    _, semantic_pb2, _ = _load_grpc_modules()
+    request = semantic_pb2.EmbedTextRequest(
+        request_id=f"txt-{uuid.uuid4().hex[:8]}",
+        text=text,
+    )
+    response = _call_semantic(address, "EmbedText", request)
+    return _embedding_response_to_dict(response)

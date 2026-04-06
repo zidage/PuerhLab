@@ -107,7 +107,7 @@ def run_batch_label(
     if not testdata_dir.exists():
         raise RuntimeError(f"testdata dir not found: {testdata_dir}")
 
-    ensure_dependencies(repo_root, require_cargo=False, require_grpcurl=True)
+    ensure_dependencies(repo_root, require_cargo=False, require_grpc=True)
 
     server_proc = None
     owns_server = False
@@ -121,7 +121,7 @@ def run_batch_label(
             if wait_until_ready(address, timeout_sec=1):
                 print(f"using existing server at {address} (skip spawn)")
             else:
-                ensure_dependencies(repo_root, require_cargo=True, require_grpcurl=False)
+                ensure_dependencies(repo_root, require_cargo=True, require_grpc=True)
                 print(
                     f"starting rust server with {' '.join(cargo_run_command(repo_root))} "
                     f"and PUERH_MIND_DEVICE={device} at {repo_root} ..."

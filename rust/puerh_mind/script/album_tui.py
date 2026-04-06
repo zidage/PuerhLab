@@ -135,7 +135,7 @@ def refresh_album_index(
     if not testdata_dir.exists():
         raise RuntimeError(f"testdata dir not found: {testdata_dir}")
 
-    ensure_dependencies(repo_root, require_cargo=False, require_grpcurl=True)
+    ensure_dependencies(repo_root, require_cargo=False, require_grpc=True)
 
     server_proc = None
     owns_server = False
@@ -149,7 +149,7 @@ def refresh_album_index(
             if wait_until_ready(address, timeout_sec=1):
                 print(f"using existing server at {address} (skip spawn)")
             else:
-                ensure_dependencies(repo_root, require_cargo=True, require_grpcurl=False)
+                ensure_dependencies(repo_root, require_cargo=True, require_grpc=True)
                 print(
                     f"starting rust server with {' '.join(cargo_run_command(repo_root))} "
                     f"and PUERH_MIND_DEVICE={device} at {repo_root} ..."
@@ -165,9 +165,9 @@ def refresh_album_index(
                 print(f"server started at {address}")
 
         images = list_images(testdata_dir)
-        total_steps = len(images) + 1
+        total_images = len(images)
         if progress_callback:
-            progress_callback(0, total_steps, "building text prototypes")
+            progress_callback(0, total_images, "waiting for image embeddings")
 
         label_prototypes, text_cache_path, reused_cache = load_or_build_label_prototypes(
             address,
@@ -178,19 +178,14 @@ def refresh_album_index(
             print(f"loaded text prototypes from cache: {text_cache_path}")
         else:
             print(f"generated text prototypes and cached to: {text_cache_path}")
-        if progress_callback:
-            status = "loaded text prototypes cache" if reused_cache else "generated text prototypes"
-            progress_callback(1, total_steps, status)
-
         entries = []
-        total = len(images)
 
         def on_image_result(completed, total_count, image_path, _result):
             if progress_callback:
                 progress_callback(
-                    completed + 1,
-                    total_steps,
-                    f"labeling {image_path.name} ({completed}/{total_count})",
+                    completed,
+                    total_count,
+                    f"embedding images {completed}/{total_count}: {image_path.name}",
                 )
 
         results = classify_images_by_prototypes(
@@ -400,7 +395,7 @@ def refresh_with_progress(**kwargs):
         TaskProgressColumn(),
         TimeElapsedColumn(),
     ) as progress:
-        task_id = progress.add_task("[cyan]preparing", total=1)
+        task_id = progress.add_task("[cyan]waiting for image embeddings", total=1)
         callback = build_progress_callback(progress, task_id)
         return refresh_album_index(progress_callback=callback, **kwargs)
 

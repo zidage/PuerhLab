@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 
-import math
 import json
 import uuid
 from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
+
+import numpy as np
 
 from semantic_client import embed_image, embed_text
 
@@ -82,47 +83,90 @@ def list_images(image_dir):
 
 
 def cosine_similarity(vec_a, vec_b):
-    if len(vec_a) != len(vec_b):
-        raise ValueError(f"embedding dimension mismatch: {len(vec_a)} vs {len(vec_b)}")
+    arr_a = np.asarray(vec_a, dtype=np.float32)
+    arr_b = np.asarray(vec_b, dtype=np.float32)
 
-    dot = sum(a * b for a, b in zip(vec_a, vec_b))
-    norm_a = math.sqrt(sum(a * a for a in vec_a))
-    norm_b = math.sqrt(sum(b * b for b in vec_b))
-    if norm_a == 0 or norm_b == 0:
+    if arr_a.ndim != 1 or arr_b.ndim != 1:
+        raise ValueError("embedding must be a 1D vector")
+
+    if arr_a.shape[0] != arr_b.shape[0]:
+        raise ValueError(f"embedding dimension mismatch: {arr_a.shape[0]} vs {arr_b.shape[0]}")
+
+    norm_a = float(np.linalg.norm(arr_a))
+    norm_b = float(np.linalg.norm(arr_b))
+    if norm_a == 0.0 or norm_b == 0.0:
         return -1.0
-    return dot / (norm_a * norm_b)
+    return float(np.dot(arr_a, arr_b) / (norm_a * norm_b))
 
 
 def average_embeddings(vectors):
     if not vectors:
         raise ValueError("no embeddings to average")
 
-    dim = len(vectors[0])
-    for idx, vec in enumerate(vectors, start=1):
-        if len(vec) != dim:
-            raise ValueError(
-                f"embedding dimension mismatch in average: expected {dim}, got {len(vec)} at item {idx}"
-            )
+    matrix = np.asarray(vectors, dtype=np.float32)
+    if matrix.ndim != 2:
+        dim = len(vectors[0])
+        for idx, vec in enumerate(vectors, start=1):
+            if len(vec) != dim:
+                raise ValueError(
+                    f"embedding dimension mismatch in average: expected {dim}, got {len(vec)} at item {idx}"
+                )
+        raise ValueError("embedding matrix is invalid")
 
-    summed = [0.0] * dim
-    for vec in vectors:
-        for i, value in enumerate(vec):
-            summed[i] += value
-
-    count = float(len(vectors))
-    return [value / count for value in summed]
+    return matrix.mean(axis=0).tolist()
 
 
 def l2_normalize(vector):
-    norm = math.sqrt(sum(value * value for value in vector))
+    arr = np.asarray(vector, dtype=np.float32)
+    if arr.ndim != 1:
+        raise ValueError("embedding must be a 1D vector")
+
+    norm = float(np.linalg.norm(arr))
     if norm == 0.0:
         raise ValueError("embedding norm is zero")
-    return [value / norm for value in vector]
+    return (arr / norm).tolist()
 
 
 def average_normalized_embeddings(vectors):
-    normalized_vectors = [l2_normalize(vector) for vector in vectors]
-    return l2_normalize(average_embeddings(normalized_vectors))
+    if not vectors:
+        raise ValueError("no embeddings to average")
+
+    matrix = np.asarray(vectors, dtype=np.float32)
+    if matrix.ndim != 2:
+        dim = len(vectors[0])
+        for idx, vec in enumerate(vectors, start=1):
+            if len(vec) != dim:
+                raise ValueError(
+                    f"embedding dimension mismatch in average: expected {dim}, got {len(vec)} at item {idx}"
+                )
+        raise ValueError("embedding matrix is invalid")
+
+    norms = np.linalg.norm(matrix, axis=1, keepdims=True)
+    if np.any(norms == 0.0):
+        raise ValueError("embedding norm is zero")
+
+    averaged = (matrix / norms).mean(axis=0)
+    avg_norm = float(np.linalg.norm(averaged))
+    if avg_norm == 0.0:
+        raise ValueError("embedding norm is zero")
+
+    return (averaged / avg_norm).tolist()
+
+
+def _prepare_label_prototype_matrix(label_prototypes):
+    labels = list(label_prototypes.keys())
+    if not labels:
+        raise RuntimeError("no label prototypes")
+
+    matrix = np.asarray([label_prototypes[label] for label in labels], dtype=np.float32)
+    if matrix.ndim != 2 or matrix.shape[1] == 0:
+        raise ValueError("invalid label prototype matrix")
+
+    norms = np.linalg.norm(matrix, axis=1, keepdims=True)
+    if np.any(norms == 0.0):
+        raise ValueError("embedding norm is zero")
+
+    return labels, (matrix / norms)
 
 
 def response_field(payload, snake_name):
@@ -135,16 +179,29 @@ def response_field(payload, snake_name):
     return payload.get(camel_name)
 
 
-def score_image_embedding(img_embedding, label_prototypes):
-    img_embedding = l2_normalize(img_embedding)
+def score_image_embedding(img_embedding, label_prototypes, prepared_prototypes=None):
+    img_vector = np.asarray(img_embedding, dtype=np.float32)
+    if img_vector.ndim != 1:
+        raise ValueError("embedding must be a 1D vector")
 
-    scores = []
-    for label, txt_embedding in label_prototypes.items():
-        score = cosine_similarity(img_embedding, txt_embedding)
-        scores.append((label, score))
+    img_norm = float(np.linalg.norm(img_vector))
+    if img_norm == 0.0:
+        raise ValueError("embedding norm is zero")
+    img_vector = img_vector / img_norm
 
-    scores.sort(key=lambda item: item[1], reverse=True)
-    return scores
+    if prepared_prototypes is None:
+        labels, prototype_matrix = _prepare_label_prototype_matrix(label_prototypes)
+    else:
+        labels, prototype_matrix = prepared_prototypes
+
+    if prototype_matrix.shape[1] != img_vector.shape[0]:
+        raise ValueError(
+            f"embedding dimension mismatch: {img_vector.shape[0]} vs {prototype_matrix.shape[1]}"
+        )
+
+    raw_scores = prototype_matrix @ img_vector
+    order = np.argsort(raw_scores)[::-1]
+    return [(labels[idx], float(raw_scores[idx])) for idx in order]
 
 
 def embed_text_prompt_ensemble(address, label, prompt_templates=None):
@@ -353,11 +410,17 @@ def classify_image_by_prototypes(address, image_path, label_prototypes):
     if not label_prototypes:
         raise RuntimeError("no label prototypes")
 
+    prepared_prototypes = _prepare_label_prototype_matrix(label_prototypes)
+
     img_result = embed_image(address, image_path)
     img_embedding = response_field(img_result, "embedding") or []
     if not img_embedding:
         raise RuntimeError("empty image embedding")
-    return score_image_embedding(img_embedding, label_prototypes)
+    return score_image_embedding(
+        img_embedding,
+        label_prototypes,
+        prepared_prototypes=prepared_prototypes,
+    )
 
 
 def classify_images_by_prototypes(
@@ -376,6 +439,8 @@ def classify_images_by_prototypes(
 
     if max_in_flight < 1:
         raise RuntimeError("max_in_flight must be >= 1")
+
+    prepared_prototypes = _prepare_label_prototype_matrix(label_prototypes)
 
     max_workers = max(1, min(max_in_flight, len(image_paths)))
     ordered_results = [None] * len(image_paths)
@@ -411,7 +476,11 @@ def classify_images_by_prototypes(
                 result = {
                     "request_id": request_id,
                     "image_path": image_path,
-                    "scores": score_image_embedding(img_embedding, label_prototypes),
+                    "scores": score_image_embedding(
+                        img_embedding,
+                        label_prototypes,
+                        prepared_prototypes=prepared_prototypes,
+                    ),
                     "error": None,
                 }
             except Exception as exc:

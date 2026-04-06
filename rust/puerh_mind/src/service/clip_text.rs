@@ -1,6 +1,11 @@
 use candle_core::{IndexOp, Tensor};
 use candle_nn::{Embedding, LayerNorm, Linear, Module, ops::softmax};
 
+#[cfg(feature = "flash-attn")]
+use candle_flash_attn::flash_attn;
+#[cfg(feature = "flash-attn")]
+use tracing::debug;
+
 pub struct ClipTextModel {
     pub token_embedding: Embedding,
     pub positional_embedding: Tensor,
@@ -243,9 +248,70 @@ impl MultiHeadAttention {
         Ok((q, k, v))
     }
 
+    #[cfg(feature = "flash-attn")]
+    fn try_flash_attn(
+        &self,
+        q: &Tensor,
+        k: &Tensor,
+        v: &Tensor,
+        attn_mask: Option<&Tensor>,
+        head_dim: usize,
+    ) -> anyhow::Result<Option<Tensor>> {
+        if attn_mask.is_some() {
+            return Ok(None);
+        }
+
+        if head_dim == 0 || head_dim > 256 || head_dim % 8 != 0 {
+            return Ok(None);
+        }
+
+        if !matches!(q.device().location(), candle_core::DeviceLocation::Cuda { .. }) {
+            return Ok(None);
+        }
+
+        let dtype = q.dtype();
+        if !matches!(dtype, candle_core::DType::F16 | candle_core::DType::BF16) {
+            return Ok(None);
+        }
+        if k.dtype() != dtype || v.dtype() != dtype {
+            return Ok(None);
+        }
+
+        // candle-flash-attn expects [B, T, H, D], while the current path uses [B, H, T, D].
+        let q = q.transpose(1, 2)?;
+        let k = k.transpose(1, 2)?;
+        let v = v.transpose(1, 2)?;
+
+        let scale = 1f32 / (head_dim as f32).sqrt();
+        match flash_attn(&q, &k, &v, scale, false) {
+            Ok(y) => Ok(Some(y.transpose(1, 2)?)),
+            Err(err) => {
+                debug!("flash-attn unavailable for text attention, fallback to matmul path: {err}");
+                Ok(None)
+            }
+        }
+    }
+
+    #[cfg(not(feature = "flash-attn"))]
+    fn try_flash_attn(
+        &self,
+        _q: &Tensor,
+        _k: &Tensor,
+        _v: &Tensor,
+        _attn_mask: Option<&Tensor>,
+        _head_dim: usize,
+    ) -> anyhow::Result<Option<Tensor>> {
+        Ok(None)
+    }
+
     pub fn forward(&self, x: &Tensor, attn_mask: Option<&Tensor>) -> anyhow::Result<Tensor> {
         let (q, k, v) = self.project_qkv_heads(x)?; // [B, H, T, D]
         let (batch, num_heads, seq_len, head_dim) = q.dims4()?;
+
+        if let Some(y) = self.try_flash_attn(&q, &k, &v, attn_mask, head_dim)? {
+            let y = y.reshape((batch, seq_len, num_heads * head_dim))?;
+            return self.out_proj.forward(&y).map_err(Into::into);
+        }
 
         let q = q.reshape((batch * num_heads, seq_len, head_dim))?;
         let k = k.reshape((batch * num_heads, seq_len, head_dim))?;

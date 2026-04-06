@@ -3,6 +3,11 @@ use candle_nn::{
     Activation, BatchNorm, Conv2d, Conv2dConfig, Linear, Module, ModuleT, ops::softmax,
 };
 
+#[cfg(feature = "flash-attn")]
+use candle_flash_attn::flash_attn;
+#[cfg(feature = "flash-attn")]
+use tracing::debug;
+
 pub struct ConvBn2d {
     pub conv: Conv2d,
     pub bn: BatchNorm,
@@ -510,6 +515,54 @@ impl Attention2d {
         Ok(y)
     }
 
+    #[cfg(feature = "flash-attn")]
+    fn try_flash_attn(
+        &self,
+        q: &Tensor,
+        k: &Tensor,
+        v: &Tensor,
+    ) -> anyhow::Result<Option<Tensor>> {
+        if self.head_dim == 0 || self.head_dim > 256 || self.head_dim % 8 != 0 {
+            return Ok(None);
+        }
+
+        if !matches!(q.device().location(), candle_core::DeviceLocation::Cuda { .. }) {
+            return Ok(None);
+        }
+
+        let dtype = q.dtype();
+        if !matches!(dtype, candle_core::DType::F16 | candle_core::DType::BF16) {
+            return Ok(None);
+        }
+        if k.dtype() != dtype || v.dtype() != dtype {
+            return Ok(None);
+        }
+
+        // candle-flash-attn expects [B, T, H, D], while this module uses [B, H, N, D].
+        let q = q.transpose(1, 2)?;
+        let k = k.transpose(1, 2)?;
+        let v = v.transpose(1, 2)?;
+
+        let scale = 1f32 / (self.head_dim as f32).sqrt();
+        match flash_attn(&q, &k, &v, scale, false) {
+            Ok(y) => Ok(Some(y.transpose(1, 2)?)),
+            Err(err) => {
+                debug!("flash-attn unavailable for vision attention, fallback to matmul path: {err}");
+                Ok(None)
+            }
+        }
+    }
+
+    #[cfg(not(feature = "flash-attn"))]
+    fn try_flash_attn(
+        &self,
+        _q: &Tensor,
+        _k: &Tensor,
+        _v: &Tensor,
+    ) -> anyhow::Result<Option<Tensor>> {
+        Ok(None)
+    }
+
     pub fn forward(&self, x: &Tensor) -> anyhow::Result<Tensor> {
         let (batch, channels, height, width) = x.dims4()?;
         let num_tokens = height * width;
@@ -524,16 +577,19 @@ impl Attention2d {
         let k = qkv.i((.., .., 1, .., ..))?.transpose(1, 2)?; // [B, H, N, D]
         let v = qkv.i((.., .., 2, .., ..))?.transpose(1, 2)?; // [B, H, N, D]
 
-        let q = q.reshape((batch * self.num_heads, num_tokens, self.head_dim))?;
-        let k = k.reshape((batch * self.num_heads, num_tokens, self.head_dim))?;
-        let v = v.reshape((batch * self.num_heads, num_tokens, self.head_dim))?;
+        let y = if let Some(y) = self.try_flash_attn(&q, &k, &v)? {
+            y.reshape((batch * self.num_heads, num_tokens, self.head_dim))?
+        } else {
+            let q = q.reshape((batch * self.num_heads, num_tokens, self.head_dim))?;
+            let k = k.reshape((batch * self.num_heads, num_tokens, self.head_dim))?;
+            let v = v.reshape((batch * self.num_heads, num_tokens, self.head_dim))?;
+            let scale = 1f64 / (self.head_dim as f64).sqrt();
+            let q = q.affine(scale, 0.0)?;
+            let attn = q.matmul(&k.transpose(1, 2)?)?;
+            let attn = softmax(&attn, D::Minus1)?;
+            attn.matmul(&v)? // [B*H, N, D]
+        };
 
-        let scale = 1f64 / (self.head_dim as f64).sqrt();
-        let q = q.affine(scale, 0.0)?;
-        let attn = q.matmul(&k.transpose(1, 2)?)?;
-        let attn = softmax(&attn, D::Minus1)?;
-
-        let y = attn.matmul(&v)?; // [B*H, N, D]
         let y = y.reshape((batch, self.num_heads, num_tokens, self.head_dim))?;
         let y = y.transpose(1, 2)?; // [B, N, H, D]
         let y = y.reshape((batch, num_tokens, channels))?;
