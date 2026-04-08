@@ -14,6 +14,7 @@ from clip_labeling import (
 )
 from semantic_client import (
     cargo_run_command,
+    default_runtime_device,
     ensure_dependencies,
     start_server,
     stop_server,
@@ -83,7 +84,7 @@ def parse_args():
     )
     parser.add_argument(
         "--device",
-        default="cuda",
+        default=default_runtime_device(),
         help="PUERH_MIND_DEVICE value used when spawning server",
     )
     return parser.parse_args()

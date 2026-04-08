@@ -20,6 +20,7 @@ from clip_labeling import (
 )
 from semantic_client import (
     cargo_run_command,
+    default_runtime_device,
     ensure_dependencies,
     start_server,
     stop_server,
@@ -54,7 +55,7 @@ def parse_args():
     )
     parser.add_argument(
         "--device",
-        default="cuda",
+        default=default_runtime_device(),
         help="PUERH_MIND_DEVICE value used when spawning server",
     )
     parser.add_argument(
@@ -116,7 +117,7 @@ def refresh_album_index(
     port=50051,
     testdata_dir=None,
     no_spawn=False,
-    device="cuda",
+    device=None,
     top_k=3,
     request_size=DEFAULT_MAX_IN_FLIGHT,
     output_json_path=None,
@@ -126,6 +127,8 @@ def refresh_album_index(
         raise RuntimeError("--top-k must be >= 1")
     if request_size < 1:
         raise RuntimeError("--request-size must be >= 1")
+    if device is None:
+        device = default_runtime_device()
 
     address = f"{host}:{port}"
     repo_root = Path(__file__).resolve().parents[1]

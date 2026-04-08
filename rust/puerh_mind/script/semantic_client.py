@@ -4,6 +4,7 @@ import importlib
 import importlib.util
 import os
 import subprocess
+import sys
 import time
 import uuid
 from pathlib import Path
@@ -96,23 +97,36 @@ def cargo_msvc_cmd(repo_root):
     return cmd_path
 
 
-def cargo_command(repo_root, *cargo_args):
-    wrapper = str(cargo_msvc_cmd(repo_root))
+def default_runtime_device():
+    if sys.platform == "darwin":
+        return "metal"
+    return "cuda"
 
-    # .cmd files should be launched through cmd.exe for reliable argument
-    # forwarding and environment setup on Windows.
+
+def cargo_command(repo_root, *cargo_args):
     if os.name == "nt":
+        wrapper = str(cargo_msvc_cmd(repo_root))
+        # .cmd files should be launched through cmd.exe for reliable argument
+        # forwarding and environment setup on Windows.
         comspec = os.environ.get("COMSPEC", "cmd.exe")
         return [comspec, "/d", "/s", "/c", wrapper, *cargo_args]
 
-    return [wrapper, *cargo_args]
+    return ["cargo", *cargo_args]
 
 
 def cargo_run_command(repo_root):
-    return cargo_command(repo_root, "run", "--release", "--features", "cuda")
+    command = cargo_command(repo_root, "run", "--release")
+    if sys.platform == "darwin":
+        command.extend(["--features", "metal"])
+    else:
+        command.extend(["--features", "cuda"])
+    return command
 
 
-def server_environment(device="cuda", rust_log=None):
+def server_environment(device=None, rust_log=None):
+    if device is None:
+        device = default_runtime_device()
+
     env = os.environ.copy()
     env["PUERH_MIND_DEVICE"] = device
     if rust_log is not None:
@@ -120,7 +134,7 @@ def server_environment(device="cuda", rust_log=None):
     return env
 
 
-def start_server(repo_root, address, device="cuda", quiet_stdio=False, rust_log=None):
+def start_server(repo_root, address, device=None, quiet_stdio=False, rust_log=None):
     stdout = subprocess.DEVNULL if quiet_stdio else None
     stderr = subprocess.DEVNULL if quiet_stdio else None
 
@@ -185,18 +199,31 @@ def ensure_dependencies(
     missing = []
 
     if require_cargo:
-        cargo_cmd = repo_root / "script" / "cargo_msvc.cmd"
-        if not cargo_cmd.exists():
-            missing.append(str(cargo_cmd))
+        if os.name == "nt":
+            cargo_cmd = repo_root / "script" / "cargo_msvc.cmd"
+            if not cargo_cmd.exists():
+                missing.append(str(cargo_cmd))
+            else:
+                cargo_check = subprocess.run(
+                    cargo_command(repo_root, "--version"),
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    check=False,
+                )
+                if cargo_check.returncode != 0:
+                    missing.append("usable cargo_msvc.cmd (MSVC environment setup failed)")
         else:
-            cargo_check = subprocess.run(
-                cargo_command(repo_root, "--version"),
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                check=False,
-            )
-            if cargo_check.returncode != 0:
-                missing.append("usable cargo_msvc.cmd (MSVC environment setup failed)")
+            try:
+                cargo_check = subprocess.run(
+                    cargo_command(repo_root, "--version"),
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    check=False,
+                )
+                if cargo_check.returncode != 0:
+                    missing.append("usable cargo command")
+            except FileNotFoundError:
+                missing.append("cargo")
 
     if require_grpc:
         python_modules = {
