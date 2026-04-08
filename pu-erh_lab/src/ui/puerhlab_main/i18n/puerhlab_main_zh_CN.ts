@@ -572,13 +572,28 @@ Original source files on disk will be kept.</source>
     </message>
     <message>
         <location filename="../qml/NikonHeRecoveryDialog.qml" line="313"/>
+        <source>On macOS, Pu-erh Lab uses the system Adobe DNG Converter installation at /Applications/Adobe DNG Converter.app.</source>
+        <translation>在 macOS 上，Pu-erh Lab 会使用系统中位于 /Applications/Adobe DNG Converter.app 的 Adobe DNG Converter 安装。</translation>
+    </message>
+    <message>
+        <location filename="../qml/NikonHeRecoveryDialog.qml" line="313"/>
         <source>Adobe DNG Converter runs in the source folders and creates side-by-side DNG files. Original NEF files on disk will be kept.</source>
         <translation>Adobe DNG Converter 会在源文件所在文件夹中运行，并在旁边生成 DNG 文件。磁盘上的原始 NEF 文件会保留。</translation>
     </message>
     <message>
         <location filename="../qml/NikonHeRecoveryDialog.qml" line="335"/>
+        <source>Detected Converter Path</source>
+        <translation>已检测到的转换器路径</translation>
+    </message>
+    <message>
+        <location filename="../qml/NikonHeRecoveryDialog.qml" line="335"/>
         <source>Executable Path</source>
         <translation>可执行文件路径</translation>
+    </message>
+    <message>
+        <location filename="../qml/NikonHeRecoveryDialog.qml" line="346"/>
+        <source>Adobe DNG Converter is not installed at /Applications/Adobe DNG Converter.app.</source>
+        <translation>未在 /Applications/Adobe DNG Converter.app 安装 Adobe DNG Converter。</translation>
     </message>
     <message>
         <location filename="../qml/NikonHeRecoveryDialog.qml" line="346"/>
@@ -1784,6 +1799,10 @@ Original source files on disk will be kept.</source>
     <message>
         <source>Adobe DNG Converter was not found. Choose a valid executable or exit.</source>
         <translation>未找到 Adobe DNG Converter。请选择有效的可执行文件，或直接退出。</translation>
+    </message>
+    <message>
+        <source>Adobe DNG Converter was not found at /Applications/Adobe DNG Converter.app. Install it, exit this dialog, then reimport these Nikon HE/HE* files.</source>
+        <translation>未在 /Applications/Adobe DNG Converter.app 找到 Adobe DNG Converter。请先安装它，退出此对话框，然后重新导入这些 Nikon HE/HE* 文件。</translation>
     </message>
     <message>
         <source>Adobe DNG Converter failed to start. Unsupported Nikon HE images were removed from the project.</source>

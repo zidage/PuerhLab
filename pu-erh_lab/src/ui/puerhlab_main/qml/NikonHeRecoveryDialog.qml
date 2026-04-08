@@ -40,6 +40,8 @@ Popup {
     readonly property color mutedText: appTheme.textMutedColor
     readonly property color strongText: appTheme.textColor
     readonly property bool showBusyIndicator: root.recoveryBusy && !root.showImportProgress
+    readonly property bool macOsUsesFixedConverterPath: Qt.platform.os === "osx"
+    readonly property bool converterDetected: root.converterPath.length > 0
 
     Overlay.modal: Item {
         anchors.fill: parent
@@ -318,7 +320,9 @@ Popup {
 
                         Label {
                             Layout.fillWidth: true
-                            text: qsTr("Adobe DNG Converter runs in the source folders and creates side-by-side DNG files. Original NEF files on disk will be kept.")
+                            text: root.macOsUsesFixedConverterPath
+                                  ? qsTr("On macOS, Pu-erh Lab uses the system Adobe DNG Converter installation at /Applications/Adobe DNG Converter.app.")
+                                  : qsTr("Adobe DNG Converter runs in the source folders and creates side-by-side DNG files. Original NEF files on disk will be kept.")
                             color: root.mutedText
                             wrapMode: Text.WordWrap
                             font.pixelSize: 12
@@ -341,7 +345,9 @@ Popup {
 
                                 Label {
                                     Layout.fillWidth: true
-                                    text: qsTr("Executable Path")
+                                    text: root.macOsUsesFixedConverterPath
+                                          ? qsTr("Detected Converter Path")
+                                          : qsTr("Executable Path")
                                     color: root.warmAccent
                                     font.pixelSize: 11
                                     font.weight: 700
@@ -352,7 +358,9 @@ Popup {
                                     Layout.fillWidth: true
                                     text: root.converterPath.length > 0
                                           ? root.converterPath
-                                          : qsTr("Not selected in this session.")
+                                          : (root.macOsUsesFixedConverterPath
+                                             ? qsTr("Adobe DNG Converter is not installed at /Applications/Adobe DNG Converter.app.")
+                                             : qsTr("Not selected in this session."))
                                     color: root.strongText
                                     font.family: appTheme.dataFontFamily
                                     font.pixelSize: 12
@@ -362,6 +370,7 @@ Popup {
 
                                 Button {
                                     text: qsTr("Browse Converter...")
+                                    visible: !root.macOsUsesFixedConverterPath
                                     enabled: !root.recoveryBusy
                                     onClicked: root.browseRequested()
                                 }
@@ -393,10 +402,13 @@ Popup {
                 }
 
                 Button {
-                    text: root.converterPath.length > 0
+                    text: root.macOsUsesFixedConverterPath
                           ? qsTr("Convert To DNG And Continue")
-                          : qsTr("Choose Converter And Continue")
+                          : (root.converterPath.length > 0
+                             ? qsTr("Convert To DNG And Continue")
+                             : qsTr("Choose Converter And Continue"))
                     enabled: !root.recoveryBusy
+                             && (!root.macOsUsesFixedConverterPath || root.converterDetected)
                     Material.background: appTheme.toneGold
                     Material.foreground: "#16130C"
                     onClicked: root.convertRequested()

@@ -26,6 +26,41 @@ using namespace album_util;
 
 namespace {
 
+#if defined(Q_OS_MACOS)
+auto MacOsDngConverterBundlePath() -> const std::filesystem::path& {
+  static const std::filesystem::path kPath("/Applications/Adobe DNG Converter.app");
+  return kPath;
+}
+
+auto MacOsDngConverterExecutablePath() -> const std::filesystem::path& {
+  static const std::filesystem::path kPath(
+      "/Applications/Adobe DNG Converter.app/Contents/MacOS/Adobe DNG Converter");
+  return kPath;
+}
+
+auto RefreshMacOsConverterPath(QString* converter_path) -> bool {
+  std::error_code ec;
+  if (!std::filesystem::exists(MacOsDngConverterBundlePath(), ec) || ec) {
+    converter_path->clear();
+    return false;
+  }
+
+  ec.clear();
+  if (!std::filesystem::is_regular_file(MacOsDngConverterExecutablePath(), ec) || ec) {
+    converter_path->clear();
+    return false;
+  }
+
+  *converter_path = PathToQString(MacOsDngConverterExecutablePath());
+  return true;
+}
+
+auto MissingMacOsConverterStatus() -> i18n::LocalizedText {
+  return PL_TEXT(
+      "Adobe DNG Converter was not found at /Applications/Adobe DNG Converter.app. Install it, exit this dialog, then reimport these Nikon HE/HE* files.");
+}
+#endif
+
 auto ExitStatusToQtEnum(const int exit_status) -> QProcess::ExitStatus {
   return static_cast<QProcess::ExitStatus>(exit_status);
 }
@@ -53,6 +88,10 @@ void NikonHeRecoveryController::BeginRecovery(
     const std::vector<ImportLogEntry>& unsupported_entries,
     const sl_element_id_t              import_target_folder_id,
     const std::filesystem::path&       import_target_folder_path) {
+#if defined(Q_OS_MACOS)
+  RefreshMacOsConverterPath(&converter_path_);
+#endif
+
   items_.clear();
   items_.reserve(unsupported_entries.size());
   for (const auto& entry : unsupported_entries) {
@@ -75,12 +114,23 @@ void NikonHeRecoveryController::BeginRecovery(
     return;
   }
 
+#if defined(Q_OS_MACOS)
+  if (converter_path_.trimmed().isEmpty()) {
+    SetPhase(NikonHeRecoveryPhase::REVIEW_UNSUPPORTED, MissingMacOsConverterStatus(), 0);
+    return;
+  }
+#endif
+
   SetPhase(NikonHeRecoveryPhase::REVIEW_UNSUPPORTED,
            PL_TEXT("These Nikon HE/HE* files need Adobe DNG Converter before they can be imported."),
            0);
 }
 
 void NikonHeRecoveryController::BrowseConverter() {
+#if defined(Q_OS_MACOS)
+  return;
+#endif
+
   const QString selected_path = QFileDialog::getOpenFileName(
       nullptr, QCoreApplication::translate(PUERHLAB_I18N_CONTEXT, "Select Adobe DNG Converter"),
       converter_path_, ConverterFileDialogFilter());
@@ -95,18 +145,35 @@ void NikonHeRecoveryController::StartConversion() {
     return;
   }
 
+#if defined(Q_OS_MACOS)
+  if (converter_path_.trimmed().isEmpty()) {
+    RefreshMacOsConverterPath(&converter_path_);
+    NotifyStateChanged();
+    if (converter_path_.trimmed().isEmpty()) {
+      SetPhase(NikonHeRecoveryPhase::REVIEW_UNSUPPORTED, MissingMacOsConverterStatus(), 0);
+      return;
+    }
+  }
+#else
   if (converter_path_.trimmed().isEmpty()) {
     SetPhase(NikonHeRecoveryPhase::SELECTING_CONVERTER,
              PL_TEXT("Choose the Adobe DNG Converter executable to continue."), 5);
     BrowseConverter();
   }
+#endif
 
   const auto converter_path_opt = InputToPath(converter_path_);
   std::error_code ec;
   if (!converter_path_opt.has_value() ||
       !std::filesystem::is_regular_file(converter_path_opt.value(), ec) || ec) {
+#if defined(Q_OS_MACOS)
+    RefreshMacOsConverterPath(&converter_path_);
+    NotifyStateChanged();
+    SetPhase(NikonHeRecoveryPhase::REVIEW_UNSUPPORTED, MissingMacOsConverterStatus(), 0);
+#else
     SetPhase(NikonHeRecoveryPhase::REVIEW_UNSUPPORTED,
              PL_TEXT("Adobe DNG Converter was not found. Choose a valid executable or exit."), 0);
+#endif
     return;
   }
 
