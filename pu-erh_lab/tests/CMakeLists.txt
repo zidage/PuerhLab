@@ -330,6 +330,14 @@ target_include_directories(ExportIccProfileResolverTest PUBLIC ${CMAKE_SOURCE_DI
 target_link_libraries(ExportIccProfileResolverTest PRIVATE GTest::gtest_main ExportIccProfileResolver)
 gtest_discover_tests(ExportIccProfileResolverTest TEST_PREFIX "ExportIccProfileResolverTest.")
 
+add_executable(CudaDriverRequirementsTest
+    utils/cuda_driver_requirements_test.cpp
+    ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/utils/cuda/cuda_driver_requirements.cpp
+)
+target_include_directories(CudaDriverRequirementsTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
+target_link_libraries(CudaDriverRequirementsTest PRIVATE GTest::gtest_main)
+gtest_discover_tests(CudaDriverRequirementsTest TEST_PREFIX "CudaDriverRequirementsTest.")
+
 add_executable(ImagePathEncodingTest io/image_path_encoding_test.cpp)
 target_include_directories(ImagePathEncodingTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
 target_link_libraries(ImagePathEncodingTest PRIVATE GTest::gtest_main ImageLoader StorageService)
