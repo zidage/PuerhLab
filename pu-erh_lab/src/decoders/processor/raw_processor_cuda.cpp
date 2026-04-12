@@ -8,12 +8,14 @@
 
 #include <chrono>
 #include <iostream>
+#include <stdexcept>
 #include <vector>
 
 #include <opencv2/core/cuda.hpp>
 
 #include "decoders/processor/operators/gpu/cuda_color_space_conv.hpp"
 #include "decoders/processor/operators/gpu/cuda_debayer_rcd.hpp"
+#include "decoders/processor/operators/gpu/cuda_downsample.hpp"
 #include "decoders/processor/operators/gpu/cuda_highlight_reconstruct.hpp"
 #include "decoders/processor/operators/gpu/cuda_rotate.hpp"
 #include "decoders/processor/operators/gpu/cuda_white_balance.hpp"
@@ -39,6 +41,28 @@ void LogCudaProfileStep(cv::cuda::Stream& stream, const char* label,
                         const ProfileClock::time_point start) {
   stream.waitForCompletion();
   PrintProfileMs(label, ProfileClock::now() - start);
+}
+
+auto DecodeResToDownsamplePasses(const DecodeRes decode_res) -> int {
+  switch (decode_res) {
+    case DecodeRes::FULL:
+      return 0;
+    case DecodeRes::HALF:
+      return 1;
+    case DecodeRes::QUARTER:
+      return 2;
+    case DecodeRes::EIGHTH:
+      return 3;
+    default:
+      throw std::runtime_error("RawProcessor: Unknown decode resolution");
+  }
+}
+
+void NormalizeDecodeResForGpu(const cv::Size& image_size, RawParams& params) {
+  const int long_side = std::max(image_size.width, image_size.height);
+  if (long_side > 8500 && params.decode_res_ == DecodeRes::QUARTER) {
+    params.decode_res_ = DecodeRes::EIGHTH;
+  }
 }
 
 struct CudaTileJob {
@@ -118,6 +142,11 @@ auto RawProcessor::ProcessCudaFullFrame() -> ImageBuffer {
   CUDA::HighlightWorkspace highlight_workspace;
   auto&                    gpu_img   = process_buffer_.GetCUDAImage();
   cv::cuda::GpuMat         output_rgba;
+
+  const auto stage_downsample_start = ProfileClock::now();
+  CUDA::DownsampleRaw(gpu_img, cfa_pattern_, DecodeResToDownsamplePasses(params_.decode_res_), &stream);
+  LogCudaProfileStep(stream, "RAW CUDA FullFrame downsample", stage_downsample_start);
+
   const cv::Rect crop_rect =
       detail::BuildDecodeCropRect(raw_data_.sizes, gpu_img.size(), params_.decode_res_);
 
@@ -212,6 +241,10 @@ auto RawProcessor::ProcessCudaTiled() -> ImageBuffer {
   CUDA::HighlightWorkspace highlight_workspace;
   auto&                    linear_raw = process_buffer_.GetCUDAImage();
 
+  const auto stage_downsample_start = ProfileClock::now();
+  CUDA::DownsampleRaw(linear_raw, cfa_pattern_, DecodeResToDownsamplePasses(params_.decode_res_), &stream);
+  LogCudaProfileStep(stream, "RAW CUDA Tiled downsample", stage_downsample_start);
+
   const auto stage_linear_start = ProfileClock::now();
   CUDA::ToLinearRef(linear_raw, raw_processor_, cfa_pattern_, &stream);
   LogCudaProfileStep(stream, "RAW CUDA Tiled to-linear", stage_linear_start);
@@ -303,29 +336,32 @@ auto RawProcessor::ProcessDirectRgbCuda() -> ImageBuffer {
 }
 
 auto RawProcessor::ProcessCuda() -> ImageBuffer {
-  using clock = std::chrono::high_resolution_clock;
-  const auto start = clock::now();
+  const auto start = ProfileClock::now();
 
   if (input_kind_ == RawInputKind::DebayeredRgb) {
     auto out = ProcessDirectRgbCuda();
-    const auto end = clock::now();
+    const auto end = ProfileClock::now();
     std::cout << "[LOG] RAW decoding takes: "
               << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count()
               << " ms\n";
     return out;
   }
 
-  SetDecodeRes();
+  auto&      cpu_data = process_buffer_.GetCPUData();
+  const auto stage_decode_res_start = ProfileClock::now();
+  NormalizeDecodeResForGpu(cpu_data.size(), params_);
+  LogCpuProfileStep("RAW CUDA setup decode-res", stage_decode_res_start);
+
+  const auto stage_mode_select_start = ProfileClock::now();
   const cv::Rect active_rect =
-      detail::BuildDecodeCropRect(raw_data_.sizes,
-                                  cv::Size(process_buffer_.GetCPUData().cols, process_buffer_.GetCPUData().rows),
-                                  params_.decode_res_);
+      detail::BuildDecodeCropRect(raw_data_.sizes, cpu_data.size(), params_.decode_res_);
   const detail::CudaExecutionMode mode =
       detail::SelectCudaExecutionMode(params_, cfa_pattern_, active_rect);
+  LogCpuProfileStep("RAW CUDA setup mode-select", stage_mode_select_start);
 
   ImageBuffer out = mode == detail::CudaExecutionMode::Tiled ? ProcessCudaTiled()
                                                              : ProcessCudaFullFrame();
-  const auto end = clock::now();
+  const auto end = ProfileClock::now();
   std::cout << "[LOG] RAW decoding takes: "
             << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << " ms\n";
   return out;

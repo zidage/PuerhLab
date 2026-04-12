@@ -179,21 +179,26 @@ void RawProcessor::SetDecodeRes() {
     params_.decode_res_ = DecodeRes::EIGHTH;
   }
 
+  int downsample_passes = 0;
   switch (params_.decode_res_) {
     case DecodeRes::FULL:
+      downsample_passes = 0;
       break;
     case DecodeRes::HALF:
-      cpu_data = DownsampleRaw2x(cpu_data, cfa_pattern_);
+      downsample_passes = 1;
       break;
     case DecodeRes::QUARTER:
-      cpu_data = DownsampleRaw2x(DownsampleRaw2x(cpu_data, cfa_pattern_), cfa_pattern_);
+      downsample_passes = 2;
       break;
     case DecodeRes::EIGHTH:
-      cpu_data = DownsampleRaw2x(
-          DownsampleRaw2x(DownsampleRaw2x(cpu_data, cfa_pattern_), cfa_pattern_), cfa_pattern_);
+      downsample_passes = 3;
       break;
     default:
       throw std::runtime_error("RawProcessor: Unknown decode resolution");
+  }
+
+  for (int pass = 0; pass < downsample_passes; ++pass) {
+    cpu_data = DownsampleRaw2x(cpu_data, cfa_pattern_);
   }
 }
 

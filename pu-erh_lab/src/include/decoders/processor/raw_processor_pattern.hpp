@@ -7,6 +7,7 @@
 #include <libraw/libraw.h>
 
 #include <algorithm>
+#include <array>
 #include <opencv2/core/mat.hpp>
 #include <stdexcept>
 #include <string>
@@ -217,25 +218,48 @@ auto DownsampleBayer2xTyped(const cv::Mat& src, const BayerPattern2x2& pattern) 
   const int out_cols = src.cols / 2;
   cv::Mat   dst(out_rows, out_cols, src.type());
 
-  for (int y = 0; y < out_rows; ++y) {
-    T* drow = dst.ptr<T>(y);
-    for (int x = 0; x < out_cols; ++x) {
-      const int dst_index      = BayerCellIndex(y, x);
-      const int expected_color = pattern.raw_fc[dst_index];
-      int       src_index      = -1;
-      for (int i = 0; i < 4; ++i) {
-        if (pattern.raw_fc[i] == expected_color) {
-          src_index = i;
-          break;
+  std::array<int, 4> src_index_for_dst = {-1, -1, -1, -1};
+  for (int dst_index = 0; dst_index < 4; ++dst_index) {
+    const int expected_color = pattern.raw_fc[dst_index];
+    int       src_index      = -1;
+    for (int i = 0; i < 4; ++i) {
+      if (pattern.raw_fc[i] == expected_color) {
+        if (src_index >= 0) {
+          throw std::runtime_error("RawProcessor: duplicated Bayer color index in pattern");
         }
+        src_index = i;
       }
-      if (src_index < 0) {
-        throw std::runtime_error("RawProcessor: invalid Bayer pattern for downsample");
-      }
+    }
+    if (src_index < 0) {
+      throw std::runtime_error("RawProcessor: invalid Bayer pattern for downsample");
+    }
+    src_index_for_dst[dst_index] = src_index;
+  }
 
-      const int src_row = 2 * y + (src_index >> 1);
-      const int src_col = 2 * x + (src_index & 1);
-      drow[x]           = src.ptr<T>(src_row)[src_col];
+  std::array<int, 4> src_row_delta = {};
+  std::array<int, 4> src_col_delta = {};
+  for (int i = 0; i < 4; ++i) {
+    src_row_delta[i] = src_index_for_dst[i] >> 1;
+    src_col_delta[i] = src_index_for_dst[i] & 1;
+  }
+
+  for (int y = 0; y < out_rows; ++y) {
+    T*       drow         = dst.ptr<T>(y);
+    const int dst_even_idx = BayerCellIndex(y, 0);
+    const int dst_odd_idx  = BayerCellIndex(y, 1);
+    const T*  src_even     = src.ptr<T>(2 * y + src_row_delta[dst_even_idx]);
+    const T*  src_odd      = src.ptr<T>(2 * y + src_row_delta[dst_odd_idx]);
+
+    int x = 0;
+    for (; x + 1 < out_cols; x += 2) {
+      const int src_col_even = 2 * x + src_col_delta[dst_even_idx];
+      const int src_col_odd  = 2 * (x + 1) + src_col_delta[dst_odd_idx];
+      drow[x]                = src_even[src_col_even];
+      drow[x + 1]            = src_odd[src_col_odd];
+    }
+    if (x < out_cols) {
+      const int src_col_even = 2 * x + src_col_delta[dst_even_idx];
+      drow[x]                = src_even[src_col_even];
     }
   }
 
