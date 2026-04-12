@@ -5,6 +5,8 @@
 #pragma once
 
 #include <memory>
+#include <optional>
+#include <string>
 #include <vector>
 
 #include "edit/pipeline/pipeline_cpu.hpp"
@@ -21,6 +23,18 @@
 #include "type/type.hpp"
 
 namespace puerhlab {
+struct StorageStatsBucket {
+  std::string label_{};
+  int         count_ = 0;
+};
+
+struct FolderStatsView {
+  int                             total_photo_count_ = 0;
+  std::vector<StorageStatsBucket> date_stats_{};
+  std::vector<StorageStatsBucket> camera_stats_{};
+  std::vector<StorageStatsBucket> lens_stats_{};
+};
+
 class ElementController {
  private:
   ConnectionGuard    guard_;
@@ -52,8 +66,11 @@ class ElementController {
       -> std::vector<std::shared_ptr<SleeveElement>>;
 
   auto GetElementIdsInFolderByFilter(const std::shared_ptr<FilterCombo> filter,
-                                     const sl_element_id_t folder_id)
+                                      const sl_element_id_t folder_id)
       -> std::vector<sl_element_id_t>;
+  auto BuildFolderStats(sl_element_id_t                           folder_id,
+                        const std::optional<std::wstring>& extra_filter_where = std::nullopt)
+      -> FolderStatsView;
 
   void EnsureChildrenLoaded(sl_element_id_t folder_id);
 

@@ -4,15 +4,62 @@
 
 #include "storage/controller/sleeve/element_controller.hpp"
 
+#include <duckdb.h>
+
+#include <cstdint>
+#include <format>
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "sleeve/sleeve_element/sleeve_element.hpp"
 #include "sleeve/sleeve_element/sleeve_file.hpp"
 #include "sleeve/sleeve_element/sleeve_folder.hpp"
 #include "type/type.hpp"
+#include "utils/string/convert.hpp"
 
 namespace puerhlab {
+namespace {
+auto RunGroupByQuery(duckdb_connection conn, const std::string& sql) -> std::vector<StorageStatsBucket> {
+  std::vector<StorageStatsBucket> rows;
+  duckdb_result                   result;
+  if (duckdb_query(conn, sql.c_str(), &result) != DuckDBSuccess) {
+    duckdb_destroy_result(&result);
+    return rows;
+  }
+
+  const auto row_count = duckdb_row_count(&result);
+  rows.reserve(static_cast<size_t>(row_count));
+  for (idx_t r = 0; r < row_count; ++r) {
+    char*              label_raw = duckdb_value_varchar(&result, 0, r);
+    StorageStatsBucket row;
+    if (label_raw) {
+      row.label_ = label_raw;
+      duckdb_free(label_raw);
+    }
+    row.count_ = static_cast<int>(duckdb_value_int64(&result, 1, r));
+    rows.push_back(std::move(row));
+  }
+
+  duckdb_destroy_result(&result);
+  return rows;
+}
+
+auto RunScalarInt64(duckdb_connection conn, const std::string& sql) -> int64_t {
+  duckdb_result result;
+  if (duckdb_query(conn, sql.c_str(), &result) != DuckDBSuccess) {
+    duckdb_destroy_result(&result);
+    return 0;
+  }
+  int64_t value = 0;
+  if (duckdb_row_count(&result) > 0) {
+    value = duckdb_value_int64(&result, 0, 0);
+  }
+  duckdb_destroy_result(&result);
+  return value;
+}
+}  // namespace
+
 /**
  * @brief Construct a new Element Controller:: Element Controller object
  *
@@ -145,11 +192,59 @@ auto ElementController::GetElementsInFolderByFilter(const std::shared_ptr<Filter
 }
 
 auto ElementController::GetElementIdsInFolderByFilter(const std::shared_ptr<FilterCombo> filter,
-                                                        const sl_element_id_t folder_id)
+                                                         const sl_element_id_t folder_id)
     -> std::vector<sl_element_id_t> {
   // Build SQL query from the filter
   std::wstring filter_sql = filter->GenerateIdSQLOn(folder_id);
   return element_id_service_.GetElementIdsByQuery(filter_sql);  // for specialized queries only
+}
+
+auto ElementController::BuildFolderStats(
+    sl_element_id_t folder_id, const std::optional<std::wstring>& extra_filter_where)
+    -> FolderStatsView {
+  FolderStatsView out;
+
+  std::string extra_where;
+  if (extra_filter_where.has_value() && !extra_filter_where->empty()) {
+    extra_where = " AND (" + conv::ToBytes(*extra_filter_where) + ")";
+  }
+
+  const auto base_join = std::format(
+      "FROM FolderContent fc "
+      "JOIN Element e ON fc.element_id = e.id "
+      "JOIN FileImage fi ON fi.file_id = e.id "
+      "JOIN Image i ON i.id = fi.image_id "
+      "WHERE fc.folder_id = {} AND e.type = 0{}",
+      folder_id, extra_where);
+
+  out.total_photo_count_ =
+      static_cast<int>(RunScalarInt64(guard_.conn_, std::format("SELECT COUNT(*) {}", base_join)));
+
+  out.date_stats_ = RunGroupByQuery(
+      guard_.conn_,
+      std::format(
+          "SELECT CAST(json_extract(i.metadata, '$.DateTimeString') AS DATE)::VARCHAR AS d, "
+          "COUNT(*) AS c {} "
+          "GROUP BY d ORDER BY d DESC",
+          base_join));
+
+  out.camera_stats_ = RunGroupByQuery(
+      guard_.conn_,
+      std::format(
+          "SELECT COALESCE(NULLIF(json_extract_string(i.metadata, '$.Model'), ''), '(unknown)') "
+          "AS m, COUNT(*) AS c {} "
+          "GROUP BY m ORDER BY c DESC",
+          base_join));
+
+  out.lens_stats_ = RunGroupByQuery(
+      guard_.conn_,
+      std::format(
+          "SELECT COALESCE(NULLIF(json_extract_string(i.metadata, '$.Lens'), ''), '(unknown)') "
+          "AS l, COUNT(*) AS c {} "
+          "GROUP BY l ORDER BY c DESC",
+          base_join));
+
+  return out;
 }
 
 auto ElementController::GetPipelineByElementId(const sl_element_id_t element_id)

@@ -4,54 +4,9 @@
 
 #include "app/sleeve_filter_service.hpp"
 
-#include <duckdb.h>
-
-#include <format>
 #include <memory>
 
-#include "utils/string/convert.hpp"
-
 namespace puerhlab {
-namespace {
-auto RunGroupByQuery(duckdb_connection conn, const std::string& sql) -> std::vector<StatsBucket> {
-  std::vector<StatsBucket> rows;
-  duckdb_result            result;
-  if (duckdb_query(conn, sql.c_str(), &result) != DuckDBSuccess) {
-    duckdb_destroy_result(&result);
-    return rows;
-  }
-
-  const auto row_count = duckdb_row_count(&result);
-  rows.reserve(static_cast<size_t>(row_count));
-  for (idx_t r = 0; r < row_count; ++r) {
-    char*       label_raw = duckdb_value_varchar(&result, 0, r);
-    StatsBucket row;
-    if (label_raw) {
-      row.label_ = label_raw;
-      duckdb_free(label_raw);
-    }
-    row.count_ = static_cast<int>(duckdb_value_int64(&result, 1, r));
-    rows.push_back(std::move(row));
-  }
-
-  duckdb_destroy_result(&result);
-  return rows;
-}
-
-auto RunScalarInt64(duckdb_connection conn, const std::string& sql) -> int64_t {
-  duckdb_result result;
-  if (duckdb_query(conn, sql.c_str(), &result) != DuckDBSuccess) {
-    duckdb_destroy_result(&result);
-    return 0;
-  }
-  int64_t value = 0;
-  if (duckdb_row_count(&result) > 0) {
-    value = duckdb_value_int64(&result, 0, 0);
-  }
-  duckdb_destroy_result(&result);
-  return value;
-}
-}  // namespace
 
 auto SleeveFilterService::CreateFilterCombo(const FilterNode& root) -> filter_id_t {
   filter_id_t new_id = filter_id_generator_.GenerateID();
@@ -101,51 +56,34 @@ auto SleeveFilterService::ApplyFilterOn(filter_id_t filter_id, sl_element_id_t p
 
 auto SleeveFilterService::BuildFolderStats(
     sl_element_id_t parent_id, const std::optional<FilterNode>& extra_filter) -> AlbumStatsView {
-  AlbumStatsView out;
-
-  std::string extra_where;
+  std::optional<std::wstring> extra_where;
   if (extra_filter.has_value()) {
     const auto where_w = FilterSQLCompiler::Compile(*extra_filter);
     if (!where_w.empty()) {
-      extra_where = " AND (" + conv::ToBytes(where_w) + ")";
+      extra_where = where_w;
     }
   }
 
-  auto guard = storage_service_->GetDBController().GetConnectionGuard();
-  const auto base_join = std::format(
-      "FROM FolderContent fc "
-      "JOIN Element e ON fc.element_id = e.id "
-      "JOIN FileImage fi ON fi.file_id = e.id "
-      "JOIN Image i ON i.id = fi.image_id "
-      "WHERE fc.folder_id = {} AND e.type = 0{}",
-      parent_id, extra_where);
+  const auto storage_stats =
+      storage_service_->GetElementController().BuildFolderStats(parent_id, extra_where);
 
-  out.total_photo_count_ =
-      static_cast<int>(RunScalarInt64(guard.conn_, std::format("SELECT COUNT(*) {}", base_join)));
+  AlbumStatsView out;
+  out.total_photo_count_ = storage_stats.total_photo_count_;
 
-  out.date_stats_ = RunGroupByQuery(
-      guard.conn_,
-      std::format(
-          "SELECT CAST(json_extract(i.metadata, '$.DateTimeString') AS DATE)::VARCHAR AS d, "
-          "COUNT(*) AS c {} "
-          "GROUP BY d ORDER BY d DESC",
-          base_join));
+  out.date_stats_.reserve(storage_stats.date_stats_.size());
+  for (const auto& bucket : storage_stats.date_stats_) {
+    out.date_stats_.push_back({bucket.label_, bucket.count_});
+  }
 
-  out.camera_stats_ = RunGroupByQuery(
-      guard.conn_,
-      std::format(
-          "SELECT COALESCE(NULLIF(json_extract_string(i.metadata, '$.Model'), ''), '(unknown)') "
-          "AS m, COUNT(*) AS c {} "
-          "GROUP BY m ORDER BY c DESC",
-          base_join));
+  out.camera_stats_.reserve(storage_stats.camera_stats_.size());
+  for (const auto& bucket : storage_stats.camera_stats_) {
+    out.camera_stats_.push_back({bucket.label_, bucket.count_});
+  }
 
-  out.lens_stats_ = RunGroupByQuery(
-      guard.conn_,
-      std::format(
-          "SELECT COALESCE(NULLIF(json_extract_string(i.metadata, '$.Lens'), ''), '(unknown)') "
-          "AS l, COUNT(*) AS c {} "
-          "GROUP BY l ORDER BY c DESC",
-          base_join));
+  out.lens_stats_.reserve(storage_stats.lens_stats_.size());
+  for (const auto& bucket : storage_stats.lens_stats_) {
+    out.lens_stats_.push_back({bucket.label_, bucket.count_});
+  }
 
   return out;
 }
