@@ -110,6 +110,8 @@ auto Tr(const char* text) -> QString {
 
 const auto kShortcutUndoHistoryId   = QStringLiteral("editor_dialog.undo_history_transaction");
 const auto kShortcutResetGeometryId = QStringLiteral("editor_dialog.reset_geometry");
+const auto kShortcutSelectPrevLutId = QStringLiteral("editor_dialog.select_prev_lut");
+const auto kShortcutSelectNextLutId = QStringLiteral("editor_dialog.select_next_lut");
 constexpr char kPanelIconPathProperty[] = "puerhlabPanelIconPath";
 const QSize     kPanelToggleIconSize(18, 18);
 constexpr int   kPanelToggleButtonHeight = 44;
@@ -464,6 +466,34 @@ class EditorDialog final : public QDialog {
         .context          = Qt::WidgetWithChildrenShortcut,
         .on_trigger       = [this]() { ResetCropAndRotation(); },
     });
+    shortcut_registry_->Register({
+        .id               = kShortcutSelectPrevLutId,
+        .description      = Tr("Select previous LUT"),
+        .default_sequence = QKeySequence(Qt::Key_Up),
+        .context          = Qt::WidgetWithChildrenShortcut,
+        .on_trigger       = [this]() {
+          if (ShouldConsumeLutNavigationShortcut()) {
+            return;
+          }
+          if (lut_browser_widget_) {
+            lut_browser_widget_->SelectRelativeEntry(-1);
+          }
+        },
+    });
+    shortcut_registry_->Register({
+        .id               = kShortcutSelectNextLutId,
+        .description      = Tr("Select next LUT"),
+        .default_sequence = QKeySequence(Qt::Key_Down),
+        .context          = Qt::WidgetWithChildrenShortcut,
+        .on_trigger       = [this]() {
+          if (ShouldConsumeLutNavigationShortcut()) {
+            return;
+          }
+          if (lut_browser_widget_) {
+            lut_browser_widget_->SelectRelativeEntry(1);
+          }
+        },
+    });
 
     if (undo_tx_btn_) {
       undo_tx_btn_->setToolTip(shortcut_registry_->DecorateTooltip(
@@ -486,6 +516,31 @@ class EditorDialog final : public QDialog {
            qobject_cast<QTextEdit*>(focus_widget) != nullptr ||
            qobject_cast<QPlainTextEdit*>(focus_widget) != nullptr ||
            qobject_cast<QAbstractSpinBox*>(focus_widget) != nullptr;
+  }
+
+  auto ShouldConsumeLutNavigationShortcut() const -> bool {
+    if (active_panel_ != ControlPanelKind::Look || !lut_browser_widget_) {
+      return true;
+    }
+    if (QApplication::activePopupWidget()) {
+      return true;
+    }
+
+    QWidget* const focus_widget = QApplication::focusWidget();
+    if (!focus_widget || !isAncestorOf(focus_widget)) {
+      return false;
+    }
+
+    if (qobject_cast<QComboBox*>(focus_widget) != nullptr ||
+        qobject_cast<QAbstractSpinBox*>(focus_widget) != nullptr ||
+        qobject_cast<QTextEdit*>(focus_widget) != nullptr ||
+        qobject_cast<QPlainTextEdit*>(focus_widget) != nullptr) {
+      return true;
+    }
+    if (auto* line_edit = qobject_cast<QLineEdit*>(focus_widget)) {
+      return !lut_browser_widget_->isAncestorOf(line_edit);
+    }
+    return false;
   }
 
   void RefreshHlsTargetUi() {

@@ -6,7 +6,6 @@
 
 #include <QCoreApplication>
 #include <QStringList>
-
 #include <algorithm>
 #include <fstream>
 #include <mutex>
@@ -39,10 +38,10 @@ auto CatalogCacheMutex() -> std::mutex& {
 }
 
 struct LutHeaderInfo {
-  int         size1d_ = 0;
-  int         edge3d_ = 0;
-  bool        valid_  = true;
-  QString     error_{};
+  int     size1d_ = 0;
+  int     edge3d_ = 0;
+  bool    valid_  = true;
+  QString error_{};
 };
 
 auto LowercaseExtension(const std::filesystem::path& path) -> std::wstring {
@@ -51,7 +50,8 @@ auto LowercaseExtension(const std::filesystem::path& path) -> std::wstring {
   return extension;
 }
 
-auto ListCubeLutFiles(const std::filesystem::path& directory) -> std::vector<std::filesystem::path> {
+auto ListCubeLutFiles(const std::filesystem::path& directory)
+    -> std::vector<std::filesystem::path> {
   std::vector<std::filesystem::path> files;
   std::error_code                    ec;
   if (!std::filesystem::exists(directory, ec) || ec ||
@@ -80,15 +80,14 @@ auto ListCubeLutFiles(const std::filesystem::path& directory) -> std::vector<std
 
 auto TrimAscii(std::string_view text) -> std::string_view {
   size_t begin = 0;
-  while (begin < text.size() &&
-         (text[begin] == ' ' || text[begin] == '\t' || text[begin] == '\r' || text[begin] == '\n')) {
+  while (begin < text.size() && (text[begin] == ' ' || text[begin] == '\t' || text[begin] == '\r' ||
+                                 text[begin] == '\n')) {
     ++begin;
   }
 
   size_t end = text.size();
-  while (end > begin &&
-         (text[end - 1] == ' ' || text[end - 1] == '\t' || text[end - 1] == '\r' ||
-          text[end - 1] == '\n')) {
+  while (end > begin && (text[end - 1] == ' ' || text[end - 1] == '\t' || text[end - 1] == '\r' ||
+                         text[end - 1] == '\n')) {
     --end;
   }
   return text.substr(begin, end - begin);
@@ -215,9 +214,9 @@ auto MakeNoneEntry() -> LutCatalogEntry {
 
 auto MakeMissingCurrentEntry(const std::string& current_lut_path) -> LutCatalogEntry {
   LutCatalogEntry entry;
-  entry.kind_           = LutCatalogEntryKind::MissingCurrent;
-  entry.path_           = current_lut_path;
-  entry.display_name_   =
+  entry.kind_ = LutCatalogEntryKind::MissingCurrent;
+  entry.path_ = current_lut_path;
+  entry.display_name_ =
       QString::fromStdString(std::filesystem::path(current_lut_path).filename().string());
   entry.secondary_text_ = Tr("Current LUT is missing from the active LUT folder.");
   entry.status_text_    = Tr("Missing");
@@ -232,10 +231,18 @@ auto MakeFileEntry(const std::filesystem::path& path) -> LutCatalogEntry {
   entry.path_         = path.generic_string();
   entry.display_name_ = QString::fromStdString(path.filename().string());
 
-  std::error_code ec;
-  entry.file_size_bytes_ = std::filesystem::file_size(path, ec);
-  if (ec) {
+  std::error_code size_ec;
+  entry.file_size_bytes_ = std::filesystem::file_size(path, size_ec);
+  if (size_ec) {
     entry.file_size_bytes_ = 0;
+  }
+
+  std::error_code mtime_ec;
+  const auto      modified_time = std::filesystem::last_write_time(path, mtime_ec);
+  if (!mtime_ec) {
+    entry.modified_time_sort_key_ =
+        static_cast<std::int64_t>(modified_time.time_since_epoch().count());
+    entry.has_modified_time_ = true;
   }
 
   const LutHeaderInfo header = ParseCubeHeaderInfo(path);
@@ -257,7 +264,8 @@ auto CloneCatalogWithSelection(const LutCatalog& base_catalog, const std::string
     -> LutCatalog {
   LutCatalog catalog = base_catalog;
   if (!current_lut_path.empty() && FindEntryIndexForPath(catalog, current_lut_path) < 0) {
-    catalog.entries_.insert(catalog.entries_.begin() + 1, MakeMissingCurrentEntry(current_lut_path));
+    catalog.entries_.insert(catalog.entries_.begin() + 1,
+                            MakeMissingCurrentEntry(current_lut_path));
   }
   return catalog;
 }
@@ -281,17 +289,17 @@ auto BuildCatalog(const std::string& current_lut_path, bool force_refresh) -> Lu
     std::lock_guard<std::mutex> lock(CatalogCacheMutex());
     auto&                       cache = CatalogCache();
     if (force_refresh || !cache.initialized_ || cache.directory_ != directory) {
-      cache.directory_                = directory;
-      cache.catalog_                  = BuildCatalogForDirectory(directory, std::string{});
-      cache.catalog_.directory_       = directory;
-      cache.initialized_              = true;
+      cache.directory_          = directory;
+      cache.catalog_            = BuildCatalogForDirectory(directory, std::string{});
+      cache.catalog_.directory_ = directory;
+      cache.initialized_        = true;
     }
     return CloneCatalogWithSelection(cache.catalog_, current_lut_path);
   }
 }
 
 auto BuildCatalogForDirectory(const std::filesystem::path& directory,
-                              const std::string& current_lut_path) -> LutCatalog {
+                              const std::string&           current_lut_path) -> LutCatalog {
   LutCatalog catalog;
   catalog.directory_ = directory;
 
@@ -304,7 +312,8 @@ auto BuildCatalogForDirectory(const std::filesystem::path& directory,
   }
 
   if (!current_lut_path.empty() && FindEntryIndexForPath(catalog, current_lut_path) < 0) {
-    catalog.entries_.insert(catalog.entries_.begin() + 1, MakeMissingCurrentEntry(current_lut_path));
+    catalog.entries_.insert(catalog.entries_.begin() + 1,
+                            MakeMissingCurrentEntry(current_lut_path));
   }
 
   return catalog;

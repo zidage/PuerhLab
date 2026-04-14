@@ -9,8 +9,7 @@
 
 namespace puerhlab::ui {
 
-ShortcutRegistry::ShortcutRegistry(QWidget* owner) : owner_(owner) {
-}
+ShortcutRegistry::ShortcutRegistry(QWidget* owner) : owner_(owner) {}
 
 auto ShortcutRegistry::Register(ShortcutBindingSpec spec) -> QAction* {
   if (!owner_ || spec.id.isEmpty() || !spec.on_trigger) {
@@ -24,6 +23,7 @@ auto ShortcutRegistry::Register(ShortcutBindingSpec spec) -> QAction* {
   auto* action = new QAction(owner_);
   action->setObjectName(spec.id);
   action->setShortcut(spec.default_sequence);
+  action->setAutoRepeat(true);
   action->setShortcutContext(spec.context);
   if (!spec.description.isEmpty()) {
     action->setText(spec.description);
@@ -63,7 +63,7 @@ auto ShortcutRegistry::Action(const ShortcutCommandId& id) const -> QAction* {
   return nullptr;
 }
 
-auto ShortcutRegistry::ShortcutText(const ShortcutCommandId& id,
+auto ShortcutRegistry::ShortcutText(const ShortcutCommandId&     id,
                                     QKeySequence::SequenceFormat format) const -> QString {
   const auto* action = Action(id);
   if (!action) {
@@ -72,7 +72,7 @@ auto ShortcutRegistry::ShortcutText(const ShortcutCommandId& id,
   return action->shortcut().toString(format);
 }
 
-auto ShortcutRegistry::DecorateTooltip(const QString& base_tooltip,
+auto ShortcutRegistry::DecorateTooltip(const QString&           base_tooltip,
                                        const ShortcutCommandId& id) const -> QString {
   const QString shortcut_text = ShortcutText(id);
   if (shortcut_text.isEmpty()) {
