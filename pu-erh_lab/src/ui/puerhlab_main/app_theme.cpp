@@ -4,6 +4,7 @@
 
 #include "ui/puerhlab_main/app_theme.hpp"
 
+#include <QAbstractItemView>
 #include <QApplication>
 #include <QCheckBox>
 #include <QComboBox>
@@ -167,13 +168,50 @@ auto RegisterFontResource(const QString& path, const QString& preferred_family) 
   return families.front();
 }
 
-auto MakeFont(const QString& family, qreal point_size, QFont::Weight weight, bool italic = false)
-    -> QFont {
-  QFont font(family);
+void ConfigureTextRendering(QFont& font) {
+  font.setStyleStrategy(
+      static_cast<QFont::StyleStrategy>(QFont::PreferAntialias | QFont::PreferOutline));
+#if defined(_WIN32)
+  // Match the softer glyph look used by Qt Quick text rendering.
+  font.setHintingPreference(QFont::PreferNoHinting);
+#endif
+}
+
+void AppendUniqueFamily(QStringList& stack, const QString& family) {
+  if (family.isEmpty()) {
+    return;
+  }
+  if (!stack.contains(family, Qt::CaseInsensitive)) {
+    stack.push_back(family);
+  }
+}
+
+auto UiFontStack(const FontFamilies& families) -> QStringList {
+  QStringList stack;
+  AppendUniqueFamily(stack, ActiveUiFamily(families));
+  AppendUniqueFamily(stack, families.ui_zh);
+  AppendUniqueFamily(stack, families.ui_latin);
+  return stack;
+}
+
+auto DataFontStack(const FontFamilies& families) -> QStringList {
+  QStringList stack;
+  AppendUniqueFamily(stack, families.data);
+  const auto ui_stack = UiFontStack(families);
+  for (const QString& family : ui_stack) {
+    AppendUniqueFamily(stack, family);
+  }
+  return stack;
+}
+
+auto MakeFont(const QStringList& family_stack, qreal point_size, QFont::Weight weight,
+              bool italic = false) -> QFont {
+  QFont font;
+  font.setFamilies(family_stack);
   font.setPointSizeF(point_size);
   font.setWeight(weight);
   font.setItalic(italic);
-  font.setStyleStrategy(QFont::PreferAntialias);
+  ConfigureTextRendering(font);
   return font;
 }
 
@@ -265,9 +303,10 @@ auto AppTheme::TryRegisterUiFontOverride(const QString& path) -> bool {
 void AppTheme::ApplyApplicationFont(QApplication& app) {
   RegisterFonts();
 
+  const auto& families = FontState();
   QFont app_font = app.font();
-  app_font.setFamily(ActiveUiFamily(FontState()));
-  app_font.setStyleStrategy(QFont::PreferAntialias);
+  app_font.setFamilies(UiFontStack(families));
+  ConfigureTextRendering(app_font);
   app.setFont(app_font);
   RefreshTopLevelWidgetFonts();
 }
@@ -281,53 +320,65 @@ void AppTheme::ApplyApplicationFont() {
 auto AppTheme::Font(FontRole role) -> QFont {
   RegisterFonts();
   const auto& families = FontState();
-  const QString ui_family = ActiveUiFamily(families);
+  const QStringList ui_stack = UiFontStack(families);
+  const QStringList data_stack = DataFontStack(families);
+  const QStringList mono_stack{families.mono};
 
   switch (role) {
     case FontRole::UiBody:
-      return MakeFont(ui_family, 11.0, QFont::Medium);
+      return MakeFont(ui_stack, 11.0, QFont::Medium);
     case FontRole::UiBodyStrong:
-      return MakeFont(ui_family, 11.0, QFont::DemiBold);
+      return MakeFont(ui_stack, 11.0, QFont::DemiBold);
     case FontRole::UiCaption:
-      return MakeFont(ui_family, 10.0, QFont::Medium);
+      return MakeFont(ui_stack, 10.0, QFont::Medium);
     case FontRole::UiCaptionStrong:
-      return MakeFont(ui_family, 10.0, QFont::DemiBold);
+      return MakeFont(ui_stack, 10.0, QFont::DemiBold);
     case FontRole::UiTitle:
-      return MakeFont(ui_family, 11.0, QFont::DemiBold);
+      return MakeFont(ui_stack, 11.0, QFont::DemiBold);
     case FontRole::UiHeadline:
-      return MakeFont(ui_family, 14.0, QFont::Bold);
+      return MakeFont(ui_stack, 14.0, QFont::Bold);
     case FontRole::UiOverline: {
-      QFont font = MakeFont(ui_family, 9.0, QFont::DemiBold);
+      QFont font = MakeFont(ui_stack, 9.0, QFont::DemiBold);
       font.setCapitalization(QFont::AllUppercase);
       font.setLetterSpacing(QFont::AbsoluteSpacing, 0.8);
       return font;
     }
     case FontRole::UiHint:
-      return MakeFont(ui_family, 9.0, QFont::Medium);
+      return MakeFont(ui_stack, 9.0, QFont::Medium);
     case FontRole::DataBody:
-      return MakeFont(families.data, 11.0, QFont::Medium);
+      return MakeFont(data_stack, 11.0, QFont::Medium);
     case FontRole::DataBodyStrong:
-      return MakeFont(families.data, 11.0, QFont::DemiBold);
+      return MakeFont(data_stack, 11.0, QFont::DemiBold);
     case FontRole::DataCaption:
-      return MakeFont(families.data, 10.0, QFont::Medium);
+      return MakeFont(data_stack, 10.0, QFont::Medium);
     case FontRole::DataNumeric:
-      return MakeFont(families.data, 12.0, QFont::DemiBold);
+      return MakeFont(data_stack, 12.0, QFont::DemiBold);
     case FontRole::DataOverlay:
-      return MakeFont(families.data, 10.0, QFont::DemiBold);
+      return MakeFont(data_stack, 10.0, QFont::DemiBold);
     case FontRole::MonoBody:
-      return MakeFont(families.mono, 10.0, QFont::DemiBold);
+      return MakeFont(mono_stack, 10.0, QFont::DemiBold);
     case FontRole::MonoCaption:
-      return MakeFont(families.mono, 9.0, QFont::Normal);
+      return MakeFont(mono_stack, 9.0, QFont::Normal);
   }
 
-  return MakeFont(ui_family, 11.0, QFont::Normal);
+  return MakeFont(ui_stack, 11.0, QFont::Normal);
 }
 
 void AppTheme::ApplyFont(QWidget* widget, FontRole role) {
   if (!widget) {
     return;
   }
-  widget->setFont(Font(role));
+  const QFont themed_font = Font(role);
+  widget->setFont(themed_font);
+
+  if (auto* combo = qobject_cast<QComboBox*>(widget)) {
+    if (QAbstractItemView* view = combo->view()) {
+      view->setFont(themed_font);
+      if (QWidget* popup = view->window()) {
+        popup->setFont(themed_font);
+      }
+    }
+  }
 }
 
 void AppTheme::MarkFontRole(QObject* object, FontRole role) {
