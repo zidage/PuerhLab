@@ -23,6 +23,8 @@
                               auto options, auto current_value, auto&& onChange) {
       auto* label = new QLabel(name, parent);
       label->setStyleSheet(AppTheme::EditorLabelStyle(AppTheme::Instance().textColor()));
+      label->setWordWrap(true);
+      label->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
 
       auto* combo = new QComboBox(parent);
       for (const auto& option : options) {
@@ -30,7 +32,8 @@
       }
       const int current_index = combo->findData(static_cast<int>(current_value));
       combo->setCurrentIndex(std::max(0, current_index));
-      combo->setMinimumWidth(240);
+      combo->setMinimumWidth(0);
+      combo->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
       combo->setFixedHeight(32);
       combo->setStyleSheet(AppTheme::EditorComboBoxStyle());
 
@@ -44,10 +47,11 @@
                        });
 
       auto* row       = new QWidget(parent);
-      auto* rowLayout = new QHBoxLayout(row);
+      auto* rowLayout = new QVBoxLayout(row);
       rowLayout->setContentsMargins(0, 0, 0, 0);
-      rowLayout->addWidget(label, 1);
-      rowLayout->addWidget(combo);
+      rowLayout->setSpacing(4);
+      rowLayout->addWidget(label, 0);
+      rowLayout->addWidget(combo, 1);
       if (parent_layout == drt_controls_layout) {
         parent_layout->insertWidget(parent_layout->count() - 1, row);
       } else {
@@ -60,14 +64,17 @@
                             auto&& onRelease, auto&& onReset, const QString& suffix) {
       auto* info = new QLabel(name, drt_controls_);
       info->setStyleSheet(AppTheme::EditorLabelStyle(AppTheme::Instance().textColor()));
-      info->setMinimumWidth(100);
+      info->setMinimumWidth(0);
+      info->setWordWrap(true);
+      info->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
 
       auto* slider = new QSlider(Qt::Horizontal, drt_controls_);
       slider->setRange(min, max);
       slider->setValue(value);
       slider->setSingleStep(1);
       slider->setPageStep(std::max(1, (max - min) / 20));
-      slider->setMinimumWidth(200);
+      slider->setMinimumWidth(0);
+      slider->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
       slider->setFixedHeight(32);
 
       auto* spin = new QSpinBox(drt_controls_);
@@ -125,12 +132,18 @@
           });
 
       auto* row       = new QWidget(drt_controls_);
-      auto* rowLayout = new QHBoxLayout(row);
+      auto* rowLayout = new QVBoxLayout(row);
       rowLayout->setContentsMargins(0, 0, 0, 0);
-      rowLayout->setSpacing(8);
+      rowLayout->setSpacing(4);
       rowLayout->addWidget(info, 0);
-      rowLayout->addWidget(slider, 1);
-      rowLayout->addWidget(spin, 0);
+
+      auto* value_row = new QWidget(row);
+      auto* value_row_layout = new QHBoxLayout(value_row);
+      value_row_layout->setContentsMargins(0, 0, 0, 0);
+      value_row_layout->setSpacing(8);
+      value_row_layout->addWidget(slider, 1);
+      value_row_layout->addWidget(spin, 0);
+      rowLayout->addWidget(value_row, 1);
 
       drt_controls_layout->insertWidget(drt_controls_layout->count() - 1, row);
       return slider;
@@ -155,7 +168,8 @@
         });
 
     odt_encoding_eotf_combo_ = new QComboBox(drt_controls_);
-    odt_encoding_eotf_combo_->setMinimumWidth(240);
+    odt_encoding_eotf_combo_->setMinimumWidth(0);
+    odt_encoding_eotf_combo_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     odt_encoding_eotf_combo_->setFixedHeight(32);
     odt_encoding_eotf_combo_->setStyleSheet(AppTheme::EditorComboBoxStyle());
     QObject::connect(odt_encoding_eotf_combo_, QOverload<int>::of(&QComboBox::currentIndexChanged),
@@ -172,11 +186,14 @@
     {
       auto* label = new QLabel(Tr("Encoding EOTF"), drt_controls_);
       label->setStyleSheet(AppTheme::EditorLabelStyle(AppTheme::Instance().textColor()));
+      label->setWordWrap(true);
+      label->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
       auto* row       = new QWidget(drt_controls_);
-      auto* rowLayout = new QHBoxLayout(row);
+      auto* rowLayout = new QVBoxLayout(row);
       rowLayout->setContentsMargins(0, 0, 0, 0);
-      rowLayout->addWidget(label, 1);
-      rowLayout->addWidget(odt_encoding_eotf_combo_);
+      rowLayout->setSpacing(4);
+      rowLayout->addWidget(label, 0);
+      rowLayout->addWidget(odt_encoding_eotf_combo_, 1);
       drt_controls_layout->insertWidget(drt_controls_layout->count() - 1, row);
     }
     RefreshOdtEncodingEotfComboFromState();

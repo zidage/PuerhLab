@@ -49,11 +49,14 @@
                            auto&& onChange) {
       auto* label = new QLabel(name, controls_);
       label->setStyleSheet(AppTheme::EditorLabelStyle(AppTheme::Instance().textColor()));
+      label->setWordWrap(true);
+      label->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
 
       auto* combo = new QComboBox(controls_);
       combo->addItems(items);
       combo->setCurrentIndex(initial_index);
-      combo->setMinimumWidth(240);
+      combo->setMinimumWidth(0);
+      combo->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
       combo->setFixedHeight(32);
       combo->setStyleSheet(AppTheme::EditorComboBoxStyle());
 
@@ -66,10 +69,11 @@
                        });
 
       auto* row       = new QWidget(controls_);
-      auto* rowLayout = new QHBoxLayout(row);
+      auto* rowLayout = new QVBoxLayout(row);
       rowLayout->setContentsMargins(0, 0, 0, 0);
-      rowLayout->addWidget(label, /*stretch*/ 1);
-      rowLayout->addWidget(combo);
+      rowLayout->setSpacing(4);
+      rowLayout->addWidget(label, /*stretch*/ 0);
+      rowLayout->addWidget(combo, /*stretch*/ 1);
 
       controls_layout->insertWidget(controls_layout->count() - 1, row);
       return combo;
@@ -80,13 +84,16 @@
       auto* info = new QLabel(QString("%1: %2").arg(name).arg(formatter(value)), controls_);
       info->setStyleSheet(AppTheme::EditorLabelStyle(AppTheme::Instance().textColor()));
       AppTheme::MarkFontRole(info, AppTheme::FontRole::DataBody);
+      info->setWordWrap(true);
+      info->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
 
       auto* slider = new QSlider(Qt::Horizontal, controls_);
       slider->setRange(min, max);
       slider->setValue(value);
       slider->setSingleStep(1);
       slider->setPageStep(std::max(1, (max - min) / 20));
-      slider->setMinimumWidth(240);
+      slider->setMinimumWidth(0);
+      slider->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
       slider->setFixedHeight(32);
 
       QObject::connect(slider, &QSlider::valueChanged, controls_,
@@ -116,10 +123,11 @@
           });
 
       auto* row       = new QWidget(controls_);
-      auto* rowLayout = new QHBoxLayout(row);
+      auto* rowLayout = new QVBoxLayout(row);
       rowLayout->setContentsMargins(0, 0, 0, 0);
-      rowLayout->addWidget(info, /*stretch*/ 1);
-      rowLayout->addWidget(slider);
+      rowLayout->setSpacing(4);
+      rowLayout->addWidget(info, /*stretch*/ 0);
+      rowLayout->addWidget(slider, /*stretch*/ 1);
 
       controls_layout->insertWidget(controls_layout->count() - 1, row);
       return slider;
@@ -508,8 +516,8 @@
     {
       auto* wheel_frame = new QFrame(controls_);
       wheel_frame->setObjectName("EditorSection");
-      wheel_frame->setMaximumWidth(480);
-      wheel_frame->setMaximumHeight(440);
+      wheel_frame->setMinimumWidth(0);
+      wheel_frame->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
 
       auto* wheel_layout = new QVBoxLayout(wheel_frame);
       wheel_layout->setContentsMargins(10, 8, 10, 8);
@@ -524,7 +532,8 @@
                                bool invert_delta, CdlTrackballDiscWidget*& disc_widget,
                                QLabel*& offset_label, QSlider*& slider_widget) -> QWidget* {
         auto* unit = new QWidget(wheel_frame);
-        unit->setFixedWidth(180);
+        unit->setMinimumWidth(0);
+        unit->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
         auto* unit_layout = new QVBoxLayout(unit);
         unit_layout->setContentsMargins(0, 0, 0, 0);
         unit_layout->setSpacing(2);
@@ -535,7 +544,9 @@
         unit_layout->addWidget(title_label, 0, Qt::AlignHCenter);
 
         disc_widget = new CdlTrackballDiscWidget(unit);
-        disc_widget->setFixedSize(120, 120);
+        disc_widget->setMinimumSize(84, 84);
+        disc_widget->setMaximumSize(120, 120);
+        disc_widget->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
         disc_widget->SetPosition(wheel_state.disc_position_);
         disc_widget->SetPositionChangedCallback(
             [this, &wheel_state, add_unity, invert_delta](const QPointF& pos) {
@@ -573,6 +584,8 @@
         slider_widget->setSingleStep(1);
         slider_widget->setPageStep(100);
         slider_widget->setFixedHeight(14);
+        slider_widget->setMinimumWidth(0);
+        slider_widget->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
         QObject::connect(slider_widget, &QSlider::valueChanged, unit,
                          [this, &wheel_state, sign](int value) {
                            if (syncing_controls_) {
@@ -612,7 +625,7 @@
       auto* top_row = new QWidget(wheel_frame);
       auto* top_row_layout = new QHBoxLayout(top_row);
       top_row_layout->setContentsMargins(0, 0, 0, 0);
-      top_row_layout->setSpacing(0);
+      top_row_layout->setSpacing(8);
       top_row_layout->addStretch();
       top_row_layout->addWidget(gamma_unit, 0);
       top_row_layout->addStretch();
@@ -621,14 +634,14 @@
       auto* bottom_row = new QWidget(wheel_frame);
       auto* bottom_row_layout = new QHBoxLayout(bottom_row);
       bottom_row_layout->setContentsMargins(0, 0, 0, 0);
-      bottom_row_layout->setSpacing(12);
+      bottom_row_layout->setSpacing(8);
       bottom_row_layout->addStretch();
       bottom_row_layout->addWidget(lift_unit, 0);
       bottom_row_layout->addWidget(gain_unit, 0);
       bottom_row_layout->addStretch();
       wheel_layout->addWidget(bottom_row, 0);
 
-      controls_layout->insertWidget(controls_layout->count() - 1, wheel_frame, 0, Qt::AlignHCenter);
+      controls_layout->insertWidget(controls_layout->count() - 1, wheel_frame, 0);
       RefreshCdlOffsetLabels();
     }
 

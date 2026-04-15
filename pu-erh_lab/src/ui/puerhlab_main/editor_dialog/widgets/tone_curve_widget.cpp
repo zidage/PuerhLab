@@ -18,7 +18,7 @@
 namespace puerhlab::ui {
 
 ToneCurveWidget::ToneCurveWidget(QWidget* parent) : QWidget(parent) {
-  setMinimumSize(270, 220);
+  setMinimumSize(0, 220);
   setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
   setMouseTracking(true);
   setCursor(Qt::CrossCursor);

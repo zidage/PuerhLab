@@ -19,8 +19,8 @@
 namespace puerhlab::ui {
 
 CdlTrackballDiscWidget::CdlTrackballDiscWidget(QWidget* parent) : QWidget(parent) {
-  setMinimumSize(80, 80);
-  setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+  setMinimumSize(72, 72);
+  setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
   setMouseTracking(true);
   setCursor(Qt::CrossCursor);
 }

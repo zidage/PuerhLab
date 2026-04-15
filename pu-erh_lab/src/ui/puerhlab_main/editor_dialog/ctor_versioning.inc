@@ -5,6 +5,21 @@
   const QString version_primary_btn_style   = AppTheme::EditorPrimaryButtonStyle(true);
   const QString version_secondary_btn_style = AppTheme::EditorSecondaryButtonStyle();
 
+    // Versioning panel header.
+    {
+      auto* row       = new QWidget(shared_versioning_root);
+      auto* rowLayout = new QHBoxLayout(row);
+      rowLayout->setContentsMargins(0, 0, 0, 0);
+      rowLayout->setSpacing(10);
+
+      auto* title = new QLabel(Tr("Versioning"), row);
+      title->setStyleSheet(AppTheme::EditorLabelStyle(AppTheme::Instance().textColor()));
+      AppTheme::MarkFontRole(title, AppTheme::FontRole::UiBodyStrong);
+
+      rowLayout->addWidget(title, /*stretch*/ 1);
+      shared_versioning_layout->addWidget(row, 0);
+    }
+
     // Edit-history commit controls.
     {
       auto* row       = new QWidget(shared_versioning_root);
@@ -109,4 +124,6 @@
       QObject::connect(working_mode_combo_, QOverload<int>::of(&QComboBox::currentIndexChanged),
                        this, [this](int) { UpdateVersionUi(); });
     }
+
+    SetVersioningCollapsed(true, /*animate=*/false);
 

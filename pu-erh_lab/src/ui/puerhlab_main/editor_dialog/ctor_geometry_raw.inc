@@ -24,13 +24,16 @@
       auto* info = new QLabel(QString("%1: %2").arg(name).arg(formatter(value)), geometry_controls_);
       info->setStyleSheet(AppTheme::EditorLabelStyle(AppTheme::Instance().textColor()));
       AppTheme::MarkFontRole(info, AppTheme::FontRole::DataBody);
+      info->setWordWrap(true);
+      info->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
 
       auto* slider = new QSlider(Qt::Horizontal, geometry_controls_);
       slider->setRange(min, max);
       slider->setValue(value);
       slider->setSingleStep(1);
       slider->setPageStep(std::max(1, (max - min) / 20));
-      slider->setMinimumWidth(240);
+      slider->setMinimumWidth(0);
+      slider->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
       slider->setFixedHeight(32);
 
       QObject::connect(slider, &QSlider::valueChanged, geometry_controls_,
@@ -52,10 +55,11 @@
           });
 
       auto* row       = new QWidget(geometry_controls_);
-      auto* rowLayout = new QHBoxLayout(row);
+      auto* rowLayout = new QVBoxLayout(row);
       rowLayout->setContentsMargins(0, 0, 0, 0);
-      rowLayout->addWidget(info, 1);
-      rowLayout->addWidget(slider);
+      rowLayout->setSpacing(4);
+      rowLayout->addWidget(info, 0);
+      rowLayout->addWidget(slider, 1);
       geometry_controls_layout->insertWidget(geometry_controls_layout->count() - 1, row);
       return slider;
     };
@@ -89,6 +93,8 @@
       auto* preset_label = new QLabel(Tr("Aspect Preset"), preset_row);
       preset_label->setStyleSheet(AppTheme::EditorLabelStyle(AppTheme::Instance().textColor()));
       AppTheme::MarkFontRole(preset_label, AppTheme::FontRole::UiCaption);
+      preset_label->setWordWrap(true);
+      preset_label->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
       preset_row_layout->addWidget(preset_label, 0);
 
       geometry_crop_aspect_preset_combo_ = new QComboBox(preset_row);
@@ -125,6 +131,8 @@
       auto* width_label = new QLabel(Tr("Width"), ratio_row);
       width_label->setStyleSheet(preset_label->styleSheet());
       AppTheme::MarkFontRole(width_label, AppTheme::FontRole::UiCaption);
+      width_label->setWordWrap(true);
+      width_label->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
       ratio_row_layout->addWidget(width_label, 0);
 
       geometry_crop_aspect_width_spin_ = new QDoubleSpinBox(ratio_row);
@@ -158,6 +166,8 @@
       auto* height_label = new QLabel(Tr("Height"), ratio_row);
       height_label->setStyleSheet(width_label->styleSheet());
       AppTheme::MarkFontRole(height_label, AppTheme::FontRole::UiCaption);
+      height_label->setWordWrap(true);
+      height_label->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
       ratio_row_layout->addWidget(height_label, 0);
 
       geometry_crop_aspect_height_spin_ = new QDoubleSpinBox(ratio_row);
@@ -377,7 +387,8 @@
         brand_label->setStyleSheet(AppTheme::EditorLabelStyle(AppTheme::Instance().textColor()));
         AppTheme::MarkFontRole(brand_label, AppTheme::FontRole::UiCaption);
         lens_brand_combo_ = new QComboBox(brand_row);
-        lens_brand_combo_->setMinimumWidth(220);
+        lens_brand_combo_->setMinimumWidth(0);
+        lens_brand_combo_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
         lens_brand_combo_->setStyleSheet(AppTheme::EditorComboBoxStyle());
         QObject::connect(lens_brand_combo_, QOverload<int>::of(&QComboBox::currentIndexChanged),
                          this, [this](int) {
@@ -405,7 +416,8 @@
         model_label->setStyleSheet(brand_label->styleSheet());
         AppTheme::MarkFontRole(model_label, AppTheme::FontRole::UiCaption);
         lens_model_combo_ = new QComboBox(model_row);
-        lens_model_combo_->setMinimumWidth(220);
+        lens_model_combo_->setMinimumWidth(0);
+        lens_model_combo_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
         lens_model_combo_->setStyleSheet(lens_brand_combo_->styleSheet());
         QObject::connect(lens_model_combo_, QOverload<int>::of(&QComboBox::currentIndexChanged),
                          this, [this](int) {

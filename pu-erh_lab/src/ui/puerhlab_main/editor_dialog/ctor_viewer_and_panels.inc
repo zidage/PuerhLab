@@ -49,9 +49,57 @@
                                                 theme.dividerColor().name(QColor::HexArgb),
                                                 theme.textColor().name(QColor::HexRgb),
                                                 theme.textMutedColor().name(QColor::HexRgb));
+    const QString version_rail_style = QStringLiteral(
+        "#EditorVersioningRail {"
+        "  background: %1;"
+        "  border: 1px solid %2;"
+        "  border-radius: 14px;"
+        "}"
+        "#EditorVersioningRail QPushButton {"
+        "  min-width: 40px;"
+        "  min-height: 40px;"
+        "  border-radius: 10px;"
+        "  border: 1px solid %3;"
+        "  background: transparent;"
+        "  padding: 0px;"
+        "}"
+        "#EditorVersioningRail QPushButton:hover {"
+        "  background: %4;"
+        "  border-color: %5;"
+        "  padding-left: 1px;"
+        "}"
+        "#EditorVersioningRail QPushButton:pressed {"
+        "  background: %6;"
+        "}"
+        "#EditorVersioningRail QPushButton:checked {"
+        "  background: %7;"
+        "  border-color: %8;"
+        "}"
+        "#EditorVersioningRail QPushButton:checked:hover {"
+        "  background: %9;"
+        "  padding-left: 1px;"
+        "}")
+                                          .arg(theme.glassPanelColor().name(QColor::HexArgb),
+                                               theme.glassStrokeColor().name(QColor::HexArgb),
+                                               QColor(233, 227, 216, 24).name(QColor::HexArgb),
+                                               theme.hoverColor().name(QColor::HexArgb),
+                                               QColor(233, 227, 216, 94).name(QColor::HexArgb),
+                                               theme.bgPanelColor().name(QColor::HexArgb),
+                                               QColor(theme.accentColor().red(), theme.accentColor().green(),
+                                                      theme.accentColor().blue(), 214)
+                                                   .name(QColor::HexArgb),
+                                               QColor(theme.accentSecondaryColor().red(),
+                                                      theme.accentSecondaryColor().green(),
+                                                      theme.accentSecondaryColor().blue(), 160)
+                                                   .name(QColor::HexArgb),
+                                               QColor(theme.accentSecondaryColor().red(),
+                                                      theme.accentSecondaryColor().green(),
+                                                      theme.accentSecondaryColor().blue(), 224)
+                                                   .name(QColor::HexArgb));
 
     auto* root = new QHBoxLayout(this);
-    root->setContentsMargins(14, 14, 14, 14);
+    root->setContentsMargins(kEditorOuterMargin, kEditorOuterMargin, kEditorOuterMargin,
+                             kEditorOuterMargin);
     root->setSpacing(0);
 
     auto* main_splitter = new QSplitter(Qt::Horizontal, this);
@@ -65,9 +113,10 @@
         "QSplitter#EditorMainSplitter::handle:hover {"
         "  background: rgba(185, 138, 74, 0.7);"
         "}");
+    main_splitter_ = main_splitter;
 
     viewer_ = new QtEditViewer(this);
-    viewer_->setMinimumSize(560, 360);
+    viewer_->setMinimumSize(420, 320);
     viewer_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     viewer_->setStyleSheet(
         "QWidget {"
@@ -111,9 +160,9 @@
     }
 
     auto* controls_panel = new QWidget(this);
-    controls_panel->setMinimumWidth(320);
+    controls_panel->setMinimumWidth(kControlsPanelMinWidth);
     controls_panel->setMaximumWidth(900);
-    controls_panel->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
+    controls_panel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     controls_panel->setObjectName("EditorControlsPanel");
     controls_panel->setAttribute(Qt::WA_StyledBackground, true);
     controls_panel->setStyleSheet(borderless_panel_style);
@@ -132,6 +181,8 @@
 
     tone_controls_        = new QWidget(tone_controls_scroll_);
     controls_             = tone_controls_;
+    tone_controls_->setMinimumWidth(0);
+    tone_controls_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
     auto* controls_layout = new QVBoxLayout(tone_controls_);
     controls_layout->setContentsMargins(14, 14, 14, 14);
     controls_layout->setSpacing(12);
@@ -146,6 +197,8 @@
     drt_controls_scroll_->setStyleSheet(scroll_style);
 
     drt_controls_ = new QWidget(drt_controls_scroll_);
+    drt_controls_->setMinimumWidth(0);
+    drt_controls_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
     auto* drt_controls_layout = new QVBoxLayout(drt_controls_);
     drt_controls_layout->setContentsMargins(14, 14, 14, 14);
     drt_controls_layout->setSpacing(12);
@@ -160,6 +213,8 @@
     look_controls_scroll_->setStyleSheet(scroll_style);
 
     look_controls_ = new QWidget(look_controls_scroll_);
+    look_controls_->setMinimumWidth(0);
+    look_controls_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
     auto* look_controls_layout = new QVBoxLayout(look_controls_);
     look_controls_layout->setContentsMargins(14, 14, 14, 14);
     look_controls_layout->setSpacing(12);
@@ -176,6 +231,8 @@
     geometry_controls_scroll_->setStyleSheet(scroll_style);
 
     geometry_controls_ = new QWidget(geometry_controls_scroll_);
+    geometry_controls_->setMinimumWidth(0);
+    geometry_controls_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
     auto* geometry_controls_layout = new QVBoxLayout(geometry_controls_);
     geometry_controls_layout->setContentsMargins(14, 14, 14, 14);
     geometry_controls_layout->setSpacing(12);
@@ -190,6 +247,8 @@
     raw_controls_scroll_->setStyleSheet(scroll_style);
 
     raw_controls_ = new QWidget(raw_controls_scroll_);
+    raw_controls_->setMinimumWidth(0);
+    raw_controls_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
     auto* raw_controls_layout = new QVBoxLayout(raw_controls_);
     raw_controls_layout->setContentsMargins(14, 14, 14, 14);
     raw_controls_layout->setSpacing(12);
@@ -254,13 +313,35 @@
                      [this]() { SetActiveControlPanel(ControlPanelKind::RawDecode); });
     RefreshPanelSwitchUi();
 
-    auto* shared_versioning_root = new QWidget(this);
+    versioning_panel_host_ = new QWidget(this);
+    versioning_panel_host_->setMinimumWidth(kVersioningCollapsedWidth);
+    versioning_panel_host_->setMaximumWidth(kVersioningCollapsedWidth + kVersioningExpandedMaxWidth);
+    versioning_panel_host_->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
+    auto* versioning_host_layout = new QHBoxLayout(versioning_panel_host_);
+    versioning_host_layout->setContentsMargins(0, 0, 0, 0);
+    versioning_host_layout->setSpacing(0);
+
+    versioning_panel_content_ = new QWidget(versioning_panel_host_);
+    versioning_panel_content_->setMinimumWidth(0);
+    versioning_panel_content_->setMaximumWidth(0);
+    versioning_panel_content_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
+    auto* versioning_panel_content_layout = new QVBoxLayout(versioning_panel_content_);
+    versioning_panel_content_layout->setContentsMargins(0, 0, 0, 0);
+    versioning_panel_content_layout->setSpacing(0);
+
+    auto* shared_versioning_root = new QWidget(versioning_panel_content_);
     shared_versioning_root->setObjectName("EditorVersioningPanel");
-    shared_versioning_root->setMinimumWidth(220);
-    shared_versioning_root->setMaximumWidth(600);
+    shared_versioning_root->setMinimumWidth(kVersioningExpandedMinWidth);
+    shared_versioning_root->setMaximumWidth(kVersioningExpandedMaxWidth);
     shared_versioning_root->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
     shared_versioning_root->setAttribute(Qt::WA_StyledBackground, true);
     shared_versioning_root->setStyleSheet(version_panel_style);
+    versioning_panel_content_layout->addWidget(shared_versioning_root, 1);
+
+    versioning_panel_opacity_effect_ = new QGraphicsOpacityEffect(shared_versioning_root);
+    shared_versioning_root->setGraphicsEffect(versioning_panel_opacity_effect_);
+    versioning_panel_opacity_effect_->setOpacity(0.0);
+
     auto* shared_versioning_outer_layout = new QVBoxLayout(shared_versioning_root);
     shared_versioning_outer_layout->setContentsMargins(0, 0, 0, 0);
     shared_versioning_outer_layout->setSpacing(0);
@@ -280,17 +361,57 @@
     versioning_scroll->setWidget(versioning_content);
     shared_versioning_outer_layout->addWidget(versioning_scroll, 1);
 
-    main_splitter->addWidget(shared_versioning_root);
+    versioning_collapsed_nav_ = new QWidget(versioning_panel_host_);
+    versioning_collapsed_nav_->setObjectName("EditorVersioningRail");
+    versioning_collapsed_nav_->setAttribute(Qt::WA_StyledBackground, true);
+    versioning_collapsed_nav_->setStyleSheet(version_rail_style);
+    versioning_collapsed_nav_->setFixedWidth(kVersioningCollapsedWidth);
+    auto* versioning_collapsed_layout = new QVBoxLayout(versioning_collapsed_nav_);
+    versioning_collapsed_layout->setContentsMargins(7, 12, 7, 12);
+    versioning_collapsed_layout->setSpacing(8);
+    versioning_collapsed_layout->setAlignment(Qt::AlignTop);
+
+    versioning_nav_btn_ = new QPushButton(versioning_collapsed_nav_);
+    versioning_nav_btn_->setCursor(Qt::PointingHandCursor);
+    versioning_nav_btn_->setCheckable(true);
+    versioning_nav_btn_->setAutoDefault(false);
+    versioning_nav_btn_->setDefault(false);
+    versioning_nav_btn_->setAttribute(Qt::WA_Hover, true);
+    versioning_nav_btn_->setFixedSize(kVersioningRailButtonSize, kVersioningRailButtonSize);
+    versioning_nav_btn_->setIconSize(kVersioningRailIconSize);
+    versioning_nav_btn_->installEventFilter(this);
+    versioning_collapsed_layout->addWidget(versioning_nav_btn_, 0, Qt::AlignTop | Qt::AlignHCenter);
+    versioning_collapsed_layout->addStretch();
+
+    QObject::connect(versioning_nav_btn_, &QPushButton::clicked, this,
+                     [this]() { SetVersioningCollapsed(versioning_panel_progress_ > 0.5); });
+
+    versioning_collapsed_gap_base_width_ = std::max(0, kEditorOuterMargin - main_splitter->handleWidth());
+    versioning_collapsed_gap_ = new QWidget(versioning_panel_host_);
+    versioning_collapsed_gap_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
+    versioning_collapsed_gap_->setFixedWidth(versioning_collapsed_gap_base_width_);
+    versioning_collapsed_gap_->setVisible(versioning_collapsed_gap_base_width_ > 0);
+
+    versioning_host_layout->addWidget(versioning_collapsed_nav_, 0);
+    versioning_host_layout->addWidget(versioning_panel_content_, 0);
+    versioning_host_layout->addWidget(versioning_collapsed_gap_, 0);
+
+    main_splitter->addWidget(versioning_panel_host_);
     main_splitter->addWidget(viewer_container_);
     main_splitter->addWidget(controls_panel);
     main_splitter->setStretchFactor(0, 0);
     main_splitter->setStretchFactor(1, 1);
-    main_splitter->setStretchFactor(2, 0);
-    const int right_default_width =
-        std::clamp(width() / 3, controls_panel->minimumWidth(), controls_panel->maximumWidth());
+    main_splitter->setStretchFactor(2, 1);
+    const int right_default_width = std::clamp(
+        static_cast<int>(std::lround(static_cast<double>(width()) * 0.45)),
+        std::max(320, controls_panel->minimumWidth()), controls_panel->maximumWidth());
     const int left_default_width = 280;
-    main_splitter->setSizes({left_default_width,
-                             std::max(400, width() - right_default_width - left_default_width),
+    versioning_expanded_width_ =
+        std::clamp(left_default_width - kVersioningCollapsedWidth, kVersioningExpandedMinWidth,
+                   kVersioningExpandedMaxWidth);
+    const int collapsed_left_width = kVersioningCollapsedWidth + versioning_collapsed_gap_base_width_;
+    main_splitter->setSizes({collapsed_left_width,
+                             std::max(400, width() - right_default_width - collapsed_left_width),
                              right_default_width});
     root->addWidget(main_splitter, 1);
 

@@ -15,9 +15,12 @@
 #include <QDesktopServices>
 #include <QDialog>
 #include <QDoubleSpinBox>
+#include <QEasingCurve>
 #include <QEvent>
 #include <QFile>
 #include <QFrame>
+#include <QGraphicsDropShadowEffect>
+#include <QGraphicsOpacityEffect>
 #include <QGridLayout>
 #include <QHBoxLayout>
 #include <QIcon>
@@ -29,6 +32,7 @@
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
+#include <QPen>
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QPixmap>
@@ -42,6 +46,7 @@
 #include <QTimer>
 #include <QTextEdit>
 #include <QUrl>
+#include <QVariantAnimation>
 #include <QVBoxLayout>
 #include <QSvgRenderer>
 #include <algorithm>
@@ -115,6 +120,14 @@ const auto kShortcutSelectNextLutId = QStringLiteral("editor_dialog.select_next_
 constexpr char kPanelIconPathProperty[] = "puerhlabPanelIconPath";
 const QSize     kPanelToggleIconSize(18, 18);
 constexpr int   kPanelToggleButtonHeight = 44;
+const QSize     kVersioningRailIconSize(22, 22);
+constexpr int   kVersioningRailButtonSize = 46;
+constexpr int   kEditorOuterMargin = 14;
+constexpr int   kVersioningCollapsedWidth = 64;
+constexpr int   kVersioningExpandedMinWidth = 220;
+constexpr int   kVersioningExpandedMaxWidth = 600;
+constexpr int   kVersioningAnimationMs = 250;
+constexpr int   kControlsPanelMinWidth = 260;
 
 using namespace std::chrono_literals;
 
@@ -201,6 +214,58 @@ auto RenderPanelToggleIcon(const QString& resource_path, const QColor& color, co
   QPainter painter(&pixmap);
   painter.setRenderHint(QPainter::Antialiasing, true);
   renderer.render(&painter, QRectF(QPointF(0.0, 0.0), QSizeF(size)));
+  return QIcon(pixmap);
+}
+
+auto RenderDockRailIcon(const QString& resource_path, const QColor& icon_color,
+                        const QColor& chevron_color, const QSize& size,
+                        qreal device_pixel_ratio, qreal chevron_angle_degrees) -> QIcon {
+  QFile svg_file(resource_path);
+  if (!svg_file.open(QIODevice::ReadOnly)) {
+    return {};
+  }
+
+  QByteArray svg_data = svg_file.readAll();
+  svg_data.replace("currentColor", icon_color.name(QColor::HexRgb).toUtf8());
+
+  QSvgRenderer renderer(svg_data);
+  if (!renderer.isValid()) {
+    return {};
+  }
+
+  const qreal scale = std::max<qreal>(1.0, device_pixel_ratio);
+  const QSize physical_size(std::max(1, qRound(size.width() * scale)),
+                            std::max(1, qRound(size.height() * scale)));
+
+  QPixmap pixmap(physical_size);
+  pixmap.fill(Qt::transparent);
+  pixmap.setDevicePixelRatio(scale);
+
+  QPainter painter(&pixmap);
+  painter.setRenderHint(QPainter::Antialiasing, true);
+
+  const qreal glyph_span =
+      std::max(4.0, std::min<qreal>(size.height() - 2.0, size.width() - 9.0));
+  const QRectF glyph_rect(1.0, (size.height() - glyph_span) * 0.5, glyph_span, glyph_span);
+  renderer.render(&painter, glyph_rect);
+
+  const qreal cx = size.width() - 3.8;
+  const qreal cy = size.height() * 0.5;
+
+  painter.save();
+  painter.translate(cx, cy);
+  painter.rotate(chevron_angle_degrees);
+  painter.translate(-cx, -cy);
+  QPen chevron_pen(chevron_color, 1.8, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
+  painter.setPen(chevron_pen);
+  painter.setBrush(Qt::NoBrush);
+  QPainterPath chevron_path;
+  chevron_path.moveTo(cx - 3.2, cy - 2.6);
+  chevron_path.lineTo(cx - 0.3, cy);
+  chevron_path.lineTo(cx - 3.2, cy + 2.6);
+  painter.drawPath(chevron_path);
+  painter.restore();
+
   return QIcon(pixmap);
 }
 
@@ -913,6 +978,16 @@ class EditorDialog final : public QDialog {
   }
 
   bool eventFilter(QObject* obj, QEvent* event) override {
+    if (obj == versioning_nav_btn_ && event) {
+      if (event->type() == QEvent::Enter || event->type() == QEvent::HoverEnter) {
+        versioning_nav_hovered_ = true;
+        RefreshVersioningCollapseUi();
+      } else if (event->type() == QEvent::Leave || event->type() == QEvent::HoverLeave) {
+        versioning_nav_hovered_ = false;
+        RefreshVersioningCollapseUi();
+      }
+    }
+
     if (event && event->type() == QEvent::MouseButtonDblClick) {
       if (auto* slider = qobject_cast<QSlider*>(obj)) {
         const auto it = slider_reset_callbacks_.find(slider);
@@ -1024,6 +1099,7 @@ class EditorDialog final : public QDialog {
     RefreshHlsTargetUi();
     UpdateGeometryCropRectLabel();
     UpdateViewerZoomLabel(viewer_ ? viewer_->GetViewZoom() : 1.0f);
+    RefreshVersioningCollapseUi();
     UpdateVersionUi();
   }
 
@@ -1204,6 +1280,127 @@ class EditorDialog final : public QDialog {
     apply_panel_button_state(drt_panel_btn_, drt_active, false, false);
     apply_panel_button_state(geometry_panel_btn_, geometry_active, false, false);
     apply_panel_button_state(raw_panel_btn_, raw_active, false, true);
+  }
+
+  void RefreshVersioningCollapseUi() {
+    if (!versioning_panel_host_ || !versioning_panel_content_ || !versioning_collapsed_nav_) {
+      return;
+    }
+
+    const auto& theme = AppTheme::Instance();
+    const qreal progress =
+        std::clamp(versioning_panel_progress_, static_cast<qreal>(0.0), static_cast<qreal>(1.0));
+
+    const int panel_width =
+        qRound(static_cast<qreal>(versioning_expanded_width_) * progress);
+    const int gap_width = qRound(static_cast<qreal>(versioning_collapsed_gap_base_width_) *
+                                 (static_cast<qreal>(1.0) - progress));
+
+    if (versioning_panel_opacity_effect_) {
+      versioning_panel_opacity_effect_->setOpacity(progress);
+    }
+    versioning_panel_content_->setVisible(panel_width > 0 || progress > 0.0);
+    versioning_panel_content_->setMinimumWidth(panel_width);
+    versioning_panel_content_->setMaximumWidth(panel_width);
+
+    if (versioning_collapsed_gap_) {
+      versioning_collapsed_gap_->setVisible(gap_width > 0);
+      versioning_collapsed_gap_->setFixedWidth(gap_width);
+    }
+
+    const int host_width = kVersioningCollapsedWidth + panel_width + gap_width;
+    versioning_panel_host_->setMinimumWidth(host_width);
+    versioning_panel_host_->setMaximumWidth(host_width);
+    versioning_collapsed_nav_->setVisible(true);
+
+    const bool panel_expanded = progress >= 0.5;
+    versioning_collapsed_     = !panel_expanded;
+
+    if (versioning_nav_btn_) {
+      versioning_nav_btn_->setChecked(panel_expanded);
+      versioning_nav_btn_->setIconSize(versioning_nav_hovered_ ? QSize(24, 24)
+                                                               : kVersioningRailIconSize);
+      versioning_nav_btn_->setIcon(RenderDockRailIcon(
+          QStringLiteral(":/panel_icons/git-branch.svg"),
+          panel_expanded ? theme.bgCanvasColor() : theme.textColor(),
+          panel_expanded ? theme.bgCanvasColor() : theme.textMutedColor(), QSize(24, 24),
+          versioning_nav_btn_->devicePixelRatioF(), 180.0 * progress));
+      const QString nav_tip = panel_expanded ? Tr("Collapse Versioning") : Tr("Expand Versioning");
+      versioning_nav_btn_->setToolTip(nav_tip);
+      versioning_nav_btn_->setAccessibleName(nav_tip);
+    }
+
+    if (main_splitter_) {
+      auto sizes = main_splitter_->sizes();
+      if (sizes.size() >= 3) {
+        const int delta = host_width - sizes[0];
+        if (delta != 0) {
+          int center_width = sizes[1] - delta;
+          int right_width  = sizes[2];
+          if (center_width < 0) {
+            right_width += center_width;
+            center_width = 0;
+          }
+          if (right_width < 0) {
+            center_width += right_width;
+            right_width = 0;
+          }
+
+          sizes[0] = host_width;
+          sizes[1] = std::max(0, center_width);
+          sizes[2] = std::max(0, right_width);
+          main_splitter_->setSizes(sizes);
+        }
+      }
+    }
+  }
+
+  void SetVersioningCollapsed(bool collapsed, bool animate = true) {
+    const qreal target_progress = collapsed ? 0.0 : 1.0;
+    if (!animate || std::abs(versioning_panel_progress_ - target_progress) < 0.001) {
+      if (versioning_panel_anim_) {
+        versioning_panel_anim_->stop();
+      }
+      versioning_panel_progress_ = target_progress;
+      versioning_collapsed_      = collapsed;
+      RefreshVersioningCollapseUi();
+      return;
+    }
+
+    if (!versioning_panel_anim_) {
+      versioning_panel_anim_ = new QVariantAnimation(this);
+      versioning_panel_anim_->setDuration(kVersioningAnimationMs);
+      versioning_panel_anim_->setEasingCurve(QEasingCurve::OutCubic);
+      QObject::connect(versioning_panel_anim_, &QVariantAnimation::valueChanged, this,
+                       [this](const QVariant& value) {
+                         versioning_panel_progress_ = value.toReal();
+                         RefreshVersioningCollapseUi();
+                       });
+      QObject::connect(versioning_panel_anim_, &QVariantAnimation::finished, this, [this]() {
+        if (!versioning_panel_anim_) {
+          return;
+        }
+        versioning_panel_progress_ = versioning_panel_anim_->endValue().toReal();
+        versioning_collapsed_      = versioning_panel_progress_ < 0.5;
+        RefreshVersioningCollapseUi();
+      });
+    }
+
+    if (collapsed && main_splitter_) {
+      const auto sizes = main_splitter_->sizes();
+      if (sizes.size() >= 3) {
+        const int current_panel_width =
+            sizes[0] - kVersioningCollapsedWidth - versioning_collapsed_gap_base_width_;
+        versioning_expanded_width_ =
+            std::clamp(current_panel_width > 0 ? current_panel_width : versioning_expanded_width_,
+                       kVersioningExpandedMinWidth, kVersioningExpandedMaxWidth);
+      }
+    }
+
+    versioning_panel_anim_->stop();
+    versioning_panel_anim_->setStartValue(versioning_panel_progress_);
+    versioning_panel_anim_->setEndValue(target_progress);
+    versioning_panel_anim_->start();
   }
 
   void SetActiveControlPanel(ControlPanelKind panel) {
@@ -2130,6 +2327,13 @@ class EditorDialog final : public QDialog {
   QScrollArea*                                             drt_controls_scroll_    = nullptr;
   QScrollArea*                                             geometry_controls_scroll_ = nullptr;
   QScrollArea*                                             raw_controls_scroll_    = nullptr;
+  QSplitter*                                               main_splitter_          = nullptr;
+  QWidget*                                                 versioning_panel_host_  = nullptr;
+  QWidget*                                                 versioning_panel_content_ = nullptr;
+  QWidget*                                                 versioning_collapsed_nav_ = nullptr;
+  QWidget*                                                 versioning_collapsed_gap_ = nullptr;
+  QGraphicsOpacityEffect*                                  versioning_panel_opacity_effect_ = nullptr;
+  QVariantAnimation*                                       versioning_panel_anim_ = nullptr;
   QStackedWidget*                                          control_panels_stack_   = nullptr;
   SpinnerWidget*                                           spinner_                = nullptr;
   QWidget*                                                 controls_               = nullptr;
@@ -2202,6 +2406,7 @@ class EditorDialog final : public QDialog {
   QLabel*                                                  version_status_               = nullptr;
   QPushButton*                                             undo_tx_btn_                  = nullptr;
   QPushButton*                                             commit_version_btn_           = nullptr;
+  QPushButton*                                             versioning_nav_btn_           = nullptr;
   std::unique_ptr<ShortcutRegistry>                        shortcut_registry_{};
   QComboBox*                                               working_mode_combo_           = nullptr;
   QPushButton*                                             new_working_btn_              = nullptr;
@@ -2228,6 +2433,11 @@ class EditorDialog final : public QDialog {
   std::chrono::steady_clock::time_point                    last_fast_preview_submit_time_{};
   bool                                                     syncing_controls_           = false;
   bool                                                     force_next_full_frame_preview_ = false;
+  bool                                                     versioning_collapsed_       = true;
+  bool                                                     versioning_nav_hovered_     = false;
+  qreal                                                    versioning_panel_progress_  = 0.0;
+  int                                                      versioning_collapsed_gap_base_width_ = 0;
+  int                                                      versioning_expanded_width_  = 224;
   float                                                    last_known_as_shot_cct_     = 6500.0f;
   float                                                    last_known_as_shot_tint_    = 0.0f;
   bool                                                     has_last_known_as_shot_color_temp_ = false;

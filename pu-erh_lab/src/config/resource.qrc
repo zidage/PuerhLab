@@ -10,5 +10,6 @@
     <file>panel_icons/color-filter.svg</file>
     <file>panel_icons/crop.svg</file>
     <file>panel_icons/aperture.svg</file>
+    <file>panel_icons/git-branch.svg</file>
   </qresource>
 </RCC>
