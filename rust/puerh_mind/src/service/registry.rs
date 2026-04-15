@@ -7,7 +7,7 @@ use crate::proto::common::health_service_server::HealthServiceServer;
 use crate::proto::semantic::semantic_service_server::SemanticServiceServer;
 use crate::server::health::HealthServiceImpl;
 use crate::server::semantic::SemanticServiceImpl;
-use crate::service::candle_clip::CandleClipEngine;
+use crate::service::ort_clip::OrtClipEngine;
 
 const FILE_DESCRIPTOR_SET: &[u8] = tonic::include_file_descriptor_set!("semantic_descriptor");
 const GRPC_MAX_MESSAGE_BYTES: usize = 16 * 1024 * 1024;
@@ -17,7 +17,7 @@ pub fn register_services(
     config: &AppConfig,
 ) -> anyhow::Result<tonic::transport::server::Router> {
     let health_service = HealthServiceImpl;
-    let semantic_engine = Arc::new(CandleClipEngine::new(&config.semantic)?);
+    let semantic_engine = Arc::new(OrtClipEngine::new(&config.semantic)?);
     let semantic_service = SemanticServiceImpl::new(semantic_engine);
 
     let reflection_service = tonic_reflection::server::Builder::configure()

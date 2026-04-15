@@ -15,7 +15,7 @@ impl AppConfig {
             host: "127.0.0.1".to_string(),
             port: 50051,
             semantic: SemanticConfig {
-                model_id: "timm/MobileCLIP2-S2-OpenCLIP".to_string(),
+                model_id: "plhery/mobileclip2-onnx:s2".to_string(),
                 model_dir: "./models/mobileclip2-s2-openclip".to_string(),
             },
         }

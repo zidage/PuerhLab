@@ -98,9 +98,9 @@ def cargo_msvc_cmd(repo_root):
 
 
 def default_runtime_device():
-    if sys.platform == "darwin":
-        return "metal"
-    return "cuda"
+    if os.name == "nt":
+        return "directml"
+    return "auto"
 
 
 def cargo_command(repo_root, *cargo_args):
@@ -116,10 +116,6 @@ def cargo_command(repo_root, *cargo_args):
 
 def cargo_run_command(repo_root):
     command = cargo_command(repo_root, "run", "--release")
-    if sys.platform == "darwin":
-        command.extend(["--features", "metal"])
-    else:
-        command.extend(["--features", "cuda"])
     return command
 
 

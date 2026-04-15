@@ -239,12 +239,12 @@ mod tests {
 
     use super::*;
     use crate::config::SemanticConfig;
-    use crate::service::candle_clip::CandleClipEngine;
     use crate::service::embedding::{EmbeddingEngine, MockEmbeddingEngine};
+    use crate::service::ort_clip::OrtClipEngine;
 
     fn test_semantic_config() -> SemanticConfig {
         SemanticConfig {
-            model_id: "timm/MobileCLIP2-S2-OpenCLIP".to_string(),
+            model_id: "plhery/mobileclip2-onnx:s2".to_string(),
             model_dir: "./models/mobileclip2-s2-openclip".to_string(),
         }
     }
@@ -252,20 +252,20 @@ mod tests {
     #[test]
     fn uses_configured_model_id_as_default_name() {
         let config = SemanticConfig {
-            model_id: "timm/MobileCLIP2-S2-OpenCLIP".to_string(),
+            model_id: "plhery/mobileclip2-onnx:s2".to_string(),
             model_dir: "./models/mobileclip2-s2-openclip".to_string(),
         };
 
-        let engine = CandleClipEngine::new(&config).expect("engine should load");
+        let engine = OrtClipEngine::new(&config).expect("engine should load");
 
         assert_eq!(engine.default_text_model_name(), config.model_id);
         assert_eq!(engine.default_image_model_name(), config.model_id);
     }
 
     #[tokio::test]
-    async fn embeds_text_request_with_candle_engine() {
+    async fn embeds_text_request_with_ort_engine() {
         let config = test_semantic_config();
-        let engine = Arc::new(CandleClipEngine::new(&config).expect("engine should load"));
+        let engine = Arc::new(OrtClipEngine::new(&config).expect("engine should load"));
         let service = SemanticServiceImpl::new(engine);
 
         let request = Request::new(EmbedTextRequest {
@@ -283,7 +283,7 @@ mod tests {
         assert_eq!(response.request_id, "test-1");
         assert_eq!(response.dimension as usize, response.embedding.len());
         assert!(!response.embedding.is_empty());
-        assert_eq!(response.model_name, "timm/MobileCLIP2-S2-OpenCLIP");
+        assert_eq!(response.model_name, "plhery/mobileclip2-onnx:s2");
         assert!(response.elapsed_ms <= u64::MAX);
     }
 
@@ -363,6 +363,9 @@ mod tests {
             assert_eq!(response.model_name, "mock-image-v1");
         }
 
-        assert_eq!(engine.batches.lock().unwrap().as_slice(), &[TEST_REQUEST_COUNT]);
+        assert_eq!(
+            engine.batches.lock().unwrap().as_slice(),
+            &[TEST_REQUEST_COUNT]
+        );
     }
 }
