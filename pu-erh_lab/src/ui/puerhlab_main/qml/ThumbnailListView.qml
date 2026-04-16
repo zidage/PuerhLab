@@ -17,6 +17,8 @@ ListView {
     readonly property color rowAccent: appTheme.accentColor
     readonly property color rowDanger: appTheme.dangerColor
     readonly property color rowDangerTint: appTheme.dangerTintColor
+    readonly property int dataFontWeight: 500
+    readonly property real dataLetterSpacing: -0.2
 
     property var selectedImagesById: ({})
     property var exportQueueById: ({})
@@ -199,7 +201,16 @@ ListView {
                 Layout.fillWidth: true
                 Layout.alignment: Qt.AlignVCenter
                 spacing: 4
-                Label { Layout.fillWidth: true; text: fileName; color: root.rowText; font.family: appTheme.dataFontFamily; font.pixelSize: 13; elide: Text.ElideRight }
+                Label {
+                    Layout.fillWidth: true
+                    text: fileName
+                    color: root.rowText
+                    font.family: appTheme.dataFontFamily
+                    font.pixelSize: 13
+                    font.weight: root.dataFontWeight
+                    font.letterSpacing: root.dataLetterSpacing
+                    elide: Text.ElideRight
+                }
                 Label {
                     Layout.fillWidth: true
                     text: qsTr("%1 | %2 | ISO %3 | f/%4 | %5mm")
@@ -211,6 +222,8 @@ ListView {
                     color: root.rowMuted
                     font.family: appTheme.dataFontFamily
                     font.pixelSize: 11
+                    font.weight: root.dataFontWeight
+                    font.letterSpacing: root.dataLetterSpacing
                     elide: Text.ElideRight
                 }
                 Label {
@@ -219,6 +232,8 @@ ListView {
                     color: root.rowMuted
                     font.family: appTheme.dataFontFamily
                     font.pixelSize: 10
+                    font.weight: root.dataFontWeight
+                    font.letterSpacing: root.dataLetterSpacing
                     elide: Text.ElideRight
                 }
             }
@@ -228,6 +243,7 @@ ListView {
                 font.family: appTheme.dataFontFamily
                 font.pixelSize: 12
                 font.weight: 700
+                font.letterSpacing: root.dataLetterSpacing
                 horizontalAlignment: Text.AlignHCenter
                 Layout.alignment: Qt.AlignVCenter
             }

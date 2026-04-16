@@ -14,6 +14,8 @@ Item {
     readonly property color cardAccent: appTheme.accentColor
     readonly property color cardDanger: appTheme.dangerColor
     readonly property color cardDangerTint: appTheme.dangerTintColor
+    readonly property int dataFontWeight: 500
+    readonly property real dataLetterSpacing: -0.2
 
     property var selectedImagesById: ({})
     property var exportQueueById: ({})
@@ -210,12 +212,23 @@ Item {
             anchors.bottom: parent.bottom
             anchors.margins: 8
             spacing: 2
-            Label { text: fileName; color: root.cardText; font.family: appTheme.dataFontFamily; font.pixelSize: 12; elide: Text.ElideRight; width: parent.width }
+            Label {
+                text: fileName
+                color: root.cardText
+                font.family: appTheme.dataFontFamily
+                font.pixelSize: 12
+                font.weight: root.dataFontWeight
+                font.letterSpacing: root.dataLetterSpacing
+                elide: Text.ElideRight
+                width: parent.width
+            }
             Label {
                 text: qsTr("%1 | ISO %2 | f/%3").arg(cameraModel).arg(iso).arg(aperture)
                 color: root.cardMuted
                 font.family: appTheme.dataFontFamily
                 font.pixelSize: 10
+                font.weight: root.dataFontWeight
+                font.letterSpacing: root.dataLetterSpacing
                 elide: Text.ElideRight
                 width: parent.width
             }
@@ -224,6 +237,8 @@ Item {
                 color: root.cardMuted
                 font.family: appTheme.dataFontFamily
                 font.pixelSize: 10
+                font.weight: root.dataFontWeight
+                font.letterSpacing: root.dataLetterSpacing
                 elide: Text.ElideRight
                 width: parent.width
             }

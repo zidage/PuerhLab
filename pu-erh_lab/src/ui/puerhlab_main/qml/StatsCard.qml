@@ -28,6 +28,8 @@ Rectangle {
     readonly property int totalItems: model ? model.length : 0
     readonly property bool hasOverflow: totalItems > previewLimit
     property bool showAll: false
+    readonly property int dataFontWeight: 500
+    readonly property real dataLetterSpacing: -0.2
     readonly property int visibleCount: showAll ? totalItems
                                                 : Math.min(totalItems, previewLimit)
 
@@ -63,6 +65,8 @@ Rectangle {
                 color: "#7B7D7C"
                 font.family: appTheme.dataFontFamily
                 font.pixelSize: 11
+                font.weight: card.dataFontWeight
+                font.letterSpacing: card.dataLetterSpacing
             }
 
             Item { Layout.fillWidth: true }
@@ -144,6 +148,8 @@ Rectangle {
                             color: appTheme.textColor
                             font.family: appTheme.dataFontFamily
                             font.pixelSize: 11
+                            font.weight: card.dataFontWeight
+                            font.letterSpacing: card.dataLetterSpacing
                             elide: Text.ElideRight
                         }
 
@@ -153,6 +159,7 @@ Rectangle {
                             font.family: appTheme.dataFontFamily
                             font.pixelSize: 11
                             font.weight: 600
+                            font.letterSpacing: card.dataLetterSpacing
                         }
                     }
                 }
