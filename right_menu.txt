@@ -1,0 +1,81 @@
+                    }
+                }
+            }
+
+            Rectangle {
+                Layout.fillHeight: true
+                Layout.preferredWidth: inspectorVisible && !settingsPage ? root.inspectorWidth : 0
+                Behavior on Layout.preferredWidth { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+                radius: root.panelRadius
+                color: root.colBgPanel
+                border.width: 0
+                clip: true
+                visible: Layout.preferredWidth > 10
+
+                ColumnLayout {
+                    anchors.fill: parent
+                    spacing: 0
+
+                    InspectorPanel {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        Layout.margins: 10
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Layout.margins: 10
+                        Layout.topMargin: 0
+                        spacing: 10
+
+                        Button {
+                            id: addSelectedBtn
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 44
+                            text: qsTr("Add to Queue") + " (" + root.selectedCount + ")"
+                            enabled: root.backendInteractive && root.selectedCount > 0
+                            icon.source: "qrc:/panel_icons/import.svg"
+                            icon.width: 16
+                            icon.height: 16
+                            icon.color: root.colText
+                            display: AbstractButton.TextBesideIcon
+                            background: Rectangle {
+                                radius: 8
+                                color: addSelectedBtn.enabled ? root.colBgBase : Qt.rgba(root.colBgBase.r, root.colBgBase.g, root.colBgBase.b, 0.5)
+                                border.width: 1
+                                border.color: root.colDivider
+                            }
+                            Material.foreground: root.colText
+                            scale: addSelectedBtn.hovered && enabled ? 1.03 : 1.0
+                            Behavior on scale { NumberAnimation { duration: 100; easing.type: Easing.OutCubic } }
+                            onClicked: selectionState.addSelectedToExportQueue()
+                        }
+
+                        Button {
+                            id: exportQueueBtn
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 44
+                            text: qsTr("Export") + " (" + root.exportQueueCount + ")"
+                            enabled: root.backendInteractive && (albumBackend.shownCount > 0 || root.exportQueueCount > 0)
+                            icon.source: "qrc:/panel_icons/export.svg"
+                            icon.width: 16
+                            icon.height: 16
+                            icon.color: root.colBgDeep
+                            display: AbstractButton.TextBesideIcon
+                            background: Rectangle {
+                                radius: 8
+                                color: exportQueueBtn.enabled ? root.colAccentPrimary : Qt.rgba(root.colAccentPrimary.r, root.colAccentPrimary.g, root.colAccentPrimary.b, 0.5)
+                                border.width: 1
+                                border.color: Qt.rgba(root.colBgDeep.r, root.colBgDeep.g, root.colBgDeep.b, 0.18)
+                            }
+                            Material.foreground: root.colBgDeep
+                            scale: exportQueueBtn.hovered && enabled ? 1.03 : 1.0
+                            Behavior on scale { NumberAnimation { duration: 100; easing.type: Easing.OutCubic } }
+                            onClicked: {
+                                selectionState.refreshExportPreview()
+                                exportDialog.open()
+                            }
+                        }
+                    }
+                }
+            }

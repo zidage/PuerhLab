@@ -302,9 +302,9 @@
         <translation>导入图像以进行 RAW 调整。</translation>
     </message>
     <message>
-        <location filename="../qml/Main.qml" line="1012"/>
-        <source>Use Load or New in the header to choose the .puerhproj files.</source>
-        <translation>使用顶部的“加载”或“新建”来选择 .puerhproj 文件。</translation>
+        <location filename="../qml/Main.qml" line="1027"/>
+        <source>Use File &gt; Load Project or File &gt; Create Project to choose .puerhproj files.</source>
+        <translation>使用“文件 &gt; 加载项目”或“文件 &gt; 创建项目”来选择 .puerhproj 文件。</translation>
     </message>
     <message>
         <location filename="../qml/Main.qml" line="1017"/>
@@ -509,6 +509,41 @@ Original source files on disk will be kept.</source>
         <location filename="../qml/Main.qml" line="581"/>
         <source>Save</source>
         <translation>保存</translation>
+    </message>
+    <message>
+        <location filename="../qml/Main.qml" line="576"/>
+        <source>File</source>
+        <translation>文件</translation>
+    </message>
+    <message>
+        <location filename="../qml/Main.qml" line="592"/>
+        <source>Create Project</source>
+        <translation>创建项目</translation>
+    </message>
+    <message>
+        <location filename="../qml/Main.qml" line="599"/>
+        <source>Save Project</source>
+        <translation>保存项目</translation>
+    </message>
+    <message>
+        <location filename="../qml/Main.qml" line="1154"/>
+        <source>Add to Queue</source>
+        <translation>加入队列</translation>
+    </message>
+    <message>
+        <location filename="../qml/Main.qml" line="1208"/>
+        <source>Export</source>
+        <translation>导出</translation>
+    </message>
+    <message>
+        <location filename="../qml/Main.qml" line="559"/>
+        <source>Imported %1 image(s).</source>
+        <translation>已导入 %1 张图像。</translation>
+    </message>
+    <message>
+        <location filename="../qml/Main.qml" line="570"/>
+        <source>Exported %1 image(s).</source>
+        <translation>已导出 %1 张图像。</translation>
     </message>
 </context>
 <context>

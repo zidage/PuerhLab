@@ -138,7 +138,7 @@ Item {
                     anchors.fill: parent
                     radius: 10
                     color: appTheme.bgBaseColor
-                    border.width: 1
+                    border.width: 2
                     border.color: appTheme.dividerColor
                 }
                 BusyIndicator {
@@ -151,8 +151,8 @@ Item {
                 Image {
                     id: thumbImage
                     anchors.centerIn: parent
-                    width: parent.width
-                    height: parent.height
+                    width: parent.width - 4
+                    height: parent.height - 4
                     source: liveThumbUrl
                     visible: false
                     asynchronous: true
@@ -161,7 +161,7 @@ Item {
                 Rectangle {
                     id: thumbMask
                     anchors.fill: thumbImage
-                    radius: 10
+                    radius: 8
                     visible: false
                     layer.enabled: true
                 }

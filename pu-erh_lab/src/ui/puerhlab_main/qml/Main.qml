@@ -44,9 +44,6 @@ ApplicationWindow {
     readonly property color colOverlay: appTheme.overlayColor
     readonly property string dataFontFamily: appTheme.dataFontFamily
     readonly property real settingsFieldLabelWidth: 84
-    readonly property string themeTokenSummary: appTheme.currentThemeIndex === 1
-                                                 ? qsTr("Theme tokens: Canvas #111111  Text #D0D0D0  Accent #FCC704")
-                                                 : qsTr("Theme tokens: Canvas #111419  Text #E8E1D6  Accent #B98A4A")
     readonly property int controlRadius: 10
 
     Material.theme: Material.Dark
@@ -56,11 +53,22 @@ ApplicationWindow {
     Material.foreground: root.colText
     color: root.colBgPanel
 
-    property bool settingsPage: false
     property bool inspectorVisible: true
-    property real inspectorWidth: 350
+    property real inspectorWidth: 250
     readonly property real inspectorMinWidth: 250
     readonly property real inspectorMaxWidth: 600
+    readonly property real leftPaneWidth: 250
+    readonly property real centerPaneMinWidth: 560
+    readonly property real mainFrameHorizontalMargins: 24
+    readonly property real contentRowSpacingTotal: 36
+    readonly property real inspectorAdaptiveMaxWidth: Math.max(
+        0,
+        root.width
+        - leftPaneWidth
+        - centerPaneMinWidth
+        - mainFrameHorizontalMargins
+        - contentRowSpacingTotal
+        - 5)
     property bool gridMode: true
     property bool selectionMode: false
     readonly property bool backendInteractive: albumBackend.serviceReady && !albumBackend.projectLoading
@@ -70,14 +78,37 @@ ApplicationWindow {
     readonly property int selectedCount: selectionState.selectedCount
     readonly property int exportQueueCount: selectionState.exportQueueCount
     readonly property var languageOptions: languageManager.availableLanguages
+    property int pendingThemeIndex: appTheme.currentThemeIndex
+    property string pendingLanguageCode: languageManager.currentLanguageCode
     property var pendingDeleteTargets: []
     property var pendingDetailsTarget: ({})
     property string deleteConfirmText: ""
+    property string snackbarText: ""
+    property bool importSessionObserved: false
+    property bool exportSessionObserved: false
     property var imageDetailsData: ({
         title: "",
         subtitle: "",
         rows: []
     })
+
+    function showSnackbar(messageText) {
+        if (!messageText || String(messageText).trim().length === 0) {
+            return
+        }
+        root.snackbarText = String(messageText)
+        snackbarTimer.restart()
+        if (!notificationSnackbar.opened) {
+            notificationSnackbar.open()
+        }
+    }
+
+    function requestSaveProject() {
+        const ok = albumBackend.SaveProject()
+        if (ok) {
+            showSnackbar(albumBackend.serviceMessage)
+        }
+    }
 
     function languageIndexForCode(code) {
         for (let i = 0; i < languageOptions.length; ++i) {
@@ -86,6 +117,32 @@ ApplicationWindow {
             }
         }
         return 0
+    }
+
+    function themeModelIndexForTheme(themeIndex) {
+        const themes = appTheme.availableThemes
+        for (let i = 0; i < themes.length; ++i) {
+            if (themes[i].index === themeIndex) {
+                return i
+            }
+        }
+        return 0
+    }
+
+    function openSettingsDialog() {
+        root.pendingThemeIndex = appTheme.currentThemeIndex
+        root.pendingLanguageCode = languageManager.currentLanguageCode
+        settingsDialog.open()
+    }
+
+    function saveSettingsAndClose() {
+        if (appTheme.currentThemeIndex !== root.pendingThemeIndex) {
+            appTheme.currentThemeIndex = root.pendingThemeIndex
+        }
+        if (languageManager.currentLanguageCode !== root.pendingLanguageCode) {
+            languageManager.setLanguage(root.pendingLanguageCode)
+        }
+        settingsDialog.close()
     }
 
     function resolveDeleteTargets(clickedItem) {
@@ -346,6 +403,134 @@ ApplicationWindow {
         }
     }
 
+    Popup {
+        id: settingsDialog
+        modal: true
+        focus: true
+        closePolicy: Popup.CloseOnEscape
+        width: Math.min(root.width - 36, 520)
+        height: settingsDialogContent.implicitHeight + 36
+        x: Math.round((root.width - width) / 2)
+        y: Math.round((root.height - height) / 2)
+
+        Overlay.modal: Item {
+            anchors.fill: parent
+
+            MultiEffect {
+                anchors.fill: parent
+                source: mainContent
+                blurEnabled: true
+                blur: 0.6
+                blurMax: 64
+                saturation: -0.2
+            }
+
+            Rectangle {
+                anchors.fill: parent
+                color: root.colOverlay
+            }
+
+            MouseArea { anchors.fill: parent; hoverEnabled: true }
+        }
+
+        background: Rectangle {
+            radius: 14
+            color: root.colBgPanel
+            border.width: 0
+        }
+
+        contentItem: ColumnLayout {
+            id: settingsDialogContent
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.top: parent.top
+            anchors.margins: 18
+            spacing: 12
+
+            Label {
+                text: qsTr("Settings")
+                font.pixelSize: 24
+                font.weight: 700
+                color: root.colText
+            }
+
+            Label {
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                text: qsTr("Choose theme and language, then save to apply changes.")
+                color: root.colTextMuted
+                font.pixelSize: 12
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 10
+                Label {
+                    Layout.preferredWidth: root.settingsFieldLabelWidth
+                    text: qsTr("Theme")
+                    color: root.colText
+                    font.pixelSize: 13
+                    font.weight: 600
+                }
+                ComboBox {
+                    Layout.fillWidth: true
+                    model: appTheme.availableThemes
+                    textRole: "label"
+                    currentIndex: root.themeModelIndexForTheme(root.pendingThemeIndex)
+                    onActivated: function(index) {
+                        const item = model[index]
+                        if (item) {
+                            root.pendingThemeIndex = item.index
+                        }
+                    }
+                }
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 10
+                Label {
+                    Layout.preferredWidth: root.settingsFieldLabelWidth
+                    text: qsTr("Language")
+                    color: root.colText
+                    font.pixelSize: 13
+                    font.weight: 600
+                }
+                ComboBox {
+                    Layout.fillWidth: true
+                    model: root.languageOptions
+                    textRole: "label"
+                    currentIndex: root.languageIndexForCode(root.pendingLanguageCode)
+                    onActivated: function(index) {
+                        const item = model[index]
+                        if (item) {
+                            root.pendingLanguageCode = item.code
+                        }
+                    }
+                }
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 10
+
+                Item { Layout.fillWidth: true }
+
+                Button {
+                    text: qsTr("Close")
+                    onClicked: settingsDialog.close()
+                }
+
+                Button {
+                    text: qsTr("Save")
+                    Material.background: root.colAccentPrimary
+                    Material.foreground: root.colBgDeep
+                    onClicked: root.saveSettingsAndClose()
+                }
+            }
+        }
+    }
+
     ImageContextMenu {
         id: imageContextMenu
         actions: [
@@ -513,7 +698,7 @@ ApplicationWindow {
             root.pendingDetailsTarget = ({})
             deleteConfirmDialog.close()
             imageDetailsDialog.close()
-            settingsPage = false
+            root.showSnackbar(albumBackend.serviceMessage)
         }
         function onFolderSelectionChanged() {
             selectionState.clearSelectedImages()
@@ -527,8 +712,68 @@ ApplicationWindow {
                 selectionState.refreshExportPreview()
             }
         }
-        function onExportStateChanged() {
+        function onImportStateChanged() {
+            if (albumBackend.importRunning) {
+                root.importSessionObserved = true
+                return
+            }
+            if (!root.importSessionObserved) {
+                return
+            }
+            root.importSessionObserved = false
+            root.showSnackbar(qsTr("Imported %1 image(s).").arg(albumBackend.importCompleted))
         }
+        function onExportStateChanged() {
+            if (albumBackend.exportInFlight) {
+                root.exportSessionObserved = true
+                return
+            }
+            if (!root.exportSessionObserved) {
+                return
+            }
+            root.exportSessionObserved = false
+            root.showSnackbar(qsTr("Exported %1 image(s).").arg(albumBackend.exportSucceeded))
+        }
+    }
+
+    Popup {
+        id: notificationSnackbar
+        parent: Overlay.overlay
+        modal: false
+        focus: false
+        closePolicy: Popup.NoAutoClose
+        padding: 12
+        width: Math.min(root.width - 24, 760)
+        x: Math.round((root.width - width) / 2)
+        y: root.height - height - 16
+
+        background: Rectangle {
+            radius: 10
+            color: root.colGlassPanel
+            border.width: 1
+            border.color: root.colGlassStroke
+        }
+
+        contentItem: Label {
+            text: root.snackbarText
+            color: root.colText
+            wrapMode: Text.WordWrap
+            horizontalAlignment: Text.AlignHCenter
+        }
+
+        enter: Transition {
+            NumberAnimation { property: "opacity"; from: 0.0; to: 1.0; duration: 120 }
+        }
+        exit: Transition {
+            NumberAnimation { property: "opacity"; from: 1.0; to: 0.0; duration: 120 }
+        }
+    }
+
+    Timer {
+        id: snackbarTimer
+        interval: 2600
+        repeat: false
+        onTriggered: notificationSnackbar.close()
     }
 
     Item {
@@ -570,148 +815,73 @@ ApplicationWindow {
                 }
                 Item { Layout.preferredWidth: 12 }
 
-                // ── Load / New / Save pill ──
-                Rectangle {
-                    id: projectPill
-                    Layout.preferredHeight: 36
-                    Layout.preferredWidth: pillRow.implicitWidth + 8
-                    radius: root.controlRadius
-                    color: root.colBgBase
-                    border.width: 1
-                    border.color: root.colDivider
+                // ── File menu ──
+                Button {
+                    id: fileMenuButton
+                    text: qsTr("File")
+                    flat: true
+                    Material.foreground: root.colText
+                    onClicked: fileMenu.open()
 
-                    Row {
-                        id: pillRow
-                        anchors.centerIn: parent
-                        spacing: 0
+                    Menu {
+                        id: fileMenu
+                        x: 0
+                        y: fileMenuButton.height + 4
 
-                        Repeater {
-                            model: [
-                                { label: qsTr("Load"), act: "load",  en: !albumBackend.projectLoading },
-                                { label: qsTr("New"),  act: "new",   en: !albumBackend.projectLoading },
-                                { label: qsTr("Save"), act: "save",  en: root.backendInteractive }
-                            ]
-                            delegate: Item {
-                                width: pillSegment.width + (index < 2 ? pillDivider.width : 0)
-                                height: projectPill.height
-
-                                Rectangle {
-                                    id: pillSegment
-                                    width: pillLabel.implicitWidth + 28
-                                    height: parent.height - 4
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    radius: 8
-                                    color: pillMouse.containsMouse && modelData.en
-                                           ? root.colHover : "transparent"
-                                    scale: pillMouse.containsMouse && modelData.en ? 1.03 : 1.0
-                                    Behavior on color { ColorAnimation { duration: 120 } }
-                                    Behavior on scale { NumberAnimation { duration: 100; easing.type: Easing.OutCubic } }
-
-                                    Label {
-                                        id: pillLabel
-                                        anchors.centerIn: parent
-                                        text: modelData.label
-                                        font.pixelSize: 12
-                                        font.weight: 500
-                                        color: modelData.en ? root.colText : root.colTextMuted
-                                        opacity: modelData.en ? 1.0 : 0.45
-                                    }
-
-                                    MouseArea {
-                                        id: pillMouse
-                                        anchors.fill: parent
-                                        hoverEnabled: true
-                                        cursorShape: modelData.en ? Qt.PointingHandCursor : Qt.ArrowCursor
-                                        onClicked: {
-                                            if (!modelData.en) return
-                                            if (modelData.act === "load")
-                                                albumBackend.PromptAndLoadProject()
-                                            else if (modelData.act === "new")
-                                                albumBackend.PromptAndCreateProject()
-                                            else if (modelData.act === "save")
-                                                albumBackend.SaveProject()
-                                        }
-                                    }
-                                }
-
-                                // thin divider between segments
-                                Rectangle {
-                                    id: pillDivider
-                                    visible: index < 2
-                                    anchors.right: parent.right
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    width: 1
-                                    height: parent.height * 0.48
-                                    color: root.colDivider
-                                }
-                            }
+                        MenuItem {
+                            text: qsTr("Load Project")
+                            enabled: !albumBackend.projectLoading
+                            onTriggered: albumBackend.PromptAndLoadProject()
+                        }
+                        MenuItem {
+                            text: qsTr("Create Project")
+                            enabled: !albumBackend.projectLoading
+                            onTriggered: albumBackend.PromptAndCreateProject()
+                        }
+                        MenuSeparator {
+                        }
+                        MenuItem {
+                            text: qsTr("Save Project")
+                            enabled: root.backendInteractive
+                            onTriggered: root.requestSaveProject()
                         }
                     }
                 }
 
-                Item { Layout.preferredWidth: 6 }
                 Button {
-                    id: importBtn
-                    text: qsTr("Import")
-                    enabled: root.backendInteractive
-                    height: 36
-                    Material.background: root.colAccentSoft
-                    Material.foreground: root.colBgDeep
-                    scale: importBtn.hovered && enabled ? 1.03 : 1.0
-                    Behavior on scale { NumberAnimation { duration: 100; easing.type: Easing.OutCubic } }
-                    onClicked: importDialog.open()
+                    id: settingsPopoutButton
+                    text: qsTr("Settings")
+                    flat: true
+                    Material.foreground: root.colText
+                    onClicked: root.openSettingsDialog()
                 }
+
                 Item { Layout.fillWidth: true }
                 Button {
-                    id: addSelectedBtn
-                    text: qsTr("Add Selected (%1)").arg(root.selectedCount)
-                    enabled: root.backendInteractive && root.selectedCount > 0
-                    Material.background: root.colAccentPrimary
-                    Material.foreground: root.colBgDeep
-                    scale: addSelectedBtn.hovered && enabled ? 1.03 : 1.0
-                    Behavior on scale { NumberAnimation { duration: 100; easing.type: Easing.OutCubic } }
-                    onClicked: selectionState.addSelectedToExportQueue()
-                }
-                Button {
-                    id: exportQueueBtn
-                    text: qsTr("Export Queue (%1)").arg(root.exportQueueCount)
-                    enabled: root.backendInteractive && (albumBackend.shownCount > 0 || root.exportQueueCount > 0)
-                    Material.background: root.colAccentSecondary
-                    Material.foreground: root.colBgDeep
-                    scale: exportQueueBtn.hovered && enabled ? 1.03 : 1.0
-                    Behavior on scale { NumberAnimation { duration: 100; easing.type: Easing.OutCubic } }
-                    onClicked: {
-                        selectionState.refreshExportPreview()
-                        exportDialog.open()
+                    id: inspectorToggleButton
+                    checkable: false
+                    flat: true
+                    Layout.preferredWidth: 52
+                    Layout.preferredHeight: 42
+                    display: AbstractButton.IconOnly
+                    icon.source: inspectorVisible
+                                 ? "qrc:/panel_icons/expand-left.svg"
+                                 : "qrc:/panel_icons/inspector-expand.svg"
+                    icon.width: 30
+                    icon.height: 30
+                    icon.color: inspectorVisible
+                                ? root.colAccentPrimary
+                                : (inspectorToggleButton.hovered ? root.colText : root.colTextMuted)
+                    Material.foreground: icon.color
+                    ToolTip.visible: hovered
+                    ToolTip.text: inspectorVisible ? qsTr("Collapse Inspector") : qsTr("Expand Inspector")
+                    background: Rectangle {
+                        radius: 10
+                        color: inspectorVisible
+                               ? Qt.rgba(root.colAccentPrimary.r, root.colAccentPrimary.g, root.colAccentPrimary.b, 0.16)
+                               : (inspectorToggleButton.hovered ? root.colHover : "transparent")
                     }
-                }
-                Item { Layout.preferredWidth: 8 }
-                Button {
-                    id: libraryBtn
-                    text: qsTr("Library"); checkable: true; checked: !settingsPage; onClicked: settingsPage = false
-                    flat: true
-                    Material.background: checked ? Qt.rgba(root.colAccentPrimary.r, root.colAccentPrimary.g, root.colAccentPrimary.b, 0.16) : "transparent"
-                    Material.foreground: checked ? root.colText : root.colTextMuted
-                    scale: libraryBtn.hovered ? 1.03 : 1.0
-                    Behavior on scale { NumberAnimation { duration: 100; easing.type: Easing.OutCubic } }
-                }
-                Button {
-                    id: settingsBtn
-                    text: qsTr("Settings"); checkable: true; checked: settingsPage; onClicked: settingsPage = true
-                    flat: true
-                    Material.background: checked ? Qt.rgba(root.colAccentPrimary.r, root.colAccentPrimary.g, root.colAccentPrimary.b, 0.16) : "transparent"
-                    Material.foreground: checked ? root.colText : root.colTextMuted
-                    scale: settingsBtn.hovered ? 1.03 : 1.0
-                    Behavior on scale { NumberAnimation { duration: 100; easing.type: Easing.OutCubic } }
-                }
-                Button {
-                    id: inspectorBtn
-                    text: qsTr("Inspector"); checkable: true; checked: inspectorVisible; onToggled: inspectorVisible = checked
-                    flat: true
-                    Material.background: checked ? Qt.rgba(root.colAccentPrimary.r, root.colAccentPrimary.g, root.colAccentPrimary.b, 0.16) : "transparent"
-                    Material.foreground: checked ? root.colText : root.colTextMuted
-                    scale: inspectorBtn.hovered ? 1.03 : 1.0
-                    Behavior on scale { NumberAnimation { duration: 100; easing.type: Easing.OutCubic } }
+                    onClicked: inspectorVisible = !inspectorVisible
                 }
             }
         }
@@ -733,272 +903,305 @@ ApplicationWindow {
             Layout.fillHeight: true
             spacing: 12
 
-            Rectangle {
+            ColumnLayout {
                 Layout.preferredWidth: 250
+                Layout.minimumWidth: 250
+                Layout.maximumWidth: 250
                 Layout.fillHeight: true
-                radius: root.panelRadius
-                color: root.colGlassPanel
-                border.width: 1
-                border.color: root.colGlassStroke
-                clip: true
+                spacing: 10
 
-                ColumnLayout {
-                    anchors.fill: parent
-                    anchors.margins: 16
-                    spacing: 12
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    radius: root.panelRadius
+                    color: root.colGlassPanel
+                    border.width: 1
+                    border.color: root.colGlassStroke
+                    clip: true
 
-                    // ── Header ──
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: 6
-                        Label {
-                            text: "\u{1F4C1}"
-                            font.pixelSize: 18
+                    ColumnLayout {
+                        anchors.fill: parent
+                        anchors.margins: 16
+                        spacing: 12
+
+                        // ── Header ──
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 6
+                            Label {
+                                text: "\u{1F4C1}"
+                                font.pixelSize: 18
+                            }
+                            Label {
+                                text: qsTr("Library")
+                                font.pixelSize: 17
+                                font.weight: 700
+                                color: root.colText
+                            }
+                            Item { Layout.fillWidth: true }
+                            Label {
+                                text: qsTr("%1 folders").arg(folderList.count)
+                                color: root.colAccentSoft
+                                font.family: root.dataFontFamily
+                                font.pixelSize: 11
+                            }
                         }
+
                         Label {
-                            text: qsTr("Library")
-                            font.pixelSize: 17
-                            font.weight: 700
-                            color: root.colText
-                        }
-                        Item { Layout.fillWidth: true }
-                        Label {
-                            text: qsTr("%1 folders").arg(folderList.count)
-                            color: root.colAccentSoft
+                            text: albumBackend.currentFolderPath
+                            color: root.colTextMuted
                             font.family: root.dataFontFamily
                             font.pixelSize: 11
+                            elide: Text.ElideMiddle
+                            Layout.fillWidth: true
                         }
-                    }
 
-                    Label {
-                        text: albumBackend.currentFolderPath
-                        color: root.colTextMuted
-                        font.family: root.dataFontFamily
-                        font.pixelSize: 11
-                        elide: Text.ElideMiddle
-                        Layout.fillWidth: true
-                    }
+                        // ── Search ──
+                        Rectangle {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 38
+                            radius: root.controlRadius
+                            color: root.colBgBase
+                            border.width: 1
+                            border.color: root.colDivider
+                            Behavior on color { ColorAnimation { duration: 150 } }
 
-                    // ── Search ──
-                    Rectangle {
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: 38
-                        radius: root.controlRadius
-                        color: root.colBgBase
-                        border.width: 1
-                        border.color: root.colDivider
-                        Behavior on color { ColorAnimation { duration: 150 } }
-
-                        RowLayout {
-                            anchors.fill: parent
-                            anchors.leftMargin: 8
-                            anchors.rightMargin: 8
-                            spacing: 6
-                            Label { text: "\u{1F50D}"; font.pixelSize: 13; color: root.colTextMuted }
-                            TextField {
-                                id: folderSearchField
-                                Layout.fillWidth: true
-                                Layout.fillHeight: true
-                                placeholderText: qsTr("Search folders...")
-                                background: Item {}
-                                color: root.colText
-                                font.pixelSize: 12
-                            }
-                        }
-                    }
-
-                    // ── New-folder row ──
-                    Rectangle {
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: 38
-                        radius: root.controlRadius
-                        color: root.colBgBase
-                        border.width: 1
-                        border.color: root.colDivider
-                        Behavior on color { ColorAnimation { duration: 150 } }
-
-                        RowLayout {
-                            anchors.fill: parent
-                            anchors.leftMargin: 8
-                            anchors.rightMargin: 4
-                            spacing: 4
-                            Label { text: "+"; font.pixelSize: 16; font.weight: 700; color: root.colAccentSecondary }
-                            TextField {
-                                id: createFolderField
-                                Layout.fillWidth: true
-                                Layout.fillHeight: true
-                                placeholderText: qsTr("New folder...")
-                                background: Item {}
-                                color: root.colText
-                                font.pixelSize: 12
-                                enabled: root.backendInteractive
-                                onAccepted: {
-                                    if (text.trim().length === 0) return
-                                    albumBackend.CreateFolder(text)
-                                    text = ""
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.leftMargin: 8
+                                anchors.rightMargin: 8
+                                spacing: 6
+                                Label { text: "\u{1F50D}"; font.pixelSize: 13; color: root.colTextMuted }
+                                TextField {
+                                    id: folderSearchField
+                                    Layout.fillWidth: true
+                                    Layout.fillHeight: true
+                                    placeholderText: qsTr("Search folders...")
+                                    background: Item {}
+                                    color: root.colText
+                                    font.pixelSize: 12
                                 }
                             }
-                            Rectangle {
-                                width: 28; height: 28; radius: 8
-                                color: addBtn.hovered ? root.colHover : "transparent"
-                                visible: root.backendInteractive && createFolderField.text.trim().length > 0
-                                Label { anchors.centerIn: parent; text: "\u2713"; color: root.colAccentSecondary; font.pixelSize: 14; font.weight: 700 }
-                                MouseArea {
-                                    id: addBtn
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    cursorShape: Qt.PointingHandCursor
-                                    property bool hovered: false
-                                    onEntered: hovered = true
-                                    onExited: hovered = false
-                                    onClicked: {
-                                        albumBackend.CreateFolder(createFolderField.text)
-                                        createFolderField.text = ""
+                        }
+
+                        // ── New-folder row ──
+                        Rectangle {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 38
+                            radius: root.controlRadius
+                            color: root.colBgBase
+                            border.width: 1
+                            border.color: root.colDivider
+                            Behavior on color { ColorAnimation { duration: 150 } }
+
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.leftMargin: 8
+                                anchors.rightMargin: 4
+                                spacing: 4
+                                Label { text: "+"; font.pixelSize: 16; font.weight: 700; color: root.colAccentSecondary }
+                                TextField {
+                                    id: createFolderField
+                                    Layout.fillWidth: true
+                                    Layout.fillHeight: true
+                                    placeholderText: qsTr("New folder...")
+                                    background: Item {}
+                                    color: root.colText
+                                    font.pixelSize: 12
+                                    enabled: root.backendInteractive
+                                    onAccepted: {
+                                        if (text.trim().length === 0) return
+                                        albumBackend.CreateFolder(text)
+                                        text = ""
                                     }
                                 }
-                            }
-                        }
-                    }
-
-                    // ── Delete-folder button ──
-                    Rectangle {
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: 30
-                        radius: root.controlRadius
-                        color: root.colDanger
-                        border.width: 1
-                        border.color: Qt.rgba(root.colDanger.r, root.colDanger.g, root.colDanger.b, 0.24)
-                        visible: root.backendInteractive && albumBackend.currentFolderId !== 0
-                        Behavior on color { ColorAnimation { duration: 120 } }
-                        Behavior on border.color { ColorAnimation { duration: 120 } }
-
-                        RowLayout {
-                            anchors.centerIn: parent
-                            spacing: 6
-                            Label { text: "\u{1F5D1}"; font.pixelSize: 12 }
-                            Label { text: qsTr("Delete Folder"); font.pixelSize: 12; font.weight: 600 }
-                        }
-                        MouseArea {
-                            id: delBtn
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            property bool hovered: false
-                            onEntered: hovered = true
-                            onExited: hovered = false
-                            onClicked: albumBackend.DeleteFolder(albumBackend.currentFolderId)
-                        }
-                    }
-
-                    // ── Separator ──
-                    Rectangle {
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: 1
-                        color: root.colDivider
-                    }
-
-                    // ── Folder card list ──
-                    ListView {
-                        id: folderList
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        clip: true
-                        spacing: 6
-                        model: albumBackend.folders
-
-                        delegate: Item {
-                            required property int folderId
-                            required property string name
-                            required property int depth
-                            required property string path
-                            width: ListView.view.width
-                            height: cardVisible ? cardHeight : 0
-                            visible: cardVisible
-                            Behavior on height { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
-
-                            readonly property bool cardVisible: folderSearchField.text.trim().length === 0
-                                || name.toLowerCase().indexOf(folderSearchField.text.trim().toLowerCase()) >= 0
-                            readonly property real cardHeight: 44 + depth * 0
-                            readonly property bool isSelected: folderId === albumBackend.currentFolderId
-
-                            Rectangle {
-                                id: folderCard
-                                anchors.left: parent.left
-                                anchors.right: parent.right
-                                anchors.leftMargin: depth * 12
-                                height: parent.cardHeight
-                                radius: 8
-                                color: {
-                                    if (isSelected) return root.colSelectedTint
-                                    if (cardMouse.containsMouse) return root.colHover
-                                    return "transparent"
-                                }
-                                border.width: isSelected ? 1 : 0
-                                border.color: root.colGlassStroke
-                                Behavior on color { ColorAnimation { duration: 140 } }
-
-                                RowLayout {
-                                    anchors.fill: parent
-                                    anchors.leftMargin: 10
-                                    anchors.rightMargin: 10
-                                    spacing: 8
-
-                                    Label {
-                                        text: isSelected ? "\u{1F4C2}" : "\u{1F4C1}"
-                                        font.pixelSize: 16
-                                    }
-
-                                    ColumnLayout {
-                                        Layout.fillWidth: true
-                                        spacing: 1
-                                        Label {
-                                            text: name
-                                            Layout.fillWidth: true
-                                            elide: Text.ElideRight
-                                            color: isSelected ? root.colText : root.colText
-                                            font.pixelSize: 13
-                                            font.weight: isSelected ? 600 : 400
-                                        }
-                                        Label {
-                                            visible: depth > 0
-                                            text: path
-                                            Layout.fillWidth: true
-                                            elide: Text.ElideMiddle
-                                            color: root.colTextMuted
-                                            font.pixelSize: 10
+                                Rectangle {
+                                    width: 28; height: 28; radius: 8
+                                    color: addBtn.hovered ? root.colHover : "transparent"
+                                    visible: root.backendInteractive && createFolderField.text.trim().length > 0
+                                    Label { anchors.centerIn: parent; text: "\u2713"; color: root.colAccentSecondary; font.pixelSize: 14; font.weight: 700 }
+                                    MouseArea {
+                                        id: addBtn
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        property bool hovered: false
+                                        onEntered: hovered = true
+                                        onExited: hovered = false
+                                        onClicked: {
+                                            albumBackend.CreateFolder(createFolderField.text)
+                                            createFolderField.text = ""
                                         }
                                     }
-
-                                    Rectangle {
-                                        visible: isSelected
-                                        width: 6; height: 6; radius: 3
-                                        color: root.colAccentSecondary
-                                    }
                                 }
+                            }
+                        }
 
-                                MouseArea {
-                                    id: cardMouse
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: {
-                                        settingsPage = false
-                                        albumBackend.SelectFolder(folderId)
+                        // ── Delete-folder button ──
+                        Rectangle {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 30
+                            radius: root.controlRadius
+                            color: root.colDanger
+                            border.width: 1
+                            border.color: Qt.rgba(root.colDanger.r, root.colDanger.g, root.colDanger.b, 0.24)
+                            visible: root.backendInteractive && albumBackend.currentFolderId !== 0
+                            Behavior on color { ColorAnimation { duration: 120 } }
+                            Behavior on border.color { ColorAnimation { duration: 120 } }
+
+                            RowLayout {
+                                anchors.centerIn: parent
+                                spacing: 6
+                                Label { text: "\u{1F5D1}"; font.pixelSize: 12 }
+                                Label { text: qsTr("Delete Folder"); font.pixelSize: 12; font.weight: 600 }
+                            }
+                            MouseArea {
+                                id: delBtn
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                property bool hovered: false
+                                onEntered: hovered = true
+                                onExited: hovered = false
+                                onClicked: albumBackend.DeleteFolder(albumBackend.currentFolderId)
+                            }
+                        }
+
+                        // ── Separator ──
+                        Rectangle {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 1
+                            color: root.colDivider
+                        }
+
+                        // ── Folder card list ──
+                        ListView {
+                            id: folderList
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            clip: true
+                            spacing: 6
+                            model: albumBackend.folders
+
+                            delegate: Item {
+                                required property int folderId
+                                required property string name
+                                required property int depth
+                                required property string path
+                                width: ListView.view.width
+                                height: cardVisible ? cardHeight : 0
+                                visible: cardVisible
+                                Behavior on height { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
+
+                                readonly property bool cardVisible: folderSearchField.text.trim().length === 0
+                                    || name.toLowerCase().indexOf(folderSearchField.text.trim().toLowerCase()) >= 0
+                                readonly property real cardHeight: 44 + depth * 0
+                                readonly property bool isSelected: folderId === albumBackend.currentFolderId
+
+                                Rectangle {
+                                    id: folderCard
+                                    anchors.left: parent.left
+                                    anchors.right: parent.right
+                                    anchors.leftMargin: depth * 12
+                                    height: parent.cardHeight
+                                    radius: 8
+                                    color: {
+                                        if (isSelected) return root.colSelectedTint
+                                        if (cardMouse.containsMouse) return root.colHover
+                                        return "transparent"
+                                    }
+                                    border.width: isSelected ? 1 : 0
+                                    border.color: root.colGlassStroke
+                                    Behavior on color { ColorAnimation { duration: 140 } }
+
+                                    RowLayout {
+                                        anchors.fill: parent
+                                        anchors.leftMargin: 10
+                                        anchors.rightMargin: 10
+                                        spacing: 8
+
+                                        Label {
+                                            text: isSelected ? "\u{1F4C2}" : "\u{1F4C1}"
+                                            font.pixelSize: 16
+                                        }
+
+                                        ColumnLayout {
+                                            Layout.fillWidth: true
+                                            spacing: 1
+                                            Label {
+                                                text: name
+                                                Layout.fillWidth: true
+                                                elide: Text.ElideRight
+                                                color: isSelected ? root.colText : root.colText
+                                                font.pixelSize: 13
+                                                font.weight: isSelected ? 600 : 400
+                                            }
+                                            Label {
+                                                visible: depth > 0
+                                                text: path
+                                                Layout.fillWidth: true
+                                                elide: Text.ElideMiddle
+                                                color: root.colTextMuted
+                                                font.pixelSize: 10
+                                            }
+                                        }
+
+                                        Rectangle {
+                                            visible: isSelected
+                                            width: 6; height: 6; radius: 3
+                                            color: root.colAccentSecondary
+                                        }
+                                    }
+
+                                    MouseArea {
+                                        id: cardMouse
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: {
+                                            albumBackend.SelectFolder(folderId)
+                                        }
                                     }
                                 }
                             }
                         }
                     }
                 }
+
+                Button {
+                    id: importBtn
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 44
+                    Layout.topMargin: 2
+                    text: qsTr("Import")
+                    enabled: root.backendInteractive
+                    icon.source: "qrc:/panel_icons/import.svg"
+                    icon.width: 16
+                    icon.height: 16
+                    icon.color: root.colBgDeep
+                    display: AbstractButton.TextBesideIcon
+                    background: Rectangle {
+                        radius: 8
+                        color: importBtn.enabled ? root.colAccentSoft : Qt.rgba(root.colAccentSoft.r, root.colAccentSoft.g, root.colAccentSoft.b, 0.5)
+                        border.width: 1
+                        border.color: Qt.rgba(root.colBgDeep.r, root.colBgDeep.g, root.colBgDeep.b, 0.18)
+                    }
+                    Material.background: root.colAccentSoft
+                    Material.foreground: root.colBgDeep
+                    scale: importBtn.hovered && enabled ? 1.03 : 1.0
+                    Behavior on scale { NumberAnimation { duration: 100; easing.type: Easing.OutCubic } }
+                    onClicked: importDialog.open()
+                }
             }
 
             Rectangle {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
+                Layout.minimumWidth: root.centerPaneMinWidth
                 radius: root.panelRadius
-                color: root.colBgDeep
+                color: root.colGlassPanel
                 border.width: 1
-                border.color: root.colDivider
+                border.color: root.colGlassStroke
                 clip: true
 
             ColumnLayout {
@@ -1009,7 +1212,7 @@ ApplicationWindow {
                     Layout.fillWidth: true
                     Layout.preferredHeight: 40
                     radius: 0
-                    color: root.colBgDeep
+                    color: "transparent"
                     border.width: 0
                     RowLayout {
                         anchors.left: parent.left
@@ -1036,11 +1239,10 @@ ApplicationWindow {
                 StackLayout {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
-                    currentIndex: settingsPage ? 1 : 0
 
                     Rectangle {
                         radius: 0
-                        color: root.colBgDeep
+                        color: "transparent"
                         border.width: 0
 
                         ColumnLayout {
@@ -1073,81 +1275,16 @@ ApplicationWindow {
                                 Label {
                                     text: albumBackend.serviceReady
                                           ? qsTr("Import your images for RAW adjustments.")
-                                          : qsTr("Use Load or New in the header to choose the .puerhproj files.")
+                                          : qsTr("Use File > Load Project or File > Create Project to choose .puerhproj files.")
                                     color: root.colTextMuted
                                     font.pixelSize: 12
                                 }
                                 Button {
-                                    text: albumBackend.serviceReady ? qsTr("Import Photos") : qsTr("Load Project")
-                                    onClicked: {
-                                        if (albumBackend.serviceReady) {
-                                            importDialog.open()
-                                        } else {
-                                            albumBackend.PromptAndLoadProject()
-                                        }
-                                    }
+                                    visible: !albumBackend.serviceReady
+                                    text: qsTr("Load Project")
+                                    onClicked: albumBackend.PromptAndLoadProject()
                                 }
                             }
-                        }
-                    }
-
-                    Rectangle {
-                        radius: 0
-                        color: root.colBgDeep
-                        border.width: 0
-                        ColumnLayout {
-                            anchors.fill: parent
-                            anchors.margins: 18
-                            Label { text: qsTr("Settings"); color: root.colText; font.pixelSize: 20; font.weight: 700 }
-                            Label { text: root.themeTokenSummary; color: root.colTextMuted; font.pixelSize: 12 }
-                            Label { text: qsTr("Qt Quick renderer is hardware accelerated."); color: root.colTextMuted; font.pixelSize: 12 }
-                            RowLayout {
-                                Layout.fillWidth: true
-                                spacing: 10
-                                Label {
-                                    Layout.preferredWidth: root.settingsFieldLabelWidth
-                                    text: qsTr("Theme")
-                                    color: root.colText
-                                    font.pixelSize: 13
-                                    font.weight: 600
-                                }
-                                ComboBox {
-                                    Layout.preferredWidth: 220
-                                    model: appTheme.availableThemes
-                                    textRole: "label"
-                                    currentIndex: appTheme.currentThemeIndex
-                                    onActivated: function(index) {
-                                        const item = model[index]
-                                        if (item) {
-                                            appTheme.currentThemeIndex = item.index
-                                        }
-                                    }
-                                }
-                            }
-                            RowLayout {
-                                Layout.fillWidth: true
-                                spacing: 10
-                                Label {
-                                    Layout.preferredWidth: root.settingsFieldLabelWidth
-                                    text: qsTr("Language")
-                                    color: root.colText
-                                    font.pixelSize: 13
-                                    font.weight: 600
-                                }
-                                ComboBox {
-                                    Layout.preferredWidth: 220
-                                    model: root.languageOptions
-                                    textRole: "label"
-                                    currentIndex: root.languageIndexForCode(languageManager.currentLanguageCode)
-                                    onActivated: function(index) {
-                                        const item = model[index]
-                                        if (item) {
-                                            languageManager.setLanguage(item.code)
-                                        }
-                                    }
-                                }
-                            }
-                            Item { Layout.fillHeight: true }
                         }
                     }
                 }
@@ -1155,93 +1292,133 @@ ApplicationWindow {
 
             } // close center block wrapper
 
-            // ── drag handle to resize inspector panel ──
-            Rectangle {
+            // ── inspector panel + overlay resize handle ──
+            Item {
+                id: inspectorContainer
                 Layout.fillHeight: true
-                Layout.preferredWidth: inspectorVisible && !settingsPage ? 5 : 0
-                color: dragArea.containsMouse || dragArea.drag.active ? root.colAccentPrimary : "transparent"
-                visible: inspectorVisible && !settingsPage
-                Behavior on color { ColorAnimation { duration: 120 } }
-
-                MouseArea {
-                    id: dragArea
-                    anchors.fill: parent
-                    anchors.margins: -3          // widen the hit area
-                    hoverEnabled: true
-                    cursorShape: Qt.SplitHCursor
-                    property real startX: 0
-                    property real startWidth: 0
-                    onPressed: function(mouse) {
-                        startX = mapToGlobal(mouse.x, 0).x
-                        startWidth = root.inspectorWidth
-                    }
-                    onPositionChanged: function(mouse) {
-                        if (!pressed) return
-                        var globalX = mapToGlobal(mouse.x, 0).x
-                        var delta = startX - globalX   // dragging left ⇒ wider
-                        root.inspectorWidth = Math.max(root.inspectorMinWidth,
-                                                      Math.min(root.inspectorMaxWidth,
-                                                               startWidth + delta))
-                    }
-                }
-            }
-
-            Rectangle {
-                Layout.fillHeight: true
-                Layout.preferredWidth: inspectorVisible && !settingsPage ? root.inspectorWidth : 0
+                Layout.minimumWidth: 0
+                Layout.maximumWidth: root.inspectorAdaptiveMaxWidth
+                Layout.preferredWidth: inspectorVisible
+                                       ? Math.min(root.inspectorWidth, root.inspectorAdaptiveMaxWidth)
+                                       : 0
                 Behavior on Layout.preferredWidth { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
-                radius: root.panelRadius
-                color: root.colBgPanel
-                border.width: 0
-                clip: true
-                visible: Layout.preferredWidth > 10
 
-                InspectorPanel {
+                ColumnLayout {
                     anchors.fill: parent
-                    anchors.margins: 10
+                    spacing: 10
+
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        radius: root.panelRadius
+                        color: root.colBgPanel
+                        border.width: 0
+                        clip: true
+
+                        InspectorPanel {
+                            anchors.fill: parent
+                            anchors.margins: 10
+                        }
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 44
+                        spacing: 10
+
+                        Button {
+                            id: addSelectedBtn
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 44
+                            text: qsTr("Add to Queue") + " (" + root.selectedCount + ")"
+                            enabled: root.backendInteractive && root.selectedCount > 0
+                            icon.source: "qrc:/panel_icons/queue-add.svg"
+                            icon.width: 16
+                            icon.height: 16
+                            icon.color: root.colText
+                            display: AbstractButton.TextBesideIcon
+                            background: Rectangle {
+                                radius: 8
+                                color: addSelectedBtn.enabled ? root.colBgBase : Qt.rgba(root.colBgBase.r, root.colBgBase.g, root.colBgBase.b, 0.5)
+                                border.width: 1
+                                border.color: root.colDivider
+                            }
+                            Material.foreground: root.colText
+                            scale: addSelectedBtn.hovered && enabled ? 1.03 : 1.0
+                            Behavior on scale { NumberAnimation { duration: 100; easing.type: Easing.OutCubic } }
+                            onClicked: selectionState.addSelectedToExportQueue()
+                        }
+
+                        Button {
+                            id: exportQueueBtn
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 44
+                            text: qsTr("Export") + " (" + root.exportQueueCount + ")"
+                            enabled: root.backendInteractive && (albumBackend.shownCount > 0 || root.exportQueueCount > 0)
+                            icon.source: "qrc:/panel_icons/export.svg"
+                            icon.width: 16
+                            icon.height: 16
+                            icon.color: root.colBgDeep
+                            display: AbstractButton.TextBesideIcon
+                            background: Rectangle {
+                                radius: 8
+                                color: exportQueueBtn.enabled ? root.colAccentPrimary : Qt.rgba(root.colAccentPrimary.r, root.colAccentPrimary.g, root.colAccentPrimary.b, 0.5)
+                                border.width: 1
+                                border.color: Qt.rgba(root.colBgDeep.r, root.colBgDeep.g, root.colBgDeep.b, 0.18)
+                            }
+                            Material.foreground: root.colBgDeep
+                            scale: exportQueueBtn.hovered && enabled ? 1.03 : 1.0
+                            Behavior on scale { NumberAnimation { duration: 100; easing.type: Easing.OutCubic } }
+                            onClicked: {
+                                selectionState.refreshExportPreview()
+                                exportDialog.open()
+                            }
+                        }
+                    }
+                }
+
+                Rectangle {
+                    id: inspectorResizeHandle
+                    anchors.left: parent.left
+                    anchors.top: parent.top
+                    anchors.bottom: parent.bottom
+                    width: inspectorVisible && root.inspectorAdaptiveMaxWidth > 0 ? 5 : 0
+                    x: -Math.round(width / 2)
+                    color: dragArea.containsMouse || dragArea.drag.active ? root.colAccentPrimary : "transparent"
+                    visible: width > 0
+                    z: 10
+                    Behavior on width { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+                    Behavior on color { ColorAnimation { duration: 120 } }
+
+                    MouseArea {
+                        id: dragArea
+                        anchors.fill: parent
+                        anchors.margins: -3          // widen the hit area
+                        hoverEnabled: true
+                        cursorShape: Qt.SplitHCursor
+                        property real startX: 0
+                        property real startWidth: 0
+                        onPressed: function(mouse) {
+                            startX = mapToGlobal(mouse.x, 0).x
+                            startWidth = root.inspectorWidth
+                        }
+                        onPositionChanged: function(mouse) {
+                            if (!pressed) return
+                            var globalX = mapToGlobal(mouse.x, 0).x
+                            var delta = startX - globalX   // dragging left ⇒ wider
+                            var cappedMax = Math.min(root.inspectorMaxWidth, root.inspectorAdaptiveMaxWidth)
+                            var target = startWidth + delta
+                            if (cappedMax >= root.inspectorMinWidth) {
+                                root.inspectorWidth = Math.max(root.inspectorMinWidth, Math.min(cappedMax, target))
+                            } else {
+                                root.inspectorWidth = Math.max(0, Math.min(cappedMax, target))
+                            }
+                        }
+                    }
                 }
             }
         }
 
-        Rectangle {
-            Layout.fillWidth: true
-            Layout.preferredHeight: 40
-            radius: root.panelRadius
-            color: root.colGlassPanel
-            border.width: 1
-            border.color: root.colGlassStroke
-
-            Rectangle {
-                anchors.bottom: parent.bottom
-                anchors.left: parent.left
-                anchors.right: parent.right
-                height: 2
-                radius: 1
-                color: albumBackend.projectLoading ? root.colAccentPrimary : "transparent"
-            }
-
-            RowLayout {
-                anchors.fill: parent
-                anchors.leftMargin: 10
-                anchors.rightMargin: 10
-                spacing: 12
-                Label {
-                    Layout.fillWidth: true
-                    text: albumBackend.serviceMessage.length > 0 ? albumBackend.serviceMessage : albumBackend.taskStatus
-                    elide: Text.ElideMiddle
-                    color: albumBackend.projectLoading ? root.colAccentPrimary : root.colTextMuted
-                    font.pixelSize: 11
-                }
-                ProgressBar { Layout.preferredWidth: 240; value: albumBackend.taskProgress / 100.0 }
-                Button {
-                    visible: albumBackend.taskCancelVisible
-                    text: qsTr("Cancel")
-                    Material.background: root.colDanger
-                    Material.foreground: root.colText
-                    onClicked: albumBackend.CancelImport()
-                }
-            }
-        }
     }
 
     }

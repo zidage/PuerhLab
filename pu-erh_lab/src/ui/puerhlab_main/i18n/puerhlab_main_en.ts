@@ -312,6 +312,11 @@ Original source files on disk will be kept.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <location filename="../qml/Main.qml" line="576"/>
+        <source>File</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <location filename="../qml/Main.qml" line="580"/>
         <source>New</source>
         <translation type="unfinished"></translation>
@@ -322,6 +327,16 @@ Original source files on disk will be kept.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <location filename="../qml/Main.qml" line="592"/>
+        <source>Create Project</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../qml/Main.qml" line="599"/>
+        <source>Save Project</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <location filename="../qml/Main.qml" line="641"/>
         <source>Import</source>
         <translation type="unfinished"></translation>
@@ -329,6 +344,26 @@ Original source files on disk will be kept.</source>
     <message>
         <location filename="../qml/Main.qml" line="650"/>
         <source>Add Selected (%1)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../qml/Main.qml" line="1154"/>
+        <source>Add to Queue</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../qml/Main.qml" line="1208"/>
+        <source>Export</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../qml/Main.qml" line="559"/>
+        <source>Imported %1 image(s).</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../qml/Main.qml" line="570"/>
+        <source>Exported %1 image(s).</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -419,8 +454,8 @@ Original source files on disk will be kept.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/Main.qml" line="1012"/>
-        <source>Use Load or New in the header to choose the .puerhproj files.</source>
+        <location filename="../qml/Main.qml" line="1027"/>
+        <source>Use File &gt; Load Project or File &gt; Create Project to choose .puerhproj files.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>

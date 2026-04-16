@@ -11,5 +11,11 @@
     <file>panel_icons/crop.svg</file>
     <file>panel_icons/aperture.svg</file>
     <file>panel_icons/git-branch.svg</file>
+    <file>panel_icons/import.svg</file>
+    <file>panel_icons/export.svg</file>
+    <file>panel_icons/queue-add.svg</file>
+    <file>panel_icons/expand-left.svg</file>
+    <file>panel_icons/inspector-collapse.svg</file>
+    <file>panel_icons/inspector-expand.svg</file>
   </qresource>
 </RCC>
