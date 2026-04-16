@@ -16,6 +16,7 @@
 #include <QWidget>
 #include <algorithm>
 #include <json.hpp>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -34,10 +35,43 @@ auto Tr(const char* text) -> QString {
   return QCoreApplication::translate(PUERHLAB_I18N_CONTEXT, text);
 }
 
+void AddEmptyStateItem(QListWidget* list_widget, const QString& text) {
+  if (!list_widget) {
+    return;
+  }
+  auto* item = new QListWidgetItem(list_widget);
+  item->setFlags(Qt::NoItemFlags);
+  item->setSizeHint(QSize(0, 56));
+
+  auto* label = new QLabel(text, list_widget);
+  label->setAlignment(Qt::AlignCenter);
+  label->setStyleSheet(
+      AppTheme::EditorLabelStyle(AppTheme::Instance().textMutedColor()));
+  AppTheme::MarkFontRole(label, AppTheme::FontRole::UiCaption);
+  label->setAttribute(Qt::WA_TransparentForMouseEvents, true);
+  list_widget->setItemWidget(item, label);
+}
+
+auto CompactTxHeadline(const EditTransaction& tx) -> QString {
+  return QString::fromStdString(tx.Describe(false));
+}
+
+auto CompactTxDetail(const EditTransaction& tx) -> QString {
+  const std::string head = tx.Describe(false);
+  std::string       full = tx.Describe(true, 72);
+  if (full.rfind(head + " ", 0) == 0) {
+    full = full.substr(head.size() + 1);
+  }
+  if (full == head) {
+    return {};
+  }
+  return QString::fromStdString(full);
+}
+
 }  // namespace
 
 auto MakeTxCountLabel(size_t tx_count) -> QString {
-  return Tr("Uncommitted: %1 tx").arg(static_cast<qulonglong>(tx_count));
+  return Tr("Uncommitted: %1").arg(static_cast<qulonglong>(tx_count));
 }
 
 auto IsPlainModeSelected(const QComboBox* working_mode_combo) -> bool {
@@ -256,31 +290,7 @@ void UpdateVersionUi(const VersionUiContext& ui, const Version& working_version,
   }
 
   const size_t tx_count = working_version.GetAllEditTransactions().size();
-  QString      label    = MakeTxCountLabel(tx_count);
-
-  if (working_version.HasParentVersion()) {
-    label +=
-        Tr(" | parent: %1")
-            .arg(QString::fromStdString(
-                working_version.GetParentVersionID().ToString().substr(0, 8)));
-  } else {
-    label += Tr(" | plain");
-  }
-
-  if (ui.working_mode_combo) {
-    label += IsPlainModeSelected(ui.working_mode_combo) ? Tr(" | mode: plain")
-                                                        : Tr(" | mode: incremental");
-  }
-
-  if (history_guard && history_guard->history_) {
-    try {
-      const auto latest_id =
-          history_guard->history_->GetLatestVersion().ver_ref_.GetVersionID();
-      label +=
-          Tr(" | Latest: %1").arg(QString::fromStdString(latest_id.ToString().substr(0, 8)));
-    } catch (...) {
-    }
-  }
+  const QString label = MakeTxCountLabel(tx_count);
 
   ui.version_status->setText(label);
   ui.version_status->setToolTip(label);
@@ -293,18 +303,22 @@ void UpdateVersionUi(const VersionUiContext& ui, const Version& working_version,
     ui.tx_stack->clear();
     const auto&  txs   = working_version.GetAllEditTransactions();
     const size_t total = txs.size();
+    if (total == 0) {
+      AddEmptyStateItem(ui.tx_stack, Tr("No data"));
+    }
     size_t       i     = 0;
     for (const auto& tx : txs) {
-      const QString title = QString::fromStdString(tx.Describe(true, 110));
+      const QString tx_headline = CompactTxHeadline(tx);
+      const QString tx_detail   = CompactTxDetail(tx);
 
       auto* item = new QListWidgetItem(ui.tx_stack);
-      item->setToolTip(QString::fromStdString(tx.ToJSON().dump(2)));
-      item->setSizeHint(QSize(0, 66));
+      item->setToolTip(tx_detail.isEmpty() ? tx_headline : tx_detail);
+      item->setSizeHint(QSize(0, tx_detail.isEmpty() ? 50 : 64));
 
       auto* card = new HistoryCardWidget(ui.tx_stack);
       auto* row  = new QHBoxLayout(card);
-      row->setContentsMargins(14, 10, 14, 10);
-      row->setSpacing(10);
+      row->setContentsMargins(10, 8, 10, 8);
+      row->setSpacing(8);
 
       const QColor dot  = AppTheme::Instance().textMutedColor();
       const QColor line = AppTheme::Instance().dividerColor();
@@ -315,26 +329,28 @@ void UpdateVersionUi(const VersionUiContext& ui, const Version& working_version,
 
       auto* body = new QVBoxLayout();
       body->setContentsMargins(0, 0, 0, 0);
-        body->setSpacing(6);
+      body->setSpacing(2);
 
-        auto* title_l = new ElidedLabel(title, card);
-        QFont title_font = AppTheme::Font(AppTheme::FontRole::UiBodyStrong);
-        title_font.setPointSizeF(13.0);
-        title_font.setWeight(QFont::Medium);
-        title_font.setStyleStrategy(QFont::PreferAntialias);
-        title_l->setFont(title_font);
-        title_l->setStyleSheet(
-            AppTheme::EditorLabelStyle(AppTheme::Instance().textColor()));
+      auto* title_l = new ElidedLabel(tx_headline, card);
+      QFont title_font = AppTheme::Font(AppTheme::FontRole::UiBodyStrong);
+      title_font.setPointSizeF(11.0);
+      title_font.setWeight(QFont::Medium);
+      title_font.setStyleStrategy(QFont::PreferAntialias);
+      title_l->setFont(title_font);
+      title_l->setStyleSheet(
+          AppTheme::EditorLabelStyle(AppTheme::Instance().textColor()));
 
-      auto* meta_l =
-          new QLabel(Tr("Uncommitted | #%1").arg(static_cast<qulonglong>(i + 1)), card);
-        QFont meta_font = AppTheme::Font(AppTheme::FontRole::DataCaption);
-        meta_font.setPointSizeF(11.0);
-        meta_font.setWeight(QFont::Normal);
-        meta_font.setStyleStrategy(QFont::PreferAntialias);
-        meta_l->setFont(meta_font);
-        meta_l->setStyleSheet(
-            AppTheme::EditorLabelStyle(AppTheme::Instance().textMutedColor()));
+      auto* meta_l = new ElidedLabel(
+          tx_detail.isEmpty() ? Tr("Uncommitted | #%1").arg(static_cast<qulonglong>(i + 1))
+                              : tx_detail,
+          card);
+      QFont meta_font = AppTheme::Font(AppTheme::FontRole::DataCaption);
+      meta_font.setPointSizeF(9.5);
+      meta_font.setWeight(QFont::Normal);
+      meta_font.setStyleStrategy(QFont::PreferAntialias);
+      meta_l->setFont(meta_font);
+      meta_l->setStyleSheet(
+          AppTheme::EditorLabelStyle(AppTheme::Instance().textMutedColor()));
 
       body->addWidget(title_l);
       body->addWidget(meta_l);
@@ -371,7 +387,7 @@ void UpdateVersionUi(const VersionUiContext& ui, const Version& working_version,
         const auto  short_id = QString::fromStdString(ver_id.ToString().substr(0, 8));
         const auto  when =
             QDateTime::fromSecsSinceEpoch(static_cast<qint64>(ver.GetLastModifiedTime()))
-                .toString("yyyy-MM-dd HH:mm:ss");
+                .toString("MM-dd HH:mm");
         const auto committed_tx_count =
             static_cast<qulonglong>(ver.GetAllEditTransactions().size());
 
@@ -387,7 +403,7 @@ void UpdateVersionUi(const VersionUiContext& ui, const Version& working_version,
         QString last_tx_summary;
         QString last_tx_full;
         if (!txs.empty()) {
-          last_tx_summary = QString::fromStdString(txs.front().Describe(true, 220));
+          last_tx_summary = QString::fromStdString(txs.front().Describe(true, 78));
           last_tx_full    = QString::fromStdString(txs.front().Describe(true, 4096));
         } else {
           last_tx_summary = Tr("(empty)");
@@ -409,13 +425,13 @@ void UpdateVersionUi(const VersionUiContext& ui, const Version& working_version,
         auto* item = new QListWidgetItem(ui.version_log);
         item->setData(Qt::UserRole, QString::fromStdString(ver_id.ToString()));
         item->setToolTip(card_tooltip);
-        item->setSizeHint(QSize(0, 96));
+        item->setSizeHint(QSize(0, 84));
 
         auto* card = new HistoryCardWidget(ui.version_log);
         card->setToolTip(card_tooltip);
         auto* row  = new QHBoxLayout(card);
-        row->setContentsMargins(14, 10, 14, 10);
-        row->setSpacing(10);
+        row->setContentsMargins(10, 8, 10, 8);
+        row->setSpacing(8);
 
         const QColor dot =
             is_head ? AppTheme::Instance().accentColor() : AppTheme::Instance().textMutedColor();
@@ -427,11 +443,11 @@ void UpdateVersionUi(const VersionUiContext& ui, const Version& working_version,
 
         auto* body = new QVBoxLayout();
         body->setContentsMargins(0, 0, 0, 0);
-        body->setSpacing(4);
+        body->setSpacing(2);
 
         auto* title_l = new ElidedLabel(version_title, card);
         QFont title_font = AppTheme::Font(AppTheme::FontRole::UiBodyStrong);
-        title_font.setPointSizeF(14.0);
+        title_font.setPointSizeF(11.5);
         title_font.setWeight(QFont::Medium);
         title_font.setStyleStrategy(QFont::PreferAntialias);
         title_l->setFont(title_font);
@@ -441,7 +457,7 @@ void UpdateVersionUi(const VersionUiContext& ui, const Version& working_version,
 
         auto* subtitle_l = new ElidedLabel(last_tx_summary, card);
         QFont subtitle_font = AppTheme::Font(AppTheme::FontRole::UiCaption);
-        subtitle_font.setPointSizeF(11.0);
+        subtitle_font.setPointSizeF(10.0);
         subtitle_font.setWeight(QFont::Medium);
         subtitle_font.setStyleStrategy(QFont::PreferAntialias);
         subtitle_l->setFont(subtitle_font);
@@ -451,7 +467,7 @@ void UpdateVersionUi(const VersionUiContext& ui, const Version& working_version,
 
         auto* meta_l = new ElidedLabel(meta, card);
         QFont meta_font = AppTheme::Font(AppTheme::FontRole::DataCaption);
-        meta_font.setPointSizeF(10.0);
+        meta_font.setPointSizeF(9.0);
         meta_font.setWeight(QFont::Medium);
         meta_font.setStyleStrategy(QFont::PreferAntialias);
         meta_l->setFont(meta_font);
@@ -466,7 +482,7 @@ void UpdateVersionUi(const VersionUiContext& ui, const Version& working_version,
 
         auto* badges = new QVBoxLayout();
         badges->setContentsMargins(0, 0, 0, 0);
-        badges->setSpacing(4);
+        badges->setSpacing(2);
         badges->setAlignment(Qt::AlignTop | Qt::AlignRight);
 
         if (is_head) {
@@ -477,16 +493,13 @@ void UpdateVersionUi(const VersionUiContext& ui, const Version& working_version,
         }
         if (is_plain) {
           badges->addWidget(MakePillLabel(Tr("PLAIN"), card), 0, Qt::AlignRight);
-        } else {
-          const auto parent_short =
-              QString::fromStdString(ver.GetParentVersionID().ToString().substr(0, 8));
-          badges->addWidget(MakePillLabel(Tr("PARENT %1").arg(parent_short), card), 0,
-                            Qt::AlignRight);
         }
-        badges->addWidget(MakePillLabel(Tr("tx %1").arg(committed_tx_count), card), 0,
-                          Qt::AlignRight);
 
-        row->addLayout(badges, 0);
+        if (badges->count() > 0) {
+          row->addLayout(badges, 0);
+        } else {
+          delete badges;
+        }
 
         ui.version_log->setItemWidget(item, card);
 
@@ -499,6 +512,9 @@ void UpdateVersionUi(const VersionUiContext& ui, const Version& working_version,
           item->setSelected(true);
         }
       }
+    }
+    if (ui.version_log->count() == 0) {
+      AddEmptyStateItem(ui.version_log, Tr("No data"));
     }
 
     if (refresh_selection_styles) {

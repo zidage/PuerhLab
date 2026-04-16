@@ -704,13 +704,29 @@ void QtEditViewer::OnResizeSurface(int w, int h) {
 
 void QtEditViewer::ResizeChildWidgets() {
   const QRect area = rect();
+  const int corner_radius = property("cornerRadius").toInt();
+  if (corner_radius > 0) {
+    QPainterPath mask_path;
+    mask_path.addRoundedRect(QRectF(area), corner_radius, corner_radius);
+    setMask(QRegion(mask_path.toFillPolygon().toPolygon()));
+  } else {
+    clearMask();
+  }
   if (surface_) {
     if (QWidget* surface_widget = surface_->widget()) {
       surface_widget->setGeometry(area);
+      surface_widget->clearMask();
     }
   }
   if (overlay_) {
     overlay_->setGeometry(area);
+    if (corner_radius > 0) {
+      QPainterPath mask_path;
+      mask_path.addRoundedRect(QRectF(overlay_->rect()), corner_radius, corner_radius);
+      overlay_->setMask(QRegion(mask_path.toFillPolygon().toPolygon()));
+    } else {
+      overlay_->clearMask();
+    }
     overlay_->raise();
   }
 }

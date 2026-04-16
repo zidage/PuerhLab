@@ -1350,7 +1350,7 @@ Original source files on disk will be kept.</source>
     </message>
     <message>
         <source>Commit Version</source>
-        <translation>提交版本</translation>
+        <translation>提交</translation>
     </message>
     <message>
         <source>New</source>
@@ -1413,8 +1413,12 @@ Original source files on disk will be kept.</source>
         <translation>提交失败。</translation>
     </message>
     <message>
-        <source>Uncommitted: %1 tx</source>
-        <translation>未提交：%1 个事务</translation>
+        <source>Uncommitted: %1</source>
+        <translation>未提交：%1</translation>
+    </message>
+    <message>
+        <source>No data</source>
+        <translation>暂无数据</translation>
     </message>
     <message>
         <source>Invalid version ID: %1</source>

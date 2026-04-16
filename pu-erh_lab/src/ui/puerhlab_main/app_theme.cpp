@@ -718,24 +718,21 @@ auto AppTheme::EditorHistoryCardStyle() -> QString {
   const auto& theme = AppTheme::Instance();
   return QStringLiteral("QFrame#HistoryCard {"
                         "  background: %1;"
-                        "  border: 1px solid %2;"
+                        "  border: none;"
                         "  border-radius: 10px;"
                         "}"
                         "QFrame#HistoryCard:hover {"
-                        "  background: %3;"
-                        "  border-color: %4;"
+                        "  background: %2;"
                         "}"
                         "QFrame#HistoryCard[selected=\"true\"] {"
-                        "  background: %5;"
-                        "  border: 1px solid %6;"
+                        "  background: %3;"
+                        "  border: none;"
                         "}"
                         "QFrame#HistoryCard[selected=\"true\"]:hover {"
-                        "  background: %7;"
+                        "  background: %4;"
                         "}")
-      .arg(Rgba(WithAlpha(theme.bgPanelColor(), 224)), Rgba(theme.dividerColor()),
-           Rgba(WithAlpha(theme.hoverColor(), 245)),
-           Rgba(WithAlpha(theme.glassStrokeColor(), 180)), Rgba(theme.selectedTintColor()),
-           Rgba(WithAlpha(theme.accentColor(), 144)),
+      .arg(Rgba(WithAlpha(theme.bgPanelColor(), 224)), Rgba(WithAlpha(theme.hoverColor(), 245)),
+           Rgba(theme.selectedTintColor()),
            Rgba(WithAlpha(theme.selectedTintColor(), 68)));
 }
 

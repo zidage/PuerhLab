@@ -37,6 +37,7 @@
 #include <QPushButton>
 #include <QPixmap>
 #include <QScrollArea>
+#include <QShowEvent>
 #include <QSlider>
 #include <QSpinBox>
 #include <QStackedWidget>
@@ -1013,6 +1014,43 @@ class EditorDialog final : public QDialog {
       RetranslateUi();
     }
     QDialog::changeEvent(event);
+  }
+
+  void showEvent(QShowEvent* event) override {
+    QDialog::showEvent(event);
+    if (initial_splitter_sizes_applied_) {
+      return;
+    }
+    initial_splitter_sizes_applied_ = true;
+    QTimer::singleShot(50, this, [this]() { ApplyInitialSplitterSizes(); });
+  }
+
+  void ApplyInitialSplitterSizes() {
+    if (!main_splitter_) {
+      return;
+    }
+
+    QWidget* controls_panel = main_splitter_->widget(2);
+    if (!controls_panel) {
+      return;
+    }
+
+    const int handle_width = main_splitter_->handleWidth();
+    const int available_width =
+        std::max(0, main_splitter_->width() - handle_width * (main_splitter_->count() - 1));
+    if (available_width <= 0) {
+      return;
+    }
+
+    const int collapsed_left_width =
+        kVersioningCollapsedWidth + versioning_collapsed_gap_base_width_;
+    const int right_width = std::clamp(
+        static_cast<int>(std::lround(static_cast<double>(available_width) * 0.25)),
+        controls_panel->minimumWidth(), controls_panel->maximumWidth());
+    const int center_width =
+        std::max(400, available_width - collapsed_left_width - right_width);
+
+    main_splitter_->setSizes({collapsed_left_width, center_width, right_width});
   }
 
   void UpdateViewerZoomLabel(float zoom) {
@@ -2435,6 +2473,7 @@ class EditorDialog final : public QDialog {
   bool                                                     force_next_full_frame_preview_ = false;
   bool                                                     versioning_collapsed_       = true;
   bool                                                     versioning_nav_hovered_     = false;
+  bool                                                     initial_splitter_sizes_applied_ = false;
   qreal                                                    versioning_panel_progress_  = 0.0;
   int                                                      versioning_collapsed_gap_base_width_ = 0;
   int                                                      versioning_expanded_width_  = 224;
@@ -2455,6 +2494,7 @@ auto RunEditorDialog(std::shared_ptr<ImagePoolService>       image_pool,
                      image_id_t image_id, QWidget* parent) -> bool {
   EditorDialog dlg(std::move(image_pool), std::move(pipeline_guard), std::move(history_service),
                    std::move(history_guard), element_id, image_id, parent);
+  dlg.showMaximized();
   dlg.exec();
   return true;
 }

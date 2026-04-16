@@ -6,67 +6,63 @@
     const QString borderless_panel_style = QStringLiteral(
         "#EditorControlsPanel {"
         "  background: %1;"
-        "  border: 1px solid %2;"
+        "  border: none;"
         "  border-radius: 14px;"
         "}"
         "#EditorControlsPanel QFrame#EditorSection {"
-        "  background: %3;"
-        "  border: 1px solid %4;"
+        "  background: %2;"
+        "  border: none;"
         "  border-radius: 12px;"
         "}"
         "#EditorControlsPanel QLabel#EditorSectionTitle {"
-        "  color: %5;"
+        "  color: %3;"
         "}"
         "#EditorControlsPanel QLabel#EditorSectionSub {"
-        "  color: %6;"
+        "  color: %4;"
         "}")
-                                             .arg(theme.glassPanelColor().name(QColor::HexArgb),
-                                                  theme.glassStrokeColor().name(QColor::HexArgb),
-                                                  theme.bgBaseColor().name(QColor::HexArgb),
-                                                  theme.dividerColor().name(QColor::HexArgb),
-                                                  theme.textColor().name(QColor::HexRgb),
-                                                  theme.textMutedColor().name(QColor::HexRgb));
+                                          .arg(theme.glassPanelColor().name(QColor::HexArgb),
+                                               theme.bgBaseColor().name(QColor::HexArgb),
+                                               theme.textColor().name(QColor::HexRgb),
+                                               theme.textMutedColor().name(QColor::HexRgb));
     const QString version_panel_style = QStringLiteral(
         "#EditorVersioningPanel {"
         "  background: %1;"
-        "  border: 1px solid %2;"
+        "  border: none;"
         "  border-radius: 14px;"
         "}"
         "#EditorVersioningPanel QFrame#EditorSection {"
-        "  background: %3;"
-        "  border: 1px solid %4;"
+        "  background: %2;"
+        "  border: none;"
         "  border-radius: 12px;"
         "}"
         "#EditorVersioningPanel QLabel#EditorSectionTitle {"
-        "  color: %5;"
+        "  color: %3;"
         "}"
         "#EditorVersioningPanel QLabel#EditorSectionSub {"
-        "  color: %6;"
+        "  color: %4;"
         "}")
                                            .arg(theme.glassPanelColor().name(QColor::HexArgb),
-                                                theme.glassStrokeColor().name(QColor::HexArgb),
                                                 theme.bgBaseColor().name(QColor::HexArgb),
-                                                theme.dividerColor().name(QColor::HexArgb),
                                                 theme.textColor().name(QColor::HexRgb),
                                                 theme.textMutedColor().name(QColor::HexRgb));
+    const QColor  rail_accent = theme.accentSecondaryColor();
     const QString version_rail_style = QStringLiteral(
         "#EditorVersioningRail {"
         "  background: %1;"
-        "  border: 1px solid %2;"
+        "  border: none;"
         "  border-radius: 14px;"
         "}"
         "#EditorVersioningRail QPushButton {"
         "  min-width: 40px;"
         "  min-height: 40px;"
         "  border-radius: 10px;"
-        "  border: 1px solid %3;"
-        "  background: transparent;"
+        "  border: 1px solid %2;"
+        "  background: %3;"
         "  padding: 0px;"
         "}"
         "#EditorVersioningRail QPushButton:hover {"
         "  background: %4;"
         "  border-color: %5;"
-        "  padding-left: 1px;"
         "}"
         "#EditorVersioningRail QPushButton:pressed {"
         "  background: %6;"
@@ -77,24 +73,31 @@
         "}"
         "#EditorVersioningRail QPushButton:checked:hover {"
         "  background: %9;"
-        "  padding-left: 1px;"
         "}")
                                           .arg(theme.glassPanelColor().name(QColor::HexArgb),
-                                               theme.glassStrokeColor().name(QColor::HexArgb),
-                                               QColor(233, 227, 216, 24).name(QColor::HexArgb),
-                                               theme.hoverColor().name(QColor::HexArgb),
-                                               QColor(233, 227, 216, 94).name(QColor::HexArgb),
-                                               theme.bgPanelColor().name(QColor::HexArgb),
-                                               QColor(theme.accentColor().red(), theme.accentColor().green(),
-                                                      theme.accentColor().blue(), 214)
+                                               QColor(rail_accent.red(), rail_accent.green(),
+                                                      rail_accent.blue(), 168)
                                                    .name(QColor::HexArgb),
-                                               QColor(theme.accentSecondaryColor().red(),
-                                                      theme.accentSecondaryColor().green(),
-                                                      theme.accentSecondaryColor().blue(), 160)
+                                               QColor(rail_accent.red(), rail_accent.green(),
+                                                      rail_accent.blue(), 46)
                                                    .name(QColor::HexArgb),
-                                               QColor(theme.accentSecondaryColor().red(),
-                                                      theme.accentSecondaryColor().green(),
-                                                      theme.accentSecondaryColor().blue(), 224)
+                                               QColor(rail_accent.red(), rail_accent.green(),
+                                                      rail_accent.blue(), 82)
+                                                   .name(QColor::HexArgb),
+                                               QColor(rail_accent.red(), rail_accent.green(),
+                                                      rail_accent.blue(), 220)
+                                                   .name(QColor::HexArgb),
+                                               QColor(rail_accent.red(), rail_accent.green(),
+                                                      rail_accent.blue(), 112)
+                                                   .name(QColor::HexArgb),
+                                               QColor(rail_accent.red(), rail_accent.green(),
+                                                      rail_accent.blue(), 230)
+                                                   .name(QColor::HexArgb),
+                                               QColor(rail_accent.red(), rail_accent.green(),
+                                                      rail_accent.blue(), 255)
+                                                   .name(QColor::HexArgb),
+                                               QColor(rail_accent.red(), rail_accent.green(),
+                                                      rail_accent.blue(), 255)
                                                    .name(QColor::HexArgb));
 
     auto* root = new QHBoxLayout(this);
@@ -105,28 +108,34 @@
     auto* main_splitter = new QSplitter(Qt::Horizontal, this);
     main_splitter->setObjectName("EditorMainSplitter");
     main_splitter->setChildrenCollapsible(false);
-    main_splitter->setHandleWidth(8);
+    main_splitter->setHandleWidth(kEditorOuterMargin);
     main_splitter->setStyleSheet(
         "QSplitter#EditorMainSplitter::handle {"
-        "  background: rgba(233, 227, 216, 0.08);"
-        "}"
-        "QSplitter#EditorMainSplitter::handle:hover {"
-        "  background: rgba(185, 138, 74, 0.7);"
+        "  background: transparent;"
         "}");
     main_splitter_ = main_splitter;
 
     viewer_ = new QtEditViewer(this);
+    viewer_->setProperty("cornerRadius", 14);
     viewer_->setMinimumSize(420, 320);
     viewer_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     viewer_->setStyleSheet(
         "QWidget {"
         "  background: #151A20;"
         "  border: none;"
-        "  border-radius: 12px;"
+        "  border-radius: 14px;"
         "}");
 
     // Viewer container allows a small overlay spinner during rendering.
     viewer_container_ = new QWidget(this);
+    viewer_container_->setObjectName("EditorViewportFrame");
+    viewer_container_->setAttribute(Qt::WA_StyledBackground, true);
+    viewer_container_->setStyleSheet(
+        "#EditorViewportFrame {"
+        "  background: #151A20;"
+        "  border: none;"
+        "  border-radius: 14px;"
+        "}");
     auto* viewer_grid = new QGridLayout(viewer_container_);
     viewer_grid->setContentsMargins(0, 0, 0, 0);
     viewer_grid->setSpacing(0);
@@ -269,7 +278,7 @@
     panel_switch_row->setStyleSheet(
         "#EditorPanelSwitchRow {"
         "  background: rgba(21, 26, 32, 0.84);"
-        "  border: 1px solid rgba(233, 227, 216, 0.08);"
+        "  border: none;"
         "  border-radius: 10px;"
         "}");
     auto* panel_switch_layout = new QHBoxLayout(panel_switch_row);
@@ -356,8 +365,8 @@
     auto* versioning_content = new QWidget(versioning_scroll);
     versioning_content->setStyleSheet("background: transparent;");
     auto* shared_versioning_layout = new QVBoxLayout(versioning_content);
-    shared_versioning_layout->setContentsMargins(18, 18, 18, 18);
-    shared_versioning_layout->setSpacing(10);
+    shared_versioning_layout->setContentsMargins(20, 20, 20, 20);
+    shared_versioning_layout->setSpacing(14);
     versioning_scroll->setWidget(versioning_content);
     shared_versioning_outer_layout->addWidget(versioning_scroll, 1);
 
@@ -401,11 +410,11 @@
     main_splitter->addWidget(controls_panel);
     main_splitter->setStretchFactor(0, 0);
     main_splitter->setStretchFactor(1, 1);
-    main_splitter->setStretchFactor(2, 1);
+    main_splitter->setStretchFactor(2, 0);
     const int right_default_width = std::clamp(
-        static_cast<int>(std::lround(static_cast<double>(width()) * 0.45)),
-        std::max(320, controls_panel->minimumWidth()), controls_panel->maximumWidth());
-    const int left_default_width = 280;
+        static_cast<int>(std::lround(static_cast<double>(width()) * 0.25)),
+        controls_panel->minimumWidth(), controls_panel->maximumWidth());
+    const int left_default_width = 320;
     versioning_expanded_width_ =
         std::clamp(left_default_width - kVersioningCollapsedWidth, kVersioningExpandedMinWidth,
                    kVersioningExpandedMaxWidth);
