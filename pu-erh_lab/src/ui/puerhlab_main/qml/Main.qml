@@ -1205,15 +1205,20 @@ ApplicationWindow {
                 }
             }
 
-            Rectangle {
+            ColumnLayout {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 Layout.minimumWidth: root.centerPaneMinWidth
-                radius: root.panelRadius
-                color: root.colGlassPanel
-                border.width: 1
-                border.color: root.colGlassStroke
-                clip: true
+                spacing: 10
+
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    radius: root.panelRadius
+                    color: root.colGlassPanel
+                    border.width: 1
+                    border.color: root.colGlassStroke
+                    clip: true
 
                 ColumnLayout {
                     anchors.left: parent.left
@@ -1341,7 +1346,12 @@ ApplicationWindow {
                         }
                     }
                 }
+                } // close album card Rectangle
 
+                Item {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 52
+                }
             } // close center block wrapper
 
             // ── inspector panel + overlay resize handle ──

@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cmd /c scripts\\\\\\\\msvc_env.cmd --build --preset win_debug --parallel 4 --target puerhlab_main)",
+      "Bash(cmd //c \"scripts\\\\\\\\msvc_env.cmd --build --preset win_debug --target puerhlab_main --parallel 4\")"
+    ]
+  }
+}

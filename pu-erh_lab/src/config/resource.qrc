@@ -17,5 +17,31 @@
     <file>panel_icons/expand-left.svg</file>
     <file>panel_icons/inspector-collapse.svg</file>
     <file>panel_icons/inspector-expand.svg</file>
+    <file>history_icons/aperture.svg</file>
+    <file>history_icons/arrow-right-left.svg</file>
+    <file>history_icons/chart-spline.svg</file>
+    <file>history_icons/contrast.svg</file>
+    <file>history_icons/crop.svg</file>
+    <file>history_icons/droplets.svg</file>
+    <file>history_icons/file-sliders.svg</file>
+    <file>history_icons/focus.svg</file>
+    <file>history_icons/git-commit-horizontal.svg</file>
+    <file>history_icons/monitor.svg</file>
+    <file>history_icons/monitor-up.svg</file>
+    <file>history_icons/moon.svg</file>
+    <file>history_icons/palette.svg</file>
+    <file>history_icons/pipette.svg</file>
+    <file>history_icons/scaling.svg</file>
+    <file>history_icons/scan-line.svg</file>
+    <file>history_icons/scan-search.svg</file>
+    <file>history_icons/sliders-horizontal.svg</file>
+    <file>history_icons/sparkles.svg</file>
+    <file>history_icons/square-split-horizontal.svg</file>
+    <file>history_icons/sun.svg</file>
+    <file>history_icons/sun-medium.svg</file>
+    <file>history_icons/swatch-book.svg</file>
+    <file>history_icons/thermometer.svg</file>
+    <file>history_icons/wand-sparkles.svg</file>
+    <file>history_icons/workflow.svg</file>
   </qresource>
 </RCC>

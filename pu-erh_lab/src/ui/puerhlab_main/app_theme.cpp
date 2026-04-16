@@ -747,23 +747,42 @@ auto AppTheme::EditorListWidgetStyle() -> QString {
 auto AppTheme::EditorHistoryCardStyle() -> QString {
   const auto& theme = AppTheme::Instance();
   return QStringLiteral("QFrame#HistoryCard {"
-                        "  background: %1;"
-                        "  border: none;"
+                        "  background: transparent;"
+                        "  border: 1px solid transparent;"
                         "  border-radius: 10px;"
                         "}"
                         "QFrame#HistoryCard:hover {"
-                        "  background: %2;"
+                        "  background: %1;"
+                        "  border-color: %2;"
                         "}"
                         "QFrame#HistoryCard[selected=\"true\"] {"
-                        "  background: %3;"
-                        "  border: none;"
+                        "  background: transparent;"
+                        "  border-color: %3;"
                         "}"
                         "QFrame#HistoryCard[selected=\"true\"]:hover {"
-                        "  background: %4;"
+                        "  background: transparent;"
+                        "  border-color: %4;"
+                        "}"
+                        "QFrame#HistoryCard QFrame#HistoryTxIconTile {"
+                        "  background: %5;"
+                        "  border: none;"
+                        "  border-radius: 8px;"
+                        "}"
+                        "QFrame#HistoryCard QLabel#HistoryTxTitle {"
+                        "  color: %6;"
+                        "  background: transparent;"
+                        "}"
+                        "QFrame#HistoryCard QLabel#HistoryTxSubtitle {"
+                        "  color: %7;"
+                        "  background: transparent;"
                         "}")
-      .arg(Rgba(WithAlpha(theme.bgPanelColor(), 224)), Rgba(WithAlpha(theme.hoverColor(), 245)),
-           Rgba(theme.selectedTintColor()),
-           Rgba(WithAlpha(theme.selectedTintColor(), 68)));
+      .arg(Rgba(WithAlpha(theme.bgPanelColor(), 168)),
+           Rgba(WithAlpha(theme.dividerColor(), 132)),
+           Rgba(WithAlpha(theme.accentColor(), 184)),
+           Rgba(theme.accentColor()),
+           Rgba(WithAlpha(theme.bgDeepColor(), 228)),
+           Hex(theme.textColor()),
+           Hex(theme.textMutedColor()));
 }
 
 auto AppTheme::EditorTransparentFrameStyle() -> QString {

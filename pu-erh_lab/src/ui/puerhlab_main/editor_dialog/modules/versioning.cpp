@@ -52,22 +52,6 @@ void AddEmptyStateItem(QListWidget* list_widget, const QString& text) {
   list_widget->setItemWidget(item, label);
 }
 
-auto CompactTxHeadline(const EditTransaction& tx) -> QString {
-  return QString::fromStdString(tx.Describe(false));
-}
-
-auto CompactTxDetail(const EditTransaction& tx) -> QString {
-  const std::string head = tx.Describe(false);
-  std::string       full = tx.Describe(true, 72);
-  if (full.rfind(head + " ", 0) == 0) {
-    full = full.substr(head.size() + 1);
-  }
-  if (full == head) {
-    return {};
-  }
-  return QString::fromStdString(full);
-}
-
 }  // namespace
 
 auto MakeTxCountLabel(size_t tx_count) -> QString {
@@ -306,56 +290,14 @@ void UpdateVersionUi(const VersionUiContext& ui, const Version& working_version,
     if (total == 0) {
       AddEmptyStateItem(ui.tx_stack, Tr("No data"));
     }
-    size_t       i     = 0;
+    size_t i = 0;
     for (const auto& tx : txs) {
-      const QString tx_headline = CompactTxHeadline(tx);
-      const QString tx_detail   = CompactTxDetail(tx);
-
       auto* item = new QListWidgetItem(ui.tx_stack);
-      item->setToolTip(tx_detail.isEmpty() ? tx_headline : tx_detail);
-      item->setSizeHint(QSize(0, tx_detail.isEmpty() ? 50 : 64));
+      item->setSizeHint(QSize(0, 56));
 
-      auto* card = new HistoryCardWidget(ui.tx_stack);
-      auto* row  = new QHBoxLayout(card);
-      row->setContentsMargins(10, 8, 10, 8);
-      row->setSpacing(8);
-
-      const QColor dot  = AppTheme::Instance().textMutedColor();
-      const QColor line = AppTheme::Instance().dividerColor();
-      auto* lane        = new HistoryLaneWidget(dot, line, /*draw_top*/ i > 0,
-                                                /*draw_bottom*/ (i + 1) < total,
-                                                /*solid_dot*/ false, card);
-      row->addWidget(lane, 0);
-
-      auto* body = new QVBoxLayout();
-      body->setContentsMargins(0, 0, 0, 0);
-      body->setSpacing(2);
-
-      auto* title_l = new ElidedLabel(tx_headline, card);
-      QFont title_font = AppTheme::Font(AppTheme::FontRole::UiBodyStrong);
-      title_font.setPointSizeF(11.0);
-      title_font.setWeight(QFont::Medium);
-      title_font.setStyleStrategy(QFont::PreferAntialias);
-      title_l->setFont(title_font);
-      title_l->setStyleSheet(
-          AppTheme::EditorLabelStyle(AppTheme::Instance().textColor()));
-
-      auto* meta_l = new ElidedLabel(
-          tx_detail.isEmpty() ? Tr("Uncommitted | #%1").arg(static_cast<qulonglong>(i + 1))
-                              : tx_detail,
-          card);
-      QFont meta_font = AppTheme::Font(AppTheme::FontRole::DataCaption);
-      meta_font.setPointSizeF(9.5);
-      meta_font.setWeight(QFont::Normal);
-      meta_font.setStyleStrategy(QFont::PreferAntialias);
-      meta_l->setFont(meta_font);
-      meta_l->setStyleSheet(
-          AppTheme::EditorLabelStyle(AppTheme::Instance().textMutedColor()));
-
-      body->addWidget(title_l);
-      body->addWidget(meta_l);
-      row->addLayout(body, 1);
-
+      auto* card = BuildTxHistoryCard(tx, /*draw_top*/ i > 0,
+                                      /*draw_bottom*/ (i + 1) < total, ui.tx_stack);
+      card->SetSelected(i == 0);
       ui.tx_stack->setItemWidget(item, card);
       ++i;
     }
@@ -403,7 +345,12 @@ void UpdateVersionUi(const VersionUiContext& ui, const Version& working_version,
         QString last_tx_summary;
         QString last_tx_full;
         if (!txs.empty()) {
-          last_tx_summary = QString::fromStdString(txs.front().Describe(true, 78));
+          const QString detail = CompactTxDelta(txs.front());
+          last_tx_summary = detail.isEmpty()
+                                ? OperatorDisplayName(txs.front().GetTxOperatorType())
+                                : QStringLiteral("%1 | %2")
+                                      .arg(OperatorDisplayName(txs.front().GetTxOperatorType()),
+                                           detail);
           last_tx_full    = QString::fromStdString(txs.front().Describe(true, 4096));
         } else {
           last_tx_summary = Tr("(empty)");
@@ -425,13 +372,13 @@ void UpdateVersionUi(const VersionUiContext& ui, const Version& working_version,
         auto* item = new QListWidgetItem(ui.version_log);
         item->setData(Qt::UserRole, QString::fromStdString(ver_id.ToString()));
         item->setToolTip(card_tooltip);
-        item->setSizeHint(QSize(0, 84));
+        item->setSizeHint(QSize(0, 56));
 
         auto* card = new HistoryCardWidget(ui.version_log);
         card->setToolTip(card_tooltip);
         auto* row  = new QHBoxLayout(card);
-        row->setContentsMargins(10, 8, 10, 8);
-        row->setSpacing(8);
+        row->setContentsMargins(8, 4, 8, 4);
+        row->setSpacing(4);
 
         const QColor dot =
             is_head ? AppTheme::Instance().accentColor() : AppTheme::Instance().textMutedColor();
@@ -443,12 +390,12 @@ void UpdateVersionUi(const VersionUiContext& ui, const Version& working_version,
 
         auto* body = new QVBoxLayout();
         body->setContentsMargins(0, 0, 0, 0);
-        body->setSpacing(2);
+        body->setSpacing(0);
 
         auto* title_l = new ElidedLabel(version_title, card);
         QFont title_font = AppTheme::Font(AppTheme::FontRole::UiBodyStrong);
-        title_font.setPointSizeF(11.5);
-        title_font.setWeight(QFont::Medium);
+        title_font.setPointSizeF(9.5);
+        title_font.setWeight(QFont::DemiBold);
         title_font.setStyleStrategy(QFont::PreferAntialias);
         title_l->setFont(title_font);
         title_l->setStyleSheet(
@@ -457,8 +404,8 @@ void UpdateVersionUi(const VersionUiContext& ui, const Version& working_version,
 
         auto* subtitle_l = new ElidedLabel(last_tx_summary, card);
         QFont subtitle_font = AppTheme::Font(AppTheme::FontRole::UiCaption);
-        subtitle_font.setPointSizeF(10.0);
-        subtitle_font.setWeight(QFont::Medium);
+        subtitle_font.setPointSizeF(8.0);
+        subtitle_font.setWeight(QFont::Normal);
         subtitle_font.setStyleStrategy(QFont::PreferAntialias);
         subtitle_l->setFont(subtitle_font);
         subtitle_l->setStyleSheet(
@@ -467,8 +414,8 @@ void UpdateVersionUi(const VersionUiContext& ui, const Version& working_version,
 
         auto* meta_l = new ElidedLabel(meta, card);
         QFont meta_font = AppTheme::Font(AppTheme::FontRole::DataCaption);
-        meta_font.setPointSizeF(9.0);
-        meta_font.setWeight(QFont::Medium);
+        meta_font.setPointSizeF(7.5);
+        meta_font.setWeight(QFont::Normal);
         meta_font.setStyleStrategy(QFont::PreferAntialias);
         meta_l->setFont(meta_font);
         meta_l->setStyleSheet(
@@ -482,7 +429,7 @@ void UpdateVersionUi(const VersionUiContext& ui, const Version& working_version,
 
         auto* badges = new QVBoxLayout();
         badges->setContentsMargins(0, 0, 0, 0);
-        badges->setSpacing(2);
+        badges->setSpacing(1);
         badges->setAlignment(Qt::AlignTop | Qt::AlignRight);
 
         if (is_head) {

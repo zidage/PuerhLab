@@ -8,7 +8,10 @@
 #include <QFrame>
 #include <QLabel>
 #include <QResizeEvent>
+#include <QString>
 #include <QWidget>
+
+#include "edit/history/edit_transaction.hpp"
 
 namespace puerhlab::ui {
 
@@ -55,5 +58,21 @@ class ElidedLabel final : public QLabel {
 };
 
 auto MakePillLabel(const QString& text, QWidget* parent) -> QLabel*;
+
+// Short, human-readable label for an operator (e.g. EXPOSURE -> "Exposure").
+auto OperatorDisplayName(OperatorType op) -> QString;
+
+// One-line "param: old -> new" summary for the most meaningful change in a tx.
+// Returns a narrow-panel-friendly string (targets <= ~28 chars).
+auto CompactTxDelta(const EditTransaction& tx) -> QString;
+
+// Glyph representing the transaction action (+, -, ~).
+auto TxActionGlyph(TransactionType type) -> QString;
+
+// Git-tree styled card that summarises a single transaction in two lines:
+//   line 1: operator display name  (action glyph on the right)
+//   line 2: compact delta          (e.g. "exp: 0.00 -> +1.20")
+auto BuildTxHistoryCard(const EditTransaction& tx, bool draw_top, bool draw_bottom,
+                        QWidget* parent = nullptr) -> HistoryCardWidget*;
 
 }  // namespace puerhlab::ui

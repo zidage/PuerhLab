@@ -140,7 +140,7 @@ void EditorDialog::BuildVersioningPanel() {
 
       version_log_ = new QListWidget(versions_panel);
       version_log_->setSelectionMode(QAbstractItemView::SingleSelection);
-      version_log_->setSpacing(6);
+      version_log_->setSpacing(0);
       version_log_->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
       version_log_->setMinimumHeight(140);
       version_log_->setStyleSheet(embedded_list_style);
@@ -171,7 +171,7 @@ void EditorDialog::BuildVersioningPanel() {
 
       tx_stack_ = new QListWidget(tx_panel);
       tx_stack_->setSelectionMode(QAbstractItemView::NoSelection);
-      tx_stack_->setSpacing(6);
+      tx_stack_->setSpacing(0);
       tx_stack_->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
       tx_stack_->setMinimumHeight(150);
       tx_stack_->setStyleSheet(embedded_list_style);
