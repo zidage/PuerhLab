@@ -70,7 +70,6 @@ ApplicationWindow {
         - contentRowSpacingTotal
         - 5)
     property bool gridMode: true
-    property bool selectionMode: false
     readonly property bool backendInteractive: albumBackend.serviceReady && !albumBackend.projectLoading
     readonly property var selectedImagesById: selectionState.selectedImagesById
     readonly property var exportQueueById: selectionState.exportQueueById
@@ -864,11 +863,10 @@ ApplicationWindow {
                     Layout.preferredWidth: 52
                     Layout.preferredHeight: 42
                     display: AbstractButton.IconOnly
-                    icon.source: inspectorVisible
-                                 ? "qrc:/panel_icons/expand-left.svg"
-                                 : "qrc:/panel_icons/inspector-expand.svg"
-                    icon.width: 30
-                    icon.height: 30
+                    property real iconRotationTarget: inspectorVisible ? 180 : 0
+                    icon.source: "qrc:/panel_icons/inspector-expand.svg"
+                    icon.width: 24
+                    icon.height: 24
                     icon.color: inspectorVisible
                                 ? root.colAccentPrimary
                                 : (inspectorToggleButton.hovered ? root.colText : root.colTextMuted)
@@ -881,20 +879,34 @@ ApplicationWindow {
                                ? Qt.rgba(root.colAccentPrimary.r, root.colAccentPrimary.g, root.colAccentPrimary.b, 0.16)
                                : (inspectorToggleButton.hovered ? root.colHover : "transparent")
                     }
+                    onContentItemChanged: {
+                        inspectorIconRotate.target = contentItem
+                        if (contentItem) {
+                            contentItem.transformOrigin = Item.Center
+                            contentItem.rotation = iconRotationTarget
+                        }
+                    }
+                    onIconRotationTargetChanged: {
+                        if (contentItem) {
+                            inspectorIconRotate.stop()
+                            inspectorIconRotate.to = iconRotationTarget
+                            inspectorIconRotate.start()
+                        }
+                    }
+                    Component.onCompleted: {
+                        if (contentItem) {
+                            contentItem.transformOrigin = Item.Center
+                            contentItem.rotation = iconRotationTarget
+                        }
+                    }
+                    NumberAnimation {
+                        id: inspectorIconRotate
+                        property: "rotation"
+                        duration: 170
+                        easing.type: Easing.OutCubic
+                    }
                     onClicked: inspectorVisible = !inspectorVisible
                 }
-            }
-        }
-
-        // ── Toolbar bottom shadow (rendered above content) ──
-        Rectangle {
-            Layout.fillWidth: true
-            Layout.preferredHeight: 8
-            Layout.topMargin: -8
-            z: 2
-            gradient: Gradient {
-                GradientStop { position: 0.0; color: Qt.rgba(0, 0, 0, 0.18) }
-                GradientStop { position: 1.0; color: "transparent" }
             }
         }
 
@@ -942,7 +954,7 @@ ApplicationWindow {
                             Label {
                                 text: qsTr("%1 folders").arg(folderList.count)
                                 color: root.colAccentSoft
-                                font.family: root.dataFontFamily
+                                font.family: appTheme.uiFontFamily
                                 font.pixelSize: 11
                             }
                         }
@@ -1171,8 +1183,7 @@ ApplicationWindow {
                 Button {
                     id: importBtn
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 44
-                    Layout.topMargin: 2
+                    Layout.preferredHeight: 52
                     text: qsTr("Import")
                     enabled: root.backendInteractive
                     icon.source: "qrc:/panel_icons/import.svg"
@@ -1204,91 +1215,132 @@ ApplicationWindow {
                 border.color: root.colGlassStroke
                 clip: true
 
-            ColumnLayout {
-                anchors.fill: parent
-                spacing: 0
+                ColumnLayout {
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.top: parent.top
+                    anchors.bottom: parent.bottom
+                    anchors.leftMargin: 18
+                    anchors.rightMargin: 18
+                    anchors.topMargin: 10
+                    anchors.bottomMargin: 0
+                    spacing: 10
 
-                Rectangle {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: 40
-                    radius: 0
-                    color: "transparent"
-                    border.width: 0
                     RowLayout {
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                        anchors.verticalCenter: parent.verticalCenter
-                        anchors.leftMargin: 18
-                        anchors.rightMargin: 18
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 40
                         Label { text: qsTr("Browser"); color: root.colTextMuted; font.pixelSize: 13; font.weight: 600 }
                         Item { Layout.fillWidth: true }
-                        Button { text: qsTr("Grid"); checkable: true; checked: gridMode; onClicked: gridMode = true; flat: true }
-                        Button { text: qsTr("List"); checkable: true; checked: !gridMode; onClicked: gridMode = false; flat: true }
-                        Item { Layout.preferredWidth: 12 }
-                        Button {
-                            text: root.selectionMode ? qsTr("\u2611 Multi-Select") : qsTr("Multi-Select")
-                            checkable: true
-                            checked: root.selectionMode
-                            onToggled: root.selectionMode = checked
-                            flat: true
-                            Material.foreground: root.selectionMode ? root.colAccentPrimary : root.colTextMuted
+                        Item {
+                            id: viewModeSwitch
+                            Layout.preferredWidth: 118
+                            Layout.preferredHeight: 32
+
+                            Rectangle {
+                                id: viewModeTrack
+                                anchors.fill: parent
+                                radius: height / 2
+                                color: Qt.rgba(root.colBgBase.r, root.colBgBase.g, root.colBgBase.b, 0.98)
+                                border.width: 1
+                                border.color: root.colDivider
+                            }
+
+                            Rectangle {
+                                id: viewModeThumb
+                                width: parent.width / 2 - 4
+                                height: parent.height - 4
+                                y: 2
+                                x: root.gridMode ? 2 : parent.width - width - 2
+                                radius: height / 2
+                                color: root.colAccentPrimary
+                                border.width: 1
+                                border.color: Qt.rgba(
+                                    root.colAccentSecondary.r,
+                                    root.colAccentSecondary.g,
+                                    root.colAccentSecondary.b,
+                                    0.52)
+                                Behavior on x { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+                            }
+
+                            Row {
+                                anchors.fill: parent
+                                spacing: 0
+
+                                Item {
+                                    width: parent.width / 2
+                                    height: parent.height
+
+                                    Label {
+                                        anchors.centerIn: parent
+                                        text: qsTr("Grid")
+                                        color: root.gridMode ? root.colBgDeep : root.colTextMuted
+                                        font.pixelSize: 11
+                                        font.weight: root.gridMode ? 700 : 500
+                                    }
+                                }
+
+                                Item {
+                                    width: parent.width / 2
+                                    height: parent.height
+
+                                    Label {
+                                        anchors.centerIn: parent
+                                        text: qsTr("List")
+                                        color: root.gridMode ? root.colTextMuted : root.colBgDeep
+                                        font.pixelSize: 11
+                                        font.weight: root.gridMode ? 500 : 700
+                                    }
+                                }
+                            }
+
+                            MouseArea {
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: function(mouse) {
+                                    root.gridMode = mouse.x < width / 2
+                                }
+                            }
                         }
                     }
-                }
 
-                StackLayout {
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
+                    Item {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
 
-                    Rectangle {
-                        radius: 0
-                        color: "transparent"
-                        border.width: 0
-
-                        ColumnLayout {
+                        Loader {
                             anchors.fill: parent
-                            anchors.margins: 18
-                            RowLayout {
-                                Layout.fillWidth: true
-                                Label { text: qsTr("Album"); color: root.colTextMuted; font.pixelSize: 14; font.weight: 600 }
-                                Item { Layout.fillWidth: true }
-                                Label { text: albumBackend.filterInfo; color: root.colTextMuted; font.family: root.dataFontFamily; font.pixelSize: 11 }
-                            }
+                            active: albumBackend.shownCount > 0
+                            sourceComponent: gridMode ? gridComp : listComp
+                        }
 
-                            Loader {
-                                Layout.fillWidth: true
-                                Layout.fillHeight: true
-                                active: albumBackend.shownCount > 0
-                                sourceComponent: gridMode ? gridComp : listComp
+                        Column {
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.top: parent.top
+                            visible: albumBackend.shownCount === 0
+                            spacing: 8
+                            Label {
+                                text: albumBackend.serviceReady ? qsTr("No Photos Yet") : qsTr("Open or Create a Project")
+                                color: root.colText
+                                font.pixelSize: 22
+                                font.weight: 700
                             }
-
-                            Column {
-                                Layout.fillWidth: true
-                                visible: albumBackend.shownCount === 0
-                                spacing: 8
-                                Label {
-                                    text: albumBackend.serviceReady ? qsTr("No Photos Yet") : qsTr("Open or Create a Project")
-                                    color: root.colText
-                                    font.pixelSize: 22
-                                    font.weight: 700
-                                }
-                                Label {
-                                    text: albumBackend.serviceReady
-                                          ? qsTr("Import your images for RAW adjustments.")
-                                          : qsTr("Use File > Load Project or File > Create Project to choose .puerhproj files.")
-                                    color: root.colTextMuted
-                                    font.pixelSize: 12
-                                }
-                                Button {
-                                    visible: !albumBackend.serviceReady
-                                    text: qsTr("Load Project")
-                                    onClicked: albumBackend.PromptAndLoadProject()
-                                }
+                            Label {
+                                text: albumBackend.serviceReady
+                                      ? qsTr("Import your images for RAW adjustments.")
+                                      : qsTr("Use File > Load Project or File > Create Project to choose .puerhproj files.")
+                                color: root.colTextMuted
+                                font.pixelSize: 12
+                            }
+                            Button {
+                                visible: !albumBackend.serviceReady
+                                text: qsTr("Load Project")
+                                onClicked: albumBackend.PromptAndLoadProject()
                             }
                         }
                     }
                 }
-            }
 
             } // close center block wrapper
 
@@ -1323,13 +1375,13 @@ ApplicationWindow {
 
                     RowLayout {
                         Layout.fillWidth: true
-                        Layout.preferredHeight: 44
+                        Layout.preferredHeight: 52
                         spacing: 10
 
                         Button {
                             id: addSelectedBtn
                             Layout.fillWidth: true
-                            Layout.preferredHeight: 44
+                            Layout.preferredHeight: 52
                             text: qsTr("Add to Queue") + " (" + root.selectedCount + ")"
                             enabled: root.backendInteractive && root.selectedCount > 0
                             icon.source: "qrc:/panel_icons/queue-add.svg"
@@ -1352,7 +1404,7 @@ ApplicationWindow {
                         Button {
                             id: exportQueueBtn
                             Layout.fillWidth: true
-                            Layout.preferredHeight: 44
+                            Layout.preferredHeight: 52
                             text: qsTr("Export") + " (" + root.exportQueueCount + ")"
                             enabled: root.backendInteractive && (albumBackend.shownCount > 0 || root.exportQueueCount > 0)
                             icon.source: "qrc:/panel_icons/export.svg"
@@ -1702,7 +1754,6 @@ ApplicationWindow {
         ThumbnailGridView {
             selectedImagesById: root.selectedImagesById
             exportQueueById: root.exportQueueById
-            selectionMode: root.selectionMode
             onImageSelectionChanged: function(elementId, imageId, fileName, selected) {
                 selectionState.setImageSelected(elementId, imageId, fileName, selected)
             }
@@ -1720,7 +1771,6 @@ ApplicationWindow {
         ThumbnailListView {
             selectedImagesById: root.selectedImagesById
             exportQueueById: root.exportQueueById
-            selectionMode: root.selectionMode
             onImageSelectionChanged: function(elementId, imageId, fileName, selected) {
                 selectionState.setImageSelected(elementId, imageId, fileName, selected)
             }

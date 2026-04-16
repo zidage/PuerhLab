@@ -9,6 +9,7 @@
 #include <QCoreApplication>
 #include <QStringList>
 
+#include <array>
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -102,11 +103,40 @@ auto FormatAspectRatio(uint32_t width, uint32_t height) -> QString {
   if (width == 0 || height == 0) {
     return DashValue();
   }
-  const auto divisor = std::gcd(width, height);
-  if (divisor == 0) {
+
+  const double longer_edge  = static_cast<double>(std::max(width, height));
+  const double shorter_edge = static_cast<double>(std::min(width, height));
+  if (shorter_edge <= 0.0) {
     return DashValue();
   }
-  return QStringLiteral("%1:%2").arg(width / divisor).arg(height / divisor);
+
+  const double normalized_ratio = longer_edge / shorter_edge;
+
+  struct CommonAspectRatio {
+    double      ratio;
+    const char* label;
+  };
+  constexpr std::array<CommonAspectRatio, 4> kCommonAspectRatios = {
+      CommonAspectRatio{3.0 / 2.0, "3:2"},
+      CommonAspectRatio{1.85, "1.85:1"},
+      CommonAspectRatio{1.79, "1.79:1"},
+      CommonAspectRatio{4.0 / 3.0, "4:3"},
+  };
+  constexpr double kCommonRatioTolerance = 0.03;
+
+  const auto nearest =
+      std::min_element(kCommonAspectRatios.begin(), kCommonAspectRatios.end(),
+                       [normalized_ratio](const CommonAspectRatio& lhs,
+                                          const CommonAspectRatio& rhs) {
+                         return std::abs(normalized_ratio - lhs.ratio) <
+                                std::abs(normalized_ratio - rhs.ratio);
+                       });
+  if (nearest != kCommonAspectRatios.end() &&
+      std::abs(normalized_ratio - nearest->ratio) <= kCommonRatioTolerance) {
+    return QString::fromLatin1(nearest->label);
+  }
+
+  return QStringLiteral("%1:1").arg(QString::number(normalized_ratio, 'f', 2));
 }
 
 auto FormatDimensions(uint32_t width, uint32_t height) -> QString {

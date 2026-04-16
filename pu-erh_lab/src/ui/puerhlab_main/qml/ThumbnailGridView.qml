@@ -17,7 +17,6 @@ Item {
 
     property var selectedImagesById: ({})
     property var exportQueueById: ({})
-    property bool selectionMode: false
 
     signal imageSelectionChanged(int elementId, int imageId, string fileName, bool selected)
     signal replaceSelection(var items)
@@ -35,6 +34,10 @@ Item {
     function isImageQueued(elementId) {
         return Object.prototype.hasOwnProperty.call(
             exportQueueById, keyForElement(elementId))
+    }
+
+    function hasMultiSelectModifier(modifiers) {
+        return (modifiers & Qt.ShiftModifier) || (modifiers & Qt.ControlModifier)
     }
 
     GridView {
@@ -241,6 +244,7 @@ Item {
         property point dragCurrent: Qt.point(0, 0)
         property bool isDragging: false
         property var preDragSelection: ({})
+        property bool dragAdditive: false
 
         cursorShape: hoveredIndex >= 0 ? Qt.PointingHandCursor : Qt.ArrowCursor
 
@@ -287,14 +291,15 @@ Item {
                 const dy = mouse.y - dragStart.y
                 if (!isDragging && (dx * dx + dy * dy) > 64) {
                     isDragging = true
-                    if (root.selectionMode) {
+                    dragAdditive = root.hasMultiSelectModifier(mouse.modifiers)
+                    if (dragAdditive) {
                         preDragSelection = Object.assign({}, root.selectedImagesById)
                     }
                 }
                 if (isDragging) {
                     dragCurrent = Qt.point(mouse.x, mouse.y)
                     const bandItems = collectRubberBandItems()
-                    if (root.selectionMode) {
+                    if (dragAdditive) {
                         const merged = Object.values(preDragSelection).concat(bandItems)
                         root.replaceSelection(merged)
                     } else {
@@ -324,6 +329,7 @@ Item {
             dragStart = Qt.point(mouse.x, mouse.y)
             dragCurrent = Qt.point(mouse.x, mouse.y)
             isDragging = false
+            dragAdditive = false
         }
 
         onReleased: function(mouse) {
@@ -336,7 +342,7 @@ Item {
                 if (idx >= 0) {
                     const item = grid.itemAtIndex(idx)
                     if (item) {
-                        if (root.selectionMode) {
+                        if (root.hasMultiSelectModifier(mouse.modifiers)) {
                             const next = !root.isImageSelected(item.elementId)
                             root.imageSelectionChanged(item.elementId, item.imageId, item.fileName, next)
                         } else {

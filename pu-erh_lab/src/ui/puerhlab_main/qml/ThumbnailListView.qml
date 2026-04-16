@@ -20,7 +20,6 @@ ListView {
 
     property var selectedImagesById: ({})
     property var exportQueueById: ({})
-    property bool selectionMode: false
 
     signal imageSelectionChanged(int elementId, int imageId, string fileName, bool selected)
     signal replaceSelection(var items)
@@ -38,6 +37,10 @@ ListView {
     function isImageQueued(elementId) {
         return Object.prototype.hasOwnProperty.call(
             exportQueueById, keyForElement(elementId))
+    }
+
+    function hasMultiSelectModifier(modifiers) {
+        return (modifiers & Qt.ShiftModifier) || (modifiers & Qt.ControlModifier)
     }
 
     delegate: Rectangle {
@@ -251,7 +254,7 @@ ListView {
                 if (mouse.button !== Qt.LeftButton) {
                     return
                 }
-                if (root.selectionMode) {
+                if (root.hasMultiSelectModifier(mouse.modifiers)) {
                     const nextSelected = !root.isImageSelected(elementId)
                     root.imageSelectionChanged(elementId, imageId, fileName, nextSelected)
                 } else {
