@@ -923,12 +923,18 @@ if(PUERHLAB_REAL_WIDGET_EDITOR)
     set(PUERHLAB_EDITOR_DIALOG_SRCS
         ui/puerhlab_main/editor_dialog/editor_dialog.cpp
         ui/puerhlab_main/editor_dialog/dialog.cpp
+        ui/puerhlab_main/editor_dialog/dialog_core.cpp
+        ui/puerhlab_main/editor_dialog/dialog_history.cpp
+        ui/puerhlab_main/editor_dialog/dialog_pipeline.cpp
+        ui/puerhlab_main/editor_dialog/dialog_render.cpp
+        ui/puerhlab_main/editor_dialog/dialog_ui_state.cpp
         ui/puerhlab_main/editor_dialog/state.cpp
         ui/puerhlab_main/editor_dialog/controllers/image_controller.cpp
         ui/puerhlab_main/editor_dialog/controllers/pipeline_controller.cpp
         ui/puerhlab_main/editor_dialog/controllers/history_controller.cpp
         ui/puerhlab_main/editor_dialog/controllers/lut_controller.cpp
         ui/puerhlab_main/editor_dialog/controllers/render_controller.cpp
+        ui/puerhlab_main/editor_dialog/frame/editor_frame_manager.cpp
         ui/puerhlab_main/editor_dialog/modules/histogram.cpp
         ui/puerhlab_main/editor_dialog/modules/color_temp.cpp
         ui/puerhlab_main/editor_dialog/modules/color_wheel.cpp
@@ -942,6 +948,14 @@ if(PUERHLAB_REAL_WIDGET_EDITOR)
         ui/puerhlab_main/editor_dialog/scope/scope_panel.cpp
         ui/puerhlab_main/editor_dialog/scope/scope_plot_widgets.cpp
         ui/puerhlab_main/editor_dialog/scope/scope_renderer.cpp
+        ui/puerhlab_main/editor_dialog/widgets/display_transform_panel_widget.cpp
+        ui/puerhlab_main/editor_dialog/widgets/editor_control_panel_widget.cpp
+        ui/puerhlab_main/editor_dialog/widgets/editor_viewer_pane.cpp
+        ui/puerhlab_main/editor_dialog/widgets/geometry_panel_widget.cpp
+        ui/puerhlab_main/editor_dialog/widgets/look_control_panel_widget.cpp
+        ui/puerhlab_main/editor_dialog/widgets/raw_decode_panel_widget.cpp
+        ui/puerhlab_main/editor_dialog/widgets/tone_control_panel_widget.cpp
+        ui/puerhlab_main/editor_dialog/widgets/versioning_panel_widget.cpp
         ui/puerhlab_main/editor_dialog/widgets/spinner.cpp
         ui/puerhlab_main/editor_dialog/widgets/histogram_widget.cpp
         ui/puerhlab_main/editor_dialog/widgets/trackball.cpp
@@ -952,27 +966,39 @@ if(PUERHLAB_REAL_WIDGET_EDITOR)
         include/ui/puerhlab_main/editor_dialog/controllers/lut_controller.hpp
         include/ui/puerhlab_main/editor_dialog/modules/lut_catalog.hpp
         include/ui/puerhlab_main/editor_dialog/widgets/lut_browser_widget.hpp
-        ui/puerhlab_main/editor_dialog/dialog.hpp
-        ui/puerhlab_main/editor_dialog/state.hpp
-        ui/puerhlab_main/editor_dialog/controllers/image_controller.hpp
-        ui/puerhlab_main/editor_dialog/controllers/pipeline_controller.hpp
-        ui/puerhlab_main/editor_dialog/controllers/history_controller.hpp
-        ui/puerhlab_main/editor_dialog/controllers/render_controller.hpp
-        ui/puerhlab_main/editor_dialog/modules/histogram.hpp
-        ui/puerhlab_main/editor_dialog/modules/color_temp.hpp
-        ui/puerhlab_main/editor_dialog/modules/color_wheel.hpp
-        ui/puerhlab_main/editor_dialog/modules/curve.hpp
-        ui/puerhlab_main/editor_dialog/modules/lens_calib.hpp
-        ui/puerhlab_main/editor_dialog/modules/geometry.hpp
-        ui/puerhlab_main/editor_dialog/modules/versioning.hpp
-        ui/puerhlab_main/editor_dialog/scope/scope_panel.hpp
-        ui/puerhlab_main/editor_dialog/scope/scope_plot_widgets.hpp
-        ui/puerhlab_main/editor_dialog/scope/scope_renderer.hpp
-        ui/puerhlab_main/editor_dialog/widgets/spinner.hpp
-        ui/puerhlab_main/editor_dialog/widgets/histogram_widget.hpp
-        ui/puerhlab_main/editor_dialog/widgets/trackball.hpp
-        ui/puerhlab_main/editor_dialog/widgets/tone_curve_widget.hpp
-        ui/puerhlab_main/editor_dialog/widgets/history_cards.hpp
+        include/ui/puerhlab_main/editor_dialog/dialog.hpp
+        include/ui/puerhlab_main/editor_dialog/dialog_internal.hpp
+        include/ui/puerhlab_main/editor_dialog/state.hpp
+        include/ui/puerhlab_main/editor_dialog/controllers/image_controller.hpp
+        include/ui/puerhlab_main/editor_dialog/controllers/pipeline_controller.hpp
+        include/ui/puerhlab_main/editor_dialog/controllers/history_controller.hpp
+        include/ui/puerhlab_main/editor_dialog/controllers/render_controller.hpp
+        include/ui/puerhlab_main/editor_dialog/frame/editor_frame_manager.hpp
+        include/ui/puerhlab_main/editor_dialog/modules/histogram.hpp
+        include/ui/puerhlab_main/editor_dialog/modules/color_temp.hpp
+        include/ui/puerhlab_main/editor_dialog/modules/color_wheel.hpp
+        include/ui/puerhlab_main/editor_dialog/modules/curve.hpp
+        include/ui/puerhlab_main/editor_dialog/modules/lens_calib.hpp
+        include/ui/puerhlab_main/editor_dialog/modules/geometry.hpp
+        include/ui/puerhlab_main/editor_dialog/modules/hls.hpp
+        include/ui/puerhlab_main/editor_dialog/modules/pipeline_io.hpp
+        include/ui/puerhlab_main/editor_dialog/modules/versioning.hpp
+        include/ui/puerhlab_main/editor_dialog/scope/scope_panel.hpp
+        include/ui/puerhlab_main/editor_dialog/scope/scope_plot_widgets.hpp
+        include/ui/puerhlab_main/editor_dialog/scope/scope_renderer.hpp
+        include/ui/puerhlab_main/editor_dialog/widgets/display_transform_panel_widget.hpp
+        include/ui/puerhlab_main/editor_dialog/widgets/editor_control_panel_widget.hpp
+        include/ui/puerhlab_main/editor_dialog/widgets/editor_viewer_pane.hpp
+        include/ui/puerhlab_main/editor_dialog/widgets/geometry_panel_widget.hpp
+        include/ui/puerhlab_main/editor_dialog/widgets/look_control_panel_widget.hpp
+        include/ui/puerhlab_main/editor_dialog/widgets/raw_decode_panel_widget.hpp
+        include/ui/puerhlab_main/editor_dialog/widgets/tone_control_panel_widget.hpp
+        include/ui/puerhlab_main/editor_dialog/widgets/versioning_panel_widget.hpp
+        include/ui/puerhlab_main/editor_dialog/widgets/spinner.hpp
+        include/ui/puerhlab_main/editor_dialog/widgets/histogram_widget.hpp
+        include/ui/puerhlab_main/editor_dialog/widgets/trackball.hpp
+        include/ui/puerhlab_main/editor_dialog/widgets/tone_curve_widget.hpp
+        include/ui/puerhlab_main/editor_dialog/widgets/history_cards.hpp
     )
 endif()
 
@@ -1045,7 +1071,6 @@ target_include_directories(puerhlab_main
         ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include
         ${CMAKE_CURRENT_SOURCE_DIR}/ui/puerhlab_main
         ${CMAKE_CURRENT_SOURCE_DIR}/ui/puerhlab_main/album_backend
-        ${CMAKE_CURRENT_SOURCE_DIR}/ui/puerhlab_main/editor_dialog
 )
 
 target_link_libraries(puerhlab_main
