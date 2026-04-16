@@ -17,6 +17,7 @@
 namespace puerhlab {
 namespace {
 constexpr float kRotationPreviewEpsilon = 1e-4f;
+constexpr int   kFullResPreviewMaxLongEdge = 8192;
 
 auto HasActiveGeometryRotation(const std::shared_ptr<CPUPipelineExecutor>& pipeline_executor)
     -> bool {
@@ -122,7 +123,7 @@ void PipelineTask::SetExecutorRenderParams() {
     pipeline_executor_->SetNextFramePresentationMode(FramePresentationMode::ViewportTransformed);
     pipeline_executor_->SetResizeDownsampleAlgorithm(ResizeDownsampleAlgorithm::Area);
     pipeline_executor_->SetRenderRegion(0, 0, 1.0f);
-    pipeline_executor_->SetRenderRes(true);
+    pipeline_executor_->SetRenderRes(false, kFullResPreviewMaxLongEdge);
     pipeline_executor_->SetForceCPUOutput(false);
     return;
   }
