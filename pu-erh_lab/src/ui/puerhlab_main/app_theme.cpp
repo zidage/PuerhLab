@@ -109,7 +109,7 @@ struct FontFamilies {
   QString ui_zh = QStringLiteral("Noto Sans SC");
   QString ui_override;
   QString effective_language_code = QStringLiteral("en");
-  QString data = QStringLiteral("IBM Plex Sans");
+  QString data = QStringLiteral("Google Sans Code Monospaced");
   QString mono;
 };
 
@@ -194,14 +194,37 @@ auto UiFontStack(const FontFamilies& families) -> QStringList {
   return stack;
 }
 
+auto DataFontFallbackStack(const FontFamilies& families) -> QStringList {
+  QStringList stack;
+  if (IsChineseLanguageCode(families.effective_language_code)) {
+    AppendUniqueFamily(stack, families.ui_zh);
+    AppendUniqueFamily(stack, families.ui_latin);
+  } else {
+    AppendUniqueFamily(stack, families.ui_latin);
+    AppendUniqueFamily(stack, families.ui_zh);
+  }
+  return stack;
+}
+
 auto DataFontStack(const FontFamilies& families) -> QStringList {
   QStringList stack;
   AppendUniqueFamily(stack, families.data);
-  const auto ui_stack = UiFontStack(families);
-  for (const QString& family : ui_stack) {
-    AppendUniqueFamily(stack, family);
+  const QStringList fallbacks = DataFontFallbackStack(families);
+  for (const QString& fallback : fallbacks) {
+    AppendUniqueFamily(stack, fallback);
   }
   return stack;
+}
+
+void ApplyDataFontSubstitutions(const FontFamilies& families) {
+  if (families.data.isEmpty()) {
+    return;
+  }
+  QFont::removeSubstitutions(families.data);
+  const QStringList fallbacks = DataFontFallbackStack(families);
+  if (!fallbacks.isEmpty()) {
+    QFont::insertSubstitutions(families.data, fallbacks);
+  }
 }
 
 auto MakeFont(const QStringList& family_stack, qreal point_size, QFont::Weight weight,
@@ -249,9 +272,11 @@ void AppTheme::RegisterFonts() {
   RegisterFontResource(QStringLiteral(":/fonts/main_Inter_italic.ttf"), families.ui_latin);
   families.ui_zh = RegisterFontResource(QStringLiteral(":/fonts/main_NotoSans_zh.ttf"),
                                         QStringLiteral("Noto Sans SC"));
-  families.data = RegisterFontResource(QStringLiteral(":/fonts/main_IBM.ttf"),
-                                       QStringLiteral("IBM Plex Sans"));
+  families.data = RegisterFontResource(QStringLiteral(":/fonts/data_mono.ttf"),
+                                       QStringLiteral("Google Sans Code Monospaced"));
   families.mono = QFontDatabase::systemFont(QFontDatabase::FixedFont).family();
+
+  ApplyDataFontSubstitutions(families);
 
   FontsRegisteredFlag() = true;
 }
@@ -261,11 +286,16 @@ void AppTheme::SetEffectiveLanguageCode(const QString& code) {
 
   auto& families = FontState();
   const QString previous_family = ActiveUiFamily(families);
+  const bool previous_is_chinese = IsChineseLanguageCode(families.effective_language_code);
   const QString normalized_code =
       code.trimmed().isEmpty() ? QStringLiteral("en") : code.trimmed();
   families.effective_language_code = normalized_code;
+  const bool current_is_chinese = IsChineseLanguageCode(families.effective_language_code);
 
-  if (ActiveUiFamily(families) == previous_family) {
+  ApplyDataFontSubstitutions(families);
+
+  if (ActiveUiFamily(families) == previous_family &&
+      previous_is_chinese == current_is_chinese) {
     return;
   }
 
