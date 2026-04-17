@@ -151,6 +151,7 @@ void PipelineTask::ResetPreviewRenderParams() {
   pipeline_executor_->SetForceCPUOutput(false);
   pipeline_executor_->SetEnableCache(true);
   pipeline_executor_->SetDecodeRes(DecodeRes::FULL);
+  pipeline_executor_->ReleasePreviewGpuScratch();
 }
 
 void PipelineTask::ResetThumbnailRenderParams() {

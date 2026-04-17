@@ -62,6 +62,10 @@ class GPU_KernelLauncher {
   double                                     last_output_sync_ms_          = 0.0;
   size_t                                     frames_since_report_          = 0;
   size_t                                     total_frames_rendered_        = 0;
+  int                                        last_logged_target_type_      = -1;
+  int                                        last_logged_domain_           = -1;
+  size_t                                     last_logged_width_            = 0;
+  size_t                                     last_logged_height_           = 0;
 
   static constexpr std::chrono::milliseconds kReportInterval{500};
   static constexpr double                    kEmaAlpha = 0.15;  // smoothing factor
@@ -98,6 +102,8 @@ class GPU_KernelLauncher {
     params_.to_output_lut_.Reset();
     params_.to_output_params_.Reset();
   }
+
+  [[nodiscard]] auto GetAllocatedScratchBytes() const -> size_t { return allocated_size_; }
 
   ~GPU_KernelLauncher() {
     ReleaseResources();
@@ -149,6 +155,18 @@ class GPU_KernelLauncher {
                                  cudaGetErrorString(temp_alloc_err));
       }
       allocated_size_ = needed_size;
+
+      {
+        size_t free_bytes = 0;
+        size_t total_bytes = 0;
+        if (cudaMemGetInfo(&free_bytes, &total_bytes) == cudaSuccess) {
+          const size_t used_bytes = total_bytes - free_bytes;
+          std::cout << "[VRAM] GPU_KernelLauncher scratch allocated (" << (needed_size >> 20)
+                    << " MB each, 2 buffers): free=" << (free_bytes >> 20)
+                    << " MB / total=" << (total_bytes >> 20)
+                    << " MB (used=" << (used_bytes >> 20) << " MB)\n";
+        }
+      }
     }
   }
 
@@ -229,6 +247,23 @@ class GPU_KernelLauncher {
             mapping.memory_domain != FrameMemoryDomain::CudaDevice) {
           frame_sink_->UnmapResource();
           throw std::runtime_error("GPU frame sink does not expose a CUDA RGBA32F mapping.");
+        }
+
+        const int cur_target_type = static_cast<int>(mapping.target_type);
+        const int cur_domain      = static_cast<int>(mapping.memory_domain);
+        if (cur_target_type != last_logged_target_type_ || cur_domain != last_logged_domain_ ||
+            width != last_logged_width_ || height != last_logged_height_) {
+          const char* tt_name =
+              mapping.target_type == FrameWriteTargetType::CudaArray ? "CudaArray"
+              : mapping.target_type == FrameWriteTargetType::LinearBuffer ? "LinearBuffer"
+              : "<other>";
+          std::cout << "[DirectPresent] frame_sink mapping: target_type=" << tt_name
+                    << " domain=" << cur_domain << " size=" << width << "x" << height
+                    << " row_bytes=" << mapping.row_bytes << std::endl;
+          last_logged_target_type_ = cur_target_type;
+          last_logged_domain_      = cur_domain;
+          last_logged_width_       = width;
+          last_logged_height_      = height;
         }
 
         const size_t row_bytes          = static_cast<size_t>(width) * sizeof(float4);
@@ -315,25 +350,30 @@ class GPU_KernelLauncher {
           last_report_time_ = exec_end;
         }
 
-        // if ((exec_end - last_report_time_) >= kReportInterval) {
-        //   static std::mutex           print_mutex;
-        //   std::lock_guard<std::mutex> guard(print_mutex);
-        //
-        //   std::cout << "\r\033[2KGPU preview: " << std::fixed << std::setprecision(1) << ema_fps_
-        //             << " fps"
-        //             << " | last " << std::setprecision(2) << last_frame_ms_ << " ms"
-        //             << " | parts e:" << std::setprecision(2) << last_ensure_size_ms_
-        //             << " in:" << last_input_copy_enqueue_ms_
-        //             << " k:" << last_kernel_dispatch_ms_
-        //             << " pc:" << last_present_copy_enqueue_ms_
-        //             << " ps:" << last_present_sync_ms_
-        //             << " oc:" << last_output_copy_enqueue_ms_
-        //             << " os:" << last_output_sync_ms_
-        //             << " | frames " << total_frames_rendered_ << std::flush;
-        //
-        //   frames_since_report_ = 0;
-        //   last_report_time_    = exec_end;
-        // }
+        if ((exec_end - last_report_time_) >= kReportInterval) {
+          static std::mutex           print_mutex;
+          std::lock_guard<std::mutex> guard(print_mutex);
+
+          size_t vram_free  = 0;
+          size_t vram_total = 0;
+          (void)cudaMemGetInfo(&vram_free, &vram_total);
+
+          std::cout << "[DirectPresent] GPU preview: " << std::fixed << std::setprecision(1)
+                    << ema_fps_ << " fps"
+                    << " | last " << std::setprecision(2) << last_frame_ms_ << " ms"
+                    << " | parts e:" << std::setprecision(2) << last_ensure_size_ms_
+                    << " in:" << last_input_copy_enqueue_ms_
+                    << " k:" << last_kernel_dispatch_ms_
+                    << " pc:" << last_present_copy_enqueue_ms_
+                    << " ps:" << last_present_sync_ms_
+                    << " oc:" << last_output_copy_enqueue_ms_
+                    << " os:" << last_output_sync_ms_
+                    << " | vram_free=" << (vram_free >> 20) << "MB"
+                    << " | frames " << total_frames_rendered_ << std::endl;
+
+          frames_since_report_ = 0;
+          last_report_time_    = exec_end;
+        }
       }
     }
 

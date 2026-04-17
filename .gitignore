@@ -1073,3 +1073,5 @@ vcpkg
 
 # Temporarily ignore technical documentation
 /docs/technical
+
+*.local.json

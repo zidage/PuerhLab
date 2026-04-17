@@ -2,7 +2,13 @@
   "permissions": {
     "allow": [
       "Bash(cmd /c scripts\\\\\\\\msvc_env.cmd --build --preset win_debug --parallel 4 --target puerhlab_main)",
-      "Bash(cmd //c \"scripts\\\\\\\\msvc_env.cmd --build --preset win_debug --target puerhlab_main --parallel 4\")"
+      "Bash(cmd //c \"scripts\\\\\\\\msvc_env.cmd --build --preset win_debug --target puerhlab_main --parallel 4\")",
+      "Bash(ls -la \"D:\\\\\\\\Projects\\\\\\\\pu-erh_lab\\\\\\\\\")",
+      "Bash(cd \"D:\\\\\\\\Projects\\\\\\\\pu-erh_lab\")",
+      "Bash(xargs grep *)",
+      "Bash(cmd /c scripts\\\\msvc_env.cmd --build --preset win_debug --parallel 4)",
+      "Bash(cmake --build --preset win_debug --parallel 4)",
+      "Bash(cmd //c \"scripts\\\\msvc_env.cmd --build --preset win_debug --parallel 4\")"
     ]
   }
 }

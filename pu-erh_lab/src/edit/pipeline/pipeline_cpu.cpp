@@ -402,6 +402,12 @@ void CPUPipelineExecutor::ClearAllIntermediateBuffers() {
   }
 }
 
+void CPUPipelineExecutor::ReleasePreviewGpuScratch() {
+  if (merged_stages_) {
+    merged_stages_->ResetRuntimeResources(PipelineStage::RuntimeResetMode::ReleaseGpuScratch);
+  }
+}
+
 void CPUPipelineExecutor::ReleaseAllGPUResources() {
   for (auto& stage : exec_stages_) {
     stage->ResetRuntimeResources(PipelineStage::RuntimeResetMode::ReleaseGpuResources);
@@ -410,6 +416,10 @@ void CPUPipelineExecutor::ReleaseAllGPUResources() {
   if (merged_stages_) {
     merged_stages_->ResetRuntimeResources(PipelineStage::RuntimeResetMode::ReleaseGpuResources);
   }
+}
+
+auto CPUPipelineExecutor::DebugGetMergedStageScratchBytes() const -> size_t {
+  return merged_stages_ ? merged_stages_->DebugGetAllocatedGpuScratchBytes() : 0;
 }
 
 };  // namespace puerhlab

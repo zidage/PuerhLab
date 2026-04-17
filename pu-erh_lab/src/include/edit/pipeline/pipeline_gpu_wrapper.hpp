@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include <memory>
 
 #include "edit/operators/op_base.hpp"
@@ -20,7 +21,9 @@ class GPUPipelineImpl {
   virtual void SetParams(OperatorParams& params)                        = 0;
   virtual void SetFrameSink(IFrameSink* frame_sink)                    = 0;
   virtual void Execute(std::shared_ptr<ImageBuffer> output)            = 0;
+  virtual void ReleaseScratchBuffers() {}
   virtual void ReleaseResources()                                      = 0;
+  [[nodiscard]] virtual auto DebugGetAllocatedScratchBytes() const -> size_t { return 0; }
 };
 
 class GPUPipelineWrapper {
@@ -41,6 +44,13 @@ class GPUPipelineWrapper {
   // Frees persistent GPU allocations used by the pipeline (scratch buffers, LUTs, etc.).
   // Intended for batch export to avoid holding large VRAM allocations across many pipelines.
   void ReleaseResources();
+
+  // Frees transient scratch buffers while keeping immutable pipeline state intact.
+  // Used by preview mode transitions to drop stale high-water allocations without
+  // rebuilding LUTs or other long-lived GPU state.
+  void ReleaseScratchBuffers();
+
+  [[nodiscard]] auto DebugGetAllocatedScratchBytes() const -> size_t;
 
  private:
   std::unique_ptr<GPUPipelineImpl> impl_;

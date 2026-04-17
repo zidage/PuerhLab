@@ -195,6 +195,12 @@ if(PUERHLAB_CUDA_ENABLED)
   target_link_libraries(ODTCudaSmokeTest PRIVATE GTest::gtest_main Operators ${PUERHLAB_TEST_OPENCV_MIN_DEPS} CUDA::cudart)
   set_target_properties(ODTCudaSmokeTest PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
   gtest_discover_tests(ODTCudaSmokeTest TEST_PREFIX "ODTCudaSmokeTest.")
+
+  add_executable(CudaPreviewVramReclamationTest edit/pipeline/cuda_preview_vram_reclamation_test.cu)
+  target_include_directories(CudaPreviewVramReclamationTest PUBLIC ${CMAKE_SOURCE_DIR}/pu-erh_lab/src/include)
+  target_link_libraries(CudaPreviewVramReclamationTest PRIVATE GTest::gtest_main EditPipeline PipelineScheduler Operators ThreadPool ${PUERHLAB_TEST_OPENCV_MIN_DEPS} CUDA::cudart)
+  set_target_properties(CudaPreviewVramReclamationTest PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
+  gtest_discover_tests(CudaPreviewVramReclamationTest TEST_PREFIX "CudaPreviewVramReclamationTest.")
 endif()
 
 # add_executable(TileTest edit/pipeline/tile_test.cpp)

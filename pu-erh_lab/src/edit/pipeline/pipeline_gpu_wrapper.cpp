@@ -28,6 +28,8 @@ class UnavailableGPUPipeline final : public GPUPipelineImpl {
     throw std::runtime_error("GPU backend unavailable: compiled GPU pipeline implementation is missing.");
   }
 
+  void ReleaseScratchBuffers() override {}
+
   void ReleaseResources() override {}
 };
 
@@ -71,4 +73,10 @@ auto GPUPipelineWrapper::HasAcceleratedBackend() const -> bool {
 }
 
 void GPUPipelineWrapper::ReleaseResources() { impl_->ReleaseResources(); }
+
+void GPUPipelineWrapper::ReleaseScratchBuffers() { impl_->ReleaseScratchBuffers(); }
+
+auto GPUPipelineWrapper::DebugGetAllocatedScratchBytes() const -> size_t {
+  return impl_->DebugGetAllocatedScratchBytes();
+}
 }  // namespace puerhlab

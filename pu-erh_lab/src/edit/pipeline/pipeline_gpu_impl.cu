@@ -63,7 +63,13 @@ class CUDA_GPUPipeline final : public GPUPipelineImpl {
     launcher_.Execute();
   }
 
+  void ReleaseScratchBuffers() override { launcher_.ReleaseScratchBuffers(); }
+
   void ReleaseResources() override { launcher_.ReleaseResources(); }
+
+  [[nodiscard]] auto DebugGetAllocatedScratchBytes() const -> size_t override {
+    return launcher_.GetAllocatedScratchBytes();
+  }
 };
 
 auto CreateCUDAGPUPipeline() -> std::unique_ptr<GPUPipelineImpl> {

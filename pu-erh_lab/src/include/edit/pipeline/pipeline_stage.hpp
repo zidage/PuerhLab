@@ -161,6 +161,7 @@ class PipelineStage {
   enum class RuntimeResetMode {
     InvalidateCache,
     ClearIntermediateBuffers,
+    ReleaseGpuScratch,
     ReleaseGpuResources,
     ClearIntermediateBuffersAndGpu,
   };
@@ -251,6 +252,10 @@ class PipelineStage {
   void RefreshGlobalParams(OperatorParams& global_params);
 
   auto GetStaticKernelStream() -> StaticKernelStreamType& { return static_kernel_stream_; }
+
+  [[nodiscard]] auto DebugGetAllocatedGpuScratchBytes() const -> size_t {
+    return gpu_executor_.DebugGetAllocatedScratchBytes();
+  }
 
   void SetEnableCache(bool enable) {
     if (enable_cache_ == enable) return;

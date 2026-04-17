@@ -856,6 +856,19 @@ auto RhiEditViewerSurface::ensureRenderTarget(int slot_index, int width, int hei
   slot.width          = width;
   slot.height         = height;
   slot.texture_handle = reinterpret_cast<std::uintptr_t>(slot.texture.Get());
+  {
+    size_t free_bytes = 0;
+    size_t total_bytes = 0;
+    if (cudaMemGetInfo(&free_bytes, &total_bytes) == cudaSuccess) {
+      const size_t used_bytes = total_bytes - free_bytes;
+      const size_t slot_bytes =
+          static_cast<size_t>(width) * static_cast<size_t>(height) * kRgba32fPixelBytes;
+      qInfo("[VRAM] D3D11 present slot[%d] allocated (%dx%d, %zu MB): free=%zu MB / total=%zu MB "
+            "(used=%zu MB)",
+            slot_index, width, height, slot_bytes >> 20, free_bytes >> 20, total_bytes >> 20,
+            used_bytes >> 20);
+    }
+  }
   return true;
 #else
   (void)slot_index;
@@ -872,6 +885,19 @@ void RhiEditViewerSurface::initialize(QRhiCommandBuffer* command_buffer) {
 #if defined(Q_OS_WIN) && defined(HAVE_CUDA)
   platform_state_->supports_direct_present = false;
   platform_state_->cuda_device             = -1;
+  const char* backend_name = "<none>";
+  if (rhi()) {
+    switch (rhi()->backend()) {
+      case QRhi::D3D11:    backend_name = "D3D11"; break;
+      case QRhi::D3D12:    backend_name = "D3D12"; break;
+      case QRhi::Vulkan:   backend_name = "Vulkan"; break;
+      case QRhi::OpenGLES2:backend_name = "OpenGLES2"; break;
+      case QRhi::Metal:    backend_name = "Metal"; break;
+      case QRhi::Null:     backend_name = "Null"; break;
+      default:             backend_name = "<other>"; break;
+    }
+  }
+  bool bind_ok = false;
   if (rhi() && rhi()->backend() == QRhi::D3D11) {
     const auto* native_handles =
         static_cast<const QRhiD3D11NativeHandles*>(rhi()->nativeHandles());
@@ -879,10 +905,16 @@ void RhiEditViewerSurface::initialize(QRhiCommandBuffer* command_buffer) {
         native_handles ? static_cast<ID3D11Device*>(native_handles->dev) : nullptr;
     platform_state_->cuda_device =
         platform_state_->device ? ResolveCudaDeviceForD3D11Device(platform_state_->device) : -1;
-    platform_state_->supports_direct_present =
-        platform_state_->device && platform_state_->cuda_device >= 0 &&
-        BindCudaDeviceOnCurrentThread(platform_state_->cuda_device, "initialize");
+    bind_ok = platform_state_->device && platform_state_->cuda_device >= 0 &&
+              BindCudaDeviceOnCurrentThread(platform_state_->cuda_device, "initialize");
+    platform_state_->supports_direct_present = bind_ok;
   }
+  qInfo("[DirectPresent] RHI backend=%s, d3d11_device=%p, cuda_device=%d, bind_ok=%d, "
+        "supports_direct_present=%d",
+        backend_name, static_cast<void*>(platform_state_->device), platform_state_->cuda_device,
+        bind_ok ? 1 : 0, platform_state_->supports_direct_present ? 1 : 0);
+#else
+  qInfo("[DirectPresent] CUDA/D3D11 interop unavailable at compile time (HAVE_CUDA/Q_OS_WIN not set).");
 #endif
 
   if (latest_frame_) {

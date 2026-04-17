@@ -11,6 +11,7 @@
 #include <stdexcept>
 #include <vector>
 
+#include <cuda_runtime_api.h>
 #include <opencv2/core/cuda.hpp>
 
 #include "decoders/processor/operators/gpu/cuda_color_space_conv.hpp"
@@ -41,6 +42,21 @@ void LogCudaProfileStep(cv::cuda::Stream& stream, const char* label,
                         const ProfileClock::time_point start) {
   stream.waitForCompletion();
   PrintProfileMs(label, ProfileClock::now() - start);
+}
+
+void LogVramUsage(const char* tag) {
+  size_t free_bytes = 0;
+  size_t total_bytes = 0;
+  const cudaError_t err = cudaMemGetInfo(&free_bytes, &total_bytes);
+  if (err != cudaSuccess) {
+    std::cout << "[VRAM] " << tag << ": cudaMemGetInfo failed: " << cudaGetErrorString(err)
+              << "\n";
+    return;
+  }
+  const size_t used_bytes = total_bytes - free_bytes;
+  std::cout << "[VRAM] " << tag << ": free=" << (free_bytes >> 20)
+            << " MB / total=" << (total_bytes >> 20)
+            << " MB (used=" << (used_bytes >> 20) << " MB)\n";
 }
 
 auto DecodeResToDownsamplePasses(const DecodeRes decode_res) -> int {
@@ -337,6 +353,7 @@ auto RawProcessor::ProcessDirectRgbCuda() -> ImageBuffer {
 
 auto RawProcessor::ProcessCuda() -> ImageBuffer {
   const auto start = ProfileClock::now();
+  LogVramUsage("ProcessCuda ENTER");
 
   if (input_kind_ == RawInputKind::DebayeredRgb) {
     auto out = ProcessDirectRgbCuda();
@@ -344,6 +361,7 @@ auto RawProcessor::ProcessCuda() -> ImageBuffer {
     std::cout << "[LOG] RAW decoding takes: "
               << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count()
               << " ms\n";
+    LogVramUsage("ProcessCuda EXIT (DebayeredRgb)");
     return out;
   }
 
@@ -364,6 +382,8 @@ auto RawProcessor::ProcessCuda() -> ImageBuffer {
   const auto end = ProfileClock::now();
   std::cout << "[LOG] RAW decoding takes: "
             << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << " ms\n";
+  LogVramUsage(mode == detail::CudaExecutionMode::Tiled ? "ProcessCuda EXIT (Tiled)"
+                                                        : "ProcessCuda EXIT (FullFrame)");
   return out;
 }
 

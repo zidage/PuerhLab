@@ -251,6 +251,13 @@ void PipelineStage::ResetRuntimeResources(RuntimeResetMode mode) {
     gpu_setup_done_ = false;
   };
 
+  const auto release_gpu_scratch = [this]() {
+    if (stage_role_ != StageRole::GpuStreamable) {
+      return;
+    }
+    gpu_executor_.ReleaseScratchBuffers();
+  };
+
   switch (mode) {
     case RuntimeResetMode::InvalidateCache:
       output_cache_.reset();
@@ -261,6 +268,9 @@ void PipelineStage::ResetRuntimeResources(RuntimeResetMode mode) {
       return;
     case RuntimeResetMode::ClearIntermediateBuffers:
       clear_intermediate_buffers();
+      return;
+    case RuntimeResetMode::ReleaseGpuScratch:
+      release_gpu_scratch();
       return;
     case RuntimeResetMode::ReleaseGpuResources:
       release_gpu_resources();

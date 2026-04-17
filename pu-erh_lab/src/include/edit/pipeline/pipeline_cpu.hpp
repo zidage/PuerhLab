@@ -117,10 +117,21 @@ class CPUPipelineExecutor : public PipelineExecutor {
   void ClearAllIntermediateBuffers();
 
   /**
+   * @brief Release transient merged-stage preview scratch buffers while keeping
+   *        the compiled GPU pipeline and LUT state intact.
+   *        Use this when a full-resolution preview/export frame returns to the
+   *        FAST_PREVIEW baseline and the large scratch high-water mark should
+   *        not stay pinned in VRAM.
+   */
+  void ReleasePreviewGpuScratch();
+
+  /**
    * @brief Release persistent GPU allocations held by execution stages.
    *        Useful for batch export to avoid holding large VRAM allocations
    *        across many cached pipelines.
    */
   void ReleaseAllGPUResources();
+
+  [[nodiscard]] auto DebugGetMergedStageScratchBytes() const -> size_t;
 };
 };  // namespace puerhlab
