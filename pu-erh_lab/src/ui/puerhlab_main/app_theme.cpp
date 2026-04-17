@@ -46,28 +46,28 @@ struct ThemeColors {
   int panel_radius;
 };
 
-// Theme 0: Pu-erh (current warm theme)
+// Theme 0: Pu-erh — layered matte surfaces, saffron/steel/teal CTA palette
 auto MakePuerhTheme() -> ThemeColors {
   return ThemeColors{
-      .tone_gold = QColor(0xB9, 0x8A, 0x4A),
-      .tone_wine = QColor(0x7A, 0x3E, 0x47),
-      .tone_steel = QColor(0x46, 0x51, 0x5E),
-      .tone_graphite = QColor(0x15, 0x1A, 0x20),
-      .tone_mist = QColor(0xE8, 0xE1, 0xD6),
-      .bg_canvas = QColor(0x0D, 0x11, 0x16),
-      .bg_deep = QColor(0x11, 0x16, 0x1C),
-      .bg_base = QColor(0x16, 0x1C, 0x23),
-      .bg_panel = QColor(0x18, 0x1E, 0x26),
-      .text = QColor(0xE8, 0xE1, 0xD6),
-      .text_muted = QColor(0xA7, 0x9F, 0x93),
-      .accent_secondary = QColor(0xD2, 0xA5, 0x66),
-      .danger_tint = QColor(122, 62, 71, 92),
-      .selected_tint = QColor(185, 138, 74, 46),
-      .hover = QColor(0x21, 0x28, 0x31),
-      .divider = QColor(233, 227, 216, 20),
-      .glass_panel = QColor(0x18, 0x1E, 0x26),
-      .glass_stroke = QColor(233, 227, 216, 28),
-      .overlay = QColor(0x11, 0x14, 0x19, 0xC0),
+      .tone_gold = QColor(0x98, 0xCD, 0xF2),      // primary CTA / accent (light blue)
+      .tone_wine = QColor(0x8A, 0x3A, 0x3A),      // danger red
+      .tone_steel = QColor(0x45, 0x7B, 0x9D),     // steel blue
+      .tone_graphite = QColor(0x11, 0x11, 0x11),
+      .tone_mist = QColor(0xE0, 0xE0, 0xE0),
+      .bg_canvas = QColor(0x12, 0x12, 0x12),      // floor — outermost surface
+      .bg_deep = QColor(0x2E, 0x2E, 0x2E),        // floating modals / popovers
+      .bg_base = QColor(0x24, 0x24, 0x24),        // interactive panels, inputs
+      .bg_panel = QColor(0x1A, 0x1A, 0x1A),       // primary workspaces
+      .text = QColor(0xE0, 0xE0, 0xE0),
+      .text_muted = QColor(0x88, 0x88, 0x88),
+      .accent_secondary = QColor(0x00, 0x47, 0x66), // CTA gradient end / container
+      .danger_tint = QColor(138, 58, 58, 80),
+      .selected_tint = QColor(152, 205, 242, 40),
+      .hover = QColor(0x26, 0x25, 0x25),
+      .divider = QColor(200, 200, 200, 16),
+      .glass_panel = QColor(0x1A, 0x1A, 0x1A),
+      .glass_stroke = QColor(200, 200, 200, 20),
+      .overlay = QColor(0x0A, 0x0A, 0x0A, 0xC8),
       .panel_radius = 10,
   };
 }
@@ -108,6 +108,7 @@ struct FontFamilies {
   QString ui_latin = QStringLiteral("Inter");
   QString ui_zh = QStringLiteral("Noto Sans SC");
   QString ui_override;
+  QString ui_headline = QStringLiteral("Manrope");
   QString effective_language_code = QStringLiteral("en");
   QString data = QStringLiteral("Google Sans Code Monospaced");
   QString mono;
@@ -206,6 +207,14 @@ auto DataFontFallbackStack(const FontFamilies& families) -> QStringList {
   return stack;
 }
 
+auto HeadlineFontStack(const FontFamilies& families) -> QStringList {
+  QStringList stack;
+  AppendUniqueFamily(stack, families.ui_headline);
+  AppendUniqueFamily(stack, families.ui_zh);
+  AppendUniqueFamily(stack, families.ui_latin);
+  return stack;
+}
+
 auto DataFontStack(const FontFamilies& families) -> QStringList {
   QStringList stack;
   AppendUniqueFamily(stack, families.data);
@@ -274,6 +283,11 @@ void AppTheme::RegisterFonts() {
                                         QStringLiteral("Noto Sans SC"));
   families.data = RegisterFontResource(QStringLiteral(":/fonts/data_mono.ttf"),
                                        QStringLiteral("Google Sans Code Monospaced"));
+  const QString registered_headline =
+      RegisterFontResource(QStringLiteral(":/fonts/main_Manrope.ttf"), QStringLiteral("Manrope"));
+  if (!registered_headline.isEmpty()) {
+    families.ui_headline = registered_headline;
+  }
   families.mono = QFontDatabase::systemFont(QFontDatabase::FixedFont).family();
 
   ApplyDataFontSubstitutions(families);
@@ -351,6 +365,7 @@ auto AppTheme::Font(FontRole role) -> QFont {
   RegisterFonts();
   const auto& families = FontState();
   const QStringList ui_stack = UiFontStack(families);
+  const QStringList headline_stack = HeadlineFontStack(families);
   const QStringList data_stack = DataFontStack(families);
   const QStringList mono_stack{families.mono};
 
@@ -366,7 +381,7 @@ auto AppTheme::Font(FontRole role) -> QFont {
     case FontRole::UiTitle:
       return MakeFont(ui_stack, 11.0, QFont::DemiBold);
     case FontRole::UiHeadline:
-      return MakeFont(ui_stack, 14.0, QFont::Bold);
+      return MakeFont(headline_stack, 14.0, QFont::Bold);
     case FontRole::UiOverline: {
       QFont font = MakeFont(ui_stack, 9.0, QFont::DemiBold);
       font.setCapitalization(QFont::AllUppercase);
@@ -796,6 +811,10 @@ auto AppTheme::EditorTransparentFrameStyle() -> QString {
 auto AppTheme::uiFontFamily() const -> QString {
   RegisterFonts();
   return ActiveUiFamily(FontState());
+}
+auto AppTheme::headlineFontFamily() const -> QString {
+  RegisterFonts();
+  return FontState().ui_headline;
 }
 auto AppTheme::dataFontFamily() const -> QString {
   RegisterFonts();

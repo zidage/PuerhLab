@@ -23,7 +23,7 @@ ApplicationWindow {
     readonly property color toneAmber: appTheme.toneGold
     readonly property color toneAccentSecondary: appTheme.accentSecondaryColor
 
-    readonly property color colBgDeep: appTheme.bgDeepColor        // center content — darkest "stage"
+    readonly property color colBgDeep: appTheme.bgDeepColor        // floating modals / popovers — topmost layer
     readonly property color colBgBase: appTheme.bgBaseColor        // sunken inputs
     readonly property color colBgPanel: appTheme.bgPanelColor      // side panels & header/footer
     readonly property color colBgCanvas: appTheme.bgCanvasColor    // gap / outer canvas behind blocks
@@ -43,6 +43,7 @@ ApplicationWindow {
     readonly property color colGlassStroke: appTheme.glassStrokeColor
     readonly property color colOverlay: appTheme.overlayColor
     readonly property string dataFontFamily: appTheme.dataFontFamily
+    readonly property string headlineFontFamily: appTheme.headlineFontFamily
     readonly property real settingsFieldLabelWidth: 84
     readonly property int controlRadius: 10
 
@@ -54,8 +55,8 @@ ApplicationWindow {
     color: root.colBgPanel
 
     property bool inspectorVisible: true
-    property real inspectorWidth: 250
-    readonly property real inspectorMinWidth: 250
+    property real inspectorWidth: 300
+    readonly property real inspectorMinWidth: 300
     readonly property real inspectorMaxWidth: 600
     readonly property real leftPaneWidth: 250
     readonly property real centerPaneMinWidth: 560
@@ -448,6 +449,7 @@ ApplicationWindow {
 
             Label {
                 text: qsTr("Settings")
+                font.family: root.headlineFontFamily
                 font.pixelSize: 24
                 font.weight: 700
                 color: root.colText
@@ -523,7 +525,7 @@ ApplicationWindow {
                 Button {
                     text: qsTr("Save")
                     Material.background: root.colAccentPrimary
-                    Material.foreground: root.colBgDeep
+                    Material.foreground: root.colBgCanvas
                     onClicked: root.saveSettingsAndClose()
                 }
             }
@@ -645,6 +647,7 @@ ApplicationWindow {
 
             Label {
                 text: qsTr("Confirm Deletion")
+                font.family: root.headlineFontFamily
                 font.pixelSize: 24
                 font.weight: 700
                 color: root.colText
@@ -808,9 +811,9 @@ ApplicationWindow {
                 spacing: 10
                 Row {
                     spacing: 0
-                    Label { text: qsTr("Pu-erh"); font.pixelSize: 19; font.weight: 700; color: root.colAccentPrimary }
-                    Label { text: " "; font.pixelSize: 19; font.weight: 700 }
-                    Label { text: qsTr("Lab"); font.pixelSize: 19; font.weight: 700; color: root.colText }
+                    Label { text: qsTr("Pu-erh"); font.family: root.headlineFontFamily; font.pixelSize: 19; font.weight: 700; color: root.colAccentPrimary }
+                    Label { text: " "; font.family: root.headlineFontFamily; font.pixelSize: 19; font.weight: 700 }
+                    Label { text: qsTr("Lab"); font.family: root.headlineFontFamily; font.pixelSize: 19; font.weight: 700; color: root.colText }
                 }
                 Item { Layout.preferredWidth: 12 }
 
@@ -1189,16 +1192,39 @@ ApplicationWindow {
                     icon.source: "qrc:/panel_icons/import.svg"
                     icon.width: 16
                     icon.height: 16
-                    icon.color: root.colBgDeep
+                    icon.color: root.colText
                     display: AbstractButton.TextBesideIcon
-                    background: Rectangle {
-                        radius: 8
-                        color: importBtn.enabled ? root.colAccentSoft : Qt.rgba(root.colAccentSoft.r, root.colAccentSoft.g, root.colAccentSoft.b, 0.5)
-                        border.width: 1
-                        border.color: Qt.rgba(root.colBgDeep.r, root.colBgDeep.g, root.colBgDeep.b, 0.18)
+                    background: Canvas {
+                        opacity: importBtn.enabled ? 1.0 : 0.5
+                        property color gradStart: root.colAccentPrimary
+                        property color gradEnd: root.colAccentSecondary
+                        onGradStartChanged: requestPaint()
+                        onGradEndChanged: requestPaint()
+                        onWidthChanged: requestPaint()
+                        onHeightChanged: requestPaint()
+                        onPaint: {
+                            var ctx = getContext("2d")
+                            ctx.clearRect(0, 0, width, height)
+                            var r = 8
+                            ctx.beginPath()
+                            ctx.moveTo(r, 0)
+                            ctx.lineTo(width - r, 0)
+                            ctx.quadraticCurveTo(width, 0, width, r)
+                            ctx.lineTo(width, height - r)
+                            ctx.quadraticCurveTo(width, height, width - r, height)
+                            ctx.lineTo(r, height)
+                            ctx.quadraticCurveTo(0, height, 0, height - r)
+                            ctx.lineTo(0, r)
+                            ctx.quadraticCurveTo(0, 0, r, 0)
+                            ctx.closePath()
+                            var grad = ctx.createLinearGradient(0, height, width, 0)
+                            grad.addColorStop(0.0, Qt.rgba(gradStart.r, gradStart.g, gradStart.b, 1.0))
+                            grad.addColorStop(1.0, Qt.rgba(gradEnd.r, gradEnd.g, gradEnd.b, 1.0))
+                            ctx.fillStyle = grad
+                            ctx.fill()
+                        }
                     }
-                    Material.background: root.colAccentSoft
-                    Material.foreground: root.colBgDeep
+                    Material.foreground: root.colText
                     scale: importBtn.hovered && enabled ? 1.03 : 1.0
                     Behavior on scale { NumberAnimation { duration: 100; easing.type: Easing.OutCubic } }
                     onClicked: importDialog.open()
@@ -1278,7 +1304,7 @@ ApplicationWindow {
                                     Label {
                                         anchors.centerIn: parent
                                         text: qsTr("Grid")
-                                        color: root.gridMode ? root.colBgDeep : root.colTextMuted
+                                        color: root.gridMode ? root.colBgCanvas : root.colTextMuted
                                         font.pixelSize: 11
                                         font.weight: root.gridMode ? 700 : 500
                                     }
@@ -1291,7 +1317,7 @@ ApplicationWindow {
                                     Label {
                                         anchors.centerIn: parent
                                         text: qsTr("List")
-                                        color: root.gridMode ? root.colTextMuted : root.colBgDeep
+                                        color: root.gridMode ? root.colTextMuted : root.colBgCanvas
                                         font.pixelSize: 11
                                         font.weight: root.gridMode ? 500 : 700
                                     }
@@ -1327,6 +1353,7 @@ ApplicationWindow {
                             spacing: 8
                             Label {
                                 text: albumBackend.serviceReady ? qsTr("No Photos Yet") : qsTr("Open or Create a Project")
+                                font.family: root.headlineFontFamily
                                 color: root.colText
                                 font.pixelSize: 22
                                 font.weight: 700
@@ -1348,10 +1375,6 @@ ApplicationWindow {
                 }
                 } // close album card Rectangle
 
-                Item {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: 52
-                }
             } // close center block wrapper
 
             // ── inspector panel + overlay resize handle ──
@@ -1420,15 +1443,39 @@ ApplicationWindow {
                             icon.source: "qrc:/panel_icons/export.svg"
                             icon.width: 16
                             icon.height: 16
-                            icon.color: root.colBgDeep
+                            icon.color: root.colText
                             display: AbstractButton.TextBesideIcon
-                            background: Rectangle {
-                                radius: 8
-                                color: exportQueueBtn.enabled ? root.colAccentPrimary : Qt.rgba(root.colAccentPrimary.r, root.colAccentPrimary.g, root.colAccentPrimary.b, 0.5)
-                                border.width: 1
-                                border.color: Qt.rgba(root.colBgDeep.r, root.colBgDeep.g, root.colBgDeep.b, 0.18)
+                            background: Canvas {
+                                opacity: exportQueueBtn.enabled ? 1.0 : 0.5
+                                property color gradStart: root.colAccentPrimary
+                                property color gradEnd: root.colAccentSecondary
+                                onGradStartChanged: requestPaint()
+                                onGradEndChanged: requestPaint()
+                                onWidthChanged: requestPaint()
+                                onHeightChanged: requestPaint()
+                                onPaint: {
+                                    var ctx = getContext("2d")
+                                    ctx.clearRect(0, 0, width, height)
+                                    var r = 8
+                                    ctx.beginPath()
+                                    ctx.moveTo(r, 0)
+                                    ctx.lineTo(width - r, 0)
+                                    ctx.quadraticCurveTo(width, 0, width, r)
+                                    ctx.lineTo(width, height - r)
+                                    ctx.quadraticCurveTo(width, height, width - r, height)
+                                    ctx.lineTo(r, height)
+                                    ctx.quadraticCurveTo(0, height, 0, height - r)
+                                    ctx.lineTo(0, r)
+                                    ctx.quadraticCurveTo(0, 0, r, 0)
+                                    ctx.closePath()
+                                    var grad = ctx.createLinearGradient(0, height, width, 0)
+                                    grad.addColorStop(0.0, Qt.rgba(gradStart.r, gradStart.g, gradStart.b, 1.0))
+                                    grad.addColorStop(1.0, Qt.rgba(gradEnd.r, gradEnd.g, gradEnd.b, 1.0))
+                                    ctx.fillStyle = grad
+                                    ctx.fill()
+                                }
                             }
-                            Material.foreground: root.colBgDeep
+                            Material.foreground: root.colText
                             scale: exportQueueBtn.hovered && enabled ? 1.03 : 1.0
                             Behavior on scale { NumberAnimation { duration: 100; easing.type: Easing.OutCubic } }
                             onClicked: {
@@ -1527,6 +1574,7 @@ ApplicationWindow {
                     spacing: 8
                     Label {
                         text: qsTr("Open Project")
+                        font.family: root.headlineFontFamily
                         font.pixelSize: 24
                         font.weight: 700
                         color: root.colText
@@ -1572,14 +1620,14 @@ ApplicationWindow {
                         Layout.fillWidth: true
                         text: qsTr("Load Existing Project")
                         Material.background: root.colAccentPrimary
-                        Material.foreground: root.colBgDeep
+                        Material.foreground: root.colBgCanvas
                         onClicked: albumBackend.PromptAndLoadProject()
                     }
                     Button {
                         Layout.fillWidth: true
                         text: qsTr("Create New Project")
                         Material.background: root.colAccentPrimary
-                        Material.foreground: root.colBgDeep
+                        Material.foreground: root.colBgCanvas
                         onClicked: albumBackend.PromptAndCreateProject()
                     }
                 }
@@ -1637,6 +1685,7 @@ ApplicationWindow {
 
                 Label {
                     text: qsTr("Loading Project")
+                    font.family: root.headlineFontFamily
                     font.pixelSize: 21
                     font.weight: 700
                     color: root.colText
@@ -1699,6 +1748,7 @@ ApplicationWindow {
 
                 Label {
                     text: qsTr("Importing Photos")
+                    font.family: root.headlineFontFamily
                     font.pixelSize: 21
                     font.weight: 700
                     color: root.colText

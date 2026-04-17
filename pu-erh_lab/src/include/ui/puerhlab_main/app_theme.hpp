@@ -18,6 +18,7 @@ namespace puerhlab::ui {
 class AppTheme final : public QObject {
   Q_OBJECT
   Q_PROPERTY(QString uiFontFamily READ uiFontFamily NOTIFY UiFontFamilyChanged)
+  Q_PROPERTY(QString headlineFontFamily READ headlineFontFamily NOTIFY UiFontFamilyChanged)
   Q_PROPERTY(QString dataFontFamily READ dataFontFamily CONSTANT)
   Q_PROPERTY(QString monoFontFamily READ monoFontFamily CONSTANT)
   Q_PROPERTY(QColor toneGold READ toneGold NOTIFY ThemeChanged)
@@ -93,6 +94,7 @@ class AppTheme final : public QObject {
   static auto EditorTransparentFrameStyle() -> QString;
 
   auto uiFontFamily() const -> QString;
+  auto headlineFontFamily() const -> QString;
   auto dataFontFamily() const -> QString;
   auto monoFontFamily() const -> QString;
 
@@ -133,7 +135,7 @@ class AppTheme final : public QObject {
 
   static auto ResolveRole(QWidget* widget) -> FontRole;
 
-  int current_theme_index_ = 1;
+  int current_theme_index_ = 0;
 };
 
 }  // namespace puerhlab::ui

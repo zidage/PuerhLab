@@ -5,11 +5,8 @@ import QtQuick.Layouts
 ScrollView {
     id: root
     contentWidth: availableWidth
-    readonly property color cardColor: "#242424"
-    readonly property color separatorColor: "#363636"
     readonly property color textColor: appTheme.textColor
     readonly property color mutedTextColor: appTheme.textMutedColor
-    readonly property color statsMutedTextColor: "#7B7D7C"
 
     Component.onCompleted: {
         contentItem.interactive = false
@@ -17,96 +14,105 @@ ScrollView {
 
     ColumnLayout {
         width: root.availableWidth
-        spacing: 12
+        spacing: 0
 
-        Rectangle {
+        // Library Overview hero
+        Item {
             Layout.fillWidth: true
-            Layout.margins: 4
-            implicitHeight: heroCol.implicitHeight + 24
-            radius: 10
-            color: root.cardColor
+            Layout.topMargin: 24
+            Layout.leftMargin: 16
+            Layout.rightMargin: 16
+            Layout.bottomMargin: 4
+            implicitHeight: heroCol.implicitHeight
 
             ColumnLayout {
                 id: heroCol
-                anchors.fill: parent
-                anchors.margins: 16
-                spacing: 4
+                anchors.left: parent.left
+                anchors.right: parent.right
+                spacing: 14
 
                 Label {
-                    text: qsTr("Photo Library")
+                    text: qsTr("LIBRARY OVERVIEW")
                     color: root.mutedTextColor
-                    font.pixelSize: 11
-                    font.weight: 600
-                    font.letterSpacing: 1.2
-                }
-
-                Label {
-                    text: albumBackend.totalPhotoCount
-                    color: root.textColor
-                    font.family: appTheme.dataFontFamily
-                    font.pixelSize: 42
+                    font.pixelSize: 10
                     font.weight: 700
+                    font.letterSpacing: 1.8
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+
+                    Label {
+                        text: qsTr("Total Photos")
+                        color: root.mutedTextColor
+                        font.family: appTheme.uiFontFamily
+                        font.pixelSize: 13
+                        font.weight: 400
+                        Layout.alignment: Qt.AlignVCenter
+                    }
+
+                    Item { Layout.fillWidth: true }
+
+                    Label {
+                        text: albumBackend.totalPhotoCount
+                        color: root.textColor
+                        font.family: appTheme.headlineFontFamily
+                        font.pixelSize: 34
+                        font.weight: 300
+                        Layout.alignment: Qt.AlignVCenter
+                    }
                 }
 
                 Label {
+                    visible: albumBackend.filterInfo !== ""
                     text: albumBackend.filterInfo
-                    color: root.statsMutedTextColor
+                    color: root.mutedTextColor
+                    font.family: appTheme.uiFontFamily
                     font.pixelSize: 11
+                    font.weight: 400
+                    Layout.topMargin: -6
                 }
             }
         }
 
-        Rectangle {
+        // Stats sections
+        ColumnLayout {
             Layout.fillWidth: true
-            Layout.preferredHeight: 1
-            color: root.separatorColor
-        }
+            Layout.topMargin: 28
+            Layout.leftMargin: 16
+            Layout.rightMargin: 16
+            Layout.bottomMargin: 20
+            spacing: 24
 
-        StatsCard {
-            Layout.fillWidth: true
-            Layout.margins: 4
-            title: qsTr("By Capture Date")
-            accentColor: "#5B9BD5"
-            model: albumBackend.dateStats
-            selectedLabel: albumBackend.statsFilterDate
-            onBarClicked: function(label) { albumBackend.ToggleStatsFilter("date", label) }
-        }
+            StatsCard {
+                Layout.fillWidth: true
+                title: qsTr("By Capture Date")
+                accentColor: "#5B9BD5"
+                model: albumBackend.dateStats
+                selectedLabel: albumBackend.statsFilterDate
+                displayMode: "grouped"
+                onBarClicked: function(label) { albumBackend.ToggleStatsFilter("date", label) }
+            }
 
-        Rectangle {
-            Layout.fillWidth: true
-            Layout.preferredHeight: 1
-            color: root.separatorColor
-        }
+            StatsCard {
+                Layout.fillWidth: true
+                title: qsTr("By Camera Model")
+                accentColor: "#ED7D31"
+                model: albumBackend.cameraStats
+                selectedLabel: albumBackend.statsFilterCamera
+                displayMode: "chips"
+                onBarClicked: function(label) { albumBackend.ToggleStatsFilter("camera", label) }
+            }
 
-        StatsCard {
-            Layout.fillWidth: true
-            Layout.margins: 4
-            title: qsTr("By Camera Model")
-            accentColor: "#ED7D31"
-            model: albumBackend.cameraStats
-            selectedLabel: albumBackend.statsFilterCamera
-            onBarClicked: function(label) { albumBackend.ToggleStatsFilter("camera", label) }
-        }
-
-        Rectangle {
-            Layout.fillWidth: true
-            Layout.preferredHeight: 1
-            color: root.separatorColor
-        }
-
-        StatsCard {
-            Layout.fillWidth: true
-            Layout.margins: 4
-            title: qsTr("By Lens")
-            accentColor: "#70AD47"
-            model: albumBackend.lensStats
-            selectedLabel: albumBackend.statsFilterLens
-            onBarClicked: function(label) { albumBackend.ToggleStatsFilter("lens", label) }
-        }
-
-        Item {
-            Layout.fillWidth: true
-            Layout.preferredHeight: 8
+            StatsCard {
+                Layout.fillWidth: true
+                title: qsTr("By Lens")
+                accentColor: "#70AD47"
+                model: albumBackend.lensStats
+                selectedLabel: albumBackend.statsFilterLens
+                displayMode: "dots"
+                onBarClicked: function(label) { albumBackend.ToggleStatsFilter("lens", label) }
+            }
         }
     }
 }
