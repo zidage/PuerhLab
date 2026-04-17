@@ -87,7 +87,7 @@ ScrollView {
             StatsCard {
                 Layout.fillWidth: true
                 title: qsTr("By Capture Date")
-                accentColor: "#5B9BD5"
+                accentColor: appTheme.toneSteel
                 model: albumBackend.dateStats
                 selectedLabel: albumBackend.statsFilterDate
                 displayMode: "grouped"
@@ -97,7 +97,7 @@ ScrollView {
             StatsCard {
                 Layout.fillWidth: true
                 title: qsTr("By Camera Model")
-                accentColor: "#ED7D31"
+                accentColor: appTheme.toneGold
                 model: albumBackend.cameraStats
                 selectedLabel: albumBackend.statsFilterCamera
                 displayMode: "chips"
@@ -107,7 +107,7 @@ ScrollView {
             StatsCard {
                 Layout.fillWidth: true
                 title: qsTr("By Lens")
-                accentColor: "#70AD47"
+                accentColor: appTheme.toneGold
                 model: albumBackend.lensStats
                 selectedLabel: albumBackend.statsFilterLens
                 displayMode: "dots"

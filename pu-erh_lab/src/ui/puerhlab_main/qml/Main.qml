@@ -1264,8 +1264,8 @@ ApplicationWindow {
                         Item { Layout.fillWidth: true }
                         Item {
                             id: viewModeSwitch
-                            Layout.preferredWidth: 118
-                            Layout.preferredHeight: 32
+                            Layout.preferredWidth: 132
+                            Layout.preferredHeight: 36
 
                             Rectangle {
                                 id: viewModeTrack
@@ -1301,12 +1301,28 @@ ApplicationWindow {
                                     width: parent.width / 2
                                     height: parent.height
 
-                                    Label {
+                                    Image {
+                                        id: gridModeIconSource
                                         anchors.centerIn: parent
-                                        text: qsTr("Grid")
-                                        color: root.gridMode ? root.colBgCanvas : root.colTextMuted
-                                        font.pixelSize: 11
-                                        font.weight: root.gridMode ? 700 : 500
+                                        width: 20
+                                        height: 20
+                                        source: "qrc:/panel_icons/layout-grid.svg"
+                                        visible: false
+                                        asynchronous: true
+                                    }
+
+                                    MultiEffect {
+                                        anchors.fill: gridModeIconSource
+                                        source: gridModeIconSource
+                                        colorization: 1.0
+                                        colorizationColor: root.gridMode ? root.colBgCanvas : root.colTextMuted
+                                    }
+
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: root.gridMode = true
                                     }
                                 }
 
@@ -1314,22 +1330,29 @@ ApplicationWindow {
                                     width: parent.width / 2
                                     height: parent.height
 
-                                    Label {
+                                    Image {
+                                        id: listModeIconSource
                                         anchors.centerIn: parent
-                                        text: qsTr("List")
-                                        color: root.gridMode ? root.colTextMuted : root.colBgCanvas
-                                        font.pixelSize: 11
-                                        font.weight: root.gridMode ? 500 : 700
+                                        width: 20
+                                        height: 20
+                                        source: "qrc:/panel_icons/list.svg"
+                                        visible: false
+                                        asynchronous: true
                                     }
-                                }
-                            }
 
-                            MouseArea {
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: function(mouse) {
-                                    root.gridMode = mouse.x < width / 2
+                                    MultiEffect {
+                                        anchors.fill: listModeIconSource
+                                        source: listModeIconSource
+                                        colorization: 1.0
+                                        colorizationColor: root.gridMode ? root.colTextMuted : root.colBgCanvas
+                                    }
+
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: root.gridMode = false
+                                    }
                                 }
                             }
                         }

@@ -43,6 +43,17 @@ Item {
         return (idx >= 0 && idx < 12) ? names[idx] : mm;
     }
 
+    function withAlpha(color, alpha) {
+        return Qt.rgba(color.r, color.g, color.b, alpha);
+    }
+
+    function lensDotColor(index, isSelected) {
+        if (isSelected || index === 0) return card.accentColor;
+        if (index === 1) return appTheme.accentSecondaryColor;
+        if (index === 2) return card.withAlpha(appTheme.textMutedColor, 0.55);
+        return card.withAlpha(appTheme.textMutedColor, 0.75);
+    }
+
     readonly property int totalItems: model ? model.length : 0
     readonly property bool hasOverflow: totalItems > previewLimit
     property bool showAll: false
@@ -200,49 +211,51 @@ Item {
                         readonly property bool isSelected: entryLabel === card.selectedLabel
                                                           && card.selectedLabel !== ""
 
-                        height: 26
-                        radius: 13
-                        implicitWidth: chipRow.implicitWidth + 20
+                        id: chip
+                        height: 36
+                        radius: 18
+                        implicitWidth: chipRow.implicitWidth + 26
                         color: isSelected
-                            ? Qt.rgba(card.accentColor.r, card.accentColor.g, card.accentColor.b, 0.35)
-                            : Qt.rgba(card.accentColor.r, card.accentColor.g, card.accentColor.b, 0.12)
+                            ? card.withAlpha(appTheme.selectedTintColor, 0.26)
+                            : chipHitArea.containsMouse
+                                ? card.withAlpha(appTheme.hoverColor, 0.92)
+                                : card.withAlpha(appTheme.bgBaseColor, 0.82)
+                        border.width: 1
+                        border.color: isSelected
+                            ? card.withAlpha(card.accentColor, 0.55)
+                            : card.withAlpha(appTheme.glassStrokeColor, 0.7)
 
                         MouseArea {
+                            id: chipHitArea
                             anchors.fill: parent
                             cursorShape: Qt.PointingHandCursor
+                            hoverEnabled: true
                             onClicked: card.barClicked(entryLabel)
                         }
 
                         Row {
                             id: chipRow
                             anchors.centerIn: parent
-                            spacing: 5
+                            spacing: 4
 
                             Label {
                                 text: entryLabel
-                                color: isSelected ? appTheme.textColor : appTheme.textMutedColor
+                                color: isSelected ? card.accentColor : appTheme.textColor
                                 font.family: appTheme.uiFontFamily
                                 font.pixelSize: 11
-                                font.weight: isSelected ? 600 : 400
+                                font.weight: isSelected ? 700 : 600
                                 anchors.verticalCenter: parent.verticalCenter
                             }
 
-                            Rectangle {
+                            Label {
+                                text: "(" + entryCount + ")"
+                                color: isSelected
+                                    ? card.withAlpha(card.accentColor, 0.92)
+                                    : appTheme.textMutedColor
+                                font.family: appTheme.dataFontFamily
+                                font.pixelSize: 11
+                                font.weight: 600
                                 anchors.verticalCenter: parent.verticalCenter
-                                width: countBadge.implicitWidth + 8
-                                height: 16
-                                radius: 8
-                                color: Qt.rgba(card.accentColor.r, card.accentColor.g, card.accentColor.b, 0.25)
-
-                                Label {
-                                    id: countBadge
-                                    anchors.centerIn: parent
-                                    text: entryCount
-                                    color: appTheme.textColor
-                                    font.family: appTheme.dataFontFamily
-                                    font.pixelSize: 10
-                                    font.weight: 600
-                                }
                             }
                         }
                     }
@@ -269,7 +282,7 @@ Item {
                 delegate: Item {
                     required property int index
                     Layout.fillWidth: true
-                    implicitHeight: 22
+                    implicitHeight: 42
 
                     readonly property var entry: card.model[index]
                     readonly property string entryLabel: entry ? String(entry.label) : ""
@@ -277,30 +290,37 @@ Item {
                     readonly property bool isSelected: entryLabel === card.selectedLabel
                                                       && card.selectedLabel !== ""
 
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: 6
+                        color: isSelected
+                            ? card.withAlpha(appTheme.bgBaseColor, 0.92)
+                            : dotHitArea.containsMouse
+                                ? card.withAlpha(appTheme.hoverColor, 0.86)
+                                : "transparent"
+                        border.width: isSelected ? 1 : 0
+                        border.color: card.withAlpha(card.accentColor, 0.42)
+                    }
+
                     MouseArea {
+                        id: dotHitArea
                         anchors.fill: parent
                         cursorShape: Qt.PointingHandCursor
                         hoverEnabled: true
                         onClicked: card.barClicked(entryLabel)
-
-                        Rectangle {
-                            anchors.fill: parent
-                            radius: 3
-                            color: "#FFFFFF"
-                            opacity: parent.containsMouse ? 0.04 : 0
-                        }
                     }
 
                     RowLayout {
                         anchors.fill: parent
-                        spacing: 8
+                        anchors.leftMargin: 12
+                        anchors.rightMargin: 12
+                        spacing: 10
 
                         Rectangle {
-                            width: 6
-                            height: 6
-                            radius: 3
-                            color: card.accentColor
-                            opacity: isSelected ? 1.0 : 0.65
+                            implicitWidth: 9
+                            implicitHeight: 9
+                            radius: 4.5
+                            color: card.lensDotColor(index, isSelected)
                             Layout.alignment: Qt.AlignVCenter
                         }
 
@@ -308,20 +328,20 @@ Item {
                             Layout.fillWidth: true
                             text: entryLabel
                             color: isSelected ? appTheme.textColor
-                                              : Qt.rgba(appTheme.textColor.r,
-                                                        appTheme.textColor.g,
-                                                        appTheme.textColor.b, 0.75)
+                                              : card.withAlpha(appTheme.textColor, 0.78)
                             font.family: appTheme.dataFontFamily
-                            font.pixelSize: 11
-                            font.weight: isSelected ? 600 : 400
+                            font.pixelSize: 12
+                            font.weight: isSelected ? 600 : 500
                             elide: Text.ElideRight
                         }
 
                         Label {
                             text: entryCount
-                            color: appTheme.textMutedColor
+                            color: isSelected
+                                ? card.withAlpha(appTheme.textColor, 0.82)
+                                : appTheme.textMutedColor
                             font.family: appTheme.dataFontFamily
-                            font.pixelSize: 11
+                            font.pixelSize: 12
                             font.weight: 500
                         }
                     }
@@ -359,25 +379,42 @@ Item {
                         : false
 
                     // Year row
-                    RowLayout {
+                    Rectangle {
                         Layout.fillWidth: true
+                        implicitHeight: 38
+                        radius: 18
+                        color: isYearSelected
+                            ? card.withAlpha(appTheme.selectedTintColor, 0.24)
+                            : card.withAlpha(appTheme.bgBaseColor, 0.82)
+                        border.width: 1
+                        border.color: isYearSelected
+                            ? card.withAlpha(card.accentColor, 0.5)
+                            : card.withAlpha(appTheme.glassStrokeColor, 0.7)
 
-                        Label {
-                            text: group ? group.year : ""
-                            color: isYearSelected ? appTheme.textColor : appTheme.textMutedColor
-                            font.family: appTheme.uiFontFamily
-                            font.pixelSize: 12
-                            font.weight: isYearSelected ? 700 : 500
-                        }
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.leftMargin: 14
+                            anchors.rightMargin: 14
 
-                        Item { Layout.fillWidth: true }
+                            Label {
+                                text: group ? group.year : ""
+                                color: isYearSelected ? card.accentColor : appTheme.textColor
+                                font.family: appTheme.uiFontFamily
+                                font.pixelSize: 12
+                                font.weight: isYearSelected ? 700 : 600
+                            }
 
-                        Label {
-                            text: group ? group.total : 0
-                            color: appTheme.textMutedColor
-                            font.family: appTheme.dataFontFamily
-                            font.pixelSize: 11
-                            font.weight: 500
+                            Item { Layout.fillWidth: true }
+
+                            Label {
+                                text: group ? "(" + group.total + ")" : ""
+                                color: isYearSelected
+                                    ? card.withAlpha(card.accentColor, 0.92)
+                                    : appTheme.textMutedColor
+                                font.family: appTheme.dataFontFamily
+                                font.pixelSize: 11
+                                font.weight: 600
+                            }
                         }
                     }
 
@@ -401,16 +438,25 @@ Item {
                                         ? pill.label === card.selectedLabel
                                         : false
 
-                                    height: 22
-                                    radius: 11
-                                    implicitWidth: pillRow.implicitWidth + 14
+                                    id: monthPill
+                                    height: 30
+                                    radius: 15
+                                    implicitWidth: pillRow.implicitWidth + 20
                                     color: isSelected
-                                        ? Qt.rgba(card.accentColor.r, card.accentColor.g, card.accentColor.b, 0.38)
-                                        : Qt.rgba(card.accentColor.r, card.accentColor.g, card.accentColor.b, 0.10)
+                                        ? card.withAlpha(appTheme.selectedTintColor, 0.24)
+                                        : monthHitArea.containsMouse
+                                            ? card.withAlpha(appTheme.hoverColor, 0.92)
+                                            : card.withAlpha(appTheme.bgBaseColor, 0.82)
+                                    border.width: 1
+                                    border.color: isSelected
+                                        ? card.withAlpha(card.accentColor, 0.5)
+                                        : card.withAlpha(appTheme.glassStrokeColor, 0.7)
 
                                     MouseArea {
+                                        id: monthHitArea
                                         anchors.fill: parent
                                         cursorShape: Qt.PointingHandCursor
+                                        hoverEnabled: true
                                         onClicked: card.barClicked(pill ? pill.label : "")
                                     }
 
@@ -421,21 +467,21 @@ Item {
 
                                         Label {
                                             text: pill ? card.monthAbbr(pill.month) : ""
-                                            color: isSelected ? appTheme.textColor : appTheme.textMutedColor
+                                            color: isSelected ? card.accentColor : appTheme.textColor
                                             font.family: appTheme.uiFontFamily
-                                            font.pixelSize: 10
-                                            font.weight: isSelected ? 600 : 400
+                                            font.pixelSize: 11
+                                            font.weight: isSelected ? 700 : 600
                                             anchors.verticalCenter: parent.verticalCenter
                                         }
 
                                         Label {
-                                            text: pill ? pill.count : ""
+                                            text: pill ? "(" + pill.count + ")" : ""
                                             color: isSelected
-                                                ? Qt.rgba(card.accentColor.r, card.accentColor.g, card.accentColor.b, 0.9)
+                                                ? card.withAlpha(card.accentColor, 0.92)
                                                 : appTheme.textMutedColor
                                             font.family: appTheme.dataFontFamily
-                                            font.pixelSize: 10
-                                            font.weight: 500
+                                            font.pixelSize: 11
+                                            font.weight: 600
                                             anchors.verticalCenter: parent.verticalCenter
                                         }
                                     }
