@@ -961,14 +961,8 @@ ApplicationWindow {
                     ToolTip.text: inspectorVisible ? qsTr("Collapse Inspector") : qsTr("Expand Inspector")
                     background: Rectangle {
                         radius: root.controlRadius
-                        color: root.secondaryButtonFill(
-                            inspectorToggleButton.enabled,
-                            inspectorToggleButton.hovered,
-                            inspectorToggleButton.down)
-                        border.width: 1
-                        border.color: inspectorVisible
-                                      ? root.withAlpha(root.colButtonHighlight, 0.40)
-                                      : root.colButtonSecondaryBorder
+                        color: "transparent"
+                        border.width: 0
                     }
                     onContentItemChanged: {
                         inspectorIconRotate.target = contentItem
