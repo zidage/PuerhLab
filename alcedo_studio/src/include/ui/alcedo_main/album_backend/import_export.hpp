@@ -6,6 +6,7 @@
 
 #include <QStringList>
 #include <QVariantList>
+#include <QVariantMap>
 
 #include <filesystem>
 #include <memory>
@@ -71,6 +72,7 @@ class ImportExportHandler {
   [[nodiscard]] auto export_error_summary() const -> QString {
     return export_error_summary_text_.Render();
   }
+  [[nodiscard]] auto export_item_statuses() const -> QVariantMap { return export_item_statuses_; }
   [[nodiscard]] int  export_total() const { return export_total_; }
   [[nodiscard]] int  export_completed() const { return export_completed_; }
   [[nodiscard]] int  export_succeeded() const { return export_succeeded_; }
@@ -107,6 +109,7 @@ class ImportExportHandler {
   QString default_export_folder_{};
   i18n::LocalizedText export_status_text_{};
   i18n::LocalizedText export_error_summary_text_{};
+  QVariantMap export_item_statuses_{};
   int     export_total_         = 0;
   int     export_completed_     = 0;
   int     export_succeeded_     = 0;

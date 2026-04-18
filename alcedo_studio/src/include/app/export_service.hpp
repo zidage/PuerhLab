@@ -42,6 +42,11 @@ struct ExportProgress {
   size_t completed_ = 0;
   size_t succeeded_ = 0;
   size_t failed_    = 0;
+  sl_element_id_t sleeve_id_ = 0;
+  image_id_t      image_id_  = 0;
+  bool            task_started_  = false;
+  bool            task_finished_ = false;
+  bool            task_success_  = false;
 };
 
 class ExportService {

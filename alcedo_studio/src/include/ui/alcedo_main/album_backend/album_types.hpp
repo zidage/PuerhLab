@@ -77,6 +77,7 @@ struct ExportQueueBuildResult {
   int     queued_count_  = 0;
   int     skipped_count_ = 0;
   QString first_error_{};
+  std::vector<ExportTarget> queued_targets_{};
 };
 
 }  // namespace alcedo::ui

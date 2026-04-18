@@ -57,6 +57,11 @@ auto SanitizeBitDepth(ImageFormatType format,
   }
 }
 
+auto ExportStatusKey(const sl_element_id_t elementId, const image_id_t imageId) -> QString {
+  return QString::number(static_cast<qulonglong>(elementId)) + ":" +
+         QString::number(static_cast<qulonglong>(imageId));
+}
+
 }  // namespace
 
 ImportExportHandler::ImportExportHandler(AlbumBackend& backend) : backend_(backend) {
@@ -302,6 +307,11 @@ void ImportExportHandler::StartExportWithOptionsForTargets(
     return;
   }
 
+  export_item_statuses_.clear();
+  for (const auto& [elementId, imageId] : queue_result.queued_targets_) {
+    export_item_statuses_.insert(ExportStatusKey(elementId, imageId), QStringLiteral("queued"));
+  }
+
   export_inflight_ = true;
   export_total_    = queue_result.queued_count_;
   export_skipped_  = queue_result.skipped_count_;
@@ -324,25 +334,50 @@ void ImportExportHandler::StartExportWithOptionsForTargets(
             [self, progress]() {
               if (!self) return;
               auto& ie = self->import_export_;
-              const int completed =
-                  static_cast<int>(std::min(progress.completed_, progress.total_));
-              if (completed < ie.export_completed_) return;
+              bool state_changed = false;
 
-              ie.export_total_     = static_cast<int>(std::max<size_t>(progress.total_, 1));
-              ie.export_completed_ = completed;
-              ie.export_succeeded_ = static_cast<int>(progress.succeeded_);
-              ie.export_failed_    = static_cast<int>(progress.failed_);
-              ie.export_status_text_ =
-                  PL_TEXT("Exporting... processed %1/%2, written %3, failed %4.",
-                          ie.export_completed_, ie.export_total_, ie.export_succeeded_,
-                          ie.export_failed_);
-              emit self->ExportStateChanged();
+              if (progress.sleeve_id_ != 0 && progress.image_id_ != 0 &&
+                  (progress.task_started_ || progress.task_finished_)) {
+                const QString status_key = ExportStatusKey(progress.sleeve_id_, progress.image_id_);
+                if (progress.task_started_) {
+                  ie.export_item_statuses_.insert(status_key, QStringLiteral("running"));
+                  state_changed = true;
+                }
+                if (progress.task_finished_) {
+                  ie.export_item_statuses_.insert(
+                      status_key,
+                      progress.task_success_ ? QStringLiteral("succeeded")
+                                             : QStringLiteral("failed"));
+                  state_changed = true;
+                }
+              }
 
-              const int percent =
-                  ie.export_total_ > 0
-                      ? (ie.export_completed_ * 100) / ie.export_total_
-                      : 0;
-              self->SetTaskState(ie.export_status_text_, percent, false);
+              if (progress.task_finished_) {
+                const int completed =
+                    static_cast<int>(std::min(progress.completed_, progress.total_));
+                if (completed >= ie.export_completed_) {
+                  ie.export_total_     = static_cast<int>(std::max<size_t>(progress.total_, 1));
+                  ie.export_completed_ = completed;
+                  ie.export_succeeded_ = static_cast<int>(progress.succeeded_);
+                  ie.export_failed_    = static_cast<int>(progress.failed_);
+                  ie.export_status_text_ =
+                      PL_TEXT("Exporting... processed %1/%2, written %3, failed %4.",
+                              ie.export_completed_, ie.export_total_, ie.export_succeeded_,
+                              ie.export_failed_);
+
+                  const int percent =
+                      ie.export_total_ > 0
+                          ? (ie.export_completed_ * 100) / ie.export_total_
+                          : 0;
+                  self->SetTaskState(ie.export_status_text_, percent, false);
+                  state_changed = true;
+                }
+              }
+
+              if (state_changed) {
+                emit self->ExportStateChanged();
+                emit self->exportStateChanged();
+              }
             },
             Qt::QueuedConnection);
       },
@@ -612,6 +647,7 @@ auto ImportExportHandler::BuildExportQueue(
 
       esvc->EnqueueExportTask(task);
       ++summary.queued_count_;
+      summary.queued_targets_.emplace_back(elementId, imageId);
     } catch (const std::exception& e) {
       ++summary.skipped_count_;
       if (summary.first_error_.isEmpty()) {
@@ -630,6 +666,7 @@ auto ImportExportHandler::BuildExportQueue(
 void ImportExportHandler::ResetExportProgressState(const i18n::LocalizedText& status) {
   export_status_text_        = status;
   export_error_summary_text_ = {};
+  export_item_statuses_.clear();
   export_total_              = 0;
   export_completed_          = 0;
   export_succeeded_          = 0;
@@ -642,6 +679,7 @@ void ImportExportHandler::ResetExportProgressState(const i18n::LocalizedText& st
 void ImportExportHandler::SetExportFailureState(const i18n::LocalizedText& message) {
   export_status_text_        = message;
   export_error_summary_text_ = {};
+  export_item_statuses_.clear();
   emit backend_.ExportStateChanged();
   emit backend_.exportStateChanged();
   backend_.SetTaskState(message, 0, false);

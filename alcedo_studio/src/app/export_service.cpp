@@ -133,6 +133,21 @@ void ExportService::ExportAll(
     // Export in thread pool
     export_thread_pool_.Submit([this, task, results, progress_callback, callback, completed,
                                 succeeded, failed, queue_size]() {
+      if (progress_callback) {
+        try {
+          progress_callback(ExportProgress{
+              .total_        = queue_size,
+              .completed_    = completed->load(std::memory_order_acquire),
+              .succeeded_    = succeeded->load(std::memory_order_acquire),
+              .failed_       = failed->load(std::memory_order_acquire),
+              .sleeve_id_    = task.sleeve_id_,
+              .image_id_     = task.image_id_,
+              .task_started_ = true,
+          });
+        } catch (...) {
+        }
+      }
+
       ExportResult result;
       // Do export, this call will block until done
       try {
@@ -164,10 +179,14 @@ void ExportService::ExportAll(
       if (progress_callback) {
         try {
           progress_callback(ExportProgress{
-              .total_     = queue_size,
-              .completed_ = finished,
-              .succeeded_ = succeeded->load(std::memory_order_acquire),
-              .failed_    = failed->load(std::memory_order_acquire),
+              .total_         = queue_size,
+              .completed_     = finished,
+              .succeeded_     = succeeded->load(std::memory_order_acquire),
+              .failed_        = failed->load(std::memory_order_acquire),
+              .sleeve_id_     = task.sleeve_id_,
+              .image_id_      = task.image_id_,
+              .task_finished_ = true,
+              .task_success_  = export_ok,
           });
         } catch (...) {
         }

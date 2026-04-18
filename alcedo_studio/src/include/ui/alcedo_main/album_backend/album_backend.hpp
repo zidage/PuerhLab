@@ -59,6 +59,7 @@ class AlbumBackend final : public QObject {
   Q_PROPERTY(QString importStatus READ ImportStatus NOTIFY ImportStateChanged)
   Q_PROPERTY(bool exportInFlight READ ExportInFlight NOTIFY ExportStateChanged)
   Q_PROPERTY(QString exportStatus READ ExportStatus NOTIFY ExportStateChanged)
+  Q_PROPERTY(QVariantMap exportItemStatuses READ ExportItemStatuses NOTIFY ExportStateChanged)
   Q_PROPERTY(int exportTotal READ ExportTotal NOTIFY ExportStateChanged)
   Q_PROPERTY(int exportCompleted READ ExportCompleted NOTIFY ExportStateChanged)
   Q_PROPERTY(int exportSucceeded READ ExportSucceeded NOTIFY ExportStateChanged)
@@ -125,6 +126,7 @@ class AlbumBackend final : public QObject {
   QString ImportStatus() const { return import_export_.import_status(); }
   bool ExportInFlight() const { return import_export_.export_inflight(); }
   QString ExportStatus() const { return import_export_.export_status(); }
+  QVariantMap ExportItemStatuses() const { return import_export_.export_item_statuses(); }
   int ExportTotal() const { return import_export_.export_total(); }
   int ExportCompleted() const { return import_export_.export_completed(); }
   int ExportSucceeded() const { return import_export_.export_succeeded(); }

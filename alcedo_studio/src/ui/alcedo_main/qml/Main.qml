@@ -116,10 +116,10 @@ ApplicationWindow {
     property bool gridMode: true
     readonly property bool backendInteractive: albumBackend.serviceReady && !albumBackend.projectLoading
     readonly property var selectedImagesById: selectionState.selectedImagesById
-    readonly property var exportQueueById: selectionState.exportQueueById
-    readonly property var exportPreviewRows: selectionState.exportPreviewRows
+    readonly property var exportQueueById: exportQueueState.exportQueueById
+    readonly property var exportPreviewRows: exportQueueState.exportPreviewRows
     readonly property int selectedCount: selectionState.selectedCount
-    readonly property int exportQueueCount: selectionState.exportQueueCount
+    readonly property int exportQueueCount: exportQueueState.exportQueueCount
     readonly property var languageOptions: languageManager.availableLanguages
     property int pendingThemeIndex: appTheme.currentThemeIndex
     property string pendingLanguageCode: languageManager.currentLanguageCode
@@ -129,6 +129,7 @@ ApplicationWindow {
     property string snackbarText: ""
     property bool importSessionObserved: false
     property bool exportSessionObserved: false
+    property int lastObservedExportCompleted: 0
     property bool welcomeDismissedForLaunch: false
     property var imageDetailsData: ({
         title: "",
@@ -264,6 +265,7 @@ ApplicationWindow {
         const deletedIds = (result && result.deletedElementIds) ? result.deletedElementIds : []
         if (deletedIds.length > 0) {
             selectionState.pruneDeletedElements(deletedIds)
+            exportQueueState.pruneDeletedElements(deletedIds)
         }
         root.pendingDeleteTargets = []
     }
@@ -287,13 +289,14 @@ ApplicationWindow {
         imageDetailsDialog.open()
     }
 
+    ExportQueueState {
+        id: exportQueueState
+    }
+
     QtObject {
         id: selectionState
         property var selectedImagesById: ({})
-        property var exportQueueById: ({})
-        property var exportPreviewRows: []
         readonly property int selectedCount: Object.keys(selectedImagesById).length
-        readonly property int exportQueueCount: Object.keys(exportQueueById).length
 
         function keyForElement(elementId) {
             return String(Number(elementId))
@@ -337,27 +340,6 @@ ApplicationWindow {
             selectedImagesById = next
         }
 
-        function addSelectedToExportQueue() {
-            const selected = Object.values(selectedImagesById)
-            if (selected.length === 0) {
-                return
-            }
-
-            const next = Object.assign({}, exportQueueById)
-            for (let i = 0; i < selected.length; ++i) {
-                const item = selected[i]
-                next[keyForElement(item.elementId)] = item
-            }
-            exportQueueById = next
-            clearSelectedImages()
-            refreshExportPreview()
-        }
-
-        function clearExportQueue() {
-            exportQueueById = ({})
-            refreshExportPreview()
-        }
-
         function pruneDeletedElements(elementIds) {
             if (!elementIds || elementIds.length === 0) {
                 return
@@ -378,50 +360,6 @@ ApplicationWindow {
                 }
             }
             selectedImagesById = nextSelected
-
-            const nextQueue = {}
-            const queueRows = Object.values(exportQueueById)
-            for (let i = 0; i < queueRows.length; ++i) {
-                const row = queueRows[i]
-                const key = keyForElement(row.elementId)
-                if (!deleted[key]) {
-                    nextQueue[key] = row
-                }
-            }
-            exportQueueById = nextQueue
-            refreshExportPreview()
-        }
-
-        function exportQueueTargets() {
-            const rows = Object.values(exportQueueById)
-            const targets = []
-            for (let i = 0; i < rows.length; ++i) {
-                targets.push({
-                    elementId: rows[i].elementId,
-                    imageId: rows[i].imageId
-                })
-            }
-            return targets
-        }
-
-        function refreshExportPreview() {
-            const src = Object.values(exportQueueById)
-            src.sort((a, b) => String(a.fileName).localeCompare(String(b.fileName)))
-            const next = []
-            const previewCount = Math.min(12, src.length)
-            for (let i = 0; i < previewCount; ++i) {
-                const item = src[i]
-                next.push({
-                    label: qsTr("Image #%1  Sleeve #%2  %3")
-                        .arg(item.imageId)
-                        .arg(item.elementId)
-                        .arg(item.fileName)
-                })
-            }
-            if (src.length > previewCount) {
-                next.push({ label: qsTr("... and %1 more").arg(src.length - previewCount) })
-            }
-            exportPreviewRows = next
         }
     }
 
@@ -444,14 +382,18 @@ ApplicationWindow {
 
     AlbumExportDialog {
         id: exportDialog
+        blurSource: mainContent
         selectedCount: root.selectedCount
         exportQueueCount: root.exportQueueCount
         exportPreviewRows: root.exportPreviewRows
         hdrExportAvailable: root.exportQueueCount > 0
             && albumBackend.CanUseHdrExportForTargets(Object.values(root.exportQueueById))
-        onAddSelectedToQueueRequested: selectionState.addSelectedToExportQueue()
-        onClearQueueRequested: selectionState.clearExportQueue()
-        onEnsurePreviewRequested: selectionState.refreshExportPreview()
+        onAddSelectedToQueueRequested: {
+            exportQueueState.addTargets(Object.values(selectionState.selectedImagesById))
+            selectionState.clearSelectedImages()
+        }
+        onClearQueueRequested: exportQueueState.clearQueue()
+        onEnsurePreviewRequested: exportQueueState.refreshExportPreview()
         onStartExportRequested: function(outDir, format, hdrExportMode, resizeEnabled, maxSide, quality, bitDepth, pngLevel, tiffComp) {
             albumBackend.StartExportWithOptionsForTargets(
                 outDir,
@@ -463,7 +405,7 @@ ApplicationWindow {
                 bitDepth,
                 pngLevel,
                 tiffComp,
-                selectionState.exportQueueTargets())
+                exportQueueState.exportQueueTargets())
         }
     }
 
@@ -769,7 +711,7 @@ ApplicationWindow {
             root.welcomeDismissedForLaunch = false
             root.updateWelcomeDialogVisibility()
             selectionState.clearSelectedImages()
-            selectionState.clearExportQueue()
+            exportQueueState.clearQueue()
             root.pendingDeleteTargets = []
             root.pendingDetailsTarget = ({})
             deleteConfirmDialog.close()
@@ -794,7 +736,7 @@ ApplicationWindow {
         }
         function onThumbnailsChanged() {
             if (exportDialog.visible) {
-                selectionState.refreshExportPreview()
+                exportQueueState.refreshExportPreview()
             }
         }
         function onImportStateChanged() {
@@ -811,8 +753,14 @@ ApplicationWindow {
         function onExportStateChanged() {
             if (albumBackend.exportInFlight) {
                 root.exportSessionObserved = true
+                if (albumBackend.exportCompleted > root.lastObservedExportCompleted) {
+                    exportQueueState.pruneCompleted(albumBackend.exportItemStatuses)
+                    root.lastObservedExportCompleted = albumBackend.exportCompleted
+                }
                 return
             }
+            exportQueueState.pruneCompleted(albumBackend.exportItemStatuses)
+            root.lastObservedExportCompleted = 0
             if (!root.exportSessionObserved) {
                 return
             }
@@ -896,7 +844,7 @@ ApplicationWindow {
                     spacing: 0
                     Label { text: qsTr("Alcedo"); font.family: root.headlineFontFamily; font.pixelSize: 19; font.weight: 700; color: root.colAccentPrimary }
                     Label { text: " "; font.family: root.headlineFontFamily; font.pixelSize: 19; font.weight: 700 }
-                    Label { text: qsTr("Lab"); font.family: root.headlineFontFamily; font.pixelSize: 19; font.weight: 700; color: root.colText }
+                    Label { text: qsTr("Studio"); font.family: root.headlineFontFamily; font.pixelSize: 19; font.weight: 700; color: root.colText }
                 }
                 Item { Layout.preferredWidth: 12 }
 
@@ -1542,7 +1490,10 @@ ApplicationWindow {
                             Material.foreground: root.colText
                             scale: addSelectedBtn.hovered && enabled ? 1.03 : 1.0
                             Behavior on scale { NumberAnimation { duration: 100; easing.type: Easing.OutCubic } }
-                            onClicked: selectionState.addSelectedToExportQueue()
+                            onClicked: {
+                                exportQueueState.addTargets(Object.values(selectionState.selectedImagesById))
+                                selectionState.clearSelectedImages()
+                            }
                         }
 
                         Button {
@@ -1590,7 +1541,7 @@ ApplicationWindow {
                             scale: exportQueueBtn.hovered && enabled ? 1.03 : 1.0
                             Behavior on scale { NumberAnimation { duration: 100; easing.type: Easing.OutCubic } }
                             onClicked: {
-                                selectionState.refreshExportPreview()
+                                exportQueueState.refreshExportPreview()
                                 exportDialog.open()
                             }
                         }
