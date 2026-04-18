@@ -1,6 +1,36 @@
 #include "ui/alcedo_main/editor_dialog/dialog_internal.hpp"
 
 namespace alcedo::ui {
+namespace {
+
+auto LoadScopeExifDisplayMetaData(const std::shared_ptr<ImagePoolService>& image_pool,
+                                  image_id_t image_id) -> ExifDisplayMetaData {
+  if (!image_pool || image_id == 0) {
+    return {};
+  }
+
+  try {
+    return image_pool->Read<ExifDisplayMetaData>(
+        image_id, [](const std::shared_ptr<Image>& image) -> ExifDisplayMetaData {
+          if (!image) {
+            return {};
+          }
+          if (image->has_exif_display_.load()) {
+            return image->exif_display_;
+          }
+          if (image->has_exif_json_.load()) {
+            ExifDisplayMetaData metadata;
+            metadata.FromJson(image->exif_json_);
+            return metadata;
+          }
+          return {};
+        });
+  } catch (...) {
+    return {};
+  }
+}
+
+}  // namespace
 
 EditorDialog::EditorDialog(std::shared_ptr<ImagePoolService>       image_pool,
                std::shared_ptr<PipelineGuard>          pipeline_guard,
@@ -32,6 +62,9 @@ EditorDialog::EditorDialog(std::shared_ptr<ImagePoolService>       image_pool,
 
     // --- EditorDialog UI construction. ---
     BuildViewerAndPanelShell();
+    if (scope_panel_) {
+      scope_panel_->SetExifDisplayMetaData(LoadScopeExifDisplayMetaData(image_pool_, image_id_));
+    }
     BuildToneControlPanel();
     BuildDisplayTransformPanel();
     BuildGeometryRawPanels();

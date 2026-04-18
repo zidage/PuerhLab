@@ -4,13 +4,16 @@
 
 #include "ui/alcedo_main/editor_dialog/scope/scope_panel.hpp"
 
+#include <QComboBox>
 #include <QCoreApplication>
 #include <QHBoxLayout>
 #include <QLabel>
-#include <QPushButton>
+#include <QSignalBlocker>
 #include <QStackedWidget>
 #include <QTimer>
 #include <QVBoxLayout>
+
+#include <cmath>
 
 #include "ui/alcedo_main/app_theme.hpp"
 #include "ui/alcedo_main/editor_dialog/scope/scope_plot_widgets.hpp"
@@ -29,68 +32,115 @@ constexpr int kDefaultWaveformHeight     = 192;
 constexpr int kDefaultAnalysisDownsample = 4;
 constexpr int kDefaultTargetFps          = 20;
 
+auto FormatCompactFloat(float value) -> QString {
+  const float rounded = std::round(value);
+  if (std::fabs(value - rounded) < 0.05f) {
+    return QString::number(static_cast<int>(rounded));
+  }
+  return QString::number(value, 'f', 1);
+}
+
+auto FormatExifIso(const ExifDisplayMetaData& metadata) -> QString {
+  if (metadata.iso_ == 0) {
+    return QStringLiteral("ISO --");
+  }
+  return QStringLiteral("ISO %1").arg(static_cast<qulonglong>(metadata.iso_));
+}
+
+auto FormatExifFocalLength(const ExifDisplayMetaData& metadata) -> QString {
+  if (!std::isfinite(metadata.focal_) || metadata.focal_ <= 0.0f) {
+    return QStringLiteral("--");
+  }
+  return QStringLiteral("%1mm").arg(FormatCompactFloat(metadata.focal_));
+}
+
+auto FormatExifAperture(const ExifDisplayMetaData& metadata) -> QString {
+  if (!std::isfinite(metadata.aperture_) || metadata.aperture_ <= 0.0f) {
+    return QStringLiteral("f/--");
+  }
+  return QStringLiteral("f/%1").arg(FormatCompactFloat(metadata.aperture_));
+}
+
+auto FormatExifShutter(const ExifDisplayMetaData& metadata) -> QString {
+  const int numerator   = metadata.shutter_speed_.first;
+  const int denominator = metadata.shutter_speed_.second;
+  if (numerator <= 0 || denominator <= 0) {
+    return QStringLiteral("--");
+  }
+  if (denominator == 1) {
+    return QStringLiteral("%1s").arg(numerator);
+  }
+  if (numerator == 1) {
+    return QStringLiteral("1/%1s").arg(denominator);
+  }
+  return QStringLiteral("%1/%2s").arg(numerator).arg(denominator);
+}
+
 }  // namespace
 
 ScopePanel::ScopePanel(QWidget* parent) : QWidget(parent) {
+  const auto& theme = AppTheme::Instance();
+
   auto* root = new QVBoxLayout(this);
   root->setContentsMargins(14, 12, 14, 12);
-  root->setSpacing(10);
+  root->setSpacing(12);
 
-  auto* header = new QHBoxLayout();
-  auto* title = new QLabel(TrScope("Scopes"), this);
+  auto* title = new QLabel(TrScope("Scope"), this);
   title->setObjectName("EditorSectionTitle");
-  backend_status_label_ = new QLabel(TrScope("Backend unavailable"), this);
-  backend_status_label_->setObjectName("EditorSectionSub");
-  header->addWidget(title, 1);
-  header->addWidget(backend_status_label_, 0, Qt::AlignRight);
-  root->addLayout(header);
+  root->addWidget(title, 0);
 
-  auto* scope_switch_row = new QWidget(this);
-  auto* scope_switch_layout = new QHBoxLayout(scope_switch_row);
-  scope_switch_layout->setContentsMargins(0, 0, 0, 0);
-  scope_switch_layout->setSpacing(8);
-
-  histogram_switch_btn_ = new QPushButton(TrScope("Histogram"), scope_switch_row);
-  waveform_switch_btn_  = new QPushButton(TrScope("Waveform"), scope_switch_row);
-  histogram_switch_btn_->setCheckable(true);
-  waveform_switch_btn_->setCheckable(true);
-  histogram_switch_btn_->setCursor(Qt::PointingHandCursor);
-  waveform_switch_btn_->setCursor(Qt::PointingHandCursor);
-  histogram_switch_btn_->setFixedHeight(30);
-  waveform_switch_btn_->setFixedHeight(30);
-  const auto& theme = AppTheme::Instance();
-  scope_switch_row->setStyleSheet(
+  scope_type_combo_ = new QComboBox(this);
+  scope_type_combo_->addItem(TrScope("Histogram"));
+  scope_type_combo_->addItem(TrScope("Waveform"));
+  scope_type_combo_->setCursor(Qt::PointingHandCursor);
+  scope_type_combo_->setFixedHeight(44);
+  scope_type_combo_->setMinimumWidth(180);
+  scope_type_combo_->setMaximumWidth(260);
+  scope_type_combo_->setStyleSheet(
       QStringLiteral(
-          "QPushButton {"
+          "QComboBox {"
           "  background: %1;"
           "  color: %2;"
-          "  border: 1px solid %3;"
-          "  border-radius: 10px;"
-          "  padding: 6px 10px;"
+          "  border: none;"
+          "  border-radius: 12px;"
+          "  padding: 0 14px;"
           "}"
-          "QPushButton:hover {"
-          "  border-color: %4;"
-          "  background: %5;"
-          "  color: %6;"
+          "QComboBox:hover {"
+          "  background: %3;"
           "}"
-          "QPushButton:checked {"
-          "  background: %7;"
-          "  color: %8;"
-          "  border-color: %9;"
-          "  font-weight: 600;"
+          "QComboBox::drop-down {"
+          "  border: 0px;"
+          "  width: 28px;"
+          "}"
+          "QComboBox QAbstractItemView {"
+          "  background: %4;"
+          "  color: %2;"
+          "  border: 1px solid %5;"
+          "  selection-background-color: %6;"
+          "  selection-color: %7;"
+          "  outline: 0px;"
+          "}"
+          "QComboBox QAbstractItemView::item {"
+          "  min-height: 28px;"
+          "}"
+          "QComboBox QAbstractItemView::item:hover {"
+          "  background: %8;"
+          "}"
+          "QComboBox QAbstractItemView::item:selected {"
+          "  background: %6;"
+          "  color: %7;"
           "}")
-          .arg(theme.bgDeepColor().name(QColor::HexArgb), theme.textMutedColor().name(QColor::HexRgb),
+          .arg(QColor(0x38, 0x38, 0x38).name(QColor::HexRgb), theme.textColor().name(QColor::HexRgb),
+               QColor(0x42, 0x42, 0x42).name(QColor::HexRgb),
+               QColor(0x2A, 0x2A, 0x2A).name(QColor::HexRgb),
                theme.glassStrokeColor().name(QColor::HexArgb),
-               theme.accentSecondaryColor().name(QColor::HexRgb),
-               theme.hoverColor().name(QColor::HexArgb), theme.textColor().name(QColor::HexRgb),
                QColor(theme.accentColor().red(), theme.accentColor().green(),
                       theme.accentColor().blue(), 224)
                    .name(QColor::HexArgb),
                theme.bgCanvasColor().name(QColor::HexRgb),
-               theme.accentSecondaryColor().name(QColor::HexRgb)));
-  scope_switch_layout->addWidget(histogram_switch_btn_, 1);
-  scope_switch_layout->addWidget(waveform_switch_btn_, 1);
-  root->addWidget(scope_switch_row, 0);
+               QColor(0x36, 0x36, 0x36).name(QColor::HexRgb)));
+  AppTheme::MarkFontRole(scope_type_combo_, AppTheme::FontRole::UiBodyStrong);
+  root->addWidget(scope_type_combo_, 0, Qt::AlignLeft);
 
   scope_stack_ = new QStackedWidget(this);
   histogram_widget_ = new ScopeHistogramWidget(scope_stack_);
@@ -99,16 +149,33 @@ ScopePanel::ScopePanel(QWidget* parent) : QWidget(parent) {
   scope_stack_->addWidget(waveform_widget_);
   root->addWidget(scope_stack_, 1);
 
+  auto* exif_row = new QWidget(this);
+  exif_row->setStyleSheet(QStringLiteral(
+      "QWidget { background: transparent; }"
+      "QLabel { color: %1; }")
+                              .arg(theme.textMutedColor().name(QColor::HexRgb)));
+  auto* exif_layout = new QHBoxLayout(exif_row);
+  exif_layout->setContentsMargins(0, 4, 0, 0);
+  exif_layout->setSpacing(10);
+  for (QLabel*& label : exif_value_labels_) {
+    label = new QLabel(QStringLiteral("--"), exif_row);
+    label->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    AppTheme::MarkFontRole(label, AppTheme::FontRole::DataCaption);
+    exif_layout->addWidget(label, 1);
+  }
+  root->addWidget(exif_row, 0);
+
   refresh_timer_ = new QTimer(this);
   refresh_timer_->setInterval(50);
   QObject::connect(refresh_timer_, &QTimer::timeout, this, [this]() { RefreshOutputs(); });
   refresh_timer_->start();
 
-  QObject::connect(histogram_switch_btn_, &QPushButton::clicked, this,
-                   [this]() { SetActiveScopeView(ScopeView::Histogram); });
-  QObject::connect(waveform_switch_btn_, &QPushButton::clicked, this,
-                   [this]() { SetActiveScopeView(ScopeView::Waveform); });
+  QObject::connect(scope_type_combo_, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+                   [this](int index) {
+                     SetActiveScopeView(index == 0 ? ScopeView::Histogram : ScopeView::Waveform);
+                   });
 
+  RefreshExifUi();
   RefreshScopeSwitchUi();
   SetActiveScopeView(ScopeView::Histogram);
 }
@@ -116,8 +183,12 @@ ScopePanel::ScopePanel(QWidget* parent) : QWidget(parent) {
 void ScopePanel::SetAnalyzer(std::shared_ptr<IScopeAnalyzer> analyzer) {
   analyzer_ = std::move(analyzer);
   last_generation_ = 0;
-  backend_status_label_->setText(analyzer_ ? TrScope("Live") : TrScope("Backend unavailable"));
   ApplyCurrentRequest();
+}
+
+void ScopePanel::SetExifDisplayMetaData(const ExifDisplayMetaData& metadata) {
+  exif_display_ = metadata;
+  RefreshExifUi();
 }
 
 void ScopePanel::SetRequestChangedCallback(std::function<void(const ScopeRequest&)> callback) {
@@ -186,11 +257,26 @@ void ScopePanel::SetActiveScopeView(ScopeView view) {
 }
 
 void ScopePanel::RefreshScopeSwitchUi() {
-  if (histogram_switch_btn_) {
-    histogram_switch_btn_->setChecked(active_scope_view_ == ScopeView::Histogram);
+  if (scope_type_combo_) {
+    const QSignalBlocker blocker(scope_type_combo_);
+    scope_type_combo_->setCurrentIndex(active_scope_view_ == ScopeView::Histogram ? 0 : 1);
   }
-  if (waveform_switch_btn_) {
-    waveform_switch_btn_->setChecked(active_scope_view_ == ScopeView::Waveform);
+}
+
+void ScopePanel::RefreshExifUi() {
+  if (exif_value_labels_.size() < 4) {
+    return;
+  }
+
+  exif_value_labels_[0]->setText(FormatExifIso(exif_display_));
+  exif_value_labels_[1]->setText(FormatExifFocalLength(exif_display_));
+  exif_value_labels_[2]->setText(FormatExifAperture(exif_display_));
+  exif_value_labels_[3]->setText(FormatExifShutter(exif_display_));
+  for (QLabel* label : exif_value_labels_) {
+    if (!label) {
+      continue;
+    }
+    label->setToolTip(label->text());
   }
 }
 

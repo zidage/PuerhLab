@@ -15,7 +15,7 @@
 namespace alcedo::ui {
 
 ScopeHistogramWidget::ScopeHistogramWidget(QWidget* parent) : QWidget(parent) {
-  setMinimumHeight(126);
+  setMinimumHeight(184);
   setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
   setAutoFillBackground(false);
 }
