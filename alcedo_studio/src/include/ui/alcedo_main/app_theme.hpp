@@ -92,6 +92,11 @@ class AppTheme final : public QObject {
   static auto EditorListWidgetStyle() -> QString;
   static auto EditorHistoryCardStyle() -> QString;
   static auto EditorTransparentFrameStyle() -> QString;
+  static auto EditorSliderTrackColor() -> QColor;
+  static auto EditorSliderAccentColor(bool positive) -> QColor;
+  static auto EditorSliderBorderColor(bool positive) -> QColor;
+  static auto EditorSliderHandleColor() -> QColor;
+  static auto EditorSliderHandleBorderColor() -> QColor;
 
   auto uiFontFamily() const -> QString;
   auto headlineFontFamily() const -> QString;

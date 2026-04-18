@@ -265,6 +265,16 @@ auto WithAlpha(const QColor& color, int alpha) -> QColor {
   return tinted;
 }
 
+auto Blend(const QColor& a, const QColor& b, qreal ratio) -> QColor {
+  const qreal t = std::clamp(ratio, 0.0, 1.0);
+  const auto lerp = [t](int lhs, int rhs) {
+    return static_cast<int>(std::lround(lhs + (rhs - lhs) * t));
+  };
+
+  return QColor(lerp(a.red(), b.red()), lerp(a.green(), b.green()), lerp(a.blue(), b.blue()),
+                lerp(a.alpha(), b.alpha()));
+}
+
 }  // namespace
 
 AppTheme::AppTheme(QObject* parent) : QObject(parent) {}
@@ -806,6 +816,30 @@ auto AppTheme::EditorTransparentFrameStyle() -> QString {
                         "  border: none;"
                         "  border-radius: 12px;"
                         "}");
+}
+
+auto AppTheme::EditorSliderTrackColor() -> QColor {
+  const auto& theme = AppTheme::Instance();
+  return Blend(theme.bgDeepColor(), theme.bgBaseColor(), 0.35);
+}
+
+auto AppTheme::EditorSliderAccentColor(bool positive) -> QColor {
+  const auto& theme = AppTheme::Instance();
+  if (positive) {
+    return Blend(theme.accentColor(), QColor(0xD8, 0xEC, 0xFF), 0.42);
+  }
+  return Blend(theme.dangerColor(), QColor(0xFF, 0xE3, 0xE0), 0.72);
+}
+
+auto AppTheme::EditorSliderBorderColor(bool positive) -> QColor {
+  const auto accent = EditorSliderAccentColor(positive);
+  return WithAlpha(accent, positive ? 112 : 104);
+}
+
+auto AppTheme::EditorSliderHandleColor() -> QColor { return QColor(0xF1, 0xEE, 0xEA); }
+
+auto AppTheme::EditorSliderHandleBorderColor() -> QColor {
+  return WithAlpha(AppTheme::Instance().bgCanvasColor(), 228);
 }
 
 auto AppTheme::uiFontFamily() const -> QString {
