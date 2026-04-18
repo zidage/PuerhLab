@@ -1,0 +1,287 @@
+//  Copyright 2026 Yurun Zi
+//  SPDX-License-Identifier: GPL-3.0-only
+//  Additional permission under GPLv3 section 7 applies; see the LICENSE file.
+
+#include <gtest/gtest.h>
+
+#include <filesystem>
+#include <memory>
+#include <random>
+#include <stdexcept>
+#include <string>
+#include <vector>
+
+#include "app/project_service.hpp"
+#include "sleeve/sleeve_element/sleeve_element.hpp"
+#include "utils/clock/time_provider.hpp"
+#include "utils/string/convert.hpp"
+
+namespace alcedo {
+class SleeveServiceTests : public ::testing::Test {
+ protected:
+  std::filesystem::path db_path_;
+  std::filesystem::path meta_path_;
+
+  void                  SetUp() override {
+    TimeProvider::Refresh();
+    db_path_ = std::filesystem::temp_directory_path() / "sleeve_service_test.db";
+    meta_path_ = std::filesystem::temp_directory_path() / "sleeve_service_test.json";
+    if (std::filesystem::exists(db_path_)) {
+      std::filesystem::remove(db_path_);
+    }
+    if (std::filesystem::exists(meta_path_)) {
+      std::filesystem::remove(meta_path_);
+    }
+  }
+
+  void TearDown() override {
+    if (std::filesystem::exists(db_path_)) {
+      std::filesystem::remove(db_path_);
+    }
+    if (std::filesystem::exists(meta_path_)) {
+      std::filesystem::remove(meta_path_);
+    }
+  }
+};
+
+TEST_F(SleeveServiceTests, InitAndCreateTest) {
+  ProjectService project(db_path_, meta_path_);
+  auto           service      = project.GetSleeveService();
+
+  auto           write_result = service->Write<std::shared_ptr<SleeveElement>>(
+      [](FileSystem& fs) { return fs.Create(L"", L"Folder", ElementType::FOLDER); });
+  EXPECT_NE(write_result.first, nullptr);
+  EXPECT_TRUE(write_result.second.success_);
+
+  service->Write<std::shared_ptr<SleeveElement>>(
+      [](FileSystem& fs) { return fs.Create(L"/Folder", L"File", ElementType::FILE); });
+
+  auto file = service->Read<std::shared_ptr<SleeveElement>>(
+      [](FileSystem& fs) { return fs.Get(L"/Folder/File", false); });
+  ASSERT_NE(file, nullptr);
+  EXPECT_EQ(file->element_name_, L"File");
+}
+
+TEST_F(SleeveServiceTests, DeleteTest) {
+  ProjectService project(db_path_, meta_path_);
+  auto           service = project.GetSleeveService();
+
+  service->Write<std::shared_ptr<SleeveElement>>(
+      [](FileSystem& fs) { return fs.Create(L"", L"File", ElementType::FILE); });
+  service->Write<bool>([](FileSystem& fs) {
+    fs.Delete(L"/File");
+    return true;
+  });
+
+  EXPECT_THROW(service->Read<std::shared_ptr<SleeveElement>>(
+                   [](FileSystem& fs) { return fs.Get(L"/File", false); }),
+               std::runtime_error);
+}
+
+TEST_F(SleeveServiceTests, CopyTest) {
+  ProjectService project(db_path_, meta_path_);
+  auto           service = project.GetSleeveService();
+
+  service->Write<std::shared_ptr<SleeveElement>>(
+      [](FileSystem& fs) { return fs.Create(L"", L"Folder", ElementType::FOLDER); });
+  service->Write<std::shared_ptr<SleeveElement>>(
+      [](FileSystem& fs) { return fs.Create(L"/Folder", L"Subfolder", ElementType::FOLDER); });
+  service->Write<std::shared_ptr<SleeveElement>>(
+      [](FileSystem& fs) { return fs.Create(L"/Folder/Subfolder", L"Linux", ElementType::FILE); });
+
+  service->Write<bool>([](FileSystem& fs) {
+    fs.Copy(L"/Folder/Subfolder", L"/");
+    return true;
+  });
+
+  auto tree     = service->Read<std::wstring>([](FileSystem& fs) { return fs.Tree(L"/"); });
+  auto tree_str = conv::ToBytes(tree);
+  EXPECT_NE(tree_str.find("Subfolder"), std::string::npos);
+  EXPECT_NE(tree_str.find("Linux"), std::string::npos);
+}
+
+TEST_F(SleeveServiceTests, SaveLoadTest) {
+  {
+    ProjectService project(db_path_, meta_path_);
+    auto           service = project.GetSleeveService();
+    service->Write<std::shared_ptr<SleeveElement>>(
+        [](FileSystem& fs) { return fs.Create(L"", L"Folder", ElementType::FOLDER); });
+    service->Write<std::shared_ptr<SleeveElement>>(
+        [](FileSystem& fs) { return fs.Create(L"/Folder", L"File", ElementType::FILE); });
+
+    project.SaveProject(meta_path_);
+  }
+
+  ProjectService reloaded_project(db_path_, meta_path_);
+  // reloaded_project.LoadProject(meta_path_);
+  auto           reloaded_service = reloaded_project.GetSleeveService();
+  auto           file             = reloaded_service->Read<std::shared_ptr<SleeveElement>>(
+      [](FileSystem& fs) { return fs.Get(L"/Folder/File", false); });
+  ASSERT_NE(file, nullptr);
+  EXPECT_EQ(file->element_name_, L"File");
+}
+
+TEST_F(SleeveServiceTests, ResolveAndListImmediateChildrenByPath) {
+  ProjectService project(db_path_, meta_path_);
+  auto           service = project.GetSleeveService();
+
+  service->CreateFolder(L"/", L"Folder");
+  service->CreateFolder(L"/Folder", L"Nested");
+  service->Write<std::shared_ptr<SleeveElement>>(
+      [](FileSystem& fs) { return fs.Create(L"/Folder/Nested", L"Image", ElementType::FILE); });
+
+  const auto root_entries = service->ListFolderEntries(L"/");
+  ASSERT_EQ(root_entries.size(), 1u);
+  EXPECT_EQ(root_entries.front()->element_name_, L"Folder");
+  EXPECT_EQ(root_entries.front()->type_, ElementType::FOLDER);
+
+  const auto folder = service->ResolveFolder(L"/Folder");
+  ASSERT_NE(folder, nullptr);
+  EXPECT_EQ(folder->element_name_, L"Folder");
+
+  const auto nested_entries = service->ListFolderEntries(L"/Folder");
+  ASSERT_EQ(nested_entries.size(), 1u);
+  EXPECT_EQ(nested_entries.front()->element_name_, L"Nested");
+  EXPECT_EQ(nested_entries.front()->type_, ElementType::FOLDER);
+}
+
+TEST_F(SleeveServiceTests, CreateAndDeleteFolderByPathApi) {
+  ProjectService project(db_path_, meta_path_);
+  auto           service = project.GetSleeveService();
+
+  const auto created = service->CreateFolder(L"/", L"ToDelete");
+  ASSERT_NE(created.first, nullptr);
+  EXPECT_TRUE(created.second.success_);
+  EXPECT_EQ(created.first->element_name_, L"ToDelete");
+
+  const auto deleted = service->DeletePath(L"/ToDelete");
+  EXPECT_TRUE(deleted.success_);
+  EXPECT_THROW(service->ResolveFolder(L"/ToDelete"), std::runtime_error);
+}
+
+TEST_F(SleeveServiceTests, ReloadedFolderWriteDoesNotCloneSingleParentFolder) {
+  {
+    ProjectService project(db_path_, meta_path_);
+    auto           service = project.GetSleeveService();
+
+    const auto created = service->CreateFolder(L"/", L"test");
+    ASSERT_NE(created.first, nullptr);
+    ASSERT_TRUE(created.second.success_);
+
+    const auto sync = service->Sync();
+    ASSERT_TRUE(sync.success_);
+    project.SaveProject(meta_path_);
+  }
+
+  ProjectService reloaded_project(db_path_, meta_path_);
+  auto           service = reloaded_project.GetSleeveService();
+
+  const auto root_entries = service->ListFolderEntries(L"/");
+  ASSERT_EQ(root_entries.size(), 1u);
+  ASSERT_EQ(root_entries.front()->element_name_, L"test");
+
+  const auto folder_before = service->ResolveFolder(L"/test");
+  ASSERT_NE(folder_before, nullptr);
+  const auto folder_id_before = folder_before->element_id_;
+  EXPECT_EQ(folder_before->ref_count_, 1u);
+
+  auto created_file = service->Write_NoSync<std::shared_ptr<SleeveElement>>(
+      [](FileSystem& fs) { return fs.Create(L"/test", L"after_reload.arw", ElementType::FILE); });
+  ASSERT_NE(created_file, nullptr);
+
+  const auto sync = service->Sync();
+  EXPECT_TRUE(sync.success_);
+
+  const auto folder_after = service->ResolveFolder(L"/test");
+  ASSERT_NE(folder_after, nullptr);
+  EXPECT_EQ(folder_after->element_id_, folder_id_before);
+
+  const auto nested_entries = service->ListFolderEntries(L"/test");
+  ASSERT_EQ(nested_entries.size(), 1u);
+  EXPECT_EQ(nested_entries.front()->element_name_, L"after_reload.arw");
+  EXPECT_EQ(nested_entries.front()->type_, ElementType::FILE);
+}
+
+TEST_F(SleeveServiceTests, FuzzyCreateCopyTest) {
+  std::wstring first_tree;
+  {
+    ProjectService            project(db_path_, meta_path_);
+    auto                      service = project.GetSleeveService();
+
+    std::mt19937              gen(42);
+    std::vector<std::wstring> known_paths;
+    std::vector<std::wstring> known_folders;
+    known_paths.push_back(L"");
+    known_folders.push_back(L"");
+
+    auto generate_name = [&gen](int length = 8) {
+      static const std::wstring chars =
+          L"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+      std::uniform_int_distribution<> dist(0, static_cast<int>(chars.size() - 1));
+      std::wstring                    result;
+      for (int i = 0; i < length; ++i) {
+        result += chars[dist(gen)];
+      }
+      return result;
+    };
+
+    constexpr int kOperations = 200;
+    for (int i = 0; i < kOperations; ++i) {
+      std::uniform_int_distribution<> op_dist(0, 1);
+      int                             op = op_dist(gen);
+
+      if (known_paths.size() < 2 && op == 1) {
+        op = 0;
+      }
+
+      if (op == 0) {
+        std::uniform_int_distribution<size_t> parent_dist(0, known_folders.size() - 1);
+        std::wstring                          parent = known_folders[parent_dist(gen)];
+        std::wstring                          name   = generate_name();
+        ElementType type = (gen() % 2 == 0) ? ElementType::FOLDER : ElementType::FILE;
+
+        try {
+          service->Write_NoSync<std::shared_ptr<SleeveElement>>(
+              [&](FileSystem& fs) { return fs.Create(parent, name, type); });
+          std::wstring new_path = parent + L"/" + name;
+          known_paths.push_back(new_path);
+          if (type == ElementType::FOLDER) {
+            known_folders.push_back(new_path);
+          }
+        } catch (const std::exception&) {
+          // Ignore invalid ops to keep fuzz running
+        }
+      } else {
+        std::uniform_int_distribution<size_t> from_dist(0, known_paths.size() - 1);
+        std::uniform_int_distribution<size_t> dest_dist(0, known_folders.size() - 1);
+        std::wstring                          from_path = known_paths[from_dist(gen)];
+        std::wstring                          to_parent = known_folders[dest_dist(gen)];
+
+        try {
+          service->Write_NoSync<bool>([&](FileSystem& fs) {
+            fs.Copy(from_path, to_parent);
+            return true;
+          });
+        } catch (const std::exception&) {
+          // Ignore invalid ops to keep fuzz running
+        }
+      }
+      std::cout << "\r\033[2KCompleted operation " << (i + 1) << " / " << kOperations << std::flush;
+    }
+
+    first_tree = service->Read<std::wstring>([](FileSystem& fs) { return fs.Tree(L"/"); });
+    service->Sync();
+    project.SaveProject(meta_path_);
+  }
+  std::cout << std::endl;
+
+  ProjectService reloaded_project(db_path_, meta_path_);
+  // reloaded_project.LoadProject(meta_path_);
+  auto           reloaded_service = reloaded_project.GetSleeveService();
+  auto           second_tree =
+      reloaded_service->Read<std::wstring>([](FileSystem& fs) { return fs.Tree(L"/"); });
+
+  EXPECT_EQ(conv::ToBytes(first_tree), conv::ToBytes(second_tree));
+}
+
+}  // namespace alcedo

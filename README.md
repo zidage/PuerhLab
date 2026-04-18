@@ -1,6 +1,6 @@
-# Pu-erh Lab
+# Alcedo Studio
 
-[Project website](https://zidage.github.io/PuerhLab/en/) | [项目网页](https://zidage.github.io/PuerhLab/zh/)
+[Project website](https://zidage.github.io/Alcedo/en/) | [项目网页](https://zidage.github.io/Alcedo/zh/)
 
 <p align="right"><a href="./README.md"><strong>English</strong></a> | <a href="./README.zh-CN.md">简体中文</a></p>
 
@@ -8,9 +8,9 @@
 ![CUDA](https://img.shields.io/badge/CUDA-12.8-76B900)
 ![C++](https://img.shields.io/badge/C++-20-blue)
 
-**Pu-erh Lab** is an open-source RAW photo editor and digital asset management (DAM) project. It is designed to provide a new choice to photographers who seek a lightweight, high-performance, and largely industry-compatible workflow for their photo editing and library management needs. 
+**Alcedo Studio** is an open-source RAW photo editor and digital asset management (DAM) project. It is designed to provide a new choice to photographers who seek a lightweight, high-performance, and largely industry-compatible workflow for their photo editing and library management needs. 
 
->Pu-erh Lab is _**NOT an alternative**_ to the existing commercial software nor other open-source projects.
+>Alcedo Studio is _**NOT an alternative**_ to the existing commercial software nor other open-source projects.
 
 
 ## Early Demo
@@ -81,7 +81,7 @@
 
 ## Build from Source
 
-This section mirrors the current setup in `CMakeLists.txt`, `pu-erh_lab/tests/CMakeLists.txt`, and NOTICE files.
+This section mirrors the current setup in `CMakeLists.txt`, `alcedo/tests/CMakeLists.txt`, and NOTICE files.
 
 ### Windows (current full feature set)
 
@@ -101,39 +101,39 @@ This section mirrors the current setup in `CMakeLists.txt`, `pu-erh_lab/tests/CM
 - Package-managed dependencies (commonly resolved through vcpkg toolchain on Windows): `OpenCV`, `Eigen3`, `OpenGL`, `hwy`, `lcms2`, `OpenColorIO`, `OpenImageIO`, `libraw`, `xxHash`, `OpenMP`, `glib`
 - Test framework: `googletest` (fetched with `FetchContent`)
 - Windows local imported binaries: `DuckDB`, `Exiv2`, `easy_profiler`
-- Lens correction dependency: the upstream `Lensfun` source checkout in `pu-erh_lab/src/third_party/lensfun`, built automatically by the top-level CMake build
-- Ultra HDR dependency: the upstream `libultrahdr` source checkout in `pu-erh_lab/src/third_party/libultrahdr`, consumed as a git submodule by the top-level CMake build
-- Additional Windows dependency for the bundled Lensfun build: `GLib2`. When the vcpkg toolchain is active, Pu-erh Lab will use `vcpkg/installed/<triplet>` automatically. `PUERHLAB_LENSFUN_GLIB2_BASE_DIR` is only needed to override that auto-detected location or to point at a non-vcpkg GLib2 package.
+- Lens correction dependency: the upstream `Lensfun` source checkout in `alcedo/src/third_party/lensfun`, built automatically by the top-level CMake build
+- Ultra HDR dependency: the upstream `libultrahdr` source checkout in `alcedo/src/third_party/libultrahdr`, consumed as a git submodule by the top-level CMake build
+- Additional Windows dependency for the bundled Lensfun build: `GLib2`. When the vcpkg toolchain is active, Alcedo Studio will use `vcpkg/installed/<triplet>` automatically. `ALCEDO_LENSFUN_GLIB2_BASE_DIR` is only needed to override that auto-detected location or to point at a non-vcpkg GLib2 package.
 
 ### 3) Initialize Bundled Source Submodules
 
-Make sure the upstream `Lensfun` and `libultrahdr` submodules are present before configuring Pu-erh Lab:
+Make sure the upstream `Lensfun` and `libultrahdr` submodules are present before configuring Alcedo Studio:
 
 ```powershell
 git submodule update --init --recursive `
-  pu-erh_lab/src/third_party/lensfun `
-  pu-erh_lab/src/third_party/libultrahdr
+  alcedo/src/third_party/lensfun `
+  alcedo/src/third_party/libultrahdr
 ```
 
 For details about the Windows GLib2 prerequisite used by the bundled build:
 
 - [docs/lensfun_build/lensfun_local_build.md](docs/lensfun_build/lensfun_local_build.md)
 
-### 4) Configure and Build Pu-erh Lab
+### 4) Configure and Build Alcedo Studio
 
 Clone and initialize submodules:
 
 ```powershell
-git clone --recursive https://github.com/zidage/PuerhLab.git
-cd PuerhLab
+git clone --recursive https://github.com/zidage/Alcedo.git
+cd Alcedo
 ```
 
 If you cloned earlier without `--recursive`, initialize the source submodules before configuring:
 
 ```powershell
 git submodule update --init --recursive `
-  pu-erh_lab/src/third_party/lensfun `
-  pu-erh_lab/src/third_party/libultrahdr
+  alcedo/src/third_party/lensfun `
+  alcedo/src/third_party/libultrahdr
 ```
 
 Bootstrap local vcpkg if needed:
@@ -149,7 +149,7 @@ Adjust the Qt/easy_profiler paths below to your local environment.
 # Debug configure
 cmd /c scripts\msvc_env.cmd --preset win_debug `
   -DCMAKE_PREFIX_PATH="D:/Qt/6.9.3/msvc2022_64/lib/cmake" `
-  -Deasy_profiler_DIR="$PWD/pu-erh_lab/third_party/easy_profiler-v2.1.0-msvc15-win64/lib/cmake/easy_profiler"
+  -Deasy_profiler_DIR="$PWD/alcedo/third_party/easy_profiler-v2.1.0-msvc15-win64/lib/cmake/easy_profiler"
 
 # Debug build
 cmd /c scripts\msvc_env.cmd --build --preset win_debug --parallel 4
@@ -159,7 +159,7 @@ cmd /c scripts\msvc_env.cmd --build --preset win_debug --parallel 4
 # Release configure
 cmd /c scripts\msvc_env.cmd --preset win_release `
   -DCMAKE_PREFIX_PATH="D:/Qt/6.9.3/msvc2022_64/lib/cmake" `
-  -Deasy_profiler_DIR="$PWD/pu-erh_lab/third_party/easy_profiler-v2.1.0-msvc15-win64/lib/cmake/easy_profiler"
+  -Deasy_profiler_DIR="$PWD/alcedo/third_party/easy_profiler-v2.1.0-msvc15-win64/lib/cmake/easy_profiler"
 
 # Release build + install
 cmd /c scripts\msvc_env.cmd --build --preset win_release --parallel 4
@@ -193,13 +193,13 @@ cpack --config build/release/CPackConfig.cmake
 Common binaries after a Debug build:
 
 ```powershell
-.\build\debug\pu-erh_lab\src\puerhlab_main.exe
-.\build\debug\pu-erh_lab\tests\ImagePreview.exe
+.\build\debug\alcedo\src\alcedo_main.exe
+.\build\debug\alcedo\tests\ImagePreview.exe
 ```
 
 ### 6) Tests and Dev Utilities
 
-Current executable targets in `pu-erh_lab/tests/CMakeLists.txt`:
+Current executable targets in `alcedo/tests/CMakeLists.txt`:
 
 - `SampleTest`
 - `SingleRawLoad`
@@ -228,7 +228,7 @@ ctest --test-dir build/debug --output-on-failure
 Standalone tests can be run directly as executables, for example:
 
 ```powershell
-.\build\debug\pu-erh_lab\tests\SampleTest.exe
+.\build\debug\alcedo\tests\SampleTest.exe
 ```
 
 Some historical unit tests remain intentionally disabled/commented during refactoring.
@@ -252,10 +252,10 @@ Configure and build the main Qt application:
 
 ```bash
 git submodule update --init --recursive \
-  pu-erh_lab/src/third_party/lensfun \
-  pu-erh_lab/src/third_party/libultrahdr
+  alcedo/src/third_party/lensfun \
+  alcedo/src/third_party/libultrahdr
 cmake --preset macos_debug
-cmake --build --preset macos_debug --target puerhlab_main
+cmake --build --preset macos_debug --target alcedo_main
 ```
 
 This repository's macOS release preset is configured for the Qt installation at `/Users/zidage/Qt/6.9.3/macos` on this machine instead of the Homebrew Qt prefix.
@@ -263,7 +263,7 @@ This repository's macOS release preset is configured for the Qt installation at 
 Run the app:
 
 ```bash
-./build/macos-debug/pu-erh_lab/src/puerhlab_main
+./build/macos-debug/alcedo/src/alcedo_main
 ```
 
 #### Release Build & Standalone DMG/ZIP
@@ -273,28 +273,28 @@ Build, install, and package a self-contained `.app` bundle:
 ```bash
 cmake --preset macos_release
 cmake --build --preset macos_release
-cmake --install build/macos-release          # → build/install/PuerhLab.app
-cd build/macos-release && cpack -G DragNDrop # → pu-erh_lab-<version>-Darwin-arm64.dmg
-cd build/macos-release && cpack -G ZIP       # → pu-erh_lab-<version>-Darwin-arm64.zip
+cmake --install build/macos-release          # → build/install/Alcedo.app
+cd build/macos-release && cpack -G DragNDrop # → alcedo-<version>-Darwin-arm64.dmg
+cd build/macos-release && cpack -G ZIP       # → alcedo-<version>-Darwin-arm64.zip
 ```
 
 Run the installed app directly:
 
 ```bash
-./build/install/PuerhLab.app/Contents/MacOS/PuerhLab
+./build/install/Alcedo.app/Contents/MacOS/Alcedo
 ```
 
 Or extract the ZIP and run from anywhere:
 
 ```bash
-unzip pu-erh_lab-*-Darwin-arm64.zip -d ~/Desktop
-~/Desktop/PuerhLab.app/Contents/MacOS/PuerhLab
+unzip alcedo-*-Darwin-arm64.zip -d ~/Desktop
+~/Desktop/Alcedo.app/Contents/MacOS/Alcedo
 ```
 
 The ZIP is fully standalone — all Homebrew libraries, Qt frameworks, and QML
 modules are bundled inside the `.app`. No Homebrew installation is needed on the
 target machine. Code signing and notarization are not applied; macOS Gatekeeper
-may require `xattr -cr PuerhLab.app` before first launch.
+may require `xattr -cr Alcedo.app` before first launch.
 
 Notes:
 

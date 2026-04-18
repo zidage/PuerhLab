@@ -3,7 +3,7 @@ import tailwind from '@astrojs/tailwind';
 
 export default defineConfig({
   site: 'https://zidage.github.io',
-  base: '/PuerhLab/',
+  base: '/Alcedo/',
   trailingSlash: 'always',
   integrations: [tailwind()],
   i18n: {

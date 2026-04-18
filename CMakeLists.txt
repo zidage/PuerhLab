@@ -5,9 +5,9 @@ cmake_minimum_required(VERSION 3.19)
 #set(CMAKE_CXX_COMPILER "clang++")
 # Compiler flags.
 
-project(pu-erh_lab VERSION 0.2.2 LANGUAGES C CXX)
+project(alcedo VERSION 0.2.3 LANGUAGES C CXX)
 
-set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build pu-erh_lab libraries as static by default." FORCE)
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build alcedo libraries as static by default." FORCE)
 
 if(APPLE)
     enable_language(OBJCXX)
@@ -19,89 +19,89 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 if(APPLE)
-    set(PUERHLAB_ENABLE_CUDA_DEFAULT OFF)
-    set(PUERHLAB_ENABLE_METAL_DEFAULT ON)
-    set(PUERHLAB_ENABLE_OPENGL_EDITOR_DEFAULT OFF)
+    set(ALCEDO_ENABLE_CUDA_DEFAULT OFF)
+    set(ALCEDO_ENABLE_METAL_DEFAULT ON)
+    set(ALCEDO_ENABLE_OPENGL_EDITOR_DEFAULT OFF)
 else()
-    set(PUERHLAB_ENABLE_CUDA_DEFAULT ON)
-    set(PUERHLAB_ENABLE_METAL_DEFAULT OFF)
-    set(PUERHLAB_ENABLE_OPENGL_EDITOR_DEFAULT ON)
+    set(ALCEDO_ENABLE_CUDA_DEFAULT ON)
+    set(ALCEDO_ENABLE_METAL_DEFAULT OFF)
+    set(ALCEDO_ENABLE_OPENGL_EDITOR_DEFAULT ON)
 endif()
 
-option(PUERHLAB_ENABLE_CUDA "Enable CUDA-accelerated pipeline backends when CUDA is available." ${PUERHLAB_ENABLE_CUDA_DEFAULT})
-option(PUERHLAB_ENABLE_METAL "Enable Metal-accelerated pipeline backends when building on Apple platforms." ${PUERHLAB_ENABLE_METAL_DEFAULT})
-option(PUERHLAB_ENABLE_OPENGL_EDITOR "Build the OpenGL-based editor UI when the required backend is available." ${PUERHLAB_ENABLE_OPENGL_EDITOR_DEFAULT})
-option(PUERHLAB_BUILD_TESTS "Build pu-erh_lab tests and demos." ON)
-option(PUERHLAB_MACOS_BUNDLE
-       "Build puerhlab_main as a macOS .app bundle (intended for packaging/install)."
+option(ALCEDO_ENABLE_CUDA "Enable CUDA-accelerated pipeline backends when CUDA is available." ${ALCEDO_ENABLE_CUDA_DEFAULT})
+option(ALCEDO_ENABLE_METAL "Enable Metal-accelerated pipeline backends when building on Apple platforms." ${ALCEDO_ENABLE_METAL_DEFAULT})
+option(ALCEDO_ENABLE_OPENGL_EDITOR "Build the OpenGL-based editor UI when the required backend is available." ${ALCEDO_ENABLE_OPENGL_EDITOR_DEFAULT})
+option(ALCEDO_BUILD_TESTS "Build alcedo tests and demos." ON)
+option(ALCEDO_MACOS_BUNDLE
+       "Build alcedo_main as a macOS .app bundle (intended for packaging/install)."
        OFF)
-option(PUERHLAB_MACDEPLOYQT_STRIP
+option(ALCEDO_MACDEPLOYQT_STRIP
        "Allow macdeployqt to strip binaries during macOS app deployment."
        OFF)
-set(PUERHLAB_MACOS_CODESIGN_IDENTITY "-"
+set(ALCEDO_MACOS_CODESIGN_IDENTITY "-"
     CACHE STRING
     "Code-sign identity for macOS bundle after deployment (use '-' for ad-hoc signing, empty to skip).")
-set(PUERHLAB_QT_PREFIX ""
+set(ALCEDO_QT_PREFIX ""
     CACHE PATH
     "Optional Qt installation prefix for macOS packaging builds (contains bin/, lib/cmake/Qt6, plugins/, and qml/).")
 
-function(puerhlab_append_existing_prefix prefix)
+function(alcedo_append_existing_prefix prefix)
     if(EXISTS "${prefix}")
         list(APPEND CMAKE_PREFIX_PATH "${prefix}")
         set(CMAKE_PREFIX_PATH "${CMAKE_PREFIX_PATH}" PARENT_SCOPE)
     endif()
 endfunction()
 
-set(_puerhlab_qt_prefix_hint "")
-if(PUERHLAB_QT_PREFIX)
-    file(TO_CMAKE_PATH "${PUERHLAB_QT_PREFIX}" _puerhlab_qt_prefix_hint)
-    if(EXISTS "${_puerhlab_qt_prefix_hint}")
-        list(PREPEND CMAKE_PREFIX_PATH "${_puerhlab_qt_prefix_hint}")
+set(_alcedo_qt_prefix_hint "")
+if(ALCEDO_QT_PREFIX)
+    file(TO_CMAKE_PATH "${ALCEDO_QT_PREFIX}" _alcedo_qt_prefix_hint)
+    if(EXISTS "${_alcedo_qt_prefix_hint}")
+        list(PREPEND CMAKE_PREFIX_PATH "${_alcedo_qt_prefix_hint}")
     else()
-        message(WARNING "PUERHLAB_QT_PREFIX does not exist: ${_puerhlab_qt_prefix_hint}")
+        message(WARNING "ALCEDO_QT_PREFIX does not exist: ${_alcedo_qt_prefix_hint}")
     endif()
 endif()
 
-puerhlab_append_existing_prefix("/opt/homebrew")
-puerhlab_append_existing_prefix("/opt/homebrew/opt/qt")
-puerhlab_append_existing_prefix("/opt/homebrew/opt/opencv")
-puerhlab_append_existing_prefix("/opt/homebrew/opt/opencolorio")
-puerhlab_append_existing_prefix("/opt/homebrew/opt/openimageio")
-puerhlab_append_existing_prefix("/opt/homebrew/opt/exiv2")
-puerhlab_append_existing_prefix("/opt/homebrew/opt/glib")
-puerhlab_append_existing_prefix("/opt/homebrew/opt/libraw")
-puerhlab_append_existing_prefix("/opt/homebrew/opt/xxhash")
-puerhlab_append_existing_prefix("/opt/homebrew/opt/duckdb")
-puerhlab_append_existing_prefix("/opt/homebrew/opt/little-cms2")
-puerhlab_append_existing_prefix("/opt/homebrew/opt/highway")
-puerhlab_append_existing_prefix("/opt/homebrew/opt/openblas")
-puerhlab_append_existing_prefix("/opt/homebrew/opt/gcc")
+alcedo_append_existing_prefix("/opt/homebrew")
+alcedo_append_existing_prefix("/opt/homebrew/opt/qt")
+alcedo_append_existing_prefix("/opt/homebrew/opt/opencv")
+alcedo_append_existing_prefix("/opt/homebrew/opt/opencolorio")
+alcedo_append_existing_prefix("/opt/homebrew/opt/openimageio")
+alcedo_append_existing_prefix("/opt/homebrew/opt/exiv2")
+alcedo_append_existing_prefix("/opt/homebrew/opt/glib")
+alcedo_append_existing_prefix("/opt/homebrew/opt/libraw")
+alcedo_append_existing_prefix("/opt/homebrew/opt/xxhash")
+alcedo_append_existing_prefix("/opt/homebrew/opt/duckdb")
+alcedo_append_existing_prefix("/opt/homebrew/opt/little-cms2")
+alcedo_append_existing_prefix("/opt/homebrew/opt/highway")
+alcedo_append_existing_prefix("/opt/homebrew/opt/openblas")
+alcedo_append_existing_prefix("/opt/homebrew/opt/gcc")
 
-puerhlab_append_existing_prefix("/usr/local")
-puerhlab_append_existing_prefix("/usr/local/opt/qt")
-puerhlab_append_existing_prefix("/usr/local/opt/opencv")
-puerhlab_append_existing_prefix("/usr/local/opt/opencolorio")
-puerhlab_append_existing_prefix("/usr/local/opt/openimageio")
-puerhlab_append_existing_prefix("/usr/local/opt/exiv2")
-puerhlab_append_existing_prefix("/usr/local/opt/glib")
-puerhlab_append_existing_prefix("/usr/local/opt/libraw")
-puerhlab_append_existing_prefix("/usr/local/opt/xxhash")
-puerhlab_append_existing_prefix("/usr/local/opt/duckdb")
-puerhlab_append_existing_prefix("/usr/local/opt/little-cms2")
-puerhlab_append_existing_prefix("/usr/local/opt/highway")
-puerhlab_append_existing_prefix("/usr/local/opt/openblas")
-puerhlab_append_existing_prefix("/usr/local/opt/gcc")
+alcedo_append_existing_prefix("/usr/local")
+alcedo_append_existing_prefix("/usr/local/opt/qt")
+alcedo_append_existing_prefix("/usr/local/opt/opencv")
+alcedo_append_existing_prefix("/usr/local/opt/opencolorio")
+alcedo_append_existing_prefix("/usr/local/opt/openimageio")
+alcedo_append_existing_prefix("/usr/local/opt/exiv2")
+alcedo_append_existing_prefix("/usr/local/opt/glib")
+alcedo_append_existing_prefix("/usr/local/opt/libraw")
+alcedo_append_existing_prefix("/usr/local/opt/xxhash")
+alcedo_append_existing_prefix("/usr/local/opt/duckdb")
+alcedo_append_existing_prefix("/usr/local/opt/little-cms2")
+alcedo_append_existing_prefix("/usr/local/opt/highway")
+alcedo_append_existing_prefix("/usr/local/opt/openblas")
+alcedo_append_existing_prefix("/usr/local/opt/gcc")
 
-set(PUERHLAB_LIBRARY_HINTS "")
-set(PUERHLAB_INCLUDE_HINTS "")
+set(ALCEDO_LIBRARY_HINTS "")
+set(ALCEDO_INCLUDE_HINTS "")
 
 foreach(_prefix IN LISTS CMAKE_PREFIX_PATH)
     if(EXISTS "${_prefix}")
         if(EXISTS "${_prefix}/lib")
-            list(APPEND PUERHLAB_LIBRARY_HINTS "${_prefix}/lib")
+            list(APPEND ALCEDO_LIBRARY_HINTS "${_prefix}/lib")
         endif()
         if(EXISTS "${_prefix}/include")
-            list(APPEND PUERHLAB_INCLUDE_HINTS "${_prefix}/include")
+            list(APPEND ALCEDO_INCLUDE_HINTS "${_prefix}/include")
         endif()
     endif()
 endforeach()
@@ -111,25 +111,25 @@ endforeach()
 foreach(_gcc_prefix IN ITEMS "/opt/homebrew/opt/gcc" "/usr/local/opt/gcc")
     if(EXISTS "${_gcc_prefix}")
         if(EXISTS "${_gcc_prefix}/lib")
-            list(APPEND PUERHLAB_LIBRARY_HINTS "${_gcc_prefix}/lib")
+            list(APPEND ALCEDO_LIBRARY_HINTS "${_gcc_prefix}/lib")
         endif()
 
-        file(GLOB _puerhlab_gcc_runtime_dirs
+        file(GLOB _alcedo_gcc_runtime_dirs
             LIST_DIRECTORIES true
             "${_gcc_prefix}/lib/gcc/current"
             "${_gcc_prefix}/lib/gcc/*"
         )
-        foreach(_dir IN LISTS _puerhlab_gcc_runtime_dirs)
+        foreach(_dir IN LISTS _alcedo_gcc_runtime_dirs)
             if(IS_DIRECTORY "${_dir}")
-                list(APPEND PUERHLAB_LIBRARY_HINTS "${_dir}")
+                list(APPEND ALCEDO_LIBRARY_HINTS "${_dir}")
             endif()
         endforeach()
-        unset(_puerhlab_gcc_runtime_dirs)
+        unset(_alcedo_gcc_runtime_dirs)
     endif()
 endforeach()
 
-list(REMOVE_DUPLICATES PUERHLAB_LIBRARY_HINTS)
-list(REMOVE_DUPLICATES PUERHLAB_INCLUDE_HINTS)
+list(REMOVE_DUPLICATES ALCEDO_LIBRARY_HINTS)
+list(REMOVE_DUPLICATES ALCEDO_INCLUDE_HINTS)
 
 
 
@@ -159,7 +159,7 @@ else()
 endif()
 
 # Qt6
-set(PUERHLAB_QT_COMPONENTS
+set(ALCEDO_QT_COMPONENTS
     Core
     LinguistTools
     Svg
@@ -170,21 +170,21 @@ set(PUERHLAB_QT_COMPONENTS
     QuickDialogs2
     QuickEffects
 )
-if(PUERHLAB_BUILD_TESTS)
-    list(APPEND PUERHLAB_QT_COMPONENTS Test)
+if(ALCEDO_BUILD_TESTS)
+    list(APPEND ALCEDO_QT_COMPONENTS Test)
 endif()
-find_package(Qt6 REQUIRED COMPONENTS ${PUERHLAB_QT_COMPONENTS})
+find_package(Qt6 REQUIRED COMPONENTS ${ALCEDO_QT_COMPONENTS})
 
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTORCC ON)
 
 # CUDA
-set(PUERHLAB_CUDA_ENABLED OFF)
-if(PUERHLAB_ENABLE_CUDA)
+set(ALCEDO_CUDA_ENABLED OFF)
+if(ALCEDO_ENABLE_CUDA)
     find_package(CUDAToolkit QUIET)
 endif()
-if (PUERHLAB_ENABLE_CUDA AND CUDAToolkit_FOUND)
+if (ALCEDO_ENABLE_CUDA AND CUDAToolkit_FOUND)
     enable_language(CUDA)
     add_definitions(-DHAVE_CUDA)
     set(CMAKE_CUDA_RUNTIME_LIBRARY Shared)
@@ -197,23 +197,23 @@ if (PUERHLAB_ENABLE_CUDA AND CUDAToolkit_FOUND)
     if(MSVC)
         list(APPEND CMAKE_CUDA_HOST_COMPILER_OPTIONS /W4 /external:anglebrackets /external:W0 /D_DEBUG /EHsc /arch:AVX2 /openmp)
     endif()
-    set(PUERHLAB_CUDA_ENABLED ON)
-elseif(PUERHLAB_ENABLE_CUDA)
+    set(ALCEDO_CUDA_ENABLED ON)
+elseif(ALCEDO_ENABLE_CUDA)
     message(STATUS "CUDA toolkit not found; building without CUDA backends.")
 endif()
 
 # Metal
-set(PUERHLAB_METAL_ENABLED OFF)
-if(PUERHLAB_ENABLE_METAL AND APPLE)
+set(ALCEDO_METAL_ENABLED OFF)
+if(ALCEDO_ENABLE_METAL AND APPLE)
     add_compile_definitions(HAVE_METAL)
-    set(PUERHLAB_METAL_ENABLED ON)
-elseif(PUERHLAB_ENABLE_METAL)
+    set(ALCEDO_METAL_ENABLED ON)
+elseif(ALCEDO_ENABLE_METAL)
     message(STATUS "Metal support is only available on Apple platforms; building without Metal backends.")
 endif()
 
 # Dependencies
 # GTest
-if(PUERHLAB_BUILD_TESTS)
+if(ALCEDO_BUILD_TESTS)
     include(FetchContent)
     FetchContent_Declare(
       googletest
@@ -231,20 +231,20 @@ find_package(OpenMP REQUIRED)
 # Headers-only libraries
 # UUID
 add_library(stduuid INTERFACE)
-target_include_directories(stduuid INTERFACE "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_party/stduuid")
+target_include_directories(stduuid INTERFACE "${CMAKE_SOURCE_DIR}/alcedo_studio/third_party/stduuid")
 
 # UUID
 add_library(uuid_v4 INTERFACE)
-target_include_directories(uuid_v4 INTERFACE "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_party/uuid_v4")
+target_include_directories(uuid_v4 INTERFACE "${CMAKE_SOURCE_DIR}/alcedo_studio/third_party/uuid_v4")
 
 # utfcpp 
 add_library(utfcpp INTERFACE)
-target_include_directories(utfcpp INTERFACE "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_party/utfcpp")
+target_include_directories(utfcpp INTERFACE "${CMAKE_SOURCE_DIR}/alcedo_studio/third_party/utfcpp")
 
 # MurmurHash3
-add_library(MurmurHash3 STATIC "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_party/murmurhash3/MurmurHash3.cpp")
+add_library(MurmurHash3 STATIC "${CMAKE_SOURCE_DIR}/alcedo_studio/third_party/murmurhash3/MurmurHash3.cpp")
 set_target_properties(MurmurHash3 PROPERTIES 
-    INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_party/murmurhash3"
+    INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_SOURCE_DIR}/alcedo_studio/third_party/murmurhash3"
 )
 
 # xxHash
@@ -265,7 +265,7 @@ endif()
 
 # JSON  
 add_library(JSON INTERFACE)
-target_include_directories(JSON INTERFACE "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_party/nlohmann_json")
+target_include_directories(JSON INTERFACE "${CMAKE_SOURCE_DIR}/alcedo_studio/third_party/nlohmann_json")
 
 
 # Other libraries
@@ -275,38 +275,38 @@ find_package(OpenCV REQUIRED COMPONENTS core imgproc imgcodecs calib3d highgui)
 # Eigen3
 find_package(Eigen3 CONFIG REQUIRED)
 
-set(PUERHLAB_REAL_WIDGET_EDITOR OFF)
-set(PUERHLAB_REAL_OPENGL_EDITOR OFF)
-set(PUERHLAB_RHI_WIDGET_EDITOR OFF)
-if(PUERHLAB_ENABLE_OPENGL_EDITOR AND PUERHLAB_CUDA_ENABLED)
+set(ALCEDO_REAL_WIDGET_EDITOR OFF)
+set(ALCEDO_REAL_OPENGL_EDITOR OFF)
+set(ALCEDO_RHI_WIDGET_EDITOR OFF)
+if(ALCEDO_ENABLE_OPENGL_EDITOR AND ALCEDO_CUDA_ENABLED)
     find_package(Qt6 REQUIRED COMPONENTS OpenGL OpenGLWidgets)
     find_package(OpenGL REQUIRED)
-    set(PUERHLAB_REAL_OPENGL_EDITOR ON)
-    set(PUERHLAB_REAL_WIDGET_EDITOR ON)
-    add_compile_definitions(PUERHLAB_HAS_LEGACY_GL_VIEWER)
-elseif(PUERHLAB_ENABLE_OPENGL_EDITOR)
+    set(ALCEDO_REAL_OPENGL_EDITOR ON)
+    set(ALCEDO_REAL_WIDGET_EDITOR ON)
+    add_compile_definitions(ALCEDO_HAS_LEGACY_GL_VIEWER)
+elseif(ALCEDO_ENABLE_OPENGL_EDITOR)
     message(STATUS "OpenGL editor requested, but no accelerated backend is available. Building editor stub only.")
 endif()
 
-if((WIN32 AND PUERHLAB_CUDA_ENABLED) OR (APPLE AND PUERHLAB_METAL_ENABLED))
+if((WIN32 AND ALCEDO_CUDA_ENABLED) OR (APPLE AND ALCEDO_METAL_ENABLED))
     find_package(Qt6 REQUIRED COMPONENTS ShaderTools GuiPrivate)
-    set(PUERHLAB_RHI_WIDGET_EDITOR ON)
-    set(PUERHLAB_REAL_WIDGET_EDITOR ON)
-    add_compile_definitions(PUERHLAB_HAS_RHI_VIEWER)
+    set(ALCEDO_RHI_WIDGET_EDITOR ON)
+    set(ALCEDO_REAL_WIDGET_EDITOR ON)
+    add_compile_definitions(ALCEDO_HAS_RHI_VIEWER)
 endif()
 
 # Profiler/hwy/lcms2
-if (WIN32)
-find_package(easy_profiler REQUIRED)
-add_compile_definitions(HAS_EASY_PROFILER)
-endif()
+# if (WIN32)
+# find_package(easy_profiler REQUIRED)
+# add_compile_definitions(HAS_EASY_PROFILER)
+# endif()
 find_package(hwy CONFIG REQUIRED)
 
 if (WIN32)
 find_package(lcms2 CONFIG REQUIRED)
 elseif(APPLE)
-    find_library(LCMS2_LIB NAMES lcms2 PATHS ${PUERHLAB_LIBRARY_HINTS})
-    find_path(LCMS2_INC NAMES lcms2.h PATHS ${PUERHLAB_INCLUDE_HINTS})
+    find_library(LCMS2_LIB NAMES lcms2 PATHS ${ALCEDO_LIBRARY_HINTS})
+    find_path(LCMS2_INC NAMES lcms2.h PATHS ${ALCEDO_INCLUDE_HINTS})
     if(LCMS2_LIB AND LCMS2_INC)
         add_library(lcms2::lcms2 SHARED IMPORTED)
         set_target_properties(lcms2::lcms2 PROPERTIES IMPORTED_LOCATION "${LCMS2_LIB}" INTERFACE_INCLUDE_DIRECTORIES "${LCMS2_INC}")
@@ -323,8 +323,8 @@ find_package(OpenColorIO CONFIG REQUIRED)
 if (TARGET OpenColorIO::OpenColorIO)
     add_library(OpenColorIO ALIAS OpenColorIO::OpenColorIO)
 else()
-    find_library(OCIO_LIB NAMES OpenColorIO PATHS ${PUERHLAB_LIBRARY_HINTS})
-    find_path(OCIO_INC NAMES OpenColorIO/OpenColorIO.h PATHS ${PUERHLAB_INCLUDE_HINTS})
+    find_library(OCIO_LIB NAMES OpenColorIO PATHS ${ALCEDO_LIBRARY_HINTS})
+    find_path(OCIO_INC NAMES OpenColorIO/OpenColorIO.h PATHS ${ALCEDO_INCLUDE_HINTS})
     if(OCIO_LIB AND OCIO_INC)
         add_library(OpenColorIO SHARED IMPORTED)
         set_target_properties(OpenColorIO PROPERTIES IMPORTED_LOCATION "${OCIO_LIB}" INTERFACE_INCLUDE_DIRECTORIES "${OCIO_INC}")
@@ -339,8 +339,8 @@ if (NOT TARGET OpenImageIO::OpenImageIO)
     if (TARGET OpenImageIO)
         add_library(OpenImageIO::OpenImageIO ALIAS OpenImageIO)
     else()
-        find_library(OPENIMAGEIO_LIB NAMES OpenImageIO PATHS ${PUERHLAB_LIBRARY_HINTS})
-        find_path(OPENIMAGEIO_INC NAMES OpenImageIO/imageio.h PATHS ${PUERHLAB_INCLUDE_HINTS})
+        find_library(OPENIMAGEIO_LIB NAMES OpenImageIO PATHS ${ALCEDO_LIBRARY_HINTS})
+        find_path(OPENIMAGEIO_INC NAMES OpenImageIO/imageio.h PATHS ${ALCEDO_INCLUDE_HINTS})
         if(OPENIMAGEIO_LIB AND OPENIMAGEIO_INC)
             add_library(OpenImageIO::OpenImageIO SHARED IMPORTED)
             set_target_properties(OpenImageIO::OpenImageIO PROPERTIES
@@ -360,13 +360,13 @@ if (TARGET Exiv2::Exiv2 AND NOT TARGET Exiv2)
 elseif(WIN32)
     add_library(Exiv2 SHARED IMPORTED)
     set_target_properties(Exiv2 PROPERTIES
-        IMPORTED_LOCATION "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_party/exiv2_x64-windows/bin/exiv2.dll"
-        IMPORTED_IMPLIB "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_party/exiv2_x64-windows/lib/exiv2.lib"
-        INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_party/exiv2_x64-windows/include"
+        IMPORTED_LOCATION "${CMAKE_SOURCE_DIR}/alcedo_studio/third_party/exiv2_x64-windows/bin/exiv2.dll"
+        IMPORTED_IMPLIB "${CMAKE_SOURCE_DIR}/alcedo_studio/third_party/exiv2_x64-windows/lib/exiv2.lib"
+        INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_SOURCE_DIR}/alcedo_studio/third_party/exiv2_x64-windows/include"
     )
 else()
-  find_library(EXIV2_LIB NAMES exiv2 PATHS ${PUERHLAB_LIBRARY_HINTS})
-  find_path(EXIV2_INC NAMES exiv2/exiv2.hpp PATHS ${PUERHLAB_INCLUDE_HINTS})
+  find_library(EXIV2_LIB NAMES exiv2 PATHS ${ALCEDO_LIBRARY_HINTS})
+  find_path(EXIV2_INC NAMES exiv2/exiv2.hpp PATHS ${ALCEDO_INCLUDE_HINTS})
   if(EXIV2_LIB AND EXIV2_INC)
     add_library(Exiv2 SHARED IMPORTED)
     set_target_properties(Exiv2 PROPERTIES IMPORTED_LOCATION "${EXIV2_LIB}" INTERFACE_INCLUDE_DIRECTORIES "${EXIV2_INC}")
@@ -379,8 +379,8 @@ endif()
 if (WIN32)
     find_package(libraw CONFIG REQUIRED)
 else()
-    find_path(LIBRAW_INC NAMES libraw/libraw.h PATHS ${PUERHLAB_INCLUDE_HINTS})
-    find_library(LIBRAW_LIB NAMES raw_r raw libraw PATHS ${PUERHLAB_LIBRARY_HINTS})
+    find_path(LIBRAW_INC NAMES libraw/libraw.h PATHS ${ALCEDO_INCLUDE_HINTS})
+    find_library(LIBRAW_LIB NAMES raw_r raw libraw PATHS ${ALCEDO_LIBRARY_HINTS})
     if(LIBRAW_INC AND LIBRAW_LIB)
         add_library(libraw::raw_r SHARED IMPORTED)
         set_target_properties(libraw::raw_r PROPERTIES
@@ -406,12 +406,12 @@ endif()
 if (WIN32)
     add_library(DuckDB SHARED IMPORTED)
     set_target_properties(DuckDB PROPERTIES
-        IMPORTED_LOCATION "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_party/libduckdb-windows/duckdb.dll"
-        IMPORTED_IMPLIB "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_party/libduckdb-windows/duckdb.lib"
-        INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_party/libduckdb-windows")
+        IMPORTED_LOCATION "${CMAKE_SOURCE_DIR}/alcedo_studio/third_party/libduckdb-windows/duckdb.dll"
+        IMPORTED_IMPLIB "${CMAKE_SOURCE_DIR}/alcedo_studio/third_party/libduckdb-windows/duckdb.lib"
+        INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_SOURCE_DIR}/alcedo_studio/third_party/libduckdb-windows")
 else()        
-  find_path(DUCKDB_INC NAMES duckdb.h PATHS ${PUERHLAB_INCLUDE_HINTS})
-  find_library(DUCKDB_LIB NAMES duckdb PATHS ${PUERHLAB_LIBRARY_HINTS})
+  find_path(DUCKDB_INC NAMES duckdb.h PATHS ${ALCEDO_INCLUDE_HINTS})
+  find_library(DUCKDB_LIB NAMES duckdb PATHS ${ALCEDO_LIBRARY_HINTS})
   if(DUCKDB_INC AND DUCKDB_LIB)
     add_library(DuckDB SHARED IMPORTED)
     set_target_properties(DuckDB PROPERTIES IMPORTED_LOCATION "${DUCKDB_LIB}" INTERFACE_INCLUDE_DIRECTORIES "${DUCKDB_INC}")
@@ -421,55 +421,55 @@ else()
 endif()
 
 # Modules
-set(TEST_RES_DIR "${CMAKE_SOURCE_DIR}/pu-erh_lab/tests/resources" CACHE PATH "Path to test resources")
+set(TEST_RES_DIR "${CMAKE_SOURCE_DIR}/alcedo_studio/tests/resources" CACHE PATH "Path to test resources")
 file(TO_CMAKE_PATH "${TEST_RES_DIR}" TEST_RES_DIR)
 add_compile_definitions(
     TEST_DB_PATH=\"${TEST_RES_DIR}/temp_folder/test.db\"
     TEST_META_PATH=\"${TEST_RES_DIR}/temp_folder/meta.json\"
     TEST_IMG_PATH=\"${TEST_RES_DIR}/sample_images\"
     TEST_PROFILER_OUTPUT_PATH=\"${TEST_RES_DIR}/temp_folder/test_profile.prof\"
-    CONFIG_PATH=\"${CMAKE_SOURCE_DIR}/pu-erh_lab/src/config/\"
+    CONFIG_PATH=\"${CMAKE_SOURCE_DIR}/alcedo_studio/src/config/\"
 )
 
 include(GNUInstallDirs)
 
-add_subdirectory(${CMAKE_SOURCE_DIR}/pu-erh_lab/src/third_party)
-add_subdirectory(${CMAKE_SOURCE_DIR}/pu-erh_lab/src)
-if(PUERHLAB_BUILD_TESTS)
-    add_subdirectory(${CMAKE_SOURCE_DIR}/pu-erh_lab/tests)
+add_subdirectory(${CMAKE_SOURCE_DIR}/alcedo_studio/src/third_party)
+add_subdirectory(${CMAKE_SOURCE_DIR}/alcedo_studio/src)
+if(ALCEDO_BUILD_TESTS)
+    add_subdirectory(${CMAKE_SOURCE_DIR}/alcedo_studio/tests)
 endif()
 
-set(PUERHLAB_MAIN_BIN puerhlab_main)
-if(TARGET ${PUERHLAB_MAIN_BIN})
-    if(APPLE AND PUERHLAB_MACOS_BUNDLE)
-        # Match the app bundle name to the QML module URI (PuerhLab.Main)
+set(ALCEDO_MAIN_BIN alcedo_main)
+if(TARGET ${ALCEDO_MAIN_BIN})
+    if(APPLE AND ALCEDO_MACOS_BUNDLE)
+        # Match the app bundle name to the QML module URI (Alcedo.Main)
         # so that Qt's QML deploy puts files in the correct bundle.
-        set_target_properties(${PUERHLAB_MAIN_BIN} PROPERTIES OUTPUT_NAME PuerhLab)
-        set_property(TARGET ${PUERHLAB_MAIN_BIN} APPEND PROPERTY INSTALL_RPATH "@executable_path/../Frameworks")
+        set_target_properties(${ALCEDO_MAIN_BIN} PROPERTIES OUTPUT_NAME Alcedo)
+        set_property(TARGET ${ALCEDO_MAIN_BIN} APPEND PROPERTY INSTALL_RPATH "@executable_path/../Frameworks")
 
         # macOS: install the .app bundle into the prefix root so that
-        # CPack picks up  PuerhLab.app/  directly.
-        install(TARGETS ${PUERHLAB_MAIN_BIN}
+        # CPack picks up  Alcedo.app/  directly.
+        install(TARGETS ${ALCEDO_MAIN_BIN}
             BUNDLE  DESTINATION .
             RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
         )
 
         # Copy asset folders into Contents/MacOS/ (next to the executable)
-        set(_config_dir "${CMAKE_SOURCE_DIR}/pu-erh_lab/src/config")
-        set(_bundle_macos_dest "PuerhLab.app/Contents/MacOS")
-        set(_bundle_resources_dest "PuerhLab.app/Contents/Resources")
-        set(_bundle_frameworks_dest "PuerhLab.app/Contents/Frameworks")
+        set(_config_dir "${CMAKE_SOURCE_DIR}/alcedo_studio/src/config")
+        set(_bundle_macos_dest "Alcedo.app/Contents/MacOS")
+        set(_bundle_resources_dest "Alcedo.app/Contents/Resources")
+        set(_bundle_frameworks_dest "Alcedo.app/Contents/Frameworks")
         install(DIRECTORY "${_config_dir}/fonts/" DESTINATION "${_bundle_macos_dest}/fonts")
         install(DIRECTORY "${_config_dir}/icc/" DESTINATION "${_bundle_macos_dest}/config/icc")
         install(DIRECTORY "${_config_dir}/lens_calib/" DESTINATION "${_bundle_macos_dest}/config/lens_calib")
         install(DIRECTORY "${_config_dir}/nikon_lens/" DESTINATION "${_bundle_macos_dest}/config/nikon_lens")
-        if(PUERHLAB_METAL_ENABLED AND PUERHLAB_METAL_RUNTIME_LIBS)
-            install(FILES ${PUERHLAB_METAL_RUNTIME_LIBS}
+        if(ALCEDO_METAL_ENABLED AND ALCEDO_METAL_RUNTIME_LIBS)
+            install(FILES ${ALCEDO_METAL_RUNTIME_LIBS}
                 DESTINATION "${_bundle_resources_dest}/metallib"
             )
         endif()
-        if(DEFINED PUERHLAB_LENSFUN_LIBRARY_DIR AND NOT "${PUERHLAB_LENSFUN_LIBRARY_DIR}" STREQUAL "")
-            set(_lensfun_soname_path "${PUERHLAB_LENSFUN_LIBRARY_DIR}/liblensfun.2.dylib")
+        if(DEFINED ALCEDO_LENSFUN_LIBRARY_DIR AND NOT "${ALCEDO_LENSFUN_LIBRARY_DIR}" STREQUAL "")
+            set(_lensfun_soname_path "${ALCEDO_LENSFUN_LIBRARY_DIR}/liblensfun.2.dylib")
             file(REAL_PATH "${_lensfun_soname_path}" _lensfun_real_path)
             if(EXISTS "${_lensfun_real_path}")
                 install(FILES "${_lensfun_real_path}"
@@ -484,9 +484,9 @@ if(TARGET ${PUERHLAB_MAIN_BIN})
                          file(REMOVE \"\${_frameworks_dir}/liblensfun.2.dylib\")
                          execute_process(
                              COMMAND \"${CMAKE_COMMAND}\" -E create_symlink \"${_lensfun_real_name}\" \"\${_frameworks_dir}/liblensfun.2.dylib\"
-                             RESULT_VARIABLE _puerhlab_lensfun_symlink_result
+                             RESULT_VARIABLE _alcedo_lensfun_symlink_result
                          )
-                         if(NOT _puerhlab_lensfun_symlink_result EQUAL 0)
+                         if(NOT _alcedo_lensfun_symlink_result EQUAL 0)
                              message(FATAL_ERROR \"Failed to create lensfun soname symlink in \${_frameworks_dir}\")
                          endif()
                         "
@@ -502,7 +502,7 @@ if(TARGET ${PUERHLAB_MAIN_BIN})
 
         # Ensure JPEG XL runtime deps are present for OpenImageIO/Homebrew builds.
         set(_jxl_cms_soname_path "")
-        foreach(_lib_dir IN LISTS PUERHLAB_LIBRARY_HINTS)
+        foreach(_lib_dir IN LISTS ALCEDO_LIBRARY_HINTS)
             if(EXISTS "${_lib_dir}/libjxl_cms.0.11.dylib")
                 set(_jxl_cms_soname_path "${_lib_dir}/libjxl_cms.0.11.dylib")
                 break()
@@ -523,9 +523,9 @@ if(TARGET ${PUERHLAB_MAIN_BIN})
                          file(REMOVE \"\${_frameworks_dir}/libjxl_cms.0.11.dylib\")
                          execute_process(
                              COMMAND \"${CMAKE_COMMAND}\" -E create_symlink \"${_jxl_cms_real_name}\" \"\${_frameworks_dir}/libjxl_cms.0.11.dylib\"
-                             RESULT_VARIABLE _puerhlab_jxl_cms_symlink_result
+                             RESULT_VARIABLE _alcedo_jxl_cms_symlink_result
                          )
-                         if(NOT _puerhlab_jxl_cms_symlink_result EQUAL 0)
+                         if(NOT _alcedo_jxl_cms_symlink_result EQUAL 0)
                              message(FATAL_ERROR \"Failed to create libjxl_cms soname symlink in \${_frameworks_dir}\")
                          endif()
                         "
@@ -538,36 +538,36 @@ if(TARGET ${PUERHLAB_MAIN_BIN})
                 )
             endif()
         else()
-            message(WARNING "libjxl_cms.0.11.dylib was not found in PUERHLAB_LIBRARY_HINTS; app may fail to launch on systems without JPEG XL runtime installed.")
+            message(WARNING "libjxl_cms.0.11.dylib was not found in ALCEDO_LIBRARY_HINTS; app may fail to launch on systems without JPEG XL runtime installed.")
         endif()
     else()
-        install(TARGETS ${PUERHLAB_MAIN_BIN}
+        install(TARGETS ${ALCEDO_MAIN_BIN}
             RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
         )
 
-        set(_config_dir "${CMAKE_SOURCE_DIR}/pu-erh_lab/src/config")
+        set(_config_dir "${CMAKE_SOURCE_DIR}/alcedo_studio/src/config")
         install(DIRECTORY "${_config_dir}/fonts/" DESTINATION "${CMAKE_INSTALL_BINDIR}/fonts")
         install(DIRECTORY "${_config_dir}/icc/" DESTINATION "${CMAKE_INSTALL_BINDIR}/config/icc")
         install(DIRECTORY "${_config_dir}/lens_calib/" DESTINATION "${CMAKE_INSTALL_BINDIR}/config/lens_calib")
         install(DIRECTORY "${_config_dir}/nikon_lens/" DESTINATION "${CMAKE_INSTALL_BINDIR}/config/nikon_lens")
-        if(APPLE AND PUERHLAB_METAL_ENABLED AND PUERHLAB_METAL_RUNTIME_LIBS)
-            install(FILES ${PUERHLAB_METAL_RUNTIME_LIBS}
+        if(APPLE AND ALCEDO_METAL_ENABLED AND ALCEDO_METAL_RUNTIME_LIBS)
+            install(FILES ${ALCEDO_METAL_RUNTIME_LIBS}
                 DESTINATION "${CMAKE_INSTALL_BINDIR}/metallib"
             )
         endif()
     endif()
 endif()
 
-if(WIN32 AND TARGET ${PUERHLAB_MAIN_BIN})
+if(WIN32 AND TARGET ${ALCEDO_MAIN_BIN})
     set(CMAKE_INSTALL_SYSTEM_RUNTIME_DESTINATION "${CMAKE_INSTALL_BINDIR}")
     include(InstallRequiredSystemLibraries)
 
-    set(PUERHLAB_RUNTIME_DEP_DIRS "" CACHE STRING "Extra directories to search for runtime DLL dependencies during install.")
-    set(PUERHLAB_RUNTIME_EXES "$<TARGET_FILE:${PUERHLAB_MAIN_BIN}>")
-    set(PUERHLAB_RUNTIME_SEARCH_DIRS "$<TARGET_FILE_DIR:${PUERHLAB_MAIN_BIN}>")
+    set(ALCEDO_RUNTIME_DEP_DIRS "" CACHE STRING "Extra directories to search for runtime DLL dependencies during install.")
+    set(ALCEDO_RUNTIME_EXES "$<TARGET_FILE:${ALCEDO_MAIN_BIN}>")
+    set(ALCEDO_RUNTIME_SEARCH_DIRS "$<TARGET_FILE_DIR:${ALCEDO_MAIN_BIN}>")
 
-    set(_third_party_exiv2_bin "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_party/exiv2_x64-windows/bin")
-    set(_third_party_duckdb_bin "${CMAKE_SOURCE_DIR}/pu-erh_lab/third_party/libduckdb-windows")
+    set(_third_party_exiv2_bin "${CMAKE_SOURCE_DIR}/alcedo_studio/third_party/exiv2_x64-windows/bin")
+    set(_third_party_duckdb_bin "${CMAKE_SOURCE_DIR}/alcedo_studio/third_party/libduckdb-windows")
 
     set(_vcpkg_bin_dir "")
     if(DEFINED VCPKG_INSTALLED_DIR AND DEFINED VCPKG_TARGET_TRIPLET)
@@ -584,25 +584,25 @@ if(WIN32 AND TARGET ${PUERHLAB_MAIN_BIN})
     endif()
 
     set(_cuda_bin_dir "")
-    if(PUERHLAB_CUDA_ENABLED AND CUDAToolkit_BIN_DIR)
+    if(ALCEDO_CUDA_ENABLED AND CUDAToolkit_BIN_DIR)
         set(_cuda_bin_dir "${CUDAToolkit_BIN_DIR}")
     endif()
 
     install(CODE
-        "message(STATUS \"[pu-erh_lab] Installing runtime DLL dependencies...\")
+        "message(STATUS \"[alcedo] Installing runtime DLL dependencies...\")
          set(_bindir \"\${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_BINDIR}\")
          file(MAKE_DIRECTORY \"\${_bindir}\")
          set(_search_dirs
              \"\${_bindir}\"
-             ${PUERHLAB_RUNTIME_SEARCH_DIRS}
+             ${ALCEDO_RUNTIME_SEARCH_DIRS}
              \"${_third_party_exiv2_bin}\"
              \"${_third_party_duckdb_bin}\"
              \"${_vcpkg_bin_dir}\"
              \"${_qt6_bin_dir}\"
-             \${PUERHLAB_RUNTIME_DEP_DIRS}
+             \${ALCEDO_RUNTIME_DEP_DIRS}
          )
          file(GET_RUNTIME_DEPENDENCIES
-             EXECUTABLES ${PUERHLAB_RUNTIME_EXES}
+             EXECUTABLES ${ALCEDO_RUNTIME_EXES}
              DIRECTORIES \${_search_dirs}
              RESOLVED_DEPENDENCIES_VAR _resolved
              UNRESOLVED_DEPENDENCIES_VAR _unresolved
@@ -633,11 +633,11 @@ if(WIN32 AND TARGET ${PUERHLAB_MAIN_BIN})
                  file(INSTALL DESTINATION \"\${_bindir}\" TYPE SHARED_LIBRARY FILES \"\${_cuda_runtime_dll}\")
              endforeach()
              if(NOT _cuda_runtime_dlls)
-                 message(WARNING \"[pu-erh_lab] cudart64_*.dll not found in: ${_cuda_bin_dir}\")
+                 message(WARNING \"[alcedo] cudart64_*.dll not found in: ${_cuda_bin_dir}\")
              endif()
          endif()
          if(_unresolved)
-             message(WARNING \"[pu-erh_lab] Unresolved runtime deps: \${_unresolved}\")
+             message(WARNING \"[alcedo] Unresolved runtime deps: \${_unresolved}\")
          endif()
         "
     )
@@ -646,53 +646,53 @@ if(WIN32 AND TARGET ${PUERHLAB_MAIN_BIN})
         message(FATAL_ERROR "qt_generate_deploy_qml_app_script is unavailable. Use Qt 6.3+ with deployment tooling.")
     endif()
 
-    option(PUERHLAB_DEPLOY_SOFTWARE_OPENGL "Bundle opengl32sw.dll for software OpenGL fallback." OFF)
+    option(ALCEDO_DEPLOY_SOFTWARE_OPENGL "Bundle opengl32sw.dll for software OpenGL fallback." OFF)
 
-    set(_puerhlab_qt_deploy_tool_options_default
+    set(_alcedo_qt_deploy_tool_options_default
         --no-compiler-runtime
         --no-system-d3d-compiler
         --no-system-dxc-compiler
     )
-    set(_puerhlab_qt_deploy_tool_options_legacy_default
+    set(_alcedo_qt_deploy_tool_options_legacy_default
         --no-compiler-runtime
         --no-translations
         --no-system-d3d-compiler
         --no-system-dxc-compiler
     )
 
-    if(NOT DEFINED PUERHLAB_QT_DEPLOY_TOOL_OPTIONS OR
-       "${PUERHLAB_QT_DEPLOY_TOOL_OPTIONS}" STREQUAL "${_puerhlab_qt_deploy_tool_options_legacy_default}")
-        set(PUERHLAB_QT_DEPLOY_TOOL_OPTIONS
-            ${_puerhlab_qt_deploy_tool_options_default}
+    if(NOT DEFINED ALCEDO_QT_DEPLOY_TOOL_OPTIONS OR
+       "${ALCEDO_QT_DEPLOY_TOOL_OPTIONS}" STREQUAL "${_alcedo_qt_deploy_tool_options_legacy_default}")
+        set(ALCEDO_QT_DEPLOY_TOOL_OPTIONS
+            ${_alcedo_qt_deploy_tool_options_default}
             CACHE STRING
             "Semicolon-separated options forwarded to Qt deploy tool during install."
             FORCE
         )
     else()
-        set(PUERHLAB_QT_DEPLOY_TOOL_OPTIONS
-            "${PUERHLAB_QT_DEPLOY_TOOL_OPTIONS}"
+        set(ALCEDO_QT_DEPLOY_TOOL_OPTIONS
+            "${ALCEDO_QT_DEPLOY_TOOL_OPTIONS}"
             CACHE STRING
             "Semicolon-separated options forwarded to Qt deploy tool during install."
         )
     endif()
 
-    set(_deploy_tool_options ${PUERHLAB_QT_DEPLOY_TOOL_OPTIONS})
-    if(NOT PUERHLAB_DEPLOY_SOFTWARE_OPENGL)
+    set(_deploy_tool_options ${ALCEDO_QT_DEPLOY_TOOL_OPTIONS})
+    if(NOT ALCEDO_DEPLOY_SOFTWARE_OPENGL)
         list(APPEND _deploy_tool_options --no-opengl-sw)
     endif()
 
     qt_generate_deploy_qml_app_script(
-        TARGET ${PUERHLAB_MAIN_BIN}
-        OUTPUT_SCRIPT _puerhlab_deploy_script
+        TARGET ${ALCEDO_MAIN_BIN}
+        OUTPUT_SCRIPT _alcedo_deploy_script
         NO_UNSUPPORTED_PLATFORM_ERROR
         DEPLOY_TOOL_OPTIONS ${_deploy_tool_options}
     )
-    install(SCRIPT ${_puerhlab_deploy_script})
+    install(SCRIPT ${_alcedo_deploy_script})
 endif()
 
 # ── macOS deployment ────────────────────────────────────────────────────────
 # Bundles external dylibs + Qt frameworks/plugins/QML modules into
-# PuerhLab.app so the packaged ZIP/DMG is self-contained.
+# Alcedo.app so the packaged ZIP/DMG is self-contained.
 #
 # Build & package workflow:
 #   cmake --preset macos_release
@@ -701,9 +701,9 @@ endif()
 #   cd build/macos-release && cpack              # creates the DMG + ZIP
 #
 # End-user can run the app from the terminal after mounting/extracting:
-#   ./PuerhLab.app/Contents/MacOS/PuerhLab
+#   ./Alcedo.app/Contents/MacOS/Alcedo
 # ────────────────────────────────────────────────────────────────────────────
-if(APPLE AND PUERHLAB_MACOS_BUNDLE AND TARGET ${PUERHLAB_MAIN_BIN})
+if(APPLE AND ALCEDO_MACOS_BUNDLE AND TARGET ${ALCEDO_MAIN_BIN})
 
     # Use Qt's QML deploy API (macdeployqt underneath) and pass Homebrew/3rd-party
     # library search roots via -libpath.
@@ -713,65 +713,65 @@ if(APPLE AND PUERHLAB_MACOS_BUNDLE AND TARGET ${PUERHLAB_MAIN_BIN})
             "Use Qt 6.3+ with deployment tooling.")
     endif()
 
-    set(_puerhlab_macos_deploy_tool_options "")
-    if(NOT PUERHLAB_MACDEPLOYQT_STRIP)
-        list(APPEND _puerhlab_macos_deploy_tool_options -no-strip)
+    set(_alcedo_macos_deploy_tool_options "")
+    if(NOT ALCEDO_MACDEPLOYQT_STRIP)
+        list(APPEND _alcedo_macos_deploy_tool_options -no-strip)
     endif()
 
-    set(_puerhlab_macos_libpaths "")
-    foreach(_lib_dir IN LISTS PUERHLAB_LIBRARY_HINTS)
+    set(_alcedo_macos_libpaths "")
+    foreach(_lib_dir IN LISTS ALCEDO_LIBRARY_HINTS)
         if(EXISTS "${_lib_dir}")
-            list(APPEND _puerhlab_macos_libpaths "-libpath=${_lib_dir}")
+            list(APPEND _alcedo_macos_libpaths "-libpath=${_lib_dir}")
         endif()
     endforeach()
 
-    if(DEFINED PUERHLAB_LENSFUN_LIBRARY_DIR AND NOT "${PUERHLAB_LENSFUN_LIBRARY_DIR}" STREQUAL "")
-        list(APPEND _puerhlab_macos_libpaths "-libpath=${PUERHLAB_LENSFUN_LIBRARY_DIR}")
+    if(DEFINED ALCEDO_LENSFUN_LIBRARY_DIR AND NOT "${ALCEDO_LENSFUN_LIBRARY_DIR}" STREQUAL "")
+        list(APPEND _alcedo_macos_libpaths "-libpath=${ALCEDO_LENSFUN_LIBRARY_DIR}")
     endif()
 
-    list(REMOVE_DUPLICATES _puerhlab_macos_libpaths)
-    list(APPEND _puerhlab_macos_deploy_tool_options ${_puerhlab_macos_libpaths})
+    list(REMOVE_DUPLICATES _alcedo_macos_libpaths)
+    list(APPEND _alcedo_macos_deploy_tool_options ${_alcedo_macos_libpaths})
 
-    set(_puerhlab_macos_deploy_args NO_UNSUPPORTED_PLATFORM_ERROR)
-    if(_puerhlab_macos_deploy_tool_options)
-        list(APPEND _puerhlab_macos_deploy_args
+    set(_alcedo_macos_deploy_args NO_UNSUPPORTED_PLATFORM_ERROR)
+    if(_alcedo_macos_deploy_tool_options)
+        list(APPEND _alcedo_macos_deploy_args
             DEPLOY_TOOL_OPTIONS
-            ${_puerhlab_macos_deploy_tool_options}
+            ${_alcedo_macos_deploy_tool_options}
         )
     endif()
 
     qt_generate_deploy_qml_app_script(
-        TARGET ${PUERHLAB_MAIN_BIN}
-        OUTPUT_SCRIPT _puerhlab_macos_deploy_script
-        ${_puerhlab_macos_deploy_args}
+        TARGET ${ALCEDO_MAIN_BIN}
+        OUTPUT_SCRIPT _alcedo_macos_deploy_script
+        ${_alcedo_macos_deploy_args}
     )
-    install(SCRIPT ${_puerhlab_macos_deploy_script})
+    install(SCRIPT ${_alcedo_macos_deploy_script})
 
     # Build a search-dir list for manual GCC/OpenBLAS runtime fixups.
-    set(_puerhlab_runtime_dirs ${PUERHLAB_LIBRARY_HINTS})
-    if(DEFINED PUERHLAB_LENSFUN_LIBRARY_DIR AND NOT "${PUERHLAB_LENSFUN_LIBRARY_DIR}" STREQUAL "")
-        list(APPEND _puerhlab_runtime_dirs "${PUERHLAB_LENSFUN_LIBRARY_DIR}")
+    set(_alcedo_runtime_dirs ${ALCEDO_LIBRARY_HINTS})
+    if(DEFINED ALCEDO_LENSFUN_LIBRARY_DIR AND NOT "${ALCEDO_LENSFUN_LIBRARY_DIR}" STREQUAL "")
+        list(APPEND _alcedo_runtime_dirs "${ALCEDO_LENSFUN_LIBRARY_DIR}")
     endif()
-    list(REMOVE_DUPLICATES _puerhlab_runtime_dirs)
-    list(JOIN _puerhlab_runtime_dirs ";" _puerhlab_runtime_dirs_joined)
+    list(REMOVE_DUPLICATES _alcedo_runtime_dirs)
+    list(JOIN _alcedo_runtime_dirs ";" _alcedo_runtime_dirs_joined)
 
     # Qt/macdeployqt already does the main deployment pass.
     # Here we only patch the OpenBLAS -> libgfortran -> libquadmath/libgcc_s chain.
     install(CODE
         "
-        set(_puerhlab_app_path \"\${CMAKE_INSTALL_PREFIX}/PuerhLab.app\")
-        set(_puerhlab_fw_dir   \"\${_puerhlab_app_path}/Contents/Frameworks\")
-        set(_puerhlab_search_dirs \"${_puerhlab_runtime_dirs_joined}\")
+        set(_alcedo_app_path \"\${CMAKE_INSTALL_PREFIX}/Alcedo.app\")
+        set(_alcedo_fw_dir   \"\${_alcedo_app_path}/Contents/Frameworks\")
+        set(_alcedo_search_dirs \"${_alcedo_runtime_dirs_joined}\")
 
-        if(NOT EXISTS \"\${_puerhlab_app_path}\")
-            message(FATAL_ERROR \"macOS bundle not found: \${_puerhlab_app_path}\")
+        if(NOT EXISTS \"\${_alcedo_app_path}\")
+            message(FATAL_ERROR \"macOS bundle not found: \${_alcedo_app_path}\")
         endif()
 
-        file(MAKE_DIRECTORY \"\${_puerhlab_fw_dir}\")
+        file(MAKE_DIRECTORY \"\${_alcedo_fw_dir}\")
 
-        function(_puerhlab_find_lib _out _name)
+        function(_alcedo_find_lib _out _name)
             set(_found \"\")
-            foreach(_dir IN LISTS _puerhlab_search_dirs)
+            foreach(_dir IN LISTS _alcedo_search_dirs)
                 if(EXISTS \"\${_dir}/\${_name}\")
                     set(_found \"\${_dir}/\${_name}\")
                     break()
@@ -780,10 +780,10 @@ if(APPLE AND PUERHLAB_MACOS_BUNDLE AND TARGET ${PUERHLAB_MAIN_BIN})
             set(\${_out} \"\${_found}\" PARENT_SCOPE)
         endfunction()
 
-        function(_puerhlab_copy_lib_if_missing _name)
-            set(_dst \"\${_puerhlab_fw_dir}/\${_name}\")
+        function(_alcedo_copy_lib_if_missing _name)
+            set(_dst \"\${_alcedo_fw_dir}/\${_name}\")
             if(NOT EXISTS \"\${_dst}\")
-                _puerhlab_find_lib(_src \"\${_name}\")
+                _alcedo_find_lib(_src \"\${_name}\")
                 if(\"\${_src}\" STREQUAL \"\")
                     message(FATAL_ERROR \"Required runtime library not found: \${_name}\")
                 endif()
@@ -801,41 +801,41 @@ if(APPLE AND PUERHLAB_MACOS_BUNDLE AND TARGET ${PUERHLAB_MAIN_BIN})
         endfunction()
 
         # Ensure the GCC runtime chain exists in the bundle.
-        _puerhlab_copy_lib_if_missing(\"libgfortran.5.dylib\")
-        _puerhlab_copy_lib_if_missing(\"libquadmath.0.dylib\")
-        _puerhlab_copy_lib_if_missing(\"libgcc_s.1.1.dylib\")
+        _alcedo_copy_lib_if_missing(\"libgfortran.5.dylib\")
+        _alcedo_copy_lib_if_missing(\"libquadmath.0.dylib\")
+        _alcedo_copy_lib_if_missing(\"libgcc_s.1.1.dylib\")
 
         # Patch libgfortran to use sibling dylibs in Frameworks.
         execute_process(
             COMMAND /usr/bin/install_name_tool
                     -change @rpath/libquadmath.0.dylib @loader_path/libquadmath.0.dylib
-                    \"\${_puerhlab_fw_dir}/libgfortran.5.dylib\"
+                    \"\${_alcedo_fw_dir}/libgfortran.5.dylib\"
             RESULT_VARIABLE _ignore_quadmath
             ERROR_QUIET
         )
         execute_process(
             COMMAND /usr/bin/install_name_tool
                     -change @rpath/libgcc_s.1.1.dylib @loader_path/libgcc_s.1.1.dylib
-                    \"\${_puerhlab_fw_dir}/libgfortran.5.dylib\"
+                    \"\${_alcedo_fw_dir}/libgfortran.5.dylib\"
             RESULT_VARIABLE _ignore_gcc
             ERROR_QUIET
         )
 
         # Make libopenblas prefer the bundled libgfortran when applicable.
-        if(EXISTS \"\${_puerhlab_fw_dir}/libopenblas.0.dylib\")
-            execute_process(COMMAND /bin/chmod u+w \"\${_puerhlab_fw_dir}/libopenblas.0.dylib\" ERROR_QUIET)
+        if(EXISTS \"\${_alcedo_fw_dir}/libopenblas.0.dylib\")
+            execute_process(COMMAND /bin/chmod u+w \"\${_alcedo_fw_dir}/libopenblas.0.dylib\" ERROR_QUIET)
 
             execute_process(
                 COMMAND /usr/bin/install_name_tool
                         -change @rpath/libgfortran.5.dylib @loader_path/libgfortran.5.dylib
-                        \"\${_puerhlab_fw_dir}/libopenblas.0.dylib\"
+                        \"\${_alcedo_fw_dir}/libopenblas.0.dylib\"
                 RESULT_VARIABLE _ignore_openblas_rpath
                 ERROR_QUIET
             )
             execute_process(
                 COMMAND /usr/bin/install_name_tool
                         -change @executable_path/../Frameworks/libgfortran.5.dylib @loader_path/libgfortran.5.dylib
-                        \"\${_puerhlab_fw_dir}/libopenblas.0.dylib\"
+                        \"\${_alcedo_fw_dir}/libopenblas.0.dylib\"
                 RESULT_VARIABLE _ignore_openblas_exec
                 ERROR_QUIET
             )
@@ -843,7 +843,7 @@ if(APPLE AND PUERHLAB_MACOS_BUNDLE AND TARGET ${PUERHLAB_MAIN_BIN})
 
         # Optional sanity check for the patched libgfortran.
         execute_process(
-            COMMAND /usr/bin/otool -L \"\${_puerhlab_fw_dir}/libgfortran.5.dylib\"
+            COMMAND /usr/bin/otool -L \"\${_alcedo_fw_dir}/libgfortran.5.dylib\"
             RESULT_VARIABLE _gfortran_otool_result
             OUTPUT_VARIABLE _gfortran_otool_output
             ERROR_VARIABLE  _gfortran_otool_error
@@ -858,29 +858,29 @@ if(APPLE AND PUERHLAB_MACOS_BUNDLE AND TARGET ${PUERHLAB_MAIN_BIN})
     )
 
     # Sign only after all bundle mutations are complete.
-    if(NOT "${PUERHLAB_MACOS_CODESIGN_IDENTITY}" STREQUAL "")
+    if(NOT "${ALCEDO_MACOS_CODESIGN_IDENTITY}" STREQUAL "")
         install(CODE
-            "set(_puerhlab_app_path \"\${CMAKE_INSTALL_PREFIX}/PuerhLab.app\")
-             if(EXISTS \"\${_puerhlab_app_path}\")
+            "set(_alcedo_app_path \"\${CMAKE_INSTALL_PREFIX}/Alcedo.app\")
+             if(EXISTS \"\${_alcedo_app_path}\")
                  if(EXISTS \"/usr/bin/codesign\")
                      execute_process(
                          COMMAND /usr/bin/codesign
                                  --force
                                  --deep
-                                 --sign \"${PUERHLAB_MACOS_CODESIGN_IDENTITY}\"
+                                 --sign \"${ALCEDO_MACOS_CODESIGN_IDENTITY}\"
                                  --timestamp=none
-                                 \"\${_puerhlab_app_path}\"
-                         RESULT_VARIABLE _puerhlab_codesign_result
+                                 \"\${_alcedo_app_path}\"
+                         RESULT_VARIABLE _alcedo_codesign_result
                      )
-                     if(NOT _puerhlab_codesign_result EQUAL 0)
+                     if(NOT _alcedo_codesign_result EQUAL 0)
                          message(FATAL_ERROR
-                             \"codesign failed for \${_puerhlab_app_path} (exit=\${_puerhlab_codesign_result})\")
+                             \"codesign failed for \${_alcedo_app_path} (exit=\${_alcedo_codesign_result})\")
                      endif()
                  else()
                      message(WARNING \"/usr/bin/codesign not found; skipping macOS bundle re-sign\")
                  endif()
              else()
-                 message(WARNING \"macOS bundle not found for re-sign: \${_puerhlab_app_path}\")
+                 message(WARNING \"macOS bundle not found for re-sign: \${_alcedo_app_path}\")
              endif()
             "
         )
@@ -889,22 +889,22 @@ endif()
 
 
 file(GLOB_RECURSE ALL_SOURCE_FILES
-    "${CMAKE_SOURCE_DIR}/pu-erh_lab/src/*.c"
-    "${CMAKE_SOURCE_DIR}/pu-erh_lab/src/*.cpp"
-    "${CMAKE_SOURCE_DIR}/pu-erh_lab/src/*.cu"
-    "${CMAKE_SOURCE_DIR}/pu-erh_lab/src/*.h"
-    "${CMAKE_SOURCE_DIR}/pu-erh_lab/src/*.hpp"
-    "${CMAKE_SOURCE_DIR}/pu-erh_lab/src/*.cuh")
+    "${CMAKE_SOURCE_DIR}/alcedo_studio/src/*.c"
+    "${CMAKE_SOURCE_DIR}/alcedo_studio/src/*.cpp"
+    "${CMAKE_SOURCE_DIR}/alcedo_studio/src/*.cu"
+    "${CMAKE_SOURCE_DIR}/alcedo_studio/src/*.h"
+    "${CMAKE_SOURCE_DIR}/alcedo_studio/src/*.hpp"
+    "${CMAKE_SOURCE_DIR}/alcedo_studio/src/*.cuh")
 
 # Files compiled by clang-tidy; keep to TUs so compile_commands entries are used.
 file(GLOB_RECURSE TIDY_SOURCE_FILES
-    "${CMAKE_SOURCE_DIR}/pu-erh_lab/src/*.c"
-    "${CMAKE_SOURCE_DIR}/pu-erh_lab/src/*.cpp"
-    "${CMAKE_SOURCE_DIR}/pu-erh_lab/src/*.cu"
-    "${CMAKE_SOURCE_DIR}/pu-erh_lab/tests/*.cpp")
+    "${CMAKE_SOURCE_DIR}/alcedo_studio/src/*.c"
+    "${CMAKE_SOURCE_DIR}/alcedo_studio/src/*.cpp"
+    "${CMAKE_SOURCE_DIR}/alcedo_studio/src/*.cu"
+    "${CMAKE_SOURCE_DIR}/alcedo_studio/tests/*.cpp")
 
 # Header filter: allow both '/' and '\\' so Windows paths match.
-set(MY_HEADER_FILTER ".*pu-erh_lab[\\\\/](src|tests)[\\\\/].*")
+set(MY_HEADER_FILTER ".*alcedo[\\\\/](src|tests)[\\\\/].*")
 
 add_custom_target(format
     COMMAND clang-format
@@ -928,14 +928,14 @@ add_custom_target(tidy
     COMMENT "Running clang-tidy on source files"
 )
 
-set(CPACK_PACKAGE_NAME "pu-erh_lab")
+set(CPACK_PACKAGE_NAME "alcedo")
 set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
 set(CPACK_PACKAGE_FILE_NAME "${CPACK_PACKAGE_NAME}-${CPACK_PACKAGE_VERSION}-${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}")
-if(APPLE AND PUERHLAB_MACOS_BUNDLE)
+if(APPLE AND ALCEDO_MACOS_BUNDLE)
     set(CPACK_GENERATOR "DragNDrop;ZIP")
-    set(CPACK_DMG_VOLUME_NAME "PuerhLab")
+    set(CPACK_DMG_VOLUME_NAME "Alcedo")
     # Include the .app bundle at the top level of the ZIP so the user
-    # extracts it and finds PuerhLab.app/ directly.
+    # extracts it and finds Alcedo.app/ directly.
     set(CPACK_INCLUDE_TOPLEVEL_DIRECTORY OFF)
 else()
     set(CPACK_GENERATOR "ZIP")

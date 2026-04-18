@@ -56,7 +56,7 @@ def parse_args():
     parser.add_argument(
         "--device",
         default=default_runtime_device(),
-        help="PUERH_MIND_DEVICE value used when spawning server",
+        help="ALCEDO_MIND_DEVICE value used when spawning server",
     )
     parser.add_argument(
         "--top-k",
@@ -155,7 +155,7 @@ def refresh_album_index(
                 ensure_dependencies(repo_root, require_cargo=True, require_grpc=True)
                 print(
                     f"starting rust server with {' '.join(cargo_run_command(repo_root))} "
-                    f"and PUERH_MIND_DEVICE={device} at {repo_root} ..."
+                    f"and ALCEDO_MIND_DEVICE={device} at {repo_root} ..."
                 )
                 server_proc = start_server(
                     repo_root,

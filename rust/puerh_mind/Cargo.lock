@@ -1955,7 +1955,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "puerh_mind"
+name = "alcedo_mind"
 version = "0.1.0"
 dependencies = [
  "anyhow",

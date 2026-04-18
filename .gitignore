@@ -1060,9 +1060,9 @@ sample_images/
 temp_folder/
 
 third_party/
-!pu-erh_lab/src/third_party/
-!pu-erh_lab/src/third_party/lensfun/
-!pu-erh_lab/src/third_party/lensfun/**
+!alcedo/src/third_party/
+!alcedo/src/third_party/lensfun/
+!alcedo/src/third_party/lensfun/**
 
 /.vscode/
 

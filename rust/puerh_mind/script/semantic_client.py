@@ -124,7 +124,7 @@ def server_environment(device=None, rust_log=None):
         device = default_runtime_device()
 
     env = os.environ.copy()
-    env["PUERH_MIND_DEVICE"] = device
+    env["ALCEDO_MIND_DEVICE"] = device
     if rust_log is not None:
         env["RUST_LOG"] = rust_log
     return env

@@ -19,7 +19,7 @@ const TEXT_SEQUENCE_LENGTH: usize = 77;
 const EMBEDDING_DIM: usize = 512;
 const IMAGE_SIZE: usize = 256;
 
-const DEVICE_ERROR_MESSAGE: &str = "expected \"auto\", \"cpu\", \"directml\", \"dml\", \"directml:N\", or \"dml:N\" for PUERH_MIND_DEVICE with ORT backend";
+const DEVICE_ERROR_MESSAGE: &str = "expected \"auto\", \"cpu\", \"directml\", \"dml\", \"directml:N\", or \"dml:N\" for ALCEDO_MIND_DEVICE with ORT backend";
 
 static ORT_ENVIRONMENT_INIT: OnceLock<bool> = OnceLock::new();
 
@@ -49,7 +49,7 @@ impl OrtClipEngine {
     fn parse_device_request(value: &str) -> Result<DeviceRequest> {
         let value = value.trim();
         if value.is_empty() {
-            bail!("unsupported PUERH_MIND_DEVICE value {value:?}, {DEVICE_ERROR_MESSAGE}");
+            bail!("unsupported ALCEDO_MIND_DEVICE value {value:?}, {DEVICE_ERROR_MESSAGE}");
         }
 
         let value_lower = value.to_ascii_lowercase();
@@ -90,18 +90,18 @@ impl OrtClipEngine {
             || value_lower.starts_with("metal:")
         {
             bail!(
-                "PUERH_MIND_DEVICE={value:?} is not supported by the ORT backend; use \"directml\"/\"dml\" on Windows or \"cpu\""
+                "ALCEDO_MIND_DEVICE={value:?} is not supported by the ORT backend; use \"directml\"/\"dml\" on Windows or \"cpu\""
             );
         }
 
-        bail!("unsupported PUERH_MIND_DEVICE value {value:?}, {DEVICE_ERROR_MESSAGE}")
+        bail!("unsupported ALCEDO_MIND_DEVICE value {value:?}, {DEVICE_ERROR_MESSAGE}")
     }
 
     fn select_device_request() -> Result<DeviceRequest> {
-        match std::env::var("PUERH_MIND_DEVICE") {
+        match std::env::var("ALCEDO_MIND_DEVICE") {
             Ok(value) => Self::parse_device_request(&value),
             Err(std::env::VarError::NotPresent) => Ok(DeviceRequest::Auto),
-            Err(err) => bail!("failed to read PUERH_MIND_DEVICE: {err}"),
+            Err(err) => bail!("failed to read ALCEDO_MIND_DEVICE: {err}"),
         }
     }
 
@@ -148,7 +148,7 @@ impl OrtClipEngine {
             DeviceRequest::DirectMl(device_id) => {
                 if !cfg!(target_os = "windows") {
                     bail!(
-                        "PUERH_MIND_DEVICE requests DirectML, but DirectML is only supported on Windows for the ORT backend"
+                        "ALCEDO_MIND_DEVICE requests DirectML, but DirectML is only supported on Windows for the ORT backend"
                     );
                 }
 
@@ -587,7 +587,7 @@ mod tests {
             .expect("model load lock should not be poisoned");
 
         unsafe {
-            std::env::set_var("PUERH_MIND_DEVICE", "cpu");
+            std::env::set_var("ALCEDO_MIND_DEVICE", "cpu");
         }
 
         let config = SemanticConfig {
@@ -725,12 +725,12 @@ mod tests {
 
     #[test]
     fn downloads_missing_assets_when_opted_in() {
-        if std::env::var("PUERH_MIND_RUN_DOWNLOAD_TESTS")
+        if std::env::var("ALCEDO_MIND_RUN_DOWNLOAD_TESTS")
             .ok()
             .as_deref()
             != Some("1")
         {
-            eprintln!("skipping download test; set PUERH_MIND_RUN_DOWNLOAD_TESTS=1 to enable");
+            eprintln!("skipping download test; set ALCEDO_MIND_RUN_DOWNLOAD_TESTS=1 to enable");
             return;
         }
 

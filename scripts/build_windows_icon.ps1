@@ -1,6 +1,6 @@
 param(
-    [string]$InputPng = "$PSScriptRoot/../pu-erh_lab/src/config/ICON/unnamed.png",
-    [string]$OutputIco = "$PSScriptRoot/../pu-erh_lab/src/config/ICON/unnamed.ico",
+    [string]$InputPng = "$PSScriptRoot/../alcedo/src/config/ICON/unnamed.png",
+    [string]$OutputIco = "$PSScriptRoot/../alcedo/src/config/ICON/unnamed.ico",
     [int[]]$Sizes = @(16, 20, 24, 32, 40, 48, 64, 128, 256),
     [double]$PaddingRatio = 0.04,
     [int]$AlphaThreshold = 8,

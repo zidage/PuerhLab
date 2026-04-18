@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**Pu-erh Lab** is a RAW photo editor and digital asset management (DAM) system written in C++20. It features CUDA-accelerated (Windows) and Metal-accelerated (macOS) image processing, a DuckDB-backed asset management system ("Sleeve"), and a Qt 6 UI combining QML (album browser) and Qt Widgets (editor).
+**Alcedo Studio** is a RAW photo editor and digital asset management (DAM) system written in C++20. It features CUDA-accelerated (Windows) and Metal-accelerated (macOS) image processing, a DuckDB-backed asset management system ("Sleeve"), and a Qt 6 UI combining QML (album browser) and Qt Widgets (editor).
 
 ## Build Commands
 
@@ -30,7 +30,7 @@ cpack --config build/release/CPackConfig.cmake
 
 ```bash
 cmake --preset macos_debug
-cmake --build --preset macos_debug --target puerhlab_main
+cmake --build --preset macos_debug --target alcedo_main
 
 cmake --preset macos_release
 cmake --build --preset macos_release
@@ -84,7 +84,7 @@ These façade services are the **only** API surface the UI layer may call. They 
 - **AlbumBackendLib**: Reusable QML/C++ backend module for the album browser
 - **EditViewer**: Real-time editor viewport using Qt RHI (D3D11 / Metal / OpenGL fallback)
 - **editor_dialog**: Editor UI panels (tone, color, geometry, versioning, scope/histogram)
-- **puerhlab_main**: Application entry point (QML + C++ shell)
+- **alcedo_main**: Application entry point (QML + C++ shell)
 
 ## Key Technical Notes
 

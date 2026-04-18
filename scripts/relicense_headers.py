@@ -12,8 +12,8 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 TARGET_DIRS = (
-    REPO_ROOT / "pu-erh_lab" / "src",
-    REPO_ROOT / "pu-erh_lab" / "tests",
+    REPO_ROOT / "alcedo" / "src",
+    REPO_ROOT / "alcedo" / "tests",
 )
 CODE_EXTENSIONS = {
     ".c",
@@ -28,9 +28,9 @@ CODE_EXTENSIONS = {
     ".hxx",
 }
 PURE_THIRD_PARTY_PATHS = {
-    Path("pu-erh_lab/src/config/CLFs/hilite_recon.cc"),
-    Path("pu-erh_lab/src/include/edit/operators/basic/camera_matrices.hpp"),
-    Path("pu-erh_lab/tests/leak_detector/memory_leak_detector.hpp"),
+    Path("alcedo/src/config/CLFs/hilite_recon.cc"),
+    Path("alcedo/src/include/edit/operators/basic/camera_matrices.hpp"),
+    Path("alcedo/tests/leak_detector/memory_leak_detector.hpp"),
 }
 PURE_THIRD_PARTY_MARKERS = (
     "creativecommons.org/licenses/by-sa/4.0",
@@ -66,7 +66,7 @@ class ParsedLine:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Migrate pu-erh_lab source/test headers to GPL-3.0-only."
+        description="Migrate alcedo source/test headers to GPL-3.0-only."
     )
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--check", action="store_true", help="Report files that would change.")

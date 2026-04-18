@@ -1,10 +1,10 @@
-pu-erh_lab NOTICE
+alcedo NOTICE
 Copyright 2025-2026 Yurun Zi
 
 Project license status:
 - The v0.1.1 tag and earlier released versions were distributed under the Apache License, Version 2.0.
 - Development after v0.1.1 is distributed under GPL-3.0-only.
-- The root LICENSE file also includes an additional permission under GPLv3 section 7 for combining/distributing pu-erh_lab with required NVIDIA CUDA components.
+- The root LICENSE file also includes an additional permission under GPLv3 section 7 for combining/distributing alcedo with required NVIDIA CUDA components.
 - That additional permission applies only to material for which the relevant copyright holder can grant it; third-party material remains subject to its own notices and licenses.
 
 This distribution includes third-party components under separate licenses.
@@ -24,13 +24,13 @@ Selected attribution highlights:
 - ACES core and ACES looks referenced for color pipeline formulas and transforms
 
 Attribution/source pointers for adapted files:
-- pu-erh_lab/src/decoders/processor/operators/cpu/highlight_reconstruct.cpp
+- alcedo/src/decoders/processor/operators/cpu/highlight_reconstruct.cpp
   Adapted from darktable opposed highlight reconstruction implementation.
-- pu-erh_lab/src/decoders/processor/operators/cpu/debayer_rcd.cpp
+- alcedo/src/decoders/processor/operators/cpu/debayer_rcd.cpp
   Adapted from LuisSR/RCD-Demosaicing.
-- pu-erh_lab/src/decoders/processor/operators/gpu/cuda_debayer_rcd.cu
+- alcedo/src/decoders/processor/operators/gpu/cuda_debayer_rcd.cu
   CUDA adaptation of RCD demosaicing algorithm with upstream attribution.
-- pu-erh_lab/src/edit/operators/cst/open_drt_cpu.cpp
+- alcedo/src/edit/operators/cst/open_drt_cpu.cpp
   Contains GPLv3-derived logic adapted from OpenDRT v1.1.0.
 
 If you redistribute this project, preserve this NOTICE file, THIRD_PARTY_NOTICE.txt,

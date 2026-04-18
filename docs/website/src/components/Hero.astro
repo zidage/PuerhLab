@@ -9,9 +9,9 @@ const { lang } = Astro.props;
 const i = t(lang);
 const base = import.meta.env.BASE_URL;
 const windowsReleaseUrl =
-  'https://github.com/zidage/PuerhLab/releases/download/v0.2.2/pu-erh_lab-0.2.2-Windows-AMD64.7z';
+  'https://github.com/zidage/Alcedo/releases/download/v0.2.2/alcedo-0.2.2-Windows-AMD64.7z';
 const macosReleaseUrl =
-  'https://github.com/zidage/PuerhLab/releases/download/v0.2.2/pu-erh_lab-0.2.2-Darwin-arm64.dmg';
+  'https://github.com/zidage/Alcedo/releases/download/v0.2.2/alcedo-0.2.2-Darwin-arm64.dmg';
 ---
 
 <section
@@ -34,7 +34,7 @@ const macosReleaseUrl =
     >
       <img
         src={`${base}brand/app-icon.png`}
-        alt={lang === 'zh' ? '普洱工坊 logo' : 'Pu-erh Lab logo'}
+        alt={lang === 'zh' ? '普洱工坊 logo' : 'Alcedo Studio logo'}
         class="w-16 h-16 sm:w-20 sm:h-20 lg:w-24 lg:h-24 drop-shadow-[0_0_24px_rgba(252,199,4,0.4)]"
         loading="eager"
       />
@@ -46,7 +46,7 @@ const macosReleaseUrl =
           </>
         ) : (
           <>
-            <span class="text-gold">Pu-erh</span>
+            <span class="text-gold">Alcedo</span>
             <span class="text-mist"> Lab</span>
           </>
         )}
@@ -111,7 +111,7 @@ const macosReleaseUrl =
         {lang === 'zh' ? '下载 macOS 版' : 'Download for macOS'}
       </a>
       <a
-        href="https://zidage.github.io/PuerhLab_docs"
+        href="https://zidage.github.io/Alcedo_docs"
         target="_blank"
         rel="noopener noreferrer"
         class="px-8 py-3 border border-gold text-gold font-semibold rounded-panel hover:bg-gold/10 transition-all"
@@ -119,7 +119,7 @@ const macosReleaseUrl =
         {i.hero.ctaStart}
       </a>
       <a
-        href="https://github.com/zidage/PuerhLab"
+        href="https://github.com/zidage/Alcedo"
         target="_blank"
         rel="noopener noreferrer"
         class="px-8 py-3 border border-gold text-gold font-semibold rounded-panel hover:bg-gold/10 transition-all flex items-center gap-2"

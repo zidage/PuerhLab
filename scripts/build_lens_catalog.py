@@ -87,13 +87,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--source",
         type=Path,
-        default=Path("pu-erh_lab/src/config/lens_calib"),
+        default=Path("alcedo/src/config/lens_calib"),
         help="Directory containing lens calibration XML files.",
     )
     parser.add_argument(
         "--output",
         type=Path,
-        default=Path("pu-erh_lab/src/config/lens_calib/lens_catalog.json"),
+        default=Path("alcedo/src/config/lens_calib/lens_catalog.json"),
         help="Output JSON file path.",
     )
     return parser.parse_args()

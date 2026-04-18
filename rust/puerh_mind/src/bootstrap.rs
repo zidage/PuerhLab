@@ -8,7 +8,7 @@ pub async fn start_server() -> Result<(), Box<dyn std::error::Error>> {
     let config = AppConfig::load();
     let addr = config.listen_addr().parse()?;
 
-    info!("staring puerh_mind on {}", addr);
+    info!("staring alcedo_mind on {}", addr);
 
     let router = register_services(Server::builder(), &config)?;
 

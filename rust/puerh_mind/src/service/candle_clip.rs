@@ -49,7 +49,7 @@ impl CandleClipEngine {
         let value = value.trim();
         if value.is_empty() {
             bail!(
-                "unsupported PUERH_MIND_DEVICE value {value:?}, expected \"auto\", \"cpu\", \"cuda\", \"cuda:N\", \"metal\", or \"metal:N\""
+                "unsupported ALCEDO_MIND_DEVICE value {value:?}, expected \"auto\", \"cpu\", \"cuda\", \"cuda:N\", \"metal\", or \"metal:N\""
             );
         }
 
@@ -67,7 +67,7 @@ impl CandleClipEngine {
         }
 
         bail!(
-            "unsupported PUERH_MIND_DEVICE value {value:?}, expected \"auto\", \"cpu\", \"cuda\", \"cuda:N\", \"metal\", or \"metal:N\""
+            "unsupported ALCEDO_MIND_DEVICE value {value:?}, expected \"auto\", \"cpu\", \"cuda\", \"cuda:N\", \"metal\", or \"metal:N\""
         )
     }
 
@@ -110,7 +110,7 @@ impl CandleClipEngine {
         let value = value.trim();
         if value.is_empty() {
             bail!(
-                "unsupported PUERH_MIND_DTYPE value {value:?}, expected \"auto\", \"fp16\", or \"fp32\""
+                "unsupported ALCEDO_MIND_DTYPE value {value:?}, expected \"auto\", \"fp16\", or \"fp32\""
             );
         }
 
@@ -133,15 +133,15 @@ impl CandleClipEngine {
         }
 
         bail!(
-            "unsupported PUERH_MIND_DTYPE value {value:?}, expected \"auto\", \"fp16\", or \"fp32\""
+            "unsupported ALCEDO_MIND_DTYPE value {value:?}, expected \"auto\", \"fp16\", or \"fp32\""
         )
     }
 
     fn select_dtype_request() -> Result<DTypeRequest> {
-        match std::env::var("PUERH_MIND_DTYPE") {
+        match std::env::var("ALCEDO_MIND_DTYPE") {
             Ok(value) => Self::parse_dtype_request(&value),
             Err(std::env::VarError::NotPresent) => Ok(DTypeRequest::Auto),
-            Err(err) => bail!("failed to read PUERH_MIND_DTYPE: {err}"),
+            Err(err) => bail!("failed to read ALCEDO_MIND_DTYPE: {err}"),
         }
     }
 
@@ -208,10 +208,10 @@ impl CandleClipEngine {
     }
 
     fn select_device() -> Result<Device> {
-        match std::env::var("PUERH_MIND_DEVICE") {
+        match std::env::var("ALCEDO_MIND_DEVICE") {
             Ok(value) => Self::initialize_device(Self::parse_device_request(&value)?),
             Err(std::env::VarError::NotPresent) => Ok(Self::select_best_available_device()),
-            Err(err) => bail!("failed to read PUERH_MIND_DEVICE: {err}"),
+            Err(err) => bail!("failed to read ALCEDO_MIND_DEVICE: {err}"),
         }
     }
 
@@ -650,12 +650,12 @@ mod tests {
     #[test]
     fn rejects_invalid_dtype_request() {
         let err = CandleClipEngine::parse_dtype_request("bf16").unwrap_err();
-        assert!(err.to_string().contains("PUERH_MIND_DTYPE"));
+        assert!(err.to_string().contains("ALCEDO_MIND_DTYPE"));
     }
 
     fn make_test_engine() -> CandleClipEngine {
         unsafe {
-            std::env::set_var("PUERH_MIND_DEVICE", "cpu");
+            std::env::set_var("ALCEDO_MIND_DEVICE", "cpu");
         }
         let config = SemanticConfig {
             model_id: "timm/MobileCLIP2-S2-OpenCLIP".to_string(),

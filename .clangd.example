@@ -18,7 +18,7 @@ CompileFlags:
 ---
 
 If:
-    PathMatch: ^pu-erh_lab/tests/.*\.(c|h)pp$
+    PathMatch: ^alcedo/tests/.*\.(c|h)pp$
 CompileFlags:
     CompilationDatabase: build/macos-debug-tests
 Diagnostics:
@@ -27,7 +27,7 @@ Diagnostics:
 ---
 
 If:
-    PathMatch: ^pu-erh_lab/src/.*\.(c|h)pp$
+    PathMatch: ^alcedo/src/.*\.(c|h)pp$
 CompileFlags:
     CompilationDatabase: build/macos-debug
 Diagnostics:

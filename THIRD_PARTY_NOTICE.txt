@@ -1,4 +1,4 @@
-pu-erh_lab THIRD-PARTY NOTICE
+alcedo THIRD-PARTY NOTICE
 Generated: 2026-02-27
 
 Project license: GPL-3.0-only with additional permission under GPLv3 section 7 for required NVIDIA CUDA components
@@ -158,16 +158,16 @@ Usage note: debayer RCD implementations are marked as adapted from this source.
 
 C) File-level adaptation pointers in this repository
 
-- pu-erh_lab/src/decoders/processor/operators/cpu/highlight_reconstruct.cpp
+- alcedo/src/decoders/processor/operators/cpu/highlight_reconstruct.cpp
   Includes darktable GPL notice and adaptation note.
 
-- pu-erh_lab/src/decoders/processor/operators/cpu/debayer_rcd.cpp
+- alcedo/src/decoders/processor/operators/cpu/debayer_rcd.cpp
   Includes adaptation note pointing to RCD-Demosaicing.
 
-- pu-erh_lab/src/decoders/processor/operators/gpu/cuda_debayer_rcd.cu
+- alcedo/src/decoders/processor/operators/gpu/cuda_debayer_rcd.cu
   Includes RCD authorship header and algorithm attribution.
 
-- pu-erh_lab/src/include/edit/operators/GPU_kernels/color_mgmt/*.cuh
+- alcedo/src/include/edit/operators/GPU_kernels/color_mgmt/*.cuh
   ACES core links are referenced in comments for ported formulas.
 
 D) Redistribution reminder

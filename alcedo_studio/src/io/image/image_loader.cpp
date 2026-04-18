@@ -1,0 +1,121 @@
+//  Copyright 2025 Yurun Zi
+//  SPDX-License-Identifier: GPL-3.0-only
+//  Additional permission under GPLv3 section 7 applies; see the LICENSE file.
+
+#include "io/image/image_loader.hpp"
+
+#include <cstddef>
+#include <cstdint>
+#include <fstream>
+#include <future>
+#include <memory>
+#include <stdexcept>
+#include <vector>
+
+#include "decoders/decoder_scheduler.hpp"
+#include "type/type.hpp"
+
+namespace alcedo {
+namespace {
+
+auto ReadWholeFile(const image_path_t& path) -> std::vector<uint8_t> {
+  std::ifstream file(path, std::ios::binary | std::ios::ate);
+  if (!file.is_open()) {
+    throw std::runtime_error("ByteBufferLoader: cannot open file for reading");
+  }
+
+  const std::streamsize file_size = file.tellg();
+  if (file_size <= 0) {
+    throw std::runtime_error("ByteBufferLoader: file size is invalid");
+  }
+
+  file.seekg(0, std::ios::beg);
+  auto buffer = std::vector<uint8_t>(static_cast<size_t>(file_size));
+  if (!file.read(reinterpret_cast<char*>(buffer.data()), file_size) || file.gcount() != file_size) {
+    throw std::runtime_error("ByteBufferLoader: failed to read full file");
+  }
+
+  return buffer;
+}
+
+}  // namespace
+
+/**
+ * @brief Construct a new ImageLoader::ImageLoader object
+ *
+ * @param buffer_size size of loader's buffer
+ * @param use_thread number of thread used to decode image
+ */
+ImageLoader::ImageLoader(uint32_t buffer_size, size_t use_thread, image_id_t start_id)
+    : buffer_decoded_(std::make_shared<BufferQueue>(buffer_size)),
+      buffer_size_(buffer_size),
+      use_thread_(use_thread),
+      start_id_(start_id),
+      next_id_(start_id),
+      decoder_scheduler_(use_thread, buffer_decoded_) {}
+
+/**
+ * @brief Loads a batch of images
+ *
+ * @param images
+ * @param decode_type
+ */
+void ImageLoader::StartLoading(std::vector<image_path_t> images, DecodeType decode_type) {
+  for (const auto& img : images) {
+    // Skip unsupported file type
+    // if (!is_supported_file(img)) {
+    //   continue;
+    // }
+
+    promises_.emplace_back(std::make_shared<std::promise<image_id_t>>());
+    futures_.emplace_back(promises_[next_id_]->get_future());
+    if (decode_type == DecodeType::SLEEVE_LOADING)
+      decoder_scheduler_.ScheduleDecode(next_id_, img, promises_[next_id_]);
+    ++next_id_;
+  }
+}
+
+/**
+ * @brief Loads a single of images
+ *
+ * @param images
+ * @param decode_type
+ */
+void ImageLoader::StartLoading(std::shared_ptr<Image> image, DecodeType decode_type) {
+  promises_.emplace_back(std::make_shared<std::promise<image_id_t>>());
+  futures_.emplace_back(promises_[next_id_]->get_future());
+  decoder_scheduler_.ScheduleDecode(image, decode_type, promises_[next_id_]);
+  ++next_id_;
+}
+
+auto ImageLoader::LoadImage() -> std::shared_ptr<Image> {
+  // If there's no finished image in the buffer, will block the load routine
+  std::shared_ptr<Image> img = buffer_decoded_->pop();
+  return img;
+}
+
+auto ByteBufferLoader::LoadFromImage(std::shared_ptr<Image> img)
+    -> std::shared_ptr<std::vector<uint8_t>> {
+  if (!img) {
+    return nullptr;
+  }
+
+  try {
+    return std::make_shared<std::vector<uint8_t>>(ReadWholeFile(img->image_path_));
+  } catch (...) {
+    return nullptr;
+  }
+}
+
+auto ByteBufferLoader::LoadByteBufferFromImage(std::shared_ptr<Image> img) -> std::vector<uint8_t> {
+  if (!img) {
+    throw std::runtime_error("ByteBufferLoader: image is null");
+  }
+  return LoadByteBufferFromPath(img->image_path_);
+}
+
+auto ByteBufferLoader::LoadByteBufferFromPath(const image_path_t& path) -> std::vector<uint8_t> {
+  return ReadWholeFile(path);
+}
+
+};  // namespace alcedo

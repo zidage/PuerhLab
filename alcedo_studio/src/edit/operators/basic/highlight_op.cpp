@@ -1,0 +1,98 @@
+//  Copyright 2025 Yurun Zi
+//  SPDX-License-Identifier: GPL-3.0-only
+//  Additional permission under GPLv3 section 7 applies; see the LICENSE file.
+
+#include "edit/operators/basic/highlight_op.hpp"
+
+#include <cmath>
+#include <opencv2/core/types.hpp>
+#include <opencv2/highgui.hpp>
+#include <opencv2/opencv.hpp>
+#include <string>
+
+#include "edit/operators/basic/shadows_highlights_shared_curve.hpp"
+#include "edit/operators/op_base.hpp"
+#include "image/image_buffer.hpp"
+
+namespace alcedo {
+HighlightsOp::HighlightsOp(float offset) : offset_(offset) {}
+
+HighlightsOp::HighlightsOp(const nlohmann::json& params) { SetParams(params); }
+
+static inline float clampf(float v, float a, float b) { return std::max(a, std::min(b, v)); }
+
+namespace {
+void UpdateSharedToneCurvePayload(OperatorParams& params) {
+  const bool shadows_active = params.shadows_operator_present_ && params.shadows_enabled_;
+  const bool highlights_active = params.highlights_operator_present_ && params.highlights_enabled_;
+  const auto curve = detail::BuildSharedToneCurve(shadows_active, params.shadows_slider_value_,
+                                                  highlights_active, params.highlights_slider_value_);
+  detail::StoreSharedToneCurve(curve, params);
+  params.shared_tone_curve_apply_in_shadows_    = shadows_active;
+  params.shared_tone_curve_apply_in_highlights_ = (!shadows_active) && highlights_active;
+}
+}  // namespace
+
+// Luminance (linear, BGR)
+
+auto                HighlightsOp::GetScale() -> float { return offset_ / 300.0f; }
+
+void                HighlightsOp::Apply(std::shared_ptr<ImageBuffer> input) { (void)input; }
+
+void HighlightsOp::ApplyGPU(std::shared_ptr<ImageBuffer>) { throw std::runtime_error("HighlightsOp: ApplyGPU not implemented"); }
+
+auto HighlightsOp::GetParams() const -> nlohmann::json {
+  return {{std::string(script_name_), offset_}};
+}
+
+void HighlightsOp::SetParams(const nlohmann::json& params) {
+  bool found = false;
+  if (params.is_object() && params.contains(script_name_)) {
+    offset_ = params[script_name_].get<float>();
+    found   = true;
+  } else if (params.is_array() && params.size() == 2) {
+    // Backward compatibility for legacy snapshots serialized as ["highlights", value].
+    try {
+      if (params[0].is_string() && params[0].get<std::string>() == script_name_) {
+        offset_ = params[1].get<float>();
+        found   = true;
+      }
+    } catch (...) {
+    }
+  }
+  if (!found) {
+    offset_ = 0.0f;
+  }
+  curve_.control_    = clampf(offset_ / 50.0f, -2.0f, 2.0f);
+  const float c = std::max(0.0f, curve_.control_);
+  curve_.knee_start_ = clampf(0.75f + 0.1f * c, 0.0f, 0.95f);
+  // curve_.knee_start_ = clampf(0.8f, 0.0f, 1.0f);  // ensure <= whitepoint
+  // map control -> slope at whitepoint (m1)
+  // design: control = +1 => strong compression (m1 -> small, e.g. 0.2)
+  //         control =  0 => identity slope (1.0)
+  //         control = -1 => boost highlights (m1 -> >1, e.g. 1.8)
+  curve_.m1_ = 1.0f - curve_.control_ * curve_.slope_range_;  // in [1-slope_range, 1+slope_range]
+
+  // endpoints for Hermite between x0 = knee_start, x1 = whitepoint
+  curve_.x0_ = curve_.knee_start_;
+  curve_.y0_ = curve_.x0_;  // keep continuity (identity at x0)
+  curve_.y1_ = curve_.x1_;  // identity at x1 (we'll control slope to shape shoulder)
+
+  // For Hermite formula we need derivatives dy/dx at endpoints.
+  // m0 and m1 are dy/dx at x0 and x1 respectively.
+  // But Hermite cubic uses tangents scaled by (x1-x0) in the basis:
+  curve_.dx_ = (curve_.x1_ - curve_.x0_);
+}
+
+void HighlightsOp::SetGlobalParams(OperatorParams& params) const {
+  params.highlights_operator_present_ = true;
+  params.highlights_slider_value_     = offset_;
+  params.highlights_offset_ = offset_ / 50.0f;
+  params.highlights_m1_     = curve_.m1_;
+  UpdateSharedToneCurvePayload(params);
+}
+
+void HighlightsOp::EnableGlobalParams(OperatorParams& params, bool enable) {
+  params.highlights_enabled_ = enable;
+}
+}  // namespace alcedo

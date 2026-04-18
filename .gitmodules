@@ -1,17 +1,17 @@
-[submodule "pu-erh_lab/third_party/opencv"]
-	path = pu-erh_lab/third_party/opencv
+[submodule "alcedo/third_party/opencv"]
+	path = alcedo/third_party/opencv
 	url = https://github.com/opencv/opencv.git
 	branch = 4.x
-[submodule "pu-erh_lab/third_party/opencv_contrib"]
-	path = pu-erh_lab/third_party/opencv_contrib
+[submodule "alcedo/third_party/opencv_contrib"]
+	path = alcedo/third_party/opencv_contrib
 	url = https://github.com/opencv/opencv_contrib.git
 	branch = 4.x
-[submodule "pu-erh_lab/src/third_party/lensfun"]
-	path = pu-erh_lab/src/third_party/lensfun
+[submodule "alcedo/src/third_party/lensfun"]
+	path = alcedo/src/third_party/lensfun
 	url = https://github.com/lensfun/lensfun.git
-[submodule "pu-erh_lab/src/third_party/metal-cpp"]
-	path = pu-erh_lab/src/third_party/metal-cpp
+[submodule "alcedo/src/third_party/metal-cpp"]
+	path = alcedo/src/third_party/metal-cpp
 	url = https://github.com/bkaradzic/metal-cpp
-[submodule "pu-erh_lab/src/third_party/libultrahdr"]
-	path = pu-erh_lab/src/third_party/libultrahdr
+[submodule "alcedo/src/third_party/libultrahdr"]
+	path = alcedo/src/third_party/libultrahdr
 	url = https://github.com/google/libultrahdr.git

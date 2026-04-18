@@ -4,7 +4,7 @@ interface Props {
   lang?: string;
 }
 
-const { title = 'Pu-erh Lab', lang = 'en' } = Astro.props;
+const { title = 'Alcedo Studio', lang = 'en' } = Astro.props;
 const base = import.meta.env.BASE_URL;
 const iconPath = `${base}brand/app-icon.png`;
 ---
@@ -17,7 +17,7 @@ const iconPath = `${base}brand/app-icon.png`;
     <title>{title}</title>
     <meta
       name="description"
-      content="Pu-erh Lab — Open-source RAW photo editor and digital asset manager. CUDA-accelerated 60 FPS editing, ACES 2.0 color management, and Git-like version control."
+      content="Alcedo Studio — Open-source RAW photo editor and digital asset manager. CUDA-accelerated 60 FPS editing, ACES 2.0 color management, and Git-like version control."
     />
     <!-- Open Graph -->
     <meta property="og:title" content={title} />

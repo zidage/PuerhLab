@@ -115,8 +115,8 @@
     },
     "windows": [
       "# Windows / CUDA 工具链",
-      "git clone --recursive https://github.com/zidage/PuerhLab.git",
-      "cd PuerhLab",
+      "git clone --recursive https://github.com/zidage/Alcedo.git",
+      "cd Alcedo",
       ".\\vcpkg\\bootstrap-vcpkg.bat",
       "cmd /c scripts\\msvc_env.cmd --preset win_debug -DCMAKE_PREFIX_PATH=\"<Qt路径>\"",
       "cmd /c scripts\\msvc_env.cmd --build --preset win_debug --parallel 4"
@@ -124,15 +124,15 @@
     "macos": [
       "# macOS / Metal 工具链",
       "brew install cmake ninja qt opencv opencolorio duckdb exiv2 glib libraw little-cms2 highway openimageio pkg-config xxhash eigen libomp",
-      "git clone --recursive https://github.com/zidage/PuerhLab.git && cd PuerhLab",
-      "git submodule update --init --recursive pu-erh_lab/src/third_party/lensfun",
+      "git clone --recursive https://github.com/zidage/Alcedo.git && cd Alcedo",
+      "git submodule update --init --recursive alcedo/src/third_party/lensfun",
       "cmake --preset macos_debug",
-      "cmake --build --preset macos_debug --target puerhlab_main"
+      "cmake --build --preset macos_debug --target alcedo_main"
     ]
   },
   "contributing": {
     "sectionTitle": "参与贡献",
-    "description": "Pu-erh Lab 是一个开源项目，欢迎贡献。提交 Issue、Pull Request，或分享你的想法。",
+    "description": "Alcedo Studio 是一个开源项目，欢迎贡献。提交 Issue、Pull Request，或分享你的想法。",
     "ctaGithub": "查看源码",
     "ctaDocs": "阅读文档"
   },

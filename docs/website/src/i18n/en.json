@@ -8,7 +8,7 @@
     "contribute": "Contribute"
   },
   "hero": {
-    "title": "Pu-erh Lab",
+    "title": "Alcedo Studio",
     "subtitle": "Cross-Platform RAW Editor & Digital Asset Manager",
     "description": "Now supports Windows/CUDA and Apple Silicon",
     "version": "v0.2.2",
@@ -115,8 +115,8 @@
     },
     "windows": [
       "# Windows / CUDA toolchain",
-      "git clone --recursive https://github.com/zidage/PuerhLab.git",
-      "cd PuerhLab",
+      "git clone --recursive https://github.com/zidage/Alcedo.git",
+      "cd Alcedo",
       ".\\vcpkg\\bootstrap-vcpkg.bat",
       "cmd /c scripts\\msvc_env.cmd --preset win_debug -DCMAKE_PREFIX_PATH=\"<Qt-path>\"",
       "cmd /c scripts\\msvc_env.cmd --build --preset win_debug --parallel 4"
@@ -124,15 +124,15 @@
     "macos": [
       "# macOS / Metal toolchain",
       "brew install cmake ninja qt opencv opencolorio duckdb exiv2 glib libraw little-cms2 highway openimageio pkg-config xxhash eigen libomp",
-      "git clone --recursive https://github.com/zidage/PuerhLab.git && cd PuerhLab",
-      "git submodule update --init --recursive pu-erh_lab/src/third_party/lensfun",
+      "git clone --recursive https://github.com/zidage/Alcedo.git && cd Alcedo",
+      "git submodule update --init --recursive alcedo/src/third_party/lensfun",
       "cmake --preset macos_debug",
-      "cmake --build --preset macos_debug --target puerhlab_main"
+      "cmake --build --preset macos_debug --target alcedo_main"
     ]
   },
   "contributing": {
     "sectionTitle": "Contribute",
-    "description": "Pu-erh Lab is an open-source project and contributions are welcome. Open issues, submit pull requests, or share your ideas.",
+    "description": "Alcedo Studio is an open-source project and contributions are welcome. Open issues, submit pull requests, or share your ideas.",
     "ctaGithub": "View on GitHub",
     "ctaDocs": "Read the Docs"
   },

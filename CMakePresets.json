@@ -26,7 +26,7 @@
         "CMAKE_BUILD_TYPE": "Release",
         "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/vcpkg/scripts/buildsystems/vcpkg.cmake",
         "CMAKE_INSTALL_PREFIX": "${sourceDir}/build/install",
-        "PUERHLAB_BUILD_TESTS": "OFF"
+        "ALCEDO_BUILD_TESTS": "OFF"
       }
     },
     {
@@ -58,10 +58,10 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
-        "PUERHLAB_ENABLE_CUDA": "OFF",
-        "PUERHLAB_ENABLE_OPENGL_EDITOR": "OFF",
-        "PUERHLAB_BUILD_TESTS": "OFF",
-        "PUERHLAB_MACOS_BUNDLE": "OFF"
+        "ALCEDO_ENABLE_CUDA": "OFF",
+        "ALCEDO_ENABLE_OPENGL_EDITOR": "OFF",
+        "ALCEDO_BUILD_TESTS": "OFF",
+        "ALCEDO_MACOS_BUNDLE": "OFF"
       }
     },
     {
@@ -73,10 +73,10 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
-        "PUERHLAB_ENABLE_CUDA": "OFF",
-        "PUERHLAB_ENABLE_OPENGL_EDITOR": "OFF",
-        "PUERHLAB_BUILD_TESTS": "ON",
-        "PUERHLAB_MACOS_BUNDLE": "OFF"
+        "ALCEDO_ENABLE_CUDA": "OFF",
+        "ALCEDO_ENABLE_OPENGL_EDITOR": "OFF",
+        "ALCEDO_BUILD_TESTS": "ON",
+        "ALCEDO_MACOS_BUNDLE": "OFF"
       }
     },
     {
@@ -88,11 +88,11 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
-        "PUERHLAB_ENABLE_CUDA": "OFF",
-        "PUERHLAB_ENABLE_OPENGL_EDITOR": "OFF",
-        "PUERHLAB_BUILD_TESTS": "OFF",
-        "PUERHLAB_MACOS_BUNDLE": "ON",
-        "PUERHLAB_QT_PREFIX": "/Users/zidage/Qt/6.9.3/macos",
+        "ALCEDO_ENABLE_CUDA": "OFF",
+        "ALCEDO_ENABLE_OPENGL_EDITOR": "OFF",
+        "ALCEDO_BUILD_TESTS": "OFF",
+        "ALCEDO_MACOS_BUNDLE": "ON",
+        "ALCEDO_QT_PREFIX": "/Users/zidage/Qt/6.9.3/macos",
         "CMAKE_INSTALL_PREFIX": "${sourceDir}/build/install"
       }
     }
@@ -108,7 +108,7 @@
       "configurePreset": "win_release",
       "jobs": 8,
       "targets": [
-        "puerhlab_main"
+        "alcedo_main"
       ]
     },
     {
