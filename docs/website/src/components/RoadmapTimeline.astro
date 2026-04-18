@@ -26,7 +26,7 @@ const i = t(lang);
     <div class="relative">
       <!-- Vertical line -->
       <div
-        class="absolute left-4 md:left-1/2 md:-translate-x-px top-0 bottom-0 w-0.5 bg-gradient-to-b from-gold/60 via-gold/30 to-gold/10"
+        class="absolute left-4 md:left-1/2 md:-translate-x-px top-0 bottom-0 w-0.5 bg-gradient-to-b from-action/60 via-support/35 to-accent/15"
       >
       </div>
 
@@ -37,7 +37,7 @@ const i = t(lang);
           >
             {/* Timeline dot */}
             <div class="absolute left-4 md:left-1/2 -translate-x-1/2 z-10">
-              <div class="timeline-dot reveal w-4 h-4 rounded-full bg-gold border-4 border-canvas shadow-[0_0_12px_rgba(252,199,4,0.4)]" />
+              <div class="timeline-dot reveal w-4 h-4 rounded-full bg-accent border-4 border-canvas shadow-[0_0_12px_rgba(233,196,106,0.35)]" />
             </div>
 
             {/* Content card */}
@@ -56,7 +56,9 @@ const i = t(lang);
                   class={`space-y-1.5 ${idx % 2 === 0 ? 'md:text-right' : ''}`}
                 >
                   {item.entries.map((entry) => (
-                    <li class="text-sm text-muted flex items-start gap-2 {idx % 2 === 0 ? 'md:flex-row-reverse' : ''}">
+                    <li
+                      class={`text-sm text-muted flex items-start gap-2 ${idx % 2 === 0 ? 'md:flex-row-reverse' : ''}`}
+                    >
                       <span class="text-gold/60 mt-1 shrink-0">•</span>
                       <span>{entry}</span>
                     </li>
@@ -73,10 +75,10 @@ const i = t(lang);
 
 <style>
   .timeline-card {
-    background: rgba(43, 43, 43, 0.5);
+    background: rgba(24, 24, 24, 0.72);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
-    border: 1px solid rgba(54, 54, 54, 0.6);
+    border: 1px solid rgba(42, 157, 143, 0.15);
   }
   .timeline-dot {
     transition: box-shadow 0.3s ease;
@@ -87,10 +89,10 @@ const i = t(lang);
   @keyframes pulseGold {
     0%,
     100% {
-      box-shadow: 0 0 0 0 rgba(252, 199, 4, 0.4);
+      box-shadow: 0 0 0 0 rgba(233, 196, 106, 0.4);
     }
     50% {
-      box-shadow: 0 0 0 10px rgba(252, 199, 4, 0);
+      box-shadow: 0 0 0 10px rgba(233, 196, 106, 0);
     }
   }
 </style>

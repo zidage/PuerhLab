@@ -1,28 +1,5 @@
 ---
-import BaseLayout from '../../layouts/BaseLayout.astro';
-import Navbar from '../../components/Navbar.astro';
-import Hero from '../../components/Hero.astro';
-import FeatureCards from '../../components/FeatureCards.astro';
-import ScreenshotGallery from '../../components/ScreenshotGallery.astro';
-import RoadmapTimeline from '../../components/RoadmapTimeline.astro';
-import TechStack from '../../components/TechStack.astro';
-import InstallGuide from '../../components/InstallGuide.astro';
-import Contributing from '../../components/Contributing.astro';
-import Footer from '../../components/Footer.astro';
-
-const lang = 'en';
+import LandingPage from '../../components/LandingPage.astro';
 ---
 
-<BaseLayout title="Alcedo Studio — Open-Source RAW Photo Editor" lang={lang}>
-  <Navbar lang={lang} />
-  <main>
-    <Hero lang={lang} />
-    <FeatureCards lang={lang} />
-    <ScreenshotGallery lang={lang} />
-    <RoadmapTimeline lang={lang} />
-    <TechStack lang={lang} />
-    <InstallGuide lang={lang} />
-    <Contributing lang={lang} />
-  </main>
-  <Footer lang={lang} />
-</BaseLayout>
+<LandingPage lang="en" />

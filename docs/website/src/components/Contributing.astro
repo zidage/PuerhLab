@@ -1,5 +1,6 @@
 ---
 import { t } from '../i18n';
+import { REPOSITORY_URL } from '../site';
 
 interface Props {
   lang: string;
@@ -29,10 +30,10 @@ const i = t(lang);
     </p>
     <div class="flex flex-col sm:flex-row items-center justify-center gap-4">
       <a
-        href="https://github.com/zidage/Alcedo"
+        href={REPOSITORY_URL}
         target="_blank"
         rel="noopener noreferrer"
-        class="px-8 py-3 bg-gold text-canvas font-semibold rounded-panel hover:bg-gold/90 transition-all hover:shadow-[0_0_24px_rgba(252,199,4,0.3)] flex items-center gap-2"
+        class="px-8 py-3 bg-action text-mist font-semibold rounded-panel hover:bg-action/90 transition-all hover:shadow-[0_0_24px_rgba(69,123,157,0.3)] flex items-center gap-2"
       >
         <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
           <path
@@ -45,7 +46,7 @@ const i = t(lang);
         href="https://zidage.github.io/Alcedo_docs"
         target="_blank"
         rel="noopener noreferrer"
-        class="px-8 py-3 border border-gold text-gold font-semibold rounded-panel hover:bg-gold/10 transition-all"
+        class="px-8 py-3 border border-support text-support font-semibold rounded-panel hover:bg-support/10 transition-all"
       >
         {i.contributing.ctaDocs}
       </a>

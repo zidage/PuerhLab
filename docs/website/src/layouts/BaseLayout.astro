@@ -42,19 +42,29 @@ const iconPath = `${base}brand/app-icon.png`;
   >
     <slot />
     <style is:global>
+      :root {
+        --surface: #121212;
+        --surface-deep: #171717;
+        --surface-panel: #1c1c1c;
+        --separator: #2a2a2a;
+        --action-rgb: 69 123 157;
+        --support-rgb: 42 157 143;
+        --accent-rgb: 233 196 106;
+      }
+
       /* Custom scrollbar */
       ::-webkit-scrollbar {
         width: 8px;
       }
       ::-webkit-scrollbar-track {
-        background: #111111;
+        background: var(--surface);
       }
       ::-webkit-scrollbar-thumb {
-        background: #2b2b2b;
+        background: rgba(var(--action-rgb), 0.4);
         border-radius: 4px;
       }
       ::-webkit-scrollbar-thumb:hover {
-        background: #363636;
+        background: rgba(var(--support-rgb), 0.5);
       }
 
       /* Scroll reveal base state */

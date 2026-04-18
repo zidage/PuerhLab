@@ -1,0 +1,36 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import Navbar from './Navbar.astro';
+import Hero from './Hero.astro';
+import FeatureCards from './FeatureCards.astro';
+import ScreenshotGallery from './ScreenshotGallery.astro';
+import RoadmapTimeline from './RoadmapTimeline.astro';
+import TechStack from './TechStack.astro';
+import InstallGuide from './InstallGuide.astro';
+import Contributing from './Contributing.astro';
+import Footer from './Footer.astro';
+
+interface Props {
+  lang: string;
+}
+
+const { lang } = Astro.props;
+const title =
+  lang === 'zh'
+    ? '普洱工坊 — 开源 RAW 图像处理与数字资产管理'
+    : 'Alcedo Studio — Open-Source RAW Photo Editor';
+---
+
+<BaseLayout title={title} lang={lang}>
+  <Navbar lang={lang} />
+  <main>
+    <Hero lang={lang} />
+    <FeatureCards lang={lang} />
+    <ScreenshotGallery lang={lang} />
+    <RoadmapTimeline lang={lang} />
+    <TechStack lang={lang} />
+    <InstallGuide lang={lang} />
+    <Contributing lang={lang} />
+  </main>
+  <Footer lang={lang} />
+</BaseLayout>

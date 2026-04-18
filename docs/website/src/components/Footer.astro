@@ -1,5 +1,6 @@
 ---
 import { t } from '../i18n';
+import { REPOSITORY_URL } from '../site';
 
 interface Props {
   lang: string;
@@ -9,7 +10,7 @@ const { lang } = Astro.props;
 const i = t(lang);
 ---
 
-<footer class="relative border-t border-gold/20 bg-[#0d0d0d] py-10 px-4">
+<footer class="relative border-t border-support/20 bg-deep py-10 px-4">
   <div
     class="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-6 text-sm text-muted"
   >
@@ -24,7 +25,7 @@ const i = t(lang);
 
     <!-- Right: GitHub link -->
     <a
-      href="https://github.com/zidage/Alcedo"
+      href={REPOSITORY_URL}
       target="_blank"
       rel="noopener noreferrer"
       class="text-muted hover:text-gold transition-colors"

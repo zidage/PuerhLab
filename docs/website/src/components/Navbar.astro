@@ -1,5 +1,6 @@
 ---
-import { t, getOtherLang, getOtherLangLabel } from '../i18n';
+import { t, getOtherLang, getOtherLangLabel, getLangPath } from '../i18n';
+import { REPOSITORY_URL } from '../site';
 
 interface Props {
   lang: string;
@@ -10,6 +11,8 @@ const i = t(lang);
 const otherLang = getOtherLang(lang);
 const otherLabel = getOtherLangLabel(lang);
 const base = import.meta.env.BASE_URL;
+const homePath = getLangPath(base, lang);
+const otherLangPath = getLangPath(base, otherLang);
 ---
 
 <nav
@@ -19,7 +22,7 @@ const base = import.meta.env.BASE_URL;
   <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
     <div class="flex items-center justify-between h-16">
       <!-- Logo -->
-      <a href={`${base}${lang}/`} class="flex items-center gap-2 shrink-0">
+      <a href={homePath} class="flex items-center gap-2 shrink-0">
         <span class="text-xl font-bold">
           {lang === 'zh' ? (
             <>
@@ -48,14 +51,14 @@ const base = import.meta.env.BASE_URL;
       <div class="flex items-center gap-3">
         <!-- Language toggle -->
         <a
-          href={`${base}${otherLang}/`}
+          href={otherLangPath}
           class="px-3 py-1 rounded-full text-sm border border-separator text-muted hover:text-gold hover:border-gold transition-colors"
         >
           {otherLabel}
         </a>
         <!-- GitHub -->
         <a
-          href="https://github.com/zidage/Alcedo"
+          href={REPOSITORY_URL}
           target="_blank"
           rel="noopener noreferrer"
           class="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-panel text-mist text-sm hover:bg-hover transition-colors"
@@ -116,7 +119,7 @@ const base = import.meta.env.BASE_URL;
   }
   #navbar.scrolled {
     @apply bg-canvas/80 backdrop-blur-lg shadow-lg;
-    border-bottom: 1px solid rgba(54, 54, 54, 0.5);
+    border-bottom: 1px solid rgba(69, 123, 157, 0.22);
   }
 </style>
 

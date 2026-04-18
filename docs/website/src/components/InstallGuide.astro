@@ -1,5 +1,6 @@
 ---
 import { t } from '../i18n';
+import { getReleaseAssetUrl } from '../site';
 
 interface Props {
   lang: string;
@@ -7,10 +8,8 @@ interface Props {
 
 const { lang } = Astro.props;
 const i = t(lang);
-const windowsReleaseUrl =
-  'https://github.com/zidage/Alcedo/releases/download/v0.2.2/alcedo-0.2.2-Windows-AMD64.7z';
-const macosReleaseUrl =
-  'https://github.com/zidage/Alcedo/releases/download/v0.2.2/alcedo-0.2.2-Darwin-arm64.dmg';
+const windowsReleaseUrl = getReleaseAssetUrl('alcedo-0.2.2-Windows-AMD64.7z');
+const macosReleaseUrl = getReleaseAssetUrl('alcedo-0.2.2-Darwin-arm64.dmg');
 ---
 
 <section id="install" class="relative py-24 px-4">
@@ -87,18 +86,18 @@ const macosReleaseUrl =
     background: none;
   }
   .install-tab.active {
-    @apply text-gold border-gold;
+    @apply text-action border-action;
   }
   .install-tab:hover:not(.active) {
     @apply text-mist;
   }
   .download-row {
     @apply py-8 px-8 border border-separator flex items-center justify-center;
-    background: #151515;
+    background: #171717;
   }
   .download-btn {
     @apply inline-flex items-center px-6 py-3 rounded-panel font-semibold text-base;
-    @apply bg-gold text-canvas hover:bg-gold/90 transition-colors hover:shadow-[0_0_16px_rgba(252,199,4,0.2)];
+    @apply bg-action text-mist hover:bg-action/90 transition-colors hover:shadow-[0_0_16px_rgba(69,123,157,0.22)];
   }
 </style>
 

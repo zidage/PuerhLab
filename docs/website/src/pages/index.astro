@@ -1,4 +1,6 @@
 ---
-const base = import.meta.env.BASE_URL;
-return Astro.redirect(`${base}en/`);
+import LandingPage from '../components/LandingPage.astro';
+import { DEFAULT_LANG } from '../i18n';
 ---
+
+<LandingPage lang={DEFAULT_LANG} />

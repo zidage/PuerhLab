@@ -3,14 +3,14 @@ import tailwind from '@astrojs/tailwind';
 
 export default defineConfig({
   site: 'https://zidage.github.io',
-  base: '/Alcedo/',
+  base: '/PuerhLab/',
   trailingSlash: 'always',
   integrations: [tailwind()],
   i18n: {
     defaultLocale: 'en',
     locales: ['en', 'zh'],
     routing: {
-      prefixDefaultLocale: true,
+      prefixDefaultLocale: false,
     },
   },
 });

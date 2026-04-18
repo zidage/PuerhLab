@@ -46,7 +46,7 @@ const icons = [
             style={`transition-delay: ${idx * 100}ms`}
           >
             <div class="p-6">
-              <div class="w-12 h-12 mb-4 text-gold">
+              <div class="w-12 h-12 mb-4 text-support">
                 <svg
                   class="w-full h-full"
                   fill="none"
@@ -73,10 +73,10 @@ const icons = [
 <style>
   .feature-card {
     @apply relative rounded-panel overflow-hidden transition-all duration-300;
-    background: rgba(43, 43, 43, 0.5);
+    background: rgba(24, 24, 24, 0.72);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
-    border: 1px solid rgba(54, 54, 54, 0.6);
+    border: 1px solid rgba(69, 123, 157, 0.14);
   }
   .feature-card::before {
     content: '';
@@ -86,7 +86,7 @@ const icons = [
     transform: translateY(-4px);
     box-shadow:
       0 8px 32px rgba(0, 0, 0, 0.3),
-      0 0 0 1px rgba(252, 199, 4, 0.15);
+      0 0 0 1px rgba(69, 123, 157, 0.2);
   }
   .feature-card:hover::before {
     @apply opacity-100;
