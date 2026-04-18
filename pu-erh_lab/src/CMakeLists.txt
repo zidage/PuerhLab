@@ -1093,6 +1093,7 @@ qt_add_qml_module(puerhlab_main
         ui/puerhlab_main/qml/Main.qml
         ui/puerhlab_main/qml/AlbumExportDialog.qml
         ui/puerhlab_main/qml/ImageDetailsDialog.qml
+        ui/puerhlab_main/qml/WelcomeDialog.qml
         ui/puerhlab_main/qml/NikonHeRecoveryDialog.qml
         ui/puerhlab_main/qml/ImportProgressRing.qml
         ui/puerhlab_main/qml/InspectorPanel.qml

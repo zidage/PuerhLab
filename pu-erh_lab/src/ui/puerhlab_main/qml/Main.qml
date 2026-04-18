@@ -46,6 +46,49 @@ ApplicationWindow {
     readonly property string headlineFontFamily: appTheme.headlineFontFamily
     readonly property real settingsFieldLabelWidth: 84
     readonly property int controlRadius: 10
+    readonly property color colButtonPrimary: "#457B9D"
+    readonly property color colButtonSecondary: "#3A3F44"
+    readonly property color colButtonHighlight: "#E9C46A"
+    readonly property color colButtonBorder: Qt.rgba(
+        colButtonHighlight.r,
+        colButtonHighlight.g,
+        colButtonHighlight.b,
+        0.20)
+    readonly property color colButtonSecondaryBorder: Qt.rgba(
+        root.colText.r,
+        root.colText.g,
+        root.colText.b,
+        0.12)
+
+    function withAlpha(colorValue, alphaValue) {
+        return Qt.rgba(colorValue.r, colorValue.g, colorValue.b, alphaValue)
+    }
+
+    function nauticalButtonFill(enabled, hovered, pressed) {
+        if (!enabled) {
+            return withAlpha(colButtonPrimary, 0.45)
+        }
+        if (pressed) {
+            return Qt.darker(colButtonPrimary, 1.18)
+        }
+        if (hovered) {
+            return Qt.lighter(colButtonPrimary, 1.08)
+        }
+        return colButtonPrimary
+    }
+
+    function secondaryButtonFill(enabled, hovered, pressed) {
+        if (!enabled) {
+            return withAlpha(colButtonSecondary, 0.55)
+        }
+        if (pressed) {
+            return Qt.darker(colButtonSecondary, 1.14)
+        }
+        if (hovered) {
+            return Qt.lighter(colButtonSecondary, 1.08)
+        }
+        return colButtonSecondary
+    }
 
     Material.theme: Material.Dark
     Material.primary: root.colAccentSecondary
@@ -86,11 +129,15 @@ ApplicationWindow {
     property string snackbarText: ""
     property bool importSessionObserved: false
     property bool exportSessionObserved: false
+    property bool welcomeDismissedForLaunch: false
     property var imageDetailsData: ({
         title: "",
         subtitle: "",
         rows: []
     })
+
+    onWelcomeDismissedForLaunchChanged: updateWelcomeDialogVisibility()
+    Component.onCompleted: updateWelcomeDialogVisibility()
 
     function showSnackbar(messageText) {
         if (!messageText || String(messageText).trim().length === 0) {
@@ -143,6 +190,23 @@ ApplicationWindow {
             languageManager.setLanguage(root.pendingLanguageCode)
         }
         settingsDialog.close()
+    }
+
+    function dismissWelcomeForProjectLaunch() {
+        root.welcomeDismissedForLaunch = true
+    }
+
+    function updateWelcomeDialogVisibility() {
+        const shouldShowWelcome = !root.welcomeDismissedForLaunch
+                                  && !albumBackend.serviceReady
+                                  && !albumBackend.projectLoading
+        if (shouldShowWelcome) {
+            if (!welcomeDialog.opened) {
+                welcomeDialog.open()
+            }
+        } else if (welcomeDialog.opened) {
+            welcomeDialog.close()
+        }
     }
 
     function resolveDeleteTargets(clickedItem) {
@@ -518,14 +582,18 @@ ApplicationWindow {
                 Item { Layout.fillWidth: true }
 
                 Button {
+                    id: settingsCloseButton
                     text: qsTr("Close")
+                    Material.background: root.colDanger
+                    Material.foreground: root.colText
                     onClicked: settingsDialog.close()
                 }
 
                 Button {
+                    id: settingsSaveButton
                     text: qsTr("Save")
-                    Material.background: root.colAccentPrimary
-                    Material.foreground: root.colBgCanvas
+                    Material.background: root.colButtonPrimary
+                    Material.foreground: root.colText
                     onClicked: root.saveSettingsAndClose()
                 }
             }
@@ -670,7 +738,10 @@ ApplicationWindow {
                 Item { Layout.fillWidth: true }
 
                 Button {
+                    id: deleteCancelButton
                     text: qsTr("Cancel")
+                    Material.background: root.colButtonSecondary
+                    Material.foreground: root.colText
                     onClicked: {
                         root.pendingDeleteTargets = []
                         deleteConfirmDialog.close()
@@ -678,6 +749,7 @@ ApplicationWindow {
                 }
 
                 Button {
+                    id: deleteConfirmButton
                     text: qsTr("Delete")
                     Material.background: root.colDanger
                     Material.foreground: root.colText
@@ -694,6 +766,8 @@ ApplicationWindow {
         target: albumBackend
         ignoreUnknownSignals: true
         function onProjectChanged() {
+            root.welcomeDismissedForLaunch = false
+            root.updateWelcomeDialogVisibility()
             selectionState.clearSelectedImages()
             selectionState.clearExportQueue()
             root.pendingDeleteTargets = []
@@ -708,6 +782,15 @@ ApplicationWindow {
             root.pendingDetailsTarget = ({})
             deleteConfirmDialog.close()
             imageDetailsDialog.close()
+        }
+        function onServiceStateChanged() {
+            root.updateWelcomeDialogVisibility()
+        }
+        function onProjectLoadStateChanged() {
+            if (!albumBackend.projectLoading) {
+                root.welcomeDismissedForLaunch = false
+            }
+            root.updateWelcomeDialogVisibility()
         }
         function onThumbnailsChanged() {
             if (exportDialog.visible) {
@@ -877,10 +960,15 @@ ApplicationWindow {
                     ToolTip.visible: hovered
                     ToolTip.text: inspectorVisible ? qsTr("Collapse Inspector") : qsTr("Expand Inspector")
                     background: Rectangle {
-                        radius: 10
-                        color: inspectorVisible
-                               ? Qt.rgba(root.colAccentPrimary.r, root.colAccentPrimary.g, root.colAccentPrimary.b, 0.16)
-                               : (inspectorToggleButton.hovered ? root.colHover : "transparent")
+                        radius: root.controlRadius
+                        color: root.secondaryButtonFill(
+                            inspectorToggleButton.enabled,
+                            inspectorToggleButton.hovered,
+                            inspectorToggleButton.down)
+                        border.width: 1
+                        border.color: inspectorVisible
+                                      ? root.withAlpha(root.colButtonHighlight, 0.40)
+                                      : root.colButtonSecondaryBorder
                     }
                     onContentItemChanged: {
                         inspectorIconRotate.target = contentItem
@@ -1389,8 +1477,11 @@ ApplicationWindow {
                                 font.pixelSize: 12
                             }
                             Button {
+                                id: emptyStateLoadButton
                                 visible: !albumBackend.serviceReady
                                 text: qsTr("Load Project")
+                                Material.background: root.colButtonPrimary
+                                Material.foreground: root.colText
                                 onClicked: albumBackend.PromptAndLoadProject()
                             }
                         }
@@ -1446,10 +1537,13 @@ ApplicationWindow {
                             icon.color: root.colText
                             display: AbstractButton.TextBesideIcon
                             background: Rectangle {
-                                radius: 8
-                                color: addSelectedBtn.enabled ? root.colBgBase : Qt.rgba(root.colBgBase.r, root.colBgBase.g, root.colBgBase.b, 0.5)
+                                radius: root.controlRadius
+                                color: root.secondaryButtonFill(
+                                    addSelectedBtn.enabled,
+                                    addSelectedBtn.hovered,
+                                    addSelectedBtn.down)
                                 border.width: 1
-                                border.color: root.colDivider
+                                border.color: root.colButtonSecondaryBorder
                             }
                             Material.foreground: root.colText
                             scale: addSelectedBtn.hovered && enabled ? 1.03 : 1.0
@@ -1555,178 +1649,49 @@ ApplicationWindow {
 
     }
 
-    Item {
-        anchors.fill: parent
-        visible: !albumBackend.serviceReady && !albumBackend.projectLoading
+    WelcomeDialog {
+        id: welcomeDialog
         z: 30
-
-        MultiEffect {
-            anchors.fill: parent
-            source: mainContent
-            blurEnabled: true
-            blur: 0.6
-            blurMax: 64
-            saturation: -0.2
-        }
-
-        Rectangle {
-            anchors.fill: parent
-            color: root.colOverlay
-        }
-
-        MouseArea { anchors.fill: parent; hoverEnabled: true }
-
-        Rectangle {
-            anchors.centerIn: parent
-            width: Math.min(parent.width - 36, 700)
-            height: dialogContent.implicitHeight + 36
-            radius: root.panelRadius
-            color: root.colBgPanel
-            border.width: 0
-
-            ColumnLayout {
-                id: dialogContent
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.top: parent.top
-                anchors.margins: 18
-                spacing: 12
-
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: 8
-                    Label {
-                        text: qsTr("Open Project")
-                        font.family: root.headlineFontFamily
-                        font.pixelSize: 24
-                        font.weight: 700
-                        color: root.colText
-                    }
-                    Item { Layout.fillWidth: true }
-                    ComboBox {
-                        id: welcomeLangCombo
-                        Layout.preferredWidth: 130
-                        font.pixelSize: 11
-                        model: root.languageOptions
-                        textRole: "label"
-                        currentIndex: root.languageIndexForCode(languageManager.currentLanguageCode)
-                        onActivated: function(index) {
-                            const item = model[index]
-                            if (item) {
-                                languageManager.setLanguage(item.code)
-                            }
-                        }
-                        Material.background: root.colBgBase
-                        Material.foreground: root.colText
-                    }
-                }
-                Label {
-                    Layout.fillWidth: true
-                    wrapMode: Text.WordWrap
-                    text: qsTr("Every boot asks for a project. Load a packed .puerhproj file or a metadata JSON/database pair, or create a new project package.")
-                    color: root.colTextMuted
-                    font.pixelSize: 13
-                }
-                Label {
-                    Layout.fillWidth: true
-                    wrapMode: Text.WordWrap
-                    text: albumBackend.serviceMessage
-                    color: root.colText
-                    font.pixelSize: 12
-                }
-
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: 10
-
-                    Button {
-                        Layout.fillWidth: true
-                        text: qsTr("Load Existing Project")
-                        Material.background: root.colAccentPrimary
-                        Material.foreground: root.colBgCanvas
-                        onClicked: albumBackend.PromptAndLoadProject()
-                    }
-                    Button {
-                        Layout.fillWidth: true
-                        text: qsTr("Create New Project")
-                        Material.background: root.colAccentPrimary
-                        Material.foreground: root.colBgCanvas
-                        onClicked: albumBackend.PromptAndCreateProject()
-                    }
-                }
-
-                RowLayout {
-                    Layout.fillWidth: true
-                    Item { Layout.fillWidth: true }
-                    Button {
-                        text: qsTr("Exit")
-                        Material.background: root.colDanger
-                        Material.foreground: root.colText
-                        onClicked: Qt.quit()
-                    }
-                }
+        blurSource: mainContent
+        recentProjects: albumBackend.recentProjects
+        languageOptions: root.languageOptions
+        currentLanguageIndex: root.languageIndexForCode(languageManager.currentLanguageCode)
+        serviceMessage: albumBackend.serviceMessage
+        headlineFontFamily: root.headlineFontFamily
+        primaryAccent: root.colButtonPrimary
+        secondaryAccent: root.colAccentSecondary
+        textColor: root.colText
+        mutedTextColor: root.colTextMuted
+        panelColor: root.colBgPanel
+        panelBorderColor: root.withAlpha(root.colText, 0.08)
+        overlayColor: root.colOverlay
+        baseColor: root.colBgCanvas
+        onLoadRequested: {
+            root.dismissWelcomeForProjectLaunch()
+            root.updateWelcomeDialogVisibility()
+            if (!albumBackend.PromptAndLoadProject()) {
+                root.welcomeDismissedForLaunch = false
+                root.updateWelcomeDialogVisibility()
             }
         }
-    }
-
-    Item {
-        anchors.fill: parent
-        visible: albumBackend.projectLoading
-        z: 40
-
-        MultiEffect {
-            anchors.fill: parent
-            source: mainContent
-            blurEnabled: true
-            blur: 0.6
-            blurMax: 64
-            saturation: -0.2
+        onCreateRequested: {
+            root.dismissWelcomeForProjectLaunch()
+            root.updateWelcomeDialogVisibility()
+            if (!albumBackend.PromptAndCreateProject()) {
+                root.welcomeDismissedForLaunch = false
+                root.updateWelcomeDialogVisibility()
+            }
         }
-
-        Rectangle {
-            anchors.fill: parent
-            color: root.colOverlay
+        onExitRequested: Qt.quit()
+        onLanguageRequested: function(languageCode) {
+            languageManager.setLanguage(languageCode)
         }
-
-        MouseArea { anchors.fill: parent; hoverEnabled: true }
-
-        Rectangle {
-            anchors.centerIn: parent
-            width: Math.min(parent.width - 36, 520)
-            height: loadingContent.implicitHeight + 30
-            radius: 14
-            color: root.colBgDeep
-            border.width: 0
-
-            ColumnLayout {
-                id: loadingContent
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.top: parent.top
-                anchors.margins: 16
-                spacing: 10
-
-                Label {
-                    text: qsTr("Loading Project")
-                    font.family: root.headlineFontFamily
-                    font.pixelSize: 21
-                    font.weight: 700
-                    color: root.colText
-                }
-                BusyIndicator {
-                    running: albumBackend.projectLoading
-                    Layout.alignment: Qt.AlignHCenter
-                }
-                Label {
-                    Layout.fillWidth: true
-                    wrapMode: Text.WordWrap
-                    text: albumBackend.projectLoadingMessage.length > 0
-                          ? albumBackend.projectLoadingMessage
-                          : qsTr("Preparing database and metadata...")
-                    color: root.colTextMuted
-                    font.pixelSize: 12
-                    horizontalAlignment: Text.AlignHCenter
-                }
+        onRecentProjectRequested: function(projectPath) {
+            root.dismissWelcomeForProjectLaunch()
+            root.updateWelcomeDialogVisibility()
+            if (!albumBackend.LoadProject(projectPath)) {
+                root.welcomeDismissedForLaunch = false
+                root.updateWelcomeDialogVisibility()
             }
         }
     }
@@ -1822,6 +1787,7 @@ ApplicationWindow {
                 }
 
                 Button {
+                    id: importCancelButton
                     Layout.alignment: Qt.AlignHCenter
                     text: qsTr("Cancel")
                     Material.background: root.colDanger

@@ -31,7 +31,8 @@ class ProjectHandler {
                           const std::filesystem::path& metaPath,
                           ProjectOpenMode              openMode,
                           const std::filesystem::path& packagePath = {},
-                          const std::filesystem::path& workspaceDir = {});
+                          const std::filesystem::path& workspaceDir = {},
+                          const std::filesystem::path& recentProjectPath = {});
   bool PersistCurrentProjectState();
   bool PackageCurrentProjectFiles(QString* errorOut = nullptr) const;
   void SetProjectLoadingState(bool loading, const i18n::LocalizedText& message);

@@ -23,8 +23,8 @@ Dialog {
     property bool hdrExportAvailable: false
     property bool exportTriggered: false
     readonly property color overlayColor: appTheme.bgDeepColor
-    readonly property color panelColor: appTheme.toneGraphite
-    readonly property color sectionColor: appTheme.bgBaseColor
+    readonly property color panelColor: appTheme.bgPanelColor
+    readonly property color sectionColor: appTheme.bgPanelColor
     readonly property color separatorColor: "#38373C"
     readonly property color textColor: appTheme.textColor
     readonly property color mutedTextColor: "#7B7D7C"
@@ -498,7 +498,7 @@ Dialog {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         radius: 6
-                        color: root.overlayColor
+                        color: root.sectionColor
                         border.width: 0
 
                         ListView {
@@ -511,7 +511,7 @@ Dialog {
                                 width: ListView.view.width
                                 height: 22
                                 radius: 3
-                                color: index % 2 === 0 ? root.overlayColor : root.panelColor
+                                color: root.sectionColor
                                 border.width: 0
                                 Label {
                                     anchors.fill: parent

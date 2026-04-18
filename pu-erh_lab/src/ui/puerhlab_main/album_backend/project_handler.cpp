@@ -26,7 +26,8 @@ bool ProjectHandler::InitializeServices(const std::filesystem::path& dbPath,
                                         const std::filesystem::path& metaPath,
                                         ProjectOpenMode              openMode,
                                         const std::filesystem::path& packagePath,
-                                        const std::filesystem::path& workspaceDir) {
+                                        const std::filesystem::path& workspaceDir,
+                                        const std::filesystem::path& recentProjectPath) {
   if (project_loading_) {
     backend_.SetServiceMessageForCurrentProject(PL_TEXT("A project load is already in progress."));
     return false;
@@ -68,7 +69,7 @@ bool ProjectHandler::InitializeServices(const std::filesystem::path& dbPath,
   std::thread([self, request_id, old_project = std::move(old_project),
                old_pipeline = std::move(old_pipeline), old_meta = std::move(old_meta),
                old_package = std::move(old_package), old_workspace = std::move(old_workspace),
-               dbPath, metaPath, packagePath, workspaceDir, openMode]() mutable {
+               dbPath, metaPath, packagePath, workspaceDir, recentProjectPath, openMode]() mutable {
     struct LoadResult {
       bool                                    success_ = false;
       QString                                 error_{};
@@ -82,6 +83,7 @@ bool ProjectHandler::InitializeServices(const std::filesystem::path& dbPath,
       std::filesystem::path                   meta_path_{};
       std::filesystem::path                   package_path_{};
       std::filesystem::path                   workspace_dir_{};
+      std::filesystem::path                   recent_project_path_{};
       std::filesystem::path                   workspace_to_cleanup_{};
     };
 
@@ -150,6 +152,7 @@ bool ProjectHandler::InitializeServices(const std::filesystem::path& dbPath,
       }
       result->package_path_  = packagePath;
       result->workspace_dir_ = workspaceDir;
+      result->recent_project_path_ = recentProjectPath;
       result->success_       = true;
     } catch (const std::exception& e) {
       result->success_ = false;
@@ -213,6 +216,10 @@ bool ProjectHandler::InitializeServices(const std::filesystem::path& dbPath,
                         : PL_TEXT("Loaded packed project: %1 (DB temp: %2)",
                                   album_util::PathToQString(ph.project_package_path_),
                                   album_util::PathToQString(ph.db_path_)));
+          self->RegisterRecentProject(result->recent_project_path_.empty()
+                                          ? (!ph.project_package_path_.empty() ? ph.project_package_path_
+                                                                               : ph.meta_path_)
+                                          : result->recent_project_path_);
           emit self->ProjectChanged();
           emit self->projectChanged();
           ph.SetProjectLoadingState(false, {});

@@ -45,6 +45,7 @@ class AlbumBackend final : public QObject {
   Q_PROPERTY(QString statsFilterLens READ StatsFilterLens NOTIFY StatsFilterChanged)
   Q_PROPERTY(bool serviceReady READ ServiceReady NOTIFY ServiceStateChanged)
   Q_PROPERTY(QString serviceMessage READ ServiceMessage NOTIFY ServiceStateChanged)
+  Q_PROPERTY(QVariantList recentProjects READ RecentProjects NOTIFY RecentProjectsChanged)
   Q_PROPERTY(bool projectLoading READ ProjectLoading NOTIFY ProjectLoadStateChanged)
   Q_PROPERTY(QString projectLoadingMessage READ ProjectLoadingMessage NOTIFY ProjectLoadStateChanged)
   Q_PROPERTY(QString taskStatus READ TaskStatus NOTIFY TaskStateChanged)
@@ -110,6 +111,7 @@ class AlbumBackend final : public QObject {
   const QString& StatsFilterLens() const { return stats_.filter_lens(); }
   bool ServiceReady() const { return service_ready_; }
   QString ServiceMessage() const { return service_message_text_.Render(); }
+  QVariantList RecentProjects() const { return recent_projects_; }
   bool ProjectLoading() const { return project_handler_.project_loading(); }
   QString ProjectLoadingMessage() const { return project_handler_.project_loading_message(); }
   QString TaskStatus() const { return task_status_text_.Render(); }
@@ -219,6 +221,7 @@ signals:
   void CountsChanged();
   void StatsChanged();
   void ServiceStateChanged();
+  void RecentProjectsChanged();
   void TaskStateChanged();
   void ImportStateChanged();
   void importStateChanged();
@@ -250,6 +253,10 @@ signals:
   void ScheduleIdleTaskStateReset(int delayMs);
   void SetTaskState(const i18n::LocalizedText& status, int progress, bool cancelVisible);
   void RefreshTranslations();
+  void LoadRecentProjectsFromSettings();
+  void PersistRecentProjects() const;
+  void RegisterRecentProject(const std::filesystem::path& projectPath);
+  void RemoveRecentProject(const std::filesystem::path& projectPath);
   void ReloadFolderTree(const std::filesystem::path& preferredFolderPath = {});
   void ReloadCurrentFolder();
   void AddOrUpdateAlbumItem(sl_element_id_t elementId, image_id_t imageId,
@@ -272,6 +279,7 @@ signals:
   AlbumViewState                                      view_state_{};
   i18n::LocalizedText                                 service_message_text_{};
   bool                                                service_ready_   = false;
+  QVariantList                                        recent_projects_{};
   i18n::LocalizedText                                 task_status_text_{};
   int                                                 task_progress_   = 0;
   bool                                                task_cancel_visible_ = false;

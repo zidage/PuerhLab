@@ -937,4 +937,97 @@ Original source files on disk will be kept.</source>
         <translation type="unfinished"></translation>
     </message>
 </context>
+<context>
+    <name>WelcomeDialog</name>
+    <message>
+        <location filename="../qml/WelcomeDialog.qml" line="54"/>
+        <source>Opened recently</source>
+        <translation>Opened recently</translation>
+    </message>
+    <message>
+        <location filename="../qml/WelcomeDialog.qml" line="59"/>
+        <source>Opened just now</source>
+        <translation>Opened just now</translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../qml/WelcomeDialog.qml" line="62"/>
+        <source>Opened %n minute(s) ago</source>
+        <translation>
+            <numerusform>Opened %n minute ago</numerusform>
+            <numerusform>Opened %n minutes ago</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../qml/WelcomeDialog.qml" line="67"/>
+        <source>Opened %n hour(s) ago</source>
+        <translation>
+            <numerusform>Opened %n hour ago</numerusform>
+            <numerusform>Opened %n hours ago</numerusform>
+        </translation>
+    </message>
+    <message>
+        <location filename="../qml/WelcomeDialog.qml" line="72"/>
+        <source>Opened yesterday</source>
+        <translation>Opened yesterday</translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../qml/WelcomeDialog.qml" line="75"/>
+        <location filename="../qml/WelcomeDialog.qml" line="80"/>
+        <source>Opened %n day(s) ago</source>
+        <translation>
+            <numerusform>Opened %n day ago</numerusform>
+            <numerusform>Opened %n days ago</numerusform>
+        </translation>
+    </message>
+    <message>
+        <location filename="../qml/WelcomeDialog.qml" line="78"/>
+        <source>Opened last week</source>
+        <translation>Opened last week</translation>
+    </message>
+    <message>
+        <location filename="../qml/WelcomeDialog.qml" line="142"/>
+        <source>Pu-erh Lab</source>
+        <translation>Pu-erh Lab</translation>
+    </message>
+    <message>
+        <location filename="../qml/WelcomeDialog.qml" line="158"/>
+        <source>Load Project</source>
+        <translation>Load Project</translation>
+    </message>
+    <message>
+        <location filename="../qml/WelcomeDialog.qml" line="231"/>
+        <source>Create Project</source>
+        <translation>Create Project</translation>
+    </message>
+    <message>
+        <location filename="../qml/WelcomeDialog.qml" line="324"/>
+        <source>Exit Application</source>
+        <translation>Exit Application</translation>
+    </message>
+    <message>
+        <location filename="../qml/WelcomeDialog.qml" line="372"/>
+        <source>Recent Projects</source>
+        <translation>Recent Projects</translation>
+    </message>
+    <message>
+        <location filename="../qml/WelcomeDialog.qml" line="386"/>
+        <source>Collapse</source>
+        <translation>Collapse</translation>
+    </message>
+    <message>
+        <location filename="../qml/WelcomeDialog.qml" line="386"/>
+        <source>View All</source>
+        <translation>View All</translation>
+    </message>
+    <message>
+        <location filename="../qml/WelcomeDialog.qml" line="409"/>
+        <source>No recent projects yet</source>
+        <translation>No recent projects yet</translation>
+    </message>
+    <message>
+        <location filename="../qml/WelcomeDialog.qml" line="417"/>
+        <source>Projects you open or create here will appear in this list.</source>
+        <translation>Projects you open or create here will appear in this list.</translation>
+    </message>
+</context>
 </TS>

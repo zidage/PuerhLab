@@ -2002,4 +2002,94 @@ Original source files on disk will be kept.</source>
         <translation>源文件已被移动或删除</translation>
     </message>
 </context>
+<context>
+    <name>WelcomeDialog</name>
+    <message>
+        <location filename="../qml/WelcomeDialog.qml" line="54"/>
+        <source>Opened recently</source>
+        <translation>最近打开</translation>
+    </message>
+    <message>
+        <location filename="../qml/WelcomeDialog.qml" line="59"/>
+        <source>Opened just now</source>
+        <translation>刚刚打开</translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../qml/WelcomeDialog.qml" line="62"/>
+        <source>Opened %n minute(s) ago</source>
+        <translation>
+            <numerusform>%n 分钟前打开</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../qml/WelcomeDialog.qml" line="67"/>
+        <source>Opened %n hour(s) ago</source>
+        <translation>
+            <numerusform>%n 小时前打开</numerusform>
+        </translation>
+    </message>
+    <message>
+        <location filename="../qml/WelcomeDialog.qml" line="72"/>
+        <source>Opened yesterday</source>
+        <translation>昨天打开</translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../qml/WelcomeDialog.qml" line="75"/>
+        <location filename="../qml/WelcomeDialog.qml" line="80"/>
+        <source>Opened %n day(s) ago</source>
+        <translation>
+            <numerusform>%n 天前打开</numerusform>
+        </translation>
+    </message>
+    <message>
+        <location filename="../qml/WelcomeDialog.qml" line="78"/>
+        <source>Opened last week</source>
+        <translation>上周打开</translation>
+    </message>
+    <message>
+        <location filename="../qml/WelcomeDialog.qml" line="142"/>
+        <source>Pu-erh Lab</source>
+        <translation>Pu-erh Lab</translation>
+    </message>
+    <message>
+        <location filename="../qml/WelcomeDialog.qml" line="158"/>
+        <source>Load Project</source>
+        <translation>加载项目</translation>
+    </message>
+    <message>
+        <location filename="../qml/WelcomeDialog.qml" line="231"/>
+        <source>Create Project</source>
+        <translation>创建项目</translation>
+    </message>
+    <message>
+        <location filename="../qml/WelcomeDialog.qml" line="324"/>
+        <source>Exit Application</source>
+        <translation>退出应用</translation>
+    </message>
+    <message>
+        <location filename="../qml/WelcomeDialog.qml" line="372"/>
+        <source>Recent Projects</source>
+        <translation>最近项目</translation>
+    </message>
+    <message>
+        <location filename="../qml/WelcomeDialog.qml" line="386"/>
+        <source>Collapse</source>
+        <translation>收起</translation>
+    </message>
+    <message>
+        <location filename="../qml/WelcomeDialog.qml" line="386"/>
+        <source>View All</source>
+        <translation>查看全部</translation>
+    </message>
+    <message>
+        <location filename="../qml/WelcomeDialog.qml" line="409"/>
+        <source>No recent projects yet</source>
+        <translation>暂无最近项目</translation>
+    </message>
+    <message>
+        <location filename="../qml/WelcomeDialog.qml" line="417"/>
+        <source>Projects you open or create here will appear in this list.</source>
+        <translation>你在这里打开或创建的项目会显示在此列表中。</translation>
+    </message>
+</context>
 </TS>

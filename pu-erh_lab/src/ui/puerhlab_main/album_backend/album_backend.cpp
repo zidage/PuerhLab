@@ -9,11 +9,13 @@
 #include "ui/puerhlab_main/album_backend/path_utils.hpp"
 
 #include <QDesktopServices>
+#include <QDateTime>
 #include <QDir>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QInputDialog>
 #include <QLineEdit>
+#include <QSettings>
 #include <QStandardPaths>
 #include <QTimer>
 #include <QUrl>
@@ -33,8 +35,37 @@ using namespace album_util;
 
 namespace {
 
+constexpr auto kRecentProjectsKey = "projects/recent";
+constexpr int  kMaxRecentProjects = 12;
+
 auto IsHdrExportEotf(const ColorUtils::EOTF eotf) -> bool {
   return eotf == ColorUtils::EOTF::ST2084 || eotf == ColorUtils::EOTF::HLG;
+}
+
+auto NormalizeRecentProjectPath(const std::filesystem::path& projectPath) -> QString {
+  if (projectPath.empty()) {
+    return {};
+  }
+  return QDir::cleanPath(QDir::fromNativeSeparators(
+      QFileInfo(PathToQString(projectPath.lexically_normal())).absoluteFilePath()));
+}
+
+auto BuildRecentProjectEntry(const QString& normalizedPath, qint64 lastOpenedMs) -> QVariantMap {
+  const QFileInfo info(normalizedPath);
+  QString         display_name = info.completeBaseName();
+  if (display_name.isEmpty()) {
+    display_name = info.fileName();
+  }
+  if (display_name.isEmpty()) {
+    display_name = normalizedPath;
+  }
+
+  return QVariantMap{
+      {"path", normalizedPath},
+      {"name", display_name},
+      {"folderPath", info.absolutePath()},
+      {"lastOpenedMs", lastOpenedMs},
+  };
 }
 
 }  // namespace
@@ -51,6 +82,7 @@ AlbumBackend::AlbumBackend(QObject* parent)
       import_export_(*this),
       nikon_he_recovery_(*this),
       editor_(*this) {
+  LoadRecentProjectsFromSettings();
   QObject::connect(&i18n::TranslationNotifier::Instance(), &i18n::TranslationNotifier::LanguageChanged,
                    this, &AlbumBackend::RefreshTranslations);
   editor_.InitializeEditorLuts();
@@ -297,6 +329,7 @@ bool AlbumBackend::LoadProject(const QString& metaFileUrlOrPath) {
   const auto project_path = project_path_opt.value();
   std::error_code ec;
   if (!std::filesystem::is_regular_file(project_path, ec) || ec) {
+    RemoveRecentProject(project_path);
     SetServiceMessageForCurrentProject(PL_TEXT("Project file was not found."));
     return false;
   }
@@ -331,7 +364,7 @@ bool AlbumBackend::LoadProject(const QString& metaFileUrlOrPath) {
 
     return project_handler_.InitializeServices(unpacked_db_path, unpacked_meta_path,
                                                ProjectOpenMode::kLoadExisting,
-                                               project_path, workspace_dir);
+                                               project_path, workspace_dir, project_path);
   }
 
   if (!package_service.IsMetadataJsonPath(project_path)) {
@@ -345,7 +378,7 @@ bool AlbumBackend::LoadProject(const QString& metaFileUrlOrPath) {
   return project_handler_.InitializeServices(db_hint_path, project_path,
                                              ProjectOpenMode::kLoadExisting,
                                              package_service.BuildBundlePathFromMetaPath(project_path),
-                                             {});
+                                             {}, project_path);
 }
 
 bool AlbumBackend::CreateProjectInFolder(const QString& folderUrlOrPath) {
@@ -391,7 +424,8 @@ bool AlbumBackend::CreateProjectInFolderNamed(const QString& folderUrlOrPath,
   const bool started =
       project_handler_.InitializeServices(runtime_pair.first, runtime_pair.second,
                                           ProjectOpenMode::kCreateNew,
-                                          packed_path_opt.value(), workspace_dir);
+                                          packed_path_opt.value(), workspace_dir,
+                                          packed_path_opt.value());
   if (!started) {
     CleanupWorkspaceDirectory(workspace_dir);
   }
@@ -487,7 +521,116 @@ void AlbumBackend::RefreshTranslations() {
   emit importStateChanged();
   emit ExportStateChanged();
   emit exportStateChanged();
+  emit RecentProjectsChanged();
   emit EditorStateChanged();
+}
+
+void AlbumBackend::LoadRecentProjectsFromSettings() {
+  const QVariantList stored_entries = QSettings{}.value(QLatin1String(kRecentProjectsKey)).toList();
+
+  QVariantList normalized_entries;
+  QStringList  seen_paths;
+  bool         changed = false;
+
+  for (const QVariant& entry_variant : stored_entries) {
+    const QVariantMap entry_map = entry_variant.toMap();
+    const QString raw_path = entry_map.value(QStringLiteral("path")).toString().trimmed();
+    if (raw_path.isEmpty()) {
+      changed = true;
+      continue;
+    }
+
+    const QString normalized_path =
+        NormalizeRecentProjectPath(std::filesystem::path(raw_path.toStdWString()));
+    if (normalized_path.isEmpty() || seen_paths.contains(normalized_path)) {
+      changed = true;
+      continue;
+    }
+
+    const QFileInfo info(normalized_path);
+    if (!info.exists() || !info.isFile()) {
+      changed = true;
+      continue;
+    }
+
+    const qint64 last_opened_ms =
+        entry_map.value(QStringLiteral("lastOpenedMs")).toLongLong();
+    normalized_entries.push_back(
+        BuildRecentProjectEntry(normalized_path, last_opened_ms > 0 ? last_opened_ms : 0));
+    seen_paths.push_back(normalized_path);
+
+    if (normalized_entries.size() >= kMaxRecentProjects) {
+      if (stored_entries.size() > normalized_entries.size()) {
+        changed = true;
+      }
+      break;
+    }
+  }
+
+  recent_projects_ = normalized_entries;
+  if (changed || stored_entries != normalized_entries) {
+    PersistRecentProjects();
+  }
+}
+
+void AlbumBackend::PersistRecentProjects() const {
+  QSettings{}.setValue(QLatin1String(kRecentProjectsKey), recent_projects_);
+}
+
+void AlbumBackend::RegisterRecentProject(const std::filesystem::path& projectPath) {
+  const QString normalized_path = NormalizeRecentProjectPath(projectPath);
+  if (normalized_path.isEmpty()) {
+    return;
+  }
+
+  QVariantList next_entries;
+  next_entries.push_back(
+      BuildRecentProjectEntry(normalized_path, QDateTime::currentDateTimeUtc().toMSecsSinceEpoch()));
+
+  for (const QVariant& entry_variant : recent_projects_) {
+    const QVariantMap entry_map = entry_variant.toMap();
+    const QString entry_path = entry_map.value(QStringLiteral("path")).toString();
+    if (entry_path.isEmpty() || entry_path == normalized_path) {
+      continue;
+    }
+    next_entries.push_back(entry_map);
+    if (next_entries.size() >= kMaxRecentProjects) {
+      break;
+    }
+  }
+
+  if (recent_projects_ == next_entries) {
+    return;
+  }
+
+  recent_projects_ = next_entries;
+  PersistRecentProjects();
+  emit RecentProjectsChanged();
+}
+
+void AlbumBackend::RemoveRecentProject(const std::filesystem::path& projectPath) {
+  const QString normalized_path = NormalizeRecentProjectPath(projectPath);
+  if (normalized_path.isEmpty()) {
+    return;
+  }
+
+  QVariantList next_entries;
+  next_entries.reserve(recent_projects_.size());
+  for (const QVariant& entry_variant : recent_projects_) {
+    const QVariantMap entry_map = entry_variant.toMap();
+    if (entry_map.value(QStringLiteral("path")).toString() == normalized_path) {
+      continue;
+    }
+    next_entries.push_back(entry_map);
+  }
+
+  if (recent_projects_ == next_entries) {
+    return;
+  }
+
+  recent_projects_ = next_entries;
+  PersistRecentProjects();
+  emit RecentProjectsChanged();
 }
 
 void AlbumBackend::ReloadFolderTree(const std::filesystem::path& preferredFolderPath) {
