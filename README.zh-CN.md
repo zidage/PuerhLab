@@ -8,7 +8,7 @@
 ![CUDA](https://img.shields.io/badge/CUDA-12.8-76B900)
 ![C++](https://img.shields.io/badge/C++-20-blue)
 
-Alcedo Studio (普洱工坊) 是一个开源 RAW 图像处理与数字资产管理（DAM）项目，旨在为摄影师提供一个轻量级、高性能、且在很大程度上兼容行业标准的照片编辑与库管理工作流新选择。
+Alcedo Studio 是一个开源 RAW 图像处理与数字资产管理（DAM）项目，旨在为摄影师提供一个轻量级、高性能、且在很大程度上兼容行业标准的照片编辑与库管理工作流新选择。
 
 > Alcedo Studio _**不是**_ 现有商业软件或其他开源项目的替代品。
 
