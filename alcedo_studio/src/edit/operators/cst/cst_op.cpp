@@ -3,6 +3,7 @@
 //  Additional permission under GPLv3 section 7 applies; see the LICENSE file.
 
 #include "edit/operators/cst/cst_op.hpp"
+#include "edit/operators/cst/ocio_config_utils.hpp"
 
 #include <OpenColorIO/OpenColorIO.h>
 #include <OpenColorIO/OpenColorTransforms.h>
@@ -28,7 +29,7 @@ namespace alcedo {
 
 OCIO_ACES_Transform_Op::OCIO_ACES_Transform_Op(const std::string& input, const std::string& output)
     : input_transform_(input), output_transform_(output) {
-  config_ = OCIO::GetCurrentConfig();
+  config_ = ocio_config::LoadBundledConfig();
 }
 
 OCIO_ACES_Transform_Op::OCIO_ACES_Transform_Op(const std::string& input, const std::string& output,
@@ -39,11 +40,11 @@ OCIO_ACES_Transform_Op::OCIO_ACES_Transform_Op(const std::string& input, const s
 
 OCIO_ACES_Transform_Op::OCIO_ACES_Transform_Op(std::filesystem::path& lmt_path)
     : input_transform_("ACES - ACEScct"), output_transform_("ACES - ACEScct"), lmt_path_(lmt_path) {
-  config_ = OCIO::GetCurrentConfig();
+  config_ = ocio_config::LoadBundledConfig();
 }
 
 OCIO_ACES_Transform_Op::OCIO_ACES_Transform_Op(const nlohmann::json& params) {
-  config_ = OCIO::GetCurrentConfig();
+  config_ = ocio_config::LoadBundledConfig();
   SetParams(params);
 }
 

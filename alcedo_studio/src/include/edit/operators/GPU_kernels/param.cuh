@@ -898,8 +898,8 @@ class CudaFusedParamUploader {
     std::error_code ec;
     const auto      abs_path   = std::filesystem::absolute(path, ec);
     const auto      normalized = (ec ? path : abs_path).lexically_normal();
-
-    std::string     key        = normalized.string();
+    const auto      utf8       = normalized.generic_u8string();
+    std::string     key{reinterpret_cast<const char*>(utf8.data()), utf8.size()};
 
     std::error_code size_ec;
     const auto      file_size  = std::filesystem::file_size(normalized, size_ec);
@@ -987,8 +987,10 @@ class CudaFusedParamUploader {
     CubeLut     lut;
     std::string parse_error;
     if (!ParseCubeFile(path, lut, &parse_error)) {
+      const auto utf8 = path.generic_u8string();
       std::ostringstream oss;
-      oss << "GPUParamsConverter: Failed to parse LUT file '" << path.string()
+      oss << "GPUParamsConverter: Failed to parse LUT file '"
+          << std::string(reinterpret_cast<const char*>(utf8.data()), utf8.size())
           << "': " << parse_error;
       throw std::runtime_error(oss.str());
     }

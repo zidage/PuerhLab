@@ -616,9 +616,10 @@ class MetalFusedParamUploader {
     CubeLut lut;
     std::string error;
     if (!ParseCubeFile(cpu_params.lmt_lut_path_, lut, &error)) {
+      const auto utf8 = cpu_params.lmt_lut_path_.generic_u8string();
       std::ostringstream oss;
       oss << "Metal fused params: failed to parse LUT file '"
-          << cpu_params.lmt_lut_path_.string() << "': " << error;
+          << std::string(reinterpret_cast<const char*>(utf8.data()), utf8.size()) << "': " << error;
       throw std::runtime_error(oss.str());
     }
     if (!lut.Has3D()) {
@@ -643,8 +644,9 @@ class MetalFusedParamUploader {
   static auto BuildPathIdentity(const std::filesystem::path& path) -> std::uintptr_t {
     std::error_code ec;
     const auto abs = std::filesystem::absolute(path, ec);
-    const auto normalized = (ec ? path : abs).lexically_normal().string();
-    return std::hash<std::string>{}(normalized);
+    const auto normalized = (ec ? path : abs).lexically_normal().generic_u8string();
+    return std::hash<std::string>{}(
+        std::string(reinterpret_cast<const char*>(normalized.data()), normalized.size()));
   }
 };
 

@@ -3,17 +3,37 @@
 //  Additional permission under GPLv3 section 7 applies; see the LICENSE file.
 
 #include "edit/operators/cst/lmt_op.hpp"
-
-#include "utils/string/convert.hpp"
+#include "edit/operators/cst/ocio_config_utils.hpp"
 
 namespace alcedo {
+namespace {
+
+auto PathToUtf8(const std::filesystem::path& path) -> std::string {
+  const auto utf8 = path.generic_u8string();
+  return {reinterpret_cast<const char*>(utf8.data()), utf8.size()};
+}
+
+auto Utf8OrNativeToPath(const std::string& raw_path) -> std::filesystem::path {
+  if (raw_path.empty()) {
+    return {};
+  }
+  try {
+    const auto* begin = reinterpret_cast<const char8_t*>(raw_path.data());
+    return std::filesystem::path(std::u8string(begin, begin + raw_path.size()));
+  } catch (...) {
+    return std::filesystem::path(raw_path);
+  }
+}
+
+}  // namespace
+
 OCIO_LMT_Transform_Op::OCIO_LMT_Transform_Op(std::filesystem::path& lmt_path)
     : lmt_path_(lmt_path) {
-  config_ = OCIO::GetCurrentConfig();
+  config_ = ocio_config::LoadBundledConfig();
 }
 
 OCIO_LMT_Transform_Op::OCIO_LMT_Transform_Op(const nlohmann::json& params) {
-  config_ = OCIO::GetCurrentConfig();
+  config_ = ocio_config::LoadBundledConfig();
   SetParams(params);
 }
 
@@ -24,8 +44,8 @@ void OCIO_LMT_Transform_Op::Apply(std::shared_ptr<ImageBuffer> input) {
   auto& img           = input->GetCPUData();
 
   auto  lmt_transform = OCIO::FileTransform::Create();
-  auto  path_str      = lmt_path_.wstring();
-  lmt_transform->setSrc(conv::ToBytes(path_str).c_str());
+  const std::string path_utf8 = PathToUtf8(lmt_path_);
+  lmt_transform->setSrc(path_utf8.c_str());
   lmt_transform->setInterpolation(OCIO::INTERP_BEST);
   lmt_transform->setDirection(OCIO::TRANSFORM_DIR_FORWARD);
 
@@ -48,17 +68,22 @@ void OCIO_LMT_Transform_Op::ApplyGPU(std::shared_ptr<ImageBuffer>) {
 
 auto OCIO_LMT_Transform_Op::GetParams() const -> nlohmann::json {
   nlohmann::json o;
-  o[script_name_] = conv::ToBytes(lmt_path_.wstring());
+  o[script_name_] = PathToUtf8(lmt_path_);
 
   return o;
 }
 
 void OCIO_LMT_Transform_Op::SetParams(const nlohmann::json& params) {
   if (!params.contains(script_name_)) {
-    // Empty path
     lmt_path_ = std::filesystem::path();
+    return;
   }
-  lmt_path_ = std::filesystem::path(conv::FromBytes(params[script_name_].get<std::string>()));
+  const std::string raw_path = params[script_name_].get<std::string>();
+  if (raw_path.empty()) {
+    lmt_path_ = std::filesystem::path();
+    return;
+  }
+  lmt_path_ = Utf8OrNativeToPath(raw_path);
 
   // auto lmt_transform = OCIO::FileTransform::Create();
   // auto path_str      = lmt_path_.wstring();

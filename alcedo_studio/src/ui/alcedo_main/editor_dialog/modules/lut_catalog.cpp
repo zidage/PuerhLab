@@ -21,6 +21,28 @@ auto Tr(const char* text) -> QString {
   return QCoreApplication::translate(ALCEDO_I18N_CONTEXT, text);
 }
 
+auto PathToUtf8(const std::filesystem::path& path) -> std::string {
+  const auto utf8 = path.generic_u8string();
+  return {reinterpret_cast<const char*>(utf8.data()), utf8.size()};
+}
+
+auto Utf8OrNativeToPath(const std::string& raw_path) -> std::filesystem::path {
+  if (raw_path.empty()) {
+    return {};
+  }
+  try {
+    const auto* begin = reinterpret_cast<const char8_t*>(raw_path.data());
+    return std::filesystem::path(std::u8string(begin, begin + raw_path.size()));
+  } catch (...) {
+    // Backward compatibility for older projects that persisted native narrow paths.
+    return std::filesystem::path(raw_path);
+  }
+}
+
+auto PathFilenameToQString(const std::filesystem::path& path) -> QString {
+  return QString::fromStdWString(path.filename().wstring());
+}
+
 struct CachedCatalogState {
   std::filesystem::path directory_{};
   bool                  initialized_ = false;
@@ -216,8 +238,7 @@ auto MakeMissingCurrentEntry(const std::string& current_lut_path) -> LutCatalogE
   LutCatalogEntry entry;
   entry.kind_ = LutCatalogEntryKind::MissingCurrent;
   entry.path_ = current_lut_path;
-  entry.display_name_ =
-      QString::fromStdString(std::filesystem::path(current_lut_path).filename().string());
+  entry.display_name_ = PathFilenameToQString(Utf8OrNativeToPath(current_lut_path));
   entry.secondary_text_ = Tr("Current LUT is missing from the active LUT folder.");
   entry.status_text_    = Tr("Missing");
   entry.valid_          = false;
@@ -228,8 +249,8 @@ auto MakeMissingCurrentEntry(const std::string& current_lut_path) -> LutCatalogE
 auto MakeFileEntry(const std::filesystem::path& path) -> LutCatalogEntry {
   LutCatalogEntry entry;
   entry.kind_         = LutCatalogEntryKind::File;
-  entry.path_         = path.generic_string();
-  entry.display_name_ = QString::fromStdString(path.filename().string());
+  entry.path_         = PathToUtf8(path);
+  entry.display_name_ = PathFilenameToQString(path);
 
   std::error_code size_ec;
   entry.file_size_bytes_ = std::filesystem::file_size(path, size_ec);
@@ -330,7 +351,7 @@ auto FindEntryIndexForPath(const LutCatalog& catalog, const std::string& lut_pat
     }
   }
 
-  const std::filesystem::path target_path(lut_path);
+  const std::filesystem::path target_path = Utf8OrNativeToPath(lut_path);
   const auto                  target_name = target_path.filename().wstring();
   if (target_name.empty()) {
     return -1;
@@ -340,7 +361,7 @@ auto FindEntryIndexForPath(const LutCatalog& catalog, const std::string& lut_pat
     if (catalog.entries_[i].kind_ != LutCatalogEntryKind::File) {
       continue;
     }
-    if (std::filesystem::path(catalog.entries_[i].path_).filename().wstring() == target_name) {
+    if (Utf8OrNativeToPath(catalog.entries_[i].path_).filename().wstring() == target_name) {
       return i;
     }
   }
@@ -353,7 +374,7 @@ auto DefaultLutPath(const LutCatalog& catalog) -> std::string {
     if (entry.kind_ != LutCatalogEntryKind::File) {
       continue;
     }
-    if (std::filesystem::path(entry.path_).filename() == "5207.cube") {
+    if (Utf8OrNativeToPath(entry.path_).filename() == "5207.cube") {
       return entry.path_;
     }
   }

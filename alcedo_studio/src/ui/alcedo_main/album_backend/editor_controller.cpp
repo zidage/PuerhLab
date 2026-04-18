@@ -23,6 +23,27 @@ namespace alcedo::ui {
 
 using namespace album_util;
 
+namespace {
+
+auto PathToUtf8(const std::filesystem::path& path) -> std::string {
+  const auto utf8 = path.generic_u8string();
+  return {reinterpret_cast<const char*>(utf8.data()), utf8.size()};
+}
+
+auto Utf8OrNativeToPath(const std::string& raw_path) -> std::filesystem::path {
+  if (raw_path.empty()) {
+    return {};
+  }
+  try {
+    const auto* begin = reinterpret_cast<const char8_t*>(raw_path.data());
+    return std::filesystem::path(std::u8string(begin, begin + raw_path.size()));
+  } catch (...) {
+    return std::filesystem::path(raw_path);
+  }
+}
+
+}  // namespace
+
 #define PL_TEXT(text, ...)                                                    \
   i18n::MakeLocalizedText(ALCEDO_I18N_CONTEXT,                              \
                           QT_TRANSLATE_NOOP(ALCEDO_I18N_CONTEXT, text)      \
@@ -205,9 +226,9 @@ void EditorController::InitializeEditorLuts() {
   const auto lutsDir    = std::filesystem::is_directory(appLutsDir) ? appLutsDir : srcLutsDir;
   const auto lutFiles   = ListCubeLutsInDir(lutsDir);
   for (const auto& path : lutFiles) {
-    editor_lut_paths_.push_back(path.generic_string());
+    editor_lut_paths_.push_back(PathToUtf8(path));
     editor_lut_options_.push_back(
-        QVariantMap{{"text", QString::fromStdString(path.filename().string())},
+        QVariantMap{{"text", QString::fromStdWString(path.filename().wstring())},
                     {"value", static_cast<int>(editor_lut_paths_.size() - 1)}});
   }
 
@@ -227,9 +248,9 @@ auto EditorController::LutIndexForPath(const std::string& lutPath) const -> int 
     }
   }
 
-  const auto target = std::filesystem::path(lutPath).filename().wstring();
+  const auto target = Utf8OrNativeToPath(lutPath).filename().wstring();
   for (size_t i = 0; i < editor_lut_paths_.size(); ++i) {
-    if (std::filesystem::path(editor_lut_paths_[i]).filename().wstring() == target) {
+    if (Utf8OrNativeToPath(editor_lut_paths_[i]).filename().wstring() == target) {
       return static_cast<int>(i);
     }
   }

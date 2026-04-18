@@ -56,6 +56,11 @@ auto ValidCubeContent() -> std::string {
          "1 1 1\n";
 }
 
+auto PathToUtf8(const std::filesystem::path& path) -> std::string {
+  const auto utf8 = path.generic_u8string();
+  return {reinterpret_cast<const char*>(utf8.data()), utf8.size()};
+}
+
 }  // namespace
 
 TEST(LutCatalogTests, EmptyDirectoryStillProvidesNoneEntry) {
@@ -119,7 +124,22 @@ TEST(LutCatalogTests, FindEntryIndexFallsBackToFilenameMatch) {
 
   EXPECT_EQ(FindEntryIndexForPath(catalog, "D:/custom/LUTs/5207.cube"), 1);
   EXPECT_EQ(DefaultLutPath(catalog),
-            (temp_dir.path() / "5207.cube").generic_string());
+            PathToUtf8(temp_dir.path() / "5207.cube"));
+}
+
+TEST(LutCatalogTests, UnicodePathsRoundTripAsUtf8) {
+  ScopedTempDir temp_dir;
+  const auto unicode_dir = temp_dir.path() / L"项目";
+  std::filesystem::create_directories(unicode_dir);
+  const auto lut_path = unicode_dir / L"5207.cube";
+  WriteTextFile(lut_path, ValidCubeContent());
+
+  const LutCatalog catalog = BuildCatalogForDirectory(unicode_dir, std::string{});
+
+  ASSERT_EQ(catalog.entries_.size(), 2u);
+  EXPECT_EQ(catalog.entries_[1].path_, PathToUtf8(lut_path));
+  EXPECT_EQ(catalog.entries_[1].display_name_, QStringLiteral("5207.cube"));
+  EXPECT_EQ(FindEntryIndexForPath(catalog, PathToUtf8(lut_path)), 1);
 }
 
 }  // namespace alcedo::ui::lut_catalog

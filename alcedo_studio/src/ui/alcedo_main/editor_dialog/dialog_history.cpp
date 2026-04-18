@@ -201,7 +201,18 @@ void EditorDialog::CommitAdjustment(AdjustmentField field) {
 
     EditTransaction tx{tx_type, op_type, stage_name, new_params};
     tx.SetLastOperatorParams(old_params);
-    (void)tx.ApplyTransaction(*exec);
+    try {
+      (void)tx.ApplyTransaction(*exec);
+    } catch (const std::exception& e) {
+      QMessageBox::warning(this, Tr("Adjustment"),
+                           Tr("Failed to apply adjustment: %1")
+                               .arg(QString::fromUtf8(e.what())));
+      return;
+    } catch (...) {
+      QMessageBox::warning(this, Tr("Adjustment"),
+                           Tr("Failed to apply adjustment."));
+      return;
+    }
 
     working_version_.AppendEditTransaction(std::move(tx));
     pipeline_guard_->dirty_ = true;
