@@ -139,12 +139,24 @@ Dialog {
                             Layout.fillWidth: true
                             spacing: 0
 
-                            Label {
-                                text: qsTr("Alcedo Studio")
-                                color: dialog.primaryAccent
-                                font.family: dialog.headlineFontFamily
-                                font.pixelSize: 44
-                                font.weight: 800
+                            Row {
+                                spacing: 10
+
+                                Label {
+                                    text: qsTr("Alcedo")
+                                    color: dialog.primaryAccent
+                                    font.family: dialog.headlineFontFamily
+                                    font.pixelSize: 44
+                                    font.weight: 800
+                                }
+
+                                Label {
+                                    text: qsTr("Studio")
+                                    color: dialog.textColor
+                                    font.family: dialog.headlineFontFamily
+                                    font.pixelSize: 44
+                                    font.weight: 800
+                                }
                             }
                         }
 
