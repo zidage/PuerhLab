@@ -55,7 +55,8 @@ void AddEmptyStateItem(QListWidget* list_widget, const QString& text) {
 }  // namespace
 
 auto MakeTxCountLabel(size_t tx_count) -> QString {
-  return Tr("Uncommitted: %1").arg(static_cast<qulonglong>(tx_count));
+  return tx_count == 0 ? Tr("No pending edits")
+                       : Tr("Pending edits: %1").arg(static_cast<qulonglong>(tx_count));
 }
 
 auto IsPlainModeSelected(const QComboBox* working_mode_combo) -> bool {
@@ -282,7 +283,6 @@ void UpdateVersionUi(const VersionUiContext& ui, const Version& working_version,
   if (ui.undo_tx_btn) {
     ui.undo_tx_btn->setEnabled(tx_count > 0);
   }
-
   if (ui.tx_stack) {
     ui.tx_stack->clear();
     const auto&  txs   = working_version.GetAllEditTransactions();

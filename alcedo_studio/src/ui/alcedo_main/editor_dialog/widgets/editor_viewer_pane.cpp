@@ -39,9 +39,9 @@ void EditorDialog::BuildViewerAndPanelShell() {
         "  border-radius: 14px;"
         "}"
         "#EditorVersioningPanel QFrame#EditorSection {"
-        "  background: %2;"
+        "  background: transparent;"
         "  border: none;"
-        "  border-radius: 12px;"
+        "  border-radius: 0px;"
         "}"
         "#EditorVersioningPanel QLabel#EditorSectionTitle {"
         "  color: %3;"
@@ -49,11 +49,15 @@ void EditorDialog::BuildViewerAndPanelShell() {
         "#EditorVersioningPanel QLabel#EditorSectionSub {"
         "  color: %4;"
         "}")
-                                           .arg(theme.glassPanelColor().name(QColor::HexArgb),
-                                                theme.bgBaseColor().name(QColor::HexArgb),
+                                           .arg(QColor(theme.bgDeepColor().red(),
+                                                       theme.bgDeepColor().green(),
+                                                       theme.bgDeepColor().blue(), 246)
+                                                    .name(QColor::HexArgb),
                                                 theme.textColor().name(QColor::HexRgb),
                                                 theme.textMutedColor().name(QColor::HexRgb));
-    const QColor  rail_accent = theme.accentSecondaryColor();
+    // Sidebar buttons: solid-gray rounded-square tiles, no borders (Qt Widgets
+    // renders white strokes with visible dots on this system — avoid them).
+    const QColor rail_tile       = theme.bgPanelColor();
     const QString version_rail_style = QStringLiteral(
         "#EditorVersioningRail {"
         "  background: %1;"
@@ -64,48 +68,37 @@ void EditorDialog::BuildViewerAndPanelShell() {
         "  min-width: 40px;"
         "  min-height: 40px;"
         "  border-radius: 10px;"
-        "  border: 1px solid %2;"
-        "  background: %3;"
+        "  border: none;"
+        "  background: %2;"
         "  padding: 0px;"
         "}"
         "#EditorVersioningRail QPushButton:hover {"
-        "  background: %4;"
-        "  border-color: %5;"
+        "  background: %3;"
         "}"
         "#EditorVersioningRail QPushButton:pressed {"
+        "  background: %4;"
+        "}"
+        "#EditorVersioningRail QPushButton[versioningActive=\"true\"] {"
+        "  background: %5;"
+        "}"
+        "#EditorVersioningRail QPushButton[versioningActive=\"true\"]:hover {"
         "  background: %6;"
-        "}"
-        "#EditorVersioningRail QPushButton:checked {"
-        "  background: %7;"
-        "  border-color: %8;"
-        "}"
-        "#EditorVersioningRail QPushButton:checked:hover {"
-        "  background: %9;"
         "}")
                                           .arg(theme.glassPanelColor().name(QColor::HexArgb),
-                                               QColor(rail_accent.red(), rail_accent.green(),
-                                                      rail_accent.blue(), 168)
+                                               QColor(rail_tile.red(), rail_tile.green(),
+                                                      rail_tile.blue(), 210)
                                                    .name(QColor::HexArgb),
-                                               QColor(rail_accent.red(), rail_accent.green(),
-                                                      rail_accent.blue(), 46)
+                                               QColor(rail_tile.red(), rail_tile.green(),
+                                                      rail_tile.blue(), 238)
                                                    .name(QColor::HexArgb),
-                                               QColor(rail_accent.red(), rail_accent.green(),
-                                                      rail_accent.blue(), 82)
+                                               QColor(rail_tile.red(), rail_tile.green(),
+                                                      rail_tile.blue(), 170)
                                                    .name(QColor::HexArgb),
-                                               QColor(rail_accent.red(), rail_accent.green(),
-                                                      rail_accent.blue(), 220)
+                                               QColor(rail_tile.red(), rail_tile.green(),
+                                                      rail_tile.blue(), 255)
                                                    .name(QColor::HexArgb),
-                                               QColor(rail_accent.red(), rail_accent.green(),
-                                                      rail_accent.blue(), 112)
-                                                   .name(QColor::HexArgb),
-                                               QColor(rail_accent.red(), rail_accent.green(),
-                                                      rail_accent.blue(), 230)
-                                                   .name(QColor::HexArgb),
-                                               QColor(rail_accent.red(), rail_accent.green(),
-                                                      rail_accent.blue(), 255)
-                                                   .name(QColor::HexArgb),
-                                               QColor(rail_accent.red(), rail_accent.green(),
-                                                      rail_accent.blue(), 255)
+                                               QColor(rail_tile.red(), rail_tile.green(),
+                                                      rail_tile.blue(), 255)
                                                    .name(QColor::HexArgb));
 
     auto* root = new QHBoxLayout(this);
@@ -134,7 +127,6 @@ void EditorDialog::BuildViewerAndPanelShell() {
         "  border-radius: 14px;"
         "}");
 
-    // Viewer container allows a small overlay spinner during rendering.
     viewer_container_ = new EditorViewerPane(this);
     viewer_container_->setObjectName("EditorViewportFrame");
     viewer_container_->setAttribute(Qt::WA_StyledBackground, true);
@@ -178,53 +170,13 @@ void EditorDialog::BuildViewerAndPanelShell() {
 
     auto* controls_panel = BuildControlPanelShell(borderless_panel_style);
 
+    // ── Versioning rail (fixed 64 px, always visible) ─────────────────────
     versioning_panel_host_ = new VersioningPanelWidget(this);
-    versioning_panel_host_->setMinimumWidth(kVersioningCollapsedWidth);
-    versioning_panel_host_->setMaximumWidth(kVersioningCollapsedWidth + kVersioningExpandedMaxWidth);
-    versioning_panel_host_->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
+    versioning_panel_host_->setFixedWidth(kVersioningCollapsedWidth);
+    versioning_panel_host_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
     auto* versioning_host_layout = new QHBoxLayout(versioning_panel_host_);
     versioning_host_layout->setContentsMargins(0, 0, 0, 0);
     versioning_host_layout->setSpacing(0);
-
-    versioning_panel_content_ = new QWidget(versioning_panel_host_);
-    versioning_panel_content_->setMinimumWidth(0);
-    versioning_panel_content_->setMaximumWidth(0);
-    versioning_panel_content_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
-    auto* versioning_panel_content_layout = new QVBoxLayout(versioning_panel_content_);
-    versioning_panel_content_layout->setContentsMargins(0, 0, 0, 0);
-    versioning_panel_content_layout->setSpacing(0);
-
-    shared_versioning_root_ = new QWidget(versioning_panel_content_);
-    shared_versioning_root_->setObjectName("EditorVersioningPanel");
-    shared_versioning_root_->setMinimumWidth(kVersioningExpandedMinWidth);
-    shared_versioning_root_->setMaximumWidth(kVersioningExpandedMaxWidth);
-    shared_versioning_root_->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
-    shared_versioning_root_->setAttribute(Qt::WA_StyledBackground, true);
-    shared_versioning_root_->setStyleSheet(version_panel_style);
-    versioning_panel_content_layout->addWidget(shared_versioning_root_, 1);
-
-    versioning_panel_opacity_effect_ = new QGraphicsOpacityEffect(shared_versioning_root_);
-    shared_versioning_root_->setGraphicsEffect(versioning_panel_opacity_effect_);
-    versioning_panel_opacity_effect_->setOpacity(0.0);
-
-    auto* shared_versioning_outer_layout = new QVBoxLayout(shared_versioning_root_);
-    shared_versioning_outer_layout->setContentsMargins(0, 0, 0, 0);
-    shared_versioning_outer_layout->setSpacing(0);
-
-    auto* versioning_scroll = new QScrollArea(shared_versioning_root_);
-    versioning_scroll->setFrameShape(QFrame::NoFrame);
-    versioning_scroll->setWidgetResizable(true);
-    versioning_scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    versioning_scroll->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
-    versioning_scroll->setStyleSheet(AppTheme::EditorScrollAreaStyle());
-
-    auto* versioning_content = new QWidget(versioning_scroll);
-    versioning_content->setStyleSheet("background: transparent;");
-    shared_versioning_layout_ = new QVBoxLayout(versioning_content);
-    shared_versioning_layout_->setContentsMargins(20, 20, 20, 20);
-    shared_versioning_layout_->setSpacing(14);
-    versioning_scroll->setWidget(versioning_content);
-    shared_versioning_outer_layout->addWidget(versioning_scroll, 1);
 
     versioning_collapsed_nav_ = new QWidget(versioning_panel_host_);
     versioning_collapsed_nav_->setObjectName("EditorVersioningRail");
@@ -236,50 +188,116 @@ void EditorDialog::BuildViewerAndPanelShell() {
     versioning_collapsed_layout->setSpacing(8);
     versioning_collapsed_layout->setAlignment(Qt::AlignTop);
 
-    versioning_nav_btn_ = new QPushButton(versioning_collapsed_nav_);
-    versioning_nav_btn_->setCursor(Qt::PointingHandCursor);
-    versioning_nav_btn_->setCheckable(true);
-    versioning_nav_btn_->setAutoDefault(false);
-    versioning_nav_btn_->setDefault(false);
-    versioning_nav_btn_->setAttribute(Qt::WA_Hover, true);
-    versioning_nav_btn_->setFixedSize(kVersioningRailButtonSize, kVersioningRailButtonSize);
-    versioning_nav_btn_->setIconSize(kVersioningRailIconSize);
-    versioning_nav_btn_->installEventFilter(this);
-    versioning_collapsed_layout->addWidget(versioning_nav_btn_, 0, Qt::AlignTop | Qt::AlignHCenter);
+    const auto configure_versioning_rail_button = [](QPushButton* button) {
+      if (!button) {
+        return;
+      }
+      button->setCursor(Qt::PointingHandCursor);
+      button->setAutoDefault(false);
+      button->setDefault(false);
+      button->setFocusPolicy(Qt::NoFocus);
+      button->setProperty("versioningActive", false);
+      button->setFixedSize(kVersioningRailButtonSize, kVersioningRailButtonSize);
+      button->setIconSize(kVersioningRailIconSize);
+    };
+
+    versioning_history_btn_ = new QPushButton(versioning_collapsed_nav_);
+    configure_versioning_rail_button(versioning_history_btn_);
+    versioning_collapsed_layout->addWidget(versioning_history_btn_, 0,
+                                           Qt::AlignTop | Qt::AlignHCenter);
+
+    versioning_versions_btn_ = new QPushButton(versioning_collapsed_nav_);
+    configure_versioning_rail_button(versioning_versions_btn_);
+    versioning_collapsed_layout->addWidget(versioning_versions_btn_, 0,
+                                           Qt::AlignTop | Qt::AlignHCenter);
+
+    versioning_collapsed_layout->addSpacing(6);
+    auto* nav_divider = new QFrame(versioning_collapsed_nav_);
+    nav_divider->setFrameShape(QFrame::HLine);
+    nav_divider->setFixedWidth(kVersioningRailButtonSize - 10);
+    nav_divider->setStyleSheet(QStringLiteral("color: %1; background: %1; border: none;")
+                                   .arg(QColor(theme.dividerColor().red(),
+                                               theme.dividerColor().green(),
+                                               theme.dividerColor().blue(), 96)
+                                            .name(QColor::HexArgb)));
+    versioning_collapsed_layout->addWidget(nav_divider, 0, Qt::AlignHCenter);
     versioning_collapsed_layout->addStretch();
 
-    QObject::connect(versioning_nav_btn_, &QPushButton::clicked, this,
-                     [this]() { SetVersioningCollapsed(versioning_panel_progress_ > 0.5); });
-
-    versioning_collapsed_gap_base_width_ = std::max(0, kEditorOuterMargin - main_splitter->handleWidth());
-    versioning_collapsed_gap_ = new QWidget(versioning_panel_host_);
-    versioning_collapsed_gap_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
-    versioning_collapsed_gap_->setFixedWidth(versioning_collapsed_gap_base_width_);
-    versioning_collapsed_gap_->setVisible(versioning_collapsed_gap_base_width_ > 0);
+    QObject::connect(versioning_history_btn_, &QPushButton::clicked, this, [this]() {
+      const bool same_page_open =
+          !versioning_collapsed_ && versioning_active_page_ == VersioningFlyoutPage::History;
+      versioning_active_page_ = VersioningFlyoutPage::History;
+      if (same_page_open) {
+        SetVersioningCollapsed(true, /*animate=*/false);
+      } else {
+        SetVersioningCollapsed(false, /*animate=*/false);
+      }
+    });
+    QObject::connect(versioning_versions_btn_, &QPushButton::clicked, this, [this]() {
+      const bool same_page_open =
+          !versioning_collapsed_ && versioning_active_page_ == VersioningFlyoutPage::Versions;
+      versioning_active_page_ = VersioningFlyoutPage::Versions;
+      if (same_page_open) {
+        SetVersioningCollapsed(true, /*animate=*/false);
+      } else {
+        SetVersioningCollapsed(false, /*animate=*/false);
+      }
+    });
 
     versioning_host_layout->addWidget(versioning_collapsed_nav_, 0);
-    versioning_host_layout->addWidget(versioning_panel_content_, 0);
-    versioning_host_layout->addWidget(versioning_collapsed_gap_, 0);
 
+    // ── Floating versioning flyout (not in splitter) ───────────────────────
+    // This QWidget is a child of the dialog but not in any layout; it is
+    // manually positioned via RepositionVersioningFlyout() so it overlays
+    // the viewer area when open.
+    versioning_flyout_ = new QWidget(this);
+    versioning_flyout_->setObjectName("EditorVersioningFlyout");
+    versioning_flyout_->setAttribute(Qt::WA_StyledBackground, false);
+    versioning_flyout_->setAttribute(Qt::WA_TranslucentBackground, true);
+    versioning_flyout_->hide();
+    versioning_flyout_->installEventFilter(this);
+
+    auto* flyout_layout = new QVBoxLayout(versioning_flyout_);
+    flyout_layout->setContentsMargins(0, 0, 0, 0);
+    flyout_layout->setSpacing(0);
+
+    shared_versioning_root_ = new QWidget(versioning_flyout_);
+    shared_versioning_root_->setObjectName("EditorVersioningPanel");
+    shared_versioning_root_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    shared_versioning_root_->setAttribute(Qt::WA_StyledBackground, true);
+    shared_versioning_root_->setStyleSheet(version_panel_style);
+    flyout_layout->addWidget(shared_versioning_root_, 1);
+
+    versioning_panel_opacity_effect_ = new QGraphicsOpacityEffect(shared_versioning_root_);
+    shared_versioning_root_->setGraphicsEffect(versioning_panel_opacity_effect_);
+    versioning_panel_opacity_effect_->setOpacity(0.0);
+
+    auto* shared_versioning_outer_layout = new QVBoxLayout(shared_versioning_root_);
+    shared_versioning_outer_layout->setContentsMargins(0, 0, 0, 0);
+    shared_versioning_outer_layout->setSpacing(0);
+    auto* versioning_content = new QWidget(shared_versioning_root_);
+    versioning_content->setAttribute(Qt::WA_StyledBackground, false);
+    versioning_content->setStyleSheet("background: transparent;");
+    shared_versioning_layout_ = new QVBoxLayout(versioning_content);
+    shared_versioning_layout_->setContentsMargins(20, 20, 20, 20);
+    shared_versioning_layout_->setSpacing(14);
+    shared_versioning_outer_layout->addWidget(versioning_content, 1);
+
+    // ── Splitter: [rail (fixed)] | [viewer] | [controls] ──────────────────
     main_splitter->addWidget(versioning_panel_host_);
     main_splitter->addWidget(viewer_container_);
     main_splitter->addWidget(controls_panel);
     main_splitter->setStretchFactor(0, 0);
     main_splitter->setStretchFactor(1, 1);
     main_splitter->setStretchFactor(2, 0);
+
     const int right_default_width = std::clamp(
         static_cast<int>(std::lround(static_cast<double>(width()) * 0.25)),
         controls_panel->minimumWidth(), controls_panel->maximumWidth());
-    const int left_default_width = 320;
-    versioning_expanded_width_ =
-        std::clamp(left_default_width - kVersioningCollapsedWidth, kVersioningExpandedMinWidth,
-                   kVersioningExpandedMaxWidth);
-    const int collapsed_left_width = kVersioningCollapsedWidth + versioning_collapsed_gap_base_width_;
-    main_splitter->setSizes({collapsed_left_width,
-                             std::max(400, width() - right_default_width - collapsed_left_width),
+    main_splitter->setSizes({kVersioningCollapsedWidth,
+                             std::max(400, width() - right_default_width - kVersioningCollapsedWidth),
                              right_default_width});
     root->addWidget(main_splitter, 1);
-
 }
 
 }  // namespace alcedo::ui

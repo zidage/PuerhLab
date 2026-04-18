@@ -10,179 +10,351 @@ namespace alcedo::ui {
 VersioningPanelWidget::VersioningPanelWidget(QWidget* parent) : QWidget(parent) {}
 
 void EditorDialog::BuildVersioningPanel() {
-  const auto&  version_theme               = AppTheme::Instance();
-  const QString version_primary_btn_style   = AppTheme::EditorPrimaryButtonStyle(true);
-  const QString version_secondary_btn_style = AppTheme::EditorSecondaryButtonStyle();
-  const QString compact_button_font_style   =
-      QStringLiteral("QPushButton { font-size: 12px; font-weight: 500; }");
-  const QString compact_combo_font_style    =
-      QStringLiteral("QComboBox { font-size: 12px; }");
-  const QString version_section_panel_style =
-      QStringLiteral("QFrame#VersioningSectionPanel {"
+  const auto& version_theme = AppTheme::Instance();
+
+  // Primary action ("Commit All"): solid filled button, no border.
+  const QString version_primary_btn_style =
+      QStringLiteral("QPushButton {"
+                     "  color: %1;"
+                     "  background: %2;"
+                     "  border: none;"
+                     "  border-radius: 10px;"
+                     "  font-size: 13px;"
+                     "  font-weight: 600;"
+                     "  padding: 8px 14px;"
+                     "}"
+                     "QPushButton:hover { background: %3; }"
+                     "QPushButton:pressed { background: %4; }"
+                     "QPushButton:disabled { color: %5; background: %6; }")
+          .arg(version_theme.bgCanvasColor().name(QColor::HexRgb),
+               version_theme.accentColor().name(QColor::HexArgb),
+               QColor(version_theme.accentColor().red(), version_theme.accentColor().green(),
+                      version_theme.accentColor().blue(), 232)
+                   .name(QColor::HexArgb),
+               version_theme.accentSecondaryColor().name(QColor::HexArgb),
+               version_theme.textMutedColor().name(QColor::HexRgb),
+               QColor(version_theme.bgPanelColor().red(), version_theme.bgPanelColor().green(),
+                      version_theme.bgPanelColor().blue(), 160)
+                   .name(QColor::HexArgb));
+
+  // Secondary action ("Undo Last"): subtle gray pill, no border (avoid white strokes).
+  const QString version_secondary_btn_style =
+      QStringLiteral("QPushButton {"
+                     "  color: %1;"
+                     "  background: %2;"
+                     "  border: none;"
+                     "  border-radius: 10px;"
+                     "  font-size: 13px;"
+                     "  font-weight: 600;"
+                     "  padding: 8px 14px;"
+                     "}"
+                     "QPushButton:hover { background: %3; }"
+                     "QPushButton:pressed { background: %4; }"
+                     "QPushButton:disabled { color: %5; background: %2; }")
+          .arg(version_theme.textColor().name(QColor::HexRgb),
+               QColor(version_theme.bgPanelColor().red(), version_theme.bgPanelColor().green(),
+                      version_theme.bgPanelColor().blue(), 200)
+                   .name(QColor::HexArgb),
+               QColor(version_theme.bgPanelColor().red(), version_theme.bgPanelColor().green(),
+                      version_theme.bgPanelColor().blue(), 238)
+                   .name(QColor::HexArgb),
+               QColor(version_theme.bgPanelColor().red(), version_theme.bgPanelColor().green(),
+                      version_theme.bgPanelColor().blue(), 160)
+                   .name(QColor::HexArgb),
+               version_theme.textMutedColor().name(QColor::HexRgb));
+
+  const QString compact_combo_font_style =
+      QStringLiteral("QComboBox {"
+                     "  font-size: 12px;"
                      "  background: %1;"
+                     "  color: %2;"
                      "  border: none;"
                      "  border-radius: 8px;"
+                     "  padding: 4px 10px;"
+                     "}"
+                     "QComboBox::drop-down { border: 0px; width: 20px; }"
+                     "QComboBox QAbstractItemView {"
+                     "  background: %1;"
+                     "  color: %2;"
+                     "  border: none;"
+                     "  selection-background-color: %3;"
+                     "  selection-color: %4;"
                      "}")
-          .arg(QColor(version_theme.bgBaseColor().red(), version_theme.bgBaseColor().green(),
-                      version_theme.bgBaseColor().blue(), 238)
+          .arg(QColor(version_theme.bgPanelColor().red(), version_theme.bgPanelColor().green(),
+                      version_theme.bgPanelColor().blue(), 210)
+                   .name(QColor::HexArgb),
+               version_theme.textColor().name(QColor::HexRgb),
+               QColor(version_theme.accentSecondaryColor().red(),
+                      version_theme.accentSecondaryColor().green(),
+                      version_theme.accentSecondaryColor().blue(), 224)
+                   .name(QColor::HexArgb),
+               version_theme.bgCanvasColor().name(QColor::HexRgb));
+
+  // Subtle divider used for header separation (no borders to avoid aliasing).
+  const QString divider_style =
+      QStringLiteral("QFrame#VersioningDivider {"
+                     "  background: %1;"
+                     "  border: none;"
+                     "  min-height: 1px;"
+                     "  max-height: 1px;"
+                     "}")
+          .arg(QColor(version_theme.dividerColor().red(), version_theme.dividerColor().green(),
+                      version_theme.dividerColor().blue(), 72)
                    .name(QColor::HexArgb));
+
+  // Embedded list: transparent so the rows inherit the parent panel look.
   const QString embedded_list_style =
-      AppTheme::EditorListWidgetStyle() +
       QStringLiteral("QListWidget {"
                      "  background: transparent;"
                      "  border: none;"
                      "  border-radius: 0px;"
                      "  padding: 0px;"
-                     "}");
+                     "}"
+                     "QListWidget::item {"
+                     "  background: transparent;"
+                     "  border: none;"
+                     "  padding: 0px;"
+                     "}"
+                     "QListWidget::item:selected { background: transparent; }");
 
-    {
-      auto* section = new QFrame(shared_versioning_root_);
-      section->setObjectName("EditorSection");
-      auto* v = new QVBoxLayout(section);
-      v->setContentsMargins(12, 10, 12, 10);
-      v->setSpacing(2);
-      auto* t = new QLabel(Tr("Versioning"), section);
-      t->setObjectName("EditorSectionTitle");
-      auto* s = new QLabel(Tr("Commit and inspect edit history."), section);
-      s->setObjectName("EditorSectionSub");
-      s->setWordWrap(true);
-      v->addWidget(t, 0);
-      v->addWidget(s, 0);
-      shared_versioning_layout_->addWidget(section, 0);
+  shared_versioning_layout_->setContentsMargins(0, 0, 0, 0);
+  shared_versioning_layout_->setSpacing(0);
+
+  versioning_pages_stack_ = new QStackedWidget(shared_versioning_root_);
+  versioning_pages_stack_->setObjectName("EditorVersioningPages");
+  versioning_pages_stack_->setStyleSheet(QStringLiteral(
+      "QStackedWidget#EditorVersioningPages { background: transparent; }"));
+  shared_versioning_layout_->addWidget(versioning_pages_stack_, 1);
+
+  const auto build_header_row = [&](const QString& title, const QString& pill_text) {
+    auto* row = new QWidget(shared_versioning_root_);
+    auto* layout = new QHBoxLayout(row);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(8);
+
+    auto* title_label = new QLabel(title, row);
+    title_label->setStyleSheet(QStringLiteral("QLabel { color: %1; font-size: 15px; font-weight: 700; background: transparent; }")
+                                   .arg(version_theme.textColor().name(QColor::HexRgb)));
+    AppTheme::MarkFontRole(title_label, AppTheme::FontRole::UiBodyStrong);
+    layout->addWidget(title_label, 0);
+    layout->addStretch(1);
+
+    if (!pill_text.isEmpty()) {
+      auto* pill = new QLabel(pill_text, row);
+      pill->setStyleSheet(QStringLiteral("QLabel {"
+                                         "  color: %1;"
+                                         "  background: %2;"
+                                         "  border: none;"
+                                         "  border-radius: 10px;"
+                                         "  font-size: 11px;"
+                                         "  font-weight: 600;"
+                                         "  padding: 4px 12px;"
+                                         "}")
+                              .arg(version_theme.textColor().name(QColor::HexRgb),
+                                   QColor(version_theme.bgPanelColor().red(),
+                                          version_theme.bgPanelColor().green(),
+                                          version_theme.bgPanelColor().blue(), 220)
+                                       .name(QColor::HexArgb)));
+      AppTheme::MarkFontRole(pill, AppTheme::FontRole::UiCaption);
+      layout->addWidget(pill, 0);
     }
 
-    // Action row 1 (uncommitted changes).
-    {
-      auto* row       = new QWidget(shared_versioning_root_);
-      auto* rowLayout = new QHBoxLayout(row);
-      rowLayout->setContentsMargins(0, 4, 0, 0);
-      rowLayout->setSpacing(8);
+    return row;
+  };
 
-      version_status_ = new QLabel(row);
-      version_status_->setStyleSheet(
-          QStringLiteral("QLabel { color: %1; font-size: 12px; }")
-              .arg(version_theme.textMutedColor().name(QColor::HexRgb)));
-      AppTheme::MarkFontRole(version_status_, AppTheme::FontRole::UiBodyStrong);
-      version_status_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+  const auto build_divider = [&]() {
+    auto* divider = new QFrame(shared_versioning_root_);
+    divider->setObjectName("VersioningDivider");
+    divider->setStyleSheet(divider_style);
+    return divider;
+  };
 
-      undo_tx_btn_ = new QPushButton(Tr("Undo"), row);
-      undo_tx_btn_->setMinimumHeight(28);
-      undo_tx_btn_->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Fixed);
-      undo_tx_btn_->setStyleSheet(version_secondary_btn_style + compact_button_font_style);
+  // "COMMITTED STATE" label flanked by two thin lines — separates the
+  // uncommitted transaction list from the baseline commit row on the
+  // history page.
+  const auto build_section_divider = [&](const QString& label_text) {
+    auto* row = new QWidget(shared_versioning_root_);
+    auto* layout = new QHBoxLayout(row);
+    layout->setContentsMargins(0, 4, 0, 4);
+    layout->setSpacing(10);
 
-      commit_version_btn_ = new QPushButton(Tr("Commit Version"), row);
-      commit_version_btn_->setMinimumHeight(28);
-      commit_version_btn_->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Fixed);
-      commit_version_btn_->setStyleSheet(version_primary_btn_style + compact_button_font_style);
+    const QColor line_color =
+        QColor(version_theme.dividerColor().red(), version_theme.dividerColor().green(),
+               version_theme.dividerColor().blue(), 92);
+    const QString line_style =
+        QStringLiteral("QFrame { background: %1; border: none; min-height: 1px; max-height: 1px; }")
+            .arg(line_color.name(QColor::HexArgb));
 
-      rowLayout->addWidget(version_status_, /*stretch*/ 0);
-      rowLayout->addStretch(1);
-      rowLayout->addWidget(undo_tx_btn_, /*stretch*/ 0);
-      rowLayout->addWidget(commit_version_btn_, /*stretch*/ 0);
-      shared_versioning_layout_->addWidget(row, 0);
+    auto* line_left = new QFrame(row);
+    line_left->setStyleSheet(line_style);
+    line_left->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    line_left->setFixedHeight(1);
 
-      QObject::connect(undo_tx_btn_, &QPushButton::clicked, this,
-                       [this]() { UndoLastTransaction(); });
-      QObject::connect(commit_version_btn_, &QPushButton::clicked, this,
-                       [this]() { CommitWorkingVersion(); });
-    }
+    auto* label = new QLabel(label_text, row);
+    label->setStyleSheet(QStringLiteral("QLabel {"
+                                        "  color: %1;"
+                                        "  background: transparent;"
+                                        "  font-size: 10px;"
+                                        "  font-weight: 700;"
+                                        "  letter-spacing: 2px;"
+                                        "}")
+                             .arg(version_theme.textMutedColor().name(QColor::HexRgb)));
+    AppTheme::MarkFontRole(label, AppTheme::FontRole::UiCaption);
 
-    // Action row 2 (working version).
-    {
-      auto* mode_row    = new QWidget(shared_versioning_root_);
-      auto* mode_layout = new QHBoxLayout(mode_row);
-      mode_layout->setContentsMargins(0, 0, 0, 0);
-      mode_layout->setSpacing(8);
+    auto* line_right = new QFrame(row);
+    line_right->setStyleSheet(line_style);
+    line_right->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    line_right->setFixedHeight(1);
 
-      auto* mode_label = new QLabel(Tr("Working version:"), mode_row);
-      mode_label->setStyleSheet(AppTheme::EditorLabelStyle(version_theme.textMutedColor()));
-      AppTheme::MarkFontRole(mode_label, AppTheme::FontRole::UiCaption);
+    layout->addWidget(line_left, 1);
+    layout->addWidget(label, 0);
+    layout->addWidget(line_right, 1);
+    return row;
+  };
 
-      working_mode_combo_ = new QComboBox(mode_row);
-      working_mode_combo_->addItem(Tr("Plain"), static_cast<int>(WorkingMode::Plain));
-      working_mode_combo_->addItem(Tr("Incr"), static_cast<int>(WorkingMode::Incremental));
-      working_mode_combo_->setMinimumHeight(28);
-      working_mode_combo_->setMinimumWidth(68);
-      working_mode_combo_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-      working_mode_combo_->setStyleSheet(AppTheme::EditorComboBoxStyle() + compact_combo_font_style);
+  {
+    auto* history_page = new QWidget(versioning_pages_stack_);
+    history_page->setAttribute(Qt::WA_StyledBackground, false);
+    history_page->setStyleSheet("background: transparent;");
+    auto* page_layout  = new QVBoxLayout(history_page);
+    page_layout->setContentsMargins(18, 18, 18, 18);
+    page_layout->setSpacing(10);
 
-      new_working_btn_ = new QPushButton(Tr("New"), mode_row);
-      new_working_btn_->setMinimumHeight(28);
-      new_working_btn_->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Fixed);
-      new_working_btn_->setStyleSheet(version_secondary_btn_style + compact_button_font_style);
+    page_layout->addWidget(build_header_row(Tr("Edit History"), Tr("Uncommitted")), 0);
+    page_layout->addWidget(build_divider(), 0);
 
-      mode_layout->addWidget(mode_label, /*stretch*/ 0);
-      mode_layout->addWidget(working_mode_combo_, /*stretch*/ 1);
-      mode_layout->addWidget(new_working_btn_, /*stretch*/ 0);
-      shared_versioning_layout_->addWidget(mode_row, 0);
+    // Working transaction list — transparent so tx cards paint on the panel directly.
+    tx_stack_ = new QListWidget(history_page);
+    tx_stack_->setSelectionMode(QAbstractItemView::NoSelection);
+    tx_stack_->setSpacing(4);
+    tx_stack_->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
+    tx_stack_->setMinimumHeight(170);
+    tx_stack_->setStyleSheet(embedded_list_style);
+    tx_stack_->setFrameShape(QFrame::NoFrame);
+    page_layout->addWidget(tx_stack_, 1);
 
-      QObject::connect(new_working_btn_, &QPushButton::clicked, this,
-                       [this]() { StartNewWorkingVersionFromUi(); });
-      QObject::connect(working_mode_combo_, QOverload<int>::of(&QComboBox::currentIndexChanged),
-                       this, [this](int) { UpdateVersionUi(); });
-    }
+    // "COMMITTED STATE" divider — visual separator between the uncommitted
+    // transaction list and the committed-baseline summary beneath it.
+    page_layout->addWidget(build_section_divider(Tr("COMMITTED STATE")), 0);
 
-    // Versions section.
-    {
-      auto* versions_label = new QLabel(Tr("Versions"), shared_versioning_root_);
-      versions_label->setStyleSheet(
-          QStringLiteral("QLabel { color: %1; font-size: 12px; font-weight: 600; }")
-              .arg(version_theme.textColor().name(QColor::HexRgb)));
-      AppTheme::MarkFontRole(versions_label, AppTheme::FontRole::UiBodyStrong);
-      shared_versioning_layout_->addWidget(versions_label, 0);
+    // Baseline summary row: icon + "Baseline" label + pending-edit status on
+    // the right (reuses version_status_ which UpdateVersionUi populates).
+    auto* baseline_row = new QWidget(history_page);
+    auto* baseline_layout = new QHBoxLayout(baseline_row);
+    baseline_layout->setContentsMargins(4, 4, 4, 4);
+    baseline_layout->setSpacing(10);
 
-      auto* versions_panel = new QFrame(shared_versioning_root_);
-      versions_panel->setObjectName("VersioningSectionPanel");
-      versions_panel->setStyleSheet(version_section_panel_style);
-      auto* versions_panel_layout = new QVBoxLayout(versions_panel);
-      versions_panel_layout->setContentsMargins(12, 12, 12, 12);
-      versions_panel_layout->setSpacing(0);
+    auto* baseline_label = new QLabel(Tr("Baseline"), baseline_row);
+    baseline_label->setStyleSheet(
+        QStringLiteral("QLabel { color: %1; background: transparent; font-size: 13px; font-weight: 600; }")
+            .arg(version_theme.textColor().name(QColor::HexRgb)));
+    AppTheme::MarkFontRole(baseline_label, AppTheme::FontRole::UiBody);
 
-      version_log_ = new QListWidget(versions_panel);
-      version_log_->setSelectionMode(QAbstractItemView::SingleSelection);
-      version_log_->setSpacing(0);
-      version_log_->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
-      version_log_->setMinimumHeight(140);
-      version_log_->setStyleSheet(embedded_list_style);
-      versions_panel_layout->addWidget(version_log_, 1);
-      shared_versioning_layout_->addWidget(versions_panel, 0);
+    version_status_ = new QLabel(baseline_row);
+    version_status_->setStyleSheet(
+        QStringLiteral("QLabel { color: %1; background: transparent; font-size: 11px; font-weight: 500; }")
+            .arg(version_theme.textMutedColor().name(QColor::HexRgb)));
+    AppTheme::MarkFontRole(version_status_, AppTheme::FontRole::DataCaption);
 
-      QObject::connect(version_log_, &QListWidget::itemSelectionChanged, this,
-                       [this]() { RefreshVersionLogSelectionStyles(); });
-      QObject::connect(version_log_, &QListWidget::itemClicked, this,
-                       [this](QListWidgetItem* item) { CheckoutSelectedVersion(item); });
-    }
+    baseline_layout->addWidget(baseline_label, 0);
+    baseline_layout->addStretch(1);
+    baseline_layout->addWidget(version_status_, 0);
+    page_layout->addWidget(baseline_row, 0);
 
-    // Uncommitted transactions stack section.
-    {
-      auto* tx_label = new QLabel(Tr("Uncommitted transactions (stack)"), shared_versioning_root_);
-      tx_label->setStyleSheet(
-          QStringLiteral("QLabel { color: %1; font-size: 12px; font-weight: 600; }")
-              .arg(version_theme.textColor().name(QColor::HexRgb)));
-      AppTheme::MarkFontRole(tx_label, AppTheme::FontRole::UiBodyStrong);
-      shared_versioning_layout_->addWidget(tx_label, 0);
+    auto* action_row = new QWidget(history_page);
+    auto* action_layout = new QHBoxLayout(action_row);
+    action_layout->setContentsMargins(0, 8, 0, 0);
+    action_layout->setSpacing(10);
 
-      auto* tx_panel = new QFrame(shared_versioning_root_);
-      tx_panel->setObjectName("VersioningSectionPanel");
-      tx_panel->setStyleSheet(version_section_panel_style);
-      auto* tx_panel_layout = new QVBoxLayout(tx_panel);
-      tx_panel_layout->setContentsMargins(12, 12, 12, 12);
-      tx_panel_layout->setSpacing(0);
+    undo_tx_btn_ = new QPushButton(Tr("Undo Last"), action_row);
+    undo_tx_btn_->setMinimumHeight(38);
+    undo_tx_btn_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    undo_tx_btn_->setStyleSheet(version_secondary_btn_style);
 
-      tx_stack_ = new QListWidget(tx_panel);
-      tx_stack_->setSelectionMode(QAbstractItemView::NoSelection);
-      tx_stack_->setSpacing(0);
-      tx_stack_->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
-      tx_stack_->setMinimumHeight(150);
-      tx_stack_->setStyleSheet(embedded_list_style);
-      tx_panel_layout->addWidget(tx_stack_, 1);
-      shared_versioning_layout_->addWidget(tx_panel, 1);
-      shared_versioning_layout_->addStretch();
-    }
+    commit_version_btn_ = new QPushButton(Tr("Commit All"), action_row);
+    commit_version_btn_->setMinimumHeight(38);
+    commit_version_btn_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    commit_version_btn_->setStyleSheet(version_primary_btn_style);
 
-    SetVersioningCollapsed(true, /*animate=*/false);
+    action_layout->addWidget(undo_tx_btn_, 1);
+    action_layout->addWidget(commit_version_btn_, 1);
+    page_layout->addWidget(action_row, 0);
 
+    QObject::connect(undo_tx_btn_, &QPushButton::clicked, this,
+                     [this]() { UndoLastTransaction(); });
+    QObject::connect(commit_version_btn_, &QPushButton::clicked, this,
+                     [this]() { CommitWorkingVersion(); });
 
+    versioning_pages_stack_->addWidget(history_page);
+  }
+
+  {
+    auto* versions_page = new QWidget(versioning_pages_stack_);
+    versions_page->setAttribute(Qt::WA_StyledBackground, false);
+    versions_page->setStyleSheet("background: transparent;");
+    auto* page_layout   = new QVBoxLayout(versions_page);
+    page_layout->setContentsMargins(18, 18, 18, 18);
+    page_layout->setSpacing(10);
+
+    page_layout->addWidget(build_header_row(Tr("Version Tree"), QString()), 0);
+    page_layout->addWidget(build_divider(), 0);
+
+    // Working-mode control row — borderless, inline on the panel.
+    auto* mode_row = new QWidget(versions_page);
+    auto* mode_layout = new QHBoxLayout(mode_row);
+    mode_layout->setContentsMargins(0, 2, 0, 2);
+    mode_layout->setSpacing(10);
+
+    auto* mode_label = new QLabel(Tr("Working mode"), mode_row);
+    mode_label->setStyleSheet(
+        QStringLiteral("QLabel { color: %1; background: transparent; font-size: 11px; font-weight: 600; letter-spacing: 1px; }")
+            .arg(version_theme.textMutedColor().name(QColor::HexRgb)));
+    AppTheme::MarkFontRole(mode_label, AppTheme::FontRole::UiCaption);
+
+    working_mode_combo_ = new QComboBox(mode_row);
+    working_mode_combo_->addItem(Tr("Plain"), static_cast<int>(WorkingMode::Plain));
+    working_mode_combo_->addItem(Tr("Incremental"), static_cast<int>(WorkingMode::Incremental));
+    working_mode_combo_->setMinimumHeight(32);
+    working_mode_combo_->setMinimumWidth(118);
+    working_mode_combo_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    working_mode_combo_->setStyleSheet(compact_combo_font_style);
+
+    new_working_btn_ = new QPushButton(Tr("New Working"), mode_row);
+    new_working_btn_->setMinimumHeight(32);
+    new_working_btn_->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Fixed);
+    new_working_btn_->setStyleSheet(version_secondary_btn_style);
+
+    mode_layout->addWidget(mode_label, 0);
+    mode_layout->addWidget(working_mode_combo_, 1);
+    mode_layout->addWidget(new_working_btn_, 0);
+    page_layout->addWidget(mode_row, 0);
+
+    page_layout->addWidget(build_section_divider(Tr("COMMITTED STATE")), 0);
+
+    version_log_ = new QListWidget(versions_page);
+    version_log_->setSelectionMode(QAbstractItemView::SingleSelection);
+    version_log_->setSpacing(2);
+    version_log_->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
+    version_log_->setMinimumHeight(170);
+    version_log_->setStyleSheet(embedded_list_style);
+    version_log_->setFrameShape(QFrame::NoFrame);
+    page_layout->addWidget(version_log_, 1);
+
+    QObject::connect(new_working_btn_, &QPushButton::clicked, this,
+                     [this]() { StartNewWorkingVersionFromUi(); });
+    QObject::connect(working_mode_combo_, QOverload<int>::of(&QComboBox::currentIndexChanged),
+                     this, [this](int) { UpdateVersionUi(); });
+    QObject::connect(version_log_, &QListWidget::itemSelectionChanged, this,
+                     [this]() { RefreshVersionLogSelectionStyles(); });
+    QObject::connect(version_log_, &QListWidget::itemClicked, this,
+                     [this](QListWidgetItem* item) { CheckoutSelectedVersion(item); });
+
+    versioning_pages_stack_->addWidget(versions_page);
+  }
+
+  versioning_pages_stack_->setCurrentIndex(
+      static_cast<int>(VersioningFlyoutPage::History));
+  SetVersioningCollapsed(true, /*animate=*/false);
 }
 
 }  // namespace alcedo::ui

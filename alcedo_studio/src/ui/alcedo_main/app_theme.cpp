@@ -46,12 +46,16 @@ struct ThemeColors {
   int panel_radius;
 };
 
+auto BrandBlueBase() -> QColor { return QColor(104, 146, 185); }
+auto BrandBlueHover() -> QColor { return QColor(118, 160, 199); }
+auto BrandBluePressed() -> QColor { return QColor(86, 127, 165); }
+
 // Theme 0: Alcedo — layered matte surfaces, saffron/steel/teal CTA palette
 auto MakePuerhTheme() -> ThemeColors {
   return ThemeColors{
-      .tone_gold = QColor(0x98, 0xCD, 0xF2),      // primary CTA / accent (light blue)
+      .tone_gold = BrandBlueBase(),               // primary brand blue / CTA
       .tone_wine = QColor(0x8A, 0x3A, 0x3A),      // danger red
-      .tone_steel = QColor(0x45, 0x7B, 0x9D),     // steel blue
+      .tone_steel = BrandBluePressed(),           // pressed / deeper blue
       .tone_graphite = QColor(0x11, 0x11, 0x11),
       .tone_mist = QColor(0xE0, 0xE0, 0xE0),
       .bg_canvas = QColor(0x12, 0x12, 0x12),      // floor — outermost surface
@@ -60,9 +64,9 @@ auto MakePuerhTheme() -> ThemeColors {
       .bg_panel = QColor(0x1A, 0x1A, 0x1A),       // primary workspaces
       .text = QColor(0xE0, 0xE0, 0xE0),
       .text_muted = QColor(0x88, 0x88, 0x88),
-      .accent_secondary = QColor(0x00, 0x47, 0x66), // CTA gradient end / container
+      .accent_secondary = BrandBlueHover(),       // hover / secondary blue
       .danger_tint = QColor(138, 58, 58, 80),
-      .selected_tint = QColor(152, 205, 242, 40),
+      .selected_tint = QColor(104, 146, 185, 46),
       .hover = QColor(0x26, 0x25, 0x25),
       .divider = QColor(200, 200, 200, 16),
       .glass_panel = QColor(0x1A, 0x1A, 0x1A),
@@ -457,6 +461,7 @@ auto AppTheme::EditorPrimaryButtonStyle(bool include_disabled) -> QString {
   const auto&  theme         = AppTheme::Instance();
   const QColor accent        = theme.accentColor();
   const QColor accent_hover  = theme.accentSecondaryColor();
+  const QColor accent_press  = theme.toneSteel();
   const QColor dark_text     = theme.bgCanvasColor();
   const QColor disabled_text = theme.textMutedColor();
   const QColor disabled_bg   = theme.bgBaseColor();
@@ -472,9 +477,9 @@ auto AppTheme::EditorPrimaryButtonStyle(bool include_disabled) -> QString {
                      "  background: %3;"
                      "}"
                      "QPushButton:pressed {"
-                     "  background: %2;"
+                     "  background: %4;"
                      "}")
-          .arg(Hex(dark_text), Hex(accent), Hex(accent_hover));
+          .arg(Hex(dark_text), Hex(accent), Hex(accent_hover), Hex(accent_press));
   if (include_disabled) {
     style += QStringLiteral("QPushButton:disabled {"
                             "  color: %1;"
@@ -763,38 +768,33 @@ auto AppTheme::EditorHistoryCardStyle() -> QString {
   const auto& theme = AppTheme::Instance();
   return QStringLiteral("QFrame#HistoryCard {"
                         "  background: transparent;"
-                        "  border: 1px solid transparent;"
-                        "  border-radius: 10px;"
-                        "}"
-                        "QFrame#HistoryCard:hover {"
-                        "  background: %1;"
-                        "  border-color: %2;"
-                        "}"
-                        "QFrame#HistoryCard[selected=\"true\"] {"
-                        "  background: transparent;"
-                        "  border-color: %3;"
-                        "}"
-                        "QFrame#HistoryCard[selected=\"true\"]:hover {"
-                        "  background: transparent;"
-                        "  border-color: %4;"
-                        "}"
-                        "QFrame#HistoryCard QFrame#HistoryTxIconTile {"
-                        "  background: %5;"
                         "  border: none;"
                         "  border-radius: 8px;"
                         "}"
+                        "QFrame#HistoryCard:hover {"
+                        "  background: %1;"
+                        "}"
+                        "QFrame#HistoryCard[selected=\"true\"] {"
+                        "  background: %2;"
+                        "}"
+                        "QFrame#HistoryCard[selected=\"true\"]:hover {"
+                        "  background: %2;"
+                        "}"
+                        "QFrame#HistoryCard QFrame#HistoryTxIconTile {"
+                        "  background: %3;"
+                        "  border: none;"
+                        "  border-radius: 7px;"
+                        "}"
                         "QFrame#HistoryCard QLabel#HistoryTxTitle {"
-                        "  color: %6;"
+                        "  color: %4;"
                         "  background: transparent;"
                         "}"
                         "QFrame#HistoryCard QLabel#HistoryTxSubtitle {"
-                        "  color: %7;"
+                        "  color: %5;"
                         "  background: transparent;"
                         "}")
-      .arg(Rgba(WithAlpha(theme.bgPanelColor(), 168)),
-           Rgba(WithAlpha(theme.dividerColor(), 132)),
-           Rgba(WithAlpha(theme.accentColor(), 184)),
-           Rgba(theme.accentColor()),
+      .arg(Rgba(WithAlpha(theme.bgPanelColor(), 132)),
+           Rgba(WithAlpha(theme.bgPanelColor(), 118)),
            Rgba(WithAlpha(theme.bgDeepColor(), 228)),
            Hex(theme.textColor()),
            Hex(theme.textMutedColor()));

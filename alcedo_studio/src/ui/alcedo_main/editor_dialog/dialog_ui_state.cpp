@@ -548,76 +548,68 @@ void EditorDialog::RefreshPanelSwitchUi() {
   }
 
 void EditorDialog::RefreshVersioningCollapseUi() {
-    if (!versioning_panel_host_ || !versioning_panel_content_ || !versioning_collapsed_nav_) {
+    if (!versioning_panel_host_ || !versioning_collapsed_nav_) {
       return;
     }
 
     const auto& theme = AppTheme::Instance();
     const qreal progress =
         std::clamp(versioning_panel_progress_, static_cast<qreal>(0.0), static_cast<qreal>(1.0));
+    if (versioning_pages_stack_) {
+      versioning_pages_stack_->setCurrentIndex(static_cast<int>(versioning_active_page_));
+    }
 
-    const int panel_width =
-        qRound(static_cast<qreal>(versioning_expanded_width_) * progress);
-    const int gap_width = qRound(static_cast<qreal>(versioning_collapsed_gap_base_width_) *
-                                 (static_cast<qreal>(1.0) - progress));
+    // Show or hide the flyout based on animation progress.
+    if (versioning_flyout_) {
+      if (progress > 0.0) {
+        if (!versioning_flyout_->isVisible()) {
+          versioning_flyout_->show();
+          versioning_flyout_->raise();
+          RepositionVersioningFlyout();
+          QTimer::singleShot(0, this, [this]() {
+            if (!versioning_flyout_ || versioning_panel_progress_ <= 0.0) {
+              return;
+            }
+            RepositionVersioningFlyout();
+          });
+        }
+      } else {
+        if (versioning_flyout_->isVisible()) {
+          versioning_flyout_->hide();
+        }
+      }
+    }
 
     if (versioning_panel_opacity_effect_) {
       versioning_panel_opacity_effect_->setOpacity(progress);
     }
-    versioning_panel_content_->setVisible(panel_width > 0 || progress > 0.0);
-    versioning_panel_content_->setMinimumWidth(panel_width);
-    versioning_panel_content_->setMaximumWidth(panel_width);
-
-    if (versioning_collapsed_gap_) {
-      versioning_collapsed_gap_->setVisible(gap_width > 0);
-      versioning_collapsed_gap_->setFixedWidth(gap_width);
-    }
-
-    const int host_width = kVersioningCollapsedWidth + panel_width + gap_width;
-    versioning_panel_host_->setMinimumWidth(host_width);
-    versioning_panel_host_->setMaximumWidth(host_width);
-    versioning_collapsed_nav_->setVisible(true);
 
     const bool panel_expanded = progress >= 0.5;
     versioning_collapsed_     = !panel_expanded;
 
-    if (versioning_nav_btn_) {
-      versioning_nav_btn_->setChecked(panel_expanded);
-      versioning_nav_btn_->setIconSize(versioning_nav_hovered_ ? QSize(24, 24)
-                                                               : kVersioningRailIconSize);
-      versioning_nav_btn_->setIcon(RenderDockRailIcon(
-          QStringLiteral(":/panel_icons/git-branch.svg"),
-          panel_expanded ? theme.bgCanvasColor() : theme.textColor(),
-          panel_expanded ? theme.bgCanvasColor() : theme.textMutedColor(), QSize(24, 24),
-          versioning_nav_btn_->devicePixelRatioF(), 180.0 * progress));
-      const QString nav_tip = panel_expanded ? Tr("Collapse Versioning") : Tr("Expand Versioning");
-      versioning_nav_btn_->setToolTip(nav_tip);
-      versioning_nav_btn_->setAccessibleName(nav_tip);
-    }
-
-    if (main_splitter_) {
-      auto sizes = main_splitter_->sizes();
-      if (sizes.size() >= 3) {
-        const int delta = host_width - sizes[0];
-        if (delta != 0) {
-          int center_width = sizes[1] - delta;
-          int right_width  = sizes[2];
-          if (center_width < 0) {
-            right_width += center_width;
-            center_width = 0;
-          }
-          if (right_width < 0) {
-            center_width += right_width;
-            right_width = 0;
-          }
-
-          sizes[0] = host_width;
-          sizes[1] = std::max(0, center_width);
-          sizes[2] = std::max(0, right_width);
-          main_splitter_->setSizes(sizes);
-        }
+    const auto update_nav_button = [&](QPushButton* button, const QString& icon_path,
+                                       const QString& label,
+                                       VersioningFlyoutPage page) {
+      if (!button) {
+        return;
       }
-    }
+      const bool active = panel_expanded && versioning_active_page_ == page;
+      button->setProperty("versioningActive", active);
+      button->style()->unpolish(button);
+      button->style()->polish(button);
+      button->setIcon(RenderPanelToggleIcon(
+          icon_path, active ? theme.textColor() : theme.textMutedColor(),
+          kVersioningRailIconSize, button->devicePixelRatioF()));
+      const QString tooltip =
+          active ? Tr("Hide %1").arg(label) : Tr("Show %1").arg(label);
+      button->setToolTip(tooltip);
+      button->setAccessibleName(tooltip);
+    };
+
+    update_nav_button(versioning_history_btn_, QStringLiteral(":/history_icons/git-commit-horizontal.svg"),
+                      Tr("Edit History"), VersioningFlyoutPage::History);
+    update_nav_button(versioning_versions_btn_, QStringLiteral(":/panel_icons/git-branch.svg"),
+                      Tr("Version Tree"), VersioningFlyoutPage::Versions);
   }
 
 void EditorDialog::SetVersioningCollapsed(bool collapsed, bool animate) {
@@ -628,8 +620,28 @@ void EditorDialog::SetVersioningCollapsed(bool collapsed, bool animate) {
       }
       versioning_panel_progress_ = target_progress;
       versioning_collapsed_      = collapsed;
+      if (!collapsed && versioning_pages_stack_) {
+        versioning_pages_stack_->setCurrentIndex(static_cast<int>(versioning_active_page_));
+      }
       RefreshVersioningCollapseUi();
       return;
+    }
+
+    // Show flyout immediately at the start of an expand animation so the
+    // opacity fade has something to render into.
+    if (!collapsed && versioning_pages_stack_) {
+      versioning_pages_stack_->setCurrentIndex(static_cast<int>(versioning_active_page_));
+    }
+    if (!collapsed && versioning_flyout_ && !versioning_flyout_->isVisible()) {
+      versioning_flyout_->show();
+      versioning_flyout_->raise();
+      RepositionVersioningFlyout();
+      QTimer::singleShot(0, this, [this]() {
+        if (!versioning_flyout_ || versioning_panel_progress_ <= 0.0) {
+          return;
+        }
+        RepositionVersioningFlyout();
+      });
     }
 
     if (!versioning_panel_anim_) {
@@ -651,21 +663,92 @@ void EditorDialog::SetVersioningCollapsed(bool collapsed, bool animate) {
       });
     }
 
-    if (collapsed && main_splitter_) {
-      const auto sizes = main_splitter_->sizes();
-      if (sizes.size() >= 3) {
-        const int current_panel_width =
-            sizes[0] - kVersioningCollapsedWidth - versioning_collapsed_gap_base_width_;
-        versioning_expanded_width_ =
-            std::clamp(current_panel_width > 0 ? current_panel_width : versioning_expanded_width_,
-                       kVersioningExpandedMinWidth, kVersioningExpandedMaxWidth);
-      }
-    }
-
     versioning_panel_anim_->stop();
     versioning_panel_anim_->setStartValue(versioning_panel_progress_);
     versioning_panel_anim_->setEndValue(target_progress);
     versioning_panel_anim_->start();
+  }
+
+void EditorDialog::RepositionVersioningFlyout() {
+    if (!versioning_flyout_ || !viewer_container_) {
+      return;
+    }
+
+    versioning_flyout_->ensurePolished();
+    if (auto* layout = versioning_flyout_->layout()) {
+      layout->activate();
+    }
+    if (versioning_pages_stack_) {
+      versioning_pages_stack_->ensurePolished();
+      if (auto* layout = versioning_pages_stack_->layout()) {
+        layout->activate();
+      }
+      if (auto* page = versioning_pages_stack_->currentWidget()) {
+        page->ensurePolished();
+        if (auto* layout = page->layout()) {
+          layout->activate();
+        }
+      }
+    }
+    if (shared_versioning_root_) {
+      shared_versioning_root_->ensurePolished();
+      if (auto* layout = shared_versioning_root_->layout()) {
+        layout->activate();
+      }
+    }
+
+    const QRect viewer_rect = viewer_container_->geometry().adjusted(14, 14, -14, -14);
+    const int   gap         = 14;
+    int         flyout_x    = viewer_rect.left() + 4;
+    if (versioning_panel_host_) {
+      flyout_x =
+          std::max(flyout_x, versioning_panel_host_->geometry().right() + gap);
+    }
+    flyout_x = std::max(flyout_x, kEditorOuterMargin + 4);
+
+    const int available_width =
+        std::max(0, viewer_rect.right() - flyout_x - 12);
+    const int desired_width = std::clamp(
+        static_cast<int>(std::lround(static_cast<double>(viewer_rect.width()) * 0.30)),
+        kVersioningExpandedMinWidth, kVersioningExpandedMaxWidth);
+    const int flyout_y = viewer_rect.top() + 2;
+    const int flyout_w = std::clamp(desired_width,
+                                    std::min(kVersioningExpandedMinWidth, std::max(220, available_width)),
+                                    std::max(220, available_width));
+    int content_height = kVersioningExpandedMinHeight;
+    if (versioning_pages_stack_) {
+      if (auto* page = versioning_pages_stack_->currentWidget()) {
+        page->ensurePolished();
+        content_height = std::max(content_height, page->sizeHint().height() + 32);
+      } else {
+        content_height = std::max(content_height, versioning_pages_stack_->sizeHint().height() + 32);
+      }
+    } else if (shared_versioning_root_) {
+      content_height = std::max(content_height, shared_versioning_root_->sizeHint().height());
+    }
+    const int flyout_h =
+        std::clamp(content_height, kVersioningExpandedMinHeight,
+                   std::min(kVersioningExpandedMaxHeight, std::max(220, viewer_rect.height() - 20)));
+
+    versioning_flyout_->setGeometry(flyout_x, flyout_y, flyout_w, flyout_h);
+    if (auto* layout = versioning_flyout_->layout()) {
+      layout->activate();
+    }
+    if (shared_versioning_root_) {
+      if (auto* layout = shared_versioning_root_->layout()) {
+        layout->activate();
+      }
+    }
+    if (shared_versioning_root_) {
+      const QRect rect = shared_versioning_root_->rect();
+      if (rect.isValid() && rect.width() > 0 && rect.height() > 0) {
+        QPainterPath path;
+        path.addRoundedRect(QRectF(rect), 14.0, 14.0);
+        shared_versioning_root_->setMask(QRegion(path.toFillPolygon().toPolygon()));
+      } else {
+        shared_versioning_root_->clearMask();
+      }
+    }
   }
 
 void EditorDialog::SetActiveControlPanel(ControlPanelKind panel) {

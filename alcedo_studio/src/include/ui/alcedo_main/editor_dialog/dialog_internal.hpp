@@ -33,6 +33,7 @@
 #include <QMessageBox>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QResizeEvent>
 #include <QPainterPath>
 #include <QPen>
 #include <QPlainTextEdit>
@@ -132,12 +133,14 @@ const auto kShortcutSelectNextLutId = QStringLiteral("editor_dialog.select_next_
 constexpr char kPanelIconPathProperty[] = "puerhlabPanelIconPath";
 const QSize     kPanelToggleIconSize(18, 18);
 constexpr int   kPanelToggleButtonHeight = 44;
-const QSize     kVersioningRailIconSize(22, 22);
+const QSize     kVersioningRailIconSize(24, 24);
 constexpr int   kVersioningRailButtonSize = 46;
 constexpr int   kEditorOuterMargin = 14;
 constexpr int   kVersioningCollapsedWidth = 64;
-constexpr int   kVersioningExpandedMinWidth = 220;
-constexpr int   kVersioningExpandedMaxWidth = 600;
+constexpr int   kVersioningExpandedMinWidth = 320;
+constexpr int   kVersioningExpandedMaxWidth = 420;
+constexpr int   kVersioningExpandedMinHeight = 300;
+constexpr int   kVersioningExpandedMaxHeight = 460;
 constexpr int   kVersioningAnimationMs = 250;
 constexpr int   kControlsPanelMinWidth = 260;
 
@@ -216,7 +219,7 @@ auto RenderPanelToggleIcon(const QString& resource_path, const QColor& color, co
     return {};
   }
 
-  const qreal scale = std::max<qreal>(1.0, device_pixel_ratio);
+  const qreal scale = std::max<qreal>(2.0, std::ceil(std::max<qreal>(1.0, device_pixel_ratio) * 2.0));
   const QSize physical_size(std::max(1, qRound(size.width() * scale)),
                             std::max(1, qRound(size.height() * scale)));
   QPixmap     pixmap(physical_size);
@@ -225,6 +228,8 @@ auto RenderPanelToggleIcon(const QString& resource_path, const QColor& color, co
 
   QPainter painter(&pixmap);
   painter.setRenderHint(QPainter::Antialiasing, true);
+  painter.setRenderHint(QPainter::TextAntialiasing, true);
+  painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
   renderer.render(&painter, QRectF(QPointF(0.0, 0.0), QSizeF(size)));
   return QIcon(pixmap);
 }
@@ -457,6 +462,7 @@ auto ResolveEditorWindowTitle(const std::shared_ptr<ImagePoolService>& image_poo
 class EditorDialog final : public QDialog {
  public:
   enum class WorkingMode : int { Incremental = 0, Plain = 1 };
+  enum class VersioningFlyoutPage : int { History = 0, Versions = 1 };
 
   EditorDialog(std::shared_ptr<ImagePoolService>       image_pool,
                std::shared_ptr<PipelineGuard>          pipeline_guard,
@@ -535,6 +541,8 @@ class EditorDialog final : public QDialog {
 
   void showEvent(QShowEvent* event) override;
 
+  void resizeEvent(QResizeEvent* event) override;
+
   void ApplyInitialSplitterSizes();
 
   void UpdateViewerZoomLabel(float zoom);
@@ -562,6 +570,8 @@ class EditorDialog final : public QDialog {
   void RefreshVersioningCollapseUi();
 
   void SetVersioningCollapsed(bool collapsed, bool animate = true);
+
+  void RepositionVersioningFlyout();
 
   void SetActiveControlPanel(ControlPanelKind panel);
 
@@ -673,9 +683,8 @@ class EditorDialog final : public QDialog {
   QScrollArea*                                             raw_controls_scroll_    = nullptr;
   QSplitter*                                               main_splitter_          = nullptr;
   QWidget*                                                 versioning_panel_host_  = nullptr;
-  QWidget*                                                 versioning_panel_content_ = nullptr;
+  QWidget*                                                 versioning_flyout_      = nullptr;
   QWidget*                                                 versioning_collapsed_nav_ = nullptr;
-  QWidget*                                                 versioning_collapsed_gap_ = nullptr;
   QGraphicsOpacityEffect*                                  versioning_panel_opacity_effect_ = nullptr;
   QVariantAnimation*                                       versioning_panel_anim_ = nullptr;
   QStackedWidget*                                          control_panels_stack_   = nullptr;
@@ -693,6 +702,7 @@ class EditorDialog final : public QDialog {
   QVBoxLayout*                                             raw_controls_layout_    = nullptr;
   QWidget*                                                 shared_versioning_root_ = nullptr;
   QVBoxLayout*                                             shared_versioning_layout_ = nullptr;
+  QStackedWidget*                                          versioning_pages_stack_ = nullptr;
   QPushButton*                                             tone_panel_btn_         = nullptr;
   QPushButton*                                             look_panel_btn_         = nullptr;
   QPushButton*                                             drt_panel_btn_          = nullptr;
@@ -757,7 +767,8 @@ class EditorDialog final : public QDialog {
   QLabel*                                                  version_status_               = nullptr;
   QPushButton*                                             undo_tx_btn_                  = nullptr;
   QPushButton*                                             commit_version_btn_           = nullptr;
-  QPushButton*                                             versioning_nav_btn_           = nullptr;
+  QPushButton*                                             versioning_history_btn_       = nullptr;
+  QPushButton*                                             versioning_versions_btn_      = nullptr;
   std::unique_ptr<ShortcutRegistry>                        shortcut_registry_{};
   QComboBox*                                               working_mode_combo_           = nullptr;
   QPushButton*                                             new_working_btn_              = nullptr;
@@ -784,11 +795,10 @@ class EditorDialog final : public QDialog {
   std::chrono::steady_clock::time_point                    last_fast_preview_submit_time_{};
   bool                                                     syncing_controls_           = false;
   bool                                                     versioning_collapsed_       = true;
-  bool                                                     versioning_nav_hovered_     = false;
   bool                                                     initial_splitter_sizes_applied_ = false;
   qreal                                                    versioning_panel_progress_  = 0.0;
-  int                                                      versioning_collapsed_gap_base_width_ = 0;
-  int                                                      versioning_expanded_width_  = 224;
+  VersioningFlyoutPage                                     versioning_active_page_ =
+      VersioningFlyoutPage::History;
   float                                                    last_known_as_shot_cct_     = 6500.0f;
   float                                                    last_known_as_shot_tint_    = 0.0f;
   bool                                                     has_last_known_as_shot_color_temp_ = false;

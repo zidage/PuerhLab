@@ -166,12 +166,16 @@ auto EditorDialog::ShouldConsumeLutNavigationShortcut() const -> bool {
   }
 
 bool EditorDialog::eventFilter(QObject* obj, QEvent* event) {
-    if (obj == versioning_nav_btn_ && event) {
-      if (event->type() == QEvent::Enter || event->type() == QEvent::HoverEnter) {
-        versioning_nav_hovered_ = true;
-        RefreshVersioningCollapseUi();
-      } else if (event->type() == QEvent::Leave || event->type() == QEvent::HoverLeave) {
-        versioning_nav_hovered_ = false;
+    if (obj == versioning_flyout_ && event && event->type() == QEvent::Hide) {
+      if (!versioning_collapsed_) {
+        if (versioning_panel_anim_) {
+          versioning_panel_anim_->stop();
+        }
+        versioning_panel_progress_ = 0.0;
+        versioning_collapsed_      = true;
+        if (versioning_panel_opacity_effect_) {
+          versioning_panel_opacity_effect_->setOpacity(0.0);
+        }
         RefreshVersioningCollapseUi();
       }
     }
@@ -229,15 +233,20 @@ void EditorDialog::ApplyInitialSplitterSizes() {
       return;
     }
 
-    const int collapsed_left_width =
-        kVersioningCollapsedWidth + versioning_collapsed_gap_base_width_;
     const int right_width = std::clamp(
         static_cast<int>(std::lround(static_cast<double>(available_width) * 0.25)),
         controls_panel->minimumWidth(), controls_panel->maximumWidth());
     const int center_width =
-        std::max(400, available_width - collapsed_left_width - right_width);
+        std::max(400, available_width - kVersioningCollapsedWidth - right_width);
 
-    main_splitter_->setSizes({collapsed_left_width, center_width, right_width});
+    main_splitter_->setSizes({kVersioningCollapsedWidth, center_width, right_width});
+  }
+
+void EditorDialog::resizeEvent(QResizeEvent* event) {
+    QDialog::resizeEvent(event);
+    if (versioning_flyout_ && versioning_flyout_->isVisible()) {
+      RepositionVersioningFlyout();
+    }
   }
 
 void EditorDialog::RetranslateUi() {
@@ -267,13 +276,13 @@ void EditorDialog::RetranslateUi() {
       geometry_reset_btn_->setToolTip(Tr("Reset crop & rotation (Ctrl+R)"));
     }
     if (undo_tx_btn_) {
-      undo_tx_btn_->setText(Tr("Undo"));
+      undo_tx_btn_->setText(Tr("Undo Last"));
     }
     if (commit_version_btn_) {
-      commit_version_btn_->setText(Tr("Commit Version"));
+      commit_version_btn_->setText(Tr("Commit All"));
     }
     if (new_working_btn_) {
-      new_working_btn_->setText(Tr("New"));
+      new_working_btn_->setText(Tr("New Working"));
     }
     if (color_temp_unsupported_label_) {
       color_temp_unsupported_label_->setText(
@@ -285,7 +294,8 @@ void EditorDialog::RetranslateUi() {
       syncing_controls_ = true;
       working_mode_combo_->clear();
       working_mode_combo_->addItem(Tr("Plain"), static_cast<int>(WorkingMode::Plain));
-      working_mode_combo_->addItem(Tr("Incr"), static_cast<int>(WorkingMode::Incremental));
+      working_mode_combo_->addItem(Tr("Incremental"),
+                                   static_cast<int>(WorkingMode::Incremental));
       const int index = working_mode_combo_->findData(current_value);
       working_mode_combo_->setCurrentIndex(std::max(0, index));
       syncing_controls_ = prev_sync;
