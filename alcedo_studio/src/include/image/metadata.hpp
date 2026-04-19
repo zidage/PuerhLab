@@ -99,7 +99,12 @@ class ExifDisplayMetaData {
     focal_35mm_    = exif_json.value("FocalLength35mm", 0.0f);
     focus_distance_m_ = exif_json.value("FocusDistanceM", 0.0f);
     iso_           = exif_json.value("ISO", 0);
-    auto shutter  = exif_json.value("ShutterSpeed", std::vector<int>{0, 0});
+    const auto shutter = exif_json.value("ShutterSpeed", std::vector<int>{0, 0});
+    if (shutter.size() >= 2) {
+      shutter_speed_ = {shutter[0], shutter[1]};
+    } else {
+      shutter_speed_ = {0, 0};
+    }
     height_        = exif_json.value("ImageHeight", 0);
     width_         = exif_json.value("ImageWidth", 0);
     image_size_    = exif_json.value("ImageSize", 0);

@@ -113,6 +113,7 @@ struct FontFamilies {
   QString ui_zh = QStringLiteral("Noto Sans SC");
   QString ui_override;
   QString ui_headline = QStringLiteral("Manrope");
+  QString ui_headline_zh = QStringLiteral("Noto Sans SC");
   QString effective_language_code = QStringLiteral("en");
   QString data = QStringLiteral("Google Sans Code Monospaced");
   QString mono;
@@ -214,6 +215,7 @@ auto DataFontFallbackStack(const FontFamilies& families) -> QStringList {
 auto HeadlineFontStack(const FontFamilies& families) -> QStringList {
   QStringList stack;
   AppendUniqueFamily(stack, families.ui_headline);
+  AppendUniqueFamily(stack, families.ui_headline_zh);
   AppendUniqueFamily(stack, families.ui_zh);
   AppendUniqueFamily(stack, families.ui_latin);
   return stack;
@@ -229,15 +231,31 @@ auto DataFontStack(const FontFamilies& families) -> QStringList {
   return stack;
 }
 
-void ApplyDataFontSubstitutions(const FontFamilies& families) {
-  if (families.data.isEmpty()) {
+void ApplyFamilySubstitutions(const QString& family, const QStringList& fallbacks) {
+  if (family.isEmpty()) {
     return;
   }
-  QFont::removeSubstitutions(families.data);
-  const QStringList fallbacks = DataFontFallbackStack(families);
-  if (!fallbacks.isEmpty()) {
-    QFont::insertSubstitutions(families.data, fallbacks);
+
+  QStringList substitution_stack;
+  for (const QString& fallback : fallbacks) {
+    AppendUniqueFamily(substitution_stack, fallback);
   }
+
+  QFont::removeSubstitutions(family);
+  if (!substitution_stack.isEmpty()) {
+    QFont::insertSubstitutions(family, substitution_stack);
+  }
+}
+
+void ApplyUiFontSubstitutions(const FontFamilies& families) {
+  ApplyFamilySubstitutions(families.ui_latin, QStringList{families.ui_zh});
+  ApplyFamilySubstitutions(
+      families.ui_headline,
+      QStringList{families.ui_headline_zh, families.ui_zh, families.ui_latin});
+}
+
+void ApplyDataFontSubstitutions(const FontFamilies& families) {
+  ApplyFamilySubstitutions(families.data, DataFontFallbackStack(families));
 }
 
 auto MakeFont(const QStringList& family_stack, qreal point_size, QFont::Weight weight,
@@ -297,6 +315,11 @@ void AppTheme::RegisterFonts() {
                                         QStringLiteral("Noto Sans SC"));
   families.data = RegisterFontResource(QStringLiteral(":/fonts/data_mono.ttf"),
                                        QStringLiteral("Google Sans Code Monospaced"));
+  const QString registered_headline_zh =
+      RegisterFontResource(QStringLiteral(":/fonts/main_HanaMinA.ttf"), QString());
+  if (!registered_headline_zh.isEmpty()) {
+    families.ui_headline_zh = registered_headline_zh;
+  }
   const QString registered_headline =
       RegisterFontResource(QStringLiteral(":/fonts/main_Manrope.ttf"), QStringLiteral("Manrope"));
   if (!registered_headline.isEmpty()) {
@@ -304,6 +327,7 @@ void AppTheme::RegisterFonts() {
   }
   families.mono = QFontDatabase::systemFont(QFontDatabase::FixedFont).family();
 
+  ApplyUiFontSubstitutions(families);
   ApplyDataFontSubstitutions(families);
 
   FontsRegisteredFlag() = true;
@@ -320,6 +344,7 @@ void AppTheme::SetEffectiveLanguageCode(const QString& code) {
   families.effective_language_code = normalized_code;
   const bool current_is_chinese = IsChineseLanguageCode(families.effective_language_code);
 
+  ApplyUiFontSubstitutions(families);
   ApplyDataFontSubstitutions(families);
 
   if (ActiveUiFamily(families) == previous_family &&

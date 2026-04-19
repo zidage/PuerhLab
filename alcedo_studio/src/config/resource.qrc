@@ -1,10 +1,11 @@
 <RCC>
   <qresource prefix="/">
-    <file>ICON/unnamed.png</file>
+    <file>ICON/alcedo_icon.png</file>
     <file>fonts/main_Inter.ttf</file>
     <file>fonts/main_Inter_italic.ttf</file>
     <file>fonts/data_mono.ttf</file>
     <file>fonts/main_NotoSans_zh.ttf</file>
+    <file>fonts/main_HanaMinA.ttf</file>
     <file>fonts/main_Manrope.ttf</file>
     <file>panel_icons/adjustments.svg</file>
     <file>panel_icons/palette.svg</file>
@@ -22,6 +23,10 @@
     <file>panel_icons/layout-grid.svg</file>
     <file>panel_icons/list.svg</file>
     <file>panel_icons/image.svg</file>
+    <file>panel_icons/search.svg</file>
+    <file>panel_icons/sort.svg</file>
+    <file>panel_icons/folder-plus.svg</file>
+    <file>panel_icons/collections-folder.svg</file>
     <file>history_icons/aperture.svg</file>
     <file>history_icons/arrow-right-left.svg</file>
     <file>history_icons/chart-spline.svg</file>

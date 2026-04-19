@@ -90,6 +90,9 @@ Item {
 
         const n = model.length;
         if (displayMode === "chips") {
+            if (showAll) {
+                return model;
+            }
             const limit = Math.min(chipPreviewLimit, n);
             const entries = [];
             for (let i = 0; i < limit; ++i) entries.push(model[i]);
@@ -336,12 +339,47 @@ Item {
                     radius: 19
                     implicitWidth: moreLabel.implicitWidth + 28
                     color: card.withAlpha(appTheme.bgBaseColor, 0.35)
-                    border.width: 0
+                    border.width: 1
+                    border.color: card.withAlpha(appTheme.glassStrokeColor, 0.3)
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        hoverEnabled: true
+                        onClicked: card.showAll = true
+                    }
 
                     Label {
                         id: moreLabel
                         anchors.centerIn: parent
                         text: "+" + card.hiddenCount + qsTr(" more")
+                        color: appTheme.textColor
+                        font.family: appTheme.uiFontFamily
+                        font.pixelSize: 11
+                        font.weight: 700
+                    }
+                }
+
+                Rectangle {
+                    visible: card.showAll && card.totalItems > card.chipPreviewLimit
+                    height: 38
+                    radius: 19
+                    implicitWidth: collapseLabel.implicitWidth + 28
+                    color: card.withAlpha(appTheme.bgBaseColor, 0.35)
+                    border.width: 1
+                    border.color: card.withAlpha(appTheme.glassStrokeColor, 0.3)
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        hoverEnabled: true
+                        onClicked: card.showAll = false
+                    }
+
+                    Label {
+                        id: collapseLabel
+                        anchors.centerIn: parent
+                        text: qsTr("Show less")
                         color: appTheme.textColor
                         font.family: appTheme.uiFontFamily
                         font.pixelSize: 11

@@ -101,7 +101,7 @@ ApplicationWindow {
     property real inspectorWidth: 300
     readonly property real inspectorMinWidth: 300
     readonly property real inspectorMaxWidth: 600
-    readonly property real leftPaneWidth: 250
+    readonly property real leftPaneWidth: 276
     readonly property real centerPaneMinWidth: 560
     readonly property real mainFrameHorizontalMargins: 24
     readonly property real contentRowSpacingTotal: 36
@@ -948,317 +948,15 @@ ApplicationWindow {
             Layout.fillHeight: true
             spacing: 12
 
-            ColumnLayout {
-                Layout.preferredWidth: 250
-                Layout.minimumWidth: 250
-                Layout.maximumWidth: 250
+            CollectionsPanel {
+                Layout.preferredWidth: root.leftPaneWidth
+                Layout.minimumWidth: root.leftPaneWidth
+                Layout.maximumWidth: root.leftPaneWidth
                 Layout.fillHeight: true
-                spacing: 10
-
-                Rectangle {
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    radius: root.panelRadius
-                    color: root.colGlassPanel
-                    border.width: 1
-                    border.color: root.colGlassStroke
-                    clip: true
-
-                    ColumnLayout {
-                        anchors.fill: parent
-                        anchors.margins: 16
-                        spacing: 12
-
-                        // ── Header ──
-                        RowLayout {
-                            Layout.fillWidth: true
-                            spacing: 6
-                            Label {
-                                text: "\u{1F4C1}"
-                                font.pixelSize: 18
-                            }
-                            Label {
-                                text: qsTr("Library")
-                                font.pixelSize: 17
-                                font.weight: 700
-                                color: root.colText
-                            }
-                            Item { Layout.fillWidth: true }
-                            Label {
-                                text: qsTr("%1 folders").arg(folderList.count)
-                                color: root.colAccentSoft
-                                font.family: appTheme.uiFontFamily
-                                font.pixelSize: 11
-                            }
-                        }
-
-                        Label {
-                            text: albumBackend.currentFolderPath
-                            color: root.colTextMuted
-                            font.family: root.dataFontFamily
-                            font.pixelSize: 11
-                            elide: Text.ElideMiddle
-                            Layout.fillWidth: true
-                        }
-
-                        // ── Search ──
-                        Rectangle {
-                            Layout.fillWidth: true
-                            Layout.preferredHeight: 38
-                            radius: root.controlRadius
-                            color: root.colBgBase
-                            border.width: 1
-                            border.color: root.colDivider
-                            Behavior on color { ColorAnimation { duration: 150 } }
-
-                            RowLayout {
-                                anchors.fill: parent
-                                anchors.leftMargin: 8
-                                anchors.rightMargin: 8
-                                spacing: 6
-                                Label { text: "\u{1F50D}"; font.pixelSize: 13; color: root.colTextMuted }
-                                TextField {
-                                    id: folderSearchField
-                                    Layout.fillWidth: true
-                                    Layout.fillHeight: true
-                                    placeholderText: qsTr("Search folders...")
-                                    background: Item {}
-                                    color: root.colText
-                                    font.pixelSize: 12
-                                }
-                            }
-                        }
-
-                        // ── New-folder row ──
-                        Rectangle {
-                            Layout.fillWidth: true
-                            Layout.preferredHeight: 38
-                            radius: root.controlRadius
-                            color: root.colBgBase
-                            border.width: 1
-                            border.color: root.colDivider
-                            Behavior on color { ColorAnimation { duration: 150 } }
-
-                            RowLayout {
-                                anchors.fill: parent
-                                anchors.leftMargin: 8
-                                anchors.rightMargin: 4
-                                spacing: 4
-                                Label { text: "+"; font.pixelSize: 16; font.weight: 700; color: root.colAccentSecondary }
-                                TextField {
-                                    id: createFolderField
-                                    Layout.fillWidth: true
-                                    Layout.fillHeight: true
-                                    placeholderText: qsTr("New folder...")
-                                    background: Item {}
-                                    color: root.colText
-                                    font.pixelSize: 12
-                                    enabled: root.backendInteractive
-                                    onAccepted: {
-                                        if (text.trim().length === 0) return
-                                        albumBackend.CreateFolder(text)
-                                        text = ""
-                                    }
-                                }
-                                Rectangle {
-                                    width: 28; height: 28; radius: 8
-                                    color: addBtn.hovered ? root.colHover : "transparent"
-                                    visible: root.backendInteractive && createFolderField.text.trim().length > 0
-                                    Label { anchors.centerIn: parent; text: "\u2713"; color: root.colAccentSecondary; font.pixelSize: 14; font.weight: 700 }
-                                    MouseArea {
-                                        id: addBtn
-                                        anchors.fill: parent
-                                        hoverEnabled: true
-                                        cursorShape: Qt.PointingHandCursor
-                                        property bool hovered: false
-                                        onEntered: hovered = true
-                                        onExited: hovered = false
-                                        onClicked: {
-                                            albumBackend.CreateFolder(createFolderField.text)
-                                            createFolderField.text = ""
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        // ── Delete-folder button ──
-                        Rectangle {
-                            Layout.fillWidth: true
-                            Layout.preferredHeight: 30
-                            radius: root.controlRadius
-                            color: root.colDanger
-                            border.width: 1
-                            border.color: Qt.rgba(root.colDanger.r, root.colDanger.g, root.colDanger.b, 0.24)
-                            visible: root.backendInteractive && albumBackend.currentFolderId !== 0
-                            Behavior on color { ColorAnimation { duration: 120 } }
-                            Behavior on border.color { ColorAnimation { duration: 120 } }
-
-                            RowLayout {
-                                anchors.centerIn: parent
-                                spacing: 6
-                                Label { text: "\u{1F5D1}"; font.pixelSize: 12 }
-                                Label { text: qsTr("Delete Folder"); font.pixelSize: 12; font.weight: 600 }
-                            }
-                            MouseArea {
-                                id: delBtn
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                property bool hovered: false
-                                onEntered: hovered = true
-                                onExited: hovered = false
-                                onClicked: albumBackend.DeleteFolder(albumBackend.currentFolderId)
-                            }
-                        }
-
-                        // ── Separator ──
-                        Rectangle {
-                            Layout.fillWidth: true
-                            Layout.preferredHeight: 1
-                            color: root.colDivider
-                        }
-
-                        // ── Folder card list ──
-                        ListView {
-                            id: folderList
-                            Layout.fillWidth: true
-                            Layout.fillHeight: true
-                            clip: true
-                            spacing: 6
-                            model: albumBackend.folders
-
-                            delegate: Item {
-                                required property int folderId
-                                required property string name
-                                required property int depth
-                                required property string path
-                                width: ListView.view.width
-                                height: cardVisible ? cardHeight : 0
-                                visible: cardVisible
-                                Behavior on height { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
-
-                                readonly property bool cardVisible: folderSearchField.text.trim().length === 0
-                                    || name.toLowerCase().indexOf(folderSearchField.text.trim().toLowerCase()) >= 0
-                                readonly property real cardHeight: 44 + depth * 0
-                                readonly property bool isSelected: folderId === albumBackend.currentFolderId
-
-                                Rectangle {
-                                    id: folderCard
-                                    anchors.left: parent.left
-                                    anchors.right: parent.right
-                                    anchors.leftMargin: depth * 12
-                                    height: parent.cardHeight
-                                    radius: 8
-                                    color: {
-                                        if (isSelected) return root.colSelectedTint
-                                        if (cardMouse.containsMouse) return root.colHover
-                                        return "transparent"
-                                    }
-                                    border.width: isSelected ? 1 : 0
-                                    border.color: root.colGlassStroke
-                                    Behavior on color { ColorAnimation { duration: 140 } }
-
-                                    RowLayout {
-                                        anchors.fill: parent
-                                        anchors.leftMargin: 10
-                                        anchors.rightMargin: 10
-                                        spacing: 8
-
-                                        Label {
-                                            text: isSelected ? "\u{1F4C2}" : "\u{1F4C1}"
-                                            font.pixelSize: 16
-                                        }
-
-                                        ColumnLayout {
-                                            Layout.fillWidth: true
-                                            spacing: 1
-                                            Label {
-                                                text: name
-                                                Layout.fillWidth: true
-                                                elide: Text.ElideRight
-                                                color: isSelected ? root.colText : root.colText
-                                                font.pixelSize: 13
-                                                font.weight: isSelected ? 600 : 400
-                                            }
-                                            Label {
-                                                visible: depth > 0
-                                                text: path
-                                                Layout.fillWidth: true
-                                                elide: Text.ElideMiddle
-                                                color: root.colTextMuted
-                                                font.pixelSize: 10
-                                            }
-                                        }
-
-                                        Rectangle {
-                                            visible: isSelected
-                                            width: 6; height: 6; radius: 3
-                                            color: root.colAccentSecondary
-                                        }
-                                    }
-
-                                    MouseArea {
-                                        id: cardMouse
-                                        anchors.fill: parent
-                                        hoverEnabled: true
-                                        cursorShape: Qt.PointingHandCursor
-                                        onClicked: {
-                                            albumBackend.SelectFolder(folderId)
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                Button {
-                    id: importBtn
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: 52
-                    text: qsTr("Import")
-                    enabled: root.backendInteractive
-                    icon.source: "qrc:/panel_icons/import.svg"
-                    icon.width: 16
-                    icon.height: 16
-                    icon.color: root.colText
-                    display: AbstractButton.TextBesideIcon
-                    background: Canvas {
-                        opacity: importBtn.enabled ? 1.0 : 0.5
-                        property color gradStart: root.colAccentPrimary
-                        property color gradEnd: root.colAccentSecondary
-                        onGradStartChanged: requestPaint()
-                        onGradEndChanged: requestPaint()
-                        onWidthChanged: requestPaint()
-                        onHeightChanged: requestPaint()
-                        onPaint: {
-                            var ctx = getContext("2d")
-                            ctx.clearRect(0, 0, width, height)
-                            var r = 8
-                            ctx.beginPath()
-                            ctx.moveTo(r, 0)
-                            ctx.lineTo(width - r, 0)
-                            ctx.quadraticCurveTo(width, 0, width, r)
-                            ctx.lineTo(width, height - r)
-                            ctx.quadraticCurveTo(width, height, width - r, height)
-                            ctx.lineTo(r, height)
-                            ctx.quadraticCurveTo(0, height, 0, height - r)
-                            ctx.lineTo(0, r)
-                            ctx.quadraticCurveTo(0, 0, r, 0)
-                            ctx.closePath()
-                            var grad = ctx.createLinearGradient(0, height, width, 0)
-                            grad.addColorStop(0.0, Qt.rgba(gradStart.r, gradStart.g, gradStart.b, 1.0))
-                            grad.addColorStop(1.0, Qt.rgba(gradEnd.r, gradEnd.g, gradEnd.b, 1.0))
-                            ctx.fillStyle = grad
-                            ctx.fill()
-                        }
-                    }
-                    Material.foreground: root.colText
-                    scale: importBtn.hovered && enabled ? 1.03 : 1.0
-                    Behavior on scale { NumberAnimation { duration: 100; easing.type: Easing.OutCubic } }
-                    onClicked: importDialog.open()
-                }
+                backend: albumBackend
+                theme: root
+                backendInteractive: root.backendInteractive
+                onImportRequested: importDialog.open()
             }
 
             ColumnLayout {
@@ -1345,7 +1043,7 @@ ApplicationWindow {
                                         anchors.fill: gridModeIconSource
                                         source: gridModeIconSource
                                         colorization: 1.0
-                                        colorizationColor: root.gridMode ? root.colBgCanvas : root.colTextMuted
+                                        colorizationColor: "white"
                                     }
 
                                     MouseArea {
@@ -1374,7 +1072,7 @@ ApplicationWindow {
                                         anchors.fill: listModeIconSource
                                         source: listModeIconSource
                                         colorization: 1.0
-                                        colorizationColor: root.gridMode ? root.colTextMuted : root.colBgCanvas
+                                        colorizationColor: "white"
                                     }
 
                                     MouseArea {

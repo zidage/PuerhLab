@@ -2092,4 +2092,51 @@ Original source files on disk will be kept.</source>
         <translation>你在这里打开或创建的项目会显示在此列表中。</translation>
     </message>
 </context>
+<context>
+    <name>CollectionsPanel</name>
+    <message>
+        <source>Collections</source>
+        <translation>影集</translation>
+    </message>
+    <message>
+        <source>Search</source>
+        <translation>搜索</translation>
+    </message>
+    <message>
+        <source>LOCAL FOLDERS</source>
+        <translation>本地文件夹</translation>
+    </message>
+    <message>
+        <source>Sorted Z-A</source>
+        <translation>按 Z-A 排序</translation>
+    </message>
+    <message>
+        <source>Sorted A-Z</source>
+        <translation>按 A-Z 排序</translation>
+    </message>
+    <message>
+        <source>New collection</source>
+        <translation>新建影集</translation>
+    </message>
+    <message>
+        <source>New collection...</source>
+        <translation>新建影集...</translation>
+    </message>
+    <message>
+        <source>Create</source>
+        <translation>创建</translation>
+    </message>
+    <message>
+        <source>No collections yet</source>
+        <translation>还没有影集</translation>
+    </message>
+    <message>
+        <source>Delete collection</source>
+        <translation>删除影集</translation>
+    </message>
+    <message>
+        <source>Import</source>
+        <translation>导入</translation>
+    </message>
+</context>
 </TS>

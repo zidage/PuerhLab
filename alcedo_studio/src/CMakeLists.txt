@@ -1097,6 +1097,7 @@ qt_add_qml_module(alcedo_main
         ui/alcedo_main/qml/NikonHeRecoveryDialog.qml
         ui/alcedo_main/qml/ImportProgressRing.qml
         ui/alcedo_main/qml/InspectorPanel.qml
+        ui/alcedo_main/qml/CollectionsPanel.qml
         ui/alcedo_main/qml/StatsCard.qml
         ui/alcedo_main/qml/ImageContextMenu.qml
         ui/alcedo_main/qml/ThumbnailGridView.qml

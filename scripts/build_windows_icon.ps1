@@ -1,6 +1,6 @@
 param(
-    [string]$InputPng = "$PSScriptRoot/../alcedo/src/config/ICON/unnamed.png",
-    [string]$OutputIco = "$PSScriptRoot/../alcedo/src/config/ICON/unnamed.ico",
+    [string]$InputPng = "$PSScriptRoot/../alcedo_studio/src/config/ICON/alcedo_icon.png",
+    [string]$OutputIco = "$PSScriptRoot/../alcedo_studio/src/config/ICON/alcedo_icon.ico",
     [int[]]$Sizes = @(16, 20, 24, 32, 40, 48, 64, 128, 256),
     [double]$PaddingRatio = 0.04,
     [int]$AlphaThreshold = 8,
@@ -148,8 +148,8 @@ function Convert-BitmapToIcoImageData {
                 $writer.Write([UInt32]0)
                 $writer.Write([UInt32]0)
 
-                $writer.Write($xorData)
-                $writer.Write($andData)
+                $writer.BaseStream.Write($xorData, 0, $xorData.Length)
+                $writer.BaseStream.Write($andData, 0, $andData.Length)
             }
             finally {
                 $writer.Dispose()
@@ -222,7 +222,7 @@ try {
             }
 
             foreach ($entry in $entries) {
-                $writer.Write($entry.Data)
+                $writer.BaseStream.Write($entry.Data, 0, $entry.Data.Length)
             }
         }
         finally {

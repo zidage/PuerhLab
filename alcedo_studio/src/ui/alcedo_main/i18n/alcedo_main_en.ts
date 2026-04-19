@@ -1030,4 +1030,51 @@ Original source files on disk will be kept.</source>
         <translation>Projects you open or create here will appear in this list.</translation>
     </message>
 </context>
+<context>
+    <name>CollectionsPanel</name>
+    <message>
+        <source>Collections</source>
+        <translation>Collections</translation>
+    </message>
+    <message>
+        <source>Search</source>
+        <translation>Search</translation>
+    </message>
+    <message>
+        <source>LOCAL FOLDERS</source>
+        <translation>LOCAL FOLDERS</translation>
+    </message>
+    <message>
+        <source>Sorted Z-A</source>
+        <translation>Sorted Z-A</translation>
+    </message>
+    <message>
+        <source>Sorted A-Z</source>
+        <translation>Sorted A-Z</translation>
+    </message>
+    <message>
+        <source>New collection</source>
+        <translation>New collection</translation>
+    </message>
+    <message>
+        <source>New collection...</source>
+        <translation>New collection...</translation>
+    </message>
+    <message>
+        <source>Create</source>
+        <translation>Create</translation>
+    </message>
+    <message>
+        <source>No collections yet</source>
+        <translation>No collections yet</translation>
+    </message>
+    <message>
+        <source>Delete collection</source>
+        <translation>Delete collection</translation>
+    </message>
+    <message>
+        <source>Import</source>
+        <translation>Import</translation>
+    </message>
+</context>
 </TS>
