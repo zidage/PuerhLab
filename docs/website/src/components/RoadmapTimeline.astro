@@ -7,92 +7,80 @@ interface Props {
 
 const { lang } = Astro.props;
 const i = t(lang);
+const sectionLabel = lang === 'zh' ? '路线图' : 'ROADMAP';
 ---
 
-<section id="roadmap" class="relative py-24 px-4">
-  <div class="max-w-5xl mx-auto">
+<section id="roadmap" class="relative py-28 px-4">
+  <div class="max-w-6xl mx-auto">
     <!-- Section header -->
-    <div class="text-center mb-16 reveal">
-      <h2 class="text-3xl sm:text-4xl font-bold text-mist mb-3">
-        {i.roadmap.sectionTitle}
-      </h2>
-      <div class="w-16 h-0.5 bg-gold mx-auto mb-4"></div>
-      <p class="text-muted text-lg max-w-xl mx-auto">
-        {i.roadmap.sectionSubtitle}
-      </p>
+    <div class="mb-14 reveal">
+      <div class="flex items-center gap-3 mb-4">
+        <span class="section-label eyebrow-line">{sectionLabel}</span>
+      </div>
+      <div class="flex flex-col md:flex-row md:items-end md:justify-between gap-3">
+        <h2 class="font-display text-3xl sm:text-4xl lg:text-[42px] font-semibold text-mist leading-tight">
+          {i.roadmap.sectionTitle}
+        </h2>
+        <p class="text-muted text-[15px] max-w-md md:text-right">
+          {i.roadmap.sectionSubtitle}
+        </p>
+      </div>
     </div>
 
-    <!-- Timeline -->
+    <!-- Timeline — single column on left, like the library overview panel -->
     <div class="relative">
       <!-- Vertical line -->
       <div
-        class="absolute left-4 md:left-1/2 md:-translate-x-px top-0 bottom-0 w-0.5 bg-gradient-to-b from-action/60 via-support/35 to-accent/15"
+        class="absolute left-[14px] top-2 bottom-2 w-px bg-gradient-to-b from-action/60 via-action/20 to-transparent"
       >
       </div>
 
-      {
-        i.roadmap.items.map((item, idx) => (
-          <div
-            class={`relative flex items-start mb-12 last:mb-0 ${idx % 2 === 0 ? 'md:flex-row' : 'md:flex-row-reverse'}`}
-          >
-            {/* Timeline dot */}
-            <div class="absolute left-4 md:left-1/2 -translate-x-1/2 z-10">
-              <div class="timeline-dot reveal w-4 h-4 rounded-full bg-accent border-4 border-canvas shadow-[0_0_12px_rgba(233,196,106,0.35)]" />
-            </div>
-
-            {/* Content card */}
+      <div class="space-y-10">
+        {
+          i.roadmap.items.map((item, idx) => (
             <div
-              class={`ml-12 md:ml-0 md:w-[calc(50%-2rem)] reveal ${idx % 2 === 0 ? 'md:pr-8 md:text-right' : 'md:pl-8'}`}
-              style={`transition-delay: ${idx * 150}ms`}
+              class="relative pl-12 reveal"
+              style={`transition-delay: ${idx * 100}ms`}
             >
-              <div class="timeline-card p-5 rounded-panel">
-                <span class="text-gold text-sm font-data font-semibold">
-                  {item.date}
-                </span>
-                <h3 class="text-lg font-semibold text-mist mt-1 mb-3">
-                  {item.title}
-                </h3>
-                <ul
-                  class={`space-y-1.5 ${idx % 2 === 0 ? 'md:text-right' : ''}`}
-                >
+              {/* Node — calendar-pill style */}
+              <div class="absolute left-0 top-0 flex items-center justify-center w-8 h-8 rounded-full bg-panel ring-1 ring-action/40 shadow-[0_0_0_4px_rgba(11,11,13,0.9)]">
+                <span class="w-2 h-2 rounded-full bg-action shadow-[0_0_10px_rgba(106,164,198,0.6)]" />
+              </div>
+
+              <div class="timeline-card rounded-panel p-5 sm:p-6">
+                <div class="flex flex-wrap items-center gap-3 mb-3">
+                  <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-pill border border-action/30 bg-action-tint text-action text-[12px] font-data font-semibold">
+                    {item.date}
+                  </span>
+                  <h3 class="font-display text-[17px] sm:text-[19px] font-semibold text-mist">
+                    {item.title}
+                  </h3>
+                </div>
+                <ul class="space-y-1.5 mt-2">
                   {item.entries.map((entry) => (
-                    <li
-                      class={`text-sm text-muted flex items-start gap-2 ${idx % 2 === 0 ? 'md:flex-row-reverse' : ''}`}
-                    >
-                      <span class="text-gold/60 mt-1 shrink-0">•</span>
+                    <li class="text-[14px] text-muted flex items-start gap-2.5">
+                      <span class="mt-[9px] w-1 h-1 rounded-full bg-action/60 shrink-0" />
                       <span>{entry}</span>
                     </li>
                   ))}
                 </ul>
               </div>
             </div>
-          </div>
-        ))
-      }
+          ))
+        }
+      </div>
     </div>
   </div>
 </section>
 
 <style>
   .timeline-card {
-    background: rgba(24, 24, 24, 0.72);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border: 1px solid rgba(42, 157, 143, 0.15);
+    background: linear-gradient(180deg, rgba(27, 27, 33, 0.7) 0%, rgba(23, 23, 28, 0.55) 100%);
+    border: 1px solid rgba(36, 36, 41, 0.9);
+    transition: border-color 0.3s ease, transform 0.3s ease;
   }
-  .timeline-dot {
-    transition: box-shadow 0.3s ease;
-  }
-  .timeline-dot.visible {
-    animation: pulseGold 2s ease-in-out 1;
-  }
-  @keyframes pulseGold {
-    0%,
-    100% {
-      box-shadow: 0 0 0 0 rgba(233, 196, 106, 0.4);
-    }
-    50% {
-      box-shadow: 0 0 0 10px rgba(233, 196, 106, 0);
-    }
+  .timeline-card:hover {
+    border-color: rgba(106, 164, 198, 0.28);
+    transform: translateX(2px);
   }
 </style>

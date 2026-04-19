@@ -10,38 +10,35 @@ const { lang } = Astro.props;
 const i = t(lang);
 const windowsReleaseUrl = getReleaseAssetUrl('alcedo-0.2.2-Windows-AMD64.7z');
 const macosReleaseUrl = getReleaseAssetUrl('alcedo-0.2.2-Darwin-arm64.dmg');
+const sectionLabel = lang === 'zh' ? '安装' : 'GET STARTED';
 ---
 
-<section id="install" class="relative py-24 px-4">
+<section id="install" class="relative py-28 px-4">
   <div class="max-w-4xl mx-auto">
     <!-- Section header -->
-    <div class="text-center mb-12 reveal">
-      <h2 class="text-3xl sm:text-4xl font-bold text-mist mb-3">
+    <div class="mb-12 reveal">
+      <div class="flex items-center gap-3 mb-4">
+        <span class="section-label eyebrow-line">{sectionLabel}</span>
+      </div>
+      <h2 class="font-display text-3xl sm:text-4xl lg:text-[42px] font-semibold text-mist leading-tight">
         {i.install.sectionTitle}
       </h2>
-      <div class="w-16 h-0.5 bg-gold mx-auto mb-4"></div>
-      <p class="text-muted text-lg max-w-xl mx-auto">
+      <p class="text-muted text-[15px] mt-3 max-w-xl">
         {i.install.sectionSubtitle}
       </p>
     </div>
 
-    <!-- Tabs -->
-    <div class="reveal">
-      <div class="flex border-b border-separator mb-0">
-        <button
-          class="install-tab active"
-          data-tab="windows"
-        >
-          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+    <!-- Tabs panel -->
+    <div class="reveal rounded-panel ring-1 ring-separator bg-panel/50 overflow-hidden">
+      <div class="flex border-b border-separator bg-deep/60">
+        <button class="install-tab active" data-tab="windows">
+          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
             <path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801" />
           </svg>
           {i.install.tabs.windows}
         </button>
-        <button
-          class="install-tab"
-          data-tab="macos"
-        >
-          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+        <button class="install-tab" data-tab="macos">
+          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
             <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z" />
           </svg>
           {i.install.tabs.macos}
@@ -50,7 +47,15 @@ const macosReleaseUrl = getReleaseAssetUrl('alcedo-0.2.2-Darwin-arm64.dmg');
 
       <!-- Windows panel -->
       <div class="install-panel active" data-panel="windows">
-        <div class="download-row !rounded-b-panel">
+        <div class="download-row">
+          <div class="text-left">
+            <p class="font-display text-[11px] tracking-label uppercase text-stats-muted mb-1">
+              {lang === 'zh' ? '最新稳定版' : 'Latest stable'}
+            </p>
+            <p class="font-display text-[15px] text-mist font-medium">
+              Alcedo Studio 0.2.2 · Windows x64
+            </p>
+          </div>
           <a
             href={windowsReleaseUrl}
             target="_blank"
@@ -64,7 +69,15 @@ const macosReleaseUrl = getReleaseAssetUrl('alcedo-0.2.2-Darwin-arm64.dmg');
 
       <!-- macOS panel -->
       <div class="install-panel hidden" data-panel="macos">
-        <div class="download-row !rounded-b-panel">
+        <div class="download-row">
+          <div class="text-left">
+            <p class="font-display text-[11px] tracking-label uppercase text-stats-muted mb-1">
+              {lang === 'zh' ? '最新稳定版' : 'Latest stable'}
+            </p>
+            <p class="font-display text-[15px] text-mist font-medium">
+              Alcedo Studio 0.2.2 · Apple Silicon
+            </p>
+          </div>
           <a
             href={macosReleaseUrl}
             target="_blank"
@@ -81,23 +94,23 @@ const macosReleaseUrl = getReleaseAssetUrl('alcedo-0.2.2-Darwin-arm64.dmg');
 
 <style>
   .install-tab {
-    @apply flex items-center gap-2 px-5 py-3 text-sm font-semibold text-muted border-b-2 border-transparent
-           transition-all duration-200 cursor-pointer;
+    @apply flex items-center gap-2 px-5 py-3 text-[13px] font-display font-semibold tracking-tight
+           text-muted border-b-2 border-transparent transition-all duration-200 cursor-pointer;
     background: none;
   }
   .install-tab.active {
     @apply text-action border-action;
+    background: rgba(106, 164, 198, 0.06);
   }
   .install-tab:hover:not(.active) {
     @apply text-mist;
   }
   .download-row {
-    @apply py-8 px-8 border border-separator flex items-center justify-center;
-    background: #171717;
+    @apply py-8 px-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4;
   }
   .download-btn {
-    @apply inline-flex items-center px-6 py-3 rounded-panel font-semibold text-base;
-    @apply bg-action text-mist hover:bg-action/90 transition-colors hover:shadow-[0_0_16px_rgba(69,123,157,0.22)];
+    @apply inline-flex items-center px-5 py-2.5 rounded-panel font-display font-semibold text-[14px];
+    @apply bg-action text-canvas hover:bg-action/90 transition-colors hover:shadow-[0_0_24px_rgba(106,164,198,0.32)];
   }
 </style>
 

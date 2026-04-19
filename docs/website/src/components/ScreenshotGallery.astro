@@ -17,51 +17,67 @@ const images = [
   `5${imageSuffix}.png`,
   `4${imageSuffix}.png`,
 ];
+const sectionLabel = lang === 'zh' ? '界面一览' : 'IN THE APP';
 ---
 
-<section id="gallery" class="relative py-24">
+<section id="gallery" class="relative py-28">
   <!-- Section header -->
-  <div class="text-center mb-16 px-4 reveal">
-    <h2 class="text-3xl sm:text-4xl font-bold text-mist mb-3">
-      {i.gallery.sectionTitle}
-    </h2>
-    <div class="w-16 h-0.5 bg-gold mx-auto mb-4"></div>
-    <p class="text-muted text-lg max-w-xl mx-auto">
-      {i.gallery.sectionSubtitle}
-    </p>
+  <div class="max-w-7xl mx-auto px-4 mb-16 reveal">
+    <div class="flex items-center gap-3 mb-4">
+      <span class="section-label eyebrow-line">{sectionLabel}</span>
+    </div>
+    <div class="flex flex-col md:flex-row md:items-end md:justify-between gap-3">
+      <h2 class="font-display text-3xl sm:text-4xl lg:text-[42px] font-semibold text-mist leading-tight">
+        {i.gallery.sectionTitle}
+      </h2>
+      {i.gallery.sectionSubtitle && (
+        <p class="text-muted text-[15px] max-w-md md:text-right">
+          {i.gallery.sectionSubtitle}
+        </p>
+      )}
+    </div>
   </div>
 
-  <!-- Screenshot sections -->
-  <div class="flex flex-col gap-0">
+  <!-- Screenshot sections (alternating) -->
+  <div class="max-w-7xl mx-auto px-4 space-y-20">
     {
       i.gallery.items.map((item, idx) => (
-        <div class="gallery-section relative overflow-hidden" data-idx={idx}>
-          {/* Image container with parallax */}
-          <div class="gallery-img-wrap relative w-full h-[60vh] sm:h-[70vh] lg:h-[80vh]">
-            <img
-              src={`${base}demo/${images[idx]}`}
-              alt={item.title}
-              class="gallery-img absolute inset-0 w-full h-full object-cover object-center"
-              loading={idx === 0 ? 'eager' : 'lazy'}
-            />
-            {/* Gradient overlay */}
-            <div class="absolute inset-0 bg-gradient-to-t from-canvas via-canvas/40 to-transparent" />
-            <div class="absolute inset-0 bg-gradient-to-r from-canvas/60 to-transparent" />
+        <div
+          class={`gallery-section grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center ${
+            idx % 2 === 1 ? 'lg:[&>div:first-child]:order-2' : ''
+          }`}
+          data-idx={idx}
+        >
+          {/* Image frame — editor chrome style */}
+          <div class="lg:col-span-8 reveal-scale">
+            <div class="relative rounded-panel overflow-hidden ring-1 ring-separator bg-panel/50 shadow-[0_24px_60px_-18px_rgba(0,0,0,0.7)]">
+              <div class="flex items-center gap-1.5 px-3 h-7 border-b border-separator bg-deep/80">
+                <span class="w-2 h-2 rounded-full bg-[#323236]" />
+                <span class="w-2 h-2 rounded-full bg-[#323236]" />
+                <span class="w-2 h-2 rounded-full bg-[#323236]" />
+              </div>
+              <div class="gallery-img-wrap relative overflow-hidden">
+                <img
+                  src={`${base}demo/${images[idx]}`}
+                  alt={item.title}
+                  class="gallery-img w-full h-auto block"
+                  loading={idx === 0 ? 'eager' : 'lazy'}
+                />
+              </div>
+            </div>
           </div>
 
-          {/* Text overlay */}
-          <div class="absolute bottom-0 left-0 right-0 p-6 sm:p-10 lg:p-16">
-            <div class="max-w-7xl mx-auto reveal">
-              <span class="text-gold text-sm font-data font-semibold tracking-wider uppercase mb-2 block">
-                0{idx + 1}
-              </span>
-              <h3 class="text-2xl sm:text-3xl lg:text-4xl font-bold text-mist mb-3">
-                {item.title}
-              </h3>
-              <p class="text-muted text-base sm:text-lg max-w-xl">
-                {item.description}
-              </p>
-            </div>
+          {/* Text */}
+          <div class="lg:col-span-4 reveal">
+            <span class="font-display text-[11px] tracking-label uppercase text-action mb-3 block">
+              0{idx + 1} &nbsp;/&nbsp; {String(i.gallery.items.length).padStart(2, '0')}
+            </span>
+            <h3 class="font-display text-2xl sm:text-[28px] font-semibold text-mist mb-3 leading-snug">
+              {item.title}
+            </h3>
+            <p class="text-muted text-[15px] leading-relaxed">
+              {item.description}
+            </p>
           </div>
         </div>
       ))
@@ -71,8 +87,8 @@ const images = [
 
 <style>
   .gallery-img {
-    transition: transform 0.8s ease-out;
-    transform: scale(1.05);
+    transition: transform 1.1s cubic-bezier(0.2, 0.6, 0.2, 1);
+    transform: scale(1.04);
   }
   .gallery-section.in-view .gallery-img {
     transform: scale(1);
@@ -89,7 +105,7 @@ const images = [
         }
       });
     },
-    { threshold: 0.15 }
+    { threshold: 0.2 }
   );
   sections.forEach((s) => obs.observe(s));
 </script>

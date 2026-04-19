@@ -9,122 +9,134 @@ interface Props {
 const { lang } = Astro.props;
 const i = t(lang);
 const base = import.meta.env.BASE_URL;
+const iconPath = `${base}brand/app-icon.png`;
 const windowsReleaseUrl = getReleaseAssetUrl('alcedo-0.2.2-Windows-AMD64.7z');
 const macosReleaseUrl = getReleaseAssetUrl('alcedo-0.2.2-Darwin-arm64.dmg');
+const previewImg = `${base}demo/1${lang === 'zh' ? '_zh' : ''}.png`;
+const taglineLabel = lang === 'zh' ? '开源 RAW 图像处理' : 'OPEN-SOURCE RAW EDITOR';
 ---
 
 <section
   id="hero"
-  class="relative min-h-screen flex items-center justify-center overflow-hidden"
+  class="relative pt-32 pb-20 sm:pt-40 sm:pb-28 overflow-hidden grain"
 >
-  <!-- Particle canvas -->
-  <canvas id="particle-canvas" class="absolute inset-0 w-full h-full"></canvas>
-
-  <!-- Radial gradient overlay -->
+  <!-- Ambient glow — mirrors the editor's subtle background wash -->
   <div
-    class="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_rgba(42,157,143,0.16)_0%,_rgba(69,123,157,0.12)_42%,_#121212_78%)]"
+    class="absolute inset-x-0 -top-40 h-[520px] bg-[radial-gradient(ellipse_at_center,_rgba(106,164,198,0.22)_0%,_rgba(74,127,157,0.10)_40%,_transparent_72%)] pointer-events-none"
   >
   </div>
-  <div class="absolute inset-x-0 top-0 h-72 bg-[radial-gradient(circle_at_top,_rgba(233,196,106,0.16)_0%,_transparent_70%)]"></div>
+  <div
+    class="absolute right-[8%] top-24 w-[380px] h-[380px] rounded-full bg-gold/10 blur-3xl pointer-events-none"
+  >
+  </div>
 
-  <!-- Content -->
-  <div class="relative z-10 text-center px-4 max-w-4xl mx-auto">
+  <!-- Particle canvas (subtle, muted) -->
+  <canvas id="particle-canvas" class="absolute inset-0 w-full h-full opacity-60 pointer-events-none"></canvas>
+
+  <div class="relative z-10 max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+    <!-- Eyebrow label -->
     <div
-      class="flex items-center justify-center gap-4 sm:gap-6 mb-4 opacity-0 animate-[fadeInUp_0.8s_ease-out_0.2s_forwards]"
+      class="flex items-center justify-center mb-8 opacity-0 animate-[fadeInUp_0.7s_ease-out_0.1s_forwards]"
     >
-      <img
-        src={`${base}brand/app-icon.png`}
-        alt={lang === 'zh' ? '普洱工坊 logo' : 'Alcedo Studio logo'}
-        class="w-16 h-16 sm:w-20 sm:h-20 lg:w-24 lg:h-24 drop-shadow-[0_0_24px_rgba(42,157,143,0.32)]"
-        loading="eager"
-      />
-      <h1 class="text-5xl sm:text-6xl lg:text-7xl font-bold">
-        {lang === 'zh' ? (
-          <>
-            <span class="text-gold">Alcedo</span>
-            <span class="text-mist"> Studio</span>
-          </>
-        ) : (
-          <>
-            <span class="text-gold">Alcedo</span>
-            <span class="text-mist"> Studio</span>
-          </>
-        )}
+      <span class="section-label eyebrow-line">
+        {taglineLabel}
+      </span>
+    </div>
+
+    <!-- Brand + Wordmark -->
+    <div
+      class="flex flex-col items-center gap-6 mb-6 opacity-0 animate-[fadeInUp_0.8s_ease-out_0.2s_forwards]"
+    >
+      <div class="relative">
+        <img
+          src={iconPath}
+          alt={lang === 'zh' ? '普洱工坊 logo' : 'Alcedo Studio logo'}
+          class="w-20 h-20 sm:w-24 sm:h-24 rounded-full ring-1 ring-separator drop-shadow-[0_0_32px_rgba(106,164,198,0.35)]"
+          loading="eager"
+        />
+        <div class="absolute inset-0 rounded-full ring-1 ring-action/30 animate-pulse-action pointer-events-none"></div>
+      </div>
+
+      <h1
+        class="font-display text-5xl sm:text-6xl lg:text-7xl font-semibold tracking-tight text-center"
+      >
+        <span class="text-action">Alcedo</span><span class="text-mist"
+        > Studio</span>
       </h1>
     </div>
+
     <p
-      class="text-xl sm:text-2xl text-mist mb-3 opacity-0 animate-[fadeInUp_0.8s_ease-out_0.4s_forwards]"
+      class="text-center text-xl sm:text-2xl text-mist/95 font-display font-medium mb-3 opacity-0 animate-[fadeInUp_0.8s_ease-out_0.4s_forwards]"
     >
       {i.hero.subtitle}
     </p>
     <p
-      class="text-base text-muted max-w-2xl mx-auto mb-8 opacity-0 animate-[fadeInUp_0.8s_ease-out_0.5s_forwards]"
+      class="text-center text-[15px] sm:text-base text-muted max-w-2xl mx-auto mb-10 opacity-0 animate-[fadeInUp_0.8s_ease-out_0.5s_forwards]"
     >
       {i.hero.description}
     </p>
 
-    <!-- Version badge -->
+    <!-- Version + platform badges (editor-style pills) -->
     <div
-      class="flex flex-wrap items-center justify-center gap-3 mb-8 opacity-0 animate-[fadeInUp_0.8s_ease-out_0.6s_forwards]"
+      class="flex flex-wrap items-center justify-center gap-2.5 mb-10 opacity-0 animate-[fadeInUp_0.8s_ease-out_0.6s_forwards]"
     >
       <span
-        class="px-4 py-1.5 rounded-full border border-accent/40 bg-panel/70 text-accent text-sm font-data"
+        class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-pill border border-gold/40 bg-gold-tint text-gold text-[13px] font-data font-semibold"
       >
+        <span class="w-1.5 h-1.5 rounded-full bg-gold animate-pulse"></span>
         {i.hero.version}
       </span>
       <span
-        class="px-4 py-1.5 rounded-full border border-action/35 bg-panel/70 text-mist text-sm font-data flex items-center gap-2"
+        class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-pill border border-action/35 bg-action-tint text-mist text-[13px] font-data"
       >
-        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
           <path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801" />
         </svg>
         Windows / CUDA
       </span>
       <span
-        class="px-4 py-1.5 rounded-full border border-support/35 bg-panel/70 text-mist text-sm font-data flex items-center gap-2"
+        class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-pill border border-support/35 bg-support-tint text-mist text-[13px] font-data"
       >
-        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
           <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z" />
         </svg>
-        Apple Silicon
+        Apple Silicon / Metal
       </span>
     </div>
 
     <!-- CTAs -->
     <div
-      class="flex flex-col sm:flex-row items-center justify-center gap-4 opacity-0 animate-[fadeInUp_0.8s_ease-out_0.7s_forwards]"
+      class="flex flex-col sm:flex-row items-center justify-center gap-3 opacity-0 animate-[fadeInUp_0.8s_ease-out_0.7s_forwards]"
     >
       <a
         href={windowsReleaseUrl}
         target="_blank"
         rel="noopener noreferrer"
-        class="px-8 py-3 bg-action text-mist font-semibold rounded-panel hover:bg-action/90 transition-all hover:shadow-[0_0_24px_rgba(69,123,157,0.3)]"
+        class="group relative px-6 py-3 bg-action text-canvas font-display font-semibold text-[14.5px] rounded-panel hover:bg-action/90 transition-all hover:shadow-[0_0_32px_rgba(106,164,198,0.35)] inline-flex items-center gap-2"
       >
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801" />
+        </svg>
         {i.hero.ctaDownloadWindows}
       </a>
       <a
         href={macosReleaseUrl}
         target="_blank"
         rel="noopener noreferrer"
-        class="px-8 py-3 bg-action text-mist font-semibold rounded-panel hover:bg-action/90 transition-all hover:shadow-[0_0_24px_rgba(69,123,157,0.3)]"
+        class="group px-6 py-3 bg-panel/80 text-mist ring-1 ring-separator font-display font-semibold text-[14.5px] rounded-panel hover:ring-action/60 hover:bg-hover transition-all inline-flex items-center gap-2"
       >
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z" />
+        </svg>
         {lang === 'zh' ? '下载 macOS 版' : 'Download for macOS'}
-      </a>
-      <a
-        href="https://zidage.github.io/Alcedo_docs"
-        target="_blank"
-        rel="noopener noreferrer"
-        class="px-8 py-3 border border-support text-support font-semibold rounded-panel hover:bg-support/10 transition-all"
-      >
-        {i.hero.ctaStart}
       </a>
       <a
         href={REPOSITORY_URL}
         target="_blank"
         rel="noopener noreferrer"
-        class="px-8 py-3 border border-support text-support font-semibold rounded-panel hover:bg-support/10 transition-all flex items-center gap-2"
+        class="px-6 py-3 text-muted hover:text-mist font-display font-medium text-[14.5px] rounded-panel transition-colors inline-flex items-center gap-2"
       >
-        <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
           <path
             d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"
           ></path>
@@ -132,9 +144,32 @@ const macosReleaseUrl = getReleaseAssetUrl('alcedo-0.2.2-Darwin-arm64.dmg');
         {i.hero.ctaGithub}
       </a>
     </div>
-  </div>
 
-  
+    <!-- Product preview frame — echoes the editor chrome -->
+    <div
+      class="mt-20 reveal-scale"
+    >
+      <div
+        class="relative mx-auto max-w-6xl rounded-panel overflow-hidden ring-1 ring-separator bg-panel/60 shadow-[0_30px_80px_-20px_rgba(0,0,0,0.7)]"
+      >
+        <!-- Window chrome -->
+        <div class="flex items-center gap-2 px-4 h-9 border-b border-separator bg-deep/80">
+          <span class="w-2.5 h-2.5 rounded-full bg-[#3a3a3f]"></span>
+          <span class="w-2.5 h-2.5 rounded-full bg-[#3a3a3f]"></span>
+          <span class="w-2.5 h-2.5 rounded-full bg-[#3a3a3f]"></span>
+          <span class="ml-3 text-[11px] tracking-label uppercase text-stats-muted font-display">
+            alcedo studio
+          </span>
+        </div>
+        <img
+          src={previewImg}
+          alt={lang === 'zh' ? '主界面预览' : 'Main interface preview'}
+          class="w-full h-auto block"
+          loading="lazy"
+        />
+      </div>
+    </div>
+  </div>
 </section>
 
 <script>
@@ -153,8 +188,8 @@ const macosReleaseUrl = getReleaseAssetUrl('alcedo-0.2.2-Darwin-arm64.dmg');
       a: number;
     }
     const particles: Particle[] = [];
-    const count = 60;
-    const maxDist = 120;
+    const count = 48;
+    const maxDist = 130;
 
     function resize() {
       w = canvas.width = canvas.offsetWidth;
@@ -167,10 +202,10 @@ const macosReleaseUrl = getReleaseAssetUrl('alcedo-0.2.2-Darwin-arm64.dmg');
         particles.push({
           x: Math.random() * w,
           y: Math.random() * h,
-          vx: (Math.random() - 0.5) * 0.4,
-          vy: (Math.random() - 0.5) * 0.4,
-          r: Math.random() * 1.5 + 0.5,
-          a: Math.random() * 0.5 + 0.2,
+          vx: (Math.random() - 0.5) * 0.25,
+          vy: (Math.random() - 0.5) * 0.25,
+          r: Math.random() * 1.2 + 0.4,
+          a: Math.random() * 0.4 + 0.15,
         });
       }
     }
@@ -187,11 +222,9 @@ const macosReleaseUrl = getReleaseAssetUrl('alcedo-0.2.2-Darwin-arm64.dmg');
         ctx.beginPath();
         ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
         ctx.fillStyle =
-          i % 3 === 0
-            ? `rgba(233, 196, 106, ${p.a})`
-            : i % 2 === 0
-              ? `rgba(69, 123, 157, ${p.a})`
-              : `rgba(42, 157, 143, ${p.a})`;
+          i % 5 === 0
+            ? `rgba(240, 180, 74, ${p.a * 0.7})`
+            : `rgba(106, 164, 198, ${p.a})`;
         ctx.fill();
 
         for (let j = i + 1; j < particles.length; j++) {
@@ -203,7 +236,7 @@ const macosReleaseUrl = getReleaseAssetUrl('alcedo-0.2.2-Darwin-arm64.dmg');
             ctx.beginPath();
             ctx.moveTo(p.x, p.y);
             ctx.lineTo(q.x, q.y);
-            ctx.strokeStyle = `rgba(69, 123, 157, ${0.18 * (1 - dist / maxDist)})`;
+            ctx.strokeStyle = `rgba(106, 164, 198, ${0.14 * (1 - dist / maxDist)})`;
             ctx.lineWidth = 0.5;
             ctx.stroke();
           }

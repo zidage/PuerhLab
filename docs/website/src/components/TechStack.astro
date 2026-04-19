@@ -7,40 +7,42 @@ interface Props {
 
 const { lang } = Astro.props;
 const i = t(lang);
+const sectionLabel = lang === 'zh' ? '技术栈' : 'BUILT WITH';
 ---
 
-<section id="tech-stack" class="relative py-24 px-4 bg-deep/50">
-  <div class="max-w-5xl mx-auto">
+<section id="tech-stack" class="relative py-28 px-4">
+  <div class="max-w-6xl mx-auto">
     <!-- Section header -->
-    <div class="text-center mb-16 reveal">
-      <h2 class="text-3xl sm:text-4xl font-bold text-mist mb-3">
-        {i.techStack.sectionTitle}
-      </h2>
-      <div class="w-16 h-0.5 bg-gold mx-auto mb-4"></div>
-      <p class="text-muted text-lg max-w-xl mx-auto">
-        {i.techStack.sectionSubtitle}
-      </p>
+    <div class="mb-14 reveal">
+      <div class="flex items-center gap-3 mb-4">
+        <span class="section-label eyebrow-line">{sectionLabel}</span>
+      </div>
+      <div class="flex flex-col md:flex-row md:items-end md:justify-between gap-3">
+        <h2 class="font-display text-3xl sm:text-4xl lg:text-[42px] font-semibold text-mist leading-tight">
+          {i.techStack.sectionTitle}
+        </h2>
+        <p class="text-muted text-[15px] max-w-md md:text-right">
+          {i.techStack.sectionSubtitle}
+        </p>
+      </div>
     </div>
 
-    <!-- Category rows -->
-    <div class="space-y-8">
+    <!-- Category rows — library-filter style -->
+    <div class="rounded-panel ring-1 ring-separator bg-panel/40 divide-y divide-separator/80 overflow-hidden">
       {
         i.techStack.categories.map((cat, catIdx) => (
           <div
-            class="reveal"
-            style={`transition-delay: ${catIdx * 100}ms`}
+            class="flex flex-col md:flex-row md:items-center gap-4 md:gap-8 px-6 py-5 reveal"
+            style={`transition-delay: ${catIdx * 80}ms`}
           >
-            <h3 class="text-sm font-semibold text-support uppercase tracking-wider mb-3 font-data">
-              {cat.label}
-            </h3>
-            <div class="flex flex-wrap gap-3">
-              {cat.items.map((item, itemIdx) => (
-                <span
-                  class="tech-pill"
-                  style={`transition-delay: ${catIdx * 100 + itemIdx * 50}ms`}
-                >
-                  {item}
-                </span>
+            <div class="md:w-48 shrink-0">
+              <h3 class="font-display text-[11px] tracking-label uppercase text-stats-muted">
+                {cat.label}
+              </h3>
+            </div>
+            <div class="flex flex-wrap gap-2">
+              {cat.items.map((item) => (
+                <span class="tech-pill">{item}</span>
               ))}
             </div>
           </div>
@@ -52,11 +54,10 @@ const i = t(lang);
 
 <style>
   .tech-pill {
-    @apply px-4 py-2 rounded-full text-sm text-mist bg-panel border border-separator
-           hover:border-action hover:text-action
-           transition-all duration-300 cursor-default;
-  }
-  .tech-pill:hover {
-    box-shadow: 0 0 16px rgba(69, 123, 157, 0.15);
+    @apply inline-flex items-center px-3.5 py-1.5 rounded-pill text-[13px] font-medium
+           text-mist/90 bg-card/60 ring-1 ring-separator
+           hover:text-action hover:ring-action/50 hover:bg-action-tint
+           transition-all duration-200 cursor-default;
+    font-family: 'Manrope', sans-serif;
   }
 </style>
