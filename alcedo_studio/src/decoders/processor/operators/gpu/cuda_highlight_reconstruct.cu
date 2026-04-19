@@ -95,6 +95,13 @@ __device__ __forceinline__ float3 MaxRgb(const float3& value) {
   return make_float3(fmaxf(0.0f, value.x), fmaxf(0.0f, value.y), fmaxf(0.0f, value.z));
 }
 
+__device__ __forceinline__ float3 LoadPlanarRgb(const cv::cuda::PtrStepSz<float> red,
+                                                const cv::cuda::PtrStepSz<float> green,
+                                                const cv::cuda::PtrStepSz<float> blue,
+                                                const int row, const int col) {
+  return make_float3(red.ptr(row)[col], green.ptr(row)[col], blue.ptr(row)[col]);
+}
+
 __device__ __forceinline__ void StoreOrientedRgba(cv::cuda::PtrStepSz<float4> output,
                                                   const int src_row, const int src_col,
                                                   const int src_rows, const int src_cols,
@@ -129,6 +136,38 @@ __device__ __forceinline__ float3 CalcRefavg(const cv::cuda::PtrStepSz<float3> i
     const float3* row_ptr = input.ptr(dy);
     for (int dx = dxmin; dx <= dxmax; ++dx) {
       const float3 sample = MaxRgb(row_ptr[dx]);
+      mean[0] += sample.x;
+      mean[1] += sample.y;
+      mean[2] += sample.z;
+      cnt[0] += 1.0f;
+      cnt[1] += 1.0f;
+      cnt[2] += 1.0f;
+    }
+  }
+
+  for (int c = 0; c < 3; ++c) {
+    mean[c] = (cnt[c] > 0.0f) ? cbrtf(mean[c] / cnt[c]) : 0.0f;
+  }
+
+  return make_float3(Cube(0.5f * (mean[1] + mean[2])), Cube(0.5f * (mean[0] + mean[2])),
+                     Cube(0.5f * (mean[0] + mean[1])));
+}
+
+__device__ __forceinline__ float3 CalcRefavgPlanar(const cv::cuda::PtrStepSz<float> red,
+                                                   const cv::cuda::PtrStepSz<float> green,
+                                                   const cv::cuda::PtrStepSz<float> blue,
+                                                   const int row, const int col) {
+  float mean[3] = {0.0f, 0.0f, 0.0f};
+  float cnt[3]  = {0.0f, 0.0f, 0.0f};
+
+  const int dymin = max(0, row - 1);
+  const int dxmin = max(0, col - 1);
+  const int dymax = min(red.rows - 1, row + 1);
+  const int dxmax = min(red.cols - 1, col + 1);
+
+  for (int dy = dymin; dy <= dymax; ++dy) {
+    for (int dx = dxmin; dx <= dxmax; ++dx) {
+      const float3 sample = MaxRgb(LoadPlanarRgb(red, green, blue, dy, dx));
       mean[0] += sample.x;
       mean[1] += sample.y;
       mean[2] += sample.z;
@@ -310,6 +349,112 @@ __global__ void AccumulateHighlightStatsKernel(const cv::cuda::PtrStepSz<float3>
   }
 }
 
+__global__ void AccumulateHighlightStatsPlanarKernel(const cv::cuda::PtrStepSz<float> red,
+                                                     const cv::cuda::PtrStepSz<float> green,
+                                                     const cv::cuda::PtrStepSz<float> blue,
+                                                     int* anyclipped, float* sums, float* cnts,
+                                                     HighlightCorrectionParams params, const int x0,
+                                                     const int y0, const int x1, const int y1) {
+  __shared__ float3  tile_img[kStatsTileH][kStatsTileW];
+  __shared__ uint8_t tile_r[kStatsTileH][kStatsTileW];
+  __shared__ uint8_t tile_g[kStatsTileH][kStatsTileW];
+  __shared__ uint8_t tile_b[kStatsTileH][kStatsTileW];
+  __shared__ float   block_sums[3];
+  __shared__ float   block_cnts[3];
+  __shared__ int     block_any_clipped;
+
+  const int lane = threadIdx.y * blockDim.x + threadIdx.x;
+  if (lane < 3) {
+    block_sums[lane] = 0.0f;
+    block_cnts[lane] = 0.0f;
+  }
+  if (lane == 0) {
+    block_any_clipped = 0;
+  }
+
+  const int tile_origin_x = blockIdx.x * blockDim.x - kDilateRadius;
+  const int tile_origin_y = blockIdx.y * blockDim.y - kDilateRadius;
+  for (int sy = threadIdx.y; sy < kStatsTileH; sy += blockDim.y) {
+    const int gy = max(0, min(red.rows - 1, tile_origin_y + sy));
+    for (int sx = threadIdx.x; sx < kStatsTileW; sx += blockDim.x) {
+      const int gx = max(0, min(red.cols - 1, tile_origin_x + sx));
+      const float3 pixel = MaxRgb(LoadPlanarRgb(red, green, blue, gy, gx));
+      tile_img[sy][sx]   = pixel;
+      tile_r[sy][sx]     = pixel.x >= params.clips[0] ? 1 : 0;
+      tile_g[sy][sx]     = pixel.y >= params.clips[1] ? 1 : 0;
+      tile_b[sy][sx]     = pixel.z >= params.clips[2] ? 1 : 0;
+
+      if ((tile_r[sy][sx] | tile_g[sy][sx] | tile_b[sy][sx]) != 0) {
+        atomicExch(&block_any_clipped, 1);
+      }
+    }
+  }
+  __syncthreads();
+
+  const int col = blockIdx.x * blockDim.x + threadIdx.x;
+  const int row = blockIdx.y * blockDim.y + threadIdx.y;
+  const bool in_bounds = col < red.cols && row < red.rows;
+  if (in_bounds && col >= x0 && col < x1 && row >= y0 && row < y1) {
+    const int local_x = threadIdx.x + kDilateRadius;
+    const int local_y = threadIdx.y + kDilateRadius;
+    uint8_t   dil_r   = 0;
+    uint8_t   dil_g   = 0;
+    uint8_t   dil_b   = 0;
+
+    const int dy0 = max(-kDilateRadius, -row);
+    const int dx0 = max(-kDilateRadius, -col);
+    const int dy1 = min(kDilateRadius, red.rows - 1 - row);
+    const int dx1 = min(kDilateRadius, red.cols - 1 - col);
+
+    #pragma unroll
+    for (int dy = -kDilateRadius; dy <= kDilateRadius; ++dy) {
+      if (dy < dy0 || dy > dy1) {
+        continue;
+      }
+      #pragma unroll
+      for (int dx = -kDilateRadius; dx <= kDilateRadius; ++dx) {
+        if (dx < dx0 || dx > dx1) {
+          continue;
+        }
+        dil_r |= tile_r[local_y + dy][local_x + dx];
+        dil_g |= tile_g[local_y + dy][local_x + dx];
+        dil_b |= tile_b[local_y + dy][local_x + dx];
+      }
+    }
+
+    const float3 pixel = tile_img[local_y][local_x];
+    const bool   use_r = dil_r != 0 && pixel.x > params.clipdark[0] && pixel.x < params.clips[0];
+    const bool   use_g = dil_g != 0 && pixel.y > params.clipdark[1] && pixel.y < params.clips[1];
+    const bool   use_b = dil_b != 0 && pixel.z > params.clipdark[2] && pixel.z < params.clips[2];
+
+    if (use_r || use_g || use_b) {
+      const float3 ref =
+          CalcRefavgFromTile(tile_img, row, col, local_y, local_x, red.rows, red.cols);
+      if (use_r) {
+        atomicAdd(&block_sums[0], pixel.x - ref.x);
+        atomicAdd(&block_cnts[0], 1.0f);
+      }
+      if (use_g) {
+        atomicAdd(&block_sums[1], pixel.y - ref.y);
+        atomicAdd(&block_cnts[1], 1.0f);
+      }
+      if (use_b) {
+        atomicAdd(&block_sums[2], pixel.z - ref.z);
+        atomicAdd(&block_cnts[2], 1.0f);
+      }
+    }
+  }
+
+  __syncthreads();
+  if (lane == 0 && block_any_clipped != 0) {
+    atomicExch(anyclipped, 1);
+  }
+  if (lane < 3 && (block_sums[lane] != 0.0f || block_cnts[lane] != 0.0f)) {
+    atomicAdd(&sums[lane], block_sums[lane]);
+    atomicAdd(&cnts[lane], block_cnts[lane]);
+  }
+}
+
 __global__ void HighlightReconstructKernel(const cv::cuda::PtrStepSz<float3> input,
                                            cv::cuda::PtrStepSz<float3> output,
                                            HighlightCorrectionParams params) {
@@ -358,6 +503,23 @@ __global__ void ClampAndPackRGBAKernel(const cv::cuda::PtrStepSz<float3> input,
                     flip);
 }
 
+__global__ void ClampAndPackRGBAPlanarKernel(const cv::cuda::PtrStepSz<float> red,
+                                             const cv::cuda::PtrStepSz<float> green,
+                                             const cv::cuda::PtrStepSz<float> blue,
+                                             cv::cuda::PtrStepSz<float4> output,
+                                             const float3 gain, const int flip) {
+  const int col = blockIdx.x * blockDim.x + threadIdx.x;
+  const int row = blockIdx.y * blockDim.y + threadIdx.y;
+  if (col >= red.cols || row >= red.rows) {
+    return;
+  }
+
+  const float3 pixel = ClampRgb(LoadPlanarRgb(red, green, blue, row, col));
+  StoreOrientedRgba(output, row, col, red.rows, red.cols,
+                    make_float4(pixel.x * gain.x, pixel.y * gain.y, pixel.z * gain.z, 1.0f),
+                    flip);
+}
+
 __global__ void HighlightReconstructAndPackRGBAKernel(const cv::cuda::PtrStepSz<float3> input,
                                                       cv::cuda::PtrStepSz<float4> output,
                                                       HighlightCorrectionParams params,
@@ -385,6 +547,37 @@ __global__ void HighlightReconstructAndPackRGBAKernel(const cv::cuda::PtrStepSz<
     }
   }
   StoreOrientedRgba(output, row, col, input.rows, input.cols,
+                    make_float4(result.x * gain.x, result.y * gain.y, result.z * gain.z, 1.0f),
+                    flip);
+}
+
+__global__ void HighlightReconstructAndPackRGBAPlanarKernel(
+    const cv::cuda::PtrStepSz<float> red, const cv::cuda::PtrStepSz<float> green,
+    const cv::cuda::PtrStepSz<float> blue, cv::cuda::PtrStepSz<float4> output,
+    HighlightCorrectionParams params, const float3 gain, const int flip) {
+  const int col = blockIdx.x * blockDim.x + threadIdx.x;
+  const int row = blockIdx.y * blockDim.y + threadIdx.y;
+  if (col >= red.cols || row >= red.rows) {
+    return;
+  }
+
+  const float3 pixel = MaxRgb(LoadPlanarRgb(red, green, blue, row, col));
+  const int    count = CountClippedChannels(pixel, params.clips);
+
+  float3 result = pixel;
+  if (count != 0) {
+    const float3 ref = CalcRefavgPlanar(red, green, blue, row, col);
+    if (pixel.x >= params.clips[0]) {
+      result.x = fmaxf(pixel.x, ref.x + params.chrominance[0]);
+    }
+    if (pixel.y >= params.clips[1]) {
+      result.y = fmaxf(pixel.y, ref.y + params.chrominance[1]);
+    }
+    if (pixel.z >= params.clips[2]) {
+      result.z = fmaxf(pixel.z, ref.z + params.chrominance[2]);
+    }
+  }
+  StoreOrientedRgba(output, row, col, red.rows, red.cols,
                     make_float4(result.x * gain.x, result.y * gain.y, result.z * gain.z, 1.0f),
                     flip);
 }
@@ -547,6 +740,57 @@ void AccumulateHighlightStats(const cv::cuda::GpuMat& img, const HighlightCorrec
   }
 }
 
+void AccumulateHighlightStats(const cv::cuda::GpuMat& red, const cv::cuda::GpuMat& green,
+                              const cv::cuda::GpuMat& blue,
+                              const HighlightCorrection& correction,
+                              const cv::Rect& inner_region, HighlightWorkspace& workspace,
+                              HighlightAccumulation& accumulation, cv::cuda::Stream* stream) {
+  CV_Assert(red.type() == CV_32FC1 && green.type() == CV_32FC1 && blue.type() == CV_32FC1);
+  CV_Assert(red.size() == green.size() && red.size() == blue.size());
+
+  const int width  = red.cols;
+  const int height = red.rows;
+  if (width <= 0 || height <= 0) {
+    return;
+  }
+
+  workspace.Reserve(width, height);
+  CUDA_CHECK(cudaMemsetAsync(workspace.anyclipped_, 0, sizeof(int), GetCudaStream(stream)));
+  CUDA_CHECK(cudaMemsetAsync(workspace.sums_, 0, sizeof(float) * 4, GetCudaStream(stream)));
+  CUDA_CHECK(cudaMemsetAsync(workspace.cnts_, 0, sizeof(float) * 4, GetCudaStream(stream)));
+
+  const dim3 threads(kStatsBlockX, kStatsBlockY);
+  const dim3 blocks((width + threads.x - 1) / threads.x, (height + threads.y - 1) / threads.y);
+  const auto params      = ToParams(correction);
+  const auto cuda_stream = GetCudaStream(stream);
+
+  const cv::Rect region = NormalizeInnerRegion(inner_region, red.size());
+  AccumulateHighlightStatsPlanarKernel<<<blocks, threads, 0, cuda_stream>>>(
+      red, green, blue, workspace.anyclipped_, workspace.sums_, workspace.cnts_, params,
+      region.x, region.y, region.x + region.width, region.y + region.height);
+  CUDA_CHECK(cudaGetLastError());
+
+  int any_clipped = 0;
+  std::array<float, 4> sums = {0.0f, 0.0f, 0.0f, 0.0f};
+  std::array<float, 4> cnts = {0.0f, 0.0f, 0.0f, 0.0f};
+  CUDA_CHECK(cudaMemcpyAsync(&any_clipped, workspace.anyclipped_, sizeof(int), cudaMemcpyDeviceToHost,
+                             cuda_stream));
+  CUDA_CHECK(cudaMemcpyAsync(sums.data(), workspace.sums_, sizeof(float) * 4, cudaMemcpyDeviceToHost,
+                             cuda_stream));
+  CUDA_CHECK(cudaMemcpyAsync(cnts.data(), workspace.cnts_, sizeof(float) * 4, cudaMemcpyDeviceToHost,
+                             cuda_stream));
+  WaitForStream(stream);
+
+  if (any_clipped == 0) {
+    return;
+  }
+  accumulation.any_clipped = true;
+  for (int i = 0; i < 4; ++i) {
+    accumulation.sums[i] += static_cast<double>(sums[i]);
+    accumulation.cnts[i] += static_cast<double>(cnts[i]);
+  }
+}
+
 void ApplyHighlightCorrection(cv::cuda::GpuMat& img, const HighlightCorrection& correction,
                               HighlightWorkspace* workspace, cv::cuda::Stream* stream) {
   CV_Assert(img.type() == CV_32FC3);
@@ -582,6 +826,18 @@ void ApplyHighlightCorrectionAndPackRGBA(const cv::cuda::GpuMat& img, cv::cuda::
   ApplyHighlightCorrectionAndPackRGBAOriented(img, dst, correction, cam_mul, 0, workspace, stream);
 }
 
+void ApplyHighlightCorrectionAndPackRGBA(const cv::cuda::GpuMat& red,
+                                         const cv::cuda::GpuMat& green,
+                                         const cv::cuda::GpuMat& blue,
+                                         cv::cuda::GpuMat& dst,
+                                         const HighlightCorrection& correction,
+                                         const float* cam_mul,
+                                         HighlightWorkspace* workspace,
+                                         cv::cuda::Stream* stream) {
+  ApplyHighlightCorrectionAndPackRGBAOriented(red, green, blue, dst, correction, cam_mul, 0,
+                                              workspace, stream);
+}
+
 void ApplyHighlightCorrectionAndPackRGBAOriented(const cv::cuda::GpuMat& img, cv::cuda::GpuMat& dst,
                                                  const HighlightCorrection& correction,
                                                  const float* cam_mul, const int flip,
@@ -614,6 +870,51 @@ void ApplyHighlightCorrectionAndPackRGBAOriented(const cv::cuda::GpuMat& img, cv
 
   HighlightReconstructAndPackRGBAKernel<<<blocks, threads, 0, cuda_stream>>>(img, dst, params, gain,
                                                                               flip);
+  CUDA_CHECK(cudaGetLastError());
+
+  if (stream == nullptr) {
+    WaitForStream(stream);
+  }
+}
+
+void ApplyHighlightCorrectionAndPackRGBAOriented(const cv::cuda::GpuMat& red,
+                                                 const cv::cuda::GpuMat& green,
+                                                 const cv::cuda::GpuMat& blue,
+                                                 cv::cuda::GpuMat& dst,
+                                                 const HighlightCorrection& correction,
+                                                 const float* cam_mul, const int flip,
+                                                 HighlightWorkspace* workspace,
+                                                 cv::cuda::Stream* stream) {
+  CV_Assert(red.type() == CV_32FC1 && green.type() == CV_32FC1 && blue.type() == CV_32FC1);
+  CV_Assert(red.size() == green.size() && red.size() == blue.size());
+
+  const cv::Size dst_size = GetOrientedOutputSize(red.size(), flip);
+  if (dst.empty() || dst.size() != dst_size || dst.type() != CV_32FC4) {
+    dst.create(dst_size, CV_32FC4);
+  }
+
+  HighlightWorkspace local_workspace;
+  HighlightWorkspace& active_workspace = workspace == nullptr ? local_workspace : *workspace;
+  active_workspace.Reserve(red.cols, red.rows);
+
+  const dim3 threads(32, 8);
+  const dim3 blocks((red.cols + threads.x - 1) / threads.x, (red.rows + threads.y - 1) / threads.y);
+  const auto params      = ToParams(correction);
+  const auto cuda_stream = GetCudaStream(stream);
+  const float3 gain      = BuildInverseCamMulScale(cam_mul);
+
+  if (!correction.any_clipped) {
+    ClampAndPackRGBAPlanarKernel<<<blocks, threads, 0, cuda_stream>>>(red, green, blue, dst, gain,
+                                                                      flip);
+    CUDA_CHECK(cudaGetLastError());
+    if (stream == nullptr) {
+      WaitForStream(stream);
+    }
+    return;
+  }
+
+  HighlightReconstructAndPackRGBAPlanarKernel<<<blocks, threads, 0, cuda_stream>>>(
+      red, green, blue, dst, params, gain, flip);
   CUDA_CHECK(cudaGetLastError());
 
   if (stream == nullptr) {

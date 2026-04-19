@@ -223,26 +223,31 @@ auto RawProcessor::ProcessCudaFullFrame() -> ImageBuffer {
 
   if (cfa_pattern_.kind == RawCfaKind::Bayer2x2 && params_.highlights_reconstruct_) {
     const auto stage_debayer_start = ProfileClock::now();
-    CUDA::Bayer2x2ToRGB_RCD(gpu_img, cfa_pattern_.bayer_pattern, &rcd_workspace, &stream);
+    CUDA::Bayer2x2ToPlanarRGB_RCD(gpu_img, cfa_pattern_.bayer_pattern, &rcd_workspace, &stream);
     LogCudaProfileStep(stream, "RAW CUDA FullFrame debayer", stage_debayer_start);
 
+    cv::cuda::GpuMat debayer_r = rcd_workspace.r;
+    cv::cuda::GpuMat debayer_g = rcd_workspace.g;
+    cv::cuda::GpuMat debayer_b = rcd_workspace.b;
     const auto stage_crop_start = ProfileClock::now();
     if (!detail::IsFullImageRect(crop_rect, gpu_img.size())) {
-      gpu_img = gpu_img(crop_rect);
+      debayer_r = debayer_r(crop_rect);
+      debayer_g = debayer_g(crop_rect);
+      debayer_b = debayer_b(crop_rect);
     }
     LogCpuProfileStep("RAW CUDA FullFrame crop", stage_crop_start);
 
     CUDA::HighlightCorrection correction = CUDA::BuildHighlightCorrection(raw_processor_);
     CUDA::HighlightAccumulation accumulation;
     const auto stage_highlight_stats_start = ProfileClock::now();
-    CUDA::AccumulateHighlightStats(gpu_img, correction, cv::Rect{}, highlight_workspace,
-                                   accumulation, &stream);
+    CUDA::AccumulateHighlightStats(debayer_r, debayer_g, debayer_b, correction, cv::Rect{},
+                                   highlight_workspace, accumulation, &stream);
     CUDA::FinalizeHighlightCorrection(accumulation, correction);
     LogCpuProfileStep("RAW CUDA FullFrame highlight stats", stage_highlight_stats_start);
 
     const auto stage_highlight_start = ProfileClock::now();
-    CUDA::ApplyHighlightCorrectionAndPackRGBAOriented(gpu_img, output_rgba, correction,
-                                                      raw_data_.color.cam_mul,
+    CUDA::ApplyHighlightCorrectionAndPackRGBAOriented(debayer_r, debayer_g, debayer_b, output_rgba,
+                                                      correction, raw_data_.color.cam_mul,
                                                       raw_data_.sizes.flip, &highlight_workspace,
                                                       &stream);
     LogCudaProfileStep(stream, "RAW CUDA FullFrame highlight reconstruct + pack rgba (oriented)",
@@ -332,9 +337,10 @@ auto RawProcessor::ProcessCudaTiled() -> ImageBuffer {
       linear_raw(job.source_rect).copyTo(tile_raw, stream);
       const BayerPattern2x2 tile_pattern =
           ShiftBayerPattern(cfa_pattern_.bayer_pattern, job.source_rect.y, job.source_rect.x);
-      CUDA::Bayer2x2ToRGB_RCD(tile_raw, tile_pattern, &rcd_workspace, &stream);
-      CUDA::AccumulateHighlightStats(tile_raw, correction, job.inner_rect_in_tile, highlight_workspace,
-                                     accumulation, &stream);
+      CUDA::Bayer2x2ToPlanarRGB_RCD(tile_raw, tile_pattern, &rcd_workspace, &stream);
+      CUDA::AccumulateHighlightStats(rcd_workspace.r, rcd_workspace.g, rcd_workspace.b, correction,
+                                     job.inner_rect_in_tile, highlight_workspace, accumulation,
+                                     &stream);
     }
     CUDA::FinalizeHighlightCorrection(accumulation, correction);
     LogCudaProfileStep(stream, "RAW CUDA Tiled highlight stats", stage_highlight_stats_start);
@@ -349,10 +355,10 @@ auto RawProcessor::ProcessCudaTiled() -> ImageBuffer {
       linear_raw(job.source_rect).copyTo(tile_raw, stream);
       const BayerPattern2x2 tile_pattern =
           ShiftBayerPattern(cfa_pattern_.bayer_pattern, job.source_rect.y, job.source_rect.x);
-      CUDA::Bayer2x2ToRGB_RCD(tile_raw, tile_pattern, &rcd_workspace, &stream);
-      CUDA::ApplyHighlightCorrectionAndPackRGBA(tile_raw, tile_rgba, correction,
-                                               raw_data_.color.cam_mul, &highlight_workspace,
-                                               &stream);
+      CUDA::Bayer2x2ToPlanarRGB_RCD(tile_raw, tile_pattern, &rcd_workspace, &stream);
+      CUDA::ApplyHighlightCorrectionAndPackRGBA(rcd_workspace.r, rcd_workspace.g, rcd_workspace.b,
+                                                tile_rgba, correction, raw_data_.color.cam_mul,
+                                                &highlight_workspace, &stream);
       tile_rgba(job.inner_rect_in_tile).copyTo(output_rgba(job.output_rect), stream);
     }
     LogCudaProfileStep(stream, "RAW CUDA Tiled highlight reconstruct + pack tile assembly",

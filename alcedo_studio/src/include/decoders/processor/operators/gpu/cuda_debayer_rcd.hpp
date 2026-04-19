@@ -24,12 +24,16 @@ struct RcdWorkspace {
     r.create(size, CV_32FC1);
     g.create(size, CV_32FC1);
     b.create(size, CV_32FC1);
-    vh_dir.create(size, CV_32FC1);
-    pq_dir.create(size, CV_32FC1);
+    vh_dir.create(size, CV_16UC1);
+    pq_dir.create(size, CV_16UC1);
   }
 };
 
 void Bayer2x2ToRGB_RCD(cv::cuda::GpuMat& image, const BayerPattern2x2& pattern,
                        RcdWorkspace* workspace = nullptr, cv::cuda::Stream* stream = nullptr);
+
+void Bayer2x2ToPlanarRGB_RCD(const cv::cuda::GpuMat& raw, const BayerPattern2x2& pattern,
+                             RcdWorkspace* workspace = nullptr,
+                             cv::cuda::Stream* stream = nullptr);
 };
 };  // namespace alcedo

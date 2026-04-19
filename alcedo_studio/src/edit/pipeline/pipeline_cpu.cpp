@@ -5,8 +5,13 @@
 #include "edit/pipeline/pipeline_cpu.hpp"
 
 #include <algorithm>
+#include <chrono>
+#include <iomanip>
+#include <iostream>
 #include <memory>
+#include <sstream>
 #include <stdexcept>
+#include <vector>
 #include <opencv2/core.hpp>
 #include <opencv2/core/mat.hpp>
 
@@ -23,6 +28,35 @@
 namespace alcedo {
 
 namespace {
+using ProfileClock = std::chrono::steady_clock;
+
+auto DurationToMs(const ProfileClock::duration duration) -> double {
+  return std::chrono::duration<double, std::milli>(duration).count();
+}
+
+auto FormatDurationMs(const double duration_ms) -> std::string {
+  std::ostringstream oss;
+  oss << std::fixed << std::setprecision(2) << duration_ms << " ms";
+  return oss.str();
+}
+
+void PrintPipelineProfile(const ProfileClock::time_point apply_start,
+                          const std::vector<std::string>& executor_steps,
+                          const std::vector<std::string>& stage_profiles) {
+  std::ostringstream summary;
+  summary << "[PROFILE][PipelineCPU] total="
+          << FormatDurationMs(DurationToMs(ProfileClock::now() - apply_start));
+  for (const auto& step : executor_steps) {
+    summary << " | " << step;
+  }
+  std::cout << summary.str() << '\n';
+
+  for (const auto& profile : stage_profiles) {
+    if (!profile.empty()) {
+      std::cout << "[PROFILE][PipelineCPU] " << profile << '\n';
+    }
+  }
+}
 
 auto ToResizeAlgorithmParam(ResizeDownsampleAlgorithm algorithm) -> const char* {
   switch (algorithm) {
@@ -103,10 +137,18 @@ auto CPUPipelineExecutor::GetStage(PipelineStageName stage) -> PipelineStage& {
 
 auto CPUPipelineExecutor::Apply(std::shared_ptr<ImageBuffer> input)
     -> std::shared_ptr<ImageBuffer> {
-  auto* first_stage = exec_stages_.front();
+  const auto apply_start = ProfileClock::now();
+  if (exec_stages_.empty()) {
+    return input;
+  }
+
+  std::vector<std::string> executor_steps;
+  std::vector<std::string> stage_profiles;
+  auto*                    first_stage = exec_stages_.front();
   if (!first_stage) {
     return input;
   }
+
   std::shared_ptr<ImageBuffer> output;
   // Before the merged GPU stream, re-trigger SetGlobalParams for operators
   // in stages that feed into it, so they pick up runtime data (e.g. raw decode
@@ -120,38 +162,73 @@ auto CPUPipelineExecutor::Apply(std::shared_ptr<ImageBuffer> input)
     }
   };
 
+  const auto apply_stage = [&](PipelineStage* stage) {
+    const auto refresh_start = ProfileClock::now();
+    refresh_before_merged(stage);
+    const auto refresh_elapsed = ProfileClock::now() - refresh_start;
+
+    const auto stage_start = ProfileClock::now();
+    stage->SetInputImage(output);
+    stage->SetForceCPUOutput(force_cpu_output_);
+    output = stage->ApplyStage(global_params_);
+
+    std::string stage_profile = stage->GetLastProfileSummary();
+    if (stage_profile.empty()) {
+      std::ostringstream fallback;
+      fallback << "stage=" << stage->GetStageNameString()
+               << " total=" << FormatDurationMs(DurationToMs(ProfileClock::now() - stage_start));
+      stage_profile = fallback.str();
+    } else {
+      stage_profile +=
+          " | executor_call=" + FormatDurationMs(DurationToMs(ProfileClock::now() - stage_start));
+    }
+
+    if (stage->stage_ == PipelineStageName::Merged_Stage) {
+      stage_profile += " | refresh_global_params=" +
+                       FormatDurationMs(DurationToMs(refresh_elapsed));
+    }
+    stage_profiles.push_back(std::move(stage_profile));
+  };
+
   if (enable_cache_) {
     if (!first_stage->CacheValid()) {
+      const auto clone_start = ProfileClock::now();
       output = std::make_shared<ImageBuffer>(input->Clone());
+      executor_steps.push_back("clone_input=" +
+                               FormatDurationMs(DurationToMs(ProfileClock::now() - clone_start)));
       for (auto* stage : exec_stages_) {
-        refresh_before_merged(stage);
-        stage->SetInputImage(output);
-        stage->SetForceCPUOutput(force_cpu_output_);
-        output = stage->ApplyStage(global_params_);
+        apply_stage(stage);
       }
     } else {
       // If cache is valid, use cached output
+      const auto cache_fetch_start = ProfileClock::now();
       output = first_stage->GetOutputCache();
+      const auto cache_fetch_elapsed = ProfileClock::now() - cache_fetch_start;
+      executor_steps.push_back("first_stage_cache_fetch=" +
+                               FormatDurationMs(DurationToMs(cache_fetch_elapsed)));
+      stage_profiles.push_back("stage=" + first_stage->GetStageNameString() +
+                               " mode=executor_cache cache=hit total=" +
+                               FormatDurationMs(DurationToMs(cache_fetch_elapsed)) +
+                               " | get_output_cache=" +
+                               FormatDurationMs(DurationToMs(cache_fetch_elapsed)));
       for (auto* stage : exec_stages_) {
         if (stage != first_stage) {
-          refresh_before_merged(stage);
-          stage->SetInputImage(output);
-          stage->SetForceCPUOutput(force_cpu_output_);
-          output = stage->ApplyStage(global_params_);
+          apply_stage(stage);
         }
       }
     }
   } else {
     // Cache is disabled, just process the stages sequentially
+    const auto clone_start = ProfileClock::now();
     output = std::make_shared<ImageBuffer>(input->Clone());
+    executor_steps.push_back("clone_input=" +
+                             FormatDurationMs(DurationToMs(ProfileClock::now() - clone_start)));
     for (auto* stage : exec_stages_) {
-      refresh_before_merged(stage);
-      stage->SetInputImage(output);
-      stage->SetForceCPUOutput(force_cpu_output_);
-      output = stage->ApplyStage(global_params_);
+      apply_stage(stage);
     }
   }
 
+  PrintPipelineProfile(apply_start, executor_steps, stage_profiles);
   return output;
 }
 

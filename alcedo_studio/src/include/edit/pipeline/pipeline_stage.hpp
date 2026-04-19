@@ -285,6 +285,8 @@ class PipelineStage {
 
   void ImportStageParams(const nlohmann::json& j, OperatorParams& global_params);
 
+  auto GetLastProfileSummary() const -> const std::string& { return last_profile_summary_; }
+
  private:
   static StageRole             DetermineStageRole(PipelineStageName stage, bool is_streamable);
 
@@ -296,6 +298,7 @@ class PipelineStage {
   std::shared_ptr<ImageBuffer> ApplyGpuStream(OperatorParams& global_params);
 
   bool                         force_cpu_output_ = false;
+  std::string                  last_profile_summary_;
 };
 
 }  // namespace alcedo

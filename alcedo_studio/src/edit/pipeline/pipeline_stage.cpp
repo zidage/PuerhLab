@@ -5,10 +5,16 @@
 #include "edit/pipeline/pipeline_stage.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
+#include <format>
+#include <iomanip>
+#include <iostream>
 #include <memory>
+#include <sstream>
 #include <opencv2/highgui.hpp>
 #include <stdexcept>
+#include <vector>
 
 #include "edit/operators/op_base.hpp"
 #include "edit/operators/operator_factory.hpp"
@@ -17,6 +23,51 @@
 
 namespace alcedo {
 namespace {
+using ProfileClock = std::chrono::steady_clock;
+
+auto DurationToMs(const ProfileClock::duration duration) -> double {
+  return std::chrono::duration<double, std::milli>(duration).count();
+}
+
+auto FormatDurationMs(const double duration_ms) -> std::string {
+  std::ostringstream oss;
+  oss << std::fixed << std::setprecision(2) << duration_ms << " ms";
+  return oss.str();
+}
+
+class StageProfileCollector {
+ public:
+  StageProfileCollector(std::string stage_name, std::string mode)
+      : stage_name_(std::move(stage_name)),
+        mode_(std::move(mode)),
+        start_(ProfileClock::now()) {}
+
+  void SetCacheState(std::string cache_state) { cache_state_ = std::move(cache_state); }
+
+  void AddDuration(std::string label, const ProfileClock::duration duration) {
+    entries_.push_back(std::move(label) + "=" + FormatDurationMs(DurationToMs(duration)));
+  }
+
+  void AddNote(std::string note) { entries_.push_back(std::move(note)); }
+
+  auto Finish() const -> std::string {
+    std::ostringstream oss;
+    oss << "stage=" << stage_name_ << " mode=" << mode_ << " cache=" << cache_state_
+        << " total=" << FormatDurationMs(DurationToMs(ProfileClock::now() - start_));
+    for (const auto& entry : entries_) {
+      oss << " | " << entry;
+    }
+    return oss.str();
+  }
+
+ private:
+  std::string                    stage_name_;
+  std::string                    mode_;
+  std::string                    cache_state_ = "off";
+  std::vector<std::string>       entries_;
+  ProfileClock::time_point       start_;
+};
+
 auto IsResizeEffectivelyNoOp(const IOperatorBase& op, int width, int height) -> bool {
   const nlohmann::json params = op.GetParams();
   if (!params.contains("resize") || !params["resize"].is_object()) {
@@ -223,6 +274,7 @@ void PipelineStage::ResetAll() {
   operators_->clear();
   input_img_.reset();
   output_cache_.reset();
+  last_profile_summary_.clear();
   input_set_          = false;
   input_cache_valid_  = false;
   output_cache_valid_ = false;
@@ -238,6 +290,7 @@ void PipelineStage::ResetRuntimeResources(RuntimeResetMode mode) {
   const auto clear_intermediate_buffers = [this]() {
     input_img_.reset();
     output_cache_.reset();
+    last_profile_summary_.clear();
     input_set_          = false;
     input_cache_valid_  = false;
     output_cache_valid_ = false;
@@ -261,6 +314,7 @@ void PipelineStage::ResetRuntimeResources(RuntimeResetMode mode) {
   switch (mode) {
     case RuntimeResetMode::InvalidateCache:
       output_cache_.reset();
+      last_profile_summary_.clear();
       output_cache_valid_ = false;
       if (next_stage_) {
         next_stage_->SetInputCacheValid(false);
@@ -305,34 +359,51 @@ bool PipelineStage::HasEnabledOperator() const {
 }
 
 std::shared_ptr<ImageBuffer> PipelineStage::ApplyDescriptorOnly() {
+  StageProfileCollector profile(GetStageNameString(), "descriptor");
+
   if (!enable_cache_) {
+    profile.SetCacheState("off");
+    profile.AddNote("pass_through");
     SetOutputCacheValid(false);
     if (next_stage_) {
       next_stage_->SetInputCacheValid(false);
     }
+    last_profile_summary_ = profile.Finish();
     return input_img_;
   }
 
   if (CacheValid()) {
-    std::cout << "RAW Cache VALID" << std::endl;
+    profile.SetCacheState("hit");
+    profile.AddNote("reuse_stage_cache");
     if (next_stage_ && next_stage_->CacheValid()) {
+      profile.AddNote("downstream_cache_also_valid");
+      last_profile_summary_ = profile.Finish();
       return nullptr;
     }
+    last_profile_summary_ = profile.Finish();
     return output_cache_;
   }
 
+  profile.SetCacheState("miss");
   output_cache_ = input_img_;
   SetOutputCacheValid(true);
   if (next_stage_) {
     next_stage_->SetInputCacheValid(true);
   }
 
+  profile.AddNote("cache_store_input_reference");
+  last_profile_summary_ = profile.Finish();
   return output_cache_;
 }
 
 std::shared_ptr<ImageBuffer> PipelineStage::ApplyGpuOperators(OperatorParams& global_params) {
+  StageProfileCollector profile(GetStageNameString(), "gpu_ops");
+
   auto execute_ops = [&]() {
-    if (!HasEnabledOperator()) return input_img_;
+    if (!HasEnabledOperator()) {
+      profile.AddNote("no_enabled_ops");
+      return input_img_;
+    }
 
     if (stage_ == PipelineStageName::Geometry_Adjustment) {
       int width  = 0;
@@ -365,6 +436,7 @@ std::shared_ptr<ImageBuffer> PipelineStage::ApplyGpuOperators(OperatorParams& gl
       // Geometry stage is frequently configured as "full-res passthrough" during editing.
       // Reuse upstream cache directly to avoid holding another full-resolution GpuMat.
       if (has_enabled && all_noop) {
+        profile.AddNote("geometry_noop_passthrough");
         return input_img_;
       }
     }
@@ -374,22 +446,31 @@ std::shared_ptr<ImageBuffer> PipelineStage::ApplyGpuOperators(OperatorParams& gl
       const bool can_share_input = stage_ == PipelineStageName::Geometry_Adjustment &&
                                    CanShareGeometryGpuInputWithoutCopy(*operators_);
       if (can_share_input) {
+        const auto share_start = ProfileClock::now();
         current_img->ShareGPUDataFrom(*input_img_);
+        profile.AddDuration("share_input_gpu", ProfileClock::now() - share_start);
       } else {
+        const auto alloc_start = ProfileClock::now();
         current_img->InitGPUData(input_img_->GetGPUWidth(), input_img_->GetGPUHeight(),
                                  input_img_->GetGPUType());
+        profile.AddDuration("alloc_stage_gpu", ProfileClock::now() - alloc_start);
+        const auto copy_start = ProfileClock::now();
         input_img_->CopyGPUDataTo(*current_img);
         current_img->gpu_data_valid_ = true;
+        profile.AddDuration("copy_input_gpu", ProfileClock::now() - copy_start);
       }
     } else if (input_img_->buffer_valid_) {
+      const auto materialize_start = ProfileClock::now();
       auto buffer = input_img_->GetBuffer();
       current_img = std::make_shared<ImageBuffer>(std::move(buffer));
+      profile.AddDuration("materialize_input_buffer", ProfileClock::now() - materialize_start);
     }
 
     const auto apply_gpu_operator = [&](OperatorType op_type, const OperatorEntry& op_entry) {
       if (!op_entry.enable_ || !op_entry.op_) {
         return;
       }
+      const auto op_start = ProfileClock::now();
       if (op_type == OperatorType::LENS_CALIBRATION) {
         op_entry.op_->SetGlobalParams(global_params);
         op_entry.op_->ApplyGPU(current_img);
@@ -397,6 +478,7 @@ std::shared_ptr<ImageBuffer> PipelineStage::ApplyGpuOperators(OperatorParams& gl
         op_entry.op_->ApplyGPU(current_img);
         op_entry.op_->SetGlobalParams(global_params);
       }
+      profile.AddDuration("op:" + OperatorTypeToString(op_type), ProfileClock::now() - op_start);
     };
 
     for (const auto& [op_type, op_entry] : *operators_) {
@@ -407,10 +489,14 @@ std::shared_ptr<ImageBuffer> PipelineStage::ApplyGpuOperators(OperatorParams& gl
   };
 
   if (!input_img_->gpu_data_valid_ && !input_img_->buffer_valid_) {
+    const auto sync_start = ProfileClock::now();
     input_img_->SyncToGPU();
+    profile.AddDuration("sync_input_to_gpu", ProfileClock::now() - sync_start);
   }
+
   // This is different from ApplyGpuStream, as this function applies individual GPU operators
   if (!enable_cache_) {
+    profile.SetCacheState("off");
     SetOutputCacheValid(false);
     if (next_stage_) {
       next_stage_->SetInputCacheValid(false);
@@ -420,27 +506,40 @@ std::shared_ptr<ImageBuffer> PipelineStage::ApplyGpuOperators(OperatorParams& gl
     if (next_stage_) {
       next_stage_->SetInputCacheValid(false);
     }
+    last_profile_summary_ = profile.Finish();
     return output_cache_;
   }
 
   if (CacheValid()) {
+    profile.SetCacheState("hit");
+    profile.AddNote("reuse_stage_cache");
     if (next_stage_ && next_stage_->CacheValid()) {
+      profile.AddNote("downstream_cache_also_valid");
+      last_profile_summary_ = profile.Finish();
       return nullptr;
     }
+    last_profile_summary_ = profile.Finish();
     return output_cache_;
   }
 
+  profile.SetCacheState("miss");
   output_cache_ = execute_ops();
   SetOutputCacheValid(true);
   if (next_stage_) {
     next_stage_->SetInputCacheValid(true);
   }
+  last_profile_summary_ = profile.Finish();
   return output_cache_;
 }
 
 std::shared_ptr<ImageBuffer> PipelineStage::ApplyCpuOperators(OperatorParams& global_params) {
+  StageProfileCollector profile(GetStageNameString(), "cpu_ops");
+
   auto execute_ops = [&]() {
-    if (!HasEnabledOperator()) return input_img_;
+    if (!HasEnabledOperator()) {
+      profile.AddNote("no_enabled_ops");
+      return input_img_;
+    }
 
     if (stage_ == PipelineStageName::Geometry_Adjustment) {
       int width  = 0;
@@ -471,16 +570,20 @@ std::shared_ptr<ImageBuffer> PipelineStage::ApplyCpuOperators(OperatorParams& gl
       }
 
       if (has_enabled && all_noop) {
+        profile.AddNote("geometry_noop_passthrough");
         return input_img_;
       }
     }
 
-    auto       current_img        = std::make_shared<ImageBuffer>(input_img_->Clone());
+    const auto clone_start = ProfileClock::now();
+    auto       current_img = std::make_shared<ImageBuffer>(input_img_->Clone());
+    profile.AddDuration("clone_input", ProfileClock::now() - clone_start);
 
     const auto apply_cpu_operator = [&](OperatorType op_type, const OperatorEntry& op_entry) {
       if (!op_entry.enable_ || !op_entry.op_) {
         return;
       }
+      const auto op_start = ProfileClock::now();
       if (op_type == OperatorType::LENS_CALIBRATION) {
         op_entry.op_->SetGlobalParams(global_params);
         op_entry.op_->Apply(current_img);
@@ -488,6 +591,7 @@ std::shared_ptr<ImageBuffer> PipelineStage::ApplyCpuOperators(OperatorParams& gl
         op_entry.op_->Apply(current_img);
         op_entry.op_->SetGlobalParams(global_params);
       }
+      profile.AddDuration("op:" + OperatorTypeToString(op_type), ProfileClock::now() - op_start);
     };
 
     if (stage_ == PipelineStageName::Geometry_Adjustment) {
@@ -510,21 +614,29 @@ std::shared_ptr<ImageBuffer> PipelineStage::ApplyCpuOperators(OperatorParams& gl
   };
 
   if (!enable_cache_) {
+    profile.SetCacheState("off");
     output_cache_ = execute_ops();
     SetOutputCacheValid(false);
     if (next_stage_) {
       next_stage_->SetInputCacheValid(false);
     }
+    last_profile_summary_ = profile.Finish();
     return output_cache_;
   }
 
   if (CacheValid()) {
+    profile.SetCacheState("hit");
+    profile.AddNote("reuse_stage_cache");
     if (next_stage_ && next_stage_->CacheValid()) {
+      profile.AddNote("downstream_cache_also_valid");
+      last_profile_summary_ = profile.Finish();
       return nullptr;
     }
+    last_profile_summary_ = profile.Finish();
     return output_cache_;
   }
 
+  profile.SetCacheState("miss");
   output_cache_ = execute_ops();
   SetOutputCacheValid(true);
   if (next_stage_) {
@@ -535,43 +647,71 @@ std::shared_ptr<ImageBuffer> PipelineStage::ApplyCpuOperators(OperatorParams& gl
         throw std::runtime_error(
             "PipelineStage: cannot prepare GPU input for merged stage without CPU or GPU data.");
       }
+      const auto sync_start = ProfileClock::now();
       output_cache_->SyncToGPU();
+      profile.AddDuration("prepare_next_stage_gpu_input", ProfileClock::now() - sync_start);
     }
   }
+  last_profile_summary_ = profile.Finish();
   return output_cache_;
 }
 
 std::shared_ptr<ImageBuffer> PipelineStage::ApplyGpuStream(OperatorParams& global_params) {
+  StageProfileCollector profile(
+      GetStageNameString(), gpu_executor_.HasAcceleratedBackend() ? "gpu_stream" : "cpu_stream");
+  profile.SetCacheState("off");
+
   if (!gpu_executor_.HasAcceleratedBackend()) {
     if (!static_tile_scheduler_) {
+      const auto scheduler_setup_start = ProfileClock::now();
       SetStaticTileScheduler();
+      profile.AddDuration("setup_static_tile_scheduler",
+                          ProfileClock::now() - scheduler_setup_start);
     } else {
+      const auto update_input_start = ProfileClock::now();
       static_tile_scheduler_->SetInputImage(input_img_);
+      profile.AddDuration("update_static_tile_input", ProfileClock::now() - update_input_start);
     }
 
+    const auto execute_start = ProfileClock::now();
     output_cache_ = static_tile_scheduler_->ApplyOps(global_params);
+    profile.AddDuration("execute_static_tile_stream", ProfileClock::now() - execute_start);
     SetOutputCacheValid(false);
     if (next_stage_) {
       next_stage_->SetInputCacheValid(false);
     }
+    last_profile_summary_ = profile.Finish();
     return output_cache_;
   }
 
   if (!gpu_setup_done_) {
+    const auto setup_start = ProfileClock::now();
     SetGPUExecutor();
+    profile.AddDuration("setup_gpu_executor", ProfileClock::now() - setup_start);
   }
 
   output_cache_ = std::make_shared<ImageBuffer>();
+  const auto set_params_start = ProfileClock::now();
   gpu_executor_.SetParams(global_params);
+  profile.AddDuration("set_fused_params", ProfileClock::now() - set_params_start);
+  const auto set_input_start = ProfileClock::now();
   gpu_executor_.SetInputImage(input_img_);
+  profile.AddDuration("set_gpu_input", ProfileClock::now() - set_input_start);
+  const auto execute_start = ProfileClock::now();
   gpu_executor_.Execute(output_cache_);
+  profile.AddDuration("execute_gpu_stream", ProfileClock::now() - execute_start);
 
   if (force_cpu_output_) {
     try {
+      const auto sync_start = ProfileClock::now();
       output_cache_->SyncToCPU();
+      profile.AddDuration("sync_stream_output_to_cpu", ProfileClock::now() - sync_start);
+      const auto release_start = ProfileClock::now();
       output_cache_->ReleaseGPUData();  // Free GPU memory after sync
+      profile.AddDuration("release_stream_gpu_output", ProfileClock::now() - release_start);
     } catch (const std::exception& e) {
       // Keep GPU result if CPU sync fails; caller will validate.
+      profile.AddNote(std::string("sync_stream_output_to_cpu_failed=") + e.what());
       std::cerr << std::format(
                        "Failed to sync GPU stream output to CPU: {}. Keeping GPU data for "
                        "downstream stages.",
@@ -585,6 +725,7 @@ std::shared_ptr<ImageBuffer> PipelineStage::ApplyGpuStream(OperatorParams& globa
   if (next_stage_) {
     next_stage_->SetInputCacheValid(false);
   }
+  last_profile_summary_ = profile.Finish();
   return output_cache_;
 }
 
@@ -609,8 +750,6 @@ auto PipelineStage::GetStageNameString() const -> std::string {
     default:
       return "Unknown Stage";
   }
-
-  return "Unknown Stage";
 }
 
 auto PipelineStage::ExportStageParams() const -> nlohmann::json {
