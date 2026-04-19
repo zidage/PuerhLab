@@ -51,11 +51,12 @@
     "sectionTitle": "功能展示",
     "sectionSubtitle": "",
     "items": [
-      { "title": "图库浏览器", "description": "文件夹树、响应式缩略图网格、多条件筛选与实时计数，让大图库也能快速定位。" },
-      { "title": "调整工作区", "description": "白平衡、HSL、CDL 色轮、色调塑形与实时直方图都围绕实时预览展开。" },
-      { "title": "LUT 与历史", "description": "一边套用和比较不同 LUT，一边保留就近可见、可分支的编辑历史，方便反复迭代色彩与明暗风格。" },
-      { "title": "自定义“色彩科学”", "description": "围绕自定义显示变换、渲染意图与 look 开发来组织项目流程，而不是被单一默认色彩管线固定住。" },
-      { "title": "导出队列", "description": "批量导出支持格式、位深、缩放与元数据选项，适合一次性完成整组交付。" }
+      { "title": "影集浏览", "description": "左侧文件夹树、中部响应式缩略图网格、右侧“图库概览”按拍摄日期 / 相机型号 / 镜头聚合，让海量素材一目了然。", "image": "album.png" },
+      { "title": "HSL 与 CDL 调色", "description": "HSL 控件与 CDL Lift / Gain 色轮紧贴 Waveform 波形监视器，每一次色相、饱和度与影调调整都可以对着真实像素做决定。", "image": "advance_color.png" },
+      { "title": "可切换的色彩科学", "description": "在 ACES 2.0 与 OpenDRT 渲染变换之间切换，选择目标显示色彩空间（P3-D65、Rec. 709 …）与 EOTF，并调节峰值亮度，直方图实时刷新。", "image": "drt.png" },
+      { "title": ".cube LUT 库", "description": "“Look”面板可扫描任意文件夹内的 .cube LUT，支持按名称搜索与手动刷新，让风格化外观始终触手可及。", "image": "lut.png" },
+      { "title": "可分支的编辑历史", "description": "编辑历史面板记录每一次 LUT、DRT 与影调调整，可撤销、折叠或从任意历史节点分支，原始编辑永不丢失。", "image": "history.png" },
+      { "title": "导出队列", "description": "批量排队导出多张照片，支持 JPEG / PNG / TIFF / WebP 格式、位深与长边控制、色彩配置文件嵌入，并提供实时进度指示。", "image": "output.png" }
     ]
   },
   "roadmap": {

@@ -51,11 +51,12 @@
     "sectionTitle": "See It in Action",
     "sectionSubtitle": "",
     "items": [
-      { "title": "Library Browser", "description": "Folder tree, responsive thumbnail grid, filters, and live counts keep large projects readable at a glance." },
-      { "title": "Adjustment Workspace", "description": "White balance, HSL, CDL wheels, tone shaping, and histogram-driven controls stay close to the live preview." },
-      { "title": "LUT & History", "description": "Apply LUTs, compare looks, and keep a branchable edit history close at hand while iterating on color and tone." },
-      { "title": "Custom Color Science", "description": "Build a project around custom display transforms, rendering intent, and look development instead of being locked into a single default color pipeline." },
-      { "title": "Export Queue", "description": "Batch export with format, bit-depth, resize, and metadata options for finishing multiple images in one pass." }
+      { "title": "Library Browser", "description": "Folder tree, responsive thumbnail grid, and a live Library Overview panel with date / camera / lens facets keep large projects readable at a glance.", "image": "album.png" },
+      { "title": "HSL & CDL Color Grading", "description": "HSL controls and CDL Lift / Gain wheels sit beside a live Waveform scope, so every hue, saturation, and tonal decision stays grounded in the actual pixels.", "image": "advance_color.png" },
+      { "title": "Custom Color Science", "description": "Switch between ACES 2.0 and OpenDRT rendering transforms, pick the display colour space (P3-D65, Rec. 709, …) and EOTF, and tune the target peak — the histogram updates in real time.", "image": "drt.png" },
+      { "title": ".cube LUT Library", "description": "A filterable Look panel scans any folder of .cube LUTs, lets you search by name and refresh on demand so creative looks are one click away.", "image": "lut.png" },
+      { "title": "Branchable Edit History", "description": "An Edit History panel records every LUT, DRT, and tonal change. Undo, collapse, or branch from any prior state without losing your working edit.", "image": "history.png" },
+      { "title": "Export Queue", "description": "Queue multiple images for batch export with JPEG / PNG / TIFF / WebP formats, bit-depth and edge-length controls, colour-profile embedding, and a live progress indicator.", "image": "output.png" }
     ]
   },
   "roadmap": {

@@ -10,7 +10,8 @@
       "Bash(cmake --build --preset win_debug --parallel 4)",
       "Bash(cmd //c \"scripts\\\\msvc_env.cmd --build --preset win_debug --parallel 4\")",
       "Bash(npx astro *)",
-      "Bash(kill %1)"
+      "Bash(kill %1)",
+      "mcp__Claude_Preview__preview_start"
     ]
   }
 }

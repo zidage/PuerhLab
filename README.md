@@ -1,4 +1,4 @@
-# Alcedo Studio
+<img src="docs/header.jpg" alt="Alcedo Logo" width="100%"/>
 
 [Project website](https://zidage.github.io/Alcedo/en/) | [项目网页](https://zidage.github.io/Alcedo/zh/)
 
@@ -13,7 +13,7 @@
 >Alcedo Studio is _**NOT an alternative**_ to the existing commercial software nor other open-source projects.
 
 
-## Early Demo
+## Screenshots and Demo
 
 <table>
   <colgroup>
@@ -22,27 +22,37 @@
   </colgroup>
   <tbody>
     <tr>
-      <td><img src="docs/demo/1.png" alt="Modern UI interface" width="100%" /></td>
-      <td>Modern UI Interface</td>
+      <td><img src="docs/demo/welcome.png" alt="Welcome / project loader" width="100%" /></td>
+      <td>Welcome screen — load or create a project from a single branded entry point</td>
     </tr>
     <tr>
-      <td><img src="docs/demo/2.png" alt="Highlight transition" width="100%" /></td>
-      <td>Advanced Adjustment Controls</td>
+      <td><img src="docs/demo/album.png" alt="Library browser" width="100%" /></td>
+      <td>Library browser — folder tree, responsive thumbnail grid, and a Library Overview panel with date / camera / lens facets</td>
     </tr>
     <tr>
-      <td><img src="docs/demo/3.png" alt="LUT and history stack" width="100%" /></td>
-      <td>LUT Support / Unlimited History Stack / Git-like Version Control</td>
+      <td><img src="docs/demo/advance_color.png" alt="HSL and CDL color grading" width="100%" /></td>
+      <td>HSL and CDL Lift / Gain wheels alongside a live Waveform scope</td>
     </tr>
     <tr>
-      <td><img src="docs/demo/5.png" alt="LUT and history stack" width="100%" /></td>
-      <td>Lens Correction Support</td>
+      <td><img src="docs/demo/drt.png" alt="Color science switcher (ACES 2.0 / OpenDRT)" width="100%" /></td>
+      <td>Switchable color science — ACES 2.0 or OpenDRT with display colour space, EOTF, and peak-luminance controls</td>
     </tr>
     <tr>
-      <td><img src="docs/demo/4.png" alt="Export workflow" width="100%" /></td>
-      <td>Advanced Exporting Feature</td>
+      <td><img src="docs/demo/lut.png" alt=".cube LUT library" width="100%" /></td>
+      <td>.cube LUT library with search, folder scan, and one-click apply</td>
+    </tr>
+    <tr>
+      <td><img src="docs/demo/history.png" alt="Branchable edit history" width="100%" /></td>
+      <td>Branchable edit history — undo, collapse, or branch from any prior state</td>
+    </tr>
+    <tr>
+      <td><img src="docs/demo/output.png" alt="Export queue" width="100%" /></td>
+      <td>Export queue — batch export with format, bit-depth, resize, and metadata options</td>
     </tr>
   </tbody>
 </table>
+
+>RAW files are from [signatureedits](https://www.signatureedits.com/free-raw-photos/) 100% Free Raw Files.
 
 ## Key Technical Features
 
