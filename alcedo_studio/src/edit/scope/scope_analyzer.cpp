@@ -34,6 +34,43 @@ class NullScopeAnalyzer final : public IScopeAnalyzer {
   void ReleaseResources() override {}
 };
 
+constexpr float kHistogramClipWarningRatio = 0.02f;
+
+auto HistogramTailBins(int bins) -> int {
+  if (bins <= 0) {
+    return 0;
+  }
+  return std::clamp(bins / 64, 1, 4);
+}
+
+auto AverageTailRatio(const std::vector<uint32_t>& counts, int bins, int tail_bins, bool highlight_tail)
+    -> float {
+  if (bins <= 0 || tail_bins <= 0 || counts.size() < static_cast<size_t>(bins * 3)) {
+    return 0.0f;
+  }
+
+  float max_ratio = 0.0f;
+  for (int channel = 0; channel < 3; ++channel) {
+    const size_t channel_offset = static_cast<size_t>(channel) * static_cast<size_t>(bins);
+    uint64_t     total_count    = 0U;
+    uint64_t     tail_count     = 0U;
+    for (int bin = 0; bin < bins; ++bin) {
+      const uint32_t count = counts[channel_offset + static_cast<size_t>(bin)];
+      total_count += static_cast<uint64_t>(count);
+      const bool in_tail = highlight_tail ? (bin >= bins - tail_bins) : (bin < tail_bins);
+      if (in_tail) {
+        tail_count += static_cast<uint64_t>(count);
+      }
+    }
+    if (total_count > 0U) {
+      max_ratio = std::max(max_ratio,
+                           static_cast<float>(tail_count) / static_cast<float>(total_count));
+    }
+  }
+
+  return max_ratio;
+}
+
 auto NormalizeHistogramToUnitRange(const std::vector<uint32_t>& counts, int bins)
     -> ScopeHistogramRenderData {
   ScopeHistogramRenderData data;
@@ -41,13 +78,40 @@ auto NormalizeHistogramToUnitRange(const std::vector<uint32_t>& counts, int bins
     return data;
   }
 
-  const auto max_it = std::max_element(counts.begin(), counts.begin() + static_cast<size_t>(bins * 3));
-  const float denom = (max_it != counts.end() && *max_it > 0U) ? static_cast<float>(*max_it) : 1.0f;
+  data.bins                   = bins;
+  data.clip_tail_bins         = HistogramTailBins(bins);
+  data.shadow_clip_ratio      = AverageTailRatio(counts, bins, data.clip_tail_bins, false);
+  data.highlight_clip_ratio   = AverageTailRatio(counts, bins, data.clip_tail_bins, true);
+  data.shadow_clip_warning    = data.shadow_clip_ratio >= kHistogramClipWarningRatio;
+  data.highlight_clip_warning = data.highlight_clip_ratio >= kHistogramClipWarningRatio;
 
-  data.bins = bins;
+  uint32_t denom_count = 0U;
+  for (int channel = 0; channel < 3; ++channel) {
+    const size_t channel_offset = static_cast<size_t>(channel) * static_cast<size_t>(bins);
+    for (int bin = 0; bin < bins; ++bin) {
+      const bool skip_shadow = data.shadow_clip_warning && bin < data.clip_tail_bins;
+      const bool skip_highlight =
+          data.highlight_clip_warning && bin >= bins - data.clip_tail_bins;
+      if (skip_shadow || skip_highlight) {
+        continue;
+      }
+      denom_count = std::max(denom_count, counts[channel_offset + static_cast<size_t>(bin)]);
+    }
+  }
+
+  if (denom_count == 0U) {
+    const auto max_it =
+        std::max_element(counts.begin(), counts.begin() + static_cast<size_t>(bins * 3));
+    if (max_it != counts.end()) {
+      denom_count = *max_it;
+    }
+  }
+
+  const float denom = denom_count > 0U ? static_cast<float>(denom_count) : 1.0f;
+
   data.rgb.resize(static_cast<size_t>(bins * 3), 0.0f);
   for (size_t i = 0; i < data.rgb.size(); ++i) {
-    data.rgb[i] = static_cast<float>(counts[i]) / denom;
+    data.rgb[i] = std::clamp(static_cast<float>(counts[i]) / denom, 0.0f, 1.0f);
   }
   data.valid = true;
   return data;

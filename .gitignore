@@ -1075,3 +1075,6 @@ vcpkg
 /docs/technical
 
 *.local.json
+
+# Ignore skills for coding agents
+/.*/skills/

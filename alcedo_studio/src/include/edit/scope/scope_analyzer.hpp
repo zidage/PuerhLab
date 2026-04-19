@@ -102,9 +102,14 @@ struct ScopeOutputSet {
 };
 
 struct ScopeHistogramRenderData {
-  int                bins   = 0;
-  std::vector<float> rgb    = {};
-  bool               valid  = false;
+  int                bins                     = 0;
+  int                clip_tail_bins           = 0;
+  float              shadow_clip_ratio        = 0.0f;
+  float              highlight_clip_ratio     = 0.0f;
+  bool               shadow_clip_warning      = false;
+  bool               highlight_clip_warning   = false;
+  std::vector<float> rgb                      = {};
+  bool               valid                    = false;
 };
 
 struct ScopeWaveformRenderData {

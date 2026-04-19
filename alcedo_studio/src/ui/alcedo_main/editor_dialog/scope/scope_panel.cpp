@@ -6,6 +6,7 @@
 
 #include <QComboBox>
 #include <QCoreApplication>
+#include <QFrame>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QSignalBlocker>
@@ -31,6 +32,7 @@ constexpr int kDefaultWaveformWidth      = 384;
 constexpr int kDefaultWaveformHeight     = 192;
 constexpr int kDefaultAnalysisDownsample = 4;
 constexpr int kDefaultTargetFps          = 20;
+constexpr int kScopePlotInset            = 10;
 
 auto FormatCompactFloat(float value) -> QString {
   const float rounded = std::round(value);
@@ -143,27 +145,48 @@ ScopePanel::ScopePanel(QWidget* parent) : QWidget(parent) {
   root->addWidget(scope_type_combo_, 0, Qt::AlignLeft);
 
   scope_stack_ = new QStackedWidget(this);
+  scope_stack_->setFrameShape(QFrame::NoFrame);
+  scope_stack_->setLineWidth(0);
+  scope_stack_->setAttribute(Qt::WA_StyledBackground, true);
+  scope_stack_->setStyleSheet(QStringLiteral(
+      "QStackedWidget {"
+      "  background: transparent;"
+      "  border: none;"
+      "}"));
   histogram_widget_ = new ScopeHistogramWidget(scope_stack_);
   waveform_widget_  = new ScopeWaveformWidget(scope_stack_);
   scope_stack_->addWidget(histogram_widget_);
   scope_stack_->addWidget(waveform_widget_);
   root->addWidget(scope_stack_, 1);
 
-  auto* exif_row = new QWidget(this);
+  auto* exif_row_host = new QWidget(this);
+  auto* exif_host_layout = new QVBoxLayout(exif_row_host);
+  exif_host_layout->setContentsMargins(kScopePlotInset, 0, kScopePlotInset, 0);
+  exif_host_layout->setSpacing(0);
+
+  auto* exif_row = new QWidget(exif_row_host);
   exif_row->setStyleSheet(QStringLiteral(
       "QWidget { background: transparent; }"
       "QLabel { color: %1; }")
                               .arg(theme.textMutedColor().name(QColor::HexRgb)));
   auto* exif_layout = new QHBoxLayout(exif_row);
   exif_layout->setContentsMargins(0, 4, 0, 0);
-  exif_layout->setSpacing(10);
-  for (QLabel*& label : exif_value_labels_) {
+  exif_layout->setSpacing(0);
+  constexpr int        kExifColumnStretch[4] = {1, 1, 1, 1};
+  constexpr Qt::Alignment kExifAlignment[4]  = {Qt::AlignLeft | Qt::AlignVCenter,
+                                               Qt::AlignLeft | Qt::AlignVCenter,
+                                               Qt::AlignLeft | Qt::AlignVCenter,
+                                               Qt::AlignRight | Qt::AlignVCenter};
+  for (size_t i = 0; i < exif_value_labels_.size(); ++i) {
+    QLabel*& label = exif_value_labels_[i];
     label = new QLabel(QStringLiteral("--"), exif_row);
-    label->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    label->setAlignment(kExifAlignment[i]);
+    label->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
     AppTheme::MarkFontRole(label, AppTheme::FontRole::DataCaption);
-    exif_layout->addWidget(label, 1);
+    exif_layout->addWidget(label, kExifColumnStretch[i], kExifAlignment[i]);
   }
-  root->addWidget(exif_row, 0);
+  exif_host_layout->addWidget(exif_row, 0);
+  root->addWidget(exif_row_host, 0);
 
   refresh_timer_ = new QTimer(this);
   refresh_timer_->setInterval(50);

@@ -25,9 +25,14 @@ auto ScopeRenderer::Render(const ScopeOutputSet& output) const -> ScopePresentat
   presentation.generation            = snapshot.generation;
 
   if (snapshot.histogram.valid) {
-    presentation.histogram.bins  = snapshot.histogram.bins;
-    presentation.histogram.rgb   = snapshot.histogram.rgb;
-    presentation.histogram.valid = true;
+    presentation.histogram.bins                   = snapshot.histogram.bins;
+    presentation.histogram.clip_tail_bins         = snapshot.histogram.clip_tail_bins;
+    presentation.histogram.shadow_clip_ratio      = snapshot.histogram.shadow_clip_ratio;
+    presentation.histogram.highlight_clip_ratio   = snapshot.histogram.highlight_clip_ratio;
+    presentation.histogram.shadow_clip_warning    = snapshot.histogram.shadow_clip_warning;
+    presentation.histogram.highlight_clip_warning = snapshot.histogram.highlight_clip_warning;
+    presentation.histogram.rgb                    = snapshot.histogram.rgb;
+    presentation.histogram.valid                  = true;
   }
 
   if (snapshot.waveform.valid) {
