@@ -11,7 +11,12 @@
       "Bash(cmd //c \"scripts\\\\msvc_env.cmd --build --preset win_debug --parallel 4\")",
       "Bash(npx astro *)",
       "Bash(kill %1)",
-      "mcp__Claude_Preview__preview_start"
+      "mcp__Claude_Preview__preview_start",
+      "Bash(cmd /c \"scripts\\\\\\\\msvc_env.cmd --build --preset win_debug --target alcedo_main --parallel 4\")",
+      "Bash(cmd /c \"call scripts\\\\\\\\msvc_env.cmd --build --preset win_debug --target alcedo_main --parallel 4 2>&1\")",
+      "Bash(cmd /c \"scripts\\\\\\\\msvc_env.cmd --build --preset win_debug --target alcedo_main --parallel 4 1> build.out 2> build.err\")",
+      "Bash(echo \"exit=$?\")",
+      "PowerShell(& cmd /c \"scripts\\\\msvc_env.cmd --build --preset win_debug --target alcedo_main --parallel 4\" 2>&1)"
     ]
   }
 }

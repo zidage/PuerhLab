@@ -9,45 +9,82 @@ namespace alcedo::ui {
 
 GeometryPanelWidget::GeometryPanelWidget(QWidget* parent) : QWidget(parent) {}
 
+namespace {
+
+constexpr int kSectionContentMarginH = 18;
+constexpr int kSectionContentMarginV = 16;
+constexpr int kSectionInnerSpacing   = 14;
+constexpr int kRowInnerSpacing       = 8;
+constexpr int kControlHeight         = 32;
+constexpr int kSliderHeight          = 26;
+
+}  // namespace
+
 void EditorDialog::BuildGeometryRawPanels() {
-    auto addGeometrySection = [&](const QString& title, const QString& subtitle) {
+    const auto& theme = AppTheme::Instance();
+
+    // --- helpers -----------------------------------------------------------
+
+    auto addSection = [&](const QString& title) -> std::pair<QFrame*, QVBoxLayout*> {
       auto* frame = new QFrame(geometry_controls_);
       frame->setObjectName("EditorSection");
       auto* v = new QVBoxLayout(frame);
-      v->setContentsMargins(12, 10, 12, 10);
-      v->setSpacing(2);
+      v->setContentsMargins(kSectionContentMarginH, kSectionContentMarginV,
+                            kSectionContentMarginH, kSectionContentMarginV);
+      v->setSpacing(kSectionInnerSpacing);
 
-      auto* t = new QLabel(title, frame);
+      auto* t = new QLabel(title.toUpper(), frame);
       t->setObjectName("EditorSectionTitle");
-      auto* s = new QLabel(subtitle, frame);
-      s->setObjectName("EditorSectionSub");
-      s->setWordWrap(true);
+      AppTheme::MarkFontRole(t, AppTheme::FontRole::UiOverline);
+      QFont title_font = t->font();
+      title_font.setBold(true);
+      title_font.setLetterSpacing(QFont::AbsoluteSpacing, 1.4);
+      t->setFont(title_font);
       v->addWidget(t, 0);
-      v->addWidget(s, 0);
+
       geometry_controls_layout_->insertWidget(geometry_controls_layout_->count() - 1, frame);
+      return {frame, v};
     };
 
-    auto addGeometrySlider = [&](const QString& name, int min, int max, int value, auto&& onChange,
-                                 auto&& onReset, auto&& formatter) {
-      auto* info = new QLabel(QString("%1: %2").arg(name).arg(formatter(value)), geometry_controls_);
-      info->setStyleSheet(AppTheme::EditorLabelStyle(AppTheme::Instance().textColor()));
-      AppTheme::MarkFontRole(info, AppTheme::FontRole::DataBody);
-      info->setWordWrap(true);
-      info->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+    auto addSlider = [&](QWidget* parent, QVBoxLayout* layout, const QString& name, int min, int max,
+                         int value, auto&& onChange, auto&& onReset, auto&& formatter) -> QSlider* {
+      auto* row = new QWidget(parent);
+      auto* row_v = new QVBoxLayout(row);
+      row_v->setContentsMargins(0, 0, 0, 0);
+      row_v->setSpacing(6);
 
-      auto* slider = new QSlider(Qt::Horizontal, geometry_controls_);
+      auto* header = new QWidget(row);
+      auto* header_h = new QHBoxLayout(header);
+      header_h->setContentsMargins(0, 0, 0, 0);
+      header_h->setSpacing(kRowInnerSpacing);
+
+      auto* name_label = new QLabel(name, header);
+      name_label->setStyleSheet(AppTheme::EditorLabelStyle(theme.textColor()));
+      AppTheme::MarkFontRole(name_label, AppTheme::FontRole::UiBody);
+      name_label->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+
+      auto* value_label = new QLabel(formatter(value), header);
+      value_label->setStyleSheet(AppTheme::EditorLabelStyle(theme.accentColor()));
+      AppTheme::MarkFontRole(value_label, AppTheme::FontRole::DataNumeric);
+      value_label->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+      value_label->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
+
+      header_h->addWidget(name_label, 1);
+      header_h->addWidget(value_label, 0);
+
+      auto* slider = new QSlider(Qt::Horizontal, row);
       slider->setRange(min, max);
       slider->setValue(value);
       slider->setSingleStep(1);
       slider->setPageStep(std::max(1, (max - min) / 20));
       slider->setMinimumWidth(0);
       slider->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-      slider->setFixedHeight(32);
+      slider->setFixedHeight(kSliderHeight);
 
-      QObject::connect(slider, &QSlider::valueChanged, geometry_controls_,
-                       [this, info, name, formatter,
+      QObject::connect(slider, &QSlider::valueChanged, parent,
+                       [this, value_label, formatter,
                         onChange = std::forward<decltype(onChange)>(onChange)](int v) {
-                         info->setText(QString("%1: %2").arg(name).arg(formatter(v)));
+                         value_label->setText(formatter(v));
                          if (syncing_controls_) {
                            return;
                          }
@@ -62,62 +99,42 @@ void EditorDialog::BuildGeometryRawPanels() {
             onReset();
           });
 
-      auto* row       = new QWidget(geometry_controls_);
-      auto* rowLayout = new QVBoxLayout(row);
-      rowLayout->setContentsMargins(0, 0, 0, 0);
-      rowLayout->setSpacing(4);
-      rowLayout->addWidget(info, 0);
-      rowLayout->addWidget(slider, 1);
-      geometry_controls_layout_->insertWidget(geometry_controls_layout_->count() - 1, row);
+      row_v->addWidget(header, 0);
+      row_v->addWidget(slider, 0);
+      layout->addWidget(row, 0);
       return slider;
     };
 
-    addGeometrySection(Tr("Geometry"),
-                       Tr("Rotate and crop workflow. Changes apply only when committed."));
-    rotate_slider_ = addGeometrySlider(
-        Tr("Rotate"), -18000, 18000,
-        static_cast<int>(std::lround(state_.rotate_degrees_ * kRotationSliderScale)),
-        [&](int v) {
-          state_.rotate_degrees_ = static_cast<float>(v) / kRotationSliderScale;
-          if (viewer_) {
-            viewer_->SetCropOverlayRotationDegrees(state_.rotate_degrees_);
-          }
-        },
-        [this]() { ResetCropAndRotation(); },
-        [](int v) { return QString("%1 deg").arg(static_cast<double>(v) / kRotationSliderScale, 0, 'f', 2); });
-
+    // --- SECTION 1: CROP & ASPECT RATIO ------------------------------------
     {
-      auto* frame = new QFrame(geometry_controls_);
-      frame->setObjectName("EditorSection");
-      auto* layout = new QVBoxLayout(frame);
-      layout->setContentsMargins(12, 10, 12, 10);
-      layout->setSpacing(8);
+      auto [frame, v] = addSection(Tr("Crop & Aspect Ratio"));
 
-      auto* preset_row = new QWidget(frame);
-      auto* preset_row_layout = new QVBoxLayout(preset_row);
-      preset_row_layout->setContentsMargins(0, 0, 0, 0);
-      preset_row_layout->setSpacing(4);
+      auto* aspect_row = new QWidget(frame);
+      auto* aspect_h   = new QHBoxLayout(aspect_row);
+      aspect_h->setContentsMargins(0, 0, 0, 0);
+      aspect_h->setSpacing(kRowInnerSpacing);
 
-      auto* preset_label = new QLabel(Tr("Aspect Preset"), preset_row);
-      preset_label->setStyleSheet(AppTheme::EditorLabelStyle(AppTheme::Instance().textColor()));
-      AppTheme::MarkFontRole(preset_label, AppTheme::FontRole::UiCaption);
-      preset_label->setWordWrap(true);
-      preset_label->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
-      preset_row_layout->addWidget(preset_label, 0);
+      auto* aspect_label = new QLabel(Tr("Aspect"), aspect_row);
+      aspect_label->setStyleSheet(AppTheme::EditorLabelStyle(theme.textColor()));
+      AppTheme::MarkFontRole(aspect_label, AppTheme::FontRole::UiBody);
+      aspect_label->setMinimumWidth(64);
+      aspect_label->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
+      aspect_h->addWidget(aspect_label, 0);
 
-      geometry_crop_aspect_preset_combo_ = new QComboBox(preset_row);
+      geometry_crop_aspect_preset_combo_ = new QComboBox(aspect_row);
       geometry_crop_aspect_preset_combo_->setStyleSheet(AppTheme::EditorComboBoxStyle());
       geometry_crop_aspect_preset_combo_->setSizeAdjustPolicy(
           QComboBox::AdjustToMinimumContentsLengthWithIcon);
       geometry_crop_aspect_preset_combo_->setMinimumContentsLength(1);
       geometry_crop_aspect_preset_combo_->setMinimumWidth(0);
+      geometry_crop_aspect_preset_combo_->setFixedHeight(kControlHeight);
       geometry_crop_aspect_preset_combo_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
       for (const auto& option : geometry::CropAspectPresetOptions()) {
         geometry_crop_aspect_preset_combo_->addItem(option.label_, static_cast<int>(option.value_));
       }
-      geometry_crop_aspect_preset_combo_->setCurrentIndex(
-          std::max(0, geometry_crop_aspect_preset_combo_->findData(
-                            static_cast<int>(state_.crop_aspect_preset_))));
+      geometry_crop_aspect_preset_combo_->setCurrentIndex(std::max(
+          0, geometry_crop_aspect_preset_combo_->findData(
+                 static_cast<int>(state_.crop_aspect_preset_))));
       QObject::connect(geometry_crop_aspect_preset_combo_,
                        QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int) {
                          if (syncing_controls_ || !geometry_crop_aspect_preset_combo_) {
@@ -128,179 +145,239 @@ void EditorDialog::BuildGeometryRawPanels() {
                          SetCropAspectPresetState(preset);
                          RefreshGeometryModeUi();
                        });
-      preset_row_layout->addWidget(geometry_crop_aspect_preset_combo_, 0);
-      layout->addWidget(preset_row, 0);
+      aspect_h->addWidget(geometry_crop_aspect_preset_combo_, 1);
+      v->addWidget(aspect_row, 0);
 
-      auto* ratio_row = new QWidget(frame);
-      auto* ratio_row_layout = new QHBoxLayout(ratio_row);
-      ratio_row_layout->setContentsMargins(0, 0, 0, 0);
-      ratio_row_layout->setSpacing(8);
+      auto* wh_row = new QWidget(frame);
+      auto* wh_h   = new QHBoxLayout(wh_row);
+      wh_h->setContentsMargins(0, 0, 0, 0);
+      wh_h->setSpacing(kRowInnerSpacing);
 
-      auto* width_label = new QLabel(Tr("Width"), ratio_row);
-      width_label->setStyleSheet(preset_label->styleSheet());
-      AppTheme::MarkFontRole(width_label, AppTheme::FontRole::UiCaption);
-      width_label->setWordWrap(true);
-      width_label->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
-      ratio_row_layout->addWidget(width_label, 0);
+      auto configureRatioSpin = [&](QDoubleSpinBox* spin, const QString& prefix, double value) {
+        spin->setRange(kCropAspectSpinMin, kCropAspectSpinMax);
+        spin->setDecimals(2);
+        spin->setSingleStep(0.01);
+        spin->setValue(value);
+        spin->setPrefix(prefix);
+        spin->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        spin->setStyleSheet(AppTheme::EditorSpinBoxStyle());
+        spin->setButtonSymbols(QAbstractSpinBox::NoButtons);
+        spin->setFixedHeight(kControlHeight);
+        spin->setMinimumWidth(0);
+        spin->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        AppTheme::MarkFontRole(spin, AppTheme::FontRole::DataNumeric);
+      };
 
-      geometry_crop_aspect_width_spin_ = new QDoubleSpinBox(ratio_row);
-      geometry_crop_aspect_width_spin_->setRange(kCropAspectSpinMin, kCropAspectSpinMax);
-      geometry_crop_aspect_width_spin_->setDecimals(3);
-      geometry_crop_aspect_width_spin_->setSingleStep(0.01);
-      geometry_crop_aspect_width_spin_->setValue(state_.crop_aspect_width_);
-      geometry_crop_aspect_width_spin_->setStyleSheet(AppTheme::EditorSpinBoxStyle());
-      geometry_crop_aspect_width_spin_->setMinimumWidth(0);
-      geometry_crop_aspect_width_spin_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-      QObject::connect(geometry_crop_aspect_width_spin_, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
-                       this, [this](double value) {
+      auto setPresetToCustom = [this]() {
+        if (!geometry_crop_aspect_preset_combo_) {
+          return;
+        }
+        const bool prev_sync    = syncing_controls_;
+        syncing_controls_       = true;
+        const int custom_index  = geometry_crop_aspect_preset_combo_->findData(
+            static_cast<int>(CropAspectPreset::Custom));
+        geometry_crop_aspect_preset_combo_->setCurrentIndex(std::max(0, custom_index));
+        syncing_controls_ = prev_sync;
+      };
+
+      geometry_crop_aspect_width_spin_ = new QDoubleSpinBox(wh_row);
+      configureRatioSpin(geometry_crop_aspect_width_spin_, QStringLiteral("W   "),
+                         state_.crop_aspect_width_);
+      QObject::connect(geometry_crop_aspect_width_spin_,
+                       QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
+                       [this, setPresetToCustom](double value) {
                          if (syncing_controls_) {
                            return;
                          }
                          state_.crop_aspect_preset_ = CropAspectPreset::Custom;
                          state_.crop_aspect_width_  = static_cast<float>(value);
-                         if (geometry_crop_aspect_preset_combo_) {
-                           const bool prev_sync = syncing_controls_;
-                           syncing_controls_    = true;
-                           const int custom_index = geometry_crop_aspect_preset_combo_->findData(
-                               static_cast<int>(CropAspectPreset::Custom));
-                           geometry_crop_aspect_preset_combo_->setCurrentIndex(std::max(0, custom_index));
-                           syncing_controls_ = prev_sync;
-                         }
+                         setPresetToCustom();
                          ApplyAspectPresetToCurrentCrop();
                          RefreshGeometryModeUi();
                        });
-      ratio_row_layout->addWidget(geometry_crop_aspect_width_spin_, 1);
+      wh_h->addWidget(geometry_crop_aspect_width_spin_, 1);
 
-      auto* height_label = new QLabel(Tr("Height"), ratio_row);
-      height_label->setStyleSheet(width_label->styleSheet());
-      AppTheme::MarkFontRole(height_label, AppTheme::FontRole::UiCaption);
-      height_label->setWordWrap(true);
-      height_label->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
-      ratio_row_layout->addWidget(height_label, 0);
-
-      geometry_crop_aspect_height_spin_ = new QDoubleSpinBox(ratio_row);
-      geometry_crop_aspect_height_spin_->setRange(kCropAspectSpinMin, kCropAspectSpinMax);
-      geometry_crop_aspect_height_spin_->setDecimals(3);
-      geometry_crop_aspect_height_spin_->setSingleStep(0.01);
-      geometry_crop_aspect_height_spin_->setValue(state_.crop_aspect_height_);
-      geometry_crop_aspect_height_spin_->setStyleSheet(AppTheme::EditorSpinBoxStyle());
-      geometry_crop_aspect_height_spin_->setMinimumWidth(0);
-      geometry_crop_aspect_height_spin_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+      geometry_crop_aspect_height_spin_ = new QDoubleSpinBox(wh_row);
+      configureRatioSpin(geometry_crop_aspect_height_spin_, QStringLiteral("H   "),
+                         state_.crop_aspect_height_);
       QObject::connect(geometry_crop_aspect_height_spin_,
-                       QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this](double value) {
+                       QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
+                       [this, setPresetToCustom](double value) {
                          if (syncing_controls_) {
                            return;
                          }
                          state_.crop_aspect_preset_ = CropAspectPreset::Custom;
                          state_.crop_aspect_height_ = static_cast<float>(value);
-                         if (geometry_crop_aspect_preset_combo_) {
-                           const bool prev_sync = syncing_controls_;
-                           syncing_controls_    = true;
-                           const int custom_index = geometry_crop_aspect_preset_combo_->findData(
-                               static_cast<int>(CropAspectPreset::Custom));
-                           geometry_crop_aspect_preset_combo_->setCurrentIndex(std::max(0, custom_index));
-                           syncing_controls_ = prev_sync;
-                         }
+                         setPresetToCustom();
                          ApplyAspectPresetToCurrentCrop();
                          RefreshGeometryModeUi();
                        });
-      ratio_row_layout->addWidget(geometry_crop_aspect_height_spin_, 1);
+      wh_h->addWidget(geometry_crop_aspect_height_spin_, 1);
 
-      layout->addWidget(ratio_row, 0);
-
-      geometry_controls_layout_->insertWidget(geometry_controls_layout_->count() - 1, frame);
+      v->addWidget(wh_row, 0);
     }
 
-    geometry_crop_x_slider_ = addGeometrySlider(
-        Tr("Crop X"), 0, static_cast<int>(kCropRectSliderScale),
-        static_cast<int>(std::lround(state_.crop_x_ * kCropRectSliderScale)),
-        [&](int v) {
-          SetCropRectState(static_cast<float>(v) / kCropRectSliderScale, state_.crop_y_, state_.crop_w_,
-                           state_.crop_h_, false, true);
-        },
-        [this]() { ResetCropAndRotation(); },
-        [](int v) { return QString::number(static_cast<double>(v) / kCropRectSliderScale, 'f', 3); });
-
-    geometry_crop_y_slider_ = addGeometrySlider(
-        Tr("Crop Y"), 0, static_cast<int>(kCropRectSliderScale),
-        static_cast<int>(std::lround(state_.crop_y_ * kCropRectSliderScale)),
-        [&](int v) {
-          SetCropRectState(state_.crop_x_, static_cast<float>(v) / kCropRectSliderScale, state_.crop_w_,
-                           state_.crop_h_, false, true);
-        },
-        [this]() { ResetCropAndRotation(); },
-        [](int v) { return QString::number(static_cast<double>(v) / kCropRectSliderScale, 'f', 3); });
-
-    geometry_crop_w_slider_ = addGeometrySlider(
-        Tr("Crop W"), 1, static_cast<int>(kCropRectSliderScale),
-        static_cast<int>(std::lround(state_.crop_w_ * kCropRectSliderScale)),
-        [&](int v) {
-          ResizeCropRectWithAspect(static_cast<float>(v) / kCropRectSliderScale, true);
-        },
-        [this]() { ResetCropAndRotation(); },
-        [](int v) { return QString::number(static_cast<double>(v) / kCropRectSliderScale, 'f', 3); });
-
-    geometry_crop_h_slider_ = addGeometrySlider(
-        Tr("Crop H"), 1, static_cast<int>(kCropRectSliderScale),
-        static_cast<int>(std::lround(state_.crop_h_ * kCropRectSliderScale)),
-        [&](int v) {
-          ResizeCropRectWithAspect(static_cast<float>(v) / kCropRectSliderScale, false);
-        },
-        [this]() { ResetCropAndRotation(); },
-        [](int v) { return QString::number(static_cast<double>(v) / kCropRectSliderScale, 'f', 3); });
-
+    // --- SECTION 2: ROTATE & FLIP -----------------------------------------
     {
-      auto* frame = new QFrame(geometry_controls_);
-      frame->setObjectName("EditorSection");
-      auto* layout = new QVBoxLayout(frame);
-      layout->setContentsMargins(12, 10, 12, 10);
-      layout->setSpacing(8);
+      auto [frame, v] = addSection(Tr("Rotate & Flip"));
+
+      rotate_slider_ = addSlider(
+          frame, v, Tr("Angle"), -18000, 18000,
+          static_cast<int>(std::lround(state_.rotate_degrees_ * kRotationSliderScale)),
+          [&](int vv) {
+            state_.rotate_degrees_ = static_cast<float>(vv) / kRotationSliderScale;
+            if (viewer_) {
+              viewer_->SetCropOverlayRotationDegrees(state_.rotate_degrees_);
+            }
+          },
+          [this]() { ResetCropAndRotation(); },
+          [](int vv) {
+            return QString::fromUtf8("%1°")
+                .arg(static_cast<double>(vv) / kRotationSliderScale, 0, 'f', 1);
+          });
+
+      auto* btn_row = new QWidget(frame);
+      auto* btn_h   = new QHBoxLayout(btn_row);
+      btn_h->setContentsMargins(0, 0, 0, 0);
+      btn_h->setSpacing(kRowInnerSpacing);
+
+      auto rotateBy = [this](float delta) {
+        if (!rotate_slider_) {
+          return;
+        }
+        float a = state_.rotate_degrees_ + delta;
+        while (a > 180.0f) a -= 360.0f;
+        while (a < -180.0f) a += 360.0f;
+        rotate_slider_->setValue(static_cast<int>(std::lround(a * kRotationSliderScale)));
+      };
+
+      auto makeToolButton = [&](const QString& glyph, const QString& tip,
+                                std::function<void()> onClick, bool enabled) {
+        auto* b = new QPushButton(glyph, btn_row);
+        b->setFixedHeight(36);
+        b->setCursor(Qt::PointingHandCursor);
+        b->setStyleSheet(AppTheme::EditorSecondaryButtonStyle());
+        b->setToolTip(tip);
+        b->setEnabled(enabled);
+        AppTheme::MarkFontRole(b, AppTheme::FontRole::UiBodyStrong);
+        QFont gf = b->font();
+        gf.setPointSizeF(gf.pointSizeF() + 2.0);
+        b->setFont(gf);
+        if (enabled && onClick) {
+          QObject::connect(b, &QPushButton::clicked, this, std::move(onClick));
+        }
+        return b;
+      };
+
+      auto* rotate_l = makeToolButton(QString::fromUtf8("\xE2\x86\xBA"),
+                                      Tr("Rotate 90° left"), [rotateBy]() { rotateBy(-90.0f); }, true);
+      auto* rotate_r = makeToolButton(QString::fromUtf8("\xE2\x86\xBB"),
+                                      Tr("Rotate 90° right"), [rotateBy]() { rotateBy(90.0f); }, true);
+      auto* flip     = makeToolButton(QString::fromUtf8("\xE2\x87\x84"),
+                                      Tr("Flip horizontal (coming soon)"), {}, false);
+
+      btn_h->addWidget(rotate_l, 1);
+      btn_h->addWidget(rotate_r, 1);
+      btn_h->addWidget(flip, 1);
+      v->addWidget(btn_row, 0);
+    }
+
+    // --- SECTION 3: CROP OFFSET -------------------------------------------
+    {
+      auto [frame, v] = addSection(Tr("Crop Offset"));
+
+      auto formatUnit = [](int vv) {
+        return QString::number(static_cast<double>(vv) / kCropRectSliderScale, 'f', 3);
+      };
+
+      geometry_crop_x_slider_ = addSlider(
+          frame, v, Tr("X"), 0, static_cast<int>(kCropRectSliderScale),
+          static_cast<int>(std::lround(state_.crop_x_ * kCropRectSliderScale)),
+          [&](int vv) {
+            SetCropRectState(static_cast<float>(vv) / kCropRectSliderScale, state_.crop_y_,
+                             state_.crop_w_, state_.crop_h_, false, true);
+          },
+          [this]() { ResetCropAndRotation(); }, formatUnit);
+
+      geometry_crop_y_slider_ = addSlider(
+          frame, v, Tr("Y"), 0, static_cast<int>(kCropRectSliderScale),
+          static_cast<int>(std::lround(state_.crop_y_ * kCropRectSliderScale)),
+          [&](int vv) {
+            SetCropRectState(state_.crop_x_, static_cast<float>(vv) / kCropRectSliderScale,
+                             state_.crop_w_, state_.crop_h_, false, true);
+          },
+          [this]() { ResetCropAndRotation(); }, formatUnit);
+
+      geometry_crop_w_slider_ = addSlider(
+          frame, v, Tr("Width"), 1, static_cast<int>(kCropRectSliderScale),
+          static_cast<int>(std::lround(state_.crop_w_ * kCropRectSliderScale)),
+          [&](int vv) {
+            ResizeCropRectWithAspect(static_cast<float>(vv) / kCropRectSliderScale, true);
+          },
+          [this]() { ResetCropAndRotation(); }, formatUnit);
+
+      geometry_crop_h_slider_ = addSlider(
+          frame, v, Tr("Height"), 1, static_cast<int>(kCropRectSliderScale),
+          static_cast<int>(std::lround(state_.crop_h_ * kCropRectSliderScale)),
+          [&](int vv) {
+            ResizeCropRectWithAspect(static_cast<float>(vv) / kCropRectSliderScale, false);
+          },
+          [this]() { ResetCropAndRotation(); }, formatUnit);
 
       geometry_crop_rect_label_ = new QLabel(frame);
       geometry_crop_rect_label_->setStyleSheet(
-          AppTheme::EditorLabelStyle(AppTheme::Instance().textMutedColor()));
-      AppTheme::MarkFontRole(geometry_crop_rect_label_, AppTheme::FontRole::DataBody);
-      layout->addWidget(geometry_crop_rect_label_, 0);
+          AppTheme::EditorLabelStyle(theme.textMutedColor()));
+      AppTheme::MarkFontRole(geometry_crop_rect_label_, AppTheme::FontRole::DataCaption);
+      geometry_crop_rect_label_->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+      v->addWidget(geometry_crop_rect_label_, 0);
+    }
 
-      auto* row       = new QWidget(frame);
-      auto* rowLayout = new QHBoxLayout(row);
-      rowLayout->setContentsMargins(0, 0, 0, 0);
-      rowLayout->setSpacing(8);
+    // --- SECTION 4: APPLY / RESET -----------------------------------------
+    {
+      auto* frame = new QFrame(geometry_controls_);
+      frame->setObjectName("EditorSection");
+      auto* v = new QVBoxLayout(frame);
+      v->setContentsMargins(kSectionContentMarginH, kSectionContentMarginV,
+                            kSectionContentMarginH, kSectionContentMarginV);
+      v->setSpacing(kSectionInnerSpacing);
 
-      geometry_apply_btn_ = new QPushButton(Tr("Apply Crop"), row);
-      geometry_apply_btn_->setFixedHeight(30);
+      auto* btn_row   = new QWidget(frame);
+      auto* btn_h     = new QHBoxLayout(btn_row);
+      btn_h->setContentsMargins(0, 0, 0, 0);
+      btn_h->setSpacing(kRowInnerSpacing);
+
+      geometry_apply_btn_ = new QPushButton(Tr("Apply Crop"), btn_row);
+      geometry_apply_btn_->setFixedHeight(36);
       geometry_apply_btn_->setCursor(Qt::PointingHandCursor);
       geometry_apply_btn_->setStyleSheet(AppTheme::EditorPrimaryButtonStyle());
       QObject::connect(geometry_apply_btn_, &QPushButton::clicked, this, [this]() {
         state_.crop_enabled_ = true;
         CommitAdjustment(AdjustmentField::CropRotate);
       });
-      rowLayout->addWidget(geometry_apply_btn_, 1);
+      btn_h->addWidget(geometry_apply_btn_, 2);
 
-      geometry_reset_btn_ = new QPushButton(Tr("Reset"), row);
-      geometry_reset_btn_->setFixedHeight(30);
+      geometry_reset_btn_ = new QPushButton(Tr("Reset"), btn_row);
+      geometry_reset_btn_->setFixedHeight(36);
       geometry_reset_btn_->setCursor(Qt::PointingHandCursor);
       geometry_reset_btn_->setStyleSheet(AppTheme::EditorSecondaryButtonStyle());
-      QObject::connect(geometry_reset_btn_, &QPushButton::clicked, this, [this]() {
-        ResetCropAndRotation();
-      });
-      rowLayout->addWidget(geometry_reset_btn_, 0);
-      layout->addWidget(row, 0);
+      QObject::connect(geometry_reset_btn_, &QPushButton::clicked, this,
+                       [this]() { ResetCropAndRotation(); });
+      btn_h->addWidget(geometry_reset_btn_, 1);
+      v->addWidget(btn_row, 0);
 
       auto* hint = new QLabel(
-          Tr("Geometry panel edits only the crop frame overlay. Image pixels update only after Apply Crop. "
-             "Aspect presets lock crop resizing until switched back to Free. "
-             "Double click viewer to restore full crop frame. "
-             "Double click any geometry slider to restore the full-frame crop and zero rotation. Ctrl+R to reset all geometry."),
+          Tr("Pixels update on Apply. Double click any slider or the viewer to reset. "
+             "Ctrl+R resets all geometry."),
           frame);
       hint->setWordWrap(true);
-      hint->setStyleSheet(AppTheme::EditorLabelStyle(AppTheme::Instance().textMutedColor()));
+      hint->setStyleSheet(AppTheme::EditorLabelStyle(theme.textMutedColor()));
       AppTheme::MarkFontRole(hint, AppTheme::FontRole::UiHint);
-      layout->addWidget(hint, 0);
+      v->addWidget(hint, 0);
 
       geometry_controls_layout_->insertWidget(geometry_controls_layout_->count() - 1, frame);
     }
 
+    // --- viewer wiring -----------------------------------------------------
     if (viewer_) {
       QObject::connect(viewer_, &QtEditViewer::CropOverlayRectChanged, this,
                        [this](float x, float y, float w, float h, bool /*is_final*/) {
@@ -308,7 +385,7 @@ void EditorDialog::BuildGeometryRawPanels() {
                            return;
                          }
                          SetCropRectState(x, y, w, h, true, false);
-                        });
+                       });
       QObject::connect(viewer_, &QtEditViewer::CropOverlayRotationChanged, this,
                        [this](float angle_degrees, bool /*is_final*/) {
                          if (syncing_controls_) {
@@ -316,11 +393,10 @@ void EditorDialog::BuildGeometryRawPanels() {
                          }
                          state_.rotate_degrees_ = angle_degrees;
                          const bool prev_sync = syncing_controls_;
-                         syncing_controls_     = true;
+                         syncing_controls_    = true;
                          if (rotate_slider_) {
-                           rotate_slider_->setValue(
-                               static_cast<int>(std::lround(state_.rotate_degrees_ *
-                                                            kRotationSliderScale)));
+                           rotate_slider_->setValue(static_cast<int>(
+                               std::lround(state_.rotate_degrees_ * kRotationSliderScale)));
                          }
                          syncing_controls_ = prev_sync;
                        });

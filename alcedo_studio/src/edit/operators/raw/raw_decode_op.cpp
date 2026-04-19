@@ -4,11 +4,15 @@
 
 #include "edit/operators/raw/raw_decode_op.hpp"
 
+#include <chrono>
 #include <opencv2/core/hal/interface.h>
 #include <opencv2/imgproc.hpp>
 
 #include <cstdint>
+#include <iostream>
 #include <memory>
+#include <sstream>
+#include <vector>
 
 #include "decoders/libraw_unpack_guard.hpp"
 #include "decoders/processor/raw_processor.hpp"
@@ -17,6 +21,35 @@
 
 namespace alcedo {
 namespace {
+using ProfileClock = std::chrono::steady_clock;
+
+struct DeferredCpuLog {
+  std::vector<std::string> entries;
+
+  void Add(std::string entry) { entries.push_back(std::move(entry)); }
+
+  void Flush() const {
+    if (entries.empty()) {
+      return;
+    }
+
+    std::cout << "[LOG] ";
+    for (size_t i = 0; i < entries.size(); ++i) {
+      if (i != 0) {
+        std::cout << " | ";
+      }
+      std::cout << entries[i];
+    }
+    std::cout << '\n';
+  }
+};
+
+void AppendProfileMs(DeferredCpuLog& log, const char* label, const ProfileClock::duration elapsed) {
+  std::ostringstream oss;
+  oss << label << '=' << std::chrono::duration<double, std::milli>(elapsed).count() << " ms";
+  log.Add(oss.str());
+}
+
 auto RawGpuBackendToString(RawGpuBackend backend) -> const char* {
   switch (backend) {
     case RawGpuBackend::GPU:
@@ -31,10 +64,14 @@ auto RawGpuBackendToString(RawGpuBackend backend) -> const char* {
 RawDecodeOp::RawDecodeOp(const nlohmann::json& params) { SetParams(params); }
 
 void RawDecodeOp::Apply(std::shared_ptr<ImageBuffer> input) {
+  const auto             total_start = ProfileClock::now();
+  DeferredCpuLog         deferred_log;
   auto&                   buffer        = input->GetBuffer();
 
+  const auto              open_start = ProfileClock::now();
   std::unique_ptr<LibRaw> raw_processor = std::make_unique<LibRaw>();
   int                     ret = raw_processor->open_buffer((void*)buffer.data(), buffer.size());
+  AppendProfileMs(deferred_log, "RAW CPU open_buffer", ProfileClock::now() - open_start);
   if (ret != LIBRAW_SUCCESS) {
     throw std::runtime_error("RawDecodeOp: Unable to read raw file using LibRAW");
   }
@@ -45,7 +82,9 @@ void RawDecodeOp::Apply(std::shared_ptr<ImageBuffer> input) {
 
   switch (backend_) {
     case RawProcessBackend::ALCEDO: {
+      const auto unpack_start = ProfileClock::now();
       libraw_guard::Unpack(*raw_processor);
+      AppendProfileMs(deferred_log, "RAW CPU unpack", ProfileClock::now() - unpack_start);
 
       // Use pre-populated context injected before rendering; fall back to
       // extracting directly from the open LibRaw instance.
@@ -56,7 +95,9 @@ void RawDecodeOp::Apply(std::shared_ptr<ImageBuffer> input) {
 
       RawProcessor processor{params_, raw_processor->imgdata.rawdata, *raw_processor, ctx};
 
+      const auto process_start = ProfileClock::now();
       output = processor.Process();
+      AppendProfileMs(deferred_log, "RAW CPU processor.Process", ProfileClock::now() - process_start);
       latest_runtime_context_ = processor.GetRuntimeColorContext();
       raw_processor->recycle();
       break;
@@ -69,7 +110,9 @@ void RawDecodeOp::Apply(std::shared_ptr<ImageBuffer> input) {
       raw_processor->imgdata.params.use_camera_wb  = 1;  // Discarded if user_wb is set for now
       raw_processor->imgdata.rawparams.use_dngsdk  = 1;
 
+      const auto unpack_start = ProfileClock::now();
       libraw_guard::Unpack(*raw_processor);
+      AppendProfileMs(deferred_log, "RAW CPU unpack", ProfileClock::now() - unpack_start);
 
       // Use pre-populated context or extract from LibRaw.
       RawRuntimeColorContext ctx = pre_populated_ctx_;
@@ -77,8 +120,10 @@ void RawDecodeOp::Apply(std::shared_ptr<ImageBuffer> input) {
         MetadataExtractor::PopulateRuntimeContextFromOpenLibRaw(*raw_processor, ctx);
       }
 
+      const auto process_start = ProfileClock::now();
       raw_processor->dcraw_process();
       libraw_processed_image_t* img = raw_processor->dcraw_make_mem_image(&ret);
+      AppendProfileMs(deferred_log, "RAW CPU dcraw_process", ProfileClock::now() - process_start);
       if (ret != LIBRAW_SUCCESS) {
         throw std::runtime_error("RawDecodeOp: Unable to process raw file using LibRAW");
       }
@@ -103,6 +148,8 @@ void RawDecodeOp::Apply(std::shared_ptr<ImageBuffer> input) {
       break;
     }
   }
+  AppendProfileMs(deferred_log, "RAW CPU total", ProfileClock::now() - total_start);
+  deferred_log.Flush();
   *input = std::move(output);
 }
 
