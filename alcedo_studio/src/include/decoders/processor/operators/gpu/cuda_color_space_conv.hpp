@@ -20,5 +20,9 @@ void ApplyInverseCamMul(cv::cuda::GpuMat& img, const float* cam_mul,
 
 void ApplyInverseCamMulAndPackRGBA(const cv::cuda::GpuMat& src, cv::cuda::GpuMat& dst,
                                    const float* cam_mul, cv::cuda::Stream* stream = nullptr);
+
+void ApplyInverseCamMulAndPackRGBAOriented(const cv::cuda::GpuMat& src, cv::cuda::GpuMat& dst,
+                                           const float* cam_mul, int flip,
+                                           cv::cuda::Stream* stream = nullptr);
 };
 };  // namespace alcedo

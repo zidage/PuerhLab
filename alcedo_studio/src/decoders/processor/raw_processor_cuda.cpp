@@ -8,6 +8,7 @@
 
 #include <chrono>
 #include <iostream>
+#include <sstream>
 #include <stdexcept>
 #include <vector>
 
@@ -28,10 +29,55 @@ namespace {
 
 using ProfileClock = std::chrono::steady_clock;
 
+struct DeferredCudaLog {
+  std::vector<std::string> entries;
+
+  void Add(std::string entry) { entries.push_back(std::move(entry)); }
+
+  void Flush() const {
+    if (entries.empty()) {
+      return;
+    }
+
+    std::cout << "[LOG] ";
+    for (size_t i = 0; i < entries.size(); ++i) {
+      if (i != 0) {
+        std::cout << " | ";
+      }
+      std::cout << entries[i];
+    }
+    std::cout << '\n';
+  }
+};
+
+thread_local DeferredCudaLog* g_deferred_cuda_log = nullptr;
+
+class ScopedDeferredCudaLog {
+ public:
+  explicit ScopedDeferredCudaLog(DeferredCudaLog& log) : prev_(g_deferred_cuda_log) {
+    g_deferred_cuda_log = &log;
+  }
+
+  ~ScopedDeferredCudaLog() { g_deferred_cuda_log = prev_; }
+
+ private:
+  DeferredCudaLog* prev_ = nullptr;
+};
+
+void AppendDeferredLog(std::string entry) {
+  if (g_deferred_cuda_log != nullptr) {
+    g_deferred_cuda_log->Add(std::move(entry));
+    return;
+  }
+
+  std::cout << "[LOG] " << entry << '\n';
+}
+
 void PrintProfileMs(const char* label, const ProfileClock::duration elapsed) {
-  std::cout << "[LOG] " << label << " takes: "
-            << std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count()
-            << " ms\n";
+  std::ostringstream oss;
+  oss << label << '=' << std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count()
+      << " ms";
+  AppendDeferredLog(oss.str());
 }
 
 void LogCpuProfileStep(const char* label, const ProfileClock::time_point start) {
@@ -49,14 +95,16 @@ void LogVramUsage(const char* tag) {
   size_t total_bytes = 0;
   const cudaError_t err = cudaMemGetInfo(&free_bytes, &total_bytes);
   if (err != cudaSuccess) {
-    std::cout << "[VRAM] " << tag << ": cudaMemGetInfo failed: " << cudaGetErrorString(err)
-              << "\n";
+    std::ostringstream oss;
+    oss << "VRAM " << tag << ": cudaMemGetInfo failed: " << cudaGetErrorString(err);
+    AppendDeferredLog(oss.str());
     return;
   }
   const size_t used_bytes = total_bytes - free_bytes;
-  std::cout << "[VRAM] " << tag << ": free=" << (free_bytes >> 20)
-            << " MB / total=" << (total_bytes >> 20)
-            << " MB (used=" << (used_bytes >> 20) << " MB)\n";
+  std::ostringstream oss;
+  oss << "VRAM " << tag << ": free=" << (free_bytes >> 20) << " MB, total="
+      << (total_bytes >> 20) << " MB, used=" << (used_bytes >> 20) << " MB";
+  AppendDeferredLog(oss.str());
 }
 
 auto DecodeResToDownsamplePasses(const DecodeRes decode_res) -> int {
@@ -147,20 +195,23 @@ void ApplyCudaGeometricCorrections(cv::cuda::GpuMat& gpu_img, const int flip,
 
 auto RawProcessor::ProcessCudaFullFrame() -> ImageBuffer {
   const auto full_frame_start = ProfileClock::now();
+  cv::cuda::Stream         stream;
+  CUDA::RcdWorkspace       rcd_workspace;
+  CUDA::HighlightWorkspace highlight_workspace;
+  cv::cuda::GpuMat         output_rgba;
 
   const auto stage_upload_start = ProfileClock::now();
   process_buffer_.SyncToGPU();
   process_buffer_.ReleaseCPUData();
   LogCpuProfileStep("RAW CUDA FullFrame sync/upload", stage_upload_start);
 
-  cv::cuda::Stream        stream;
-  CUDA::RcdWorkspace       rcd_workspace;
-  CUDA::HighlightWorkspace highlight_workspace;
   auto&                    gpu_img   = process_buffer_.GetCUDAImage();
-  cv::cuda::GpuMat         output_rgba;
 
   const auto stage_downsample_start = ProfileClock::now();
-  CUDA::DownsampleRaw(gpu_img, cfa_pattern_, DecodeResToDownsamplePasses(params_.decode_res_), &stream);
+  CUDA::DownsampleRaw(
+      gpu_img, cfa_pattern_,
+      std::max(0, DecodeResToDownsamplePasses(params_.decode_res_) - gpu_input_downsample_passes_),
+      &stream);
   LogCudaProfileStep(stream, "RAW CUDA FullFrame downsample", stage_downsample_start);
 
   const cv::Rect crop_rect =
@@ -181,24 +232,23 @@ auto RawProcessor::ProcessCudaFullFrame() -> ImageBuffer {
     }
     LogCpuProfileStep("RAW CUDA FullFrame crop", stage_crop_start);
 
-    const auto stage_highlight_start = ProfileClock::now();
     CUDA::HighlightCorrection correction = CUDA::BuildHighlightCorrection(raw_processor_);
     CUDA::HighlightAccumulation accumulation;
+    const auto stage_highlight_stats_start = ProfileClock::now();
     CUDA::AccumulateHighlightStats(gpu_img, correction, cv::Rect{}, highlight_workspace,
                                    accumulation, &stream);
     CUDA::FinalizeHighlightCorrection(accumulation, correction);
-    output_rgba.create(gpu_img.size(), CV_32FC4);
-    CUDA::ApplyHighlightCorrectionAndPackRGBA(gpu_img, output_rgba, correction,
-                                             raw_data_.color.cam_mul, &highlight_workspace,
-                                             &stream);
-    LogCudaProfileStep(stream, "RAW CUDA FullFrame highlight reconstruct + pack rgba",
+    LogCpuProfileStep("RAW CUDA FullFrame highlight stats", stage_highlight_stats_start);
+
+    const auto stage_highlight_start = ProfileClock::now();
+    CUDA::ApplyHighlightCorrectionAndPackRGBAOriented(gpu_img, output_rgba, correction,
+                                                      raw_data_.color.cam_mul,
+                                                      raw_data_.sizes.flip, &highlight_workspace,
+                                                      &stream);
+    LogCudaProfileStep(stream, "RAW CUDA FullFrame highlight reconstruct + pack rgba (oriented)",
                        stage_highlight_start);
 
     runtime_color_context_.output_in_camera_space_ = true;
-
-    const auto stage_geo_start = ProfileClock::now();
-    ApplyCudaGeometricCorrections(output_rgba, raw_data_.sizes.flip, &stream);
-    LogCudaProfileStep(stream, "RAW CUDA FullFrame geometric corrections", stage_geo_start);
 
     process_buffer_ = {std::move(output_rgba)};
     PrintProfileMs("RAW CUDA FullFrame", ProfileClock::now() - full_frame_start);
@@ -227,14 +277,11 @@ auto RawProcessor::ProcessCudaFullFrame() -> ImageBuffer {
     LogCpuProfileStep("RAW CUDA FullFrame crop", stage_crop_start);
   }
 
-  const auto stage_geo_start = ProfileClock::now();
-  ApplyCudaGeometricCorrections(gpu_img, raw_data_.sizes.flip, &stream);
-  LogCudaProfileStep(stream, "RAW CUDA FullFrame geometric corrections", stage_geo_start);
-
   const auto stage_pack_start = ProfileClock::now();
-  output_rgba.create(gpu_img.size(), CV_32FC4);
-  CUDA::ApplyInverseCamMulAndPackRGBA(gpu_img, output_rgba, raw_data_.color.cam_mul, &stream);
-  LogCudaProfileStep(stream, "RAW CUDA FullFrame apply inverse cam mul + pack rgba", stage_pack_start);
+  CUDA::ApplyInverseCamMulAndPackRGBAOriented(gpu_img, output_rgba, raw_data_.color.cam_mul,
+                                              raw_data_.sizes.flip, &stream);
+  LogCudaProfileStep(stream, "RAW CUDA FullFrame apply inverse cam mul + pack rgba (oriented)",
+                     stage_pack_start);
 
   runtime_color_context_.output_in_camera_space_ = true;
   process_buffer_                                = {std::move(output_rgba)};
@@ -246,19 +293,22 @@ auto RawProcessor::ProcessCudaFullFrame() -> ImageBuffer {
 
 auto RawProcessor::ProcessCudaTiled() -> ImageBuffer {
   const auto tiled_start = ProfileClock::now();
+  cv::cuda::Stream         stream;
+  CUDA::RcdWorkspace       rcd_workspace;
+  CUDA::HighlightWorkspace highlight_workspace;
 
   const auto stage_upload_start = ProfileClock::now();
   process_buffer_.SyncToGPU();
   process_buffer_.ReleaseCPUData();
   LogCpuProfileStep("RAW CUDA Tiled sync/upload", stage_upload_start);
 
-  cv::cuda::Stream         stream;
-  CUDA::RcdWorkspace       rcd_workspace;
-  CUDA::HighlightWorkspace highlight_workspace;
   auto&                    linear_raw = process_buffer_.GetCUDAImage();
 
   const auto stage_downsample_start = ProfileClock::now();
-  CUDA::DownsampleRaw(linear_raw, cfa_pattern_, DecodeResToDownsamplePasses(params_.decode_res_), &stream);
+  CUDA::DownsampleRaw(
+      linear_raw, cfa_pattern_,
+      std::max(0, DecodeResToDownsamplePasses(params_.decode_res_) - gpu_input_downsample_passes_),
+      &stream);
   LogCudaProfileStep(stream, "RAW CUDA Tiled downsample", stage_downsample_start);
 
   const auto stage_linear_start = ProfileClock::now();
@@ -341,10 +391,9 @@ auto RawProcessor::ProcessCudaTiled() -> ImageBuffer {
 }
 
 auto RawProcessor::ProcessDirectRgbCuda() -> ImageBuffer {
+  cv::cuda::Stream stream;
   process_buffer_.SyncToGPU();
   process_buffer_.ReleaseCPUData();
-
-  cv::cuda::Stream stream;
   auto&            gpu_img = process_buffer_.GetCUDAImage();
   ApplyCudaGeometricCorrections(gpu_img, raw_data_.sizes.flip, &stream);
   stream.waitForCompletion();
@@ -353,15 +402,16 @@ auto RawProcessor::ProcessDirectRgbCuda() -> ImageBuffer {
 
 auto RawProcessor::ProcessCuda() -> ImageBuffer {
   const auto start = ProfileClock::now();
+  DeferredCudaLog deferred_log;
+  const ScopedDeferredCudaLog scoped_log(deferred_log);
   LogVramUsage("ProcessCuda ENTER");
 
   if (input_kind_ == RawInputKind::DebayeredRgb) {
     auto out = ProcessDirectRgbCuda();
     const auto end = ProfileClock::now();
-    std::cout << "[LOG] RAW decoding takes: "
-              << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count()
-              << " ms\n";
+    PrintProfileMs("RAW decoding", end - start);
     LogVramUsage("ProcessCuda EXIT (DebayeredRgb)");
+    deferred_log.Flush();
     return out;
   }
 
@@ -380,10 +430,10 @@ auto RawProcessor::ProcessCuda() -> ImageBuffer {
   ImageBuffer out = mode == detail::CudaExecutionMode::Tiled ? ProcessCudaTiled()
                                                              : ProcessCudaFullFrame();
   const auto end = ProfileClock::now();
-  std::cout << "[LOG] RAW decoding takes: "
-            << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << " ms\n";
+  PrintProfileMs("RAW decoding", end - start);
   LogVramUsage(mode == detail::CudaExecutionMode::Tiled ? "ProcessCuda EXIT (Tiled)"
                                                         : "ProcessCuda EXIT (FullFrame)");
+  deferred_log.Flush();
   return out;
 }
 

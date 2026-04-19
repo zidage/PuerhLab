@@ -27,6 +27,41 @@
 namespace alcedo {
 namespace {
 
+auto DecodeResToDownsamplePasses(const DecodeRes decode_res) -> int {
+  switch (decode_res) {
+    case DecodeRes::FULL:
+      return 0;
+    case DecodeRes::HALF:
+      return 1;
+    case DecodeRes::QUARTER:
+      return 2;
+    case DecodeRes::EIGHTH:
+      return 3;
+    default:
+      throw std::runtime_error("RawProcessor: Unknown decode resolution");
+  }
+}
+
+void NormalizeDecodeResForGpu(const cv::Size& image_size, RawParams& params) {
+  const int long_side = std::max(image_size.width, image_size.height);
+  if (long_side > 8500 && params.decode_res_ == DecodeRes::QUARTER) {
+    params.decode_res_ = DecodeRes::EIGHTH;
+  }
+}
+
+auto DownsampleRawForGpuInput(const cv::Mat& raw_view, RawCfaPattern& pattern, const int passes)
+    -> cv::Mat {
+  if (passes <= 0) {
+    return raw_view.clone();
+  }
+
+  cv::Mat downsampled = DownsampleRaw2x(raw_view, pattern);
+  for (int pass = 1; pass < passes; ++pass) {
+    downsampled = DownsampleRaw2x(downsampled, pattern);
+  }
+  return downsampled;
+}
+
 void ThrowUnsupportedGPUBackend(const char* op_name) {
 #ifdef HAVE_METAL
   throw std::runtime_error(std::string("RawProcessor: ") + op_name +
@@ -279,6 +314,7 @@ auto RawProcessor::ProcessGpu() -> ImageBuffer {
 auto RawProcessor::Process() -> ImageBuffer {
   input_kind_ = ClassifyRawInput(raw_data_, raw_processor_.imgdata.idata);
   runtime_color_context_.output_in_camera_space_ = false;
+  gpu_input_downsample_passes_                   = 0;
 
   if (input_kind_ == RawInputKind::DebayeredRgb) {
     params_.highlights_reconstruct_              = false;
@@ -319,13 +355,22 @@ auto RawProcessor::Process() -> ImageBuffer {
     throw std::runtime_error("RawProcessor: CPU backend does not support X-Trans CFA input.");
   }
 
+  if (params_.gpu_backend_ == RawGpuBackend::GPU) {
+    NormalizeDecodeResForGpu(cv::Size(static_cast<int>(raw_data_.sizes.raw_width),
+                                      static_cast<int>(raw_data_.sizes.raw_height)),
+                             params_);
+    gpu_input_downsample_passes_ = DecodeResToDownsamplePasses(params_.decode_res_);
+
+    cv::Mat unpacked_view{raw_data_.sizes.raw_height, raw_data_.sizes.raw_width, CV_16UC1,
+                          raw_data_.raw_image};
+    process_buffer_ = {
+        DownsampleRawForGpuInput(unpacked_view, cfa_pattern_, gpu_input_downsample_passes_)};
+    return ProcessGpu();
+  }
+
   cv::Mat unpacked_view{raw_data_.sizes.raw_height, raw_data_.sizes.raw_width, CV_16UC1,
                         raw_data_.raw_image};
   process_buffer_ = {unpacked_view.clone()};
-
-  if (params_.gpu_backend_ == RawGpuBackend::GPU) {
-    return ProcessGpu();
-  }
 
   SetDecodeRes();
   ApplyLinearization();

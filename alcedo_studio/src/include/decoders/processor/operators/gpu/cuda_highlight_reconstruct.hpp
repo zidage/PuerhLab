@@ -57,11 +57,15 @@ class HighlightWorkspace {
                                                   const float* cam_mul,
                                                   HighlightWorkspace* workspace,
                                                   cv::cuda::Stream* stream);
+  friend void ApplyHighlightCorrectionAndPackRGBAOriented(const cv::cuda::GpuMat& img,
+                                                          cv::cuda::GpuMat& dst,
+                                                          const HighlightCorrection& correction,
+                                                          const float* cam_mul, int flip,
+                                                          HighlightWorkspace* workspace,
+                                                          cv::cuda::Stream* stream);
   void Reserve(int width, int height);
   void Release();
 
-  uint8_t*         mask_buf_      = nullptr;
-  uint8_t*         dilated_mask_  = nullptr;
   int*             anyclipped_    = nullptr;
   float*           sums_          = nullptr;
   float*           cnts_          = nullptr;
@@ -84,6 +88,11 @@ void ApplyHighlightCorrectionAndPackRGBA(const cv::cuda::GpuMat& img, cv::cuda::
                                          const float* cam_mul,
                                          HighlightWorkspace* workspace = nullptr,
                                          cv::cuda::Stream* stream = nullptr);
+void ApplyHighlightCorrectionAndPackRGBAOriented(const cv::cuda::GpuMat& img, cv::cuda::GpuMat& dst,
+                                                 const HighlightCorrection& correction,
+                                                 const float* cam_mul, int flip,
+                                                 HighlightWorkspace* workspace = nullptr,
+                                                 cv::cuda::Stream* stream = nullptr);
 void HighlightReconstruct(cv::cuda::GpuMat& img, LibRaw& raw_processor,
                           HighlightWorkspace* workspace = nullptr,
                           cv::cuda::Stream* stream = nullptr);

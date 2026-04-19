@@ -115,7 +115,7 @@ struct FontFamilies {
   QString ui_headline = QStringLiteral("Manrope");
   QString ui_headline_zh = QStringLiteral("Noto Sans SC");
   QString effective_language_code = QStringLiteral("en");
-  QString data = QStringLiteral("Google Sans Code Monospaced");
+  QString data = QStringLiteral("DM Mono");
   QString mono;
 };
 
@@ -313,8 +313,8 @@ void AppTheme::RegisterFonts() {
   RegisterFontResource(QStringLiteral(":/fonts/main_Inter_italic.ttf"), families.ui_latin);
   families.ui_zh = RegisterFontResource(QStringLiteral(":/fonts/main_NotoSans_zh.ttf"),
                                         QStringLiteral("Noto Sans SC"));
-  families.data = RegisterFontResource(QStringLiteral(":/fonts/data_mono.ttf"),
-                                       QStringLiteral("Google Sans Code Monospaced"));
+  families.data =
+      RegisterFontResource(QStringLiteral(":/fonts/data_DMMono.ttf"), QStringLiteral("DM Mono"));
   const QString registered_headline_zh =
       RegisterFontResource(QStringLiteral(":/fonts/main_HanaMinA.ttf"), QString());
   if (!registered_headline_zh.isEmpty()) {

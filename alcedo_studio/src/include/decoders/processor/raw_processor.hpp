@@ -42,6 +42,7 @@ class RawProcessor {
   RawRuntimeColorContext  runtime_color_context_;
   RawCfaPattern           cfa_pattern_;
   RawInputKind            input_kind_ = RawInputKind::Unsupported;
+  int                     gpu_input_downsample_passes_ = 0;
 
   const libraw_rawdata_t& raw_data_;
   LibRaw&                 raw_processor_;
