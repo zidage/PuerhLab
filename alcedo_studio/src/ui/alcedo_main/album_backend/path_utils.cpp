@@ -20,14 +20,6 @@
 
 namespace alcedo::ui::album_util {
 
-namespace {
-
-auto Tr(const char* text) -> QString {
-  return QCoreApplication::translate(ALCEDO_I18N_CONTEXT, text);
-}
-
-}  // namespace
-
 auto WStringToQString(const std::wstring& value) -> QString {
   return QString::fromStdWString(value);
 }

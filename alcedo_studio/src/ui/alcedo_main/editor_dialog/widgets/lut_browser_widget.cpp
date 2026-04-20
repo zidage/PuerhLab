@@ -34,10 +34,6 @@ constexpr int kListIconSize   = 14;
 constexpr int kCheckBadgeSize = 14;
 constexpr int kRowHeight      = 32;
 
-auto Tr(const char* text) -> QString {
-  return QCoreApplication::translate(ALCEDO_I18N_CONTEXT, text);
-}
-
 auto BuildLutEntriesListStyle() -> QString {
   return AppTheme::EditorListWidgetStyle() +
          QStringLiteral("QListWidget {"

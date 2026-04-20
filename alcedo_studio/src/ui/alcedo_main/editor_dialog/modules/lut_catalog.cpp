@@ -17,10 +17,6 @@
 namespace alcedo::ui::lut_catalog {
 namespace {
 
-auto Tr(const char* text) -> QString {
-  return QCoreApplication::translate(ALCEDO_I18N_CONTEXT, text);
-}
-
 auto PathToUtf8(const std::filesystem::path& path) -> std::string {
   const auto utf8 = path.generic_u8string();
   return {reinterpret_cast<const char*>(utf8.data()), utf8.size()};

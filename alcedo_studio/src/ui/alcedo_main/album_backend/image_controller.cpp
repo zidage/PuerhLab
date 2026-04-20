@@ -40,10 +40,6 @@ auto ToVariantIdList(const std::vector<sl_element_id_t>& ids) -> QVariantList {
   return out;
 }
 
-auto Tr(const char* text) -> QString {
-  return QCoreApplication::translate(ALCEDO_I18N_CONTEXT, text);
-}
-
 auto DashValue() -> QString {
   return QString::fromUtf8("\u2014");
 }

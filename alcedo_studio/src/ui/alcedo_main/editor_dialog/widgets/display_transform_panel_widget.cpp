@@ -10,6 +10,12 @@ namespace alcedo::ui {
 DisplayTransformPanelWidget::DisplayTransformPanelWidget(QWidget* parent) : QWidget(parent) {}
 
 void EditorDialog::BuildDisplayTransformPanel() {
+    auto* controls_header = new QLabel(Tr("Display Rendering Transform"), drt_controls_);
+    controls_header->setObjectName("SectionTitle");
+    controls_header->setStyleSheet(AppTheme::EditorLabelStyle(AppTheme::Instance().textColor()));
+    AppTheme::MarkFontRole(controls_header, AppTheme::FontRole::UiHeadline);
+    drt_controls_layout_->insertWidget(0, controls_header, 0);
+
     auto addDrtSection = [&](const QString& title, const QString& subtitle) {
       auto* frame = new QFrame(drt_controls_);
       frame->setObjectName("EditorSection");
@@ -156,10 +162,6 @@ void EditorDialog::BuildDisplayTransformPanel() {
       drt_controls_layout_->insertWidget(drt_controls_layout_->count() - 1, row);
       return slider;
     };
-
-    addDrtSection(Tr("Display Rendering Transform"),
-                  Tr("Shared display encoding controls with switchable ACES 2.0 and OpenDRT "
-                     "method presets."));
 
     odt_encoding_space_combo_ = addDrtComboBox(
         drt_controls_, drt_controls_layout_, Tr("Encoding Space"), kDisplayEncodingSpaceOptions,

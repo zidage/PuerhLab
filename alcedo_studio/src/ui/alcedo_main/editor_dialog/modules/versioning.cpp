@@ -31,10 +31,6 @@ namespace alcedo::ui::versioning {
 
 namespace {
 
-auto Tr(const char* text) -> QString {
-  return QCoreApplication::translate(ALCEDO_I18N_CONTEXT, text);
-}
-
 void AddEmptyStateItem(QListWidget* list_widget, const QString& text) {
   if (!list_widget) {
     return;

@@ -23,6 +23,12 @@ constexpr int kSliderHeight          = 26;
 void EditorDialog::BuildGeometryRawPanels() {
     const auto& theme = AppTheme::Instance();
 
+    auto* controls_header = new QLabel(Tr("Geometry"), geometry_controls_);
+    controls_header->setObjectName("SectionTitle");
+    controls_header->setStyleSheet(AppTheme::EditorLabelStyle(theme.textColor()));
+    AppTheme::MarkFontRole(controls_header, AppTheme::FontRole::UiHeadline);
+    geometry_controls_layout_->insertWidget(0, controls_header, 0);
+
     // --- helpers -----------------------------------------------------------
 
     auto addSection = [&](const QString& title) -> std::pair<QFrame*, QVBoxLayout*> {
@@ -130,7 +136,8 @@ void EditorDialog::BuildGeometryRawPanels() {
       geometry_crop_aspect_preset_combo_->setFixedHeight(kControlHeight);
       geometry_crop_aspect_preset_combo_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
       for (const auto& option : geometry::CropAspectPresetOptions()) {
-        geometry_crop_aspect_preset_combo_->addItem(option.label_, static_cast<int>(option.value_));
+        geometry_crop_aspect_preset_combo_->addItem(Tr(option.label_),
+                                                    static_cast<int>(option.value_));
       }
       geometry_crop_aspect_preset_combo_->setCurrentIndex(std::max(
           0, geometry_crop_aspect_preset_combo_->findData(

@@ -12,6 +12,12 @@ RawDecodePanelWidget::RawDecodePanelWidget(QWidget* parent) : QWidget(parent) {}
 void EditorDialog::BuildRawDecodePanel() {
   lens_catalog_ = LoadLensCatalog();
 
+  auto* controls_header = new QLabel(Tr("RAW Decode"), raw_controls_);
+  controls_header->setObjectName("SectionTitle");
+  controls_header->setStyleSheet(AppTheme::EditorLabelStyle(AppTheme::Instance().textColor()));
+  AppTheme::MarkFontRole(controls_header, AppTheme::FontRole::UiHeadline);
+  raw_controls_layout_->insertWidget(0, controls_header, 0);
+
   auto* raw_layout = qobject_cast<QVBoxLayout*>(raw_controls_ ? raw_controls_->layout() : nullptr);
   if (!raw_layout) {
     return;

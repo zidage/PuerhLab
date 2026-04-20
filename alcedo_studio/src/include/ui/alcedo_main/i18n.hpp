@@ -16,6 +16,14 @@
 
 #define ALCEDO_I18N_CONTEXT "Alcedo"
 
+namespace alcedo::ui {
+
+inline auto Tr(const char* text) -> QString {
+  return QCoreApplication::translate(ALCEDO_I18N_CONTEXT, text);
+}
+
+}  // namespace alcedo::ui
+
 namespace alcedo::ui::i18n {
 
 struct LocalizedText {

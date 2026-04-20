@@ -122,10 +122,6 @@
 namespace alcedo::ui {
 namespace {
 
-auto Tr(const char* text) -> QString {
-  return QCoreApplication::translate(ALCEDO_I18N_CONTEXT, text);
-}
-
 const auto kShortcutUndoHistoryId   = QStringLiteral("editor_dialog.undo_history_transaction");
 const auto kShortcutResetGeometryId = QStringLiteral("editor_dialog.reset_geometry");
 const auto kShortcutSelectPrevLutId = QStringLiteral("editor_dialog.select_prev_lut");
