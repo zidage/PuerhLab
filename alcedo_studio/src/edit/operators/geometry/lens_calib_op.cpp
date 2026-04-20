@@ -393,7 +393,7 @@ auto ResolveScaleFromModifier(const lfLens* lens, float focal_mm, float crop_fac
   }
 
   auto modifier = std::unique_ptr<lfModifier, LensfunModifierDeleter>(
-      lf_modifier_create(lens, focal_mm, crop_factor, width, height, LF_PF_F32, false));
+      lf_modifier_create(lens, focal_mm, crop_factor, width, height, LF_PF_F32, true));
   if (!modifier) {
     return 1.0f;
   }
@@ -943,6 +943,18 @@ void LensCalibOp::ResolveRuntime(OperatorParams& params) const {
        runtime.apply_projection == 0 && runtime.apply_crop == 0)
           ? 1
           : 0;
+
+  std::cout << "LensCalibOp runtime: lens=\"" << meta.lens_model_ << "\""
+            << " focal=" << meta.focal_length_mm_ << " crop_factor=" << crop_factor
+            << " apply_distortion=" << runtime.apply_distortion
+            << " apply_tca=" << runtime.apply_tca
+            << " apply_projection=" << runtime.apply_projection
+            << " apply_crop=" << runtime.apply_crop
+            << " crop_mode=" << runtime.crop_mode
+            << " resolved_scale=" << runtime.resolved_scale
+            << " crop_bounds=[" << runtime.crop_bounds[0] << ", " << runtime.crop_bounds[1]
+            << ", " << runtime.crop_bounds[2] << ", " << runtime.crop_bounds[3] << "]"
+            << std::endl;
 
   if (runtime.apply_vignetting == 0 && runtime.apply_distortion == 0 && runtime.apply_tca == 0 &&
       runtime.apply_projection == 0 && runtime.apply_crop == 0) {

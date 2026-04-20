@@ -9,8 +9,12 @@
 #include <opencv2/core/cuda_types.hpp>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
+#include <cstdint>
+#include <iostream>
 #include <stdexcept>
+#include <vector>
 
 #include "decoders/processor/operators/gpu/cuda_raw_proc_utils.hpp"
 
@@ -550,6 +554,18 @@ __device__ auto ApplyCircleCropAlpha(const float4& in, int x, int y, const LensC
   return in;
 }
 
+__device__ auto IsSampleCoordValid(float sx, float sy, int width, int height) -> bool {
+  if (width <= 0 || height <= 0) {
+    return false;
+  }
+
+  const int x0 = static_cast<int>(floorf(sx));
+  const int y0 = static_cast<int>(floorf(sy));
+  const int x1 = x0 + 1;
+  const int y1 = y0 + 1;
+  return x0 >= 0 && y0 >= 0 && x1 < width && y1 < height;
+}
+
 __global__ void LensVignettingKernel(cv::cuda::PtrStepSz<float4> image, LensCalibGpuParams p) {
   const int x = blockIdx.x * blockDim.x + threadIdx.x;
   const int y = blockIdx.y * blockDim.y + threadIdx.y;
@@ -612,6 +628,36 @@ __global__ void LensWarpGeometryTcaKernel(const cv::cuda::PtrStepSz<float4> src,
   dst(y, x) = out;
 }
 
+__global__ void LensValidityMaskKernel(cv::cuda::PtrStepSz<unsigned char> mask, LensCalibGpuParams p,
+                                       int src_cols, int src_rows) {
+  const int x = blockIdx.x * blockDim.x + threadIdx.x;
+  const int y = blockIdx.y * blockDim.y + threadIdx.y;
+  if (x >= mask.cols || y >= mask.rows) {
+    return;
+  }
+
+  float2 g = PixelToNormalized(static_cast<float>(x), static_cast<float>(y), p);
+  g        = ApplyScaleAndPerspective(g, p);
+  g        = ApplyProjectionTransform(g, p);
+  g        = ApplyDistortion(g, p);
+
+  float2 r = g;
+  float2 b = g;
+  ApplyTca(g, r, b, p);
+
+  const float2 gp = NormalizedToPixel(g, p);
+  const float2 rp = NormalizedToPixel(r, p);
+  const float2 bp = NormalizedToPixel(b, p);
+
+  bool valid = IsSampleCoordValid(gp.x, gp.y, src_cols, src_rows);
+  if (valid && p.apply_tca != 0) {
+    valid = IsSampleCoordValid(rp.x, rp.y, src_cols, src_rows) &&
+            IsSampleCoordValid(bp.x, bp.y, src_cols, src_rows);
+  }
+
+  mask(y, x) = valid ? static_cast<unsigned char>(255) : static_cast<unsigned char>(0);
+}
+
 auto ComputeRectCropRoi(const LensCalibGpuParams& params) -> cv::Rect {
   const int width  = params.dst_width;
   const int height = params.dst_height;
@@ -636,41 +682,158 @@ auto ComputeRectCropRoi(const LensCalibGpuParams& params) -> cv::Rect {
   return cv::Rect(x0, y0, std::max(1, x1 - x0), std::max(1, y1 - y0));
 }
 
-auto ComputeAutoCropRoiFromAlpha(const cv::cuda::GpuMat& image, float alpha_threshold = 1e-4f)
-    -> cv::Rect {
-  if (image.empty() || image.type() != CV_32FC4) {
+auto ComputeLargestValidRectFromMask(const cv::Mat& mask) -> cv::Rect {
+  if (mask.empty() || mask.type() != CV_8UC1) {
+    return cv::Rect();
+  }
+
+  std::vector<int> heights(static_cast<size_t>(mask.cols), 0);
+  std::vector<int> stack;
+  stack.reserve(static_cast<size_t>(mask.cols) + 1U);
+
+  int best_left   = 0;
+  int best_right  = mask.cols;
+  int best_top    = 0;
+  int best_bottom = mask.rows;
+  int best_area   = 0;
+
+  for (int y = 0; y < mask.rows; ++y) {
+    const auto* row = mask.ptr<unsigned char>(y);
+    for (int x = 0; x < mask.cols; ++x) {
+      heights[static_cast<size_t>(x)] =
+          (row[x] != 0) ? (heights[static_cast<size_t>(x)] + 1) : 0;
+    }
+
+    stack.clear();
+    for (int x = 0; x <= mask.cols; ++x) {
+      const int current_height = (x < mask.cols) ? heights[static_cast<size_t>(x)] : 0;
+      while (!stack.empty() &&
+             heights[static_cast<size_t>(stack.back())] > current_height) {
+        const int height = heights[static_cast<size_t>(stack.back())];
+        stack.pop_back();
+
+        const int left   = stack.empty() ? 0 : (stack.back() + 1);
+        const int right  = x;
+        const int area   = height * (right - left);
+        const int bottom = y + 1;
+        const int top    = bottom - height;
+
+        if (area > best_area) {
+          best_area   = area;
+          best_left   = left;
+          best_right  = right;
+          best_top    = top;
+          best_bottom = bottom;
+        }
+      }
+      stack.push_back(x);
+    }
+  }
+
+  if (best_area <= 0) {
+    return cv::Rect(0, 0, mask.cols, mask.rows);
+  }
+
+  return cv::Rect(best_left, best_top, std::max(1, best_right - best_left),
+                  std::max(1, best_bottom - best_top));
+}
+
+auto RefineValidityMaskWithBorderBlackPixels(const cv::Mat& image, const cv::Mat& geometry_mask,
+                                             float black_threshold = 1e-4f) -> cv::Mat {
+  if (image.empty() || image.type() != CV_32FC4 || geometry_mask.empty() ||
+      geometry_mask.type() != CV_8UC1 || image.size() != geometry_mask.size()) {
+    return geometry_mask;
+  }
+
+  cv::Mat refined = geometry_mask.clone();
+  cv::Mat visited(image.rows, image.cols, CV_8UC1, cv::Scalar(0));
+
+  std::vector<cv::Point> queue;
+  queue.reserve(static_cast<size_t>(image.rows + image.cols) * 2U);
+
+  const auto is_near_black = [&](int x, int y) -> bool {
+    const cv::Vec4f& pixel = image.at<cv::Vec4f>(y, x);
+    const float max_rgb    = std::max(std::max(pixel[0], pixel[1]), pixel[2]);
+    return max_rgb <= black_threshold;
+  };
+
+  const auto try_enqueue = [&](int x, int y) {
+    if (x < 0 || y < 0 || x >= image.cols || y >= image.rows) {
+      return;
+    }
+    if (visited.at<std::uint8_t>(y, x) != 0) {
+      return;
+    }
+    if (geometry_mask.at<std::uint8_t>(y, x) == 0) {
+      return;
+    }
+    if (!is_near_black(x, y)) {
+      return;
+    }
+    visited.at<std::uint8_t>(y, x) = 1;
+    queue.emplace_back(x, y);
+  };
+
+  for (int x = 0; x < image.cols; ++x) {
+    try_enqueue(x, 0);
+    try_enqueue(x, image.rows - 1);
+  }
+  for (int y = 0; y < image.rows; ++y) {
+    try_enqueue(0, y);
+    try_enqueue(image.cols - 1, y);
+  }
+
+  static const std::array<cv::Point, 4> kNeighbors = {
+      cv::Point{1, 0}, cv::Point{-1, 0}, cv::Point{0, 1}, cv::Point{0, -1}};
+
+  for (size_t index = 0; index < queue.size(); ++index) {
+    const cv::Point pt = queue[index];
+    refined.at<std::uint8_t>(pt.y, pt.x) = 0;
+
+    for (const cv::Point delta : kNeighbors) {
+      const cv::Point next = pt + delta;
+      try_enqueue(next.x, next.y);
+    }
+  }
+
+  return refined;
+}
+
+auto ComputeAutoCropRoiFromValidityMask(const cv::cuda::GpuMat& mask) -> cv::Rect {
+  if (mask.empty() || mask.type() != CV_8UC1) {
     return cv::Rect();
   }
 
   cv::Mat host;
-  image.download(host);
-  if (host.empty() || host.type() != CV_32FC4) {
+  mask.download(host);
+  if (host.empty() || host.type() != CV_8UC1) {
+    return cv::Rect();
+  }
+  return ComputeLargestValidRectFromMask(host);
+}
+
+auto ComputeAutoCropRoi(const cv::cuda::GpuMat& image, const cv::cuda::GpuMat& geometry_mask)
+    -> cv::Rect {
+  if (image.empty() || image.type() != CV_32FC4 || geometry_mask.empty() ||
+      geometry_mask.type() != CV_8UC1 || image.size() != geometry_mask.size()) {
     return cv::Rect();
   }
 
-  int min_x = host.cols;
-  int min_y = host.rows;
-  int max_x = -1;
-  int max_y = -1;
-
-  for (int y = 0; y < host.rows; ++y) {
-    const auto* row = host.ptr<cv::Vec4f>(y);
-    for (int x = 0; x < host.cols; ++x) {
-      if (row[x][3] <= alpha_threshold) {
-        continue;
-      }
-      min_x = std::min(min_x, x);
-      min_y = std::min(min_y, y);
-      max_x = std::max(max_x, x);
-      max_y = std::max(max_y, y);
-    }
+  cv::Mat host_image;
+  image.download(host_image);
+  if (host_image.empty() || host_image.type() != CV_32FC4) {
+    return cv::Rect();
   }
 
-  if (max_x < min_x || max_y < min_y) {
-    return cv::Rect(0, 0, host.cols, host.rows);
+  cv::Mat host_geometry_mask;
+  geometry_mask.download(host_geometry_mask);
+  if (host_geometry_mask.empty() || host_geometry_mask.type() != CV_8UC1) {
+    return cv::Rect();
   }
 
-  return cv::Rect(min_x, min_y, (max_x - min_x) + 1, (max_y - min_y) + 1);
+  const cv::Mat refined_mask =
+      RefineValidityMaskWithBorderBlackPixels(host_image, host_geometry_mask);
+  return ComputeLargestValidRectFromMask(refined_mask);
 }
 
 }  // namespace
@@ -727,14 +890,30 @@ void ApplyLensCalibration(cv::cuda::GpuMat& image, const LensCalibGpuParams& par
 
   if (has_rect_crop) {
     const cv::Rect roi = ComputeRectCropRoi(launch);
+    std::cout << "LensCalib CUDA rect crop: src=" << image.cols << "x" << image.rows
+              << " roi=(" << roi.x << ", " << roi.y << ", " << roi.width << ", " << roi.height
+              << ")" << std::endl;
     if (roi.width > 0 && roi.height > 0) {
       image = image(roi).clone();
+      std::cout << "LensCalib CUDA rect crop result: " << image.cols << "x" << image.rows
+                << std::endl;
     }
   } else if (has_auto_crop) {
-    const cv::Rect roi = ComputeAutoCropRoiFromAlpha(image);
+    cv::cuda::GpuMat validity_mask(image.rows, image.cols, CV_8UC1);
+    LensValidityMaskKernel<<<grid, block>>>(validity_mask, launch, launch.src_width,
+                                            launch.src_height);
+    CUDA_CHECK(cudaGetLastError());
+    CUDA_CHECK(cudaDeviceSynchronize());
+
+    const cv::Rect roi = ComputeAutoCropRoi(image, validity_mask);
+    std::cout << "LensCalib CUDA auto crop: src=" << image.cols << "x" << image.rows
+              << " roi=(" << roi.x << ", " << roi.y << ", " << roi.width << ", " << roi.height
+              << ")" << std::endl;
     if (roi.width > 0 && roi.height > 0 &&
         (roi.width < image.cols || roi.height < image.rows)) {
       image = image(roi).clone();
+      std::cout << "LensCalib CUDA auto crop result: " << image.cols << "x" << image.rows
+                << std::endl;
     }
   }
 }

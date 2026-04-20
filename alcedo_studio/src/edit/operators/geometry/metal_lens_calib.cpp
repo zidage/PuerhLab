@@ -14,6 +14,7 @@
 #include <cstring>
 #include <stdexcept>
 #include <utility>
+#include <vector>
 
 #include <opencv2/core/mat.hpp>
 
@@ -195,34 +196,63 @@ auto ComputeRectCropRoi(const LensCalibGpuParams& params) -> cv::Rect {
   return cv::Rect(x0, y0, std::max(1, x1 - x0), std::max(1, y1 - y0));
 }
 
-auto ComputeAutoCropRoiFromAlpha(const cv::Mat& image, float alpha_threshold = 1e-4f) -> cv::Rect {
+auto ComputeAutoCropRoiFromAlpha(const cv::Mat& image,
+                                 float alpha_threshold = 1.0f - 1e-4f) -> cv::Rect {
   if (image.empty() || image.type() != CV_32FC4) {
     return cv::Rect();
   }
 
-  int min_x = image.cols;
-  int min_y = image.rows;
-  int max_x = -1;
-  int max_y = -1;
+  std::vector<int> heights(static_cast<size_t>(image.cols), 0);
+  std::vector<int> stack;
+  stack.reserve(static_cast<size_t>(image.cols) + 1U);
+
+  int best_left   = 0;
+  int best_right  = image.cols;
+  int best_top    = 0;
+  int best_bottom = image.rows;
+  int best_area   = 0;
 
   for (int y = 0; y < image.rows; ++y) {
     const auto* row = image.ptr<cv::Vec4f>(y);
     for (int x = 0; x < image.cols; ++x) {
-      if (row[x][3] <= alpha_threshold) {
-        continue;
+      heights[static_cast<size_t>(x)] = (row[x][3] >= alpha_threshold)
+                                            ? (heights[static_cast<size_t>(x)] + 1)
+                                            : 0;
+    }
+
+    stack.clear();
+    for (int x = 0; x <= image.cols; ++x) {
+      const int current_height =
+          (x < image.cols) ? heights[static_cast<size_t>(x)] : 0;
+      while (!stack.empty() &&
+             heights[static_cast<size_t>(stack.back())] > current_height) {
+        const int height = heights[static_cast<size_t>(stack.back())];
+        stack.pop_back();
+
+        const int left   = stack.empty() ? 0 : (stack.back() + 1);
+        const int right  = x;
+        const int area   = height * (right - left);
+        const int bottom = y + 1;
+        const int top    = bottom - height;
+
+        if (area > best_area) {
+          best_area   = area;
+          best_left   = left;
+          best_right  = right;
+          best_top    = top;
+          best_bottom = bottom;
+        }
       }
-      min_x = std::min(min_x, x);
-      min_y = std::min(min_y, y);
-      max_x = std::max(max_x, x);
-      max_y = std::max(max_y, y);
+      stack.push_back(x);
     }
   }
 
-  if (max_x < min_x || max_y < min_y) {
+  if (best_area <= 0) {
     return cv::Rect(0, 0, image.cols, image.rows);
   }
 
-  return cv::Rect(min_x, min_y, (max_x - min_x) + 1, (max_y - min_y) + 1);
+  return cv::Rect(best_left, best_top, std::max(1, best_right - best_left),
+                  std::max(1, best_bottom - best_top));
 }
 
 void DispatchVignetting(MTL::CommandBuffer* command_buffer, MTL::Buffer* image_buffer,
