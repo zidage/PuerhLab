@@ -5,11 +5,11 @@
 
 #include "ui/alcedo_main/editor_dialog/modules/lut_catalog.hpp"
 
+class QAction;
 class QLabel;
 class QListWidget;
-class QPushButton;
-class QComboBox;
 class QLineEdit;
+class QToolButton;
 
 namespace alcedo::ui {
 
@@ -51,16 +51,17 @@ class LutBrowserWidget final : public QWidget {
   void         RefreshSelectionStyles();
 
   QLabel*      title_label_          = nullptr;
-  QLabel*      subtitle_label_       = nullptr;
   ElidedLabel* directory_label_      = nullptr;
   QLabel*      status_label_         = nullptr;
-  QLabel*      sort_label_           = nullptr;
   QLabel*      search_summary_label_ = nullptr;
   QLineEdit*   search_edit_          = nullptr;
-  QComboBox*   sort_field_combo_     = nullptr;
-  QComboBox*   sort_order_combo_     = nullptr;
-  QPushButton* open_folder_btn_      = nullptr;
-  QPushButton* refresh_btn_          = nullptr;
+  QToolButton* sort_btn_             = nullptr;
+  QToolButton* folder_btn_           = nullptr;
+  QAction*     sort_field_name_action_    = nullptr;
+  QAction*     sort_field_time_action_    = nullptr;
+  QAction*     sort_order_asc_action_     = nullptr;
+  QAction*     sort_order_desc_action_    = nullptr;
+  QAction*     refresh_action_            = nullptr;
   QListWidget* entries_list_         = nullptr;
   std::vector<lut_catalog::LutCatalogEntry> source_entries_{};
   std::vector<lut_catalog::LutCatalogEntry> visible_entries_{};

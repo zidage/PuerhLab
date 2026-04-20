@@ -3,18 +3,22 @@
 //  Additional permission under GPLv3 section 7 applies; see the LICENSE file.
 
 #include "ui/alcedo_main/editor_dialog/widgets/lut_browser_widget.hpp"
-#include <qlabel.h>
 
 #include <QAbstractItemView>
-#include <QComboBox>
+#include <QAction>
+#include <QActionGroup>
 #include <QCoreApplication>
 #include <QFrame>
 #include <QHBoxLayout>
+#include <QIcon>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
 #include <QListWidgetItem>
-#include <QPushButton>
+#include <QMenu>
+#include <QPainter>
+#include <QPainterPath>
+#include <QToolButton>
 #include <QVBoxLayout>
 #include <QVariant>
 #include <algorithm>
@@ -26,24 +30,21 @@
 namespace alcedo::ui {
 namespace {
 
+constexpr int kListIconSize   = 18;
+constexpr int kCheckBadgeSize = 18;
+constexpr int kRowHeight      = 44;
+
 auto Tr(const char* text) -> QString {
   return QCoreApplication::translate(ALCEDO_I18N_CONTEXT, text);
 }
 
-auto BuildSearchContainerStyle() -> QString {
-  return QStringLiteral(
-             "QFrame#LutBrowserSearchContainer {"
-             "  background: transparent;"
-             "  border: none;"
-             "}");
-}
-
 auto BuildLutEntriesListStyle() -> QString {
-  return AppTheme::EditorListWidgetStyle() + QStringLiteral(
-                                                 "QListWidget {"
-                                                 "  border-bottom-left-radius: 14px;"
-                                                 "  border-bottom-right-radius: 14px;"
-                                                 "}");
+  return AppTheme::EditorListWidgetStyle() +
+         QStringLiteral("QListWidget {"
+                        "  background: transparent;"
+                        "  border: none;"
+                        "}"
+                        "QListWidget::item { border: none; }");
 }
 
 auto BuildSearchEditStyle() -> QString {
@@ -52,27 +53,40 @@ auto BuildSearchEditStyle() -> QString {
              "QLineEdit {"
              "  background: rgba(255, 255, 255, 0.04);"
              "  color: %1;"
-             "  border: 1px solid rgba(255, 255, 255, 0.08);"
-             "  border-radius: 8px;"
-             "  padding: 0px 14px;"
+             "  border-radius: 10px;"
+             "  padding: 0px 12px 0px 36px;"
              "  selection-background-color: %2;"
              "  selection-color: %3;"
              "}"
              "QLineEdit:hover {"
              "  background: rgba(255, 255, 255, 0.08);"
-             "  border: 1px solid rgba(255, 255, 255, 0.15);"
              "}"
              "QLineEdit:focus {"
              "  background: rgba(0, 0, 0, 0.2);"
              "  border: 1px solid %4;"
-             "}"
-             "QLineEdit::placeholder {"
-             "  color: rgba(255, 255, 255, 0.3);"
              "}")
       .arg(theme.textColor().name(QColor::HexRgb),
-           theme.accentColor().name(QColor::HexRgb), 
+           theme.accentColor().name(QColor::HexRgb),
            theme.bgCanvasColor().name(QColor::HexRgb),
-           QColor(theme.accentColor().red(), theme.accentColor().green(), theme.accentColor().blue(), 200).name(QColor::HexArgb));
+           QColor(theme.accentColor().red(), theme.accentColor().green(),
+                  theme.accentColor().blue(), 200)
+               .name(QColor::HexArgb));
+}
+
+auto BuildIconToolButtonStyle() -> QString {
+  return QStringLiteral(
+      "QToolButton {"
+      "  background: rgba(255, 255, 255, 0.04);"
+      "  border-radius: 10px;"
+      "  padding: 0px;"
+      "}"
+      "QToolButton:hover {"
+      "  background: rgba(255, 255, 255, 0.08);"
+      "}"
+      "QToolButton:pressed {"
+      "  background: rgba(255, 255, 255, 0.12);"
+      "}"
+      "QToolButton::menu-indicator { image: none; width: 0px; }");
 }
 
 auto EntryMatchesSearchToken(const lut_catalog::LutCatalogEntry& entry, const QString& token)
@@ -104,128 +118,224 @@ auto CompareByNameAsc(const lut_catalog::LutCatalogEntry& a, const lut_catalog::
   return QString::compare(a_path, b_path, Qt::CaseSensitive) < 0;
 }
 
+auto FormatByteSize(std::uintmax_t bytes) -> QString {
+  constexpr double kKiB = 1024.0;
+  constexpr double kMiB = 1024.0 * 1024.0;
+
+  if (bytes >= static_cast<std::uintmax_t>(kMiB)) {
+    return QStringLiteral("%1MB").arg(static_cast<double>(bytes) / kMiB, 0, 'f', 2);
+  }
+  if (bytes >= static_cast<std::uintmax_t>(kKiB)) {
+    return QStringLiteral("%1KB").arg(static_cast<double>(bytes) / kKiB, 0, 'f', 1);
+  }
+  if (bytes == 0) {
+    return {};
+  }
+  return QStringLiteral("%1B").arg(static_cast<qulonglong>(bytes));
+}
+
+auto BuildTypeBadgeText(const lut_catalog::LutCatalogEntry& entry) -> QString {
+  if (entry.edge3d_ > 0) {
+    return QStringLiteral("3D %1").arg(entry.edge3d_);
+  }
+  if (entry.size1d_ > 0) {
+    return QStringLiteral("1D %1").arg(entry.size1d_);
+  }
+  return {};
+}
+
+class CheckBadge final : public QWidget {
+ public:
+  explicit CheckBadge(QWidget* parent = nullptr) : QWidget(parent) {
+    setFixedSize(kCheckBadgeSize, kCheckBadgeSize);
+    setAttribute(Qt::WA_TransparentForMouseEvents, true);
+  }
+
+ protected:
+  void paintEvent(QPaintEvent*) override {
+    QPainter p(this);
+    p.setRenderHint(QPainter::Antialiasing, true);
+    const auto& theme = AppTheme::Instance();
+    p.setBrush(theme.accentColor());
+    p.setPen(Qt::NoPen);
+    const QRectF r(0.5, 0.5, kCheckBadgeSize - 1.0, kCheckBadgeSize - 1.0);
+    p.drawEllipse(r);
+
+    QPen pen(Qt::white);
+    pen.setWidthF(2.0);
+    pen.setCapStyle(Qt::RoundCap);
+    pen.setJoinStyle(Qt::RoundJoin);
+    p.setPen(pen);
+
+    const double w = kCheckBadgeSize;
+    QPainterPath path;
+    path.moveTo(w * 0.28, w * 0.52);
+    path.lineTo(w * 0.44, w * 0.68);
+    path.lineTo(w * 0.74, w * 0.36);
+    p.drawPath(path);
+  }
+};
+
 class LutEntryItemWidget final : public QFrame {
  public:
   explicit LutEntryItemWidget(QWidget* parent = nullptr) : QFrame(parent) {
     auto* layout = new QHBoxLayout(this);
-    layout->setContentsMargins(12, 10, 12, 10);
+    layout->setContentsMargins(12, 8, 12, 8);
     layout->setSpacing(10);
 
-    auto* text_layout = new QVBoxLayout();
-    text_layout->setContentsMargins(0, 0, 0, 0);
-    text_layout->setSpacing(4);
+    icon_label_ = new QLabel(this);
+    icon_label_->setFixedSize(kListIconSize, kListIconSize);
+    icon_label_->setAlignment(Qt::AlignCenter);
+    icon_label_->setPixmap(
+        QIcon(QStringLiteral(":/panel_icons/box.svg"))
+            .pixmap(kListIconSize, kListIconSize));
 
     title_label_ = new ElidedLabel({}, this);
     title_label_->setStyleSheet(AppTheme::EditorLabelStyle(AppTheme::Instance().textColor()));
-    AppTheme::MarkFontRole(title_label_, AppTheme::FontRole::UiBodyStrong);
+    AppTheme::MarkFontRole(title_label_, AppTheme::FontRole::UiBody);
 
-    subtitle_label_ = new ElidedLabel({}, this);
-    subtitle_label_->setStyleSheet(
+    type_label_ = MakePillLabel({}, this);
+    type_label_->hide();
+
+    size_label_ = new QLabel(this);
+    size_label_->setStyleSheet(
         AppTheme::EditorLabelStyle(AppTheme::Instance().textMutedColor()));
-    AppTheme::MarkFontRole(subtitle_label_, AppTheme::FontRole::UiCaption);
-
-    text_layout->addWidget(title_label_);
-    text_layout->addWidget(subtitle_label_);
+    AppTheme::MarkFontRole(size_label_, AppTheme::FontRole::UiCaption);
 
     status_label_ = MakePillLabel({}, this);
     status_label_->hide();
 
-    layout->addLayout(text_layout, 1);
-    layout->addWidget(status_label_, 0, Qt::AlignTop);
+    check_badge_ = new CheckBadge(this);
+    check_badge_->hide();
+
+    layout->addWidget(icon_label_, 0, Qt::AlignVCenter);
+    layout->addWidget(title_label_, 1, Qt::AlignVCenter);
+    layout->addWidget(status_label_, 0, Qt::AlignVCenter);
+    layout->addWidget(type_label_, 0, Qt::AlignVCenter);
+    layout->addWidget(size_label_, 0, Qt::AlignVCenter);
+    layout->addWidget(check_badge_, 0, Qt::AlignVCenter);
   }
 
   void Bind(const lut_catalog::LutCatalogEntry& entry) {
-    entry_            = entry;
-    const auto& theme = AppTheme::Instance();
+    entry_ = entry;
     title_label_->SetRawText(entry.display_name_);
-    subtitle_label_->SetRawText(entry.secondary_text_);
+
+    const QString type_text = BuildTypeBadgeText(entry);
+    type_label_->setText(type_text);
+    type_label_->setVisible(!type_text.isEmpty());
+
+    const QString size_text = FormatByteSize(entry.file_size_bytes_);
+    size_label_->setText(size_text);
+    size_label_->setVisible(!size_text.isEmpty());
+
     status_label_->setVisible(!entry.status_text_.isEmpty());
     status_label_->setText(entry.status_text_);
 
     if (entry.kind_ == lut_catalog::LutCatalogEntryKind::MissingCurrent) {
-      status_label_->setStyleSheet(
-          QStringLiteral("QLabel {"
-                         "  color: #E5A040;" 
-                         "  background: rgba(229, 160, 64, 0.12);"
-                         "  border: 1px solid rgba(229, 160, 64, 0.3);"
-                         "  border-radius: 4px;"
-                         "  padding: 2px 8px;"
-                         "}"));
+      status_label_->setStyleSheet(QStringLiteral("QLabel {"
+                                                  "  color: #E5A040;"
+                                                  "  background: rgba(229, 160, 64, 0.12);"
+                                                  "  border: 1px solid rgba(229, 160, 64, 0.3);"
+                                                  "  border-radius: 4px;"
+                                                  "  padding: 2px 8px;"
+                                                  "}"));
     } else if (!entry.valid_) {
-      status_label_->setStyleSheet(
-          QStringLiteral("QLabel {"
-                         "  color: #E05C5C;"
-                         "  background: rgba(224, 92, 92, 0.12);"
-                         "  border: 1px solid rgba(224, 92, 92, 0.3);"
-                         "  border-radius: 4px;"
-                         "  padding: 2px 8px;"
-                         "}"));
-    } else {
-      status_label_->setStyleSheet(
-          QStringLiteral("QLabel {"
-                         "  color: %1;"
-                         "  background: %2;"
-                         "  border: 1px solid %3;"
-                         "  border-radius: 6px;"
-                         "  padding: 2px 6px;"
-                         "}")
-              .arg(theme.accentColor().name(QColor::HexRgb),
-                   QColor(theme.accentColor().red(), theme.accentColor().green(),
-                          theme.accentColor().blue(), 28)
-                       .name(QColor::HexArgb),
-                   QColor(theme.accentColor().red(), theme.accentColor().green(),
-                          theme.accentColor().blue(), 62)
-                       .name(QColor::HexArgb)));
+      status_label_->setStyleSheet(QStringLiteral("QLabel {"
+                                                  "  color: #E05C5C;"
+                                                  "  background: rgba(224, 92, 92, 0.12);"
+                                                  "  border: 1px solid rgba(224, 92, 92, 0.3);"
+                                                  "  border-radius: 4px;"
+                                                  "  padding: 2px 8px;"
+                                                  "}"));
     }
+
+    icon_label_->setVisible(entry.kind_ == lut_catalog::LutCatalogEntryKind::File ||
+                            entry.kind_ == lut_catalog::LutCatalogEntryKind::MissingCurrent);
+    icon_label_->setStyleSheet(QStringLiteral("QLabel { background: transparent; }"));
+
     SetSelected(false);
   }
 
   void SetSelected(bool selected) {
     const auto& theme = AppTheme::Instance();
-    
-    QString border_color = "transparent"; 
-    QString background = "transparent";
-    QString title_color = theme.textColor().name(QColor::HexRgb);
-    QString sub_color   = theme.textMutedColor().name(QColor::HexRgb);
+
+    QString border_color = QStringLiteral("transparent");
+    QString background   = QStringLiteral("transparent");
+    QString title_color  = theme.textColor().name(QColor::HexRgb);
+    QString size_color   = theme.textMutedColor().name(QColor::HexRgb);
 
     if (!entry_.valid_) {
       title_color = theme.textMutedColor().name(QColor::HexRgb);
-      sub_color   = theme.dividerColor().name(QColor::HexRgb); // 甚至更暗
+      size_color  = theme.dividerColor().name(QColor::HexRgb);
     }
 
-    if (selected) {
-      border_color = QColor(theme.accentColor().red(), theme.accentColor().green(), theme.accentColor().blue(), 120).name(QColor::HexArgb);
-      background = theme.selectedTintColor().name(QColor::HexArgb);
-      title_color = theme.textColor().name(QColor::HexRgb); // 选中时恢复高亮
+    if (selected && entry_.selectable_) {
+      border_color = QColor(theme.accentColor().red(), theme.accentColor().green(),
+                            theme.accentColor().blue(), 160)
+                         .name(QColor::HexArgb);
+      background  = theme.selectedTintColor().name(QColor::HexArgb);
+      title_color = theme.textColor().name(QColor::HexRgb);
     }
 
     setStyleSheet(QStringLiteral("QFrame {"
                                  "  background: %1;"
                                  "  border: 1px solid %2;"
-                                 "  border-radius: 8px;"
+                                 "  border-radius: 10px;"
                                  "}"
                                  "QFrame:hover {"
                                  "  background: rgba(255, 255, 255, 0.05);"
                                  "}"
                                  "QLabel { border: none; background: transparent; }")
                       .arg(background, border_color));
-                      
+
     title_label_->setStyleSheet(AppTheme::EditorLabelStyle(QColor(title_color)));
-    subtitle_label_->setStyleSheet(AppTheme::EditorLabelStyle(QColor(sub_color)));
+    size_label_->setStyleSheet(AppTheme::EditorLabelStyle(QColor(size_color)));
+
+    check_badge_->setVisible(selected && entry_.selectable_ && entry_.valid_);
   }
 
  private:
   lut_catalog::LutCatalogEntry entry_{};
-  ElidedLabel*                 title_label_    = nullptr;
-  ElidedLabel*                 subtitle_label_ = nullptr;
-  QLabel*                      status_label_   = nullptr;
+  QLabel*                      icon_label_   = nullptr;
+  ElidedLabel*                 title_label_  = nullptr;
+  QLabel*                      type_label_   = nullptr;
+  QLabel*                      size_label_   = nullptr;
+  QLabel*                      status_label_ = nullptr;
+  CheckBadge*                  check_badge_  = nullptr;
 };
+
+auto MakeIconToolButton(QWidget* parent, const QString& icon_path,
+                        const QString& tooltip) -> QToolButton* {
+  auto* btn = new QToolButton(parent);
+  btn->setFixedSize(40, 40);
+  btn->setIcon(QIcon(icon_path));
+  btn->setIconSize(QSize(18, 18));
+  btn->setCursor(Qt::PointingHandCursor);
+  btn->setToolTip(tooltip);
+  btn->setStyleSheet(BuildIconToolButtonStyle());
+  return btn;
+}
 
 }  // namespace
 
 LutBrowserWidget::LutBrowserWidget(QWidget* parent) : QWidget(parent) {
+  const auto& theme = AppTheme::Instance();
+  setObjectName(QStringLiteral("LutBrowserCard"));
+  setAttribute(Qt::WA_StyledBackground, true);
+  setStyleSheet(QStringLiteral("QWidget#LutBrowserCard {"
+                               "  background: %1;"
+                               "  border-radius: %3px;"
+                               "}")
+                    .arg(QColor(theme.bgPanelColor().red(), theme.bgPanelColor().green(),
+                                theme.bgPanelColor().blue(), 210)
+                             .name(QColor::HexArgb),
+                         QColor(theme.glassStrokeColor().red(), theme.glassStrokeColor().green(),
+                                theme.glassStrokeColor().blue(), 140)
+                             .name(QColor::HexArgb))
+                    .arg(theme.panelRadius()));
+
   auto* root = new QVBoxLayout(this);
-  root->setContentsMargins(12, 12, 12, 12);
+  root->setContentsMargins(14, 14, 14, 14);
   root->setSpacing(10);
 
   title_label_ = new QLabel(this);
@@ -234,97 +344,91 @@ LutBrowserWidget::LutBrowserWidget(QWidget* parent) : QWidget(parent) {
   AppTheme::MarkFontRole(title_label_, AppTheme::FontRole::UiHeadline);
   root->addWidget(title_label_, 0);
 
-  subtitle_label_ = new QLabel(this);
-  subtitle_label_->setWordWrap(true);
-  subtitle_label_->setStyleSheet(AppTheme::EditorLabelStyle(AppTheme::Instance().textMutedColor()));
-  AppTheme::MarkFontRole(subtitle_label_, AppTheme::FontRole::UiHint);
-  root->addWidget(subtitle_label_, 0);
-
-  auto* search_container = new QFrame(this);
-  search_container->setObjectName(QStringLiteral("LutBrowserSearchContainer"));
-  search_container->setStyleSheet(BuildSearchContainerStyle());
-
-  auto* search_layout = new QVBoxLayout(search_container);
+  auto* search_row    = new QWidget(this);
+  auto* search_layout = new QHBoxLayout(search_row);
   search_layout->setContentsMargins(0, 0, 0, 0);
-  search_layout->setSpacing(6);
+  search_layout->setSpacing(8);
 
-  search_edit_ = new QLineEdit(search_container);
-  search_edit_->setClearButtonEnabled(true); 
-  search_edit_->setFixedHeight(36);          
+  auto* search_edit_host = new QWidget(search_row);
+  search_edit_host->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+  search_edit_host->setFixedHeight(40);
+  auto* search_edit_layout = new QHBoxLayout(search_edit_host);
+  search_edit_layout->setContentsMargins(0, 0, 0, 0);
+  search_edit_layout->setSpacing(0);
+
+  search_edit_ = new QLineEdit(search_edit_host);
+  search_edit_->setClearButtonEnabled(true);
+  search_edit_->setFixedHeight(40);
   search_edit_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
   search_edit_->setStyleSheet(BuildSearchEditStyle());
   AppTheme::MarkFontRole(search_edit_, AppTheme::FontRole::UiBody);
-  search_layout->addWidget(search_edit_, 0);
+  search_edit_layout->addWidget(search_edit_);
 
-  auto* filter_row    = new QWidget(search_container);
-  auto* filter_layout = new QHBoxLayout(filter_row);
-  filter_layout->setContentsMargins(4, 6, 4, 0); 
-  filter_layout->setSpacing(8);
+  auto* search_glyph = new QLabel(search_edit_host);
+  search_glyph->setPixmap(QIcon(QStringLiteral(":/panel_icons/search.svg")).pixmap(16, 16));
+  search_glyph->setAttribute(Qt::WA_TransparentForMouseEvents, true);
+  search_glyph->setStyleSheet(QStringLiteral("QLabel { background: transparent; border: none; }"));
+  search_glyph->setParent(search_edit_);
+  search_glyph->move(12, (40 - 16) / 2);
+  search_glyph->show();
 
-  search_summary_label_ = new QLabel(filter_row);
-  search_summary_label_->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
-  search_summary_label_->setStyleSheet(
-      AppTheme::EditorLabelStyle(AppTheme::Instance().textMutedColor()));
-  AppTheme::MarkFontRole(search_summary_label_, AppTheme::FontRole::UiCaption);
-  
-  filter_layout->addWidget(search_summary_label_, 0); 
+  search_layout->addWidget(search_edit_host, 1);
 
-  filter_layout->addStretch(1); 
+  sort_btn_   = MakeIconToolButton(search_row, QStringLiteral(":/panel_icons/sort.svg"),
+                                   Tr("Sort options"));
+  folder_btn_ = MakeIconToolButton(search_row, QStringLiteral(":/panel_icons/folder-open.svg"),
+                                   Tr("Open LUT folder"));
+  sort_btn_->setPopupMode(QToolButton::InstantPopup);
 
-  sort_label_ = new QLabel(filter_row);
-  sort_label_->setStyleSheet(AppTheme::EditorLabelStyle(AppTheme::Instance().textMutedColor()));
-  AppTheme::MarkFontRole(sort_label_, AppTheme::FontRole::UiCaptionStrong);
-  filter_layout->addWidget(sort_label_, 0);
+  auto* sort_menu          = new QMenu(sort_btn_);
+  auto* sort_field_group   = new QActionGroup(sort_menu);
+  sort_field_name_action_  = sort_menu->addAction(QString{});
+  sort_field_time_action_  = sort_menu->addAction(QString{});
+  sort_field_name_action_->setCheckable(true);
+  sort_field_time_action_->setCheckable(true);
+  sort_field_name_action_->setData(static_cast<int>(SortField::Name));
+  sort_field_time_action_->setData(static_cast<int>(SortField::ModifiedTime));
+  sort_field_group->addAction(sort_field_name_action_);
+  sort_field_group->addAction(sort_field_time_action_);
+  sort_field_name_action_->setChecked(true);
 
-  sort_field_combo_ = new QComboBox(filter_row);
-  sort_field_combo_->setFixedHeight(28); 
-  sort_field_combo_->setStyleSheet(AppTheme::EditorComboBoxStyle());
-  sort_field_combo_->addItem({}, static_cast<int>(SortField::Name));
-  sort_field_combo_->addItem({}, static_cast<int>(SortField::ModifiedTime));
-  AppTheme::MarkFontRole(sort_field_combo_, AppTheme::FontRole::UiBody);
-  filter_layout->addWidget(sort_field_combo_, 0);
+  sort_menu->addSeparator();
+  auto* sort_order_group  = new QActionGroup(sort_menu);
+  sort_order_asc_action_  = sort_menu->addAction(QString{});
+  sort_order_desc_action_ = sort_menu->addAction(QString{});
+  sort_order_asc_action_->setCheckable(true);
+  sort_order_desc_action_->setCheckable(true);
+  sort_order_asc_action_->setData(static_cast<int>(SortOrder::Ascending));
+  sort_order_desc_action_->setData(static_cast<int>(SortOrder::Descending));
+  sort_order_group->addAction(sort_order_asc_action_);
+  sort_order_group->addAction(sort_order_desc_action_);
+  sort_order_asc_action_->setChecked(true);
 
-  sort_order_combo_ = new QComboBox(filter_row);
-  sort_order_combo_->setFixedHeight(28);
-  sort_order_combo_->setStyleSheet(AppTheme::EditorComboBoxStyle());
-  sort_order_combo_->addItem({}, static_cast<int>(SortOrder::Ascending));
-  sort_order_combo_->addItem({}, static_cast<int>(SortOrder::Descending));
-  AppTheme::MarkFontRole(sort_order_combo_, AppTheme::FontRole::UiBody);
-  filter_layout->addWidget(sort_order_combo_, 0);
+  sort_menu->addSeparator();
+  refresh_action_ = sort_menu->addAction(QString{});
+  sort_btn_->setMenu(sort_menu);
 
-  search_layout->addWidget(filter_row, 0); 
-  root->addWidget(search_container, 0);
+  QObject::connect(folder_btn_, &QToolButton::clicked, this,
+                   [this]() { emit OpenFolderRequested(); });
 
-  auto* actions_row    = new QWidget(this);
-  auto* actions_layout = new QHBoxLayout(actions_row);
-  actions_layout->setContentsMargins(0, 0, 0, 0);
-  actions_layout->setSpacing(8);
+  search_layout->addWidget(sort_btn_, 0);
+  search_layout->addWidget(folder_btn_, 0);
+  root->addWidget(search_row, 0);
 
-  directory_label_ = new ElidedLabel({}, actions_row);
-  directory_label_->setStyleSheet(AppTheme::EditorLabelStyle(AppTheme::Instance().textColor()));
-  AppTheme::MarkFontRole(directory_label_, AppTheme::FontRole::UiCaptionStrong);
-
-  open_folder_btn_ = new QPushButton(actions_row);
-  open_folder_btn_->setFixedHeight(30);
-  open_folder_btn_->setStyleSheet(AppTheme::EditorSecondaryButtonStyle());
-
-  refresh_btn_ = new QPushButton(actions_row);
-  refresh_btn_->setFixedHeight(30);
-  refresh_btn_->setStyleSheet(AppTheme::EditorPrimaryButtonStyle());
-
-  actions_layout->addWidget(directory_label_, 1);
-  actions_layout->addWidget(open_folder_btn_, 0);
-  actions_layout->addWidget(refresh_btn_, 0);
-  root->addWidget(actions_row, 0);
-
-  status_label_ = new QLabel(this);
-  status_label_->setWordWrap(true);
-  status_label_->setStyleSheet(AppTheme::EditorLabelStyle(AppTheme::Instance().textMutedColor()));
-  AppTheme::MarkFontRole(status_label_, AppTheme::FontRole::UiCaption);
-  root->addWidget(status_label_, 0);
+  auto* divider = new QFrame(this);
+  divider->setFrameShape(QFrame::HLine);
+  divider->setFrameShadow(QFrame::Plain);
+  divider->setFixedHeight(1);
+  divider->setStyleSheet(
+      QStringLiteral("QFrame { background: %1; border: none; }")
+          .arg(QColor(AppTheme::Instance().dividerColor().red(),
+                      AppTheme::Instance().dividerColor().green(),
+                      AppTheme::Instance().dividerColor().blue(), 120)
+                   .name(QColor::HexArgb)));
+  root->addWidget(divider, 0);
 
   entries_list_ = new QListWidget(this);
-  entries_list_->setSpacing(6);
+  entries_list_->setSpacing(4);
   entries_list_->setSelectionMode(QAbstractItemView::SingleSelection);
   entries_list_->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
   entries_list_->setFocusPolicy(Qt::NoFocus);
@@ -332,32 +436,55 @@ LutBrowserWidget::LutBrowserWidget(QWidget* parent) : QWidget(parent) {
   entries_list_->setFrameShape(QFrame::NoFrame);
   root->addWidget(entries_list_, 1);
 
+  auto* summary_row    = new QWidget(this);
+  auto* summary_layout = new QHBoxLayout(summary_row);
+  summary_layout->setContentsMargins(2, 0, 2, 0);
+  summary_layout->setSpacing(8);
+
+  search_summary_label_ = new QLabel(summary_row);
+  search_summary_label_->setStyleSheet(
+      AppTheme::EditorLabelStyle(AppTheme::Instance().textMutedColor()));
+  AppTheme::MarkFontRole(search_summary_label_, AppTheme::FontRole::UiCaption);
+
+  directory_label_ = new ElidedLabel({}, summary_row);
+  directory_label_->setStyleSheet(
+      AppTheme::EditorLabelStyle(AppTheme::Instance().textMutedColor()));
+  AppTheme::MarkFontRole(directory_label_, AppTheme::FontRole::UiCaption);
+
+  summary_layout->addWidget(search_summary_label_, 0);
+  summary_layout->addStretch(1);
+  summary_layout->addWidget(directory_label_, 1);
+  root->addWidget(summary_row, 0);
+
+  status_label_ = new QLabel(this);
+  status_label_->setWordWrap(true);
+  status_label_->setStyleSheet(
+      AppTheme::EditorLabelStyle(AppTheme::Instance().textMutedColor()));
+  AppTheme::MarkFontRole(status_label_, AppTheme::FontRole::UiCaption);
+  status_label_->hide();
+  root->addWidget(status_label_, 0);
+
   QObject::connect(search_edit_, &QLineEdit::textChanged, this, [this](const QString&) {
     const QString selected_path = entries_list_ && entries_list_->currentItem()
                                       ? entries_list_->currentItem()->data(Qt::UserRole).toString()
                                       : QString{};
     RebuildVisibleEntries(selected_path);
   });
-  QObject::connect(sort_field_combo_, qOverload<int>(&QComboBox::currentIndexChanged), this,
-                   [this](int) {
-                     const QString selected_path =
-                         entries_list_ && entries_list_->currentItem()
-                             ? entries_list_->currentItem()->data(Qt::UserRole).toString()
-                             : QString{};
-                     RebuildVisibleEntries(selected_path);
-                   });
-  QObject::connect(sort_order_combo_, qOverload<int>(&QComboBox::currentIndexChanged), this,
-                   [this](int) {
-                     const QString selected_path =
-                         entries_list_ && entries_list_->currentItem()
-                             ? entries_list_->currentItem()->data(Qt::UserRole).toString()
-                             : QString{};
-                     RebuildVisibleEntries(selected_path);
-                   });
-  QObject::connect(open_folder_btn_, &QPushButton::clicked, this,
-                   [this]() { emit OpenFolderRequested(); });
-  QObject::connect(refresh_btn_, &QPushButton::clicked, this,
+
+  const auto rebuild_on_sort_change = [this]() {
+    const QString selected_path = entries_list_ && entries_list_->currentItem()
+                                      ? entries_list_->currentItem()->data(Qt::UserRole).toString()
+                                      : QString{};
+    RebuildVisibleEntries(selected_path);
+  };
+  QObject::connect(sort_field_name_action_, &QAction::triggered, this, rebuild_on_sort_change);
+  QObject::connect(sort_field_time_action_, &QAction::triggered, this, rebuild_on_sort_change);
+  QObject::connect(sort_order_asc_action_, &QAction::triggered, this, rebuild_on_sort_change);
+  QObject::connect(sort_order_desc_action_, &QAction::triggered, this, rebuild_on_sort_change);
+
+  QObject::connect(refresh_action_, &QAction::triggered, this,
                    [this]() { emit RefreshRequested(); });
+
   const auto emit_activation_for_item = [this](QListWidgetItem* item) {
     if (updating_entries_ || !item) {
       return;
@@ -388,33 +515,48 @@ LutBrowserWidget::LutBrowserWidget(QWidget* parent) : QWidget(parent) {
 }
 
 void LutBrowserWidget::RetranslateUi() {
-  title_label_->setText(Tr("Look"));
-  subtitle_label_->setText(Tr("Browse LUT files and apply one to the current image."));
+  title_label_->setText(Tr("Looks & LUTs"));
   if (search_edit_) {
-    search_edit_->setPlaceholderText(Tr("Search LUTs by file name or metadata"));
+    search_edit_->setPlaceholderText(Tr("Search LUTs..."));
   }
-  if (sort_label_) {
-    sort_label_->setText(Tr("Sort"));
+  if (sort_field_name_action_) {
+    sort_field_name_action_->setText(Tr("Sort by Name"));
   }
-  if (sort_field_combo_) {
-    sort_field_combo_->setItemText(0, Tr("Name"));
-    sort_field_combo_->setItemText(1, Tr("Modified Time"));
+  if (sort_field_time_action_) {
+    sort_field_time_action_->setText(Tr("Sort by Modified Time"));
   }
-  if (sort_order_combo_) {
-    sort_order_combo_->setItemText(0, QStringLiteral("▲"));
-    sort_order_combo_->setItemText(1, QStringLiteral("▼"));
+  if (sort_order_asc_action_) {
+    sort_order_asc_action_->setText(Tr("Ascending"));
   }
-  open_folder_btn_->setText(Tr("Open Folder"));
-  refresh_btn_->setText(Tr("Refresh"));
+  if (sort_order_desc_action_) {
+    sort_order_desc_action_->setText(Tr("Descending"));
+  }
+  if (refresh_action_) {
+    refresh_action_->setText(Tr("Refresh"));
+  }
+  if (folder_btn_) {
+    folder_btn_->setToolTip(Tr("Open LUT folder"));
+  }
+  if (sort_btn_) {
+    sort_btn_->setToolTip(Tr("Sort options"));
+  }
   UpdateSearchResultSummary();
 }
 
 void LutBrowserWidget::SetDirectoryInfo(const QString& directory_text, const QString& status_text,
                                         bool can_open_directory) {
-  directory_label_->SetRawText(directory_text);
-  directory_label_->setToolTip(directory_text);
-  status_label_->setText(status_text);
-  open_folder_btn_->setEnabled(can_open_directory);
+  if (directory_label_) {
+    directory_label_->SetRawText(directory_text);
+    directory_label_->setToolTip(directory_text);
+  }
+  if (status_label_) {
+    status_label_->setText(status_text);
+    status_label_->setVisible(!status_text.isEmpty());
+  }
+  if (folder_btn_) {
+    folder_btn_->setToolTip(directory_text.isEmpty() ? Tr("Open LUT folder") : directory_text);
+    folder_btn_->setEnabled(can_open_directory);
+  }
 }
 
 void LutBrowserWidget::SetEntries(const std::vector<lut_catalog::LutCatalogEntry>& entries,
@@ -528,7 +670,7 @@ void LutBrowserWidget::RebuildVisibleEntries(const QString& preferred_selected_p
   for (int i = 0; i < static_cast<int>(visible_entries_.size()); ++i) {
     const auto& entry = visible_entries_[static_cast<size_t>(i)];
     auto*       item  = new QListWidgetItem(entries_list_);
-    item->setSizeHint(QSize(0, 66));
+    item->setSizeHint(QSize(0, kRowHeight));
     item->setData(Qt::UserRole, QString::fromStdString(entry.path_));
 
     auto* row_widget = new LutEntryItemWidget(entries_list_);
@@ -583,20 +725,14 @@ void LutBrowserWidget::UpdateSearchResultSummary() {
 }
 
 auto LutBrowserWidget::CurrentSortField() const -> SortField {
-  if (!sort_field_combo_) {
-    return SortField::Name;
-  }
-  if (sort_field_combo_->currentData().toInt() == static_cast<int>(SortField::ModifiedTime)) {
+  if (sort_field_time_action_ && sort_field_time_action_->isChecked()) {
     return SortField::ModifiedTime;
   }
   return SortField::Name;
 }
 
 auto LutBrowserWidget::CurrentSortOrder() const -> SortOrder {
-  if (!sort_order_combo_) {
-    return SortOrder::Ascending;
-  }
-  if (sort_order_combo_->currentData().toInt() == static_cast<int>(SortOrder::Descending)) {
+  if (sort_order_desc_action_ && sort_order_desc_action_->isChecked()) {
     return SortOrder::Descending;
   }
   return SortOrder::Ascending;
