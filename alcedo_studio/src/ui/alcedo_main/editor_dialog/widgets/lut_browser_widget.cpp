@@ -30,9 +30,9 @@
 namespace alcedo::ui {
 namespace {
 
-constexpr int kListIconSize   = 18;
-constexpr int kCheckBadgeSize = 18;
-constexpr int kRowHeight      = 44;
+constexpr int kListIconSize   = 14;
+constexpr int kCheckBadgeSize = 14;
+constexpr int kRowHeight      = 32;
 
 auto Tr(const char* text) -> QString {
   return QCoreApplication::translate(ALCEDO_I18N_CONTEXT, text);
@@ -53,8 +53,8 @@ auto BuildSearchEditStyle() -> QString {
              "QLineEdit {"
              "  background: rgba(255, 255, 255, 0.04);"
              "  color: %1;"
-             "  border-radius: 10px;"
-             "  padding: 0px 12px 0px 36px;"
+             "  border-radius: 6px;"
+             "  padding: 0px 8px 0px 24px;"
              "  selection-background-color: %2;"
              "  selection-color: %3;"
              "}"
@@ -77,7 +77,7 @@ auto BuildIconToolButtonStyle() -> QString {
   return QStringLiteral(
       "QToolButton {"
       "  background: rgba(255, 255, 255, 0.04);"
-      "  border-radius: 10px;"
+      "  border-radius: 6px;"
       "  padding: 0px;"
       "}"
       "QToolButton:hover {"
@@ -180,8 +180,8 @@ class LutEntryItemWidget final : public QFrame {
  public:
   explicit LutEntryItemWidget(QWidget* parent = nullptr) : QFrame(parent) {
     auto* layout = new QHBoxLayout(this);
-    layout->setContentsMargins(12, 8, 12, 8);
-    layout->setSpacing(10);
+    layout->setContentsMargins(8, 4, 8, 4);
+    layout->setSpacing(6);
 
     icon_label_ = new QLabel(this);
     icon_label_->setFixedSize(kListIconSize, kListIconSize);
@@ -192,7 +192,7 @@ class LutEntryItemWidget final : public QFrame {
 
     title_label_ = new ElidedLabel({}, this);
     title_label_->setStyleSheet(AppTheme::EditorLabelStyle(AppTheme::Instance().textColor()));
-    AppTheme::MarkFontRole(title_label_, AppTheme::FontRole::UiBody);
+    AppTheme::MarkFontRole(title_label_, AppTheme::FontRole::UiCaption);
 
     type_label_ = MakePillLabel({}, this);
     type_label_->hide();
@@ -200,7 +200,7 @@ class LutEntryItemWidget final : public QFrame {
     size_label_ = new QLabel(this);
     size_label_->setStyleSheet(
         AppTheme::EditorLabelStyle(AppTheme::Instance().textMutedColor()));
-    AppTheme::MarkFontRole(size_label_, AppTheme::FontRole::UiCaption);
+    AppTheme::MarkFontRole(size_label_, AppTheme::FontRole::DataCaption);
 
     status_label_ = MakePillLabel({}, this);
     status_label_->hide();
@@ -307,9 +307,9 @@ class LutEntryItemWidget final : public QFrame {
 auto MakeIconToolButton(QWidget* parent, const QString& icon_path,
                         const QString& tooltip) -> QToolButton* {
   auto* btn = new QToolButton(parent);
-  btn->setFixedSize(40, 40);
+  btn->setFixedSize(26, 26);
   btn->setIcon(QIcon(icon_path));
-  btn->setIconSize(QSize(18, 18));
+  btn->setIconSize(QSize(14, 14));
   btn->setCursor(Qt::PointingHandCursor);
   btn->setToolTip(tooltip);
   btn->setStyleSheet(BuildIconToolButtonStyle());
@@ -335,41 +335,35 @@ LutBrowserWidget::LutBrowserWidget(QWidget* parent) : QWidget(parent) {
                     .arg(theme.panelRadius()));
 
   auto* root = new QVBoxLayout(this);
-  root->setContentsMargins(14, 14, 14, 14);
-  root->setSpacing(10);
-
-  title_label_ = new QLabel(this);
-  title_label_->setObjectName("SectionTitle");
-  title_label_->setStyleSheet(AppTheme::EditorLabelStyle(AppTheme::Instance().textColor()));
-  AppTheme::MarkFontRole(title_label_, AppTheme::FontRole::UiHeadline);
-  root->addWidget(title_label_, 0);
+  root->setContentsMargins(10, 8, 10, 8);
+  root->setSpacing(6);
 
   auto* search_row    = new QWidget(this);
   auto* search_layout = new QHBoxLayout(search_row);
   search_layout->setContentsMargins(0, 0, 0, 0);
-  search_layout->setSpacing(8);
+  search_layout->setSpacing(6);
 
   auto* search_edit_host = new QWidget(search_row);
   search_edit_host->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-  search_edit_host->setFixedHeight(40);
+  search_edit_host->setFixedHeight(26);
   auto* search_edit_layout = new QHBoxLayout(search_edit_host);
   search_edit_layout->setContentsMargins(0, 0, 0, 0);
   search_edit_layout->setSpacing(0);
 
   search_edit_ = new QLineEdit(search_edit_host);
   search_edit_->setClearButtonEnabled(true);
-  search_edit_->setFixedHeight(40);
+  search_edit_->setFixedHeight(26);
   search_edit_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
   search_edit_->setStyleSheet(BuildSearchEditStyle());
-  AppTheme::MarkFontRole(search_edit_, AppTheme::FontRole::UiBody);
+  AppTheme::MarkFontRole(search_edit_, AppTheme::FontRole::UiCaption);
   search_edit_layout->addWidget(search_edit_);
 
   auto* search_glyph = new QLabel(search_edit_host);
-  search_glyph->setPixmap(QIcon(QStringLiteral(":/panel_icons/search.svg")).pixmap(16, 16));
+  search_glyph->setPixmap(QIcon(QStringLiteral(":/panel_icons/search.svg")).pixmap(12, 12));
   search_glyph->setAttribute(Qt::WA_TransparentForMouseEvents, true);
   search_glyph->setStyleSheet(QStringLiteral("QLabel { background: transparent; border: none; }"));
   search_glyph->setParent(search_edit_);
-  search_glyph->move(12, (40 - 16) / 2);
+  search_glyph->move(8, (26 - 12) / 2);
   search_glyph->show();
 
   search_layout->addWidget(search_edit_host, 1);
@@ -439,28 +433,22 @@ LutBrowserWidget::LutBrowserWidget(QWidget* parent) : QWidget(parent) {
   auto* summary_row    = new QWidget(this);
   auto* summary_layout = new QHBoxLayout(summary_row);
   summary_layout->setContentsMargins(2, 0, 2, 0);
-  summary_layout->setSpacing(8);
+  summary_layout->setSpacing(6);
 
   search_summary_label_ = new QLabel(summary_row);
   search_summary_label_->setStyleSheet(
       AppTheme::EditorLabelStyle(AppTheme::Instance().textMutedColor()));
-  AppTheme::MarkFontRole(search_summary_label_, AppTheme::FontRole::UiCaption);
-
-  directory_label_ = new ElidedLabel({}, summary_row);
-  directory_label_->setStyleSheet(
-      AppTheme::EditorLabelStyle(AppTheme::Instance().textMutedColor()));
-  AppTheme::MarkFontRole(directory_label_, AppTheme::FontRole::UiCaption);
+  AppTheme::MarkFontRole(search_summary_label_, AppTheme::FontRole::DataCaption);
 
   summary_layout->addWidget(search_summary_label_, 0);
   summary_layout->addStretch(1);
-  summary_layout->addWidget(directory_label_, 1);
   root->addWidget(summary_row, 0);
 
   status_label_ = new QLabel(this);
   status_label_->setWordWrap(true);
   status_label_->setStyleSheet(
       AppTheme::EditorLabelStyle(AppTheme::Instance().textMutedColor()));
-  AppTheme::MarkFontRole(status_label_, AppTheme::FontRole::UiCaption);
+  AppTheme::MarkFontRole(status_label_, AppTheme::FontRole::DataCaption);
   status_label_->hide();
   root->addWidget(status_label_, 0);
 
@@ -515,7 +503,9 @@ LutBrowserWidget::LutBrowserWidget(QWidget* parent) : QWidget(parent) {
 }
 
 void LutBrowserWidget::RetranslateUi() {
-  title_label_->setText(Tr("Looks & LUTs"));
+  if (title_label_) {
+    title_label_->setText(Tr("Looks & LUTs"));
+  }
   if (search_edit_) {
     search_edit_->setPlaceholderText(Tr("Search LUTs..."));
   }
@@ -549,9 +539,19 @@ void LutBrowserWidget::SetDirectoryInfo(const QString& directory_text, const QSt
     directory_label_->SetRawText(directory_text);
     directory_label_->setToolTip(directory_text);
   }
+  // The normal "%N LUTs available." status duplicates the summary line at the bottom of the
+  // browser. Suppress it so only genuine issues (folder missing, invalid LUTs, empty folder)
+  // ever surface here.
   if (status_label_) {
-    status_label_->setText(status_text);
-    status_label_->setVisible(!status_text.isEmpty());
+    const bool is_count_only_status = status_text.contains(QStringLiteral("LUTs available")) &&
+                                      !status_text.contains(QStringLiteral("invalid"));
+    if (is_count_only_status) {
+      status_label_->clear();
+      status_label_->hide();
+    } else {
+      status_label_->setText(status_text);
+      status_label_->setVisible(!status_text.isEmpty());
+    }
   }
   if (folder_btn_) {
     folder_btn_->setToolTip(directory_text.isEmpty() ? Tr("Open LUT folder") : directory_text);
@@ -718,10 +718,11 @@ void LutBrowserWidget::UpdateSearchResultSummary() {
   const bool has_search = search_edit_ && !search_edit_->text().trimmed().isEmpty();
 
   if (!has_search) {
-    search_summary_label_->setText(Tr("LUTs %1").arg(total_file_count));
+    search_summary_label_->setText(Tr("%1 Available").arg(total_file_count));
     return;
   }
-  search_summary_label_->setText(Tr("Shown %1/%2").arg(visible_file_count).arg(total_file_count));
+  search_summary_label_->setText(
+      Tr("%1/%2 Available").arg(visible_file_count).arg(total_file_count));
 }
 
 auto LutBrowserWidget::CurrentSortField() const -> SortField {

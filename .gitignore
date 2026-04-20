@@ -1078,3 +1078,6 @@ vcpkg
 
 # Ignore skills for coding agents
 /.*/skills/
+
+# Ignore agent guidance files
+AGENTS.md

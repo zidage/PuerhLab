@@ -121,7 +121,7 @@ auto EditorDialog::BuildControlPanelShell(const QString& panel_style) -> EditorC
 
   ConfigurePanelToggleButton(tone_panel_btn_, Tr("Tone"),
                              QStringLiteral(":/panel_icons/adjustments.svg"));
-  ConfigurePanelToggleButton(look_panel_btn_, Tr("Look"),
+  ConfigurePanelToggleButton(look_panel_btn_, Tr("Color"),
                              QStringLiteral(":/panel_icons/palette.svg"));
   ConfigurePanelToggleButton(drt_panel_btn_, Tr("Display Rendering Transform"),
                              QStringLiteral(":/panel_icons/color-filter.svg"));

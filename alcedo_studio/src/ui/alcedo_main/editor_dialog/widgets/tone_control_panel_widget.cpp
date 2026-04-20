@@ -3,173 +3,10 @@
 //  Additional permission under GPLv3 section 7 applies; see the LICENSE file.
 
 #include "ui/alcedo_main/editor_dialog/dialog_internal.hpp"
+#include "ui/alcedo_main/editor_dialog/editor_slider_styling.hpp"
 #include "ui/alcedo_main/editor_dialog/widgets/tone_control_panel_widget.hpp"
 
 namespace alcedo::ui {
-namespace {
-
-struct SliderPaintMetrics {
-  int track_height;
-  int handle_diameter;
-};
-
-constexpr SliderPaintMetrics kRegularSliderMetrics{10, 16};
-constexpr SliderPaintMetrics kCompactSliderMetrics{6, 12};
-
-auto WithAlpha(const QColor& color, int alpha) -> QColor {
-  QColor tinted(color);
-  tinted.setAlpha(std::clamp(alpha, 0, 255));
-  return tinted;
-}
-
-class AccentBalanceSlider final : public QSlider {
- public:
-  explicit AccentBalanceSlider(const SliderPaintMetrics& metrics, QWidget* parent = nullptr)
-      : QSlider(Qt::Horizontal, parent), metrics_(metrics) {
-    const int handle_margin = std::max(0, (metrics_.handle_diameter - metrics_.track_height) / 2);
-    setStyleSheet(QStringLiteral(
-                      "QSlider::groove:horizontal {"
-                      "  background: transparent;"
-                      "  height: %1px;"
-                      "}"
-                      "QSlider::sub-page:horizontal,"
-                      "QSlider::add-page:horizontal {"
-                      "  background: transparent;"
-                      "}"
-                      "QSlider::handle:horizontal {"
-                      "  background: transparent;"
-                      "  width: %2px;"
-                      "  margin: -%3px 0;"
-                      "}")
-                      .arg(metrics_.track_height)
-                      .arg(metrics_.handle_diameter)
-                      .arg(handle_margin));
-    QObject::connect(&AppTheme::Instance(), &AppTheme::ThemeChanged, this,
-                     [this]() { update(); });
-  }
-
- protected:
-  void paintEvent(QPaintEvent* event) override {
-    Q_UNUSED(event);
-
-    QPainter painter(this);
-    painter.setRenderHint(QPainter::Antialiasing, true);
-
-    const QRectF track_rect = TrackRect();
-    if (track_rect.width() <= 0.0) {
-      return;
-    }
-
-    const int   anchor_value    = AnchorValue();
-    const qreal anchor_x        = PositionForValue(anchor_value, track_rect);
-    const qreal value_x         = PositionForValue(value(), track_rect);
-    const bool  has_center_zero = minimum() < 0 && maximum() > 0;
-    const bool  is_positive     = value() > anchor_value;
-    const bool  is_negative     = value() < anchor_value;
-
-    QColor track_fill   = AppTheme::EditorSliderTrackColor();
-    QColor border_color = WithAlpha(AppTheme::Instance().dividerColor(), 72);
-    if (is_positive) {
-      border_color = AppTheme::EditorSliderBorderColor(true);
-    } else if (is_negative) {
-      border_color = AppTheme::EditorSliderBorderColor(false);
-    }
-
-    if (!isEnabled()) {
-      track_fill   = WithAlpha(track_fill, 140);
-      border_color = WithAlpha(AppTheme::Instance().dividerColor(), 48);
-    }
-
-    painter.setPen(QPen(border_color, 1.0));
-    painter.setBrush(track_fill);
-    painter.drawRoundedRect(track_rect, track_rect.height() * 0.5, track_rect.height() * 0.5);
-
-    if (has_center_zero) {
-      painter.setPen(QPen(WithAlpha(AppTheme::Instance().textMutedColor(), 88), 1.0));
-      painter.drawLine(QPointF(anchor_x, track_rect.top() + 1.0),
-                       QPointF(anchor_x, track_rect.bottom() - 1.0));
-    }
-
-    if (!qFuzzyCompare(anchor_x, value_x)) {
-      QRectF fill_rect(QPointF(std::min(anchor_x, value_x), track_rect.top() + 1.0),
-                       QPointF(std::max(anchor_x, value_x), track_rect.bottom() - 1.0));
-      if (fill_rect.width() < 1.0) {
-        fill_rect.setWidth(1.0);
-      }
-
-      QColor accent_fill = AppTheme::EditorSliderAccentColor(!is_negative);
-      if (!isEnabled()) {
-        accent_fill = WithAlpha(accent_fill, 120);
-      }
-
-      painter.setPen(Qt::NoPen);
-      painter.setBrush(accent_fill);
-      painter.drawRoundedRect(fill_rect, std::max(1.0, fill_rect.height() * 0.45),
-                              std::max(1.0, fill_rect.height() * 0.45));
-    }
-
-    const qreal handle_radius = metrics_.handle_diameter * 0.5;
-    const QRectF handle_rect(value_x - handle_radius,
-                             (rect().height() - metrics_.handle_diameter) * 0.5,
-                             metrics_.handle_diameter, metrics_.handle_diameter);
-
-    QColor handle_fill   = AppTheme::EditorSliderHandleColor();
-    QColor handle_border = AppTheme::EditorSliderHandleBorderColor();
-    if (!isEnabled()) {
-      handle_fill   = WithAlpha(handle_fill, 136);
-      handle_border = WithAlpha(handle_border, 120);
-    }
-
-    painter.setPen(QPen(handle_border, 1.0));
-    painter.setBrush(handle_fill);
-    painter.drawEllipse(handle_rect);
-
-    if (hasFocus()) {
-      const QColor focus_color =
-          is_negative ? AppTheme::EditorSliderBorderColor(false)
-                      : AppTheme::EditorSliderBorderColor(true);
-      painter.setPen(QPen(WithAlpha(focus_color, 176), 1.0));
-      painter.setBrush(Qt::NoBrush);
-      painter.drawEllipse(handle_rect.adjusted(-2.0, -2.0, 2.0, 2.0));
-    }
-  }
-
- private:
-  auto AnchorValue() const -> int {
-    if (minimum() <= 0 && maximum() >= 0) {
-      return 0;
-    }
-    return minimum() > 0 ? minimum() : maximum();
-  }
-
-  auto TrackRect() const -> QRectF {
-    const qreal handle_radius = metrics_.handle_diameter * 0.5;
-    const qreal left          = handle_radius + 2.0;
-    const qreal width         = std::max(0.0, rect().width() - (left * 2.0));
-    const qreal top           = (rect().height() - metrics_.track_height) * 0.5;
-    return QRectF(left, top, width, metrics_.track_height);
-  }
-
-  auto PositionForValue(int slider_value, const QRectF& track_rect) const -> qreal {
-    if (maximum() <= minimum() || track_rect.width() <= 0.0) {
-      return track_rect.center().x();
-    }
-
-    const qreal ratio =
-        static_cast<qreal>(slider_value - minimum()) / static_cast<qreal>(maximum() - minimum());
-    const qreal visual_ratio = invertedAppearance() ? (1.0 - ratio) : ratio;
-    return track_rect.left() + std::clamp(visual_ratio, 0.0, 1.0) * track_rect.width();
-  }
-
-  SliderPaintMetrics metrics_;
-};
-
-enum class SliderVisualStyle {
-  Accent,
-  Native
-};
-
-}  // namespace
 
 ToneControlPanelWidget::ToneControlPanelWidget(QWidget* parent) : QWidget(parent) {}
 
@@ -273,12 +110,11 @@ void EditorDialog::BuildToneControlPanel() {
     const QString value_chip_style =
         QStringLiteral("QLabel {"
                        "  color: %1;"
-                       "  background: rgba(255, 255, 255, 0.035);"
-                       "  border: 1px solid rgba(255, 255, 255, 0.08);"
-                       "  border-radius: 4px;"
-                       "  padding: 0 6px;"
+                       "  background: transparent;"
+                       "  border: none;"
+                       "  padding: 0;"
                        "}")
-            .arg(AppTheme::Instance().textColor().name(QColor::HexRgb));
+            .arg(AppTheme::Instance().textMutedColor().name(QColor::HexRgb));
 
     auto addSlider = [&, value_chip_style](
                          const QString& name, int min, int max, int value, auto&& onChange,
@@ -286,16 +122,16 @@ void EditorDialog::BuildToneControlPanel() {
                          SliderVisualStyle visual_style = SliderVisualStyle::Accent) {
       auto* name_label = new QLabel(name, controls_);
       name_label->setStyleSheet(AppTheme::EditorLabelStyle(AppTheme::Instance().textColor()));
-      AppTheme::MarkFontRole(name_label, AppTheme::FontRole::UiBody);
+      AppTheme::MarkFontRole(name_label, AppTheme::FontRole::UiCaption);
       name_label->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
 
       auto* value_chip = new QLabel(formatter(value), controls_);
-      value_chip->setAlignment(Qt::AlignCenter);
-      value_chip->setMinimumWidth(52);
-      value_chip->setMaximumWidth(84);
-      value_chip->setFixedHeight(20);
+      value_chip->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+      value_chip->setMinimumWidth(40);
+      value_chip->setMaximumWidth(72);
+      value_chip->setFixedHeight(16);
       value_chip->setStyleSheet(value_chip_style);
-      AppTheme::MarkFontRole(value_chip, AppTheme::FontRole::DataNumeric);
+      AppTheme::MarkFontRole(value_chip, AppTheme::FontRole::DataCaption);
 
       QSlider* slider = nullptr;
       if (visual_style == SliderVisualStyle::Accent) {
@@ -604,235 +440,6 @@ void EditorDialog::BuildToneControlPanel() {
         "}");
     controls_layout_->insertWidget(controls_layout_->count() - 1, color_temp_unsupported_label_);
     color_temp_unsupported_label_->setVisible(!state_.color_temp_supported_);
-
-    addSection(Tr("HSL / Color"), Tr("Per-hue lightness and saturation adjustments."));
-    {
-      auto* frame  = new QWidget(controls_);
-      auto* layout = new QVBoxLayout(frame);
-      layout->setContentsMargins(0, 0, 0, 0);
-      layout->setSpacing(6);
-
-      hls_target_label_ = new QLabel(frame);
-      hls_target_label_->setStyleSheet(AppTheme::EditorLabelStyle(AppTheme::Instance().textColor()));
-      AppTheme::MarkFontRole(hls_target_label_, AppTheme::FontRole::UiBody);
-      layout->addWidget(hls_target_label_, 0);
-
-      auto* swatch_row        = new QWidget(frame);
-      auto* swatch_row_layout = new QHBoxLayout(swatch_row);
-      swatch_row_layout->setContentsMargins(0, 0, 0, 0);
-      swatch_row_layout->setSpacing(6);
-
-      hls_candidate_buttons_.clear();
-      hls_candidate_buttons_.reserve(kHlsCandidateHues.size());
-      for (int i = 0; i < static_cast<int>(kHlsCandidateHues.size()); ++i) {
-        auto* btn = new QPushButton(swatch_row);
-        btn->setFixedSize(20, 20);
-        btn->setCursor(Qt::PointingHandCursor);
-        btn->setToolTip(
-            Tr("Hue %1 deg").arg(kHlsCandidateHues[static_cast<size_t>(i)], 0, 'f', 0));
-        QObject::connect(btn, &QPushButton::clicked, this, [this, i]() {
-          if (syncing_controls_) {
-            return;
-          }
-          SaveActiveHlsProfile(state_);
-          state_.hls_target_hue_ = kHlsCandidateHues[static_cast<size_t>(i)];
-          LoadActiveHlsProfile(state_);
-          SyncControlsFromState();
-        });
-        hls_candidate_buttons_.push_back(btn);
-        swatch_row_layout->addWidget(btn);
-      }
-      swatch_row_layout->addStretch();
-      layout->addWidget(swatch_row, 0);
-
-      controls_layout_->insertWidget(controls_layout_->count() - 1, frame);
-      RefreshHlsTargetUi();
-    }
-
-    hls_hue_adjust_slider_ = addSlider(
-        Tr("Hue Shift"), -15, 15, static_cast<int>(std::lround(state_.hls_hue_adjust_)),
-        [&](int v) {
-          state_.hls_hue_adjust_ =
-              std::clamp(static_cast<float>(v), -kHlsMaxHueShiftDegrees, kHlsMaxHueShiftDegrees);
-          SaveActiveHlsProfile(state_);
-          RequestRender();
-        },
-        [this]() { CommitAdjustment(AdjustmentField::Hls); },
-        [this]() {
-          ResetFieldToDefault(AdjustmentField::Hls, [this](const AdjustmentState& defaults) {
-            state_.hls_hue_adjust_ = defaults.hls_hue_adjust_;
-            SaveActiveHlsProfile(state_);
-          });
-        },
-        [](int v) { return QString("%1 deg").arg(v); });
-
-    hls_lightness_adjust_slider_ = addSlider(
-        Tr("Lightness"), -100, 100, static_cast<int>(std::lround(state_.hls_lightness_adjust_)),
-        [&](int v) {
-          state_.hls_lightness_adjust_ =
-              std::clamp(static_cast<float>(v), kHlsAdjUiMin, kHlsAdjUiMax);
-          SaveActiveHlsProfile(state_);
-          RequestRender();
-        },
-        [this]() { CommitAdjustment(AdjustmentField::Hls); },
-        [this]() {
-          ResetFieldToDefault(AdjustmentField::Hls, [this](const AdjustmentState& defaults) {
-            state_.hls_lightness_adjust_ = defaults.hls_lightness_adjust_;
-            SaveActiveHlsProfile(state_);
-          });
-        },
-        [](int v) { return QString::number(v, 'f', 0); });
-
-    hls_saturation_adjust_slider_ = addSlider(
-        Tr("HSL Saturation"), -100, 100,
-        static_cast<int>(std::lround(state_.hls_saturation_adjust_)),
-        [&](int v) {
-          state_.hls_saturation_adjust_ =
-              std::clamp(static_cast<float>(v), kHlsAdjUiMin, kHlsAdjUiMax);
-          SaveActiveHlsProfile(state_);
-          RequestRender();
-        },
-        [this]() { CommitAdjustment(AdjustmentField::Hls); },
-        [this]() {
-          ResetFieldToDefault(AdjustmentField::Hls, [this](const AdjustmentState& defaults) {
-            state_.hls_saturation_adjust_ = defaults.hls_saturation_adjust_;
-            SaveActiveHlsProfile(state_);
-          });
-        },
-        [](int v) { return QString::number(v, 'f', 0); });
-
-    hls_hue_range_slider_ = addSlider(
-        Tr("Hue Range"), 1, 180, static_cast<int>(std::lround(state_.hls_hue_range_)),
-        [&](int v) {
-          state_.hls_hue_range_ = static_cast<float>(v);
-          SaveActiveHlsProfile(state_);
-          RequestRender();
-        },
-        [this]() { CommitAdjustment(AdjustmentField::Hls); },
-        [this]() {
-          ResetFieldToDefault(AdjustmentField::Hls, [this](const AdjustmentState& defaults) {
-            state_.hls_hue_range_ = defaults.hls_hue_range_;
-            SaveActiveHlsProfile(state_);
-          });
-        },
-        [](int v) { return QString("%1 deg").arg(v); });
-
-    addSection(Tr("CDL Wheels"), Tr("Lift / Gamma / Gain color wheels."));
-    {
-      auto* wheel_frame = new QWidget(controls_);
-      wheel_frame->setMinimumWidth(0);
-      wheel_frame->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
-
-      auto* wheel_layout = new QVBoxLayout(wheel_frame);
-      wheel_layout->setContentsMargins(0, 0, 0, 0);
-      wheel_layout->setSpacing(4);
-
-      auto makeWheelUnit = [&](const QString& title, CdlWheelState& wheel_state, bool add_unity,
-                               bool invert_delta, CdlTrackballDiscWidget*& disc_widget,
-                               QLabel*& offset_label, QSlider*& slider_widget) -> QWidget* {
-        auto* unit = new QWidget(wheel_frame);
-        unit->setMinimumWidth(0);
-        unit->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
-        auto* unit_layout = new QVBoxLayout(unit);
-        unit_layout->setContentsMargins(0, 0, 0, 0);
-        unit_layout->setSpacing(2);
-
-        auto* title_label = new QLabel(title, unit);
-        title_label->setStyleSheet(AppTheme::EditorLabelStyle(QColor(0xCF, 0xCF, 0xCF)));
-        AppTheme::MarkFontRole(title_label, AppTheme::FontRole::UiOverline);
-        unit_layout->addWidget(title_label, 0, Qt::AlignHCenter);
-
-        disc_widget = new CdlTrackballDiscWidget(unit);
-        disc_widget->setMinimumSize(68, 68);
-        disc_widget->setMaximumSize(100, 100);
-        disc_widget->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
-        disc_widget->SetPosition(wheel_state.disc_position_);
-        disc_widget->SetPositionChangedCallback(
-            [this, &wheel_state, add_unity, invert_delta](const QPointF& pos) {
-              if (syncing_controls_) {
-                return;
-              }
-              wheel_state.disc_position_ = ClampDiscPoint(pos);
-              UpdateCdlWheelDerivedColor(wheel_state, add_unity, invert_delta);
-              RefreshCdlOffsetLabels();
-              RequestRender();
-            });
-        disc_widget->SetPositionReleasedCallback(
-            [this, &wheel_state, add_unity, invert_delta](const QPointF& pos) {
-              if (syncing_controls_) {
-                return;
-              }
-              wheel_state.disc_position_ = ClampDiscPoint(pos);
-              UpdateCdlWheelDerivedColor(wheel_state, add_unity, invert_delta);
-              RefreshCdlOffsetLabels();
-              RequestRender();
-              CommitAdjustment(AdjustmentField::ColorWheel);
-            });
-        unit_layout->addWidget(disc_widget, 0, Qt::AlignHCenter);
-
-        offset_label = new QLabel(FormatWheelDeltaText(wheel_state, add_unity), unit);
-        offset_label->setStyleSheet(AppTheme::EditorLabelStyle(QColor(0xA9, 0xA9, 0xA9)));
-        AppTheme::MarkFontRole(offset_label, AppTheme::FontRole::DataCaption);
-        offset_label->setAlignment(Qt::AlignHCenter);
-        unit_layout->addWidget(offset_label, 0);
-
-        slider_widget = new AccentBalanceSlider(kCompactSliderMetrics, unit);
-        slider_widget->setRange(kCdlWheelSliderUiMin, kCdlWheelSliderUiMax);
-        const float sign = invert_delta ? -1.0f : 1.0f;
-        slider_widget->setValue(CdlMasterToSliderUi(wheel_state.master_offset_ * sign));
-        slider_widget->setSingleStep(1);
-        slider_widget->setPageStep(100);
-        slider_widget->setFixedHeight(14);
-        slider_widget->setMinimumWidth(0);
-        slider_widget->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-        QObject::connect(slider_widget, &QSlider::valueChanged, unit,
-                         [this, &wheel_state, sign](int value) {
-                           if (syncing_controls_) {
-                             return;
-                           }
-                           wheel_state.master_offset_ = CdlSliderUiToMaster(value) * sign;
-                           RefreshCdlOffsetLabels();
-                           RequestRender();
-                         });
-        QObject::connect(slider_widget, &QSlider::sliderReleased, unit, [this]() {
-          if (syncing_controls_) {
-            return;
-          }
-          CommitAdjustment(AdjustmentField::ColorWheel);
-        });
-        RegisterSliderReset(slider_widget, [this, &wheel_state]() {
-          wheel_state.master_offset_ = 0.0f;
-          SyncControlsFromState();
-          RequestRender();
-          CommitAdjustment(AdjustmentField::ColorWheel);
-        });
-        unit_layout->addWidget(slider_widget, 0);
-
-        return unit;
-      };
-
-      auto* gamma_unit = makeWheelUnit(Tr("Gamma"), state_.gamma_wheel_, true, true,
-                                       gamma_disc_widget_, gamma_offset_label_,
-                                       gamma_master_slider_);
-      auto* lift_unit  = makeWheelUnit(Tr("Lift"), state_.lift_wheel_, false, false,
-                                       lift_disc_widget_, lift_offset_label_,
-                                       lift_master_slider_);
-      auto* gain_unit  = makeWheelUnit(Tr("Gain"), state_.gain_wheel_, true, false,
-                                       gain_disc_widget_, gain_offset_label_,
-                                       gain_master_slider_);
-
-      auto* wheel_row        = new QWidget(wheel_frame);
-      auto* wheel_row_layout = new QHBoxLayout(wheel_row);
-      wheel_row_layout->setContentsMargins(0, 0, 0, 0);
-      wheel_row_layout->setSpacing(6);
-      wheel_row_layout->addWidget(lift_unit, 1);
-      wheel_row_layout->addWidget(gamma_unit, 1);
-      wheel_row_layout->addWidget(gain_unit, 1);
-      wheel_layout->addWidget(wheel_row, 0);
-
-      controls_layout_->insertWidget(controls_layout_->count() - 1, wheel_frame, 0);
-      RefreshCdlOffsetLabels();
-    }
 
     addSection(Tr("Detail"), Tr("Micro-contrast and sharpen controls."));
 

@@ -289,7 +289,7 @@ void EditorDialog::RetranslateUi() {
       tone_panel_btn_->setText(Tr("Tone"));
     }
     if (look_panel_btn_) {
-      look_panel_btn_->setText(Tr("Look"));
+      look_panel_btn_->setText(Tr("Color"));
     }
     if (drt_panel_btn_) {
       drt_panel_btn_->setText(Tr("Display RT"));
