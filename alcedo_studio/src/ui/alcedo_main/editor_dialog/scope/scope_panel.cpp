@@ -226,6 +226,10 @@ void ScopePanel::SetRequestChangedCallback(std::function<void(const ScopeRequest
   ApplyCurrentRequest();
 }
 
+void ScopePanel::SetNeedsRenderCallback(std::function<void()> callback) {
+  needs_render_callback_ = std::move(callback);
+}
+
 auto ScopePanel::CurrentRequest() const -> ScopeRequest {
   ScopeRequest request;
   request.enabled_mask = 0U;
@@ -284,6 +288,10 @@ void ScopePanel::SetActiveScopeView(ScopeView view) {
   }
   RefreshScopeSwitchUi();
   ApplyCurrentRequest();
+
+  if (needs_render_callback_) {
+    needs_render_callback_();
+  }
 }
 
 void ScopePanel::RefreshScopeSwitchUi() {

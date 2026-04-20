@@ -321,6 +321,7 @@ auto MakeIconToolButton(QWidget* parent, const QString& icon_path,
 LutBrowserWidget::LutBrowserWidget(QWidget* parent) : QWidget(parent) {
   const auto& theme = AppTheme::Instance();
   setObjectName(QStringLiteral("LutBrowserCard"));
+  setMinimumHeight(380);
   setAttribute(Qt::WA_StyledBackground, true);
   setStyleSheet(QStringLiteral("QWidget#LutBrowserCard {"
                                "  background: %1;"

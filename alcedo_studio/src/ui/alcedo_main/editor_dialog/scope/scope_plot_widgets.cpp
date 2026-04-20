@@ -6,6 +6,7 @@
 
 #include <QtGlobal>
 
+#include <QCoreApplication>
 #include <QPainter>
 #include <QPainterPath>
 #include <QPen>
@@ -16,6 +17,10 @@
 
 namespace alcedo::ui {
 namespace {
+
+auto TrScope(const char* text) -> QString {
+  return QCoreApplication::translate("Alcedo.Main", text);
+}
 
 auto FormatClipBadge(const char* label, float ratio) -> QString {
   return QStringLiteral("%1 %2%").arg(QString::fromLatin1(label)).arg(qRound(ratio * 100.0f));
@@ -39,7 +44,7 @@ void DrawClipBadge(QPainter& painter, const QRectF& rect, const QColor& fill_col
 }  // namespace
 
 ScopeHistogramWidget::ScopeHistogramWidget(QWidget* parent) : QWidget(parent) {
-  setMinimumHeight(150);
+  setMinimumHeight(180);
   setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
   setAutoFillBackground(false);
 }
@@ -65,12 +70,18 @@ void ScopeHistogramWidget::paintEvent(QPaintEvent*) {
       presentation_.rgb.size() < static_cast<size_t>(presentation_.bins * 3)) {
     painter.setPen(QColor(0x9A, 0x9A, 0x9A));
     painter.setFont(AppTheme::Font(AppTheme::FontRole::DataCaption));
-    painter.drawText(plot_rect, Qt::AlignCenter, QStringLiteral("Waiting for histogram"));
+    painter.drawText(plot_rect, Qt::AlignCenter, TrScope("Waiting for histogram"));
     return;
   }
 
   painter.save();
   painter.setClipPath(plot_clip);
+
+  painter.setPen(QPen(QColor(0x28, 0x28, 0x28), 1.0));
+  for (int i = 1; i < 5; ++i) {
+    const qreal x = plot_rect.left() + plot_rect.width() * i / 5.0;
+    painter.drawLine(QPointF(x, plot_rect.top()), QPointF(x, plot_rect.bottom()));
+  }
 
   const QColor fill_colors[3] = {QColor(255, 64, 64, 76), QColor(64, 255, 96, 72),
                                  QColor(64, 128, 255, 72)};
@@ -138,7 +149,7 @@ void ScopeHistogramWidget::paintEvent(QPaintEvent*) {
 }
 
 ScopeWaveformWidget::ScopeWaveformWidget(QWidget* parent) : QWidget(parent) {
-  setMinimumHeight(150);
+  setMinimumHeight(180);
   setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
   setAutoFillBackground(false);
 }
@@ -164,12 +175,19 @@ void ScopeWaveformWidget::paintEvent(QPaintEvent*) {
   if (!presentation_.valid || presentation_.image.isNull()) {
     painter.setPen(QColor(0x9A, 0x9A, 0x9A));
     painter.setFont(AppTheme::Font(AppTheme::FontRole::DataCaption));
-    painter.drawText(draw_rect, Qt::AlignCenter, QStringLiteral("Waiting for waveform"));
+    painter.drawText(draw_rect, Qt::AlignCenter, TrScope("Waiting for waveform"));
     return;
   }
 
   painter.save();
   painter.setClipPath(draw_clip);
+
+  painter.setPen(QPen(QColor(0x28, 0x28, 0x28), 1.0));
+  for (int i = 1; i < 5; ++i) {
+    const qreal y = draw_rect.top() + draw_rect.height() * i / 5.0;
+    painter.drawLine(QPointF(draw_rect.left(), y), QPointF(draw_rect.right(), y));
+  }
+
   painter.drawImage(draw_rect, presentation_.image);
   painter.restore();
 

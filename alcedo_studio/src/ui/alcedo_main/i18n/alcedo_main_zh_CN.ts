@@ -2139,4 +2139,32 @@ Original source files on disk will be kept.</source>
         <translation>导入</translation>
     </message>
 </context>
+<context>
+    <name>Alcedo.Main</name>
+    <message>
+        <location filename="../editor_dialog/scope/scope_panel.cpp" line="95"/>
+        <source>Scope</source>
+        <translation>示波器</translation>
+    </message>
+    <message>
+        <location filename="../editor_dialog/scope/scope_panel.cpp" line="101"/>
+        <source>Histogram</source>
+        <translation>直方图</translation>
+    </message>
+    <message>
+        <location filename="../editor_dialog/scope/scope_panel.cpp" line="102"/>
+        <source>Waveform</source>
+        <translation>波形图</translation>
+    </message>
+    <message>
+        <location filename="../editor_dialog/scope/scope_plot_widgets.cpp" line="68"/>
+        <source>Waiting for histogram</source>
+        <translation>等待直方图数据</translation>
+    </message>
+    <message>
+        <location filename="../editor_dialog/scope/scope_plot_widgets.cpp" line="173"/>
+        <source>Waiting for waveform</source>
+        <translation>等待波形图数据</translation>
+    </message>
+</context>
 </TS>

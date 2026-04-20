@@ -79,6 +79,9 @@ EditorDialog::EditorDialog(std::shared_ptr<ImagePoolService>       image_pool,
 
     frame_manager_.SetViewer(viewer_);
     frame_manager_.SetScopePanel(scope_panel_);
+    if (scope_panel_) {
+      scope_panel_->SetNeedsRenderCallback([this]() { RequestRender(); });
+    }
     SetupPipeline();
     pipeline_initialized_ = true;
     if (viewer_) {

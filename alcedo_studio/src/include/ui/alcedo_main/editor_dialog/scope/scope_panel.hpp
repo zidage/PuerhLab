@@ -31,6 +31,7 @@ class ScopePanel final : public QWidget {
   void SetAnalyzer(std::shared_ptr<IScopeAnalyzer> analyzer);
   void SetExifDisplayMetaData(const ExifDisplayMetaData& metadata);
   void SetRequestChangedCallback(std::function<void(const ScopeRequest&)> callback);
+  void SetNeedsRenderCallback(std::function<void()> callback);
   auto CurrentRequest() const -> ScopeRequest;
 
  private:
@@ -48,6 +49,7 @@ class ScopePanel final : public QWidget {
   std::shared_ptr<IScopeAnalyzer>             analyzer_{};
   ExifDisplayMetaData                         exif_display_{};
   std::function<void(const ScopeRequest&)>    request_changed_callback_{};
+  std::function<void()>                       needs_render_callback_{};
   ScopeRenderer                               renderer_{};
   QTimer*                                     refresh_timer_ = nullptr;
   QComboBox*                                  scope_type_combo_ = nullptr;

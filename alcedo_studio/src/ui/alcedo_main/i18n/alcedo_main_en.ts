@@ -1077,4 +1077,32 @@ Original source files on disk will be kept.</source>
         <translation>Import</translation>
     </message>
 </context>
+<context>
+    <name>Alcedo.Main</name>
+    <message>
+        <location filename="../editor_dialog/scope/scope_panel.cpp" line="95"/>
+        <source>Scope</source>
+        <translation>Scope</translation>
+    </message>
+    <message>
+        <location filename="../editor_dialog/scope/scope_panel.cpp" line="101"/>
+        <source>Histogram</source>
+        <translation>Histogram</translation>
+    </message>
+    <message>
+        <location filename="../editor_dialog/scope/scope_panel.cpp" line="102"/>
+        <source>Waveform</source>
+        <translation>Waveform</translation>
+    </message>
+    <message>
+        <location filename="../editor_dialog/scope/scope_plot_widgets.cpp" line="68"/>
+        <source>Waiting for histogram</source>
+        <translation>Waiting for histogram</translation>
+    </message>
+    <message>
+        <location filename="../editor_dialog/scope/scope_plot_widgets.cpp" line="173"/>
+        <source>Waiting for waveform</source>
+        <translation>Waiting for waveform</translation>
+    </message>
+</context>
 </TS>
