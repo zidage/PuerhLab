@@ -181,20 +181,38 @@ void EditorDialog::BuildToneControlPanel() {
     controls_layout_->addWidget(controls_header, 0);
 
     auto addSection = [&](const QString& title, const QString& subtitle) {
-      auto* frame = new QFrame(controls_);
-      frame->setObjectName("EditorSection");
-      auto* v = new QVBoxLayout(frame);
-      v->setContentsMargins(12, 10, 12, 10);
-      v->setSpacing(2);
+      auto* frame = new QWidget(controls_);
+      auto* v     = new QVBoxLayout(frame);
+      v->setContentsMargins(0, 8, 0, 2);
+      v->setSpacing(4);
 
-      auto* t = new QLabel(title, frame);
+      auto* header_row    = new QWidget(frame);
+      auto* header_layout = new QHBoxLayout(header_row);
+      header_layout->setContentsMargins(0, 0, 0, 0);
+      header_layout->setSpacing(6);
+
+      auto* t = new QLabel(title.toUpper(), header_row);
       t->setObjectName("EditorSectionTitle");
-      auto* s = new QLabel(subtitle, frame);
-      s->setObjectName("EditorSectionSub");
-      s->setWordWrap(true);
-      v->addWidget(t, 0);
-      v->addWidget(s, 0);
-      controls_layout_->addWidget(frame, 0);
+      t->setStyleSheet(
+          AppTheme::EditorLabelStyle(AppTheme::Instance().textMutedColor()));
+      AppTheme::MarkFontRole(t, AppTheme::FontRole::UiOverline);
+      if (!subtitle.isEmpty()) {
+        t->setToolTip(subtitle);
+      }
+      header_layout->addWidget(t, 0);
+      header_layout->addStretch(1);
+
+      auto* divider = new QFrame(frame);
+      divider->setFrameShape(QFrame::HLine);
+      divider->setFixedHeight(1);
+      divider->setStyleSheet(
+          QStringLiteral("QFrame { background: %1; border: none; }")
+              .arg(WithAlpha(AppTheme::Instance().dividerColor(), 110)
+                       .name(QColor::HexArgb)));
+
+      v->addWidget(header_row, 0);
+      v->addWidget(divider, 0);
+      controls_layout_->insertWidget(controls_layout_->count() - 1, frame, 0);
     };
 
     controls_layout_->addStretch();
@@ -221,15 +239,16 @@ void EditorDialog::BuildToneControlPanel() {
                            auto&& onChange) {
       auto* label = new QLabel(name, controls_);
       label->setStyleSheet(AppTheme::EditorLabelStyle(AppTheme::Instance().textColor()));
-      label->setWordWrap(true);
+      AppTheme::MarkFontRole(label, AppTheme::FontRole::UiBody);
       label->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
 
       auto* combo = new QComboBox(controls_);
       combo->addItems(items);
       combo->setCurrentIndex(initial_index);
-      combo->setMinimumWidth(0);
-      combo->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-      combo->setFixedHeight(32);
+      combo->setMinimumWidth(96);
+      combo->setMaximumWidth(160);
+      combo->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
+      combo->setFixedHeight(26);
       combo->setStyleSheet(AppTheme::EditorComboBoxStyle());
 
       QObject::connect(combo, QOverload<int>::of(&QComboBox::currentIndexChanged), controls_,
@@ -241,24 +260,42 @@ void EditorDialog::BuildToneControlPanel() {
                        });
 
       auto* row       = new QWidget(controls_);
-      auto* rowLayout = new QVBoxLayout(row);
+      auto* rowLayout = new QHBoxLayout(row);
       rowLayout->setContentsMargins(0, 0, 0, 0);
-      rowLayout->setSpacing(4);
-      rowLayout->addWidget(label, /*stretch*/ 0);
-      rowLayout->addWidget(combo, /*stretch*/ 1);
+      rowLayout->setSpacing(8);
+      rowLayout->addWidget(label, /*stretch*/ 1);
+      rowLayout->addWidget(combo, /*stretch*/ 0, Qt::AlignRight | Qt::AlignVCenter);
 
       controls_layout_->insertWidget(controls_layout_->count() - 1, row);
       return combo;
     };
 
-    auto addSlider = [&](const QString& name, int min, int max, int value, auto&& onChange,
+    const QString value_chip_style =
+        QStringLiteral("QLabel {"
+                       "  color: %1;"
+                       "  background: rgba(255, 255, 255, 0.035);"
+                       "  border: 1px solid rgba(255, 255, 255, 0.08);"
+                       "  border-radius: 4px;"
+                       "  padding: 0 6px;"
+                       "}")
+            .arg(AppTheme::Instance().textColor().name(QColor::HexRgb));
+
+    auto addSlider = [&, value_chip_style](
+                         const QString& name, int min, int max, int value, auto&& onChange,
                          auto&& onRelease, auto&& onReset, auto&& formatter,
                          SliderVisualStyle visual_style = SliderVisualStyle::Accent) {
-      auto* info = new QLabel(QString("%1: %2").arg(name).arg(formatter(value)), controls_);
-      info->setStyleSheet(AppTheme::EditorLabelStyle(AppTheme::Instance().textColor()));
-      AppTheme::MarkFontRole(info, AppTheme::FontRole::DataBody);
-      info->setWordWrap(true);
-      info->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+      auto* name_label = new QLabel(name, controls_);
+      name_label->setStyleSheet(AppTheme::EditorLabelStyle(AppTheme::Instance().textColor()));
+      AppTheme::MarkFontRole(name_label, AppTheme::FontRole::UiBody);
+      name_label->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+
+      auto* value_chip = new QLabel(formatter(value), controls_);
+      value_chip->setAlignment(Qt::AlignCenter);
+      value_chip->setMinimumWidth(52);
+      value_chip->setMaximumWidth(84);
+      value_chip->setFixedHeight(20);
+      value_chip->setStyleSheet(value_chip_style);
+      AppTheme::MarkFontRole(value_chip, AppTheme::FontRole::DataNumeric);
 
       QSlider* slider = nullptr;
       if (visual_style == SliderVisualStyle::Accent) {
@@ -272,12 +309,12 @@ void EditorDialog::BuildToneControlPanel() {
       slider->setPageStep(std::max(1, (max - min) / 20));
       slider->setMinimumWidth(0);
       slider->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-      slider->setFixedHeight(32);
+      slider->setFixedHeight(22);
 
       QObject::connect(slider, &QSlider::valueChanged, controls_,
-                       [this, info, name, formatter,
+                       [this, value_chip, formatter,
                         onChange = std::forward<decltype(onChange)>(onChange)](int v) {
-                         info->setText(QString("%1: %2").arg(name).arg(formatter(v)));
+                         value_chip->setText(formatter(v));
                          if (syncing_controls_) {
                            return;
                          }
@@ -300,12 +337,19 @@ void EditorDialog::BuildToneControlPanel() {
             onReset();
           });
 
+      auto* head_row    = new QWidget(controls_);
+      auto* head_layout = new QHBoxLayout(head_row);
+      head_layout->setContentsMargins(0, 0, 0, 0);
+      head_layout->setSpacing(8);
+      head_layout->addWidget(name_label, /*stretch*/ 1);
+      head_layout->addWidget(value_chip, /*stretch*/ 0, Qt::AlignRight | Qt::AlignVCenter);
+
       auto* row       = new QWidget(controls_);
       auto* rowLayout = new QVBoxLayout(row);
       rowLayout->setContentsMargins(0, 0, 0, 0);
-      rowLayout->setSpacing(4);
-      rowLayout->addWidget(info, /*stretch*/ 0);
-      rowLayout->addWidget(slider, /*stretch*/ 1);
+      rowLayout->setSpacing(2);
+      rowLayout->addWidget(head_row, /*stretch*/ 0);
+      rowLayout->addWidget(slider, /*stretch*/ 0);
 
       controls_layout_->insertWidget(controls_layout_->count() - 1, row);
       return slider;
@@ -398,12 +442,13 @@ void EditorDialog::BuildToneControlPanel() {
         },
         [](int v) { return QString::number(v, 'f', 2); });
 
-    addSection(Tr("Curve"), Tr("Smooth tone curve mapped from input [0, 1] to output [0, 1]."));
+    addSection(Tr("Tone Curve"),
+               Tr("Smooth tone curve mapped from input [0, 1] to output [0, 1]."));
     {
       auto* frame  = new QFrame(controls_);
       auto* layout = new QVBoxLayout(frame);
       layout->setContentsMargins(0, 0, 0, 0);
-      layout->setSpacing(8);
+      layout->setSpacing(4);
 
       curve_widget_ = new ToneCurveWidget(frame);
       curve_widget_->SetControlPoints(state_.curve_points_);
@@ -560,16 +605,16 @@ void EditorDialog::BuildToneControlPanel() {
     controls_layout_->insertWidget(controls_layout_->count() - 1, color_temp_unsupported_label_);
     color_temp_unsupported_label_->setVisible(!state_.color_temp_supported_);
 
+    addSection(Tr("HSL / Color"), Tr("Per-hue lightness and saturation adjustments."));
     {
-      auto* frame = new QFrame(controls_);
-      frame->setObjectName("EditorSection");
+      auto* frame  = new QWidget(controls_);
       auto* layout = new QVBoxLayout(frame);
-      layout->setContentsMargins(12, 10, 12, 10);
-      layout->setSpacing(8);
+      layout->setContentsMargins(0, 0, 0, 0);
+      layout->setSpacing(6);
 
       hls_target_label_ = new QLabel(frame);
       hls_target_label_->setStyleSheet(AppTheme::EditorLabelStyle(AppTheme::Instance().textColor()));
-      AppTheme::MarkFontRole(hls_target_label_, AppTheme::FontRole::DataBodyStrong);
+      AppTheme::MarkFontRole(hls_target_label_, AppTheme::FontRole::UiBody);
       layout->addWidget(hls_target_label_, 0);
 
       auto* swatch_row        = new QWidget(frame);
@@ -581,7 +626,7 @@ void EditorDialog::BuildToneControlPanel() {
       hls_candidate_buttons_.reserve(kHlsCandidateHues.size());
       for (int i = 0; i < static_cast<int>(kHlsCandidateHues.size()); ++i) {
         auto* btn = new QPushButton(swatch_row);
-        btn->setFixedSize(22, 22);
+        btn->setFixedSize(20, 20);
         btn->setCursor(Qt::PointingHandCursor);
         btn->setToolTip(
             Tr("Hue %1 deg").arg(kHlsCandidateHues[static_cast<size_t>(i)], 0, 'f', 0));
@@ -672,20 +717,15 @@ void EditorDialog::BuildToneControlPanel() {
         },
         [](int v) { return QString("%1 deg").arg(v); });
 
+    addSection(Tr("CDL Wheels"), Tr("Lift / Gamma / Gain color wheels."));
     {
-      auto* wheel_frame = new QFrame(controls_);
-      wheel_frame->setObjectName("EditorSection");
+      auto* wheel_frame = new QWidget(controls_);
       wheel_frame->setMinimumWidth(0);
       wheel_frame->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
 
       auto* wheel_layout = new QVBoxLayout(wheel_frame);
-      wheel_layout->setContentsMargins(10, 8, 10, 8);
-      wheel_layout->setSpacing(2);
-
-      auto* wheel_title = new QLabel(Tr("CDL Wheels"), wheel_frame);
-      wheel_title->setStyleSheet(AppTheme::EditorLabelStyle(AppTheme::Instance().textColor()));
-      AppTheme::MarkFontRole(wheel_title, AppTheme::FontRole::UiTitle);
-      wheel_layout->addWidget(wheel_title, 0, Qt::AlignHCenter);
+      wheel_layout->setContentsMargins(0, 0, 0, 0);
+      wheel_layout->setSpacing(4);
 
       auto makeWheelUnit = [&](const QString& title, CdlWheelState& wheel_state, bool add_unity,
                                bool invert_delta, CdlTrackballDiscWidget*& disc_widget,
@@ -703,8 +743,8 @@ void EditorDialog::BuildToneControlPanel() {
         unit_layout->addWidget(title_label, 0, Qt::AlignHCenter);
 
         disc_widget = new CdlTrackballDiscWidget(unit);
-        disc_widget->setMinimumSize(84, 84);
-        disc_widget->setMaximumSize(120, 120);
+        disc_widget->setMinimumSize(68, 68);
+        disc_widget->setMaximumSize(100, 100);
         disc_widget->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
         disc_widget->SetPosition(wheel_state.disc_position_);
         disc_widget->SetPositionChangedCallback(
@@ -781,24 +821,14 @@ void EditorDialog::BuildToneControlPanel() {
                                        gain_disc_widget_, gain_offset_label_,
                                        gain_master_slider_);
 
-      auto* top_row = new QWidget(wheel_frame);
-      auto* top_row_layout = new QHBoxLayout(top_row);
-      top_row_layout->setContentsMargins(0, 0, 0, 0);
-      top_row_layout->setSpacing(8);
-      top_row_layout->addStretch();
-      top_row_layout->addWidget(gamma_unit, 0);
-      top_row_layout->addStretch();
-      wheel_layout->addWidget(top_row, 0);
-
-      auto* bottom_row = new QWidget(wheel_frame);
-      auto* bottom_row_layout = new QHBoxLayout(bottom_row);
-      bottom_row_layout->setContentsMargins(0, 0, 0, 0);
-      bottom_row_layout->setSpacing(8);
-      bottom_row_layout->addStretch();
-      bottom_row_layout->addWidget(lift_unit, 0);
-      bottom_row_layout->addWidget(gain_unit, 0);
-      bottom_row_layout->addStretch();
-      wheel_layout->addWidget(bottom_row, 0);
+      auto* wheel_row        = new QWidget(wheel_frame);
+      auto* wheel_row_layout = new QHBoxLayout(wheel_row);
+      wheel_row_layout->setContentsMargins(0, 0, 0, 0);
+      wheel_row_layout->setSpacing(6);
+      wheel_row_layout->addWidget(lift_unit, 1);
+      wheel_row_layout->addWidget(gamma_unit, 1);
+      wheel_row_layout->addWidget(gain_unit, 1);
+      wheel_layout->addWidget(wheel_row, 0);
 
       controls_layout_->insertWidget(controls_layout_->count() - 1, wheel_frame, 0);
       RefreshCdlOffsetLabels();

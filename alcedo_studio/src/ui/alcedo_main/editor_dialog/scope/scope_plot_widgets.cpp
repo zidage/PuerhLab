@@ -39,7 +39,7 @@ void DrawClipBadge(QPainter& painter, const QRectF& rect, const QColor& fill_col
 }  // namespace
 
 ScopeHistogramWidget::ScopeHistogramWidget(QWidget* parent) : QWidget(parent) {
-  setMinimumHeight(184);
+  setMinimumHeight(112);
   setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
   setAutoFillBackground(false);
 }
@@ -138,7 +138,7 @@ void ScopeHistogramWidget::paintEvent(QPaintEvent*) {
 }
 
 ScopeWaveformWidget::ScopeWaveformWidget(QWidget* parent) : QWidget(parent) {
-  setMinimumHeight(184);
+  setMinimumHeight(112);
   setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
   setAutoFillBackground(false);
 }

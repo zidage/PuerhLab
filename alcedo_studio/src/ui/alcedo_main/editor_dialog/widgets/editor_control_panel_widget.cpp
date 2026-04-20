@@ -19,8 +19,8 @@ auto EditorDialog::BuildControlPanelShell(const QString& panel_style) -> EditorC
   controls_panel->setStyleSheet(panel_style);
 
   auto* controls_panel_layout = new QVBoxLayout(controls_panel);
-  controls_panel_layout->setContentsMargins(18, 18, 18, 18);
-  controls_panel_layout->setSpacing(12);
+  controls_panel_layout->setContentsMargins(12, 12, 12, 12);
+  controls_panel_layout->setSpacing(8);
 
   const QString scroll_style = AppTheme::EditorScrollAreaStyle();
 
@@ -36,8 +36,8 @@ auto EditorDialog::BuildControlPanelShell(const QString& panel_style) -> EditorC
   tone_controls_->setMinimumWidth(0);
   tone_controls_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
   controls_layout_ = new QVBoxLayout(tone_controls_);
-  controls_layout_->setContentsMargins(14, 14, 14, 14);
-  controls_layout_->setSpacing(12);
+  controls_layout_->setContentsMargins(10, 8, 10, 10);
+  controls_layout_->setSpacing(8);
   tone_controls_scroll_->setWidget(tone_controls_);
   controls_scroll_ = tone_controls_scroll_;
 
@@ -150,11 +150,13 @@ auto EditorDialog::BuildControlPanelShell(const QString& panel_style) -> EditorC
 
   auto* scope_frame = new QFrame(controls_panel);
   scope_frame->setObjectName("EditorSection");
+  scope_frame->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
   auto* scope_layout = new QVBoxLayout(scope_frame);
   scope_layout->setContentsMargins(0, 0, 0, 0);
   scope_layout->setSpacing(0);
   scope_panel_ = new ScopePanel(scope_frame);
-  scope_layout->addWidget(scope_panel_, 1);
+  scope_panel_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+  scope_layout->addWidget(scope_panel_, 0);
 
   controls_panel_layout->addWidget(scope_frame, 0);
   controls_panel_layout->addWidget(panel_switch_row, 0);

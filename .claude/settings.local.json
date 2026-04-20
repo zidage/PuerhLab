@@ -18,7 +18,11 @@
       "Bash(echo \"exit=$?\")",
       "PowerShell(& cmd /c \"scripts\\\\msvc_env.cmd --build --preset win_debug --target alcedo_main --parallel 4\" 2>&1)",
       "Bash(xargs -I{} basename {})",
-      "Bash(cmd //c \"scripts\\\\\\\\msvc_env.cmd --build --preset win_debug --parallel 4 --target alcedo_main\")"
+      "Bash(cmd //c \"scripts\\\\\\\\msvc_env.cmd --build --preset win_debug --parallel 4 --target alcedo_main\")",
+      "Bash(cmd //c scripts\\\\\\\\msvc_env.cmd --build --preset win_debug --parallel 4 --target alcedo_main)",
+      "Bash(cmd /c \"scripts\\\\msvc_env.cmd --build --preset win_debug --parallel 4 --target alcedo_main\")",
+      "Bash(cmd /c \"scripts\\\\\\\\msvc_env.cmd --build --preset win_debug --parallel 4 --target alcedo_main\")",
+      "Bash(cmd //c \"call scripts\\\\\\\\msvc_env.cmd --build --preset win_debug --parallel 4 --target alcedo_main\")"
     ]
   }
 }

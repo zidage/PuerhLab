@@ -32,7 +32,7 @@ constexpr int kDefaultWaveformWidth      = 384;
 constexpr int kDefaultWaveformHeight     = 192;
 constexpr int kDefaultAnalysisDownsample = 4;
 constexpr int kDefaultTargetFps          = 20;
-constexpr int kScopePlotInset            = 10;
+constexpr int kScopePlotInset            = 6;
 
 auto FormatCompactFloat(float value) -> QString {
   const float rounded = std::round(value);
@@ -84,35 +84,41 @@ ScopePanel::ScopePanel(QWidget* parent) : QWidget(parent) {
   const auto& theme = AppTheme::Instance();
 
   auto* root = new QVBoxLayout(this);
-  root->setContentsMargins(14, 12, 14, 12);
-  root->setSpacing(12);
+  root->setContentsMargins(10, 8, 10, 6);
+  root->setSpacing(6);
 
-  auto* title = new QLabel(TrScope("Scope"), this);
+  auto* header_row        = new QWidget(this);
+  auto* header_row_layout = new QHBoxLayout(header_row);
+  header_row_layout->setContentsMargins(0, 0, 0, 0);
+  header_row_layout->setSpacing(8);
+
+  auto* title = new QLabel(TrScope("Scope"), header_row);
   title->setObjectName("EditorSectionTitle");
-  root->addWidget(title, 0);
+  header_row_layout->addWidget(title, 0);
+  header_row_layout->addStretch(1);
 
-  scope_type_combo_ = new QComboBox(this);
+  scope_type_combo_ = new QComboBox(header_row);
   scope_type_combo_->addItem(TrScope("Histogram"));
   scope_type_combo_->addItem(TrScope("Waveform"));
   scope_type_combo_->setCursor(Qt::PointingHandCursor);
-  scope_type_combo_->setFixedHeight(44);
-  scope_type_combo_->setMinimumWidth(180);
-  scope_type_combo_->setMaximumWidth(260);
+  scope_type_combo_->setFixedHeight(26);
+  scope_type_combo_->setMinimumWidth(120);
+  scope_type_combo_->setMaximumWidth(180);
   scope_type_combo_->setStyleSheet(
       QStringLiteral(
           "QComboBox {"
           "  background: %1;"
           "  color: %2;"
           "  border: none;"
-          "  border-radius: 12px;"
-          "  padding: 0 14px;"
+          "  border-radius: 6px;"
+          "  padding: 0 10px;"
           "}"
           "QComboBox:hover {"
           "  background: %3;"
           "}"
           "QComboBox::drop-down {"
           "  border: 0px;"
-          "  width: 28px;"
+          "  width: 22px;"
           "}"
           "QComboBox QAbstractItemView {"
           "  background: %4;"
@@ -141,8 +147,9 @@ ScopePanel::ScopePanel(QWidget* parent) : QWidget(parent) {
                    .name(QColor::HexArgb),
                theme.bgCanvasColor().name(QColor::HexRgb),
                QColor(0x36, 0x36, 0x36).name(QColor::HexRgb)));
-  AppTheme::MarkFontRole(scope_type_combo_, AppTheme::FontRole::UiBodyStrong);
-  root->addWidget(scope_type_combo_, 0, Qt::AlignLeft);
+  AppTheme::MarkFontRole(scope_type_combo_, AppTheme::FontRole::UiCaptionStrong);
+  header_row_layout->addWidget(scope_type_combo_, 0, Qt::AlignRight | Qt::AlignVCenter);
+  root->addWidget(header_row, 0);
 
   scope_stack_ = new QStackedWidget(this);
   scope_stack_->setFrameShape(QFrame::NoFrame);
@@ -170,7 +177,7 @@ ScopePanel::ScopePanel(QWidget* parent) : QWidget(parent) {
       "QLabel { color: %1; }")
                               .arg(theme.textMutedColor().name(QColor::HexRgb)));
   auto* exif_layout = new QHBoxLayout(exif_row);
-  exif_layout->setContentsMargins(0, 4, 0, 0);
+  exif_layout->setContentsMargins(0, 2, 0, 0);
   exif_layout->setSpacing(0);
   constexpr int        kExifColumnStretch[4] = {1, 1, 1, 1};
   constexpr Qt::Alignment kExifAlignment[4]  = {Qt::AlignLeft | Qt::AlignVCenter,
