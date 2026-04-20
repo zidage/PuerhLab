@@ -47,9 +47,12 @@ void ToneCurveWidget::paintEvent(QPaintEvent*) {
   painter.setFont(AppTheme::Font(AppTheme::FontRole::DataCaption));
   const auto& theme = AppTheme::Instance();
 
-  painter.fillRect(rect(), theme.bgPanelColor());
+  const QRectF  bg_rect = rect().adjusted(0, 0, -1, -1);
+  QPainterPath  bg_path;
+  bg_path.addRoundedRect(bg_rect, 10.0, 10.0);
+  painter.fillPath(bg_path, theme.bgPanelColor());
   painter.setPen(QPen(theme.glassStrokeColor(), 1.0));
-  painter.drawRoundedRect(rect().adjusted(0, 0, -1, -1), 10.0, 10.0);
+  painter.drawPath(bg_path);
 
   const QRectF plot = PlotRect();
   painter.fillRect(plot, theme.bgBaseColor());
