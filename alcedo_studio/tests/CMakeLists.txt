@@ -30,6 +30,28 @@ target_include_directories(EditViewerLogicTest PUBLIC ${ALCEDO_INCLUDE_DIR})
 target_link_libraries(EditViewerLogicTest PRIVATE GTest::gtest_main Qt6::Widgets opencv_core)
 gtest_discover_tests(EditViewerLogicTest TEST_PREFIX "EditViewerLogicTest.")
 
+add_executable(ToneCurveWidgetTest
+  ui/tone_curve_widget_test.cpp
+  ui/widget_test_main.cpp
+  ${ALCEDO_SRC_DIR}/ui/alcedo_main/app_theme.cpp
+  ${ALCEDO_SRC_DIR}/include/ui/alcedo_main/app_theme.hpp
+  ${ALCEDO_SRC_DIR}/ui/alcedo_main/editor_dialog/modules/curve.cpp
+  ${ALCEDO_SRC_DIR}/ui/alcedo_main/editor_dialog/widgets/tone_curve_widget.cpp
+)
+target_include_directories(ToneCurveWidgetTest
+  PUBLIC ${ALCEDO_INCLUDE_DIR}
+  PRIVATE ${ALCEDO_TEST_DIR}
+)
+target_link_libraries(ToneCurveWidgetTest
+  PRIVATE
+    GTest::gtest
+    JSON
+    Qt6::Core
+    Qt6::Test
+    Qt6::Widgets
+)
+gtest_discover_tests(ToneCurveWidgetTest TEST_PREFIX "ToneCurveWidgetTest.")
+
 add_executable(SingleRawLoad raw/single_raw_decode_test.cpp)
 target_include_directories(SingleRawLoad PUBLIC ${ALCEDO_INCLUDE_DIR})
 target_link_libraries(SingleRawLoad PRIVATE GTest::gtest_main libraw::raw ${ALCEDO_TEST_OPENCV_MIN_DEPS})

@@ -45,15 +45,16 @@ void ToneCurveWidget::paintEvent(QPaintEvent*) {
   painter.setRenderHint(QPainter::Antialiasing, true);
   painter.setRenderHint(QPainter::TextAntialiasing, true);
   painter.setFont(AppTheme::Font(AppTheme::FontRole::DataCaption));
+  const auto& theme = AppTheme::Instance();
 
-  painter.fillRect(rect(), QColor(0x1A, 0x1A, 0x1A));
-  painter.setPen(QPen(QColor(0x2A, 0x2A, 0x2A), 1.0));
+  painter.fillRect(rect(), theme.bgPanelColor());
+  painter.setPen(QPen(theme.glassStrokeColor(), 1.0));
   painter.drawRoundedRect(rect().adjusted(0, 0, -1, -1), 10.0, 10.0);
 
   const QRectF plot = PlotRect();
-  painter.fillRect(plot, QColor(0x12, 0x12, 0x12));
+  painter.fillRect(plot, theme.bgBaseColor());
 
-  painter.setPen(QPen(QColor(0x2A, 0x2A, 0x2A), 1.0));
+  painter.setPen(QPen(theme.dividerColor(), 1.0));
   for (int i = 1; i < 4; ++i) {
     const qreal t  = static_cast<qreal>(i) / 4.0;
     const qreal gx = plot.left() + t * plot.width();
@@ -62,7 +63,7 @@ void ToneCurveWidget::paintEvent(QPaintEvent*) {
     painter.drawLine(QPointF(plot.left(), gy), QPointF(plot.right(), gy));
   }
 
-  painter.setPen(QPen(QColor(0x8C, 0x8C, 0x8C), 1.0, Qt::DashLine));
+  painter.setPen(QPen(theme.textMutedColor(), 1.0, Qt::DashLine));
   painter.drawLine(QPointF(plot.left(), plot.bottom()), QPointF(plot.right(), plot.top()));
 
   const auto    cache = curve::BuildCurveHermiteCache(points_);
@@ -79,22 +80,22 @@ void ToneCurveWidget::paintEvent(QPaintEvent*) {
     }
   }
 
-  painter.setPen(QPen(QColor(0xFC, 0xC7, 0x04), 2.0));
+  painter.setPen(QPen(theme.accentColor(), 2.0));
   painter.drawPath(curve_path);
 
   for (size_t i = 0; i < points_.size(); ++i) {
     const QPointF p       = ToWidgetPoint(points_[i]);
     const bool    active  = static_cast<int>(i) == active_idx_;
     const bool    pinned  = (i == 0 || i + 1 == points_.size());
-    const QColor  fill    = active ? QColor(0xFC, 0xC7, 0x04) : QColor(0xE6, 0xE6, 0xE6);
-    const QColor  outline = pinned ? QColor(0xFC, 0xC7, 0x04) : QColor(0x2A, 0x2A, 0x2A);
+    const QColor  fill    = active ? theme.accentColor() : theme.textColor();
+    const QColor  outline = pinned ? theme.accentColor() : theme.glassStrokeColor();
 
     painter.setPen(QPen(outline, 1.5));
     painter.setBrush(fill);
     painter.drawEllipse(p, active ? 5.5 : 4.5, active ? 5.5 : 4.5);
   }
 
-  painter.setPen(QColor(0x8C, 0x8C, 0x8C));
+  painter.setPen(theme.textMutedColor());
   painter.drawText(QRectF(plot.left() - 2.0, plot.bottom() + 4.0, 32.0, 14.0), "0");
   painter.drawText(QRectF(plot.right() - 10.0, plot.bottom() + 4.0, 20.0, 14.0), "1");
   painter.drawText(QRectF(plot.left() - 16.0, plot.top() - 2.0, 14.0, 14.0), "1");
@@ -139,8 +140,11 @@ void ToneCurveWidget::mousePressEvent(QMouseEvent* event) {
   }
 
   const QPointF normalized = ToNormalizedPoint(pos);
-  if (normalized.x() <= curve::kCurveMinPointSpacing ||
-      normalized.x() >= (1.0 - curve::kCurveMinPointSpacing)) {
+  const float min_insert_x =
+      static_cast<float>(points_.front().x()) + curve::kCurveMinPointSpacing;
+  const float max_insert_x =
+      static_cast<float>(points_.back().x()) - curve::kCurveMinPointSpacing;
+  if (normalized.x() <= min_insert_x || normalized.x() >= max_insert_x) {
     return;
   }
 
@@ -161,13 +165,19 @@ void ToneCurveWidget::mouseMoveEvent(QMouseEvent* event) {
   const int     last_idx   = static_cast<int>(points_.size()) - 1;
   const QPointF normalized = ToNormalizedPoint(event->position());
   if (active_idx_ == 0) {
-    points_[0] = QPointF(0.0, curve::Clamp01(static_cast<float>(normalized.y())));
+    const float max_x = static_cast<float>(points_[1].x()) - curve::kCurveMinPointSpacing;
+    const float x     = std::clamp(static_cast<float>(normalized.x()), 0.0f, max_x);
+    const float y     = curve::Clamp01(static_cast<float>(normalized.y()));
+    points_[0]        = QPointF(x, y);
     NotifyCurveChanged();
     update();
     return;
   }
   if (active_idx_ == last_idx) {
-    points_[last_idx] = QPointF(1.0, curve::Clamp01(static_cast<float>(normalized.y())));
+    const float min_x = static_cast<float>(points_[last_idx - 1].x()) + curve::kCurveMinPointSpacing;
+    const float x     = std::clamp(static_cast<float>(normalized.x()), min_x, 1.0f);
+    const float y     = curve::Clamp01(static_cast<float>(normalized.y()));
+    points_[last_idx] = QPointF(x, y);
     NotifyCurveChanged();
     update();
     return;

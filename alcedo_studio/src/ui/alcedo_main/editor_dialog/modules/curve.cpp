@@ -13,7 +13,7 @@ namespace alcedo::ui::curve {
 auto Clamp01(float v) -> float { return std::clamp(v, 0.0f, 1.0f); }
 
 auto DefaultCurveControlPoints() -> std::vector<QPointF> {
-  return {QPointF(0.0, 0.0), QPointF(0.25, 0.25), QPointF(0.75, 0.75), QPointF(1.0, 1.0)};
+  return {QPointF(0.0, 0.0), QPointF(1.0, 1.0)};
 }
 
 auto NormalizeCurveControlPoints(const std::vector<QPointF>& in) -> std::vector<QPointF> {
@@ -47,17 +47,15 @@ auto NormalizeCurveControlPoints(const std::vector<QPointF>& in) -> std::vector<
     }
   }
 
-  if (deduped.front().x() > kCurveEpsilon) {
-    deduped.insert(deduped.begin(), QPointF(0.0, Clamp01(static_cast<float>(deduped.front().y()))));
-  }
-  if (deduped.back().x() < (1.0 - kCurveEpsilon)) {
-    deduped.push_back(QPointF(1.0, Clamp01(static_cast<float>(deduped.back().y()))));
-  }
-
-  deduped.front().setX(0.0);
   deduped.front().setY(Clamp01(static_cast<float>(deduped.front().y())));
-  deduped.back().setX(1.0);
+  deduped.front().setX(Clamp01(static_cast<float>(deduped.front().x())));
+  deduped.back().setX(Clamp01(static_cast<float>(deduped.back().x())));
   deduped.back().setY(Clamp01(static_cast<float>(deduped.back().y())));
+
+  if (deduped.size() < 2 ||
+      (deduped.back().x() - deduped.front().x()) <= kCurveMinPointSpacing) {
+    return DefaultCurveControlPoints();
+  }
 
   std::vector<QPointF> normalized;
   normalized.reserve(deduped.size());
@@ -67,7 +65,7 @@ auto NormalizeCurveControlPoints(const std::vector<QPointF>& in) -> std::vector<
     if (p.x() <= normalized.back().x() + kCurveMinPointSpacing) {
       continue;
     }
-    if (p.x() >= 1.0 - kCurveMinPointSpacing) {
+    if (p.x() >= deduped.back().x() - kCurveMinPointSpacing) {
       continue;
     }
     normalized.push_back(p);
@@ -77,7 +75,8 @@ auto NormalizeCurveControlPoints(const std::vector<QPointF>& in) -> std::vector<
   }
   normalized.push_back(deduped.back());
 
-  if (normalized.size() < 2) {
+  if (normalized.size() < 2 ||
+      (normalized.back().x() - normalized.front().x()) <= kCurveMinPointSpacing) {
     return DefaultCurveControlPoints();
   }
 

@@ -117,6 +117,9 @@ static inline float metal_evaluate_curve_hermite(float x, constant MetalFusedPar
   if (curve_count == 1) {
     return params.curve_ctrl_pts_y_[0];
   }
+  if (x <= params.curve_ctrl_pts_x_[0]) {
+    return params.curve_ctrl_pts_y_[0];
+  }
   if (x >= params.curve_ctrl_pts_x_[curve_count - 1]) {
     return params.curve_ctrl_pts_y_[curve_count - 1];
   }
