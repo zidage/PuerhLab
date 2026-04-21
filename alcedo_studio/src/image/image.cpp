@@ -68,6 +68,9 @@ auto RawContextToJson(const RawRuntimeColorContext& ctx) -> json {
   value["ColorMatricesValid"]  = ctx.color_matrices_valid_;
   value["ColorMatrix1"]        = MakeJsonArray(ctx.color_matrix_1_, 9);
   value["ColorMatrix2"]        = MakeJsonArray(ctx.color_matrix_2_, 9);
+  value["ForwardMatricesValid"] = ctx.forward_matrices_valid_;
+  value["ForwardMatrix1"]       = MakeJsonArray(ctx.forward_matrix_1_, 9);
+  value["ForwardMatrix2"]       = MakeJsonArray(ctx.forward_matrix_2_, 9);
   value["AsShotNeutralValid"]  = ctx.as_shot_neutral_valid_;
   value["AsShotNeutral"]       = MakeJsonArray(ctx.as_shot_neutral_, 3);
   value["CalibrationIlluminantsValid"] = ctx.calibration_illuminants_valid_;
@@ -100,13 +103,17 @@ auto RawContextFromJson(const json& value, RawRuntimeColorContext& ctx) -> bool 
   ctx.color_matrices_valid_   = value.value("ColorMatricesValid", false);
   LoadJsonArray(value, "ColorMatrix1", ctx.color_matrix_1_, 9);
   LoadJsonArray(value, "ColorMatrix2", ctx.color_matrix_2_, 9);
+  ctx.forward_matrices_valid_ = value.value("ForwardMatricesValid", false);
+  LoadJsonArray(value, "ForwardMatrix1", ctx.forward_matrix_1_, 9);
+  LoadJsonArray(value, "ForwardMatrix2", ctx.forward_matrix_2_, 9);
   ctx.as_shot_neutral_valid_  = value.value("AsShotNeutralValid", false);
   LoadJsonArray(value, "AsShotNeutral", ctx.as_shot_neutral_, 3);
   ctx.calibration_illuminants_valid_ = value.value("CalibrationIlluminantsValid", false);
   ctx.color_matrix_1_cct_     = value.value("ColorMatrix1Cct", 2856.0);
   ctx.color_matrix_2_cct_     = value.value("ColorMatrix2Cct", 6504.0);
 
-  return ctx.valid_ || ctx.color_matrices_valid_ || !ctx.camera_make_.empty() ||
+  return ctx.valid_ || ctx.color_matrices_valid_ || ctx.forward_matrices_valid_ ||
+         !ctx.camera_make_.empty() ||
          !ctx.camera_model_.empty();
 }
 }  // namespace

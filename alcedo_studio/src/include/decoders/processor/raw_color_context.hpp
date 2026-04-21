@@ -35,6 +35,9 @@ struct RawRuntimeColorContext {
   bool              color_matrices_valid_    = false;
   double            color_matrix_1_[9]       = {};
   double            color_matrix_2_[9]       = {};
+  bool              forward_matrices_valid_  = false;
+  double            forward_matrix_1_[9]     = {};
+  double            forward_matrix_2_[9]     = {};
   bool              as_shot_neutral_valid_   = false;
   double            as_shot_neutral_[3]      = {};
   bool              calibration_illuminants_valid_ = false;

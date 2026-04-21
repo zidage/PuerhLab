@@ -240,7 +240,10 @@ void RawDecodeOp::SetGlobalParams(OperatorParams& params) const {
   for (int i = 0; i < 9; ++i) {
     params.raw_color_matrix_1_[i] = latest_runtime_context_.color_matrix_1_[i];
     params.raw_color_matrix_2_[i] = latest_runtime_context_.color_matrix_2_[i];
+    params.raw_forward_matrix_1_[i] = latest_runtime_context_.forward_matrix_1_[i];
+    params.raw_forward_matrix_2_[i] = latest_runtime_context_.forward_matrix_2_[i];
   }
+  params.raw_forward_matrices_valid_ = latest_runtime_context_.forward_matrices_valid_;
   params.raw_as_shot_neutral_valid_ = latest_runtime_context_.as_shot_neutral_valid_;
   for (int i = 0; i < 3; ++i) {
     params.raw_as_shot_neutral_[i] = latest_runtime_context_.as_shot_neutral_[i];

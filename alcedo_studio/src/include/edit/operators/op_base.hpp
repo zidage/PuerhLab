@@ -186,6 +186,9 @@ struct OperatorParams {
   bool                         raw_color_matrices_valid_  = false;
   double                       raw_color_matrix_1_[9]     = {};
   double                       raw_color_matrix_2_[9]     = {};
+  bool                         raw_forward_matrices_valid_ = false;
+  double                       raw_forward_matrix_1_[9]    = {};
+  double                       raw_forward_matrix_2_[9]    = {};
   bool                         raw_as_shot_neutral_valid_ = false;
   double                       raw_as_shot_neutral_[3]    = {};
   bool                         raw_calibration_illuminants_valid_ = false;
@@ -301,7 +304,10 @@ struct OperatorParams {
     for (int i = 0; i < 9; ++i) {
       raw_color_matrix_1_[i] = ctx.color_matrix_1_[i];
       raw_color_matrix_2_[i] = ctx.color_matrix_2_[i];
+      raw_forward_matrix_1_[i] = ctx.forward_matrix_1_[i];
+      raw_forward_matrix_2_[i] = ctx.forward_matrix_2_[i];
     }
+    raw_forward_matrices_valid_ = ctx.forward_matrices_valid_;
     raw_as_shot_neutral_valid_ = ctx.as_shot_neutral_valid_;
     for (int i = 0; i < 3; ++i) {
       raw_as_shot_neutral_[i] = ctx.as_shot_neutral_[i];

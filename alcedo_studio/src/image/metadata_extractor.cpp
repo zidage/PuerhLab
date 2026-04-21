@@ -871,6 +871,22 @@ void PopulateDngColorMetadataFromExif(const Exiv2::ExifData& exif_data, RawRunti
   std::memcpy(ctx.color_matrix_2_, cm2, sizeof(ctx.color_matrix_2_));
   ctx.color_matrices_valid_ = true;
 
+  double fm1[9] = {};
+  double fm2[9] = {};
+  const bool has_fm1 = ReadExifNumericArrayTag(exif_data, "Exif.Image.ForwardMatrix1", 9, fm1);
+  const bool has_fm2 = ReadExifNumericArrayTag(exif_data, "Exif.Image.ForwardMatrix2", 9, fm2);
+  if (has_fm1 || has_fm2) {
+    if (!has_fm1 && has_fm2) {
+      std::memcpy(fm1, fm2, sizeof(fm1));
+    } else if (has_fm1 && !has_fm2) {
+      std::memcpy(fm2, fm1, sizeof(fm2));
+    }
+
+    std::memcpy(ctx.forward_matrix_1_, fm1, sizeof(ctx.forward_matrix_1_));
+    std::memcpy(ctx.forward_matrix_2_, fm2, sizeof(ctx.forward_matrix_2_));
+    ctx.forward_matrices_valid_ = true;
+  }
+
   double as_shot_neutral[3] = {};
   if (ReadExifNumericArrayTag(exif_data, "Exif.Image.AsShotNeutral", 3, as_shot_neutral)) {
     std::memcpy(ctx.as_shot_neutral_, as_shot_neutral, sizeof(ctx.as_shot_neutral_));

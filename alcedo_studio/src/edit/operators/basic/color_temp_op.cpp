@@ -138,6 +138,15 @@ auto BuildRuntimeCacheKey(const OperatorParams& params, ColorTempMode mode, floa
     HashCombine(key, static_cast<std::uint64_t>(std::hash<double>{}(params.raw_color_matrix_1_cct_)));
     HashCombine(key, static_cast<std::uint64_t>(std::hash<double>{}(params.raw_color_matrix_2_cct_)));
   }
+  HashCombine(key, static_cast<std::uint64_t>(params.raw_forward_matrices_valid_));
+  if (params.raw_forward_matrices_valid_) {
+    for (double value : params.raw_forward_matrix_1_) {
+      HashCombine(key, static_cast<std::uint64_t>(std::hash<double>{}(value)));
+    }
+    for (double value : params.raw_forward_matrix_2_) {
+      HashCombine(key, static_cast<std::uint64_t>(std::hash<double>{}(value)));
+    }
+  }
   HashCombine(key, static_cast<std::uint64_t>(params.raw_as_shot_neutral_valid_));
   if (params.raw_as_shot_neutral_valid_) {
     for (double value : params.raw_as_shot_neutral_) {
@@ -490,6 +499,17 @@ auto ResolveColorMatrixEndpoints(const OperatorParams& params, cv::Matx33d& cm1,
   return true;
 }
 
+auto ResolveForwardMatrixEndpoints(const OperatorParams& params, cv::Matx33d& fm1,
+                                   cv::Matx33d& fm2) -> bool {
+  if (!params.raw_forward_matrices_valid_) {
+    return false;
+  }
+
+  fm1 = MatrixFromArray9(params.raw_forward_matrix_1_);
+  fm2 = MatrixFromArray9(params.raw_forward_matrix_2_);
+  return IsFiniteMatrix(fm1) && IsFiniteMatrix(fm2);
+}
+
 auto ResolveAsShotCameraNeutral(const OperatorParams& params, cv::Vec3d& out_neutral) -> bool {
   if (params.raw_as_shot_neutral_valid_) {
     const cv::Vec3d neutral(params.raw_as_shot_neutral_[0], params.raw_as_shot_neutral_[1],
@@ -557,6 +577,28 @@ auto SolveAsShotWhiteXY(const OperatorParams& params, const cv::Matx33d& cm1, co
 
   out_xy = xy;
   return true;
+}
+
+auto BuildCameraToXyzD50FromForwardMatrix(const cv::Matx33d& cm1, const cv::Matx33d& cm2,
+                                          const cv::Matx33d& fm1, const cv::Matx33d& fm2,
+                                          double cct, double endpoint_cct_1,
+                                          double endpoint_cct_2, const cv::Vec2d& white_xy,
+                                          cv::Matx33d& out_camera_to_xyz_d50) -> bool {
+  const cv::Matx33d xyz_to_camera =
+      InterpolateColorMatrix(cm1, cm2, cct, endpoint_cct_1, endpoint_cct_2);
+  const cv::Matx33d forward_matrix =
+      InterpolateColorMatrix(fm1, fm2, cct, endpoint_cct_1, endpoint_cct_2);
+
+  const cv::Vec3d reference_neutral = xyz_to_camera * XYToXYZ(white_xy);
+  if (!std::all_of(std::begin(reference_neutral.val), std::end(reference_neutral.val),
+                   [](double value) { return std::isfinite(value) && value > kValueEpsilon; })) {
+    return false;
+  }
+
+  const cv::Matx33d reference_scale = cv::Matx33d::diag(
+      cv::Vec3d(1.0 / reference_neutral[0], 1.0 / reference_neutral[1], 1.0 / reference_neutral[2]));
+  out_camera_to_xyz_d50 = forward_matrix * reference_scale;
+  return IsFiniteMatrix(out_camera_to_xyz_d50);
 }
 }  // namespace
 
@@ -690,6 +732,8 @@ void ColorTempOp::ResolveRuntime(OperatorParams& params) const {
 
   cv::Matx33d cm1;
   cv::Matx33d cm2;
+  cv::Matx33d fm1;
+  cv::Matx33d fm2;
   double     endpoint_cct_1 = kCalibrationLowCCT;
   double     endpoint_cct_2 = kCalibrationHighCCT;
   if (!ResolveColorMatrixEndpoints(params, cm1, cm2, endpoint_cct_1, endpoint_cct_2)) {
@@ -697,6 +741,7 @@ void ColorTempOp::ResolveRuntime(OperatorParams& params) const {
     params.color_temp_runtime_dirty_  = false;
     return;
   }
+  const bool has_forward_matrices = ResolveForwardMatrixEndpoints(params, fm1, fm2);
 
   cv::Vec2d selected_xy(kD50X, kD50Y);
   double    selected_cct  = custom_cct_;
@@ -725,8 +770,18 @@ void ColorTempOp::ResolveRuntime(OperatorParams& params) const {
     return;
   }
 
-  const cv::Matx33d cat_src_to_d50 = BuildBradfordCAT(selected_xy, cv::Vec2d(kD50X, kD50Y));
-  const cv::Matx33d camera_to_xyz_d50 = cat_src_to_d50 * camera_to_xyz;
+  cv::Matx33d camera_to_xyz_d50;
+  if (has_forward_matrices) {
+    if (!BuildCameraToXyzD50FromForwardMatrix(cm1, cm2, fm1, fm2, selected_cct, endpoint_cct_1,
+                                              endpoint_cct_2, selected_xy, camera_to_xyz_d50)) {
+      params.color_temp_matrices_valid_ = false;
+      params.color_temp_runtime_dirty_  = false;
+      return;
+    }
+  } else {
+    const cv::Matx33d cat_src_to_d50 = BuildBradfordCAT(selected_xy, cv::Vec2d(kD50X, kD50Y));
+    camera_to_xyz_d50                = cat_src_to_d50 * camera_to_xyz;
+  }
 
   const cv::Matx33d cat_d50_to_d60 = BuildBradfordCAT(cv::Vec2d(kD50X, kD50Y), cv::Vec2d(kD60X, kD60Y));
   const cv::Matx33d xyz_d50_to_ap1 = kXyzD60ToAp1 * cat_d50_to_d60;
