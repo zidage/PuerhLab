@@ -49,6 +49,14 @@ class ViewTransformController {
                        const ViewportImageInfo& image_info, int wheel_delta,
                        const QPointF& anchor_widget_pos) -> ViewTransformResult;
 
+  auto HandlePinchZoom(ViewerState& state, const ViewportWidgetInfo& widget_info,
+                       const ViewportImageInfo& image_info, float zoom_delta,
+                       const QPointF& anchor_widget_pos) -> ViewTransformResult;
+
+  auto HandleWheelPan(ViewerState& state, const ViewportWidgetInfo& widget_info,
+                      const ViewportImageInfo& image_info, const QPoint& pixel_delta)
+      -> ViewTransformResult;
+
   auto HandlePanPress(bool interaction_blocked, const QPoint& mouse_pos) -> ViewTransformResult;
 
   auto HandlePanMove(ViewerState& state, const ViewportWidgetInfo& widget_info,

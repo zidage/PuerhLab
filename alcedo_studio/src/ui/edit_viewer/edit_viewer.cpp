@@ -15,6 +15,7 @@
 #include <QByteArray>
 #include <QEasingCurve>
 #include <QMouseEvent>
+#include <QNativeGestureEvent>
 #include <QPainter>
 #include <QPainterPath>
 #include <QPen>
@@ -127,6 +128,13 @@ class EditViewerOverlayWidget final : public QWidget {
   }
 
  protected:
+  bool event(QEvent* event) override {
+    if (event->type() == QEvent::NativeGesture) {
+      owner_.HandleOverlayNativeGesture(static_cast<QNativeGestureEvent*>(event));
+      return true;
+    }
+    return QWidget::event(event);
+  }
   void paintEvent(QPaintEvent*) override { owner_.PaintOverlay(*this); }
   void wheelEvent(QWheelEvent* event) override { owner_.HandleOverlayWheel(event); }
   void mousePressEvent(QMouseEvent* event) override { owner_.HandleOverlayMousePress(event); }
@@ -545,7 +553,40 @@ void QtEditViewer::HandleOverlayWheel(QWheelEvent* event) {
     return;
   }
 
+  // Trackpad two-finger pan (not a physical mouse wheel).
+  if (event->source() != Qt::MouseEventNotSynthesized) {
+    QPoint pixel_delta = event->pixelDelta();
+    if (pixel_delta.isNull()) {
+      // Fallback for platforms that don't provide pixel deltas.
+      pixel_delta = event->angleDelta() / 4;
+    }
+    if (!pixel_delta.isNull()) {
+      StopZoomAnimation();
+      const auto result = view_transform_controller_.HandleWheelPan(
+          viewer_state_, CurrentWidgetInfo(), CurrentImageInfo(), pixel_delta);
+      ApplyViewTransformResult(result);
+    }
+    event->accept();
+    return;
+  }
+
   event->accept();
+}
+
+void QtEditViewer::HandleOverlayNativeGesture(QNativeGestureEvent* event) {
+  if (event->gestureType() == Qt::ZoomNativeGesture) {
+    StopZoomAnimation();
+    const float value = static_cast<float>(event->value());
+    if (std::abs(value) > 1e-4f) {
+      const auto result = view_transform_controller_.HandlePinchZoom(
+          viewer_state_, CurrentWidgetInfo(), CurrentImageInfo(), value, event->position());
+      ApplyViewTransformResult(result);
+    }
+    event->accept();
+    return;
+  }
+
+  event->ignore();
 }
 
 void QtEditViewer::HandleOverlayMousePress(QMouseEvent* event) {

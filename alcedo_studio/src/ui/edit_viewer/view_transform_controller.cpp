@@ -39,6 +39,55 @@ auto ViewTransformController::HandleCtrlWheel(ViewerState& state,
   return ApplyViewTransform(state, widget_info, image_info, target_zoom, target_pan, true);
 }
 
+auto ViewTransformController::HandlePinchZoom(ViewerState& state,
+                                              const ViewportWidgetInfo& widget_info,
+                                              const ViewportImageInfo& image_info, float zoom_delta,
+                                              const QPointF& anchor_widget_pos)
+    -> ViewTransformResult {
+  ViewTransformResult result;
+  result.consumed = true;
+  if (std::abs(zoom_delta) < 1e-4f) {
+    return result;
+  }
+
+  const auto view_state = state.GetViewTransform();
+  // Qt docs: for ZoomNativeGesture, scale = scale * (1 + value)
+  const float scale       = 1.0f + zoom_delta;
+  const float target_zoom =
+      std::clamp(view_state.zoom * scale, kMinInteractiveZoom, kMaxInteractiveZoom);
+  const QVector2D target_pan = ViewportMapper::ComputeAnchoredPan(
+      anchor_widget_pos, widget_info, image_info, view_state.zoom, view_state.pan, target_zoom,
+      view_state.pan);
+
+  double_click_zoom_target_  = target_zoom;
+  double_click_zoom_in_next_ = false;
+  click_zoom_toggle_active_  = false;
+  StopAnimation();
+  return ApplyViewTransform(state, widget_info, image_info, target_zoom, target_pan, true);
+}
+
+auto ViewTransformController::HandleWheelPan(ViewerState& state,
+                                             const ViewportWidgetInfo& widget_info,
+                                             const ViewportImageInfo& image_info,
+                                             const QPoint& pixel_delta)
+    -> ViewTransformResult {
+  ViewTransformResult result;
+  if (pixel_delta.isNull()) {
+    return result;
+  }
+
+  const float dpr = std::max(widget_info.device_pixel_ratio, 1e-4f);
+  const float vw  = std::max(1.0f, static_cast<float>(widget_info.widget_width) * dpr);
+  const float vh  = std::max(1.0f, static_cast<float>(widget_info.widget_height) * dpr);
+  QVector2D   ndc_delta(2.0f * static_cast<float>(pixel_delta.x()) / vw,
+                        -2.0f * static_cast<float>(pixel_delta.y()) / vh);
+
+  const auto view_state = state.GetViewTransform();
+  result.consumed = true;
+  return ApplyViewTransform(state, widget_info, image_info, view_state.zoom,
+                            view_state.pan + ndc_delta, false);
+}
+
 auto ViewTransformController::HandlePanPress(bool interaction_blocked, const QPoint& mouse_pos)
     -> ViewTransformResult {
   ViewTransformResult result;
