@@ -6,7 +6,7 @@
 
 #include "common.metal"
 
-#define METAL_NEIGHBOR_MAX_TAP_COUNT 24
+#define METAL_NEIGHBOR_MAX_TAP_COUNT 64
 
 constant uint kMetalNeighborOpSharpen = 1u;
 constant uint kMetalNeighborOpClarity = 2u;
@@ -70,6 +70,11 @@ static inline float4 metal_neighbor_blur_vertical(texture2d<float, access::read>
   return blur;
 }
 
+static inline float metal_detail_smoothstep(float edge0, float edge1, float x) {
+  const float t = clamp((x - edge0) / (edge1 - edge0), 0.0f, 1.0f);
+  return t * t * (3.0f - 2.0f * t);
+}
+
 static inline float4 metal_apply_sharpen(float4 px, float4 blur,
                                          constant MetalNeighborStageParams& params) {
   if (params.amount_ == 0.0f || params.tap_count_ == 0u) {
@@ -93,15 +98,20 @@ static inline float4 metal_apply_clarity(float4 px, float4 blur,
     return px;
   }
 
-  float4 high       = float4(px.x - blur.x, px.y - blur.y, px.z - blur.z, px.w);
+  float4 diff       = float4(px.x - blur.x, px.y - blur.y, px.z - blur.z, 0.0f);
+
+  const float diff_lum = metal_detail_luminance(diff);
+  const float edge_mag = fabs(diff_lum);
+  constexpr float kEdgeThreshold = 0.18f;
+  const float protect = 1.0f - metal_detail_smoothstep(0.0f, kEdgeThreshold, edge_mag);
 
   const float lum   = metal_detail_luminance(px);
-  const float t     = (lum - 0.5f) * 2.0f;
-  const float mask  = 1.0f - t * t;
-  const float w     = mask * params.amount_;
-  high.xyz *= w;
+  const float t_lum = (lum - 0.5f) * 2.0f;
+  const float mask  = fmax(1.0f - t_lum * t_lum, 0.0f);
+  const float strength = params.amount_ * protect * mask;
 
-  return float4(px.x + high.x, px.y + high.y, px.z + high.z, px.w);
+  return float4(fma(diff.x, strength, px.x), fma(diff.y, strength, px.y),
+                fma(diff.z, strength, px.z), px.w);
 }
 
 kernel void metal_neighbor_blur_h_rgba32f(texture2d<float, access::read> src [[texture(0)]],

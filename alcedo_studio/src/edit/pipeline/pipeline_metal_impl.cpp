@@ -37,8 +37,7 @@ constexpr const char* kNeighborApplyVerticalKernelName  = "metal_neighbor_apply_
 constexpr const char* kFusedPipelineDebugLabel          = "Metal fused pipeline";
 constexpr const char* kNeighborBlurDebugLabel           = "Metal neighbor blur horizontal";
 constexpr const char* kNeighborApplyDebugLabel          = "Metal neighbor apply vertical";
-constexpr uint32_t    kMetalNeighborMaxRadius           = 20;
-constexpr uint32_t    kMetalNeighborMaxTapCount         = 24;
+constexpr uint32_t    kMetalNeighborMaxTapCount         = 64;
 constexpr auto        kReportInterval                   = std::chrono::milliseconds{500};
 constexpr double      kFpsEmaAlpha                      = 0.15;
 
@@ -57,7 +56,8 @@ struct alignas(16) MetalNeighborStageParams {
   std::array<float, kMetalNeighborMaxTapCount> weights_ = {};
 };
 
-static_assert(sizeof(MetalNeighborStageParams) == 128,
+static_assert(sizeof(MetalNeighborStageParams) ==
+                  ((3U + 5U + kMetalNeighborMaxTapCount) * sizeof(float)),
               "MetalNeighborStageParams must stay ABI-compatible with Metal shaders.");
 
 struct MetalNeighborStage {
@@ -208,17 +208,34 @@ auto BuildGaussianWeights(float sigma, uint32_t radius)
   return weights;
 }
 
-auto BuildNeighborStageParams(MetalNeighborOpKind kind, float sigma, float amount, float threshold)
+auto BuildNeighborStageParams(MetalNeighborOpKind kind, float sigma, float amount, float threshold,
+                              int gaussian_tap_count, const float* gaussian_weights)
     -> MetalNeighborStageParams {
   MetalNeighborStageParams params;
-  const float              safe_sigma = std::max(sigma, 1.0e-4f);
 
-  params.kind_      = static_cast<uint32_t>(kind);
-  params.radius_    = std::clamp<uint32_t>(static_cast<uint32_t>(std::ceil(3.0f * safe_sigma)), 1U,
-                                           kMetalNeighborMaxRadius);
-  params.tap_count_ = params.radius_ + 1U;
-  params.amount_    = amount;
+  params.kind_   = static_cast<uint32_t>(kind);
+  params.amount_ = amount;
   params.threshold_ = threshold;
+
+  const int clamped_tap_count =
+      std::clamp(gaussian_tap_count, 0, static_cast<int>(kMetalNeighborMaxTapCount));
+  if (clamped_tap_count > 0 && gaussian_weights != nullptr) {
+    params.tap_count_ = static_cast<uint32_t>(clamped_tap_count);
+    params.radius_    = params.tap_count_ - 1U;
+    std::copy_n(gaussian_weights, clamped_tap_count, params.weights_.begin());
+    return params;
+  }
+
+  if (sigma <= 0.0f) {
+    return params;
+  }
+
+  const float    safe_sigma = std::max(sigma, 1.0e-4f);
+  const uint32_t max_radius =
+      (kMetalNeighborMaxTapCount > 0U) ? (kMetalNeighborMaxTapCount - 1U) : 0U;
+  params.radius_ =
+      std::clamp<uint32_t>(static_cast<uint32_t>(std::ceil(3.0f * safe_sigma)), 1U, max_radius);
+  params.tap_count_ = params.radius_ + 1U;
   params.weights_   = BuildGaussianWeights(safe_sigma, params.radius_);
   return params;
 }
@@ -329,12 +346,14 @@ class MetalGPUPipeline final : public GPUPipelineImpl {
     if (ShouldRunSharpen()) {
       stages.push_back(MetalNeighborStage{BuildNeighborStageParams(
           MetalNeighborOpKind::Sharpen, fused_params_.sharpen_radius_, fused_params_.sharpen_offset_,
-          fused_params_.sharpen_threshold_)});
+          fused_params_.sharpen_threshold_, fused_params_.sharpen_gaussian_tap_count_,
+          fused_params_.sharpen_gaussian_weights_)});
     }
     if (ShouldRunClarity()) {
       stages.push_back(MetalNeighborStage{BuildNeighborStageParams(
           MetalNeighborOpKind::Clarity, fused_params_.clarity_radius_, fused_params_.clarity_offset_,
-          0.0f)});
+          0.0f, fused_params_.clarity_gaussian_tap_count_,
+          fused_params_.clarity_gaussian_weights_)});
     }
 
     return stages;
