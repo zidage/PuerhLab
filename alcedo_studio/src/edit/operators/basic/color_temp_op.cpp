@@ -127,6 +127,23 @@ auto BuildRuntimeCacheKey(const OperatorParams& params, ColorTempMode mode, floa
   HashCombine(key, static_cast<std::uint64_t>(std::hash<std::string>{}(params.raw_camera_model_)));
   HashFloatArray(key, params.raw_pre_mul_, 3);
   HashFloatArray(key, params.raw_cam_xyz_, 9);
+  HashCombine(key, static_cast<std::uint64_t>(params.raw_color_matrices_valid_));
+  if (params.raw_color_matrices_valid_) {
+    for (double value : params.raw_color_matrix_1_) {
+      HashCombine(key, static_cast<std::uint64_t>(std::hash<double>{}(value)));
+    }
+    for (double value : params.raw_color_matrix_2_) {
+      HashCombine(key, static_cast<std::uint64_t>(std::hash<double>{}(value)));
+    }
+    HashCombine(key, static_cast<std::uint64_t>(std::hash<double>{}(params.raw_color_matrix_1_cct_)));
+    HashCombine(key, static_cast<std::uint64_t>(std::hash<double>{}(params.raw_color_matrix_2_cct_)));
+  }
+  HashCombine(key, static_cast<std::uint64_t>(params.raw_as_shot_neutral_valid_));
+  if (params.raw_as_shot_neutral_valid_) {
+    for (double value : params.raw_as_shot_neutral_) {
+      HashCombine(key, static_cast<std::uint64_t>(std::hash<double>{}(value)));
+    }
+  }
   if (mode == ColorTempMode::AS_SHOT) {
     HashFloatArray(key, params.raw_cam_mul_, 3);
   }
@@ -163,29 +180,42 @@ auto BuildFallbackXyzToCamera(const OperatorParams& params, cv::Matx33d& out) ->
   return IsFiniteMatrix(out);
 }
 
-auto InterpolateColorMatrix(const cv::Matx33d& cm1, const cv::Matx33d& cm2, double cct)
+auto SanitizeEndpointCct(double cct, double fallback) -> double {
+  return (std::isfinite(cct) && cct > kValueEpsilon) ? cct : fallback;
+}
+
+auto InterpolateColorMatrix(const cv::Matx33d& cm1, const cv::Matx33d& cm2, double cct,
+                            double endpoint_cct_1, double endpoint_cct_2)
     -> cv::Matx33d {
+  const double cct1 = SanitizeEndpointCct(endpoint_cct_1, kCalibrationLowCCT);
+  const double cct2 = SanitizeEndpointCct(endpoint_cct_2, kCalibrationHighCCT);
+  const double low_cct  = std::min(cct1, cct2);
+  const double high_cct = std::max(cct1, cct2);
+  const bool   cm1_is_low = cct1 <= cct2;
+  const cv::Matx33d& low_matrix  = cm1_is_low ? cm1 : cm2;
+  const cv::Matx33d& high_matrix = cm1_is_low ? cm2 : cm1;
+
   if (!std::isfinite(cct)) {
-    return cm2;
+    return high_matrix;
   }
 
-  if (cct <= kCalibrationLowCCT) {
-    return cm1;
+  if (cct <= low_cct) {
+    return low_matrix;
   }
-  if (cct >= kCalibrationHighCCT) {
-    return cm2;
+  if (cct >= high_cct) {
+    return high_matrix;
   }
 
   const double inv_t  = 1.0 / cct;
-  const double inv_t1 = 1.0 / kCalibrationLowCCT;
-  const double inv_t2 = 1.0 / kCalibrationHighCCT;
+  const double inv_t1 = 1.0 / low_cct;
+  const double inv_t2 = 1.0 / high_cct;
   const double denom  = inv_t2 - inv_t1;
   if (std::abs(denom) <= kValueEpsilon) {
-    return cm2;
+    return high_matrix;
   }
 
   const double w = std::clamp((inv_t - inv_t1) / denom, 0.0, 1.0);
-  return cm1 * (1.0 - w) + cm2 * w;
+  return low_matrix * (1.0 - w) + high_matrix * w;
 }
 
 auto Invert3x3(const cv::Matx33d& m, cv::Matx33d& out) -> bool {
@@ -433,13 +463,20 @@ void StoreMatrix(const cv::Matx33d& src, float dst[9]) {
   }
 }
 
-auto ResolveColorMatrixEndpoints(const OperatorParams& params, cv::Matx33d& cm1, cv::Matx33d& cm2)
-    -> bool {
+auto ResolveColorMatrixEndpoints(const OperatorParams& params, cv::Matx33d& cm1, cv::Matx33d& cm2,
+                                 double& endpoint_cct_1, double& endpoint_cct_2) -> bool {
+  endpoint_cct_1 = kCalibrationLowCCT;
+  endpoint_cct_2 = kCalibrationHighCCT;
+
   // Use pre-resolved Adobe DNG colour matrices stored in OperatorParams.
   // These are looked up once at import time by MetadataExtractor.
   if (params.raw_color_matrices_valid_) {
     cm1 = MatrixFromArray9(params.raw_color_matrix_1_);
     cm2 = MatrixFromArray9(params.raw_color_matrix_2_);
+    if (params.raw_calibration_illuminants_valid_) {
+      endpoint_cct_1 = params.raw_color_matrix_1_cct_;
+      endpoint_cct_2 = params.raw_color_matrix_2_cct_;
+    }
     return IsFiniteMatrix(cm1) && IsFiniteMatrix(cm2);
   }
 
@@ -453,12 +490,38 @@ auto ResolveColorMatrixEndpoints(const OperatorParams& params, cv::Matx33d& cm1,
   return true;
 }
 
-auto SolveAsShotWhiteXY(const OperatorParams& params, const cv::Matx33d& cm1, const cv::Matx33d& cm2,
-                        cv::Vec2d& out_xy, double& out_cct, double& out_tint) -> bool {
+auto ResolveAsShotCameraNeutral(const OperatorParams& params, cv::Vec3d& out_neutral) -> bool {
+  if (params.raw_as_shot_neutral_valid_) {
+    const cv::Vec3d neutral(params.raw_as_shot_neutral_[0], params.raw_as_shot_neutral_[1],
+                            params.raw_as_shot_neutral_[2]);
+    if (std::all_of(std::begin(neutral.val), std::end(neutral.val), [](double value) {
+          return std::isfinite(value) && value > kValueEpsilon;
+        })) {
+      out_neutral = neutral;
+      return true;
+    }
+  }
+
   const double r = std::max(static_cast<double>(params.raw_cam_mul_[0]), kValueEpsilon);
   const double g = std::max(static_cast<double>(params.raw_cam_mul_[1]), kValueEpsilon);
   const double b = std::max(static_cast<double>(params.raw_cam_mul_[2]), kValueEpsilon);
-  const cv::Vec3d camera_neutral(g / r, 1.0, g / b);
+  if (!std::isfinite(r) || !std::isfinite(g) || !std::isfinite(b)) {
+    return false;
+  }
+
+  out_neutral = cv::Vec3d(g / r, 1.0, g / b);
+  return std::all_of(std::begin(out_neutral.val), std::end(out_neutral.val), [](double value) {
+    return std::isfinite(value) && value > kValueEpsilon;
+  });
+}
+
+auto SolveAsShotWhiteXY(const OperatorParams& params, const cv::Matx33d& cm1, const cv::Matx33d& cm2,
+                        double endpoint_cct_1, double endpoint_cct_2, cv::Vec2d& out_xy,
+                        double& out_cct, double& out_tint) -> bool {
+  cv::Vec3d camera_neutral;
+  if (!ResolveAsShotCameraNeutral(params, camera_neutral)) {
+    return false;
+  }
 
   cv::Vec2d       xy(kD50X, kD50Y);
   for (int i = 0; i < kAsShotSolveMaxIter; ++i) {
@@ -468,7 +531,8 @@ auto SolveAsShotWhiteXY(const OperatorParams& params, const cv::Matx33d& cm1, co
       break;
     }
 
-    const cv::Matx33d xyz_to_camera = InterpolateColorMatrix(cm1, cm2, iter_cct);
+    const cv::Matx33d xyz_to_camera =
+        InterpolateColorMatrix(cm1, cm2, iter_cct, endpoint_cct_1, endpoint_cct_2);
     cv::Matx33d       camera_to_xyz;
     if (!Invert3x3(xyz_to_camera, camera_to_xyz)) {
       return false;
@@ -626,7 +690,9 @@ void ColorTempOp::ResolveRuntime(OperatorParams& params) const {
 
   cv::Matx33d cm1;
   cv::Matx33d cm2;
-  if (!ResolveColorMatrixEndpoints(params, cm1, cm2)) {
+  double     endpoint_cct_1 = kCalibrationLowCCT;
+  double     endpoint_cct_2 = kCalibrationHighCCT;
+  if (!ResolveColorMatrixEndpoints(params, cm1, cm2, endpoint_cct_1, endpoint_cct_2)) {
     params.color_temp_matrices_valid_ = false;
     params.color_temp_runtime_dirty_  = false;
     return;
@@ -637,7 +703,8 @@ void ColorTempOp::ResolveRuntime(OperatorParams& params) const {
   double    selected_tint = custom_tint_;
 
   if (mode_ == ColorTempMode::AS_SHOT) {
-    if (!SolveAsShotWhiteXY(params, cm1, cm2, selected_xy, selected_cct, selected_tint)) {
+    if (!SolveAsShotWhiteXY(params, cm1, cm2, endpoint_cct_1, endpoint_cct_2, selected_xy,
+                            selected_cct, selected_tint)) {
       params.color_temp_matrices_valid_ = false;
       params.color_temp_runtime_dirty_  = false;
       return;
@@ -648,7 +715,8 @@ void ColorTempOp::ResolveRuntime(OperatorParams& params) const {
     selected_xy   = UVToXY(TemperatureTintToUV(selected_cct, selected_tint));
   }
 
-  const cv::Matx33d xyz_to_camera = InterpolateColorMatrix(cm1, cm2, selected_cct);
+  const cv::Matx33d xyz_to_camera =
+      InterpolateColorMatrix(cm1, cm2, selected_cct, endpoint_cct_1, endpoint_cct_2);
   cv::Matx33d       camera_to_xyz;
   if (!Invert3x3(xyz_to_camera, camera_to_xyz)) {
     std::cout << "ColorTempOp: Failed to invert XYZ to camera matrix.\n";

@@ -29,6 +29,7 @@
 #include "app/sleeve_service.hpp"
 #include "edit/operators/operator_registeration.hpp"
 #include "edit/pipeline/default_pipeline_params.hpp"
+#include "io/image/image_loader.hpp"
 #include "renderer/pipeline_scheduler.hpp"
 #include "type/type.hpp"
 #include "utils/clock/time_provider.hpp"
@@ -86,6 +87,16 @@ static uint64_t HashMatBytes(const cv::Mat& mat) {
     }
   }
   return h;
+}
+
+static uint64_t HashImageBufferCpuBytes(ImageBuffer& buffer) {
+  if (!buffer.cpu_data_valid_ && buffer.gpu_data_valid_) {
+    buffer.SyncToCPU();
+  }
+  EXPECT_TRUE(buffer.cpu_data_valid_);
+  auto& mat = buffer.GetCPUData();
+  EXPECT_FALSE(mat.empty());
+  return HashMatBytes(mat);
 }
 
 static std::shared_ptr<ThumbnailGuard> GetThumbnailBlocking(ThumbnailService& service,
@@ -848,6 +859,85 @@ TEST_F(ThumbnailServiceTests, MetalGeometryPipelineThumbnailStillRenders) {
   EXPECT_EQ(mat.type(), CV_32FC4);
   EXPECT_LE(std::max(mat.cols, mat.rows), 1024);
 #endif
+}
+
+TEST_F(ThumbnailServiceTests, ThumbnailRenderUsesInjectedRawMetadataForDng) {
+  const auto raw_path = std::filesystem::path(TEST_IMG_PATH) / "raw" / "bad_dng" / "bad.dng.DNG";
+  if (!std::filesystem::exists(raw_path)) {
+    GTEST_SKIP() << "Sample DNG file is missing: " << raw_path.string();
+  }
+
+  ProjectService    project(db_path_, meta_path_);
+  auto              fs_service = project.GetSleeveService();
+  auto              img_pool   = project.GetImagePoolService();
+  ImportServiceImpl import_service(fs_service, img_pool);
+
+  std::shared_ptr<ImportJob> import_job = std::make_shared<ImportJob>();
+  std::promise<ImportResult> final_result;
+  auto                       final_result_future = final_result.get_future();
+  import_job->on_finished_ = [&final_result](const ImportResult& result) {
+    final_result.set_value(result);
+  };
+
+  import_job = import_service.ImportToFolder({raw_path}, L"", {}, import_job);
+  ASSERT_NE(import_job, nullptr);
+  ASSERT_EQ(final_result_future.wait_for(60s), std::future_status::ready);
+
+  const auto import_result = final_result_future.get();
+  ASSERT_EQ(import_result.imported_, 1u);
+  ASSERT_EQ(import_result.failed_, 0u);
+  ASSERT_NE(import_job->import_log_, nullptr);
+
+  const auto snapshot = import_job->import_log_->Snapshot();
+  ASSERT_EQ(snapshot.created_.size(), 1u);
+
+  import_service.SyncImports(snapshot, L"");
+  project.GetSleeveService()->Sync();
+  project.GetImagePoolService()->SyncWithStorage();
+  project.SaveProject(meta_path_);
+
+  const auto element_id = snapshot.created_.front().element_id_;
+  const auto image_id   = snapshot.created_.front().image_id_;
+
+  auto pipeline_service = std::make_shared<PipelineMgmtService>(project.GetStorageService());
+  ThumbnailService thumbnail_service(project.GetSleeveService(), img_pool, pipeline_service);
+
+  const uint64_t thumbnail_hash = GetThumbnailHashBlocking(thumbnail_service, element_id, image_id);
+  thumbnail_service.ReleaseThumbnail(element_id);
+
+  auto image_desc = img_pool->Read<std::shared_ptr<Image>>(
+      image_id, [](const std::shared_ptr<Image>& img) { return img; });
+  ASSERT_NE(image_desc, nullptr);
+  ASSERT_TRUE(image_desc->HasRawColorContext());
+
+  auto pipeline_guard = pipeline_service->LoadPipeline(element_id);
+  ASSERT_NE(pipeline_guard, nullptr);
+  ASSERT_NE(pipeline_guard->pipeline_, nullptr);
+  const auto pipeline_params = pipeline_guard->pipeline_->ExportPipelineParams();
+  pipeline_service->SavePipeline(pipeline_guard);
+
+  auto direct_exec = std::make_shared<CPUPipelineExecutor>();
+  direct_exec->ImportPipelineParams(pipeline_params);
+  direct_exec->SetBoundFile(element_id);
+  direct_exec->SetExecutionStages();
+  direct_exec->InjectRawMetadata(image_desc->GetRawColorContext());
+  direct_exec->SetNextFramePresentationMode(FramePresentationMode::ViewportTransformed);
+  direct_exec->SetResizeDownsampleAlgorithm(ResizeDownsampleAlgorithm::Bilinear);
+  direct_exec->SetRenderRegion(0, 0, 1.0f);
+  direct_exec->SetForceCPUOutput(true);
+  direct_exec->SetRenderRes(false, 1024);
+  direct_exec->SetEnableCache(false);
+  direct_exec->SetDecodeRes(DecodeRes::QUARTER);
+
+  auto bytes = ByteBufferLoader::LoadFromImage(image_desc);
+  ASSERT_NE(bytes, nullptr);
+
+  auto direct_input  = std::make_shared<ImageBuffer>(std::move(*bytes));
+  auto direct_result = direct_exec->Apply(direct_input);
+  ASSERT_NE(direct_result, nullptr);
+
+  const uint64_t direct_hash = HashImageBufferCpuBytes(*direct_result);
+  EXPECT_EQ(thumbnail_hash, direct_hash);
 }
 
 TEST_F(ThumbnailServiceTests, DISABLED_PipelineRestoredFromDBGeneratesCorrectThumbnail) {

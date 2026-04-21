@@ -35,6 +35,11 @@ struct RawRuntimeColorContext {
   bool              color_matrices_valid_    = false;
   double            color_matrix_1_[9]       = {};
   double            color_matrix_2_[9]       = {};
+  bool              as_shot_neutral_valid_   = false;
+  double            as_shot_neutral_[3]      = {};
+  bool              calibration_illuminants_valid_ = false;
+  double            color_matrix_1_cct_      = 2856.0;
+  double            color_matrix_2_cct_      = 6504.0;
 };
 
 }  // namespace alcedo

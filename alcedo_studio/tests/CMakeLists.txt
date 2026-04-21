@@ -358,6 +358,11 @@ target_include_directories(ImageWriterTest PUBLIC ${ALCEDO_INCLUDE_DIR})
 target_link_libraries(ImageWriterTest PRIVATE GTest::gtest_main ImageWriter ${ALCEDO_TEST_OPENCV_MIN_DEPS})
 gtest_discover_tests(ImageWriterTest TEST_PREFIX "ImageWriterTest.")
 
+add_executable(MetadataExtractorTest image/metadata_extractor_test.cpp)
+target_include_directories(MetadataExtractorTest PUBLIC ${ALCEDO_INCLUDE_DIR})
+target_link_libraries(MetadataExtractorTest PRIVATE GTest::gtest_main Image Operators)
+gtest_discover_tests(MetadataExtractorTest TEST_PREFIX "MetadataExtractorTest.")
+
 add_executable(ExportIccProfileResolverTest io/export_icc_profile_resolver_test.cpp)
 target_include_directories(ExportIccProfileResolverTest PUBLIC ${ALCEDO_INCLUDE_DIR})
 target_link_libraries(ExportIccProfileResolverTest PRIVATE GTest::gtest_main ExportIccProfileResolver)

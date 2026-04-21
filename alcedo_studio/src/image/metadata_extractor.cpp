@@ -10,6 +10,7 @@
 #include <cctype>
 #include <cmath>
 #include <cstdint>
+#include <cstdlib>
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
@@ -681,6 +682,226 @@ auto LookupCameraColorMatrices(const std::string& camera_make,
   return false;
 }
 
+auto ParseExifNumericToken(std::string token, double& out_value) -> bool {
+  token.erase(std::remove_if(token.begin(), token.end(), [](unsigned char ch) {
+                return ch == '[' || ch == ']' || ch == '(' || ch == ')' || ch == ',';
+              }),
+              token.end());
+  if (token.empty()) {
+    return false;
+  }
+
+  const size_t slash_pos = token.find('/');
+  if (slash_pos != std::string::npos) {
+    const std::string numerator_text   = token.substr(0, slash_pos);
+    const std::string denominator_text = token.substr(slash_pos + 1);
+    char*             numerator_end    = nullptr;
+    char*             denominator_end  = nullptr;
+    const double      numerator        = std::strtod(numerator_text.c_str(), &numerator_end);
+    const double      denominator      = std::strtod(denominator_text.c_str(), &denominator_end);
+    if (numerator_end == numerator_text.c_str() || denominator_end == denominator_text.c_str() ||
+        !std::isfinite(numerator) || !std::isfinite(denominator) || std::abs(denominator) < 1e-12) {
+      return false;
+    }
+    out_value = numerator / denominator;
+    return std::isfinite(out_value);
+  }
+
+  char*        value_end = nullptr;
+  const double value     = std::strtod(token.c_str(), &value_end);
+  if (value_end == token.c_str() || !std::isfinite(value)) {
+    return false;
+  }
+  out_value = value;
+  return true;
+}
+
+auto ParseExifNumericList(const std::string& text) -> std::vector<double> {
+  std::istringstream     iss(text);
+  std::string            token;
+  std::vector<double>    values;
+
+  while (iss >> token) {
+    double parsed_value = 0.0;
+    if (ParseExifNumericToken(token, parsed_value)) {
+      values.push_back(parsed_value);
+    }
+  }
+
+  return values;
+}
+
+auto ReadExifStringTag(const Exiv2::ExifData& exif_data, const char* key) -> std::string {
+  const auto it = exif_data.findKey(Exiv2::ExifKey(key));
+  if (it == exif_data.end()) {
+    return {};
+  }
+  return TrimAscii(it->toString());
+}
+
+auto ReadExifNumericArrayTag(const Exiv2::ExifData& exif_data, const char* key, const int count,
+                             double* values_out) -> bool {
+  if (!values_out || count <= 0) {
+    return false;
+  }
+
+  const auto it = exif_data.findKey(Exiv2::ExifKey(key));
+  if (it == exif_data.end()) {
+    return false;
+  }
+
+  const auto values = ParseExifNumericList(it->toString());
+  if (static_cast<int>(values.size()) < count) {
+    return false;
+  }
+
+  for (int i = 0; i < count; ++i) {
+    values_out[i] = values[static_cast<size_t>(i)];
+  }
+  return true;
+}
+
+auto ReadExifUnsignedIntTag(const Exiv2::ExifData& exif_data, const char* key, uint32_t& out_value)
+    -> bool {
+  const auto it = exif_data.findKey(Exiv2::ExifKey(key));
+  if (it == exif_data.end()) {
+    return false;
+  }
+
+  try {
+    out_value = static_cast<uint32_t>(it->toUint32());
+    return true;
+  } catch (...) {
+    try {
+      out_value = static_cast<uint32_t>(it->toInt64());
+      return true;
+    } catch (...) {
+      return false;
+    }
+  }
+}
+
+auto CalibrationIlluminantToCct(const uint32_t illuminant) -> double {
+  switch (illuminant) {
+    case 1:   // Daylight
+    case 21:  // D65
+      return 6504.0;
+    case 2:   // Fluorescent
+      return 4150.0;
+    case 3:   // Tungsten
+    case 17:  // Standard Light A
+      return 2856.0;
+    case 4:   // Flash
+    case 9:   // Fine weather
+      return 5500.0;
+    case 10:  // Cloudy
+      return 6500.0;
+    case 11:  // Shade
+      return 7500.0;
+    case 12:  // Daylight fluorescent
+      return 6430.0;
+    case 13:  // Day white fluorescent
+      return 5300.0;
+    case 14:  // Cool white fluorescent
+      return 4230.0;
+    case 15:  // White fluorescent
+      return 3450.0;
+    case 18:  // Standard Light B
+      return 4874.0;
+    case 19:  // Standard Light C
+      return 6774.0;
+    case 20:  // D55
+      return 5503.0;
+    case 22:  // D75
+      return 7504.0;
+    case 23:  // D50
+      return 5003.0;
+    case 24:  // ISO studio tungsten
+      return 3200.0;
+    default:
+      return std::numeric_limits<double>::quiet_NaN();
+  }
+}
+
+auto HasMeaningfulCameraModelToken(const std::string& camera_model) -> bool {
+  const auto normalized = NormalizeCameraName(camera_model);
+  if (normalized.empty()) {
+    return false;
+  }
+
+  const auto tokens = UniqueMeaningfulCameraTokens(TokenizeCameraNameLoose(normalized));
+  if (!tokens.empty()) {
+    return true;
+  }
+
+  return normalized.find(' ') != std::string::npos;
+}
+
+void PopulateDngColorMetadataFromExif(const Exiv2::ExifData& exif_data, RawRuntimeColorContext& ctx) {
+  const std::string exif_make         = ReadExifStringTag(exif_data, "Exif.Image.Make");
+  const std::string exif_model        = ReadExifStringTag(exif_data, "Exif.Image.Model");
+  const std::string unique_camera_model =
+      ReadExifStringTag(exif_data, "Exif.Image.UniqueCameraModel");
+
+  if (ctx.camera_make_.empty() && !exif_make.empty()) {
+    ctx.camera_make_ = exif_make;
+  }
+  if ((!HasMeaningfulCameraModelToken(ctx.camera_model_) || ctx.camera_model_ == exif_model) &&
+      !unique_camera_model.empty()) {
+    ctx.camera_model_ = unique_camera_model;
+  } else if (ctx.camera_model_.empty() && !exif_model.empty()) {
+    ctx.camera_model_ = exif_model;
+  }
+
+  double cm1[9] = {};
+  double cm2[9] = {};
+  const bool has_cm1 = ReadExifNumericArrayTag(exif_data, "Exif.Image.ColorMatrix1", 9, cm1);
+  const bool has_cm2 = ReadExifNumericArrayTag(exif_data, "Exif.Image.ColorMatrix2", 9, cm2);
+  if (!has_cm1 && !has_cm2) {
+    return;
+  }
+
+  if (!has_cm1 && has_cm2) {
+    std::memcpy(cm1, cm2, sizeof(cm1));
+  } else if (has_cm1 && !has_cm2) {
+    std::memcpy(cm2, cm1, sizeof(cm2));
+  }
+
+  std::memcpy(ctx.color_matrix_1_, cm1, sizeof(ctx.color_matrix_1_));
+  std::memcpy(ctx.color_matrix_2_, cm2, sizeof(ctx.color_matrix_2_));
+  ctx.color_matrices_valid_ = true;
+
+  double as_shot_neutral[3] = {};
+  if (ReadExifNumericArrayTag(exif_data, "Exif.Image.AsShotNeutral", 3, as_shot_neutral)) {
+    std::memcpy(ctx.as_shot_neutral_, as_shot_neutral, sizeof(ctx.as_shot_neutral_));
+    ctx.as_shot_neutral_valid_ = std::all_of(
+        std::begin(ctx.as_shot_neutral_), std::end(ctx.as_shot_neutral_),
+        [](const double value) { return std::isfinite(value) && value > 0.0; });
+  }
+
+  uint32_t illuminant1 = 0;
+  uint32_t illuminant2 = 0;
+  const bool has_illuminant1 =
+      ReadExifUnsignedIntTag(exif_data, "Exif.Image.CalibrationIlluminant1", illuminant1);
+  const bool has_illuminant2 =
+      ReadExifUnsignedIntTag(exif_data, "Exif.Image.CalibrationIlluminant2", illuminant2);
+  if (has_illuminant1 || has_illuminant2) {
+    const double cct1 = has_illuminant1 ? CalibrationIlluminantToCct(illuminant1)
+                                        : std::numeric_limits<double>::quiet_NaN();
+    const double cct2 = has_illuminant2 ? CalibrationIlluminantToCct(illuminant2)
+                                        : std::numeric_limits<double>::quiet_NaN();
+    if (std::isfinite(cct1)) {
+      ctx.color_matrix_1_cct_ = cct1;
+    }
+    if (std::isfinite(cct2)) {
+      ctx.color_matrix_2_cct_ = cct2;
+    }
+    ctx.calibration_illuminants_valid_ =
+        std::isfinite(ctx.color_matrix_1_cct_) && std::isfinite(ctx.color_matrix_2_cct_) &&
+        ctx.color_matrix_1_cct_ > 0.0 && ctx.color_matrix_2_cct_ > 0.0;
+  }
+}
+
 /// Populate a RawRuntimeColorContext directly from libraw's open-but-not-processed state.
 /// Only requires open_file / unpack to have been called so that imgdata.rawdata.color,
 /// imgdata.idata, imgdata.other, imgdata.lens are populated.
@@ -976,8 +1197,7 @@ auto MetadataExtractor::EXIFToJSON(const Exiv2::Image::UniquePtr& exif_data) -> 
 void MetadataExtractor::ExtractEXIF_ToImage(const image_path_t& image_path, Image& image) {
   // For raw files, prefer the libraw-based extraction path which also provides
   // RawRuntimeColorContext for pipeline operators.
-  const bool is_dng = IsDngExtension(image_path);
-  if (IsRawExtension(image_path) && !is_dng) {
+  if (IsRawExtension(image_path)) {
     if (ExtractRawMetadata_ToImage(image_path, image)) {
       return;
     }
@@ -1034,6 +1254,17 @@ auto MetadataExtractor::ExtractRawMetadata_ToImage(const image_path_t& image_pat
 
   RawRuntimeColorContext ctx{};
   PopulateMetadataRuntimeContext(*raw_processor, ctx);
+
+  if (IsDngExtension(image_path)) {
+    try {
+      auto exif_data = ExtractEXIF(image_path);
+      if (exif_data && !exif_data->exifData().empty()) {
+        PopulateDngColorMetadataFromExif(exif_data->exifData(), ctx);
+      }
+    } catch (...) {
+      // Non-fatal: keep the LibRaw-derived context if Exiv2 cannot read the DNG tags.
+    }
+  }
 
   ExifDisplayMetaData display{};
   PopulateDisplayMetadataFromLibRaw(*raw_processor, ctx, display);

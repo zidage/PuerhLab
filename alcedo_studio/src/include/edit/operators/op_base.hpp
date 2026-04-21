@@ -186,6 +186,11 @@ struct OperatorParams {
   bool                         raw_color_matrices_valid_  = false;
   double                       raw_color_matrix_1_[9]     = {};
   double                       raw_color_matrix_2_[9]     = {};
+  bool                         raw_as_shot_neutral_valid_ = false;
+  double                       raw_as_shot_neutral_[3]    = {};
+  bool                         raw_calibration_illuminants_valid_ = false;
+  double                       raw_color_matrix_1_cct_    = 2856.0;
+  double                       raw_color_matrix_2_cct_    = 6504.0;
   bool                         raw_lens_metadata_valid_   = false;
   std::string                  raw_lens_make_             = {};
   std::string                  raw_lens_model_            = {};
@@ -297,6 +302,13 @@ struct OperatorParams {
       raw_color_matrix_1_[i] = ctx.color_matrix_1_[i];
       raw_color_matrix_2_[i] = ctx.color_matrix_2_[i];
     }
+    raw_as_shot_neutral_valid_ = ctx.as_shot_neutral_valid_;
+    for (int i = 0; i < 3; ++i) {
+      raw_as_shot_neutral_[i] = ctx.as_shot_neutral_[i];
+    }
+    raw_calibration_illuminants_valid_ = ctx.calibration_illuminants_valid_;
+    raw_color_matrix_1_cct_            = ctx.color_matrix_1_cct_;
+    raw_color_matrix_2_cct_            = ctx.color_matrix_2_cct_;
     raw_lens_metadata_valid_   = ctx.lens_metadata_valid_;
     raw_lens_make_             = ctx.lens_make_;
     raw_lens_model_            = ctx.lens_model_;
