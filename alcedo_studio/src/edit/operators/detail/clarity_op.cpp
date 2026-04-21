@@ -54,11 +54,11 @@ void BuildGaussianKernel(float sigma, int max_radius, int& tap_count,
 
 }  // namespace
 
-float ClarityOp::usm_radius_ = 5.0f;
+float ClarityOp::usm_radius_ = 15.0f;
 
 ClarityOp::ClarityOp() : clarity_offset_(0) { scale_ = 1.0f; }
 ClarityOp::ClarityOp(float clarity_offset) : clarity_offset_(clarity_offset) {
-  scale_ = clarity_offset / 300.0f;
+  scale_ = clarity_offset / 200.0f;
 }
 
 ClarityOp::ClarityOp(const nlohmann::json& params) { SetParams(params); }
@@ -79,47 +79,73 @@ void ClarityOp::CreateMidtoneMask(cv::Mat& input, cv::Mat& mask) const {
 }
 
 void ClarityOp::Apply(std::shared_ptr<ImageBuffer> input) {
-  // Adpated from
-  // https://community.adobe.com/t5/photoshop-ecosystem-discussions/what-exactly-is-clarity/td-p/8957968
+  // Local contrast enhancement ("Clarity"):
+  // 1. Blur with a medium-large radius to obtain local mean.
+  // 2. diff = original - local_mean  (local contrast signal)
+  // 3. Protect strong edges and highlights/shadows.
+  // 4. Gently boost diff in mid-tones / flat areas.
   cv::Mat& img = input->GetCPUData();
 
-  cv::Mat  midtone_mask;
-  CreateMidtoneMask(img, midtone_mask);
-
   cv::Mat blurred;
-  // Use reflect padding to avoid brightness seams at tile boundaries
   cv::GaussianBlur(img, blurred, cv::Size(), usm_radius_, usm_radius_, cv::BORDER_REFLECT101);
 
-  cv::Mat    high_pass  = img - blurred;
-
-  const bool continuous = high_pass.isContinuous() && midtone_mask.isContinuous();
-  const int  rows       = high_pass.rows;
-  const int  cols       = high_pass.cols;
+  const bool continuous = img.isContinuous() && blurred.isContinuous();
+  const int  rows       = img.rows;
+  const int  cols       = img.cols;
+  constexpr float kEdgeThreshold = 0.18f;
 
   if (continuous) {
-    const int total    = rows * cols;
-    auto*     hp_ptr   = high_pass.ptr<cv::Vec3f>();
-    auto*     mask_ptr = midtone_mask.ptr<float>();
+    const int total = rows * cols;
+    auto*     img_ptr  = img.ptr<cv::Vec3f>();
+    auto*     blur_ptr = blurred.ptr<cv::Vec3f>();
     for (int i = 0; i < total; ++i) {
-      const float w = mask_ptr[i] * scale_;
-      hp_ptr[i][0] *= w;
-      hp_ptr[i][1] *= w;
-      hp_ptr[i][2] *= w;
+      const cv::Vec3f& orig = img_ptr[i];
+      const cv::Vec3f& blur = blur_ptr[i];
+
+      cv::Vec3f diff = orig - blur;
+      float diff_lum = diff[0] * 0.114f + diff[1] * 0.587f + diff[2] * 0.299f;
+      float edge_mag = std::abs(diff_lum);
+      float t_edge   = std::min(edge_mag / kEdgeThreshold, 1.0f);
+      float protect  = 1.0f - t_edge * t_edge * (3.0f - 2.0f * t_edge);
+
+      float lum   = orig[0] * 0.114f + orig[1] * 0.587f + orig[2] * 0.299f;
+      float t_lum = (lum - 0.5f) * 2.0f;
+      float mask  = 1.0f - t_lum * t_lum;
+      mask        = std::max(mask, 0.0f);
+
+      float strength = scale_ * protect * mask;
+
+      img_ptr[i][0] += diff[0] * strength;
+      img_ptr[i][1] += diff[1] * strength;
+      img_ptr[i][2] += diff[2] * strength;
     }
   } else {
     for (int r = 0; r < rows; ++r) {
-      auto*        hp_ptr = high_pass.ptr<cv::Vec3f>(r);
-      const float* m      = midtone_mask.ptr<float>(r);
+      auto* img_ptr  = img.ptr<cv::Vec3f>(r);
+      auto* blur_ptr = blurred.ptr<cv::Vec3f>(r);
       for (int c = 0; c < cols; ++c) {
-        const float w = m[c] * scale_;
-        hp_ptr[c][0] *= w;
-        hp_ptr[c][1] *= w;
-        hp_ptr[c][2] *= w;
+        const cv::Vec3f& orig = img_ptr[c];
+        const cv::Vec3f& blur = blur_ptr[c];
+
+        cv::Vec3f diff = orig - blur;
+        float diff_lum = diff[0] * 0.114f + diff[1] * 0.587f + diff[2] * 0.299f;
+        float edge_mag = std::abs(diff_lum);
+        float t_edge   = std::min(edge_mag / kEdgeThreshold, 1.0f);
+        float protect  = 1.0f - t_edge * t_edge * (3.0f - 2.0f * t_edge);
+
+        float lum   = orig[0] * 0.114f + orig[1] * 0.587f + orig[2] * 0.299f;
+        float t_lum = (lum - 0.5f) * 2.0f;
+        float mask  = 1.0f - t_lum * t_lum;
+        mask        = std::max(mask, 0.0f);
+
+        float strength = scale_ * protect * mask;
+
+        img_ptr[c][0] += diff[0] * strength;
+        img_ptr[c][1] += diff[1] * strength;
+        img_ptr[c][2] += diff[2] * strength;
       }
     }
   }
-
-  img += high_pass;
 }
 
 void ClarityOp::ApplyGPU(std::shared_ptr<ImageBuffer>) {
@@ -140,13 +166,13 @@ void ClarityOp::SetParams(const nlohmann::json& params) {
   } else {
     clarity_offset_ = 0.0f;
   }
-  scale_ = clarity_offset_ / 300.0f;
+  scale_ = clarity_offset_ / 100.0f;
 }
 
 void ClarityOp::SetGlobalParams(OperatorParams& params) const {
   params.clarity_offset_ = scale_;
   params.clarity_radius_ = usm_radius_;
-  BuildGaussianKernel(usm_radius_, 20, params.clarity_gaussian_tap_count_,
+  BuildGaussianKernel(usm_radius_, 60, params.clarity_gaussian_tap_count_,
                       params.clarity_gaussian_weights_);
 }
 

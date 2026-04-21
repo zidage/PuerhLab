@@ -254,7 +254,7 @@ struct OperatorParams {
   std::vector<float>           curve_h_                  = {};
   std::vector<float>           curve_m_                  = {};
 
-  static constexpr int         kDetailMaxGaussianTapCount = 24;
+  static constexpr int         kDetailMaxGaussianTapCount = 64;
 
   // Clarity adjustment parameter
   bool                         clarity_enabled_          = true;

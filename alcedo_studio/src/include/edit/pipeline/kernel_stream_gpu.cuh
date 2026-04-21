@@ -34,6 +34,21 @@ class HasApplyOps {
   static constexpr bool value = decltype(test<T>(0))::value;
 };
 
+template <typename T>
+class HasCustomDispatch {
+  template <typename U>
+  static auto test(int)
+      -> decltype(std::declval<U>().Dispatch(std::declval<float4*>(), std::declval<float4*>(), 0,
+                                             0, 0, std::declval<GPUOperatorParams&>(), dim3{},
+                                             dim3{}, nullptr),
+                  std::true_type());
+  template <typename U>
+  static std::false_type test(...);
+
+ public:
+  static constexpr bool value = decltype(test<T>(0))::value;
+};
+
 template <typename Op>
 __global__ void GenericPointKernel(Op op, float4* __restrict src, float4* __restrict dst, int width,
                                    int height, size_t pitch_elems, GPUOperatorParams params) {
@@ -116,7 +131,9 @@ class GPU_StaticKernelStream {
       auto& stage     = std::get<I>(stages_);
       using StageType = std::decay_t<decltype(stage)>;
 
-      if constexpr (HasApplyOps<StageType>::value) {
+      if constexpr (HasCustomDispatch<StageType>::value) {
+        stage.Dispatch(src, dst, width, height, pitch_elems, params, grid, block, stream);
+      } else if constexpr (HasApplyOps<StageType>::value) {
         // PointOp
         GenericPointKernel<<<grid, block, 0, stream>>>(stage, src, dst, width, height, pitch_elems,
                                                        params);
