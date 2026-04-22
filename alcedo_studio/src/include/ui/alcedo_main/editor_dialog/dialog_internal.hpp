@@ -129,7 +129,7 @@ const auto kShortcutSelectNextLutId = QStringLiteral("editor_dialog.select_next_
 constexpr char kPanelIconPathProperty[] = "puerhlabPanelIconPath";
 const QSize     kPanelToggleIconSize(18, 18);
 constexpr int   kPanelToggleButtonHeight = 44;
-const QSize     kVersioningRailIconSize(24, 24);
+const QSize     kVersioningRailIconSize(18, 18);
 constexpr int   kVersioningRailButtonSize = 46;
 constexpr int   kEditorOuterMargin = 14;
 constexpr int   kVersioningCollapsedWidth = 64;
@@ -682,7 +682,9 @@ class EditorDialog final : public QDialog {
 
   QtEditViewer*                                            viewer_                 = nullptr;
   QWidget*                                                 viewer_container_       = nullptr;
-  QLabel*                                                  viewer_zoom_label_      = nullptr;
+  QWidget*                                                 viewer_zoom_overlay_    = nullptr;
+  QLabel*                                                  viewer_zoom_value_label_ = nullptr;
+  QLabel*                                                  viewer_zoom_resolution_label_ = nullptr;
   ScopePanel*                                              scope_panel_            = nullptr;
   QScrollArea*                                             controls_scroll_        = nullptr;
   QScrollArea*                                             tone_controls_scroll_   = nullptr;
@@ -820,6 +822,8 @@ class EditorDialog final : public QDialog {
   EditorFrameManager                                      frame_manager_{};
   std::map<QSlider*, std::function<void()>>                slider_reset_callbacks_{};
   std::function<void()>                                    curve_reset_callback_{};
+
+  ExifDisplayMetaData                                      exif_display_;
 };
 
 }  // namespace alcedo::ui

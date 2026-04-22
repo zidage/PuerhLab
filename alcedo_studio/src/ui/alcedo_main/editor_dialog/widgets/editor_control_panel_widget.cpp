@@ -103,11 +103,12 @@ auto EditorDialog::BuildControlPanelShell(const QString& panel_style) -> EditorC
   panel_switch_row->setObjectName("EditorPanelSwitchRow");
   panel_switch_row->setAttribute(Qt::WA_StyledBackground, true);
   panel_switch_row->setStyleSheet(
-      "#EditorPanelSwitchRow {"
-      "  background: rgba(21, 26, 32, 0.84);"
-      "  border: none;"
-      "  border-radius: 10px;"
-      "}");
+      QStringLiteral("#EditorPanelSwitchRow {"
+                     "  background: %1;"
+                     "  border: none;"
+                     "  border-radius: 10px;"
+                     "}")
+          .arg(AppTheme::Instance().bgBaseColor().name(QColor::HexArgb)));
 
   auto* panel_switch_layout = new QHBoxLayout(panel_switch_row);
   panel_switch_layout->setContentsMargins(0, 0, 0, 0);

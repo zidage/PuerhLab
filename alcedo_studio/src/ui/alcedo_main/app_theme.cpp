@@ -561,6 +561,7 @@ auto AppTheme::EditorPanelToggleStyle(bool active, bool is_first, bool is_last) 
                           "  color: %1;"
                           "  background: %2;"
                           "  border: 1px solid %3;"
+                          "  outline: none;"
                           "  padding: 0px;"
                           "  border-top-left-radius: %4;"
                           "  border-bottom-left-radius: %5;"
@@ -569,6 +570,7 @@ auto AppTheme::EditorPanelToggleStyle(bool active, bool is_first, bool is_last) 
                           "}"
                           "QPushButton:hover {"
                           "  background: %8;"
+                          "  outline: none;"
                           "}")
         .arg(Hex(theme.bgCanvasColor()), Rgba(WithAlpha(theme.accentColor(), 224)),
              Rgba(WithAlpha(theme.accentSecondaryColor(), 112)), top_left_radius,
@@ -580,6 +582,7 @@ auto AppTheme::EditorPanelToggleStyle(bool active, bool is_first, bool is_last) 
                         "  color: %1;"
                         "  background: transparent;"
                         "  border: 1px solid transparent;"
+                        "  outline: none;"
                         "  padding: 0px;"
                         "  border-top-left-radius: %2;"
                         "  border-bottom-left-radius: %3;"
@@ -588,9 +591,11 @@ auto AppTheme::EditorPanelToggleStyle(bool active, bool is_first, bool is_last) 
                         "}"
                         "QPushButton:hover {"
                         "  background: %6;"
+                        "  outline: none;"
                         "}"
                         "QPushButton:pressed {"
                         "  background: %7;"
+                        "  outline: none;"
                         "}")
       .arg(Hex(theme.textColor()), top_left_radius, bottom_left_radius, top_right_radius,
            bottom_right_radius, Rgba(WithAlpha(theme.hoverColor(), 210)),
@@ -738,9 +743,10 @@ auto AppTheme::EditorScrollAreaStyle() -> QString {
   const QString bg_canvas = Rgba(WithAlpha(theme.bgCanvasColor(), 170));
   const QString accent    = Hex(theme.accentColor());
 
-  return QStringLiteral("QScrollArea { background: %1; border: none; }"
+  return QStringLiteral("QScrollArea { background: %1; border: none; border-radius: 12px; }"
                         "QScrollArea > QWidget, QScrollArea > QWidget > QWidget {"
                         "  background: %1;"
+                        "  border-radius: 12px;"
                         "}"
                         "QScrollBar:vertical {"
                         "  background: %2;"

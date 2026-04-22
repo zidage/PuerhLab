@@ -837,6 +837,19 @@ auto HasMeaningfulCameraModelToken(const std::string& camera_model) -> bool {
   return normalized.find(' ') != std::string::npos;
 }
 
+auto HasEmbeddedDngProfileTables(const Exiv2::ExifData& exif_data) -> bool {
+  for (const auto& datum : exif_data) {
+    const std::string key = datum.key();
+    if (key.find("ProfileHueSatMapDims") != std::string::npos ||
+        key.find("ProfileHueSatMapData") != std::string::npos ||
+        key.find("ProfileLookTableDims") != std::string::npos ||
+        key.find("ProfileLookTableData") != std::string::npos) {
+      return true;
+    }
+  }
+  return false;
+}
+
 void PopulateDngColorMetadataFromExif(const Exiv2::ExifData& exif_data, RawRuntimeColorContext& ctx) {
   const std::string exif_make         = ReadExifStringTag(exif_data, "Exif.Image.Make");
   const std::string exif_model        = ReadExifStringTag(exif_data, "Exif.Image.Model");
@@ -875,7 +888,7 @@ void PopulateDngColorMetadataFromExif(const Exiv2::ExifData& exif_data, RawRunti
   double fm2[9] = {};
   const bool has_fm1 = ReadExifNumericArrayTag(exif_data, "Exif.Image.ForwardMatrix1", 9, fm1);
   const bool has_fm2 = ReadExifNumericArrayTag(exif_data, "Exif.Image.ForwardMatrix2", 9, fm2);
-  if (has_fm1 || has_fm2) {
+  if ((has_fm1 || has_fm2) && !HasEmbeddedDngProfileTables(exif_data)) {
     if (!has_fm1 && has_fm2) {
       std::memcpy(fm1, fm2, sizeof(fm1));
     } else if (has_fm1 && !has_fm2) {

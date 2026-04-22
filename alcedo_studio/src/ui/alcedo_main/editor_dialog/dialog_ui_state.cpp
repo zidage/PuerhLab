@@ -358,14 +358,23 @@ void EditorDialog::ResetCropAndRotation() {
   }
 
 void EditorDialog::UpdateViewerZoomLabel(float zoom) {
-    if (!viewer_zoom_label_) {
+    if (!viewer_zoom_value_label_) {
       return;
     }
     const float clamped = std::max(1.0f, zoom);
-    viewer_zoom_label_->setText(
-        Tr("Zoom %1% (%2x)")
-            .arg(clamped * 100.0f, 0, 'f', 0)
-            .arg(clamped, 0, 'f', 2));
+    viewer_zoom_value_label_->setText(
+        Tr("%1%").arg(clamped * 100.0f, 0, 'f', 0));
+
+    if (viewer_zoom_resolution_label_) {
+      const uint32_t w = exif_display_.width_;
+      const uint32_t h = exif_display_.height_;
+      if (w > 0 && h > 0) {
+        viewer_zoom_resolution_label_->setText(
+            Tr("%1 × %2 px").arg(w).arg(h));
+      } else {
+        viewer_zoom_resolution_label_->setText(QStringLiteral("-- × -- px"));
+      }
+    }
   }
 
 void EditorDialog::RefreshGeometryModeUi() {

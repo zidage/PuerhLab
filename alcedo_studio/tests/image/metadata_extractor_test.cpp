@@ -18,6 +18,11 @@ auto BadDngSamplePath() -> std::filesystem::path {
   return std::filesystem::path(TEST_IMG_PATH) / "raw" / "bad_dng" / "bad_color_dng.dng";
 }
 
+auto HasselbladX2dSamplePath() -> std::filesystem::path {
+  return std::filesystem::path(TEST_IMG_PATH) / "raw" / "camera" / "hasselblad" / "x2d" /
+         "B0004841.dng";
+}
+
 void ExpectMatrixNear(const double* actual, const double (&expected)[9], const double epsilon) {
   ASSERT_NE(actual, nullptr);
   for (int i = 0; i < 9; ++i) {
@@ -175,6 +180,41 @@ TEST(MetadataExtractorTest, ColorTempOpUsesForwardMatrixForBadColorDngAsShot) {
     EXPECT_NEAR(params.color_temp_cam_to_xyz_d50_[i], kExpectedCameraToXyzD50[i], 1e-3f)
         << "matrix index " << i;
   }
+}
+
+TEST(MetadataExtractorTest, EmbeddedDngProfileTablesDisableForwardMatrixFallback) {
+  const auto sample_path = HasselbladX2dSamplePath();
+  if (!std::filesystem::exists(sample_path)) {
+    GTEST_SKIP() << "Sample DNG not found: " << sample_path.string();
+  }
+
+  Image image(6, sample_path, ImageType::DNG);
+  ASSERT_NO_THROW(MetadataExtractor::ExtractEXIF_ToImage(sample_path, image));
+  ASSERT_TRUE(image.HasRawColorContext());
+
+  const auto& ctx = image.GetRawColorContext();
+  EXPECT_TRUE(ctx.color_matrices_valid_);
+  EXPECT_FALSE(ctx.forward_matrices_valid_);
+  EXPECT_TRUE(ctx.calibration_illuminants_valid_);
+  EXPECT_EQ(ctx.camera_make_, "Hasselblad");
+  EXPECT_EQ(ctx.camera_model_, "X2D 100C-100c");
+
+  OperatorParams params;
+  params.color_temp_enabled_ = true;
+  params.PopulateRawMetadata(ctx);
+
+  const nlohmann::json color_temp_params = {
+      {"color_temp", {{"mode", "as_shot"}, {"cct", 6500.0}, {"tint", 0.0}}}};
+  ColorTempOp op(color_temp_params);
+  ASSERT_NO_THROW(op.SetGlobalParams(params));
+
+  EXPECT_TRUE(params.color_temp_matrices_valid_);
+  EXPECT_GT(params.color_temp_resolved_cct_, 4900.0f);
+  EXPECT_LT(params.color_temp_resolved_cct_, 5050.0f);
+  EXPECT_GT(params.color_temp_cam_to_xyz_d50_[0], 1.5f);
+  EXPECT_LT(params.color_temp_cam_to_xyz_d50_[2], 0.05f);
+  EXPECT_LT(params.color_temp_cam_to_xyz_d50_[5], -0.2f);
+  EXPECT_LT(params.color_temp_cam_to_xyz_d50_[7], -0.1f);
 }
 
 }  // namespace

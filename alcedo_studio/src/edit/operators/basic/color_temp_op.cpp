@@ -135,6 +135,7 @@ auto BuildRuntimeCacheKey(const OperatorParams& params, ColorTempMode mode, floa
     for (double value : params.raw_color_matrix_2_) {
       HashCombine(key, static_cast<std::uint64_t>(std::hash<double>{}(value)));
     }
+    HashCombine(key, static_cast<std::uint64_t>(params.raw_calibration_illuminants_valid_));
     HashCombine(key, static_cast<std::uint64_t>(std::hash<double>{}(params.raw_color_matrix_1_cct_)));
     HashCombine(key, static_cast<std::uint64_t>(std::hash<double>{}(params.raw_color_matrix_2_cct_)));
   }
@@ -191,6 +192,17 @@ auto BuildFallbackXyzToCamera(const OperatorParams& params, cv::Matx33d& out) ->
 
 auto SanitizeEndpointCct(double cct, double fallback) -> double {
   return (std::isfinite(cct) && cct > kValueEpsilon) ? cct : fallback;
+}
+
+auto HasDualIlluminantCalibration(const OperatorParams& params) -> bool {
+  if (!params.raw_calibration_illuminants_valid_) {
+    return false;
+  }
+
+  const double cct1 = params.raw_color_matrix_1_cct_;
+  const double cct2 = params.raw_color_matrix_2_cct_;
+  return std::isfinite(cct1) && std::isfinite(cct2) && cct1 > kValueEpsilon &&
+         cct2 > kValueEpsilon && std::abs(cct1 - cct2) > kValueEpsilon;
 }
 
 auto InterpolateColorMatrix(const cv::Matx33d& cm1, const cv::Matx33d& cm2, double cct,
@@ -482,9 +494,16 @@ auto ResolveColorMatrixEndpoints(const OperatorParams& params, cv::Matx33d& cm1,
   if (params.raw_color_matrices_valid_) {
     cm1 = MatrixFromArray9(params.raw_color_matrix_1_);
     cm2 = MatrixFromArray9(params.raw_color_matrix_2_);
-    if (params.raw_calibration_illuminants_valid_) {
+    if (HasDualIlluminantCalibration(params)) {
       endpoint_cct_1 = params.raw_color_matrix_1_cct_;
       endpoint_cct_2 = params.raw_color_matrix_2_cct_;
+    } else {
+      // Match Adobe DNG SDK behavior: if either calibration illuminant is
+      // missing/invalid, treat the profile as a single calibration instead of
+      // interpolating Matrix1/2 across a fabricated 2856K/6504K range.
+      cm2            = cm1;
+      endpoint_cct_1 = 5000.0;
+      endpoint_cct_2 = 5000.0;
     }
     return IsFiniteMatrix(cm1) && IsFiniteMatrix(cm2);
   }
@@ -507,6 +526,9 @@ auto ResolveForwardMatrixEndpoints(const OperatorParams& params, cv::Matx33d& fm
 
   fm1 = MatrixFromArray9(params.raw_forward_matrix_1_);
   fm2 = MatrixFromArray9(params.raw_forward_matrix_2_);
+  if (!HasDualIlluminantCalibration(params)) {
+    fm2 = fm1;
+  }
   return IsFiniteMatrix(fm1) && IsFiniteMatrix(fm2);
 }
 

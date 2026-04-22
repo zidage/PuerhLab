@@ -63,7 +63,9 @@ EditorDialog::EditorDialog(std::shared_ptr<ImagePoolService>       image_pool,
     // --- EditorDialog UI construction. ---
     BuildViewerAndPanelShell();
     if (scope_panel_) {
-      scope_panel_->SetExifDisplayMetaData(LoadScopeExifDisplayMetaData(image_pool_, image_id_));
+      exif_display_ = LoadScopeExifDisplayMetaData(image_pool_, image_id_);
+      scope_panel_->SetExifDisplayMetaData(exif_display_);
+      UpdateViewerZoomLabel(viewer_ ? viewer_->GetViewZoom() : 1.0f);
     }
     BuildToneControlPanel();
     BuildDisplayTransformPanel();
