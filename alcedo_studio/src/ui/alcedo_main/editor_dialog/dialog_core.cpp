@@ -80,7 +80,9 @@ EditorDialog::EditorDialog(std::shared_ptr<ImagePoolService>       image_pool,
     frame_manager_.SetViewer(viewer_);
     frame_manager_.SetScopePanel(scope_panel_);
     if (scope_panel_) {
-      scope_panel_->SetNeedsRenderCallback([this]() { RequestRender(); });
+      scope_panel_->SetNeedsRenderCallback(
+          [this]() { RequestRender(/*use_viewport_region=*/true,
+                                   /*bump_preview_generation=*/false); });
     }
     SetupPipeline();
     pipeline_initialized_ = true;
@@ -92,12 +94,15 @@ EditorDialog::EditorDialog(std::shared_ptr<ImagePoolService>       image_pool,
       viewer_->SetCropOverlayVisible(false);
       viewer_->SetCropToolEnabled(false);
     }
+    if (viewer_) {
+      QObject::connect(viewer_, &QtEditViewer::ViewInteractionSettled, this,
+                       [this]() { MaybeScheduleDetailPreviewRenderFromViewport(); });
+    }
 
-    // Load with a full-res preview first; scheduler transitions back to fast-preview baseline.
+    // Load a 4K quality base preview first; scheduler transitions back to fast-preview baseline.
     QTimer::singleShot(0, this, [this]() {
-      state_.type_ = RenderType::FULL_RES_PREVIEW;
-      RequestRender();
-      state_.type_ = RenderType::FAST_PREVIEW;
+      AdvancePreviewGeneration();
+      TriggerQualityPreviewRenderFromPipeline();
     });
   }
 

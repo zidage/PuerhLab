@@ -17,6 +17,10 @@
 namespace alcedo {
 namespace {
 constexpr float kRotationPreviewEpsilon = 1e-4f;
+constexpr float kFullFrameRegionEpsilon = 1e-4f;
+constexpr int   kFastPreviewMaxLongEdge = 2560;
+constexpr int   kQualityBasePreviewMaxLongEdge = 4096;
+constexpr int   kDetailRoiPreviewMaxLongEdge = 4096;
 constexpr int   kFullResPreviewMaxLongEdge = 8192;
 
 auto HasActiveGeometryRotation(const std::shared_ptr<CPUPipelineExecutor>& pipeline_executor)
@@ -54,6 +58,43 @@ auto HasActiveGeometryRotation(const std::shared_ptr<CPUPipelineExecutor>& pipel
   const float angle = crop_rotate.value("angle_degrees", 0.0f);
   return std::abs(angle) > kRotationPreviewEpsilon;
 }
+
+auto BuildSourceRoiRect(const std::optional<ViewportRenderRegion>& viewport_region, int region_x,
+                        int region_y, float region_scale_x, float region_scale_y) -> FrameRoiRect {
+  if (viewport_region.has_value() && viewport_region->reference_width_ > 0 &&
+      viewport_region->reference_height_ > 0) {
+    const float reference_width =
+        static_cast<float>(std::max(1, viewport_region->reference_width_));
+    const float reference_height =
+        static_cast<float>(std::max(1, viewport_region->reference_height_));
+    return {
+        std::clamp(static_cast<float>(std::max(0, region_x)) / reference_width, 0.0f, 1.0f),
+        std::clamp(static_cast<float>(std::max(0, region_y)) / reference_height, 0.0f, 1.0f),
+        std::clamp(region_scale_x, 1e-4f, 1.0f),
+        std::clamp(region_scale_y, 1e-4f, 1.0f),
+    };
+  }
+  return {0.0f, 0.0f, 1.0f, 1.0f};
+}
+
+auto MetadataFromRegion(const FramePreviewMetadata& base_metadata,
+                        const std::optional<ViewportRenderRegion>& viewport_region, int region_x,
+                        int region_y, float region_scale_x, float region_scale_y)
+    -> FramePreviewMetadata {
+  FramePreviewMetadata metadata = base_metadata;
+  metadata.source_roi_norm =
+      BuildSourceRoiRect(viewport_region, region_x, region_y, region_scale_x, region_scale_y);
+  return metadata;
+}
+
+auto LoadViewportRegion(const std::shared_ptr<CPUPipelineExecutor>& pipeline_executor,
+                        bool should_use_viewport_region)
+    -> std::optional<ViewportRenderRegion> {
+  if (!pipeline_executor || !should_use_viewport_region) {
+    return std::nullopt;
+  }
+  return pipeline_executor->GetViewportRenderRegion();
+}
 }  // namespace
 
 void PipelineTask::SetExecutorRenderParams() {
@@ -74,43 +115,96 @@ void PipelineTask::SetExecutorRenderParams() {
   int   region_y       = desc.y_;
   float region_scale_x = desc.scale_factor_x_;
   float region_scale_y = desc.scale_factor_y_;
-  if (requested_render_type == RenderType::FAST_PREVIEW && desc.use_viewport_region_ &&
-      !rotation_active_fast_preview) {
-    if (const auto viewport_region = pipeline_executor_->GetViewportRenderRegion();
-        viewport_region.has_value()) {
-      region_x       = viewport_region->x_;
-      region_y       = viewport_region->y_;
-      region_scale_x = viewport_region->scale_x_;
-      region_scale_y = viewport_region->scale_y_;
-    }
+  int   region_reference_width = 0;
+  int   region_reference_height = 0;
+  const bool viewport_region_render =
+      (requested_render_type == RenderType::FAST_PREVIEW ||
+       requested_render_type == RenderType::DETAIL_ROI_PREVIEW) &&
+      desc.use_viewport_region_;
+  const auto viewport_region =
+      LoadViewportRegion(pipeline_executor_, viewport_region_render && !rotation_active_fast_preview);
+  if (viewport_region.has_value()) {
+    region_x       = viewport_region->x_;
+    region_y       = viewport_region->y_;
+    region_scale_x = viewport_region->scale_x_;
+    region_scale_y = viewport_region->scale_y_;
+    region_reference_width = viewport_region->reference_width_;
+    region_reference_height = viewport_region->reference_height_;
   }
 
+  FramePreviewMetadata frame_metadata = desc.frame_metadata_;
+
   if (requested_render_type == RenderType::FAST_PREVIEW) {
-    if (rotation_active_fast_preview) {
+    frame_metadata.frame_role = FrameRole::InteractivePrimary;
+    const bool full_frame_region = region_x == 0 && region_y == 0 &&
+                                   region_scale_x >= (1.0f - kFullFrameRegionEpsilon) &&
+                                   region_scale_y >= (1.0f - kFullFrameRegionEpsilon);
+    if (rotation_active_fast_preview || full_frame_region) {
       // Rotation preview should use a downsampled full frame so viewport coordinates
-      // stay aligned with the rotated result.
+      // stay aligned with the rotated result. Cropped full-frame previews should also
+      // keep viewport transforms active instead of being treated like an ROI patch.
       pipeline_executor_->SetNextFramePresentationMode(FramePresentationMode::ViewportTransformed);
+      frame_metadata.source_roi_norm = {};
+      pipeline_executor_->SetNextFramePreviewMetadata(frame_metadata);
       pipeline_executor_->SetResizeDownsampleAlgorithm(ResizeDownsampleAlgorithm::Bilinear);
       pipeline_executor_->SetRenderRegion(0, 0, 1.0f, 1.0f);
       pipeline_executor_->SetForceCPUOutput(false);
-      pipeline_executor_->SetRenderRes(false, 1600);
+      pipeline_executor_->SetRenderRes(false, kFastPreviewMaxLongEdge);
       pipeline_executor_->SetEnableCache(true);
       pipeline_executor_->SetDecodeRes(DecodeRes::FULL);
       return;
     }
 
     pipeline_executor_->SetNextFramePresentationMode(FramePresentationMode::RoiFrame);
+    frame_metadata =
+        MetadataFromRegion(frame_metadata, viewport_region, region_x, region_y, region_scale_x,
+                           region_scale_y);
+    pipeline_executor_->SetNextFramePreviewMetadata(frame_metadata);
     pipeline_executor_->SetResizeDownsampleAlgorithm(ResizeDownsampleAlgorithm::Bilinear);
-    pipeline_executor_->SetRenderRegion(region_x, region_y, region_scale_x, region_scale_y);
+    pipeline_executor_->SetRenderRegion(region_x, region_y, region_scale_x, region_scale_y,
+                                        region_reference_width, region_reference_height);
     pipeline_executor_->SetForceCPUOutput(false);
-    pipeline_executor_->SetRenderRes(false, 2560);
+    pipeline_executor_->SetRenderRes(false, kFastPreviewMaxLongEdge);
     pipeline_executor_->SetEnableCache(true);
     // The default decode res is full, this call will be effective only when changed before
     pipeline_executor_->SetDecodeRes(DecodeRes::FULL);
     return;
   }
+  if (requested_render_type == RenderType::QUALITY_BASE_PREVIEW) {
+    frame_metadata.frame_role      = FrameRole::QualityBase;
+    frame_metadata.source_roi_norm = {};
+    pipeline_executor_->SetNextFramePresentationMode(FramePresentationMode::ViewportTransformed);
+    pipeline_executor_->SetNextFramePreviewMetadata(frame_metadata);
+    pipeline_executor_->SetResizeDownsampleAlgorithm(ResizeDownsampleAlgorithm::Area);
+    pipeline_executor_->SetRenderRegion(0, 0, 1.0f, 1.0f);
+    pipeline_executor_->SetRenderRes(false, kQualityBasePreviewMaxLongEdge);
+    pipeline_executor_->SetForceCPUOutput(false);
+    pipeline_executor_->SetEnableCache(true);
+    pipeline_executor_->SetDecodeRes(DecodeRes::FULL);
+    return;
+  }
+  if (requested_render_type == RenderType::DETAIL_ROI_PREVIEW) {
+    frame_metadata.frame_role =
+        (region_scale_x < (1.0f - 1e-4f) || region_scale_y < (1.0f - 1e-4f))
+            ? FrameRole::DetailPatch
+            : FrameRole::QualityBase;
+    frame_metadata =
+        MetadataFromRegion(frame_metadata, viewport_region, region_x, region_y, region_scale_x,
+                           region_scale_y);
+    pipeline_executor_->SetNextFramePresentationMode(FramePresentationMode::ViewportTransformed);
+    pipeline_executor_->SetNextFramePreviewMetadata(frame_metadata);
+    pipeline_executor_->SetResizeDownsampleAlgorithm(ResizeDownsampleAlgorithm::Area);
+    pipeline_executor_->SetRenderRegion(region_x, region_y, region_scale_x, region_scale_y,
+                                        region_reference_width, region_reference_height);
+    pipeline_executor_->SetRenderRes(false, kDetailRoiPreviewMaxLongEdge);
+    pipeline_executor_->SetForceCPUOutput(false);
+    pipeline_executor_->SetEnableCache(true);
+    pipeline_executor_->SetDecodeRes(DecodeRes::FULL);
+    return;
+  }
   if (requested_render_type == RenderType::THUMBNAIL) {
     pipeline_executor_->SetNextFramePresentationMode(FramePresentationMode::ViewportTransformed);
+    pipeline_executor_->SetNextFramePreviewMetadata(frame_metadata);
     pipeline_executor_->SetResizeDownsampleAlgorithm(ResizeDownsampleAlgorithm::Bilinear);
     pipeline_executor_->SetRenderRegion(0, 0, 1.0f);
     pipeline_executor_->SetForceCPUOutput(true);
@@ -121,14 +215,18 @@ void PipelineTask::SetExecutorRenderParams() {
   }
   if (requested_render_type == RenderType::FULL_RES_PREVIEW) {
     pipeline_executor_->SetNextFramePresentationMode(FramePresentationMode::ViewportTransformed);
+    pipeline_executor_->SetNextFramePreviewMetadata(frame_metadata);
     pipeline_executor_->SetResizeDownsampleAlgorithm(ResizeDownsampleAlgorithm::Area);
     pipeline_executor_->SetRenderRegion(0, 0, 1.0f);
     pipeline_executor_->SetRenderRes(false, kFullResPreviewMaxLongEdge);
     pipeline_executor_->SetForceCPUOutput(false);
+    pipeline_executor_->SetEnableCache(true);
+    pipeline_executor_->SetDecodeRes(DecodeRes::FULL);
     return;
   }
   if (requested_render_type == RenderType::FULL_RES_EXPORT) {
     pipeline_executor_->SetNextFramePresentationMode(FramePresentationMode::ViewportTransformed);
+    pipeline_executor_->SetNextFramePreviewMetadata(frame_metadata);
     pipeline_executor_->SetResizeDownsampleAlgorithm(ResizeDownsampleAlgorithm::Area);
     pipeline_executor_->SetRenderRegion(0, 0, 1.0f);
     pipeline_executor_->SetRenderRes(true);
@@ -147,7 +245,7 @@ void PipelineTask::ResetPreviewRenderParams() {
   }
   // Transition back to fast-preview baseline state.
   pipeline_executor_->SetResizeDownsampleAlgorithm(ResizeDownsampleAlgorithm::Bilinear);
-  pipeline_executor_->SetRenderRes(false, 2560);
+  pipeline_executor_->SetRenderRes(false, kFastPreviewMaxLongEdge);
   pipeline_executor_->SetForceCPUOutput(false);
   pipeline_executor_->SetEnableCache(true);
   pipeline_executor_->SetDecodeRes(DecodeRes::FULL);
@@ -160,7 +258,7 @@ void PipelineTask::ResetThumbnailRenderParams() {
   }
   // Transition to full-res preview baseline state.
   pipeline_executor_->SetResizeDownsampleAlgorithm(ResizeDownsampleAlgorithm::Area);
-  pipeline_executor_->SetRenderRes(true, 2560);
+  pipeline_executor_->SetRenderRes(true, kFastPreviewMaxLongEdge);
   pipeline_executor_->SetForceCPUOutput(false);
   pipeline_executor_->SetEnableCache(true);
   pipeline_executor_->SetDecodeRes(DecodeRes::FULL);
@@ -201,7 +299,9 @@ void PipelineScheduler::ScheduleTask(PipelineTask&& task) {
         task.ResetThumbnailRenderParams();
         return;
       }
-      if (render_type == RenderType::FULL_RES_PREVIEW ||
+      if (render_type == RenderType::QUALITY_BASE_PREVIEW ||
+          render_type == RenderType::DETAIL_ROI_PREVIEW ||
+          render_type == RenderType::FULL_RES_PREVIEW ||
           render_type == RenderType::FULL_RES_EXPORT) {
         // FULL_RES_PREVIEW/FULL_RES_EXPORT -> FAST_PREVIEW baseline
         task.ResetPreviewRenderParams();
@@ -267,6 +367,8 @@ void PipelineScheduler::ScheduleTask(PipelineTask&& task) {
               result && result_has_cpu && (!require_gpu_valid || result->gpu_data_valid_);
 
           if (render_desc.render_type_ == RenderType::FAST_PREVIEW ||
+              render_desc.render_type_ == RenderType::QUALITY_BASE_PREVIEW ||
+              render_desc.render_type_ == RenderType::DETAIL_ROI_PREVIEW ||
               render_desc.render_type_ == RenderType::FULL_RES_PREVIEW ||
               !result_valid_for_copy) {
             if (render_desc.render_type_ == RenderType::THUMBNAIL &&

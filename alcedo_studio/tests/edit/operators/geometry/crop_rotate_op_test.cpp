@@ -9,6 +9,7 @@
 #include <opencv2/core.hpp>
 
 #include "edit/operators/geometry/crop_rotate_op.hpp"
+#include "edit/operators/geometry/resize_op.hpp"
 #include "edit/pipeline/default_pipeline_params.hpp"
 #include "image/image_buffer.hpp"
 
@@ -150,6 +151,40 @@ TEST(CropRotateOpTests, InvalidAspectSanitizesBackToFree) {
   const auto& output = buffer->GetCPUData();
   EXPECT_EQ(output.cols, 400);
   EXPECT_EQ(output.rows, 300);
+}
+
+TEST(CropRotateOpTests, ResizeOpScalesViewportOriginFromReferenceDimensions) {
+  cv::Mat image(100, 200, CV_32FC3);
+  for (int y = 0; y < image.rows; ++y) {
+    for (int x = 0; x < image.cols; ++x) {
+      image.at<cv::Vec3f>(y, x) =
+          cv::Vec3f(static_cast<float>(x), static_cast<float>(y), 0.0f);
+    }
+  }
+
+  nlohmann::json params;
+  params["resize"] = {{"enable_scale", false},
+                      {"maximum_edge", 4096},
+                      {"enable_roi", true},
+                      {"downsample_algorithm", "inter_area"},
+                      {"roi",
+                       {{"x", 25},
+                        {"y", 10},
+                        {"resize_factor_x", 0.5f},
+                        {"resize_factor_y", 0.5f},
+                        {"resize_factor", 0.5f},
+                        {"reference_width", 100},
+                        {"reference_height", 50}}}};
+
+  ResizeOp op(params);
+  auto     buffer = std::make_shared<ImageBuffer>(std::move(image));
+  op.Apply(buffer);
+  const auto& output = buffer->GetCPUData();
+
+  ASSERT_EQ(output.cols, 100);
+  ASSERT_EQ(output.rows, 50);
+  EXPECT_FLOAT_EQ(output.at<cv::Vec3f>(0, 0)[0], 50.0f);
+  EXPECT_FLOAT_EQ(output.at<cv::Vec3f>(0, 0)[1], 20.0f);
 }
 
 }  // namespace alcedo

@@ -144,6 +144,32 @@ TEST(CudaPreviewVramReclamationTest, FullResPreviewTransitionReleasesScratchBefo
             ExpectedScratchBytes(expected_size.width, expected_size.height));
 }
 
+TEST(CudaPreviewVramReclamationTest, QualityBasePreviewTransitionReleasesScratchBeforeFastPreview) {
+  if (!EnsureCudaDevice()) {
+    GTEST_SKIP() << "No CUDA device available.";
+  }
+
+  RegisterAllOperators();
+
+  auto pipeline = MakeConfiguredExecutor();
+  auto input    = std::make_shared<ImageBuffer>(MakeLinearInput(3072, 2048));
+  PipelineScheduler scheduler(1);
+
+  auto quality_base_result =
+      SubmitBlockingRender(scheduler, pipeline, input, RenderType::QUALITY_BASE_PREVIEW);
+  ASSERT_NE(quality_base_result, nullptr);
+  EXPECT_EQ(pipeline->DebugGetMergedStageScratchBytes(), 0u);
+
+  auto fast_result = SubmitBlockingRender(scheduler, pipeline, input, RenderType::FAST_PREVIEW);
+  ASSERT_NE(fast_result, nullptr);
+  ASSERT_TRUE(fast_result->gpu_data_valid_);
+  const auto expected_size = ExpectedFastPreviewSize(3072, 2048);
+  EXPECT_EQ(fast_result->GetGPUWidth(), expected_size.width);
+  EXPECT_EQ(fast_result->GetGPUHeight(), expected_size.height);
+  EXPECT_EQ(pipeline->DebugGetMergedStageScratchBytes(),
+            ExpectedScratchBytes(expected_size.width, expected_size.height));
+}
+
 TEST(CudaPreviewVramReclamationTest, FullResExportTransitionReleasesScratchBeforeFastPreview) {
   if (!EnsureCudaDevice()) {
     GTEST_SKIP() << "No CUDA device available.";

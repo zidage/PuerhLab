@@ -197,13 +197,13 @@ QtEditViewer::QtEditViewer(QWidget* parent) : QWidget(parent) {
   connect(zoom_animation_, &QVariantAnimation::valueChanged, this,
           [this](const QVariant& value) {
             const auto result = view_transform_controller_.ApplyAnimationProgress(
-                viewer_state_, CurrentWidgetInfo(), CurrentImageInfo(),
+                viewer_state_, CurrentWidgetInfo(), CurrentInteractionImageInfo(),
                 std::clamp(static_cast<float>(value.toDouble()), 0.0f, 1.0f));
             ApplyViewTransformResult(result);
           });
   connect(zoom_animation_, &QVariantAnimation::finished, this, [this]() {
     const auto result = view_transform_controller_.ApplyAnimationFinished(
-        viewer_state_, CurrentWidgetInfo(), CurrentImageInfo());
+        viewer_state_, CurrentWidgetInfo(), CurrentInteractionImageInfo());
     ApplyViewTransformResult(result);
   });
 
@@ -211,9 +211,14 @@ QtEditViewer::QtEditViewer(QWidget* parent) : QWidget(parent) {
   click_toggle_timer_->setSingleShot(true);
   connect(click_toggle_timer_, &QTimer::timeout, this, [this]() {
     const auto result = view_transform_controller_.HandleClickToggleTimeout(
-        viewer_state_, CurrentWidgetInfo(), CurrentImageInfo());
+        viewer_state_, CurrentWidgetInfo(), CurrentInteractionImageInfo());
     ApplyViewTransformResult(result);
   });
+
+  view_interaction_settle_timer_ = new QTimer(this);
+  view_interaction_settle_timer_->setSingleShot(true);
+  connect(view_interaction_settle_timer_, &QTimer::timeout, this,
+          [this]() { HandleViewInteractionSettled(); });
 }
 
 QtEditViewer::~QtEditViewer() = default;
@@ -299,12 +304,35 @@ void QtEditViewer::ResetCropOverlayRectToFull() { SetCropOverlayRectNormalized(0
 
 auto QtEditViewer::GetViewZoom() const -> float { return viewer_state_.GetViewZoom(); }
 
+auto QtEditViewer::IsViewInteractionActive() const -> bool { return view_interaction_active_; }
+
 void QtEditViewer::SetDisplayEncoding(ColorUtils::ColorSpace encoding_space,
                                       ColorUtils::EOTF       encoding_eotf) {
   {
     std::lock_guard<std::mutex> lock(host_frame_mutex_);
     pending_display_config_       = ViewerDisplayConfig{encoding_space, encoding_eotf};
     pending_display_config_valid_ = true;
+  }
+  emit RequestUpdate();
+}
+
+void QtEditViewer::SetExpectedDetailToken(std::uint64_t preview_generation,
+                                          std::uint64_t detail_serial) {
+  {
+    std::lock_guard<std::mutex> lock(host_frame_mutex_);
+    has_expected_detail_token_  = true;
+    expected_detail_generation_ = preview_generation;
+    expected_detail_serial_     = detail_serial;
+  }
+  emit RequestUpdate();
+}
+
+void QtEditViewer::ClearExpectedDetailToken() {
+  {
+    std::lock_guard<std::mutex> lock(host_frame_mutex_);
+    has_expected_detail_token_  = false;
+    expected_detail_generation_ = 0;
+    expected_detail_serial_     = 0;
   }
   emit RequestUpdate();
 }
@@ -369,6 +397,10 @@ void QtEditViewer::SubmitHostFrame(const ViewerFrame& frame) {
       submitted_frame.presentation_mode = pending_presentation_mode_;
       pending_presentation_mode_valid_ = false;
     }
+    if (pending_preview_metadata_valid_) {
+      submitted_frame.preview_metadata = pending_preview_metadata_;
+      pending_preview_metadata_valid_ = false;
+    }
     pending_host_frame_ = std::move(submitted_frame);
 #ifdef HAVE_METAL
     pending_metal_frame_.reset();
@@ -385,6 +417,10 @@ void QtEditViewer::SubmitMetalFrame(const ViewerMetalFrame& frame) {
     if (pending_presentation_mode_valid_) {
       submitted_frame.presentation_mode = pending_presentation_mode_;
       pending_presentation_mode_valid_ = false;
+    }
+    if (pending_preview_metadata_valid_) {
+      submitted_frame.preview_metadata = pending_preview_metadata_;
+      pending_preview_metadata_valid_ = false;
     }
     pending_metal_frame_ = std::move(submitted_frame);
     pending_host_frame_.reset();
@@ -439,19 +475,58 @@ void QtEditViewer::SetNextFramePresentationMode(FramePresentationMode mode) {
 #ifdef HAVE_CUDA
   if (render_target_surface_ && render_target_surface_->supportsDirectCudaPresent()) {
     render_target_surface_->setNextFramePresentationMode(mode);
-    return;
   }
-  frame_mailbox_.SetNextFramePresentationMode(mode);
-#else
-  std::lock_guard<std::mutex> lock(host_frame_mutex_);
-  pending_presentation_mode_       = mode;
-  pending_presentation_mode_valid_ = true;
+#ifdef ALCEDO_HAS_LEGACY_GL_VIEWER
+  if (HasLegacyGlSurface(surface_.get())) {
+    frame_mailbox_.SetNextFramePresentationMode(mode);
+  }
 #endif
+#endif
+  {
+    std::lock_guard<std::mutex> lock(host_frame_mutex_);
+    pending_presentation_mode_       = mode;
+    pending_presentation_mode_valid_ = true;
+  }
+}
+
+void QtEditViewer::SetNextFramePreviewMetadata(const FramePreviewMetadata& metadata) {
+#ifdef HAVE_CUDA
+  if (render_target_surface_ && render_target_surface_->supportsDirectCudaPresent()) {
+    render_target_surface_->setNextFramePreviewMetadata(metadata);
+  }
+#endif
+  std::lock_guard<std::mutex> lock(host_frame_mutex_);
+  pending_preview_metadata_       = metadata;
+  pending_preview_metadata_valid_ = true;
 }
 
 auto QtEditViewer::GetViewerSurface() -> IEditViewerSurface* { return surface_.get(); }
 
 auto QtEditViewer::GetViewerSurface() const -> const IEditViewerSurface* { return surface_.get(); }
+
+void QtEditViewer::MarkViewInteractionChanged() {
+  {
+    std::lock_guard<std::mutex> lock(host_frame_mutex_);
+    view_interaction_active_     = true;
+    prefer_interactive_primary_  = false;
+    allow_detail_patch_          = false;
+  }
+  if (view_interaction_settle_timer_) {
+    view_interaction_settle_timer_->start(kViewInteractionSettleDelayMs);
+  }
+}
+
+void QtEditViewer::HandleViewInteractionSettled() {
+  {
+    std::lock_guard<std::mutex> lock(host_frame_mutex_);
+    view_interaction_active_    = false;
+    prefer_interactive_primary_ = false;
+    allow_detail_patch_         = viewer_state_.GetViewZoom() > 1.0f;
+  }
+  UpdateSurface();
+  UpdateOverlay();
+  emit ViewInteractionSettled();
+}
 
 auto QtEditViewer::SupportsHistogram() const -> bool {
 #ifdef ALCEDO_HAS_LEGACY_GL_VIEWER
@@ -546,7 +621,8 @@ void QtEditViewer::HandleOverlayWheel(QWheelEvent* event) {
   if ((event->modifiers() & Qt::ControlModifier) == Qt::ControlModifier) {
     StopZoomAnimation();
     const auto result = view_transform_controller_.HandleCtrlWheel(
-        viewer_state_, CurrentWidgetInfo(), CurrentImageInfo(), event->angleDelta().y(),
+        viewer_state_, CurrentWidgetInfo(), CurrentInteractionImageInfo(),
+        event->angleDelta().y(),
         event->position());
     ApplyViewTransformResult(result);
     event->accept();
@@ -563,7 +639,7 @@ void QtEditViewer::HandleOverlayWheel(QWheelEvent* event) {
     if (!pixel_delta.isNull()) {
       StopZoomAnimation();
       const auto result = view_transform_controller_.HandleWheelPan(
-          viewer_state_, CurrentWidgetInfo(), CurrentImageInfo(), pixel_delta);
+          viewer_state_, CurrentWidgetInfo(), CurrentInteractionImageInfo(), pixel_delta);
       ApplyViewTransformResult(result);
     }
     event->accept();
@@ -579,7 +655,8 @@ void QtEditViewer::HandleOverlayNativeGesture(QNativeGestureEvent* event) {
     const float value = static_cast<float>(event->value());
     if (std::abs(value) > 1e-4f) {
       const auto result = view_transform_controller_.HandlePinchZoom(
-          viewer_state_, CurrentWidgetInfo(), CurrentImageInfo(), value, event->position());
+          viewer_state_, CurrentWidgetInfo(), CurrentInteractionImageInfo(), value,
+          event->position());
       ApplyViewTransformResult(result);
     }
     event->accept();
@@ -628,7 +705,7 @@ void QtEditViewer::HandleOverlayMouseMove(QMouseEvent* event) {
   }
 
   const auto result = view_transform_controller_.HandlePanMove(
-      viewer_state_, CurrentWidgetInfo(), CurrentImageInfo(), event->pos());
+      viewer_state_, CurrentWidgetInfo(), CurrentInteractionImageInfo(), event->pos());
   if (result.consumed) {
     ApplyViewTransformResult(result);
     event->accept();
@@ -683,7 +760,7 @@ void QtEditViewer::HandleOverlayMouseDoubleClick(QMouseEvent* event) {
     }
 
     const auto result = view_transform_controller_.HandleDoubleClick(
-        viewer_state_, CurrentWidgetInfo(), CurrentImageInfo(), event->position());
+        viewer_state_, CurrentWidgetInfo(), CurrentInteractionImageInfo(), event->position());
     ApplyViewTransformResult(result);
     event->accept();
     return;
@@ -784,6 +861,35 @@ void QtEditViewer::UpdateViewportRenderRegionCache() {
       snapshot.render_reference_width, snapshot.render_reference_height));
 }
 
+void QtEditViewer::ReconcileViewTransformForRenderReference() {
+  const auto snapshot = viewer_state_.Snapshot();
+  if (snapshot.render_reference_width <= 0 || snapshot.render_reference_height <= 0) {
+    return;
+  }
+
+  const float     clamped_zoom =
+      std::clamp(snapshot.view_transform.zoom, ViewTransformController::kMinInteractiveZoom,
+                 ViewTransformController::kMaxInteractiveZoom);
+  QVector2D       clamped_pan = ViewportMapper::ClampPanForZoom(
+      CurrentWidgetInfo(),
+      {snapshot.render_reference_width, snapshot.render_reference_height},
+      clamped_zoom, snapshot.view_transform.pan, ViewTransformController::kMinInteractiveZoom,
+      ViewTransformController::kMaxInteractiveZoom);
+  if (clamped_zoom <= (ViewTransformController::kMinInteractiveZoom + 1.0e-4f)) {
+    clamped_pan = QVector2D(0.0f, 0.0f);
+  }
+
+  const bool zoom_changed = std::abs(clamped_zoom - snapshot.view_transform.zoom) > 1.0e-5f;
+  const bool pan_changed =
+      (clamped_pan - snapshot.view_transform.pan).lengthSquared() > 1.0e-8f;
+  if (!zoom_changed && !pan_changed) {
+    return;
+  }
+
+  StopZoomAnimation();
+  viewer_state_.SetViewTransform(clamped_zoom, clamped_pan);
+}
+
 void QtEditViewer::RefreshFrameDerivedState() {
 #ifdef HAVE_CUDA
   EditViewerRenderTargetState active_frame{};
@@ -807,17 +913,27 @@ void QtEditViewer::RefreshFrameDerivedState() {
     int                   width = 0;
     int                   height = 0;
     FramePresentationMode presentation_mode = FramePresentationMode::FullFrame;
+    FramePreviewMetadata  preview_metadata = {};
   } active_frame;
   {
     std::lock_guard<std::mutex> lock(host_frame_mutex_);
     active_frame.width             = active_frame_width_;
     active_frame.height            = active_frame_height_;
     active_frame.presentation_mode = active_presentation_mode_;
+    active_frame.preview_metadata  = active_preview_metadata_;
   }
 #endif
+  const auto previous_snapshot = viewer_state_.Snapshot();
+  bool       render_reference_changed = false;
   if (active_frame.presentation_mode != FramePresentationMode::RoiFrame && active_frame.width > 0 &&
       active_frame.height > 0) {
+    render_reference_changed =
+        previous_snapshot.render_reference_width != active_frame.width ||
+        previous_snapshot.render_reference_height != active_frame.height;
     viewer_state_.SetRenderReferenceSize(active_frame.width, active_frame.height);
+    if (render_reference_changed) {
+      ReconcileViewTransformForRenderReference();
+    }
   }
   viewer_state_.SetCropOverlayMetricAspect(
       CropGeometry::SafeAspect(active_frame.width, active_frame.height));
@@ -849,6 +965,7 @@ void QtEditViewer::SyncSurfaceState() {
       active_frame_width_        = pending_metal_frame_->width;
       active_frame_height_       = pending_metal_frame_->height;
       active_presentation_mode_  = pending_metal_frame_->presentation_mode;
+      active_preview_metadata_   = pending_metal_frame_->preview_metadata;
       display_config             = active_display_config_;
       metal_frame_to_submit      = *pending_metal_frame_;
       pending_metal_frame_.reset();
@@ -859,6 +976,7 @@ void QtEditViewer::SyncSurfaceState() {
       active_frame_width_        = pending_host_frame_->width;
       active_frame_height_       = pending_host_frame_->height;
       active_presentation_mode_  = pending_host_frame_->presentation_mode;
+      active_preview_metadata_   = pending_host_frame_->preview_metadata;
       display_config             = active_display_config_;
       host_frame_to_submit       = *pending_host_frame_;
       pending_host_frame_.reset();
@@ -872,6 +990,7 @@ void QtEditViewer::SyncSurfaceState() {
       active_frame_width_        = pending_host_frame_->width;
       active_frame_height_       = pending_host_frame_->height;
       active_presentation_mode_  = pending_host_frame_->presentation_mode;
+      active_preview_metadata_   = pending_host_frame_->preview_metadata;
       display_config             = active_display_config_;
       host_frame_to_submit       = *pending_host_frame_;
       pending_host_frame_.reset();
@@ -895,7 +1014,17 @@ void QtEditViewer::SyncSurfaceState() {
 #endif
 
   RefreshFrameDerivedState();
-  surface_->setViewState({viewer_state_.Snapshot()});
+  ViewerViewState view_state;
+  view_state.snapshot = viewer_state_.Snapshot();
+  {
+    std::lock_guard<std::mutex> lock(host_frame_mutex_);
+    view_state.prefer_interactive_primary = prefer_interactive_primary_;
+    view_state.allow_detail_patch         = allow_detail_patch_;
+    view_state.has_expected_detail_token  = has_expected_detail_token_;
+    view_state.expected_detail_generation = expected_detail_generation_;
+    view_state.expected_detail_serial     = expected_detail_serial_;
+  }
+  surface_->setViewState(view_state);
 }
 
 void QtEditViewer::StopZoomAnimation() {
@@ -929,6 +1058,14 @@ auto QtEditViewer::CurrentImageInfo() const -> ViewportImageInfo {
   std::lock_guard<std::mutex> lock(host_frame_mutex_);
   return {active_frame_width_, active_frame_height_};
 #endif
+}
+
+auto QtEditViewer::CurrentInteractionImageInfo() const -> ViewportImageInfo {
+  const auto snapshot = viewer_state_.Snapshot();
+  if (snapshot.render_reference_width > 0 && snapshot.render_reference_height > 0) {
+    return {snapshot.render_reference_width, snapshot.render_reference_height};
+  }
+  return CurrentImageInfo();
 }
 
 auto QtEditViewer::CurrentPresentationMode() const -> FramePresentationMode {
@@ -988,6 +1125,7 @@ void QtEditViewer::ApplyViewTransformResult(const ViewTransformResult& result) {
     zoom_animation_->start();
   }
   if (result.request_repaint) {
+    MarkViewInteractionChanged();
     UpdateViewportRenderRegionCache();
     UpdateSurface();
     UpdateOverlay();

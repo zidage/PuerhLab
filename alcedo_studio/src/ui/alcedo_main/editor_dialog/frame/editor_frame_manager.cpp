@@ -81,6 +81,10 @@ void EditorFrameManager::MarkNeedsFullFramePreviewAfterGeometryCommit() {
   force_next_full_frame_preview_ = true;
 }
 
+auto EditorFrameManager::NeedsFullFramePreviewAfterGeometryCommit() const -> bool {
+  return force_next_full_frame_preview_;
+}
+
 auto EditorFrameManager::UseViewportRegionForPanelChange(ControlPanelKind previous_panel,
                                                          ControlPanelKind next_panel) -> bool {
   const bool force_full_frame_preview =

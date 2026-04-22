@@ -21,6 +21,7 @@ auto EditorDialog::ReloadUiStateFromPipeline(bool reset_to_defaults_if_missing) 
     }
     committed_state_ = state_;
     SyncControlsFromState();
+    AdvancePreviewGeneration();
     TriggerQualityPreviewRenderFromPipeline();
     return true;
   }
@@ -223,6 +224,7 @@ void EditorDialog::CommitAdjustment(AdjustmentField field) {
     }
     UpdateVersionUi();
 
+    AdvancePreviewGeneration();
     ScheduleQualityPreviewRenderFromPipeline();
   }
 }  // namespace alcedo::ui

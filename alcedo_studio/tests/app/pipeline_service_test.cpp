@@ -138,6 +138,41 @@ TEST_F(PipelineServiceTests, DefaultOutputTransformUsesOpenDRT) {
   EXPECT_EQ(exported.dump(), reloaded->pipeline_->ExportPipelineParams().dump());
 }
 
+TEST_F(PipelineServiceTests, LoadPipelineRepairsLensCalibEnableMismatchFromParams) {
+  {
+    ProjectService      project(db_path_, meta_path_);
+    PipelineMgmtService pipeline_service(project.GetStorageService());
+
+    auto                pipeline_guard = pipeline_service.LoadPipeline(44);
+    ASSERT_NE(pipeline_guard, nullptr);
+
+    auto& loading = pipeline_guard->pipeline_->GetStage(PipelineStageName::Image_Loading);
+    auto& global_params = pipeline_guard->pipeline_->GetGlobalParams();
+    nlohmann::json lens_params = pipeline_defaults::MakeDefaultLensCalibParams();
+    lens_params["lens_calib"]["enabled"] = false;
+    loading.SetOperator(OperatorType::LENS_CALIBRATION, lens_params, global_params);
+    loading.EnableOperator(OperatorType::LENS_CALIBRATION, true, global_params);
+
+    pipeline_guard->dirty_ = true;
+    pipeline_service.SavePipeline(pipeline_guard);
+    pipeline_service.Sync();
+  }
+
+  {
+    ProjectService      project(db_path_, meta_path_);
+    PipelineMgmtService pipeline_service(project.GetStorageService());
+
+    auto                reloaded = pipeline_service.LoadPipeline(44);
+    ASSERT_NE(reloaded, nullptr);
+    auto                op =
+        reloaded->pipeline_->GetStage(PipelineStageName::Image_Loading)
+            .GetOperator(OperatorType::LENS_CALIBRATION);
+    ASSERT_TRUE(op.has_value());
+    ASSERT_NE(op.value(), nullptr);
+    EXPECT_FALSE(op.value()->enable_);
+  }
+}
+
 TEST_F(PipelineServiceTests, OutputTransformPersistencePreservesSharedAndMethodSpecificSettings) {
   ProjectService      project(db_path_, meta_path_);
   PipelineMgmtService pipeline_service(project.GetStorageService());

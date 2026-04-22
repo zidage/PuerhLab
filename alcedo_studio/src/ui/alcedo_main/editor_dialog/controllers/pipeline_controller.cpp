@@ -42,6 +42,21 @@ auto MergeMissingDefaults(nlohmann::json& target, const nlohmann::json& defaults
   return changed;
 }
 
+void SyncOperatorEnabledFromParams(PipelineStage& stage, OperatorType type,
+                                   const char* root_key, OperatorParams& global_params) {
+  const auto op = stage.GetOperator(type);
+  if (!op.has_value() || !op.value() || !op.value()->op_) {
+    return;
+  }
+
+  bool enabled = op.value()->enable_;
+  const auto params = op.value()->op_->GetParams();
+  if (params.contains(root_key) && params[root_key].is_object()) {
+    enabled = params[root_key].value("enabled", enabled);
+  }
+  stage.EnableOperator(type, enabled, global_params);
+}
+
 }  // namespace
 
 void EnsureLoadingOperatorDefaults(const std::shared_ptr<CPUPipelineExecutor>& exec) {
@@ -53,7 +68,8 @@ void EnsureLoadingOperatorDefaults(const std::shared_ptr<CPUPipelineExecutor>& e
   auto& loading       = exec->GetStage(PipelineStageName::Image_Loading);
 
   const auto ensure_defaults =
-      [&](OperatorType type, const nlohmann::json& defaults, bool pass_global_params) {
+      [&](OperatorType type, const nlohmann::json& defaults, bool pass_global_params,
+          const char* enabled_root_key = nullptr) {
         const auto op = loading.GetOperator(type);
         if (!op.has_value() || !op.value() || !op.value()->op_) {
           if (pass_global_params) {
@@ -61,28 +77,30 @@ void EnsureLoadingOperatorDefaults(const std::shared_ptr<CPUPipelineExecutor>& e
           } else {
             loading.SetOperator(type, defaults);
           }
-          return;
+        } else {
+          nlohmann::json params = nlohmann::json::object();
+          const auto     exported = op.value()->ExportOperatorParams();
+          if (exported.contains("params") && exported["params"].is_object()) {
+            params = exported["params"];
+          }
+          if (MergeMissingDefaults(params, defaults)) {
+            if (pass_global_params) {
+              loading.SetOperator(type, params, global_params);
+            } else {
+              loading.SetOperator(type, params);
+            }
+          }
         }
 
-        nlohmann::json params = nlohmann::json::object();
-        const auto     exported = op.value()->ExportOperatorParams();
-        if (exported.contains("params") && exported["params"].is_object()) {
-          params = exported["params"];
-        }
-        if (!MergeMissingDefaults(params, defaults)) {
-          return;
-        }
-        if (pass_global_params) {
-          loading.SetOperator(type, params, global_params);
-        } else {
-          loading.SetOperator(type, params);
+        if (pass_global_params && enabled_root_key) {
+          SyncOperatorEnabledFromParams(loading, type, enabled_root_key, global_params);
         }
       };
 
   ensure_defaults(OperatorType::RAW_DECODE,
                   pipeline_defaults::MakeDefaultRawDecodeParams(), false);
   ensure_defaults(OperatorType::LENS_CALIBRATION,
-                  pipeline_defaults::MakeDefaultLensCalibParams(), true);
+                  pipeline_defaults::MakeDefaultLensCalibParams(), true, "lens_calib");
 }
 
 void AttachExecutionStages(const std::shared_ptr<CPUPipelineExecutor>& exec,

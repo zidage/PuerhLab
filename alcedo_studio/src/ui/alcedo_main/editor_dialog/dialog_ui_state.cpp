@@ -778,7 +778,13 @@ void EditorDialog::SetActiveControlPanel(ControlPanelKind panel) {
     RefreshGeometryModeUi();
     RefreshPanelSwitchUi();
     if (pipeline_initialized_) {
-      RequestRender(frame_manager_.UseViewportRegionForPanelChange(previous_panel, panel));
+      const bool geometry_transition =
+          previous_panel == ControlPanelKind::Geometry || panel == ControlPanelKind::Geometry;
+      if (geometry_transition) {
+        InvalidateDetailPreviewState();
+      }
+      RequestRender(frame_manager_.UseViewportRegionForPanelChange(previous_panel, panel),
+                    geometry_transition);
       ScheduleQualityPreviewRenderFromPipeline();
     }
   }

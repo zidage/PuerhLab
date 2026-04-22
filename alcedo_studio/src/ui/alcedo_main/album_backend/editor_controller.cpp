@@ -370,6 +370,8 @@ void EditorController::SetupEditorPipeline() {
   if (!loading.GetOperator(OperatorType::LENS_CALIBRATION).has_value()) {
     const nlohmann::json lens_params = pipeline_defaults::MakeDefaultLensCalibParams();
     loading.SetOperator(OperatorType::LENS_CALIBRATION, lens_params, global_params);
+    loading.EnableOperator(OperatorType::LENS_CALIBRATION,
+                           lens_params["lens_calib"].value("enabled", true), global_params);
   }
 
   // Inject pre-extracted raw metadata so downstream operators resolve eagerly.

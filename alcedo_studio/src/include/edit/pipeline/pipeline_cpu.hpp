@@ -73,6 +73,7 @@ class CPUPipelineExecutor : public PipelineExecutor {
 
   auto GetViewportRenderRegion() const -> std::optional<ViewportRenderRegion>;
   void SetNextFramePresentationMode(FramePresentationMode mode) const;
+  void SetNextFramePreviewMetadata(const FramePreviewMetadata& metadata) const;
 
   auto GetGlobalParams() -> OperatorParams& override { return global_params_; }
 
@@ -92,7 +93,9 @@ class CPUPipelineExecutor : public PipelineExecutor {
   void ImportPipelineParams(const nlohmann::json& j) override;
 
   void SetRenderRegion(int x, int y, float scale_factor_x,
-                       float scale_factor_y = -1.0f) override;
+                       float scale_factor_y = -1.0f,
+                       int reference_width = 0,
+                       int reference_height = 0) override;
   void SetRenderRes(bool full_res, int max_side_length = 2048) override;
   void SetResizeDownsampleAlgorithm(ResizeDownsampleAlgorithm algorithm) override;
   void SetDecodeRes(DecodeRes res);

@@ -12,6 +12,11 @@ namespace alcedo {
 
 struct ViewerViewState {
   ViewerStateSnapshot snapshot{};
+  bool                prefer_interactive_primary = false;
+  bool                allow_detail_patch        = true;
+  bool                has_expected_detail_token = false;
+  std::uint64_t       expected_detail_generation = 0;
+  std::uint64_t       expected_detail_serial     = 0;
 };
 
 struct EditViewerRenderTargetResizeDecision {
@@ -24,6 +29,7 @@ struct EditViewerRenderTargetState {
   int                   width              = 0;
   int                   height             = 0;
   FramePresentationMode presentation_mode  = FramePresentationMode::FullFrame;
+  FramePreviewMetadata  preview_metadata   = {};
 };
 
 class IEditViewerSurface {
@@ -60,6 +66,7 @@ class IEditViewerRenderTargetSurface {
   virtual void unmapResource() {}
   virtual void notifyFrameReady() {}
   virtual void setNextFramePresentationMode(FramePresentationMode) {}
+  virtual void setNextFramePreviewMetadata(const FramePreviewMetadata&) {}
   virtual auto activeRenderTargetState() const -> EditViewerRenderTargetState { return {}; }
   virtual auto hasRenderTarget(int slot_index, int width, int height) const -> bool = 0;
   virtual auto ensureRenderTarget(int slot_index, int width, int height) -> bool     = 0;

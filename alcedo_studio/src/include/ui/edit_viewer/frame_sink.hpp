@@ -28,6 +28,28 @@ struct ViewportRenderRegion {
   int   y_            = 0;
   float scale_x_      = 1.0f;
   float scale_y_      = 1.0f;
+  int   reference_width_ = 0;
+  int   reference_height_ = 0;
+};
+
+enum class FrameRole {
+  InteractivePrimary,
+  QualityBase,
+  DetailPatch,
+};
+
+struct FrameRoiRect {
+  float x      = 0.0f;
+  float y      = 0.0f;
+  float width  = 1.0f;
+  float height = 1.0f;
+};
+
+struct FramePreviewMetadata {
+  FrameRole    frame_role          = FrameRole::InteractivePrimary;
+  std::uint64_t preview_generation = 0;
+  std::uint64_t detail_serial      = 0;
+  FrameRoiRect source_roi_norm     = {};
 };
 
 enum class FramePresentationMode {
@@ -69,6 +91,7 @@ struct ViewerFrame {
   std::shared_ptr<const void> pixels{};
   ViewerDisplayConfig   display_config{};
   FramePresentationMode presentation_mode   = FramePresentationMode::FullFrame;
+  FramePreviewMetadata  preview_metadata    = {};
 
   explicit operator bool() const {
     return width > 0 && height > 0 && row_bytes > 0 && pixels != nullptr;
@@ -82,6 +105,7 @@ struct ViewerGpuFrameUpload {
   std::shared_ptr<const void> pixels{};
   ViewerDisplayConfig   display_config{};
   FramePresentationMode presentation_mode   = FramePresentationMode::FullFrame;
+  FramePreviewMetadata  preview_metadata    = {};
 
   explicit operator bool() const {
     return width > 0 && height > 0 && row_bytes > 0 && pixels != nullptr;
@@ -96,6 +120,7 @@ struct ViewerMetalFrame {
   std::shared_ptr<const void> owner{};
   ViewerDisplayConfig   display_config{};
   FramePresentationMode presentation_mode   = FramePresentationMode::FullFrame;
+  FramePreviewMetadata  preview_metadata    = {};
 
   explicit operator bool() const {
     return width > 0 && height > 0 && texture_handle != 0 && owner != nullptr;
@@ -132,6 +157,7 @@ class IFrameSink {
 
   // Sets how the next presented frame should be displayed.
   virtual void    SetNextFramePresentationMode(FramePresentationMode) {}
+  virtual void    SetNextFramePreviewMetadata(const FramePreviewMetadata&) {}
 
   // Exposes the presentation surface when a sink is backed by a live viewer.
   virtual auto    GetViewerSurface() -> IEditViewerSurface* { return nullptr; }

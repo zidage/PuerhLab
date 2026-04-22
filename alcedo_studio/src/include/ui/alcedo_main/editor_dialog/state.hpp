@@ -7,6 +7,7 @@
 #include <QColor>
 #include <QPointF>
 #include <QString>
+#include <cstdint>
 #include <array>
 #include <chrono>
 #include <string>
@@ -156,9 +157,10 @@ struct AdjustmentState {
 };
 
 struct PendingRenderRequest {
-  AdjustmentState state_;
-  bool            apply_state_ = true;
-  bool            use_viewport_region_ = true;
+  AdjustmentState      state_;
+  FramePreviewMetadata frame_metadata_{};
+  bool                 apply_state_         = true;
+  bool                 use_viewport_region_ = true;
 };
 
 // ---------------------------------------------------------------------------

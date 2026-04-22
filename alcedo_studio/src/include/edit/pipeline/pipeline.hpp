@@ -28,7 +28,9 @@ class PipelineExecutor {
   virtual auto GetGlobalParams() -> OperatorParams&                                      = 0;
 
   virtual void SetRenderRegion(int x, int y, float scale_factor_x,
-                               float scale_factor_y = -1.0f)                                            = 0;
+                               float scale_factor_y = -1.0f,
+                               int reference_width = 0,
+                               int reference_height = 0)                                                 = 0;
   virtual void SetRenderRes(bool full_res, int max_side_length = 2048)                                         = 0;
   virtual void SetResizeDownsampleAlgorithm(ResizeDownsampleAlgorithm algorithm)                               = 0;
 

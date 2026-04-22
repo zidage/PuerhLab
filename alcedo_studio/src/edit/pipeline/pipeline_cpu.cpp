@@ -274,6 +274,13 @@ void CPUPipelineExecutor::SetExecutionStages() {
     PipelineStage* next_stage = (i < exec_stages_.size() - 1) ? exec_stages_[i + 1] : nullptr;
     exec_stages_[i]->SetNeighbors(prev_stage, next_stage);
   }
+
+  for (auto* stage : exec_stages_) {
+    const bool stage_cache_enabled = (stage->stage_ == PipelineStageName::Merged_Stage)
+                                         ? false
+                                         : enable_cache_;
+    stage->SetEnableCache(stage_cache_enabled);
+  }
 }
 
 void CPUPipelineExecutor::SetExecutionStages(IFrameSink* frame_sink) {
@@ -324,7 +331,9 @@ void CPUPipelineExecutor::ImportPipelineParams(const nlohmann::json& j) {
   }
 }
 
-void CPUPipelineExecutor::SetRenderRegion(int x, int y, float scale_factor_x, float scale_factor_y) {
+void CPUPipelineExecutor::SetRenderRegion(int x, int y, float scale_factor_x,
+                                          float scale_factor_y, int reference_width,
+                                          int reference_height) {
   const nlohmann::json prev_resize_params =
       render_params_.contains("resize") ? render_params_["resize"] : nlohmann::json::object();
   auto& resize_params = render_params_["resize"];
@@ -338,7 +347,9 @@ void CPUPipelineExecutor::SetRenderRegion(int x, int y, float scale_factor_x, fl
                                  {"y", std::max(0, y)},
                                  {"resize_factor_x", clamped_scale_x},
                                  {"resize_factor_y", clamped_scale_y},
-                                 {"resize_factor", std::max(clamped_scale_x, clamped_scale_y)}};
+                                 {"resize_factor", std::max(clamped_scale_x, clamped_scale_y)},
+                                 {"reference_width", std::max(0, reference_width)},
+                                 {"reference_height", std::max(0, reference_height)}};
 
   if (resize_params != prev_resize_params) {
     stages_[static_cast<int>(PipelineStageName::Geometry_Adjustment)].SetOperator(
@@ -403,6 +414,13 @@ void CPUPipelineExecutor::SetNextFramePresentationMode(FramePresentationMode mod
   frame_sink_->SetNextFramePresentationMode(mode);
 }
 
+void CPUPipelineExecutor::SetNextFramePreviewMetadata(const FramePreviewMetadata& metadata) const {
+  if (!frame_sink_) {
+    return;
+  }
+  frame_sink_->SetNextFramePreviewMetadata(metadata);
+}
+
 void CPUPipelineExecutor::RegisterAllOperators() {
   // It is really silly to hardcode the operators here.
   // I should keep things more flexible in the future.
@@ -436,6 +454,8 @@ void CPUPipelineExecutor::SetTemplateParams() {
 
   nlohmann::json lens_params = pipeline_defaults::MakeDefaultLensCalibParams();
   raw_stage.SetOperator(OperatorType::LENS_CALIBRATION, lens_params, global_params);
+  raw_stage.EnableOperator(OperatorType::LENS_CALIBRATION,
+                           lens_params["lens_calib"].value("enabled", true), global_params);
 
   nlohmann::json color_temp_params;
   auto&          to_ws_stage = GetStage(PipelineStageName::To_WorkingSpace);

@@ -50,8 +50,11 @@ class QtEditViewer : public QWidget, public alcedo::IFrameSink {
   void SetCropOverlayAspectLock(bool enabled, float aspect_ratio);
   void ResetCropOverlayRectToFull();
   auto GetViewZoom() const -> float;
+  auto IsViewInteractionActive() const -> bool;
   void SetDisplayEncoding(ColorUtils::ColorSpace encoding_space,
                           ColorUtils::EOTF       encoding_eotf);
+  void SetExpectedDetailToken(std::uint64_t preview_generation, std::uint64_t detail_serial);
+  void ClearExpectedDetailToken();
 
   // Overrides from IFrameSink
   void    EnsureSize(int width, int height) override;
@@ -66,6 +69,7 @@ class QtEditViewer : public QWidget, public alcedo::IFrameSink {
   int     GetHeight() const override;
   auto    GetViewportRenderRegion() const -> std::optional<ViewportRenderRegion> override;
   void    SetNextFramePresentationMode(FramePresentationMode mode) override;
+  void    SetNextFramePreviewMetadata(const FramePreviewMetadata& metadata) override;
   auto    GetViewerSurface() -> IEditViewerSurface* override;
   auto    GetViewerSurface() const -> const IEditViewerSurface* override;
 
@@ -81,6 +85,7 @@ class QtEditViewer : public QWidget, public alcedo::IFrameSink {
   void CropOverlayRectChanged(float x, float y, float w, float h, bool is_final);
   void CropOverlayRotationChanged(float angle_degrees, bool is_final);
   void ViewZoomChanged(float zoom);
+  void ViewInteractionSettled();
 
  private slots:
   void OnResizeSurface(int w, int h);
@@ -94,11 +99,15 @@ class QtEditViewer : public QWidget, public alcedo::IFrameSink {
   void                    HandleQueuedUpdate();
   void                    ResizeChildWidgets();
   void                    UpdateViewportRenderRegionCache();
+  void                    ReconcileViewTransformForRenderReference();
   void                    RefreshFrameDerivedState();
   void                    SyncSurfaceState();
   void                    StopZoomAnimation();
+  void                    MarkViewInteractionChanged();
+  void                    HandleViewInteractionSettled();
   auto                    CurrentWidgetInfo() const -> ViewportWidgetInfo;
   auto                    CurrentImageInfo() const -> ViewportImageInfo;
+  auto                    CurrentInteractionImageInfo() const -> ViewportImageInfo;
   auto                    CurrentPresentationMode() const -> FramePresentationMode;
   auto                    CurrentOverlaySnapshot() const -> EditViewerOverlaySnapshot;
   auto                    CurrentOverlayHover(const QPointF& event_pos) const -> EditViewerOverlayHover;
@@ -117,6 +126,7 @@ class QtEditViewer : public QWidget, public alcedo::IFrameSink {
   void                    HandleOverlayLeave();
 
   static constexpr int     kZoomAnimationDurationMs = 170;
+  static constexpr int     kViewInteractionSettleDelayMs = 120;
 
   ViewerState              viewer_state_{};
   ViewTransformController  view_transform_controller_{};
@@ -126,6 +136,7 @@ class QtEditViewer : public QWidget, public alcedo::IFrameSink {
   EditViewerOverlayWidget* overlay_ = nullptr;
   QVariantAnimation*       zoom_animation_ = nullptr;
   QTimer*                  click_toggle_timer_ = nullptr;
+  QTimer*                  view_interaction_settle_timer_ = nullptr;
 
 #ifdef HAVE_CUDA
   FrameMailbox             frame_mailbox_{};
@@ -142,9 +153,18 @@ class QtEditViewer : public QWidget, public alcedo::IFrameSink {
   int                      active_frame_width_ = 0;
   int                      active_frame_height_ = 0;
   FramePresentationMode    active_presentation_mode_ = FramePresentationMode::FullFrame;
+  FramePreviewMetadata     active_preview_metadata_{};
   bool                     pending_presentation_mode_valid_ = false;
   FramePresentationMode    pending_presentation_mode_ = FramePresentationMode::FullFrame;
+  bool                     pending_preview_metadata_valid_ = false;
+  FramePreviewMetadata     pending_preview_metadata_{};
   bool                     pending_display_config_valid_ = false;
+  bool                     prefer_interactive_primary_ = false;
+  bool                     allow_detail_patch_ = true;
+  bool                     view_interaction_active_ = false;
+  bool                     has_expected_detail_token_ = false;
+  std::uint64_t            expected_detail_generation_ = 0;
+  std::uint64_t            expected_detail_serial_ = 0;
   mutable std::mutex       host_frame_mutex_{};
 };
 };  // namespace alcedo

@@ -35,6 +35,7 @@ class FinalDisplayFrameTapSink final : public IFrameSink, public IFinalDisplayFr
   auto GetHeight() const -> int override;
   auto GetViewportRenderRegion() const -> std::optional<ViewportRenderRegion> override;
   void SetNextFramePresentationMode(FramePresentationMode mode) override;
+  void SetNextFramePreviewMetadata(const FramePreviewMetadata& metadata) override;
   auto GetViewerSurface() -> IEditViewerSurface* override;
   auto GetViewerSurface() const -> const IEditViewerSurface* override;
 

@@ -87,12 +87,22 @@ void EnsureDefaultLensCalib(CPUPipelineExecutor& exec) {
   auto& global_params = exec.GetGlobalParams();
   auto& loading_stage = exec.GetStage(PipelineStageName::Image_Loading);
 
-  if (loading_stage.GetOperator(OperatorType::LENS_CALIBRATION).has_value()) {
+  if (!loading_stage.GetOperator(OperatorType::LENS_CALIBRATION).has_value()) {
+    const nlohmann::json lens_params = pipeline_defaults::MakeDefaultLensCalibParams();
+    loading_stage.SetOperator(OperatorType::LENS_CALIBRATION, lens_params, global_params);
+  }
+
+  const auto op = loading_stage.GetOperator(OperatorType::LENS_CALIBRATION);
+  if (!op.has_value() || !op.value() || !op.value()->op_) {
     return;
   }
 
-  const nlohmann::json lens_params = pipeline_defaults::MakeDefaultLensCalibParams();
-  loading_stage.SetOperator(OperatorType::LENS_CALIBRATION, lens_params, global_params);
+  bool enabled = op.value()->enable_;
+  const auto params = op.value()->op_->GetParams();
+  if (params.contains("lens_calib") && params["lens_calib"].is_object()) {
+    enabled = params["lens_calib"].value("enabled", enabled);
+  }
+  loading_stage.EnableOperator(OperatorType::LENS_CALIBRATION, enabled, global_params);
 }
 
 void ResyncGlobalParamsFromOperators(CPUPipelineExecutor& exec) {
@@ -112,6 +122,15 @@ void ResyncGlobalParamsFromOperators(CPUPipelineExecutor& exec) {
       op_entry.op_->SetGlobalParams(global_params);
     }
   }
+}
+
+void ResetTransientPreviewState(CPUPipelineExecutor& exec) {
+  exec.SetResizeDownsampleAlgorithm(ResizeDownsampleAlgorithm::Bilinear);
+  exec.SetRenderRegion(0, 0, 1.0f);
+  exec.SetRenderRes(false, 4096);
+  exec.SetForceCPUOutput(false);
+  exec.SetEnableCache(true);
+  exec.SetDecodeRes(DecodeRes::FULL);
 }
 }  // namespace
 
@@ -170,13 +189,8 @@ auto PipelineMgmtService::LoadPipeline(sl_element_id_t id) -> std::shared_ptr<Pi
         if (!it->second->pinned_) {
           it->second->pipeline_->SetBoundFile(id);
           it->second->pipeline_->SetExecutionStages();
-          // Reset transient render/cache state to a consistent FAST_PREVIEW baseline.
-          it->second->pipeline_->SetResizeDownsampleAlgorithm(ResizeDownsampleAlgorithm::Bilinear);
-          it->second->pipeline_->SetRenderRegion(0, 0, 1.0f);
-          it->second->pipeline_->SetRenderRes(false, 4096);
-          it->second->pipeline_->SetForceCPUOutput(false);
-          it->second->pipeline_->SetEnableCache(true);
-          it->second->pipeline_->SetDecodeRes(DecodeRes::FULL);
+          // Reset transient render/cache state to a consistent preview baseline.
+          ResetTransientPreviewState(*it->second->pipeline_);
 
           EnsureDefaultOutputTransform(*it->second->pipeline_);
           EnsureDefaultRawDecode(*it->second->pipeline_);
@@ -211,6 +225,7 @@ auto PipelineMgmtService::LoadPipeline(sl_element_id_t id) -> std::shared_ptr<Pi
 
     // Ensure the loaded pipeline is bound to the requested element id.
     pipeline->SetBoundFile(id);
+    ResetTransientPreviewState(*pipeline);
 
     EnsureDefaultOutputTransform(*pipeline);
     EnsureDefaultRawDecode(*pipeline);

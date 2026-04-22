@@ -631,10 +631,21 @@ class EditorDialog final : public QDialog {
       controllers::render::kFastPreviewMinSubmitInterval;
   static constexpr std::chrono::milliseconds kQualityPreviewDebounceInterval =
       controllers::render::kQualityPreviewDebounceInterval;
+  static constexpr std::chrono::milliseconds kViewportDetailDebounceInterval{120};
+
+  void AdvancePreviewGeneration();
+  void InvalidateDetailPreviewState();
+  auto BuildPreviewMetadata(RenderType render_type) const -> FramePreviewMetadata;
+  auto IsDetailPreviewGeometryFallbackActive() const -> bool;
+  auto CanScheduleDetailPreview() const -> bool;
+  void MaybeScheduleDetailPreviewRenderFromViewport();
 
   void EnsureQualityPreviewTimer();
+  void EnsureDetailPreviewTimer();
 
   void ScheduleQualityPreviewRenderFromPipeline();
+  void ScheduleDetailPreviewRenderFromViewport();
+  void TriggerDetailPreviewRenderFromViewport();
 
   auto CanSubmitFastPreviewNow() const -> bool;
 
@@ -642,12 +653,14 @@ class EditorDialog final : public QDialog {
 
   void ArmFastPreviewSubmitTimer();
 
-  void EnqueueRenderRequest(const AdjustmentState& snapshot, bool apply_state,
+  void EnqueueRenderRequest(const AdjustmentState& snapshot,
+                            const FramePreviewMetadata& frame_metadata, bool apply_state,
                             bool use_viewport_region = true);
 
-  void RequestRender(bool use_viewport_region = true);
+  void RequestRender(bool use_viewport_region = true, bool bump_preview_generation = true);
 
-  void RequestRenderWithoutApplyingState(bool use_viewport_region = true);
+  void RequestRenderWithoutApplyingState(bool use_viewport_region = true,
+                                         bool bump_preview_generation = false);
 
   void EnsurePollTimer();
 
@@ -771,7 +784,9 @@ class EditorDialog final : public QDialog {
   QListWidget*                                             version_log_                  = nullptr;
   QListWidget*                                             tx_stack_                     = nullptr;
   QTimer*                                                  poll_timer_                   = nullptr;
+  QTimer*                                                  detail_preview_timer_         = nullptr;
   std::optional<std::future<std::shared_ptr<ImageBuffer>>> inflight_future_{};
+  std::optional<PendingRenderRequest>                      inflight_request_{};
 
   controllers::LutController                               lut_controller_{};
   LensCatalog                                              lens_catalog_{};
@@ -781,14 +796,18 @@ class EditorDialog final : public QDialog {
   AdjustmentState                                          state_{};
   AdjustmentState                                          committed_state_{};
   Version                                                  working_version_{};
-  std::deque<PendingRenderRequest>                         pending_quality_render_requests_{};
   std::optional<PendingRenderRequest>                      pending_fast_preview_request_{};
+  std::optional<PendingRenderRequest>                      pending_quality_base_render_request_{};
+  std::optional<PendingRenderRequest>                      pending_detail_render_request_{};
   ControlPanelKind                                         active_panel_               = ControlPanelKind::Tone;
   bool                                                     pipeline_initialized_       = false;
   bool                                                     inflight_                   = false;
   QTimer*                                                  quality_preview_timer_      = nullptr;
   QTimer*                                                  fast_preview_submit_timer_  = nullptr;
   std::chrono::steady_clock::time_point                    last_fast_preview_submit_time_{};
+  std::uint64_t                                            preview_generation_         = 0;
+  std::uint64_t                                            detail_serial_              = 0;
+  std::uint64_t                                            latest_quality_base_generation_ready_ = 0;
   bool                                                     syncing_controls_           = false;
   bool                                                     versioning_collapsed_       = true;
   bool                                                     initial_splitter_sizes_applied_ = false;

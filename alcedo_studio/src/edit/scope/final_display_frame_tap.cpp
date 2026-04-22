@@ -100,6 +100,12 @@ void FinalDisplayFrameTapSink::SetNextFramePresentationMode(FramePresentationMod
   }
 }
 
+void FinalDisplayFrameTapSink::SetNextFramePreviewMetadata(const FramePreviewMetadata& metadata) {
+  if (downstream_sink_) {
+    downstream_sink_->SetNextFramePreviewMetadata(metadata);
+  }
+}
+
 auto FinalDisplayFrameTapSink::GetViewerSurface() -> IEditViewerSurface* {
   return downstream_sink_ ? downstream_sink_->GetViewerSurface() : nullptr;
 }

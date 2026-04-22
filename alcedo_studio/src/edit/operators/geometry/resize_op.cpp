@@ -66,8 +66,28 @@ auto BuildResizePlan(int w, int h, bool enable_scale, int maximum_edge, bool ena
       std::clamp(static_cast<int>(std::lround(static_cast<float>(w) * roi_factor_x)), 1, w);
   const int roi_h =
       std::clamp(static_cast<int>(std::lround(static_cast<float>(h) * roi_factor_y)), 1, h);
-  const int roi_x = std::clamp(roi.x_, 0, std::max(0, w - roi_w));
-  const int roi_y = std::clamp(roi.y_, 0, std::max(0, h - roi_h));
+  const int roi_x = [&]() {
+    if (roi.reference_width_ > 0) {
+      const float normalized_x =
+          std::clamp(static_cast<float>(std::max(0, roi.x_)) /
+                         static_cast<float>(std::max(1, roi.reference_width_)),
+                     0.0f, 1.0f);
+      return std::clamp(static_cast<int>(std::lround(normalized_x * static_cast<float>(w))), 0,
+                        std::max(0, w - roi_w));
+    }
+    return std::clamp(roi.x_, 0, std::max(0, w - roi_w));
+  }();
+  const int roi_y = [&]() {
+    if (roi.reference_height_ > 0) {
+      const float normalized_y =
+          std::clamp(static_cast<float>(std::max(0, roi.y_)) /
+                         static_cast<float>(std::max(1, roi.reference_height_)),
+                     0.0f, 1.0f);
+      return std::clamp(static_cast<int>(std::lround(normalized_y * static_cast<float>(h))), 0,
+                        std::max(0, h - roi_h));
+    }
+    return std::clamp(roi.y_, 0, std::max(0, h - roi_h));
+  }();
 
   plan.use_roi    = true;
   plan.roi_rect   = cv::Rect(roi_x, roi_y, roi_w, roi_h);
@@ -236,7 +256,9 @@ auto ResizeOp::GetParams() const -> nlohmann::json {
                                    {"y", roi_.y_},
                                    {"resize_factor_x", roi_.resize_factor_x_},
                                    {"resize_factor_y", roi_.resize_factor_y_},
-                                   {"resize_factor", roi_.resize_factor_}};
+                                   {"resize_factor", roi_.resize_factor_},
+                                   {"reference_width", roi_.reference_width_},
+                                   {"reference_height", roi_.reference_height_}};
 
   params[script_name_]          = inner;
   return params;
@@ -268,13 +290,15 @@ auto ResizeOp::SetParams(const nlohmann::json& params) -> void {
       roi_.resize_factor_   = roi_json.value("resize_factor", 1.0f);
       roi_.resize_factor_x_ = roi_json.value("resize_factor_x", roi_.resize_factor_);
       roi_.resize_factor_y_ = roi_json.value("resize_factor_y", roi_.resize_factor_);
+      roi_.reference_width_ = roi_json.value("reference_width", 0);
+      roi_.reference_height_ = roi_json.value("reference_height", 0);
     }
   } else {
     enable_scale_         = false;
     maximum_edge_         = 2048;
     enable_roi_           = false;
     downsample_algorithm_ = ResizeDownsampleAlgorithm::Area;
-    roi_                  = {0, 0, 1.0f, 1.0f, 1.0f};
+    roi_                  = {0, 0, 1.0f, 1.0f, 1.0f, 0, 0};
   }
 }
 

@@ -4,6 +4,8 @@
 
 #include <gtest/gtest.h>
 
+#include <cmath>
+
 #include "ui/edit_viewer/crop_geometry.hpp"
 #include "ui/edit_viewer/crop_interaction_controller.hpp"
 #include "ui/edit_viewer/view_transform_controller.hpp"
@@ -36,6 +38,16 @@ TEST(EditViewerLogicTests, ViewportMapperRoundTripsUvThroughWidgetSpace) {
   ASSERT_TRUE(round_trip.has_value());
   EXPECT_NEAR(round_trip->x(), uv.x(), 1e-5);
   EXPECT_NEAR(round_trip->y(), uv.y(), 1e-5);
+}
+
+TEST(EditViewerLogicTests, ViewportRenderRegionCarriesReferenceSizeForDetailPreviewRequests) {
+  const auto region = ViewportMapper::ComputeViewportRenderRegion(
+      kWidgetInfo, 2.0f, QVector2D(0.15f, -0.1f), 4096, 3072);
+  ASSERT_TRUE(region.has_value());
+  EXPECT_EQ(region->reference_width_, 4096);
+  EXPECT_EQ(region->reference_height_, 3072);
+  EXPECT_LT(region->scale_x_, 1.0f);
+  EXPECT_LT(region->scale_y_, 1.0f);
 }
 
 TEST(EditViewerLogicTests, CropGeometryAspectLockedDiagonalPreservesRatio) {
@@ -87,6 +99,75 @@ TEST(EditViewerLogicTests, ViewTransformControllerDoubleClickStartsAnimationAndR
   const auto finished = controller.ApplyAnimationFinished(state, kWidgetInfo, kImageInfo);
   ASSERT_TRUE(finished.emitted_zoom.has_value());
   EXPECT_FLOAT_EQ(*finished.emitted_zoom, 1.0f);
+}
+
+TEST(EditViewerLogicTests, AnchoredPanMustUseReferenceImageGeometryForViewportRoiViews) {
+  const ViewportWidgetInfo widget_info{800, 600, 1.0f};
+  const ViewportImageInfo  reference_image{6000, 4000};
+  const QVector2D          current_pan(0.6f, 0.1f);
+  constexpr float          current_zoom = 1.5f;
+  constexpr float          target_zoom  = 2.0f;
+  const QPointF            anchor_widget_pos(100.0, 500.0);
+
+  const auto viewport_region = ViewportMapper::ComputeViewportRenderRegion(
+      widget_info, current_zoom, current_pan, reference_image.image_width,
+      reference_image.image_height);
+  ASSERT_TRUE(viewport_region.has_value());
+
+  const ViewportImageInfo roi_image{
+      std::max(1, static_cast<int>(std::lround(static_cast<double>(reference_image.image_width) *
+                                               viewport_region->scale_x_))),
+      std::max(1, static_cast<int>(std::lround(static_cast<double>(reference_image.image_height) *
+                                               viewport_region->scale_y_)))};
+
+  const auto anchor_uv_before = ViewportMapper::WidgetPointToImageUv(
+      anchor_widget_pos, widget_info, reference_image, current_zoom, current_pan);
+  ASSERT_TRUE(anchor_uv_before.has_value());
+
+  const auto unclamped_reference_pan =
+      ViewportMapper::ComputeAnchoredPan(anchor_widget_pos, widget_info, reference_image,
+                                         current_zoom, current_pan, target_zoom, current_pan);
+  const auto reference_pan =
+      ViewportMapper::ClampPanForZoom(widget_info, reference_image, target_zoom,
+                                      unclamped_reference_pan, 1.0f, 8.0f);
+  const auto anchored_uv_with_reference = ViewportMapper::WidgetPointToImageUv(
+      anchor_widget_pos, widget_info, reference_image, target_zoom, reference_pan);
+  ASSERT_TRUE(anchored_uv_with_reference.has_value());
+  EXPECT_LT(std::abs(anchored_uv_with_reference->x() - anchor_uv_before->x()), 2.0e-2);
+  EXPECT_NEAR(anchored_uv_with_reference->y(), anchor_uv_before->y(), 1.0e-5);
+
+  const auto unclamped_roi_pan =
+      ViewportMapper::ComputeAnchoredPan(anchor_widget_pos, widget_info, roi_image, current_zoom,
+                                         current_pan, target_zoom, current_pan);
+  const auto roi_pan = ViewportMapper::ClampPanForZoom(widget_info, roi_image, target_zoom,
+                                                       unclamped_roi_pan, 1.0f, 8.0f);
+  const auto anchored_uv_with_roi = ViewportMapper::WidgetPointToImageUv(
+      anchor_widget_pos, widget_info, reference_image, target_zoom, roi_pan);
+  ASSERT_TRUE(anchored_uv_with_roi.has_value());
+  EXPECT_GT(std::abs(roi_pan.x() - reference_pan.x()), 5.0e-2);
+  EXPECT_GT(std::abs(anchored_uv_with_roi->x() - anchor_uv_before->x()),
+            std::abs(anchored_uv_with_reference->x() - anchor_uv_before->x()));
+  EXPECT_NEAR(anchored_uv_with_roi->y(), anchor_uv_before->y(), 1.0e-5);
+}
+
+TEST(EditViewerLogicTests, CropAspectChangesRequirePanToBeReclampedToNewReference) {
+  const ViewportWidgetInfo widget_info{800, 600, 1.0f};
+  const ViewportImageInfo  pre_crop_image{4000, 3000};
+  const ViewportImageInfo  post_crop_image{3000, 3000};
+  constexpr float          zoom = 2.0f;
+
+  const QVector2D pre_crop_pan =
+      ViewportMapper::ClampPanForZoom(widget_info, pre_crop_image, zoom, QVector2D(0.7f, 0.0f),
+                                      ViewTransformController::kMinInteractiveZoom,
+                                      ViewTransformController::kMaxInteractiveZoom);
+  const QVector2D post_crop_pan = ViewportMapper::ClampPanForZoom(
+      widget_info, post_crop_image, zoom, pre_crop_pan,
+      ViewTransformController::kMinInteractiveZoom,
+      ViewTransformController::kMaxInteractiveZoom);
+
+  EXPECT_GT(pre_crop_pan.x(), post_crop_pan.x());
+  EXPECT_FLOAT_EQ(post_crop_pan.y(), 0.0f);
+  EXPECT_LE(post_crop_pan.x(), 0.5f);
 }
 
 TEST(EditViewerLogicTests, CropInteractionControllerCreatesAndFinalizesCropRect) {

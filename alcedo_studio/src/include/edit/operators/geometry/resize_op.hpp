@@ -13,6 +13,8 @@ struct ROI {
   float resize_factor_x_;
   float resize_factor_y_;
   float resize_factor_;  // Legacy fallback for old serialized params.
+  int   reference_width_ = 0;
+  int   reference_height_ = 0;
 };
 
 class ResizeOp : public OperatorBase<ResizeOp> {
@@ -22,7 +24,7 @@ class ResizeOp : public OperatorBase<ResizeOp> {
   bool enable_scale_ = false;
 
   bool enable_roi_   = false;
-  ROI  roi_          = {0, 0, 1.0f, 1.0f, 1.0f};
+  ROI  roi_          = {0, 0, 1.0f, 1.0f, 1.0f, 0, 0};
   ResizeDownsampleAlgorithm downsample_algorithm_ = ResizeDownsampleAlgorithm::Area;
 
  public:

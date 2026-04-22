@@ -37,6 +37,7 @@ class EditorFrameManager final {
                                  ColorUtils::EOTF       encoding_eotf);
 
   void MarkNeedsFullFramePreviewAfterGeometryCommit();
+  auto NeedsFullFramePreviewAfterGeometryCommit() const -> bool;
   auto UseViewportRegionForPanelChange(ControlPanelKind previous_panel,
                                        ControlPanelKind next_panel) -> bool;
 

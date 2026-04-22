@@ -15,9 +15,17 @@
 #include "image/image.hpp"
 #include "image/image_buffer.hpp"
 #include "type/type.hpp"
+#include "ui/edit_viewer/frame_sink.hpp"
 
 namespace alcedo {
-enum class RenderType { FAST_PREVIEW, FULL_RES_PREVIEW, FULL_RES_EXPORT, THUMBNAIL };
+enum class RenderType {
+  FAST_PREVIEW,
+  QUALITY_BASE_PREVIEW,
+  DETAIL_ROI_PREVIEW,
+  FULL_RES_PREVIEW,
+  FULL_RES_EXPORT,
+  THUMBNAIL
+};
 
 struct RenderDesc {
   RenderType render_type_  = RenderType::FAST_PREVIEW;
@@ -27,6 +35,7 @@ struct RenderDesc {
   float      scale_factor_x_ = 1.0f;
   float      scale_factor_y_ = 1.0f;
   bool       use_viewport_region_ = true;
+  FramePreviewMetadata frame_metadata_ = {};
 };
 
 struct TaskOptions {

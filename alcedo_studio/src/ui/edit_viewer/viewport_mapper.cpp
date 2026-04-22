@@ -183,6 +183,8 @@ auto ViewportMapper::ComputeViewportRenderRegion(const ViewportWidgetInfo& widge
                                1.0f);
   region.scale_y_ = std::clamp(static_cast<float>(roi_h) / static_cast<float>(base_height), 1e-4f,
                                1.0f);
+  region.reference_width_ = base_width;
+  region.reference_height_ = base_height;
   return region;
 }
 
