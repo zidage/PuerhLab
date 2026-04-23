@@ -14,7 +14,49 @@ set(ALCEDO_INCLUDE_DIR "${ALCEDO_SRC_DIR}/include")
 set(ALCEDO_TEST_DIR "${ALCEDO_ROOT_DIR}/tests")
 
 include(GoogleTest)
-set(CMAKE_GTEST_DISCOVER_TESTS_DISCOVERY_MODE PRE_TEST)
+set(CMAKE_GTEST_DISCOVER_TESTS_DISCOVERY_MODE POST_BUILD)
+
+option(ALCEDO_BUILD_TESTS_BY_DEFAULT
+       "Build enabled test targets as part of the default all target." OFF)
+option(ALCEDO_BUILD_CORE_TESTS "Enable small core/unit test category targets." ON)
+option(ALCEDO_BUILD_IMAGE_TESTS "Enable image and ImageBuffer test category targets." ON)
+option(ALCEDO_BUILD_IO_TESTS "Enable IO/export/metadata test category targets." ON)
+option(ALCEDO_BUILD_RAW_TESTS "Enable RAW decode/processor test category targets." ON)
+option(ALCEDO_BUILD_GPU_TESTS "Enable CUDA/Metal/WebGPU GPU test category targets." ON)
+option(ALCEDO_BUILD_EDIT_TESTS "Enable edit operator and pipeline test category targets." ON)
+option(ALCEDO_BUILD_UI_TESTS "Enable Qt/UI test category targets." ON)
+option(ALCEDO_BUILD_APP_TESTS "Enable application service test category targets." ON)
+option(ALCEDO_BUILD_STORAGE_TESTS "Enable storage/Sleeve test category targets." ON)
+option(ALCEDO_BUILD_DEMO_TARGETS "Enable GUI/demo target category targets." OFF)
+
+add_custom_target(alcedo_tests_all)
+add_custom_target(alcedo_tests_core)
+add_custom_target(alcedo_tests_image)
+add_custom_target(alcedo_tests_io)
+add_custom_target(alcedo_tests_raw)
+add_custom_target(alcedo_tests_gpu)
+add_custom_target(alcedo_tests_edit)
+add_custom_target(alcedo_tests_ui)
+add_custom_target(alcedo_tests_app)
+add_custom_target(alcedo_tests_storage)
+add_custom_target(alcedo_tests_demos)
+
+function(alcedo_assign_test_category category option_name category_target)
+  foreach(test_target IN LISTS ARGN)
+    if(TARGET ${test_target})
+      if(NOT ${option_name} OR NOT ALCEDO_BUILD_TESTS_BY_DEFAULT)
+        set_target_properties(${test_target} PROPERTIES
+          EXCLUDE_FROM_ALL TRUE
+          EXCLUDE_FROM_DEFAULT_BUILD TRUE
+        )
+      endif()
+      if(${option_name})
+        add_dependencies(${category_target} ${test_target})
+        add_dependencies(alcedo_tests_all ${test_target})
+      endif()
+    endif()
+  endforeach()
+endfunction()
 
 add_executable(SampleTest sample_test.cpp)
 target_link_libraries(SampleTest PRIVATE GTest::gtest_main)
@@ -115,6 +157,20 @@ if(ALCEDO_METAL_ENABLED)
   target_include_directories(MetalFullPipelinePreviewTest PUBLIC ${ALCEDO_INCLUDE_DIR})
   target_link_libraries(MetalFullPipelinePreviewTest PRIVATE GTest::gtest_main EditPipeline RawProcessor PipelineScheduler ThreadPool opencv_highgui ${ALCEDO_TEST_OPENCV_MIN_DEPS})
   gtest_discover_tests(MetalFullPipelinePreviewTest TEST_PREFIX "MetalFullPipelinePreviewTest.")
+endif()
+
+if(ALCEDO_WEBGPU_ENABLED)
+  add_executable(ImageBufferWebGpuTest image/image_buffer_webgpu_test.cpp)
+  target_include_directories(ImageBufferWebGpuTest PUBLIC ${ALCEDO_INCLUDE_DIR})
+  target_link_libraries(ImageBufferWebGpuTest PRIVATE GTest::gtest_main ImageBuffer ${ALCEDO_TEST_OPENCV_MIN_DEPS})
+  if(WIN32 AND ALCEDO_DAWN_RUNTIME_DLLS)
+    add_custom_command(TARGET ImageBufferWebGpuTest POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different
+              ${ALCEDO_DAWN_RUNTIME_DLLS}
+              $<TARGET_FILE_DIR:ImageBufferWebGpuTest>
+      COMMENT "Copying Dawn runtime DLLs for ImageBufferWebGpuTest")
+  endif()
+  gtest_discover_tests(ImageBufferWebGpuTest TEST_PREFIX "ImageBufferWebGpuTest.")
 endif()
 
 # add_executable(ImageDecoderTest decoders/image_decoder_test.cpp)
@@ -496,3 +552,81 @@ target_link_libraries(LanguageManagerTest
         Qt6::Qml
 )
 gtest_discover_tests(LanguageManagerTest TEST_PREFIX "LanguageManagerTest.")
+
+alcedo_assign_test_category(core ALCEDO_BUILD_CORE_TESTS alcedo_tests_core
+  SampleTest
+  CudaDriverRequirementsTest
+)
+
+alcedo_assign_test_category(image ALCEDO_BUILD_IMAGE_TESTS alcedo_tests_image
+  ImageBufferMetalTest
+  ImageBufferWebGpuTest
+  MetadataExtractorTest
+  BatchImportDngMetadataTest
+)
+
+alcedo_assign_test_category(io ALCEDO_BUILD_IO_TESTS alcedo_tests_io
+  ImageWriterTest
+  ExportIccProfileResolverTest
+  ImagePathEncodingTest
+)
+
+alcedo_assign_test_category(raw ALCEDO_BUILD_RAW_TESTS alcedo_tests_raw
+  SingleRawLoad
+  SingleThumbnailLoad
+  RawProcessorPatternTest
+  ColorTempCudaSanityTest
+  MetalRawStagePreviewTest
+  MetalFullPipelinePreviewTest
+)
+
+alcedo_assign_test_category(gpu ALCEDO_BUILD_GPU_TESTS alcedo_tests_gpu
+  CudaImageGeometryOpsTest
+  D3DCudaInteropUtilsTest
+  CudaRawOpsTest
+  MetalUtilsTest
+  MetalRawOpsTest
+  ODTCudaSmokeTest
+  CudaPreviewVramReclamationTest
+)
+
+alcedo_assign_test_category(edit ALCEDO_BUILD_EDIT_TESTS alcedo_tests_edit
+  SharedToneCurveTest
+  ODTOpTest
+  CropRotateOpTest
+)
+
+alcedo_assign_test_category(ui ALCEDO_BUILD_UI_TESTS alcedo_tests_ui
+  EditViewerLogicTest
+  ToneCurveWidgetTest
+  LutCatalogTest
+  AlbumBackendImportTest
+  AlbumBackendProjectTest
+  AlbumBackendFolderTest
+  AlbumBackendImageDeleteTest
+  AlbumBackendImageDetailsTest
+  AlbumBackendThumbnailTest
+  AlbumBackendI18nTest
+  LanguageManagerTest
+)
+
+alcedo_assign_test_category(app ALCEDO_BUILD_APP_TESTS alcedo_tests_app
+  ImportServiceTest
+  SleeveServiceTest
+  FilterServiceTest
+  PipelineServiceTest
+  EditHistoryMgmtServiceTest
+  ThumbnailServiceTest
+  ExportServiceTest
+)
+
+alcedo_assign_test_category(storage ALCEDO_BUILD_STORAGE_TESTS alcedo_tests_storage
+  SleeveFSTest
+)
+
+alcedo_assign_test_category(demos ALCEDO_BUILD_DEMO_TARGETS alcedo_tests_demos
+  ImagePreview
+  ThumbnailAlbumQtDemo
+  CompleteUIDemo
+  DngMetadataBenchmark
+)

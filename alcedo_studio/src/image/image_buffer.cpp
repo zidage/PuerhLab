@@ -10,100 +10,242 @@
 
 namespace alcedo {
 
-#if defined(HAVE_CUDA) && defined(HAVE_METAL)
-#error "Alcedo currently supports only one compiled GPU backend per build."
+namespace {
+auto DefaultGpuBackend() -> GpuBackendKind {
+#ifdef HAVE_CUDA
+  return GpuBackendKind::CUDA;
+#elif defined(HAVE_METAL)
+  return GpuBackendKind::Metal;
+#elif defined(HAVE_WEBGPU)
+  return GpuBackendKind::WebGPU;
+#else
+  return GpuBackendKind::None;
 #endif
+}
+
+auto ResolveGpuBackend(GpuBackendKind backend) -> GpuBackendKind {
+  return backend == GpuBackendKind::None ? DefaultGpuBackend() : backend;
+}
+}  // namespace
 
 #ifdef HAVE_CUDA
-GpuImageWrapper::GpuImageWrapper(cv::cuda::GpuMat&& image) : image_(std::move(image)) {}
+GpuImageWrapper::GpuImageWrapper(cv::cuda::GpuMat&& image)
+    : backend_(GpuBackendKind::CUDA), cuda_image_(std::move(image)) {}
 
-auto GpuImageWrapper::GetCUDAImage() -> cv::cuda::GpuMat& { return image_; }
+auto GpuImageWrapper::GetCUDAImage() -> cv::cuda::GpuMat& {
+  if (backend_ != GpuBackendKind::CUDA) {
+    throw std::runtime_error("GpuImageWrapper: Active GPU backend is not CUDA.");
+  }
+  return cuda_image_;
+}
 
-auto GpuImageWrapper::GetCUDAImage() const -> const cv::cuda::GpuMat& { return image_; }
+auto GpuImageWrapper::GetCUDAImage() const -> const cv::cuda::GpuMat& {
+  if (backend_ != GpuBackendKind::CUDA) {
+    throw std::runtime_error("GpuImageWrapper: Active GPU backend is not CUDA.");
+  }
+  return cuda_image_;
+}
 #endif
 
 #ifdef HAVE_METAL
-GpuImageWrapper::GpuImageWrapper(metal::MetalImage&& image) : image_(std::move(image)) {}
+GpuImageWrapper::GpuImageWrapper(metal::MetalImage&& image)
+    : backend_(GpuBackendKind::Metal), metal_image_(std::move(image)) {}
 
-auto GpuImageWrapper::GetMetalImage() -> metal::MetalImage& { return image_; }
+auto GpuImageWrapper::GetMetalImage() -> metal::MetalImage& {
+  if (backend_ != GpuBackendKind::Metal) {
+    throw std::runtime_error("GpuImageWrapper: Active GPU backend is not Metal.");
+  }
+  return metal_image_;
+}
 
-auto GpuImageWrapper::GetMetalImage() const -> const metal::MetalImage& { return image_; }
+auto GpuImageWrapper::GetMetalImage() const -> const metal::MetalImage& {
+  if (backend_ != GpuBackendKind::Metal) {
+    throw std::runtime_error("GpuImageWrapper: Active GPU backend is not Metal.");
+  }
+  return metal_image_;
+}
 #endif
+
+#ifdef HAVE_WEBGPU
+GpuImageWrapper::GpuImageWrapper(webgpu::WebGpuImage&& image)
+    : backend_(GpuBackendKind::WebGPU), webgpu_image_(std::move(image)) {}
+
+auto GpuImageWrapper::GetWebGpuImage() -> webgpu::WebGpuImage& {
+  if (backend_ != GpuBackendKind::WebGPU) {
+    throw std::runtime_error("GpuImageWrapper: Active GPU backend is not WebGPU.");
+  }
+  return webgpu_image_;
+}
+
+auto GpuImageWrapper::GetWebGpuImage() const -> const webgpu::WebGpuImage& {
+  if (backend_ != GpuBackendKind::WebGPU) {
+    throw std::runtime_error("GpuImageWrapper: Active GPU backend is not WebGPU.");
+  }
+  return webgpu_image_;
+}
+#endif
+
+auto GpuImageWrapper::Backend() const -> GpuBackendKind { return backend_; }
 
 auto GpuImageWrapper::Empty() const -> bool {
+  switch (backend_) {
 #ifdef HAVE_CUDA
-  return image_.empty();
-#elif defined(HAVE_METAL)
-  return image_.Empty();
-#else
-  return true;
+    case GpuBackendKind::CUDA:
+      return cuda_image_.empty();
 #endif
+#ifdef HAVE_METAL
+    case GpuBackendKind::Metal:
+      return metal_image_.Empty();
+#endif
+#ifdef HAVE_WEBGPU
+    case GpuBackendKind::WebGPU:
+      return webgpu_image_.Empty();
+#endif
+    case GpuBackendKind::None:
+      return true;
+  }
+  return true;
 }
 
 auto GpuImageWrapper::Width() const -> int {
+  switch (backend_) {
 #ifdef HAVE_CUDA
-  return image_.cols;
-#elif defined(HAVE_METAL)
-  return static_cast<int>(image_.Width());
-#else
-  return 0;
+    case GpuBackendKind::CUDA:
+      return cuda_image_.cols;
 #endif
+#ifdef HAVE_METAL
+    case GpuBackendKind::Metal:
+      return static_cast<int>(metal_image_.Width());
+#endif
+#ifdef HAVE_WEBGPU
+    case GpuBackendKind::WebGPU:
+      return static_cast<int>(webgpu_image_.Width());
+#endif
+    case GpuBackendKind::None:
+      return 0;
+  }
+  return 0;
 }
 
 auto GpuImageWrapper::Height() const -> int {
+  switch (backend_) {
 #ifdef HAVE_CUDA
-  return image_.rows;
-#elif defined(HAVE_METAL)
-  return static_cast<int>(image_.Height());
-#else
-  return 0;
+    case GpuBackendKind::CUDA:
+      return cuda_image_.rows;
 #endif
+#ifdef HAVE_METAL
+    case GpuBackendKind::Metal:
+      return static_cast<int>(metal_image_.Height());
+#endif
+#ifdef HAVE_WEBGPU
+    case GpuBackendKind::WebGPU:
+      return static_cast<int>(webgpu_image_.Height());
+#endif
+    case GpuBackendKind::None:
+      return 0;
+  }
+  return 0;
 }
 
 auto GpuImageWrapper::Type() const -> int {
+  switch (backend_) {
 #ifdef HAVE_CUDA
-  return image_.type();
-#elif defined(HAVE_METAL)
-  return metal::MetalImage::CVTypeFromPixelFormat(image_.Format());
-#else
+    case GpuBackendKind::CUDA:
+      return cuda_image_.type();
+#endif
+#ifdef HAVE_METAL
+    case GpuBackendKind::Metal:
+      return metal::MetalImage::CVTypeFromPixelFormat(metal_image_.Format());
+#endif
+#ifdef HAVE_WEBGPU
+    case GpuBackendKind::WebGPU:
+      return webgpu::WebGpuImage::CVTypeFromPixelFormat(webgpu_image_.Format());
+#endif
+    case GpuBackendKind::None:
+      return -1;
+  }
   return -1;
-#endif
 }
 
-void GpuImageWrapper::Create(int width, int height, int type) {
+void GpuImageWrapper::Create(int width, int height, int type, GpuBackendKind backend) {
+  const auto resolved_backend = ResolveGpuBackend(backend);
+  if (backend_ != resolved_backend) {
+    Release();
+    backend_ = resolved_backend;
+  }
+  switch (resolved_backend) {
 #ifdef HAVE_CUDA
-  image_.create(height, width, type);
-#elif defined(HAVE_METAL)
-  image_.Create(static_cast<uint32_t>(width), static_cast<uint32_t>(height),
-                metal::MetalImage::PixelFormatFromCVType(type));
-#else
-  (void)width;
-  (void)height;
-  (void)type;
-  throw std::runtime_error("GpuImageWrapper: No compiled GPU backend.");
+    case GpuBackendKind::CUDA:
+      cuda_image_.create(height, width, type);
+      return;
 #endif
+#ifdef HAVE_METAL
+    case GpuBackendKind::Metal:
+      metal_image_.Create(static_cast<uint32_t>(width), static_cast<uint32_t>(height),
+                          metal::MetalImage::PixelFormatFromCVType(type));
+      return;
+#endif
+#ifdef HAVE_WEBGPU
+    case GpuBackendKind::WebGPU:
+      webgpu_image_.Create(static_cast<uint32_t>(width), static_cast<uint32_t>(height),
+                           webgpu::WebGpuImage::PixelFormatFromCVType(type));
+      return;
+#endif
+    case GpuBackendKind::None:
+      break;
+  }
+  throw std::runtime_error("GpuImageWrapper: Requested GPU backend is not compiled.");
 }
 
-void GpuImageWrapper::Upload(const cv::Mat& cpu_data) {
+void GpuImageWrapper::Upload(const cv::Mat& cpu_data, GpuBackendKind backend) {
+  const auto resolved_backend = ResolveGpuBackend(backend);
+  if (backend_ != resolved_backend) {
+    Release();
+    backend_ = resolved_backend;
+  }
+  switch (resolved_backend) {
 #ifdef HAVE_CUDA
-  image_.upload(cpu_data);
-#elif defined(HAVE_METAL)
-  image_.Upload(cpu_data);
-#else
-  (void)cpu_data;
-  throw std::runtime_error("GpuImageWrapper: No compiled GPU backend.");
+    case GpuBackendKind::CUDA:
+      cuda_image_.upload(cpu_data);
+      return;
 #endif
+#ifdef HAVE_METAL
+    case GpuBackendKind::Metal:
+      metal_image_.Upload(cpu_data);
+      return;
+#endif
+#ifdef HAVE_WEBGPU
+    case GpuBackendKind::WebGPU:
+      webgpu_image_.Upload(cpu_data);
+      return;
+#endif
+    case GpuBackendKind::None:
+      break;
+  }
+  throw std::runtime_error("GpuImageWrapper: Requested GPU backend is not compiled.");
 }
 
 void GpuImageWrapper::Download(cv::Mat& cpu_data) const {
+  switch (backend_) {
 #ifdef HAVE_CUDA
-  image_.download(cpu_data);
-#elif defined(HAVE_METAL)
-  image_.Download(cpu_data);
-#else
-  (void)cpu_data;
-  throw std::runtime_error("GpuImageWrapper: No compiled GPU backend.");
+    case GpuBackendKind::CUDA:
+      cuda_image_.download(cpu_data);
+      return;
 #endif
+#ifdef HAVE_METAL
+    case GpuBackendKind::Metal:
+      metal_image_.Download(cpu_data);
+      return;
+#endif
+#ifdef HAVE_WEBGPU
+    case GpuBackendKind::WebGPU:
+      webgpu_image_.Download(cpu_data);
+      return;
+#endif
+    case GpuBackendKind::None:
+      break;
+  }
+  throw std::runtime_error("GpuImageWrapper: No active GPU backend.");
 }
 
 void GpuImageWrapper::ShareFrom(const GpuImageWrapper& src) {
@@ -112,14 +254,28 @@ void GpuImageWrapper::ShareFrom(const GpuImageWrapper& src) {
     return;
   }
 
+  Release();
+  backend_ = src.backend_;
+  switch (src.backend_) {
 #ifdef HAVE_CUDA
-  image_ = src.image_;
-#elif defined(HAVE_METAL)
-  image_ = src.image_;
-#else
-  (void)src;
-  throw std::runtime_error("GpuImageWrapper: No compiled GPU backend.");
+    case GpuBackendKind::CUDA:
+      cuda_image_ = src.cuda_image_;
+      return;
 #endif
+#ifdef HAVE_METAL
+    case GpuBackendKind::Metal:
+      metal_image_ = src.metal_image_;
+      return;
+#endif
+#ifdef HAVE_WEBGPU
+    case GpuBackendKind::WebGPU:
+      webgpu_image_ = src.webgpu_image_;
+      return;
+#endif
+    case GpuBackendKind::None:
+      return;
+  }
+  throw std::runtime_error("GpuImageWrapper: Source GPU backend is not compiled.");
 }
 
 void GpuImageWrapper::CopyTo(GpuImageWrapper& dst) const {
@@ -127,15 +283,29 @@ void GpuImageWrapper::CopyTo(GpuImageWrapper& dst) const {
     throw std::runtime_error("GpuImageWrapper: Cannot copy empty GPU data.");
   }
 
+  dst.Release();
+  dst.backend_ = backend_;
+  switch (backend_) {
 #ifdef HAVE_CUDA
-  dst.image_.create(image_.rows, image_.cols, image_.type());
-  image_.copyTo(dst.image_);
-#elif defined(HAVE_METAL)
-  image_.CopyTo(dst.image_);
-#else
-  (void)dst;
-  throw std::runtime_error("GpuImageWrapper: No compiled GPU backend.");
+    case GpuBackendKind::CUDA:
+      dst.cuda_image_.create(cuda_image_.rows, cuda_image_.cols, cuda_image_.type());
+      cuda_image_.copyTo(dst.cuda_image_);
+      return;
 #endif
+#ifdef HAVE_METAL
+    case GpuBackendKind::Metal:
+      metal_image_.CopyTo(dst.metal_image_);
+      return;
+#endif
+#ifdef HAVE_WEBGPU
+    case GpuBackendKind::WebGPU:
+      webgpu_image_.CopyTo(dst.webgpu_image_);
+      return;
+#endif
+    case GpuBackendKind::None:
+      break;
+  }
+  throw std::runtime_error("GpuImageWrapper: Active GPU backend is not compiled.");
 }
 
 void GpuImageWrapper::ConvertTo(GpuImageWrapper& dst, int type, double alpha, double beta) const {
@@ -143,25 +313,43 @@ void GpuImageWrapper::ConvertTo(GpuImageWrapper& dst, int type, double alpha, do
     throw std::runtime_error("GpuImageWrapper: Cannot convert empty GPU data.");
   }
 
+  dst.Release();
+  dst.backend_ = backend_;
+  switch (backend_) {
 #ifdef HAVE_CUDA
-  image_.convertTo(dst.image_, type, alpha, beta);
-#elif defined(HAVE_METAL)
-  image_.ConvertTo(dst.image_, metal::MetalImage::PixelFormatFromCVType(type), alpha, beta);
-#else
-  (void)dst;
-  (void)type;
-  (void)alpha;
-  (void)beta;
-  throw std::runtime_error("GpuImageWrapper: No compiled GPU backend.");
+    case GpuBackendKind::CUDA:
+      cuda_image_.convertTo(dst.cuda_image_, type, alpha, beta);
+      return;
 #endif
+#ifdef HAVE_METAL
+    case GpuBackendKind::Metal:
+      metal_image_.ConvertTo(dst.metal_image_, metal::MetalImage::PixelFormatFromCVType(type),
+                             alpha, beta);
+      return;
+#endif
+#ifdef HAVE_WEBGPU
+    case GpuBackendKind::WebGPU:
+      webgpu_image_.ConvertTo(dst.webgpu_image_, webgpu::WebGpuImage::PixelFormatFromCVType(type),
+                              alpha, beta);
+      return;
+#endif
+    case GpuBackendKind::None:
+      break;
+  }
+  throw std::runtime_error("GpuImageWrapper: Active GPU backend is not compiled.");
 }
 
 void GpuImageWrapper::Release() {
 #ifdef HAVE_CUDA
-  image_.release();
-#elif defined(HAVE_METAL)
-  image_.Release();
+  cuda_image_.release();
 #endif
+#ifdef HAVE_METAL
+  metal_image_.Release();
+#endif
+#ifdef HAVE_WEBGPU
+  webgpu_image_.Release();
+#endif
+  backend_ = GpuBackendKind::None;
 }
 
 ImageBuffer::~ImageBuffer() {
@@ -194,21 +382,28 @@ ImageBuffer::ImageBuffer(ImageBuffer&& other) noexcept
 }
 
 #ifdef HAVE_CUDA
-ImageBuffer::ImageBuffer(cv::cuda::GpuMat&& data) : gpu_data_(std::move(data)), gpu_data_valid_(true) {}
+ImageBuffer::ImageBuffer(cv::cuda::GpuMat&& data)
+    : gpu_data_(std::move(data)), gpu_data_valid_(true) {}
 #endif
 
 #ifdef HAVE_METAL
-ImageBuffer::ImageBuffer(metal::MetalImage&& data) : gpu_data_(std::move(data)), gpu_data_valid_(true) {}
+ImageBuffer::ImageBuffer(metal::MetalImage&& data)
+    : gpu_data_(std::move(data)), gpu_data_valid_(true) {}
+#endif
+
+#ifdef HAVE_WEBGPU
+ImageBuffer::ImageBuffer(webgpu::WebGpuImage&& data)
+    : gpu_data_(std::move(data)), gpu_data_valid_(true) {}
 #endif
 
 ImageBuffer& ImageBuffer::operator=(ImageBuffer&& other) noexcept {
   if (this != &other) {
-    cpu_data_       = std::move(other.cpu_data_);
-    gpu_data_       = std::move(other.gpu_data_);
-    buffer_         = std::move(other.buffer_);
-    cpu_data_valid_ = other.cpu_data_valid_;
-    gpu_data_valid_ = other.gpu_data_valid_;
-    buffer_valid_   = other.buffer_valid_;
+    cpu_data_             = std::move(other.cpu_data_);
+    gpu_data_             = std::move(other.gpu_data_);
+    buffer_               = std::move(other.buffer_);
+    cpu_data_valid_       = other.cpu_data_valid_;
+    gpu_data_valid_       = other.gpu_data_valid_;
+    buffer_valid_         = other.buffer_valid_;
 
     other.cpu_data_valid_ = false;
     other.gpu_data_valid_ = false;
@@ -268,6 +463,29 @@ auto ImageBuffer::GetMetalImage() const -> const metal::MetalImage& {
 }
 #endif
 
+#ifdef HAVE_WEBGPU
+auto ImageBuffer::GetWebGpuImage() -> webgpu::WebGpuImage& {
+  if (!gpu_data_valid_) {
+    throw std::runtime_error("ImageBuffer: No valid GPU image data.");
+  }
+  return gpu_data_.GetWebGpuImage();
+}
+
+auto ImageBuffer::GetWebGpuImage() const -> const webgpu::WebGpuImage& {
+  if (!gpu_data_valid_) {
+    throw std::runtime_error("ImageBuffer: No valid GPU image data.");
+  }
+  return gpu_data_.GetWebGpuImage();
+}
+#endif
+
+auto ImageBuffer::GetGPUBackend() const -> GpuBackendKind {
+  if (!gpu_data_valid_) {
+    return GpuBackendKind::None;
+  }
+  return gpu_data_.Backend();
+}
+
 auto ImageBuffer::GetGPUWidth() const -> int {
   if (!gpu_data_valid_) {
     throw std::runtime_error("ImageBuffer: No valid GPU image data.");
@@ -289,11 +507,13 @@ auto ImageBuffer::GetGPUType() const -> int {
   return gpu_data_.Type();
 }
 
-auto ImageBuffer::SyncToGPU() -> void {
+auto ImageBuffer::SyncToGPU() -> void { SyncToGPU(GpuBackendKind::None); }
+
+auto ImageBuffer::SyncToGPU(GpuBackendKind backend) -> void {
   if (!cpu_data_valid_ || cpu_data_.empty()) {
     throw std::runtime_error("ImageBuffer: No valid CPU data to sync to GPU.");
   }
-  gpu_data_.Upload(cpu_data_);
+  gpu_data_.Upload(cpu_data_, backend);
   gpu_data_valid_ = true;
 }
 
@@ -334,15 +554,16 @@ void ImageBuffer::CopyGPUDataTo(ImageBuffer& dst) const {
   dst.gpu_data_valid_ = true;
 }
 
-void ImageBuffer::InitGPUData(int width, int height, int type) {
-  if (gpu_data_valid_ || !gpu_data_.Empty()) {
+void ImageBuffer::InitGPUData(int width, int height, int type, GpuBackendKind backend) {
+  const auto requested_backend = ResolveGpuBackend(backend);
+  if ((gpu_data_valid_ || !gpu_data_.Empty()) && gpu_data_.Backend() == requested_backend) {
     return;
   }
-  gpu_data_.Create(width, height, type);
+  gpu_data_.Create(width, height, type, requested_backend);
   gpu_data_valid_ = true;
 }
 
-void ImageBuffer::SetGPUDataValid(bool valid) { gpu_data_valid_ = valid; }
+void        ImageBuffer::SetGPUDataValid(bool valid) { gpu_data_valid_ = valid; }
 
 ImageBuffer ImageBuffer::Clone() const {
   if (cpu_data_valid_) {

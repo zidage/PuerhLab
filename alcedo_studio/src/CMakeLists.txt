@@ -325,6 +325,12 @@ endif()
 
 # ImageBuffer (Platform specific deps handling)
 set(IMAGE_BUFFER_SRCS image/image_buffer.cpp)
+if(ALCEDO_WEBGPU_ENABLED)
+    list(APPEND IMAGE_BUFFER_SRCS
+        image/webgpu_context.cpp
+        image/webgpu_image.cpp
+    )
+endif()
 add_library(ImageBuffer ${IMAGE_BUFFER_SRCS})
 target_include_directories(ImageBuffer PUBLIC include)
 
@@ -334,6 +340,9 @@ set(IMAGE_BUFFER_DEPS Exiv2 ${ALCEDO_OPENCV_CORE_DEPS} libraw::raw_r TimeProvide
 # Platform specific dependencies
 if (WIN32)
     target_link_libraries(ImageBuffer PUBLIC ${IMAGE_BUFFER_DEPS} xxHash::xxhash)
+    if(ALCEDO_WEBGPU_ENABLED)
+        target_link_libraries(ImageBuffer PUBLIC dawn::webgpu_dawn)
+    endif()
 elseif(ALCEDO_METAL_ENABLED)
     target_link_libraries(ImageBuffer PUBLIC ${IMAGE_BUFFER_DEPS} xxHash MetalImage MetalUtils)
 else()

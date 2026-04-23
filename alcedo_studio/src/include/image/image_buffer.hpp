@@ -10,6 +10,8 @@
 #include <utility>
 #include <vector>
 
+#include "image/gpu_backend.hpp"
+
 #ifdef HAVE_CUDA
 #include <opencv2/core/cuda.hpp>
 #endif
@@ -18,14 +20,18 @@
 #include "metal_image.hpp"
 #endif
 
+#ifdef HAVE_WEBGPU
+#include "webgpu_image.hpp"
+#endif
+
 namespace alcedo {
 class GpuImageWrapper {
  public:
-  GpuImageWrapper()                                   = default;
-  ~GpuImageWrapper()                                  = default;
-  GpuImageWrapper(const GpuImageWrapper&)             = delete;
-  auto operator=(const GpuImageWrapper&) -> GpuImageWrapper& = delete;
-  GpuImageWrapper(GpuImageWrapper&&) noexcept         = default;
+  GpuImageWrapper()                                              = default;
+  ~GpuImageWrapper()                                             = default;
+  GpuImageWrapper(const GpuImageWrapper&)                        = delete;
+  auto operator=(const GpuImageWrapper&) -> GpuImageWrapper&     = delete;
+  GpuImageWrapper(GpuImageWrapper&&) noexcept                    = default;
   auto operator=(GpuImageWrapper&&) noexcept -> GpuImageWrapper& = default;
 
 #ifdef HAVE_CUDA
@@ -39,14 +45,20 @@ class GpuImageWrapper {
   auto GetMetalImage() -> metal::MetalImage&;
   auto GetMetalImage() const -> const metal::MetalImage&;
 #endif
+#ifdef HAVE_WEBGPU
+  explicit GpuImageWrapper(webgpu::WebGpuImage&& image);
+  auto GetWebGpuImage() -> webgpu::WebGpuImage&;
+  auto GetWebGpuImage() const -> const webgpu::WebGpuImage&;
+#endif
 
+  auto Backend() const -> GpuBackendKind;
   auto Empty() const -> bool;
   auto Width() const -> int;
   auto Height() const -> int;
   auto Type() const -> int;
 
-  void Create(int width, int height, int type);
-  void Upload(const cv::Mat& cpu_data);
+  void Create(int width, int height, int type, GpuBackendKind backend = GpuBackendKind::None);
+  void Upload(const cv::Mat& cpu_data, GpuBackendKind backend = GpuBackendKind::None);
   void Download(cv::Mat& cpu_data) const;
   void ShareFrom(const GpuImageWrapper& src);
   void CopyTo(GpuImageWrapper& dst) const;
@@ -54,10 +66,14 @@ class GpuImageWrapper {
   void Release();
 
  private:
+  GpuBackendKind backend_ = GpuBackendKind::None;
 #if defined(HAVE_CUDA)
-  cv::cuda::GpuMat image_;
+  cv::cuda::GpuMat cuda_image_;
 #elif defined(HAVE_METAL)
-  metal::MetalImage image_;
+  metal::MetalImage metal_image_;
+#endif
+#if defined(HAVE_WEBGPU)
+  webgpu::WebGpuImage webgpu_image_;
 #endif
 };
 
@@ -69,11 +85,11 @@ class ImageBuffer {
   std::unique_ptr<std::vector<uint8_t>> buffer_;
 
  public:
-  bool cpu_data_valid_       = false;
-  bool gpu_data_valid_       = false;
+  bool cpu_data_valid_ = false;
+  bool gpu_data_valid_ = false;
 
-  bool buffer_valid_         = false;
-  ImageBuffer()              = default;
+  bool buffer_valid_   = false;
+  ImageBuffer()        = default;
   ~ImageBuffer();
 
   // Non-copyable
@@ -92,39 +108,48 @@ class ImageBuffer {
 #ifdef HAVE_METAL
   ImageBuffer(metal::MetalImage&& data);
 #endif
+#ifdef HAVE_WEBGPU
+  ImageBuffer(webgpu::WebGpuImage&& data);
+#endif
   ImageBuffer(std::vector<uint8_t>&& buffer);
 
-  void         ReadFromVectorBuffer(std::vector<uint8_t>&& buffer);
+  void ReadFromVectorBuffer(std::vector<uint8_t>&& buffer);
 
-  auto         GetCPUData() -> cv::Mat&;
-  auto         GetBuffer() -> std::vector<uint8_t>&;
+  auto GetCPUData() -> cv::Mat&;
+  auto GetBuffer() -> std::vector<uint8_t>&;
 
 #ifdef HAVE_CUDA
-  auto         GetCUDAImage() -> cv::cuda::GpuMat&;
-  auto         GetCUDAImage() const -> const cv::cuda::GpuMat&;
+  auto GetCUDAImage() -> cv::cuda::GpuMat&;
+  auto GetCUDAImage() const -> const cv::cuda::GpuMat&;
 #endif
 #ifdef HAVE_METAL
-  auto         GetMetalImage() -> metal::MetalImage&;
-  auto         GetMetalImage() const -> const metal::MetalImage&;
+  auto GetMetalImage() -> metal::MetalImage&;
+  auto GetMetalImage() const -> const metal::MetalImage&;
+#endif
+#ifdef HAVE_WEBGPU
+  auto GetWebGpuImage() -> webgpu::WebGpuImage&;
+  auto GetWebGpuImage() const -> const webgpu::WebGpuImage&;
 #endif
 
-  auto         GetGPUWidth() const -> int;
-  auto         GetGPUHeight() const -> int;
-  auto         GetGPUType() const -> int;
+  auto GetGPUBackend() const -> GpuBackendKind;
+  auto GetGPUWidth() const -> int;
+  auto GetGPUHeight() const -> int;
+  auto GetGPUType() const -> int;
 
-  void         SyncToGPU();
-  void         SyncToCPU();
-  void         ConvertGPUDataTo(int type, double alpha = 1.0, double beta = 0.0);
-  void         ShareGPUDataFrom(const ImageBuffer& src);
-  void         CopyGPUDataTo(ImageBuffer& dst) const;
+  void SyncToGPU();
+  void SyncToGPU(GpuBackendKind backend);
+  void SyncToCPU();
+  void ConvertGPUDataTo(int type, double alpha = 1.0, double beta = 0.0);
+  void ShareGPUDataFrom(const ImageBuffer& src);
+  void CopyGPUDataTo(ImageBuffer& dst) const;
 
-  void         InitGPUData(int width, int height, int type);
-  void         SetGPUDataValid(bool valid);
+  void InitGPUData(int width, int height, int type, GpuBackendKind backend = GpuBackendKind::None);
+  void SetGPUDataValid(bool valid);
 
-  ImageBuffer  Clone() const;
+  ImageBuffer Clone() const;
 
-  void         ReleaseCPUData();
-  void         ReleaseGPUData();
-  void         ReleaseBuffer();
+  void        ReleaseCPUData();
+  void        ReleaseGPUData();
+  void        ReleaseBuffer();
 };
 };  // namespace alcedo

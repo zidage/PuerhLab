@@ -21,15 +21,18 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 if(APPLE)
     set(ALCEDO_ENABLE_CUDA_DEFAULT OFF)
     set(ALCEDO_ENABLE_METAL_DEFAULT ON)
+    set(ALCEDO_ENABLE_WEBGPU_DEFAULT OFF)
     set(ALCEDO_ENABLE_OPENGL_EDITOR_DEFAULT OFF)
 else()
     set(ALCEDO_ENABLE_CUDA_DEFAULT ON)
     set(ALCEDO_ENABLE_METAL_DEFAULT OFF)
+    set(ALCEDO_ENABLE_WEBGPU_DEFAULT ON)
     set(ALCEDO_ENABLE_OPENGL_EDITOR_DEFAULT ON)
 endif()
 
 option(ALCEDO_ENABLE_CUDA "Enable CUDA-accelerated pipeline backends when CUDA is available." ${ALCEDO_ENABLE_CUDA_DEFAULT})
 option(ALCEDO_ENABLE_METAL "Enable Metal-accelerated pipeline backends when building on Apple platforms." ${ALCEDO_ENABLE_METAL_DEFAULT})
+option(ALCEDO_ENABLE_WEBGPU "Enable Dawn/WebGPU backend support when Dawn is available." ${ALCEDO_ENABLE_WEBGPU_DEFAULT})
 option(ALCEDO_ENABLE_OPENGL_EDITOR "Build the OpenGL-based editor UI when the required backend is available." ${ALCEDO_ENABLE_OPENGL_EDITOR_DEFAULT})
 option(ALCEDO_BUILD_TESTS "Build alcedo tests and demos." ON)
 option(ALCEDO_MACOS_BUNDLE
@@ -227,6 +230,93 @@ endif()
 
 # OpenMP
 find_package(OpenMP REQUIRED)
+
+# Dawn (WebGPU) — Windows only for now.
+set(ALCEDO_WEBGPU_ENABLED OFF)
+if(ALCEDO_ENABLE_WEBGPU AND WIN32)
+    find_package(Threads REQUIRED)
+
+    set(_alcedo_dawn_release_dir "${CMAKE_SOURCE_DIR}/alcedo_studio/third_party/dawn_win")
+    set(_alcedo_dawn_debug_dir "${CMAKE_SOURCE_DIR}/alcedo_studio/third_party/dawn_win_debug")
+    if(MSVC AND CMAKE_BUILD_TYPE MATCHES "Debug" AND
+       EXISTS "${_alcedo_dawn_debug_dir}/lib/cmake/Dawn/DawnConfig.cmake")
+        set(_alcedo_dawn_default_dir "${_alcedo_dawn_debug_dir}")
+    else()
+        set(_alcedo_dawn_default_dir "${_alcedo_dawn_release_dir}")
+    endif()
+    set(ALCEDO_DAWN_PACKAGE_DIR "${_alcedo_dawn_default_dir}"
+        CACHE PATH "Root directory of the bundled Dawn package used by the WebGPU backend.")
+
+    set(Dawn_DIR "${ALCEDO_DAWN_PACKAGE_DIR}/lib/cmake/Dawn"
+        CACHE PATH "CMake package directory for the selected Dawn package." FORCE)
+    find_package(Dawn CONFIG REQUIRED)
+    if(NOT TARGET dawn::webgpu_dawn)
+        message(FATAL_ERROR "Dawn package found but dawn::webgpu_dawn target is missing.")
+    endif()
+    get_target_property(_alcedo_dawn_imported_configs dawn::webgpu_dawn IMPORTED_CONFIGURATIONS)
+    if(MSVC AND CMAKE_BUILD_TYPE MATCHES "Debug" AND
+       NOT "DEBUG" IN_LIST _alcedo_dawn_imported_configs)
+        message(STATUS
+            "Bundled Dawn package has no Debug import configuration; "
+            "building Debug without WebGPU to avoid MSVC CRT/iterator-level mismatches.")
+    else()
+        file(GLOB _alcedo_dawn_d3d_runtime_versioned_dirs
+            LIST_DIRECTORIES true
+            "C:/Program Files (x86)/Windows Kits/10/bin/*/x64"
+        )
+        if(_alcedo_dawn_d3d_runtime_versioned_dirs)
+            list(SORT _alcedo_dawn_d3d_runtime_versioned_dirs COMPARE NATURAL ORDER DESCENDING)
+            set(_alcedo_dawn_d3d_runtime_candidates
+                ${_alcedo_dawn_d3d_runtime_versioned_dirs})
+        endif()
+        list(APPEND _alcedo_dawn_d3d_runtime_candidates
+            "C:/Program Files (x86)/Windows Kits/10/Redist/D3D/x64")
+        foreach(_dir IN LISTS _alcedo_dawn_d3d_runtime_candidates)
+            if(EXISTS "${_dir}/dxcompiler.dll" AND EXISTS "${_dir}/dxil.dll")
+                set(ALCEDO_DAWN_D3D_RUNTIME_DIR_DEFAULT "${_dir}")
+                break()
+            endif()
+        endforeach()
+        if(NOT DEFINED ALCEDO_DAWN_D3D_RUNTIME_DIR OR
+           "${ALCEDO_DAWN_D3D_RUNTIME_DIR}" STREQUAL "" OR
+           "${ALCEDO_DAWN_D3D_RUNTIME_DIR}" STREQUAL
+               "C:/Program Files (x86)/Windows Kits/10/Redist/D3D/x64")
+            set(ALCEDO_DAWN_D3D_RUNTIME_DIR "${ALCEDO_DAWN_D3D_RUNTIME_DIR_DEFAULT}"
+                CACHE PATH
+                "Directory containing dxcompiler.dll and dxil.dll for Dawn's D3D12 backend."
+                FORCE)
+        else()
+            set(ALCEDO_DAWN_D3D_RUNTIME_DIR "${ALCEDO_DAWN_D3D_RUNTIME_DIR}"
+                CACHE PATH
+                "Directory containing dxcompiler.dll and dxil.dll for Dawn's D3D12 backend.")
+        endif()
+        if(ALCEDO_DAWN_D3D_RUNTIME_DIR AND
+           EXISTS "${ALCEDO_DAWN_D3D_RUNTIME_DIR}/dxcompiler.dll" AND
+           EXISTS "${ALCEDO_DAWN_D3D_RUNTIME_DIR}/dxil.dll")
+            add_compile_definitions(
+                ALCEDO_DAWN_D3D_RUNTIME_DIR="${ALCEDO_DAWN_D3D_RUNTIME_DIR}")
+            set(ALCEDO_DAWN_RUNTIME_DLLS
+                "${ALCEDO_DAWN_D3D_RUNTIME_DIR}/dxcompiler.dll"
+                "${ALCEDO_DAWN_D3D_RUNTIME_DIR}/dxil.dll")
+            message(STATUS "Dawn D3D runtime search path: ${ALCEDO_DAWN_D3D_RUNTIME_DIR}")
+        else()
+            message(WARNING
+                "Dawn D3D12 runtime DLLs were not found. WebGPU may fail to create "
+                "a D3D12 device unless dxcompiler.dll and dxil.dll are available at runtime.")
+        endif()
+        add_compile_definitions(HAVE_WEBGPU)
+        set(ALCEDO_WEBGPU_ENABLED ON)
+        message(STATUS "WebGPU enabled with Dawn package: ${ALCEDO_DAWN_PACKAGE_DIR}")
+    endif()
+    unset(_alcedo_dawn_release_dir)
+    unset(_alcedo_dawn_debug_dir)
+    unset(_alcedo_dawn_default_dir)
+    unset(_alcedo_dawn_d3d_runtime_candidates)
+    unset(_alcedo_dawn_d3d_runtime_versioned_dirs)
+    unset(_alcedo_dawn_imported_configs)
+elseif(ALCEDO_ENABLE_WEBGPU)
+    message(STATUS "WebGPU support is currently enabled only on Windows; building without WebGPU.")
+endif()
 
 # Headers-only libraries
 # UUID
@@ -568,6 +658,18 @@ if(WIN32 AND TARGET ${ALCEDO_MAIN_BIN})
 
     set(_third_party_exiv2_bin "${CMAKE_SOURCE_DIR}/alcedo_studio/third_party/exiv2_x64-windows/bin")
     set(_third_party_duckdb_bin "${CMAKE_SOURCE_DIR}/alcedo_studio/third_party/libduckdb-windows")
+    if(ALCEDO_WEBGPU_ENABLED)
+        set(_third_party_dawn_bin "${ALCEDO_DAWN_PACKAGE_DIR}/bin")
+    else()
+        set(_third_party_dawn_bin "${CMAKE_SOURCE_DIR}/alcedo_studio/third_party/dawn_win/bin")
+    endif()
+
+    # Dawn runtime DLLs are copied during install. WebGPU tests use Dawn's
+    # additional runtime search paths instead of relying on side-by-side copies.
+    file(GLOB _dawn_dlls "${_third_party_dawn_bin}/*.dll")
+    if(ALCEDO_DAWN_RUNTIME_DLLS)
+        list(APPEND _dawn_dlls ${ALCEDO_DAWN_RUNTIME_DLLS})
+    endif()
 
     set(_vcpkg_bin_dir "")
     if(DEFINED VCPKG_INSTALLED_DIR AND DEFINED VCPKG_TARGET_TRIPLET)
@@ -597,6 +699,7 @@ if(WIN32 AND TARGET ${ALCEDO_MAIN_BIN})
              ${ALCEDO_RUNTIME_SEARCH_DIRS}
              \"${_third_party_exiv2_bin}\"
              \"${_third_party_duckdb_bin}\"
+             \"${_third_party_dawn_bin}\"
              \"${_vcpkg_bin_dir}\"
              \"${_qt6_bin_dir}\"
              \${ALCEDO_RUNTIME_DEP_DIRS}
@@ -639,6 +742,16 @@ if(WIN32 AND TARGET ${ALCEDO_MAIN_BIN})
          if(_unresolved)
              message(WARNING \"[alcedo] Unresolved runtime deps: \${_unresolved}\")
          endif()
+         # Explicitly copy any bundled Dawn DLLs even if they are not direct linker dependencies
+         # (Dawn may load them dynamically at runtime).
+         file(GLOB _dawn_dlls \"${_third_party_dawn_bin}/*.dll\")
+         set(_alcedo_dawn_runtime_dlls \"${ALCEDO_DAWN_RUNTIME_DLLS}\")
+         if(_alcedo_dawn_runtime_dlls)
+             list(APPEND _dawn_dlls \${_alcedo_dawn_runtime_dlls})
+         endif()
+         foreach(_dawn_dll IN LISTS _dawn_dlls)
+             file(INSTALL DESTINATION \"\${_bindir}\" TYPE SHARED_LIBRARY FILES \"\${_dawn_dll}\")
+         endforeach()
         "
     )
 
