@@ -283,6 +283,15 @@ class GPU_KernelLauncher {
           frame_sink_->UnmapResource();
           throw std::runtime_error("Unsupported GPU frame sink target type.");
         }
+        if (out_copy_err == cudaSuccess && mapping.cuda_signal_semaphore &&
+            mapping.cuda_signal_value != 0) {
+          cudaExternalSemaphoreSignalParams signal_params{};
+          signal_params.params.fence.value = mapping.cuda_signal_value;
+          cudaExternalSemaphore_t signal_semaphore =
+              reinterpret_cast<cudaExternalSemaphore_t>(mapping.cuda_signal_semaphore);
+          out_copy_err =
+              cudaSignalExternalSemaphoresAsync(&signal_semaphore, &signal_params, 1, stream_);
+        }
         const auto present_copy_end = std::chrono::steady_clock::now();
         present_copy_enqueue_ms =
             std::chrono::duration<double, std::milli>(present_copy_end - present_copy_start)

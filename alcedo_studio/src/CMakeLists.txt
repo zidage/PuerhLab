@@ -840,7 +840,7 @@ if(ALCEDO_REAL_WIDGET_EDITOR)
         )
     endif()
     if(ALCEDO_RHI_WIDGET_EDITOR AND WIN32)
-        target_link_libraries(EditViewer PRIVATE d3d11 dxgi)
+        target_link_libraries(EditViewer PRIVATE d3d11 d3d12 dxgi)
     endif()
 
     if(ALCEDO_RHI_WIDGET_EDITOR)

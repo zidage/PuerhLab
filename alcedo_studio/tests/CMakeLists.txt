@@ -77,6 +77,13 @@ if(ALCEDO_CUDA_ENABLED)
   target_link_libraries(CudaImageGeometryOpsTest PRIVATE GTest::gtest_main RawProcessorOp Operators ${ALCEDO_TEST_OPENCV_MIN_DEPS})
   gtest_discover_tests(CudaImageGeometryOpsTest TEST_PREFIX "CudaImageGeometryOpsTest.")
 
+  if(WIN32)
+    add_executable(D3DCudaInteropUtilsTest ui/d3d_cuda_interop_utils_test.cpp)
+    target_include_directories(D3DCudaInteropUtilsTest PUBLIC ${ALCEDO_INCLUDE_DIR})
+    target_link_libraries(D3DCudaInteropUtilsTest PRIVATE GTest::gtest_main CUDA::cudart)
+    gtest_discover_tests(D3DCudaInteropUtilsTest TEST_PREFIX "D3DCudaInteropUtilsTest.")
+  endif()
+
   add_executable(CudaRawOpsTest raw/cuda_raw_ops_test.cpp)
   target_include_directories(CudaRawOpsTest PUBLIC ${ALCEDO_INCLUDE_DIR})
   target_link_libraries(CudaRawOpsTest PRIVATE GTest::gtest_main RawProcessorOp ${ALCEDO_TEST_OPENCV_MIN_DEPS})

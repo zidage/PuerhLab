@@ -78,6 +78,8 @@ auto FrameMailbox::MapResourceForWrite() -> FrameWriteMapping {
           FramePixelFormat::RGBA32F,
           FrameMemoryDomain::CudaDevice,
           FrameWriteTargetType::LinearBuffer,
+          0,
+          nullptr,
           0};
 }
 

@@ -5,6 +5,7 @@
 #include "ui/edit_viewer/rhi_edit_viewer_surface.hpp"
 
 #include "ui/edit_viewer/color_manager.hpp"
+#include "ui/edit_viewer/d3d_cuda_interop_utils.hpp"
 
 #include <QtGui/rhi/qrhi.h>
 #include <QtGui/rhi/qrhi_platform.h>
@@ -17,19 +18,21 @@
 
 #include <array>
 #include <atomic>
+#include <cstring>
 #include <limits>
 #include <mutex>
+#include <optional>
 
 #if defined(Q_OS_WIN) && defined(HAVE_CUDA)
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
 #include <d3d11.h>
+#include <d3d12.h>
 #include <dxgi.h>
 #include <dxgi1_2.h>
 #include <wrl/client.h>
 
-#include <cuda_d3d11_interop.h>
 #include <cuda_runtime_api.h>
 #endif
 
@@ -43,6 +46,7 @@ constexpr const char* kFragmentShaderResource = ":/shaders/edit_viewer/rhi_image
 using Microsoft::WRL::ComPtr;
 
 constexpr size_t kRgba32fPixelBytes = sizeof(float) * 4U;
+constexpr size_t kDirectPresentSlotCount = 3U;
 
 auto IsValidSlotIndex(int slot_index, size_t slot_count) -> bool {
   return slot_index >= 0 && slot_index < static_cast<int>(slot_count);
@@ -77,12 +81,33 @@ auto GetDxgiAdapterFromDevice(ID3D11Device* device) -> ComPtr<IDXGIAdapter> {
   return adapter;
 }
 
-auto DescribeCudaDeviceList(const int* devices, unsigned int count) -> QString {
-  QStringList entries;
-  for (unsigned int i = 0; i < count; ++i) {
-    entries.push_back(QString::number(devices[i]));
+auto GetCudaDeviceLuid(int cuda_device) -> std::optional<LUID> {
+  if (cuda_device < 0) {
+    return std::nullopt;
   }
-  return entries.join(QStringLiteral(", "));
+
+  cudaDeviceProp prop{};
+  const cudaError_t prop_err = cudaGetDeviceProperties(&prop, cuda_device);
+  if (prop_err != cudaSuccess) {
+    qWarning("RhiEditViewerSurface: cudaGetDeviceProperties failed for device %d: %s",
+             cuda_device, cudaGetErrorString(prop_err));
+    return std::nullopt;
+  }
+
+  LUID luid{};
+  static_assert(sizeof(luid) == sizeof(prop.luid));
+  std::memcpy(&luid, prop.luid, sizeof(luid));
+  return luid;
+}
+
+auto LuidMatches(const LUID& lhs, const LUID& rhs) -> bool {
+  return lhs.LowPart == rhs.LowPart && lhs.HighPart == rhs.HighPart;
+}
+
+auto DescribeLuid(const LUID& luid) -> QString {
+  return QStringLiteral("%1:%2")
+      .arg(static_cast<quint32>(luid.HighPart), 8, 16, QLatin1Char('0'))
+      .arg(luid.LowPart, 8, 16, QLatin1Char('0'));
 }
 
 auto BindCudaDeviceOnCurrentThread(int cuda_device, const char* context) -> bool {
@@ -125,33 +150,55 @@ auto ResolveCudaDeviceForD3D11Device(ID3D11Device* device) -> int {
     return -1;
   }
 
-  unsigned int cuda_device_count = 0;
-  std::array<int, 8> cuda_devices{};
-  const cudaError_t query_err =
-      cudaD3D11GetDevices(&cuda_device_count, cuda_devices.data(),
-                          static_cast<unsigned int>(cuda_devices.size()), device,
-                          cudaD3D11DeviceListAll);
-  if (query_err != cudaSuccess || cuda_device_count == 0) {
-    const auto adapter = GetDxgiAdapterFromDevice(device);
-    qWarning("RhiEditViewerSurface: D3D11 device adapter '%s' is not CUDA-interoperable for "
-             "current preview device %d (%s).",
-             qPrintable(DescribeDxgiAdapter(adapter.Get())), current_cuda_device,
-             cudaGetErrorString(query_err));
+  const auto cuda_luid = GetCudaDeviceLuid(current_cuda_device);
+  const auto adapter = GetDxgiAdapterFromDevice(device);
+  if (!cuda_luid || !adapter) {
     return -1;
   }
 
-  for (unsigned int i = 0; i < cuda_device_count; ++i) {
-    if (cuda_devices[i] == current_cuda_device) {
-      return current_cuda_device;
-    }
+  DXGI_ADAPTER_DESC desc{};
+  if (FAILED(adapter->GetDesc(&desc))) {
+    return -1;
   }
 
-  const auto adapter = GetDxgiAdapterFromDevice(device);
-  qWarning("RhiEditViewerSurface: D3D11 adapter '%s' maps to CUDA device(s) [%s], but the "
-           "pipeline is running on CUDA device %d.",
+  if (LuidMatches(desc.AdapterLuid, *cuda_luid)) {
+    return current_cuda_device;
+  }
+
+  qWarning("RhiEditViewerSurface: D3D11 adapter '%s' LUID %s does not match CUDA device %d "
+           "LUID %s.",
            qPrintable(DescribeDxgiAdapter(adapter.Get())),
-           qPrintable(DescribeCudaDeviceList(cuda_devices.data(), cuda_device_count)),
-           current_cuda_device);
+           qPrintable(DescribeLuid(desc.AdapterLuid)), current_cuda_device,
+           qPrintable(DescribeLuid(*cuda_luid)));
+  return -1;
+}
+
+auto ResolveCudaDeviceForD3D12Device(ID3D12Device* device) -> int {
+  if (!device) {
+    return -1;
+  }
+
+  int current_cuda_device = -1;
+  const cudaError_t current_device_err = cudaGetDevice(&current_cuda_device);
+  if (current_device_err != cudaSuccess || current_cuda_device < 0) {
+    qWarning("RhiEditViewerSurface: cudaGetDevice failed while validating D3D12 interop: %s",
+             cudaGetErrorString(current_device_err));
+    return -1;
+  }
+
+  const auto cuda_luid = GetCudaDeviceLuid(current_cuda_device);
+  if (!cuda_luid) {
+    return -1;
+  }
+
+  const LUID device_luid = device->GetAdapterLuid();
+  if (LuidMatches(device_luid, *cuda_luid)) {
+    return current_cuda_device;
+  }
+
+  qWarning("RhiEditViewerSurface: D3D12 adapter LUID %s does not match CUDA device %d LUID %s.",
+           qPrintable(DescribeLuid(device_luid)), current_cuda_device,
+           qPrintable(DescribeLuid(*cuda_luid)));
   return -1;
 }
 #endif
@@ -203,8 +250,15 @@ struct RhiImageRenderer::VertexData {
 
 struct RhiEditViewerSurface::PlatformState {
 #if defined(Q_OS_WIN) && defined(HAVE_CUDA)
+  enum class DirectPresentBackend {
+    None,
+    D3D11,
+    D3D12,
+  };
+
   struct DirectPresentSlot {
     ComPtr<ID3D11Texture2D> texture;
+    ComPtr<ID3D12Resource>  resource;
     HANDLE                  shared_handle     = nullptr;
     cudaExternalMemory_t    external_memory   = nullptr;
     cudaMipmappedArray_t    mipmapped_array   = nullptr;
@@ -212,10 +266,26 @@ struct RhiEditViewerSurface::PlatformState {
     int                     width             = 0;
     int                     height            = 0;
     std::uintptr_t          texture_handle    = 0;
+    D3D12_RESOURCE_STATES   d3d12_state       = D3D12_RESOURCE_STATE_COMMON;
+    UINT64                  pending_cuda_signal_value = 0;
+    UINT64                  ready_cuda_signal_value   = 0;
+    UINT64                  active_cuda_signal_value  = 0;
   };
 
-  std::array<DirectPresentSlot, 2> targets{};
+  std::array<DirectPresentSlot, kDirectPresentSlotCount> targets{};
   ID3D11Device*                    device = nullptr;
+  ID3D12Device*                    d3d12_device = nullptr;
+  ID3D12CommandQueue*              d3d12_queue = nullptr;
+  ComPtr<ID3D12CommandAllocator>   d3d12_transition_allocator;
+  ComPtr<ID3D12GraphicsCommandList> d3d12_transition_list;
+  ComPtr<ID3D12Fence>              d3d12_transition_fence;
+  ComPtr<ID3D12Fence>              d3d12_cuda_fence;
+  HANDLE                           d3d12_transition_event = nullptr;
+  HANDLE                           d3d12_cuda_fence_shared_handle = nullptr;
+  cudaExternalSemaphore_t          cuda_signal_semaphore = nullptr;
+  UINT64                           d3d12_transition_fence_value = 0;
+  UINT64                           d3d12_cuda_fence_value = 0;
+  DirectPresentBackend             backend = DirectPresentBackend::None;
   int                              cuda_device = -1;
   mutable std::mutex               mutex{};
   std::atomic<int>                 pending_frame_idx{-1};
@@ -254,9 +324,169 @@ void ReleaseDirectPresentSlot(RhiEditViewerSurface::PlatformState::DirectPresent
     slot.shared_handle = nullptr;
   }
   slot.texture.Reset();
+  slot.resource.Reset();
   slot.width          = 0;
   slot.height         = 0;
   slot.texture_handle = 0;
+  slot.d3d12_state    = D3D12_RESOURCE_STATE_COMMON;
+  slot.pending_cuda_signal_value = 0;
+  slot.ready_cuda_signal_value   = 0;
+  slot.active_cuda_signal_value  = 0;
+}
+
+auto HasDirectPresentResource(
+    const RhiEditViewerSurface::PlatformState::DirectPresentSlot& slot,
+    RhiEditViewerSurface::PlatformState::DirectPresentBackend backend) -> bool {
+  if (!slot.image_array) {
+    return false;
+  }
+  switch (backend) {
+    case RhiEditViewerSurface::PlatformState::DirectPresentBackend::D3D11:
+      return slot.texture != nullptr;
+    case RhiEditViewerSurface::PlatformState::DirectPresentBackend::D3D12:
+      return slot.resource != nullptr;
+    case RhiEditViewerSurface::PlatformState::DirectPresentBackend::None:
+      return false;
+  }
+  return false;
+}
+
+auto EnsureD3D12TransitionObjects(RhiEditViewerSurface::PlatformState& state) -> bool {
+  if (!state.d3d12_device || !state.d3d12_queue) {
+    return false;
+  }
+
+  if (!state.d3d12_transition_allocator &&
+      FAILED(state.d3d12_device->CreateCommandAllocator(
+          D3D12_COMMAND_LIST_TYPE_DIRECT,
+          IID_PPV_ARGS(state.d3d12_transition_allocator.GetAddressOf())))) {
+    qWarning("RhiEditViewerSurface: failed to create D3D12 transition command allocator.");
+    return false;
+  }
+
+  if (!state.d3d12_transition_list) {
+    if (FAILED(state.d3d12_device->CreateCommandList(
+            0, D3D12_COMMAND_LIST_TYPE_DIRECT, state.d3d12_transition_allocator.Get(), nullptr,
+            IID_PPV_ARGS(state.d3d12_transition_list.GetAddressOf())))) {
+      qWarning("RhiEditViewerSurface: failed to create D3D12 transition command list.");
+      return false;
+    }
+    state.d3d12_transition_list->Close();
+  }
+
+  if (!state.d3d12_transition_fence &&
+      FAILED(state.d3d12_device->CreateFence(
+          0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(state.d3d12_transition_fence.GetAddressOf())))) {
+    qWarning("RhiEditViewerSurface: failed to create D3D12 transition fence.");
+    return false;
+  }
+
+  if (!state.d3d12_transition_event) {
+    state.d3d12_transition_event = CreateEvent(nullptr, FALSE, FALSE, nullptr);
+    if (!state.d3d12_transition_event) {
+      qWarning("RhiEditViewerSurface: failed to create D3D12 transition fence event.");
+      return false;
+    }
+  }
+
+  return true;
+}
+
+auto EnsureD3D12CudaSemaphore(RhiEditViewerSurface::PlatformState& state) -> bool {
+  if (!state.d3d12_device || !state.d3d12_queue) {
+    return false;
+  }
+  if (state.d3d12_cuda_fence && state.cuda_signal_semaphore) {
+    return true;
+  }
+
+  if (!state.d3d12_cuda_fence &&
+      FAILED(state.d3d12_device->CreateFence(
+          0, D3D12_FENCE_FLAG_SHARED, IID_PPV_ARGS(state.d3d12_cuda_fence.GetAddressOf())))) {
+    qWarning("RhiEditViewerSurface: failed to create D3D12/CUDA fence.");
+    return false;
+  }
+
+  if (!state.d3d12_cuda_fence_shared_handle &&
+      (FAILED(state.d3d12_device->CreateSharedHandle(
+           state.d3d12_cuda_fence.Get(), nullptr, GENERIC_ALL, nullptr,
+           &state.d3d12_cuda_fence_shared_handle)) ||
+       !state.d3d12_cuda_fence_shared_handle)) {
+    qWarning("RhiEditViewerSurface: failed to create shared handle for D3D12/CUDA fence.");
+    return false;
+  }
+
+  if (!state.cuda_signal_semaphore) {
+    cudaExternalSemaphoreHandleDesc semaphore_desc{};
+    semaphore_desc.type                = cudaExternalSemaphoreHandleTypeD3D12Fence;
+    semaphore_desc.handle.win32.handle = state.d3d12_cuda_fence_shared_handle;
+    const cudaError_t import_err =
+        cudaImportExternalSemaphore(&state.cuda_signal_semaphore, &semaphore_desc);
+    if (import_err != cudaSuccess) {
+      qWarning("RhiEditViewerSurface: cudaImportExternalSemaphore(D3D12 fence) failed: %s",
+               cudaGetErrorString(import_err));
+      return false;
+    }
+  }
+
+  return true;
+}
+
+auto TransitionD3D12Slot(RhiEditViewerSurface::PlatformState& state,
+                         RhiEditViewerSurface::PlatformState::DirectPresentSlot& slot,
+                         D3D12_RESOURCE_STATES target_state) -> bool {
+  if (state.backend != RhiEditViewerSurface::PlatformState::DirectPresentBackend::D3D12 ||
+      !slot.resource || slot.d3d12_state == target_state) {
+    return true;
+  }
+
+  if (!EnsureD3D12TransitionObjects(state)) {
+    return false;
+  }
+
+  if (FAILED(state.d3d12_transition_allocator->Reset())) {
+    qWarning("RhiEditViewerSurface: failed to reset D3D12 transition command allocator.");
+    return false;
+  }
+  if (FAILED(state.d3d12_transition_list->Reset(state.d3d12_transition_allocator.Get(),
+                                                nullptr))) {
+    qWarning("RhiEditViewerSurface: failed to reset D3D12 transition command list.");
+    return false;
+  }
+
+  D3D12_RESOURCE_BARRIER barrier{};
+  barrier.Type                   = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+  barrier.Flags                  = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+  barrier.Transition.pResource   = slot.resource.Get();
+  barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+  barrier.Transition.StateBefore = slot.d3d12_state;
+  barrier.Transition.StateAfter  = target_state;
+  state.d3d12_transition_list->ResourceBarrier(1, &barrier);
+
+  if (FAILED(state.d3d12_transition_list->Close())) {
+    qWarning("RhiEditViewerSurface: failed to close D3D12 transition command list.");
+    return false;
+  }
+
+  ID3D12CommandList* command_lists[] = {state.d3d12_transition_list.Get()};
+  state.d3d12_queue->ExecuteCommandLists(1, command_lists);
+
+  const UINT64 fence_value = ++state.d3d12_transition_fence_value;
+  if (FAILED(state.d3d12_queue->Signal(state.d3d12_transition_fence.Get(), fence_value))) {
+    qWarning("RhiEditViewerSurface: failed to signal D3D12 transition fence.");
+    return false;
+  }
+  if (state.d3d12_transition_fence->GetCompletedValue() < fence_value) {
+    if (FAILED(state.d3d12_transition_fence->SetEventOnCompletion(
+            fence_value, state.d3d12_transition_event))) {
+      qWarning("RhiEditViewerSurface: failed to arm D3D12 transition fence event.");
+      return false;
+    }
+    WaitForSingleObject(state.d3d12_transition_event, INFINITE);
+  }
+
+  slot.d3d12_state = target_state;
+  return true;
 }
 #endif
 
@@ -630,6 +860,7 @@ void RhiImageRenderer::ensureImportedTexture(QRhiTexture*& texture, int& width, 
   const quint64 next_native_object = static_cast<quint64>(frame.texture_handle);
   if (texture && width == frame.width && height == frame.height &&
       native_object == next_native_object) {
+    texture->setNativeLayout(frame.native_layout);
     return;
   }
 
@@ -645,13 +876,18 @@ void RhiImageRenderer::ensureImportedTexture(QRhiTexture*& texture, int& width, 
 
   destroyResource(texture);
   texture = rhi_->newTexture(QRhiTexture::RGBA32F, QSize(frame.width, frame.height), 1);
-  if (!texture->createFrom({next_native_object, 0})) {
+  if (!texture->createFrom({next_native_object, frame.native_layout})) {
+    qWarning("RhiImageRenderer: failed to import native texture object=0x%llx size=%dx%d layout=%d "
+             "backend=%d.",
+             static_cast<unsigned long long>(next_native_object), frame.width, frame.height,
+             frame.native_layout, static_cast<int>(rhi_->backend()));
     destroyResource(texture);
     width         = 0;
     height        = 0;
     native_object = 0;
     return;
   }
+  texture->setNativeLayout(frame.native_layout);
 
   width         = frame.width;
   height        = frame.height;
@@ -952,7 +1188,7 @@ RhiEditViewerSurface::RhiEditViewerSurface(QWidget* parent)
   setAutoFillBackground(false);
   setMouseTracking(false);
 #if defined(Q_OS_WIN)
-  setApi(QRhiWidget::Api::Direct3D11);
+  setApi(QRhiWidget::Api::Direct3D12);
 #elif defined(HAVE_METAL)
   setApi(QRhiWidget::Api::Metal);
 #endif
@@ -1006,15 +1242,27 @@ auto RhiEditViewerSurface::prepareRenderTarget(int width, int height)
   }
 
   std::lock_guard<std::mutex> lock(platform_state_->mutex);
-  const auto& target_slot = platform_state_->targets[platform_state_->render_target_idx];
-  if (target_slot.width != width || target_slot.height != height || !target_slot.texture ||
-      !target_slot.image_array) {
-    platform_state_->render_target_idx = platform_state_->write_idx;
-    const auto& write_slot = platform_state_->targets[platform_state_->render_target_idx];
-    decision.need_resize = write_slot.width != width || write_slot.height != height ||
-                           !write_slot.texture || !write_slot.image_array;
+  const int pending_slot = platform_state_->pending_frame_idx.load(std::memory_order_acquire);
+  std::array<DirectPresentSlotAvailability, kDirectPresentSlotCount> slot_infos{};
+  for (size_t i = 0; i < platform_state_->targets.size(); ++i) {
+    const auto& target = platform_state_->targets[i];
+    slot_infos[i] = DirectPresentSlotAvailability{
+        target.width,
+        target.height,
+        HasDirectPresentResource(target, platform_state_->backend),
+        static_cast<int>(i) == platform_state_->active_idx ||
+            static_cast<int>(i) == pending_slot ||
+            static_cast<int>(i) == platform_state_->ready_slot_idx ||
+            static_cast<int>(i) == platform_state_->mapped_slot_idx,
+    };
   }
-  decision.slot_index = platform_state_->render_target_idx;
+
+  const DirectPresentTargetSelection selection = SelectDirectPresentWriteSlot(
+      slot_infos.data(), slot_infos.size(), platform_state_->write_idx, width, height);
+  platform_state_->write_idx = selection.slot_index;
+  platform_state_->render_target_idx = selection.slot_index;
+  decision.slot_index = selection.slot_index;
+  decision.need_resize = selection.need_resize;
 #else
   (void)width;
   (void)height;
@@ -1052,8 +1300,20 @@ auto RhiEditViewerSurface::mapResourceForWrite() -> FrameWriteMapping {
 
   platform_state_->mutex.lock();
   auto& slot = platform_state_->targets[platform_state_->render_target_idx];
+  if (platform_state_->backend == PlatformState::DirectPresentBackend::D3D12 &&
+      !TransitionD3D12Slot(*platform_state_, slot, D3D12_RESOURCE_STATE_COMMON)) {
+    qWarning("RhiEditViewerSurface: failed to transition D3D12 present target for CUDA write.");
+    platform_state_->mutex.unlock();
+    return {};
+  }
+  if (platform_state_->backend == PlatformState::DirectPresentBackend::D3D12 &&
+      !EnsureD3D12CudaSemaphore(*platform_state_)) {
+    qWarning("RhiEditViewerSurface: failed to prepare D3D12/CUDA synchronization fence.");
+    platform_state_->mutex.unlock();
+    return {};
+  }
   if (!slot.image_array || slot.width <= 0 || slot.height <= 0) {
-    qWarning("RhiEditViewerSurface: no valid D3D11/CUDA present target is available.");
+    qWarning("RhiEditViewerSurface: no valid D3D/CUDA present target is available.");
     platform_state_->mutex.unlock();
     return {};
   }
@@ -1066,6 +1326,13 @@ auto RhiEditViewerSurface::mapResourceForWrite() -> FrameWriteMapping {
   mapping.memory_domain = FrameMemoryDomain::CudaDevice;
   mapping.target_type   = FrameWriteTargetType::CudaArray;
   mapping.native_object = slot.texture_handle;
+  if (platform_state_->backend == PlatformState::DirectPresentBackend::D3D12 &&
+      platform_state_->cuda_signal_semaphore) {
+    slot.pending_cuda_signal_value = ++platform_state_->d3d12_cuda_fence_value;
+    mapping.cuda_signal_semaphore =
+        reinterpret_cast<void*>(platform_state_->cuda_signal_semaphore);
+    mapping.cuda_signal_value = slot.pending_cuda_signal_value;
+  }
   return mapping;
 #else
   return {};
@@ -1080,6 +1347,9 @@ void RhiEditViewerSurface::unmapResource() {
 
   if (platform_state_->mapped_slot_idx >= 0 &&
       IsValidSlotIndex(platform_state_->mapped_slot_idx, platform_state_->targets.size())) {
+    auto& slot = platform_state_->targets[platform_state_->mapped_slot_idx];
+    slot.ready_cuda_signal_value = slot.pending_cuda_signal_value;
+    slot.pending_cuda_signal_value = 0;
     platform_state_->ready_slot_idx = platform_state_->mapped_slot_idx;
   }
   platform_state_->mapped_slot_idx = -1;
@@ -1149,7 +1419,8 @@ auto RhiEditViewerSurface::hasRenderTarget(int slot_index, int width, int height
 
   std::lock_guard<std::mutex> lock(platform_state_->mutex);
   const auto& slot = platform_state_->targets[slot_index];
-  return slot.texture && slot.image_array && slot.width == width && slot.height == height;
+  return HasDirectPresentResource(slot, platform_state_->backend) && slot.width == width &&
+         slot.height == height;
 #else
   (void)slot_index;
   (void)width;
@@ -1162,7 +1433,8 @@ auto RhiEditViewerSurface::ensureRenderTarget(int slot_index, int width, int hei
 #if defined(Q_OS_WIN) && defined(HAVE_CUDA)
   if (!supportsDirectCudaPresent() ||
       !IsValidSlotIndex(slot_index, platform_state_->targets.size()) ||
-      !platform_state_->device || width <= 0 || height <= 0) {
+      platform_state_->backend == PlatformState::DirectPresentBackend::None ||
+      width <= 0 || height <= 0) {
     return false;
   }
 
@@ -1172,52 +1444,118 @@ auto RhiEditViewerSurface::ensureRenderTarget(int slot_index, int width, int hei
 
   std::lock_guard<std::mutex> lock(platform_state_->mutex);
   auto& slot = platform_state_->targets[slot_index];
-  if (slot.texture && slot.image_array && slot.width == width && slot.height == height) {
+  if (HasDirectPresentResource(slot, platform_state_->backend) && slot.width == width &&
+      slot.height == height) {
     return true;
   }
 
   ReleaseDirectPresentSlot(slot);
 
-  D3D11_TEXTURE2D_DESC desc{};
-  desc.Width              = static_cast<UINT>(width);
-  desc.Height             = static_cast<UINT>(height);
-  desc.MipLevels          = 1;
-  desc.ArraySize          = 1;
-  desc.Format             = DXGI_FORMAT_R32G32B32A32_FLOAT;
-  desc.SampleDesc.Count   = 1;
-  desc.Usage              = D3D11_USAGE_DEFAULT;
-  desc.BindFlags          = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
-  desc.CPUAccessFlags     = 0;
-  desc.MiscFlags          = D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_SHARED_NTHANDLE;
+  cudaExternalMemoryHandleType handle_type = cudaExternalMemoryHandleTypeOpaqueWin32;
+  unsigned long long           handle_size = 0;
 
-  if (FAILED(platform_state_->device->CreateTexture2D(&desc, nullptr,
-                                                       slot.texture.GetAddressOf()))) {
-    qWarning("RhiEditViewerSurface: failed to create D3D11 present target %dx%d.", width, height);
-    ReleaseDirectPresentSlot(slot);
+  if (platform_state_->backend == PlatformState::DirectPresentBackend::D3D11) {
+    if (!platform_state_->device) {
+      return false;
+    }
+
+    D3D11_TEXTURE2D_DESC desc{};
+    desc.Width              = static_cast<UINT>(width);
+    desc.Height             = static_cast<UINT>(height);
+    desc.MipLevels          = 1;
+    desc.ArraySize          = 1;
+    desc.Format             = DXGI_FORMAT_R32G32B32A32_FLOAT;
+    desc.SampleDesc.Count   = 1;
+    desc.Usage              = D3D11_USAGE_DEFAULT;
+    desc.BindFlags          = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
+    desc.CPUAccessFlags     = 0;
+    desc.MiscFlags          = D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_SHARED_NTHANDLE;
+
+    if (FAILED(platform_state_->device->CreateTexture2D(&desc, nullptr,
+                                                         slot.texture.GetAddressOf()))) {
+      qWarning("RhiEditViewerSurface: failed to create D3D11 present target %dx%d.", width,
+               height);
+      ReleaseDirectPresentSlot(slot);
+      return false;
+    }
+
+    ComPtr<IDXGIResource1> dxgi_resource;
+    if (FAILED(slot.texture.As(&dxgi_resource)) || !dxgi_resource) {
+      qWarning("RhiEditViewerSurface: failed to query IDXGIResource1 for D3D11 present target.");
+      ReleaseDirectPresentSlot(slot);
+      return false;
+    }
+
+    if (FAILED(dxgi_resource->CreateSharedHandle(nullptr, GENERIC_ALL, nullptr,
+                                                 &slot.shared_handle)) ||
+        !slot.shared_handle) {
+      qWarning("RhiEditViewerSurface: CreateSharedHandle failed for D3D11 present target.");
+      ReleaseDirectPresentSlot(slot);
+      return false;
+    }
+
+    handle_type = cudaExternalMemoryHandleTypeD3D11Resource;
+    handle_size = static_cast<unsigned long long>(width) *
+                  static_cast<unsigned long long>(height) *
+                  static_cast<unsigned long long>(kRgba32fPixelBytes);
+  } else if (platform_state_->backend == PlatformState::DirectPresentBackend::D3D12) {
+    if (!platform_state_->d3d12_device) {
+      return false;
+    }
+
+    D3D12_HEAP_PROPERTIES heap_props{};
+    heap_props.Type                 = D3D12_HEAP_TYPE_DEFAULT;
+    heap_props.CPUPageProperty      = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
+    heap_props.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
+    heap_props.CreationNodeMask     = 1;
+    heap_props.VisibleNodeMask      = 1;
+
+    D3D12_RESOURCE_DESC desc{};
+    desc.Dimension        = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+    desc.Alignment        = 0;
+    desc.Width            = static_cast<UINT64>(width);
+    desc.Height           = static_cast<UINT>(height);
+    desc.DepthOrArraySize = 1;
+    desc.MipLevels        = 1;
+    desc.Format           = DXGI_FORMAT_R32G32B32A32_FLOAT;
+    desc.SampleDesc.Count = 1;
+    desc.Layout           = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+    desc.Flags            = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+
+    D3D12_CLEAR_VALUE clear_value{};
+    clear_value.Format   = DXGI_FORMAT_R32G32B32A32_FLOAT;
+    clear_value.Color[0] = 0.0f;
+    clear_value.Color[1] = 0.0f;
+    clear_value.Color[2] = 0.0f;
+    clear_value.Color[3] = 1.0f;
+    const HRESULT create_hr = platform_state_->d3d12_device->CreateCommittedResource(
+        &heap_props, D3D12_HEAP_FLAG_SHARED, &desc, D3D12_RESOURCE_STATE_COMMON, &clear_value,
+        IID_PPV_ARGS(slot.resource.GetAddressOf()));
+    if (FAILED(create_hr)) {
+      qWarning("RhiEditViewerSurface: failed to create D3D12 present target %dx%d (hr=0x%08lx).",
+               width, height, static_cast<unsigned long>(create_hr));
+      ReleaseDirectPresentSlot(slot);
+      return false;
+    }
+
+    if (FAILED(platform_state_->d3d12_device->CreateSharedHandle(
+            slot.resource.Get(), nullptr, GENERIC_ALL, nullptr, &slot.shared_handle)) ||
+        !slot.shared_handle) {
+      qWarning("RhiEditViewerSurface: CreateSharedHandle failed for D3D12 present target.");
+      ReleaseDirectPresentSlot(slot);
+      return false;
+    }
+
+    const D3D12_RESOURCE_ALLOCATION_INFO allocation_info =
+        platform_state_->d3d12_device->GetResourceAllocationInfo(0, 1, &desc);
+    handle_type = cudaExternalMemoryHandleTypeD3D12Resource;
+    handle_size = allocation_info.SizeInBytes;
+  } else {
     return false;
   }
 
-  ComPtr<IDXGIResource1> dxgi_resource;
-  if (FAILED(slot.texture.As(&dxgi_resource)) || !dxgi_resource) {
-    qWarning("RhiEditViewerSurface: failed to query IDXGIResource1 for D3D11 present target.");
-    ReleaseDirectPresentSlot(slot);
-    return false;
-  }
-
-  if (FAILED(dxgi_resource->CreateSharedHandle(nullptr, GENERIC_ALL, nullptr, &slot.shared_handle)) ||
-      !slot.shared_handle) {
-    qWarning("RhiEditViewerSurface: CreateSharedHandle failed for D3D11 present target.");
-    ReleaseDirectPresentSlot(slot);
-    return false;
-  }
-
-  cudaExternalMemoryHandleDesc handle_desc{};
-  handle_desc.type                = cudaExternalMemoryHandleTypeD3D11Resource;
-  handle_desc.handle.win32.handle = slot.shared_handle;
-  handle_desc.size                = static_cast<unsigned long long>(width) *
-                     static_cast<unsigned long long>(height) *
-                     static_cast<unsigned long long>(kRgba32fPixelBytes);
-  handle_desc.flags               = cudaExternalMemoryDedicated;
+  const cudaExternalMemoryHandleDesc handle_desc =
+      MakeDedicatedCudaExternalMemoryHandleDesc(slot.shared_handle, handle_type, handle_size);
   const cudaError_t import_err =
       cudaImportExternalMemory(&slot.external_memory, &handle_desc);
   if (import_err != cudaSuccess) {
@@ -1252,9 +1590,12 @@ auto RhiEditViewerSurface::ensureRenderTarget(int slot_index, int width, int hei
     return false;
   }
 
-  slot.width          = width;
-  slot.height         = height;
-  slot.texture_handle = reinterpret_cast<std::uintptr_t>(slot.texture.Get());
+  slot.width  = width;
+  slot.height = height;
+  slot.texture_handle =
+      platform_state_->backend == PlatformState::DirectPresentBackend::D3D12
+          ? reinterpret_cast<std::uintptr_t>(slot.resource.Get())
+          : reinterpret_cast<std::uintptr_t>(slot.texture.Get());
   {
     size_t free_bytes  = 0;
     size_t total_bytes = 0;
@@ -1262,10 +1603,13 @@ auto RhiEditViewerSurface::ensureRenderTarget(int slot_index, int width, int hei
       const size_t used_bytes = total_bytes - free_bytes;
       const size_t slot_bytes =
           static_cast<size_t>(width) * static_cast<size_t>(height) * kRgba32fPixelBytes;
-      qInfo("[VRAM] D3D11 present slot[%d] allocated (%dx%d, %zu MB): free=%zu MB / total=%zu MB "
+      const char* backend_name =
+          platform_state_->backend == PlatformState::DirectPresentBackend::D3D12 ? "D3D12"
+                                                                                 : "D3D11";
+      qInfo("[VRAM] %s present slot[%d] allocated (%dx%d, %zu MB): free=%zu MB / total=%zu MB "
             "(used=%zu MB)",
-            slot_index, width, height, slot_bytes >> 20, free_bytes >> 20, total_bytes >> 20,
-            used_bytes >> 20);
+            backend_name, slot_index, width, height, slot_bytes >> 20, free_bytes >> 20,
+            total_bytes >> 20, used_bytes >> 20);
     }
   }
   return true;
@@ -1284,6 +1628,9 @@ void RhiEditViewerSurface::initialize(QRhiCommandBuffer* command_buffer) {
 #if defined(Q_OS_WIN) && defined(HAVE_CUDA)
   platform_state_->supports_direct_present = false;
   platform_state_->cuda_device             = -1;
+  platform_state_->device                  = nullptr;
+  platform_state_->d3d12_device            = nullptr;
+  platform_state_->backend                 = PlatformState::DirectPresentBackend::None;
   const char* backend_name = "<none>";
   if (rhi()) {
     switch (rhi()->backend()) {
@@ -1307,13 +1654,36 @@ void RhiEditViewerSurface::initialize(QRhiCommandBuffer* command_buffer) {
     bind_ok = platform_state_->device && platform_state_->cuda_device >= 0 &&
               BindCudaDeviceOnCurrentThread(platform_state_->cuda_device, "initialize");
     platform_state_->supports_direct_present = bind_ok;
+    if (bind_ok) {
+      platform_state_->backend = PlatformState::DirectPresentBackend::D3D11;
+    }
+  } else if (rhi() && rhi()->backend() == QRhi::D3D12) {
+    const auto* native_handles =
+        static_cast<const QRhiD3D12NativeHandles*>(rhi()->nativeHandles());
+    platform_state_->d3d12_device =
+        native_handles ? static_cast<ID3D12Device*>(native_handles->dev) : nullptr;
+    platform_state_->d3d12_queue =
+        native_handles ? static_cast<ID3D12CommandQueue*>(native_handles->commandQueue) : nullptr;
+    platform_state_->cuda_device = platform_state_->d3d12_device
+                                       ? ResolveCudaDeviceForD3D12Device(
+                                             platform_state_->d3d12_device)
+                                       : -1;
+    bind_ok = platform_state_->d3d12_device && platform_state_->d3d12_queue &&
+              platform_state_->cuda_device >= 0 &&
+              BindCudaDeviceOnCurrentThread(platform_state_->cuda_device, "initialize");
+    platform_state_->supports_direct_present = bind_ok;
+    if (bind_ok) {
+      platform_state_->backend = PlatformState::DirectPresentBackend::D3D12;
+    }
   }
-  qInfo("[DirectPresent] RHI backend=%s, d3d11_device=%p, cuda_device=%d, bind_ok=%d, "
-        "supports_direct_present=%d",
-        backend_name, static_cast<void*>(platform_state_->device), platform_state_->cuda_device,
+  qInfo("[DirectPresent] RHI backend=%s, d3d11_device=%p, d3d12_device=%p, d3d12_queue=%p, "
+        "cuda_device=%d, bind_ok=%d, supports_direct_present=%d",
+        backend_name, static_cast<void*>(platform_state_->device),
+        static_cast<void*>(platform_state_->d3d12_device),
+        static_cast<void*>(platform_state_->d3d12_queue), platform_state_->cuda_device,
         bind_ok ? 1 : 0, platform_state_->supports_direct_present ? 1 : 0);
 #else
-  qInfo("[DirectPresent] CUDA/D3D11 interop unavailable at compile time (HAVE_CUDA/Q_OS_WIN not set).");
+  qInfo("[DirectPresent] CUDA/D3D interop unavailable at compile time (HAVE_CUDA/Q_OS_WIN not set).");
 #endif
 }
 
@@ -1334,7 +1704,34 @@ void RhiEditViewerSurface::render(QRhiCommandBuffer* command_buffer) {
       if (IsValidSlotIndex(pending_slot, platform_state_->targets.size())) {
         slot_to_show                = pending_slot;
         platform_state_->active_idx = pending_slot;
-        platform_state_->write_idx  = 1 - pending_slot;
+        platform_state_->targets[pending_slot].active_cuda_signal_value =
+            platform_state_->targets[pending_slot].ready_cuda_signal_value;
+        platform_state_->targets[pending_slot].ready_cuda_signal_value = 0;
+        std::array<DirectPresentSlotAvailability, kDirectPresentSlotCount> slot_infos{};
+        const int queued_pending_slot =
+            platform_state_->pending_frame_idx.load(std::memory_order_acquire);
+        for (size_t i = 0; i < platform_state_->targets.size(); ++i) {
+          const auto& target = platform_state_->targets[i];
+          slot_infos[i] = DirectPresentSlotAvailability{
+              target.width,
+              target.height,
+              HasDirectPresentResource(target, platform_state_->backend),
+              static_cast<int>(i) == platform_state_->active_idx ||
+                  static_cast<int>(i) == queued_pending_slot ||
+                  static_cast<int>(i) == platform_state_->ready_slot_idx ||
+                  static_cast<int>(i) == platform_state_->mapped_slot_idx,
+          };
+        }
+        const int preferred_write_slot =
+            (pending_slot + 1) % static_cast<int>(platform_state_->targets.size());
+        const int target_width =
+            slot_to_show >= 0 ? platform_state_->targets[slot_to_show].width : 0;
+        const int target_height =
+            slot_to_show >= 0 ? platform_state_->targets[slot_to_show].height : 0;
+        platform_state_->write_idx = SelectDirectPresentWriteSlot(
+                                         slot_infos.data(), slot_infos.size(), preferred_write_slot,
+                                         target_width, target_height)
+                                         .slot_index;
         if (platform_state_->pending_presentation_mode_valid.exchange(false,
                                                                       std::memory_order_acq_rel)) {
           platform_state_->active_presentation_mode.store(
@@ -1348,11 +1745,30 @@ void RhiEditViewerSurface::render(QRhiCommandBuffer* command_buffer) {
       }
 
       const auto& slot = platform_state_->targets[slot_to_show];
-      if (slot.texture && slot.width > 0 && slot.height > 0 &&
+      if (HasDirectPresentResource(slot, platform_state_->backend) && slot.width > 0 &&
+          slot.height > 0 &&
           IsValidSlotIndex(pending_slot, platform_state_->targets.size())) {
+        if (platform_state_->backend == PlatformState::DirectPresentBackend::D3D12 &&
+            platform_state_->d3d12_queue && platform_state_->d3d12_cuda_fence &&
+            slot.active_cuda_signal_value != 0) {
+          const HRESULT wait_hr = platform_state_->d3d12_queue->Wait(
+              platform_state_->d3d12_cuda_fence.Get(), slot.active_cuda_signal_value);
+          if (FAILED(wait_hr)) {
+            qWarning("RhiEditViewerSurface: D3D12 queue wait for CUDA fence value %llu failed "
+                     "(hr=0x%08lx).",
+                     static_cast<unsigned long long>(slot.active_cuda_signal_value),
+                     static_cast<unsigned long>(wait_hr));
+          }
+        }
         direct_present_frame.width             = slot.width;
         direct_present_frame.height            = slot.height;
         direct_present_frame.texture_handle    = slot.texture_handle;
+#if defined(Q_OS_WIN)
+        direct_present_frame.native_layout =
+            platform_state_->backend == PlatformState::DirectPresentBackend::D3D12
+                ? static_cast<int>(D3D12_RESOURCE_STATE_COMMON)
+                : 0;
+#endif
         direct_present_frame.presentation_mode =
             platform_state_->active_presentation_mode.load(std::memory_order_acquire);
         direct_present_frame.preview_metadata = platform_state_->active_preview_metadata;
@@ -1368,6 +1784,17 @@ void RhiEditViewerSurface::render(QRhiCommandBuffer* command_buffer) {
 
   renderer_.render(command_buffer, renderTarget(), view_state_,
                    ViewportWidgetInfo{width(), height(), static_cast<float>(devicePixelRatioF())});
+
+#if defined(Q_OS_WIN) && defined(HAVE_CUDA)
+  if (supportsDirectCudaPresent() &&
+      platform_state_->backend == PlatformState::DirectPresentBackend::D3D12) {
+    std::lock_guard<std::mutex> lock(platform_state_->mutex);
+    auto& slot = platform_state_->targets[platform_state_->active_idx];
+    if (slot.resource) {
+      slot.d3d12_state = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+    }
+  }
+#endif
 }
 
 void RhiEditViewerSurface::releaseResources() {
@@ -1406,6 +1833,27 @@ void RhiEditViewerSurface::releasePlatformTargets() {
     ReleaseDirectPresentSlot(slot);
   }
   platform_state_->device                         = nullptr;
+  platform_state_->d3d12_device                   = nullptr;
+  platform_state_->d3d12_queue                    = nullptr;
+  platform_state_->d3d12_transition_list.Reset();
+  platform_state_->d3d12_transition_allocator.Reset();
+  platform_state_->d3d12_transition_fence.Reset();
+  platform_state_->d3d12_cuda_fence.Reset();
+  if (platform_state_->cuda_signal_semaphore) {
+    cudaDestroyExternalSemaphore(platform_state_->cuda_signal_semaphore);
+    platform_state_->cuda_signal_semaphore = nullptr;
+  }
+  if (platform_state_->d3d12_cuda_fence_shared_handle) {
+    CloseHandle(platform_state_->d3d12_cuda_fence_shared_handle);
+    platform_state_->d3d12_cuda_fence_shared_handle = nullptr;
+  }
+  if (platform_state_->d3d12_transition_event) {
+    CloseHandle(platform_state_->d3d12_transition_event);
+    platform_state_->d3d12_transition_event = nullptr;
+  }
+  platform_state_->d3d12_transition_fence_value   = 0;
+  platform_state_->d3d12_cuda_fence_value         = 0;
+  platform_state_->backend                        = PlatformState::DirectPresentBackend::None;
   platform_state_->cuda_device                    = -1;
   platform_state_->mapped_slot_idx                = -1;
   platform_state_->ready_slot_idx                 = -1;

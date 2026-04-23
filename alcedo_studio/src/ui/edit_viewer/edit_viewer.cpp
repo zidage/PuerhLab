@@ -24,7 +24,9 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 #include <mutex>
+#include <optional>
 
 #if defined(ALCEDO_HAS_RHI_VIEWER) && defined(Q_OS_WIN) && defined(HAVE_CUDA)
 #ifndef NOMINMAX
@@ -33,7 +35,6 @@
 #include <dxgi.h>
 #include <wrl/client.h>
 
-#include <cuda_d3d11_interop.h>
 #include <cuda_runtime_api.h>
 #endif
 
@@ -65,7 +66,30 @@ auto DescribeDxgiAdapter(IDXGIAdapter1* adapter) -> QString {
   return QString::fromWCharArray(desc.Description);
 }
 
-void ConfigureQtD3D11AdapterForCurrentCudaDevice() {
+auto GetCudaDeviceLuid(int cuda_device) -> std::optional<LUID> {
+  if (cuda_device < 0) {
+    return std::nullopt;
+  }
+
+  cudaDeviceProp prop{};
+  const cudaError_t prop_err = cudaGetDeviceProperties(&prop, cuda_device);
+  if (prop_err != cudaSuccess) {
+    qWarning("QtEditViewer: cudaGetDeviceProperties failed before selecting Qt D3D adapter: %s",
+             cudaGetErrorString(prop_err));
+    return std::nullopt;
+  }
+
+  LUID luid{};
+  static_assert(sizeof(luid) == sizeof(prop.luid));
+  std::memcpy(&luid, prop.luid, sizeof(luid));
+  return luid;
+}
+
+auto LuidMatches(const LUID& lhs, const LUID& rhs) -> bool {
+  return lhs.LowPart == rhs.LowPart && lhs.HighPart == rhs.HighPart;
+}
+
+void ConfigureQtD3DAdapterForCurrentCudaDevice() {
   static std::once_flag once;
   std::call_once(once, []() {
     if (!qEnvironmentVariableIsEmpty("QT_D3D_ADAPTER_INDEX")) {
@@ -80,9 +104,14 @@ void ConfigureQtD3D11AdapterForCurrentCudaDevice() {
       return;
     }
 
+    const auto cuda_luid = GetCudaDeviceLuid(current_cuda_device);
+    if (!cuda_luid) {
+      return;
+    }
+
     ComPtr<IDXGIFactory1> factory;
     if (FAILED(CreateDXGIFactory1(IID_PPV_ARGS(factory.GetAddressOf())))) {
-      qWarning("QtEditViewer: CreateDXGIFactory1 failed while selecting Qt D3D11 adapter.");
+      qWarning("QtEditViewer: CreateDXGIFactory1 failed while selecting Qt D3D adapter.");
       return;
     }
 
@@ -96,20 +125,19 @@ void ConfigureQtD3D11AdapterForCurrentCudaDevice() {
         continue;
       }
 
-      int adapter_cuda_device = -1;
-      const cudaError_t adapter_err = cudaD3D11GetDevice(&adapter_cuda_device, adapter.Get());
-      if (adapter_err != cudaSuccess || adapter_cuda_device != current_cuda_device) {
+      DXGI_ADAPTER_DESC1 desc{};
+      if (FAILED(adapter->GetDesc1(&desc)) || !LuidMatches(desc.AdapterLuid, *cuda_luid)) {
         continue;
       }
 
       qputenv("QT_D3D_ADAPTER_INDEX", QByteArray::number(adapter_index));
-      qInfo("QtEditViewer: using DXGI adapter %u ('%s') for Qt D3D11 to match CUDA device %d.",
+      qInfo("QtEditViewer: using DXGI adapter %u ('%s') for Qt D3D to match CUDA device %d.",
             adapter_index, qPrintable(DescribeDxgiAdapter(adapter.Get())), current_cuda_device);
       return;
     }
 
     qWarning("QtEditViewer: no DXGI adapter matched current CUDA device %d. "
-             "Qt D3D11 may select an incompatible adapter for CUDA interop.",
+             "Qt D3D may select an incompatible adapter for CUDA interop.",
              current_cuda_device);
   });
 }
@@ -155,7 +183,7 @@ QtEditViewer::QtEditViewer(QWidget* parent) : QWidget(parent) {
 
 #ifdef ALCEDO_HAS_RHI_VIEWER
 #if defined(Q_OS_WIN) && defined(HAVE_CUDA)
-  ConfigureQtD3D11AdapterForCurrentCudaDevice();
+  ConfigureQtD3DAdapterForCurrentCudaDevice();
 #endif
   surface_ = std::make_unique<RhiEditViewerSurface>(this);
   render_target_surface_ = dynamic_cast<IEditViewerRenderTargetSurface*>(surface_.get());

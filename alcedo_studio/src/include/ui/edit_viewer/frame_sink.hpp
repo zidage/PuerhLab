@@ -80,6 +80,8 @@ struct FrameWriteMapping {
   FrameMemoryDomain memory_domain = FrameMemoryDomain::HostVisible;
   FrameWriteTargetType target_type = FrameWriteTargetType::LinearBuffer;
   std::uintptr_t    native_object = 0;
+  void*             cuda_signal_semaphore = nullptr;
+  std::uint64_t     cuda_signal_value = 0;
 
   explicit operator bool() const { return data != nullptr || image_array != nullptr; }
 };

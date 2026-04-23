@@ -30,6 +30,7 @@ struct ImportedTextureFrame {
   int                   width              = 0;
   int                   height             = 0;
   std::uintptr_t        texture_handle     = 0;
+  int                   native_layout      = 0;
   FramePresentationMode presentation_mode  = FramePresentationMode::FullFrame;
   FramePreviewMetadata  preview_metadata   = {};
 
