@@ -363,6 +363,15 @@ target_include_directories(MetadataExtractorTest PUBLIC ${ALCEDO_INCLUDE_DIR})
 target_link_libraries(MetadataExtractorTest PRIVATE GTest::gtest_main Image Operators)
 gtest_discover_tests(MetadataExtractorTest TEST_PREFIX "MetadataExtractorTest.")
 
+add_executable(BatchImportDngMetadataTest image/batch_import_dng_metadata_test.cpp)
+target_include_directories(BatchImportDngMetadataTest PUBLIC ${ALCEDO_INCLUDE_DIR})
+target_link_libraries(BatchImportDngMetadataTest PRIVATE GTest::gtest_main Image Operators)
+gtest_discover_tests(BatchImportDngMetadataTest TEST_PREFIX "BatchImportDngMetadataTest.")
+
+add_executable(DngMetadataBenchmark image/dng_metadata_benchmark.cpp)
+target_include_directories(DngMetadataBenchmark PUBLIC ${ALCEDO_INCLUDE_DIR})
+target_link_libraries(DngMetadataBenchmark PRIVATE OpenImageIO::OpenImageIO Exiv2 libraw::raw_r)
+
 add_executable(ExportIccProfileResolverTest io/export_icc_profile_resolver_test.cpp)
 target_include_directories(ExportIccProfileResolverTest PUBLIC ${ALCEDO_INCLUDE_DIR})
 target_link_libraries(ExportIccProfileResolverTest PRIVATE GTest::gtest_main ExportIccProfileResolver)

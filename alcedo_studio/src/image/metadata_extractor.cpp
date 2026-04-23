@@ -4,6 +4,7 @@
 
 #include "image/metadata_extractor.hpp"
 
+#include <OpenImageIO/imageio.h>
 #include <libraw/libraw.h>
 
 #include <algorithm>
@@ -30,6 +31,8 @@
 
 namespace alcedo {
 namespace {
+OIIO_NAMESPACE_USING
+
 auto RationalToFloat(const Exiv2::Rational& value) -> float {
   if (value.second == 0) {
     return 0.0f;
@@ -112,6 +115,11 @@ auto BuildUnsupportedNikonHeMessage(const image_path_t& image_path,
 auto ResolveCropFactorHint(float focal_mm, float focal_35mm_mm) -> float {
   if (!IsFinitePositive(focal_mm) || !IsFinitePositive(focal_35mm_mm)) return 0.0f;
   return focal_35mm_mm / focal_mm;
+}
+
+auto PathToUtf8(const std::filesystem::path& path) -> std::string {
+  const auto u8 = path.u8string();
+  return std::string(reinterpret_cast<const char*>(u8.data()), u8.size());
 }
 
 // ---------------------------------------------------------------------------
@@ -837,6 +845,35 @@ auto HasMeaningfulCameraModelToken(const std::string& camera_model) -> bool {
   return normalized.find(' ') != std::string::npos;
 }
 
+auto ShouldPreferUniqueCameraModel(const std::string& current_model,
+                                   const std::string& exif_model,
+                                   const std::string& unique_camera_model) -> bool {
+  if (unique_camera_model.empty()) {
+    return false;
+  }
+
+  if (!HasMeaningfulCameraModelToken(current_model)) {
+    return true;
+  }
+
+  const std::string current_compact = CompactCameraName(current_model);
+  const std::string exif_compact    = CompactCameraName(exif_model);
+  const std::string unique_compact  = CompactCameraName(unique_camera_model);
+
+  if (current_compact.empty() || exif_compact.empty() || unique_compact.empty()) {
+    return false;
+  }
+
+  const bool current_matches_exif =
+      current_model == exif_model || current_compact == exif_compact;
+  if (!current_matches_exif) {
+    return false;
+  }
+
+  return unique_compact.find(exif_compact) != std::string::npos ||
+         exif_compact.find(unique_compact) != std::string::npos;
+}
+
 auto HasEmbeddedDngProfileTables(const Exiv2::ExifData& exif_data) -> bool {
   for (const auto& datum : exif_data) {
     const std::string key = datum.key();
@@ -859,8 +896,7 @@ void PopulateDngColorMetadataFromExif(const Exiv2::ExifData& exif_data, RawRunti
   if (ctx.camera_make_.empty() && !exif_make.empty()) {
     ctx.camera_make_ = exif_make;
   }
-  if ((!HasMeaningfulCameraModelToken(ctx.camera_model_) || ctx.camera_model_ == exif_model) &&
-      !unique_camera_model.empty()) {
+  if (ShouldPreferUniqueCameraModel(ctx.camera_model_, exif_model, unique_camera_model)) {
     ctx.camera_model_ = unique_camera_model;
   } else if (ctx.camera_model_.empty() && !exif_model.empty()) {
     ctx.camera_model_ = exif_model;
@@ -929,6 +965,186 @@ void PopulateDngColorMetadataFromExif(const Exiv2::ExifData& exif_data, RawRunti
         std::isfinite(ctx.color_matrix_1_cct_) && std::isfinite(ctx.color_matrix_2_cct_) &&
         ctx.color_matrix_1_cct_ > 0.0 && ctx.color_matrix_2_cct_ > 0.0;
   }
+}
+
+auto PopulateDisplayDimensionsFromOiio(const image_path_t& image_path,
+                                       ExifDisplayMetaData& display) -> bool {
+  try {
+    auto input = ImageInput::open(PathToUtf8(image_path));
+    if (!input) {
+      return false;
+    }
+
+    const ImageSpec& spec = input->spec();
+    const int        width =
+        spec.full_width > 0 ? spec.full_width : spec.width;
+    const int        height =
+        spec.full_height > 0 ? spec.full_height : spec.height;
+    if (width <= 0 || height <= 0) {
+      return false;
+    }
+
+    display.width_  = static_cast<uint32_t>(width);
+    display.height_ = static_cast<uint32_t>(height);
+    return true;
+  } catch (...) {
+    return false;
+  }
+}
+
+void PopulateDngMetadataHintFromOpenLibRaw(LibRaw& raw_processor, ExifDisplayMetaData& display,
+                                           RawRuntimeColorContext& ctx) {
+  const std::string raw_make       = TrimAscii(raw_processor.imgdata.idata.make);
+  const std::string raw_model      = TrimAscii(raw_processor.imgdata.idata.model);
+  const std::string raw_lens_make  = TrimTrailingZeroPadded(raw_processor.imgdata.lens.LensMake);
+  std::string       raw_lens_model = TrimTrailingZeroPadded(raw_processor.imgdata.lens.Lens);
+  if (raw_lens_model.empty()) {
+    raw_lens_model = TrimTrailingZeroPadded(raw_processor.imgdata.lens.makernotes.Lens);
+  }
+
+  if (!raw_make.empty()) {
+    ctx.camera_make_ = raw_make;
+  }
+  if (!raw_model.empty()) {
+    ctx.camera_model_ = raw_model;
+  }
+  if (!raw_lens_make.empty()) {
+    ctx.lens_make_ = raw_lens_make;
+  }
+  if (!raw_lens_model.empty()) {
+    ctx.lens_model_ = raw_lens_model;
+  }
+
+  if (!ctx.camera_make_.empty()) {
+    display.make_ = ctx.camera_make_;
+  }
+  if (!ctx.camera_model_.empty()) {
+    display.model_ = ctx.camera_model_;
+  }
+  if (!ctx.lens_make_.empty()) {
+    display.lens_make_ = ctx.lens_make_;
+  }
+  if (!ctx.lens_model_.empty()) {
+    display.lens_ = ctx.lens_model_;
+  }
+
+  const float focal_length_mm = raw_processor.imgdata.other.focal_len;
+  if (IsFinitePositive(focal_length_mm)) {
+    ctx.focal_length_mm_ = focal_length_mm;
+    display.focal_       = focal_length_mm;
+  }
+
+  const float aperture_f_number = raw_processor.imgdata.other.aperture;
+  if (IsFinitePositive(aperture_f_number)) {
+    ctx.aperture_f_number_ = aperture_f_number;
+    display.aperture_      = aperture_f_number;
+  }
+
+  const float focal_35mm_mm =
+      raw_processor.imgdata.lens.FocalLengthIn35mmFormat > 0
+          ? static_cast<float>(raw_processor.imgdata.lens.FocalLengthIn35mmFormat)
+          : 0.0f;
+  if (IsFinitePositive(focal_35mm_mm)) {
+    ctx.focal_35mm_mm_ = focal_35mm_mm;
+    display.focal_35mm_ = focal_35mm_mm;
+  }
+
+  const auto iso_speed = static_cast<uint64_t>(raw_processor.imgdata.other.iso_speed);
+  if (iso_speed > 0) {
+    display.iso_ = iso_speed;
+  }
+
+  const float shutter_sec = raw_processor.imgdata.other.shutter;
+  if (std::isfinite(shutter_sec) && shutter_sec > 0.0f) {
+    if (shutter_sec >= 1.0f) {
+      display.shutter_speed_ = {static_cast<int>(shutter_sec), 1};
+    } else {
+      display.shutter_speed_ = {1, static_cast<int>(1.0f / shutter_sec + 0.5f)};
+    }
+  }
+
+  if (raw_processor.imgdata.sizes.width > 0) {
+    display.width_ = static_cast<uint32_t>(raw_processor.imgdata.sizes.width);
+  }
+  if (raw_processor.imgdata.sizes.height > 0) {
+    display.height_ = static_cast<uint32_t>(raw_processor.imgdata.sizes.height);
+  }
+
+  const time_t ts = raw_processor.imgdata.other.timestamp;
+  if (ts > 0) {
+    struct tm t {};
+#if defined(_WIN32)
+    gmtime_s(&t, &ts);
+#else
+    gmtime_r(&ts, &t);
+#endif
+    char buf[64] = {};
+    std::strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", &t);
+    display.date_time_str_ = buf;
+  }
+}
+
+auto ExtractDngMetadataToImageFast(const image_path_t& image_path, Image& image) -> bool {
+  Exiv2::Image::UniquePtr exif_image;
+  try {
+    exif_image = MetadataExtractor::ExtractEXIF(image_path);
+  } catch (...) {
+    return false;
+  }
+
+  if (!exif_image || exif_image->exifData().empty()) {
+    return false;
+  }
+
+  ExifDisplayMetaData  display = MetadataExtractor::EXIFToDisplayMetaData(exif_image);
+  RawRuntimeColorContext ctx{};
+
+  // LibRaw open_file is cheap and preserves the same camera/model strings
+  // the old import path used, without paying the DNG unpack cost.
+  auto raw_processor = std::make_unique<LibRaw>();
+#if defined(_WIN32)
+  const int open_ret = raw_processor->open_file(image_path.wstring().c_str());
+#else
+  const int open_ret = raw_processor->open_file(image_path.string().c_str());
+#endif
+  if (open_ret == LIBRAW_SUCCESS) {
+    PopulateDngMetadataHintFromOpenLibRaw(*raw_processor, display, ctx);
+  }
+  raw_processor->recycle();
+
+  MetadataExtractor::MergeMetadataHint(&display, ctx);
+
+  PopulateDngColorMetadataFromExif(exif_image->exifData(), ctx);
+  if (!ctx.color_matrices_valid_) {
+    ctx.color_matrices_valid_ = LookupCameraColorMatrices(
+        ctx.camera_make_, ctx.camera_model_, ctx.color_matrix_1_, ctx.color_matrix_2_);
+  }
+
+  ctx.crop_factor_hint_ = ResolveCropFactorHint(ctx.focal_length_mm_, ctx.focal_35mm_mm_);
+  ctx.lens_metadata_valid_ =
+      !ctx.lens_model_.empty() && std::isfinite(ctx.focal_length_mm_) && ctx.focal_length_mm_ > 0.0f;
+
+  ctx.valid_                  = true;
+  ctx.output_in_camera_space_ = true;
+
+  display.make_             = ctx.camera_make_;
+  display.model_            = ctx.camera_model_;
+  display.lens_make_        = ctx.lens_make_;
+  display.lens_             = ctx.lens_model_;
+  display.focal_            = ctx.focal_length_mm_;
+  display.aperture_         = ctx.aperture_f_number_;
+  display.focus_distance_m_ = ctx.focus_distance_m_;
+  display.focal_35mm_       = ctx.focal_35mm_mm_;
+
+  if (display.width_ == 0 || display.height_ == 0) {
+    // Exiv2 often reports the embedded preview dimensions for DNG. Use OIIO
+    // only as a last-resort size probe if LibRaw open_file did not expose it.
+    PopulateDisplayDimensionsFromOiio(image_path, display);
+  }
+
+  image.SetExifDisplayMetaData(std::move(display));
+  image.SetRawColorContext(std::move(ctx));
+  return true;
 }
 
 /// Populate a RawRuntimeColorContext directly from libraw's open-but-not-processed state.
@@ -1244,6 +1460,10 @@ void MetadataExtractor::ExtractEXIF_ToImage(const image_path_t& image_path, Imag
 
 auto MetadataExtractor::ExtractRawMetadata_ToImage(const image_path_t& image_path, Image& image)
     -> bool {
+  if (IsDngExtension(image_path) && ExtractDngMetadataToImageFast(image_path, image)) {
+    return true;
+  }
+
   // LibRaw is large enough to blow worker-thread stacks under ASan if allocated locally.
   auto raw_processor = std::make_unique<LibRaw>();
 

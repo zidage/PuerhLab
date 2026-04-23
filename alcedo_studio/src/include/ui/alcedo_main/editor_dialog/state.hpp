@@ -109,7 +109,7 @@ struct OdtState {
 // ---------------------------------------------------------------------------
 
 struct AdjustmentState {
-  float                exposure_                    = 2.0f;
+  float                exposure_                    = 1.5f;
   float                contrast_                    = 0.0f;
   float                saturation_                  = 30.0f;
   bool                 raw_highlights_reconstruct_  = true;

@@ -341,14 +341,15 @@ else()
 endif()
 
 # Image Base
-def_library(Image 
+def_library(Image
     SOURCES image/image.cpp 
     image/metadata_extractor.cpp
     PUBLIC_DEPS ImageBuffer
 )
+target_link_libraries(Image PRIVATE OpenImageIO::OpenImageIO)
 
 # Image Pool
-def_library(ImagePool 
+def_library(ImagePool
     SOURCES storage/image_pool/image_pool_manager.cpp
     PRIVATE_DEPS Image
 )

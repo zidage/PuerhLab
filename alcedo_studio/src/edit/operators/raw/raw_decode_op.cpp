@@ -5,6 +5,7 @@
 #include "edit/operators/raw/raw_decode_op.hpp"
 
 #include <chrono>
+#include <libraw/libraw_const.h>
 #include <opencv2/core/hal/interface.h>
 #include <opencv2/imgproc.hpp>
 
@@ -50,6 +51,36 @@ void AppendProfileMs(DeferredCpuLog& log, const char* label, const ProfileClock:
   log.Add(oss.str());
 }
 
+void AppendLibRawUnpackRouteLog(DeferredCpuLog& log, LibRaw& raw_processor) {
+  if (const char* decoder_name = raw_processor.unpack_function_name();
+      decoder_name != nullptr && decoder_name[0] != '\0') {
+    log.Add(std::string("RAW CPU decoder=") + decoder_name);
+  }
+
+  const auto warnings = raw_processor.imgdata.process_warnings;
+  if ((warnings & LIBRAW_WARN_RAWSPEED3_PROCESSED) != 0) {
+    log.Add("RAW CPU unpack_route=rawspeed3");
+    return;
+  }
+  if ((warnings & LIBRAW_WARN_RAWSPEED_PROCESSED) != 0) {
+    log.Add("RAW CPU unpack_route=rawspeed");
+    return;
+  }
+  if ((warnings & LIBRAW_WARN_DNGSDK_PROCESSED) != 0) {
+    log.Add("RAW CPU unpack_route=dngsdk");
+    return;
+  }
+
+  if ((warnings & LIBRAW_WARN_RAWSPEED3_UNSUPPORTED) != 0) {
+    log.Add("RAW CPU rawspeed3=unsupported");
+  }
+  if ((warnings & LIBRAW_WARN_RAWSPEED_UNSUPPORTED) != 0) {
+    log.Add("RAW CPU rawspeed=unsupported");
+  }
+
+  log.Add("RAW CPU unpack_route=libraw");
+}
+
 auto RawGpuBackendToString(RawGpuBackend backend) -> const char* {
   switch (backend) {
     case RawGpuBackend::GPU:
@@ -77,6 +108,7 @@ void RawDecodeOp::Apply(std::shared_ptr<ImageBuffer> input) {
   }
 
   raw_processor->imgdata.params.output_bps = 16;
+  raw_processor->imgdata.rawparams.use_rawspeed = 1;
   ImageBuffer output;
   latest_runtime_context_ = {};
 
@@ -85,6 +117,7 @@ void RawDecodeOp::Apply(std::shared_ptr<ImageBuffer> input) {
       const auto unpack_start = ProfileClock::now();
       libraw_guard::Unpack(*raw_processor);
       AppendProfileMs(deferred_log, "RAW CPU unpack", ProfileClock::now() - unpack_start);
+      AppendLibRawUnpackRouteLog(deferred_log, *raw_processor);
 
       // Use pre-populated context injected before rendering; fall back to
       // extracting directly from the open LibRaw instance.
@@ -113,6 +146,7 @@ void RawDecodeOp::Apply(std::shared_ptr<ImageBuffer> input) {
       const auto unpack_start = ProfileClock::now();
       libraw_guard::Unpack(*raw_processor);
       AppendProfileMs(deferred_log, "RAW CPU unpack", ProfileClock::now() - unpack_start);
+      AppendLibRawUnpackRouteLog(deferred_log, *raw_processor);
 
       // Use pre-populated context or extract from LibRaw.
       RawRuntimeColorContext ctx = pre_populated_ctx_;
