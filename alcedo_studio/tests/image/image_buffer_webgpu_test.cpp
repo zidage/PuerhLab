@@ -11,7 +11,7 @@
 #include <string>
 
 #include "image/image_buffer.hpp"
-#include "image/webgpu_context.hpp"
+#include "webgpu/webgpu_context.hpp"
 
 namespace alcedo {
 namespace {

@@ -7,8 +7,8 @@
 #include <libraw/libraw.h>
 
 #include <cstdint>
-#include <string>
 #include <opencv2/core/types.hpp>
+#include <string>
 
 #include "decoders/decoder_scheduler.hpp"
 #include "decoders/processor/raw_color_context.hpp"
@@ -22,13 +22,20 @@ namespace alcedo {
 enum class RawGpuBackend {
   CPU,
   GPU,
+  CUDA,
+  Metal,
+  WebGPU,
 };
 
+inline auto IsRawGpuBackend(const RawGpuBackend backend) -> bool {
+  return backend != RawGpuBackend::CPU;
+}
+
 struct RawParams {
-  RawGpuBackend gpu_backend_       = RawGpuBackend::CPU;
-  bool     highlights_reconstruct_ = false;
-  bool     use_camera_wb_          = true;
-  uint32_t user_wb_ = 6500;  // If user wants to set a specific white balance temperature
+  RawGpuBackend gpu_backend_            = RawGpuBackend::CPU;
+  bool          highlights_reconstruct_ = false;
+  bool          use_camera_wb_          = true;
+  uint32_t      user_wb_ = 6500;  // If user wants to set a specific white balance temperature
   CPU::LightSourceType user_light_source_ =
       CPU::LightSourceType::UNKNOWN;  // If user wants to use a preset light source as the wb
 
@@ -41,7 +48,7 @@ class RawProcessor {
   RawParams               params_;
   RawRuntimeColorContext  runtime_color_context_;
   RawCfaPattern           cfa_pattern_;
-  RawInputKind            input_kind_ = RawInputKind::Unsupported;
+  RawInputKind            input_kind_                  = RawInputKind::Unsupported;
   int                     gpu_input_downsample_passes_ = 0;
 
   const libraw_rawdata_t& raw_data_;
@@ -50,23 +57,28 @@ class RawProcessor {
   void                    SetDecodeRes();
   auto                    ProcessGpu() -> ImageBuffer;
 #ifdef HAVE_CUDA
-  auto                    ProcessCuda() -> ImageBuffer;
-  auto                    ProcessCudaFullFrame() -> ImageBuffer;
-  auto                    ProcessCudaTiled() -> ImageBuffer;
-  auto                    ProcessDirectRgbCuda() -> ImageBuffer;
+  auto ProcessCuda() -> ImageBuffer;
+  auto ProcessCudaFullFrame() -> ImageBuffer;
+  auto ProcessCudaTiled() -> ImageBuffer;
+  auto ProcessDirectRgbCuda() -> ImageBuffer;
 #endif
 #ifdef HAVE_METAL
-  auto                    ProcessMetal() -> ImageBuffer;
-  auto                    ProcessDirectRgbMetal() -> ImageBuffer;
+  auto ProcessMetal() -> ImageBuffer;
+  auto ProcessDirectRgbMetal() -> ImageBuffer;
+#endif
+#ifdef HAVE_WEBGPU
+  auto ProcessWebGpu() -> ImageBuffer;
+  auto ProcessDirectRgbWebGpu() -> ImageBuffer;
 #endif
 
   /**
-   * @brief A procedure similar to DNG "Mapping Raw Values to Linear Reference Values" procedure.
-   *
-   * This method converts the raw sensor values to linear reference values. To support highlight
-   * reconstruction, "as shot" white balance multipliers are applied here beforehand.
+   * @brief A procedure similar to DNG "Mapping Raw Values to Linear Reference Values"
+   * procedure.
+   * This method converts the raw sensor values to linear reference values. To
+   * support highlight reconstruction, "as shot" white balance multipliers are applied here
+   * beforehand.
    */
-  void                    ApplyLinearization();
+  void ApplyLinearization();
 
   /**
    * @brief Apply highlight reconstruction if enabled.
@@ -74,15 +86,15 @@ class RawProcessor {
    * To make highlight reconstruction work properly, "as shot" white balance multipliers should be
    * applied before this step.
    */
-  void                    ApplyHighlightReconstruct();
+  void ApplyHighlightReconstruct();
 
   /**
    * @brief Debayer the raw image according to the selected algorithm.
    *
    */
-  void                    ApplyDebayer();
+  void ApplyDebayer();
 
-  void                    ApplyGeometricCorrections();
+  void ApplyGeometricCorrections();
 
   /**
    * @brief Apply color space transformation from camera RGB to ACES2065-1.
@@ -96,13 +108,15 @@ class RawProcessor {
    * color matrices provided by LibRaw, which are extracted from the camera profiles or the
    * corresponding DNG files.
    */
-  void                    ConvertToWorkingSpace();
+  void ConvertToWorkingSpace();
 
  public:
   RawProcessor() = delete;
   RawProcessor(const RawParams& params, const libraw_rawdata_t& rawdata, LibRaw& raw_processor,
                const RawRuntimeColorContext& pre_ctx);
   auto Process() -> ImageBuffer;
-  auto GetRuntimeColorContext() const -> const RawRuntimeColorContext& { return runtime_color_context_; }
+  auto GetRuntimeColorContext() const -> const RawRuntimeColorContext& {
+    return runtime_color_context_;
+  }
 };
 };  // namespace alcedo

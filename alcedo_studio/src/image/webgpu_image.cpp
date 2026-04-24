@@ -11,7 +11,7 @@
 #include <stdexcept>
 #include <vector>
 
-#include "image/webgpu_context.hpp"
+#include "webgpu/webgpu_context.hpp"
 
 namespace alcedo {
 namespace webgpu {

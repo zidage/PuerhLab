@@ -318,6 +318,9 @@ if(ALCEDO_METAL_ENABLED)
     add_dependencies(MetalGeometryUtils MetalGeometryUtilsShaders)
     target_compile_definitions(MetalGeometryUtils PRIVATE ALCEDO_METAL_GEOMETRY_UTILS_METALLIB_PATH="${METAL_GEOMETRY_UTILS_METALLIB}")
 endif()
+if(ALCEDO_WEBGPU_ENABLED)
+    def_library(WebGpuContext SOURCES webgpu/webgpu_context.cpp PUBLIC_DEPS dawn::webgpu_dawn)
+endif()
 
 # ==============================================================================
 # 2. Core Image Handling 
@@ -327,7 +330,6 @@ endif()
 set(IMAGE_BUFFER_SRCS image/image_buffer.cpp)
 if(ALCEDO_WEBGPU_ENABLED)
     list(APPEND IMAGE_BUFFER_SRCS
-        image/webgpu_context.cpp
         image/webgpu_image.cpp
     )
 endif()
@@ -341,7 +343,7 @@ set(IMAGE_BUFFER_DEPS Exiv2 ${ALCEDO_OPENCV_CORE_DEPS} libraw::raw_r TimeProvide
 if (WIN32)
     target_link_libraries(ImageBuffer PUBLIC ${IMAGE_BUFFER_DEPS} xxHash::xxhash)
     if(ALCEDO_WEBGPU_ENABLED)
-        target_link_libraries(ImageBuffer PUBLIC dawn::webgpu_dawn)
+        target_link_libraries(ImageBuffer PUBLIC WebGpuContext)
     endif()
 elseif(ALCEDO_METAL_ENABLED)
     target_link_libraries(ImageBuffer PUBLIC ${IMAGE_BUFFER_DEPS} xxHash MetalImage MetalUtils)
@@ -542,8 +544,12 @@ def_library(PipelineScheduler
 set(RAW_PROCESSOR_BACKEND_SRCS)
 if(ALCEDO_CUDA_ENABLED)
     list(APPEND RAW_PROCESSOR_BACKEND_SRCS decoders/processor/raw_processor_cuda.cpp)
-elseif(ALCEDO_METAL_ENABLED)
+endif()
+if(ALCEDO_METAL_ENABLED)
     list(APPEND RAW_PROCESSOR_BACKEND_SRCS decoders/processor/raw_processor_metal.cpp)
+endif()
+if(ALCEDO_WEBGPU_ENABLED)
+    list(APPEND RAW_PROCESSOR_BACKEND_SRCS decoders/processor/raw_processor_webgpu.cpp)
 endif()
 
 def_library(RawProcessor

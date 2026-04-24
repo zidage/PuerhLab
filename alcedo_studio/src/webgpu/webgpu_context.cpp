@@ -4,7 +4,7 @@
 
 #ifdef HAVE_WEBGPU
 
-#include "image/webgpu_context.hpp"
+#include "webgpu/webgpu_context.hpp"
 
 #include <dawn/native/DawnNative.h>
 
@@ -39,9 +39,9 @@ auto AdapterInfoLabel(WGPUAdapter adapter) -> std::string {
     return "unknown adapter";
   }
 
-  const auto vendor      = StringViewToString(info.vendor);
-  const auto device      = StringViewToString(info.device);
-  const auto description = StringViewToString(info.description);
+  const auto         vendor      = StringViewToString(info.vendor);
+  const auto         device      = StringViewToString(info.device);
+  const auto         description = StringViewToString(info.description);
 
   std::ostringstream label;
   if (!description.empty()) {
@@ -77,7 +77,7 @@ WebGpuContext::WebGpuContext() {
   instance_descriptor.requiredLimits       = &instance_limits;
 
 #ifdef ALCEDO_DAWN_D3D_RUNTIME_DIR
-  const char* runtime_search_paths[] = {ALCEDO_DAWN_D3D_RUNTIME_DIR};
+  const char*                          runtime_search_paths[] = {ALCEDO_DAWN_D3D_RUNTIME_DIR};
   dawn::native::DawnInstanceDescriptor dawn_descriptor{};
   dawn_descriptor.additionalRuntimeSearchPathsCount = 1;
   dawn_descriptor.additionalRuntimeSearchPaths      = runtime_search_paths;
@@ -100,7 +100,7 @@ WebGpuContext::WebGpuContext() {
     options.backendType     = attempt.backend_type;
     options.featureLevel    = attempt.feature_level;
 
-    auto adapters = native_instance_->EnumerateAdapters(&options);
+    auto adapters           = native_instance_->EnumerateAdapters(&options);
     log << attempt.name << ": " << adapters.size() << " adapter(s)";
     if (adapters.empty()) {
       log << '\n';

@@ -4,21 +4,21 @@
 
 #include "edit/operators/raw/raw_decode_op.hpp"
 
-#include <chrono>
 #include <libraw/libraw_const.h>
 #include <opencv2/core/hal/interface.h>
-#include <opencv2/imgproc.hpp>
 
+#include <chrono>
 #include <cstdint>
 #include <iostream>
 #include <memory>
+#include <opencv2/imgproc.hpp>
 #include <sstream>
 #include <vector>
 
 #include "decoders/libraw_unpack_guard.hpp"
 #include "decoders/processor/raw_processor.hpp"
-#include "image/metadata_extractor.hpp"
 #include "image/image_buffer.hpp"
+#include "image/metadata_extractor.hpp"
 
 namespace alcedo {
 namespace {
@@ -27,9 +27,9 @@ using ProfileClock = std::chrono::steady_clock;
 struct DeferredCpuLog {
   std::vector<std::string> entries;
 
-  void Add(std::string entry) { entries.push_back(std::move(entry)); }
+  void                     Add(std::string entry) { entries.push_back(std::move(entry)); }
 
-  void Flush() const {
+  void                     Flush() const {
     if (entries.empty()) {
       return;
     }
@@ -83,6 +83,12 @@ void AppendLibRawUnpackRouteLog(DeferredCpuLog& log, LibRaw& raw_processor) {
 
 auto RawGpuBackendToString(RawGpuBackend backend) -> const char* {
   switch (backend) {
+    case RawGpuBackend::CUDA:
+      return "cuda";
+    case RawGpuBackend::Metal:
+      return "metal";
+    case RawGpuBackend::WebGPU:
+      return "webgpu";
     case RawGpuBackend::GPU:
       return "gpu";
     case RawGpuBackend::CPU:
@@ -95,11 +101,11 @@ auto RawGpuBackendToString(RawGpuBackend backend) -> const char* {
 RawDecodeOp::RawDecodeOp(const nlohmann::json& params) { SetParams(params); }
 
 void RawDecodeOp::Apply(std::shared_ptr<ImageBuffer> input) {
-  const auto             total_start = ProfileClock::now();
-  DeferredCpuLog         deferred_log;
+  const auto              total_start = ProfileClock::now();
+  DeferredCpuLog          deferred_log;
   auto&                   buffer        = input->GetBuffer();
 
-  const auto              open_start = ProfileClock::now();
+  const auto              open_start    = ProfileClock::now();
   std::unique_ptr<LibRaw> raw_processor = std::make_unique<LibRaw>();
   int                     ret = raw_processor->open_buffer((void*)buffer.data(), buffer.size());
   AppendProfileMs(deferred_log, "RAW CPU open_buffer", ProfileClock::now() - open_start);
@@ -107,7 +113,7 @@ void RawDecodeOp::Apply(std::shared_ptr<ImageBuffer> input) {
     throw std::runtime_error("RawDecodeOp: Unable to read raw file using LibRAW");
   }
 
-  raw_processor->imgdata.params.output_bps = 16;
+  raw_processor->imgdata.params.output_bps      = 16;
   raw_processor->imgdata.rawparams.use_rawspeed = 1;
   ImageBuffer output;
   latest_runtime_context_ = {};
@@ -128,9 +134,10 @@ void RawDecodeOp::Apply(std::shared_ptr<ImageBuffer> input) {
 
       RawProcessor processor{params_, raw_processor->imgdata.rawdata, *raw_processor, ctx};
 
-      const auto process_start = ProfileClock::now();
-      output = processor.Process();
-      AppendProfileMs(deferred_log, "RAW CPU processor.Process", ProfileClock::now() - process_start);
+      const auto   process_start = ProfileClock::now();
+      output                     = processor.Process();
+      AppendProfileMs(deferred_log, "RAW CPU processor.Process",
+                      ProfileClock::now() - process_start);
       latest_runtime_context_ = processor.GetRuntimeColorContext();
       raw_processor->recycle();
       break;
@@ -143,7 +150,7 @@ void RawDecodeOp::Apply(std::shared_ptr<ImageBuffer> input) {
       raw_processor->imgdata.params.use_camera_wb  = 1;  // Discarded if user_wb is set for now
       raw_processor->imgdata.rawparams.use_dngsdk  = 1;
 
-      const auto unpack_start = ProfileClock::now();
+      const auto unpack_start                      = ProfileClock::now();
       libraw_guard::Unpack(*raw_processor);
       AppendProfileMs(deferred_log, "RAW CPU unpack", ProfileClock::now() - unpack_start);
       AppendLibRawUnpackRouteLog(deferred_log, *raw_processor);
@@ -174,7 +181,7 @@ void RawDecodeOp::Apply(std::shared_ptr<ImageBuffer> input) {
       cv::Mat result_rgba;
       cv::cvtColor(result_rgb, result_rgba, cv::COLOR_RGB2RGBA);
 
-      output                                         = ImageBuffer(std::move(result_rgba));
+      output                                          = ImageBuffer(std::move(result_rgba));
       latest_runtime_context_                         = ctx;
       latest_runtime_context_.output_in_camera_space_ = false;
       raw_processor->dcraw_clear_mem(img);
@@ -196,10 +203,11 @@ auto RawDecodeOp::GetParams() const -> nlohmann::json {
   nlohmann::json params;
   nlohmann::json inner;
 
-  inner["gpu_backend"]            = RawGpuBackendToString(params_.gpu_backend_);
-  inner["cuda"]                   = false;
+  inner["gpu_backend"] = RawGpuBackendToString(params_.gpu_backend_);
+  inner["cuda"]        = false;
 #ifdef HAVE_CUDA
-  inner["cuda"]                   = (params_.gpu_backend_ == RawGpuBackend::GPU);
+  inner["cuda"] =
+      (params_.gpu_backend_ == RawGpuBackend::GPU || params_.gpu_backend_ == RawGpuBackend::CUDA);
 #endif
   inner["highlights_reconstruct"] = params_.highlights_reconstruct_;
   inner["use_camera_wb"]          = params_.use_camera_wb_;
@@ -226,8 +234,14 @@ void RawDecodeOp::SetParams(const nlohmann::json& params) {
     const std::string backend = inner["gpu_backend"].get<std::string>();
     if (backend == "cpu") {
       params_.gpu_backend_ = RawGpuBackend::CPU;
-    } else if (backend == "gpu" || backend == "cuda" || backend == "metal") {
+    } else if (backend == "gpu") {
       params_.gpu_backend_ = RawGpuBackend::GPU;
+    } else if (backend == "cuda") {
+      params_.gpu_backend_ = RawGpuBackend::CUDA;
+    } else if (backend == "metal") {
+      params_.gpu_backend_ = RawGpuBackend::Metal;
+    } else if (backend == "webgpu" || backend == "dawn") {
+      params_.gpu_backend_ = RawGpuBackend::WebGPU;
     } else {
       throw std::runtime_error("RawDecodeOp: Unknown gpu_backend " + backend);
     }
@@ -252,8 +266,7 @@ void RawDecodeOp::SetParams(const nlohmann::json& params) {
 }
 
 void RawDecodeOp::SetGlobalParams(OperatorParams& params) const {
-  params.raw_runtime_valid_ =
-      latest_runtime_context_.valid_;
+  params.raw_runtime_valid_      = latest_runtime_context_.valid_;
   params.raw_decode_input_space_ = latest_runtime_context_.output_in_camera_space_
                                        ? RawDecodeInputSpace::CAMERA
                                        : RawDecodeInputSpace::AP0;
@@ -268,35 +281,35 @@ void RawDecodeOp::SetGlobalParams(OperatorParams& params) const {
     params.raw_rgb_cam_[i] = latest_runtime_context_.rgb_cam_[i];
   }
 
-  params.raw_camera_make_ = latest_runtime_context_.camera_make_;
-  params.raw_camera_model_ = latest_runtime_context_.camera_model_;
+  params.raw_camera_make_          = latest_runtime_context_.camera_make_;
+  params.raw_camera_model_         = latest_runtime_context_.camera_model_;
   params.raw_color_matrices_valid_ = latest_runtime_context_.color_matrices_valid_;
   for (int i = 0; i < 9; ++i) {
-    params.raw_color_matrix_1_[i] = latest_runtime_context_.color_matrix_1_[i];
-    params.raw_color_matrix_2_[i] = latest_runtime_context_.color_matrix_2_[i];
+    params.raw_color_matrix_1_[i]   = latest_runtime_context_.color_matrix_1_[i];
+    params.raw_color_matrix_2_[i]   = latest_runtime_context_.color_matrix_2_[i];
     params.raw_forward_matrix_1_[i] = latest_runtime_context_.forward_matrix_1_[i];
     params.raw_forward_matrix_2_[i] = latest_runtime_context_.forward_matrix_2_[i];
   }
   params.raw_forward_matrices_valid_ = latest_runtime_context_.forward_matrices_valid_;
-  params.raw_as_shot_neutral_valid_ = latest_runtime_context_.as_shot_neutral_valid_;
+  params.raw_as_shot_neutral_valid_  = latest_runtime_context_.as_shot_neutral_valid_;
   for (int i = 0; i < 3; ++i) {
     params.raw_as_shot_neutral_[i] = latest_runtime_context_.as_shot_neutral_[i];
   }
   params.raw_calibration_illuminants_valid_ =
       latest_runtime_context_.calibration_illuminants_valid_;
-  params.raw_color_matrix_1_cct_ = latest_runtime_context_.color_matrix_1_cct_;
-  params.raw_color_matrix_2_cct_ = latest_runtime_context_.color_matrix_2_cct_;
-  params.raw_lens_metadata_valid_ = latest_runtime_context_.lens_metadata_valid_;
-  params.raw_lens_make_           = latest_runtime_context_.lens_make_;
-  params.raw_lens_model_          = latest_runtime_context_.lens_model_;
-  params.raw_lens_focal_mm_       = latest_runtime_context_.focal_length_mm_;
-  params.raw_lens_aperture_f_     = latest_runtime_context_.aperture_f_number_;
+  params.raw_color_matrix_1_cct_    = latest_runtime_context_.color_matrix_1_cct_;
+  params.raw_color_matrix_2_cct_    = latest_runtime_context_.color_matrix_2_cct_;
+  params.raw_lens_metadata_valid_   = latest_runtime_context_.lens_metadata_valid_;
+  params.raw_lens_make_             = latest_runtime_context_.lens_make_;
+  params.raw_lens_model_            = latest_runtime_context_.lens_model_;
+  params.raw_lens_focal_mm_         = latest_runtime_context_.focal_length_mm_;
+  params.raw_lens_aperture_f_       = latest_runtime_context_.aperture_f_number_;
   params.raw_lens_focus_distance_m_ = latest_runtime_context_.focus_distance_m_;
   params.raw_lens_focal_35mm_       = latest_runtime_context_.focal_35mm_mm_;
   params.raw_lens_crop_factor_hint_ = latest_runtime_context_.crop_factor_hint_;
 
   params.lens_calib_runtime_dirty_  = true;
-  params.color_temp_runtime_dirty_ = true;
+  params.color_temp_runtime_dirty_  = true;
 }
 
 void RawDecodeOp::EnableGlobalParams(OperatorParams&, bool) {

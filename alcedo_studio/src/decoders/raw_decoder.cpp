@@ -15,8 +15,8 @@
 #include <opencv2/opencv.hpp>
 #include <stdexcept>
 
-#include "decoders/processor/raw_processor.hpp"
 #include "decoders/libraw_unpack_guard.hpp"
+#include "decoders/processor/raw_processor.hpp"
 #include "image/image.hpp"
 #include "image/image_buffer.hpp"
 #include "image/metadata_extractor.hpp"
@@ -69,7 +69,7 @@ void RawDecoder::Decode(std::vector<char>&& buffer, std::shared_ptr<Image> sourc
   }
 
   RawParams raw_params;
-#if defined(HAVE_CUDA) || defined(HAVE_METAL)
+#if defined(HAVE_CUDA) || defined(HAVE_METAL) || defined(HAVE_WEBGPU)
   raw_params.gpu_backend_ = RawGpuBackend::GPU;
 #else
   raw_params.gpu_backend_ = RawGpuBackend::CPU;

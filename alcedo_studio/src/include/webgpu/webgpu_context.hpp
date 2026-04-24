@@ -36,8 +36,8 @@ class WebGpuContext {
   auto operator=(const WebGpuContext&) -> WebGpuContext& = delete;
 
   std::unique_ptr<dawn::native::Instance> native_instance_;
-  wgpu::Device                            device_    = nullptr;
-  wgpu::Queue                             queue_     = nullptr;
+  wgpu::Device                            device_ = nullptr;
+  wgpu::Queue                             queue_  = nullptr;
   std::string                             initialization_log_;
   bool                                    available_ = false;
 };

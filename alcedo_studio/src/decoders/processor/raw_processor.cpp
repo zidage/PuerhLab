@@ -10,9 +10,9 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
-#include <optional>
 #include <opencv2/core.hpp>
 #include <opencv2/imgproc.hpp>
+#include <optional>
 #include <stdexcept>
 #include <string>
 
@@ -62,14 +62,30 @@ auto DownsampleRawForGpuInput(const cv::Mat& raw_view, RawCfaPattern& pattern, c
   return downsampled;
 }
 
-void ThrowUnsupportedGPUBackend(const char* op_name) {
-#ifdef HAVE_METAL
-  throw std::runtime_error(std::string("RawProcessor: ") + op_name +
-                           " is not implemented for the Metal GPU backend.");
-#else
+[[noreturn]] void ThrowUnsupportedGPUBackend(const char* op_name) {
   throw std::runtime_error(std::string("RawProcessor: ") + op_name +
                            " requires a compiled GPU backend implementation.");
-#endif
+}
+
+auto RawGpuBackendName(const RawGpuBackend backend) -> const char* {
+  switch (backend) {
+    case RawGpuBackend::CPU:
+      return "CPU";
+    case RawGpuBackend::GPU:
+      return "GPU";
+    case RawGpuBackend::CUDA:
+      return "CUDA";
+    case RawGpuBackend::Metal:
+      return "Metal";
+    case RawGpuBackend::WebGPU:
+      return "WebGPU";
+  }
+  return "unknown";
+}
+
+[[noreturn]] void ThrowUnavailableRawGpuBackend(const RawGpuBackend backend) {
+  throw std::runtime_error(std::string("RawProcessor: requested ") + RawGpuBackendName(backend) +
+                           " backend is not compiled.");
 }
 
 auto CropToActiveArea(const cv::Mat& src, const libraw_image_sizes_t& sizes) -> cv::Mat {
@@ -181,7 +197,8 @@ auto SelectCudaExecutionMode(const RawParams& params, const RawCfaPattern& cfa_p
   if (g_cuda_execution_mode_override.has_value()) {
     return *g_cuda_execution_mode_override;
   }
-  if (params.gpu_backend_ != RawGpuBackend::GPU || cfa_pattern.kind != RawCfaKind::Bayer2x2) {
+  if ((params.gpu_backend_ != RawGpuBackend::GPU && params.gpu_backend_ != RawGpuBackend::CUDA) ||
+      cfa_pattern.kind != RawCfaKind::Bayer2x2) {
     return CudaExecutionMode::FullFrame;
   }
 
@@ -248,7 +265,8 @@ void RawProcessor::ApplyDebayer() {
     throw std::runtime_error("RawProcessor: CPU debayer only supports classic Bayer CFA.");
   }
   CPU::BayerRGGB2RGB_RCD(img);
-  const cv::Rect crop_rect = detail::BuildDecodeCropRect(raw_data_.sizes, img.size(), params_.decode_res_);
+  const cv::Rect crop_rect =
+      detail::BuildDecodeCropRect(raw_data_.sizes, img.size(), params_.decode_res_);
   if (!detail::IsFullImageRect(crop_rect, img.size())) {
     img = img(crop_rect);
   }
@@ -283,7 +301,7 @@ void RawProcessor::ApplyGeometricCorrections() {
 }
 
 void RawProcessor::ConvertToWorkingSpace() {
-  auto& img = process_buffer_.GetCPUData();
+  auto& img          = process_buffer_.GetCPUData();
   auto  color_coeffs = raw_data_.color.rgb_cam;
   img.convertTo(img, CV_32FC3);
   auto pre_mul   = raw_data_.color.pre_mul;
@@ -302,13 +320,39 @@ void RawProcessor::ConvertToWorkingSpace() {
 }
 
 auto RawProcessor::ProcessGpu() -> ImageBuffer {
+  switch (params_.gpu_backend_) {
+    case RawGpuBackend::CPU:
+      ThrowUnsupportedGPUBackend("Process");
+    case RawGpuBackend::CUDA:
 #ifdef HAVE_CUDA
-  return ProcessCuda();
-#elif defined(HAVE_METAL)
-  return ProcessMetal();
+      return ProcessCuda();
 #else
-  ThrowUnsupportedGPUBackend("Process");
+      ThrowUnavailableRawGpuBackend(params_.gpu_backend_);
 #endif
+    case RawGpuBackend::Metal:
+#ifdef HAVE_METAL
+      return ProcessMetal();
+#else
+      ThrowUnavailableRawGpuBackend(params_.gpu_backend_);
+#endif
+    case RawGpuBackend::WebGPU:
+#ifdef HAVE_WEBGPU
+      return ProcessWebGpu();
+#else
+      ThrowUnavailableRawGpuBackend(params_.gpu_backend_);
+#endif
+    case RawGpuBackend::GPU:
+#ifdef HAVE_CUDA
+      return ProcessCuda();
+#elif defined(HAVE_METAL)
+      return ProcessMetal();
+#elif defined(HAVE_WEBGPU)
+      return ProcessWebGpu();
+#else
+      ThrowUnsupportedGPUBackend("Process");
+#endif
+  }
+  ThrowUnsupportedGPUBackend("Process");
 }
 
 auto RawProcessor::Process() -> ImageBuffer {
@@ -317,11 +361,11 @@ auto RawProcessor::Process() -> ImageBuffer {
   gpu_input_downsample_passes_                   = 0;
 
   if (input_kind_ == RawInputKind::DebayeredRgb) {
-    params_.highlights_reconstruct_              = false;
-    process_buffer_                             = {BuildDirectRgbRgba(raw_data_, raw_processor_.imgdata.idata)};
+    params_.highlights_reconstruct_ = false;
+    process_buffer_                 = {BuildDirectRgbRgba(raw_data_, raw_processor_.imgdata.idata)};
     runtime_color_context_.output_in_camera_space_ = true;
 
-    if (params_.gpu_backend_ == RawGpuBackend::GPU) {
+    if (IsRawGpuBackend(params_.gpu_backend_)) {
       return ProcessGpu();
     }
 
@@ -351,11 +395,11 @@ auto RawProcessor::Process() -> ImageBuffer {
     throw std::runtime_error("RawProcessor: CPU backend only supports RGGB Bayer input; got " +
                              DescribeBayerPattern(cfa_pattern_.bayer_pattern) + ".");
   }
-  if (cfa_pattern_.kind == RawCfaKind::XTrans6x6 && params_.gpu_backend_ != RawGpuBackend::GPU) {
+  if (cfa_pattern_.kind == RawCfaKind::XTrans6x6 && !IsRawGpuBackend(params_.gpu_backend_)) {
     throw std::runtime_error("RawProcessor: CPU backend does not support X-Trans CFA input.");
   }
 
-  if (params_.gpu_backend_ == RawGpuBackend::GPU) {
+  if (IsRawGpuBackend(params_.gpu_backend_)) {
     NormalizeDecodeResForGpu(cv::Size(static_cast<int>(raw_data_.sizes.raw_width),
                                       static_cast<int>(raw_data_.sizes.raw_height)),
                              params_);
