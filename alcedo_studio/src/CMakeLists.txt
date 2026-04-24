@@ -320,6 +320,10 @@ if(ALCEDO_METAL_ENABLED)
 endif()
 if(ALCEDO_WEBGPU_ENABLED)
     def_library(WebGpuContext SOURCES webgpu/webgpu_context.cpp PUBLIC_DEPS dawn::webgpu_dawn)
+    set_target_properties(WebGpuContext PROPERTIES NO_SYSTEM_FROM_IMPORTED ON)
+    if(WIN32)
+        target_link_libraries(WebGpuContext PUBLIC OneCore.lib dxguid.lib)
+    endif()
 endif()
 
 # ==============================================================================
@@ -344,6 +348,8 @@ if (WIN32)
     target_link_libraries(ImageBuffer PUBLIC ${IMAGE_BUFFER_DEPS} xxHash::xxhash)
     if(ALCEDO_WEBGPU_ENABLED)
         target_link_libraries(ImageBuffer PUBLIC WebGpuContext)
+        set_target_properties(ImageBuffer PROPERTIES NO_SYSTEM_FROM_IMPORTED ON)
+        target_include_directories(ImageBuffer BEFORE PRIVATE "${ALCEDO_DAWN_PACKAGE_DIR}/include")
     endif()
 elseif(ALCEDO_METAL_ENABLED)
     target_link_libraries(ImageBuffer PUBLIC ${IMAGE_BUFFER_DEPS} xxHash MetalImage MetalUtils)
@@ -380,8 +386,9 @@ set(RAW_OP_CPU_SRCS
     decoders/processor/operators/cpu/raw_proc_utils.cpp
 )
 
+set(RAW_OP_GPU_SRCS)
 if(ALCEDO_CUDA_ENABLED)
-    set(RAW_OP_GPU_SRCS
+    list(APPEND RAW_OP_GPU_SRCS
         decoders/processor/operators/gpu/cuda_color_space_conv.cu
         decoders/processor/operators/gpu/cuda_debayer_ahd.cu
         decoders/processor/operators/gpu/cuda_debayer_rcd.cu
@@ -392,13 +399,22 @@ if(ALCEDO_CUDA_ENABLED)
         decoders/processor/operators/gpu/cuda_white_balance.cu
         decoders/processor/operators/gpu/cuda_xtrans_interpolate.cu
     )
-elseif(ALCEDO_METAL_ENABLED)
-    set(RAW_OP_GPU_SRCS
+endif()
+if(ALCEDO_METAL_ENABLED)
+    list(APPEND RAW_OP_GPU_SRCS
         decoders/processor/operators/gpu/metal_cvt_ref_space.cpp
         decoders/processor/operators/gpu/metal_debayer_rcd.cpp
         decoders/processor/operators/gpu/metal_highlight_reconstruct.cpp
         decoders/processor/operators/gpu/metal_to_linear_ref.cpp
         decoders/processor/operators/gpu/metal_xtrans_interpolate.cpp
+    )
+endif()
+if(ALCEDO_WEBGPU_ENABLED)
+    set(WEBGPU_TO_LINEAR_REF_WGSL "${CMAKE_CURRENT_SOURCE_DIR}/decoders/processor/operators/gpu/webgpu_shader/to_linear_ref.wgsl")
+    set_source_files_properties("${WEBGPU_TO_LINEAR_REF_WGSL}" PROPERTIES HEADER_FILE_ONLY TRUE)
+    list(APPEND RAW_OP_GPU_SRCS
+        decoders/processor/operators/gpu/webgpu_to_linear_ref.cpp
+        "${WEBGPU_TO_LINEAR_REF_WGSL}"
     )
 endif()
 
@@ -421,6 +437,13 @@ if(ALCEDO_METAL_ENABLED)
         ALCEDO_METAL_HIGHLIGHT_RECONSTRUCT_METALLIB_PATH="${METAL_HIGHLIGHT_RECONSTRUCT_METALLIB}"
         ALCEDO_METAL_XTRANS_INTERPOLATE_METALLIB_PATH="${METAL_XTRANS_INTERPOLATE_METALLIB}"
         ALCEDO_METAL_CVT_REF_SPACE_METALLIB_PATH="${METAL_CVT_REF_SPACE_METALLIB}"
+    )
+endif()
+if(ALCEDO_WEBGPU_ENABLED)
+    set_target_properties(RawProcessorOp PROPERTIES NO_SYSTEM_FROM_IMPORTED ON)
+    target_include_directories(RawProcessorOp BEFORE PRIVATE "${ALCEDO_DAWN_PACKAGE_DIR}/include")
+    target_compile_definitions(RawProcessorOp PRIVATE
+        ALCEDO_WEBGPU_TO_LINEAR_REF_WGSL_PATH="${WEBGPU_TO_LINEAR_REF_WGSL}"
     )
 endif()
 

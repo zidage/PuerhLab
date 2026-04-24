@@ -17,6 +17,10 @@ namespace alcedo {
 namespace webgpu {
 namespace {
 
+#ifdef _WIN32
+constexpr wgpu::BackendType kPreferredWindowsBackend = wgpu::BackendType::D3D12;
+#endif
+
 struct AdapterAttempt {
   wgpu::BackendType  backend_type;
   wgpu::FeatureLevel feature_level;
@@ -88,8 +92,8 @@ WebGpuContext::WebGpuContext() {
 
   const std::vector<AdapterAttempt> attempts = {
 #ifdef _WIN32
-      {wgpu::BackendType::D3D12, wgpu::FeatureLevel::Core, "D3D12/Core"},
-      {wgpu::BackendType::D3D12, wgpu::FeatureLevel::Compatibility, "D3D12/Compatibility"},
+      {kPreferredWindowsBackend, wgpu::FeatureLevel::Core, "D3D12/Core"},
+      {kPreferredWindowsBackend, wgpu::FeatureLevel::Compatibility, "D3D12/Compatibility"},
 #endif
   };
 
@@ -99,6 +103,7 @@ WebGpuContext::WebGpuContext() {
     options.powerPreference = wgpu::PowerPreference::HighPerformance;
     options.backendType     = attempt.backend_type;
     options.featureLevel    = attempt.feature_level;
+    options.forceFallbackAdapter = false;
 
     auto adapters           = native_instance_->EnumerateAdapters(&options);
     log << attempt.name << ": " << adapters.size() << " adapter(s)";

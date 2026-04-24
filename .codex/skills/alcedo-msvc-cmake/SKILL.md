@@ -13,6 +13,7 @@ Use this skill for configure, build, install, and test workflows in this reposit
 - Prefer the presets in `CMakePresets.json`: `win_debug` and `win_release`.
 - Do not invoke bare `cmake` directly for configure/build/install when `scripts/msvc_env.cmd` is available.
 - Use `cmd /c scripts\msvc_env.cmd ...` so Visual Studio, MSVC, and CUDA environment variables are initialized first.
+- Treat MSVC configure/build/test commands in this repository as long-running by default. Typical compile times can reach about 20 minutes, so use generous command timeouts instead of short defaults.
 
 ## Command Templates
 
@@ -28,3 +29,4 @@ Use this skill for configure, build, install, and test workflows in this reposit
 - Append user-provided `-D...` cache entries to the configure command after the preset.
 - If the user asks for a `cmake --build build/...` style command, translate it to the wrapper form instead of changing the build intent.
 - If the wrapper fails before reaching CMake, inspect `scripts/msvc_env.cmd` before changing presets or toolchain arguments.
+- Prefer timeout budgets on the order of tens of minutes for MSVC build/test invocations in this repo; avoid retry loops caused by timeouts that are too short.

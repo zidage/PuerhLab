@@ -14,7 +14,7 @@ set(ALCEDO_INCLUDE_DIR "${ALCEDO_SRC_DIR}/include")
 set(ALCEDO_TEST_DIR "${ALCEDO_ROOT_DIR}/tests")
 
 include(GoogleTest)
-set(CMAKE_GTEST_DISCOVER_TESTS_DISCOVERY_MODE POST_BUILD)
+set(CMAKE_GTEST_DISCOVER_TESTS_DISCOVERY_MODE PRE_TEST)
 
 option(ALCEDO_BUILD_TESTS_BY_DEFAULT
        "Build enabled test targets as part of the default all target." OFF)
@@ -171,6 +171,18 @@ if(ALCEDO_WEBGPU_ENABLED)
       COMMENT "Copying Dawn runtime DLLs for ImageBufferWebGpuTest")
   endif()
   gtest_discover_tests(ImageBufferWebGpuTest TEST_PREFIX "ImageBufferWebGpuTest.")
+
+  add_executable(WebGpuRawOpsTest raw/webgpu_raw_ops_test.cpp)
+  target_include_directories(WebGpuRawOpsTest PUBLIC ${ALCEDO_INCLUDE_DIR})
+  target_link_libraries(WebGpuRawOpsTest PRIVATE GTest::gtest_main RawProcessorOp ${ALCEDO_TEST_OPENCV_MIN_DEPS})
+  if(WIN32 AND ALCEDO_DAWN_RUNTIME_DLLS)
+    add_custom_command(TARGET WebGpuRawOpsTest POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different
+              ${ALCEDO_DAWN_RUNTIME_DLLS}
+              $<TARGET_FILE_DIR:WebGpuRawOpsTest>
+      COMMENT "Copying Dawn runtime DLLs for WebGpuRawOpsTest")
+  endif()
+  gtest_discover_tests(WebGpuRawOpsTest TEST_PREFIX "WebGpuRawOpsTest.")
 endif()
 
 # add_executable(ImageDecoderTest decoders/image_decoder_test.cpp)
@@ -586,6 +598,7 @@ alcedo_assign_test_category(gpu ALCEDO_BUILD_GPU_TESTS alcedo_tests_gpu
   CudaRawOpsTest
   MetalUtilsTest
   MetalRawOpsTest
+  WebGpuRawOpsTest
   ODTCudaSmokeTest
   CudaPreviewVramReclamationTest
 )

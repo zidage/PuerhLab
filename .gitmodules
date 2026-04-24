@@ -15,3 +15,6 @@
 [submodule "alcedo/src/third_party/libultrahdr"]
 	path = alcedo/src/third_party/libultrahdr
 	url = https://github.com/google/libultrahdr.git
+[submodule "alcedo_studio/third_party/dawn"]
+	path = alcedo_studio/third_party/dawn
+	url = https://dawn.googlesource.com/dawn

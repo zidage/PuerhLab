@@ -9,6 +9,7 @@
 #include <stdexcept>
 #include <string>
 
+#include "decoders/processor/operators/gpu/webgpu_to_linear_ref.hpp"
 #include "image/gpu_backend.hpp"
 #include "webgpu/webgpu_context.hpp"
 
@@ -51,9 +52,15 @@ auto RawProcessor::ProcessWebGpu() -> ImageBuffer {
     return ProcessDirectRgbWebGpu();
   }
 
+  process_buffer_.SyncToGPU(GpuBackendKind::WebGPU);
+  process_buffer_.ReleaseCPUData();
+
+  auto& gpu_img = process_buffer_.GetWebGpuImage();
+  webgpu::ToLinearRef(gpu_img, raw_processor_, cfa_pattern_);
+
   throw std::runtime_error(
-      "RawProcessor: WebGPU raw pipeline is routed, but raw linearization, debayer, highlight "
-      "reconstruction, geometry, and RGBA pack operators are not implemented yet.");
+      "RawProcessor: WebGPU raw pipeline now routes through to_linear_ref, but debayer, "
+      "highlight reconstruction, geometry, and RGBA pack operators are not implemented yet.");
 }
 
 }  // namespace alcedo

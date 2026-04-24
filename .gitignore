@@ -1063,6 +1063,8 @@ third_party/
 !alcedo/src/third_party/
 !alcedo/src/third_party/lensfun/
 !alcedo/src/third_party/lensfun/**
+!alcedo_studio/third_party/
+!alcedo_studio/third_party/dawn/
 
 /.vscode/
 
