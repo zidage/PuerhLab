@@ -425,11 +425,15 @@ if(ALCEDO_WEBGPU_ENABLED)
     set_source_files_properties("${WEBGPU_TO_LINEAR_REF_WGSL}" PROPERTIES HEADER_FILE_ONLY TRUE)
     set(WEBGPU_DEBAYER_RCD_WGSL "${CMAKE_CURRENT_SOURCE_DIR}/decoders/processor/operators/gpu/webgpu_shader/debayer_rcd.wgsl")
     set_source_files_properties("${WEBGPU_DEBAYER_RCD_WGSL}" PROPERTIES HEADER_FILE_ONLY TRUE)
+    set(WEBGPU_CVT_REF_SPACE_WGSL "${CMAKE_CURRENT_SOURCE_DIR}/decoders/processor/operators/gpu/webgpu_shader/cvt_ref_space.wgsl")
+    set_source_files_properties("${WEBGPU_CVT_REF_SPACE_WGSL}" PROPERTIES HEADER_FILE_ONLY TRUE)
     list(APPEND RAW_OP_GPU_SRCS
         decoders/processor/operators/gpu/webgpu_to_linear_ref.cpp
         decoders/processor/operators/gpu/webgpu_debayer_rcd.cpp
+        decoders/processor/operators/gpu/webgpu_cvt_ref_space.cpp
         "${WEBGPU_TO_LINEAR_REF_WGSL}"
         "${WEBGPU_DEBAYER_RCD_WGSL}"
+        "${WEBGPU_CVT_REF_SPACE_WGSL}"
     )
 endif()
 
@@ -460,6 +464,7 @@ if(ALCEDO_WEBGPU_ENABLED)
     target_compile_definitions(RawProcessorOp PRIVATE
         ALCEDO_WEBGPU_TO_LINEAR_REF_WGSL_PATH="${WEBGPU_TO_LINEAR_REF_WGSL}"
         ALCEDO_WEBGPU_DEBAYER_RCD_WGSL_PATH="${WEBGPU_DEBAYER_RCD_WGSL}"
+        ALCEDO_WEBGPU_CVT_REF_SPACE_WGSL_PATH="${WEBGPU_CVT_REF_SPACE_WGSL}"
     )
 endif()
 

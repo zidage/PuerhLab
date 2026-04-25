@@ -8,6 +8,7 @@
 
 #include <dawn/native/DawnNative.h>
 
+#include <iostream>
 #include <limits>
 #include <sstream>
 #include <stdexcept>
@@ -28,6 +29,16 @@ struct AdapterAttempt {
 };
 
 auto StringViewToString(WGPUStringView view) -> std::string {
+  if (view.data == nullptr) {
+    return {};
+  }
+  if (view.length == WGPU_STRLEN) {
+    return std::string(view.data);
+  }
+  return std::string(view.data, view.length);
+}
+
+auto StringViewToString(wgpu::StringView view) -> std::string {
   if (view.data == nullptr) {
     return {};
   }
@@ -100,12 +111,12 @@ WebGpuContext::WebGpuContext() {
   std::ostringstream log;
   for (const auto& attempt : attempts) {
     wgpu::RequestAdapterOptions options{};
-    options.powerPreference = wgpu::PowerPreference::HighPerformance;
-    options.backendType     = attempt.backend_type;
-    options.featureLevel    = attempt.feature_level;
+    options.powerPreference      = wgpu::PowerPreference::HighPerformance;
+    options.backendType          = attempt.backend_type;
+    options.featureLevel         = attempt.feature_level;
     options.forceFallbackAdapter = false;
 
-    auto adapters           = native_instance_->EnumerateAdapters(&options);
+    auto adapters                = native_instance_->EnumerateAdapters(&options);
     log << attempt.name << ": " << adapters.size() << " adapter(s)";
     if (adapters.empty()) {
       log << '\n';
@@ -118,6 +129,17 @@ WebGpuContext::WebGpuContext() {
       device_descriptor.SetDeviceLostCallback(
           wgpu::CallbackMode::AllowProcessEvents,
           [](const wgpu::Device&, wgpu::DeviceLostReason, wgpu::StringView) {});
+      device_descriptor.SetUncapturedErrorCallback(
+          [](const wgpu::Device&, wgpu::ErrorType type, wgpu::StringView message) {
+            std::cerr << "[WebGPU uncaptured error] type=" << static_cast<uint32_t>(type)
+                      << " message=" << StringViewToString(message) << '\n';
+          });
+      WGPULimits   adapter_limits = WGPU_LIMITS_INIT;
+      wgpu::Limits required_limits{};
+      if (wgpuAdapterGetLimits(adapter.Get(), &adapter_limits) == WGPUStatus_Success) {
+        required_limits.maxBufferSize    = adapter_limits.maxBufferSize;
+        device_descriptor.requiredLimits = &required_limits;
+      }
       WGPUDevice raw_device = adapter.CreateDevice(&device_descriptor);
       if (raw_device == nullptr) {
         log << ": CreateDevice failed";

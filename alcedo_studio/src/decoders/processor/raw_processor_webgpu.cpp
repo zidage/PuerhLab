@@ -9,6 +9,7 @@
 #include <stdexcept>
 #include <string>
 
+#include "decoders/processor/operators/gpu/webgpu_cvt_ref_space.hpp"
 #include "decoders/processor/operators/gpu/webgpu_debayer_rcd.hpp"
 #include "decoders/processor/operators/gpu/webgpu_to_linear_ref.hpp"
 #include "decoders/processor/raw_processor_internal.hpp"
@@ -50,6 +51,17 @@ void ApplyWebGpuGeometricCorrections(webgpu::WebGpuImage& gpu_img, const int fli
   }
 }
 
+void CropWebGpuImage(webgpu::WebGpuImage& gpu_img, const cv::Rect& crop_rect) {
+  if (detail::IsFullImageRect(crop_rect, cv::Size(gpu_img.Width(), gpu_img.Height()))) {
+    return;
+  }
+
+  cv::Mat host;
+  gpu_img.Download(host);
+  cv::Mat cropped = host(crop_rect).clone();
+  gpu_img.Upload(cropped);
+}
+
 }  // namespace
 
 auto RawProcessor::ProcessDirectRgbWebGpu() -> ImageBuffer {
@@ -78,36 +90,18 @@ auto RawProcessor::ProcessWebGpu() -> ImageBuffer {
   auto& gpu_img = process_buffer_.GetWebGpuImage();
   webgpu::ToLinearRef(gpu_img, raw_processor_, cfa_pattern_);
 
-  if (cfa_pattern_.kind == RawCfaKind::Bayer2x2 && params_.highlights_reconstruct_) {
-    webgpu::Bayer2x2ToRGB_RCD(gpu_img, cfa_pattern_.bayer_pattern);
-    const cv::Rect crop_rect = detail::BuildDecodeCropRect(
-        raw_data_.sizes, cv::Size(gpu_img.Width(), gpu_img.Height()), params_.decode_res_);
-    if (!detail::IsFullImageRect(crop_rect, cv::Size(gpu_img.Width(), gpu_img.Height()))) {
-      cv::Mat host;
-      gpu_img.Download(host);
-      cv::Mat cropped = host(crop_rect).clone();
-      gpu_img.Upload(cropped);
-    }
-    throw std::runtime_error(
-        "RawProcessor: WebGPU highlight reconstruction is not implemented yet.");
+  webgpu::Clamp01(gpu_img);
+  if (cfa_pattern_.kind == RawCfaKind::XTrans6x6) {
+    throw std::runtime_error("RawProcessor: WebGPU X-Trans interpolation is not implemented yet.");
   } else {
-    if (cfa_pattern_.kind == RawCfaKind::XTrans6x6) {
-      throw std::runtime_error(
-          "RawProcessor: WebGPU X-Trans interpolation is not implemented yet.");
-    } else {
-      webgpu::Bayer2x2ToRGB_RCD(gpu_img, cfa_pattern_.bayer_pattern);
-    }
-    const cv::Rect crop_rect = detail::BuildDecodeCropRect(
-        raw_data_.sizes, cv::Size(gpu_img.Width(), gpu_img.Height()), params_.decode_res_);
-    if (!detail::IsFullImageRect(crop_rect, cv::Size(gpu_img.Width(), gpu_img.Height()))) {
-      cv::Mat host;
-      gpu_img.Download(host);
-      cv::Mat cropped = host(crop_rect).clone();
-      gpu_img.Upload(cropped);
-    }
+    webgpu::Bayer2x2ToRGB_RCD(gpu_img, cfa_pattern_.bayer_pattern);
   }
+  const cv::Rect crop_rect = detail::BuildDecodeCropRect(
+      raw_data_.sizes, cv::Size(gpu_img.Width(), gpu_img.Height()), params_.decode_res_);
+  CropWebGpuImage(gpu_img, crop_rect);
 
-  ApplyWebGpuGeometricCorrections(gpu_img, raw_data_.sizes.flip);
+  webgpu::ApplyInverseCamMulAndOrientRGBA(gpu_img, raw_data_.color.cam_mul, raw_data_.sizes.flip);
+  runtime_color_context_.output_in_camera_space_ = true;
   return {std::move(process_buffer_)};
 }
 

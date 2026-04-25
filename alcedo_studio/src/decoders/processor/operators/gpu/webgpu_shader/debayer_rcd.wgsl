@@ -25,6 +25,14 @@ fn FC(params: SinglePlaneParams, y: u32, x: u32) -> u32 {
   return params.rgb_fc[idx];
 }
 
+fn Px(tex: texture_2d<f32>, y: i32, x: i32) -> f32 {
+  return textureLoad(tex, vec2<i32>(x, y), 0).x;
+}
+
+fn StoreR(dst: texture_storage_2d<r32float, write>, y: u32, x: u32, v: f32) {
+  textureStore(dst, vec2<i32>(i32(x), i32(y)), vec4<f32>(v, 0.0, 0.0, 1.0));
+}
+
 fn ReconstructRbAtGreen(
   ch_m1: f32, ch_p1: f32, ch_m3: f32, ch_p3: f32,
   ch_l1: f32, ch_r1: f32, ch_l3: f32, ch_r3: f32,
@@ -47,14 +55,21 @@ fn ReconstructRbAtGreen(
   return max(0.0, g_c + (1.0 - vh_disc) * V_est + vh_disc * H_est);
 }
 
+fn LowPass(raw: texture_2d<f32>, y: i32, x: i32) -> f32 {
+  return 0.25 * Px(raw, y, x) +
+    0.125 * (Px(raw, y - 1, x) + Px(raw, y + 1, x) + Px(raw, y, x - 1) + Px(raw, y, x + 1)) +
+    0.0625 * (Px(raw, y - 1, x - 1) + Px(raw, y - 1, x + 1) +
+              Px(raw, y + 1, x - 1) + Px(raw, y + 1, x + 1));
+}
+
 // ---------------------------------------------------------------------------
 // Kernel 1: rcd_init_and_vh
 // ---------------------------------------------------------------------------
-@group(0) @binding(0) var<storage, read> raw_init: array<f32>;
-@group(0) @binding(1) var<storage, read_write> r_init: array<f32>;
-@group(0) @binding(2) var<storage, read_write> g_init: array<f32>;
-@group(0) @binding(3) var<storage, read_write> b_init: array<f32>;
-@group(0) @binding(4) var<storage, read_write> vh_dir_init: array<f32>;
+@group(0) @binding(0) var raw_init: texture_2d<f32>;
+@group(0) @binding(1) var r_init: texture_storage_2d<r32float, write>;
+@group(0) @binding(2) var g_init: texture_storage_2d<r32float, write>;
+@group(0) @binding(3) var b_init: texture_storage_2d<r32float, write>;
+@group(0) @binding(4) var vh_dir_init: texture_storage_2d<r32float, write>;
 @group(0) @binding(5) var<uniform> params_init: SinglePlaneParams;
 
 @compute @workgroup_size(8, 8, 1)
@@ -63,13 +78,12 @@ fn rcd_init_and_vh(@builtin(global_invocation_id) gid: vec3<u32>) {
     return;
   }
 
-  let index = gid.y * params_init.stride + gid.x;
-  let val = raw_init[index];
+  let val = Px(raw_init, i32(gid.y), i32(gid.x));
   let color = FC(params_init, gid.y, gid.x);
 
-  r_init[index] = select(0.0, val, color == 0u);
-  g_init[index] = select(0.0, val, color == 1u);
-  b_init[index] = select(0.0, val, color == 2u);
+  StoreR(r_init, gid.y, gid.x, select(0.0, val, color == 0u));
+  StoreR(g_init, gid.y, gid.x, select(0.0, val, color == 1u));
+  StoreR(b_init, gid.y, gid.x, select(0.0, val, color == 2u));
 
   var vh = 0.0;
   if (gid.x >= 4u && gid.y >= 4u && gid.x + 4u < params_init.width && gid.y + 4u < params_init.height) {
@@ -77,23 +91,23 @@ fn rcd_init_and_vh(@builtin(global_invocation_id) gid: vec3<u32>) {
     let y = i32(gid.y);
     let c = val;
 
-    let vm1 = raw_init[u32(y - 1) * params_init.stride + u32(x)];
-    let vp1 = raw_init[u32(y + 1) * params_init.stride + u32(x)];
-    let vm2 = raw_init[u32(y - 2) * params_init.stride + u32(x)];
-    let vp2 = raw_init[u32(y + 2) * params_init.stride + u32(x)];
-    let vm3 = raw_init[u32(y - 3) * params_init.stride + u32(x)];
-    let vp3 = raw_init[u32(y + 3) * params_init.stride + u32(x)];
-    let vm4 = raw_init[u32(y - 4) * params_init.stride + u32(x)];
-    let vp4 = raw_init[u32(y + 4) * params_init.stride + u32(x)];
+    let vm1 = Px(raw_init, y - 1, x);
+    let vp1 = Px(raw_init, y + 1, x);
+    let vm2 = Px(raw_init, y - 2, x);
+    let vp2 = Px(raw_init, y + 2, x);
+    let vm3 = Px(raw_init, y - 3, x);
+    let vp3 = Px(raw_init, y + 3, x);
+    let vm4 = Px(raw_init, y - 4, x);
+    let vp4 = Px(raw_init, y + 4, x);
 
-    let hm1 = raw_init[u32(y) * params_init.stride + u32(x - 1)];
-    let hp1 = raw_init[u32(y) * params_init.stride + u32(x + 1)];
-    let hm2 = raw_init[u32(y) * params_init.stride + u32(x - 2)];
-    let hp2 = raw_init[u32(y) * params_init.stride + u32(x + 2)];
-    let hm3 = raw_init[u32(y) * params_init.stride + u32(x - 3)];
-    let hp3 = raw_init[u32(y) * params_init.stride + u32(x + 3)];
-    let hm4 = raw_init[u32(y) * params_init.stride + u32(x - 4)];
-    let hp4 = raw_init[u32(y) * params_init.stride + u32(x + 4)];
+    let hm1 = Px(raw_init, y, x - 1);
+    let hp1 = Px(raw_init, y, x + 1);
+    let hm2 = Px(raw_init, y, x - 2);
+    let hp2 = Px(raw_init, y, x + 2);
+    let hm3 = Px(raw_init, y, x - 3);
+    let hp3 = Px(raw_init, y, x + 3);
+    let hm4 = Px(raw_init, y, x - 4);
+    let hp4 = Px(raw_init, y, x + 4);
 
     let V_stat = max(
       -18.0 * c * vm1 - 18.0 * c * vp1 - 36.0 * c * vm2 - 36.0 * c * vp2 + 18.0 * c * vm3 +
@@ -105,7 +119,7 @@ fn rcd_init_and_vh(@builtin(global_invocation_id) gid: vec3<u32>) {
       2.0 * vm2 * vm4 + 2.0 * vm2 * vp4 + 11.0 * vm2 * vm2 - 12.0 * vp2 * vm3 +
       2.0 * vp2 * vm4 - 2.0 * vp2 * vp4 + 11.0 * vp2 * vp2 + 2.0 * vm3 * vp3 -
       6.0 * vm3 * vm4 + 10.0 * vm3 * vm3 - 6.0 * vp3 * vp4 + 10.0 * vp3 * vp3 +
-      1.0 * vm4 * vm4 + 1.0 * vp4 * vp4,
+      vm4 * vm4 + vp4 * vp4,
       kEpsSq
     );
 
@@ -119,123 +133,86 @@ fn rcd_init_and_vh(@builtin(global_invocation_id) gid: vec3<u32>) {
       2.0 * hm2 * hm4 + 2.0 * hm2 * hp4 + 11.0 * hm2 * hm2 - 12.0 * hp2 * hm3 +
       2.0 * hp2 * hm4 - 2.0 * hp2 * hp4 + 11.0 * hp2 * hp2 + 2.0 * hm3 * hp3 -
       6.0 * hm3 * hm4 + 10.0 * hm3 * hm3 - 6.0 * hp3 * hp4 + 10.0 * hp3 * hp3 +
-      1.0 * hm4 * hm4 + 1.0 * hp4 * hp4,
+      hm4 * hm4 + hp4 * hp4,
       kEpsSq
     );
 
     vh = V_stat / (V_stat + H_stat);
   }
 
-  vh_dir_init[index] = vh;
+  StoreR(vh_dir_init, gid.y, gid.x, vh);
 }
 
 // ---------------------------------------------------------------------------
 // Kernel 2: rcd_green_at_rb
 // ---------------------------------------------------------------------------
-@group(0) @binding(0) var<storage, read> raw_green: array<f32>;
-@group(0) @binding(1) var<storage, read> vh_dir_green: array<f32>;
-@group(0) @binding(2) var<storage, read_write> g_green: array<f32>;
-@group(0) @binding(3) var<uniform> params_green: SinglePlaneParams;
+@group(0) @binding(0) var raw_green: texture_2d<f32>;
+@group(0) @binding(1) var vh_dir_green: texture_2d<f32>;
+@group(0) @binding(2) var g_green_src: texture_2d<f32>;
+@group(0) @binding(3) var g_green_dst: texture_storage_2d<r32float, write>;
+@group(0) @binding(4) var<uniform> params_green: SinglePlaneParams;
 
 @compute @workgroup_size(8, 8, 1)
 fn rcd_green_at_rb(@builtin(global_invocation_id) gid: vec3<u32>) {
-  if (gid.x >= params_green.width || gid.y >= params_green.height || gid.x < 4u || gid.y < 4u ||
-      gid.x + 4u >= params_green.width || gid.y + 4u >= params_green.height) {
-    return;
-  }
-
-  if (FC(params_green, gid.y, gid.x) == 1u) {
+  if (gid.x >= params_green.width || gid.y >= params_green.height) {
     return;
   }
 
   let x = i32(gid.x);
   let y = i32(gid.y);
+  var out_g = Px(g_green_src, y, x);
+  if (gid.x >= 4u && gid.y >= 4u && gid.x + 4u < params_green.width &&
+      gid.y + 4u < params_green.height && FC(params_green, gid.y, gid.x) != 1u) {
+    let VH_central = Px(vh_dir_green, y, x);
+    let VH_neigh = 0.25 * (Px(vh_dir_green, y - 1, x - 1) + Px(vh_dir_green, y - 1, x + 1) +
+                           Px(vh_dir_green, y + 1, x - 1) + Px(vh_dir_green, y + 1, x + 1));
+    let VH_disc = select(VH_central, VH_neigh, abs(0.5 - VH_central) < abs(0.5 - VH_neigh));
 
-  let VH_central = vh_dir_green[u32(y) * params_green.stride + u32(x)];
-  let VH_neigh = 0.25 * (vh_dir_green[u32(y - 1) * params_green.stride + u32(x - 1)] +
-                         vh_dir_green[u32(y - 1) * params_green.stride + u32(x + 1)] +
-                         vh_dir_green[u32(y + 1) * params_green.stride + u32(x - 1)] +
-                         vh_dir_green[u32(y + 1) * params_green.stride + u32(x + 1)]);
-  let VH_disc = select(VH_central, VH_neigh, abs(0.5 - VH_central) < abs(0.5 - VH_neigh));
+    let c = Px(raw_green, y, x);
+    let vm1 = Px(raw_green, y - 1, x);
+    let vp1 = Px(raw_green, y + 1, x);
+    let vm2 = Px(raw_green, y - 2, x);
+    let vp2 = Px(raw_green, y + 2, x);
+    let vm3 = Px(raw_green, y - 3, x);
+    let vp3 = Px(raw_green, y + 3, x);
+    let vm4 = Px(raw_green, y - 4, x);
+    let vp4 = Px(raw_green, y + 4, x);
+    let hm1 = Px(raw_green, y, x - 1);
+    let hp1 = Px(raw_green, y, x + 1);
+    let hm2 = Px(raw_green, y, x - 2);
+    let hp2 = Px(raw_green, y, x + 2);
+    let hm3 = Px(raw_green, y, x - 3);
+    let hp3 = Px(raw_green, y, x + 3);
+    let hm4 = Px(raw_green, y, x - 4);
+    let hp4 = Px(raw_green, y, x + 4);
 
-  let c = raw_green[u32(y) * params_green.stride + u32(x)];
-  let vm1 = raw_green[u32(y - 1) * params_green.stride + u32(x)];
-  let vp1 = raw_green[u32(y + 1) * params_green.stride + u32(x)];
-  let vm2 = raw_green[u32(y - 2) * params_green.stride + u32(x)];
-  let vp2 = raw_green[u32(y + 2) * params_green.stride + u32(x)];
-  let vm3 = raw_green[u32(y - 3) * params_green.stride + u32(x)];
-  let vp3 = raw_green[u32(y + 3) * params_green.stride + u32(x)];
-  let vm4 = raw_green[u32(y - 4) * params_green.stride + u32(x)];
-  let vp4 = raw_green[u32(y + 4) * params_green.stride + u32(x)];
+    let lpf_c = LowPass(raw_green, y, x);
+    let lpf_n2 = LowPass(raw_green, y - 2, x);
+    let lpf_s2 = LowPass(raw_green, y + 2, x);
+    let lpf_w2 = LowPass(raw_green, y, x - 2);
+    let lpf_e2 = LowPass(raw_green, y, x + 2);
 
-  let hm1 = raw_green[u32(y) * params_green.stride + u32(x - 1)];
-  let hp1 = raw_green[u32(y) * params_green.stride + u32(x + 1)];
-  let hm2 = raw_green[u32(y) * params_green.stride + u32(x - 2)];
-  let hp2 = raw_green[u32(y) * params_green.stride + u32(x + 2)];
-  let hm3 = raw_green[u32(y) * params_green.stride + u32(x - 3)];
-  let hp3 = raw_green[u32(y) * params_green.stride + u32(x + 3)];
-  let hm4 = raw_green[u32(y) * params_green.stride + u32(x - 4)];
-  let hp4 = raw_green[u32(y) * params_green.stride + u32(x + 4)];
+    let N_grad = kEps + abs(vm1 - vp1) + abs(c - vm2) + abs(vm1 - vm3) + abs(vm2 - vm4);
+    let S_grad = kEps + abs(vp1 - vm1) + abs(c - vp2) + abs(vp1 - vp3) + abs(vp2 - vp4);
+    let W_grad = kEps + abs(hm1 - hp1) + abs(c - hm2) + abs(hm1 - hm3) + abs(hm2 - hm4);
+    let E_grad = kEps + abs(hp1 - hm1) + abs(c - hp2) + abs(hp1 - hp3) + abs(hp2 - hp4);
 
-  let lpf_c = 0.25 * c + 0.125 * (vm1 + vp1 + hm1 + hp1) +
-    0.0625 * (raw_green[u32(y - 1) * params_green.stride + u32(x - 1)] +
-              raw_green[u32(y - 1) * params_green.stride + u32(x + 1)] +
-              raw_green[u32(y + 1) * params_green.stride + u32(x - 1)] +
-              raw_green[u32(y + 1) * params_green.stride + u32(x + 1)]);
-
-  let lpf_n2 = 0.25 * vm2 + 0.125 * (raw_green[u32(y - 3) * params_green.stride + u32(x)] + c +
-                                      raw_green[u32(y - 2) * params_green.stride + u32(x - 1)] +
-                                      raw_green[u32(y - 2) * params_green.stride + u32(x + 1)]) +
-    0.0625 * (raw_green[u32(y - 3) * params_green.stride + u32(x - 1)] +
-              raw_green[u32(y - 3) * params_green.stride + u32(x + 1)] +
-              raw_green[u32(y - 1) * params_green.stride + u32(x - 1)] +
-              raw_green[u32(y - 1) * params_green.stride + u32(x + 1)]);
-
-  let lpf_s2 = 0.25 * vp2 + 0.125 * (c + raw_green[u32(y + 3) * params_green.stride + u32(x)] +
-                                      raw_green[u32(y + 2) * params_green.stride + u32(x - 1)] +
-                                      raw_green[u32(y + 2) * params_green.stride + u32(x + 1)]) +
-    0.0625 * (raw_green[u32(y + 1) * params_green.stride + u32(x - 1)] +
-              raw_green[u32(y + 1) * params_green.stride + u32(x + 1)] +
-              raw_green[u32(y + 3) * params_green.stride + u32(x - 1)] +
-              raw_green[u32(y + 3) * params_green.stride + u32(x + 1)]);
-
-  let lpf_w2 = 0.25 * hm2 + 0.125 * (raw_green[u32(y) * params_green.stride + u32(x - 3)] + c +
-                                      raw_green[u32(y - 1) * params_green.stride + u32(x - 2)] +
-                                      raw_green[u32(y + 1) * params_green.stride + u32(x - 2)]) +
-    0.0625 * (raw_green[u32(y - 1) * params_green.stride + u32(x - 3)] +
-              raw_green[u32(y + 1) * params_green.stride + u32(x - 3)] +
-              raw_green[u32(y - 1) * params_green.stride + u32(x - 1)] +
-              raw_green[u32(y + 1) * params_green.stride + u32(x - 1)]);
-
-  let lpf_e2 = 0.25 * hp2 + 0.125 * (c + raw_green[u32(y) * params_green.stride + u32(x + 3)] +
-                                      raw_green[u32(y - 1) * params_green.stride + u32(x + 2)] +
-                                      raw_green[u32(y + 1) * params_green.stride + u32(x + 2)]) +
-    0.0625 * (raw_green[u32(y - 1) * params_green.stride + u32(x + 1)] +
-              raw_green[u32(y + 1) * params_green.stride + u32(x + 1)] +
-              raw_green[u32(y - 1) * params_green.stride + u32(x + 3)] +
-              raw_green[u32(y + 1) * params_green.stride + u32(x + 3)]);
-
-  let N_grad = kEps + abs(vm1 - vp1) + abs(c - vm2) + abs(vm1 - vm3) + abs(vm2 - vm4);
-  let S_grad = kEps + abs(vp1 - vm1) + abs(c - vp2) + abs(vp1 - vp3) + abs(vp2 - vp4);
-  let W_grad = kEps + abs(hm1 - hp1) + abs(c - hm2) + abs(hm1 - hm3) + abs(hm2 - hm4);
-  let E_grad = kEps + abs(hp1 - hm1) + abs(c - hp2) + abs(hp1 - hp3) + abs(hp2 - hp4);
-
-  let N_est = vm1 * (1.0 + (lpf_c - lpf_n2) / (kEps + lpf_c + lpf_n2));
-  let S_est = vp1 * (1.0 + (lpf_c - lpf_s2) / (kEps + lpf_c + lpf_s2));
-  let W_est = hm1 * (1.0 + (lpf_c - lpf_w2) / (kEps + lpf_c + lpf_w2));
-  let E_est = hp1 * (1.0 + (lpf_c - lpf_e2) / (kEps + lpf_c + lpf_e2));
-
-  let V_est = (S_grad * N_est + N_grad * S_est) / (N_grad + S_grad);
-  let H_est = (W_grad * E_est + E_grad * W_est) / (E_grad + W_grad);
-
-  g_green[gid.y * params_green.stride + gid.x] = max(VH_disc * H_est + (1.0 - VH_disc) * V_est, 0.0);
+    let N_est = vm1 * (1.0 + (lpf_c - lpf_n2) / (kEps + lpf_c + lpf_n2));
+    let S_est = vp1 * (1.0 + (lpf_c - lpf_s2) / (kEps + lpf_c + lpf_s2));
+    let W_est = hm1 * (1.0 + (lpf_c - lpf_w2) / (kEps + lpf_c + lpf_w2));
+    let E_est = hp1 * (1.0 + (lpf_c - lpf_e2) / (kEps + lpf_c + lpf_e2));
+    let V_est = (S_grad * N_est + N_grad * S_est) / (N_grad + S_grad);
+    let H_est = (W_grad * E_est + E_grad * W_est) / (E_grad + W_grad);
+    out_g = max(VH_disc * H_est + (1.0 - VH_disc) * V_est, 0.0);
+  }
+  StoreR(g_green_dst, gid.y, gid.x, out_g);
 }
 
 // ---------------------------------------------------------------------------
 // Kernel 3: rcd_pq_dir
 // ---------------------------------------------------------------------------
-@group(0) @binding(0) var<storage, read> raw_pq: array<f32>;
-@group(0) @binding(1) var<storage, read_write> pq_dir_pq: array<f32>;
+@group(0) @binding(0) var raw_pq: texture_2d<f32>;
+@group(0) @binding(1) var pq_dir_pq: texture_storage_2d<r32float, write>;
 @group(0) @binding(2) var<uniform> params_pq: SinglePlaneParams;
 
 @compute @workgroup_size(8, 8, 1)
@@ -249,217 +226,166 @@ fn rcd_pq_dir(@builtin(global_invocation_id) gid: vec3<u32>) {
       FC(params_pq, gid.y, gid.x) != 1u) {
     let x = i32(gid.x);
     let y = i32(gid.y);
-    let c = raw_pq[u32(y) * params_pq.stride + u32(x)];
-
-    let nw1 = raw_pq[u32(y - 1) * params_pq.stride + u32(x - 1)];
-    let se1 = raw_pq[u32(y + 1) * params_pq.stride + u32(x + 1)];
-    let nw2 = raw_pq[u32(y - 2) * params_pq.stride + u32(x - 2)];
-    let se2 = raw_pq[u32(y + 2) * params_pq.stride + u32(x + 2)];
-    let nw3 = raw_pq[u32(y - 3) * params_pq.stride + u32(x - 3)];
-    let se3 = raw_pq[u32(y + 3) * params_pq.stride + u32(x + 3)];
-    let nw4 = raw_pq[u32(y - 4) * params_pq.stride + u32(x - 4)];
-    let se4 = raw_pq[u32(y + 4) * params_pq.stride + u32(x + 4)];
-
-    let sw1 = raw_pq[u32(y + 1) * params_pq.stride + u32(x - 1)];
-    let ne1 = raw_pq[u32(y - 1) * params_pq.stride + u32(x + 1)];
-    let sw2 = raw_pq[u32(y + 2) * params_pq.stride + u32(x - 2)];
-    let ne2 = raw_pq[u32(y - 2) * params_pq.stride + u32(x + 2)];
-    let sw3 = raw_pq[u32(y + 3) * params_pq.stride + u32(x - 3)];
-    let ne3 = raw_pq[u32(y - 3) * params_pq.stride + u32(x + 3)];
-    let sw4 = raw_pq[u32(y + 4) * params_pq.stride + u32(x - 4)];
-    let ne4 = raw_pq[u32(y - 4) * params_pq.stride + u32(x + 4)];
-
-    let P_stat = max(
-      -18.0 * c * nw1 - 18.0 * c * se1 - 36.0 * c * nw2 - 36.0 * c * se2 + 18.0 * c * nw3 +
-      18.0 * c * se3 - 2.0 * c * nw4 - 2.0 * c * se4 + 38.0 * c * c - 70.0 * nw1 * se1 -
-      12.0 * nw1 * nw2 + 24.0 * nw1 * se2 - 38.0 * nw1 * nw3 + 16.0 * nw1 * se3 +
-      12.0 * nw1 * nw4 - 6.0 * nw1 * se4 + 46.0 * nw1 * nw1 + 24.0 * se1 * nw2 -
-      12.0 * se1 * se2 + 16.0 * se1 * nw3 - 38.0 * se1 * se3 - 6.0 * se1 * nw4 +
-      12.0 * se1 * se4 + 46.0 * se1 * se1 + 14.0 * nw2 * se2 - 12.0 * nw2 * se3 -
-      2.0 * nw2 * nw4 + 2.0 * nw2 * se4 + 11.0 * nw2 * nw2 - 12.0 * se2 * nw3 +
-      2.0 * se2 * nw4 - 2.0 * se2 * se4 + 11.0 * se2 * se2 + 2.0 * nw3 * se3 -
-      6.0 * nw3 * nw4 + 10.0 * nw3 * nw3 - 6.0 * se3 * se4 + 10.0 * se3 * se3 +
-      1.0 * nw4 * nw4 + 1.0 * se4 * se4,
-      kEpsSq
-    );
-
-    let Q_stat = max(
-      -18.0 * c * sw1 - 18.0 * c * ne1 - 36.0 * c * sw2 - 36.0 * c * ne2 + 18.0 * c * sw3 +
-      18.0 * c * ne3 - 2.0 * c * sw4 - 2.0 * c * ne4 + 38.0 * c * c - 70.0 * sw1 * ne1 -
-      12.0 * sw1 * sw2 + 24.0 * sw1 * ne2 - 38.0 * sw1 * sw3 + 16.0 * sw1 * ne3 +
-      12.0 * sw1 * sw4 - 6.0 * sw1 * ne4 + 46.0 * sw1 * sw1 + 24.0 * ne1 * sw2 -
-      12.0 * ne1 * ne2 + 16.0 * ne1 * sw3 - 38.0 * ne1 * ne3 - 6.0 * ne1 * sw4 +
-      12.0 * ne1 * ne4 + 46.0 * ne1 * ne1 + 14.0 * sw2 * ne2 - 12.0 * sw2 * ne3 -
-      2.0 * sw2 * sw4 + 2.0 * sw2 * ne4 + 11.0 * sw2 * sw2 - 12.0 * ne2 * sw3 +
-      2.0 * ne2 * sw4 - 2.0 * ne2 * ne4 + 11.0 * ne2 * ne2 + 2.0 * sw3 * ne3 -
-      6.0 * sw3 * sw4 + 10.0 * sw3 * sw3 - 6.0 * ne3 * ne4 + 10.0 * ne3 * ne3 +
-      1.0 * sw4 * sw4 + 1.0 * ne4 * ne4,
-      kEpsSq
-    );
-
+    let c = Px(raw_pq, y, x);
+    let nw1 = Px(raw_pq, y - 1, x - 1);
+    let se1 = Px(raw_pq, y + 1, x + 1);
+    let nw2 = Px(raw_pq, y - 2, x - 2);
+    let se2 = Px(raw_pq, y + 2, x + 2);
+    let nw3 = Px(raw_pq, y - 3, x - 3);
+    let se3 = Px(raw_pq, y + 3, x + 3);
+    let nw4 = Px(raw_pq, y - 4, x - 4);
+    let se4 = Px(raw_pq, y + 4, x + 4);
+    let sw1 = Px(raw_pq, y + 1, x - 1);
+    let ne1 = Px(raw_pq, y - 1, x + 1);
+    let sw2 = Px(raw_pq, y + 2, x - 2);
+    let ne2 = Px(raw_pq, y - 2, x + 2);
+    let sw3 = Px(raw_pq, y + 3, x - 3);
+    let ne3 = Px(raw_pq, y - 3, x + 3);
+    let sw4 = Px(raw_pq, y + 4, x - 4);
+    let ne4 = Px(raw_pq, y - 4, x + 4);
+    let P_stat = max(-18.0*c*nw1 - 18.0*c*se1 - 36.0*c*nw2 - 36.0*c*se2 + 18.0*c*nw3 +
+      18.0*c*se3 - 2.0*c*nw4 - 2.0*c*se4 + 38.0*c*c - 70.0*nw1*se1 -
+      12.0*nw1*nw2 + 24.0*nw1*se2 - 38.0*nw1*nw3 + 16.0*nw1*se3 +
+      12.0*nw1*nw4 - 6.0*nw1*se4 + 46.0*nw1*nw1 + 24.0*se1*nw2 -
+      12.0*se1*se2 + 16.0*se1*nw3 - 38.0*se1*se3 - 6.0*se1*nw4 +
+      12.0*se1*se4 + 46.0*se1*se1 + 14.0*nw2*se2 - 12.0*nw2*se3 -
+      2.0*nw2*nw4 + 2.0*nw2*se4 + 11.0*nw2*nw2 - 12.0*se2*nw3 +
+      2.0*se2*nw4 - 2.0*se2*se4 + 11.0*se2*se2 + 2.0*nw3*se3 -
+      6.0*nw3*nw4 + 10.0*nw3*nw3 - 6.0*se3*se4 + 10.0*se3*se3 +
+      nw4*nw4 + se4*se4, kEpsSq);
+    let Q_stat = max(-18.0*c*sw1 - 18.0*c*ne1 - 36.0*c*sw2 - 36.0*c*ne2 + 18.0*c*sw3 +
+      18.0*c*ne3 - 2.0*c*sw4 - 2.0*c*ne4 + 38.0*c*c - 70.0*sw1*ne1 -
+      12.0*sw1*sw2 + 24.0*sw1*ne2 - 38.0*sw1*sw3 + 16.0*sw1*ne3 +
+      12.0*sw1*sw4 - 6.0*sw1*ne4 + 46.0*sw1*sw1 + 24.0*ne1*sw2 -
+      12.0*ne1*ne2 + 16.0*ne1*sw3 - 38.0*ne1*ne3 - 6.0*ne1*sw4 +
+      12.0*ne1*ne4 + 46.0*ne1*ne1 + 14.0*sw2*ne2 - 12.0*sw2*ne3 -
+      2.0*sw2*sw4 + 2.0*sw2*ne4 + 11.0*sw2*sw2 - 12.0*ne2*sw3 +
+      2.0*ne2*sw4 - 2.0*ne2*ne4 + 11.0*ne2*ne2 + 2.0*sw3*ne3 -
+      6.0*sw3*sw4 + 10.0*sw3*sw3 - 6.0*ne3*ne4 + 10.0*ne3*ne3 +
+      sw4*sw4 + ne4*ne4, kEpsSq);
     pq = P_stat / (P_stat + Q_stat);
   }
-
-  pq_dir_pq[gid.y * params_pq.stride + gid.x] = pq;
+  StoreR(pq_dir_pq, gid.y, gid.x, pq);
 }
 
 // ---------------------------------------------------------------------------
 // Kernel 4: rcd_rb_at_rb
 // ---------------------------------------------------------------------------
-@group(0) @binding(0) var<storage, read> pq_dir_rb: array<f32>;
-@group(0) @binding(1) var<storage, read> g_rb: array<f32>;
-@group(0) @binding(2) var<storage, read_write> r_rb: array<f32>;
-@group(0) @binding(3) var<storage, read_write> b_rb: array<f32>;
-@group(0) @binding(4) var<uniform> params_rb: SinglePlaneParams;
+@group(0) @binding(0) var pq_dir_rb: texture_2d<f32>;
+@group(0) @binding(1) var g_rb: texture_2d<f32>;
+@group(0) @binding(2) var r_rb_src: texture_2d<f32>;
+@group(0) @binding(3) var b_rb_src: texture_2d<f32>;
+@group(0) @binding(4) var r_rb_dst: texture_storage_2d<r32float, write>;
+@group(0) @binding(5) var b_rb_dst: texture_storage_2d<r32float, write>;
+@group(0) @binding(6) var<uniform> params_rb: SinglePlaneParams;
 
 @compute @workgroup_size(8, 8, 1)
 fn rcd_rb_at_rb(@builtin(global_invocation_id) gid: vec3<u32>) {
-  if (gid.x >= params_rb.width || gid.y >= params_rb.height || gid.x < 4u || gid.y < 4u ||
-      gid.x + 4u >= params_rb.width || gid.y + 4u >= params_rb.height) {
+  if (gid.x >= params_rb.width || gid.y >= params_rb.height) {
     return;
   }
-
-  let color = FC(params_rb, gid.y, gid.x);
-  if (color == 1u) {
-    return;
-  }
-
   let x = i32(gid.x);
   let y = i32(gid.y);
-  let c = 2u - color;
-
-  let PQ_c = pq_dir_rb[u32(y) * params_rb.stride + u32(x)];
-  let PQ_n = 0.25 * (pq_dir_rb[u32(y - 1) * params_rb.stride + u32(x - 1)] +
-                     pq_dir_rb[u32(y - 1) * params_rb.stride + u32(x + 1)] +
-                     pq_dir_rb[u32(y + 1) * params_rb.stride + u32(x - 1)] +
-                     pq_dir_rb[u32(y + 1) * params_rb.stride + u32(x + 1)]);
-  let PQ_disc = select(PQ_c, PQ_n, abs(0.5 - PQ_c) < abs(0.5 - PQ_n));
-
-  let g_c = g_rb[u32(y) * params_rb.stride + u32(x)];
-
-  let ch_nw1 = select(r_rb[u32(y - 1) * params_rb.stride + u32(x - 1)],
-                      b_rb[u32(y - 1) * params_rb.stride + u32(x - 1)], c == 1u);
-  let ch_ne1 = select(r_rb[u32(y - 1) * params_rb.stride + u32(x + 1)],
-                      b_rb[u32(y - 1) * params_rb.stride + u32(x + 1)], c == 1u);
-  let ch_sw1 = select(r_rb[u32(y + 1) * params_rb.stride + u32(x - 1)],
-                      b_rb[u32(y + 1) * params_rb.stride + u32(x - 1)], c == 1u);
-  let ch_se1 = select(r_rb[u32(y + 1) * params_rb.stride + u32(x + 1)],
-                      b_rb[u32(y + 1) * params_rb.stride + u32(x + 1)], c == 1u);
-
-  let ch_nw3 = select(r_rb[u32(y - 3) * params_rb.stride + u32(x - 3)],
-                      b_rb[u32(y - 3) * params_rb.stride + u32(x - 3)], c == 1u);
-  let ch_ne3 = select(r_rb[u32(y - 3) * params_rb.stride + u32(x + 3)],
-                      b_rb[u32(y - 3) * params_rb.stride + u32(x + 3)], c == 1u);
-  let ch_sw3 = select(r_rb[u32(y + 3) * params_rb.stride + u32(x - 3)],
-                      b_rb[u32(y + 3) * params_rb.stride + u32(x - 3)], c == 1u);
-  let ch_se3 = select(r_rb[u32(y + 3) * params_rb.stride + u32(x + 3)],
-                      b_rb[u32(y + 3) * params_rb.stride + u32(x + 3)], c == 1u);
-
-  let g_nw2 = g_rb[u32(y - 2) * params_rb.stride + u32(x - 2)];
-  let g_ne2 = g_rb[u32(y - 2) * params_rb.stride + u32(x + 2)];
-  let g_sw2 = g_rb[u32(y + 2) * params_rb.stride + u32(x - 2)];
-  let g_se2 = g_rb[u32(y + 2) * params_rb.stride + u32(x + 2)];
-
-  let NW_grad = kEps + abs(ch_nw1 - ch_se1) + abs(ch_nw1 - ch_nw3) + abs(g_c - g_nw2);
-  let NE_grad = kEps + abs(ch_ne1 - ch_sw1) + abs(ch_ne1 - ch_ne3) + abs(g_c - g_ne2);
-  let SW_grad = kEps + abs(ch_sw1 - ch_ne1) + abs(ch_sw1 - ch_sw3) + abs(g_c - g_sw2);
-  let SE_grad = kEps + abs(ch_se1 - ch_nw1) + abs(ch_se1 - ch_se3) + abs(g_c - g_se2);
-
-  let g_nw1 = g_rb[u32(y - 1) * params_rb.stride + u32(x - 1)];
-  let g_ne1 = g_rb[u32(y - 1) * params_rb.stride + u32(x + 1)];
-  let g_sw1 = g_rb[u32(y + 1) * params_rb.stride + u32(x - 1)];
-  let g_se1 = g_rb[u32(y + 1) * params_rb.stride + u32(x + 1)];
-
-  let NW_est = ch_nw1 - g_nw1;
-  let NE_est = ch_ne1 - g_ne1;
-  let SW_est = ch_sw1 - g_sw1;
-  let SE_est = ch_se1 - g_se1;
-
-  let P_est = (NW_grad * SE_est + SE_grad * NW_est) / (NW_grad + SE_grad);
-  let Q_est = (NE_grad * SW_est + SW_grad * NE_est) / (NE_grad + SW_grad);
-  let out_val = max(0.0, g_c + (1.0 - PQ_disc) * P_est + PQ_disc * Q_est);
-
-  if (c == 0u) {
-    r_rb[gid.y * params_rb.stride + gid.x] = out_val;
-  } else {
-    b_rb[gid.y * params_rb.stride + gid.x] = out_val;
+  var out_r = Px(r_rb_src, y, x);
+  var out_b = Px(b_rb_src, y, x);
+  let color = FC(params_rb, gid.y, gid.x);
+  if (gid.x >= 4u && gid.y >= 4u && gid.x + 4u < params_rb.width && gid.y + 4u < params_rb.height &&
+      color != 1u) {
+    let c = 2u - color;
+    let use_b = c == 2u;
+    let PQ_c = Px(pq_dir_rb, y, x);
+    let PQ_n = 0.25 * (Px(pq_dir_rb, y - 1, x - 1) + Px(pq_dir_rb, y - 1, x + 1) +
+                       Px(pq_dir_rb, y + 1, x - 1) + Px(pq_dir_rb, y + 1, x + 1));
+    let PQ_disc = select(PQ_c, PQ_n, abs(0.5 - PQ_c) < abs(0.5 - PQ_n));
+    let g_c = Px(g_rb, y, x);
+    let ch_nw1 = select(Px(r_rb_src, y - 1, x - 1), Px(b_rb_src, y - 1, x - 1), use_b);
+    let ch_ne1 = select(Px(r_rb_src, y - 1, x + 1), Px(b_rb_src, y - 1, x + 1), use_b);
+    let ch_sw1 = select(Px(r_rb_src, y + 1, x - 1), Px(b_rb_src, y + 1, x - 1), use_b);
+    let ch_se1 = select(Px(r_rb_src, y + 1, x + 1), Px(b_rb_src, y + 1, x + 1), use_b);
+    let ch_nw3 = select(Px(r_rb_src, y - 3, x - 3), Px(b_rb_src, y - 3, x - 3), use_b);
+    let ch_ne3 = select(Px(r_rb_src, y - 3, x + 3), Px(b_rb_src, y - 3, x + 3), use_b);
+    let ch_sw3 = select(Px(r_rb_src, y + 3, x - 3), Px(b_rb_src, y + 3, x - 3), use_b);
+    let ch_se3 = select(Px(r_rb_src, y + 3, x + 3), Px(b_rb_src, y + 3, x + 3), use_b);
+    let g_nw2 = Px(g_rb, y - 2, x - 2);
+    let g_ne2 = Px(g_rb, y - 2, x + 2);
+    let g_sw2 = Px(g_rb, y + 2, x - 2);
+    let g_se2 = Px(g_rb, y + 2, x + 2);
+    let NW_grad = kEps + abs(ch_nw1 - ch_se1) + abs(ch_nw1 - ch_nw3) + abs(g_c - g_nw2);
+    let NE_grad = kEps + abs(ch_ne1 - ch_sw1) + abs(ch_ne1 - ch_ne3) + abs(g_c - g_ne2);
+    let SW_grad = kEps + abs(ch_sw1 - ch_ne1) + abs(ch_sw1 - ch_sw3) + abs(g_c - g_sw2);
+    let SE_grad = kEps + abs(ch_se1 - ch_nw1) + abs(ch_se1 - ch_se3) + abs(g_c - g_se2);
+    let NW_est = ch_nw1 - Px(g_rb, y - 1, x - 1);
+    let NE_est = ch_ne1 - Px(g_rb, y - 1, x + 1);
+    let SW_est = ch_sw1 - Px(g_rb, y + 1, x - 1);
+    let SE_est = ch_se1 - Px(g_rb, y + 1, x + 1);
+    let P_est = (NW_grad * SE_est + SE_grad * NW_est) / (NW_grad + SE_grad);
+    let Q_est = (NE_grad * SW_est + SW_grad * NE_est) / (NE_grad + SW_grad);
+    let out_val = max(0.0, g_c + (1.0 - PQ_disc) * P_est + PQ_disc * Q_est);
+    if (c == 0u) {
+      out_r = out_val;
+    } else {
+      out_b = out_val;
+    }
   }
+  StoreR(r_rb_dst, gid.y, gid.x, out_r);
+  StoreR(b_rb_dst, gid.y, gid.x, out_b);
 }
 
 // ---------------------------------------------------------------------------
 // Kernel 5: rcd_rb_at_g
 // ---------------------------------------------------------------------------
-@group(0) @binding(0) var<storage, read> vh_dir_g: array<f32>;
-@group(0) @binding(1) var<storage, read> g_g: array<f32>;
-@group(0) @binding(2) var<storage, read_write> r_g: array<f32>;
-@group(0) @binding(3) var<storage, read_write> b_g: array<f32>;
-@group(0) @binding(4) var<uniform> params_g: SinglePlaneParams;
+@group(0) @binding(0) var vh_dir_g: texture_2d<f32>;
+@group(0) @binding(1) var g_g: texture_2d<f32>;
+@group(0) @binding(2) var r_g_src: texture_2d<f32>;
+@group(0) @binding(3) var b_g_src: texture_2d<f32>;
+@group(0) @binding(4) var r_g_dst: texture_storage_2d<r32float, write>;
+@group(0) @binding(5) var b_g_dst: texture_storage_2d<r32float, write>;
+@group(0) @binding(6) var<uniform> params_g: SinglePlaneParams;
 
 @compute @workgroup_size(8, 8, 1)
 fn rcd_rb_at_g(@builtin(global_invocation_id) gid: vec3<u32>) {
-  if (gid.x >= params_g.width || gid.y >= params_g.height || gid.x < 4u || gid.y < 4u ||
-      gid.x + 4u >= params_g.width || gid.y + 4u >= params_g.height ||
-      FC(params_g, gid.y, gid.x) != 1u) {
+  if (gid.x >= params_g.width || gid.y >= params_g.height) {
     return;
   }
-
   let x = i32(gid.x);
   let y = i32(gid.y);
-
-  let VH_central = vh_dir_g[u32(y) * params_g.stride + u32(x)];
-  let VH_neigh = 0.25 * (vh_dir_g[u32(y - 1) * params_g.stride + u32(x - 1)] +
-                         vh_dir_g[u32(y - 1) * params_g.stride + u32(x + 1)] +
-                         vh_dir_g[u32(y + 1) * params_g.stride + u32(x - 1)] +
-                         vh_dir_g[u32(y + 1) * params_g.stride + u32(x + 1)]);
-  let VH_disc = select(VH_central, VH_neigh, abs(0.5 - VH_central) < abs(0.5 - VH_neigh));
-
-  let g_c = g_g[u32(y) * params_g.stride + u32(x)];
-  let g_m2 = g_g[u32(y - 2) * params_g.stride + u32(x)];
-  let g_p2 = g_g[u32(y + 2) * params_g.stride + u32(x)];
-  let g_l2 = g_g[u32(y) * params_g.stride + u32(x - 2)];
-  let g_r2 = g_g[u32(y) * params_g.stride + u32(x + 2)];
-  let g_m1 = g_g[u32(y - 1) * params_g.stride + u32(x)];
-  let g_p1 = g_g[u32(y + 1) * params_g.stride + u32(x)];
-  let g_l1 = g_g[u32(y) * params_g.stride + u32(x - 1)];
-  let g_r1 = g_g[u32(y) * params_g.stride + u32(x + 1)];
-
-  let r_m1 = r_g[u32(y - 1) * params_g.stride + u32(x)];
-  let r_p1 = r_g[u32(y + 1) * params_g.stride + u32(x)];
-  let r_m3 = r_g[u32(y - 3) * params_g.stride + u32(x)];
-  let r_p3 = r_g[u32(y + 3) * params_g.stride + u32(x)];
-  let r_l1 = r_g[u32(y) * params_g.stride + u32(x - 1)];
-  let r_r1 = r_g[u32(y) * params_g.stride + u32(x + 1)];
-  let r_l3 = r_g[u32(y) * params_g.stride + u32(x - 3)];
-  let r_r3 = r_g[u32(y) * params_g.stride + u32(x + 3)];
-
-  let b_m1 = b_g[u32(y - 1) * params_g.stride + u32(x)];
-  let b_p1 = b_g[u32(y + 1) * params_g.stride + u32(x)];
-  let b_m3 = b_g[u32(y - 3) * params_g.stride + u32(x)];
-  let b_p3 = b_g[u32(y + 3) * params_g.stride + u32(x)];
-  let b_l1 = b_g[u32(y) * params_g.stride + u32(x - 1)];
-  let b_r1 = b_g[u32(y) * params_g.stride + u32(x + 1)];
-  let b_l3 = b_g[u32(y) * params_g.stride + u32(x - 3)];
-  let b_r3 = b_g[u32(y) * params_g.stride + u32(x + 3)];
-
-  let index = gid.y * params_g.stride + gid.x;
-
-  r_g[index] = ReconstructRbAtGreen(
-    r_m1, r_p1, r_m3, r_p3, r_l1, r_r1, r_l3, r_r3,
-    g_c, g_m2, g_p2, g_l2, g_r2, g_m1, g_p1, g_l1, g_r1, VH_disc
-  );
-  b_g[index] = ReconstructRbAtGreen(
-    b_m1, b_p1, b_m3, b_p3, b_l1, b_r1, b_l3, b_r3,
-    g_c, g_m2, g_p2, g_l2, g_r2, g_m1, g_p1, g_l1, g_r1, VH_disc
-  );
+  var out_r = Px(r_g_src, y, x);
+  var out_b = Px(b_g_src, y, x);
+  if (gid.x >= 4u && gid.y >= 4u && gid.x + 4u < params_g.width && gid.y + 4u < params_g.height &&
+      FC(params_g, gid.y, gid.x) == 1u) {
+    let VH_central = Px(vh_dir_g, y, x);
+    let VH_neigh = 0.25 * (Px(vh_dir_g, y - 1, x - 1) + Px(vh_dir_g, y - 1, x + 1) +
+                           Px(vh_dir_g, y + 1, x - 1) + Px(vh_dir_g, y + 1, x + 1));
+    let VH_disc = select(VH_central, VH_neigh, abs(0.5 - VH_central) < abs(0.5 - VH_neigh));
+    let g_c = Px(g_g, y, x);
+    let g_m2 = Px(g_g, y - 2, x);
+    let g_p2 = Px(g_g, y + 2, x);
+    let g_l2 = Px(g_g, y, x - 2);
+    let g_r2 = Px(g_g, y, x + 2);
+    let g_m1 = Px(g_g, y - 1, x);
+    let g_p1 = Px(g_g, y + 1, x);
+    let g_l1 = Px(g_g, y, x - 1);
+    let g_r1 = Px(g_g, y, x + 1);
+    out_r = ReconstructRbAtGreen(
+      Px(r_g_src, y - 1, x), Px(r_g_src, y + 1, x), Px(r_g_src, y - 3, x), Px(r_g_src, y + 3, x),
+      Px(r_g_src, y, x - 1), Px(r_g_src, y, x + 1), Px(r_g_src, y, x - 3), Px(r_g_src, y, x + 3),
+      g_c, g_m2, g_p2, g_l2, g_r2, g_m1, g_p1, g_l1, g_r1, VH_disc);
+    out_b = ReconstructRbAtGreen(
+      Px(b_g_src, y - 1, x), Px(b_g_src, y + 1, x), Px(b_g_src, y - 3, x), Px(b_g_src, y + 3, x),
+      Px(b_g_src, y, x - 1), Px(b_g_src, y, x + 1), Px(b_g_src, y, x - 3), Px(b_g_src, y, x + 3),
+      g_c, g_m2, g_p2, g_l2, g_r2, g_m1, g_p1, g_l1, g_r1, VH_disc);
+  }
+  StoreR(r_g_dst, gid.y, gid.x, out_r);
+  StoreR(b_g_dst, gid.y, gid.x, out_b);
 }
 
 // ---------------------------------------------------------------------------
 // Kernel 6: rcd_merge_rgba
 // ---------------------------------------------------------------------------
-@group(0) @binding(0) var<storage, read> r_merge: array<f32>;
-@group(0) @binding(1) var<storage, read> g_merge: array<f32>;
-@group(0) @binding(2) var<storage, read> b_merge: array<f32>;
-@group(0) @binding(3) var<storage, read_write> out_rgba: array<vec4<f32>>;
+@group(0) @binding(0) var r_merge: texture_2d<f32>;
+@group(0) @binding(1) var g_merge: texture_2d<f32>;
+@group(0) @binding(2) var b_merge: texture_2d<f32>;
+@group(0) @binding(3) var out_rgba: texture_storage_2d<rgba32float, write>;
 @group(0) @binding(4) var<uniform> params_merge: MergeParams;
 
 @compute @workgroup_size(8, 8, 1)
@@ -467,13 +393,12 @@ fn rcd_merge_rgba(@builtin(global_invocation_id) gid: vec3<u32>) {
   if (gid.x >= params_merge.width || gid.y >= params_merge.height) {
     return;
   }
-
-  let plane_index = gid.y * params_merge.plane_stride + gid.x;
-  let rgba_index = gid.y * params_merge.rgba_stride + gid.x;
-  out_rgba[rgba_index] = vec4<f32>(
-    r_merge[plane_index],
-    g_merge[plane_index],
-    b_merge[plane_index],
+  let x = i32(gid.x);
+  let y = i32(gid.y);
+  textureStore(out_rgba, vec2<i32>(x, y), vec4<f32>(
+    Px(r_merge, y, x),
+    Px(g_merge, y, x),
+    Px(b_merge, y, x),
     1.0
-  );
+  ));
 }

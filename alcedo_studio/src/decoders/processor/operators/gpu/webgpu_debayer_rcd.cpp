@@ -6,9 +6,7 @@
 
 #include "decoders/processor/operators/gpu/webgpu_debayer_rcd.hpp"
 
-#include <algorithm>
 #include <array>
-#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
@@ -16,6 +14,7 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "image/webgpu_image.hpp"
@@ -40,6 +39,13 @@ struct MergeParams {
   uint32_t rgba_stride;
 };
 
+enum class BindingKind {
+  ReadTextureR32F,
+  WriteTextureR32F,
+  WriteTextureRGBA32F,
+  UniformBuffer,
+};
+
 enum class Kernel : uint32_t {
   InitAndVH,
   GreenAtRB,
@@ -48,12 +54,6 @@ enum class Kernel : uint32_t {
   RBAtG,
   MergeRGBA,
 };
-
-constexpr uint32_t kRowAlignmentBytes = 256;
-
-auto               AlignRowBytes(size_t row_bytes) -> size_t {
-  return ((row_bytes + kRowAlignmentBytes - 1) / kRowAlignmentBytes) * kRowAlignmentBytes;
-}
 
 auto KernelNameFor(Kernel kernel) -> const char* {
   switch (kernel) {
@@ -73,67 +73,31 @@ auto KernelNameFor(Kernel kernel) -> const char* {
   throw std::runtime_error("WebGPU Debayer RCD: unknown kernel.");
 }
 
-auto BindingCountFor(Kernel kernel) -> uint32_t {
+auto BindingKindsFor(Kernel kernel) -> std::vector<BindingKind> {
   switch (kernel) {
     case Kernel::InitAndVH:
-      return 6;
+      return {BindingKind::ReadTextureR32F,  BindingKind::WriteTextureR32F,
+              BindingKind::WriteTextureR32F, BindingKind::WriteTextureR32F,
+              BindingKind::WriteTextureR32F, BindingKind::UniformBuffer};
     case Kernel::GreenAtRB:
-      return 4;
+      return {BindingKind::ReadTextureR32F, BindingKind::ReadTextureR32F,
+              BindingKind::ReadTextureR32F, BindingKind::WriteTextureR32F,
+              BindingKind::UniformBuffer};
     case Kernel::PQDir:
-      return 3;
-    case Kernel::RBAtRB:
-      return 5;
-    case Kernel::RBAtG:
-      return 5;
-    case Kernel::MergeRGBA:
-      return 5;
-  }
-  return 0;
-}
-
-auto BindingTypeFor(Kernel kernel, uint32_t binding) -> wgpu::BufferBindingType {
-  switch (kernel) {
-    case Kernel::InitAndVH:
-      if (binding == 0) {
-        return wgpu::BufferBindingType::ReadOnlyStorage;
-      }
-      if (binding == 5) {
-        return wgpu::BufferBindingType::Uniform;
-      }
-      return wgpu::BufferBindingType::Storage;
-    case Kernel::GreenAtRB:
-      if (binding == 3) {
-        return wgpu::BufferBindingType::Uniform;
-      }
-      if (binding <= 1) {
-        return wgpu::BufferBindingType::ReadOnlyStorage;
-      }
-      return wgpu::BufferBindingType::Storage;
-    case Kernel::PQDir:
-      if (binding == 2) {
-        return wgpu::BufferBindingType::Uniform;
-      }
-      return binding == 0 ? wgpu::BufferBindingType::ReadOnlyStorage
-                          : wgpu::BufferBindingType::Storage;
+      return {BindingKind::ReadTextureR32F, BindingKind::WriteTextureR32F,
+              BindingKind::UniformBuffer};
     case Kernel::RBAtRB:
     case Kernel::RBAtG:
-      if (binding == 4) {
-        return wgpu::BufferBindingType::Uniform;
-      }
-      if (binding <= 1) {
-        return wgpu::BufferBindingType::ReadOnlyStorage;
-      }
-      return wgpu::BufferBindingType::Storage;
+      return {BindingKind::ReadTextureR32F,  BindingKind::ReadTextureR32F,
+              BindingKind::ReadTextureR32F,  BindingKind::ReadTextureR32F,
+              BindingKind::WriteTextureR32F, BindingKind::WriteTextureR32F,
+              BindingKind::UniformBuffer};
     case Kernel::MergeRGBA:
-      if (binding == 4) {
-        return wgpu::BufferBindingType::Uniform;
-      }
-      if (binding <= 2) {
-        return wgpu::BufferBindingType::ReadOnlyStorage;
-      }
-      return wgpu::BufferBindingType::Storage;
+      return {BindingKind::ReadTextureR32F, BindingKind::ReadTextureR32F,
+              BindingKind::ReadTextureR32F, BindingKind::WriteTextureRGBA32F,
+              BindingKind::UniformBuffer};
   }
-  throw std::runtime_error("WebGPU Debayer RCD: unknown kernel binding type.");
+  return {};
 }
 
 auto ReadTextFile(const std::filesystem::path& path, const char* label) -> std::string {
@@ -159,45 +123,53 @@ auto ReadTextFile(const std::filesystem::path& path, const char* label) -> std::
   return contents;
 }
 
-auto MakeBuffer(uint64_t size, wgpu::BufferUsage usage, bool mapped_at_creation = false)
-    -> wgpu::Buffer {
+auto MakeBuffer(uint64_t size, wgpu::BufferUsage usage) -> wgpu::Buffer {
   wgpu::BufferDescriptor descriptor{};
-  descriptor.usage            = usage;
-  descriptor.size             = size;
-  descriptor.mappedAtCreation = mapped_at_creation;
-  auto buffer                 = WebGpuContext::Instance().Device().CreateBuffer(&descriptor);
+  descriptor.usage = usage;
+  descriptor.size  = size;
+  auto buffer      = WebGpuContext::Instance().Device().CreateBuffer(&descriptor);
   if (!buffer.Get()) {
     throw std::runtime_error("WebGPU Debayer RCD: Failed to create buffer.");
   }
   return buffer;
 }
 
-auto MakeExtent(uint32_t width, uint32_t height) -> wgpu::Extent3D {
-  return wgpu::Extent3D{width, height, 1};
-}
-
-auto MakeTextureCopy(const wgpu::Texture& texture) -> wgpu::TexelCopyTextureInfo {
-  wgpu::TexelCopyTextureInfo copy{};
-  copy.texture  = texture;
-  copy.mipLevel = 0;
-  copy.origin   = wgpu::Origin3D{0, 0, 0};
-  copy.aspect   = wgpu::TextureAspect::All;
-  return copy;
-}
-
-auto MakeBufferCopy(const wgpu::Buffer& buffer, uint32_t row_bytes, uint32_t rows)
-    -> wgpu::TexelCopyBufferInfo {
-  wgpu::TexelCopyBufferInfo copy{};
-  copy.buffer              = buffer;
-  copy.layout.offset       = 0;
-  copy.layout.bytesPerRow  = row_bytes;
-  copy.layout.rowsPerImage = rows;
-  return copy;
-}
-
 void SubmitAndWait(const wgpu::CommandBuffer& command_buffer) {
   WebGpuContext::Instance().Queue().Submit(1, &command_buffer);
   WebGpuContext::Instance().WaitForSubmittedWork();
+}
+
+auto MakeTextureView(const WebGpuImage& image) -> wgpu::TextureView {
+  wgpu::TextureViewDescriptor descriptor{};
+  descriptor.dimension = wgpu::TextureViewDimension::e2D;
+  auto view            = image.Texture().CreateView(&descriptor);
+  if (!view.Get()) {
+    throw std::runtime_error("WebGPU Debayer RCD: Failed to create texture view.");
+  }
+  return view;
+}
+
+void ConfigureLayoutEntry(wgpu::BindGroupLayoutEntry& entry, BindingKind kind) {
+  entry.visibility = wgpu::ShaderStage::Compute;
+  switch (kind) {
+    case BindingKind::ReadTextureR32F:
+      entry.texture.sampleType    = wgpu::TextureSampleType::UnfilterableFloat;
+      entry.texture.viewDimension = wgpu::TextureViewDimension::e2D;
+      break;
+    case BindingKind::WriteTextureR32F:
+      entry.storageTexture.access        = wgpu::StorageTextureAccess::WriteOnly;
+      entry.storageTexture.format        = wgpu::TextureFormat::R32Float;
+      entry.storageTexture.viewDimension = wgpu::TextureViewDimension::e2D;
+      break;
+    case BindingKind::WriteTextureRGBA32F:
+      entry.storageTexture.access        = wgpu::StorageTextureAccess::WriteOnly;
+      entry.storageTexture.format        = wgpu::TextureFormat::RGBA32Float;
+      entry.storageTexture.viewDimension = wgpu::TextureViewDimension::e2D;
+      break;
+    case BindingKind::UniformBuffer:
+      entry.buffer.type = wgpu::BufferBindingType::Uniform;
+      break;
+  }
 }
 
 auto GetOrCreatePipeline(Kernel kernel) -> wgpu::ComputePipeline {
@@ -225,15 +197,14 @@ auto GetOrCreatePipeline(Kernel kernel) -> wgpu::ComputePipeline {
     throw std::runtime_error("WebGPU Debayer RCD: Failed to create shader module.");
   }
 
-  const auto                              binding_count = BindingCountFor(kernel);
+  const auto                              kinds = BindingKindsFor(kernel);
   std::vector<wgpu::BindGroupLayoutEntry> entries;
-  entries.reserve(binding_count);
-  for (uint32_t i = 0; i < binding_count; ++i) {
-    wgpu::BindGroupLayoutEntry e{};
-    e.binding     = i;
-    e.visibility  = wgpu::ShaderStage::Compute;
-    e.buffer.type = BindingTypeFor(kernel, i);
-    entries.push_back(e);
+  entries.reserve(kinds.size());
+  for (uint32_t i = 0; i < kinds.size(); ++i) {
+    wgpu::BindGroupLayoutEntry entry{};
+    entry.binding = i;
+    ConfigureLayoutEntry(entry, kinds[i]);
+    entries.push_back(entry);
   }
 
   wgpu::BindGroupLayoutDescriptor bgl_desc{};
@@ -265,22 +236,48 @@ auto GetOrCreatePipeline(Kernel kernel) -> wgpu::ComputePipeline {
   return pipeline;
 }
 
-auto CreateBindGroup(const wgpu::ComputePipeline&     pipeline,
-                     const std::vector<wgpu::Buffer>& buffers) -> wgpu::BindGroup {
+struct BindingResource {
+  const WebGpuImage* texture = nullptr;
+  wgpu::Buffer       buffer  = nullptr;
+};
+
+auto CreateBindGroup(const wgpu::ComputePipeline&        pipeline,
+                     const std::vector<BindingResource>& resources) -> wgpu::BindGroup {
+  std::vector<wgpu::TextureView> views;
+  views.reserve(resources.size());
   std::vector<wgpu::BindGroupEntry> entries;
-  entries.reserve(buffers.size());
-  for (size_t i = 0; i < buffers.size(); ++i) {
-    wgpu::BindGroupEntry e{};
-    e.binding = static_cast<uint32_t>(i);
-    e.buffer  = buffers[i];
-    entries.push_back(e);
+  entries.reserve(resources.size());
+
+  for (uint32_t i = 0; i < resources.size(); ++i) {
+    wgpu::BindGroupEntry entry{};
+    entry.binding = i;
+    if (resources[i].texture != nullptr) {
+      views.push_back(MakeTextureView(*resources[i].texture));
+      entry.textureView = views.back();
+    } else {
+      entry.buffer = resources[i].buffer;
+    }
+    entries.push_back(entry);
   }
 
   wgpu::BindGroupDescriptor desc{};
   desc.layout     = pipeline.GetBindGroupLayout(0);
   desc.entryCount = entries.size();
   desc.entries    = entries.data();
-  return WebGpuContext::Instance().Device().CreateBindGroup(&desc);
+  auto bind_group = WebGpuContext::Instance().Device().CreateBindGroup(&desc);
+  if (!bind_group.Get()) {
+    throw std::runtime_error("WebGPU Debayer RCD: Failed to create bind group.");
+  }
+  return bind_group;
+}
+
+void Dispatch(wgpu::ComputePassEncoder& compute, Kernel kernel,
+              const std::vector<BindingResource>& resources, uint32_t width, uint32_t height) {
+  auto pipeline   = GetOrCreatePipeline(kernel);
+  auto bind_group = CreateBindGroup(pipeline, resources);
+  compute.SetPipeline(pipeline);
+  compute.SetBindGroup(0, bind_group);
+  compute.DispatchWorkgroups((width + 7) / 8, (height + 7) / 8, 1);
 }
 
 }  // namespace
@@ -299,23 +296,27 @@ void Bayer2x2ToRGB_RCD(WebGpuImage& image, const BayerPattern2x2& pattern) {
     return;
   }
 
-  const auto plane_row_bytes = AlignRowBytes(static_cast<size_t>(width) * sizeof(float));
-  const auto plane_size      = plane_row_bytes * height;
-  const auto plane_stride    = static_cast<uint32_t>(plane_row_bytes / sizeof(float));
-
-  const auto rgba_row_bytes  = AlignRowBytes(static_cast<size_t>(width) * sizeof(float) * 4U);
-  const auto rgba_size       = rgba_row_bytes * height;
-  const auto rgba_stride     = static_cast<uint32_t>(rgba_row_bytes / (sizeof(float) * 4U));
-
-  auto raw_buffer = MakeBuffer(plane_size, wgpu::BufferUsage::Storage | wgpu::BufferUsage::CopyDst);
-  auto r_buffer   = MakeBuffer(plane_size, wgpu::BufferUsage::Storage | wgpu::BufferUsage::CopyDst);
-  auto g_buffer   = MakeBuffer(plane_size, wgpu::BufferUsage::Storage | wgpu::BufferUsage::CopyDst);
-  auto b_buffer   = MakeBuffer(plane_size, wgpu::BufferUsage::Storage | wgpu::BufferUsage::CopyDst);
-  auto vh_buffer  = MakeBuffer(plane_size, wgpu::BufferUsage::Storage | wgpu::BufferUsage::CopyDst);
-  auto pq_buffer  = MakeBuffer(plane_size, wgpu::BufferUsage::Storage | wgpu::BufferUsage::CopyDst);
-  auto rgba_buffer = MakeBuffer(rgba_size, wgpu::BufferUsage::Storage | wgpu::BufferUsage::CopySrc);
-
+  WebGpuImage r0;
+  WebGpuImage g0;
+  WebGpuImage g1;
+  WebGpuImage b0;
+  WebGpuImage vh;
+  WebGpuImage pq;
+  WebGpuImage r1;
+  WebGpuImage b1;
+  WebGpuImage r2;
+  WebGpuImage b2;
   WebGpuImage output;
+  r0.Create(width, height, PixelFormat::R32FLOAT);
+  g0.Create(width, height, PixelFormat::R32FLOAT);
+  g1.Create(width, height, PixelFormat::R32FLOAT);
+  b0.Create(width, height, PixelFormat::R32FLOAT);
+  vh.Create(width, height, PixelFormat::R32FLOAT);
+  pq.Create(width, height, PixelFormat::R32FLOAT);
+  r1.Create(width, height, PixelFormat::R32FLOAT);
+  b1.Create(width, height, PixelFormat::R32FLOAT);
+  r2.Create(width, height, PixelFormat::R32FLOAT);
+  b2.Create(width, height, PixelFormat::R32FLOAT);
   output.Create(width, height, PixelFormat::RGBA32FLOAT);
 
   const SinglePlaneParams plane_params{
@@ -324,19 +325,19 @@ void Bayer2x2ToRGB_RCD(WebGpuImage& image, const BayerPattern2x2& pattern) {
                  static_cast<uint32_t>(pattern.rgb_fc[3])},
       .width  = width,
       .height = height,
-      .stride = plane_stride,
+      .stride = width,
       .padding = 0,
   };
   const MergeParams merge_params{
       .width        = width,
       .height       = height,
-      .plane_stride = plane_stride,
-      .rgba_stride  = rgba_stride,
+      .plane_stride = width,
+      .rgba_stride  = width,
   };
 
-  auto params_buffer = MakeBuffer(sizeof(SinglePlaneParams),
-                                  wgpu::BufferUsage::Uniform | wgpu::BufferUsage::CopyDst);
-  WebGpuContext::Instance().Queue().WriteBuffer(params_buffer, 0, &plane_params,
+  auto plane_params_buffer = MakeBuffer(sizeof(SinglePlaneParams),
+                                        wgpu::BufferUsage::Uniform | wgpu::BufferUsage::CopyDst);
+  WebGpuContext::Instance().Queue().WriteBuffer(plane_params_buffer, 0, &plane_params,
                                                 sizeof(plane_params));
 
   auto merge_params_buffer =
@@ -345,88 +346,26 @@ void Bayer2x2ToRGB_RCD(WebGpuImage& image, const BayerPattern2x2& pattern) {
                                                 sizeof(merge_params));
 
   auto encoder = WebGpuContext::Instance().Device().CreateCommandEncoder();
-
-  // Copy input texture → raw buffer
-  {
-    auto src    = MakeTextureCopy(image.Texture());
-    auto dst    = MakeBufferCopy(raw_buffer, static_cast<uint32_t>(plane_row_bytes), height);
-    auto extent = MakeExtent(width, height);
-    encoder.CopyTextureToBuffer(&src, &dst, &extent);
-  }
-
-  // Single compute pass with all 6 kernels
   {
     auto compute = encoder.BeginComputePass();
 
-    // Kernel 1: InitAndVH
-    {
-      auto pipeline   = GetOrCreatePipeline(Kernel::InitAndVH);
-      auto bind_group = CreateBindGroup(
-          pipeline, {raw_buffer, r_buffer, g_buffer, b_buffer, vh_buffer, params_buffer});
-      compute.SetPipeline(pipeline);
-      compute.SetBindGroup(0, bind_group);
-      compute.DispatchWorkgroups((width + 7) / 8, (height + 7) / 8, 1);
-    }
-
-    // Kernel 2: GreenAtRB
-    {
-      auto pipeline   = GetOrCreatePipeline(Kernel::GreenAtRB);
-      auto bind_group = CreateBindGroup(pipeline, {raw_buffer, vh_buffer, g_buffer, params_buffer});
-      compute.SetPipeline(pipeline);
-      compute.SetBindGroup(0, bind_group);
-      compute.DispatchWorkgroups((width + 7) / 8, (height + 7) / 8, 1);
-    }
-
-    // Kernel 3: PQDir
-    {
-      auto pipeline   = GetOrCreatePipeline(Kernel::PQDir);
-      auto bind_group = CreateBindGroup(pipeline, {raw_buffer, pq_buffer, params_buffer});
-      compute.SetPipeline(pipeline);
-      compute.SetBindGroup(0, bind_group);
-      compute.DispatchWorkgroups((width + 7) / 8, (height + 7) / 8, 1);
-    }
-
-    // Kernel 4: RBAtRB
-    {
-      auto pipeline = GetOrCreatePipeline(Kernel::RBAtRB);
-      auto bind_group =
-          CreateBindGroup(pipeline, {pq_buffer, g_buffer, r_buffer, b_buffer, params_buffer});
-      compute.SetPipeline(pipeline);
-      compute.SetBindGroup(0, bind_group);
-      compute.DispatchWorkgroups((width + 7) / 8, (height + 7) / 8, 1);
-    }
-
-    // Kernel 5: RBAtG
-    {
-      auto pipeline = GetOrCreatePipeline(Kernel::RBAtG);
-      auto bind_group =
-          CreateBindGroup(pipeline, {vh_buffer, g_buffer, r_buffer, b_buffer, params_buffer});
-      compute.SetPipeline(pipeline);
-      compute.SetBindGroup(0, bind_group);
-      compute.DispatchWorkgroups((width + 7) / 8, (height + 7) / 8, 1);
-    }
-
-    // Kernel 6: MergeRGBA
-    {
-      auto pipeline   = GetOrCreatePipeline(Kernel::MergeRGBA);
-      auto bind_group = CreateBindGroup(
-          pipeline, {r_buffer, g_buffer, b_buffer, rgba_buffer, merge_params_buffer});
-      compute.SetPipeline(pipeline);
-      compute.SetBindGroup(0, bind_group);
-      compute.DispatchWorkgroups((width + 7) / 8, (height + 7) / 8, 1);
-    }
+    Dispatch(compute, Kernel::InitAndVH,
+             {{&image}, {&r0}, {&g0}, {&b0}, {&vh}, {nullptr, plane_params_buffer}}, width, height);
+    Dispatch(compute, Kernel::GreenAtRB,
+             {{&image}, {&vh}, {&g0}, {&g1}, {nullptr, plane_params_buffer}}, width, height);
+    Dispatch(compute, Kernel::PQDir, {{&image}, {&pq}, {nullptr, plane_params_buffer}}, width,
+             height);
+    Dispatch(compute, Kernel::RBAtRB,
+             {{&pq}, {&g1}, {&r0}, {&b0}, {&r1}, {&b1}, {nullptr, plane_params_buffer}}, width,
+             height);
+    Dispatch(compute, Kernel::RBAtG,
+             {{&vh}, {&g1}, {&r1}, {&b1}, {&r2}, {&b2}, {nullptr, plane_params_buffer}}, width,
+             height);
+    Dispatch(compute, Kernel::MergeRGBA,
+             {{&r2}, {&g1}, {&b2}, {&output}, {nullptr, merge_params_buffer}}, width, height);
 
     compute.End();
   }
-
-  // Copy rgba buffer → output texture
-  {
-    auto src    = MakeBufferCopy(rgba_buffer, static_cast<uint32_t>(rgba_row_bytes), height);
-    auto dst    = MakeTextureCopy(output.Texture());
-    auto extent = MakeExtent(width, height);
-    encoder.CopyBufferToTexture(&src, &dst, &extent);
-  }
-
   SubmitAndWait(encoder.Finish());
 
   image = std::move(output);

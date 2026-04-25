@@ -174,7 +174,7 @@ if(ALCEDO_WEBGPU_ENABLED)
 
   add_executable(WebGpuRawOpsTest raw/webgpu_raw_ops_test.cpp)
   target_include_directories(WebGpuRawOpsTest PUBLIC ${ALCEDO_INCLUDE_DIR})
-  target_link_libraries(WebGpuRawOpsTest PRIVATE GTest::gtest_main RawProcessorOp WebGpuGeometryUtils ${ALCEDO_TEST_OPENCV_MIN_DEPS} opencv_highgui)
+  target_link_libraries(WebGpuRawOpsTest PRIVATE GTest::gtest_main RawProcessorOp WebGpuGeometryUtils Qt6::Widgets ${ALCEDO_TEST_OPENCV_MIN_DEPS})
   if(WIN32 AND ALCEDO_DAWN_RUNTIME_DLLS)
     add_custom_command(TARGET WebGpuRawOpsTest POST_BUILD
       COMMAND ${CMAKE_COMMAND} -E copy_if_different

@@ -4,6 +4,11 @@
 
 #include <gtest/gtest.h>
 
+#include <QApplication>
+#include <QImage>
+#include <QLabel>
+#include <QPixmap>
+#include <QTimer>
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -12,11 +17,12 @@
 #include <iostream>
 #include <memory>
 #include <opencv2/core.hpp>
-#include <opencv2/highgui.hpp>
 #include <opencv2/imgproc.hpp>
 #include <stdexcept>
+#include <string>
 
 #include "decoders/libraw_unpack_guard.hpp"
+#include "decoders/processor/operators/gpu/webgpu_cvt_ref_space.hpp"
 #include "decoders/processor/operators/gpu/webgpu_debayer_rcd.hpp"
 #include "decoders/processor/operators/gpu/webgpu_to_linear_ref.hpp"
 #include "decoders/processor/raw_normalization.hpp"
@@ -62,6 +68,23 @@ auto MakeRGBAImage(int rows, int cols) -> cv::Mat {
     }
   }
   return rgba;
+}
+
+auto ApplyInverseCamMulReference(const cv::Mat& src, const std::array<float, 4>& cam_mul)
+    -> cv::Mat {
+  const float g      = std::max(cam_mul[1], 1e-6f);
+  const float gain_r = g / std::max(cam_mul[0], 1e-6f);
+  const float gain_b = g / std::max(cam_mul[2], 1e-6f);
+
+  cv::Mat     scaled(src.size(), CV_32FC4);
+  for (int y = 0; y < src.rows; ++y) {
+    const cv::Vec4f* src_row = src.ptr<cv::Vec4f>(y);
+    cv::Vec4f*       dst_row = scaled.ptr<cv::Vec4f>(y);
+    for (int x = 0; x < src.cols; ++x) {
+      dst_row[x] = cv::Vec4f(src_row[x][0] * gain_r, src_row[x][1], src_row[x][2] * gain_b, 1.0f);
+    }
+  }
+  return scaled;
 }
 
 auto CFAColorAt(const BayerPattern2x2& pattern, int y, int x) -> int {
@@ -175,13 +198,52 @@ auto LeicaM10RawPath() -> std::filesystem::path {
   return std::filesystem::path(TEST_IMG_PATH) / "raw" / "camera" / "leica" / "m10" / "L1001108.dng";
 }
 
-auto MakeDisplayPreview(const cv::Mat& rgba_linear) -> cv::Mat {
-  cv::Mat normalized;
-  cv::normalize(rgba_linear, normalized, 0.0, 1.0, cv::NORM_MINMAX);
+auto RawPerformanceTestPath() -> std::filesystem::path {
+  return "D:/Projects/pu-erh_lab/alcedo_studio/tests/resources/sample_images/raw/camera/lumix/s5/"
+         "P1000625.RW2";
+}
 
-  cv::Mat bgr;
-  cv::cvtColor(normalized, bgr, cv::COLOR_RGBA2BGR);
-  return bgr;
+auto MakeDisplayPreview(const cv::Mat& rgba_linear) -> QImage {
+  std::vector<cv::Mat> channels;
+  cv::split(rgba_linear, channels);
+  cv::Mat rgb;
+  cv::merge(std::vector<cv::Mat>{channels[0], channels[1], channels[2]}, rgb);
+
+  cv::Mat normalized_rgb;
+  cv::normalize(rgb, normalized_rgb, 0.0, 1.0, cv::NORM_MINMAX);
+
+  std::vector<cv::Mat> normalized_channels;
+  cv::split(normalized_rgb, normalized_channels);
+  normalized_channels.push_back(cv::Mat(rgba_linear.size(), CV_32FC1, cv::Scalar(1.0f)));
+
+  cv::Mat normalized_rgba;
+  cv::merge(normalized_channels, normalized_rgba);
+
+  cv::Mat rgba8;
+  normalized_rgba.convertTo(rgba8, CV_8UC4, 255.0);
+  if (!rgba8.isContinuous()) {
+    rgba8 = rgba8.clone();
+  }
+
+  QImage image(rgba8.data, rgba8.cols, rgba8.rows, static_cast<int>(rgba8.step),
+               QImage::Format_RGBA8888);
+  return image.copy();
+}
+
+void PrintMatStats(const char* label, const cv::Mat& mat) {
+  std::vector<cv::Mat> channels;
+  cv::split(mat, channels);
+  std::cout << "[WebGPU RAW stats] " << label << " type=" << mat.type() << " size=" << mat.cols
+            << 'x' << mat.rows;
+  for (size_t c = 0; c < channels.size(); ++c) {
+    double min_value = 0.0;
+    double max_value = 0.0;
+    cv::minMaxLoc(channels[c], &min_value, &max_value);
+    const cv::Scalar mean = cv::mean(channels[c]);
+    std::cout << " c" << c << "{min=" << min_value << ", max=" << max_value << ", mean=" << mean[0]
+              << '}';
+  }
+  std::cout << '\n';
 }
 
 auto DownsampleRawForPreview(const cv::Mat& raw, RawCfaPattern& pattern, const int passes)
@@ -197,35 +259,37 @@ auto DownsampleRawForPreview(const cv::Mat& raw, RawCfaPattern& pattern, const i
   return downsampled;
 }
 
-void ShowPreviewNonBlockingOrSave(const cv::Mat& preview) {
-  try {
-    cv::namedWindow("WebGPU Leica M10 ToLinearRef + RCD", cv::WINDOW_NORMAL);
-    cv::imshow("WebGPU Leica M10 ToLinearRef + RCD", preview);
-    cv::waitKey(1);
+auto EnsureQApplication() -> QApplication* {
+  if (auto* app = qobject_cast<QApplication*>(QCoreApplication::instance())) {
+    return app;
+  }
+
+  static int   argc       = 1;
+  static char  app_name[] = "WebGpuRawOpsTest";
+  static char* argv[]     = {app_name, nullptr};
+  static auto  app        = std::make_unique<QApplication>(argc, argv);
+  return app.get();
+}
+
+void ShowPreviewWithQt(const QImage& preview, const QString& title) {
+  ASSERT_FALSE(preview.isNull());
+
+  auto* app = EnsureQApplication();
+  if (app == nullptr) {
+    GTEST_SKIP() << "QApplication could not be initialized for Qt preview.";
     return;
-  } catch (const cv::Exception& e) {
-    std::cout << "[WebGPU RAW preview] OpenCV highgui window unavailable: " << e.what() << '\n';
   }
 
-  cv::Mat preview_8u;
-  preview.convertTo(preview_8u, CV_8UC3, 255.0);
-  cv::Mat preview_rgb;
-  cv::cvtColor(preview_8u, preview_rgb, cv::COLOR_BGR2RGB);
+  QLabel label;
+  label.setWindowTitle(title);
+  label.setAlignment(Qt::AlignCenter);
+  label.setPixmap(
+      QPixmap::fromImage(preview).scaled(1280, 900, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+  label.resize(label.pixmap().size());
+  label.show();
 
-  const auto output_path =
-      std::filesystem::temp_directory_path() / "alcedo_webgpu_leica_m10_preview.ppm";
-  std::ofstream output(output_path, std::ios::binary);
-  ASSERT_TRUE(output.is_open()) << "Failed to open fallback preview image: "
-                                << output_path.string();
-  output << "P6\n" << preview_rgb.cols << ' ' << preview_rgb.rows << "\n255\n";
-  output.write(reinterpret_cast<const char*>(preview_rgb.data),
-               static_cast<std::streamsize>(preview_rgb.total() * preview_rgb.elemSize()));
-  output.close();
-
-  EXPECT_TRUE(output.good()) << "Failed to save fallback preview image: " << output_path.string();
-  if (output.good()) {
-    std::cout << "[WebGPU RAW preview] saved fallback preview=" << output_path.string() << '\n';
-  }
+  QTimer::singleShot(150000, app, &QCoreApplication::quit);
+  app->exec();
 }
 
 }  // namespace
@@ -386,7 +450,7 @@ TEST(WebGpuRawOpsTest, DebayerRcdProducesRGBAAndPreservesCFASamples) {
 #endif
 }
 
-TEST(WebGpuRawOpsTest, PreviewLeicaM10ToLinearRefAndDebayerRcd) {
+TEST(WebGpuRawOpsTest, Clamp01ClampsSingleChannelRawTexture) {
 #ifndef HAVE_WEBGPU
   GTEST_SKIP() << "WebGPU is not enabled in this build.";
 #else
@@ -396,7 +460,72 @@ TEST(WebGpuRawOpsTest, PreviewLeicaM10ToLinearRefAndDebayerRcd) {
                  << WebGpuInitializationLog();
   }
 
-  const auto raw_path = LeicaM10RawPath();
+  cv::Mat src(3, 5, CV_32FC1);
+  for (int y = 0; y < src.rows; ++y) {
+    float* row = src.ptr<float>(y);
+    for (int x = 0; x < src.cols; ++x) {
+      row[x] = -0.5f + static_cast<float>(y * src.cols + x) * 0.2f;
+    }
+  }
+
+  webgpu::WebGpuImage image;
+  image.Upload(src);
+
+  ASSERT_NO_THROW(webgpu::Clamp01(image));
+
+  cv::Mat gpu_result;
+  image.Download(gpu_result);
+
+  cv::Mat expected;
+  cv::max(src, 0.0f, expected);
+  cv::min(expected, 1.0f, expected);
+  EXPECT_LE(cv::norm(gpu_result, expected, cv::NORM_INF), 1e-6);
+#endif
+}
+
+TEST(WebGpuRawOpsTest, ApplyInverseCamMulAndOrientRGBAMatchesCpuReference) {
+#ifndef HAVE_WEBGPU
+  GTEST_SKIP() << "WebGPU is not enabled in this build.";
+#else
+  SCOPED_TRACE(WebGpuInitializationLog());
+  if (!WebGpuAvailable()) {
+    GTEST_SKIP() << "WebGPU device is unavailable in this environment.\n"
+                 << WebGpuInitializationLog();
+  }
+
+  const cv::Mat              src     = MakeRGBAImage(4, 7);
+  const std::array<float, 4> cam_mul = {2.0f, 1.0f, 4.0f, 1.0f};
+
+  webgpu::WebGpuImage        image;
+  image.Upload(src);
+
+  ASSERT_NO_THROW(webgpu::ApplyInverseCamMulAndOrientRGBA(image, cam_mul.data(), 6));
+
+  cv::Mat gpu_result;
+  image.Download(gpu_result);
+
+  const cv::Mat scaled = ApplyInverseCamMulReference(src, cam_mul);
+  cv::Mat       expected;
+  cv::transpose(scaled, expected);
+  cv::flip(expected, expected, 1);
+
+  ASSERT_EQ(gpu_result.type(), CV_32FC4);
+  ASSERT_EQ(gpu_result.size(), expected.size());
+  EXPECT_LE(cv::norm(gpu_result, expected, cv::NORM_INF), 1e-6);
+#endif
+}
+
+TEST(WebGpuRawOpsTest, PreviewLeicaM10FullWebGpuRawPipelineWithQt) {
+#ifndef HAVE_WEBGPU
+  GTEST_SKIP() << "WebGPU is not enabled in this build.";
+#else
+  SCOPED_TRACE(WebGpuInitializationLog());
+  if (!WebGpuAvailable()) {
+    GTEST_SKIP() << "WebGPU device is unavailable in this environment.\n"
+                 << WebGpuInitializationLog();
+  }
+
+  const std::filesystem::path raw_path = RawPerformanceTestPath();
   if (!std::filesystem::exists(raw_path)) {
     GTEST_SKIP() << "Sample RAW file is missing: " << raw_path.string();
   }
@@ -421,6 +550,120 @@ TEST(WebGpuRawOpsTest, PreviewLeicaM10ToLinearRefAndDebayerRcd) {
   cv::Mat raw_view{static_cast<int>(raw_processor->imgdata.sizes.raw_height),
                    static_cast<int>(raw_processor->imgdata.sizes.raw_width), CV_16UC1,
                    raw_processor->imgdata.rawdata.raw_image};
+  cv::Mat preview_raw = raw_view;
+
+  stage_start         = Clock::now();
+  webgpu::WebGpuImage image;
+  image.Upload(preview_raw);
+  const double upload_ms = MsSince(stage_start);
+
+  stage_start            = Clock::now();
+  webgpu::ToLinearRef(image, *raw_processor, cfa_pattern);
+  const double linear_ms = MsSince(stage_start);
+
+  cv::Mat      linear_result;
+  image.Download(linear_result);
+  PrintMatStats("linear", linear_result);
+
+  stage_start = Clock::now();
+  webgpu::Clamp01(image);
+  const double clamp_ms = MsSince(stage_start);
+
+  cv::Mat      clamped_result;
+  image.Download(clamped_result);
+  PrintMatStats("clamped", clamped_result);
+
+  stage_start = Clock::now();
+  webgpu::Bayer2x2ToRGB_RCD(image, cfa_pattern.bayer_pattern);
+  const double debayer_ms = MsSince(stage_start);
+
+  stage_start             = Clock::now();
+  cv::Mat debayer_result;
+  image.Download(debayer_result);
+  const double debayer_download_ms = MsSince(stage_start);
+  ASSERT_FALSE(debayer_result.empty());
+  ASSERT_EQ(debayer_result.type(), CV_32FC4);
+  ASSERT_EQ(debayer_result.cols, preview_raw.cols);
+  ASSERT_EQ(debayer_result.rows, preview_raw.rows);
+  PrintMatStats("debayer", debayer_result);
+
+  ShowPreviewWithQt(MakeDisplayPreview(debayer_result),
+                    QStringLiteral("WebGPU Leica M10 RCD debayer preview"));
+
+  stage_start = Clock::now();
+  webgpu::ApplyInverseCamMulAndOrientRGBA(image, raw_processor->imgdata.rawdata.color.cam_mul,
+                                          raw_processor->imgdata.sizes.flip);
+  const double inverse_wb_orient_ms = MsSince(stage_start);
+
+  stage_start                       = Clock::now();
+  cv::Mat full_result;
+  image.Download(full_result);
+  const double full_download_ms = MsSince(stage_start);
+  ASSERT_FALSE(full_result.empty());
+  ASSERT_EQ(full_result.type(), CV_32FC4);
+  if (raw_processor->imgdata.sizes.flip == 5 || raw_processor->imgdata.sizes.flip == 6) {
+    ASSERT_EQ(full_result.cols, preview_raw.rows);
+    ASSERT_EQ(full_result.rows, preview_raw.cols);
+  } else {
+    ASSERT_EQ(full_result.cols, preview_raw.cols);
+    ASSERT_EQ(full_result.rows, preview_raw.rows);
+  }
+  PrintMatStats("final", full_result);
+
+  std::cout << "[WebGPU RAW preview] file=" << raw_path.string() << '\n'
+            << "[WebGPU RAW preview] raw_size=" << raw_view.cols << 'x' << raw_view.rows
+            << " preview_size=" << preview_raw.cols << 'x' << preview_raw.rows << '\n'
+            << "[WebGPU RAW preview] open=" << open_ms << " ms"
+            << " unpack=" << unpack_ms << " ms"
+            << " upload=" << upload_ms << " ms"
+            << " to_linear_ref=" << linear_ms << " ms"
+            << " clamp=" << clamp_ms << " ms"
+            << " debayer_rcd=" << debayer_ms << " ms"
+            << " debayer_download=" << debayer_download_ms << " ms"
+            << " inverse_wb_orient_rgba=" << inverse_wb_orient_ms << " ms"
+            << " full_download=" << full_download_ms << " ms"
+            << " gpu_ops_total=" << (linear_ms + clamp_ms + debayer_ms + inverse_wb_orient_ms)
+            << " ms\n";
+
+#endif
+}
+
+TEST(WebGpuRawOpsTest, MeasureLeicaM10FullWebGpuRawDecodePerformance) {
+#ifndef HAVE_WEBGPU
+  GTEST_SKIP() << "WebGPU is not enabled in this build.";
+#else
+  SCOPED_TRACE(WebGpuInitializationLog());
+  if (!WebGpuAvailable()) {
+    GTEST_SKIP() << "WebGPU device is unavailable in this environment.\n"
+                 << WebGpuInitializationLog();
+  }
+
+  const std::filesystem::path raw_path = RawPerformanceTestPath();
+  if (!std::filesystem::exists(raw_path)) {
+    GTEST_SKIP() << "Sample RAW file is missing: " << raw_path.string();
+  }
+
+  std::unique_ptr<LibRaw> raw_processor = std::make_unique<LibRaw>();
+
+  const auto              total_start   = Clock::now();
+  auto                    stage_start   = Clock::now();
+  int                     ret           = OpenRawFile(*raw_processor, raw_path);
+  ASSERT_EQ(ret, LIBRAW_SUCCESS) << libraw_strerror(ret);
+  const double open_ms = MsSince(stage_start);
+
+  stage_start          = Clock::now();
+  ret                  = libraw_guard::Unpack(*raw_processor);
+  ASSERT_EQ(ret, LIBRAW_SUCCESS) << libraw_strerror(ret);
+  const double unpack_ms = MsSince(stage_start);
+
+  ASSERT_NE(raw_processor->imgdata.rawdata.raw_image, nullptr);
+  RawCfaPattern cfa_pattern = ReadLibRawCfaPattern(*raw_processor);
+  ASSERT_EQ(cfa_pattern.kind, RawCfaKind::Bayer2x2)
+      << "This performance test currently expects a Bayer 2x2 RAW.";
+
+  cv::Mat raw_view{static_cast<int>(raw_processor->imgdata.sizes.raw_height),
+                   static_cast<int>(raw_processor->imgdata.sizes.raw_width), CV_16UC1,
+                   raw_processor->imgdata.rawdata.raw_image};
 
   stage_start = Clock::now();
   webgpu::WebGpuImage image;
@@ -432,30 +675,32 @@ TEST(WebGpuRawOpsTest, PreviewLeicaM10ToLinearRefAndDebayerRcd) {
   const double linear_ms = MsSince(stage_start);
 
   stage_start            = Clock::now();
+  webgpu::Clamp01(image);
+  const double clamp_ms = MsSince(stage_start);
+
+  stage_start           = Clock::now();
   webgpu::Bayer2x2ToRGB_RCD(image, cfa_pattern.bayer_pattern);
   const double debayer_ms = MsSince(stage_start);
 
   stage_start             = Clock::now();
-  cv::Mat full_result;
-  image.Download(full_result);
-  const double full_download_ms = MsSince(stage_start);
-  ASSERT_FALSE(full_result.empty());
-  ASSERT_EQ(full_result.type(), CV_32FC4);
-  ASSERT_EQ(full_result.cols, raw_view.cols);
-  ASSERT_EQ(full_result.rows, raw_view.rows);
+  webgpu::ApplyInverseCamMulAndOrientRGBA(image, raw_processor->imgdata.rawdata.color.cam_mul,
+                                          raw_processor->imgdata.sizes.flip);
+  const double inverse_wb_orient_ms = MsSince(stage_start);
+  const double total_ms             = MsSince(total_start);
 
-
-  std::cout << "[WebGPU RAW preview] file=" << raw_path.string() << '\n'
-            << "[WebGPU RAW preview] size=" << raw_view.cols << 'x' << raw_view.rows << '\n'
-            << "[WebGPU RAW preview] open=" << open_ms << " ms"
+  std::cout << "[WebGPU RAW perf] file=" << raw_path.string() << '\n'
+            << "[WebGPU RAW perf] raw_size=" << raw_view.cols << 'x' << raw_view.rows << '\n'
+            << "[WebGPU RAW perf] open=" << open_ms << " ms"
             << " unpack=" << unpack_ms << " ms"
             << " upload=" << upload_ms << " ms"
             << " to_linear_ref=" << linear_ms << " ms"
+            << " clamp=" << clamp_ms << " ms"
             << " debayer_rcd=" << debayer_ms << " ms"
-            << " full_download=" << full_download_ms << " ms"
-            << " gpu_ops_total=" << (linear_ms + debayer_ms) << " ms\n";
-
-  #endif
+            << " inverse_wb_orient_rgba=" << inverse_wb_orient_ms << " ms"
+            << " gpu_decode_total=" << (linear_ms + clamp_ms + debayer_ms + inverse_wb_orient_ms)
+            << " ms"
+            << " end_to_end_total=" << total_ms << " ms\n";
+#endif
 }
 
 TEST(WebGpuRawOpsTest, Rotate180MatchesCpuReference) {
