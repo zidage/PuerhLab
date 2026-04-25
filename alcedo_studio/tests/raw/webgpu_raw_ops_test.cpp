@@ -6,19 +6,67 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
+#include <filesystem>
+#include <fstream>
+#include <iostream>
 #include <memory>
+#include <opencv2/core.hpp>
+#include <opencv2/highgui.hpp>
+#include <opencv2/imgproc.hpp>
 #include <stdexcept>
 
-#include <opencv2/core.hpp>
-
+#include "decoders/libraw_unpack_guard.hpp"
+#include "decoders/processor/operators/gpu/webgpu_debayer_rcd.hpp"
 #include "decoders/processor/operators/gpu/webgpu_to_linear_ref.hpp"
 #include "decoders/processor/raw_normalization.hpp"
 #include "decoders/processor/raw_processor_pattern.hpp"
 #include "image/webgpu_image.hpp"
 #include "webgpu/webgpu_context.hpp"
+#include "webgpu/webgpu_geometry_utils.hpp"
 
 namespace alcedo {
 namespace {
+using Clock = std::chrono::steady_clock;
+
+auto MsSince(const Clock::time_point start) -> double {
+  return std::chrono::duration<double, std::milli>(Clock::now() - start).count();
+}
+
+auto OpenRawFile(LibRaw& raw_processor, const std::filesystem::path& path) -> int {
+#ifdef _WIN32
+  return raw_processor.open_file(path.wstring().c_str());
+#else
+  return raw_processor.open_file(path.string().c_str());
+#endif
+}
+
+auto MakeBayerPattern(int rows, int cols) -> cv::Mat {
+  cv::Mat bayer(rows, cols, CV_32FC1);
+  for (int y = 0; y < rows; ++y) {
+    float* row = bayer.ptr<float>(y);
+    for (int x = 0; x < cols; ++x) {
+      row[x] = static_cast<float>((y * 17 + x * 11) % 251) / 255.0f;
+    }
+  }
+  return bayer;
+}
+
+auto MakeRGBAImage(int rows, int cols) -> cv::Mat {
+  cv::Mat rgba(rows, cols, CV_32FC4);
+  for (int y = 0; y < rows; ++y) {
+    cv::Vec4f* row = rgba.ptr<cv::Vec4f>(y);
+    for (int x = 0; x < cols; ++x) {
+      row[x] = cv::Vec4f(static_cast<float>(x) / 17.0f, static_cast<float>(y) / 13.0f,
+                         static_cast<float>(x + y) / 29.0f, 1.0f);
+    }
+  }
+  return rgba;
+}
+
+auto CFAColorAt(const BayerPattern2x2& pattern, int y, int x) -> int {
+  return pattern.rgb_fc[BayerCellIndex(y, x)];
+}
 
 auto MakePattern(const int top_left_raw_color) -> BayerPattern2x2 {
   switch (top_left_raw_color) {
@@ -59,7 +107,8 @@ void InitLinearizationRawProcessor(LibRaw& raw_processor) {
   raw_processor.imgdata.rawdata.color.cblack[4]  = 6;
   raw_processor.imgdata.rawdata.color.cblack[5]  = 6;
   for (int i = 0; i < 36; ++i) {
-    raw_processor.imgdata.rawdata.color.cblack[6 + i] = static_cast<unsigned short>(8 + (i % 5) * 3);
+    raw_processor.imgdata.rawdata.color.cblack[6 + i] =
+        static_cast<unsigned short>(8 + (i % 5) * 3);
   }
   raw_processor.imgdata.rawdata.color.maximum       = 15000;
   raw_processor.imgdata.rawdata.color.linear_max[0] = 14000;
@@ -85,7 +134,7 @@ auto MakeLinearizationRawProcessor() -> std::unique_ptr<LibRaw> {
 
 auto ComputeLinearizedReference(const cv::Mat& raw_u16, const RawCfaPattern& pattern,
                                 const LibRaw& raw_processor) -> cv::Mat {
-  cv::Mat expected(raw_u16.rows, raw_u16.cols, CV_32FC1);
+  cv::Mat    expected(raw_u16.rows, raw_u16.cols, CV_32FC1);
   const auto raw_curve = raw_norm::BuildLinearizationCurve(raw_processor.imgdata.rawdata);
   const bool apply_wb  = raw_processor.imgdata.color.as_shot_wb_applied != 1;
 
@@ -122,6 +171,63 @@ auto WebGpuInitializationLog() -> const std::string& {
   }
 }
 
+auto LeicaM10RawPath() -> std::filesystem::path {
+  return std::filesystem::path(TEST_IMG_PATH) / "raw" / "camera" / "leica" / "m10" / "L1001108.dng";
+}
+
+auto MakeDisplayPreview(const cv::Mat& rgba_linear) -> cv::Mat {
+  cv::Mat normalized;
+  cv::normalize(rgba_linear, normalized, 0.0, 1.0, cv::NORM_MINMAX);
+
+  cv::Mat bgr;
+  cv::cvtColor(normalized, bgr, cv::COLOR_RGBA2BGR);
+  return bgr;
+}
+
+auto DownsampleRawForPreview(const cv::Mat& raw, RawCfaPattern& pattern, const int passes)
+    -> cv::Mat {
+  if (passes <= 0) {
+    return raw.clone();
+  }
+
+  cv::Mat downsampled = DownsampleRaw2x(raw, pattern);
+  for (int pass = 1; pass < passes; ++pass) {
+    downsampled = DownsampleRaw2x(downsampled, pattern);
+  }
+  return downsampled;
+}
+
+void ShowPreviewNonBlockingOrSave(const cv::Mat& preview) {
+  try {
+    cv::namedWindow("WebGPU Leica M10 ToLinearRef + RCD", cv::WINDOW_NORMAL);
+    cv::imshow("WebGPU Leica M10 ToLinearRef + RCD", preview);
+    cv::waitKey(1);
+    return;
+  } catch (const cv::Exception& e) {
+    std::cout << "[WebGPU RAW preview] OpenCV highgui window unavailable: " << e.what() << '\n';
+  }
+
+  cv::Mat preview_8u;
+  preview.convertTo(preview_8u, CV_8UC3, 255.0);
+  cv::Mat preview_rgb;
+  cv::cvtColor(preview_8u, preview_rgb, cv::COLOR_BGR2RGB);
+
+  const auto output_path =
+      std::filesystem::temp_directory_path() / "alcedo_webgpu_leica_m10_preview.ppm";
+  std::ofstream output(output_path, std::ios::binary);
+  ASSERT_TRUE(output.is_open()) << "Failed to open fallback preview image: "
+                                << output_path.string();
+  output << "P6\n" << preview_rgb.cols << ' ' << preview_rgb.rows << "\n255\n";
+  output.write(reinterpret_cast<const char*>(preview_rgb.data),
+               static_cast<std::streamsize>(preview_rgb.total() * preview_rgb.elemSize()));
+  output.close();
+
+  EXPECT_TRUE(output.good()) << "Failed to save fallback preview image: " << output_path.string();
+  if (output.good()) {
+    std::cout << "[WebGPU RAW preview] saved fallback preview=" << output_path.string() << '\n';
+  }
+}
+
 }  // namespace
 
 TEST(WebGpuRawOpsTest, ToLinearRefMatchesScalarReferenceForBayerAndXTrans) {
@@ -130,16 +236,17 @@ TEST(WebGpuRawOpsTest, ToLinearRefMatchesScalarReferenceForBayerAndXTrans) {
 #else
   SCOPED_TRACE(WebGpuInitializationLog());
   if (!WebGpuAvailable()) {
-    GTEST_SKIP() << "WebGPU device is unavailable in this environment.\n" << WebGpuInitializationLog();
+    GTEST_SKIP() << "WebGPU device is unavailable in this environment.\n"
+                 << WebGpuInitializationLog();
   }
 
-  auto raw_processor = MakeLinearizationRawProcessor();
+  auto                  raw_processor = MakeLinearizationRawProcessor();
 
   // --- Bayer test ---
   const BayerPattern2x2 bayer_pattern = MakePattern(0);
   RawCfaPattern         bayer_cfa     = {};
-  bayer_cfa.kind                    = RawCfaKind::Bayer2x2;
-  bayer_cfa.bayer_pattern           = bayer_pattern;
+  bayer_cfa.kind                      = RawCfaKind::Bayer2x2;
+  bayer_cfa.bayer_pattern             = bayer_pattern;
 
   cv::Mat bayer_raw(6, 8, CV_16UC1);
   for (int y = 0; y < bayer_raw.rows; ++y) {
@@ -160,8 +267,8 @@ TEST(WebGpuRawOpsTest, ToLinearRefMatchesScalarReferenceForBayerAndXTrans) {
   // --- X-Trans test ---
   const XTransPattern6x6 xtrans_pattern = MakeXTransPattern();
   RawCfaPattern          xtrans_cfa     = {};
-  xtrans_cfa.kind                     = RawCfaKind::XTrans6x6;
-  xtrans_cfa.xtrans_pattern           = xtrans_pattern;
+  xtrans_cfa.kind                       = RawCfaKind::XTrans6x6;
+  xtrans_cfa.xtrans_pattern             = xtrans_pattern;
 
   cv::Mat xtrans_raw(8, 10, CV_16UC1);
   for (int y = 0; y < xtrans_raw.rows; ++y) {
@@ -188,16 +295,17 @@ TEST(WebGpuRawOpsTest, ToLinearRefRejectsNonR16UintInput) {
 #else
   SCOPED_TRACE(WebGpuInitializationLog());
   if (!WebGpuAvailable()) {
-    GTEST_SKIP() << "WebGPU device is unavailable in this environment.\n" << WebGpuInitializationLog();
+    GTEST_SKIP() << "WebGPU device is unavailable in this environment.\n"
+                 << WebGpuInitializationLog();
   }
 
-  auto raw_processor = MakeLinearizationRawProcessor();
-  const auto pattern = MakePattern(0);
-  RawCfaPattern cfa  = {};
-  cfa.kind           = RawCfaKind::Bayer2x2;
-  cfa.bayer_pattern  = pattern;
+  auto          raw_processor = MakeLinearizationRawProcessor();
+  const auto    pattern       = MakePattern(0);
+  RawCfaPattern cfa           = {};
+  cfa.kind                    = RawCfaKind::Bayer2x2;
+  cfa.bayer_pattern           = pattern;
 
-  cv::Mat float_img(4, 4, CV_32FC1, cv::Scalar(0.5f));
+  cv::Mat             float_img(4, 4, CV_32FC1, cv::Scalar(0.5f));
   webgpu::WebGpuImage image;
   image.Upload(float_img);
 
@@ -211,17 +319,231 @@ TEST(WebGpuRawOpsTest, ToLinearRefRejectsEmptyImage) {
 #else
   SCOPED_TRACE(WebGpuInitializationLog());
   if (!WebGpuAvailable()) {
-    GTEST_SKIP() << "WebGPU device is unavailable in this environment.\n" << WebGpuInitializationLog();
+    GTEST_SKIP() << "WebGPU device is unavailable in this environment.\n"
+                 << WebGpuInitializationLog();
   }
 
-  auto raw_processor = MakeLinearizationRawProcessor();
-  const auto pattern = MakePattern(0);
-  RawCfaPattern cfa  = {};
-  cfa.kind           = RawCfaKind::Bayer2x2;
-  cfa.bayer_pattern  = pattern;
+  auto          raw_processor = MakeLinearizationRawProcessor();
+  const auto    pattern       = MakePattern(0);
+  RawCfaPattern cfa           = {};
+  cfa.kind                    = RawCfaKind::Bayer2x2;
+  cfa.bayer_pattern           = pattern;
 
   webgpu::WebGpuImage image;
   EXPECT_THROW(webgpu::ToLinearRef(image, *raw_processor, cfa), std::runtime_error);
+#endif
+}
+
+TEST(WebGpuRawOpsTest, DebayerRcdProducesRGBAAndPreservesCFASamples) {
+#ifndef HAVE_WEBGPU
+  GTEST_SKIP() << "WebGPU is not enabled in this build.";
+#else
+  SCOPED_TRACE(WebGpuInitializationLog());
+  if (!WebGpuAvailable()) {
+    GTEST_SKIP() << "WebGPU device is unavailable in this environment.\n"
+                 << WebGpuInitializationLog();
+  }
+
+  const cv::Mat       bayer   = MakeBayerPattern(18, 20);
+  const auto          pattern = MakePattern(1);
+
+  webgpu::WebGpuImage image;
+  image.Upload(bayer);
+
+  ASSERT_NO_THROW(webgpu::Bayer2x2ToRGB_RCD(image, pattern));
+
+  cv::Mat gpu_result;
+  image.Download(gpu_result);
+
+  ASSERT_EQ(gpu_result.type(), CV_32FC4);
+  ASSERT_EQ(gpu_result.size(), bayer.size());
+
+  for (int y = 0; y < gpu_result.rows; ++y) {
+    const float*     raw_row  = bayer.ptr<float>(y);
+    const cv::Vec4f* rgba_row = gpu_result.ptr<cv::Vec4f>(y);
+    for (int x = 0; x < gpu_result.cols; ++x) {
+      const cv::Vec4f px  = rgba_row[x];
+      const float     raw = raw_row[x];
+
+      EXPECT_GE(px[0], 0.0f);
+      EXPECT_GE(px[1], 0.0f);
+      EXPECT_GE(px[2], 0.0f);
+      EXPECT_NEAR(px[3], 1.0f, 1e-6);
+
+      switch (CFAColorAt(pattern, y, x)) {
+        case 0:
+          EXPECT_NEAR(px[0], raw, 1e-5);
+          break;
+        case 1:
+          EXPECT_NEAR(px[1], raw, 1e-5);
+          break;
+        case 2:
+          EXPECT_NEAR(px[2], raw, 1e-5);
+          break;
+      }
+    }
+  }
+#endif
+}
+
+TEST(WebGpuRawOpsTest, PreviewLeicaM10ToLinearRefAndDebayerRcd) {
+#ifndef HAVE_WEBGPU
+  GTEST_SKIP() << "WebGPU is not enabled in this build.";
+#else
+  SCOPED_TRACE(WebGpuInitializationLog());
+  if (!WebGpuAvailable()) {
+    GTEST_SKIP() << "WebGPU device is unavailable in this environment.\n"
+                 << WebGpuInitializationLog();
+  }
+
+  const auto raw_path = LeicaM10RawPath();
+  if (!std::filesystem::exists(raw_path)) {
+    GTEST_SKIP() << "Sample RAW file is missing: " << raw_path.string();
+  }
+
+  std::unique_ptr<LibRaw> raw_processor = std::make_unique<LibRaw>();
+
+  auto                    stage_start   = Clock::now();
+  int                     ret           = OpenRawFile(*raw_processor, raw_path);
+  ASSERT_EQ(ret, LIBRAW_SUCCESS) << libraw_strerror(ret);
+  const double open_ms = MsSince(stage_start);
+
+  stage_start          = Clock::now();
+  ret                  = libraw_guard::Unpack(*raw_processor);
+  ASSERT_EQ(ret, LIBRAW_SUCCESS) << libraw_strerror(ret);
+  const double unpack_ms = MsSince(stage_start);
+
+  ASSERT_NE(raw_processor->imgdata.rawdata.raw_image, nullptr);
+  RawCfaPattern cfa_pattern = ReadLibRawCfaPattern(*raw_processor);
+  ASSERT_EQ(cfa_pattern.kind, RawCfaKind::Bayer2x2)
+      << "This preview test currently expects a Bayer 2x2 RAW.";
+
+  cv::Mat raw_view{static_cast<int>(raw_processor->imgdata.sizes.raw_height),
+                   static_cast<int>(raw_processor->imgdata.sizes.raw_width), CV_16UC1,
+                   raw_processor->imgdata.rawdata.raw_image};
+
+  stage_start = Clock::now();
+  webgpu::WebGpuImage image;
+  image.Upload(raw_view);
+  const double upload_ms = MsSince(stage_start);
+
+  stage_start            = Clock::now();
+  webgpu::ToLinearRef(image, *raw_processor, cfa_pattern);
+  const double linear_ms = MsSince(stage_start);
+
+  stage_start            = Clock::now();
+  webgpu::Bayer2x2ToRGB_RCD(image, cfa_pattern.bayer_pattern);
+  const double debayer_ms = MsSince(stage_start);
+
+  stage_start             = Clock::now();
+  cv::Mat full_result;
+  image.Download(full_result);
+  const double full_download_ms = MsSince(stage_start);
+  ASSERT_FALSE(full_result.empty());
+  ASSERT_EQ(full_result.type(), CV_32FC4);
+  ASSERT_EQ(full_result.cols, raw_view.cols);
+  ASSERT_EQ(full_result.rows, raw_view.rows);
+
+
+  std::cout << "[WebGPU RAW preview] file=" << raw_path.string() << '\n'
+            << "[WebGPU RAW preview] size=" << raw_view.cols << 'x' << raw_view.rows << '\n'
+            << "[WebGPU RAW preview] open=" << open_ms << " ms"
+            << " unpack=" << unpack_ms << " ms"
+            << " upload=" << upload_ms << " ms"
+            << " to_linear_ref=" << linear_ms << " ms"
+            << " debayer_rcd=" << debayer_ms << " ms"
+            << " full_download=" << full_download_ms << " ms"
+            << " gpu_ops_total=" << (linear_ms + debayer_ms) << " ms\n";
+
+  #endif
+}
+
+TEST(WebGpuRawOpsTest, Rotate180MatchesCpuReference) {
+#ifndef HAVE_WEBGPU
+  GTEST_SKIP() << "WebGPU is not enabled in this build.";
+#else
+  SCOPED_TRACE(WebGpuInitializationLog());
+  if (!WebGpuAvailable()) {
+    GTEST_SKIP() << "WebGPU device is unavailable in this environment.\n"
+                 << WebGpuInitializationLog();
+  }
+
+  const cv::Mat       src = MakeRGBAImage(9, 11);
+
+  webgpu::WebGpuImage image;
+  image.Upload(src);
+
+  ASSERT_NO_THROW(webgpu::utils::Rotate180(image));
+
+  cv::Mat gpu_result;
+  image.Download(gpu_result);
+
+  cv::Mat expected;
+  cv::flip(src, expected, -1);
+
+  ASSERT_EQ(gpu_result.type(), CV_32FC4);
+  ASSERT_EQ(gpu_result.size(), expected.size());
+  EXPECT_LE(cv::norm(gpu_result, expected, cv::NORM_INF), 1e-6);
+#endif
+}
+
+TEST(WebGpuRawOpsTest, Rotate90CWMatchesCpuReference) {
+#ifndef HAVE_WEBGPU
+  GTEST_SKIP() << "WebGPU is not enabled in this build.";
+#else
+  SCOPED_TRACE(WebGpuInitializationLog());
+  if (!WebGpuAvailable()) {
+    GTEST_SKIP() << "WebGPU device is unavailable in this environment.\n"
+                 << WebGpuInitializationLog();
+  }
+
+  const cv::Mat       src = MakeRGBAImage(9, 11);
+
+  webgpu::WebGpuImage image;
+  image.Upload(src);
+
+  ASSERT_NO_THROW(webgpu::utils::Rotate90CW(image));
+
+  cv::Mat gpu_result;
+  image.Download(gpu_result);
+
+  cv::Mat expected;
+  cv::transpose(src, expected);
+  cv::flip(expected, expected, 1);
+
+  ASSERT_EQ(gpu_result.type(), CV_32FC4);
+  ASSERT_EQ(gpu_result.size(), expected.size());
+  EXPECT_LE(cv::norm(gpu_result, expected, cv::NORM_INF), 1e-6);
+#endif
+}
+
+TEST(WebGpuRawOpsTest, Rotate90CCWMatchesCpuReference) {
+#ifndef HAVE_WEBGPU
+  GTEST_SKIP() << "WebGPU is not enabled in this build.";
+#else
+  SCOPED_TRACE(WebGpuInitializationLog());
+  if (!WebGpuAvailable()) {
+    GTEST_SKIP() << "WebGPU device is unavailable in this environment.\n"
+                 << WebGpuInitializationLog();
+  }
+
+  const cv::Mat       src = MakeRGBAImage(9, 11);
+
+  webgpu::WebGpuImage image;
+  image.Upload(src);
+
+  ASSERT_NO_THROW(webgpu::utils::Rotate90CCW(image));
+
+  cv::Mat gpu_result;
+  image.Download(gpu_result);
+
+  cv::Mat expected;
+  cv::transpose(src, expected);
+  cv::flip(expected, expected, 0);
+
+  ASSERT_EQ(gpu_result.type(), CV_32FC4);
+  ASSERT_EQ(gpu_result.size(), expected.size());
+  EXPECT_LE(cv::norm(gpu_result, expected, cv::NORM_INF), 1e-6);
 #endif
 }
 

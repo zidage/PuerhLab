@@ -324,6 +324,17 @@ if(ALCEDO_WEBGPU_ENABLED)
     if(WIN32)
         target_link_libraries(WebGpuContext PUBLIC OneCore.lib dxguid.lib)
     endif()
+
+    set(WEBGPU_GEOMETRY_UTILS_WGSL "${CMAKE_CURRENT_SOURCE_DIR}/webgpu/webgpu_geometry_utils.wgsl")
+    set_source_files_properties("${WEBGPU_GEOMETRY_UTILS_WGSL}" PROPERTIES HEADER_FILE_ONLY TRUE)
+    def_library(WebGpuGeometryUtils
+        SOURCES webgpu/webgpu_geometry_utils.cpp "${WEBGPU_GEOMETRY_UTILS_WGSL}"
+        PUBLIC_DEPS WebGpuContext ${ALCEDO_OPENCV_CORE_DEPS}
+    )
+    set_target_properties(WebGpuGeometryUtils PROPERTIES NO_SYSTEM_FROM_IMPORTED ON)
+    target_compile_definitions(WebGpuGeometryUtils PRIVATE
+        ALCEDO_WEBGPU_GEOMETRY_UTILS_WGSL_PATH="${WEBGPU_GEOMETRY_UTILS_WGSL}"
+    )
 endif()
 
 # ==============================================================================
@@ -412,9 +423,13 @@ endif()
 if(ALCEDO_WEBGPU_ENABLED)
     set(WEBGPU_TO_LINEAR_REF_WGSL "${CMAKE_CURRENT_SOURCE_DIR}/decoders/processor/operators/gpu/webgpu_shader/to_linear_ref.wgsl")
     set_source_files_properties("${WEBGPU_TO_LINEAR_REF_WGSL}" PROPERTIES HEADER_FILE_ONLY TRUE)
+    set(WEBGPU_DEBAYER_RCD_WGSL "${CMAKE_CURRENT_SOURCE_DIR}/decoders/processor/operators/gpu/webgpu_shader/debayer_rcd.wgsl")
+    set_source_files_properties("${WEBGPU_DEBAYER_RCD_WGSL}" PROPERTIES HEADER_FILE_ONLY TRUE)
     list(APPEND RAW_OP_GPU_SRCS
         decoders/processor/operators/gpu/webgpu_to_linear_ref.cpp
+        decoders/processor/operators/gpu/webgpu_debayer_rcd.cpp
         "${WEBGPU_TO_LINEAR_REF_WGSL}"
+        "${WEBGPU_DEBAYER_RCD_WGSL}"
     )
 endif()
 
@@ -444,6 +459,7 @@ if(ALCEDO_WEBGPU_ENABLED)
     target_include_directories(RawProcessorOp BEFORE PRIVATE "${ALCEDO_DAWN_PACKAGE_DIR}/include")
     target_compile_definitions(RawProcessorOp PRIVATE
         ALCEDO_WEBGPU_TO_LINEAR_REF_WGSL_PATH="${WEBGPU_TO_LINEAR_REF_WGSL}"
+        ALCEDO_WEBGPU_DEBAYER_RCD_WGSL_PATH="${WEBGPU_DEBAYER_RCD_WGSL}"
     )
 endif()
 
@@ -580,6 +596,9 @@ def_library(RawProcessor
     PUBLIC_DEPS Image libraw::raw_r Exiv2 RawProcessorOp
     PRIVATE_DEPS opencv_imgproc
 )
+if(ALCEDO_WEBGPU_ENABLED)
+    target_link_libraries(RawProcessor PRIVATE WebGpuGeometryUtils)
+endif()
 
 # ==============================================================================
 # 4. Decoding & IO

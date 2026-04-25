@@ -18,6 +18,7 @@ namespace webgpu {
 namespace {
 
 constexpr uint32_t kCopyRowAlignmentBytes = 256;
+constexpr size_t   kReadbackChunkBytes    = 64ULL * 1024ULL * 1024ULL;
 
 auto               AlignUp(size_t value, size_t alignment) -> size_t {
   return ((value + alignment - 1) / alignment) * alignment;
@@ -74,15 +75,6 @@ void CopyRowsToBuffer(const cv::Mat& host_image, void* destination, size_t desti
   }
 }
 
-void CopyRowsFromBuffer(const void* source, size_t source_row_bytes, cv::Mat& host_image) {
-  const auto destination_row_bytes = static_cast<size_t>(host_image.cols) * host_image.elemSize();
-  auto*      src_bytes             = static_cast<const std::byte*>(source);
-  for (int row = 0; row < host_image.rows; ++row) {
-    std::memcpy(host_image.ptr(row), src_bytes + static_cast<size_t>(row) * source_row_bytes,
-                destination_row_bytes);
-  }
-}
-
 auto MakeBuffer(uint64_t size, wgpu::BufferUsage usage, bool mapped_at_creation = false)
     -> wgpu::Buffer {
   wgpu::BufferDescriptor descriptor{};
@@ -106,6 +98,12 @@ auto MakeTextureCopy(const wgpu::Texture& texture) -> wgpu::TexelCopyTextureInfo
   copy.mipLevel = 0;
   copy.origin   = wgpu::Origin3D{0, 0, 0};
   copy.aspect   = wgpu::TextureAspect::All;
+  return copy;
+}
+
+auto MakeTextureCopy(const wgpu::Texture& texture, uint32_t y) -> wgpu::TexelCopyTextureInfo {
+  auto copy     = MakeTextureCopy(texture);
+  copy.origin.y = y;
   return copy;
 }
 
@@ -137,6 +135,16 @@ void WaitForBufferMap(const wgpu::Buffer& buffer, size_t size) {
   WebGpuContext::Instance().Wait(future);
   if (!mapped) {
     throw std::runtime_error("WebGpuImage: Failed to map readback buffer.");
+  }
+}
+
+void CopyRowsFromBufferToHost(const void* source, size_t source_row_bytes, cv::Mat& host_image,
+                              uint32_t first_row, uint32_t row_count) {
+  const auto destination_row_bytes = static_cast<size_t>(host_image.cols) * host_image.elemSize();
+  auto*      src_bytes             = static_cast<const std::byte*>(source);
+  for (uint32_t row = 0; row < row_count; ++row) {
+    std::memcpy(host_image.ptr(static_cast<int>(first_row + row)),
+                src_bytes + static_cast<size_t>(row) * source_row_bytes, destination_row_bytes);
   }
 }
 
@@ -251,27 +259,34 @@ void WebGpuImage::Download(cv::Mat& host_image) const {
     throw std::runtime_error("WebGpuImage: Cannot download from an empty texture.");
   }
 
-  const auto cv_type     = CVTypeFromPixelFormat(format_);
-  const auto row_bytes   = static_cast<uint32_t>(AlignedRowBytes(width_, format_));
-  const auto buffer_size = StagingBufferSize(width_, height_, format_);
+  const auto cv_type   = CVTypeFromPixelFormat(format_);
+  const auto row_bytes = static_cast<uint32_t>(AlignedRowBytes(width_, format_));
+  const auto max_rows_per_chunk =
+      std::max<uint32_t>(1, static_cast<uint32_t>(kReadbackChunkBytes / row_bytes));
 
   host_image.create(static_cast<int>(height_), static_cast<int>(width_), cv_type);
-  auto staging = MakeBuffer(buffer_size, wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::MapRead);
 
-  auto encoder = WebGpuContext::Instance().Device().CreateCommandEncoder();
-  auto src     = MakeTextureCopy(texture_);
-  auto dst     = MakeBufferCopy(staging, row_bytes, height_);
-  auto extent  = MakeExtent(width_, height_);
-  encoder.CopyTextureToBuffer(&src, &dst, &extent);
-  SubmitAndWait(encoder.Finish());
+  for (uint32_t first_row = 0; first_row < height_; first_row += max_rows_per_chunk) {
+    const uint32_t rows =
+        std::min<uint32_t>(max_rows_per_chunk, static_cast<uint32_t>(height_ - first_row));
+    const auto buffer_size = static_cast<uint64_t>(row_bytes) * rows;
+    auto staging = MakeBuffer(buffer_size, wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::MapRead);
 
-  WaitForBufferMap(staging, buffer_size);
-  const auto* mapped = staging.GetConstMappedRange(0, buffer_size);
-  if (mapped == nullptr) {
-    throw std::runtime_error("WebGpuImage: Failed to read mapped buffer.");
+    auto encoder = WebGpuContext::Instance().Device().CreateCommandEncoder();
+    auto src     = MakeTextureCopy(texture_, first_row);
+    auto dst     = MakeBufferCopy(staging, row_bytes, rows);
+    auto extent  = MakeExtent(width_, rows);
+    encoder.CopyTextureToBuffer(&src, &dst, &extent);
+    SubmitAndWait(encoder.Finish());
+
+    WaitForBufferMap(staging, buffer_size);
+    const auto* mapped = staging.GetConstMappedRange(0, buffer_size);
+    if (mapped == nullptr) {
+      throw std::runtime_error("WebGpuImage: Failed to read mapped buffer.");
+    }
+    CopyRowsFromBufferToHost(mapped, row_bytes, host_image, first_row, rows);
+    staging.Unmap();
   }
-  CopyRowsFromBuffer(mapped, row_bytes, host_image);
-  staging.Unmap();
 }
 
 void WebGpuImage::CopyTo(WebGpuImage& dst) const {
