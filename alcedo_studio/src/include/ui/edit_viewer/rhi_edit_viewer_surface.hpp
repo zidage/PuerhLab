@@ -49,6 +49,7 @@ class RhiImageRenderer {
   void queueFrame(const ViewerFrame& frame);
   void queueImportedFrame(const ImportedTextureFrame& frame,
                           std::shared_ptr<const void> owner = {});
+  void releaseImportedTexture(std::uintptr_t texture_handle);
   auto currentRenderState(const ViewerViewState& view_state) const -> EditViewerRenderTargetState;
   void render(QRhiCommandBuffer* command_buffer, QRhiRenderTarget* render_target,
               const ViewerViewState& view_state, const ViewportWidgetInfo& widget_info);

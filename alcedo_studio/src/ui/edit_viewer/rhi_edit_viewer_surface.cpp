@@ -302,7 +302,7 @@ struct RhiEditViewerSurface::PlatformState {
   int                              render_target_idx  = 0;
   int                              mapped_slot_idx    = -1;
   int                              ready_slot_idx     = -1;
-  bool                             supports_direct_present = true;
+  bool                             supports_direct_present = false;
 #else
   bool supports_direct_present = false;
 #endif
@@ -581,6 +581,53 @@ void RhiImageRenderer::queueImportedFrame(const ImportedTextureFrame& frame,
       detail_state = {};
     }
   }
+}
+
+void RhiImageRenderer::releaseImportedTexture(std::uintptr_t texture_handle) {
+  if (texture_handle == 0) {
+    return;
+  }
+
+  const quint64 native_object = static_cast<quint64>(texture_handle);
+  auto release_layer = [&](LayerId layer, QRhiTexture*& texture, int& width, int& height,
+                           quint64& imported_native_object) {
+    if (imported_native_object != native_object) {
+      return;
+    }
+
+    if (bound_primary_texture_ == texture || bound_detail_texture_ == texture) {
+      destroyResource(shader_resource_bindings_);
+      if (bound_primary_texture_ == texture) {
+        bound_primary_texture_ = nullptr;
+      }
+      if (bound_detail_texture_ == texture) {
+        bound_detail_texture_ = nullptr;
+      }
+    }
+
+    destroyResource(texture);
+    width                  = 0;
+    height                 = 0;
+    imported_native_object = 0;
+
+    auto& state = layerState(layer);
+    if (state.source_is_imported) {
+      state = {};
+    }
+
+    auto& pending = pendingLayer(layer);
+    if (pending.imported_frame.texture_handle == texture_handle) {
+      pending = {};
+    }
+  };
+
+  release_layer(LayerId::InteractivePrimary, interactive_imported_texture_,
+                interactive_imported_width_, interactive_imported_height_,
+                interactive_imported_native_object_);
+  release_layer(LayerId::QualityBase, quality_base_imported_texture_, quality_base_imported_width_,
+                quality_base_imported_height_, quality_base_imported_native_object_);
+  release_layer(LayerId::DetailPatch, detail_patch_imported_texture_, detail_patch_imported_width_,
+                detail_patch_imported_height_, detail_patch_imported_native_object_);
 }
 
 auto RhiImageRenderer::currentRenderState(const ViewerViewState& view_state) const
@@ -1195,7 +1242,10 @@ RhiEditViewerSurface::RhiEditViewerSurface(QWidget* parent)
   setColorBufferFormat(QRhiWidget::TextureFormat::RGBA32F);
 }
 
-RhiEditViewerSurface::~RhiEditViewerSurface() { releasePlatformTargets(); }
+RhiEditViewerSurface::~RhiEditViewerSurface() {
+  renderer_.releaseResources();
+  releasePlatformTargets();
+}
 
 auto RhiEditViewerSurface::widget() -> QWidget* { return this; }
 
@@ -1259,6 +1309,13 @@ auto RhiEditViewerSurface::prepareRenderTarget(int width, int height)
 
   const DirectPresentTargetSelection selection = SelectDirectPresentWriteSlot(
       slot_infos.data(), slot_infos.size(), platform_state_->write_idx, width, height);
+  if (slot_infos[selection.slot_index].unavailable &&
+      !IsReusableDirectPresentSlot(slot_infos[selection.slot_index], width, height)) {
+    platform_state_->render_target_idx = -1;
+    decision.slot_index = -1;
+    decision.need_resize = false;
+    return decision;
+  }
   platform_state_->write_idx = selection.slot_index;
   platform_state_->render_target_idx = selection.slot_index;
   decision.slot_index = selection.slot_index;
@@ -1299,6 +1356,10 @@ auto RhiEditViewerSurface::mapResourceForWrite() -> FrameWriteMapping {
   }
 
   platform_state_->mutex.lock();
+  if (!IsValidSlotIndex(platform_state_->render_target_idx, platform_state_->targets.size())) {
+    platform_state_->mutex.unlock();
+    return {};
+  }
   auto& slot = platform_state_->targets[platform_state_->render_target_idx];
   if (platform_state_->backend == PlatformState::DirectPresentBackend::D3D12 &&
       !TransitionD3D12Slot(*platform_state_, slot, D3D12_RESOURCE_STATE_COMMON)) {
@@ -1449,6 +1510,9 @@ auto RhiEditViewerSurface::ensureRenderTarget(int slot_index, int width, int hei
     return true;
   }
 
+  if (slot.texture_handle != 0) {
+    renderer_.releaseImportedTexture(slot.texture_handle);
+  }
   ReleaseDirectPresentSlot(slot);
 
   cudaExternalMemoryHandleType handle_type = cudaExternalMemoryHandleTypeOpaqueWin32;
@@ -1630,6 +1694,7 @@ void RhiEditViewerSurface::initialize(QRhiCommandBuffer* command_buffer) {
   platform_state_->cuda_device             = -1;
   platform_state_->device                  = nullptr;
   platform_state_->d3d12_device            = nullptr;
+  platform_state_->d3d12_queue             = nullptr;
   platform_state_->backend                 = PlatformState::DirectPresentBackend::None;
   const char* backend_name = "<none>";
   if (rhi()) {
@@ -1832,6 +1897,7 @@ void RhiEditViewerSurface::releasePlatformTargets() {
   for (auto& slot : platform_state_->targets) {
     ReleaseDirectPresentSlot(slot);
   }
+  platform_state_->supports_direct_present        = false;
   platform_state_->device                         = nullptr;
   platform_state_->d3d12_device                   = nullptr;
   platform_state_->d3d12_queue                    = nullptr;
@@ -1855,6 +1921,10 @@ void RhiEditViewerSurface::releasePlatformTargets() {
   platform_state_->d3d12_cuda_fence_value         = 0;
   platform_state_->backend                        = PlatformState::DirectPresentBackend::None;
   platform_state_->cuda_device                    = -1;
+  platform_state_->pending_frame_idx.store(-1, std::memory_order_release);
+  platform_state_->active_idx                     = 0;
+  platform_state_->write_idx                      = 1;
+  platform_state_->render_target_idx              = 0;
   platform_state_->mapped_slot_idx                = -1;
   platform_state_->ready_slot_idx                 = -1;
   platform_state_->active_preview_metadata        = {};
