@@ -8,25 +8,53 @@
 
 #include <dawn/native/DawnNative.h>
 
+#include <cstdlib>
 #include <iostream>
 #include <limits>
 #include <sstream>
 #include <stdexcept>
+#include <string_view>
 #include <vector>
 
 namespace alcedo {
 namespace webgpu {
 namespace {
 
-#ifdef _WIN32
-constexpr wgpu::BackendType kPreferredWindowsBackend = wgpu::BackendType::D3D12;
-#endif
-
 struct AdapterAttempt {
   wgpu::BackendType  backend_type;
   wgpu::FeatureLevel feature_level;
   const char*        name;
 };
+
+auto PreferredWindowsBackend() -> wgpu::BackendType {
+#ifdef _WIN32
+  char*  backend = nullptr;
+  size_t backend_size = 0;
+  if (_dupenv_s(&backend, &backend_size, "ALCEDO_WEBGPU_BACKEND") != 0 || backend == nullptr) {
+    return wgpu::BackendType::D3D12;
+  }
+  const std::string_view value(backend);
+  const bool             use_vulkan = value == "vulkan" || value == "VULKAN" || value == "Vulkan";
+  std::free(backend);
+  if (use_vulkan) {
+    return wgpu::BackendType::Vulkan;
+  }
+  return wgpu::BackendType::D3D12;
+#else
+  return wgpu::BackendType::Undefined;
+#endif
+}
+
+auto BackendName(wgpu::BackendType backend) -> const char* {
+  switch (backend) {
+    case wgpu::BackendType::D3D12:
+      return "D3D12";
+    case wgpu::BackendType::Vulkan:
+      return "Vulkan";
+    default:
+      return "Default";
+  }
+}
 
 auto StringViewToString(WGPUStringView view) -> std::string {
   if (view.data == nullptr) {
@@ -101,10 +129,12 @@ WebGpuContext::WebGpuContext() {
 
   native_instance_ = std::make_unique<dawn::native::Instance>(&instance_descriptor);
 
+  const auto preferred_backend = PreferredWindowsBackend();
+  const auto preferred_name    = BackendName(preferred_backend);
   const std::vector<AdapterAttempt> attempts = {
 #ifdef _WIN32
-      {kPreferredWindowsBackend, wgpu::FeatureLevel::Core, "D3D12/Core"},
-      {kPreferredWindowsBackend, wgpu::FeatureLevel::Compatibility, "D3D12/Compatibility"},
+      {preferred_backend, wgpu::FeatureLevel::Core, preferred_name},
+      {preferred_backend, wgpu::FeatureLevel::Compatibility, preferred_name},
 #endif
   };
 
@@ -117,7 +147,9 @@ WebGpuContext::WebGpuContext() {
     options.forceFallbackAdapter = false;
 
     auto adapters                = native_instance_->EnumerateAdapters(&options);
-    log << attempt.name << ": " << adapters.size() << " adapter(s)";
+    log << attempt.name << '/'
+        << (attempt.feature_level == wgpu::FeatureLevel::Core ? "Core" : "Compatibility") << ": "
+        << adapters.size() << " adapter(s)";
     if (adapters.empty()) {
       log << '\n';
       continue;

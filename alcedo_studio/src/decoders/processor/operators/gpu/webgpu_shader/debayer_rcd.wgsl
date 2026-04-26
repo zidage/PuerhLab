@@ -13,13 +13,6 @@ struct SinglePlaneParams {
   padding: u32,
 };
 
-struct MergeParams {
-  width: u32,
-  height: u32,
-  plane_stride: u32,
-  rgba_stride: u32,
-};
-
 fn FC(params: SinglePlaneParams, y: u32, x: u32) -> u32 {
   let idx = ((y & 1u) << 1u) | (x & 1u);
   return params.rgb_fc[idx];
@@ -27,6 +20,10 @@ fn FC(params: SinglePlaneParams, y: u32, x: u32) -> u32 {
 
 fn Px(tex: texture_2d<f32>, y: i32, x: i32) -> f32 {
   return textureLoad(tex, vec2<i32>(x, y), 0).x;
+}
+
+fn Py(tex: texture_2d<f32>, y: i32, x: i32) -> f32 {
+  return textureLoad(tex, vec2<i32>(x, y), 0).y;
 }
 
 fn StoreR(dst: texture_storage_2d<r32float, write>, y: u32, x: u32, v: f32) {
@@ -66,13 +63,11 @@ fn LowPass(raw: texture_2d<f32>, y: i32, x: i32) -> f32 {
 // Kernel 1: rcd_init_and_vh
 // ---------------------------------------------------------------------------
 @group(0) @binding(0) var raw_init: texture_2d<f32>;
-@group(0) @binding(1) var r_init: texture_storage_2d<r32float, write>;
-@group(0) @binding(2) var g_init: texture_storage_2d<r32float, write>;
-@group(0) @binding(3) var b_init: texture_storage_2d<r32float, write>;
-@group(0) @binding(4) var vh_dir_init: texture_storage_2d<r32float, write>;
-@group(0) @binding(5) var<uniform> params_init: SinglePlaneParams;
+@group(0) @binding(1) var g_init: texture_storage_2d<r32float, write>;
+@group(0) @binding(2) var dir_init: texture_storage_2d<rgba16float, write>;
+@group(0) @binding(3) var<uniform> params_init: SinglePlaneParams;
 
-@compute @workgroup_size(8, 8, 1)
+@compute @workgroup_size(32, 8, 1)
 fn rcd_init_and_vh(@builtin(global_invocation_id) gid: vec3<u32>) {
   if (gid.x >= params_init.width || gid.y >= params_init.height) {
     return;
@@ -81,11 +76,10 @@ fn rcd_init_and_vh(@builtin(global_invocation_id) gid: vec3<u32>) {
   let val = Px(raw_init, i32(gid.y), i32(gid.x));
   let color = FC(params_init, gid.y, gid.x);
 
-  StoreR(r_init, gid.y, gid.x, select(0.0, val, color == 0u));
   StoreR(g_init, gid.y, gid.x, select(0.0, val, color == 1u));
-  StoreR(b_init, gid.y, gid.x, select(0.0, val, color == 2u));
 
   var vh = 0.0;
+  var pq = 0.0;
   if (gid.x >= 4u && gid.y >= 4u && gid.x + 4u < params_init.width && gid.y + 4u < params_init.height) {
     let x = i32(gid.x);
     let y = i32(gid.y);
@@ -138,9 +132,49 @@ fn rcd_init_and_vh(@builtin(global_invocation_id) gid: vec3<u32>) {
     );
 
     vh = V_stat / (V_stat + H_stat);
+
+    if (color != 1u) {
+      let nw1 = Px(raw_init, y - 1, x - 1);
+      let se1 = Px(raw_init, y + 1, x + 1);
+      let nw2 = Px(raw_init, y - 2, x - 2);
+      let se2 = Px(raw_init, y + 2, x + 2);
+      let nw3 = Px(raw_init, y - 3, x - 3);
+      let se3 = Px(raw_init, y + 3, x + 3);
+      let nw4 = Px(raw_init, y - 4, x - 4);
+      let se4 = Px(raw_init, y + 4, x + 4);
+      let sw1 = Px(raw_init, y + 1, x - 1);
+      let ne1 = Px(raw_init, y - 1, x + 1);
+      let sw2 = Px(raw_init, y + 2, x - 2);
+      let ne2 = Px(raw_init, y - 2, x + 2);
+      let sw3 = Px(raw_init, y + 3, x - 3);
+      let ne3 = Px(raw_init, y - 3, x + 3);
+      let sw4 = Px(raw_init, y + 4, x - 4);
+      let ne4 = Px(raw_init, y - 4, x + 4);
+      let P_stat = max(-18.0*c*nw1 - 18.0*c*se1 - 36.0*c*nw2 - 36.0*c*se2 + 18.0*c*nw3 +
+        18.0*c*se3 - 2.0*c*nw4 - 2.0*c*se4 + 38.0*c*c - 70.0*nw1*se1 -
+        12.0*nw1*nw2 + 24.0*nw1*se2 - 38.0*nw1*nw3 + 16.0*nw1*se3 +
+        12.0*nw1*nw4 - 6.0*nw1*se4 + 46.0*nw1*nw1 + 24.0*se1*nw2 -
+        12.0*se1*se2 + 16.0*se1*nw3 - 38.0*se1*se3 - 6.0*se1*nw4 +
+        12.0*se1*se4 + 46.0*se1*se1 + 14.0*nw2*se2 - 12.0*nw2*se3 -
+        2.0*nw2*nw4 + 2.0*nw2*se4 + 11.0*nw2*nw2 - 12.0*se2*nw3 +
+        2.0*se2*nw4 - 2.0*se2*se4 + 11.0*se2*se2 + 2.0*nw3*se3 -
+        6.0*nw3*nw4 + 10.0*nw3*nw3 - 6.0*se3*se4 + 10.0*se3*se3 +
+        nw4*nw4 + se4*se4, kEpsSq);
+      let Q_stat = max(-18.0*c*sw1 - 18.0*c*ne1 - 36.0*c*sw2 - 36.0*c*ne2 + 18.0*c*sw3 +
+        18.0*c*ne3 - 2.0*c*sw4 - 2.0*c*ne4 + 38.0*c*c - 70.0*sw1*ne1 -
+        12.0*sw1*sw2 + 24.0*sw1*ne2 - 38.0*sw1*sw3 + 16.0*sw1*ne3 +
+        12.0*sw1*sw4 - 6.0*sw1*ne4 + 46.0*sw1*sw1 + 24.0*ne1*sw2 -
+        12.0*ne1*ne2 + 16.0*ne1*sw3 - 38.0*ne1*ne3 - 6.0*ne1*sw4 +
+        12.0*ne1*ne4 + 46.0*ne1*ne1 + 14.0*sw2*ne2 - 12.0*sw2*ne3 -
+        2.0*sw2*sw4 + 2.0*sw2*ne4 + 11.0*sw2*sw2 - 12.0*ne2*sw3 +
+        2.0*ne2*sw4 - 2.0*ne2*ne4 + 11.0*ne2*ne2 + 2.0*sw3*ne3 -
+        6.0*sw3*sw4 + 10.0*sw3*sw3 - 6.0*ne3*ne4 + 10.0*ne3*ne3 +
+        sw4*sw4 + ne4*ne4, kEpsSq);
+      pq = P_stat / (P_stat + Q_stat);
+    }
   }
 
-  StoreR(vh_dir_init, gid.y, gid.x, vh);
+  textureStore(dir_init, vec2<i32>(i32(gid.x), i32(gid.y)), vec4<f32>(vh, pq, 0.0, 1.0));
 }
 
 // ---------------------------------------------------------------------------
@@ -152,7 +186,7 @@ fn rcd_init_and_vh(@builtin(global_invocation_id) gid: vec3<u32>) {
 @group(0) @binding(3) var g_green_dst: texture_storage_2d<r32float, write>;
 @group(0) @binding(4) var<uniform> params_green: SinglePlaneParams;
 
-@compute @workgroup_size(8, 8, 1)
+@compute @workgroup_size(32, 8, 1)
 fn rcd_green_at_rb(@builtin(global_invocation_id) gid: vec3<u32>) {
   if (gid.x >= params_green.width || gid.y >= params_green.height) {
     return;
@@ -209,196 +243,106 @@ fn rcd_green_at_rb(@builtin(global_invocation_id) gid: vec3<u32>) {
 }
 
 // ---------------------------------------------------------------------------
-// Kernel 3: rcd_pq_dir
+// Kernel 3: rcd_final_rgba
 // ---------------------------------------------------------------------------
-@group(0) @binding(0) var raw_pq: texture_2d<f32>;
-@group(0) @binding(1) var pq_dir_pq: texture_storage_2d<r32float, write>;
-@group(0) @binding(2) var<uniform> params_pq: SinglePlaneParams;
+@group(0) @binding(0) var dir_final: texture_2d<f32>;
+@group(0) @binding(1) var g_final: texture_2d<f32>;
+@group(0) @binding(2) var raw_final: texture_2d<f32>;
+@group(0) @binding(3) var out_final_rgba: texture_storage_2d<rgba32float, write>;
+@group(0) @binding(4) var<uniform> params_final: SinglePlaneParams;
 
-@compute @workgroup_size(8, 8, 1)
-fn rcd_pq_dir(@builtin(global_invocation_id) gid: vec3<u32>) {
-  if (gid.x >= params_pq.width || gid.y >= params_pq.height) {
-    return;
+fn RbChannelAfterRbAtRb(target_color: u32, y: i32, x: i32) -> f32 {
+  let uy = u32(y);
+  let ux = u32(x);
+  let color = FC(params_final, uy, ux);
+  let raw = Px(raw_final, y, x);
+  if (color == target_color) {
+    return raw;
+  }
+  if (color == 1u || ux < 4u || uy < 4u ||
+      ux + 4u >= params_final.width || uy + 4u >= params_final.height) {
+    return 0.0;
   }
 
-  var pq = 0.0;
-  if (gid.x >= 4u && gid.y >= 4u && gid.x + 4u < params_pq.width && gid.y + 4u < params_pq.height &&
-      FC(params_pq, gid.y, gid.x) != 1u) {
-    let x = i32(gid.x);
-    let y = i32(gid.y);
-    let c = Px(raw_pq, y, x);
-    let nw1 = Px(raw_pq, y - 1, x - 1);
-    let se1 = Px(raw_pq, y + 1, x + 1);
-    let nw2 = Px(raw_pq, y - 2, x - 2);
-    let se2 = Px(raw_pq, y + 2, x + 2);
-    let nw3 = Px(raw_pq, y - 3, x - 3);
-    let se3 = Px(raw_pq, y + 3, x + 3);
-    let nw4 = Px(raw_pq, y - 4, x - 4);
-    let se4 = Px(raw_pq, y + 4, x + 4);
-    let sw1 = Px(raw_pq, y + 1, x - 1);
-    let ne1 = Px(raw_pq, y - 1, x + 1);
-    let sw2 = Px(raw_pq, y + 2, x - 2);
-    let ne2 = Px(raw_pq, y - 2, x + 2);
-    let sw3 = Px(raw_pq, y + 3, x - 3);
-    let ne3 = Px(raw_pq, y - 3, x + 3);
-    let sw4 = Px(raw_pq, y + 4, x - 4);
-    let ne4 = Px(raw_pq, y - 4, x + 4);
-    let P_stat = max(-18.0*c*nw1 - 18.0*c*se1 - 36.0*c*nw2 - 36.0*c*se2 + 18.0*c*nw3 +
-      18.0*c*se3 - 2.0*c*nw4 - 2.0*c*se4 + 38.0*c*c - 70.0*nw1*se1 -
-      12.0*nw1*nw2 + 24.0*nw1*se2 - 38.0*nw1*nw3 + 16.0*nw1*se3 +
-      12.0*nw1*nw4 - 6.0*nw1*se4 + 46.0*nw1*nw1 + 24.0*se1*nw2 -
-      12.0*se1*se2 + 16.0*se1*nw3 - 38.0*se1*se3 - 6.0*se1*nw4 +
-      12.0*se1*se4 + 46.0*se1*se1 + 14.0*nw2*se2 - 12.0*nw2*se3 -
-      2.0*nw2*nw4 + 2.0*nw2*se4 + 11.0*nw2*nw2 - 12.0*se2*nw3 +
-      2.0*se2*nw4 - 2.0*se2*se4 + 11.0*se2*se2 + 2.0*nw3*se3 -
-      6.0*nw3*nw4 + 10.0*nw3*nw3 - 6.0*se3*se4 + 10.0*se3*se3 +
-      nw4*nw4 + se4*se4, kEpsSq);
-    let Q_stat = max(-18.0*c*sw1 - 18.0*c*ne1 - 36.0*c*sw2 - 36.0*c*ne2 + 18.0*c*sw3 +
-      18.0*c*ne3 - 2.0*c*sw4 - 2.0*c*ne4 + 38.0*c*c - 70.0*sw1*ne1 -
-      12.0*sw1*sw2 + 24.0*sw1*ne2 - 38.0*sw1*sw3 + 16.0*sw1*ne3 +
-      12.0*sw1*sw4 - 6.0*sw1*ne4 + 46.0*sw1*sw1 + 24.0*ne1*sw2 -
-      12.0*ne1*ne2 + 16.0*ne1*sw3 - 38.0*ne1*ne3 - 6.0*ne1*sw4 +
-      12.0*ne1*ne4 + 46.0*ne1*ne1 + 14.0*sw2*ne2 - 12.0*sw2*ne3 -
-      2.0*sw2*sw4 + 2.0*sw2*ne4 + 11.0*sw2*sw2 - 12.0*ne2*sw3 +
-      2.0*ne2*sw4 - 2.0*ne2*ne4 + 11.0*ne2*ne2 + 2.0*sw3*ne3 -
-      6.0*sw3*sw4 + 10.0*sw3*sw3 - 6.0*ne3*ne4 + 10.0*ne3*ne3 +
-      sw4*sw4 + ne4*ne4, kEpsSq);
-    pq = P_stat / (P_stat + Q_stat);
-  }
-  StoreR(pq_dir_pq, gid.y, gid.x, pq);
+  let PQ_c = Py(dir_final, y, x);
+  let PQ_n = 0.25 * (Py(dir_final, y - 1, x - 1) + Py(dir_final, y - 1, x + 1) +
+                     Py(dir_final, y + 1, x - 1) + Py(dir_final, y + 1, x + 1));
+  let PQ_disc = select(PQ_c, PQ_n, abs(0.5 - PQ_c) < abs(0.5 - PQ_n));
+  let g_c = Px(g_final, y, x);
+  let ch_nw1 = Px(raw_final, y - 1, x - 1);
+  let ch_ne1 = Px(raw_final, y - 1, x + 1);
+  let ch_sw1 = Px(raw_final, y + 1, x - 1);
+  let ch_se1 = Px(raw_final, y + 1, x + 1);
+  let ch_nw3 = Px(raw_final, y - 3, x - 3);
+  let ch_ne3 = Px(raw_final, y - 3, x + 3);
+  let ch_sw3 = Px(raw_final, y + 3, x - 3);
+  let ch_se3 = Px(raw_final, y + 3, x + 3);
+  let g_nw2 = Px(g_final, y - 2, x - 2);
+  let g_ne2 = Px(g_final, y - 2, x + 2);
+  let g_sw2 = Px(g_final, y + 2, x - 2);
+  let g_se2 = Px(g_final, y + 2, x + 2);
+  let NW_grad = kEps + abs(ch_nw1 - ch_se1) + abs(ch_nw1 - ch_nw3) + abs(g_c - g_nw2);
+  let NE_grad = kEps + abs(ch_ne1 - ch_sw1) + abs(ch_ne1 - ch_ne3) + abs(g_c - g_ne2);
+  let SW_grad = kEps + abs(ch_sw1 - ch_ne1) + abs(ch_sw1 - ch_sw3) + abs(g_c - g_sw2);
+  let SE_grad = kEps + abs(ch_se1 - ch_nw1) + abs(ch_se1 - ch_se3) + abs(g_c - g_se2);
+  let NW_est = ch_nw1 - Px(g_final, y - 1, x - 1);
+  let NE_est = ch_ne1 - Px(g_final, y - 1, x + 1);
+  let SW_est = ch_sw1 - Px(g_final, y + 1, x - 1);
+  let SE_est = ch_se1 - Px(g_final, y + 1, x + 1);
+  let P_est = (NW_grad * SE_est + SE_grad * NW_est) / (NW_grad + SE_grad);
+  let Q_est = (NE_grad * SW_est + SW_grad * NE_est) / (NE_grad + SW_grad);
+  return max(0.0, g_c + (1.0 - PQ_disc) * P_est + PQ_disc * Q_est);
 }
 
-// ---------------------------------------------------------------------------
-// Kernel 4: rcd_rb_at_rb
-// ---------------------------------------------------------------------------
-@group(0) @binding(0) var pq_dir_rb: texture_2d<f32>;
-@group(0) @binding(1) var g_rb: texture_2d<f32>;
-@group(0) @binding(2) var r_rb_src: texture_2d<f32>;
-@group(0) @binding(3) var b_rb_src: texture_2d<f32>;
-@group(0) @binding(4) var r_rb_dst: texture_storage_2d<r32float, write>;
-@group(0) @binding(5) var b_rb_dst: texture_storage_2d<r32float, write>;
-@group(0) @binding(6) var<uniform> params_rb: SinglePlaneParams;
-
-@compute @workgroup_size(8, 8, 1)
-fn rcd_rb_at_rb(@builtin(global_invocation_id) gid: vec3<u32>) {
-  if (gid.x >= params_rb.width || gid.y >= params_rb.height) {
-    return;
-  }
-  let x = i32(gid.x);
-  let y = i32(gid.y);
-  var out_r = Px(r_rb_src, y, x);
-  var out_b = Px(b_rb_src, y, x);
-  let color = FC(params_rb, gid.y, gid.x);
-  if (gid.x >= 4u && gid.y >= 4u && gid.x + 4u < params_rb.width && gid.y + 4u < params_rb.height &&
-      color != 1u) {
-    let c = 2u - color;
-    let use_b = c == 2u;
-    let PQ_c = Px(pq_dir_rb, y, x);
-    let PQ_n = 0.25 * (Px(pq_dir_rb, y - 1, x - 1) + Px(pq_dir_rb, y - 1, x + 1) +
-                       Px(pq_dir_rb, y + 1, x - 1) + Px(pq_dir_rb, y + 1, x + 1));
-    let PQ_disc = select(PQ_c, PQ_n, abs(0.5 - PQ_c) < abs(0.5 - PQ_n));
-    let g_c = Px(g_rb, y, x);
-    let ch_nw1 = select(Px(r_rb_src, y - 1, x - 1), Px(b_rb_src, y - 1, x - 1), use_b);
-    let ch_ne1 = select(Px(r_rb_src, y - 1, x + 1), Px(b_rb_src, y - 1, x + 1), use_b);
-    let ch_sw1 = select(Px(r_rb_src, y + 1, x - 1), Px(b_rb_src, y + 1, x - 1), use_b);
-    let ch_se1 = select(Px(r_rb_src, y + 1, x + 1), Px(b_rb_src, y + 1, x + 1), use_b);
-    let ch_nw3 = select(Px(r_rb_src, y - 3, x - 3), Px(b_rb_src, y - 3, x - 3), use_b);
-    let ch_ne3 = select(Px(r_rb_src, y - 3, x + 3), Px(b_rb_src, y - 3, x + 3), use_b);
-    let ch_sw3 = select(Px(r_rb_src, y + 3, x - 3), Px(b_rb_src, y + 3, x - 3), use_b);
-    let ch_se3 = select(Px(r_rb_src, y + 3, x + 3), Px(b_rb_src, y + 3, x + 3), use_b);
-    let g_nw2 = Px(g_rb, y - 2, x - 2);
-    let g_ne2 = Px(g_rb, y - 2, x + 2);
-    let g_sw2 = Px(g_rb, y + 2, x - 2);
-    let g_se2 = Px(g_rb, y + 2, x + 2);
-    let NW_grad = kEps + abs(ch_nw1 - ch_se1) + abs(ch_nw1 - ch_nw3) + abs(g_c - g_nw2);
-    let NE_grad = kEps + abs(ch_ne1 - ch_sw1) + abs(ch_ne1 - ch_ne3) + abs(g_c - g_ne2);
-    let SW_grad = kEps + abs(ch_sw1 - ch_ne1) + abs(ch_sw1 - ch_sw3) + abs(g_c - g_sw2);
-    let SE_grad = kEps + abs(ch_se1 - ch_nw1) + abs(ch_se1 - ch_se3) + abs(g_c - g_se2);
-    let NW_est = ch_nw1 - Px(g_rb, y - 1, x - 1);
-    let NE_est = ch_ne1 - Px(g_rb, y - 1, x + 1);
-    let SW_est = ch_sw1 - Px(g_rb, y + 1, x - 1);
-    let SE_est = ch_se1 - Px(g_rb, y + 1, x + 1);
-    let P_est = (NW_grad * SE_est + SE_grad * NW_est) / (NW_grad + SE_grad);
-    let Q_est = (NE_grad * SW_est + SW_grad * NE_est) / (NE_grad + SW_grad);
-    let out_val = max(0.0, g_c + (1.0 - PQ_disc) * P_est + PQ_disc * Q_est);
-    if (c == 0u) {
-      out_r = out_val;
-    } else {
-      out_b = out_val;
-    }
-  }
-  StoreR(r_rb_dst, gid.y, gid.x, out_r);
-  StoreR(b_rb_dst, gid.y, gid.x, out_b);
+fn ReconstructTargetAtGreen(target_color: u32, y: i32, x: i32, vh_disc: f32) -> f32 {
+  return ReconstructRbAtGreen(
+    RbChannelAfterRbAtRb(target_color, y - 1, x),
+    RbChannelAfterRbAtRb(target_color, y + 1, x),
+    RbChannelAfterRbAtRb(target_color, y - 3, x),
+    RbChannelAfterRbAtRb(target_color, y + 3, x),
+    RbChannelAfterRbAtRb(target_color, y, x - 1),
+    RbChannelAfterRbAtRb(target_color, y, x + 1),
+    RbChannelAfterRbAtRb(target_color, y, x - 3),
+    RbChannelAfterRbAtRb(target_color, y, x + 3),
+    Px(g_final, y, x),
+    Px(g_final, y - 2, x),
+    Px(g_final, y + 2, x),
+    Px(g_final, y, x - 2),
+    Px(g_final, y, x + 2),
+    Px(g_final, y - 1, x),
+    Px(g_final, y + 1, x),
+    Px(g_final, y, x - 1),
+    Px(g_final, y, x + 1),
+    vh_disc);
 }
 
-// ---------------------------------------------------------------------------
-// Kernel 5: rcd_rb_at_g
-// ---------------------------------------------------------------------------
-@group(0) @binding(0) var vh_dir_g: texture_2d<f32>;
-@group(0) @binding(1) var g_g: texture_2d<f32>;
-@group(0) @binding(2) var r_g_src: texture_2d<f32>;
-@group(0) @binding(3) var b_g_src: texture_2d<f32>;
-@group(0) @binding(4) var r_g_dst: texture_storage_2d<r32float, write>;
-@group(0) @binding(5) var b_g_dst: texture_storage_2d<r32float, write>;
-@group(0) @binding(6) var<uniform> params_g: SinglePlaneParams;
-
-@compute @workgroup_size(8, 8, 1)
-fn rcd_rb_at_g(@builtin(global_invocation_id) gid: vec3<u32>) {
-  if (gid.x >= params_g.width || gid.y >= params_g.height) {
+@compute @workgroup_size(32, 8, 1)
+fn rcd_final_rgba(@builtin(global_invocation_id) gid: vec3<u32>) {
+  if (gid.x >= params_final.width || gid.y >= params_final.height) {
     return;
   }
+
   let x = i32(gid.x);
   let y = i32(gid.y);
-  var out_r = Px(r_g_src, y, x);
-  var out_b = Px(b_g_src, y, x);
-  if (gid.x >= 4u && gid.y >= 4u && gid.x + 4u < params_g.width && gid.y + 4u < params_g.height &&
-      FC(params_g, gid.y, gid.x) == 1u) {
-    let VH_central = Px(vh_dir_g, y, x);
-    let VH_neigh = 0.25 * (Px(vh_dir_g, y - 1, x - 1) + Px(vh_dir_g, y - 1, x + 1) +
-                           Px(vh_dir_g, y + 1, x - 1) + Px(vh_dir_g, y + 1, x + 1));
+  let color = FC(params_final, gid.y, gid.x);
+  let raw = Px(raw_final, y, x);
+  var out_r = select(0.0, raw, color == 0u);
+  let out_g = Px(g_final, y, x);
+  var out_b = select(0.0, raw, color == 2u);
+
+  if (color == 0u) {
+    out_b = RbChannelAfterRbAtRb(2u, y, x);
+  } else if (color == 2u) {
+    out_r = RbChannelAfterRbAtRb(0u, y, x);
+  } else if (gid.x >= 4u && gid.y >= 4u && gid.x + 4u < params_final.width &&
+             gid.y + 4u < params_final.height) {
+    let VH_central = Px(dir_final, y, x);
+    let VH_neigh = 0.25 * (Px(dir_final, y - 1, x - 1) + Px(dir_final, y - 1, x + 1) +
+                           Px(dir_final, y + 1, x - 1) + Px(dir_final, y + 1, x + 1));
     let VH_disc = select(VH_central, VH_neigh, abs(0.5 - VH_central) < abs(0.5 - VH_neigh));
-    let g_c = Px(g_g, y, x);
-    let g_m2 = Px(g_g, y - 2, x);
-    let g_p2 = Px(g_g, y + 2, x);
-    let g_l2 = Px(g_g, y, x - 2);
-    let g_r2 = Px(g_g, y, x + 2);
-    let g_m1 = Px(g_g, y - 1, x);
-    let g_p1 = Px(g_g, y + 1, x);
-    let g_l1 = Px(g_g, y, x - 1);
-    let g_r1 = Px(g_g, y, x + 1);
-    out_r = ReconstructRbAtGreen(
-      Px(r_g_src, y - 1, x), Px(r_g_src, y + 1, x), Px(r_g_src, y - 3, x), Px(r_g_src, y + 3, x),
-      Px(r_g_src, y, x - 1), Px(r_g_src, y, x + 1), Px(r_g_src, y, x - 3), Px(r_g_src, y, x + 3),
-      g_c, g_m2, g_p2, g_l2, g_r2, g_m1, g_p1, g_l1, g_r1, VH_disc);
-    out_b = ReconstructRbAtGreen(
-      Px(b_g_src, y - 1, x), Px(b_g_src, y + 1, x), Px(b_g_src, y - 3, x), Px(b_g_src, y + 3, x),
-      Px(b_g_src, y, x - 1), Px(b_g_src, y, x + 1), Px(b_g_src, y, x - 3), Px(b_g_src, y, x + 3),
-      g_c, g_m2, g_p2, g_l2, g_r2, g_m1, g_p1, g_l1, g_r1, VH_disc);
+    out_r = ReconstructTargetAtGreen(0u, y, x, VH_disc);
+    out_b = ReconstructTargetAtGreen(2u, y, x, VH_disc);
   }
-  StoreR(r_g_dst, gid.y, gid.x, out_r);
-  StoreR(b_g_dst, gid.y, gid.x, out_b);
-}
 
-// ---------------------------------------------------------------------------
-// Kernel 6: rcd_merge_rgba
-// ---------------------------------------------------------------------------
-@group(0) @binding(0) var r_merge: texture_2d<f32>;
-@group(0) @binding(1) var g_merge: texture_2d<f32>;
-@group(0) @binding(2) var b_merge: texture_2d<f32>;
-@group(0) @binding(3) var out_rgba: texture_storage_2d<rgba32float, write>;
-@group(0) @binding(4) var<uniform> params_merge: MergeParams;
-
-@compute @workgroup_size(8, 8, 1)
-fn rcd_merge_rgba(@builtin(global_invocation_id) gid: vec3<u32>) {
-  if (gid.x >= params_merge.width || gid.y >= params_merge.height) {
-    return;
-  }
-  let x = i32(gid.x);
-  let y = i32(gid.y);
-  textureStore(out_rgba, vec2<i32>(x, y), vec4<f32>(
-    Px(r_merge, y, x),
-    Px(g_merge, y, x),
-    Px(b_merge, y, x),
-    1.0
-  ));
+  textureStore(out_final_rgba, vec2<i32>(x, y), vec4<f32>(out_r, out_g, out_b, 1.0));
 }
