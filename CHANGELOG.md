@@ -1,5 +1,37 @@
 # Changelog
 
+## [0.2.3] (21046ec..fd3f8f2) — 2026-04-08 ~ 2026-04-26
+
+### Features
+- **Project rebranded to Alcedo Studio**: Renamed the project from Puerh Lab to Alcedo Studio across the codebase, UI, and website, and added a new welcome screen. (`abdfa38`, `0ebb546`, `cc02941`)
+- **WebGPU RAW processing backend**: Added experimental WebGPU support to the image buffer and introduced a full WebGPU-accelerated RAW decode pipeline — including RCD demosaic shaders, linear reference op, skeleton backend, and RCD demosaic performance tuning. (`3db42c6`, `8caa858`, `d09d5e5`, `4d7e041`, `f3cdde3`, `ab32232`)
+- **Windows preview surface migrated to D3D12**: Ported the Windows preview surface from D3D11 to D3D12 in preparation for WebGPU support. (`1573e4a`)
+- **Forward matrix support for RAW color**: Added forward matrix to the RAW color context and metadata extraction pipeline for improved color accuracy on supported cameras. (`0578f9d`)
+- **DNG import and metadata improvements**: Optimized DNG file import performance, enhanced UI components, added DNG metadata extraction tests, and improved the DNG Converter recovery menu design. (`614bac2`, `ef33ff67`, `7481f37`)
+- **Clarity operator improvements**: Improved Clarity operator quality and aligned its behavior between macOS and Windows. (`d7a79fe`, `efd30e4`)
+- **Gesture operations on viewer**: Added pinch-to-zoom and pan gesture support to the image viewer. (`37f58f7`)
+- **OCIO configuration enhancements**: Improved OCIO configuration handling and cross-platform path management. (`26096ac`)
+- **LUT search and panel updates**: Added search support to the LUT selector and refreshed the LUT selection panel UI. (`5bb41c4`, `992bcd3`)
+- **Inference backend migrated to ONNX**: Replaced the previous inference sidecar backend with ONNX Runtime. (`cf3a12e`)
+- **i18n support for adjustment panels**: Added localization coverage for all adjustment panel strings. (`5e8920f`)
+- **macOS installation script update**: Updated the macOS installation helper script. (`fd3f8f2`)
+
+### UI
+- **Comprehensive UI overhaul**: Overhauled the main theme and inspector panel, redesigned the tone, geometry, scope, versioning, and export panels, updated slider and folder styles, redesigned history cards, updated data display fonts, and added a pipeline profiler readout. (`4fb8ad7`, `7d4b345`, `5450a54`, `5f9153d`, `ba568cd`, `15e04a8`, `42599fa`, `3c1fbdb`, `4ccdc3d`, `6269a5c`, `9c3a10f`, `a96f7e7`, `3fa0b81`, `723e894`, `b87cbc8`, `aedd372`, `b273134`, `8e3297d`)
+
+### Performance
+- **VRAM optimization for large images**: Reduced peak VRAM consumption when processing 100MP+ images and capped the preview render resolution at 8K. (`1a9f09a`, `e49f5e6`)
+- **Highlight reconstruction CUDA optimization**: Further tuned the CUDA highlight reconstruction kernel for improved throughput. (`4277677`)
+- **Thumbnail and decode optimizations**: Optimized thumbnail downsample logic and general decode pipeline efficiency. (`4046e82`)
+
+### Bug Fixes
+- **RAW color matrix resolution fixes**: Fixed CCM resolution errors for DNG files and general camera matrix matching. (`83370a8`, `060d887`)
+- **D3D12 preview crash**: Fixed a crash-to-desktop when initializing the D3D12 preview surface. (`11af467`)
+- **Lens correction crop**: Fixed broken crop output after lens correction is applied. (`66d6fbb`)
+- **Curve control behavior and rendering**: Fixed curve control interaction behavior and panel corner rendering. (`767bcf9`, `b591a56`)
+- **Editor font rendering on Windows**: Fixed incorrect font rendering in the editor on Windows. (`919fc88`)
+- **Miscellaneous UI fixes**: Fixed incorrect collapse/expand button color and inconsistent panel headline design. (`17fe748`, `b97e016`)
+
 ## [0.2.2] (6def338..17363e4) — 2026-03-22 ~ 2026-04-08
 
 ### Features
@@ -77,6 +109,38 @@
 ---
 
 # 更新日志
+
+## [0.2.3] (21046ec..fd3f8f2) — 2026-04-08 ~ 2026-04-26
+
+### 新功能
+- **项目更名为 Alcedo Studio**：将项目从 Puerh Lab 更名为 Alcedo Studio，涵盖代码库、UI 及网站，并新增欢迎页面。(`abdfa38`, `0ebb546`, `cc02941`)
+- **WebGPU RAW 处理后端**：新增实验性 WebGPU 支持，为图像缓冲区引入完整的 WebGPU 加速 RAW 解码管线，包括 RCD 去马赛克着色器、线性参考算子、骨架后端及 RCD 去马赛克性能优化。(`3db42c6`, `8caa858`, `d09d5e5`, `4d7e041`, `f3cdde3`, `ab32232`)
+- **Windows 预览曲面迁移至 D3D12**：将 Windows 预览 Surface 从 D3D11 迁移到 D3D12，为 WebGPU 支持做准备。(`1573e4a`)
+- **RAW 色彩正向矩阵支持**：在 RAW 色彩上下文和元数据提取管线中加入正向矩阵，提升支持机型的色彩精准度。(`0578f9d`)
+- **DNG 导入与元数据改进**：优化 DNG 文件导入性能，增强 UI 组件，新增 DNG 元数据提取测试，并改进 DNG Converter 恢复菜单设计。(`614bac2`, `ef33ff67`, `7481f37`)
+- **清晰度算子改进**：提升清晰度算子质量，并统一 macOS 与 Windows 平台的行为表现。(`d7a79fe`, `efd30e4`)
+- **预览区手势操作**：为图像预览区添加捏合缩放与平移手势支持。(`37f58f7`)
+- **OCIO 配置增强**：改进 OCIO 配置处理方式与跨平台路径管理。(`26096ac`)
+- **LUT 搜索与面板更新**：为 LUT 选择器添加搜索支持，并刷新 LUT 面板 UI。(`5bb41c4`, `992bcd3`)
+- **推理后端迁移至 ONNX**：将推理 sidecar 后端替换为 ONNX Runtime。(`cf3a12e`)
+- **调整面板 i18n 支持**：为所有调整面板字符串补全本地化支持。(`5e8920f`)
+- **macOS 安装脚本更新**：更新 macOS 安装辅助脚本。(`fd3f8f2`)
+
+### 界面
+- **全面 UI 大改版**：重做主题与检查器面板，重新设计色调、几何、波形、版本控制及导出面板，更新滑块与文件夹样式，重设历史记录卡片，更新数据显示字体，并添加管线性能分析输出。(`4fb8ad7`, `7d4b345`, `5450a54`, `5f9153d`, `ba568cd`, `15e04a8`, `42599fa`, `3c1fbdb`, `4ccdc3d`, `6269a5c`, `9c3a10f`, `a96f7e7`, `3fa0b81`, `723e894`, `b87cbc8`, `aedd372`, `b273134`, `8e3297d`)
+
+### 性能优化
+- **大尺寸图像 VRAM 优化**：降低 100MP 以上图像处理时的峰值 VRAM 消耗，并将预览渲染分辨率上限设定为 8K。(`1a9f09a`, `e49f5e6`)
+- **高光恢复 CUDA 优化**：进一步调优 CUDA 高光恢复内核，提升处理吞吐量。(`4277677`)
+- **缩略图与解码优化**：优化缩略图降采样逻辑及整体解码管线效率。(`4046e82`)
+
+### 缺陷修复
+- **RAW 色彩矩阵解析修复**：修复 DNG 文件的 CCM 解析错误及通用相机矩阵匹配问题。(`83370a8`, `060d887`)
+- **D3D12 预览崩溃**：修复 D3D12 预览 Surface 初始化时的崩溃问题。(`11af467`)
+- **镜头校正裁切**：修复应用镜头校正后裁切输出异常的问题。(`66d6fbb`)
+- **曲线控制行为与渲染**：修复曲线控制交互行为和面板圆角渲染问题。(`767bcf9`, `b591a56`)
+- **Windows 编辑器字体渲染**：修复 Windows 上编辑器中字体渲染错误。(`919fc88`)
+- **其他 UI 修复**：修复收起/展开按钮颜色错误及面板标题设计不一致问题。(`17fe748`, `b97e016`)
 
 ## [0.2.2] (6def338..17363e4) — 2026-03-22 ~ 2026-04-08
 

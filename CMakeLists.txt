@@ -744,17 +744,9 @@ if(WIN32 AND TARGET ${ALCEDO_MAIN_BIN})
 
     set(_third_party_exiv2_bin "${CMAKE_SOURCE_DIR}/alcedo_studio/third_party/exiv2_x64-windows/bin")
     set(_third_party_duckdb_bin "${CMAKE_SOURCE_DIR}/alcedo_studio/third_party/libduckdb-windows")
+    set(_third_party_dawn_bin "")
     if(ALCEDO_WEBGPU_ENABLED)
         set(_third_party_dawn_bin "${ALCEDO_DAWN_PACKAGE_DIR}/bin")
-    else()
-        set(_third_party_dawn_bin "${CMAKE_SOURCE_DIR}/alcedo_studio/third_party/dawn_win/bin")
-    endif()
-
-    # Dawn runtime DLLs are copied during install. WebGPU tests use Dawn's
-    # additional runtime search paths instead of relying on side-by-side copies.
-    file(GLOB _dawn_dlls "${_third_party_dawn_bin}/*.dll")
-    if(ALCEDO_DAWN_RUNTIME_DLLS)
-        list(APPEND _dawn_dlls ${ALCEDO_DAWN_RUNTIME_DLLS})
     endif()
 
     set(_vcpkg_bin_dir "")
@@ -785,11 +777,13 @@ if(WIN32 AND TARGET ${ALCEDO_MAIN_BIN})
              ${ALCEDO_RUNTIME_SEARCH_DIRS}
              \"${_third_party_exiv2_bin}\"
              \"${_third_party_duckdb_bin}\"
-             \"${_third_party_dawn_bin}\"
              \"${_vcpkg_bin_dir}\"
              \"${_qt6_bin_dir}\"
              \${ALCEDO_RUNTIME_DEP_DIRS}
          )
+         if(NOT \"${_third_party_dawn_bin}\" STREQUAL \"\")
+             list(APPEND _search_dirs \"${_third_party_dawn_bin}\")
+         endif()
          file(GET_RUNTIME_DEPENDENCIES
              EXECUTABLES ${ALCEDO_RUNTIME_EXES}
              DIRECTORIES \${_search_dirs}
@@ -828,16 +822,18 @@ if(WIN32 AND TARGET ${ALCEDO_MAIN_BIN})
          if(_unresolved)
              message(WARNING \"[alcedo] Unresolved runtime deps: \${_unresolved}\")
          endif()
-         # Explicitly copy any bundled Dawn DLLs even if they are not direct linker dependencies
-         # (Dawn may load them dynamically at runtime).
-         file(GLOB _dawn_dlls \"${_third_party_dawn_bin}/*.dll\")
-         set(_alcedo_dawn_runtime_dlls \"${ALCEDO_DAWN_RUNTIME_DLLS}\")
-         if(_alcedo_dawn_runtime_dlls)
-             list(APPEND _dawn_dlls \${_alcedo_dawn_runtime_dlls})
+         if(NOT \"${_third_party_dawn_bin}\" STREQUAL \"\")
+             # Explicitly copy bundled Dawn DLLs even if they are not direct linker dependencies
+             # (Dawn may load them dynamically at runtime).
+             file(GLOB _dawn_dlls \"${_third_party_dawn_bin}/*.dll\")
+             set(_alcedo_dawn_runtime_dlls \"${ALCEDO_DAWN_RUNTIME_DLLS}\")
+             if(_alcedo_dawn_runtime_dlls)
+                 list(APPEND _dawn_dlls \${_alcedo_dawn_runtime_dlls})
+             endif()
+             foreach(_dawn_dll IN LISTS _dawn_dlls)
+                 file(INSTALL DESTINATION \"\${_bindir}\" TYPE SHARED_LIBRARY FILES \"\${_dawn_dll}\")
+             endforeach()
          endif()
-         foreach(_dawn_dll IN LISTS _dawn_dlls)
-             file(INSTALL DESTINATION \"\${_bindir}\" TYPE SHARED_LIBRARY FILES \"\${_dawn_dll}\")
-         endforeach()
         "
     )
 

@@ -28,7 +28,8 @@
         "CMAKE_BUILD_TYPE": "Release",
         "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/vcpkg/scripts/buildsystems/vcpkg.cmake",
         "CMAKE_INSTALL_PREFIX": "${sourceDir}/build/install",
-        "ALCEDO_BUILD_TESTS": "OFF"
+        "ALCEDO_BUILD_TESTS": "OFF",
+        "ALCEDO_ENABLE_WEBGPU": "OFF"
       }
     },
     {
