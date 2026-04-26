@@ -182,4 +182,8 @@ auto SleeveServiceImpl::CreateFolder(const std::filesystem::path& parent_path,
 auto SleeveServiceImpl::DeletePath(const std::filesystem::path& target_path) -> SyncResult {
   return Write<void>([target_path](FileSystem& fs) { fs.Delete(target_path); });
 }
+
+auto SleeveServiceImpl::DeleteElement(sl_element_id_t target_id) -> SyncResult {
+  return Write<void>([target_id](FileSystem& fs) { fs.Delete(target_id); });
+}
 };  // namespace alcedo

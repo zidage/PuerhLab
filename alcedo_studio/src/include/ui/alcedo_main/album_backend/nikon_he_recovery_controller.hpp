@@ -45,6 +45,9 @@ class NikonHeRecoveryController {
   [[nodiscard]] auto         status_text() const -> QString { return status_text_.Render(); }
   [[nodiscard]] auto         unsupported_files() const -> QVariantList;
   [[nodiscard]] const QString& converter_path() const { return converter_path_; }
+  [[nodiscard]] bool         converter_path_from_default() const {
+    return converter_path_from_default_;
+  }
 
  private:
   void NotifyStateChanged();
@@ -62,6 +65,7 @@ class NikonHeRecoveryController {
   sl_element_id_t          import_target_folder_id_ = 0;
   std::filesystem::path    import_target_folder_path_{};
   QString                  converter_path_{};
+  bool                     converter_path_from_default_ = false;
   std::unique_ptr<QProcess> process_{};
   NikonHeRecoveryPhase     phase_ = NikonHeRecoveryPhase::IDLE;
   i18n::LocalizedText      status_text_{};

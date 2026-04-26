@@ -29,6 +29,7 @@ struct AlbumFileView {
 struct AlbumDeleteResult {
   std::vector<AlbumFileView>         deleted_files_{};
   std::vector<std::filesystem::path> failed_paths_{};
+  std::vector<sl_element_id_t>       failed_element_ids_{};
 };
 
 class AlbumBrowseService {
@@ -46,6 +47,8 @@ class AlbumBrowseService {
       -> std::optional<AlbumFolderView>;
   [[nodiscard]] bool DeleteFolder(const std::filesystem::path& folder_path);
   [[nodiscard]] auto DeleteFiles(const std::vector<std::filesystem::path>& file_paths)
+      -> AlbumDeleteResult;
+  [[nodiscard]] auto DeleteFilesByElementIds(const std::vector<sl_element_id_t>& element_ids)
       -> AlbumDeleteResult;
 
  private:

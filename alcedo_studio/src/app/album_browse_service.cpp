@@ -156,4 +156,49 @@ auto AlbumBrowseService::DeleteFiles(const std::vector<std::filesystem::path>& f
   return out;
 }
 
+auto AlbumBrowseService::DeleteFilesByElementIds(
+    const std::vector<sl_element_id_t>& element_ids) -> AlbumDeleteResult {
+  AlbumDeleteResult out;
+  if (!sleeve_service_ || element_ids.empty()) {
+    return out;
+  }
+
+  std::unordered_set<sl_element_id_t> seen;
+  seen.reserve(element_ids.size() * 2 + 1);
+
+  for (const auto element_id : element_ids) {
+    if (element_id == 0 || !seen.insert(element_id).second) {
+      continue;
+    }
+
+    try {
+      const auto file = sleeve_service_->Read<std::shared_ptr<SleeveFile>>(
+          [element_id](FileSystem& fs) -> std::shared_ptr<SleeveFile> {
+            const auto element = fs.Get(element_id);
+            if (!element || element->type_ != ElementType::FILE ||
+                element->sync_flag_ == SyncFlag::DELETED) {
+              return nullptr;
+            }
+            return std::dynamic_pointer_cast<SleeveFile>(element);
+          });
+      if (!file || file->image_id_ == 0) {
+        out.failed_element_ids_.push_back(element_id);
+        continue;
+      }
+
+      auto       view = BuildFileView({}, file);
+      const auto sync = sleeve_service_->DeleteElement(element_id);
+      if (!sync.success_) {
+        out.failed_element_ids_.push_back(element_id);
+        continue;
+      }
+      out.deleted_files_.push_back(std::move(view));
+    } catch (...) {
+      out.failed_element_ids_.push_back(element_id);
+    }
+  }
+
+  return out;
+}
+
 }  // namespace alcedo

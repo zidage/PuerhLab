@@ -8,6 +8,7 @@
 #include <exception>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <memory>
 #include <stdexcept>
 
@@ -142,6 +143,65 @@ void FileSystem::Delete(std::filesystem::path target) {
   }
 
   parent_write_node->RemoveNameFromMap(delete_node_name.wstring());
+}
+
+void FileSystem::Delete(sl_element_id_t target_id) {
+  if (target_id == 0) {
+    throw std::runtime_error("Filesystem: root cannot be deleted");
+  }
+
+  auto delete_node = Get(target_id);
+  if (!delete_node || delete_node->sync_flag_ == SyncFlag::DELETED) {
+    throw std::runtime_error("Filesystem: Deleting node does not exist");
+  }
+
+  const auto decrement_folder_children =
+      [this](const std::shared_ptr<SleeveFolder>& folder, const auto& self) -> void {
+    storage_handler_.EnsureChildrenLoaded(folder);
+    const auto children = folder->ListElements();
+    for (const auto child_id : children) {
+      auto child = storage_handler_.GetElement(child_id);
+      if (!child || child->sync_flag_ == SyncFlag::DELETED) {
+        continue;
+      }
+      child->DecrementRefCount();
+      if (child->ref_count_ <= 0 && child->type_ == ElementType::FOLDER) {
+        self(std::static_pointer_cast<SleeveFolder>(child), self);
+      }
+    }
+  };
+
+  const auto remove_from_folder =
+      [this, target_id, &delete_node,
+       &decrement_folder_children](const std::shared_ptr<SleeveFolder>& folder,
+                                   const auto& self) -> bool {
+    storage_handler_.EnsureChildrenLoaded(folder);
+    const auto children = folder->ListElements();
+    for (const auto child_id : children) {
+      auto child = storage_handler_.GetElement(child_id);
+      if (!child || child->sync_flag_ == SyncFlag::DELETED) {
+        continue;
+      }
+      if (child_id == target_id) {
+        delete_node->DecrementRefCount();
+        if (delete_node->ref_count_ <= 0 && delete_node->type_ == ElementType::FOLDER) {
+          const auto delete_folder = std::static_pointer_cast<SleeveFolder>(delete_node);
+          decrement_folder_children(delete_folder, decrement_folder_children);
+        }
+        folder->RemoveNameFromMap(delete_node->element_name_);
+        return true;
+      }
+      if (child->type_ == ElementType::FOLDER &&
+          self(std::static_pointer_cast<SleeveFolder>(child), self)) {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  if (!remove_from_folder(root_, remove_from_folder)) {
+    throw std::runtime_error("Filesystem: Deleting node does not exist");
+  }
 }
 
 void FileSystem::Copy(std::filesystem::path from, std::filesystem::path dest) {

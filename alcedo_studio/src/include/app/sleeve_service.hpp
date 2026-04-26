@@ -110,6 +110,7 @@ class SleeveServiceImpl final : public SleeveService {
   auto CreateFolder(const std::filesystem::path& parent_path, const file_name_t& name)
       -> std::pair<std::shared_ptr<SleeveFolder>, SyncResult>;
   auto DeletePath(const std::filesystem::path& target_path) -> SyncResult;
+  auto DeleteElement(sl_element_id_t target_id) -> SyncResult;
 
   auto GetStorageService() -> std::shared_ptr<StorageService> {
     return storage_service_;

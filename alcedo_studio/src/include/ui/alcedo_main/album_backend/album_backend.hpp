@@ -72,6 +72,7 @@ class AlbumBackend final : public QObject {
   Q_PROPERTY(QString nikonHeRecoveryStatus READ NikonHeRecoveryStatus NOTIFY NikonHeRecoveryStateChanged)
   Q_PROPERTY(QVariantList nikonHeUnsupportedFiles READ NikonHeUnsupportedFiles NOTIFY NikonHeRecoveryStateChanged)
   Q_PROPERTY(QString nikonHeConverterPath READ NikonHeConverterPath NOTIFY NikonHeRecoveryStateChanged)
+  Q_PROPERTY(bool nikonHeConverterPathFromDefault READ NikonHeConverterPathFromDefault NOTIFY NikonHeRecoveryStateChanged)
   Q_PROPERTY(bool editorActive READ EditorActive NOTIFY EditorStateChanged)
   Q_PROPERTY(bool editorBusy READ EditorBusy NOTIFY EditorStateChanged)
   Q_PROPERTY(uint editorElementId READ EditorElementId NOTIFY EditorStateChanged)
@@ -139,6 +140,9 @@ class AlbumBackend final : public QObject {
   QString NikonHeRecoveryStatus() const { return nikon_he_recovery_.status_text(); }
   QVariantList NikonHeUnsupportedFiles() const { return nikon_he_recovery_.unsupported_files(); }
   QString NikonHeConverterPath() const { return nikon_he_recovery_.converter_path(); }
+  bool NikonHeConverterPathFromDefault() const {
+    return nikon_he_recovery_.converter_path_from_default();
+  }
   bool EditorActive() const { return editor_.editor_active(); }
   bool EditorBusy() const { return editor_.editor_busy(); }
   uint EditorElementId() const { return static_cast<uint>(editor_.editor_element_id()); }

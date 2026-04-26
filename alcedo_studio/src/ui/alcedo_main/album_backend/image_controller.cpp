@@ -447,20 +447,27 @@ auto ImageController::DeleteTargets(const std::vector<DeleteTarget>& targets)
     deleted_ids.push_back(file.element_id_);
   }
 
+  std::unordered_set<sl_element_id_t> deleted_id_set(deleted_ids.begin(), deleted_ids.end());
+  std::vector<sl_element_id_t> id_delete_targets;
+  id_delete_targets.reserve(resolved_targets.size());
+  for (const auto& target : resolved_targets) {
+    if (target.element_id_ != 0 && !deleted_id_set.contains(target.element_id_)) {
+      id_delete_targets.push_back(target.element_id_);
+    }
+  }
+
+  const auto id_delete_result = browse->DeleteFilesByElementIds(id_delete_targets);
+  for (const auto& file : id_delete_result.deleted_files_) {
+    if (deleted_id_set.insert(file.element_id_).second) {
+      deleted_ids.push_back(file.element_id_);
+    }
+  }
+
   std::vector<sl_element_id_t> failed_ids;
   failed_ids.reserve(resolved_targets.size());
   for (const auto& target : resolved_targets) {
-    if (target.file_path_.empty()) {
+    if (target.element_id_ != 0 && !deleted_id_set.contains(target.element_id_)) {
       failed_ids.push_back(target.element_id_);
-    }
-  }
-  for (const auto& path : delete_result.failed_paths_) {
-    const auto it = std::find_if(resolved_targets.begin(), resolved_targets.end(),
-                                 [&path](const DeleteTarget& target) {
-      return target.file_path_.lexically_normal() == path.lexically_normal();
-    });
-    if (it != resolved_targets.end()) {
-      failed_ids.push_back(it->element_id_);
     }
   }
 

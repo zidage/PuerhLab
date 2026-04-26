@@ -598,6 +598,7 @@ ApplicationWindow {
         recoveryStatus: albumBackend.nikonHeRecoveryStatus
         unsupportedFiles: albumBackend.nikonHeUnsupportedFiles
         converterPath: albumBackend.nikonHeConverterPath
+        converterPathFromDefault: albumBackend.nikonHeConverterPathFromDefault
         showImportProgress: albumBackend.importRunning && albumBackend.nikonHeRecoveryActive
         importCompleted: albumBackend.importCompleted
         importTotal: albumBackend.importTotal

@@ -47,6 +47,7 @@ class FileSystem {
   auto Create(std::filesystem::path dest, std::wstring filename, ElementType type)
       -> std::shared_ptr<SleeveElement>;
   void Delete(std::filesystem::path target);
+  void Delete(sl_element_id_t target_id);
   auto Get(std::filesystem::path target, bool write) -> std::shared_ptr<SleeveElement>;
   auto Get(sl_element_id_t id) -> std::shared_ptr<SleeveElement>;
   auto ListFolderContent(const std::filesystem::path& folder_path, bool write = false)

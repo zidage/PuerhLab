@@ -11,8 +11,8 @@ Popup {
     visible: recoveryActive
     closePolicy: Popup.NoAutoClose
     anchors.centerIn: parent
-    width: Math.min(parent ? parent.width - 52 : 860, 860)
-    height: Math.min(parent ? parent.height - 56 : 760, 760)
+    width: Math.min(parent ? parent.width - 64 : 760, 760)
+    height: Math.min(parent ? parent.height - 64 : 740, 740)
     padding: 0
 
     property bool recoveryActive: false
@@ -24,6 +24,7 @@ Popup {
     property string recoveryPhase: ""
     property string recoveryStatus: ""
     property string converterPath: ""
+    property bool converterPathFromDefault: false
     property var unsupportedFiles: []
     property Item backgroundSource: null
 
@@ -31,17 +32,35 @@ Popup {
     signal convertRequested()
     signal exitRequested()
 
-    readonly property color panelColor: appTheme.bgDeepColor
-    readonly property color sectionColor: Qt.rgba(0.12, 0.12, 0.12, 0.92)
-    readonly property color overlayTint: Qt.rgba(0.03, 0.03, 0.04, 0.76)
-    readonly property color warmAccent: appTheme.toneGold
-    readonly property color warmAccentSoft: Qt.rgba(warmAccent.r, warmAccent.g, warmAccent.b, 0.16)
-    readonly property color separatorColor: Qt.rgba(1, 1, 1, 0.08)
-    readonly property color mutedText: appTheme.textMutedColor
-    readonly property color strongText: appTheme.textColor
+    readonly property color modalColor: appTheme.bgPanelColor
+    readonly property color raisedColor: appTheme.bgDeepColor
+    readonly property color inputColor: appTheme.bgBaseColor
+    readonly property color hoverColor: appTheme.hoverColor
+    readonly property color accentColor: appTheme.accentColor
+    readonly property color accentHoverColor: appTheme.accentSecondaryColor
+    readonly property color grayButtonColor: appTheme.bgBaseColor
+    readonly property color grayButtonHoverColor: appTheme.hoverColor
+    readonly property color buttonTextColor: "#FFFFFF"
+    readonly property color textColor: appTheme.textColor
+    readonly property color mutedTextColor: appTheme.textMutedColor
+    readonly property color dividerColor: appTheme.dividerColor
+    readonly property color strokeColor: appTheme.glassStrokeColor
     readonly property bool showBusyIndicator: root.recoveryBusy && !root.showImportProgress
     readonly property bool macOsUsesFixedConverterPath: Qt.platform.os === "osx"
     readonly property bool converterDetected: root.converterPath.length > 0
+    readonly property int converterRowHeight: 34
+
+    function directoryName(path) {
+        if (!path || path.length === 0) {
+            return qsTr("Unknown directory")
+        }
+        var normalized = String(path).replace(/\\/g, "/")
+        var index = normalized.lastIndexOf("/")
+        if (index <= 0) {
+            return normalized
+        }
+        return normalized.substring(0, index)
+    }
 
     Overlay.modal: Item {
         anchors.fill: parent
@@ -51,367 +70,429 @@ Popup {
             anchors.fill: parent
             source: root.backgroundSource
             blurEnabled: true
-            blur: 0.72
-            blurMax: 72
-            saturation: -0.26
+            blur: 0.68
+            blurMax: 64
+            saturation: -0.28
         }
 
         Rectangle {
             anchors.fill: parent
-            gradient: Gradient {
-                GradientStop { position: 0.0; color: Qt.rgba(0.06, 0.06, 0.06, 0.84) }
-                GradientStop { position: 0.65; color: root.overlayTint }
-                GradientStop { position: 1.0; color: Qt.rgba(0.09, 0.08, 0.05, 0.84) }
-            }
+            color: appTheme.overlayColor
         }
 
         MouseArea { anchors.fill: parent; hoverEnabled: true }
     }
 
     background: Rectangle {
-        radius: 18
-        color: root.panelColor
+        radius: appTheme.panelRadius + 2
+        color: root.modalColor
         border.width: 1
-        border.color: Qt.rgba(root.warmAccent.r, root.warmAccent.g, root.warmAccent.b, 0.18)
+        border.color: root.strokeColor
     }
 
-    contentItem: ScrollView {
-        id: scrollView
-        anchors.fill: parent
-        contentWidth: width - 56
-        padding: 28
-        clip: true
-        ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+    contentItem: ColumnLayout {
+        spacing: 0
 
         ColumnLayout {
-            width: scrollView.width - 56
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            Layout.margins: 26
+            Layout.bottomMargin: 22
             spacing: 22
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 14
+
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+
+                    Label {
+                        Layout.fillWidth: true
+                        text: qsTr("Nikon High Efficiency RAW conversion required")
+                        color: root.textColor
+                        font.family: appTheme.headlineFontFamily
+                        font.pixelSize: 24
+                        font.weight: 800
+                        lineHeight: 1.06
+                        wrapMode: Text.WordWrap
+                    }
+
+                    Label {
+                        visible: root.recoveryStatus.length > 0 || root.showBusyIndicator
+                        Layout.fillWidth: true
+                        text: root.recoveryStatus.length > 0
+                              ? root.recoveryStatus
+                              : qsTr("Preparing recovery workflow...")
+                        color: root.mutedTextColor
+                        font.family: appTheme.uiFontFamily
+                        font.pixelSize: 13
+                        font.weight: 600
+                        lineHeight: 1.25
+                        wrapMode: Text.WordWrap
+                    }
+                }
+
+                BusyIndicator {
+                    running: root.showBusyIndicator
+                    visible: root.showBusyIndicator
+                    implicitWidth: 30
+                    implicitHeight: 30
+                }
+            }
+
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 8
+
+                Label {
+                    text: qsTr("Adobe DNG Converter executable")
+                    color: root.textColor
+                    font.family: appTheme.uiFontFamily
+                    font.pixelSize: 13
+                    font.weight: 700
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: root.converterRowHeight
+                    spacing: 8
+
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        Layout.preferredHeight: root.converterRowHeight
+                        radius: appTheme.panelRadius
+                        color: root.inputColor
+                        border.width: 1
+                        border.color: root.strokeColor
+
+                        Label {
+                            anchors.fill: parent
+                            anchors.leftMargin: 14
+                            anchors.rightMargin: 14
+                            verticalAlignment: Text.AlignVCenter
+                            text: root.converterPath.length > 0
+                                  ? root.converterPath
+                                  : (root.macOsUsesFixedConverterPath
+                                     ? qsTr("Adobe DNG Converter is not installed at /Applications/Adobe DNG Converter.app.")
+                                     : qsTr("No converter selected"))
+                            color: root.converterPath.length > 0 ? root.textColor : root.mutedTextColor
+                            font.family: appTheme.dataFontFamily
+                            font.pixelSize: 12
+                            elide: Text.ElideMiddle
+                        }
+                    }
+
+                    Rectangle {
+                        id: browseButton
+                        visible: !root.macOsUsesFixedConverterPath
+                        Layout.preferredWidth: root.converterRowHeight
+                        Layout.preferredHeight: root.converterRowHeight
+                        Layout.fillHeight: true
+                        radius: appTheme.panelRadius
+                        color: browseMouse.pressed ? root.hoverColor : root.inputColor
+                        border.width: 1
+                        border.color: browseMouse.containsMouse ? root.accentColor : root.strokeColor
+                        opacity: root.recoveryBusy ? 0.55 : 1.0
+
+                        Image {
+                            anchors.centerIn: parent
+                            width: 16
+                            height: 16
+                            source: "qrc:/panel_icons/folder-open.svg"
+                            sourceSize.width: 16
+                            sourceSize.height: 16
+                            fillMode: Image.PreserveAspectFit
+                            mipmap: false
+                            smooth: false
+                        }
+
+                        MouseArea {
+                            id: browseMouse
+                            anchors.fill: parent
+                            enabled: !root.recoveryBusy
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.browseRequested()
+                        }
+
+                        ToolTip.visible: browseMouse.containsMouse
+                        ToolTip.text: qsTr("Browse for Adobe DNG Converter")
+                    }
+                }
+
+                Rectangle {
+                    visible: root.converterPathFromDefault
+                    Layout.preferredHeight: 24
+                    Layout.preferredWidth: defaultPathBadge.implicitWidth + 18
+                    radius: appTheme.panelRadius - 2
+                    color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.22)
+                    border.width: 1
+                    border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.45)
+
+                    Label {
+                        id: defaultPathBadge
+                        anchors.centerIn: parent
+                        text: qsTr("Loaded from default path")
+                        color: root.buttonTextColor
+                        font.family: appTheme.uiFontFamily
+                        font.pixelSize: 11
+                        font.weight: 800
+                    }
+                }
+            }
 
             ColumnLayout {
                 Layout.fillWidth: true
                 spacing: 10
 
-                Label {
-                    text: root.recoveryPhase.length > 0 ? root.recoveryPhase.toUpperCase() : qsTr("RECOVERY")
-                    color: root.warmAccent
-                    font.pixelSize: 11
-                    font.weight: 800
-                    font.letterSpacing: 1.8
-                }
-
-                Label {
+                RowLayout {
                     Layout.fillWidth: true
-                    text: qsTr("Nikon HE / HE* RAW Needs Conversion")
-                    color: root.strongText
-                    font.pixelSize: 30
-                    font.weight: 800
-                    wrapMode: Text.WordWrap
-                }
+                    spacing: 8
 
-                Label {
-                    Layout.fillWidth: true
-                    Layout.maximumWidth: Math.max(420, root.width * 0.72)
-                    text: qsTr("Alcedo Studio cannot decode these Nikon files with the built-in RAW pipeline. Convert them to DNG, then the import can continue.")
-                    color: root.mutedText
-                    wrapMode: Text.WordWrap
-                    font.pixelSize: 14
-                    lineHeight: 1.2
-                    Layout.minimumWidth: 100
-                }
-            }
-
-            Rectangle {
-                Layout.fillWidth: true
-                Layout.preferredHeight: statusColumn.implicitHeight + 32
-                radius: 14
-                color: root.warmAccentSoft
-                border.width: 1
-                border.color: Qt.rgba(root.warmAccent.r, root.warmAccent.g, root.warmAccent.b, 0.24)
-                clip: true
-
-                ColumnLayout {
-                    id: statusColumn
-                    anchors.fill: parent
-                    anchors.margins: 16
-                    spacing: 12
-
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: 12
-
-                        BusyIndicator {
-                            Layout.alignment: Qt.AlignTop
-                            running: root.showBusyIndicator
-                            visible: root.showBusyIndicator
-                            implicitWidth: 28
-                            implicitHeight: 28
-                        }
-
-                        ColumnLayout {
-                            Layout.fillWidth: true
-                            spacing: 6
-
-                            Label {
-                                Layout.fillWidth: true
-                                text: root.recoveryStatus.length > 0
-                                      ? root.recoveryStatus
-                                      : qsTr("Preparing recovery workflow...")
-                                color: root.strongText
-                                wrapMode: Text.WordWrap
-                                font.pixelSize: 15
-                                font.weight: 700
-                                lineHeight: 1.18
-                                Layout.minimumWidth: 50
-                            }
-
-                            Label {
-                                visible: root.showBusyIndicator
-                                text: qsTr("This step is still running. The dialog will update automatically when conversion finishes.")
-                                color: root.mutedText
-                                wrapMode: Text.WordWrap
-                                font.pixelSize: 12
-                                Layout.minimumWidth: 50
-                            }
-                        }
+                    Label {
+                        text: qsTr("Affected files")
+                        color: root.textColor
+                        font.family: appTheme.uiFontFamily
+                        font.pixelSize: 14
+                        font.weight: 800
                     }
 
-                    ColumnLayout {
-                        Layout.fillWidth: true
-                        visible: root.showImportProgress
-                        spacing: 6
-
-                        ProgressBar {
-                            Layout.fillWidth: true
-                            from: 0
-                            to: Math.max(1, root.importTotal)
-                            value: root.importCompleted + root.importFailed
-                        }
-
-                        Label {
-                            text: qsTr("%1 / %2 converted files reimported · %3 failed")
-                                  .arg(root.importCompleted)
-                                  .arg(root.importTotal)
-                                  .arg(root.importFailed)
-                            color: root.mutedText
-                            font.family: appTheme.dataFontFamily
-                            font.pixelSize: 12
-                        }
+                    Label {
+                        text: qsTr("(%1 items found)").arg(root.unsupportedFiles.length)
+                        color: root.mutedTextColor
+                        font.family: appTheme.uiFontFamily
+                        font.pixelSize: 12
+                        font.weight: 600
                     }
                 }
-            }
-
-            RowLayout {
-                Layout.fillWidth: true
-                Layout.alignment: Qt.AlignTop
-                spacing: 16
 
                 Rectangle {
                     Layout.fillWidth: true
-                    Layout.preferredWidth: Math.max(350, root.width * 0.6)
-                    Layout.preferredHeight: Math.max(320, Math.min(460, root.height * 0.46))
-                    radius: 16
-                    color: root.sectionColor
+                    Layout.fillHeight: true
+                    Layout.minimumHeight: 250
+                    radius: appTheme.panelRadius
+                    color: root.raisedColor
                     border.width: 1
-                    border.color: root.separatorColor
+                    border.color: root.dividerColor
+                    clip: true
 
                     ColumnLayout {
                         anchors.fill: parent
-                        anchors.margins: 18
-                        spacing: 12
-
-                        Label {
-                            text: qsTr("Affected Files")
-                            color: root.strongText
-                            font.pixelSize: 17
-                            font.weight: 700
-                        }
-
-                        Label {
-                            Layout.fillWidth: true
-                            text: qsTr("%1 file(s) will be removed from the project and replaced by converted DNG files when available.")
-                                  .arg(root.unsupportedFiles.length)
-                            color: root.mutedText
-                            wrapMode: Text.WordWrap
-                            font.pixelSize: 12
-                            Layout.minimumWidth: 50
-                        }
+                        spacing: 0
 
                         Rectangle {
                             Layout.fillWidth: true
-                            Layout.fillHeight: true
-                            radius: 12
-                            color: Qt.rgba(0, 0, 0, 0.18)
-                            border.width: 1
-                            border.color: root.separatorColor
+                            Layout.preferredHeight: 42
+                            radius: appTheme.panelRadius
+                            color: root.inputColor
+                            clip: true
 
-                            ScrollView {
+                            Rectangle {
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                anchors.bottom: parent.bottom
+                                height: appTheme.panelRadius
+                                color: parent.color
+                            }
+
+                            RowLayout {
                                 anchors.fill: parent
-                                anchors.margins: 10
-                                clip: true
+                                anchors.leftMargin: 18
+                                anchors.rightMargin: 18
+                                spacing: 16
 
-                                Column {
-                                    width: parent.width
-                                    spacing: 8
+                                Label {
+                                    Layout.preferredWidth: Math.max(180, parent.width * 0.34)
+                                    text: qsTr("Filename")
+                                    color: root.mutedTextColor
+                                    font.family: appTheme.uiFontFamily
+                                    font.pixelSize: 12
+                                    font.weight: 800
+                                }
 
-                                    Repeater {
-                                        model: root.unsupportedFiles
+                                Label {
+                                    Layout.fillWidth: true
+                                    text: qsTr("Directory")
+                                    color: root.mutedTextColor
+                                    font.family: appTheme.uiFontFamily
+                                    font.pixelSize: 12
+                                    font.weight: 800
+                                }
+                            }
+                        }
 
-                                        delegate: Rectangle {
-                                            width: parent.width
-                                            radius: 10
-                                            color: Qt.rgba(1, 1, 1, 0.04)
-                                            border.width: 1
-                                            border.color: Qt.rgba(root.warmAccent.r, root.warmAccent.g, root.warmAccent.b, 0.12)
-                                            height: fileColumn.implicitHeight + 18
+                        ListView {
+                            id: fileList
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            clip: true
+                            model: root.unsupportedFiles
+                            boundsBehavior: Flickable.StopAtBounds
 
-                                            ColumnLayout {
-                                                id: fileColumn
-                                                anchors.fill: parent
-                                                anchors.margins: 10
-                                                spacing: 4
+                            delegate: Rectangle {
+                                id: fileRow
+                                required property int index
+                                required property var modelData
+                                width: fileList.width
+                                height: 40
+                                color: fileRow.index % 2 === 0 ? Qt.rgba(1, 1, 1, 0.018) : "transparent"
 
-                                                Label {
-                                                    Layout.fillWidth: true
-                                                    text: modelData.fileName
-                                                    color: root.strongText
-                                                    font.pixelSize: 13
-                                                    font.weight: 700
-                                                    elide: Text.ElideMiddle
-                                                }
+                                Rectangle {
+                                    anchors.left: parent.left
+                                    anchors.right: parent.right
+                                    anchors.bottom: parent.bottom
+                                    height: 1
+                                    color: root.dividerColor
+                                }
 
-                                                Label {
-                                                    Layout.fillWidth: true
-                                                    text: modelData.sourcePath
-                                                    color: root.mutedText
-                                                    font.family: appTheme.dataFontFamily
-                                                    font.pixelSize: 11
-                                                    elide: Text.ElideMiddle
-                                                }
-                                            }
-                                        }
+                                RowLayout {
+                                    anchors.fill: parent
+                                    anchors.leftMargin: 18
+                                    anchors.rightMargin: 18
+                                    spacing: 16
+
+                                    Label {
+                                        Layout.preferredWidth: Math.max(180, parent.width * 0.34)
+                                        text: fileRow.modelData.fileName
+                                        color: root.textColor
+                                        font.family: appTheme.dataFontFamily
+                                        font.pixelSize: 12
+                                        font.weight: 600
+                                        elide: Text.ElideMiddle
+                                        verticalAlignment: Text.AlignVCenter
+                                    }
+
+                                    Label {
+                                        Layout.fillWidth: true
+                                        text: root.directoryName(fileRow.modelData.sourcePath)
+                                        color: root.mutedTextColor
+                                        font.family: appTheme.dataFontFamily
+                                        font.pixelSize: 11
+                                        elide: Text.ElideMiddle
+                                        verticalAlignment: Text.AlignVCenter
                                     }
                                 }
                             }
-                        }
-                    }
-                }
 
-                Rectangle {
-                    Layout.fillWidth: true
-                    Layout.preferredWidth: Math.max(260, root.width * 0.32)
-                    Layout.preferredHeight: Math.max(320, Math.min(460, root.height * 0.46))
-                    Layout.alignment: Qt.AlignTop
-                    radius: 16
-                    color: root.sectionColor
-                    border.width: 1
-                    border.color: root.separatorColor
-
-                    ColumnLayout {
-                        anchors.fill: parent
-                        anchors.margins: 18
-                        spacing: 14
-
-                        Label {
-                            text: qsTr("Converter")
-                            color: root.strongText
-                            font.pixelSize: 17
-                            font.weight: 700
-                        }
-
-                        Label {
-                            Layout.fillWidth: true
-                            text: root.macOsUsesFixedConverterPath
-                                  ? qsTr("On macOS, Alcedo Studio uses the system Adobe DNG Converter installation at /Applications/Adobe DNG Converter.app.")
-                                  : qsTr("Adobe DNG Converter runs in the source folders and creates side-by-side DNG files. Original NEF files on disk will be kept.")
-                            color: root.mutedText
-                            wrapMode: Text.WordWrap
-                            font.pixelSize: 12
-                            Layout.minimumWidth: 50
-                        }
-
-                        Rectangle {
-                            Layout.fillWidth: true
-                            radius: 12
-                            color: Qt.rgba(0, 0, 0, 0.18)
-                            border.width: 1
-                            border.color: root.separatorColor
-                            height: converterColumn.implicitHeight + 18
-
-                            ColumnLayout {
-                                id: converterColumn
-                                anchors.fill: parent
-                                anchors.margins: 10
-                                spacing: 8
-
-                                Label {
-                                    Layout.fillWidth: true
-                                    text: root.macOsUsesFixedConverterPath
-                                          ? qsTr("Detected Converter Path")
-                                          : qsTr("Executable Path")
-                                    color: root.warmAccent
-                                    font.pixelSize: 11
-                                    font.weight: 700
-                                    font.letterSpacing: 1.4
+                            ScrollBar.vertical: ScrollBar {
+                                policy: ScrollBar.AsNeeded
+                                contentItem: Rectangle {
+                                    implicitWidth: 5
+                                    radius: 3
+                                    color: root.accentColor
                                 }
-
-                                Label {
-                                    Layout.fillWidth: true
-                                    text: root.converterPath.length > 0
-                                          ? root.converterPath
-                                          : (root.macOsUsesFixedConverterPath
-                                             ? qsTr("Adobe DNG Converter is not installed at /Applications/Adobe DNG Converter.app.")
-                                             : qsTr("Not selected in this session."))
-                                    color: root.strongText
-                                    font.family: appTheme.dataFontFamily
-                                    font.pixelSize: 12
-                                    wrapMode: Text.WrapAnywhere
-                                    Layout.minimumWidth: 50
-                                }
-
-                                Button {
-                                    text: qsTr("Browse Converter...")
-                                    visible: !root.macOsUsesFixedConverterPath
-                                    enabled: !root.recoveryBusy
-                                    onClicked: root.browseRequested()
+                                background: Rectangle {
+                                    color: "transparent"
                                 }
                             }
-                        }
-
-                        Label {
-                            Layout.fillWidth: true
-                            text: qsTr("Exit removes the unsupported Nikon entries from the project only. Nothing in the source folders will be deleted.")
-                            color: root.mutedText
-                            wrapMode: Text.WordWrap
-                            font.pixelSize: 12
-                            Layout.minimumWidth: 50
                         }
                     }
                 }
             }
 
-            RowLayout {
+            ColumnLayout {
                 Layout.fillWidth: true
+                visible: root.showImportProgress
+                spacing: 7
+
+                ProgressBar {
+                    Layout.fillWidth: true
+                    from: 0
+                    to: Math.max(1, root.importTotal)
+                    value: root.importCompleted + root.importFailed
+                }
+
+                Label {
+                    text: qsTr("%1 / %2 converted files reimported, %3 failed")
+                          .arg(root.importCompleted)
+                          .arg(root.importTotal)
+                          .arg(root.importFailed)
+                    color: root.mutedTextColor
+                    font.family: appTheme.dataFontFamily
+                    font.pixelSize: 12
+                }
+            }
+        }
+
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.preferredHeight: 70
+            color: appTheme.bgCanvasColor
+
+            Rectangle {
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.top: parent.top
+                height: 1
+                color: root.dividerColor
+            }
+
+            RowLayout {
+                anchors.fill: parent
+                anchors.leftMargin: 26
+                anchors.rightMargin: 26
                 spacing: 12
 
                 Item { Layout.fillWidth: true }
 
                 Button {
-                    text: qsTr("Exit And Remove From Project")
+                    id: cancelButton
                     enabled: !root.recoveryBusy
+                    text: qsTr("Cancel import")
+                    implicitWidth: 122
+                    implicitHeight: 42
+                    font.family: appTheme.uiFontFamily
+                    font.pixelSize: 13
+                    font.weight: 800
                     onClicked: root.exitRequested()
+                    background: Rectangle {
+                        radius: appTheme.panelRadius
+                        color: cancelButton.down ? Qt.darker(root.grayButtonColor, 1.12)
+                                                 : (cancelButton.hovered ? root.grayButtonHoverColor
+                                                                         : root.grayButtonColor)
+                        border.width: 1
+                        border.color: root.strokeColor
+                    }
+                    contentItem: Label {
+                        text: cancelButton.text
+                        color: cancelButton.enabled ? root.buttonTextColor : Qt.darker(root.mutedTextColor, 1.25)
+                        font: cancelButton.font
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
                 }
 
                 Button {
+                    id: convertButton
                     text: root.macOsUsesFixedConverterPath
-                          ? qsTr("Convert To DNG And Continue")
+                          ? qsTr("Convert to DNG & Continue")
                           : (root.converterPath.length > 0
-                             ? qsTr("Convert To DNG And Continue")
-                             : qsTr("Choose Converter And Continue"))
+                             ? qsTr("Convert to DNG & Continue")
+                             : qsTr("Choose converter & Continue"))
                     enabled: !root.recoveryBusy
                              && (!root.macOsUsesFixedConverterPath || root.converterDetected)
-                    Material.background: appTheme.toneGold
-                    Material.foreground: "#16130C"
+                    implicitWidth: 244
+                    implicitHeight: 42
+                    font.family: appTheme.uiFontFamily
+                    font.pixelSize: 13
+                    font.weight: 800
                     onClicked: root.convertRequested()
+                    background: Rectangle {
+                        radius: appTheme.panelRadius
+                        color: convertButton.enabled
+                               ? (convertButton.down ? appTheme.toneSteel : (convertButton.hovered ? root.accentHoverColor : root.accentColor))
+                               : root.inputColor
+                    }
+                    contentItem: Label {
+                        text: convertButton.text
+                        color: convertButton.enabled ? root.buttonTextColor : root.mutedTextColor
+                        font: convertButton.font
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
                 }
             }
         }
