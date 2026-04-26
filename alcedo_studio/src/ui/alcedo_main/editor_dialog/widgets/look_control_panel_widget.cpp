@@ -27,7 +27,7 @@ void EditorDialog::BuildLookControlPanel(EditorControlPanelWidget* controls_pane
   look_controls_layout_->setSpacing(8);
 
   // ===== Header =====
-  auto* header = new QLabel(Tr("Color"), look_controls_);
+  auto* header = NewLocalizedLabel("Color", look_controls_);
   header->setObjectName("SectionTitle");
   header->setStyleSheet(AppTheme::EditorLabelStyle(AppTheme::Instance().textColor()));
   AppTheme::MarkFontRole(header, AppTheme::FontRole::UiHeadline);
@@ -37,7 +37,7 @@ void EditorDialog::BuildLookControlPanel(EditorControlPanelWidget* controls_pane
   look_controls_layout_->addStretch();
 
   // ===== Shared helpers: section header, compact slider row. =====
-  auto addSection = [this](const QString& title, const QString& subtitle) {
+  auto addSection = [this](const char* title_source, const char* subtitle_source) {
     auto* frame = new QWidget(look_controls_);
     auto* v     = new QVBoxLayout(frame);
     v->setContentsMargins(0, 8, 0, 2);
@@ -48,12 +48,12 @@ void EditorDialog::BuildLookControlPanel(EditorControlPanelWidget* controls_pane
     header_layout->setContentsMargins(0, 0, 0, 0);
     header_layout->setSpacing(6);
 
-    auto* t = new QLabel(title.toUpper(), header_row);
+    auto* t = NewLocalizedLabel(title_source, header_row, true);
     t->setObjectName("EditorSectionTitle");
     t->setStyleSheet(AppTheme::EditorLabelStyle(AppTheme::Instance().textMutedColor()));
     AppTheme::MarkFontRole(t, AppTheme::FontRole::UiOverline);
-    if (!subtitle.isEmpty()) {
-      t->setToolTip(subtitle);
+    if (subtitle_source != nullptr && subtitle_source[0] != '\0') {
+      SetLocalizedToolTip(t, subtitle_source);
     }
     header_layout->addWidget(t, 0);
     header_layout->addStretch(1);
@@ -80,9 +80,9 @@ void EditorDialog::BuildLookControlPanel(EditorControlPanelWidget* controls_pane
           .arg(AppTheme::Instance().textMutedColor().name(QColor::HexRgb));
 
   auto addSlider = [this, value_chip_style](
-                       const QString& name, int min, int max, int value, auto&& onChange,
+                       const char* name_source, int min, int max, int value, auto&& onChange,
                        auto&& onRelease, auto&& onReset, auto&& formatter) {
-    auto* name_label = new QLabel(name, look_controls_);
+    auto* name_label = NewLocalizedLabel(name_source, look_controls_);
     name_label->setStyleSheet(AppTheme::EditorLabelStyle(AppTheme::Instance().textColor()));
     AppTheme::MarkFontRole(name_label, AppTheme::FontRole::UiCaption);
     name_label->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
@@ -147,12 +147,12 @@ void EditorDialog::BuildLookControlPanel(EditorControlPanelWidget* controls_pane
   };
 
   // ===== LUT section =====
-  addSection(Tr("LUT"), Tr("Browse and apply look-up tables."));
+  addSection("LUT", "Browse and apply look-up tables.");
   lut_browser_widget_ = new LutBrowserWidget(look_controls_);
   look_controls_layout_->insertWidget(look_controls_layout_->count() - 1, lut_browser_widget_, 0);
 
   // ===== HSL / Color section =====
-  addSection(Tr("HSL / Color"), Tr("Per-hue lightness and saturation adjustments."));
+  addSection("HSL / Color", "Per-hue lightness and saturation adjustments.");
   {
     auto* frame  = new QWidget(look_controls_);
     auto* layout = new QVBoxLayout(frame);
@@ -197,7 +197,7 @@ void EditorDialog::BuildLookControlPanel(EditorControlPanelWidget* controls_pane
   }
 
   hls_hue_adjust_slider_ = addSlider(
-      Tr("Hue Shift"), -15, 15, static_cast<int>(std::lround(state_.hls_hue_adjust_)),
+      "Hue Shift", -15, 15, static_cast<int>(std::lround(state_.hls_hue_adjust_)),
       [this](int v) {
         state_.hls_hue_adjust_ =
             std::clamp(static_cast<float>(v), -kHlsMaxHueShiftDegrees, kHlsMaxHueShiftDegrees);
@@ -214,7 +214,7 @@ void EditorDialog::BuildLookControlPanel(EditorControlPanelWidget* controls_pane
       [](int v) { return QString("%1 deg").arg(v); });
 
   hls_lightness_adjust_slider_ = addSlider(
-      Tr("Lightness"), -100, 100, static_cast<int>(std::lround(state_.hls_lightness_adjust_)),
+      "Lightness", -100, 100, static_cast<int>(std::lround(state_.hls_lightness_adjust_)),
       [this](int v) {
         state_.hls_lightness_adjust_ =
             std::clamp(static_cast<float>(v), kHlsAdjUiMin, kHlsAdjUiMax);
@@ -231,7 +231,7 @@ void EditorDialog::BuildLookControlPanel(EditorControlPanelWidget* controls_pane
       [](int v) { return QString::number(v, 'f', 0); });
 
   hls_saturation_adjust_slider_ = addSlider(
-      Tr("HSL Saturation"), -100, 100,
+      "HSL Saturation", -100, 100,
       static_cast<int>(std::lround(state_.hls_saturation_adjust_)),
       [this](int v) {
         state_.hls_saturation_adjust_ =
@@ -249,7 +249,7 @@ void EditorDialog::BuildLookControlPanel(EditorControlPanelWidget* controls_pane
       [](int v) { return QString::number(v, 'f', 0); });
 
   hls_hue_range_slider_ = addSlider(
-      Tr("Hue Range"), 1, 180, static_cast<int>(std::lround(state_.hls_hue_range_)),
+      "Hue Range", 1, 180, static_cast<int>(std::lround(state_.hls_hue_range_)),
       [this](int v) {
         state_.hls_hue_range_ = static_cast<float>(v);
         SaveActiveHlsProfile(state_);
@@ -265,7 +265,7 @@ void EditorDialog::BuildLookControlPanel(EditorControlPanelWidget* controls_pane
       [](int v) { return QString("%1 deg").arg(v); });
 
   // ===== CDL Wheels section (triangle layout: Gamma on top, Lift + Gain below) =====
-  addSection(Tr("Color Wheels"), Tr("CDL: Lift / Gamma / Gain with master offset."));
+  addSection("Color Wheels", "CDL: Lift / Gamma / Gain with master offset.");
   {
     auto* wheel_frame = new QWidget(look_controls_);
     wheel_frame->setMinimumWidth(0);
@@ -276,7 +276,7 @@ void EditorDialog::BuildLookControlPanel(EditorControlPanelWidget* controls_pane
     wheel_layout->setSpacing(10);
 
     auto makeWheelUnit = [this, wheel_frame](
-                             const QString& title, CdlWheelState& wheel_state, bool add_unity,
+                             const char* title_source, CdlWheelState& wheel_state, bool add_unity,
                              bool invert_delta, CdlTrackballDiscWidget*& disc_widget,
                              QLabel*& offset_label, QSlider*& slider_widget) -> QWidget* {
       auto* unit = new QWidget(wheel_frame);
@@ -286,7 +286,7 @@ void EditorDialog::BuildLookControlPanel(EditorControlPanelWidget* controls_pane
       unit_layout->setContentsMargins(0, 0, 0, 0);
       unit_layout->setSpacing(4);
 
-      auto* title_label = new QLabel(title, unit);
+      auto* title_label = NewLocalizedLabel(title_source, unit);
       title_label->setStyleSheet(AppTheme::EditorLabelStyle(QColor(0xCF, 0xCF, 0xCF)));
       AppTheme::MarkFontRole(title_label, AppTheme::FontRole::UiOverline);
       unit_layout->addWidget(title_label, 0, Qt::AlignHCenter);
@@ -361,13 +361,13 @@ void EditorDialog::BuildLookControlPanel(EditorControlPanelWidget* controls_pane
     };
 
     auto* gamma_unit =
-        makeWheelUnit(Tr("Gamma"), state_.gamma_wheel_, true, true, gamma_disc_widget_,
+        makeWheelUnit("Gamma", state_.gamma_wheel_, true, true, gamma_disc_widget_,
                       gamma_offset_label_, gamma_master_slider_);
     auto* lift_unit =
-        makeWheelUnit(Tr("Lift"), state_.lift_wheel_, false, false, lift_disc_widget_,
+        makeWheelUnit("Lift", state_.lift_wheel_, false, false, lift_disc_widget_,
                       lift_offset_label_, lift_master_slider_);
     auto* gain_unit =
-        makeWheelUnit(Tr("Gain"), state_.gain_wheel_, true, false, gain_disc_widget_,
+        makeWheelUnit("Gain", state_.gain_wheel_, true, false, gain_disc_widget_,
                       gain_offset_label_, gain_master_slider_);
 
     // Triangle layout: Gamma centered on top, Lift and Gain on the bottom.

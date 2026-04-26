@@ -127,6 +127,9 @@ const auto kShortcutResetGeometryId = QStringLiteral("editor_dialog.reset_geomet
 const auto kShortcutSelectPrevLutId = QStringLiteral("editor_dialog.select_prev_lut");
 const auto kShortcutSelectNextLutId = QStringLiteral("editor_dialog.select_next_lut");
 constexpr char kPanelIconPathProperty[] = "puerhlabPanelIconPath";
+constexpr char kLocalizedTextProperty[] = "puerhlabI18nText";
+constexpr char kLocalizedTextUpperProperty[] = "puerhlabI18nTextUpper";
+constexpr char kLocalizedToolTipProperty[] = "puerhlabI18nToolTip";
 const QSize     kPanelToggleIconSize(18, 18);
 constexpr int   kPanelToggleButtonHeight = 44;
 const QSize     kVersioningRailIconSize(18, 18);
@@ -166,6 +169,201 @@ using hls::HlsProfileArray;
 inline auto ClosestHlsCandidateHueIndex(float hue) -> int { return hls::ClosestCandidateHueIndex(hue); }
 inline auto HlsCandidateColor(float hue_degrees) -> QColor { return hls::CandidateColor(hue_degrees); }
 inline auto MakeHlsFilledArray(float value) -> HlsProfileArray { return hls::MakeFilledArray(value); }
+
+void SetLocalizedText(QObject* object, const char* source, bool uppercase = false) {
+  if (!object || source == nullptr) {
+    return;
+  }
+
+  object->setProperty(kLocalizedTextProperty, source);
+  object->setProperty(kLocalizedTextUpperProperty, uppercase);
+  QString text = Tr(source);
+  if (uppercase) {
+    text = text.toUpper();
+  }
+
+  if (auto* label = qobject_cast<QLabel*>(object)) {
+    label->setText(text);
+  } else if (auto* button = qobject_cast<QPushButton*>(object)) {
+    button->setText(text);
+  } else if (auto* checkbox = qobject_cast<QCheckBox*>(object)) {
+    checkbox->setText(text);
+  }
+}
+
+void SetLocalizedToolTip(QWidget* widget, const char* source) {
+  if (!widget || source == nullptr) {
+    return;
+  }
+  widget->setProperty(kLocalizedToolTipProperty, source);
+  widget->setToolTip(Tr(source));
+  widget->setAccessibleName(Tr(source));
+}
+
+auto NewLocalizedLabel(const char* source, QWidget* parent, bool uppercase = false) -> QLabel* {
+  auto* label = new QLabel(parent);
+  SetLocalizedText(label, source, uppercase);
+  return label;
+}
+
+auto NewLocalizedButton(const char* source, QWidget* parent) -> QPushButton* {
+  auto* button = new QPushButton(parent);
+  SetLocalizedText(button, source);
+  return button;
+}
+
+auto NewLocalizedCheckBox(const char* source, QWidget* parent) -> QCheckBox* {
+  auto* checkbox = new QCheckBox(parent);
+  SetLocalizedText(checkbox, source);
+  return checkbox;
+}
+
+void RetranslateMarkedObjects(QObject* root) {
+  if (!root) {
+    return;
+  }
+
+  const QVariant text_source = root->property(kLocalizedTextProperty);
+  if (text_source.isValid()) {
+    const bool uppercase = root->property(kLocalizedTextUpperProperty).toBool();
+    const QByteArray source = text_source.toByteArray();
+    SetLocalizedText(root, source.constData(), uppercase);
+  }
+
+  if (auto* widget = qobject_cast<QWidget*>(root)) {
+    const QVariant tooltip_source = widget->property(kLocalizedToolTipProperty);
+    if (tooltip_source.isValid()) {
+      const QByteArray source = tooltip_source.toByteArray();
+      SetLocalizedToolTip(widget, source.constData());
+    }
+  }
+
+  for (QObject* child : root->children()) {
+    RetranslateMarkedObjects(child);
+  }
+}
+
+[[maybe_unused]] constexpr auto kEditorDialogTranslationSources = std::to_array<const char*>({
+    QT_TRANSLATE_NOOP("Alcedo", "Adjustments"),
+    QT_TRANSLATE_NOOP("Alcedo", "Tone"),
+    QT_TRANSLATE_NOOP("Alcedo", "Primary tonal shaping controls."),
+    QT_TRANSLATE_NOOP("Alcedo", "Exposure"),
+    QT_TRANSLATE_NOOP("Alcedo", "Contrast"),
+    QT_TRANSLATE_NOOP("Alcedo", "Highlights"),
+    QT_TRANSLATE_NOOP("Alcedo", "Shadows"),
+    QT_TRANSLATE_NOOP("Alcedo", "Whites"),
+    QT_TRANSLATE_NOOP("Alcedo", "Blacks"),
+    QT_TRANSLATE_NOOP("Alcedo", "Tone Curve"),
+    QT_TRANSLATE_NOOP("Alcedo",
+                      "Smooth tone curve mapped from input [0, 1] to output [0, 1]."),
+    QT_TRANSLATE_NOOP("Alcedo",
+                      "Left click/drag to shape. Right click a point to remove. Double click to reset."),
+    QT_TRANSLATE_NOOP("Alcedo", "Reset Curve"),
+    QT_TRANSLATE_NOOP("Alcedo", "Color"),
+    QT_TRANSLATE_NOOP("Alcedo", "Color balance and saturation."),
+    QT_TRANSLATE_NOOP("Alcedo", "Saturation"),
+    QT_TRANSLATE_NOOP("Alcedo", "White Balance"),
+    QT_TRANSLATE_NOOP("Alcedo", "As Shot"),
+    QT_TRANSLATE_NOOP("Alcedo", "Custom"),
+    QT_TRANSLATE_NOOP("Alcedo", "Color Temp"),
+    QT_TRANSLATE_NOOP("Alcedo", "Color Tint"),
+    QT_TRANSLATE_NOOP("Alcedo", "Color temperature/tint is unavailable for this image."),
+    QT_TRANSLATE_NOOP("Alcedo", "Detail"),
+    QT_TRANSLATE_NOOP("Alcedo", "Micro-contrast and sharpen controls."),
+    QT_TRANSLATE_NOOP("Alcedo", "Sharpen"),
+    QT_TRANSLATE_NOOP("Alcedo", "Clarity"),
+    QT_TRANSLATE_NOOP("Alcedo", "LUT"),
+    QT_TRANSLATE_NOOP("Alcedo", "Browse and apply look-up tables."),
+    QT_TRANSLATE_NOOP("Alcedo", "HSL / Color"),
+    QT_TRANSLATE_NOOP("Alcedo", "Per-hue lightness and saturation adjustments."),
+    QT_TRANSLATE_NOOP("Alcedo", "Hue Shift"),
+    QT_TRANSLATE_NOOP("Alcedo", "Lightness"),
+    QT_TRANSLATE_NOOP("Alcedo", "HSL Saturation"),
+    QT_TRANSLATE_NOOP("Alcedo", "Hue Range"),
+    QT_TRANSLATE_NOOP("Alcedo", "Color Wheels"),
+    QT_TRANSLATE_NOOP("Alcedo", "CDL: Lift / Gamma / Gain with master offset."),
+    QT_TRANSLATE_NOOP("Alcedo", "Gamma"),
+    QT_TRANSLATE_NOOP("Alcedo", "Lift"),
+    QT_TRANSLATE_NOOP("Alcedo", "Gain"),
+    QT_TRANSLATE_NOOP("Alcedo", "Display Rendering Transform"),
+    QT_TRANSLATE_NOOP("Alcedo", "Display RT"),
+    QT_TRANSLATE_NOOP("Alcedo", "Encoding Space"),
+    QT_TRANSLATE_NOOP("Alcedo", "Encoding EOTF"),
+    QT_TRANSLATE_NOOP("Alcedo", "Peak Luminance"),
+    QT_TRANSLATE_NOOP("Alcedo", "Rendering Method"),
+    QT_TRANSLATE_NOOP("Alcedo",
+                      "Choose the transform family. Shared encoding settings stay above; method-specific settings stay preserved per method."),
+    QT_TRANSLATE_NOOP("Alcedo", "ACES 2.0"),
+    QT_TRANSLATE_NOOP("Alcedo", "OpenDRT"),
+    QT_TRANSLATE_NOOP("Alcedo", "Limiting Space"),
+    QT_TRANSLATE_NOOP("Alcedo", "Look Preset"),
+    QT_TRANSLATE_NOOP("Alcedo", "Tonescale Preset"),
+    QT_TRANSLATE_NOOP("Alcedo", "Creative White"),
+    QT_TRANSLATE_NOOP("Alcedo", "Geometry"),
+    QT_TRANSLATE_NOOP("Alcedo", "Crop & Aspect Ratio"),
+    QT_TRANSLATE_NOOP("Alcedo", "Aspect"),
+    QT_TRANSLATE_NOOP("Alcedo", "Rotate & Flip"),
+    QT_TRANSLATE_NOOP("Alcedo", "Angle"),
+    QT_TRANSLATE_NOOP("Alcedo", "Rotate 90° left"),
+    QT_TRANSLATE_NOOP("Alcedo", "Rotate 90° right"),
+    QT_TRANSLATE_NOOP("Alcedo", "Flip horizontal (coming soon)"),
+    QT_TRANSLATE_NOOP("Alcedo", "Crop Offset"),
+    QT_TRANSLATE_NOOP("Alcedo", "X"),
+    QT_TRANSLATE_NOOP("Alcedo", "Y"),
+    QT_TRANSLATE_NOOP("Alcedo", "Width"),
+    QT_TRANSLATE_NOOP("Alcedo", "Height"),
+    QT_TRANSLATE_NOOP("Alcedo", "Apply Crop"),
+    QT_TRANSLATE_NOOP("Alcedo", "Reset"),
+    QT_TRANSLATE_NOOP("Alcedo",
+                      "Pixels update on Apply. Double click any slider or the viewer to reset. Ctrl+R resets all geometry."),
+    QT_TRANSLATE_NOOP("Alcedo", "RAW Decode"),
+    QT_TRANSLATE_NOOP("Alcedo",
+                      "Configure RAW decode options. These settings are shared with thumbnail rendering."),
+    QT_TRANSLATE_NOOP("Alcedo", "Enable Highlight Reconstruction"),
+    QT_TRANSLATE_NOOP("Alcedo", "Lens Calibration"),
+    QT_TRANSLATE_NOOP("Alcedo",
+                      "Enable correction and optionally override lens metadata with catalog entries."),
+    QT_TRANSLATE_NOOP("Alcedo", "Enable Lens Calibration"),
+    QT_TRANSLATE_NOOP("Alcedo", "Lens Brand"),
+    QT_TRANSLATE_NOOP("Alcedo", "Lens Model"),
+    QT_TRANSLATE_NOOP("Alcedo", "Edit History"),
+    QT_TRANSLATE_NOOP("Alcedo", "Uncommitted"),
+    QT_TRANSLATE_NOOP("Alcedo", "COMMITTED STATE"),
+    QT_TRANSLATE_NOOP("Alcedo", "Baseline"),
+    QT_TRANSLATE_NOOP("Alcedo", "Undo Last"),
+    QT_TRANSLATE_NOOP("Alcedo", "Commit All"),
+    QT_TRANSLATE_NOOP("Alcedo", "Version Tree"),
+    QT_TRANSLATE_NOOP("Alcedo", "Working mode"),
+    QT_TRANSLATE_NOOP("Alcedo", "New Working"),
+    QT_TRANSLATE_NOOP("Alcedo", "Rec.709"),
+    QT_TRANSLATE_NOOP("Alcedo", "P3-D65"),
+    QT_TRANSLATE_NOOP("Alcedo", "P3-D60"),
+    QT_TRANSLATE_NOOP("Alcedo", "P3-DCI"),
+    QT_TRANSLATE_NOOP("Alcedo", "XYZ"),
+    QT_TRANSLATE_NOOP("Alcedo", "Rec.2020"),
+    QT_TRANSLATE_NOOP("Alcedo", "ProPhoto RGB"),
+    QT_TRANSLATE_NOOP("Alcedo", "Adobe RGB"),
+    QT_TRANSLATE_NOOP("Alcedo", "Standard"),
+    QT_TRANSLATE_NOOP("Alcedo", "Arriba"),
+    QT_TRANSLATE_NOOP("Alcedo", "Sylvan"),
+    QT_TRANSLATE_NOOP("Alcedo", "Colorful"),
+    QT_TRANSLATE_NOOP("Alcedo", "Aery"),
+    QT_TRANSLATE_NOOP("Alcedo", "Dystopic"),
+    QT_TRANSLATE_NOOP("Alcedo", "Umbra"),
+    QT_TRANSLATE_NOOP("Alcedo", "Use Look Preset"),
+    QT_TRANSLATE_NOOP("Alcedo", "Low Contrast"),
+    QT_TRANSLATE_NOOP("Alcedo", "Medium Contrast"),
+    QT_TRANSLATE_NOOP("Alcedo", "High Contrast"),
+    QT_TRANSLATE_NOOP("Alcedo", "Arriba Tonescale"),
+    QT_TRANSLATE_NOOP("Alcedo", "Sylvan Tonescale"),
+    QT_TRANSLATE_NOOP("Alcedo", "Colorful Tonescale"),
+    QT_TRANSLATE_NOOP("Alcedo", "Aery Tonescale"),
+    QT_TRANSLATE_NOOP("Alcedo", "Dystopic Tonescale"),
+    QT_TRANSLATE_NOOP("Alcedo", "Umbra Tonescale"),
+    QT_TRANSLATE_NOOP("Alcedo", "Marvelous Tonscape"),
+    QT_TRANSLATE_NOOP("Alcedo", "Dagrinchi Tonegroan"),
+    QT_TRANSLATE_NOOP("Alcedo", "D93"),
+});
 
 // Tonal-slider scale aliases (defined in pipeline_io).
 constexpr float kBlackSliderFromGlobalScale      = pipeline_io::kBlackSliderFromGlobalScale;
@@ -283,7 +481,7 @@ auto RenderDockRailIcon(const QString& resource_path, const QColor& icon_color,
 }
 
 void ConfigurePanelToggleButton(QPushButton*    button,
-                                const QString& tooltip,
+                                const char* tooltip_source,
                                 const QString& icon_resource_path) {
   if (!button) {
     return;
@@ -296,8 +494,7 @@ void ConfigurePanelToggleButton(QPushButton*    button,
   button->setCursor(Qt::PointingHandCursor);
   button->setFixedHeight(kPanelToggleButtonHeight);
   button->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-  button->setToolTip(tooltip);
-  button->setAccessibleName(tooltip);
+  SetLocalizedToolTip(button, tooltip_source);
   button->setIconSize(kPanelToggleIconSize);
   button->setProperty(kPanelIconPathProperty, icon_resource_path);
 }

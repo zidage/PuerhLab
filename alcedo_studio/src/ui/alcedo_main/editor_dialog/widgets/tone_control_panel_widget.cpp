@@ -11,13 +11,13 @@ namespace alcedo::ui {
 ToneControlPanelWidget::ToneControlPanelWidget(QWidget* parent) : QWidget(parent) {}
 
 void EditorDialog::BuildToneControlPanel() {
-    auto* controls_header = new QLabel(Tr("Adjustments"), controls_);
+    auto* controls_header = NewLocalizedLabel("Adjustments", controls_);
     controls_header->setObjectName("SectionTitle");
     controls_header->setStyleSheet(AppTheme::EditorLabelStyle(AppTheme::Instance().textColor()));
     AppTheme::MarkFontRole(controls_header, AppTheme::FontRole::UiHeadline);
     controls_layout_->addWidget(controls_header, 0);
 
-    auto addSection = [&](const QString& title, const QString& subtitle) {
+    auto addSection = [&](const char* title_source, const char* subtitle_source) {
       auto* frame = new QWidget(controls_);
       auto* v     = new QVBoxLayout(frame);
       v->setContentsMargins(0, 8, 0, 2);
@@ -28,13 +28,13 @@ void EditorDialog::BuildToneControlPanel() {
       header_layout->setContentsMargins(0, 0, 0, 0);
       header_layout->setSpacing(6);
 
-      auto* t = new QLabel(title.toUpper(), header_row);
+      auto* t = NewLocalizedLabel(title_source, header_row, true);
       t->setObjectName("EditorSectionTitle");
       t->setStyleSheet(
           AppTheme::EditorLabelStyle(AppTheme::Instance().textMutedColor()));
       AppTheme::MarkFontRole(t, AppTheme::FontRole::UiOverline);
-      if (!subtitle.isEmpty()) {
-        t->setToolTip(subtitle);
+      if (subtitle_source != nullptr && subtitle_source[0] != '\0') {
+        SetLocalizedToolTip(t, subtitle_source);
       }
       header_layout->addWidget(t, 0);
       header_layout->addStretch(1);
@@ -72,9 +72,9 @@ void EditorDialog::BuildToneControlPanel() {
     working_version_.SetBasePipelineExecutor(pipeline_guard_->pipeline_);
     WireLookControlPanel();
 
-    auto addComboBox = [&](const QString& name, const QStringList& items, int initial_index,
+    auto addComboBox = [&](const char* name_source, const QStringList& items, int initial_index,
                            auto&& onChange) {
-      auto* label = new QLabel(name, controls_);
+      auto* label = NewLocalizedLabel(name_source, controls_);
       label->setStyleSheet(AppTheme::EditorLabelStyle(AppTheme::Instance().textColor()));
       AppTheme::MarkFontRole(label, AppTheme::FontRole::UiBody);
       label->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
@@ -117,10 +117,10 @@ void EditorDialog::BuildToneControlPanel() {
             .arg(AppTheme::Instance().textMutedColor().name(QColor::HexRgb));
 
     auto addSlider = [&, value_chip_style](
-                         const QString& name, int min, int max, int value, auto&& onChange,
+                         const char* name_source, int min, int max, int value, auto&& onChange,
                          auto&& onRelease, auto&& onReset, auto&& formatter,
                          SliderVisualStyle visual_style = SliderVisualStyle::Accent) {
-      auto* name_label = new QLabel(name, controls_);
+      auto* name_label = NewLocalizedLabel(name_source, controls_);
       name_label->setStyleSheet(AppTheme::EditorLabelStyle(AppTheme::Instance().textColor()));
       AppTheme::MarkFontRole(name_label, AppTheme::FontRole::UiCaption);
       name_label->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
@@ -191,10 +191,10 @@ void EditorDialog::BuildToneControlPanel() {
       return slider;
     };
 
-    addSection(Tr("Tone"), Tr("Primary tonal shaping controls."));
+    addSection("Tone", "Primary tonal shaping controls.");
 
     exposure_slider_ = addSlider(
-        Tr("Exposure"), -1000, 1000, static_cast<int>(std::lround(state_.exposure_ * 100.0f)),
+        "Exposure", -1000, 1000, static_cast<int>(std::lround(state_.exposure_ * 100.0f)),
         [&](int v) {
           state_.exposure_ = static_cast<float>(v) / 100.0f;
           RequestRender();
@@ -208,7 +208,7 @@ void EditorDialog::BuildToneControlPanel() {
         [](int v) { return QString::number(v / 100.0, 'f', 2); });
 
     contrast_slider_ = addSlider(
-        Tr("Contrast"), -100, 100, static_cast<int>(std::lround(state_.contrast_)),
+        "Contrast", -100, 100, static_cast<int>(std::lround(state_.contrast_)),
         [&](int v) {
           state_.contrast_ = static_cast<float>(v);
           RequestRender();
@@ -222,7 +222,7 @@ void EditorDialog::BuildToneControlPanel() {
         [](int v) { return QString::number(v, 'f', 2); });
 
     highlights_slider_ = addSlider(
-        Tr("Highlights"), -100, 100, static_cast<int>(std::lround(state_.highlights_)),
+        "Highlights", -100, 100, static_cast<int>(std::lround(state_.highlights_)),
         [&](int v) {
           state_.highlights_ = static_cast<float>(v);
           RequestRender();
@@ -237,7 +237,7 @@ void EditorDialog::BuildToneControlPanel() {
         [](int v) { return QString::number(v, 'f', 2); });
 
     shadows_slider_ = addSlider(
-        Tr("Shadows"), -100, 100, static_cast<int>(std::lround(state_.shadows_)),
+        "Shadows", -100, 100, static_cast<int>(std::lround(state_.shadows_)),
         [&](int v) {
           state_.shadows_ = static_cast<float>(v);
           RequestRender();
@@ -251,7 +251,7 @@ void EditorDialog::BuildToneControlPanel() {
         [](int v) { return QString::number(v, 'f', 2); });
 
     whites_slider_ = addSlider(
-        Tr("Whites"), -100, 100, static_cast<int>(std::lround(state_.whites_)),
+        "Whites", -100, 100, static_cast<int>(std::lround(state_.whites_)),
         [&](int v) {
           state_.whites_ = static_cast<float>(v);
           RequestRender();
@@ -265,7 +265,7 @@ void EditorDialog::BuildToneControlPanel() {
         [](int v) { return QString::number(v, 'f', 2); });
 
     blacks_slider_ = addSlider(
-        Tr("Blacks"), -100, 100, static_cast<int>(std::lround(state_.blacks_)),
+        "Blacks", -100, 100, static_cast<int>(std::lround(state_.blacks_)),
         [&](int v) {
           state_.blacks_ = static_cast<float>(v);
           RequestRender();
@@ -278,8 +278,7 @@ void EditorDialog::BuildToneControlPanel() {
         },
         [](int v) { return QString::number(v, 'f', 2); });
 
-    addSection(Tr("Tone Curve"),
-               Tr("Smooth tone curve mapped from input [0, 1] to output [0, 1]."));
+    addSection("Tone Curve", "Smooth tone curve mapped from input [0, 1] to output [0, 1].");
     {
       auto* frame  = new QFrame(controls_);
       auto* layout = new QVBoxLayout(frame);
@@ -309,14 +308,14 @@ void EditorDialog::BuildToneControlPanel() {
       actions_row_layout->setContentsMargins(0, 0, 0, 0);
       actions_row_layout->setSpacing(8);
 
-      auto* curve_hint = new QLabel(
-          Tr("Left click/drag to shape. Right click a point to remove. Double click to reset."),
+      auto* curve_hint = NewLocalizedLabel(
+          "Left click/drag to shape. Right click a point to remove. Double click to reset.",
           actions_row);
       curve_hint->setStyleSheet(AppTheme::EditorLabelStyle(AppTheme::Instance().textMutedColor()));
       AppTheme::MarkFontRole(curve_hint, AppTheme::FontRole::UiHint);
       curve_hint->setWordWrap(true);
 
-      auto* reset_curve_btn = new QPushButton(Tr("Reset Curve"), actions_row);
+      auto* reset_curve_btn = NewLocalizedButton("Reset Curve", actions_row);
       reset_curve_btn->setFixedHeight(28);
       reset_curve_btn->setStyleSheet(AppTheme::EditorPrimaryButtonStyle());
       QObject::connect(reset_curve_btn, &QPushButton::clicked, this,
@@ -331,10 +330,10 @@ void EditorDialog::BuildToneControlPanel() {
       controls_layout_->insertWidget(controls_layout_->count() - 1, frame);
     }
 
-    addSection(Tr("Color"), Tr("Color balance and saturation."));
+    addSection("Color", "Color balance and saturation.");
 
     saturation_slider_ = addSlider(
-        Tr("Saturation"), -100, 100, static_cast<int>(std::lround(state_.saturation_)),
+        "Saturation", -100, 100, static_cast<int>(std::lround(state_.saturation_)),
         [&](int v) {
           state_.saturation_ = static_cast<float>(v);
           RequestRender();
@@ -349,7 +348,7 @@ void EditorDialog::BuildToneControlPanel() {
         [](int v) { return QString::number(v, 'f', 2); });
 
     color_temp_mode_combo_ = addComboBox(
-        Tr("White Balance"), {Tr("As Shot"), Tr("Custom")},
+        "White Balance", {Tr("As Shot"), Tr("Custom")},
         ColorTempModeToComboIndex(state_.color_temp_mode_), [&](int idx) {
           const auto new_mode = ComboIndexToColorTempMode(idx);
           if (new_mode == state_.color_temp_mode_) {
@@ -370,7 +369,7 @@ void EditorDialog::BuildToneControlPanel() {
         });
 
     color_temp_cct_slider_ = addSlider(
-        Tr("Color Temp"), kColorTempSliderUiMin, kColorTempSliderUiMax,
+        "Color Temp", kColorTempSliderUiMin, kColorTempSliderUiMax,
         ColorTempCctToSliderPos(DisplayedColorTempCct(state_)),
         [&](int v) {
           PromoteColorTempToCustomForEditing();
@@ -400,7 +399,7 @@ void EditorDialog::BuildToneControlPanel() {
         "}");
 
     color_temp_tint_slider_ = addSlider(
-        Tr("Color Tint"), kColorTempTintMin, kColorTempTintMax,
+        "Color Tint", kColorTempTintMin, kColorTempTintMax,
         static_cast<int>(std::lround(DisplayedColorTempTint(state_))),
         [&](int v) {
           PromoteColorTempToCustomForEditing();
@@ -427,7 +426,7 @@ void EditorDialog::BuildToneControlPanel() {
         "}");
 
     color_temp_unsupported_label_ =
-        new QLabel(Tr("Color temperature/tint is unavailable for this image."), controls_);
+        NewLocalizedLabel("Color temperature/tint is unavailable for this image.", controls_);
     color_temp_unsupported_label_->setWordWrap(true);
     AppTheme::MarkFontRole(color_temp_unsupported_label_, AppTheme::FontRole::UiHint);
     color_temp_unsupported_label_->setStyleSheet(
@@ -441,10 +440,10 @@ void EditorDialog::BuildToneControlPanel() {
     controls_layout_->insertWidget(controls_layout_->count() - 1, color_temp_unsupported_label_);
     color_temp_unsupported_label_->setVisible(!state_.color_temp_supported_);
 
-    addSection(Tr("Detail"), Tr("Micro-contrast and sharpen controls."));
+    addSection("Detail", "Micro-contrast and sharpen controls.");
 
     sharpen_slider_ = addSlider(
-        Tr("Sharpen"), -100, 100, static_cast<int>(std::lround(state_.sharpen_)),
+        "Sharpen", -100, 100, static_cast<int>(std::lround(state_.sharpen_)),
         [&](int v) {
           state_.sharpen_ = static_cast<float>(v);
           RequestRender();
@@ -458,7 +457,7 @@ void EditorDialog::BuildToneControlPanel() {
         [](int v) { return QString::number(v, 'f', 2); });
 
     clarity_slider_ = addSlider(
-        Tr("Clarity"), -100, 100, static_cast<int>(std::lround(state_.clarity_)),
+        "Clarity", -100, 100, static_cast<int>(std::lround(state_.clarity_)),
         [&](int v) {
           state_.clarity_ = static_cast<float>(v);
           RequestRender();

@@ -294,6 +294,7 @@ void EditorDialog::resizeEvent(QResizeEvent* event) {
 
 void EditorDialog::RetranslateUi() {
     setWindowTitle(ResolveEditorWindowTitle(image_pool_, image_id_, element_id_));
+    RetranslateMarkedObjects(this);
 
     if (tone_panel_btn_) {
       tone_panel_btn_->setText(Tr("Tone"));
@@ -331,6 +332,17 @@ void EditorDialog::RetranslateUi() {
       color_temp_unsupported_label_->setText(
           Tr("Color temperature/tint is unavailable for this image."));
     }
+    if (color_temp_mode_combo_) {
+      const int current_value = color_temp_mode_combo_->currentData().toInt();
+      const bool prev_sync = syncing_controls_;
+      syncing_controls_ = true;
+      color_temp_mode_combo_->clear();
+      color_temp_mode_combo_->addItem(Tr("As Shot"), static_cast<int>(ColorTempMode::AS_SHOT));
+      color_temp_mode_combo_->addItem(Tr("Custom"), static_cast<int>(ColorTempMode::CUSTOM));
+      const int index = color_temp_mode_combo_->findData(current_value);
+      color_temp_mode_combo_->setCurrentIndex(std::max(0, index));
+      syncing_controls_ = prev_sync;
+    }
     if (working_mode_combo_) {
       const int current_value = working_mode_combo_->currentData().toInt();
       const bool prev_sync = syncing_controls_;
@@ -356,6 +368,26 @@ void EditorDialog::RetranslateUi() {
       geometry_crop_aspect_preset_combo_->setCurrentIndex(std::max(0, index));
       syncing_controls_ = prev_sync;
     }
+    auto refresh_odt_combo = [this](QComboBox* combo, const auto& options) {
+      if (!combo) {
+        return;
+      }
+      const int current_value = combo->currentData().toInt();
+      const bool prev_sync = syncing_controls_;
+      syncing_controls_ = true;
+      combo->clear();
+      for (const auto& option : options) {
+        combo->addItem(Tr(option.label_), static_cast<int>(option.value_));
+      }
+      const int index = combo->findData(current_value);
+      combo->setCurrentIndex(std::max(0, index));
+      syncing_controls_ = prev_sync;
+    };
+    refresh_odt_combo(odt_encoding_space_combo_, kDisplayEncodingSpaceOptions);
+    refresh_odt_combo(odt_aces_limiting_space_combo_, kAcesLimitingSpaceOptions);
+    refresh_odt_combo(odt_open_drt_look_preset_combo_, kOpenDrtLookPresetOptions);
+    refresh_odt_combo(odt_open_drt_tonescale_preset_combo_, kOpenDrtTonescaleOptions);
+    refresh_odt_combo(odt_open_drt_creative_white_combo_, kOpenDrtCreativeWhiteOptions);
     if (lut_browser_widget_) {
       lut_browser_widget_->RetranslateUi();
       RefreshLutBrowserUi();

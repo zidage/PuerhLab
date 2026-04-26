@@ -120,15 +120,15 @@ auto EditorDialog::BuildControlPanelShell(const QString& panel_style) -> EditorC
   geometry_panel_btn_ = new QPushButton(panel_switch_row);
   raw_panel_btn_      = new QPushButton(panel_switch_row);
 
-  ConfigurePanelToggleButton(tone_panel_btn_, Tr("Tone"),
+  ConfigurePanelToggleButton(tone_panel_btn_, "Tone",
                              QStringLiteral(":/panel_icons/adjustments.svg"));
-  ConfigurePanelToggleButton(look_panel_btn_, Tr("Color"),
+  ConfigurePanelToggleButton(look_panel_btn_, "Color",
                              QStringLiteral(":/panel_icons/palette.svg"));
-  ConfigurePanelToggleButton(drt_panel_btn_, Tr("Display Rendering Transform"),
+  ConfigurePanelToggleButton(drt_panel_btn_, "Display Rendering Transform",
                              QStringLiteral(":/panel_icons/color-filter.svg"));
-  ConfigurePanelToggleButton(geometry_panel_btn_, Tr("Geometry"),
+  ConfigurePanelToggleButton(geometry_panel_btn_, "Geometry",
                              QStringLiteral(":/panel_icons/crop.svg"));
-  ConfigurePanelToggleButton(raw_panel_btn_, Tr("RAW Decode"),
+  ConfigurePanelToggleButton(raw_panel_btn_, "RAW Decode",
                              QStringLiteral(":/panel_icons/aperture.svg"));
 
   panel_switch_layout->addWidget(tone_panel_btn_, 1);

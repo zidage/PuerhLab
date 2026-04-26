@@ -18,6 +18,7 @@ class QComboBox;
 class QLabel;
 class QStackedWidget;
 class QTimer;
+class QEvent;
 
 namespace alcedo::ui {
 
@@ -34,6 +35,9 @@ class ScopePanel final : public QWidget {
   void SetNeedsRenderCallback(std::function<void()> callback);
   auto CurrentRequest() const -> ScopeRequest;
 
+ protected:
+  void changeEvent(QEvent* event) override;
+
  private:
   enum class ScopeView : int {
     Histogram = 0,
@@ -44,6 +48,7 @@ class ScopePanel final : public QWidget {
   void RefreshOutputs();
   void SetActiveScopeView(ScopeView view);
   void RefreshScopeSwitchUi();
+  void RetranslateUi();
   void RefreshExifUi();
 
   std::shared_ptr<IScopeAnalyzer>             analyzer_{};
@@ -52,6 +57,7 @@ class ScopePanel final : public QWidget {
   std::function<void()>                       needs_render_callback_{};
   ScopeRenderer                               renderer_{};
   QTimer*                                     refresh_timer_ = nullptr;
+  QLabel*                                     title_label_ = nullptr;
   QComboBox*                                  scope_type_combo_ = nullptr;
   QStackedWidget*                             scope_stack_ = nullptr;
   ScopeHistogramWidget*                       histogram_widget_ = nullptr;

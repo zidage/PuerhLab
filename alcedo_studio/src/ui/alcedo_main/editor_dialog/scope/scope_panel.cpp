@@ -7,6 +7,7 @@
 #include <QComboBox>
 #include <QCoreApplication>
 #include <QFrame>
+#include <QEvent>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QSignalBlocker>
@@ -14,6 +15,7 @@
 #include <QTimer>
 #include <QVBoxLayout>
 
+#include <algorithm>
 #include <cmath>
 
 #include "ui/alcedo_main/app_theme.hpp"
@@ -92,9 +94,9 @@ ScopePanel::ScopePanel(QWidget* parent) : QWidget(parent) {
   header_row_layout->setContentsMargins(0, 0, 0, 0);
   header_row_layout->setSpacing(8);
 
-  auto* title = new QLabel(TrScope("Scope"), header_row);
-  title->setObjectName("EditorSectionTitle");
-  header_row_layout->addWidget(title, 0);
+  title_label_ = new QLabel(TrScope("Scope"), header_row);
+  title_label_->setObjectName("EditorSectionTitle");
+  header_row_layout->addWidget(title_label_, 0);
   header_row_layout->addStretch(1);
 
   scope_type_combo_ = new QComboBox(header_row);
@@ -208,6 +210,28 @@ ScopePanel::ScopePanel(QWidget* parent) : QWidget(parent) {
   RefreshExifUi();
   RefreshScopeSwitchUi();
   SetActiveScopeView(ScopeView::Histogram);
+}
+
+void ScopePanel::changeEvent(QEvent* event) {
+  if (event && event->type() == QEvent::LanguageChange) {
+    RetranslateUi();
+  }
+  QWidget::changeEvent(event);
+}
+
+void ScopePanel::RetranslateUi() {
+  if (title_label_) {
+    title_label_->setText(TrScope("Scope"));
+  }
+  if (scope_type_combo_) {
+    const QSignalBlocker blocker(scope_type_combo_);
+    const int current_index = scope_type_combo_->currentIndex();
+    scope_type_combo_->clear();
+    scope_type_combo_->addItem(TrScope("Histogram"));
+    scope_type_combo_->addItem(TrScope("Waveform"));
+    scope_type_combo_->setCurrentIndex(std::clamp(current_index, 0, scope_type_combo_->count() - 1));
+  }
+  RefreshScopeSwitchUi();
 }
 
 void ScopePanel::SetAnalyzer(std::shared_ptr<IScopeAnalyzer> analyzer) {

@@ -12,7 +12,7 @@ RawDecodePanelWidget::RawDecodePanelWidget(QWidget* parent) : QWidget(parent) {}
 void EditorDialog::BuildRawDecodePanel() {
   lens_catalog_ = LoadLensCatalog();
 
-  auto* controls_header = new QLabel(Tr("RAW Decode"), raw_controls_);
+  auto* controls_header = NewLocalizedLabel("RAW Decode", raw_controls_);
   controls_header->setObjectName("SectionTitle");
   controls_header->setStyleSheet(AppTheme::EditorLabelStyle(AppTheme::Instance().textColor()));
   AppTheme::MarkFontRole(controls_header, AppTheme::FontRole::UiHeadline);
@@ -23,16 +23,16 @@ void EditorDialog::BuildRawDecodePanel() {
     return;
   }
 
-  auto addRawSection = [&](const QString& title, const QString& subtitle) {
+  auto addRawSection = [&](const char* title_source, const char* subtitle_source) {
     auto* frame = new QFrame(raw_controls_);
     frame->setObjectName("EditorSection");
     auto* v = new QVBoxLayout(frame);
     v->setContentsMargins(12, 10, 12, 10);
     v->setSpacing(8);
 
-    auto* t = new QLabel(title, frame);
+    auto* t = NewLocalizedLabel(title_source, frame);
     t->setObjectName("EditorSectionTitle");
-    auto* s = new QLabel(subtitle, frame);
+    auto* s = NewLocalizedLabel(subtitle_source, frame);
     s->setObjectName("EditorSectionSub");
     s->setWordWrap(true);
     v->addWidget(t, 0);
@@ -42,11 +42,11 @@ void EditorDialog::BuildRawDecodePanel() {
   };
 
   auto* decode_layout = addRawSection(
-      Tr("RAW Decode"),
-      Tr("Configure RAW decode options. These settings are shared with thumbnail rendering."));
+      "RAW Decode",
+      "Configure RAW decode options. These settings are shared with thumbnail rendering.");
 
   raw_highlights_reconstruct_checkbox_ =
-      new QCheckBox(Tr("Enable Highlight Reconstruction"), raw_controls_);
+      NewLocalizedCheckBox("Enable Highlight Reconstruction", raw_controls_);
   raw_highlights_reconstruct_checkbox_->setChecked(state_.raw_highlights_reconstruct_);
   raw_highlights_reconstruct_checkbox_->setStyleSheet(AppTheme::EditorCheckBoxStyle());
   QObject::connect(raw_highlights_reconstruct_checkbox_, &QCheckBox::toggled, this,
@@ -61,10 +61,10 @@ void EditorDialog::BuildRawDecodePanel() {
   decode_layout->addWidget(raw_highlights_reconstruct_checkbox_, 0);
 
   auto* lens_layout = addRawSection(
-      Tr("Lens Calibration"),
-      Tr("Enable correction and optionally override lens metadata with catalog entries."));
+      "Lens Calibration",
+      "Enable correction and optionally override lens metadata with catalog entries.");
 
-  lens_calib_enabled_checkbox_ = new QCheckBox(Tr("Enable Lens Calibration"), raw_controls_);
+  lens_calib_enabled_checkbox_ = NewLocalizedCheckBox("Enable Lens Calibration", raw_controls_);
   lens_calib_enabled_checkbox_->setChecked(state_.lens_calib_enabled_);
   lens_calib_enabled_checkbox_->setStyleSheet(raw_highlights_reconstruct_checkbox_->styleSheet());
   QObject::connect(lens_calib_enabled_checkbox_, &QCheckBox::toggled, this,
@@ -83,7 +83,7 @@ void EditorDialog::BuildRawDecodePanel() {
   brand_row_layout->setContentsMargins(0, 0, 0, 0);
   brand_row_layout->setSpacing(8);
 
-  auto* brand_label = new QLabel(Tr("Lens Brand"), brand_row);
+  auto* brand_label = NewLocalizedLabel("Lens Brand", brand_row);
   brand_label->setStyleSheet(AppTheme::EditorLabelStyle(AppTheme::Instance().textColor()));
   AppTheme::MarkFontRole(brand_label, AppTheme::FontRole::UiCaption);
 
@@ -114,7 +114,7 @@ void EditorDialog::BuildRawDecodePanel() {
   model_row_layout->setContentsMargins(0, 0, 0, 0);
   model_row_layout->setSpacing(8);
 
-  auto* model_label = new QLabel(Tr("Lens Model"), model_row);
+  auto* model_label = NewLocalizedLabel("Lens Model", model_row);
   model_label->setStyleSheet(brand_label->styleSheet());
   AppTheme::MarkFontRole(model_label, AppTheme::FontRole::UiCaption);
 

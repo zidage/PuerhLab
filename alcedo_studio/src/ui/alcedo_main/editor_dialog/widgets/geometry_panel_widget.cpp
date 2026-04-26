@@ -23,7 +23,7 @@ constexpr int kSliderHeight          = 26;
 void EditorDialog::BuildGeometryRawPanels() {
     const auto& theme = AppTheme::Instance();
 
-    auto* controls_header = new QLabel(Tr("Geometry"), geometry_controls_);
+    auto* controls_header = NewLocalizedLabel("Geometry", geometry_controls_);
     controls_header->setObjectName("SectionTitle");
     controls_header->setStyleSheet(AppTheme::EditorLabelStyle(theme.textColor()));
     AppTheme::MarkFontRole(controls_header, AppTheme::FontRole::UiHeadline);
@@ -31,7 +31,7 @@ void EditorDialog::BuildGeometryRawPanels() {
 
     // --- helpers -----------------------------------------------------------
 
-    auto addSection = [&](const QString& title) -> std::pair<QFrame*, QVBoxLayout*> {
+    auto addSection = [&](const char* title_source) -> std::pair<QFrame*, QVBoxLayout*> {
       auto* frame = new QFrame(geometry_controls_);
       frame->setObjectName("EditorSection");
       auto* v = new QVBoxLayout(frame);
@@ -39,7 +39,7 @@ void EditorDialog::BuildGeometryRawPanels() {
                             kSectionContentMarginH, kSectionContentMarginV);
       v->setSpacing(kSectionInnerSpacing);
 
-      auto* t = new QLabel(title.toUpper(), frame);
+      auto* t = NewLocalizedLabel(title_source, frame, true);
       t->setObjectName("EditorSectionTitle");
       AppTheme::MarkFontRole(t, AppTheme::FontRole::UiOverline);
       QFont title_font = t->font();
@@ -52,7 +52,7 @@ void EditorDialog::BuildGeometryRawPanels() {
       return {frame, v};
     };
 
-    auto addSlider = [&](QWidget* parent, QVBoxLayout* layout, const QString& name, int min, int max,
+    auto addSlider = [&](QWidget* parent, QVBoxLayout* layout, const char* name_source, int min, int max,
                          int value, auto&& onChange, auto&& onReset, auto&& formatter) -> QSlider* {
       auto* row = new QWidget(parent);
       auto* row_v = new QVBoxLayout(row);
@@ -64,7 +64,7 @@ void EditorDialog::BuildGeometryRawPanels() {
       header_h->setContentsMargins(0, 0, 0, 0);
       header_h->setSpacing(kRowInnerSpacing);
 
-      auto* name_label = new QLabel(name, header);
+      auto* name_label = NewLocalizedLabel(name_source, header);
       name_label->setStyleSheet(AppTheme::EditorLabelStyle(theme.textColor()));
       AppTheme::MarkFontRole(name_label, AppTheme::FontRole::UiBody);
       name_label->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
@@ -113,14 +113,14 @@ void EditorDialog::BuildGeometryRawPanels() {
 
     // --- SECTION 1: CROP & ASPECT RATIO ------------------------------------
     {
-      auto [frame, v] = addSection(Tr("Crop & Aspect Ratio"));
+      auto [frame, v] = addSection("Crop & Aspect Ratio");
 
       auto* aspect_row = new QWidget(frame);
       auto* aspect_h   = new QHBoxLayout(aspect_row);
       aspect_h->setContentsMargins(0, 0, 0, 0);
       aspect_h->setSpacing(kRowInnerSpacing);
 
-      auto* aspect_label = new QLabel(Tr("Aspect"), aspect_row);
+      auto* aspect_label = NewLocalizedLabel("Aspect", aspect_row);
       aspect_label->setStyleSheet(AppTheme::EditorLabelStyle(theme.textColor()));
       AppTheme::MarkFontRole(aspect_label, AppTheme::FontRole::UiBody);
       aspect_label->setMinimumWidth(64);
@@ -226,10 +226,10 @@ void EditorDialog::BuildGeometryRawPanels() {
 
     // --- SECTION 2: ROTATE & FLIP -----------------------------------------
     {
-      auto [frame, v] = addSection(Tr("Rotate & Flip"));
+      auto [frame, v] = addSection("Rotate & Flip");
 
       rotate_slider_ = addSlider(
-          frame, v, Tr("Angle"), -18000, 18000,
+          frame, v, "Angle", -18000, 18000,
           static_cast<int>(std::lround(state_.rotate_degrees_ * kRotationSliderScale)),
           [&](int vv) {
             state_.rotate_degrees_ = static_cast<float>(vv) / kRotationSliderScale;
@@ -258,13 +258,13 @@ void EditorDialog::BuildGeometryRawPanels() {
         rotate_slider_->setValue(static_cast<int>(std::lround(a * kRotationSliderScale)));
       };
 
-      auto makeToolButton = [&](const QString& glyph, const QString& tip,
+      auto makeToolButton = [&](const QString& glyph, const char* tip_source,
                                 std::function<void()> onClick, bool enabled) {
         auto* b = new QPushButton(glyph, btn_row);
         b->setFixedHeight(36);
         b->setCursor(Qt::PointingHandCursor);
         b->setStyleSheet(AppTheme::EditorSecondaryButtonStyle());
-        b->setToolTip(tip);
+        SetLocalizedToolTip(b, tip_source);
         b->setEnabled(enabled);
         AppTheme::MarkFontRole(b, AppTheme::FontRole::UiBodyStrong);
         QFont gf = b->font();
@@ -277,11 +277,11 @@ void EditorDialog::BuildGeometryRawPanels() {
       };
 
       auto* rotate_l = makeToolButton(QString::fromUtf8("\xE2\x86\xBA"),
-                                      Tr("Rotate 90° left"), [rotateBy]() { rotateBy(-90.0f); }, true);
+                                      "Rotate 90° left", [rotateBy]() { rotateBy(-90.0f); }, true);
       auto* rotate_r = makeToolButton(QString::fromUtf8("\xE2\x86\xBB"),
-                                      Tr("Rotate 90° right"), [rotateBy]() { rotateBy(90.0f); }, true);
+                                      "Rotate 90° right", [rotateBy]() { rotateBy(90.0f); }, true);
       auto* flip     = makeToolButton(QString::fromUtf8("\xE2\x87\x84"),
-                                      Tr("Flip horizontal (coming soon)"), {}, false);
+                                      "Flip horizontal (coming soon)", {}, false);
 
       btn_h->addWidget(rotate_l, 1);
       btn_h->addWidget(rotate_r, 1);
@@ -291,14 +291,14 @@ void EditorDialog::BuildGeometryRawPanels() {
 
     // --- SECTION 3: CROP OFFSET -------------------------------------------
     {
-      auto [frame, v] = addSection(Tr("Crop Offset"));
+      auto [frame, v] = addSection("Crop Offset");
 
       auto formatUnit = [](int vv) {
         return QString::number(static_cast<double>(vv) / kCropRectSliderScale, 'f', 3);
       };
 
       geometry_crop_x_slider_ = addSlider(
-          frame, v, Tr("X"), 0, static_cast<int>(kCropRectSliderScale),
+          frame, v, "X", 0, static_cast<int>(kCropRectSliderScale),
           static_cast<int>(std::lround(state_.crop_x_ * kCropRectSliderScale)),
           [&](int vv) {
             SetCropRectState(static_cast<float>(vv) / kCropRectSliderScale, state_.crop_y_,
@@ -307,7 +307,7 @@ void EditorDialog::BuildGeometryRawPanels() {
           [this]() { ResetCropAndRotation(); }, formatUnit);
 
       geometry_crop_y_slider_ = addSlider(
-          frame, v, Tr("Y"), 0, static_cast<int>(kCropRectSliderScale),
+          frame, v, "Y", 0, static_cast<int>(kCropRectSliderScale),
           static_cast<int>(std::lround(state_.crop_y_ * kCropRectSliderScale)),
           [&](int vv) {
             SetCropRectState(state_.crop_x_, static_cast<float>(vv) / kCropRectSliderScale,
@@ -316,7 +316,7 @@ void EditorDialog::BuildGeometryRawPanels() {
           [this]() { ResetCropAndRotation(); }, formatUnit);
 
       geometry_crop_w_slider_ = addSlider(
-          frame, v, Tr("Width"), 1, static_cast<int>(kCropRectSliderScale),
+          frame, v, "Width", 1, static_cast<int>(kCropRectSliderScale),
           static_cast<int>(std::lround(state_.crop_w_ * kCropRectSliderScale)),
           [&](int vv) {
             ResizeCropRectWithAspect(static_cast<float>(vv) / kCropRectSliderScale, true);
@@ -324,7 +324,7 @@ void EditorDialog::BuildGeometryRawPanels() {
           [this]() { ResetCropAndRotation(); }, formatUnit);
 
       geometry_crop_h_slider_ = addSlider(
-          frame, v, Tr("Height"), 1, static_cast<int>(kCropRectSliderScale),
+          frame, v, "Height", 1, static_cast<int>(kCropRectSliderScale),
           static_cast<int>(std::lround(state_.crop_h_ * kCropRectSliderScale)),
           [&](int vv) {
             ResizeCropRectWithAspect(static_cast<float>(vv) / kCropRectSliderScale, false);
@@ -353,7 +353,7 @@ void EditorDialog::BuildGeometryRawPanels() {
       btn_h->setContentsMargins(0, 0, 0, 0);
       btn_h->setSpacing(kRowInnerSpacing);
 
-      geometry_apply_btn_ = new QPushButton(Tr("Apply Crop"), btn_row);
+      geometry_apply_btn_ = NewLocalizedButton("Apply Crop", btn_row);
       geometry_apply_btn_->setFixedHeight(36);
       geometry_apply_btn_->setCursor(Qt::PointingHandCursor);
       geometry_apply_btn_->setStyleSheet(AppTheme::EditorPrimaryButtonStyle());
@@ -363,7 +363,7 @@ void EditorDialog::BuildGeometryRawPanels() {
       });
       btn_h->addWidget(geometry_apply_btn_, 2);
 
-      geometry_reset_btn_ = new QPushButton(Tr("Reset"), btn_row);
+      geometry_reset_btn_ = NewLocalizedButton("Reset", btn_row);
       geometry_reset_btn_->setFixedHeight(36);
       geometry_reset_btn_->setCursor(Qt::PointingHandCursor);
       geometry_reset_btn_->setStyleSheet(AppTheme::EditorSecondaryButtonStyle());
@@ -372,9 +372,9 @@ void EditorDialog::BuildGeometryRawPanels() {
       btn_h->addWidget(geometry_reset_btn_, 1);
       v->addWidget(btn_row, 0);
 
-      auto* hint = new QLabel(
-          Tr("Pixels update on Apply. Double click any slider or the viewer to reset. "
-             "Ctrl+R resets all geometry."),
+      auto* hint = NewLocalizedLabel(
+          "Pixels update on Apply. Double click any slider or the viewer to reset. "
+          "Ctrl+R resets all geometry.",
           frame);
       hint->setWordWrap(true);
       hint->setStyleSheet(AppTheme::EditorLabelStyle(theme.textMutedColor()));

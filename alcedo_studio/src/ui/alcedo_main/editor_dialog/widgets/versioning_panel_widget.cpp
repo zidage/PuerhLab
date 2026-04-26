@@ -126,21 +126,21 @@ void EditorDialog::BuildVersioningPanel() {
       "QStackedWidget#EditorVersioningPages { background: transparent; }"));
   shared_versioning_layout_->addWidget(versioning_pages_stack_, 1);
 
-  const auto build_header_row = [&](const QString& title, const QString& pill_text) {
+  const auto build_header_row = [&](const char* title_source, const char* pill_source) {
     auto* row = new QWidget(shared_versioning_root_);
     auto* layout = new QHBoxLayout(row);
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(8);
 
-    auto* title_label = new QLabel(title, row);
+    auto* title_label = NewLocalizedLabel(title_source, row);
     title_label->setStyleSheet(QStringLiteral("QLabel { color: %1; font-size: 15px; font-weight: 700; background: transparent; }")
                                    .arg(version_theme.textColor().name(QColor::HexRgb)));
     AppTheme::MarkFontRole(title_label, AppTheme::FontRole::UiBodyStrong);
     layout->addWidget(title_label, 0);
     layout->addStretch(1);
 
-    if (!pill_text.isEmpty()) {
-      auto* pill = new QLabel(pill_text, row);
+    if (pill_source != nullptr && pill_source[0] != '\0') {
+      auto* pill = NewLocalizedLabel(pill_source, row);
       pill->setStyleSheet(QStringLiteral("QLabel {"
                                          "  color: %1;"
                                          "  background: %2;"
@@ -172,7 +172,7 @@ void EditorDialog::BuildVersioningPanel() {
   // "COMMITTED STATE" label flanked by two thin lines — separates the
   // uncommitted transaction list from the baseline commit row on the
   // history page.
-  const auto build_section_divider = [&](const QString& label_text) {
+  const auto build_section_divider = [&](const char* label_source) {
     auto* row = new QWidget(shared_versioning_root_);
     auto* layout = new QHBoxLayout(row);
     layout->setContentsMargins(0, 4, 0, 4);
@@ -190,7 +190,7 @@ void EditorDialog::BuildVersioningPanel() {
     line_left->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     line_left->setFixedHeight(1);
 
-    auto* label = new QLabel(label_text, row);
+    auto* label = NewLocalizedLabel(label_source, row);
     label->setStyleSheet(QStringLiteral("QLabel {"
                                         "  color: %1;"
                                         "  background: transparent;"
@@ -220,7 +220,7 @@ void EditorDialog::BuildVersioningPanel() {
     page_layout->setContentsMargins(18, 18, 18, 18);
     page_layout->setSpacing(10);
 
-    page_layout->addWidget(build_header_row(Tr("Edit History"), Tr("Uncommitted")), 0);
+    page_layout->addWidget(build_header_row("Edit History", "Uncommitted"), 0);
     page_layout->addWidget(build_divider(), 0);
 
     // Working transaction list — transparent so tx cards paint on the panel directly.
@@ -235,7 +235,7 @@ void EditorDialog::BuildVersioningPanel() {
 
     // "COMMITTED STATE" divider — visual separator between the uncommitted
     // transaction list and the committed-baseline summary beneath it.
-    page_layout->addWidget(build_section_divider(Tr("COMMITTED STATE")), 0);
+    page_layout->addWidget(build_section_divider("COMMITTED STATE"), 0);
 
     // Baseline summary row: icon + "Baseline" label + pending-edit status on
     // the right (reuses version_status_ which UpdateVersionUi populates).
@@ -244,7 +244,7 @@ void EditorDialog::BuildVersioningPanel() {
     baseline_layout->setContentsMargins(4, 4, 4, 4);
     baseline_layout->setSpacing(10);
 
-    auto* baseline_label = new QLabel(Tr("Baseline"), baseline_row);
+    auto* baseline_label = NewLocalizedLabel("Baseline", baseline_row);
     baseline_label->setStyleSheet(
         QStringLiteral("QLabel { color: %1; background: transparent; font-size: 13px; font-weight: 600; }")
             .arg(version_theme.textColor().name(QColor::HexRgb)));
@@ -266,12 +266,12 @@ void EditorDialog::BuildVersioningPanel() {
     action_layout->setContentsMargins(0, 8, 0, 0);
     action_layout->setSpacing(10);
 
-    undo_tx_btn_ = new QPushButton(Tr("Undo Last"), action_row);
+    undo_tx_btn_ = NewLocalizedButton("Undo Last", action_row);
     undo_tx_btn_->setMinimumHeight(38);
     undo_tx_btn_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     undo_tx_btn_->setStyleSheet(version_secondary_btn_style);
 
-    commit_version_btn_ = new QPushButton(Tr("Commit All"), action_row);
+    commit_version_btn_ = NewLocalizedButton("Commit All", action_row);
     commit_version_btn_->setMinimumHeight(38);
     commit_version_btn_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     commit_version_btn_->setStyleSheet(version_primary_btn_style);
@@ -296,7 +296,7 @@ void EditorDialog::BuildVersioningPanel() {
     page_layout->setContentsMargins(18, 18, 18, 18);
     page_layout->setSpacing(10);
 
-    page_layout->addWidget(build_header_row(Tr("Version Tree"), QString()), 0);
+    page_layout->addWidget(build_header_row("Version Tree", ""), 0);
     page_layout->addWidget(build_divider(), 0);
 
     // Working-mode control row — borderless, inline on the panel.
@@ -305,7 +305,7 @@ void EditorDialog::BuildVersioningPanel() {
     mode_layout->setContentsMargins(0, 2, 0, 2);
     mode_layout->setSpacing(10);
 
-    auto* mode_label = new QLabel(Tr("Working mode"), mode_row);
+    auto* mode_label = NewLocalizedLabel("Working mode", mode_row);
     mode_label->setStyleSheet(
         QStringLiteral("QLabel { color: %1; background: transparent; font-size: 11px; font-weight: 600; letter-spacing: 1px; }")
             .arg(version_theme.textMutedColor().name(QColor::HexRgb)));
@@ -319,7 +319,7 @@ void EditorDialog::BuildVersioningPanel() {
     working_mode_combo_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     working_mode_combo_->setStyleSheet(compact_combo_font_style);
 
-    new_working_btn_ = new QPushButton(Tr("New Working"), mode_row);
+    new_working_btn_ = NewLocalizedButton("New Working", mode_row);
     new_working_btn_->setMinimumHeight(32);
     new_working_btn_->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Fixed);
     new_working_btn_->setStyleSheet(version_secondary_btn_style);
@@ -329,7 +329,7 @@ void EditorDialog::BuildVersioningPanel() {
     mode_layout->addWidget(new_working_btn_, 0);
     page_layout->addWidget(mode_row, 0);
 
-    page_layout->addWidget(build_section_divider(Tr("COMMITTED STATE")), 0);
+    page_layout->addWidget(build_section_divider("COMMITTED STATE"), 0);
 
     version_log_ = new QListWidget(versions_page);
     version_log_->setSelectionMode(QAbstractItemView::SingleSelection);

@@ -262,16 +262,569 @@
         <translation type="vanished">Camera Model</translation>
     </message>
     <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="247"/>
+        <source>Adjustments</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="248"/>
+        <source>Tone</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="249"/>
+        <source>Primary tonal shaping controls.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="251"/>
+        <source>Contrast</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="252"/>
+        <source>Highlights</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="253"/>
+        <source>Shadows</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="254"/>
+        <source>Whites</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="255"/>
+        <source>Blacks</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="256"/>
+        <source>Tone Curve</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="257"/>
+        <source>Smooth tone curve mapped from input [0, 1] to output [0, 1].</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="259"/>
+        <source>Left click/drag to shape. Right click a point to remove. Double click to reset.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="261"/>
+        <source>Reset Curve</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="262"/>
+        <source>Color</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="263"/>
+        <source>Color balance and saturation.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="264"/>
+        <source>Saturation</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="265"/>
+        <source>White Balance</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="266"/>
+        <source>As Shot</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="267"/>
+        <source>Custom</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="268"/>
+        <source>Color Temp</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="269"/>
+        <source>Color Tint</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="270"/>
+        <source>Color temperature/tint is unavailable for this image.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="271"/>
+        <source>Detail</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="272"/>
+        <source>Micro-contrast and sharpen controls.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="273"/>
+        <source>Sharpen</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="274"/>
+        <source>Clarity</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="275"/>
+        <source>LUT</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="276"/>
+        <source>Browse and apply look-up tables.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="277"/>
+        <source>HSL / Color</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="278"/>
+        <source>Per-hue lightness and saturation adjustments.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="279"/>
+        <source>Hue Shift</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="280"/>
+        <source>Lightness</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="281"/>
+        <source>HSL Saturation</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="282"/>
+        <source>Hue Range</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="283"/>
+        <source>Color Wheels</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="284"/>
+        <source>CDL: Lift / Gamma / Gain with master offset.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="285"/>
+        <source>Gamma</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="286"/>
+        <source>Lift</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="287"/>
+        <source>Gain</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="288"/>
+        <source>Display Rendering Transform</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="289"/>
+        <source>Display RT</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="290"/>
+        <source>Encoding Space</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="291"/>
+        <source>Encoding EOTF</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="292"/>
+        <source>Peak Luminance</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="293"/>
+        <source>Rendering Method</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="294"/>
+        <source>Choose the transform family. Shared encoding settings stay above; method-specific settings stay preserved per method.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="296"/>
+        <source>ACES 2.0</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="297"/>
+        <source>OpenDRT</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="298"/>
+        <source>Limiting Space</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="299"/>
+        <source>Look Preset</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="300"/>
+        <source>Tonescale Preset</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="301"/>
+        <source>Creative White</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="302"/>
+        <source>Geometry</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="303"/>
+        <source>Crop &amp; Aspect Ratio</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="304"/>
+        <source>Aspect</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="305"/>
+        <source>Rotate &amp; Flip</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="306"/>
+        <source>Angle</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="307"/>
+        <source>Rotate 90° left</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="308"/>
+        <source>Rotate 90° right</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="309"/>
+        <source>Flip horizontal (coming soon)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="310"/>
+        <source>Crop Offset</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="311"/>
+        <source>X</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="312"/>
+        <source>Y</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="313"/>
+        <source>Width</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="314"/>
+        <source>Height</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="315"/>
+        <source>Apply Crop</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="316"/>
+        <source>Reset</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="317"/>
+        <source>Pixels update on Apply. Double click any slider or the viewer to reset. Ctrl+R resets all geometry.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="319"/>
+        <source>RAW Decode</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="320"/>
+        <source>Configure RAW decode options. These settings are shared with thumbnail rendering.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="322"/>
+        <source>Enable Highlight Reconstruction</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="323"/>
+        <source>Lens Calibration</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="324"/>
+        <source>Enable correction and optionally override lens metadata with catalog entries.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="326"/>
+        <source>Enable Lens Calibration</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="327"/>
         <source>Lens Brand</source>
-        <translation type="vanished">Lens Brand</translation>
+        <translation>Lens Brand</translation>
     </message>
     <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="328"/>
         <source>Lens Model</source>
-        <translation type="vanished">Lens Model</translation>
+        <translation>Lens Model</translation>
     </message>
     <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="329"/>
+        <source>Edit History</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="330"/>
+        <source>Uncommitted</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="331"/>
+        <source>COMMITTED STATE</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="332"/>
+        <source>Baseline</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="333"/>
+        <source>Undo Last</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="334"/>
+        <source>Commit All</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="335"/>
+        <source>Version Tree</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="336"/>
+        <source>Working mode</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="337"/>
+        <source>New Working</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="338"/>
+        <source>Rec.709</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="339"/>
+        <source>P3-D65</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="340"/>
+        <source>P3-D60</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="341"/>
+        <source>P3-DCI</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="342"/>
+        <source>XYZ</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="343"/>
+        <source>Rec.2020</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="344"/>
+        <source>ProPhoto RGB</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="345"/>
+        <source>Adobe RGB</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="346"/>
+        <source>Standard</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="347"/>
+        <source>Arriba</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="348"/>
+        <source>Sylvan</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="349"/>
+        <source>Colorful</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="350"/>
+        <source>Aery</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="351"/>
+        <source>Dystopic</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="352"/>
+        <source>Umbra</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="353"/>
+        <source>Use Look Preset</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="354"/>
+        <source>Low Contrast</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="355"/>
+        <source>Medium Contrast</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="356"/>
+        <source>High Contrast</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="357"/>
+        <source>Arriba Tonescale</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="358"/>
+        <source>Sylvan Tonescale</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="359"/>
+        <source>Colorful Tonescale</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="360"/>
+        <source>Aery Tonescale</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="361"/>
+        <source>Dystopic Tonescale</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="362"/>
+        <source>Umbra Tonescale</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="363"/>
+        <source>Marvelous Tonscape</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="364"/>
+        <source>Dagrinchi Tonegroan</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="365"/>
+        <source>D93</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="250"/>
         <source>Exposure</source>
-        <translation type="vanished">Exposure</translation>
+        <translation>Exposure</translation>
     </message>
     <message>
         <source>Aperture</source>
@@ -800,27 +1353,27 @@ Original source files on disk will be kept.</source>
         <translation type="vanished">Alcedo Studio cannot decode these Nikon files with the built-in RAW pipeline. Convert them to DNG, then the import can continue.</translation>
     </message>
     <message>
-        <location filename="../qml/NikonHeRecoveryDialog.qml" line="54"/>
+        <location filename="../qml/NikonHeRecoveryDialog.qml" line="55"/>
         <source>Unknown directory</source>
         <translation>Unknown directory</translation>
     </message>
     <message>
-        <location filename="../qml/NikonHeRecoveryDialog.qml" line="112"/>
+        <location filename="../qml/NikonHeRecoveryDialog.qml" line="113"/>
         <source>Nikon High Efficiency RAW conversion required</source>
         <translation>Nikon High Efficiency RAW conversion required</translation>
     </message>
     <message>
-        <location filename="../qml/NikonHeRecoveryDialog.qml" line="126"/>
+        <location filename="../qml/NikonHeRecoveryDialog.qml" line="127"/>
         <source>Preparing recovery workflow...</source>
         <translation>Preparing recovery workflow...</translation>
     </message>
     <message>
-        <location filename="../qml/NikonHeRecoveryDialog.qml" line="149"/>
+        <location filename="../qml/NikonHeRecoveryDialog.qml" line="150"/>
         <source>Adobe DNG Converter executable</source>
         <translation>Adobe DNG Converter executable</translation>
     </message>
     <message>
-        <location filename="../qml/NikonHeRecoveryDialog.qml" line="177"/>
+        <location filename="../qml/NikonHeRecoveryDialog.qml" line="180"/>
         <source>No converter selected</source>
         <translation>No converter selected</translation>
     </message>
@@ -829,37 +1382,37 @@ Original source files on disk will be kept.</source>
         <translation type="vanished">Browse...</translation>
     </message>
     <message>
-        <location filename="../qml/NikonHeRecoveryDialog.qml" line="217"/>
+        <location filename="../qml/NikonHeRecoveryDialog.qml" line="222"/>
         <source>Browse for Adobe DNG Converter</source>
         <translation>Browse for Adobe DNG Converter</translation>
     </message>
     <message>
-        <location filename="../qml/NikonHeRecoveryDialog.qml" line="233"/>
+        <location filename="../qml/NikonHeRecoveryDialog.qml" line="238"/>
         <source>Loaded from default path</source>
         <translation>Loaded from default path</translation>
     </message>
     <message>
-        <location filename="../qml/NikonHeRecoveryDialog.qml" line="251"/>
+        <location filename="../qml/NikonHeRecoveryDialog.qml" line="256"/>
         <source>Affected files</source>
         <translation>Affected files</translation>
     </message>
     <message>
-        <location filename="../qml/NikonHeRecoveryDialog.qml" line="259"/>
+        <location filename="../qml/NikonHeRecoveryDialog.qml" line="264"/>
         <source>(%1 items found)</source>
         <translation>(%1 items found)</translation>
     </message>
     <message>
-        <location filename="../qml/NikonHeRecoveryDialog.qml" line="304"/>
+        <location filename="../qml/NikonHeRecoveryDialog.qml" line="309"/>
         <source>Filename</source>
         <translation>Filename</translation>
     </message>
     <message>
-        <location filename="../qml/NikonHeRecoveryDialog.qml" line="313"/>
+        <location filename="../qml/NikonHeRecoveryDialog.qml" line="318"/>
         <source>Directory</source>
         <translation>Directory</translation>
     </message>
     <message>
-        <location filename="../qml/NikonHeRecoveryDialog.qml" line="404"/>
+        <location filename="../qml/NikonHeRecoveryDialog.qml" line="409"/>
         <source>%1 / %2 converted files reimported, %3 failed</source>
         <translation>%1 / %2 converted files reimported, %3 failed</translation>
     </message>
@@ -868,18 +1421,18 @@ Original source files on disk will be kept.</source>
         <translation type="vanished">Remove from project</translation>
     </message>
     <message>
-        <location filename="../qml/NikonHeRecoveryDialog.qml" line="439"/>
+        <location filename="../qml/NikonHeRecoveryDialog.qml" line="444"/>
         <source>Cancel import</source>
         <translation>Cancel import</translation>
     </message>
     <message>
-        <location filename="../qml/NikonHeRecoveryDialog.qml" line="466"/>
-        <location filename="../qml/NikonHeRecoveryDialog.qml" line="468"/>
+        <location filename="../qml/NikonHeRecoveryDialog.qml" line="471"/>
+        <location filename="../qml/NikonHeRecoveryDialog.qml" line="473"/>
         <source>Convert to DNG &amp; Continue</source>
         <translation>Convert to DNG &amp; Continue</translation>
     </message>
     <message>
-        <location filename="../qml/NikonHeRecoveryDialog.qml" line="469"/>
+        <location filename="../qml/NikonHeRecoveryDialog.qml" line="474"/>
         <source>Choose converter &amp; Continue</source>
         <translation>Choose converter &amp; Continue</translation>
     </message>
@@ -920,7 +1473,7 @@ Original source files on disk will be kept.</source>
         <translation type="vanished">Executable Path</translation>
     </message>
     <message>
-        <location filename="../qml/NikonHeRecoveryDialog.qml" line="176"/>
+        <location filename="../qml/NikonHeRecoveryDialog.qml" line="179"/>
         <source>Adobe DNG Converter is not installed at /Applications/Adobe DNG Converter.app.</source>
         <translation>Adobe DNG Converter is not installed at /Applications/Adobe DNG Converter.app.</translation>
     </message>

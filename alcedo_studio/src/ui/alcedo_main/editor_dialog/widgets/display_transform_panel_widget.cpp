@@ -10,22 +10,22 @@ namespace alcedo::ui {
 DisplayTransformPanelWidget::DisplayTransformPanelWidget(QWidget* parent) : QWidget(parent) {}
 
 void EditorDialog::BuildDisplayTransformPanel() {
-    auto* controls_header = new QLabel(Tr("Display Rendering Transform"), drt_controls_);
+    auto* controls_header = NewLocalizedLabel("Display Rendering Transform", drt_controls_);
     controls_header->setObjectName("SectionTitle");
     controls_header->setStyleSheet(AppTheme::EditorLabelStyle(AppTheme::Instance().textColor()));
     AppTheme::MarkFontRole(controls_header, AppTheme::FontRole::UiHeadline);
     drt_controls_layout_->insertWidget(0, controls_header, 0);
 
-    auto addDrtSection = [&](const QString& title, const QString& subtitle) {
+    auto addDrtSection = [&](const char* title_source, const char* subtitle_source) {
       auto* frame = new QFrame(drt_controls_);
       frame->setObjectName("EditorSection");
       auto* v = new QVBoxLayout(frame);
       v->setContentsMargins(12, 10, 12, 10);
       v->setSpacing(2);
 
-      auto* t = new QLabel(title, frame);
+      auto* t = NewLocalizedLabel(title_source, frame);
       t->setObjectName("EditorSectionTitle");
-      auto* s = new QLabel(subtitle, frame);
+      auto* s = NewLocalizedLabel(subtitle_source, frame);
       s->setObjectName("EditorSectionSub");
       s->setWordWrap(true);
       v->addWidget(t, 0);
@@ -33,9 +33,9 @@ void EditorDialog::BuildDisplayTransformPanel() {
       drt_controls_layout_->insertWidget(drt_controls_layout_->count() - 1, frame);
     };
 
-    auto addDrtComboBox = [&](QWidget* parent, QVBoxLayout* parent_layout, const QString& name,
+    auto addDrtComboBox = [&](QWidget* parent, QVBoxLayout* parent_layout, const char* name_source,
                               auto options, auto current_value, auto&& onChange) {
-      auto* label = new QLabel(name, parent);
+      auto* label = NewLocalizedLabel(name_source, parent);
       label->setStyleSheet(AppTheme::EditorLabelStyle(AppTheme::Instance().textColor()));
       label->setWordWrap(true);
       label->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
@@ -74,9 +74,9 @@ void EditorDialog::BuildDisplayTransformPanel() {
       return combo;
     };
 
-    auto addDrtSlider = [&](const QString& name, int min, int max, int value, auto&& onChange,
+    auto addDrtSlider = [&](const char* name_source, int min, int max, int value, auto&& onChange,
                             auto&& onRelease, auto&& onReset, const QString& suffix) {
-      auto* info = new QLabel(name, drt_controls_);
+      auto* info = NewLocalizedLabel(name_source, drt_controls_);
       info->setStyleSheet(AppTheme::EditorLabelStyle(AppTheme::Instance().textColor()));
       info->setMinimumWidth(0);
       info->setWordWrap(true);
@@ -164,7 +164,7 @@ void EditorDialog::BuildDisplayTransformPanel() {
     };
 
     odt_encoding_space_combo_ = addDrtComboBox(
-        drt_controls_, drt_controls_layout_, Tr("Encoding Space"), kDisplayEncodingSpaceOptions,
+        drt_controls_, drt_controls_layout_, "Encoding Space", kDisplayEncodingSpaceOptions,
         state_.odt_.encoding_space_, [this](int value) {
           state_.odt_.encoding_space_ = static_cast<ColorUtils::ColorSpace>(value);
           if (!IsSupportedDisplayEncoding(state_.odt_.encoding_space_,
@@ -196,7 +196,7 @@ void EditorDialog::BuildDisplayTransformPanel() {
                        CommitAdjustment(AdjustmentField::Odt);
                      });
     {
-      auto* label = new QLabel(Tr("Encoding EOTF"), drt_controls_);
+      auto* label = NewLocalizedLabel("Encoding EOTF", drt_controls_);
       label->setStyleSheet(AppTheme::EditorLabelStyle(AppTheme::Instance().textColor()));
       label->setWordWrap(true);
       label->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
@@ -211,7 +211,7 @@ void EditorDialog::BuildDisplayTransformPanel() {
     RefreshOdtEncodingEotfComboFromState();
 
     odt_peak_luminance_slider_ = addDrtSlider(
-        Tr("Peak Luminance"), 100, 1000,
+        "Peak Luminance", 100, 1000,
         static_cast<int>(std::lround(state_.odt_.peak_luminance_)),
         [this](int value) {
           state_.odt_.peak_luminance_ = static_cast<float>(value);
@@ -232,11 +232,11 @@ void EditorDialog::BuildDisplayTransformPanel() {
       layout->setContentsMargins(12, 12, 12, 12);
       layout->setSpacing(10);
 
-      auto* title = new QLabel(Tr("Rendering Method"), frame);
+      auto* title = NewLocalizedLabel("Rendering Method", frame);
       title->setObjectName("EditorSectionTitle");
-      auto* sub = new QLabel(
-          Tr("Choose the transform family. Shared encoding settings stay above; method-specific "
-             "settings stay preserved per method."),
+      auto* sub = NewLocalizedLabel(
+          "Choose the transform family. Shared encoding settings stay above; method-specific "
+          "settings stay preserved per method.",
           frame);
       sub->setObjectName("EditorSectionSub");
       sub->setWordWrap(true);
@@ -248,12 +248,8 @@ void EditorDialog::BuildDisplayTransformPanel() {
       cards_layout->setContentsMargins(0, 0, 0, 0);
       cards_layout->setSpacing(12);
 
-      odt_aces_method_card_ = new QPushButton(
-          Tr("ACES 2.0"),
-          cards_row);
-      odt_open_drt_method_card_ = new QPushButton(
-          Tr("OpenDRT"),
-          cards_row);
+      odt_aces_method_card_ = NewLocalizedButton("ACES 2.0", cards_row);
+      odt_open_drt_method_card_ = NewLocalizedButton("OpenDRT", cards_row);
       for (QPushButton* card : {odt_aces_method_card_, odt_open_drt_method_card_}) {
         card->setCheckable(true);
         card->setCursor(Qt::PointingHandCursor);
@@ -286,7 +282,7 @@ void EditorDialog::BuildDisplayTransformPanel() {
       aces_layout->setContentsMargins(0, 4, 0, 0);
       aces_layout->setSpacing(8);
       odt_aces_limiting_space_combo_ = addDrtComboBox(
-          aces_page, aces_layout, Tr("Limiting Space"), kAcesLimitingSpaceOptions,
+          aces_page, aces_layout, "Limiting Space", kAcesLimitingSpaceOptions,
           state_.odt_.aces_.limiting_space_, [this](int value) {
             state_.odt_.aces_.limiting_space_ = static_cast<ColorUtils::ColorSpace>(value);
             RequestRender();
@@ -300,7 +296,7 @@ void EditorDialog::BuildDisplayTransformPanel() {
       open_drt_layout->setContentsMargins(0, 4, 0, 0);
       open_drt_layout->setSpacing(8);
       odt_open_drt_look_preset_combo_ = addDrtComboBox(
-          open_drt_page, open_drt_layout, Tr("Look Preset"), kOpenDrtLookPresetOptions,
+          open_drt_page, open_drt_layout, "Look Preset", kOpenDrtLookPresetOptions,
           state_.odt_.open_drt_.look_preset_, [this](int value) {
             state_.odt_.open_drt_.look_preset_ =
                 static_cast<odt_cpu::OpenDRTLookPreset>(value);
@@ -308,7 +304,7 @@ void EditorDialog::BuildDisplayTransformPanel() {
             CommitAdjustment(AdjustmentField::Odt);
           });
       odt_open_drt_tonescale_preset_combo_ = addDrtComboBox(
-          open_drt_page, open_drt_layout, Tr("Tonescale Preset"), kOpenDrtTonescaleOptions,
+          open_drt_page, open_drt_layout, "Tonescale Preset", kOpenDrtTonescaleOptions,
           state_.odt_.open_drt_.tonescale_preset_, [this](int value) {
             state_.odt_.open_drt_.tonescale_preset_ =
                 static_cast<odt_cpu::OpenDRTTonescalePreset>(value);
@@ -316,7 +312,7 @@ void EditorDialog::BuildDisplayTransformPanel() {
             CommitAdjustment(AdjustmentField::Odt);
           });
       odt_open_drt_creative_white_combo_ = addDrtComboBox(
-          open_drt_page, open_drt_layout, Tr("Creative White"), kOpenDrtCreativeWhiteOptions,
+          open_drt_page, open_drt_layout, "Creative White", kOpenDrtCreativeWhiteOptions,
           state_.odt_.open_drt_.creative_white_, [this](int value) {
             state_.odt_.open_drt_.creative_white_ =
                 static_cast<odt_cpu::OpenDRTCreativeWhitePreset>(value);
