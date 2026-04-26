@@ -726,6 +726,13 @@ if(TARGET ${ALCEDO_MAIN_BIN})
         install(DIRECTORY "${_config_dir}/icc/" DESTINATION "${CMAKE_INSTALL_BINDIR}/config/icc")
         install(DIRECTORY "${_config_dir}/lens_calib/" DESTINATION "${CMAKE_INSTALL_BINDIR}/config/lens_calib")
         install(DIRECTORY "${_config_dir}/nikon_lens/" DESTINATION "${CMAKE_INSTALL_BINDIR}/config/nikon_lens")
+
+        # Install ACEScc LUTs into bin/LUTs
+        file(GLOB _acescc_luts "${_config_dir}/LUTs/*ACEScc*.cube")
+        if(_acescc_luts)
+            install(FILES ${_acescc_luts} DESTINATION "${CMAKE_INSTALL_BINDIR}/LUTs")
+        endif()
+
         if(APPLE AND ALCEDO_METAL_ENABLED AND ALCEDO_METAL_RUNTIME_LIBS)
             install(FILES ${ALCEDO_METAL_RUNTIME_LIBS}
                 DESTINATION "${CMAKE_INSTALL_BINDIR}/metallib"
@@ -1160,6 +1167,84 @@ if(APPLE AND ALCEDO_MACOS_BUNDLE)
     # Include the .app bundle at the top level of the ZIP so the user
     # extracts it and finds the app bundle directly.
     set(CPACK_INCLUDE_TOPLEVEL_DIRECTORY OFF)
+elseif(WIN32 AND TARGET ${ALCEDO_MAIN_BIN})
+    # ------------------------------------------------------------------
+    # Windows installer packaging (WIX and/or NSIS)
+    # ------------------------------------------------------------------
+    set(CPACK_PACKAGE_NAME "Alcedo Studio")
+    set(CPACK_PACKAGE_VENDOR "Alcedo Studio Team")
+    set(CPACK_PACKAGE_INSTALL_DIRECTORY "Alcedo Studio")
+    set(CPACK_PACKAGE_FILE_NAME "AlcedoStudio-${PROJECT_VERSION}-Windows-${CMAKE_SYSTEM_PROCESSOR}")
+
+    set(_pkg_res_dir "${CMAKE_SOURCE_DIR}/packaging/windows")
+    if(EXISTS "${_pkg_res_dir}/EULA_RTF.rtf")
+        set(CPACK_RESOURCE_FILE_LICENSE "${_pkg_res_dir}/EULA_RTF.rtf")
+    endif()
+    if(EXISTS "${_pkg_res_dir}/alcedo.ico")
+        set(CPACK_NSIS_MUI_ICON "${_pkg_res_dir}/alcedo.ico")
+        set(CPACK_NSIS_MUI_UNIICON "${_pkg_res_dir}/alcedo.ico")
+        set(CPACK_WIX_PRODUCT_ICON "${_pkg_res_dir}/alcedo.ico")
+    endif()
+
+    # --- NSIS settings ------------------------------------------------
+    set(CPACK_NSIS_DISPLAY_NAME "Alcedo Studio v${PROJECT_VERSION}")
+    set(CPACK_NSIS_PACKAGE_NAME "Alcedo Studio v${PROJECT_VERSION}")
+    set(CPACK_NSIS_INSTALLED_ICON_NAME "bin\\\\alcedo_main.exe")
+    set(CPACK_NSIS_ENABLE_UNINSTALL_BEFORE_INSTALL ON)
+    set(CPACK_NSIS_MODIFY_PATH OFF)
+
+    # Start-menu shortcut
+    set(CPACK_NSIS_CREATE_ICONS_EXTRA
+        "CreateShortCut \\\"$SMPROGRAMS\\\\$STARTMENU_FOLDER\\\\Alcedo Studio.lnk\\\" \\\"$INSTDIR\\\\bin\\\\alcedo_main.exe\\\""
+    )
+    set(CPACK_NSIS_DELETE_ICONS_EXTRA
+        "Delete \\\"$SMPROGRAMS\\\\$STARTMENU_FOLDER\\\\Alcedo Studio.lnk\\\""
+    )
+    # Desktop shortcut
+    set(CPACK_NSIS_EXTRA_INSTALL_COMMANDS
+        "CreateShortCut \\\"$DESKTOP\\\\Alcedo Studio.lnk\\\" \\\"$INSTDIR\\\\bin\\\\alcedo_main.exe\\\""
+    )
+    set(CPACK_NSIS_EXTRA_UNINSTALL_COMMANDS
+        "Delete \\\"$DESKTOP\\\\Alcedo Studio.lnk\\\""
+    )
+
+    # --- WiX settings -------------------------------------------------
+    set(CPACK_WIX_PROGRAM_MENU_FOLDER "Alcedo Studio")
+    set(CPACK_WIX_CULTURES "zh-CN;en-US")
+    set(CPACK_WIX_PROPERTY_ARPURLINFOABOUT "https://alcedo.studio")
+    # Fixed upgrade GUID so subsequent installers replace the same product.
+    set(CPACK_WIX_UPGRADE_GUID "0EF54FAE-B541-4077-BB2A-7EDB85133B8E")
+
+    # Auto-detect available generators
+    set(_alcedo_win_generators "")
+    find_program(_ALCEDO_WIX_CANDLE candle.exe
+        PATHS
+            "$ENV{WIX}bin"
+            "C:/Program Files (x86)/WiX Toolset v3.11/bin"
+            "C:/Program Files/WiX Toolset v3.11/bin"
+            "C:/Program Files (x86)/WiX Toolset v3.14/bin"
+            "C:/Program Files/WiX Toolset v3.14/bin"
+    )
+    find_program(_ALCEDO_WIX_LIGHT light.exe
+        PATHS
+            "$ENV{WIX}bin"
+            "C:/Program Files (x86)/WiX Toolset v3.11/bin"
+            "C:/Program Files/WiX Toolset v3.11/bin"
+            "C:/Program Files (x86)/WiX Toolset v3.14/bin"
+            "C:/Program Files/WiX Toolset v3.14/bin"
+    )
+    if(_ALCEDO_WIX_CANDLE AND _ALCEDO_WIX_LIGHT)
+        list(APPEND _alcedo_win_generators "WIX")
+    endif()
+    find_program(_ALCEDO_NSIS_MAKENSIS makensis.exe)
+    if(_ALCEDO_NSIS_MAKENSIS)
+        list(APPEND _alcedo_win_generators "NSIS")
+    endif()
+    # Always provide ZIP as a fallback
+    list(APPEND _alcedo_win_generators "ZIP")
+
+    set(CPACK_GENERATOR "${_alcedo_win_generators}")
+    message(STATUS "[alcedo] Windows package generators: ${CPACK_GENERATOR}")
 else()
     set(CPACK_GENERATOR "ZIP")
 endif()
