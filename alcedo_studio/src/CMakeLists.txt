@@ -128,13 +128,24 @@ if(ALCEDO_METAL_ENABLED)
     if(DEFINED CMAKE_OSX_DEPLOYMENT_TARGET AND NOT "${CMAKE_OSX_DEPLOYMENT_TARGET}" STREQUAL "")
         set(ALCEDO_METAL_SHADER_DEPLOYMENT_TARGET_DEFAULT "${CMAKE_OSX_DEPLOYMENT_TARGET}")
     else()
-        set(ALCEDO_METAL_SHADER_DEPLOYMENT_TARGET_DEFAULT "13.0")
+        set(ALCEDO_METAL_SHADER_DEPLOYMENT_TARGET_DEFAULT "13.3")
     endif()
-    set(ALCEDO_METAL_SHADER_DEPLOYMENT_TARGET
-        "${ALCEDO_METAL_SHADER_DEPLOYMENT_TARGET_DEFAULT}"
-        CACHE STRING
-        "macOS deployment target used when compiling Metal shaders."
-    )
+    if(NOT DEFINED ALCEDO_METAL_SHADER_DEPLOYMENT_TARGET OR
+       "${ALCEDO_METAL_SHADER_DEPLOYMENT_TARGET}" STREQUAL "" OR
+       "${ALCEDO_METAL_SHADER_DEPLOYMENT_TARGET}" STREQUAL "13.0")
+        set(ALCEDO_METAL_SHADER_DEPLOYMENT_TARGET
+            "${ALCEDO_METAL_SHADER_DEPLOYMENT_TARGET_DEFAULT}"
+            CACHE STRING
+            "macOS deployment target used when compiling Metal shaders."
+            FORCE
+        )
+    else()
+        set(ALCEDO_METAL_SHADER_DEPLOYMENT_TARGET
+            "${ALCEDO_METAL_SHADER_DEPLOYMENT_TARGET}"
+            CACHE STRING
+            "macOS deployment target used when compiling Metal shaders."
+        )
+    endif()
     set(ALCEDO_METAL_PLATFORM_COMPILE_FLAGS)
     if(NOT "${ALCEDO_METAL_SHADER_DEPLOYMENT_TARGET}" STREQUAL "")
         list(APPEND ALCEDO_METAL_PLATFORM_COMPILE_FLAGS
@@ -1085,9 +1096,9 @@ else()
 endif()
 
 if(APPLE)
-    set(ALCEDO_MAIN_ICON_PNG "${CMAKE_CURRENT_SOURCE_DIR}/config/ICON/unnamed.png")
-    set(ALCEDO_MAIN_ICONSET_DIR "${CMAKE_CURRENT_BINARY_DIR}/alcedo_main.iconset")
-    set(ALCEDO_MAIN_ICON_ICNS "${CMAKE_CURRENT_BINARY_DIR}/alcedo_main.icns")
+    set(ALCEDO_MAIN_ICON_PNG "${CMAKE_CURRENT_SOURCE_DIR}/config/ICON/alcedo_icon.png")
+    set(ALCEDO_MAIN_ICONSET_DIR "${CMAKE_CURRENT_BINARY_DIR}/alcedo_icon.iconset")
+    set(ALCEDO_MAIN_ICON_ICNS "${CMAKE_CURRENT_BINARY_DIR}/alcedo_icon.icns")
 
     find_program(ALCEDO_SIPS_EXECUTABLE sips REQUIRED)
     find_program(ALCEDO_ICONUTIL_EXECUTABLE iconutil REQUIRED)
@@ -1112,11 +1123,11 @@ if(APPLE)
         VERBATIM
     )
 
-    add_custom_target(PuerhLabMainIcon DEPENDS "${ALCEDO_MAIN_ICON_ICNS}")
-    add_dependencies(alcedo_main PuerhLabMainIcon)
+    add_custom_target(AlcedoStudioMainIcon DEPENDS "${ALCEDO_MAIN_ICON_ICNS}")
+    add_dependencies(alcedo_main AlcedoStudioMainIcon)
     set_source_files_properties("${ALCEDO_MAIN_ICON_ICNS}" PROPERTIES MACOSX_PACKAGE_LOCATION "Resources")
     target_sources(alcedo_main PRIVATE "${ALCEDO_MAIN_ICON_ICNS}")
-    set_target_properties(alcedo_main PROPERTIES MACOSX_BUNDLE_ICON_FILE "alcedo_main.icns")
+    set_target_properties(alcedo_main PROPERTIES MACOSX_BUNDLE_ICON_FILE "alcedo_icon.icns")
 endif()
 
 if(WIN32)
@@ -1172,6 +1183,10 @@ set_target_properties(alcedo_main PROPERTIES
 if(APPLE)
     set_target_properties(alcedo_main PROPERTIES
         MACOSX_BUNDLE ${ALCEDO_MACOS_BUNDLE}
+        MACOSX_BUNDLE_BUNDLE_NAME "${ALCEDO_MACOS_BUNDLE_NAME}"
+        MACOSX_BUNDLE_GUI_IDENTIFIER "${ALCEDO_MACOS_BUNDLE_IDENTIFIER}"
+        MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
+        MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"
     )
 endif()
 

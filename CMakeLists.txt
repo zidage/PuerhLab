@@ -1,5 +1,9 @@
 cmake_minimum_required(VERSION 3.19)
 
+if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Darwin" AND
+   (NOT DEFINED CMAKE_OSX_DEPLOYMENT_TARGET OR "${CMAKE_OSX_DEPLOYMENT_TARGET}" STREQUAL ""))
+    set(CMAKE_OSX_DEPLOYMENT_TARGET "13.3" CACHE STRING "Minimum macOS version supported by the built binaries." FORCE)
+endif()
 
 #set(CMAKE_C_COMPILER "clang")
 #set(CMAKE_CXX_COMPILER "clang++")
@@ -47,6 +51,21 @@ set(ALCEDO_MACOS_CODESIGN_IDENTITY "-"
 set(ALCEDO_QT_PREFIX ""
     CACHE PATH
     "Optional Qt installation prefix for macOS packaging builds (contains bin/, lib/cmake/Qt6, plugins/, and qml/).")
+if(NOT DEFINED ALCEDO_MACOS_BUNDLE_NAME OR
+   "${ALCEDO_MACOS_BUNDLE_NAME}" STREQUAL "" OR
+   "${ALCEDO_MACOS_BUNDLE_NAME}" STREQUAL "PuerhLab")
+    set(ALCEDO_MACOS_BUNDLE_NAME "AlcedoStudio"
+        CACHE STRING
+        "Display/executable name for the packaged macOS .app bundle."
+        FORCE)
+else()
+    set(ALCEDO_MACOS_BUNDLE_NAME "${ALCEDO_MACOS_BUNDLE_NAME}"
+        CACHE STRING
+        "Display/executable name for the packaged macOS .app bundle.")
+endif()
+set(ALCEDO_MACOS_BUNDLE_IDENTIFIER "studio.alcedo.AlcedoStudio"
+    CACHE STRING
+    "Bundle identifier for the packaged macOS .app bundle.")
 
 function(alcedo_append_existing_prefix prefix)
     if(EXISTS "${prefix}")
@@ -600,11 +619,11 @@ if(TARGET ${ALCEDO_MAIN_BIN})
     if(APPLE AND ALCEDO_MACOS_BUNDLE)
         # Match the app bundle name to the QML module URI (Alcedo.Main)
         # so that Qt's QML deploy puts files in the correct bundle.
-        set_target_properties(${ALCEDO_MAIN_BIN} PROPERTIES OUTPUT_NAME Alcedo)
+        set_target_properties(${ALCEDO_MAIN_BIN} PROPERTIES OUTPUT_NAME "${ALCEDO_MACOS_BUNDLE_NAME}")
         set_property(TARGET ${ALCEDO_MAIN_BIN} APPEND PROPERTY INSTALL_RPATH "@executable_path/../Frameworks")
 
         # macOS: install the .app bundle into the prefix root so that
-        # CPack picks up  Alcedo.app/  directly.
+        # CPack picks up the app bundle directly.
         install(TARGETS ${ALCEDO_MAIN_BIN}
             BUNDLE  DESTINATION .
             RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
@@ -612,9 +631,10 @@ if(TARGET ${ALCEDO_MAIN_BIN})
 
         # Copy asset folders into Contents/MacOS/ (next to the executable)
         set(_config_dir "${CMAKE_SOURCE_DIR}/alcedo_studio/src/config")
-        set(_bundle_macos_dest "Alcedo.app/Contents/MacOS")
-        set(_bundle_resources_dest "Alcedo.app/Contents/Resources")
-        set(_bundle_frameworks_dest "Alcedo.app/Contents/Frameworks")
+        set(_alcedo_macos_app_bundle "${ALCEDO_MACOS_BUNDLE_NAME}.app")
+        set(_bundle_macos_dest "${_alcedo_macos_app_bundle}/Contents/MacOS")
+        set(_bundle_resources_dest "${_alcedo_macos_app_bundle}/Contents/Resources")
+        set(_bundle_frameworks_dest "${_alcedo_macos_app_bundle}/Contents/Frameworks")
         install(DIRECTORY "${_config_dir}/fonts/" DESTINATION "${_bundle_macos_dest}/fonts")
         install(DIRECTORY "${_config_dir}/icc/" DESTINATION "${_bundle_macos_dest}/config/icc")
         install(DIRECTORY "${_config_dir}/lens_calib/" DESTINATION "${_bundle_macos_dest}/config/lens_calib")
@@ -876,11 +896,10 @@ endif()
 # Build & package workflow:
 #   cmake --preset macos_release
 #   cmake --build --preset macos_release
-#   cmake --install build/macos-release          # populates build/install/
-#   cd build/macos-release && cpack              # creates the DMG + ZIP
+#   cmake --build --preset macos_package         # install + create the DMG + ZIP
 #
 # End-user can run the app from the terminal after mounting/extracting:
-#   ./Alcedo.app/Contents/MacOS/Alcedo
+#   ./AlcedoStudio.app/Contents/MacOS/AlcedoStudio
 # ────────────────────────────────────────────────────────────────────────────
 if(APPLE AND ALCEDO_MACOS_BUNDLE AND TARGET ${ALCEDO_MAIN_BIN})
 
@@ -938,7 +957,7 @@ if(APPLE AND ALCEDO_MACOS_BUNDLE AND TARGET ${ALCEDO_MAIN_BIN})
     # Here we only patch the OpenBLAS -> libgfortran -> libquadmath/libgcc_s chain.
     install(CODE
         "
-        set(_alcedo_app_path \"\${CMAKE_INSTALL_PREFIX}/Alcedo.app\")
+        set(_alcedo_app_path \"\${CMAKE_INSTALL_PREFIX}/${ALCEDO_MACOS_BUNDLE_NAME}.app\")
         set(_alcedo_fw_dir   \"\${_alcedo_app_path}/Contents/Frameworks\")
         set(_alcedo_search_dirs \"${_alcedo_runtime_dirs_joined}\")
 
@@ -1020,6 +1039,33 @@ if(APPLE AND ALCEDO_MACOS_BUNDLE AND TARGET ${ALCEDO_MAIN_BIN})
             )
         endif()
 
+        set(_alcedo_dylib_ids
+            \"libopencv_core.412.dylib=@rpath/libopencv_core.412.dylib\"
+            \"libopencv_imgproc.412.dylib=@rpath/libopencv_imgproc.412.dylib\"
+            \"libopencv_imgcodecs.412.dylib=@rpath/libopencv_imgcodecs.412.dylib\"
+            \"libopencv_videoio.412.dylib=@rpath/libopencv_videoio.412.dylib\"
+            \"libopencv_features2d.412.dylib=@rpath/libopencv_features2d.412.dylib\"
+            \"libopencv_flann.412.dylib=@rpath/libopencv_flann.412.dylib\"
+            \"libgcc_s.1.1.dylib=@rpath/libgcc_s.1.1.dylib\"
+            \"libjxl_cms.0.11.2.dylib=@rpath/libjxl_cms.0.11.dylib\"
+        )
+        foreach(_alcedo_dylib_id IN LISTS _alcedo_dylib_ids)
+            string(REPLACE \"=\" \";\" _alcedo_dylib_id_parts \"\${_alcedo_dylib_id}\")
+            list(GET _alcedo_dylib_id_parts 0 _alcedo_dylib_name)
+            list(GET _alcedo_dylib_id_parts 1 _alcedo_dylib_install_name)
+            set(_alcedo_dylib_path \"\${_alcedo_fw_dir}/\${_alcedo_dylib_name}\")
+            if(EXISTS \"\${_alcedo_dylib_path}\")
+                execute_process(COMMAND /bin/chmod u+w \"\${_alcedo_dylib_path}\" ERROR_QUIET)
+                execute_process(
+                    COMMAND /usr/bin/install_name_tool -id \"\${_alcedo_dylib_install_name}\" \"\${_alcedo_dylib_path}\"
+                    RESULT_VARIABLE _alcedo_install_id_result
+                )
+                if(NOT _alcedo_install_id_result EQUAL 0)
+                    message(FATAL_ERROR \"Failed to set install name for \${_alcedo_dylib_path}\")
+                endif()
+            endif()
+        endforeach()
+
         # Optional sanity check for the patched libgfortran.
         execute_process(
             COMMAND /usr/bin/otool -L \"\${_alcedo_fw_dir}/libgfortran.5.dylib\"
@@ -1039,7 +1085,7 @@ if(APPLE AND ALCEDO_MACOS_BUNDLE AND TARGET ${ALCEDO_MAIN_BIN})
     # Sign only after all bundle mutations are complete.
     if(NOT "${ALCEDO_MACOS_CODESIGN_IDENTITY}" STREQUAL "")
         install(CODE
-            "set(_alcedo_app_path \"\${CMAKE_INSTALL_PREFIX}/Alcedo.app\")
+            "set(_alcedo_app_path \"\${CMAKE_INSTALL_PREFIX}/${ALCEDO_MACOS_BUNDLE_NAME}.app\")
              if(EXISTS \"\${_alcedo_app_path}\")
                  if(EXISTS \"/usr/bin/codesign\")
                      execute_process(
@@ -1112,11 +1158,24 @@ set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
 set(CPACK_PACKAGE_FILE_NAME "${CPACK_PACKAGE_NAME}-${CPACK_PACKAGE_VERSION}-${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}")
 if(APPLE AND ALCEDO_MACOS_BUNDLE)
     set(CPACK_GENERATOR "DragNDrop;ZIP")
-    set(CPACK_DMG_VOLUME_NAME "Alcedo")
+    set(CPACK_PACKAGE_NAME "${ALCEDO_MACOS_BUNDLE_NAME}")
+    set(CPACK_PACKAGE_FILE_NAME "${CPACK_PACKAGE_NAME}-${CPACK_PACKAGE_VERSION}-${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}")
+    set(CPACK_DMG_VOLUME_NAME "${ALCEDO_MACOS_BUNDLE_NAME}")
     # Include the .app bundle at the top level of the ZIP so the user
-    # extracts it and finds Alcedo.app/ directly.
+    # extracts it and finds the app bundle directly.
     set(CPACK_INCLUDE_TOPLEVEL_DIRECTORY OFF)
 else()
     set(CPACK_GENERATOR "ZIP")
 endif()
 include(CPack)
+
+if(APPLE AND ALCEDO_MACOS_BUNDLE AND TARGET ${ALCEDO_MAIN_BIN})
+    add_custom_target(macos_package
+        COMMAND "${CMAKE_COMMAND}" --install "${CMAKE_BINARY_DIR}"
+        COMMAND "${CMAKE_CPACK_COMMAND}" --config "${CMAKE_BINARY_DIR}/CPackConfig.cmake" -B "${CMAKE_INSTALL_PREFIX}"
+        DEPENDS ${ALCEDO_MAIN_BIN}
+        WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
+        COMMENT "Installing ${ALCEDO_MACOS_BUNDLE_NAME}.app and creating macOS packages"
+        USES_TERMINAL
+    )
+endif()

@@ -107,6 +107,7 @@
         "ALCEDO_ENABLE_OPENGL_EDITOR": "OFF",
         "ALCEDO_BUILD_TESTS": "OFF",
         "ALCEDO_MACOS_BUNDLE": "ON",
+        "CMAKE_OSX_DEPLOYMENT_TARGET": "13.3",
         "ALCEDO_QT_PREFIX": "/Users/zidage/Qt/6.9.3/macos",
         "CMAKE_INSTALL_PREFIX": "${sourceDir}/build/install"
       }
@@ -155,6 +156,14 @@
       "name": "macos_release",
       "configurePreset": "macos_release",
       "jobs": 8
+    },
+    {
+      "name": "macos_package",
+      "configurePreset": "macos_release",
+      "jobs": 8,
+      "targets": [
+        "macos_package"
+      ]
     }
   ],
   "testPresets": [
