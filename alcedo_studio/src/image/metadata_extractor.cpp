@@ -690,6 +690,12 @@ auto LookupCameraColorMatrices(const std::string& camera_make,
   return false;
 }
 
+void MarkAdobeCameraMatrixDatabaseIlluminants(RawRuntimeColorContext& ctx) {
+  ctx.calibration_illuminants_valid_ = true;
+  ctx.color_matrix_1_cct_            = 2856.0;
+  ctx.color_matrix_2_cct_            = 6504.0;
+}
+
 auto ParseExifNumericToken(std::string token, double& out_value) -> bool {
   token.erase(std::remove_if(token.begin(), token.end(), [](unsigned char ch) {
                 return ch == '[' || ch == ']' || ch == '(' || ch == ')' || ch == ',';
@@ -1118,6 +1124,9 @@ auto ExtractDngMetadataToImageFast(const image_path_t& image_path, Image& image)
   if (!ctx.color_matrices_valid_) {
     ctx.color_matrices_valid_ = LookupCameraColorMatrices(
         ctx.camera_make_, ctx.camera_model_, ctx.color_matrix_1_, ctx.color_matrix_2_);
+    if (ctx.color_matrices_valid_) {
+      MarkAdobeCameraMatrixDatabaseIlluminants(ctx);
+    }
   }
 
   ctx.crop_factor_hint_ = ResolveCropFactorHint(ctx.focal_length_mm_, ctx.focal_35mm_mm_);
@@ -1213,6 +1222,9 @@ void PopulateMetadataRuntimeContext(LibRaw& raw_processor, RawRuntimeColorContex
   ctx.color_matrices_valid_ = LookupCameraColorMatrices(
       ctx.camera_make_, ctx.camera_model_,
       ctx.color_matrix_1_, ctx.color_matrix_2_);
+  if (ctx.color_matrices_valid_) {
+    MarkAdobeCameraMatrixDatabaseIlluminants(ctx);
+  }
 
   // Mark as valid for downstream consumers (not an actual decode, just metadata)
   ctx.valid_                  = true;
