@@ -3,7 +3,6 @@
 //  Additional permission under GPLv3 section 7 applies; see the LICENSE file.
 
 #include "edit/operators/cst/cst_op.hpp"
-#include "edit/operators/cst/ocio_config_utils.hpp"
 
 #include <OpenColorIO/OpenColorIO.h>
 #include <OpenColorIO/OpenColorTransforms.h>
