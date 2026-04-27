@@ -162,9 +162,9 @@ struct OperatorParams {
   bool                         to_ws_enabled_            = true;
   bool                         is_working_space_         = true;
   bool                         to_ws_dirty_              = false;
-  OCIO::ConstCPUProcessorRcPtr cpu_to_working_processor_ = nullptr;
-  OCIO::ConstGPUProcessorRcPtr gpu_to_working_processor_ = nullptr;
-  OCIO::BakerRcPtr             to_ws_lut_baker_          = nullptr;
+  // OCIO::ConstCPUProcessorRcPtr cpu_to_working_processor_ = nullptr;
+  // OCIO::ConstGPUProcessorRcPtr gpu_to_working_processor_ = nullptr;
+  // OCIO::BakerRcPtr             to_ws_lut_baker_          = nullptr;
 
   // Dynamic RAW color temperature / white balance state.
   bool                         color_temp_enabled_        = true;
@@ -235,17 +235,18 @@ struct OperatorParams {
   // Look modification transform
   bool                         lmt_enabled_              = false;
   bool                         to_lmt_dirty_             = false;
-  OCIO::ConstCPUProcessorRcPtr cpu_lmt_processor_        = nullptr;
-  OCIO::ConstGPUProcessorRcPtr gpu_lmt_processor_        = nullptr;
+  // OCIO::ConstCPUProcessorRcPtr cpu_lmt_processor_        = nullptr;
+  // OCIO::ConstGPUProcessorRcPtr gpu_lmt_processor_        = nullptr;
   std::filesystem::path        lmt_lut_path_             = {};
 
   // Output transform runtime (ACES 2.0 or OpenDRT)
   bool                         to_output_enabled_        = true;
   bool                         to_output_dirty_          = false;
-  OCIO::ConstCPUProcessorRcPtr cpu_to_output_processor_  = nullptr;
-  // [UNUSED] Current approach does not use OCIO or LUT in GPU path
-  OCIO::ConstGPUProcessorRcPtr gpu_to_output_processor_  = nullptr;
-  OCIO::BakerRcPtr             to_output_lut_baker_      = nullptr;
+  // OCIO::ConstCPUProcessorRcPtr cpu_to_output_processor_  = nullptr;
+  // // [UNUSED] Current approach does not use OCIO or LUT in GPU path
+  // OCIO::ConstGPUProcessorRcPtr gpu_to_output_processor_  = nullptr;
+  // OCIO::BakerRcPtr             to_output_lut_baker_      = nullptr;
+
   // [WIP] Ported from Academy Color Encoding System Core Transforms
   // A CUDA implementation of the CTL operators
   // https://github.com/aces-aswf/aces-core

@@ -29,11 +29,11 @@ class OCIO_ACES_Transform_Op : public OperatorBase<OCIO_ACES_Transform_Op> {
 
   std::optional<std::filesystem::path> lmt_path_;
 
-  OCIO::ConstConfigRcPtr               config_;
+  // OCIO::ConstConfigRcPtr               config_;
 
-  OCIO::ConstCPUProcessorRcPtr         cpu_processor_;
-  OCIO::ConstGPUProcessorRcPtr         gpu_processor_;
-  OCIO::BakerRcPtr                     baker_;
+  // OCIO::ConstCPUProcessorRcPtr         cpu_processor_;
+  // OCIO::ConstGPUProcessorRcPtr         gpu_processor_;
+  // OCIO::BakerRcPtr                     baker_;
 
   void                                 SetCSTProcessors(const char* input, const char* output);
   void                                 SetDisplayProcessors(const char* output);

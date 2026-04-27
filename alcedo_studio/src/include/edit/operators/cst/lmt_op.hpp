@@ -23,10 +23,10 @@ namespace OCIO = OCIO_NAMESPACE;
 class OCIO_LMT_Transform_Op : public OperatorBase<OCIO_LMT_Transform_Op> {
  private:
   std::filesystem::path        lmt_path_;
-  OCIO::ConstConfigRcPtr       config_;
+  // OCIO::ConstConfigRcPtr       config_;
 
-  OCIO::ConstCPUProcessorRcPtr cpu_processor_;
-  OCIO::ConstGPUProcessorRcPtr gpu_processor_;
+  // OCIO::ConstCPUProcessorRcPtr cpu_processor_;
+  // OCIO::ConstGPUProcessorRcPtr gpu_processor_;
 
  public:
   static constexpr PriorityLevel     priority_level_    = 3;
