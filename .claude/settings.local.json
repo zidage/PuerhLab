@@ -25,7 +25,8 @@
       "Bash(cmd //c \"call scripts\\\\\\\\msvc_env.cmd --build --preset win_debug --parallel 4 --target alcedo_main\")",
       "Bash(cd /d D:\\\\Projects\\\\pu-erh_lab)",
       "Bash(cmd /c \"call scripts\\\\msvc_env.cmd --build --preset win_debug --parallel 4 --target alcedo_main\")",
-      "Bash(cmd //c \"call scripts\\\\msvc_env.cmd --build --preset win_debug --parallel 4 --target alcedo_main\")"
+      "Bash(cmd //c \"call scripts\\\\msvc_env.cmd --build --preset win_debug --parallel 4 --target alcedo_main\")",
+      "Bash(python -c ' *)"
     ]
   }
 }

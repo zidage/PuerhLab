@@ -35,6 +35,8 @@ Dialog {
     property color overlayColor: Qt.rgba(11 / 255, 12 / 255, 14 / 255, 0.60)
     property color baseColor: "#111214"
     property color exitColor: "#D3D0CB"
+    // Match the host window's corner radius so the modal backdrop doesn't bleed past rounded corners.
+    property real cornerRadius: 0
     property bool showAllRecent: false
     property int currentPage: 0
     property string projectName: qsTr("Untitled Project")
@@ -99,19 +101,44 @@ Dialog {
     Overlay.modal: Item {
         anchors.fill: parent
 
-        MultiEffect {
+        // Hidden rounded-rect used as the alpha mask for the entire backdrop
+        // (blur + dim). White pixels keep, transparent pixels cut away.
+        Rectangle {
+            id: backdropMask
             anchors.fill: parent
-            source: dialog.blurSource
-            blurEnabled: true
-            blur: 0.72
-            blurMax: 72
-            saturation: -0.24
-            brightness: -0.08
+            radius: dialog.cornerRadius
+            color: "white"
+            visible: false
+            layer.enabled: true
+            layer.smooth: true
         }
 
-        Rectangle {
+        // Wrap blur + dim in a layer-rendered Item, then mask the layer.
+        // This reliably clips both effects to the rounded shape.
+        Item {
+            id: maskedBackdrop
             anchors.fill: parent
-            color: dialog.overlayColor
+            layer.enabled: true
+            layer.smooth: true
+            layer.effect: MultiEffect {
+                maskEnabled: dialog.cornerRadius > 0
+                maskSource: backdropMask
+            }
+
+            MultiEffect {
+                anchors.fill: parent
+                source: dialog.blurSource
+                blurEnabled: true
+                blur: 0.72
+                blurMax: 72
+                saturation: -0.24
+                brightness: -0.08
+            }
+
+            Rectangle {
+                anchors.fill: parent
+                color: dialog.overlayColor
+            }
         }
 
         MouseArea {

@@ -7,12 +7,20 @@ import QtQuick.Effects
 
 ApplicationWindow {
     id: root
-    width: 1460
-    height: 900
+    width: 1200
+    height: 760
+    minimumWidth: 960
+    minimumHeight: 640
     visible: true
-    visibility: Window.Maximized
+    visibility: Window.Windowed
     title: qsTr("Alcedo Studio")
+    flags: Qt.Window | Qt.FramelessWindowHint
     font.family: appTheme.uiFontFamily
+
+    readonly property bool windowMaximized: visibility === Window.Maximized || visibility === Window.FullScreen
+    readonly property real maximizedInset: 0
+    // Snap radius — animating it together with the OS resize causes layout jitter.
+    readonly property real windowCornerRadius: windowMaximized ? 0 : 12
 
     // Theme palette — borderless, luminance-separated zones
     readonly property color toneGold: appTheme.toneGold
@@ -95,7 +103,8 @@ ApplicationWindow {
     Material.accent: root.colAccentPrimary
     Material.background: root.colBgPanel
     Material.foreground: root.colText
-    color: root.colBgPanel
+    // Transparent root surface so DWM does not draw a frame/border around our rounded content.
+    color: "transparent"
 
     property bool inspectorVisible: true
     property real inspectorWidth: 300
@@ -718,6 +727,12 @@ ApplicationWindow {
             deleteConfirmDialog.close()
             imageDetailsDialog.close()
             root.showSnackbar(albumBackend.serviceMessage)
+
+            // Auto-maximize when a project is successfully opened.
+            if (albumBackend.serviceReady && !root.windowMaximized && !maximizeTransition.running) {
+                maximizeTransition.targetMaximize = true
+                maximizeTransition.start()
+            }
         }
         function onFolderSelectionChanged() {
             selectionState.clearSelectedImages()
@@ -813,10 +828,13 @@ ApplicationWindow {
     Item {
         id: mainContent
         anchors.fill: parent
+        anchors.margins: root.maximizedInset
+        clip: true
 
         Rectangle {
             anchors.fill: parent
             color: root.colBgCanvas
+            radius: root.windowCornerRadius
         }
 
     ColumnLayout {
@@ -834,12 +852,24 @@ ApplicationWindow {
             border.color: root.colGlassStroke
             z: 1
 
+            // Drag the window from any empty area of the toolbar; double-click toggles maximize.
+            TapHandler {
+                acceptedButtons: Qt.LeftButton
+                gesturePolicy: TapHandler.DragThreshold
+                onDoubleTapped: root.toggleMaximizeAnimated()
+            }
+            DragHandler {
+                target: null
+                grabPermissions: PointerHandler.CanTakeOverFromAnything
+                onActiveChanged: if (active) root.startSystemMove()
+            }
+
             RowLayout {
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
                 anchors.leftMargin: 20
-                anchors.rightMargin: 20
+                anchors.rightMargin: 0
                 spacing: 10
                 Row {
                     spacing: 0
@@ -940,6 +970,60 @@ ApplicationWindow {
                         easing.type: Easing.OutCubic
                     }
                     onClicked: inspectorVisible = !inspectorVisible
+                }
+
+                // ── Native-styled Windows caption buttons ──
+                Item { Layout.preferredWidth: 8 }
+
+                Row {
+                    id: windowCaptionButtons
+                    Layout.preferredHeight: 56
+                    spacing: 0
+
+                    component CaptionButton: Rectangle {
+                        id: capBtn
+                        property string glyph: ""
+                        property color hoverColor: root.colHover
+                        property color glyphColor: root.colText
+                        signal activated()
+                        width: 46
+                        height: 56
+                        color: capMA.containsMouse
+                               ? hoverColor
+                               : "transparent"
+
+                        Label {
+                            anchors.centerIn: parent
+                            text: capBtn.glyph
+                            // Segoe MDL2 Assets ships on both Win10 and Win11; the Chrome
+                            // caption glyphs share code points with Segoe Fluent Icons.
+                            font.family: "Segoe MDL2 Assets"
+                            font.pixelSize: 10
+                            color: capBtn.glyphColor
+                        }
+
+                        MouseArea {
+                            id: capMA
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.ArrowCursor
+                            onClicked: capBtn.activated()
+                        }
+                    }
+
+                    CaptionButton {
+                        glyph: "" // ChromeMinimize
+                        onActivated: minimizeAnimation.start()
+                    }
+                    CaptionButton {
+                        glyph: root.visibility === Window.Maximized ? "" : "" // ChromeRestore / ChromeMaximize
+                        onActivated: root.toggleMaximizeAnimated()
+                    }
+                    CaptionButton {
+                        glyph: "" // ChromeClose
+                        hoverColor: root.colDanger
+                        onActivated: root.close()
+                    }
                 }
             }
         }
@@ -1293,10 +1377,133 @@ ApplicationWindow {
 
     }
 
+    // ── Minimize / restore content animations ──
+    SequentialAnimation {
+        id: minimizeAnimation
+        ParallelAnimation {
+            NumberAnimation { target: mainContent; property: "scale"; from: 1.0; to: 0.96; duration: 130; easing.type: Easing.InCubic }
+            NumberAnimation { target: mainContent; property: "opacity"; to: 0.0; duration: 110; easing.type: Easing.InCubic }
+        }
+        ScriptAction { script: root.showMinimized() }
+        ScriptAction { script: { mainContent.scale = 1.0 } }
+    }
+
+    // Fade-through: hide content fully → switch visibility (OS animates window) → wait for the
+    // OS resize to finish → fade back in. Hiding during the resize avoids the visible Layout
+    // re-flow ("twitch") that happens while the window dimensions are interpolating.
+    function toggleMaximizeAnimated() {
+        if (maximizeTransition.running) {
+            return
+        }
+        maximizeTransition.targetMaximize = !root.windowMaximized
+        maximizeTransition.start()
+    }
+
+    SequentialAnimation {
+        id: maximizeTransition
+        property bool targetMaximize: false
+
+        NumberAnimation { target: mainContent; property: "opacity"; to: 0.0; duration: 110; easing.type: Easing.OutCubic }
+        ScriptAction {
+            script: {
+                if (maximizeTransition.targetMaximize) {
+                    root.showMaximized()
+                } else {
+                    root.showNormal()
+                }
+            }
+        }
+        // Wait long enough for the Win11 maximize/restore animation to finish.
+        PauseAnimation { duration: 240 }
+        NumberAnimation { target: mainContent; property: "opacity"; to: 1.0; duration: 180; easing.type: Easing.OutCubic }
+    }
+
+    NumberAnimation {
+        id: restoreAnimation
+        target: mainContent
+        property: "opacity"
+        from: 0.0
+        to: 1.0
+        duration: 200
+        easing.type: Easing.OutCubic
+    }
+
+    Connections {
+        target: root
+        function onVisibilityChanged() {
+            if (root.visibility !== Window.Minimized && root.visibility !== Window.Hidden) {
+                if (mainContent.opacity < 1.0 && !restoreAnimation.running) {
+                    restoreAnimation.start()
+                }
+            }
+        }
+    }
+
+    // ── Frameless-window resize handles (native DWM resize via startSystemResize) ──
+    Item {
+        id: resizeHandles
+        anchors.fill: parent
+        visible: root.visibility === Window.Windowed
+        z: 1000
+
+        readonly property int edge: 4
+        readonly property int corner: 10
+
+        MouseArea {
+            anchors { left: parent.left; right: parent.right; top: parent.top }
+            height: resizeHandles.edge
+            cursorShape: Qt.SizeVerCursor
+            onPressed: root.startSystemResize(Qt.TopEdge)
+        }
+        MouseArea {
+            anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
+            height: resizeHandles.edge
+            cursorShape: Qt.SizeVerCursor
+            onPressed: root.startSystemResize(Qt.BottomEdge)
+        }
+        MouseArea {
+            anchors { top: parent.top; bottom: parent.bottom; left: parent.left }
+            width: resizeHandles.edge
+            cursorShape: Qt.SizeHorCursor
+            onPressed: root.startSystemResize(Qt.LeftEdge)
+        }
+        MouseArea {
+            anchors { top: parent.top; bottom: parent.bottom; right: parent.right }
+            width: resizeHandles.edge
+            cursorShape: Qt.SizeHorCursor
+            onPressed: root.startSystemResize(Qt.RightEdge)
+        }
+        MouseArea {
+            anchors { top: parent.top; left: parent.left }
+            width: resizeHandles.corner; height: resizeHandles.corner
+            cursorShape: Qt.SizeFDiagCursor
+            onPressed: root.startSystemResize(Qt.TopEdge | Qt.LeftEdge)
+        }
+        MouseArea {
+            anchors { top: parent.top; right: parent.right }
+            width: resizeHandles.corner; height: resizeHandles.corner
+            cursorShape: Qt.SizeBDiagCursor
+            onPressed: root.startSystemResize(Qt.TopEdge | Qt.RightEdge)
+        }
+        MouseArea {
+            anchors { bottom: parent.bottom; left: parent.left }
+            width: resizeHandles.corner; height: resizeHandles.corner
+            cursorShape: Qt.SizeBDiagCursor
+            onPressed: root.startSystemResize(Qt.BottomEdge | Qt.LeftEdge)
+        }
+        MouseArea {
+            anchors { bottom: parent.bottom; right: parent.right }
+            width: resizeHandles.corner; height: resizeHandles.corner
+            cursorShape: Qt.SizeFDiagCursor
+            onPressed: root.startSystemResize(Qt.BottomEdge | Qt.RightEdge)
+        }
+    }
+
     WelcomeDialog {
         id: welcomeDialog
         z: 30
         blurSource: mainContent
+        cornerRadius: root.windowCornerRadius
         recentProjects: albumBackend.recentProjects
         languageOptions: root.languageOptions
         currentLanguageIndex: root.languageIndexForCode(languageManager.currentLanguageCode)
