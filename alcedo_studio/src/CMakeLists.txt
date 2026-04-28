@@ -764,10 +764,10 @@ if(APPLE)
     target_link_libraries(ExportIccProfileResolver PRIVATE "-framework CoreGraphics" "-framework CoreFoundation")
 endif()
 
-if(ALCEDO_ULTRAHDR_AVAILABLE)
+if(PUERHLAB_ULTRAHDR_AVAILABLE)
     def_library(UltraHdrWriter
         SOURCES io/image/ultra_hdr_writer.cpp
-        PUBLIC_DEPS OpenImageIO::OpenImageIO ImageBuffer Exiv2 alcedo::uhdr ExportIccProfileResolver
+        PUBLIC_DEPS OpenImageIO::OpenImageIO ImageBuffer Exiv2 puerhlab::uhdr ExportIccProfileResolver
         PRIVATE_DEPS opencv_core
     )
 
@@ -781,7 +781,7 @@ def_library(ImageWriter
     PUBLIC_DEPS OpenImageIO::OpenImageIO ImageBuffer ExportIccProfileResolver
     PRIVATE_DEPS ${ALCEDO_OPENCV_IMAGE_DEPS}
 )
-if(ALCEDO_ULTRAHDR_AVAILABLE)
+if(PUERHLAB_ULTRAHDR_AVAILABLE)
     target_link_libraries(ImageWriter PUBLIC UltraHdrWriter)
     target_compile_definitions(ImageWriter PUBLIC ALCEDO_HAS_ULTRAHDR=1)
 endif()
