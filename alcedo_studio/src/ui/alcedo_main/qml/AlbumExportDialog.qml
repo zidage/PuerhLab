@@ -204,6 +204,17 @@ Dialog {
         ensureValidBitDepthSelection()
     }
     onEffectiveExportFormatChanged: ensureValidBitDepthSelection()
+    onUltraHdrSelectedChanged: {
+        if (ultraHdrSelected) {
+            if (exportMaxSideField.text.length === 0) {
+                exportMaxSideField.text = "8192"
+            } else {
+                const v = parseInt(exportMaxSideField.text)
+                if (!isNaN(v) && v > 8192)
+                    exportMaxSideField.text = "8192"
+            }
+        }
+    }
 
     FolderDialog {
         id: exportFolderDialog
@@ -531,7 +542,10 @@ Dialog {
                                         id: exportMaxSideField
                                         Layout.fillWidth: true
                                         placeholderText: "e.g. 2048"
-                                        validator: IntValidator { bottom: 256; top: 16384 }
+                                        validator: IntValidator {
+                                            bottom: 256
+                                            top: root.ultraHdrSelected ? 8192 : 16384
+                                        }
                                         inputMethodHints: Qt.ImhDigitsOnly
                                         font.family: root.dataFontFamily
                                         font.pixelSize: 12
@@ -563,50 +577,59 @@ Dialog {
                             }
 
                             RowLayout {
+                                id: metadataRow
                                 Layout.fillWidth: true
-                                spacing: 10
-                                Label {
-                                    text: qsTr("HDR Output Format")
-                                    color: root.mutedTextColor
-                                    font.pixelSize: 12
-                                    Layout.alignment: Qt.AlignVCenter
-                                }
-                                Item { Layout.fillWidth: true }
-                                ComboBox {
-                                    id: hdrExportMode
-                                    enabled: root.hdrExportAvailable && !albumBackend.exportInFlight
-                                    model: [
-                                        { text: qsTr("Ultra HDR"),        value: "ULTRA_HDR"            },
-                                        { text: qsTr("Embed ICC Profile"), value: "EMBEDDED_PROFILE_ONLY" }
-                                    ]
-                                    textRole: "text"
-                                    valueRole: "value"
-                                    implicitWidth: 170
-                                    onCurrentValueChanged: {
-                                        if (currentValue === "ULTRA_HDR")
-                                            exportFormat.currentIndex = 0
+                                spacing: 12
+
+                                // HDR Export
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    Layout.preferredWidth: (metadataRow.width - metadataRow.spacing) / 2
+                                    spacing: 4
+
+                                    Label {
+                                        text: qsTr("HDR Export")
+                                        color: root.mutedTextColor
+                                        font.pixelSize: 11
+                                    }
+
+                                    ComboBox {
+                                        id: hdrExportMode
+                                        Layout.fillWidth: true
+                                        enabled: root.hdrExportAvailable && !albumBackend.exportInFlight
+                                        model: [
+                                            { text: qsTr("Ultra HDR"),        value: "ULTRA_HDR"            },
+                                            { text: qsTr("ICC Profile"),      value: "EMBEDDED_PROFILE_ONLY" }
+                                        ]
+                                        textRole: "text"
+                                        valueRole: "value"
+                                        onCurrentValueChanged: {
+                                            if (currentValue === "ULTRA_HDR")
+                                                exportFormat.currentIndex = 0
+                                        }
                                     }
                                 }
-                            }
 
-                            CheckBox {
-                                id: embedColorProfileCheck
-                                text: qsTr("Embed Color Profile")
-                                checked: true
-                                enabled: !root.ultraHdrSelected && !albumBackend.exportInFlight
-                                font.pixelSize: 12
-                            }
+                                // SDR Export
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    Layout.preferredWidth: (metadataRow.width - metadataRow.spacing) / 2
+                                    spacing: 4
 
-                            Label {
-                                Layout.fillWidth: true
-                                wrapMode: Text.WordWrap
-                                color: root.mutedTextColor
-                                font.pixelSize: 11
-                                text: !root.hdrExportAvailable
-                                    ? qsTr("Ultra HDR is only available when every queued item uses an HDR output EOTF (PQ or HLG). For SDR output, only ICC profile embedding is available.")
-                                    : root.ultraHdrSelected
-                                    ? qsTr("Ultra HDR exports are written as JPEG and include SDR fallback for legacy viewers.")
-                                    : qsTr("Embed the active output ICC profile without Ultra HDR encoding. This mode keeps all export formats available.")
+                                    Label {
+                                        text: qsTr("SDR Export")
+                                        color: root.mutedTextColor
+                                        font.pixelSize: 11
+                                    }
+
+                                    CheckBox {
+                                        id: embedColorProfileCheck
+                                        text: qsTr("Embed ICC Profile")
+                                        checked: true
+                                        enabled: !root.ultraHdrSelected && !albumBackend.exportInFlight
+                                        font.pixelSize: 12
+                                    }
+                                }
                             }
                         }
                     }
