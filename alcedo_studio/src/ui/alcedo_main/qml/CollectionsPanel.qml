@@ -435,9 +435,9 @@ ColumnLayout {
                 Layout.fillWidth: true
                 Layout.preferredHeight: hasSelectedCollection ? 38 : 0
                 radius: 10
-                color: panel.withAlpha(theme.colDanger, 0.12)
+                color: hasSelectedCollection ? panel.withAlpha(theme.colDanger, 0.12) : "transparent"
                 border.width: hasSelectedCollection ? 1 : 0
-                border.color: panel.withAlpha(theme.colDanger, 0.22)
+                border.color: hasSelectedCollection ? panel.withAlpha(theme.colDanger, 0.22) : "transparent"
 
                 Behavior on Layout.preferredHeight {
                     NumberAnimation { duration: 160; easing.type: Easing.OutCubic }
@@ -445,6 +445,7 @@ ColumnLayout {
 
                 Button {
                     anchors.fill: parent
+                    visible: hasSelectedCollection
                     enabled: hasSelectedCollection && backendInteractive
                     text: qsTr("Delete collection")
                     Material.foreground: theme.colText
