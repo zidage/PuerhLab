@@ -1318,10 +1318,10 @@ ApplicationWindow {
                 root.updateWelcomeDialogVisibility()
             }
         }
-        onCreateRequested: {
+        onCreateRequested: function(projectName, storageLocation) {
             root.dismissWelcomeForProjectLaunch()
             root.updateWelcomeDialogVisibility()
-            if (!albumBackend.PromptAndCreateProject()) {
+            if (!albumBackend.CreateProjectInFolderNamed(storageLocation, projectName)) {
                 root.welcomeDismissedForLaunch = false
                 root.updateWelcomeDialogVisibility()
             }
