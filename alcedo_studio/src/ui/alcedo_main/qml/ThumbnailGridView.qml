@@ -404,9 +404,9 @@ Item {
         y: Math.min(overlay.dragStart.y, overlay.dragCurrent.y)
         width: Math.abs(overlay.dragCurrent.x - overlay.dragStart.x)
         height: Math.abs(overlay.dragCurrent.y - overlay.dragStart.y)
-        color: Qt.rgba(252 / 255, 199 / 255, 4 / 255, 0.08)
+        color: Qt.rgba(appTheme.toneMist.r, appTheme.toneMist.g, appTheme.toneMist.b, 0.08)
         border.width: 1
-        border.color: Qt.rgba(252 / 255, 199 / 255, 4 / 255, 0.50)
+        border.color: Qt.rgba(appTheme.toneMist.r, appTheme.toneMist.g, appTheme.toneMist.b, 0.50)
         radius: 2
         z: 10
     }
