@@ -24,7 +24,7 @@ const translations = {
     'features.f1.tag2': '低资源占用',
     'features.f1.tag3': '快速预览',
     'features.f2.title': '双引擎色彩科学',
-    'features.f2.desc': '业界领先的 ACES 与 OpenDRT 双色彩渲染管线，无论是追求真实还原还是艺术风格化，都能找到最适合场景的色彩倾向与影调表达。',
+    'features.f2.desc': 'ACES 与 OpenDRT 双色彩渲染管线，无论是追求真实还原还是艺术风格化，都能找到最适合场景的色彩倾向与影调表达。',
     'features.f2.tag1': 'ACES 色彩管线',
     'features.f2.tag2': 'OpenDRT 渲染',
     'features.f2.tag3': '场景化影调',
