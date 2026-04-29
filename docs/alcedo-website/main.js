@@ -96,7 +96,7 @@ const translations = {
     'features.f1.tag2': 'Low resource usage',
     'features.f1.tag3': 'Fast preview',
     'features.f2.title': 'Dual-Engine Color Science',
-    'features.f2.desc': 'Industry-leading ACES and OpenDRT dual color rendering pipelines. Whether you seek faithful reproduction or artistic stylization, find the perfect color grade for every scene.',
+    'features.f2.desc': 'ACES and OpenDRT dual color rendering pipelines. Whether you seek faithful reproduction or artistic stylization, find the perfect color grade for every scene.',
     'features.f2.tag1': 'ACES pipeline',
     'features.f2.tag2': 'OpenDRT rendering',
     'features.f2.tag3': 'Scene-based tones',
