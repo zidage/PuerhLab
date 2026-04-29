@@ -1,6 +1,6 @@
 <img src="docs/header.jpg" alt="Alcedo Logo" width="100%"/>
 
-[Project website](https://zidage.github.io/Alcedo/en/) | [项目网页](https://zidage.github.io/Alcedo/zh/)
+[Project website](https://zidage.github.io/AlcedoStudio) | [项目网页](https://zidage.github.io/AlcedoStudio)
 
 <p align="right"><a href="./README.md"><strong>English</strong></a> | <a href="./README.zh-CN.md">简体中文</a></p>
 
@@ -81,8 +81,8 @@
 
 ## System Requirements
 
-- Windows 10/11 x64 for the current CUDA editor build, which now defaults to the Qt RHI/D3D11 viewer path. The legacy OpenGL viewer remains optional for compatibility/debugging.
-- macOS on Apple platforms for the Metal-backed Qt application build. The current presets disable the legacy OpenGL editor there, but keep Apple-native pipeline backends enabled.
+- Windows 10/11 x64 for the current CUDA editor build, which now defaults to the Qt RHI/D3D12 viewer path.
+- macOS on Apple platforms for the Metal-backed Qt application build. 
 - NVIDIA GPU with CUDA support (minimum compute capability 6.0 (10-series or later), recommended 7.0+ (20-series or later) for optimal performance) and preferably 6GB+ VRAM for smooth performance with high resolution RAW files (40MP+) on the Windows/CUDA build.
 - A Metal-capable Mac for the macOS/Metal build.
 - At least 8GB of system RAM (16GB+ recommended for larger libraries and smoother performance).
@@ -91,226 +91,37 @@
 
 ## Build from Source
 
-This section mirrors the current setup in `CMakeLists.txt`, `alcedo/tests/CMakeLists.txt`, and NOTICE files.
+Detailed bilingual instructions are in:
+- [docs/build_from_source.md](docs/build_from_source.md)
 
-### Windows (current full feature set)
+构建细节（中英对照）已单独维护在：
+- [docs/build_from_source.md](docs/build_from_source.md)
 
-### 1) Prerequisites
-
-- Windows 10/11 x64
-- Visual Studio 2022 (MSVC toolchain, x64)
-- CMake 3.21+
-- Ninja
-- Git
-- Qt 6 (MSVC 2022 x64), with `Widgets`, `Quick`, `ShaderTools`, and `Test`. `OpenGL` and `OpenGLWidgets` are only needed when building the optional legacy viewer fallback.
-- NVIDIA CUDA Toolkit (optional, but recommended)
-
-### 2) Dependency Layout Used by CMake
-
-- Vendored header/source dependencies: `stduuid`, `uuid_v4`, `UTF8-CPP` (`utfcpp`), `nlohmann/json`, `MurmurHash3` (all these are required to install manually by the user, as they are not included in the repository)
-- Package-managed dependencies (commonly resolved through vcpkg toolchain on Windows): `OpenCV`, `Eigen3`, `OpenGL`, `hwy`, `lcms2`, `OpenColorIO`, `OpenImageIO`, `libraw`, `xxHash`, `OpenMP`, `glib`
-- Test framework: `googletest` (fetched with `FetchContent`)
-- Windows local imported binaries: `DuckDB`, `Exiv2`, `easy_profiler`
-- Lens correction dependency: the upstream `Lensfun` source checkout in `alcedo/src/third_party/lensfun`, built automatically by the top-level CMake build
-- Ultra HDR dependency: the upstream `libultrahdr` source checkout in `alcedo/src/third_party/libultrahdr`, consumed as a git submodule by the top-level CMake build
-- Additional Windows dependency for the bundled Lensfun build: `GLib2`. When the vcpkg toolchain is active, Alcedo Studio will use `vcpkg/installed/<triplet>` automatically. `ALCEDO_LENSFUN_GLIB2_BASE_DIR` is only needed to override that auto-detected location or to point at a non-vcpkg GLib2 package.
-
-### 3) Initialize Bundled Source Submodules
-
-Make sure the upstream `Lensfun` and `libultrahdr` submodules are present before configuring Alcedo Studio:
+Quick commands:
 
 ```powershell
+# Required submodules for current CMake layout
 git submodule update --init --recursive `
-  alcedo/src/third_party/lensfun `
-  alcedo/src/third_party/libultrahdr
-```
+  alcedo_studio/src/third_party/lensfun `
+  alcedo_studio/src/third_party/libultrahdr `
+  alcedo_studio/src/third_party/metal-cpp
 
-For details about the Windows GLib2 prerequisite used by the bundled build:
+# Windows debug (MSVC wrapper + preset)
+cmd /c scripts\msvc_env.cmd --preset win_debug -DCMAKE_PREFIX_PATH="D:/Qt/6.9.3/msvc2022_64/lib/cmake"
+cmd /c scripts\msvc_env.cmd --build --preset win_debug --parallel 8
 
-- [docs/lensfun_build/lensfun_local_build.md](docs/lensfun_build/lensfun_local_build.md)
-
-### 4) Configure and Build Alcedo Studio
-
-Clone and initialize submodules:
-
-```powershell
-git clone --recursive https://github.com/zidage/Alcedo.git
-cd Alcedo
-```
-
-If you cloned earlier without `--recursive`, initialize the source submodules before configuring:
-
-```powershell
-git submodule update --init --recursive `
-  alcedo/src/third_party/lensfun `
-  alcedo/src/third_party/libultrahdr
-```
-
-Bootstrap local vcpkg if needed:
-
-```powershell
-.\vcpkg\bootstrap-vcpkg.bat
-```
-
-Recommended: use `cmd /c scripts\msvc_env.cmd ...` so MSVC environment variables are set automatically.
-Adjust the Qt/easy_profiler paths below to your local environment.
-
-```powershell
-# Debug configure
-cmd /c scripts\msvc_env.cmd --preset win_debug `
-  -DCMAKE_PREFIX_PATH="D:/Qt/6.9.3/msvc2022_64/lib/cmake" `
-  -Deasy_profiler_DIR="$PWD/alcedo/third_party/easy_profiler-v2.1.0-msvc15-win64/lib/cmake/easy_profiler"
-
-# Debug build
-cmd /c scripts\msvc_env.cmd --build --preset win_debug --parallel 4
-```
-
-```powershell
-# Release configure
-cmd /c scripts\msvc_env.cmd --preset win_release `
-  -DCMAKE_PREFIX_PATH="D:/Qt/6.9.3/msvc2022_64/lib/cmake" `
-  -Deasy_profiler_DIR="$PWD/alcedo/third_party/easy_profiler-v2.1.0-msvc15-win64/lib/cmake/easy_profiler"
-
-# Release build + install
-cmd /c scripts\msvc_env.cmd --build --preset win_release --parallel 4
+# Windows release
+cmd /c scripts\msvc_env.cmd --preset win_release -DCMAKE_PREFIX_PATH="D:/Qt/6.9.3/msvc2022_64/lib/cmake"
+cmd /c scripts\msvc_env.cmd --build --preset win_release --parallel 8
 cmd /c scripts\msvc_env.cmd --install build/release --prefix build/install
-```
 
-If you are not using the vcpkg-provided `glib` package, or you want to override the auto-detected GLib2 location, add:
-
-```powershell
--DPUERHLAB_LENSFUN_GLIB2_BASE_DIR="<path-to-glib2>"
-```
-
-Optional deploy tuning:
-
-```powershell
-# Include software OpenGL fallback DLL in the install package (larger package).
--DPUERHLAB_DEPLOY_SOFTWARE_OPENGL=ON
-
-# Pass extra options to Qt deploy tooling (semicolon-separated list).
--DPUERHLAB_QT_DEPLOY_TOOL_OPTIONS="--no-compiler-runtime;--no-system-d3d-compiler;--no-system-dxc-compiler"
-```
-
-Create a ZIP package (CPack):
-
-```powershell
-cpack --config build/release/CPackConfig.cmake
-```
-
-### 5) Run Main/Demo Binaries
-
-Common binaries after a Debug build:
-
-```powershell
-.\build\debug\alcedo\src\alcedo_main.exe
-.\build\debug\alcedo\tests\ImagePreview.exe
-```
-
-### 6) Tests and Dev Utilities
-
-Current executable targets in `alcedo/tests/CMakeLists.txt`:
-
-- `SampleTest`
-- `SingleRawLoad`
-- `SingleThumbnailLoad`
-- `ColorTempCudaSanityTest`
-- `SleeveFSTest`
-- `ImportServiceTest`
-- `SleeveServiceTest`
-- `FilterServiceTest`
-- `PipelineServiceTest`
-- `EditHistoryMgmtServiceTest`
-- `ThumbnailServiceTest`
-- `ExportServiceTest`
-- `AlbumBackendImportTest`
-- `AlbumBackendProjectTest`
-- `AlbumBackendFolderTest`
-- `AlbumBackendImageDeleteTest`
-- `CudaImageGeometryOpsTest` (only when CUDA is found)
-
-CTest-discovered suites currently include `PipelineServiceTest`, `EditHistoryMgmtServiceTest`, and all `AlbumBackend*` targets:
-
-```powershell
-ctest --test-dir build/debug --output-on-failure
-```
-
-Standalone tests can be run directly as executables, for example:
-
-```powershell
-.\build\debug\alcedo\tests\SampleTest.exe
-```
-
-Some historical unit tests remain intentionally disabled/commented during refactoring.
-
-Formatting/lint targets are available (clang-tidy integration is still partial):
-
-```powershell
-cmd /c scripts\msvc_env.cmd --build --preset win_debug --target format
-cmd /c scripts\msvc_env.cmd --build --preset win_debug --target tidy
-```
-
-### macOS (Metal-enabled app build)
-
-Install the required dependencies with Homebrew:
-
-```bash
-brew install cmake ninja qt opencv opencolorio duckdb exiv2 glib libraw little-cms2 highway openimageio pkg-config xxhash eigen libomp
-```
-
-Configure and build the main Qt application:
-
-```bash
-git submodule update --init --recursive \
-  alcedo/src/third_party/lensfun \
-  alcedo/src/third_party/libultrahdr
+# macOS debug and packaging
 cmake --preset macos_debug
 cmake --build --preset macos_debug --target alcedo_main
-```
-
-This repository's macOS release preset is configured for the Qt installation at `/Users/zidage/Qt/6.9.3/macos` on this machine instead of the Homebrew Qt prefix.
-
-Run the app:
-
-```bash
-./build/macos-debug/alcedo/src/alcedo_main
-```
-
-#### Release Build & Standalone DMG/ZIP
-
-Build, install, and package a self-contained `.app` bundle:
-
-```bash
 cmake --preset macos_release
 cmake --build --preset macos_release
-cmake --install build/macos-release          # → build/install/Alcedo.app
-cd build/macos-release && cpack -G DragNDrop # → alcedo-<version>-Darwin-arm64.dmg
-cd build/macos-release && cpack -G ZIP       # → alcedo-<version>-Darwin-arm64.zip
+cmake --build --preset macos_package
 ```
-
-Run the installed app directly:
-
-```bash
-./build/install/Alcedo.app/Contents/MacOS/Alcedo
-```
-
-Or extract the ZIP and run from anywhere:
-
-```bash
-unzip alcedo-*-Darwin-arm64.zip -d ~/Desktop
-~/Desktop/Alcedo.app/Contents/MacOS/Alcedo
-```
-
-The ZIP is fully standalone — all Homebrew libraries, Qt frameworks, and QML
-modules are bundled inside the `.app`. No Homebrew installation is needed on the
-target machine. Code signing and notarization are not applied; macOS Gatekeeper
-may require `xattr -cr Alcedo.app` before first launch.
-
-Notes:
-
-- The `macos_debug` and `macos_release` presets build the main app without CUDA, without the legacy OpenGL editor, and without tests. On Apple platforms, the project uses the Metal backend path instead.
-- If Homebrew is installed in a nonstandard prefix, pass `-DCMAKE_PREFIX_PATH=/path/to/prefix` when configuring.
-- The current macOS build targets the Qt application with Metal-enabled pipeline integration rather than the Windows/CUDA path. Some editor-specific parity work is still ongoing.
 
 ## Roadmap
 
