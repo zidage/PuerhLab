@@ -1549,17 +1549,35 @@ ApplicationWindow {
 
     // ── Import progress overlay ──────────────────────────────────────────
     Item {
+        id: importProgressOverlay
         anchors.fill: parent
         visible: albumBackend.importRunning && !albumBackend.nikonHeRecoveryActive
         z: 50
 
+        ShaderEffectSource {
+            id: importOverlaySnapshot
+            width: mainContent.width
+            height: mainContent.height
+            sourceItem: mainContent
+            sourceRect: Qt.rect(0, 0, mainContent.width, mainContent.height)
+            textureSize: Qt.size(Math.max(1, mainContent.width), Math.max(1, mainContent.height))
+            live: true
+            recursive: false
+            hideSource: false
+            visible: false
+        }
+
         MultiEffect {
-            anchors.fill: parent
-            source: mainContent
+            x: mainContent.x
+            y: mainContent.y
+            width: mainContent.width
+            height: mainContent.height
+            source: importOverlaySnapshot
             blurEnabled: true
             blur: 0.6
             blurMax: 64
             saturation: -0.2
+            autoPaddingEnabled: false
         }
 
         Rectangle {
@@ -1596,8 +1614,8 @@ ApplicationWindow {
 
                 ImportProgressRing {
                     Layout.alignment: Qt.AlignHCenter
-                    width: 160
-                    height: 160
+                    Layout.preferredWidth: 160
+                    Layout.preferredHeight: 160
                     ringWidth: 14
                     trackColor: root.colHover
                     fillColor: root.colAccentPrimary

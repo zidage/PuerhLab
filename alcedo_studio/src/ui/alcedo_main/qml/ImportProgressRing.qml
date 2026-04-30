@@ -11,8 +11,10 @@ import QtQuick
  */
 Item {
     id: ring
-    width: 160
-    height: 160
+    implicitWidth: 160
+    implicitHeight: 160
+    width: implicitWidth
+    height: implicitHeight
 
     property real progress: 0.0
     property real ringWidth: 14
