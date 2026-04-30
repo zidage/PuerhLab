@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.2.4] (6e2863a..f5990076) — 2026-04-27 ~ 2026-04-29
+
+### Features
+- **Camera matrix regeneration from spectral data**: Regenerated camera matrices from rawtoaces spectral sensitivities, replacing Adobe-extracted DNG ColorMatrix entries with XYZ D50 → camera RGB fits for illuminant A and D65 using the CIE 1931 observer and CAT02 chromatic adaptation. (`0cda8c40`)
+- **Borderless main window**: Removed the OS navigation bar from the main interface for a cleaner, more immersive workspace. (`3efe359b`)
+- **Welcome panel redesign**: Improved the welcome panel design with a new project-file icon and refined layout. (`db51c7dc`)
+- **Selection expand style update**: Updated the thumbnail selection expand animation/style. (`2a38b286`)
+- **Export option logic improvement**: Improved the export option selection logic in the album export dialog. (`3918418b`)
+
+### Bug Fixes
+- **macOS button glyphs**: Fixed missing button glyphs on macOS. (`f5990076`)
+- **Selection scrolling**: Fixed an issue where selected items could disappear during grid scrolling. (`2b81bb9f`)
+- **Import background scaling**: Fixed incorrect scale background displayed during the import process. (`1ec5e554`)
+- **Ultra HDR export**: Fixed the Ultra HDR export issue. (`891a1776`)
+- **Delete button layout**: Fixed the delete button layout issue in the collections panel. (`5e0ea463`)
+- **Website resource paths**: Fixed resource path resolution in the project website. (`d28f9a0b`)
+- **OCIO code cleanup**: Removed unused OCIO configuration files and related dead code from CST/LMT operators. (`d0f05464`, `0b6f7a13`)
+
+### Documentation
+- **README and build docs**: Refreshed README content and extracted build-from-source instructions into a dedicated guide (`docs/build_from_source.md`). (`cb7b8895`)
+
+### Miscellaneous
+- **Project website overhaul**: Rebuilt the project website from Astro to a lightweight Vite-based setup, updated screenshots and previews, and aligned zh-CN translations. (`258ace0f`, `16ca867a`, `67512a6b`)
+
 ## [0.2.3] (21046ec..fd3f8f2) — 2026-04-08 ~ 2026-04-26
 
 ### Features
@@ -109,6 +133,30 @@
 ---
 
 # 更新日志
+
+## [0.2.4] (6e2863a..f5990076) — 2026-04-27 ~ 2026-04-29
+
+### 新功能
+- **基于光谱数据的相机矩阵重生成**：使用 rawtoaces 光谱敏感度数据重新生成相机矩阵，将 Adobe 提取的 DNG ColorMatrix 替换为基于 CIE 1931 标准观察者和 CAT02 色度适应、拟合 illuminant A / D65 的 XYZ D50 → 相机 RGB 矩阵。(`0cda8c40`)
+- **无边框主窗口**：移除主界面操作系统导航栏，提供更沉浸、简洁的工作空间。(`3efe359b`)
+- **欢迎面板重设计**：改进欢迎面板视觉设计，新增项目文件图标并优化布局。(`db51c7dc`)
+- **选中展开样式更新**：更新缩略图选中项的展开动画/样式。(`2a38b286`)
+- **导出选项逻辑优化**：改进相册导出对话框中的导出选项选择逻辑。(`3918418b`)
+
+### 缺陷修复
+- **macOS 按钮图标**：修复 macOS 上按钮图标缺失的问题。(`f5990076`)
+- **选择滚动消失**：修复网格滚动时选中项可能消失的问题。(`2b81bb9f`)
+- **导入背景缩放**：修复导入过程中显示的错误缩放背景。(`1ec5e554`)
+- **Ultra HDR 导出**：修复 Ultra HDR 导出问题。(`891a1776`)
+- **删除按钮布局**：修复收藏夹面板中删除按钮的布局问题。(`5e0ea463`)
+- **网站资源路径**：修复项目网站的资源路径解析问题。(`d28f9a0b`)
+- **OCIO 代码清理**：移除未使用的 OCIO 配置文件及 CST/LMT 算子中的相关无用代码。(`d0f05464`, `0b6f7a13`)
+
+### 文档更新
+- **README 与构建文档**：刷新 README 内容，并将源码构建说明提取到独立指南 (`docs/build_from_source.md`)。(`cb7b8895`)
+
+### 其他
+- **项目网站全面改版**：将项目网站从 Astro 重构为轻量 Vite 方案，更新截图与预览，并对齐简体中文翻译。(`258ace0f`, `16ca867a`, `67512a6b`)
 
 ## [0.2.3] (21046ec..fd3f8f2) — 2026-04-08 ~ 2026-04-26
 
