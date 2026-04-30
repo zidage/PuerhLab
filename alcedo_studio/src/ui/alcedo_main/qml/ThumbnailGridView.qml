@@ -42,6 +42,27 @@ Item {
         return (modifiers & Qt.ShiftModifier) || (modifiers & Qt.ControlModifier)
     }
 
+    function selectionItemForIndex(index) {
+        if (index < 0 || index >= albumBackend.thumbnails.length) {
+            return null
+        }
+
+        const row = albumBackend.thumbnails[index]
+        if (!row) {
+            return null
+        }
+        const elementId = Number(row.elementId)
+        if (elementId <= 0) {
+            return null
+        }
+
+        return {
+            elementId: elementId,
+            imageId: Number(row.imageId),
+            fileName: row.fileName ? row.fileName : qsTr("(unnamed)")
+        }
+    }
+
     GridView {
         id: grid
         anchors.fill: parent
@@ -257,6 +278,7 @@ Item {
         property int hoveredIndex: -1
         property point dragStart: Qt.point(0, 0)
         property point dragCurrent: Qt.point(0, 0)
+        property real dragStartContentY: 0
         property bool isDragging: false
         property var preDragSelection: ({})
         property bool dragAdditive: false
@@ -267,14 +289,40 @@ Item {
             return grid.indexAt(viewX + grid.contentX, viewY + grid.contentY)
         }
 
+        function dragStartContentTop() {
+            return dragStart.y + dragStartContentY
+        }
+
+        function dragCurrentContentTop() {
+            return dragCurrent.y + grid.contentY
+        }
+
+        function rubberBandViewportY() {
+            return Math.min(dragStartContentTop(), dragCurrentContentTop()) - grid.contentY
+        }
+
+        function rubberBandViewportHeight() {
+            return Math.abs(dragCurrentContentTop() - dragStartContentTop())
+        }
+
+        function applyRubberBandSelection() {
+            const bandItems = collectRubberBandItems()
+            if (dragAdditive) {
+                const merged = Object.values(preDragSelection).concat(bandItems)
+                root.replaceSelection(merged)
+            } else {
+                root.replaceSelection(bandItems)
+            }
+        }
+
         function collectRubberBandItems() {
             const colCount = Math.max(1, Math.floor(grid.width / grid.cellWidth))
             const totalCount = grid.count
 
             const bLeft   = Math.min(dragStart.x, dragCurrent.x)
             const bRight  = Math.max(dragStart.x, dragCurrent.x)
-            const bTop    = Math.min(dragStart.y, dragCurrent.y) + grid.contentY
-            const bBottom = Math.max(dragStart.y, dragCurrent.y) + grid.contentY
+            const bTop    = Math.min(dragStartContentTop(), dragCurrentContentTop())
+            const bBottom = Math.max(dragStartContentTop(), dragCurrentContentTop())
 
             const minCol = Math.max(0, Math.floor(bLeft / grid.cellWidth))
             const maxCol = Math.min(colCount - 1, Math.floor(bRight / grid.cellWidth))
@@ -286,13 +334,9 @@ Item {
                 for (let col = minCol; col <= maxCol; ++col) {
                     const idx = row * colCount + col
                     if (idx >= 0 && idx < totalCount) {
-                        const item = grid.itemAtIndex(idx)
+                        const item = root.selectionItemForIndex(idx)
                         if (item) {
-                            items.push({
-                                elementId: item.elementId,
-                                imageId: item.imageId,
-                                fileName: item.fileName
-                            })
+                            items.push(item)
                         }
                     }
                 }
@@ -313,13 +357,7 @@ Item {
                 }
                 if (isDragging) {
                     dragCurrent = Qt.point(mouse.x, mouse.y)
-                    const bandItems = collectRubberBandItems()
-                    if (dragAdditive) {
-                        const merged = Object.values(preDragSelection).concat(bandItems)
-                        root.replaceSelection(merged)
-                    } else {
-                        root.replaceSelection(bandItems)
-                    }
+                    applyRubberBandSelection()
                 }
             }
             hoveredIndex = gridIndexAt(mouse.x, mouse.y)
@@ -329,22 +367,20 @@ Item {
             if (mouse.button === Qt.RightButton) {
                 const idx = gridIndexAt(mouse.x, mouse.y)
                 if (idx >= 0) {
-                    const item = grid.itemAtIndex(idx)
+                    const item = root.selectionItemForIndex(idx)
                     if (item) {
                         const scenePoint = overlay.mapToItem(null, mouse.x, mouse.y)
-                        root.contextMenuRequested({
-                            elementId: item.elementId,
-                            imageId: item.imageId,
-                            fileName: item.fileName
-                        }, scenePoint.x, scenePoint.y)
+                        root.contextMenuRequested(item, scenePoint.x, scenePoint.y)
                     }
                 }
                 return
             }
             dragStart = Qt.point(mouse.x, mouse.y)
             dragCurrent = Qt.point(mouse.x, mouse.y)
+            dragStartContentY = grid.contentY
             isDragging = false
             dragAdditive = false
+            preDragSelection = ({})
         }
 
         onReleased: function(mouse) {
@@ -355,17 +391,13 @@ Item {
             if (!isDragging) {
                 const idx = gridIndexAt(mouse.x, mouse.y)
                 if (idx >= 0) {
-                    const item = grid.itemAtIndex(idx)
+                    const item = root.selectionItemForIndex(idx)
                     if (item) {
                         if (root.hasMultiSelectModifier(mouse.modifiers)) {
                             const next = !root.isImageSelected(item.elementId)
                             root.imageSelectionChanged(item.elementId, item.imageId, item.fileName, next)
                         } else {
-                            root.replaceSelection([{
-                                elementId: item.elementId,
-                                imageId: item.imageId,
-                                fileName: item.fileName
-                            }])
+                            root.replaceSelection([item])
                         }
                     }
                 } else {
@@ -378,7 +410,7 @@ Item {
         onDoubleClicked: function(mouse) {
             const idx = gridIndexAt(mouse.x, mouse.y)
             if (idx >= 0) {
-                const item = grid.itemAtIndex(idx)
+                const item = root.selectionItemForIndex(idx)
                 if (item) {
                     albumBackend.OpenEditor(item.elementId, item.imageId)
                 }
@@ -391,6 +423,9 @@ Item {
             grid.contentY = Math.max(0, Math.min(
                 grid.contentHeight - grid.height,
                 grid.contentY - wheel.angleDelta.y))
+            if (isDragging) {
+                applyRubberBandSelection()
+            }
             hoveredIndex = gridIndexAt(mouseX, mouseY)
             wheel.accepted = true
         }
@@ -401,9 +436,9 @@ Item {
         id: rubberBand
         visible: overlay.isDragging
         x: Math.min(overlay.dragStart.x, overlay.dragCurrent.x)
-        y: Math.min(overlay.dragStart.y, overlay.dragCurrent.y)
+        y: overlay.rubberBandViewportY()
         width: Math.abs(overlay.dragCurrent.x - overlay.dragStart.x)
-        height: Math.abs(overlay.dragCurrent.y - overlay.dragStart.y)
+        height: overlay.rubberBandViewportHeight()
         color: Qt.rgba(appTheme.toneMist.r, appTheme.toneMist.g, appTheme.toneMist.b, 0.08)
         border.width: 1
         border.color: Qt.rgba(appTheme.toneMist.r, appTheme.toneMist.g, appTheme.toneMist.b, 0.50)
