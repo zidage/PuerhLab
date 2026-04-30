@@ -972,7 +972,7 @@ ApplicationWindow {
                     onClicked: inspectorVisible = !inspectorVisible
                 }
 
-                // ── Native-styled Windows caption buttons ──
+                // ── Frameless window caption buttons ──
                 Item { Layout.preferredWidth: 8 }
 
                 Row {
@@ -982,9 +982,9 @@ ApplicationWindow {
 
                     component CaptionButton: Rectangle {
                         id: capBtn
-                        property string glyph: ""
+                        property string iconName: "minimize"
                         property color hoverColor: root.colHover
-                        property color glyphColor: root.colText
+                        property color iconColor: root.colText
                         signal activated()
                         width: 46
                         height: 56
@@ -992,14 +992,47 @@ ApplicationWindow {
                                ? hoverColor
                                : "transparent"
 
-                        Label {
+                        Canvas {
+                            id: captionIcon
                             anchors.centerIn: parent
-                            text: capBtn.glyph
-                            // Segoe MDL2 Assets ships on both Win10 and Win11; the Chrome
-                            // caption glyphs share code points with Segoe Fluent Icons.
-                            font.family: "Segoe MDL2 Assets"
-                            font.pixelSize: 10
-                            color: capBtn.glyphColor
+                            width: 16
+                            height: 16
+                            antialiasing: true
+
+                            Connections {
+                                target: capBtn
+                                function onIconNameChanged() { captionIcon.requestPaint() }
+                                function onIconColorChanged() { captionIcon.requestPaint() }
+                            }
+
+                            onPaint: {
+                                const ctx = getContext("2d")
+                                ctx.clearRect(0, 0, width, height)
+                                ctx.strokeStyle = capBtn.iconColor
+                                ctx.lineWidth = 1.35
+                                ctx.lineCap = "square"
+                                ctx.lineJoin = "miter"
+
+                                if (capBtn.iconName === "minimize") {
+                                    ctx.beginPath()
+                                    ctx.moveTo(4, 8)
+                                    ctx.lineTo(12, 8)
+                                    ctx.stroke()
+                                } else if (capBtn.iconName === "maximize") {
+                                    ctx.strokeRect(4.5, 4.5, 7, 7)
+                                } else if (capBtn.iconName === "restore") {
+                                    ctx.strokeRect(6.5, 4.5, 6, 6)
+                                    ctx.strokeRect(3.5, 7.5, 6, 6)
+                                } else if (capBtn.iconName === "close") {
+                                    ctx.lineCap = "round"
+                                    ctx.beginPath()
+                                    ctx.moveTo(4.5, 4.5)
+                                    ctx.lineTo(11.5, 11.5)
+                                    ctx.moveTo(11.5, 4.5)
+                                    ctx.lineTo(4.5, 11.5)
+                                    ctx.stroke()
+                                }
+                            }
                         }
 
                         MouseArea {
@@ -1012,15 +1045,15 @@ ApplicationWindow {
                     }
 
                     CaptionButton {
-                        glyph: "" // ChromeMinimize
+                        iconName: "minimize"
                         onActivated: minimizeAnimation.start()
                     }
                     CaptionButton {
-                        glyph: root.visibility === Window.Maximized ? "" : "" // ChromeRestore / ChromeMaximize
+                        iconName: root.visibility === Window.Maximized ? "restore" : "maximize"
                         onActivated: root.toggleMaximizeAnimated()
                     }
                     CaptionButton {
-                        glyph: "" // ChromeClose
+                        iconName: "close"
                         hoverColor: root.colDanger
                         onActivated: root.close()
                     }
