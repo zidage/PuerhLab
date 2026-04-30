@@ -639,6 +639,10 @@ if(TARGET ${ALCEDO_MAIN_BIN})
         install(DIRECTORY "${_config_dir}/icc/" DESTINATION "${_bundle_macos_dest}/config/icc")
         install(DIRECTORY "${_config_dir}/lens_calib/" DESTINATION "${_bundle_macos_dest}/config/lens_calib")
         install(DIRECTORY "${_config_dir}/nikon_lens/" DESTINATION "${_bundle_macos_dest}/config/nikon_lens")
+        file(GLOB _acescc_luts "${_config_dir}/LUTs/*ACEScc*.cube")
+        if(_acescc_luts)
+            install(FILES ${_acescc_luts} DESTINATION "${_bundle_macos_dest}/LUTs")
+        endif()
         if(ALCEDO_METAL_ENABLED AND ALCEDO_METAL_RUNTIME_LIBS)
             install(FILES ${ALCEDO_METAL_RUNTIME_LIBS}
                 DESTINATION "${_bundle_resources_dest}/metallib"
@@ -1164,6 +1168,7 @@ if(APPLE AND ALCEDO_MACOS_BUNDLE)
     set(CPACK_PACKAGE_NAME "${ALCEDO_MACOS_BUNDLE_NAME}")
     set(CPACK_PACKAGE_FILE_NAME "${CPACK_PACKAGE_NAME}-${CPACK_PACKAGE_VERSION}-${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}")
     set(CPACK_DMG_VOLUME_NAME "${ALCEDO_MACOS_BUNDLE_NAME}")
+    set(CPACK_DMG_FORMAT "UDBZ")
     # Include the .app bundle at the top level of the ZIP so the user
     # extracts it and finds the app bundle directly.
     set(CPACK_INCLUDE_TOPLEVEL_DIRECTORY OFF)
