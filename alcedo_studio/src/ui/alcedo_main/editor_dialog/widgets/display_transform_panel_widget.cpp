@@ -4,11 +4,59 @@
 
 #include "ui/alcedo_main/editor_dialog/widgets/display_transform_panel_widget.hpp"
 
+#include <QKeyEvent>
+
 #include "ui/alcedo_main/editor_dialog/dialog_internal.hpp"
 
 namespace alcedo::ui {
 
 DisplayTransformPanelWidget::DisplayTransformPanelWidget(QWidget* parent) : QWidget(parent) {}
+
+namespace {
+
+class AccordionHeader final : public QFrame {
+ public:
+  explicit AccordionHeader(QWidget* parent = nullptr) : QFrame(parent) {
+    setCursor(Qt::PointingHandCursor);
+    setFocusPolicy(Qt::StrongFocus);
+    setAttribute(Qt::WA_StyledBackground, true);
+  }
+
+  void SetOnActivated(std::function<void()> on_activated) {
+    on_activated_ = std::move(on_activated);
+  }
+
+ protected:
+  void mouseReleaseEvent(QMouseEvent* event) override {
+    if (event->button() == Qt::LeftButton && rect().contains(event->pos())) {
+      Activate();
+      event->accept();
+      return;
+    }
+    QFrame::mouseReleaseEvent(event);
+  }
+
+  void keyPressEvent(QKeyEvent* event) override {
+    if (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter ||
+        event->key() == Qt::Key_Space) {
+      Activate();
+      event->accept();
+      return;
+    }
+    QFrame::keyPressEvent(event);
+  }
+
+ private:
+  void Activate() {
+    if (on_activated_) {
+      on_activated_();
+    }
+  }
+
+  std::function<void()> on_activated_{};
+};
+
+}  // namespace
 
 void EditorDialog::BuildDisplayTransformPanel() {
   auto* controls_header = NewLocalizedLabel("Display Rendering Transform", drt_controls_);
@@ -426,26 +474,68 @@ void EditorDialog::BuildDisplayTransformPanel() {
           CommitAdjustment(AdjustmentField::Odt);
         });
 
-    auto* detail_toggle = NewLocalizedButton("Detailed Parameters", open_drt_page);
-    detail_toggle->setCheckable(true);
-    detail_toggle->setCursor(Qt::PointingHandCursor);
-    detail_toggle->setFixedHeight(28);
-    detail_toggle->setStyleSheet(AppTheme::EditorSecondaryButtonStyle());
-    open_drt_layout->addWidget(detail_toggle, 0);
+    const auto& theme            = AppTheme::Instance();
 
-    odt_open_drt_detail_panel_ = new QFrame(open_drt_page);
-    odt_open_drt_detail_panel_->setObjectName("EditorSection");
-    auto* detail_layout = new QVBoxLayout(odt_open_drt_detail_panel_);
-    detail_layout->setContentsMargins(8, 8, 8, 8);
+    auto*       detail_accordion = new QFrame(open_drt_page);
+    detail_accordion->setObjectName("EditorSection");
+    auto* accordion_layout = new QVBoxLayout(detail_accordion);
+    accordion_layout->setContentsMargins(0, 0, 0, 0);
+    accordion_layout->setSpacing(0);
+
+    auto* detail_header = new AccordionHeader(detail_accordion);
+    detail_header->setObjectName("OpenDrtDetailAccordionHeader");
+    detail_header->setStyleSheet(
+        QStringLiteral("QFrame#OpenDrtDetailAccordionHeader {"
+                       "  background: transparent;"
+                       "  border: none;"
+                       "  border-radius: 10px;"
+                       "}"
+                       "QFrame#OpenDrtDetailAccordionHeader:hover {"
+                       "  background: %1;"
+                       "}")
+            .arg(QColor(theme.bgPanelColor().red(), theme.bgPanelColor().green(),
+                        theme.bgPanelColor().blue(), 170)
+                     .name(QColor::HexArgb)));
+    SetLocalizedToolTip(detail_header, "Advanced Parameters");
+
+    auto* detail_header_layout = new QHBoxLayout(detail_header);
+    detail_header_layout->setContentsMargins(10, 8, 10, 8);
+    detail_header_layout->setSpacing(8);
+
+    auto* detail_title = NewLocalizedLabel("Advanced Parameters", detail_header);
+    detail_title->setObjectName("EditorSectionTitle");
+    detail_title->setAttribute(Qt::WA_TransparentForMouseEvents, true);
+    AppTheme::MarkFontRole(detail_title, AppTheme::FontRole::UiCaptionStrong);
+
+    auto* detail_chevron = new QLabel(QStringLiteral(">"), detail_header);
+    detail_chevron->setObjectName("OpenDrtDetailAccordionChevron");
+    detail_chevron->setAlignment(Qt::AlignCenter);
+    detail_chevron->setFixedWidth(16);
+    detail_chevron->setAttribute(Qt::WA_TransparentForMouseEvents, true);
+    detail_chevron->setStyleSheet(AppTheme::EditorLabelStyle(theme.textMutedColor()));
+    AppTheme::MarkFontRole(detail_chevron, AppTheme::FontRole::UiCaptionStrong);
+
+    detail_header_layout->addWidget(detail_title, 1);
+    detail_header_layout->addWidget(detail_chevron, 0);
+    accordion_layout->addWidget(detail_header, 0);
+
+    odt_open_drt_detail_panel_ = new QFrame(detail_accordion);
+    auto* detail_layout        = new QVBoxLayout(odt_open_drt_detail_panel_);
+    detail_layout->setContentsMargins(8, 0, 8, 10);
     detail_layout->setSpacing(8);
     odt_open_drt_detail_panel_->setVisible(false);
-    QObject::connect(detail_toggle, &QPushButton::toggled, odt_open_drt_detail_panel_,
-                     [this](bool checked) {
-                       if (odt_open_drt_detail_panel_) {
-                         odt_open_drt_detail_panel_->setVisible(checked);
-                       }
-                       RefreshOdtMethodUi();
-                     });
+    accordion_layout->addWidget(odt_open_drt_detail_panel_, 0);
+
+    auto set_detail_expanded = [this, detail_chevron](bool expanded) {
+      if (odt_open_drt_detail_panel_) {
+        odt_open_drt_detail_panel_->setVisible(expanded);
+      }
+      detail_chevron->setText(expanded ? QStringLiteral("v") : QStringLiteral(">"));
+      RefreshOdtMethodUi();
+    };
+    detail_header->SetOnActivated([this, set_detail_expanded]() {
+      set_detail_expanded(!odt_open_drt_detail_panel_->isVisible());
+    });
 
     auto addDetailSection = [&](const char* title_source) {
       auto* section        = new QWidget(odt_open_drt_detail_panel_);
@@ -577,18 +667,18 @@ void EditorDialog::BuildDisplayTransformPanel() {
         },
         commitOdt, resetOdt, QString());
 
-      auto* purity_section = addDetailSection("Purity");
-      addOpenDrtFloatSlider(
-          open_drt_page, purity_section, "Creative White Limit", 0.0f, 1.0f, 0.01f,
-          state_.odt_.open_drt_.detailed_.cwp_lm_,
-          [](const odt_cpu::OpenDRTSettings& s) { return s.detailed_.cwp_lm_; },
-          [this](float v) {
-            MarkOpenDrtLookPresetCustomForEditing();
-            state_.odt_.open_drt_.detailed_.cwp_lm_     = v;
-            state_.odt_.open_drt_.creative_white_limit_ = v;
-            RequestRender();
-          },
-          commitOdt, resetOdt, QString());
+    auto* purity_section = addDetailSection("Purity");
+    addOpenDrtFloatSlider(
+        open_drt_page, purity_section, "Creative White Limit", 0.0f, 1.0f, 0.01f,
+        state_.odt_.open_drt_.detailed_.cwp_lm_,
+        [](const odt_cpu::OpenDRTSettings& s) { return s.detailed_.cwp_lm_; },
+        [this](float v) {
+          MarkOpenDrtLookPresetCustomForEditing();
+          state_.odt_.open_drt_.detailed_.cwp_lm_     = v;
+          state_.odt_.open_drt_.creative_white_limit_ = v;
+          RequestRender();
+        },
+        commitOdt, resetOdt, QString());
     addLookDetail(purity_section, "Render Space Strength", 0.0f, 0.6f, 0.006f,
                   &odt_cpu::OpenDRTDetailedSettings::rs_sa_);
     addLookDetail(purity_section, "Render Space Weight R", 0.0f, 0.8f, 0.008f,
@@ -680,7 +770,7 @@ void EditorDialog::BuildDisplayTransformPanel() {
     addLookDetail(hue_section, "Hueshift Y Range", 0.0f, 1.0f, 0.01f,
                   &odt_cpu::OpenDRTDetailedSettings::hs_y_rng_);
 
-    open_drt_layout->addWidget(odt_open_drt_detail_panel_, 0);
+    open_drt_layout->addWidget(detail_accordion, 0);
     odt_method_stack_->addWidget(open_drt_page);
 
     layout->addWidget(odt_method_stack_, 0);
