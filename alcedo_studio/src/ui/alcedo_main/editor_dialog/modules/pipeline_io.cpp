@@ -9,16 +9,15 @@
 
 #include "ui/alcedo_main/editor_dialog/modules/pipeline_io.hpp"
 
+#include <QPointF>
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <json.hpp>
 #include <optional>
 #include <string>
 #include <utility>
 #include <vector>
-
-#include <QPointF>
-#include <json.hpp>
 
 #include "edit/pipeline/default_pipeline_params.hpp"
 #include "edit/pipeline/pipeline_cpu.hpp"
@@ -35,8 +34,7 @@ namespace alcedo::ui::pipeline_io {
 // Low-level pipeline-stage readers
 // =========================================================================
 
-auto IsOperatorEnabled(const PipelineStage& stage,
-                       OperatorType type) -> std::optional<bool> {
+auto IsOperatorEnabled(const PipelineStage& stage, OperatorType type) -> std::optional<bool> {
   const auto op = stage.GetOperator(type);
   if (!op.has_value() || op.value() == nullptr) {
     return std::nullopt;
@@ -52,8 +50,8 @@ auto IsOperatorEnabled(const PipelineStage& stage,
   }
 }
 
-auto ReadFloat(const PipelineStage& stage, OperatorType type,
-               const char* key) -> std::optional<float> {
+auto ReadFloat(const PipelineStage& stage, OperatorType type, const char* key)
+    -> std::optional<float> {
   const auto op = stage.GetOperator(type);
   if (!op.has_value() || op.value() == nullptr) {
     return std::nullopt;
@@ -104,8 +102,8 @@ auto ReadNestedFloat(const PipelineStage& stage, OperatorType type, const char* 
   }
 }
 
-auto ReadNestedObject(const PipelineStage& stage, OperatorType type,
-                      const char* key) -> std::optional<nlohmann::json> {
+auto ReadNestedObject(const PipelineStage& stage, OperatorType type, const char* key)
+    -> std::optional<nlohmann::json> {
   const auto op = stage.GetOperator(type);
   if (!op.has_value() || op.value() == nullptr) {
     return std::nullopt;
@@ -121,8 +119,8 @@ auto ReadNestedObject(const PipelineStage& stage, OperatorType type,
   return params[key];
 }
 
-auto ReadString(const PipelineStage& stage, OperatorType type,
-                const char* key) -> std::optional<std::string> {
+auto ReadString(const PipelineStage& stage, OperatorType type, const char* key)
+    -> std::optional<std::string> {
   const auto op = stage.GetOperator(type);
   if (!op.has_value() || op.value() == nullptr) {
     return std::nullopt;
@@ -145,8 +143,8 @@ auto ReadString(const PipelineStage& stage, OperatorType type,
   }
 }
 
-auto ReadCurvePoints(const PipelineStage& stage,
-                     OperatorType type) -> std::optional<std::vector<QPointF>> {
+auto ReadCurvePoints(const PipelineStage& stage, OperatorType type)
+    -> std::optional<std::vector<QPointF>> {
   const auto op = stage.GetOperator(type);
   if (!op.has_value() || op.value() == nullptr) {
     return std::nullopt;
@@ -229,12 +227,17 @@ auto FieldSpec(AdjustmentField field) -> std::pair<PipelineStageName, OperatorTy
   return {PipelineStageName::Basic_Adjustment, OperatorType::EXPOSURE};
 }
 
+auto OpenDRTDetailedParamsToJson(const odt_cpu::OpenDRTDetailedSettings& p) -> nlohmann::json;
+void LoadOpenDRTDetailedParams(const nlohmann::json& j, odt_cpu::OpenDRTDetailedSettings* p);
+auto OpenDRTDetailedParamsEqual(const odt_cpu::OpenDRTDetailedSettings& a,
+                                const odt_cpu::OpenDRTDetailedSettings& b) -> bool;
+
 // =========================================================================
 // ParamsForField
 // =========================================================================
 
-auto ParamsForField(AdjustmentField field, const AdjustmentState& s,
-                    CPUPipelineExecutor* exec) -> nlohmann::json {
+auto ParamsForField(AdjustmentField field, const AdjustmentState& s, CPUPipelineExecutor* exec)
+    -> nlohmann::json {
   using namespace hls;
   using namespace color_temp;
   using curve::CurveControlPointsToParams;
@@ -249,11 +252,11 @@ auto ParamsForField(AdjustmentField field, const AdjustmentState& s,
       return {{"saturation", s.saturation_}};
     case AdjustmentField::RawDecode: {
       const nlohmann::json defaults = pipeline_defaults::MakeDefaultRawDecodeParams();
-      nlohmann::json params =
+      nlohmann::json       params =
           exec ? ReadCurrentOperatorParams(*exec, PipelineStageName::Image_Loading,
-                                           OperatorType::RAW_DECODE)
+                                                 OperatorType::RAW_DECODE)
                      .value_or(defaults)
-               : defaults;
+                     : defaults;
       if (!params.is_object()) {
         params = defaults;
       }
@@ -272,11 +275,11 @@ auto ParamsForField(AdjustmentField field, const AdjustmentState& s,
     }
     case AdjustmentField::LensCalib: {
       const nlohmann::json defaults = pipeline_defaults::MakeDefaultLensCalibParams();
-      nlohmann::json params =
+      nlohmann::json       params =
           exec ? ReadCurrentOperatorParams(*exec, PipelineStageName::Image_Loading,
-                                           OperatorType::LENS_CALIBRATION)
+                                                 OperatorType::LENS_CALIBRATION)
                      .value_or(defaults)
-               : defaults;
+                     : defaults;
       if (!params.is_object()) {
         params = defaults;
       }
@@ -297,20 +300,17 @@ auto ParamsForField(AdjustmentField field, const AdjustmentState& s,
       return params;
     }
     case AdjustmentField::ColorTemp:
-      return {{"color_temp",
-               {{"mode", ColorTempModeToString(s.color_temp_mode_)},
-                {"cct", std::clamp(s.color_temp_custom_cct_,
-                                   static_cast<float>(kCctMin),
-                                   static_cast<float>(kCctMax))},
-                {"tint", std::clamp(s.color_temp_custom_tint_,
-                                    static_cast<float>(kTintMin),
-                                    static_cast<float>(kTintMax))},
-                {"resolved_cct", std::clamp(s.color_temp_resolved_cct_,
-                                            static_cast<float>(kCctMin),
-                                            static_cast<float>(kCctMax))},
-                {"resolved_tint", std::clamp(s.color_temp_resolved_tint_,
-                                             static_cast<float>(kTintMin),
-                                             static_cast<float>(kTintMax))}}}};
+      return {
+          {"color_temp",
+           {{"mode", ColorTempModeToString(s.color_temp_mode_)},
+            {"cct", std::clamp(s.color_temp_custom_cct_, static_cast<float>(kCctMin),
+                               static_cast<float>(kCctMax))},
+            {"tint", std::clamp(s.color_temp_custom_tint_, static_cast<float>(kTintMin),
+                                static_cast<float>(kTintMax))},
+            {"resolved_cct", std::clamp(s.color_temp_resolved_cct_, static_cast<float>(kCctMin),
+                                        static_cast<float>(kCctMax))},
+            {"resolved_tint", std::clamp(s.color_temp_resolved_tint_, static_cast<float>(kTintMin),
+                                         static_cast<float>(kTintMax))}}}};
     case AdjustmentField::Hls: {
       nlohmann::json hue_bins      = nlohmann::json::array();
       nlohmann::json hls_adj_table = nlohmann::json::array();
@@ -319,8 +319,7 @@ auto ParamsForField(AdjustmentField field, const AdjustmentState& s,
         hue_bins.push_back(kCandidateHues[i]);
         hls_adj_table.push_back(std::array<float, 3>{
             std::clamp(s.hls_hue_adjust_table_[i], -kMaxHueShiftDegrees, kMaxHueShiftDegrees),
-            std::clamp(s.hls_lightness_adjust_table_[i], kAdjUiMin, kAdjUiMax) /
-                kAdjUiToParamScale,
+            std::clamp(s.hls_lightness_adjust_table_[i], kAdjUiMin, kAdjUiMax) / kAdjUiToParamScale,
             std::clamp(s.hls_saturation_adjust_table_[i], kAdjUiMin, kAdjUiMax) /
                 kAdjUiToParamScale});
         h_range_table.push_back(std::max(s.hls_hue_range_table_[i], 1.0f));
@@ -331,9 +330,8 @@ auto ParamsForField(AdjustmentField field, const AdjustmentState& s,
                {{"hue_bins", std::move(hue_bins)},
                 {"hls_adj_table", std::move(hls_adj_table)},
                 {"h_range_table", std::move(h_range_table)},
-                {"target_hls",
-                 std::array<float, 3>{WrapHueDegrees(s.hls_target_hue_), kFixedTargetLightness,
-                                      kFixedTargetSaturation}},
+                {"target_hls", std::array<float, 3>{WrapHueDegrees(s.hls_target_hue_),
+                                                    kFixedTargetLightness, kFixedTargetSaturation}},
                 {"hls_adj",
                  std::array<float, 3>{
                      std::clamp(s.hls_hue_adjust_table_[active_idx], -kMaxHueShiftDegrees,
@@ -391,11 +389,11 @@ auto ParamsForField(AdjustmentField field, const AdjustmentState& s,
       return {{"ocio_lmt", s.lut_path_}};
     case AdjustmentField::Odt: {
       const nlohmann::json defaults = pipeline_defaults::MakeDefaultODTParams();
-      nlohmann::json params =
+      nlohmann::json       params =
           exec ? ReadCurrentOperatorParams(*exec, PipelineStageName::Output_Transform,
-                                           OperatorType::ODT)
+                                                 OperatorType::ODT)
                      .value_or(defaults)
-               : defaults;
+                     : defaults;
       if (!params.is_object()) {
         params = defaults;
       }
@@ -412,8 +410,7 @@ auto ParamsForField(AdjustmentField field, const AdjustmentState& s,
 
       auto& odt_params = params["odt"];
       if (!odt_params.contains("open_drt") || !odt_params["open_drt"].is_object()) {
-        odt_params["open_drt"] =
-            defaults.at("odt").value("open_drt", nlohmann::json::object());
+        odt_params["open_drt"] = defaults.at("odt").value("open_drt", nlohmann::json::object());
       }
       if (defaults.at("odt").contains("open_drt") && defaults.at("odt")["open_drt"].is_object()) {
         for (auto it = defaults.at("odt")["open_drt"].begin();
@@ -435,35 +432,171 @@ auto ParamsForField(AdjustmentField field, const AdjustmentState& s,
           odt_cpu::OpenDRTTonescalePresetToString(s.odt_.open_drt_.tonescale_preset_);
       odt_params["open_drt"]["creative_white"] =
           odt_cpu::OpenDRTCreativeWhitePresetToString(s.odt_.open_drt_.creative_white_);
+      odt_params["open_drt"]["creative_white_limit"] =
+          std::clamp(s.odt_.open_drt_.creative_white_limit_, 0.0f, 1.0f);
+      odt_params["open_drt"]["display_grey_luminance"] =
+          std::clamp(s.odt_.open_drt_.display_grey_luminance_, 3.0f, 25.0f);
+      odt_params["open_drt"]["hdr_grey_boost"] =
+          std::clamp(s.odt_.open_drt_.hdr_grey_boost_, 0.0f, 1.0f);
+      odt_params["open_drt"]["hdr_purity"] = std::clamp(s.odt_.open_drt_.hdr_purity_, 0.0f, 1.0f);
+      odt_params["open_drt"]["parameters"] =
+          OpenDRTDetailedParamsToJson(s.odt_.open_drt_.detailed_);
       return params;
     }
     case AdjustmentField::CropRotate: {
-      const auto crop_rect = ClampCropRect(s.crop_x_, s.crop_y_, s.crop_w_, s.crop_h_);
-      const bool has_locked_aspect =
-          geometry::HasLockedAspect(s.crop_aspect_preset_, s.crop_aspect_width_,
-                                    s.crop_aspect_height_);
+      const auto crop_rect         = ClampCropRect(s.crop_x_, s.crop_y_, s.crop_w_, s.crop_h_);
+      const bool has_locked_aspect = geometry::HasLockedAspect(
+          s.crop_aspect_preset_, s.crop_aspect_width_, s.crop_aspect_height_);
       const bool has_rotation = std::abs(s.rotate_degrees_) > 1e-4f;
       const bool has_crop =
           s.crop_enabled_ &&
           (std::abs(crop_rect[0]) > 1e-4f || std::abs(crop_rect[1]) > 1e-4f ||
            std::abs(crop_rect[2] - 1.0f) > 1e-4f || std::abs(crop_rect[3] - 1.0f) > 1e-4f);
-      return {{"crop_rotate",
-               {{"enabled", has_rotation || has_crop || has_locked_aspect},
-                {"angle_degrees", s.rotate_degrees_},
-                {"enable_crop", s.crop_enabled_},
-                {"crop_rect",
-                 {{"x", crop_rect[0]},
-                  {"y", crop_rect[1]},
-                  {"w", crop_rect[2]},
-                  {"h", crop_rect[3]}}},
-                {"expand_to_fit", s.crop_expand_to_fit_},
-                {"aspect_ratio_preset",
-                 std::string(geometry::CropAspectPresetToString(s.crop_aspect_preset_))},
-                {"aspect_ratio",
-                 {{"width", s.crop_aspect_width_}, {"height", s.crop_aspect_height_}}}}}};
+      return {
+          {"crop_rotate",
+           {{"enabled", has_rotation || has_crop || has_locked_aspect},
+            {"angle_degrees", s.rotate_degrees_},
+            {"enable_crop", s.crop_enabled_},
+            {"crop_rect",
+             {{"x", crop_rect[0]}, {"y", crop_rect[1]}, {"w", crop_rect[2]}, {"h", crop_rect[3]}}},
+            {"expand_to_fit", s.crop_expand_to_fit_},
+            {"aspect_ratio_preset",
+             std::string(geometry::CropAspectPresetToString(s.crop_aspect_preset_))},
+            {"aspect_ratio",
+             {{"width", s.crop_aspect_width_}, {"height", s.crop_aspect_height_}}}}}};
     }
   }
   return {};
+}
+
+auto OpenDRTDetailedParamsToJson(const odt_cpu::OpenDRTDetailedSettings& p) -> nlohmann::json {
+  return {{"tn_con", p.tn_con_},
+          {"tn_sh", p.tn_sh_},
+          {"tn_toe", p.tn_toe_},
+          {"tn_off", p.tn_off_},
+          {"tn_hcon", p.tn_hcon_},
+          {"tn_hcon_pv", p.tn_hcon_pv_},
+          {"tn_hcon_st", p.tn_hcon_st_},
+          {"tn_lcon", p.tn_lcon_},
+          {"tn_lcon_w", p.tn_lcon_w_},
+          {"cwp_lm", p.cwp_lm_},
+          {"rs_sa", p.rs_sa_},
+          {"rs_rw", p.rs_rw_},
+          {"rs_bw", p.rs_bw_},
+          {"pt_lml", p.pt_lml_},
+          {"pt_lml_r", p.pt_lml_r_},
+          {"pt_lml_g", p.pt_lml_g_},
+          {"pt_lml_b", p.pt_lml_b_},
+          {"pt_lmh", p.pt_lmh_},
+          {"pt_lmh_r", p.pt_lmh_r_},
+          {"pt_lmh_b", p.pt_lmh_b_},
+          {"ptl_c", p.ptl_c_},
+          {"ptl_m", p.ptl_m_},
+          {"ptl_y", p.ptl_y_},
+          {"ptm_low", p.ptm_low_},
+          {"ptm_low_rng", p.ptm_low_rng_},
+          {"ptm_low_st", p.ptm_low_st_},
+          {"ptm_high", p.ptm_high_},
+          {"ptm_high_rng", p.ptm_high_rng_},
+          {"ptm_high_st", p.ptm_high_st_},
+          {"brl", p.brl_},
+          {"brl_r", p.brl_r_},
+          {"brl_g", p.brl_g_},
+          {"brl_b", p.brl_b_},
+          {"brl_rng", p.brl_rng_},
+          {"brl_st", p.brl_st_},
+          {"brlp", p.brlp_},
+          {"brlp_r", p.brlp_r_},
+          {"brlp_g", p.brlp_g_},
+          {"brlp_b", p.brlp_b_},
+          {"hc_r", p.hc_r_},
+          {"hc_r_rng", p.hc_r_rng_},
+          {"hs_r", p.hs_r_},
+          {"hs_r_rng", p.hs_r_rng_},
+          {"hs_g", p.hs_g_},
+          {"hs_g_rng", p.hs_g_rng_},
+          {"hs_b", p.hs_b_},
+          {"hs_b_rng", p.hs_b_rng_},
+          {"hs_c", p.hs_c_},
+          {"hs_c_rng", p.hs_c_rng_},
+          {"hs_m", p.hs_m_},
+          {"hs_m_rng", p.hs_m_rng_},
+          {"hs_y", p.hs_y_},
+          {"hs_y_rng", p.hs_y_rng_}};
+}
+
+void LoadOpenDRTDetailedParams(const nlohmann::json& j, odt_cpu::OpenDRTDetailedSettings* p) {
+  if (!p || !j.is_object()) {
+    return;
+  }
+  auto read = [&j](const char* key, float* out) {
+    if (j.contains(key) && j.at(key).is_number()) {
+      *out = j.at(key).get<float>();
+    }
+  };
+  read("tn_con", &p->tn_con_);
+  read("tn_sh", &p->tn_sh_);
+  read("tn_toe", &p->tn_toe_);
+  read("tn_off", &p->tn_off_);
+  read("tn_hcon", &p->tn_hcon_);
+  read("tn_hcon_pv", &p->tn_hcon_pv_);
+  read("tn_hcon_st", &p->tn_hcon_st_);
+  read("tn_lcon", &p->tn_lcon_);
+  read("tn_lcon_w", &p->tn_lcon_w_);
+  read("cwp_lm", &p->cwp_lm_);
+  read("rs_sa", &p->rs_sa_);
+  read("rs_rw", &p->rs_rw_);
+  read("rs_bw", &p->rs_bw_);
+  read("pt_lml", &p->pt_lml_);
+  read("pt_lml_r", &p->pt_lml_r_);
+  read("pt_lml_g", &p->pt_lml_g_);
+  read("pt_lml_b", &p->pt_lml_b_);
+  read("pt_lmh", &p->pt_lmh_);
+  read("pt_lmh_r", &p->pt_lmh_r_);
+  read("pt_lmh_b", &p->pt_lmh_b_);
+  read("ptl_c", &p->ptl_c_);
+  read("ptl_m", &p->ptl_m_);
+  read("ptl_y", &p->ptl_y_);
+  read("ptm_low", &p->ptm_low_);
+  read("ptm_low_rng", &p->ptm_low_rng_);
+  read("ptm_low_st", &p->ptm_low_st_);
+  read("ptm_high", &p->ptm_high_);
+  read("ptm_high_rng", &p->ptm_high_rng_);
+  read("ptm_high_st", &p->ptm_high_st_);
+  read("brl", &p->brl_);
+  read("brl_r", &p->brl_r_);
+  read("brl_g", &p->brl_g_);
+  read("brl_b", &p->brl_b_);
+  read("brl_rng", &p->brl_rng_);
+  read("brl_st", &p->brl_st_);
+  read("brlp", &p->brlp_);
+  read("brlp_r", &p->brlp_r_);
+  read("brlp_g", &p->brlp_g_);
+  read("brlp_b", &p->brlp_b_);
+  read("hc_r", &p->hc_r_);
+  read("hc_r_rng", &p->hc_r_rng_);
+  read("hs_r", &p->hs_r_);
+  read("hs_r_rng", &p->hs_r_rng_);
+  read("hs_g", &p->hs_g_);
+  read("hs_g_rng", &p->hs_g_rng_);
+  read("hs_b", &p->hs_b_);
+  read("hs_b_rng", &p->hs_b_rng_);
+  read("hs_c", &p->hs_c_);
+  read("hs_c_rng", &p->hs_c_rng_);
+  read("hs_m", &p->hs_m_);
+  read("hs_m_rng", &p->hs_m_rng_);
+  read("hs_y", &p->hs_y_);
+  read("hs_y_rng", &p->hs_y_rng_);
+}
+
+auto OpenDRTDetailedParamsEqual(const odt_cpu::OpenDRTDetailedSettings& a,
+                                const odt_cpu::OpenDRTDetailedSettings& b) -> bool {
+  return a.tn_hcon_enable_ == b.tn_hcon_enable_ && a.tn_lcon_enable_ == b.tn_lcon_enable_ &&
+         a.pt_enable_ == b.pt_enable_ && a.ptl_enable_ == b.ptl_enable_ &&
+         a.ptm_enable_ == b.ptm_enable_ && a.brl_enable_ == b.brl_enable_ &&
+         a.brlp_enable_ == b.brlp_enable_ && a.hc_enable_ == b.hc_enable_ &&
+         a.hs_rgb_enable_ == b.hs_rgb_enable_ && a.hs_cmy_enable_ == b.hs_cmy_enable_ &&
+         OpenDRTDetailedParamsToJson(a) == OpenDRTDetailedParamsToJson(b);
 }
 
 // =========================================================================
@@ -495,14 +628,12 @@ auto FieldChanged(AdjustmentField field, const AdjustmentState& current,
              !NearlyEqual(current.color_temp_custom_tint_, committed.color_temp_custom_tint_);
     case AdjustmentField::Hls:
       for (size_t i = 0; i < hls::kCandidateHues.size(); ++i) {
-        if (!NearlyEqual(current.hls_hue_adjust_table_[i],
-                         committed.hls_hue_adjust_table_[i]) ||
+        if (!NearlyEqual(current.hls_hue_adjust_table_[i], committed.hls_hue_adjust_table_[i]) ||
             !NearlyEqual(current.hls_lightness_adjust_table_[i],
                          committed.hls_lightness_adjust_table_[i]) ||
             !NearlyEqual(current.hls_saturation_adjust_table_[i],
                          committed.hls_saturation_adjust_table_[i]) ||
-            !NearlyEqual(current.hls_hue_range_table_[i],
-                         committed.hls_hue_range_table_[i])) {
+            !NearlyEqual(current.hls_hue_range_table_[i], committed.hls_hue_range_table_[i])) {
           return true;
         }
       }
@@ -548,13 +679,22 @@ auto FieldChanged(AdjustmentField field, const AdjustmentState& current,
              current.odt_.open_drt_.look_preset_ != committed.odt_.open_drt_.look_preset_ ||
              current.odt_.open_drt_.tonescale_preset_ !=
                  committed.odt_.open_drt_.tonescale_preset_ ||
-             current.odt_.open_drt_.creative_white_ !=
-                 committed.odt_.open_drt_.creative_white_;
+             current.odt_.open_drt_.creative_white_ != committed.odt_.open_drt_.creative_white_ ||
+             !NearlyEqual(current.odt_.open_drt_.creative_white_limit_,
+                          committed.odt_.open_drt_.creative_white_limit_) ||
+             !NearlyEqual(current.odt_.open_drt_.display_grey_luminance_,
+                          committed.odt_.open_drt_.display_grey_luminance_) ||
+             !NearlyEqual(current.odt_.open_drt_.hdr_grey_boost_,
+                          committed.odt_.open_drt_.hdr_grey_boost_) ||
+             !NearlyEqual(current.odt_.open_drt_.hdr_purity_,
+                          committed.odt_.open_drt_.hdr_purity_) ||
+             !OpenDRTDetailedParamsEqual(current.odt_.open_drt_.detailed_,
+                                         committed.odt_.open_drt_.detailed_);
     case AdjustmentField::CropRotate: {
       const auto state_rect =
           ClampCropRect(current.crop_x_, current.crop_y_, current.crop_w_, current.crop_h_);
-      const auto committed_rect = ClampCropRect(committed.crop_x_, committed.crop_y_,
-                                                committed.crop_w_, committed.crop_h_);
+      const auto committed_rect =
+          ClampCropRect(committed.crop_x_, committed.crop_y_, committed.crop_w_, committed.crop_h_);
       return !NearlyEqual(current.rotate_degrees_, committed.rotate_degrees_) ||
              current.crop_enabled_ != committed.crop_enabled_ ||
              current.crop_expand_to_fit_ != committed.crop_expand_to_fit_ ||
@@ -574,8 +714,7 @@ auto FieldChanged(AdjustmentField field, const AdjustmentState& current,
 // LoadStateFromPipeline
 // =========================================================================
 
-auto LoadStateFromPipeline(CPUPipelineExecutor& exec,
-                           const AdjustmentState& base_state)
+auto LoadStateFromPipeline(CPUPipelineExecutor& exec, const AdjustmentState& base_state)
     -> std::pair<AdjustmentState, bool> {
   using color_wheel::ClampDiscPoint;
   using geometry::ClampCropRect;
@@ -595,15 +734,15 @@ auto LoadStateFromPipeline(CPUPipelineExecutor& exec,
   loaded_state.crop_aspect_preset_ = ::alcedo::ui::geometry::CropAspectPreset::Free;
   loaded_state.crop_aspect_width_  = 1.0f;
   loaded_state.crop_aspect_height_ = 1.0f;
-  bool has_loaded_any              = false;
+  bool        has_loaded_any       = false;
 
-  const auto& loading  = exec.GetStage(PipelineStageName::Image_Loading);
-  const auto& geometry = exec.GetStage(PipelineStageName::Geometry_Adjustment);
-  const auto& to_ws    = exec.GetStage(PipelineStageName::To_WorkingSpace);
-  const auto& basic    = exec.GetStage(PipelineStageName::Basic_Adjustment);
-  const auto& color    = exec.GetStage(PipelineStageName::Color_Adjustment);
-  const auto& detail   = exec.GetStage(PipelineStageName::Detail_Adjustment);
-  const auto& output   = exec.GetStage(PipelineStageName::Output_Transform);
+  const auto& loading              = exec.GetStage(PipelineStageName::Image_Loading);
+  const auto& geometry             = exec.GetStage(PipelineStageName::Geometry_Adjustment);
+  const auto& to_ws                = exec.GetStage(PipelineStageName::To_WorkingSpace);
+  const auto& basic                = exec.GetStage(PipelineStageName::Basic_Adjustment);
+  const auto& color                = exec.GetStage(PipelineStageName::Color_Adjustment);
+  const auto& detail               = exec.GetStage(PipelineStageName::Detail_Adjustment);
+  const auto& output               = exec.GetStage(PipelineStageName::Output_Transform);
 
   // --- Raw decode ---
   if (const auto raw_json = ReadNestedObject(loading, OperatorType::RAW_DECODE, "raw");
@@ -678,9 +817,8 @@ auto LoadStateFromPipeline(CPUPipelineExecutor& exec,
 
   const auto shadows_enabled = IsOperatorEnabled(basic, OperatorType::SHADOWS);
   if (shadows_enabled.has_value() && shadows_enabled.value()) {
-    loaded_state.shadows_ =
-        exec.GetGlobalParams().shadows_offset_ * kShadowsSliderFromGlobalScale;
-    has_loaded_any = true;
+    loaded_state.shadows_ = exec.GetGlobalParams().shadows_offset_ * kShadowsSliderFromGlobalScale;
+    has_loaded_any        = true;
   } else if (const auto v = ReadFloat(basic, OperatorType::SHADOWS, "shadows"); v.has_value()) {
     loaded_state.shadows_ = v.value();
     has_loaded_any        = true;
@@ -719,7 +857,7 @@ auto LoadStateFromPipeline(CPUPipelineExecutor& exec,
       if (!wheels.contains(key) || !wheels.at(key).is_object()) {
         return false;
       }
-      const auto& src            = wheels.at(key);
+      const auto& src              = wheels.at(key);
       bool        loaded_any_field = false;
       bool        has_color_offset = false;
 
@@ -782,8 +920,7 @@ auto LoadStateFromPipeline(CPUPipelineExecutor& exec,
   }
 
   // --- Color temperature ---
-  if (const auto color_temp_json =
-          ReadNestedObject(to_ws, OperatorType::COLOR_TEMP, "color_temp");
+  if (const auto color_temp_json = ReadNestedObject(to_ws, OperatorType::COLOR_TEMP, "color_temp");
       color_temp_json.has_value()) {
     const auto& ct = *color_temp_json;
     if (ct.contains("mode") && ct["mode"].is_string()) {
@@ -791,33 +928,33 @@ auto LoadStateFromPipeline(CPUPipelineExecutor& exec,
     }
     if (ct.contains("cct")) {
       try {
-        loaded_state.color_temp_custom_cct_ = std::clamp(
-            ct["cct"].get<float>(), static_cast<float>(color_temp::kCctMin),
-            static_cast<float>(color_temp::kCctMax));
+        loaded_state.color_temp_custom_cct_ =
+            std::clamp(ct["cct"].get<float>(), static_cast<float>(color_temp::kCctMin),
+                       static_cast<float>(color_temp::kCctMax));
       } catch (...) {
       }
     }
     if (ct.contains("tint")) {
       try {
-        loaded_state.color_temp_custom_tint_ = std::clamp(
-            ct["tint"].get<float>(), static_cast<float>(color_temp::kTintMin),
-            static_cast<float>(color_temp::kTintMax));
+        loaded_state.color_temp_custom_tint_ =
+            std::clamp(ct["tint"].get<float>(), static_cast<float>(color_temp::kTintMin),
+                       static_cast<float>(color_temp::kTintMax));
       } catch (...) {
       }
     }
     if (ct.contains("resolved_cct")) {
       try {
-        loaded_state.color_temp_resolved_cct_ = std::clamp(
-            ct["resolved_cct"].get<float>(), static_cast<float>(color_temp::kCctMin),
-            static_cast<float>(color_temp::kCctMax));
+        loaded_state.color_temp_resolved_cct_ =
+            std::clamp(ct["resolved_cct"].get<float>(), static_cast<float>(color_temp::kCctMin),
+                       static_cast<float>(color_temp::kCctMax));
       } catch (...) {
       }
     }
     if (ct.contains("resolved_tint")) {
       try {
-        loaded_state.color_temp_resolved_tint_ = std::clamp(
-            ct["resolved_tint"].get<float>(), static_cast<float>(color_temp::kTintMin),
-            static_cast<float>(color_temp::kTintMax));
+        loaded_state.color_temp_resolved_tint_ =
+            std::clamp(ct["resolved_tint"].get<float>(), static_cast<float>(color_temp::kTintMin),
+                       static_cast<float>(color_temp::kTintMax));
       } catch (...) {
       }
     }
@@ -846,11 +983,11 @@ auto LoadStateFromPipeline(CPUPipelineExecutor& exec,
     loaded_state.hls_hue_adjust_table_.fill(0.0f);
     loaded_state.hls_lightness_adjust_table_.fill(0.0f);
     loaded_state.hls_saturation_adjust_table_.fill(0.0f);
-    loaded_state.hls_hue_range_table_ = MakeFilledArray(hls::kDefaultHueRange);
-    std::array<float, 3> target_hls   = {loaded_state.hls_target_hue_, hls::kFixedTargetLightness,
+    loaded_state.hls_hue_range_table_  = MakeFilledArray(hls::kDefaultHueRange);
+    std::array<float, 3> target_hls    = {loaded_state.hls_target_hue_, hls::kFixedTargetLightness,
                                           hls::kFixedTargetSaturation};
-    std::array<float, 3> hls_adj      = {};
-    bool                 has_adj_table   = false;
+    std::array<float, 3> hls_adj       = {};
+    bool                 has_adj_table = false;
     bool                 has_range_table = false;
 
     if (hls_data.contains("hls_adj_table") && hls_data["hls_adj_table"].is_array()) {
@@ -874,11 +1011,9 @@ auto LoadStateFromPipeline(CPUPipelineExecutor& exec,
           loaded_state.hls_hue_adjust_table_[idx] = std::clamp(
               adj_tbl[i][0].get<float>(), -hls::kMaxHueShiftDegrees, hls::kMaxHueShiftDegrees);
           loaded_state.hls_lightness_adjust_table_[idx] = std::clamp(
-              adj_tbl[i][1].get<float>() * hls::kAdjUiToParamScale, hls::kAdjUiMin,
-              hls::kAdjUiMax);
+              adj_tbl[i][1].get<float>() * hls::kAdjUiToParamScale, hls::kAdjUiMin, hls::kAdjUiMax);
           loaded_state.hls_saturation_adjust_table_[idx] = std::clamp(
-              adj_tbl[i][2].get<float>() * hls::kAdjUiToParamScale, hls::kAdjUiMin,
-              hls::kAdjUiMax);
+              adj_tbl[i][2].get<float>() * hls::kAdjUiToParamScale, hls::kAdjUiMin, hls::kAdjUiMax);
           has_adj_table = true;
         } catch (...) {
         }
@@ -978,14 +1113,33 @@ auto LoadStateFromPipeline(CPUPipelineExecutor& exec,
             odt_cpu::OpenDRTLookPresetFromString(open_drt["look_preset"].get<std::string>());
       }
       if (open_drt.contains("tonescale_preset") && open_drt["tonescale_preset"].is_string()) {
-        loaded_state.odt_.open_drt_.tonescale_preset_ =
-            odt_cpu::OpenDRTTonescalePresetFromString(
-                open_drt["tonescale_preset"].get<std::string>());
+        loaded_state.odt_.open_drt_.tonescale_preset_ = odt_cpu::OpenDRTTonescalePresetFromString(
+            open_drt["tonescale_preset"].get<std::string>());
       }
       if (open_drt.contains("creative_white") && open_drt["creative_white"].is_string()) {
-        loaded_state.odt_.open_drt_.creative_white_ =
-            odt_cpu::OpenDRTCreativeWhitePresetFromString(
-                open_drt["creative_white"].get<std::string>());
+        loaded_state.odt_.open_drt_.creative_white_ = odt_cpu::OpenDRTCreativeWhitePresetFromString(
+            open_drt["creative_white"].get<std::string>());
+      }
+      if (open_drt.contains("creative_white_limit") &&
+          open_drt["creative_white_limit"].is_number()) {
+        loaded_state.odt_.open_drt_.creative_white_limit_ =
+            std::clamp(open_drt["creative_white_limit"].get<float>(), 0.0f, 1.0f);
+      }
+      if (open_drt.contains("display_grey_luminance") &&
+          open_drt["display_grey_luminance"].is_number()) {
+        loaded_state.odt_.open_drt_.display_grey_luminance_ =
+            std::clamp(open_drt["display_grey_luminance"].get<float>(), 3.0f, 25.0f);
+      }
+      if (open_drt.contains("hdr_grey_boost") && open_drt["hdr_grey_boost"].is_number()) {
+        loaded_state.odt_.open_drt_.hdr_grey_boost_ =
+            std::clamp(open_drt["hdr_grey_boost"].get<float>(), 0.0f, 1.0f);
+      }
+      if (open_drt.contains("hdr_purity") && open_drt["hdr_purity"].is_number()) {
+        loaded_state.odt_.open_drt_.hdr_purity_ =
+            std::clamp(open_drt["hdr_purity"].get<float>(), 0.0f, 1.0f);
+      }
+      if (open_drt.contains("parameters") && open_drt["parameters"].is_object()) {
+        LoadOpenDRTDetailedParams(open_drt["parameters"], &loaded_state.odt_.open_drt_.detailed_);
       }
     }
     has_loaded_any = true;
@@ -997,7 +1151,7 @@ auto LoadStateFromPipeline(CPUPipelineExecutor& exec,
       crop_rotate_json.has_value()) {
     const auto& crop_rotate      = *crop_rotate_json;
     loaded_state.rotate_degrees_ = crop_rotate.value("angle_degrees", loaded_state.rotate_degrees_);
-    loaded_state.crop_enabled_ = crop_rotate.value("enable_crop", loaded_state.crop_enabled_);
+    loaded_state.crop_enabled_   = crop_rotate.value("enable_crop", loaded_state.crop_enabled_);
     loaded_state.crop_expand_to_fit_ =
         crop_rotate.value("expand_to_fit", loaded_state.crop_expand_to_fit_);
     const bool has_aspect_ratio_object =
@@ -1012,32 +1166,32 @@ auto LoadStateFromPipeline(CPUPipelineExecutor& exec,
         loaded_state.crop_aspect_height_ = normalized->at(1);
       }
     }
-    if (crop_rotate.contains("aspect_ratio_preset") && crop_rotate["aspect_ratio_preset"].is_string()) {
-      const auto preset =
-          ::alcedo::ui::geometry::ParseCropAspectPreset(
-              crop_rotate["aspect_ratio_preset"].get<std::string>());
+    if (crop_rotate.contains("aspect_ratio_preset") &&
+        crop_rotate["aspect_ratio_preset"].is_string()) {
+      const auto preset = ::alcedo::ui::geometry::ParseCropAspectPreset(
+          crop_rotate["aspect_ratio_preset"].get<std::string>());
       if (preset.has_value()) {
         loaded_state.crop_aspect_preset_ = *preset;
       } else if (has_aspect_ratio_object &&
                  ::alcedo::ui::geometry::NormalizeCropAspect(loaded_state.crop_aspect_width_,
-                                                               loaded_state.crop_aspect_height_)
+                                                             loaded_state.crop_aspect_height_)
                      .has_value()) {
         loaded_state.crop_aspect_preset_ = ::alcedo::ui::geometry::CropAspectPreset::Custom;
       }
     } else if (has_aspect_ratio_object &&
                ::alcedo::ui::geometry::NormalizeCropAspect(loaded_state.crop_aspect_width_,
-                                                             loaded_state.crop_aspect_height_)
+                                                           loaded_state.crop_aspect_height_)
                    .has_value()) {
       loaded_state.crop_aspect_preset_ = ::alcedo::ui::geometry::CropAspectPreset::Custom;
     }
     if (!::alcedo::ui::geometry::HasLockedAspect(loaded_state.crop_aspect_preset_,
-                                                   loaded_state.crop_aspect_width_,
-                                                   loaded_state.crop_aspect_height_)) {
+                                                 loaded_state.crop_aspect_width_,
+                                                 loaded_state.crop_aspect_height_)) {
       loaded_state.crop_aspect_preset_ = ::alcedo::ui::geometry::CropAspectPreset::Free;
       loaded_state.crop_aspect_width_  = 1.0f;
       loaded_state.crop_aspect_height_ = 1.0f;
-    } else if (const auto preset_ratio = ::alcedo::ui::geometry::CropAspectPresetRatio(
-                   loaded_state.crop_aspect_preset_);
+    } else if (const auto preset_ratio =
+                   ::alcedo::ui::geometry::CropAspectPresetRatio(loaded_state.crop_aspect_preset_);
                preset_ratio.has_value()) {
       loaded_state.crop_aspect_width_  = preset_ratio->at(0);
       loaded_state.crop_aspect_height_ = preset_ratio->at(1);
@@ -1045,14 +1199,13 @@ auto LoadStateFromPipeline(CPUPipelineExecutor& exec,
     bool has_non_full_crop_rect = false;
     if (crop_rotate.contains("crop_rect") && crop_rotate["crop_rect"].is_object()) {
       const auto& crop_rect = crop_rotate["crop_rect"];
-      const auto  clamped   = ClampCropRect(crop_rect.value("x", loaded_state.crop_x_),
-                                             crop_rect.value("y", loaded_state.crop_y_),
-                                             crop_rect.value("w", loaded_state.crop_w_),
-                                             crop_rect.value("h", loaded_state.crop_h_));
-      loaded_state.crop_x_ = clamped[0];
-      loaded_state.crop_y_ = clamped[1];
-      loaded_state.crop_w_ = clamped[2];
-      loaded_state.crop_h_ = clamped[3];
+      const auto  clamped   = ClampCropRect(
+          crop_rect.value("x", loaded_state.crop_x_), crop_rect.value("y", loaded_state.crop_y_),
+          crop_rect.value("w", loaded_state.crop_w_), crop_rect.value("h", loaded_state.crop_h_));
+      loaded_state.crop_x_   = clamped[0];
+      loaded_state.crop_y_   = clamped[1];
+      loaded_state.crop_w_   = clamped[2];
+      loaded_state.crop_h_   = clamped[3];
       has_non_full_crop_rect = std::abs(loaded_state.crop_x_) > 1e-4f ||
                                std::abs(loaded_state.crop_y_) > 1e-4f ||
                                std::abs(loaded_state.crop_w_ - 1.0f) > 1e-4f ||
@@ -1061,9 +1214,9 @@ auto LoadStateFromPipeline(CPUPipelineExecutor& exec,
     loaded_state.crop_enabled_ =
         loaded_state.crop_enabled_ || has_non_full_crop_rect ||
         ::alcedo::ui::geometry::HasLockedAspect(loaded_state.crop_aspect_preset_,
-                                                  loaded_state.crop_aspect_width_,
-                                                  loaded_state.crop_aspect_height_);
-    has_loaded_any             = true;
+                                                loaded_state.crop_aspect_width_,
+                                                loaded_state.crop_aspect_height_);
+    has_loaded_any = true;
   }
 
   // --- LUT ---
@@ -1078,12 +1231,12 @@ auto LoadStateFromPipeline(CPUPipelineExecutor& exec,
   }
 
   // --- Resolved color temperature from global params ---
-  loaded_state.color_temp_resolved_cct_ = std::clamp(
-      exec.GetGlobalParams().color_temp_resolved_cct_,
-      static_cast<float>(color_temp::kCctMin), static_cast<float>(color_temp::kCctMax));
+  loaded_state.color_temp_resolved_cct_ =
+      std::clamp(exec.GetGlobalParams().color_temp_resolved_cct_,
+                 static_cast<float>(color_temp::kCctMin), static_cast<float>(color_temp::kCctMax));
   loaded_state.color_temp_resolved_tint_ = std::clamp(
-      exec.GetGlobalParams().color_temp_resolved_tint_,
-      static_cast<float>(color_temp::kTintMin), static_cast<float>(color_temp::kTintMax));
+      exec.GetGlobalParams().color_temp_resolved_tint_, static_cast<float>(color_temp::kTintMin),
+      static_cast<float>(color_temp::kTintMax));
   loaded_state.color_temp_supported_ = exec.GetGlobalParams().color_temp_matrices_valid_;
 
   return {loaded_state, has_loaded_any};

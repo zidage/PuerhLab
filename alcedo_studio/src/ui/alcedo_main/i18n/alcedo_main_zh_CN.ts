@@ -1482,7 +1482,7 @@
     <message>
       <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="294" />
       <source>Choose the transform family. Shared encoding settings stay above; method-specific settings stay preserved per method.</source>
-      <translation>选择变换族。共享编码设置保留在上方；各方法专属设置会分别保留。</translation>
+      <translation>选择显示变换算法</translation>
     </message>
     <message>
       <location filename="../../../include/ui/alcedo_main/editor_dialog/dialog_internal.hpp" line="296" />

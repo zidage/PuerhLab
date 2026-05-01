@@ -4,8 +4,6 @@
 
 #pragma once
 
-#include "ui/alcedo_main/editor_dialog/dialog.hpp"
-
 #include <QAbstractItemView>
 #include <QAbstractSpinBox>
 #include <QApplication>
@@ -33,26 +31,26 @@
 #include <QMessageBox>
 #include <QMouseEvent>
 #include <QPainter>
-#include <QResizeEvent>
 #include <QPainterPath>
 #include <QPen>
+#include <QPixmap>
 #include <QPlainTextEdit>
 #include <QPushButton>
-#include <QPixmap>
+#include <QResizeEvent>
 #include <QScrollArea>
 #include <QShowEvent>
 #include <QSlider>
 #include <QSpinBox>
-#include <QStackedWidget>
 #include <QSplitter>
+#include <QStackedWidget>
 #include <QStyle>
 #include <QSurfaceFormat>
-#include <QTimer>
-#include <QTextEdit>
-#include <QUrl>
-#include <QVariantAnimation>
-#include <QVBoxLayout>
 #include <QSvgRenderer>
+#include <QTextEdit>
+#include <QTimer>
+#include <QUrl>
+#include <QVBoxLayout>
+#include <QVariantAnimation>
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -60,9 +58,9 @@
 #include <deque>
 #include <filesystem>
 #include <format>
+#include <fstream>
 #include <functional>
 #include <future>
-#include <fstream>
 #include <json.hpp>
 #include <map>
 #include <numbers>
@@ -73,9 +71,9 @@
 #include <vector>
 
 #include "app/render_service.hpp"
-#include "edit/operators/basic/color_temp_op.hpp"
 #include "edit/history/edit_transaction.hpp"
 #include "edit/history/version.hpp"
+#include "edit/operators/basic/color_temp_op.hpp"
 #include "edit/pipeline/default_pipeline_params.hpp"
 #include "edit/pipeline/pipeline_cpu.hpp"
 #include "edit/scope/final_display_frame_tap.hpp"
@@ -83,11 +81,13 @@
 #include "image/image.hpp"
 #include "io/image/image_loader.hpp"
 #include "renderer/pipeline_task.hpp"
+#include "ui/alcedo_main/app_theme.hpp"
 #include "ui/alcedo_main/editor_dialog/controllers/history_controller.hpp"
 #include "ui/alcedo_main/editor_dialog/controllers/image_controller.hpp"
 #include "ui/alcedo_main/editor_dialog/controllers/lut_controller.hpp"
 #include "ui/alcedo_main/editor_dialog/controllers/pipeline_controller.hpp"
 #include "ui/alcedo_main/editor_dialog/controllers/render_controller.hpp"
+#include "ui/alcedo_main/editor_dialog/dialog.hpp"
 #include "ui/alcedo_main/editor_dialog/frame/editor_frame_manager.hpp"
 #include "ui/alcedo_main/editor_dialog/modules/color_temp.hpp"
 #include "ui/alcedo_main/editor_dialog/modules/color_wheel.hpp"
@@ -110,11 +110,10 @@
 #include "ui/alcedo_main/editor_dialog/widgets/lut_browser_widget.hpp"
 #include "ui/alcedo_main/editor_dialog/widgets/raw_decode_panel_widget.hpp"
 #include "ui/alcedo_main/editor_dialog/widgets/spinner.hpp"
-#include "ui/alcedo_main/editor_dialog/widgets/tone_curve_widget.hpp"
 #include "ui/alcedo_main/editor_dialog/widgets/tone_control_panel_widget.hpp"
+#include "ui/alcedo_main/editor_dialog/widgets/tone_curve_widget.hpp"
 #include "ui/alcedo_main/editor_dialog/widgets/trackball.hpp"
 #include "ui/alcedo_main/editor_dialog/widgets/versioning_panel_widget.hpp"
-#include "ui/alcedo_main/app_theme.hpp"
 #include "ui/alcedo_main/i18n.hpp"
 #include "ui/alcedo_main/shortcut_registry.hpp"
 #include "ui/edit_viewer/edit_viewer.hpp"
@@ -122,53 +121,59 @@
 namespace alcedo::ui {
 namespace {
 
-const auto kShortcutUndoHistoryId   = QStringLiteral("editor_dialog.undo_history_transaction");
-const auto kShortcutResetGeometryId = QStringLiteral("editor_dialog.reset_geometry");
-const auto kShortcutSelectPrevLutId = QStringLiteral("editor_dialog.select_prev_lut");
-const auto kShortcutSelectNextLutId = QStringLiteral("editor_dialog.select_next_lut");
+const auto     kShortcutUndoHistoryId   = QStringLiteral("editor_dialog.undo_history_transaction");
+const auto     kShortcutResetGeometryId = QStringLiteral("editor_dialog.reset_geometry");
+const auto     kShortcutSelectPrevLutId = QStringLiteral("editor_dialog.select_prev_lut");
+const auto     kShortcutSelectNextLutId = QStringLiteral("editor_dialog.select_next_lut");
 constexpr char kPanelIconPathProperty[] = "puerhlabPanelIconPath";
 constexpr char kLocalizedTextProperty[] = "puerhlabI18nText";
 constexpr char kLocalizedTextUpperProperty[] = "puerhlabI18nTextUpper";
-constexpr char kLocalizedToolTipProperty[] = "puerhlabI18nToolTip";
-const QSize     kPanelToggleIconSize(18, 18);
-constexpr int   kPanelToggleButtonHeight = 44;
-const QSize     kVersioningRailIconSize(18, 18);
-constexpr int   kVersioningRailButtonSize = 46;
-constexpr int   kEditorOuterMargin = 14;
-constexpr int   kVersioningCollapsedWidth = 64;
-constexpr int   kVersioningExpandedMinWidth = 320;
-constexpr int   kVersioningExpandedMaxWidth = 420;
-constexpr int   kVersioningExpandedMinHeight = 300;
-constexpr int   kVersioningExpandedMaxHeight = 460;
-constexpr int   kVersioningAnimationMs = 250;
-constexpr int   kControlsPanelMinWidth = 260;
+constexpr char kLocalizedToolTipProperty[]   = "puerhlabI18nToolTip";
+const QSize    kPanelToggleIconSize(18, 18);
+constexpr int  kPanelToggleButtonHeight = 44;
+const QSize    kVersioningRailIconSize(18, 18);
+constexpr int  kVersioningRailButtonSize    = 46;
+constexpr int  kEditorOuterMargin           = 14;
+constexpr int  kVersioningCollapsedWidth    = 64;
+constexpr int  kVersioningExpandedMinWidth  = 320;
+constexpr int  kVersioningExpandedMaxWidth  = 420;
+constexpr int  kVersioningExpandedMinHeight = 300;
+constexpr int  kVersioningExpandedMaxHeight = 460;
+constexpr int  kVersioningAnimationMs       = 250;
+constexpr int  kControlsPanelMinWidth       = 260;
 
 using namespace std::chrono_literals;
 
 using LensCatalog = lens_calib::LensCatalog;
-using lens_calib::LoadLensCatalog;
-using lens_calib::SortAndUniqueStrings;
+using color_wheel::CdlMasterToSliderUi;
+using color_wheel::CdlSliderUiToMaster;
 using color_wheel::ClampDiscPoint;
 using color_wheel::DiscToCdlDelta;
-using color_wheel::CdlSliderUiToMaster;
-using color_wheel::CdlMasterToSliderUi;
-using curve::Clamp01;
-using curve::DefaultCurveControlPoints;
-using curve::NormalizeCurveControlPoints;
-using curve::CurveControlPointsEqual;
-using curve::CurveHermiteCache;
 using curve::BuildCurveHermiteCache;
-using curve::EvaluateCurveHermite;
+using curve::Clamp01;
+using curve::CurveControlPointsEqual;
 using curve::CurveControlPointsToParams;
+using curve::CurveHermiteCache;
+using curve::DefaultCurveControlPoints;
+using curve::EvaluateCurveHermite;
+using curve::NormalizeCurveControlPoints;
 using curve::ParseCurveControlPointsFromParams;
 using geometry::ClampCropRect;
 using geometry::CropAspectPreset;
-using hls::WrapHueDegrees;
-using hls::HueDistanceDegrees;
 using hls::HlsProfileArray;
-inline auto ClosestHlsCandidateHueIndex(float hue) -> int { return hls::ClosestCandidateHueIndex(hue); }
-inline auto HlsCandidateColor(float hue_degrees) -> QColor { return hls::CandidateColor(hue_degrees); }
-inline auto MakeHlsFilledArray(float value) -> HlsProfileArray { return hls::MakeFilledArray(value); }
+using hls::HueDistanceDegrees;
+using hls::WrapHueDegrees;
+using lens_calib::LoadLensCatalog;
+using lens_calib::SortAndUniqueStrings;
+inline auto ClosestHlsCandidateHueIndex(float hue) -> int {
+  return hls::ClosestCandidateHueIndex(hue);
+}
+inline auto HlsCandidateColor(float hue_degrees) -> QColor {
+  return hls::CandidateColor(hue_degrees);
+}
+inline auto MakeHlsFilledArray(float value) -> HlsProfileArray {
+  return hls::MakeFilledArray(value);
+}
 
 void SetLocalizedText(QObject* object, const char* source, bool uppercase = false) {
   if (!object || source == nullptr) {
@@ -225,8 +230,8 @@ void RetranslateMarkedObjects(QObject* root) {
 
   const QVariant text_source = root->property(kLocalizedTextProperty);
   if (text_source.isValid()) {
-    const bool uppercase = root->property(kLocalizedTextUpperProperty).toBool();
-    const QByteArray source = text_source.toByteArray();
+    const bool       uppercase = root->property(kLocalizedTextUpperProperty).toBool();
+    const QByteArray source    = text_source.toByteArray();
     SetLocalizedText(root, source.constData(), uppercase);
   }
 
@@ -254,10 +259,10 @@ void RetranslateMarkedObjects(QObject* root) {
     QT_TRANSLATE_NOOP("Alcedo", "Whites"),
     QT_TRANSLATE_NOOP("Alcedo", "Blacks"),
     QT_TRANSLATE_NOOP("Alcedo", "Tone Curve"),
-    QT_TRANSLATE_NOOP("Alcedo",
-                      "Smooth tone curve mapped from input [0, 1] to output [0, 1]."),
-    QT_TRANSLATE_NOOP("Alcedo",
-                      "Left click/drag to shape. Right click a point to remove. Double click to reset."),
+    QT_TRANSLATE_NOOP("Alcedo", "Smooth tone curve mapped from input [0, 1] to output [0, 1]."),
+    QT_TRANSLATE_NOOP(
+        "Alcedo",
+        "Left click/drag to shape. Right click a point to remove. Double click to reset."),
     QT_TRANSLATE_NOOP("Alcedo", "Reset Curve"),
     QT_TRANSLATE_NOOP("Alcedo", "Color"),
     QT_TRANSLATE_NOOP("Alcedo", "Color balance and saturation."),
@@ -292,7 +297,8 @@ void RetranslateMarkedObjects(QObject* root) {
     QT_TRANSLATE_NOOP("Alcedo", "Peak Luminance"),
     QT_TRANSLATE_NOOP("Alcedo", "Rendering Method"),
     QT_TRANSLATE_NOOP("Alcedo",
-                      "Choose the transform family. Shared encoding settings stay above; method-specific settings stay preserved per method."),
+                      "Choose the transform family. Shared encoding settings stay above; "
+                      "method-specific settings stay preserved per method."),
     QT_TRANSLATE_NOOP("Alcedo", "ACES 2.0"),
     QT_TRANSLATE_NOOP("Alcedo", "OpenDRT"),
     QT_TRANSLATE_NOOP("Alcedo", "Limiting Space"),
@@ -315,14 +321,16 @@ void RetranslateMarkedObjects(QObject* root) {
     QT_TRANSLATE_NOOP("Alcedo", "Apply Crop"),
     QT_TRANSLATE_NOOP("Alcedo", "Reset"),
     QT_TRANSLATE_NOOP("Alcedo",
-                      "Pixels update on Apply. Double click any slider or the viewer to reset. Ctrl+R resets all geometry."),
+                      "Pixels update on Apply. Double click any slider or the viewer to reset. "
+                      "Ctrl+R resets all geometry."),
     QT_TRANSLATE_NOOP("Alcedo", "RAW Decode"),
-    QT_TRANSLATE_NOOP("Alcedo",
-                      "Configure RAW decode options. These settings are shared with thumbnail rendering."),
+    QT_TRANSLATE_NOOP(
+        "Alcedo",
+        "Configure RAW decode options. These settings are shared with thumbnail rendering."),
     QT_TRANSLATE_NOOP("Alcedo", "Enable Highlight Reconstruction"),
     QT_TRANSLATE_NOOP("Alcedo", "Lens Calibration"),
-    QT_TRANSLATE_NOOP("Alcedo",
-                      "Enable correction and optionally override lens metadata with catalog entries."),
+    QT_TRANSLATE_NOOP(
+        "Alcedo", "Enable correction and optionally override lens metadata with catalog entries."),
     QT_TRANSLATE_NOOP("Alcedo", "Enable Lens Calibration"),
     QT_TRANSLATE_NOOP("Alcedo", "Lens Brand"),
     QT_TRANSLATE_NOOP("Alcedo", "Lens Model"),
@@ -366,37 +374,37 @@ void RetranslateMarkedObjects(QObject* root) {
 });
 
 // Tonal-slider scale aliases (defined in pipeline_io).
-constexpr float kBlackSliderFromGlobalScale      = pipeline_io::kBlackSliderFromGlobalScale;
-constexpr float kWhiteSliderFromGlobalScale      = pipeline_io::kWhiteSliderFromGlobalScale;
-constexpr float kShadowsSliderFromGlobalScale    = pipeline_io::kShadowsSliderFromGlobalScale;
-constexpr float kHighlightsSliderFromGlobalScale = pipeline_io::kHighlightsSliderFromGlobalScale;
+constexpr float  kBlackSliderFromGlobalScale      = pipeline_io::kBlackSliderFromGlobalScale;
+constexpr float  kWhiteSliderFromGlobalScale      = pipeline_io::kWhiteSliderFromGlobalScale;
+constexpr float  kShadowsSliderFromGlobalScale    = pipeline_io::kShadowsSliderFromGlobalScale;
+constexpr float  kHighlightsSliderFromGlobalScale = pipeline_io::kHighlightsSliderFromGlobalScale;
 
 // HLS constant aliases.
-constexpr auto& kHlsCandidateHues        = hls::kCandidateHues;
-constexpr float kHlsFixedTargetLightness  = hls::kFixedTargetLightness;
-constexpr float kHlsFixedTargetSaturation = hls::kFixedTargetSaturation;
-constexpr float kHlsDefaultHueRange       = hls::kDefaultHueRange;
-constexpr float kHlsFixedLightnessRange   = hls::kFixedLightnessRange;
-constexpr float kHlsFixedSaturationRange  = hls::kFixedSaturationRange;
-constexpr float kHlsMaxHueShiftDegrees    = hls::kMaxHueShiftDegrees;
-constexpr float kHlsAdjUiMin              = hls::kAdjUiMin;
-constexpr float kHlsAdjUiMax              = hls::kAdjUiMax;
-constexpr float kHlsAdjUiToParamScale     = hls::kAdjUiToParamScale;
+constexpr auto&  kHlsCandidateHues                = hls::kCandidateHues;
+constexpr float  kHlsFixedTargetLightness         = hls::kFixedTargetLightness;
+constexpr float  kHlsFixedTargetSaturation        = hls::kFixedTargetSaturation;
+constexpr float  kHlsDefaultHueRange              = hls::kDefaultHueRange;
+constexpr float  kHlsFixedLightnessRange          = hls::kFixedLightnessRange;
+constexpr float  kHlsFixedSaturationRange         = hls::kFixedSaturationRange;
+constexpr float  kHlsMaxHueShiftDegrees           = hls::kMaxHueShiftDegrees;
+constexpr float  kHlsAdjUiMin                     = hls::kAdjUiMin;
+constexpr float  kHlsAdjUiMax                     = hls::kAdjUiMax;
+constexpr float  kHlsAdjUiToParamScale            = hls::kAdjUiToParamScale;
 
 // Aliases for module constants (preserve local names used throughout EditorDialog).
-constexpr int   kColorTempCctMin         = color_temp::kCctMin;
-constexpr int   kColorTempCctMax         = color_temp::kCctMax;
-constexpr int   kColorTempTintMin        = color_temp::kTintMin;
-constexpr int   kColorTempTintMax        = color_temp::kTintMax;
-constexpr int   kColorTempSliderUiMin    = color_temp::kSliderUiMin;
-constexpr int   kColorTempSliderUiMax    = color_temp::kSliderUiMax;
-constexpr float kRotationSliderScale     = geometry::kRotationSliderScale;
-constexpr float kCropRectSliderScale     = geometry::kCropRectSliderScale;
-constexpr double kCropAspectSpinMin      = 0.01;
-constexpr double kCropAspectSpinMax      = 100.0;
-constexpr int   kCdlWheelSliderUiMin     = color_wheel::kSliderUiMin;
-constexpr int   kCdlWheelSliderUiMax     = color_wheel::kSliderUiMax;
-constexpr float kCdlWheelStrengthDefault = color_wheel::kStrengthDefault;
+constexpr int    kColorTempCctMin                 = color_temp::kCctMin;
+constexpr int    kColorTempCctMax                 = color_temp::kCctMax;
+constexpr int    kColorTempTintMin                = color_temp::kTintMin;
+constexpr int    kColorTempTintMax                = color_temp::kTintMax;
+constexpr int    kColorTempSliderUiMin            = color_temp::kSliderUiMin;
+constexpr int    kColorTempSliderUiMax            = color_temp::kSliderUiMax;
+constexpr float  kRotationSliderScale             = geometry::kRotationSliderScale;
+constexpr float  kCropRectSliderScale             = geometry::kCropRectSliderScale;
+constexpr double kCropAspectSpinMin               = 0.01;
+constexpr double kCropAspectSpinMax               = 100.0;
+constexpr int    kCdlWheelSliderUiMin             = color_wheel::kSliderUiMin;
+constexpr int    kCdlWheelSliderUiMax             = color_wheel::kSliderUiMax;
+constexpr float  kCdlWheelStrengthDefault         = color_wheel::kStrengthDefault;
 
 auto RenderPanelToggleIcon(const QString& resource_path, const QColor& color, const QSize& size,
                            qreal device_pixel_ratio) -> QIcon {
@@ -413,7 +421,8 @@ auto RenderPanelToggleIcon(const QString& resource_path, const QColor& color, co
     return {};
   }
 
-  const qreal scale = std::max<qreal>(2.0, std::ceil(std::max<qreal>(1.0, device_pixel_ratio) * 2.0));
+  const qreal scale =
+      std::max<qreal>(2.0, std::ceil(std::max<qreal>(1.0, device_pixel_ratio) * 2.0));
   const QSize physical_size(std::max(1, qRound(size.width() * scale)),
                             std::max(1, qRound(size.height() * scale)));
   QPixmap     pixmap(physical_size);
@@ -429,8 +438,8 @@ auto RenderPanelToggleIcon(const QString& resource_path, const QColor& color, co
 }
 
 auto RenderDockRailIcon(const QString& resource_path, const QColor& icon_color,
-                        const QColor& chevron_color, const QSize& size,
-                        qreal device_pixel_ratio, qreal chevron_angle_degrees) -> QIcon {
+                        const QColor& chevron_color, const QSize& size, qreal device_pixel_ratio,
+                        qreal chevron_angle_degrees) -> QIcon {
   QFile svg_file(resource_path);
   if (!svg_file.open(QIODevice::ReadOnly)) {
     return {};
@@ -448,15 +457,14 @@ auto RenderDockRailIcon(const QString& resource_path, const QColor& icon_color,
   const QSize physical_size(std::max(1, qRound(size.width() * scale)),
                             std::max(1, qRound(size.height() * scale)));
 
-  QPixmap pixmap(physical_size);
+  QPixmap     pixmap(physical_size);
   pixmap.fill(Qt::transparent);
   pixmap.setDevicePixelRatio(scale);
 
   QPainter painter(&pixmap);
   painter.setRenderHint(QPainter::Antialiasing, true);
 
-  const qreal glyph_span =
-      std::max(4.0, std::min<qreal>(size.height() - 2.0, size.width() - 9.0));
+  const qreal  glyph_span = std::max(4.0, std::min<qreal>(size.height() - 2.0, size.width() - 9.0));
   const QRectF glyph_rect(1.0, (size.height() - glyph_span) * 0.5, glyph_span, glyph_span);
   renderer.render(&painter, glyph_rect);
 
@@ -480,8 +488,7 @@ auto RenderDockRailIcon(const QString& resource_path, const QColor& icon_color,
   return QIcon(pixmap);
 }
 
-void ConfigurePanelToggleButton(QPushButton*    button,
-                                const char* tooltip_source,
+void ConfigurePanelToggleButton(QPushButton* button, const char* tooltip_source,
                                 const QString& icon_resource_path) {
   if (!button) {
     return;
@@ -505,7 +512,7 @@ struct EnumOption {
   const char* label_;
 };
 
-constexpr std::array<EnumOption<ColorUtils::ColorSpace>, 6> kDisplayEncodingSpaceOptions = {{
+constexpr std::array<EnumOption<ColorUtils::ColorSpace>, 6>     kDisplayEncodingSpaceOptions   = {{
     {ColorUtils::ColorSpace::REC709, "Rec.709"},
     {ColorUtils::ColorSpace::P3_D65, "P3-D65"},
     {ColorUtils::ColorSpace::P3_D60, "P3-D60"},
@@ -514,7 +521,7 @@ constexpr std::array<EnumOption<ColorUtils::ColorSpace>, 6> kDisplayEncodingSpac
     {ColorUtils::ColorSpace::REC2020, "Rec.2020"},
 }};
 
-constexpr std::array<EnumOption<ColorUtils::ColorSpace>, 7> kAcesLimitingSpaceOptions = {{
+constexpr std::array<EnumOption<ColorUtils::ColorSpace>, 7>     kAcesLimitingSpaceOptions      = {{
     {ColorUtils::ColorSpace::REC709, "Rec.709"},
     {ColorUtils::ColorSpace::REC2020, "Rec.2020"},
     {ColorUtils::ColorSpace::P3_D65, "P3-D65"},
@@ -524,7 +531,7 @@ constexpr std::array<EnumOption<ColorUtils::ColorSpace>, 7> kAcesLimitingSpaceOp
     {ColorUtils::ColorSpace::ADOBE_RGB, "Adobe RGB"},
 }};
 
-constexpr std::array<EnumOption<odt_cpu::OpenDRTLookPreset>, 7> kOpenDrtLookPresetOptions = {{
+constexpr std::array<EnumOption<odt_cpu::OpenDRTLookPreset>, 8> kOpenDrtLookPresetOptions      = {{
     {odt_cpu::OpenDRTLookPreset::STANDARD, "Standard"},
     {odt_cpu::OpenDRTLookPreset::ARRIBA, "Arriba"},
     {odt_cpu::OpenDRTLookPreset::SYLVAN, "Sylvan"},
@@ -532,9 +539,10 @@ constexpr std::array<EnumOption<odt_cpu::OpenDRTLookPreset>, 7> kOpenDrtLookPres
     {odt_cpu::OpenDRTLookPreset::AERY, "Aery"},
     {odt_cpu::OpenDRTLookPreset::DYSTOPIC, "Dystopic"},
     {odt_cpu::OpenDRTLookPreset::UMBRA, "Umbra"},
+    {odt_cpu::OpenDRTLookPreset::CUSTOM, "Custom"},
 }};
 
-constexpr std::array<EnumOption<odt_cpu::OpenDRTTonescalePreset>, 14> kOpenDrtTonescaleOptions = {{
+constexpr std::array<EnumOption<odt_cpu::OpenDRTTonescalePreset>, 15> kOpenDrtTonescaleOptions = {{
     {odt_cpu::OpenDRTTonescalePreset::USE_LOOK_PRESET, "Use Look Preset"},
     {odt_cpu::OpenDRTTonescalePreset::LOW_CONTRAST, "Low Contrast"},
     {odt_cpu::OpenDRTTonescalePreset::MEDIUM_CONTRAST, "Medium Contrast"},
@@ -549,10 +557,11 @@ constexpr std::array<EnumOption<odt_cpu::OpenDRTTonescalePreset>, 14> kOpenDrtTo
     {odt_cpu::OpenDRTTonescalePreset::ACES_2_0, "ACES 2.0"},
     {odt_cpu::OpenDRTTonescalePreset::MARVELOUS_TONESCAPE, "Marvelous Tonscape"},
     {odt_cpu::OpenDRTTonescalePreset::DAGRINCHI_TONEGROAN, "Dagrinchi Tonegroan"},
+    {odt_cpu::OpenDRTTonescalePreset::CUSTOM, "Custom"},
 }};
 
 constexpr std::array<EnumOption<odt_cpu::OpenDRTCreativeWhitePreset>, 7>
-    kOpenDrtCreativeWhiteOptions = {{
+     kOpenDrtCreativeWhiteOptions = {{
         {odt_cpu::OpenDRTCreativeWhitePreset::USE_LOOK_PRESET, "Use Look Preset"},
         {odt_cpu::OpenDRTCreativeWhitePreset::D93, "D93"},
         {odt_cpu::OpenDRTCreativeWhitePreset::D75, "D75"},
@@ -569,8 +578,7 @@ auto SupportedDisplayEotfOptions(ColorUtils::ColorSpace encoding_space)
     -> std::vector<EnumOption<ColorUtils::EOTF>> {
   switch (encoding_space) {
     case ColorUtils::ColorSpace::REC709:
-      return {{ColorUtils::EOTF::BT1886, "BT.1886"},
-              {ColorUtils::EOTF::GAMMA_2_2, "Gamma 2.2"}};
+      return {{ColorUtils::EOTF::BT1886, "BT.1886"}, {ColorUtils::EOTF::GAMMA_2_2, "Gamma 2.2"}};
     case ColorUtils::ColorSpace::P3_D65:
       return {{ColorUtils::EOTF::GAMMA_2_2, "Gamma 2.2"},
               {ColorUtils::EOTF::ST2084, "ST 2084 (PQ)"}};
@@ -579,8 +587,7 @@ auto SupportedDisplayEotfOptions(ColorUtils::ColorSpace encoding_space)
     case ColorUtils::ColorSpace::XYZ:
       return {{ColorUtils::EOTF::GAMMA_2_6, "Gamma 2.6"}};
     case ColorUtils::ColorSpace::REC2020:
-      return {{ColorUtils::EOTF::ST2084, "ST 2084 (PQ)"},
-              {ColorUtils::EOTF::HLG, "HLG"}};
+      return {{ColorUtils::EOTF::ST2084, "ST 2084 (PQ)"}, {ColorUtils::EOTF::HLG, "HLG"}};
     default:
       return {{ColorUtils::EOTF::GAMMA_2_2, "Gamma 2.2"}};
   }
@@ -589,8 +596,9 @@ auto SupportedDisplayEotfOptions(ColorUtils::ColorSpace encoding_space)
 auto IsSupportedDisplayEncoding(ColorUtils::ColorSpace encoding_space,
                                 ColorUtils::EOTF       encoding_eotf) -> bool {
   const auto options = SupportedDisplayEotfOptions(encoding_space);
-  return std::any_of(options.begin(), options.end(),
-                     [encoding_eotf](const auto& option) { return option.value_ == encoding_eotf; });
+  return std::any_of(options.begin(), options.end(), [encoding_eotf](const auto& option) {
+    return option.value_ == encoding_eotf;
+  });
 }
 
 auto DefaultDisplayEotfForSpace(ColorUtils::ColorSpace encoding_space) -> ColorUtils::EOTF {
@@ -599,11 +607,9 @@ auto DefaultDisplayEotfForSpace(ColorUtils::ColorSpace encoding_space) -> ColorU
 }
 
 void SanitizeOdtStateForUi(OdtState& odt_state) {
-  const bool encoding_space_supported =
-      std::any_of(kDisplayEncodingSpaceOptions.begin(), kDisplayEncodingSpaceOptions.end(),
-                  [&odt_state](const auto& option) {
-                    return option.value_ == odt_state.encoding_space_;
-                  });
+  const bool encoding_space_supported = std::any_of(
+      kDisplayEncodingSpaceOptions.begin(), kDisplayEncodingSpaceOptions.end(),
+      [&odt_state](const auto& option) { return option.value_ == odt_state.encoding_space_; });
   if (!encoding_space_supported) {
     odt_state.encoding_space_ = ColorUtils::ColorSpace::REC709;
   }
@@ -622,13 +628,11 @@ void SanitizeOdtStateForUi(OdtState& odt_state) {
 }
 
 auto ResolveEditorWindowTitle(const std::shared_ptr<ImagePoolService>& image_pool,
-                              image_id_t image_id,
-                              sl_element_id_t element_id) -> QString {
+                              image_id_t image_id, sl_element_id_t element_id) -> QString {
   if (image_pool && image_id != 0) {
     try {
       const std::wstring image_name = image_pool->Read<std::wstring>(
-          image_id,
-          [](const std::shared_ptr<Image>& image) -> std::wstring {
+          image_id, [](const std::shared_ptr<Image>& image) -> std::wstring {
             if (!image) {
               return {};
             }
@@ -664,7 +668,6 @@ class EditorDialog final : public QDialog {
                image_id_t image_id, QWidget* parent = nullptr);
 
  private:
-
   void BuildViewerAndPanelShell();
   auto BuildControlPanelShell(const QString& panel_style) -> EditorControlPanelWidget*;
   void BuildLookControlPanel(EditorControlPanelWidget* controls_panel, const QString& scroll_style);
@@ -709,81 +712,87 @@ class EditorDialog final : public QDialog {
 
   static auto DefaultAdjustmentState() -> const AdjustmentState&;
 
-  void CacheAsShotColorTemp(float cct, float tint);
+  void        CacheAsShotColorTemp(float cct, float tint);
 
-  void PrimeColorTempDisplayForAsShot();
+  void        PrimeColorTempDisplayForAsShot();
 
-  void WarmAsShotColorTempCacheFromRawMetadata();
+  void        WarmAsShotColorTempCacheFromRawMetadata();
 
-  void RegisterSliderReset(QSlider* slider, std::function<void()> on_reset);
+  void        RegisterSliderReset(QSlider* slider, std::function<void()> on_reset);
 
-  void RegisterCurveReset(ToneCurveWidget* widget, std::function<void()> on_reset);
+  void        RegisterCurveReset(ToneCurveWidget* widget, std::function<void()> on_reset);
 
-  void ResetFieldToDefault(AdjustmentField field,
-                           const std::function<void(const AdjustmentState&)>& apply_default);
+  void        ResetFieldToDefault(AdjustmentField                                    field,
+                                  const std::function<void(const AdjustmentState&)>& apply_default);
 
-  void ResetColorTempToAsShot();
+  void        ResetColorTempToAsShot();
 
-  void ResetCurveToDefault();
+  void        ResetCurveToDefault();
 
-  void ResetCropAndRotation();
+  void        ResetCropAndRotation();
 
-  bool eventFilter(QObject* obj, QEvent* event) override;
+  bool        eventFilter(QObject* obj, QEvent* event) override;
 
-  void changeEvent(QEvent* event) override;
+  void        changeEvent(QEvent* event) override;
 
-  void showEvent(QShowEvent* event) override;
+  void        showEvent(QShowEvent* event) override;
 
-  void resizeEvent(QResizeEvent* event) override;
+  void        resizeEvent(QResizeEvent* event) override;
 
-  void ApplyInitialSplitterSizes();
+  void        ApplyInitialSplitterSizes();
 
-  void UpdateViewerZoomLabel(float zoom);
+  void        UpdateViewerZoomLabel(float zoom);
 
-  void RetranslateUi();
+  void        RetranslateUi();
 
-  void RefreshGeometryModeUi();
+  void        RefreshGeometryModeUi();
 
-  void EnsureLensCatalogLoaded();
+  void        EnsureLensCatalogLoaded();
 
-  void RefreshLensBrandComboFromState();
+  void        RefreshLensBrandComboFromState();
 
-  void RefreshLensModelComboFromState();
+  void        RefreshLensModelComboFromState();
 
-  void RefreshLensComboFromState();
+  void        RefreshLensComboFromState();
 
-  void RefreshLutBrowserUi();
+  void        RefreshLutBrowserUi();
 
-  void ForceRefreshLutBrowserUi();
+  void        ForceRefreshLutBrowserUi();
 
-  void OpenLutFolder();
+  void        OpenLutFolder();
 
-  void RefreshPanelSwitchUi();
+  void        RefreshPanelSwitchUi();
 
-  void RefreshVersioningCollapseUi();
+  void        RefreshVersioningCollapseUi();
 
-  void SetVersioningCollapsed(bool collapsed, bool animate = true);
+  void        SetVersioningCollapsed(bool collapsed, bool animate = true);
 
-  void RepositionVersioningFlyout();
+  void        RepositionVersioningFlyout();
 
-  void SetActiveControlPanel(ControlPanelKind panel);
+  void        SetActiveControlPanel(ControlPanelKind panel);
 
-  void RefreshOdtMethodUi();
+  void        RefreshOdtMethodUi();
 
-  void RefreshOdtEncodingEotfComboFromState();
+  void        RefreshOdtEncodingEotfComboFromState();
 
-  void PromoteColorTempToCustomForEditing();
+  void        SyncOpenDrtDetailControlsFromState();
+
+  void        MarkOpenDrtLookPresetCustomForEditing();
+
+  void        MarkOpenDrtTonescalePresetCustomForEditing();
+
+  void        PromoteColorTempToCustomForEditing();
 
   // Returns true if any resolved color temp value actually changed.
-  auto RefreshColorTempRuntimeStateFromGlobalParams() -> bool;
+  auto        RefreshColorTempRuntimeStateFromGlobalParams() -> bool;
 
-  void SyncColorTempControlsFromState();
+  void        SyncColorTempControlsFromState();
 
-  void RefreshVersionLogSelectionStyles();
+  void        RefreshVersionLogSelectionStyles();
 
-  void TriggerQualityPreviewRenderFromPipeline();
+  void        TriggerQualityPreviewRenderFromPipeline();
 
-  void SyncControlsFromState();
+  void        SyncControlsFromState();
 
   auto ReconstructPipelineParamsForVersion(Version& version) -> std::optional<nlohmann::json>;
 
@@ -814,15 +823,15 @@ class EditorDialog final : public QDialog {
 
   nlohmann::json ParamsForField(AdjustmentField field, const AdjustmentState& s) const;
 
-  bool FieldChanged(AdjustmentField field) const;
+  bool           FieldChanged(AdjustmentField field) const;
 
-  void CommitAdjustment(AdjustmentField field);
+  void           CommitAdjustment(AdjustmentField field);
 
-  bool LoadStateFromPipelineIfPresent();
+  bool           LoadStateFromPipelineIfPresent();
 
-  void SetupPipeline();
+  void           SetupPipeline();
 
-  void ApplyStateToPipeline(const AdjustmentState& render_state);
+  void           ApplyStateToPipeline(const AdjustmentState& render_state);
 
   static constexpr std::chrono::milliseconds kFastPreviewMinSubmitInterval =
       controllers::render::kFastPreviewMinSubmitInterval;
@@ -830,8 +839,8 @@ class EditorDialog final : public QDialog {
       controllers::render::kQualityPreviewDebounceInterval;
   static constexpr std::chrono::milliseconds kViewportDetailDebounceInterval{120};
 
-  void AdvancePreviewGeneration();
-  void InvalidateDetailPreviewState();
+  void                                       AdvancePreviewGeneration();
+  void                                       InvalidateDetailPreviewState();
   auto BuildPreviewMetadata(RenderType render_type) const -> FramePreviewMetadata;
   auto IsDetailPreviewGeometryFallbackActive() const -> bool;
   auto CanScheduleDetailPreview() const -> bool;
@@ -850,13 +859,13 @@ class EditorDialog final : public QDialog {
 
   void ArmFastPreviewSubmitTimer();
 
-  void EnqueueRenderRequest(const AdjustmentState& snapshot,
+  void EnqueueRenderRequest(const AdjustmentState&      snapshot,
                             const FramePreviewMetadata& frame_metadata, bool apply_state,
                             bool use_viewport_region = true);
 
   void RequestRender(bool use_viewport_region = true, bool bump_preview_generation = true);
 
-  void RequestRenderWithoutApplyingState(bool use_viewport_region = true,
+  void RequestRenderWithoutApplyingState(bool use_viewport_region     = true,
                                          bool bump_preview_generation = false);
 
   void EnsurePollTimer();
@@ -867,123 +876,133 @@ class EditorDialog final : public QDialog {
 
   void OnRenderFinished();
 
-  std::shared_ptr<ImagePoolService>                        image_pool_;
-  std::shared_ptr<PipelineGuard>                           pipeline_guard_;
-  std::shared_ptr<EditHistoryMgmtService>                  history_service_;
-  std::shared_ptr<EditHistoryGuard>                        history_guard_;
-  sl_element_id_t                                          element_id_ = 0;
-  image_id_t                                               image_id_   = 0;
+  std::shared_ptr<ImagePoolService>       image_pool_;
+  std::shared_ptr<PipelineGuard>          pipeline_guard_;
+  std::shared_ptr<EditHistoryMgmtService> history_service_;
+  std::shared_ptr<EditHistoryGuard>       history_guard_;
+  sl_element_id_t                         element_id_ = 0;
+  image_id_t                              image_id_   = 0;
 
-  std::shared_ptr<PipelineScheduler>                       scheduler_;
-  PipelineTask                                             base_task_{};
+  std::shared_ptr<PipelineScheduler>      scheduler_;
+  PipelineTask                            base_task_{};
 
-  QtEditViewer*                                            viewer_                 = nullptr;
-  QWidget*                                                 viewer_container_       = nullptr;
-  QWidget*                                                 viewer_zoom_overlay_    = nullptr;
-  QLabel*                                                  viewer_zoom_value_label_ = nullptr;
-  QLabel*                                                  viewer_zoom_resolution_label_ = nullptr;
-  ScopePanel*                                              scope_panel_            = nullptr;
-  QScrollArea*                                             controls_scroll_        = nullptr;
-  QScrollArea*                                             tone_controls_scroll_   = nullptr;
-  QScrollArea*                                             look_controls_scroll_   = nullptr;
-  QScrollArea*                                             drt_controls_scroll_    = nullptr;
-  QScrollArea*                                             geometry_controls_scroll_ = nullptr;
-  QScrollArea*                                             raw_controls_scroll_    = nullptr;
-  QSplitter*                                               main_splitter_          = nullptr;
-  QWidget*                                                 versioning_panel_host_  = nullptr;
-  QWidget*                                                 versioning_flyout_      = nullptr;
-  QWidget*                                                 versioning_collapsed_nav_ = nullptr;
-  QGraphicsOpacityEffect*                                  versioning_panel_opacity_effect_ = nullptr;
-  QVariantAnimation*                                       versioning_panel_anim_ = nullptr;
-  QStackedWidget*                                          control_panels_stack_   = nullptr;
-  SpinnerWidget*                                           spinner_                = nullptr;
-  QWidget*                                                 controls_               = nullptr;
-  QWidget*                                                 tone_controls_          = nullptr;
-  QWidget*                                                 look_controls_          = nullptr;
-  QWidget*                                                 drt_controls_           = nullptr;
-  QWidget*                                                 geometry_controls_      = nullptr;
-  QWidget*                                                 raw_controls_           = nullptr;
-  QVBoxLayout*                                             controls_layout_        = nullptr;
-  QVBoxLayout*                                             look_controls_layout_   = nullptr;
-  QVBoxLayout*                                             drt_controls_layout_    = nullptr;
-  QVBoxLayout*                                             geometry_controls_layout_ = nullptr;
-  QVBoxLayout*                                             raw_controls_layout_    = nullptr;
-  QWidget*                                                 shared_versioning_root_ = nullptr;
-  QVBoxLayout*                                             shared_versioning_layout_ = nullptr;
-  QStackedWidget*                                          versioning_pages_stack_ = nullptr;
-  QPushButton*                                             tone_panel_btn_         = nullptr;
-  QPushButton*                                             look_panel_btn_         = nullptr;
-  QPushButton*                                             drt_panel_btn_          = nullptr;
-  QPushButton*                                             geometry_panel_btn_     = nullptr;
-  QPushButton*                                             raw_panel_btn_          = nullptr;
-  LutBrowserWidget*                                        lut_browser_widget_     = nullptr;
-  QSlider*                                                 exposure_slider_        = nullptr;
-  QSlider*                                                 contrast_slider_        = nullptr;
-  QSlider*                                                 saturation_slider_      = nullptr;
-  QCheckBox*                                               raw_highlights_reconstruct_checkbox_ = nullptr;
-  QCheckBox*                                               lens_calib_enabled_checkbox_ = nullptr;
-  QComboBox*                                               lens_brand_combo_       = nullptr;
-  QComboBox*                                               lens_model_combo_       = nullptr;
-  QLabel*                                                  lens_catalog_status_label_ = nullptr;
-  CdlTrackballDiscWidget*                                  lift_disc_widget_       = nullptr;
-  CdlTrackballDiscWidget*                                  gamma_disc_widget_      = nullptr;
-  CdlTrackballDiscWidget*                                  gain_disc_widget_       = nullptr;
-  QLabel*                                                  lift_offset_label_      = nullptr;
-  QLabel*                                                  gamma_offset_label_     = nullptr;
-  QLabel*                                                  gain_offset_label_      = nullptr;
-  QSlider*                                                 lift_master_slider_     = nullptr;
-  QSlider*                                                 gamma_master_slider_    = nullptr;
-  QSlider*                                                 gain_master_slider_     = nullptr;
-  QComboBox*                                               color_temp_mode_combo_  = nullptr;
-  QSlider*                                                 color_temp_cct_slider_  = nullptr;
-  QSlider*                                                 color_temp_tint_slider_ = nullptr;
-  QLabel*                                                  color_temp_unsupported_label_ = nullptr;
-  QLabel*                                                  hls_target_label_       = nullptr;
-  std::vector<QPushButton*>                                hls_candidate_buttons_{};
-  QSlider*                                                 hls_hue_adjust_slider_        = nullptr;
-  QSlider*                                                 hls_lightness_adjust_slider_  = nullptr;
-  QSlider*                                                 hls_saturation_adjust_slider_ = nullptr;
-  QSlider*                                                 hls_hue_range_slider_         = nullptr;
-  QSlider*                                                 blacks_slider_                = nullptr;
-  QSlider*                                                 whites_slider_                = nullptr;
-  QSlider*                                                 shadows_slider_               = nullptr;
-  QSlider*                                                 highlights_slider_            = nullptr;
-  ToneCurveWidget*                                         curve_widget_                 = nullptr;
-  QSlider*                                                 sharpen_slider_               = nullptr;
-  QSlider*                                                 clarity_slider_               = nullptr;
-  QComboBox*                                               odt_encoding_space_combo_     = nullptr;
-  QComboBox*                                               odt_encoding_eotf_combo_      = nullptr;
-  QSlider*                                                 odt_peak_luminance_slider_    = nullptr;
-  QPushButton*                                             odt_aces_method_card_         = nullptr;
-  QPushButton*                                             odt_open_drt_method_card_     = nullptr;
-  QStackedWidget*                                          odt_method_stack_             = nullptr;
-  QComboBox*                                               odt_aces_limiting_space_combo_ = nullptr;
-  QComboBox*                                               odt_open_drt_look_preset_combo_ = nullptr;
-  QComboBox*                                               odt_open_drt_tonescale_preset_combo_ = nullptr;
-  QComboBox*                                               odt_open_drt_creative_white_combo_ = nullptr;
-  QSlider*                                                 rotate_slider_                = nullptr;
-  QSlider*                                                 geometry_crop_x_slider_       = nullptr;
-  QSlider*                                                 geometry_crop_y_slider_       = nullptr;
-  QSlider*                                                 geometry_crop_w_slider_       = nullptr;
-  QSlider*                                                 geometry_crop_h_slider_       = nullptr;
-  QComboBox*                                               geometry_crop_aspect_preset_combo_ = nullptr;
-  QDoubleSpinBox*                                          geometry_crop_aspect_width_spin_ = nullptr;
-  QDoubleSpinBox*                                          geometry_crop_aspect_height_spin_ = nullptr;
-  QLabel*                                                  geometry_crop_rect_label_     = nullptr;
-  QPushButton*                                             geometry_apply_btn_           = nullptr;
-  QPushButton*                                             geometry_reset_btn_           = nullptr;
-  QLabel*                                                  version_status_               = nullptr;
-  QPushButton*                                             undo_tx_btn_                  = nullptr;
-  QPushButton*                                             commit_version_btn_           = nullptr;
-  QPushButton*                                             versioning_history_btn_       = nullptr;
-  QPushButton*                                             versioning_versions_btn_      = nullptr;
-  std::unique_ptr<ShortcutRegistry>                        shortcut_registry_{};
-  QComboBox*                                               working_mode_combo_           = nullptr;
-  QPushButton*                                             new_working_btn_              = nullptr;
-  QListWidget*                                             version_log_                  = nullptr;
-  QListWidget*                                             tx_stack_                     = nullptr;
-  QTimer*                                                  poll_timer_                   = nullptr;
-  QTimer*                                                  detail_preview_timer_         = nullptr;
+  QtEditViewer*                           viewer_                              = nullptr;
+  QWidget*                                viewer_container_                    = nullptr;
+  QWidget*                                viewer_zoom_overlay_                 = nullptr;
+  QLabel*                                 viewer_zoom_value_label_             = nullptr;
+  QLabel*                                 viewer_zoom_resolution_label_        = nullptr;
+  ScopePanel*                             scope_panel_                         = nullptr;
+  QScrollArea*                            controls_scroll_                     = nullptr;
+  QScrollArea*                            tone_controls_scroll_                = nullptr;
+  QScrollArea*                            look_controls_scroll_                = nullptr;
+  QScrollArea*                            drt_controls_scroll_                 = nullptr;
+  QScrollArea*                            geometry_controls_scroll_            = nullptr;
+  QScrollArea*                            raw_controls_scroll_                 = nullptr;
+  QSplitter*                              main_splitter_                       = nullptr;
+  QWidget*                                versioning_panel_host_               = nullptr;
+  QWidget*                                versioning_flyout_                   = nullptr;
+  QWidget*                                versioning_collapsed_nav_            = nullptr;
+  QGraphicsOpacityEffect*                 versioning_panel_opacity_effect_     = nullptr;
+  QVariantAnimation*                      versioning_panel_anim_               = nullptr;
+  QStackedWidget*                         control_panels_stack_                = nullptr;
+  SpinnerWidget*                          spinner_                             = nullptr;
+  QWidget*                                controls_                            = nullptr;
+  QWidget*                                tone_controls_                       = nullptr;
+  QWidget*                                look_controls_                       = nullptr;
+  QWidget*                                drt_controls_                        = nullptr;
+  QWidget*                                geometry_controls_                   = nullptr;
+  QWidget*                                raw_controls_                        = nullptr;
+  QVBoxLayout*                            controls_layout_                     = nullptr;
+  QVBoxLayout*                            look_controls_layout_                = nullptr;
+  QVBoxLayout*                            drt_controls_layout_                 = nullptr;
+  QVBoxLayout*                            geometry_controls_layout_            = nullptr;
+  QVBoxLayout*                            raw_controls_layout_                 = nullptr;
+  QWidget*                                shared_versioning_root_              = nullptr;
+  QVBoxLayout*                            shared_versioning_layout_            = nullptr;
+  QStackedWidget*                         versioning_pages_stack_              = nullptr;
+  QPushButton*                            tone_panel_btn_                      = nullptr;
+  QPushButton*                            look_panel_btn_                      = nullptr;
+  QPushButton*                            drt_panel_btn_                       = nullptr;
+  QPushButton*                            geometry_panel_btn_                  = nullptr;
+  QPushButton*                            raw_panel_btn_                       = nullptr;
+  LutBrowserWidget*                       lut_browser_widget_                  = nullptr;
+  QSlider*                                exposure_slider_                     = nullptr;
+  QSlider*                                contrast_slider_                     = nullptr;
+  QSlider*                                saturation_slider_                   = nullptr;
+  QCheckBox*                              raw_highlights_reconstruct_checkbox_ = nullptr;
+  QCheckBox*                              lens_calib_enabled_checkbox_         = nullptr;
+  QComboBox*                              lens_brand_combo_                    = nullptr;
+  QComboBox*                              lens_model_combo_                    = nullptr;
+  QLabel*                                 lens_catalog_status_label_           = nullptr;
+  CdlTrackballDiscWidget*                 lift_disc_widget_                    = nullptr;
+  CdlTrackballDiscWidget*                 gamma_disc_widget_                   = nullptr;
+  CdlTrackballDiscWidget*                 gain_disc_widget_                    = nullptr;
+  QLabel*                                 lift_offset_label_                   = nullptr;
+  QLabel*                                 gamma_offset_label_                  = nullptr;
+  QLabel*                                 gain_offset_label_                   = nullptr;
+  QSlider*                                lift_master_slider_                  = nullptr;
+  QSlider*                                gamma_master_slider_                 = nullptr;
+  QSlider*                                gain_master_slider_                  = nullptr;
+  QComboBox*                              color_temp_mode_combo_               = nullptr;
+  QSlider*                                color_temp_cct_slider_               = nullptr;
+  QSlider*                                color_temp_tint_slider_              = nullptr;
+  QLabel*                                 color_temp_unsupported_label_        = nullptr;
+  QLabel*                                 hls_target_label_                    = nullptr;
+  std::vector<QPushButton*>               hls_candidate_buttons_{};
+  QSlider*                                hls_hue_adjust_slider_               = nullptr;
+  QSlider*                                hls_lightness_adjust_slider_         = nullptr;
+  QSlider*                                hls_saturation_adjust_slider_        = nullptr;
+  QSlider*                                hls_hue_range_slider_                = nullptr;
+  QSlider*                                blacks_slider_                       = nullptr;
+  QSlider*                                whites_slider_                       = nullptr;
+  QSlider*                                shadows_slider_                      = nullptr;
+  QSlider*                                highlights_slider_                   = nullptr;
+  ToneCurveWidget*                        curve_widget_                        = nullptr;
+  QSlider*                                sharpen_slider_                      = nullptr;
+  QSlider*                                clarity_slider_                      = nullptr;
+  QComboBox*                              odt_encoding_space_combo_            = nullptr;
+  QComboBox*                              odt_encoding_eotf_combo_             = nullptr;
+  QSlider*                                odt_peak_luminance_slider_           = nullptr;
+  QPushButton*                            odt_aces_method_card_                = nullptr;
+  QPushButton*                            odt_open_drt_method_card_            = nullptr;
+  QStackedWidget*                         odt_method_stack_                    = nullptr;
+  QComboBox*                              odt_aces_limiting_space_combo_       = nullptr;
+  QComboBox*                              odt_open_drt_look_preset_combo_      = nullptr;
+  QComboBox*                              odt_open_drt_tonescale_preset_combo_ = nullptr;
+  QComboBox*                              odt_open_drt_creative_white_combo_   = nullptr;
+  QWidget*                                odt_open_drt_detail_panel_           = nullptr;
+  struct OpenDrtDetailSliderBinding {
+    QSlider*                                              slider_ = nullptr;
+    QDoubleSpinBox*                                       spin_   = nullptr;
+    float                                                 min_    = 0.0f;
+    float                                                 max_    = 1.0f;
+    float                                                 scale_  = 100.0f;
+    std::function<float(const odt_cpu::OpenDRTSettings&)> getter_{};
+  };
+  std::vector<OpenDrtDetailSliderBinding> odt_open_drt_detail_sliders_{};
+  QSlider*                                rotate_slider_                     = nullptr;
+  QSlider*                                geometry_crop_x_slider_            = nullptr;
+  QSlider*                                geometry_crop_y_slider_            = nullptr;
+  QSlider*                                geometry_crop_w_slider_            = nullptr;
+  QSlider*                                geometry_crop_h_slider_            = nullptr;
+  QComboBox*                              geometry_crop_aspect_preset_combo_ = nullptr;
+  QDoubleSpinBox*                         geometry_crop_aspect_width_spin_   = nullptr;
+  QDoubleSpinBox*                         geometry_crop_aspect_height_spin_  = nullptr;
+  QLabel*                                 geometry_crop_rect_label_          = nullptr;
+  QPushButton*                            geometry_apply_btn_                = nullptr;
+  QPushButton*                            geometry_reset_btn_                = nullptr;
+  QLabel*                                 version_status_                    = nullptr;
+  QPushButton*                            undo_tx_btn_                       = nullptr;
+  QPushButton*                            commit_version_btn_                = nullptr;
+  QPushButton*                            versioning_history_btn_            = nullptr;
+  QPushButton*                            versioning_versions_btn_           = nullptr;
+  std::unique_ptr<ShortcutRegistry>       shortcut_registry_{};
+  QComboBox*                              working_mode_combo_   = nullptr;
+  QPushButton*                            new_working_btn_      = nullptr;
+  QListWidget*                            version_log_          = nullptr;
+  QListWidget*                            tx_stack_             = nullptr;
+  QTimer*                                 poll_timer_           = nullptr;
+  QTimer*                                 detail_preview_timer_ = nullptr;
   std::optional<std::future<std::shared_ptr<ImageBuffer>>> inflight_future_{};
   std::optional<PendingRenderRequest>                      inflight_request_{};
 
@@ -998,29 +1017,28 @@ class EditorDialog final : public QDialog {
   std::optional<PendingRenderRequest>                      pending_fast_preview_request_{};
   std::optional<PendingRenderRequest>                      pending_quality_base_render_request_{};
   std::optional<PendingRenderRequest>                      pending_detail_render_request_{};
-  ControlPanelKind                                         active_panel_               = ControlPanelKind::Tone;
-  bool                                                     pipeline_initialized_       = false;
-  bool                                                     inflight_                   = false;
-  QTimer*                                                  quality_preview_timer_      = nullptr;
-  QTimer*                                                  fast_preview_submit_timer_  = nullptr;
+  ControlPanelKind                                         active_panel_ = ControlPanelKind::Tone;
+  bool                                                     pipeline_initialized_      = false;
+  bool                                                     inflight_                  = false;
+  QTimer*                                                  quality_preview_timer_     = nullptr;
+  QTimer*                                                  fast_preview_submit_timer_ = nullptr;
   std::chrono::steady_clock::time_point                    last_fast_preview_submit_time_{};
-  std::uint64_t                                            preview_generation_         = 0;
-  std::uint64_t                                            detail_serial_              = 0;
-  std::uint64_t                                            latest_quality_base_generation_ready_ = 0;
-  bool                                                     syncing_controls_           = false;
-  bool                                                     versioning_collapsed_       = true;
-  bool                                                     initial_splitter_sizes_applied_ = false;
-  qreal                                                    versioning_panel_progress_  = 0.0;
-  VersioningFlyoutPage                                     versioning_active_page_ =
-      VersioningFlyoutPage::History;
-  float                                                    last_known_as_shot_cct_     = 6500.0f;
-  float                                                    last_known_as_shot_tint_    = 0.0f;
-  bool                                                     has_last_known_as_shot_color_temp_ = false;
-  EditorFrameManager                                      frame_manager_{};
-  std::map<QSlider*, std::function<void()>>                slider_reset_callbacks_{};
-  std::function<void()>                                    curve_reset_callback_{};
+  std::uint64_t                                            preview_generation_    = 0;
+  std::uint64_t                                            detail_serial_         = 0;
+  std::uint64_t                             latest_quality_base_generation_ready_ = 0;
+  bool                                      syncing_controls_                     = false;
+  bool                                      versioning_collapsed_                 = true;
+  bool                                      initial_splitter_sizes_applied_       = false;
+  qreal                                     versioning_panel_progress_            = 0.0;
+  VersioningFlyoutPage                      versioning_active_page_ = VersioningFlyoutPage::History;
+  float                                     last_known_as_shot_cct_ = 6500.0f;
+  float                                     last_known_as_shot_tint_           = 0.0f;
+  bool                                      has_last_known_as_shot_color_temp_ = false;
+  EditorFrameManager                        frame_manager_{};
+  std::map<QSlider*, std::function<void()>> slider_reset_callbacks_{};
+  std::function<void()>                     curve_reset_callback_{};
 
-  ExifDisplayMetaData                                      exif_display_;
+  ExifDisplayMetaData                       exif_display_;
 };
 
 }  // namespace alcedo::ui

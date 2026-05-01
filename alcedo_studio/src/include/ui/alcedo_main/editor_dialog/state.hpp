@@ -7,14 +7,14 @@
 #include <QColor>
 #include <QPointF>
 #include <QString>
-#include <cstdint>
 #include <array>
 #include <chrono>
+#include <cstdint>
 #include <string>
 #include <vector>
 
-#include "edit/operators/op_base.hpp"
 #include "edit/operators/cst/open_drt_cpu.hpp"
+#include "edit/operators/op_base.hpp"
 #include "renderer/pipeline_task.hpp"
 #include "ui/alcedo_main/editor_dialog/modules/color_temp.hpp"
 #include "ui/alcedo_main/editor_dialog/modules/color_wheel.hpp"
@@ -87,16 +87,10 @@ struct AcesOdtState {
   ColorUtils::ColorSpace limiting_space_ = ColorUtils::ColorSpace::REC709;
 };
 
-struct OpenDrtOdtState {
-  odt_cpu::OpenDRTLookPreset          look_preset_      = odt_cpu::OpenDRTLookPreset::STANDARD;
-  odt_cpu::OpenDRTTonescalePreset     tonescale_preset_ =
-      odt_cpu::OpenDRTTonescalePreset::USE_LOOK_PRESET;
-  odt_cpu::OpenDRTCreativeWhitePreset creative_white_   =
-      odt_cpu::OpenDRTCreativeWhitePreset::USE_LOOK_PRESET;
-};
+using OpenDrtOdtState = odt_cpu::OpenDRTSettings;
 
 struct OdtState {
-  ColorUtils::ODTMethod method_          = ColorUtils::ODTMethod::OPEN_DRT;
+  ColorUtils::ODTMethod  method_         = ColorUtils::ODTMethod::OPEN_DRT;
   ColorUtils::ColorSpace encoding_space_ = ColorUtils::ColorSpace::REC709;
   ColorUtils::EOTF       encoding_eotf_  = ColorUtils::EOTF::GAMMA_2_2;
   float                  peak_luminance_ = 100.0f;
@@ -109,51 +103,51 @@ struct OdtState {
 // ---------------------------------------------------------------------------
 
 struct AdjustmentState {
-  float                exposure_                    = 1.5f;
-  float                contrast_                    = 0.0f;
-  float                saturation_                  = 30.0f;
-  bool                 raw_highlights_reconstruct_  = true;
-  bool                 lens_calib_enabled_          = true;
-  std::string          lens_override_make_{};
-  std::string          lens_override_model_{};
-  ColorTempMode        color_temp_mode_             = ColorTempMode::AS_SHOT;
-  float                color_temp_custom_cct_       = 6500.0f;
-  float                color_temp_custom_tint_      = 0.0f;
-  float                color_temp_resolved_cct_     = 6500.0f;
-  float                color_temp_resolved_tint_    = 0.0f;
-  bool                 color_temp_supported_        = true;
-  float                hls_target_hue_              = 0.0f;
-  float                hls_hue_adjust_              = 0.0f;
-  float                hls_lightness_adjust_        = 0.0f;
-  float                hls_saturation_adjust_       = 0.0f;
-  float                hls_hue_range_               = hls::kDefaultHueRange;
-  CdlWheelState        lift_wheel_                  = DefaultLiftWheelState();
-  CdlWheelState        gamma_wheel_                 = DefaultGammaGainWheelState();
-  CdlWheelState        gain_wheel_                  = DefaultGammaGainWheelState();
-  hls::HlsProfileArray hls_hue_adjust_table_        = {};
-  hls::HlsProfileArray hls_lightness_adjust_table_  = {};
-  hls::HlsProfileArray hls_saturation_adjust_table_ = {};
-  hls::HlsProfileArray hls_hue_range_table_         = hls::MakeFilledArray(hls::kDefaultHueRange);
-  float                blacks_                      = 0.0f;
-  float                whites_                      = 0.0f;
-  float                shadows_                     = 0.0f;
-  float                highlights_                  = 0.0f;
-  std::vector<QPointF> curve_points_                = curve::DefaultCurveControlPoints();
-  float                sharpen_                     = 0.0f;
-  float                clarity_                     = 0.0f;
-  OdtState             odt_                         = {};
-  float                rotate_degrees_              = 0.0f;
-  bool                 crop_enabled_                = true;
-  float                crop_x_                      = 0.0f;
-  float                crop_y_                      = 0.0f;
-  float                crop_w_                      = 1.0f;
-  float                crop_h_                      = 1.0f;
-  bool                 crop_expand_to_fit_          = true;
-  geometry::CropAspectPreset crop_aspect_preset_    = geometry::CropAspectPreset::Free;
-  float                crop_aspect_width_           = 1.0f;
-  float                crop_aspect_height_          = 1.0f;
-  std::string          lut_path_;
-  RenderType           type_ = RenderType::FAST_PREVIEW;
+  float                      exposure_                   = 1.5f;
+  float                      contrast_                   = 0.0f;
+  float                      saturation_                 = 30.0f;
+  bool                       raw_highlights_reconstruct_ = true;
+  bool                       lens_calib_enabled_         = true;
+  std::string                lens_override_make_{};
+  std::string                lens_override_model_{};
+  ColorTempMode              color_temp_mode_             = ColorTempMode::AS_SHOT;
+  float                      color_temp_custom_cct_       = 6500.0f;
+  float                      color_temp_custom_tint_      = 0.0f;
+  float                      color_temp_resolved_cct_     = 6500.0f;
+  float                      color_temp_resolved_tint_    = 0.0f;
+  bool                       color_temp_supported_        = true;
+  float                      hls_target_hue_              = 0.0f;
+  float                      hls_hue_adjust_              = 0.0f;
+  float                      hls_lightness_adjust_        = 0.0f;
+  float                      hls_saturation_adjust_       = 0.0f;
+  float                      hls_hue_range_               = hls::kDefaultHueRange;
+  CdlWheelState              lift_wheel_                  = DefaultLiftWheelState();
+  CdlWheelState              gamma_wheel_                 = DefaultGammaGainWheelState();
+  CdlWheelState              gain_wheel_                  = DefaultGammaGainWheelState();
+  hls::HlsProfileArray       hls_hue_adjust_table_        = {};
+  hls::HlsProfileArray       hls_lightness_adjust_table_  = {};
+  hls::HlsProfileArray       hls_saturation_adjust_table_ = {};
+  hls::HlsProfileArray       hls_hue_range_table_ = hls::MakeFilledArray(hls::kDefaultHueRange);
+  float                      blacks_              = 0.0f;
+  float                      whites_              = 0.0f;
+  float                      shadows_             = 0.0f;
+  float                      highlights_          = 0.0f;
+  std::vector<QPointF>       curve_points_        = curve::DefaultCurveControlPoints();
+  float                      sharpen_             = 0.0f;
+  float                      clarity_             = 0.0f;
+  OdtState                   odt_                 = {};
+  float                      rotate_degrees_      = 0.0f;
+  bool                       crop_enabled_        = true;
+  float                      crop_x_              = 0.0f;
+  float                      crop_y_              = 0.0f;
+  float                      crop_w_              = 1.0f;
+  float                      crop_h_              = 1.0f;
+  bool                       crop_expand_to_fit_  = true;
+  geometry::CropAspectPreset crop_aspect_preset_  = geometry::CropAspectPreset::Free;
+  float                      crop_aspect_width_   = 1.0f;
+  float                      crop_aspect_height_  = 1.0f;
+  std::string                lut_path_;
+  RenderType                 type_ = RenderType::FAST_PREVIEW;
 };
 
 struct PendingRenderRequest {
@@ -217,12 +211,12 @@ inline auto FormatWheelDeltaText(const CdlWheelState& wheel, bool add_unity) -> 
       .arg(FormatSigned3(delta[0]), FormatSigned3(delta[1]), FormatSigned3(delta[2]));
 }
 
-auto ActiveHlsProfileIndex(const AdjustmentState& state) -> int;
-void SaveActiveHlsProfile(AdjustmentState& state);
-void LoadActiveHlsProfile(AdjustmentState& state);
+auto        ActiveHlsProfileIndex(const AdjustmentState& state) -> int;
+void        SaveActiveHlsProfile(AdjustmentState& state);
+void        LoadActiveHlsProfile(AdjustmentState& state);
 
-auto ParseColorTempMode(const std::string& mode) -> ColorTempMode;
-auto ColorTempModeToString(ColorTempMode mode) -> std::string;
+auto        ParseColorTempMode(const std::string& mode) -> ColorTempMode;
+auto        ColorTempModeToString(ColorTempMode mode) -> std::string;
 
 inline auto ColorTempModeToComboIndex(ColorTempMode mode) -> int {
   return mode == ColorTempMode::CUSTOM ? 1 : 0;

@@ -11,6 +11,129 @@
 #include "edit/operators/cst/aces_odt_cpu.hpp"
 
 namespace alcedo {
+namespace {
+
+auto OpenDRTDetailedParamsToJson(const odt_cpu::OpenDRTDetailedSettings& p) -> nlohmann::json {
+  return {{"tn_con", p.tn_con_},
+          {"tn_sh", p.tn_sh_},
+          {"tn_toe", p.tn_toe_},
+          {"tn_off", p.tn_off_},
+          {"tn_hcon", p.tn_hcon_},
+          {"tn_hcon_pv", p.tn_hcon_pv_},
+          {"tn_hcon_st", p.tn_hcon_st_},
+          {"tn_lcon", p.tn_lcon_},
+          {"tn_lcon_w", p.tn_lcon_w_},
+          {"cwp_lm", p.cwp_lm_},
+          {"rs_sa", p.rs_sa_},
+          {"rs_rw", p.rs_rw_},
+          {"rs_bw", p.rs_bw_},
+          {"pt_lml", p.pt_lml_},
+          {"pt_lml_r", p.pt_lml_r_},
+          {"pt_lml_g", p.pt_lml_g_},
+          {"pt_lml_b", p.pt_lml_b_},
+          {"pt_lmh", p.pt_lmh_},
+          {"pt_lmh_r", p.pt_lmh_r_},
+          {"pt_lmh_b", p.pt_lmh_b_},
+          {"ptl_c", p.ptl_c_},
+          {"ptl_m", p.ptl_m_},
+          {"ptl_y", p.ptl_y_},
+          {"ptm_low", p.ptm_low_},
+          {"ptm_low_rng", p.ptm_low_rng_},
+          {"ptm_low_st", p.ptm_low_st_},
+          {"ptm_high", p.ptm_high_},
+          {"ptm_high_rng", p.ptm_high_rng_},
+          {"ptm_high_st", p.ptm_high_st_},
+          {"brl", p.brl_},
+          {"brl_r", p.brl_r_},
+          {"brl_g", p.brl_g_},
+          {"brl_b", p.brl_b_},
+          {"brl_rng", p.brl_rng_},
+          {"brl_st", p.brl_st_},
+          {"brlp", p.brlp_},
+          {"brlp_r", p.brlp_r_},
+          {"brlp_g", p.brlp_g_},
+          {"brlp_b", p.brlp_b_},
+          {"hc_r", p.hc_r_},
+          {"hc_r_rng", p.hc_r_rng_},
+          {"hs_r", p.hs_r_},
+          {"hs_r_rng", p.hs_r_rng_},
+          {"hs_g", p.hs_g_},
+          {"hs_g_rng", p.hs_g_rng_},
+          {"hs_b", p.hs_b_},
+          {"hs_b_rng", p.hs_b_rng_},
+          {"hs_c", p.hs_c_},
+          {"hs_c_rng", p.hs_c_rng_},
+          {"hs_m", p.hs_m_},
+          {"hs_m_rng", p.hs_m_rng_},
+          {"hs_y", p.hs_y_},
+          {"hs_y_rng", p.hs_y_rng_}};
+}
+
+void LoadOpenDRTDetailedParams(const nlohmann::json& j, odt_cpu::OpenDRTDetailedSettings* p) {
+  if (!p || !j.is_object()) {
+    return;
+  }
+  auto read = [&j](const char* key, float* out) {
+    if (j.contains(key) && j.at(key).is_number()) {
+      *out = j.at(key).get<float>();
+    }
+  };
+  read("tn_con", &p->tn_con_);
+  read("tn_sh", &p->tn_sh_);
+  read("tn_toe", &p->tn_toe_);
+  read("tn_off", &p->tn_off_);
+  read("tn_hcon", &p->tn_hcon_);
+  read("tn_hcon_pv", &p->tn_hcon_pv_);
+  read("tn_hcon_st", &p->tn_hcon_st_);
+  read("tn_lcon", &p->tn_lcon_);
+  read("tn_lcon_w", &p->tn_lcon_w_);
+  read("cwp_lm", &p->cwp_lm_);
+  read("rs_sa", &p->rs_sa_);
+  read("rs_rw", &p->rs_rw_);
+  read("rs_bw", &p->rs_bw_);
+  read("pt_lml", &p->pt_lml_);
+  read("pt_lml_r", &p->pt_lml_r_);
+  read("pt_lml_g", &p->pt_lml_g_);
+  read("pt_lml_b", &p->pt_lml_b_);
+  read("pt_lmh", &p->pt_lmh_);
+  read("pt_lmh_r", &p->pt_lmh_r_);
+  read("pt_lmh_b", &p->pt_lmh_b_);
+  read("ptl_c", &p->ptl_c_);
+  read("ptl_m", &p->ptl_m_);
+  read("ptl_y", &p->ptl_y_);
+  read("ptm_low", &p->ptm_low_);
+  read("ptm_low_rng", &p->ptm_low_rng_);
+  read("ptm_low_st", &p->ptm_low_st_);
+  read("ptm_high", &p->ptm_high_);
+  read("ptm_high_rng", &p->ptm_high_rng_);
+  read("ptm_high_st", &p->ptm_high_st_);
+  read("brl", &p->brl_);
+  read("brl_r", &p->brl_r_);
+  read("brl_g", &p->brl_g_);
+  read("brl_b", &p->brl_b_);
+  read("brl_rng", &p->brl_rng_);
+  read("brl_st", &p->brl_st_);
+  read("brlp", &p->brlp_);
+  read("brlp_r", &p->brlp_r_);
+  read("brlp_g", &p->brlp_g_);
+  read("brlp_b", &p->brlp_b_);
+  read("hc_r", &p->hc_r_);
+  read("hc_r_rng", &p->hc_r_rng_);
+  read("hs_r", &p->hs_r_);
+  read("hs_r_rng", &p->hs_r_rng_);
+  read("hs_g", &p->hs_g_);
+  read("hs_g_rng", &p->hs_g_rng_);
+  read("hs_b", &p->hs_b_);
+  read("hs_b_rng", &p->hs_b_rng_);
+  read("hs_c", &p->hs_c_);
+  read("hs_c_rng", &p->hs_c_rng_);
+  read("hs_m", &p->hs_m_);
+  read("hs_m_rng", &p->hs_m_rng_);
+  read("hs_y", &p->hs_y_);
+  read("hs_y_rng", &p->hs_y_rng_);
+}
+
+}  // namespace
 
 ODT_Op::ODT_Op(const nlohmann::json& params) { SetParams(params); }
 
@@ -32,16 +155,17 @@ auto ODT_Op::GetParams() const -> nlohmann::json {
   odt["limiting_space"] = ColorUtils::ColorSpaceToString(limiting_space_);
   odt["peak_luminance"] = peak_luminance_;
 
-  odt["open_drt"] = {
+  odt["open_drt"]       = {
       {"look_preset", odt_cpu::OpenDRTLookPresetToString(open_drt_settings_.look_preset_)},
       {"tonescale_preset",
-       odt_cpu::OpenDRTTonescalePresetToString(open_drt_settings_.tonescale_preset_)},
+             odt_cpu::OpenDRTTonescalePresetToString(open_drt_settings_.tonescale_preset_)},
       {"creative_white",
-       odt_cpu::OpenDRTCreativeWhitePresetToString(open_drt_settings_.creative_white_)},
+             odt_cpu::OpenDRTCreativeWhitePresetToString(open_drt_settings_.creative_white_)},
       {"creative_white_limit", open_drt_settings_.creative_white_limit_},
       {"display_grey_luminance", open_drt_settings_.display_grey_luminance_},
       {"hdr_grey_boost", open_drt_settings_.hdr_grey_boost_},
       {"hdr_purity", open_drt_settings_.hdr_purity_},
+      {"parameters", OpenDRTDetailedParamsToJson(open_drt_settings_.detailed_)},
   };
 
   return {{std::string(script_name_), odt}};
@@ -90,8 +214,7 @@ void ODT_Op::SetParams(const nlohmann::json& in_j) {
     }
     if (open_drt.contains("creative_white_limit") &&
         open_drt.at("creative_white_limit").is_number()) {
-      open_drt_settings_.creative_white_limit_ =
-          open_drt.at("creative_white_limit").get<float>();
+      open_drt_settings_.creative_white_limit_ = open_drt.at("creative_white_limit").get<float>();
     }
     if (open_drt.contains("display_grey_luminance") &&
         open_drt.at("display_grey_luminance").is_number()) {
@@ -103,6 +226,9 @@ void ODT_Op::SetParams(const nlohmann::json& in_j) {
     }
     if (open_drt.contains("hdr_purity") && open_drt.at("hdr_purity").is_number()) {
       open_drt_settings_.hdr_purity_ = open_drt.at("hdr_purity").get<float>();
+    }
+    if (open_drt.contains("parameters") && open_drt.at("parameters").is_object()) {
+      LoadOpenDRTDetailedParams(open_drt.at("parameters"), &open_drt_settings_.detailed_);
     }
   }
 

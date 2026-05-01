@@ -2,9 +2,10 @@
 //  SPDX-License-Identifier: GPL-3.0-only
 //  Additional permission under GPLv3 section 7 applies; see the LICENSE file.
 
+#include "edit/operators/cst/odt_op.hpp"
+
 #include <gtest/gtest.h>
 
-#include "edit/operators/cst/odt_op.hpp"
 #include "edit/pipeline/default_pipeline_params.hpp"
 
 namespace alcedo {
@@ -22,8 +23,8 @@ TEST(ODTOpTests, DefaultRoundTripUsesOpenDRT) {
 }
 
 TEST(ODTOpTests, MethodSwitchesToACES2) {
-  nlohmann::json params = pipeline_defaults::MakeDefaultODTParams();
-  params["odt"]["method"] = "aces_2_0";
+  nlohmann::json params           = pipeline_defaults::MakeDefaultODTParams();
+  params["odt"]["method"]         = "aces_2_0";
   params["odt"]["limiting_space"] = "rec709";
 
   ODT_Op         op(params);
@@ -36,13 +37,13 @@ TEST(ODTOpTests, MethodSwitchesToACES2) {
 }
 
 TEST(ODTOpTests, UnsupportedOpenDRTOutputCombinationThrows) {
-  nlohmann::json params = pipeline_defaults::MakeDefaultODTParams();
+  nlohmann::json params           = pipeline_defaults::MakeDefaultODTParams();
   params["odt"]["encoding_space"] = "prophoto";
   EXPECT_THROW({ ODT_Op op(params); }, std::runtime_error);
 }
 
 TEST(ODTOpTests, PresetExpansionProducesStableResolvedRuntimeValues) {
-  nlohmann::json params = pipeline_defaults::MakeDefaultODTParams();
+  nlohmann::json params                         = pipeline_defaults::MakeDefaultODTParams();
   params["odt"]["open_drt"]["tonescale_preset"] = "aces_2_0";
 
   ODT_Op         op(params);
@@ -57,27 +58,79 @@ TEST(ODTOpTests, PresetExpansionProducesStableResolvedRuntimeValues) {
 }
 
 TEST(ODTOpTests, MethodRoundTripPreservesBothMethodSpecificSettings) {
-  nlohmann::json params = pipeline_defaults::MakeDefaultODTParams();
-  params["odt"]["method"] = "open_drt";
-  params["odt"]["limiting_space"] = "p3_d65";
-  params["odt"]["open_drt"]["look_preset"] = "umbra";
+  nlohmann::json params                         = pipeline_defaults::MakeDefaultODTParams();
+  params["odt"]["method"]                       = "open_drt";
+  params["odt"]["limiting_space"]               = "p3_d65";
+  params["odt"]["open_drt"]["look_preset"]      = "umbra";
   params["odt"]["open_drt"]["tonescale_preset"] = "aces_2_0";
-  params["odt"]["open_drt"]["creative_white"] = "d60";
+  params["odt"]["open_drt"]["creative_white"]   = "d60";
 
   ODT_Op open_drt_op(params);
-  auto exported_open_drt = open_drt_op.GetParams();
+  auto   exported_open_drt = open_drt_op.GetParams();
   EXPECT_EQ(exported_open_drt["odt"]["limiting_space"], "p3_d65");
   EXPECT_EQ(exported_open_drt["odt"]["open_drt"]["look_preset"], "umbra");
   EXPECT_EQ(exported_open_drt["odt"]["open_drt"]["tonescale_preset"], "aces_2_0");
   EXPECT_EQ(exported_open_drt["odt"]["open_drt"]["creative_white"], "d60");
 
   exported_open_drt["odt"]["method"] = "aces_2_0";
-  ODT_Op aces_op(exported_open_drt);
+  ODT_Op     aces_op(exported_open_drt);
   const auto exported_aces = aces_op.GetParams();
   EXPECT_EQ(exported_aces["odt"]["limiting_space"], "p3_d65");
   EXPECT_EQ(exported_aces["odt"]["open_drt"]["look_preset"], "umbra");
   EXPECT_EQ(exported_aces["odt"]["open_drt"]["tonescale_preset"], "aces_2_0");
   EXPECT_EQ(exported_aces["odt"]["open_drt"]["creative_white"], "d60");
+}
+
+TEST(ODTOpTests, CustomOpenDRTLookUsesDetailedSliderParameters) {
+  nlohmann::json params                               = pipeline_defaults::MakeDefaultODTParams();
+  params["odt"]["open_drt"]["look_preset"]            = "custom";
+  params["odt"]["open_drt"]["parameters"]["brl_r"]    = -4.0f;
+  params["odt"]["open_drt"]["parameters"]["hs_b_rng"] = 2.5f;
+
+  ODT_Op         op(params);
+  OperatorParams global_params;
+  op.SetGlobalParams(global_params);
+
+  const auto& runtime = global_params.to_output_params_.open_drt_params_;
+  EXPECT_NEAR(runtime.brl_r_, -4.0f, 1e-6f);
+  EXPECT_NEAR(runtime.hs_b_rng_, 2.5f, 1e-6f);
+  EXPECT_EQ(op.GetParams()["odt"]["open_drt"]["look_preset"], "custom");
+  EXPECT_NEAR(op.GetParams()["odt"]["open_drt"]["parameters"]["brl_r"].get<float>(), -4.0f, 1e-6f);
+}
+
+TEST(ODTOpTests, CustomTonescaleOverridesLookPresetToneParameters) {
+  nlohmann::json params                              = pipeline_defaults::MakeDefaultODTParams();
+  params["odt"]["open_drt"]["look_preset"]           = "umbra";
+  params["odt"]["open_drt"]["tonescale_preset"]      = "custom";
+  params["odt"]["open_drt"]["parameters"]["tn_con"]  = 1.23f;
+  params["odt"]["open_drt"]["parameters"]["tn_lcon"] = 0.77f;
+  params["odt"]["open_drt"]["parameters"]["brl_r"]   = -3.25f;
+
+  ODT_Op         op(params);
+  OperatorParams global_params;
+  op.SetGlobalParams(global_params);
+
+  const auto& runtime = global_params.to_output_params_.open_drt_params_;
+  EXPECT_NEAR(runtime.tn_con_, 1.23f, 1e-6f);
+  EXPECT_NEAR(runtime.tn_lcon_, 0.77f, 1e-6f);
+  EXPECT_NEAR(runtime.brl_r_, -4.5f, 1e-6f);
+}
+
+TEST(ODTOpTests, PresetAutomataWritesPresetValuesIntoSliderState) {
+  odt_cpu::OpenDRTSettings settings;
+  settings.detailed_.tn_con_ = 1.01f;
+  settings.detailed_.brl_r_  = 0.5f;
+
+  odt_cpu::ApplyOpenDRTLookPresetToSettings(odt_cpu::OpenDRTLookPreset::UMBRA, &settings);
+  EXPECT_EQ(settings.look_preset_, odt_cpu::OpenDRTLookPreset::UMBRA);
+  EXPECT_NEAR(settings.detailed_.tn_con_, 1.8f, 1e-6f);
+  EXPECT_NEAR(settings.detailed_.brl_r_, -4.5f, 1e-6f);
+
+  odt_cpu::ApplyOpenDRTTonescalePresetToSettings(odt_cpu::OpenDRTTonescalePreset::ACES_2_0,
+                                                 &settings);
+  EXPECT_EQ(settings.tonescale_preset_, odt_cpu::OpenDRTTonescalePreset::ACES_2_0);
+  EXPECT_NEAR(settings.detailed_.tn_con_, 1.15f, 1e-6f);
+  EXPECT_NEAR(settings.detailed_.brl_r_, -4.5f, 1e-6f);
 }
 
 }  // namespace alcedo

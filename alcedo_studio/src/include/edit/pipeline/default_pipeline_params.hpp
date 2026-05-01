@@ -54,7 +54,25 @@ inline auto MakeDefaultODTParams() -> nlohmann::json {
               {"creative_white_limit", 0.25f},
               {"display_grey_luminance", 10.0f},
               {"hdr_grey_boost", 0.13f},
-              {"hdr_purity", 0.5f}}}}}};
+              {"hdr_purity", 0.5f},
+              {"parameters", {{"tn_con", 1.66f},       {"tn_sh", 0.5f},       {"tn_toe", 0.003f},
+                              {"tn_off", 0.005f},      {"tn_hcon", 0.0f},     {"tn_hcon_pv", 1.0f},
+                              {"tn_hcon_st", 4.0f},    {"tn_lcon", 0.0f},     {"tn_lcon_w", 0.5f},
+                              {"cwp_lm", 0.25f},       {"rs_sa", 0.35f},      {"rs_rw", 0.25f},
+                              {"rs_bw", 0.55f},        {"pt_lml", 0.25f},     {"pt_lml_r", 0.5f},
+                              {"pt_lml_g", 0.0f},      {"pt_lml_b", 0.1f},    {"pt_lmh", 0.25f},
+                              {"pt_lmh_r", 0.5f},      {"pt_lmh_b", 0.0f},    {"ptl_c", 0.06f},
+                              {"ptl_m", 0.08f},        {"ptl_y", 0.06f},      {"ptm_low", 0.4f},
+                              {"ptm_low_rng", 0.25f},  {"ptm_low_st", 0.5f},  {"ptm_high", -0.8f},
+                              {"ptm_high_rng", 0.35f}, {"ptm_high_st", 0.4f}, {"brl", 0.0f},
+                              {"brl_r", -2.5f},        {"brl_g", -1.5f},      {"brl_b", -1.5f},
+                              {"brl_rng", 0.5f},       {"brl_st", 0.35f},     {"brlp", -0.5f},
+                              {"brlp_r", -1.25f},      {"brlp_g", -1.25f},    {"brlp_b", -0.25f},
+                              {"hc_r", 1.0f},          {"hc_r_rng", 0.3f},    {"hs_r", 0.6f},
+                              {"hs_r_rng", 0.6f},      {"hs_g", 0.35f},       {"hs_g_rng", 1.0f},
+                              {"hs_b", 0.66f},         {"hs_b_rng", 1.0f},    {"hs_c", 0.25f},
+                              {"hs_c_rng", 1.0f},      {"hs_m", 0.0f},        {"hs_m_rng", 1.0f},
+                              {"hs_y", 0.0f},          {"hs_y_rng", 1.0f}}}}}}}};
 }
 
 inline auto MakeDefaultCropRotateParams() -> nlohmann::json {
