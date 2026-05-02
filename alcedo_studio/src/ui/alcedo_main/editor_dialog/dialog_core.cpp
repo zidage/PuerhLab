@@ -86,8 +86,14 @@ EditorDialog::EditorDialog(std::shared_ptr<ImagePoolService>       image_pool,
                 frame_manager_.AttachExecutionStages(pipeline_guard_->pipeline_);
                 last_applied_lut_path_.clear();
               },
-          .is_plain_working_mode = [this]() { return CurrentWorkingMode() == WorkingMode::Plain; },
-          .refresh_version_log_selection_styles = [this]() { RefreshVersionLogSelectionStyles(); },
+          .is_plain_working_mode =
+              [this]() { return versioning_panel_ && versioning_panel_->IsPlainWorkingMode(); },
+          .refresh_version_log_selection_styles =
+              [this]() {
+                if (versioning_panel_) {
+                  versioning_panel_->RefreshVersionLogSelectionStyles();
+                }
+              },
       });
   render_coordinator_ = std::make_unique<EditorRenderCoordinator>(
       EditorRenderCoordinator::Dependencies{
@@ -146,16 +152,24 @@ EditorDialog::EditorDialog(std::shared_ptr<ImagePoolService>       image_pool,
   BuildDisplayTransformPanel();
   BuildGeometryPanel();
   BuildRawDecodePanel();
-  BuildVersioningPanel();
-  if (history_coordinator_) {
-    history_coordinator_->SetUiContext(versioning::VersionUiContext{
-        .version_status     = version_status_,
-        .commit_version_btn = commit_version_btn_,
-        .undo_tx_btn        = undo_tx_btn_,
-        .working_mode_combo = working_mode_combo_,
-        .version_log        = version_log_,
-        .tx_stack           = tx_stack_,
-    });
+  if (versioning_panel_) {
+    VersioningPanelWidget::Callbacks versioning_callbacks{
+        .undo_last_transaction     = [this]() { UndoLastTransaction(); },
+        .commit_working_version    = [this]() { CommitWorkingVersion(); },
+        .start_new_working_version = [this]() { StartNewWorkingVersionFromUi(); },
+        .checkout_version_by_id =
+            [this](const QString& version_id) { CheckoutVersionById(version_id); },
+        .on_working_mode_changed = [this]() { UpdateVersionUi(); },
+        .viewer_geometry =
+            [this]() -> QRect {
+          return viewer_container_ ? viewer_container_->geometry() : QRect{};
+        },
+    };
+    versioning_panel_->Configure(this, std::move(versioning_callbacks));
+    versioning_panel_->Build();
+  }
+  if (history_coordinator_ && versioning_panel_) {
+    history_coordinator_->SetUiContext(versioning_panel_->MakeUiContext());
   }
 
   shortcut_registry_ = std::make_unique<ShortcutRegistry>(this);
@@ -264,8 +278,8 @@ void EditorDialog::RegisterShortcuts() {
           },
   });
 
-  if (undo_tx_btn_) {
-    undo_tx_btn_->setToolTip(shortcut_registry_->DecorateTooltip(
+  if (versioning_panel_ && versioning_panel_->UndoButton()) {
+    versioning_panel_->UndoButton()->setToolTip(shortcut_registry_->DecorateTooltip(
         Tr("Undo last uncommitted transaction"), kShortcutUndoHistoryId));
   }
   if (geometry_panel_ && geometry_panel_->ResetButton()) {
@@ -296,20 +310,6 @@ auto EditorDialog::ShouldConsumeLutNavigationShortcut() const -> bool {
 }
 
 bool EditorDialog::eventFilter(QObject* obj, QEvent* event) {
-  if (obj == versioning_flyout_ && event && event->type() == QEvent::Hide) {
-    if (!versioning_collapsed_) {
-      if (versioning_panel_anim_) {
-        versioning_panel_anim_->stop();
-      }
-      versioning_panel_progress_ = 0.0;
-      versioning_collapsed_      = true;
-      if (versioning_panel_opacity_effect_) {
-        versioning_panel_opacity_effect_->setOpacity(0.0);
-      }
-      RefreshVersioningCollapseUi();
-    }
-  }
-
   if (event && event->type() == QEvent::MouseButtonDblClick) {
     if (auto* slider = qobject_cast<QSlider*>(obj)) {
       const auto it = slider_reset_callbacks_.find(slider);
@@ -366,15 +366,15 @@ void EditorDialog::ApplyInitialSplitterSizes() {
   const int right_width =
       std::clamp(static_cast<int>(std::lround(static_cast<double>(available_width) * 0.25)),
                  controls_panel->minimumWidth(), controls_panel->maximumWidth());
-  const int center_width = std::max(400, available_width - kVersioningCollapsedWidth - right_width);
+  const int center_width = std::max(400, available_width - VersioningPanelWidget::kCollapsedWidth - right_width);
 
-  main_splitter_->setSizes({kVersioningCollapsedWidth, center_width, right_width});
+  main_splitter_->setSizes({VersioningPanelWidget::kCollapsedWidth, center_width, right_width});
 }
 
 void EditorDialog::resizeEvent(QResizeEvent* event) {
   QDialog::resizeEvent(event);
-  if (versioning_flyout_ && versioning_flyout_->isVisible()) {
-    RepositionVersioningFlyout();
+  if (versioning_panel_) {
+    versioning_panel_->OnDialogResized();
   }
 }
 
@@ -404,31 +404,14 @@ void EditorDialog::RetranslateUi() {
   if (drt_panel_) {
     drt_panel_->RetranslateUi();
   }
-  if (undo_tx_btn_) {
-    undo_tx_btn_->setText(Tr("Undo Last"));
-  }
-  if (commit_version_btn_) {
-    commit_version_btn_->setText(Tr("Commit All"));
-  }
-  if (new_working_btn_) {
-    new_working_btn_->setText(Tr("New Working"));
-  }
   if (tone_panel_) {
     if (auto* unsupported_label = tone_panel_->ColorTempUnsupportedLabel()) {
       unsupported_label->setText(Tr("Color temperature/tint is unavailable for this image."));
     }
     tone_panel_->RetranslateColorTempModeCombo();
   }
-  if (working_mode_combo_) {
-    const int  current_value = working_mode_combo_->currentData().toInt();
-    const bool prev_sync     = syncing_controls_;
-    syncing_controls_        = true;
-    working_mode_combo_->clear();
-    working_mode_combo_->addItem(Tr("Plain"), static_cast<int>(WorkingMode::Plain));
-    working_mode_combo_->addItem(Tr("Incremental"), static_cast<int>(WorkingMode::Incremental));
-    const int index = working_mode_combo_->findData(current_value);
-    working_mode_combo_->setCurrentIndex(std::max(0, index));
-    syncing_controls_ = prev_sync;
+  if (versioning_panel_) {
+    versioning_panel_->RetranslateUi();
   }
   if (look_panel_) {
     look_panel_->RetranslateUi();
@@ -438,7 +421,6 @@ void EditorDialog::RetranslateUi() {
     raw_panel_->RetranslateUi();
   }
   UpdateViewerZoomLabel(viewer_ ? viewer_->GetViewZoom() : 1.0f);
-  RefreshVersioningCollapseUi();
   UpdateVersionUi();
 }
 void EditorDialog::BuildToneControlPanel() {

@@ -28,7 +28,10 @@
       "Bash(cmd //c \"call scripts\\\\msvc_env.cmd --build --preset win_debug --parallel 4 --target alcedo_main\")",
       "Bash(python -c ' *)",
       "Bash(bash -c 'cmd //c \"scripts\\\\\\\\msvc_env.cmd --build --preset win_debug --parallel 4\" 2>&1 | tail -200')",
-      "Bash(bash -c 'cmd //c \"scripts\\\\\\\\msvc_env.cmd --build --preset win_debug --parallel 4\" 2>&1 | tail -150')"
+      "Bash(bash -c 'cmd //c \"scripts\\\\\\\\msvc_env.cmd --build --preset win_debug --parallel 4\" 2>&1 | tail -150')",
+      "Bash(cmd /c \"scripts\\\\\\\\msvc_env.cmd --build --preset win_debug --parallel 4\")",
+      "Bash(cmd //c \"scripts\\\\\\\\msvc_env.cmd --build --preset win_debug --parallel 4\")",
+      "Bash(ctest --test-dir build/debug --output-on-failure -R \"^\\(EditViewerLogicTest|ToneCurveWidgetTest|ODTOpTest|LutCatalogTest|CropRotateOpTest\\)\\\\.\")"
     ]
   }
 }

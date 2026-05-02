@@ -427,6 +427,58 @@ Exit criteria:
 
 - `EditorDialog` no longer declares versioning controls or flyout animation fields.
 
+Progress note (2026-05-02):
+
+- Phase 9 versioning UI migration has been implemented. `VersioningPanelWidget` is now a real
+  `QWidget` (not an `AdjustmentPanelWidget`, per the design's note that versioning is not an
+  adjustment panel). The widget owns the entire versioning surface: rail container, history and
+  versions rail buttons, divider, the floating flyout overlay, opacity effect and slide animation,
+  the page stack with both history and version pages, baseline label, version status, undo/commit
+  buttons, working-mode combo, new-working button, version log list, and uncommitted-transaction
+  list. The widget also owns the rail/flyout style sheets that previously lived inline in
+  `EditorDialog::BuildViewerAndPanelShell()`.
+- Panel-local state moved off `EditorDialog`: `versioning_panel_host_`, `versioning_flyout_`,
+  `versioning_collapsed_nav_`, `versioning_panel_opacity_effect_`, `versioning_panel_anim_`,
+  `versioning_pages_stack_`, `shared_versioning_root_`, `shared_versioning_layout_`,
+  `version_status_`, `undo_tx_btn_`, `commit_version_btn_`, `versioning_history_btn_`,
+  `versioning_versions_btn_`, `working_mode_combo_`, `new_working_btn_`, `version_log_`,
+  `tx_stack_`, `versioning_collapsed_`, `versioning_panel_progress_`, `versioning_active_page_`,
+  the `VersioningFlyoutPage`/`WorkingMode` nested enums, and the `kVersioning*` size/animation
+  constants are all removed from `dialog_internal.hpp`. `kVersioningCollapsedWidth` was promoted to
+  `VersioningPanelWidget::kCollapsedWidth` so the splitter sizing in `EditorDialog` and
+  `BuildViewerAndPanelShell()` can keep using a single source of truth.
+- Helper methods removed from `EditorDialog`: `BuildVersioningPanel()`,
+  `RefreshVersioningCollapseUi()`, `SetVersioningCollapsed()`, `RepositionVersioningFlyout()`,
+  `RefreshVersionLogSelectionStyles()`, and `CurrentWorkingMode()`. The flyout-hide branch in
+  `EditorDialog::eventFilter()` is gone (the widget now installs its own filter on the flyout).
+  `EditorDialog::resizeEvent()` and `EditorDialog::RetranslateUi()` delegate to
+  `VersioningPanelWidget::OnDialogResized()` and `VersioningPanelWidget::RetranslateUi()`
+  respectively. The `is_plain_working_mode` and `refresh_version_log_selection_styles` callbacks
+  passed to `EditorHistoryCoordinator` now route through the widget rather than legacy dialog
+  members. `EditorHistoryCoordinator::SetUiContext()` is now seeded from
+  `versioning_panel_->MakeUiContext()`, so the coordinator continues to own working-version
+  behavior but no longer relies on the dialog exposing the underlying widgets directly.
+- Widget callbacks (undo, commit, start-new-working, checkout-version, working-mode-changed,
+  viewer-geometry) bridge back to `EditorDialog`'s existing forwarding wrappers and to
+  `viewer_container_->geometry()`. The shortcut registry still decorates the undo button tooltip,
+  but it now does so via `VersioningPanelWidget::UndoButton()`.
+- `BuildViewerAndPanelShell()` shrinks substantially: the inline rail/flyout construction, rail
+  styles, button connect blocks, opacity-effect setup, and shared layout creation are gone. The
+  shell now only news a `VersioningPanelWidget`, places it as the leftmost splitter pane, and lets
+  the dialog constructor wire callbacks and call `Configure()`/`Build()` after the other panels.
+- Verification: `cmd /c scripts\msvc_env.cmd --build --preset win_debug --parallel 4` passes.
+  Per the known unrelated `0xc0000139` GoogleTest discovery issue, only editor-related tests were
+  run: `ctest --test-dir build/debug --output-on-failure -R
+  "^(EditViewerLogicTest|ToneCurveWidgetTest|ODTOpTest|LutCatalogTest|CropRotateOpTest)\."`.
+  The targeted run executed 36 tests and all passed.
+- Manual verification should follow `docs/editor_dialog_manual_test_matrix.md` for the Versioning
+  and History rows: rail open/close (history vs. versions, same-page-toggle collapses), flyout
+  reposition on dialog resize, undo single transaction, undo stack, commit-all (and commit-all
+  with no uncommitted transactions), version checkout from the version log, plain vs incremental
+  working-mode toggle, new-working button, translation refresh of the working-mode combo and
+  buttons, no duplicate transactions, and that LUT keyboard navigation still respects the active
+  panel.
+
 ## Phase 10: Remove Legacy Snapshot and Wrappers
 
 Goal: finish the architecture after panels have moved.

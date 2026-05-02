@@ -53,11 +53,6 @@ void EditorDialog::CommitWorkingVersion() {
   }
 }
 
-auto EditorDialog::CurrentWorkingMode() const -> WorkingMode {
-  return versioning::IsPlainModeSelected(working_mode_combo_) ? WorkingMode::Plain
-                                                              : WorkingMode::Incremental;
-}
-
 void EditorDialog::StartNewWorkingVersionFromUi() {
   if (history_coordinator_) {
     history_coordinator_->StartNewWorkingVersionFromUi();
