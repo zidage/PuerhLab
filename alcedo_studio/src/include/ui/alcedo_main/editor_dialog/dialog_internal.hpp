@@ -84,7 +84,6 @@
 #include "ui/alcedo_main/app_theme.hpp"
 #include "ui/alcedo_main/editor_dialog/controllers/history_controller.hpp"
 #include "ui/alcedo_main/editor_dialog/controllers/image_controller.hpp"
-#include "ui/alcedo_main/editor_dialog/controllers/lut_controller.hpp"
 #include "ui/alcedo_main/editor_dialog/controllers/pipeline_controller.hpp"
 #include "ui/alcedo_main/editor_dialog/controllers/render_controller.hpp"
 #include "ui/alcedo_main/editor_dialog/dialog.hpp"
@@ -96,7 +95,6 @@
 #include "ui/alcedo_main/editor_dialog/modules/geometry.hpp"
 #include "ui/alcedo_main/editor_dialog/modules/histogram.hpp"
 #include "ui/alcedo_main/editor_dialog/modules/hls.hpp"
-#include "ui/alcedo_main/editor_dialog/modules/lut_catalog.hpp"
 #include "ui/alcedo_main/editor_dialog/modules/pipeline_io.hpp"
 #include "ui/alcedo_main/editor_dialog/modules/versioning.hpp"
 #include "ui/alcedo_main/editor_dialog/render/editor_render_coordinator.hpp"
@@ -109,12 +107,10 @@
 #include "ui/alcedo_main/editor_dialog/widgets/geometry_panel_widget.hpp"
 #include "ui/alcedo_main/editor_dialog/widgets/history_cards.hpp"
 #include "ui/alcedo_main/editor_dialog/widgets/look_control_panel_widget.hpp"
-#include "ui/alcedo_main/editor_dialog/widgets/lut_browser_widget.hpp"
 #include "ui/alcedo_main/editor_dialog/widgets/raw_decode_panel_widget.hpp"
 #include "ui/alcedo_main/editor_dialog/widgets/spinner.hpp"
 #include "ui/alcedo_main/editor_dialog/widgets/tone_control_panel_widget.hpp"
 #include "ui/alcedo_main/editor_dialog/widgets/tone_curve_widget.hpp"
-#include "ui/alcedo_main/editor_dialog/widgets/trackball.hpp"
 #include "ui/alcedo_main/editor_dialog/widgets/versioning_panel_widget.hpp"
 #include "ui/alcedo_main/i18n.hpp"
 #include "ui/alcedo_main/shortcut_registry.hpp"
@@ -146,10 +142,6 @@ constexpr int  kControlsPanelMinWidth       = 260;
 
 using namespace std::chrono_literals;
 
-using color_wheel::CdlMasterToSliderUi;
-using color_wheel::CdlSliderUiToMaster;
-using color_wheel::ClampDiscPoint;
-using color_wheel::DiscToCdlDelta;
 using curve::BuildCurveHermiteCache;
 using curve::Clamp01;
 using curve::CurveControlPointsEqual;
@@ -161,19 +153,6 @@ using curve::NormalizeCurveControlPoints;
 using curve::ParseCurveControlPointsFromParams;
 using geometry::ClampCropRect;
 using geometry::CropAspectPreset;
-using hls::HlsProfileArray;
-using hls::HueDistanceDegrees;
-using hls::WrapHueDegrees;
-inline auto ClosestHlsCandidateHueIndex(float hue) -> int {
-  return hls::ClosestCandidateHueIndex(hue);
-}
-inline auto HlsCandidateColor(float hue_degrees) -> QColor {
-  return hls::CandidateColor(hue_degrees);
-}
-inline auto MakeHlsFilledArray(float value) -> HlsProfileArray {
-  return hls::MakeFilledArray(value);
-}
-
 void SetLocalizedText(QObject* object, const char* source, bool uppercase = false) {
   if (!object || source == nullptr) {
     return;
@@ -378,18 +357,6 @@ constexpr float  kWhiteSliderFromGlobalScale      = pipeline_io::kWhiteSliderFro
 constexpr float  kShadowsSliderFromGlobalScale    = pipeline_io::kShadowsSliderFromGlobalScale;
 constexpr float  kHighlightsSliderFromGlobalScale = pipeline_io::kHighlightsSliderFromGlobalScale;
 
-// HLS constant aliases.
-constexpr auto&  kHlsCandidateHues                = hls::kCandidateHues;
-constexpr float  kHlsFixedTargetLightness         = hls::kFixedTargetLightness;
-constexpr float  kHlsFixedTargetSaturation        = hls::kFixedTargetSaturation;
-constexpr float  kHlsDefaultHueRange              = hls::kDefaultHueRange;
-constexpr float  kHlsFixedLightnessRange          = hls::kFixedLightnessRange;
-constexpr float  kHlsFixedSaturationRange         = hls::kFixedSaturationRange;
-constexpr float  kHlsMaxHueShiftDegrees           = hls::kMaxHueShiftDegrees;
-constexpr float  kHlsAdjUiMin                     = hls::kAdjUiMin;
-constexpr float  kHlsAdjUiMax                     = hls::kAdjUiMax;
-constexpr float  kHlsAdjUiToParamScale            = hls::kAdjUiToParamScale;
-
 // Aliases for module constants (preserve local names used throughout EditorDialog).
 constexpr int    kColorTempCctMin                 = color_temp::kCctMin;
 constexpr int    kColorTempCctMax                 = color_temp::kCctMax;
@@ -401,10 +368,6 @@ constexpr float  kRotationSliderScale             = geometry::kRotationSliderSca
 constexpr float  kCropRectSliderScale             = geometry::kCropRectSliderScale;
 constexpr double kCropAspectSpinMin               = 0.01;
 constexpr double kCropAspectSpinMax               = 100.0;
-constexpr int    kCdlWheelSliderUiMin             = color_wheel::kSliderUiMin;
-constexpr int    kCdlWheelSliderUiMax             = color_wheel::kSliderUiMax;
-constexpr float  kCdlWheelStrengthDefault         = color_wheel::kStrengthDefault;
-
 auto RenderPanelToggleIcon(const QString& resource_path, const QColor& color, const QSize& size,
                            qreal device_pixel_ratio) -> QIcon {
   QFile svg_file(resource_path);
@@ -670,7 +633,7 @@ class EditorDialog final : public QDialog {
   void BuildViewerAndPanelShell();
   auto BuildControlPanelShell(const QString& panel_style) -> EditorControlPanelWidget*;
   void BuildLookControlPanel(EditorControlPanelWidget* controls_panel, const QString& scroll_style);
-  void WireLookControlPanel();
+  void BuildLookPanel();
   void BuildToneControlPanel();
   void BuildDisplayTransformPanel();
   void BuildGeometryPanel();
@@ -683,12 +646,6 @@ class EditorDialog final : public QDialog {
   auto ShouldConsumeUndoShortcutLocally() const -> bool;
 
   auto ShouldConsumeLutNavigationShortcut() const -> bool;
-
-  void RefreshHlsTargetUi();
-
-  void RefreshCdlOffsetLabels();
-
-
 
   static auto DefaultAdjustmentState() -> const AdjustmentState&;
 
@@ -730,12 +687,6 @@ class EditorDialog final : public QDialog {
   void        RetranslateUi();
 
 
-
-  void        RefreshLutBrowserUi();
-
-  void        ForceRefreshLutBrowserUi();
-
-  void        OpenLutFolder();
 
   void        RefreshPanelSwitchUi();
 
@@ -876,12 +827,10 @@ class EditorDialog final : public QDialog {
   SpinnerWidget*                          spinner_                         = nullptr;
   QWidget*                                controls_                        = nullptr;
   QWidget*                                tone_controls_                   = nullptr;
-  QWidget*                                look_controls_                   = nullptr;
   QWidget*                                drt_controls_                    = nullptr;
   QWidget*                                geometry_controls_               = nullptr;
   QWidget*                                raw_controls_                    = nullptr;
   QVBoxLayout*                            controls_layout_                 = nullptr;
-  QVBoxLayout*                            look_controls_layout_            = nullptr;
   QVBoxLayout*                            drt_controls_layout_             = nullptr;
   QVBoxLayout*                            geometry_controls_layout_        = nullptr;
   QVBoxLayout*                            raw_controls_layout_             = nullptr;
@@ -893,25 +842,10 @@ class EditorDialog final : public QDialog {
   QPushButton*                            drt_panel_btn_                   = nullptr;
   QPushButton*                            geometry_panel_btn_              = nullptr;
   QPushButton*                            raw_panel_btn_                   = nullptr;
-  LutBrowserWidget*                       lut_browser_widget_              = nullptr;
   ToneControlPanelWidget*                 tone_panel_                      = nullptr;
+  LookControlPanelWidget*                 look_panel_                      = nullptr;
   DisplayTransformPanelWidget*            drt_panel_                       = nullptr;
   RawDecodePanelWidget*                   raw_panel_                       = nullptr;
-  CdlTrackballDiscWidget*                 lift_disc_widget_                = nullptr;
-  CdlTrackballDiscWidget*                 gamma_disc_widget_               = nullptr;
-  CdlTrackballDiscWidget*                 gain_disc_widget_                = nullptr;
-  QLabel*                                 lift_offset_label_               = nullptr;
-  QLabel*                                 gamma_offset_label_              = nullptr;
-  QLabel*                                 gain_offset_label_               = nullptr;
-  QSlider*                                lift_master_slider_              = nullptr;
-  QSlider*                                gamma_master_slider_             = nullptr;
-  QSlider*                                gain_master_slider_              = nullptr;
-  QLabel*                                 hls_target_label_                = nullptr;
-  std::vector<QPushButton*>               hls_candidate_buttons_{};
-  QSlider*                                hls_hue_adjust_slider_               = nullptr;
-  QSlider*                                hls_lightness_adjust_slider_         = nullptr;
-  QSlider*                                hls_saturation_adjust_slider_        = nullptr;
-  QSlider*                                hls_hue_range_slider_                = nullptr;
   GeometryPanelWidget*                      geometry_panel_                  = nullptr;
   QLabel*                                   version_status_                    = nullptr;
   QPushButton*                              undo_tx_btn_                       = nullptr;
@@ -923,8 +857,6 @@ class EditorDialog final : public QDialog {
   QPushButton*                              new_working_btn_    = nullptr;
   QListWidget*                              version_log_        = nullptr;
   QListWidget*                              tx_stack_           = nullptr;
-
-  controllers::LutController                lut_controller_{};
 
   std::string                               last_applied_lut_path_{};
   std::optional<ColorTempRequestSnapshot>   last_submitted_color_temp_request_{};

@@ -1,5 +1,6 @@
 #include "ui/alcedo_main/editor_dialog/dialog_internal.hpp"
 #include "ui/alcedo_main/editor_dialog/pipeline/display_transform_pipeline_adapter.hpp"
+#include "ui/alcedo_main/editor_dialog/pipeline/look_pipeline_adapter.hpp"
 #include "ui/alcedo_main/editor_dialog/pipeline/raw_pipeline_adapter.hpp"
 
 namespace alcedo::ui {
@@ -141,6 +142,7 @@ EditorDialog::EditorDialog(std::shared_ptr<ImagePoolService>       image_pool,
     UpdateViewerZoomLabel(viewer_ ? viewer_->GetViewZoom() : 1.0f);
   }
   BuildToneControlPanel();
+  BuildLookPanel();
   BuildDisplayTransformPanel();
   BuildGeometryPanel();
   BuildRawDecodePanel();
@@ -241,8 +243,8 @@ void EditorDialog::RegisterShortcuts() {
             if (ShouldConsumeLutNavigationShortcut()) {
               return;
             }
-            if (lut_browser_widget_) {
-              lut_browser_widget_->SelectRelativeEntry(-1);
+            if (look_panel_) {
+              look_panel_->SelectRelativeLut(-1);
             }
           },
   });
@@ -256,8 +258,8 @@ void EditorDialog::RegisterShortcuts() {
             if (ShouldConsumeLutNavigationShortcut()) {
               return;
             }
-            if (lut_browser_widget_) {
-              lut_browser_widget_->SelectRelativeEntry(1);
+            if (look_panel_) {
+              look_panel_->SelectRelativeLut(1);
             }
           },
   });
@@ -285,28 +287,12 @@ auto EditorDialog::ShouldConsumeUndoShortcutLocally() const -> bool {
 }
 
 auto EditorDialog::ShouldConsumeLutNavigationShortcut() const -> bool {
-  if (active_panel_ != ControlPanelKind::Look || !lut_browser_widget_) {
-    return true;
-  }
-  if (QApplication::activePopupWidget()) {
+  if (active_panel_ != ControlPanelKind::Look || !look_panel_) {
     return true;
   }
 
   QWidget* const focus_widget = QApplication::focusWidget();
-  if (!focus_widget || !isAncestorOf(focus_widget)) {
-    return false;
-  }
-
-  if (qobject_cast<QComboBox*>(focus_widget) != nullptr ||
-      qobject_cast<QAbstractSpinBox*>(focus_widget) != nullptr ||
-      qobject_cast<QTextEdit*>(focus_widget) != nullptr ||
-      qobject_cast<QPlainTextEdit*>(focus_widget) != nullptr) {
-    return true;
-  }
-  if (auto* line_edit = qobject_cast<QLineEdit*>(focus_widget)) {
-    return !lut_browser_widget_->isAncestorOf(line_edit);
-  }
-  return false;
+  return !look_panel_->CanHandleLutNavigationShortcut(focus_widget);
 }
 
 bool EditorDialog::eventFilter(QObject* obj, QEvent* event) {
@@ -444,15 +430,13 @@ void EditorDialog::RetranslateUi() {
     working_mode_combo_->setCurrentIndex(std::max(0, index));
     syncing_controls_ = prev_sync;
   }
-  if (lut_browser_widget_) {
-    lut_browser_widget_->RetranslateUi();
-    RefreshLutBrowserUi();
+  if (look_panel_) {
+    look_panel_->RetranslateUi();
   }
 
   if (raw_panel_) {
     raw_panel_->RetranslateUi();
   }
-  RefreshHlsTargetUi();
   UpdateViewerZoomLabel(viewer_ ? viewer_->GetViewZoom() : 1.0f);
   RefreshVersioningCollapseUi();
   UpdateVersionUi();
@@ -462,7 +446,7 @@ void EditorDialog::BuildToneControlPanel() {
     return;
   }
 
-  const auto default_lut_path           = lut_controller_.DefaultLutPath();
+  const auto default_lut_path = look_panel_ ? look_panel_->DefaultLutPath() : std::string{};
 
   // If the pipeline already has operator params (loaded from PipelineService/storage),
   // initialize UI state from those params rather than overwriting them.
@@ -478,8 +462,6 @@ void EditorDialog::BuildToneControlPanel() {
   if (history_coordinator_) {
     history_coordinator_->SeedWorkingVersionFromLatest();
   }
-  WireLookControlPanel();
-
   ToneControlPanelWidget::Dependencies deps{
       .session                = adjustment_session_.get(),
       .panel_layout           = controls_layout_,
@@ -508,6 +490,44 @@ void EditorDialog::BuildToneControlPanel() {
 
   tone_panel_->Configure(std::move(deps), std::move(callbacks));
   tone_panel_->Build();
+}
+
+void EditorDialog::BuildLookPanel() {
+  if (!look_panel_) {
+    return;
+  }
+
+  LookControlPanelWidget::Dependencies deps{
+      .session                = adjustment_session_.get(),
+      .dialog_state           = &state_,
+      .dialog_committed_state = &committed_state_,
+  };
+
+  LookControlPanelWidget::Callbacks callbacks{
+      .is_global_syncing = [this]() { return syncing_controls_; },
+      .request_render    = [this]() { RequestRender(); },
+      .register_slider_reset =
+          [this](QSlider* slider, std::function<void()> on_reset) {
+            RegisterSliderReset(slider, std::move(on_reset));
+          },
+      .default_adjustment_state = [this]() -> const AdjustmentState& {
+        return DefaultAdjustmentState();
+      },
+      .load_from_pipeline =
+          [this](const LookAdjustmentState& base) -> std::optional<LookAdjustmentState> {
+        if (!pipeline_guard_ || !pipeline_guard_->pipeline_) {
+          return std::nullopt;
+        }
+        const auto loaded = LookPipelineAdapter::Load(*pipeline_guard_->pipeline_, base);
+        if (!loaded.loaded_any) {
+          return std::nullopt;
+        }
+        return loaded.state;
+      },
+  };
+
+  look_panel_->Configure(std::move(deps), std::move(callbacks));
+  look_panel_->Build();
 }
 
 void EditorDialog::BuildDisplayTransformPanel() {

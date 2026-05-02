@@ -386,6 +386,33 @@ Exit criteria:
 - `EditorDialog` no longer owns HLS, CDL, or LUT browser controls.
 - LUT keyboard navigation still works only when the LUT browser should consume it.
 
+Progress note (2026-05-02):
+
+- Phase 8 look panel migration has been implemented. `LookControlPanelWidget` is now a real
+  `AdjustmentPanelWidget` and owns the LUT browser, LUT catalog controller, HLS target swatches,
+  HLS profile tables and sliders, CDL lift/gamma/gain trackballs, CDL offset labels, and CDL master
+  sliders.
+- The widget keeps panel-local `LookAdjustmentState look_state_` and a committed mirror. HLS and
+  CDL edits update panel state first, project look fields back into the legacy `AdjustmentState`
+  during this migration window, then route preview and commit through `EditorAdjustmentSession`
+  with `LookPipelineAdapter`.
+- LUT refresh/open/select behavior moved into the look panel. The dialog now delegates LUT keyboard
+  shortcut eligibility and previous/next selection to `LookControlPanelWidget`, so up/down
+  navigation is still limited to the active Look panel and avoids stealing focus from combo boxes,
+  spin boxes, non-LUT line edits, and popups.
+- `EditorDialog` no longer declares HLS controls, CDL controls, a LUT browser pointer, or a
+  `LutController`. The shell still owns only the look scroll container and a `LookControlPanelWidget`
+  child pointer while later phases remove remaining temporary wrappers.
+- Verification: `cmd /c scripts\msvc_env.cmd --build --preset win_debug --parallel 4` passes.
+  Per the known unrelated `0xc0000139` discovery issue, only editor-related tests were run:
+  `ctest --test-dir build/debug --output-on-failure -R
+  "^(EditViewerLogicTest|ToneCurveWidgetTest|ODTOpTest|LutCatalogTest|CropRotateOpTest)\."`.
+  The targeted run executed 36 tests and all passed.
+- Manual verification should follow `docs/editor_dialog_manual_test_matrix.md` for the Look Panel
+  rows: HLS target switching, HLS slider preview/release commits, CDL wheel drag/release, CDL master
+  sliders and resets, LUT browser selection, LUT keyboard navigation, undo, commit-all, version
+  checkout, and no duplicate transactions.
+
 ## Phase 9: Migrate Versioning UI
 
 Goal: remove versioning controls from `EditorDialog`.

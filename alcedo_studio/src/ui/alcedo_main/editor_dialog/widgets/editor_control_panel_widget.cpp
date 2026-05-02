@@ -10,6 +10,19 @@ namespace alcedo::ui {
 
 EditorControlPanelWidget::EditorControlPanelWidget(QWidget* parent) : QWidget(parent) {}
 
+void EditorDialog::BuildLookControlPanel(EditorControlPanelWidget* controls_panel,
+                                         const QString&             scroll_style) {
+  look_controls_scroll_ = new QScrollArea(controls_panel);
+  look_controls_scroll_->setFrameShape(QFrame::NoFrame);
+  look_controls_scroll_->setWidgetResizable(true);
+  look_controls_scroll_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+  look_controls_scroll_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+  look_controls_scroll_->setStyleSheet(scroll_style);
+
+  look_panel_ = new LookControlPanelWidget(look_controls_scroll_);
+  look_controls_scroll_->setWidget(look_panel_);
+}
+
 auto EditorDialog::BuildControlPanelShell(const QString& panel_style) -> EditorControlPanelWidget* {
   auto* controls_panel = new EditorControlPanelWidget(this);
   controls_panel->setMinimumWidth(kControlsPanelMinWidth);

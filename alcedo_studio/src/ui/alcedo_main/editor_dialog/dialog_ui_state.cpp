@@ -2,54 +2,6 @@
 
 namespace alcedo::ui {
 
-void EditorDialog::RefreshHlsTargetUi() {
-  if (!hls_target_label_ && hls_candidate_buttons_.empty()) {
-    return;
-  }
-
-  const float hue = WrapHueDegrees(state_.hls_target_hue_);
-  if (hls_target_label_) {
-    hls_target_label_->setText(Tr("Target Hue: %1 deg").arg(hue, 0, 'f', 0));
-  }
-
-  const int selected_idx = ClosestHlsCandidateHueIndex(hue);
-  for (int i = 0; i < static_cast<int>(hls_candidate_buttons_.size()); ++i) {
-    auto* btn = hls_candidate_buttons_[i];
-    if (!btn) {
-      continue;
-    }
-    const bool    selected    = (i == selected_idx);
-    const QColor  swatch      = HlsCandidateColor(kHlsCandidateHues[static_cast<size_t>(i)]);
-    const auto    border_w_px = selected ? "3px" : "1px";
-    const QString border_col  = selected
-                                    ? AppTheme::Instance().accentColor().name(QColor::HexRgb)
-                                    : AppTheme::Instance().glassStrokeColor().name(QColor::HexArgb);
-    btn->setToolTip(Tr("Hue %1 deg").arg(kHlsCandidateHues[static_cast<size_t>(i)], 0, 'f', 0));
-    btn->setStyleSheet(QString("QPushButton {"
-                               "  background: %1;"
-                               "  border: %2 solid %3;"
-                               "  border-radius: 11px;"
-                               "}"
-                               "QPushButton:hover {"
-                               "  border-color: %4;"
-                               "}")
-                           .arg(swatch.name(QColor::HexRgb), border_w_px, border_col,
-                                AppTheme::Instance().accentSecondaryColor().name(QColor::HexRgb)));
-  }
-}
-
-void EditorDialog::RefreshCdlOffsetLabels() {
-  if (lift_offset_label_) {
-    lift_offset_label_->setText(FormatWheelDeltaText(state_.lift_wheel_, false));
-  }
-  if (gamma_offset_label_) {
-    gamma_offset_label_->setText(FormatWheelDeltaText(state_.gamma_wheel_, true));
-  }
-  if (gain_offset_label_) {
-    gain_offset_label_->setText(FormatWheelDeltaText(state_.gain_wheel_, true));
-  }
-}
-
 auto EditorDialog::DefaultAdjustmentState() -> const AdjustmentState& {
   static const AdjustmentState defaults{};
   return defaults;
@@ -159,39 +111,6 @@ void EditorDialog::UpdateViewerZoomLabel(float zoom) {
     } else {
       viewer_zoom_resolution_label_->setText(QStringLiteral("-- × -- px"));
     }
-  }
-}
-
-void EditorDialog::RefreshLutBrowserUi() {
-  if (!lut_browser_widget_) {
-    return;
-  }
-  const auto view_model = lut_controller_.Refresh(state_.lut_path_, false);
-  lut_browser_widget_->SetDirectoryInfo(view_model.directory_text_, view_model.status_text_,
-                                        view_model.can_open_directory_);
-  lut_browser_widget_->SetEntries(view_model.entries_, view_model.selected_path_);
-}
-
-void EditorDialog::ForceRefreshLutBrowserUi() {
-  if (!lut_browser_widget_) {
-    return;
-  }
-  const auto view_model = lut_controller_.Refresh(state_.lut_path_, true);
-  lut_browser_widget_->SetDirectoryInfo(view_model.directory_text_, view_model.status_text_,
-                                        view_model.can_open_directory_);
-  lut_browser_widget_->SetEntries(view_model.entries_, view_model.selected_path_);
-}
-
-void EditorDialog::OpenLutFolder() {
-  const auto&     directory = lut_controller_.directory();
-  std::error_code ec;
-  if (directory.empty() || !std::filesystem::is_directory(directory, ec) || ec) {
-    QMessageBox::warning(this, Tr("LUT"), Tr("LUT folder is unavailable."));
-    return;
-  }
-  if (!QDesktopServices::openUrl(
-          QUrl::fromLocalFile(QString::fromStdWString(directory.wstring())))) {
-    QMessageBox::warning(this, Tr("LUT"), Tr("Failed to open the LUT folder."));
   }
 }
 
@@ -556,42 +475,12 @@ void EditorDialog::SyncControlsFromState() {
   syncing_controls_ = true;
   LoadActiveHlsProfile(state_);
   SanitizeOdtStateForUi(state_.odt_);
-  RefreshLutBrowserUi();
 
   if (raw_panel_) {
     raw_panel_->SyncControlsFromDialogState();
   }
-  if (lift_disc_widget_) {
-    lift_disc_widget_->SetPosition(state_.lift_wheel_.disc_position_);
-  }
-  if (gamma_disc_widget_) {
-    gamma_disc_widget_->SetPosition(state_.gamma_wheel_.disc_position_);
-  }
-  if (gain_disc_widget_) {
-    gain_disc_widget_->SetPosition(state_.gain_wheel_.disc_position_);
-  }
-  if (lift_master_slider_) {
-    lift_master_slider_->setValue(CdlMasterToSliderUi(state_.lift_wheel_.master_offset_));
-  }
-  if (gamma_master_slider_) {
-    gamma_master_slider_->setValue(CdlMasterToSliderUi(-state_.gamma_wheel_.master_offset_));
-  }
-  if (gain_master_slider_) {
-    gain_master_slider_->setValue(CdlMasterToSliderUi(state_.gain_wheel_.master_offset_));
-  }
-  if (hls_hue_adjust_slider_) {
-    hls_hue_adjust_slider_->setValue(static_cast<int>(std::lround(state_.hls_hue_adjust_)));
-  }
-  if (hls_lightness_adjust_slider_) {
-    hls_lightness_adjust_slider_->setValue(
-        static_cast<int>(std::lround(state_.hls_lightness_adjust_)));
-  }
-  if (hls_saturation_adjust_slider_) {
-    hls_saturation_adjust_slider_->setValue(
-        static_cast<int>(std::lround(state_.hls_saturation_adjust_)));
-  }
-  if (hls_hue_range_slider_) {
-    hls_hue_range_slider_->setValue(static_cast<int>(std::lround(state_.hls_hue_range_)));
+  if (look_panel_) {
+    look_panel_->SyncControlsFromDialogState();
   }
   if (tone_panel_) {
     tone_panel_->ReloadFromCommittedState();
@@ -609,9 +498,6 @@ void EditorDialog::SyncControlsFromState() {
     viewer_->SetCropOverlayVisible(geometry_active);
     viewer_->SetCropToolEnabled(geometry_active);
   }
-  RefreshHlsTargetUi();
-  RefreshCdlOffsetLabels();
-
   syncing_controls_ = false;
 }
 }  // namespace alcedo::ui
