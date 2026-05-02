@@ -89,6 +89,7 @@
 #include "ui/alcedo_main/editor_dialog/controllers/render_controller.hpp"
 #include "ui/alcedo_main/editor_dialog/dialog.hpp"
 #include "ui/alcedo_main/editor_dialog/frame/editor_frame_manager.hpp"
+#include "ui/alcedo_main/editor_dialog/history/editor_history_coordinator.hpp"
 #include "ui/alcedo_main/editor_dialog/modules/color_temp.hpp"
 #include "ui/alcedo_main/editor_dialog/modules/color_wheel.hpp"
 #include "ui/alcedo_main/editor_dialog/modules/curve.hpp"
@@ -99,6 +100,7 @@
 #include "ui/alcedo_main/editor_dialog/modules/lut_catalog.hpp"
 #include "ui/alcedo_main/editor_dialog/modules/pipeline_io.hpp"
 #include "ui/alcedo_main/editor_dialog/modules/versioning.hpp"
+#include "ui/alcedo_main/editor_dialog/render/editor_render_coordinator.hpp"
 #include "ui/alcedo_main/editor_dialog/scope/scope_panel.hpp"
 #include "ui/alcedo_main/editor_dialog/session/editor_adjustment_session.hpp"
 #include "ui/alcedo_main/editor_dialog/state.hpp"
@@ -1002,10 +1004,6 @@ class EditorDialog final : public QDialog {
   QPushButton*                            new_working_btn_      = nullptr;
   QListWidget*                            version_log_          = nullptr;
   QListWidget*                            tx_stack_             = nullptr;
-  QTimer*                                 poll_timer_           = nullptr;
-  QTimer*                                 detail_preview_timer_ = nullptr;
-  std::optional<std::future<std::shared_ptr<ImageBuffer>>> inflight_future_{};
-  std::optional<PendingRenderRequest>                      inflight_request_{};
 
   controllers::LutController                               lut_controller_{};
   LensCatalog                                              lens_catalog_{};
@@ -1014,20 +1012,11 @@ class EditorDialog final : public QDialog {
   std::optional<ColorTempRequestSnapshot>                  last_submitted_color_temp_request_{};
   AdjustmentState                                          state_{};
   AdjustmentState                                          committed_state_{};
-  Version                                                  working_version_{};
+  std::unique_ptr<EditorHistoryCoordinator>                history_coordinator_{};
+  std::unique_ptr<EditorRenderCoordinator>                 render_coordinator_{};
   std::unique_ptr<EditorAdjustmentSession>                 adjustment_session_{};
-  std::optional<PendingRenderRequest>                      pending_fast_preview_request_{};
-  std::optional<PendingRenderRequest>                      pending_quality_base_render_request_{};
-  std::optional<PendingRenderRequest>                      pending_detail_render_request_{};
   ControlPanelKind                                         active_panel_ = ControlPanelKind::Tone;
   bool                                                     pipeline_initialized_      = false;
-  bool                                                     inflight_                  = false;
-  QTimer*                                                  quality_preview_timer_     = nullptr;
-  QTimer*                                                  fast_preview_submit_timer_ = nullptr;
-  std::chrono::steady_clock::time_point                    last_fast_preview_submit_time_{};
-  std::uint64_t                                            preview_generation_    = 0;
-  std::uint64_t                                            detail_serial_         = 0;
-  std::uint64_t                             latest_quality_base_generation_ready_ = 0;
   bool                                      syncing_controls_                     = false;
   bool                                      versioning_collapsed_                 = true;
   bool                                      initial_splitter_sizes_applied_       = false;

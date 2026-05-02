@@ -1008,6 +1008,8 @@ if(ALCEDO_REAL_WIDGET_EDITOR)
         ui/alcedo_main/editor_dialog/controllers/lut_controller.cpp
         ui/alcedo_main/editor_dialog/controllers/render_controller.cpp
         ui/alcedo_main/editor_dialog/frame/editor_frame_manager.cpp
+        ui/alcedo_main/editor_dialog/history/editor_history_coordinator.cpp
+        ui/alcedo_main/editor_dialog/render/editor_render_coordinator.cpp
         ui/alcedo_main/editor_dialog/session/editor_adjustment_session.cpp
         ui/alcedo_main/editor_dialog/modules/histogram.cpp
         ui/alcedo_main/editor_dialog/modules/color_temp.cpp
@@ -1048,6 +1050,8 @@ if(ALCEDO_REAL_WIDGET_EDITOR)
         include/ui/alcedo_main/editor_dialog/controllers/history_controller.hpp
         include/ui/alcedo_main/editor_dialog/controllers/render_controller.hpp
         include/ui/alcedo_main/editor_dialog/frame/editor_frame_manager.hpp
+        include/ui/alcedo_main/editor_dialog/history/editor_history_coordinator.hpp
+        include/ui/alcedo_main/editor_dialog/render/editor_render_coordinator.hpp
         include/ui/alcedo_main/editor_dialog/session/adjustment_panel.hpp
         include/ui/alcedo_main/editor_dialog/session/adjustment_patch.hpp
         include/ui/alcedo_main/editor_dialog/session/adjustment_snapshot.hpp

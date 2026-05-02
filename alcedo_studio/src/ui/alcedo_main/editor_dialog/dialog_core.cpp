@@ -49,10 +49,72 @@ EditorDialog::EditorDialog(std::shared_ptr<ImagePoolService>       image_pool,
         !history_guard_ || !history_guard_->history_ || !scheduler_) {
       throw std::runtime_error("EditorDialog: missing services");
     }
+    history_coordinator_ = std::make_unique<EditorHistoryCoordinator>(
+        EditorHistoryCoordinator::Dependencies{
+            .history_service = history_service_,
+            .history_guard   = history_guard_,
+            .pipeline_guard  = pipeline_guard_,
+            .element_id      = element_id_,
+            .message_parent  = this,
+        },
+        EditorHistoryCoordinator::Callbacks{
+            .reload_ui_state_from_pipeline =
+                [this](bool reset_to_defaults_if_missing) {
+                  const bool loaded = LoadStateFromPipelineIfPresent();
+                  if (!loaded && !reset_to_defaults_if_missing) {
+                    return false;
+                  }
+                  if (!loaded) {
+                    state_ = AdjustmentState{};
+                    SanitizeOdtStateForUi(state_.odt_);
+                    UpdateAllCdlWheelDerivedColors(state_);
+                    last_submitted_color_temp_request_.reset();
+                  } else {
+                    last_submitted_color_temp_request_ = BuildColorTempRequest(state_);
+                  }
+                  committed_state_ = state_;
+                  SyncControlsFromState();
+                  AdvancePreviewGeneration();
+                  TriggerQualityPreviewRenderFromPipeline();
+                  return true;
+                },
+            .after_pipeline_params_imported =
+                [this]() {
+                  frame_manager_.AttachExecutionStages(pipeline_guard_->pipeline_);
+                  last_applied_lut_path_.clear();
+                },
+            .is_plain_working_mode =
+                [this]() { return CurrentWorkingMode() == WorkingMode::Plain; },
+            .refresh_version_log_selection_styles =
+                [this]() { RefreshVersionLogSelectionStyles(); },
+        });
+    render_coordinator_ = std::make_unique<EditorRenderCoordinator>(
+        EditorRenderCoordinator::Dependencies{
+            .timer_parent   = this,
+            .pipeline_guard = pipeline_guard_,
+            .scheduler      = scheduler_,
+            .base_task      = &base_task_,
+            .state          = &state_,
+        },
+        EditorRenderCoordinator::Callbacks{
+            .viewer = [this]() { return viewer_; },
+            .spinner = [this]() { return spinner_; },
+            .active_panel = [this]() { return active_panel_; },
+            .needs_full_frame_preview_after_geometry_commit =
+                [this]() { return frame_manager_.NeedsFullFramePreviewAfterGeometryCommit(); },
+            .apply_state_to_pipeline =
+                [this](const AdjustmentState& render_state) {
+                  ApplyStateToPipeline(render_state);
+                },
+            .refresh_color_temp_runtime_state =
+                [this]() { return RefreshColorTempRuntimeStateFromGlobalParams(); },
+            .sync_color_temp_controls = [this]() { SyncColorTempControlsFromState(); },
+        });
     adjustment_session_ = std::make_unique<EditorAdjustmentSession>(
         EditorAdjustmentSession::Dependencies{
             .pipeline_guard  = pipeline_guard_,
-            .working_version = &working_version_,
+            .working_version =
+                history_coordinator_ ? &history_coordinator_->WorkingVersion() : nullptr,
             .state           = &state_,
             .committed_state = &committed_state_,
         },
@@ -86,6 +148,16 @@ EditorDialog::EditorDialog(std::shared_ptr<ImagePoolService>       image_pool,
     BuildDisplayTransformPanel();
     BuildGeometryRawPanels();
     BuildVersioningPanel();
+    if (history_coordinator_) {
+      history_coordinator_->SetUiContext(versioning::VersionUiContext{
+          .version_status     = version_status_,
+          .commit_version_btn = commit_version_btn_,
+          .undo_tx_btn        = undo_tx_btn_,
+          .working_mode_combo = working_mode_combo_,
+          .version_log        = version_log_,
+          .tx_stack           = tx_stack_,
+      });
+    }
 
     shortcut_registry_ = std::make_unique<ShortcutRegistry>(this);
     RegisterShortcuts();

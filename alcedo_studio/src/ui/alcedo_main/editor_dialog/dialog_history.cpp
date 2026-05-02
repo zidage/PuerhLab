@@ -2,207 +2,113 @@
 
 namespace alcedo::ui {
 
-auto EditorDialog::ReconstructPipelineParamsForVersion(Version& version) -> std::optional<nlohmann::json> {
-    return versioning::ReconstructPipelineParamsForVersion(version, history_guard_);
-  }
+auto EditorDialog::ReconstructPipelineParamsForVersion(Version& version)
+    -> std::optional<nlohmann::json> {
+  return history_coordinator_
+             ? history_coordinator_->ReconstructPipelineParamsForVersion(version)
+             : std::nullopt;
+}
 
 auto EditorDialog::ReloadUiStateFromPipeline(bool reset_to_defaults_if_missing) -> bool {
-    const bool loaded = LoadStateFromPipelineIfPresent();
-    if (!loaded && !reset_to_defaults_if_missing) {
-      return false;
-    }
-    if (!loaded) {
-      state_ = AdjustmentState{};
-      SanitizeOdtStateForUi(state_.odt_);
-      UpdateAllCdlWheelDerivedColors(state_);
-      last_submitted_color_temp_request_.reset();
-    } else {
-      last_submitted_color_temp_request_ = BuildColorTempRequest(state_);
-    }
-    committed_state_ = state_;
-    SyncControlsFromState();
-    AdvancePreviewGeneration();
-    TriggerQualityPreviewRenderFromPipeline();
-    return true;
-  }
+  return history_coordinator_ &&
+         history_coordinator_->ReloadUiStateFromPipeline(reset_to_defaults_if_missing);
+}
 
 auto EditorDialog::ApplyPipelineParamsToEditor(const nlohmann::json& params) -> bool {
-    if (!pipeline_guard_ || !pipeline_guard_->pipeline_) {
-      return false;
-    }
-
-    auto exec = pipeline_guard_->pipeline_;
-    exec->ImportPipelineParams(params);
-    frame_manager_.AttachExecutionStages(exec);
-    pipeline_guard_->dirty_ = true;
-    last_applied_lut_path_.clear();
-
-    return ReloadUiStateFromPipeline(/*reset_to_defaults_if_missing=*/true);
-  }
+  return history_coordinator_ && history_coordinator_->ApplyPipelineParamsToEditor(params);
+}
 
 auto EditorDialog::ReloadEditorFromHistoryVersion(Version& version, QString* error) -> bool {
-    const auto selected_params = ReconstructPipelineParamsForVersion(version);
-    if (!selected_params.has_value()) {
-      if (error) {
-        *error = Tr("Could not reconstruct pipeline params for the selected version.");
-      }
-      return false;
-    }
-
-    if (!ApplyPipelineParamsToEditor(*selected_params)) {
-      if (error) {
-        *error = Tr("Failed to apply selected version to the editor.");
-      }
-      return false;
-    }
-    return true;
-  }
+  return history_coordinator_ &&
+         history_coordinator_->ReloadEditorFromHistoryVersion(version, error);
+}
 
 void EditorDialog::CheckoutSelectedVersion(QListWidgetItem* item) {
-    versioning::ResolvedVersionSelection selection{};
-    QString                              selection_error;
-    if (!versioning::ResolveSelectedVersion(item, history_guard_, &selection,
-                                            &selection_error)) {
-      if (!selection_error.isEmpty()) {
-        QMessageBox::warning(this, Tr("History"), selection_error);
-      }
-      return;
-    }
-
-    QString reload_error;
-    if (!selection.version || !ReloadEditorFromHistoryVersion(*selection.version, &reload_error)) {
-      QMessageBox::warning(this, Tr("History"), reload_error);
-      return;
-    }
-
-    working_version_ = versioning::SeedWorkingVersionFromCommit(
-        element_id_, selection.version_id, pipeline_guard_,
-        CurrentWorkingMode() != WorkingMode::Plain);
-    UpdateVersionUi();
+  if (history_coordinator_) {
+    history_coordinator_->CheckoutSelectedVersion(item);
   }
+}
 
 void EditorDialog::UndoLastTransaction() {
-    if (!pipeline_guard_ || !pipeline_guard_->pipeline_) {
-      return;
-    }
-
-    const auto undo_result = versioning::UndoLastTransaction(working_version_, pipeline_guard_);
-    if (undo_result.no_transaction) {
-      QMessageBox::information(this, Tr("History"), Tr("No transaction to undo."));
-      return;
-    }
-    if (!undo_result.error.isEmpty()) {
-      QMessageBox::warning(this, Tr("History"), undo_result.error);
-      return;
-    }
-    if (!undo_result.undone) {
-      return;
-    }
-    if (!ReloadUiStateFromPipeline(/*reset_to_defaults_if_missing=*/false)) {
-      QMessageBox::warning(this, Tr("History"),
-                           Tr("Undo failed while reloading pipeline state."));
-      return;
-    }
-    UpdateVersionUi();
+  if (history_coordinator_) {
+    history_coordinator_->UndoLastTransaction();
   }
+}
 
 void EditorDialog::UpdateVersionUi() {
-    const versioning::VersionUiContext ui{
-        .version_status     = version_status_,
-        .commit_version_btn = commit_version_btn_,
-        .undo_tx_btn        = undo_tx_btn_,
-        .working_mode_combo = working_mode_combo_,
-        .version_log        = version_log_,
-        .tx_stack           = tx_stack_,
-    };
-    versioning::UpdateVersionUi(ui, working_version_, history_guard_,
-                                [this]() { RefreshVersionLogSelectionStyles(); });
+  if (history_coordinator_) {
+    history_coordinator_->UpdateVersionUi();
   }
+}
 
 void EditorDialog::CommitWorkingVersion() {
-    const auto commit_result = versioning::CommitWorkingVersion(
-        history_service_, history_guard_, pipeline_guard_, element_id_,
-        std::move(working_version_));
-    if (commit_result.no_transactions) {
-      QMessageBox::information(this, Tr("History"), Tr("No uncommitted transactions."));
-      return;
-    }
-    if (!commit_result.committed_id.has_value()) {
-      QMessageBox::warning(this, Tr("History"),
-                           commit_result.error.isEmpty() ? Tr("Commit failed.")
-                                                         : commit_result.error);
-      if (commit_result.recovery_working_version.has_value()) {
-        working_version_ = std::move(*commit_result.recovery_working_version);
-        UpdateVersionUi();
-      }
-      return;
-    }
-
-    StartNewWorkingVersionFromCommit(*commit_result.committed_id);
-    UpdateVersionUi();
+  if (history_coordinator_) {
+    history_coordinator_->CommitWorkingVersion();
   }
+}
 
 auto EditorDialog::CurrentWorkingMode() const -> WorkingMode {
-    return versioning::IsPlainModeSelected(working_mode_combo_) ? WorkingMode::Plain
-                                                                : WorkingMode::Incremental;
-  }
+  return versioning::IsPlainModeSelected(working_mode_combo_) ? WorkingMode::Plain
+                                                              : WorkingMode::Incremental;
+}
 
 void EditorDialog::StartNewWorkingVersionFromUi() {
-    working_version_ = versioning::SeedWorkingVersionFromUi(
-        element_id_, history_guard_, pipeline_guard_,
-        CurrentWorkingMode() == WorkingMode::Plain);
-    UpdateVersionUi();
+  if (history_coordinator_) {
+    history_coordinator_->StartNewWorkingVersionFromUi();
   }
+}
 
 void EditorDialog::StartNewWorkingVersionFromCommit(const Hash128& committed_id) {
-    working_version_ = versioning::SeedWorkingVersionFromCommit(
-        element_id_, committed_id, pipeline_guard_,
-        CurrentWorkingMode() != WorkingMode::Plain);
+  if (history_coordinator_) {
+    history_coordinator_->StartNewWorkingVersionFromCommit(committed_id);
   }
+}
 
-auto EditorDialog::ReadCurrentOperatorParams(PipelineStageName stage_name, OperatorType op_type) const
-      -> std::optional<nlohmann::json> {
-    if (!adjustment_session_) {
-      return std::nullopt;
-    }
-    return adjustment_session_->ReadCurrentOperatorParams(stage_name, op_type);
+auto EditorDialog::ReadCurrentOperatorParams(PipelineStageName stage_name,
+                                             OperatorType      op_type) const
+    -> std::optional<nlohmann::json> {
+  if (!adjustment_session_) {
+    return std::nullopt;
   }
+  return adjustment_session_->ReadCurrentOperatorParams(stage_name, op_type);
+}
 
-std::pair<PipelineStageName, OperatorType> EditorDialog::FieldSpec(AdjustmentField field) const {
-    return adjustment_session_ ? adjustment_session_->FieldSpec(field)
-                               : pipeline_io::FieldSpec(field);
-  }
+std::pair<PipelineStageName, OperatorType> EditorDialog::FieldSpec(
+    AdjustmentField field) const {
+  return adjustment_session_ ? adjustment_session_->FieldSpec(field)
+                             : pipeline_io::FieldSpec(field);
+}
 
-nlohmann::json EditorDialog::ParamsForField(AdjustmentField field, const AdjustmentState& s) const {
-    return adjustment_session_ ? adjustment_session_->ParamsForField(field, s)
-                               : pipeline_io::ParamsForField(
-                                     field, s,
-                                     (pipeline_guard_ && pipeline_guard_->pipeline_)
-                                         ? pipeline_guard_->pipeline_.get()
-                                         : nullptr);
-  }
+nlohmann::json EditorDialog::ParamsForField(AdjustmentField        field,
+                                            const AdjustmentState& s) const {
+  return adjustment_session_ ? adjustment_session_->ParamsForField(field, s)
+                             : pipeline_io::ParamsForField(
+                                   field, s,
+                                   (pipeline_guard_ && pipeline_guard_->pipeline_)
+                                       ? pipeline_guard_->pipeline_.get()
+                                       : nullptr);
+}
 
 bool EditorDialog::FieldChanged(AdjustmentField field) const {
-    return adjustment_session_ ? adjustment_session_->FieldChanged(field)
-                               : pipeline_io::FieldChanged(field, state_, committed_state_);
-  }
+  return adjustment_session_ ? adjustment_session_->FieldChanged(field)
+                             : pipeline_io::FieldChanged(field, state_, committed_state_);
+}
 
 void EditorDialog::CommitAdjustment(AdjustmentField field) {
-    if (!adjustment_session_) {
-      ScheduleQualityPreviewRenderFromPipeline();
-      return;
-    }
-    const auto result = adjustment_session_->Commit(field);
-    if (result.status == EditorAdjustmentSession::CommitStatus::Failed) {
-      if (!result.error.isEmpty()) {
-        QMessageBox::warning(this, Tr("Adjustment"),
-                             Tr("Failed to apply adjustment: %1")
-                                 .arg(result.error));
-      } else {
-        QMessageBox::warning(this, Tr("Adjustment"),
-                             Tr("Failed to apply adjustment."));
-      }
-      return;
-    }
+  if (!adjustment_session_) {
+    ScheduleQualityPreviewRenderFromPipeline();
+    return;
   }
+  const auto result = adjustment_session_->Commit(field);
+  if (result.status == EditorAdjustmentSession::CommitStatus::Failed) {
+    if (!result.error.isEmpty()) {
+      QMessageBox::warning(this, Tr("Adjustment"),
+                           Tr("Failed to apply adjustment: %1").arg(result.error));
+    } else {
+      QMessageBox::warning(this, Tr("Adjustment"), Tr("Failed to apply adjustment."));
+    }
+    return;
+  }
+}
+
 }  // namespace alcedo::ui

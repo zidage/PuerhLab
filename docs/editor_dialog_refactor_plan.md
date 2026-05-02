@@ -101,6 +101,14 @@ Exit criteria:
 - `EditorDialog` no longer owns preview request queues or history transaction list logic.
 - Behavior matches the baseline test matrix.
 
+Progress note (2026-05-02):
+
+- Phase 2 render/history coordinator extraction has been implemented. `EditorRenderCoordinator` now owns preview request queues, preview generation/detail state, render timers, inflight future polling, and render completion sequencing. Existing `EditorDialog` render methods remain as forwarding wrappers for unmigrated panel code.
+- `EditorHistoryCoordinator` now owns the working version and version operations: version reconstruction, checkout, undo, commit-all, working-version seeding, and version UI refresh. History-triggered pipeline reloads route back through the adjustment session load path before synchronizing legacy controls.
+- `EditorDialog` still owns shell widgets and legacy panel controls, but it no longer stores the render queues/timers/future state or the working `Version` directly. CMake includes the new `render/` and `history/` coordinator sources.
+- Verification: `cmd /c scripts\msvc_env.cmd --build --preset win_debug --parallel 4` passes. For `ctest`, `CudaImageGeometryOpsTest` and `CudaPreviewVramReclamationTest` were disabled via new CMake switches because their executables exit `0xc0000139` during GoogleTest discovery. Additional generated discovery includes with the same startup status were disabled in the local build tree for this run: `PipelineServiceTest`, `EditHistoryMgmtServiceTest`, `ExportServiceTest`, and the `AlbumBackend*` tests.
+- Remaining `ctest --test-dir build/debug --output-on-failure` execution reached 94 discovered tests; 88 passed, 2 were skipped, and 6 unrelated assertions failed in `RawProcessorPatternTest`, `CudaRawOpsTest`, and `SharedToneCurveTest`. Run the manual matrix before merging UI-facing follow-up phases.
+
 ## Phase 3: Split Typed State and Adapter Skeletons
 
 Goal: create per-module state types before moving widgets.

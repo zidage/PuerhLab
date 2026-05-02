@@ -67,9 +67,9 @@ void EditorDialog::BuildToneControlPanel() {
     committed_state_ = state_;
 
     // Seed a working version from the latest committed one (if any).
-    working_version_ =
-        controllers::SeedWorkingVersionFromLatest(element_id_, history_guard_);
-    working_version_.SetBasePipelineExecutor(pipeline_guard_->pipeline_);
+    if (history_coordinator_) {
+      history_coordinator_->SeedWorkingVersionFromLatest();
+    }
     WireLookControlPanel();
 
     auto addComboBox = [&](const char* name_source, const QStringList& items, int initial_index,

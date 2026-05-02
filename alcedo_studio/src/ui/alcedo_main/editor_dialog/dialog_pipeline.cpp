@@ -3,21 +3,16 @@
 namespace alcedo::ui {
 
 bool EditorDialog::LoadStateFromPipelineIfPresent() {
-    auto exec = pipeline_guard_ ? pipeline_guard_->pipeline_ : nullptr;
-    if (!exec) {
+    if (!adjustment_session_ || !adjustment_session_->LoadFromPipeline()) {
       return false;
     }
-    auto [loaded_state, has_loaded_any] = pipeline_io::LoadStateFromPipeline(*exec, state_);
-    if (!has_loaded_any) {
-      return false;
+    SanitizeOdtStateForUi(state_.odt_);
+    if (state_.color_temp_mode_ == ColorTempMode::AS_SHOT &&
+        state_.color_temp_supported_) {
+      CacheAsShotColorTemp(state_.color_temp_resolved_cct_,
+                           state_.color_temp_resolved_tint_);
     }
-    SanitizeOdtStateForUi(loaded_state.odt_);
-    if (loaded_state.color_temp_mode_ == ColorTempMode::AS_SHOT &&
-        loaded_state.color_temp_supported_) {
-      CacheAsShotColorTemp(loaded_state.color_temp_resolved_cct_,
-                           loaded_state.color_temp_resolved_tint_);
-    }
-    state_ = loaded_state;
+    committed_state_ = state_;
     last_submitted_color_temp_request_ = BuildColorTempRequest(state_);
     return true;
   }
