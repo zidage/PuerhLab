@@ -146,6 +146,14 @@ Exit criteria:
 - Module state groups are available to panel widgets.
 - Legacy render path can still consume `AdjustmentState`.
 
+Progress note (2026-05-02):
+
+- Phase 3 typed state and adapter skeletons have been implemented. Six typed state structs now live under `state/`: `ToneAdjustmentState`, `ColorTempAdjustmentState`, `LookAdjustmentState`, `DisplayTransformAdjustmentState`, `GeometryAdjustmentState`, and `RawDecodeAdjustmentState`.
+- `EditorAdjustmentSnapshot` has been redefined as an aggregate of the six typed states plus `RenderType`. Inline conversion helpers `ToLegacyAdjustmentState()` and `FromLegacyAdjustmentState()` preserve full bidirectional compatibility with the existing `AdjustmentState` struct.
+- Six pipeline adapter skeletons now live under `pipeline/`: `TonePipelineAdapter`, `ColorTempPipelineAdapter`, `LookPipelineAdapter`, `DisplayTransformPipelineAdapter`, `GeometryPipelineAdapter`, and `RawPipelineAdapter`. Each adapter is stateless and currently delegates to `pipeline_io.cpp` by constructing temporary legacy `AdjustmentState` objects, calling the existing free functions, and extracting the relevant results. A generic `PipelineLoadResult<T>` template is provided in `adjustment_pipeline_adapter.hpp`.
+- `AdjustmentState` itself remains unchanged; no existing code paths were modified. All new headers are wired into `alcedo_studio/src/CMakeLists.txt`.
+- Verification: `cmd /c scripts\msvc_env.cmd --build --preset win_debug --parallel 4` passes. For `ctest`, the same `0xc0000139`-affected tests disabled in Phase 2 were excluded from the local build tree (`PipelineServiceTest`, `EditHistoryMgmtServiceTest`, `ExportServiceTest`, `AlbumBackend*`, `CudaImageGeometryOpsTest`, `CudaPreviewVramReclamationTest`). Remaining `ctest --test-dir build/debug --output-on-failure` reached 94 discovered tests; 88 passed, 2 were skipped, and 6 unrelated pre-existing assertions failed in `RawProcessorPatternTest`, `CudaRawOpsTest`, and `SharedToneCurveTest`.
+
 ## Phase 4: Migrate Tone Panel First
 
 Goal: prove the panel pattern on the highest-value but relatively straightforward panel.

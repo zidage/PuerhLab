@@ -1056,6 +1056,19 @@ if(ALCEDO_REAL_WIDGET_EDITOR)
         include/ui/alcedo_main/editor_dialog/session/adjustment_patch.hpp
         include/ui/alcedo_main/editor_dialog/session/adjustment_snapshot.hpp
         include/ui/alcedo_main/editor_dialog/session/editor_adjustment_session.hpp
+        include/ui/alcedo_main/editor_dialog/state/tone_adjustment_state.hpp
+        include/ui/alcedo_main/editor_dialog/state/color_temp_adjustment_state.hpp
+        include/ui/alcedo_main/editor_dialog/state/look_adjustment_state.hpp
+        include/ui/alcedo_main/editor_dialog/state/display_transform_adjustment_state.hpp
+        include/ui/alcedo_main/editor_dialog/state/geometry_adjustment_state.hpp
+        include/ui/alcedo_main/editor_dialog/state/raw_decode_adjustment_state.hpp
+        include/ui/alcedo_main/editor_dialog/pipeline/adjustment_pipeline_adapter.hpp
+        include/ui/alcedo_main/editor_dialog/pipeline/tone_pipeline_adapter.hpp
+        include/ui/alcedo_main/editor_dialog/pipeline/color_temp_pipeline_adapter.hpp
+        include/ui/alcedo_main/editor_dialog/pipeline/look_pipeline_adapter.hpp
+        include/ui/alcedo_main/editor_dialog/pipeline/display_transform_pipeline_adapter.hpp
+        include/ui/alcedo_main/editor_dialog/pipeline/geometry_pipeline_adapter.hpp
+        include/ui/alcedo_main/editor_dialog/pipeline/raw_pipeline_adapter.hpp
         include/ui/alcedo_main/editor_dialog/modules/histogram.hpp
         include/ui/alcedo_main/editor_dialog/modules/color_temp.hpp
         include/ui/alcedo_main/editor_dialog/modules/color_wheel.hpp
