@@ -240,6 +240,36 @@ Exit criteria:
 - `EditorDialog` no longer declares raw or lens control pointers.
 - Raw decode and lens calibration transactions remain identical.
 
+Progress note (2026-05-02):
+
+- Phase 5 raw decode panel migration has been implemented. `RawDecodePanelWidget` is now a real
+  `AdjustmentPanelWidget` and owns the RAW highlight reconstruction checkbox, lens calibration
+  enable checkbox, lens brand/model override combos, lens catalog status label, panel-local
+  `RawDecodeAdjustmentState`, committed raw-state mirror, and lens catalog cache.
+- `EditorDialog::BuildRawDecodePanel()` is now a composition wrapper that configures the raw panel
+  with the adjustment session, legacy state bridges, render callback, and `RawPipelineAdapter` load
+  callback. The dialog no longer declares raw/lens control pointers or owns lens catalog state.
+- Raw decode and lens calibration changes project the panel-local raw state back into the legacy
+  `AdjustmentState` for the current migration path, request preview through
+  `EditorAdjustmentSession::Preview()`, and commit through `EditorAdjustmentSession::Commit()` with
+  `RawPipelineAdapter` params and field-change checks.
+- Undo/version/import reload continues through `SyncControlsFromState()`, which now delegates raw
+  control refresh to `RawDecodePanelWidget::SyncControlsFromDialogState()`. Translation refresh
+  delegates lens combo/status text refresh to `RawDecodePanelWidget::RetranslateUi()`.
+- Verification: `cmd /c scripts\msvc_env.cmd --build --preset win_debug --parallel 4` passes. The
+  initial `ctest --test-dir build/debug --output-on-failure` run hit the known `0xc0000139`
+  GoogleTest discovery failure at `PipelineServiceTest.exe`; the generated discovery includes for
+  the same affected local build-tree tests noted in previous phases were disabled
+  (`PipelineServiceTest`, `EditHistoryMgmtServiceTest`, `ExportServiceTest`, and the
+  `AlbumBackend*` tests), then the remaining suite was run.
+- Remaining `ctest --test-dir build/debug --output-on-failure` execution reached 94 discovered
+  tests; 88 passed, 2 were skipped, and 6 unrelated assertions failed in
+  `RawProcessorPatternTest`, `CudaRawOpsTest`, and `SharedToneCurveTest`, matching the previous
+  phase pattern. Run the manual matrix rows for RAW decode highlight reconstruction, lens
+  calibration enable, lens make/model overrides, clear/auto override behavior, undo, commit-all,
+  version checkout, translation refresh, and no duplicate transactions before merging a UI-facing
+  PR.
+
 ## Phase 6: Migrate Geometry Panel
 
 Goal: isolate geometry state and viewer overlay behavior.

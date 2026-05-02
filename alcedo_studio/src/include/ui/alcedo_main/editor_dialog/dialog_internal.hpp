@@ -96,7 +96,6 @@
 #include "ui/alcedo_main/editor_dialog/modules/geometry.hpp"
 #include "ui/alcedo_main/editor_dialog/modules/histogram.hpp"
 #include "ui/alcedo_main/editor_dialog/modules/hls.hpp"
-#include "ui/alcedo_main/editor_dialog/modules/lens_calib.hpp"
 #include "ui/alcedo_main/editor_dialog/modules/lut_catalog.hpp"
 #include "ui/alcedo_main/editor_dialog/modules/pipeline_io.hpp"
 #include "ui/alcedo_main/editor_dialog/modules/versioning.hpp"
@@ -147,7 +146,6 @@ constexpr int  kControlsPanelMinWidth       = 260;
 
 using namespace std::chrono_literals;
 
-using LensCatalog = lens_calib::LensCatalog;
 using color_wheel::CdlMasterToSliderUi;
 using color_wheel::CdlSliderUiToMaster;
 using color_wheel::ClampDiscPoint;
@@ -166,8 +164,6 @@ using geometry::CropAspectPreset;
 using hls::HlsProfileArray;
 using hls::HueDistanceDegrees;
 using hls::WrapHueDegrees;
-using lens_calib::LoadLensCatalog;
-using lens_calib::SortAndUniqueStrings;
 inline auto ClosestHlsCandidateHueIndex(float hue) -> int {
   return hls::ClosestCandidateHueIndex(hue);
 }
@@ -750,14 +746,6 @@ class EditorDialog final : public QDialog {
 
   void        RefreshGeometryModeUi();
 
-  void        EnsureLensCatalogLoaded();
-
-  void        RefreshLensBrandComboFromState();
-
-  void        RefreshLensModelComboFromState();
-
-  void        RefreshLensComboFromState();
-
   void        RefreshLutBrowserUi();
 
   void        ForceRefreshLutBrowserUi();
@@ -891,62 +879,58 @@ class EditorDialog final : public QDialog {
   std::shared_ptr<PipelineScheduler>      scheduler_;
   PipelineTask                            base_task_{};
 
-  QtEditViewer*                           viewer_                              = nullptr;
-  QWidget*                                viewer_container_                    = nullptr;
-  QWidget*                                viewer_zoom_overlay_                 = nullptr;
-  QLabel*                                 viewer_zoom_value_label_             = nullptr;
-  QLabel*                                 viewer_zoom_resolution_label_        = nullptr;
-  ScopePanel*                             scope_panel_                         = nullptr;
-  QScrollArea*                            controls_scroll_                     = nullptr;
-  QScrollArea*                            tone_controls_scroll_                = nullptr;
-  QScrollArea*                            look_controls_scroll_                = nullptr;
-  QScrollArea*                            drt_controls_scroll_                 = nullptr;
-  QScrollArea*                            geometry_controls_scroll_            = nullptr;
-  QScrollArea*                            raw_controls_scroll_                 = nullptr;
-  QSplitter*                              main_splitter_                       = nullptr;
-  QWidget*                                versioning_panel_host_               = nullptr;
-  QWidget*                                versioning_flyout_                   = nullptr;
-  QWidget*                                versioning_collapsed_nav_            = nullptr;
-  QGraphicsOpacityEffect*                 versioning_panel_opacity_effect_     = nullptr;
-  QVariantAnimation*                      versioning_panel_anim_               = nullptr;
-  QStackedWidget*                         control_panels_stack_                = nullptr;
-  SpinnerWidget*                          spinner_                             = nullptr;
-  QWidget*                                controls_                            = nullptr;
-  QWidget*                                tone_controls_                       = nullptr;
-  QWidget*                                look_controls_                       = nullptr;
-  QWidget*                                drt_controls_                        = nullptr;
-  QWidget*                                geometry_controls_                   = nullptr;
-  QWidget*                                raw_controls_                        = nullptr;
-  QVBoxLayout*                            controls_layout_                     = nullptr;
-  QVBoxLayout*                            look_controls_layout_                = nullptr;
-  QVBoxLayout*                            drt_controls_layout_                 = nullptr;
-  QVBoxLayout*                            geometry_controls_layout_            = nullptr;
-  QVBoxLayout*                            raw_controls_layout_                 = nullptr;
-  QWidget*                                shared_versioning_root_              = nullptr;
-  QVBoxLayout*                            shared_versioning_layout_            = nullptr;
-  QStackedWidget*                         versioning_pages_stack_              = nullptr;
-  QPushButton*                            tone_panel_btn_                      = nullptr;
-  QPushButton*                            look_panel_btn_                      = nullptr;
-  QPushButton*                            drt_panel_btn_                       = nullptr;
-  QPushButton*                            geometry_panel_btn_                  = nullptr;
-  QPushButton*                            raw_panel_btn_                       = nullptr;
-  LutBrowserWidget*                       lut_browser_widget_                  = nullptr;
-  ToneControlPanelWidget*                 tone_panel_                          = nullptr;
-  QCheckBox*                              raw_highlights_reconstruct_checkbox_ = nullptr;
-  QCheckBox*                              lens_calib_enabled_checkbox_         = nullptr;
-  QComboBox*                              lens_brand_combo_                    = nullptr;
-  QComboBox*                              lens_model_combo_                    = nullptr;
-  QLabel*                                 lens_catalog_status_label_           = nullptr;
-  CdlTrackballDiscWidget*                 lift_disc_widget_                    = nullptr;
-  CdlTrackballDiscWidget*                 gamma_disc_widget_                   = nullptr;
-  CdlTrackballDiscWidget*                 gain_disc_widget_                    = nullptr;
-  QLabel*                                 lift_offset_label_                   = nullptr;
-  QLabel*                                 gamma_offset_label_                  = nullptr;
-  QLabel*                                 gain_offset_label_                   = nullptr;
-  QSlider*                                lift_master_slider_                  = nullptr;
-  QSlider*                                gamma_master_slider_                 = nullptr;
-  QSlider*                                gain_master_slider_                  = nullptr;
-  QLabel*                                 hls_target_label_                    = nullptr;
+  QtEditViewer*                           viewer_                          = nullptr;
+  QWidget*                                viewer_container_                = nullptr;
+  QWidget*                                viewer_zoom_overlay_             = nullptr;
+  QLabel*                                 viewer_zoom_value_label_         = nullptr;
+  QLabel*                                 viewer_zoom_resolution_label_    = nullptr;
+  ScopePanel*                             scope_panel_                     = nullptr;
+  QScrollArea*                            controls_scroll_                 = nullptr;
+  QScrollArea*                            tone_controls_scroll_            = nullptr;
+  QScrollArea*                            look_controls_scroll_            = nullptr;
+  QScrollArea*                            drt_controls_scroll_             = nullptr;
+  QScrollArea*                            geometry_controls_scroll_        = nullptr;
+  QScrollArea*                            raw_controls_scroll_             = nullptr;
+  QSplitter*                              main_splitter_                   = nullptr;
+  QWidget*                                versioning_panel_host_           = nullptr;
+  QWidget*                                versioning_flyout_               = nullptr;
+  QWidget*                                versioning_collapsed_nav_        = nullptr;
+  QGraphicsOpacityEffect*                 versioning_panel_opacity_effect_ = nullptr;
+  QVariantAnimation*                      versioning_panel_anim_           = nullptr;
+  QStackedWidget*                         control_panels_stack_            = nullptr;
+  SpinnerWidget*                          spinner_                         = nullptr;
+  QWidget*                                controls_                        = nullptr;
+  QWidget*                                tone_controls_                   = nullptr;
+  QWidget*                                look_controls_                   = nullptr;
+  QWidget*                                drt_controls_                    = nullptr;
+  QWidget*                                geometry_controls_               = nullptr;
+  QWidget*                                raw_controls_                    = nullptr;
+  QVBoxLayout*                            controls_layout_                 = nullptr;
+  QVBoxLayout*                            look_controls_layout_            = nullptr;
+  QVBoxLayout*                            drt_controls_layout_             = nullptr;
+  QVBoxLayout*                            geometry_controls_layout_        = nullptr;
+  QVBoxLayout*                            raw_controls_layout_             = nullptr;
+  QWidget*                                shared_versioning_root_          = nullptr;
+  QVBoxLayout*                            shared_versioning_layout_        = nullptr;
+  QStackedWidget*                         versioning_pages_stack_          = nullptr;
+  QPushButton*                            tone_panel_btn_                  = nullptr;
+  QPushButton*                            look_panel_btn_                  = nullptr;
+  QPushButton*                            drt_panel_btn_                   = nullptr;
+  QPushButton*                            geometry_panel_btn_              = nullptr;
+  QPushButton*                            raw_panel_btn_                   = nullptr;
+  LutBrowserWidget*                       lut_browser_widget_              = nullptr;
+  ToneControlPanelWidget*                 tone_panel_                      = nullptr;
+  RawDecodePanelWidget*                   raw_panel_                       = nullptr;
+  CdlTrackballDiscWidget*                 lift_disc_widget_                = nullptr;
+  CdlTrackballDiscWidget*                 gamma_disc_widget_               = nullptr;
+  CdlTrackballDiscWidget*                 gain_disc_widget_                = nullptr;
+  QLabel*                                 lift_offset_label_               = nullptr;
+  QLabel*                                 gamma_offset_label_              = nullptr;
+  QLabel*                                 gain_offset_label_               = nullptr;
+  QSlider*                                lift_master_slider_              = nullptr;
+  QSlider*                                gamma_master_slider_             = nullptr;
+  QSlider*                                gain_master_slider_              = nullptr;
+  QLabel*                                 hls_target_label_                = nullptr;
   std::vector<QPushButton*>               hls_candidate_buttons_{};
   QSlider*                                hls_hue_adjust_slider_               = nullptr;
   QSlider*                                hls_lightness_adjust_slider_         = nullptr;
@@ -971,45 +955,44 @@ class EditorDialog final : public QDialog {
     float                                                 scale_  = 100.0f;
     std::function<float(const odt_cpu::OpenDRTSettings&)> getter_{};
   };
-  std::vector<OpenDrtDetailSliderBinding> odt_open_drt_detail_sliders_{};
-  QSlider*                                rotate_slider_                     = nullptr;
-  QSlider*                                geometry_crop_x_slider_            = nullptr;
-  QSlider*                                geometry_crop_y_slider_            = nullptr;
-  QSlider*                                geometry_crop_w_slider_            = nullptr;
-  QSlider*                                geometry_crop_h_slider_            = nullptr;
-  QComboBox*                              geometry_crop_aspect_preset_combo_ = nullptr;
-  QDoubleSpinBox*                         geometry_crop_aspect_width_spin_   = nullptr;
-  QDoubleSpinBox*                         geometry_crop_aspect_height_spin_  = nullptr;
-  QLabel*                                 geometry_crop_rect_label_          = nullptr;
-  QPushButton*                            geometry_apply_btn_                = nullptr;
-  QPushButton*                            geometry_reset_btn_                = nullptr;
-  QLabel*                                 version_status_                    = nullptr;
-  QPushButton*                            undo_tx_btn_                       = nullptr;
-  QPushButton*                            commit_version_btn_                = nullptr;
-  QPushButton*                            versioning_history_btn_            = nullptr;
-  QPushButton*                            versioning_versions_btn_           = nullptr;
-  std::unique_ptr<ShortcutRegistry>       shortcut_registry_{};
-  QComboBox*                              working_mode_combo_   = nullptr;
-  QPushButton*                            new_working_btn_      = nullptr;
-  QListWidget*                            version_log_          = nullptr;
-  QListWidget*                            tx_stack_             = nullptr;
+  std::vector<OpenDrtDetailSliderBinding>   odt_open_drt_detail_sliders_{};
+  QSlider*                                  rotate_slider_                     = nullptr;
+  QSlider*                                  geometry_crop_x_slider_            = nullptr;
+  QSlider*                                  geometry_crop_y_slider_            = nullptr;
+  QSlider*                                  geometry_crop_w_slider_            = nullptr;
+  QSlider*                                  geometry_crop_h_slider_            = nullptr;
+  QComboBox*                                geometry_crop_aspect_preset_combo_ = nullptr;
+  QDoubleSpinBox*                           geometry_crop_aspect_width_spin_   = nullptr;
+  QDoubleSpinBox*                           geometry_crop_aspect_height_spin_  = nullptr;
+  QLabel*                                   geometry_crop_rect_label_          = nullptr;
+  QPushButton*                              geometry_apply_btn_                = nullptr;
+  QPushButton*                              geometry_reset_btn_                = nullptr;
+  QLabel*                                   version_status_                    = nullptr;
+  QPushButton*                              undo_tx_btn_                       = nullptr;
+  QPushButton*                              commit_version_btn_                = nullptr;
+  QPushButton*                              versioning_history_btn_            = nullptr;
+  QPushButton*                              versioning_versions_btn_           = nullptr;
+  std::unique_ptr<ShortcutRegistry>         shortcut_registry_{};
+  QComboBox*                                working_mode_combo_ = nullptr;
+  QPushButton*                              new_working_btn_    = nullptr;
+  QListWidget*                              version_log_        = nullptr;
+  QListWidget*                              tx_stack_           = nullptr;
 
-  controllers::LutController                               lut_controller_{};
-  LensCatalog                                              lens_catalog_{};
+  controllers::LutController                lut_controller_{};
 
-  std::string                                              last_applied_lut_path_{};
-  std::optional<ColorTempRequestSnapshot>                  last_submitted_color_temp_request_{};
-  AdjustmentState                                          state_{};
-  AdjustmentState                                          committed_state_{};
-  std::unique_ptr<EditorHistoryCoordinator>                history_coordinator_{};
-  std::unique_ptr<EditorRenderCoordinator>                 render_coordinator_{};
-  std::unique_ptr<EditorAdjustmentSession>                 adjustment_session_{};
-  ControlPanelKind                                         active_panel_ = ControlPanelKind::Tone;
-  bool                                                     pipeline_initialized_      = false;
-  bool                                      syncing_controls_                     = false;
-  bool                                      versioning_collapsed_                 = true;
-  bool                                      initial_splitter_sizes_applied_       = false;
-  qreal                                     versioning_panel_progress_            = 0.0;
+  std::string                               last_applied_lut_path_{};
+  std::optional<ColorTempRequestSnapshot>   last_submitted_color_temp_request_{};
+  AdjustmentState                           state_{};
+  AdjustmentState                           committed_state_{};
+  std::unique_ptr<EditorHistoryCoordinator> history_coordinator_{};
+  std::unique_ptr<EditorRenderCoordinator>  render_coordinator_{};
+  std::unique_ptr<EditorAdjustmentSession>  adjustment_session_{};
+  ControlPanelKind                          active_panel_         = ControlPanelKind::Tone;
+  bool                                      pipeline_initialized_ = false;
+  bool                                      syncing_controls_     = false;
+  bool                                      versioning_collapsed_ = true;
+  bool                                      initial_splitter_sizes_applied_ = false;
+  qreal                                     versioning_panel_progress_      = 0.0;
   VersioningFlyoutPage                      versioning_active_page_ = VersioningFlyoutPage::History;
   float                                     last_known_as_shot_cct_ = 6500.0f;
   float                                     last_known_as_shot_tint_           = 0.0f;

@@ -382,110 +382,6 @@ void EditorDialog::RefreshGeometryModeUi() {
   }
 }
 
-void EditorDialog::EnsureLensCatalogLoaded() {
-  if (!lens_catalog_.brands_.empty() || !lens_catalog_.models_by_brand_.empty()) {
-    return;
-  }
-  lens_catalog_ = LoadLensCatalog();
-}
-
-void EditorDialog::RefreshLensBrandComboFromState() {
-  if (!lens_brand_combo_) {
-    return;
-  }
-  EnsureLensCatalogLoaded();
-
-  const bool prev_sync = syncing_controls_;
-  syncing_controls_    = true;
-
-  lens_brand_combo_->clear();
-  lens_brand_combo_->addItem(Tr("Auto (metadata)"), QString());
-  for (const auto& brand : lens_catalog_.brands_) {
-    lens_brand_combo_->addItem(QString::fromStdString(brand), QString::fromStdString(brand));
-  }
-
-  int selected_index = 0;
-  if (!state_.lens_override_make_.empty()) {
-    selected_index =
-        lens_brand_combo_->findData(QString::fromStdString(state_.lens_override_make_));
-    if (selected_index < 0) {
-      lens_brand_combo_->addItem(QString::fromStdString(state_.lens_override_make_),
-                                 QString::fromStdString(state_.lens_override_make_));
-      selected_index = lens_brand_combo_->count() - 1;
-    }
-  }
-  lens_brand_combo_->setCurrentIndex(std::max(0, selected_index));
-
-  syncing_controls_ = prev_sync;
-}
-
-void EditorDialog::RefreshLensModelComboFromState() {
-  if (!lens_model_combo_) {
-    return;
-  }
-  EnsureLensCatalogLoaded();
-
-  const bool prev_sync = syncing_controls_;
-  syncing_controls_    = true;
-
-  lens_model_combo_->clear();
-
-  if (state_.lens_override_make_.empty()) {
-    lens_model_combo_->addItem(Tr("Auto (metadata)"), QString());
-    lens_model_combo_->setCurrentIndex(0);
-    lens_model_combo_->setEnabled(false);
-    state_.lens_override_model_.clear();
-  } else {
-    std::vector<std::string> models;
-    if (const auto it = lens_catalog_.models_by_brand_.find(state_.lens_override_make_);
-        it != lens_catalog_.models_by_brand_.end()) {
-      models = it->second;
-    }
-    if (!state_.lens_override_model_.empty() &&
-        std::find(models.begin(), models.end(), state_.lens_override_model_) == models.end()) {
-      models.push_back(state_.lens_override_model_);
-    }
-    SortAndUniqueStrings(&models);
-    for (const auto& model : models) {
-      lens_model_combo_->addItem(QString::fromStdString(model), QString::fromStdString(model));
-    }
-
-    int selected_index = 0;
-    if (!state_.lens_override_model_.empty()) {
-      selected_index =
-          lens_model_combo_->findData(QString::fromStdString(state_.lens_override_model_));
-    }
-    if (selected_index < 0 && lens_model_combo_->count() > 0) {
-      selected_index = 0;
-    }
-    lens_model_combo_->setCurrentIndex(selected_index);
-    lens_model_combo_->setEnabled(lens_model_combo_->count() > 0);
-
-    if (lens_model_combo_->count() > 0) {
-      state_.lens_override_model_ = lens_model_combo_->currentData().toString().toStdString();
-    } else {
-      state_.lens_override_model_.clear();
-    }
-  }
-
-  if (lens_catalog_status_label_) {
-    if (lens_catalog_.brands_.empty()) {
-      lens_catalog_status_label_->setText(
-          Tr("Lens catalog not found. You can still use Auto (metadata) mode."));
-    } else {
-      lens_catalog_status_label_->setText(
-          Tr("Lens catalog: %1 brands").arg(static_cast<int>(lens_catalog_.brands_.size())));
-    }
-  }
-
-  syncing_controls_ = prev_sync;
-}
-
-void EditorDialog::RefreshLensComboFromState() {
-  RefreshLensBrandComboFromState();
-  RefreshLensModelComboFromState();
-}
-
 void EditorDialog::RefreshLutBrowserUi() {
   if (!lut_browser_widget_) {
     return;
@@ -989,13 +885,9 @@ void EditorDialog::SyncControlsFromState() {
   SanitizeOdtStateForUi(state_.odt_);
   RefreshLutBrowserUi();
 
-  if (raw_highlights_reconstruct_checkbox_) {
-    raw_highlights_reconstruct_checkbox_->setChecked(state_.raw_highlights_reconstruct_);
+  if (raw_panel_) {
+    raw_panel_->SyncControlsFromDialogState();
   }
-  if (lens_calib_enabled_checkbox_) {
-    lens_calib_enabled_checkbox_->setChecked(state_.lens_calib_enabled_);
-  }
-  RefreshLensComboFromState();
   if (lift_disc_widget_) {
     lift_disc_widget_->SetPosition(state_.lift_wheel_.disc_position_);
   }

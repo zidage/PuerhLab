@@ -2,8 +2,9 @@
 //  SPDX-License-Identifier: GPL-3.0-only
 //  Additional permission under GPLv3 section 7 applies; see the LICENSE file.
 
-#include "ui/alcedo_main/editor_dialog/dialog_internal.hpp"
 #include "ui/alcedo_main/editor_dialog/widgets/editor_control_panel_widget.hpp"
+
+#include "ui/alcedo_main/editor_dialog/dialog_internal.hpp"
 
 namespace alcedo::ui {
 
@@ -24,7 +25,7 @@ auto EditorDialog::BuildControlPanelShell(const QString& panel_style) -> EditorC
 
   const QString scroll_style = AppTheme::EditorScrollAreaStyle();
 
-  tone_controls_scroll_ = new QScrollArea(controls_panel);
+  tone_controls_scroll_      = new QScrollArea(controls_panel);
   tone_controls_scroll_->setFrameShape(QFrame::NoFrame);
   tone_controls_scroll_->setWidgetResizable(true);
   tone_controls_scroll_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
@@ -83,7 +84,8 @@ auto EditorDialog::BuildControlPanelShell(const QString& panel_style) -> EditorC
   raw_controls_scroll_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
   raw_controls_scroll_->setStyleSheet(scroll_style);
 
-  raw_controls_ = new RawDecodePanelWidget(raw_controls_scroll_);
+  raw_panel_    = new RawDecodePanelWidget(raw_controls_scroll_);
+  raw_controls_ = raw_panel_;
   raw_controls_->setMinimumWidth(0);
   raw_controls_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
   raw_controls_layout_ = new QVBoxLayout(raw_controls_);
@@ -123,8 +125,7 @@ auto EditorDialog::BuildControlPanelShell(const QString& panel_style) -> EditorC
 
   ConfigurePanelToggleButton(tone_panel_btn_, "Tone",
                              QStringLiteral(":/panel_icons/adjustments.svg"));
-  ConfigurePanelToggleButton(look_panel_btn_, "Color",
-                             QStringLiteral(":/panel_icons/palette.svg"));
+  ConfigurePanelToggleButton(look_panel_btn_, "Color", QStringLiteral(":/panel_icons/palette.svg"));
   ConfigurePanelToggleButton(drt_panel_btn_, "Display Rendering Transform",
                              QStringLiteral(":/panel_icons/color-filter.svg"));
   ConfigurePanelToggleButton(geometry_panel_btn_, "Geometry",
@@ -142,8 +143,9 @@ auto EditorDialog::BuildControlPanelShell(const QString& panel_style) -> EditorC
                    [this]() { SetActiveControlPanel(ControlPanelKind::Tone); });
   QObject::connect(look_panel_btn_, &QPushButton::clicked, this,
                    [this]() { SetActiveControlPanel(ControlPanelKind::Look); });
-  QObject::connect(drt_panel_btn_, &QPushButton::clicked, this,
-                   [this]() { SetActiveControlPanel(ControlPanelKind::DisplayRenderingTransform); });
+  QObject::connect(drt_panel_btn_, &QPushButton::clicked, this, [this]() {
+    SetActiveControlPanel(ControlPanelKind::DisplayRenderingTransform);
+  });
   QObject::connect(geometry_panel_btn_, &QPushButton::clicked, this,
                    [this]() { SetActiveControlPanel(ControlPanelKind::Geometry); });
   QObject::connect(raw_panel_btn_, &QPushButton::clicked, this,
