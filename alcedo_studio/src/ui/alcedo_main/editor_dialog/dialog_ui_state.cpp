@@ -467,114 +467,6 @@ void EditorDialog::SetActiveControlPanel(ControlPanelKind panel) {
   }
 }
 
-void EditorDialog::RefreshOdtMethodUi() {
-  const bool    aces_active     = state_.odt_.method_ == ColorUtils::ODTMethod::ACES_2_0;
-  const bool    open_drt_active = state_.odt_.method_ == ColorUtils::ODTMethod::OPEN_DRT;
-
-  const QString active_style    = AppTheme::EditorMethodCardStyle(true);
-  const QString inactive_style  = AppTheme::EditorMethodCardStyle(false);
-
-  if (odt_aces_method_card_) {
-    odt_aces_method_card_->setChecked(aces_active);
-    odt_aces_method_card_->setStyleSheet(aces_active ? active_style : inactive_style);
-  }
-  if (odt_open_drt_method_card_) {
-    odt_open_drt_method_card_->setChecked(open_drt_active);
-    odt_open_drt_method_card_->setStyleSheet(open_drt_active ? active_style : inactive_style);
-  }
-  if (odt_method_stack_) {
-    odt_method_stack_->setCurrentIndex(aces_active ? 0 : 1);
-    if (QWidget* current_page = odt_method_stack_->currentWidget()) {
-      current_page->adjustSize();
-      const int page_height = std::max(1, current_page->sizeHint().height());
-      odt_method_stack_->setMinimumHeight(page_height);
-      odt_method_stack_->setMaximumHeight(page_height);
-    }
-    odt_method_stack_->updateGeometry();
-    if (drt_controls_) {
-      drt_controls_->adjustSize();
-      drt_controls_->updateGeometry();
-    }
-  }
-}
-
-void EditorDialog::RefreshOdtEncodingEotfComboFromState() {
-  if (!odt_encoding_eotf_combo_) {
-    return;
-  }
-
-  SanitizeOdtStateForUi(state_.odt_);
-  const bool prev_sync = syncing_controls_;
-  syncing_controls_    = true;
-
-  odt_encoding_eotf_combo_->clear();
-  const auto options = SupportedDisplayEotfOptions(state_.odt_.encoding_space_);
-  for (const auto& option : options) {
-    odt_encoding_eotf_combo_->addItem(Tr(option.label_), static_cast<int>(option.value_));
-  }
-
-  int selected_index =
-      odt_encoding_eotf_combo_->findData(static_cast<int>(state_.odt_.encoding_eotf_));
-  if (selected_index < 0) {
-    state_.odt_.encoding_eotf_ = DefaultDisplayEotfForSpace(state_.odt_.encoding_space_);
-    selected_index =
-        odt_encoding_eotf_combo_->findData(static_cast<int>(state_.odt_.encoding_eotf_));
-  }
-  odt_encoding_eotf_combo_->setCurrentIndex(std::max(0, selected_index));
-
-  syncing_controls_ = prev_sync;
-}
-
-void EditorDialog::SyncOpenDrtDetailControlsFromState() {
-  const bool prev_sync = syncing_controls_;
-  syncing_controls_    = true;
-
-  for (const auto& binding : odt_open_drt_detail_sliders_) {
-    if (!binding.slider_ || !binding.spin_ || !binding.getter_) {
-      continue;
-    }
-    const float clamped_value =
-        std::clamp(binding.getter_(state_.odt_.open_drt_), binding.min_, binding.max_);
-    const int slider_value = static_cast<int>(std::lround(clamped_value * binding.scale_));
-    binding.slider_->setValue(slider_value);
-    binding.spin_->setValue(static_cast<double>(clamped_value));
-  }
-
-  syncing_controls_ = prev_sync;
-}
-
-void EditorDialog::MarkOpenDrtLookPresetCustomForEditing() {
-  if (state_.odt_.open_drt_.look_preset_ == odt_cpu::OpenDRTLookPreset::CUSTOM) {
-    return;
-  }
-  state_.odt_.open_drt_.look_preset_ = odt_cpu::OpenDRTLookPreset::CUSTOM;
-
-  const bool prev_sync               = syncing_controls_;
-  syncing_controls_                  = true;
-  if (odt_open_drt_look_preset_combo_) {
-    const int idx = odt_open_drt_look_preset_combo_->findData(
-        static_cast<int>(odt_cpu::OpenDRTLookPreset::CUSTOM));
-    odt_open_drt_look_preset_combo_->setCurrentIndex(std::max(0, idx));
-  }
-  syncing_controls_ = prev_sync;
-}
-
-void EditorDialog::MarkOpenDrtTonescalePresetCustomForEditing() {
-  if (state_.odt_.open_drt_.tonescale_preset_ == odt_cpu::OpenDRTTonescalePreset::CUSTOM) {
-    return;
-  }
-  state_.odt_.open_drt_.tonescale_preset_ = odt_cpu::OpenDRTTonescalePreset::CUSTOM;
-
-  const bool prev_sync                    = syncing_controls_;
-  syncing_controls_                       = true;
-  if (odt_open_drt_tonescale_preset_combo_) {
-    const int idx = odt_open_drt_tonescale_preset_combo_->findData(
-        static_cast<int>(odt_cpu::OpenDRTTonescalePreset::CUSTOM));
-    odt_open_drt_tonescale_preset_combo_->setCurrentIndex(std::max(0, idx));
-  }
-  syncing_controls_ = prev_sync;
-}
-
 void EditorDialog::PromoteColorTempToCustomForEditing() {
   if (state_.color_temp_mode_ == ColorTempMode::CUSTOM) {
     return;
@@ -704,38 +596,9 @@ void EditorDialog::SyncControlsFromState() {
   if (tone_panel_) {
     tone_panel_->ReloadFromCommittedState();
   }
-  if (odt_encoding_space_combo_) {
-    const int encoding_space_index =
-        odt_encoding_space_combo_->findData(static_cast<int>(state_.odt_.encoding_space_));
-    odt_encoding_space_combo_->setCurrentIndex(std::max(0, encoding_space_index));
+  if (drt_panel_) {
+    drt_panel_->SyncControlsFromDialogState();
   }
-  RefreshOdtEncodingEotfComboFromState();
-  if (odt_peak_luminance_slider_) {
-    odt_peak_luminance_slider_->setValue(
-        static_cast<int>(std::lround(state_.odt_.peak_luminance_)));
-  }
-  if (odt_aces_limiting_space_combo_) {
-    const int limiting_space_index = odt_aces_limiting_space_combo_->findData(
-        static_cast<int>(state_.odt_.aces_.limiting_space_));
-    odt_aces_limiting_space_combo_->setCurrentIndex(std::max(0, limiting_space_index));
-  }
-  if (odt_open_drt_look_preset_combo_) {
-    const int look_preset_index = odt_open_drt_look_preset_combo_->findData(
-        static_cast<int>(state_.odt_.open_drt_.look_preset_));
-    odt_open_drt_look_preset_combo_->setCurrentIndex(std::max(0, look_preset_index));
-  }
-  if (odt_open_drt_tonescale_preset_combo_) {
-    const int tonescale_index = odt_open_drt_tonescale_preset_combo_->findData(
-        static_cast<int>(state_.odt_.open_drt_.tonescale_preset_));
-    odt_open_drt_tonescale_preset_combo_->setCurrentIndex(std::max(0, tonescale_index));
-  }
-  if (odt_open_drt_creative_white_combo_) {
-    const int creative_white_index = odt_open_drt_creative_white_combo_->findData(
-        static_cast<int>(state_.odt_.open_drt_.creative_white_));
-    odt_open_drt_creative_white_combo_->setCurrentIndex(std::max(0, creative_white_index));
-  }
-  SyncOpenDrtDetailControlsFromState();
-  RefreshOdtMethodUi();
   if (geometry_panel_) {
     geometry_panel_->SyncControlsFromDialogState();
   }

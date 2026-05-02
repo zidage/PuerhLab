@@ -344,6 +344,32 @@ Exit criteria:
 - `EditorDialog` no longer owns ODT controls or OpenDRT detail slider bindings.
 - ODT method switching and display encoding sync remain correct.
 
+Progress note (2026-05-02):
+
+- Phase 7 display transform panel migration has been implemented. `DisplayTransformPanelWidget`
+  is now an `AdjustmentPanelWidget` and owns the ODT method controls, encoding-space/EOTF combos,
+  peak luminance slider, ACES limiting-space combo, OpenDRT preset combos, OpenDRT detail panel,
+  and `OpenDrtDetailSliderBinding` collection.
+- The widget keeps panel-local `DisplayTransformAdjustmentState display_state_` and a committed
+  mirror. ODT edits update the panel state first, sanitize method-specific output combinations,
+  project the display-transform fields back into the legacy `AdjustmentState`, then route preview
+  and commit through `EditorAdjustmentSession` using `DisplayTransformPipelineAdapter`.
+- ODT UI helpers moved out of `EditorDialog` and into the panel, including method-card/stack
+  refresh, supported encoding/EOTF refresh, OpenDRT preset custom promotion, detail slider sync,
+  load from pipeline, committed-state reload, control sync, and translation refresh.
+- Viewer display encoding is now exposed to the panel as a callback supplied by `EditorDialog`;
+  the panel does not know about `EditorFrameManager`. The shell still owns cross-panel global
+  control sync and render requests while Phase 10 removes the remaining legacy state bridges.
+- Verification: `cmd /c scripts\msvc_env.cmd --build --preset win_debug --parallel 4` passes.
+  Because this local suite can hit the known `0xc0000139` discovery error on unrelated tests, only
+  editor-related tests were run: `ctest --test-dir build/debug --output-on-failure -R
+  "^(EditViewerLogicTest|ToneCurveWidgetTest|ODTOpTest|LutCatalogTest|CropRotateOpTest)\."`.
+  The targeted run executed 36 tests and all passed.
+- Manual verification should follow `docs/editor_dialog_manual_test_matrix.md` for Display
+  Transform rows: ODT method switching, encoding-space/EOTF sanitization and viewer sync, peak
+  luminance commits, ACES limiting space, OpenDRT look/tonescale presets, detail slider edits,
+  undo, commit-all, and version checkout.
+
 ## Phase 8: Migrate Look Panel
 
 Goal: isolate the most stateful color panel after the session API has been proven.

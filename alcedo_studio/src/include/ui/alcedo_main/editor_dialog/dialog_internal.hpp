@@ -747,16 +747,6 @@ class EditorDialog final : public QDialog {
 
   void        SetActiveControlPanel(ControlPanelKind panel);
 
-  void        RefreshOdtMethodUi();
-
-  void        RefreshOdtEncodingEotfComboFromState();
-
-  void        SyncOpenDrtDetailControlsFromState();
-
-  void        MarkOpenDrtLookPresetCustomForEditing();
-
-  void        MarkOpenDrtTonescalePresetCustomForEditing();
-
   void        PromoteColorTempToCustomForEditing();
 
   // Returns true if any resolved color temp value actually changed.
@@ -905,6 +895,7 @@ class EditorDialog final : public QDialog {
   QPushButton*                            raw_panel_btn_                   = nullptr;
   LutBrowserWidget*                       lut_browser_widget_              = nullptr;
   ToneControlPanelWidget*                 tone_panel_                      = nullptr;
+  DisplayTransformPanelWidget*            drt_panel_                       = nullptr;
   RawDecodePanelWidget*                   raw_panel_                       = nullptr;
   CdlTrackballDiscWidget*                 lift_disc_widget_                = nullptr;
   CdlTrackballDiscWidget*                 gamma_disc_widget_               = nullptr;
@@ -921,26 +912,6 @@ class EditorDialog final : public QDialog {
   QSlider*                                hls_lightness_adjust_slider_         = nullptr;
   QSlider*                                hls_saturation_adjust_slider_        = nullptr;
   QSlider*                                hls_hue_range_slider_                = nullptr;
-  QComboBox*                              odt_encoding_space_combo_            = nullptr;
-  QComboBox*                              odt_encoding_eotf_combo_             = nullptr;
-  QSlider*                                odt_peak_luminance_slider_           = nullptr;
-  QPushButton*                            odt_aces_method_card_                = nullptr;
-  QPushButton*                            odt_open_drt_method_card_            = nullptr;
-  QStackedWidget*                         odt_method_stack_                    = nullptr;
-  QComboBox*                              odt_aces_limiting_space_combo_       = nullptr;
-  QComboBox*                              odt_open_drt_look_preset_combo_      = nullptr;
-  QComboBox*                              odt_open_drt_tonescale_preset_combo_ = nullptr;
-  QComboBox*                              odt_open_drt_creative_white_combo_   = nullptr;
-  QWidget*                                odt_open_drt_detail_panel_           = nullptr;
-  struct OpenDrtDetailSliderBinding {
-    QSlider*                                              slider_ = nullptr;
-    QDoubleSpinBox*                                       spin_   = nullptr;
-    float                                                 min_    = 0.0f;
-    float                                                 max_    = 1.0f;
-    float                                                 scale_  = 100.0f;
-    std::function<float(const odt_cpu::OpenDRTSettings&)> getter_{};
-  };
-  std::vector<OpenDrtDetailSliderBinding>   odt_open_drt_detail_sliders_{};
   GeometryPanelWidget*                      geometry_panel_                  = nullptr;
   QLabel*                                   version_status_                    = nullptr;
   QPushButton*                              undo_tx_btn_                       = nullptr;

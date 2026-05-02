@@ -52,7 +52,8 @@ auto EditorDialog::BuildControlPanelShell(const QString& panel_style) -> EditorC
   drt_controls_scroll_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
   drt_controls_scroll_->setStyleSheet(scroll_style);
 
-  drt_controls_ = new DisplayTransformPanelWidget(drt_controls_scroll_);
+  drt_panel_    = new DisplayTransformPanelWidget(drt_controls_scroll_);
+  drt_controls_ = drt_panel_;
   drt_controls_->setMinimumWidth(0);
   drt_controls_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
   drt_controls_layout_ = new QVBoxLayout(drt_controls_);

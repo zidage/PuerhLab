@@ -1,4 +1,5 @@
 #include "ui/alcedo_main/editor_dialog/dialog_internal.hpp"
+#include "ui/alcedo_main/editor_dialog/pipeline/display_transform_pipeline_adapter.hpp"
 #include "ui/alcedo_main/editor_dialog/pipeline/raw_pipeline_adapter.hpp"
 
 namespace alcedo::ui {
@@ -414,6 +415,9 @@ void EditorDialog::RetranslateUi() {
   if (geometry_panel_) {
     geometry_panel_->RetranslateUi();
   }
+  if (drt_panel_) {
+    drt_panel_->RetranslateUi();
+  }
   if (undo_tx_btn_) {
     undo_tx_btn_->setText(Tr("Undo Last"));
   }
@@ -440,26 +444,6 @@ void EditorDialog::RetranslateUi() {
     working_mode_combo_->setCurrentIndex(std::max(0, index));
     syncing_controls_ = prev_sync;
   }
-  auto refresh_odt_combo = [this](QComboBox* combo, const auto& options) {
-    if (!combo) {
-      return;
-    }
-    const int  current_value = combo->currentData().toInt();
-    const bool prev_sync     = syncing_controls_;
-    syncing_controls_        = true;
-    combo->clear();
-    for (const auto& option : options) {
-      combo->addItem(Tr(option.label_), static_cast<int>(option.value_));
-    }
-    const int index = combo->findData(current_value);
-    combo->setCurrentIndex(std::max(0, index));
-    syncing_controls_ = prev_sync;
-  };
-  refresh_odt_combo(odt_encoding_space_combo_, kDisplayEncodingSpaceOptions);
-  refresh_odt_combo(odt_aces_limiting_space_combo_, kAcesLimitingSpaceOptions);
-  refresh_odt_combo(odt_open_drt_look_preset_combo_, kOpenDrtLookPresetOptions);
-  refresh_odt_combo(odt_open_drt_tonescale_preset_combo_, kOpenDrtTonescaleOptions);
-  refresh_odt_combo(odt_open_drt_creative_white_combo_, kOpenDrtCreativeWhiteOptions);
   if (lut_browser_widget_) {
     lut_browser_widget_->RetranslateUi();
     RefreshLutBrowserUi();
@@ -468,7 +452,6 @@ void EditorDialog::RetranslateUi() {
   if (raw_panel_) {
     raw_panel_->RetranslateUi();
   }
-  RefreshOdtEncodingEotfComboFromState();
   RefreshHlsTargetUi();
   UpdateViewerZoomLabel(viewer_ ? viewer_->GetViewZoom() : 1.0f);
   RefreshVersioningCollapseUi();
@@ -525,6 +508,50 @@ void EditorDialog::BuildToneControlPanel() {
 
   tone_panel_->Configure(std::move(deps), std::move(callbacks));
   tone_panel_->Build();
+}
+
+void EditorDialog::BuildDisplayTransformPanel() {
+  if (!drt_panel_ || !drt_controls_layout_) {
+    return;
+  }
+
+  DisplayTransformPanelWidget::Dependencies deps{
+      .session                = adjustment_session_.get(),
+      .panel_layout           = drt_controls_layout_,
+      .dialog_state           = &state_,
+      .dialog_committed_state = &committed_state_,
+  };
+
+  DisplayTransformPanelWidget::Callbacks callbacks{
+      .is_global_syncing = [this]() { return syncing_controls_; },
+      .request_render    = [this]() { RequestRender(); },
+      .register_slider_reset =
+          [this](QSlider* slider, std::function<void()> on_reset) {
+            RegisterSliderReset(slider, std::move(on_reset));
+          },
+      .default_adjustment_state = [this]() -> const AdjustmentState& {
+        return DefaultAdjustmentState();
+      },
+      .sync_display_encoding =
+          [this](ColorUtils::ColorSpace encoding_space, ColorUtils::EOTF encoding_eotf) {
+            frame_manager_.SyncViewerDisplayEncoding(encoding_space, encoding_eotf);
+          },
+      .load_from_pipeline =
+          [this](const DisplayTransformAdjustmentState& base)
+          -> std::optional<DisplayTransformAdjustmentState> {
+        if (!pipeline_guard_ || !pipeline_guard_->pipeline_) {
+          return std::nullopt;
+        }
+        const auto loaded = DisplayTransformPipelineAdapter::Load(*pipeline_guard_->pipeline_, base);
+        if (!loaded.loaded_any) {
+          return std::nullopt;
+        }
+        return loaded.state;
+      },
+  };
+
+  drt_panel_->Configure(std::move(deps), std::move(callbacks));
+  drt_panel_->Build();
 }
 
 void EditorDialog::BuildGeometryPanel() {
