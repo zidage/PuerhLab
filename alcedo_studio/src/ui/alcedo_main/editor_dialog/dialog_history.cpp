@@ -162,69 +162,47 @@ void EditorDialog::StartNewWorkingVersionFromCommit(const Hash128& committed_id)
 
 auto EditorDialog::ReadCurrentOperatorParams(PipelineStageName stage_name, OperatorType op_type) const
       -> std::optional<nlohmann::json> {
-    if (!pipeline_guard_ || !pipeline_guard_->pipeline_) {
+    if (!adjustment_session_) {
       return std::nullopt;
     }
-    return pipeline_io::ReadCurrentOperatorParams(*pipeline_guard_->pipeline_, stage_name, op_type);
+    return adjustment_session_->ReadCurrentOperatorParams(stage_name, op_type);
   }
 
 std::pair<PipelineStageName, OperatorType> EditorDialog::FieldSpec(AdjustmentField field) const {
-    return pipeline_io::FieldSpec(field);
+    return adjustment_session_ ? adjustment_session_->FieldSpec(field)
+                               : pipeline_io::FieldSpec(field);
   }
 
 nlohmann::json EditorDialog::ParamsForField(AdjustmentField field, const AdjustmentState& s) const {
-    return pipeline_io::ParamsForField(
-        field, s, (pipeline_guard_ && pipeline_guard_->pipeline_)
-                      ? pipeline_guard_->pipeline_.get()
-                      : nullptr);
+    return adjustment_session_ ? adjustment_session_->ParamsForField(field, s)
+                               : pipeline_io::ParamsForField(
+                                     field, s,
+                                     (pipeline_guard_ && pipeline_guard_->pipeline_)
+                                         ? pipeline_guard_->pipeline_.get()
+                                         : nullptr);
   }
 
 bool EditorDialog::FieldChanged(AdjustmentField field) const {
-    return pipeline_io::FieldChanged(field, state_, committed_state_);
+    return adjustment_session_ ? adjustment_session_->FieldChanged(field)
+                               : pipeline_io::FieldChanged(field, state_, committed_state_);
   }
 
 void EditorDialog::CommitAdjustment(AdjustmentField field) {
-    if (!FieldChanged(field) || !pipeline_guard_ || !pipeline_guard_->pipeline_) {
-      // Still fulfill the "full res on release/change" behavior.
+    if (!adjustment_session_) {
       ScheduleQualityPreviewRenderFromPipeline();
       return;
     }
-
-    const auto [stage_name, op_type] = FieldSpec(field);
-    const auto            old_params = ParamsForField(field, committed_state_);
-    const auto            new_params = ParamsForField(field, state_);
-
-    auto                  exec       = pipeline_guard_->pipeline_;
-    auto&                 stage      = exec->GetStage(stage_name);
-    const auto            op         = stage.GetOperator(op_type);
-    const TransactionType tx_type =
-        (op.has_value() && op.value() != nullptr) ? TransactionType::_EDIT : TransactionType::_ADD;
-
-    EditTransaction tx{tx_type, op_type, stage_name, new_params};
-    tx.SetLastOperatorParams(old_params);
-    try {
-      (void)tx.ApplyTransaction(*exec);
-    } catch (const std::exception& e) {
-      QMessageBox::warning(this, Tr("Adjustment"),
-                           Tr("Failed to apply adjustment: %1")
-                               .arg(QString::fromUtf8(e.what())));
-      return;
-    } catch (...) {
-      QMessageBox::warning(this, Tr("Adjustment"),
-                           Tr("Failed to apply adjustment."));
+    const auto result = adjustment_session_->Commit(field);
+    if (result.status == EditorAdjustmentSession::CommitStatus::Failed) {
+      if (!result.error.isEmpty()) {
+        QMessageBox::warning(this, Tr("Adjustment"),
+                             Tr("Failed to apply adjustment: %1")
+                                 .arg(result.error));
+      } else {
+        QMessageBox::warning(this, Tr("Adjustment"),
+                             Tr("Failed to apply adjustment."));
+      }
       return;
     }
-
-    working_version_.AppendEditTransaction(std::move(tx));
-    pipeline_guard_->dirty_ = true;
-
-    CopyFieldState(field, state_, committed_state_);
-    if (field == AdjustmentField::CropRotate) {
-      frame_manager_.MarkNeedsFullFramePreviewAfterGeometryCommit();
-    }
-    UpdateVersionUi();
-
-    AdvancePreviewGeneration();
-    ScheduleQualityPreviewRenderFromPipeline();
   }
 }  // namespace alcedo::ui

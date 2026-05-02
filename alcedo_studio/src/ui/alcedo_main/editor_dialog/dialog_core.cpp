@@ -49,6 +49,21 @@ EditorDialog::EditorDialog(std::shared_ptr<ImagePoolService>       image_pool,
         !history_guard_ || !history_guard_->history_ || !scheduler_) {
       throw std::runtime_error("EditorDialog: missing services");
     }
+    adjustment_session_ = std::make_unique<EditorAdjustmentSession>(
+        EditorAdjustmentSession::Dependencies{
+            .pipeline_guard  = pipeline_guard_,
+            .working_version = &working_version_,
+            .state           = &state_,
+            .committed_state = &committed_state_,
+        },
+        EditorAdjustmentSession::Callbacks{
+            .schedule_quality_preview =
+                [this]() { ScheduleQualityPreviewRenderFromPipeline(); },
+            .advance_preview_generation = [this]() { AdvancePreviewGeneration(); },
+            .update_version_ui          = [this]() { UpdateVersionUi(); },
+            .mark_full_frame_preview_after_geometry_commit =
+                [this]() { frame_manager_.MarkNeedsFullFramePreviewAfterGeometryCommit(); },
+        });
 
     setModal(true);
     setSizeGripEnabled(true);

@@ -63,6 +63,12 @@ Exit criteria:
 - All current UI still compiles.
 - Existing panel files still call `EditorDialog::CommitAdjustment()`, but the real transaction algorithm lives in the session.
 
+Progress note (2026-05-02):
+
+- Phase 1 session scaffolding has been implemented. The new `session/` API defines adjustment preview/commit request types, the adjustment panel interface, and a legacy snapshot wrapper.
+- `EditorAdjustmentSession` now owns the commit transaction algorithm that was previously in `EditorDialog::CommitAdjustment()`. Existing panel code still calls the dialog wrapper, which forwards to the session.
+- `AdjustmentState` and `pipeline_io.cpp` remain unchanged for this phase. No panel ownership has moved yet, so the manual matrix should be used as the behavior baseline for follow-up phases.
+
 ## Phase 2: Extract Render and History Coordinators
 
 Goal: reduce `EditorDialog` before panel migration.

@@ -100,6 +100,7 @@
 #include "ui/alcedo_main/editor_dialog/modules/pipeline_io.hpp"
 #include "ui/alcedo_main/editor_dialog/modules/versioning.hpp"
 #include "ui/alcedo_main/editor_dialog/scope/scope_panel.hpp"
+#include "ui/alcedo_main/editor_dialog/session/editor_adjustment_session.hpp"
 #include "ui/alcedo_main/editor_dialog/state.hpp"
 #include "ui/alcedo_main/editor_dialog/widgets/display_transform_panel_widget.hpp"
 #include "ui/alcedo_main/editor_dialog/widgets/editor_control_panel_widget.hpp"
@@ -1014,6 +1015,7 @@ class EditorDialog final : public QDialog {
   AdjustmentState                                          state_{};
   AdjustmentState                                          committed_state_{};
   Version                                                  working_version_{};
+  std::unique_ptr<EditorAdjustmentSession>                 adjustment_session_{};
   std::optional<PendingRenderRequest>                      pending_fast_preview_request_{};
   std::optional<PendingRenderRequest>                      pending_quality_base_render_request_{};
   std::optional<PendingRenderRequest>                      pending_detail_render_request_{};
