@@ -347,7 +347,14 @@ void EditorDialog::BuildVersioningPanel() {
     QObject::connect(version_log_, &QListWidget::itemSelectionChanged, this,
                      [this]() { RefreshVersionLogSelectionStyles(); });
     QObject::connect(version_log_, &QListWidget::itemClicked, this,
-                     [this](QListWidgetItem* item) { CheckoutSelectedVersion(item); });
+                     [this](QListWidgetItem* item) {
+                       if (!item) {
+                         return;
+                       }
+                       const QString version_id = item->data(Qt::UserRole).toString();
+                       QTimer::singleShot(0, this,
+                                          [this, version_id]() { CheckoutVersionById(version_id); });
+                     });
 
     versioning_pages_stack_->addWidget(versions_page);
   }

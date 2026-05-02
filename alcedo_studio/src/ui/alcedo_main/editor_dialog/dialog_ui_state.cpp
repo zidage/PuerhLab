@@ -908,8 +908,10 @@ void EditorDialog::PromoteColorTempToCustomForEditing() {
 
   const bool prev_sync           = syncing_controls_;
   syncing_controls_              = true;
-  if (color_temp_mode_combo_) {
-    color_temp_mode_combo_->setCurrentIndex(ColorTempModeToComboIndex(state_.color_temp_mode_));
+  if (tone_panel_) {
+    if (auto* combo = tone_panel_->ColorTempModeCombo()) {
+      combo->setCurrentIndex(ColorTempModeToComboIndex(state_.color_temp_mode_));
+    }
   }
   syncing_controls_ = prev_sync;
 }
@@ -951,20 +953,8 @@ void EditorDialog::SyncColorTempControlsFromState() {
   const bool prev_sync = syncing_controls_;
   syncing_controls_    = true;
 
-  if (color_temp_mode_combo_) {
-    color_temp_mode_combo_->setCurrentIndex(ColorTempModeToComboIndex(state_.color_temp_mode_));
-  }
-  if (color_temp_cct_slider_) {
-    color_temp_cct_slider_->setValue(ColorTempCctToSliderPos(DisplayedColorTempCct(state_)));
-    color_temp_cct_slider_->setEnabled(state_.color_temp_supported_);
-  }
-  if (color_temp_tint_slider_) {
-    color_temp_tint_slider_->setValue(
-        static_cast<int>(std::lround(DisplayedColorTempTint(state_))));
-    color_temp_tint_slider_->setEnabled(state_.color_temp_supported_);
-  }
-  if (color_temp_unsupported_label_) {
-    color_temp_unsupported_label_->setVisible(!state_.color_temp_supported_);
+  if (tone_panel_) {
+    tone_panel_->SyncColorTempControlsFromDialogState();
   }
 
   syncing_controls_ = prev_sync;
@@ -999,15 +989,6 @@ void EditorDialog::SyncControlsFromState() {
   SanitizeOdtStateForUi(state_.odt_);
   RefreshLutBrowserUi();
 
-  if (exposure_slider_) {
-    exposure_slider_->setValue(static_cast<int>(std::lround(state_.exposure_ * 100.0f)));
-  }
-  if (contrast_slider_) {
-    contrast_slider_->setValue(static_cast<int>(std::lround(state_.contrast_)));
-  }
-  if (saturation_slider_) {
-    saturation_slider_->setValue(static_cast<int>(std::lround(state_.saturation_)));
-  }
   if (raw_highlights_reconstruct_checkbox_) {
     raw_highlights_reconstruct_checkbox_->setChecked(state_.raw_highlights_reconstruct_);
   }
@@ -1033,25 +1014,6 @@ void EditorDialog::SyncControlsFromState() {
   if (gain_master_slider_) {
     gain_master_slider_->setValue(CdlMasterToSliderUi(state_.gain_wheel_.master_offset_));
   }
-  if (color_temp_mode_combo_) {
-    color_temp_mode_combo_->setCurrentIndex(ColorTempModeToComboIndex(state_.color_temp_mode_));
-  }
-  if (color_temp_cct_slider_) {
-    color_temp_cct_slider_->setValue(ColorTempCctToSliderPos(DisplayedColorTempCct(state_)));
-  }
-  if (color_temp_tint_slider_) {
-    color_temp_tint_slider_->setValue(
-        static_cast<int>(std::lround(DisplayedColorTempTint(state_))));
-  }
-  if (color_temp_cct_slider_) {
-    color_temp_cct_slider_->setEnabled(state_.color_temp_supported_);
-  }
-  if (color_temp_tint_slider_) {
-    color_temp_tint_slider_->setEnabled(state_.color_temp_supported_);
-  }
-  if (color_temp_unsupported_label_) {
-    color_temp_unsupported_label_->setVisible(!state_.color_temp_supported_);
-  }
   if (hls_hue_adjust_slider_) {
     hls_hue_adjust_slider_->setValue(static_cast<int>(std::lround(state_.hls_hue_adjust_)));
   }
@@ -1066,23 +1028,8 @@ void EditorDialog::SyncControlsFromState() {
   if (hls_hue_range_slider_) {
     hls_hue_range_slider_->setValue(static_cast<int>(std::lround(state_.hls_hue_range_)));
   }
-  if (blacks_slider_) {
-    blacks_slider_->setValue(static_cast<int>(std::lround(state_.blacks_)));
-  }
-  if (whites_slider_) {
-    whites_slider_->setValue(static_cast<int>(std::lround(state_.whites_)));
-  }
-  if (shadows_slider_) {
-    shadows_slider_->setValue(static_cast<int>(std::lround(state_.shadows_)));
-  }
-  if (highlights_slider_) {
-    highlights_slider_->setValue(static_cast<int>(std::lround(state_.highlights_)));
-  }
-  if (sharpen_slider_) {
-    sharpen_slider_->setValue(static_cast<int>(std::lround(state_.sharpen_)));
-  }
-  if (clarity_slider_) {
-    clarity_slider_->setValue(static_cast<int>(std::lround(state_.clarity_)));
+  if (tone_panel_) {
+    tone_panel_->ReloadFromCommittedState();
   }
   if (odt_encoding_space_combo_) {
     const int encoding_space_index =
@@ -1122,9 +1069,6 @@ void EditorDialog::SyncControlsFromState() {
   }
   SyncGeometryCropSlidersFromState();
   SyncCropAspectControlsFromState();
-  if (curve_widget_) {
-    curve_widget_->SetControlPoints(state_.curve_points_);
-  }
   UpdateGeometryCropRectLabel();
   RefreshGeometryModeUi();
   if (viewer_) {

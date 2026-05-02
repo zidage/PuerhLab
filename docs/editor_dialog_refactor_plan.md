@@ -181,6 +181,42 @@ Exit criteria:
 - `EditorDialog` owns `ToneControlPanelWidget* tone_panel_`, not tone sliders.
 - Tone sliders, curve editing, resets, preview, commit, undo reload, and version checkout work.
 
+Progress note (2026-05-01):
+
+- Phase 4 tone panel migration has been implemented. `ToneControlPanelWidget` is now a real widget
+  derived from `AdjustmentPanelWidget` and owns its own controls: `exposure_slider_`,
+  `contrast_slider_`, `highlights_slider_`, `shadows_slider_`, `whites_slider_`, `blacks_slider_`,
+  `curve_widget_`, `saturation_slider_`, `sharpen_slider_`, `clarity_slider_`, plus the color
+  temperature combo/sliders/unsupported label that share the panel's scroll area.
+- The widget keeps a panel-local `ToneAdjustmentState tone_state_` (and committed mirror) per the
+  design's principle 5. Slider callbacks mutate `tone_state_` first, project tone fields back into
+  the dialog's legacy `AdjustmentState` for the existing render and adapter paths, then route fast
+  preview through `EditorAdjustmentSession::Preview()` and transactional commits through
+  `EditorAdjustmentSession::Commit()`. Commits pull the new committed tone state back from the
+  dialog's `committed_state_` after each successful transaction.
+- Reset handlers, curve normalization, double-click slider/curve resets, and color-temp
+  promote-to-custom logic moved into the panel. The panel still calls back into the dialog for
+  cross-panel concerns (`SyncControlsFromState`, `PrimeColorTempDisplayForAsShot`,
+  `ResetColorTempToAsShot`) since color temperature shares the tone panel's scroll area but is not
+  yet part of `ToneAdjustmentState`. Color temp ownership remains scheduled for a later phase.
+- `EditorDialog::BuildToneControlPanel()` is now a thin wrapper that loads pipeline state, seeds
+  the working version, wires the look panel, and configures+builds the tone widget. The dialog
+  no longer declares tone slider, curve, or color-temp control members. `SyncControlsFromState`,
+  `SyncColorTempControlsFromState`, `PromoteColorTempToCustomForEditing`, and `RetranslateUi`
+  now delegate to the panel via `ReloadFromCommittedState`, `SyncColorTempControlsFromDialogState`,
+  `ColorTempModeCombo`, `ColorTempUnsupportedLabel`, and `RetranslateColorTempModeCombo`.
+- The double-click curve reset now matches the focused widget by `dynamic_cast<ToneCurveWidget*>`
+  instead of a stored pointer, since the curve widget moved out of `EditorDialog`.
+- Verification: `cmd /c scripts\msvc_env.cmd --build --preset win_debug --parallel 4` passes.
+  `ctest --test-dir build/debug --output-on-failure` ran 94 tests with the same coverage as
+  earlier phases (the `0xc0000139` GoogleTest discovery failures from previous phases remain
+  disabled in CMake; the 6 pre-existing assertion failures in `RawProcessorPatternTest`,
+  `CudaRawOpsTest`, and `SharedToneCurveTest` are unchanged and unrelated to this phase). Run the
+  manual matrix from `docs/editor_dialog_manual_test_matrix.md` covering tone slider drag/release,
+  exposure/contrast/highlights/shadows/whites/blacks reset, curve edit/release/reset, saturation,
+  sharpen, clarity, color temperature mode switch and CCT/tint commits, undo, commit-all, and
+  version checkout before merging UI-facing follow-up phases.
+
 ## Phase 5: Migrate Raw Decode Panel
 
 Goal: migrate a smaller discrete-control panel to validate non-slider commits.

@@ -53,6 +53,7 @@ class EditorHistoryCoordinator {
   auto ReloadEditorFromHistoryVersion(Version& version, QString* error) -> bool;
 
   void CheckoutSelectedVersion(QListWidgetItem* item);
+  void CheckoutVersionById(const QString& version_id);
   void UndoLastTransaction();
   void UpdateVersionUi();
   void CommitWorkingVersion();

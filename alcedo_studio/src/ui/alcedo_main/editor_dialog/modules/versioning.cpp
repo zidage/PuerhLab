@@ -115,7 +115,19 @@ auto ResolveSelectedVersion(QListWidgetItem* item,
     return false;
   }
 
-  const auto version_id_str = item->data(Qt::UserRole).toString().toStdString();
+  return ResolveVersionId(item->data(Qt::UserRole).toString(), history_guard,
+                          out_selection, error);
+}
+
+auto ResolveVersionId(const QString& version_id_qstr,
+                      const std::shared_ptr<EditHistoryGuard>& history_guard,
+                      ResolvedVersionSelection* out_selection,
+                      QString* error) -> bool {
+  if (!history_guard || !history_guard->history_) {
+    return false;
+  }
+
+  const auto version_id_str = version_id_qstr.toStdString();
   if (version_id_str.empty()) {
     return false;
   }

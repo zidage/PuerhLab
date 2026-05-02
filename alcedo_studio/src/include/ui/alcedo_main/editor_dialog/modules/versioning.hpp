@@ -66,6 +66,11 @@ auto ResolveSelectedVersion(QListWidgetItem* item,
                             ResolvedVersionSelection* out_selection,
                             QString* error) -> bool;
 
+auto ResolveVersionId(const QString& version_id_str,
+                      const std::shared_ptr<EditHistoryGuard>& history_guard,
+                      ResolvedVersionSelection* out_selection,
+                      QString* error) -> bool;
+
 auto UndoLastTransaction(Version& working_version,
                          const std::shared_ptr<PipelineGuard>& pipeline_guard) -> UndoResult;
 

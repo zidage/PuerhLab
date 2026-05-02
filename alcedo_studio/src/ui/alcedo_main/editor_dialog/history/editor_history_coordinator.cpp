@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include <QListWidgetItem>
 #include <QMessageBox>
 
 #include "ui/alcedo_main/editor_dialog/controllers/history_controller.hpp"
@@ -82,10 +83,17 @@ auto EditorHistoryCoordinator::ReloadEditorFromHistoryVersion(Version& version, 
 }
 
 void EditorHistoryCoordinator::CheckoutSelectedVersion(QListWidgetItem* item) {
+  if (!item) {
+    return;
+  }
+  CheckoutVersionById(item->data(Qt::UserRole).toString());
+}
+
+void EditorHistoryCoordinator::CheckoutVersionById(const QString& version_id) {
   versioning::ResolvedVersionSelection selection{};
   QString                              selection_error;
-  if (!versioning::ResolveSelectedVersion(item, dependencies_.history_guard, &selection,
-                                          &selection_error)) {
+  if (!versioning::ResolveVersionId(version_id, dependencies_.history_guard, &selection,
+                                    &selection_error)) {
     if (!selection_error.isEmpty()) {
       QMessageBox::warning(dependencies_.message_parent, Tr("History"), selection_error);
     }

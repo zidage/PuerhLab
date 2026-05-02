@@ -807,6 +807,8 @@ class EditorDialog final : public QDialog {
 
   void CheckoutSelectedVersion(QListWidgetItem* item);
 
+  void CheckoutVersionById(const QString& version_id);
+
   void UndoLastTransaction();
 
   void UpdateVersionUi();
@@ -929,9 +931,7 @@ class EditorDialog final : public QDialog {
   QPushButton*                            geometry_panel_btn_                  = nullptr;
   QPushButton*                            raw_panel_btn_                       = nullptr;
   LutBrowserWidget*                       lut_browser_widget_                  = nullptr;
-  QSlider*                                exposure_slider_                     = nullptr;
-  QSlider*                                contrast_slider_                     = nullptr;
-  QSlider*                                saturation_slider_                   = nullptr;
+  ToneControlPanelWidget*                 tone_panel_                          = nullptr;
   QCheckBox*                              raw_highlights_reconstruct_checkbox_ = nullptr;
   QCheckBox*                              lens_calib_enabled_checkbox_         = nullptr;
   QComboBox*                              lens_brand_combo_                    = nullptr;
@@ -946,23 +946,12 @@ class EditorDialog final : public QDialog {
   QSlider*                                lift_master_slider_                  = nullptr;
   QSlider*                                gamma_master_slider_                 = nullptr;
   QSlider*                                gain_master_slider_                  = nullptr;
-  QComboBox*                              color_temp_mode_combo_               = nullptr;
-  QSlider*                                color_temp_cct_slider_               = nullptr;
-  QSlider*                                color_temp_tint_slider_              = nullptr;
-  QLabel*                                 color_temp_unsupported_label_        = nullptr;
   QLabel*                                 hls_target_label_                    = nullptr;
   std::vector<QPushButton*>               hls_candidate_buttons_{};
   QSlider*                                hls_hue_adjust_slider_               = nullptr;
   QSlider*                                hls_lightness_adjust_slider_         = nullptr;
   QSlider*                                hls_saturation_adjust_slider_        = nullptr;
   QSlider*                                hls_hue_range_slider_                = nullptr;
-  QSlider*                                blacks_slider_                       = nullptr;
-  QSlider*                                whites_slider_                       = nullptr;
-  QSlider*                                shadows_slider_                      = nullptr;
-  QSlider*                                highlights_slider_                   = nullptr;
-  ToneCurveWidget*                        curve_widget_                        = nullptr;
-  QSlider*                                sharpen_slider_                      = nullptr;
-  QSlider*                                clarity_slider_                      = nullptr;
   QComboBox*                              odt_encoding_space_combo_            = nullptr;
   QComboBox*                              odt_encoding_eotf_combo_             = nullptr;
   QSlider*                                odt_peak_luminance_slider_           = nullptr;

@@ -29,6 +29,12 @@ void EditorDialog::CheckoutSelectedVersion(QListWidgetItem* item) {
   }
 }
 
+void EditorDialog::CheckoutVersionById(const QString& version_id) {
+  if (history_coordinator_) {
+    history_coordinator_->CheckoutVersionById(version_id);
+  }
+}
+
 void EditorDialog::UndoLastTransaction() {
   if (history_coordinator_) {
     history_coordinator_->UndoLastTransaction();

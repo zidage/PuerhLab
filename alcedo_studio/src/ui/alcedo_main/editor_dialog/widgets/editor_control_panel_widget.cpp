@@ -31,7 +31,8 @@ auto EditorDialog::BuildControlPanelShell(const QString& panel_style) -> EditorC
   tone_controls_scroll_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
   tone_controls_scroll_->setStyleSheet(scroll_style);
 
-  tone_controls_ = new ToneControlPanelWidget(tone_controls_scroll_);
+  tone_panel_    = new ToneControlPanelWidget(tone_controls_scroll_);
+  tone_controls_ = tone_panel_;
   controls_      = tone_controls_;
   tone_controls_->setMinimumWidth(0);
   tone_controls_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);

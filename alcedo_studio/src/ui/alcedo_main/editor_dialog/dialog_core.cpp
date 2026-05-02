@@ -320,7 +320,7 @@ bool EditorDialog::eventFilter(QObject* obj, QEvent* event) {
           return true;
         }
       }
-      if (obj == curve_widget_ && curve_reset_callback_) {
+      if (dynamic_cast<ToneCurveWidget*>(obj) != nullptr && curve_reset_callback_) {
         if (!syncing_controls_) {
           curve_reset_callback_();
         }
@@ -415,20 +415,12 @@ void EditorDialog::RetranslateUi() {
     if (new_working_btn_) {
       new_working_btn_->setText(Tr("New Working"));
     }
-    if (color_temp_unsupported_label_) {
-      color_temp_unsupported_label_->setText(
-          Tr("Color temperature/tint is unavailable for this image."));
-    }
-    if (color_temp_mode_combo_) {
-      const int current_value = color_temp_mode_combo_->currentData().toInt();
-      const bool prev_sync = syncing_controls_;
-      syncing_controls_ = true;
-      color_temp_mode_combo_->clear();
-      color_temp_mode_combo_->addItem(Tr("As Shot"), static_cast<int>(ColorTempMode::AS_SHOT));
-      color_temp_mode_combo_->addItem(Tr("Custom"), static_cast<int>(ColorTempMode::CUSTOM));
-      const int index = color_temp_mode_combo_->findData(current_value);
-      color_temp_mode_combo_->setCurrentIndex(std::max(0, index));
-      syncing_controls_ = prev_sync;
+    if (tone_panel_) {
+      if (auto* unsupported_label = tone_panel_->ColorTempUnsupportedLabel()) {
+        unsupported_label->setText(
+            Tr("Color temperature/tint is unavailable for this image."));
+      }
+      tone_panel_->RetranslateColorTempModeCombo();
     }
     if (working_mode_combo_) {
       const int current_value = working_mode_combo_->currentData().toInt();
@@ -488,6 +480,57 @@ void EditorDialog::RetranslateUi() {
     RefreshVersioningCollapseUi();
     UpdateVersionUi();
   }
+void EditorDialog::BuildToneControlPanel() {
+  if (!tone_panel_ || !controls_layout_) {
+    return;
+  }
+
+  const auto default_lut_path = lut_controller_.DefaultLutPath();
+
+  // If the pipeline already has operator params (loaded from PipelineService/storage),
+  // initialize UI state from those params rather than overwriting them.
+  const bool loaded_state_from_pipeline = LoadStateFromPipelineIfPresent();
+  if (!loaded_state_from_pipeline) {
+    // Demo-friendly default: apply a LUT only for brand-new pipelines with no saved params.
+    state_.lut_path_ = default_lut_path;
+    UpdateAllCdlWheelDerivedColors(state_);
+  }
+  committed_state_ = state_;
+
+  // Seed a working version from the latest committed one (if any).
+  if (history_coordinator_) {
+    history_coordinator_->SeedWorkingVersionFromLatest();
+  }
+  WireLookControlPanel();
+
+  ToneControlPanelWidget::Dependencies deps{
+      .session                = adjustment_session_.get(),
+      .panel_layout           = controls_layout_,
+      .dialog_state           = &state_,
+      .dialog_committed_state = &committed_state_,
+  };
+
+  ToneControlPanelWidget::Callbacks callbacks{
+      .is_global_syncing     = [this]() { return syncing_controls_; },
+      .request_render        = [this]() { RequestRender(); },
+      .register_slider_reset = [this](QSlider* slider, std::function<void()> on_reset) {
+        RegisterSliderReset(slider, std::move(on_reset));
+      },
+      .register_curve_reset =
+          [this](ToneCurveWidget* widget, std::function<void()> on_reset) {
+            RegisterCurveReset(widget, std::move(on_reset));
+          },
+      .default_adjustment_state =
+          [this]() -> const AdjustmentState& { return DefaultAdjustmentState(); },
+      .sync_controls_from_state     = [this]() { SyncControlsFromState(); },
+      .prime_color_temp_for_as_shot = [this]() { PrimeColorTempDisplayForAsShot(); },
+      .reset_color_temp_to_as_shot  = [this]() { ResetColorTempToAsShot(); },
+  };
+
+  tone_panel_->Configure(std::move(deps), std::move(callbacks));
+  tone_panel_->Build();
+}
+
 auto RunEditorDialog(std::shared_ptr<ImagePoolService>       image_pool,
                      std::shared_ptr<PipelineGuard>          pipeline_guard,
                      std::shared_ptr<EditHistoryMgmtService> history_service,
