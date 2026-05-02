@@ -141,7 +141,8 @@ EditorDialog::EditorDialog(std::shared_ptr<ImagePoolService>       image_pool,
   }
   BuildToneControlPanel();
   BuildDisplayTransformPanel();
-  BuildGeometryRawPanels();
+  BuildGeometryPanel();
+  BuildRawDecodePanel();
   BuildVersioningPanel();
   if (history_coordinator_) {
     history_coordinator_->SetUiContext(versioning::VersionUiContext{
@@ -178,6 +179,20 @@ EditorDialog::EditorDialog(std::shared_ptr<ImagePoolService>       image_pool,
     viewer_->SetCropOverlayRotationDegrees(state_.rotate_degrees_);
     viewer_->SetCropOverlayVisible(false);
     viewer_->SetCropToolEnabled(false);
+  }
+  if (viewer_ && geometry_panel_) {
+    QObject::connect(viewer_, &QtEditViewer::CropOverlayRectChanged, geometry_panel_,
+                     [this](float x, float y, float w, float h, bool /*is_final*/) {
+                       if (geometry_panel_) {
+                         geometry_panel_->SetCropRectFromViewer(x, y, w, h);
+                       }
+                     });
+    QObject::connect(viewer_, &QtEditViewer::CropOverlayRotationChanged, geometry_panel_,
+                     [this](float angle_degrees, bool /*is_final*/) {
+                       if (geometry_panel_) {
+                         geometry_panel_->SetRotationFromViewer(angle_degrees);
+                       }
+                     });
   }
   if (viewer_) {
     QObject::connect(viewer_, &QtEditViewer::ViewInteractionSettled, this,
@@ -250,8 +265,8 @@ void EditorDialog::RegisterShortcuts() {
     undo_tx_btn_->setToolTip(shortcut_registry_->DecorateTooltip(
         Tr("Undo last uncommitted transaction"), kShortcutUndoHistoryId));
   }
-  if (geometry_reset_btn_) {
-    geometry_reset_btn_->setToolTip(
+  if (geometry_panel_ && geometry_panel_->ResetButton()) {
+    geometry_panel_->ResetButton()->setToolTip(
         shortcut_registry_->DecorateTooltip(Tr("Reset crop & rotation"), kShortcutResetGeometryId));
   }
 }
@@ -396,12 +411,8 @@ void EditorDialog::RetranslateUi() {
   if (raw_panel_btn_) {
     raw_panel_btn_->setText(Tr("RAW Decode"));
   }
-  if (geometry_apply_btn_) {
-    geometry_apply_btn_->setText(Tr("Apply Crop"));
-  }
-  if (geometry_reset_btn_) {
-    geometry_reset_btn_->setText(Tr("Reset"));
-    geometry_reset_btn_->setToolTip(Tr("Reset crop & rotation (Ctrl+R)"));
+  if (geometry_panel_) {
+    geometry_panel_->RetranslateUi();
   }
   if (undo_tx_btn_) {
     undo_tx_btn_->setText(Tr("Undo Last"));
@@ -427,19 +438,6 @@ void EditorDialog::RetranslateUi() {
     working_mode_combo_->addItem(Tr("Incremental"), static_cast<int>(WorkingMode::Incremental));
     const int index = working_mode_combo_->findData(current_value);
     working_mode_combo_->setCurrentIndex(std::max(0, index));
-    syncing_controls_ = prev_sync;
-  }
-  if (geometry_crop_aspect_preset_combo_) {
-    const int  current_value = geometry_crop_aspect_preset_combo_->currentData().toInt();
-    const bool prev_sync     = syncing_controls_;
-    syncing_controls_        = true;
-    geometry_crop_aspect_preset_combo_->clear();
-    for (const auto& option : geometry::CropAspectPresetOptions()) {
-      geometry_crop_aspect_preset_combo_->addItem(Tr(option.label_),
-                                                  static_cast<int>(option.value_));
-    }
-    const int index = geometry_crop_aspect_preset_combo_->findData(current_value);
-    geometry_crop_aspect_preset_combo_->setCurrentIndex(std::max(0, index));
     syncing_controls_ = prev_sync;
   }
   auto refresh_odt_combo = [this](QComboBox* combo, const auto& options) {
@@ -472,7 +470,6 @@ void EditorDialog::RetranslateUi() {
   }
   RefreshOdtEncodingEotfComboFromState();
   RefreshHlsTargetUi();
-  UpdateGeometryCropRectLabel();
   UpdateViewerZoomLabel(viewer_ ? viewer_->GetViewZoom() : 1.0f);
   RefreshVersioningCollapseUi();
   UpdateVersionUi();
@@ -528,6 +525,69 @@ void EditorDialog::BuildToneControlPanel() {
 
   tone_panel_->Configure(std::move(deps), std::move(callbacks));
   tone_panel_->Build();
+}
+
+void EditorDialog::BuildGeometryPanel() {
+  if (!geometry_panel_ || !geometry_controls_layout_) {
+    return;
+  }
+
+  GeometryPanelWidget::Dependencies deps{
+      .session                = adjustment_session_.get(),
+      .panel_layout           = geometry_controls_layout_,
+      .dialog_state           = &state_,
+      .dialog_committed_state = &committed_state_,
+  };
+
+  GeometryPanelWidget::Callbacks callbacks{
+      .is_global_syncing = [this]() { return syncing_controls_; },
+      .request_render    = [this]() { RequestRender(); },
+      .register_slider_reset =
+          [this](QSlider* slider, std::function<void()> on_reset) {
+            RegisterSliderReset(slider, std::move(on_reset));
+          },
+      .set_crop_overlay_aspect_lock =
+          [this](bool locked, float ratio) {
+            if (viewer_) {
+              viewer_->SetCropOverlayAspectLock(locked, ratio);
+            }
+          },
+      .set_crop_overlay_rect =
+          [this](float x, float y, float w, float h) {
+            if (viewer_) {
+              viewer_->SetCropOverlayRectNormalized(x, y, w, h);
+            }
+          },
+      .set_crop_overlay_rotation =
+          [this](float degrees) {
+            if (viewer_) {
+              viewer_->SetCropOverlayRotationDegrees(degrees);
+            }
+          },
+      .set_crop_overlay_visible =
+          [this](bool visible) {
+            if (viewer_) {
+              viewer_->SetCropOverlayVisible(visible);
+            }
+          },
+      .set_crop_tool_enabled =
+          [this](bool enabled) {
+            if (viewer_) {
+              viewer_->SetCropToolEnabled(enabled);
+            }
+          },
+      .source_aspect_ratio =
+          [this]() -> float {
+            if (viewer_ && viewer_->GetWidth() > 0 && viewer_->GetHeight() > 0) {
+              return static_cast<float>(viewer_->GetWidth()) /
+                     static_cast<float>(viewer_->GetHeight());
+            }
+            return 1.0f;
+          },
+  };
+
+  geometry_panel_->Configure(std::move(deps), std::move(callbacks));
+  geometry_panel_->Build();
 }
 
 void EditorDialog::BuildRawDecodePanel() {

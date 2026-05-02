@@ -50,168 +50,6 @@ void EditorDialog::RefreshCdlOffsetLabels() {
   }
 }
 
-void EditorDialog::UpdateGeometryCropRectLabel() {
-  if (!geometry_crop_rect_label_) {
-    return;
-  }
-  const int   source_width  = viewer_ ? viewer_->GetWidth() : 0;
-  const int   source_height = viewer_ ? viewer_->GetHeight() : 0;
-  const float image_aspect =
-      source_height > 0 ? static_cast<float>(source_width) / static_cast<float>(source_height)
-                        : 1.0f;
-  const auto resolved =
-      geometry::ResolveCropRect(state_.crop_x_, state_.crop_y_, state_.crop_w_, state_.crop_h_,
-                                image_aspect, state_.crop_aspect_preset_, state_.crop_aspect_width_,
-                                state_.crop_aspect_height_, source_width, source_height);
-
-  QString text = Tr("Crop Rect: x=%1 y=%2 w=%3 h=%4")
-                     .arg(state_.crop_x_, 0, 'f', 3)
-                     .arg(state_.crop_y_, 0, 'f', 3)
-                     .arg(state_.crop_w_, 0, 'f', 3)
-                     .arg(state_.crop_h_, 0, 'f', 3);
-  if (resolved.pixel_width_ > 0 && resolved.pixel_height_ > 0) {
-    text += Tr(" | Output: %1x%2").arg(resolved.pixel_width_).arg(resolved.pixel_height_);
-  }
-  text += Tr(" | Aspect: %1:1").arg(resolved.aspect_ratio_, 0, 'f', 3);
-  geometry_crop_rect_label_->setText(text);
-}
-
-auto EditorDialog::CurrentGeometrySourceAspect() const -> float {
-  if (viewer_ && viewer_->GetWidth() > 0 && viewer_->GetHeight() > 0) {
-    return static_cast<float>(viewer_->GetWidth()) / static_cast<float>(viewer_->GetHeight());
-  }
-  return 1.0f;
-}
-
-auto EditorDialog::CurrentGeometryAspectRatio() const -> std::optional<float> {
-  return geometry::AspectRatioFromSize(state_.crop_aspect_width_, state_.crop_aspect_height_);
-}
-
-void EditorDialog::SyncGeometryCropSlidersFromState() {
-  const bool prev_sync = syncing_controls_;
-  syncing_controls_    = true;
-  if (geometry_crop_x_slider_) {
-    geometry_crop_x_slider_->setValue(
-        static_cast<int>(std::lround(state_.crop_x_ * kCropRectSliderScale)));
-  }
-  if (geometry_crop_y_slider_) {
-    geometry_crop_y_slider_->setValue(
-        static_cast<int>(std::lround(state_.crop_y_ * kCropRectSliderScale)));
-  }
-  if (geometry_crop_w_slider_) {
-    geometry_crop_w_slider_->setValue(
-        static_cast<int>(std::lround(state_.crop_w_ * kCropRectSliderScale)));
-  }
-  if (geometry_crop_h_slider_) {
-    geometry_crop_h_slider_->setValue(
-        static_cast<int>(std::lround(state_.crop_h_ * kCropRectSliderScale)));
-  }
-  syncing_controls_ = prev_sync;
-}
-
-void EditorDialog::SyncCropAspectControlsFromState() {
-  const bool prev_sync = syncing_controls_;
-  syncing_controls_    = true;
-  if (geometry_crop_aspect_preset_combo_) {
-    const int preset_index =
-        geometry_crop_aspect_preset_combo_->findData(static_cast<int>(state_.crop_aspect_preset_));
-    geometry_crop_aspect_preset_combo_->setCurrentIndex(std::max(0, preset_index));
-  }
-  if (geometry_crop_aspect_width_spin_) {
-    geometry_crop_aspect_width_spin_->setValue(state_.crop_aspect_width_);
-  }
-  if (geometry_crop_aspect_height_spin_) {
-    geometry_crop_aspect_height_spin_->setValue(state_.crop_aspect_height_);
-  }
-  syncing_controls_ = prev_sync;
-}
-
-void EditorDialog::PushGeometryStateToViewer() {
-  if (!viewer_) {
-    return;
-  }
-  const bool locked_aspect = geometry::HasLockedAspect(
-      state_.crop_aspect_preset_, state_.crop_aspect_width_, state_.crop_aspect_height_);
-  viewer_->SetCropOverlayAspectLock(locked_aspect, CurrentGeometryAspectRatio().value_or(1.0f));
-  viewer_->SetCropOverlayRectNormalized(state_.crop_x_, state_.crop_y_, state_.crop_w_,
-                                        state_.crop_h_);
-  viewer_->SetCropOverlayRotationDegrees(state_.rotate_degrees_);
-}
-
-void EditorDialog::SetCropRectState(float x, float y, float w, float h, bool sync_controls,
-                                    bool sync_viewer) {
-  const auto clamped   = ClampCropRect(x, y, w, h);
-  state_.crop_x_       = clamped[0];
-  state_.crop_y_       = clamped[1];
-  state_.crop_w_       = clamped[2];
-  state_.crop_h_       = clamped[3];
-  state_.crop_enabled_ = true;
-  if (sync_controls) {
-    SyncGeometryCropSlidersFromState();
-  }
-  UpdateGeometryCropRectLabel();
-  if (sync_viewer) {
-    PushGeometryStateToViewer();
-  }
-}
-
-void EditorDialog::ApplyAspectPresetToCurrentCrop() {
-  if (!geometry::HasLockedAspect(state_.crop_aspect_preset_, state_.crop_aspect_width_,
-                                 state_.crop_aspect_height_)) {
-    UpdateGeometryCropRectLabel();
-    PushGeometryStateToViewer();
-    return;
-  }
-
-  const auto aspect_ratio = CurrentGeometryAspectRatio();
-  if (!aspect_ratio.has_value()) {
-    UpdateGeometryCropRectLabel();
-    PushGeometryStateToViewer();
-    return;
-  }
-
-  const auto max_rect =
-      geometry::MakeMaxAspectCropRect(CurrentGeometrySourceAspect(), *aspect_ratio);
-  SetCropRectState(max_rect[0], max_rect[1], max_rect[2], max_rect[3], true, true);
-}
-
-void EditorDialog::ResizeCropRectWithAspect(float proposed_value, bool use_width_driver) {
-  if (!geometry::HasLockedAspect(state_.crop_aspect_preset_, state_.crop_aspect_width_,
-                                 state_.crop_aspect_height_)) {
-    if (use_width_driver) {
-      SetCropRectState(state_.crop_x_, state_.crop_y_, proposed_value, state_.crop_h_);
-    } else {
-      SetCropRectState(state_.crop_x_, state_.crop_y_, state_.crop_w_, proposed_value);
-    }
-    return;
-  }
-
-  const auto aspect_ratio = CurrentGeometryAspectRatio();
-  if (!aspect_ratio.has_value()) {
-    return;
-  }
-
-  const auto resized = geometry::ResizeAspectRectAroundCenter(
-      state_.crop_x_, state_.crop_y_, use_width_driver ? proposed_value : state_.crop_w_,
-      use_width_driver ? state_.crop_h_ : proposed_value, CurrentGeometrySourceAspect(),
-      *aspect_ratio, use_width_driver);
-  SetCropRectState(resized[0], resized[1], resized[2], resized[3], true, true);
-}
-
-void EditorDialog::SetCropAspectPresetState(CropAspectPreset preset) {
-  state_.crop_aspect_preset_ = preset;
-  if (const auto preset_ratio = geometry::CropAspectPresetRatio(preset); preset_ratio.has_value()) {
-    state_.crop_aspect_width_  = preset_ratio->at(0);
-    state_.crop_aspect_height_ = preset_ratio->at(1);
-  } else if (!geometry::NormalizeCropAspect(state_.crop_aspect_width_, state_.crop_aspect_height_)
-                  .has_value()) {
-    state_.crop_aspect_width_  = 1.0f;
-    state_.crop_aspect_height_ = 1.0f;
-  }
-  SyncCropAspectControlsFromState();
-  ApplyAspectPresetToCurrentCrop();
-}
-
 auto EditorDialog::DefaultAdjustmentState() -> const AdjustmentState& {
   static const AdjustmentState defaults{};
   return defaults;
@@ -306,55 +144,6 @@ void EditorDialog::ResetCurveToDefault() {
   CommitAdjustment(AdjustmentField::Curve);
 }
 
-void EditorDialog::ResetCropAndRotation() {
-  state_.crop_x_             = 0.0f;
-  state_.crop_y_             = 0.0f;
-  state_.crop_w_             = 1.0f;
-  state_.crop_h_             = 1.0f;
-  state_.crop_enabled_       = true;
-  state_.rotate_degrees_     = 0.0f;
-  state_.crop_aspect_preset_ = CropAspectPreset::Free;
-  state_.crop_aspect_width_  = 1.0f;
-  state_.crop_aspect_height_ = 1.0f;
-
-  const bool prev_sync       = syncing_controls_;
-  syncing_controls_          = true;
-  if (geometry_crop_x_slider_) {
-    geometry_crop_x_slider_->setValue(0);
-  }
-  if (geometry_crop_y_slider_) {
-    geometry_crop_y_slider_->setValue(0);
-  }
-  if (geometry_crop_w_slider_) {
-    geometry_crop_w_slider_->setValue(static_cast<int>(kCropRectSliderScale));
-  }
-  if (geometry_crop_h_slider_) {
-    geometry_crop_h_slider_->setValue(static_cast<int>(kCropRectSliderScale));
-  }
-  if (rotate_slider_) {
-    rotate_slider_->setValue(0);
-  }
-  if (geometry_crop_aspect_preset_combo_) {
-    const int free_index =
-        geometry_crop_aspect_preset_combo_->findData(static_cast<int>(CropAspectPreset::Free));
-    geometry_crop_aspect_preset_combo_->setCurrentIndex(std::max(0, free_index));
-  }
-  if (geometry_crop_aspect_width_spin_) {
-    geometry_crop_aspect_width_spin_->setValue(1.0);
-  }
-  if (geometry_crop_aspect_height_spin_) {
-    geometry_crop_aspect_height_spin_->setValue(1.0);
-  }
-  syncing_controls_ = prev_sync;
-
-  UpdateGeometryCropRectLabel();
-  if (viewer_) {
-    viewer_->SetCropOverlayAspectLock(false, 1.0f);
-    viewer_->SetCropOverlayRectNormalized(0.0f, 0.0f, 1.0f, 1.0f);
-    viewer_->SetCropOverlayRotationDegrees(0.0f);
-  }
-}
-
 void EditorDialog::UpdateViewerZoomLabel(float zoom) {
   if (!viewer_zoom_value_label_) {
     return;
@@ -370,15 +159,6 @@ void EditorDialog::UpdateViewerZoomLabel(float zoom) {
     } else {
       viewer_zoom_resolution_label_->setText(QStringLiteral("-- × -- px"));
     }
-  }
-}
-
-void EditorDialog::RefreshGeometryModeUi() {
-  if (geometry_crop_aspect_width_spin_) {
-    geometry_crop_aspect_width_spin_->setEnabled(true);
-  }
-  if (geometry_crop_aspect_height_spin_) {
-    geometry_crop_aspect_height_spin_->setEnabled(true);
   }
 }
 
@@ -668,11 +448,12 @@ void EditorDialog::SetActiveControlPanel(ControlPanelKind panel) {
   const bool geometry_active = (panel == ControlPanelKind::Geometry);
 
   if (viewer_) {
-    PushGeometryStateToViewer();
+    if (geometry_panel_) {
+      geometry_panel_->SyncControlsFromDialogState();
+    }
     viewer_->SetCropOverlayVisible(geometry_active);
     viewer_->SetCropToolEnabled(geometry_active);
   }
-  RefreshGeometryModeUi();
   RefreshPanelSwitchUi();
   if (pipeline_initialized_) {
     const bool geometry_transition =
@@ -955,18 +736,12 @@ void EditorDialog::SyncControlsFromState() {
   }
   SyncOpenDrtDetailControlsFromState();
   RefreshOdtMethodUi();
-  if (rotate_slider_) {
-    rotate_slider_->setValue(
-        static_cast<int>(std::lround(state_.rotate_degrees_ * kRotationSliderScale)));
+  if (geometry_panel_) {
+    geometry_panel_->SyncControlsFromDialogState();
   }
-  SyncGeometryCropSlidersFromState();
-  SyncCropAspectControlsFromState();
-  UpdateGeometryCropRectLabel();
-  RefreshGeometryModeUi();
   if (viewer_) {
     frame_manager_.SyncViewerDisplayEncoding(state_.odt_.encoding_space_,
                                              state_.odt_.encoding_eotf_);
-    PushGeometryStateToViewer();
     const bool geometry_active = (active_panel_ == ControlPanelKind::Geometry);
     viewer_->SetCropOverlayVisible(geometry_active);
     viewer_->SetCropToolEnabled(geometry_active);

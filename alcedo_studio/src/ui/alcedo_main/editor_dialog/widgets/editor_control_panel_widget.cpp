@@ -68,7 +68,8 @@ auto EditorDialog::BuildControlPanelShell(const QString& panel_style) -> EditorC
   geometry_controls_scroll_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
   geometry_controls_scroll_->setStyleSheet(scroll_style);
 
-  geometry_controls_ = new GeometryPanelWidget(geometry_controls_scroll_);
+  geometry_panel_    = new GeometryPanelWidget(geometry_controls_scroll_);
+  geometry_controls_ = geometry_panel_;
   geometry_controls_->setMinimumWidth(0);
   geometry_controls_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
   geometry_controls_layout_ = new QVBoxLayout(geometry_controls_);

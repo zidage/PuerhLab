@@ -673,7 +673,7 @@ class EditorDialog final : public QDialog {
   void WireLookControlPanel();
   void BuildToneControlPanel();
   void BuildDisplayTransformPanel();
-  void BuildGeometryRawPanels();
+  void BuildGeometryPanel();
   void BuildRawDecodePanel();
   void BuildVersioningPanel();
   // Types, enums, and state helpers are defined in state.hpp / state.cpp.
@@ -688,26 +688,7 @@ class EditorDialog final : public QDialog {
 
   void RefreshCdlOffsetLabels();
 
-  void UpdateGeometryCropRectLabel();
 
-  auto CurrentGeometrySourceAspect() const -> float;
-
-  auto CurrentGeometryAspectRatio() const -> std::optional<float>;
-
-  void SyncGeometryCropSlidersFromState();
-
-  void SyncCropAspectControlsFromState();
-
-  void PushGeometryStateToViewer();
-
-  void SetCropRectState(float x, float y, float w, float h, bool sync_controls = true,
-                        bool sync_viewer = true);
-
-  void ApplyAspectPresetToCurrentCrop();
-
-  void ResizeCropRectWithAspect(float proposed_value, bool use_width_driver);
-
-  void SetCropAspectPresetState(CropAspectPreset preset);
 
   static auto DefaultAdjustmentState() -> const AdjustmentState&;
 
@@ -728,7 +709,11 @@ class EditorDialog final : public QDialog {
 
   void        ResetCurveToDefault();
 
-  void        ResetCropAndRotation();
+  void        ResetCropAndRotation() {
+    if (geometry_panel_) {
+      geometry_panel_->ResetCropAndRotation();
+    }
+  }
 
   bool        eventFilter(QObject* obj, QEvent* event) override;
 
@@ -744,7 +729,7 @@ class EditorDialog final : public QDialog {
 
   void        RetranslateUi();
 
-  void        RefreshGeometryModeUi();
+
 
   void        RefreshLutBrowserUi();
 
@@ -956,17 +941,7 @@ class EditorDialog final : public QDialog {
     std::function<float(const odt_cpu::OpenDRTSettings&)> getter_{};
   };
   std::vector<OpenDrtDetailSliderBinding>   odt_open_drt_detail_sliders_{};
-  QSlider*                                  rotate_slider_                     = nullptr;
-  QSlider*                                  geometry_crop_x_slider_            = nullptr;
-  QSlider*                                  geometry_crop_y_slider_            = nullptr;
-  QSlider*                                  geometry_crop_w_slider_            = nullptr;
-  QSlider*                                  geometry_crop_h_slider_            = nullptr;
-  QComboBox*                                geometry_crop_aspect_preset_combo_ = nullptr;
-  QDoubleSpinBox*                           geometry_crop_aspect_width_spin_   = nullptr;
-  QDoubleSpinBox*                           geometry_crop_aspect_height_spin_  = nullptr;
-  QLabel*                                   geometry_crop_rect_label_          = nullptr;
-  QPushButton*                              geometry_apply_btn_                = nullptr;
-  QPushButton*                              geometry_reset_btn_                = nullptr;
+  GeometryPanelWidget*                      geometry_panel_                  = nullptr;
   QLabel*                                   version_status_                    = nullptr;
   QPushButton*                              undo_tx_btn_                       = nullptr;
   QPushButton*                              commit_version_btn_                = nullptr;

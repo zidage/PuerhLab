@@ -295,6 +295,39 @@ Exit criteria:
 - Crop overlay behavior matches baseline.
 - Committing crop still marks full-frame preview as required.
 
+Progress note (2026-05-01):
+
+- Phase 6 geometry panel migration has been implemented. `GeometryPanelWidget` is now a real
+  `AdjustmentPanelWidget` and owns all geometry controls: rotation slider, crop x/y/w/h sliders,
+  aspect preset combo, custom aspect width/height spin boxes, crop rect label, apply/reset buttons.
+- The widget keeps panel-local `GeometryAdjustmentState geometry_state_` (and committed mirror)
+  per the design's principle 5. Slider callbacks mutate `geometry_state_` first, project geometry
+  fields back into the dialog's legacy `AdjustmentState`, then route fast preview through
+  `EditorAdjustmentSession::Preview()` and transactional commits through
+  `EditorAdjustmentSession::Commit()` with `GeometryPipelineAdapter` params and field-change checks.
+- All geometry helper methods moved from `EditorDialog` into the panel:
+  `UpdateGeometryCropRectLabel`, `CurrentGeometrySourceAspect`, `CurrentGeometryAspectRatio`,
+  `SyncGeometryCropSlidersFromState`, `SyncCropAspectControlsFromState`, `PushGeometryStateToOverlay`,
+  `SetCropRectState`, `ApplyAspectPresetToCurrentCrop`, `ResizeCropRectWithAspect`,
+  `SetCropAspectPresetState`, `ResetCropAndRotation`, `RefreshGeometryModeUi`.
+- Viewer overlay interaction is bridged through `GeometryPanelWidget::Callbacks` using
+  `std::function` callbacks for aspect lock, overlay rect, rotation, visibility, and tool enablement.
+  The shell (`EditorDialog`) provides lambdas that forward to `QtEditViewer`. Viewer signal
+  connections (`CropOverlayRectChanged`, `CropOverlayRotationChanged`) are set up in the dialog
+  constructor and call `geometry_panel_->SetCropRectFromViewer()` and `SetRotationFromViewer()`.
+- `EditorDialog::BuildGeometryRawPanels()` has been removed. The constructor now calls
+  `BuildGeometryPanel()` then `BuildRawDecodePanel()` independently. This fixes the remaining
+  nesting left by Phase 5, where `BuildRawDecodePanel()` was called from inside
+  `BuildGeometryRawPanels()` rather than from the constructor directly.
+- `EditorDialog` no longer declares geometry widget pointers or geometry helper methods.
+  `SyncControlsFromState()` and `SetActiveControlPanel()` delegate geometry control refresh and
+  overlay push to `geometry_panel_->SyncControlsFromDialogState()`.
+- Verification: `cmd /c scripts\msvc_env.cmd --build --preset win_debug --parallel 4` passes.
+  UI-related `ctest` suite (`EditViewerLogicTest`, `ToneCurveWidgetTest`, `CropRotateOpTest`,
+  `LutCatalogTest`) ran 28 tests; all passed. Run the manual matrix rows for geometry panel
+  (enter geometry, crop sliders, aspect preset, custom aspect, rotation, apply, reset, leave
+  geometry) before merging UI-facing follow-up phases.
+
 ## Phase 7: Migrate Display Transform Panel
 
 Goal: isolate ODT complexity and OpenDRT detail binding state.
