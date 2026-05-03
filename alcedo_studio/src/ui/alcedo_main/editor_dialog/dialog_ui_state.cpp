@@ -1,4 +1,4 @@
-#include "ui/alcedo_main/editor_dialog/dialog_internal.hpp"
+#include "ui/alcedo_main/editor_dialog/shell/editor_dialog_shell_private.hpp"
 
 namespace alcedo::ui {
 
@@ -66,18 +66,6 @@ void EditorDialog::RegisterCurveReset(ToneCurveWidget* widget, std::function<voi
   curve_reset_callback_ = std::move(on_reset);
 }
 
-void EditorDialog::ResetFieldToDefault(
-    AdjustmentField field, const std::function<void(const AdjustmentState&)>& apply_default) {
-  if (!apply_default) {
-    return;
-  }
-  const auto& defaults = DefaultAdjustmentState();
-  apply_default(defaults);
-  SyncControlsFromState();
-  RequestRender();
-  CommitAdjustment(field);
-}
-
 void EditorDialog::ResetColorTempToAsShot() {
   if (state_.color_temp_mode_ == ColorTempMode::AS_SHOT) {
     return;
@@ -85,15 +73,22 @@ void EditorDialog::ResetColorTempToAsShot() {
   state_.color_temp_mode_ = ColorTempMode::AS_SHOT;
   PrimeColorTempDisplayForAsShot();
   SyncColorTempControlsFromState();
-  RequestRender();
-  CommitAdjustment(AdjustmentField::ColorTemp);
-}
-
-void EditorDialog::ResetCurveToDefault() {
-  state_.curve_points_ = DefaultCurveControlPoints();
-  SyncControlsFromState();
-  RequestRender();
-  CommitAdjustment(AdjustmentField::Curve);
+  if (render_coordinator_) {
+    render_coordinator_->RequestRender();
+  }
+  if (!adjustment_session_) {
+    if (render_coordinator_) {
+      render_coordinator_->ScheduleQualityPreviewRenderFromPipeline();
+    }
+    return;
+  }
+  const auto result = adjustment_session_->Commit(AdjustmentField::ColorTemp);
+  if (result.status == EditorAdjustmentSession::CommitStatus::Failed) {
+    QMessageBox::warning(this, Tr("Adjustment"),
+                         result.error.isEmpty()
+                             ? Tr("Failed to apply adjustment.")
+                             : Tr("Failed to apply adjustment: %1").arg(result.error));
+  }
 }
 
 void EditorDialog::UpdateViewerZoomLabel(float zoom) {
@@ -177,11 +172,16 @@ void EditorDialog::SetActiveControlPanel(ControlPanelKind panel) {
     const bool geometry_transition =
         previous_panel == ControlPanelKind::Geometry || panel == ControlPanelKind::Geometry;
     if (geometry_transition) {
-      InvalidateDetailPreviewState();
+      if (render_coordinator_) {
+        render_coordinator_->InvalidateDetailPreviewState();
+      }
     }
-    RequestRender(frame_manager_.UseViewportRegionForPanelChange(previous_panel, panel),
-                  geometry_transition);
-    ScheduleQualityPreviewRenderFromPipeline();
+    if (render_coordinator_) {
+      render_coordinator_->RequestRender(
+          frame_manager_.UseViewportRegionForPanelChange(previous_panel, panel),
+          geometry_transition);
+      render_coordinator_->ScheduleQualityPreviewRenderFromPipeline();
+    }
   }
 }
 

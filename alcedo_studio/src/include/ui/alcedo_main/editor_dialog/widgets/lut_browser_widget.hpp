@@ -25,7 +25,7 @@ class LutBrowserWidget final : public QWidget {
   void SetDirectoryInfo(const QString& directory_text, const QString& status_text,
                         bool can_open_directory);
   void SetEntries(const std::vector<lut_catalog::LutCatalogEntry>& entries,
-                  const QString&                                   selected_path);
+                  const QString& selected_path, bool preserve_scroll_position = false);
   auto SelectRelativeEntry(int step) -> bool;
 
  signals:
@@ -44,7 +44,8 @@ class LutBrowserWidget final : public QWidget {
     Descending,
   };
 
-  void         RebuildVisibleEntries(const QString& preferred_selected_path);
+  void         RebuildVisibleEntries(const QString& preferred_selected_path,
+                                     bool           preserve_scroll_position = false);
   void         UpdateSearchResultSummary();
   auto         CurrentSortField() const -> SortField;
   auto         CurrentSortOrder() const -> SortOrder;

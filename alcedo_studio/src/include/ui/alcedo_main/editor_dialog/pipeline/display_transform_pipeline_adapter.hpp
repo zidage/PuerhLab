@@ -9,7 +9,6 @@
 #include "edit/pipeline/pipeline_cpu.hpp"
 #include "ui/alcedo_main/editor_dialog/modules/pipeline_io.hpp"
 #include "ui/alcedo_main/editor_dialog/pipeline/adjustment_pipeline_adapter.hpp"
-#include "ui/alcedo_main/editor_dialog/session/adjustment_snapshot.hpp"
 #include "ui/alcedo_main/editor_dialog/state/display_transform_adjustment_state.hpp"
 
 namespace alcedo::ui {
@@ -17,10 +16,10 @@ namespace alcedo::ui {
 struct DisplayTransformPipelineAdapter {
   static auto Load(CPUPipelineExecutor& exec, const DisplayTransformAdjustmentState& base)
       -> PipelineLoadResult<DisplayTransformAdjustmentState> {
-    AdjustmentState legacy_base =
-        ToLegacyAdjustmentState(EditorAdjustmentSnapshot{.display_transform_ = base});
+    AdjustmentState legacy_base{};
+    legacy_base.odt_              = base.odt_;
     auto [loaded_legacy, has_any] = pipeline_io::LoadStateFromPipeline(exec, legacy_base);
-    return {FromLegacyAdjustmentState(loaded_legacy).display_transform_, has_any};
+    return {DisplayTransformAdjustmentState{.odt_ = loaded_legacy.odt_}, has_any};
   }
 
   static auto ParamsFor(AdjustmentField field, const DisplayTransformAdjustmentState& state,
@@ -30,8 +29,7 @@ struct DisplayTransformPipelineAdapter {
     return pipeline_io::ParamsForField(field, legacy, exec);
   }
 
-  static auto FieldChanged(AdjustmentField field,
-                           const DisplayTransformAdjustmentState& current,
+  static auto FieldChanged(AdjustmentField field, const DisplayTransformAdjustmentState& current,
                            const DisplayTransformAdjustmentState& committed) -> bool {
     AdjustmentState legacy_current{};
     legacy_current.odt_ = current.odt_;

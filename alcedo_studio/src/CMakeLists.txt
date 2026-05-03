@@ -997,9 +997,7 @@ if(ALCEDO_REAL_WIDGET_EDITOR)
         ui/alcedo_main/editor_dialog/editor_dialog.cpp
         ui/alcedo_main/editor_dialog/dialog.cpp
         ui/alcedo_main/editor_dialog/dialog_core.cpp
-        ui/alcedo_main/editor_dialog/dialog_history.cpp
         ui/alcedo_main/editor_dialog/dialog_pipeline.cpp
-        ui/alcedo_main/editor_dialog/dialog_render.cpp
         ui/alcedo_main/editor_dialog/dialog_ui_state.cpp
         ui/alcedo_main/editor_dialog/state.cpp
         ui/alcedo_main/editor_dialog/controllers/image_controller.cpp
@@ -1044,6 +1042,7 @@ if(ALCEDO_REAL_WIDGET_EDITOR)
         include/ui/alcedo_main/editor_dialog/widgets/lut_browser_widget.hpp
         include/ui/alcedo_main/editor_dialog/dialog.hpp
         include/ui/alcedo_main/editor_dialog/dialog_internal.hpp
+        include/ui/alcedo_main/editor_dialog/shell/editor_dialog_shell_private.hpp
         include/ui/alcedo_main/editor_dialog/state.hpp
         include/ui/alcedo_main/editor_dialog/controllers/image_controller.hpp
         include/ui/alcedo_main/editor_dialog/controllers/pipeline_controller.hpp

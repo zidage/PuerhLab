@@ -497,6 +497,32 @@ Exit criteria:
 - Panel files implement panel classes only.
 - The CMake file lists the new session, state, adapter, render, history, shell, and panel sources.
 
+Progress note (2026-05-02):
+
+- Phase 10 cleanup has been advanced. The old `EditorDialog` forwarding wrappers for render,
+  history, adjustment-field mapping, and commit dispatch were removed from the dialog private API.
+  The wrapper-only `dialog_history.cpp` and `dialog_render.cpp` translation units were deleted and
+  removed from `alcedo_studio/src/CMakeLists.txt`; `EditorDialog` now calls
+  `EditorRenderCoordinator`, `EditorHistoryCoordinator`, and `EditorAdjustmentSession` directly.
+- The shell-private declaration moved from the monolithic `dialog_internal.hpp` into
+  `include/ui/alcedo_main/editor_dialog/shell/editor_dialog_shell_private.hpp`. The old
+  `dialog_internal.hpp` remains only as a narrow compatibility include while remaining source files
+  now include the shell-private header directly.
+- The generic compatibility conversion helpers `ToLegacyAdjustmentState()` and
+  `FromLegacyAdjustmentState()` were deleted from `session/adjustment_snapshot.hpp`. Module
+  adapters now project only their own typed state into the temporary legacy mapping used by
+  `pipeline_io.cpp`.
+- `AdjustmentState` and `pipeline_io.cpp` remain as the temporary render/session compatibility
+  bridge; their remaining removal should be paired with changing `EditorRenderCoordinator` and
+  `EditorAdjustmentSession` to consume `EditorAdjustmentSnapshot` or module patches directly.
+- Verification: `cmd /c scripts\msvc_env.cmd --build --preset win_debug --parallel 4` passes.
+  Attempting `ctest --test-dir build/debug --output-on-failure -R
+  "^(EditViewerLogicTest|ToneCurveWidgetTest|ODTOpTest|LutCatalogTest|CropRotateOpTest)\."`
+  still evaluated unrelated GoogleTest discovery includes and hit the known
+  `PipelineServiceTest.exe` `0xc0000139` startup error. The editor-related executables were then
+  run directly: `EditViewerLogicTest`, `ToneCurveWidgetTest`, `ODTOpTest`, `LutCatalogTest`, and
+  `CropRotateOpTest`; all 36 tests passed.
+
 ## Pull Request Order
 
 Recommended PR sequence:
@@ -568,3 +594,9 @@ The refactor is ready for final acceptance when:
 - The session is the only adjustment transaction boundary.
 - Pipeline adapters are module-specific and stateless.
 - The manual matrix passes across tone, look, display transform, geometry, raw decode, versioning, undo, and version checkout.
+
+## Bug Record
+
+### LUT Panel
+
+- **Description**: After the migration of the Look panel, users report that LUT panel will automatically scroll to the top of the list when they select a LUT.

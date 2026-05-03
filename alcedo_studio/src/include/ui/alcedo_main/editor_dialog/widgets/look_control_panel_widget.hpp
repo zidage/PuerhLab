@@ -54,7 +54,7 @@ class LookControlPanelWidget final : public AdjustmentPanelWidget {
 
   void SyncControlsFromDialogState();
   void RetranslateUi();
-  void RefreshLutBrowserUi(bool force_refresh = false);
+  void RefreshLutBrowserUi(bool force_refresh = false, bool preserve_scroll_position = false);
   auto DefaultLutPath() -> std::string;
   auto SelectRelativeLut(int step) -> bool;
   auto CanHandleLutNavigationShortcut(QWidget* focus_widget) const -> bool;

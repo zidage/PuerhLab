@@ -1,7 +1,7 @@
-#include "ui/alcedo_main/editor_dialog/dialog_internal.hpp"
 #include "ui/alcedo_main/editor_dialog/pipeline/display_transform_pipeline_adapter.hpp"
 #include "ui/alcedo_main/editor_dialog/pipeline/look_pipeline_adapter.hpp"
 #include "ui/alcedo_main/editor_dialog/pipeline/raw_pipeline_adapter.hpp"
+#include "ui/alcedo_main/editor_dialog/shell/editor_dialog_shell_private.hpp"
 
 namespace alcedo::ui {
 namespace {
@@ -77,8 +77,10 @@ EditorDialog::EditorDialog(std::shared_ptr<ImagePoolService>       image_pool,
                 }
                 committed_state_ = state_;
                 SyncControlsFromState();
-                AdvancePreviewGeneration();
-                TriggerQualityPreviewRenderFromPipeline();
+                if (render_coordinator_) {
+                  render_coordinator_->AdvancePreviewGeneration();
+                  render_coordinator_->TriggerQualityPreviewRenderFromPipeline();
+                }
                 return true;
               },
           .after_pipeline_params_imported =
@@ -124,9 +126,24 @@ EditorDialog::EditorDialog(std::shared_ptr<ImagePoolService>       image_pool,
           .committed_state = &committed_state_,
       },
       EditorAdjustmentSession::Callbacks{
-          .schedule_quality_preview   = [this]() { ScheduleQualityPreviewRenderFromPipeline(); },
-          .advance_preview_generation = [this]() { AdvancePreviewGeneration(); },
-          .update_version_ui          = [this]() { UpdateVersionUi(); },
+          .schedule_quality_preview =
+              [this]() {
+                if (render_coordinator_) {
+                  render_coordinator_->ScheduleQualityPreviewRenderFromPipeline();
+                }
+              },
+          .advance_preview_generation =
+              [this]() {
+                if (render_coordinator_) {
+                  render_coordinator_->AdvancePreviewGeneration();
+                }
+              },
+          .update_version_ui =
+              [this]() {
+                if (history_coordinator_) {
+                  history_coordinator_->UpdateVersionUi();
+                }
+              },
           .mark_full_frame_preview_after_geometry_commit =
               [this]() { frame_manager_.MarkNeedsFullFramePreviewAfterGeometryCommit(); },
       });
@@ -154,14 +171,37 @@ EditorDialog::EditorDialog(std::shared_ptr<ImagePoolService>       image_pool,
   BuildRawDecodePanel();
   if (versioning_panel_) {
     VersioningPanelWidget::Callbacks versioning_callbacks{
-        .undo_last_transaction     = [this]() { UndoLastTransaction(); },
-        .commit_working_version    = [this]() { CommitWorkingVersion(); },
-        .start_new_working_version = [this]() { StartNewWorkingVersionFromUi(); },
+        .undo_last_transaction =
+            [this]() {
+              if (history_coordinator_) {
+                history_coordinator_->UndoLastTransaction();
+              }
+            },
+        .commit_working_version =
+            [this]() {
+              if (history_coordinator_) {
+                history_coordinator_->CommitWorkingVersion();
+              }
+            },
+        .start_new_working_version =
+            [this]() {
+              if (history_coordinator_) {
+                history_coordinator_->StartNewWorkingVersionFromUi();
+              }
+            },
         .checkout_version_by_id =
-            [this](const QString& version_id) { CheckoutVersionById(version_id); },
-        .on_working_mode_changed = [this]() { UpdateVersionUi(); },
-        .viewer_geometry =
-            [this]() -> QRect {
+            [this](const QString& version_id) {
+              if (history_coordinator_) {
+                history_coordinator_->CheckoutVersionById(version_id);
+              }
+            },
+        .on_working_mode_changed =
+            [this]() {
+              if (history_coordinator_) {
+                history_coordinator_->UpdateVersionUi();
+              }
+            },
+        .viewer_geometry = [this]() -> QRect {
           return viewer_container_ ? viewer_container_->geometry() : QRect{};
         },
     };
@@ -177,14 +217,18 @@ EditorDialog::EditorDialog(std::shared_ptr<ImagePoolService>       image_pool,
 
   AppTheme::ApplyFontsRecursively(this);
 
-  UpdateVersionUi();
+  if (history_coordinator_) {
+    history_coordinator_->UpdateVersionUi();
+  }
 
   frame_manager_.SetViewer(viewer_);
   frame_manager_.SetScopePanel(scope_panel_);
   if (scope_panel_) {
     scope_panel_->SetNeedsRenderCallback([this]() {
-      RequestRender(/*use_viewport_region=*/true,
-                    /*bump_preview_generation=*/false);
+      if (render_coordinator_) {
+        render_coordinator_->RequestRender(/*use_viewport_region=*/true,
+                                           /*bump_preview_generation=*/false);
+      }
     });
   }
   SetupPipeline();
@@ -212,14 +256,19 @@ EditorDialog::EditorDialog(std::shared_ptr<ImagePoolService>       image_pool,
                      });
   }
   if (viewer_) {
-    QObject::connect(viewer_, &QtEditViewer::ViewInteractionSettled, this,
-                     [this]() { MaybeScheduleDetailPreviewRenderFromViewport(); });
+    QObject::connect(viewer_, &QtEditViewer::ViewInteractionSettled, this, [this]() {
+      if (render_coordinator_) {
+        render_coordinator_->MaybeScheduleDetailPreviewRenderFromViewport();
+      }
+    });
   }
 
   // Load a 4K quality base preview first; scheduler transitions back to fast-preview baseline.
   QTimer::singleShot(0, this, [this]() {
-    AdvancePreviewGeneration();
-    TriggerQualityPreviewRenderFromPipeline();
+    if (render_coordinator_) {
+      render_coordinator_->AdvancePreviewGeneration();
+      render_coordinator_->TriggerQualityPreviewRenderFromPipeline();
+    }
   });
 }
 
@@ -236,7 +285,9 @@ void EditorDialog::RegisterShortcuts() {
       .on_trigger =
           [this]() {
             if (!ShouldConsumeUndoShortcutLocally()) {
-              UndoLastTransaction();
+              if (history_coordinator_) {
+                history_coordinator_->UndoLastTransaction();
+              }
             }
           },
   });
@@ -366,7 +417,8 @@ void EditorDialog::ApplyInitialSplitterSizes() {
   const int right_width =
       std::clamp(static_cast<int>(std::lround(static_cast<double>(available_width) * 0.25)),
                  controls_panel->minimumWidth(), controls_panel->maximumWidth());
-  const int center_width = std::max(400, available_width - VersioningPanelWidget::kCollapsedWidth - right_width);
+  const int center_width =
+      std::max(400, available_width - VersioningPanelWidget::kCollapsedWidth - right_width);
 
   main_splitter_->setSizes({VersioningPanelWidget::kCollapsedWidth, center_width, right_width});
 }
@@ -421,7 +473,9 @@ void EditorDialog::RetranslateUi() {
     raw_panel_->RetranslateUi();
   }
   UpdateViewerZoomLabel(viewer_ ? viewer_->GetViewZoom() : 1.0f);
-  UpdateVersionUi();
+  if (history_coordinator_) {
+    history_coordinator_->UpdateVersionUi();
+  }
 }
 void EditorDialog::BuildToneControlPanel() {
   if (!tone_panel_ || !controls_layout_) {
@@ -453,7 +507,12 @@ void EditorDialog::BuildToneControlPanel() {
 
   ToneControlPanelWidget::Callbacks callbacks{
       .is_global_syncing = [this]() { return syncing_controls_; },
-      .request_render    = [this]() { RequestRender(); },
+      .request_render =
+          [this]() {
+            if (render_coordinator_) {
+              render_coordinator_->RequestRender();
+            }
+          },
       .register_slider_reset =
           [this](QSlider* slider, std::function<void()> on_reset) {
             RegisterSliderReset(slider, std::move(on_reset));
@@ -487,7 +546,12 @@ void EditorDialog::BuildLookPanel() {
 
   LookControlPanelWidget::Callbacks callbacks{
       .is_global_syncing = [this]() { return syncing_controls_; },
-      .request_render    = [this]() { RequestRender(); },
+      .request_render =
+          [this]() {
+            if (render_coordinator_) {
+              render_coordinator_->RequestRender();
+            }
+          },
       .register_slider_reset =
           [this](QSlider* slider, std::function<void()> on_reset) {
             RegisterSliderReset(slider, std::move(on_reset));
@@ -526,7 +590,12 @@ void EditorDialog::BuildDisplayTransformPanel() {
 
   DisplayTransformPanelWidget::Callbacks callbacks{
       .is_global_syncing = [this]() { return syncing_controls_; },
-      .request_render    = [this]() { RequestRender(); },
+      .request_render =
+          [this]() {
+            if (render_coordinator_) {
+              render_coordinator_->RequestRender();
+            }
+          },
       .register_slider_reset =
           [this](QSlider* slider, std::function<void()> on_reset) {
             RegisterSliderReset(slider, std::move(on_reset));
@@ -538,13 +607,13 @@ void EditorDialog::BuildDisplayTransformPanel() {
           [this](ColorUtils::ColorSpace encoding_space, ColorUtils::EOTF encoding_eotf) {
             frame_manager_.SyncViewerDisplayEncoding(encoding_space, encoding_eotf);
           },
-      .load_from_pipeline =
-          [this](const DisplayTransformAdjustmentState& base)
+      .load_from_pipeline = [this](const DisplayTransformAdjustmentState& base)
           -> std::optional<DisplayTransformAdjustmentState> {
         if (!pipeline_guard_ || !pipeline_guard_->pipeline_) {
           return std::nullopt;
         }
-        const auto loaded = DisplayTransformPipelineAdapter::Load(*pipeline_guard_->pipeline_, base);
+        const auto loaded =
+            DisplayTransformPipelineAdapter::Load(*pipeline_guard_->pipeline_, base);
         if (!loaded.loaded_any) {
           return std::nullopt;
         }
@@ -570,7 +639,12 @@ void EditorDialog::BuildGeometryPanel() {
 
   GeometryPanelWidget::Callbacks callbacks{
       .is_global_syncing = [this]() { return syncing_controls_; },
-      .request_render    = [this]() { RequestRender(); },
+      .request_render =
+          [this]() {
+            if (render_coordinator_) {
+              render_coordinator_->RequestRender();
+            }
+          },
       .register_slider_reset =
           [this](QSlider* slider, std::function<void()> on_reset) {
             RegisterSliderReset(slider, std::move(on_reset));
@@ -605,14 +679,12 @@ void EditorDialog::BuildGeometryPanel() {
               viewer_->SetCropToolEnabled(enabled);
             }
           },
-      .source_aspect_ratio =
-          [this]() -> float {
-            if (viewer_ && viewer_->GetWidth() > 0 && viewer_->GetHeight() > 0) {
-              return static_cast<float>(viewer_->GetWidth()) /
-                     static_cast<float>(viewer_->GetHeight());
-            }
-            return 1.0f;
-          },
+      .source_aspect_ratio = [this]() -> float {
+        if (viewer_ && viewer_->GetWidth() > 0 && viewer_->GetHeight() > 0) {
+          return static_cast<float>(viewer_->GetWidth()) / static_cast<float>(viewer_->GetHeight());
+        }
+        return 1.0f;
+      },
   };
 
   geometry_panel_->Configure(std::move(deps), std::move(callbacks));
@@ -633,7 +705,12 @@ void EditorDialog::BuildRawDecodePanel() {
 
   RawDecodePanelWidget::Callbacks callbacks{
       .is_global_syncing = [this]() { return syncing_controls_; },
-      .request_render    = [this]() { RequestRender(); },
+      .request_render =
+          [this]() {
+            if (render_coordinator_) {
+              render_coordinator_->RequestRender();
+            }
+          },
       .load_from_pipeline =
           [this](const RawDecodeAdjustmentState& base) -> std::optional<RawDecodeAdjustmentState> {
         if (!pipeline_guard_ || !pipeline_guard_->pipeline_) {

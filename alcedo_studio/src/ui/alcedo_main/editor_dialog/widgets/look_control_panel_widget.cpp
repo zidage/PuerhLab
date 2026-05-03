@@ -351,7 +351,7 @@ void LookControlPanelWidget::BuildLutSection() {
                      look_state_.lut_path_ = *resolved_path;
                      ProjectLookStateToDialog();
                      CommitLookField(AdjustmentField::Lut);
-                     RefreshLutBrowserUi(false);
+                     RefreshLutBrowserUi(false, true);
                    });
   RefreshLutBrowserUi(false);
 }
@@ -776,14 +776,16 @@ void LookControlPanelWidget::RetranslateUi() {
   RefreshLutBrowserUi(false);
 }
 
-void LookControlPanelWidget::RefreshLutBrowserUi(bool force_refresh) {
+void LookControlPanelWidget::RefreshLutBrowserUi(bool force_refresh,
+                                                 bool preserve_scroll_position) {
   const auto view_model = lut_controller_.Refresh(look_state_.lut_path_, force_refresh);
   if (!lut_browser_widget_) {
     return;
   }
   lut_browser_widget_->SetDirectoryInfo(view_model.directory_text_, view_model.status_text_,
                                         view_model.can_open_directory_);
-  lut_browser_widget_->SetEntries(view_model.entries_, view_model.selected_path_);
+  lut_browser_widget_->SetEntries(view_model.entries_, view_model.selected_path_,
+                                  preserve_scroll_position);
 }
 
 auto LookControlPanelWidget::DefaultLutPath() -> std::string {

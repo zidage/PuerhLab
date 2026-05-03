@@ -18,6 +18,7 @@
 #include <QMenu>
 #include <QPainter>
 #include <QPainterPath>
+#include <QScrollBar>
 #include <QToolButton>
 #include <QVBoxLayout>
 #include <QVariant>
@@ -557,9 +558,10 @@ void LutBrowserWidget::SetDirectoryInfo(const QString& directory_text, const QSt
 }
 
 void LutBrowserWidget::SetEntries(const std::vector<lut_catalog::LutCatalogEntry>& entries,
-                                  const QString&                                   selected_path) {
+                                  const QString& selected_path,
+                                  bool           preserve_scroll_position) {
   source_entries_ = entries;
-  RebuildVisibleEntries(selected_path);
+  RebuildVisibleEntries(selected_path, preserve_scroll_position);
 }
 
 auto LutBrowserWidget::SelectRelativeEntry(int step) -> bool {
@@ -605,8 +607,12 @@ auto LutBrowserWidget::SelectRelativeEntry(int step) -> bool {
   return false;
 }
 
-void LutBrowserWidget::RebuildVisibleEntries(const QString& preferred_selected_path) {
+void LutBrowserWidget::RebuildVisibleEntries(const QString& preferred_selected_path,
+                                             bool           preserve_scroll_position) {
   const QString token = search_edit_ ? search_edit_->text().trimmed().toCaseFolded() : QString{};
+  QScrollBar*   scroll_bar = entries_list_ ? entries_list_->verticalScrollBar() : nullptr;
+  const int     previous_scroll_value =
+      preserve_scroll_position && scroll_bar ? scroll_bar->value() : 0;
 
   std::vector<lut_catalog::LutCatalogEntry> file_entries;
   std::vector<lut_catalog::LutCatalogEntry> special_entries;
@@ -690,6 +696,10 @@ void LutBrowserWidget::RebuildVisibleEntries(const QString& preferred_selected_p
   }
   if (selected_row >= 0) {
     entries_list_->setCurrentRow(selected_row);
+  }
+  if (preserve_scroll_position && scroll_bar) {
+    scroll_bar->setValue(
+        std::clamp(previous_scroll_value, scroll_bar->minimum(), scroll_bar->maximum()));
   }
 
   RefreshSelectionStyles();
