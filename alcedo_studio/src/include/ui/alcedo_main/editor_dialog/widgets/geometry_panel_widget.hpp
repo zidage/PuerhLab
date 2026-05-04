@@ -6,12 +6,14 @@
 
 #include <QComboBox>
 #include <QDoubleSpinBox>
+#include <QEvent>
 #include <QLabel>
 #include <QPushButton>
 #include <QSlider>
 #include <QVBoxLayout>
 #include <QWidget>
 #include <functional>
+#include <map>
 #include <optional>
 
 #include "ui/alcedo_main/editor_dialog/modules/geometry.hpp"
@@ -35,7 +37,6 @@ class GeometryPanelWidget final : public AdjustmentPanelWidget {
   struct Callbacks {
     std::function<bool()>                                   is_global_syncing;
     std::function<void()>                                   request_render;
-    std::function<void(QSlider*, std::function<void()>)>    register_slider_reset;
     std::function<void(bool locked, float ratio)>           set_crop_overlay_aspect_lock;
     std::function<void(float x, float y, float w, float h)> set_crop_overlay_rect;
     std::function<void(float degrees)>                      set_crop_overlay_rotation;
@@ -66,52 +67,55 @@ class GeometryPanelWidget final : public AdjustmentPanelWidget {
   void ResetCropAndRotation();
 
  private:
-  void BuildCropAspectSection();
-  void BuildRotateSection();
-  void BuildCropOffsetSection();
-  void BuildApplyResetSection();
+  void         BuildCropAspectSection();
+  void         BuildRotateSection();
+  void         BuildCropOffsetSection();
+  void         BuildApplyResetSection();
 
-  void ProjectGeometryStateToDialog();
-  void PullGeometryStateFromDialog();
-  void PullCommittedGeometryStateFromDialog();
+  void         ProjectGeometryStateToDialog();
+  void         PullGeometryStateFromDialog();
+  void         PullCommittedGeometryStateFromDialog();
 
-  auto IsSyncing() const -> bool;
-  void RequestPipelineRender();
+  auto         IsSyncing() const -> bool;
+  bool         eventFilter(QObject* obj, QEvent* event) override;
+  void         RegisterSliderReset(QSlider* slider, std::function<void()> on_reset);
+  void         RequestPipelineRender();
 
-  void PreviewGeometryField(AdjustmentField field);
-  void CommitGeometryField(AdjustmentField field);
+  void         PreviewGeometryField(AdjustmentField field);
+  void         CommitGeometryField(AdjustmentField field);
 
-  void UpdateGeometryCropRectLabel();
-  auto CurrentGeometrySourceAspect() const -> float;
-  auto CurrentGeometryAspectRatio() const -> std::optional<float>;
-  void SyncGeometryCropSlidersFromState();
-  void SyncCropAspectControlsFromState();
-  void PushGeometryStateToOverlay();
-  void SetCropRectState(float x, float y, float w, float h, bool sync_controls = true,
-                        bool sync_overlay = true);
-  void ApplyAspectPresetToCurrentCrop();
-  void ResizeCropRectWithAspect(float proposed_value, bool use_width_driver);
-  void SetCropAspectPresetState(geometry::CropAspectPreset preset);
-  void RefreshGeometryModeUi();
+  void         UpdateGeometryCropRectLabel();
+  auto         CurrentGeometrySourceAspect() const -> float;
+  auto         CurrentGeometryAspectRatio() const -> std::optional<float>;
+  void         SyncGeometryCropSlidersFromState();
+  void         SyncCropAspectControlsFromState();
+  void         PushGeometryStateToOverlay();
+  void         SetCropRectState(float x, float y, float w, float h, bool sync_controls = true,
+                                bool sync_overlay = true);
+  void         ApplyAspectPresetToCurrentCrop();
+  void         ResizeCropRectWithAspect(float proposed_value, bool use_width_driver);
+  void         SetCropAspectPresetState(geometry::CropAspectPreset preset);
+  void         RefreshGeometryModeUi();
 
   Dependencies deps_{};
   Callbacks    callbacks_{};
   bool         local_syncing_ = false;
 
-  GeometryAdjustmentState geometry_state_{};
-  GeometryAdjustmentState committed_geometry_state_{};
+  GeometryAdjustmentState                   geometry_state_{};
+  GeometryAdjustmentState                   committed_geometry_state_{};
 
-  QSlider*         rotate_slider_                     = nullptr;
-  QSlider*         geometry_crop_x_slider_            = nullptr;
-  QSlider*         geometry_crop_y_slider_            = nullptr;
-  QSlider*         geometry_crop_w_slider_            = nullptr;
-  QSlider*         geometry_crop_h_slider_            = nullptr;
-  QComboBox*       geometry_crop_aspect_preset_combo_ = nullptr;
-  QDoubleSpinBox*  geometry_crop_aspect_width_spin_   = nullptr;
-  QDoubleSpinBox*  geometry_crop_aspect_height_spin_  = nullptr;
-  QLabel*          geometry_crop_rect_label_          = nullptr;
-  QPushButton*     geometry_apply_btn_                = nullptr;
-  QPushButton*     geometry_reset_btn_                = nullptr;
+  QSlider*                                  rotate_slider_                     = nullptr;
+  QSlider*                                  geometry_crop_x_slider_            = nullptr;
+  QSlider*                                  geometry_crop_y_slider_            = nullptr;
+  QSlider*                                  geometry_crop_w_slider_            = nullptr;
+  QSlider*                                  geometry_crop_h_slider_            = nullptr;
+  QComboBox*                                geometry_crop_aspect_preset_combo_ = nullptr;
+  QDoubleSpinBox*                           geometry_crop_aspect_width_spin_   = nullptr;
+  QDoubleSpinBox*                           geometry_crop_aspect_height_spin_  = nullptr;
+  QLabel*                                   geometry_crop_rect_label_          = nullptr;
+  QPushButton*                              geometry_apply_btn_                = nullptr;
+  QPushButton*                              geometry_reset_btn_                = nullptr;
+  std::map<QSlider*, std::function<void()>> slider_reset_callbacks_{};
 };
 
 }  // namespace alcedo::ui

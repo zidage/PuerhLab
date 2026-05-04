@@ -4,4 +4,7 @@
 
 #pragma once
 
-#include "ui/alcedo_main/editor_dialog/shell/editor_dialog_shell_private.hpp"
+#ifndef ALCEDO_EDITOR_DIALOG_INTERNAL
+#define ALCEDO_EDITOR_DIALOG_INTERNAL
+#endif
+#include "ui/alcedo_main/editor_dialog/editor_dialog.hpp"

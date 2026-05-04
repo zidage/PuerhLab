@@ -16,6 +16,8 @@
 #include <cmath>
 #include <utility>
 
+#include "edit/operators/basic/color_temp_op.hpp"
+#include "edit/pipeline/pipeline_cpu.hpp"
 #include "ui/alcedo_main/app_theme.hpp"
 #include "ui/alcedo_main/editor_dialog/editor_slider_styling.hpp"
 #include "ui/alcedo_main/editor_dialog/modules/color_temp.hpp"
@@ -30,7 +32,7 @@ constexpr char kLocalizedTextProperty[]      = "puerhlabI18nText";
 constexpr char kLocalizedTextUpperProperty[] = "puerhlabI18nTextUpper";
 constexpr char kLocalizedToolTipProperty[]   = "puerhlabI18nToolTip";
 
-void SetLocalizedText(QObject* object, const char* source, bool uppercase = false) {
+void           SetLocalizedText(QObject* object, const char* source, bool uppercase = false) {
   if (!object || source == nullptr) {
     return;
   }
@@ -80,6 +82,8 @@ void ToneControlPanelWidget::Configure(Dependencies deps, Callbacks callbacks) {
   callbacks_ = std::move(callbacks);
   PullToneStateFromDialog();
   PullCommittedToneStateFromDialog();
+  PullColorTempStateFromDialog();
+  PullCommittedColorTempStateFromDialog();
 }
 
 void ToneControlPanelWidget::SetSyncing(bool syncing) { local_syncing_ = syncing; }
@@ -104,51 +108,128 @@ void ToneControlPanelWidget::ProjectToneStateToDialog() {
   if (!deps_.dialog_state) {
     return;
   }
-  auto& s        = *deps_.dialog_state;
-  s.exposure_    = tone_state_.exposure_;
-  s.contrast_    = tone_state_.contrast_;
-  s.blacks_      = tone_state_.blacks_;
-  s.whites_      = tone_state_.whites_;
-  s.shadows_     = tone_state_.shadows_;
-  s.highlights_  = tone_state_.highlights_;
+  auto& s         = *deps_.dialog_state;
+  s.exposure_     = tone_state_.exposure_;
+  s.contrast_     = tone_state_.contrast_;
+  s.blacks_       = tone_state_.blacks_;
+  s.whites_       = tone_state_.whites_;
+  s.shadows_      = tone_state_.shadows_;
+  s.highlights_   = tone_state_.highlights_;
   s.curve_points_ = tone_state_.curve_points_;
-  s.saturation_  = tone_state_.saturation_;
-  s.sharpen_     = tone_state_.sharpen_;
-  s.clarity_     = tone_state_.clarity_;
+  s.saturation_   = tone_state_.saturation_;
+  s.sharpen_      = tone_state_.sharpen_;
+  s.clarity_      = tone_state_.clarity_;
 }
 
 void ToneControlPanelWidget::PullToneStateFromDialog() {
   if (!deps_.dialog_state) {
     return;
   }
-  const auto& s              = *deps_.dialog_state;
-  tone_state_.exposure_      = s.exposure_;
-  tone_state_.contrast_      = s.contrast_;
-  tone_state_.blacks_        = s.blacks_;
-  tone_state_.whites_        = s.whites_;
-  tone_state_.shadows_       = s.shadows_;
-  tone_state_.highlights_    = s.highlights_;
-  tone_state_.curve_points_  = s.curve_points_;
-  tone_state_.saturation_    = s.saturation_;
-  tone_state_.sharpen_       = s.sharpen_;
-  tone_state_.clarity_       = s.clarity_;
+  const auto& s             = *deps_.dialog_state;
+  tone_state_.exposure_     = s.exposure_;
+  tone_state_.contrast_     = s.contrast_;
+  tone_state_.blacks_       = s.blacks_;
+  tone_state_.whites_       = s.whites_;
+  tone_state_.shadows_      = s.shadows_;
+  tone_state_.highlights_   = s.highlights_;
+  tone_state_.curve_points_ = s.curve_points_;
+  tone_state_.saturation_   = s.saturation_;
+  tone_state_.sharpen_      = s.sharpen_;
+  tone_state_.clarity_      = s.clarity_;
 }
 
 void ToneControlPanelWidget::PullCommittedToneStateFromDialog() {
   if (!deps_.dialog_committed_state) {
     return;
   }
-  const auto& s                          = *deps_.dialog_committed_state;
-  committed_tone_state_.exposure_        = s.exposure_;
-  committed_tone_state_.contrast_        = s.contrast_;
-  committed_tone_state_.blacks_          = s.blacks_;
-  committed_tone_state_.whites_          = s.whites_;
-  committed_tone_state_.shadows_         = s.shadows_;
-  committed_tone_state_.highlights_      = s.highlights_;
-  committed_tone_state_.curve_points_    = s.curve_points_;
-  committed_tone_state_.saturation_      = s.saturation_;
-  committed_tone_state_.sharpen_         = s.sharpen_;
-  committed_tone_state_.clarity_         = s.clarity_;
+  const auto& s                       = *deps_.dialog_committed_state;
+  committed_tone_state_.exposure_     = s.exposure_;
+  committed_tone_state_.contrast_     = s.contrast_;
+  committed_tone_state_.blacks_       = s.blacks_;
+  committed_tone_state_.whites_       = s.whites_;
+  committed_tone_state_.shadows_      = s.shadows_;
+  committed_tone_state_.highlights_   = s.highlights_;
+  committed_tone_state_.curve_points_ = s.curve_points_;
+  committed_tone_state_.saturation_   = s.saturation_;
+  committed_tone_state_.sharpen_      = s.sharpen_;
+  committed_tone_state_.clarity_      = s.clarity_;
+}
+
+void ToneControlPanelWidget::ProjectColorTempStateToDialog() {
+  if (!deps_.dialog_state) {
+    return;
+  }
+  auto& s                     = *deps_.dialog_state;
+  s.color_temp_mode_          = color_temp_state_.mode_;
+  s.color_temp_custom_cct_    = color_temp_state_.custom_cct_;
+  s.color_temp_custom_tint_   = color_temp_state_.custom_tint_;
+  s.color_temp_resolved_cct_  = color_temp_state_.resolved_cct_;
+  s.color_temp_resolved_tint_ = color_temp_state_.resolved_tint_;
+  s.color_temp_supported_     = color_temp_state_.supported_;
+}
+
+void ToneControlPanelWidget::PullColorTempStateFromDialog() {
+  if (!deps_.dialog_state) {
+    return;
+  }
+  const auto& s                    = *deps_.dialog_state;
+  color_temp_state_.mode_          = s.color_temp_mode_;
+  color_temp_state_.custom_cct_    = s.color_temp_custom_cct_;
+  color_temp_state_.custom_tint_   = s.color_temp_custom_tint_;
+  color_temp_state_.resolved_cct_  = s.color_temp_resolved_cct_;
+  color_temp_state_.resolved_tint_ = s.color_temp_resolved_tint_;
+  color_temp_state_.supported_     = s.color_temp_supported_;
+}
+
+void ToneControlPanelWidget::PullCommittedColorTempStateFromDialog() {
+  if (!deps_.dialog_committed_state) {
+    return;
+  }
+  const auto& s                              = *deps_.dialog_committed_state;
+  committed_color_temp_state_.mode_          = s.color_temp_mode_;
+  committed_color_temp_state_.custom_cct_    = s.color_temp_custom_cct_;
+  committed_color_temp_state_.custom_tint_   = s.color_temp_custom_tint_;
+  committed_color_temp_state_.resolved_cct_  = s.color_temp_resolved_cct_;
+  committed_color_temp_state_.resolved_tint_ = s.color_temp_resolved_tint_;
+  committed_color_temp_state_.supported_     = s.color_temp_supported_;
+}
+
+bool ToneControlPanelWidget::eventFilter(QObject* obj, QEvent* event) {
+  if (event && event->type() == QEvent::MouseButtonDblClick) {
+    if (auto* slider = qobject_cast<QSlider*>(obj)) {
+      const auto it = slider_reset_callbacks_.find(slider);
+      if (it != slider_reset_callbacks_.end()) {
+        if (!IsSyncing() && it->second) {
+          it->second();
+        }
+        return true;
+      }
+    }
+    if (dynamic_cast<ToneCurveWidget*>(obj) != nullptr && curve_reset_callback_) {
+      if (!IsSyncing()) {
+        curve_reset_callback_();
+      }
+      return true;
+    }
+  }
+  return AdjustmentPanelWidget::eventFilter(obj, event);
+}
+
+void ToneControlPanelWidget::RegisterSliderReset(QSlider* slider, std::function<void()> on_reset) {
+  if (!slider || !on_reset) {
+    return;
+  }
+  slider->installEventFilter(this);
+  slider_reset_callbacks_[slider] = std::move(on_reset);
+}
+
+void ToneControlPanelWidget::RegisterCurveReset(ToneCurveWidget*      widget,
+                                                std::function<void()> on_reset) {
+  if (!widget || !on_reset) {
+    return;
+  }
+  widget->installEventFilter(this);
+  curve_reset_callback_ = std::move(on_reset);
 }
 
 void ToneControlPanelWidget::PreviewToneField(AdjustmentField field) {
@@ -176,7 +257,7 @@ void ToneControlPanelWidget::CommitToneField(AdjustmentField field) {
 }
 
 void ToneControlPanelWidget::ResetToneFieldToDefault(
-    AdjustmentField field,
+    AdjustmentField                                                                field,
     const std::function<void(const ToneAdjustmentState&, const AdjustmentState&)>& apply_default) {
   if (!apply_default || !callbacks_.default_adjustment_state) {
     return;
@@ -214,23 +295,143 @@ void ToneControlPanelWidget::ResetCurveToDefaultLocal() {
 }
 
 void ToneControlPanelWidget::PromoteColorTempToCustomForEditing() {
+  PullColorTempStateFromDialog();
+  if (color_temp_state_.mode_ == ColorTempMode::CUSTOM) {
+    return;
+  }
   if (!deps_.dialog_state) {
     return;
   }
-  auto& s = *deps_.dialog_state;
-  if (s.color_temp_mode_ == ColorTempMode::CUSTOM) {
-    return;
-  }
-  s.color_temp_custom_cct_  = DisplayedColorTempCct(s);
-  s.color_temp_custom_tint_ = DisplayedColorTempTint(s);
-  s.color_temp_mode_        = ColorTempMode::CUSTOM;
+  color_temp_state_.custom_cct_  = DisplayedColorTempCct(*deps_.dialog_state);
+  color_temp_state_.custom_tint_ = DisplayedColorTempTint(*deps_.dialog_state);
+  color_temp_state_.mode_        = ColorTempMode::CUSTOM;
+  ProjectColorTempStateToDialog();
 
   if (color_temp_mode_combo_) {
     const bool prev = local_syncing_;
     local_syncing_  = true;
-    color_temp_mode_combo_->setCurrentIndex(ColorTempModeToComboIndex(s.color_temp_mode_));
-    local_syncing_  = prev;
+    color_temp_mode_combo_->setCurrentIndex(ColorTempModeToComboIndex(color_temp_state_.mode_));
+    local_syncing_ = prev;
   }
+}
+
+void ToneControlPanelWidget::CacheAsShotColorTemp(float cct, float tint) {
+  last_known_as_shot_cct_            = std::clamp(cct, static_cast<float>(color_temp::kCctMin),
+                                                  static_cast<float>(color_temp::kCctMax));
+  last_known_as_shot_tint_           = std::clamp(tint, static_cast<float>(color_temp::kTintMin),
+                                                  static_cast<float>(color_temp::kTintMax));
+  has_last_known_as_shot_color_temp_ = true;
+}
+
+void ToneControlPanelWidget::PrimeColorTempDisplayForAsShot() {
+  if (!has_last_known_as_shot_color_temp_) {
+    return;
+  }
+  PullColorTempStateFromDialog();
+  color_temp_state_.resolved_cct_  = last_known_as_shot_cct_;
+  color_temp_state_.resolved_tint_ = last_known_as_shot_tint_;
+  ProjectColorTempStateToDialog();
+  if (deps_.dialog_committed_state) {
+    deps_.dialog_committed_state->color_temp_resolved_cct_  = last_known_as_shot_cct_;
+    deps_.dialog_committed_state->color_temp_resolved_tint_ = last_known_as_shot_tint_;
+  }
+  PullCommittedColorTempStateFromDialog();
+}
+
+void ToneControlPanelWidget::WarmAsShotColorTempCacheFromPipeline(CPUPipelineExecutor* pipeline) {
+  if (has_last_known_as_shot_color_temp_ || !pipeline) {
+    return;
+  }
+
+  auto params = pipeline->GetGlobalParams();
+  try {
+    static const nlohmann::json kAsShotColorTempParams = {
+        {"color_temp", {{"mode", "as_shot"}, {"cct", 6500.0f}, {"tint", 0.0f}}}};
+    ColorTempOp as_shot_probe(kAsShotColorTempParams);
+    as_shot_probe.SetGlobalParams(params);
+  } catch (...) {
+    return;
+  }
+
+  if (!params.color_temp_matrices_valid_) {
+    return;
+  }
+
+  CacheAsShotColorTemp(params.color_temp_resolved_cct_, params.color_temp_resolved_tint_);
+  PullColorTempStateFromDialog();
+  if (color_temp_state_.mode_ == ColorTempMode::AS_SHOT) {
+    PrimeColorTempDisplayForAsShot();
+  }
+}
+
+auto ToneControlPanelWidget::RefreshColorTempRuntimeStateFromGlobalParams(
+    CPUPipelineExecutor* pipeline) -> bool {
+  if (!pipeline) {
+    return false;
+  }
+
+  PullColorTempStateFromDialog();
+  const auto& global = pipeline->GetGlobalParams();
+  const float new_cct =
+      std::clamp(global.color_temp_resolved_cct_, static_cast<float>(color_temp::kCctMin),
+                 static_cast<float>(color_temp::kCctMax));
+  const float new_tint =
+      std::clamp(global.color_temp_resolved_tint_, static_cast<float>(color_temp::kTintMin),
+                 static_cast<float>(color_temp::kTintMax));
+  const bool new_sup = global.color_temp_matrices_valid_;
+
+  const bool changed = !NearlyEqual(color_temp_state_.resolved_cct_, new_cct) ||
+                       !NearlyEqual(color_temp_state_.resolved_tint_, new_tint) ||
+                       color_temp_state_.supported_ != new_sup;
+
+  color_temp_state_.resolved_cct_  = new_cct;
+  color_temp_state_.resolved_tint_ = new_tint;
+  color_temp_state_.supported_     = new_sup;
+  ProjectColorTempStateToDialog();
+
+  if (deps_.dialog_committed_state) {
+    deps_.dialog_committed_state->color_temp_resolved_cct_  = new_cct;
+    deps_.dialog_committed_state->color_temp_resolved_tint_ = new_tint;
+    deps_.dialog_committed_state->color_temp_supported_     = new_sup;
+  }
+  PullCommittedColorTempStateFromDialog();
+  if (color_temp_state_.mode_ == ColorTempMode::AS_SHOT && new_sup) {
+    CacheAsShotColorTemp(new_cct, new_tint);
+  }
+
+  return changed;
+}
+
+void ToneControlPanelWidget::ResetColorTempToAsShot() {
+  PullColorTempStateFromDialog();
+  if (color_temp_state_.mode_ == ColorTempMode::AS_SHOT) {
+    return;
+  }
+  color_temp_state_.mode_ = ColorTempMode::AS_SHOT;
+  ProjectColorTempStateToDialog();
+  PrimeColorTempDisplayForAsShot();
+  SyncColorTempControlsFromDialogState();
+  RequestPipelineRender();
+  if (deps_.session) {
+    deps_.session->Commit(AdjustmentField::ColorTemp);
+  }
+  PullCommittedColorTempStateFromDialog();
+}
+
+void ToneControlPanelWidget::ClearSubmittedColorTempRequest() {
+  last_submitted_color_temp_request_.reset();
+}
+
+void ToneControlPanelWidget::MarkSubmittedColorTempRequest(const AdjustmentState& state) {
+  last_submitted_color_temp_request_ = BuildColorTempRequest(state);
+}
+
+auto ToneControlPanelWidget::ShouldSubmitColorTempRequest(bool                   operator_missing,
+                                                          const AdjustmentState& render_state) const
+    -> bool {
+  const auto color_temp_request = BuildColorTempRequest(render_state);
+  return operator_missing || !last_submitted_color_temp_request_.has_value() ||
+         !ColorTempRequestEqual(*last_submitted_color_temp_request_, color_temp_request);
 }
 
 void ToneControlPanelWidget::Build() {
@@ -238,8 +439,8 @@ void ToneControlPanelWidget::Build() {
     return;
   }
 
-  auto* parent_widget = this;
-  auto& layout        = *deps_.panel_layout;
+  auto* parent_widget   = this;
+  auto& layout          = *deps_.panel_layout;
 
   auto* controls_header = NewLocalizedLabel("Adjustments", parent_widget);
   controls_header->setObjectName("SectionTitle");
@@ -281,9 +482,9 @@ void AddSection(QWidget* parent, QVBoxLayout& layout, const char* title_source,
   auto* divider = new QFrame(frame);
   divider->setFrameShape(QFrame::HLine);
   divider->setFixedHeight(1);
-  divider->setStyleSheet(QStringLiteral("QFrame { background: %1; border: none; }")
-                             .arg(WithAlpha(AppTheme::Instance().dividerColor(), 110)
-                                      .name(QColor::HexArgb)));
+  divider->setStyleSheet(
+      QStringLiteral("QFrame { background: %1; border: none; }")
+          .arg(WithAlpha(AppTheme::Instance().dividerColor(), 110).name(QColor::HexArgb)));
 
   v->addWidget(header_row, 0);
   v->addWidget(divider, 0);
@@ -293,24 +494,23 @@ void AddSection(QWidget* parent, QVBoxLayout& layout, const char* title_source,
 }  // namespace
 
 void ToneControlPanelWidget::BuildToneSection() {
-  auto* parent_widget = this;
-  auto& layout        = *deps_.panel_layout;
+  auto*         parent_widget = this;
+  auto&         layout        = *deps_.panel_layout;
 
   const QString value_chip_style =
-      QStringLiteral("QLabel {"
-                     "  color: %1;"
-                     "  background: transparent;"
-                     "  border: none;"
-                     "  padding: 0;"
-                     "}")
+      QStringLiteral(
+          "QLabel {"
+          "  color: %1;"
+          "  background: transparent;"
+          "  border: none;"
+          "  padding: 0;"
+          "}")
           .arg(AppTheme::Instance().textMutedColor().name(QColor::HexRgb));
 
   auto add_slider = [&, value_chip_style](
                         const char* name_source, int min, int max, int value,
-                        std::function<void(int)>           on_change,
-                        std::function<void()>              on_release,
-                        std::function<void()>              on_reset,
-                        std::function<QString(int)>        formatter,
+                        std::function<void(int)> on_change, std::function<void()> on_release,
+                        std::function<void()> on_reset, std::function<QString(int)> formatter,
                         SliderVisualStyle visual_style = SliderVisualStyle::Accent) -> QSlider* {
     auto* name_label = NewLocalizedLabel(name_source, parent_widget);
     name_label->setStyleSheet(AppTheme::EditorLabelStyle(AppTheme::Instance().textColor()));
@@ -355,14 +555,12 @@ void ToneControlPanelWidget::BuildToneSection() {
       on_release();
     });
 
-    if (callbacks_.register_slider_reset) {
-      callbacks_.register_slider_reset(slider, [this, on_reset]() {
-        if (IsSyncing()) {
-          return;
-        }
-        on_reset();
-      });
-    }
+    RegisterSliderReset(slider, [this, on_reset]() {
+      if (IsSyncing()) {
+        return;
+      }
+      on_reset();
+    });
 
     auto* head_row    = new QWidget(parent_widget);
     auto* head_layout = new QHBoxLayout(head_row);
@@ -456,11 +654,10 @@ void ToneControlPanelWidget::BuildToneSection() {
       },
       [this]() { CommitToneField(AdjustmentField::Whites); },
       [this]() {
-        ResetToneFieldToDefault(
-            AdjustmentField::Whites,
-            [this](const ToneAdjustmentState& defaults, const AdjustmentState&) {
-              tone_state_.whites_ = defaults.whites_;
-            });
+        ResetToneFieldToDefault(AdjustmentField::Whites, [this](const ToneAdjustmentState& defaults,
+                                                                const AdjustmentState&) {
+          tone_state_.whites_ = defaults.whites_;
+        });
       },
       [](int v) { return QString::number(v, 'f', 2); });
 
@@ -472,11 +669,10 @@ void ToneControlPanelWidget::BuildToneSection() {
       },
       [this]() { CommitToneField(AdjustmentField::Blacks); },
       [this]() {
-        ResetToneFieldToDefault(
-            AdjustmentField::Blacks,
-            [this](const ToneAdjustmentState& defaults, const AdjustmentState&) {
-              tone_state_.blacks_ = defaults.blacks_;
-            });
+        ResetToneFieldToDefault(AdjustmentField::Blacks, [this](const ToneAdjustmentState& defaults,
+                                                                const AdjustmentState&) {
+          tone_state_.blacks_ = defaults.blacks_;
+        });
       },
       [](int v) { return QString::number(v, 'f', 2); });
 }
@@ -488,8 +684,8 @@ void ToneControlPanelWidget::BuildToneCurveSection() {
   AddSection(parent_widget, layout, "Tone Curve",
              "Smooth tone curve mapped from input [0, 1] to output [0, 1].");
 
-  auto* frame      = new QFrame(parent_widget);
-  auto* v_layout   = new QVBoxLayout(frame);
+  auto* frame    = new QFrame(parent_widget);
+  auto* v_layout = new QVBoxLayout(frame);
   v_layout->setContentsMargins(0, 0, 0, 0);
   v_layout->setSpacing(4);
 
@@ -509,9 +705,7 @@ void ToneControlPanelWidget::BuildToneCurveSection() {
     tone_state_.curve_points_ = curve::NormalizeCurveControlPoints(points);
     CommitToneField(AdjustmentField::Curve);
   });
-  if (callbacks_.register_curve_reset) {
-    callbacks_.register_curve_reset(curve_widget_, [this]() { ResetCurveToDefaultLocal(); });
-  }
+  RegisterCurveReset(curve_widget_, [this]() { ResetCurveToDefaultLocal(); });
 
   auto* actions_row        = new QWidget(frame);
   auto* actions_row_layout = new QHBoxLayout(actions_row);
@@ -541,16 +735,17 @@ void ToneControlPanelWidget::BuildToneCurveSection() {
 }
 
 void ToneControlPanelWidget::BuildColorSection() {
-  auto* parent_widget = this;
-  auto& layout        = *deps_.panel_layout;
+  auto*         parent_widget = this;
+  auto&         layout        = *deps_.panel_layout;
 
   const QString value_chip_style =
-      QStringLiteral("QLabel {"
-                     "  color: %1;"
-                     "  background: transparent;"
-                     "  border: none;"
-                     "  padding: 0;"
-                     "}")
+      QStringLiteral(
+          "QLabel {"
+          "  color: %1;"
+          "  background: transparent;"
+          "  border: none;"
+          "  padding: 0;"
+          "}")
           .arg(AppTheme::Instance().textMutedColor().name(QColor::HexRgb));
 
   auto add_combo_box = [&](const char* name_source, const QStringList& items, int initial_index,
@@ -590,10 +785,8 @@ void ToneControlPanelWidget::BuildColorSection() {
 
   auto add_slider = [&, value_chip_style](
                         const char* name_source, int min, int max, int value,
-                        std::function<void(int)>    on_change,
-                        std::function<void()>       on_release,
-                        std::function<void()>       on_reset,
-                        std::function<QString(int)> formatter,
+                        std::function<void(int)> on_change, std::function<void()> on_release,
+                        std::function<void()> on_reset, std::function<QString(int)> formatter,
                         SliderVisualStyle visual_style = SliderVisualStyle::Accent) -> QSlider* {
     auto* name_label = NewLocalizedLabel(name_source, parent_widget);
     name_label->setStyleSheet(AppTheme::EditorLabelStyle(AppTheme::Instance().textColor()));
@@ -638,14 +831,12 @@ void ToneControlPanelWidget::BuildColorSection() {
       on_release();
     });
 
-    if (callbacks_.register_slider_reset) {
-      callbacks_.register_slider_reset(slider, [this, on_reset]() {
-        if (IsSyncing()) {
-          return;
-        }
-        on_reset();
-      });
-    }
+    RegisterSliderReset(slider, [this, on_reset]() {
+      if (IsSyncing()) {
+        return;
+      }
+      on_reset();
+    });
 
     auto* head_row    = new QWidget(parent_widget);
     auto* head_layout = new QHBoxLayout(head_row);
@@ -683,8 +874,7 @@ void ToneControlPanelWidget::BuildColorSection() {
       },
       [](int v) { return QString::number(v, 'f', 2); });
 
-  // Color temperature controls (state still lives on the dialog state; ownership
-  // moves to ColorTempPipelineAdapter in a later phase).
+  PullColorTempStateFromDialog();
   auto* dialog_state_ptr = deps_.dialog_state;
   color_temp_mode_combo_ = add_combo_box(
       "White Balance", {Tr("As Shot"), Tr("Custom")},
@@ -699,13 +889,15 @@ void ToneControlPanelWidget::BuildColorSection() {
         if (new_mode == s.color_temp_mode_) {
           return;
         }
+        PullColorTempStateFromDialog();
         if (s.color_temp_mode_ == ColorTempMode::AS_SHOT && new_mode == ColorTempMode::CUSTOM) {
-          s.color_temp_custom_cct_  = DisplayedColorTempCct(s);
-          s.color_temp_custom_tint_ = DisplayedColorTempTint(s);
+          color_temp_state_.custom_cct_  = DisplayedColorTempCct(s);
+          color_temp_state_.custom_tint_ = DisplayedColorTempTint(s);
         }
-        s.color_temp_mode_ = new_mode;
-        if (new_mode == ColorTempMode::AS_SHOT && callbacks_.prime_color_temp_for_as_shot) {
-          callbacks_.prime_color_temp_for_as_shot();
+        color_temp_state_.mode_ = new_mode;
+        ProjectColorTempStateToDialog();
+        if (new_mode == ColorTempMode::AS_SHOT) {
+          PrimeColorTempDisplayForAsShot();
         }
         if (callbacks_.sync_controls_from_state) {
           callbacks_.sync_controls_from_state();
@@ -714,24 +906,27 @@ void ToneControlPanelWidget::BuildColorSection() {
         if (deps_.session) {
           deps_.session->Commit(AdjustmentField::ColorTemp);
         }
-        PullCommittedToneStateFromDialog();
+        PullCommittedColorTempStateFromDialog();
       });
 
   color_temp_cct_slider_ = add_slider(
       "Color Temp", color_temp::kSliderUiMin, color_temp::kSliderUiMax,
-      ColorTempCctToSliderPos(dialog_state_ptr ? DisplayedColorTempCct(*dialog_state_ptr) : 6500.0f),
+      ColorTempCctToSliderPos(dialog_state_ptr ? DisplayedColorTempCct(*dialog_state_ptr)
+                                               : 6500.0f),
       [this](int v) {
         if (!deps_.dialog_state) {
           return;
         }
         PromoteColorTempToCustomForEditing();
-        deps_.dialog_state->color_temp_custom_cct_ = ColorTempSliderPosToCct(v);
+        PullColorTempStateFromDialog();
+        color_temp_state_.custom_cct_ = ColorTempSliderPosToCct(v);
+        ProjectColorTempStateToDialog();
         RequestPipelineRender();
         if (deps_.session) {
           AdjustmentPreview preview{
-              .field  = AdjustmentField::ColorTemp,
-              .params = deps_.session->ParamsForField(AdjustmentField::ColorTemp,
-                                                      *deps_.dialog_state),
+              .field = AdjustmentField::ColorTemp,
+              .params =
+                  deps_.session->ParamsForField(AdjustmentField::ColorTemp, *deps_.dialog_state),
               .policy = PreviewPolicy::FastViewport,
           };
           deps_.session->Preview(preview);
@@ -741,13 +936,9 @@ void ToneControlPanelWidget::BuildColorSection() {
         if (deps_.session) {
           deps_.session->Commit(AdjustmentField::ColorTemp);
         }
-        PullCommittedToneStateFromDialog();
+        PullCommittedColorTempStateFromDialog();
       },
-      [this]() {
-        if (callbacks_.reset_color_temp_to_as_shot) {
-          callbacks_.reset_color_temp_to_as_shot();
-        }
-      },
+      [this]() { ResetColorTempToAsShot(); },
       [](int v) {
         return QString("%1 K").arg(static_cast<int>(std::lround(ColorTempSliderPosToCct(v))));
       },
@@ -770,20 +961,22 @@ void ToneControlPanelWidget::BuildColorSection() {
 
   color_temp_tint_slider_ = add_slider(
       "Color Tint", color_temp::kTintMin, color_temp::kTintMax,
-      static_cast<int>(std::lround(
-          dialog_state_ptr ? DisplayedColorTempTint(*dialog_state_ptr) : 0.0f)),
+      static_cast<int>(
+          std::lround(dialog_state_ptr ? DisplayedColorTempTint(*dialog_state_ptr) : 0.0f)),
       [this](int v) {
         if (!deps_.dialog_state) {
           return;
         }
         PromoteColorTempToCustomForEditing();
-        deps_.dialog_state->color_temp_custom_tint_ = static_cast<float>(v);
+        PullColorTempStateFromDialog();
+        color_temp_state_.custom_tint_ = static_cast<float>(v);
+        ProjectColorTempStateToDialog();
         RequestPipelineRender();
         if (deps_.session) {
           AdjustmentPreview preview{
-              .field  = AdjustmentField::ColorTemp,
-              .params = deps_.session->ParamsForField(AdjustmentField::ColorTemp,
-                                                      *deps_.dialog_state),
+              .field = AdjustmentField::ColorTemp,
+              .params =
+                  deps_.session->ParamsForField(AdjustmentField::ColorTemp, *deps_.dialog_state),
               .policy = PreviewPolicy::FastViewport,
           };
           deps_.session->Preview(preview);
@@ -793,14 +986,10 @@ void ToneControlPanelWidget::BuildColorSection() {
         if (deps_.session) {
           deps_.session->Commit(AdjustmentField::ColorTemp);
         }
-        PullCommittedToneStateFromDialog();
+        PullCommittedColorTempStateFromDialog();
       },
-      [this]() {
-        if (callbacks_.reset_color_temp_to_as_shot) {
-          callbacks_.reset_color_temp_to_as_shot();
-        }
-      },
-      [](int v) { return QString::number(v, 'f', 0); }, SliderVisualStyle::Native);
+      [this]() { ResetColorTempToAsShot(); }, [](int v) { return QString::number(v, 'f', 0); },
+      SliderVisualStyle::Native);
   color_temp_tint_slider_->setStyleSheet(
       "QSlider::groove:horizontal {"
       "  border: 1px solid #2A2A2A;"
@@ -817,8 +1006,8 @@ void ToneControlPanelWidget::BuildColorSection() {
       "  border-radius: 7px;"
       "}");
 
-  color_temp_unsupported_label_ = NewLocalizedLabel(
-      "Color temperature/tint is unavailable for this image.", parent_widget);
+  color_temp_unsupported_label_ =
+      NewLocalizedLabel("Color temperature/tint is unavailable for this image.", parent_widget);
   color_temp_unsupported_label_->setWordWrap(true);
   AppTheme::MarkFontRole(color_temp_unsupported_label_, AppTheme::FontRole::UiHint);
   color_temp_unsupported_label_->setStyleSheet(
@@ -835,24 +1024,24 @@ void ToneControlPanelWidget::BuildColorSection() {
 }
 
 void ToneControlPanelWidget::BuildDetailSection() {
-  auto* parent_widget = this;
-  auto& layout        = *deps_.panel_layout;
+  auto*         parent_widget = this;
+  auto&         layout        = *deps_.panel_layout;
 
   const QString value_chip_style =
-      QStringLiteral("QLabel {"
-                     "  color: %1;"
-                     "  background: transparent;"
-                     "  border: none;"
-                     "  padding: 0;"
-                     "}")
+      QStringLiteral(
+          "QLabel {"
+          "  color: %1;"
+          "  background: transparent;"
+          "  border: none;"
+          "  padding: 0;"
+          "}")
           .arg(AppTheme::Instance().textMutedColor().name(QColor::HexRgb));
 
-  auto add_slider = [&, value_chip_style](
-                        const char* name_source, int min, int max, int value,
-                        std::function<void(int)>    on_change,
-                        std::function<void()>       on_release,
-                        std::function<void()>       on_reset,
-                        std::function<QString(int)> formatter) -> QSlider* {
+  auto add_slider = [&, value_chip_style](const char* name_source, int min, int max, int value,
+                                          std::function<void(int)>    on_change,
+                                          std::function<void()>       on_release,
+                                          std::function<void()>       on_reset,
+                                          std::function<QString(int)> formatter) -> QSlider* {
     auto* name_label = NewLocalizedLabel(name_source, parent_widget);
     name_label->setStyleSheet(AppTheme::EditorLabelStyle(AppTheme::Instance().textColor()));
     AppTheme::MarkFontRole(name_label, AppTheme::FontRole::UiCaption);
@@ -891,14 +1080,12 @@ void ToneControlPanelWidget::BuildDetailSection() {
       on_release();
     });
 
-    if (callbacks_.register_slider_reset) {
-      callbacks_.register_slider_reset(slider, [this, on_reset]() {
-        if (IsSyncing()) {
-          return;
-        }
-        on_reset();
-      });
-    }
+    RegisterSliderReset(slider, [this, on_reset]() {
+      if (IsSyncing()) {
+        return;
+      }
+      on_reset();
+    });
 
     auto* head_row    = new QWidget(parent_widget);
     auto* head_layout = new QHBoxLayout(head_row);
@@ -959,6 +1146,8 @@ void ToneControlPanelWidget::SyncControlsFromDialogState() {
   }
   PullToneStateFromDialog();
   PullCommittedToneStateFromDialog();
+  PullColorTempStateFromDialog();
+  PullCommittedColorTempStateFromDialog();
 
   const bool prev = local_syncing_;
   local_syncing_  = true;
@@ -1000,6 +1189,7 @@ void ToneControlPanelWidget::SyncColorTempControlsFromDialogState() {
   if (!deps_.dialog_state) {
     return;
   }
+  PullColorTempStateFromDialog();
   const auto& s    = *deps_.dialog_state;
   const bool  prev = local_syncing_;
   local_syncing_   = true;

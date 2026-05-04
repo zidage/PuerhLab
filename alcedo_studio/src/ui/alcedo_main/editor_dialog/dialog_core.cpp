@@ -1,7 +1,8 @@
+#define ALCEDO_EDITOR_DIALOG_INTERNAL
+#include "ui/alcedo_main/editor_dialog/editor_dialog.hpp"
 #include "ui/alcedo_main/editor_dialog/pipeline/display_transform_pipeline_adapter.hpp"
 #include "ui/alcedo_main/editor_dialog/pipeline/look_pipeline_adapter.hpp"
 #include "ui/alcedo_main/editor_dialog/pipeline/raw_pipeline_adapter.hpp"
-#include "ui/alcedo_main/editor_dialog/shell/editor_dialog_shell_private.hpp"
 
 namespace alcedo::ui {
 namespace {
@@ -71,9 +72,13 @@ EditorDialog::EditorDialog(std::shared_ptr<ImagePoolService>       image_pool,
                   state_ = AdjustmentState{};
                   SanitizeOdtStateForUi(state_.odt_);
                   UpdateAllCdlWheelDerivedColors(state_);
-                  last_submitted_color_temp_request_.reset();
+                  if (tone_panel_) {
+                    tone_panel_->ClearSubmittedColorTempRequest();
+                  }
                 } else {
-                  last_submitted_color_temp_request_ = BuildColorTempRequest(state_);
+                  if (tone_panel_) {
+                    tone_panel_->MarkSubmittedColorTempRequest(state_);
+                  }
                 }
                 committed_state_ = state_;
                 SyncControlsFromState();
@@ -86,7 +91,9 @@ EditorDialog::EditorDialog(std::shared_ptr<ImagePoolService>       image_pool,
           .after_pipeline_params_imported =
               [this]() {
                 frame_manager_.AttachExecutionStages(pipeline_guard_->pipeline_);
-                last_applied_lut_path_.clear();
+                if (look_panel_) {
+                  look_panel_->ClearAppliedLutPath();
+                }
               },
           .is_plain_working_mode =
               [this]() { return versioning_panel_ && versioning_panel_->IsPlainWorkingMode(); },
@@ -114,8 +121,18 @@ EditorDialog::EditorDialog(std::shared_ptr<ImagePoolService>       image_pool,
           .apply_state_to_pipeline =
               [this](const AdjustmentState& render_state) { ApplyStateToPipeline(render_state); },
           .refresh_color_temp_runtime_state =
-              [this]() { return RefreshColorTempRuntimeStateFromGlobalParams(); },
-          .sync_color_temp_controls = [this]() { SyncColorTempControlsFromState(); },
+              [this]() {
+                return tone_panel_ && pipeline_guard_ && pipeline_guard_->pipeline_
+                           ? tone_panel_->RefreshColorTempRuntimeStateFromGlobalParams(
+                                 pipeline_guard_->pipeline_.get())
+                           : false;
+              },
+          .sync_color_temp_controls =
+              [this]() {
+                if (tone_panel_) {
+                  tone_panel_->SyncColorTempControlsFromDialogState();
+                }
+              },
       });
   adjustment_session_ = std::make_unique<EditorAdjustmentSession>(
       EditorAdjustmentSession::Dependencies{
@@ -360,27 +377,6 @@ auto EditorDialog::ShouldConsumeLutNavigationShortcut() const -> bool {
   return !look_panel_->CanHandleLutNavigationShortcut(focus_widget);
 }
 
-bool EditorDialog::eventFilter(QObject* obj, QEvent* event) {
-  if (event && event->type() == QEvent::MouseButtonDblClick) {
-    if (auto* slider = qobject_cast<QSlider*>(obj)) {
-      const auto it = slider_reset_callbacks_.find(slider);
-      if (it != slider_reset_callbacks_.end()) {
-        if (!syncing_controls_ && it->second) {
-          it->second();
-        }
-        return true;
-      }
-    }
-    if (dynamic_cast<ToneCurveWidget*>(obj) != nullptr && curve_reset_callback_) {
-      if (!syncing_controls_) {
-        curve_reset_callback_();
-      }
-      return true;
-    }
-  }
-  return QDialog::eventFilter(obj, event);
-}
-
 void EditorDialog::changeEvent(QEvent* event) {
   if (event && event->type() == QEvent::LanguageChange) {
     RetranslateUi();
@@ -513,20 +509,10 @@ void EditorDialog::BuildToneControlPanel() {
               render_coordinator_->RequestRender();
             }
           },
-      .register_slider_reset =
-          [this](QSlider* slider, std::function<void()> on_reset) {
-            RegisterSliderReset(slider, std::move(on_reset));
-          },
-      .register_curve_reset =
-          [this](ToneCurveWidget* widget, std::function<void()> on_reset) {
-            RegisterCurveReset(widget, std::move(on_reset));
-          },
       .default_adjustment_state = [this]() -> const AdjustmentState& {
         return DefaultAdjustmentState();
       },
-      .sync_controls_from_state     = [this]() { SyncControlsFromState(); },
-      .prime_color_temp_for_as_shot = [this]() { PrimeColorTempDisplayForAsShot(); },
-      .reset_color_temp_to_as_shot  = [this]() { ResetColorTempToAsShot(); },
+      .sync_controls_from_state = [this]() { SyncControlsFromState(); },
   };
 
   tone_panel_->Configure(std::move(deps), std::move(callbacks));
@@ -551,10 +537,6 @@ void EditorDialog::BuildLookPanel() {
             if (render_coordinator_) {
               render_coordinator_->RequestRender();
             }
-          },
-      .register_slider_reset =
-          [this](QSlider* slider, std::function<void()> on_reset) {
-            RegisterSliderReset(slider, std::move(on_reset));
           },
       .default_adjustment_state = [this]() -> const AdjustmentState& {
         return DefaultAdjustmentState();
@@ -595,10 +577,6 @@ void EditorDialog::BuildDisplayTransformPanel() {
             if (render_coordinator_) {
               render_coordinator_->RequestRender();
             }
-          },
-      .register_slider_reset =
-          [this](QSlider* slider, std::function<void()> on_reset) {
-            RegisterSliderReset(slider, std::move(on_reset));
           },
       .default_adjustment_state = [this]() -> const AdjustmentState& {
         return DefaultAdjustmentState();
@@ -644,10 +622,6 @@ void EditorDialog::BuildGeometryPanel() {
             if (render_coordinator_) {
               render_coordinator_->RequestRender();
             }
-          },
-      .register_slider_reset =
-          [this](QSlider* slider, std::function<void()> on_reset) {
-            RegisterSliderReset(slider, std::move(on_reset));
           },
       .set_crop_overlay_aspect_lock =
           [this](bool locked, float ratio) {

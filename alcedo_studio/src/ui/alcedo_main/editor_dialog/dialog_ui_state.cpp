@@ -1,94 +1,11 @@
-#include "ui/alcedo_main/editor_dialog/shell/editor_dialog_shell_private.hpp"
+#define ALCEDO_EDITOR_DIALOG_INTERNAL
+#include "ui/alcedo_main/editor_dialog/editor_dialog.hpp"
 
 namespace alcedo::ui {
 
 auto EditorDialog::DefaultAdjustmentState() -> const AdjustmentState& {
   static const AdjustmentState defaults{};
   return defaults;
-}
-
-void EditorDialog::CacheAsShotColorTemp(float cct, float tint) {
-  last_known_as_shot_cct_ =
-      std::clamp(cct, static_cast<float>(kColorTempCctMin), static_cast<float>(kColorTempCctMax));
-  last_known_as_shot_tint_           = std::clamp(tint, static_cast<float>(kColorTempTintMin),
-                                                  static_cast<float>(kColorTempTintMax));
-  has_last_known_as_shot_color_temp_ = true;
-}
-
-void EditorDialog::PrimeColorTempDisplayForAsShot() {
-  if (!has_last_known_as_shot_color_temp_) {
-    return;
-  }
-  state_.color_temp_resolved_cct_            = last_known_as_shot_cct_;
-  state_.color_temp_resolved_tint_           = last_known_as_shot_tint_;
-  committed_state_.color_temp_resolved_cct_  = last_known_as_shot_cct_;
-  committed_state_.color_temp_resolved_tint_ = last_known_as_shot_tint_;
-}
-
-void EditorDialog::WarmAsShotColorTempCacheFromRawMetadata() {
-  if (has_last_known_as_shot_color_temp_ || !pipeline_guard_ || !pipeline_guard_->pipeline_) {
-    return;
-  }
-
-  auto params = pipeline_guard_->pipeline_->GetGlobalParams();
-  try {
-    static const nlohmann::json kAsShotColorTempParams = {
-        {"color_temp", {{"mode", "as_shot"}, {"cct", 6500.0f}, {"tint", 0.0f}}}};
-    ColorTempOp as_shot_probe(kAsShotColorTempParams);
-    as_shot_probe.SetGlobalParams(params);
-  } catch (...) {
-    return;
-  }
-
-  if (!params.color_temp_matrices_valid_) {
-    return;
-  }
-
-  CacheAsShotColorTemp(params.color_temp_resolved_cct_, params.color_temp_resolved_tint_);
-  if (state_.color_temp_mode_ == ColorTempMode::AS_SHOT) {
-    PrimeColorTempDisplayForAsShot();
-  }
-}
-
-void EditorDialog::RegisterSliderReset(QSlider* slider, std::function<void()> on_reset) {
-  if (!slider || !on_reset) {
-    return;
-  }
-  slider->installEventFilter(this);
-  slider_reset_callbacks_[slider] = std::move(on_reset);
-}
-
-void EditorDialog::RegisterCurveReset(ToneCurveWidget* widget, std::function<void()> on_reset) {
-  if (!widget || !on_reset) {
-    return;
-  }
-  widget->installEventFilter(this);
-  curve_reset_callback_ = std::move(on_reset);
-}
-
-void EditorDialog::ResetColorTempToAsShot() {
-  if (state_.color_temp_mode_ == ColorTempMode::AS_SHOT) {
-    return;
-  }
-  state_.color_temp_mode_ = ColorTempMode::AS_SHOT;
-  PrimeColorTempDisplayForAsShot();
-  SyncColorTempControlsFromState();
-  if (render_coordinator_) {
-    render_coordinator_->RequestRender();
-  }
-  if (!adjustment_session_) {
-    if (render_coordinator_) {
-      render_coordinator_->ScheduleQualityPreviewRenderFromPipeline();
-    }
-    return;
-  }
-  const auto result = adjustment_session_->Commit(AdjustmentField::ColorTemp);
-  if (result.status == EditorAdjustmentSession::CommitStatus::Failed) {
-    QMessageBox::warning(this, Tr("Adjustment"),
-                         result.error.isEmpty()
-                             ? Tr("Failed to apply adjustment.")
-                             : Tr("Failed to apply adjustment: %1").arg(result.error));
-  }
 }
 
 void EditorDialog::UpdateViewerZoomLabel(float zoom) {
@@ -183,68 +100,6 @@ void EditorDialog::SetActiveControlPanel(ControlPanelKind panel) {
       render_coordinator_->ScheduleQualityPreviewRenderFromPipeline();
     }
   }
-}
-
-void EditorDialog::PromoteColorTempToCustomForEditing() {
-  if (state_.color_temp_mode_ == ColorTempMode::CUSTOM) {
-    return;
-  }
-  state_.color_temp_custom_cct_  = DisplayedColorTempCct(state_);
-  state_.color_temp_custom_tint_ = DisplayedColorTempTint(state_);
-  state_.color_temp_mode_        = ColorTempMode::CUSTOM;
-
-  const bool prev_sync           = syncing_controls_;
-  syncing_controls_              = true;
-  if (tone_panel_) {
-    if (auto* combo = tone_panel_->ColorTempModeCombo()) {
-      combo->setCurrentIndex(ColorTempModeToComboIndex(state_.color_temp_mode_));
-    }
-  }
-  syncing_controls_ = prev_sync;
-}
-
-// Returns true if any resolved color temp value actually changed.
-auto EditorDialog::RefreshColorTempRuntimeStateFromGlobalParams() -> bool {
-  if (!pipeline_guard_ || !pipeline_guard_->pipeline_) {
-    return false;
-  }
-
-  const auto& global = pipeline_guard_->pipeline_->GetGlobalParams();
-  const float new_cct =
-      std::clamp(global.color_temp_resolved_cct_, static_cast<float>(kColorTempCctMin),
-                 static_cast<float>(kColorTempCctMax));
-  const float new_tint =
-      std::clamp(global.color_temp_resolved_tint_, static_cast<float>(kColorTempTintMin),
-                 static_cast<float>(kColorTempTintMax));
-  const bool new_sup = global.color_temp_matrices_valid_;
-
-  const bool changed = !NearlyEqual(state_.color_temp_resolved_cct_, new_cct) ||
-                       !NearlyEqual(state_.color_temp_resolved_tint_, new_tint) ||
-                       state_.color_temp_supported_ != new_sup;
-
-  state_.color_temp_resolved_cct_            = new_cct;
-  state_.color_temp_resolved_tint_           = new_tint;
-  state_.color_temp_supported_               = new_sup;
-
-  committed_state_.color_temp_resolved_cct_  = new_cct;
-  committed_state_.color_temp_resolved_tint_ = new_tint;
-  committed_state_.color_temp_supported_     = new_sup;
-  if (state_.color_temp_mode_ == ColorTempMode::AS_SHOT && new_sup) {
-    CacheAsShotColorTemp(new_cct, new_tint);
-  }
-
-  return changed;
-}
-
-void EditorDialog::SyncColorTempControlsFromState() {
-  const bool prev_sync = syncing_controls_;
-  syncing_controls_    = true;
-
-  if (tone_panel_) {
-    tone_panel_->SyncColorTempControlsFromDialogState();
-  }
-
-  syncing_controls_ = prev_sync;
 }
 
 void EditorDialog::SyncControlsFromState() {

@@ -1,4 +1,5 @@
-#include "ui/alcedo_main/editor_dialog/shell/editor_dialog_shell_private.hpp"
+#define ALCEDO_EDITOR_DIALOG_INTERNAL
+#include "ui/alcedo_main/editor_dialog/editor_dialog.hpp"
 
 namespace alcedo::ui {
 
@@ -8,10 +9,15 @@ bool EditorDialog::LoadStateFromPipelineIfPresent() {
   }
   SanitizeOdtStateForUi(state_.odt_);
   if (state_.color_temp_mode_ == ColorTempMode::AS_SHOT && state_.color_temp_supported_) {
-    CacheAsShotColorTemp(state_.color_temp_resolved_cct_, state_.color_temp_resolved_tint_);
+    if (tone_panel_) {
+      tone_panel_->CacheAsShotColorTemp(state_.color_temp_resolved_cct_,
+                                        state_.color_temp_resolved_tint_);
+    }
   }
-  committed_state_                   = state_;
-  last_submitted_color_temp_request_ = BuildColorTempRequest(state_);
+  committed_state_ = state_;
+  if (tone_panel_) {
+    tone_panel_->MarkSubmittedColorTempRequest(state_);
+  }
   return true;
 }
 
@@ -31,7 +37,9 @@ void EditorDialog::SetupPipeline() {
         image_id_, [](const std::shared_ptr<Image>& i) { return i; });
     if (img && img->HasRawColorContext()) {
       exec->InjectRawMetadata(img->GetRawColorContext());
-      WarmAsShotColorTempCacheFromRawMetadata();
+      if (tone_panel_) {
+        tone_panel_->WarmAsShotColorTempCacheFromPipeline(pipeline_guard_->pipeline_.get());
+      }
     }
   } catch (...) {
     // Non-fatal: metadata injection is best-effort.
@@ -40,7 +48,9 @@ void EditorDialog::SetupPipeline() {
   // Cached pipelines can clear transient GPU resources when returned to the service.
   // PipelineMgmtService now resyncs global params on load, so we no longer need a
   // per-dialog LMT rebind hack here.
-  last_applied_lut_path_.clear();
+  if (look_panel_) {
+    look_panel_->ClearAppliedLutPath();
+  }
 }
 
 void EditorDialog::ApplyStateToPipeline(const AdjustmentState& render_state) {
@@ -71,15 +81,16 @@ void EditorDialog::ApplyStateToPipeline(const AdjustmentState& render_state) {
   loading.EnableOperator(OperatorType::LENS_CALIBRATION, render_state_sanitized.lens_calib_enabled_,
                          global_params);
 
-  const auto color_temp_request = BuildColorTempRequest(render_state_sanitized);
   const bool color_temp_missing = !to_ws.GetOperator(OperatorType::COLOR_TEMP).has_value();
-  if (color_temp_missing || !last_submitted_color_temp_request_.has_value() ||
-      !ColorTempRequestEqual(*last_submitted_color_temp_request_, color_temp_request)) {
+  if (!tone_panel_ ||
+      tone_panel_->ShouldSubmitColorTempRequest(color_temp_missing, render_state_sanitized)) {
     to_ws.SetOperator(OperatorType::COLOR_TEMP,
                       params_for_field(AdjustmentField::ColorTemp, render_state_sanitized),
                       global_params);
     to_ws.EnableOperator(OperatorType::COLOR_TEMP, true, global_params);
-    last_submitted_color_temp_request_ = color_temp_request;
+    if (tone_panel_) {
+      tone_panel_->MarkSubmittedColorTempRequest(render_state_sanitized);
+    }
   } else {
     to_ws.EnableOperator(OperatorType::COLOR_TEMP, true, global_params);
   }
@@ -138,10 +149,12 @@ void EditorDialog::ApplyStateToPipeline(const AdjustmentState& render_state) {
 
   // LUT (LMT): rebind only when the path changes. The operator's SetGlobalParams now
   // derives lmt_enabled_/dirty state from the path, and PipelineMgmtService resyncs on load.
-  if (render_state_sanitized.lut_path_ != last_applied_lut_path_) {
+  if (!look_panel_ || look_panel_->ShouldApplyLutPath(render_state_sanitized.lut_path_)) {
     color.SetOperator(OperatorType::LMT, {{"ocio_lmt", render_state_sanitized.lut_path_}},
                       global_params);
-    last_applied_lut_path_ = render_state_sanitized.lut_path_;
+    if (look_panel_) {
+      look_panel_->MarkAppliedLutPath(render_state_sanitized.lut_path_);
+    }
   }
 
   auto& detail = exec->GetStage(PipelineStageName::Detail_Adjustment);

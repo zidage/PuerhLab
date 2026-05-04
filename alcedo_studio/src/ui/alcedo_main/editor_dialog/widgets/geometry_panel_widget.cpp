@@ -21,19 +21,19 @@
 namespace alcedo::ui {
 namespace {
 
-constexpr int kSectionContentMarginH = 18;
-constexpr int kSectionContentMarginV = 16;
-constexpr int kSectionInnerSpacing   = 14;
-constexpr int kRowInnerSpacing       = 8;
-constexpr int kControlHeight         = 32;
-constexpr int kSliderHeight          = 26;
-constexpr double kCropAspectSpinMin  = 0.01;
-constexpr double kCropAspectSpinMax  = 100.0;
+constexpr int    kSectionContentMarginH        = 18;
+constexpr int    kSectionContentMarginV        = 16;
+constexpr int    kSectionInnerSpacing          = 14;
+constexpr int    kRowInnerSpacing              = 8;
+constexpr int    kControlHeight                = 32;
+constexpr int    kSliderHeight                 = 26;
+constexpr double kCropAspectSpinMin            = 0.01;
+constexpr double kCropAspectSpinMax            = 100.0;
 
-constexpr char kLocalizedTextProperty[]      = "puerhlabI18nText";
-constexpr char kLocalizedTextUpperProperty[] = "puerhlabI18nTextUpper";
+constexpr char   kLocalizedTextProperty[]      = "puerhlabI18nText";
+constexpr char   kLocalizedTextUpperProperty[] = "puerhlabI18nTextUpper";
 
-void SetLocalizedText(QObject* object, const char* source, bool uppercase = false) {
+void             SetLocalizedText(QObject* object, const char* source, bool uppercase = false) {
   if (!object || source == nullptr) {
     return;
   }
@@ -89,6 +89,29 @@ auto GeometryPanelWidget::IsSyncing() const -> bool {
   return local_syncing_ || (callbacks_.is_global_syncing && callbacks_.is_global_syncing());
 }
 
+bool GeometryPanelWidget::eventFilter(QObject* obj, QEvent* event) {
+  if (event && event->type() == QEvent::MouseButtonDblClick) {
+    if (auto* slider = qobject_cast<QSlider*>(obj)) {
+      const auto it = slider_reset_callbacks_.find(slider);
+      if (it != slider_reset_callbacks_.end()) {
+        if (!IsSyncing() && it->second) {
+          it->second();
+        }
+        return true;
+      }
+    }
+  }
+  return AdjustmentPanelWidget::eventFilter(obj, event);
+}
+
+void GeometryPanelWidget::RegisterSliderReset(QSlider* slider, std::function<void()> on_reset) {
+  if (!slider || !on_reset) {
+    return;
+  }
+  slider->installEventFilter(this);
+  slider_reset_callbacks_[slider] = std::move(on_reset);
+}
+
 void GeometryPanelWidget::RequestPipelineRender() {
   if (callbacks_.request_render) {
     callbacks_.request_render();
@@ -99,24 +122,24 @@ void GeometryPanelWidget::ProjectGeometryStateToDialog() {
   if (!deps_.dialog_state) {
     return;
   }
-  auto& s                     = *deps_.dialog_state;
-  s.rotate_degrees_           = geometry_state_.rotate_degrees_;
-  s.crop_enabled_             = geometry_state_.crop_enabled_;
-  s.crop_x_                   = geometry_state_.crop_x_;
-  s.crop_y_                   = geometry_state_.crop_y_;
-  s.crop_w_                   = geometry_state_.crop_w_;
-  s.crop_h_                   = geometry_state_.crop_h_;
-  s.crop_expand_to_fit_       = geometry_state_.crop_expand_to_fit_;
-  s.crop_aspect_preset_       = geometry_state_.crop_aspect_preset_;
-  s.crop_aspect_width_        = geometry_state_.crop_aspect_width_;
-  s.crop_aspect_height_       = geometry_state_.crop_aspect_height_;
+  auto& s               = *deps_.dialog_state;
+  s.rotate_degrees_     = geometry_state_.rotate_degrees_;
+  s.crop_enabled_       = geometry_state_.crop_enabled_;
+  s.crop_x_             = geometry_state_.crop_x_;
+  s.crop_y_             = geometry_state_.crop_y_;
+  s.crop_w_             = geometry_state_.crop_w_;
+  s.crop_h_             = geometry_state_.crop_h_;
+  s.crop_expand_to_fit_ = geometry_state_.crop_expand_to_fit_;
+  s.crop_aspect_preset_ = geometry_state_.crop_aspect_preset_;
+  s.crop_aspect_width_  = geometry_state_.crop_aspect_width_;
+  s.crop_aspect_height_ = geometry_state_.crop_aspect_height_;
 }
 
 void GeometryPanelWidget::PullGeometryStateFromDialog() {
   if (!deps_.dialog_state) {
     return;
   }
-  const auto& s               = *deps_.dialog_state;
+  const auto& s                       = *deps_.dialog_state;
   geometry_state_.rotate_degrees_     = s.rotate_degrees_;
   geometry_state_.crop_enabled_       = s.crop_enabled_;
   geometry_state_.crop_x_             = s.crop_x_;
@@ -133,7 +156,7 @@ void GeometryPanelWidget::PullCommittedGeometryStateFromDialog() {
   if (!deps_.dialog_committed_state) {
     return;
   }
-  const auto& s                         = *deps_.dialog_committed_state;
+  const auto& s                                 = *deps_.dialog_committed_state;
   committed_geometry_state_.rotate_degrees_     = s.rotate_degrees_;
   committed_geometry_state_.crop_enabled_       = s.crop_enabled_;
   committed_geometry_state_.crop_x_             = s.crop_x_;
@@ -229,14 +252,15 @@ auto AddGeometrySection(QWidget* parent, QVBoxLayout& layout, const char* title_
 void GeometryPanelWidget::BuildCropAspectSection() {
   const auto& theme = AppTheme::Instance();
 
-  auto addSlider = [&](QWidget* parent, QVBoxLayout* layout, const char* name_source, int min, int max,
-                       int value, auto&& onChange, auto&& onReset, auto&& formatter) -> QSlider* {
-    auto* row = new QWidget(parent);
+  auto addSlider    = [&](QWidget* parent, QVBoxLayout* layout, const char* name_source, int min,
+                       int max, int value, auto&& onChange, auto&& onReset,
+                       auto&& formatter) -> QSlider* {
+    auto* row   = new QWidget(parent);
     auto* row_v = new QVBoxLayout(row);
     row_v->setContentsMargins(0, 0, 0, 0);
     row_v->setSpacing(6);
 
-    auto* header = new QWidget(row);
+    auto* header   = new QWidget(row);
     auto* header_h = new QHBoxLayout(header);
     header_h->setContentsMargins(0, 0, 0, 0);
     header_h->setSpacing(kRowInnerSpacing);
@@ -265,7 +289,7 @@ void GeometryPanelWidget::BuildCropAspectSection() {
     slider->setFixedHeight(kSliderHeight);
 
     QObject::connect(slider, &QSlider::valueChanged, parent,
-                     [this, value_label, formatter,
+                        [this, value_label, formatter,
                       onChange = std::forward<decltype(onChange)>(onChange)](int v) {
                        value_label->setText(formatter(v));
                        if (IsSyncing()) {
@@ -274,15 +298,13 @@ void GeometryPanelWidget::BuildCropAspectSection() {
                        onChange(v);
                      });
 
-    if (callbacks_.register_slider_reset) {
-      callbacks_.register_slider_reset(
-          slider, [this, onReset = std::forward<decltype(onReset)>(onReset)]() mutable {
-            if (IsSyncing()) {
-              return;
-            }
-            onReset();
-          });
-    }
+    RegisterSliderReset(slider,
+                           [this, onReset = std::forward<decltype(onReset)>(onReset)]() mutable {
+                          if (IsSyncing()) {
+                            return;
+                          }
+                          onReset();
+                        });
 
     row_v->addWidget(header, 0);
     row_v->addWidget(slider, 0);
@@ -331,12 +353,11 @@ void GeometryPanelWidget::BuildCropAspectSection() {
   geometry_crop_aspect_preset_combo_->setFixedHeight(kControlHeight);
   geometry_crop_aspect_preset_combo_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
   for (const auto& option : geometry::CropAspectPresetOptions()) {
-    geometry_crop_aspect_preset_combo_->addItem(Tr(option.label_),
-                                                static_cast<int>(option.value_));
+    geometry_crop_aspect_preset_combo_->addItem(Tr(option.label_), static_cast<int>(option.value_));
   }
-  geometry_crop_aspect_preset_combo_->setCurrentIndex(std::max(
-      0, geometry_crop_aspect_preset_combo_->findData(
-             static_cast<int>(geometry_state_.crop_aspect_preset_))));
+  geometry_crop_aspect_preset_combo_->setCurrentIndex(
+      std::max(0, geometry_crop_aspect_preset_combo_->findData(
+                      static_cast<int>(geometry_state_.crop_aspect_preset_))));
   QObject::connect(geometry_crop_aspect_preset_combo_,
                    QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int) {
                      if (IsSyncing() || !geometry_crop_aspect_preset_combo_) {
@@ -422,14 +443,15 @@ void GeometryPanelWidget::BuildCropAspectSection() {
 void GeometryPanelWidget::BuildRotateSection() {
   const auto& theme = AppTheme::Instance();
 
-  auto addSlider = [&](QWidget* parent, QVBoxLayout* layout, const char* name_source, int min, int max,
-                       int value, auto&& onChange, auto&& onReset, auto&& formatter) -> QSlider* {
-    auto* row = new QWidget(parent);
+  auto addSlider    = [&](QWidget* parent, QVBoxLayout* layout, const char* name_source, int min,
+                       int max, int value, auto&& onChange, auto&& onReset,
+                       auto&& formatter) -> QSlider* {
+    auto* row   = new QWidget(parent);
     auto* row_v = new QVBoxLayout(row);
     row_v->setContentsMargins(0, 0, 0, 0);
     row_v->setSpacing(6);
 
-    auto* header = new QWidget(row);
+    auto* header   = new QWidget(row);
     auto* header_h = new QHBoxLayout(header);
     header_h->setContentsMargins(0, 0, 0, 0);
     header_h->setSpacing(kRowInnerSpacing);
@@ -458,7 +480,7 @@ void GeometryPanelWidget::BuildRotateSection() {
     slider->setFixedHeight(kSliderHeight);
 
     QObject::connect(slider, &QSlider::valueChanged, parent,
-                     [this, value_label, formatter,
+                        [this, value_label, formatter,
                       onChange = std::forward<decltype(onChange)>(onChange)](int v) {
                        value_label->setText(formatter(v));
                        if (IsSyncing()) {
@@ -467,15 +489,13 @@ void GeometryPanelWidget::BuildRotateSection() {
                        onChange(v);
                      });
 
-    if (callbacks_.register_slider_reset) {
-      callbacks_.register_slider_reset(
-          slider, [this, onReset = std::forward<decltype(onReset)>(onReset)]() mutable {
-            if (IsSyncing()) {
-              return;
-            }
-            onReset();
-          });
-    }
+    RegisterSliderReset(slider,
+                           [this, onReset = std::forward<decltype(onReset)>(onReset)]() mutable {
+                          if (IsSyncing()) {
+                            return;
+                          }
+                          onReset();
+                        });
 
     row_v->addWidget(header, 0);
     row_v->addWidget(slider, 0);
@@ -483,11 +503,12 @@ void GeometryPanelWidget::BuildRotateSection() {
     return slider;
   };
 
-  auto* v = AddGeometrySection(this, *deps_.panel_layout, "Rotate & Flip");
+  auto* v        = AddGeometrySection(this, *deps_.panel_layout, "Rotate & Flip");
 
   rotate_slider_ = addSlider(
       this, v, "Angle", -18000, 18000,
-      static_cast<int>(std::lround(geometry_state_.rotate_degrees_ * geometry::kRotationSliderScale)),
+      static_cast<int>(
+          std::lround(geometry_state_.rotate_degrees_ * geometry::kRotationSliderScale)),
       [&](int vv) {
         geometry_state_.rotate_degrees_ = static_cast<float>(vv) / geometry::kRotationSliderScale;
         if (callbacks_.set_crop_overlay_rotation) {
@@ -496,8 +517,8 @@ void GeometryPanelWidget::BuildRotateSection() {
       },
       [this]() { ResetCropAndRotation(); },
       [](int vv) {
-        return QString::fromUtf8("%1°")
-            .arg(static_cast<double>(vv) / geometry::kRotationSliderScale, 0, 'f', 1);
+        return QString::fromUtf8("%1°").arg(
+            static_cast<double>(vv) / geometry::kRotationSliderScale, 0, 'f', 1);
       });
 
   auto* btn_row = new QWidget(this);
@@ -533,12 +554,14 @@ void GeometryPanelWidget::BuildRotateSection() {
     return b;
   };
 
-  auto* rotate_l = makeToolButton(QString::fromUtf8("\xE2\x86\xBA"), "Rotate 90° left",
-                                  [rotateBy]() { rotateBy(-90.0f); }, true);
-  auto* rotate_r = makeToolButton(QString::fromUtf8("\xE2\x86\xBB"), "Rotate 90° right",
-                                  [rotateBy]() { rotateBy(90.0f); }, true);
-  auto* flip = makeToolButton(QString::fromUtf8("\xE2\x87\x84"),
-                              "Flip horizontal (coming soon)", {}, false);
+  auto* rotate_l = makeToolButton(
+      QString::fromUtf8("\xE2\x86\xBA"), "Rotate 90° left", [rotateBy]() { rotateBy(-90.0f); },
+      true);
+  auto* rotate_r = makeToolButton(
+      QString::fromUtf8("\xE2\x86\xBB"), "Rotate 90° right", [rotateBy]() { rotateBy(90.0f); },
+      true);
+  auto* flip =
+      makeToolButton(QString::fromUtf8("\xE2\x87\x84"), "Flip horizontal (coming soon)", {}, false);
 
   btn_h->addWidget(rotate_l, 1);
   btn_h->addWidget(rotate_r, 1);
@@ -549,14 +572,15 @@ void GeometryPanelWidget::BuildRotateSection() {
 void GeometryPanelWidget::BuildCropOffsetSection() {
   const auto& theme = AppTheme::Instance();
 
-  auto addSlider = [&](QWidget* parent, QVBoxLayout* layout, const char* name_source, int min, int max,
-                       int value, auto&& onChange, auto&& onReset, auto&& formatter) -> QSlider* {
-    auto* row = new QWidget(parent);
+  auto addSlider    = [&](QWidget* parent, QVBoxLayout* layout, const char* name_source, int min,
+                       int max, int value, auto&& onChange, auto&& onReset,
+                       auto&& formatter) -> QSlider* {
+    auto* row   = new QWidget(parent);
     auto* row_v = new QVBoxLayout(row);
     row_v->setContentsMargins(0, 0, 0, 0);
     row_v->setSpacing(6);
 
-    auto* header = new QWidget(row);
+    auto* header   = new QWidget(row);
     auto* header_h = new QHBoxLayout(header);
     header_h->setContentsMargins(0, 0, 0, 0);
     header_h->setSpacing(kRowInnerSpacing);
@@ -585,7 +609,7 @@ void GeometryPanelWidget::BuildCropOffsetSection() {
     slider->setFixedHeight(kSliderHeight);
 
     QObject::connect(slider, &QSlider::valueChanged, parent,
-                     [this, value_label, formatter,
+                        [this, value_label, formatter,
                       onChange = std::forward<decltype(onChange)>(onChange)](int v) {
                        value_label->setText(formatter(v));
                        if (IsSyncing()) {
@@ -594,15 +618,13 @@ void GeometryPanelWidget::BuildCropOffsetSection() {
                        onChange(v);
                      });
 
-    if (callbacks_.register_slider_reset) {
-      callbacks_.register_slider_reset(
-          slider, [this, onReset = std::forward<decltype(onReset)>(onReset)]() mutable {
-            if (IsSyncing()) {
-              return;
-            }
-            onReset();
-          });
-    }
+    RegisterSliderReset(slider,
+                           [this, onReset = std::forward<decltype(onReset)>(onReset)]() mutable {
+                          if (IsSyncing()) {
+                            return;
+                          }
+                          onReset();
+                        });
 
     row_v->addWidget(header, 0);
     row_v->addWidget(slider, 0);
@@ -610,9 +632,9 @@ void GeometryPanelWidget::BuildCropOffsetSection() {
     return slider;
   };
 
-  auto* v = AddGeometrySection(this, *deps_.panel_layout, "Crop Offset");
+  auto* v          = AddGeometrySection(this, *deps_.panel_layout, "Crop Offset");
 
-  auto formatUnit = [](int vv) {
+  auto  formatUnit = [](int vv) {
     return QString::number(static_cast<double>(vv) / geometry::kCropRectSliderScale, 'f', 3);
   };
 
@@ -620,8 +642,9 @@ void GeometryPanelWidget::BuildCropOffsetSection() {
       this, v, "X", 0, static_cast<int>(geometry::kCropRectSliderScale),
       static_cast<int>(std::lround(geometry_state_.crop_x_ * geometry::kCropRectSliderScale)),
       [&](int vv) {
-        SetCropRectState(static_cast<float>(vv) / geometry::kCropRectSliderScale, geometry_state_.crop_y_,
-                         geometry_state_.crop_w_, geometry_state_.crop_h_, false, true);
+        SetCropRectState(static_cast<float>(vv) / geometry::kCropRectSliderScale,
+                         geometry_state_.crop_y_, geometry_state_.crop_w_, geometry_state_.crop_h_,
+                         false, true);
       },
       [this]() { ResetCropAndRotation(); }, formatUnit);
 
@@ -629,7 +652,8 @@ void GeometryPanelWidget::BuildCropOffsetSection() {
       this, v, "Y", 0, static_cast<int>(geometry::kCropRectSliderScale),
       static_cast<int>(std::lround(geometry_state_.crop_y_ * geometry::kCropRectSliderScale)),
       [&](int vv) {
-        SetCropRectState(geometry_state_.crop_x_, static_cast<float>(vv) / geometry::kCropRectSliderScale,
+        SetCropRectState(geometry_state_.crop_x_,
+                         static_cast<float>(vv) / geometry::kCropRectSliderScale,
                          geometry_state_.crop_w_, geometry_state_.crop_h_, false, true);
       },
       [this]() { ResetCropAndRotation(); }, formatUnit);
@@ -787,9 +811,9 @@ void GeometryPanelWidget::SyncCropAspectControlsFromState() {
 
 void GeometryPanelWidget::PushGeometryStateToOverlay() {
   if (callbacks_.set_crop_overlay_aspect_lock) {
-    const bool locked_aspect = geometry::HasLockedAspect(
-        geometry_state_.crop_aspect_preset_, geometry_state_.crop_aspect_width_,
-        geometry_state_.crop_aspect_height_);
+    const bool locked_aspect = geometry::HasLockedAspect(geometry_state_.crop_aspect_preset_,
+                                                         geometry_state_.crop_aspect_width_,
+                                                         geometry_state_.crop_aspect_height_);
     callbacks_.set_crop_overlay_aspect_lock(locked_aspect,
                                             CurrentGeometryAspectRatio().value_or(1.0f));
   }
@@ -804,11 +828,11 @@ void GeometryPanelWidget::PushGeometryStateToOverlay() {
 
 void GeometryPanelWidget::SetCropRectState(float x, float y, float w, float h, bool sync_controls,
                                            bool sync_overlay) {
-  const auto clamped         = geometry::ClampCropRect(x, y, w, h);
-  geometry_state_.crop_x_    = clamped[0];
-  geometry_state_.crop_y_    = clamped[1];
-  geometry_state_.crop_w_    = clamped[2];
-  geometry_state_.crop_h_    = clamped[3];
+  const auto clamped            = geometry::ClampCropRect(x, y, w, h);
+  geometry_state_.crop_x_       = clamped[0];
+  geometry_state_.crop_y_       = clamped[1];
+  geometry_state_.crop_w_       = clamped[2];
+  geometry_state_.crop_h_       = clamped[3];
   geometry_state_.crop_enabled_ = true;
   if (sync_controls) {
     SyncGeometryCropSlidersFromState();
@@ -913,8 +937,8 @@ void GeometryPanelWidget::ResetCropAndRotation() {
     rotate_slider_->setValue(0);
   }
   if (geometry_crop_aspect_preset_combo_) {
-    const int free_index =
-        geometry_crop_aspect_preset_combo_->findData(static_cast<int>(geometry::CropAspectPreset::Free));
+    const int free_index = geometry_crop_aspect_preset_combo_->findData(
+        static_cast<int>(geometry::CropAspectPreset::Free));
     geometry_crop_aspect_preset_combo_->setCurrentIndex(std::max(0, free_index));
   }
   if (geometry_crop_aspect_width_spin_) {
@@ -952,8 +976,8 @@ void GeometryPanelWidget::SetRotationFromViewer(float degrees) {
   const bool prev_sync            = local_syncing_;
   local_syncing_                  = true;
   if (rotate_slider_) {
-    rotate_slider_->setValue(
-        static_cast<int>(std::lround(geometry_state_.rotate_degrees_ * geometry::kRotationSliderScale)));
+    rotate_slider_->setValue(static_cast<int>(
+        std::lround(geometry_state_.rotate_degrees_ * geometry::kRotationSliderScale)));
   }
   local_syncing_ = prev_sync;
 }
@@ -968,8 +992,8 @@ void GeometryPanelWidget::SyncControlsFromDialogState() {
   const bool prev_sync = local_syncing_;
   local_syncing_       = true;
   if (rotate_slider_) {
-    rotate_slider_->setValue(
-        static_cast<int>(std::lround(geometry_state_.rotate_degrees_ * geometry::kRotationSliderScale)));
+    rotate_slider_->setValue(static_cast<int>(
+        std::lround(geometry_state_.rotate_degrees_ * geometry::kRotationSliderScale)));
   }
   SyncGeometryCropSlidersFromState();
   SyncCropAspectControlsFromState();

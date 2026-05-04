@@ -4,12 +4,14 @@
 
 #pragma once
 
+#include <QEvent>
 #include <QLabel>
 #include <QPushButton>
 #include <QSlider>
 #include <QVBoxLayout>
 #include <QWidget>
 #include <functional>
+#include <map>
 #include <optional>
 #include <string>
 #include <vector>
@@ -34,10 +36,9 @@ class LookControlPanelWidget final : public AdjustmentPanelWidget {
   };
 
   struct Callbacks {
-    std::function<bool()>                                is_global_syncing;
-    std::function<void()>                                request_render;
-    std::function<void(QSlider*, std::function<void()>)> register_slider_reset;
-    std::function<const AdjustmentState&()>              default_adjustment_state;
+    std::function<bool()>                   is_global_syncing;
+    std::function<void()>                   request_render;
+    std::function<const AdjustmentState&()> default_adjustment_state;
     std::function<std::optional<LookAdjustmentState>(const LookAdjustmentState&)>
         load_from_pipeline;
   };
@@ -56,6 +57,9 @@ class LookControlPanelWidget final : public AdjustmentPanelWidget {
   void RetranslateUi();
   void RefreshLutBrowserUi(bool force_refresh = false, bool preserve_scroll_position = false);
   auto DefaultLutPath() -> std::string;
+  void ClearAppliedLutPath();
+  auto ShouldApplyLutPath(const std::string& lut_path) const -> bool;
+  void MarkAppliedLutPath(const std::string& lut_path);
   auto SelectRelativeLut(int step) -> bool;
   auto CanHandleLutNavigationShortcut(QWidget* focus_widget) const -> bool;
 
@@ -70,46 +74,50 @@ class LookControlPanelWidget final : public AdjustmentPanelWidget {
   void CopyLookStateToDialogState(const LookAdjustmentState& look_state, AdjustmentState& state);
 
   auto IsSyncing() const -> bool;
+  bool eventFilter(QObject* obj, QEvent* event) override;
+  void RegisterSliderReset(QSlider* slider, std::function<void()> on_reset);
   void RequestPipelineRender();
   void PreviewLookField(AdjustmentField field);
   void CommitLookField(AdjustmentField field);
   void ResetHlsField(
       const std::function<void(LookAdjustmentState&, const AdjustmentState&)>& apply_default);
 
-  auto ActiveHlsProfileIndex() const -> int;
-  void SaveActiveHlsProfile();
-  void LoadActiveHlsProfile();
-  void RefreshHlsTargetUi();
-  void RefreshCdlOffsetLabels();
-  void SyncCdlControlsFromState();
+  auto                                      ActiveHlsProfileIndex() const -> int;
+  void                                      SaveActiveHlsProfile();
+  void                                      LoadActiveHlsProfile();
+  void                                      RefreshHlsTargetUi();
+  void                                      RefreshCdlOffsetLabels();
+  void                                      SyncCdlControlsFromState();
 
-  Dependencies deps_{};
-  Callbacks    callbacks_{};
-  bool         local_syncing_ = false;
-  bool         built_         = false;
+  Dependencies                              deps_{};
+  Callbacks                                 callbacks_{};
+  bool                                      local_syncing_ = false;
+  bool                                      built_         = false;
 
-  LookAdjustmentState look_state_{};
-  LookAdjustmentState committed_look_state_{};
+  LookAdjustmentState                       look_state_{};
+  LookAdjustmentState                       committed_look_state_{};
 
-  QVBoxLayout*             layout_                       = nullptr;
-  LutBrowserWidget*        lut_browser_widget_           = nullptr;
-  QLabel*                  hls_target_label_             = nullptr;
-  std::vector<QPushButton*> hls_candidate_buttons_{};
-  QSlider*                 hls_hue_adjust_slider_        = nullptr;
-  QSlider*                 hls_lightness_adjust_slider_  = nullptr;
-  QSlider*                 hls_saturation_adjust_slider_ = nullptr;
-  QSlider*                 hls_hue_range_slider_         = nullptr;
-  CdlTrackballDiscWidget*  lift_disc_widget_             = nullptr;
-  CdlTrackballDiscWidget*  gamma_disc_widget_            = nullptr;
-  CdlTrackballDiscWidget*  gain_disc_widget_             = nullptr;
-  QLabel*                  lift_offset_label_            = nullptr;
-  QLabel*                  gamma_offset_label_           = nullptr;
-  QLabel*                  gain_offset_label_            = nullptr;
-  QSlider*                 lift_master_slider_           = nullptr;
-  QSlider*                 gamma_master_slider_          = nullptr;
-  QSlider*                 gain_master_slider_           = nullptr;
+  QVBoxLayout*                              layout_             = nullptr;
+  LutBrowserWidget*                         lut_browser_widget_ = nullptr;
+  QLabel*                                   hls_target_label_   = nullptr;
+  std::vector<QPushButton*>                 hls_candidate_buttons_{};
+  QSlider*                                  hls_hue_adjust_slider_        = nullptr;
+  QSlider*                                  hls_lightness_adjust_slider_  = nullptr;
+  QSlider*                                  hls_saturation_adjust_slider_ = nullptr;
+  QSlider*                                  hls_hue_range_slider_         = nullptr;
+  CdlTrackballDiscWidget*                   lift_disc_widget_             = nullptr;
+  CdlTrackballDiscWidget*                   gamma_disc_widget_            = nullptr;
+  CdlTrackballDiscWidget*                   gain_disc_widget_             = nullptr;
+  QLabel*                                   lift_offset_label_            = nullptr;
+  QLabel*                                   gamma_offset_label_           = nullptr;
+  QLabel*                                   gain_offset_label_            = nullptr;
+  QSlider*                                  lift_master_slider_           = nullptr;
+  QSlider*                                  gamma_master_slider_          = nullptr;
+  QSlider*                                  gain_master_slider_           = nullptr;
+  std::map<QSlider*, std::function<void()>> slider_reset_callbacks_{};
 
-  controllers::LutController lut_controller_{};
+  controllers::LutController                lut_controller_{};
+  std::string                               last_applied_lut_path_{};
 };
 
 }  // namespace alcedo::ui

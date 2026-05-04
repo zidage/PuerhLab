@@ -595,8 +595,14 @@ The refactor is ready for final acceptance when:
 - Pipeline adapters are module-specific and stateless.
 - The manual matrix passes across tone, look, display transform, geometry, raw decode, versioning, undo, and version checkout.
 
-## Bug Record
+## Review Opinions
 
-### LUT Panel
+- The design of  `editor_dialog_shell_private.hpp` is completely redundant and should be migrated to the `editor_dialog.hpp` header. Another problem with the current design is that the `EditorDialog` class still possesses a lot internal state of the sub-panels, such as `last_applied_lut_path_`, `last_submitted_color_temp_request_`, `slider_reset_callbacks_`, `curve_reset_callback_`, `last_known_as_shot_cct_`, `last_known_as_shot_tint_`. These fields should be moved to the corresponding panel widgets, and the dialog should only be responsible for high-level composition and coordination. Additionally, the `EditorDialog` class still contains a lot of logic related to color temperature, such as `PromoteColorTempToCustomForEditing`, which should be refactored into a dedicated `ColorTempPanelWidget` or integrated into the tone panel if they share a scroll area. The current design does not fully achieve the goal of isolating panel state and behavior, and it still leaves a lot of legacy code in the dialog that should be moved out.
 
-- **Description**: After the migration of the Look panel, users report that LUT panel will automatically scroll to the top of the list when they select a LUT.
+  Done:
+  - Removed the redundant `editor_dialog_shell_private.hpp` header and moved the internal `EditorDialog` declaration into `editor_dialog.hpp`, gated behind `ALCEDO_EDITOR_DIALOG_INTERNAL` so public callers still see only the lightweight `OpenEditorDialog` API.
+  - Moved color-temperature behavior into `ToneControlPanelWidget`, including custom promotion, as-shot cache warming/priming, runtime global-param refresh, reset-to-as-shot handling, UI sync, and the submitted color-temp request cache.
+  - Moved `last_applied_lut_path_` into `LookControlPanelWidget`.
+  - Moved slider double-click reset callback ownership into each panel widget, and moved the curve reset callback into `ToneControlPanelWidget`.
+  - Removed the corresponding color-temp helpers, LUT cache, reset callback maps, and `eventFilter()` reset dispatch from `EditorDialog`; the dialog now only wires high-level render/session/history coordination for these paths.
+  - Verification: `cmd /c scripts\msvc_env.cmd --build --preset win_debug --parallel 4` passes. Direct editor-related tests passed: `EditViewerLogicTest` (10), `ToneCurveWidgetTest` (3), `ODTOpTest` (8), `LutCatalogTest` (6), and `CropRotateOpTest` (9). The filtered `ctest` command still hits the known unrelated `PipelineServiceTest.exe` `0xc0000139` GoogleTest discovery failure before applying the regex.

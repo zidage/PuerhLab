@@ -39,7 +39,7 @@ constexpr char kLocalizedTextProperty[]      = "puerhlabI18nText";
 constexpr char kLocalizedTextUpperProperty[] = "puerhlabI18nTextUpper";
 constexpr char kLocalizedToolTipProperty[]   = "puerhlabI18nToolTip";
 
-void SetLocalizedText(QObject* object, const char* source, bool uppercase = false) {
+void           SetLocalizedText(QObject* object, const char* source, bool uppercase = false) {
   if (!object || source == nullptr) {
     return;
   }
@@ -100,9 +100,7 @@ void RetranslateMarkedLookObjects(QObject* root) {
   }
 }
 
-auto HlsCandidateColor(float hue_degrees) -> QColor {
-  return hls::CandidateColor(hue_degrees);
-}
+auto HlsCandidateColor(float hue_degrees) -> QColor { return hls::CandidateColor(hue_degrees); }
 
 auto MakeLookSection(QWidget* parent, QVBoxLayout& layout, const char* title_source,
                      const char* subtitle_source) -> QVBoxLayout* {
@@ -163,6 +161,29 @@ auto LookControlPanelWidget::IsSyncing() const -> bool {
   return local_syncing_ || (callbacks_.is_global_syncing && callbacks_.is_global_syncing());
 }
 
+bool LookControlPanelWidget::eventFilter(QObject* obj, QEvent* event) {
+  if (event && event->type() == QEvent::MouseButtonDblClick) {
+    if (auto* slider = qobject_cast<QSlider*>(obj)) {
+      const auto it = slider_reset_callbacks_.find(slider);
+      if (it != slider_reset_callbacks_.end()) {
+        if (!IsSyncing() && it->second) {
+          it->second();
+        }
+        return true;
+      }
+    }
+  }
+  return AdjustmentPanelWidget::eventFilter(obj, event);
+}
+
+void LookControlPanelWidget::RegisterSliderReset(QSlider* slider, std::function<void()> on_reset) {
+  if (!slider || !on_reset) {
+    return;
+  }
+  slider->installEventFilter(this);
+  slider_reset_callbacks_[slider] = std::move(on_reset);
+}
+
 void LookControlPanelWidget::RequestPipelineRender() {
   if (callbacks_.request_render) {
     callbacks_.request_render();
@@ -170,7 +191,7 @@ void LookControlPanelWidget::RequestPipelineRender() {
 }
 
 void LookControlPanelWidget::CopyLookStateToDialogState(const LookAdjustmentState& look_state,
-                                                        AdjustmentState& state) {
+                                                        AdjustmentState&           state) {
   state.hls_target_hue_              = look_state.hls_target_hue_;
   state.hls_hue_adjust_              = look_state.hls_hue_adjust_;
   state.hls_lightness_adjust_        = look_state.hls_lightness_adjust_;
@@ -197,20 +218,20 @@ void LookControlPanelWidget::PullLookStateFromDialog() {
   if (!deps_.dialog_state) {
     return;
   }
-  const auto& s                           = *deps_.dialog_state;
-  look_state_.hls_target_hue_             = s.hls_target_hue_;
-  look_state_.hls_hue_adjust_             = s.hls_hue_adjust_;
-  look_state_.hls_lightness_adjust_       = s.hls_lightness_adjust_;
-  look_state_.hls_saturation_adjust_      = s.hls_saturation_adjust_;
-  look_state_.hls_hue_range_              = s.hls_hue_range_;
-  look_state_.lift_wheel_                 = s.lift_wheel_;
-  look_state_.gamma_wheel_                = s.gamma_wheel_;
-  look_state_.gain_wheel_                 = s.gain_wheel_;
-  look_state_.hls_hue_adjust_table_       = s.hls_hue_adjust_table_;
-  look_state_.hls_lightness_adjust_table_ = s.hls_lightness_adjust_table_;
+  const auto& s                            = *deps_.dialog_state;
+  look_state_.hls_target_hue_              = s.hls_target_hue_;
+  look_state_.hls_hue_adjust_              = s.hls_hue_adjust_;
+  look_state_.hls_lightness_adjust_        = s.hls_lightness_adjust_;
+  look_state_.hls_saturation_adjust_       = s.hls_saturation_adjust_;
+  look_state_.hls_hue_range_               = s.hls_hue_range_;
+  look_state_.lift_wheel_                  = s.lift_wheel_;
+  look_state_.gamma_wheel_                 = s.gamma_wheel_;
+  look_state_.gain_wheel_                  = s.gain_wheel_;
+  look_state_.hls_hue_adjust_table_        = s.hls_hue_adjust_table_;
+  look_state_.hls_lightness_adjust_table_  = s.hls_lightness_adjust_table_;
   look_state_.hls_saturation_adjust_table_ = s.hls_saturation_adjust_table_;
-  look_state_.hls_hue_range_table_        = s.hls_hue_range_table_;
-  look_state_.lut_path_                   = s.lut_path_;
+  look_state_.hls_hue_range_table_         = s.hls_hue_range_table_;
+  look_state_.lut_path_                    = s.lut_path_;
   LoadActiveHlsProfile();
 }
 
@@ -274,19 +295,19 @@ auto LookControlPanelWidget::ActiveHlsProfileIndex() const -> int {
 }
 
 void LookControlPanelWidget::SaveActiveHlsProfile() {
-  const int idx                                = ActiveHlsProfileIndex();
-  look_state_.hls_hue_adjust_table_[idx]       = look_state_.hls_hue_adjust_;
-  look_state_.hls_lightness_adjust_table_[idx] = look_state_.hls_lightness_adjust_;
+  const int idx                                 = ActiveHlsProfileIndex();
+  look_state_.hls_hue_adjust_table_[idx]        = look_state_.hls_hue_adjust_;
+  look_state_.hls_lightness_adjust_table_[idx]  = look_state_.hls_lightness_adjust_;
   look_state_.hls_saturation_adjust_table_[idx] = look_state_.hls_saturation_adjust_;
-  look_state_.hls_hue_range_table_[idx]        = look_state_.hls_hue_range_;
+  look_state_.hls_hue_range_table_[idx]         = look_state_.hls_hue_range_;
 }
 
 void LookControlPanelWidget::LoadActiveHlsProfile() {
-  const int idx                         = ActiveHlsProfileIndex();
-  look_state_.hls_hue_adjust_           = look_state_.hls_hue_adjust_table_[idx];
-  look_state_.hls_lightness_adjust_     = look_state_.hls_lightness_adjust_table_[idx];
-  look_state_.hls_saturation_adjust_    = look_state_.hls_saturation_adjust_table_[idx];
-  look_state_.hls_hue_range_            = look_state_.hls_hue_range_table_[idx];
+  const int idx                      = ActiveHlsProfileIndex();
+  look_state_.hls_hue_adjust_        = look_state_.hls_hue_adjust_table_[idx];
+  look_state_.hls_lightness_adjust_  = look_state_.hls_lightness_adjust_table_[idx];
+  look_state_.hls_saturation_adjust_ = look_state_.hls_saturation_adjust_table_[idx];
+  look_state_.hls_hue_range_         = look_state_.hls_hue_range_table_[idx];
 }
 
 void LookControlPanelWidget::ResetHlsField(
@@ -306,7 +327,7 @@ void LookControlPanelWidget::Build() {
   if (built_ || !layout_) {
     return;
   }
-  built_ = true;
+  built_       = true;
 
   auto* header = NewLocalizedLabel("Color", this);
   header->setObjectName("SectionTitle");
@@ -362,8 +383,8 @@ void LookControlPanelWidget::BuildHlsSection() {
   }
 
   MakeLookSection(this, *layout_, "HSL / Color", "Per-hue lightness and saturation adjustments.");
-  auto* frame  = new QWidget(this);
-  auto* v      = new QVBoxLayout(frame);
+  auto* frame = new QWidget(this);
+  auto* v     = new QVBoxLayout(frame);
   v->setContentsMargins(0, 0, 0, 0);
   v->setSpacing(6);
 
@@ -404,9 +425,9 @@ void LookControlPanelWidget::BuildHlsSection() {
       QStringLiteral("QLabel { color: %1; background: transparent; border: none; padding: 0; }")
           .arg(AppTheme::Instance().textMutedColor().name(QColor::HexRgb));
 
-  auto add_slider = [this, value_chip_style](
-                        const char* name_source, int min, int max, int value, auto&& on_change,
-                        auto&& on_release, auto&& on_reset, auto&& formatter) {
+  auto add_slider = [this, value_chip_style](const char* name_source, int min, int max, int value,
+                                             auto&& on_change, auto&& on_release, auto&& on_reset,
+                                             auto&& formatter) {
     auto* name_label = NewLocalizedLabel(name_source, this);
     name_label->setStyleSheet(AppTheme::EditorLabelStyle(AppTheme::Instance().textColor()));
     AppTheme::MarkFontRole(name_label, AppTheme::FontRole::UiCaption);
@@ -444,14 +465,12 @@ void LookControlPanelWidget::BuildHlsSection() {
                          on_release();
                        }
                      });
-    if (callbacks_.register_slider_reset) {
-      callbacks_.register_slider_reset(
-          slider, [this, on_reset = std::forward<decltype(on_reset)>(on_reset)]() mutable {
-            if (!IsSyncing()) {
-              on_reset();
-            }
-          });
-    }
+    RegisterSliderReset(slider,
+                        [this, on_reset = std::forward<decltype(on_reset)>(on_reset)]() mutable {
+                          if (!IsSyncing()) {
+                            on_reset();
+                          }
+                        });
 
     auto* head_row    = new QWidget(this);
     auto* head_layout = new QHBoxLayout(head_row);
@@ -475,8 +494,7 @@ void LookControlPanelWidget::BuildHlsSection() {
       "Hue Shift", -15, 15, static_cast<int>(std::lround(look_state_.hls_hue_adjust_)),
       [this](int v) {
         look_state_.hls_hue_adjust_ =
-            std::clamp(static_cast<float>(v), -hls::kMaxHueShiftDegrees,
-                       hls::kMaxHueShiftDegrees);
+            std::clamp(static_cast<float>(v), -hls::kMaxHueShiftDegrees, hls::kMaxHueShiftDegrees);
         SaveActiveHlsProfile();
         PreviewLookField(AdjustmentField::Hls);
       },
@@ -554,11 +572,10 @@ void LookControlPanelWidget::BuildCdlSection() {
   wheel_layout->setContentsMargins(0, 4, 0, 0);
   wheel_layout->setSpacing(10);
 
-  auto make_wheel_unit = [this, wheel_frame](const char* title_source, CdlWheelState& wheel_state,
-                                             bool add_unity, bool invert_delta,
-                                             CdlTrackballDiscWidget*& disc_widget,
-                                             QLabel*& offset_label,
-                                             QSlider*& slider_widget) -> QWidget* {
+  auto make_wheel_unit = [this, wheel_frame](
+                             const char* title_source, CdlWheelState& wheel_state, bool add_unity,
+                             bool invert_delta, CdlTrackballDiscWidget*& disc_widget,
+                             QLabel*& offset_label, QSlider*& slider_widget) -> QWidget* {
     auto* unit = new QWidget(wheel_frame);
     unit->setMinimumWidth(0);
     unit->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
@@ -577,25 +594,27 @@ void LookControlPanelWidget::BuildCdlSection() {
     disc_widget->setMaximumSize(180, 180);
     disc_widget->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     disc_widget->SetPosition(wheel->disc_position_);
-    disc_widget->SetPositionChangedCallback([this, wheel, add_unity, invert_delta](const QPointF& pos) {
-      if (IsSyncing()) {
-        return;
-      }
-      wheel->disc_position_ = color_wheel::ClampDiscPoint(pos);
-      UpdateCdlWheelDerivedColor(*wheel, add_unity, invert_delta);
-      RefreshCdlOffsetLabels();
-      PreviewLookField(AdjustmentField::ColorWheel);
-    });
-    disc_widget->SetPositionReleasedCallback([this, wheel, add_unity, invert_delta](const QPointF& pos) {
-      if (IsSyncing()) {
-        return;
-      }
-      wheel->disc_position_ = color_wheel::ClampDiscPoint(pos);
-      UpdateCdlWheelDerivedColor(*wheel, add_unity, invert_delta);
-      RefreshCdlOffsetLabels();
-      PreviewLookField(AdjustmentField::ColorWheel);
-      CommitLookField(AdjustmentField::ColorWheel);
-    });
+    disc_widget->SetPositionChangedCallback(
+        [this, wheel, add_unity, invert_delta](const QPointF& pos) {
+          if (IsSyncing()) {
+            return;
+          }
+          wheel->disc_position_ = color_wheel::ClampDiscPoint(pos);
+          UpdateCdlWheelDerivedColor(*wheel, add_unity, invert_delta);
+          RefreshCdlOffsetLabels();
+          PreviewLookField(AdjustmentField::ColorWheel);
+        });
+    disc_widget->SetPositionReleasedCallback(
+        [this, wheel, add_unity, invert_delta](const QPointF& pos) {
+          if (IsSyncing()) {
+            return;
+          }
+          wheel->disc_position_ = color_wheel::ClampDiscPoint(pos);
+          UpdateCdlWheelDerivedColor(*wheel, add_unity, invert_delta);
+          RefreshCdlOffsetLabels();
+          PreviewLookField(AdjustmentField::ColorWheel);
+          CommitLookField(AdjustmentField::ColorWheel);
+        });
     unit_layout->addWidget(disc_widget, 0, Qt::AlignHCenter);
 
     offset_label = new QLabel(FormatWheelDeltaText(*wheel, add_unity), unit);
@@ -626,33 +645,28 @@ void LookControlPanelWidget::BuildCdlSection() {
         CommitLookField(AdjustmentField::ColorWheel);
       }
     });
-    if (callbacks_.register_slider_reset) {
-      callbacks_.register_slider_reset(slider_widget, [this, wheel]() {
-        if (IsSyncing()) {
-          return;
-        }
-        wheel->master_offset_ = 0.0f;
-        ProjectLookStateToDialog();
-        SyncControlsFromDialogState();
-        PreviewLookField(AdjustmentField::ColorWheel);
-        CommitLookField(AdjustmentField::ColorWheel);
-      });
-    }
+    RegisterSliderReset(slider_widget, [this, wheel]() {
+      if (IsSyncing()) {
+        return;
+      }
+      wheel->master_offset_ = 0.0f;
+      ProjectLookStateToDialog();
+      SyncControlsFromDialogState();
+      PreviewLookField(AdjustmentField::ColorWheel);
+      CommitLookField(AdjustmentField::ColorWheel);
+    });
     unit_layout->addWidget(slider_widget, 0);
     return unit;
   };
 
-  auto* gamma_unit =
-      make_wheel_unit("Gamma", look_state_.gamma_wheel_, true, true, gamma_disc_widget_,
-                      gamma_offset_label_, gamma_master_slider_);
-  auto* lift_unit =
-      make_wheel_unit("Lift", look_state_.lift_wheel_, false, false, lift_disc_widget_,
-                      lift_offset_label_, lift_master_slider_);
-  auto* gain_unit =
-      make_wheel_unit("Gain", look_state_.gain_wheel_, true, false, gain_disc_widget_,
-                      gain_offset_label_, gain_master_slider_);
+  auto* gamma_unit = make_wheel_unit("Gamma", look_state_.gamma_wheel_, true, true,
+                                     gamma_disc_widget_, gamma_offset_label_, gamma_master_slider_);
+  auto* lift_unit  = make_wheel_unit("Lift", look_state_.lift_wheel_, false, false,
+                                     lift_disc_widget_, lift_offset_label_, lift_master_slider_);
+  auto* gain_unit = make_wheel_unit("Gain", look_state_.gain_wheel_, true, false, gain_disc_widget_,
+                                    gain_offset_label_, gain_master_slider_);
 
-  auto* top_row        = new QWidget(wheel_frame);
+  auto* top_row   = new QWidget(wheel_frame);
   auto* top_row_layout = new QHBoxLayout(top_row);
   top_row_layout->setContentsMargins(0, 0, 0, 0);
   top_row_layout->setSpacing(0);
@@ -691,8 +705,7 @@ void LookControlPanelWidget::RefreshHlsTargetUi() {
     const QString border_col = selected
                                    ? AppTheme::Instance().accentColor().name(QColor::HexRgb)
                                    : AppTheme::Instance().glassStrokeColor().name(QColor::HexArgb);
-    btn->setToolTip(
-        Tr("Hue %1 deg").arg(hls::kCandidateHues[static_cast<size_t>(i)], 0, 'f', 0));
+    btn->setToolTip(Tr("Hue %1 deg").arg(hls::kCandidateHues[static_cast<size_t>(i)], 0, 'f', 0));
     btn->setStyleSheet(QString("QPushButton {"
                                "  background: %1;"
                                "  border: %2 solid %3;"
@@ -729,13 +742,16 @@ void LookControlPanelWidget::SyncCdlControlsFromState() {
     gain_disc_widget_->SetPosition(look_state_.gain_wheel_.disc_position_);
   }
   if (lift_master_slider_) {
-    lift_master_slider_->setValue(color_wheel::CdlMasterToSliderUi(look_state_.lift_wheel_.master_offset_));
+    lift_master_slider_->setValue(
+        color_wheel::CdlMasterToSliderUi(look_state_.lift_wheel_.master_offset_));
   }
   if (gamma_master_slider_) {
-    gamma_master_slider_->setValue(color_wheel::CdlMasterToSliderUi(-look_state_.gamma_wheel_.master_offset_));
+    gamma_master_slider_->setValue(
+        color_wheel::CdlMasterToSliderUi(-look_state_.gamma_wheel_.master_offset_));
   }
   if (gain_master_slider_) {
-    gain_master_slider_->setValue(color_wheel::CdlMasterToSliderUi(look_state_.gain_wheel_.master_offset_));
+    gain_master_slider_->setValue(
+        color_wheel::CdlMasterToSliderUi(look_state_.gain_wheel_.master_offset_));
   }
 }
 
@@ -791,6 +807,16 @@ void LookControlPanelWidget::RefreshLutBrowserUi(bool force_refresh,
 auto LookControlPanelWidget::DefaultLutPath() -> std::string {
   (void)lut_controller_.Refresh(look_state_.lut_path_, false);
   return lut_controller_.DefaultLutPath();
+}
+
+void LookControlPanelWidget::ClearAppliedLutPath() { last_applied_lut_path_.clear(); }
+
+auto LookControlPanelWidget::ShouldApplyLutPath(const std::string& lut_path) const -> bool {
+  return lut_path != last_applied_lut_path_;
+}
+
+void LookControlPanelWidget::MarkAppliedLutPath(const std::string& lut_path) {
+  last_applied_lut_path_ = lut_path;
 }
 
 auto LookControlPanelWidget::SelectRelativeLut(int step) -> bool {

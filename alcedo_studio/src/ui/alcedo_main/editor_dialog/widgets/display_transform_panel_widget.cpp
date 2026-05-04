@@ -32,6 +32,30 @@ auto DisplayTransformPanelWidget::IsSyncing() const -> bool {
   return local_syncing_ || (callbacks_.is_global_syncing && callbacks_.is_global_syncing());
 }
 
+bool DisplayTransformPanelWidget::eventFilter(QObject* obj, QEvent* event) {
+  if (event && event->type() == QEvent::MouseButtonDblClick) {
+    if (auto* slider = qobject_cast<QSlider*>(obj)) {
+      const auto it = slider_reset_callbacks_.find(slider);
+      if (it != slider_reset_callbacks_.end()) {
+        if (!IsSyncing() && it->second) {
+          it->second();
+        }
+        return true;
+      }
+    }
+  }
+  return AdjustmentPanelWidget::eventFilter(obj, event);
+}
+
+void DisplayTransformPanelWidget::RegisterSliderReset(QSlider*              slider,
+                                                      std::function<void()> on_reset) {
+  if (!slider || !on_reset) {
+    return;
+  }
+  slider->installEventFilter(this);
+  slider_reset_callbacks_[slider] = std::move(on_reset);
+}
+
 void DisplayTransformPanelWidget::RequestPipelineRender() {
   if (callbacks_.request_render) {
     callbacks_.request_render();
@@ -297,15 +321,13 @@ void DisplayTransformPanelWidget::Build() {
       onRelease();
     });
 
-    if (callbacks_.register_slider_reset) {
-      callbacks_.register_slider_reset(
-          slider, [this, onReset = std::forward<decltype(onReset)>(onReset)]() mutable {
-            if (IsSyncing()) {
-              return;
-            }
-            onReset();
-          });
-    }
+    RegisterSliderReset(slider,
+                        [this, onReset = std::forward<decltype(onReset)>(onReset)]() mutable {
+                          if (IsSyncing()) {
+                            return;
+                          }
+                          onReset();
+                        });
 
     auto* row       = new QWidget(this);
     auto* rowLayout = new QVBoxLayout(row);
@@ -394,15 +416,13 @@ void DisplayTransformPanelWidget::Build() {
       onRelease();
     });
 
-    if (callbacks_.register_slider_reset) {
-      callbacks_.register_slider_reset(
-          slider, [this, onReset = std::forward<decltype(onReset)>(onReset)]() mutable {
-            if (IsSyncing()) {
-              return;
-            }
-            onReset();
-          });
-    }
+    RegisterSliderReset(slider,
+                        [this, onReset = std::forward<decltype(onReset)>(onReset)]() mutable {
+                          if (IsSyncing()) {
+                            return;
+                          }
+                          onReset();
+                        });
 
     auto* row       = new QWidget(parent);
     auto* rowLayout = new QVBoxLayout(row);
@@ -428,8 +448,10 @@ void DisplayTransformPanelWidget::Build() {
       this, deps_.panel_layout, "Encoding Space", kDisplayEncodingSpaceOptions,
       display_state_.odt_.encoding_space_, [this](int value) {
         display_state_.odt_.encoding_space_ = static_cast<ColorUtils::ColorSpace>(value);
-        if (!IsSupportedDisplayEncoding(display_state_.odt_.encoding_space_, display_state_.odt_.encoding_eotf_)) {
-          display_state_.odt_.encoding_eotf_ = DefaultDisplayEotfForSpace(display_state_.odt_.encoding_space_);
+        if (!IsSupportedDisplayEncoding(display_state_.odt_.encoding_space_,
+                                        display_state_.odt_.encoding_eotf_)) {
+          display_state_.odt_.encoding_eotf_ =
+              DefaultDisplayEotfForSpace(display_state_.odt_.encoding_space_);
         }
         RefreshOdtEncodingEotfComboFromState();
         SyncViewerDisplayEncoding();
@@ -469,17 +491,18 @@ void DisplayTransformPanelWidget::Build() {
   RefreshOdtEncodingEotfComboFromState();
 
   odt_peak_luminance_slider_ = addDrtSlider(
-      "Peak Luminance", 100, 1000, static_cast<int>(std::lround(display_state_.odt_.peak_luminance_)),
+      "Peak Luminance", 100, 1000,
+      static_cast<int>(std::lround(display_state_.odt_.peak_luminance_)),
       [this](int value) {
         display_state_.odt_.peak_luminance_ = static_cast<float>(value);
         PreviewOdtField();
       },
       [this]() { CommitOdtField(); },
       [this]() {
-        ResetOdtFieldToDefault([this](DisplayTransformAdjustmentState& defaults,
-                                      const AdjustmentState&) {
-          display_state_.odt_.peak_luminance_ = defaults.odt_.peak_luminance_;
-        });
+        ResetOdtFieldToDefault(
+            [this](DisplayTransformAdjustmentState& defaults, const AdjustmentState&) {
+              display_state_.odt_.peak_luminance_ = defaults.odt_.peak_luminance_;
+            });
       },
       " nits");
 
@@ -556,7 +579,8 @@ void DisplayTransformPanelWidget::Build() {
     odt_open_drt_look_preset_combo_ = addDrtComboBox(
         open_drt_page, open_drt_layout, "Look Preset", kOpenDrtLookPresetOptions,
         display_state_.odt_.open_drt_.look_preset_, [this](int value) {
-          display_state_.odt_.open_drt_.look_preset_ = static_cast<odt_cpu::OpenDRTLookPreset>(value);
+          display_state_.odt_.open_drt_.look_preset_ =
+              static_cast<odt_cpu::OpenDRTLookPreset>(value);
           if (display_state_.odt_.open_drt_.look_preset_ != odt_cpu::OpenDRTLookPreset::CUSTOM) {
             odt_cpu::ApplyOpenDRTLookPresetToSettings(display_state_.odt_.open_drt_.look_preset_,
                                                       &display_state_.odt_.open_drt_);
@@ -575,9 +599,10 @@ void DisplayTransformPanelWidget::Build() {
         display_state_.odt_.open_drt_.tonescale_preset_, [this](int value) {
           display_state_.odt_.open_drt_.tonescale_preset_ =
               static_cast<odt_cpu::OpenDRTTonescalePreset>(value);
-          if (display_state_.odt_.open_drt_.tonescale_preset_ != odt_cpu::OpenDRTTonescalePreset::CUSTOM) {
-            odt_cpu::ApplyOpenDRTTonescalePresetToSettings(display_state_.odt_.open_drt_.tonescale_preset_,
-                                                           &display_state_.odt_.open_drt_);
+          if (display_state_.odt_.open_drt_.tonescale_preset_ !=
+              odt_cpu::OpenDRTTonescalePreset::CUSTOM) {
+            odt_cpu::ApplyOpenDRTTonescalePresetToSettings(
+                display_state_.odt_.open_drt_.tonescale_preset_, &display_state_.odt_.open_drt_);
             SyncOpenDrtDetailControlsFromState();
           }
           PreviewOdtField();
@@ -671,10 +696,10 @@ void DisplayTransformPanelWidget::Build() {
 
     auto commitOdt = [this]() { CommitOdtField(); };
     auto resetOdt  = [this]() {
-      ResetOdtFieldToDefault([this](DisplayTransformAdjustmentState&,
-                                    const AdjustmentState& defaults) {
-        display_state_.odt_.open_drt_ = defaults.odt_.open_drt_;
-      });
+      ResetOdtFieldToDefault(
+          [this](DisplayTransformAdjustmentState&, const AdjustmentState& defaults) {
+            display_state_.odt_.open_drt_ = defaults.odt_.open_drt_;
+          });
     };
     auto toneChanged = [this](float& target, float value) {
       MarkOpenDrtTonescalePresetCustomForEditing();
@@ -689,7 +714,8 @@ void DisplayTransformPanelWidget::Build() {
     auto addLookDetail = [&](QVBoxLayout* section, const char* label, float min, float max,
                              float step, float odt_cpu::OpenDRTDetailedSettings::* member) {
       addOpenDrtFloatSlider(
-          open_drt_page, section, label, min, max, step, display_state_.odt_.open_drt_.detailed_.*member,
+          open_drt_page, section, label, min, max, step,
+          display_state_.odt_.open_drt_.detailed_.*member,
           [member](const odt_cpu::OpenDRTSettings& s) { return s.detailed_.*member; },
           [this, lookChanged, member](float v) {
             lookChanged(display_state_.odt_.open_drt_.detailed_.*member, v);
@@ -702,31 +728,41 @@ void DisplayTransformPanelWidget::Build() {
         open_drt_page, tonescale_section, "Contrast", 1.0f, 2.0f, 0.01f,
         display_state_.odt_.open_drt_.detailed_.tn_con_,
         [](const odt_cpu::OpenDRTSettings& s) { return s.detailed_.tn_con_; },
-        [this, toneChanged](float v) { toneChanged(display_state_.odt_.open_drt_.detailed_.tn_con_, v); },
+        [this, toneChanged](float v) {
+          toneChanged(display_state_.odt_.open_drt_.detailed_.tn_con_, v);
+        },
         commitOdt, resetOdt, QString());
     addOpenDrtFloatSlider(
         open_drt_page, tonescale_section, "Shoulder Clip", 0.0f, 1.0f, 0.01f,
         display_state_.odt_.open_drt_.detailed_.tn_sh_,
         [](const odt_cpu::OpenDRTSettings& s) { return s.detailed_.tn_sh_; },
-        [this, toneChanged](float v) { toneChanged(display_state_.odt_.open_drt_.detailed_.tn_sh_, v); },
+        [this, toneChanged](float v) {
+          toneChanged(display_state_.odt_.open_drt_.detailed_.tn_sh_, v);
+        },
         commitOdt, resetOdt, QString());
     addOpenDrtFloatSlider(
         open_drt_page, tonescale_section, "Toe", 0.0f, 0.1f, 0.001f,
         display_state_.odt_.open_drt_.detailed_.tn_toe_,
         [](const odt_cpu::OpenDRTSettings& s) { return s.detailed_.tn_toe_; },
-        [this, toneChanged](float v) { toneChanged(display_state_.odt_.open_drt_.detailed_.tn_toe_, v); },
+        [this, toneChanged](float v) {
+          toneChanged(display_state_.odt_.open_drt_.detailed_.tn_toe_, v);
+        },
         commitOdt, resetOdt, QString());
     addOpenDrtFloatSlider(
         open_drt_page, tonescale_section, "Offset", 0.0f, 0.02f, 0.0002f,
         display_state_.odt_.open_drt_.detailed_.tn_off_,
         [](const odt_cpu::OpenDRTSettings& s) { return s.detailed_.tn_off_; },
-        [this, toneChanged](float v) { toneChanged(display_state_.odt_.open_drt_.detailed_.tn_off_, v); },
+        [this, toneChanged](float v) {
+          toneChanged(display_state_.odt_.open_drt_.detailed_.tn_off_, v);
+        },
         commitOdt, resetOdt, QString());
     addOpenDrtFloatSlider(
         open_drt_page, tonescale_section, "Contrast High", -1.0f, 1.0f, 0.02f,
         display_state_.odt_.open_drt_.detailed_.tn_hcon_,
         [](const odt_cpu::OpenDRTSettings& s) { return s.detailed_.tn_hcon_; },
-        [this, toneChanged](float v) { toneChanged(display_state_.odt_.open_drt_.detailed_.tn_hcon_, v); },
+        [this, toneChanged](float v) {
+          toneChanged(display_state_.odt_.open_drt_.detailed_.tn_hcon_, v);
+        },
         commitOdt, resetOdt, QString());
     addOpenDrtFloatSlider(
         open_drt_page, tonescale_section, "Contrast High Pivot", 0.0f, 4.0f, 0.04f,
@@ -748,7 +784,9 @@ void DisplayTransformPanelWidget::Build() {
         open_drt_page, tonescale_section, "Contrast Low", 0.0f, 3.0f, 0.03f,
         display_state_.odt_.open_drt_.detailed_.tn_lcon_,
         [](const odt_cpu::OpenDRTSettings& s) { return s.detailed_.tn_lcon_; },
-        [this, toneChanged](float v) { toneChanged(display_state_.odt_.open_drt_.detailed_.tn_lcon_, v); },
+        [this, toneChanged](float v) {
+          toneChanged(display_state_.odt_.open_drt_.detailed_.tn_lcon_, v);
+        },
         commitOdt, resetOdt, QString());
     addOpenDrtFloatSlider(
         open_drt_page, tonescale_section, "Contrast Low Width", 0.0f, 2.0f, 0.02f,
@@ -900,12 +938,11 @@ void DisplayTransformPanelWidget::Build() {
 }
 
 void DisplayTransformPanelWidget::RefreshOdtMethodUi() {
-  const bool aces_active = display_state_.odt_.method_ == ColorUtils::ODTMethod::ACES_2_0;
-  const bool open_drt_active =
-      display_state_.odt_.method_ == ColorUtils::ODTMethod::OPEN_DRT;
+  const bool    aces_active     = display_state_.odt_.method_ == ColorUtils::ODTMethod::ACES_2_0;
+  const bool    open_drt_active = display_state_.odt_.method_ == ColorUtils::ODTMethod::OPEN_DRT;
 
-  const QString active_style   = AppTheme::EditorMethodCardStyle(true);
-  const QString inactive_style = AppTheme::EditorMethodCardStyle(false);
+  const QString active_style    = AppTheme::EditorMethodCardStyle(true);
+  const QString inactive_style  = AppTheme::EditorMethodCardStyle(false);
 
   if (odt_aces_method_card_) {
     odt_aces_method_card_->setChecked(aces_active);
@@ -994,15 +1031,13 @@ void DisplayTransformPanelWidget::MarkOpenDrtLookPresetCustomForEditing() {
 }
 
 void DisplayTransformPanelWidget::MarkOpenDrtTonescalePresetCustomForEditing() {
-  if (display_state_.odt_.open_drt_.tonescale_preset_ ==
-      odt_cpu::OpenDRTTonescalePreset::CUSTOM) {
+  if (display_state_.odt_.open_drt_.tonescale_preset_ == odt_cpu::OpenDRTTonescalePreset::CUSTOM) {
     return;
   }
-  display_state_.odt_.open_drt_.tonescale_preset_ =
-      odt_cpu::OpenDRTTonescalePreset::CUSTOM;
+  display_state_.odt_.open_drt_.tonescale_preset_ = odt_cpu::OpenDRTTonescalePreset::CUSTOM;
 
-  const bool prev_sync = local_syncing_;
-  local_syncing_       = true;
+  const bool prev_sync                            = local_syncing_;
+  local_syncing_                                  = true;
   if (odt_open_drt_tonescale_preset_combo_) {
     const int idx = odt_open_drt_tonescale_preset_combo_->findData(
         static_cast<int>(odt_cpu::OpenDRTTonescalePreset::CUSTOM));
@@ -1020,8 +1055,8 @@ void DisplayTransformPanelWidget::SyncControlsFromDialogState() {
   local_syncing_       = true;
 
   if (odt_encoding_space_combo_) {
-    const int encoding_space_index = odt_encoding_space_combo_->findData(
-        static_cast<int>(display_state_.odt_.encoding_space_));
+    const int encoding_space_index =
+        odt_encoding_space_combo_->findData(static_cast<int>(display_state_.odt_.encoding_space_));
     odt_encoding_space_combo_->setCurrentIndex(std::max(0, encoding_space_index));
   }
   RefreshOdtEncodingEotfComboFromState();

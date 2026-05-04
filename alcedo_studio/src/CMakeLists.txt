@@ -1036,13 +1036,12 @@ if(ALCEDO_REAL_WIDGET_EDITOR)
         ui/alcedo_main/editor_dialog/widgets/tone_curve_widget.cpp
         ui/alcedo_main/editor_dialog/widgets/history_cards.cpp
         ui/alcedo_main/editor_dialog/widgets/lut_browser_widget.cpp
-        include/ui/alcedo_main/editor_dialog/editor_dialog.hpp
         include/ui/alcedo_main/editor_dialog/controllers/lut_controller.hpp
         include/ui/alcedo_main/editor_dialog/modules/lut_catalog.hpp
         include/ui/alcedo_main/editor_dialog/widgets/lut_browser_widget.hpp
         include/ui/alcedo_main/editor_dialog/dialog.hpp
         include/ui/alcedo_main/editor_dialog/dialog_internal.hpp
-        include/ui/alcedo_main/editor_dialog/shell/editor_dialog_shell_private.hpp
+        include/ui/alcedo_main/editor_dialog/editor_dialog.hpp
         include/ui/alcedo_main/editor_dialog/state.hpp
         include/ui/alcedo_main/editor_dialog/controllers/image_controller.hpp
         include/ui/alcedo_main/editor_dialog/controllers/pipeline_controller.hpp

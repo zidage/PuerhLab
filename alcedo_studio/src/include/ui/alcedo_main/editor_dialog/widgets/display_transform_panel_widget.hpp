@@ -6,6 +6,7 @@
 
 #include <QComboBox>
 #include <QDoubleSpinBox>
+#include <QEvent>
 #include <QFrame>
 #include <QPushButton>
 #include <QSlider>
@@ -13,6 +14,7 @@
 #include <QVBoxLayout>
 #include <QWidget>
 #include <functional>
+#include <map>
 #include <optional>
 #include <vector>
 
@@ -34,10 +36,9 @@ class DisplayTransformPanelWidget final : public AdjustmentPanelWidget {
   };
 
   struct Callbacks {
-    std::function<bool()>                                is_global_syncing;
-    std::function<void()>                                request_render;
-    std::function<void(QSlider*, std::function<void()>)> register_slider_reset;
-    std::function<const AdjustmentState&()>              default_adjustment_state;
+    std::function<bool()>                                         is_global_syncing;
+    std::function<void()>                                         request_render;
+    std::function<const AdjustmentState&()>                       default_adjustment_state;
     std::function<void(ColorUtils::ColorSpace, ColorUtils::EOTF)> sync_display_encoding;
     std::function<std::optional<DisplayTransformAdjustmentState>(
         const DisplayTransformAdjustmentState&)>
@@ -67,45 +68,47 @@ class DisplayTransformPanelWidget final : public AdjustmentPanelWidget {
     std::function<float(const odt_cpu::OpenDRTSettings&)> getter_{};
   };
 
-  void ProjectDisplayTransformStateToDialog();
-  void PullDisplayTransformStateFromDialog();
-  void PullCommittedDisplayTransformStateFromDialog();
+  void         ProjectDisplayTransformStateToDialog();
+  void         PullDisplayTransformStateFromDialog();
+  void         PullCommittedDisplayTransformStateFromDialog();
 
-  auto IsSyncing() const -> bool;
-  void RequestPipelineRender();
-  void SyncViewerDisplayEncoding();
-  void PreviewOdtField();
-  void CommitOdtField();
-  void ResetOdtFieldToDefault(
-      const std::function<void(DisplayTransformAdjustmentState&, const AdjustmentState&)>&
-          apply_default);
+  auto         IsSyncing() const -> bool;
+  bool         eventFilter(QObject* obj, QEvent* event) override;
+  void         RegisterSliderReset(QSlider* slider, std::function<void()> on_reset);
+  void         RequestPipelineRender();
+  void         SyncViewerDisplayEncoding();
+  void         PreviewOdtField();
+  void         CommitOdtField();
+  void         ResetOdtFieldToDefault(const std::function<void(DisplayTransformAdjustmentState&,
+                                                       const AdjustmentState&)>& apply_default);
 
-  void RefreshOdtMethodUi();
-  void RefreshOdtEncodingEotfComboFromState();
-  void SyncOpenDrtDetailControlsFromState();
-  void MarkOpenDrtLookPresetCustomForEditing();
-  void MarkOpenDrtTonescalePresetCustomForEditing();
+  void         RefreshOdtMethodUi();
+  void         RefreshOdtEncodingEotfComboFromState();
+  void         SyncOpenDrtDetailControlsFromState();
+  void         MarkOpenDrtLookPresetCustomForEditing();
+  void         MarkOpenDrtTonescalePresetCustomForEditing();
 
   Dependencies deps_{};
   Callbacks    callbacks_{};
   bool         local_syncing_ = false;
 
-  DisplayTransformAdjustmentState display_state_{};
-  DisplayTransformAdjustmentState committed_display_state_{};
+  DisplayTransformAdjustmentState           display_state_{};
+  DisplayTransformAdjustmentState           committed_display_state_{};
 
-  QComboBox*      odt_encoding_space_combo_            = nullptr;
-  QComboBox*      odt_encoding_eotf_combo_             = nullptr;
-  QSlider*        odt_peak_luminance_slider_           = nullptr;
-  QPushButton*    odt_aces_method_card_                = nullptr;
-  QPushButton*    odt_open_drt_method_card_            = nullptr;
-  QStackedWidget* odt_method_stack_                    = nullptr;
-  QComboBox*      odt_aces_limiting_space_combo_       = nullptr;
-  QComboBox*      odt_open_drt_look_preset_combo_      = nullptr;
-  QComboBox*      odt_open_drt_tonescale_preset_combo_ = nullptr;
-  QComboBox*      odt_open_drt_creative_white_combo_   = nullptr;
-  QWidget*        odt_open_drt_detail_panel_           = nullptr;
+  QComboBox*                                odt_encoding_space_combo_            = nullptr;
+  QComboBox*                                odt_encoding_eotf_combo_             = nullptr;
+  QSlider*                                  odt_peak_luminance_slider_           = nullptr;
+  QPushButton*                              odt_aces_method_card_                = nullptr;
+  QPushButton*                              odt_open_drt_method_card_            = nullptr;
+  QStackedWidget*                           odt_method_stack_                    = nullptr;
+  QComboBox*                                odt_aces_limiting_space_combo_       = nullptr;
+  QComboBox*                                odt_open_drt_look_preset_combo_      = nullptr;
+  QComboBox*                                odt_open_drt_tonescale_preset_combo_ = nullptr;
+  QComboBox*                                odt_open_drt_creative_white_combo_   = nullptr;
+  QWidget*                                  odt_open_drt_detail_panel_           = nullptr;
 
-  std::vector<OpenDrtDetailSliderBinding> odt_open_drt_detail_sliders_{};
+  std::vector<OpenDrtDetailSliderBinding>   odt_open_drt_detail_sliders_{};
+  std::map<QSlider*, std::function<void()>> slider_reset_callbacks_{};
 };
 
 }  // namespace alcedo::ui
