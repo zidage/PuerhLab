@@ -115,8 +115,8 @@ struct FontFamilies {
   QString ui_headline = QStringLiteral("Manrope");
   QString ui_headline_zh = QStringLiteral("Noto Sans SC");
   QString effective_language_code = QStringLiteral("en");
-  QString data = QStringLiteral("DM Mono");
-  QString mono;
+  QString data = QStringLiteral("IBM Plex Sans");
+  QString mono = QStringLiteral("IBM Plex Sans");
 };
 
 auto FontState() -> FontFamilies& {
@@ -314,7 +314,7 @@ void AppTheme::RegisterFonts() {
   families.ui_zh = RegisterFontResource(QStringLiteral(":/fonts/main_NotoSans_zh.ttf"),
                                         QStringLiteral("Noto Sans SC"));
   families.data =
-      RegisterFontResource(QStringLiteral(":/fonts/data_DMMono.ttf"), QStringLiteral("DM Mono"));
+      RegisterFontResource(QStringLiteral(":/fonts/main_IBM.ttf"), QStringLiteral("IBM Plex Sans"));
   const QString registered_headline_zh =
       RegisterFontResource(QStringLiteral(":/fonts/main_HanaMinA.ttf"), QString());
   if (!registered_headline_zh.isEmpty()) {
@@ -325,7 +325,7 @@ void AppTheme::RegisterFonts() {
   if (!registered_headline.isEmpty()) {
     families.ui_headline = registered_headline;
   }
-  families.mono = QFontDatabase::systemFont(QFontDatabase::FixedFont).family();
+  families.mono = families.data;
 
   ApplyUiFontSubstitutions(families);
   ApplyDataFontSubstitutions(families);
