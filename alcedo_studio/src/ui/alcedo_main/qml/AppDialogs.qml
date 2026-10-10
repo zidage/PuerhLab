@@ -16,7 +16,6 @@ Item {
     property bool automationMode: false
     property var imageActionsController: null
     property var selectionState: null
-    property var exportQueueState: null
     property Item blurSource: null
 
     property alias importDialog: importDialogObj

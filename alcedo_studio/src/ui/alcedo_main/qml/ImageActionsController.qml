@@ -12,7 +12,6 @@ Item {
 
     property var host: null
     property var selectionState: null
-    property var exportQueueState: null
     property var imageContextMenu: null
     property var adjustmentTransferDialog: null
     property var deleteConfirmDialog: null
@@ -374,11 +373,11 @@ Item {
         if (!root.pendingDeleteTargets || root.pendingDeleteTargets.length === 0) {
             return
         }
-        // LibraryMutationOperations prunes the selection and closes a deleted editor image.
+        // LibraryMutationOperations prunes the selection and the export queue and closes a
+        // deleted editor image.
         const result = appModules.libraryMutations.DeleteTargets(root.pendingDeleteTargets)
         const deletedIds = (result && result.deletedElementIds) ? result.deletedElementIds : []
         if (deletedIds.length > 0) {
-            exportQueueState.pruneDeletedElements(deletedIds)
             const focusedElementId = Number(root.focusedImageTarget.elementId || 0)
             const focusedFileId = Number(root.focusedImageTarget.fileId || 0)
             for (let i = 0; i < deletedIds.length; ++i) {

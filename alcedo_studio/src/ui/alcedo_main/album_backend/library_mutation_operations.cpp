@@ -61,6 +61,7 @@ auto LibraryMutationOperations::DeleteTargets(const QVariantList& targets) -> QV
       selection_->PruneElements(deleted);
     }
     CloseDeletedEditorImage(deleted);
+    emit ElementsDeleted(deleted);
   }
   return result;
 }

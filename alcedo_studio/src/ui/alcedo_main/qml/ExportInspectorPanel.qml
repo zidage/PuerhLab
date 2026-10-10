@@ -13,55 +13,42 @@ Item {
     id: root
     objectName: "exportInspectorPanel"
 
-    property var exportQueueState: null
     property var selectionState: null
     property int selectedCount: 0
     property bool pageActive: false
 
-    readonly property int exportQueueCount: exportQueueState ? exportQueueState.exportQueueCount : 0
-    readonly property var exportPreviewRows: exportQueueState ? exportQueueState.exportPreviewRows : []
-    readonly property bool hdrExportAvailable: exportQueueState ? exportQueueState.hasHdrItems() : false
+    // The queue, defaults, limits, and checks are C++ owners shared with automation.
+    readonly property var exportQueue: appModules.exportQueue
+    readonly property var exportRecipe: appModules.exportRecipe
+    readonly property var recipeDefaults: exportRecipe.DefaultOptions()
+    readonly property int exportQueueCount: exportQueue.count
+    readonly property var exportPreviewRows: exportQueue.previewRows
+    readonly property bool hdrExportAvailable: exportQueue.hasHdrItems
     readonly property bool exportBusy: appModules.importExport.exportInFlight
     readonly property bool controlsEnabled: !exportBusy
 
-    property string sdrFormat: "JPEG"
-    property int sdrBitDepth: 8
-    property string tiffCompression: "NONE"
-    property int pngLevel: 5
-    property bool subfolderEnabled: false
-    property bool ultraHdrDitherEnabled: true
-    property bool includeMetadata: true
-    property bool embedIccProfile: true
+    property string sdrFormat: recipeDefaults.format
+    property int sdrBitDepth: recipeDefaults.bit_depth
+    property string tiffCompression: recipeDefaults.tiff_compression
+    property bool subfolderEnabled: recipeDefaults.subfolder_enabled
+    property bool ultraHdrDitherEnabled: recipeDefaults.ultra_hdr_dither
+    property bool includeMetadata: recipeDefaults.include_metadata
+    property bool embedIccProfile: recipeDefaults.embed_icc_profile
     property string outDirText: ""
     property string subfolderText: qsTr("Processed")
-    property string sdrResizeMode: "original"
-    property string sdrMaxSideText: "2048"
-    property string sdrWidthText: "2048"
-    property string sdrHeightText: "2048"
-    property string physicalWidthText: "210"
-    property string physicalHeightText: "297"
-    property string physicalUnit: "mm"
-    property string dpiText: "300"
+    property string sdrResizeMode: recipeDefaults.resize_mode
+    property string sdrMaxSideText: String(recipeDefaults.long_edge)
+    property string sdrWidthText: String(recipeDefaults.width)
+    property string sdrHeightText: String(recipeDefaults.height)
+    property string physicalWidthText: String(recipeDefaults.print_width)
+    property string physicalHeightText: String(recipeDefaults.print_height)
+    property string physicalUnit: recipeDefaults.print_unit
+    property string dpiText: String(recipeDefaults.dpi)
     property var exportFileNamePresets: []
 
     readonly property int queuePreviewLimit: 36
     readonly property int queueListMaxHeight: 180
-    readonly property bool resizeSettingsValid: {
-        switch (root.sdrResizeMode) {
-        case "longEdge":
-            return root.validInteger(root.sdrMaxSideText, 256, 16384)
-        case "bounds":
-            return root.validInteger(root.sdrWidthText, 1, 100000)
-                    && root.validInteger(root.sdrHeightText, 1, 100000)
-        case "physical":
-            return root.validPhysicalSize(root.physicalWidthText)
-                    && root.validPhysicalSize(root.physicalHeightText)
-                    && root.validInteger(root.dpiText, 1, 10000)
-        default:
-            return true
-        }
-    }
-    readonly property bool settingsValid: namingEditor.patternValid && root.resizeSettingsValid
+    readonly property bool settingsValid: exportRecipe.ValidateOptions(root.recipeOptions()).valid
     readonly property string namingSampleSource: {
         const rows = root.exportPreviewRows || []
         return rows.length > 0 && rows[0].label ? String(rows[0].label) : "DSCF2074"
@@ -81,13 +68,6 @@ Item {
         }
     }
 
-    readonly property string effectiveOutDir: {
-        if (!subfolderEnabled || subfolderText.trim().length === 0)
-            return outDirText
-        const base = outDirText.replace(/[/\\]+$/, "")
-        return base + "/" + subfolderText.trim()
-    }
-
     readonly property var formatEntries: [
         { label: qsTr("JPEG"), value: "JPEG" },
         { label: qsTr("PNG"), value: "PNG" },
@@ -96,10 +76,10 @@ Item {
     ]
 
     readonly property var bitDepthEntries: {
-        const format = root.sdrFormat
-        const allow8 = format === "JPEG" || format === "PNG" || format === "TIFF"
-        const allow16 = format === "PNG" || format === "TIFF" || format === "EXR"
-        const allow32 = format === "TIFF" || format === "EXR"
+        const allowed = root.exportRecipe.AllowedBitDepthsFor(root.sdrFormat)
+        const allow8 = allowed.indexOf(8) >= 0
+        const allow16 = allowed.indexOf(16) >= 0
+        const allow32 = allowed.indexOf(32) >= 0
         return [
             { label: qsTr("8 Bit"), value: "8", enabled: allow8 },
             { label: qsTr("16 Bit"), value: "16", enabled: allow16 },
@@ -115,9 +95,9 @@ Item {
 
     readonly property var resizeModeEntries: [
         { label: qsTr("Original"), value: "original" },
-        { label: qsTr("Long Edge"), value: "longEdge" },
+        { label: qsTr("Long Edge"), value: "long_edge" },
         { label: qsTr("Bounds"), value: "bounds" },
-        { label: qsTr("Print"), value: "physical" }
+        { label: qsTr("Print"), value: "print" }
     ]
 
     readonly property var physicalUnitEntries: [
@@ -153,48 +133,42 @@ Item {
         return Qt.rgba(colorValue.r, colorValue.g, colorValue.b, alphaValue)
     }
 
-    function validInteger(textValue, minimum, maximum) {
-        const value = Number(textValue.trim())
-        return Number.isInteger(value) && value >= minimum && value <= maximum
-    }
-
-    function physicalSizeValue(textValue) {
-        return Number.fromLocaleString(Qt.locale(), textValue.trim())
-    }
-
-    function validPhysicalSize(textValue) {
-        const value = root.physicalSizeValue(textValue)
-        return isFinite(value) && value > 0 && value <= 100000
-    }
-
-    function preferredBitDepthFor(formatValue) {
-        switch (formatValue) {
-        case "JPEG":
-            return 8
-        default:
-            return 16
-        }
-    }
-
     function isBitDepthAllowed(formatValue, depth) {
-        switch (formatValue) {
-        case "JPEG":
-            return depth === 8
-        case "PNG":
-            return depth === 8 || depth === 16
-        case "TIFF":
-            return depth === 8 || depth === 16 || depth === 32
-        case "EXR":
-            return depth === 16 || depth === 32
-        default:
-            return depth === 8
-        }
+        return root.exportRecipe.AllowedBitDepthsFor(formatValue).indexOf(depth) >= 0
     }
 
     function ensureValidBitDepthSelection() {
         if (root.isBitDepthAllowed(root.sdrFormat, root.sdrBitDepth))
             return
-        root.sdrBitDepth = root.preferredBitDepthFor(root.sdrFormat)
+        root.sdrBitDepth = root.exportRecipe.PreferredBitDepthFor(root.sdrFormat)
+    }
+
+    // The panel values in the option form of ExportRecipeBuilder. The size fields stay text;
+    // ExportRecipeBuilder reads them and rejects text that is not a valid number.
+    function recipeOptions() {
+        return {
+            format: root.sdrFormat,
+            bit_depth: root.sdrBitDepth,
+            quality: Math.round(sdrQualityModel.value),
+            png_level: Math.round(pngLevelModel.value),
+            tiff_compression: root.tiffCompression,
+            include_metadata: root.includeMetadata,
+            embed_icc_profile: root.embedIccProfile,
+            ultra_hdr_quality: Math.round(ultraHdrQualityModel.value),
+            ultra_hdr_dither: root.ultraHdrDitherEnabled,
+            out_dir: root.outDirText,
+            subfolder_enabled: root.subfolderEnabled,
+            subfolder: root.subfolderText,
+            resize_mode: root.sdrResizeMode,
+            long_edge: root.sdrMaxSideText,
+            width: root.sdrWidthText,
+            height: root.sdrHeightText,
+            print_width: root.physicalWidthText,
+            print_height: root.physicalHeightText,
+            print_unit: root.physicalUnit,
+            dpi: root.dpiText,
+            file_name_pattern: namingEditor.pattern
+        }
     }
 
     function exportStatusForRow(statusKey, summaryRow) {
@@ -241,8 +215,6 @@ Item {
         ensureValidBitDepthSelection()
         applyRememberedQuality()
         loadExportFileNamePresets()
-        if (exportQueueState)
-            exportQueueState.refreshExportPreview()
         appModules.importExport.ResetExportState()
         sdrQualityModel.enabled = root.controlsEnabled && root.sdrFormat === "JPEG"
         ultraHdrQualityModel.enabled = root.controlsEnabled && root.hdrExportAvailable
@@ -288,50 +260,22 @@ Item {
     }
 
     function addSelectedToQueue() {
-        if (!exportQueueState || !selectionState)
+        if (!selectionState)
             return
-        exportQueueState.addTargets(selectionState.currentSelectedItems())
+        exportQueue.AddTargets(selectionState.currentSelectedItems())
         selectionState.clearSelectedImages()
     }
 
     function clearQueue() {
-        if (exportQueueState)
-            exportQueueState.clearQueue()
+        exportQueue.Clear()
     }
 
     function startExport() {
-        if (!exportQueueState || root.exportQueueCount <= 0 || root.exportBusy
-                || !root.settingsValid)
+        if (root.exportQueueCount <= 0 || root.exportBusy || !root.settingsValid)
             return
         persistExportQuality()
         appModules.importExport.SaveExportFolder(outDirText)
-        const hasSdrResize = root.sdrResizeMode !== "original"
-        const sdrMaxSide = root.sdrResizeMode === "longEdge" ? parseInt(sdrMaxSideText) : 0
-        appModules.importExport.StartExportWithRecipeOptionsForTargets(
-            effectiveOutDir,
-            hasSdrResize,
-            isNaN(sdrMaxSide) ? 0 : sdrMaxSide,
-            8192,
-            sdrFormat,
-            Math.round(sdrQualityModel.value),
-            sdrBitDepth,
-            Math.round(pngLevelModel.value),
-            tiffCompression,
-            Math.round(ultraHdrQualityModel.value),
-            ultraHdrDitherEnabled,
-            {
-                includeMetadata: root.includeMetadata,
-                embedIccProfile: root.embedIccProfile,
-                fileNamePattern: namingEditor.pattern,
-                resizeMode: root.sdrResizeMode,
-                widthPixels: parseInt(root.sdrWidthText),
-                heightPixels: parseInt(root.sdrHeightText),
-                physicalWidth: root.physicalSizeValue(root.physicalWidthText),
-                physicalHeight: root.physicalSizeValue(root.physicalHeightText),
-                physicalUnit: root.physicalUnit,
-                dpi: parseInt(root.dpiText)
-            },
-            exportQueueState.exportQueueTargets())
+        exportRecipe.StartExport(root.recipeOptions(), exportQueue.Targets())
     }
 
     onSdrFormatChanged: {
@@ -370,7 +314,7 @@ Item {
         label: qsTr("Quality")
         minimum: 1
         maximum: 100
-        defaultValue: 95
+        defaultValue: root.recipeDefaults.quality
         step: 1
         precision: 0
         suffix: "%"
@@ -384,7 +328,7 @@ Item {
         label: qsTr("HDR Quality")
         minimum: 1
         maximum: 100
-        defaultValue: 95
+        defaultValue: root.recipeDefaults.ultra_hdr_quality
         step: 1
         precision: 0
         suffix: "%"
@@ -398,8 +342,8 @@ Item {
         label: qsTr("PNG Level")
         minimum: 0
         maximum: 9
-        defaultValue: 5
-        value: 5
+        defaultValue: root.recipeDefaults.png_level
+        value: root.recipeDefaults.png_level
         step: 1
         precision: 0
         enabled: root.controlsEnabled && root.sdrFormat === "PNG"
@@ -586,6 +530,7 @@ Item {
                         sampleSourceName: root.namingSampleSource
                         outputExtension: root.outputExtension
                         savedPresets: root.exportFileNamePresets
+                        patternRules: root.exportRecipe
                         savePreset: function(name, pattern, replacedName) {
                             return root.saveExportFileNamePreset(
                                         name, pattern, replacedName)
@@ -793,7 +738,7 @@ Item {
                         ColumnLayout {
                             Layout.fillWidth: true
                             spacing: appTheme.spaceXs
-                            visible: root.sdrResizeMode === "longEdge"
+                            visible: root.sdrResizeMode === "long_edge"
 
                             Label {
                                 text: qsTr("Longest edge (px)")
@@ -899,7 +844,7 @@ Item {
                         ColumnLayout {
                             Layout.fillWidth: true
                             spacing: appTheme.spaceSm
-                            visible: root.sdrResizeMode === "physical"
+                            visible: root.sdrResizeMode === "print"
 
                             RowLayout {
                                 Layout.fillWidth: true

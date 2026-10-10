@@ -4707,15 +4707,6 @@ Refresh the library afterwards; they are listed under the User category. Import 
     </message>
 </context>
 <context>
-    <name>ExportQueueState</name>
-    <message>
-        <location filename="../qml/ExportQueueState.qml" line="+29"/>
-        <location line="+98"/>
-        <source>(unnamed)</source>
-        <translation>（未命名）</translation>
-    </message>
-</context>
-<context>
     <name>FolderImportConfirmDialog</name>
     <message>
         <location filename="../qml/FolderImportConfirmDialog.qml" line="+84"/>
@@ -7519,6 +7510,13 @@ CLIP / SigLIP 这类视觉语言模型会把图像和文字映射到同一语义
 </context>
 <context>
     <name>alcedo::ui::LibrarySelection</name>
+    <message>
+        <source>(unnamed)</source>
+        <translation>（未命名）</translation>
+    </message>
+</context>
+<context>
+    <name>alcedo::ui::ExportQueue</name>
     <message>
         <source>(unnamed)</source>
         <translation>（未命名）</translation>

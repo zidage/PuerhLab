@@ -9,8 +9,14 @@
 #include <QJsonValue>
 #include <QObject>
 #include <QString>
+#include <memory>
+#include <optional>
+#include <vector>
 
+#include "app/project_service.hpp"
 #include "automation/automation_protocol.hpp"
+#include "storage/store/sleeve/element_store.hpp"
+#include "ui/alcedo_main/album_backend/application_module_host.hpp"
 #include "ui/alcedo_main/automation/automation_command_registry.hpp"
 
 namespace alcedo::automation {
@@ -21,6 +27,17 @@ auto AutomationObjectSchema(QJsonObject properties = {}, QJsonArray required = {
 /// A parameter schema: an object schema with `"additionalProperties": false`.
 auto AutomationClosedParamsSchema(QJsonObject properties = {}, QJsonArray required = {})
     -> QJsonObject;
+
+/// The project service of the entered project, or null. Sends -32001 when no project is open
+/// or a project is loading.
+auto AutomationEnteredProject(ui::ApplicationModuleHost* host, AutomationReply& reply)
+    -> std::shared_ptr<ProjectService>;
+
+/// The library rows of @p params["element_ids"], in that order, without repeated ids. Sends
+/// -32602 with `data.unknown_ids` and returns nothing when an id is not a photo of the project.
+auto ResolveAutomationElementRows(ProjectService& project, const QJsonObject& params,
+                                  AutomationReply& reply)
+    -> std::optional<std::vector<SearchResultRow>>;
 
 /// Sends @p code with @p message and `data.reason` set to @p message, the form of `rejected`,
 /// `failed`, and `not_ready` errors that report an owner message.

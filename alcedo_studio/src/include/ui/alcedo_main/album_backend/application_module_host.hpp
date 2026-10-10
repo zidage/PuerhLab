@@ -27,6 +27,8 @@ class QQmlEngine;
 #include "ui/alcedo_main/album_backend/editor_comparison_controller.hpp"
 #include "ui/alcedo_main/album_backend/editor_session_controller.hpp"
 #include "ui/alcedo_main/album_backend/editor_session_render_scheduler_port.hpp"
+#include "ui/alcedo_main/album_backend/export_queue.hpp"
+#include "ui/alcedo_main/album_backend/export_recipe_builder.hpp"
 #include "ui/alcedo_main/album_backend/folder_controller.hpp"
 #include "ui/alcedo_main/album_backend/image_analysis_controller.hpp"
 #include "ui/alcedo_main/album_backend/image_analysis_sink.hpp"
@@ -88,6 +90,10 @@ class ApplicationModuleHost final : public QObject {
   Q_PROPERTY(ApplicationCloseCoordinator* applicationClose READ application_close CONSTANT)
   /// Library delete targets, delete scope, post-delete pruning, and rating rules.
   Q_PROPERTY(LibraryMutationOperations* libraryMutations READ library_mutations CONSTANT)
+  /// The export queue of the export panel.
+  Q_PROPERTY(ExportQueue* exportQueue READ export_queue CONSTANT)
+  /// Export option defaults, limits, and checks, and the export start of the panel.
+  Q_PROPERTY(ExportRecipeBuilder* exportRecipe READ export_recipe CONSTANT)
 
  public:
   struct LifecycleEvent {
@@ -170,6 +176,8 @@ class ApplicationModuleHost final : public QObject {
   [[nodiscard]] auto library_mutations() -> LibraryMutationOperations* {
     return library_mutations_.get();
   }
+  [[nodiscard]] auto export_queue() -> ExportQueue* { return export_queue_.get(); }
+  [[nodiscard]] auto export_recipe() -> ExportRecipeBuilder* { return export_recipe_.get(); }
   /// Phase 5A application-layer editor session (owned by the host, not QML).
   [[nodiscard]] auto editor_session_service() -> alcedo::EditorSessionService* {
     return editor_session_runtime_ ? editor_session_runtime_->service.get() : nullptr;
@@ -227,6 +235,8 @@ class ApplicationModuleHost final : public QObject {
   std::shared_ptr<IImageAnalysisSink>                  image_analysis_sink_;
   std::unique_ptr<ImageAnalysisController>             image_analysis_;
   std::unique_ptr<ImportExportHandler>                 import_export_;
+  std::unique_ptr<ExportQueue>                         export_queue_;
+  std::unique_ptr<ExportRecipeBuilder>                 export_recipe_;
   std::unique_ptr<NikonHeRecoveryController>           nikon_he_recovery_;
   std::unique_ptr<AdjustmentTransferController>        adjustment_transfer_;
   std::unique_ptr<alcedo::EditorSessionRuntime>        editor_session_runtime_;

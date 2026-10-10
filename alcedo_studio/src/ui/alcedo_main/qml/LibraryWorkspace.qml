@@ -533,7 +533,6 @@ RowLayout {
                     anchors.margins: 10
                     focusedImage: host.focusedImageInspection
                     interactionPolicy: appModules.interactionPolicy
-                    exportQueueState: host.exportQueueState
                     selectionState: host.selectionState
                     selectedCount: host.selectedCount
                     onRatingRequested: function(rating) {
@@ -580,7 +579,7 @@ RowLayout {
                     scale: addSelectedBtn.hovered && enabled ? 1.03 : 1.0
                     Behavior on scale { NumberAnimation { duration: 100; easing.type: Easing.OutCubic } }
                     onClicked: {
-                        host.exportQueueState.addTargets(host.selectionState.currentSelectedItems())
+                        appModules.exportQueue.AddTargets(host.selectionState.currentSelectedItems())
                         host.selectionState.clearSelectedImages()
                     }
                 }

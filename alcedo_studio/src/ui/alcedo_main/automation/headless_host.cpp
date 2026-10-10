@@ -25,6 +25,7 @@
 #include "ui/alcedo_main/album_backend/application_module_host.hpp"
 #include "ui/alcedo_main/automation/automation_command_registry.hpp"
 #include "ui/alcedo_main/automation/automation_editor_commands.hpp"
+#include "ui/alcedo_main/automation/automation_export_commands.hpp"
 #include "ui/alcedo_main/automation/automation_host_commands.hpp"
 #include "ui/alcedo_main/automation/automation_library_commands.hpp"
 #include "ui/alcedo_main/automation/automation_project_commands.hpp"
@@ -193,6 +194,7 @@ auto RunHostSession(QCoreApplication& app, const HeadlessHostOptions& options,
       !RegisterAutomationLibraryCommands(registry, &host, &tracker, QLatin1String(kHostMode),
                                          &registration_error) ||
       !RegisterAutomationTaskCommands(registry, &host, &tracker, &registration_error) ||
+      !RegisterAutomationExportCommands(registry, &host, &tracker, &registration_error) ||
       !RegisterAutomationEditorCommands(registry, &host, &registration_error) ||
       !RegisterAutomationVersionCommands(registry, &host, &registration_error) ||
       !RegisterAutomationRenderCommands(registry, &host, &registration_error)) {

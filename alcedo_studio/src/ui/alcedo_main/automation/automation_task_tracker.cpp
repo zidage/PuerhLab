@@ -28,6 +28,23 @@ auto ImportCounts(const ui::ImportExportHandler& import_export) -> QJsonObject {
                      {"excluded", import_export.ImportExcluded()}};
 }
 
+auto ExportCounts(const ui::ImportExportHandler& import_export) -> QJsonObject {
+  return QJsonObject{{"total", import_export.ExportTotal()},
+                     {"completed", import_export.ExportCompleted()},
+                     {"succeeded", import_export.ExportSucceeded()},
+                     {"failed", import_export.ExportFailed()},
+                     {"skipped", import_export.ExportSkipped()}};
+}
+
+/// The status text and, when photos failed, the error summary of the export.
+auto ExportMessage(const ui::ImportExportHandler& import_export) -> QString {
+  QString message = import_export.ExportStatus();
+  if (const QString summary = import_export.ExportErrorSummary(); !summary.isEmpty()) {
+    message += QLatin1Char('\n') + summary;
+  }
+  return message;
+}
+
 }  // namespace
 
 AutomationTaskTracker::AutomationTaskTracker(ui::ApplicationModuleHost* host, QObject* parent)
@@ -37,6 +54,10 @@ AutomationTaskTracker::AutomationTaskTracker(ui::ApplicationModuleHost* host, QO
   }
   connect(host_->import_export(), &ui::ImportExportHandler::ImportStateChanged, this,
           &AutomationTaskTracker::OnImportStateChanged);
+  connect(host_->import_export(), &ui::ImportExportHandler::ExportStateChanged, this,
+          &AutomationTaskTracker::OnExportStateChanged);
+  connect(host_->import_export(), &ui::ImportExportHandler::ExportFinished, this,
+          &AutomationTaskTracker::OnExportFinished);
   connect(host_->background_tasks(), &ui::BackgroundTaskController::TasksChanged, this,
           &AutomationTaskTracker::OnBackgroundTasksChanged);
   OnImportStateChanged();
@@ -63,7 +84,7 @@ auto AutomationTaskTracker::RecordEmptyImport() -> QString {
         {"counts",
          QJsonObject{
              {"total", 0}, {"completed", 0}, {"failed", 0}, {"unsupported", 0}, {"excluded", 0}}}};
-  finished_imports_[id] = task;
+  finished_tasks_[id] = task;
   emit TaskFinished(task);
   return id;
 }
@@ -103,8 +124,50 @@ void AutomationTaskTracker::OnImportStateChanged() {
                    {"progress", 100},
                    {"message", import_export.ImportStatus()},
                    {"counts", ImportCounts(import_export)}};
-  finished_imports_[running_import_id_] = task;
+  finished_tasks_[running_import_id_] = task;
   running_import_id_.clear();
+  emit TaskFinished(task);
+}
+
+auto AutomationTaskTracker::RunningExportTask() const -> QJsonObject {
+  const ui::ImportExportHandler& import_export = *host_->import_export();
+  const int                      total         = import_export.ExportTotal();
+  return QJsonObject{
+      {"task_id", running_export_id_},
+      {"kind", "export"},
+      {"state", "running"},
+      {"progress", total > 0 ? std::min(100, import_export.ExportCompleted() * 100 / total) : -1},
+      {"message", import_export.ExportStatus()},
+      {"counts", ExportCounts(import_export)}};
+}
+
+void AutomationTaskTracker::OnExportStateChanged() {
+  if (host_ == nullptr || !host_->import_export()->export_inflight()) {
+    // The end of an export is published by ExportFinished.
+    return;
+  }
+  if (running_export_id_.isEmpty()) {
+    running_export_id_ = QStringLiteral("export-%1").arg(++export_count_);
+    last_export_id_    = running_export_id_;
+  }
+  emit TaskUpdated(RunningExportTask());
+}
+
+void AutomationTaskTracker::OnExportFinished(int succeeded, int failed, int skipped) {
+  (void)succeeded;
+  (void)skipped;
+  if (host_ == nullptr || running_export_id_.isEmpty()) {
+    return;
+  }
+  const ui::ImportExportHandler& import_export = *host_->import_export();
+  QJsonObject                    task{{"task_id", running_export_id_},
+                                      {"kind", "export"},
+                                      {"state", failed > 0 ? "failed" : "succeeded"},
+                                      {"progress", 100},
+                                      {"message", ExportMessage(import_export)},
+                                      {"counts", ExportCounts(import_export)}};
+  finished_tasks_[running_export_id_] = task;
+  running_export_id_.clear();
   emit TaskFinished(task);
 }
 
@@ -138,16 +201,11 @@ auto AutomationTaskTracker::Task(const QString& task_id) const -> std::optional<
   if (!running_import_id_.isEmpty() && task_id == running_import_id_) {
     return RunningImportTask();
   }
-  if (const auto finished = finished_imports_.find(task_id); finished != finished_imports_.end()) {
+  if (const auto finished = finished_tasks_.find(task_id); finished != finished_tasks_.end()) {
     return finished->second;
   }
-  if (task_id == QStringLiteral("export")) {
-    const bool running = host_->import_export()->export_inflight();
-    return QJsonObject{{"task_id", task_id},
-                       {"kind", "export"},
-                       {"state", running ? "running" : "succeeded"},
-                       {"progress", -1},
-                       {"message", host_->import_export()->ExportStatus()}};
+  if (!running_export_id_.isEmpty() && task_id == running_export_id_) {
+    return RunningExportTask();
   }
   for (const QVariant& value : host_->background_tasks()->Tasks()) {
     const QVariantMap row = value.toMap();
@@ -166,8 +224,8 @@ auto AutomationTaskTracker::RunningTasks() const -> QJsonArray {
   if (!running_import_id_.isEmpty()) {
     tasks.push_back(RunningImportTask());
   }
-  if (host_->import_export()->export_inflight()) {
-    tasks.push_back(*Task(QStringLiteral("export")));
+  if (!running_export_id_.isEmpty()) {
+    tasks.push_back(RunningExportTask());
   }
   for (const QVariant& value : host_->background_tasks()->Tasks()) {
     const QJsonObject task = BackgroundTaskObject(value.toMap());

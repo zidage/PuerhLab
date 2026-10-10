@@ -2,22 +2,19 @@ import QtQuick
 import QtQml
 
 // Centralized shell signal routing extracted from Main.qml: language reload,
-// image-analysis completion, project open/close, folder switch, library
-// thumbnail refresh, and import/export session transitions. The import/export
-// session bookkeeping (importSessionObserved / exportSessionObserved /
-// lastObservedExportCompleted) lives here. `host` is Main; the controllers,
-// state objects, and dialogs are passed in as properties.
+// image-analysis completion, project open/close, folder switch, and
+// import/export session transitions. The import session bookkeeping
+// (importSessionObserved) lives here. The export queue (appModules.exportQueue)
+// clears itself on a project change and removes the finished entries itself. `host` is Main; the controllers, state objects, and
+// dialogs are passed in as properties.
 Item {
     id: root
     property var host: null
     property var imageActionsController: null
     property var selectionState: null
-    property var exportQueueState: null
     property var deleteConfirmDialog: null
 
     property bool importSessionObserved: false
-    property bool exportSessionObserved: false
-    property int lastObservedExportCompleted: 0
 
     Connections {
         target: languageManager
@@ -49,9 +46,6 @@ Item {
             }
             if (root.selectionState) {
                 root.selectionState.clearSelectedImages()
-            }
-            if (root.exportQueueState) {
-                root.exportQueueState.clearQueue()
             }
             if (root.host) {
                 root.host.pendingDeleteTargets = []
@@ -137,16 +131,6 @@ Item {
     }
 
     Connections {
-        target: appModules.library
-        ignoreUnknownSignals: true
-        function onThumbnailsChanged() {
-            if (root.exportQueueState && root.exportQueueState.exportQueueCount > 0) {
-                root.exportQueueState.refreshExportPreview()
-            }
-        }
-    }
-
-    Connections {
         target: appModules.importExport
         ignoreUnknownSignals: true
         function onImportStateChanged() {
@@ -162,27 +146,9 @@ Item {
                 root.host.showSnackbar(qsTr("Imported %1 image(s).").arg(appModules.importExport.importCompleted))
             }
         }
-        function onExportStateChanged() {
-            if (appModules.importExport.exportInFlight) {
-                root.exportSessionObserved = true
-                if (appModules.importExport.exportCompleted > root.lastObservedExportCompleted) {
-                    if (root.exportQueueState) {
-                        root.exportQueueState.pruneCompleted(appModules.importExport.exportItemStatuses)
-                    }
-                    root.lastObservedExportCompleted = appModules.importExport.exportCompleted
-                }
-                return
-            }
-            if (root.exportQueueState) {
-                root.exportQueueState.pruneCompleted(appModules.importExport.exportItemStatuses)
-            }
-            root.lastObservedExportCompleted = 0
-            if (!root.exportSessionObserved) {
-                return
-            }
-            root.exportSessionObserved = false
+        function onExportFinished(succeeded, failed, skipped) {
             if (root.host) {
-                root.host.showSnackbar(qsTr("Exported %1 image(s).").arg(appModules.importExport.exportSucceeded))
+                root.host.showSnackbar(qsTr("Exported %1 image(s).").arg(succeeded))
             }
         }
     }

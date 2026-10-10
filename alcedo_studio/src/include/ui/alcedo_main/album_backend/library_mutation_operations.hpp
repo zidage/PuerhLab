@@ -42,14 +42,18 @@ class LibraryMutationOperations final : public QObject {
   /// Deletes @p targets through ImageController::DeleteImages, then removes the deleted elements
   /// from the selection and closes the editor image when it was deleted: the last edited image
   /// is forgotten, the Editor workspace shows the empty editor, and an image that the session
-  /// keeps open outside the Editor workspace closes without its changes. Returns the
-  /// DeleteImages result.
+  /// keeps open outside the Editor workspace closes without its changes. Emits ElementsDeleted
+  /// when an element was deleted. Returns the DeleteImages result.
   Q_INVOKABLE QVariantMap  DeleteTargets(const QVariantList& targets);
   /// Sets the star rating of @p targets. One target uses ImageController::SetImageRating and
   /// returns its result (success, rating, message). Several targets use the batch path
   /// ImageController::StartSetImageRatings and return its result (started, taskId, message)
   /// with `batch: true`. A rating outside 0..5 returns `success: false` and changes nothing.
   Q_INVOKABLE QVariantMap  RateTargets(const QVariantList& targets, int rating);
+
+ signals:
+  /// The element ids that DeleteTargets deleted.
+  void ElementsDeleted(const QVariantList& element_ids);
 
  private:
   void                       CloseDeletedEditorImage(const QVariantList& deleted_element_ids);

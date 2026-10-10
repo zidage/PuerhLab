@@ -513,6 +513,14 @@ def_ui_test(LibrarySelectionTest library_selection_test.cpp)
 alcedo_register_test_target(LibrarySelectionTest ui)
 def_ui_test(LibraryMutationOperationsTest library_mutation_operations_test.cpp)
 alcedo_register_test_target(LibraryMutationOperationsTest ui)
+# Export recipe rules, the export queue, and the file name pattern check moved out of QML
+# (automation plan AU12).
+def_ui_test(ExportRecipeBuilderTest export_recipe_builder_test.cpp)
+alcedo_register_test_target(ExportRecipeBuilderTest ui)
+def_ui_test(ExportQueueTest export_queue_test.cpp)
+alcedo_register_test_target(ExportQueueTest ui)
+def_ui_test(ExportNamePatternTest export_name_pattern_test.cpp)
+alcedo_register_test_target(ExportNamePatternTest ui)
 
 def_ui_test(AdjustmentTransferDialogModelTest adjustment_transfer_dialog_model_test.cpp)
 alcedo_register_test_target(AdjustmentTransferDialogModelTest ui)
@@ -2044,6 +2052,7 @@ target_include_directories(ExportNamingEditorQmlTest
 )
 target_link_libraries(ExportNamingEditorQmlTest
     PRIVATE
+        AlbumBackendLib
         AppTheme
         GTest::gtest
         Qt6::Core

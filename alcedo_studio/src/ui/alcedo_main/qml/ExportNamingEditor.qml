@@ -12,6 +12,8 @@ ColumnLayout {
     property var savedPresets: []
     property var savePreset: null
     property var deletePreset: null
+    // ExportRecipeBuilder (appModules.exportRecipe): IsFileNamePatternValid(pattern).
+    property var patternRules: null
     property bool namingPreset: false
     property bool presetNameInvalid: false
     property string selectedSavedPresetName: ""
@@ -181,33 +183,12 @@ ColumnLayout {
         }
     }
 
+    // The pattern rule of the export (ParseExportFileNamePattern), read through
+    // ExportRecipeBuilder. Without the rules object no pattern is valid.
     function validatePattern(value) {
-        if (!value || value.length === 0)
+        if (!root.patternRules || !value || value.length === 0)
             return false
-        const protectedOpen = value.replace(/\{\{/g, "").replace(/\}\}/g, "")
-        let depth = 0
-        for (let i = 0; i < protectedOpen.length; ++i) {
-            if (protectedOpen[i] === "{")
-                depth += 1
-            else if (protectedOpen[i] === "}")
-                depth -= 1
-            if (depth < 0)
-                return false
-        }
-        if (depth !== 0)
-            return false
-        let valid = true
-        protectedOpen.replace(/\{([^{}]+)\}/g, function(match, token) {
-            const separator = token.indexOf(":")
-            const field = (separator >= 0 ? token.substring(0, separator) : token).toLowerCase()
-            const argument = separator >= 0 ? token.substring(separator + 1) : ""
-            const known = ["source", "date", "sequence", "cameramake", "cameramodel",
-                           "lens", "iso", "aperture", "shutter", "focal", "rating"]
-            if (known.indexOf(field) < 0 || (field === "sequence" && /[^0]/.test(argument)))
-                valid = false
-            return match
-        })
-        return valid
+        return root.patternRules.IsFileNamePatternValid(String(value))
     }
 
     function makePreview(value) {

@@ -63,19 +63,6 @@ auto ToPath(const QString& text) -> std::filesystem::path {
   return std::filesystem::path(text.toStdWString());
 }
 
-/// The project service of the entered project, or null. Sends -32001 when it is null.
-auto EnteredProject(ui::ApplicationModuleHost* host, AutomationReply& reply)
-    -> std::shared_ptr<ProjectService> {
-  ui::ProjectModule* project = host->project();
-  auto               service = project->handler().project();
-  if (!service || !project->ProjectEntered() || project->ProjectLoading()) {
-    SendAutomationOwnerError(reply, AutomationErrorCode::NotReady,
-                             QStringLiteral("No project is open."));
-    return nullptr;
-  }
-  return service;
-}
-
 auto RootFolderId(ProjectService& project) -> std::optional<sl_element_id_t> {
   const auto sleeve = project.GetSleeveService();
   if (!sleeve) {
@@ -178,51 +165,6 @@ auto ItemSchema() -> QJsonObject {
                                 QJsonArray{"element_id", "image_id", "file_name", "rating"});
 }
 
-/// The library rows of @p params["element_ids"], in that order. Sends -32602 with
-/// `data.unknown_ids` and returns nothing when an id is not a photo of the project.
-auto ResolveElementRows(ProjectService& project, const QJsonObject& params, AutomationReply& reply)
-    -> std::optional<std::vector<SearchResultRow>> {
-  std::vector<sl_element_id_t> ids;
-  for (const QJsonValue& value : params.value("element_ids").toArray()) {
-    const auto id = static_cast<sl_element_id_t>(value.toDouble());
-    if (std::find(ids.begin(), ids.end(), id) == ids.end()) {
-      ids.push_back(id);
-    }
-  }
-  const auto browse = project.GetAlbumBrowseService();
-  if (!browse) {
-    SendAutomationOwnerError(reply, AutomationErrorCode::Failed,
-                             QStringLiteral("The library cannot be read."));
-    return std::nullopt;
-  }
-  std::vector<SearchResultRow> rows;
-  try {
-    rows = browse->ReadAlbumFileRows(ids);
-  } catch (const std::exception& e) {
-    SendAutomationOwnerError(reply, AutomationErrorCode::Failed, QString::fromUtf8(e.what()));
-    return std::nullopt;
-  }
-  QJsonArray  unknown;
-  QStringList unknown_text;
-  for (const auto id : ids) {
-    const bool found = std::any_of(rows.begin(), rows.end(), [id](const SearchResultRow& row) {
-      return row.file_id_ == id && row.image_id_ != 0;
-    });
-    if (!found) {
-      unknown.push_back(static_cast<double>(id));
-      unknown_text.push_back(QString::number(id));
-    }
-  }
-  if (!unknown.isEmpty()) {
-    reply.SendError(
-        AutomationErrorCode::InvalidParams,
-        QStringLiteral("unknown element ids: %1").arg(unknown_text.join(QStringLiteral(", "))),
-        QJsonObject{{"pointer", "/element_ids"}, {"unknown_ids", unknown}});
-    return std::nullopt;
-  }
-  return rows;
-}
-
 /// ImageController target entries (elementId, imageId, fileName) of @p rows.
 auto TargetEntries(const std::vector<SearchResultRow>& rows) -> QVariantList {
   QVariantList entries;
@@ -319,7 +261,7 @@ auto RegisterAutomationLibraryCommands(AutomationCommandRegistry& registry,
                                QStringLiteral("the folder does not exist: %1").arg(folder));
       return;
     }
-    if (!EnteredProject(host, reply)) {
+    if (!AutomationEnteredProject(host, reply)) {
       return;
     }
     if (host->import_export()->ImportRunning()) {
@@ -345,7 +287,7 @@ auto RegisterAutomationLibraryCommands(AutomationCommandRegistry& registry,
   folders.result_schema = AutomationObjectSchema(
       QJsonObject{{"folders", QJsonObject{{"type", "array"}}}}, QJsonArray{"folders"});
   folders.handler = [host](const QJsonObject&, AutomationReply reply) {
-    const auto project = EnteredProject(host, reply);
+    const auto project = AutomationEnteredProject(host, reply);
     if (!project) {
       return;
     }
@@ -392,7 +334,7 @@ auto RegisterAutomationLibraryCommands(AutomationCommandRegistry& registry,
                   {"items", QJsonObject{{"type", "array"}, {"items", ItemSchema()}}}},
       QJsonArray{"total", "offset", "items"});
   list.handler = [host](const QJsonObject& params, AutomationReply reply) {
-    const auto project = EnteredProject(host, reply);
+    const auto project = AutomationEnteredProject(host, reply);
     if (!project) {
       return;
     }
@@ -462,7 +404,7 @@ auto RegisterAutomationLibraryCommands(AutomationCommandRegistry& registry,
                                          {"height", QJsonObject{{"type", "integer"}}}},
                              QJsonArray{"path", "width", "height"});
   thumbnail.handler = [host](const QJsonObject& params, AutomationReply reply) {
-    const auto project = EnteredProject(host, reply);
+    const auto project = AutomationEnteredProject(host, reply);
     if (!project) {
       return;
     }
@@ -587,11 +529,11 @@ auto RegisterAutomationLibraryCommands(AutomationCommandRegistry& registry,
                                      QStringLiteral("The library selection exists only in the GUI."));
       return;
     }
-    const auto project = EnteredProject(host, reply);
+    const auto project = AutomationEnteredProject(host, reply);
     if (!project) {
       return;
     }
-    const auto rows = ResolveElementRows(*project, params, reply);
+    const auto rows = ResolveAutomationElementRows(*project, params, reply);
     if (!rows.has_value()) {
       return;
     }
@@ -618,11 +560,11 @@ auto RegisterAutomationLibraryCommands(AutomationCommandRegistry& registry,
       QJsonArray{"element_ids", "rating"});
   rate.result_schema = AutomationObjectSchema();
   rate.handler       = [host](const QJsonObject& params, AutomationReply reply) {
-    const auto project = EnteredProject(host, reply);
+    const auto project = AutomationEnteredProject(host, reply);
     if (!project) {
       return;
     }
-    const auto rows = ResolveElementRows(*project, params, reply);
+    const auto rows = ResolveAutomationElementRows(*project, params, reply);
     if (!rows.has_value()) {
       return;
     }
@@ -664,11 +606,11 @@ auto RegisterAutomationLibraryCommands(AutomationCommandRegistry& registry,
                                          {"failed_ids", QJsonObject{{"type", "array"}}}},
                              QJsonArray{"deleted_ids", "failed_ids"});
   remove.handler = [host](const QJsonObject& params, AutomationReply reply) {
-    const auto project = EnteredProject(host, reply);
+    const auto project = AutomationEnteredProject(host, reply);
     if (!project) {
       return;
     }
-    const auto rows = ResolveElementRows(*project, params, reply);
+    const auto rows = ResolveAutomationElementRows(*project, params, reply);
     if (!rows.has_value()) {
       return;
     }

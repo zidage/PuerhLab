@@ -2,7 +2,7 @@
 
 Date: 2026-10-08
 
-Status: in progress. AU1 to AU11 have implementation evidence (completion records in their phase sections).
+Status: in progress. AU1 to AU12 have implementation evidence (completion records in their phase sections).
 
 Tracking issue: [#331](https://github.com/zidage/AlcedoStudio/issues/331). Progress is tracked in the issues, not in this document.
 
@@ -574,7 +574,7 @@ class AutomationCommandRegistry {
 | AU9b | Parameter catalog: HLS, color wheels, curve, LUT | Catalog, Look QML, editor_support modules | AU9a | 900–1100 | implemented | [#325](https://github.com/zidage/AlcedoStudio/issues/325) |
 | AU10 | Editor commands and `render.preview` | Editor session, render port | AU3, AU7 | 1300–1800 | implemented | [#326](https://github.com/zidage/AlcedoStudio/issues/326) |
 | AU11 | Version commands and commit attribution | Session, journal, storage, QML | AU10 | 1300–1800 | implemented | [#326](https://github.com/zidage/AlcedoStudio/issues/326) |
-| AU12 | Export in C++, export commands | Export queue and recipe, QML | AU5 | 1100–1600 | planned | [#327](https://github.com/zidage/AlcedoStudio/issues/327) |
+| AU12 | Export in C++, export commands | Export queue and recipe, QML | AU5 | 1100–1600 | implemented | [#327](https://github.com/zidage/AlcedoStudio/issues/327) |
 | AU13 | Search in C++, search commands | Search session, QML | AU5 | 900–1300 | planned | [#327](https://github.com/zidage/AlcedoStudio/issues/327) |
 | AU14 | GUI automation server and agent control | Control owner, policy, background task island | AU6, AU10, AU11, AU12 | 1100–1600 | planned | [#328](https://github.com/zidage/AlcedoStudio/issues/328) |
 | AU15 | MCP server, operation skill, packaging | `alcedo_cli`, skill, install rules | AU14 | 1100–1600 | planned | [#329](https://github.com/zidage/AlcedoStudio/issues/329) |
@@ -2625,12 +2625,90 @@ ctest --test-dir build/debug -R "ExportRecipeBuilderTest|ExportQueueTest|ExportN
 
 **Exit criteria**
 
-- [ ] Tests pass.
-- [ ] Manual GUI check: export panel defaults, validation messages, and queue behave as before.
+- [x] Tests pass.
+- [ ] Manual GUI check: export panel defaults, validation messages, and queue behave as before
+  (recorded by the user).
 
 **Expected diff:** 1100–1600 lines.
 
-**Completion record:** see section 13.
+**Completion record (AU12):**
+
+```text
+Phase / date / status: AU12 / 2026-10-10 / implemented.
+Source revision and branch: main fde85aedd; branch feature/automation-export-commands. Actual
+  diff: about 2460 lines (40 files, this record included). The phase is not split: about 650
+  lines are new tests, and the QML removes about 450 lines (AU11 precedent).
+Actual changed modules: ExportRecipeBuilder (new), ExportQueue (new), ImportExportHandler
+  (ExportFinished), LibraryMutationOperations (ElementsDeleted), ApplicationModuleHost
+  (exportQueue, exportRecipe), AutomationTaskTracker (export-N task ids, finished export task),
+  automation_command_support (AutomationEnteredProject and ResolveAutomationElementRows moved from
+  library_commands.cpp), export_commands.cpp (new), headless host registration,
+  ExportInspectorPanel.qml, ExportNamingEditor.qml, ShellSignals.qml, Main.qml, AppDialogs.qml,
+  InspectorPanel.qml, LibraryWorkspace.qml, ImageActionsController.qml, ExportQueueState.qml
+  (removed), translations, tests.
+Implemented behavior:
+  - ExportRecipeBuilder holds the defaults, the limits, the bit depths of each format, the output
+    folder rule, the file name pattern check (ParseExportFileNamePattern, the parser of the
+    export), and the argument assembly for StartExportWithRecipeOptionsForTargets. A rejected
+    value gives the field and "X must be in [min, max]" or "X must be one of: ...".
+  - The export panel reads the defaults, the allowed bit depths, the validity, and the start from
+    ExportRecipeBuilder; the naming editor checks the pattern through it. The panel keeps the
+    labels, the preview of the pattern, and the persisted quality and folder.
+  - ExportQueue keeps one entry for each element (the last entry wins, at the position of the
+    first), the preview rows, and the HDR flag. It clears itself on a project change, removes the
+    finished entries when the export state changes, and removes deleted elements through
+    LibraryMutationOperations::ElementsDeleted (also for library.delete from automation).
+  - ImportExportHandler::ExportFinished(succeeded, failed, skipped) is emitted once in
+    FinishExport; ShellSignals.qml shows the export snackbar from it.
+  - export.options answers the defaults, formats, bit depths, TIFF compressions, resize modes,
+    print units, and limits. export.run {element_ids, out_dir, options} checks the options first
+    (-32602 with data.pointer "/<field>"), then the project (-32001), an export that runs (-32005),
+    and the ids, and answers {task_id "export-N", queued, skipped}. tasks.wait gives the finished
+    task with counts; the task state is failed when one photo failed. export.status answers the
+    task id, message, counts, error summary, the state of each photo, and the panel queue.
+Deviations from the phase text:
+  - export.run takes 'element_ids' (as library.rate and library.delete) instead of 'targets[]';
+    the image id comes from the library row.
+  - The resize mode of export.run follows from the given values (long_edge, width/height,
+    print_*/dpi) when 'resize_mode' is not given. 'subfolder' given means the subfolder is on.
+  - The deleted-element prune of the queue moved from ShellSignals.qml to ExportQueue through
+    the new ElementsDeleted signal, not to a QML call.
+  - AutomationExportE2ETest.ExportJpegWritesFilesWithRequestedLongEdge reads the JPEG with OIIO:
+    the test executable has no Qt JPEG image plugin.
+  - Added tests: ExportRecipeBuilderTest (4 more), ExportQueueTest (2 more),
+    ExportNamePatternTest.ValidPatternsAreAccepted,
+    AutomationExportE2ETest.InvalidOptionsAreRejectedWithAllowedValues.
+Explicitly unimplemented items: none for AU12.
+Primary success call chain: export.run [e] out_dir JPEG long_edge 512 -> FromVariantMap ->
+  ExportRecipeBuilder::Validate -> ResolveAutomationElementRows -> ExportRecipeBuilder::Start ->
+  StartExportWithRecipeOptionsForTargets -> exportStateChanged (in flight) -> tracker export-1 ->
+  tasks.wait -> FinishExport -> ExportFinished(1, 0, 0) -> finished task {counts} -> export.status
+  items [{element_id, state succeeded}]
+  (AutomationExportE2ETest.ExportJpegWritesFilesWithRequestedLongEdge).
+Primary failure and restore call chain: long_edge 100 -> Validate -> -32602 "long_edge must be in
+  [256, 16384]" at /long_edge -> no export starts, no task, no output folder
+  (AutomationExportE2ETest.InvalidOptionsAreRejectedWithAllowedValues). One photo fails to write
+  -> ExportFinished with failed = 1 -> task state failed, export.status error_summary (code path;
+  no test writes into a folder that fails).
+Build and test commands with exit codes:
+  cmd /c scripts\msvc_env.cmd --build --preset win_debug --target alcedo_main alcedo_cli
+    ExportRecipeBuilderTest ExportQueueTest ExportNamePatternTest AutomationExportE2ETest
+    ExportNamingEditorQmlTest ApplicationModuleHostLifecycleTest AutomationLibraryCommandsTest
+    LibraryMutationOperationsTest --parallel 4 -> 0
+  ctest --test-dir build/debug -R "ExportRecipeBuilderTest|ExportQueueTest|ExportNamePatternTest|
+    AutomationExportE2ETest|ExportNamingEditorQmlTest|ApplicationModuleHostLifecycleTest|
+    LibraryMutationOperationsTest" -j 1 -> 8 (23/24; the JPEG check read with QImage, fixed to
+    OIIO), then ctest -R "AutomationExportE2ETest|AutomationLibraryCommandsTest|
+    ApplicationModuleHostLifecycleTest" -j 1 -> 0
+Discovered / passed / failed / skipped counts: ExportRecipeBuilderTest 6/6, ExportQueueTest 3/3,
+  ExportNamePatternTest 2/2, AutomationExportE2ETest 3/3 (--editor-backend cuda),
+  ExportNamingEditorQmlTest 3/3, ApplicationModuleHostLifecycleTest 2/2,
+  LibraryMutationOperationsTest 5/5, AutomationLibraryCommandsTest 7/7.
+Manual verification: none beyond the tests. The GUI check of the export panel is recorded by the
+  user.
+Evidence path: build/tmp/automation_au12/ (removed after the phase).
+Remaining defects or unavailable platforms: macOS Metal runs only in CI.
+```
 
 ### Phase AU13 — Search in C++ and search commands
 
@@ -2703,94 +2781,6 @@ ctest --test-dir build/debug -R "SearchSessionTest|AutomationSearchE2ETest" -j 1
 **Expected diff:** 900–1300 lines.
 
 **Completion record:** see section 13.
-
-### Phase AU14 — GUI automation server and agent control
-
-**Objective and deliverables**
-
-- The GUI `alcedo_main` starts `AutomationServer` and writes a session file with
-  `host_mode: "gui"`.
-- `AgentControlOwner` and the commands `control.acquire`, `control.release`, `control.get`.
-- A new interaction capability that blocks user-facing state changes while the agent holds
-  control.
-- The agent control task in the existing background task island and task dialog, as specified
-  in 2.8. No banner and no new notification channel.
-- **Return control** as a row action on the canceled agent task.
-- Notifications `control.changed`.
-
-The detailed agent session logic (status view content, messages, richer handoff) is not part
-of this phase. A separate plan designs it (1.3). Keep the agent task fields in 2.8 stable so that
-design can read them.
-
-**Inputs and prerequisites**
-
-- AU6, AU10, AU11, AU12. The user confirms the server default (1.5).
-
-**Modules, files, and APIs**
-
-- Proposed: `agent_control_owner.{hpp,cpp}`, owned by `ApplicationModuleHost`, exposed as
-  `Q_PROPERTY agentControl`. It receives `BackgroundTaskController*` through its constructor.
-- `background_task_controller.hpp`: `InteractionCapability::UserStateChange` and
-  `BackgroundTaskKind::AgentControl`, plus `"agentControl"` in `BackgroundTaskController::KindToString`.
-- `interaction_policy_controller.{hpp,cpp}`: `canChangeStateAsUser`, `changeStateAsUserReason`,
-  `EvaluateChangeStateAsUser()`.
-- `EditorSessionController`: its QML-facing write, undo, redo, version, and navigation
-  invokables reject while `canChangeStateAsUser` is false. `SyncBackgroundActionRestrictions`
-  does **not** map this capability into `EditorBackgroundActionRestrictions`. Otherwise the
-  session service would also reject the agent's own commands.
-- Other QML-facing invokables that start user state changes (import, delete, rating, export,
-  project open, create, close) check the same capability in their controller adapter. The shared
-  C++ operations from AU4 to AU12 do not check it.
-- `AutomationCommandRegistry`: for `changes_state` commands in the GUI host, call
-  `AgentControlOwner::BeginCommand(summary)` before the handler and `EndCommand()` after the
-  reply. These update the agent task detail.
-- `main.cpp`: start the server after the host exists. Respect the setting
-  `automation/serverEnabled`.
-- QML (load the `alcedo-qml-ui` skill first):
-  - `BackgroundTaskBar.qml`: `kindLabel("agentControl")` returns "Agent".
-  - `BackgroundTasksDialog.qml`: the **Return control** row action on a canceled agent task,
-    visible while `agentControl.revokedByUser` is true.
-  - `enabled` bindings on the editor panels, viewport edit tools, Versions actions, import,
-    delete, rating, and export controls.
-- Translations: add the new strings to the `.ts` files by hand.
-
-**Data rules and invariants**
-
-- Control state: `held`, `holder_name`, `revoked_by_user`. Only `AgentControlOwner` changes it.
-- One agent task exists while control is held. `AgentControlOwner` keeps its task id and is the
-  only caller of `UpdateTask` and `FinishTask` for it.
-- `control.acquire` waits for the pending input Release or Cancel when the editor has unsealed
-  input. It uses the existing pending-input state. It does not add a new signal source.
-- The task cancel callback (**Take control**) finishes the agent task as Canceled, sets
-  `revoked_by_user`, and emits `control.changed` once.
-- `control.release` finishes the agent task as Succeeded and emits `control.changed` once.
-- **Return control** clears `revoked_by_user` and emits `control.changed`. It does not acquire
-  control for the agent.
-- A state-changing command checks control when it starts and between batch steps. A command
-  already submitted to an owner runs to completion.
-- Shutdown cancels the agent task like other tasks.
-
-**Implementation steps**
-
-1. Add the capability, task kind, and policy properties.
-2. Write `AgentControlOwner` with task registration, detail updates, cancel, release, and
-   Return control.
-3. Add the control check and the `BeginCommand` and `EndCommand` calls to the registry for
-   `changes_state` commands in GUI host mode.
-4. Add the user-facing checks to the controller adapters.
-5. Start the server in GUI mode and write the session file.
-6. Add the kind label, the Return control row action, and the `enabled` bindings.
-7. Add the translations.
-
-**Primary success call chain**
-
-```text
-control.acquire claude-code -> no unsealed input
-  -> BackgroundTaskController::RegisterTask(AgentControl, lock UserStateChange, cancel cb)
-  -> PolicyChanged -> QML panels disabled; island unfolds after the grace delay -> respond held
-editor.set saturation 20 -> BeginCommand -> UpdateTask(detail "editor.set saturation 20")
-  -> ... -> reply -> EndCommand -> UpdateTask(detail waiting text)
-```
 
 **Primary failure and restore call chain**
 
