@@ -2677,7 +2677,9 @@ Deviations from the phase text:
     the test executable has no Qt JPEG image plugin.
   - Added tests: ExportRecipeBuilderTest (4 more), ExportQueueTest (2 more),
     ExportNamePatternTest.ValidPatternsAreAccepted,
-    AutomationExportE2ETest.InvalidOptionsAreRejectedWithAllowedValues.
+    AutomationExportE2ETest.InvalidOptionsAreRejectedWithAllowedValues, and
+    MainQmlWorkflowTest.ExportPanelUsesRecipeDefaultsChecksAndQueue (the production Main.qml
+    export panel shows the defaults, the C++ checks, the bit depths, and the C++ queue).
 Explicitly unimplemented items: none for AU12.
 Primary success call chain: export.run [e] out_dir JPEG long_edge 512 -> FromVariantMap ->
   ExportRecipeBuilder::Validate -> ResolveAutomationElementRows -> ExportRecipeBuilder::Start ->
@@ -2703,9 +2705,12 @@ Build and test commands with exit codes:
 Discovered / passed / failed / skipped counts: ExportRecipeBuilderTest 6/6, ExportQueueTest 3/3,
   ExportNamePatternTest 2/2, AutomationExportE2ETest 3/3 (--editor-backend cuda),
   ExportNamingEditorQmlTest 3/3, ApplicationModuleHostLifecycleTest 2/2,
-  LibraryMutationOperationsTest 5/5, AutomationLibraryCommandsTest 7/7.
-Manual verification: none beyond the tests. The GUI check of the export panel is recorded by the
-  user.
+  LibraryMutationOperationsTest 5/5, AutomationLibraryCommandsTest 7/7, MainQmlWorkflowTest 4/5
+  (1 new). MainQmlWorkflowTest.ProductionWindowLoadsAndRoutesCoreWorkspaceActions fails the same
+  way with the QML of main fde85aedd: a warning from Qt Material Dialog.qml:67 ("Unable to assign
+  [undefined] to double").
+Manual verification: the offscreen Main.qml test above drives the export panel. The interactive
+  GUI check of the export panel is recorded by the user.
 Evidence path: build/tmp/automation_au12/ (removed after the phase).
 Remaining defects or unavailable platforms: macOS Metal runs only in CI.
 ```
