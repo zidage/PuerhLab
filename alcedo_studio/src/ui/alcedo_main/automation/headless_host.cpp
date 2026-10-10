@@ -29,6 +29,7 @@
 #include "ui/alcedo_main/automation/automation_host_commands.hpp"
 #include "ui/alcedo_main/automation/automation_library_commands.hpp"
 #include "ui/alcedo_main/automation/automation_project_commands.hpp"
+#include "ui/alcedo_main/automation/automation_search_commands.hpp"
 #include "ui/alcedo_main/automation/automation_server.hpp"
 #include "ui/alcedo_main/automation/automation_session_commands.hpp"
 #include "ui/alcedo_main/automation/automation_task_commands.hpp"
@@ -195,6 +196,7 @@ auto RunHostSession(QCoreApplication& app, const HeadlessHostOptions& options,
                                          &registration_error) ||
       !RegisterAutomationTaskCommands(registry, &host, &tracker, &registration_error) ||
       !RegisterAutomationExportCommands(registry, &host, &tracker, &registration_error) ||
+      !RegisterAutomationSearchCommands(registry, &host, &registration_error) ||
       !RegisterAutomationEditorCommands(registry, &host, &registration_error) ||
       !RegisterAutomationVersionCommands(registry, &host, &registration_error) ||
       !RegisterAutomationRenderCommands(registry, &host, &registration_error)) {

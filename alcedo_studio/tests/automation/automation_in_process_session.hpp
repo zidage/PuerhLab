@@ -24,6 +24,7 @@
 #include "ui/alcedo_main/automation/automation_host_commands.hpp"
 #include "ui/alcedo_main/automation/automation_library_commands.hpp"
 #include "ui/alcedo_main/automation/automation_project_commands.hpp"
+#include "ui/alcedo_main/automation/automation_search_commands.hpp"
 #include "ui/alcedo_main/automation/automation_task_commands.hpp"
 #include "ui/alcedo_main/automation/automation_task_tracker.hpp"
 
@@ -46,6 +47,7 @@ class InProcessAutomationSession {
         RegisterAutomationLibraryCommands(registry_, &host_, &tracker_, host_mode, &error) &&
         RegisterAutomationTaskCommands(registry_, &host_, &tracker_, &error) &&
         RegisterAutomationExportCommands(registry_, &host_, &tracker_, &error) &&
+        RegisterAutomationSearchCommands(registry_, &host_, &error) &&
         RegisterAutomationEditorCommands(registry_, &host_, &error) &&
         RegisterAutomationVersionCommands(registry_, &host_, &error) &&
         RegisterAutomationRenderCommands(registry_, &host_, &error);

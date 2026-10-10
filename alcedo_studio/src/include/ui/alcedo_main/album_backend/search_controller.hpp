@@ -19,6 +19,7 @@
 #include "app/thumbnail_types.hpp"
 #include "storage/store/sleeve/element_store.hpp"
 #include "ui/alcedo_main/album_backend/search_request_worker.hpp"
+#include "ui/alcedo_main/album_backend/search_session.hpp"
 
 namespace alcedo::ui {
 
@@ -55,6 +56,7 @@ class SearchController final : public QObject {
                  SetSearchFieldAiDescriptionEnabled NOTIFY SearchStateChanged)
   Q_PROPERTY(bool searchFieldAiTagsEnabled READ SearchFieldAiTagsEnabled WRITE
                  SetSearchFieldAiTagsEnabled NOTIFY SearchStateChanged)
+  Q_PROPERTY(SearchSession* session READ session CONSTANT)
 
  public:
   SearchController(ProjectModule* project, LibraryModule* library, FolderController* folders,
@@ -65,6 +67,8 @@ class SearchController final : public QObject {
   [[nodiscard]] bool           natural_language_search_enabled() const {
     return natural_language_search_enabled_;
   }
+  /// Routing, response matching, and paging of the global search dialog and search.query.
+  [[nodiscard]] auto session() -> SearchSession* { return session_; }
   [[nodiscard]] bool HasActiveSearchFilter() const;
   /// Active search filter tree. The tree owns compiler output only; consumers
   /// merge it with other filters and compile once before a scoped query.
@@ -132,8 +136,10 @@ class SearchController final : public QObject {
   /// Result rows for QML: display columns from the query row plus the thumbnail state that
   /// LibraryModule already holds. Runs no SQL and no image pool read.
   QVariantList BuildResultRows(const std::vector<SearchResultRow>& result_rows);
+  /// @p allow_semantic false classifies the query as with natural language search off, so a
+  /// semantic query uses the SQL path.
   qulonglong   RequestSearchPage(const QString& query, int offset, int limit, const QString& mode,
-                                 bool submit);
+                                 bool submit, bool allow_semantic = true);
   SearchFieldMask BuildSearchFieldMask() const;
   void            ApplySearchFieldEnabled(const char* key, bool enabled);
 
@@ -154,6 +160,8 @@ class SearchController final : public QObject {
   /// The library query worker owned by LibraryModule. Preview requests run there; the
   /// destructor waits until no preview job runs.
   SearchRequestWorker*                                 worker_ = nullptr;
+  /// Child object; reads responses through SearchResponseReady.
+  SearchSession*                                       session_ = nullptr;
 };
 
 }  // namespace alcedo::ui

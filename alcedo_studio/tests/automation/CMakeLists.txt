@@ -143,3 +143,15 @@ target_compile_definitions(AutomationExportE2ETest PRIVATE
     ALCEDO_CLI_PATH="$<TARGET_FILE:alcedo_cli>"
     ALCEDO_AUTOMATION_FAILURE_DIR="${CMAKE_BINARY_DIR}/automation-failures")
 add_dependencies(AutomationExportE2ETest alcedo_main alcedo_cli)
+
+# search.query through real alcedo-cli and alcedo_main --headless processes on a CI RAW file.
+alcedo_add_automation_test(AutomationSearchE2ETest
+    SOURCES automation_search_e2e_test.cpp
+    LIBRARIES AutomationHostLib
+    LABEL ci_automation_flow
+    CATEGORIES ci_automation)
+target_compile_definitions(AutomationSearchE2ETest PRIVATE
+    ALCEDO_MAIN_PATH="$<TARGET_FILE:alcedo_main>"
+    ALCEDO_CLI_PATH="$<TARGET_FILE:alcedo_cli>"
+    ALCEDO_AUTOMATION_FAILURE_DIR="${CMAKE_BINARY_DIR}/automation-failures")
+add_dependencies(AutomationSearchE2ETest alcedo_main alcedo_cli)

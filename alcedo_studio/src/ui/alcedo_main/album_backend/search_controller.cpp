@@ -204,6 +204,18 @@ SearchController::SearchController(ProjectModule* project, LibraryModule* librar
     natural_language_search_enabled_ =
         settings.value(QLatin1String(kNaturalLanguageSearchEnabledKey), false).toBool();
   }
+
+  session_ = new SearchSession(
+      SearchSessionPort{
+          .classify_query           = [this](const QString& query) { return ClassifyQuery(query); },
+          .natural_language_enabled = [this] { return natural_language_search_enabled_; },
+          .request_page =
+              [this](const QString& query, int offset, int limit, const QString& mode, bool submit,
+                     bool allow_semantic) {
+                return RequestSearchPage(query, offset, limit, mode, submit, allow_semantic);
+              }},
+      this);
+  connect(this, &SearchController::SearchResponseReady, session_, &SearchSession::ApplyResponse);
 }
 
 SearchController::~SearchController() {
@@ -336,17 +348,18 @@ auto SearchController::RequestSubmitSearch(const QString& query, int offset, int
 }
 
 auto SearchController::RequestSearchPage(const QString& query, int offset, int limit,
-                                         const QString& mode, bool submit) -> qulonglong {
+                                         const QString& mode, bool submit, bool allow_semantic)
+    -> qulonglong {
   const auto        trimmed = query.trimmed();
   SearchPageRequest request{
-      .query_w = trimmed.toStdWString(),
-      .offset  = offset,
-      .limit   = limit,
-      .submit  = submit,
-      .classification =
-          ClassifySearchQuery(trimmed.toStdWString(), natural_language_search_enabled_),
-      .field_mask = BuildSearchFieldMask(),
-      .folder_id  = folders_->CurrentFolderElementId(),
+      .query_w        = trimmed.toStdWString(),
+      .offset         = offset,
+      .limit          = limit,
+      .submit         = submit,
+      .classification = ClassifySearchQuery(trimmed.toStdWString(),
+                                            natural_language_search_enabled_ && allow_semantic),
+      .field_mask     = BuildSearchFieldMask(),
+      .folder_id      = folders_->CurrentFolderElementId(),
   };
   request.route_name = std::string(SearchQueryRouteName(request.classification.route_));
   if (auto project = project_->handler().project()) {
@@ -469,6 +482,7 @@ void SearchController::ClearFuzzySearch() {
 }
 
 void SearchController::CancelSearchRequests() {
+  session_->Reset();
   if (worker_ == nullptr) {
     return;
   }

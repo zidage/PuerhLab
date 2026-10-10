@@ -17,35 +17,45 @@ Dialog {
         ? interactionPolicyController.canChangeSearchFieldFilters
         : true
     property var theme
+    // Routing, request matching, and the result window are in SearchSession (C++). The
+    // dialog keeps the presentation, the typing debounce, and the list position.
+    readonly property var searchSession: searchController ? searchController.session : null
     property var recommendations: []
-    property var results: []
+    readonly property var results: searchSession ? searchSession.results : []
     property var previewThumbs: ({})
-    property string lastQuery: ""
-    property int resultPageSize: 24
-    property int resultWindowCapacity: 48
-    property int resultWindowStart: 0
-    property int lastWindowDropCount: 0
-    property int lastWindowPrependCount: 0
-    property int searchOffset: 0
-    property int searchTotal: 0
-    property bool searchHasMore: false
-    property bool searchHasPrevious: false
-    property bool searchLoading: false
-    property int searchRequestGeneration: 0
-    property string pendingSearchKind: ""
-    property string pendingSearchQuery: ""
-    property int pendingSearchOffset: 0
-    property int pendingSearchLimit: 0
-    property string pendingSearchMode: "replace"
-    property int pendingSearchGeneration: 0
-    property var activeSearchRequestId: 0
+    readonly property string lastQuery: searchSession ? searchSession.query : ""
+    readonly property int resultPageSize: searchSession ? searchSession.pageSize : 24
+    readonly property int resultWindowStart: searchSession ? searchSession.windowStart : 0
+    readonly property int searchTotal: searchSession ? searchSession.total : 0
+    readonly property bool searchHasMore: searchSession ? searchSession.hasMore : false
+    readonly property bool searchHasPrevious: searchSession ? searchSession.hasPrevious : false
+    readonly property var activeSearchRequestId: searchSession ? searchSession.activeRequestId : 0
+    // True from a window change that dropped or added leading rows until the list position
+    // follows it, so that no page request starts from the old position.
+    property bool scrollAdjustPending: false
+    readonly property bool searchLoading: (searchSession ? searchSession.loading : false)
+                                          || scrollAdjustPending
     property bool previewSyncForcePending: false
-    // Natural-language-search control-layer state (5B). The toggle itself lives on
-    // searchController; these track the in-dialog preview lifecycle so QML only
-    // reflects state and never decides runtime behavior.
-    property bool naturalLanguagePreviewActive: false
-    property string currentRoute: ""
-    property string naturalLanguageStatusText: ""
+    readonly property bool naturalLanguagePreviewActive: searchSession
+                                                         ? searchSession.semanticActive : false
+    readonly property string currentRoute: searchSession ? searchSession.route : ""
+    readonly property string naturalLanguageStatusText: {
+        if (!searchSession) {
+            return ""
+        }
+        if (searchSession.tooLong) {
+            return qsTr("Query is too long for natural language search")
+        }
+        if (searchSession.semanticUnavailable) {
+            return searchSession.semanticErrorText.length > 0
+                    ? searchSession.semanticErrorText
+                    : qsTr("Natural language search is not available yet")
+        }
+        if (searchSession.awaitingSubmit) {
+            return qsTr("Press Enter or click Search for natural language search")
+        }
+        return ""
+    }
     property Item blurSource: null
     property real cornerRadius: 0
 
@@ -90,35 +100,19 @@ Dialog {
 
     function resetPreviewState() {
         previewTimer.stop()
-        searchExecutionTimer.stop()
-        searchRequestGeneration += 1
+        scrollAdjustPending = false
         if (searchController) {
             searchController.CancelSearchPreviewThumbnails()
         }
         previewThumbs = ({})
-        lastWindowDropCount = 0
-        lastWindowPrependCount = 0
-        naturalLanguagePreviewActive = false
-        currentRoute = ""
-        naturalLanguageStatusText = ""
-        pendingSearchKind = ""
-        pendingSearchQuery = ""
-        activeSearchRequestId = 0
-        searchLoading = false
+        if (searchSession) {
+            searchSession.Reset()
+        }
     }
 
     function openFromCollection() {
         resetPreviewState()
-        lastQuery = ""
         searchField.text = ""
-        results = []
-        resultWindowStart = 0
-        lastWindowDropCount = 0
-        searchOffset = 0
-        searchTotal = 0
-        searchHasMore = false
-        searchHasPrevious = false
-        searchLoading = false
         recommendations = searchController ? searchController.SearchRecommendations(12) : []
         // Re-sync the interaction-policy NL gate to the persisted SearchController
         // state BEFORE opening. The policy controller's naturalLanguageSearchEnabled
@@ -184,49 +178,6 @@ Dialog {
         previewSyncTimer.restart()
     }
 
-    function readPreviewResponse(response, mode) {
-        const rows = response && response.rows ? response.rows : []
-        lastWindowDropCount = 0
-        lastWindowPrependCount = 0
-        if (mode === "replace") {
-            if (rows.length > resultWindowCapacity) {
-                const dropCount = rows.length - resultWindowCapacity
-                results = rows.slice(dropCount)
-                resultWindowStart = (response && response.offset !== undefined
-                                     ? Number(response.offset) : 0) + dropCount
-                lastWindowDropCount = dropCount
-            } else {
-                results = rows
-                resultWindowStart = response && response.offset !== undefined ? Number(response.offset) : 0
-            }
-        } else if (mode === "append") {
-            let nextRows = results.concat(rows)
-            if (nextRows.length > resultWindowCapacity) {
-                const dropCount = nextRows.length - resultWindowCapacity
-                nextRows = nextRows.slice(dropCount)
-                resultWindowStart += dropCount
-                lastWindowDropCount = dropCount
-            }
-            results = nextRows
-        } else if (mode === "prepend") {
-            let nextRows = rows.concat(results)
-            resultWindowStart = response && response.offset !== undefined ? Number(response.offset) : 0
-            lastWindowPrependCount = rows.length
-            if (nextRows.length > resultWindowCapacity) {
-                nextRows = nextRows.slice(0, resultWindowCapacity)
-            }
-            results = nextRows
-        }
-        prunePreviewThumbs()
-        searchOffset = resultWindowStart + results.length
-        searchTotal = response && response.total !== undefined ? Number(response.total) : results.length
-        searchHasPrevious = resultWindowStart > 0
-        searchHasMore = response && response.hasMore !== undefined
-                ? response.hasMore === true
-                : searchOffset < searchTotal
-        scheduleVisiblePreviewSync(true)
-    }
-
     function resultCountText() {
         if (searchTotal <= 0) {
             return qsTr("%1 matches").arg(results.length)
@@ -239,104 +190,49 @@ Dialog {
         return qsTr("%1-%2 of %3 matches").arg(first).arg(last).arg(searchTotal)
     }
 
-    function clearPreviewWindowState() {
-        previewThumbs = ({})
-        resultWindowStart = 0
-        lastWindowDropCount = 0
-        lastWindowPrependCount = 0
-        searchOffset = 0
-        searchTotal = 0
-        searchHasMore = false
-        searchHasPrevious = false
-        results = []
-    }
-
-    // Semantic queries must not enter the debounced preview pipeline. Typing only
-    // arms an explicit-submit hint; Enter / Search owns RequestSubmitSearch so a
-    // pending previewTimer cannot bump searchRequestGeneration and drop sidecar
-    // results.
-    function showSemanticAwaitingSubmit(query) {
-        previewTimer.stop()
-        searchRequestGeneration += 1
-        searchExecutionTimer.stop()
-        lastQuery = query
-        currentRoute = "semantic"
-        naturalLanguagePreviewActive = false
-        naturalLanguageStatusText = qsTr("Press Enter or click Search for natural language search")
-        searchLoading = false
-        pendingSearchKind = ""
-        activeSearchRequestId = 0
+    function clearPreviewThumbs() {
         if (searchController) {
             searchController.CancelSearchPreviewThumbnails()
         }
-        clearPreviewWindowState()
+        previewThumbs = ({})
+        scrollAdjustPending = false
     }
 
     function refreshPreview() {
-        if (!searchController) {
+        if (!searchSession) {
             return
         }
         const query = searchField.text.trim()
-        if (query.length === 0) {
-            previewTimer.stop()
-            searchRequestGeneration += 1
-            searchExecutionTimer.stop()
-            lastQuery = ""
-            naturalLanguagePreviewActive = false
-            naturalLanguageStatusText = ""
-            searchController.CancelSearchPreviewThumbnails()
-            clearPreviewWindowState()
-            currentRoute = "empty"
+        clearPreviewThumbs()
+        // An empty query shows the recommendations. A semantic query only waits for Enter or
+        // the Search button, so typing does not reach the semantic provider.
+        searchSession.Preview(query)
+        if (searchSession.route === "empty") {
             recommendations = searchController.SearchRecommendations(12)
-            searchLoading = false
-            return
         }
-        // Natural-language mode: semantic route is submit-only. Do not schedule a
-        // preview request / searchLoading — that path races Enter/Search submits.
-        if (searchController.naturalLanguageSearchEnabled
-                && searchController.ClassifyQuery(query) === "semantic") {
-            showSemanticAwaitingSubmit(query)
-            return
-        }
-        lastQuery = query
-        naturalLanguagePreviewActive = false
-        naturalLanguageStatusText = ""
-        searchController.CancelSearchPreviewThumbnails()
-        previewThumbs = ({})
-        resultWindowStart = 0
-        lastWindowDropCount = 0
-        lastWindowPrependCount = 0
-        searchOffset = 0
-        searchTotal = 0
-        searchHasMore = false
-        searchHasPrevious = false
-        beginSearchRequest("preview", query, 0, resultPageSize, "replace")
     }
 
-    // Unified submit entry for Enter and the Search button (5B). Routing is
-    // decided in C++ (ClassifyQuery); QML only branches on the returned route.
+    // Unified submit entry for Enter and the Search button. SearchSession decides the route.
     function handleSearchSubmit() {
-        if (!searchController) {
+        if (!searchSession) {
             return
         }
         const query = searchField.text.trim()
         if (query.length === 0) {
             return
         }
-        // Cancel any pending typing debounce before submit. Otherwise a late
-        // refreshPreview() invalidates the submit generation and discards the
-        // sidecar SearchResponseReady payload.
+        // Stop the typing debounce first. Otherwise a late refreshPreview() replaces the
+        // submit request and its response is not applied.
         previewTimer.stop()
-        if (searchController.naturalLanguageSearchEnabled
-                && searchController.ClassifyQuery(query) === "semantic") {
-            runSemanticSubmit(0, "replace")
+        if (searchSession.RouteFor(query) === "semantic") {
+            runSemanticSubmit()
         } else {
             applyBroadSearch()
         }
     }
 
-    function runSemanticSubmit(offset, mode) {
-        if (!searchController) {
+    function runSemanticSubmit() {
+        if (!searchSession) {
             return
         }
         const query = searchField.text.trim()
@@ -344,131 +240,42 @@ Dialog {
             return
         }
         previewTimer.stop()
-        lastQuery = query
-        naturalLanguagePreviewActive = true
-        naturalLanguageStatusText = ""
-        searchController.CancelSearchPreviewThumbnails()
-        if (mode === "replace") {
-            previewThumbs = ({})
-            resultWindowStart = 0
-            lastWindowDropCount = 0
-            lastWindowPrependCount = 0
-            searchOffset = 0
-            searchTotal = 0
-            searchHasMore = false
-            searchHasPrevious = false
-        }
-        beginSearchRequest("submit", query, offset, resultPageSize, mode)
+        clearPreviewThumbs()
+        searchSession.SubmitSemantic(query)
     }
 
-    function beginSearchRequest(kind, query, offset, limit, mode) {
-        searchRequestGeneration += 1
-        pendingSearchKind = kind
-        pendingSearchQuery = query
-        pendingSearchOffset = offset
-        pendingSearchLimit = limit
-        pendingSearchMode = mode
-        pendingSearchGeneration = searchRequestGeneration
-        activeSearchRequestId = 0
-        searchLoading = true
-        searchExecutionTimer.restart()
-    }
-
-    function finishSearchRequest(generation) {
-        if (generation === searchRequestGeneration) {
-            pendingSearchKind = ""
-            searchLoading = false
-        }
-    }
-
-    function executePendingSearch() {
-        if (!searchController || pendingSearchKind.length === 0) {
-            finishSearchRequest(pendingSearchGeneration)
-            return
-        }
-        // Both kinds run on the C++ search worker. The response arrives through
-        // onSearchResponseReady; the request id is known before it (queued signal).
-        if (pendingSearchKind === "submit") {
-            activeSearchRequestId = searchController.RequestSubmitSearch(pendingSearchQuery,
-                                                                         pendingSearchOffset,
-                                                                         pendingSearchLimit,
-                                                                         pendingSearchMode)
-            return
-        }
-        activeSearchRequestId = searchController.RequestSearch(pendingSearchQuery,
-                                                               pendingSearchOffset,
-                                                               pendingSearchLimit,
-                                                               pendingSearchMode)
-    }
-
-    function applySearchResponse(requestId, mode, response) {
-        // Only the response to the request this dialog is waiting for applies. Between
-        // beginSearchRequest and executePendingSearch the id is 0, so an older response
-        // that arrives in that window is dropped too.
-        if (Number(activeSearchRequestId) === 0
-                || Number(requestId) !== Number(activeSearchRequestId)
-                || pendingSearchGeneration !== searchRequestGeneration
-                || pendingSearchQuery !== lastQuery) {
-            return
-        }
-        const generation = pendingSearchGeneration
-        currentRoute = response && response.route ? String(response.route) : "semantic"
-        if (response && response.tooLong === true) {
-            naturalLanguageStatusText = qsTr("Query is too long for natural language search")
-        } else if (response && response.semanticUnavailable === true) {
-            naturalLanguageStatusText = response.semanticErrorText
-                    ? String(response.semanticErrorText)
-                    : qsTr("Natural language search is not available yet")
-        } else if (response && response.awaitingSubmit === true) {
-            naturalLanguageStatusText = qsTr("Press Enter or click Search for natural language search")
-        }
-        readPreviewResponse(response, mode)
-        if (mode === "append" && lastWindowDropCount > 0) {
-            const droppedHeight = lastWindowDropCount * 82
+    function followWindowChange(mode, droppedCount, prependedCount) {
+        prunePreviewThumbs()
+        scheduleVisiblePreviewSync(true)
+        if (mode === "append" && droppedCount > 0) {
+            const droppedHeight = droppedCount * 82
+            scrollAdjustPending = true
             Qt.callLater(function() {
                 resultList.contentY = Math.max(0, resultList.contentY - droppedHeight)
-                dialog.finishSearchRequest(generation)
+                dialog.scrollAdjustPending = false
             })
-            return
-        }
-        if (mode === "prepend" && lastWindowPrependCount > 0) {
-            const prependedHeight = lastWindowPrependCount * 82
+        } else if (mode === "prepend" && prependedCount > 0) {
+            const prependedHeight = prependedCount * 82
+            scrollAdjustPending = true
             Qt.callLater(function() {
                 resultList.contentY = resultList.contentY + prependedHeight
-                dialog.finishSearchRequest(generation)
+                dialog.scrollAdjustPending = false
             })
-            return
         }
-        finishSearchRequest(generation)
     }
 
     function loadMorePreview() {
-        if (!searchController || searchLoading || !searchHasMore) {
+        if (!searchSession || searchLoading || searchField.text.trim() !== lastQuery) {
             return
         }
-        const query = searchField.text.trim()
-        if (query.length === 0 || query !== lastQuery) {
-            return
-        }
-        beginSearchRequest(naturalLanguagePreviewActive ? "submit" : "preview", query, searchOffset,
-                           resultPageSize, "append")
+        searchSession.LoadMore()
     }
 
     function loadPreviousPreview() {
-        if (!searchController || searchLoading || !searchHasPrevious) {
+        if (!searchSession || searchLoading || searchField.text.trim() !== lastQuery) {
             return
         }
-        const query = searchField.text.trim()
-        if (query.length === 0 || query !== lastQuery) {
-            return
-        }
-        const nextOffset = Math.max(0, resultWindowStart - resultPageSize)
-        const nextLimit = resultWindowStart - nextOffset
-        if (nextLimit <= 0) {
-            return
-        }
-        beginSearchRequest(naturalLanguagePreviewActive ? "submit" : "preview", query, nextOffset,
-                           nextLimit, "prepend")
+        searchSession.LoadPrevious()
     }
 
     function applyBroadSearch() {
@@ -527,8 +334,13 @@ Dialog {
             dialog.previewThumbs = next
         }
 
-        function onSearchResponseReady(requestId, mode, response) {
-            dialog.applySearchResponse(requestId, mode, response)
+    }
+
+    Connections {
+        target: dialog.searchSession
+
+        function onResponseApplied(requestId, mode, droppedCount, prependedCount) {
+            dialog.followWindowChange(mode, droppedCount, prependedCount)
         }
     }
 
@@ -548,13 +360,6 @@ Dialog {
             dialog.previewSyncForcePending = false
             dialog.refreshVisiblePreviewDelegates(force)
         }
-    }
-
-    Timer {
-        id: searchExecutionTimer
-        interval: 24
-        repeat: false
-        onTriggered: dialog.executePendingSearch()
     }
 
     Overlay.modal: Item {

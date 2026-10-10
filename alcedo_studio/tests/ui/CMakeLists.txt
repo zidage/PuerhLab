@@ -465,6 +465,10 @@ alcedo_register_test_target(AlbumBackendStatsFilterTest ui)
 def_ui_test(SearchRequestWorkerTest search_request_worker_test.cpp)
 alcedo_register_test_target(SearchRequestWorkerTest ui)
 
+# Automation AU13: routing, request matching, and the result window of the global search.
+def_ui_test(SearchSessionTest search_session_test.cpp)
+alcedo_register_test_target(SearchSessionTest ui)
+
 def_ui_test(AlbumBackendSearchWorkerTest album_backend_search_worker_test.cpp)
 alcedo_register_test_target(AlbumBackendSearchWorkerTest ui)
 
