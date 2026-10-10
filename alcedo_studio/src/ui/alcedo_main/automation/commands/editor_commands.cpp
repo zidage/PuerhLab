@@ -39,6 +39,8 @@
 #include "ui/alcedo_main/automation/automation_command_support.hpp"
 #include "ui/alcedo_main/automation/automation_editor_commands.hpp"
 #include "ui/alcedo_main/automation/automation_editor_operation.hpp"
+#include "ui/alcedo_main/automation/headless_frame_sink.hpp"
+#include "ui/editor_rhi/editor_viewport_item.hpp"
 
 namespace alcedo::automation {
 namespace {
@@ -206,6 +208,20 @@ struct PreparedWrite {
   EditorParameterWrite write_;
 };
 
+/// Source size of the frame that the editor presented last, like the Geometry panel reads it:
+/// from the bound viewport, otherwise from the headless sink. Zero before the first frame.
+auto PresentedSource(const ui::EditorSessionController& editor) -> EditorParameterSource {
+  Extent2D extent{};
+  if (const auto* item =
+          qobject_cast<const editor_rhi::EditorViewportItem*>(editor.presentation_viewport())) {
+    extent = item->presentedMaskGeometry().full_reference_extent;
+  } else if (const auto* sink =
+                 dynamic_cast<const HeadlessFrameSink*>(editor.presentation_frame_sink())) {
+    extent = sink->presented_source_extent();
+  }
+  return EditorParameterSource{extent.width, extent.height};
+}
+
 /// Converts the UI value @p value of @p field to one typed write. Writes the reason to @p error.
 auto PrepareWrite(const ui::EditorSessionController& editor, const QString& field,
                   const QJsonValue& value, QString* error) -> std::optional<PreparedWrite> {
@@ -215,9 +231,12 @@ auto PrepareWrite(const ui::EditorSessionController& editor, const QString& fiel
     return std::nullopt;
   }
   std::string reason;
+  // The crop constraint needs the source size: a locked aspect is a ratio of pixels, not of
+  // normalized coordinates.
   const auto  model = EditorParameterCatalog::ToModelJson(
       entry->field, ToModelValue(value),
-      CurrentModelValue(CurrentPanelValues(editor), entry->field), &reason);
+      CurrentModelValue(CurrentPanelValues(editor), entry->field), PresentedSource(editor),
+      &reason);
   if (!model.has_value()) {
     *error = QString::fromStdString(reason);
     return std::nullopt;

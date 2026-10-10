@@ -77,8 +77,17 @@ auto HeadlessFrameSink::MapResourceForWrite(FrameMemoryDomain preferred_domain)
   return mapping;
 }
 
-void HeadlessFrameSink::NotifyFrameReady(const FrameCompletionSubmission& /*submission*/) {
+void HeadlessFrameSink::NotifyFrameReady(const FrameCompletionSubmission& submission) {
+  if (!submission.geometry.full_reference_extent.Empty()) {
+    std::lock_guard lock(mutex_);
+    presented_source_extent_ = submission.geometry.full_reference_extent;
+  }
   ready_frame_count_.fetch_add(1, std::memory_order_acq_rel);
+}
+
+auto HeadlessFrameSink::presented_source_extent() const -> Extent2D {
+  std::lock_guard lock(mutex_);
+  return presented_source_extent_;
 }
 
 auto HeadlessFrameSink::GetWidth() const -> int {

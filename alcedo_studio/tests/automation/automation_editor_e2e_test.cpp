@@ -185,6 +185,53 @@ TEST_F(AutomationEditorE2ETest, RegionPreviewHasRegionAspectRatio) {
   Stop();
 }
 
+TEST_F(AutomationEditorE2ETest, CropRatioPresetGivesPresetAspectInPixels) {
+  ASSERT_FALSE(StartWithOnePhoto(QStringLiteral("crop_ratio_project")).isEmpty());
+  OpenPhoto();
+  const QJsonObject root =
+      Result(QStringLiteral("render.preview"),
+             QJsonObject{{"out_dir", QDir(root_).filePath(QStringLiteral("root"))},
+                         {"long_edge", 1400}})
+          .value("root")
+          .toObject();
+  const double source_aspect = root.value("width").toDouble() / root.value("height").toDouble();
+  // A square source would hide a constraint in normalized coordinates.
+  ASSERT_GT(std::abs(source_aspect - 1.0), 0.1) << "the CI RAW file is square";
+
+  // The write of the issue: the 2.35:1 preset is a pixel ratio, not 1 / 2.35 of the height.
+  Result(QStringLiteral("editor.set"),
+         QJsonObject{{"field", "crop_rotate"},
+                     {"value", QJsonObject{{"x", 0.0},
+                                           {"y", 0.31},
+                                           {"width", 1.0},
+                                           {"height", 0.638},
+                                           {"angle_degrees", 0.0},
+                                           {"aspect_preset", "ratio_2_35_1_35mm"}}}});
+  const QJsonObject crop =
+      Result(QStringLiteral("editor.get"), QJsonObject{{"fields", QJsonArray{"crop_rotate"}}})
+          .value("values")
+          .toObject()
+          .value("crop_rotate")
+          .toObject();
+  EXPECT_EQ(crop.value("aspect_preset").toString(), QStringLiteral("ratio_2_35_1_35mm"));
+  // source_aspect comes from a preview rounded to whole pixels.
+  EXPECT_NEAR(crop.value("width").toDouble() * source_aspect / crop.value("height").toDouble(),
+              2.35, 5e-3);
+
+  const QJsonObject current =
+      Result(QStringLiteral("render.preview"),
+             QJsonObject{{"out_dir", QDir(root_).filePath(QStringLiteral("cropped"))},
+                         {"long_edge", 1400}})
+          .value("current")
+          .toObject();
+  const double width  = current.value("width").toDouble();
+  const double height = current.value("height").toDouble();
+  ASSERT_GT(width, 0);
+  ASSERT_GT(height, 0);
+  EXPECT_LE(std::abs(height - width / 2.35), 1.0) << width << "x" << height;
+  Stop();
+}
+
 TEST_F(AutomationEditorE2ETest, EditsPersistAfterSessionRestart) {
   const QString project_path = StartWithOnePhoto(QStringLiteral("persist_project"));
   ASSERT_FALSE(project_path.isEmpty());
