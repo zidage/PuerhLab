@@ -1232,9 +1232,13 @@ TEST(EditorHistoryCommitPresentationTest, FormatsNumericBooleanPathEnumAndCompou
   EXPECT_EQ(odt.before_text.toStdString(), "Rec.709 / Gamma 2.2");
   EXPECT_EQ(odt.after_text.toStdString(), "Display P3 / Gamma 2.4");
 
-  // Compound (crop/rotate angle).
-  auto crop = PresentEditorHistoryCommit("crop_rotate", R"({"crop_rotate":{"angle_degrees":0.0}})",
-                                         R"({"crop_rotate":{"angle_degrees":12.0}})", true, true);
+  // Compound (crop/rotate angle). A crop commit stores the geometry model JSON; the before value
+  // is a geometry written before the aspect fields existed.
+  auto crop = PresentEditorHistoryCommit(
+      "crop_rotate",
+      R"({"crop_rect":[0.0,0.0,1.0,1.0],"expand_to_fit":true,"rotation_degrees":0.0})",
+      R"({"aspect_preset":"free","aspect_ratio":[1.0,1.0],"crop_rect":[0.0,0.0,1.0,1.0],"rotation_degrees":12.0})",
+      true, true);
   EXPECT_EQ(crop.display_name.toStdString(), "Crop / Rotate");
   EXPECT_EQ(crop.after_text.toStdString(), "+12\u00b0");
 }

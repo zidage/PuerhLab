@@ -33,7 +33,6 @@
 #include "ui/alcedo_main/album_backend/editor_adjustment_models.hpp"
 #include "ui/alcedo_main/album_backend/editor_adjustment_submitter.hpp"
 #include "ui/alcedo_main/album_backend/editor_color_temp_model.hpp"
-#include "ui/alcedo_main/album_backend/editor_lut_catalog_model.hpp"
 #include "ui/alcedo_main/album_backend/editor_session_history_port.hpp"
 #include "ui/alcedo_main/album_backend/editor_session_pipeline_port.hpp"
 #include "ui/alcedo_main/album_backend/editor_tone_curve_model.hpp"
@@ -307,11 +306,6 @@ TEST_F(SerialInputBoundaryTest, TypedModelsEnqueueThroughSameOwnerRuleWithoutLiv
   curve->beginDrag(0);
   curve->updateDrag(0.0, 0.25);
 
-  auto lut = std::make_unique<EditorLutCatalogModel>();
-  lut->setSubmitter(&submitter);
-  lut->setFieldKey("lut");
-  lut->selectPath(QStringLiteral("C:/luts/look.cube"));
-
   auto color_temp = std::make_unique<EditorColorTempModel>();
   color_temp->setSubmitter(&submitter);
   color_temp->editCct(6500.0);
@@ -323,7 +317,6 @@ TEST_F(SerialInputBoundaryTest, TypedModelsEnqueueThroughSameOwnerRuleWithoutLiv
   EXPECT_NE(alcedo::FindPendingField(pending, "color_temp_mode"), nullptr);
   EXPECT_NE(alcedo::FindPendingField(pending, "lens_calib_enabled"), nullptr);
   EXPECT_NE(alcedo::FindPendingField(pending, "curve"), nullptr);
-  EXPECT_NE(alcedo::FindPendingField(pending, "lut"), nullptr);
   EXPECT_NE(alcedo::FindPendingField(pending, "color_temp"), nullptr);
   for (const auto& sequence : pending.sequences) {
     EXPECT_EQ(sequence.identity.element_id, identity_.element_id);

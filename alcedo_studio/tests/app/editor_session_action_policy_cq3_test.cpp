@@ -427,7 +427,7 @@ TEST_F(EditorSessionActionPolicyCq3Test,
   // interactive Patch does not bump history_revision.
   openInteractive();
   const auto before = service_->history_revision();
-  auto patch = WithColorGradeTarget({"exposure", R"({"ev":0.5})", false});
+  auto       patch  = WithColorGradeTarget({"exposure", R"({"exposure_ev":0.5})", false});
   (void)service_->Patch(patch);
   drainQueue();
   EXPECT_EQ(service_->history_revision(), before);

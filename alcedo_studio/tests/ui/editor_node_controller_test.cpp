@@ -1051,17 +1051,25 @@ TEST(EditorNodeController, LookPanelClarityWriteQueuesDrtTargetWhileColorGradeSe
   EXPECT_EQ(backend.enqueue_count(), 1);
 }
 
-TEST(EditorNodeController, GeometryWriteRejectedWhenColorGradeIsSelected) {
+TEST(EditorNodeController, GeometryWriteTargetsTheDocumentWhenColorGradeIsSelected) {
   DocumentSessionBackend  backend;
   EditorSessionController session(&backend);
   EditorNodeController    nodes;
   nodes.set_editor_session(&session);
+  ASSERT_EQ(nodes.selected_node_id(), NodeId{"grade.primary"});
   ASSERT_TRUE(session.submitWrite(QStringLiteral("exposure"), EditorScalarWrite{0.1f}, true));
-  EXPECT_FALSE(session.submitWrite(QStringLiteral("crop_rotate"), ImageGeometryUpdate{}, false));
-  const auto pending = session.PeekPendingInput();
-  ASSERT_EQ(pending.sequences.size(), 1u);
-  EXPECT_EQ(pending.sequences.front().fields.size(), 1u);
-  EXPECT_EQ(pending.sequences.front().fields.front().target.field_key, "exposure");
+  // Geometry belongs to the document, so a Geometry panel write still reaches it while a
+  // Color Grade is selected.
+  EXPECT_TRUE(session.submitWrite(QStringLiteral("crop_rotate"), ImageGeometryUpdate{}, false));
+  EXPECT_EQ(nodes.selected_node_id(), NodeId{"grade.primary"});
+  const auto  pending  = session.PeekPendingInput();
+  const auto* exposure = alcedo::FindPendingField(pending, "exposure");
+  ASSERT_NE(exposure, nullptr);
+  EXPECT_EQ(exposure->target.owner_kind, EditorParameterOwnerKind::ColorGrade);
+  const auto* geometry = alcedo::FindPendingField(pending, "crop_rotate");
+  ASSERT_NE(geometry, nullptr);
+  EXPECT_EQ(geometry->target.owner_kind, EditorParameterOwnerKind::Document);
+  EXPECT_TRUE(geometry->target.node_id.Empty());
 }
 
 TEST(EditorNodeController, EmptySelectionDoesNotQueueBoundaryOrRender) {
