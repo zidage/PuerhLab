@@ -2,7 +2,7 @@
 
 Date: 2026-10-08
 
-Status: in progress. AU1 to AU12 have implementation evidence (completion records in their phase sections).
+Status: in progress. AU1 to AU13 have implementation evidence (completion records in their phase sections).
 
 Tracking issue: [#331](https://github.com/zidage/AlcedoStudio/issues/331). Progress is tracked in the issues, not in this document.
 
@@ -575,7 +575,7 @@ class AutomationCommandRegistry {
 | AU10 | Editor commands and `render.preview` | Editor session, render port | AU3, AU7 | 1300–1800 | implemented | [#326](https://github.com/zidage/AlcedoStudio/issues/326) |
 | AU11 | Version commands and commit attribution | Session, journal, storage, QML | AU10 | 1300–1800 | implemented | [#326](https://github.com/zidage/AlcedoStudio/issues/326) |
 | AU12 | Export in C++, export commands | Export queue and recipe, QML | AU5 | 1100–1600 | implemented | [#327](https://github.com/zidage/AlcedoStudio/issues/327) |
-| AU13 | Search in C++, search commands | Search session, QML | AU5 | 900–1300 | planned | [#327](https://github.com/zidage/AlcedoStudio/issues/327) |
+| AU13 | Search in C++, search commands | Search session, QML | AU5 | 900–1300 | implemented | [#327](https://github.com/zidage/AlcedoStudio/issues/327) |
 | AU14 | GUI automation server and agent control | Control owner, policy, background task island | AU6, AU10, AU11, AU12 | 1100–1600 | planned | [#328](https://github.com/zidage/AlcedoStudio/issues/328) |
 | AU15 | MCP server, operation skill, packaging | `alcedo_cli`, skill, install rules | AU14 | 1100–1600 | planned | [#329](https://github.com/zidage/AlcedoStudio/issues/329) |
 | AU16 | Operation-sequence robustness and recovery tests | Tests, CI | AU11, AU12, AU13 | 900–1400 | planned | [#330](https://github.com/zidage/AlcedoStudio/issues/330) |
@@ -2775,12 +2775,74 @@ ctest --test-dir build/debug -R "SearchSessionTest|AutomationSearchE2ETest" -j 1
 
 **Exit criteria**
 
-- [ ] Tests pass.
-- [ ] Manual GUI check: global search typing, paging, and semantic routing behave as before.
+- [x] Tests pass.
+- [ ] Manual GUI check: global search typing, paging, and semantic routing behave as before
+  (recorded by the user).
 
 **Expected diff:** 900–1300 lines.
 
-**Completion record:** see section 13.
+**Completion record (AU13):**
+
+```text
+Phase / date / status: AU13 / 2026-10-10 / implemented.
+Source revision and branch: feature/automation-export-commands (AU12); branch
+  feature/automation-search-commands. Actual diff: about 1270 lines (16 files, this record
+  included).
+Actual changed modules: SearchSession (new), SearchController (session property, the session
+  port, allow_semantic on RequestSearchPage, Reset on CancelSearchRequests), search_commands.cpp
+  (new), headless host registration, GlobalSearchDialog.qml, tests.
+Implemented behavior:
+  - SearchSession has the routing (empty, semantic when ClassifyQuery returns semantic and natural
+    language search is on, else fuzzy), the active request id (the id that RequestSearch and
+    RequestSubmitSearch return; the QML generation counter is removed), and the window of 48 rows
+    with pages of 24: append drops leading rows, prepend drops trailing rows, a replace page over
+    the capacity keeps its last rows. Only the response with the active request id changes the
+    window; a new request, Reset, or CancelSearchRequests drops the active id (RequestDropped).
+  - GlobalSearchDialog.qml reads the window, the paging values, the route, and the status flags
+    from searchController.session. It keeps the typing debounce (140 ms), the thumbnail preview
+    state, the status texts, and the list position after a drop or a prepend.
+  - search.query {text, offset, limit (1..48), mode auto|fuzzy} answers {route, offset, limit,
+    total, has_more, matches[{element_id, image_id, file_name, camera_model, lens, capture_date,
+    rating}]}. An empty text answers the recommendations. mode auto with a semantic query uses
+    the semantic path; when it is not available the answer has semantic_unavailable: true and no
+    matches. mode fuzzy keeps the query on the SQL path. A query too long for the semantic path
+    answers too_long: true with no matches. A newer search before the response gives -32002; a
+    search SQL error gives -32007.
+Deviations from the phase text:
+  - The 24 ms execution timer of the dialog is removed: a request starts when the session is
+    called, and the loading state is the active request. The typing debounce stays.
+  - SearchSession takes a SearchSessionPort (functions to the controller) so that
+    SearchSessionTest runs without a project.
+  - GlobalSearchDialogQmlTest.TypingTwentyCharactersQuicklyAppliesOnlyTheLastResponse calls
+    refreshPreview only (executePendingSearch is removed).
+  - Added test: SearchSessionTest.SemanticQueryWaitsForSubmitWhenNaturalLanguageSearchIsOn.
+Explicitly unimplemented items: none for AU13.
+Primary success call chain: search.query "<file stem>" fuzzy -> SearchSession::Replace(submit,
+  allow_semantic false) -> RequestSearchPage -> search worker SearchFolderPage ->
+  SearchResponseReady(id) -> SearchSession::ApplyResponse (id matches) -> ResponseApplied ->
+  matches, total, has_more (AutomationSearchE2ETest.FuzzySearchFindsImportedFileName).
+Primary failure and restore call chain: response with an old id -> ApplyResponse ignores it ->
+  window unchanged (SearchSessionTest.ResponseWithOldRequestIdIsIgnored); a too long semantic
+  query -> response tooLong -> {"too_long": true, "matches": []} (code path; the CI host has no
+  semantic search on).
+Build and test commands with exit codes:
+  cmd /c scripts\msvc_env.cmd --build --preset win_debug --target alcedo_main alcedo_cli
+    SearchSessionTest AutomationSearchE2ETest GlobalSearchDialogQmlTest AutomationExportE2ETest
+    SearchRequestWorkerTest AlbumBackendSearchWorkerTest AutomationLibraryCommandsTest
+    ApplicationModuleHostLifecycleTest --parallel 4 -> 0
+  ctest --test-dir build/debug -R "SearchSessionTest|AutomationSearchE2ETest|
+    AutomationExportE2ETest|GlobalSearchDialogQmlTest|SearchRequestWorkerTest|
+    AlbumBackendSearchWorkerTest|AutomationLibraryCommandsTest|
+    ApplicationModuleHostLifecycleTest" -j 1 -> 0 (32/32)
+Discovered / passed / failed / skipped counts: SearchSessionTest 3/3, AutomationSearchE2ETest 1/1,
+  GlobalSearchDialogQmlTest 6/6, SearchRequestWorkerTest 5/5, AlbumBackendSearchWorkerTest 5/5,
+  AutomationExportE2ETest 3/3, AutomationLibraryCommandsTest 7/7,
+  ApplicationModuleHostLifecycleTest 2/2.
+Manual verification: none beyond the tests. The GUI check of the search dialog is recorded by
+  the user.
+Evidence path: build/tmp/automation_au12/ (removed after the phase).
+Remaining defects or unavailable platforms: macOS Metal runs only in CI.
+```
 
 ### Phase AU14 — GUI automation server and agent control
 

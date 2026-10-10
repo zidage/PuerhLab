@@ -714,8 +714,8 @@ TEST_F(GlobalSearchDialogQmlTests, SemanticTypingShowsAwaitingSubmitAndLabelUses
 TEST_F(GlobalSearchDialogQmlTests,
        SemanticSubmitSurvivesPendingTypingDebounceAndLeavesAwaitingSubmit) {
   // Regression: typing arms previewTimer (140ms). Enter/Search must stop that
-  // timer and run RequestSubmitSearch; otherwise a late refreshPreview bumps
-  // searchRequestGeneration and drops the sidecar SearchResponseReady payload.
+  // timer and run RequestSubmitSearch; otherwise a late refreshPreview replaces
+  // the active search request and drops the sidecar SearchResponseReady payload.
   auto* app = qobject_cast<QApplication*>(QCoreApplication::instance());
   ASSERT_NE(app, nullptr);
 
@@ -929,7 +929,6 @@ TEST_F(GlobalSearchDialogQmlTests, TypingTwentyCharactersQuicklyAppliesOnlyTheLa
   for (int length = 1; length <= query.size(); ++length) {
     searchField->setProperty("text", query.left(length));
     ASSERT_TRUE(QMetaObject::invokeMethod(dialog, "refreshPreview"));
-    ASSERT_TRUE(QMetaObject::invokeMethod(dialog, "executePendingSearch"));
   }
   // Every keystroke sent its request above; the debounce must not send a 21st.
   ASSERT_TRUE(QMetaObject::invokeMethod(previewTimer, "stop"));
