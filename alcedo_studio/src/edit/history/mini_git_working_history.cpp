@@ -45,7 +45,24 @@ auto RecordToJSON(const MiniGitJournalRecord& record) -> nlohmann::json {
                    {"target_chain_hash", record.target_chain_hash.ToString()}};
   j["edit_commit"] =
       record.edit_commit.has_value() ? record.edit_commit->ToJSON() : nlohmann::json(nullptr);
+  if (record.attribution.has_value()) {
+    j["attribution"] = {{"author", record.attribution->author_},
+                        {"note", record.attribution->note_}};
+  }
   return j;
+}
+
+auto AttributionFromJSON(const nlohmann::json& j) -> EditCommitAttribution {
+  if (!j.is_object() || !j.contains("author") || !j.at("author").is_string() ||
+      !j.contains("note") || !j.at("note").is_string()) {
+    throw std::runtime_error("mini-Git journal attribution has an incompatible shape");
+  }
+  EditCommitAttribution attribution{j.at("author").get<std::string>(),
+                                    j.at("note").get<std::string>()};
+  if (!IsStorableEditCommitAttribution(attribution)) {
+    throw std::runtime_error("mini-Git journal attribution author is not agent");
+  }
+  return attribution;
 }
 
 auto RecordFromJSON(const nlohmann::json& j) -> MiniGitJournalRecord {
@@ -55,7 +72,8 @@ auto RecordFromJSON(const nlohmann::json& j) -> MiniGitJournalRecord {
     throw std::runtime_error("mini-Git journal record has an incompatible shape");
   }
   const auto format_version = j.value("format_version", 0u);
-  if (format_version != kMiniGitJournalRecordFormatVersion) {
+  if (format_version < kMiniGitJournalRecordMinFormatVersion ||
+      format_version > kMiniGitJournalRecordFormatVersion) {
     throw std::runtime_error("mini-Git journal record has an incompatible format version");
   }
   MiniGitJournalRecord record;
@@ -81,6 +99,13 @@ auto RecordFromJSON(const nlohmann::json& j) -> MiniGitJournalRecord {
   record.target_chain_hash = Hash128::FromString(j.at("target_chain_hash").get<std::string>());
   if (!j.at("edit_commit").is_null()) {
     record.edit_commit = EditCommit::FromJSON(j.at("edit_commit"));
+  }
+  // A version 6 record has no attribution; its commit belongs to the user.
+  if (format_version >= 7 && j.contains("attribution")) {
+    if (record.kind != MiniGitJournalRecordKind::kEditCommit) {
+      throw std::runtime_error("mini-Git head move record cannot have an attribution");
+    }
+    record.attribution = AttributionFromJSON(j.at("attribution"));
   }
   return record;
 }
@@ -125,6 +150,9 @@ auto ValidateAndApplyRecord(CommitGraph& graph, const MiniGitJournalRecord& reco
     }
     try {
       (void)graph.InsertCommit(commit);
+      if (record.attribution.has_value()) {
+        graph.SetCommitAttribution(commit.GetCommitHash(), *record.attribution);
+      }
       graph.MoveWorkingHead(active_version_id, record.target_head);
       return true;
     } catch (const std::exception& e) {
@@ -444,8 +472,14 @@ void MiniGitWorkingHistory::PublishWorkingSelection(MiniGitWorkingSelection sele
   redo_stack_ = std::move(selection.redo_suffix);
 }
 
-auto MiniGitWorkingHistory::PrepareAppendEdit(PipelineEditBatch payload) const
+auto MiniGitWorkingHistory::PrepareAppendEdit(
+    PipelineEditBatch payload, std::optional<EditCommitAttribution> attribution) const
     -> MiniGitPreparedEdit {
+  if (attribution.has_value() && !IsStorableEditCommitAttribution(*attribution)) {
+    MiniGitPreparedEdit rejected;
+    rejected.error = "mini-Git edit attribution author is not agent";
+    return rejected;
+  }
   MiniGitPreparedEdit prepared;
   const auto          source_head  = working_head();
   const auto          source_chain = transaction_chain_hash();
@@ -464,10 +498,10 @@ auto MiniGitWorkingHistory::PrepareAppendEdit(PipelineEditBatch payload) const
   prepared.journal_record.target_head                = prepared.commit.GetCommitHash();
   prepared.journal_record.target_chain_hash          = prepared.target_chain;
   prepared.journal_record.edit_commit                = prepared.commit;
+  prepared.journal_record.attribution                = std::move(attribution);
   prepared.ready                                     = true;
   return prepared;
 }
-
 
 auto MiniGitWorkingHistory::PublishPreparedEdit(const MiniGitPreparedEdit& prepared)
     -> MiniGitEditAppendResult {
@@ -495,6 +529,10 @@ auto MiniGitWorkingHistory::PublishPreparedEdit(const MiniGitPreparedEdit& prepa
       }
       result.error = "mini-Git commit is already in the graph";
       return result;
+    }
+    if (prepared.journal_record.attribution.has_value()) {
+      graph_->SetCommitAttribution(prepared.commit.GetCommitHash(),
+                                   *prepared.journal_record.attribution);
     }
     graph_->MoveWorkingHead(graph_->GetActiveVersionId(), prepared.commit.GetCommitHash());
     redo_stack_.clear();

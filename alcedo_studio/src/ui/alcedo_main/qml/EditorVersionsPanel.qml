@@ -159,7 +159,7 @@ Item {
         root.draftError = ""
         root.draftSubmittedName = ""
         root.draftPendingOperationId = null
-        root.draftOriginalText = qsTr("Version %1").arg(root.historyModel.versions.count + 1)
+        root.draftOriginalText = root.historyModel.defaultVersionName(qsTr("Version %1"))
         root.setDraftText(root.draftOriginalText)
         root.draftVisible = true
         draftFocusTimer.restart()
@@ -281,12 +281,13 @@ Item {
     function commitDraft(requireChanged) {
         if (!root.draftVisible || !root.historyModel || root.draftSubmitPending)
             return
-        var name = root.draftText.trim()
+        var name = root.historyModel.normalizeVersionName(root.draftText)
         if (name.length === 0) {
             cancelDraft()
             return
         }
-        if (requireChanged && name === root.draftOriginalText.trim()) {
+        if (requireChanged
+                && root.historyModel.isUnchangedVersionName(root.draftOriginalText, name)) {
             cancelDraft()
             return
         }
@@ -337,7 +338,7 @@ Item {
             return
         root.captureListScroll()
         root.historyModel.createRootVersion(
-            qsTr("Version %1").arg(root.historyModel.versions.count + 1))
+            root.historyModel.defaultVersionName(qsTr("Version %1")))
         root.restoreListScroll()
     }
 

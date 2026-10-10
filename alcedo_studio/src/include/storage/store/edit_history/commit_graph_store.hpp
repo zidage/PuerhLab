@@ -10,11 +10,13 @@
 #include <optional>
 #include <span>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "edit/graph/pipeline_document.hpp"
 #include "edit/history/commit_graph.hpp"
 #include "edit/history/edit_commit.hpp"
+#include "edit/history/edit_commit_attribution.hpp"
 #include "edit/history/version_ref.hpp"
 #include "json.hpp"
 #include "storage/mapper/sleeve/edit_history/edit_commit_mapper.hpp"
@@ -84,18 +86,20 @@ class CommitGraphStore {
   auto GetRootSerializedPipelineState(sl_element_id_t element_id, const root_id_t& root_id)
       -> std::optional<nlohmann::json>;
 
-  /// Atomically materialize commits, Version refs, and ImageEditState from a validated capture.
-  /// Fails before commit when the capture is inconsistent; prior rows remain unchanged.
+  /// Atomically materialize commits, their attribution, Version refs, and ImageEditState from a
+  /// validated capture. Fails before commit when the capture is inconsistent; prior rows remain
+  /// unchanged.
   void Materialize(const CommitGraphMaterialization& materialization);
 
-  /// Reload a graph with full structural and materialized-state validation.
+  /// Reload a graph and the attribution of its commits with full structural and
+  /// materialized-state validation.
   auto LoadGraph(sl_element_id_t element_id) -> std::optional<CommitGraph>;
 
   /// List every element_id that has an ImageEditState row.
   auto ListImageElementIds() -> std::vector<sl_element_id_t>;
 
   /// Mark all Version heads along first-parent reachability, then delete unreachable EditCommit
-  /// rows for one image.
+  /// rows and their EditCommitAttribution rows for one image.
   /// Safe on abnormal restart only when called during a clean project exit after the final save.
   /// @return number of commit rows deleted.
   auto DeleteUnreachableCommits(sl_element_id_t element_id) -> std::size_t;
@@ -107,7 +111,8 @@ class CommitGraphStore {
   /// Delete every persisted Mini-Git row owned by one image.
   ///
   /// This is used only after the image itself has been removed from the project. The Version refs,
-  /// commit objects, image state, and immutable root snapshot are removed in one transaction.
+  /// commit objects and their attribution, image state, and immutable root snapshot are removed
+  /// in one transaction.
   void DeleteGraphForElement(sl_element_id_t element_id);
 
   /// Persist an empty image edit state (infrastructure bootstrap helper).
@@ -143,6 +148,10 @@ class CommitGraphStore {
 
   void UpsertVersionRef(const VersionRef& version_ref);
   void UpsertImageEditState(const ImageEditState& state);
+  void                 InsertAttributionIfAbsent(const commit_hash_t&         commit_hash,
+                                                 const EditCommitAttribution& attribution);
+  auto                 ListAttributionsForRoot(const root_id_t& root_id)
+      -> std::unordered_map<commit_hash_t, EditCommitAttribution>;
   void        InsertRootSerializedPipelineStates(std::span<const EncodedRootPipeline> roots);
   static auto EncodeRootPipelineForGraph(const CommitGraph&                   graph,
                                          const PipelineDocument&              root_document,

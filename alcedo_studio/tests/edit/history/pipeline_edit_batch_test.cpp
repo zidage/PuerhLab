@@ -362,7 +362,7 @@ TEST(PipelineEditBatch, TypedCommitAndChainIdentityUnchangedAfterFormatCut) {
   EXPECT_EQ(kCommitFormatVersion, 5u);
   EXPECT_EQ(kChainFormatVersion, 5u);
   EXPECT_EQ(kPipelineEditBatchFormatVersion, 4u);
-  EXPECT_EQ(kMiniGitJournalRecordFormatVersion, 6u);
+  EXPECT_EQ(kMiniGitJournalRecordFormatVersion, 7u);
 
   const auto batch = PipelineEditBatch::FromJSON(
       nlohmann::json::parse(LoadExpectedBytes("set_parameter_batch.json")));

@@ -470,6 +470,11 @@ class RecordingEditorSessionBackend final : public IEditorSessionBackend {
     NotifyChange();
   }
 
+  void SetCommitAttribution(std::size_t index, std::string author, std::string note) {
+    snapshot_.commits.at(index).author = std::move(author);
+    snapshot_.commits.at(index).note   = std::move(note);
+    NotifyHistoryChange();
+  }
   void SetBlockVersionOps(bool block) { block_version_ops_ = block; }
   void SetFailNodeCommands(bool fail) { fail_node_commands_ = fail; }
   void AddMaskToPrimaryGrade(MaskModel mask) {

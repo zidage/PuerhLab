@@ -214,7 +214,13 @@ class Database {
       "CREATE TABLE IF NOT EXISTS PipelineRoot ("
       "root_id VARCHAR PRIMARY KEY,"
       "element_id BIGINT UNIQUE NOT NULL,"
-      "serialized_pipeline_state JSON NOT NULL);";
+      "serialized_pipeline_state JSON NOT NULL);"
+      // Author of an agent commit. A commit without a row belongs to the user. The commit hash
+      // does not include these values.
+      "CREATE TABLE IF NOT EXISTS EditCommitAttribution ("
+      "commit_hash VARCHAR PRIMARY KEY,"
+      "author VARCHAR NOT NULL,"
+      "note VARCHAR);";
 
   // Phase 5f: AI image understanding + rating annotation tables. CREATE IF NOT EXISTS
   // so this runs migration-safely on BOTH the fresh-DB and existing-DB paths (see

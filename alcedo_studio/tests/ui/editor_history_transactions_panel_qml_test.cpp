@@ -206,5 +206,33 @@ TEST_F(EditorHistoryTransactionsPanelQmlTest, EachTransactionCardShowsItsOwnComm
   EXPECT_GE(hashed_cards, 1);
 }
 
+TEST_F(EditorHistoryTransactionsPanelQmlTest, AgentCommitShowsAgentChipAndNote) {
+  ASSERT_NE(window_, nullptr) << warnings_.join('\n').toStdString();
+  // Snapshot order: index 1 is the exposure commit, the older one.
+  backend_.SetCommitAttribution(1, "agent", "Lift the shadows");
+  OpenHistoryPage();
+  QTRY_VERIFY_WITH_TIMEOUT(HistoryCards().size() == 2, 8000);
+
+  int agent_cards = 0;
+  for (auto* delegate : HistoryCards()) {
+    auto* author_label =
+        delegate->findChild<QQuickItem*>(QStringLiteral("editorHistoryCommitAuthor"));
+    auto* note_label = delegate->findChild<QQuickItem*>(QStringLiteral("editorHistoryCommitNote"));
+    ASSERT_NE(author_label, nullptr);
+    ASSERT_NE(note_label, nullptr);
+    if (delegate->property("agentCommit").toBool()) {
+      ++agent_cards;
+      EXPECT_TRUE(author_label->isVisible());
+      EXPECT_EQ(author_label->property("text").toString(), QStringLiteral("Agent"));
+      EXPECT_TRUE(note_label->isVisible());
+      EXPECT_EQ(note_label->property("text").toString(), QStringLiteral("Lift the shadows"));
+    } else {
+      EXPECT_FALSE(author_label->isVisible());
+      EXPECT_FALSE(note_label->isVisible());
+    }
+  }
+  EXPECT_EQ(agent_cards, 1);
+}
+
 }  // namespace
 }  // namespace alcedo::ui::test

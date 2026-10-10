@@ -9,7 +9,9 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <cstdint>
 #include <filesystem>
+#include <format>
 #include <fstream>
 #include <iterator>
 #include <json.hpp>
@@ -25,6 +27,7 @@
 #include "edit/history/commit_clock_test_access.hpp"
 #include "edit/history/commit_types.hpp"
 #include "edit/history/edit_commit.hpp"
+#include "edit/history/edit_commit_attribution.hpp"
 #include "edit/history/mini_git_working_history.hpp"
 #include "edit/history/pipeline_document_checkpoint.hpp"
 #include "edit/history/pipeline_edit_batch.hpp"
@@ -1154,6 +1157,221 @@ TEST_F(CommitGraphPersistenceTests, BatchedRootInsertRollsBackRootsWhenCallerRow
   // The connection is usable afterwards: the same roots insert cleanly.
   ASSERT_NO_THROW(service.InsertRootPipelines(roots));
   EXPECT_TRUE(service.GetImageEditState(7101).has_value());
+}
+
+namespace {
+
+auto AgentAttribution(std::string note) -> EditCommitAttribution {
+  return EditCommitAttribution{std::string(kEditCommitAuthorAgent), std::move(note)};
+}
+
+auto AppendAgentEdit(MiniGitWorkingHistory& history, PipelineEditBatch batch, std::string note)
+    -> MiniGitEditAppendResult {
+  auto prepared = history.PrepareAppendEdit(std::move(batch), AgentAttribution(std::move(note)));
+  if (!prepared.ready) {
+    return MiniGitEditAppendResult{false, std::nullopt, prepared.error};
+  }
+  return history.PublishPreparedEdit(prepared);
+}
+
+/// Rewrites every frame of the journal at @p path as a version 6 record, which has no
+/// attribution, with a matching checksum.
+void RewriteJournalAsVersion6(const std::filesystem::path& path) {
+  std::vector<std::string> lines;
+  {
+    std::ifstream input(path, std::ios::binary);
+    std::string   line;
+    while (std::getline(input, line)) {
+      lines.push_back(line);
+    }
+  }
+  std::ofstream output(path, std::ios::binary | std::ios::trunc);
+  for (const auto& text : lines) {
+    auto record              = nlohmann::json::parse(text).at("record");
+    record["format_version"] = 6;
+    record.erase("attribution");
+    const auto bytes    = record.dump();
+    const auto checksum = Hash128::Compute(bytes.data(), bytes.size());
+    output << nlohmann::json{{"record", record}, {"checksum", checksum.ToString()}}.dump() << '\n';
+  }
+}
+
+void ExecuteSql(duckdb_connection conn, const std::string& sql) {
+  duckdb_result result;
+  const auto    state = duckdb_query(conn, sql.c_str(), &result);
+  EXPECT_EQ(state, DuckDBSuccess) << sql << ": " << duckdb_result_error(&result);
+  duckdb_destroy_result(&result);
+}
+
+auto CountRows(duckdb_connection conn, const std::string& table, const commit_hash_t& hash)
+    -> std::int64_t {
+  duckdb_result result;
+  const auto    sql =
+      std::format("SELECT COUNT(*) FROM {} WHERE commit_hash='{}';", table, hash.ToString());
+  if (duckdb_query(conn, sql.c_str(), &result) != DuckDBSuccess) {
+    duckdb_destroy_result(&result);
+    return -1;
+  }
+  const auto count = duckdb_value_int64(&result, 0, 0);
+  duckdb_destroy_result(&result);
+  return count;
+}
+
+}  // namespace
+
+TEST(MiniGitJournalTest, Version7RecordRoundTripsAttribution) {
+  const auto path =
+      std::filesystem::temp_directory_path() / "alcedo-mini-git-journal-attribution-v7.wal";
+  std::error_code ignored;
+  std::filesystem::remove(path, ignored);
+
+  auto              graph         = std::make_shared<CommitGraph>(CommitGraph::CreateEmpty(730));
+  const CommitGraph recovery_base = *graph;
+  commit_hash_t     agent_hash{};
+  commit_hash_t     user_hash{};
+  {
+    MiniGitWorkingHistory history(graph, std::make_shared<MiniGitJournal>(path));
+    const auto agent = AppendAgentEdit(history, MakeExposureBatch(0.0f, 0.5f), "lift the shadows");
+    ASSERT_TRUE(agent.committed) << agent.error;
+    const auto user = history.AppendEdit(MakeContrastBatch(0.0f, 0.25f));
+    ASSERT_TRUE(user.committed) << user.error;
+    agent_hash = agent.commit->GetCommitHash();
+    user_hash  = user.commit->GetCommitHash();
+  }
+
+  MiniGitJournal reopened(path);
+  std::string    error;
+  ASSERT_TRUE(reopened.Load(&error)) << error;
+  const auto records = reopened.records();
+  ASSERT_EQ(records.size(), 2u);
+  ASSERT_TRUE(records[0].attribution.has_value());
+  EXPECT_EQ(records[0].attribution->author_, kEditCommitAuthorAgent);
+  EXPECT_EQ(records[0].attribution->note_, "lift the shadows");
+  EXPECT_FALSE(records[1].attribution.has_value());
+
+  auto recovered = recovery_base;
+  ASSERT_TRUE(MiniGitWorkingHistory::Replay(recovered, records, &error)) << error;
+  const auto* attribution = recovered.FindCommitAttribution(agent_hash);
+  ASSERT_NE(attribution, nullptr);
+  EXPECT_TRUE(*attribution == AgentAttribution("lift the shadows"));
+  EXPECT_EQ(recovered.FindCommitAttribution(user_hash), nullptr);
+  std::filesystem::remove(path, ignored);
+}
+
+TEST(MiniGitJournalTest, Version6RecordReadsAsUserAuthor) {
+  const auto path =
+      std::filesystem::temp_directory_path() / "alcedo-mini-git-journal-attribution-v6.wal";
+  std::error_code ignored;
+  std::filesystem::remove(path, ignored);
+
+  auto              graph         = std::make_shared<CommitGraph>(CommitGraph::CreateEmpty(732));
+  const CommitGraph recovery_base = *graph;
+  commit_hash_t     hash{};
+  {
+    MiniGitWorkingHistory history(graph, std::make_shared<MiniGitJournal>(path));
+    const auto appended = AppendAgentEdit(history, MakeExposureBatch(0.0f, 0.5f), "note");
+    ASSERT_TRUE(appended.committed) << appended.error;
+    hash = appended.commit->GetCommitHash();
+  }
+  RewriteJournalAsVersion6(path);
+
+  MiniGitJournal reopened(path);
+  std::string    error;
+  ASSERT_TRUE(reopened.Load(&error)) << error;
+  const auto records = reopened.records();
+  ASSERT_EQ(records.size(), 1u);
+  EXPECT_FALSE(records[0].attribution.has_value());
+
+  auto recovered = recovery_base;
+  ASSERT_TRUE(MiniGitWorkingHistory::Replay(recovered, records, &error)) << error;
+  EXPECT_NE(recovered.FindCommit(hash), nullptr);
+  EXPECT_EQ(recovered.FindCommitAttribution(hash), nullptr) << "a version 6 commit is the user's";
+  std::filesystem::remove(path, ignored);
+}
+
+TEST(EditCommitTest, HashIsUnchangedByAttribution) {
+  auto                  graph = std::make_shared<CommitGraph>(CommitGraph::CreateEmpty(733));
+  MiniGitWorkingHistory history(graph, std::make_shared<MiniGitJournal>());
+  const auto            appended = AppendAgentEdit(history, MakeExposureBatch(0.0f, 0.5f), "note");
+  ASSERT_TRUE(appended.committed) << appended.error;
+  const EditCommit& commit = *appended.commit;
+
+  const auto        without_attribution =
+      MakeEditAt(commit.GetRootId(), commit.GetFirstParentHash(), commit.GetCreatedAtNs(),
+                 MakeExposureBatch(0.0f, 0.5f));
+  EXPECT_EQ(commit.GetCommitHash(), without_attribution.GetCommitHash());
+  EXPECT_EQ(commit.GetCommitHash(), commit.ComputeCommitHash());
+  EXPECT_FALSE(commit.ToJSON().contains("attribution"));
+}
+
+class CommitGraphStoreTest : public CommitGraphPersistenceTests {};
+
+TEST_F(CommitGraphStoreTest, MaterializeWritesAttributionInSameTransaction) {
+  auto                  guard = db_->GetConnectionGuard();
+  auto                  lock  = guard.Lock();
+  CommitGraphStore      service(guard.conn_);
+
+  auto                  graph = std::make_shared<CommitGraph>(service.CreateEmptyPersisted(8001));
+  MiniGitWorkingHistory history(graph, std::make_shared<MiniGitJournal>());
+  const auto            appended = AppendAgentEdit(history, MakeExposureBatch(0.0f, 0.5f), "lift");
+  ASSERT_TRUE(appended.committed) << appended.error;
+  const auto hash = appended.commit->GetCommitHash();
+
+  // Failure injection: without the VersionRef table the write after the commit and attribution
+  // inserts fails, and the transaction must leave neither row. The index blocks a rename.
+  ExecuteSql(guard.conn_, "DROP INDEX idx_version_ref_element;");
+  ExecuteSql(guard.conn_, "ALTER TABLE VersionRef RENAME TO VersionRefAside;");
+  EXPECT_ANY_THROW(service.Materialize(graph->CaptureMaterialization()));
+  ExecuteSql(guard.conn_, "ALTER TABLE VersionRefAside RENAME TO VersionRef;");
+  ExecuteSql(guard.conn_, "CREATE INDEX idx_version_ref_element ON VersionRef(element_id);");
+  EXPECT_EQ(CountRows(guard.conn_, "EditCommit", hash), 0);
+  EXPECT_EQ(CountRows(guard.conn_, "EditCommitAttribution", hash), 0);
+
+  auto materialization = graph->CaptureMaterialization();
+  ASSERT_NO_THROW(service.Materialize(materialization));
+  EXPECT_EQ(CountRows(guard.conn_, "EditCommit", hash), 1);
+  EXPECT_EQ(CountRows(guard.conn_, "EditCommitAttribution", hash), 1);
+
+  auto loaded = service.LoadGraph(8001);
+  ASSERT_TRUE(loaded.has_value());
+  const auto* attribution = loaded->FindCommitAttribution(hash);
+  ASSERT_NE(attribution, nullptr);
+  EXPECT_TRUE(*attribution == AgentAttribution("lift"));
+}
+
+TEST_F(CommitGraphStoreTest, GarbageCollectionRemovesOrphanAttribution) {
+  auto                  guard = db_->GetConnectionGuard();
+  auto                  lock  = guard.Lock();
+  CommitGraphStore      service(guard.conn_);
+
+  auto                  graph = std::make_shared<CommitGraph>(service.CreateEmptyPersisted(8002));
+  MiniGitWorkingHistory history(graph, std::make_shared<MiniGitJournal>());
+  const auto orphan = AppendAgentEdit(history, MakeExposureBatch(0.0f, 0.5f), "replaced");
+  ASSERT_TRUE(orphan.committed) << orphan.error;
+  const auto orphan_hash = orphan.commit->GetCommitHash();
+  auto       first       = graph->CaptureMaterialization();
+  ASSERT_NO_THROW(service.Materialize(first));
+  graph->ApplyMaterializedState(first.image_state);
+  ASSERT_EQ(CountRows(guard.conn_, "EditCommitAttribution", orphan_hash), 1);
+
+  // An edit after Undo drops the redo commit: no Version reaches it.
+  ASSERT_TRUE(history.Undo().moved);
+  const auto kept = AppendAgentEdit(history, MakeContrastBatch(0.0f, 0.25f), "kept");
+  ASSERT_TRUE(kept.committed) << kept.error;
+  auto second = graph->CaptureMaterialization();
+  ASSERT_NO_THROW(service.Materialize(second));
+  graph->ApplyMaterializedState(second.image_state);
+
+  EXPECT_EQ(service.DeleteUnreachableCommits(8002), 1u);
+  EXPECT_EQ(CountRows(guard.conn_, "EditCommit", orphan_hash), 0);
+  EXPECT_EQ(CountRows(guard.conn_, "EditCommitAttribution", orphan_hash), 0);
+  const auto kept_hash = kept.commit->GetCommitHash();
+  EXPECT_EQ(CountRows(guard.conn_, "EditCommitAttribution", kept_hash), 1);
+
+  // The in-memory collection drops the attribution with the commit.
+  graph->EraseUnreachableCommits({orphan_hash});
+  EXPECT_EQ(graph->FindCommitAttribution(orphan_hash), nullptr);
+  EXPECT_NE(graph->FindCommitAttribution(kept_hash), nullptr);
 }
 
 }  // namespace alcedo

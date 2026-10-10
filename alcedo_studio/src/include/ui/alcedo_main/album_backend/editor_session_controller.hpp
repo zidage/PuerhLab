@@ -251,10 +251,12 @@ class EditorSessionController final : public QObject, public IEditorAdjustmentSu
    * @brief submitWrite that returns the session result of the enqueue.
    *
    * A settled write is a Release boundary: the result carries the operation_id that the commit
-   * and frame results of the later consume carry. A write the controller refuses before the
+   * and frame results of the later consume carry. @p attribution names the author of the
+   * commit of a settled write; nullopt is the user. A write the controller refuses before the
    * session sees it returns Rejected with the reason.
    */
-  auto EnqueueFieldWrite(QString fieldKey, alcedo::EditorParameterWrite write, bool settled)
+  auto EnqueueFieldWrite(QString fieldKey, alcedo::EditorParameterWrite write, bool settled,
+                         std::optional<alcedo::EditCommitAttribution> attribution = std::nullopt)
       -> alcedo::EditorSessionResult;
   /// Queue a node-switch seal so later writes start a new sequence. Old
   /// sequence ids keep their captured target. No live mutation.
@@ -307,6 +309,15 @@ class EditorSessionController final : public QObject, public IEditorAdjustmentSu
   /// Undo and Redo that return the session result; its operation_id identifies the command.
   auto               RequestUndo() -> alcedo::EditorSessionResult;
   auto               RequestRedo() -> alcedo::EditorSessionResult;
+  /// The Version commands that return the session result; its operation_id identifies the
+  /// command. A request that the controller refuses returns Rejected with the reason.
+  auto RequestCheckoutVersion(const QString& versionId) -> alcedo::EditorSessionResult;
+  auto RequestCreateRootVersion(const QString& displayName) -> alcedo::EditorSessionResult;
+  auto RequestBranchFromCommit(const QString& commitId, const QString& displayName)
+      -> alcedo::EditorSessionResult;
+  auto RequestRenameVersion(const QString& versionId, const QString& displayName)
+      -> alcedo::EditorSessionResult;
+  auto               RequestRemoveVersion(const QString& versionId) -> alcedo::EditorSessionResult;
   Q_INVOKABLE void   MoveHeadToCommit(const QString& commitId);
   Q_INVOKABLE void   Close();
   Q_INVOKABLE void   Shutdown();
@@ -485,6 +496,9 @@ class EditorSessionController final : public QObject, public IEditorAdjustmentSu
   /// Reject at the controller boundary without calling the backend.
   void PublishHistoryRejected(const QString& action, const QString& message,
                               const QString& selected_id = {});
+  /// PublishHistoryRejected, and the Rejected result that the Request* commands return.
+  auto RejectHistoryAction(const QString& action, const QString& message,
+                           const QString& selected_id = {}) -> alcedo::EditorSessionResult;
   /// Publish the invokable return value and track async pending when needed.
   void PublishHistoryInvokableReturn(const QString&                     action,
                                      const alcedo::EditorSessionResult& result,

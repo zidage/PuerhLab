@@ -132,6 +132,9 @@ auto EditorSessionEditController::HandlePendingSequence(const EditorPendingSeque
   for (const auto& field : sequence.fields) {
     auto        patch = PatchFromPendingField(field);
     patch.settled     = commit;
+    if (commit) {
+      patch.attribution = sequence.attribution;
+    }
     if (patch.field_key.empty()) {
       outcome.kind    = EditorEditOutcome::Kind::Rejected;
       outcome.message = "Adjustment patch requires a field key";

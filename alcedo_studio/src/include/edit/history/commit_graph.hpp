@@ -13,6 +13,7 @@
 
 #include "edit/history/commit_types.hpp"
 #include "edit/history/edit_commit.hpp"
+#include "edit/history/edit_commit_attribution.hpp"
 #include "edit/history/version_ref.hpp"
 #include "json.hpp"
 #include "type/type.hpp"
@@ -29,6 +30,8 @@ struct CommitGraphMaterialization {
   ImageEditState          image_state{};
   std::vector<VersionRef> version_refs;
   std::vector<EditCommit> commits;
+  /// Attribution of the commits in @ref commits that have one, by commit hash.
+  std::unordered_map<commit_hash_t, EditCommitAttribution> attributions;
 
   /// Validate mutual agreement of active Version, head, chain hash, and commit structure.
   void                    Validate() const;
@@ -87,6 +90,19 @@ class CommitGraph {
   /// Insert a finalized commit object. An already-present identical hash is ignored (shared).
   auto InsertCommit(EditCommit commit) -> bool;
 
+  /// Attach @p attribution to the commit @p commit_hash. Throws when the commit is not in the
+  /// graph or the attribution cannot be stored (see IsStorableEditCommitAttribution).
+  void SetCommitAttribution(const commit_hash_t& commit_hash, EditCommitAttribution attribution);
+
+  /// The attribution of @p commit_hash; null for a commit of the user.
+  [[nodiscard]] auto FindCommitAttribution(const commit_hash_t& commit_hash) const
+      -> const EditCommitAttribution*;
+
+  [[nodiscard]] auto GetAllCommitAttributions() const
+      -> const std::unordered_map<commit_hash_t, EditCommitAttribution>& {
+    return attributions_;
+  }
+
   /// Create a Version whose head is the image root (null). Unambiguous even when active is
   /// non-root.
   auto CreateVersionRefAtRoot(std::string display_name, std::time_t created_at = 0)
@@ -119,8 +135,8 @@ class CommitGraph {
   /// Commit objects present in the graph but not reachable from any Version head.
   [[nodiscard]] auto ListUnreachableCommitHashes() const -> std::vector<commit_hash_t>;
 
-  /// Remove the given commit hashes from the in-memory table. Callers must only
-  /// pass unreachable commits; reachable deletions throw.
+  /// Remove the given commit hashes and their attribution from the in-memory table. Callers
+  /// must only pass unreachable commits; reachable deletions throw.
   void               EraseUnreachableCommits(const std::vector<commit_hash_t>& hashes);
 
   /// First-parent chain fold for `head`. Unit of fold is one commit even when many operators
@@ -158,6 +174,7 @@ class CommitGraph {
 
   ImageEditState state_{};
   std::unordered_map<commit_hash_t, EditCommit>    commits_;
+  std::unordered_map<commit_hash_t, EditCommitAttribution> attributions_;
   std::unordered_map<version_ref_id_t, VersionRef> version_refs_;
 };
 

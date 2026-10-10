@@ -330,7 +330,8 @@ class FakeSessionBackend final : public IEditorSessionBackend {
     return result;
   }
 
-  auto EnqueuePendingInputBoundary(EditorPendingInputBoundaryKind kind)
+  auto EnqueuePendingInputBoundary(EditorPendingInputBoundaryKind kind,
+                                   std::optional<EditCommitAttribution> = std::nullopt)
       -> EditorSessionResult override {
     const auto admitted = pending_input_.AdmitBoundary(identity_, kind);
     EditorSessionResult result;

@@ -242,9 +242,10 @@ auto ApplyPreparedHeadMoveOnLivePipeline(HistoryWorkingState&           state,
   return true;
 }
 
-auto PublishAppliedTypedBatch(HistoryWorkingState& state, EditorHistoryState& history_state,
-                              const PipelineEditBatch& batch, bool document_already_at_after,
-                              std::string* error) -> bool {
+auto PublishAppliedTypedBatch(
+    HistoryWorkingState& state, EditorHistoryState& history_state, const PipelineEditBatch& batch,
+    bool document_already_at_after, std::string* error,
+    std::optional<alcedo::EditCommitAttribution> attribution = std::nullopt) -> bool {
   // The pre-apply snapshot is the exact failure rollback: inverse re-apply is
   // semantically equal but does not preserve node/edge container positions.
   std::optional<PipelineDocument> pre_apply_document;
@@ -284,7 +285,7 @@ auto PublishAppliedTypedBatch(HistoryWorkingState& state, EditorHistoryState& hi
     state.panel_projection_node_id   = prior_panel_node;
   };
   const auto prior_selection = state.history->WorkingSelection();
-  const auto prepared        = state.history->PrepareAppendEdit(batch);
+  const auto prepared        = state.history->PrepareAppendEdit(batch, std::move(attribution));
   if (!prepared.ready) {
     if (error) *error = prepared.error;
     restore_document();
@@ -447,7 +448,7 @@ auto EditorHistoryMutation::CommitAdjustment(const alcedo::EditorHistoryGuardHan
     (void)restore_before();
     return false;
   }
-  if (!PublishAppliedTypedBatch(*state, state_, batch, true, error)) {
+  if (!PublishAppliedTypedBatch(*state, state_, batch, true, error, patch.attribution)) {
     (void)restore_before();
     return false;
   }

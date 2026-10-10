@@ -8,6 +8,7 @@
 
 #include <QMetaObject>
 
+#include "app/version_name_rules.hpp"
 #include "ui/alcedo_main/album_backend/editor_session_controller.hpp"
 
 namespace alcedo::ui {
@@ -165,24 +166,23 @@ auto EditorHistoryModel::data(const QModelIndex& index, int role) const -> QVari
       return pres.delta_text;
     case IconKeyRole:
       return pres.icon_key;
+    case AuthorRole:
+      return QString::fromStdString(row.author);
+    case NoteRole:
+      return QString::fromStdString(row.note);
     default:
       return {};
   }
 }
 
 auto EditorHistoryModel::roleNames() const -> QHash<int, QByteArray> {
-  return {{CommitIdRole, "commitId"},
-          {FirstParentIdRole, "firstParentId"},
-          {CreatedAtNsRole, "createdAtNs"},
-          {LabelRole, "label"},
-          {FieldKeyRole, "fieldKey"},
-          {CurrentRole, "current"},
-          {DisplayNameRole, "displayName"},
-          {BeforeTextRole, "beforeText"},
-          {AfterTextRole, "afterText"},
-          {DeltaTextRole, "deltaText"},
-          {IconKeyRole, "iconKey"},
-          {TimelinePositionRole, "timelinePosition"}};
+  return {{CommitIdRole, "commitId"},       {FirstParentIdRole, "firstParentId"},
+          {CreatedAtNsRole, "createdAtNs"}, {LabelRole, "label"},
+          {FieldKeyRole, "fieldKey"},       {CurrentRole, "current"},
+          {DisplayNameRole, "displayName"}, {BeforeTextRole, "beforeText"},
+          {AfterTextRole, "afterText"},     {DeltaTextRole, "deltaText"},
+          {IconKeyRole, "iconKey"},         {TimelinePositionRole, "timelinePosition"},
+          {AuthorRole, "author"},           {NoteRole, "note"}};
 }
 
 void EditorHistoryModel::SetSnapshot(alcedo::EditorHistorySnapshot snapshot) {
@@ -318,6 +318,20 @@ void EditorHistoryModel::removeVersion(const QString& versionId) {
   if (editor_session_) editor_session_->RemoveVersion(versionId);
 }
 
+QString EditorHistoryModel::normalizeVersionName(const QString& text) const {
+  const auto name = alcedo::NormalizeVersionName(text.toStdString());
+  return name.has_value() ? QString::fromStdString(*name) : QString{};
+}
+
+QString EditorHistoryModel::defaultVersionName(const QString& pattern) const {
+  return QString::fromStdString(alcedo::DefaultVersionName(
+      static_cast<std::size_t>(versions_->rowCount()), pattern.toStdString()));
+}
+
+bool EditorHistoryModel::isUnchangedVersionName(const QString& current,
+                                                const QString& requested) const {
+  return alcedo::IsUnchangedVersionName(current.toStdString(), requested.toStdString());
+}
 
 void RegisterEditorHistoryQmlTypes() {
   qmlRegisterType<EditorHistoryModel>("Alcedo.Main", 1, 0, "EditorHistoryModel");

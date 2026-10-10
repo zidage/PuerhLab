@@ -121,6 +121,16 @@ gtest_discover_tests(EditorParameterCatalogTest
     TEST_PREFIX "EditorParameterCatalogTest.")
 alcedo_register_test_target(EditorParameterCatalogTest app)
 
+add_executable(VersionNameRulesTest
+    ${ALCEDO_TEST_ROOT}/app/version_name_rules_test.cpp)
+target_include_directories(VersionNameRulesTest
+    PUBLIC ${ALCEDO_INCLUDE_DIR} ${ALCEDO_TEST_DIR})
+target_link_libraries(VersionNameRulesTest
+    PRIVATE GTest::gtest_main VersionNameRules)
+gtest_discover_tests(VersionNameRulesTest
+    TEST_PREFIX "VersionNameRulesTest.")
+alcedo_register_test_target(VersionNameRulesTest app)
+
 add_executable(EditorAdjustmentContextTest
     ${ALCEDO_TEST_ROOT}/app/editor_adjustment_context_test.cpp)
 target_include_directories(EditorAdjustmentContextTest
@@ -246,7 +256,7 @@ add_executable(ProjectCompatibilityTest ${ALCEDO_TEST_ROOT}/app/project_compatib
 target_include_directories(ProjectCompatibilityTest
   PUBLIC ${ALCEDO_INCLUDE_DIR} ${ALCEDO_TEST_DIR})
 target_link_libraries(ProjectCompatibilityTest
-  ThumbnailService ProjectService PipelineMgmtService GTest::gtest_main)
+  ThumbnailService ProjectService PipelineMgmtService PipelineHistory GTest::gtest_main)
 target_compile_definitions(ProjectCompatibilityTest PRIVATE
   ALCEDO_COMPAT_FIXTURE_DIR="${ALCEDO_TEST_ROOT}/resources/compat")
 gtest_discover_tests(ProjectCompatibilityTest TEST_PREFIX "ProjectCompatibilityTest."

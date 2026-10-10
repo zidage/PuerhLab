@@ -45,6 +45,7 @@ class InProcessAutomationSession {
         RegisterAutomationLibraryCommands(registry_, &host_, &tracker_, host_mode, &error) &&
         RegisterAutomationTaskCommands(registry_, &host_, &tracker_, &error) &&
         RegisterAutomationEditorCommands(registry_, &host_, &error) &&
+        RegisterAutomationVersionCommands(registry_, &host_, &error) &&
         RegisterAutomationRenderCommands(registry_, &host_, &error);
     EXPECT_TRUE(registered) << error.toStdString();
   }
