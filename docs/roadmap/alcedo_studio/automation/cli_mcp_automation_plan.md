@@ -2782,6 +2782,94 @@ ctest --test-dir build/debug -R "SearchSessionTest|AutomationSearchE2ETest" -j 1
 
 **Completion record:** see section 13.
 
+### Phase AU14 — GUI automation server and agent control
+
+**Objective and deliverables**
+
+- The GUI `alcedo_main` starts `AutomationServer` and writes a session file with
+  `host_mode: "gui"`.
+- `AgentControlOwner` and the commands `control.acquire`, `control.release`, `control.get`.
+- A new interaction capability that blocks user-facing state changes while the agent holds
+  control.
+- The agent control task in the existing background task island and task dialog, as specified
+  in 2.8. No banner and no new notification channel.
+- **Return control** as a row action on the canceled agent task.
+- Notifications `control.changed`.
+
+The detailed agent session logic (status view content, messages, richer handoff) is not part
+of this phase. A separate plan designs it (1.3). Keep the agent task fields in 2.8 stable so that
+design can read them.
+
+**Inputs and prerequisites**
+
+- AU6, AU10, AU11, AU12. The user confirms the server default (1.5).
+
+**Modules, files, and APIs**
+
+- Proposed: `agent_control_owner.{hpp,cpp}`, owned by `ApplicationModuleHost`, exposed as
+  `Q_PROPERTY agentControl`. It receives `BackgroundTaskController*` through its constructor.
+- `background_task_controller.hpp`: `InteractionCapability::UserStateChange` and
+  `BackgroundTaskKind::AgentControl`, plus `"agentControl"` in `BackgroundTaskController::KindToString`.
+- `interaction_policy_controller.{hpp,cpp}`: `canChangeStateAsUser`, `changeStateAsUserReason`,
+  `EvaluateChangeStateAsUser()`.
+- `EditorSessionController`: its QML-facing write, undo, redo, version, and navigation
+  invokables reject while `canChangeStateAsUser` is false. `SyncBackgroundActionRestrictions`
+  does **not** map this capability into `EditorBackgroundActionRestrictions`. Otherwise the
+  session service would also reject the agent's own commands.
+- Other QML-facing invokables that start user state changes (import, delete, rating, export,
+  project open, create, close) check the same capability in their controller adapter. The shared
+  C++ operations from AU4 to AU12 do not check it.
+- `AutomationCommandRegistry`: for `changes_state` commands in the GUI host, call
+  `AgentControlOwner::BeginCommand(summary)` before the handler and `EndCommand()` after the
+  reply. These update the agent task detail.
+- `main.cpp`: start the server after the host exists. Respect the setting
+  `automation/serverEnabled`.
+- QML (load the `alcedo-qml-ui` skill first):
+  - `BackgroundTaskBar.qml`: `kindLabel("agentControl")` returns "Agent".
+  - `BackgroundTasksDialog.qml`: the **Return control** row action on a canceled agent task,
+    visible while `agentControl.revokedByUser` is true.
+  - `enabled` bindings on the editor panels, viewport edit tools, Versions actions, import,
+    delete, rating, and export controls.
+- Translations: add the new strings to the `.ts` files by hand.
+
+**Data rules and invariants**
+
+- Control state: `held`, `holder_name`, `revoked_by_user`. Only `AgentControlOwner` changes it.
+- One agent task exists while control is held. `AgentControlOwner` keeps its task id and is the
+  only caller of `UpdateTask` and `FinishTask` for it.
+- `control.acquire` waits for the pending input Release or Cancel when the editor has unsealed
+  input. It uses the existing pending-input state. It does not add a new signal source.
+- The task cancel callback (**Take control**) finishes the agent task as Canceled, sets
+  `revoked_by_user`, and emits `control.changed` once.
+- `control.release` finishes the agent task as Succeeded and emits `control.changed` once.
+- **Return control** clears `revoked_by_user` and emits `control.changed`. It does not acquire
+  control for the agent.
+- A state-changing command checks control when it starts and between batch steps. A command
+  already submitted to an owner runs to completion.
+- Shutdown cancels the agent task like other tasks.
+
+**Implementation steps**
+
+1. Add the capability, task kind, and policy properties.
+2. Write `AgentControlOwner` with task registration, detail updates, cancel, release, and
+   Return control.
+3. Add the control check and the `BeginCommand` and `EndCommand` calls to the registry for
+   `changes_state` commands in GUI host mode.
+4. Add the user-facing checks to the controller adapters.
+5. Start the server in GUI mode and write the session file.
+6. Add the kind label, the Return control row action, and the `enabled` bindings.
+7. Add the translations.
+
+**Primary success call chain**
+
+```text
+control.acquire claude-code -> no unsealed input
+  -> BackgroundTaskController::RegisterTask(AgentControl, lock UserStateChange, cancel cb)
+  -> PolicyChanged -> QML panels disabled; island unfolds after the grace delay -> respond held
+editor.set saturation 20 -> BeginCommand -> UpdateTask(detail "editor.set saturation 20")
+  -> ... -> reply -> EndCommand -> UpdateTask(detail waiting text)
+```
+
 **Primary failure and restore call chain**
 
 See 5.5. The user cancels the agent task in the island or the task dialog. The task finishes as
