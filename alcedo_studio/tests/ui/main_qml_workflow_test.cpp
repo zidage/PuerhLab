@@ -17,6 +17,8 @@
 #include <QSettings>
 #include <QTest>
 #include <QUrl>
+#include <QVariantList>
+#include <QVariantMap>
 #include <QuickQanava>
 #include <filesystem>
 #include <sstream>
@@ -477,6 +479,98 @@ TEST_F(MainQmlWorkflowTests, ConnectionsHandlersReachOwnerSignalsAndApplicationC
   EXPECT_FALSE(host.application_close()->waiting());
   EXPECT_FALSE(window->isVisible());
   QGuiApplication::setQuitOnLastWindowClosed(quit_on_last_window_closed);
+}
+
+// The export panel reads its defaults, checks, bit depths, and queue from the C++ owners
+// (ExportRecipeBuilder, ExportQueue) and shows the same values as before the move.
+TEST_F(MainQmlWorkflowTests, ExportPanelUsesRecipeDefaultsChecksAndQueue) {
+  ASSERT_TRUE(QCoreApplication::instance());
+  QSettings::setDefaultFormat(QSettings::IniFormat);
+  QSettings::setPath(QSettings::IniFormat, QSettings::UserScope,
+                     PathToQString(temp_dir_ / "settings"));
+  QCoreApplication::setOrganizationName(QStringLiteral("AlcedoTests"));
+  QCoreApplication::setApplicationName(QStringLiteral("MainQmlWorkflowTest"));
+  alcedo::ui::AppTheme::RegisterFonts();
+
+  ApplicationModuleHost host;
+  ASSERT_TRUE(CreateTestProject(host));
+  alcedo::ui::LanguageManager language_manager(QCoreApplication::instance());
+  alcedo::ui::AppTheme::SetEffectiveLanguageCode(language_manager.EffectiveLanguageCode());
+  QQuickStyle::setStyle(QStringLiteral("Material"));
+
+  QQmlApplicationEngine  engine;
+  std::vector<QQmlError> qml_warnings;
+  QObject*               root = LoadMainQml(host, language_manager, engine, qml_warnings);
+  ASSERT_NE(root, nullptr) << (qml_warnings.empty()
+                                   ? std::string{}
+                                   : qml_warnings.front().toString().toStdString());
+  ProcessEvents(100);
+  auto* panel = root->findChild<QObject*>(QStringLiteral("exportInspectorPanel"));
+  ASSERT_NE(panel, nullptr);
+
+  // The previous panel defaults.
+  EXPECT_EQ(panel->property("sdrFormat").toString(), QStringLiteral("JPEG"));
+  EXPECT_EQ(panel->property("sdrBitDepth").toInt(), 8);
+  EXPECT_EQ(panel->property("tiffCompression").toString(), QStringLiteral("NONE"));
+  EXPECT_EQ(panel->property("sdrResizeMode").toString(), QStringLiteral("original"));
+  EXPECT_EQ(panel->property("sdrMaxSideText").toString(), QStringLiteral("2048"));
+  EXPECT_EQ(panel->property("physicalWidthText").toString(), QStringLiteral("210"));
+  EXPECT_EQ(panel->property("physicalHeightText").toString(), QStringLiteral("297"));
+  EXPECT_EQ(panel->property("physicalUnit").toString(), QStringLiteral("mm"));
+  EXPECT_EQ(panel->property("dpiText").toString(), QStringLiteral("300"));
+  EXPECT_FALSE(panel->property("subfolderEnabled").toBool());
+  EXPECT_TRUE(panel->property("includeMetadata").toBool());
+  EXPECT_TRUE(panel->property("embedIccProfile").toBool());
+  EXPECT_TRUE(panel->property("ultraHdrDitherEnabled").toBool());
+  EXPECT_TRUE(panel->property("settingsValid").toBool());
+
+  // The size check follows the selected resize mode.
+  ASSERT_TRUE(panel->setProperty("sdrResizeMode", QStringLiteral("long_edge")));
+  ASSERT_TRUE(panel->setProperty("sdrMaxSideText", QStringLiteral("100")));
+  EXPECT_FALSE(panel->property("settingsValid").toBool());
+  ASSERT_TRUE(panel->setProperty("sdrMaxSideText", QStringLiteral("512")));
+  EXPECT_TRUE(panel->property("settingsValid").toBool());
+  ASSERT_TRUE(panel->setProperty("sdrResizeMode", QStringLiteral("print")));
+  ASSERT_TRUE(panel->setProperty("dpiText", QStringLiteral("0")));
+  EXPECT_FALSE(panel->property("settingsValid").toBool());
+  ASSERT_TRUE(panel->setProperty("dpiText", QStringLiteral("300")));
+  EXPECT_TRUE(panel->property("settingsValid").toBool());
+
+  // A format change keeps a bit depth that the format allows.
+  ASSERT_TRUE(panel->setProperty("sdrFormat", QStringLiteral("EXR")));
+  ProcessEvents(20);
+  EXPECT_EQ(panel->property("sdrBitDepth").toInt(), 16);
+  const QVariantList depths = panel->property("bitDepthEntries").toList();
+  ASSERT_EQ(depths.size(), 3);
+  EXPECT_FALSE(depths[0].toMap().value(QStringLiteral("enabled")).toBool());
+  EXPECT_TRUE(depths[1].toMap().value(QStringLiteral("enabled")).toBool());
+  EXPECT_TRUE(depths[2].toMap().value(QStringLiteral("enabled")).toBool());
+  ASSERT_TRUE(panel->setProperty("sdrFormat", QStringLiteral("JPEG")));
+  ProcessEvents(20);
+  EXPECT_EQ(panel->property("sdrBitDepth").toInt(), 8);
+
+  // The panel shows the C++ queue: one row for each element, cleared from the panel.
+  host.export_queue()->AddTargets(QVariantList{
+      QVariantMap{{"elementId", 4u}, {"imageId", 40u}, {"fileName", QStringLiteral("b.arw")}},
+      QVariantMap{{"elementId", 5u}, {"imageId", 50u}, {"fileName", QStringLiteral("a.arw")}},
+      QVariantMap{{"elementId", 4u}, {"imageId", 41u}, {"fileName", QStringLiteral("c.arw")}}});
+  ProcessEvents(20);
+  EXPECT_EQ(panel->property("exportQueueCount").toInt(), 2);
+  const QVariantList rows = panel->property("visibleExportRows").toList();
+  ASSERT_EQ(rows.size(), 2);
+  EXPECT_EQ(rows[0].toMap().value(QStringLiteral("label")).toString(), QStringLiteral("a.arw"));
+  EXPECT_EQ(rows[1].toMap().value(QStringLiteral("label")).toString(), QStringLiteral("c.arw"));
+  ASSERT_TRUE(QMetaObject::invokeMethod(panel, "clearQueue"));
+  EXPECT_EQ(panel->property("exportQueueCount").toInt(), 0);
+
+  for (const auto& warning : qml_warnings) {
+    const QString text = warning.toString();
+    EXPECT_FALSE(text.contains(QStringLiteral("ExportInspectorPanel")) ||
+                 text.contains(QStringLiteral("ExportNamingEditor")) ||
+                 text.contains(QStringLiteral("ShellSignals")) ||
+                 text.contains(QStringLiteral("exportQueue")))
+        << text.toStdString();
+  }
 }
 
 }  // namespace
