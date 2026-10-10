@@ -244,7 +244,9 @@ TEST_F(EditorSessionCommandQueueBaselineTest,
       << "running target B must remain the acquired image";
 
   // The queued selection C is promoted once B's save completes: it seals B and
-  // runs its own save checkpoint before acquiring C.
+  // runs its own save checkpoint before acquiring C. B is released only after
+  // its in-flight first frame leaves the render, so that frame completes here.
+  presentFirstFrame();
   checkpoint_store_->CompleteMaterialization(true);
   drainQueue();
   EXPECT_EQ(service_->identity().element_id, static_cast<sl_element_id_t>(50))
