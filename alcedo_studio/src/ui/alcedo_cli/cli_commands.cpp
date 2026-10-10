@@ -19,6 +19,8 @@
 #include <QString>
 #include <QThread>
 #include <QtGlobal>
+#include <algorithm>
+#include <cstddef>
 #include <cstdio>
 #include <functional>
 #include <optional>
@@ -28,6 +30,18 @@
 #include "automation/automation_client.hpp"
 #include "automation/automation_protocol.hpp"
 #include "automation/automation_session_file.hpp"
+
+#if defined(Q_OS_WIN)
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+
+#include <memory>
+#endif
 
 namespace alcedo::cli {
 namespace {
@@ -355,6 +369,80 @@ constexpr auto kHostExecutableName = "alcedo_main.exe";
 constexpr auto kHostExecutableName = "alcedo_main";
 #endif
 
+#if defined(Q_OS_WIN)
+/// Limits the handles that CreateProcess gives to the host to the three standard handles that
+/// QProcess opened for it.
+///
+/// QProcess::startDetached calls CreateProcess with handle inheritance on, so without a list the
+/// host also gets every inheritable handle of alcedo-cli. These include the write end of the pipe
+/// on which a caller reads the output of alcedo-cli, and the caller then reads end of file only
+/// when the host exits (issue #354).
+class HostHandleList {
+ public:
+  HostHandleList()                                 = default;
+  HostHandleList(const HostHandleList&)            = delete;
+  HostHandleList& operator=(const HostHandleList&) = delete;
+  ~HostHandleList() {
+    if (attributes_ != nullptr) {
+      DeleteProcThreadAttributeList(attributes_);
+    }
+  }
+
+  /// Allocates the attribute list. Returns false and writes @p error when Windows refuses.
+  auto Initialize(QString* error) -> bool {
+    SIZE_T size = 0;
+    InitializeProcThreadAttributeList(nullptr, 1, 0, &size);
+    storage_   = std::make_unique<unsigned char[]>(size);
+    auto* list = reinterpret_cast<LPPROC_THREAD_ATTRIBUTE_LIST>(storage_.get());
+    if (InitializeProcThreadAttributeList(list, 1, 0, &size) == FALSE) {
+      *error = QStringLiteral("cannot create the handle list of the session process (error %1)")
+                   .arg(GetLastError());
+      return false;
+    }
+    attributes_ = list;
+    return true;
+  }
+
+  /// The QProcess argument modifier. Puts the standard handles of @p arguments into the list and
+  /// makes CreateProcess use it. When Windows refuses the list, it makes CreateProcess fail, so
+  /// that no host starts with the handles of alcedo-cli; error() then tells why.
+  void Apply(QProcess::CreateProcessArguments* arguments) {
+    const STARTUPINFOW& startup = *arguments->startupInfo;
+    for (HANDLE handle : {startup.hStdInput, startup.hStdOutput, startup.hStdError}) {
+      if (handle != nullptr && handle != INVALID_HANDLE_VALUE && !Contains(handle)) {
+        handles_[handle_count_++] = handle;
+      }
+    }
+    if (UpdateProcThreadAttribute(attributes_, 0, PROC_THREAD_ATTRIBUTE_HANDLE_LIST, handles_,
+                                  handle_count_ * sizeof(HANDLE), nullptr, nullptr) == FALSE) {
+      error_ = QStringLiteral("cannot limit the handles of the session process (error %1)")
+                   .arg(GetLastError());
+      arguments->applicationName = L"";
+      return;
+    }
+    startup_ex_.StartupInfo     = startup;
+    startup_ex_.StartupInfo.cb  = sizeof(STARTUPINFOEXW);
+    startup_ex_.lpAttributeList = attributes_;
+    arguments->startupInfo      = &startup_ex_.StartupInfo;
+    arguments->flags |= EXTENDED_STARTUPINFO_PRESENT;
+  }
+
+  [[nodiscard]] auto error() const -> const QString& { return error_; }
+
+ private:
+  [[nodiscard]] auto Contains(HANDLE handle) const -> bool {
+    return std::find(handles_, handles_ + handle_count_, handle) != handles_ + handle_count_;
+  }
+
+  std::unique_ptr<unsigned char[]> storage_;
+  LPPROC_THREAD_ATTRIBUTE_LIST     attributes_   = nullptr;
+  HANDLE                           handles_[3]   = {};
+  std::size_t                      handle_count_ = 0;
+  STARTUPINFOEXW                   startup_ex_   = {};
+  QString                          error_;
+};
+#endif
+
 /// Finds alcedo_main: --host-binary, then the directory of alcedo-cli, then the macOS bundle
 /// layouts (alcedo-cli in Contents/Helpers, or a build tree with alcedo_main.app beside it).
 auto FindHostBinary(const QString& explicit_path, QString* error) -> QString {
@@ -502,10 +590,31 @@ auto RunSessionStart(const CliOptions& options) -> int {
   process.setStandardInputFile(QProcess::nullDevice());
   process.setStandardOutputFile(QProcess::nullDevice());
   process.setStandardErrorFile(stderr_path);
+#if defined(Q_OS_WIN)
+  HostHandleList handle_list;
+  if (!handle_list.Initialize(&error)) {
+    WriteErr(QStringLiteral("alcedo-cli: %1\n").arg(error));
+    return Exit(CliExitCode::ConnectionError);
+  }
+  process.setCreateProcessArgumentsModifier(
+      [&handle_list](QProcess::CreateProcessArguments* arguments) {
+        handle_list.Apply(arguments);
+      });
+#else
+  // The host gets only the three redirected descriptors, not the other open descriptors of
+  // alcedo-cli (for example a pipe of the caller), so that the caller reads end of file when
+  // alcedo-cli exits.
+  process.setUnixProcessParameters(QProcess::UnixProcessFlag::CloseFileDescriptors);
+#endif
   qint64 pid = 0;
   if (!process.startDetached(&pid)) {
-    WriteErr(
-        QStringLiteral("alcedo-cli: cannot start '%1': %2\n").arg(program, process.errorString()));
+    QString reason = process.errorString();
+#if defined(Q_OS_WIN)
+    if (!handle_list.error().isEmpty()) {
+      reason = handle_list.error();
+    }
+#endif
+    WriteErr(QStringLiteral("alcedo-cli: cannot start '%1': %2\n").arg(program, reason));
     return Exit(CliExitCode::ConnectionError);
   }
 

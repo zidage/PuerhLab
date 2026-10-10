@@ -8,6 +8,7 @@
 
 #include <gtest/gtest.h>
 
+#include <QDeadlineTimer>
 #include <QDir>
 #include <QFileInfo>
 #include <QImage>
@@ -17,7 +18,10 @@
 #include <QStringList>
 #include <algorithm>
 #include <cmath>
+#include <functional>
 
+#include "automation/automation_client.hpp"
+#include "automation/automation_session_file.hpp"
 #include "automation_editor_e2e_session.hpp"
 
 namespace alcedo::automation {
@@ -26,6 +30,23 @@ namespace {
 using test::CliRun;
 
 class AutomationEditorE2ETest : public test::AutomationEditorE2ETestBase {};
+
+/// Reads notifications from @p watch until one has @p method and satisfies @p match, and returns
+/// its params. Returns an empty object when none arrives within one minute.
+auto WaitForNotification(AutomationClient& watch, const QString& method,
+                         const std::function<bool(const QJsonObject&)>& match) -> QJsonObject {
+  const QDeadlineTimer deadline(60000);
+  while (!deadline.hasExpired()) {
+    const auto notification = watch.ReadNotification(static_cast<int>(deadline.remainingTime()));
+    if (!notification.has_value()) {
+      break;
+    }
+    if (notification->method == method && match(notification->params)) {
+      return notification->params;
+    }
+  }
+  return {};
+}
 
 TEST_F(AutomationEditorE2ETest, SetExposureCreatesOneCommitAndReadsBackUiValue) {
   ASSERT_FALSE(StartWithOnePhoto(QStringLiteral("set_project")).isEmpty());
@@ -185,6 +206,37 @@ TEST_F(AutomationEditorE2ETest, RegionPreviewHasRegionAspectRatio) {
   Stop();
 }
 
+// Issue #355: compare 'none' writes only the current file, and file_stem names the files.
+TEST_F(AutomationEditorE2ETest, PreviewWithoutCompareWritesOnlyCurrentFileWithFileStem) {
+  ASSERT_FALSE(StartWithOnePhoto(QStringLiteral("stem_project")).isEmpty());
+  OpenPhoto();
+  const QString     out_dir = QDir(root_).filePath(QStringLiteral("stem"));
+  const QJsonObject preview = Result(
+      QStringLiteral("render.preview"),
+      QJsonObject{
+          {"out_dir", out_dir}, {"long_edge", 256}, {"compare", "none"}, {"file_stem", "shot_7"}});
+  EXPECT_FALSE(preview.contains("root"));
+  const QString current_path = preview.value("current").toObject().value("path").toString();
+  EXPECT_EQ(QFileInfo(current_path).fileName(), QStringLiteral("shot_7_current.png"));
+  const QImage current(current_path);
+  ASSERT_FALSE(current.isNull()) << current_path.toStdString();
+  EXPECT_EQ(std::max(current.width(), current.height()), 256);
+  EXPECT_EQ(QDir(out_dir).entryList(QDir::Files), QStringList{QStringLiteral("shot_7_current.png")})
+      << "no root file is written";
+
+  const QJsonObject both =
+      Result(QStringLiteral("render.preview"),
+             QJsonObject{{"out_dir", out_dir}, {"long_edge", 256}, {"file_stem", "shot_7"}});
+  EXPECT_EQ(QFileInfo(both.value("root").toObject().value("path").toString()).fileName(),
+            QStringLiteral("shot_7_root.png"))
+      << "compare defaults to 'root'";
+
+  const CliRun folder = Call(QStringLiteral("render.preview"),
+                             QJsonObject{{"out_dir", out_dir}, {"file_stem", "../outside"}});
+  EXPECT_EQ(folder.json.value("error").toObject().value("code").toInt(), -32602);
+  Stop();
+}
+
 TEST_F(AutomationEditorE2ETest, CropRatioPresetGivesPresetAspectInPixels) {
   ASSERT_FALSE(StartWithOnePhoto(QStringLiteral("crop_ratio_project")).isEmpty());
   OpenPhoto();
@@ -251,6 +303,56 @@ TEST_F(AutomationEditorE2ETest, EditsPersistAfterSessionRestart) {
   const QJsonObject reopened = Result(QStringLiteral("editor.history"));
   EXPECT_EQ(reopened.value("head_commit"), history.value("head_commit"));
   EXPECT_EQ(reopened.value("commits").toArray().size(), history.value("commits").toArray().size());
+  Stop();
+}
+
+// Issue #356: editor and history changes reach a client that watches the session.
+TEST_F(AutomationEditorE2ETest, WatchReceivesSessionStateAndHistoryNotifications) {
+  ASSERT_FALSE(StartWithOnePhoto(QStringLiteral("notify_project")).isEmpty());
+  const auto session_file =
+      ReadAutomationSessionFile(AutomationSessionFilePath(session_dir_, QStringLiteral("e2e")));
+  ASSERT_TRUE(session_file.has_value());
+  // The server takes this connection before the connections of the commands below, so the
+  // watch receives every notification that they cause.
+  AutomationClient watch;
+  ASSERT_TRUE(watch.Connect(session_file->socket_name, 10000))
+      << watch.error_string().toStdString();
+  const double      element = element_.toDouble();
+
+  const QJsonObject opened  = OpenPhoto();
+  const QJsonObject state   = WaitForNotification(
+      watch, QStringLiteral("session.state_changed"), [element](const QJsonObject& params) {
+        return params.value("state").toString() == QStringLiteral("Interactive") &&
+               params.value("element_id").toDouble() == element;
+      });
+  ASSERT_FALSE(state.isEmpty()) << "no session.state_changed for editor.open";
+  EXPECT_EQ(state.value("image_id").toDouble(), opened.value("image_id").toDouble());
+
+  const QJsonValue  head    = Set(QStringLiteral("exposure"), 0.5).value("head_commit");
+  const QJsonObject history = WaitForNotification(
+      watch, QStringLiteral("history.changed"),
+      [head](const QJsonObject& params) { return params.value("head_commit") == head; });
+  ASSERT_FALSE(history.isEmpty()) << "no history.changed for editor.set";
+  EXPECT_EQ(history.value("element_id").toDouble(), element);
+  EXPECT_EQ(history.value("image_id").toDouble(), opened.value("image_id").toDouble());
+  const QJsonValue first_version = history.value("version_id");
+  EXPECT_FALSE(first_version.toString().isEmpty());
+
+  const QJsonValue version_id =
+      Result(QStringLiteral("versions.create"), QJsonObject{{"name", "Notified"}})
+          .value("version_id");
+  ASSERT_NE(version_id, first_version);
+  const QJsonObject version = WaitForNotification(
+      watch, QStringLiteral("history.changed"),
+      [version_id](const QJsonObject& params) { return params.value("version_id") == version_id; });
+  EXPECT_FALSE(version.isEmpty()) << "no history.changed for versions.create";
+
+  Result(QStringLiteral("editor.close"));
+  const QJsonObject closed = WaitForNotification(
+      watch, QStringLiteral("session.state_changed"), [](const QJsonObject& params) {
+        return params.value("state").toString() != QStringLiteral("Interactive");
+      });
+  EXPECT_FALSE(closed.isEmpty()) << "no session.state_changed for editor.close";
   Stop();
 }
 

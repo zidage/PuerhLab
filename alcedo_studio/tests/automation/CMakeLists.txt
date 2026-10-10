@@ -41,13 +41,21 @@ alcedo_add_automation_test(AutomationSessionFileTest
     SOURCES automation_session_file_test.cpp
     LIBRARIES AutomationProtocol)
 
-# Runs the real alcedo-cli program against servers inside the test process.
+# A small session host that `alcedo-cli session start --host-binary` starts in place of
+# alcedo_main. It answers session.ping and exits on session.shutdown.
+add_executable(alcedo_cli_test_host alcedo_cli_test_host.cpp)
+target_include_directories(alcedo_cli_test_host PRIVATE ${ALCEDO_TEST_DIR})
+target_link_libraries(alcedo_cli_test_host PRIVATE AutomationHostLib Qt6::Core Qt6::Network)
+
+# Runs the real alcedo-cli program against servers inside the test process, and against
+# alcedo_cli_test_host for `session start`.
 alcedo_add_automation_test(AlcedoCliTest
     SOURCES alcedo_cli_test.cpp
     LIBRARIES AutomationHostLib Qt6::Network)
 target_compile_definitions(AlcedoCliTest PRIVATE
-    ALCEDO_CLI_PATH="$<TARGET_FILE:alcedo_cli>")
-add_dependencies(AlcedoCliTest alcedo_cli)
+    ALCEDO_CLI_PATH="$<TARGET_FILE:alcedo_cli>"
+    ALCEDO_CLI_TEST_HOST_PATH="$<TARGET_FILE:alcedo_cli_test_host>")
+add_dependencies(AlcedoCliTest alcedo_cli alcedo_cli_test_host)
 
 alcedo_add_automation_test(HeadlessFrameSinkTest
     SOURCES headless_frame_sink_test.cpp

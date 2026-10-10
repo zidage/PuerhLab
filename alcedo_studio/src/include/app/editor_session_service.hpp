@@ -54,9 +54,17 @@ struct EditorPendingPresentationTarget {
   ImageLoadRequestId image_load_request{};
 };
 
+/// Images that one preview image request renders.
+enum class EditorPreviewImageSet : std::uint8_t {
+  /// The working values and the imported root.
+  CurrentAndRoot,
+  /// Only the working values.
+  CurrentOnly,
+};
+
 /// Terminal state of one preview image request.
 enum class EditorPreviewImagesStatus : std::uint8_t {
-  /// Both images rendered.
+  /// Every requested image rendered.
   Completed,
   /// The image render port runs another job (for example the comparison); nothing was started.
   Busy,
@@ -70,8 +78,9 @@ enum class EditorPreviewImagesStatus : std::uint8_t {
 struct EditorPreviewImagesResult {
   EditorPreviewImagesStatus status = EditorPreviewImagesStatus::Failed;
   std::string               message;
-  /// Set only when Completed.
+  /// Set only when Completed, and only for EditorPreviewImageSet::CurrentAndRoot.
   RenderedPipelineImage     root;
+  /// Set only when Completed.
   RenderedPipelineImage     current;
 };
 
@@ -497,14 +506,15 @@ class IEditorSessionBackend {
     return RejectComparison("Comparison is not supported by this backend");
   }
   /**
-   * @brief Render the imported root and the working values of the open image to host pixels.
+   * @brief Render the working values of the open image, and with @p images also the imported
+   *        root, to host pixels.
    *
    * Uses the image render port with @p geometry; presents nothing and writes nothing. The
    * working values include input that is not settled yet.
    * @return Rejected only when the command queue refuses the command. Every other outcome,
    *         including a refusal on the owner, reaches @p on_complete exactly once.
    */
-  virtual auto RenderPreviewImages(RenderRequest /*geometry*/,
+  virtual auto RenderPreviewImages(RenderRequest /*geometry*/, EditorPreviewImageSet /*images*/,
                                    EditorPreviewImagesCompletion /*on_complete*/)
       -> EditorSessionResult {
     EditorSessionResult result;
@@ -772,7 +782,8 @@ class EditorSessionService final : public IEditorSessionBackend {
   auto RetryComparison() -> EditorSessionResult override;
   auto CloseComparison(bool refresh_current_view, std::optional<ViewportRenderRegion> region)
       -> EditorSessionResult override;
-  auto RenderPreviewImages(RenderRequest geometry, EditorPreviewImagesCompletion on_complete)
+  auto RenderPreviewImages(RenderRequest geometry, EditorPreviewImageSet images,
+                           EditorPreviewImagesCompletion on_complete)
       -> EditorSessionResult override;
   [[nodiscard]] auto comparison_state() const -> EditorComparisonState override {
     return comparison_.state();

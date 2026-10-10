@@ -2521,7 +2521,7 @@ auto EditorSessionService::RetryComparison() -> EditorSessionResult {
   return Emit(std::move(result));
 }
 
-auto EditorSessionService::RenderPreviewImages(RenderRequest                 geometry,
+auto EditorSessionService::RenderPreviewImages(RenderRequest geometry, EditorPreviewImageSet images,
                                                EditorPreviewImagesCompletion on_complete)
     -> EditorSessionResult {
   if (!on_complete) {
@@ -2532,10 +2532,10 @@ auto EditorSessionService::RenderPreviewImages(RenderRequest                 geo
     command.kind = EditorSessionCommandKind::RenderPreviewImages;
     auto shared_completion =
         std::make_shared<EditorPreviewImagesCompletion>(std::move(on_complete));
-    return SubmitCommand(std::move(command),
-                         [this, geometry, shared_completion](const EditorSessionCommand&) {
-                           return RenderPreviewImages(geometry, std::move(*shared_completion));
-                         });
+    return SubmitCommand(std::move(command), [this, geometry, images,
+                                              shared_completion](const EditorSessionCommand&) {
+      return RenderPreviewImages(geometry, images, std::move(*shared_completion));
+    });
   }
   EditorSessionResult accepted;
   accepted.kind     = EditorSessionResultKind::Accepted;
@@ -2581,19 +2581,27 @@ auto EditorSessionService::RenderPreviewImages(RenderRequest                 geo
   request.element_id            = identity.element_id;
   request.image_id              = identity.image_id;
   request.image_load_request_id = lifecycle_.active_image_load_request();
-  request.snapshots             = {pair.a.snapshot, pair.b.snapshot};
-  request.geometry              = geometry;
+  const bool with_root          = images == EditorPreviewImageSet::CurrentAndRoot;
+  if (with_root) {
+    request.snapshots = {pair.a.snapshot, pair.b.snapshot};
+  } else {
+    request.snapshots = {pair.b.snapshot};
+  }
+  request.geometry       = geometry;
   // The port calls the completion only for an accepted job; a refused job keeps it here.
   auto shared_completion = std::make_shared<EditorPreviewImagesCompletion>(std::move(on_complete));
   const auto job_id      = dependencies_.images->ScheduleImages(
       std::move(request),
-      [shared_completion](EditorImageRenderResult rendered) {
+      [shared_completion, with_root](EditorImageRenderResult rendered) {
         EditorPreviewImagesResult result;
         result.message = std::move(rendered.message);
-        if (rendered.status == EditorImageRenderStatus::Completed && rendered.images.size() == 2) {
+        if (rendered.status == EditorImageRenderStatus::Completed &&
+            rendered.images.size() == (with_root ? 2u : 1u)) {
           result.status  = EditorPreviewImagesStatus::Completed;
-          result.root    = std::move(rendered.images[0]);
-          result.current = std::move(rendered.images[1]);
+          result.current = std::move(rendered.images.back());
+          if (with_root) {
+            result.root = std::move(rendered.images.front());
+          }
         } else if (rendered.status == EditorImageRenderStatus::Cancelled) {
           result.status = EditorPreviewImagesStatus::Failed;
           if (result.message.empty()) {

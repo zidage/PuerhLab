@@ -188,13 +188,21 @@ Every command accepts `timeout_ms`. The default is 120000.
 
 ### 2.5 Notifications
 
-| Notification | Payload |
-| --- | --- |
-| `session.state_changed` | Editor session state and identity. |
-| `history.changed` | Image identity, head commit, active Version. |
-| `task.updated` | Task id, kind, progress, state. |
-| `task.finished` | Task id, kind, final state, counts, error summary. |
-| `control.changed` | `held`, `revoked_by_user`, `holder_name`. |
+| Notification | Payload | Sender | Owner phase |
+| --- | --- | --- | --- |
+| `session.state_changed` | Editor session state and identity: `state`, `element_id`, `image_id`. | `AutomationEditorNotifier` | Headless host: issue #356. GUI host: AU14. |
+| `history.changed` | Image identity, head commit, active Version: `element_id`, `image_id`, `head_commit` (null without a head), `version_id`. | `AutomationEditorNotifier` | Headless host: issue #356. GUI host: AU14. |
+| `task.updated` | Task id, kind, progress, state. | `AutomationTaskTracker` | AU5 |
+| `task.finished` | Task id, kind, final state, counts, error summary. | `AutomationTaskTracker` | AU5 |
+| `control.changed` | `held`, `revoked_by_user`, `holder_name`. | `AgentControlOwner` | AU14 |
+
+`AutomationEditorNotifier` (`automation_editor_notifier.{hpp,cpp}`) observes
+`EditorSessionController::StateChanged` and `HistoryChanged`. It sends
+`session.state_changed` only when `state`, `element_id`, or `image_id` changes, and
+`history.changed` only when one of its four values changes. The controller publishes the changes
+of every actor, so an edit that a user makes in the GUI host is reported too. Test:
+`AutomationEditorE2ETest.WatchReceivesSessionStateAndHistoryNotifications` (`editor.open`,
+`editor.set`, `versions.create`, and `editor.close` each reach a connected client).
 
 The CLI prints notifications only with `alcedo-cli watch`. The MCP server forwards them as MCP
 logging notifications.
@@ -239,7 +247,7 @@ UI units apply to every editor parameter value.
 | `versions.checkout` | `version_id` | active Version |
 | `versions.rename` | `version_id`, `name` | — |
 | `versions.remove` | `version_id` | — |
-| `render.preview` | `out_dir`, `long_edge`, `region`, `compare` (`none` or `root`), `file_stem` | PNG paths and pixel sizes |
+| `render.preview` | `out_dir`, `long_edge`, `region`, `compare` (`none` or `root`, default `root`), `file_stem` (default: the photo file name without its extension) | PNG paths and pixel sizes: `current`, and `root` only with `compare: root` |
 | `export.options` | — | defaults, formats, bit depths, limits |
 | `export.run` | `targets[]`, `out_dir`, options | `task_id` |
 | `export.status` | — | queue rows and counts |
@@ -1058,6 +1066,24 @@ Remaining defects or unavailable platforms: macOS Metal not run (no macOS host i
   session; these tests are not in the macOS CI preset). EditorSessionRenderSchedulerPortTest
   has 5 failures that exist on main.
 ```
+
+**Follow-up (issue #354, 2026-10-10):** a caller that read the output of `session start`
+through a pipe (for example `out=$(alcedo-cli --json session start ...)` in a shell, or a
+subprocess pipe of an agent) did not read end of file until the host exited. On Windows,
+`QProcess::startDetached` calls `CreateProcess` with handle inheritance on, so the host also got
+the inheritable handles of `alcedo-cli`, including the write end of the caller's pipe. `session
+start` now gives the host only its three redirected standard handles: a
+`setCreateProcessArgumentsModifier` puts them into a `PROC_THREAD_ATTRIBUTE_HANDLE_LIST`
+(`STARTUPINFOEXW`, `EXTENDED_STARTUPINFO_PRESENT`). When Windows refuses the list, no host
+starts and the CLI prints the Windows error. macOS did not have the defect: the host gets
+`/dev/null` and the log file as descriptors 0 to 2, and the test passes on macOS with and
+without the change below. `QProcess::UnixProcessFlag::CloseFileDescriptors` now also closes,
+in the host, the other descriptors that a caller passes to `alcedo-cli` (for example a pipe on
+descriptor 3). Test:
+`AlcedoCliTest.SessionStartOutputPipeClosesWhenTheCliExits` starts `alcedo-cli session start`
+with stdout on an operating-system pipe and the small host `alcedo_cli_test_host`
+(`--host-binary`), and asserts end of file while the host runs. Without the fix the test fails
+after its 10 s limit.
 
 ### Phase AU4 — Project launch and close in C++, project commands
 
@@ -2204,7 +2230,10 @@ Remaining defects or unavailable platforms: macOS Metal runs only in CI.
 - `render.preview` returns `busy` when the image render port runs another job (for example the
   comparison view). It does not wait for that job and does not cancel it.
 - `render.preview` writes files only inside `out_dir`. The file names are
-  `<file_stem>_current.png` and `<file_stem>_root.png`.
+  `<file_stem>_current.png` and, with `compare: root` (the default), `<file_stem>_root.png`.
+  `compare: none` renders and writes only the current image. `file_stem` defaults to the photo
+  file name without its extension; a value with `/`, `\`, `:`, or only `.` or `..` is refused
+  (-32602), so that the files stay inside `out_dir`.
 
 **Implementation steps**
 
@@ -2236,6 +2265,8 @@ session" -> -32002 with the owner message -> history unchanged
 | `AutomationEditorE2ETest.BatchStopsAtFirstInvalidValueAndReportsApplied` | `applied` equals 1 for an invalid second change. |
 | `AutomationEditorE2ETest.PreviewWritesCurrentAndRootPngWithRequestedLongEdge` | Both files exist; long edge equals the request. |
 | `AutomationEditorE2ETest.RegionPreviewHasRegionAspectRatio` | Width / height equals the region ratio within one pixel. |
+| `AutomationEditorE2ETest.PreviewWithoutCompareWritesOnlyCurrentFileWithFileStem` | `compare: none` writes only `<file_stem>_current.png`; the default writes the root file too; a stem with a folder is refused (issue #355). |
+| `EditorComparisonServiceTest.PreviewImagesCurrentOnlyRenderOnlyTheWorkingValues` | `EditorPreviewImageSet::CurrentOnly` schedules one snapshot with the working values (issue #355). |
 | `AutomationEditorE2ETest.EditsPersistAfterSessionRestart` | After stop and start, `editor.get` returns the values. |
 
 **Build and run commands**
@@ -2351,6 +2382,16 @@ Manual verification: alcedo-cli session with --editor-backend cuda: open, get, s
 Evidence path: build/tmp/automation_au10/ (removed after the phase).
 Remaining defects or unavailable platforms: macOS Metal runs only in CI.
 ```
+
+**Follow-up (issue #355, 2026-10-10):** the first implementation accepted only `out_dir`,
+`long_edge`, `region`, and `timeout_ms`, always wrote both files, and took the stem only from the
+photo file name, so section 2.6 and the command description did not agree with it. The command
+now accepts `compare` (`none` or `root`, default `root`) and `file_stem`.
+`IEditorSessionBackend::RenderPreviewImages` takes an `EditorPreviewImageSet`: `CurrentOnly`
+schedules one snapshot (the working values) on the image render port, so `compare: none` does not
+render the root. The result has `root` only with `compare: root`. Tests:
+`AutomationEditorE2ETest.PreviewWithoutCompareWritesOnlyCurrentFileWithFileStem` and
+`EditorComparisonServiceTest.PreviewImagesCurrentOnlyRenderOnlyTheWorkingValues`.
 
 ### Phase AU11 — Version commands and commit attribution
 
@@ -2862,6 +2903,9 @@ Remaining defects or unavailable platforms: macOS Metal runs only in CI.
   in 2.8. No banner and no new notification channel.
 - **Return control** as a row action on the canceled agent task.
 - Notifications `control.changed`.
+- The GUI host connects `AutomationEditorNotifier` to its server, as the headless host does
+  (issue #356), so that `session.state_changed` and `history.changed` report the edits, undo,
+  redo, Version changes, and image changes of the user in the GUI.
 
 The detailed agent session logic (status view content, messages, richer handoff) is not part
 of this phase. A separate plan designs it (1.3). Keep the agent task fields in 2.8 stable so that
@@ -2956,6 +3000,7 @@ Canceled, the lock is released, and the user edits at once.
 | `EditorSessionControllerTest.UserWriteIsRejectedWhileAgentHoldsControl` | `submitPatch` returns false; no commit. |
 | `AutomationGuiSessionTest.AgentEditAppearsInControllerProjection` | After `editor.set` through the GUI host socket, the controller panel projection shows the value. This test constructs the host and server without loading QML. |
 | `AutomationGuiSessionTest.StateChangeWithoutControlIsRejected` | -32003. |
+| `AutomationGuiSessionTest.UserEditSendsHistoryChangedToWatchingClient` | A write through the QML-facing controller (not through the socket) sends one `history.changed` with the new head to a connected client. |
 
 **Build and run commands**
 
