@@ -62,6 +62,9 @@ struct EditorPendingSequence {
   /// publishes when it consumes the sequence carry it as their operation_id, so a client can
   /// correlate a settled edit with its commit and its frame.
   std::uint64_t                         boundary_operation_id = 0;
+  /// Author of the commits of this sequence, from the boundary that sealed it; nullopt for the
+  /// user.
+  std::optional<EditCommitAttribution>  attribution;
   /// Monotonic time of the first accepted write in this sequence.
   std::int64_t                   first_accepted_ns = 0;
   /// Monotonic time of the newest accepted write, including coalesced replacements.
@@ -129,7 +132,8 @@ class EditorPendingInputQueue {
    * @param patch Field key, typed write, optional target ids, and whether
    *        this write also releases the sequence.
    * @param boundary_operation_id Command id of the Release boundary that a settled write is;
-   *        stored on the sealed sequence. Ignored for a write that is not settled.
+   *        stored on the sealed sequence with the attribution of the patch. Ignored for a write
+   *        that is not settled.
    * @return Accepted with the sequence id, or rejected with @p error. Never
    *         mutates live document or history.
    */
@@ -142,13 +146,16 @@ class EditorPendingInputQueue {
    * @param identity Session/image ids for the boundary.
    * @param kind Release, Cancel, or NodeSwitch. None is rejected.
    * @param boundary_operation_id Command id of this boundary; stored on the sealed sequence.
+   * @param attribution Author of the commits of the sealed sequence; nullopt for the user.
    * @return Accepted with the sealed sequence id, or rejected.
    *
    * Cancel discards unapplied field writes of the open sequence and still
    * records the Cancel seal so the boundary is not dropped.
    */
   auto AdmitBoundary(EditorSessionIdentity identity, EditorPendingInputBoundaryKind kind,
-                     std::uint64_t boundary_operation_id = 0) -> EditorPendingInputAdmitResult;
+                     std::uint64_t                        boundary_operation_id = 0,
+                     std::optional<EditCommitAttribution> attribution           = std::nullopt)
+      -> EditorPendingInputAdmitResult;
 
   /**
    * @brief Copy queued sequences for tests and owner inspection.
@@ -179,10 +186,13 @@ class EditorPendingInputQueue {
   auto AdmitFieldChangeLocked(EditorSessionIdentity identity, EditorAdjustmentPatch patch,
                               std::uint64_t boundary_operation_id) -> EditorPendingInputAdmitResult;
   auto AdmitBoundaryLocked(EditorSessionIdentity identity, EditorPendingInputBoundaryKind kind,
-                           std::uint64_t boundary_operation_id) -> EditorPendingInputAdmitResult;
+                           std::uint64_t                        boundary_operation_id,
+                           std::optional<EditCommitAttribution> attribution)
+      -> EditorPendingInputAdmitResult;
   auto StartSequenceLocked(EditorSessionIdentity identity, const EditorParameterTarget& target)
       -> EditorPendingSequence&;
-  void SealOpenLocked(EditorPendingInputBoundaryKind kind, std::uint64_t boundary_operation_id);
+  void SealOpenLocked(EditorPendingInputBoundaryKind kind, std::uint64_t boundary_operation_id,
+                      std::optional<EditCommitAttribution> attribution);
   void StampAcceptedLocked(EditorPendingSequence& sequence, std::int64_t qml_write_ns);
   [[nodiscard]] auto NowNs() const -> std::int64_t;
   [[nodiscard]] auto PeekLocked() const -> EditorPendingInputView;

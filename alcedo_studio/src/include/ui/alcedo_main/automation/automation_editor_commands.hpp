@@ -29,6 +29,16 @@ auto AutomationEditorCatalogFields() -> QJsonArray;
                                                     ui::ApplicationModuleHost* host,
                                                     QString* error = nullptr) -> bool;
 
+/// Registers `versions.list`, `versions.create`, `versions.branch`, `versions.checkout`,
+/// `versions.rename`, and `versions.remove`. They call the Version commands of
+/// EditorSessionController that the Versions panel uses and the version name rules of the panel.
+/// A command that changes Versions answers after the result of the change and its frame.
+/// @p host must outlive every dispatch. Returns false and writes @p error when a registration
+/// fails.
+[[nodiscard]] auto RegisterAutomationVersionCommands(AutomationCommandRegistry& registry,
+                                                     ui::ApplicationModuleHost* host,
+                                                     QString* error = nullptr) -> bool;
+
 /// Registers `render.preview`: the imported root and the working values of the open image as
 /// PNG files, rendered through the editor image render port. @p host must outlive every
 /// dispatch. Returns false and writes @p error when the registration fails.

@@ -5,6 +5,7 @@
 #include "edit/history/commit_graph.hpp"
 
 #include <chrono>
+#include <stdexcept>
 #include <utility>
 #include <vector>
 
@@ -45,6 +46,14 @@ void CommitGraphMaterialization::Validate() const {
 
   // Rebuild a temporary graph to validate structure and chain fold.
   auto       graph  = CommitGraph::FromParts(image_state, version_refs, commits);
+  for (const auto& [hash, attribution] : attributions) {
+    if (graph.FindCommit(hash) == nullptr) {
+      throw std::runtime_error("CommitGraphMaterialization: attribution of a missing commit");
+    }
+    if (!IsStorableEditCommitAttribution(attribution)) {
+      throw std::runtime_error("CommitGraphMaterialization: attribution author is not agent");
+    }
+  }
   const auto folded = graph.ChainHashForHead(image_state.materialized_head_commit_hash);
   if (folded != image_state.materialized_transaction_chain_hash) {
     throw std::runtime_error(
@@ -215,6 +224,23 @@ auto CommitGraph::InsertCommit(EditCommit commit) -> bool {
   return true;
 }
 
+void CommitGraph::SetCommitAttribution(const commit_hash_t&  commit_hash,
+                                       EditCommitAttribution attribution) {
+  if (commits_.find(commit_hash) == commits_.end()) {
+    throw std::runtime_error("CommitGraph: attribution of a missing commit");
+  }
+  if (!IsStorableEditCommitAttribution(attribution)) {
+    throw std::runtime_error("CommitGraph: attribution author is not agent");
+  }
+  attributions_[commit_hash] = std::move(attribution);
+}
+
+auto CommitGraph::FindCommitAttribution(const commit_hash_t& commit_hash) const
+    -> const EditCommitAttribution* {
+  const auto it = attributions_.find(commit_hash);
+  return it == attributions_.end() ? nullptr : &it->second;
+}
+
 auto CommitGraph::CreateVersionRefInternal(std::string display_name, head_commit_hash_t head,
                                            std::time_t created_at) -> version_ref_id_t {
   if (head.has_value() && commits_.find(*head) == commits_.end()) {
@@ -343,6 +369,7 @@ void CommitGraph::EraseUnreachableCommits(const std::vector<commit_hash_t>& hash
       throw std::runtime_error("CommitGraph: refused to erase a reachable commit");
     }
     commits_.erase(hash);
+    attributions_.erase(hash);
   }
 }
 
@@ -378,6 +405,7 @@ auto BuildMaterializationBase(const CommitGraph& graph, const ImageEditState& st
     (void)hash;
     materialization.commits.push_back(commit);
   }
+  materialization.attributions = graph.GetAllCommitAttributions();
   return materialization;
 }
 

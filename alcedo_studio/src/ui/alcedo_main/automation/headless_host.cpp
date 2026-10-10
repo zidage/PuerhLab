@@ -194,6 +194,7 @@ auto RunHostSession(QCoreApplication& app, const HeadlessHostOptions& options,
                                          &registration_error) ||
       !RegisterAutomationTaskCommands(registry, &host, &tracker, &registration_error) ||
       !RegisterAutomationEditorCommands(registry, &host, &registration_error) ||
+      !RegisterAutomationVersionCommands(registry, &host, &registration_error) ||
       !RegisterAutomationRenderCommands(registry, &host, &registration_error)) {
     ReportFailure(QStringLiteral("command registration failed: %1").arg(registration_error));
     host.Shutdown();

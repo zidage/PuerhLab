@@ -342,6 +342,74 @@ auto CommitGraphStore::GetRootSerializedPipelineState(sl_element_id_t  element_i
   return nlohmann::json::parse(encoded);
 }
 
+void CommitGraphStore::InsertAttributionIfAbsent(const commit_hash_t&         commit_hash,
+                                                 const EditCommitAttribution& attribution) {
+  // A commit hash names one commit, so a stored row already holds this attribution.
+  constexpr const char* kSql =
+      "INSERT OR IGNORE INTO EditCommitAttribution (commit_hash, author, note) VALUES (?, ?, ?);";
+  duckdb_prepared_statement statement = nullptr;
+  if (duckdb_prepare(conn_, kSql, &statement) != DuckDBSuccess) {
+    const char*       error   = duckdb_prepare_error(statement);
+    const std::string message = error ? error : "CommitGraphStore attribution prepare failed";
+    duckdb_destroy_prepare(&statement);
+    throw std::runtime_error(message);
+  }
+  const std::string hash = commit_hash.ToString();
+  duckdb_bind_varchar(statement, 1, hash.c_str());
+  duckdb_bind_varchar_length(statement, 2, attribution.author_.data(),
+                             static_cast<idx_t>(attribution.author_.size()));
+  if (attribution.note_.empty()) {
+    duckdb_bind_null(statement, 3);
+  } else {
+    duckdb_bind_varchar_length(statement, 3, attribution.note_.data(),
+                               static_cast<idx_t>(attribution.note_.size()));
+  }
+  duckdb_result result;
+  if (duckdb_execute_prepared(statement, &result) != DuckDBSuccess) {
+    const char*       error   = duckdb_result_error(&result);
+    const std::string message = error ? error : "CommitGraphStore attribution insert failed";
+    duckdb_destroy_result(&result);
+    duckdb_destroy_prepare(&statement);
+    throw std::runtime_error(message);
+  }
+  duckdb_destroy_result(&result);
+  duckdb_destroy_prepare(&statement);
+}
+
+auto CommitGraphStore::ListAttributionsForRoot(const root_id_t& root_id)
+    -> std::unordered_map<commit_hash_t, EditCommitAttribution> {
+  duckdb_result result;
+  const auto    sql = std::format(
+      "SELECT a.commit_hash, a.author, a.note FROM EditCommitAttribution a "
+         "JOIN EditCommit c ON c.commit_hash = a.commit_hash WHERE c.root_id={};",
+      SqlQuote(root_id.ToString()));
+  if (duckdb_query(conn_, sql.c_str(), &result) != DuckDBSuccess) {
+    const char*       error   = duckdb_result_error(&result);
+    const std::string message = error ? error : "CommitGraphStore attribution query failed";
+    duckdb_destroy_result(&result);
+    throw std::runtime_error(message);
+  }
+  const auto read_text = [&result](idx_t column, idx_t row) -> std::string {
+    if (duckdb_value_is_null(&result, column, row)) {
+      return {};
+    }
+    char*       raw  = duckdb_value_varchar(&result, column, row);
+    std::string text = raw ? raw : "";
+    if (raw) {
+      duckdb_free(raw);
+    }
+    return text;
+  };
+  std::unordered_map<commit_hash_t, EditCommitAttribution> attributions;
+  const idx_t                                              rows = duckdb_row_count(&result);
+  for (idx_t row = 0; row < rows; ++row) {
+    attributions.emplace(Hash128::FromString(read_text(0, row)),
+                         EditCommitAttribution{read_text(1, row), read_text(2, row)});
+  }
+  duckdb_destroy_result(&result);
+  return attributions;
+}
+
 void CommitGraphStore::Materialize(const CommitGraphMaterialization& materialization) {
   // Validate fully before any DuckDB write so a bad capture leaves prior rows unchanged.
   materialization.Validate();
@@ -350,6 +418,9 @@ void CommitGraphStore::Materialize(const CommitGraphMaterialization& materializa
   try {
     for (const auto& commit : materialization.commits) {
       InsertCommitIfAbsent(commit);
+    }
+    for (const auto& [hash, attribution] : materialization.attributions) {
+      InsertAttributionIfAbsent(hash, attribution);
     }
     std::string keep_version_ids;
     for (std::size_t index = 0; index < materialization.version_refs.size(); ++index) {
@@ -385,8 +456,13 @@ auto CommitGraphStore::LoadGraph(sl_element_id_t element_id) -> std::optional<Co
     commits.push_back(FromCommitParams(std::move(row)));
   }
 
+  const auto root_id = state->root_id;
   // FromParts validates structure, parent rules, and materialized head/chain agreement.
-  return CommitGraph::FromParts(std::move(*state), std::move(refs), std::move(commits));
+  auto       graph = CommitGraph::FromParts(std::move(*state), std::move(refs), std::move(commits));
+  for (auto& [hash, attribution] : ListAttributionsForRoot(root_id)) {
+    graph.SetCommitAttribution(hash, std::move(attribution));
+  }
+  return graph;
 }
 
 auto CommitGraphStore::ListImageElementIds() -> std::vector<sl_element_id_t> {
@@ -412,6 +488,8 @@ auto CommitGraphStore::DeleteUnreachableCommits(sl_element_id_t element_id) -> s
   duckorm::begin_transaction(conn_);
   try {
     for (const auto& hash : unreachable) {
+      ExecuteOrThrow(conn_, std::format("DELETE FROM EditCommitAttribution WHERE commit_hash={};",
+                                        SqlQuote(hash.ToString())));
       commit_mapper_.Remove(hash.ToString());
     }
     duckorm::commit_transaction(conn_);
@@ -439,6 +517,9 @@ void CommitGraphStore::DeleteGraphForElement(sl_element_id_t element_id) {
   duckorm::begin_transaction(conn_);
   try {
     version_ref_mapper_.RemoveByClause(std::format("element_id={}", element_id));
+    ExecuteOrThrow(conn_, std::format("DELETE FROM EditCommitAttribution WHERE commit_hash IN "
+                                      "(SELECT commit_hash FROM EditCommit WHERE root_id={});",
+                                      SqlQuote(state->root_id.ToString())));
     commit_mapper_.RemoveByClause(std::format("root_id={}", SqlQuote(state->root_id.ToString())));
     image_edit_state_mapper_.Remove(element_id);
     ExecuteOrThrow(conn_, std::format("DELETE FROM PipelineRoot WHERE element_id={};", element_id));

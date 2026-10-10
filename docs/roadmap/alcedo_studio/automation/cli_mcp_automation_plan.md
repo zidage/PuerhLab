@@ -2,7 +2,7 @@
 
 Date: 2026-10-08
 
-Status: in progress. AU1 to AU10 have implementation evidence (completion records in their phase sections).
+Status: in progress. AU1 to AU11 have implementation evidence (completion records in their phase sections).
 
 Tracking issue: [#331](https://github.com/zidage/AlcedoStudio/issues/331). Progress is tracked in the issues, not in this document.
 
@@ -573,7 +573,7 @@ class AutomationCommandRegistry {
 | AU9a | Parameter catalog: display transform and white balance | Catalog, Display and white balance QML | AU8 | 1100–1200 | implemented | [#325](https://github.com/zidage/AlcedoStudio/issues/325) |
 | AU9b | Parameter catalog: HLS, color wheels, curve, LUT | Catalog, Look QML, editor_support modules | AU9a | 900–1100 | implemented | [#325](https://github.com/zidage/AlcedoStudio/issues/325) |
 | AU10 | Editor commands and `render.preview` | Editor session, render port | AU3, AU7 | 1300–1800 | implemented | [#326](https://github.com/zidage/AlcedoStudio/issues/326) |
-| AU11 | Version commands and commit attribution | Session, journal, storage, QML | AU10 | 1300–1800 | planned | [#326](https://github.com/zidage/AlcedoStudio/issues/326) |
+| AU11 | Version commands and commit attribution | Session, journal, storage, QML | AU10 | 1300–1800 | implemented | [#326](https://github.com/zidage/AlcedoStudio/issues/326) |
 | AU12 | Export in C++, export commands | Export queue and recipe, QML | AU5 | 1100–1600 | planned | [#327](https://github.com/zidage/AlcedoStudio/issues/327) |
 | AU13 | Search in C++, search commands | Search session, QML | AU5 | 900–1300 | planned | [#327](https://github.com/zidage/AlcedoStudio/issues/327) |
 | AU14 | GUI automation server and agent control | Control owner, policy, background task island | AU6, AU10, AU11, AU12 | 1100–1600 | planned | [#328](https://github.com/zidage/AlcedoStudio/issues/328) |
@@ -2425,21 +2425,125 @@ process killed after journal write, before materialize -> restart -> journal rec
 **Build and run commands**
 
 ```powershell
-cmd /c scripts\msvc_env.cmd --build --preset win_debug --target AutomationVersionsE2ETest VersionNameRulesTest MiniGitJournalTest CommitGraphStoreTest EditCommitTest --parallel 4
-ctest --test-dir build/debug -R "AutomationVersionsE2ETest|VersionNameRulesTest|MiniGitJournalTest|CommitGraphStoreTest|EditCommitTest" -j 1 --output-on-failure
+cmd /c scripts\msvc_env.cmd --build --preset win_debug --target AutomationVersionsE2ETest VersionNameRulesTest CommitGraphTest ProjectCompatibilityTest --parallel 4
+ctest --test-dir build/debug -R "AutomationVersionsE2ETest|VersionNameRulesTest|CommitGraphTest|ProjectCompatibilityTest" -j 1 --output-on-failure
 ```
-
-Confirm the exact existing test target names from `tests/*/CMakeLists.txt` before the run.
 
 **Exit criteria**
 
-- [ ] Tests pass.
-- [ ] An old project opens, edits, and saves without a format error.
-- [ ] Manual GUI check: an agent commit shows the badge and the note.
+- [x] Tests pass on Windows CUDA locally; macOS Metal in CI runs on the pull request.
+- [x] An old project opens, edits, and saves without a format error.
+- [ ] Manual GUI check: an agent commit shows the badge and the note (recorded by the user).
 
 **Expected diff:** 1300–1800 lines.
 
-**Completion record:** see section 13.
+**Completion record (AU11):**
+
+```text
+Phase / date / status: AU11 / 2026-10-10 / implemented (macOS Metal runs in the pull request CI).
+Source revision and branch: feature/automation-editor-commands 030526aa7 (AU10); branch
+  feature/automation-version-commands. Actual diff: about 2420 lines (56 files, this record
+  included).
+Actual changed modules: version_name_rules (new, app), edit_commit_attribution.hpp (new),
+  CommitGraph (attribution map, CaptureMaterialization), MiniGitWorkingHistory and the journal
+  record (format 7), CommitGraphStore (EditCommitAttribution rows in Materialize, LoadGraph,
+  garbage collection, DeleteGraphForElement), database.hpp (table), EditorAdjustmentPatch and the
+  pending input sequence (attribution), EditorSessionService (PublishAppliedTypedBatch),
+  EditorHistoryCommit and the history projection, EditorHistoryModel (author and note roles,
+  name rule invokables), EditorSessionController (Request* Version methods, attribution on
+  EnqueueFieldWrite), automation_editor_operation (new, shared operation wait),
+  editor_commands.cpp (note, author), version_commands.cpp (new), headless host registration,
+  EditorHistoryTransactionEntry.qml (Agent chip, note), EditorVersionsPanel.qml (C++ name rules),
+  translations, DESIGN.md, tests.
+Implemented behavior:
+  - versions.list answers {active_version_id, versions[{version_id, name, head_commit, active,
+    created_at, updated_at}]}.
+  - versions.create {name?} creates a root Version and checks it out; versions.branch {name?,
+    from_commit?} branches from the commit (default: the active head; -32602 at /from_commit when
+    the active Version has no commit) and checks out the new Version. Without a name both use
+    DefaultVersionName of the next Version. Both answer {version_id, name, head_commit} of the
+    active Version after the frame.
+  - versions.checkout {version_id}, versions.rename {version_id, name}, versions.remove
+    {version_id} go through the same controller methods as the Versions panel. An unknown id
+    gives -32602 at /version_id; a name that is empty after trimming gives -32602 at /name with
+    the rule message; a rename to the same name is a no-op success.
+  - NormalizeVersionName (trim, reject empty) and DefaultVersionName are in C++; the Versions
+    panel calls them through EditorHistoryModel, so QML and the commands share the rules.
+  - Every editor.set and editor.batch_set from automation commits with author agent; the optional
+    note param is stored with the commit. GUI commits have no attribution row and read as author
+    user.
+  - Journal record format 7 carries the attribution; the reader accepts 6 and 7, and a format 6
+    record reads as author user. Commit hashes are unchanged (EditCommit JSON has no
+    attribution).
+  - EditCommitAttribution (commit_hash, author, note) is created at open for new and existing
+    projects, written in the Materialize transaction, loaded with the graph, and deleted by
+    garbage collection and graph removal.
+  - editor.history answers author and note for each commit. The History panel shows an Agent
+    chip after the hash and the note under the meta row for an agent commit.
+Deviations from the phase text:
+  - The Version commands do not reuse the void QML invokables: EditorSessionController gained
+    RequestCheckoutVersion, RequestCreateRootVersion, RequestBranchFromCommit,
+    RequestRenameVersion, RequestRemoveVersion that return the EditorSessionResult (with the
+    operation id); the invokables call them.
+  - Completion: a Version change publishes SaveFinished (terminal) for its save checkpoint before
+    the result that routes the render. The command waits with OperationEnd::AfterSaveCheckpoint,
+    which skips that SaveFinished and finishes on the frame (or on the terminal result when
+    nothing renders). The wait moved from editor_commands.cpp to
+    automation_editor_operation.{hpp,cpp}.
+  - Test homes: MiniGitJournalTest, EditCommitTest, and CommitGraphStoreTest are suites in the
+    existing CommitGraphTest target (ctest names CommitGraphTest.<Suite>.<Test>). The old project
+    check is ProjectCompatibilityTest.OldProjectCommitsReadAsUserAndSaveAnAgentCommit on
+    raw_project_abdb000c8.alcd. The transaction test makes the insert after the commit rows fail
+    (VersionRef renamed), then checks that neither row exists.
+  - The automation E2E fixture is shared by AutomationEditorE2ETest and AutomationVersionsE2ETest
+    (automation_editor_e2e_session.hpp).
+  - The History panel chip is a requested exception to the no-badge rule (recorded in DESIGN.md).
+Explicitly unimplemented items: none for AU11.
+Primary success call chain: editor.set {exposure, 0.75, note} -> AgentAttribution ->
+  EnqueueFieldWrite -> EditorAdjustmentPatch.attribution -> pending sequence -> CommitAdjustment
+  -> PublishAppliedTypedBatch -> PrepareAppendEdit(batch, {agent, note}) -> journal v7 record ->
+  PublishPreparedEdit -> graph attribution -> save checkpoint -> Materialize (EditCommit row and
+  EditCommitAttribution row, one transaction) -> restart -> LoadGraph -> editor.history author
+  agent, note (AutomationVersionsE2ETest.AgentCommitShowsAuthorAfterReopen).
+Primary failure and restore call chain: Materialize fails after the commit rows -> the
+  transaction rolls back -> neither row exists
+  (CommitGraphTest.CommitGraphStoreTest.MaterializeWritesAttributionInSameTransaction); a v6
+  journal record -> author user
+  (CommitGraphTest.MiniGitJournalTest.Version6RecordReadsAsUserAuthor).
+Build and test commands with exit codes:
+  cmd /c scripts\msvc_env.cmd --build --preset win_debug --target alcedo_main alcedo_cli
+    AutomationVersionsE2ETest AutomationEditorE2ETest VersionNameRulesTest CommitGraphTest
+    ProjectCompatibilityTest PipelineDocumentCheckpointTest EditorHistoryTransactionsPanelQmlTest
+    EditorVersionsPanelQmlTest EditorSessionControllerPhase5ATest --parallel 4 -> 0
+  ctest --test-dir build/debug -R "AutomationVersionsE2ETest|AutomationEditorE2ETest" -j 1 -> 0
+    (9/9, --editor-backend cuda)
+  ctest --test-dir build/debug -R "ProjectCompatibilityTest|VersionNameRulesTest|CommitGraphTest|
+    PipelineDocumentCheckpointTest|EditorHistoryTransactionsPanelQmlTest|
+    EditorVersionsPanelQmlTest|EditorSessionControllerPhase5ATest" -j 1 -> 8 (147/150)
+  ctest of the editor session, pending input, Mini-Git, history port, node layout, and
+    automation targets (25 targets) -j 1 -> 8 (494/501)
+Discovered / passed / failed / skipped counts: AutomationVersionsE2ETest 2/2 (new),
+  AutomationEditorE2ETest 7/7, VersionNameRulesTest 4/4 (new), CommitGraphTest 48/48 (5 new),
+  ProjectCompatibilityTest 2/2 (1 new), EditorHistoryTransactionsPanelQmlTest 7/7 (1 new),
+  EditorVersionsPanelQmlTest 17/17, EditorSessionControllerPhase5ATest 53/53,
+  PipelineDocumentCheckpointTest 16/19, EditorSessionHistoryPortTest 113/114,
+  EditorNodeSelectionLayoutTest 85/86, EditorSessionCommandQueueBaselineTest 17/18,
+  EditorSessionActionPolicyCq3Test 13/14; all other targets of the regression run pass. The 7
+  failures fail the same way without this change: the three PipelineDocumentCheckpointFormat
+  serialization tests, EditorHistoryCommitPresentationTest
+  .FormatsNumericBooleanPathEnumAndCompoundAdjustments, and EditorNodeController
+  .GeometryWriteRejectedWhenColorGradeIsSelected come from the crop and rotate change 59bc10741;
+  RapidImageSelectionKeepsRunningTargetAndReplacesOnlyUnstartedSelection and
+  AdjustmentPanelsReloadOnlyWhenCommittedContentChanges fail on d20a14b0c (AU10 record).
+  BrushSourceFormatBoundaryTest is not built locally (ALCEDO_ENABLE_BRUSH_MASK off); its format
+  constant is updated to 7.
+Manual verification: none beyond the E2E tests, which drive real alcedo-cli and
+  alcedo_main --headless processes with --editor-backend cuda on a CI RAW file. The GUI check of
+  the Agent chip and note is recorded by the user.
+Evidence path: build/tmp/automation_au11/ (removed after the phase).
+Remaining defects or unavailable platforms: macOS Metal runs only in CI.
+```
+
 
 ### Phase AU12 — Export in C++ and export commands
 

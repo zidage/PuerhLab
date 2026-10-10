@@ -169,7 +169,8 @@ class ProductionSessionBackend final : public alcedo::IEditorSessionBackend {
     return result;
   }
 
-  auto EnqueuePendingInputBoundary(alcedo::EditorPendingInputBoundaryKind kind)
+  auto EnqueuePendingInputBoundary(alcedo::EditorPendingInputBoundaryKind kind,
+                                   std::optional<alcedo::EditCommitAttribution> = std::nullopt)
       -> alcedo::EditorSessionResult override {
     const auto admitted = pending_input_.AdmitBoundary(identity_, kind);
     alcedo::EditorSessionResult result;

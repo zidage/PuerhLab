@@ -83,10 +83,11 @@ auto EditorPendingInputQueue::AdmitFieldChange(EditorSessionIdentity identity,
 
 auto EditorPendingInputQueue::AdmitBoundary(EditorSessionIdentity          identity,
                                             EditorPendingInputBoundaryKind kind,
-                                            std::uint64_t                  boundary_operation_id)
+                                            std::uint64_t                  boundary_operation_id,
+                                            std::optional<EditCommitAttribution> attribution)
     -> EditorPendingInputAdmitResult {
   std::scoped_lock lock(mutex_);
-  return AdmitBoundaryLocked(identity, kind, boundary_operation_id);
+  return AdmitBoundaryLocked(identity, kind, boundary_operation_id, std::move(attribution));
 }
 
 auto EditorPendingInputQueue::Peek() const -> EditorPendingInputView {
@@ -195,14 +196,16 @@ auto EditorPendingInputQueue::AdmitFieldChangeLocked(EditorSessionIdentity ident
 
   const auto sequence_id = open_->sequence_id;
   if (patch.settled) {
-    SealOpenLocked(EditorPendingInputBoundaryKind::Release, boundary_operation_id);
+    SealOpenLocked(EditorPendingInputBoundaryKind::Release, boundary_operation_id,
+                   std::move(patch.attribution));
   }
   return AcceptAdmit(sequence_id);
 }
 
 auto EditorPendingInputQueue::AdmitBoundaryLocked(EditorSessionIdentity          identity,
                                                   EditorPendingInputBoundaryKind kind,
-                                                  std::uint64_t boundary_operation_id)
+                                                  std::uint64_t boundary_operation_id,
+                                                  std::optional<EditCommitAttribution> attribution)
     -> EditorPendingInputAdmitResult {
   if (kind == EditorPendingInputBoundaryKind::None) {
     return RejectAdmit("Pending input boundary requires Release, Cancel, or NodeSwitch");
@@ -221,7 +224,7 @@ auto EditorPendingInputQueue::AdmitBoundaryLocked(EditorSessionIdentity         
     open_->fields.clear();
     open_field_index_.clear();
   }
-  SealOpenLocked(kind, boundary_operation_id);
+  SealOpenLocked(kind, boundary_operation_id, std::move(attribution));
   return AcceptAdmit(sequence_id);
 }
 
@@ -238,12 +241,14 @@ auto EditorPendingInputQueue::StartSequenceLocked(EditorSessionIdentity        i
 }
 
 void EditorPendingInputQueue::SealOpenLocked(EditorPendingInputBoundaryKind kind,
-                                             std::uint64_t                  boundary_operation_id) {
+                                             std::uint64_t                  boundary_operation_id,
+                                             std::optional<EditCommitAttribution> attribution) {
   if (!open_.has_value()) {
     return;
   }
   open_->seal                  = kind;
   open_->boundary_operation_id = boundary_operation_id;
+  open_->attribution           = std::move(attribution);
   sealed_.push_back(std::move(*open_));
   open_.reset();
   open_field_index_.clear();

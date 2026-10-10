@@ -67,8 +67,12 @@ inline constexpr std::uint32_t kRootStateFormatVersion = 5;
 /// Checkpoint serialized pipeline state stored in `ImageEditState.serialized_pipeline_state`.
 inline constexpr std::uint32_t kCheckpointStateFormatVersion = 5;
 
-/// Mini-Git WAL record JSON `format_version`.
-inline constexpr std::uint32_t kMiniGitJournalRecordFormatVersion = 6;
+/// Mini-Git WAL record JSON `format_version`. Version 7 adds the optional `attribution` object.
+inline constexpr std::uint32_t    kMiniGitJournalRecordFormatVersion    = 7;
+
+/// Oldest Mini-Git WAL record `format_version` that the reader accepts. Its records have no
+/// attribution: their commits belong to the user.
+inline constexpr std::uint32_t    kMiniGitJournalRecordMinFormatVersion = 6;
 
 /// Adjustment Transfer package `schema` string. v5 packages are rejected without
 /// conversion.

@@ -12,8 +12,9 @@
 #include <string>
 #include <vector>
 
-#include "edit/history/pipeline_edit_batch.hpp"
 #include "edit/history/commit_graph.hpp"
+#include "edit/history/edit_commit_attribution.hpp"
+#include "edit/history/pipeline_edit_batch.hpp"
 
 namespace alcedo {
 
@@ -38,6 +39,8 @@ struct MiniGitJournalRecord {
   head_commit_hash_t        target_head = std::nullopt;
   transaction_chain_hash_t  target_chain_hash{};
   std::optional<EditCommit> edit_commit = std::nullopt;
+  /// Attribution of @ref edit_commit; nullopt for a commit of the user.
+  std::optional<EditCommitAttribution> attribution = std::nullopt;
 };
 
 /// Immutable snapshot of journal records taken under the journal mutex.
@@ -219,9 +222,13 @@ class MiniGitWorkingHistory final {
   /// a captured selection after a rejected named-ref path.
   void               PublishWorkingSelection(MiniGitWorkingSelection selection);
 
-  /// Plan a settled typed-batch edit without mutating journal/graph/redo.
-  [[nodiscard]] auto PrepareAppendEdit(PipelineEditBatch payload) const -> MiniGitPreparedEdit;
-  /// Append one journal record, insert the commit, advance the head, and clear redo.
+  /// Plan a settled typed-batch edit without mutating journal/graph/redo. @p attribution, when
+  /// set, goes into the journal record and, on publish, into the graph.
+  [[nodiscard]] auto PrepareAppendEdit(
+      PipelineEditBatch                    payload,
+      std::optional<EditCommitAttribution> attribution = std::nullopt) const -> MiniGitPreparedEdit;
+  /// Append one journal record, insert the commit and its attribution, advance the head, and
+  /// clear redo.
   auto               PublishPreparedEdit(const MiniGitPreparedEdit& prepared)
       -> MiniGitEditAppendResult;
 

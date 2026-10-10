@@ -2587,6 +2587,11 @@ Original source files on disk will be kept.</source>
         <source>Adjustment</source>
         <translation type="unfinished"></translation>
     </message>
+    <message>
+        <location line="+64"/>
+        <source>Agent</source>
+        <translation type="unfinished"></translation>
+    </message>
 </context>
 <context>
     <name>EditorHistoryTransactionsPanel</name>

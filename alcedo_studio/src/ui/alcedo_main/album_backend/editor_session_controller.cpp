@@ -18,6 +18,7 @@
 #include "app/editor_render_intent.hpp"
 #include "app/editor_session_ports.hpp"
 #include "app/editor_session_service.hpp"
+#include "app/version_name_rules.hpp"
 #include "edit/frame_presentation_types.hpp"
 #include "edit/operators/utils/color_utils.hpp"
 #include "type/hash_type.hpp"
@@ -624,16 +625,19 @@ void EditorSessionController::Open(uint elementId, uint imageId) {
 }
 
 void EditorSessionController::CheckoutVersion(const QString& versionId) {
+  (void)RequestCheckoutVersion(versionId);
+}
+
+auto EditorSessionController::RequestCheckoutVersion(const QString& versionId)
+    -> alcedo::EditorSessionResult {
   const QString action = QStringLiteral("checkoutVersion");
   if (!session_backend_) {
-    PublishHistoryRejected(action, QStringLiteral("Editor session backend is unavailable"),
-                           versionId);
-    return;
+    return RejectHistoryAction(action, QStringLiteral("Editor session backend is unavailable"),
+                               versionId);
   }
   const QString trimmed = versionId.trimmed();
   if (trimmed.isEmpty()) {
-    PublishHistoryRejected(action, QStringLiteral("Version id is required"));
-    return;
+    return RejectHistoryAction(action, QStringLiteral("Version id is required"));
   }
   try {
     const auto version_id = alcedo::Hash128::FromString(trimmed.toStdString());
@@ -641,57 +645,66 @@ void EditorSessionController::CheckoutVersion(const QString& versionId) {
     SyncIdentityFromBackend();
     emit StateChanged();
     PublishHistoryInvokableReturn(action, result, trimmed);
+    return result;
   } catch (const std::exception& ex) {
     const QString message = QString::fromUtf8(ex.what()).trimmed();
-    PublishHistoryRejected(
+    return RejectHistoryAction(
         action, message.isEmpty() ? QStringLiteral("Invalid Version id") : message, trimmed);
   }
 }
 
 void EditorSessionController::CreateRootVersion(const QString& displayName) {
+  (void)RequestCreateRootVersion(displayName);
+}
+
+auto EditorSessionController::RequestCreateRootVersion(const QString& displayName)
+    -> alcedo::EditorSessionResult {
   const QString action = QStringLiteral("createRootVersion");
   if (!session_backend_) {
-    PublishHistoryRejected(action, QStringLiteral("Editor session backend is unavailable"));
-    return;
+    return RejectHistoryAction(action, QStringLiteral("Editor session backend is unavailable"));
   }
-  const QString name = displayName.trimmed();
-  if (name.isEmpty()) {
-    PublishHistoryRejected(action, QStringLiteral("Version name is required"));
-    return;
+  auto name = alcedo::NormalizeVersionName(displayName.toStdString());
+  if (!name.has_value()) {
+    return RejectHistoryAction(action, QStringLiteral("Version name is required"));
   }
-  auto result = session_backend_->CreateRootVersion(name.toStdString());
+  auto result = session_backend_->CreateRootVersion(std::move(*name));
   SyncIdentityFromBackend();
   emit StateChanged();
   PublishHistoryInvokableReturn(action, result);
+  return result;
 }
 
 void EditorSessionController::BranchFromCommit(const QString& commitId,
                                                const QString& displayName) {
+  (void)RequestBranchFromCommit(commitId, displayName);
+}
+
+auto EditorSessionController::RequestBranchFromCommit(const QString& commitId,
+                                                      const QString& displayName)
+    -> alcedo::EditorSessionResult {
   const QString action = QStringLiteral("branchFromCommit");
   if (!session_backend_) {
-    PublishHistoryRejected(action, QStringLiteral("Editor session backend is unavailable"),
-                           commitId);
-    return;
+    return RejectHistoryAction(action, QStringLiteral("Editor session backend is unavailable"),
+                               commitId);
   }
   const QString trimmed_commit = commitId.trimmed();
-  const QString name           = displayName.trimmed();
+  auto          name           = alcedo::NormalizeVersionName(displayName.toStdString());
   if (trimmed_commit.isEmpty()) {
-    PublishHistoryRejected(action, QStringLiteral("Commit id is required"));
-    return;
+    return RejectHistoryAction(action, QStringLiteral("Commit id is required"));
   }
-  if (name.isEmpty()) {
-    PublishHistoryRejected(action, QStringLiteral("Branch name is required"), trimmed_commit);
-    return;
+  if (!name.has_value()) {
+    return RejectHistoryAction(action, QStringLiteral("Branch name is required"), trimmed_commit);
   }
   try {
     const auto id     = alcedo::Hash128::FromString(trimmed_commit.toStdString());
-    auto       result = session_backend_->BranchFromCommit(id, name.toStdString());
+    auto       result = session_backend_->BranchFromCommit(id, std::move(*name));
     SyncIdentityFromBackend();
     emit StateChanged();
     PublishHistoryInvokableReturn(action, result, trimmed_commit);
+    return result;
   } catch (const std::exception& ex) {
     const QString message = QString::fromUtf8(ex.what()).trimmed();
-    PublishHistoryRejected(
+    return RejectHistoryAction(
         action, message.isEmpty() ? QStringLiteral("Invalid commit id") : message, trimmed_commit);
   }
 }
@@ -745,54 +758,62 @@ void EditorSessionController::CancelPendingNavigation() {
 }
 
 void EditorSessionController::RenameVersion(const QString& versionId, const QString& displayName) {
+  (void)RequestRenameVersion(versionId, displayName);
+}
+
+auto EditorSessionController::RequestRenameVersion(const QString& versionId,
+                                                   const QString& displayName)
+    -> alcedo::EditorSessionResult {
   const QString action = QStringLiteral("renameVersion");
   if (!session_backend_) {
-    PublishHistoryRejected(action, QStringLiteral("Editor session backend is unavailable"),
-                           versionId);
-    return;
+    return RejectHistoryAction(action, QStringLiteral("Editor session backend is unavailable"),
+                               versionId);
   }
   const QString trimmed = versionId.trimmed();
-  const QString name    = displayName.trimmed();
+  auto          name    = alcedo::NormalizeVersionName(displayName.toStdString());
   if (trimmed.isEmpty()) {
-    PublishHistoryRejected(action, QStringLiteral("Version id is required"));
-    return;
+    return RejectHistoryAction(action, QStringLiteral("Version id is required"));
   }
-  if (name.isEmpty()) {
-    PublishHistoryRejected(action, QStringLiteral("Version name is required"), trimmed);
-    return;
+  if (!name.has_value()) {
+    return RejectHistoryAction(action, QStringLiteral("Version name is required"), trimmed);
   }
   try {
     const auto id     = alcedo::Hash128::FromString(trimmed.toStdString());
-    auto       result = session_backend_->RenameVersion(id, name.toStdString());
+    auto       result = session_backend_->RenameVersion(id, std::move(*name));
     emit       StateChanged();
     PublishHistoryInvokableReturn(action, result, trimmed);
+    return result;
   } catch (const std::exception& ex) {
     const QString message = QString::fromUtf8(ex.what()).trimmed();
-    PublishHistoryRejected(
+    return RejectHistoryAction(
         action, message.isEmpty() ? QStringLiteral("Invalid Version id") : message, trimmed);
   }
 }
 
 void EditorSessionController::RemoveVersion(const QString& versionId) {
+  (void)RequestRemoveVersion(versionId);
+}
+
+auto EditorSessionController::RequestRemoveVersion(const QString& versionId)
+    -> alcedo::EditorSessionResult {
   const QString action = QStringLiteral("removeVersion");
   if (!session_backend_) {
-    PublishHistoryRejected(action, QStringLiteral("Editor session backend is unavailable"),
-                           versionId);
-    return;
+    return RejectHistoryAction(action, QStringLiteral("Editor session backend is unavailable"),
+                               versionId);
   }
   const QString trimmed = versionId.trimmed();
   if (trimmed.isEmpty()) {
-    PublishHistoryRejected(action, QStringLiteral("Version id is required"));
-    return;
+    return RejectHistoryAction(action, QStringLiteral("Version id is required"));
   }
   try {
     const auto id     = alcedo::Hash128::FromString(trimmed.toStdString());
     auto       result = session_backend_->RemoveVersion(id);
     emit       StateChanged();
     PublishHistoryInvokableReturn(action, result, trimmed);
+    return result;
   } catch (const std::exception& ex) {
     const QString message = QString::fromUtf8(ex.what()).trimmed();
-    PublishHistoryRejected(
+    return RejectHistoryAction(
         action, message.isEmpty() ? QStringLiteral("Invalid Version id") : message, trimmed);
   }
 }
@@ -922,6 +943,17 @@ void EditorSessionController::PublishHistoryRejected(const QString& action, cons
                                                      const QString& selected_id) {
   const auto operation_id = history_ops_.AllocateOperationId();
   ApplyPublishedHistory(history_ops_.PublishRejected(operation_id, action, message, selected_id));
+}
+
+auto EditorSessionController::RejectHistoryAction(const QString& action, const QString& message,
+                                                  const QString& selected_id)
+    -> alcedo::EditorSessionResult {
+  PublishHistoryRejected(action, message, selected_id);
+  alcedo::EditorSessionResult rejected;
+  rejected.kind    = alcedo::EditorSessionResultKind::Rejected;
+  rejected.state   = session_state();
+  rejected.message = message.toStdString();
+  return rejected;
 }
 
 void EditorSessionController::PublishHistoryInvokableReturn(
@@ -1513,13 +1545,14 @@ bool EditorSessionController::submitWrite(QString fieldKey, alcedo::EditorParame
       EnqueueFieldWrite(std::move(fieldKey), std::move(write), settled).kind);
 }
 
-auto EditorSessionController::EnqueueFieldWrite(QString                      fieldKey,
-                                                alcedo::EditorParameterWrite write, bool settled)
-    -> alcedo::EditorSessionResult {
+auto EditorSessionController::EnqueueFieldWrite(
+    QString fieldKey, alcedo::EditorParameterWrite write, bool settled,
+    std::optional<alcedo::EditCommitAttribution> attribution) -> alcedo::EditorSessionResult {
   alcedo::EditorAdjustmentPatch patch;
-  patch.field_key = fieldKey.toStdString();
-  patch.write     = std::move(write);
-  patch.settled   = settled;
+  patch.field_key   = fieldKey.toStdString();
+  patch.write       = std::move(write);
+  patch.settled     = settled;
+  patch.attribution = std::move(attribution);
   if (can_edit() && session_backend_ != nullptr && node_controller_ != nullptr) {
     const auto document = pipeline_document();
     if (!document) {

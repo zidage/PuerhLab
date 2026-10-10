@@ -7,7 +7,6 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonValue>
-#include <QMetaObject>
 #include <QObject>
 #include <QPointer>
 #include <QVariant>
@@ -32,12 +31,14 @@
 #include "app/editor_parameter_write.hpp"
 #include "app/editor_session_service.hpp"
 #include "app/editor_session_types.hpp"
+#include "edit/history/edit_commit_attribution.hpp"
 #include "json.hpp"
 #include "storage/store/sleeve/element_store.hpp"
 #include "ui/alcedo_main/album_backend/editor_panel_presentation.hpp"
 #include "ui/alcedo_main/album_backend/editor_session_controller.hpp"
 #include "ui/alcedo_main/automation/automation_command_support.hpp"
 #include "ui/alcedo_main/automation/automation_editor_commands.hpp"
+#include "ui/alcedo_main/automation/automation_editor_operation.hpp"
 
 namespace alcedo::automation {
 namespace {
@@ -199,129 +200,6 @@ auto EditorIdentity(const ui::EditorSessionController& editor) -> QJsonObject {
                      {"head_commit", HeadValue(editor.history_snapshot())}};
 }
 
-/// A failed session command: the error code of the response and the owner message.
-struct OperationFailure {
-  AutomationErrorCode code_ = AutomationErrorCode::Failed;
-  QString             message_;
-};
-
-using OperationDone = std::function<void(std::optional<OperationFailure>)>;
-
-/**
- * @brief Waits for the results of one session command.
- *
- * The command is done after its terminal result. When one of its results routed a render, it is
- * done after a presented frame of that render request or a later one (a later request renders the
- * later document, which includes the change). A Rejected or Failed result of the command fails
- * it. Results that arrive before the command id is known are kept and checked once it is.
- */
-class OperationWait final {
- public:
-  /// Connects to @p editor with @p context as the connection context. Call Start with the id
-  /// that the submission returned.
-  static auto Begin(ui::EditorSessionController* editor, QObject* context, OperationDone done)
-      -> std::shared_ptr<OperationWait> {
-    auto wait         = std::shared_ptr<OperationWait>(new OperationWait(std::move(done)));
-    wait->self_       = wait;
-    wait->connection_ = QObject::connect(
-        editor, &ui::EditorSessionController::SessionResultObserved, context,
-        [weak = std::weak_ptr<OperationWait>(wait)](const EditorSessionResult& result) {
-          if (auto locked = weak.lock()) {
-            locked->Observe(result);
-          }
-        });
-    // A wait whose reply timed out never finishes; it ends with its context.
-    QObject::connect(context, &QObject::destroyed, [weak = std::weak_ptr<OperationWait>(wait)] {
-      if (auto locked = weak.lock()) {
-        locked->self_.reset();
-      }
-    });
-    return wait;
-  }
-
-  void Start(std::uint64_t operation_id) {
-    if (finished_) {
-      return;
-    }
-    if (operation_id == 0) {
-      Finish(OperationFailure{AutomationErrorCode::Failed,
-                              QStringLiteral("The editor did not assign a command id.")});
-      return;
-    }
-    operation_id_ = operation_id;
-    auto early    = std::exchange(early_, {});
-    for (const auto& result : early) {
-      Observe(result);
-    }
-  }
-
-  void Fail(OperationFailure failure) { Finish(std::move(failure)); }
-
- private:
-  explicit OperationWait(OperationDone done) : done_(std::move(done)) {}
-
-  void Observe(const EditorSessionResult& result) {
-    if (finished_) {
-      return;
-    }
-    if (operation_id_ == 0) {
-      early_.push_back(result);
-      return;
-    }
-    if (result.kind == EditorSessionResultKind::FramePresented) {
-      if (render_request_id_ != 0 && result.render_request_id >= render_request_id_) {
-        Finish(std::nullopt);
-      }
-      return;
-    }
-    if (result.operation_id != operation_id_) {
-      return;
-    }
-    if (EditorSessionResultIsFailure(result.kind)) {
-      Finish(OperationFailure{result.kind == EditorSessionResultKind::Rejected
-                                  ? AutomationErrorCode::Rejected
-                                  : AutomationErrorCode::Failed,
-                              QString::fromStdString(result.message)});
-      return;
-    }
-    if (result.render_request_id != 0) {
-      render_request_id_ = result.render_request_id;
-      return;
-    }
-    if (render_request_id_ == 0 && EditorSessionResultIsTerminal(result.kind)) {
-      Finish(std::nullopt);
-    }
-  }
-
-  void Finish(std::optional<OperationFailure> failure) {
-    if (finished_) {
-      return;
-    }
-    finished_ = true;
-    QObject::disconnect(connection_);
-    auto done = std::move(done_);
-    auto self = std::move(self_);
-    if (done) {
-      done(std::move(failure));
-    }
-  }
-
-  OperationDone                    done_;
-  QMetaObject::Connection          connection_;
-  std::vector<EditorSessionResult> early_;
-  std::uint64_t                    operation_id_      = 0;
-  std::uint64_t                    render_request_id_ = 0;
-  bool                             finished_          = false;
-  /// Keeps the wait alive until it finishes; the connection holds only a weak reference.
-  std::shared_ptr<OperationWait>   self_;
-};
-
-/// Runs @p task on the event loop of @p context after the change notifications that are queued
-/// now: the session publishes a result before the change that updates the snapshots.
-void AfterQueuedChanges(QObject* context, std::function<void()> task) {
-  QMetaObject::invokeMethod(context, std::move(task), Qt::QueuedConnection);
-}
-
 /// A field write that the catalog accepted: the canonical field and its typed write.
 struct PreparedWrite {
   std::string          field_;
@@ -352,12 +230,20 @@ auto PrepareWrite(const ui::EditorSessionController& editor, const QString& fiel
   return PreparedWrite{std::string(entry->field), std::move(*write)};
 }
 
-/// Enqueues @p prepared as a settled write and calls @p done after its commit and frame.
+/// The attribution of the commits of one write command: the author agent and @p params.note.
+auto AgentAttribution(const QJsonObject& params) -> EditCommitAttribution {
+  return EditCommitAttribution{std::string(kEditCommitAuthorAgent),
+                               params.value("note").toString().toStdString()};
+}
+
+/// Enqueues @p prepared as a settled write with the author @p attribution and calls @p done
+/// after its commit and frame.
 void ApplyWrite(ui::EditorSessionController* editor, QObject* context, PreparedWrite prepared,
-                OperationDone done) {
+                EditCommitAttribution attribution, OperationDone done) {
   auto       wait   = OperationWait::Begin(editor, context, std::move(done));
-  const auto result = editor->EnqueueFieldWrite(QString::fromStdString(prepared.field_),
-                                                std::move(prepared.write_), /*settled=*/true);
+  const auto result =
+      editor->EnqueueFieldWrite(QString::fromStdString(prepared.field_), std::move(prepared.write_),
+                                /*settled=*/true, std::move(attribution));
   if (EditorSessionResultIsFailure(result.kind)) {
     wait->Fail(OperationFailure{AutomationErrorCode::Rejected,
                                 result.message.empty()
@@ -403,8 +289,12 @@ void SendHistoryMove(ui::EditorSessionController* editor, AutomationCommandWait*
 /// One editor.batch_set call: applies the changes in order, each after the previous frame.
 class BatchApply final : public std::enable_shared_from_this<BatchApply> {
  public:
-  BatchApply(ui::EditorSessionController* editor, AutomationCommandWait* wait, QJsonArray changes)
-      : editor_(editor), wait_(wait), changes_(std::move(changes)) {}
+  BatchApply(ui::EditorSessionController* editor, AutomationCommandWait* wait, QJsonArray changes,
+             EditCommitAttribution attribution)
+      : editor_(editor),
+        wait_(wait),
+        changes_(std::move(changes)),
+        attribution_(std::move(attribution)) {}
 
   void Next() {
     if (wait_ == nullptr) {
@@ -428,7 +318,7 @@ class BatchApply final : public std::enable_shared_from_this<BatchApply> {
       return;
     }
     auto self = shared_from_this();
-    ApplyWrite(editor_, wait_, std::move(*prepared),
+    ApplyWrite(editor_, wait_, std::move(*prepared), attribution_,
                [self](std::optional<OperationFailure> failure) { self->Finished(failure); });
   }
 
@@ -475,6 +365,7 @@ class BatchApply final : public std::enable_shared_from_this<BatchApply> {
   ui::EditorSessionController*    editor_;
   QPointer<AutomationCommandWait> wait_;
   QJsonArray                      changes_;
+  EditCommitAttribution           attribution_;
   qsizetype                       applied_ = 0;
 };
 
@@ -482,6 +373,13 @@ auto IsPersistBusy(const ui::EditorSessionController& editor) -> bool {
   const auto state = editor.session_state();
   return editor.close_in_flight() || editor.persist_in_flight() ||
          state == EditorSessionState::Saving || state == EditorSessionState::Switching;
+}
+
+auto NoteSchema() -> QJsonObject {
+  return QJsonObject{{"type", "string"},
+                     {"description",
+                      "A note for the commits of this call. The History panel shows it with the "
+                      "author agent."}};
 }
 
 auto ValueSchema() -> QJsonObject {
@@ -712,9 +610,10 @@ auto RegisterAutomationEditorCommands(AutomationCommandRegistry& registry,
       "Sets one field of the open image to a UI value, like releasing a panel control: one "
       "history commit. Answers after the commit and its rendered frame, with the value that the "
       "editor now shows (a crop can be constrained). A value equal to the current one makes no "
-      "commit.");
+      "commit. The commit has the author agent and the optional 'note'.");
   set.params_schema = AutomationClosedParamsSchema(
-      QJsonObject{{"field", text_schema}, {"value", ValueSchema()}}, QJsonArray{"field", "value"});
+      QJsonObject{{"field", text_schema}, {"value", ValueSchema()}, {"note", NoteSchema()}},
+      QJsonArray{"field", "value"});
   set.result_schema = AutomationObjectSchema(
       QJsonObject{{"field", text_schema},
                   {"value", QJsonObject{{"type", QJsonArray{"number", "object", "null"}}}},
@@ -736,7 +635,7 @@ auto RegisterAutomationEditorCommands(AutomationCommandRegistry& registry,
     }
     QPointer<AutomationCommandWait> wait = new AutomationCommandWait(std::move(reply), host);
     ApplyWrite(
-        editor, wait, std::move(*prepared),
+        editor, wait, std::move(*prepared), AgentAttribution(params),
         [wait, editor, field](std::optional<OperationFailure> failure) {
           if (wait == nullptr) {
             return;
@@ -765,14 +664,17 @@ auto RegisterAutomationEditorCommands(AutomationCommandRegistry& registry,
       "Sets several fields in order. Each change that alters a value is one history commit, "
       "applied after the frame "
       "of the previous one. The first change that fails stops the batch: the error data has "
-      "'applied' (the changes before it, which stay) and 'head_commit'.");
+      "'applied' (the changes before it, which stay) and 'head_commit'. Each commit has the "
+      "author agent and the optional 'note'.");
   batch.params_schema = AutomationClosedParamsSchema(
-      QJsonObject{{"changes", QJsonObject{{"type", "array"},
-                                          {"minItems", 1},
-                                          {"items", AutomationClosedParamsSchema(
-                                                        QJsonObject{{"field", text_schema},
-                                                                    {"value", ValueSchema()}},
-                                                        QJsonArray{"field", "value"})}}}},
+      QJsonObject{
+          {"changes",
+           QJsonObject{{"type", "array"},
+                       {"minItems", 1},
+                       {"items", AutomationClosedParamsSchema(
+                                     QJsonObject{{"field", text_schema}, {"value", ValueSchema()}},
+                                     QJsonArray{"field", "value"})}}},
+          {"note", NoteSchema()}},
       QJsonArray{"changes"});
   batch.result_schema =
       AutomationObjectSchema(QJsonObject{{"applied", QJsonObject{{"type", "integer"}}},
@@ -789,7 +691,8 @@ auto RegisterAutomationEditorCommands(AutomationCommandRegistry& registry,
       return;
     }
     auto* wait = new AutomationCommandWait(std::move(reply), host);
-    std::make_shared<BatchApply>(host->editor_session(), wait, changes)->Next();
+    std::make_shared<BatchApply>(host->editor_session(), wait, changes, AgentAttribution(params))
+        ->Next();
   };
   RegisterOrFail(registry, std::move(batch), &ok, error);
 
@@ -825,7 +728,8 @@ auto RegisterAutomationEditorCommands(AutomationCommandRegistry& registry,
   history.description = QStringLiteral(
       "Returns the history of the active Version of the open image: its commits from the root, "
       "the head, and whether undo and redo are possible. 'position' is applied, current (the "
-      "head), or future (undone, can be redone).");
+      "head), or future (undone, can be redone). 'author' is user or agent; 'note' is the note "
+      "of an agent commit.");
   history.params_schema = AutomationClosedParamsSchema();
   history.result_schema = AutomationObjectSchema(
       QJsonObject{{"version_id", text_schema},
@@ -856,7 +760,9 @@ auto RegisterAutomationEditorCommands(AutomationCommandRegistry& registry,
                : QJsonValue(QJsonValue::Null)},
           {"field", QString::fromStdString(commit.field_key)},
           {"operation_kind", QString::fromStdString(commit.operation_kind)},
-          {"position", QString::fromLatin1(position)}});
+          {"position", QString::fromLatin1(position)},
+          {"author", QString::fromStdString(commit.author)},
+          {"note", QString::fromStdString(commit.note)}});
     }
     reply.SendResult(
         QJsonObject{{"version_id", QString::fromStdString(snapshot.active_version_id.ToString())},

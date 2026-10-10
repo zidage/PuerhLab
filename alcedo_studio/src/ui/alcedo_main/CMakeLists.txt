@@ -267,6 +267,7 @@ target_link_libraries(AlbumBackendLib
         EditorMaskCreationController
         EditorAdjustmentPipeline
         EditorParameterCatalog
+        VersionNameRules
         EditorPipelineCommandService
         EditorPanelProjection
         EditorNodeGraphDraft
@@ -371,6 +372,9 @@ def_library(AutomationHostLib
         "${ALCEDO_INCLUDE_ROOT}/ui/alcedo_main/automation/automation_library_commands.hpp"
         "${ALCEDO_UI_SHELL_ROOT}/automation/commands/editor_commands.cpp"
         "${ALCEDO_UI_SHELL_ROOT}/automation/commands/render_commands.cpp"
+        "${ALCEDO_UI_SHELL_ROOT}/automation/commands/version_commands.cpp"
+        "${ALCEDO_UI_SHELL_ROOT}/automation/automation_editor_operation.cpp"
+        "${ALCEDO_INCLUDE_ROOT}/ui/alcedo_main/automation/automation_editor_operation.hpp"
         "${ALCEDO_INCLUDE_ROOT}/ui/alcedo_main/automation/automation_editor_commands.hpp"
         "${ALCEDO_UI_SHELL_ROOT}/automation/headless_frame_sink.cpp"
         "${ALCEDO_INCLUDE_ROOT}/ui/alcedo_main/automation/headless_frame_sink.hpp"

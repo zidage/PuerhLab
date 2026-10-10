@@ -99,6 +99,12 @@ without an explicit user request.
 The one standing exception is the alert badge below: the user requested it for
 every warning and error message.
 
+The History panel Agent chip is a second requested exception: the automation
+plan (commit attribution) asks for an agent badge on each agent commit. It uses
+the hash chip language of the same row (`badgeRadius`, 1 px `cardBorderColor`,
+caption text) and sits after the hash chip. The note of the commit is muted
+caption text on its own line, not a chip.
+
 ### Alert badges: warning and error messages
 
 Every warning or error message (a failed operation, a missing file, a rejected

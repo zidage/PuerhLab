@@ -11,6 +11,7 @@
 
 #include "app/editor_parameter_write.hpp"
 #include "edit/graph/graph_ids.hpp"
+#include "edit/history/edit_commit_attribution.hpp"
 
 /// Reusable adjustment patch/snapshot data for editor session and render intents.
 /// Lives in the application layer so session/render ports never depend on QWidget
@@ -124,6 +125,9 @@ struct EditorAdjustmentPatch {
   std::string params_json;
   /// Monotonic time of the QML/C++ submitWrite call. 0 means the caller did not stamp.
   std::int64_t qml_write_ns = 0;
+  /// Author of the commit of a settled write; nullopt for the user. Only a settled write can
+  /// carry it.
+  std::optional<EditCommitAttribution> attribution;
 };
 
 }  // namespace alcedo

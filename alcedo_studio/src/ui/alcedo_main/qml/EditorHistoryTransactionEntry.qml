@@ -4,7 +4,8 @@ import QtQuick.Layouts
 
 // One transaction timeline entry (Git-graph row): the commit-graph cell on the
 // left, then a flat two-line commit row — title + relative time, then hash
-// chip + delta summary. Only the checked-out row carries the card
+// chip + delta summary. An agent commit adds the Agent chip after the hash
+// chip and its note on a third line. Only the checked-out row carries the card
 // surface with the quiet 1 px text outline; other rows stay flat on the
 // sunken timeline well (DESIGN.md, Git-graph timeline language).
 Item {
@@ -22,6 +23,8 @@ Item {
     required property string deltaText
     required property string timelinePosition
     required property var createdAtNs
+    required property string author
+    required property string note
 
     readonly property color colText: theme ? theme.colText : appTheme.textColor
     readonly property color colMuted: theme ? theme.colTextMuted : appTheme.textMutedColor
@@ -37,6 +40,9 @@ Item {
                                                     titleLabel.implicitHeight)
     readonly property real metaRowHeight: Math.max(appTheme.lineHeightCaption + appTheme.spaceXs,
                                                    deltaLabel.implicitHeight + appTheme.spaceXs)
+    // The note line exists only for an agent commit with a note.
+    readonly property real noteRowHeight: commitNote.length > 0
+                                          ? rowLineGap + noteLabel.implicitHeight : 0
     readonly property int listRowGap: ListView.view ? ListView.view.spacing : 0
     readonly property int rowCount: ListView.view ? ListView.view.count : 0
 
@@ -48,6 +54,8 @@ Item {
     property string transactionTime: relativeTime(createdAtNs)
     property string shortCommitId: transactionId.length > 0
                                    ? transactionId.slice(0, 8) : ""
+    property bool agentCommit: author === "agent"
+    property string commitNote: agentCommit ? String(note || "") : ""
     property bool futureRow: transactionPosition === "future"
     // Model order is newest-first: the last row is the graph root commit.
     property bool firstRow: index === 0
@@ -73,7 +81,8 @@ Item {
     }
 
     width: ListView.view ? ListView.view.width : 0
-    height: rowTopPadding + titleRowHeight + rowLineGap + metaRowHeight + rowBottomPadding
+    height: rowTopPadding + titleRowHeight + rowLineGap + metaRowHeight + noteRowHeight
+            + rowBottomPadding
 
     ListView.onPooled: {}
     ListView.onReused: {}
@@ -211,6 +220,30 @@ Item {
                 }
             }
 
+            // Requested by the automation plan (commit attribution): marks a
+            // commit that an agent made. Same chip language as the hash chip.
+            Rectangle {
+                id: authorChip
+                visible: root.agentCommit
+                Layout.preferredWidth: authorLabel.implicitWidth + appTheme.spaceSm * 2
+                Layout.preferredHeight: root.metaRowHeight
+                radius: appTheme.badgeRadius
+                color: root.currentTransaction ? appTheme.bgBaseColor : root.colCardSurface
+                border.width: 1
+                border.color: root.colCardBorder
+
+                Label {
+                    id: authorLabel
+                    objectName: "editorHistoryCommitAuthor"
+                    anchors.centerIn: parent
+                    text: qsTr("Agent")
+                    color: root.colText
+                    font.family: appTheme.uiFontFamily
+                    font.pixelSize: appTheme.fontSizeCaption
+                    font.weight: appTheme.fontWeightStrong
+                }
+            }
+
             Label {
                 id: deltaLabel
                 objectName: "editorHistoryCommitValue"
@@ -222,6 +255,23 @@ Item {
                 font.family: appTheme.monoFontFamily
                 font.pixelSize: appTheme.fontSizeCaption
             }
+        }
+
+        Label {
+            id: noteLabel
+            objectName: "editorHistoryCommitNote"
+            visible: root.commitNote.length > 0
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.top: metaRow.bottom
+            anchors.leftMargin: appTheme.spaceSm
+            anchors.rightMargin: appTheme.spaceSm
+            anchors.topMargin: root.rowLineGap
+            text: root.commitNote
+            color: root.colMuted
+            wrapMode: Text.Wrap
+            font.family: appTheme.uiFontFamily
+            font.pixelSize: appTheme.fontSizeCaption
         }
     }
 }

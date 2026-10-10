@@ -489,6 +489,13 @@ def_library(EditorParameterCatalog
                 EditGraph JSON
 )
 
+# Version name rules of the Versions panel and the automation Version commands. Qt-free.
+def_library(VersionNameRules
+    SOURCES
+        "${ALCEDO_APP_ROOT}/version_name_rules.cpp"
+        "${ALCEDO_INCLUDE_ROOT}/app/version_name_rules.hpp"
+)
+
 def_library(EditorParameterWrite
     SOURCES
         "${ALCEDO_APP_ROOT}/editor_parameter_write.cpp"

@@ -1239,6 +1239,14 @@ auto EditorSessionService::EnqueueAdjustmentInput(EditorAdjustmentPatch patch)
   if (comparison_active_.load(std::memory_order_acquire)) {
     return Reject("Close the comparison before editing");
   }
+  if (patch.attribution.has_value()) {
+    if (!patch.settled) {
+      return Reject("Only a settled adjustment can name a commit author");
+    }
+    if (!IsStorableEditCommitAttribution(*patch.attribution)) {
+      return Reject("The commit author must be agent");
+    }
+  }
   const auto identity = lifecycle_.identity();
   // Admission stays on the caller thread so a slider drag never waits for the owner queue. A
   // settled write is a Release boundary; it takes an id so the commit and frame results of the
@@ -1259,7 +1267,8 @@ auto EditorSessionService::EnqueueAdjustmentInput(EditorAdjustmentPatch patch)
   return result;
 }
 
-auto EditorSessionService::EnqueuePendingInputBoundary(EditorPendingInputBoundaryKind kind)
+auto EditorSessionService::EnqueuePendingInputBoundary(
+    EditorPendingInputBoundaryKind kind, std::optional<EditCommitAttribution> attribution)
     -> EditorSessionResult {
   if (lifecycle_.state() != EditorSessionState::Interactive) {
     return Reject("Queued adjustment input requires an interactive session");
@@ -1270,9 +1279,13 @@ auto EditorSessionService::EnqueuePendingInputBoundary(EditorPendingInputBoundar
   if (comparison_active_.load(std::memory_order_acquire)) {
     return Reject("Close the comparison before editing");
   }
+  if (attribution.has_value() && !IsStorableEditCommitAttribution(*attribution)) {
+    return Reject("The commit author must be agent");
+  }
   const auto identity              = lifecycle_.identity();
   const auto boundary_operation_id = command_queue_.ReserveCommandId();
-  const auto admitted = pending_input_.AdmitBoundary(identity, kind, boundary_operation_id);
+  const auto admitted =
+      pending_input_.AdmitBoundary(identity, kind, boundary_operation_id, std::move(attribution));
   if (!admitted.accepted) {
     return Reject(admitted.error.empty() ? "Queued adjustment boundary was rejected"
                                          : admitted.error);

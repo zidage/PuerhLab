@@ -324,10 +324,13 @@ class IEditorSessionBackend {
   /**
    * @brief Admit a Release, Cancel, or NodeSwitch seal on the open sequence.
    *
-   * Does not apply or restore live parameters. Default backends reject.
+   * @p attribution names the author of the commits of the sealed sequence; nullopt is the user,
+   * and only kEditCommitAuthorAgent is accepted. Does not apply or restore live parameters.
+   * Default backends reject.
    */
-  virtual auto EnqueuePendingInputBoundary(EditorPendingInputBoundaryKind /*kind*/)
-      -> EditorSessionResult {
+  virtual auto EnqueuePendingInputBoundary(
+      EditorPendingInputBoundaryKind /*kind*/,
+      std::optional<EditCommitAttribution> /*attribution*/ = std::nullopt) -> EditorSessionResult {
     EditorSessionResult result;
     result.kind     = EditorSessionResultKind::Rejected;
     result.state    = state();
@@ -704,7 +707,8 @@ class EditorSessionService final : public IEditorSessionBackend {
   auto               Patch(EditorAdjustmentPatch patch) -> EditorSessionResult override;
   auto               CommitAdjustment(EditorAdjustmentPatch patch) -> EditorSessionResult override;
   auto EnqueueAdjustmentInput(EditorAdjustmentPatch patch) -> EditorSessionResult override;
-  auto EnqueuePendingInputBoundary(EditorPendingInputBoundaryKind kind)
+  auto EnqueuePendingInputBoundary(EditorPendingInputBoundaryKind       kind,
+                                   std::optional<EditCommitAttribution> attribution = std::nullopt)
       -> EditorSessionResult override;
   auto EnqueueMaskCreation(EditorMaskCreationCommand command) -> EditorSessionResult override;
   [[nodiscard]] auto mask_creation_commands_pending() const -> bool override;

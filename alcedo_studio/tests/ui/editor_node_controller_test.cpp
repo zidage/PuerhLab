@@ -117,7 +117,8 @@ class DocumentSessionBackend final : public IEditorSessionBackend {
     }
     return Accepted("Adjustment input queued");
   }
-  auto EnqueuePendingInputBoundary(EditorPendingInputBoundaryKind kind)
+  auto EnqueuePendingInputBoundary(EditorPendingInputBoundaryKind kind,
+                                   std::optional<alcedo::EditCommitAttribution> = std::nullopt)
       -> EditorSessionResult override {
     ++boundary_count_;
     last_boundary_      = kind;

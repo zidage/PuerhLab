@@ -104,7 +104,12 @@ auto EditorHistoryProjection::ReadHistorySnapshot(
 
   projection.commits.reserve(commit_sources.size());
   for (const auto& source : commit_sources) {
-    projection.commits.push_back(CommitRowFromEdit(source.commit, source.position));
+    auto row = CommitRowFromEdit(source.commit, source.position);
+    if (const auto* attribution = graph.FindCommitAttribution(row.commit_hash)) {
+      row.author = attribution->author_;
+      row.note   = attribution->note_;
+    }
+    projection.commits.push_back(std::move(row));
   }
   *snapshot = std::move(projection);
   return true;

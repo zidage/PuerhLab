@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "edit/history/commit_types.hpp"
+#include "edit/history/edit_commit_attribution.hpp"
 
 namespace alcedo {
 
@@ -64,6 +65,10 @@ struct EditorHistoryCommit {
   std::string                  adjustment_instance_id;
   std::string                  mask_id;
   std::string                  mask_display_name;
+  /// kEditCommitAuthorUser, or the author of the commit attribution.
+  std::string                   author{kEditCommitAuthorUser};
+  /// Note of the commit attribution. Empty when there is none.
+  std::string                   note;
 };
 
 /// Stable, typed history projection consumed by QML models. Recovery journal

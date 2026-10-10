@@ -117,3 +117,16 @@ target_compile_definitions(AutomationEditorE2ETest PRIVATE
     ALCEDO_CLI_PATH="$<TARGET_FILE:alcedo_cli>"
     ALCEDO_AUTOMATION_FAILURE_DIR="${CMAKE_BINARY_DIR}/automation-failures")
 add_dependencies(AutomationEditorE2ETest alcedo_main alcedo_cli)
+
+# Version commands and commit attribution through real alcedo-cli and alcedo_main --headless
+# processes on a CI RAW file. Needs the GPU editor backend.
+alcedo_add_automation_test(AutomationVersionsE2ETest
+    SOURCES automation_versions_e2e_test.cpp
+    LIBRARIES AutomationHostLib
+    LABEL ci_automation_flow
+    CATEGORIES ci_automation)
+target_compile_definitions(AutomationVersionsE2ETest PRIVATE
+    ALCEDO_MAIN_PATH="$<TARGET_FILE:alcedo_main>"
+    ALCEDO_CLI_PATH="$<TARGET_FILE:alcedo_cli>"
+    ALCEDO_AUTOMATION_FAILURE_DIR="${CMAKE_BINARY_DIR}/automation-failures")
+add_dependencies(AutomationVersionsE2ETest alcedo_main alcedo_cli)
