@@ -2305,7 +2305,10 @@ Deviations from the phase text:
     request id also finishes the wait. A render that fails after the commit answers the Failed
     result; a frame that never arrives answers the registry timeout (-32006).
 Explicitly unimplemented items: none for AU10. Crop values read from the document carry no source
-  size (the catalog crop entry does not need it).
+  size. A crop write needs the source size: a locked aspect preset is a ratio of pixels.
+  PrepareWrite gives ToModelJson the full_reference_extent of the last presented frame (the bound
+  viewport, or HeadlessFrameSink in the headless host); zero before the first frame (fix of
+  2026-10-10, AutomationEditorE2ETest.CropRatioPresetGivesPresetAspectInPixels).
 Primary success call chain: editor.set exposure 0.5 -> PrepareWrite -> EnqueueFieldWrite(settled)
   -> EnqueueAdjustmentInput (ReserveCommandId = n, sealed Release) -> TryConsumePendingInput
   (current_operation_id_ = n) -> HandlePendingSequence -> CommitAdjustment ->

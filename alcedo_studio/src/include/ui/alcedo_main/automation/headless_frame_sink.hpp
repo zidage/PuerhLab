@@ -44,6 +44,10 @@ class HeadlessFrameSink final : public IFrameSink {
   [[nodiscard]] auto GetWidth() const -> int override;
   [[nodiscard]] auto GetHeight() const -> int override;
 
+  /// Source size of the last presented frame in reference pixels (the
+  /// `full_reference_extent` of its geometry). Empty before a frame with geometry arrives.
+  [[nodiscard]] auto presented_source_extent() const -> Extent2D;
+
   /// Number of frames that the renderer completed into this sink.
   [[nodiscard]] auto ready_frame_count() const -> std::uint64_t {
     return ready_frame_count_.load(std::memory_order_acquire);
@@ -56,6 +60,7 @@ class HeadlessFrameSink final : public IFrameSink {
   int                width_  = 0;
   int                height_ = 0;
   std::vector<float> host_pixels_;
+  Extent2D           presented_source_extent_{};
 #ifdef HAVE_OPENCL
   cl_mem opencl_image_ = nullptr;
 #endif
