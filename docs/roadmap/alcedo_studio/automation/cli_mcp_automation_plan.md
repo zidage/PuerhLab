@@ -2,7 +2,7 @@
 
 Date: 2026-10-08
 
-Status: in progress. AU1 to AU11 have implementation evidence (completion records in their phase sections).
+Status: in progress. AU1 to AU12 have implementation evidence (completion records in their phase sections).
 
 Tracking issue: [#331](https://github.com/zidage/AlcedoStudio/issues/331). Progress is tracked in the issues, not in this document.
 
@@ -574,7 +574,7 @@ class AutomationCommandRegistry {
 | AU9b | Parameter catalog: HLS, color wheels, curve, LUT | Catalog, Look QML, editor_support modules | AU9a | 900–1100 | implemented | [#325](https://github.com/zidage/AlcedoStudio/issues/325) |
 | AU10 | Editor commands and `render.preview` | Editor session, render port | AU3, AU7 | 1300–1800 | implemented | [#326](https://github.com/zidage/AlcedoStudio/issues/326) |
 | AU11 | Version commands and commit attribution | Session, journal, storage, QML | AU10 | 1300–1800 | implemented | [#326](https://github.com/zidage/AlcedoStudio/issues/326) |
-| AU12 | Export in C++, export commands | Export queue and recipe, QML | AU5 | 1100–1600 | planned | [#327](https://github.com/zidage/AlcedoStudio/issues/327) |
+| AU12 | Export in C++, export commands | Export queue and recipe, QML | AU5 | 1100–1600 | implemented | [#327](https://github.com/zidage/AlcedoStudio/issues/327) |
 | AU13 | Search in C++, search commands | Search session, QML | AU5 | 900–1300 | planned | [#327](https://github.com/zidage/AlcedoStudio/issues/327) |
 | AU14 | GUI automation server and agent control | Control owner, policy, background task island | AU6, AU10, AU11, AU12 | 1100–1600 | planned | [#328](https://github.com/zidage/AlcedoStudio/issues/328) |
 | AU15 | MCP server, operation skill, packaging | `alcedo_cli`, skill, install rules | AU14 | 1100–1600 | planned | [#329](https://github.com/zidage/AlcedoStudio/issues/329) |
@@ -2625,12 +2625,95 @@ ctest --test-dir build/debug -R "ExportRecipeBuilderTest|ExportQueueTest|ExportN
 
 **Exit criteria**
 
-- [ ] Tests pass.
-- [ ] Manual GUI check: export panel defaults, validation messages, and queue behave as before.
+- [x] Tests pass.
+- [ ] Manual GUI check: export panel defaults, validation messages, and queue behave as before
+  (recorded by the user).
 
 **Expected diff:** 1100–1600 lines.
 
-**Completion record:** see section 13.
+**Completion record (AU12):**
+
+```text
+Phase / date / status: AU12 / 2026-10-10 / implemented.
+Source revision and branch: main fde85aedd; branch feature/automation-export-commands. Actual
+  diff: about 2460 lines (40 files, this record included). The phase is not split: about 650
+  lines are new tests, and the QML removes about 450 lines (AU11 precedent).
+Actual changed modules: ExportRecipeBuilder (new), ExportQueue (new), ImportExportHandler
+  (ExportFinished), LibraryMutationOperations (ElementsDeleted), ApplicationModuleHost
+  (exportQueue, exportRecipe), AutomationTaskTracker (export-N task ids, finished export task),
+  automation_command_support (AutomationEnteredProject and ResolveAutomationElementRows moved from
+  library_commands.cpp), export_commands.cpp (new), headless host registration,
+  ExportInspectorPanel.qml, ExportNamingEditor.qml, ShellSignals.qml, Main.qml, AppDialogs.qml,
+  InspectorPanel.qml, LibraryWorkspace.qml, ImageActionsController.qml, ExportQueueState.qml
+  (removed), translations, tests.
+Implemented behavior:
+  - ExportRecipeBuilder holds the defaults, the limits, the bit depths of each format, the output
+    folder rule, the file name pattern check (ParseExportFileNamePattern, the parser of the
+    export), and the argument assembly for StartExportWithRecipeOptionsForTargets. A rejected
+    value gives the field and "X must be in [min, max]" or "X must be one of: ...".
+  - The export panel reads the defaults, the allowed bit depths, the validity, and the start from
+    ExportRecipeBuilder; the naming editor checks the pattern through it. The panel keeps the
+    labels, the preview of the pattern, and the persisted quality and folder.
+  - ExportQueue keeps one entry for each element (the last entry wins, at the position of the
+    first), the preview rows, and the HDR flag. It clears itself on a project change, removes the
+    finished entries when the export state changes, and removes deleted elements through
+    LibraryMutationOperations::ElementsDeleted (also for library.delete from automation).
+  - ImportExportHandler::ExportFinished(succeeded, failed, skipped) is emitted once in
+    FinishExport; ShellSignals.qml shows the export snackbar from it.
+  - export.options answers the defaults, formats, bit depths, TIFF compressions, resize modes,
+    print units, and limits. export.run {element_ids, out_dir, options} checks the options first
+    (-32602 with data.pointer "/<field>"), then the project (-32001), an export that runs (-32005),
+    and the ids, and answers {task_id "export-N", queued, skipped}. tasks.wait gives the finished
+    task with counts; the task state is failed when one photo failed. export.status answers the
+    task id, message, counts, error summary, the state of each photo, and the panel queue.
+Deviations from the phase text:
+  - export.run takes 'element_ids' (as library.rate and library.delete) instead of 'targets[]';
+    the image id comes from the library row.
+  - The resize mode of export.run follows from the given values (long_edge, width/height,
+    print_*/dpi) when 'resize_mode' is not given. 'subfolder' given means the subfolder is on.
+  - The deleted-element prune of the queue moved from ShellSignals.qml to ExportQueue through
+    the new ElementsDeleted signal, not to a QML call.
+  - AutomationExportE2ETest.ExportJpegWritesFilesWithRequestedLongEdge reads the JPEG with OIIO:
+    the test executable has no Qt JPEG image plugin.
+  - Added tests: ExportRecipeBuilderTest (4 more), ExportQueueTest (2 more),
+    ExportNamePatternTest.ValidPatternsAreAccepted,
+    AutomationExportE2ETest.InvalidOptionsAreRejectedWithAllowedValues, and
+    MainQmlWorkflowTest.ExportPanelUsesRecipeDefaultsChecksAndQueue (the production Main.qml
+    export panel shows the defaults, the C++ checks, the bit depths, and the C++ queue).
+Explicitly unimplemented items: none for AU12.
+Primary success call chain: export.run [e] out_dir JPEG long_edge 512 -> FromVariantMap ->
+  ExportRecipeBuilder::Validate -> ResolveAutomationElementRows -> ExportRecipeBuilder::Start ->
+  StartExportWithRecipeOptionsForTargets -> exportStateChanged (in flight) -> tracker export-1 ->
+  tasks.wait -> FinishExport -> ExportFinished(1, 0, 0) -> finished task {counts} -> export.status
+  items [{element_id, state succeeded}]
+  (AutomationExportE2ETest.ExportJpegWritesFilesWithRequestedLongEdge).
+Primary failure and restore call chain: long_edge 100 -> Validate -> -32602 "long_edge must be in
+  [256, 16384]" at /long_edge -> no export starts, no task, no output folder
+  (AutomationExportE2ETest.InvalidOptionsAreRejectedWithAllowedValues). One photo fails to write
+  -> ExportFinished with failed = 1 -> task state failed, export.status error_summary (code path;
+  no test writes into a folder that fails).
+Build and test commands with exit codes:
+  cmd /c scripts\msvc_env.cmd --build --preset win_debug --target alcedo_main alcedo_cli
+    ExportRecipeBuilderTest ExportQueueTest ExportNamePatternTest AutomationExportE2ETest
+    ExportNamingEditorQmlTest ApplicationModuleHostLifecycleTest AutomationLibraryCommandsTest
+    LibraryMutationOperationsTest --parallel 4 -> 0
+  ctest --test-dir build/debug -R "ExportRecipeBuilderTest|ExportQueueTest|ExportNamePatternTest|
+    AutomationExportE2ETest|ExportNamingEditorQmlTest|ApplicationModuleHostLifecycleTest|
+    LibraryMutationOperationsTest" -j 1 -> 8 (23/24; the JPEG check read with QImage, fixed to
+    OIIO), then ctest -R "AutomationExportE2ETest|AutomationLibraryCommandsTest|
+    ApplicationModuleHostLifecycleTest" -j 1 -> 0
+Discovered / passed / failed / skipped counts: ExportRecipeBuilderTest 6/6, ExportQueueTest 3/3,
+  ExportNamePatternTest 2/2, AutomationExportE2ETest 3/3 (--editor-backend cuda),
+  ExportNamingEditorQmlTest 3/3, ApplicationModuleHostLifecycleTest 2/2,
+  LibraryMutationOperationsTest 5/5, AutomationLibraryCommandsTest 7/7, MainQmlWorkflowTest 4/5
+  (1 new). MainQmlWorkflowTest.ProductionWindowLoadsAndRoutesCoreWorkspaceActions fails the same
+  way with the QML of main fde85aedd: a warning from Qt Material Dialog.qml:67 ("Unable to assign
+  [undefined] to double").
+Manual verification: the offscreen Main.qml test above drives the export panel. The interactive
+  GUI check of the export panel is recorded by the user.
+Evidence path: build/tmp/automation_au12/ (removed after the phase).
+Remaining defects or unavailable platforms: macOS Metal runs only in CI.
+```
 
 ### Phase AU13 — Search in C++ and search commands
 

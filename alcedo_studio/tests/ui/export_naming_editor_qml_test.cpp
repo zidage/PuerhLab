@@ -18,6 +18,7 @@
 #include <QVariantMap>
 #include <filesystem>
 
+#include "ui/alcedo_main/album_backend/export_recipe_builder.hpp"
 #include "ui/alcedo_main/app_theme.hpp"
 
 namespace alcedo::ui::test {
@@ -57,6 +58,7 @@ ApplicationWindow {
             item.objectName = "exportNamingEditor"
             item.sampleSourceName = "DSCF2074.RAF"
             item.outputExtension = ".jpg"
+            item.patternRules = exportRecipe
             item.savePreset = function(name, pattern, replacedName) {
                 harnessRoot.savedPresetName = name
                 harnessRoot.savedPresetPattern = pattern
@@ -73,6 +75,8 @@ ApplicationWindow {
 )";
 
 struct NamingEditorHarness {
+  // The pattern rules of the export panel; no export starts in these tests.
+  ExportRecipeBuilder   export_recipe{nullptr};
   QQmlApplicationEngine engine;
   QQuickWindow*         window = nullptr;
   QQuickItem*           editor = nullptr;
@@ -84,6 +88,7 @@ struct NamingEditorHarness {
     });
     engine.addImportPath(SourceQmlDirectory());
     engine.rootContext()->setContextProperty(QStringLiteral("appTheme"), &AppTheme::Instance());
+    engine.rootContext()->setContextProperty(QStringLiteral("exportRecipe"), &export_recipe);
     engine.rootContext()->setContextProperty(
         QStringLiteral("editorSourceUrl"),
         QUrl::fromLocalFile(SourceQmlDirectory() + QStringLiteral("/ExportNamingEditor.qml")));

@@ -210,11 +210,10 @@ ApplicationWindow {
                                                && !appModules.project.projectLoading
                                                && !appModules.project.acceleratorPreparing
     readonly property var selectedImagesById: selectionState.selectedImagesById
-    readonly property var exportQueueById: exportQueueState.exportQueueById
-    readonly property var exportPreviewRows: exportQueueState.exportPreviewRows
+    readonly property var exportQueueById: appModules.exportQueue.entriesById
     readonly property var semanticGeneration: appModules.semanticGeneration
     readonly property int selectedCount: selectionState.selectedCount
-    readonly property int exportQueueCount: exportQueueState.exportQueueCount
+    readonly property int exportQueueCount: appModules.exportQueue.count
     readonly property var languageOptions: languageManager.availableLanguages
     property alias pendingDeleteTargets: imageActionsController.pendingDeleteTargets
     property alias pendingRatingTarget: imageActionsController.pendingRatingTarget
@@ -403,7 +402,6 @@ ApplicationWindow {
     Component.onCompleted: {
         appDialogs.blurSource = mainContent
         imageActionsController.selectionState = selectionStateObj
-        imageActionsController.exportQueueState = exportQueueStateObj
         imageActionsController.imageContextMenu = appDialogs.imageContextMenu
         imageActionsController.adjustmentTransferDialog = appDialogs.adjustmentTransferDialog
         imageActionsController.deleteConfirmDialog = appDialogs.deleteConfirmDialog
@@ -547,15 +545,10 @@ ApplicationWindow {
     readonly property int libraryThumbnailMaxEdge: workspaceHost.libraryItem
                                                    && workspaceHost.libraryItem.thumbnailMaxEdge !== undefined
                                                    ? workspaceHost.libraryItem.thumbnailMaxEdge : 0
-    readonly property alias exportQueueState: exportQueueStateObj
     readonly property alias selectionState: selectionStateObj
     readonly property var importDialog: appDialogs.importDialog
     readonly property var importFolderDialog: appDialogs.importFolderDialog
     readonly property var globalSearchDialog: appDialogs.globalSearchDialog
-
-    ExportQueueState {
-        id: exportQueueStateObj
-    }
 
     SelectionState {
         id: selectionStateObj
@@ -567,7 +560,6 @@ ApplicationWindow {
         automationMode: root.automationModeEnabled
         imageActionsController: imageActionsController
         selectionState: selectionStateObj
-        exportQueueState: exportQueueStateObj
     }
 
 
@@ -676,7 +668,6 @@ ApplicationWindow {
         host: root
         imageActionsController: imageActionsController
         selectionState: selectionStateObj
-        exportQueueState: exportQueueStateObj
         deleteConfirmDialog: appDialogs.deleteConfirmDialog
     }
 

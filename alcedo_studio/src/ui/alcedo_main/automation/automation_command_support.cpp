@@ -4,6 +4,9 @@
 
 #include "ui/alcedo_main/automation/automation_command_support.hpp"
 
+#include <QStringList>
+#include <algorithm>
+#include <exception>
 #include <utility>
 
 namespace alcedo::automation {
@@ -20,6 +23,62 @@ auto AutomationClosedParamsSchema(QJsonObject properties, QJsonArray required) -
   QJsonObject schema = AutomationObjectSchema(std::move(properties), std::move(required));
   schema.insert("additionalProperties", false);
   return schema;
+}
+
+auto AutomationEnteredProject(ui::ApplicationModuleHost* host, AutomationReply& reply)
+    -> std::shared_ptr<ProjectService> {
+  ui::ProjectModule* project = host->project();
+  auto               service = project->handler().project();
+  if (!service || !project->ProjectEntered() || project->ProjectLoading()) {
+    SendAutomationOwnerError(reply, AutomationErrorCode::NotReady,
+                             QStringLiteral("No project is open."));
+    return nullptr;
+  }
+  return service;
+}
+
+auto ResolveAutomationElementRows(ProjectService& project, const QJsonObject& params,
+                                  AutomationReply& reply)
+    -> std::optional<std::vector<SearchResultRow>> {
+  std::vector<sl_element_id_t> ids;
+  for (const QJsonValue& value : params.value("element_ids").toArray()) {
+    const auto id = static_cast<sl_element_id_t>(value.toDouble());
+    if (std::find(ids.begin(), ids.end(), id) == ids.end()) {
+      ids.push_back(id);
+    }
+  }
+  const auto browse = project.GetAlbumBrowseService();
+  if (!browse) {
+    SendAutomationOwnerError(reply, AutomationErrorCode::Failed,
+                             QStringLiteral("The library cannot be read."));
+    return std::nullopt;
+  }
+  std::vector<SearchResultRow> rows;
+  try {
+    rows = browse->ReadAlbumFileRows(ids);
+  } catch (const std::exception& e) {
+    SendAutomationOwnerError(reply, AutomationErrorCode::Failed, QString::fromUtf8(e.what()));
+    return std::nullopt;
+  }
+  QJsonArray  unknown;
+  QStringList unknown_text;
+  for (const auto id : ids) {
+    const bool found = std::any_of(rows.begin(), rows.end(), [id](const SearchResultRow& row) {
+      return row.file_id_ == id && row.image_id_ != 0;
+    });
+    if (!found) {
+      unknown.push_back(static_cast<double>(id));
+      unknown_text.push_back(QString::number(id));
+    }
+  }
+  if (!unknown.isEmpty()) {
+    reply.SendError(
+        AutomationErrorCode::InvalidParams,
+        QStringLiteral("unknown element ids: %1").arg(unknown_text.join(QStringLiteral(", "))),
+        QJsonObject{{"pointer", "/element_ids"}, {"unknown_ids", unknown}});
+    return std::nullopt;
+  }
+  return rows;
 }
 
 void SendAutomationOwnerError(AutomationReply& reply, AutomationErrorCode code,

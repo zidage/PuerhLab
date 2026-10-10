@@ -25,12 +25,16 @@ namespace alcedo::automation {
 ///   the protocol id `import-N` when ImportRunning becomes true. Its state is read from the
 ///   handler while it runs. When it ends, the final counts are kept for the id, because the
 ///   handler overwrites them with the next import.
-/// - An export in flight is reported with the id `export`.
+/// - ImportExportHandler runs one export at a time and has no task id either, so each export
+///   run gets the protocol id `export-N` when exportInFlight becomes true. ExportFinished
+///   ends it; the final counts are kept for the id. An export with a failed photo ends in the
+///   state `failed`.
 ///
 /// A task object has `task_id`, `kind`, `state` (`queued`, `running`, `canceling`,
 /// `succeeded`, `failed`, or `canceled`), `progress` (percent, -1 when unknown), and `message`.
 /// An import task also has `counts` (`total`, `completed`, `failed`, `unsupported`,
-/// `excluded`).
+/// `excluded`); an export task has `counts` (`total`, `completed`, `succeeded`, `failed`,
+/// `skipped`).
 class AutomationTaskTracker final : public QObject {
   Q_OBJECT
 
@@ -39,6 +43,10 @@ class AutomationTaskTracker final : public QObject {
 
   /// The id of the import that runs now, or an empty string when no import runs.
   [[nodiscard]] auto        RunningImportId() const -> QString { return running_import_id_; }
+  /// The id of the export that runs now, or an empty string when no export runs.
+  [[nodiscard]] auto        RunningExportId() const -> QString { return running_export_id_; }
+  /// The id of the last export run (running or finished), or an empty string.
+  [[nodiscard]] auto        LastExportId() const -> QString { return last_export_id_; }
   /// Records an import of zero files, which ImportExportHandler does not start, as a finished
   /// import task with zero counts. Returns its id.
   auto                      RecordEmptyImport() -> QString;
@@ -57,15 +65,21 @@ class AutomationTaskTracker final : public QObject {
 
  private:
   void                                OnImportStateChanged();
+  void                                OnExportStateChanged();
+  void                                OnExportFinished(int succeeded, int failed, int skipped);
   void                                OnBackgroundTasksChanged();
   [[nodiscard]] auto                  RunningImportTask() const -> QJsonObject;
+  [[nodiscard]] auto                  RunningExportTask() const -> QJsonObject;
   [[nodiscard]] auto                  NextImportId() -> QString;
 
   QPointer<ui::ApplicationModuleHost> host_;
   QString                             running_import_id_;
   int                                 import_count_ = 0;
-  /// Final state of each finished import, by id.
-  std::map<QString, QJsonObject>      finished_imports_;
+  QString                             running_export_id_;
+  QString                             last_export_id_;
+  int                                 export_count_ = 0;
+  /// Final state of each finished import and export, by id.
+  std::map<QString, QJsonObject>      finished_tasks_;
   /// Last published state of each background task, to publish only changes.
   std::map<QString, QString>          background_states_;
 };

@@ -130,3 +130,16 @@ target_compile_definitions(AutomationVersionsE2ETest PRIVATE
     ALCEDO_CLI_PATH="$<TARGET_FILE:alcedo_cli>"
     ALCEDO_AUTOMATION_FAILURE_DIR="${CMAKE_BINARY_DIR}/automation-failures")
 add_dependencies(AutomationVersionsE2ETest alcedo_main alcedo_cli)
+
+# export.* commands through real alcedo-cli and alcedo_main --headless processes on a CI RAW
+# file. The written files are read back with OpenImageIO. Needs the GPU editor backend.
+alcedo_add_automation_test(AutomationExportE2ETest
+    SOURCES automation_export_e2e_test.cpp
+    LIBRARIES AutomationHostLib OpenImageIO::OpenImageIO
+    LABEL ci_automation_flow
+    CATEGORIES ci_automation)
+target_compile_definitions(AutomationExportE2ETest PRIVATE
+    ALCEDO_MAIN_PATH="$<TARGET_FILE:alcedo_main>"
+    ALCEDO_CLI_PATH="$<TARGET_FILE:alcedo_cli>"
+    ALCEDO_AUTOMATION_FAILURE_DIR="${CMAKE_BINARY_DIR}/automation-failures")
+add_dependencies(AutomationExportE2ETest alcedo_main alcedo_cli)

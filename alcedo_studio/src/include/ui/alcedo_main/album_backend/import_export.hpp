@@ -208,6 +208,9 @@ class ImportExportHandler final : public QObject {
   void importStateChanged();
   void ExportStateChanged();
   void exportStateChanged();
+  /// Emitted once when an export run ends (exportInFlight becomes false), after the final
+  /// counts and the error summary are published. An export that does not start emits nothing.
+  void ExportFinished(int succeeded, int failed, int skipped);
 
  private:
   enum class ImportPhaseState { Idle, Preparing, Reading, Finalizing };

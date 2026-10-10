@@ -116,6 +116,8 @@ TEST_F(ApplicationModuleHostLifecycleTests,
     EXPECT_NE(host.project_launch(), nullptr);
     EXPECT_NE(host.application_close(), nullptr);
     EXPECT_NE(host.library_mutations(), nullptr);
+    EXPECT_NE(host.export_queue(), nullptr);
+    EXPECT_NE(host.export_recipe(), nullptr);
     EXPECT_FALSE(host.project()->ServiceReady());
 
     const auto*                                            meta           = host.metaObject();
@@ -147,6 +149,8 @@ TEST_F(ApplicationModuleHostLifecycleTests,
         {"projectLaunch", "alcedo::ui::ProjectLaunchCoordinator*"},
         {"applicationClose", "alcedo::ui::ApplicationCloseCoordinator*"},
         {"libraryMutations", "alcedo::ui::LibraryMutationOperations*"},
+        {"exportQueue", "alcedo::ui::ExportQueue*"},
+        {"exportRecipe", "alcedo::ui::ExportRecipeBuilder*"},
     };
     for (const auto& [name, type_name] : property_types) {
       const int index = meta->indexOfProperty(name);

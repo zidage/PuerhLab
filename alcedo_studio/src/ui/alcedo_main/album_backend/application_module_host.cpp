@@ -260,6 +260,10 @@ ApplicationModuleHost::ApplicationModuleHost(QObject* parent, LifecycleObserver 
       std::make_unique<ImportExportHandler>(project_.get(), library_.get(), folders_.get(),
                                             project_.get(), db_write_barrier_.get(), this);
   RecordConstruction("ImportExportHandler", import_export_.get());
+  export_queue_ = std::make_unique<ExportQueue>(project_.get(), import_export_.get(), this);
+  RecordConstruction("ExportQueue", export_queue_.get());
+  export_recipe_ = std::make_unique<ExportRecipeBuilder>(import_export_.get(), this);
+  RecordConstruction("ExportRecipeBuilder", export_recipe_.get());
   nikon_he_recovery_ = std::make_unique<NikonHeRecoveryController>(project_.get(), images_.get(),
                                                                    project_.get(), this);
   RecordConstruction("NikonHeRecoveryController", nikon_he_recovery_.get());
@@ -449,6 +453,8 @@ ApplicationModuleHost::ApplicationModuleHost(QObject* parent, LifecycleObserver 
       images_.get(), library_->selection(), folders_.get(), editor_session_.get(),
       workspace_router_.get(), this);
   RecordConstruction("LibraryMutationOperations", library_mutations_.get());
+  connect(library_mutations_.get(), &LibraryMutationOperations::ElementsDeleted,
+          export_queue_.get(), &ExportQueue::RemoveElements);
 
   library_->BindCollaborators(folders_.get(), search_.get(), stats_.get());
   library_->SetSemanticLabelProvider(
@@ -706,6 +712,8 @@ ApplicationModuleHost::~ApplicationModuleHost() {
   }
   destroy(adjustment_transfer_, "AdjustmentTransferController");
   destroy(nikon_he_recovery_, "NikonHeRecoveryController");
+  destroy(export_recipe_, "ExportRecipeBuilder");
+  destroy(export_queue_, "ExportQueue");
   destroy(import_export_, "ImportExportHandler");
   destroy(image_analysis_, "ImageAnalysisController");
   destroy_shared(image_analysis_sink_, "ImageAnalysisSink");
