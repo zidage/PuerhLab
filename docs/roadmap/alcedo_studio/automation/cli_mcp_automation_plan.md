@@ -2626,8 +2626,8 @@ ctest --test-dir build/debug -R "ExportRecipeBuilderTest|ExportQueueTest|ExportN
 **Exit criteria**
 
 - [x] Tests pass.
-- [ ] Manual GUI check: export panel defaults, validation messages, and queue behave as before
-  (recorded by the user).
+- [x] Manual GUI check: export panel defaults, validation messages, and queue behave as before
+  (checked by the user, 2026-10-10).
 
 **Expected diff:** 1100–1600 lines.
 
@@ -2709,8 +2709,8 @@ Discovered / passed / failed / skipped counts: ExportRecipeBuilderTest 6/6, Expo
   (1 new). MainQmlWorkflowTest.ProductionWindowLoadsAndRoutesCoreWorkspaceActions fails the same
   way with the QML of main fde85aedd: a warning from Qt Material Dialog.qml:67 ("Unable to assign
   [undefined] to double").
-Manual verification: the offscreen Main.qml test above drives the export panel. The interactive
-  GUI check of the export panel is recorded by the user.
+Manual verification: the offscreen Main.qml test above drives the export panel. The user checked
+  the export panel in the GUI on 2026-10-10: it behaves as before.
 Evidence path: build/tmp/automation_au12/ (removed after the phase).
 Remaining defects or unavailable platforms: macOS Metal runs only in CI.
 ```
@@ -2781,8 +2781,8 @@ ctest --test-dir build/debug -R "SearchSessionTest|AutomationSearchE2ETest" -j 1
 **Exit criteria**
 
 - [x] Tests pass.
-- [ ] Manual GUI check: global search typing, paging, and semantic routing behave as before
-  (recorded by the user).
+- [x] Manual GUI check: global search typing, paging, and semantic routing behave as before
+  (checked by the user, 2026-10-10).
 
 **Expected diff:** 900–1300 lines.
 
@@ -2843,8 +2843,8 @@ Discovered / passed / failed / skipped counts: SearchSessionTest 3/3, Automation
   GlobalSearchDialogQmlTest 6/6, SearchRequestWorkerTest 5/5, AlbumBackendSearchWorkerTest 5/5,
   AutomationExportE2ETest 3/3, AutomationLibraryCommandsTest 7/7,
   ApplicationModuleHostLifecycleTest 2/2.
-Manual verification: none beyond the tests. The GUI check of the search dialog is recorded by
-  the user.
+Manual verification: the user checked the global search dialog in the GUI on 2026-10-10: typing,
+  paging, and semantic routing behave as before.
 Evidence path: build/tmp/automation_au12/ (removed after the phase).
 Remaining defects or unavailable platforms: macOS Metal runs only in CI.
 ```
