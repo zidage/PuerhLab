@@ -169,6 +169,23 @@ struct EditorAdjustmentContext {
     -> NodeId;
 
 /**
+ * @brief Target of @p field_key for a client that names fields, not nodes.
+ *
+ * The selected node owns the field when it supports it, so a Color Grade
+ * field goes to the selected Color Grade. Otherwise the field goes to the
+ * node that the panels show when no node is selected: Develop fields to
+ * Develop, DRT fields to the DRT node, and Color Grade fields to the current
+ * panel Color Grade. Crop and white balance therefore stay reachable while a
+ * Color Grade is selected.
+ *
+ * @pre No other thread writes @p document during the call.
+ */
+[[nodiscard]] auto FieldOwnerParameterTarget(const PipelineDocument& document,
+                                             const NodeId& selected_node_id, std::string field_key,
+                                             std::string* error)
+    -> std::optional<EditorParameterTarget>;
+
+/**
  * @brief Supported production adapter targets for @p selected_node_id.
  *
  * @return nullopt when the node is missing or a supported instance cannot be

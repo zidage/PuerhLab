@@ -148,3 +148,11 @@ A photo that has no edits starts with the default look of Alcedo Studio, not wit
 values of the catalog: exposure +1.5, contrast 15, saturation 30. Read the current values with
 `editor.get` before you change them. `editor.set` writes an absolute value; it does not add to
 the current value.
+
+Each field belongs to one node of the image: crop, white balance, and the RAW settings belong to
+the Develop node, `odt` belongs to the display transform node, and the color fields belong to a
+Color Grade node. The editor commands find the node themselves; a client does not select a node.
+In the GUI session, a field that the selected node supports goes to that node, and all other
+fields go to their own node. Thus, an agent can crop while the user has a Color Grade node
+selected, and the selection does not change. A write of some properties of an object field
+keeps the other properties at their current values.

@@ -10,6 +10,7 @@
 #include <sstream>
 #include <utility>
 
+#include "app/editor_pipeline_command_service.hpp"
 #include "edit/graph/color_grade_node_model.hpp"
 #include "edit/graph/develop_node_model.hpp"
 #include "edit/graph/drt_node_model.hpp"
@@ -243,6 +244,21 @@ auto PanelWriteOwnerNode(const PipelineDocument& document, const NodeId& selecte
     }
   }
   return selected_node_id;
+}
+
+auto FieldOwnerParameterTarget(const PipelineDocument& document, const NodeId& selected_node_id,
+                               std::string field_key, std::string* error)
+    -> std::optional<EditorParameterTarget> {
+  if (!selected_node_id.Empty()) {
+    if (const auto* node = document.Graph().FindNode(selected_node_id); node != nullptr) {
+      const auto kind = KindOf(*node);
+      if (kind.has_value() && AdjustmentFieldIsSupported(*kind, field_key)) {
+        return CompleteSelectedNodeParameterTarget(document, selected_node_id, std::move(field_key),
+                                                   error);
+      }
+    }
+  }
+  return CompleteCurrentPanelParameterTarget(document, std::move(field_key), error);
 }
 
 auto CompleteSelectedNodeParameterTarget(const PipelineDocument& document,

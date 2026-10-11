@@ -27,8 +27,11 @@
 
 #include "app/editor_session_types.hpp"
 #include "automation/automation_protocol.hpp"
+#include "edit/graph/graph_ids.hpp"
+#include "edit/graph/pipeline_document.hpp"
 #include "ui/album_backend_test_fixture.hpp"
 #include "ui/alcedo_main/album_backend/agent_control_owner.hpp"
+#include "ui/alcedo_main/album_backend/editor_node_controller.hpp"
 #include "ui/alcedo_main/automation/automation_host_session.hpp"
 #include "ui/alcedo_main/automation/headless_frame_sink.hpp"
 #include "ui/alcedo_main/automation/headless_host.hpp"
@@ -326,6 +329,64 @@ TEST_F(AutomationGuiSessionTest, UserEditSendsHistoryChangedToWatchingClient) {
       client.WaitForNotification(QStringLiteral("control.changed"), std::chrono::seconds(5));
   ASSERT_TRUE(changed.has_value());
   EXPECT_TRUE(changed->value("held").toBool());
+}
+
+// With a Color Grade selected in the window, the agent still reads and writes the fields of the
+// Develop and DRT nodes, a partial crop write keeps the other crop properties, and a Color Grade
+// field goes to the selected Color Grade. The selection does not change.
+TEST_F(AutomationGuiSessionTest, OtherNodeFieldsStayReachableWhileColorGradeIsSelected) {
+  ui::EditorNodeController nodes;
+  nodes.set_editor_session(host_->editor_session());
+  const auto document = host_->editor_session()->pipeline_document();
+  ASSERT_TRUE(document && document->PrimaryGrade() != nullptr);
+  const NodeId grade = document->PrimaryGrade()->Id();
+  nodes.selectNode(QString::fromStdString(std::string(grade.Value())));
+  ASSERT_EQ(host_->editor_session()->selected_node_id(), grade);
+  ASSERT_TRUE(Result(QStringLiteral("control.acquire"), QJsonObject{{"holder_name", "test-agent"}})
+                  .value("held")
+                  .toBool());
+
+  const auto read = [&](const QString& field) {
+    return Result(QStringLiteral("editor.get"), QJsonObject{{"fields", QJsonArray{field}}})
+        .value("values")
+        .toObject()
+        .value(field);
+  };
+  for (const QString field : {QStringLiteral("crop_rotate"), QStringLiteral("color_temp"),
+                              QStringLiteral("odt"), QStringLiteral("exposure")}) {
+    EXPECT_FALSE(read(field).isUndefined()) << field.toStdString() << " is not readable";
+  }
+
+  const auto set = [&](const QString& field, const QJsonValue& value) {
+    const auto response =
+        Call(QStringLiteral("editor.set"), QJsonObject{{"field", field}, {"value", value}});
+    ASSERT_TRUE(response.has_value()) << field.toStdString() << " did not answer";
+    EXPECT_FALSE(response->error.has_value())
+        << field.toStdString() << ": " << response->error->message.toStdString();
+  };
+  set(QStringLiteral("crop_rotate"),
+      QJsonObject{{"x", 0.1}, {"y", 0.1}, {"width", 0.8}, {"height", 0.8}});
+  set(QStringLiteral("crop_rotate"), QJsonObject{{"y", 0.15}});
+  const QJsonObject crop = read(QStringLiteral("crop_rotate")).toObject();
+  EXPECT_NEAR(crop.value("x").toDouble(), 0.1, 1e-3);
+  EXPECT_NEAR(crop.value("y").toDouble(), 0.15, 1e-3);
+  EXPECT_NEAR(crop.value("width").toDouble(), 0.8, 1e-3);
+  EXPECT_NEAR(crop.value("height").toDouble(), 0.8, 1e-3);
+
+  set(QStringLiteral("color_temp"), QJsonObject{{"kelvin", 5000}});
+  const QJsonObject white_balance = read(QStringLiteral("color_temp")).toObject();
+  EXPECT_EQ(white_balance.value("mode").toString(), QStringLiteral("custom"));
+  EXPECT_NEAR(white_balance.value("kelvin").toDouble(), 5000.0, 1.0);
+
+  set(QStringLiteral("odt"), QJsonObject{{"look_preset", "arriba"}});
+  EXPECT_EQ(read(QStringLiteral("odt")).toObject().value("look_preset").toString(),
+            QStringLiteral("arriba"));
+
+  set(QStringLiteral("exposure"), 1.0);
+  EXPECT_NEAR(read(QStringLiteral("exposure")).toDouble(), 1.0, 1e-6);
+
+  EXPECT_EQ(host_->editor_session()->selected_node_id(), grade);
+  EXPECT_FALSE(Result(QStringLiteral("control.release")).value("held").toBool());
 }
 
 }  // namespace
