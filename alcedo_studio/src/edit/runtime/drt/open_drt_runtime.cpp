@@ -885,6 +885,22 @@ void ResolveDisplayEncoding(ColorUtils::ColorSpace encoding_space, ColorUtils::E
     p->display_eotf_  = 1;
     return;
   }
+  // An sRGB display shares the gamma 2.2 viewing intent: average surround and an SDR tonescale.
+  // The piecewise sRGB curve itself is applied by the display encoding stage from the output EOTF.
+  if (encoding_space == ColorUtils::ColorSpace::REC709 &&
+      encoding_eotf == ColorUtils::EOTF::SRGB_PIECEWISE) {
+    p->surround_      = 2;
+    p->display_gamut_ = 0;
+    p->display_eotf_  = 1;
+    return;
+  }
+  if (encoding_space == ColorUtils::ColorSpace::P3_D65 &&
+      encoding_eotf == ColorUtils::EOTF::SRGB_PIECEWISE) {
+    p->surround_      = 2;
+    p->display_gamut_ = 1;
+    p->display_eotf_  = 1;
+    return;
+  }
   if (encoding_space == ColorUtils::ColorSpace::P3_D60 &&
       encoding_eotf == ColorUtils::EOTF::GAMMA_2_6) {
     p->surround_      = 0;

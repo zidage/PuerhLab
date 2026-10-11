@@ -9,6 +9,7 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <tuple>
 
 #include "edit/graph/drt_node_model.hpp"
 
@@ -89,6 +90,45 @@ TEST(DrtOutputResolver, DrtOutputResolverRejectsUnsupportedOpenDrtEncodingPair) 
             "DrtOutputResolver: ResolveOpenDRTRuntime: unsupported OpenDRT output combination for "
             "encoding_space=\"rec709\" and encoding_eotf=\"hlg\".");
   ExpectUnchanged(output);
+}
+
+TEST(DrtOutputResolver, OpenDrtResolvesSrgbPiecewiseForRec709AndP3D65) {
+  for (const auto [space, encoding_space, display_gamut] :
+       {std::tuple{DrtColorSpace::Rec709, ColorUtils::ColorSpace::REC709, 0},
+        std::tuple{DrtColorSpace::P3D65, ColorUtils::ColorSpace::P3_D65, 1}}) {
+    DrtPayload payload;
+    payload.method         = DrtMethod::OpenDrt;
+    payload.encoding_space = space;
+    payload.encoding_eotf  = DrtEotf::SrgbPiecewise;
+    ColorUtils::TO_OUTPUT_Params output;
+    std::string                  error;
+    ASSERT_TRUE(DrtOutputResolver::Resolve(payload, nullptr, &output, &error)) << error;
+    EXPECT_EQ(output.method_, ColorUtils::ODTMethod::OPEN_DRT);
+    EXPECT_EQ(output.encoding_space_, encoding_space);
+    EXPECT_EQ(output.eotf_, ColorUtils::EOTF::SRGB_PIECEWISE);
+    EXPECT_EQ(output.display_linear_scale_, 1.0f);
+    EXPECT_EQ(output.open_drt_params_.display_gamut_, display_gamut);
+    EXPECT_EQ(output.open_drt_params_.surround_, 2);
+    EXPECT_EQ(output.open_drt_params_.display_eotf_, 1);
+
+    // The sRGB display shares the gamma 2.2 tonescale; only the encoding curve differs.
+    DrtPayload gamma_payload    = payload;
+    gamma_payload.encoding_eotf = DrtEotf::Gamma22;
+    ColorUtils::TO_OUTPUT_Params gamma_output;
+    ASSERT_TRUE(DrtOutputResolver::Resolve(gamma_payload, nullptr, &gamma_output, &error)) << error;
+    EXPECT_EQ(output.open_drt_params_.ts_s1_, gamma_output.open_drt_params_.ts_s1_);
+    EXPECT_EQ(output.open_drt_params_.ts_dsc_, gamma_output.open_drt_params_.ts_dsc_);
+  }
+
+  // Export to an sRGB file with OpenDRT resolves through the same display encoding.
+  DrtPayload payload;
+  payload.method = DrtMethod::OpenDrt;
+  ExportColorProfileConfig     export_encoding{ColorUtils::ColorSpace::REC709,
+                                           ColorUtils::EOTF::SRGB_PIECEWISE, 100.0f};
+  ColorUtils::TO_OUTPUT_Params output;
+  std::string                  error;
+  ASSERT_TRUE(DrtOutputResolver::Resolve(payload, &export_encoding, &output, &error)) << error;
+  EXPECT_EQ(output.eotf_, ColorUtils::EOTF::SRGB_PIECEWISE);
 }
 
 TEST(DrtOutputResolver, AcesResolutionFillsTablesAndPqDisplayScale) {
