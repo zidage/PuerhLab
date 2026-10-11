@@ -10,12 +10,16 @@
 
 #include <QDeadlineTimer>
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
+#include <QIODevice>
 #include <QImage>
 #include <QJsonArray>
+#include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonValue>
 #include <QStringList>
+#include <QTextStream>
 #include <algorithm>
 #include <cmath>
 #include <functional>
@@ -127,6 +131,58 @@ TEST_F(AutomationEditorE2ETest, BatchStopsAtFirstInvalidValueAndReportsApplied) 
   EXPECT_EQ(applied.value("applied").toInt(), 2);
   EXPECT_EQ(CommitCount(), commits_before + 3);
   EXPECT_NEAR(applied.value("values").toObject().value("vibrance").toDouble(), -5, 1e-4);
+  Stop();
+}
+
+TEST_F(AutomationEditorE2ETest, EveryValueReadByGetIsAcceptedBySetAndKeepsItsValue) {
+  ASSERT_FALSE(StartWithOnePhoto(QStringLiteral("round_trip_project")).isEmpty());
+  OpenPhoto();
+  // A LUT with a strength, so that the lut value is not the empty no-LUT value.
+  const QString cube_path = QDir(root_).filePath(QStringLiteral("round_trip.cube"));
+  {
+    QFile cube(cube_path);
+    ASSERT_TRUE(cube.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text));
+    QTextStream out(&cube);
+    out << "LUT_3D_SIZE 2\n";
+    for (int b = 0; b <= 1; ++b) {
+      for (int g = 0; g <= 1; ++g) {
+        for (int r = 0; r <= 1; ++r) {
+          out << 0.05 + 0.9 * r << ' ' << 0.1 + 0.8 * g << ' ' << 0.2 + 0.7 * b << '\n';
+        }
+      }
+    }
+  }
+  const QJsonObject lut{{"cube_path", cube_path}, {"strength", 0.5}};
+  EXPECT_EQ(Result(QStringLiteral("editor.set"), QJsonObject{{"field", "lut"}, {"value", lut}})
+                .value("value")
+                .toObject(),
+            (QJsonObject{{"cube_path", cube_path},
+                         {"strength", 0.5},
+                         {"input_encoding", "acescc"},
+                         {"output_encoding", "acescc"}}));
+
+  const QJsonObject values = Result(QStringLiteral("editor.get")).value("values").toObject();
+  // A RAW image has no input profile; the RAW Decode panel hides it too.
+  EXPECT_FALSE(values.contains("input_profile"));
+  ASSERT_FALSE(values.isEmpty());
+  for (auto it = values.begin(); it != values.end(); ++it) {
+    const CliRun run =
+        Call(QStringLiteral("editor.set"), QJsonObject{{"field", it.key()}, {"value", it.value()}});
+    ASSERT_EQ(run.exit_code, 0) << it.key().toStdString() << ": "
+                                << QJsonDocument(run.json).toJson().toStdString();
+    EXPECT_EQ(run.json.value("value"), it.value()) << it.key().toStdString();
+  }
+  EXPECT_EQ(Result(QStringLiteral("editor.get")).value("values").toObject(), values);
+
+  // Writing the input profile of a RAW image names the reason.
+  const CliRun input = Call(QStringLiteral("editor.set"),
+                            QJsonObject{{"field", "input_profile"},
+                                        {"value", QJsonObject{{"profile_override", "auto"}}}});
+  EXPECT_EQ(input.exit_code, 1);
+  const QJsonObject error = input.json.value("error").toObject();
+  EXPECT_EQ(error.value("code").toInt(), -32602);
+  EXPECT_EQ(error.value("message").toString(),
+            QStringLiteral("input_profile: a RAW image has no input profile"));
   Stop();
 }
 
