@@ -3012,9 +3012,9 @@ ctest --test-dir build/debug -R "AgentControlOwnerTest|InteractionPolicyControll
 **Exit criteria**
 
 - [x] Tests pass.
-- [ ] Manual GUI check, recorded by the user: the island unfolds while the agent edits; a click
+- [x] Manual GUI check, recorded by the user: the island unfolds while the agent edits; a click
       shows the agent task with the running command; cancel takes control and blocks the agent;
-      Return control lets the agent acquire control again.
+      Return control lets the agent acquire control again (checked by the user, 2026-10-10).
 
 **Expected diff:** 1100–1600 lines.
 
@@ -3108,7 +3108,9 @@ Manual verification: release alcedo_main with a real project, session "gui", dri
   -32004. A user edit sent history.changed to the watching client. The user selected Return
   control: control.changed held:false. control.acquire succeeded again, the exposure was restored,
   and control.release ended the second agent task as succeeded ("控制权已交还给你。"); the first
-  agent task stays canceled ("你已收回控制权。").
+  agent task stays canceled ("你已收回控制权。"). The user confirmed on 2026-10-10 that the island
+  unfolded while the agent edited, the 智能体 task showed the running command or the waiting text,
+  and the agent task showed 收回控制权 and then 交还控制权 on the canceled task.
 Evidence path: build/tmp/au14_*.log (removed after the phase).
 Remaining defects or unavailable platforms: macOS Metal runs only in CI.
 ```
