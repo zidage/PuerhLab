@@ -2708,14 +2708,21 @@ void EditorSessionService::NotifyRenderResult(const EditorRenderResult& render_r
     BeginPublication();
     render_.NotifyRenderResult(completion.render_result, lifecycle_.identity(),
                                lifecycle_.active_image_load_request(), lifecycle_.state());
-    if (completion.render_result.kind == EditorRenderResultKind::FrameReady &&
+    const bool frame_ready = completion.render_result.kind == EditorRenderResultKind::FrameReady;
+    if ((frame_ready || completion.render_result.kind == EditorRenderResultKind::Failed) &&
         current_operation_id_ != 0) {
-      EditorSessionResult presented;
-      presented.kind              = EditorSessionResultKind::FramePresented;
-      presented.state             = lifecycle_.state();
-      presented.identity          = lifecycle_.identity();
-      presented.render_request_id = completion.request_id;
-      (void)EmitQuiet(std::move(presented));
+      // A failed render ends the wait of its command like a presented frame does.
+      EditorSessionResult frame;
+      frame.kind              = frame_ready ? EditorSessionResultKind::FramePresented
+                                            : EditorSessionResultKind::FrameFailed;
+      frame.state             = lifecycle_.state();
+      frame.identity          = lifecycle_.identity();
+      frame.render_request_id = completion.request_id;
+      if (!frame_ready) {
+        frame.message = completion.render_result.message.empty() ? std::string("Render failed")
+                                                                 : completion.render_result.message;
+      }
+      (void)EmitQuiet(std::move(frame));
     }
     FinishSerialFrameIfNeeded(completion.render_result);
     PublishRenderProgressIfChanged();

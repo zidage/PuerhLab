@@ -301,6 +301,24 @@ void ApplyWrite(ui::EditorSessionController* editor, QObject* context, PreparedW
   wait->Start(result.operation_id);
 }
 
+/// Answers @p failure of a write, undo, or redo. A committed failure (its frame failed to render)
+/// also carries the head commit, read after the queued history change, so the agent can undo it.
+void SendOperationFailure(const QPointer<AutomationCommandWait>& wait,
+                          ui::EditorSessionController* editor, const OperationFailure& failure) {
+  if (!failure.committed_) {
+    wait->SendOwnerError(failure.code_, failure.message_);
+    return;
+  }
+  AfterQueuedChanges(wait, [wait, editor, failure] {
+    if (wait == nullptr) {
+      return;
+    }
+    wait->SendError(failure.code_, failure.message_,
+                    QJsonObject{{"reason", failure.message_},
+                                {"head_commit", HeadValue(editor->history_snapshot())}});
+  });
+}
+
 /// Answers an undo or redo after its command and frame.
 void SendHistoryMove(ui::EditorSessionController* editor, AutomationCommandWait* reply_wait,
                      bool undo) {
@@ -311,7 +329,7 @@ void SendHistoryMove(ui::EditorSessionController* editor, AutomationCommandWait*
           return;
         }
         if (failure.has_value()) {
-          wait->SendOwnerError(failure->code_, failure->message_);
+          SendOperationFailure(wait, editor, *failure);
           return;
         }
         AfterQueuedChanges(wait, [wait, editor] {
@@ -387,12 +405,23 @@ class BatchApply final : public std::enable_shared_from_this<BatchApply> {
     if (wait_ == nullptr) {
       return;
     }
-    if (failure.has_value()) {
+    if (failure.has_value() && !failure->committed_) {
       wait_->SendError(failure->code_, failure->message_, FailureData(failure->message_, {}));
       return;
     }
     ++applied_;
     auto self = shared_from_this();
+    if (failure.has_value()) {
+      // The change is committed and stays, so it counts as applied; only its frame failed. The
+      // head is read after the queued history change.
+      AfterQueuedChanges(wait_, [self, failure = *failure] {
+        if (self->wait_ != nullptr) {
+          self->wait_->SendError(failure.code_, failure.message_,
+                                 self->FailureData(failure.message_, {}));
+        }
+      });
+      return;
+    }
     AfterQueuedChanges(wait_, [self] { self->Next(); });
   }
 
@@ -671,7 +700,9 @@ auto RegisterAutomationEditorCommands(AutomationCommandRegistry& registry,
       "Sets one field of the open image to a UI value, like releasing a panel control: one "
       "history commit. Answers after the commit and its rendered frame, with the value that the "
       "editor now shows (a crop can be constrained). A value equal to the current one makes no "
-      "commit. The commit has the author agent and the optional 'note'.");
+      "commit. The commit has the author agent and the optional 'note'. When the frame of the "
+      "commit fails to render, the commit stays and the error data has 'reason' and "
+      "'head_commit'; editor.undo reverts it.");
   set.params_schema = AutomationClosedParamsSchema(
       QJsonObject{{"field", text_schema}, {"value", ValueSchema()}, {"note", NoteSchema()}},
       QJsonArray{"field", "value"});
@@ -702,7 +733,7 @@ auto RegisterAutomationEditorCommands(AutomationCommandRegistry& registry,
             return;
           }
           if (failure.has_value()) {
-            wait->SendOwnerError(failure->code_, failure->message_);
+            SendOperationFailure(wait, editor, *failure);
             return;
           }
           AfterQueuedChanges(wait, [wait, editor, field] {
@@ -725,7 +756,8 @@ auto RegisterAutomationEditorCommands(AutomationCommandRegistry& registry,
       "Sets several fields in order. Each change that alters a value is one history commit, "
       "applied after the frame "
       "of the previous one. The first change that fails stops the batch: the error data has "
-      "'applied' (the changes before it, which stay) and 'head_commit'. Each commit has the "
+      "'applied' (the changes before it, which stay) and 'head_commit'. A change whose frame "
+      "fails to render is committed and stays, so 'applied' counts it. Each commit has the "
       "author agent and the optional 'note'.");
   batch.params_schema = AutomationClosedParamsSchema(
       QJsonObject{
@@ -766,12 +798,17 @@ auto RegisterAutomationEditorCommands(AutomationCommandRegistry& registry,
   for (const bool undo : {true, false}) {
     AutomationCommandSpec move;
     move.method        = undo ? QStringLiteral("editor.undo") : QStringLiteral("editor.redo");
-    move.description   = undo ? QStringLiteral(
-                                  "Moves the history head back one commit, like Edit > Undo. "
-                                    "Answers after the frame of the restored values.")
-                              : QStringLiteral(
-                                  "Moves the history head forward one commit, like Edit > Redo. "
-                                    "Answers after the frame of the restored values.");
+    move.description =
+        undo ? QStringLiteral(
+                   "Moves the history head back one commit, like Edit > Undo. "
+                   "Answers after the frame of the restored values. When that frame fails to "
+                   "render, the head stays moved and the error data has "
+                   "'head_commit'.")
+             : QStringLiteral(
+                   "Moves the history head forward one commit, like Edit > Redo. "
+                   "Answers after the frame of the restored values. When that frame fails to "
+                   "render, the head stays moved and the error data has "
+                   "'head_commit'.");
     move.params_schema = AutomationClosedParamsSchema();
     move.result_schema = move_result_schema;
     move.changes_state = true;

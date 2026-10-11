@@ -45,6 +45,10 @@ enum class EditorSessionResultKind : std::uint8_t {
   /// A frame for `render_request_id` reached presentation. Published only for a render that a
   /// command routed, so a client can wait for the frame of its own commit.
   FramePresented,
+  /// The render of `render_request_id` failed; `message` has the reason. Published only for a
+  /// render that a command routed, like FramePresented: the command's commit stays, but no frame
+  /// of it will be presented.
+  FrameFailed,
 };
 
 /// Public session identity carries durable domain ids only. Worker correlation
@@ -109,6 +113,7 @@ struct HistoryOperationEvent {
   switch (kind) {
     case EditorSessionResultKind::SaveStarted:
     case EditorSessionResultKind::FramePresented:
+    case EditorSessionResultKind::FrameFailed:
       return false;
     case EditorSessionResultKind::Accepted:
     case EditorSessionResultKind::StateChanged:
