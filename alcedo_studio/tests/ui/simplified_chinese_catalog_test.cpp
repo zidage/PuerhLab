@@ -43,12 +43,12 @@ using Catalog         = QMap<QString, CatalogMessages>;
 const QMap<QString, int>& ExpectedContextMessageCounts() {
   static const QMap<QString, int> counts = {
       {QStringLiteral("AdjustmentTransferDialog"), 7},
-      {QStringLiteral("AdjustmentTransferItemPane"), 12},
+      {QStringLiteral("AdjustmentTransferItemPane"), 14},
       {QStringLiteral("AdjustmentTransferNodePane"), 4},
       {QStringLiteral("AdjustmentTransferVersionPane"), 4},
       {QStringLiteral("CollectionsPanel"), 17},
       {QStringLiteral("EditorAdjustmentHeader"), 2},
-      {QStringLiteral("EditorAdjustmentStack"), 10},
+      {QStringLiteral("EditorAdjustmentStack"), 11},
       {QStringLiteral("EditorEndpointNodeDelegate"), 2},
       {QStringLiteral("EditorGeometryPanel"), 14},
       {QStringLiteral("EditorMaskGroupDelegate"), 16},
@@ -61,8 +61,8 @@ const QMap<QString, int>& ExpectedContextMessageCounts() {
       {QStringLiteral("EditorNodePortDelegate"), 2},
       {QStringLiteral("EditorNodesPanel"), 14},
       {QStringLiteral("EditorPostProcessPanel"), 9},
-      {QStringLiteral("EditorWhiteBalanceSection"), 6},
-      {QStringLiteral("EditorWorkspaceRail"), 10},
+      {QStringLiteral("EditorWhiteBalanceSection"), 5},
+      {QStringLiteral("EditorWorkspaceRail"), 18},
       {QStringLiteral("InspectorToggleButton"), 4},
       {QStringLiteral("TopToolbar"), 8},
       {QStringLiteral("alcedo::ui::EditorNodeController"), 24},
@@ -70,7 +70,7 @@ const QMap<QString, int>& ExpectedContextMessageCounts() {
   return counts;
 }
 
-constexpr int kExpectedTargetMessageTotal = 218;
+constexpr int kExpectedTargetMessageTotal = 228;
 
 /// Parses a Qt TS catalog into context -> messages. Numerus translations keep
 /// their combined <numerusform> text so placeholder checks stay meaningful.
@@ -136,6 +136,14 @@ auto          ParseTsCatalog(const QString& path, QString* error) -> Catalog {
     return {};
   }
   return catalog;
+}
+
+/// The rail label of the editor workspace is the short noun 图层 (commit e73e0227a): the rail
+/// has no room for the parenthetical. Every other Mask Group text keeps the approved phrase.
+auto IsShortMaskGroupRailLabel(const QString& context, const CatalogMessage& message) -> bool {
+  return context == QLatin1String("EditorWorkspaceRail") &&
+         message.source == QLatin1String("Mask Groups") &&
+         message.translation == QStringLiteral("图层");
 }
 
 auto PlaceholderMultiset(const QString& text) -> QMap<QString, int> {
@@ -237,6 +245,9 @@ TEST(SimplifiedChineseCatalogTest, MaskGroupTermsUseLayerWithMaskGroupParentheti
       for (const auto& message : ctx.value()) {
         if (message.source == it.key()) {
           found = true;
+          if (IsShortMaskGroupRailLabel(ctx.key(), message)) {
+            continue;
+          }
           EXPECT_EQ(message.translation, it.value())
               << ctx.key().toStdString() << " | " << it.key().toStdString();
         }
@@ -250,6 +261,9 @@ TEST(SimplifiedChineseCatalogTest, MaskGroupTermsUseLayerWithMaskGroupParentheti
       continue;
     }
     for (const auto& message : ctx.value()) {
+      if (IsShortMaskGroupRailLabel(ctx.key(), message)) {
+        continue;
+      }
       // Any source that names the Mask Group concept must carry the approved
       // phrase inside the Chinese text.
       if (message.source.contains(QStringLiteral("Mask Group"))) {
