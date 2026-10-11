@@ -3098,10 +3098,17 @@ Build and test commands with exit codes:
 Discovered / passed / failed / skipped counts: AgentControlOwnerTest 7/7,
   InteractionPolicyControllerTest 1/1, EditorSessionControllerTest 1/1,
   AutomationGuiSessionTest 3/3; the regression programs above all pass (1 Metal skip).
-  SimplifiedChineseCatalogTest fails 2 tests in contexts this phase does not change
-  (AdjustmentTransferItemPane, EditorAdjustmentStack, EditorWhiteBalanceSection,
-  EditorWorkspaceRail); the same 2 fail with the .ts file of the base revision.
-Manual verification: open. The user records the GUI check of the exit criteria.
+  SimplifiedChineseCatalogTest failed 2 tests on the base revision too (stale audited counts in
+  AdjustmentTransferItemPane, EditorAdjustmentStack, EditorWhiteBalanceSection,
+  EditorWorkspaceRail); the test is updated in this pull request and passes 7/7.
+Manual verification: release alcedo_main with a real project, session "gui", driven by
+  alcedo-cli while the user worked in the window (2026-10-10). editor.set without control got
+  -32003. control.acquire (claude-code) -> held; editor.set exposure committed. The user selected
+  Take control: control.changed revoked_by_user:true, and editor.set and control.acquire got
+  -32004. A user edit sent history.changed to the watching client. The user selected Return
+  control: control.changed held:false. control.acquire succeeded again, the exposure was restored,
+  and control.release ended the second agent task as succeeded ("控制权已交还给你。"); the first
+  agent task stays canceled ("你已收回控制权。").
 Evidence path: build/tmp/au14_*.log (removed after the phase).
 Remaining defects or unavailable platforms: macOS Metal runs only in CI.
 ```
