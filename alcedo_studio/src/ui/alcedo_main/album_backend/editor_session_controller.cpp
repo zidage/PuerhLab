@@ -1666,6 +1666,22 @@ auto EditorSessionController::EnqueueFieldWrite(
   return EnqueueAdjustmentPatch(std::move(patch), settled, {});
 }
 
+auto EditorSessionController::EnqueueTargetedFieldWrite(
+    alcedo::EditorParameterTarget target, alcedo::EditorParameterWrite write, bool settled,
+    std::optional<alcedo::EditCommitAttribution> attribution) -> alcedo::EditorSessionResult {
+  auto target_error = alcedo::DescribeEditorParameterTargetError(target, target.field_key);
+  if (!target_error.empty()) {
+    return EnqueueAdjustmentPatch(std::nullopt, settled, std::move(target_error));
+  }
+  alcedo::EditorAdjustmentPatch patch;
+  patch.field_key   = target.field_key;
+  patch.write       = std::move(write);
+  patch.settled     = settled;
+  patch.attribution = std::move(attribution);
+  patch.target      = std::move(target);
+  return EnqueueAdjustmentPatch(std::move(patch), settled, {});
+}
+
 auto EditorSessionController::SubmitTargetedWrite(const alcedo::EditorParameterTarget& target,
                                                   alcedo::EditorParameterWrite         write,
                                                   bool settled) -> bool {
