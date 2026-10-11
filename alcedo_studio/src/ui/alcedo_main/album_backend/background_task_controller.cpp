@@ -52,6 +52,14 @@ int BackgroundTaskController::RunningCount() const {
   return n;
 }
 
+int BackgroundTaskController::ActiveCountExcept(BackgroundTaskKind kind) const {
+  int n = 0;
+  for (const auto& record : tasks_) {
+    if (record.snapshot_.kind_ != kind && IsActive(record.snapshot_.state_)) ++n;
+  }
+  return n;
+}
+
 bool BackgroundTaskController::HasBlockingShutdownTasks() const {
   for (const auto& record : tasks_) {
     if (IsActive(record.snapshot_.state_) &&
@@ -217,6 +225,8 @@ auto BackgroundTaskController::KindToString(BackgroundTaskKind kind) -> QString 
       return QStringLiteral("adjustmentPaste");
     case BackgroundTaskKind::RatingUpdate:
       return QStringLiteral("ratingUpdate");
+    case BackgroundTaskKind::AgentControl:
+      return QStringLiteral("agentControl");
   }
   return QStringLiteral("unknown");
 }
@@ -284,6 +294,8 @@ auto BackgroundTaskController::CapabilityToString(InteractionCapability capabili
       return QStringLiteral("checkoutVersion");
     case InteractionCapability::PasteAdjustments:
       return QStringLiteral("pasteAdjustments");
+    case InteractionCapability::UserStateChange:
+      return QStringLiteral("userStateChange");
   }
   return QStringLiteral("unknown");
 }

@@ -17,6 +17,9 @@ Dialog {
     objectName: "backgroundTasksDialog"
 
     property var controller: null
+    // AgentControlOwner: the agent task shows Take control instead of Cancel and, after the
+    // user took control, Return control.
+    property var agentControl: null
     property Item blurSource: null
     property real cornerRadius: 0
     signal taskDetailsRequested(var task)
@@ -101,6 +104,7 @@ Dialog {
         if (kind === "export") return qsTr("Export")
         if (kind === "adjustmentPaste") return qsTr("Paste Adjustments")
         if (kind === "ratingUpdate") return qsTr("Ratings")
+        if (kind === "agentControl") return qsTr("Agent")
         return qsTr("Task")
     }
 
@@ -286,6 +290,12 @@ Dialog {
                     readonly property bool showCancel: !!task && task.cancelable === true
                                                        && (task.state === "running"
                                                            || task.state === "queued")
+                    readonly property bool agentTask: !!task && task.kind === "agentControl"
+                    readonly property bool showReturnControl: agentTask
+                                                              && task.state === "canceled"
+                                                              && !!root.agentControl
+                                                              && root.agentControl.revokedByUser
+                                                              && root.agentControl.taskId === task.id
                     readonly property string progressLabel: root.progressText(task)
 
                     width: ListView.view ? ListView.view.width : 0
@@ -396,6 +406,7 @@ Dialog {
                             Layout.alignment: Qt.AlignVCenter
                             spacing: appTheme.spaceXs
                             visible: taskRow.showDetails || taskRow.showCancel
+                                     || taskRow.showReturnControl
 
                             Button {
                                 id: detailsButton
@@ -439,12 +450,52 @@ Dialog {
                             }
 
                             Button {
+                                id: returnControlButton
+                                objectName: "backgroundTaskReturnControlButton"
+                                visible: taskRow.showReturnControl
+                                Layout.preferredWidth: Math.max(implicitWidth,
+                                                                appTheme.iconButtonHitSize * 2)
+                                Layout.preferredHeight: appTheme.spaceXl + appTheme.spaceSm
+                                text: qsTr("Return control")
+                                hoverEnabled: true
+                                activeFocusOnTab: true
+                                Accessible.name: text
+                                onClicked: root.agentControl.ReturnControl()
+
+                                contentItem: Label {
+                                    text: returnControlButton.text
+                                    color: returnControlButton.hovered
+                                           ? appTheme.textColor : appTheme.textMutedColor
+                                    font.family: appTheme.uiFontFamily
+                                    font.pixelSize: appTheme.fontSizeCaption
+                                    font.weight: appTheme.fontWeightStrong
+                                    horizontalAlignment: Text.AlignHCenter
+                                    verticalAlignment: Text.AlignVCenter
+                                    leftPadding: appTheme.spaceSm
+                                    rightPadding: appTheme.spaceSm
+                                }
+
+                                background: Rectangle {
+                                    radius: appTheme.controlRadiusSmall
+                                    color: returnControlButton.down
+                                           ? appTheme.buttonPressedFillColor
+                                           : (returnControlButton.hovered
+                                              ? appTheme.buttonHoveredFillColor
+                                              : appTheme.bgBaseColor)
+                                    border.width: 1
+                                    border.color: appTheme.cardBorderColor
+                                }
+                            }
+
+                            Button {
                                 id: cancelButton
+                                objectName: "backgroundTaskCancelButton"
                                 visible: taskRow.showCancel
                                 Layout.preferredWidth: Math.max(implicitWidth,
                                                                 appTheme.iconButtonHitSize * 2)
                                 Layout.preferredHeight: appTheme.spaceXl + appTheme.spaceSm
-                                text: qsTr("Cancel")
+                                // Canceling the agent task takes control back from the agent.
+                                text: taskRow.agentTask ? qsTr("Take control") : qsTr("Cancel")
                                 hoverEnabled: true
                                 activeFocusOnTab: true
                                 Accessible.name: text

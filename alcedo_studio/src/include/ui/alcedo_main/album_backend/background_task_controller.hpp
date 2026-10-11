@@ -30,6 +30,9 @@ enum class BackgroundTaskKind {
   AdjustmentPaste,
   /// Star ratings written to several library images and saved to the project.
   RatingUpdate,
+  /// An automation agent (CLI or MCP) holds control of the GUI session. Canceling the task
+  /// gives control back to the user.
+  AgentControl,
 };
 
 /// Lifecycle state of a single background task record.
@@ -70,6 +73,10 @@ enum class InteractionCapability {
   SwitchWorkspace,
   CheckoutVersion,
   PasteAdjustments,
+  /// User-started state changes (edits, history moves, Versions, import, delete, rating,
+  /// export, project open, create, and close). Only the user-facing adapters read it, so the
+  /// agent that holds this lock keeps its own commands.
+  UserStateChange,
 };
 
 /// One interaction lock published by a running task. `element_id_ == 0` means
@@ -138,6 +145,8 @@ class BackgroundTaskController final : public QObject {
   QVariantList Tasks() const;
   QVariantMap  PrimaryTask() const;
   int          RunningCount() const;
+  /// Active tasks of every kind except @p kind.
+  int          ActiveCountExcept(BackgroundTaskKind kind) const;
   bool         HasBlockingShutdownTasks() const;
 
   // ── QML-facing actions ─────────────────────────────────────────────────

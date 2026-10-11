@@ -324,8 +324,15 @@ auto ExportRecipeBuilder::OutputFolderFor(const QVariantMap& options) const -> Q
   return OutputFolder(FromVariantMap(options));
 }
 
+void ExportRecipeBuilder::SetInteractionPolicy(InteractionPolicyController* interaction_policy) {
+  interaction_policy_ = interaction_policy;
+}
+
 auto ExportRecipeBuilder::StartExport(const QVariantMap& options, const QVariantList& targets)
     -> QVariantMap {
+  if (const QString refusal = UserStateChangeRefusal(interaction_policy_); !refusal.isEmpty()) {
+    return ErrorMap(ExportRecipeError{QString(), refusal}, QStringLiteral("started"));
+  }
   return ErrorMap(Start(FromVariantMap(options), targets), QStringLiteral("started"));
 }
 

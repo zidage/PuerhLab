@@ -51,6 +51,13 @@ def_library(BackgroundTaskController
     PUBLIC_DEPS Qt6::Core
 )
 
+def_library(AgentControlOwner
+    SOURCES
+        "${ALCEDO_UI_SHELL_ROOT}/album_backend/agent_control_owner.cpp"
+        "${ALCEDO_INCLUDE_ROOT}/ui/alcedo_main/album_backend/agent_control_owner.hpp"
+    PUBLIC_DEPS BackgroundTaskController UiLocalization Qt6::Core
+)
+
 def_library(ImageAnalysisController
     SOURCES
         "${ALCEDO_UI_SHELL_ROOT}/album_backend/image_analysis_controller.cpp"
@@ -256,6 +263,7 @@ target_link_libraries(AlbumBackendLib
     PUBLIC
         UiLocalization
         BackgroundTaskController
+        AgentControlOwner
         EditorRhiViewport
         # The editor scope controller and item analyze the presented frame through EditScope.
         EditScope
@@ -390,6 +398,10 @@ def_library(AutomationHostLib
         "${ALCEDO_INCLUDE_ROOT}/ui/alcedo_main/automation/automation_editor_notifier.hpp"
         "${ALCEDO_UI_SHELL_ROOT}/automation/headless_frame_sink.cpp"
         "${ALCEDO_INCLUDE_ROOT}/ui/alcedo_main/automation/headless_frame_sink.hpp"
+        "${ALCEDO_UI_SHELL_ROOT}/automation/commands/control_commands.cpp"
+        "${ALCEDO_INCLUDE_ROOT}/ui/alcedo_main/automation/automation_control_commands.hpp"
+        "${ALCEDO_UI_SHELL_ROOT}/automation/automation_host_session.cpp"
+        "${ALCEDO_INCLUDE_ROOT}/ui/alcedo_main/automation/automation_host_session.hpp"
         "${ALCEDO_UI_SHELL_ROOT}/automation/headless_host.cpp"
         "${ALCEDO_INCLUDE_ROOT}/ui/alcedo_main/automation/headless_host.hpp"
     PUBLIC_DEPS

@@ -21,6 +21,7 @@ class QQmlEngine;
 #include "app/model_download_service.hpp"
 #include "app/update_service.hpp"
 #include "ui/alcedo_main/album_backend/adjustment_transfer_controller.hpp"
+#include "ui/alcedo_main/album_backend/agent_control_owner.hpp"
 #include "ui/alcedo_main/album_backend/application_close_coordinator.hpp"
 #include "ui/alcedo_main/album_backend/background_task_controller.hpp"
 #include "ui/alcedo_main/album_backend/editor_behavior_preferences.hpp"
@@ -66,6 +67,8 @@ class ApplicationModuleHost final : public QObject {
   Q_PROPERTY(NikonHeRecoveryController* nikonHeRecovery READ nikon_he_recovery CONSTANT)
   Q_PROPERTY(BackgroundTaskController* backgroundTasks READ background_tasks CONSTANT)
   Q_PROPERTY(InteractionPolicyController* interactionPolicy READ interaction_policy CONSTANT)
+  /// Turn-taking control between the user and an automation agent in the GUI session.
+  Q_PROPERTY(AgentControlOwner* agentControl READ agent_control CONSTANT)
   Q_PROPERTY(ModelDownloadController* modelDownload READ model_download CONSTANT)
   Q_PROPERTY(alcedo::UpdateService* updates READ updates CONSTANT)
   Q_PROPERTY(alcedo::LutLibraryService* lutLibrary READ lut_library CONSTANT)
@@ -136,6 +139,7 @@ class ApplicationModuleHost final : public QObject {
   [[nodiscard]] auto interaction_policy() -> InteractionPolicyController* {
     return interaction_policy_.get();
   }
+  [[nodiscard]] auto agent_control() -> AgentControlOwner* { return agent_control_.get(); }
   [[nodiscard]] auto model_download() -> ModelDownloadController* { return model_download_.get(); }
   [[nodiscard]] auto updates() -> alcedo::UpdateService* { return updates_.get(); }
   [[nodiscard]] auto lut_library() -> alcedo::LutLibraryService* { return lut_library_.get(); }
@@ -190,7 +194,8 @@ class ApplicationModuleHost final : public QObject {
     return editor_session_scheduler_.get();
   }
 
-  /// True when no background task runs, no import runs, and no export is in flight.
+  /// True when no background task runs, no import runs, and no export is in flight. The agent
+  /// control task marks control, not work, so it does not count.
   [[nodiscard]] auto IsIdle() const -> bool;
 
   // Explicitly idempotent so the application can shut down modules before the
@@ -216,6 +221,7 @@ class ApplicationModuleHost final : public QObject {
   // Owned in construction dependency order. Destroyed in reverse.
   std::unique_ptr<BackgroundTaskController>            background_tasks_;
   std::unique_ptr<InteractionPolicyController>         interaction_policy_;
+  std::unique_ptr<AgentControlOwner>                   agent_control_;
   std::unique_ptr<alcedo::DownloadService>             download_service_;
   std::unique_ptr<alcedo::ModelDownloadService>        model_download_service_;
   std::unique_ptr<alcedo::UpdateService>               updates_;

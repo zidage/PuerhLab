@@ -1323,6 +1323,22 @@ Alcedo will use %1 instead.</translation>
         <source>Project closed.</source>
         <translation type="unfinished"></translation>
     </message>
+    <message>
+        <source>An agent controls the session.</source>
+        <translation type="unfinished">An agent controls the session.</translation>
+    </message>
+    <message>
+        <source>Control returned to you.</source>
+        <translation type="unfinished">Control returned to you.</translation>
+    </message>
+    <message>
+        <source>You took control.</source>
+        <translation type="unfinished">You took control.</translation>
+    </message>
+    <message>
+        <source>Waiting for the next command</source>
+        <translation type="unfinished">Waiting for the next command</translation>
+    </message>
 </context>
 <context>
     <name>AppDialogs</name>
@@ -1435,6 +1451,10 @@ Alcedo will use %1 instead.</translation>
         <source>+%1</source>
         <translation type="unfinished"></translation>
     </message>
+    <message>
+        <source>Agent</source>
+        <translation type="unfinished">Agent</translation>
+    </message>
 </context>
 <context>
     <name>BackgroundTasksDialog</name>
@@ -1542,6 +1562,18 @@ Alcedo will use %1 instead.</translation>
         <location line="+11"/>
         <source>Imports, exports, model work, and AI jobs will appear here.</source>
         <translation type="unfinished">Imports, exports, model work, and AI jobs will appear here.</translation>
+    </message>
+    <message>
+        <source>Agent</source>
+        <translation type="unfinished">Agent</translation>
+    </message>
+    <message>
+        <source>Take control</source>
+        <translation type="unfinished">Take control</translation>
+    </message>
+    <message>
+        <source>Return control</source>
+        <translation type="unfinished">Return control</translation>
     </message>
 </context>
 <context>

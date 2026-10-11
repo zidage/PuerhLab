@@ -634,6 +634,10 @@ auto ImageController::AddImagesToFolder(const QVariantList& targetEntries, uint 
                      {"addedElementIds", QVariantList{}},
                      {"failedElementIds", QVariantList{}},
                      {"message", QString{}}};
+  if (const QString refusal = UserStateChangeRefusal(policy_); !refusal.isEmpty()) {
+    result["message"] = refusal;
+    return result;
+  }
 
   auto&       ph = project_->handler();
   if (ph.project_loading()) {
@@ -1560,6 +1564,10 @@ auto ImageController::StartSetImageRatings(const QVariantList& targetEntries, in
 
 auto ImageController::SetImageDescription(uint elementId, const QString& caption) -> QVariantMap {
   QVariantMap   result{{"success", false}, {"message", QString{}}, {"caption", QString{}}};
+  if (const QString refusal = UserStateChangeRefusal(policy_); !refusal.isEmpty()) {
+    result["message"] = refusal;
+    return result;
+  }
 
   const QString trimmed_caption = caption.trimmed();
   if (trimmed_caption.isEmpty()) {
@@ -1640,6 +1648,10 @@ auto ImageController::SetImageDescription(uint elementId, const QString& caption
 
 auto ImageController::SetImageRatingReasons(uint elementId, const QString& reasons) -> QVariantMap {
   QVariantMap   result{{"success", false}, {"message", QString{}}, {"reasons", QString{}}};
+  if (const QString refusal = UserStateChangeRefusal(policy_); !refusal.isEmpty()) {
+    result["message"] = refusal;
+    return result;
+  }
 
   const QString trimmed_reasons = reasons.trimmed();
   if (trimmed_reasons.isEmpty()) {

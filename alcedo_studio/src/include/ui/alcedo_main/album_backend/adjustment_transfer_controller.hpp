@@ -5,18 +5,18 @@
 #pragma once
 
 #include <QObject>
+#include <QPointer>
 #include <QString>
 #include <QVariantList>
 #include <QVariantMap>
 #include <optional>
-
-#include <QPointer>
 
 #include "app/adjustment_transfer_types.hpp"
 #include "ui/alcedo_main/album_backend/adjustment_transfer_apply_coordinator.hpp"
 #include "ui/alcedo_main/album_backend/adjustment_transfer_dialog_model.hpp"
 #include "ui/alcedo_main/album_backend/background_task_controller.hpp"
 #include "ui/alcedo_main/album_backend/editor_session_controller.hpp"
+#include "ui/alcedo_main/album_backend/interaction_policy_controller.hpp"
 
 namespace alcedo::ui {
 
@@ -58,6 +58,9 @@ class AdjustmentTransferController final : public QObject {
   /// The editor session that owns the image open in the editor. Paste routes
   /// that image through the session instead of loading its pipeline directly.
   void               SetEditorSession(EditorSessionController* editor_session);
+  /// The policy whose agent control refuses Paste. Null refuses nothing. PasteIntoEditor is
+  /// refused by EditorSessionController::PasteAdjustmentPackage.
+  void               SetInteractionPolicy(InteractionPolicyController* interaction_policy);
   /// Test accessor for the multi-target apply owner.
   [[nodiscard]] auto apply_coordinator() -> AdjustmentTransferApplyCoordinator* {
     return apply_coordinator_.get();
@@ -75,7 +78,8 @@ class AdjustmentTransferController final : public QObject {
    * The image open in the editor pastes through the editor session queue, so
    * its Versions panel shows the new Version. Every other target pastes on a
    * worker thread; @ref PasteFinished reports that result. Returns
-   * `{success, message?, pending}` without waiting for the worker.
+   * `{success, message?, pending}` without waiting for the worker. A user action: refused
+   * while an automation agent holds control.
    */
   Q_INVOKABLE QVariantMap Paste(const QVariantList& targetEntries, const QString& strategy);
   Q_INVOKABLE QVariantMap PasteIntoEditor(QObject* editorSession);
@@ -95,6 +99,7 @@ class AdjustmentTransferController final : public QObject {
   LibraryModule*                                      library_       = nullptr;
   ImportExportHandler*                                import_export_ = nullptr;
   QPointer<EditorSessionController>                   editor_session_;
+  InteractionPolicyController*                        interaction_policy_ = nullptr;
 
   AdjustmentTransferDialogModel*                      dialog_model_  = nullptr;  // owned child
   std::unique_ptr<AdjustmentTransferApplyCoordinator> apply_coordinator_;

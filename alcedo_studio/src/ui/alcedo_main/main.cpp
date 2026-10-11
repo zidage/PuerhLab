@@ -37,8 +37,10 @@
 
 #include "ui/alcedo_main/album_backend/application_module_host.hpp"
 #include "alcedo_version.hpp"
+#include "automation/automation_session_file.hpp"
 #include "ui/alcedo_main/application_module_qml_types.hpp"
 #include "ui/alcedo_main/app_theme.hpp"
+#include "ui/alcedo_main/automation/automation_host_session.hpp"
 #include "ui/alcedo_main/automation/headless_host.hpp"
 #include "ui/alcedo_main/album_backend/editor_scope_controller.hpp"
 #include "ui/alcedo_main/language_manager.hpp"
@@ -389,7 +391,35 @@ int main(int argc, char* argv[]) {
       }
     }
 
+    // The automation server of the GUI host. An agent changes the session state only while it
+    // holds agent control. A start failure leaves the app without the server.
+    std::optional<alcedo::automation::AutomationHostSession> automation_session;
+    if (alcedo::automation::IsGuiAutomationServerEnabled()) {
+      const QString session_dir = alcedo::automation::DefaultAutomationSessionDir();
+      alcedo::automation::AutomationHostSessionOptions session_options;
+      session_options.host_mode      = QStringLiteral("gui");
+      session_options.session_name   = alcedo::automation::GuiAutomationSessionName(session_dir);
+      session_options.session_dir    = session_dir;
+      session_options.after_shutdown = [&app]() {
+        // Quit after the event loop writes the response.
+        QMetaObject::invokeMethod(&app, &QCoreApplication::quit, Qt::QueuedConnection);
+      };
+      automation_session.emplace(&app_modules, std::move(session_options));
+      QString session_error;
+      if (automation_session->Start(&session_error)) {
+        qCInfo(alcedo::diag::appLog).noquote()
+            << QStringLiteral("automation.session.ready name=%1 socket=%2")
+                   .arg(automation_session->session_name(), automation_session->socket_name());
+      } else {
+        qWarning().noquote() << "automation.session.start.failed" << session_error;
+        automation_session.reset();
+      }
+    }
+
     exit_code = app.exec();
+    if (automation_session.has_value()) {
+      automation_session->Stop();
+    }
     // The QML engine owns the editor viewport and its frame sink, and it is destroyed before
     // app_modules. Shut the modules down (and drain the in-flight editor frame) while it lives.
     app_modules.Shutdown();

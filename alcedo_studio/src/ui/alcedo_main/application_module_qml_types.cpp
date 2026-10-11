@@ -7,6 +7,7 @@
 #include <qqml.h>
 
 #include "app/ai_provider_profile.hpp"
+#include "ui/alcedo_main/album_backend/agent_control_owner.hpp"
 #include "ui/alcedo_main/album_backend/application_module_host.hpp"
 #include "ui/alcedo_main/album_backend/editor_mask_creation_adapter.hpp"
 #include "ui/alcedo_main/shortcut_registry.hpp"
@@ -35,6 +36,8 @@ void RegisterApplicationModuleTypes() {
       "Alcedo.Main", 1, 0, "BackgroundTaskController", "Owned by ApplicationModuleHost");
   qmlRegisterUncreatableType<InteractionPolicyController>(
       "Alcedo.Main", 1, 0, "InteractionPolicyController", "Owned by ApplicationModuleHost");
+  qmlRegisterUncreatableType<AgentControlOwner>("Alcedo.Main", 1, 0, "AgentControlOwner",
+                                                "Owned by ApplicationModuleHost");
   qmlRegisterUncreatableType<ModelDownloadController>(
       "Alcedo.Main", 1, 0, "ModelDownloadController", "Owned by ApplicationModuleHost");
   qmlRegisterUncreatableType<alcedo::UpdateService>(

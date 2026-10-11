@@ -79,6 +79,12 @@ target_compile_definitions(AutomationHeadlessSessionTest PRIVATE
     ALCEDO_CLI_PATH="$<TARGET_FILE:alcedo_cli>")
 add_dependencies(AutomationHeadlessSessionTest alcedo_main alcedo_cli)
 
+# A gui session in this process: agent control, the user adapters, and the notifications of a
+# watching socket client on a CI RAW file in the editor. Needs the GPU editor backend.
+alcedo_add_automation_test(AutomationGuiSessionTest
+    SOURCES automation_gui_session_test.cpp
+    LIBRARIES AutomationHostLib Qt6::Network)
+
 # project.* commands through the command registry of an in-process headless session.
 alcedo_add_automation_test(AutomationProjectCommandsTest
     SOURCES automation_project_commands_test.cpp

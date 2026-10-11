@@ -47,6 +47,11 @@ Item {
                                                      && editorSession
                                                      && editorSession.actions
                                                      && editorSession.actions.canEdit)
+    // False while an automation agent holds control: the adjustment controls and the mask
+    // commands are disabled, and the viewport keeps pan and zoom.
+    readonly property bool userCanChangeState: !interactionPolicy
+                                               || interactionPolicy.canChangeStateAsUser
+    readonly property bool editorEditControlsEnabled: editorControlsEnabled && userCanChangeState
     readonly property var maskCreation: editorSession ? editorSession.maskCreation : null
     readonly property bool maskOwnsLeftButton: !!(maskCreation && maskCreation.ownsLeftButton)
     property var comparison: appModules.editorComparison
@@ -883,7 +888,7 @@ Item {
                 interaction: editorInteraction
                 nodeController: historyVersionsRail.nodeController
                 comparison: root.comparison
-                controlsEnabled: root.editorControlsEnabled
+                controlsEnabled: root.editorEditControlsEnabled
                 expanded: !root.host || root.host.editorAdjustmentStackExpanded !== false
             }
         }
@@ -907,7 +912,7 @@ Item {
         objectName: "maskFinishEditShortcut"
         commandId: "mask.finishEdit"
         activeScope: root.maskEditScopeActive ? "editor.maskEdit" : ""
-        commandEnabled: root.editorControlsEnabled
+        commandEnabled: root.editorEditControlsEnabled
         onActivated: root.maskCreation.finishBody()
     }
 
@@ -915,7 +920,7 @@ Item {
         objectName: "maskDeleteSelectionShortcut"
         commandId: "mask.deleteSelection"
         activeScope: root.maskEditScopeActive ? "editor.maskEdit" : ""
-        commandEnabled: root.editorControlsEnabled
+        commandEnabled: root.editorEditControlsEnabled
         onActivated: root.maskCreation.deleteActiveMask()
     }
 
@@ -923,7 +928,7 @@ Item {
         objectName: "maskConfirmEditShortcut"
         commandId: "mask.confirmEdit"
         activeScope: root.maskEditScopeActive ? "editor.maskEdit" : ""
-        commandEnabled: root.editorControlsEnabled
+        commandEnabled: root.editorEditControlsEnabled
         onActivated: {
             if (typeof adjustmentStack.confirmMaskEditAndReturn === "function")
                 adjustmentStack.confirmMaskEditAndReturn()
@@ -943,7 +948,7 @@ Item {
     // workspace so it still works when focus is on the right panel.
     Shortcut {
         sequences: [ "Return", "Enter" ]
-        enabled: root.editorControlsEnabled
+        enabled: root.editorEditControlsEnabled
                  && root.editorSession
                  && String(root.editorSession.activeAdjustmentPanel || "") === "geometry"
         onActivated: {

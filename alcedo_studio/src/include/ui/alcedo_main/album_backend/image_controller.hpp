@@ -62,6 +62,7 @@ class ImageController final : public QObject {
                                             BackgroundTaskController*     background_tasks);
 
   Q_INVOKABLE QVariantMap DeleteImages(const QVariantList& targetEntries);
+  /// User action: refused with the reason in `message` while an automation agent holds control.
   Q_INVOKABLE QVariantMap AddImagesToFolder(const QVariantList& targetEntries, uint targetFolderId);
   Q_INVOKABLE QVariantMap GetImageDetails(uint elementId, uint imageId);
   Q_INVOKABLE QVariantMap GetFocusedImageInspection(uint elementId, uint imageId);
@@ -75,6 +76,8 @@ class ImageController final : public QObject {
   // Returns {started, taskId, message}; taskId is the RatingUpdate background task.
   // ImageRatingsFinished carries the SetImageRatings result.
   Q_INVOKABLE QVariantMap StartSetImageRatings(const QVariantList& targetEntries, int rating);
+  /// User edits of the inspector: refused with the reason in `message` while an automation agent
+  /// holds control.
   Q_INVOKABLE QVariantMap SetImageDescription(uint elementId, const QString& caption);
   Q_INVOKABLE QVariantMap SetImageRatingReasons(uint elementId, const QString& reasons);
   Q_INVOKABLE QVariantMap GetImageRatingReasons(uint elementId);

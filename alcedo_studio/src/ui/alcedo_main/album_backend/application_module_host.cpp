@@ -13,6 +13,7 @@
 #include <QQmlEngine>
 #include <QStringList>
 #include <QThread>
+#include <algorithm>
 #include <chrono>
 #include <cstdint>
 #include <exception>
@@ -24,6 +25,7 @@
 #include <vector>
 
 #include "app/editor_adjustment_context.hpp"
+#include "app/editor_pending_input.hpp"
 #include "app/image_pool_service.hpp"
 #include "app/project_service.hpp"
 #include "image/image.hpp"
@@ -189,6 +191,8 @@ ApplicationModuleHost::ApplicationModuleHost(QObject* parent, LifecycleObserver 
   interaction_policy_ =
       std::make_unique<InteractionPolicyController>(background_tasks_.get(), this);
   RecordConstruction("InteractionPolicyController", interaction_policy_.get());
+  agent_control_ = std::make_unique<AgentControlOwner>(background_tasks_.get(), this);
+  RecordConstruction("AgentControlOwner", agent_control_.get());
   download_service_ = std::make_unique<alcedo::DownloadService>();
   RecordConstruction("DownloadService", download_service_.get());
   model_download_service_ =
@@ -260,16 +264,19 @@ ApplicationModuleHost::ApplicationModuleHost(QObject* parent, LifecycleObserver 
       std::make_unique<ImportExportHandler>(project_.get(), library_.get(), folders_.get(),
                                             project_.get(), db_write_barrier_.get(), this);
   RecordConstruction("ImportExportHandler", import_export_.get());
+  import_export_->SetInteractionPolicy(interaction_policy_.get());
   export_queue_ = std::make_unique<ExportQueue>(project_.get(), import_export_.get(), this);
   RecordConstruction("ExportQueue", export_queue_.get());
   export_recipe_ = std::make_unique<ExportRecipeBuilder>(import_export_.get(), this);
   RecordConstruction("ExportRecipeBuilder", export_recipe_.get());
+  export_recipe_->SetInteractionPolicy(interaction_policy_.get());
   nikon_he_recovery_ = std::make_unique<NikonHeRecoveryController>(project_.get(), images_.get(),
                                                                    project_.get(), this);
   RecordConstruction("NikonHeRecoveryController", nikon_he_recovery_.get());
   adjustment_transfer_ = std::make_unique<AdjustmentTransferController>(
       project_.get(), library_.get(), import_export_.get(), background_tasks_.get(), this);
   RecordConstruction("AdjustmentTransferController", adjustment_transfer_.get());
+  adjustment_transfer_->SetInteractionPolicy(interaction_policy_.get());
   // Phase 5B/5E: wire runtime first-frame ports, direct presentation, and
   // BackgroundTaskController-backed editor_save registration into the session
   // runtime. The session scheduler accepts intents without completing when
@@ -382,6 +389,22 @@ ApplicationModuleHost::ApplicationModuleHost(QObject* parent, LifecycleObserver 
                    [session = editor_session_.get()] { session->NotifyLutResourcesChanged(); });
   editor_session_->SetInteractionPolicy(interaction_policy_.get());
   editor_session_->SetAlbumCatalog(library_.get());
+  // control.acquire waits while the user drags a slider: the pending input of the editor has a
+  // sequence that no Release or Cancel boundary sealed. Every session result and state change
+  // can end that state, so the waiting acquires are tried again on both.
+  agent_control_->SetUnsealedInputReader([session = editor_session_.get()] {
+    const auto pending = session->PeekPendingInput();
+    return std::any_of(pending.sequences.begin(), pending.sequences.end(),
+                       [](const alcedo::EditorPendingSequence& sequence) {
+                         return sequence.seal == alcedo::EditorPendingInputBoundaryKind::None;
+                       });
+  });
+  QObject::connect(editor_session_.get(), &EditorSessionController::SessionResultObserved,
+                   agent_control_.get(),
+                   [control = agent_control_.get()] { control->RecheckPendingAcquires(); });
+  QObject::connect(editor_session_.get(), &EditorSessionController::StateChanged,
+                   agent_control_.get(),
+                   [control = agent_control_.get()] { control->RecheckPendingAcquires(); });
   QObject::connect(library_.get(), &LibraryModule::LastEditedFileFound, editor_session_.get(),
                    [session = editor_session_.get()](uint element_id, uint image_id) {
                      session->restoreLastEditedImage(element_id, image_id);
@@ -441,11 +464,13 @@ ApplicationModuleHost::ApplicationModuleHost(QObject* parent, LifecycleObserver 
                    });
   lut_browser_->setAppliedEntryId(lut_target_->associationEntryId());
   workspace_router_ = std::make_unique<WorkspaceRouter>(editor_session_.get(), this);
+  workspace_router_->SetInteractionPolicy(interaction_policy_.get());
   RecordConstruction("WorkspaceRouter", workspace_router_.get());
   editor_behavior_ = std::make_unique<EditorBehaviorPreferences>(this);
   RecordConstruction("EditorBehaviorPreferences", editor_behavior_.get());
   project_launch_ = std::make_unique<ProjectLaunchCoordinator>(project_.get(), this);
   RecordConstruction("ProjectLaunchCoordinator", project_launch_.get());
+  project_launch_->SetInteractionPolicy(interaction_policy_.get());
   application_close_ = std::make_unique<ApplicationCloseCoordinator>(
       editor_session_.get(), workspace_router_.get(), project_.get(), this);
   RecordConstruction("ApplicationCloseCoordinator", application_close_.get());
@@ -453,6 +478,7 @@ ApplicationModuleHost::ApplicationModuleHost(QObject* parent, LifecycleObserver 
       images_.get(), library_->selection(), folders_.get(), editor_session_.get(),
       workspace_router_.get(), this);
   RecordConstruction("LibraryMutationOperations", library_mutations_.get());
+  library_mutations_->SetInteractionPolicy(interaction_policy_.get());
   connect(library_mutations_.get(), &LibraryMutationOperations::ElementsDeleted,
           export_queue_.get(), &ExportQueue::RemoveElements);
 
@@ -736,6 +762,7 @@ ApplicationModuleHost::~ApplicationModuleHost() {
   destroy(updates_, "UpdateService");
   destroy(model_download_service_, "ModelDownloadService");
   destroy(download_service_, "DownloadService");
+  destroy(agent_control_, "AgentControlOwner");
   destroy(interaction_policy_, "InteractionPolicyController");
   destroy(background_tasks_, "BackgroundTaskController");
 }
@@ -743,7 +770,8 @@ ApplicationModuleHost::~ApplicationModuleHost() {
 void ApplicationModuleHost::Shutdown() { ShutdownModules(); }
 
 auto ApplicationModuleHost::IsIdle() const -> bool {
-  if (background_tasks_ && background_tasks_->RunningCount() > 0) {
+  if (background_tasks_ &&
+      background_tasks_->ActiveCountExcept(BackgroundTaskKind::AgentControl) > 0) {
     return false;
   }
   return !import_export_ ||

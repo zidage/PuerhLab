@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <optional>
 
+#include "ui/alcedo_main/album_backend/interaction_policy_controller.hpp"
 #include "ui/alcedo_main/album_backend/project_module.hpp"
 
 namespace alcedo::ui {
@@ -50,17 +51,28 @@ class ProjectLaunchCoordinator final : public QObject {
   [[nodiscard]] auto loading_overlay_visible() const -> bool;
   [[nodiscard]] auto launch_busy() const -> bool;
 
+  /// The policy whose agent control refuses the user launches. Null refuses nothing.
+  void               SetInteractionPolicy(InteractionPolicyController* interaction_policy);
+
   /// Each Begin call queues one launch and returns true. Returns false and changes nothing when
-  /// the accelerator preparation runs or another launch is queued.
+  /// the accelerator preparation runs or another launch is queued. BeginPromptOpen and
+  /// BeginPromptCreate are user launches: they also return false while an automation agent holds
+  /// control. BeginOpen and BeginCreate are the shared operations of the automation commands.
   Q_INVOKABLE bool   BeginPromptOpen();
   Q_INVOKABLE bool   BeginPromptCreate();
   Q_INVOKABLE bool   BeginOpen(const QString& projectUrlOrPath);
   Q_INVOKABLE bool   BeginCreate(const QString& folderUrlOrPath, const QString& projectName);
+  /// The user create of the welcome surface: BeginCreate, refused while an agent holds control.
+  Q_INVOKABLE bool   BeginCreateAsUser(const QString& folderUrlOrPath, const QString& projectName);
+  /// The user preview of a recent project on the welcome surface (ProjectModule::PreviewProject),
+  /// refused while an automation agent holds control.
+  Q_INVOKABLE bool   PreviewProject(const QString& projectUrlOrPath);
   /// Starts the repaint delay of a queued launch when it has not started yet.
   Q_INVOKABLE void   StartPendingLaunch();
   /// Enters the previewed project (ProjectModule::EnterLoadedProject). When the preview load
   /// still runs, the welcome surface is dismissed so the loading overlay replaces it. Returns
-  /// the result of EnterLoadedProject.
+  /// the result of EnterLoadedProject. A user action: returns false while an automation agent
+  /// holds control.
   Q_INVOKABLE bool   ContinueWelcomeProject();
 
  signals:
@@ -86,6 +98,7 @@ class ProjectLaunchCoordinator final : public QObject {
   void                    SetLaunchState(bool launch_pending, bool welcome_dismissed_for_launch);
 
   QPointer<ProjectModule> project_;
+  InteractionPolicyController* interaction_policy_ = nullptr;
   QTimer                  launch_timer_;
   std::optional<LaunchRequest> pending_request_;
   bool                         launch_pending_                    = false;

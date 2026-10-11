@@ -5,10 +5,8 @@
 #include "ui/alcedo_main/automation/headless_host.hpp"
 
 #include <QCoreApplication>
-#include <QDateTime>
 #include <QDebug>
 #include <QEventLoop>
-#include <QJsonObject>
 #include <QMetaObject>
 #include <QObject>
 #include <QSettings>
@@ -19,22 +17,10 @@
 #include <string_view>
 #include <utility>
 
-#include "automation/automation_protocol.hpp"
 #include "automation/automation_session_file.hpp"
 #include "edit/pipeline/pipeline_accelerator.hpp"
 #include "ui/alcedo_main/album_backend/application_module_host.hpp"
-#include "ui/alcedo_main/automation/automation_command_registry.hpp"
-#include "ui/alcedo_main/automation/automation_editor_commands.hpp"
-#include "ui/alcedo_main/automation/automation_editor_notifier.hpp"
-#include "ui/alcedo_main/automation/automation_export_commands.hpp"
-#include "ui/alcedo_main/automation/automation_host_commands.hpp"
-#include "ui/alcedo_main/automation/automation_library_commands.hpp"
-#include "ui/alcedo_main/automation/automation_project_commands.hpp"
-#include "ui/alcedo_main/automation/automation_search_commands.hpp"
-#include "ui/alcedo_main/automation/automation_server.hpp"
-#include "ui/alcedo_main/automation/automation_session_commands.hpp"
-#include "ui/alcedo_main/automation/automation_task_commands.hpp"
-#include "ui/alcedo_main/automation/automation_task_tracker.hpp"
+#include "ui/alcedo_main/automation/automation_host_session.hpp"
 #include "ui/alcedo_main/automation/headless_frame_sink.hpp"
 #include "utils/clock/time_provider.hpp"
 #include "utils/diagnostics/app_logging.hpp"
@@ -147,109 +133,28 @@ auto RunHostSession(QCoreApplication& app, const HeadlessHostOptions& options,
     return Exit(HeadlessHostExitCode::ProjectLoadError);
   }
 
-  const QString session_file_path = AutomationSessionFilePath(session_dir, options.session_name);
-  if (const auto existing = ReadAutomationSessionFile(session_file_path);
-      existing.has_value() && existing->pid != QCoreApplication::applicationPid() &&
-      IsAutomationProcessRunning(existing->pid)) {
-    ReportFailure(QStringLiteral("session '%1' is in use by process %2")
-                      .arg(options.session_name)
-                      .arg(existing->pid));
-    host.Shutdown();
-    return Exit(HeadlessHostExitCode::SessionError);
-  }
-
-  AutomationCommandRegistry registry;
-  AutomationServer          server(registry);
-  AutomationTaskTracker     tracker(&host);
-  QObject::connect(&tracker, &AutomationTaskTracker::TaskUpdated, &server,
-                   [&server](const QJsonObject& task) {
-                     server.SendNotification(QStringLiteral("task.updated"), task);
-                   });
-  QObject::connect(&tracker, &AutomationTaskTracker::TaskFinished, &server,
-                   [&server](const QJsonObject& task) {
-                     server.SendNotification(QStringLiteral("task.finished"), task);
-                   });
-  AutomationEditorNotifier editor_notifier(host.editor_session());
-  QObject::connect(&editor_notifier, &AutomationEditorNotifier::SessionStateChanged, &server,
-                   [&server](const QJsonObject& state) {
-                     server.SendNotification(QStringLiteral("session.state_changed"), state);
-                   });
-  QObject::connect(&editor_notifier, &AutomationEditorNotifier::HistoryChanged, &server,
-                   [&server](const QJsonObject& history) {
-                     server.SendNotification(QStringLiteral("history.changed"), history);
-                   });
-  bool                      session_file_written = false;
-  const auto                remove_session_file  = [&]() {
-    if (session_file_written) {
-      (void)RemoveAutomationSessionFile(session_dir, options.session_name);
-      session_file_written = false;
-    }
-  };
-
-  AutomationHostCommandContext context;
-  context.host           = &host;
-  context.host_mode      = QLatin1String(kHostMode);
-  context.after_shutdown = [&remove_session_file, &app]() {
-    remove_session_file();
+  AutomationHostSessionOptions session_options;
+  session_options.host_mode      = QLatin1String(kHostMode);
+  session_options.session_name   = options.session_name;
+  session_options.session_dir    = session_dir;
+  session_options.after_shutdown = [&app]() {
     // Quit after the event loop writes the response.
     QMetaObject::invokeMethod(&app, &QCoreApplication::quit, Qt::QueuedConnection);
   };
-  QString registration_error;
-  if (!RegisterAutomationSessionCommands(
-          registry,
-          AutomationSessionDescription{QLatin1String(kHostMode),
-                                       QCoreApplication::applicationVersion()},
-          &registration_error) ||
-      !RegisterAutomationHostCommands(registry, std::move(context), &registration_error) ||
-      !RegisterAutomationProjectCommands(registry, &host, &registration_error) ||
-      !RegisterAutomationLibraryCommands(registry, &host, &tracker, QLatin1String(kHostMode),
-                                         &registration_error) ||
-      !RegisterAutomationTaskCommands(registry, &host, &tracker, &registration_error) ||
-      !RegisterAutomationExportCommands(registry, &host, &tracker, &registration_error) ||
-      !RegisterAutomationSearchCommands(registry, &host, &registration_error) ||
-      !RegisterAutomationEditorCommands(registry, &host, &registration_error) ||
-      !RegisterAutomationVersionCommands(registry, &host, &registration_error) ||
-      !RegisterAutomationRenderCommands(registry, &host, &registration_error)) {
-    ReportFailure(QStringLiteral("command registration failed: %1").arg(registration_error));
+  AutomationHostSession session(&host, std::move(session_options));
+  QString               session_error;
+  if (!session.Start(&session_error)) {
+    ReportFailure(session_error);
     host.Shutdown();
     return Exit(HeadlessHostExitCode::SessionError);
   }
-
-  const QString socket_name = QStringLiteral("alcedo-automation-%1-%2")
-                                  .arg(QCoreApplication::applicationPid())
-                                  .arg(options.session_name);
-  QString server_error;
-  if (!server.Listen(socket_name, &server_error)) {
-    ReportFailure(server_error);
-    host.Shutdown();
-    return Exit(HeadlessHostExitCode::SessionError);
-  }
-
-  AutomationSessionFile session_file;
-  session_file.protocol_version = kAutomationProtocolVersion;
-  session_file.session_name     = options.session_name;
-  session_file.socket_name      = socket_name;
-  session_file.pid              = QCoreApplication::applicationPid();
-  session_file.host_mode        = QLatin1String(kHostMode);
-  session_file.project_path =
-      QString::fromStdWString(host.project()->handler().package_path().generic_wstring());
-  session_file.started_at = QDateTime::currentDateTimeUtc();
-  QString file_error;
-  if (!WriteAutomationSessionFile(session_dir, session_file, &file_error)) {
-    ReportFailure(file_error);
-    server.Close();
-    host.Shutdown();
-    return Exit(HeadlessHostExitCode::SessionError);
-  }
-  session_file_written = true;
-  qCInfo(diag::appLog).noquote() << QStringLiteral(
-                                        "automation.session.ready name=%1 socket=%2 file=%3")
-                                        .arg(options.session_name, socket_name, session_file_path);
+  qCInfo(diag::appLog).noquote()
+      << QStringLiteral("automation.session.ready name=%1 socket=%2 file=%3")
+             .arg(session.session_name(), session.socket_name(), session.session_file_path());
 
   const int exit_code = app.exec();
 
-  server.Close();
-  remove_session_file();
+  session.Stop();
   host.Shutdown();
   return exit_code;
 }

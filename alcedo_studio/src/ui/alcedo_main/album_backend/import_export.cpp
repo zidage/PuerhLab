@@ -136,7 +136,15 @@ auto ImportExportHandler::SupportedImportPatterns() -> QString {
   return SupportedImportNameFilters().join(QLatin1Char(' '));
 }
 
+void ImportExportHandler::SetInteractionPolicy(InteractionPolicyController* interaction_policy) {
+  interaction_policy_ = interaction_policy;
+}
+
 void ImportExportHandler::StartImport(const QStringList& fileUrlsOrPaths) {
+  if (!UserStateChangeRefusal(interaction_policy_).isEmpty()) {
+    status_->SetTaskState(PL_TEXT("An agent controls the session."), 0, false);
+    return;
+  }
   std::vector<image_path_t>        paths;
   std::unordered_set<std::wstring> seen;
 
@@ -163,6 +171,14 @@ void ImportExportHandler::StartImport(const QStringList& fileUrlsOrPaths) {
   }
   // The user picked these files, so every importable category is allowed.
   StartImportResolvedPaths(std::move(paths), false, kAllImportCategories);
+}
+
+void ImportExportHandler::StartFolderImportAsUser() {
+  if (!UserStateChangeRefusal(interaction_policy_).isEmpty()) {
+    status_->SetTaskState(PL_TEXT("An agent controls the session."), 0, false);
+    return;
+  }
+  StartFolderImport();
 }
 
 void ImportExportHandler::StartFolderImport() {

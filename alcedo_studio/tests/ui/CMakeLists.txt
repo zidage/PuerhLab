@@ -490,6 +490,9 @@ alcedo_register_test_target(AlbumBackendBackgroundTaskTest ui)
 
 def_ui_test(AlbumBackendInteractionPolicyTest album_backend_interaction_policy_test.cpp "interaction_policy")
 alcedo_register_test_target(AlbumBackendInteractionPolicyTest ui)
+
+def_ui_test(AgentControlOwnerTest agent_control_owner_test.cpp "interaction_policy")
+alcedo_register_test_target(AgentControlOwnerTest ui)
 def_ui_test(AlbumBackendDbWriteBarrierTest album_backend_db_write_barrier_test.cpp)
 alcedo_register_test_target(AlbumBackendDbWriteBarrierTest ui)
 

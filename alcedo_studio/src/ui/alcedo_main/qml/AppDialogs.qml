@@ -85,7 +85,7 @@ Item {
         theme: host
         host: root.host
         blurSource: root.blurSource
-        onConfirmed: appModules.importExport.StartFolderImport()
+        onConfirmed: appModules.importExport.StartFolderImportAsUser()
     }
 
     SettingDialog {
@@ -273,6 +273,7 @@ Item {
     BackgroundTasksDialog {
         id: backgroundTasksDialogObj
         controller: appModules.backgroundTasks
+        agentControl: appModules.agentControl
         blurSource: root.blurSource
         cornerRadius: root.host ? root.host.windowCornerRadius : 0
         onTaskDetailsRequested: function(task) {
@@ -349,12 +350,12 @@ Item {
         // A row previews that project under the welcome surface; the upper
         // area shows the skeleton until the load completes.
         onPreviewRequested: function(projectPath) {
-            appModules.project.PreviewProject(projectPath)
+            appModules.projectLaunch.PreviewProject(projectPath)
         }
         onContinueRequested: host.continueWelcomeProject()
         onOpenRequested: appModules.projectLaunch.BeginPromptOpen()
         onCreateRequested: function(storageLocation, projectName) {
-            appModules.projectLaunch.BeginCreate(storageLocation, projectName)
+            appModules.projectLaunch.BeginCreateAsUser(storageLocation, projectName)
         }
         onExitRequested: Qt.quit()
         onLanguageRequested: function(languageCode) {

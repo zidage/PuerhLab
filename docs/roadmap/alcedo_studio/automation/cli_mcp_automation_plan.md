@@ -2,7 +2,7 @@
 
 Date: 2026-10-08
 
-Status: in progress. AU1 to AU13 have implementation evidence (completion records in their phase sections).
+Status: in progress. AU1 to AU14 have implementation evidence (completion records in their phase sections).
 
 Tracking issue: [#331](https://github.com/zidage/AlcedoStudio/issues/331). Progress is tracked in the issues, not in this document.
 
@@ -103,7 +103,7 @@ proposed default.
 
 | Decision | Proposed default | Needed by |
 | --- | --- | --- |
-| GUI automation server default | Enabled. The socket accepts only the current OS user. A setting "Allow agent control (CLI and MCP)" disables it. | Phase AU14 |
+| GUI automation server default | Enabled. The socket accepts only the current OS user. A setting "Allow agent control (CLI and MCP)" disables it. AU14 uses this default (key `automation/serverEnabled`); the Settings toggle is not built yet. | Phase AU14 |
 | `alcedo-cli` location in the macOS bundle and PATH exposure | `<Bundle>.app/Contents/Helpers/alcedo-cli`. The skill tells the user to add a symlink. The installer does not change PATH. | Phase AU15 |
 
 ## 2. Product design specification
@@ -584,7 +584,7 @@ class AutomationCommandRegistry {
 | AU11 | Version commands and commit attribution | Session, journal, storage, QML | AU10 | 1300–1800 | implemented | [#326](https://github.com/zidage/AlcedoStudio/issues/326) |
 | AU12 | Export in C++, export commands | Export queue and recipe, QML | AU5 | 1100–1600 | implemented | [#327](https://github.com/zidage/AlcedoStudio/issues/327) |
 | AU13 | Search in C++, search commands | Search session, QML | AU5 | 900–1300 | implemented | [#327](https://github.com/zidage/AlcedoStudio/issues/327) |
-| AU14 | GUI automation server and agent control | Control owner, policy, background task island | AU6, AU10, AU11, AU12 | 1100–1600 | planned | [#328](https://github.com/zidage/AlcedoStudio/issues/328) |
+| AU14 | GUI automation server and agent control | Control owner, policy, background task island | AU6, AU10, AU11, AU12 | 1100–1600 | implemented | [#328](https://github.com/zidage/AlcedoStudio/issues/328) |
 | AU15 | MCP server, operation skill, packaging | `alcedo_cli`, skill, install rules | AU14 | 1100–1600 | planned | [#329](https://github.com/zidage/AlcedoStudio/issues/329) |
 | AU16 | Operation-sequence robustness and recovery tests | Tests, CI | AU11, AU12, AU13 | 900–1400 | planned | [#330](https://github.com/zidage/AlcedoStudio/issues/330) |
 
@@ -3011,14 +3011,100 @@ ctest --test-dir build/debug -R "AgentControlOwnerTest|InteractionPolicyControll
 
 **Exit criteria**
 
-- [ ] Tests pass.
+- [x] Tests pass.
 - [ ] Manual GUI check, recorded by the user: the island unfolds while the agent edits; a click
       shows the agent task with the running command; cancel takes control and blocks the agent;
       Return control lets the agent acquire control again.
 
 **Expected diff:** 1100–1600 lines.
 
-**Completion record:** see section 13.
+**Completion record (AU14):**
+
+```text
+Phase / date / status: AU14 / 2026-10-10 / implemented; the manual GUI check is open.
+Source revision and branch: main 9a5d0cef6; branch feature/automation-gui-agent-control.
+  Actual diff: about 2300 lines (56 files, this record included).
+Actual changed modules: AgentControlOwner (new), BackgroundTaskController (AgentControl kind,
+  UserStateChange capability, ActiveCountExcept), InteractionPolicyController
+  (canChangeStateAsUser, UserStateChangeRefusal), EditorSessionController and the user adapters
+  (WorkspaceRouter, LibraryMutationOperations, ImportExportHandler, ExportRecipeBuilder,
+  ProjectLaunchCoordinator, AdjustmentTransferController, ImageController),
+  AutomationCommandRegistry (state change control, command summary), control_commands.cpp (new),
+  AutomationHostSession (new, shared by the headless host and the GUI host), main.cpp, QML
+  (task bar, task dialog, editor workspace, library, toolbar, dialogs), translations, tests.
+Implemented behavior:
+  - The GUI alcedo_main starts an AutomationHostSession with host_mode "gui" after the QML
+    engine loads, when the setting automation/serverEnabled is true (default true). The session
+    name is "gui", or "gui-<pid>" when a live process of another host uses "gui". A start
+    failure is logged and the app runs without the server. The socket is the per-user local
+    socket of AU1. The session file is written again when a project load finishes.
+  - AutomationHostSession registers every command group, connects AutomationTaskTracker and
+    AutomationEditorNotifier (task.*, session.state_changed, history.changed) to the server, and
+    in a GUI session installs the agent control rules and sends control.changed. The headless
+    host runs on the same class.
+  - control.acquire {holder_name} waits while the editor has unsealed user input (checked again
+    on the editor SessionResultObserved and StateChanged signals), then registers one Running
+    task: kind agentControl, title = holder name, detail = "Waiting for the next command",
+    progress -1, cancelable, global UserStateChange lock. The same holder acquires again without
+    a change; another holder gets -32005. control.release finishes the task as Succeeded.
+    control.get and state.get report held, revoked_by_user, holder_name. In the headless host
+    the three commands report held: true.
+  - A state-changing command in a GUI session without control fails with -32003; after the user
+    took control with -32004. An admitted command shows its summary (method and scalar
+    parameters) in the task detail until its reply is sent. editor.batch checks control again
+    before each step after the first; the error data has applied and head_commit.
+  - Canceling the agent task in the island or the task dialog (button "Take control") gives
+    control to the user at once (held false, revoked_by_user true, one control.changed); the
+    task finishes as Canceled. The task dialog shows "Return control" on that canceled task
+    while revokedByUser is true; it clears revoked_by_user and does not acquire control.
+  - While the lock is held, the user entry points refuse without a change: editor writes, undo,
+    redo, Version and history operations, discard, color grade and node graph edits, mask
+    creation, paste, image switch in the editor, import, delete, rating, description, add to
+    folder, export start, project open and create. The QML projection of the editor actions,
+    the adjustment panels, the mask commands, the export button, and the project menu items are
+    disabled. Viewport pan and zoom stay available. The shared operations of the automation
+    commands do not read the lock, and EditorBackgroundActionRestrictions does not map it.
+  - ApplicationModuleHost::IsIdle ignores the agent task.
+Deviations from the phase text:
+  - AgentControlOwner is in album_backend (library AgentControlOwner), not in automation:
+    AutomationHostLib links AlbumBackendLib, and ApplicationModuleHost owns the owner.
+  - The Settings page has no toggle for automation/serverEnabled yet; the key is read at start.
+  - Added tests: AgentControlOwnerTest.AcquireWaitIsDroppedWhenTheCallerStopsWaiting; the
+    lifecycle test checks the agentControl property and the construction order.
+  - EditorSessionControllerTest.UserWriteIsRejectedWhileAgentHoldsControl is in the
+    EditorSessionControllerPhase5ATest program; InteractionPolicyControllerTest is in the
+    AlbumBackendInteractionPolicyTest program.
+Explicitly unimplemented items: the richer agent session view (1.3); the Settings toggle.
+Primary success call chain: control.acquire test-agent -> AgentControlOwner::TryAcquire ->
+  RegisterTask(AgentControl, UserStateChange) -> PolicyChanged -> editor action projection
+  masked -> held; editor.set exposure 1.25 -> registry admit -> BeginCommand (task detail
+  "editor.set field=exposure value=1.25") -> EnqueueFieldWrite -> commit -> reply ->
+  EndCommand (waiting text) (AutomationGuiSessionTest.AgentEditAppearsInControllerProjection).
+Primary failure and restore call chain: CancelTask(agent task) -> RevokeByUser -> held false,
+  revoked true -> queued FinishTask(Canceled) -> editor.set -> -32004 -> ReturnControl ->
+  control.acquire -> held -> editor.set commits
+  (AutomationGuiSessionTest.StateChangeWithoutControlIsRejected).
+Build and test commands with exit codes:
+  cmd /c scripts\msvc_env.cmd --build --preset win_debug --target alcedo_main alcedo_cli
+    AgentControlOwnerTest AlbumBackendInteractionPolicyTest EditorSessionControllerPhase5ATest
+    AutomationGuiSessionTest AutomationCommandRegistryTest AutomationEditorCommandsTest
+    AutomationLibraryCommandsTest AutomationProjectCommandsTest ApplicationModuleHostLifecycleTest
+    ApplicationModuleHostIdleTest ApplicationModuleHostShutdownTest AlbumBackendBackgroundTaskTest
+    HeadlessHostTest AutomationHeadlessSessionTest AutomationEditorE2ETest AlbumBackendImportTest
+    AlbumBackendImageDeleteTest AlbumBackendRatingTest AdjustmentTransferControllerTest
+    --parallel 4 -> 0
+  ctest --test-dir build/debug -R "<the targets above>" -j 1 -> 0 (105/105 and 96/96 with the
+    Metal case skipped on Windows; 92/92 again after the formatting pass)
+Discovered / passed / failed / skipped counts: AgentControlOwnerTest 7/7,
+  InteractionPolicyControllerTest 1/1, EditorSessionControllerTest 1/1,
+  AutomationGuiSessionTest 3/3; the regression programs above all pass (1 Metal skip).
+  SimplifiedChineseCatalogTest fails 2 tests in contexts this phase does not change
+  (AdjustmentTransferItemPane, EditorAdjustmentStack, EditorWhiteBalanceSection,
+  EditorWorkspaceRail); the same 2 fail with the .ts file of the base revision.
+Manual verification: open. The user records the GUI check of the exit criteria.
+Evidence path: build/tmp/au14_*.log (removed after the phase).
+Remaining defects or unavailable platforms: macOS Metal runs only in CI.
+```
 
 ### Phase AU15 — MCP server, operation skill, and packaging
 

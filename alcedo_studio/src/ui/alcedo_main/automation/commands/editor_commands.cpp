@@ -306,11 +306,14 @@ void SendHistoryMove(ui::EditorSessionController* editor, AutomationCommandWait*
 }
 
 /// One editor.batch_set call: applies the changes in order, each after the previous frame.
+/// Agent control is checked again before each change after the first: when the user took
+/// control, the batch stops with the refusal, and the changes before it stay.
 class BatchApply final : public std::enable_shared_from_this<BatchApply> {
  public:
-  BatchApply(ui::EditorSessionController* editor, AutomationCommandWait* wait, QJsonArray changes,
-             EditCommitAttribution attribution)
-      : editor_(editor),
+  BatchApply(const AutomationCommandRegistry* registry, ui::EditorSessionController* editor,
+             AutomationCommandWait* wait, QJsonArray changes, EditCommitAttribution attribution)
+      : registry_(registry),
+        editor_(editor),
         wait_(wait),
         changes_(std::move(changes)),
         attribution_(std::move(attribution)) {}
@@ -322,6 +325,16 @@ class BatchApply final : public std::enable_shared_from_this<BatchApply> {
     if (applied_ == changes_.size()) {
       SendDone();
       return;
+    }
+    if (applied_ > 0) {
+      if (const auto refusal = registry_->AdmitStateChange()) {
+        QJsonObject data = FailureData(refusal->message, {});
+        for (auto it = refusal->data.begin(); it != refusal->data.end(); ++it) {
+          data.insert(it.key(), it.value());
+        }
+        wait_->SendError(refusal->code, refusal->message, data);
+        return;
+      }
     }
     const QJsonObject change  = changes_.at(applied_).toObject();
     const QString     field   = change.value("field").toString();
@@ -381,11 +394,12 @@ class BatchApply final : public std::enable_shared_from_this<BatchApply> {
                                   {"values", values}});
   }
 
-  ui::EditorSessionController*    editor_;
-  QPointer<AutomationCommandWait> wait_;
-  QJsonArray                      changes_;
-  EditCommitAttribution           attribution_;
-  qsizetype                       applied_ = 0;
+  const AutomationCommandRegistry* registry_;
+  ui::EditorSessionController*     editor_;
+  QPointer<AutomationCommandWait>  wait_;
+  QJsonArray                       changes_;
+  EditCommitAttribution            attribution_;
+  qsizetype                        applied_ = 0;
 };
 
 auto IsPersistBusy(const ui::EditorSessionController& editor) -> bool {
@@ -701,7 +715,7 @@ auto RegisterAutomationEditorCommands(AutomationCommandRegistry& registry,
                                          {"values", QJsonObject{{"type", "object"}}}},
                              QJsonArray{"applied", "head_commit", "values"});
   batch.changes_state = true;
-  batch.handler       = [host](const QJsonObject& params, AutomationReply reply) {
+  batch.handler       = [host, &registry](const QJsonObject& params, AutomationReply reply) {
     const QJsonArray changes = params.value("changes").toArray();
     if (changes.size() > kMaxBatchChanges) {
       SendAutomationParamError(
@@ -710,7 +724,8 @@ auto RegisterAutomationEditorCommands(AutomationCommandRegistry& registry,
       return;
     }
     auto* wait = new AutomationCommandWait(std::move(reply), host);
-    std::make_shared<BatchApply>(host->editor_session(), wait, changes, AgentAttribution(params))
+    std::make_shared<BatchApply>(&registry, host->editor_session(), wait, changes,
+                                 AgentAttribution(params))
         ->Next();
   };
   RegisterOrFail(registry, std::move(batch), &ok, error);

@@ -1490,6 +1490,22 @@ Alcedo 将改用 %1。</translation>
         <source>Project closed.</source>
         <translation>项目已关闭。</translation>
     </message>
+    <message>
+        <source>An agent controls the session.</source>
+        <translation>智能体正在控制会话。</translation>
+    </message>
+    <message>
+        <source>Control returned to you.</source>
+        <translation>控制权已交还给你。</translation>
+    </message>
+    <message>
+        <source>You took control.</source>
+        <translation>你已收回控制权。</translation>
+    </message>
+    <message>
+        <source>Waiting for the next command</source>
+        <translation>等待下一条命令</translation>
+    </message>
 </context>
 <context>
     <name>AppDialogs</name>
@@ -1620,6 +1636,10 @@ Alcedo 将改用 %1。</translation>
         <source>No recent tasks</source>
         <translation>暂无近期任务</translation>
     </message>
+    <message>
+        <source>Agent</source>
+        <translation>智能体</translation>
+    </message>
 </context>
 <context>
     <name>BackgroundTasksDialog</name>
@@ -1731,6 +1751,18 @@ Alcedo 将改用 %1。</translation>
     <message>
         <source>Paste Adjustments</source>
         <translation>粘贴调整</translation>
+    </message>
+    <message>
+        <source>Agent</source>
+        <translation>智能体</translation>
+    </message>
+    <message>
+        <source>Take control</source>
+        <translation>收回控制权</translation>
+    </message>
+    <message>
+        <source>Return control</source>
+        <translation>交还控制权</translation>
     </message>
 </context>
 <context>

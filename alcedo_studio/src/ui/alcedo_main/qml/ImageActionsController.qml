@@ -375,7 +375,10 @@ Item {
         }
         // LibraryMutationOperations prunes the selection and the export queue and closes a
         // deleted editor image.
-        const result = appModules.libraryMutations.DeleteTargets(root.pendingDeleteTargets)
+        const result = appModules.libraryMutations.DeleteTargetsAsUser(root.pendingDeleteTargets)
+        if (result && result.success === false && result.message) {
+            host.showSnackbar(result.message)
+        }
         const deletedIds = (result && result.deletedElementIds) ? result.deletedElementIds : []
         if (deletedIds.length > 0) {
             const focusedElementId = Number(root.focusedImageTarget.elementId || 0)
@@ -401,7 +404,7 @@ Item {
         const targets = root.pendingRatingTargets && root.pendingRatingTargets.length > 1
                 ? root.pendingRatingTargets
                 : [root.pendingRatingTarget]
-        const result = appModules.libraryMutations.RateTargets(targets, normalizedRating)
+        const result = appModules.libraryMutations.RateTargetsAsUser(targets, normalizedRating)
         if (result && result.batch === true) {
             // Batch path: the library shows the new stars at once; the save runs as a
             // background task and onImageRatingsFinished reports the result.
@@ -455,7 +458,7 @@ Item {
             return
         }
         const normalizedRating = Math.max(0, Math.min(5, Number(rating)))
-        const result = appModules.libraryMutations.RateTargets([{
+        const result = appModules.libraryMutations.RateTargetsAsUser([{
             elementId: Number(root.focusedImageTarget.elementId || root.focusedImageTarget.fileId),
             imageId: Number(root.focusedImageTarget.imageId)
         }], normalizedRating)

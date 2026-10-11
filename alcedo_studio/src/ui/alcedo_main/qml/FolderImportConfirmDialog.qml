@@ -7,7 +7,7 @@ import QtQuick.Effects
 // once and starts ImportExportHandler.folderScan on a worker thread; the list and
 // the file count fill in while the folder tree is read, so a large tree never
 // leaves the window without feedback. Import takes the scanned paths directly in
-// C++ (StartFolderImport); closing the dialog any other way cancels the scan.
+// C++ (StartFolderImportAsUser); closing the dialog any other way cancels the scan.
 Popup {
     id: root
     objectName: "folderImportConfirmDialog"

@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "app/editor_session_types.hpp"
+#include "ui/alcedo_main/automation/automation_control_commands.hpp"
 #include "ui/alcedo_main/automation/automation_host_commands.hpp"
 
 namespace alcedo::automation {
@@ -66,14 +67,13 @@ auto ReadAutomationSessionState(ui::ApplicationModuleHost& host, const QString& 
       host.workspace_router() != nullptr ? host.workspace_router()->workspace() : QString();
   // The headless host has no user, so the agent always holds control there.
   const bool headless = host_mode == QStringLiteral("headless");
-  return QJsonObject{
-      {"host_mode", host_mode},
-      {"project", ReadProjectState(host)},
-      {"workspace", workspace},
-      {"editor", ReadEditorState(host)},
-      {"control", QJsonObject{{"held", headless}, {"revoked_by_user", false}, {"holder_name", ""}}},
-      {"tasks", tasks},
-      {"idle", host.IsIdle()}};
+  return QJsonObject{{"host_mode", host_mode},
+                     {"project", ReadProjectState(host)},
+                     {"workspace", workspace},
+                     {"editor", ReadEditorState(host)},
+                     {"control", AutomationControlState(headless ? nullptr : host.agent_control())},
+                     {"tasks", tasks},
+                     {"idle", host.IsIdle()}};
 }
 
 auto RegisterAutomationHostCommands(AutomationCommandRegistry&   registry,

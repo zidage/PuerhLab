@@ -100,12 +100,14 @@ Rectangle {
                     objectName: "fileMenuLoadProject"
                     text: qsTr("Load Project")
                     enabled: root.host && !root.host.projectLaunchBusy && !appModules.project.acceleratorPreparing
+                             && appModules.interactionPolicy.canChangeStateAsUser
                     onTriggered: appModules.projectLaunch.BeginPromptOpen()
                 }
                 AppMenuItem {
                     objectName: "fileMenuCreateProject"
                     text: qsTr("Create Project")
                     enabled: root.host && !root.host.projectLaunchBusy && !appModules.project.acceleratorPreparing
+                             && appModules.interactionPolicy.canChangeStateAsUser
                     onTriggered: appModules.projectLaunch.BeginPromptCreate()
                 }
                 AppMenuSeparator {
