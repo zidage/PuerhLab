@@ -184,7 +184,13 @@ auto ValidateAt(const QJsonValue& value, const QJsonObject& schema, const QStrin
   if (schema.contains("enum") && !schema.value("enum").toArray().contains(value)) {
     QStringList allowed;
     for (const QJsonValue& entry : schema.value("enum").toArray()) {
-      allowed.push_back(entry.isString() ? entry.toString() : QString::number(entry.toDouble()));
+      if (entry.isString()) {
+        allowed.push_back(entry.toString());
+      } else if (entry.isBool()) {
+        allowed.push_back(entry.toBool() ? QStringLiteral("true") : QStringLiteral("false"));
+      } else {
+        allowed.push_back(QString::number(entry.toDouble()));
+      }
     }
     return AutomationSchemaViolation{
         pointer,

@@ -57,6 +57,17 @@ auto FindVersion(const EditorHistorySnapshot& history, const QString& version_id
   return nullptr;
 }
 
+/// True when @p commit_hash (hex text) is a commit of the active Version in @p history.
+auto HasCommit(const EditorHistorySnapshot& history, const QString& commit_hash) -> bool {
+  const std::string hash = commit_hash.trimmed().toLower().toStdString();
+  for (const auto& commit : history.commits) {
+    if (commit.commit_hash.ToString() == hash) {
+      return true;
+    }
+  }
+  return false;
+}
+
 /// The open editor, or null. Sends -32001 when no image is open.
 auto OpenEditor(ui::ApplicationModuleHost* host, AutomationReply& reply)
     -> ui::EditorSessionController* {
@@ -240,6 +251,14 @@ auto RegisterAutomationVersionCommands(AutomationCommandRegistry& registry,
     } else if (from_commit.isEmpty()) {
       SendAutomationParamError(reply, QStringLiteral("/from_commit"),
                                      QStringLiteral("The commit hash is empty."));
+      return;
+    } else if (!HasCommit(editor->history_snapshot(), from_commit)) {
+      // The editor saves before it branches, and a branch that then fails leaves the session
+      // in its save recovery state. Refuse an unknown commit before that.
+      SendAutomationParamError(
+          reply, QStringLiteral("/from_commit"),
+          QStringLiteral("unknown commit; editor.history lists the commits of the active "
+                         "Version"));
       return;
     }
     const auto name = RequestedName(*editor, params, reply);
