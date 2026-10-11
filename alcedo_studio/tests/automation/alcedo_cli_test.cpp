@@ -8,13 +8,37 @@
 #include <gtest/gtest.h>
 
 #include <QCoreApplication>
+#include <QDir>
 #include <QElapsedTimer>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QJsonObject>
 #include <QProcess>
 #include <QTemporaryDir>
+#include <QThread>
 #include <memory>
+#include <string>
 #include <vector>
+
+#if defined(_WIN32)
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#else
+#include <fcntl.h>
+#include <poll.h>
+#include <spawn.h>
+#include <sys/wait.h>
+#include <unistd.h>
+
+#include <csignal>
+
+extern char** environ;
+#endif
 
 #include "automation/automation_session_file.hpp"
 #include "ui/alcedo_main/automation/automation_command_registry.hpp"
@@ -23,6 +47,9 @@
 
 #ifndef ALCEDO_CLI_PATH
 #error "ALCEDO_CLI_PATH must name the alcedo-cli program"
+#endif
+#ifndef ALCEDO_CLI_TEST_HOST_PATH
+#error "ALCEDO_CLI_TEST_HOST_PATH must name the alcedo_cli_test_host program"
 #endif
 
 namespace alcedo::automation {
@@ -52,6 +79,178 @@ auto CliEnvironment() -> QProcessEnvironment {
   environment.remove(QStringLiteral("ALCEDO_SESSION"));
   return environment;
 }
+
+/// Runs alcedo-cli with stdout and stderr on one operating-system pipe, as a shell does for
+/// `out=$(alcedo-cli ...)`, and reads that pipe. QProcess is not used here, because it reports the
+/// exit of the process and not the end of file on its output pipe.
+class PipedCliProcess {
+ public:
+  PipedCliProcess()                                  = default;
+  PipedCliProcess(const PipedCliProcess&)            = delete;
+  PipedCliProcess& operator=(const PipedCliProcess&) = delete;
+  ~PipedCliProcess() {
+#if defined(_WIN32)
+    if (process_ != nullptr) {
+      if (WaitForSingleObject(process_, 0) == WAIT_TIMEOUT) {
+        TerminateProcess(process_, 1);
+      }
+      CloseHandle(process_);
+    }
+    if (read_end_ != nullptr) {
+      CloseHandle(read_end_);
+    }
+#else
+    if (pid_ > 0 && !exited_) {
+      ::kill(pid_, SIGKILL);
+      ::waitpid(pid_, nullptr, 0);
+    }
+    if (read_end_ >= 0) {
+      ::close(read_end_);
+    }
+#endif
+  }
+
+  /// Starts alcedo-cli with @p arguments. Only this object keeps the read end of the pipe.
+  auto Start(const QStringList& arguments) -> bool {
+#if defined(_WIN32)
+    SECURITY_ATTRIBUTES inheritable{sizeof(SECURITY_ATTRIBUTES), nullptr, TRUE};
+    HANDLE              write_end = nullptr;
+    if (CreatePipe(&read_end_, &write_end, &inheritable, 0) == FALSE ||
+        SetHandleInformation(read_end_, HANDLE_FLAG_INHERIT, 0) == FALSE) {
+      return false;
+    }
+    HANDLE  null_input = CreateFileW(L"NUL", GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                                     &inheritable, OPEN_EXISTING, 0, nullptr);
+    QString command_line =
+        QStringLiteral("\"%1\"").arg(QDir::toNativeSeparators(QStringLiteral(ALCEDO_CLI_PATH)));
+    for (const QString& argument : arguments) {
+      command_line += QStringLiteral(" \"%1\"").arg(argument);
+    }
+    std::wstring        command = command_line.toStdWString();
+    STARTUPINFOW        startup{};
+    PROCESS_INFORMATION information{};
+    startup.cb         = sizeof(startup);
+    startup.dwFlags    = STARTF_USESTDHANDLES;
+    startup.hStdInput  = null_input;
+    startup.hStdOutput = write_end;
+    startup.hStdError  = write_end;
+    const BOOL started = CreateProcessW(nullptr, command.data(), nullptr, nullptr, TRUE,
+                                        CREATE_NO_WINDOW, nullptr, nullptr, &startup, &information);
+    CloseHandle(write_end);
+    CloseHandle(null_input);
+    if (started == FALSE) {
+      return false;
+    }
+    CloseHandle(information.hThread);
+    process_ = information.hProcess;
+    return true;
+#else
+    int pipe_ends[2] = {-1, -1};
+    if (::pipe(pipe_ends) != 0) {
+      return false;
+    }
+    read_end_ = pipe_ends[0];
+    posix_spawn_file_actions_t actions;
+    posix_spawn_file_actions_init(&actions);
+    posix_spawn_file_actions_addopen(&actions, STDIN_FILENO, "/dev/null", O_RDONLY, 0);
+    posix_spawn_file_actions_adddup2(&actions, pipe_ends[1], STDOUT_FILENO);
+    posix_spawn_file_actions_adddup2(&actions, pipe_ends[1], STDERR_FILENO);
+    posix_spawn_file_actions_addclose(&actions, pipe_ends[0]);
+    posix_spawn_file_actions_addclose(&actions, pipe_ends[1]);
+    std::vector<QByteArray> words{QByteArray(ALCEDO_CLI_PATH)};
+    for (const QString& argument : arguments) {
+      words.push_back(argument.toLocal8Bit());
+    }
+    std::vector<char*> argv;
+    for (QByteArray& word : words) {
+      argv.push_back(word.data());
+    }
+    argv.push_back(nullptr);
+    const int spawned =
+        posix_spawn(&pid_, ALCEDO_CLI_PATH, &actions, nullptr, argv.data(), environ);
+    posix_spawn_file_actions_destroy(&actions);
+    ::close(pipe_ends[1]);
+    return spawned == 0;
+#endif
+  }
+
+  /// Waits for the exit of alcedo-cli. Returns its exit code, or -1 when it did not exit within
+  /// @p timeout_ms.
+  auto WaitForExit(int timeout_ms) -> int {
+#if defined(_WIN32)
+    DWORD exit_code = 0;
+    if (WaitForSingleObject(process_, static_cast<DWORD>(timeout_ms)) != WAIT_OBJECT_0 ||
+        GetExitCodeProcess(process_, &exit_code) == FALSE) {
+      return -1;
+    }
+    return static_cast<int>(exit_code);
+#else
+    QElapsedTimer timer;
+    timer.start();
+    int status = 0;
+    while (::waitpid(pid_, &status, WNOHANG) == 0) {
+      if (timer.elapsed() > timeout_ms) {
+        return -1;
+      }
+      QThread::msleep(10);
+    }
+    exited_ = true;
+    return WIFEXITED(status) ? WEXITSTATUS(status) : -1;
+#endif
+  }
+
+  /// Reads the pipe until end of file. Returns false when end of file did not arrive within
+  /// @p timeout_ms, which means that another process still holds the write end.
+  auto ReadUntilEndOfFile(int timeout_ms) -> bool {
+    QElapsedTimer timer;
+    timer.start();
+    char buffer[4096];
+    while (timer.elapsed() <= timeout_ms) {
+#if defined(_WIN32)
+      DWORD available = 0;
+      if (PeekNamedPipe(read_end_, nullptr, 0, nullptr, &available, nullptr) == FALSE) {
+        return GetLastError() == ERROR_BROKEN_PIPE;
+      }
+      if (available == 0) {
+        QThread::msleep(10);
+        continue;
+      }
+      DWORD read = 0;
+      if (ReadFile(read_end_, buffer, sizeof(buffer), &read, nullptr) == FALSE) {
+        return GetLastError() == ERROR_BROKEN_PIPE;
+      }
+      output_.append(buffer, static_cast<qsizetype>(read));
+#else
+      pollfd descriptor{read_end_, POLLIN, 0};
+      if (::poll(&descriptor, 1, 10) <= 0) {
+        continue;
+      }
+      const ssize_t read = ::read(read_end_, buffer, sizeof(buffer));
+      if (read == 0) {
+        return true;
+      }
+      if (read < 0) {
+        return false;
+      }
+      output_.append(buffer, static_cast<qsizetype>(read));
+#endif
+    }
+    return false;
+  }
+
+  [[nodiscard]] auto output() const -> const QByteArray& { return output_; }
+
+ private:
+#if defined(_WIN32)
+  HANDLE process_  = nullptr;
+  HANDLE read_end_ = nullptr;
+#else
+  pid_t pid_      = -1;
+  bool  exited_   = false;
+  int   read_end_ = -1;
+#endif
+  QByteArray output_;
+};
 
 /// One in-process session: a registry, a listening server, and its session file.
 struct TestSession {
@@ -239,6 +438,31 @@ TEST_F(AlcedoCliTest, UsageErrorsExitFour) {
   EXPECT_EQ(RunCli({"call", "session.ping", "[1]"}).exit_code, 4);
   EXPECT_EQ(RunCli({"--timeout", "zero", "schema"}).exit_code, 4);
   EXPECT_EQ(RunCli({"session", "explode"}).exit_code, 4);
+}
+
+// Issue #354: a caller that reads the output of `session start` through a pipe must read end of
+// file when alcedo-cli exits, not when the session host exits.
+TEST_F(AlcedoCliTest, SessionStartOutputPipeClosesWhenTheCliExits) {
+  PipedCliProcess cli;
+  ASSERT_TRUE(cli.Start({"--session-dir", session_dir_.path(), "--session", "piped", "--json",
+                         "session", "start", "--headless", "--create",
+                         session_dir_.path() + QStringLiteral(",piped_project"), "--host-binary",
+                         QStringLiteral(ALCEDO_CLI_TEST_HOST_PATH)}));
+  const int  exit_code   = cli.WaitForExit(60000);
+  const bool end_of_file = cli.ReadUntilEndOfFile(10000);
+  ASSERT_EQ(exit_code, 0) << cli.output().toStdString();
+
+  const QJsonObject started   = QJsonDocument::fromJson(cli.output()).object();
+  const qint64      host_pid  = static_cast<qint64>(started.value("pid").toDouble());
+  const bool        host_runs = IsAutomationProcessRunning(host_pid);
+  // Stop the host before the checks, so that a failed check does not leave it running.
+  const CliRun      stop      = RunCli({"--session", "piped", "session", "stop"});
+
+  EXPECT_TRUE(end_of_file) << "the session host holds the output pipe of alcedo-cli";
+  EXPECT_TRUE(host_runs) << cli.output().toStdString();
+  EXPECT_EQ(started.value("session_name"), QJsonValue("piped"));
+  EXPECT_EQ(stop.exit_code, 0) << stop.stderr_text.toStdString();
+  EXPECT_FALSE(IsAutomationProcessRunning(host_pid));
 }
 
 }  // namespace

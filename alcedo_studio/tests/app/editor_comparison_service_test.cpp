@@ -591,7 +591,8 @@ TEST_F(EditorComparisonServiceTest, PreviewImagesRenderRootAndWorkingValuesWithR
   geometry.view.visible_rect_in_edit_space = NormalizedRect{0.25f, 0.25f, 0.5f, 0.25f};
   auto       outcome  = std::make_shared<std::optional<EditorPreviewImagesResult>>();
   const auto accepted = service_->RenderPreviewImages(
-      geometry, [outcome](EditorPreviewImagesResult result) { *outcome = std::move(result); });
+      geometry, EditorPreviewImageSet::CurrentAndRoot,
+      [outcome](EditorPreviewImagesResult result) { *outcome = std::move(result); });
   ASSERT_NE(accepted.kind, EditorSessionResultKind::Rejected) << accepted.message;
   Drain();
 
@@ -614,6 +615,34 @@ TEST_F(EditorComparisonServiceTest, PreviewImagesRenderRootAndWorkingValuesWithR
   EXPECT_EQ(checkpoints_->materialize_count, 0);
 }
 
+// Issue #355: render.preview with compare 'none' renders only the working values.
+TEST_F(EditorComparisonServiceTest, PreviewImagesCurrentOnlyRenderOnlyTheWorkingValues) {
+  OpenInteractive();
+  ASSERT_EQ(service_
+                ->EnqueueAdjustmentInput(test::WithColorGradeTarget(
+                    test::PatchFromJson("exposure", R"({"exposure":1.5})", false)))
+                .kind,
+            EditorSessionResultKind::Accepted);
+  Drain();
+
+  auto       outcome  = std::make_shared<std::optional<EditorPreviewImagesResult>>();
+  const auto accepted = service_->RenderPreviewImages(
+      EditorImageRenderRequest{}.geometry, EditorPreviewImageSet::CurrentOnly,
+      [outcome](EditorPreviewImagesResult result) { *outcome = std::move(result); });
+  ASSERT_NE(accepted.kind, EditorSessionResultKind::Rejected) << accepted.message;
+  Drain();
+
+  ASSERT_EQ(images_->jobs.size(), 1u) << LastMessage();
+  const auto& request = images_->jobs.front().request;
+  ASSERT_EQ(request.snapshots.size(), 1u) << "the root is not rendered";
+  EXPECT_FLOAT_EQ(ExposureEv(request.snapshots[0]->Document()), 1.5f)
+      << "the only image has the working values";
+
+  images_->CompleteLast(EditorImageRenderStatus::Completed);
+  ASSERT_TRUE(outcome->has_value());
+  EXPECT_EQ((*outcome)->status, EditorPreviewImagesStatus::Completed) << (*outcome)->message;
+}
+
 TEST_F(EditorComparisonServiceTest,
        PreviewImagesReportBusyWhileTheComparisonRendersAndLeaveItsJob) {
   OpenInteractive();
@@ -622,7 +651,8 @@ TEST_F(EditorComparisonServiceTest,
 
   auto       outcome = std::make_shared<std::optional<EditorPreviewImagesResult>>();
   const auto record = [outcome](EditorPreviewImagesResult result) { *outcome = std::move(result); };
-  (void)service_->RenderPreviewImages(EditorImageRenderRequest{}.geometry, record);
+  (void)service_->RenderPreviewImages(EditorImageRenderRequest{}.geometry,
+                                      EditorPreviewImageSet::CurrentAndRoot, record);
   Drain();
   ASSERT_TRUE(outcome->has_value());
   EXPECT_EQ((*outcome)->status, EditorPreviewImagesStatus::Busy);
@@ -633,7 +663,8 @@ TEST_F(EditorComparisonServiceTest,
   Drain();
   EXPECT_EQ(service_->comparison_state().status, EditorComparisonStatus::Ready);
   outcome->reset();
-  (void)service_->RenderPreviewImages(EditorImageRenderRequest{}.geometry, record);
+  (void)service_->RenderPreviewImages(EditorImageRenderRequest{}.geometry,
+                                      EditorPreviewImageSet::CurrentAndRoot, record);
   Drain();
   EXPECT_EQ(images_->jobs.size(), 2u) << "the port is free again";
   images_->CompleteLast(EditorImageRenderStatus::Failed, "device lost");

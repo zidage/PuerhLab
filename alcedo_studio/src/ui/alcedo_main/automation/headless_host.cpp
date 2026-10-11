@@ -25,6 +25,7 @@
 #include "ui/alcedo_main/album_backend/application_module_host.hpp"
 #include "ui/alcedo_main/automation/automation_command_registry.hpp"
 #include "ui/alcedo_main/automation/automation_editor_commands.hpp"
+#include "ui/alcedo_main/automation/automation_editor_notifier.hpp"
 #include "ui/alcedo_main/automation/automation_export_commands.hpp"
 #include "ui/alcedo_main/automation/automation_host_commands.hpp"
 #include "ui/alcedo_main/automation/automation_library_commands.hpp"
@@ -167,6 +168,15 @@ auto RunHostSession(QCoreApplication& app, const HeadlessHostOptions& options,
   QObject::connect(&tracker, &AutomationTaskTracker::TaskFinished, &server,
                    [&server](const QJsonObject& task) {
                      server.SendNotification(QStringLiteral("task.finished"), task);
+                   });
+  AutomationEditorNotifier editor_notifier(host.editor_session());
+  QObject::connect(&editor_notifier, &AutomationEditorNotifier::SessionStateChanged, &server,
+                   [&server](const QJsonObject& state) {
+                     server.SendNotification(QStringLiteral("session.state_changed"), state);
+                   });
+  QObject::connect(&editor_notifier, &AutomationEditorNotifier::HistoryChanged, &server,
+                   [&server](const QJsonObject& history) {
+                     server.SendNotification(QStringLiteral("history.changed"), history);
                    });
   bool                      session_file_written = false;
   const auto                remove_session_file  = [&]() {

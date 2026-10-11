@@ -81,6 +81,20 @@ auto ReadRegion(const QJsonObject& region, QString* error) -> std::optional<Norm
   return rect;
 }
 
+/// The file_stem parameter: one file name part, without a folder. Writes the reason to @p error.
+auto ReadFileStem(const QString& stem, QString* error) -> bool {
+  if (stem.isEmpty() || stem == QStringLiteral(".") || stem == QStringLiteral("..")) {
+    *error = QStringLiteral("the file stem must be a file name");
+    return false;
+  }
+  if (stem.contains(QLatin1Char('/')) || stem.contains(QLatin1Char('\\')) ||
+      stem.contains(QLatin1Char(':'))) {
+    *error = QStringLiteral("the file stem must not contain '/', '\\', or ':'");
+    return false;
+  }
+  return true;
+}
+
 }  // namespace
 
 auto RegisterAutomationRenderCommands(AutomationCommandRegistry& registry,
@@ -95,11 +109,13 @@ auto RegisterAutomationRenderCommands(AutomationCommandRegistry& registry,
   AutomationCommandSpec preview;
   preview.method      = QStringLiteral("render.preview");
   preview.description = QStringLiteral(
-      "Renders the open image twice, with the current edits and as imported (the root), and "
-      "writes <file_stem>_current.png and <file_stem>_root.png into out_dir. The long edge of "
-      "each file is long_edge pixels at most. 'region' (x, y, w, h in 0..1 of the cropped image) "
-      "renders only that part. Answers -32005 while the editor renders another image job, for "
-      "example an open comparison; that job continues.");
+      "Renders the open image with the current edits and writes <file_stem>_current.png into "
+      "out_dir. With compare 'root' (the default), it also renders the image as imported (the "
+      "root) and writes <file_stem>_root.png; with compare 'none', it renders and writes only the "
+      "current file. file_stem defaults to the photo file name without its extension. The long "
+      "edge of each file is long_edge pixels at most. 'region' (x, y, w, h in 0..1 of the "
+      "cropped image) renders only that part. Answers -32005 while the editor renders another "
+      "image job, for example an open comparison; that job continues.");
   preview.params_schema = AutomationClosedParamsSchema(
       QJsonObject{
           {"out_dir", QJsonObject{{"type", "string"}, {"description", "Folder of the PNG files."}}},
@@ -109,10 +125,19 @@ auto RegisterAutomationRenderCommands(AutomationCommandRegistry& registry,
                                     {"default", kDefaultPreviewLongEdge}}},
           {"region", AutomationClosedParamsSchema(
                          QJsonObject{{"x", unit}, {"y", unit}, {"w", unit}, {"h", unit}},
-                         QJsonArray{"x", "y", "w", "h"})}},
+                         QJsonArray{"x", "y", "w", "h"})},
+          {"compare", QJsonObject{{"type", "string"},
+                                  {"enum", QJsonArray{"none", "root"}},
+                                  {"default", "root"},
+                                  {"description", "'root' also writes the imported image."}}},
+          {"file_stem",
+           QJsonObject{{"type", "string"},
+                       {"description",
+                        "First part of the file names. Default: the photo file name without "
+                        "its extension."}}}},
       QJsonArray{"out_dir"});
   preview.result_schema = AutomationObjectSchema(
-      QJsonObject{{"current", file_schema}, {"root", file_schema}}, QJsonArray{"current", "root"});
+      QJsonObject{{"current", file_schema}, {"root", file_schema}}, QJsonArray{"current"});
   preview.handler = [host](const QJsonObject& params, AutomationReply reply) {
     ui::EditorSessionController* editor  = host->editor_session();
     IEditorSessionBackend*       backend = editor != nullptr ? editor->session_backend() : nullptr;
@@ -134,9 +159,17 @@ auto RegisterAutomationRenderCommands(AutomationCommandRegistry& registry,
       geometry.view.visible_rect_in_edit_space = *region;
     }
 
-    // The file stem of the photo names both files.
-    QString stem = QStringLiteral("preview");
-    if (const auto service = host->project()->handler().project()) {
+    const bool with_root =
+        params.value("compare").toString(QStringLiteral("root")) == QStringLiteral("root");
+    QString stem = params.value("file_stem").toString(QStringLiteral("preview"));
+    if (params.contains("file_stem")) {
+      QString reason;
+      if (!ReadFileStem(stem, &reason)) {
+        SendAutomationParamError(reply, QStringLiteral("/file_stem"), reason);
+        return;
+      }
+    } else if (const auto service = host->project()->handler().project()) {
+      // Without file_stem, the file name of the photo names the files.
       if (const auto browse = service->GetAlbumBrowseService()) {
         try {
           const std::array<sl_element_id_t, 1> ids{
@@ -171,8 +204,11 @@ auto RegisterAutomationRenderCommands(AutomationCommandRegistry& registry,
           },
           Qt::QueuedConnection);
     };
+    const EditorPreviewImageSet image_set =
+        with_root ? EditorPreviewImageSet::CurrentAndRoot : EditorPreviewImageSet::CurrentOnly;
     const auto submitted = backend->RenderPreviewImages(
-        geometry, [answer, current_path, root_path](EditorPreviewImagesResult result) {
+        geometry, image_set,
+        [answer, current_path, root_path, with_root](EditorPreviewImagesResult result) {
           const QString message = QString::fromStdString(result.message);
           if (result.status != EditorPreviewImagesStatus::Completed) {
             const AutomationErrorCode code = result.status == EditorPreviewImagesStatus::Busy
@@ -188,22 +224,26 @@ auto RegisterAutomationRenderCommands(AutomationCommandRegistry& registry,
           // The completion runs on the editor render worker; the PNG encode runs off it so the
           // next viewport frame does not wait for it.
           auto images = std::make_shared<EditorPreviewImagesResult>(std::move(result));
-          QThreadPool::globalInstance()->start([answer, images, current_path, root_path] {
-            PreviewFile current;
-            PreviewFile root;
-            QString     failure = WritePng(images->current, current_path, &current);
-            if (failure.isEmpty()) {
-              failure = WritePng(images->root, root_path, &root);
-            }
-            answer([failure, current, root](AutomationCommandWait* wait) {
-              if (!failure.isEmpty()) {
-                wait->SendOwnerError(AutomationErrorCode::Failed, failure);
-                return;
-              }
-              wait->SendResult(
-                  QJsonObject{{"current", FileJson(current)}, {"root", FileJson(root)}});
-            });
-          });
+          QThreadPool::globalInstance()->start(
+              [answer, images, current_path, root_path, with_root] {
+                PreviewFile current;
+                PreviewFile root;
+                QString     failure = WritePng(images->current, current_path, &current);
+                if (failure.isEmpty() && with_root) {
+                  failure = WritePng(images->root, root_path, &root);
+                }
+                answer([failure, current, root, with_root](AutomationCommandWait* wait) {
+                  if (!failure.isEmpty()) {
+                    wait->SendOwnerError(AutomationErrorCode::Failed, failure);
+                    return;
+                  }
+                  QJsonObject files{{"current", FileJson(current)}};
+                  if (with_root) {
+                    files.insert("root", FileJson(root));
+                  }
+                  wait->SendResult(files);
+                });
+              });
         });
     if (submitted.kind == EditorSessionResultKind::Rejected && wait != nullptr) {
       wait->SendOwnerError(AutomationErrorCode::Rejected,

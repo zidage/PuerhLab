@@ -386,6 +386,8 @@ def_library(AutomationHostLib
         "${ALCEDO_UI_SHELL_ROOT}/automation/automation_editor_operation.cpp"
         "${ALCEDO_INCLUDE_ROOT}/ui/alcedo_main/automation/automation_editor_operation.hpp"
         "${ALCEDO_INCLUDE_ROOT}/ui/alcedo_main/automation/automation_editor_commands.hpp"
+        "${ALCEDO_UI_SHELL_ROOT}/automation/automation_editor_notifier.cpp"
+        "${ALCEDO_INCLUDE_ROOT}/ui/alcedo_main/automation/automation_editor_notifier.hpp"
         "${ALCEDO_UI_SHELL_ROOT}/automation/headless_frame_sink.cpp"
         "${ALCEDO_INCLUDE_ROOT}/ui/alcedo_main/automation/headless_frame_sink.hpp"
         "${ALCEDO_UI_SHELL_ROOT}/automation/headless_host.cpp"
