@@ -229,9 +229,19 @@ constexpr std::array kInputProfileProperties = {
 
 auto InputProfileUiDefault() -> json { return {{"profile_override", "auto"}}; }
 
+/// The panel projection of a RAW image has `"raster": false`: a RAW image has no input profile,
+/// so the field has no UI value, like the RAW Decode panel hides the control.
 auto InputProfileModelToUi(const json& model_json, std::string* error) -> std::optional<json> {
   const auto& input = UnwrapObject(model_json, "input");
   if (!RequireObject(input, "input_profile", error)) {
+    return std::nullopt;
+  }
+  bool raster = true;
+  if (!ReadBool(input, "raster", true, "input_profile", &raster, error)) {
+    return std::nullopt;
+  }
+  if (!raster) {
+    SetError(error, "input_profile: a RAW image has no input profile");
     return std::nullopt;
   }
   std::string profile;
@@ -1111,10 +1121,74 @@ auto CurveModelToUi(const json& model_json, std::string* error) -> std::optional
 
 auto LutUiDefault() -> json { return json::object(); }
 
+/// The Model JSON of the LUT panel projection (`referenceKind` with `path`, `packageId` and
+/// `lutId`, or `libraryPath`; `lutName`, `strength`, and the encodings): `cube_path` or a tagged
+/// `reference`, the shape of the `editor_value` of lut.list. No LUT is {}.
+auto LutPanelToModel(const json& panel, std::string* error) -> std::optional<json> {
+  std::string kind;
+  if (!ReadString(panel, "referenceKind", "none", "lut", &kind, error)) {
+    return std::nullopt;
+  }
+  if (kind == "none") {
+    return json::object();
+  }
+  json model = json::object();
+  if (kind == "file") {
+    std::string path;
+    if (!ReadString(panel, "path", "", "lut", &path, error)) {
+      return std::nullopt;
+    }
+    model["cube_path"] = path;
+  } else if (kind == "official") {
+    std::string package_id;
+    std::string lut_id;
+    if (!ReadString(panel, "packageId", "", "lut", &package_id, error) ||
+        !ReadString(panel, "lutId", "", "lut", &lut_id, error)) {
+      return std::nullopt;
+    }
+    model["reference"] = {{"kind", "official"}, {"package_id", package_id}, {"lut_id", lut_id}};
+  } else if (kind == "library") {
+    std::string path;
+    if (!ReadString(panel, "libraryPath", "", "lut", &path, error)) {
+      return std::nullopt;
+    }
+    model["reference"] = {{"kind", "library"}, {"path", path}};
+  } else {
+    SetError(error, "lut Model JSON referenceKind '" + kind + "' is not a LUT reference kind");
+    return std::nullopt;
+  }
+  std::string name;
+  double      strength = 1.0;
+  std::string input_encoding;
+  std::string output_encoding;
+  if (!ReadString(panel, "lutName", "", "lut", &name, error) ||
+      !ReadNumber(panel, "strength", 1.0, "lut", &strength, error) ||
+      !ReadString(panel, "input_encoding", "", "lut", &input_encoding, error) ||
+      !ReadString(panel, "output_encoding", "", "lut", &output_encoding, error)) {
+    return std::nullopt;
+  }
+  if (!name.empty()) {
+    model["name"] = name;
+  }
+  model["strength"] = strength;
+  if (!input_encoding.empty()) {
+    model["input_encoding"] = input_encoding;
+  }
+  if (!output_encoding.empty()) {
+    model["output_encoding"] = output_encoding;
+  }
+  return model;
+}
+
+/// The UI value of lut is its Model JSON, which editor.set accepts. The panel projection form is
+/// converted by LutPanelToModel; a Model JSON object is the UI value as it is.
 auto LutModelToUi(const json& model_json, std::string* error) -> std::optional<json> {
   const auto& lut = UnwrapObject(model_json, "lut");
   if (!RequireObject(lut, "lut", error)) {
     return std::nullopt;
+  }
+  if (lut.contains("referenceKind")) {
+    return LutPanelToModel(lut, error);
   }
   return lut;
 }

@@ -10,6 +10,7 @@
 
 #include <gtest/gtest.h>
 
+#include <array>
 #include <cmath>
 #include <json.hpp>
 #include <optional>
@@ -434,6 +435,17 @@ TEST(EditorParameterCatalogTest, InputProfileOptionsAreTheDevelopOverrides) {
       "input_profile", {{"input", {{"raster", true}, {"profile_override", "prophoto"}}}}, &error);
   ASSERT_TRUE(ui.has_value()) << error;
   EXPECT_EQ(*ui, (nlohmann::json{{"profile_override", "prophoto"}}));
+  // A RAW image has no input profile: the field has no UI value.
+  EXPECT_FALSE(EditorParameterCatalog::ToUiValue(
+                   "input_profile", {{"input", {{"raster", false}, {"profile_override", "auto"}}}},
+                   &error)
+                   .has_value());
+  EXPECT_EQ(error, "input_profile: a RAW image has no input profile");
+  EXPECT_FALSE(EditorParameterCatalog::ToModelJson(
+                   "input_profile", {{"profile_override", "auto"}},
+                   {{"input", {{"raster", false}, {"profile_override", "auto"}}}}, &error)
+                   .has_value());
+  EXPECT_EQ(error, "input_profile: a RAW image has no input profile");
   EXPECT_FALSE(EditorParameterCatalog::ToModelJson(
                    "input_profile", {{"profile_override", "aces"}}, nlohmann::json{}, &error)
                    .has_value());
@@ -900,6 +912,78 @@ TEST(EditorParameterCatalogTest, CurveAndLutUseTheModelShape) {
       EditorParameterCatalog::ToModelJson("lut", nlohmann::json(3), nlohmann::json{}, &error)
           .has_value());
   EXPECT_EQ(error.rfind("lut must be its Model JSON: ", 0), 0U) << error;
+}
+
+TEST(EditorParameterCatalogTest, LutPanelProjectionConvertsToModelJsonThatParsesAsWrite) {
+  const nlohmann::json official = {{"referenceKind", "official"},
+                                   {"packageId", "spectral_film_lut"},
+                                   {"lutId", "kodak-5207"},
+                                   {"ocio_lmt", ""},
+                                   {"path", ""},
+                                   {"lutName", "Kodak Vision3 250D 5207"},
+                                   {"strength", 0.5},
+                                   {"input_encoding", "acescc"},
+                                   {"output_encoding", "acescct"}};
+  const nlohmann::json library  = {{"referenceKind", "library"},
+                                   {"libraryPath", "user/look.cube"},
+                                   {"ocio_lmt", ""},
+                                   {"path", ""},
+                                   {"lutName", "look"},
+                                   {"strength", 1.0},
+                                   {"input_encoding", "acescc"},
+                                   {"output_encoding", "acescc"}};
+  const nlohmann::json file     = {{"referenceKind", "file"},
+                                   {"ocio_lmt", "C:/luts/look.cube"},
+                                   {"path", "C:/luts/look.cube"},
+                                   {"lutName", ""},
+                                   {"strength", 0.25},
+                                   {"input_encoding", "acescc"},
+                                   {"output_encoding", "acescc"}};
+  const nlohmann::json none     = {{"referenceKind", "none"},
+                                   {"ocio_lmt", ""},
+                                   {"path", ""},
+                                   {"lutName", ""},
+                                   {"strength", 1.0},
+                                   {"input_encoding", "acescc"},
+                                   {"output_encoding", "acescc"}};
+
+  const std::array<std::pair<nlohmann::json, nlohmann::json>, 4> cases = {{
+      {official,
+       {{"reference",
+         {{"kind", "official"}, {"package_id", "spectral_film_lut"}, {"lut_id", "kodak-5207"}}},
+        {"name", "Kodak Vision3 250D 5207"},
+        {"strength", 0.5},
+        {"input_encoding", "acescc"},
+        {"output_encoding", "acescct"}}},
+      {library,
+       {{"reference", {{"kind", "library"}, {"path", "user/look.cube"}}},
+        {"name", "look"},
+        {"strength", 1.0},
+        {"input_encoding", "acescc"},
+        {"output_encoding", "acescc"}}},
+      {file,
+       {{"cube_path", "C:/luts/look.cube"},
+        {"strength", 0.25},
+        {"input_encoding", "acescc"},
+        {"output_encoding", "acescc"}}},
+      {none, nlohmann::json::object()},
+  }};
+  for (const auto& [panel, expected] : cases) {
+    std::string error;
+    const auto  ui = EditorParameterCatalog::ToUiValue("lut", panel, &error);
+    ASSERT_TRUE(ui.has_value()) << panel.dump() << ": " << error;
+    EXPECT_EQ(*ui, expected) << panel.dump();
+    // The UI value is accepted as a write unchanged: editor.get output is editor.set input.
+    const auto model = EditorParameterCatalog::ToModelJson("lut", *ui, panel, &error);
+    ASSERT_TRUE(model.has_value()) << error;
+    EXPECT_TRUE(ParseEditorParameterWrite("lut", *model, &error).has_value())
+        << ui->dump() << ": " << error;
+  }
+
+  std::string error;
+  EXPECT_FALSE(
+      EditorParameterCatalog::ToUiValue("lut", {{"referenceKind", "cloud"}}, &error).has_value());
+  EXPECT_EQ(error, "lut Model JSON referenceKind 'cloud' is not a LUT reference kind");
 }
 
 TEST(EditorParameterCatalogTest, EveryCatalogFieldCoversEveryFieldKey) {
