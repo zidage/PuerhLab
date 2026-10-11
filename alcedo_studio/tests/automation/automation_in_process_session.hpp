@@ -23,6 +23,7 @@
 #include "ui/alcedo_main/automation/automation_export_commands.hpp"
 #include "ui/alcedo_main/automation/automation_host_commands.hpp"
 #include "ui/alcedo_main/automation/automation_library_commands.hpp"
+#include "ui/alcedo_main/automation/automation_lut_commands.hpp"
 #include "ui/alcedo_main/automation/automation_project_commands.hpp"
 #include "ui/alcedo_main/automation/automation_search_commands.hpp"
 #include "ui/alcedo_main/automation/automation_task_commands.hpp"
@@ -36,7 +37,11 @@ namespace alcedo::automation::test {
 class InProcessAutomationSession {
  public:
   /// @p host_mode is `headless` or `gui`; the library selection commands need `gui`.
-  explicit InProcessAutomationSession(const QString& host_mode = QStringLiteral("headless")) {
+  /// @p lut_services points the LUT services at a test root; empty selects the production ones.
+  explicit InProcessAutomationSession(
+      const QString&                                 host_mode    = QStringLiteral("headless"),
+      ui::ApplicationModuleHost::LutServiceFactories lut_services = {})
+      : host_(nullptr, {}, std::move(lut_services)) {
     AutomationHostCommandContext context;
     context.host      = &host_;
     context.host_mode = host_mode;
@@ -48,6 +53,7 @@ class InProcessAutomationSession {
         RegisterAutomationTaskCommands(registry_, &host_, &tracker_, &error) &&
         RegisterAutomationExportCommands(registry_, &host_, &tracker_, &error) &&
         RegisterAutomationSearchCommands(registry_, &host_, &error) &&
+        RegisterAutomationLutCommands(registry_, &host_, &error) &&
         RegisterAutomationEditorCommands(registry_, &host_, &error) &&
         RegisterAutomationVersionCommands(registry_, &host_, &error) &&
         RegisterAutomationRenderCommands(registry_, &host_, &error);

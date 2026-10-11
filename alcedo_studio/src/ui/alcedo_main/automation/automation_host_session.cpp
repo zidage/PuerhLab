@@ -17,6 +17,7 @@
 #include "ui/alcedo_main/automation/automation_export_commands.hpp"
 #include "ui/alcedo_main/automation/automation_host_commands.hpp"
 #include "ui/alcedo_main/automation/automation_library_commands.hpp"
+#include "ui/alcedo_main/automation/automation_lut_commands.hpp"
 #include "ui/alcedo_main/automation/automation_project_commands.hpp"
 #include "ui/alcedo_main/automation/automation_search_commands.hpp"
 #include "ui/alcedo_main/automation/automation_session_commands.hpp"
@@ -160,6 +161,7 @@ auto AutomationHostSession::RegisterCommands(QString* error) -> bool {
          RegisterAutomationTaskCommands(registry_, host_, &tracker_, error) &&
          RegisterAutomationExportCommands(registry_, host_, &tracker_, error) &&
          RegisterAutomationSearchCommands(registry_, host_, error) &&
+         RegisterAutomationLutCommands(registry_, host_, error) &&
          RegisterAutomationEditorCommands(registry_, host_, error) &&
          RegisterAutomationVersionCommands(registry_, host_, error) &&
          RegisterAutomationRenderCommands(registry_, host_, error);

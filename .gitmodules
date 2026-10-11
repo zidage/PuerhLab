@@ -35,3 +35,6 @@
 [submodule "alcedo_studio/src/third_party/QuickQanava"]
 	path = alcedo_studio/src/third_party/QuickQanava
 	url = https://github.com/cneben/QuickQanava.git
+[submodule "docs/alcedo-skills"]
+	path = docs/alcedo-skills
+	url = https://github.com/zidage/alcedo-skills.git

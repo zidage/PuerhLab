@@ -2,8 +2,8 @@
 //  SPDX-License-Identifier: GPL-3.0-only
 //  Additional permission under GPLv3 section 7 applies; see the LICENSE file.
 
-// The command reference in docs/automation/reference/ is generated from commands.json and
-// editor_catalog.json. These tests check that both files are the same as the schemas that a GUI
+// The command reference of the alcedo skill (the docs/alcedo-skills submodule, in
+// skills/alcedo/references/reference/) is generated from commands.json and editor_catalog.json. These tests check that both files are the same as the schemas that a GUI
 // session of this build reports. On a difference they write the schemas of the build to
 // ALCEDO_REFERENCE_OUT_DIR, and the failure message names the command that updates the docs.
 
@@ -66,6 +66,11 @@ auto SortedByMethod(QJsonArray commands) -> QJsonArray {
   return sorted;
 }
 
+auto MissingHint(const char* name) -> std::string {
+  return "cannot read " + std::string(ALCEDO_REFERENCE_DOCS_DIR) + "/" + name +
+         ". Run: git submodule update --init docs/alcedo-skills";
+}
+
 auto UpdateHint() -> std::string {
   return "The command reference is out of date. Review the new schemas in " +
          std::string(ALCEDO_REFERENCE_OUT_DIR) +
@@ -102,7 +107,7 @@ class AutomationReferenceDocsTest : public ui::test::ApplicationModuleHostTestFi
 TEST_F(AutomationReferenceDocsTest, CommittedCommandsMatchSessionDescribe) {
   const auto committed = ReadJsonFile(QStringLiteral(ALCEDO_REFERENCE_DOCS_DIR "/commands.json"));
   ASSERT_TRUE(committed.has_value() && committed->isArray())
-      << "cannot read " << ALCEDO_REFERENCE_DOCS_DIR << "/commands.json";
+      << MissingHint("commands.json");
 
   const QJsonArray live = SortedByMethod(session_->registry().Describe());
   if (SortedByMethod(committed->array()) != live) {
@@ -115,7 +120,7 @@ TEST_F(AutomationReferenceDocsTest, CommittedCatalogMatchesEditorCatalog) {
   const auto committed =
       ReadJsonFile(QStringLiteral(ALCEDO_REFERENCE_DOCS_DIR "/editor_catalog.json"));
   ASSERT_TRUE(committed.has_value() && committed->isObject())
-      << "cannot read " << ALCEDO_REFERENCE_DOCS_DIR << "/editor_catalog.json";
+      << MissingHint("editor_catalog.json");
 
   std::optional<AutomationResponse> response;
   const AutomationRequest           request{QJsonValue(1), QStringLiteral("editor.catalog"), {}};

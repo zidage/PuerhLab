@@ -5,8 +5,9 @@
 """Writes the generated parts of the alcedo-cli command reference.
 
 The command schemas (`session.describe`) and the editor field catalog (`editor.catalog`) are
-committed as JSON in docs/automation/reference/. AutomationReferenceDocsTest checks that these
-files are the same as the schemas of the current build. This script writes, from those files:
+committed as JSON in docs/alcedo-skills/skills/alcedo/references/reference/, the reference of the
+alcedo skill (the alcedo-skills submodule). AutomationReferenceDocsTest checks that these files
+are the same as the schemas of the current build. This script writes, from those files:
 
 - the block between `<!-- BEGIN GENERATED: <method> -->` and `<!-- END GENERATED: <method> -->`
   in the command pages (description, parameters, result);
@@ -27,12 +28,11 @@ from __future__ import annotations
 import argparse
 import json
 import re
-import shutil
 import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-REFERENCE_DIR = REPO_ROOT / "docs" / "automation" / "reference"
+REFERENCE_DIR = REPO_ROOT / "docs" / "alcedo-skills" / "skills" / "alcedo" / "references" / "reference"
 COMMANDS_JSON = REFERENCE_DIR / "commands.json"
 CATALOG_JSON = REFERENCE_DIR / "editor_catalog.json"
 FIELDS_PAGE = REFERENCE_DIR / "editor_fields.md"
@@ -220,6 +220,14 @@ def expected_blocks(commands: list, catalog: dict) -> dict[str, str]:
     return blocks
 
 
+def copy_json(source: Path, target: Path) -> None:
+    """Writes the JSON of @p source to @p target with two-space indents and LF line ends, the form
+    of the committed files. The build writes four-space indents."""
+    data = json.loads(source.read_text(encoding="utf-8"))
+    target.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8",
+                      newline="\n")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -229,9 +237,9 @@ def main() -> int:
     arguments = parser.parse_args()
 
     if arguments.schema:
-        shutil.copyfile(arguments.schema, COMMANDS_JSON)
+        copy_json(arguments.schema, COMMANDS_JSON)
     if arguments.catalog:
-        shutil.copyfile(arguments.catalog, CATALOG_JSON)
+        copy_json(arguments.catalog, CATALOG_JSON)
 
     commands = json.loads(COMMANDS_JSON.read_text(encoding="utf-8"))
     catalog = json.loads(CATALOG_JSON.read_text(encoding="utf-8"))
@@ -262,7 +270,7 @@ def main() -> int:
 
     for name in expected:
         if name not in seen:
-            problems.append(f"'{name}' has no generated block in docs/automation/reference/*.md")
+            problems.append(f"'{name}' has no generated block in the reference pages")
 
     if arguments.check:
         for problem in problems:
