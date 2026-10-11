@@ -254,12 +254,15 @@ uploaded a stable pair, this workflow must fail.
 1. Merge the last feature work to `main`.
 2. Generate and approve the version notes. Commit them as the last commit of
    that version.
-3. Update the agent skill in
-   [alcedo-skills](https://github.com/zidage/alcedo-skills): run its
-   `scripts/sync_references.py <this checkout>` to copy `docs/automation`, set
-   the plugin version to the app version, and push a tag `v<version>`. Do this
-   for every release, also when the automation commands did not change, so
-   that the skill version names the app version that it was checked with.
+3. Release the agent skill in
+   [alcedo-skills](https://github.com/zidage/alcedo-skills). Its
+   `skills/alcedo/references/` is the alcedo-cli documentation, and this
+   repository checks it out at `docs/alcedo-skills` as a submodule. In
+   alcedo-skills, start from the submodule commit of the release, run
+   `scripts/set_version.py <version>`, commit, and push a tag `v<version>`
+   (and `main`, when that commit is its head). Do this for every release, also
+   when the automation commands did not change, so that the skill version names
+   the app version that it was checked with.
 4. On each package machine, check out that merge commit on `main`. Run the
    **Release** package task (stable).
 5. Upload that platform with `publish_update.py`. That platform is now live.

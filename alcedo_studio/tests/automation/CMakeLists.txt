@@ -85,13 +85,14 @@ alcedo_add_automation_test(AutomationGuiSessionTest
     SOURCES automation_gui_session_test.cpp
     LIBRARIES AutomationHostLib Qt6::Network)
 
-# docs/automation/reference/commands.json and editor_catalog.json against the schemas of a GUI
+# commands.json and editor_catalog.json of the alcedo skill reference (the docs/alcedo-skills
+# submodule) against the schemas of a GUI
 # session of this build.
 alcedo_add_automation_test(AutomationReferenceDocsTest
     SOURCES automation_reference_docs_test.cpp
     LIBRARIES AutomationHostLib Qt6::Network)
 target_compile_definitions(AutomationReferenceDocsTest PRIVATE
-    ALCEDO_REFERENCE_DOCS_DIR="${CMAKE_SOURCE_DIR}/docs/automation/reference"
+    ALCEDO_REFERENCE_DOCS_DIR="${CMAKE_SOURCE_DIR}/docs/alcedo-skills/skills/alcedo/references/reference"
     ALCEDO_REFERENCE_OUT_DIR="${CMAKE_BINARY_DIR}/automation_reference")
 
 # The generated blocks of the command reference are up to date and every command has a section.
@@ -113,6 +114,13 @@ alcedo_add_automation_test(AutomationProjectCommandsTest
 # library.* and tasks.* parameter and state rules in an in-process headless session.
 alcedo_add_automation_test(AutomationLibraryCommandsTest
     SOURCES automation_library_commands_test.cpp
+    LIBRARIES AutomationHostLib
+    LABEL ci_automation_flow
+    CATEGORIES ci_automation)
+
+# lut.list through the command registry, with a temporary LUT library root.
+alcedo_add_automation_test(AutomationLutCommandsTest
+    SOURCES automation_lut_commands_test.cpp
     LIBRARIES AutomationHostLib
     LABEL ci_automation_flow
     CATEGORIES ci_automation)
