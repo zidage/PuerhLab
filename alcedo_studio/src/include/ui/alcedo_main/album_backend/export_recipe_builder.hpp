@@ -14,6 +14,7 @@
 #include <optional>
 
 #include "ui/alcedo_main/album_backend/import_export.hpp"
+#include "ui/alcedo_main/album_backend/interaction_policy_controller.hpp"
 
 namespace alcedo::ui {
 
@@ -124,11 +125,16 @@ class ExportRecipeBuilder final : public QObject {
   /// `{valid, field, message}` of Validate for the map form of the options.
   Q_INVOKABLE QVariantMap  ValidateOptions(const QVariantMap& options) const;
   Q_INVOKABLE QString      OutputFolderFor(const QVariantMap& options) const;
-  /// `{started, field, message}` of Start for the map form of the options.
+  /// The policy whose agent control refuses StartExport. Null refuses nothing.
+  void                     SetInteractionPolicy(InteractionPolicyController* interaction_policy);
+  /// The user export of the export panel: `{started, field, message}` of Start for the map form
+  /// of the options. Refused with `started: false` and the reason in `message` while an
+  /// automation agent holds control. The automation command calls Start.
   Q_INVOKABLE QVariantMap  StartExport(const QVariantMap& options, const QVariantList& targets);
 
  private:
   QPointer<ImportExportHandler> import_export_;
+  InteractionPolicyController*  interaction_policy_ = nullptr;
 };
 
 }  // namespace alcedo::ui

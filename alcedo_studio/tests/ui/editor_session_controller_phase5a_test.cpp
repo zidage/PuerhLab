@@ -7,7 +7,6 @@
 /// and build-check that EditorSessionService does not link Qt Widgets.
 
 #include <gtest/gtest.h>
-#include "support/editor_parameter_write_test.hpp"
 
 #include <QCoreApplication>
 #include <QEvent>
@@ -23,15 +22,19 @@
 #include <utility>
 #include <vector>
 
+#include "app/editor_panel_projection.hpp"
+#include "app/editor_pending_input.hpp"
 #include "app/editor_session_bootstrap.hpp"
 #include "app/editor_session_service.hpp"
-#include "app/editor_pending_input.hpp"
-#include "app/editor_panel_projection.hpp"
 #include "app/editor_session_types.hpp"
 #include "app/pipeline_document_history.hpp"
+#include "support/editor_parameter_write_test.hpp"
 #include "type/hash_type.hpp"
+#include "ui/alcedo_main/album_backend/agent_control_owner.hpp"
+#include "ui/alcedo_main/album_backend/background_task_controller.hpp"
 #include "ui/alcedo_main/album_backend/editor_history_models.hpp"
 #include "ui/alcedo_main/album_backend/editor_session_controller.hpp"
+#include "ui/alcedo_main/album_backend/interaction_policy_controller.hpp"
 #include "ui/alcedo_main/album_backend/workspace_router.hpp"
 #include "ui/editor_rhi/editor_interaction_controller.hpp"
 #include "ui/editor_rhi/editor_viewport_item.hpp"
@@ -1701,6 +1704,46 @@ TEST(EditorSessionControllerPhase5ATest, HistoryModelPresentsTypedAddColorGradeT
             QStringLiteral("Add Color Grade"));
   EXPECT_EQ(model.data(model.index(0), EditorHistoryModel::DeltaTextRole).toString(),
             QStringLiteral("Color Grade 2"));
+}
+
+TEST(EditorSessionControllerTest, UserWriteIsRejectedWhileAgentHoldsControl) {
+  FakeSessionBackend backend;
+  backend.state_               = EditorSessionState::Interactive;
+  backend.image_load_request_  = ImageLoadRequestId{1};
+  backend.identity_.element_id = 1;
+  backend.identity_.image_id   = 2;
+  EditorSessionController     controller(&backend);
+  BackgroundTaskController    tasks;
+  InteractionPolicyController policy(&tasks);
+  AgentControlOwner           control(&tasks);
+  controller.SetInteractionPolicy(&policy);
+
+  ASSERT_EQ(control.TryAcquire(QStringLiteral("claude-code")), AgentControlRefusal::None);
+  ASSERT_FALSE(policy.CanChangeStateAsUser());
+
+  // The user write is refused before the session sees it.
+  EXPECT_FALSE(controller.submitPatch(QStringLiteral("exposure"),
+                                      QStringLiteral("{\"exposure\":0.5}"), true));
+  EXPECT_EQ(backend.enqueue_count, 0);
+  EXPECT_TRUE(backend.PeekPendingInput().sequences.empty());
+  EXPECT_FALSE(controller.actions()->can_undo());
+  EXPECT_FALSE(controller.actions()->can_checkout_version());
+
+  // The shared write that the agent commands use still runs.
+  std::string error;
+  auto        write = alcedo::ParseEditorParameterWrite(
+      "exposure", nlohmann::json::parse(R"({"exposure":0.8})"), &error);
+  ASSERT_TRUE(write.has_value()) << error;
+  EXPECT_FALSE(alcedo::EditorSessionResultIsFailure(
+      controller.EnqueueFieldWrite(QStringLiteral("exposure"), std::move(*write), true).kind));
+  EXPECT_EQ(backend.enqueue_count, 1);
+
+  // After the agent gives control back, the user write runs again.
+  ASSERT_TRUE(control.Release());
+  EXPECT_TRUE(policy.CanChangeStateAsUser());
+  EXPECT_TRUE(controller.submitPatch(QStringLiteral("exposure"),
+                                     QStringLiteral("{\"exposure\":0.6}"), true));
+  EXPECT_EQ(backend.enqueue_count, 2);
 }
 
 }  // namespace

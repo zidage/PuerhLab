@@ -5,6 +5,7 @@
 #include "ui/alcedo_main/automation/automation_command_registry.hpp"
 
 #include <QDebug>
+#include <QStringList>
 #include <QTimer>
 #include <chrono>
 #include <exception>
@@ -134,6 +135,38 @@ auto AutomationCommandRegistry::Register(AutomationCommandSpec spec, QString* er
   return true;
 }
 
+auto AutomationCommandSummary(const AutomationRequest& request) -> QString {
+  QStringList parts{request.method};
+  for (auto it = request.params.begin(); it != request.params.end(); ++it) {
+    if (it.key() == QLatin1String(kTimeoutParameter) || it.key() == QLatin1String("note")) {
+      continue;
+    }
+    const QJsonValue& value = it.value();
+    if (value.isString()) {
+      parts.push_back(value.toString());
+    } else if (value.isDouble()) {
+      parts.push_back(QString::number(value.toDouble()));
+    } else if (value.isBool()) {
+      parts.push_back(QStringLiteral("%1=%2").arg(it.key(), value.toBool() ? "true" : "false"));
+    } else if (value.isArray()) {
+      parts.push_back(QStringLiteral("%1[%2]").arg(it.key()).arg(value.toArray().size()));
+    }
+  }
+  return parts.join(QLatin1Char(' '));
+}
+
+void AutomationCommandRegistry::SetStateChangeControl(AutomationStateChangeControl control) {
+  state_change_control_ = std::move(control);
+}
+
+auto AutomationCommandRegistry::AdmitStateChange() const
+    -> std::optional<AutomationCommandRefusal> {
+  if (!state_change_control_.admit) {
+    return std::nullopt;
+  }
+  return state_change_control_.admit();
+}
+
 void AutomationCommandRegistry::Dispatch(const AutomationRequest& request,
                                          AutomationReply          reply) const {
   const auto command = commands_.find(request.method);
@@ -151,6 +184,27 @@ void AutomationCommandRegistry::Dispatch(const AutomationRequest& request,
         QStringLiteral("invalid parameter at '%1': %2").arg(violation->pointer, violation->reason),
         QJsonObject{{"pointer", violation->pointer}, {"reason", violation->reason}});
     return;
+  }
+
+  if (spec.changes_state) {
+    if (auto refusal = AdmitStateChange()) {
+      reply.SendError(refusal->code, refusal->message, refusal->data);
+      return;
+    }
+    if (state_change_control_.begin_command && reply.state_) {
+      // The task detail shows the command until its response is sent, also a timeout response.
+      const quint64 token = state_change_control_.begin_command(AutomationCommandSummary(request));
+      reply.state_->sink  = [sink = std::move(reply.state_->sink),
+                            end  = state_change_control_.end_command,
+                            token](AutomationResponse response) {
+        if (sink) {
+          sink(std::move(response));
+        }
+        if (end) {
+          end(token);
+        }
+      };
+    }
   }
 
   const int timeout_ms = request.params.value(kTimeoutParameter).toInt(kDefaultAutomationTimeoutMs);

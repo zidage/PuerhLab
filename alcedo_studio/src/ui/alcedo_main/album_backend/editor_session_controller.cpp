@@ -262,12 +262,43 @@ void EditorSessionController::SyncBackgroundActionRestrictions() {
   ApplyActionAvailability();
 }
 
+auto EditorSessionController::UserStateChangeRefusalText() const -> QString {
+  return UserStateChangeRefusal(interaction_policy_);
+}
+
+auto EditorSessionController::RejectedResult(const QString& message) const
+    -> alcedo::EditorSessionResult {
+  alcedo::EditorSessionResult rejected;
+  rejected.kind    = alcedo::EditorSessionResultKind::Rejected;
+  rejected.state   = session_state();
+  rejected.message = message.toStdString();
+  return rejected;
+}
+
 void EditorSessionController::ApplyActionAvailability() {
   if (!session_backend_) {
     actions_.Apply({});
     return;
   }
-  actions_.Apply(session_backend_->action_availability());
+  alcedo::EditorActionAvailability availability = session_backend_->action_availability();
+  // While an automation agent holds control, the QML projection disables the user actions that
+  // change the session state. The backend admission stays as it is: the agent runs the same
+  // operations. The editor controls and the viewport tools read the policy themselves, so that
+  // the user can still pan and zoom.
+  if (const QString refusal = UserStateChangeRefusalText(); !refusal.isEmpty()) {
+    for (const alcedo::EditorAction action :
+         {alcedo::EditorAction::SelectImage, alcedo::EditorAction::Undo, alcedo::EditorAction::Redo,
+          alcedo::EditorAction::MoveHead, alcedo::EditorAction::DiscardChanges,
+          alcedo::EditorAction::CheckoutVersion, alcedo::EditorAction::CreateRootVersion,
+          alcedo::EditorAction::BranchVersion, alcedo::EditorAction::RenameVersion,
+          alcedo::EditorAction::RemoveVersion, alcedo::EditorAction::ApplyPaste,
+          alcedo::EditorAction::DiscardAndContinue}) {
+      auto& decision   = availability.decisions[static_cast<std::size_t>(action)];
+      decision.allowed = false;
+      decision.reason  = refusal.toStdString();
+    }
+  }
+  actions_.Apply(availability);
 }
 
 void EditorSessionController::OnBackendChanged() {
@@ -625,6 +656,10 @@ void EditorSessionController::Open(uint elementId, uint imageId) {
 }
 
 void EditorSessionController::CheckoutVersion(const QString& versionId) {
+  if (const QString refusal = UserStateChangeRefusalText(); !refusal.isEmpty()) {
+    PublishHistoryRejected(QStringLiteral("checkoutVersion"), refusal, versionId);
+    return;
+  }
   (void)RequestCheckoutVersion(versionId);
 }
 
@@ -654,6 +689,10 @@ auto EditorSessionController::RequestCheckoutVersion(const QString& versionId)
 }
 
 void EditorSessionController::CreateRootVersion(const QString& displayName) {
+  if (const QString refusal = UserStateChangeRefusalText(); !refusal.isEmpty()) {
+    PublishHistoryRejected(QStringLiteral("createRootVersion"), refusal);
+    return;
+  }
   (void)RequestCreateRootVersion(displayName);
 }
 
@@ -676,6 +715,10 @@ auto EditorSessionController::RequestCreateRootVersion(const QString& displayNam
 
 void EditorSessionController::BranchFromCommit(const QString& commitId,
                                                const QString& displayName) {
+  if (const QString refusal = UserStateChangeRefusalText(); !refusal.isEmpty()) {
+    PublishHistoryRejected(QStringLiteral("branchFromCommit"), refusal, commitId);
+    return;
+  }
   (void)RequestBranchFromCommit(commitId, displayName);
 }
 
@@ -723,6 +766,10 @@ void EditorSessionController::RetrySave() {
 
 void EditorSessionController::DiscardAndContinue() {
   const QString action = QStringLiteral("discardAndContinue");
+  if (const QString refusal = UserStateChangeRefusalText(); !refusal.isEmpty()) {
+    PublishHistoryRejected(action, refusal);
+    return;
+  }
   if (!session_backend_) {
     PublishHistoryRejected(action, QStringLiteral("Editor session backend is unavailable"));
     return;
@@ -735,6 +782,10 @@ void EditorSessionController::DiscardAndContinue() {
 
 void EditorSessionController::Discard() {
   const QString action = QStringLiteral("discard");
+  if (const QString refusal = UserStateChangeRefusalText(); !refusal.isEmpty()) {
+    PublishHistoryRejected(action, refusal);
+    return;
+  }
   if (!session_backend_) {
     PublishHistoryRejected(action, QStringLiteral("Editor session backend is unavailable"));
     return;
@@ -758,6 +809,10 @@ void EditorSessionController::CancelPendingNavigation() {
 }
 
 void EditorSessionController::RenameVersion(const QString& versionId, const QString& displayName) {
+  if (const QString refusal = UserStateChangeRefusalText(); !refusal.isEmpty()) {
+    PublishHistoryRejected(QStringLiteral("renameVersion"), refusal, versionId);
+    return;
+  }
   (void)RequestRenameVersion(versionId, displayName);
 }
 
@@ -791,6 +846,10 @@ auto EditorSessionController::RequestRenameVersion(const QString& versionId,
 }
 
 void EditorSessionController::RemoveVersion(const QString& versionId) {
+  if (const QString refusal = UserStateChangeRefusalText(); !refusal.isEmpty()) {
+    PublishHistoryRejected(QStringLiteral("removeVersion"), refusal, versionId);
+    return;
+  }
   (void)RequestRemoveVersion(versionId);
 }
 
@@ -818,9 +877,21 @@ auto EditorSessionController::RequestRemoveVersion(const QString& versionId)
   }
 }
 
-void EditorSessionController::Undo() { (void)RequestUndo(); }
+void EditorSessionController::Undo() {
+  if (const QString refusal = UserStateChangeRefusalText(); !refusal.isEmpty()) {
+    PublishHistoryRejected(QStringLiteral("undo"), refusal);
+    return;
+  }
+  (void)RequestUndo();
+}
 
-void EditorSessionController::Redo() { (void)RequestRedo(); }
+void EditorSessionController::Redo() {
+  if (const QString refusal = UserStateChangeRefusalText(); !refusal.isEmpty()) {
+    PublishHistoryRejected(QStringLiteral("redo"), refusal);
+    return;
+  }
+  (void)RequestRedo();
+}
 
 auto EditorSessionController::RequestUndo() -> alcedo::EditorSessionResult {
   return RequestUndoRedo(true);
@@ -848,6 +919,9 @@ auto EditorSessionController::RequestUndoRedo(bool undo) -> alcedo::EditorSessio
 auto EditorSessionController::SubmitRenameColorGrade(const alcedo::NodeId& node_id,
                                                      std::string           display_name)
     -> alcedo::EditorSessionResult {
+  if (const QString refusal = UserStateChangeRefusalText(); !refusal.isEmpty()) {
+    return RejectedResult(refusal);
+  }
   if (!session_backend_) {
     alcedo::EditorSessionResult result;
     result.kind    = alcedo::EditorSessionResultKind::Rejected;
@@ -860,6 +934,9 @@ auto EditorSessionController::SubmitRenameColorGrade(const alcedo::NodeId& node_
 
 auto EditorSessionController::SubmitSetColorGradeDeletionProtected(
     const alcedo::NodeId& node_id, bool deletion_protected) -> alcedo::EditorSessionResult {
+  if (const QString refusal = UserStateChangeRefusalText(); !refusal.isEmpty()) {
+    return RejectedResult(refusal);
+  }
   if (!session_backend_) {
     alcedo::EditorSessionResult result;
     result.kind    = alcedo::EditorSessionResultKind::Rejected;
@@ -872,6 +949,9 @@ auto EditorSessionController::SubmitSetColorGradeDeletionProtected(
 
 auto EditorSessionController::SubmitNodeGraphTopologyEdit(
     const alcedo::NodeGraphTopologyChange& change) -> alcedo::EditorSessionResult {
+  if (const QString refusal = UserStateChangeRefusalText(); !refusal.isEmpty()) {
+    return RejectedResult(refusal);
+  }
   if (!session_backend_) {
     alcedo::EditorSessionResult result;
     result.kind    = alcedo::EditorSessionResultKind::Rejected;
@@ -885,6 +965,9 @@ auto EditorSessionController::SubmitNodeGraphTopologyEdit(
 auto EditorSessionController::SubmitInsertColorGradeAtTop(
     const alcedo::NodeId& new_id, const alcedo::NodeId& expected_predecessor_id)
     -> alcedo::EditorSessionResult {
+  if (const QString refusal = UserStateChangeRefusalText(); !refusal.isEmpty()) {
+    return RejectedResult(refusal);
+  }
   if (!session_backend_) {
     alcedo::EditorSessionResult result;
     result.kind    = alcedo::EditorSessionResultKind::Rejected;
@@ -897,6 +980,9 @@ auto EditorSessionController::SubmitInsertColorGradeAtTop(
 
 auto EditorSessionController::SubmitRemoveColorGradeAndBridge(const alcedo::NodeId& node_id)
     -> alcedo::EditorSessionResult {
+  if (const QString refusal = UserStateChangeRefusalText(); !refusal.isEmpty()) {
+    return RejectedResult(refusal);
+  }
   if (!session_backend_) {
     alcedo::EditorSessionResult result;
     result.kind    = alcedo::EditorSessionResultKind::Rejected;
@@ -909,6 +995,10 @@ auto EditorSessionController::SubmitRemoveColorGradeAndBridge(const alcedo::Node
 
 void EditorSessionController::MoveHeadToCommit(const QString& commitId) {
   const QString action = QStringLiteral("moveHeadToCommit");
+  if (const QString refusal = UserStateChangeRefusalText(); !refusal.isEmpty()) {
+    PublishHistoryRejected(action, refusal, commitId);
+    return;
+  }
   if (!session_backend_) {
     PublishHistoryRejected(action, QStringLiteral("Editor session backend is unavailable"),
                            commitId);
@@ -1541,6 +1631,10 @@ auto EditorSessionController::can_discard_current_commit() const -> bool {
 
 bool EditorSessionController::submitWrite(QString fieldKey, alcedo::EditorParameterWrite write,
                                           bool settled) {
+  if (const QString refusal = UserStateChangeRefusalText(); !refusal.isEmpty()) {
+    return !alcedo::EditorSessionResultIsFailure(
+        EnqueueAdjustmentPatch(std::nullopt, settled, refusal.toStdString()).kind);
+  }
   return !alcedo::EditorSessionResultIsFailure(
       EnqueueFieldWrite(std::move(fieldKey), std::move(write), settled).kind);
 }
@@ -1575,6 +1669,10 @@ auto EditorSessionController::EnqueueFieldWrite(
 auto EditorSessionController::SubmitTargetedWrite(const alcedo::EditorParameterTarget& target,
                                                   alcedo::EditorParameterWrite         write,
                                                   bool settled) -> bool {
+  if (const QString refusal = UserStateChangeRefusalText(); !refusal.isEmpty()) {
+    return !alcedo::EditorSessionResultIsFailure(
+        EnqueueAdjustmentPatch(std::nullopt, settled, refusal.toStdString()).kind);
+  }
   auto target_error = alcedo::DescribeEditorParameterTargetError(target, target.field_key);
   if (!target_error.empty()) {
     return !alcedo::EditorSessionResultIsFailure(
@@ -1679,7 +1777,7 @@ void EditorSessionController::BindNodeSelectionSource(EditorNodeController* node
 
 auto EditorSessionController::EnqueueMaskCreation(alcedo::EditorMaskCreationCommand command)
     -> bool {
-  if (session_backend_ == nullptr || !can_edit()) {
+  if (session_backend_ == nullptr || !can_edit() || !UserStateChangeRefusalText().isEmpty()) {
     return false;
   }
   const auto result = session_backend_->EnqueueMaskCreation(std::move(command));
@@ -2016,6 +2114,9 @@ auto EditorSessionController::PasteAdjustmentPackage(
     const alcedo::AdjustmentTransferPackage& package, const QString& versionDisplayName)
     -> alcedo::EditorSessionResult {
   if (!session_backend_) return {};
+  if (const QString refusal = UserStateChangeRefusalText(); !refusal.isEmpty()) {
+    return RejectedResult(refusal);
+  }
   return session_backend_->PasteAdjustments(package, versionDisplayName.toStdString());
 }
 

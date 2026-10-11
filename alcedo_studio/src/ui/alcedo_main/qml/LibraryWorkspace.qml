@@ -492,6 +492,7 @@ RowLayout {
                     Button {
                         id: emptyStateLoadButton
                         visible: !appModules.project.serviceReady
+                        enabled: appModules.interactionPolicy.canChangeStateAsUser
                         text: qsTr("Load Project")
                         Material.background: root.colButtonPrimary
                         Material.foreground: root.colText
@@ -595,6 +596,7 @@ RowLayout {
                             ? qsTr("Export 1 File")
                             : qsTr("Export %1 Files").arg(host.exportQueueCount)
                     enabled: host.backendInteractive
+                             && appModules.interactionPolicy.canChangeStateAsUser
                              && !appModules.importExport.exportInFlight
                              && host.exportQueueCount > 0
                              && inspectorPanel.exportSettingsValid

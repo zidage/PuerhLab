@@ -85,6 +85,10 @@ class InteractionPolicyController final : public QObject {
   Q_PROPERTY(QString checkoutVersionReason READ CheckoutVersionReason NOTIFY PolicyChanged)
   Q_PROPERTY(bool canPasteAdjustments READ CanPasteAdjustments NOTIFY PolicyChanged)
   Q_PROPERTY(QString pasteAdjustmentsReason READ PasteAdjustmentsReason NOTIFY PolicyChanged)
+  // Automation agent control: false while an agent holds control of the GUI session. Only the
+  // user-facing adapters read it; editor session admission does not.
+  Q_PROPERTY(bool canChangeStateAsUser READ CanChangeStateAsUser NOTIFY PolicyChanged)
+  Q_PROPERTY(QString changeStateAsUserReason READ ChangeStateAsUserReason NOTIFY PolicyChanged)
 
  public:
   explicit InteractionPolicyController(BackgroundTaskController* registry = nullptr,
@@ -123,6 +127,8 @@ class InteractionPolicyController final : public QObject {
   QString CheckoutVersionReason() const;
   bool    CanPasteAdjustments() const;
   QString PasteAdjustmentsReason() const;
+  bool    CanChangeStateAsUser() const;
+  QString ChangeStateAsUserReason() const;
 
   // ── Q_INVOKABLE one-shot queries (return {allowed, reason, blockingTaskIds}) ─
   // Named `Evaluate*` (not `Can*`) so they do not collide with the no-arg
@@ -142,6 +148,7 @@ class InteractionPolicyController final : public QObject {
   Q_INVOKABLE QVariantMap EvaluateSwitchWorkspace() const;
   Q_INVOKABLE QVariantMap EvaluateCheckoutVersion() const;
   Q_INVOKABLE QVariantMap EvaluatePasteAdjustments() const;
+  Q_INVOKABLE QVariantMap EvaluateChangeStateAsUser() const;
 
  signals:
   void PolicyChanged();
@@ -175,5 +182,10 @@ class InteractionPolicyController final : public QObject {
   QVariantList                   pending_analysis_targets_ = {};
   bool                           natural_language_search_enabled_ = false;
 };
+
+/// The reason why the user cannot change application state now, or an empty string when the
+/// user can. Empty for a null @p policy. The user-facing adapters (QML invokables) call it before
+/// they start a user state change.
+auto UserStateChangeRefusal(const InteractionPolicyController* policy) -> QString;
 
 }  // namespace alcedo::ui

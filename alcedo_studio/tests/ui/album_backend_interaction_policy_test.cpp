@@ -211,6 +211,34 @@ TEST_F(ApplicationModuleHostInteractionPolicyTests, ModelActivationLocks_BlockAl
   EXPECT_TRUE(policy.EvaluateRunImageAnalysis(Targets({42})).value("allowed").toBool());
 }
 
+// The agent control lock refuses only the user-facing adapters. The capabilities that the editor
+// session admission reads stay open, so the commands of the agent still run.
+TEST(InteractionPolicyControllerTest, UserStateChangeLockDoesNotRestrictSessionAdmission) {
+  BackgroundTaskController    registry;
+  InteractionPolicyController policy(&registry);
+  EXPECT_TRUE(policy.CanChangeStateAsUser());
+  EXPECT_TRUE(UserStateChangeRefusal(&policy).isEmpty());
+  EXPECT_TRUE(UserStateChangeRefusal(nullptr).isEmpty());
+
+  const QString id = RegisterLockedTask(
+      registry, BackgroundTaskKind::AgentControl,
+      {Lock(InteractionCapability::UserStateChange, 0, QStringLiteral("agent"))});
+  EXPECT_FALSE(policy.CanChangeStateAsUser());
+  EXPECT_EQ(policy.ChangeStateAsUserReason(), QStringLiteral("agent"));
+  EXPECT_FALSE(policy.EvaluateChangeStateAsUser().value("allowed").toBool());
+  EXPECT_EQ(UserStateChangeRefusal(&policy), QStringLiteral("agent"));
+
+  EXPECT_TRUE(policy.CanSelectEditorImage());
+  EXPECT_TRUE(policy.CanPasteAdjustments());
+  EXPECT_TRUE(policy.CanCheckoutVersion());
+  EXPECT_TRUE(policy.CanSwitchWorkspace());
+  EXPECT_TRUE(policy.CanDeletePendingTargets());
+  EXPECT_TRUE(policy.CanRunAnalysis());
+
+  registry.FinishTask(id, BackgroundTaskState::Succeeded);
+  EXPECT_TRUE(policy.CanChangeStateAsUser());
+}
+
 TEST_F(ApplicationModuleHostInteractionPolicyTests, FinishTask_ClearsLocks) {
   BackgroundTaskController    registry;
   InteractionPolicyController policy(&registry);

@@ -32,12 +32,38 @@ auto ProjectLaunchCoordinator::launch_busy() const -> bool {
   return loading_overlay_visible() || pending_request_.has_value();
 }
 
+void ProjectLaunchCoordinator::SetInteractionPolicy(
+    InteractionPolicyController* interaction_policy) {
+  interaction_policy_ = interaction_policy;
+}
+
 bool ProjectLaunchCoordinator::BeginPromptOpen() {
+  if (!UserStateChangeRefusal(interaction_policy_).isEmpty()) {
+    return false;
+  }
   return Begin(LaunchRequest{LaunchKind::kPromptOpen, {}, {}});
 }
 
 bool ProjectLaunchCoordinator::BeginPromptCreate() {
+  if (!UserStateChangeRefusal(interaction_policy_).isEmpty()) {
+    return false;
+  }
   return Begin(LaunchRequest{LaunchKind::kPromptCreate, {}, {}});
+}
+
+bool ProjectLaunchCoordinator::BeginCreateAsUser(const QString& folderUrlOrPath,
+                                                 const QString& projectName) {
+  if (!UserStateChangeRefusal(interaction_policy_).isEmpty()) {
+    return false;
+  }
+  return BeginCreate(folderUrlOrPath, projectName);
+}
+
+bool ProjectLaunchCoordinator::PreviewProject(const QString& projectUrlOrPath) {
+  if (project_ == nullptr || !UserStateChangeRefusal(interaction_policy_).isEmpty()) {
+    return false;
+  }
+  return project_->PreviewProject(projectUrlOrPath);
 }
 
 bool ProjectLaunchCoordinator::BeginOpen(const QString& projectUrlOrPath) {
@@ -105,7 +131,7 @@ void ProjectLaunchCoordinator::RunPendingLaunch() {
 }
 
 bool ProjectLaunchCoordinator::ContinueWelcomeProject() {
-  if (project_ == nullptr) {
+  if (project_ == nullptr || !UserStateChangeRefusal(interaction_policy_).isEmpty()) {
     return false;
   }
   const bool load_running = project_->ProjectLoading();

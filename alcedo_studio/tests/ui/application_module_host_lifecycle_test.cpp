@@ -69,6 +69,7 @@ TEST_F(ApplicationModuleHostLifecycleTests,
   };
 
   EXPECT_LT(index_of("BackgroundTaskController"), index_of("InteractionPolicyController"));
+  EXPECT_LT(index_of("InteractionPolicyController"), index_of("AgentControlOwner"));
   EXPECT_LT(index_of("ProjectModule"), index_of("LibraryModule"));
   EXPECT_LT(index_of("LibraryModule"), index_of("FolderController"));
   EXPECT_LT(index_of("FolderController"), index_of("ImageController"));
@@ -132,6 +133,7 @@ TEST_F(ApplicationModuleHostLifecycleTests,
         {"nikonHeRecovery", "alcedo::ui::NikonHeRecoveryController*"},
         {"backgroundTasks", "alcedo::ui::BackgroundTaskController*"},
         {"interactionPolicy", "alcedo::ui::InteractionPolicyController*"},
+        {"agentControl", "alcedo::ui::AgentControlOwner*"},
         {"modelDownload", "alcedo::ui::ModelDownloadController*"},
         {"updates", "alcedo::UpdateService*"},
         {"lutLibrary", "alcedo::LutLibraryService*"},

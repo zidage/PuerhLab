@@ -23,8 +23,10 @@ auto AutomationEditorCatalogFields() -> QJsonArray;
 /// `editor.batch_set`, `editor.undo`, `editor.redo`, `editor.history`, and `editor.actions`.
 /// They call the owners that the GUI uses: WorkspaceRouter to open, EditorSessionController for
 /// writes, Undo, Redo, and close, and the session snapshots for the reads. A write answers after
-/// its commit and the frame of that commit. @p host must outlive every dispatch. Returns false
-/// and writes @p error when a registration fails.
+/// its commit and the frame of that commit. `editor.batch_set` checks agent control again
+/// between its changes through AutomationCommandRegistry::AdmitStateChange. @p host and
+/// @p registry must outlive every dispatch. Returns false and writes @p error when a
+/// registration fails.
 [[nodiscard]] auto RegisterAutomationEditorCommands(AutomationCommandRegistry& registry,
                                                     ui::ApplicationModuleHost* host,
                                                     QString* error = nullptr) -> bool;

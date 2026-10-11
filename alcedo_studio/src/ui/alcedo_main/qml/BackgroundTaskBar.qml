@@ -165,6 +165,7 @@ Item {
         if (kind === "export") return qsTr("Export")
         if (kind === "adjustmentPaste") return qsTr("Paste Adjustments")
         if (kind === "ratingUpdate") return qsTr("Ratings")
+        if (kind === "agentControl") return qsTr("Agent")
         return qsTr("Background Tasks")
     }
 

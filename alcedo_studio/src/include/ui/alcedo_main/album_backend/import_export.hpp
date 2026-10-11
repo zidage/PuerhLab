@@ -21,6 +21,7 @@
 #include "type/supported_file_type.hpp"
 #include "ui/alcedo_main/album_backend/album_types.hpp"
 #include "ui/alcedo_main/album_backend/folder_import_scan_model.hpp"
+#include "ui/alcedo_main/album_backend/interaction_policy_controller.hpp"
 #include "ui/alcedo_main/album_backend/nikon_he_recovery_types.hpp"
 #include "ui/alcedo_main/i18n.hpp"
 
@@ -74,9 +75,19 @@ class ImportExportHandler final : public QObject {
   void                    BindCollaborators(StatsEngine* stats, NikonHeRecoveryController* nikon,
                                             SemanticGenerationController* semantic);
 
+  /// The policy whose agent control refuses the user imports StartImport and
+  /// StartFolderImportAsUser. Null refuses nothing.
+  void                    SetInteractionPolicy(InteractionPolicyController* interaction_policy);
+
+  /// The user import of the Import dialog and file drop. Refused while an automation agent holds
+  /// control.
   Q_INVOKABLE void        StartImport(const QStringList& fileUrlsOrPaths);
-  /// Import the files of the finished folder scan (folderScan) into the current folder.
+  /// Import the files of the finished folder scan (folderScan) into the current folder. Shared
+  /// operation of the UI and the automation commands.
   Q_INVOKABLE void        StartFolderImport();
+  /// The user folder import of the folder import dialog: StartFolderImport, refused while an
+  /// automation agent holds control.
+  Q_INVOKABLE void        StartFolderImportAsUser();
   Q_INVOKABLE void        CancelImport();
   Q_INVOKABLE void        StartExport(const QString& outputDirUrlOrPath);
   Q_INVOKABLE void        StartExportWithOptions(const QString& outputDirUrlOrPath,
@@ -237,6 +248,7 @@ class ImportExportHandler final : public QObject {
   LibraryModule*    library_              = nullptr;
   FolderController* folders_              = nullptr;
   IUiStatusSink*    status_               = nullptr;
+  InteractionPolicyController* interaction_policy_ = nullptr;
   ProjectDbWriteBarrier*        barrier_  = nullptr;
   StatsEngine*                  stats_    = nullptr;
   NikonHeRecoveryController*    nikon_    = nullptr;

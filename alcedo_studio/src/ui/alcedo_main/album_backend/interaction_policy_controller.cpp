@@ -296,6 +296,14 @@ QString InteractionPolicyController::PasteAdjustmentsReason() const {
   return EvalGlobal(InteractionCapability::PasteAdjustments).reason_;
 }
 
+bool InteractionPolicyController::CanChangeStateAsUser() const {
+  return EvalGlobal(InteractionCapability::UserStateChange).allowed_;
+}
+
+QString InteractionPolicyController::ChangeStateAsUserReason() const {
+  return EvalGlobal(InteractionCapability::UserStateChange).reason_;
+}
+
 // ── Q_INVOKABLE one-shot queries (full {allowed, reason, blockingTaskIds} map) ─
 QVariantMap InteractionPolicyController::EvaluateEditImageDescription(uint elementId) const {
   return ToVariantMap(Eval(InteractionCapability::EditImageDescription, elementId));
@@ -353,6 +361,18 @@ QVariantMap InteractionPolicyController::EvaluateCheckoutVersion() const {
 
 QVariantMap InteractionPolicyController::EvaluatePasteAdjustments() const {
   return ToVariantMap(EvalGlobal(InteractionCapability::PasteAdjustments));
+}
+
+QVariantMap InteractionPolicyController::EvaluateChangeStateAsUser() const {
+  return ToVariantMap(EvalGlobal(InteractionCapability::UserStateChange));
+}
+
+auto UserStateChangeRefusal(const InteractionPolicyController* policy) -> QString {
+  if (policy == nullptr || policy->CanChangeStateAsUser()) {
+    return {};
+  }
+  const QString reason = policy->ChangeStateAsUserReason();
+  return reason.isEmpty() ? Tr("An agent controls the session.") : reason;
 }
 
 }  // namespace alcedo::ui

@@ -13,6 +13,7 @@
 #include "ui/alcedo_main/album_backend/editor_session_controller.hpp"
 #include "ui/alcedo_main/album_backend/folder_controller.hpp"
 #include "ui/alcedo_main/album_backend/image_controller.hpp"
+#include "ui/alcedo_main/album_backend/interaction_policy_controller.hpp"
 #include "ui/alcedo_main/album_backend/library_selection.hpp"
 #include "ui/alcedo_main/album_backend/workspace_router.hpp"
 
@@ -30,6 +31,10 @@ class LibraryMutationOperations final : public QObject {
   LibraryMutationOperations(ImageController* images, LibrarySelection* selection,
                             FolderController* folders, EditorSessionController* editor_session,
                             WorkspaceRouter* workspace_router, QObject* parent = nullptr);
+
+  /// The policy whose agent control refuses the user variants DeleteTargetsAsUser and
+  /// RateTargetsAsUser. Null refuses nothing.
+  void SetInteractionPolicy(InteractionPolicyController* interaction_policy);
 
   /// The targets of a delete, rating, or paste from the context menu of @p clickedItem: with
   /// @p includeSelection, the selected images when the selection is not empty; otherwise the
@@ -50,6 +55,11 @@ class LibraryMutationOperations final : public QObject {
   /// ImageController::StartSetImageRatings and return its result (started, taskId, message)
   /// with `batch: true`. A rating outside 0..5 returns `success: false` and changes nothing.
   Q_INVOKABLE QVariantMap  RateTargets(const QVariantList& targets, int rating);
+  /// The user delete and rating of the library context menu: DeleteTargets and RateTargets, but
+  /// refused with `success: false` and the reason in `message` while an automation agent holds
+  /// control. The automation commands call DeleteTargets and RateTargets directly.
+  Q_INVOKABLE QVariantMap  DeleteTargetsAsUser(const QVariantList& targets);
+  Q_INVOKABLE QVariantMap  RateTargetsAsUser(const QVariantList& targets, int rating);
 
  signals:
   /// The element ids that DeleteTargets deleted.
@@ -63,6 +73,7 @@ class LibraryMutationOperations final : public QObject {
   QPointer<FolderController> folders_;
   QPointer<EditorSessionController> editor_session_;
   QPointer<WorkspaceRouter>         workspace_router_;
+  InteractionPolicyController*      interaction_policy_ = nullptr;
 };
 
 }  // namespace alcedo::ui

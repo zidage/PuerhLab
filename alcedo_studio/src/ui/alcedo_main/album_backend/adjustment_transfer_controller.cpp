@@ -173,8 +173,16 @@ auto AdjustmentTransferController::CommitCopy() -> QVariantMap {
   return result;
 }
 
+void AdjustmentTransferController::SetInteractionPolicy(
+    InteractionPolicyController* interaction_policy) {
+  interaction_policy_ = interaction_policy;
+}
+
 auto AdjustmentTransferController::Paste(const QVariantList& targetEntries, const QString& strategy)
     -> QVariantMap {
+  if (const QString refusal = UserStateChangeRefusal(interaction_policy_); !refusal.isEmpty()) {
+    return ErrorResult(refusal);
+  }
   if (!copied_package_.has_value()) {
     return ErrorResult(Tr("No copied adjustments."));
   }

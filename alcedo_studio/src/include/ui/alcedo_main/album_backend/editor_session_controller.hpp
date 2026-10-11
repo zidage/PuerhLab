@@ -243,7 +243,8 @@ class EditorSessionController final : public QObject, public IEditorAdjustmentSu
   // IEditorAdjustmentSubmitter. Typed adjustment models call submitPatch to
   // enqueue one field write (and a Release seal when settled=true). True means
   // the session accepted the write for later owner processing, not that live
-  // parameters or history were updated.
+  // parameters or history were updated. These are user writes: they are refused while an
+  // automation agent holds control (InteractionPolicyController::canChangeStateAsUser).
   Q_INVOKABLE bool   submitPatch(QString fieldKey, QString paramsJson, bool settled) override;
   auto               submitWrite(QString fieldKey, alcedo::EditorParameterWrite write, bool settled)
       -> bool override;
@@ -253,7 +254,8 @@ class EditorSessionController final : public QObject, public IEditorAdjustmentSu
    * A settled write is a Release boundary: the result carries the operation_id that the commit
    * and frame results of the later consume carry. @p attribution names the author of the
    * commit of a settled write; nullopt is the user. A write the controller refuses before the
-   * session sees it returns Rejected with the reason.
+   * session sees it returns Rejected with the reason. This is the shared operation of the user
+   * write (submitWrite) and the automation write: it does not read agent control.
    */
   auto EnqueueFieldWrite(QString fieldKey, alcedo::EditorParameterWrite write, bool settled,
                          std::optional<alcedo::EditCommitAttribution> attribution = std::nullopt)
@@ -292,6 +294,10 @@ class EditorSessionController final : public QObject, public IEditorAdjustmentSu
   [[nodiscard]] auto PeekPendingInput() const -> alcedo::EditorPendingInputView;
   [[nodiscard]] auto canEdit() const -> bool override { return can_edit(); }
 
+  /// The QML-facing history and Version invokables below (Undo, Redo, the Version
+  /// commands without the Request prefix, MoveHeadToCommit, Discard, DiscardAndContinue) are user
+  /// actions: they publish a rejected history result while an automation agent holds control.
+  /// The Request* functions are the shared operations that the automation commands call.
   Q_INVOKABLE void   Open(uint elementId = 0, uint imageId = 0);
   /// Check out a named Version by its hex version_id. Completes a save checkpoint
   /// first, then rebuilds the pipeline from root + first-parent commits.
@@ -488,6 +494,11 @@ class EditorSessionController final : public QObject, public IEditorAdjustmentSu
   void                     ApplyActionAvailability();
   void                     PublishRenderProgressIfChanged();
   void                     SyncBackgroundActionRestrictions();
+  /// The reason why a user state change is refused now (an automation agent holds control), or
+  /// an empty string. Read only by the user-facing entry points.
+  [[nodiscard]] auto       UserStateChangeRefusalText() const -> QString;
+  /// A Rejected result with @p message, without a backend call.
+  [[nodiscard]] auto RejectedResult(const QString& message) const -> alcedo::EditorSessionResult;
   void                     SetCloseInFlight(bool in_flight);
   void                     SetPersistInFlight(bool in_flight);
   [[nodiscard]] qulonglong SessionEpoch() const;

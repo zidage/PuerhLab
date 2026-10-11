@@ -60,6 +60,8 @@ class AutomationCommandWait final : public QObject {
   void SendError(AutomationErrorCode code, const QString& message,
                  QJsonValue data = QJsonValue(QJsonValue::Undefined));
   void SendOwnerError(AutomationErrorCode code, const QString& message);
+  /// True after a Send call or after the registry sent the timeout response of the request.
+  [[nodiscard]] auto IsAnswered() const -> bool { return finished_ || reply_.IsSent(); }
 
  private:
   void            Finish();

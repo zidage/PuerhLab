@@ -43,6 +43,26 @@ auto LibraryMutationOperations::ResolveTargets(const QVariantMap& clickedItem,
       {QStringLiteral("fileName"), file_name}}};
 }
 
+void LibraryMutationOperations::SetInteractionPolicy(
+    InteractionPolicyController* interaction_policy) {
+  interaction_policy_ = interaction_policy;
+}
+
+auto LibraryMutationOperations::DeleteTargetsAsUser(const QVariantList& targets) -> QVariantMap {
+  if (const QString refusal = UserStateChangeRefusal(interaction_policy_); !refusal.isEmpty()) {
+    return QVariantMap{{QStringLiteral("success"), false}, {QStringLiteral("message"), refusal}};
+  }
+  return DeleteTargets(targets);
+}
+
+auto LibraryMutationOperations::RateTargetsAsUser(const QVariantList& targets, int rating)
+    -> QVariantMap {
+  if (const QString refusal = UserStateChangeRefusal(interaction_policy_); !refusal.isEmpty()) {
+    return QVariantMap{{QStringLiteral("success"), false}, {QStringLiteral("message"), refusal}};
+  }
+  return RateTargets(targets, rating);
+}
+
 auto LibraryMutationOperations::DeleteScope() const -> QString {
   return folders_ == nullptr || folders_->CurrentFolderId() == 0 ? QStringLiteral("project")
                                                                  : QStringLiteral("album");
