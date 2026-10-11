@@ -102,6 +102,41 @@ TEST_F(EditorPendingInputSessionTest, EnqueueDoesNotCaptureHistoryOrApplyLivePat
   EXPECT_EQ(exposure->identity.image_id, static_cast<image_id_t>(20));
 }
 
+TEST_F(EditorPendingInputSessionTest, FailedRenderOfCommandPublishesFrameFailed) {
+  OpenInteractive();
+  const auto released = service_->EnqueueAdjustmentInput(test::ScalarPatch("exposure", 0.4f, true));
+  ASSERT_EQ(released.kind, EditorSessionResultKind::Accepted);
+  ASSERT_NE(released.operation_id, 0u);
+  const auto results_before = service_->results().size();
+  service_->DrainCommandQueueForTests();
+  auto          results           = service_->results();
+  std::uint64_t render_request_id = 0;
+  for (std::size_t i = results_before; i < results.size(); ++i) {
+    if (results[i].kind == EditorSessionResultKind::RenderRouted) {
+      render_request_id = results[i].render_request_id;
+    }
+  }
+  ASSERT_NE(render_request_id, 0u) << "the commit routes a render";
+
+  const auto frame_results_before = results.size();
+  runtime_->coordinator->NotifySchedulerCompleted(render_request_id, false, "test render failure");
+  service_->DrainCommandQueueForTests();
+  results     = service_->results();
+  bool failed = false;
+  for (std::size_t i = frame_results_before; i < results.size(); ++i) {
+    EXPECT_NE(results[i].kind, EditorSessionResultKind::FramePresented);
+    if (results[i].kind == EditorSessionResultKind::FrameFailed) {
+      failed = true;
+      EXPECT_EQ(results[i].operation_id, released.operation_id);
+      EXPECT_EQ(results[i].render_request_id, render_request_id);
+      EXPECT_EQ(results[i].message, "test render failure");
+    }
+  }
+  EXPECT_TRUE(failed) << "a failed render of a command is published for its waiters";
+  EXPECT_FALSE(EditorSessionResultIsTerminal(EditorSessionResultKind::FrameFailed));
+  EXPECT_FALSE(EditorSessionResultIsFailure(EditorSessionResultKind::FrameFailed));
+}
+
 TEST_F(EditorPendingInputSessionTest, ReleaseBoundaryResultsCarryBoundaryOperationId) {
   OpenInteractive();
   const auto results_before = service_->results().size();

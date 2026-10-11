@@ -59,10 +59,20 @@ void OperationWait::Observe(const EditorSessionResult& result) {
     early_.push_back(result);
     return;
   }
-  if (result.kind == EditorSessionResultKind::FramePresented) {
-    if (render_request_id_ != 0 && result.render_request_id >= render_request_id_) {
-      Finish(std::nullopt);
+  if (result.kind == EditorSessionResultKind::FramePresented ||
+      result.kind == EditorSessionResultKind::FrameFailed) {
+    if (render_request_id_ == 0 || result.render_request_id < render_request_id_) {
+      return;
     }
+    if (result.kind == EditorSessionResultKind::FramePresented) {
+      Finish(std::nullopt);
+      return;
+    }
+    Finish(OperationFailure{
+        AutomationErrorCode::Failed,
+        QStringLiteral("The change is applied, but its frame failed to render: %1")
+            .arg(QString::fromStdString(result.message)),
+        /*committed_=*/true});
     return;
   }
   if (result.operation_id != operation_id_) {

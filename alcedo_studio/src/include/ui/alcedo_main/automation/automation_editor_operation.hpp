@@ -26,6 +26,9 @@ namespace alcedo::automation {
 struct OperationFailure {
   AutomationErrorCode code_ = AutomationErrorCode::Failed;
   QString             message_;
+  /// True when the command committed its change and only the render of that commit failed: the
+  /// change stays in the history.
+  bool                committed_ = false;
 };
 
 using OperationDone = std::function<void(std::optional<OperationFailure>)>;
@@ -44,8 +47,9 @@ enum class OperationEnd : std::uint8_t {
  *
  * The command is done after its terminal result (see OperationEnd). When one of its results
  * routed a render, it is done after a presented frame of that render request or a later one (a
- * later request renders the later document, which includes the change). A Rejected or Failed
- * result of the command fails it. Results that arrive before the command id is known are kept
+ * later request renders the later document, which includes the change). A failed render of
+ * that request or a later one fails it with a committed failure. A Rejected or Failed result of
+ * the command fails it. Results that arrive before the command id is known are kept
  * and checked once it is.
  */
 class OperationWait final {

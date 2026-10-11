@@ -32,6 +32,7 @@
 #include "ui/album_backend_test_fixture.hpp"
 #include "ui/alcedo_main/album_backend/agent_control_owner.hpp"
 #include "ui/alcedo_main/album_backend/editor_node_controller.hpp"
+#include "ui/alcedo_main/album_backend/editor_session_controller.hpp"
 #include "ui/alcedo_main/automation/automation_host_session.hpp"
 #include "ui/alcedo_main/automation/headless_frame_sink.hpp"
 #include "ui/alcedo_main/automation/headless_host.hpp"
@@ -329,6 +330,77 @@ TEST_F(AutomationGuiSessionTest, UserEditSendsHistoryChangedToWatchingClient) {
       client.WaitForNotification(QStringLiteral("control.changed"), std::chrono::seconds(5));
   ASSERT_TRUE(changed.has_value());
   EXPECT_TRUE(changed->value("held").toBool());
+}
+
+// When the render of an agent commit fails, editor.set and editor.batch_set answer at once with
+// the render error and the head commit; the commit stays (#367). The user writes an OpenDRT
+// encoding pair that the catalog does not offer, so every later frame fails to render.
+TEST_F(AutomationGuiSessionTest, FailedRenderOfCommitAnswersWithoutWaitingForTimeout) {
+  int failed_frames = 0;
+  QObject::connect(host_->editor_session(), &ui::EditorSessionController::SessionResultObserved,
+                   host_.get(), [&failed_frames](const EditorSessionResult& result) {
+                     if (result.kind == EditorSessionResultKind::FrameFailed) {
+                       ++failed_frames;
+                     }
+                   });
+  ASSERT_TRUE(host_->editor_session()->submitPatch(
+      QStringLiteral("odt"),
+      QStringLiteral(
+          R"({"odt":{"method":"open_drt","encoding_space":"rec2020","encoding_eotf":"gamma_2_2"}})"),
+      true));
+  ASSERT_TRUE(WaitUntil([&] { return failed_frames > 0; }, std::chrono::seconds(60)))
+      << "the unsupported OpenDRT output did not fail the render";
+  ASSERT_TRUE(Result(QStringLiteral("control.acquire"), QJsonObject{{"holder_name", "test-agent"}})
+                  .value("held")
+                  .toBool());
+
+  const auto error_data = [](const std::optional<AutomationResponse>& response) {
+    return response->error->data.toObject();
+  };
+  const auto  commits = [&] { return host_->editor_session()->history_snapshot().commits.size(); };
+  const auto  head = [&] { return Result(QStringLiteral("editor.history")).value("head_commit"); };
+  std::size_t commits_before = commits();
+  const auto  started        = std::chrono::steady_clock::now();
+  const auto  set            = SetExposure(2.3);
+  ASSERT_TRUE(set.has_value());
+  ASSERT_TRUE(set->error.has_value()) << "the frame of the commit cannot render";
+  EXPECT_EQ(set->error->code, AutomationErrorCode::Failed);
+  EXPECT_TRUE(error_data(set).value("reason").toString().contains(QStringLiteral("OpenDRT")))
+      << error_data(set).value("reason").toString().toStdString();
+  EXPECT_EQ(commits(), commits_before + 1) << "the commit stays";
+  EXPECT_EQ(error_data(set).value("head_commit"), head());
+  EXPECT_NEAR(Result(QStringLiteral("editor.get"), QJsonObject{{"fields", QJsonArray{"exposure"}}})
+                  .value("values")
+                  .toObject()
+                  .value("exposure")
+                  .toDouble(),
+              2.3, 1e-6);
+
+  // A batch stops at the change whose frame fails; that change is committed, so it is applied.
+  commits_before   = commits();
+  const auto batch = Call(
+      QStringLiteral("editor.batch_set"),
+      QJsonObject{{"changes", QJsonArray{QJsonObject{{"field", "exposure"}, {"value", 0.35}},
+                                         QJsonObject{{"field", "exposure"}, {"value", 0.65}}}}});
+  ASSERT_TRUE(batch.has_value());
+  ASSERT_TRUE(batch->error.has_value());
+  EXPECT_EQ(batch->error->code, AutomationErrorCode::Failed);
+  EXPECT_EQ(error_data(batch).value("applied").toInt(), 1);
+  EXPECT_EQ(commits(), commits_before + 1);
+  EXPECT_EQ(error_data(batch).value("head_commit"), head());
+
+  // An undo to values that cannot render either answers the same way; the head stays moved.
+  const auto undo = Call(QStringLiteral("editor.undo"));
+  ASSERT_TRUE(undo.has_value());
+  ASSERT_TRUE(undo->error.has_value());
+  EXPECT_EQ(undo->error->code, AutomationErrorCode::Failed);
+  EXPECT_EQ(commits(), commits_before + 1);
+  EXPECT_EQ(error_data(undo).value("head_commit"), head());
+  EXPECT_NE(error_data(undo).value("head_commit"), error_data(batch).value("head_commit"));
+
+  // The answers came from the failed renders, not from the 120 s command timeout.
+  EXPECT_LT(std::chrono::steady_clock::now() - started, std::chrono::seconds(60));
+  EXPECT_FALSE(Result(QStringLiteral("control.release")).value("held").toBool());
 }
 
 // With a Color Grade selected in the window, the agent still reads and writes the fields of the
