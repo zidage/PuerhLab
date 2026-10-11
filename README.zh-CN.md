@@ -141,7 +141,7 @@ Alcedo 可以导出 JPEG、PNG、TIFF、OpenEXR 和 Ultra HDR JPEG，并根据�
 
 ## 文档
 
-用户指南和开发者说明请见[文档网站](https://zidage.github.io/AlcedoStudio_docs/docs/intro)。从源码构建请参阅 [docs/build_from_source.md](docs/build_from_source.md)，各版本的更新说明位于 [docs/changelog/](docs/changelog/)。
+用户指南和开发者说明请见[文档网站](https://zidage.github.io/AlcedoStudio_docs/docs/intro)。从源码构建请参阅 [docs/build_from_source.md](docs/build_from_source.md)，各版本的更新说明位于 [docs/changelog/](docs/changelog/)。如需从终端、脚本或 AI 智能体控制 Alcedo Studio，请参阅 [alcedo-cli 文档](docs/automation/README.md)（英文）以及 [alcedo-skills](https://github.com/zidage/alcedo-skills) 中的智能体技能。
 
 ## 致谢
 
