@@ -1,0 +1,2263 @@
+[
+  {
+    "changes_state": false,
+    "description": "Takes control of a GUI session so that state-changing commands run. While the agent holds control, the user cannot change the session state; the task island shows the agent task with the running command. Waits while the user drags an editor control. Fails with -32004 after the user took control until the user selects Return control, and with -32005 while another holder holds control. The headless host always reports held.",
+    "method": "control.acquire",
+    "params_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "holder_name": {
+          "default": "agent",
+          "description": "The name that the task island shows, for example claude-code.",
+          "type": "string"
+        },
+        "timeout_ms": {
+          "default": 120000,
+          "description": "Time limit in milliseconds for the command to reach its terminal state.",
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "result_schema": {
+      "properties": {
+        "held": {
+          "type": "boolean"
+        },
+        "holder_name": {
+          "type": "string"
+        },
+        "revoked_by_user": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "held",
+        "revoked_by_user",
+        "holder_name"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "changes_state": false,
+    "description": "Returns the agent control state of the session.",
+    "method": "control.get",
+    "params_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "timeout_ms": {
+          "default": 120000,
+          "description": "Time limit in milliseconds for the command to reach its terminal state.",
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "result_schema": {
+      "properties": {
+        "held": {
+          "type": "boolean"
+        },
+        "holder_name": {
+          "type": "string"
+        },
+        "revoked_by_user": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "held",
+        "revoked_by_user",
+        "holder_name"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "changes_state": false,
+    "description": "Gives control of a GUI session back to the user. The agent task finishes as succeeded. Without control the state does not change.",
+    "method": "control.release",
+    "params_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "timeout_ms": {
+          "default": 120000,
+          "description": "Time limit in milliseconds for the command to reach its terminal state.",
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "result_schema": {
+      "properties": {
+        "held": {
+          "type": "boolean"
+        },
+        "holder_name": {
+          "type": "string"
+        },
+        "revoked_by_user": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "held",
+        "revoked_by_user",
+        "holder_name"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "changes_state": false,
+    "description": "Returns which editor actions the session admits now, with the reason for each refused one. The GUI enables its controls from the same decisions.",
+    "method": "editor.actions",
+    "params_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "timeout_ms": {
+          "default": 120000,
+          "description": "Time limit in milliseconds for the command to reach its terminal state.",
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "result_schema": {
+      "properties": {
+        "actions": {
+          "type": "array"
+        }
+      },
+      "required": [
+        "actions"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "changes_state": true,
+    "description": "Sets several fields in order. Each change that alters a value is one history commit, applied after the frame of the previous one. The first change that fails stops the batch: the error data has 'applied' (the changes before it, which stay) and 'head_commit'. Each commit has the author agent and the optional 'note'.",
+    "method": "editor.batch_set",
+    "params_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "changes": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "field": {
+                "type": "string"
+              },
+              "value": {
+                "description": "The UI value: a number for a scalar field, an object for an object or Model field. editor.catalog gives the range, the properties, and the Model shape.",
+                "type": [
+                  "number",
+                  "object"
+                ]
+              }
+            },
+            "required": [
+              "field",
+              "value"
+            ],
+            "type": "object"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "note": {
+          "description": "A note for the commits of this call. The History panel shows it with the author agent.",
+          "type": "string"
+        },
+        "timeout_ms": {
+          "default": 120000,
+          "description": "Time limit in milliseconds for the command to reach its terminal state.",
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "changes"
+      ],
+      "type": "object"
+    },
+    "result_schema": {
+      "properties": {
+        "applied": {
+          "type": "integer"
+        },
+        "head_commit": {
+          "description": "Hex hash of the head commit; null at the root.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "values": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "applied",
+        "head_commit",
+        "values"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "changes_state": false,
+    "description": "Returns every editor field that editor.set accepts, in UI units: the values that the editor panels show. A scalar field has its range (ui_min, ui_max), default, step, and shown decimals. An object field lists its properties (number range, boolean, string, or option list, or a list of numbers) and its default object; a write may give some of the properties. A model field (curve, lut) takes its Model JSON, described in model_shape; a write gives the complete value. A Kelvin property also has its slider position scale (ui_slider), and odt lists the valid encoding_eotf values of each encoding_space. A value outside the range or the option list is rejected; it is not clamped.",
+    "method": "editor.catalog",
+    "params_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "timeout_ms": {
+          "default": 120000,
+          "description": "Time limit in milliseconds for the command to reach its terminal state.",
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "result_schema": {
+      "properties": {
+        "fields": {
+          "items": {
+            "properties": {
+              "aliases": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "encoding_eotf_by_space": {
+                "properties": {
+                  "p3_d65": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "rec2020": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "rec709": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "rec709",
+                  "p3_d65",
+                  "rec2020"
+                ],
+                "type": "object"
+              },
+              "field": {
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "scalar",
+                  "object",
+                  "model"
+                ],
+                "type": "string"
+              },
+              "model_shape": {
+                "type": "string"
+              },
+              "panel": {
+                "type": "string"
+              },
+              "properties": {
+                "items": {
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "options": {
+                      "items": {
+                        "properties": {
+                          "label": {
+                            "type": "string"
+                          },
+                          "value": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "value",
+                          "label"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "type": {
+                      "enum": [
+                        "number",
+                        "boolean",
+                        "string",
+                        "option",
+                        "number_list"
+                      ],
+                      "type": "string"
+                    },
+                    "ui_count": {
+                      "type": "integer"
+                    },
+                    "ui_decimals": {
+                      "type": "integer"
+                    },
+                    "ui_max": {
+                      "type": "number"
+                    },
+                    "ui_min": {
+                      "type": "number"
+                    },
+                    "ui_slider": {
+                      "properties": {
+                        "pivot_kelvin": {
+                          "type": "number"
+                        },
+                        "pivot_position": {
+                          "type": "integer"
+                        },
+                        "position_max": {
+                          "type": "integer"
+                        },
+                        "position_min": {
+                          "type": "integer"
+                        },
+                        "scale": {
+                          "enum": [
+                            "kelvin_pivot"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "scale",
+                        "position_min",
+                        "position_max",
+                        "pivot_position",
+                        "pivot_kelvin"
+                      ],
+                      "type": "object"
+                    },
+                    "ui_step": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "type"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "ui_decimals": {
+                "type": "integer"
+              },
+              "ui_default": {
+                "type": [
+                  "number",
+                  "object"
+                ]
+              },
+              "ui_max": {
+                "type": "number"
+              },
+              "ui_min": {
+                "type": "number"
+              },
+              "ui_step": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "field",
+              "kind",
+              "panel",
+              "ui_default"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "fields"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "changes_state": true,
+    "description": "Closes the editor image and returns to the library. With persist (the default) the edits are saved first; without it, edits that are not saved are discarded. Answers when the image is closed. A failed save keeps the image open and answers with the reason.",
+    "method": "editor.close",
+    "params_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "persist": {
+          "default": true,
+          "type": "boolean"
+        },
+        "timeout_ms": {
+          "default": 120000,
+          "description": "Time limit in milliseconds for the command to reach its terminal state.",
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "result_schema": {
+      "properties": {
+        "closed": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "closed"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "changes_state": false,
+    "description": "Returns the UI values of the open image: the values that the editor panels show, in the units of editor.catalog. Without 'fields', every field that the image shows.",
+    "method": "editor.get",
+    "params_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "fields": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "timeout_ms": {
+          "default": 120000,
+          "description": "Time limit in milliseconds for the command to reach its terminal state.",
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "result_schema": {
+      "properties": {
+        "element_id": {
+          "type": "integer"
+        },
+        "head_commit": {
+          "description": "Hex hash of the head commit; null at the root.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "image_id": {
+          "type": "integer"
+        },
+        "state": {
+          "type": "string"
+        },
+        "values": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "element_id",
+        "image_id",
+        "state",
+        "head_commit",
+        "values"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "changes_state": false,
+    "description": "Returns the history of the active Version of the open image: its commits from the root, the head, and whether undo and redo are possible. 'position' is applied, current (the head), or future (undone, can be redone). 'author' is user or agent; 'note' is the note of an agent commit.",
+    "method": "editor.history",
+    "params_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "timeout_ms": {
+          "default": 120000,
+          "description": "Time limit in milliseconds for the command to reach its terminal state.",
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "result_schema": {
+      "properties": {
+        "can_redo": {
+          "type": "boolean"
+        },
+        "can_undo": {
+          "type": "boolean"
+        },
+        "commits": {
+          "type": "array"
+        },
+        "head_commit": {
+          "description": "Hex hash of the head commit; null at the root.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "version_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "version_id",
+        "head_commit",
+        "can_undo",
+        "can_redo",
+        "commits"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "changes_state": true,
+    "description": "Opens a photo in the editor, like a double-click in the library. An open image is saved and replaced. Answers when the editor can edit the photo.",
+    "method": "editor.open",
+    "params_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "element_id": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "timeout_ms": {
+          "default": 120000,
+          "description": "Time limit in milliseconds for the command to reach its terminal state.",
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "element_id"
+      ],
+      "type": "object"
+    },
+    "result_schema": {
+      "properties": {
+        "element_id": {
+          "type": "integer"
+        },
+        "head_commit": {
+          "description": "Hex hash of the head commit; null at the root.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "image_id": {
+          "type": "integer"
+        },
+        "state": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "element_id",
+        "image_id",
+        "state",
+        "head_commit"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "changes_state": true,
+    "description": "Moves the history head forward one commit, like Edit > Redo. Answers after the frame of the restored values.",
+    "method": "editor.redo",
+    "params_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "timeout_ms": {
+          "default": 120000,
+          "description": "Time limit in milliseconds for the command to reach its terminal state.",
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "result_schema": {
+      "properties": {
+        "can_redo": {
+          "type": "boolean"
+        },
+        "can_undo": {
+          "type": "boolean"
+        },
+        "head_commit": {
+          "description": "Hex hash of the head commit; null at the root.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "head_commit",
+        "can_undo",
+        "can_redo"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "changes_state": true,
+    "description": "Sets one field of the open image to a UI value, like releasing a panel control: one history commit. Answers after the commit and its rendered frame, with the value that the editor now shows (a crop can be constrained). A value equal to the current one makes no commit. The commit has the author agent and the optional 'note'.",
+    "method": "editor.set",
+    "params_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "field": {
+          "type": "string"
+        },
+        "note": {
+          "description": "A note for the commits of this call. The History panel shows it with the author agent.",
+          "type": "string"
+        },
+        "timeout_ms": {
+          "default": 120000,
+          "description": "Time limit in milliseconds for the command to reach its terminal state.",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "value": {
+          "description": "The UI value: a number for a scalar field, an object for an object or Model field. editor.catalog gives the range, the properties, and the Model shape.",
+          "type": [
+            "number",
+            "object"
+          ]
+        }
+      },
+      "required": [
+        "field",
+        "value"
+      ],
+      "type": "object"
+    },
+    "result_schema": {
+      "properties": {
+        "field": {
+          "type": "string"
+        },
+        "head_commit": {
+          "description": "Hex hash of the head commit; null at the root.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "value": {
+          "type": [
+            "number",
+            "object",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "field",
+        "value",
+        "head_commit"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "changes_state": true,
+    "description": "Moves the history head back one commit, like Edit > Undo. Answers after the frame of the restored values.",
+    "method": "editor.undo",
+    "params_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "timeout_ms": {
+          "default": 120000,
+          "description": "Time limit in milliseconds for the command to reach its terminal state.",
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "result_schema": {
+      "properties": {
+        "can_redo": {
+          "type": "boolean"
+        },
+        "can_undo": {
+          "type": "boolean"
+        },
+        "head_commit": {
+          "description": "Hex hash of the head commit; null at the root.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "head_commit",
+        "can_undo",
+        "can_redo"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "changes_state": false,
+    "description": "Returns the export defaults, the formats, the bit depths of each format, the TIFF compressions, the resize modes, the print units, and the limits of the size and quality values. export.run uses the same rules as the export panel.",
+    "method": "export.options",
+    "params_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "timeout_ms": {
+          "default": 120000,
+          "description": "Time limit in milliseconds for the command to reach its terminal state.",
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "result_schema": {
+      "properties": {
+        "bit_depths": {
+          "type": "object"
+        },
+        "defaults": {
+          "type": "object"
+        },
+        "formats": {
+          "type": "array"
+        },
+        "limits": {
+          "type": "object"
+        },
+        "print_units": {
+          "type": "array"
+        },
+        "resize_modes": {
+          "type": "array"
+        },
+        "tiff_compressions": {
+          "type": "array"
+        }
+      },
+      "required": [
+        "defaults",
+        "formats",
+        "bit_depths",
+        "tiff_compressions",
+        "resize_modes",
+        "print_units",
+        "limits"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "changes_state": true,
+    "description": "Exports the photos 'element_ids' into 'out_dir' with the given options (see export.options; an option that is not given has its default). An option that breaks a rule is rejected with the allowed values and no export starts. Returns the task id for tasks.wait as soon as the export runs; the finished task has the counts, and export.status lists the state of each photo.",
+    "method": "export.run",
+    "params_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "bit_depth": {
+          "description": "JPEG 8; PNG 8, 16; TIFF 8, 16, 32; EXR 16, 32.",
+          "type": "integer"
+        },
+        "dpi": {
+          "description": "Print resolution, 1 to 10000.",
+          "type": "integer"
+        },
+        "element_ids": {
+          "description": "The photos to export.",
+          "items": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "embed_icc_profile": {
+          "description": "Embed the output ICC profile.",
+          "type": "boolean"
+        },
+        "file_name_pattern": {
+          "description": "File name pattern, for example {source} or {date:yyyy MM dd}-{sequence:0000}. Fields: source, date, sequence, cameraMake, cameraModel, lens, iso, aperture, shutter, focal, rating.",
+          "type": "string"
+        },
+        "format": {
+          "description": "Output format of SDR photos. HDR photos export as UltraHDR JPEG.",
+          "enum": [
+            "JPEG",
+            "PNG",
+            "TIFF",
+            "EXR"
+          ],
+          "type": "string"
+        },
+        "height": {
+          "description": "Bounds height in pixels, 1 to 100000.",
+          "type": "integer"
+        },
+        "include_metadata": {
+          "description": "Write the photo metadata.",
+          "type": "boolean"
+        },
+        "long_edge": {
+          "description": "Long edge in pixels, 256 to 16384.",
+          "type": "integer"
+        },
+        "out_dir": {
+          "description": "The output folder. It is created when it does not exist.",
+          "type": "string"
+        },
+        "png_level": {
+          "description": "PNG compression level, 0 to 9.",
+          "type": "integer"
+        },
+        "print_height": {
+          "description": "Print height, more than 0 and at most 100000.",
+          "type": "number"
+        },
+        "print_unit": {
+          "description": "Unit of the print size.",
+          "enum": [
+            "mm",
+            "cm",
+            "in"
+          ],
+          "type": "string"
+        },
+        "print_width": {
+          "description": "Print width, more than 0 and at most 100000.",
+          "type": "number"
+        },
+        "quality": {
+          "description": "JPEG quality, 1 to 100.",
+          "type": "integer"
+        },
+        "resize_mode": {
+          "description": "original, long_edge (long_edge), bounds (width, height), or print (print_width, print_height, print_unit, dpi). Without it, the first size value given selects the mode.",
+          "enum": [
+            "original",
+            "long_edge",
+            "bounds",
+            "print"
+          ],
+          "type": "string"
+        },
+        "subfolder": {
+          "description": "Write into this subfolder of out_dir.",
+          "type": "string"
+        },
+        "tiff_compression": {
+          "description": "TIFF compression.",
+          "enum": [
+            "NONE",
+            "LZW",
+            "ZIP"
+          ],
+          "type": "string"
+        },
+        "timeout_ms": {
+          "default": 120000,
+          "description": "Time limit in milliseconds for the command to reach its terminal state.",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "ultra_hdr_dither": {
+          "description": "Dither the UltraHDR gain map.",
+          "type": "boolean"
+        },
+        "ultra_hdr_quality": {
+          "description": "UltraHDR JPEG quality of HDR photos, 1 to 100.",
+          "type": "integer"
+        },
+        "width": {
+          "description": "Bounds width in pixels, 1 to 100000.",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "element_ids",
+        "out_dir"
+      ],
+      "type": "object"
+    },
+    "result_schema": {
+      "properties": {
+        "queued": {
+          "type": "integer"
+        },
+        "skipped": {
+          "type": "integer"
+        },
+        "task_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "task_id",
+        "queued",
+        "skipped"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "changes_state": false,
+    "description": "Returns the state of the running or last export: the task id, the status message, the counts, the error summary, and the state of each photo. 'queue' lists the export queue of the export panel (empty in the headless host).",
+    "method": "export.status",
+    "params_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "timeout_ms": {
+          "default": 120000,
+          "description": "Time limit in milliseconds for the command to reach its terminal state.",
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "result_schema": {
+      "properties": {
+        "counts": {
+          "type": "object"
+        },
+        "error_summary": {
+          "type": "string"
+        },
+        "in_flight": {
+          "type": "boolean"
+        },
+        "items": {
+          "type": "array"
+        },
+        "message": {
+          "type": "string"
+        },
+        "queue": {
+          "type": "array"
+        },
+        "task_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "in_flight",
+        "task_id",
+        "message",
+        "counts",
+        "error_summary",
+        "items",
+        "queue"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "changes_state": true,
+    "description": "Deletes 'element_ids'. With scope 'project' the photos leave the project; this needs the root folder as the current folder. With scope 'album' they leave the current album.",
+    "method": "library.delete",
+    "params_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "element_ids": {
+          "items": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "scope": {
+          "enum": [
+            "project",
+            "album"
+          ],
+          "type": "string"
+        },
+        "timeout_ms": {
+          "default": 120000,
+          "description": "Time limit in milliseconds for the command to reach its terminal state.",
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "element_ids",
+        "scope"
+      ],
+      "type": "object"
+    },
+    "result_schema": {
+      "properties": {
+        "deleted_ids": {
+          "type": "array"
+        },
+        "failed_ids": {
+          "type": "array"
+        }
+      },
+      "required": [
+        "deleted_ids",
+        "failed_ids"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "changes_state": false,
+    "description": "Returns the folder tree of the open project as a list, parents before children. The root folder is first.",
+    "method": "library.folders",
+    "params_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "timeout_ms": {
+          "default": 120000,
+          "description": "Time limit in milliseconds for the command to reach its terminal state.",
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "result_schema": {
+      "properties": {
+        "folders": {
+          "type": "array"
+        }
+      },
+      "required": [
+        "folders"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "changes_state": true,
+    "description": "Imports the files 'paths', or the supported files of 'folder' (with its subfolders when 'recursive', the default), into the current folder of the open project. Returns a task id for tasks.wait as soon as the import starts.",
+    "method": "library.import",
+    "params_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "folder": {
+          "description": "A folder to import.",
+          "type": "string"
+        },
+        "paths": {
+          "description": "Files to import.",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "recursive": {
+          "default": true,
+          "description": "Include the subfolders of 'folder'.",
+          "type": "boolean"
+        },
+        "timeout_ms": {
+          "default": 120000,
+          "description": "Time limit in milliseconds for the command to reach its terminal state.",
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "result_schema": {
+      "properties": {
+        "task_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "task_id"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "changes_state": false,
+    "description": "Returns one page of the photos of a folder (the root folder by default) in the order of 'sort', then by element id. 'total' is the photo count of the folder.",
+    "method": "library.list",
+    "params_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "descending": {
+          "default": false,
+          "type": "boolean"
+        },
+        "folder_id": {
+          "description": "A folder id from library.folders.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "limit": {
+          "default": 100,
+          "maximum": 1000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "offset": {
+          "default": 0,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "sort": {
+          "default": "none",
+          "enum": [
+            "none",
+            "capture_time",
+            "import_time",
+            "camera_model",
+            "lens",
+            "rating",
+            "labels",
+            "edit_time"
+          ],
+          "type": "string"
+        },
+        "timeout_ms": {
+          "default": 120000,
+          "description": "Time limit in milliseconds for the command to reach its terminal state.",
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "result_schema": {
+      "properties": {
+        "items": {
+          "items": {
+            "properties": {
+              "element_id": {
+                "type": "integer"
+              },
+              "file_name": {
+                "type": "string"
+              },
+              "image_id": {
+                "type": "integer"
+              },
+              "rating": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "element_id",
+              "image_id",
+              "file_name",
+              "rating"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "offset": {
+          "type": "integer"
+        },
+        "total": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "total",
+        "offset",
+        "items"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "changes_state": true,
+    "description": "Sets the star rating (0 to 5) of 'element_ids'. One photo is rated at once and the result holds 'applied_count'. Several photos use the batch save, and the result holds the 'task_id' of the save task.",
+    "method": "library.rate",
+    "params_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "element_ids": {
+          "items": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "rating": {
+          "maximum": 5,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "timeout_ms": {
+          "default": 120000,
+          "description": "Time limit in milliseconds for the command to reach its terminal state.",
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "element_ids",
+        "rating"
+      ],
+      "type": "object"
+    },
+    "result_schema": {
+      "properties": {},
+      "type": "object"
+    }
+  },
+  {
+    "changes_state": false,
+    "description": "Returns the library selection of the GUI. The headless host has no selection.",
+    "method": "library.selection.get",
+    "params_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "timeout_ms": {
+          "default": 120000,
+          "description": "Time limit in milliseconds for the command to reach its terminal state.",
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "result_schema": {
+      "properties": {
+        "items": {
+          "type": "array"
+        }
+      },
+      "required": [
+        "items"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "changes_state": true,
+    "description": "Replaces the library selection of the GUI with 'element_ids'. The headless host has no selection.",
+    "method": "library.selection.set",
+    "params_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "element_ids": {
+          "items": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "type": "array"
+        },
+        "timeout_ms": {
+          "default": 120000,
+          "description": "Time limit in milliseconds for the command to reach its terminal state.",
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "element_ids"
+      ],
+      "type": "object"
+    },
+    "result_schema": {
+      "properties": {
+        "items": {
+          "type": "array"
+        }
+      },
+      "required": [
+        "items"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "changes_state": false,
+    "description": "Renders the library thumbnail of a photo and writes it as a PNG file whose long edge is 'long_edge'.",
+    "method": "library.thumbnail",
+    "params_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "element_id": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "long_edge": {
+          "default": 512,
+          "maximum": 2048,
+          "minimum": 16,
+          "type": "integer"
+        },
+        "out": {
+          "description": "The PNG file.",
+          "type": "string"
+        },
+        "timeout_ms": {
+          "default": 120000,
+          "description": "Time limit in milliseconds for the command to reach its terminal state.",
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "element_id",
+        "out"
+      ],
+      "type": "object"
+    },
+    "result_schema": {
+      "properties": {
+        "height": {
+          "type": "integer"
+        },
+        "path": {
+          "type": "string"
+        },
+        "width": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "path",
+        "width",
+        "height"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "changes_state": true,
+    "description": "Closes the editor image and the loaded project. With persist (the default), both are saved first; without it, the changes since the last save are discarded. The response arrives when no project is loaded.",
+    "method": "project.close",
+    "params_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "persist": {
+          "default": true,
+          "description": "Save the editor image and the project first.",
+          "type": "boolean"
+        },
+        "timeout_ms": {
+          "default": 120000,
+          "description": "Time limit in milliseconds for the command to reach its terminal state.",
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "result_schema": {
+      "properties": {
+        "closed": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "closed"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "changes_state": true,
+    "description": "Creates a packed project named 'name' in 'folder' and enters it. A loaded project closes first and is saved. The response arrives when the new project is loaded.",
+    "method": "project.create",
+    "params_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "folder": {
+          "description": "An existing folder.",
+          "type": "string"
+        },
+        "name": {
+          "description": "The project name.",
+          "type": "string"
+        },
+        "timeout_ms": {
+          "default": 120000,
+          "description": "Time limit in milliseconds for the command to reach its terminal state.",
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "folder",
+        "name"
+      ],
+      "type": "object"
+    },
+    "result_schema": {
+      "properties": {
+        "entered": {
+          "type": "boolean"
+        },
+        "name": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "photo_count": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "path",
+        "name",
+        "entered",
+        "photo_count"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "changes_state": true,
+    "description": "Opens the packed project at 'path' and enters it. A loaded project closes first and is saved. The response arrives when the project is loaded.",
+    "method": "project.open",
+    "params_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "description": "The .alcd project file.",
+          "type": "string"
+        },
+        "timeout_ms": {
+          "default": 120000,
+          "description": "Time limit in milliseconds for the command to reach its terminal state.",
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "type": "object"
+    },
+    "result_schema": {
+      "properties": {
+        "entered": {
+          "type": "boolean"
+        },
+        "name": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "photo_count": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "path",
+        "name",
+        "entered",
+        "photo_count"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "changes_state": true,
+    "description": "Saves and packs the loaded project. Like File > Save Project, it first closes the editor image with its changes.",
+    "method": "project.save",
+    "params_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "timeout_ms": {
+          "default": 120000,
+          "description": "Time limit in milliseconds for the command to reach its terminal state.",
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "result_schema": {
+      "properties": {
+        "path": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "changes_state": false,
+    "description": "Renders the open image with the current edits and writes <file_stem>_current.png into out_dir. With compare 'root' (the default), it also renders the image as imported (the root) and writes <file_stem>_root.png; with compare 'none', it renders and writes only the current file. file_stem defaults to the photo file name without its extension. The long edge of each file is long_edge pixels at most. 'region' (x, y, w, h in 0..1 of the cropped image) renders only that part. Answers -32005 while the editor renders another image job, for example an open comparison; that job continues.",
+    "method": "render.preview",
+    "params_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "compare": {
+          "default": "root",
+          "description": "'root' also writes the imported image.",
+          "enum": [
+            "none",
+            "root"
+          ],
+          "type": "string"
+        },
+        "file_stem": {
+          "description": "First part of the file names. Default: the photo file name without its extension.",
+          "type": "string"
+        },
+        "long_edge": {
+          "default": 2048,
+          "maximum": 4096,
+          "minimum": 16,
+          "type": "integer"
+        },
+        "out_dir": {
+          "description": "Folder of the PNG files.",
+          "type": "string"
+        },
+        "region": {
+          "additionalProperties": false,
+          "properties": {
+            "h": {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            "w": {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            "x": {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            "y": {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            }
+          },
+          "required": [
+            "x",
+            "y",
+            "w",
+            "h"
+          ],
+          "type": "object"
+        },
+        "timeout_ms": {
+          "default": 120000,
+          "description": "Time limit in milliseconds for the command to reach its terminal state.",
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "out_dir"
+      ],
+      "type": "object"
+    },
+    "result_schema": {
+      "properties": {
+        "current": {
+          "properties": {
+            "height": {
+              "type": "integer"
+            },
+            "path": {
+              "type": "string"
+            },
+            "width": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "path",
+            "width",
+            "height"
+          ],
+          "type": "object"
+        },
+        "root": {
+          "properties": {
+            "height": {
+              "type": "integer"
+            },
+            "path": {
+              "type": "string"
+            },
+            "width": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "path",
+            "width",
+            "height"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "current"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "changes_state": false,
+    "description": "Searches the photos of the current folder with the rules of the global search dialog. An empty text returns the recommendations. With 'mode' auto a natural language query uses the semantic path when natural language search is on; when that path is not available the result has 'semantic_unavailable' and no matches. 'mode' fuzzy always uses the text search. A query that is too long for the semantic path returns 'too_long'.",
+    "method": "search.query",
+    "params_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "limit": {
+          "description": "The number of matches to return. Default 24.",
+          "maximum": 48,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "mode": {
+          "description": "auto (default) or fuzzy.",
+          "enum": [
+            "auto",
+            "fuzzy"
+          ],
+          "type": "string"
+        },
+        "offset": {
+          "description": "The first match to return. Default 0.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "text": {
+          "description": "The search text.",
+          "type": "string"
+        },
+        "timeout_ms": {
+          "default": 120000,
+          "description": "Time limit in milliseconds for the command to reach its terminal state.",
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "type": "object"
+    },
+    "result_schema": {
+      "properties": {
+        "has_more": {
+          "type": "boolean"
+        },
+        "limit": {
+          "type": "integer"
+        },
+        "matches": {
+          "type": "array"
+        },
+        "offset": {
+          "type": "integer"
+        },
+        "recommendations": {
+          "type": "array"
+        },
+        "route": {
+          "type": "string"
+        },
+        "semantic_error": {
+          "type": "string"
+        },
+        "semantic_unavailable": {
+          "type": "boolean"
+        },
+        "too_long": {
+          "type": "boolean"
+        },
+        "total": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "route",
+        "matches"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "changes_state": false,
+    "description": "Returns the protocol version, the host mode, the application version, and the command list with the parameter and result schemas.",
+    "method": "session.describe",
+    "params_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "timeout_ms": {
+          "default": 120000,
+          "description": "Time limit in milliseconds for the command to reach its terminal state.",
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "result_schema": {
+      "properties": {
+        "application_version": {
+          "type": "string"
+        },
+        "commands": {
+          "type": "array"
+        },
+        "host_mode": {
+          "enum": [
+            "headless",
+            "gui"
+          ],
+          "type": "string"
+        },
+        "protocol_version": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "protocol_version",
+        "host_mode",
+        "application_version",
+        "commands"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "changes_state": false,
+    "description": "Checks that the session answers.",
+    "method": "session.ping",
+    "params_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "timeout_ms": {
+          "default": 120000,
+          "description": "Time limit in milliseconds for the command to reach its terminal state.",
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "result_schema": {
+      "properties": {
+        "pong": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "pong"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "changes_state": true,
+    "description": "Shuts the application modules down, which persists the open project, and then ends the session process. The response arrives after the shutdown.",
+    "method": "session.shutdown",
+    "params_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "persist": {
+          "default": true,
+          "description": "Persist the open project before the exit.",
+          "enum": [
+            true
+          ],
+          "type": "boolean"
+        },
+        "timeout_ms": {
+          "default": 120000,
+          "description": "Time limit in milliseconds for the command to reach its terminal state.",
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "result_schema": {
+      "properties": {
+        "shut_down": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "shut_down"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "changes_state": false,
+    "description": "Returns the project, workspace, editor session, control state, running tasks, and whether all application work is idle.",
+    "method": "state.get",
+    "params_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "timeout_ms": {
+          "default": 120000,
+          "description": "Time limit in milliseconds for the command to reach its terminal state.",
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "result_schema": {
+      "properties": {
+        "control": {
+          "type": "object"
+        },
+        "editor": {
+          "type": "object"
+        },
+        "host_mode": {
+          "type": "string"
+        },
+        "idle": {
+          "type": "boolean"
+        },
+        "project": {
+          "type": "object"
+        },
+        "tasks": {
+          "type": "array"
+        },
+        "workspace": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "host_mode",
+        "project",
+        "workspace",
+        "editor",
+        "control",
+        "tasks",
+        "idle"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "changes_state": false,
+    "description": "Returns the tasks that have not finished (imports, an export, and background tasks) and whether all application work is idle.",
+    "method": "tasks.list",
+    "params_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "timeout_ms": {
+          "default": 120000,
+          "description": "Time limit in milliseconds for the command to reach its terminal state.",
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "result_schema": {
+      "properties": {
+        "idle": {
+          "type": "boolean"
+        },
+        "tasks": {
+          "items": {
+            "properties": {
+              "counts": {
+                "type": "object"
+              },
+              "kind": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "progress": {
+                "type": "integer"
+              },
+              "state": {
+                "type": "string"
+              },
+              "task_id": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "task_id",
+              "kind",
+              "state"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "tasks",
+        "idle"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "changes_state": false,
+    "description": "Waits until the task 'task_id' finishes and returns its final state, or with 'idle': true until no import, export, or background task runs.",
+    "method": "tasks.wait",
+    "params_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "idle": {
+          "description": "Wait for all application work instead.",
+          "type": "boolean"
+        },
+        "task_id": {
+          "description": "A task id from a command.",
+          "type": "string"
+        },
+        "timeout_ms": {
+          "default": 120000,
+          "description": "Time limit in milliseconds for the command to reach its terminal state.",
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "result_schema": {
+      "properties": {},
+      "type": "object"
+    }
+  },
+  {
+    "changes_state": true,
+    "description": "Creates a Version that starts at a commit and checks it out, like Branch in the Versions panel. 'from_commit' is a commit hash (editor.history); without it the head of the active Version. Without 'name' the Version gets the next default name. Answers after the frame of the new Version.",
+    "method": "versions.branch",
+    "params_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "from_commit": {
+          "description": "Hex hash of the start commit.",
+          "type": "string"
+        },
+        "name": {
+          "description": "The Version name. Leading and trailing white space is removed; an empty name is rejected.",
+          "type": "string"
+        },
+        "timeout_ms": {
+          "default": 120000,
+          "description": "Time limit in milliseconds for the command to reach its terminal state.",
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "result_schema": {
+      "properties": {
+        "head_commit": {
+          "description": "Hex hash of the head commit; null at the root.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "version_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "version_id",
+        "head_commit"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "changes_state": true,
+    "description": "Checks out a Version, like a click on its card in the Versions panel. The open edits are saved first. Answers after the frame of the Version head.",
+    "method": "versions.checkout",
+    "params_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "timeout_ms": {
+          "default": 120000,
+          "description": "Time limit in milliseconds for the command to reach its terminal state.",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "version_id": {
+          "description": "Hex id of a Version (versions.list).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "version_id"
+      ],
+      "type": "object"
+    },
+    "result_schema": {
+      "properties": {
+        "head_commit": {
+          "description": "Hex hash of the head commit; null at the root.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "version_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "version_id",
+        "head_commit"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "changes_state": true,
+    "description": "Creates a Version at the image root and checks it out, like New Version in the Versions panel. The open edits are saved first. Without 'name' the Version gets the next default name. Answers after the frame of the new Version.",
+    "method": "versions.create",
+    "params_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "description": "The Version name. Leading and trailing white space is removed; an empty name is rejected.",
+          "type": "string"
+        },
+        "timeout_ms": {
+          "default": 120000,
+          "description": "Time limit in milliseconds for the command to reach its terminal state.",
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "result_schema": {
+      "properties": {
+        "head_commit": {
+          "description": "Hex hash of the head commit; null at the root.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "version_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "version_id",
+        "head_commit"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "changes_state": false,
+    "description": "Returns the Versions of the open image and the active one, like the Versions panel. created_at and updated_at are Unix seconds.",
+    "method": "versions.list",
+    "params_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "timeout_ms": {
+          "default": 120000,
+          "description": "Time limit in milliseconds for the command to reach its terminal state.",
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "result_schema": {
+      "properties": {
+        "active_version_id": {
+          "type": "string"
+        },
+        "versions": {
+          "items": {
+            "properties": {
+              "active": {
+                "type": "boolean"
+              },
+              "created_at": {
+                "type": "integer"
+              },
+              "head_commit": {
+                "description": "Hex hash of the head commit; null at the root.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "name": {
+                "type": "string"
+              },
+              "updated_at": {
+                "type": "integer"
+              },
+              "version_id": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "version_id",
+              "name",
+              "head_commit",
+              "active"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "active_version_id",
+        "versions"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "changes_state": true,
+    "description": "Removes a Version, like Remove in the Versions panel.",
+    "method": "versions.remove",
+    "params_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "timeout_ms": {
+          "default": 120000,
+          "description": "Time limit in milliseconds for the command to reach its terminal state.",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "version_id": {
+          "description": "Hex id of a Version (versions.list).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "version_id"
+      ],
+      "type": "object"
+    },
+    "result_schema": {
+      "properties": {
+        "active_version_id": {
+          "type": "string"
+        },
+        "version_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "version_id",
+        "active_version_id"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "changes_state": true,
+    "description": "Renames a Version, like Rename in the Versions panel. A rename to the current name changes nothing and succeeds.",
+    "method": "versions.rename",
+    "params_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "description": "The Version name. Leading and trailing white space is removed; an empty name is rejected.",
+          "type": "string"
+        },
+        "timeout_ms": {
+          "default": 120000,
+          "description": "Time limit in milliseconds for the command to reach its terminal state.",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "version_id": {
+          "description": "Hex id of a Version (versions.list).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "version_id",
+        "name"
+      ],
+      "type": "object"
+    },
+    "result_schema": {
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "version_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "version_id",
+        "name"
+      ],
+      "type": "object"
+    }
+  }
+]

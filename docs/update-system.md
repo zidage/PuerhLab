@@ -254,15 +254,21 @@ uploaded a stable pair, this workflow must fail.
 1. Merge the last feature work to `main`.
 2. Generate and approve the version notes. Commit them as the last commit of
    that version.
-3. On each package machine, check out that merge commit on `main`. Run the
+3. Update the agent skill in
+   [alcedo-skills](https://github.com/zidage/alcedo-skills): run its
+   `scripts/sync_references.py <this checkout>` to copy `docs/automation`, set
+   the plugin version to the app version, and push a tag `v<version>`. Do this
+   for every release, also when the automation commands did not change, so
+   that the skill version names the app version that it was checked with.
+4. On each package machine, check out that merge commit on `main`. Run the
    **Release** package task (stable).
-4. Upload that platform with `publish_update.py`. That platform is now live.
-5. After both live stable manifests show the same version, run
+5. Upload that platform with `publish_update.py`. That platform is now live.
+6. After both live stable manifests show the same version, run
    **Archive stable update to GitHub** by hand. Each packaged commit must exist
    on `origin/main`; the two platforms do not need the same SHA.
 
-Until step 4 happens for a platform, nothing user-facing changes. Running the
-archive workflow does not perform step 4.
+Until step 5 happens for a platform, nothing user-facing changes. Running the
+archive workflow does not perform step 5.
 
 ## Packaged end-to-end install test
 

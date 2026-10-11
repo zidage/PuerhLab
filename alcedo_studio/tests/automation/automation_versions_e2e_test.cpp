@@ -115,6 +115,27 @@ TEST_F(AutomationVersionsE2ETest, BranchCheckoutAndRenameAppearInVersionList) {
   Stop();
 }
 
+// A branch from a commit that is not in the history is refused before the editor saves, so the
+// editor stays Interactive and takes the next edit.
+TEST_F(AutomationVersionsE2ETest, BranchFromUnknownCommitLeavesEditorInteractive) {
+  ASSERT_FALSE(StartWithOnePhoto(QStringLiteral("unknown_branch_project")).isEmpty());
+  OpenPhoto();
+  Set(QStringLiteral("exposure"), 0.5);
+
+  const CliRun unknown = Call(QStringLiteral("versions.branch"),
+                              QJsonObject{{"from_commit", "ffffffffffffffffffffffffffffffff"}});
+  EXPECT_EQ(unknown.json.value("error").toObject().value("code").toInt(), -32602);
+  EXPECT_EQ(unknown.json.value("error").toObject().value("data").toObject().value("pointer"),
+            QJsonValue(QStringLiteral("/from_commit")));
+
+  EXPECT_EQ(Result(QStringLiteral("state.get")).value("editor").toObject().value("state"),
+            QJsonValue(QStringLiteral("Interactive")));
+  EXPECT_EQ(Versions().value("versions").toArray().size(), 1);
+  Set(QStringLiteral("exposure"), 0.8);
+  EXPECT_NEAR(Value(QStringLiteral("exposure")), 0.8, 1e-6);
+  Stop();
+}
+
 TEST_F(AutomationVersionsE2ETest, AgentCommitShowsAuthorAfterReopen) {
   const QString project_path = StartWithOnePhoto(QStringLiteral("author_project"));
   ASSERT_FALSE(project_path.isEmpty());

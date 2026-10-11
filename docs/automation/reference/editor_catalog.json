@@ -1,0 +1,921 @@
+{
+  "fields": [
+    {
+      "field": "exposure",
+      "kind": "scalar",
+      "panel": "tone",
+      "ui_decimals": 2,
+      "ui_default": 0,
+      "ui_max": 10,
+      "ui_min": -10,
+      "ui_step": 0.01
+    },
+    {
+      "field": "contrast",
+      "kind": "scalar",
+      "panel": "tone",
+      "ui_decimals": 0,
+      "ui_default": 0,
+      "ui_max": 100,
+      "ui_min": -100,
+      "ui_step": 1
+    },
+    {
+      "field": "highlights",
+      "kind": "scalar",
+      "panel": "tone",
+      "ui_decimals": 0,
+      "ui_default": 0,
+      "ui_max": 100,
+      "ui_min": -100,
+      "ui_step": 1
+    },
+    {
+      "field": "shadows",
+      "kind": "scalar",
+      "panel": "tone",
+      "ui_decimals": 0,
+      "ui_default": 0,
+      "ui_max": 100,
+      "ui_min": -100,
+      "ui_step": 1
+    },
+    {
+      "aliases": [
+        "whites"
+      ],
+      "field": "white",
+      "kind": "scalar",
+      "panel": "tone",
+      "ui_decimals": 0,
+      "ui_default": 0,
+      "ui_max": 100,
+      "ui_min": -100,
+      "ui_step": 1
+    },
+    {
+      "aliases": [
+        "blacks"
+      ],
+      "field": "black",
+      "kind": "scalar",
+      "panel": "tone",
+      "ui_decimals": 0,
+      "ui_default": 0,
+      "ui_max": 100,
+      "ui_min": -100,
+      "ui_step": 1
+    },
+    {
+      "field": "saturation",
+      "kind": "scalar",
+      "panel": "look",
+      "ui_decimals": 0,
+      "ui_default": 0,
+      "ui_max": 100,
+      "ui_min": -100,
+      "ui_step": 1
+    },
+    {
+      "field": "vibrance",
+      "kind": "scalar",
+      "panel": "look",
+      "ui_decimals": 0,
+      "ui_default": 0,
+      "ui_max": 100,
+      "ui_min": -100,
+      "ui_step": 1
+    },
+    {
+      "field": "diffusion",
+      "kind": "scalar",
+      "panel": "post",
+      "ui_decimals": 0,
+      "ui_default": 0,
+      "ui_max": 100,
+      "ui_min": 0,
+      "ui_step": 1
+    },
+    {
+      "field": "clarity",
+      "kind": "scalar",
+      "panel": "post",
+      "ui_decimals": 0,
+      "ui_default": 0,
+      "ui_max": 100,
+      "ui_min": -100,
+      "ui_step": 1
+    },
+    {
+      "field": "sharpen",
+      "kind": "scalar",
+      "panel": "post",
+      "ui_decimals": 0,
+      "ui_default": 0,
+      "ui_max": 100,
+      "ui_min": 0,
+      "ui_step": 1
+    },
+    {
+      "field": "film_grain",
+      "kind": "scalar",
+      "panel": "post",
+      "ui_decimals": 0,
+      "ui_default": 0,
+      "ui_max": 100,
+      "ui_min": 0,
+      "ui_step": 1
+    },
+    {
+      "field": "halation",
+      "kind": "scalar",
+      "panel": "post",
+      "ui_decimals": 0,
+      "ui_default": 0,
+      "ui_max": 100,
+      "ui_min": 0,
+      "ui_step": 1
+    },
+    {
+      "field": "raw_decode",
+      "kind": "object",
+      "panel": "raw",
+      "properties": [
+        {
+          "name": "method",
+          "options": [
+            {
+              "label": "Default",
+              "value": "default"
+            },
+            {
+              "label": "Legacy",
+              "value": "legacy"
+            },
+            {
+              "label": "Neural Engine",
+              "value": "neural_engine"
+            }
+          ],
+          "type": "option"
+        },
+        {
+          "name": "highlights_reconstruct",
+          "type": "boolean"
+        }
+      ],
+      "ui_default": {
+        "highlights_reconstruct": true,
+        "method": "default"
+      }
+    },
+    {
+      "field": "input_profile",
+      "kind": "object",
+      "panel": "raw",
+      "properties": [
+        {
+          "name": "profile_override",
+          "options": [
+            {
+              "label": "Auto (from file)",
+              "value": "auto"
+            },
+            {
+              "label": "sRGB",
+              "value": "srgb"
+            },
+            {
+              "label": "Display P3",
+              "value": "display_p3"
+            },
+            {
+              "label": "Adobe RGB",
+              "value": "adobe_rgb"
+            },
+            {
+              "label": "Rec.2020",
+              "value": "rec2020"
+            },
+            {
+              "label": "ProPhoto",
+              "value": "prophoto"
+            },
+            {
+              "label": "Linear Rec.709",
+              "value": "linear_rec709"
+            }
+          ],
+          "type": "option"
+        }
+      ],
+      "ui_default": {
+        "profile_override": "auto"
+      }
+    },
+    {
+      "field": "lens_calib",
+      "kind": "object",
+      "panel": "raw",
+      "properties": [
+        {
+          "name": "enabled",
+          "type": "boolean"
+        },
+        {
+          "name": "lens_maker",
+          "type": "string"
+        },
+        {
+          "name": "lens_model",
+          "type": "string"
+        }
+      ],
+      "ui_default": {
+        "enabled": false,
+        "lens_maker": "",
+        "lens_model": ""
+      }
+    },
+    {
+      "field": "crop_rotate",
+      "kind": "object",
+      "panel": "geometry",
+      "properties": [
+        {
+          "name": "x",
+          "type": "number",
+          "ui_decimals": 3,
+          "ui_max": 1,
+          "ui_min": -1,
+          "ui_step": 0.001
+        },
+        {
+          "name": "y",
+          "type": "number",
+          "ui_decimals": 3,
+          "ui_max": 1,
+          "ui_min": -1,
+          "ui_step": 0.001
+        },
+        {
+          "name": "width",
+          "type": "number",
+          "ui_decimals": 3,
+          "ui_max": 1,
+          "ui_min": 0.0001,
+          "ui_step": 0.001
+        },
+        {
+          "name": "height",
+          "type": "number",
+          "ui_decimals": 3,
+          "ui_max": 1,
+          "ui_min": 0.0001,
+          "ui_step": 0.001
+        },
+        {
+          "name": "angle_degrees",
+          "type": "number",
+          "ui_decimals": 1,
+          "ui_max": 180,
+          "ui_min": -180,
+          "ui_step": 0.1
+        },
+        {
+          "name": "aspect_preset",
+          "options": [
+            {
+              "label": "Free",
+              "value": "free"
+            },
+            {
+              "label": "Custom",
+              "value": "custom"
+            },
+            {
+              "label": "2.35:1 (35mm)",
+              "value": "ratio_2_35_1_35mm"
+            },
+            {
+              "label": "1:1",
+              "value": "ratio_1_1"
+            },
+            {
+              "label": "16:9",
+              "value": "ratio_16_9"
+            },
+            {
+              "label": "1.9:1 (IMAX)",
+              "value": "ratio_1_9_1_imax"
+            },
+            {
+              "label": "1.85:1 (DCI)",
+              "value": "ratio_1_85_1_dci"
+            },
+            {
+              "label": "2.2:1 (70mm)",
+              "value": "ratio_2_2_1_70mm"
+            },
+            {
+              "label": "1.43:1 (70mm IMAX)",
+              "value": "ratio_1_43_1_70mm_imax"
+            },
+            {
+              "label": "4:3 (35mm)",
+              "value": "ratio_4_3_35mm"
+            },
+            {
+              "label": "1.5:1 (native or VistaVision)",
+              "value": "ratio_1_5_1_native_vistavision"
+            },
+            {
+              "label": "2.76:1 (Panavision Ultra)",
+              "value": "ratio_2_76_1_panavision_ultra"
+            }
+          ],
+          "type": "option"
+        },
+        {
+          "name": "aspect_width",
+          "type": "number",
+          "ui_decimals": 2,
+          "ui_max": 100,
+          "ui_min": 0.0001,
+          "ui_step": 0.01
+        },
+        {
+          "name": "aspect_height",
+          "type": "number",
+          "ui_decimals": 2,
+          "ui_max": 100,
+          "ui_min": 0.0001,
+          "ui_step": 0.01
+        }
+      ],
+      "ui_default": {
+        "angle_degrees": 0,
+        "aspect_height": 1,
+        "aspect_preset": "free",
+        "aspect_width": 1,
+        "height": 1,
+        "width": 1,
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "encoding_eotf_by_space": {
+        "p3_d65": [
+          "gamma_2_2",
+          "srgb_piecewise",
+          "st2084"
+        ],
+        "rec2020": [
+          "st2084",
+          "hlg"
+        ],
+        "rec709": [
+          "bt1886",
+          "gamma_2_2",
+          "srgb_piecewise"
+        ]
+      },
+      "field": "odt",
+      "kind": "object",
+      "panel": "display",
+      "properties": [
+        {
+          "name": "method",
+          "options": [
+            {
+              "label": "ACES 2.0",
+              "value": "aces_2_0"
+            },
+            {
+              "label": "OpenDRT",
+              "value": "open_drt"
+            }
+          ],
+          "type": "option"
+        },
+        {
+          "name": "encoding_space",
+          "options": [
+            {
+              "label": "Rec.709",
+              "value": "rec709"
+            },
+            {
+              "label": "P3-D65",
+              "value": "p3_d65"
+            },
+            {
+              "label": "Rec.2020",
+              "value": "rec2020"
+            }
+          ],
+          "type": "option"
+        },
+        {
+          "name": "encoding_eotf",
+          "options": [
+            {
+              "label": "BT.1886",
+              "value": "bt1886"
+            },
+            {
+              "label": "Gamma 2.2",
+              "value": "gamma_2_2"
+            },
+            {
+              "label": "sRGB",
+              "value": "srgb_piecewise"
+            },
+            {
+              "label": "ST 2084 (PQ)",
+              "value": "st2084"
+            },
+            {
+              "label": "HLG",
+              "value": "hlg"
+            }
+          ],
+          "type": "option"
+        },
+        {
+          "name": "peak_luminance",
+          "type": "number",
+          "ui_decimals": 0,
+          "ui_max": 1000,
+          "ui_min": 100,
+          "ui_step": 1
+        },
+        {
+          "name": "limiting_space",
+          "options": [
+            {
+              "label": "Rec.709",
+              "value": "rec709"
+            },
+            {
+              "label": "Rec.2020",
+              "value": "rec2020"
+            },
+            {
+              "label": "P3-D65",
+              "value": "p3_d65"
+            }
+          ],
+          "type": "option"
+        },
+        {
+          "name": "look_preset",
+          "options": [
+            {
+              "label": "Standard",
+              "value": "standard"
+            },
+            {
+              "label": "Arriba",
+              "value": "arriba"
+            },
+            {
+              "label": "Sylvan",
+              "value": "sylvan"
+            },
+            {
+              "label": "Colorful",
+              "value": "colorful"
+            },
+            {
+              "label": "Aery",
+              "value": "aery"
+            },
+            {
+              "label": "Dystopic",
+              "value": "dystopic"
+            },
+            {
+              "label": "Umbra",
+              "value": "umbra"
+            },
+            {
+              "label": "Custom",
+              "value": "custom"
+            }
+          ],
+          "type": "option"
+        },
+        {
+          "name": "tonescale_preset",
+          "options": [
+            {
+              "label": "Use Look Preset",
+              "value": "use_look_preset"
+            },
+            {
+              "label": "Low Contrast",
+              "value": "low_contrast"
+            },
+            {
+              "label": "Medium Contrast",
+              "value": "medium_contrast"
+            },
+            {
+              "label": "High Contrast",
+              "value": "high_contrast"
+            },
+            {
+              "label": "Arriba Tonescale",
+              "value": "arriba_tonescale"
+            },
+            {
+              "label": "Sylvan Tonescale",
+              "value": "sylvan_tonescale"
+            },
+            {
+              "label": "Colorful Tonescale",
+              "value": "colorful_tonescale"
+            },
+            {
+              "label": "Aery Tonescale",
+              "value": "aery_tonescale"
+            },
+            {
+              "label": "Dystopic Tonescale",
+              "value": "dystopic_tonescale"
+            },
+            {
+              "label": "Umbra Tonescale",
+              "value": "umbra_tonescale"
+            },
+            {
+              "label": "ACES 1.x",
+              "value": "aces_1_x"
+            },
+            {
+              "label": "ACES 2.0",
+              "value": "aces_2_0"
+            },
+            {
+              "label": "Marvelous Tonscape",
+              "value": "marvelous_tonscape"
+            },
+            {
+              "label": "Dagrinchi Tonegroan",
+              "value": "dagrinchi_tonegroan"
+            },
+            {
+              "label": "Custom",
+              "value": "custom"
+            }
+          ],
+          "type": "option"
+        },
+        {
+          "name": "creative_white",
+          "options": [
+            {
+              "label": "Use Look Preset",
+              "value": "use_look_preset"
+            },
+            {
+              "label": "D93",
+              "value": "d93"
+            },
+            {
+              "label": "D75",
+              "value": "d75"
+            },
+            {
+              "label": "D65",
+              "value": "d65"
+            },
+            {
+              "label": "D60",
+              "value": "d60"
+            },
+            {
+              "label": "D55",
+              "value": "d55"
+            },
+            {
+              "label": "D50",
+              "value": "d50"
+            }
+          ],
+          "type": "option"
+        }
+      ],
+      "ui_default": {
+        "creative_white": "use_look_preset",
+        "encoding_eotf": "gamma_2_2",
+        "encoding_space": "rec709",
+        "limiting_space": "rec709",
+        "look_preset": "standard",
+        "method": "open_drt",
+        "peak_luminance": 100,
+        "tonescale_preset": "use_look_preset"
+      }
+    },
+    {
+      "field": "color_temp",
+      "kind": "object",
+      "panel": "raw",
+      "properties": [
+        {
+          "name": "mode",
+          "options": [
+            {
+              "label": "As Shot",
+              "value": "as_shot"
+            },
+            {
+              "label": "Custom",
+              "value": "custom"
+            }
+          ],
+          "type": "option"
+        },
+        {
+          "name": "kelvin",
+          "type": "number",
+          "ui_decimals": 0,
+          "ui_max": 15000,
+          "ui_min": 2000,
+          "ui_slider": {
+            "pivot_kelvin": 6000,
+            "pivot_position": 2048,
+            "position_max": 4096,
+            "position_min": 0,
+            "scale": "kelvin_pivot"
+          },
+          "ui_step": 1
+        },
+        {
+          "name": "tint",
+          "type": "number",
+          "ui_decimals": 0,
+          "ui_max": 150,
+          "ui_min": -150,
+          "ui_step": 1
+        }
+      ],
+      "ui_default": {
+        "kelvin": 6500,
+        "mode": "as_shot",
+        "tint": 0
+      }
+    },
+    {
+      "field": "grade_white_balance",
+      "kind": "object",
+      "panel": "look",
+      "properties": [
+        {
+          "name": "temperature",
+          "type": "number",
+          "ui_decimals": 0,
+          "ui_max": 15000,
+          "ui_min": 2000,
+          "ui_slider": {
+            "pivot_kelvin": 6000,
+            "pivot_position": 2048,
+            "position_max": 4096,
+            "position_min": 0,
+            "scale": "kelvin_pivot"
+          },
+          "ui_step": 1
+        },
+        {
+          "name": "tint",
+          "type": "number",
+          "ui_decimals": 0,
+          "ui_max": 150,
+          "ui_min": -150,
+          "ui_step": 1
+        }
+      ],
+      "ui_default": {
+        "temperature": 5999.9931640625,
+        "tint": 9.711277961730957
+      }
+    },
+    {
+      "aliases": [
+        "HLS"
+      ],
+      "field": "hls",
+      "kind": "object",
+      "panel": "look",
+      "properties": [
+        {
+          "name": "hue",
+          "type": "number",
+          "ui_decimals": 0,
+          "ui_max": 315,
+          "ui_min": 0,
+          "ui_step": 45
+        },
+        {
+          "name": "hue_shift",
+          "type": "number_list",
+          "ui_count": 8,
+          "ui_decimals": 0,
+          "ui_max": 30,
+          "ui_min": -30,
+          "ui_step": 1
+        },
+        {
+          "name": "lightness",
+          "type": "number_list",
+          "ui_count": 8,
+          "ui_decimals": 0,
+          "ui_max": 100,
+          "ui_min": -100,
+          "ui_step": 1
+        },
+        {
+          "name": "chroma",
+          "type": "number_list",
+          "ui_count": 8,
+          "ui_decimals": 0,
+          "ui_max": 100,
+          "ui_min": -100,
+          "ui_step": 1
+        },
+        {
+          "name": "hue_smoothness",
+          "type": "number_list",
+          "ui_count": 8,
+          "ui_decimals": 0,
+          "ui_max": 180,
+          "ui_min": 1,
+          "ui_step": 1
+        }
+      ],
+      "ui_default": {
+        "chroma": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "hue": 0,
+        "hue_shift": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "hue_smoothness": [
+          45,
+          45,
+          45,
+          45,
+          45,
+          45,
+          45,
+          45
+        ],
+        "lightness": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "field": "color_wheel",
+      "kind": "object",
+      "panel": "look",
+      "properties": [
+        {
+          "name": "lift_x",
+          "type": "number",
+          "ui_decimals": 3,
+          "ui_max": 1,
+          "ui_min": -1,
+          "ui_step": 0.001
+        },
+        {
+          "name": "lift_y",
+          "type": "number",
+          "ui_decimals": 3,
+          "ui_max": 1,
+          "ui_min": -1,
+          "ui_step": 0.001
+        },
+        {
+          "name": "lift_master",
+          "type": "number",
+          "ui_decimals": 0,
+          "ui_max": 800,
+          "ui_min": -800,
+          "ui_step": 1
+        },
+        {
+          "name": "gamma_x",
+          "type": "number",
+          "ui_decimals": 3,
+          "ui_max": 1,
+          "ui_min": -1,
+          "ui_step": 0.001
+        },
+        {
+          "name": "gamma_y",
+          "type": "number",
+          "ui_decimals": 3,
+          "ui_max": 1,
+          "ui_min": -1,
+          "ui_step": 0.001
+        },
+        {
+          "name": "gamma_master",
+          "type": "number",
+          "ui_decimals": 0,
+          "ui_max": 800,
+          "ui_min": -800,
+          "ui_step": 1
+        },
+        {
+          "name": "gain_x",
+          "type": "number",
+          "ui_decimals": 3,
+          "ui_max": 1,
+          "ui_min": -1,
+          "ui_step": 0.001
+        },
+        {
+          "name": "gain_y",
+          "type": "number",
+          "ui_decimals": 3,
+          "ui_max": 1,
+          "ui_min": -1,
+          "ui_step": 0.001
+        },
+        {
+          "name": "gain_master",
+          "type": "number",
+          "ui_decimals": 0,
+          "ui_max": 800,
+          "ui_min": -800,
+          "ui_step": 1
+        }
+      ],
+      "ui_default": {
+        "gain_master": 0,
+        "gain_x": 0,
+        "gain_y": 0,
+        "gamma_master": 0,
+        "gamma_x": 0,
+        "gamma_y": 0,
+        "lift_master": 0,
+        "lift_x": 0,
+        "lift_y": 0
+      }
+    },
+    {
+      "field": "curve",
+      "kind": "model",
+      "model_shape": "{\"points\": [{\"x\": number, \"y\": number}, ...]}: at least two control points in the unit square",
+      "panel": "tone",
+      "ui_default": {
+        "points": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 1,
+            "y": 1
+          }
+        ]
+      }
+    },
+    {
+      "aliases": [
+        "ocio_lmt"
+      ],
+      "field": "lut",
+      "kind": "model",
+      "model_shape": "{\"cube_path\": string} or a tagged {\"reference\": object}, and optional \"name\", \"strength\" (0 to 1), \"input_encoding\", and \"output_encoding\" (color encoding ids). {} is no LUT",
+      "panel": "lut",
+      "ui_default": {}
+    }
+  ]
+}

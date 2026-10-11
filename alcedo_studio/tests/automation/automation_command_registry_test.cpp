@@ -12,6 +12,7 @@
 #include <optional>
 #include <vector>
 
+#include "ui/alcedo_main/automation/automation_json_schema.hpp"
 #include "ui/alcedo_main/automation/automation_session_commands.hpp"
 
 namespace alcedo::automation {
@@ -106,6 +107,23 @@ TEST(AutomationCommandRegistryTest, MissingRequiredParameterIsReported) {
 
   ASSERT_EQ(log.responses.size(), 1U);
   EXPECT_EQ(log.responses[0].error->data.toObject().value("pointer"), QJsonValue("/element_ids"));
+}
+
+TEST(AutomationCommandRegistryTest, EnumViolationNamesTheAllowedValues) {
+  const QJsonObject schema{
+      {"type", "object"},
+      {"properties",
+       QJsonObject{{"persist", QJsonObject{{"type", "boolean"}, {"enum", QJsonArray{true}}}},
+                   {"mode", QJsonObject{{"type", "string"}, {"enum", QJsonArray{"a", "b"}}}}}}};
+
+  const auto boolean = ValidateAutomationJson(QJsonObject{{"persist", false}}, schema);
+  ASSERT_TRUE(boolean.has_value());
+  EXPECT_EQ(boolean->pointer, QStringLiteral("/persist"));
+  EXPECT_EQ(boolean->reason, QStringLiteral("value must be one of: true"));
+
+  const auto text = ValidateAutomationJson(QJsonObject{{"mode", "c"}}, schema);
+  ASSERT_TRUE(text.has_value());
+  EXPECT_EQ(text->reason, QStringLiteral("value must be one of: a, b"));
 }
 
 TEST(AutomationCommandRegistryTest, ValidParametersReachTheHandler) {
