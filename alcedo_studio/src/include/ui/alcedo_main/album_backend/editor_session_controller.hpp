@@ -260,6 +260,17 @@ class EditorSessionController final : public QObject, public IEditorAdjustmentSu
   auto EnqueueFieldWrite(QString fieldKey, alcedo::EditorParameterWrite write, bool settled,
                          std::optional<alcedo::EditCommitAttribution> attribution = std::nullopt)
       -> alcedo::EditorSessionResult;
+  /**
+   * @brief Enqueue one write for @p target, like EnqueueFieldWrite without the node selection.
+   *
+   * The automation write resolves the owner of each field itself
+   * (FieldOwnerParameterTarget), so a field of another node stays reachable while a node is
+   * selected. An incomplete target returns Rejected with the reason.
+   */
+  auto EnqueueTargetedFieldWrite(alcedo::EditorParameterTarget target,
+                                 alcedo::EditorParameterWrite write, bool settled,
+                                 std::optional<alcedo::EditCommitAttribution> attribution)
+      -> alcedo::EditorSessionResult;
   /// Queue a node-switch seal so later writes start a new sequence. Old
   /// sequence ids keep their captured target. No live mutation.
   Q_INVOKABLE bool enqueueNodeSwitchBoundary();

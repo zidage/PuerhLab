@@ -138,24 +138,45 @@ auto HeadValue(const EditorHistorySnapshot& history) -> QJsonValue {
   return QString::fromStdString(history.active_head->ToString());
 }
 
-/// The panel values of the open image, read from its current document like the panel shows them:
-/// the fields of the selected node when one is selected, otherwise the fields of the current
-/// panel nodes. Empty when the document cannot be read.
+/// The panel values of the open image, read from its current document. Each field is read from
+/// its owner node (FieldOwnerParameterTarget): a Color Grade field from the selected Color Grade,
+/// and crop, white balance, and the display transform from their nodes whatever node is
+/// selected. A field without an owner in the image is left out. Empty when the document cannot be
+/// read.
 auto CurrentPanelValues(const ui::EditorSessionController& editor) -> QVariantMap {
   const auto document = editor.pipeline_document();
   if (!document) {
     return {};
   }
+  const NodeId                       selected = editor.selected_node_id();
+  const auto                         table    = EditorPanelAdapterTable::Production();
+  std::vector<EditorParameterTarget> targets;
+  for (const auto& adapter : table.Adapters()) {
+    std::string error;
+    auto        target =
+        FieldOwnerParameterTarget(*document, selected, std::string{adapter.field_key}, &error);
+    if (target.has_value()) {
+      targets.push_back(std::move(*target));
+    }
+  }
   EditorPanelProjection projection;
   std::string           error;
-  const NodeId          selected = editor.selected_node_id();
-  const bool read = selected.Empty() ? ProjectCurrentPanelFields(*document, 0, &projection, &error)
-                                     : ProjectSelectedNodePanelFields(*document, selected, 0,
-                                                                      &projection, &error);
-  if (!read) {
+  if (!ProjectEditorPanelFields(*document, targets, 0, &projection, &error)) {
     return {};
   }
   return ui::PanelProjectionToVariantMap(projection);
+}
+
+/// The owner target of @p field in the open image; nothing when the editor cannot edit or the
+/// image has no owner of the field. The write then takes the selection path, which reports why.
+auto FieldTarget(const ui::EditorSessionController& editor, std::string field)
+    -> std::optional<EditorParameterTarget> {
+  const auto document = editor.pipeline_document();
+  if (!editor.can_edit() || !document) {
+    return std::nullopt;
+  }
+  std::string error;
+  return FieldOwnerParameterTarget(*document, editor.selected_node_id(), std::move(field), &error);
 }
 
 /// The value of @p field in @p values, as the catalog reads it; null when the open image does
@@ -202,10 +223,12 @@ auto EditorIdentity(const ui::EditorSessionController& editor) -> QJsonObject {
                      {"head_commit", HeadValue(editor.history_snapshot())}};
 }
 
-/// A field write that the catalog accepted: the canonical field and its typed write.
+/// A field write that the catalog accepted: the canonical field, its typed write, and the
+/// target of its owner node (nothing when the editor cannot edit now).
 struct PreparedWrite {
-  std::string          field_;
-  EditorParameterWrite write_;
+  std::string                          field_;
+  EditorParameterWrite                 write_;
+  std::optional<EditorParameterTarget> target_;
 };
 
 /// Source size of the frame that the editor presented last, like the Geometry panel reads it:
@@ -246,7 +269,8 @@ auto PrepareWrite(const ui::EditorSessionController& editor, const QString& fiel
     *error = QString::fromStdString(reason);
     return std::nullopt;
   }
-  return PreparedWrite{std::string(entry->field), std::move(*write)};
+  return PreparedWrite{std::string(entry->field), std::move(*write),
+                       FieldTarget(editor, std::string(entry->field))};
 }
 
 /// The attribution of the commits of one write command: the author agent and @p params.note.
@@ -260,9 +284,13 @@ auto AgentAttribution(const QJsonObject& params) -> EditCommitAttribution {
 void ApplyWrite(ui::EditorSessionController* editor, QObject* context, PreparedWrite prepared,
                 EditCommitAttribution attribution, OperationDone done) {
   auto       wait   = OperationWait::Begin(editor, context, std::move(done));
-  const auto result =
-      editor->EnqueueFieldWrite(QString::fromStdString(prepared.field_), std::move(prepared.write_),
-                                /*settled=*/true, std::move(attribution));
+  const auto result = prepared.target_.has_value()
+                          ? editor->EnqueueTargetedFieldWrite(
+                                std::move(*prepared.target_), std::move(prepared.write_),
+                                /*settled=*/true, std::move(attribution))
+                          : editor->EnqueueFieldWrite(QString::fromStdString(prepared.field_),
+                                                      std::move(prepared.write_),
+                                                      /*settled=*/true, std::move(attribution));
   if (EditorSessionResultIsFailure(result.kind)) {
     wait->Fail(OperationFailure{AutomationErrorCode::Rejected,
                                 result.message.empty()
