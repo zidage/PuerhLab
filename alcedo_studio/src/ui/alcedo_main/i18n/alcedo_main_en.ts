@@ -1332,12 +1332,71 @@ Alcedo will use %1 instead.</translation>
         <translation type="unfinished">Control returned to you.</translation>
     </message>
     <message>
-        <source>You took control.</source>
-        <translation type="unfinished">You took control.</translation>
-    </message>
-    <message>
         <source>Waiting for the next command</source>
         <translation type="unfinished">Waiting for the next command</translation>
+    </message>
+    <message>
+        <source>You stopped the agent.</source>
+        <translation type="unfinished">You stopped the agent.</translation>
+    </message>
+    <message>
+        <source>Stopped. Tell the agent to continue.</source>
+        <translation type="unfinished">Stopped. Tell the agent to continue.</translation>
+    </message>
+    <message>
+        <source>The agent took control.</source>
+        <translation type="unfinished">The agent took control.</translation>
+    </message>
+    <message>
+        <source>The agent continued.</source>
+        <translation type="unfinished">The agent continued.</translation>
+    </message>
+    <message>
+        <source>The agent gave control back to you.</source>
+        <translation type="unfinished">The agent gave control back to you.</translation>
+    </message>
+</context>
+<context>
+    <name>AgentSessionCard</name>
+    <message>
+        <source>Stopping</source>
+        <translation type="unfinished">Stopping</translation>
+    </message>
+    <message>
+        <source>Stopped</source>
+        <translation type="unfinished">Stopped</translation>
+    </message>
+    <message>
+        <source>Failed</source>
+        <translation type="unfinished">Failed</translation>
+    </message>
+    <message>
+        <source>Finished</source>
+        <translation type="unfinished">Finished</translation>
+    </message>
+    <message>
+        <source>Working</source>
+        <translation type="unfinished">Working</translation>
+    </message>
+    <message>
+        <source>Agent</source>
+        <translation type="unfinished">Agent</translation>
+    </message>
+    <message>
+        <source>Agent · %1</source>
+        <translation type="unfinished">Agent · %1</translation>
+    </message>
+    <message>
+        <source>Stop the agent</source>
+        <translation type="unfinished">Stop the agent</translation>
+    </message>
+    <message>
+        <source>Stopped. Tell the agent to continue.</source>
+        <translation type="unfinished">Stopped. Tell the agent to continue.</translation>
+    </message>
+    <message>
+        <source>Dismiss</source>
+        <translation type="unfinished">Dismiss</translation>
     </message>
 </context>
 <context>
@@ -1455,6 +1514,10 @@ Alcedo will use %1 instead.</translation>
         <source>Agent</source>
         <translation type="unfinished">Agent</translation>
     </message>
+    <message>
+        <source>Open background tasks</source>
+        <translation type="unfinished">Open background tasks</translation>
+    </message>
 </context>
 <context>
     <name>BackgroundTasksDialog</name>
@@ -1566,14 +1629,6 @@ Alcedo will use %1 instead.</translation>
     <message>
         <source>Agent</source>
         <translation type="unfinished">Agent</translation>
-    </message>
-    <message>
-        <source>Take control</source>
-        <translation type="unfinished">Take control</translation>
-    </message>
-    <message>
-        <source>Return control</source>
-        <translation type="unfinished">Return control</translation>
     </message>
 </context>
 <context>

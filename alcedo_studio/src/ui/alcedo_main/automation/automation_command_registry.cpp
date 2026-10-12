@@ -193,15 +193,17 @@ void AutomationCommandRegistry::Dispatch(const AutomationRequest& request,
     }
     if (state_change_control_.begin_command && reply.state_) {
       // The task detail shows the command until its response is sent, also a timeout response.
-      const quint64 token = state_change_control_.begin_command(AutomationCommandSummary(request));
-      reply.state_->sink  = [sink = std::move(reply.state_->sink),
+      const quint64 token = state_change_control_.begin_command(
+          AutomationCommandSummary(request), request.params.value("note").toString());
+      reply.state_->sink = [sink = std::move(reply.state_->sink),
                             end  = state_change_control_.end_command,
                             token](AutomationResponse response) {
+        const bool succeeded = !response.error.has_value();
         if (sink) {
           sink(std::move(response));
         }
         if (end) {
-          end(token);
+          end(token, succeeded);
         }
       };
     }

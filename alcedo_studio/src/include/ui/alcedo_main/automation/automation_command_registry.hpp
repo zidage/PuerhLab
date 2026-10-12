@@ -87,11 +87,12 @@ struct AutomationCommandRefusal {
 struct AutomationStateChangeControl {
   /// Returns a refusal when a state-changing command cannot start now.
   std::function<std::optional<AutomationCommandRefusal>()> admit;
-  /// Called with the command summary before the handler of an admitted command. Returns a token
-  /// for `end_command`.
-  std::function<quint64(const QString& summary)>          begin_command;
-  /// Called after the response of the command of @p token was sent.
-  std::function<void(quint64 token)>                      end_command;
+  /// Called with the command summary and the `note` parameter of the request (empty without
+  /// one) before the handler of an admitted command. Returns a token for `end_command`.
+  std::function<quint64(const QString& summary, const QString& note)> begin_command;
+  /// Called after the response of the command of @p token was sent. @p succeeded is false when
+  /// the response is an error, also a timeout error.
+  std::function<void(quint64 token, bool succeeded)>                  end_command;
 };
 
 /// A short text that names @p request for a person: the method and the scalar parameter values

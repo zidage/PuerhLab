@@ -757,6 +757,8 @@ set(ALCEDO_MAIN_QML_FILES
     "${ALCEDO_UI_SHELL_ROOT}/qml/ThumbnailGridView.qml"
     "${ALCEDO_UI_SHELL_ROOT}/qml/BackgroundTaskBar.qml"
     "${ALCEDO_UI_SHELL_ROOT}/qml/BackgroundTasksDialog.qml"
+    "${ALCEDO_UI_SHELL_ROOT}/qml/AgentSessionCard.qml"
+    "${ALCEDO_UI_SHELL_ROOT}/qml/TaskWorkingRing.qml"
     "${ALCEDO_UI_SHELL_ROOT}/qml/WorkspaceHost.qml"
     "${ALCEDO_UI_SHELL_ROOT}/qml/LibraryWorkspace.qml"
     "${ALCEDO_UI_SHELL_ROOT}/qml/EditorWorkspace.qml"

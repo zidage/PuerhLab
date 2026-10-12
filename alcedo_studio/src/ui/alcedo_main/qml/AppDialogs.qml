@@ -273,7 +273,6 @@ Item {
     BackgroundTasksDialog {
         id: backgroundTasksDialogObj
         controller: appModules.backgroundTasks
-        agentControl: appModules.agentControl
         blurSource: root.blurSource
         cornerRadius: root.host ? root.host.windowCornerRadius : 0
         onTaskDetailsRequested: function(task) {

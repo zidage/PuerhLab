@@ -4,6 +4,7 @@
 
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Controls.impl
 import QtQuick.Layouts
 
 // Background-task island on the top toolbar, next to the right-sidebar toggle.
@@ -17,18 +18,26 @@ import QtQuick.Layouts
 //   - a task fails; the island folds back after the auto-collapse delay.
 // A successful finish folds the island back at once; the lamp pops green.
 //
-// Clicking toggles the island by hand. A hand-opened island stays open (no
-// auto-collapse) until it is clicked again; hand-closing it hands control back
-// to the automatic behavior for the next task transition.
+// The agent task is pinned: while an agent works it is the primary task, and
+// after it ends the island keeps showing how it ended until the user dismisses
+// it in the task dialog, so frequent short tasks such as editor saves do not
+// hide it. A sparkles mark tells an agent task from work of the user.
+//
+// Clicking the bare lamp opens the island by hand. The open island shows a
+// search button that opens the task dialog; a click anywhere else on the island
+// folds it. A hand-opened island stays open (no auto-collapse) until it is
+// clicked again; hand-closing it hands control back to the automatic behavior
+// for the next task transition.
 //
 // Motion: the pill width, the surface opacity, and the text fade all follow one
-// `reveal` value. While a task runs, the lamp pulses and a hairline along the
-// bottom edge shows the progress (a moving highlight when it is unknown).
-// Hovering an automatically opened island keeps it open.
+// `reveal` value. While a task runs, an arc circles the lamp; a known progress
+// shows as a percentage. Hovering an automatically opened island keeps it open.
 Item {
     id: root
     objectName: "backgroundTaskBar"
 
+    // Main window: openBackgroundTasksDialog().
+    property var host: null
     readonly property var controller: appModules ? appModules.backgroundTasks : null
     readonly property var primary: controller && controller.primaryTask
                                    ? controller.primaryTask : ({})
@@ -39,6 +48,7 @@ Item {
                                           && primary.progressPercent !== undefined
                                           && Number(primary.progressPercent) >= 0
     readonly property color lampColor: stateColor(primary.state || "")
+    readonly property bool primaryIsAgent: primary && primary.kind === "agentControl"
 
     readonly property int revealDelayMs: 400
     readonly property real collapsedWidth: appTheme.iconButtonHitSizeCompact
@@ -174,6 +184,9 @@ Item {
             return qsTr("No recent tasks")
         if (!(primary && primary.title))
             return qsTr("Background Tasks")
+        // The agent task names the agent and what it does now, or how it ended.
+        if (primary.kind === "agentControl" && primary.detail)
+            return qsTr("%1 · %2").arg(primary.title).arg(primary.detail)
         const kind = kindLabel(primary.kind)
         if (primary.state === "failed" && primary.detail)
             return qsTr("%1 · %2").arg(kind).arg(primary.detail)
@@ -262,7 +275,14 @@ Item {
 
     TapHandler {
         acceptedButtons: Qt.LeftButton
-        onTapped: root.toggleByUser()
+        onTapped: function(eventPoint) {
+            if (openTasksButton.visible) {
+                const local = openTasksButton.mapFromItem(root, eventPoint.position)
+                if (openTasksButton.contains(local))
+                    return
+            }
+            root.toggleByUser()
+        }
     }
 
     // Hover feedback for the bare lamp; the pill surface takes over as it unfolds.
@@ -291,7 +311,6 @@ Item {
         anchors.right: parent.right
         height: root.pillHeight
         radius: height / 2
-        clip: true
         color: appTheme.cardSurfaceColor
         border.width: 1
         border.color: Qt.rgba(root.lampColor.r, root.lampColor.g, root.lampColor.b,
@@ -302,72 +321,6 @@ Item {
             enabled: !appTheme.reduceMotion
             ColorAnimation {
                 duration: appTheme.motionFoldOpenMs
-            }
-        }
-
-        // Hairline progress along the bottom edge, inset so it stays inside the
-        // rounded ends.
-        Item {
-            id: progressTrack
-            objectName: "backgroundTaskBarProgress"
-            visible: root.primaryActive && root.reveal > 0
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.bottom: parent.bottom
-            anchors.leftMargin: surface.radius
-            anchors.rightMargin: surface.radius
-            anchors.bottomMargin: 1
-            height: 2
-            clip: true
-            Accessible.role: Accessible.ProgressBar
-            Accessible.name: root.primaryLabel()
-
-            Rectangle {
-                anchors.fill: parent
-                radius: height / 2
-                color: Qt.rgba(root.lampColor.r, root.lampColor.g, root.lampColor.b, 0.16)
-            }
-
-            Rectangle {
-                visible: root.progressKnown
-                height: parent.height
-                radius: height / 2
-                color: root.lampColor
-                width: parent.width * Math.max(0, Math.min(100,
-                                    Number(root.primary.progressPercent || 0))) / 100
-
-                Behavior on width {
-                    enabled: !appTheme.reduceMotion
-                    NumberAnimation {
-                        duration: appTheme.motionFoldOpenMs + appTheme.motionFadeMs
-                        easing.type: Easing.OutCubic
-                    }
-                }
-            }
-
-            // Unknown progress: a soft highlight sweeps across the track.
-            Rectangle {
-                id: sweep
-                visible: !root.progressKnown
-                width: Math.max(appTheme.spaceMd * 4, parent.width * 0.32)
-                height: parent.height
-                radius: height / 2
-                x: appTheme.reduceMotion ? (parent.width - width) / 2 : -width
-                gradient: Gradient {
-                    orientation: Gradient.Horizontal
-                    GradientStop { position: 0.0; color: "transparent" }
-                    GradientStop { position: 0.5; color: root.lampColor }
-                    GradientStop { position: 1.0; color: "transparent" }
-                }
-
-                NumberAnimation on x {
-                    running: sweep.visible && progressTrack.visible && !appTheme.reduceMotion
-                    loops: Animation.Infinite
-                    from: -sweep.width
-                    to: progressTrack.width
-                    duration: appTheme.motionFoldOpenMs * 7
-                    easing.type: Easing.InOutCubic
-                }
             }
         }
     }
@@ -387,48 +340,21 @@ Item {
             width: Math.max(0, parent.width - root.contentLeftInset - appTheme.spaceMd)
             spacing: appTheme.spaceSm
 
-            // Status lamp: pulses while a task runs, pops once when it ends.
+            // Status lamp: an arc circles it while a task runs; it pops once when the task ends.
             Item {
                 Layout.preferredWidth: root.lampBoxSize
                 Layout.preferredHeight: root.lampBoxSize
                 Layout.alignment: Qt.AlignVCenter
                 Accessible.ignored: true
 
-                Rectangle {
-                    id: lampHalo
+                TaskWorkingRing {
+                    objectName: "backgroundTaskBarWorkingRing"
                     anchors.centerIn: parent
-                    width: lamp.width
-                    height: lamp.height
-                    radius: width / 2
+                    width: root.lampBoxSize + appTheme.spaceXs
+                    height: width
+                    visible: root.primaryActive
+                    running: root.primaryActive && root.visible
                     color: root.lampColor
-                    opacity: 0
-                    scale: 1
-                }
-
-                ParallelAnimation {
-                    running: root.primaryActive && root.visible && !appTheme.reduceMotion
-                    loops: Animation.Infinite
-                    onStopped: {
-                        lampHalo.opacity = 0
-                        lampHalo.scale = 1
-                    }
-
-                    NumberAnimation {
-                        target: lampHalo
-                        property: "scale"
-                        from: 1
-                        to: 2.4
-                        duration: appTheme.motionFoldOpenMs * 6
-                        easing.type: Easing.OutCubic
-                    }
-                    NumberAnimation {
-                        target: lampHalo
-                        property: "opacity"
-                        from: 0.45
-                        to: 0
-                        duration: appTheme.motionFoldOpenMs * 6
-                        easing.type: Easing.OutCubic
-                    }
                 }
 
                 Rectangle {
@@ -468,6 +394,20 @@ Item {
                 opacity: Math.max(0, Math.min(1, root.reveal * 1.8 - 0.8))
                 visible: root.reveal > 0
 
+                ColorImage {
+                    objectName: "backgroundTaskBarAgentMark"
+                    visible: root.primaryIsAgent
+                    Layout.preferredWidth: appTheme.iconOpticalSizeCompact - appTheme.spaceXs
+                    Layout.preferredHeight: Layout.preferredWidth
+                    Layout.alignment: Qt.AlignVCenter
+                    source: "qrc:/panel_icons/sparkles.svg"
+                    sourceSize.width: appTheme.iconSourceSizeCompact
+                    sourceSize.height: appTheme.iconSourceSizeCompact
+                    color: appTheme.backgroundTaskWorkingColor
+                    fillMode: Image.PreserveAspectFit
+                    Accessible.ignored: true
+                }
+
                 Label {
                     Layout.fillWidth: true
                     text: root.primaryLabel()
@@ -493,6 +433,21 @@ Item {
                     color: appTheme.textMutedColor
                     font.family: appTheme.uiFontFamily
                     font.pixelSize: appTheme.fontSizeCaption
+                }
+
+                IconActionButton {
+                    id: openTasksButton
+                    objectName: "backgroundTaskBarOpenTasksButton"
+                    visible: root.host !== null
+                    Layout.preferredWidth: root.pillHeight - appTheme.spaceXs
+                    Layout.preferredHeight: root.pillHeight - appTheme.spaceXs
+                    Layout.alignment: Qt.AlignVCenter
+                    compact: true
+                    focusOnPointerPress: false
+                    iconSrc: "qrc:/panel_icons/search.svg"
+                    fillIdle: "transparent"
+                    actionName: qsTr("Open background tasks")
+                    onClicked: root.host.openBackgroundTasksDialog()
                 }
             }
         }

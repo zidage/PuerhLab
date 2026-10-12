@@ -1499,12 +1499,71 @@ Alcedo 将改用 %1。</translation>
         <translation>控制权已交还给你。</translation>
     </message>
     <message>
-        <source>You took control.</source>
-        <translation>你已收回控制权。</translation>
-    </message>
-    <message>
         <source>Waiting for the next command</source>
         <translation>等待下一条命令</translation>
+    </message>
+    <message>
+        <source>You stopped the agent.</source>
+        <translation>你已停止智能体。</translation>
+    </message>
+    <message>
+        <source>Stopped. Tell the agent to continue.</source>
+        <translation>已停止。请告知智能体继续。</translation>
+    </message>
+    <message>
+        <source>The agent took control.</source>
+        <translation>智能体已接管控制。</translation>
+    </message>
+    <message>
+        <source>The agent continued.</source>
+        <translation>智能体已继续。</translation>
+    </message>
+    <message>
+        <source>The agent gave control back to you.</source>
+        <translation>智能体已将控制权交还给你。</translation>
+    </message>
+</context>
+<context>
+    <name>AgentSessionCard</name>
+    <message>
+        <source>Stopping</source>
+        <translation>正在停止</translation>
+    </message>
+    <message>
+        <source>Stopped</source>
+        <translation>已停止</translation>
+    </message>
+    <message>
+        <source>Failed</source>
+        <translation>失败</translation>
+    </message>
+    <message>
+        <source>Finished</source>
+        <translation>已完成</translation>
+    </message>
+    <message>
+        <source>Working</source>
+        <translation>正在处理</translation>
+    </message>
+    <message>
+        <source>Agent</source>
+        <translation>智能体</translation>
+    </message>
+    <message>
+        <source>Agent · %1</source>
+        <translation>智能体 · %1</translation>
+    </message>
+    <message>
+        <source>Stop the agent</source>
+        <translation>停止智能体</translation>
+    </message>
+    <message>
+        <source>Stopped. Tell the agent to continue.</source>
+        <translation>已停止。请告知智能体继续。</translation>
+    </message>
+    <message>
+        <source>Dismiss</source>
+        <translation>移除</translation>
     </message>
 </context>
 <context>
@@ -1640,6 +1699,10 @@ Alcedo 将改用 %1。</translation>
         <source>Agent</source>
         <translation>智能体</translation>
     </message>
+    <message>
+        <source>Open background tasks</source>
+        <translation>打开后台任务</translation>
+    </message>
 </context>
 <context>
     <name>BackgroundTasksDialog</name>
@@ -1755,14 +1818,6 @@ Alcedo 将改用 %1。</translation>
     <message>
         <source>Agent</source>
         <translation>智能体</translation>
-    </message>
-    <message>
-        <source>Take control</source>
-        <translation>收回控制权</translation>
-    </message>
-    <message>
-        <source>Return control</source>
-        <translation>交还控制权</translation>
     </message>
 </context>
 <context>

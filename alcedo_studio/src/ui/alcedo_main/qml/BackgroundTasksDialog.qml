@@ -12,19 +12,20 @@ import QtQuick.Layouts
 // Centered modal listing background work. Layout matches the merge dialog
 // family: card surface, square X close, sunken list well, status lamp dots, and
 // quiet row actions — not full-height DialogActionButton chrome.
+//
+// Pinned tasks (agent sessions) sit at the top as AgentSessionCard and stay
+// until the user dismisses them. The other tasks scroll below them; the
+// registry keeps only the newest finished ones.
 Dialog {
     id: root
     objectName: "backgroundTasksDialog"
 
     property var controller: null
-    // AgentControlOwner: the agent task shows Take control instead of Cancel and, after the
-    // user took control, Return control.
-    property var agentControl: null
     property Item blurSource: null
     property real cornerRadius: 0
     signal taskDetailsRequested(var task)
 
-    readonly property int taskCount: taskModel.count
+    readonly property int taskCount: taskModel.count + agentModel.count
     readonly property int runningCount: controller ? controller.runningCount : 0
     // Medium dialog: wider than a side panel, far narrower than the merge resolver.
     readonly property int preferredWidth: appTheme.editorSidePanelWidth * 2
@@ -52,30 +53,45 @@ Dialog {
         return Qt.rgba(colorValue.r, colorValue.g, colorValue.b, alphaValue)
     }
 
-    function taskIndex(taskId, startIndex) {
-        for (let index = startIndex; index < taskModel.count; ++index) {
-            const entry = taskModel.get(index)
+    function taskIndex(model, taskId, startIndex) {
+        for (let index = startIndex; index < model.count; ++index) {
+            const entry = model.get(index)
             if (entry.task && String(entry.task.id) === taskId)
                 return index
         }
         return -1
     }
 
-    function syncTasks() {
-        const source = controller ? controller.tasks : []
+    function syncModel(model, source) {
         for (let targetIndex = 0; targetIndex < source.length; ++targetIndex) {
             const sourceTask = source[targetIndex]
             const sourceId = String(sourceTask.id || "")
-            const existingIndex = taskIndex(sourceId, targetIndex)
+            const existingIndex = taskIndex(model, sourceId, targetIndex)
             if (existingIndex < 0) {
-                taskModel.insert(targetIndex, { task: sourceTask })
+                model.insert(targetIndex, { task: sourceTask })
             } else if (existingIndex !== targetIndex) {
-                taskModel.move(existingIndex, targetIndex, 1)
+                model.move(existingIndex, targetIndex, 1)
             }
-            taskModel.setProperty(targetIndex, "task", sourceTask)
+            model.setProperty(targetIndex, "task", sourceTask)
         }
-        if (taskModel.count > source.length)
-            taskModel.remove(source.length, taskModel.count - source.length)
+        if (model.count > source.length)
+            model.remove(source.length, model.count - source.length)
+    }
+
+    function syncTasks() {
+        const source = controller ? controller.tasks : []
+        const pinned = []
+        const others = []
+        for (let index = 0; index < source.length; ++index) {
+            if (source[index].pinned === true)
+                pinned.push(source[index])
+            else
+                others.push(source[index])
+        }
+        // Newest agent session first.
+        pinned.reverse()
+        syncModel(agentModel, pinned)
+        syncModel(taskModel, others)
     }
 
     function statusLabel(state) {
@@ -173,6 +189,10 @@ Dialog {
     }
 
     ListModel {
+        id: agentModel
+    }
+
+    ListModel {
         id: taskModel
     }
 
@@ -243,6 +263,25 @@ Dialog {
             }
         }
 
+        ColumnLayout {
+            objectName: "backgroundTasksPinnedAgents"
+            Layout.fillWidth: true
+            Layout.leftMargin: appTheme.spaceLg
+            Layout.rightMargin: appTheme.spaceLg
+            Layout.bottomMargin: appTheme.spaceMd
+            visible: agentModel.count > 0
+            spacing: appTheme.spaceSm
+
+            Repeater {
+                model: agentModel
+
+                delegate: AgentSessionCard {
+                    Layout.fillWidth: true
+                    controller: root.controller
+                }
+            }
+        }
+
         // Sunken list well — rows sit inside the track, not as floating cards.
         Rectangle {
             Layout.fillWidth: true
@@ -283,19 +322,18 @@ Dialog {
 
                     readonly property color rowStatusColor: root.statusColor(task ? task.state : "")
                     readonly property bool rowFailed: !!task && task.state === "failed"
-                    readonly property bool showProgress: !!task
-                                                         && (task.state === "running"
-                                                             || task.state === "canceling")
+                    readonly property bool rowActive: !!task
+                                                      && (task.state === "running"
+                                                          || task.state === "queued"
+                                                          || task.state === "canceling")
+                    // A known percentage shows as a bar; the ring shows work in progress.
+                    readonly property bool showProgress: rowActive
+                                                         && task.progressPercent !== undefined
+                                                         && task.progressPercent >= 0
                     readonly property bool showDetails: !!task && task.kind === "imageAnalysis"
                     readonly property bool showCancel: !!task && task.cancelable === true
                                                        && (task.state === "running"
                                                            || task.state === "queued")
-                    readonly property bool agentTask: !!task && task.kind === "agentControl"
-                    readonly property bool showReturnControl: agentTask
-                                                              && task.state === "canceled"
-                                                              && !!root.agentControl
-                                                              && root.agentControl.revokedByUser
-                                                              && root.agentControl.taskId === task.id
                     readonly property string progressLabel: root.progressText(task)
 
                     width: ListView.view ? ListView.view.width : 0
@@ -323,13 +361,26 @@ Dialog {
                                 spacing: appTheme.spaceSm
 
                                 // Status lamp only — no pill chrome (matches BackgroundTaskBar).
-                                Rectangle {
+                                Item {
                                     Layout.alignment: Qt.AlignVCenter
-                                    Layout.preferredWidth: appTheme.spaceMd
-                                    Layout.preferredHeight: appTheme.spaceMd
-                                    radius: appTheme.badgeRadius
-                                    color: taskRow.rowStatusColor
+                                    Layout.preferredWidth: appTheme.spaceLg
+                                    Layout.preferredHeight: appTheme.spaceLg
                                     Accessible.ignored: true
+
+                                    TaskWorkingRing {
+                                        anchors.fill: parent
+                                        visible: taskRow.rowActive
+                                        running: taskRow.rowActive
+                                        color: taskRow.rowStatusColor
+                                    }
+
+                                    Rectangle {
+                                        anchors.centerIn: parent
+                                        width: appTheme.spaceSm
+                                        height: width
+                                        radius: width / 2
+                                        color: taskRow.rowStatusColor
+                                    }
                                 }
 
                                 Label {
@@ -396,8 +447,6 @@ Dialog {
                                         return 0
                                     return taskRow.task.progressPercent
                                 }
-                                indeterminate: !!taskRow.task
-                                               && taskRow.task.progressPercent < 0
                             }
                         }
 
@@ -406,7 +455,6 @@ Dialog {
                             Layout.alignment: Qt.AlignVCenter
                             spacing: appTheme.spaceXs
                             visible: taskRow.showDetails || taskRow.showCancel
-                                     || taskRow.showReturnControl
 
                             Button {
                                 id: detailsButton
@@ -450,52 +498,13 @@ Dialog {
                             }
 
                             Button {
-                                id: returnControlButton
-                                objectName: "backgroundTaskReturnControlButton"
-                                visible: taskRow.showReturnControl
-                                Layout.preferredWidth: Math.max(implicitWidth,
-                                                                appTheme.iconButtonHitSize * 2)
-                                Layout.preferredHeight: appTheme.spaceXl + appTheme.spaceSm
-                                text: qsTr("Return control")
-                                hoverEnabled: true
-                                activeFocusOnTab: true
-                                Accessible.name: text
-                                onClicked: root.agentControl.ReturnControl()
-
-                                contentItem: Label {
-                                    text: returnControlButton.text
-                                    color: returnControlButton.hovered
-                                           ? appTheme.textColor : appTheme.textMutedColor
-                                    font.family: appTheme.uiFontFamily
-                                    font.pixelSize: appTheme.fontSizeCaption
-                                    font.weight: appTheme.fontWeightStrong
-                                    horizontalAlignment: Text.AlignHCenter
-                                    verticalAlignment: Text.AlignVCenter
-                                    leftPadding: appTheme.spaceSm
-                                    rightPadding: appTheme.spaceSm
-                                }
-
-                                background: Rectangle {
-                                    radius: appTheme.controlRadiusSmall
-                                    color: returnControlButton.down
-                                           ? appTheme.buttonPressedFillColor
-                                           : (returnControlButton.hovered
-                                              ? appTheme.buttonHoveredFillColor
-                                              : appTheme.bgBaseColor)
-                                    border.width: 1
-                                    border.color: appTheme.cardBorderColor
-                                }
-                            }
-
-                            Button {
                                 id: cancelButton
                                 objectName: "backgroundTaskCancelButton"
                                 visible: taskRow.showCancel
                                 Layout.preferredWidth: Math.max(implicitWidth,
                                                                 appTheme.iconButtonHitSize * 2)
                                 Layout.preferredHeight: appTheme.spaceXl + appTheme.spaceSm
-                                // Canceling the agent task takes control back from the agent.
-                                text: taskRow.agentTask ? qsTr("Take control") : qsTr("Cancel")
+                                text: qsTr("Cancel")
                                 hoverEnabled: true
                                 activeFocusOnTab: true
                                 Accessible.name: text
@@ -531,7 +540,7 @@ Dialog {
                 ColumnLayout {
                     anchors.centerIn: parent
                     spacing: appTheme.spaceSm
-                    visible: taskList.count === 0
+                    visible: taskList.count === 0 && agentModel.count === 0
                     width: parent.width - appTheme.spaceXl * 2
 
                     Label {

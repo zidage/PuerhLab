@@ -19,15 +19,23 @@ namespace {
 using CommandHandler = std::function<void(const QJsonObject& params, AutomationReply reply)>;
 
 auto ControlStateSchema() -> QJsonObject {
-  return AutomationObjectSchema(QJsonObject{{"held", QJsonObject{{"type", "boolean"}}},
-                                            {"revoked_by_user", QJsonObject{{"type", "boolean"}}},
-                                            {"holder_name", QJsonObject{{"type", "string"}}}},
-                                QJsonArray{"held", "revoked_by_user", "holder_name"});
+  return AutomationObjectSchema(
+      QJsonObject{{"held", QJsonObject{{"type", "boolean"}}},
+                  {"revoked_by_user",
+                   QJsonObject{{"type", "boolean"},
+                               {"description",
+                                "True after the user stopped the agent, until an agent calls "
+                                "control.acquire again."}}},
+                  {"holder_name", QJsonObject{{"type", "string"}}}},
+      QJsonArray{"held", "revoked_by_user", "holder_name"});
 }
 
-auto RevokedRefusal() -> AutomationCommandRefusal {
+/// The answer to a state-changing command after the user stopped the agent. The agent must not
+/// continue on its own: the user tells it when to continue, and then it calls control.acquire.
+auto StoppedRefusal() -> AutomationCommandRefusal {
   const QString message = QStringLiteral(
-      "The user took control. Wait until the user selects Return control in the task dialog.");
+      "The user stopped the agent. Stop working and ask the user what to do. Call "
+      "control.acquire only after the user tells you to continue.");
   return AutomationCommandRefusal{AutomationErrorCode::ControlRevokedByUser, message,
                                   QJsonObject{{"reason", message}}};
 }
@@ -42,11 +50,6 @@ void           AnswerAcquire(AutomationCommandWait* wait, const ui::AgentControl
     case ui::AgentControlRefusal::None:
       wait->SendResult(AutomationControlState(control));
       return;
-    case ui::AgentControlRefusal::RevokedByUser: {
-      const AutomationCommandRefusal revoked = RevokedRefusal();
-      wait->SendError(revoked.code, revoked.message, revoked.data);
-      return;
-    }
     case ui::AgentControlRefusal::HeldByOtherAgent:
       wait->SendError(AutomationErrorCode::Busy,
                                 QStringLiteral("Another agent holds control: %1").arg(holder),
@@ -110,7 +113,7 @@ auto AutomationControlState(const ui::AgentControlOwner* owner) -> QJsonObject {
     return QJsonObject{{"held", true}, {"revoked_by_user", false}, {"holder_name", ""}};
   }
   return QJsonObject{{"held", owner->held()},
-                     {"revoked_by_user", owner->revoked_by_user()},
+                     {"revoked_by_user", owner->stopped_by_user()},
                      {"holder_name", owner->holder_name()}};
 }
 
@@ -121,8 +124,8 @@ auto MakeAgentStateChangeControl(ui::AgentControlOwner* owner) -> AutomationStat
     if (control != nullptr && control->held()) {
       return std::nullopt;
     }
-    if (control != nullptr && control->revoked_by_user()) {
-      return RevokedRefusal();
+    if (control != nullptr && control->stopped_by_user()) {
+      return StoppedRefusal();
     }
     const QString message = QStringLiteral(
         "This command changes the session state and needs agent control. Call control.acquire "
@@ -130,12 +133,12 @@ auto MakeAgentStateChangeControl(ui::AgentControlOwner* owner) -> AutomationStat
     return AutomationCommandRefusal{AutomationErrorCode::ControlNotHeld, message,
                                     QJsonObject{{"reason", message}}};
   };
-  rules.begin_command = [control](const QString& summary) -> quint64 {
-    return control != nullptr ? control->BeginCommand(summary) : 0;
+  rules.begin_command = [control](const QString& summary, const QString& note) -> quint64 {
+    return control != nullptr ? control->BeginCommand(summary, note) : 0;
   };
-  rules.end_command = [control](quint64 token) {
+  rules.end_command = [control](quint64 token, bool succeeded) {
     if (control != nullptr) {
-      control->EndCommand(token);
+      control->EndCommand(token, succeeded);
     }
   };
   return rules;
@@ -153,9 +156,11 @@ auto RegisterAutomationControlCommands(AutomationCommandRegistry& registry,
   acquire.description = QStringLiteral(
       "Takes control of a GUI session so that state-changing commands run. While the agent holds "
       "control, the user cannot change the session state; the task island shows the agent task "
-      "with the running command. Waits while the user drags an editor control. Fails with "
-      "-32004 after the user took control until the user selects Return control, and with "
-      "-32005 while another holder holds control. The headless host always reports held.");
+      "with each state-changing command and its note. Waits while the user drags an editor "
+      "control. After the user stopped the agent, state-changing commands fail with -32004; "
+      "call control.acquire again only after the user tells you to continue, and the agent "
+      "task continues. Fails with -32005 while another holder holds control. The headless host "
+      "always reports held.");
   acquire.params_schema = AutomationClosedParamsSchema(QJsonObject{
       {"holder_name",
        QJsonObject{
