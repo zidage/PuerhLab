@@ -326,7 +326,7 @@ Dialog {
                                                       && (task.state === "running"
                                                           || task.state === "queued"
                                                           || task.state === "canceling")
-                    // A known percentage shows as a bar; the ring shows work in progress.
+                    // A known percentage shows as a bar; the turning outline shows work in progress.
                     readonly property bool showProgress: rowActive
                                                          && task.progressPercent !== undefined
                                                          && task.progressPercent >= 0
@@ -340,8 +340,16 @@ Dialog {
                     height: taskContent.implicitHeight + appTheme.spaceMd * 2
                     radius: appTheme.controlRadiusSmall
                     color: appTheme.cardSurfaceColor
-                    border.width: 1
+                    border.width: rowActive ? 0 : 1
                     border.color: appTheme.cardBorderColor
+
+                    RotatingTaskBorder {
+                        anchors.fill: parent
+                        radius: taskRow.radius
+                        visible: taskRow.rowActive
+                        running: visible
+                        color: taskRow.rowStatusColor
+                    }
 
                     RowLayout {
                         id: taskContent
@@ -361,26 +369,13 @@ Dialog {
                                 spacing: appTheme.spaceSm
 
                                 // Status lamp only — no pill chrome (matches BackgroundTaskBar).
-                                Item {
+                                Rectangle {
                                     Layout.alignment: Qt.AlignVCenter
-                                    Layout.preferredWidth: appTheme.spaceLg
-                                    Layout.preferredHeight: appTheme.spaceLg
+                                    Layout.preferredWidth: appTheme.spaceMd
+                                    Layout.preferredHeight: appTheme.spaceMd
+                                    radius: appTheme.badgeRadius
+                                    color: taskRow.rowStatusColor
                                     Accessible.ignored: true
-
-                                    TaskWorkingRing {
-                                        anchors.fill: parent
-                                        visible: taskRow.rowActive
-                                        running: taskRow.rowActive
-                                        color: taskRow.rowStatusColor
-                                    }
-
-                                    Rectangle {
-                                        anchors.centerIn: parent
-                                        width: appTheme.spaceSm
-                                        height: width
-                                        radius: width / 2
-                                        color: taskRow.rowStatusColor
-                                    }
                                 }
 
                                 Label {

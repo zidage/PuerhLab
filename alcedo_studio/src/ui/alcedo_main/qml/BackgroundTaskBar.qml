@@ -23,15 +23,15 @@ import QtQuick.Layouts
 // it in the task dialog, so frequent short tasks such as editor saves do not
 // hide it. A sparkles mark tells an agent task from work of the user.
 //
-// Clicking the bare lamp opens the island by hand. The open island shows a
-// search button that opens the task dialog; a click anywhere else on the island
-// folds it. A hand-opened island stays open (no auto-collapse) until it is
-// clicked again; hand-closing it hands control back to the automatic behavior
-// for the next task transition.
+// A click on the folded island opens it by hand; a hand-opened island stays
+// open (no auto-collapse). A click on the open island opens the task dialog and
+// hands the island back to the automatic behavior: it folds after the
+// auto-collapse delay unless a task still runs.
 //
 // Motion: the pill width, the surface opacity, and the text fade all follow one
-// `reveal` value. While a task runs, an arc circles the lamp; a known progress
-// shows as a percentage. Hovering an automatically opened island keeps it open.
+// `reveal` value. While a task runs, a gradient turns around the whole outline
+// of the pill; a known progress shows as a percentage. Hovering an
+// automatically opened island keeps it open.
 Item {
     id: root
     objectName: "backgroundTaskBar"
@@ -78,7 +78,7 @@ Item {
 
     Accessible.role: Accessible.Button
     Accessible.name: primaryLabel()
-    Accessible.onPressAction: toggleByUser()
+    Accessible.onPressAction: activateByUser()
 
     function taskStateFingerprint() {
         const tasks = controller ? controller.tasks : []
@@ -117,14 +117,18 @@ Item {
         animateReveal(0)
     }
 
-    function toggleByUser() {
-        if (expanded) {
-            collapseIsland()
+    function activateByUser() {
+        if (!expanded) {
+            expandIsland()
+            autoCollapseTimer.stop()
+            pinned = true
             return
         }
-        expandIsland()
-        autoCollapseTimer.stop()
-        pinned = true
+        pinned = false
+        if (host)
+            host.openBackgroundTasksDialog()
+        if (!primaryActive)
+            scheduleAutoCollapse()
     }
 
     function scheduleAutoCollapse() {
@@ -275,14 +279,7 @@ Item {
 
     TapHandler {
         acceptedButtons: Qt.LeftButton
-        onTapped: function(eventPoint) {
-            if (openTasksButton.visible) {
-                const local = openTasksButton.mapFromItem(root, eventPoint.position)
-                if (openTasksButton.contains(local))
-                    return
-            }
-            root.toggleByUser()
-        }
+        onTapped: root.activateByUser()
     }
 
     // Hover feedback for the bare lamp; the pill surface takes over as it unfolds.
@@ -312,9 +309,9 @@ Item {
         height: root.pillHeight
         radius: height / 2
         color: appTheme.cardSurfaceColor
-        border.width: 1
-        border.color: Qt.rgba(root.lampColor.r, root.lampColor.g, root.lampColor.b,
-                              root.primaryActive ? 0.32 : 0.2)
+        // A running task draws its outline with RotatingTaskBorder instead.
+        border.width: root.primaryActive ? 0 : 1
+        border.color: Qt.rgba(root.lampColor.r, root.lampColor.g, root.lampColor.b, 0.2)
         opacity: Math.min(1, Math.max(0, root.reveal) * 1.6)
 
         Behavior on border.color {
@@ -322,6 +319,15 @@ Item {
             ColorAnimation {
                 duration: appTheme.motionFoldOpenMs
             }
+        }
+
+        RotatingTaskBorder {
+            objectName: "backgroundTaskBarWorkingBorder"
+            anchors.fill: parent
+            radius: surface.radius
+            visible: root.primaryActive && root.reveal > 0
+            running: visible
+            color: root.lampColor
         }
     }
 
@@ -340,22 +346,12 @@ Item {
             width: Math.max(0, parent.width - root.contentLeftInset - appTheme.spaceMd)
             spacing: appTheme.spaceSm
 
-            // Status lamp: an arc circles it while a task runs; it pops once when the task ends.
+            // Status lamp: it pops once when the task ends.
             Item {
                 Layout.preferredWidth: root.lampBoxSize
                 Layout.preferredHeight: root.lampBoxSize
                 Layout.alignment: Qt.AlignVCenter
                 Accessible.ignored: true
-
-                TaskWorkingRing {
-                    objectName: "backgroundTaskBarWorkingRing"
-                    anchors.centerIn: parent
-                    width: root.lampBoxSize + appTheme.spaceXs
-                    height: width
-                    visible: root.primaryActive
-                    running: root.primaryActive && root.visible
-                    color: root.lampColor
-                }
 
                 Rectangle {
                     id: lamp
@@ -433,21 +429,6 @@ Item {
                     color: appTheme.textMutedColor
                     font.family: appTheme.uiFontFamily
                     font.pixelSize: appTheme.fontSizeCaption
-                }
-
-                IconActionButton {
-                    id: openTasksButton
-                    objectName: "backgroundTaskBarOpenTasksButton"
-                    visible: root.host !== null
-                    Layout.preferredWidth: root.pillHeight - appTheme.spaceXs
-                    Layout.preferredHeight: root.pillHeight - appTheme.spaceXs
-                    Layout.alignment: Qt.AlignVCenter
-                    compact: true
-                    focusOnPointerPress: false
-                    iconSrc: "qrc:/panel_icons/search.svg"
-                    fillIdle: "transparent"
-                    actionName: qsTr("Open background tasks")
-                    onClicked: root.host.openBackgroundTasksDialog()
                 }
             }
         }

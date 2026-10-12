@@ -5,7 +5,7 @@ pragma ComponentBehavior: Bound
 //  Additional permission under GPLv3 section 7 applies; see the LICENSE file.
 
 import QtQuick
-import QtQuick.Controls
+import QtQuick.Controls.Basic
 import QtQuick.Controls.impl
 import QtQuick.Layouts
 
@@ -13,9 +13,11 @@ import QtQuick.Layouts
 // controls the session, what the agent does now, and its activity: each
 // state-changing command with the note the agent gave and its outcome.
 //
-// Stop cancels the agent task: the user has control at once and the agent is
-// told to stop. The button then stays disabled; the session continues when the
-// user tells the agent to continue. The card stays until the user dismisses it.
+// Stop (a white disc with a black square) cancels the agent task: the user has
+// control at once and the agent is told to stop. The button then turns gray;
+// the session continues when the user tells the agent to continue. The archive
+// button below Stop dismisses a finished card. While the agent works, a
+// gradient turns around the outline of the card.
 Rectangle {
     id: root
     objectName: "agentSessionCard"
@@ -56,12 +58,15 @@ Rectangle {
     implicitHeight: content.implicitHeight + appTheme.spaceMd * 2
     radius: appTheme.controlRadiusSmall
     color: appTheme.cardSurfaceColor
-    border.width: 1
-    border.color: active
-                  ? Qt.rgba(appTheme.backgroundTaskWorkingColor.r,
-                            appTheme.backgroundTaskWorkingColor.g,
-                            appTheme.backgroundTaskWorkingColor.b, 0.45)
-                  : appTheme.cardBorderColor
+    border.width: active ? 0 : 1
+    border.color: appTheme.cardBorderColor
+
+    RotatingTaskBorder {
+        anchors.fill: parent
+        radius: root.radius
+        visible: root.active
+        running: visible
+    }
 
     ColumnLayout {
         id: content
@@ -73,25 +78,13 @@ Rectangle {
             Layout.fillWidth: true
             spacing: appTheme.spaceSm
 
-            Item {
-                Layout.preferredWidth: appTheme.spaceLg
-                Layout.preferredHeight: appTheme.spaceLg
+            Rectangle {
+                Layout.preferredWidth: appTheme.spaceSm
+                Layout.preferredHeight: appTheme.spaceSm
                 Layout.alignment: Qt.AlignVCenter
+                radius: width / 2
+                color: root.stateColor(root.taskState)
                 Accessible.ignored: true
-
-                TaskWorkingRing {
-                    anchors.fill: parent
-                    visible: root.active
-                    running: root.active
-                }
-
-                Rectangle {
-                    anchors.centerIn: parent
-                    width: appTheme.spaceSm
-                    height: width
-                    radius: width / 2
-                    color: root.stateColor(root.taskState)
-                }
             }
 
             ColorImage {
@@ -131,29 +124,62 @@ Rectangle {
                 }
             }
 
-            IconActionButton {
-                objectName: "agentSessionStopButton"
-                Layout.alignment: Qt.AlignVCenter
-                compact: true
-                enabled: root.canStop
-                iconSrc: "qrc:/panel_icons/stop.svg"
-                iconColorDefault: appTheme.dangerColor
-                fillIdle: appTheme.cardSurfaceColor
-                fillHover: appTheme.dangerTintColor
-                actionName: root.canStop ? qsTr("Stop the agent")
-                                         : qsTr("Stopped. Tell the agent to continue.")
-                onClicked: root.controller.CancelTask(root.task.id)
-            }
+            ColumnLayout {
+                Layout.alignment: Qt.AlignTop
+                spacing: appTheme.spaceXs
 
-            IconActionButton {
-                objectName: "agentSessionDismissButton"
-                Layout.alignment: Qt.AlignVCenter
-                compact: true
-                enabled: root.finished
-                iconSrc: "qrc:/panel_icons/close.svg"
-                fillIdle: appTheme.cardSurfaceColor
-                actionName: qsTr("Dismiss")
-                onClicked: root.controller.DismissTask(root.task.id)
+                Button {
+                    id: stopButton
+                    objectName: "agentSessionStopButton"
+                    readonly property real side: appTheme.iconOpticalSize + appTheme.spaceXs
+                    Layout.preferredWidth: appTheme.iconButtonHitSizeCompact
+                    Layout.preferredHeight: appTheme.iconButtonHitSizeCompact
+                    Layout.alignment: Qt.AlignHCenter
+                    enabled: root.canStop
+                    hoverEnabled: true
+                    padding: 0
+                    Accessible.name: root.canStop ? qsTr("Stop the agent")
+                                                  : qsTr("Stopped. Tell the agent to continue.")
+                    ToolTip.visible: hovered
+                    ToolTip.delay: 500
+                    ToolTip.text: Accessible.name
+                    onClicked: root.controller.CancelTask(root.task.id)
+
+                    // A white disc with a black square; gray after the stop.
+                    background: Item {
+                        Rectangle {
+                            anchors.centerIn: parent
+                            width: stopButton.side
+                            height: stopButton.side
+                            radius: width / 2
+                            color: stopButton.enabled ? "#FFFFFF" : appTheme.textMutedColor
+                            opacity: stopButton.enabled ? (stopButton.down ? 0.72
+                                                           : (stopButton.hovered ? 0.88 : 1))
+                                                        : 0.45
+                        }
+                    }
+                    contentItem: Item {
+                        Rectangle {
+                            anchors.centerIn: parent
+                            width: Math.round(stopButton.side * 0.36)
+                            height: width
+                            radius: 2
+                            color: "#000000"
+                            opacity: stopButton.enabled ? 1 : 0.6
+                        }
+                    }
+                }
+
+                IconActionButton {
+                    objectName: "agentSessionArchiveButton"
+                    Layout.alignment: Qt.AlignHCenter
+                    compact: true
+                    enabled: root.finished
+                    iconSrc: "qrc:/panel_icons/archive.svg"
+                    fillIdle: appTheme.cardSurfaceColor
+                    actionName: qsTr("Dismiss")
+                    onClicked: root.controller.DismissTask(root.task.id)
+                }
             }
         }
 

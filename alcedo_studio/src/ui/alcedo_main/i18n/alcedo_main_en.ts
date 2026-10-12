@@ -1514,10 +1514,6 @@ Alcedo will use %1 instead.</translation>
         <source>Agent</source>
         <translation type="unfinished">Agent</translation>
     </message>
-    <message>
-        <source>Open background tasks</source>
-        <translation type="unfinished">Open background tasks</translation>
-    </message>
 </context>
 <context>
     <name>BackgroundTasksDialog</name>

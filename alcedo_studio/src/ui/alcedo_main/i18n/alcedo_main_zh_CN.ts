@@ -1699,10 +1699,6 @@ Alcedo 将改用 %1。</translation>
         <source>Agent</source>
         <translation>智能体</translation>
     </message>
-    <message>
-        <source>Open background tasks</source>
-        <translation>打开后台任务</translation>
-    </message>
 </context>
 <context>
     <name>BackgroundTasksDialog</name>
