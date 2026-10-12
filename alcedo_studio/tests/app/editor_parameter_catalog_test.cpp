@@ -888,6 +888,39 @@ TEST(EditorParameterCatalogTest, ColorWheelUiMatchesTrackballWrite) {
             "color_wheel.gain_x and gain_y must be inside the unit disc (x * x + y * y <= 1)");
 }
 
+TEST(EditorParameterCatalogTest, CurvePointsOutsideTheUnitSquareOrOutOfOrderAreRejected) {
+  const auto curve_error = [](const nlohmann::json& points) {
+    std::string error;
+    EXPECT_FALSE(
+        ParseEditorParameterWrite("curve", {{"curve", {{"points", points}}}}, &error).has_value())
+        << points.dump();
+    return error;
+  };
+  EXPECT_EQ(curve_error({{{"x", 0.0}, {"y", 0.0}}, {{"x", 1.2}, {"y", 1.0}}}),
+            "curve.points[1].x must be in [0, 1]");
+  EXPECT_EQ(curve_error({{{"x", 0.0}, {"y", -0.5}}, {{"x", 1.0}, {"y", 1.0}}}),
+            "curve.points[0].y must be in [0, 1]");
+  EXPECT_EQ(curve_error({{{"x", -0.1}, {"y", 0.0}}, {{"x", 1.0}, {"y", 1.0}}}),
+            "curve.points[0].x must be in [0, 1]");
+  EXPECT_EQ(curve_error({{{"x", 0.0}, {"y", 0.0}}, {{"x", 1.0}, {"y", 1.5}}}),
+            "curve.points[1].y must be in [0, 1]");
+  EXPECT_EQ(curve_error({{{"x", 0.0}, {"y", 0.0}},
+                         {{"x", 0.6}, {"y", 0.5}},
+                         {{"x", 0.4}, {"y", 0.6}},
+                         {{"x", 1.0}, {"y", 1.0}}}),
+            "curve.points[2].x must be greater than curve.points[1].x");
+  EXPECT_EQ(curve_error({{{"x", 0.0}, {"y", 0.0}}, {{"x", 0.0}, {"y", 1.0}}}),
+            "curve.points[1].x must be greater than curve.points[0].x");
+
+  // The corners of the unit square are valid points.
+  std::string error;
+  EXPECT_TRUE(ParseEditorParameterWrite(
+                  "curve", {{"curve", {{"points", {{{"x", 0.0}, {"y", 1.0}}, {{"x", 1.0}, {"y", 0.0}}}}}}},
+                  &error)
+                  .has_value())
+      << error;
+}
+
 TEST(EditorParameterCatalogTest, CurveAndLutUseTheModelShape) {
   std::string          error;
   const nlohmann::json curve = {

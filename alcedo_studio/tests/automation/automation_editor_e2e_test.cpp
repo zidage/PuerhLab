@@ -186,6 +186,34 @@ TEST_F(AutomationEditorE2ETest, EveryValueReadByGetIsAcceptedBySetAndKeepsItsVal
   Stop();
 }
 
+TEST_F(AutomationEditorE2ETest, CurvePointOutsideTheUnitSquareIsRejectedAtValue) {
+  ASSERT_FALSE(StartWithOnePhoto(QStringLiteral("curve_range_project")).isEmpty());
+  OpenPhoto();
+  const qsizetype commits_before = CommitCount();
+  const auto      point          = [](double x, double y) { return QJsonObject{{"x", x}, {"y", y}}; };
+  const struct {
+    QJsonArray points;
+    QString    reason;
+  } cases[] = {
+      {QJsonArray{point(0, 0), point(1.2, 1)}, QStringLiteral("curve.points[1].x must be in [0, 1]")},
+      {QJsonArray{point(0, -0.5), point(1, 1)}, QStringLiteral("curve.points[0].y must be in [0, 1]")},
+      {QJsonArray{point(0, 0), point(0.6, 0.5), point(0.4, 0.6), point(1, 1)},
+       QStringLiteral("curve.points[2].x must be greater than curve.points[1].x")},
+  };
+  for (const auto& rejected : cases) {
+    const CliRun run =
+        Call(QStringLiteral("editor.set"),
+             QJsonObject{{"field", "curve"}, {"value", QJsonObject{{"points", rejected.points}}}});
+    EXPECT_EQ(run.exit_code, 1) << rejected.reason.toStdString();
+    const QJsonObject error = run.json.value("error").toObject();
+    EXPECT_EQ(error.value("code").toInt(), -32602);
+    EXPECT_EQ(error.value("data").toObject().value("pointer").toString(), QStringLiteral("/value"));
+    EXPECT_EQ(error.value("data").toObject().value("reason").toString(), rejected.reason);
+  }
+  EXPECT_EQ(CommitCount(), commits_before);
+  Stop();
+}
+
 TEST_F(AutomationEditorE2ETest, SetBeforeInteractiveIsRejectedWithTheOwnerMessage) {
   ASSERT_FALSE(StartWithOnePhoto(QStringLiteral("rejected_project")).isEmpty());
   const CliRun run =
