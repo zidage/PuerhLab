@@ -33,7 +33,9 @@ inline auto operator==(const Vec3f& lhs, const Vec3f& rhs) -> bool {
 
 struct ColorWheelControl {
   Vec2f disc{};
-  float strength = 1.0f;
+  // The strength that the color wheel panel writes for every edit, so writing the default panel
+  // value back does not change the Model.
+  float strength = 0.10f;
   Vec3f color_offset{};
   float luminance_offset = 0.0f;
 };
@@ -45,8 +47,8 @@ inline auto operator==(const ColorWheelControl& lhs, const ColorWheelControl& rh
 
 struct ColorWheelPayload {
   ColorWheelControl lift{};
-  ColorWheelControl gamma{Vec2f{}, 1.0f, Vec3f{1.0f, 1.0f, 1.0f}, 0.0f};
-  ColorWheelControl gain{Vec2f{}, 1.0f, Vec3f{1.0f, 1.0f, 1.0f}, 0.0f};
+  ColorWheelControl gamma{Vec2f{}, 0.10f, Vec3f{1.0f, 1.0f, 1.0f}, 0.0f};
+  ColorWheelControl gain{Vec2f{}, 0.10f, Vec3f{1.0f, 1.0f, 1.0f}, 0.0f};
 };
 
 enum class ColorWheelDirty : std::uint32_t {

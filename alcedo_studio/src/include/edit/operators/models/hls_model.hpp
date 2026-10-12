@@ -31,11 +31,13 @@ struct HlsPayload {
   std::array<HlsVec3, kHlsHueBinCount> hls_adj_table{};
   std::array<float, kHlsHueBinCount>   h_range_table{45.0f, 45.0f, 45.0f, 45.0f,
                                                    45.0f, 45.0f, 45.0f, 45.0f};
-  HlsVec3                              target_hls{0.0f, 0.5f, 1.0f};
+  // target_hls, l_range, and s_range are the values that the HLS panel writes for every edit, so
+  // writing the default panel value back does not change the Model.
+  HlsVec3                              target_hls{0.0f, 0.5f, 0.5f};
   HlsVec3                              hls_adj{};
   float                                h_range = 45.0f;
-  float                                l_range = 0.1f;
-  float                                s_range = 0.1f;
+  float                                l_range = 1.0f;
+  float                                s_range = 1.0f;
 };
 
 enum class HlsDirty : std::uint32_t {

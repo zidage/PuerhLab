@@ -536,11 +536,8 @@ auto RegisterAutomationEditorCommands(AutomationCommandRegistry& registry,
   open.result_schema = identity_schema;
   open.changes_state = true;
   open.handler       = [host](const QJsonObject& params, AutomationReply reply) {
-    ui::ProjectModule* project = host->project();
-    const auto         service = project->handler().project();
-    if (!service || !project->ProjectEntered() || project->ProjectLoading()) {
-      SendAutomationOwnerError(reply, AutomationErrorCode::NotReady,
-                                     QStringLiteral("No project is open."));
+    const auto service = AutomationEnteredProject(host, reply);
+    if (!service) {
       return;
     }
     const auto element_id = static_cast<sl_element_id_t>(params.value("element_id").toDouble());

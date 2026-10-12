@@ -165,13 +165,17 @@ TEST_F(AutomationEditorE2ETest, EveryValueReadByGetIsAcceptedBySetAndKeepsItsVal
   // A RAW image has no input profile; the RAW Decode panel hides it too.
   EXPECT_FALSE(values.contains("input_profile"));
   ASSERT_FALSE(values.isEmpty());
+  // Each value equals the current one, so no write makes a commit.
+  const QJsonValue head = Head();
   for (auto it = values.begin(); it != values.end(); ++it) {
     const CliRun run =
         Call(QStringLiteral("editor.set"), QJsonObject{{"field", it.key()}, {"value", it.value()}});
     ASSERT_EQ(run.exit_code, 0) << it.key().toStdString() << ": "
                                 << QJsonDocument(run.json).toJson().toStdString();
     EXPECT_EQ(run.json.value("value"), it.value()) << it.key().toStdString();
+    EXPECT_EQ(run.json.value("head_commit"), head) << it.key().toStdString();
   }
+  EXPECT_EQ(Head(), head);
   EXPECT_EQ(Result(QStringLiteral("editor.get")).value("values").toObject(), values);
 
   // Writing the input profile of a RAW image names the reason.
@@ -183,6 +187,34 @@ TEST_F(AutomationEditorE2ETest, EveryValueReadByGetIsAcceptedBySetAndKeepsItsVal
   EXPECT_EQ(error.value("code").toInt(), -32602);
   EXPECT_EQ(error.value("message").toString(),
             QStringLiteral("input_profile: a RAW image has no input profile"));
+  Stop();
+}
+
+TEST_F(AutomationEditorE2ETest, CurvePointOutsideTheUnitSquareIsRejectedAtValue) {
+  ASSERT_FALSE(StartWithOnePhoto(QStringLiteral("curve_range_project")).isEmpty());
+  OpenPhoto();
+  const qsizetype commits_before = CommitCount();
+  const auto      point          = [](double x, double y) { return QJsonObject{{"x", x}, {"y", y}}; };
+  const struct {
+    QJsonArray points;
+    QString    reason;
+  } cases[] = {
+      {QJsonArray{point(0, 0), point(1.2, 1)}, QStringLiteral("curve.points[1].x must be in [0, 1]")},
+      {QJsonArray{point(0, -0.5), point(1, 1)}, QStringLiteral("curve.points[0].y must be in [0, 1]")},
+      {QJsonArray{point(0, 0), point(0.6, 0.5), point(0.4, 0.6), point(1, 1)},
+       QStringLiteral("curve.points[2].x must be greater than curve.points[1].x")},
+  };
+  for (const auto& rejected : cases) {
+    const CliRun run =
+        Call(QStringLiteral("editor.set"),
+             QJsonObject{{"field", "curve"}, {"value", QJsonObject{{"points", rejected.points}}}});
+    EXPECT_EQ(run.exit_code, 1) << rejected.reason.toStdString();
+    const QJsonObject error = run.json.value("error").toObject();
+    EXPECT_EQ(error.value("code").toInt(), -32602);
+    EXPECT_EQ(error.value("data").toObject().value("pointer").toString(), QStringLiteral("/value"));
+    EXPECT_EQ(error.value("data").toObject().value("reason").toString(), rejected.reason);
+  }
+  EXPECT_EQ(CommitCount(), commits_before);
   Stop();
 }
 

@@ -93,7 +93,26 @@ auto RegisterAutomationHostCommands(AutomationCommandRegistry&   registry,
   state.params_schema = ClosedParamsSchema();
   state.result_schema = ObjectSchema(
       QJsonObject{{"host_mode", QJsonObject{{"type", "string"}}},
-                  {"project", QJsonObject{{"type", "object"}}},
+                  {"project",
+                   ObjectSchema(
+                       QJsonObject{
+                           {"loaded",
+                            QJsonObject{{"type", "boolean"},
+                                        {"description", "A project file is loaded."}}},
+                           {"entered",
+                            QJsonObject{
+                                {"type", "boolean"},
+                                {"description",
+                                 "The loaded project is open in the window. Project and editor "
+                                 "commands need it. A loaded project that is not entered (the "
+                                 "window shows the start screen) is opened with project.open and "
+                                 "its path."}}},
+                           {"loading", QJsonObject{{"type", "boolean"},
+                                                   {"description", "A project load runs."}}},
+                           {"path", QJsonObject{{"type", "string"},
+                                                {"description", "The loaded project file."}}},
+                           {"message", QJsonObject{{"type", "string"}}}},
+                       QJsonArray{"loaded", "entered", "loading", "path"})},
                   {"workspace", QJsonObject{{"type", "string"}}},
                   {"editor", QJsonObject{{"type", "object"}}},
                   {"control", QJsonObject{{"type", "object"}}},

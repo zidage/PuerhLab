@@ -199,17 +199,30 @@ auto ParseCurveWrite(const nlohmann::json& params) -> EditorCurveWrite {
       throw std::invalid_argument("curve.size must match curve.points");
     }
   }
+  // The control points lie in the unit square and their x values strictly increase, as the curve
+  // panel writes them. Out-of-range or unordered points are rejected, not clamped or sorted.
   std::vector<CurvePoint> points;
   points.reserve(points_json.size());
   for (std::size_t index = 0; index < points_json.size(); ++index) {
-    const auto& point =
-        RequireObject(points_json.at(index), "curve.points[" + std::to_string(index) + "]");
+    const auto  context = "curve.points[" + std::to_string(index) + "]";
+    const auto& point   = RequireObject(points_json.at(index), context);
     RejectUnknownKeys(point, {"x", "y"}, "curve point");
     if (!point.contains("x") || !point.contains("y")) {
       throw std::invalid_argument("curve points require x and y");
     }
-    points.push_back(CurvePoint{ReadFiniteFloat(point.at("x"), "curve point.x"),
-                                ReadFiniteFloat(point.at("y"), "curve point.y")});
+    const CurvePoint parsed{ReadFiniteFloat(point.at("x"), context + ".x"),
+                            ReadFiniteFloat(point.at("y"), context + ".y")};
+    if (parsed.x < 0.0f || parsed.x > 1.0f) {
+      throw std::invalid_argument(context + ".x must be in [0, 1]");
+    }
+    if (parsed.y < 0.0f || parsed.y > 1.0f) {
+      throw std::invalid_argument(context + ".y must be in [0, 1]");
+    }
+    if (!points.empty() && parsed.x <= points.back().x) {
+      throw std::invalid_argument(context + ".x must be greater than curve.points[" +
+                                  std::to_string(index - 1) + "].x");
+    }
+    points.push_back(parsed);
   }
   return EditorCurveWrite{std::move(points)};
 }
