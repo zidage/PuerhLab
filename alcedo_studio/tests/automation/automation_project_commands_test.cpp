@@ -150,6 +150,56 @@ TEST_F(AutomationProjectCommandsTest, SaveAndCloseReportProjectStateErrors) {
   EXPECT_EQ(project.value("path").toString(), QString());
 }
 
+TEST_F(AutomationProjectCommandsTest, LoadedProjectThatIsNotEnteredNamesProjectOpenWithItsPath) {
+  InProcessAutomationSession session;
+  ui::ApplicationModuleHost& host = session.host();
+  const QString              path =
+      session
+          .CallResult(QStringLiteral("project.create"),
+                      QJsonObject{{"folder", Folder()}, {"name", "not_entered_project"}})
+          .value("path")
+          .toString();
+  ASSERT_FALSE(path.isEmpty());
+  ASSERT_EQ(session.CallResult(QStringLiteral("project.close"), QJsonObject{{"persist", true}})
+                .value("closed"),
+            QJsonValue(true));
+
+  // The GUI start state: the last project is loaded, and the window shows the start screen.
+  ASSERT_TRUE(host.project()->PreviewProject(path));
+  ASSERT_TRUE(WaitUntil([&] { return !host.project()->ProjectLoading(); }, std::chrono::minutes(1)));
+  const QJsonObject project =
+      session.CallResult(QStringLiteral("state.get")).value("project").toObject();
+  ASSERT_EQ(project.value("loaded"), QJsonValue(true));
+  ASSERT_EQ(project.value("entered"), QJsonValue(false));
+  ASSERT_EQ(project.value("path").toString(), path);
+
+  const auto response =
+      session.Call(QStringLiteral("editor.open"), QJsonObject{{"element_id", 1}});
+  ASSERT_TRUE(response.has_value() && response->error.has_value());
+  EXPECT_EQ(response->error->code, AutomationErrorCode::NotReady);
+  EXPECT_EQ(response->error->message,
+            QStringLiteral(
+                "The project is loaded but not open in the window; call project.open with its path."));
+  EXPECT_EQ(response->error->data.toObject().value("path").toString(), path);
+  EXPECT_EQ(response->error->data.toObject().value("reason").toString(), response->error->message);
+
+  // project.open with that path enters the project.
+  EXPECT_EQ(session.CallResult(QStringLiteral("project.open"), QJsonObject{{"path", path}})
+                .value("entered"),
+            QJsonValue(true));
+}
+
+TEST_F(AutomationProjectCommandsTest, NoProjectErrorNamesProjectOpenAndHasNoPath) {
+  InProcessAutomationSession session;
+  const auto response =
+      session.Call(QStringLiteral("editor.open"), QJsonObject{{"element_id", 1}});
+  ASSERT_TRUE(response.has_value() && response->error.has_value());
+  EXPECT_EQ(response->error->code, AutomationErrorCode::NotReady);
+  EXPECT_EQ(response->error->message,
+            QStringLiteral("No project is open; call project.open or project.create."));
+  EXPECT_FALSE(response->error->data.toObject().contains("path"));
+}
+
 TEST_F(AutomationProjectCommandsTest, CreateInMissingFolderIsRejected) {
   InProcessAutomationSession session;
   const auto                 response = session.Call(

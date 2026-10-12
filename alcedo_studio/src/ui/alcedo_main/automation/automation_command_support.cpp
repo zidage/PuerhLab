@@ -29,12 +29,27 @@ auto AutomationEnteredProject(ui::ApplicationModuleHost* host, AutomationReply& 
     -> std::shared_ptr<ProjectService> {
   ui::ProjectModule* project = host->project();
   auto               service = project->handler().project();
-  if (!service || !project->ProjectEntered() || project->ProjectLoading()) {
-    SendAutomationOwnerError(reply, AutomationErrorCode::NotReady,
-                             QStringLiteral("No project is open."));
-    return nullptr;
+  if (service && project->ProjectEntered() && !project->ProjectLoading()) {
+    return service;
   }
-  return service;
+  const QString path = QString::fromStdWString(project->handler().package_path().generic_wstring());
+  QString       message;
+  if (project->ProjectLoading()) {
+    message = QStringLiteral(
+        "A project is loading; wait until state.get reports project.loading false.");
+  } else if (service) {
+    // The GUI can start with the last project loaded while the window stays on the start screen.
+    message = QStringLiteral(
+        "The project is loaded but not open in the window; call project.open with its path.");
+  } else {
+    message = QStringLiteral("No project is open; call project.open or project.create.");
+  }
+  QJsonObject data{{"reason", message}};
+  if (service) {
+    data.insert("path", path);
+  }
+  reply.SendError(AutomationErrorCode::NotReady, message, data);
+  return nullptr;
 }
 
 auto ResolveAutomationElementRows(ProjectService& project, const QJsonObject& params,

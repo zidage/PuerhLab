@@ -28,8 +28,9 @@ auto AutomationObjectSchema(QJsonObject properties = {}, QJsonArray required = {
 auto AutomationClosedParamsSchema(QJsonObject properties = {}, QJsonArray required = {})
     -> QJsonObject;
 
-/// The project service of the entered project, or null. Sends -32001 when no project is open
-/// or a project is loading.
+/// The project service of the entered project, or null. Sends -32001 when no project is open,
+/// a project is loading, or a project is loaded but not entered (the window shows the start
+/// screen). The message names the next command; `data.path` is the loaded project file, if any.
 auto AutomationEnteredProject(ui::ApplicationModuleHost* host, AutomationReply& reply)
     -> std::shared_ptr<ProjectService>;
 
