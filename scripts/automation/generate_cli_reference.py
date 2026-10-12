@@ -5,16 +5,18 @@
 """Writes the generated parts of the alcedo-cli command reference.
 
 The command schemas (`session.describe`) and the editor field catalog (`editor.catalog`) are
-committed as JSON in docs/alcedo-skills/skills/alcedo/references/reference/, the reference of the
-alcedo skill (the alcedo-skills submodule). AutomationReferenceDocsTest checks that these files
-are the same as the schemas of the current build. This script writes, from those files:
+committed as JSON in skills/alcedo/references/reference/ of the alcedo skill repository
+(https://github.com/zidage/alcedo-skills). This repository does not pin a commit of it: pass the
+path of a local checkout with --skills-dir. AutomationReferenceDocsTest, registered when CMake has
+ALCEDO_SKILLS_DIR, checks that these files are the same as the schemas of the current build.
+This script writes, from those files:
 
 - the block between `<!-- BEGIN GENERATED: <method> -->` and `<!-- END GENERATED: <method> -->`
   in the command pages (description, parameters, result);
 - the block between `<!-- BEGIN GENERATED: editor-fields -->` and
   `<!-- END GENERATED: editor-fields -->` in editor_fields.md.
 
-Usage:
+Usage (every form needs --skills-dir <alcedo-skills checkout>):
   generate_cli_reference.py            Rewrite the generated blocks.
   generate_cli_reference.py --check    Fail when a block differs, a command has no block, or a
                                        block names an unknown command.
@@ -31,11 +33,8 @@ import re
 import sys
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-REFERENCE_DIR = REPO_ROOT / "docs" / "alcedo-skills" / "skills" / "alcedo" / "references" / "reference"
-COMMANDS_JSON = REFERENCE_DIR / "commands.json"
-CATALOG_JSON = REFERENCE_DIR / "editor_catalog.json"
-FIELDS_PAGE = REFERENCE_DIR / "editor_fields.md"
+# The command reference inside an alcedo-skills checkout.
+REFERENCE_SUBDIR = Path("skills") / "alcedo" / "references" / "reference"
 FIELDS_BLOCK = "editor-fields"
 
 BLOCK_PATTERN = re.compile(
@@ -231,23 +230,33 @@ def copy_json(source: Path, target: Path) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--skills-dir", type=Path, required=True,
+                        help="A local checkout of https://github.com/zidage/alcedo-skills.")
     parser.add_argument("--check", action="store_true", help="Check only; change no file.")
     parser.add_argument("--schema", type=Path, help="A new commands.json to copy first.")
     parser.add_argument("--catalog", type=Path, help="A new editor_catalog.json to copy first.")
     arguments = parser.parse_args()
 
-    if arguments.schema:
-        copy_json(arguments.schema, COMMANDS_JSON)
-    if arguments.catalog:
-        copy_json(arguments.catalog, CATALOG_JSON)
+    reference_dir = arguments.skills_dir / REFERENCE_SUBDIR
+    if not reference_dir.is_dir():
+        print(f"{reference_dir} does not exist; --skills-dir must name an alcedo-skills checkout",
+              file=sys.stderr)
+        return 1
+    commands_json = reference_dir / "commands.json"
+    catalog_json = reference_dir / "editor_catalog.json"
 
-    commands = json.loads(COMMANDS_JSON.read_text(encoding="utf-8"))
-    catalog = json.loads(CATALOG_JSON.read_text(encoding="utf-8"))
+    if arguments.schema:
+        copy_json(arguments.schema, commands_json)
+    if arguments.catalog:
+        copy_json(arguments.catalog, catalog_json)
+
+    commands = json.loads(commands_json.read_text(encoding="utf-8"))
+    catalog = json.loads(catalog_json.read_text(encoding="utf-8"))
     expected = expected_blocks(commands, catalog)
 
     problems = []
     seen: dict[str, Path] = {}
-    for page in sorted(REFERENCE_DIR.glob("*.md")):
+    for page in sorted(reference_dir.glob("*.md")):
         text = page.read_text(encoding="utf-8")
 
         def replace(match: re.Match) -> str:
@@ -276,8 +285,8 @@ def main() -> int:
         for problem in problems:
             print(problem, file=sys.stderr)
         if problems:
-            print("Run scripts/automation/generate_cli_reference.py and add the missing "
-                  "sections.", file=sys.stderr)
+            print("Run scripts/automation/generate_cli_reference.py --skills-dir <checkout> "
+                  "and add the missing sections.", file=sys.stderr)
             return 1
         return 0
 
