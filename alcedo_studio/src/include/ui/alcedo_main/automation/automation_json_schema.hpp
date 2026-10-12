@@ -20,7 +20,7 @@ struct AutomationSchemaViolation {
 
 /// Checks that @p schema uses only the supported subset of JSON Schema draft 2020-12:
 /// `type`, `properties`, `required`, `additionalProperties` (boolean only), `enum`, `minimum`,
-/// `maximum`, `items`, and `minItems`, plus the annotations `title`, `description`, and
+/// `maximum`, `items`, `minItems`, and `maxItems`, plus the annotations `title`, `description`, and
 /// `default`. The violation pointer locates the bad keyword inside @p schema.
 auto CheckAutomationSchemaKeywords(const QJsonObject& schema)
     -> std::optional<AutomationSchemaViolation>;

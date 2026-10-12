@@ -96,6 +96,82 @@ TEST_F(AutomationLibraryE2ETest, ThumbnailCommandWritesPngWithRequestedLongEdge)
   Stop();
 }
 
+TEST_F(AutomationLibraryE2ETest, ThumbnailsCommandWritesOnePngPerElementInRequestOrder) {
+  const auto raw_files = CollectCiRawFiles();
+  ASSERT_GE(raw_files.size(), 2u) << "the CI RAW files are missing under " << TEST_IMG_PATH;
+  ASSERT_FALSE(StartWithNewProject(QStringLiteral("thumbnails_project")).isEmpty());
+  const std::vector<std::filesystem::path> imported(raw_files.begin(), raw_files.begin() + 2);
+  ASSERT_EQ(ImportAndWait(imported).value("counts").toObject().value("completed"), QJsonValue(2));
+  const QJsonArray listed = ListItems();
+  ASSERT_EQ(listed.size(), 2);
+  // The reverse of the list order: the answer keeps the request order.
+  const QJsonArray  ids{listed.at(1).toObject().value("element_id"),
+                       listed.at(0).toObject().value("element_id")};
+
+  const QString     out_dir = QDir(root_).filePath(QStringLiteral("sheet_thumbs"));
+  const QJsonObject result =
+      Result(QStringLiteral("library.thumbnails"),
+             QJsonObject{{"element_ids", ids}, {"out_dir", out_dir}, {"long_edge", 200}});
+  EXPECT_EQ(result.value("written_count").toInt(), 2);
+  EXPECT_EQ(result.value("failed_count").toInt(), 0);
+  const QJsonArray items = result.value("items").toArray();
+  ASSERT_EQ(items.size(), 2);
+  for (qsizetype index = 0; index < items.size(); ++index) {
+    const QJsonObject item = items.at(index).toObject();
+    EXPECT_EQ(item.value("element_id"), ids.at(index));
+    const QString expected_path = QDir(out_dir).filePath(
+        QStringLiteral("%1.png").arg(static_cast<qint64>(ids.at(index).toDouble())));
+    EXPECT_EQ(QDir::cleanPath(item.value("path").toString()), QDir::cleanPath(expected_path));
+    const QImage image(expected_path);
+    ASSERT_FALSE(image.isNull()) << expected_path.toStdString();
+    EXPECT_EQ(std::max(image.width(), image.height()), 200);
+    EXPECT_EQ(item.value("width").toInt(), image.width());
+    EXPECT_EQ(item.value("height").toInt(), image.height());
+  }
+
+  const CliRun unknown =
+      Call(QStringLiteral("library.thumbnails"),
+           QJsonObject{{"element_ids", QJsonArray{999999}}, {"out_dir", out_dir}});
+  EXPECT_EQ(unknown.exit_code, 1);
+  EXPECT_EQ(unknown.json.value("error").toObject().value("code").toInt(), -32602);
+  Stop();
+}
+
+TEST_F(AutomationLibraryE2ETest, InfoCommandReturnsSourcePathAndCaptureValues) {
+  const auto raw_files = CollectCiRawFiles();
+  ASSERT_FALSE(raw_files.empty()) << "the CI RAW files are missing under " << TEST_IMG_PATH;
+  ASSERT_FALSE(StartWithNewProject(QStringLiteral("info_project")).isEmpty());
+  ASSERT_EQ(ImportAndWait({raw_files.front()}).value("counts").toObject().value("completed"),
+            QJsonValue(1));
+  const QJsonObject listed = ListItems().first().toObject();
+
+  const QJsonArray  items =
+      Result(QStringLiteral("library.info"),
+             QJsonObject{{"element_ids", QJsonArray{listed.value("element_id")}}})
+          .value("items")
+          .toArray();
+  ASSERT_EQ(items.size(), 1);
+  const QJsonObject item = items.first().toObject();
+  EXPECT_EQ(item.value("element_id"), listed.value("element_id"));
+  EXPECT_EQ(item.value("file_name"), listed.value("file_name"));
+  EXPECT_EQ(item.value("rating"), listed.value("rating"));
+  EXPECT_FALSE(item.contains("metadata_error"))
+      << item.value("metadata_error").toString().toStdString();
+  EXPECT_EQ(std::filesystem::path(item.value("file_path").toString().toStdWString()),
+            raw_files.front());
+  // The CI RAW files are camera files with a full capture record.
+  EXPECT_FALSE(item.value("camera_model").toString().isEmpty());
+  EXPECT_GT(item.value("iso").toDouble(), 0);
+  EXPECT_GT(item.value("aperture").toDouble(), 0);
+  EXPECT_GT(item.value("focal_mm").toDouble(), 0);
+  EXPECT_GT(item.value("shutter_seconds").toDouble(), 0);
+  EXPECT_TRUE(item.value("shutter").toString().endsWith(QLatin1Char('s')));
+  EXPECT_EQ(item.value("capture_time").toString().size(), 19) << "YYYY-MM-DD HH:MM:SS";
+  EXPECT_GT(item.value("width").toInt(), 0);
+  EXPECT_GT(item.value("height").toInt(), 0);
+  Stop();
+}
+
 TEST_F(AutomationLibraryE2ETest, IdleWaitReturnsAfterPostImportPersist) {
   const auto raw_files = CollectCiRawFiles();
   ASSERT_FALSE(raw_files.empty()) << "the CI RAW files are missing under " << TEST_IMG_PATH;

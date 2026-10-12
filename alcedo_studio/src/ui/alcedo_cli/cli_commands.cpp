@@ -23,7 +23,9 @@
 #include <cstddef>
 #include <cstdio>
 #include <functional>
+#include <iostream>
 #include <optional>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -66,6 +68,9 @@ Global options:
 
 Commands:
   call <method> [<params-json>]   Send one command.
+  batch                           Read one request per stdin line ({"method": ...,
+                                  "params": {...}}), send each over one connection, and
+                                  print one JSON line per request.
   schema                          Print the command schemas.
   session start --headless (--project <path> | --create <folder>,<name>)
         [--editor-backend cuda|opencl|metal] [--viewport <w>x<h>] [--settings-dir <dir>]
@@ -815,6 +820,90 @@ auto RunWatch(const CliOptions& options) -> int {
   }
 }
 
+/// The `error` object of a batch output line.
+auto BatchErrorJson(const automation::AutomationError& error) -> QJsonObject {
+  QJsonObject object{{"code", static_cast<int>(error.code)}, {"message", error.message}};
+  if (!error.data.isUndefined()) {
+    object.insert("data", error.data);
+  }
+  return object;
+}
+
+/// Reads requests from stdin, one JSON object per line, sends them in order over one connection,
+/// and prints one compact JSON line per request: the request `id` (or the line number) with
+/// `result` or `error`. Stops at the end of stdin, or with exit code 3 when the connection is
+/// lost.
+auto RunBatch(const CliOptions& options) -> int {
+  if (options.positional.size() != 1) {
+    return UsageFailure(QStringLiteral("batch takes no arguments; it reads requests from stdin"));
+  }
+  QString    error;
+  const auto session = SelectSession(options, &error);
+  if (!session.has_value()) {
+    WriteErr(QStringLiteral("alcedo-cli: %1\n").arg(error));
+    return Exit(CliExitCode::SessionSelectionError);
+  }
+  AutomationClient client;
+  if (!client.Connect(session->socket_name, kConnectTimeoutMs)) {
+    WriteErr(QStringLiteral("alcedo-cli: %1\n").arg(client.error_string()));
+    return Exit(CliExitCode::ConnectionError);
+  }
+
+  bool        any_error   = false;
+  int         line_number = 0;
+  std::string line;
+  while (std::getline(std::cin, line)) {
+    ++line_number;
+    const QByteArray text = QByteArray::fromStdString(line).trimmed();
+    if (text.isEmpty()) {
+      continue;
+    }
+    QJsonObject         output{{"id", line_number}};
+    QJsonParseError     parse_error{};
+    const QJsonDocument document = QJsonDocument::fromJson(text, &parse_error);
+    const QJsonObject   request  = document.object();
+    if (request.contains("id")) {
+      output.insert("id", request.value("id"));
+    }
+    const QJsonValue method = request.value("method");
+    const QJsonValue params = request.value("params");
+    if (parse_error.error != QJsonParseError::NoError || !document.isObject() ||
+        !method.isString() || method.toString().isEmpty() ||
+        !(params.isUndefined() || params.isObject())) {
+      any_error = true;
+      output.insert("error",
+                    BatchErrorJson({automation::AutomationErrorCode::InvalidRequest,
+                                    QStringLiteral("a batch line must be a JSON object with "
+                                                   "'method' (a string) and optional 'params' "
+                                                   "(an object)")}));
+      WriteOut(ToJsonText(output, QJsonDocument::Compact) + '\n');
+      continue;
+    }
+
+    QJsonObject call_params = params.toObject();
+    if (options.timeout_ms.has_value() && !call_params.contains("timeout_ms")) {
+      call_params.insert("timeout_ms", *options.timeout_ms);
+    }
+    const int timeout_ms = call_params.value("timeout_ms")
+                               .toInt(options.timeout_ms.value_or(kDefaultCommandTimeoutMs));
+    const auto response =
+        client.Call(method.toString(), call_params, timeout_ms + kResponseWaitMarginMs);
+    if (!response.has_value()) {
+      WriteErr(QStringLiteral("alcedo-cli: socket '%1': %2\n")
+                   .arg(session->socket_name, client.error_string()));
+      return Exit(CliExitCode::ConnectionError);
+    }
+    if (response->error.has_value()) {
+      any_error = true;
+      output.insert("error", BatchErrorJson(*response->error));
+    } else {
+      output.insert("result", response->result);
+    }
+    WriteOut(ToJsonText(output, QJsonDocument::Compact) + '\n');
+  }
+  return Exit(any_error ? CliExitCode::CommandError : CliExitCode::Success);
+}
+
 }  // namespace
 
 auto RunAlcedoCli(const QStringList& arguments) -> int {
@@ -838,6 +927,9 @@ auto RunAlcedoCli(const QStringList& arguments) -> int {
   }
   if (command == QStringLiteral("schema")) {
     return RunSchema(options);
+  }
+  if (command == QStringLiteral("batch")) {
+    return RunBatch(options);
   }
   if (command == QStringLiteral("watch")) {
     return RunWatch(options);

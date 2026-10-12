@@ -16,6 +16,7 @@
 #include <QProcess>
 #include <QTemporaryDir>
 #include <QThread>
+#include <algorithm>
 #include <memory>
 #include <string>
 #include <vector>
@@ -382,6 +383,69 @@ TEST_F(AlcedoCliTest, WatchPrintsNotification) {
 
   ASSERT_TRUE(printed);
   EXPECT_EQ(output.trimmed(), QStringLiteral(R"(task.finished {"state":"succeeded","task_id":3})"));
+}
+
+TEST_F(AlcedoCliTest, BatchAnswersEachStdinLineInOrderOverOneConnection) {
+  TestSession& session = StartSession(QStringLiteral("default"));
+
+  QProcess     process;
+  ASSERT_TRUE(StartCli(process, {"batch"}));
+  // The first request is answered before the next is written, as a script that reads each
+  // answer before it decides the next request does it.
+  process.write(R"({"id":"first","method":"session.ping"})"
+                "\n");
+  QString output;
+  ASSERT_TRUE(PumpUntil([&]() {
+    output += QString::fromUtf8(process.readAllStandardOutput());
+    return output.contains('\n');
+  }));
+  EXPECT_EQ(session.server->connection_count(), 1);
+  process.write("\n");
+  process.write(R"({"method":"test.reject","params":{}})"
+                "\n");
+  process.write("not json\n");
+  process.write(R"({"id":7,"method":"session.ping","params":{}})"
+                "\n");
+  process.closeWriteChannel();
+  int        max_connections = session.server->connection_count();
+  const bool exited          = PumpUntil([&]() {
+    max_connections = std::max(max_connections, session.server->connection_count());
+    return process.state() == QProcess::NotRunning;
+  });
+  ASSERT_TRUE(exited);
+  output += QString::fromUtf8(process.readAllStandardOutput());
+
+  EXPECT_EQ(process.exitCode(), 1) << "a command error makes the batch exit with 1";
+  EXPECT_EQ(max_connections, 1);
+  QStringList lines = output.trimmed().split('\n');
+  for (QString& line : lines) {
+    line = line.trimmed();  // stdout is in text mode on Windows: lines end with \r\n.
+  }
+  ASSERT_EQ(lines.size(), 4) << output.toStdString();
+  EXPECT_EQ(lines.at(0), QStringLiteral(R"({"id":"first","result":{"pong":true}})"));
+  const QJsonObject rejected = QJsonDocument::fromJson(lines.at(1).toUtf8()).object();
+  EXPECT_EQ(rejected.value("id"), QJsonValue(3)) << "without an id, the line number";
+  EXPECT_EQ(rejected.value("error").toObject().value("code"), QJsonValue(-32002));
+  const QJsonObject invalid = QJsonDocument::fromJson(lines.at(2).toUtf8()).object();
+  EXPECT_EQ(invalid.value("id"), QJsonValue(4));
+  EXPECT_EQ(invalid.value("error").toObject().value("code"), QJsonValue(-32600));
+  EXPECT_EQ(lines.at(3), QStringLiteral(R"({"id":7,"result":{"pong":true}})"));
+}
+
+TEST_F(AlcedoCliTest, BatchWithOnlySuccessfulCommandsExitsZero) {
+  StartSession(QStringLiteral("default"));
+
+  QProcess process;
+  ASSERT_TRUE(StartCli(process, {"batch"}));
+  process.write(R"({"method":"session.ping"})"
+                "\n"
+                R"({"method":"session.ping"})"
+                "\n");
+  process.closeWriteChannel();
+  ASSERT_TRUE(PumpUntil([&]() { return process.state() == QProcess::NotRunning; }));
+
+  EXPECT_EQ(process.exitCode(), 0) << process.readAllStandardError().toStdString();
+  EXPECT_EQ(QString::fromUtf8(process.readAllStandardOutput()).trimmed().split('\n').size(), 2);
 }
 
 TEST_F(AlcedoCliTest, SchemaListsRegisteredCommands) {

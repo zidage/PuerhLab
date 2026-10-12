@@ -158,6 +158,11 @@ auto CheckKeywordsAt(const QJsonObject& schema, const QString& pointer)
         return AutomationSchemaViolation{at,
                                          QStringLiteral("minItems must be a non-negative integer")};
       }
+    } else if (keyword == QStringLiteral("maxItems")) {
+      if (!IsIntegral(value) || value.toDouble() < 0) {
+        return AutomationSchemaViolation{at,
+                                         QStringLiteral("maxItems must be a non-negative integer")};
+      }
     } else {
       return AutomationSchemaViolation{
           at, QStringLiteral("unsupported schema keyword '%1'").arg(keyword)};
@@ -247,6 +252,11 @@ auto ValidateAt(const QJsonValue& value, const QJsonObject& schema, const QStrin
       return AutomationSchemaViolation{
           pointer,
           QStringLiteral("list must have at least %1 items").arg(schema.value("minItems").toInt())};
+    }
+    if (schema.contains("maxItems") && array.size() > schema.value("maxItems").toInt()) {
+      return AutomationSchemaViolation{
+          pointer,
+          QStringLiteral("list must have at most %1 items").arg(schema.value("maxItems").toInt())};
     }
     if (schema.contains("items")) {
       const QJsonObject item_schema = schema.value("items").toObject();

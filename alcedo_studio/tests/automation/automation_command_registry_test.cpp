@@ -97,6 +97,33 @@ TEST(AutomationCommandRegistryTest, WrongItemTypeReportsArrayIndexPointer) {
   EXPECT_EQ(log.responses[0].error->data.toObject().value("pointer"), QJsonValue("/element_ids/1"));
 }
 
+TEST(AutomationCommandRegistryTest, ListLongerThanMaxItemsIsRejectedWithListPointer) {
+  AutomationCommandSpec spec        = RatingCommand();
+  QJsonObject           properties  = spec.params_schema.value("properties").toObject();
+  QJsonObject           element_ids = properties.value("element_ids").toObject();
+  element_ids.insert("maxItems", 2);
+  properties.insert("element_ids", element_ids);
+  spec.params_schema.insert("properties", properties);
+  AutomationCommandRegistry registry;
+  ASSERT_TRUE(registry.Register(std::move(spec)));
+
+  ResponseLog log;
+  registry.Dispatch(MakeRequest(QStringLiteral("library.rate"),
+                                QJsonObject{{"rating", 1}, {"element_ids", QJsonArray{1, 2, 3}}}),
+                    log.MakeReply(QJsonValue(1)));
+  registry.Dispatch(MakeRequest(QStringLiteral("library.rate"),
+                                QJsonObject{{"rating", 1}, {"element_ids", QJsonArray{1, 2}}}),
+                    log.MakeReply(QJsonValue(2)));
+
+  ASSERT_EQ(log.responses.size(), 2U);
+  ASSERT_TRUE(log.responses[0].error.has_value());
+  EXPECT_EQ(log.responses[0].error->code, AutomationErrorCode::InvalidParams);
+  EXPECT_EQ(log.responses[0].error->data.toObject().value("pointer"), QJsonValue("/element_ids"));
+  EXPECT_TRUE(log.responses[0].error->message.contains(QStringLiteral("at most 2 items")));
+  EXPECT_FALSE(log.responses[1].error.has_value());
+  EXPECT_EQ(log.responses[1].result.toObject().value("applied"), QJsonValue(2));
+}
+
 TEST(AutomationCommandRegistryTest, MissingRequiredParameterIsReported) {
   AutomationCommandRegistry registry;
   ASSERT_TRUE(registry.Register(RatingCommand()));

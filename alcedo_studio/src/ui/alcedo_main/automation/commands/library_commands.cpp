@@ -12,10 +12,13 @@
 #include <QObject>
 #include <QPointer>
 #include <QStringList>
+#include <QThreadPool>
 #include <QVariantList>
 #include <QVariantMap>
 #include <algorithm>
 #include <array>
+#include <cmath>
+#include <cstddef>
 #include <exception>
 #include <filesystem>
 #include <functional>
@@ -26,9 +29,13 @@
 #include <vector>
 
 #include "app/album_browse_service.hpp"
+#include "app/editor_adjustment_context.hpp"
+#include "app/image_pool_service.hpp"
 #include "app/thumbnail_service.hpp"
+#include "image/image.hpp"
 #include "image/image_buffer.hpp"
 #include "sleeve/album_query.hpp"
+#include "storage/mapper/image/image_search_columns.hpp"
 #include "type/supported_file_type.hpp"
 #include "ui/alcedo_main/album_backend/path_utils.hpp"
 #include "ui/alcedo_main/automation/automation_command_support.hpp"
@@ -38,6 +45,10 @@ namespace alcedo::automation {
 namespace {
 
 constexpr int kMaxThumbnailLongEdge = 2048;
+/// The most photos of one library.info or library.thumbnails request.
+constexpr int kMaxBatchElementIds   = 1000;
+/// The thumbnail renders that library.thumbnails keeps requested at the same time.
+constexpr int kThumbnailsInFlight   = 4;
 
 struct SortFieldName {
   const char*    name;
@@ -93,6 +104,203 @@ auto ThumbnailTierFor(int long_edge) -> ThumbnailResolution {
   if (long_edge <= 512) return ThumbnailResolution::k512;
   if (long_edge <= 1024) return ThumbnailResolution::k1024;
   return ThumbnailResolution::k2048;
+}
+
+/// A thumbnail PNG that WriteThumbnailPng wrote, or the reason why it wrote none.
+struct ThumbnailFile {
+  QString path_;
+  int     width_  = 0;
+  int     height_ = 0;
+  QString error_;
+};
+
+/// Renders the library thumbnail of @p row with @p thumbnails, scales it to @p long_edge, and
+/// writes it to the PNG file @p out. Calls @p done on the GUI thread with the file or the error.
+void WriteThumbnailPng(const std::shared_ptr<ThumbnailService>& thumbnails,
+                       const SearchResultRow& row, const QString& out, int long_edge,
+                       std::function<void(ThumbnailFile)> done) {
+  std::weak_ptr<ThumbnailService> weak_service = thumbnails;
+  // The render answers on a worker thread; the conversion and the answer run on this one.
+  CallbackDispatcher              dispatcher   = [](std::function<void()> callback) {
+    QMetaObject::invokeMethod(QCoreApplication::instance(), std::move(callback),
+                                             Qt::QueuedConnection);
+  };
+  thumbnails->GetThumbnailDetailed(
+      row.file_id_, row.image_id_,
+      [weak_service, out, long_edge, done = std::move(done)](ThumbnailRequestResult result) {
+        QImage  image;
+        QString failure = QString::fromStdString(result.message);
+        if (result.status == ThumbnailRequestStatus::kReady && result.guard &&
+            result.guard->thumbnail_buffer_) {
+          auto* buffer = result.guard->thumbnail_buffer_.get();
+          if (!buffer->cpu_data_valid_ && buffer->gpu_data_valid_) {
+            buffer->SyncToCPU();
+          }
+          if (buffer->cpu_data_valid_) {
+            image = ui::album_util::MatRgba32fToQImageCopy(buffer->GetCPUData());
+          }
+        }
+        if (result.guard) {
+          if (auto service = weak_service.lock()) {
+            service->ReleaseThumbnail(result.key);
+          }
+        }
+        ThumbnailFile file;
+        if (image.isNull()) {
+          file.error_ = failure.isEmpty()
+                            ? QStringLiteral("The thumbnail render returned no image.")
+                            : failure;
+          done(std::move(file));
+          return;
+        }
+        if (std::max(image.width(), image.height()) > long_edge) {
+          image = image.scaled(long_edge, long_edge, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+        }
+        if (!image.save(out, "PNG")) {
+          file.error_ = QStringLiteral("The PNG file cannot be written: %1").arg(out);
+          done(std::move(file));
+          return;
+        }
+        file.path_   = out;
+        file.width_  = image.width();
+        file.height_ = image.height();
+        done(std::move(file));
+      },
+      /*pin_if_found=*/true, dispatcher, ThumbnailTierFor(long_edge));
+}
+
+/// One library.thumbnails request: the photos, the next photo to request, and the item of each
+/// photo. GUI thread only. The thumbnail callbacks share it; it ends with the last callback.
+struct ThumbnailBatch {
+  std::vector<SearchResultRow>    rows_;
+  std::vector<QJsonObject>        items_;
+  QString                         out_dir_;
+  int                             long_edge_ = 0;
+  std::size_t                     next_      = 0;
+  std::size_t                     finished_  = 0;
+  int                             in_flight_ = 0;
+  std::weak_ptr<ThumbnailService> thumbnails_;
+  QPointer<AutomationCommandWait> wait_;
+};
+
+/// Requests the next thumbnails of @p batch until kThumbnailsInFlight renders run. Answers the
+/// request when the last thumbnail is written or has failed. Stops requesting when the request
+/// was answered by its time limit.
+void RequestNextThumbnails(const std::shared_ptr<ThumbnailBatch>& batch) {
+  while (batch->in_flight_ < kThumbnailsInFlight && batch->next_ < batch->rows_.size()) {
+    if (batch->wait_ == nullptr || batch->wait_->IsAnswered()) {
+      return;
+    }
+    const auto thumbnails = batch->thumbnails_.lock();
+    if (!thumbnails) {
+      batch->wait_->SendOwnerError(AutomationErrorCode::Failed,
+                                   QStringLiteral("The thumbnail service closed."));
+      return;
+    }
+    const std::size_t      index = batch->next_++;
+    const SearchResultRow& row   = batch->rows_[index];
+    const QString out = QDir(batch->out_dir_).filePath(QStringLiteral("%1.png").arg(row.file_id_));
+    ++batch->in_flight_;
+    WriteThumbnailPng(thumbnails, row, out, batch->long_edge_, [batch, index](ThumbnailFile file) {
+      --batch->in_flight_;
+      ++batch->finished_;
+      QJsonObject& item = batch->items_[index];
+      if (file.error_.isEmpty()) {
+        item.insert("path", file.path_);
+        item.insert("width", file.width_);
+        item.insert("height", file.height_);
+      } else {
+        item.insert("error", file.error_);
+      }
+      if (batch->wait_ == nullptr || batch->wait_->IsAnswered()) {
+        return;
+      }
+      if (batch->finished_ < batch->rows_.size()) {
+        RequestNextThumbnails(batch);
+        return;
+      }
+      QJsonArray items;
+      int        failed = 0;
+      for (const QJsonObject& written : batch->items_) {
+        failed += written.contains("error") ? 1 : 0;
+        items.push_back(written);
+      }
+      batch->wait_->SendResult(
+          QJsonObject{{"items", items},
+                      {"written_count", static_cast<int>(batch->items_.size()) - failed},
+                      {"failed_count", failed}});
+    });
+  }
+}
+
+/// The metadata keeps focal length and aperture as float, so 6.3f reads as 6.3000001907 when
+/// widened. Two decimals are finer than any lens or aperture marking; the Image search columns
+/// round the same way.
+auto RoundedLensValue(float value) -> double {
+  return std::round(static_cast<double>(value) * 100.0) / 100.0;
+}
+
+/// The library.info item of @p row: the library columns, the source file, and the capture
+/// values of the Image metadata that the import read. A value that the metadata does not have
+/// is left out.
+auto PhotoInfoItem(ImagePoolService* image_pool, const SearchResultRow& row) -> QJsonObject {
+  QJsonObject item{{"element_id", static_cast<double>(row.file_id_)},
+                   {"image_id", static_cast<double>(row.image_id_)},
+                   {"file_name", QString::fromStdString(row.file_name_)},
+                   {"rating", row.rating_}};
+  if (image_pool == nullptr) {
+    return item;
+  }
+  const auto insert_text = [&item](const char* name, const std::string& text) {
+    if (!text.empty()) {
+      item.insert(QLatin1String(name), QString::fromStdString(text));
+    }
+  };
+  try {
+    image_pool->Read<void>(row.image_id_, [&](std::shared_ptr<Image> image) {
+      if (!image) {
+        return;
+      }
+      if (!image->image_path_.empty()) {
+        item.insert("file_path", PathText(image->image_path_));
+      }
+      if (!image->has_exif_display_.load()) {
+        return;
+      }
+      const ExifDisplayMetaData& metadata = image->exif_display_;
+      if (const auto capture = ParseCaptureDateTime(metadata.date_time_str_)) {
+        item.insert("capture_time", QString::fromStdString(capture->date_time_));
+      }
+      insert_text("camera_make", metadata.make_);
+      insert_text("camera_model", metadata.model_);
+      insert_text("lens", metadata.lens_);
+      const EditorImageExifDisplay exposure = ReadEditorImageExifDisplay(metadata);
+      if (exposure.focal_mm.has_value() && std::isfinite(*exposure.focal_mm)) {
+        item.insert("focal_mm", RoundedLensValue(*exposure.focal_mm));
+      }
+      if (exposure.aperture.has_value() && std::isfinite(*exposure.aperture)) {
+        item.insert("aperture", RoundedLensValue(*exposure.aperture));
+      }
+      if (exposure.shutter_speed.has_value()) {
+        const auto [numerator, denominator] = *exposure.shutter_speed;
+        item.insert("shutter",
+                    QString::fromStdString(FormatEditorImageExifDisplay(exposure).shutter));
+        item.insert("shutter_seconds",
+                    static_cast<double>(numerator) / static_cast<double>(denominator));
+      }
+      if (exposure.iso.has_value()) {
+        item.insert("iso", static_cast<double>(*exposure.iso));
+      }
+      if (metadata.width_ > 0 && metadata.height_ > 0) {
+        item.insert("width", static_cast<double>(metadata.width_));
+        item.insert("height", static_cast<double>(metadata.height_));
+      }
+    });
+  } catch (const std::exception& e) {
+    // The library columns above still name the photo; the item says why the rest is missing.
+    item.insert("metadata_error", QString::fromUtf8(e.what()));
+  }
+  return item;
 }
 
 /// Starts the import of @p paths and answers with its task id, or with the owner message when
@@ -193,6 +401,48 @@ auto ElementIdsParam() -> QJsonObject {
   return QJsonObject{{"type", "array"},
                      {"items", QJsonObject{{"type", "integer"}, {"minimum", 1}}},
                      {"minItems", 1}};
+}
+
+/// `element_ids` of library.info and library.thumbnails: at most kMaxBatchElementIds ids.
+auto BatchElementIdsParam() -> QJsonObject {
+  QJsonObject param = ElementIdsParam();
+  param.insert("maxItems", kMaxBatchElementIds);
+  return param;
+}
+
+auto InfoItemSchema() -> QJsonObject {
+  const QJsonObject text{{"type", "string"}};
+  const QJsonObject integer{{"type", "integer"}};
+  return AutomationObjectSchema(
+      QJsonObject{
+          {"element_id", integer},
+          {"image_id", integer},
+          {"file_name", text},
+          {"rating", integer},
+          {"file_path",
+           QJsonObject{{"type", "string"}, {"description", "The source file of the photo."}}},
+          {"capture_time",
+           QJsonObject{{"type", "string"},
+                       {"description", "YYYY-MM-DD HH:MM:SS by the camera clock."}}},
+          {"camera_make", text},
+          {"camera_model", text},
+          {"lens", text},
+          {"focal_mm",
+           QJsonObject{{"type", "number"}, {"description", "The real focal length in mm."}}},
+          {"aperture", QJsonObject{{"type", "number"}, {"description", "The f-number."}}},
+          {"shutter", QJsonObject{{"type", "string"},
+                                  {"description", "The exposure time, for example 1/250s."}}},
+          {"shutter_seconds", QJsonObject{{"type", "number"}}},
+          {"iso", integer},
+          {"width",
+           QJsonObject{{"type", "integer"}, {"description", "The image width in pixels."}}},
+          {"height", integer},
+          {"metadata_error",
+           QJsonObject{{"type", "string"},
+                       {"description",
+                        "Why the metadata cannot be read; the item then has only the library "
+                        "columns."}}}},
+      QJsonArray{"element_id", "image_id", "file_name", "rating"});
 }
 
 void RegisterOrFail(AutomationCommandRegistry& registry, AutomationCommandSpec spec, bool* ok,
@@ -438,57 +688,125 @@ auto RegisterAutomationLibraryCommands(AutomationCommandRegistry& registry,
     }
 
     QPointer<AutomationCommandWait> wait = new AutomationCommandWait(std::move(reply), host);
-    std::weak_ptr<ThumbnailService> weak_service = thumbnails;
-    // The render answers on a worker thread; the conversion and the response run on this one.
-    CallbackDispatcher              dispatcher   = [](std::function<void()> callback) {
-      QMetaObject::invokeMethod(QCoreApplication::instance(), std::move(callback),
-                                               Qt::QueuedConnection);
-    };
-    thumbnails->GetThumbnailDetailed(
-        element_id, rows.front().image_id_,
-        [wait, weak_service, out, long_edge](ThumbnailRequestResult result) {
-          QImage  image;
-          QString failure = QString::fromStdString(result.message);
-          if (result.status == ThumbnailRequestStatus::kReady && result.guard &&
-              result.guard->thumbnail_buffer_) {
-            auto* buffer = result.guard->thumbnail_buffer_.get();
-            if (!buffer->cpu_data_valid_ && buffer->gpu_data_valid_) {
-              buffer->SyncToCPU();
-            }
-            if (buffer->cpu_data_valid_) {
-              image = ui::album_util::MatRgba32fToQImageCopy(buffer->GetCPUData());
-            }
-          }
-          if (result.guard) {
-            if (auto service = weak_service.lock()) {
-              service->ReleaseThumbnail(result.key);
-            }
-          }
-          if (wait == nullptr) {
-            return;
-          }
-          if (image.isNull()) {
-            wait->SendOwnerError(AutomationErrorCode::Failed,
-                                 failure.isEmpty()
-                                     ? QStringLiteral("The thumbnail render returned no image.")
-                                     : failure);
-            return;
-          }
-          if (std::max(image.width(), image.height()) > long_edge) {
-            image =
-                image.scaled(long_edge, long_edge, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-          }
-          if (!image.save(out, "PNG")) {
-            wait->SendOwnerError(AutomationErrorCode::Failed,
-                                 QStringLiteral("The PNG file cannot be written: %1").arg(out));
-            return;
-          }
-          wait->SendResult(
-              QJsonObject{{"path", out}, {"width", image.width()}, {"height", image.height()}});
-        },
-        /*pin_if_found=*/true, dispatcher, ThumbnailTierFor(long_edge));
+    WriteThumbnailPng(thumbnails, rows.front(), out, long_edge, [wait](ThumbnailFile file) {
+      if (wait == nullptr) {
+        return;
+      }
+      if (!file.error_.isEmpty()) {
+        wait->SendOwnerError(AutomationErrorCode::Failed, file.error_);
+        return;
+      }
+      wait->SendResult(
+          QJsonObject{{"path", file.path_}, {"width", file.width_}, {"height", file.height_}});
+    });
   };
   RegisterOrFail(registry, std::move(thumbnail), &ok, error);
+
+  AutomationCommandSpec thumbnails;
+  thumbnails.method      = QStringLiteral("library.thumbnails");
+  thumbnails.description = QStringLiteral(
+      "Renders the library thumbnails of 'element_ids' and writes each as the PNG file "
+      "<element_id>.png in 'out_dir', with the long edge 'long_edge'. Answers when every "
+      "thumbnail is written or has failed: each item has 'path', 'width', and 'height', or "
+      "'error'.");
+  thumbnails.params_schema = AutomationClosedParamsSchema(
+      QJsonObject{
+          {"element_ids", BatchElementIdsParam()},
+          {"out_dir", QJsonObject{{"type", "string"}, {"description", "Folder of the PNG files."}}},
+          {"long_edge", QJsonObject{{"type", "integer"},
+                                    {"minimum", 16},
+                                    {"maximum", kMaxThumbnailLongEdge},
+                                    {"default", 512}}}},
+      QJsonArray{"element_ids", "out_dir"});
+  thumbnails.result_schema = AutomationObjectSchema(
+      QJsonObject{
+          {"items",
+           QJsonObject{{"type", "array"},
+                       {"items", AutomationObjectSchema(
+                                     QJsonObject{{"element_id", QJsonObject{{"type", "integer"}}},
+                                                 {"path", QJsonObject{{"type", "string"}}},
+                                                 {"width", QJsonObject{{"type", "integer"}}},
+                                                 {"height", QJsonObject{{"type", "integer"}}},
+                                                 {"error", QJsonObject{{"type", "string"}}}},
+                                     QJsonArray{"element_id"})}}},
+          {"written_count", QJsonObject{{"type", "integer"}}},
+          {"failed_count", QJsonObject{{"type", "integer"}}}},
+      QJsonArray{"items", "written_count", "failed_count"});
+  thumbnails.handler = [host](const QJsonObject& params, AutomationReply reply) {
+    const auto project = AutomationEnteredProject(host, reply);
+    if (!project) {
+      return;
+    }
+    const QString out_dir = QFileInfo(params.value("out_dir").toString()).absoluteFilePath();
+    auto          service = host->project()->handler().thumbnail_service();
+    if (!service) {
+      SendAutomationOwnerError(reply, AutomationErrorCode::Failed,
+                               QStringLiteral("The thumbnail service is not available."));
+      return;
+    }
+    auto rows = ResolveAutomationElementRows(*project, params, reply);
+    if (!rows.has_value()) {
+      return;
+    }
+    if (!QDir().mkpath(out_dir)) {
+      SendAutomationParamError(reply, QStringLiteral("/out_dir"),
+                               QStringLiteral("the folder cannot be created"));
+      return;
+    }
+    auto batch         = std::make_shared<ThumbnailBatch>();
+    batch->rows_       = std::move(*rows);
+    batch->out_dir_    = out_dir;
+    batch->long_edge_  = params.value("long_edge").toInt(512);
+    batch->thumbnails_ = service;
+    for (const SearchResultRow& row : batch->rows_) {
+      batch->items_.push_back(QJsonObject{{"element_id", static_cast<double>(row.file_id_)}});
+    }
+    batch->wait_ = new AutomationCommandWait(std::move(reply), host);
+    RequestNextThumbnails(batch);
+  };
+  RegisterOrFail(registry, std::move(thumbnails), &ok, error);
+
+  AutomationCommandSpec info;
+  info.method      = QStringLiteral("library.info");
+  info.description = QStringLiteral(
+      "Returns the source file and the capture values of 'element_ids', in that order. The "
+      "capture values come from the metadata that the import read: capture_time, camera_make, "
+      "camera_model, lens, focal_mm, aperture, shutter, shutter_seconds, iso, width, and "
+      "height. A value that the metadata does not have is left out of the item.");
+  info.params_schema = AutomationClosedParamsSchema(
+      QJsonObject{{"element_ids", BatchElementIdsParam()}}, QJsonArray{"element_ids"});
+  info.result_schema = AutomationObjectSchema(
+      QJsonObject{{"items", QJsonObject{{"type", "array"}, {"items", InfoItemSchema()}}}},
+      QJsonArray{"items"});
+  info.handler = [host](const QJsonObject& params, AutomationReply reply) {
+    const auto project = AutomationEnteredProject(host, reply);
+    if (!project) {
+      return;
+    }
+    auto rows = ResolveAutomationElementRows(*project, params, reply);
+    if (!rows.has_value()) {
+      return;
+    }
+    // A cold image pool reads each Image from the database. The library view reads it on its
+    // query worker for the same reason: up to 1000 reads on the GUI thread stall the window.
+    QPointer<AutomationCommandWait> wait = new AutomationCommandWait(std::move(reply), host);
+    QThreadPool::globalInstance()->start(
+        [wait, image_pool = project->GetImagePoolService(), rows = std::move(*rows)]() {
+          QJsonArray items;
+          for (const SearchResultRow& row : rows) {
+            items.push_back(PhotoInfoItem(image_pool.get(), row));
+          }
+          QMetaObject::invokeMethod(
+              QCoreApplication::instance(),
+              [wait, items = std::move(items)]() {
+                if (wait != nullptr) {
+                  wait->SendResult(QJsonObject{{"items", items}});
+                }
+              },
+              Qt::QueuedConnection);
+        });
+  };
+  RegisterOrFail(registry, std::move(info), &ok, error);
 
   const bool selection_available    = host_mode != QStringLiteral("headless");
   const auto selection_items_schema = AutomationObjectSchema(
