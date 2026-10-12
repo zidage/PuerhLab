@@ -266,8 +266,10 @@ class EditorSessionThreadedCommandExecutor final : public IEditorSessionCommandE
   std::vector<ScheduledTask>    scheduled_;
   std::uint64_t                 next_sequence_ = 0;
   bool                          stopping_      = false;
-  std::thread                   thread_;
+  // Initialized before thread_: Run() stores the worker id on the new thread, and a later
+  // member initializer would overwrite it, leaving no thread as the owner.
   std::atomic<std::thread::id>  owner_thread_{};
+  std::thread                   thread_;
 };
 
 /// Serialized actor queue for editor-session command reduction and completion
