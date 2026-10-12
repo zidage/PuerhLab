@@ -141,7 +141,7 @@ Alcedo exports JPEG, PNG, TIFF, OpenEXR, and Ultra HDR JPEG, at 8, 16, or 32 bit
 
 ## Documentation
 
-User guides and developer notes are on the [documentation site](https://zidage.github.io/AlcedoStudio_docs/docs/intro). To build from source, see [docs/build_from_source.md](docs/build_from_source.md). Release notes are in [docs/changelog/](docs/changelog/). To control Alcedo Studio from a terminal, a script, or an AI agent, see the [alcedo-cli documentation](https://github.com/zidage/alcedo-skills/blob/main/skills/alcedo/references/README.md). It is part of the agent skill in [alcedo-skills](https://github.com/zidage/alcedo-skills) and is checked out at [docs/alcedo-skills](docs/alcedo-skills) as a submodule.
+User guides and developer notes are on the [documentation site](https://zidage.github.io/AlcedoStudio_docs/docs/intro). To build from source, see [docs/build_from_source.md](docs/build_from_source.md). Release notes are in [docs/changelog/](docs/changelog/). To control Alcedo Studio from a terminal, a script, or an AI agent, see the [alcedo-cli documentation](https://github.com/zidage/alcedo-skills/blob/main/skills/alcedo/references/README.md). It is part of the agent skill in the [alcedo-skills](https://github.com/zidage/alcedo-skills) repository.
 
 ## Acknowledgements
 

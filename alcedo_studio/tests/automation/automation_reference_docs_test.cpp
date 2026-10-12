@@ -2,10 +2,12 @@
 //  SPDX-License-Identifier: GPL-3.0-only
 //  Additional permission under GPLv3 section 7 applies; see the LICENSE file.
 
-// The command reference of the alcedo skill (the docs/alcedo-skills submodule, in
-// skills/alcedo/references/reference/) is generated from commands.json and editor_catalog.json. These tests check that both files are the same as the schemas that a GUI
-// session of this build reports. On a difference they write the schemas of the build to
-// ALCEDO_REFERENCE_OUT_DIR, and the failure message names the command that updates the docs.
+// The command reference of the alcedo skill (https://github.com/zidage/alcedo-skills, in
+// skills/alcedo/references/reference/) is generated from commands.json and editor_catalog.json.
+// These tests check that both files of the local checkout in ALCEDO_SKILLS_DIR are the same as
+// the schemas that a GUI session of this build reports. On a difference they write the schemas
+// of the build to ALCEDO_REFERENCE_OUT_DIR, and the failure message names the command that
+// updates the docs.
 
 #include <gtest/gtest.h>
 
@@ -68,13 +70,14 @@ auto SortedByMethod(QJsonArray commands) -> QJsonArray {
 
 auto MissingHint(const char* name) -> std::string {
   return "cannot read " + std::string(ALCEDO_REFERENCE_DOCS_DIR) + "/" + name +
-         ". Run: git submodule update --init docs/alcedo-skills";
+         ". ALCEDO_SKILLS_DIR must name an alcedo-skills checkout.";
 }
 
 auto UpdateHint() -> std::string {
   return "The command reference is out of date. Review the new schemas in " +
          std::string(ALCEDO_REFERENCE_OUT_DIR) +
-         ", then run: python scripts/automation/generate_cli_reference.py --schema " +
+         ", then run: python scripts/automation/generate_cli_reference.py --skills-dir " +
+         std::string(ALCEDO_SKILLS_DIR) + " --schema " +
          std::string(ALCEDO_REFERENCE_OUT_DIR) + "/commands.json --catalog " +
          std::string(ALCEDO_REFERENCE_OUT_DIR) +
          "/editor_catalog.json, and write the errors and the example of each new command.";

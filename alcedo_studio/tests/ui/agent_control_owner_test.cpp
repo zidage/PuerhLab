@@ -30,7 +30,7 @@ auto FindTask(const BackgroundTaskController& tasks, const QString& id) -> QVari
   return {};
 }
 
-/// Runs the queued calls, for example the FinishTask that follows Take control.
+/// Runs the queued calls, for example the FinishTask that follows Stop.
 void DrainEvents() {
   for (int i = 0; i < 4; ++i) {
     QCoreApplication::processEvents();
@@ -129,38 +129,67 @@ TEST(AgentControlOwnerTest, AcquireRegistersRunningAgentTaskWithUserStateChangeL
 TEST(AgentControlOwnerTest, CommandSummaryUpdatesAgentTaskDetail) {
   BackgroundTaskController tasks;
   AgentControlOwner        control(&tasks);
-  EXPECT_EQ(control.BeginCommand(QStringLiteral("editor.set exposure=0.5")), 0u);
+  EXPECT_EQ(control.BeginCommand(QStringLiteral("editor.set exposure=0.5"), QString()), 0u);
   ASSERT_EQ(control.TryAcquire(QStringLiteral("agent")), AgentControlRefusal::None);
 
-  const quint64 first = control.BeginCommand(QStringLiteral("editor.set exposure=0.5"));
+  const quint64 first = control.BeginCommand(QStringLiteral("editor.set exposure=0.5"), QString());
   ASSERT_NE(first, 0u);
   EXPECT_EQ(FindTask(tasks, control.task_id()).value(QStringLiteral("detail")).toString(),
             QStringLiteral("editor.set exposure=0.5"));
 
-  const quint64 second = control.BeginCommand(QStringLiteral("editor.undo"));
+  const quint64 second = control.BeginCommand(QStringLiteral("editor.undo"), QString());
   EXPECT_EQ(FindTask(tasks, control.task_id()).value(QStringLiteral("detail")).toString(),
             QStringLiteral("editor.undo"));
 
   // The newest command that still runs shows; after the last one, the waiting text.
-  control.EndCommand(second);
+  control.EndCommand(second, true);
   EXPECT_EQ(FindTask(tasks, control.task_id()).value(QStringLiteral("detail")).toString(),
             QStringLiteral("editor.set exposure=0.5"));
-  control.EndCommand(first);
+  control.EndCommand(first, true);
   EXPECT_EQ(FindTask(tasks, control.task_id()).value(QStringLiteral("detail")).toString(),
             AgentControlOwner::WaitingDetail());
 }
 
-TEST(AgentControlOwnerTest, CancelingAgentTaskRevokesControl) {
+TEST(AgentControlOwnerTest, CommandsAppearInAgentTaskActivityWithNoteAndOutcome) {
+  BackgroundTaskController tasks;
+  AgentControlOwner        control(&tasks);
+  ASSERT_EQ(control.TryAcquire(QStringLiteral("agent")), AgentControlRefusal::None);
+
+  const quint64 set  = control.BeginCommand(QStringLiteral("editor.set exposure 0.5"),
+                                            QStringLiteral("agent: lift exposure"));
+  const quint64 undo = control.BeginCommand(QStringLiteral("editor.undo"), QString());
+  QVariantList  activity =
+      FindTask(tasks, control.task_id()).value(QStringLiteral("activity")).toList();
+  // The acquire entry, then one entry per command in start order.
+  ASSERT_EQ(activity.size(), 3);
+  EXPECT_EQ(activity[1].toMap().value(QStringLiteral("text")).toString(),
+            QStringLiteral("editor.set exposure 0.5"));
+  EXPECT_EQ(activity[1].toMap().value(QStringLiteral("note")).toString(),
+            QStringLiteral("agent: lift exposure"));
+  EXPECT_EQ(activity[1].toMap().value(QStringLiteral("state")).toString(),
+            QStringLiteral("running"));
+
+  control.EndCommand(set, true);
+  control.EndCommand(undo, false);
+  activity = FindTask(tasks, control.task_id()).value(QStringLiteral("activity")).toList();
+  EXPECT_EQ(activity[1].toMap().value(QStringLiteral("state")).toString(),
+            QStringLiteral("succeeded"));
+  EXPECT_EQ(activity[2].toMap().value(QStringLiteral("state")).toString(),
+            QStringLiteral("failed"));
+}
+
+TEST(AgentControlOwnerTest, CancelingAgentTaskStopsAgent) {
   BackgroundTaskController    tasks;
   InteractionPolicyController policy(&tasks);
   AgentControlOwner           control(&tasks);
   ASSERT_EQ(control.TryAcquire(QStringLiteral("agent")), AgentControlRefusal::None);
   const QString task_id = control.task_id();
+  const quint64 running = control.BeginCommand(QStringLiteral("editor.set"), QString());
 
-  // The task dialog cancels the task: Take control.
+  // The task dialog cancels the task: Stop.
   ASSERT_TRUE(tasks.CancelTask(task_id));
   EXPECT_FALSE(control.held());
-  EXPECT_TRUE(control.revoked_by_user());
+  EXPECT_TRUE(control.stopped_by_user());
   EXPECT_TRUE(control.holder_name().isEmpty());
 
   DrainEvents();
@@ -168,31 +197,101 @@ TEST(AgentControlOwnerTest, CancelingAgentTaskRevokesControl) {
   EXPECT_EQ(task.value(QStringLiteral("state")).toString(), QStringLiteral("canceled"));
   EXPECT_TRUE(policy.CanChangeStateAsUser());
   EXPECT_EQ(control.task_id(), task_id);
-  // A command that the agent started before the cancel does not write the detail again.
-  EXPECT_EQ(control.BeginCommand(QStringLiteral("editor.set")), 0u);
+  // A command that the agent sends after the stop does not start.
+  EXPECT_EQ(control.BeginCommand(QStringLiteral("editor.undo"), QString()), 0u);
+
+  // The command that ran during the stop still reports its outcome in the activity.
+  control.EndCommand(running, true);
+  const QVariantList activity = FindTask(tasks, task_id).value(QStringLiteral("activity")).toList();
+  bool               found    = false;
+  for (const QVariant& entry : activity) {
+    if (entry.toMap().value(QStringLiteral("text")).toString() == QStringLiteral("editor.set")) {
+      found = true;
+      EXPECT_EQ(entry.toMap().value(QStringLiteral("state")).toString(),
+                QStringLiteral("succeeded"));
+    }
+  }
+  EXPECT_TRUE(found);
 }
 
-TEST(AgentControlOwnerTest, ReacquireIsRefusedUntilReturnControl) {
+TEST(AgentControlOwnerTest, AcquireAfterStopResumesStoppedTaskOfSameHolder) {
+  BackgroundTaskController    tasks;
+  InteractionPolicyController policy(&tasks);
+  AgentControlOwner           control(&tasks);
+  ASSERT_EQ(control.TryAcquire(QStringLiteral("agent")), AgentControlRefusal::None);
+  const QString task_id = control.task_id();
+  control.Stop();
+  DrainEvents();
+  ASSERT_TRUE(control.stopped_by_user());
+
+  // The user told the agent to continue; nothing is selected in the application.
+  QSignalSpy changed(&control, &AgentControlOwner::ControlChanged);
+  ASSERT_EQ(control.TryAcquire(QStringLiteral("agent")), AgentControlRefusal::None);
+  EXPECT_TRUE(control.held());
+  EXPECT_FALSE(control.stopped_by_user());
+  EXPECT_EQ(changed.count(), 1);
+  EXPECT_EQ(control.task_id(), task_id);
+  EXPECT_EQ(tasks.Tasks().size(), 1);
+  EXPECT_EQ(FindTask(tasks, task_id).value(QStringLiteral("state")).toString(),
+            QStringLiteral("running"));
+  EXPECT_FALSE(policy.CanChangeStateAsUser());
+
+  // A stop of the resumed task works like the first one.
+  control.Stop();
+  DrainEvents();
+  EXPECT_TRUE(control.stopped_by_user());
+  EXPECT_EQ(FindTask(tasks, task_id).value(QStringLiteral("state")).toString(),
+            QStringLiteral("canceled"));
+}
+
+TEST(AgentControlOwnerTest, AcquireAfterStopStartsNewTaskForOtherHolderOrDismissedTask) {
   BackgroundTaskController tasks;
   AgentControlOwner        control(&tasks);
   ASSERT_EQ(control.TryAcquire(QStringLiteral("agent")), AgentControlRefusal::None);
-  control.TakeControl();
+  const QString first_task = control.task_id();
+  control.Stop();
   DrainEvents();
-  ASSERT_TRUE(control.revoked_by_user());
 
-  EXPECT_EQ(control.TryAcquire(QStringLiteral("agent")), AgentControlRefusal::RevokedByUser);
-  EXPECT_EQ(control.TryAcquire(QStringLiteral("other")), AgentControlRefusal::RevokedByUser);
-  EXPECT_FALSE(control.held());
-
-  QSignalSpy changed(&control, &AgentControlOwner::ControlChanged);
-  control.ReturnControl();
-  EXPECT_FALSE(control.revoked_by_user());
-  EXPECT_FALSE(control.held()) << "Return control does not acquire control for the agent";
-  EXPECT_EQ(changed.count(), 1);
-
-  ASSERT_EQ(control.TryAcquire(QStringLiteral("agent")), AgentControlRefusal::None);
-  EXPECT_TRUE(control.held());
+  ASSERT_EQ(control.TryAcquire(QStringLiteral("other")), AgentControlRefusal::None);
+  EXPECT_NE(control.task_id(), first_task);
   EXPECT_EQ(tasks.Tasks().size(), 2);
+  EXPECT_EQ(FindTask(tasks, first_task).value(QStringLiteral("state")).toString(),
+            QStringLiteral("canceled"));
+
+  const QString second_task = control.task_id();
+  control.Stop();
+  DrainEvents();
+  ASSERT_TRUE(tasks.DismissTask(second_task));
+  ASSERT_EQ(control.TryAcquire(QStringLiteral("other")), AgentControlRefusal::None);
+  EXPECT_NE(control.task_id(), second_task);
+  EXPECT_EQ(FindTask(tasks, control.task_id()).value(QStringLiteral("state")).toString(),
+            QStringLiteral("running"));
+}
+
+TEST(AgentControlOwnerTest, AgentTaskIsPinnedAndOutlivesManyShortTasks) {
+  BackgroundTaskController tasks;
+  AgentControlOwner        control(&tasks);
+  ASSERT_EQ(control.TryAcquire(QStringLiteral("agent")), AgentControlRefusal::None);
+  const QString agent_task = control.task_id();
+  EXPECT_TRUE(FindTask(tasks, agent_task).value(QStringLiteral("pinned")).toBool());
+  control.Stop();
+  DrainEvents();
+
+  // Many editor saves finish after the stop.
+  for (int i = 0; i < 20; ++i) {
+    BackgroundTaskSnapshot save;
+    save.kind_  = BackgroundTaskKind::EditorSave;
+    save.state_ = BackgroundTaskState::Running;
+    tasks.FinishTask(tasks.RegisterTask(save), BackgroundTaskState::Succeeded);
+  }
+  EXPECT_FALSE(FindTask(tasks, agent_task).isEmpty());
+  EXPECT_EQ(tasks.PrimaryTask().value(QStringLiteral("id")).toString(), agent_task);
+
+  // The user dismisses it: the island shows the last short task again.
+  ASSERT_TRUE(tasks.DismissTask(agent_task));
+  EXPECT_TRUE(FindTask(tasks, agent_task).isEmpty());
+  EXPECT_EQ(tasks.PrimaryTask().value(QStringLiteral("kind")).toString(),
+            QStringLiteral("editorSave"));
 }
 
 TEST(AgentControlOwnerTest, ReleaseFinishesAgentTaskAsSucceeded) {
@@ -205,7 +304,7 @@ TEST(AgentControlOwnerTest, ReleaseFinishesAgentTaskAsSucceeded) {
 
   EXPECT_TRUE(control.Release());
   EXPECT_FALSE(control.held());
-  EXPECT_FALSE(control.revoked_by_user());
+  EXPECT_FALSE(control.stopped_by_user());
   const QVariantMap task = FindTask(tasks, task_id);
   EXPECT_EQ(task.value(QStringLiteral("state")).toString(), QStringLiteral("succeeded"));
   EXPECT_TRUE(policy.CanChangeStateAsUser());

@@ -256,10 +256,11 @@ uploaded a stable pair, this workflow must fail.
    that version.
 3. Release the agent skill in
    [alcedo-skills](https://github.com/zidage/alcedo-skills). Its
-   `skills/alcedo/references/` is the alcedo-cli documentation, and this
-   repository checks it out at `docs/alcedo-skills` as a submodule. In
-   alcedo-skills, start from the submodule commit of the release, run
-   `scripts/set_version.py <version>`, commit, and push a tag `v<version>`
+   `skills/alcedo/references/` is the alcedo-cli documentation. This
+   repository does not pin a commit of it. In a local checkout of
+   alcedo-skills, check the reference against the release build (configure
+   with `-DALCEDO_SKILLS_DIR=<checkout>` and run `AutomationReferenceDocs`),
+   then run `scripts/set_version.py <version>`, commit, and push a tag `v<version>`
    (and `main`, when that commit is its head). Do this for every release, also
    when the automation commands did not change, so that the skill version names
    the app version that it was checked with.

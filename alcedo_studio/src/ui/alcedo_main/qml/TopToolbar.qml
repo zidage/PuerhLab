@@ -170,6 +170,7 @@ Rectangle {
         // or after one fails.
         BackgroundTaskBar {
             Layout.alignment: Qt.AlignVCenter
+            host: root.host
         }
 
         // Inspector toggle: compact IconActionButton, same hit as the

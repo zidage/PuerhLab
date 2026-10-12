@@ -85,23 +85,30 @@ alcedo_add_automation_test(AutomationGuiSessionTest
     SOURCES automation_gui_session_test.cpp
     LIBRARIES AutomationHostLib Qt6::Network)
 
-# commands.json and editor_catalog.json of the alcedo skill reference (the docs/alcedo-skills
-# submodule) against the schemas of a GUI
-# session of this build.
-alcedo_add_automation_test(AutomationReferenceDocsTest
-    SOURCES automation_reference_docs_test.cpp
-    LIBRARIES AutomationHostLib Qt6::Network)
-target_compile_definitions(AutomationReferenceDocsTest PRIVATE
-    ALCEDO_REFERENCE_DOCS_DIR="${CMAKE_SOURCE_DIR}/docs/alcedo-skills/skills/alcedo/references/reference"
-    ALCEDO_REFERENCE_OUT_DIR="${CMAKE_BINARY_DIR}/automation_reference")
+# The alcedo skill and its command reference live in https://github.com/zidage/alcedo-skills.
+# This repository does not pin a commit of it. Set ALCEDO_SKILLS_DIR to a local checkout to
+# compare its commands.json and editor_catalog.json with the schemas of a GUI session of this
+# build, and to check its generated reference blocks.
+set(ALCEDO_SKILLS_DIR "" CACHE PATH "Local checkout of the alcedo-skills repository")
+if(ALCEDO_SKILLS_DIR)
+  alcedo_add_automation_test(AutomationReferenceDocsTest
+      SOURCES automation_reference_docs_test.cpp
+      LIBRARIES AutomationHostLib Qt6::Network)
+  target_compile_definitions(AutomationReferenceDocsTest PRIVATE
+      ALCEDO_SKILLS_DIR="${ALCEDO_SKILLS_DIR}"
+      ALCEDO_REFERENCE_DOCS_DIR="${ALCEDO_SKILLS_DIR}/skills/alcedo/references/reference"
+      ALCEDO_REFERENCE_OUT_DIR="${CMAKE_BINARY_DIR}/automation_reference")
 
-# The generated blocks of the command reference are up to date and every command has a section.
-find_package(Python3 QUIET COMPONENTS Interpreter)
-if(Python3_Interpreter_FOUND)
-  add_test(NAME AutomationReferenceDocsGenerated
-      COMMAND Python3::Interpreter
-          "${CMAKE_SOURCE_DIR}/scripts/automation/generate_cli_reference.py" --check)
-  set_tests_properties(AutomationReferenceDocsGenerated PROPERTIES LABELS "automation")
+  # The generated blocks of the command reference are up to date and every command has a
+  # section.
+  find_package(Python3 QUIET COMPONENTS Interpreter)
+  if(Python3_Interpreter_FOUND)
+    add_test(NAME AutomationReferenceDocsGenerated
+        COMMAND Python3::Interpreter
+            "${CMAKE_SOURCE_DIR}/scripts/automation/generate_cli_reference.py"
+            --skills-dir "${ALCEDO_SKILLS_DIR}" --check)
+    set_tests_properties(AutomationReferenceDocsGenerated PROPERTIES LABELS "automation")
+  endif()
 endif()
 
 # project.* commands through the command registry of an in-process headless session.

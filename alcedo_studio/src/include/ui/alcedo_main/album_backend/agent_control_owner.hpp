@@ -18,8 +18,6 @@ namespace alcedo::ui {
 /// The reason why `AgentControlOwner` did not give control to an agent.
 enum class AgentControlRefusal : std::uint8_t {
   None,
-  /// The user took control back. The agent must wait until the user selects Return control.
-  RevokedByUser,
   /// An agent with another holder name holds control.
   HeldByOtherAgent,
   /// The editor has user slider input that a Release or Cancel boundary has not sealed yet.
@@ -32,16 +30,24 @@ enum class AgentControlRefusal : std::uint8_t {
 /// While an agent holds control, one running background task of the kind `AgentControl` holds
 /// the global `UserStateChange` lock. The user-facing adapters read that lock and refuse user
 /// state changes. The editor session admission does not read it, so the commands of the agent
-/// still run. The existing task island and task dialog show the task. Canceling the task is
-/// **Take control**: control goes back to the user at once, and the agent cannot acquire
-/// control again until the user selects **Return control**.
+/// still run. The agent task is pinned: the task island and the task dialog keep it, with the
+/// activity of the agent (one entry per state-changing command and its note), until the user
+/// dismisses it.
 ///
-/// Only this owner changes the control state (`held`, `holder_name`, `revoked_by_user`), and it
-/// is the only caller of `UpdateTask` and `FinishTask` for its task. GUI thread only.
+/// Canceling the task is **Stop**: control goes back to the user at once and the task finishes
+/// as Canceled. The next state-changing command of the agent is refused with "stopped by user",
+/// so the agent stops and asks the user. When the user tells the agent to continue, the agent
+/// calls `control.acquire` again. That acquire resumes the stopped task of the same holder, so
+/// the session keeps one task and one activity list. The user does not select anything in the
+/// application to let the agent continue.
+///
+/// Only this owner changes the control state (`held`, `holder_name`, `stopped_by_user`), and it
+/// is the only caller of `UpdateTask`, `FinishTask`, `ResumeTask`, and the activity calls for
+/// its task. GUI thread only.
 class AgentControlOwner final : public QObject {
   Q_OBJECT
   Q_PROPERTY(bool held READ held NOTIFY ControlChanged)
-  Q_PROPERTY(bool revokedByUser READ revoked_by_user NOTIFY ControlChanged)
+  Q_PROPERTY(bool stoppedByUser READ stopped_by_user NOTIFY ControlChanged)
   Q_PROPERTY(QString holderName READ holder_name NOTIFY ControlChanged)
   /// The id of the newest agent task, also after the task finished. Empty before the first
   /// acquire.
@@ -62,13 +68,16 @@ class AgentControlOwner final : public QObject {
   void               SetUnsealedInputReader(UnsealedInputReader reader);
 
   [[nodiscard]] auto held() const -> bool { return held_; }
-  [[nodiscard]] auto revoked_by_user() const -> bool { return revoked_by_user_; }
+  /// True after the user stopped the agent, until an agent acquires control again.
+  [[nodiscard]] auto stopped_by_user() const -> bool { return stopped_by_user_; }
   [[nodiscard]] auto holder_name() const -> QString { return holder_name_; }
   [[nodiscard]] auto task_id() const -> QString { return task_id_; }
 
-  /// Gives control to @p holder_name and registers the agent task. Holding control already
-  /// with the same holder name is a success without a change. Refuses without a change when the
-  /// user revoked control, another holder holds it, or the editor has unsealed input.
+  /// Gives control to @p holder_name. After a stop by the user, an acquire by the same holder
+  /// resumes the stopped agent task while it is still in the task list; otherwise it registers
+  /// a new agent task. Holding control already with the same holder name is a success without
+  /// a change. Refuses without a change when another holder holds control or the editor has
+  /// unsealed input.
   auto               TryAcquire(const QString& holder_name) -> AgentControlRefusal;
   /// TryAcquire, but when the editor has unsealed input, waits: RecheckPendingAcquires tries
   /// again until the acquire succeeds or is refused for another reason, or until @p still_waiting
@@ -84,24 +93,23 @@ class AgentControlOwner final : public QObject {
   /// The agent gives control back: the agent task finishes as Succeeded. Returns false and
   /// changes nothing when no agent holds control.
   auto             Release() -> bool;
-  /// Take control: cancels the agent task. The task finishes as Canceled and the user has
-  /// control at once. No change when no agent holds control.
-  Q_INVOKABLE void TakeControl();
-  /// Return control: the agent can acquire control again. It does not acquire control for the
-  /// agent. No change when the user did not revoke control.
-  Q_INVOKABLE void ReturnControl();
+  /// Stop: cancels the agent task. The task finishes as Canceled and the user has control at
+  /// once. No change when no agent holds control.
+  Q_INVOKABLE void Stop();
 
-  /// A state-changing agent command starts: the agent task detail shows @p summary. Returns a
-  /// token for EndCommand, or 0 when no agent holds control.
-  auto             BeginCommand(const QString& summary) -> quint64;
-  /// The command of @p token ended. The task detail shows the newest command that still runs,
+  /// A state-changing agent command starts: the agent task gets an activity entry with
+  /// @p summary and @p note (the reason that the agent gave, may be empty), and its detail
+  /// shows @p summary. Returns a token for EndCommand, or 0 when no agent holds control.
+  auto             BeginCommand(const QString& summary, const QString& note) -> quint64;
+  /// The command of @p token ended: its activity entry shows @p succeeded, also when the user
+  /// stopped the agent while it ran. The task detail shows the newest command that still runs,
   /// or the waiting text.
-  void             EndCommand(quint64 token);
+  void             EndCommand(quint64 token, bool succeeded);
   /// The task detail between commands.
   static auto      WaitingDetail() -> QString;
 
  signals:
-  /// `held`, `holder_name`, or `revoked_by_user` changed. Emitted once per change.
+  /// `held`, `holder_name`, or `stopped_by_user` changed. Emitted once per change.
   void ControlChanged();
 
  private:
@@ -112,18 +120,25 @@ class AgentControlOwner final : public QObject {
   };
   struct RunningCommand {
     quint64 token_ = 0;
+    /// The agent task and the activity entry of the command.
+    QString task_id_;
+    quint64 activity_id_ = 0;
     QString summary_;
   };
 
-  void                        RevokeByUser();
+  void                        StopByUser();
   void                        PublishTaskDetail();
   [[nodiscard]] auto          HasUnsealedInput() const -> bool;
+  [[nodiscard]] auto          CancelCallback() -> std::function<void()>;
 
   BackgroundTaskController*   tasks_ = nullptr;
   UnsealedInputReader         unsealed_input_reader_;
   bool                        held_            = false;
-  bool                        revoked_by_user_ = false;
+  bool                        stopped_by_user_ = false;
   QString                     holder_name_;
+  /// The holder that held control when the user stopped it. An acquire by this holder resumes
+  /// the stopped task.
+  QString                     stopped_holder_name_;
   QString                     task_id_;
   std::vector<PendingAcquire> pending_acquires_;
   std::vector<RunningCommand> running_commands_;

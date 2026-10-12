@@ -290,26 +290,43 @@ TEST_F(AutomationGuiSessionTest, StateChangeWithoutControlIsRejected) {
   EXPECT_FALSE(Result(QStringLiteral("editor.history")).isEmpty());
   EXPECT_EQ(host_->editor_session()->history_snapshot().commits.size(), commits_before);
 
-  // After the user takes control, the agent is refused until the user returns control.
+  // After the user stops the agent, its commands are refused until it acquires control again.
   ASSERT_TRUE(Result(QStringLiteral("control.acquire")).value("held").toBool());
-  ASSERT_TRUE(host_->background_tasks()->CancelTask(control()->task_id()));
+  const QString agent_task_id = control()->task_id();
+  ASSERT_TRUE(host_->background_tasks()->CancelTask(agent_task_id));
   EXPECT_TRUE(host_->interaction_policy()->CanChangeStateAsUser() ||
               WaitUntil([&] { return host_->interaction_policy()->CanChangeStateAsUser(); },
                         std::chrono::seconds(5)));
   EXPECT_EQ(
       ErrorCode(QStringLiteral("editor.set"), QJsonObject{{"field", "exposure"}, {"value", 1.0}}),
       static_cast<int>(AutomationErrorCode::ControlRevokedByUser));
-  EXPECT_EQ(ErrorCode(QStringLiteral("control.acquire")),
-            static_cast<int>(AutomationErrorCode::ControlRevokedByUser));
   EXPECT_TRUE(Result(QStringLiteral("control.get")).value("revoked_by_user").toBool());
   EXPECT_EQ(host_->editor_session()->history_snapshot().commits.size(), commits_before);
 
-  control()->ReturnControl();
+  // The user told the agent to continue: the acquire succeeds without a step in the application
+  // and the stopped agent task continues.
   ASSERT_TRUE(Result(QStringLiteral("control.acquire")).value("held").toBool());
-  const auto set = SetExposure(1.0);
+  EXPECT_FALSE(Result(QStringLiteral("control.get")).value("revoked_by_user").toBool());
+  EXPECT_EQ(control()->task_id(), agent_task_id);
+  const auto set =
+      Call(QStringLiteral("editor.set"),
+           QJsonObject{{"field", "exposure"}, {"value", 1.0}, {"note", "agent: lift"}});
   ASSERT_TRUE(set.has_value());
   EXPECT_FALSE(set->error.has_value());
   EXPECT_EQ(host_->editor_session()->history_snapshot().commits.size(), commits_before + 1);
+
+  // The agent task lists the command with its note and its outcome.
+  QVariantList activity;
+  for (const QVariant& value : host_->background_tasks()->Tasks()) {
+    if (value.toMap().value("id").toString() == agent_task_id) {
+      activity = value.toMap().value("activity").toList();
+    }
+  }
+  ASSERT_FALSE(activity.isEmpty());
+  const QVariantMap last = activity.back().toMap();
+  EXPECT_TRUE(last.value("text").toString().startsWith(QStringLiteral("editor.set")));
+  EXPECT_EQ(last.value("note").toString(), QStringLiteral("agent: lift"));
+  EXPECT_EQ(last.value("state").toString(), QStringLiteral("succeeded"));
 }
 
 TEST_F(AutomationGuiSessionTest, UserEditSendsHistoryChangedToWatchingClient) {
