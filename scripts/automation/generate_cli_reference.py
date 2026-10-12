@@ -79,8 +79,12 @@ def limits_text(schema: dict) -> str:
         parts.append(f"at least {number(schema['minimum'])}")
     elif "maximum" in schema:
         parts.append(f"at most {number(schema['maximum'])}")
-    if "minItems" in schema:
+    if "minItems" in schema and "maxItems" in schema:
+        parts.append(f"{schema['minItems']} to {schema['maxItems']} items")
+    elif "minItems" in schema:
         parts.append(f"at least {schema['minItems']} item(s)")
+    elif "maxItems" in schema:
+        parts.append(f"at most {schema['maxItems']} items")
     items = schema.get("items", {})
     if "minimum" in items:
         parts.append(f"each item at least {number(items['minimum'])}")
