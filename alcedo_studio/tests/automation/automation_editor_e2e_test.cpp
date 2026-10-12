@@ -165,13 +165,17 @@ TEST_F(AutomationEditorE2ETest, EveryValueReadByGetIsAcceptedBySetAndKeepsItsVal
   // A RAW image has no input profile; the RAW Decode panel hides it too.
   EXPECT_FALSE(values.contains("input_profile"));
   ASSERT_FALSE(values.isEmpty());
+  // Each value equals the current one, so no write makes a commit.
+  const QJsonValue head = Head();
   for (auto it = values.begin(); it != values.end(); ++it) {
     const CliRun run =
         Call(QStringLiteral("editor.set"), QJsonObject{{"field", it.key()}, {"value", it.value()}});
     ASSERT_EQ(run.exit_code, 0) << it.key().toStdString() << ": "
                                 << QJsonDocument(run.json).toJson().toStdString();
     EXPECT_EQ(run.json.value("value"), it.value()) << it.key().toStdString();
+    EXPECT_EQ(run.json.value("head_commit"), head) << it.key().toStdString();
   }
+  EXPECT_EQ(Head(), head);
   EXPECT_EQ(Result(QStringLiteral("editor.get")).value("values").toObject(), values);
 
   // Writing the input profile of a RAW image names the reason.

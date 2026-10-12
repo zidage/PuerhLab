@@ -28,6 +28,7 @@
 #include "edit/geometry/types.hpp"
 #include "edit/graph/drt_node_model.hpp"
 #include "edit/operators/models/cat02_white_balance_model.hpp"
+#include "edit/operators/models/color_wheel_model.hpp"
 #include "edit/operators/models/hls_model.hpp"
 #include "ui/alcedo_main/editor_support/modules/color_wheel_math.hpp"
 #include "ui/alcedo_main/editor_support/modules/hls_math.hpp"
@@ -886,6 +887,44 @@ TEST(EditorParameterCatalogTest, ColorWheelUiMatchesTrackballWrite) {
                    .has_value());
   EXPECT_EQ(error,
             "color_wheel.gain_x and gain_y must be inside the unit disc (x * x + y * y <= 1)");
+}
+
+TEST(EditorParameterCatalogTest, DefaultHlsAndColorWheelModelsConvertBackToTheSameModelJson) {
+  // Writing the UI value of an unedited Model back must not change the hidden Model fields that
+  // the UI value does not show (strength, target_hls, l_range, s_range), so it makes no commit.
+  {
+    HlsModel             model;
+    const nlohmann::json model_json = model.ToJson();
+    std::string          error;
+    const auto           ui = EditorParameterCatalog::ToUiValue("hls", model_json, &error);
+    ASSERT_TRUE(ui.has_value()) << error;
+    const auto written = EditorParameterCatalog::ToModelJson("hls", *ui, model_json, &error);
+    ASSERT_TRUE(written.has_value()) << error;
+    EXPECT_EQ(written->at("HLS"), model_json);
+    const auto write = ParseEditorParameterWrite("hls", *written, &error);
+    ASSERT_TRUE(write.has_value()) << error;
+    const auto* update = std::get_if<HlsUpdate>(&*write);
+    ASSERT_NE(update, nullptr);
+    model.ApplyUpdate(*update);
+    EXPECT_EQ(model.ToJson(), model_json);
+  }
+  {
+    ColorWheelModel      model;
+    const nlohmann::json model_json = model.ToJson();
+    std::string          error;
+    const auto           ui = EditorParameterCatalog::ToUiValue("color_wheel", model_json, &error);
+    ASSERT_TRUE(ui.has_value()) << error;
+    const auto written =
+        EditorParameterCatalog::ToModelJson("color_wheel", *ui, model_json, &error);
+    ASSERT_TRUE(written.has_value()) << error;
+    EXPECT_EQ(written->at("color_wheel"), model_json);
+    const auto write = ParseEditorParameterWrite("color_wheel", *written, &error);
+    ASSERT_TRUE(write.has_value()) << error;
+    const auto* update = std::get_if<ColorWheelUpdate>(&*write);
+    ASSERT_NE(update, nullptr);
+    model.ApplyUpdate(*update);
+    EXPECT_EQ(model.ToJson(), model_json);
+  }
 }
 
 TEST(EditorParameterCatalogTest, CurvePointsOutsideTheUnitSquareOrOutOfOrderAreRejected) {
