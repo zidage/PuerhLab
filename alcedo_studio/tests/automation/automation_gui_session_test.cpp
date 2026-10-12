@@ -32,6 +32,7 @@
 #include "ui/album_backend_test_fixture.hpp"
 #include "ui/alcedo_main/album_backend/agent_control_owner.hpp"
 #include "ui/alcedo_main/album_backend/editor_node_controller.hpp"
+#include "ui/alcedo_main/album_backend/editor_scope_controller.hpp"
 #include "ui/alcedo_main/album_backend/editor_session_controller.hpp"
 #include "ui/alcedo_main/automation/automation_host_session.hpp"
 #include "ui/alcedo_main/automation/headless_frame_sink.hpp"
@@ -140,7 +141,12 @@ class AutomationGuiSessionTest : public ui::test::ApplicationModuleHostTestFixtu
     sink_ = std::make_unique<HeadlessFrameSink>();
     host_ = std::make_unique<ApplicationModuleHost>();
     host_->project()->SetRuntimeAcceleratorPreference(HeadlessAcceleratorPreference(*backend));
-    ASSERT_TRUE(host_->editor_session()->BindHeadlessPresentationSink(sink_.get(), 1280, 720));
+    // The GUI viewport receives its frames through the scope tap; route the headless sink the
+    // same way so the scope controller sees the frames of this session.
+    ui::EditorScopeController* scope = host_->editor_session()->scope_controller();
+    scope->SetDownstreamSink(sink_.get());
+    ASSERT_TRUE(
+        host_->editor_session()->BindHeadlessPresentationSink(scope->frame_sink(), 1280, 720));
     ASSERT_TRUE(CreateTestProject(*host_));
 
     host_->import_export()->StartImport(ui::test::PathsToQStringList({raw_files.front()}));
@@ -476,6 +482,86 @@ TEST_F(AutomationGuiSessionTest, OtherNodeFieldsStayReachableWhileColorGradeIsSe
 
   EXPECT_EQ(host_->editor_session()->selected_node_id(), grade);
   EXPECT_FALSE(Result(QStringLiteral("control.release")).value("held").toBool());
+}
+
+// The scopes show the current frame while an agent holds control, after the agent edits, opens,
+// closes, and reopens images, and after control comes back to the user (#376). The test writes
+// visualActive like EditorScopePanel: the panel is shown and the editor has an image. Agent
+// control does not change the value.
+TEST_F(AutomationGuiSessionTest, ScopesFollowTheCurrentImageThroughAgentControl) {
+  const auto raw_files = CollectCiRawFiles();
+  if (raw_files.size() < 2) {
+    GTEST_SKIP() << "two CI RAW files are required for the image switch";
+  }
+  host_->import_export()->StartImport(ui::test::PathsToQStringList({raw_files.at(1)}));
+  ASSERT_TRUE(
+      WaitUntil([&] { return !host_->import_export()->ImportRunning(); }, std::chrono::minutes(2)));
+  ASSERT_EQ(host_->import_export()->ImportFailed(), 0);
+  ASSERT_TRUE(WaitUntil([&] { return host_->library()->Thumbnails().size() >= 2; },
+                        std::chrono::seconds(30)));
+
+  ui::EditorSessionController* editor          = host_->editor_session();
+  ui::EditorScopeController*   scope           = editor->scope_controller();
+  const uint                   first_element   = editor->element_id();
+  const uint                   first_image_id  = editor->image_id();
+  uint                         second_element  = 0;
+  uint                         second_image_id = 0;
+  for (const QVariant& value : host_->library()->Thumbnails()) {
+    const QVariantMap item = value.toMap();
+    if (item.value("elementId").toUInt() != first_element) {
+      second_element  = item.value("elementId").toUInt();
+      second_image_id = item.value("imageId").toUInt();
+    }
+  }
+  ASSERT_NE(second_element, 0U);
+
+  QObject panel;
+  QObject::connect(editor, &ui::EditorSessionController::StateChanged, &panel,
+                   [editor, scope] { scope->set_visual_active(editor->has_image()); });
+  scope->set_visual_active(editor->has_image());
+
+  // Waits for a scope snapshot of @p image_id that is newer than @p after_generation.
+  const auto wait_for_snapshot = [&](uint image_id, qulonglong after_generation) {
+    return WaitUntil(
+        [&] {
+          return scope->has_snapshot() && scope->image_identity() == image_id &&
+                 scope->scope_generation() > after_generation;
+        },
+        std::chrono::seconds(60));
+  };
+  ASSERT_TRUE(wait_for_snapshot(first_image_id, 0)) << "no scope before agent control";
+
+  ASSERT_TRUE(Result(QStringLiteral("control.acquire"), QJsonObject{{"holder_name", "test-agent"}})
+                  .value("held")
+                  .toBool());
+  const qulonglong before_edit = scope->scope_generation();
+  const auto       set         = SetExposure(1.25);
+  ASSERT_TRUE(set.has_value());
+  ASSERT_FALSE(set->error.has_value()) << set->error->message.toStdString();
+  EXPECT_TRUE(wait_for_snapshot(first_image_id, before_edit)) << "no scope after the agent edit";
+
+  const auto open = [&](uint element) {
+    const QJsonObject opened = Result(QStringLiteral("editor.open"),
+                                      QJsonObject{{"element_id", static_cast<qint64>(element)}});
+    return static_cast<uint>(opened.value("element_id").toInteger());
+  };
+  ASSERT_EQ(open(second_element), second_element);
+  EXPECT_TRUE(wait_for_snapshot(second_image_id, 0)) << "no scope after the agent image switch";
+
+  ASSERT_TRUE(Result(QStringLiteral("editor.close")).value("closed").toBool());
+  ASSERT_EQ(open(first_element), first_element);
+  EXPECT_TRUE(wait_for_snapshot(first_image_id, 0)) << "no scope after the agent reopen";
+
+  ASSERT_FALSE(Result(QStringLiteral("control.release")).value("held").toBool());
+  ASSERT_TRUE(host_->interaction_policy()->CanChangeStateAsUser());
+  const qulonglong before_user_edit = scope->scope_generation();
+  ASSERT_TRUE(
+      editor->submitPatch(QStringLiteral("exposure"), QStringLiteral("{\"exposure\":0.5}"), true));
+  EXPECT_TRUE(wait_for_snapshot(first_image_id, before_user_edit))
+      << "no scope after control came back";
+
+  host_->workspace_router()->OpenEditor(second_element, second_image_id);
+  EXPECT_TRUE(wait_for_snapshot(second_image_id, 0)) << "no scope after the user image switch";
 }
 
 }  // namespace

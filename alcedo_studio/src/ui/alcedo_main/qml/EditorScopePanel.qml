@@ -12,12 +12,13 @@ Item {
 
     property var theme: null
     property var editorSession: null
+    // Enables the plot mode switch only. The scopes show data, so they also
+    // run while an agent holds control and the edit controls are disabled.
     property bool controlsEnabled: true
     readonly property var scopeController: editorSession ? editorSession.scopeController : null
     readonly property bool visualActive: root.visible
                                          && !!root.editorSession
                                          && !!root.editorSession.hasImage
-                                         && root.controlsEnabled
     readonly property bool hasSnapshot: root.scopeController
                                         ? root.scopeController.hasSnapshot
                                         : false
