@@ -174,6 +174,8 @@ class HeaderSession final : public QObject, public IEditorAdjustmentSubmitter {
   Q_PROPERTY(QObject* maskCreation READ maskCreation CONSTANT)
   // Editor left-rail page; the LUT control opens the `luts` page through it.
   Q_PROPERTY(QString editorToolPanelPage MEMBER tool_panel_page_ NOTIFY toolPanelPageChanged)
+  // The scope panel runs while the editor has an image.
+  Q_PROPERTY(bool hasImage MEMBER has_image_ NOTIFY hasImageChanged)
 
  public:
   explicit HeaderSession(QObject* mask_creation = nullptr) : mask_creation_(mask_creation) {
@@ -271,9 +273,11 @@ class HeaderSession final : public QObject, public IEditorAdjustmentSubmitter {
   void activeAdjustmentPanelChanged();
   void ImageExifChanged();
   void toolPanelPageChanged();
+  void hasImageChanged();
 
  private:
   QString     tool_panel_page_;
+  bool        has_image_ = false;
   QVariantMap snapshot_;
   quint64     revision_               = 0;
   QString     panel_                  = QStringLiteral("tone");
@@ -647,6 +651,28 @@ TEST(EditorAdjustmentHeaderQmlTest, HeaderAtMinPreferredAndMaxWidthKeepsNameAndE
     EXPECT_EQ(name->property("text").toString(), QStringLiteral("Color Grade 2"));
     EXPECT_EQ(name->property("font").value<QFont>().family(), AppTheme::Instance().uiFontFamily());
   }
+}
+
+// EditorWorkspace disables the adjustment controls while an agent holds control. The scopes show
+// data, so the scope panel stays active; only its plot mode switch follows the controls (#376).
+TEST(EditorAdjustmentHeaderQmlTest, ScopePanelStaysActiveWhileTheControlsAreDisabled) {
+  HeaderSession session;
+  session.setProperty("hasImage", true);
+  FakeNodeController nodes;
+  StackHarness       harness(&session, &nodes, 320);
+  ASSERT_NE(harness.root(), nullptr) << harness.errors().toStdString();
+  auto* scope = harness.find(QStringLiteral("editorScopeSlot"));
+  ASSERT_NE(scope, nullptr);
+  ASSERT_TRUE(scope->property("visualActive").toBool());
+
+  harness.root()->setProperty("controlsEnabled", false);
+  ProcessEvents(20);
+  EXPECT_FALSE(scope->property("controlsEnabled").toBool());
+  EXPECT_TRUE(scope->property("visualActive").toBool());
+
+  session.setProperty("hasImage", false);
+  ProcessEvents(20);
+  EXPECT_FALSE(scope->property("visualActive").toBool());
 }
 
 TEST(EditorAdjustmentHeaderQmlTest, LongNodeNameElidesAndKeepsFullAccessibleName) {
