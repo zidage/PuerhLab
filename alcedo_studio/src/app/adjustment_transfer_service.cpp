@@ -71,7 +71,8 @@ auto AdjustmentTransferService::PackageFingerprint(const AdjustmentTransferPacka
 auto AdjustmentTransferService::PasteAsRootRelativeVersion(
     CommitGraph& graph, const PipelineDocument& root_document,
     const AdjustmentTransferPackage& package, std::string version_display_name,
-    const DocumentTransferPasteOptions& options) -> AdjustmentPasteResult {
+    const DocumentTransferPasteOptions& options, std::optional<EditCommitAttribution> attribution)
+    -> AdjustmentPasteResult {
   AdjustmentPasteResult result;
   result.prior_version_id = graph.GetActiveVersionId();
   PreparedDocumentPaste prepared;
@@ -95,6 +96,9 @@ auto AdjustmentTransferService::PasteAsRootRelativeVersion(
         EditCommit::MakePipelineEdit(graph.GetRootId(), std::nullopt, std::move(prepared.batch));
     if (!graph.InsertCommit(commit)) {
       throw std::runtime_error("Paste commit was not inserted");
+    }
+    if (attribution.has_value()) {
+      graph.SetCommitAttribution(commit.GetCommitHash(), std::move(*attribution));
     }
     graph.MoveWorkingHead(new_version_id, commit.GetCommitHash());
     result.pasted         = true;

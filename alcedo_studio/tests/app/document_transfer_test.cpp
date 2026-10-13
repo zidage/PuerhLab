@@ -619,8 +619,8 @@ auto ApplyPasteToClone(const PreparedDocumentPaste& prepared, const PipelineDocu
   return working;
 }
 
-TEST(DocumentTransferTest, PartialGradePasteUsesCleanValuesForUnselectedAdjustments) {
-  auto  source = test::DocumentWithExposureEv(1.5);
+TEST(DocumentTransferTest, PartialGradePasteKeepsTargetDefaultGradeValuesForUnselectedItems) {
+  auto  source = test::DocumentWithExposureEv(0.7);
   auto* grade  = source.PrimaryGrade();
   ASSERT_NE(grade, nullptr);
   grade->SetEnabled(false);
@@ -639,19 +639,82 @@ TEST(DocumentTransferTest, PartialGradePasteUsesCleanValuesForUnselectedAdjustme
   ASSERT_FALSE(package.color_grades_.front().mix.has_value());
   ASSERT_EQ(package.color_grades_.front().adjustments.size(), 1u);
 
-  const auto  target  = CreateDefaultPipelineDocument();
+  // The target default Grade has the product Default look plus values that no factory gives.
+  auto  target       = CreateDefaultPipelineDocument();
+  auto* target_grade = target.PrimaryGrade();
+  ASSERT_NE(target_grade, nullptr);
+  target_grade->SetMix(0.8f);
+  target_grade->FindAdjustmentByType(type_ids::Contrast())->LoadJson({{"contrast", 40.0}});
+  const auto target_saturation =
+      target_grade->FindAdjustmentByType(type_ids::Saturation())->ToJson().dump();
+  ASSERT_EQ(target_grade->FindAdjustmentByType(type_ids::Saturation())
+                ->ToJson()
+                .at("saturation")
+                .get<float>(),
+            kDefaultPipelineSaturation);
+
   const auto  working = ApplyPasteToClone(PlanSelectivePaste(package, target), target);
   const auto* pasted =
       dynamic_cast<const ColorGradeNodeModel*>(working.Graph().FindNode(NodeId{"grade.t1"}));
   ASSERT_NE(pasted, nullptr);
+  EXPECT_EQ(working.DefaultGradeId(), NodeId{"grade.t1"});
+  // Unselected node values and adjustments keep the values of the target default Grade.
   EXPECT_TRUE(pasted->Enabled());
-  EXPECT_FLOAT_EQ(pasted->Mix(), 1.0f);
-  const auto clean = ColorGradeNodeModel::MakeClean(NodeId{"grade.clean"});
-  EXPECT_EQ(pasted->FindAdjustmentByType(type_ids::Contrast())->ToJson().dump(),
-            clean->FindAdjustmentByType(type_ids::Contrast())->ToJson().dump());
+  EXPECT_FLOAT_EQ(pasted->Mix(), 0.8f);
+  EXPECT_DOUBLE_EQ(
+      pasted->FindAdjustmentByType(type_ids::Contrast())->ToJson().at("contrast").get<double>(),
+      40.0);
+  EXPECT_EQ(pasted->FindAdjustmentByType(type_ids::Saturation())->ToJson().dump(),
+            target_saturation);
+  // The selected adjustment has the source value.
   const auto* exposure = pasted->FindAdjustmentByType(type_ids::Exposure());
   ASSERT_NE(exposure, nullptr);
-  EXPECT_DOUBLE_EQ(exposure->ToJson().at("exposure_ev").get<double>(), 1.5);
+  EXPECT_FLOAT_EQ(exposure->ToJson().at("exposure_ev").get<float>(), 0.7f);
+}
+
+TEST(DocumentTransferTest, PartialPasteOfExtraGradeStartsFromCleanValues) {
+  // The source default Grade is not selected, so the first selected Grade becomes the target
+  // default and replaces the target default Grade. The second selected Grade has no target
+  // counterpart and starts from clean values.
+  auto source = CreateDefaultPipelineDocument();
+  ASSERT_TRUE(AddCleanColorGrade(source, NodeId{"drt"}, NodeId{"grade.b"}).empty());
+  ASSERT_TRUE(AddCleanColorGrade(source, NodeId{"drt"}, NodeId{"grade.c"}).empty());
+  const auto* grade_b =
+      dynamic_cast<ColorGradeNodeModel*>(source.Graph().FindNode(NodeId{"grade.b"}));
+  auto* grade_c = dynamic_cast<ColorGradeNodeModel*>(source.Graph().FindNode(NodeId{"grade.c"}));
+  ASSERT_NE(grade_b, nullptr);
+  ASSERT_NE(grade_c, nullptr);
+  grade_c->FindAdjustmentByType(type_ids::Exposure())->LoadJson({{"exposure_ev", 0.25}});
+
+  AdjustmentTransferSelection selection;
+  selection.nodes.push_back({grade_b->Id(),
+                             {{AdjustmentTransferItemKind::Adjustment,
+                               *grade_b->FindAdjustmentIdByType(type_ids::Exposure())}}});
+  selection.nodes.push_back({grade_c->Id(),
+                             {{AdjustmentTransferItemKind::Adjustment,
+                               *grade_c->FindAdjustmentIdByType(type_ids::Exposure())}}});
+  const auto  package = AdjustmentTransferPackageBuilder::Build(source, selection);
+
+  const auto  target  = CreateDefaultPipelineDocument();
+  const auto  working = ApplyPasteToClone(PlanSelectivePaste(package, target), target);
+  const auto* first =
+      dynamic_cast<const ColorGradeNodeModel*>(working.Graph().FindNode(NodeId{"grade.t1"}));
+  const auto* second =
+      dynamic_cast<const ColorGradeNodeModel*>(working.Graph().FindNode(NodeId{"grade.t2"}));
+  ASSERT_NE(first, nullptr);
+  ASSERT_NE(second, nullptr);
+  EXPECT_EQ(working.DefaultGradeId(), NodeId{"grade.t1"});
+  // The default Grade keeps the Default look contrast of the target.
+  EXPECT_FLOAT_EQ(
+      first->FindAdjustmentByType(type_ids::Contrast())->ToJson().at("contrast").get<float>(),
+      kDefaultPipelineContrast);
+  // The extra Grade has clean values except its selected exposure.
+  const auto clean = ColorGradeNodeModel::MakeClean(NodeId{"grade.clean"});
+  EXPECT_EQ(second->FindAdjustmentByType(type_ids::Contrast())->ToJson().dump(),
+            clean->FindAdjustmentByType(type_ids::Contrast())->ToJson().dump());
+  EXPECT_DOUBLE_EQ(
+      second->FindAdjustmentByType(type_ids::Exposure())->ToJson().at("exposure_ev").get<double>(),
+      0.25);
 }
 
 TEST(DocumentTransferTest, SelectedGradeSubsetKeepsSourceOrder) {

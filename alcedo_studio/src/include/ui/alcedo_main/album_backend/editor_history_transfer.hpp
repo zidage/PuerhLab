@@ -4,11 +4,13 @@
 
 #pragma once
 
+#include <optional>
 #include <string>
 #include <vector>
 
 #include "app/adjustment_transfer_types.hpp"
 #include "app/editor_session_ports.hpp"
+#include "edit/history/edit_commit_attribution.hpp"
 
 namespace alcedo::ui {
 
@@ -25,12 +27,13 @@ class EditorHistoryTransfer {
   /// to the live document from the immutable root, and publish one WAL commit.
   ///
   /// @param result On success carries the new Version, its head, and `prior_version_id`.
+  /// @param attribution Author of the Paste commit; nullopt is the user.
   /// @pre Caller owns the editor session command queue for this element.
-  auto PasteLiveRootRelativeVersion(const alcedo::EditorHistoryGuardHandle& guard,
-                                    const alcedo::AdjustmentTransferPackage& package,
-                                    std::string version_display_name,
-                                    alcedo::AdjustmentPasteResult* result, std::string* error)
-      -> bool;
+  auto PasteLiveRootRelativeVersion(
+      const alcedo::EditorHistoryGuardHandle&  guard,
+      const alcedo::AdjustmentTransferPackage& package, std::string version_display_name,
+      alcedo::AdjustmentPasteResult* result, std::string* error,
+      std::optional<alcedo::EditCommitAttribution> attribution = std::nullopt) -> bool;
 
  private:
   EditorHistoryState& state_;

@@ -149,8 +149,14 @@ auto EditorSessionService::SubmitCommand(EditorSessionCommand command, CommandRe
         reducing_command_ = true;
         BeginPublication();
         if (const auto action = EditorActionPolicy::ActionForCommand(queued.kind)) {
-          const auto decision = EditorActionPolicy::Evaluate(
-              *action, EditorCommandContext{active_leases_}, BuildActionInputs());
+          auto inputs = BuildActionInputs();
+          // A queued Paste carries its package. The copied-package flag tells only whether the
+          // Paste action of the GUI has a package to submit; an automation Paste has its own.
+          if (queued.kind == EditorSessionCommandKind::ApplyPaste) {
+            inputs.package_available = !queued.transfer_package.Empty();
+          }
+          const auto decision =
+              EditorActionPolicy::Evaluate(*action, EditorCommandContext{active_leases_}, inputs);
           if (!decision.allowed) {
             EditorSessionResult rejected;
             rejected.kind         = EditorSessionResultKind::Rejected;
@@ -759,15 +765,20 @@ auto EditorSessionService::RemoveVersion(const version_ref_id_t& version_id)
 }
 
 auto EditorSessionService::PasteAdjustments(const AdjustmentTransferPackage& package,
-                                            std::string                      version_display_name)
+                                            std::string                      version_display_name,
+                                            std::optional<EditCommitAttribution> attribution)
     -> EditorSessionResult {
+  if (attribution.has_value() && !IsStorableEditCommitAttribution(*attribution)) {
+    return Reject("Paste attribution author is not agent");
+  }
   if (!InOwnerReduction()) {
     EditorSessionCommand command;
     command.kind             = EditorSessionCommandKind::ApplyPaste;
     command.transfer_package = package;
     command.text             = std::move(version_display_name);
+    command.attribution      = std::move(attribution);
     return SubmitCommand(std::move(command), [this](const EditorSessionCommand& queued) {
-      return PasteAdjustments(queued.transfer_package, queued.text);
+      return PasteAdjustments(queued.transfer_package, queued.text, queued.attribution);
     });
   }
   if (lifecycle_.state() != EditorSessionState::Interactive || !dependencies_.history) {
@@ -775,9 +786,9 @@ auto EditorSessionService::PasteAdjustments(const AdjustmentTransferPackage& pac
   }
   AdjustmentPasteResult paste_result;
   std::string           error;
-  if (!dependencies_.history->PasteLiveRootRelativeVersion(lifecycle_.history_guard(), package,
-                                                           std::move(version_display_name),
-                                                           &paste_result, &error)) {
+  if (!dependencies_.history->PasteLiveRootRelativeVersion(
+          lifecycle_.history_guard(), package, std::move(version_display_name), &paste_result,
+          &error, std::move(attribution))) {
     return Reject(error.empty() ? "Editor Paste failed" : std::move(error));
   }
 

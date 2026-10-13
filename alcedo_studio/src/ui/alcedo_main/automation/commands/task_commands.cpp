@@ -20,7 +20,8 @@ auto TaskSchema() -> QJsonObject {
                                             {"state", QJsonObject{{"type", "string"}}},
                                             {"progress", QJsonObject{{"type", "integer"}}},
                                             {"message", QJsonObject{{"type", "string"}}},
-                                            {"counts", QJsonObject{{"type", "object"}}}},
+                                            {"counts", QJsonObject{{"type", "object"}}},
+                                            {"result", QJsonObject{{"type", "object"}}}},
                                 QJsonArray{"task_id", "kind", "state"});
 }
 

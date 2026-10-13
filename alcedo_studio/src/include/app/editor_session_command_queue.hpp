@@ -25,6 +25,7 @@
 #include "app/editor_session_types.hpp"
 #include "edit/graph/graph_ids.hpp"
 #include "edit/history/commit_types.hpp"
+#include "edit/history/edit_commit_attribution.hpp"
 #include "edit/history/pipeline_edit_batch.hpp"
 
 namespace alcedo {
@@ -122,6 +123,8 @@ struct EditorSessionCommand {
   commit_hash_t                           commit_id{};
   AdjustmentTransferPackage               transfer_package{};
   std::string                             text;
+  /// ApplyPaste: author of the Paste commit; nullopt is the user.
+  std::optional<EditCommitAttribution>    attribution;
   bool                                    persist_changes = true;
   /// Presentation binding for SetPresentationTarget / SetPresentationSize /
   /// SetGeometryOverlay. Unused by other command kinds.

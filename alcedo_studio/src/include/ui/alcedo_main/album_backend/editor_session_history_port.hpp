@@ -139,11 +139,11 @@ class EditorSessionHistoryPort final : public alcedo::IEditorHistoryPort {
                      std::string* error) -> bool override;
   auto RemoveVersion(const alcedo::EditorHistoryGuardHandle& guard,
                      const alcedo::Hash128& version_id, std::string* error) -> bool override;
-  auto PasteLiveRootRelativeVersion(const alcedo::EditorHistoryGuardHandle& guard,
-                                    const alcedo::AdjustmentTransferPackage& package,
-                                    std::string version_display_name,
-                                    alcedo::AdjustmentPasteResult* result, std::string* error)
-      -> bool override;
+  auto PasteLiveRootRelativeVersion(
+      const alcedo::EditorHistoryGuardHandle&  guard,
+      const alcedo::AdjustmentTransferPackage& package, std::string version_display_name,
+      alcedo::AdjustmentPasteResult* result, std::string* error,
+      std::optional<alcedo::EditCommitAttribution> attribution = std::nullopt) -> bool override;
   auto ReadPanelProjection(const alcedo::EditorHistoryGuardHandle& guard,
                            alcedo::EditorPanelProjection* projection, std::string* error)
       -> bool override;
