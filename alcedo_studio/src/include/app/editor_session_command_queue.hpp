@@ -166,6 +166,8 @@ struct EditorSessionCompletion {
   EditorRenderEvent            render_event{};
   bool                         navigation_success = false;
   bool                         retained_image     = false;
+  /// NavigationFinished: the render a Version action routed (NavigationCompletion).
+  std::optional<std::uint64_t> navigation_render_request_id;
   std::string                  message;
 };
 
