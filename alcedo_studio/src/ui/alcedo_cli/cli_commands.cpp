@@ -370,6 +370,9 @@ constexpr int kStartErrorTailBytes     = 4000;
 
 #if defined(Q_OS_WIN)
 constexpr auto kHostExecutableName = "alcedo_main.exe";
+#elif defined(ALCEDO_MACOS_BUNDLE_EXECUTABLE)
+// In a macOS bundle build, alcedo_main is the bundle executable and carries the bundle name.
+constexpr auto kHostExecutableName = ALCEDO_MACOS_BUNDLE_EXECUTABLE;
 #else
 constexpr auto kHostExecutableName = "alcedo_main";
 #endif
@@ -448,8 +451,9 @@ class HostHandleList {
 };
 #endif
 
-/// Finds alcedo_main: --host-binary, then the directory of alcedo-cli, then the macOS bundle
-/// layouts (alcedo-cli in Contents/Helpers, or a build tree with alcedo_main.app beside it).
+/// Finds alcedo_main: --host-binary, then the directory of alcedo-cli. The packages install
+/// alcedo-cli beside alcedo_main: in `bin` on Windows and in `<Bundle>.app/Contents/MacOS` on
+/// macOS.
 auto FindHostBinary(const QString& explicit_path, QString* error) -> QString {
   if (!explicit_path.isEmpty()) {
     if (QFileInfo(explicit_path).isExecutable()) {
@@ -458,16 +462,10 @@ auto FindHostBinary(const QString& explicit_path, QString* error) -> QString {
     *error = QStringLiteral("--host-binary '%1' is not an executable file").arg(explicit_path);
     return {};
   }
-  const QDir        cli_dir(QCoreApplication::applicationDirPath());
-  const QStringList candidates{
-      cli_dir.filePath(QLatin1String(kHostExecutableName)),
-      cli_dir.filePath(QStringLiteral("../MacOS/") + QLatin1String(kHostExecutableName)),
-      cli_dir.filePath(QStringLiteral("alcedo_main.app/Contents/MacOS/") +
-                       QLatin1String(kHostExecutableName))};
-  for (const QString& candidate : candidates) {
-    if (QFileInfo(candidate).isExecutable()) {
-      return QFileInfo(candidate).absoluteFilePath();
-    }
+  const QDir      cli_dir(QCoreApplication::applicationDirPath());
+  const QFileInfo host(cli_dir.filePath(QLatin1String(kHostExecutableName)));
+  if (host.isExecutable()) {
+    return host.absoluteFilePath();
   }
   *error = QStringLiteral("cannot find %1 near '%2'; use --host-binary")
                .arg(QLatin1String(kHostExecutableName), cli_dir.absolutePath());
