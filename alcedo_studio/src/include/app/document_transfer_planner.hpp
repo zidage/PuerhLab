@@ -98,11 +98,13 @@ struct DocumentTransferPasteOptions {
  *
  * Starts from the target immutable root document, applies the selected Develop
  * fields and geometry to the target root Develop node and document geometry
- * (the target camera profile and as-shot white balance stay), materializes each selected
- * Color Grade from clean catalog defaults, applies only the selected source
- * values, applies the selected DRT/Post values to the target root DRT/Post
- * node, and remaps every transferred identity to a collision-free target
- * identity. Produces one validated @ref PipelineEditBatch. Does not mutate the
+ * (the target camera profile and as-shot white balance stay), replaces the target
+ * Color Grades with the selected Color Grades, applies the selected DRT/Post values
+ * to the target root DRT/Post node, and remaps every transferred identity to a
+ * collision-free target identity. The Grade that becomes the target default Grade
+ * starts from the values of the target root default Grade; any other Grade starts
+ * from clean catalog values. Only the selected source values change those start
+ * values. Produces one validated @ref PipelineEditBatch. Does not mutate the
  * target root or any live document.
  */
 class DocumentTransferPlanner {

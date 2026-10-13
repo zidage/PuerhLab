@@ -277,5 +277,70 @@ TEST_F(AutomationAdjustmentCommandsTest, PasteGivesEachPhotoOneAgentVersionAndRe
             source_commits_before);
 }
 
+TEST_F(AutomationAdjustmentCommandsTest, PasteOfExposureOnlyKeepsImportLookOfOtherAdjustments) {
+  InProcessAutomationSession session;
+  const QJsonArray           photos = StartWithCiPhotos(session, QStringLiteral("exposure_only"));
+  ASSERT_GE(photos.size(), 2);
+  const QJsonValue  source = photos.at(0).toObject().value("element_id");
+  const QJsonValue  target = photos.at(1).toObject().value("element_id");
+  // The source look: exposure +0.7 EV; its other adjustments have the import look.
+  const QVariantMap source_look =
+      session.host().adjustment_transfer()->apply_coordinator()->ApplyToTargets(
+          alcedo::test::MakeExposureTransferPackage(0.7),
+          {static_cast<sl_element_id_t>(source.toDouble())}, QStringLiteral("Source look"));
+  ASSERT_EQ(source_look.value("appliedCount").toInt(), 1);
+
+  const QJsonObject target_before = NodeOfKind(
+      session.CallResult(QStringLiteral("adjustments.items"), QJsonObject{{"element_id", target}}),
+      QStringLiteral("color_grade"));
+  const QJsonObject source_grade = NodeOfKind(
+      session.CallResult(QStringLiteral("adjustments.items"), QJsonObject{{"element_id", source}}),
+      QStringLiteral("color_grade"));
+  const QJsonObject source_exposure =
+      ItemOfType(source_grade, QStringLiteral("alcedo.adjustment.exposure"));
+  ASSERT_FALSE(source_exposure.isEmpty());
+
+  const QString package_id =
+      session
+          .CallResult(
+              QStringLiteral("adjustments.copy"),
+              QJsonObject{
+                  {"element_id", source},
+                  {"items", QJsonArray{QJsonObject{
+                                {"node_id", source_grade.value("node_id")},
+                                {"item", "adjustment"},
+                                {"adjustment_id", source_exposure.value("adjustment_id")}}}}})
+          .value("package_id")
+          .toString();
+  ASSERT_FALSE(package_id.isEmpty());
+  const QString task_id =
+      session
+          .CallResult(QStringLiteral("adjustments.paste"),
+                      QJsonObject{{"package_id", package_id}, {"element_ids", QJsonArray{target}}})
+          .value("task_id")
+          .toString();
+  const QJsonObject task = session.CallResult(
+      QStringLiteral("tasks.wait"), QJsonObject{{"task_id", task_id}, {"timeout_ms", 600000}});
+  ASSERT_EQ(task.value("result").toObject().value("applied_count").toInt(), 1)
+      << QJsonDocument(task).toJson().toStdString();
+
+  const QJsonObject target_after = NodeOfKind(
+      session.CallResult(QStringLiteral("adjustments.items"), QJsonObject{{"element_id", target}}),
+      QStringLiteral("color_grade"));
+  EXPECT_EQ(ItemOfType(target_after, QStringLiteral("alcedo.adjustment.exposure")).value("value"),
+            source_exposure.value("value"));
+  // Contrast +15 and saturation +30 of the import look stay on the target.
+  for (const QString type : {QStringLiteral("alcedo.adjustment.contrast"),
+                             QStringLiteral("alcedo.adjustment.saturation")}) {
+    EXPECT_EQ(ItemOfType(target_after, type).value("value"),
+              ItemOfType(target_before, type).value("value"))
+        << type.toStdString();
+  }
+  EXPECT_EQ(ItemOfType(target_after, QStringLiteral("alcedo.adjustment.contrast"))
+                .value("value")
+                .toString(),
+            QStringLiteral("15.00"));
+}
+
 }  // namespace
 }  // namespace alcedo::automation

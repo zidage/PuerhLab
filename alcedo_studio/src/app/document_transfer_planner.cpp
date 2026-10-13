@@ -128,23 +128,43 @@ class DefaultTransferIdentitySource final : public TransferIdentitySource {
 /**
  * @brief One remapped sparse Grade entry plus its materialized node JSON.
  *
- * The materialized node starts from clean catalog defaults, then applies only
- * the selected source values, so unselected fields carry clean values.
+ * The materialized node starts from the values of its target base Grade (see
+ * @ref RemapGradeEntry), then applies only the selected source values, so
+ * unselected fields keep the base values.
  */
 struct RemappedGradeEntry {
   TransferColorGradeValue value;
   nlohmann::json          node;
 };
 
+/// The default Color Grade of @p root on its image backbone, or null.
+auto RootDefaultGrade(const PipelineDocument& root) -> const ColorGradeNodeModel* {
+  for (const auto* grade : ColorGradesOnImageBackbone(root)) {
+    if (grade->Id() == root.DefaultGradeId()) {
+      return grade;
+    }
+  }
+  return nullptr;
+}
+
 /**
- * @brief Materialize one selected source Grade against clean defaults.
+ * @brief Materialize one selected source Grade.
+ *
+ * Paste replaces the Color Grades of the target root. The entry that becomes the
+ * target default Grade replaces the root default Grade, so it starts from the
+ * enabled, mix, and adjustment values of @p base (that root Grade, for example
+ * the product Default look of an imported photo). Every other entry has no
+ * target counterpart and starts from clean catalog values, like a Grade added in
+ * the editor. The selected source values then overwrite the start values; an
+ * unselected item keeps them.
  *
  * @p becomes_default marks the entry that establishes the target default Grade.
  * That Grade receives the required default deletion protection; every other
  * Grade keeps its transferred protection value.
  */
 auto RemapGradeEntry(const TransferColorGradeValue& grade, TransferIdentitySource& identity,
-                     std::set<std::string>* occupied, bool becomes_default) -> RemappedGradeEntry {
+                     std::set<std::string>* occupied, bool becomes_default,
+                     const ColorGradeNodeModel* base) -> RemappedGradeEntry {
   const auto new_node = identity.NextNodeId();
   RejectCollision(std::string{new_node.Value()}, *occupied, "NodeId");
   occupied->insert(std::string{new_node.Value()});
@@ -152,6 +172,16 @@ auto RemapGradeEntry(const TransferColorGradeValue& grade, TransferIdentitySourc
   auto clean = ColorGradeNodeModel::MakeClean(new_node);
   clean->SetDisplayName(grade.display_name);
   clean->SetDeletionProtected(becomes_default || grade.deletion_protected);
+  if (becomes_default && base != nullptr) {
+    clean->SetEnabled(base->Enabled());
+    clean->SetMix(base->Mix());
+    for (std::size_t index = 0; index < base->AdjustmentCount(); ++index) {
+      const auto& base_adjustment = base->AdjustmentAt(index);
+      if (auto* model = clean->FindAdjustmentByType(base_adjustment.Type())) {
+        model->LoadJson(base_adjustment.ToJson());
+      }
+    }
+  }
   if (grade.enabled.has_value()) {
     clean->SetEnabled(*grade.enabled);
   }
@@ -483,7 +513,8 @@ auto DocumentTransferPlanner::Plan(const AdjustmentTransferPackage&    package,
     const bool  becomes_default = !package.default_grade_id_.Empty()
                                       ? grade.source_node_id == package.default_grade_id_
                                       : index == 0;
-    auto        remapped        = RemapGradeEntry(grade, source, &occupied, becomes_default);
+    auto        remapped =
+        RemapGradeEntry(grade, source, &occupied, becomes_default, RootDefaultGrade(root_document));
     materialized_grades.push_back(remapped.node);
     if (becomes_default) {
       prepared.package.default_grade_id_ = remapped.value.source_node_id;
