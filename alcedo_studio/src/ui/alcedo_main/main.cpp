@@ -38,6 +38,7 @@
 #include "ui/alcedo_main/album_backend/application_module_host.hpp"
 #include "alcedo_version.hpp"
 #include "automation/automation_session_file.hpp"
+#include "image/exiv2_xmp_toolkit_scope.hpp"
 #include "ui/alcedo_main/application_module_qml_types.hpp"
 #include "ui/alcedo_main/app_theme.hpp"
 #include "ui/alcedo_main/automation/automation_host_session.hpp"
@@ -252,6 +253,12 @@ int main(int argc, char* argv[]) {
 
   alcedo::TimeProvider::Refresh();
   Exiv2::LogMsg::setLevel(Exiv2::LogMsg::Level::error);
+  // Thumbnail and import workers read XMP in parallel; the toolkit must start before they do.
+  const alcedo::Exiv2XmpToolkitScope xmp_toolkit;
+  if (!xmp_toolkit.initialized()) {
+    qCritical("The Exiv2 XMP toolkit cannot be initialized");
+    return 1;
+  }
 
   QApplication app(argc, argv);
   // QApplication applies the user's locale on macOS and Linux (setlocale(LC_ALL, "")). Keep

@@ -34,6 +34,14 @@ gtest_discover_tests(DngColorProfileCacheTest TEST_PREFIX "DngColorProfileCacheT
   PROPERTIES LABELS "ci_core_flow;image")
 alcedo_register_test_target(DngColorProfileCacheTest image ci_core)
 
+# Exiv2 XMP toolkit started on the main thread before parallel XMP decodes (issue 389). Its own
+# executable, so no other test in the process starts the toolkit first.
+add_executable(Exiv2XmpToolkitScopeTest ${ALCEDO_TEST_ROOT}/image/exiv2_xmp_toolkit_scope_test.cpp)
+target_include_directories(Exiv2XmpToolkitScopeTest PUBLIC ${ALCEDO_INCLUDE_DIR})
+target_link_libraries(Exiv2XmpToolkitScopeTest PRIVATE GTest::gtest_main Image)
+gtest_discover_tests(Exiv2XmpToolkitScopeTest TEST_PREFIX "Exiv2XmpToolkitScopeTest.")
+alcedo_register_test_target(Exiv2XmpToolkitScopeTest image)
+
 if(ALCEDO_METAL_ENABLED)
   add_executable(ImageBufferMetalTest ${ALCEDO_TEST_ROOT}/image/image_buffer_metal_test.cpp)
   target_include_directories(ImageBufferMetalTest PUBLIC ${ALCEDO_INCLUDE_DIR})

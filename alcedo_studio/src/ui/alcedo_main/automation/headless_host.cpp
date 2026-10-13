@@ -19,6 +19,7 @@
 
 #include "automation/automation_session_file.hpp"
 #include "edit/pipeline/pipeline_accelerator.hpp"
+#include "image/exiv2_xmp_toolkit_scope.hpp"
 #include "ui/alcedo_main/album_backend/application_module_host.hpp"
 #include "ui/alcedo_main/automation/automation_host_session.hpp"
 #include "ui/alcedo_main/automation/headless_frame_sink.hpp"
@@ -306,6 +307,12 @@ auto RunHeadlessHost(int argc, char** argv) -> int {
 
   TimeProvider::Refresh();
   Exiv2::LogMsg::setLevel(Exiv2::LogMsg::Level::error);
+  // Thumbnail and import workers read XMP in parallel; the toolkit must start before they do.
+  const Exiv2XmpToolkitScope xmp_toolkit;
+  if (!xmp_toolkit.initialized()) {
+    ReportFailure(QStringLiteral("the Exiv2 XMP toolkit cannot be initialized"));
+    return Exit(HeadlessHostExitCode::MetadataLibraryError);
+  }
   QCoreApplication app(argc, argv);
   // The same numeric locale rule as the GUI host: number text always uses a decimal point.
   std::setlocale(LC_NUMERIC, "C");

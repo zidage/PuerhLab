@@ -15,14 +15,16 @@ namespace alcedo::automation {
 
 /// Exit codes of `alcedo_main --headless`.
 enum class HeadlessHostExitCode : int {
-  Success          = 0,
-  UsageError       = 2,
+  Success              = 0,
+  UsageError           = 2,
   /// The editor backend cannot start. No other backend is tried.
-  BackendError     = 3,
+  BackendError         = 3,
   /// The project cannot be opened or created.
-  ProjectLoadError = 4,
+  ProjectLoadError     = 4,
   /// The automation server or the session file cannot start.
-  SessionError     = 5,
+  SessionError         = 5,
+  /// The Exiv2 XMP toolkit cannot be initialized.
+  MetadataLibraryError = 6,
 };
 
 /// Options of `alcedo_main --headless`.
