@@ -951,6 +951,8 @@ if(TARGET ${ALCEDO_MAIN_BIN})
         set(_bundle_macos_dest "${_alcedo_macos_app_bundle}/Contents/MacOS")
         set(_bundle_resources_dest "${_alcedo_macos_app_bundle}/Contents/Resources")
         set(_bundle_frameworks_dest "${_alcedo_macos_app_bundle}/Contents/Frameworks")
+        # alcedo-cli sits beside the bundle executable so that `session start` finds it.
+        install(TARGETS alcedo_cli RUNTIME DESTINATION "${_bundle_macos_dest}")
         # The build-tree .app can accumulate downloaded runtime models while
         # testing. Do not ship that cache in release packages; models are
         # downloaded per user through the app.
@@ -1100,6 +1102,10 @@ if(TARGET ${ALCEDO_MAIN_BIN})
         install(TARGETS alcedo_update_installer
             RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
         )
+        # alcedo-cli sits beside alcedo_main so that `session start` finds it.
+        install(TARGETS alcedo_cli
+            RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+        )
     endif()
 endif()
 
@@ -1112,7 +1118,7 @@ if(WIN32 AND TARGET ${ALCEDO_MAIN_BIN})
     include(InstallRequiredSystemLibraries)
 
     set(ALCEDO_RUNTIME_DEP_DIRS "" CACHE STRING "Extra directories to search for runtime DLL dependencies during install.")
-    set(ALCEDO_RUNTIME_EXES "$<TARGET_FILE:${ALCEDO_MAIN_BIN}>")
+    set(ALCEDO_RUNTIME_EXES "$<TARGET_FILE:${ALCEDO_MAIN_BIN}>" "$<TARGET_FILE:alcedo_cli>")
     set(ALCEDO_RUNTIME_SEARCH_DIRS "$<TARGET_FILE_DIR:${ALCEDO_MAIN_BIN}>")
     if(ALCEDO_MIND_BINARY)
         list(APPEND ALCEDO_RUNTIME_EXES "${ALCEDO_MIND_BINARY}")
@@ -1461,12 +1467,16 @@ if(APPLE AND ALCEDO_MACOS_BUNDLE AND TARGET ${ALCEDO_MAIN_BIN})
              set(_alcedo_main_bin \"\${_alcedo_app_path}/Contents/MacOS/${ALCEDO_MACOS_BUNDLE_NAME}\")
              set(_alcedo_mind_bin \"\${_alcedo_app_path}/Contents/MacOS/alcedo_mind\")
              set(_alcedo_aria2c_bin \"\${_alcedo_app_path}/Contents/MacOS/aria2c\")
+             set(_alcedo_cli_bin \"\${_alcedo_app_path}/Contents/MacOS/alcedo-cli\")
 
              if(NOT EXISTS \"\${_alcedo_main_bin}\")
                  message(FATAL_ERROR \"macOS bundle executable not found: \${_alcedo_main_bin}\")
              endif()
+             if(NOT EXISTS \"\${_alcedo_cli_bin}\")
+                 message(FATAL_ERROR \"alcedo-cli not found in the macOS bundle: \${_alcedo_cli_bin}\")
+             endif()
 
-             set(_alcedo_macho_files \"\${_alcedo_main_bin}\")
+             set(_alcedo_macho_files \"\${_alcedo_main_bin}\" \"\${_alcedo_cli_bin}\")
              if(EXISTS \"\${_alcedo_mind_bin}\")
                  list(APPEND _alcedo_macho_files \"\${_alcedo_mind_bin}\")
              endif()

@@ -12,4 +12,15 @@ set_target_properties(alcedo_cli PROPERTIES
     OUTPUT_NAME "alcedo-cli"
     RUNTIME_OUTPUT_DIRECTORY "${ALCEDO_BINARY_ROOT}"
 )
+if(APPLE)
+    # The macOS package installs alcedo-cli in <Bundle>.app/Contents/MacOS, beside the bundle
+    # executable, and the Qt frameworks in Contents/Frameworks.
+    set_property(TARGET alcedo_cli APPEND PROPERTY
+        INSTALL_RPATH "@executable_path/../Frameworks")
+    if(ALCEDO_MACOS_BUNDLE)
+        # The root CMakeLists.txt names the bundle executable after the bundle.
+        target_compile_definitions(alcedo_cli PRIVATE
+            ALCEDO_MACOS_BUNDLE_EXECUTABLE="${ALCEDO_MACOS_BUNDLE_NAME}")
+    endif()
+endif()
 alcedo_copy_linked_runtime_dlls(alcedo_cli)

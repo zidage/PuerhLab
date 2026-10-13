@@ -86,10 +86,12 @@ assert_dir "$plugins_dir"
 main_exe="${macos_dir}/${bundle_name}"
 mind_exe="${macos_dir}/alcedo_mind"
 aria2c_exe="${macos_dir}/aria2c"
+cli_exe="${macos_dir}/alcedo-cli"
 
 assert_executable "$main_exe"
 assert_executable "$mind_exe"
 assert_executable "$aria2c_exe"
+assert_executable "$cli_exe"
 
 required_files=(
   "${contents_dir}/Info.plist"
@@ -106,6 +108,7 @@ required_files=(
   "${resources_dir}/duckdb_extensions/fts.duckdb_extension"
   "${frameworks_dir}/QtCore.framework/QtCore"
   "${frameworks_dir}/QtGui.framework/QtGui"
+  "${frameworks_dir}/QtNetwork.framework/QtNetwork"
   "${frameworks_dir}/QtQml.framework/QtQml"
   "${frameworks_dir}/QtQuick.framework/QtQuick"
   "${frameworks_dir}/QtWidgets.framework/QtWidgets"
@@ -191,7 +194,7 @@ if command -v codesign >/dev/null 2>&1; then
   fi
 fi
 
-declare -a macho_files=("$main_exe" "$mind_exe" "$aria2c_exe")
+declare -a macho_files=("$main_exe" "$mind_exe" "$aria2c_exe" "$cli_exe")
 while IFS= read -r -d '' file; do
   macho_files+=("$file")
 done < <(find "$macos_dir" "$frameworks_dir" "$plugins_dir" "${resources_dir}/duckdb_extensions" \
@@ -314,5 +317,26 @@ if ! grep -F -q "qml.imports.ok=QuickQanava" "$qml_probe_out"; then
   fail "installed app did not report a QuickQanava QML import: $(cat "$qml_probe_out")"
 fi
 rm -f "$qml_probe_out"
+
+# alcedo-cli must run with only the system directories on PATH, and `session start` must find the
+# bundle executable beside it and start a headless session.
+cli_probe_dir="$(mktemp -d "${TMPDIR:-/tmp}/alcedo_cli_probe.XXXXXX")"
+mkdir -p "${cli_probe_dir}/project"
+cli_session_args=(--session-dir "${cli_probe_dir}/sessions" --session install_probe)
+run_cli() {
+  env -i HOME="$HOME" TMPDIR="${TMPDIR:-/tmp}" PATH=/usr/bin:/bin:/usr/sbin:/sbin "$cli_exe" "$@"
+}
+if ! cli_help="$(run_cli help 2>&1)" || ! grep -F -q "Usage: alcedo-cli" <<<"$cli_help"; then
+  fail "installed alcedo-cli help failed with a clean PATH: ${cli_help}"
+fi
+if ! cli_start="$(run_cli "${cli_session_args[@]}" session start --headless \
+    --create "${cli_probe_dir}/project,install_probe" \
+    --settings-dir "${cli_probe_dir}/settings" 2>&1)"; then
+  fail "installed alcedo-cli could not start a headless session: ${cli_start}"
+fi
+if ! cli_stop="$(run_cli "${cli_session_args[@]}" session stop 2>&1)"; then
+  fail "installed alcedo-cli could not stop the headless session: ${cli_stop}"
+fi
+rm -rf "$cli_probe_dir"
 
 echo "[alcedo] macOS install tree verification passed: $app_dir"

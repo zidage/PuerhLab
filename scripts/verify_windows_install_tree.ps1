@@ -54,6 +54,7 @@ foreach ($developmentDir in @('include', 'lib', 'share')) {
 
 $requiredFiles = @(
     'alcedo_main.exe',
+    'alcedo-cli.exe',
     'alcedo_studio_ao.ico',
     'alcedo_mind.exe',
     'DirectML.dll',
@@ -63,6 +64,7 @@ $requiredFiles = @(
     'duckdb_extensions\vss.duckdb_extension',
     'Qt6Core.dll',
     'Qt6Gui.dll',
+    'Qt6Network.dll',
     'Qt6Qml.dll',
     'Qt6Quick.dll',
     'Qt6Widgets.dll',
@@ -215,5 +217,46 @@ if ($qmlProbe.ExitCode -ne 0) {
 if ($qmlOutput -notmatch 'qml\.imports\.ok=QuickQanava') {
     throw "Installed alcedo_main.exe did not report a QuickQanava QML import: $qmlOutput"
 }
+
+# alcedo-cli must run with only the Windows directories on PATH, so that it and alcedo_main.exe
+# load their DLLs from the install tree. `session start` finds alcedo_main.exe beside alcedo-cli.
+$cliExe = Join-Path $binDir 'alcedo-cli.exe'
+$cliProbeDir = Join-Path ([System.IO.Path]::GetTempPath()) "alcedo_cli_probe_$PID"
+$cliSessionDir = Join-Path $cliProbeDir 'sessions'
+$cliSettingsDir = Join-Path $cliProbeDir 'settings'
+$cliProjectDir = Join-Path $cliProbeDir 'project'
+New-Item -ItemType Directory -Force -Path $cliProjectDir | Out-Null
+$cliSessionArgs = @('--session-dir', $cliSessionDir, '--session', 'install_probe')
+$savedPath = $env:Path
+# Windows PowerShell 5.1 turns stderr lines of a native program into errors; read them as text.
+$savedErrorAction = $ErrorActionPreference
+try {
+    $ErrorActionPreference = 'Continue'
+    $env:Path = "$env:SystemRoot\System32;$env:SystemRoot"
+    $cliHelp = & $cliExe help 2>&1 | Out-String
+    $cliHelpExit = $LASTEXITCODE
+    $cliStart = & $cliExe @cliSessionArgs session start --headless `
+        --create "$cliProjectDir,install_probe" --settings-dir $cliSettingsDir 2>&1 | Out-String
+    $cliStartExit = $LASTEXITCODE
+    $cliStop = ''
+    $cliStopExit = 0
+    if ($cliStartExit -eq 0) {
+        $cliStop = & $cliExe @cliSessionArgs session stop 2>&1 | Out-String
+        $cliStopExit = $LASTEXITCODE
+    }
+} finally {
+    $env:Path = $savedPath
+    $ErrorActionPreference = $savedErrorAction
+}
+if ($cliHelpExit -ne 0 -or $cliHelp -notmatch 'Usage: alcedo-cli') {
+    throw "Installed alcedo-cli.exe help exited $cliHelpExit with a clean PATH: $cliHelp"
+}
+if ($cliStartExit -ne 0) {
+    throw "Installed alcedo-cli.exe could not start a headless session (exit $cliStartExit): $cliStart"
+}
+if ($cliStopExit -ne 0) {
+    throw "Installed alcedo-cli.exe could not stop the headless session (exit $cliStopExit): $cliStop"
+}
+Remove-Item -LiteralPath $cliProbeDir -Recurse -Force -ErrorAction SilentlyContinue
 
 Write-Host "[alcedo] Windows install tree verification passed: $binDir" -ForegroundColor Green

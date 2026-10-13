@@ -104,7 +104,7 @@ proposed default.
 | Decision | Proposed default | Needed by |
 | --- | --- | --- |
 | GUI automation server default | Enabled. The socket accepts only the current OS user. A setting "Allow agent control (CLI and MCP)" disables it. AU14 uses this default (key `automation/serverEnabled`); the Settings toggle is not built yet. | Phase AU14 |
-| `alcedo-cli` location in the macOS bundle and PATH exposure | `<Bundle>.app/Contents/Helpers/alcedo-cli`. The skill tells the user to add a symlink. The installer does not change PATH. | Phase AU15 |
+| `alcedo-cli` location in the macOS bundle and PATH exposure | Decided (2026-10-13): `<Bundle>.app/Contents/MacOS/alcedo-cli`, beside the bundle executable, as `bin\alcedo-cli.exe` is beside `alcedo_main.exe` on Windows. The installers do not change PATH and the skill does not ask for a symlink: the agent calls `alcedo-cli` by its path in the install folder or the app bundle. | Phase AU15 |
 
 ## 2. Product design specification
 
@@ -919,8 +919,8 @@ Remaining defects or unavailable platforms: macOS tests not run locally.
 6. Start `AutomationServer`, register `session.*` and `state.get`, write the session file.
 7. Implement `session.shutdown`: respond after `ApplicationModuleHost::Shutdown()` returns,
    remove the session file, quit the event loop.
-8. Implement `alcedo-cli session start`: find the host binary (same directory on Windows,
-   `../MacOS/<bundle executable>` from `Contents/Helpers` on macOS, or `--host-binary`), start it
+8. Implement `alcedo-cli session start`: find the host binary (`--host-binary`, or the directory
+   of `alcedo-cli`; in a macOS bundle the host is the bundle executable), start it
    detached, wait for the session file and `session.ping` (bounded by `--timeout`).
 9. Implement `alcedo-cli session stop`.
 10. Confirm that no QML timer behavior is needed: update checks, LUT feed checks, and
@@ -3136,7 +3136,7 @@ Remaining defects or unavailable platforms: macOS Metal runs only in CI.
 - Tool names replace `.` with `_` (`editor_set`). Tool input schemas equal the command schemas.
 - MCP tools also include `session_start` and `session_stop`, which run the AU3 CLI logic.
 - Root `CMakeLists.txt`: install `alcedo_cli` to `bin` on Windows and to
-  `<Bundle>.app/Contents/Helpers` on macOS with `INSTALL_RPATH @loader_path/../Frameworks`.
+  `<Bundle>.app/Contents/MacOS` on macOS with `INSTALL_RPATH @executable_path/../Frameworks`.
   The bundle signing step covers it.
 - `scripts/verify_windows_install_tree.ps1`: require `alcedo-cli.exe`.
 
