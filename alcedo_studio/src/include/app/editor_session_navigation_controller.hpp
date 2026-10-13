@@ -103,6 +103,9 @@ struct NavigationCompletion {
   bool             retained_image = false;  ///< True when the image survived a failure.
   std::string      message;
   CheckpointTicket ticket;
+  /// The render routed by a Version action (checkout, root Version, branch); 0 when none was
+  /// routed. Empty for the other actions, whose frame is the first frame of the image.
+  std::optional<std::uint64_t> render_request_id;
 };
 
 using NavigationCompletionNotifier = std::function<void(const NavigationCompletion&)>;
@@ -242,7 +245,8 @@ class EditorSessionNavigationController final {
   void PromoteQueuedSwitchTarget();
   /// Publish the async completion to the registered notifier (if any).
   void NotifyCompletion(bool success, bool retained_image, std::string message,
-                        const CheckpointTicket& ticket);
+                        const CheckpointTicket&      ticket,
+                        std::optional<std::uint64_t> render_request_id = std::nullopt);
   /// Retain the current image and remember the pending target after a save or
   /// checkpoint failure. Callers are already on the session owner thread.
   void RetainPendingFailure(PendingEditorAction pending, std::string message);
@@ -261,6 +265,8 @@ class EditorSessionNavigationController final {
   OwnerCheck                     owner_check_;
   std::thread::id                owner_thread_;
   std::uint64_t                  operation_id_ = 0;
+  /// The render request of the last Continue* Version action; 0 when it routed none.
+  std::uint64_t                  version_render_request_id_ = 0;
   NavigationCompletionNotifier   completion_notifier_;
   std::function<void(std::function<void()>)> owner_poster_;
   SealPreparer                               seal_preparer_;

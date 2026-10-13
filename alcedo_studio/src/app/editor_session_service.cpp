@@ -101,6 +101,7 @@ EditorSessionService::EditorSessionService(Dependencies dependencies)
     posted.element_id           = completion.ticket.element_id;
     posted.navigation_success   = completion.success;
     posted.retained_image       = completion.retained_image;
+    posted.navigation_render_request_id = completion.render_request_id;
     posted.message              = completion.message;
     PostCompletion(std::move(posted));
   });
@@ -239,7 +240,8 @@ void EditorSessionService::PostCompletion(EditorSessionCompletion completion) {
             completion.navigation_success, completion.retained_image, completion.message,
             CheckpointTicket{completion.request_id, completion.operation.command_id,
                              completion.image_load_request, completion.element_id,
-                             completion.task_id}});
+                             completion.task_id},
+            completion.navigation_render_request_id});
         break;
       case EditorSessionCompletionKind::ImageStateLoaded:
         HandleImageAcquiredCompletion(completion);
@@ -338,9 +340,13 @@ void EditorSessionService::HandleNavigationCompletion(const NavigationCompletion
   result.state        = lifecycle_.state();
   result.task_id      = completion.ticket.task_id;
   if (completion.success) {
-    result.kind = render_.first_frame_request_id() != 0 ? EditorSessionResultKind::RenderRouted
-                                                        : EditorSessionResultKind::Accepted;
-    result.render_request_id = render_.first_frame_request_id();
+    // A Version action keeps the image and routes its own frame; the first frame of the image
+    // is long presented, so a wait on it would end on any later frame or on none.
+    const auto render_request_id =
+        completion.render_request_id.value_or(render_.first_frame_request_id());
+    result.kind              = render_request_id != 0 ? EditorSessionResultKind::RenderRouted
+                                                      : EditorSessionResultKind::Accepted;
+    result.render_request_id = render_request_id;
     result.message           = completion.message;
     BumpHistoryRevision();
   } else {

@@ -137,6 +137,55 @@ TEST_F(EditorPendingInputSessionTest, FailedRenderOfCommandPublishesFrameFailed)
   EXPECT_FALSE(EditorSessionResultIsFailure(EditorSessionResultKind::FrameFailed));
 }
 
+// The save completion of a Version checkout arrives after other owner work. A frame that no
+// command routed may finish in between; the checkout frame still belongs to the checkout command,
+// and the checkout reports that frame instead of the long presented first frame of the image.
+TEST_F(EditorPendingInputSessionTest, CheckoutFrameBelongsToCheckoutAfterAnUnroutedFrame) {
+  OpenInteractive();
+  const auto first_frame_request_id   = service_->first_frame_request_id();
+  checkpoint_store_->async_materialize = true;
+  const auto checkout = service_->CheckoutVersion(history_->last_root_version);
+  ASSERT_NE(checkout.operation_id, 0u);
+  service_->DrainCommandQueueForTests();
+  ASSERT_TRUE(checkpoint_store_->pending_materialize) << "the checkout waits for its save";
+
+  EditorRenderResult unrouted;
+  unrouted.kind               = EditorRenderResultKind::Cancelled;
+  unrouted.request_id         = first_frame_request_id;
+  unrouted.intent.operation_id = 0;
+  service_->NotifyRenderResult(unrouted);
+  service_->DrainCommandQueueForTests();
+
+  const auto results_before = service_->results().size();
+  checkpoint_store_->CompleteMaterialization(true);
+  service_->DrainCommandQueueForTests();
+  auto          results           = service_->results();
+  std::uint64_t render_request_id = 0;
+  for (std::size_t i = results_before; i < results.size(); ++i) {
+    if (results[i].kind == EditorSessionResultKind::RenderRouted &&
+        results[i].operation_id == checkout.operation_id) {
+      render_request_id = results[i].render_request_id;
+    }
+  }
+  ASSERT_NE(render_request_id, 0u) << "the checkout routes a render";
+  EXPECT_GT(render_request_id, first_frame_request_id);
+  EXPECT_EQ(render_request_id, runtime_->coordinator->last_scheduled_request_id());
+
+  const auto frame_results_before = results.size();
+  runtime_->coordinator->NotifySchedulerCompleted(render_request_id, true);
+  service_->DrainCommandQueueForTests();
+  results        = service_->results();
+  bool presented = false;
+  for (std::size_t i = frame_results_before; i < results.size(); ++i) {
+    if (results[i].kind == EditorSessionResultKind::FramePresented) {
+      presented = true;
+      EXPECT_EQ(results[i].operation_id, checkout.operation_id);
+      EXPECT_EQ(results[i].render_request_id, render_request_id);
+    }
+  }
+  EXPECT_TRUE(presented) << "the checkout frame ends the wait of the checkout";
+}
+
 TEST_F(EditorPendingInputSessionTest, ReleaseBoundaryResultsCarryBoundaryOperationId) {
   OpenInteractive();
   const auto results_before = service_->results().size();
