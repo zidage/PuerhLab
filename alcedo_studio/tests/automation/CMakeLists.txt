@@ -125,6 +125,14 @@ alcedo_add_automation_test(AutomationLibraryCommandsTest
     LABEL ci_automation_flow
     CATEGORIES ci_automation)
 
+# adjustments.* parameter rules and the background Paste of library photos in an in-process
+# headless session.
+alcedo_add_automation_test(AutomationAdjustmentCommandsTest
+    SOURCES automation_adjustment_commands_test.cpp
+    LIBRARIES AutomationHostLib
+    LABEL ci_automation_flow
+    CATEGORIES ci_automation)
+
 # lut.list through the command registry, with a temporary LUT library root.
 alcedo_add_automation_test(AutomationLutCommandsTest
     SOURCES automation_lut_commands_test.cpp
@@ -177,6 +185,19 @@ target_compile_definitions(AutomationVersionsE2ETest PRIVATE
     ALCEDO_CLI_PATH="$<TARGET_FILE:alcedo_cli>"
     ALCEDO_AUTOMATION_FAILURE_DIR="${CMAKE_BINARY_DIR}/automation-failures")
 add_dependencies(AutomationVersionsE2ETest alcedo_main alcedo_cli)
+
+# adjustments.copy and adjustments.paste through real alcedo-cli and alcedo_main --headless
+# processes on two CI RAW files. Needs the GPU editor backend.
+alcedo_add_automation_test(AutomationAdjustmentsE2ETest
+    SOURCES automation_adjustments_e2e_test.cpp
+    LIBRARIES AutomationHostLib
+    LABEL ci_automation_flow
+    CATEGORIES ci_automation)
+target_compile_definitions(AutomationAdjustmentsE2ETest PRIVATE
+    ALCEDO_MAIN_PATH="$<TARGET_FILE:alcedo_main>"
+    ALCEDO_CLI_PATH="$<TARGET_FILE:alcedo_cli>"
+    ALCEDO_AUTOMATION_FAILURE_DIR="${CMAKE_BINARY_DIR}/automation-failures")
+add_dependencies(AutomationAdjustmentsE2ETest alcedo_main alcedo_cli)
 
 # export.* commands through real alcedo-cli and alcedo_main --headless processes on a CI RAW
 # file. The written files are read back with OpenImageIO. Needs the GPU editor backend.

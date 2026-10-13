@@ -9,9 +9,13 @@
 #include <QString>
 #include <QVariantList>
 #include <QVariantMap>
+#include <memory>
 #include <optional>
 
 #include "app/adjustment_transfer_types.hpp"
+#include "edit/graph/pipeline_document.hpp"
+#include "edit/history/commit_graph.hpp"
+#include "type/type.hpp"
 #include "ui/alcedo_main/album_backend/adjustment_transfer_apply_coordinator.hpp"
 #include "ui/alcedo_main/album_backend/adjustment_transfer_dialog_model.hpp"
 #include "ui/alcedo_main/album_backend/background_task_controller.hpp"
@@ -61,10 +65,23 @@ class AdjustmentTransferController final : public QObject {
   /// The policy whose agent control refuses Paste. Null refuses nothing. PasteIntoEditor is
   /// refused by EditorSessionController::PasteAdjustmentPackage.
   void               SetInteractionPolicy(InteractionPolicyController* interaction_policy);
-  /// Test accessor for the multi-target apply owner.
+  /// The multi-target apply owner. Automation pastes through it with agent attribution.
   [[nodiscard]] auto apply_coordinator() -> AdjustmentTransferApplyCoordinator* {
     return apply_coordinator_.get();
   }
+  /**
+   * @brief Read the history of the Copy source @p element_id.
+   *
+   * The image open in the editor is read through the editor session, which owns its history
+   * and keeps its unsaved edits; every other image is read from storage. Both results are
+   * immutable, so a later Paste into the source cannot change them.
+   *
+   * @return false with @p error when the pipeline service is unavailable or the read fails.
+   */
+  auto ReadSourceHistory(sl_element_id_t                                  element_id,
+                         std::shared_ptr<const alcedo::CommitGraph>*      graph,
+                         std::shared_ptr<const alcedo::PipelineDocument>* root_document,
+                         QString*                                         error) -> bool;
 
   /// Load the source image catalog into the dialog model. Returns
   /// `{success, message?, sourceTitle?, activeVersionId?}` for the caller.

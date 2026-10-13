@@ -34,7 +34,10 @@ namespace alcedo::automation {
 /// `succeeded`, `failed`, or `canceled`), `progress` (percent, -1 when unknown), and `message`.
 /// An import task also has `counts` (`total`, `completed`, `failed`, `unsupported`,
 /// `excluded`); an export task has `counts` (`total`, `completed`, `succeeded`, `failed`,
-/// `skipped`).
+/// `skipped`). A finished adjustment Paste task (`adjustmentPaste`) has `result`
+/// (`applied_count`, `failure_count`, `applied_ids`, and `failures` with `element_id` and
+/// `message`), read from AdjustmentTransferApplyCoordinator::FinishedResult. The tracker keeps
+/// that final state for the id, because the controller drops old finished tasks.
 class AutomationTaskTracker final : public QObject {
   Q_OBJECT
 
@@ -71,6 +74,8 @@ class AutomationTaskTracker final : public QObject {
   [[nodiscard]] auto                  RunningImportTask() const -> QJsonObject;
   [[nodiscard]] auto                  RunningExportTask() const -> QJsonObject;
   [[nodiscard]] auto                  NextImportId() -> QString;
+  /// @p task with the per-photo `result` of its Paste when @p task is a finished Paste.
+  [[nodiscard]] auto                  WithPasteResult(QJsonObject task) const -> QJsonObject;
 
   QPointer<ui::ApplicationModuleHost> host_;
   QString                             running_import_id_;
@@ -78,7 +83,7 @@ class AutomationTaskTracker final : public QObject {
   QString                             running_export_id_;
   QString                             last_export_id_;
   int                                 export_count_ = 0;
-  /// Final state of each finished import and export, by id.
+  /// Final state of each finished import, export, and adjustment Paste, by id.
   std::map<QString, QJsonObject>      finished_tasks_;
   /// Last published state of each background task, to publish only changes.
   std::map<QString, QString>          background_states_;

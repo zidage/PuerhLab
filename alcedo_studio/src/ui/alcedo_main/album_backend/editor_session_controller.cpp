@@ -2136,6 +2136,15 @@ auto EditorSessionController::PasteAdjustmentPackage(
   return session_backend_->PasteAdjustments(package, versionDisplayName.toStdString());
 }
 
+auto EditorSessionController::RequestPasteAdjustmentPackage(
+    const alcedo::AdjustmentTransferPackage& package, const QString& versionDisplayName,
+    std::optional<alcedo::EditCommitAttribution> attribution) -> alcedo::EditorSessionResult {
+  if (!session_backend_)
+    return RejectedResult(QStringLiteral("The editor session is not available."));
+  return session_backend_->PasteAdjustments(package, versionDisplayName.toStdString(),
+                                            std::move(attribution));
+}
+
 auto EditorSessionController::SnapshotHistorySource(
     std::shared_ptr<const alcedo::CommitGraph>*      graph,
     std::shared_ptr<const alcedo::PipelineDocument>* root_document, std::string* error) -> bool {

@@ -8,6 +8,9 @@
 #include <QVariantMap>
 #include <algorithm>
 
+#include "ui/alcedo_main/album_backend/adjustment_transfer_apply_coordinator.hpp"
+#include "ui/alcedo_main/album_backend/adjustment_transfer_controller.hpp"
+
 namespace alcedo::automation {
 namespace {
 
@@ -34,6 +37,25 @@ auto ExportCounts(const ui::ImportExportHandler& import_export) -> QJsonObject {
                      {"succeeded", import_export.ExportSucceeded()},
                      {"failed", import_export.ExportFailed()},
                      {"skipped", import_export.ExportSkipped()}};
+}
+
+/// The `result` object of a task of kind `adjustmentPaste` from the coordinator result map.
+auto PasteResultObject(const QVariantMap& result) -> QJsonObject {
+  QJsonArray applied_ids;
+  for (const QVariant& id : result.value(QStringLiteral("appliedIds")).toList()) {
+    applied_ids.push_back(static_cast<double>(id.toUInt()));
+  }
+  QJsonArray failures;
+  for (const QVariant& value : result.value(QStringLiteral("failures")).toList()) {
+    const QVariantMap failure = value.toMap();
+    failures.push_back(QJsonObject{
+        {"element_id", static_cast<double>(failure.value(QStringLiteral("elementId")).toUInt())},
+        {"message", failure.value(QStringLiteral("message")).toString()}});
+  }
+  return QJsonObject{{"applied_count", result.value(QStringLiteral("appliedCount")).toInt()},
+                     {"failure_count", result.value(QStringLiteral("failureCount")).toInt()},
+                     {"applied_ids", applied_ids},
+                     {"failures", failures}};
 }
 
 /// The status text and, when photos failed, the error summary of the export.
@@ -187,11 +209,31 @@ void AutomationTaskTracker::OnBackgroundTasksChanged() {
     }
     background_states_[id] = state;
     if (IsTerminalState(state)) {
-      emit TaskFinished(task);
+      const QJsonObject finished = WithPasteResult(task);
+      if (finished.contains("result")) {
+        finished_tasks_[id] = finished;
+      }
+      emit TaskFinished(finished);
     } else {
       emit TaskUpdated(task);
     }
   }
+}
+
+auto AutomationTaskTracker::WithPasteResult(QJsonObject task) const -> QJsonObject {
+  if (task.value("kind").toString() != QStringLiteral("adjustmentPaste") ||
+      !IsTerminalState(task.value("state").toString())) {
+    return task;
+  }
+  ui::AdjustmentTransferController* transfer = host_->adjustment_transfer();
+  if (transfer == nullptr) {
+    return task;
+  }
+  if (const auto result =
+          transfer->apply_coordinator()->FinishedResult(task.value("task_id").toString())) {
+    task.insert("result", PasteResultObject(*result));
+  }
+  return task;
 }
 
 auto AutomationTaskTracker::Task(const QString& task_id) const -> std::optional<QJsonObject> {

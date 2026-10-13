@@ -18,6 +18,7 @@
 
 #include "automation/automation_protocol.hpp"
 #include "ui/alcedo_main/album_backend/application_module_host.hpp"
+#include "ui/alcedo_main/automation/automation_adjustment_commands.hpp"
 #include "ui/alcedo_main/automation/automation_command_registry.hpp"
 #include "ui/alcedo_main/automation/automation_editor_commands.hpp"
 #include "ui/alcedo_main/automation/automation_export_commands.hpp"
@@ -56,7 +57,8 @@ class InProcessAutomationSession {
         RegisterAutomationLutCommands(registry_, &host_, &error) &&
         RegisterAutomationEditorCommands(registry_, &host_, &error) &&
         RegisterAutomationVersionCommands(registry_, &host_, &error) &&
-        RegisterAutomationRenderCommands(registry_, &host_, &error);
+        RegisterAutomationRenderCommands(registry_, &host_, &error) &&
+        RegisterAutomationAdjustmentCommands(registry_, &host_, host_mode, &error);
     EXPECT_TRUE(registered) << error.toStdString();
   }
 

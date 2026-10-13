@@ -221,8 +221,8 @@ class RecordingEditorSessionBackend final : public IEditorSessionBackend {
     return Accepted("Version removed");
   }
 
-  auto PasteAdjustments(const AdjustmentTransferPackage&, std::string)
-      -> EditorSessionResult override {
+  auto PasteAdjustments(const AdjustmentTransferPackage&, std::string,
+                        std::optional<EditCommitAttribution>) -> EditorSessionResult override {
     ++paste_count_;
     NotifyHistoryChange();
     return Accepted("Adjustments pasted");

@@ -13,6 +13,7 @@
 #include "edit/history/commit_graph.hpp"
 #include "edit/history/commit_types.hpp"
 #include "edit/history/edit_commit.hpp"
+#include "edit/history/edit_commit_attribution.hpp"
 #include "edit/history/pipeline_edit_batch.hpp"
 #include "edit/history/pipeline_history_format.hpp"
 #include "json.hpp"
@@ -56,6 +57,42 @@ TEST(AdjustmentTransferServiceTest, TransferSurfaceHasNoPipelineMergeOperation) 
   ASSERT_TRUE(IsPipelineEditBatchJson(commit.GetPayloadJSON()));
   EXPECT_EQ(PipelineEditBatch::FromJSON(commit.GetPayloadJSON()).operation_kind,
             PipelineEditOperationKind::Paste);
+  // A Paste without attribution is a commit of the user.
+  EXPECT_EQ(graph->FindCommitAttribution(pasted.new_head), nullptr);
+  project.TearDown();
+}
+
+TEST(AdjustmentTransferServiceTest, AgentPasteCommitCarriesAgentAttribution) {
+  test::EditorMiniGitProjectFixture project;
+  project.SetUp();
+  auto* graph = project.graph(test::EditorMiniGitProjectFixture::kElementA).get();
+  ASSERT_NE(graph, nullptr);
+  const EditCommitAttribution attribution{std::string(kEditCommitAuthorAgent), "apply the look"};
+  const auto                  pasted = AdjustmentTransferService::PasteAsRootRelativeVersion(
+      *graph, CreateDefaultPipelineDocument(), test::MakeDefaultDocumentTransferPackage(),
+      "Pasted Adjustments", {}, attribution);
+  ASSERT_TRUE(pasted.pasted) << pasted.error;
+  const auto* stored = graph->FindCommitAttribution(pasted.new_head);
+  ASSERT_NE(stored, nullptr);
+  EXPECT_EQ(*stored, attribution);
+  project.TearDown();
+}
+
+TEST(AdjustmentTransferServiceTest, PasteWithUserAuthorAttributionFailsAndKeepsActiveVersion) {
+  test::EditorMiniGitProjectFixture project;
+  project.SetUp();
+  auto* graph = project.graph(test::EditorMiniGitProjectFixture::kElementA).get();
+  ASSERT_NE(graph, nullptr);
+  const auto prior_version = graph->GetActiveVersionId();
+  const auto prior_count   = graph->GetAllVersionRefs().size();
+  const auto pasted        = AdjustmentTransferService::PasteAsRootRelativeVersion(
+      *graph, CreateDefaultPipelineDocument(), test::MakeDefaultDocumentTransferPackage(),
+      "Pasted Adjustments", {},
+      EditCommitAttribution{std::string(kEditCommitAuthorUser), std::string()});
+  EXPECT_FALSE(pasted.pasted);
+  EXPECT_FALSE(pasted.error.empty());
+  EXPECT_EQ(graph->GetActiveVersionId(), prior_version);
+  EXPECT_EQ(graph->GetAllVersionRefs().size(), prior_count);
   project.TearDown();
 }
 

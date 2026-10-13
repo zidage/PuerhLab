@@ -42,6 +42,7 @@
 #include "app/editor_session_bootstrap.hpp"
 #include "app/editor_session_service.hpp"
 #include "app/editor_session_types.hpp"
+#include "edit/history/edit_commit_attribution.hpp"
 #include "support/editor_session_command_queue_test_support.hpp"
 #include "support/editor_parameter_write_test.hpp"
 
@@ -407,6 +408,34 @@ TEST_F(EditorSessionCommandQueueBaselineTest,
   ASSERT_EQ(events.size(), 2u);
   EXPECT_EQ(events[0], "version_created");
   EXPECT_EQ(events[1], "save_started");
+}
+
+/// An automation Paste carries its own package, so it is admitted when the GUI
+/// has no copied package. Only an agent author is accepted as attribution.
+TEST_F(EditorSessionCommandQueueBaselineTest,
+       PasteWithItsOwnPackageIsAdmittedWithoutCopiedPackage) {
+  openInteractive(10, 20);  // image A, interactive
+  service_->SetCopiedPackageAvailable(false);
+
+  std::vector<std::string> events;
+  history_->event_log                  = &events;
+  checkpoint_store_->event_log         = &events;
+  history_->dirty_journal              = true;
+  checkpoint_store_->async_materialize = false;
+
+  const auto user_author               = service_->PasteAdjustments(
+      MakeExposureTransferPackage(0.75), "Pasted Version",
+      EditCommitAttribution{std::string(kEditCommitAuthorUser), std::string()});
+  EXPECT_EQ(user_author.kind, EditorSessionResultKind::Rejected);
+  EXPECT_TRUE(events.empty());
+
+  const auto result = service_->PasteAdjustments(
+      MakeExposureTransferPackage(0.75), "Pasted Version",
+      EditCommitAttribution{std::string(kEditCommitAuthorAgent), "apply the look"});
+  EXPECT_EQ(result.kind, EditorSessionResultKind::SaveStarted) << result.message;
+  drainQueue();
+  ASSERT_FALSE(events.empty());
+  EXPECT_EQ(events[0], "version_created");
 }
 
 /// Live paste mutates history before the ordinary checkpoint. A materialization

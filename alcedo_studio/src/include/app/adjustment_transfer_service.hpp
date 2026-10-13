@@ -4,12 +4,14 @@
 
 #pragma once
 
+#include <optional>
 #include <string>
 
 #include "app/adjustment_transfer_types.hpp"
 #include "app/document_transfer_planner.hpp"
 #include "edit/graph/pipeline_document.hpp"
 #include "edit/history/commit_graph.hpp"
+#include "edit/history/edit_commit_attribution.hpp"
 #include "json.hpp"
 
 namespace alcedo {
@@ -58,11 +60,14 @@ class AdjustmentTransferService final {
    * @param package Validated transfer document.
    * @param version_display_name Requested Version label; uniquified if needed.
    * @param options Identity source.
+   * @param attribution Author of the Paste commit; nullopt is the user. Only
+   *        kEditCommitAuthorAgent can be stored.
    */
   [[nodiscard]] static auto PasteAsRootRelativeVersion(
       CommitGraph& graph, const PipelineDocument& root_document,
       const AdjustmentTransferPackage& package, std::string version_display_name,
-      const DocumentTransferPasteOptions& options = {}) -> AdjustmentPasteResult;
+      const DocumentTransferPasteOptions&  options     = {},
+      std::optional<EditCommitAttribution> attribution = std::nullopt) -> AdjustmentPasteResult;
 };
 
 }  // namespace alcedo

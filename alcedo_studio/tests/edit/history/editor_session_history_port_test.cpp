@@ -33,6 +33,7 @@
 #include "edit/graph/pipeline_graph_commands.hpp"
 #include "edit/graph/pipeline_graph_snapshot.hpp"
 #include "edit/history/commit_clock_test_access.hpp"
+#include "edit/history/edit_commit_attribution.hpp"
 #include "edit/history/mini_git_working_history.hpp"
 #include "edit/history/pipeline_document_checkpoint.hpp"
 #include "edit/operators/models/builtin_type_ids.hpp"
@@ -669,6 +670,26 @@ TEST_F(EditorSessionHistoryPortTest, PasteCreatesNewVersionAndLiveDocumentReceiv
   EXPECT_DOUBLE_EQ(*exposure, 1.5);
 
   EXPECT_EQ(Graph()->CommitCount(), 1u);
+  // A Paste without attribution is a commit of the user.
+  EXPECT_EQ(Graph()->FindCommitAttribution(paste_result.new_head), nullptr);
+}
+
+TEST_F(EditorSessionHistoryPortTest, AgentPasteCommitCarriesAgentAttribution) {
+  std::string error;
+  const auto  handle = history_.Acquire(42, &error);
+  ASSERT_TRUE(handle.valid) << error;
+
+  const alcedo::EditCommitAttribution attribution{std::string(alcedo::kEditCommitAuthorAgent),
+                                                  "apply the look"};
+  alcedo::AdjustmentPasteResult       paste_result;
+  ASSERT_TRUE(history_.PasteLiveRootRelativeVersion(
+      handle, MakeExposureTransferPackage(1.5), "Pasted Live", &paste_result, &error, attribution))
+      << error;
+  ASSERT_TRUE(paste_result.pasted);
+  const auto  graph  = Graph();
+  const auto* stored = graph->FindCommitAttribution(paste_result.new_head);
+  ASSERT_NE(stored, nullptr);
+  EXPECT_EQ(*stored, attribution);
 }
 
 TEST_F(EditorSessionHistoryPortTest, TypedEditChangesDocumentBeforeOrWithWalAppend) {

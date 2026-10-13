@@ -354,13 +354,13 @@ auto EditorSessionHistoryPort::RemoveVersion(const alcedo::EditorHistoryGuardHan
 }
 
 auto EditorSessionHistoryPort::PasteLiveRootRelativeVersion(
-    const alcedo::EditorHistoryGuardHandle& guard,
-    const alcedo::AdjustmentTransferPackage& package, std::string version_display_name,
-    alcedo::AdjustmentPasteResult* result, std::string* error) -> bool {
+    const alcedo::EditorHistoryGuardHandle& guard, const alcedo::AdjustmentTransferPackage& package,
+    std::string version_display_name, alcedo::AdjustmentPasteResult* result, std::string* error,
+    std::optional<alcedo::EditCommitAttribution> attribution) -> bool {
   std::scoped_lock lock(mutex_);
-  return PublishAfterWrite(guard,
-                           transfer_->PasteLiveRootRelativeVersion(
-                               guard, package, std::move(version_display_name), result, error));
+  return PublishAfterWrite(guard, transfer_->PasteLiveRootRelativeVersion(
+                                      guard, package, std::move(version_display_name), result,
+                                      error, std::move(attribution)));
 }
 
 auto EditorSessionHistoryPort::ReadPanelProjection(const alcedo::EditorHistoryGuardHandle& guard,

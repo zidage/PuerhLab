@@ -105,11 +105,42 @@ void AdjustmentTransferController::SetEditorSession(EditorSessionController* edi
   editor_session_ = editor_session;
 }
 
-auto AdjustmentTransferController::PrepareCopy(uint elementId) -> QVariantMap {
+auto AdjustmentTransferController::ReadSourceHistory(
+    sl_element_id_t element_id, std::shared_ptr<const alcedo::CommitGraph>* graph,
+    std::shared_ptr<const alcedo::PipelineDocument>* root_document, QString* error) -> bool {
   auto pipeline_service = project_->handler().pipeline_service();
   if (!pipeline_service) {
-    return ErrorResult(Tr("Pipeline service is unavailable."));
+    *error = Tr("Pipeline service is unavailable.");
+    return false;
   }
+  try {
+    // The editor session owns the history of the image it has open. Read that
+    // image through the session; loading it here would rebind its history and
+    // live document from storage and drop the unsaved edits.
+    if (editor_session_ && editor_session_->has_image() &&
+        editor_session_->element_id() == element_id) {
+      std::string session_error;
+      if (!editor_session_->SnapshotHistorySource(graph, root_document, &session_error)) {
+        *error = session_error.empty() ? Tr("Pipeline was not available.")
+                                       : QString::fromStdString(session_error);
+        return false;
+      }
+      return true;
+    }
+    // Every other image: read its stored history. The snapshot is immutable, so a later
+    // Paste into this image cannot change the graph the reader is reading.
+    auto history = pipeline_service->LoadHistorySnapshot(element_id);
+    *graph       = std::move(history.graph_);
+    *root_document =
+        std::shared_ptr<const alcedo::PipelineDocument>(history.root_, &history.root_->document);
+    return true;
+  } catch (...) {
+    *error = CurrentExceptionText("Failed to read the source history.");
+    return false;
+  }
+}
+
+auto AdjustmentTransferController::PrepareCopy(uint elementId) -> QVariantMap {
   if (elementId == 0) {
     return ErrorResult(Tr("No image selected."));
   }
@@ -117,26 +148,14 @@ auto AdjustmentTransferController::PrepareCopy(uint elementId) -> QVariantMap {
   try {
     std::shared_ptr<const alcedo::CommitGraph>      source_graph;
     std::shared_ptr<const alcedo::PipelineDocument> source_root;
-    std::string                                     error;
-    // The editor session owns the history of the image it has open. Read that
-    // image through the session; loading it here would rebind its history and
-    // live document from storage and drop the unsaved edits.
-    if (editor_session_ && editor_session_->has_image() &&
-        editor_session_->element_id() == elementId) {
-      if (!editor_session_->SnapshotHistorySource(&source_graph, &source_root, &error)) {
-        return ErrorResult(error.empty() ? Tr("Pipeline was not available.")
-                                         : QString::fromStdString(error));
-      }
-    } else {
-      // Every other image: read its stored history. The snapshot is immutable, so a later
-      // Paste into this image cannot change the graph the dialog is reading.
-      auto history = pipeline_service->LoadHistorySnapshot(static_cast<sl_element_id_t>(elementId));
-      source_graph = std::move(history.graph_);
-      source_root =
-          std::shared_ptr<const alcedo::PipelineDocument>(history.root_, &history.root_->document);
+    QString                                         read_error;
+    if (!ReadSourceHistory(static_cast<sl_element_id_t>(elementId), &source_graph, &source_root,
+                           &read_error)) {
+      return ErrorResult(read_error);
     }
 
-    const bool opened = dialog_model_->OpenSource(source_graph, source_root, &error);
+    std::string error;
+    const bool  opened = dialog_model_->OpenSource(source_graph, source_root, &error);
     if (!opened) {
       return ErrorResult(QString::fromStdString(error));
     }

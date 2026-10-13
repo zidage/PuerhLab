@@ -223,10 +223,11 @@ class ControllableEditorHistoryPort : public FakeEditorHistoryPort {
     return FakeEditorHistoryPort::CheckoutVersion(guard, version_id, error);
   }
 
-  auto PasteLiveRootRelativeVersion(const EditorHistoryGuardHandle& guard,
+  auto PasteLiveRootRelativeVersion(const EditorHistoryGuardHandle&  guard,
                                     const AdjustmentTransferPackage& package,
                                     std::string /*version_display_name*/,
-                                    AdjustmentPasteResult* result, std::string* error)
+                                    AdjustmentPasteResult* result, std::string* error,
+                                    std::optional<EditCommitAttribution> /*attribution*/)
       -> bool override {
     (void)guard;
     if (package.Empty()) {

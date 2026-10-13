@@ -61,9 +61,9 @@ void RestoreLivePastePrior(HistoryWorkingState& state, EditorHistoryState& histo
 }  // namespace
 
 auto EditorHistoryTransfer::PasteLiveRootRelativeVersion(
-    const alcedo::EditorHistoryGuardHandle& guard,
-    const alcedo::AdjustmentTransferPackage& package, std::string version_display_name,
-    alcedo::AdjustmentPasteResult* result, std::string* error) -> bool {
+    const alcedo::EditorHistoryGuardHandle& guard, const alcedo::AdjustmentTransferPackage& package,
+    std::string version_display_name, alcedo::AdjustmentPasteResult* result, std::string* error,
+    std::optional<alcedo::EditCommitAttribution> attribution) -> bool {
   auto state = state_.EnsureWorkingState(guard.element_id, error);
   if (!state) return false;
   if (result == nullptr) return SetError(error, "Paste result storage is required");
@@ -161,7 +161,8 @@ auto EditorHistoryTransfer::PasteLiveRootRelativeVersion(
     return SetError(error, ex.what());
   }
 
-  const auto prepared_edit = state->history->PrepareAppendEdit(prepared.batch);
+  const auto prepared_edit =
+      state->history->PrepareAppendEdit(prepared.batch, std::move(attribution));
   if (!prepared_edit.ready) {
     if (!rollback_after_version()) {
       return false;

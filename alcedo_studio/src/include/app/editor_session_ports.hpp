@@ -21,6 +21,7 @@
 #include "app/editor_session_types.hpp"
 #include "edit/graph/graph_ids.hpp"
 #include "edit/graph/pipeline_graph_snapshot.hpp"
+#include "edit/history/edit_commit_attribution.hpp"
 #include "edit/history/pipeline_edit_batch.hpp"
 #include "type/type.hpp"
 
@@ -370,14 +371,13 @@ class IEditorHistoryPort {
     return false;
   }
 
-
   /// Paste onto the live CommitGraph and WAL, then apply package operators to
-  /// the live pipeline. Default fake records success without mutating state.
-  virtual auto PasteLiveRootRelativeVersion(const EditorHistoryGuardHandle& /*guard*/,
-                                            const AdjustmentTransferPackage& package,
-                                            std::string version_display_name,
-                                            AdjustmentPasteResult* result, std::string* error)
-      -> bool {
+  /// the live pipeline. @p attribution names the author of the Paste commit; nullopt is the
+  /// user. Default fake records success without mutating state.
+  virtual auto PasteLiveRootRelativeVersion(
+      const EditorHistoryGuardHandle& /*guard*/, const AdjustmentTransferPackage& package,
+      std::string version_display_name, AdjustmentPasteResult* result, std::string* error,
+      std::optional<EditCommitAttribution> /*attribution*/ = std::nullopt) -> bool {
     if (result == nullptr) {
       if (error != nullptr) *error = "Paste result storage is required";
       return false;

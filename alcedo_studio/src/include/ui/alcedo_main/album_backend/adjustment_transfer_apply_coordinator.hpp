@@ -7,11 +7,13 @@
 #include <QObject>
 #include <QString>
 #include <QVariantMap>
+#include <optional>
 #include <unordered_map>
 #include <vector>
 
 #include "app/adjustment_transfer_types.hpp"
 #include "app/pipeline_service.hpp"
+#include "edit/history/edit_commit_attribution.hpp"
 #include "type/type.hpp"
 #include "ui/alcedo_main/album_backend/background_task_controller.hpp"
 
@@ -46,13 +48,15 @@ class AdjustmentTransferApplyCoordinator final : public QObject {
    *        wait for the result on the calling thread.
    *
    * The result map reports `appliedCount`, `unchangedCount`, `failureCount`,
-   * and a `failures` list of `{elementId, message}` rows. A target that fails
+   * an `appliedIds` list, and a `failures` list of `{elementId, message}` rows.
+   * @p attribution is the author of each Paste commit; nullopt is the user. A target that fails
    * package validation, rebuild, or persistence is restored to its prior graph
    * and receives no metadata or thumbnail refresh.
    */
-  [[nodiscard]] auto ApplyToTargets(const alcedo::AdjustmentTransferPackage& package,
-                                    const std::vector<sl_element_id_t>&      target_ids,
-                                    const QString& version_display_name) -> QVariantMap;
+  [[nodiscard]] auto ApplyToTargets(
+      const alcedo::AdjustmentTransferPackage& package,
+      const std::vector<sl_element_id_t>& target_ids, const QString& version_display_name,
+      std::optional<alcedo::EditCommitAttribution> attribution = std::nullopt) -> QVariantMap;
 
   /**
    * @brief Start the same Paste on a worker thread and return immediately.
@@ -63,14 +67,25 @@ class AdjustmentTransferApplyCoordinator final : public QObject {
    * this Paste writes it. The result map of @ref ApplyToTargets arrives through
    * @ref ApplyFinished on the owner thread after the thumbnail refresh.
    *
+   * The result map is also kept for @ref FinishedResult before the task
+   * finishes, so a reader of the finished task can read the result of each target.
+   *
    * @return false with @p error when another Paste is running or the pipeline
    *         service is unavailable; nothing starts in that case.
    */
   auto StartApplyToTargets(const alcedo::AdjustmentTransferPackage& package,
-                           std::vector<sl_element_id_t> target_ids,
-                           const QString& version_display_name, QString* error) -> bool;
+                           std::vector<sl_element_id_t>             target_ids,
+                           const QString& version_display_name, QString* error,
+                           std::optional<alcedo::EditCommitAttribution> attribution = std::nullopt)
+      -> bool;
 
   [[nodiscard]] bool running() const { return running_; }
+  /// The background task id of the running Paste; empty when no Paste runs or
+  /// the coordinator has no task controller.
+  [[nodiscard]] auto running_task_id() const -> QString { return task_id_; }
+  /// The result map of the last finished Paste when its task id is @p task_id;
+  /// nothing for another id. It is set before that task finishes.
+  [[nodiscard]] auto FinishedResult(const QString& task_id) const -> std::optional<QVariantMap>;
 
  signals:
   /// Emitted once per target whose persisted paste completed its HDR and
@@ -91,10 +106,10 @@ class AdjustmentTransferApplyCoordinator final : public QObject {
   /// Per-target Paste, rebuild, and persistence. Uses only the pipeline
   /// service, so it runs on a worker thread.
   [[nodiscard]] static auto ApplyPackageToTargets(
-      alcedo::PipelineMgmtService& pipeline_service,
+      alcedo::PipelineMgmtService&             pipeline_service,
       const alcedo::AdjustmentTransferPackage& package,
-      const std::vector<sl_element_id_t>& target_ids, const std::string& version_display_name)
-      -> TargetApplyOutcome;
+      const std::vector<sl_element_id_t>& target_ids, const std::string& version_display_name,
+      const std::optional<alcedo::EditCommitAttribution>& attribution) -> TargetApplyOutcome;
 
   /// Owner-thread completion: HDR flag, thumbnail refresh, and the result map.
   auto           FinishApply(const TargetApplyOutcome& outcome) -> QVariantMap;
@@ -106,6 +121,9 @@ class AdjustmentTransferApplyCoordinator final : public QObject {
   BackgroundTaskController* background_tasks_ = nullptr;
   bool                      running_          = false;
   QString                   task_id_;
+  /// Task id and result map of the last finished Paste, for FinishedResult.
+  QString                   finished_task_id_;
+  QVariantMap               finished_result_;
 };
 
 }  // namespace alcedo::ui

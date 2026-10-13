@@ -262,8 +262,12 @@ class IEditorSessionBackend {
     result.message  = "Version removal is not supported by this backend";
     return result;
   }
+  /// Paste @p package as a new root-relative Version of the open image. @p attribution names
+  /// the author of the Paste commit; nullopt is the user. Default backends reject.
   virtual auto PasteAdjustments(const AdjustmentTransferPackage& /*package*/,
-                                std::string /*version_display_name*/) -> EditorSessionResult {
+                                std::string /*version_display_name*/,
+                                std::optional<EditCommitAttribution> /*attribution*/ = std::nullopt)
+      -> EditorSessionResult {
     EditorSessionResult result;
     result.kind     = EditorSessionResultKind::Rejected;
     result.state    = state();
@@ -702,7 +706,8 @@ class EditorSessionService final : public IEditorSessionBackend {
   auto RenameVersion(const version_ref_id_t& version_id, std::string display_name)
       -> EditorSessionResult override;
   auto RemoveVersion(const version_ref_id_t& version_id) -> EditorSessionResult override;
-  auto PasteAdjustments(const AdjustmentTransferPackage& package, std::string version_display_name)
+  auto PasteAdjustments(const AdjustmentTransferPackage& package, std::string version_display_name,
+                        std::optional<EditCommitAttribution> attribution = std::nullopt)
       -> EditorSessionResult override;
   auto               Close(bool persist_changes) -> EditorSessionResult override;
   auto               PersistCurrentImage() -> EditorSessionResult override;

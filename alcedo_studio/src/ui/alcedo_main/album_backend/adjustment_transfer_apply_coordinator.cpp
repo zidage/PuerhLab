@@ -45,20 +45,21 @@ AdjustmentTransferApplyCoordinator::AdjustmentTransferApplyCoordinator(
 
 auto AdjustmentTransferApplyCoordinator::ApplyToTargets(
     const alcedo::AdjustmentTransferPackage& package,
-    const std::vector<sl_element_id_t>& target_ids, const QString& version_display_name)
-    -> QVariantMap {
+    const std::vector<sl_element_id_t>& target_ids, const QString& version_display_name,
+    std::optional<alcedo::EditCommitAttribution> attribution) -> QVariantMap {
   auto pipeline_service = project_->handler().pipeline_service();
   if (!pipeline_service) {
     return ErrorResult(Tr("Pipeline service is unavailable."));
   }
   const auto outcome = ApplyPackageToTargets(*pipeline_service, package, target_ids,
-                                             version_display_name.toStdString());
+                                             version_display_name.toStdString(), attribution);
   return FinishApply(outcome);
 }
 
 auto AdjustmentTransferApplyCoordinator::StartApplyToTargets(
     const alcedo::AdjustmentTransferPackage& package, std::vector<sl_element_id_t> target_ids,
-    const QString& version_display_name, QString* error) -> bool {
+    const QString& version_display_name, QString* error,
+    std::optional<alcedo::EditCommitAttribution> attribution) -> bool {
   if (running_) {
     if (error != nullptr) *error = Tr("Adjustments are already being pasted.");
     return false;
@@ -96,10 +97,10 @@ auto AdjustmentTransferApplyCoordinator::StartApplyToTargets(
 
   QPointer<AdjustmentTransferApplyCoordinator> self(this);
   std::thread([self, pipeline_service = std::move(pipeline_service), package,
-               target_ids = std::move(target_ids),
-               name       = version_display_name.toStdString()]() mutable {
+               target_ids = std::move(target_ids), name = version_display_name.toStdString(),
+               attribution = std::move(attribution)]() mutable {
     auto outcome = std::make_shared<TargetApplyOutcome>(
-        ApplyPackageToTargets(*pipeline_service, package, target_ids, name));
+        ApplyPackageToTargets(*pipeline_service, package, target_ids, name, attribution));
     QMetaObject::invokeMethod(
         self.data(),
         [self, outcome]() {
@@ -108,6 +109,9 @@ auto AdjustmentTransferApplyCoordinator::StartApplyToTargets(
           }
           const auto result = self->FinishApply(*outcome);
           const bool failed = !result.value("success").toBool();
+          // Readers of the finished task (the automation task tracker) read this result.
+          self->finished_task_id_ = self->task_id_;
+          self->finished_result_  = result;
           if (self->background_tasks_ != nullptr && !self->task_id_.isEmpty()) {
             self->background_tasks_->FinishTask(
                 self->task_id_,
@@ -126,8 +130,8 @@ auto AdjustmentTransferApplyCoordinator::StartApplyToTargets(
 
 auto AdjustmentTransferApplyCoordinator::ApplyPackageToTargets(
     alcedo::PipelineMgmtService& pipeline_service, const alcedo::AdjustmentTransferPackage& package,
-    const std::vector<sl_element_id_t>& target_ids, const std::string& version_display_name)
-    -> TargetApplyOutcome {
+    const std::vector<sl_element_id_t>& target_ids, const std::string& version_display_name,
+    const std::optional<alcedo::EditCommitAttribution>& attribution) -> TargetApplyOutcome {
   TargetApplyOutcome outcome;
   auto&              result = outcome.result_;
   for (sl_element_id_t element_id : target_ids) {
@@ -143,7 +147,7 @@ auto AdjustmentTransferApplyCoordinator::ApplyPackageToTargets(
       // A root-relative Paste creates both immutable commits and a named Version.
       alcedo::DocumentTransferPasteOptions options;
       auto paste_result = alcedo::AdjustmentTransferService::PasteAsRootRelativeVersion(
-          graph, base.root_->document, package, version_display_name, options);
+          graph, base.root_->document, package, version_display_name, options, attribution);
       if (!paste_result.pasted) {
         result.failures_.push_back({element_id, paste_result.error});
         continue;
@@ -184,6 +188,10 @@ auto AdjustmentTransferApplyCoordinator::FinishApply(const TargetApplyOutcome& o
     }
   }
 
+  QVariantList applied_ids;
+  for (sl_element_id_t element_id : result.applied_ids_) {
+    applied_ids.push_back(static_cast<uint>(element_id));
+  }
   QVariantList failures;
   for (const auto& failure : result.failures_) {
     failures.push_back(QVariantMap{{"elementId", static_cast<uint>(failure.file_id_)},
@@ -201,8 +209,17 @@ auto AdjustmentTransferApplyCoordinator::FinishApply(const TargetApplyOutcome& o
   response.insert("appliedCount", static_cast<int>(result.applied_ids_.size()));
   response.insert("unchangedCount", static_cast<int>(result.unchanged_ids_.size()));
   response.insert("failureCount", static_cast<int>(result.failures_.size()));
+  response.insert("appliedIds", applied_ids);
   response.insert("failures", failures);
   return response;
+}
+
+auto AdjustmentTransferApplyCoordinator::FinishedResult(const QString& task_id) const
+    -> std::optional<QVariantMap> {
+  if (task_id.isEmpty() || task_id != finished_task_id_) {
+    return std::nullopt;
+  }
+  return finished_result_;
 }
 
 void AdjustmentTransferApplyCoordinator::RefreshOneTarget(sl_element_id_t element_id,
