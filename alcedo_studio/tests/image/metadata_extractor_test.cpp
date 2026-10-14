@@ -9,10 +9,15 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <cstdlib>
+#include <ctime>
 #include <exiv2/exiv2.hpp>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
+#include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "edit/graph/develop_color_transform.hpp"
@@ -46,6 +51,58 @@ auto SonyCctRegressionSamplePath() -> std::filesystem::path {
 auto SonyA7CiiConvertedDngPath() -> std::filesystem::path {
   return std::filesystem::path(TEST_IMG_PATH) / "raw" / "camera" / "sony" / "a7cii" /
          "ycbcr_compressed" / "DSC04739_dng.dng";
+}
+
+/// Sets the process time zone for the lifetime of the object and restores the previous one.
+/// LibRaw converts EXIF capture dates with the C runtime local time zone, so a fixed offset away
+/// from UTC makes a UTC conversion of the capture time visible in any test environment.
+class ScopedTimeZone {
+ public:
+  explicit ScopedTimeZone(const char* posix_time_zone) {
+    if (const char* previous = std::getenv("TZ"); previous != nullptr) {
+      previous_time_zone_ = previous;
+    }
+    Set(posix_time_zone);
+  }
+  ~ScopedTimeZone() { Set(previous_time_zone_ ? previous_time_zone_->c_str() : nullptr); }
+  ScopedTimeZone(const ScopedTimeZone&)                    = delete;
+  auto operator=(const ScopedTimeZone&) -> ScopedTimeZone& = delete;
+
+ private:
+  static void Set(const char* posix_time_zone) {
+#if defined(_WIN32)
+    _putenv_s("TZ", posix_time_zone ? posix_time_zone : "");
+    _tzset();
+#else
+    if (posix_time_zone) {
+      setenv("TZ", posix_time_zone, 1);
+    } else {
+      unsetenv("TZ");
+    }
+    tzset();
+#endif
+  }
+
+  std::optional<std::string> previous_time_zone_;
+};
+
+/// EXIF `DateTimeOriginal` of the file as `YYYY-MM-DD HH:MM:SS`, read with Exiv2.
+auto ReadExifDateTimeOriginal(const std::filesystem::path& path) -> std::string {
+  auto exif_image = MetadataExtractor::ExtractEXIF(path);
+  if (!exif_image) {
+    return {};
+  }
+  const auto& exif_data = exif_image->exifData();
+  const auto  it        = exif_data.findKey(Exiv2::ExifKey("Exif.Photo.DateTimeOriginal"));
+  if (it == exif_data.end()) {
+    return {};
+  }
+  std::string date_time = it->toString();
+  if (date_time.size() >= 10) {
+    date_time[4] = '-';
+    date_time[7] = '-';
+  }
+  return date_time;
 }
 
 /// Bind the imported camera profile to a Develop payload in as-shot mode and resolve its
@@ -306,6 +363,98 @@ TEST(MetadataExtractorTest, SonyArwMakerNoteAsShotNeutralResolvesStableCct) {
   EXPECT_LT(result.transform.resolved_cct, 4050.0f);
   EXPECT_GT(result.transform.resolved_tint, -20.0f);
   EXPECT_LT(result.transform.resolved_tint, 0.0f);
+}
+
+// Issue #381: a photo taken at 16:02 on a camera clock showed 07:02 after import in UTC+9.
+// The capture time of a RAW file is the camera clock time in EXIF, whatever the time zone of
+// the importing machine.
+TEST(MetadataExtractorTest, RawCaptureTimeIsExifCameraClockTimeOutsideUtc) {
+  const auto sample_path = SonyCctRegressionSamplePath();
+  if (!std::filesystem::exists(sample_path)) {
+    GTEST_SKIP() << "Sample ARW not found: " << sample_path.string();
+  }
+  const std::string expected = ReadExifDateTimeOriginal(sample_path);
+  ASSERT_EQ(expected.size(), 19u) << "sample has no EXIF DateTimeOriginal";
+
+  const ScopedTimeZone utc_plus_nine("JST-9");
+  Image                image(9, sample_path, ImageType::ARW);
+  ASSERT_NO_THROW(MetadataExtractor::ExtractEXIF_ToImage(sample_path, image));
+  EXPECT_EQ(image.exif_display_.date_time_str_, expected);
+}
+
+TEST(MetadataExtractorTest, DngCaptureTimeIsExifCameraClockTimeOutsideUtc) {
+  const auto sample_path = HasselbladX2dSamplePath();
+  if (!std::filesystem::exists(sample_path)) {
+    GTEST_SKIP() << "Sample DNG not found: " << sample_path.string();
+  }
+  const std::string expected = ReadExifDateTimeOriginal(sample_path);
+  ASSERT_EQ(expected.size(), 19u) << "sample has no EXIF DateTimeOriginal";
+
+  const ScopedTimeZone utc_minus_five("EST5");
+  Image                image(10, sample_path, ImageType::DNG);
+  ASSERT_NO_THROW(MetadataExtractor::ExtractEXIF_ToImage(sample_path, image));
+  EXPECT_EQ(image.exif_display_.date_time_str_, expected);
+}
+
+// A camera without a daylight saving setting keeps standard time all year, so it can record a
+// time in the hour that is skipped when daylight saving time starts. 2024-03-10 02:30 does not
+// exist in US Central Time; a conversion through time_t moves it to 01:30 or 03:30.
+TEST(MetadataExtractorTest, RawCaptureTimeInSkippedDaylightSavingHourKeepsCameraClockTime) {
+  const auto sample_path = std::filesystem::path(TEST_IMG_PATH) / "raw" / "camera" / "nikon" /
+                           "d7000" / "Nikon-D7000-raw-00012.nef";
+  if (!std::filesystem::exists(sample_path)) {
+    GTEST_SKIP() << "Sample NEF not found: " << sample_path.string();
+  }
+  constexpr std::string_view kSampleDateTime  = "2013:11:24 17:29:48";
+  constexpr std::string_view kSkippedDateTime = "2024:03:10 02:30:00";
+
+  std::string                bytes;
+  {
+    std::ifstream in(sample_path, std::ios::binary);
+    ASSERT_TRUE(in.is_open());
+    bytes.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+  }
+  int replaced = 0;
+  for (auto pos = bytes.find(kSampleDateTime); pos != std::string::npos;
+       pos      = bytes.find(kSampleDateTime, pos + kSampleDateTime.size())) {
+    bytes.replace(pos, kSampleDateTime.size(), kSkippedDateTime);
+    ++replaced;
+  }
+  ASSERT_GT(replaced, 0) << "sample date text not found";
+
+  const auto dir = std::filesystem::temp_directory_path() / "alcedo_metadata_dst_capture_time";
+  std::filesystem::create_directories(dir);
+  const auto path = dir / "skipped_hour.nef";
+  {
+    std::ofstream out(path, std::ios::binary | std::ios::trunc);
+    ASSERT_TRUE(out.is_open());
+    out.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+  }
+
+#if defined(_WIN32)
+  // The Windows C runtime applies the US daylight saving rules to a TZ value with a DST name.
+  const ScopedTimeZone us_central("CST6CDT");
+#else
+  const ScopedTimeZone us_central("CST6CDT,M3.2.0,M11.1.0");
+#endif
+  // The time zone must skip 02:30 on this date, or the test does not reach the case it checks.
+  std::tm skipped{};
+  skipped.tm_year           = 2024 - 1900;
+  skipped.tm_mon            = 2;
+  skipped.tm_mday           = 10;
+  skipped.tm_hour           = 2;
+  skipped.tm_min            = 30;
+  skipped.tm_isdst          = -1;
+  const time_t skipped_time = std::mktime(&skipped);
+  ASSERT_NE(skipped_time, static_cast<time_t>(-1));
+  ASSERT_NE(skipped.tm_hour, 2) << "time zone does not skip 02:00-03:00 on 2024-03-10";
+
+  Image image(11, path, ImageType::NEF);
+  ASSERT_NO_THROW(MetadataExtractor::ExtractEXIF_ToImage(path, image));
+  EXPECT_EQ(image.exif_display_.date_time_str_, "2024-03-10 02:30:00");
+
+  std::error_code ec;
+  std::filesystem::remove_all(dir, ec);
 }
 
 TEST(MetadataExtractorTest, SonyAdobeDngPreservesTaggedMatrixAndSeparateAnalogBalance) {
