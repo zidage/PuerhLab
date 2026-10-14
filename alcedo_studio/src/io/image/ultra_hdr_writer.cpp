@@ -253,13 +253,13 @@ auto BuildBaseJpegBytes(const cv::Mat& linear_rgba32f, const ExportFormatOptions
 
 }  // namespace
 
-void UltraHdrWriter::WriteImageToPath(const image_path_t&          /*src_path*/,
+void UltraHdrWriter::WriteImageToPath(const image_path_t& /*src_path*/,
                                       const std::filesystem::path& export_path,
                                       const cv::Mat& rgba32f, const ExportFormatOptions& options,
                                       const ExportColorProfileConfig&    color_profile,
                                       std::optional<ExifDisplayMetaData> export_metadata,
                                       bool include_exif_metadata, bool embed_icc_profile,
-                                      const std::vector<ExifIfdTag>& gps_tags) {
+                                      const ExifIfdEntries& source_exif_entries) {
   if (rgba32f.empty() || rgba32f.type() != CV_32FC4) {
     throw std::runtime_error("UltraHdrWriter: expected non-empty CV_32FC4 image.");
   }
@@ -268,12 +268,15 @@ void UltraHdrWriter::WriteImageToPath(const image_path_t&          /*src_path*/,
 
   std::vector<uint8_t> exif_payload;
   if (include_exif_metadata) {
-    exif_payload = BuildJpegExifApp1Payload(JpegExifApp1Options{
+    // The EXIF ColorSpace describes the SDR base image, which is what non-HDR readers show.
+    exif_payload = BuildJpegExifApp1Payload(ExportExifOptions{
         .metadata_         = export_metadata,
         .width_            = linear_rgba32f.cols,
         .height_           = linear_rgba32f.rows,
         .include_software_ = true,
-        .gps_tags_         = gps_tags,
+        .source_entries_   = source_exif_entries,
+        .color_space_      = ExifColorSpaceFor(MakeSdrBaseColorProfile(color_profile)),
+        .resolution_dpi_   = 0.0,
     });
   }
 
