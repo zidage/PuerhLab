@@ -60,6 +60,11 @@ class ImportExportHandler final : public QObject {
   Q_PROPERTY(bool importCanceling READ ImportCanceling NOTIFY ImportStateChanged)
   /// Subset of importFailed: files left unread because the import was canceled.
   Q_PROPERTY(int importCanceled READ ImportCanceled NOTIFY ImportStateChanged)
+  /// Subsets of importTotal, importCompleted and importFailed: files with a RAW extension. The
+  /// import dialog draws one ring for these files and one for the other files.
+  Q_PROPERTY(int importRawTotal READ ImportRawTotal NOTIFY ImportStateChanged)
+  Q_PROPERTY(int importRawCompleted READ ImportRawCompleted NOTIFY ImportStateChanged)
+  Q_PROPERTY(int importRawFailed READ ImportRawFailed NOTIFY ImportStateChanged)
   Q_PROPERTY(QString importStatus READ ImportStatus NOTIFY ImportStateChanged)
   Q_PROPERTY(bool exportInFlight READ ExportInFlight NOTIFY ExportStateChanged)
   Q_PROPERTY(QString exportStatus READ ExportStatus NOTIFY ExportStateChanged)
@@ -168,6 +173,9 @@ class ImportExportHandler final : public QObject {
   [[nodiscard]] int  ImportExcluded() const { return import_excluded_; }
   [[nodiscard]] bool ImportCanceling() const { return import_canceling_; }
   [[nodiscard]] int  ImportCanceled() const { return import_canceled_; }
+  [[nodiscard]] int  ImportRawTotal() const { return import_raw_total_; }
+  [[nodiscard]] int  ImportRawCompleted() const { return import_raw_completed_; }
+  [[nodiscard]] int  ImportRawFailed() const { return import_raw_failed_; }
   [[nodiscard]] bool import_running() const { return import_running_; }
   [[nodiscard]] int  ImportTotal() const { return import_total_; }
   [[nodiscard]] int  import_total() const { return import_total_; }
@@ -280,6 +288,9 @@ class ImportExportHandler final : public QObject {
   int                           import_unsupported_ = 0;
   int                           import_excluded_    = 0;
   int                           import_canceled_    = 0;
+  int                           import_raw_total_     = 0;
+  int                           import_raw_completed_ = 0;
+  int                           import_raw_failed_    = 0;
   bool                          import_canceling_   = false;
   i18n::LocalizedText           import_status_text_{};
   bool                          export_inflight_ = false;

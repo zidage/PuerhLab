@@ -4694,43 +4694,23 @@ Original source files on disk will be kept.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <source>Canceling</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Saving</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Preparing</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Reading</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Saving the photos imported before the cancel...</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Finishing the files already being read. Queued files are skipped.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Import · %1</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>of %1 photos imported</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>%1 file(s) not read because the import was canceled</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <source>Cancel import</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Canceling Import</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Saving Photos</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>RAW photos: %1 of %2 imported</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Other photos: %1 of %2 imported</source>
         <translation type="unfinished"></translation>
     </message>
 </context>

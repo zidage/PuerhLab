@@ -293,6 +293,9 @@ TEST_F(ImportServiceTests, BatchCancelTest) {
   // were not submitted yet; those count as failed. Every requested file is accounted for.
   EXPECT_EQ(final_result_value.imported_ + final_result_value.failed_,
             static_cast<uint32_t>(paths.size()));
+  // Files the canceled loop did not reach count in the RAW subset too.
+  EXPECT_EQ(final_result_value.raw_imported_ + final_result_value.raw_failed_,
+            final_result_value.raw_requested_);
   std::cout << "This test may fail occasionally in Release mode due to fast imports." << std::endl;
 
   auto snapshot = import_job->import_log_->Snapshot();
@@ -341,6 +344,10 @@ TEST_F(ImportServiceTests, CancelAfterAllFilesQueuedSkipsQueuedMetadataTasks) {
   EXPECT_LT(result.imported_, total);
   EXPECT_EQ(result.imported_ + result.failed_, total);
   EXPECT_LE(result.canceled_, result.failed_);
+  // The RAW subset is counted on the same paths as the totals, including the canceled files.
+  EXPECT_LE(result.raw_imported_, result.imported_);
+  EXPECT_LE(result.raw_failed_, result.failed_);
+  EXPECT_EQ(result.raw_imported_ + result.raw_failed_, result.raw_requested_);
 
   auto                                snapshot        = import_job->import_log_->Snapshot();
   uint32_t                            canceled_in_log = 0;

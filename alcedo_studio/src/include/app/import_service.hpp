@@ -69,6 +69,17 @@ struct ImportProgress {
   /// Subset of failed_: files left unread because the job was canceled, both files the
   /// placeholder loop did not reach and queued metadata tasks that had not started.
   std::atomic<uint32_t> canceled_             = 0;
+
+  /// Files whose extension names the RAW category, set before the job starts. The import dialog
+  /// shows RAW files and the other files as separate progress rings, and only the extension is
+  /// known before a file is read. The other files are total_ - raw_total_.
+  uint32_t              raw_total_            = 0;
+
+  /// Subset of metadata_done_: imported files with a RAW extension.
+  std::atomic<uint32_t> raw_imported_         = 0;
+
+  /// Subset of failed_: failed files with a RAW extension.
+  std::atomic<uint32_t> raw_failed_           = 0;
 };
 
 struct ImportError {
@@ -87,6 +98,12 @@ struct ImportResult {
   uint32_t excluded_type_ = 0;
   /// Subset of failed_: files left unread because the job was canceled.
   uint32_t canceled_      = 0;
+  /// Subset of requested_: files with a RAW extension.
+  uint32_t raw_requested_ = 0;
+  /// Subset of imported_: files with a RAW extension.
+  uint32_t raw_imported_  = 0;
+  /// Subset of failed_: files with a RAW extension.
+  uint32_t raw_failed_    = 0;
 };
 
 class ImportJob {

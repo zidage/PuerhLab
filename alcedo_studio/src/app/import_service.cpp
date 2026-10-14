@@ -4,6 +4,7 @@
 
 #include "app/import_service.hpp"
 
+#include <algorithm>
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
@@ -66,7 +67,9 @@ constexpr uint32_t kPlaceholderProgressInterval = 256;
 class ImportRootBatchWriter {
  public:
   struct PendingRoot {
-    image_id_t       image_id_ = 0;
+    image_id_t       image_id_      = 0;
+    /// The file has a RAW extension; it decides the progress ring the image counts in.
+    bool             raw_extension_ = false;
     EncodedImageRoot root_;
   };
 
@@ -74,9 +77,10 @@ class ImportRootBatchWriter {
   void AddOutstandingEncode() { outstanding_encodes_.fetch_add(1); }
 
   /// Queue @p root. Returns a full batch for the caller to write, or an empty vector.
-  auto Add(image_id_t image_id, EncodedImageRoot root) -> std::vector<PendingRoot> {
+  auto Add(image_id_t image_id, bool raw_extension, EncodedImageRoot root)
+      -> std::vector<PendingRoot> {
     std::lock_guard<std::mutex> lock(mutex_);
-    pending_.push_back(PendingRoot{image_id, std::move(root)});
+    pending_.push_back(PendingRoot{image_id, raw_extension, std::move(root)});
     if (pending_.size() < kImportRootWriteBatchSize) {
       return {};
     }
@@ -113,18 +117,22 @@ class ImportRootBatchWriter {
   std::atomic<uint32_t>    outstanding_encodes_{0};
 };
 
+auto IsRawExtension(const image_path_t& path) -> bool {
+  return CategoryForPath(path) == ImportFileCategory::Raw;
+}
+
+/// Count one failed file, and the RAW subset when the file has a RAW extension. failed_ first:
+/// a reader that loads the subset before failed_ never sees more subset than failed files.
+void CountFailedFile(ImportProgress& progress, bool raw_extension) {
+  progress.failed_.fetch_add(1);
+  if (raw_extension) {
+    progress.raw_failed_.fetch_add(1);
+  }
+}
+
 }  // namespace
 
-static void SetImportResult(std::shared_ptr<ImportJob> job, uint32_t requested, uint32_t imported,
-                            uint32_t failed, uint32_t unsupported, uint32_t excluded_type,
-                            uint32_t canceled) {
-  ImportResult result;
-  result.requested_     = requested;
-  result.imported_      = imported;
-  result.failed_        = failed;
-  result.unsupported_   = unsupported;
-  result.excluded_type_ = excluded_type;
-  result.canceled_      = canceled;
+static void SetImportResult(const std::shared_ptr<ImportJob>& job, const ImportResult& result) {
   if (job && job->on_finished_ && !job->cancelation_acked_.exchange(true)) {
     job->on_finished_(result);
   }
@@ -138,9 +146,17 @@ static void TryFinishImportJob(const std::shared_ptr<ImportJob>&      job,
   if (job->metadata_tasks_finished_.load() != job->metadata_tasks_submitted_.load()) {
     return;
   }
-  SetImportResult(job, progress->total_, progress->metadata_done_.load(), progress->failed_.load(),
-                  progress->unsupported_.load(), progress->excluded_type_.load(),
-                  progress->canceled_.load());
+  ImportResult result;
+  result.requested_     = progress->total_;
+  result.imported_      = progress->metadata_done_.load();
+  result.failed_        = progress->failed_.load();
+  result.unsupported_   = progress->unsupported_.load();
+  result.excluded_type_ = progress->excluded_type_.load();
+  result.canceled_      = progress->canceled_.load();
+  result.raw_requested_ = progress->raw_total_;
+  result.raw_imported_  = progress->raw_imported_.load();
+  result.raw_failed_    = progress->raw_failed_.load();
+  SetImportResult(job, result);
 }
 
 /// Commit one batch of encoded roots, then count each image as imported or failed.
@@ -152,12 +168,9 @@ static void WriteImportRootBatch(std::vector<ImportRootBatchWriter::PendingRoot>
   if (batch.empty()) {
     return;
   }
-  std::vector<image_id_t>       image_ids;
   std::vector<EncodedImageRoot> roots;
-  image_ids.reserve(batch.size());
   roots.reserve(batch.size());
   for (auto& pending : batch) {
-    image_ids.push_back(pending.image_id_);
     roots.push_back(std::move(pending.root_));
   }
 
@@ -172,24 +185,27 @@ static void WriteImportRootBatch(std::vector<ImportRootBatchWriter::PendingRoot>
     error = "unknown storage error";
   }
 
-  for (const auto image_id : image_ids) {
+  for (const auto& pending : batch) {
     if (written) {
       if (import_log) {
-        import_log->MarkMetadataSuccess(image_id);
+        import_log->MarkMetadataSuccess(pending.image_id_);
       }
       progress->metadata_done_.fetch_add(1);
+      if (pending.raw_extension_) {
+        progress->raw_imported_.fetch_add(1);
+      }
     } else {
       if (import_log) {
-        import_log->MarkMetadataFailure(image_id, ImportErrorCode::DB_WRITE_FAILED, error);
+        import_log->MarkMetadataFailure(pending.image_id_, ImportErrorCode::DB_WRITE_FAILED, error);
       }
-      progress->failed_.fetch_add(1);
+      CountFailedFile(*progress, pending.raw_extension_);
     }
   }
   if (job && job->on_progress_) {
     job->on_progress_(*progress);
   }
   if (job) {
-    job->metadata_tasks_finished_.fetch_add(static_cast<uint32_t>(image_ids.size()));
+    job->metadata_tasks_finished_.fetch_add(static_cast<uint32_t>(batch.size()));
   }
   TryFinishImportJob(job, progress);
 }
@@ -204,13 +220,15 @@ auto ImportServiceImpl::ImportToFolder(const std::vector<image_path_t>& paths,
   }
   std::shared_ptr<ImportProgress> progress_ptr = std::make_shared<ImportProgress>();
   progress_ptr->total_                         = static_cast<uint32_t>(paths.size());
+  progress_ptr->raw_total_ =
+      static_cast<uint32_t>(std::count_if(paths.begin(), paths.end(), IsRawExtension));
   if (job) {
     job->progress_ = progress_ptr;
   }
 
   if (paths.empty()) {
     // Immediately finish
-    SetImportResult(job, 0, 0, 0, 0, 0, 0);
+    SetImportResult(job, ImportResult{});
     return job;
   }
 
@@ -241,12 +259,13 @@ void ImportServiceImpl::CreatePlaceholdersAndSubmit(
       break;
     }
     ++files_reached;
+    const bool      raw_extension = IsRawExtension(image_path);
     // Validate that the path is a regular file. File-type detection is deferred
     // to metadata extraction, which classifies the content; rejected files are
     // marked failed and SyncImports removes their element and Image.
     std::error_code file_ec;
     if (!std::filesystem::is_regular_file(image_path, file_ec) || file_ec) {
-      progress_ptr->failed_.fetch_add(1);
+      CountFailedFile(*progress_ptr, raw_extension);
       report_progress();
       continue;
     }
@@ -270,12 +289,12 @@ void ImportServiceImpl::CreatePlaceholdersAndSubmit(
             return file;
           });
     } catch (...) {
-      progress_ptr->failed_.fetch_add(1);
+      CountFailedFile(*progress_ptr, raw_extension);
       report_progress();
       continue;
     }
     if (!element) {
-      progress_ptr->failed_.fetch_add(1);
+      CountFailedFile(*progress_ptr, raw_extension);
       report_progress();
       continue;
     }
@@ -285,7 +304,7 @@ void ImportServiceImpl::CreatePlaceholdersAndSubmit(
     auto image_handler = image_pool_service_->CreateAndReturnPinnedEmpty();
 
     if (!image_handler) {
-      progress_ptr->failed_.fetch_add(1);
+      CountFailedFile(*progress_ptr, raw_extension);
       report_progress();
       continue;
     }
@@ -317,7 +336,7 @@ void ImportServiceImpl::CreatePlaceholdersAndSubmit(
     // The placeholder loop queues files much faster than the pool reads them, so a cancel
     // usually finds most tasks still queued: each one checks the job before reading its file.
     thread_pool_.Submit([image_handler_ptr, progress_ptr, job, import_log, element_id,
-                         pipeline_service, root_writer, allowed_categories]() {
+                         pipeline_service, root_writer, allowed_categories, raw_extension]() {
       auto image_ptr = image_handler_ptr ? image_handler_ptr->Get() : nullptr;
       std::vector<ImportRootBatchWriter::PendingRoot> full_batch;
       bool                                            encoded     = false;
@@ -336,7 +355,7 @@ void ImportServiceImpl::CreatePlaceholdersAndSubmit(
           MetadataExtractor::ExtractEXIF_ToImage(image_ptr->image_path_, *image_ptr,
                                                  allowed_categories);
           full_batch =
-              root_writer->Add(image_ptr->image_id_,
+              root_writer->Add(image_ptr->image_id_, raw_extension,
                                EncodeImportedImageRoot(*pipeline_service, element_id, image_ptr));
           encoded = true;
         } catch (const MetadataExtractionError& e) {
@@ -361,7 +380,7 @@ void ImportServiceImpl::CreatePlaceholdersAndSubmit(
       if (!encoded) {
         // failed_ first: unsupported_, excluded_type_ and canceled_ are subsets, so a reader
         // that loads them before failed_ never sees more of them than failed files.
-        progress_ptr->failed_.fetch_add(1);
+        CountFailedFile(*progress_ptr, raw_extension);
         if (unsupported) {
           progress_ptr->unsupported_.fetch_add(1);
         }
@@ -396,8 +415,11 @@ void ImportServiceImpl::CreatePlaceholdersAndSubmit(
     // Count the files the loop never reached from its own position: canceled metadata tasks
     // update the shared counters while this runs, so a sum of them can count a file twice.
     if (files_reached < progress_ptr->total_) {
-      const auto unreached = progress_ptr->total_ - files_reached;
+      const auto unreached     = progress_ptr->total_ - files_reached;
+      const auto raw_unreached = static_cast<uint32_t>(
+          std::count_if(paths.begin() + files_reached, paths.end(), IsRawExtension));
       progress_ptr->failed_.fetch_add(unreached);
+      progress_ptr->raw_failed_.fetch_add(raw_unreached);
       progress_ptr->canceled_.fetch_add(unreached);
       report_progress();
     }

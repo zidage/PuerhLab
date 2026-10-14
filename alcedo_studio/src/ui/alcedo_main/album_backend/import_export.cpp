@@ -249,6 +249,9 @@ void ImportExportHandler::StartImportResolvedPaths(std::vector<image_path_t> pat
   import_excluded_    = 0;
   import_canceled_    = 0;
   import_canceling_   = false;
+  import_raw_total_     = 0;
+  import_raw_completed_ = 0;
+  import_raw_failed_    = 0;
   import_status_text_ = PL_TEXT("Preparing %1 file(s)...", import_total_);
   import_progress_queued_->store(false);
   emit ImportStateChanged();
@@ -288,6 +291,12 @@ void ImportExportHandler::StartImportResolvedPaths(std::vector<image_path_t> pat
     ImportOptions options;
     options.allowed_categories_ = allowedCategories;
     current_import_job_ = isvc->ImportToFolder(paths, import_target_folder_path_, options, job);
+    // ImportToFolder sets the RAW file count before it returns; the dialog sizes its rings now.
+    if (current_import_job_ && current_import_job_->progress_) {
+      import_raw_total_ = static_cast<int>(current_import_job_->progress_->raw_total_);
+      emit ImportStateChanged();
+      emit importStateChanged();
+    }
   } catch (const std::exception& e) {
     current_import_job_.reset();
     import_running_     = false;
@@ -305,11 +314,14 @@ void ImportExportHandler::ApplyImportProgress() {
     return;
   }
   const ImportProgress& progress = *job->progress_;
-  // unsupported_, excluded_type_ and canceled_ are subsets of failed_ and are incremented after
-  // it, so they are read first.
+  // unsupported_, excluded_type_, canceled_ and raw_failed_ are subsets of failed_, and
+  // raw_imported_ of metadata_done_. Each subset is incremented after its total, so it is read
+  // first.
   const uint32_t        unsupported = progress.unsupported_.load();
   const uint32_t        excluded    = progress.excluded_type_.load();
   const uint32_t        canceled    = progress.canceled_.load();
+  const uint32_t        raw_failed  = progress.raw_failed_.load();
+  const uint32_t        raw_done    = progress.raw_imported_.load();
   const uint32_t        failed      = progress.failed_.load();
   const uint32_t        imported    = progress.metadata_done_.load();
   const uint32_t        prepared    = progress.placeholders_created_.load();
@@ -321,6 +333,9 @@ void ImportExportHandler::ApplyImportProgress() {
   import_unsupported_ = static_cast<int>(unsupported);
   import_excluded_                  = static_cast<int>(excluded);
   import_canceled_                  = static_cast<int>(canceled);
+  import_raw_total_                 = static_cast<int>(progress.raw_total_);
+  import_raw_completed_             = static_cast<int>(raw_done);
+  import_raw_failed_                = static_cast<int>(raw_failed);
   import_phase_       = job->submission_closed_.load() ? ImportPhaseState::Reading
                                                        : ImportPhaseState::Preparing;
   if (!job->IsCancelled()) {
@@ -732,6 +747,9 @@ void ImportExportHandler::FinishImport(const ImportResult& result) {
   import_unsupported_ = static_cast<int>(result.unsupported_);
   import_excluded_    = static_cast<int>(result.excluded_type_);
   import_canceled_    = static_cast<int>(result.canceled_);
+  import_raw_total_     = static_cast<int>(result.raw_requested_);
+  import_raw_completed_ = static_cast<int>(result.raw_imported_);
+  import_raw_failed_    = static_cast<int>(result.raw_failed_);
   import_status_text_ = PL_TEXT("Saving %1 imported photo(s) to the library...", result.imported_);
   emit ImportStateChanged();
   emit importStateChanged();
@@ -818,6 +836,9 @@ void ImportExportHandler::CompleteImport(const ImportResult&                    
   import_unsupported_ = static_cast<int>(result.unsupported_);
   import_excluded_    = static_cast<int>(result.excluded_type_);
   import_canceled_    = static_cast<int>(result.canceled_);
+  import_raw_total_     = static_cast<int>(result.raw_requested_);
+  import_raw_completed_ = static_cast<int>(result.raw_imported_);
+  import_raw_failed_    = static_cast<int>(result.raw_failed_);
   import_status_text_ = task_text;
   emit ImportStateChanged();
   emit importStateChanged();

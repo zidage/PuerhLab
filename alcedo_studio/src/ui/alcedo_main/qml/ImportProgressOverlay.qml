@@ -2,22 +2,23 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 
-// Import progress overlay, laid out like the agent session card: a state lamp
-// and a state line beside the title, a gradient that turns around the outline
-// while the import works, and a close (X) button at the top right that cancels
-// the import.
-//
-// The ring and the count inside it show photos imported out of the photos
-// expected. Files rejected as not RAW (or failed) leave the expected total, so
-// the total shrinks while the import runs instead of stalling the ring. The
-// line below the ring counts files checked out of all files handed to the
-// import. "preparing" registers the files, "reading" reads their metadata, and
-// "finalizing" writes the result to the project; the ring spins while the
+// Import progress overlay. Concentric rings show the progress of each kind of
+// file, as the Apple Watch activity rings do: the outer ring counts RAW files
+// and the inner ring counts the other image files. A ring is drawn only when
+// the import has files of its kind. Below the rings is the total count of
+// photos imported out of the photos expected. Files rejected as not supported
+// (or failed) leave the expected total of their ring, so the totals shrink
+// while the import runs instead of stalling a ring. The rings spin while the
 // amount of remaining work is unknown (start of preparing, finalizing).
 //
-// Cancel takes effect at once: the lamp, ring and outline turn gray, the state
-// line reads "Canceling", and the X is disabled. Files already being read
-// finish and the photos imported so far are saved; queued files are skipped.
+// The kind of a file follows its extension: only the extension is known before
+// the import reads the file.
+//
+// While the import works, a gradient turns around the card outline. The close
+// (X) button at the top right cancels the import. The cancel takes effect at
+// once: the title changes, the rings and the outline turn gray, and the X is
+// disabled. Files already being read finish and the photos imported so far
+// are saved; queued files are skipped.
 Item {
     id: root
     objectName: "importProgressOverlay"
@@ -31,52 +32,49 @@ Item {
     readonly property int total: handler.importTotal
     readonly property int completed: handler.importCompleted
     readonly property int failed: handler.importFailed
-    readonly property int canceled: Math.min(handler.importCanceled, failed)
-    readonly property int unsupported: Math.min(handler.importUnsupported, failed - canceled)
-    readonly property int excluded: Math.min(handler.importExcluded,
-                                             failed - canceled - unsupported)
-    readonly property int errors: failed - canceled - unsupported - excluded
     readonly property int expected: Math.max(0, total - failed)
-    readonly property int checked: Math.min(total, completed + failed - canceled)
+
+    readonly property int rawTotal: Math.min(handler.importRawTotal, total)
+    readonly property int rawCompleted: Math.min(handler.importRawCompleted, completed)
+    readonly property int rawExpected: Math.max(0, rawTotal - Math.min(handler.importRawFailed,
+                                                                       failed))
+    readonly property int otherTotal: total - rawTotal
+    readonly property int otherCompleted: completed - rawCompleted
+    readonly property int otherExpected: Math.max(0, expected - rawExpected)
+
     readonly property bool finalizing: phase === "finalizing"
     readonly property bool progressUnknown: finalizing
-                                            || (phase === "preparing" && checked === 0)
+                                            || (phase === "preparing"
+                                                && completed + failed === 0)
     readonly property bool canCancel: !canceling && !finalizing
+
+    readonly property real ringsSize: 176
+    readonly property real ringWidth: 16
+    readonly property real ringGap: 4
 
     readonly property color textColor: root.theme ? root.theme.colText : appTheme.textColor
     readonly property color mutedColor: root.theme ? root.theme.colTextMuted
                                                    : appTheme.textMutedColor
-    readonly property color stateColor: canceling ? mutedColor
-                                                  : appTheme.backgroundTaskWorkingColor
 
     function formatCount(value) {
         return Number(value).toLocaleString(Qt.locale(), 'f', 0)
     }
 
-    function stateLabel() {
+    function title() {
         if (root.canceling)
-            return qsTr("Canceling")
+            return qsTr("Canceling Import")
         if (root.finalizing)
-            return qsTr("Saving")
-        if (root.phase === "preparing")
-            return qsTr("Preparing")
-        return qsTr("Reading")
+            return qsTr("Saving Photos")
+        return qsTr("Importing Photos")
     }
 
-    function phaseText() {
-        if (root.canceling && root.finalizing)
-            return qsTr("Saving the photos imported before the cancel...")
-        if (root.canceling)
-            return qsTr("Finishing the files already being read. Queued files are skipped.")
-        if (root.finalizing)
-            return qsTr("Saving to the library...")
-        if (root.phase === "preparing")
-            return qsTr("Preparing files... %1 of %2")
-                   .arg(root.formatCount(root.handler.importPrepared))
-                   .arg(root.formatCount(root.total))
-        return qsTr("Reading photos... %1 of %2 files checked")
-               .arg(root.formatCount(root.checked))
-               .arg(root.formatCount(root.total))
+    function ringColor(color) {
+        return root.canceling ? root.mutedColor : color
+    }
+
+    function trackColor(color) {
+        const c = root.ringColor(color)
+        return Qt.rgba(c.r, c.g, c.b, 0.2)
     }
 
     BlurredOverlay {
@@ -87,7 +85,7 @@ Item {
         Rectangle {
             id: importCard
             anchors.centerIn: parent
-            width: Math.min(parent.width - appTheme.spaceXl * 2, 420)
+            width: Math.min(parent.width - appTheme.spaceXl * 2, 320)
             height: importDialogContent.implicitHeight + appTheme.spaceLg * 2
             radius: appTheme.panelRadius
             color: root.theme ? root.theme.colBgDeep : appTheme.bgDeepColor
@@ -97,7 +95,7 @@ Item {
                 objectName: "importProgressOutline"
                 anchors.fill: parent
                 radius: importCard.radius
-                color: root.stateColor
+                color: root.canceling ? root.mutedColor : appTheme.backgroundTaskWorkingColor
                 running: root.visible && !root.canceling
             }
 
@@ -107,46 +105,22 @@ Item {
                 anchors.right: parent.right
                 anchors.top: parent.top
                 anchors.margins: appTheme.spaceLg
-                spacing: appTheme.spaceMd
+                spacing: appTheme.spaceLg
 
                 RowLayout {
                     Layout.fillWidth: true
                     spacing: appTheme.spaceSm
 
-                    Rectangle {
-                        Layout.preferredWidth: appTheme.spaceSm
-                        Layout.preferredHeight: appTheme.spaceSm
-                        Layout.alignment: Qt.AlignVCenter
-                        radius: width / 2
-                        color: root.stateColor
-                        Accessible.ignored: true
-                    }
-
-                    ColumnLayout {
+                    Label {
+                        objectName: "importProgressTitle"
                         Layout.fillWidth: true
-                        spacing: 0
-
-                        Label {
-                            Layout.fillWidth: true
-                            text: qsTr("Importing Photos")
-                            elide: Text.ElideRight
-                            font.family: root.theme ? root.theme.headlineFontFamily
-                                                    : appTheme.headlineFontFamily
-                            font.pixelSize: appTheme.fontSizeTitle
-                            font.weight: appTheme.fontWeightStrong
-                            color: root.textColor
-                        }
-
-                        Label {
-                            objectName: "importProgressState"
-                            Layout.fillWidth: true
-                            text: qsTr("Import · %1").arg(root.stateLabel())
-                            elide: Text.ElideRight
-                            color: root.mutedColor
-                            font.family: appTheme.uiFontFamily
-                            font.pixelSize: appTheme.fontSizeCaption
-                            font.weight: appTheme.fontWeightStrong
-                        }
+                        Layout.alignment: Qt.AlignVCenter
+                        text: root.title()
+                        elide: Text.ElideRight
+                        font.family: appTheme.headlineFontFamily
+                        font.pixelSize: appTheme.fontSizeTitle
+                        font.weight: appTheme.fontWeightStrong
+                        color: root.textColor
                     }
 
                     IconActionButton {
@@ -163,108 +137,59 @@ Item {
 
                 Item {
                     Layout.alignment: Qt.AlignHCenter
-                    Layout.preferredWidth: 160
-                    Layout.preferredHeight: 160
+                    Layout.preferredWidth: root.ringsSize
+                    Layout.preferredHeight: root.ringsSize
 
                     ImportProgressRing {
-                        objectName: "importProgressRing"
-                        anchors.fill: parent
-                        ringWidth: 12
-                        trackColor: root.theme ? root.theme.colHover : appTheme.hoverColor
-                        fillColor: root.canceling
-                                   ? root.mutedColor
-                                   : (root.theme ? root.theme.colAccentPrimary
-                                                 : appTheme.accentColor)
+                        objectName: "importRawRing"
+                        anchors.centerIn: parent
+                        width: root.ringsSize
+                        height: root.ringsSize
+                        visible: root.rawTotal > 0
+                        ringWidth: root.ringWidth
+                        fillColor: root.ringColor(appTheme.importRawRingColor)
+                        trackColor: root.trackColor(appTheme.importRawRingColor)
                         indeterminate: root.progressUnknown
                         running: root.visible
-                        progress: root.expected > 0 ? root.completed / root.expected : 0
+                        progress: root.rawExpected > 0 ? root.rawCompleted / root.rawExpected : 0
+                        Accessible.role: Accessible.ProgressBar
+                        Accessible.name: qsTr("RAW photos: %1 of %2 imported")
+                                         .arg(root.rawCompleted).arg(root.rawExpected)
                     }
 
-                    ColumnLayout {
+                    ImportProgressRing {
+                        objectName: "importOtherRing"
+                        readonly property real side: root.rawTotal > 0
+                                                     ? root.ringsSize
+                                                       - 2 * (root.ringWidth + root.ringGap)
+                                                     : root.ringsSize
                         anchors.centerIn: parent
-                        width: parent.width - 2 * (12 + appTheme.spaceMd)
-                        spacing: 0
-
-                        Label {
-                            objectName: "importProgressCount"
-                            Layout.fillWidth: true
-                            horizontalAlignment: Text.AlignHCenter
-                            text: root.formatCount(root.completed)
-                            fontSizeMode: Text.HorizontalFit
-                            minimumPixelSize: appTheme.fontSizeTitle
-                            font.family: root.theme ? root.theme.dataFontFamily
-                                                    : appTheme.dataFontFamily
-                            font.pixelSize: appTheme.fontSizeHeadline + 6
-                            font.weight: appTheme.fontWeightStrong
-                            color: root.textColor
-                        }
-
-                        Label {
-                            Layout.fillWidth: true
-                            horizontalAlignment: Text.AlignHCenter
-                            wrapMode: Text.Wrap
-                            text: qsTr("of %1 photos imported").arg(root.formatCount(root.expected))
-                            color: root.mutedColor
-                            font.pixelSize: appTheme.fontSizeCaption
-                        }
+                        width: side
+                        height: side
+                        visible: root.otherTotal > 0
+                        ringWidth: root.ringWidth
+                        fillColor: root.ringColor(appTheme.importOtherRingColor)
+                        trackColor: root.trackColor(appTheme.importOtherRingColor)
+                        indeterminate: root.progressUnknown
+                        running: root.visible
+                        progress: root.otherExpected > 0
+                                  ? root.otherCompleted / root.otherExpected : 0
+                        Accessible.role: Accessible.ProgressBar
+                        Accessible.name: qsTr("Other photos: %1 of %2 imported")
+                                         .arg(root.otherCompleted).arg(root.otherExpected)
                     }
                 }
 
                 Label {
-                    objectName: "importProgressPhase"
+                    objectName: "importProgressCount"
                     Layout.fillWidth: true
-                    wrapMode: Text.Wrap
                     horizontalAlignment: Text.AlignHCenter
-                    text: root.phaseText()
-                    color: root.mutedColor
-                    font.family: appTheme.uiFontFamily
-                    font.pixelSize: appTheme.fontSizeCaption
-                }
-
-                Label {
-                    Layout.fillWidth: true
-                    visible: root.unsupported > 0
-                    wrapMode: Text.Wrap
-                    horizontalAlignment: Text.AlignHCenter
-                    text: qsTr("%1 file(s) skipped because they are not supported images")
-                          .arg(root.formatCount(root.unsupported))
-                    color: root.mutedColor
-                    font.pixelSize: appTheme.fontSizeCaption
-                }
-
-                Label {
-                    objectName: "importProgressExcluded"
-                    Layout.fillWidth: true
-                    visible: root.excluded > 0
-                    wrapMode: Text.Wrap
-                    horizontalAlignment: Text.AlignHCenter
-                    text: qsTr("%1 file(s) skipped because their type is not selected")
-                          .arg(root.formatCount(root.excluded))
-                    color: root.mutedColor
-                    font.pixelSize: appTheme.fontSizeCaption
-                }
-
-                Label {
-                    objectName: "importProgressCanceled"
-                    Layout.fillWidth: true
-                    visible: root.canceled > 0
-                    wrapMode: Text.Wrap
-                    horizontalAlignment: Text.AlignHCenter
-                    text: qsTr("%1 file(s) not read because the import was canceled")
-                          .arg(root.formatCount(root.canceled))
-                    color: root.mutedColor
-                    font.pixelSize: appTheme.fontSizeCaption
-                }
-
-                Label {
-                    Layout.fillWidth: true
-                    visible: root.errors > 0
-                    wrapMode: Text.Wrap
-                    horizontalAlignment: Text.AlignHCenter
-                    text: qsTr("%1 file(s) failed").arg(root.formatCount(root.errors))
-                    color: root.theme ? root.theme.colDanger : appTheme.dangerColor
-                    font.family: root.theme ? root.theme.dataFontFamily : appTheme.dataFontFamily
-                    font.pixelSize: appTheme.fontSizeCaption
+                    text: qsTr("%1 / %2").arg(root.formatCount(root.completed))
+                                         .arg(root.formatCount(root.expected))
+                    font.family: appTheme.headlineFontFamily
+                    font.pixelSize: appTheme.fontSizeHeadline
+                    font.weight: appTheme.fontWeightStrong
+                    color: root.textColor
                 }
             }
         }

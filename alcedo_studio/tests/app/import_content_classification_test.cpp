@@ -249,6 +249,10 @@ TEST_F(ImportContentClassificationTest,
   EXPECT_EQ(outcome.result_.requested_, 6u);
   EXPECT_EQ(outcome.result_.imported_, 3u);
   EXPECT_EQ(outcome.result_.failed_, 3u);
+  // The RAW subset follows the extension: only camera_raw.ARW has a RAW extension.
+  EXPECT_EQ(outcome.result_.raw_requested_, 1u);
+  EXPECT_EQ(outcome.result_.raw_imported_, 1u);
+  EXPECT_EQ(outcome.result_.raw_failed_, 0u);
   ASSERT_EQ(outcome.snapshot_.metadata_failed_.size(), 3u);
   for (const auto& entry : outcome.snapshot_.metadata_failed_) {
     EXPECT_EQ(entry.error_code_, ImportErrorCode::UNSUPPORTED_FORMAT)

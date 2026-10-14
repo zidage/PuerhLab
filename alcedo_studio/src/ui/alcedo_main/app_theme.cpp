@@ -1131,6 +1131,9 @@ auto AppTheme::alertBadgeFillColor() const -> QColor { return dangerColor(); }
 auto AppTheme::alertBadgeTextColor() const -> QColor { return QColor(0xFF, 0xFF, 0xFF); }
 auto AppTheme::backgroundTaskFinishedColor() const -> QColor { return QColor(0x3F, 0xB9, 0x50); }
 auto AppTheme::backgroundTaskWorkingColor() const -> QColor { return QColor(0xD2, 0xA8, 0x3A); }
+auto AppTheme::importRawRingColor() const -> QColor { return accentColor(); }
+// Green apart from the blue and the gold accents of the themes.
+auto AppTheme::importOtherRingColor() const -> QColor { return QColor(0x4C, 0xC2, 0x7A); }
 auto AppTheme::backgroundTaskFailedColor() const -> QColor { return dangerColor(); }
 auto AppTheme::selectedTintColor() const -> QColor {
   return GetTheme(current_theme_index_).selected_tint;

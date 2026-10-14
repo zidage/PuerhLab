@@ -5221,44 +5221,24 @@ Refresh the library afterwards; they are listed under the User category. Import 
         <translation>已跳过 %1 个未选择类型的文件</translation>
     </message>
     <message>
-        <source>Canceling</source>
-        <translation>正在取消</translation>
-    </message>
-    <message>
-        <source>Saving</source>
-        <translation>正在保存</translation>
-    </message>
-    <message>
-        <source>Preparing</source>
-        <translation>正在准备</translation>
-    </message>
-    <message>
-        <source>Reading</source>
-        <translation>正在读取</translation>
-    </message>
-    <message>
-        <source>Saving the photos imported before the cancel...</source>
-        <translation>正在保存取消前已导入的照片…</translation>
-    </message>
-    <message>
-        <source>Finishing the files already being read. Queued files are skipped.</source>
-        <translation>正在完成已开始读取的文件，排队中的文件将被跳过。</translation>
-    </message>
-    <message>
-        <source>Import · %1</source>
-        <translation>导入 · %1</translation>
-    </message>
-    <message>
-        <source>of %1 photos imported</source>
-        <translation>张已导入，共 %1 张</translation>
-    </message>
-    <message>
-        <source>%1 file(s) not read because the import was canceled</source>
-        <translation>导入已取消，%1 个文件未读取</translation>
-    </message>
-    <message>
         <source>Cancel import</source>
         <translation>取消导入</translation>
+    </message>
+    <message>
+        <source>Canceling Import</source>
+        <translation>正在取消导入</translation>
+    </message>
+    <message>
+        <source>Saving Photos</source>
+        <translation>正在保存照片</translation>
+    </message>
+    <message>
+        <source>RAW photos: %1 of %2 imported</source>
+        <translation>RAW 照片：已导入 %1 / %2</translation>
+    </message>
+    <message>
+        <source>Other photos: %1 of %2 imported</source>
+        <translation>其他照片：已导入 %1 / %2</translation>
     </message>
 </context>
 <context>
