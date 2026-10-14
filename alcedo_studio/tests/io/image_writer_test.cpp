@@ -25,6 +25,8 @@
 #include "alcedo_version.hpp"
 #include "image/image_buffer.hpp"
 #include "image/metadata.hpp"
+#include "io/image/exif_gps_tags.hpp"
+#include "io/image/jpeg_exif_app1.hpp"
 #include "utils/string/convert.hpp"
 
 namespace alcedo {
@@ -742,6 +744,252 @@ TEST_F(ImageWriterTests, RecipeCanOmitMetadataAndIccFromTiff) {
   EXPECT_FALSE(HasOiioAttr(dst_path, "Exif:Model"));
   EXPECT_FALSE(HasOiioAttr(dst_path, "Exif:ISOSpeedRatings"));
   EXPECT_FALSE(HasOiioAttr(dst_path, "ICCProfile"));
+}
+
+namespace {
+
+auto MakeRationalTag(uint16_t tag, std::initializer_list<std::pair<uint32_t, uint32_t>> values)
+    -> ExifIfdTag {
+  ExifIfdTag result{.tag_ = tag, .type_ = 5, .count_ = static_cast<uint32_t>(values.size())};
+  for (const auto& [numerator, denominator] : values) {
+    for (const uint32_t part : {numerator, denominator}) {
+      for (int shift = 0; shift < 32; shift += 8) {
+        result.value_.push_back(static_cast<uint8_t>((part >> shift) & 0xFF));
+      }
+    }
+  }
+  return result;
+}
+
+auto MakeAsciiTag(uint16_t tag, const std::string& text) -> ExifIfdTag {
+  ExifIfdTag result{.tag_ = tag, .type_ = 2, .value_ = {text.begin(), text.end()}};
+  result.value_.push_back(0);
+  result.count_ = static_cast<uint32_t>(result.value_.size());
+  return result;
+}
+
+/// The GPS IFD of the camera file of issue 363 (22 deg 47' 30.55" N, 108 deg 23' 35.44" E, 235 m).
+auto MakeCameraGpsTags() -> std::vector<ExifIfdTag> {
+  return {
+      ExifIfdTag{.tag_ = 0x0000, .type_ = 1, .count_ = 4, .value_ = {2, 3, 0, 0}},
+      MakeAsciiTag(0x0001, "N"),
+      MakeRationalTag(0x0002, {{22, 1}, {47, 1}, {3055, 100}}),
+      MakeAsciiTag(0x0003, "E"),
+      MakeRationalTag(0x0004, {{108, 1}, {23, 1}, {3544, 100}}),
+      ExifIfdTag{.tag_ = 0x0005, .type_ = 1, .count_ = 1, .value_ = {0}},
+      MakeRationalTag(0x0006, {{235, 1}}),
+      MakeAsciiTag(0x0012, "WGS-84"),
+  };
+}
+
+/// A JPEG source whose APP1 segment holds the GPS IFD of MakeCameraGpsTags.
+void WriteJpegWithGps(const std::filesystem::path& path) {
+  WriteTestJpeg(path, {32, 64, 96, 96, 64, 32}, 2, 1);
+  ASSERT_TRUE(ApplyJpegExifApp1Metadata(
+      path, JpegExifApp1Options{.include_software_ = false, .gps_tags_ = MakeCameraGpsTags()}));
+}
+
+auto ReadOiioFloats(const std::filesystem::path& path, const char* key) -> std::vector<float> {
+  OIIO_NAMESPACE_USING
+  auto input = ImageInput::open(PathToUtf8(path));
+  if (!input) return {};
+  std::vector<float> values;
+  if (const ParamValue* attr = input->spec().find_attribute(key);
+      attr != nullptr && attr->type().basetype == TypeDesc::FLOAT) {
+    const auto* data = static_cast<const float*>(attr->data());
+    values.assign(data, data + attr->type().basevalues() * attr->nvalues());
+  }
+  input->close();
+  return values;
+}
+
+/// Degrees of a GPS:Latitude or GPS:Longitude value (degrees, minutes, seconds). Cameras store
+/// either whole minutes and seconds or decimal minutes with zero seconds.
+auto DecimalDegrees(const std::vector<float>& values) -> double {
+  return values.size() == 3 ? values[0] + values[1] / 60.0 + values[2] / 3600.0 : -1.0;
+}
+
+/// The position of MakeCameraGpsTags: 22 deg 47' 30.55" N, 108 deg 23' 35.44" E, 235 m.
+void ExpectCameraGpsInOiioAttributes(const std::filesystem::path& path) {
+  EXPECT_EQ(ReadOiioStringAttr(path, "GPS:LatitudeRef"), "N") << DumpOiioAttrSummary(path);
+  EXPECT_EQ(ReadOiioStringAttr(path, "GPS:LongitudeRef"), "E") << DumpOiioAttrSummary(path);
+  EXPECT_NEAR(DecimalDegrees(ReadOiioFloats(path, "GPS:Latitude")),
+              22.0 + 47.0 / 60.0 + 30.55 / 3600.0, 1e-5)
+      << DumpOiioAttrSummary(path);
+  EXPECT_NEAR(DecimalDegrees(ReadOiioFloats(path, "GPS:Longitude")),
+              108.0 + 23.0 / 60.0 + 35.44 / 3600.0, 1e-5)
+      << DumpOiioAttrSummary(path);
+  EXPECT_NEAR(ReadOiioFloatAttr(path, "GPS:Altitude"), 235.0f, 0.5f) << DumpOiioAttrSummary(path);
+}
+
+auto MakeRecipe(ImageFormatType format, const std::filesystem::path& export_path,
+                bool include_location) -> ExportRecipe {
+  ExportRecipe recipe;
+  recipe.codec_.format_              = format;
+  recipe.codec_.bit_depth_           = format == ImageFormatType::JPEG
+                                           ? ExportFormatOptions::BIT_DEPTH::BIT_8
+                                           : ExportFormatOptions::BIT_DEPTH::BIT_16;
+  recipe.codec_.export_path_         = export_path;
+  recipe.metadata_.include_location_ = include_location;
+  return recipe;
+}
+
+auto MakeFlatImage(int rows, int cols) -> std::shared_ptr<ImageBuffer> {
+  return std::make_shared<ImageBuffer>(
+      cv::Mat(rows, cols, CV_32FC4, cv::Scalar(0.2f, 0.4f, 0.6f, 1.0f)));
+}
+
+}  // namespace
+
+TEST_F(ImageWriterTests, ReadExifGpsTagsReturnsTheSourceGpsIfdEntries) {
+  const auto src_path = temp_dir_ / "gps_read_source.jpg";
+  WriteJpegWithGps(src_path);
+
+  const auto tags     = ReadExifGpsTags(src_path);
+  const auto expected = MakeCameraGpsTags();
+  ASSERT_EQ(tags.size(), expected.size());
+  for (size_t i = 0; i < tags.size(); ++i) {
+    SCOPED_TRACE(tags[i].tag_);
+    EXPECT_EQ(tags[i].tag_, expected[i].tag_);
+    EXPECT_EQ(tags[i].type_, expected[i].type_);
+    EXPECT_EQ(tags[i].count_, expected[i].count_);
+    EXPECT_EQ(tags[i].value_, expected[i].value_);
+  }
+}
+
+TEST_F(ImageWriterTests, ReadExifGpsTagsIsEmptyForSourceWithoutGps) {
+  const auto src_path = temp_dir_ / "no_gps_source.jpg";
+  WriteTestJpeg(src_path, {32, 64, 96, 96, 64, 32}, 2, 1);
+  EXPECT_TRUE(ReadExifGpsTags(src_path).empty());
+}
+
+// Issue 363: the JPEG APP1 rewrite dropped the GPS IFD of the source file.
+TEST_F(ImageWriterTests, JpegExportCopiesSourceGpsWhenLocationIsIncluded) {
+  const auto src_path = temp_dir_ / "gps_source.jpg";
+  const auto dst_path = temp_dir_ / "gps_exported.jpg";
+  WriteJpegWithGps(src_path);
+
+  ExifDisplayMetaData metadata;
+  metadata.make_ = "NIKON CORPORATION";
+  ASSERT_NO_THROW(ImageWriter::WriteImageToPath(src_path, MakeFlatImage(1, 2),
+                                                MakeRecipe(ImageFormatType::JPEG, dst_path, true),
+                                                std::nullopt, metadata));
+
+  ExpectCameraGpsInOiioAttributes(dst_path);
+  EXPECT_EQ(ReadOiioStringAttr(dst_path, "GPS:MapDatum"), "WGS-84")
+      << DumpOiioAttrSummary(dst_path);
+  EXPECT_EQ(ReadOiioStringAttr(dst_path, "Make"), metadata.make_)
+      << DumpOiioAttrSummary(dst_path);
+  EXPECT_TRUE(JpegContainsAscii(dst_path, AlcedoSoftwareExifString()));
+}
+
+TEST_F(ImageWriterTests, PngAndExrExportsCopySourceGpsWhenLocationIsIncluded) {
+  const auto src_path = temp_dir_ / "gps_multi_source.jpg";
+  WriteJpegWithGps(src_path);
+
+  for (const auto& [format, extension] :
+       {std::pair{ImageFormatType::PNG, ".png"}, std::pair{ImageFormatType::EXR, ".exr"}}) {
+    SCOPED_TRACE(extension);
+    const auto dst_path = temp_dir_ / (std::string("gps_exported") + extension);
+    ASSERT_NO_THROW(ImageWriter::WriteImageToPath(src_path, MakeFlatImage(1, 2),
+                                                  MakeRecipe(format, dst_path, true),
+                                                  std::nullopt, std::nullopt));
+    ExpectCameraGpsInOiioAttributes(dst_path);
+  }
+}
+
+// OIIO writes no GPS IFD into TIFF files (and its reader reports none), so the TIFF export adds
+// the GPS IFD itself; Exiv2 reads it back.
+TEST_F(ImageWriterTests, TiffExportWritesSourceGpsIfd) {
+  const auto src_path = temp_dir_ / "gps_tiff_source.jpg";
+  const auto dst_path = temp_dir_ / "gps_exported.tif";
+  WriteJpegWithGps(src_path);
+
+  ExifDisplayMetaData metadata;
+  metadata.make_ = "NIKON CORPORATION";
+  ASSERT_NO_THROW(ImageWriter::WriteImageToPath(src_path, MakeFlatImage(5, 7),
+                                                MakeRecipe(ImageFormatType::TIFF, dst_path, true),
+                                                std::nullopt, metadata));
+
+  const auto tags     = ReadExifGpsTags(dst_path);
+  const auto expected = MakeCameraGpsTags();
+  ASSERT_EQ(tags.size(), expected.size());
+  for (size_t i = 0; i < tags.size(); ++i) {
+    SCOPED_TRACE(tags[i].tag_);
+    EXPECT_EQ(tags[i].tag_, expected[i].tag_);
+    EXPECT_EQ(tags[i].type_, expected[i].type_);
+    EXPECT_EQ(tags[i].count_, expected[i].count_);
+    EXPECT_EQ(tags[i].value_, expected[i].value_);
+  }
+  // The pixels and the other IFD0 and EXIF entries stay readable after the new IFD0.
+  const auto shape = ReadOiioShape(dst_path);
+  EXPECT_EQ(shape[0], 7);
+  EXPECT_EQ(shape[1], 5);
+  EXPECT_EQ(ReadOiioStringAttr(dst_path, "Make"), metadata.make_) << DumpOiioAttrSummary(dst_path);
+  EXPECT_EQ(ReadOiioIntAttr(dst_path, "Exif:PixelXDimension"), 7) << DumpOiioAttrSummary(dst_path);
+}
+
+TEST_F(ImageWriterTests, ExportOmitsSourceGpsWhenLocationIsExcluded) {
+  const auto src_path = temp_dir_ / "gps_private_source.jpg";
+  WriteJpegWithGps(src_path);
+
+  for (const auto& [format, extension] :
+       {std::pair{ImageFormatType::JPEG, ".jpg"}, std::pair{ImageFormatType::TIFF, ".tif"}}) {
+    SCOPED_TRACE(extension);
+    const auto dst_path = temp_dir_ / (std::string("gps_private_exported") + extension);
+    ASSERT_NO_THROW(ImageWriter::WriteImageToPath(src_path, MakeFlatImage(1, 2),
+                                                  MakeRecipe(format, dst_path, false),
+                                                  std::nullopt, std::nullopt));
+    EXPECT_FALSE(HasOiioAttr(dst_path, "GPS:Latitude")) << DumpOiioAttrSummary(dst_path);
+    EXPECT_TRUE(ReadExifGpsTags(dst_path).empty());
+  }
+}
+
+TEST_F(ImageWriterTests, UltraHdrExportCopiesSourceGpsWhenLocationIsIncluded) {
+#if !defined(ALCEDO_HAS_ULTRAHDR)
+  GTEST_SKIP() << "Ultra HDR support is not enabled in this build.";
+#else
+  const auto src_path = temp_dir_ / "gps_uhdr_source.jpg";
+  const auto dst_path = temp_dir_ / "gps_uhdr_exported.jpg";
+  WriteJpegWithGps(src_path);
+
+  cv::Mat rgba32f(8, 8, CV_32FC4);
+  for (int y = 0; y < rgba32f.rows; ++y) {
+    for (int x = 0; x < rgba32f.cols; ++x) {
+      const float v               = 0.08f + 0.025f * static_cast<float>(x + y);
+      rgba32f.at<cv::Vec4f>(y, x) = cv::Vec4f(v, v * 0.85f, v * 0.65f, 1.0f);
+    }
+  }
+  auto         image_data = std::make_shared<ImageBuffer>(std::move(rgba32f));
+
+  ExportRecipe recipe     = MakeRecipe(ImageFormatType::JPEG, dst_path, true);
+  recipe.codec_.hdr_export_mode_ = ExportFormatOptions::HDR_EXPORT_MODE::ULTRA_HDR;
+  ASSERT_NO_THROW(ImageWriter::WriteImageToPath(
+      src_path, image_data, recipe,
+      MakeColorProfile(ColorUtils::ColorSpace::REC2020, ColorUtils::EOTF::ST2084), std::nullopt));
+
+  const std::vector<uint8_t> bytes = ReadFileBytes(dst_path);
+  ASSERT_FALSE(bytes.empty());
+  EXPECT_EQ(is_uhdr_image(const_cast<uint8_t*>(bytes.data()), static_cast<int>(bytes.size())), 1);
+  ExpectCameraGpsInOiioAttributes(dst_path);
+#endif
+}
+
+// Issue 363 with the camera file: the GPS IFD of a Nikon Z 7II NEF must reach the exported JPEG.
+TEST_F(ImageWriterTests, NikonNefGpsReachesJpegExport) {
+  const auto src_path = std::filesystem::path(TEST_IMG_PATH) / "raw" / "gps" / "DSC_2815.NEF";
+  if (!std::filesystem::exists(src_path)) {
+    GTEST_SKIP() << "Local sample is missing: " << src_path.string();
+  }
+  ASSERT_FALSE(ReadExifGpsTags(src_path).empty());
+
+  const auto dst_path = temp_dir_ / "nef_gps_exported.jpg";
+  ASSERT_NO_THROW(ImageWriter::WriteImageToPath(src_path, MakeFlatImage(4, 6),
+                                                MakeRecipe(ImageFormatType::JPEG, dst_path, true),
+                                                std::nullopt, std::nullopt));
+  ExpectCameraGpsInOiioAttributes(dst_path);
+  EXPECT_EQ(ReadOiioStringAttr(dst_path, "GPS:MapDatum"), "WGS-84")
+      << DumpOiioAttrSummary(dst_path);
 }
 
 }  // namespace alcedo

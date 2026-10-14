@@ -5,6 +5,7 @@
 #include "io/image/image_writer.hpp"
 
 #include <OpenImageIO/imageio.h>
+#include <OpenImageIO/tiffutils.h>
 
 #include <algorithm>
 #include <cctype>
@@ -22,6 +23,7 @@
 
 #include "alcedo_version.hpp"
 #include "image/metadata.hpp"
+#include "io/image/exif_gps_tags.hpp"
 #include "io/image/export_icc_profile_resolver.hpp"
 #include "io/image/jpeg_exif_app1.hpp"
 #include "io/image/ultra_hdr_writer.hpp"
@@ -411,13 +413,24 @@ void ApplyExportResolutionToOIIO(ImageSpec& spec, const ExportResizeSpec& resize
 
 void ApplyJpegExportMetadata(const std::filesystem::path&              export_path,
                              const std::optional<ExifDisplayMetaData>& export_metadata,
-                             int width = 0, int height = 0) {
+                             const std::vector<ExifIfdTag>& gps_tags, int width, int height) {
   (void)ApplyJpegExifApp1Metadata(export_path, JpegExifApp1Options{
       .metadata_         = export_metadata,
       .width_            = width,
       .height_           = height,
       .include_software_ = true,
+      .gps_tags_         = gps_tags,
   });
+}
+
+/// Set the GPS:* attributes of @p spec from the GPS IFD entries of the source file. The OIIO
+/// PNG and EXR writers store them with the other EXIF attributes.
+void ApplyGpsTagsToOIIO(ImageSpec& spec, const std::vector<ExifIfdTag>& gps_tags) {
+  const std::vector<uint8_t> tiff_block = BuildExifGpsTiffBlock(gps_tags);
+  if (tiff_block.empty()) return;
+  if (!decode_exif(cspan<uint8_t>(tiff_block.data(), tiff_block.size()), spec)) {
+    throw std::runtime_error("OpenImageIO: failed to decode the GPS metadata of the source file");
+  }
 }
 
 auto IsJpegExportPath(const std::filesystem::path& path) -> bool {
@@ -430,6 +443,7 @@ auto TryWriteWithOpenImageIO(const image_path_t& src_path, const std::filesystem
                              const cv::Mat& rgba32f, const ExportRecipe& recipe,
                              const std::optional<ExportColorProfileConfig>& color_profile,
                              const std::optional<ExifDisplayMetaData>&      export_metadata,
+                             const std::vector<ExifIfdTag>&                 gps_tags,
                              std::string&                                   out_error) -> bool {
   const std::string dst          = PathToUtf8(export_path);
 
@@ -448,6 +462,11 @@ auto TryWriteWithOpenImageIO(const image_path_t& src_path, const std::filesystem
   ForceUprightOrientation(outspec);
   ApplyOIIOFormatOptions(outspec, options);
   ApplyExportMetadataToOIIO(outspec, export_metadata, recipe.metadata_);
+  // JPEG output gets the GPS IFD in the APP1 segment that replaces the OIIO one after the write.
+  // The OIIO TIFF writer drops GPS attributes; WriteTiffGpsIfd adds them after the write.
+  if (options.format_ == ImageFormatType::PNG || options.format_ == ImageFormatType::EXR) {
+    ApplyGpsTagsToOIIO(outspec, gps_tags);
+  }
   ApplyExportResolutionToOIIO(outspec, recipe.resize_);
   if (recipe.metadata_.mode_ == ExportMetadataMode::STANDARD && recipe.metadata_.include_exif_) {
     outspec.attribute("Exif:PixelXDimension", pixels.cols);
@@ -480,7 +499,13 @@ auto TryWriteWithOpenImageIO(const image_path_t& src_path, const std::filesystem
     return false;
   }
 
-  out->close();
+  if (!out->close()) {
+    out_error = "OpenImageIO: failed to close output: " + out->geterror();
+    return false;
+  }
+  if (options.format_ == ImageFormatType::TIFF) {
+    WriteTiffGpsIfd(export_path, gps_tags);
+  }
   return true;
 }
 
@@ -612,8 +637,18 @@ void ImageWriter::WriteImageToPath(const image_path_t&                     src_p
   // can be multi-hundred MB; cloning before downscale doubles peak memory.
   cv::Mat working = ShouldResize(recipe) ? ResizeRGBA32F(src_rgba32f, recipe) : src_rgba32f.clone();
 
-  if (recipe.metadata_.mode_ == ExportMetadataMode::NONE || !recipe.metadata_.include_exif_) {
+  const bool include_exif =
+      recipe.metadata_.mode_ == ExportMetadataMode::STANDARD && recipe.metadata_.include_exif_;
+  if (!include_exif) {
     export_metadata.reset();
+  }
+  std::vector<ExifIfdTag> gps_tags;
+  if (include_exif && recipe.metadata_.include_location_) {
+    try {
+      gps_tags = ReadExifGpsTags(src_path);
+    } catch (const std::exception& error) {
+      throw std::runtime_error(std::string("ImageWriter: ") + error.what());
+    }
   }
   const auto pixel_color = recipe.output_color_.has_value() ? recipe.output_color_ : color_profile;
   const auto embedded_profile = recipe.icc_ == ExportIccPolicy::EMBED_OUTPUT_PROFILE
@@ -622,10 +657,10 @@ void ImageWriter::WriteImageToPath(const image_path_t&                     src_p
 
   if (ShouldWriteUltraHdr(options, pixel_color)) {
 #if defined(ALCEDO_HAS_ULTRAHDR)
-    UltraHdrWriter::WriteImageToPath(
-        src_path, export_path, working, options, *pixel_color, export_metadata,
-        recipe.metadata_.mode_ == ExportMetadataMode::STANDARD && recipe.metadata_.include_exif_,
-        recipe.icc_ == ExportIccPolicy::EMBED_OUTPUT_PROFILE);
+    UltraHdrWriter::WriteImageToPath(src_path, export_path, working, options, *pixel_color,
+                                     export_metadata, include_exif,
+                                     recipe.icc_ == ExportIccPolicy::EMBED_OUTPUT_PROFILE,
+                                     gps_tags);
     return;
 #else
     throw std::runtime_error(
@@ -640,11 +675,10 @@ void ImageWriter::WriteImageToPath(const image_path_t&                     src_p
   std::string oiio_err;
   try {
     if (TryWriteWithOpenImageIO(src_path, export_path, working, recipe, embedded_profile,
-                                export_metadata, oiio_err)) {
-      if (IsJpegExportPath(export_path) &&
-          recipe.metadata_.mode_ == ExportMetadataMode::STANDARD &&
-          recipe.metadata_.include_exif_) {
-        ApplyJpegExportMetadata(export_path, export_metadata, working.cols, working.rows);
+                                export_metadata, gps_tags, oiio_err)) {
+      if (IsJpegExportPath(export_path) && include_exif) {
+        ApplyJpegExportMetadata(export_path, export_metadata, gps_tags, working.cols,
+                                working.rows);
       }
       return;
     }
@@ -654,14 +688,12 @@ void ImageWriter::WriteImageToPath(const image_path_t&                     src_p
 
   std::string cv_err;
   if (TryWriteWithOpenCV(export_path, working, recipe, cv_err)) {
-    if (IsJpegExportPath(export_path) &&
-        recipe.metadata_.mode_ == ExportMetadataMode::STANDARD &&
-        recipe.metadata_.include_exif_) {
-      ApplyJpegExportMetadata(export_path, export_metadata, working.cols, working.rows);
+    if (IsJpegExportPath(export_path) && include_exif) {
+      ApplyJpegExportMetadata(export_path, export_metadata, gps_tags, working.cols, working.rows);
       return;
     }
-    if ((export_metadata.has_value() && recipe.metadata_.mode_ == ExportMetadataMode::STANDARD) ||
-        embedded_profile.has_value() || recipe.resize_.dpi_ > 0.0) {
+    if (export_metadata.has_value() || !gps_tags.empty() || embedded_profile.has_value() ||
+        recipe.resize_.dpi_ > 0.0) {
       throw std::runtime_error(
           "ImageWriter: OpenCV fallback cannot satisfy metadata, ICC, or DPI settings. OIIO: " +
           oiio_err);

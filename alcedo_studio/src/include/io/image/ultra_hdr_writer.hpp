@@ -7,7 +7,9 @@
 #include <filesystem>
 #include <opencv2/core.hpp>
 #include <optional>
+#include <vector>
 
+#include "io/image/exif_gps_tags.hpp"
 #include "io/image/image_writer.hpp"
 #include "type/type.hpp"
 
@@ -20,7 +22,8 @@ class UltraHdrWriter {
                                const ExportFormatOptions&         options,
                                const ExportColorProfileConfig&    color_profile,
                                std::optional<ExifDisplayMetaData> export_metadata = std::nullopt,
-                               bool include_exif_metadata = true, bool embed_icc_profile = true);
+                               bool include_exif_metadata = true, bool embed_icc_profile = true,
+                               const std::vector<ExifIfdTag>& gps_tags = {});
 };
 
 }  // namespace alcedo

@@ -157,6 +157,28 @@ auto MakeRationalEntry(uint16_t tag, uint32_t numerator, uint32_t denominator) -
   return entry;
 }
 
+/// An entry whose value bytes are already in little-endian order (a GPS tag of the source file).
+auto MakeRawEntry(const ExifIfdTag& tag) -> ExifIfdEntry {
+  ExifIfdEntry entry;
+  entry.tag   = tag.tag_;
+  entry.type  = tag.type_;
+  entry.count = tag.count_;
+  if (tag.value_.size() <= 4) {
+    entry.inline_or_offset = tag.value_;
+    entry.inline_or_offset.resize(4, 0);
+  } else {
+    entry.overflow = tag.value_;
+  }
+  return entry;
+}
+
+/// True when @p tag is a TIFF field whose value size matches its type and count.
+auto IsWritableRawTag(const ExifIfdTag& tag) -> bool {
+  const uint32_t type_size = ExifTiffTypeSize(tag.type_);
+  return type_size != 0 && tag.count_ > 0 &&
+         static_cast<uint64_t>(tag.count_) * type_size == tag.value_.size();
+}
+
 auto EncodeIfd(std::vector<uint8_t>& tiff, const std::vector<ExifIfdEntry>& entries,
                uint32_t next_ifd_offset) -> void {
   AppendU16LE(tiff, static_cast<uint16_t>(entries.size()));
@@ -180,6 +202,11 @@ auto EncodeIfd(std::vector<uint8_t>& tiff, const std::vector<ExifIfdEntry>& entr
         slot[8 + b] = entry.inline_or_offset[b];
       }
     } else {
+      // Value offsets must be word aligned.
+      if (tiff.size() % 2 != 0) {
+        tiff.push_back(0);
+        slot = tiff.data() + entries_pos + i * 12u;
+      }
       const uint32_t offset = static_cast<uint32_t>(tiff.size());
       slot[8]               = static_cast<uint8_t>(offset & 0xFF);
       slot[9]               = static_cast<uint8_t>((offset >> 8) & 0xFF);
@@ -196,12 +223,89 @@ auto EncodeIfd(std::vector<uint8_t>& tiff, const std::vector<ExifIfdEntry>& entr
   next[3]       = static_cast<uint8_t>((next_ifd_offset >> 24) & 0xFF);
 }
 
+/// Write @p offset into the value of the IFD0 entry @p tag (an IFD pointer of type LONG).
+void PatchIfdPointer(std::vector<uint8_t>& tiff, size_t ifd0_start, uint16_t tag,
+                     uint32_t offset) {
+  const uint16_t count = static_cast<uint16_t>(
+      tiff[ifd0_start] | (static_cast<uint16_t>(tiff[ifd0_start + 1]) << 8));
+  for (uint16_t i = 0; i < count; ++i) {
+    uint8_t*       slot      = tiff.data() + ifd0_start + 2 + i * 12;
+    const uint16_t entry_tag = static_cast<uint16_t>(slot[0] | (static_cast<uint16_t>(slot[1]) << 8));
+    if (entry_tag == tag) {
+      slot[8]  = static_cast<uint8_t>(offset & 0xFF);
+      slot[9]  = static_cast<uint8_t>((offset >> 8) & 0xFF);
+      slot[10] = static_cast<uint8_t>((offset >> 16) & 0xFF);
+      slot[11] = static_cast<uint8_t>((offset >> 24) & 0xFF);
+      return;
+    }
+  }
+}
+
+auto MakeGpsIfdEntries(const std::vector<ExifIfdTag>& gps_tags) -> std::vector<ExifIfdEntry> {
+  std::vector<ExifIfdEntry> entries;
+  entries.reserve(gps_tags.size());
+  for (const auto& tag : gps_tags) {
+    if (IsWritableRawTag(tag)) {
+      entries.push_back(MakeRawEntry(tag));
+    }
+  }
+  std::sort(entries.begin(), entries.end(),
+            [](const ExifIfdEntry& a, const ExifIfdEntry& b) { return a.tag < b.tag; });
+  return entries;
+}
+
+constexpr uint16_t kExifIfdTag = 0x8769;
+constexpr uint16_t kGpsIfdTag  = 0x8825;
+
+/// Encode the TIFF header, IFD0, and the EXIF and GPS IFDs that IFD0 points to.
+auto EncodeTiffBlock(std::vector<ExifIfdEntry> ifd0, std::vector<ExifIfdEntry> exif_ifd,
+                     const std::vector<ExifIfdEntry>& gps_ifd) -> std::vector<uint8_t> {
+  const bool need_exif_ifd = !exif_ifd.empty();
+  const bool need_gps_ifd  = !gps_ifd.empty();
+  if (need_exif_ifd) {
+    ifd0.push_back(MakeLongEntry(kExifIfdTag, 0));
+  }
+  if (need_gps_ifd) {
+    ifd0.push_back(MakeLongEntry(kGpsIfdTag, 0));
+  }
+
+  std::sort(ifd0.begin(), ifd0.end(),
+            [](const ExifIfdEntry& a, const ExifIfdEntry& b) { return a.tag < b.tag; });
+  std::sort(exif_ifd.begin(), exif_ifd.end(),
+            [](const ExifIfdEntry& a, const ExifIfdEntry& b) { return a.tag < b.tag; });
+
+  std::vector<uint8_t> tiff;
+  tiff.push_back('I');
+  tiff.push_back('I');
+  AppendU16LE(tiff, 42);
+  AppendU32LE(tiff, 8);
+
+  const size_t ifd0_start = tiff.size();
+  EncodeIfd(tiff, ifd0, 0);
+  // IFD offsets must be word aligned; an odd-length ASCII value can end the previous IFD on an
+  // odd offset.
+  if (need_exif_ifd) {
+    if (tiff.size() % 2 != 0) tiff.push_back(0);
+    const uint32_t exif_ifd_offset = static_cast<uint32_t>(tiff.size());
+    EncodeIfd(tiff, exif_ifd, 0);
+    PatchIfdPointer(tiff, ifd0_start, kExifIfdTag, exif_ifd_offset);
+  }
+  if (need_gps_ifd) {
+    if (tiff.size() % 2 != 0) tiff.push_back(0);
+    const uint32_t gps_ifd_offset = static_cast<uint32_t>(tiff.size());
+    EncodeIfd(tiff, gps_ifd, 0);
+    PatchIfdPointer(tiff, ifd0_start, kGpsIfdTag, gps_ifd_offset);
+  }
+  return tiff;
+}
+
 }  // namespace
 
 auto BuildJpegExifApp1Payload(const JpegExifApp1Options& options) -> std::vector<uint8_t> {
   const bool has_metadata =
       options.metadata_.has_value() && HasMeaningfulExportMetadata(*options.metadata_);
-  if (!options.include_software_ && !has_metadata && options.width_ <= 0 && options.height_ <= 0) {
+  if (!options.include_software_ && !has_metadata && options.width_ <= 0 && options.height_ <= 0 &&
+      options.gps_tags_.empty()) {
     return {};
   }
 
@@ -277,42 +381,8 @@ auto BuildJpegExifApp1Payload(const JpegExifApp1Options& options) -> std::vector
     }
   }
 
-  constexpr uint16_t kExifIfdTag   = 0x8769;
-  const bool         need_exif_ifd = !exif_ifd.empty();
-  if (need_exif_ifd) {
-    ifd0.push_back(MakeLongEntry(kExifIfdTag, 0));
-  }
-
-  std::sort(ifd0.begin(), ifd0.end(),
-            [](const ExifIfdEntry& a, const ExifIfdEntry& b) { return a.tag < b.tag; });
-  std::sort(exif_ifd.begin(), exif_ifd.end(),
-            [](const ExifIfdEntry& a, const ExifIfdEntry& b) { return a.tag < b.tag; });
-
-  std::vector<uint8_t> tiff;
-  tiff.push_back('I');
-  tiff.push_back('I');
-  AppendU16LE(tiff, 42);
-  AppendU32LE(tiff, 8);
-
-  const size_t ifd0_start = tiff.size();
-  EncodeIfd(tiff, ifd0, 0);
-  if (need_exif_ifd) {
-    const uint32_t exif_ifd_offset = static_cast<uint32_t>(tiff.size());
-    EncodeIfd(tiff, exif_ifd, 0);
-    const uint16_t count = static_cast<uint16_t>(
-        tiff[ifd0_start] | (static_cast<uint16_t>(tiff[ifd0_start + 1]) << 8));
-    for (uint16_t i = 0; i < count; ++i) {
-      uint8_t*       slot = tiff.data() + ifd0_start + 2 + i * 12;
-      const uint16_t tag  = static_cast<uint16_t>(slot[0] | (static_cast<uint16_t>(slot[1]) << 8));
-      if (tag == kExifIfdTag) {
-        slot[8]  = static_cast<uint8_t>(exif_ifd_offset & 0xFF);
-        slot[9]  = static_cast<uint8_t>((exif_ifd_offset >> 8) & 0xFF);
-        slot[10] = static_cast<uint8_t>((exif_ifd_offset >> 16) & 0xFF);
-        slot[11] = static_cast<uint8_t>((exif_ifd_offset >> 24) & 0xFF);
-        break;
-      }
-    }
-  }
+  const std::vector<uint8_t> tiff =
+      EncodeTiffBlock(std::move(ifd0), std::move(exif_ifd), MakeGpsIfdEntries(options.gps_tags_));
 
   constexpr uint8_t    kExifPrefix[] = {'E', 'x', 'i', 'f', 0, 0};
   std::vector<uint8_t> payload(std::begin(kExifPrefix), std::end(kExifPrefix));
@@ -321,6 +391,14 @@ auto BuildJpegExifApp1Payload(const JpegExifApp1Options& options) -> std::vector
     return {};
   }
   return payload;
+}
+
+auto BuildExifGpsTiffBlock(const std::vector<ExifIfdTag>& gps_tags) -> std::vector<uint8_t> {
+  std::vector<ExifIfdEntry> gps_ifd = MakeGpsIfdEntries(gps_tags);
+  if (gps_ifd.empty()) {
+    return {};
+  }
+  return EncodeTiffBlock({}, {}, gps_ifd);
 }
 
 auto ReplaceJpegExifApp1Segment(const std::filesystem::path& path,

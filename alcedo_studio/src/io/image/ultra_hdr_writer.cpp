@@ -258,7 +258,8 @@ void UltraHdrWriter::WriteImageToPath(const image_path_t&          /*src_path*/,
                                       const cv::Mat& rgba32f, const ExportFormatOptions& options,
                                       const ExportColorProfileConfig&    color_profile,
                                       std::optional<ExifDisplayMetaData> export_metadata,
-                                      bool include_exif_metadata, bool embed_icc_profile) {
+                                      bool include_exif_metadata, bool embed_icc_profile,
+                                      const std::vector<ExifIfdTag>& gps_tags) {
   if (rgba32f.empty() || rgba32f.type() != CV_32FC4) {
     throw std::runtime_error("UltraHdrWriter: expected non-empty CV_32FC4 image.");
   }
@@ -272,6 +273,7 @@ void UltraHdrWriter::WriteImageToPath(const image_path_t&          /*src_path*/,
         .width_            = linear_rgba32f.cols,
         .height_           = linear_rgba32f.rows,
         .include_software_ = true,
+        .gps_tags_         = gps_tags,
     });
   }
 
